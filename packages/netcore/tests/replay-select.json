@@ -1,0 +1,13 @@
+{
+  "msgid": "gamemoduleinfo",
+  "gamemodulename": "dancingwild",
+  "gameid": 61183,
+  "playCtrlParam": {
+    "bet": 1,
+    "lines": 2400,
+    "clientParameter": "[3,1,2,4,5,6]"
+  },
+  "gmi": {
+    "clientParameter": "should_be_ignored"
+  }
+}
