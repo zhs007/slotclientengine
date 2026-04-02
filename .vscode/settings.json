@@ -1,0 +1,9 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^pnpm --filter spine2pixiani-demo test$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "pnpm": true
+    }
+}
