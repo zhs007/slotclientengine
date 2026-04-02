@@ -1,173 +1,99 @@
-# pixiani2
+# pixiani
 
-PixiJS v8 + GSAP 的实体动画项目。这个模板是干净骨架，不包含任何示例动画、示例资源或示例测试。你的任务是在现有基础设施之上，按用户需求新增动画实体、接入入口，并补齐测试。
+`packages/pixiani` 是 `slotclientengine` monorepo 内部的动画基础包。你的工作目标不是维护一个演示项目，而是在稳定基础设施之上新增动画实体、测试和必要的预览接线。
 
 ## 项目定位
 
-- 角色定位：高级前端图形工程师 / 游戏动画工程师
-- 核心库：`pixi.js` v8.x、`gsap` v3.x
-- 语言：TypeScript
-- 测试：Vitest
-- 核心思想：所有可管理动画对象统一走实体生命周期、对象池复用和管理器回收
+- 技术栈：`pixi.js` v8、`gsap` v3、TypeScript、Vitest
+- 主定位：动画内核 + 动画承载模板
+- 使用对象：仓库内应用、模板和后续 Agent 产出的动画模块
+- 默认假设：`src/core` 稳定、`src/ani` 可扩展、`src/main.ts` 仅用于本地预览
 
 ## 最高优先级规则
 
-1. `src/core` 是模板核心基础设施，默认只读，不要随意改动。
-2. 新增动画实体必须放在 `src/ani`。
-3. 每个动画实体都必须有对应测试，放在 `tests/ani`，路径与 `src/ani` 对应。
-4. 模板没有示例动画，不要假设项目里已有现成动画可以修改。
-5. `src/main.ts` 是最小入口骨架，不是示例动画展示区；只有在任务需要时才接入真实动画。
-6. 必须通过 `typecheck`、`lint`、`test`、`build`，没有错误才算完成。
-7. 动画实体字段命名禁止使用 `label`，应使用 `labelText` 等安全名称。
+1. `src/core` 是稳定层。除非任务明确要求修改基础设施，否则优先复用现有能力。
+2. 新增动画实体必须放在 `src/ani`，不要混入 `src/core`。
+3. 每个新增动画实体都必须在 `tests/ani` 补对应测试。
+4. `src/main.ts` 是调试入口，不是正式导出入口；正式导出统一走 `src/index.ts`。
+5. 不要假设包内已经有可复用的示例动画。当前初始化状态下没有预置动画资产。
+6. 完成后必须通过根目录验证：`pnpm lint`、`pnpm test`、`pnpm typecheck`、`pnpm build`。
+7. 如需保留空目录，使用 `.keepme`，不要再用 `.gitkeep`。
 
-## 目录约定
+## 目录职责
 
 - `src/core`
   - `visualentity.ts`：生命周期抽象基类
   - `objectpool.ts`：对象池复用
-  - `entitymanager.ts`：统一更新与回收
+  - `entitymanager.ts`：统一更新、父节点清理和回收
 - `src/ani`
   - 动画实体实现目录
-  - 模板初始化时为空，需要按任务创建文件
+  - 新文件默认按实体或效果命名
+- `src/index.ts`
+  - 正式库入口
 - `src/main.ts`
-  - Pixi 应用初始化、图层、布局、ticker 更新入口
-  - 只保留工程骨架，不保留演示逻辑
+  - 本地预览壳
 - `tests/core`
-  - 基础设施测试
+  - 核心基础设施测试
 - `tests/ani`
-  - 动画实体测试目录
-  - 模板初始化时为空，需要与 `src/ani` 同步补齐
-- `tests/setup.ts`
-  - Pixi 测试环境 mock
+  - 与 `src/ani` 对应的动画测试
 
 ## 动画实现规则
 
-### 1. 从 `VisualEntity` 开始
+### 生命周期
 
-所有需要统一生命周期管理、对象池复用、自动回收的动画对象，都应继承 `VisualEntity`。
-
-每个实体都必须实现：
+所有需要统一调度和复用的动画对象都应继承 `VisualEntity<TConfig>`，并实现：
 
 - `init(config)`：初始化本次实例状态
-- `update(delta)`：推进每帧状态
-- `reset()`：清理并恢复到可复用状态
+- `update(deltaSeconds)`：推进每帧状态
+- `reset()`：清理复用污染
 
-关键约束：
+推荐约定：
 
-- `init` 开始时必须设置 `this.finished = false`
-- `reset` 时必须调用 `killTimeline()` 并清理本次实例状态
-- 如果使用 GSAP timeline，完成时必须把 `this.finished = true`
+- 在 `init` 开头调用 `beginLifecycle()`。
+- 动画完成时调用 `markFinished()`，或显式设置 `finished = true`。
+- 在 `reset()` 中调用 `killTimeline()` 并清理本次实例状态。
 
-### 2. 构造函数只做稳定结构
+### 构造函数边界
 
-构造函数只负责创建会被复用的稳定显示对象与容器结构。
-
-不要在构造函数里做这些事：
+构造函数只创建稳定显示结构，不要在构造函数里：
 
 - 加载资源
-- 绑定本次动画输入
-- 发起网络请求
-- 假设实例只会使用一次
+- 写入一次性任务数据
+- 假设实例不会复用
+- 发起异步请求
 
-### 3. `init` 管本次实例，`reset` 清理污染
+### 管理器协作
 
-一切和“本次动画”有关的内容都应放进 `init(config)`：
-
-- 初始位置
-- 透明度 / 缩放 / 旋转
-- 时长与速度
-- 资源引用
-- 时间轴构建
-
-一切可能污染下一次复用的状态都必须在 `reset()` 中归零。
-
-### 4. GSAP 与 update 不要互相打架
-
-如果某些属性由 GSAP 控制，就不要在 `update` 中重复手动推进这些同一属性，避免竞态。
-
-## 对象池与管理器协作规则
-
-- 实体不直接自我销毁
-- 实体通过 `finished = true` 通知管理器应当回收
-- `EntityManager.update(delta)` 会负责检测结束、回收到对象池、并从父容器移除
-
-推荐流程：
-
-1. 创建对象池
-2. `pool.get(config)` 取得实体
-3. 把实体加到目标图层
-4. 交给 `entityManager.add(entity, pool, layer)` 管理
-
-## 资源与场景规则
-
-### 资源加载
-
-- 使用 `Assets` 在进入场景前加载资源
-- 实体构造函数只接收已加载资源
-- 如果用户提供图片 URL，先加载资源，再把资源对象传给实体
-
-### 图层
-
-建议保持三层：
-
-- `groundLayer`
-- `mainLayer`
-- `topLayer`
-
-只有当任务明确需要更多层级时再扩展。
+- 实体通过 `finished` 告知管理器应回收。
+- `EntityManager.update(deltaSeconds)` 负责更新、从父节点移除并归还对象池。
+- 推荐流程：`pool.get(config)` -> 加入图层 -> `entityManager.add(entity, pool, parent)`。
 
 ## 测试要求
 
-每个新增动画实体都必须有对应测试，并至少覆盖：
+每个新增动画实体至少覆盖以下行为：
 
-1. `init` 后初始状态正确
-2. timeline 或更新逻辑可以把实体推进到结束
-3. `finished` 在结束时正确变化
-4. `reset()` 能清理 timeline 与复用状态
-5. 默认配置或最小配置可正常执行
+1. `init` 后初始状态正确。
+2. timeline 或 update 可以推进到结束。
+3. `finished` 会在结束时变化。
+4. `reset()` 可以清理 timeline 与复用状态。
+5. 最小配置可运行。
 
-测试位置：
+如果使用新的 Pixi API，而 `tests/setup.ts` 的 mock 不够用，需要同步补齐测试环境。
 
-- `tests/ani/<entity>.test.ts`
+## 预览和验证
 
-测试环境说明：
-
-- Pixi 已在 `tests/setup.ts` 中做了 mock
-- 如果你使用新的 Pixi API，而测试 mock 尚未覆盖，需要同步补齐 mock
+- 本地预览：在根目录运行 `pnpm --filter @slotclientengine/pixiani dev`
+- 正式库构建：在根目录运行 `pnpm build`
+- 若依赖安装失败，可先设置：
+  - `export http_proxy=http://127.0.0.1:1087`
+  - `export https_proxy=http://127.0.0.1:1087`
 
 ## 工作方式
 
 推荐执行顺序：
 
-1. 先只读理解 `src/core`
-2. 在 `src/ani` 新增或重写实体
-3. 在 `tests/ani` 写对应测试
-4. 按任务需要在 `src/main.ts` 接入真实动画
-5. 完成后做 `publishProject` 验证
-
-## RunAction 约定
-
-- `install`：初始化依赖
-- `build`：运行构建
-- `test`：运行测试
-- `lint`：运行 lint
-- `typecheck`：运行类型检查
-- `format`：运行格式化
-
-限制：
-
-- `runProjectAction` 只能调用上述预设 action 名称，不能传 shell 命令
-- 查看文件请使用 `listProjectFiles` / `readProjectDoc` / `searchProjectFiles`
-- 新建目录时，通过创建目标文件路径完成，不要调用 shell 建目录
-
-## publish 规则
-
-- 完成一轮真实改动后，默认优先通过一次 publish 做阶段验证
-- publish 失败时，优先基于错误信息修源码，再重新 publish
-- 不要在没有新改动的情况下重复 publish
-
-## 关于这个模板
-
-- 这是无示例代码版本的 pixiani 模板
-- 任何动画、资源、测试、场景接线都应当围绕当前任务新增，而不是依赖旧演示内容
-- 这个文件已经吸收了原 pixiani 动画开发指南中的关键规则，并改写成更适合直接注入 SystemInstruction 的项目规则版本
+1. 先理解 `src/core` 的稳定边界。
+2. 在 `src/ani` 新增动画实体。
+3. 在 `tests/ani` 补测试。
+4. 仅在任务需要时修改 `src/main.ts` 做预览接线。
+5. 从仓库根目录完成统一验证。

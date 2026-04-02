@@ -1,9 +1,9 @@
 import { Application, Container, Rectangle } from "pixi.js";
-import { entityManager } from "./core/entitymanager";
-import { computeCanvasLayout } from "./layout";
+import { entityManager } from "./core/entitymanager.js";
+import { computeCanvasLayout } from "./layout.js";
 
 async function bootstrap() {
-  const DESIGN_RESOLUTION = {
+  const designResolution = {
     width: 800,
     height: 800
   } as const;
@@ -25,8 +25,8 @@ async function bootstrap() {
   bodyElement.style.overflow = "hidden";
   const app = new Application();
   await app.init({
-    width: DESIGN_RESOLUTION.width,
-    height: DESIGN_RESOLUTION.height,
+    width: designResolution.width,
+    height: designResolution.height,
     background: "#000000"
   });
 
@@ -48,7 +48,7 @@ async function bootstrap() {
 
   const rootStage = new Container();
   rootStage.eventMode = "static";
-  rootStage.hitArea = new Rectangle(0, 0, DESIGN_RESOLUTION.width, DESIGN_RESOLUTION.height);
+  rootStage.hitArea = new Rectangle(0, 0, designResolution.width, designResolution.height);
 
   const groundLayer = new Container();
   const mainLayer = new Container();
@@ -61,8 +61,8 @@ async function bootstrap() {
 
   function applyLayout() {
     const { width, height, offsetX, offsetY } = computeCanvasLayout({
-      designWidth: DESIGN_RESOLUTION.width,
-      designHeight: DESIGN_RESOLUTION.height,
+      designWidth: designResolution.width,
+      designHeight: designResolution.height,
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight
     });

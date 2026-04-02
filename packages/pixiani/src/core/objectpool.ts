@@ -1,23 +1,23 @@
-import { VisualEntity } from "./visualentity";
+import { VisualEntity } from "./visualentity.js";
 
-export class ObjectPool<T extends VisualEntity> {
-  private pool: T[] = [];
-  private factory: () => T;
+export class ObjectPool<TConfig, TEntity extends VisualEntity<TConfig>> {
+  private pool: TEntity[] = [];
+  private factory: () => TEntity;
 
-  constructor(factory: () => T, initialSize = 0) {
+  constructor(factory: () => TEntity, initialSize = 0) {
     this.factory = factory;
     for (let i = 0; i < initialSize; i += 1) {
       this.pool.push(factory());
     }
   }
 
-  get(config: unknown) {
+  get(config: TConfig) {
     const entity = this.pool.pop() ?? this.factory();
     entity.init(config);
     return entity;
   }
 
-  return(entity: T) {
+  return(entity: TEntity) {
     entity.reset();
     this.pool.push(entity);
   }

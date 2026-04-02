@@ -1,16 +1,15 @@
 import { describe, expect, it } from "vitest";
 import gsap from "gsap";
-import { ObjectPool } from "../../src/core/objectpool";
-import { VisualEntity } from "../../src/core/visualentity";
+import { ObjectPool } from "../../src/core/objectpool.js";
+import { VisualEntity } from "../../src/core/visualentity.js";
 
-class PooledEntity extends VisualEntity {
+class PooledEntity extends VisualEntity<Record<string, never>> {
   initCount = 0;
   resetCount = 0;
 
-  init(_config?: unknown) {
+  init(_config: Record<string, never>) {
     this.initCount += 1;
-    this.finished = false;
-    this.killTimeline();
+    this.beginLifecycle();
     this.timeline = gsap.timeline();
   }
 
@@ -24,7 +23,7 @@ class PooledEntity extends VisualEntity {
 
 describe("ObjectPool", () => {
   it("reuses instances and tracks availability", () => {
-    const pool = new ObjectPool(() => new PooledEntity(), 1);
+    const pool = new ObjectPool<Record<string, never>, PooledEntity>(() => new PooledEntity(), 1);
     expect(pool.available).toBe(1);
 
     const first = pool.get({});

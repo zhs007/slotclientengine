@@ -1,16 +1,15 @@
 import { describe, expect, it } from "vitest";
 import gsap from "gsap";
 import { Container } from "pixi.js";
-import { EntityManager } from "../../src/core/entitymanager";
-import { ObjectPool } from "../../src/core/objectpool";
-import { VisualEntity } from "../../src/core/visualentity";
+import { EntityManager } from "../../src/core/entitymanager.js";
+import { ObjectPool } from "../../src/core/objectpool.js";
+import { VisualEntity } from "../../src/core/visualentity.js";
 
-class ManagedEntity extends VisualEntity {
+class ManagedEntity extends VisualEntity<Record<string, never>> {
   updates: number[] = [];
 
-  init(_config?: unknown) {
-    this.finished = false;
-    this.killTimeline();
+  init(_config: Record<string, never>) {
+    this.beginLifecycle();
     this.timeline = gsap.timeline();
   }
 
@@ -26,7 +25,7 @@ class ManagedEntity extends VisualEntity {
 describe("EntityManager", () => {
   it("updates entities and sweeps finished ones", () => {
     const manager = new EntityManager();
-    const pool = new ObjectPool(() => new ManagedEntity(), 0);
+    const pool = new ObjectPool<Record<string, never>, ManagedEntity>(() => new ManagedEntity(), 0);
     const parent = new Container();
 
     const entity = pool.get({});
@@ -47,7 +46,7 @@ describe("EntityManager", () => {
 
   it("falls back to entity parent when parent not provided", () => {
     const manager = new EntityManager();
-    const pool = new ObjectPool(() => new ManagedEntity(), 0);
+    const pool = new ObjectPool<Record<string, never>, ManagedEntity>(() => new ManagedEntity(), 0);
     const parent = new Container();
 
     const entity = pool.get({});
@@ -63,7 +62,7 @@ describe("EntityManager", () => {
 
   it("clear removes all active entities", () => {
     const manager = new EntityManager();
-    const pool = new ObjectPool(() => new ManagedEntity(), 0);
+    const pool = new ObjectPool<Record<string, never>, ManagedEntity>(() => new ManagedEntity(), 0);
 
     const first = pool.get({});
     const second = pool.get({});

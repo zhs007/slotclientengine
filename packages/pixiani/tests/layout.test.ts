@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeCanvasLayout } from "../src/layout.ts";
+import { computeCanvasLayout } from "../src/layout.js";
 
 describe("computeCanvasLayout", () => {
   it("centers canvas when viewport larger than design", () => {
