@@ -16,7 +16,9 @@
 - `Pan` 模式下按住左键拖动画布可以平移视角，不影响动画播放。
 - 鼠标滚轮会以当前指针位置为锚点缩放整个场景，缩放范围带上下限钳制。
 - 右侧树状面板直接从 `SpineModel` 派生，展示 bone 层级和每个 bone 下的 slot 归属。
-- 首版舞台直接点选优先覆盖 bone；slot 选中通过右侧树完成，并会高亮其所属 bone。
+- 点击右侧节点树后，舞台会在贴图上方绘制粗线条、双层高亮的 selection box。
+- slot 节点优先显示当前 attachment 的旋转包围盒；bone 节点显示其子树内可见 slot 的联合范围，没有可见 attachment 时退化为固定强调框。
+- 首版舞台直接点选优先覆盖 bone；slot 选中通过右侧树完成，并会同步高亮其所属 bone。
 
 ## 当前支持的数据子集
 
@@ -43,6 +45,7 @@ pnpm --filter spine2pixiani-demo build
 
 - `src/runtime`: atlas 解析、Spine 适配、时间轴采样与显示层辅助
 - `src/runtime/debug-tree.ts`: 从 `SpineModel` 构建调试树结构
+- `src/runtime/debug-bounds.ts`: 选中节点包围盒与骨骼联合范围计算
 - `src/runtime/viewport-controller.ts`: 视口平移与缩放状态计算
 - `src/ani/cabin`: cabin 场景构建与动画实体
 - `src/ui/node-tree.ts`: 右侧调试树面板

@@ -85,8 +85,43 @@ class MockSprite extends MockContainer {
   }
 }
 
+class MockGraphics extends MockContainer {
+  clear() {
+    return this;
+  }
+
+  lineStyle(_width?: number, _color?: number, _alpha?: number) {
+    return this;
+  }
+
+  beginFill(_color?: number, _alpha?: number) {
+    return this;
+  }
+
+  endFill() {
+    return this;
+  }
+
+  drawPolygon(_points: number[]) {
+    return this;
+  }
+
+  drawCircle(_x: number, _y: number, _radius: number) {
+    return this;
+  }
+
+  moveTo(_x: number, _y: number) {
+    return this;
+  }
+
+  lineTo(_x: number, _y: number) {
+    return this;
+  }
+}
+
 vi.mock("pixi.js", () => ({
   Container: MockContainer,
+  Graphics: MockGraphics,
   Sprite: MockSprite,
   Texture: MockTexture
 }));

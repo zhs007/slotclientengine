@@ -1,11 +1,19 @@
-import { Container, Sprite, Texture } from "pixi.js";
+import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import { applySlotVisual, createSlotSprite } from "../../runtime/display-factory.js";
+import {
+  computeBoneSelectionBounds,
+  computeSlotSelectionBounds,
+  createBoneFallbackSelectionBounds,
+  createBoneSubtreeSlotIndex,
+  type ScenePoint,
+  type SelectionBounds
+} from "../../runtime/debug-bounds.js";
 import {
   composeAttachmentTransform,
   computeWorldBoneTransforms,
   sampleAnimationPose
 } from "../../runtime/timeline-sampler.js";
-import type { SampledAnimationPose, SpineModel } from "../../runtime/spine-types.js";
+import type { SampledAnimationPose, SpineModel, WorldTransform } from "../../runtime/spine-types.js";
 import { getBoneDebugNodeId } from "../../runtime/debug-tree.js";
 
 export class CabinScene {
@@ -16,6 +24,10 @@ export class CabinScene {
   private boneNodes = new Map<string, Container>();
   private slotNodes = new Map<string, ReturnType<typeof createSlotSprite>>();
   private boneMarkers = new Map<string, Sprite>();
+  private selectionOverlay = new Graphics();
+  private boneSubtreeSlots = new Map<string, string[]>();
+  private currentPose: SampledAnimationPose | null = null;
+  private currentWorldBones: Record<string, WorldTransform> = {};
   private selectedNodeId: string | null = null;
   private pickEnabled = true;
   private selectionListeners = new Set<(boneName: string) => void>();
@@ -29,6 +41,9 @@ export class CabinScene {
     this.view.addChild(this.debugLayer);
     this.createBones();
     this.createSlots();
+    this.boneSubtreeSlots = createBoneSubtreeSlotIndex(this.model);
+    this.selectionOverlay.visible = false;
+    this.debugLayer.addChild(this.selectionOverlay);
   }
 
   private createBones() {
@@ -81,6 +96,7 @@ export class CabinScene {
   }
 
   applyPose(pose: SampledAnimationPose) {
+    this.currentPose = pose;
     for (const bone of this.model.bones) {
       const node = this.boneNodes.get(bone.name);
       const local = pose.bones[bone.name];
@@ -92,10 +108,10 @@ export class CabinScene {
       node.scale.set(local.scaleX, local.scaleY);
     }
 
-    const worldBones = computeWorldBoneTransforms(this.model, pose.bones);
+    this.currentWorldBones = computeWorldBoneTransforms(this.model, pose.bones);
     for (const bone of this.model.bones) {
       const marker = this.boneMarkers.get(bone.name);
-      const world = worldBones[bone.name];
+      const world = this.currentWorldBones[bone.name];
       if (!marker || !world) {
         continue;
       }
@@ -115,7 +131,7 @@ export class CabinScene {
         continue;
       }
 
-      const world = composeAttachmentTransform(worldBones[slotPose.boneName], slotPose.attachment);
+      const world = composeAttachmentTransform(this.currentWorldBones[slotPose.boneName], slotPose.attachment);
       sprite.position.set(world.x, -world.y);
       sprite.rotation = (-world.rotation * Math.PI) / 180;
       sprite.scale.set(world.scaleX, world.scaleY);
@@ -164,6 +180,88 @@ export class CabinScene {
       marker.width = selected ? 18 : 12;
       marker.height = selected ? 18 : 12;
     }
+
+    this.refreshSelectionOverlay();
+  }
+
+  private refreshSelectionOverlay() {
+    const selectionBounds = this.getSelectionBounds();
+    this.selectionOverlay.clear();
+    this.selectionOverlay.visible = selectionBounds !== null;
+    if (!selectionBounds) {
+      return;
+    }
+
+    const polygon = flattenPoints(selectionBounds.corners);
+
+    this.selectionOverlay.lineStyle(0);
+    this.selectionOverlay.beginFill(0xffa65c, selectionBounds.kind === "fallback" ? 0.14 : 0.18);
+    this.selectionOverlay.drawPolygon(polygon);
+    this.selectionOverlay.endFill();
+
+    this.selectionOverlay.lineStyle(14, 0xff6d47, 0.18);
+    this.selectionOverlay.drawPolygon(polygon);
+    this.selectionOverlay.lineStyle(8, 0xffbf66, 0.72);
+    this.selectionOverlay.drawPolygon(polygon);
+    this.selectionOverlay.lineStyle(3, 0x8be4ff, 0.96);
+    this.selectionOverlay.drawPolygon(polygon);
+
+    this.drawCornerAccents(selectionBounds.corners);
+    this.drawCenterCross(selectionBounds.center, selectionBounds.kind === "fallback" ? 18 : 12);
+  }
+
+  private drawCornerAccents(corners: readonly ScenePoint[]) {
+    this.selectionOverlay.lineStyle(4, 0xfff4c1, 0.95);
+
+    for (let index = 0; index < corners.length; index += 1) {
+      const current = corners[index];
+      const next = corners[(index + 1) % corners.length];
+      const previous = corners[(index + corners.length - 1) % corners.length];
+
+      drawSegment(this.selectionOverlay, current, next, 18);
+      drawSegment(this.selectionOverlay, current, previous, 18);
+    }
+  }
+
+  private drawCenterCross(center: ScenePoint, armLength: number) {
+    this.selectionOverlay.lineStyle(3, 0x081019, 0.44);
+    this.selectionOverlay.drawCircle(center.x, center.y, armLength * 0.56);
+    this.selectionOverlay.lineStyle(3, 0x8be4ff, 0.98);
+    this.selectionOverlay.moveTo(center.x - armLength, center.y);
+    this.selectionOverlay.lineTo(center.x + armLength, center.y);
+    this.selectionOverlay.moveTo(center.x, center.y - armLength);
+    this.selectionOverlay.lineTo(center.x, center.y + armLength);
+  }
+
+  private getSelectionBounds(): SelectionBounds | null {
+    if (!this.selectedNodeId || !this.currentPose) {
+      return null;
+    }
+
+    if (this.selectedNodeId.startsWith("bone:")) {
+      const boneName = this.selectedNodeId.slice("bone:".length);
+      return computeBoneSelectionBounds(
+        this.currentPose,
+        this.currentWorldBones,
+        boneName,
+        this.boneSubtreeSlots.get(boneName) ?? []
+      );
+    }
+
+    if (this.selectedNodeId.startsWith("slot:")) {
+      const slotName = this.selectedNodeId.slice("slot:".length);
+      const slotPose = this.currentPose.slots[slotName];
+      if (!slotPose) {
+        return null;
+      }
+
+      return (
+        computeSlotSelectionBounds(this.currentWorldBones[slotPose.boneName], slotPose) ??
+        createBoneFallbackSelectionBounds(this.currentWorldBones[slotPose.boneName])
+      );
+    }
+
+    return null;
   }
 
   private getHighlightedBoneName() {
@@ -183,4 +281,21 @@ export class CabinScene {
 
     return null;
   }
+}
+
+function flattenPoints(points: readonly ScenePoint[]) {
+  return points.flatMap((point) => [point.x, point.y]);
+}
+
+function drawSegment(graphics: Graphics, start: ScenePoint, end: ScenePoint, maxLength: number) {
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  const length = Math.hypot(deltaX, deltaY);
+  if (length < 1e-6) {
+    return;
+  }
+
+  const ratio = Math.min(maxLength, length * 0.34) / length;
+  graphics.moveTo(start.x, start.y);
+  graphics.lineTo(start.x + deltaX * ratio, start.y + deltaY * ratio);
 }
