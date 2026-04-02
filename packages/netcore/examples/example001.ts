@@ -8,18 +8,22 @@
  * 4.  Executing a standard sequence: connect -> enter game -> perform action.
  *
  * To Run:
- * 1.  Create a `.env` file in the root directory with the following content:
+ * 1.  Create a `.env` file in the package directory with the following content:
  *     WEBSOCKET_URL=ws://your-server-url
  *     TOKEN=your-login-token
  *     GAME_CODE=your-game-code
- * 2.  Execute with ts-node: `npx ts-node examples/example001.ts`
+ * 2.  Execute from the repository root with:
+ *     `pnpm --filter @slotclientengine/netcore exec ts-node examples/example001.ts`
+ *
+ * For workspace development this example imports source files directly.
+ * Downstream packages should import from '@slotclientengine/netcore'.
  */
 
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import WebSocket from 'ws';
 import fetch from 'node-fetch';
-import { SlotcraftClient } from '../src/main';
+import { SlotcraftClient } from '../src';
 import { ConnectionState, RawMessagePayload, SlotcraftClientOptions } from '../src/types';
 
 // Polyfill WebSocket for the Connection class, which expects it to be global.

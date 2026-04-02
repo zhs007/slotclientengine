@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["src", "tests", "examples", "vitest.config.ts"],
+  "include": ["src", "tests", "examples", "vitest.config.ts", "eslint.config.cjs"],
   "exclude": ["node_modules", "dist"]
 }
