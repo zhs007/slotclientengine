@@ -8,11 +8,16 @@ class MockContainer {
   name = "";
   x = 0;
   y = 0;
+  width = 0;
+  height = 0;
   rotation = 0;
   alpha = 1;
   visible = true;
   tint = 0xffffff;
   blendMode: string | number = "normal";
+  eventMode = "auto";
+  cursor = "default";
+  private listeners = new Map<string, Array<(...args: unknown[]) => void>>();
   position = {
     x: 0,
     y: 0,
@@ -43,10 +48,25 @@ class MockContainer {
     child.parent = null;
     return child;
   }
+
+  on(eventName: string, listener: (...args: unknown[]) => void) {
+    const listeners = this.listeners.get(eventName) ?? [];
+    listeners.push(listener);
+    this.listeners.set(eventName, listeners);
+    return this;
+  }
+
+  emit(eventName: string, ...args: unknown[]) {
+    const listeners = this.listeners.get(eventName) ?? [];
+    for (const listener of listeners) {
+      listener(...args);
+    }
+  }
 }
 
 class MockTexture {
   static EMPTY = new MockTexture();
+  static WHITE = new MockTexture();
 
   static from(_source: unknown) {
     return new MockTexture();

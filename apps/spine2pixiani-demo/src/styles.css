@@ -27,7 +27,7 @@ body {
 
 .shell {
   display: grid;
-  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(280px, 360px);
   gap: 24px;
   min-height: 100vh;
   padding: 24px;
@@ -47,6 +47,7 @@ body {
   flex-direction: column;
   gap: 18px;
   padding: 24px;
+  min-height: 0;
 }
 
 .eyebrow {
@@ -60,6 +61,12 @@ body {
   margin: 0;
   font-size: clamp(28px, 4vw, 42px);
   line-height: 0.95;
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: clamp(24px, 3vw, 32px);
+  line-height: 1;
 }
 
 .panel p {
@@ -115,6 +122,22 @@ body {
   cursor: pointer;
 }
 
+.mode-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mode-button {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8f0de;
+}
+
+.mode-button.is-active {
+  background: linear-gradient(135deg, #7ed5ff 0%, #f6af51 100%);
+  color: #0b1014;
+}
+
 .toggle {
   display: inline-flex;
   gap: 10px;
@@ -149,11 +172,127 @@ body {
   width: 100%;
   min-height: calc(100vh - 80px);
   overflow: hidden;
+  border-radius: 22px;
+  touch-action: none;
 }
 
 .stage canvas {
   position: absolute;
   display: block;
+}
+
+.stage[data-mouse-mode="pan"] {
+  cursor: grab;
+}
+
+.stage[data-mouse-mode="pan"].is-dragging {
+  cursor: grabbing;
+}
+
+.stage[data-mouse-mode="select"] {
+  cursor: crosshair;
+}
+
+.debug-state {
+  display: grid;
+  gap: 10px;
+}
+
+.debug-stat {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.debug-stat-label {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(248, 240, 222, 0.54);
+}
+
+.debug-stat-value {
+  font-size: 16px;
+  color: #fff4e1;
+}
+
+.debug-stat-value.is-muted,
+.debug-stat-value.muted {
+  color: rgba(248, 240, 222, 0.52);
+}
+
+.tree-panel {
+  overflow: hidden;
+}
+
+.tree-title {
+  margin: 0;
+}
+
+.tree-list {
+  display: grid;
+  gap: 8px;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.tree-empty {
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(248, 240, 222, 0.58);
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 14px 12px calc(14px + var(--depth) * 16px);
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f8f0de;
+  text-align: left;
+}
+
+.tree-node.is-selected {
+  border-color: rgba(246, 175, 81, 0.6);
+  background: rgba(246, 175, 81, 0.14);
+}
+
+.tree-badge {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tree-badge-bone {
+  background: rgba(126, 213, 255, 0.18);
+  color: #8adfff;
+}
+
+.tree-badge-slot {
+  background: rgba(246, 175, 81, 0.18);
+  color: #ffc16d;
+}
+
+.tree-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-meta {
+  flex: 0 0 auto;
+  color: rgba(248, 240, 222, 0.58);
+  font-size: 12px;
 }
 
 .meta {
