@@ -1,0 +1,29 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build:app": {
+      "outputs": [
+        "dist/**"
+      ]
+    },
+    "lint:app": {
+      "outputs": [
+        ".turbo/lint/**"
+      ]
+    },
+    "test:run": {
+      "outputs": [
+        ".turbo/test/**",
+        "coverage/**"
+      ]
+    },
+    "format:app": {
+      "outputs": [
+        ".turbo/format/**"
+      ]
+    },
+    "typecheck:app": {
+      "cache": true
+    }
+  }
+}

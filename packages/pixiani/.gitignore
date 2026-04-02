@@ -1,0 +1,53 @@
+# Dependencies
+node_modules
+# pnpm-lock.yaml
+
+# Build outputs
+dist
+build
+.next
+.turbo
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# TypeScript
+*.tsbuildinfo
+
+startdoubaoimg.sh
+startdoubaoimglocal.sh
+startrmbg.sh
+startgeminiimg.sh
+startgeminiimglocal.sh
+rmbg-models
+.env
+djorpublish
+.gocache
+services/geminiimage/geminiimage
+services/pebbledb/pebbledb
+services/usermgr2/usermgr2
+services/genqwenimg/genqwenimg
+services/activationcode/activationcode
+services/gen_doubao_image/gen_doubao_image
+services/rmbg/rmbg
+*.out
+activation_codes.txt
+usermgr.pebble
+start*.sh
+
+# Coverage reports from vitest/jest/nyc
+coverage/
+**/coverage/
+db
+docker-compose.yml
+.pnpm-store
+data
