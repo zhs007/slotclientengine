@@ -23,7 +23,7 @@ export function createAnimationSelect(animationNames: string[]): AnimationSelect
   title.textContent = "Cabin Demo";
 
   const description = document.createElement("p");
-  description.textContent = "直接消费 cabin atlas 与 JSON 数据，使用手写 Pixi 播放层而不是 Spine 运行时。";
+  description.textContent = "直接消费 cabin atlas 与 JSON 数据，使用手写 Pixi 播放层而不是 Spine 运行时；点击右侧节点树会在舞台中直接显示选中框。";
 
   const controls = document.createElement("div");
   controls.className = "controls";
@@ -111,7 +111,7 @@ export function createAnimationSelect(animationNames: string[]): AnimationSelect
   const meta = document.createElement("div");
   meta.className = "meta";
   meta.innerHTML =
-    "<div>Animations: cabin, cabin_s</div><div>Debug view: bone picking, slot mapping, viewport pan/zoom</div>";
+    "<div>Animations: cabin, cabin_s</div><div>Debug view: tree-driven selection box, bone picking, viewport pan/zoom</div>";
 
   controls.append(selectGroup, actionGroup, modeGroup, debugState);
   root.append(eyebrow, title, description, controls, meta);

@@ -20,7 +20,7 @@ export function createNodeTreePanel(): NodeTreePanel {
   title.textContent = "Node Tree";
 
   const description = document.createElement("p");
-  description.textContent = "骨骼层级和插槽归属直接从 SpineModel 派生，用来定位错位、缺图和挂点问题。";
+  description.textContent = "骨骼层级和插槽归属直接从 SpineModel 派生；点击节点后，舞台会为当前目标绘制高可见性包围盒。";
 
   const list = document.createElement("div");
   list.className = "tree-list";
