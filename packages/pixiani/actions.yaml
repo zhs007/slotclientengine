@@ -1,0 +1,30 @@
+actions:
+  format:
+    description: "Format markdown/yaml files"
+    command: "npx prettier --write ."
+  lint:
+    description: "lint"
+    command: "pnpm lint"
+  typecheck:
+    description: "typecheck"
+    command: "pnpm typecheck"
+  test:
+    description: "test"
+    command: "pnpm test"
+  build:
+    description: "build"
+    command: "pnpm build"
+  install:
+    description: "install"
+    command: "pnpm install"
+publish:
+  checks:
+    - format
+    - typecheck
+    - lint
+    - test
+  pre_actions:
+    - build
+  package:
+    mode: dist
+    path: dist
