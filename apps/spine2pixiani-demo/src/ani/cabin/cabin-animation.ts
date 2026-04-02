@@ -68,6 +68,18 @@ export class CabinAnimationEntity extends VisualEntity<{ animationName: string; 
     this.scene.applyPose(this.lastPose);
   }
 
+  setPickingEnabled(enabled: boolean) {
+    this.scene.setPickingEnabled(enabled);
+  }
+
+  setSelectedNode(nodeId: string | null) {
+    this.scene.setSelectedNode(nodeId);
+  }
+
+  onBoneSelected(listener: (boneName: string) => void) {
+    return this.scene.onBoneSelected(listener);
+  }
+
   get currentAnimationName() {
     return this.activeAnimationName;
   }

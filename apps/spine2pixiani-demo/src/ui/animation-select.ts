@@ -1,8 +1,14 @@
+export type MouseMode = "select" | "pan";
+
 export type AnimationSelectControls = {
   root: HTMLElement;
   select: HTMLSelectElement;
   replayButton: HTMLButtonElement;
   loopCheckbox: HTMLInputElement;
+  setMouseMode: (mode: MouseMode) => void;
+  setSelection: (selection: { name: string; type: string; parentName: string | null } | null) => void;
+  setZoom: (zoom: number) => void;
+  onMouseModeChange: (listener: (mode: MouseMode) => void) => void;
 };
 
 export function createAnimationSelect(animationNames: string[]): AnimationSelectControls {
@@ -68,17 +74,116 @@ export function createAnimationSelect(animationNames: string[]): AnimationSelect
   row.append(replayButton, toggle);
   actionGroup.append(actionLabel, row);
 
+  const modeGroup = document.createElement("div");
+  modeGroup.className = "control-group";
+
+  const modeLabel = document.createElement("div");
+  modeLabel.className = "toggle-label";
+  modeLabel.textContent = "Mouse Mode";
+
+  const modeRow = document.createElement("div");
+  modeRow.className = "mode-row";
+
+  const selectModeButton = document.createElement("button");
+  selectModeButton.type = "button";
+  selectModeButton.className = "mode-button";
+  selectModeButton.textContent = "Select";
+
+  const panModeButton = document.createElement("button");
+  panModeButton.type = "button";
+  panModeButton.className = "mode-button";
+  panModeButton.textContent = "Pan";
+
+  modeRow.append(selectModeButton, panModeButton);
+  modeGroup.append(modeLabel, modeRow);
+
+  const debugState = document.createElement("div");
+  debugState.className = "debug-state";
+
+  const modeValue = createStatRow("Mode", "select");
+  const selectedValue = createStatRow("Selected", "Nothing selected");
+  const typeValue = createStatRow("Type", "-", "muted");
+  const parentValue = createStatRow("Parent", "-", "muted");
+  const zoomValue = createStatRow("Zoom", "100%");
+
+  debugState.append(modeValue.row, selectedValue.row, typeValue.row, parentValue.row, zoomValue.row);
+
   const meta = document.createElement("div");
   meta.className = "meta";
-  meta.innerHTML = "<div>Animations: cabin, cabin_s</div><div>Timelines: translate, rotate, scale, attachment, color</div>";
+  meta.innerHTML =
+    "<div>Animations: cabin, cabin_s</div><div>Debug view: bone picking, slot mapping, viewport pan/zoom</div>";
 
-  controls.append(selectGroup, actionGroup);
+  controls.append(selectGroup, actionGroup, modeGroup, debugState);
   root.append(eyebrow, title, description, controls, meta);
+
+  let mouseMode: MouseMode = "select";
+  const listeners = new Set<(mode: MouseMode) => void>();
+
+  const applyMouseMode = (nextMode: MouseMode) => {
+    mouseMode = nextMode;
+    selectModeButton.classList.toggle("is-active", nextMode === "select");
+    panModeButton.classList.toggle("is-active", nextMode === "pan");
+    modeValue.value.textContent = nextMode;
+  };
+
+  const setMouseMode = (nextMode: MouseMode) => {
+    if (nextMode === mouseMode) {
+      applyMouseMode(nextMode);
+      return;
+    }
+
+    applyMouseMode(nextMode);
+    for (const listener of listeners) {
+      listener(nextMode);
+    }
+  };
+
+  selectModeButton.addEventListener("click", () => setMouseMode("select"));
+  panModeButton.addEventListener("click", () => setMouseMode("pan"));
+  applyMouseMode(mouseMode);
 
   return {
     root,
     select,
     replayButton,
-    loopCheckbox
+    loopCheckbox,
+    setMouseMode,
+    setSelection(selection) {
+      selectedValue.value.textContent = selection?.name ?? "Nothing selected";
+      typeValue.value.textContent = selection?.type ?? "-";
+      parentValue.value.textContent = selection?.parentName ?? "-";
+      selectedValue.value.classList.toggle("is-muted", !selection);
+      typeValue.value.classList.toggle("is-muted", !selection);
+      parentValue.value.classList.toggle("is-muted", !selection);
+    },
+    setZoom(zoom) {
+      zoomValue.value.textContent = `${Math.round(zoom * 100)}%`;
+    },
+    onMouseModeChange(listener) {
+      listeners.add(listener);
+    }
+  };
+}
+
+function createStatRow(label: string, value: string, valueClassName?: string) {
+  const row = document.createElement("div");
+  row.className = "debug-stat";
+
+  const name = document.createElement("span");
+  name.className = "debug-stat-label";
+  name.textContent = label;
+
+  const content = document.createElement("strong");
+  content.className = "debug-stat-value";
+  if (valueClassName) {
+    content.classList.add(valueClassName);
+  }
+  content.textContent = value;
+
+  row.append(name, content);
+
+  return {
+    row,
+    value: content
   };
 }
