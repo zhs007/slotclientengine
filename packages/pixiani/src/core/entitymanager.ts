@@ -1,17 +1,21 @@
 import { Container } from "pixi.js";
-import { ObjectPool } from "./objectpool";
-import { VisualEntity } from "./visualentity";
+import { ObjectPool } from "./objectpool.js";
+import { VisualEntity } from "./visualentity.js";
 
-type ManagedEntity<T extends VisualEntity> = {
-  entity: T;
-  pool: ObjectPool<T>;
+type ManagedEntity<TConfig, TEntity extends VisualEntity<TConfig>> = {
+  entity: TEntity;
+  pool: ObjectPool<TConfig, TEntity>;
   parent?: Container | null;
 };
 
 export class EntityManager {
-  private active: ManagedEntity<VisualEntity>[] = [];
+  private active: ManagedEntity<unknown, VisualEntity<unknown>>[] = [];
 
-  add<T extends VisualEntity>(entity: T, pool: ObjectPool<T>, parent?: Container | null) {
+  add<TConfig, TEntity extends VisualEntity<TConfig>>(
+    entity: TEntity,
+    pool: ObjectPool<TConfig, TEntity>,
+    parent?: Container | null
+  ) {
     this.active.push({
       entity,
       pool,
@@ -19,15 +23,15 @@ export class EntityManager {
     });
   }
 
-  update(delta: number) {
+  update(deltaSeconds: number) {
     for (let i = this.active.length - 1; i >= 0; i -= 1) {
       const record = this.active[i];
-      record.entity.update(delta);
+      record.entity.update(deltaSeconds);
 
       if (record.entity.finished) {
-        record.pool.return(record.entity);
         const parent = record.parent ?? record.entity.parent;
         parent?.removeChild(record.entity);
+        record.pool.return(record.entity);
         this.active.splice(i, 1);
       }
     }

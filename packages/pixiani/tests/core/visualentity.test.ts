@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 import gsap from "gsap";
-import { VisualEntity } from "../../src/core/visualentity";
+import { VisualEntity } from "../../src/core/visualentity.js";
 
-class TestEntity extends VisualEntity {
-  init(_config?: unknown) {
-    this.finished = false;
-    this.killTimeline();
+class TestEntity extends VisualEntity<Record<string, never>> {
+  init(_config: Record<string, never>) {
+    this.beginLifecycle();
     this.timeline = gsap.timeline({
       onComplete: () => {
-        this.finished = true;
+        this.markFinished();
       }
     });
     this.timeline.to(this, { duration: 0.1 });
