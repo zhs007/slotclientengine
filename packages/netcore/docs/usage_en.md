@@ -1,122 +1,80 @@
 # Usage Guide
 
-This is a lightweight and reliable frontend network library for WebSocket communication with a game server. It provides automatic reconnection, request caching, and a simple Promise-based API.
+`@slotclientengine/netcore` is an internal workspace package. Use it from other packages in this monorepo instead of installing it as an external npm dependency.
 
-## Features
+## Import
 
-- **Automatic Reconnection**: Automatically attempts to reconnect if the network connection is lost unexpectedly.
-- **Request Caching**: Caches outgoing requests during a reconnection attempt and sends them automatically upon success.
-- **Promise API**: All asynchronous operations (like `connect`, `send`) return Promises, making them easy to use with `async/await`.
-- **Event-Driven**: Listen to client lifecycle events using `on` and `off` methods.
-- **Lightweight**: Zero production dependencies.
-
-## Installation
-
-```bash
-npm install <package-name>
+```ts
+import { ConnectionState, SlotcraftClient } from '@slotclientengine/netcore';
 ```
-
-_(Note: `<package-name>` will be determined when publishing to npm)_
 
 ## Quick Start
 
-```typescript
-import { SlotcraftClient } from '<package-name>';
-
-const options = {
-  url: 'ws://your-server.com/ws',
+```ts
+const client = new SlotcraftClient({
+  url: 'ws://your-server.example/ws',
   token: 'user-auth-token',
   gamecode: 'game-101',
-};
-
-const client = new SlotcraftClient(options);
-
-// Listen for events
-client.on('connect', () => {
-  console.log('WebSocket connection established!');
 });
 
-client.on('ready', () => {
-  console.log('Client is ready to play!');
+await client.connect();
+await client.enterGame();
 
-  // Send a game command
-  client
-    .send('spin', { bet: 100 })
-    .then((response) => {
-      console.log('Spin result:', response);
-    })
-    .catch((error) => {
-      console.error('Spin failed:', error);
-    });
-});
+while (client.getState() !== ConnectionState.IN_GAME) {
+  const state = client.getState();
 
-client.on('disconnect', (payload) => {
-  console.log(`Connection closed: ${payload.reason} (Code: ${payload.code})`);
-});
-
-client.on('reconnecting', (payload) => {
-  console.log(`Attempting to reconnect... (Attempt ${payload.attempt})`);
-});
-
-client.on('error', (error) => {
-  console.error('An error occurred:', error);
-});
-
-// Start the connection
-async function main() {
-  try {
-    await client.connect();
-    console.log('Connect, login, and game entry complete!');
-  } catch (error) {
-    console.error('Failed to connect:', error);
+  if (state === ConnectionState.SPINEND) {
+    await client.collect();
+    continue;
   }
+
+  if (state === ConnectionState.WAITTING_PLAYER) {
+    await client.selectOptional(0);
+    continue;
+  }
+
+  if (state === ConnectionState.RESUMING) {
+    await new Promise((resolve) => client.once('state', resolve));
+    continue;
+  }
+
+  throw new Error(`Unhandled state: ${state}`);
 }
 
-main();
+const result = await client.spin({ bet: 100, lines: 10 });
+console.log(result);
 ```
 
-## API Reference
+## Main Runtime Methods
 
-### `new SlotcraftClient(options)`
+- `connect(token?)`
+- `enterGame(gamecode?)`
+- `spin(params)`
+- `collect(playIndex?)`
+- `selectOptional(index)`
+- `selectSomething(clientParameter)`
+- `send(cmdid, params)`
+- `disconnect()`
 
-Creates a new client instance.
+## Useful Events
 
-- `options`: `SlotcraftClientOptions` object
-  - `url: string`: **Required**. The WebSocket server URL.
-  - `token: string`: **Required**. The user's authentication token.
-  - `gamecode: string`: **Required**. The game code to enter.
-  - `maxReconnectAttempts?: number`: _Optional_. The maximum number of reconnect attempts (default: 10).
-  - `reconnectDelay?: number`: _Optional_. The initial reconnection delay in milliseconds (default: 1000). The delay increases exponentially.
+- `state`: emits `{ previous, current, data? }`
+- `connect`: emitted after the transport connects
+- `disconnect`: emits `{ code, reason, wasClean }`
+- `reconnecting`: emits `{ attempt }`
+- `message`: passive server messages
+- `raw_message`: every raw send/receive frame
+- `error`: unexpected runtime errors
 
-### `client.connect(): Promise<void>`
+## Replay Mode
 
-Initiates the full connection, login, and game entry sequence. Returns a Promise that resolves when the client enters the `IN_GAME` state.
+When the constructor receives an `http://` or `https://` URL, the client uses replay mode instead of live WebSocket mode. In Node.js you must provide `options.fetch`.
 
-### `client.send(cmd: string, data?: object): Promise<any>`
+## Development Commands
 
-Sends a message to the server when in the `IN_GAME` state. `cmd` is the command name, and `data` is the payload. Returns a Promise that resolves with the corresponding response from the server.
+Run from the repository root:
 
-### `client.disconnect(): void`
-
-Actively closes the connection.
-
-### `client.on(event: string, callback: Function)`
-
-Subscribes to an event.
-
-### `client.off(event: string, callback: Function)`
-
-Unsubscribes from an event.
-
-### `client.once(event: string, callback: Function)`
-
-Subscribes to an event for a single emission.
-
-## Events
-
-- `connect`: Fired when the physical WebSocket connection is established.
-- `disconnect`: Fired when the connection is closed. `payload: { code, reason, wasClean }`
-- `ready`: Fired when the client has successfully entered the game and is ready to send messages.
-- `reconnecting`: Fired when an unexpected disconnection occurs and the client is attempting to reconnect. `payload: { attempt }`
-- `error`: Fired when an error occurs. `payload: Error | Event`
-- `data`: Fired for any server-pushed messages that are not handled internally. `payload: object`
+- `pnpm --filter @slotclientengine/netcore test`
+- `pnpm --filter @slotclientengine/netcore lint`
+- `pnpm --filter @slotclientengine/netcore typecheck`
+- `pnpm --filter @slotclientengine/netcore build`

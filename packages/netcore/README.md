@@ -1,263 +1,120 @@
-# Slotcraft Client-side Networking Library
+# @slotclientengine/netcore
 
-[![CI](https://github.com/zhs007/slotcraft-client-net/actions/workflows/ci.yml/badge.svg)](https://github.com/zhs007/slotcraft-client-net/actions/workflows/ci.yml)
-[![Tested with Vitest](https://img.shields.io/badge/tested%20with-vitest-6E9F18.svg?logo=vitest)](https://vitest.dev/)
+Internal network library for the `slotclientengine` monorepo. It wraps WebSocket game communication behind a stateful `SlotcraftClient` facade and supports both live connections and replay-based debugging.
 
-A robust, efficient, and lightweight TypeScript frontend networking library. It serves as a communication bridge between a game application layer and a game server, handling WebSocket connections, protocol interactions, state synchronization, and error recovery.
+For Chinese documentation, see [README.zh.md](./README.zh.md).
 
-<details>
-<summary><strong>:cn: 中文版 (Chinese Version)</strong></summary>
+## Positioning
 
-Please [click here to view the Chinese documentation](./README.zh.md).
+- Workspace package name: `@slotclientengine/netcore`
+- Current usage: internal package for apps and other workspace libraries
+- Package manager: `pnpm`
+- Build orchestration: `turbo`
+- Output format: CommonJS in `dist/`
 
-</details>
+This package is not documented as a standalone published npm package. Consume it from the monorepo workspace.
 
 ## Features
 
-- **Connection Management**: Simple `connect()` method to handle the entire WebSocket connection, version checking, and login flow.
-- **State Machine**: Manages the complete client lifecycle (`IDLE`, `CONNECTING`, `CONNECTED`, `IN_GAME`, `RECONNECTING`, etc.) internally.
-- **Protocol Abstraction**: Provides a clean API (`spin`, `collect`, etc.) so developers don't need to manage low-level protocol details like `cmdid`.
-- **Event-Driven**: Decouples from game modules via an `on(event, callback)` system. Supports `connect`, `disconnect`, `reconnecting`, `message`, and `raw_message` events.
-- **Automatic Reconnection**: Automatically attempts to reconnect on unexpected network disconnections.
-- **Operation Queue**: Serializes all user actions (`spin`, `collect`, etc.) to prevent race conditions and ensure command ordering.
-- **Game State Resume**: Intelligently handles scenarios where a user re-enters a game with an unfinished round (e.g., pending rewards or choices).
-- **Replay Mode**: Allows debugging and testing by replaying a game session from a static JSON file, eliminating the need for a live server connection.
+- Handles connect, login, enter-game, spin, collect, and selection flows through one client API.
+- Maintains client state with resume handling for unfinished rounds.
+- Emits lifecycle, raw network, and passive message events.
+- Retries live connections after unexpected disconnects.
+- Supports replay mode when the URL points to an HTTP(S) JSON snapshot.
 
-## Project Structure
+## Workspace Usage
 
-```
-.
-├── dist/                # Compiled output (JavaScript and type definitions)
-├── docs/                # Documentation files
-├── examples/            # Example usage scripts
-├── src/                 # TypeScript source code
-│   ├── connection.ts    # Low-level WebSocket connection wrapper
-│   ├── event-emitter.ts # Simple event emitter implementation
-│   ├── index.ts         # Main library export entry point
-│   ├── live-client.ts   # Implementation for live server communication
-│   ├── main.ts          # The main SlotcraftClient facade
-│   ├── replay-client.ts # Implementation for replaying sessions from a file
-│   └── types.ts         # Core type definitions and interfaces
-├── tests/               # Unit and integration tests (Vitest)
-├── package.json         # Project configuration and scripts
-└── tsconfig.json        # TypeScript compiler options
+From another workspace package, depend on `@slotclientengine/netcore` and import from the package entry:
+
+```ts
+import { ConnectionState, SlotcraftClient } from '@slotclientengine/netcore';
 ```
 
-## Code Architecture
+## Minimal Example
 
-The library is architected around the `SlotcraftClient` class, which acts as a facade. Based on the URL scheme provided in its constructor (`ws[s]://` or `http[s]://`), it instantiates one of two implementations:
+```ts
+import { ConnectionState, SlotcraftClient } from '@slotclientengine/netcore';
 
--   **`SlotcraftClientLive`**: The primary implementation for connecting to a live WebSocket server. It features a comprehensive state machine, an operation queue to serialize user actions, automatic reconnection, and heartbeat management.
--   **`SlotcraftClientReplay`**: A secondary implementation for debugging and testing. It doesn't connect to a server; instead, it fetches a JSON file representing a game session and simulates the client's behavior based on that data.
-
-This design separates the core game logic from the transport layer, allowing for powerful testing and development workflows.
-
-## Basic Usage
-
-### Installation
-
-```bash
-npm install slotcraft-client-net
-```
-
-### Development Scripts
-
--   `npm run build`: Compiles the TypeScript code to the `dist/` directory.
--   `npm test`: Runs the Vitest test suite and generates a coverage report.
--   `npm run lint`: Lints the codebase for style and potential errors.
--   `npm run typecheck`: Checks the project for TypeScript type errors without compiling.
-
-## Minimal Integration (Browser)
-
-This example shows the minimal setup for connecting to a server, entering a game, and performing a single spin.
-
-**Important**: This is a browser-based example. Do not use environment variables or hardcode sensitive tokens directly in production code. Tokens should be fetched securely from your authentication service.
-
-```typescript
-import { SlotcraftClient, ConnectionState } from 'slotcraft-client-net';
-
-async function runMinimalExample() {
-  // Configuration should be passed securely.
+async function run() {
   const client = new SlotcraftClient({
-    url: 'ws://your-game-server.com/ws', // Your WebSocket server URL
-    token: 'user-secret-token',          // User's authentication token
-    gamecode: 'game-code-001',           // The specific game to enter
-    // Optional context parameters
-    businessid: 'your-business-id',
+    url: 'ws://your-game-server.example/ws',
+    token: 'user-token',
+    gamecode: 'game-code-001',
+    businessid: 'demo',
     clienttype: 'web',
     language: 'en',
   });
 
   client.on('state', ({ current }) => {
-    console.log(`Client state is now: ${current}`);
+    console.log('state:', current);
   });
 
-  client.on('error', (err) => {
-    console.error('A client error occurred:', err);
-  });
+  await client.connect();
+  await client.enterGame();
 
-  try {
-    console.log('Connecting...');
-    await client.connect(); // Connects to the server and logs in
+  while (client.getState() !== ConnectionState.IN_GAME) {
+    const state = client.getState();
 
-    console.log('Entering game...');
-    await client.enterGame(); // Enters the specified game
-
-    // Check if the game started in a state that needs handling (e.g., a pending win)
-    if (client.getState() !== ConnectionState.IN_GAME) {
-      console.log('Game needs to be resumed. See advanced guide for handling.');
-      // For this minimal example, we'll stop here.
-      client.disconnect();
-      return;
-    }
-
-    console.log('Spinning once...');
-    const result = await client.spin({ lines: 10, bet: 100 });
-    console.log('Spin successful:', result);
-
-    // If the spin resulted in a win, the state will be 'SPINEND'.
-    if (client.getState() === ConnectionState.SPINEND) {
-      console.log('Collecting win...');
+    if (state === ConnectionState.SPINEND) {
       await client.collect();
-      console.log('Win collected. State is now:', client.getState());
+      continue;
     }
 
-  } catch (error) {
-    console.error('An error occurred during the session:', error);
-  } finally {
-    if (client.getState() !== ConnectionState.DISCONNECTED) {
-        console.log('Disconnecting.');
-        client.disconnect();
+    if (state === ConnectionState.WAITTING_PLAYER) {
+      await client.selectOptional(0);
+      continue;
     }
+
+    if (state === ConnectionState.RESUMING) {
+      await new Promise((resolve) => client.once('state', resolve));
+      continue;
+    }
+
+    throw new Error(`Unhandled state during resume: ${state}`);
   }
+
+  const result = await client.spin({ bet: 100, lines: 10 });
+  console.log(result);
+  client.disconnect();
 }
 
-runMinimalExample();
+run().catch(console.error);
 ```
 
-## Advanced Integration
+## Public API
 
-### State Management
+- `connect(token?)`: establish connection and login.
+- `enterGame(gamecode?)`: enter the target game.
+- `spin(params)`: execute one in-game action.
+- `collect(playIndex?)`: collect the current or derived play result.
+- `selectOptional(index)`: resolve a pending player-choice state.
+- `selectSomething(clientParameter)`: send a generic string parameter to the server-side `selectany` flow.
+- `send(cmdid, params)`: send a lower-level command directly.
+- `getState()` and `getUserInfo()`: inspect runtime state and caches.
 
-The client operates on a strict state machine. You can get the current state at any time with `client.getState()`. The possible states are defined in the `ConnectionState` enum:
+## Development Commands
 
--   `IDLE`: Initial state.
--   `CONNECTING`: `connect()` has been called, WebSocket is connecting.
--   `CONNECTED`: WebSocket connection is open.
--   `LOGGING_IN`: Login request has been sent.
--   `LOGGED_IN`: Login successful.
--   `ENTERING_GAME`: `enterGame()` has been called.
--   `IN_GAME`: Ready to accept `spin()` or other actions.
--   `SPINNING`: `spin()` has been called, awaiting result.
--   `PLAYER_CHOICING`: `selectOptional()` has been called, awaiting result.
--   `WAITTING_PLAYER`: Spin resulted in a choice that the user must make.
--   `SPINEND`: Spin is finished and resulted in a win that must be collected with `collect()`.
--   `COLLECTING`: `collect()` has been called.
--   `RECONNECTING`: Connection was lost, attempting to reconnect.
--   `DISCONNECTED`: Connection is closed (either intentionally or after failed reconnects).
--   `RESUMING`: A transient state indicating that an unfinished game state is being restored.
+Run from the repository root:
 
-### Event Handling
+- `pnpm --filter @slotclientengine/netcore build`
+- `pnpm --filter @slotclientengine/netcore test`
+- `pnpm --filter @slotclientengine/netcore typecheck`
+- `pnpm --filter @slotclientengine/netcore lint`
+- `pnpm --filter @slotclientengine/netcore run check`
 
-Listen to events to react to changes and messages:
+Workspace-wide validation is available through root scripts:
 
-```typescript
-// Fired on any state change
-client.on('state', (payload: { previous: ConnectionState, current: ConnectionState, data?: any }) => {
-  console.log(`State changed from ${payload.previous} to ${payload.current}`);
-});
+- `pnpm lint`
+- `pnpm test`
+- `pnpm typecheck`
+- `pnpm build`
 
-// Fired on successful connection
-client.on('connect', () => { console.log('Connected!'); });
+## Additional Docs
 
-// Fired on disconnection
-client.on('disconnect', (payload: { code: number, reason: string, wasClean: boolean }) => {
-  console.log(`Disconnected: ${payload.reason}`);
-});
-
-// Fired when the client is attempting to reconnect
-client.on('reconnecting', (payload: { attempt: number }) => {
-  console.log(`Reconnecting, attempt #${payload.attempt}...`);
-});
-
-// Fired for any asynchronous (passive) message from the server
-client.on('message', (message: any) => {
-  console.log('Received async message:', message);
-});
-
-// Fired for every single message sent or received (useful for debugging)
-client.on('raw_message', (payload: { direction: 'SEND' | 'RECV', message: string }) => {
-  // Log this to a file for detailed debugging
-});
-
-// Fired on WebSocket errors
-client.on('error', (error: Error) => {
-  console.error('Client error:', error);
-});
-```
-
-### Error Handling & Game Resume
-
-All actions (`connect`, `spin`, etc.) are `async` and return a `Promise`. You should wrap them in `try...catch` blocks.
-
-A critical feature is handling game resumption. When `enterGame()` completes, the game might not be in the `IN_GAME` state. It could be in `SPINEND` (a win is waiting to be collected) or `WAITTING_PLAYER` (a choice needs to be made). Your application must handle this to bring the game to a ready state.
-
-```typescript
-await client.enterGame();
-
-// Loop until the game is in a standard playable state.
-while (client.getState() !== ConnectionState.IN_GAME) {
-  const state = client.getState();
-  console.log(`Handling resume state: ${state}`);
-
-  if (state === ConnectionState.SPINEND) {
-    await client.collect();
-  } else if (state === ConnectionState.WAITTING_PLAYER) {
-    // Logic to determine which option to select
-    const userInfo = client.getUserInfo();
-    if (userInfo.optionals && userInfo.optionals.length > 0) {
-      await client.selectOptional(0); // Select the first option
-    } else {
-      throw new Error('In WAITTING_PLAYER state on resume, but no optionals found.');
-    }
-  } else if (state === ConnectionState.RESUMING) {
-    // This is a transient state. Wait for the next state change.
-    await new Promise(resolve => client.once('state', resolve));
-  } else {
-    // This state should not be reachable if the client is disconnected properly
-    // in case of an error during resume.
-    throw new Error(`Unhandled resume state: ${state}. Cannot proceed.`);
-  }
-}
-
-console.log('Game is ready to play!');
-// Now you can call client.spin()
-```
-
-## Detailed Features
-
-### Replay Mode
-
-Replay mode is a powerful tool for debugging and UI development. Instead of connecting to a live server, the client fetches a JSON file that contains a snapshot of a `gamemoduleinfo` message.
-
--   **Activation**: Pass an `http://` or `https://` URL to the constructor. In Node.js, you must also provide a `fetch` implementation.
--   **`connect()`**: Fetches the JSON file. Simulates `connect` and `login`.
--   **`enterGame()`**: Caches game configuration from the file (e.g., `defaultScene`, `linesOptions`).
--   **`spin()`**: Processes the result from the file and transitions to the final state (`SPINEND`, `WAITTING_PLAYER`, etc.).
-
-### Resume Logic
-
-When a player enters a game, they might have an unfinished round from a previous session. The server will report this in the response to `enterGame`. The client handles this by:
-1.  Setting the state to `RESUMING` to indicate a resume is in progress.
-2.  Parsing the server response to determine the correct state:
-    -   `SPINEND`: If there is a win to be collected.
-    -   `WAITTING_PLAYER`: If the player needs to make a choice.
-3.  Updating its internal caches (`lastTotalWin`, `optionals`, etc.) with the resume data.
-It is the responsibility of the library user to call `collect()` or `selectOptional()` to resolve this state before new actions can be performed (as shown in the "Error Handling & Game Resume" section).
-
-### `selectSomething(clientParameter: string)`
-
-This method provides a generic way to send a `selectany` command to the server, which can be used for custom game features that require a simple string input from the client. It sends the provided `clientParameter` along with the last known betting context.
+- `docs/usage_en.md`: concise integration notes
+- `docs/usage_zh.md`: 中文集成说明
+- `docs/frontend-ws-doc-en.md`: protocol-oriented WebSocket notes
+- `examples/example001.ts`: development example for local debugging
 
 ### `transformSceneData(data)` Utility
 

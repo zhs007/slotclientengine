@@ -1,14 +1,25 @@
-// ESLint flat config for ESLint v9 (CommonJS)
 const js = require('@eslint/js');
 const tsParser = require('@typescript-eslint/parser');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
-const importPlugin = require('eslint-plugin-import');
 const globals = require('globals');
 const eslintConfigPrettier = require('eslint-config-prettier');
 
 module.exports = [
   {
     ignores: ['dist/**', 'coverage/**', 'node_modules/**'],
+  },
+  {
+    files: ['**/*.cjs'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'commonjs',
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      'no-undef': 'off',
+    },
   },
   js.configs.recommended,
   {
@@ -17,6 +28,7 @@ module.exports = [
       parser: tsParser,
       parserOptions: {
         project: ['./tsconfig.eslint.json'],
+        tsconfigRootDir: __dirname,
         sourceType: 'module',
         ecmaVersion: 'latest',
       },
@@ -28,10 +40,8 @@ module.exports = [
     },
     plugins: {
       '@typescript-eslint': tsPlugin,
-      import: importPlugin,
     },
     rules: {
-      'import/no-unresolved': 'off',
       'no-unused-vars': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
@@ -47,13 +57,6 @@ module.exports = [
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/unbound-method': 'off',
       '@typescript-eslint/no-unused-vars': 'off',
-    },
-  },
-  {
-    files: ['jest.config.js'],
-    rules: {
-      'no-undef': 'off',
-      'no-unused-vars': 'off',
     },
   },
   eslintConfigPrettier,

@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Connection } from '../src/connection';
 
-// Manual store for mock instances because jest's `mock.instances` seems unreliable here.
+// Manual store for mock instances because constructor tracking is easier to reason about.
 let mockInstances: any[] = [];
 
 // Mock the global WebSocket class.
-const mockWebSocket = vi.fn().mockImplementation(() => {
+const mockWebSocket = vi.fn(function MockWebSocket() {
   const instance = {
     send: vi.fn(),
     close: vi.fn(),
