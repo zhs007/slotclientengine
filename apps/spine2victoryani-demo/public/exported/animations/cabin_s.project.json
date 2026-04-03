@@ -1,0 +1,1682 @@
+{
+  "version": "0.1.0",
+  "name": "cabin:cabin_s",
+  "duration": 0,
+  "layers": [
+    {
+      "id": "ui31__ui8",
+      "type": "pic",
+      "asset": "./assets/ui8.png",
+      "x": 665.7754,
+      "y": 1006.268,
+      "scaleX": 10.3855,
+      "scaleY": 0.6409,
+      "rotation": 0,
+      "alpha": 0.6235,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[665.7754,1006.268,10.3855,0.6409,0,0.6235,1],[665.7754,1006.268,10.3855,0.6409,0,0.6235,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui14__ui6",
+      "type": "pic",
+      "asset": "./assets/ui6.png",
+      "x": 512.1678,
+      "y": 812.5229,
+      "scaleX": 0.7016,
+      "scaleY": 0.7016,
+      "rotation": 0,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[512.1678,812.5229,0.7016,0.7016,0,1,1],[512.1678,812.5229,0.7016,0.7016,0,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui20__ui6",
+      "type": "pic",
+      "asset": "./assets/ui6.png",
+      "x": 819.0322,
+      "y": 812.5229,
+      "scaleX": 0.7016,
+      "scaleY": -0.7016,
+      "rotation": -3.1416,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[819.0322,812.5229,0.7016,-0.7016,-3.1416,1,1],[819.0322,812.5229,0.7016,-0.7016,-3.1416,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui25__ui6",
+      "type": "pic",
+      "asset": "./assets/ui6.png",
+      "x": 816.8573,
+      "y": 650.8972,
+      "scaleX": 0.7016,
+      "scaleY": 0.4911,
+      "rotation": -3.1416,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[816.8573,650.8972,0.7016,0.4911,-3.1416,1,1],[816.8573,650.8972,0.7016,0.4911,-3.1416,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui16__ui6",
+      "type": "pic",
+      "asset": "./assets/ui6.png",
+      "x": 514.3427,
+      "y": 650.8972,
+      "scaleX": 0.7016,
+      "scaleY": -0.4911,
+      "rotation": 0,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[514.3427,650.8972,0.7016,-0.4911,0,1,1],[514.3427,650.8972,0.7016,-0.4911,0,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui15__ui3",
+      "type": "pic",
+      "asset": "./assets/ui3.png",
+      "x": 885.5947,
+      "y": 810.6391,
+      "scaleX": 0.3508,
+      "scaleY": -0.3508,
+      "rotation": -3.1416,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[885.5947,810.6391,0.3508,-0.3508,-3.1416,1,1],[885.5947,810.6391,0.3508,-0.3508,-3.1416,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui17__ui3",
+      "type": "pic",
+      "asset": "./assets/ui3.png",
+      "x": 881.6729,
+      "y": 645.8588,
+      "scaleX": 0.3343,
+      "scaleY": 0.3333,
+      "rotation": 3.0836,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[881.6729,645.8588,0.3343,0.3333,3.0836,1,1],[881.6729,645.8588,0.3343,0.3333,3.0836,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui3__ui3",
+      "type": "pic",
+      "asset": "./assets/ui3.png",
+      "x": 445.6053,
+      "y": 810.6391,
+      "scaleX": 0.3508,
+      "scaleY": 0.3508,
+      "rotation": 0,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[445.6053,810.6391,0.3508,0.3508,0,1,1],[445.6053,810.6391,0.3508,0.3508,0,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui18__ui3",
+      "type": "pic",
+      "asset": "./assets/ui3.png",
+      "x": 989.0288,
+      "y": 716.3431,
+      "scaleX": 0.3508,
+      "scaleY": -0.3508,
+      "rotation": 1.2858,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[989.0288,716.3431,0.3508,-0.3508,1.2858,1,1],[989.0288,716.3431,0.3508,-0.3508,1.2858,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui21__ui1",
+      "type": "pic",
+      "asset": "./assets/ui1.png",
+      "x": 932.2674,
+      "y": 996.4669,
+      "scaleX": 0.3508,
+      "scaleY": -0.3508,
+      "rotation": -3.1416,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[932.2674,996.4669,0.3508,-0.3508,-3.1416,1,1],[932.2674,996.4669,0.3508,-0.3508,-3.1416,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui12__ui3",
+      "type": "pic",
+      "asset": "./assets/ui3.png",
+      "x": 449.5271,
+      "y": 645.8588,
+      "scaleX": 0.3343,
+      "scaleY": -0.3333,
+      "rotation": 0.0579,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[449.5271,645.8588,0.3343,-0.3333,0.0579,1,1],[449.5271,645.8588,0.3343,-0.3333,0.0579,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui26__ui1",
+      "type": "pic",
+      "asset": "./assets/ui1.png",
+      "x": 931.9166,
+      "y": 524.8301,
+      "scaleX": 0.3508,
+      "scaleY": 0.2456,
+      "rotation": -3.1416,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[931.9166,524.8301,0.3508,0.2456,-3.1416,1,1],[931.9166,524.8301,0.3508,0.2456,-3.1416,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui22__ui2",
+      "type": "pic",
+      "asset": "./assets/ui2.png",
+      "x": 756.9388,
+      "y": 905.8577,
+      "scaleX": 0.3508,
+      "scaleY": -0.3508,
+      "rotation": -3.1416,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[756.9388,905.8577,0.3508,-0.3508,-3.1416,1,1],[756.9388,905.8577,0.3508,-0.3508,-3.1416,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui13__ui3",
+      "type": "pic",
+      "asset": "./assets/ui3.png",
+      "x": 342.1712,
+      "y": 716.3431,
+      "scaleX": 0.3508,
+      "scaleY": 0.3508,
+      "rotation": 1.8558,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[342.1712,716.3431,0.3508,0.3508,1.8558,1,1],[342.1712,716.3431,0.3508,0.3508,1.8558,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui27__ui2",
+      "type": "pic",
+      "asset": "./assets/ui2.png",
+      "x": 756.588,
+      "y": 588.3081,
+      "scaleX": 0.3508,
+      "scaleY": 0.2456,
+      "rotation": -3.1416,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[756.588,588.3081,0.3508,0.2456,-3.1416,1,1],[756.588,588.3081,0.3508,0.2456,-3.1416,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui23__ui5",
+      "type": "pic",
+      "asset": "./assets/ui5.png",
+      "x": 868.6656,
+      "y": 1081.4283,
+      "scaleX": 0.3508,
+      "scaleY": -0.3508,
+      "rotation": -3.1416,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[868.6656,1081.4283,0.3508,-0.3508,-3.1416,1,1],[868.6656,1081.4283,0.3508,-0.3508,-3.1416,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui1__ui1",
+      "type": "pic",
+      "asset": "./assets/ui1.png",
+      "x": 398.9326,
+      "y": 996.4669,
+      "scaleX": 0.3508,
+      "scaleY": 0.3508,
+      "rotation": 0,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[398.9326,996.4669,0.3508,0.3508,0,1,1],[398.9326,996.4669,0.3508,0.3508,0,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui24__ui5",
+      "type": "pic",
+      "asset": "./assets/ui5.png",
+      "x": 868.6656,
+      "y": 1100.157,
+      "scaleX": 0.3508,
+      "scaleY": -0.3508,
+      "rotation": -3.1416,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[868.6656,1100.157,0.3508,-0.3508,-3.1416,1,1],[868.6656,1100.157,0.3508,-0.3508,-3.1416,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui28__ui5",
+      "type": "pic",
+      "asset": "./assets/ui5.png",
+      "x": 868.3148,
+      "y": 465.4087,
+      "scaleX": 0.3508,
+      "scaleY": 0.2456,
+      "rotation": -3.1416,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[868.3148,465.4087,0.3508,0.2456,-3.1416,1,1],[868.3148,465.4087,0.3508,0.2456,-3.1416,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui5__ui1",
+      "type": "pic",
+      "asset": "./assets/ui1.png",
+      "x": 399.2834,
+      "y": 524.8301,
+      "scaleX": 0.3508,
+      "scaleY": -0.2456,
+      "rotation": 0,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[399.2834,524.8301,0.3508,-0.2456,0,1,1],[399.2834,524.8301,0.3508,-0.2456,0,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui29__ui5",
+      "type": "pic",
+      "asset": "./assets/ui5.png",
+      "x": 868.3148,
+      "y": 433.4818,
+      "scaleX": 0.3508,
+      "scaleY": 0.2456,
+      "rotation": -3.1416,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[868.3148,433.4818,0.3508,0.2456,-3.1416,1,1],[868.3148,433.4818,0.3508,0.2456,-3.1416,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui30__ui5",
+      "type": "pic",
+      "asset": "./assets/ui5.png",
+      "x": 868.3148,
+      "y": 403.6054,
+      "scaleX": 0.3508,
+      "scaleY": 0.2456,
+      "rotation": -3.1416,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[868.3148,403.6054,0.3508,0.2456,-3.1416,1,1],[868.3148,403.6054,0.3508,0.2456,-3.1416,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui2__ui2",
+      "type": "pic",
+      "asset": "./assets/ui2.png",
+      "x": 574.2612,
+      "y": 905.8577,
+      "scaleX": 0.3508,
+      "scaleY": 0.3508,
+      "rotation": 0,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[574.2612,905.8577,0.3508,0.3508,0,1,1],[574.2612,905.8577,0.3508,0.3508,0,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui19__ui4",
+      "type": "pic",
+      "asset": "./assets/ui4.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui6__ui2",
+      "type": "pic",
+      "asset": "./assets/ui2.png",
+      "x": 574.612,
+      "y": 588.3081,
+      "scaleX": 0.3508,
+      "scaleY": -0.2456,
+      "rotation": 0,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[574.612,588.3081,0.3508,-0.2456,0,1,1],[574.612,588.3081,0.3508,-0.2456,0,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui7__ui5",
+      "type": "pic",
+      "asset": "./assets/ui5.png",
+      "x": 462.5344,
+      "y": 1081.4283,
+      "scaleX": 0.3508,
+      "scaleY": 0.3508,
+      "rotation": 0,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[462.5344,1081.4283,0.3508,0.3508,0,1,1],[462.5344,1081.4283,0.3508,0.3508,0,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui11__ui5",
+      "type": "pic",
+      "asset": "./assets/ui5.png",
+      "x": 462.5344,
+      "y": 1100.157,
+      "scaleX": 0.3508,
+      "scaleY": 0.3508,
+      "rotation": 0,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[462.5344,1100.157,0.3508,0.3508,0,1,1],[462.5344,1100.157,0.3508,0.3508,0,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui8__ui5",
+      "type": "pic",
+      "asset": "./assets/ui5.png",
+      "x": 462.8852,
+      "y": 465.4087,
+      "scaleX": 0.3508,
+      "scaleY": -0.2456,
+      "rotation": 0,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[462.8852,465.4087,0.3508,-0.2456,0,1,1],[462.8852,465.4087,0.3508,-0.2456,0,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui9__ui5",
+      "type": "pic",
+      "asset": "./assets/ui5.png",
+      "x": 462.8852,
+      "y": 433.4818,
+      "scaleX": 0.3508,
+      "scaleY": -0.2456,
+      "rotation": 0,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[462.8852,433.4818,0.3508,-0.2456,0,1,1],[462.8852,433.4818,0.3508,-0.2456,0,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui10__ui5",
+      "type": "pic",
+      "asset": "./assets/ui5.png",
+      "x": 462.8852,
+      "y": 403.6054,
+      "scaleX": 0.3508,
+      "scaleY": -0.2456,
+      "rotation": 0,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": true,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[462.8852,403.6054,0.3508,-0.2456,0,1,1],[462.8852,403.6054,0.3508,-0.2456,0,1,1]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui4__ui4",
+      "type": "pic",
+      "asset": "./assets/ui4.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping3_03__ping3_03",
+      "type": "pic",
+      "asset": "./assets/ping3_03.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping3_02__ping3_02",
+      "type": "pic",
+      "asset": "./assets/ping3_02.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping3_01__ping3_01",
+      "type": "pic",
+      "asset": "./assets/ping3_01.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "baidi0__baidi0",
+      "type": "pic",
+      "asset": "./assets/baidi0.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "baidi1__baidi0",
+      "type": "pic",
+      "asset": "./assets/baidi0.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "baidi2__baidi0",
+      "type": "pic",
+      "asset": "./assets/baidi0.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "baidi3__baidi0",
+      "type": "pic",
+      "asset": "./assets/baidi0.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping2_10__ping2_10",
+      "type": "pic",
+      "asset": "./assets/ping2_10.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping2_09__ping2_09",
+      "type": "pic",
+      "asset": "./assets/ping2_09.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping2_08__ping2_08",
+      "type": "pic",
+      "asset": "./assets/ping2_08.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping2_07__ping2_07",
+      "type": "pic",
+      "asset": "./assets/ping2_07.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping2_06__ping2_06",
+      "type": "pic",
+      "asset": "./assets/ping2_06.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping2_05__ping2_05",
+      "type": "pic",
+      "asset": "./assets/ping2_05.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping2_04__ping2_04",
+      "type": "pic",
+      "asset": "./assets/ping2_04.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping2_03__ping2_03",
+      "type": "pic",
+      "asset": "./assets/ping2_03.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping2_02__ping2_02",
+      "type": "pic",
+      "asset": "./assets/ping2_02.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping2_01__ping2_01",
+      "type": "pic",
+      "asset": "./assets/ping2_01.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_07__ping1_07",
+      "type": "pic",
+      "asset": "./assets/ping1_07.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_06__ping1_06",
+      "type": "pic",
+      "asset": "./assets/ping1_06.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_05__ping1_05",
+      "type": "pic",
+      "asset": "./assets/ping1_05.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_04__ping1_04",
+      "type": "pic",
+      "asset": "./assets/ping1_04.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_5__ping1_04",
+      "type": "pic",
+      "asset": "./assets/ping1_04.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_6__ping1_04",
+      "type": "pic",
+      "asset": "./assets/ping1_04.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_7__ping1_04",
+      "type": "pic",
+      "asset": "./assets/ping1_04.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_8__ping1_04",
+      "type": "pic",
+      "asset": "./assets/ping1_04.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_9__ping1_04",
+      "type": "pic",
+      "asset": "./assets/ping1_04.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_10__ping1_04",
+      "type": "pic",
+      "asset": "./assets/ping1_04.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_11__ping1_04",
+      "type": "pic",
+      "asset": "./assets/ping1_04.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_12__ping1_04",
+      "type": "pic",
+      "asset": "./assets/ping1_04.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_13__ping1_04",
+      "type": "pic",
+      "asset": "./assets/ping1_04.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_14__ping1_04",
+      "type": "pic",
+      "asset": "./assets/ping1_04.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_03__ping1_03",
+      "type": "pic",
+      "asset": "./assets/ping1_03.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_02__ping1_02",
+      "type": "pic",
+      "asset": "./assets/ping1_02.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_01__ping1_01",
+      "type": "pic",
+      "asset": "./assets/ping1_01.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping1_1__ping1_01",
+      "type": "pic",
+      "asset": "./assets/ping1_01.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ping_g__ping_g",
+      "type": "pic",
+      "asset": "./assets/ping_g.png",
+      "x": 0,
+      "y": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rotation": 0,
+      "alpha": 0,
+      "blendMode": "add",
+      "visible": false,
+      "locked": true,
+      "animations": [
+        {
+          "type": "timeline",
+          "startTime": 0,
+          "duration": 0,
+          "script": "{\"kind\":\"timeline\",\"fps\":24,\"frames\":[[0,0,1,1,0,0,0],[0,0,1,1,0,0,0]]}",
+          "params": {
+            "source": "spine-export"
+          }
+        }
+      ]
+    }
+  ]
+}
