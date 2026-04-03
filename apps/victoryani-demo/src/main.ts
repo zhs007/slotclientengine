@@ -1,6 +1,7 @@
 import { Application, Container } from "pixi.js";
 import rawProject from "./assets/project.json";
 import { DEFAULT_STAGE_HEIGHT, DEFAULT_STAGE_WIDTH, normalizeProjectConfig } from "./config/victory-project.js";
+import { createSceneCameraController } from "./interaction/camera-controller.js";
 import type { VictoryProjectConfigRaw } from "./config/victory-types.js";
 import { computeCanvasLayout } from "./layout.js";
 import { createProjectAssetResolver, loadProjectTextures } from "./runtime/asset-loader.js";
@@ -66,17 +67,33 @@ async function bootstrap() {
   const player = new VictoryPlayer(app, project, textures);
   sceneRoot.addChild(player.root);
 
+  let currentLayout = computeCanvasLayout({
+    designWidth: project.width,
+    designHeight: project.height,
+    viewportWidth: stageHost.clientWidth,
+    viewportHeight: stageHost.clientHeight
+  });
+
+  createSceneCameraController({
+    stageHost,
+    viewportRoot,
+    designWidth: project.width,
+    designHeight: project.height,
+    controlPanel: panel,
+    getLayoutScale: () => currentLayout.scale
+  });
+
   const applyLayout = () => {
-    const layout = computeCanvasLayout({
+    currentLayout = computeCanvasLayout({
       designWidth: project.width,
       designHeight: project.height,
       viewportWidth: stageHost.clientWidth,
       viewportHeight: stageHost.clientHeight
     });
-    app.canvas.style.width = `${layout.width}px`;
-    app.canvas.style.height = `${layout.height}px`;
-    app.canvas.style.left = `${layout.offsetX}px`;
-    app.canvas.style.top = `${layout.offsetY}px`;
+    app.canvas.style.width = `${currentLayout.width}px`;
+    app.canvas.style.height = `${currentLayout.height}px`;
+    app.canvas.style.left = `${currentLayout.offsetX}px`;
+    app.canvas.style.top = `${currentLayout.offsetY}px`;
   };
 
   panel.playButton.addEventListener("click", () => {
