@@ -1,0 +1,606 @@
+{
+  "version": "0.12.8",
+  "name": "VictoryAnimation",
+  "duration": 5,
+  "layers": [
+    {
+      "id": "Layer_005",
+      "type": "pic",
+      "asset": "./assets/Layer_005.png",
+      "text": "",
+      "x": 897,
+      "y": 439,
+      "scale": 1,
+      "rotation": 0,
+      "alpha": 1,
+      "blendMode": "normal",
+      "visible": false,
+      "locked": true,
+      "maskId": null,
+      "animations": [
+        {
+          "type": "starlight",
+          "startTime": 0,
+          "duration": 4,
+          "params": {
+            "count": 50,
+            "range": 1000,
+            "flashDuration": 1,
+            "size": 100,
+            "interval": 0.5
+          },
+          "showParams": true
+        }
+      ],
+      "scaleX": 1,
+      "scaleY": 1
+    },
+    {
+      "id": "云2",
+      "type": "pic",
+      "asset": "./assets/云2.png",
+      "text": "",
+      "x": 460,
+      "y": 359,
+      "scale": 1,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": true,
+      "locked": true,
+      "maskId": null,
+      "animations": [
+        {
+          "type": "fadeIn",
+          "startTime": 0,
+          "duration": 0.5,
+          "params": {}
+        },
+        {
+          "type": "zoomIn",
+          "startTime": 0,
+          "duration": 0.5,
+          "params": {}
+        },
+        {
+          "type": "wave",
+          "startTime": 0,
+          "duration": 1,
+          "params": {}
+        },
+        {
+          "type": "fadeOut",
+          "startTime": 4,
+          "duration": 1,
+          "params": {}
+        }
+      ],
+      "blendMode": "normal",
+      "scaleX": 1,
+      "scaleY": 1
+    },
+    {
+      "id": "云",
+      "type": "pic",
+      "asset": "./assets/云.png",
+      "text": "",
+      "x": 1327,
+      "y": 549,
+      "scale": 1,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": true,
+      "locked": true,
+      "maskId": null,
+      "animations": [
+        {
+          "type": "wave",
+          "startTime": 0.2,
+          "duration": 1,
+          "params": {},
+          "showParams": true
+        },
+        {
+          "type": "fadeOut",
+          "startTime": 4,
+          "duration": 1,
+          "params": {}
+        },
+        {
+          "type": "fadeIn",
+          "startTime": 0.2,
+          "duration": 0.5,
+          "params": {}
+        },
+        {
+          "type": "zoomIn",
+          "startTime": 0.2,
+          "duration": 0.5,
+          "params": {}
+        }
+      ],
+      "blendMode": "normal",
+      "scaleX": 1,
+      "scaleY": 1
+    },
+    {
+      "id": "光效",
+      "type": "pic",
+      "asset": "./assets/光效.png",
+      "text": "",
+      "x": 1156,
+      "y": 575,
+      "scale": 1,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": true,
+      "locked": true,
+      "maskId": "光效遮罩",
+      "animations": [
+        {
+          "type": "sweepLight",
+          "startTime": 0,
+          "duration": 1,
+          "params": {
+            "startX": 634,
+            "endX": 1156,
+            "repeat": 3
+          },
+          "showParams": true
+        },
+        {
+          "type": "fadeOut",
+          "startTime": 3.5,
+          "duration": 0.5,
+          "params": {}
+        }
+      ],
+      "blendMode": "normal",
+      "scaleX": 1,
+      "scaleY": 1
+    },
+    {
+      "id": "光效遮罩",
+      "type": "pic",
+      "asset": "./assets/光效遮罩.png",
+      "text": "",
+      "x": 886,
+      "y": 578,
+      "scale": 1,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": true,
+      "locked": true,
+      "maskId": null,
+      "animations": [
+        {
+          "type": "bounceIn",
+          "startTime": 0.2,
+          "duration": 1,
+          "params": {
+            "elasticity": 1
+          },
+          "showParams": true
+        },
+        {
+          "type": "float",
+          "startTime": 0,
+          "duration": 4,
+          "params": {}
+        },
+        {
+          "type": "fadeOut",
+          "startTime": 5,
+          "duration": 0.5,
+          "params": {}
+        }
+      ],
+      "blendMode": "normal",
+      "scaleX": 1,
+      "scaleY": 1
+    },
+    {
+      "id": "数字底",
+      "type": "pic",
+      "asset": "./assets/数字底.png",
+      "text": "",
+      "x": 886,
+      "y": 578,
+      "scale": 1,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": true,
+      "animations": [
+        {
+          "type": "bounceIn",
+          "startTime": 0.2,
+          "duration": 1,
+          "params": {
+            "elasticity": 1
+          },
+          "showParams": true
+        },
+        {
+          "type": "float",
+          "startTime": 0,
+          "duration": 4,
+          "params": {},
+          "showParams": true
+        },
+        {
+          "type": "fadeOut",
+          "startTime": 5,
+          "duration": 0.5,
+          "params": {},
+          "showParams": false
+        }
+      ],
+      "locked": true,
+      "blendMode": "normal",
+      "scaleX": 1,
+      "scaleY": 1
+    },
+    {
+      "id": "飞碟",
+      "type": "pic",
+      "asset": "./assets/飞碟.png",
+      "text": "",
+      "x": 907,
+      "y": 288,
+      "scale": 0.7,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": true,
+      "animations": [
+        {
+          "type": "slideIn",
+          "startTime": 0,
+          "duration": 0.5,
+          "params": {
+            "ease": "0",
+            "fromY": 11
+          },
+          "showParams": true
+        },
+        {
+          "type": "fadeIn",
+          "startTime": 0,
+          "duration": 0.5,
+          "params": {}
+        },
+        {
+          "type": "swing",
+          "startTime": 0.2,
+          "duration": 1,
+          "params": {}
+        },
+        {
+          "type": "fadeOut",
+          "startTime": 5,
+          "duration": 0.5,
+          "params": {}
+        }
+      ],
+      "locked": false,
+      "blendMode": "normal",
+      "scaleX": 0.7,
+      "scaleY": 0.7
+    },
+    {
+      "id": "火",
+      "type": "pic",
+      "asset": "./assets/火.jpeg",
+      "text": "",
+      "x": 919,
+      "y": 317,
+      "scale": 1.5,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": true,
+      "locked": true,
+      "maskId": "superwin_copy_3",
+      "animations": [
+        {
+          "type": "fireDistortion",
+          "startTime": 0,
+          "duration": 6,
+          "params": {
+            "strength": 150,
+            "speed": 10,
+            "frequency": 0.8,
+            "noiseSize": 2
+          },
+          "showParams": true
+        },
+        {
+          "type": "fadeIn",
+          "startTime": 0,
+          "duration": 1,
+          "params": {}
+        }
+      ],
+      "blendMode": "screen",
+      "scaleX": 1.5,
+      "scaleY": 1.5
+    },
+    {
+      "id": "superwin_copy_3",
+      "type": "pic",
+      "asset": "./assets/superwin_copy_3.png",
+      "text": "",
+      "x": 892,
+      "y": 491,
+      "scale": 1,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": true,
+      "animations": [
+        {
+          "type": "fadeIn",
+          "startTime": 0,
+          "duration": 1,
+          "params": {}
+        },
+        {
+          "type": "bounceIn",
+          "startTime": 0,
+          "duration": 1,
+          "params": {
+            "elasticity": 1
+          },
+          "showParams": true
+        },
+        {
+          "type": "float",
+          "startTime": 0.5,
+          "duration": 3,
+          "params": {}
+        },
+        {
+          "type": "fadeOut",
+          "startTime": 5,
+          "duration": 0.5,
+          "params": {}
+        }
+      ],
+      "locked": true,
+      "maskId": null,
+      "blendMode": "normal",
+      "scaleX": 1,
+      "scaleY": 1
+    },
+    {
+      "id": "火_copy_6",
+      "type": "pic",
+      "asset": "./assets/火_copy_6.jpeg",
+      "text": "",
+      "x": 896,
+      "y": 436,
+      "scale": 3,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": false,
+      "locked": true,
+      "maskId": null,
+      "animations": [
+        {
+          "type": "fireDistortion",
+          "startTime": 0,
+          "duration": 6,
+          "params": {
+            "strength": 50,
+            "speed": 10,
+            "frequency": 0.8,
+            "noiseSize": 2
+          },
+          "showParams": true
+        }
+      ],
+      "blendMode": "screen",
+      "scaleX": 3,
+      "scaleY": 3
+    },
+    {
+      "id": "superwin",
+      "type": "pic",
+      "asset": "./assets/superwin.png",
+      "text": "",
+      "x": 892,
+      "y": 491,
+      "scale": 1,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": true,
+      "animations": [
+        {
+          "type": "fadeIn",
+          "startTime": 0,
+          "duration": 1,
+          "params": {}
+        },
+        {
+          "type": "bounceIn",
+          "startTime": 0,
+          "duration": 1,
+          "params": {
+            "elasticity": 1
+          },
+          "showParams": true
+        },
+        {
+          "type": "float",
+          "startTime": 0.5,
+          "duration": 3,
+          "params": {}
+        },
+        {
+          "type": "fadeOut",
+          "startTime": 5,
+          "duration": 0.5,
+          "params": {}
+        }
+      ],
+      "locked": false,
+      "blendMode": "normal",
+      "scaleX": 1,
+      "scaleY": 1
+    },
+    {
+      "id": "彩带",
+      "type": "pic",
+      "asset": "./assets/彩带.png",
+      "text": "",
+      "x": 910,
+      "y": 460,
+      "scale": 1,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": true,
+      "animations": [
+        {
+          "type": "zoomIn",
+          "startTime": 0.1,
+          "duration": 0.5,
+          "params": {}
+        },
+        {
+          "type": "fadeIn",
+          "startTime": 0,
+          "duration": 0.5,
+          "params": {}
+        },
+        {
+          "type": "fadeOut",
+          "startTime": 5,
+          "duration": 0.5,
+          "params": {}
+        }
+      ],
+      "locked": true,
+      "blendMode": "normal",
+      "scaleX": 1,
+      "scaleY": 1
+    },
+    {
+      "id": "粒子",
+      "type": "pic",
+      "asset": "./assets/粒子.png",
+      "text": "New Text",
+      "x": 884,
+      "y": 453,
+      "scale": 1,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": true,
+      "locked": true,
+      "maskId": null,
+      "animations": [
+        {
+          "type": "particleBurst",
+          "startTime": 0.1,
+          "duration": 0.8,
+          "params": {
+            "range": 700,
+            "speed": 1,
+            "size": 1,
+            "emissionTime": 4,
+            "count": 300
+          },
+          "showParams": true
+        },
+        {
+          "type": "fadeIn",
+          "startTime": 0,
+          "duration": 1,
+          "params": {}
+        },
+        {
+          "type": "fadeOut",
+          "startTime": 4.5,
+          "duration": 0.5,
+          "params": {}
+        }
+      ],
+      "blendMode": "normal",
+      "scaleX": 1,
+      "scaleY": 1
+    },
+    {
+      "id": "烟花",
+      "type": "pic",
+      "asset": "./assets/烟花.png",
+      "text": "",
+      "x": 1611,
+      "y": 245,
+      "scale": 1,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": true,
+      "locked": true,
+      "maskId": null,
+      "animations": [
+        {
+          "type": "firework",
+          "startTime": 0,
+          "duration": 1.5,
+          "params": {
+            "range": 400,
+            "size": 0.4
+          },
+          "showParams": true
+        }
+      ],
+      "blendMode": "normal",
+      "scaleX": 1,
+      "scaleY": 1
+    },
+    {
+      "id": "烟花2",
+      "type": "pic",
+      "asset": "./assets/烟花2.png",
+      "text": "",
+      "x": 285,
+      "y": 667,
+      "scale": 1,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": true,
+      "locked": true,
+      "maskId": null,
+      "animations": [
+        {
+          "type": "firework",
+          "startTime": 0.5,
+          "duration": 2,
+          "params": {
+            "range": 500,
+            "size": 0.3,
+            "startX": null,
+            "startY": null
+          },
+          "showParams": true
+        }
+      ],
+      "blendMode": "normal",
+      "scaleX": 1,
+      "scaleY": 1
+    },
+    {
+      "id": "大背景",
+      "type": "pic",
+      "asset": "./assets/大背景.png",
+      "text": "",
+      "x": 974,
+      "y": 189,
+      "scale": 1,
+      "rotation": 0,
+      "alpha": 1,
+      "visible": true,
+      "locked": true,
+      "maskId": null,
+      "animations": [],
+      "blendMode": "normal",
+      "scaleX": 1,
+      "scaleY": 1
+    }
+  ]
+}
