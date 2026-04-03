@@ -26,6 +26,7 @@
 - slot timelines: `attachment`、`color`
 - curve: `linear`、`stepped`、4 点 bezier
 - atlas fields: `rotate`、`xy`、`size`、`orig`、`offset`、`index`
+- 世界变换内部使用二维仿射矩阵合成，可正确处理 `scaleX = -1` 这类镜像父骨骼及其子 attachment 的旋转传播
 
 当前资源没有使用 draw order 动画，因此本 demo 没有实现 draw order 采样。
 

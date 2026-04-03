@@ -9,17 +9,18 @@ import {
   mergeAxisAlignedBounds
 } from "../../src/runtime/debug-bounds.js";
 import { composeAttachmentTransform, computeWorldBoneTransforms, sampleAnimationPose } from "../../src/runtime/timeline-sampler.js";
+import { composeWorldTransform } from "../../src/runtime/transform.js";
 
 describe("debug-bounds", () => {
   it("projects attachment corners into scene space", () => {
     const bounds = computeAttachmentSceneQuad(
-      {
+      composeWorldTransform({
         x: 48,
         y: 16,
         rotation: 0,
         scaleX: 2,
         scaleY: 1.5
-      },
+      }),
       {
         width: 20,
         height: 12
@@ -90,5 +91,19 @@ describe("debug-bounds", () => {
 
     const mergedBounds = mergeAxisAlignedBounds([visibleSlotBounds!.aabb]);
     expect(mergedBounds).toMatchObject(visibleSlotBounds!.aabb);
+  });
+
+  it("keeps mirrored slot bounds symmetric for ui_k and ui_k2 branches", () => {
+    const pose = sampleAnimationPose(cabinAnimationData, "cabin", 0, true);
+    const worldBones = computeWorldBoneTransforms(cabinAnimationData, pose.bones);
+    const leftBounds = computeSlotSelectionBounds(worldBones[pose.slots.ui13.boneName], pose.slots.ui13);
+    const rightBounds = computeSlotSelectionBounds(worldBones[pose.slots.ui18.boneName], pose.slots.ui18);
+
+    expect(leftBounds).not.toBeNull();
+    expect(rightBounds).not.toBeNull();
+    expect(rightBounds?.center.x).toBeCloseTo(-leftBounds!.center.x, 5);
+    expect(rightBounds?.center.y).toBeCloseTo(leftBounds!.center.y, 5);
+    expect(rightBounds?.aabb.width).toBeCloseTo(leftBounds!.aabb.width, 5);
+    expect(rightBounds?.aabb.height).toBeCloseTo(leftBounds!.aabb.height, 5);
   });
 });
