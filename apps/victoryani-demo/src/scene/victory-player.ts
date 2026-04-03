@@ -1,4 +1,3 @@
-import type { GSAPTimeline } from "gsap";
 import { Container, type Application, type Texture } from "pixi.js";
 import { registerBuiltinAnimations } from "../animations/index.js";
 import type { VictoryProjectConfig } from "../config/victory-types.js";
@@ -12,7 +11,7 @@ export class VictoryPlayer {
   public readonly root = new Container();
   public readonly registry = new AnimationRegistry();
   private readonly instances: ReturnType<typeof createLayerInstances>;
-  private timeline: GSAPTimeline | null = null;
+  private timeline: ReturnType<typeof buildMasterTimeline> | null = null;
   private loop = true;
   private playing = false;
   private currentTime = 0;

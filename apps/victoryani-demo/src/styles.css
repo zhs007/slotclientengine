@@ -105,6 +105,31 @@ body {
   gap: 12px;
 }
 
+.debug-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.debug-grid__label,
+.debug-grid__value {
+  margin: 0;
+  font-family: "Trebuchet MS", sans-serif;
+}
+
+.debug-grid__label {
+  color: rgba(248, 243, 232, 0.64);
+}
+
+.debug-grid__value {
+  text-align: right;
+  color: #f8f3e8;
+}
+
 .control-panel__section-title {
   margin: 0;
   font-size: 1rem;
@@ -175,9 +200,27 @@ body {
   min-height: calc(100vh - 88px);
   overflow: hidden;
   border-radius: 22px;
+  border: 1px solid transparent;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0)),
     #050817;
+  cursor: grab;
+  outline: none;
+  touch-action: none;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    transform 180ms ease;
+}
+
+.stage-host--active {
+  border-color: rgba(255, 181, 93, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 0 6px rgba(255, 181, 93, 0.08);
+}
+
+.stage-host--dragging {
+  cursor: grabbing;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 24px 56px rgba(0, 0, 0, 0.28);
 }
 
 .stage-host canvas {

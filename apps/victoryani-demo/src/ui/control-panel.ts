@@ -8,6 +8,10 @@ export interface ControlPanel {
   loopCheckbox: HTMLInputElement;
   timeLabel: HTMLElement;
   statusLabel: HTMLElement;
+  cameraActiveLabel: HTMLElement;
+  cameraScaleLabel: HTMLElement;
+  cameraOffsetLabel: HTMLElement;
+  resetCameraButton: HTMLButtonElement;
 }
 
 export function createControlPanel(project: VictoryProjectConfig, supportMatrix: AnimationSupportEntry[]): ControlPanel {
@@ -47,6 +51,29 @@ export function createControlPanel(project: VictoryProjectConfig, supportMatrix:
   timeLabel.className = "control-panel__time";
   timeLabel.textContent = `0.00s / ${project.duration.toFixed(2)}s`;
 
+  const cameraSection = document.createElement("section");
+  cameraSection.className = "control-panel__section";
+  const cameraGrid = document.createElement("dl");
+  cameraGrid.className = "debug-grid";
+  const cameraActiveLabel = document.createElement("dd");
+  cameraActiveLabel.textContent = "Inactive";
+  const cameraScaleLabel = document.createElement("dd");
+  cameraScaleLabel.textContent = "1.00x";
+  const cameraOffsetLabel = document.createElement("dd");
+  cameraOffsetLabel.textContent = "0, 0";
+  cameraGrid.append(
+    createDebugEntry("Stage focus", cameraActiveLabel),
+    createDebugEntry("Zoom", cameraScaleLabel),
+    createDebugEntry("Pan", cameraOffsetLabel)
+  );
+
+  const interactionHint = document.createElement("p");
+  interactionHint.className = "control-panel__meta";
+  interactionHint.textContent = "Click the stage to arm wheel zoom, drag to pan, and use Reset View to return to the centered camera.";
+
+  const resetCameraButton = createButton("Reset View");
+  cameraSection.append(createSectionTitle("Scene camera"), cameraGrid, interactionHint, resetCameraButton);
+
   const usedSection = document.createElement("section");
   usedSection.className = "control-panel__section";
   usedSection.append(createSectionTitle("Used in sample"), createTagList(collectUsedAnimations(project)));
@@ -55,7 +82,7 @@ export function createControlPanel(project: VictoryProjectConfig, supportMatrix:
   supportSection.className = "control-panel__section";
   supportSection.append(createSectionTitle("Support matrix"), createSupportList(supportMatrix));
 
-  root.append(title, meta, actions, toggles, statusLabel, timeLabel, usedSection, supportSection);
+  root.append(title, meta, actions, toggles, statusLabel, timeLabel, cameraSection, usedSection, supportSection);
 
   return {
     root,
@@ -64,7 +91,11 @@ export function createControlPanel(project: VictoryProjectConfig, supportMatrix:
     replayButton,
     loopCheckbox,
     timeLabel,
-    statusLabel
+    statusLabel,
+    cameraActiveLabel,
+    cameraScaleLabel,
+    cameraOffsetLabel,
+    resetCameraButton
   };
 }
 
@@ -85,6 +116,16 @@ function createSectionTitle(label: string) {
   title.className = "control-panel__section-title";
   title.textContent = label;
   return title;
+}
+
+function createDebugEntry(label: string, value: HTMLElement) {
+  const fragment = document.createDocumentFragment();
+  const term = document.createElement("dt");
+  term.className = "debug-grid__label";
+  term.textContent = label;
+  value.className = "debug-grid__value";
+  fragment.append(term, value);
+  return fragment;
 }
 
 function createTagList(values: string[]) {
