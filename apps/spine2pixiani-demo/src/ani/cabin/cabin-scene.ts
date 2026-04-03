@@ -34,16 +34,19 @@ export class CabinScene {
   private selectedNodeId: string | null = null;
   private pickEnabled = true;
   private selectionListeners = new Set<(boneName: string) => void>();
+  private slotOrderIndex = new Map<string, number>();
 
   constructor(
     private readonly model: SpineModel,
     private readonly textures: Record<string, Texture>
   ) {
+    this.slotLayer.sortableChildren = true;
     this.view.addChild(this.boneLayer);
     this.view.addChild(this.slotLayer);
     this.view.addChild(this.debugLayer);
     this.createBones();
     this.createSlots();
+    this.slotOrderIndex = new Map(this.model.slotOrder.map((slotName, index) => [slotName, index]));
     this.boneSubtreeSlots = createBoneSubtreeSlotIndex(this.model);
     this.selectionOverlay.visible = false;
     this.debugLayer.addChild(this.selectionOverlay);
@@ -122,7 +125,8 @@ export class CabinScene {
       marker.position.set(world.x, -world.y);
     }
 
-    for (const slotName of pose.drawOrder) {
+    const drawOrderIndex = new Map(pose.drawOrder.map((slotName, index) => [slotName, index]));
+    for (const slotName of this.model.slotOrder) {
       const slotPose = pose.slots[slotName];
       const sprite = this.slotNodes.get(slotName);
       if (!slotPose || !sprite) {
@@ -130,6 +134,7 @@ export class CabinScene {
       }
 
       applySlotVisual(sprite, slotPose, this.textures);
+      sprite.zIndex = drawOrderIndex.get(slotName) ?? this.slotOrderIndex.get(slotName) ?? 0;
       if (!slotPose.attachment) {
         continue;
       }
@@ -143,7 +148,7 @@ export class CabinScene {
     this.refreshSelectionHighlight();
   }
 
-  reset(animationName = "cabin") {
+  reset(animationName = Object.keys(this.model.animations)[0] ?? "") {
     this.applyPose(sampleAnimationPose(this.model, animationName, 0, true));
   }
 

@@ -8,6 +8,7 @@ class MockContainer {
   name = "";
   x = 0;
   y = 0;
+  zIndex = 0;
   width = 0;
   height = 0;
   rotation = 0;
@@ -17,6 +18,7 @@ class MockContainer {
   blendMode: string | number = "normal";
   eventMode = "auto";
   cursor = "default";
+  sortableChildren = false;
   private listeners = new Map<string, Array<(...args: unknown[]) => void>>();
   position = {
     x: 0,
@@ -54,6 +56,11 @@ class MockContainer {
     this.children = this.children.filter((item) => item !== child);
     child.parent = null;
     return child;
+  }
+
+  destroy() {
+    this.children = [];
+    this.parent = null;
   }
 
   on(eventName: string, listener: (...args: unknown[]) => void) {

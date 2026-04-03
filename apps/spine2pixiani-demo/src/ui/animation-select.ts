@@ -1,17 +1,31 @@
 export type MouseMode = "select" | "pan";
 
+export type AnimationBundleOption = {
+  id: string;
+  label: string;
+  description: string;
+  animationCount: number;
+};
+
 export type AnimationSelectControls = {
   root: HTMLElement;
+  bundleSelect: HTMLSelectElement;
   select: HTMLSelectElement;
   replayButton: HTMLButtonElement;
   loopCheckbox: HTMLInputElement;
+  setAnimationOptions: (animationNames: string[], selectedAnimationName: string) => void;
+  setBundleDetails: (bundle: AnimationBundleOption) => void;
   setMouseMode: (mode: MouseMode) => void;
   setSelection: (selection: { name: string; type: string; parentName: string | null } | null) => void;
   setZoom: (zoom: number) => void;
   onMouseModeChange: (listener: (mode: MouseMode) => void) => void;
 };
 
-export function createAnimationSelect(animationNames: string[]): AnimationSelectControls {
+export function createAnimationSelect(
+  bundles: AnimationBundleOption[],
+  initialBundleId: string,
+  initialAnimationNames: string[]
+): AnimationSelectControls {
   const root = document.createElement("section");
   root.className = "panel";
 
@@ -20,13 +34,32 @@ export function createAnimationSelect(animationNames: string[]): AnimationSelect
   eyebrow.textContent = "Spine To Pixiani";
 
   const title = document.createElement("h1");
-  title.textContent = "Cabin Demo";
+  title.textContent = "Bundle Demo";
 
   const description = document.createElement("p");
-  description.textContent = "直接消费 cabin atlas 与 JSON 数据，使用手写 Pixi 播放层而不是 Spine 运行时；点击右侧节点树会在舞台中直接显示选中框。";
+  description.textContent = "直接消费多组 atlas 与 JSON 数据，使用手写 Pixi 播放层而不是 Spine 运行时；切换资源组后会同步刷新动画、调试树和舞台实例。";
 
   const controls = document.createElement("div");
   controls.className = "controls";
+
+  const bundleGroup = document.createElement("div");
+  bundleGroup.className = "control-group";
+
+  const bundleLabel = document.createElement("label");
+  bundleLabel.textContent = "Bundle";
+  bundleLabel.htmlFor = "bundle-select";
+
+  const bundleSelect = document.createElement("select");
+  bundleSelect.id = "bundle-select";
+  for (const bundle of bundles) {
+    const option = document.createElement("option");
+    option.value = bundle.id;
+    option.textContent = bundle.label;
+    bundleSelect.appendChild(option);
+  }
+  bundleSelect.value = initialBundleId;
+
+  bundleGroup.append(bundleLabel, bundleSelect);
 
   const selectGroup = document.createElement("div");
   selectGroup.className = "control-group";
@@ -37,12 +70,6 @@ export function createAnimationSelect(animationNames: string[]): AnimationSelect
 
   const select = document.createElement("select");
   select.id = "animation-select";
-  for (const animationName of animationNames) {
-    const option = document.createElement("option");
-    option.value = animationName;
-    option.textContent = animationName;
-    select.appendChild(option);
-  }
 
   selectGroup.append(selectLabel, select);
 
@@ -110,10 +137,13 @@ export function createAnimationSelect(animationNames: string[]): AnimationSelect
 
   const meta = document.createElement("div");
   meta.className = "meta";
-  meta.innerHTML =
-    "<div>Animations: cabin, cabin_s</div><div>Debug view: tree-driven selection box, bone picking, viewport pan/zoom</div>";
+  const metaAnimations = document.createElement("div");
+  const metaDescription = document.createElement("div");
+  const metaDebug = document.createElement("div");
+  metaDebug.textContent = "Debug view: tree-driven selection box, bone picking, viewport pan/zoom";
+  meta.append(metaAnimations, metaDescription, metaDebug);
 
-  controls.append(selectGroup, actionGroup, modeGroup, debugState);
+  controls.append(bundleGroup, selectGroup, actionGroup, modeGroup, debugState);
   root.append(eyebrow, title, description, controls, meta);
 
   let mouseMode: MouseMode = "select";
@@ -142,11 +172,38 @@ export function createAnimationSelect(animationNames: string[]): AnimationSelect
   panModeButton.addEventListener("click", () => setMouseMode("pan"));
   applyMouseMode(mouseMode);
 
+  const setAnimationOptions = (animationNames: string[], selectedAnimationName: string) => {
+    select.replaceChildren();
+    for (const animationName of animationNames) {
+      const option = document.createElement("option");
+      option.value = animationName;
+      option.textContent = animationName;
+      select.appendChild(option);
+    }
+    select.value = selectedAnimationName;
+  };
+
+  const setBundleDetails = (bundle: AnimationBundleOption) => {
+    title.textContent = `${bundle.label} Demo`;
+    description.textContent = bundle.description;
+    metaAnimations.textContent = `Animations: ${bundle.animationCount}`;
+    metaDescription.textContent = `Bundle: ${bundle.label}`;
+  };
+
+  setAnimationOptions(initialAnimationNames, initialAnimationNames[0] ?? "");
+  const initialBundle = bundles.find((bundle) => bundle.id === initialBundleId) ?? bundles[0];
+  if (initialBundle) {
+    setBundleDetails(initialBundle);
+  }
+
   return {
     root,
+    bundleSelect,
     select,
     replayButton,
     loopCheckbox,
+    setAnimationOptions,
+    setBundleDetails,
     setMouseMode,
     setSelection(selection) {
       selectedValue.value.textContent = selection?.name ?? "Nothing selected";
