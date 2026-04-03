@@ -187,11 +187,19 @@ body {
   min-height: calc(100vh - 80px);
   overflow: hidden;
   border-radius: 22px;
-  touch-action: manipulation;
+  border: 1px solid rgba(255, 237, 210, 0.14);
+  background: linear-gradient(180deg, rgba(4, 8, 13, 0.88), rgba(11, 19, 28, 0.72));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  cursor: grab;
+  touch-action: none;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
 }
 
 .stage::after {
-  content: "Export Preview";
+  content: "Click Preview To Activate Zoom";
   position: absolute;
   top: 14px;
   right: 18px;
@@ -202,6 +210,29 @@ body {
   font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+}
+
+.stage.is-active {
+  border-color: rgba(126, 213, 255, 0.72);
+  box-shadow:
+    inset 0 0 0 1px rgba(126, 213, 255, 0.18),
+    0 0 0 4px rgba(126, 213, 255, 0.08),
+    0 24px 60px rgba(2, 9, 16, 0.42);
+}
+
+.stage.is-active::after {
+  content: "Camera Zoom Active";
+  background: rgba(10, 35, 51, 0.78);
+  color: #bfeaff;
+}
+
+.stage.is-dragging {
+  cursor: grabbing;
+  transform: scale(0.998);
+}
+
+.stage.is-dragging::after {
+  content: "Panning Scene";
 }
 
 .stage canvas {

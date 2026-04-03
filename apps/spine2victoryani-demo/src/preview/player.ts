@@ -3,9 +3,12 @@ import type { VictoryLayerConfig, VictoryProjectConfig } from "../config/victory
 import { sampleTimelineLayer } from "./timeline.js";
 
 type LayerInstance = {
+  index: number;
   layer: VictoryLayerConfig;
   sprite: Sprite;
 };
+
+const DRAW_ORDER_STRIDE = 1000;
 
 function resolveBlendMode(blendMode: string) {
   if (blendMode === "additive") {
@@ -26,14 +29,15 @@ export class ExportPreviewPlayer {
     private readonly project: VictoryProjectConfig,
     textures: Map<string, Texture>
   ) {
+    this.root.sortableChildren = true;
     this.instances = [...project.layers]
-      .reverse()
-      .map((layer) => {
+      .map((layer, index) => {
         const sprite = new Sprite(textures.get(layer.asset) ?? Texture.WHITE);
         sprite.anchor.set(0.5);
         sprite.blendMode = resolveBlendMode(layer.blendMode) as never;
         this.root.addChild(sprite);
         return {
+          index,
           layer,
           sprite
         };
@@ -92,6 +96,9 @@ export class ExportPreviewPlayer {
       instance.sprite.rotation = sample.rotation;
       instance.sprite.alpha = sample.alpha;
       instance.sprite.visible = sample.visible;
+      instance.sprite.zIndex = sample.drawOrder * DRAW_ORDER_STRIDE + instance.index;
     }
+
+    this.root.sortChildren();
   }
 }

@@ -6,6 +6,8 @@ class MockContainer {
   children: Child[] = [];
   parent: MockContainer | null = null;
   name = "";
+  zIndex = 0;
+  sortableChildren = false;
   x = 0;
   y = 0;
   width = 0;
@@ -54,6 +56,10 @@ class MockContainer {
     this.children = this.children.filter((item) => item !== child);
     child.parent = null;
     return child;
+  }
+
+  sortChildren() {
+    this.children.sort((left, right) => left.zIndex - right.zIndex);
   }
 
   on(eventName: string, listener: (...args: unknown[]) => void) {
