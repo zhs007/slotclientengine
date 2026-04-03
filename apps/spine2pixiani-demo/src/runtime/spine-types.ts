@@ -8,6 +8,8 @@ export type RawSpineBone = {
   rotation?: number;
   scaleX?: number;
   scaleY?: number;
+  shearX?: number;
+  shearY?: number;
 };
 
 export type RawSpineSlot = {
@@ -53,6 +55,7 @@ export type RawBoneTimeline = {
   rotate?: RawNumericFrame[];
   translate?: RawNumericFrame[];
   scale?: RawNumericFrame[];
+  shear?: RawNumericFrame[];
 };
 
 export type RawSlotTimeline = {
@@ -63,6 +66,17 @@ export type RawSlotTimeline = {
 export type RawSpineAnimation = {
   slots?: Record<string, RawSlotTimeline>;
   bones?: Record<string, RawBoneTimeline>;
+  drawOrder?: RawDrawOrderFrame[];
+};
+
+export type RawDrawOrderOffset = {
+  slot: string;
+  offset: number;
+};
+
+export type RawDrawOrderFrame = {
+  time: number;
+  offsets?: RawDrawOrderOffset[];
 };
 
 export type RawSpineSkeleton = {
@@ -87,6 +101,8 @@ export type BoneSetup = {
   rotation: number;
   scaleX: number;
   scaleY: number;
+  shearX: number;
+  shearY: number;
 };
 
 export type SlotSetup = {
@@ -137,6 +153,7 @@ export type BoneAnimation = {
   rotate: NumericKeyframe[];
   translate: VectorKeyframe[];
   scale: VectorKeyframe[];
+  shear: VectorKeyframe[];
 };
 
 export type SlotAnimation = {
@@ -149,6 +166,12 @@ export type SpineAnimation = {
   duration: number;
   bones: Record<string, BoneAnimation>;
   slots: Record<string, SlotAnimation>;
+  drawOrder: DrawOrderKeyframe[];
+};
+
+export type DrawOrderKeyframe = {
+  time: number;
+  slotOrder: string[];
 };
 
 export type SpineModel = {
@@ -172,6 +195,8 @@ export type BonePose = {
   rotation: number;
   scaleX: number;
   scaleY: number;
+  shearX: number;
+  shearY: number;
 };
 
 export type AffineMatrix = {
@@ -183,7 +208,12 @@ export type AffineMatrix = {
   ty: number;
 };
 
-export type WorldTransform = BonePose & {
+export type WorldTransform = {
+  x: number;
+  y: number;
+  rotation: number;
+  scaleX: number;
+  scaleY: number;
   matrix: AffineMatrix;
 };
 

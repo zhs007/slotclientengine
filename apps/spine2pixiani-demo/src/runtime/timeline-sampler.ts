@@ -168,6 +168,20 @@ function sampleAttachment(frames: AttachmentKeyframe[], time: number, fallback: 
   return fallback;
 }
 
+function sampleDrawOrder(frames: NonNullable<SpineModel["animations"][string]["drawOrder"]>, time: number, fallback: string[]) {
+  if (frames.length === 0) {
+    return [...fallback];
+  }
+
+  for (let index = frames.length - 1; index >= 0; index -= 1) {
+    if (time >= frames[index].time) {
+      return [...frames[index].slotOrder];
+    }
+  }
+
+  return [...fallback];
+}
+
 export function sampleAnimationPose(
   model: SpineModel,
   animationName: string,
@@ -185,6 +199,7 @@ export function sampleAnimationPose(
     const timelines = animation.bones[bone.name];
     const translate = sampleVector(timelines?.translate ?? [], time, { x: 0, y: 0 });
     const scale = sampleVector(timelines?.scale ?? [], time, { x: 1, y: 1 });
+    const shear = sampleVector(timelines?.shear ?? [], time, { x: 0, y: 0 });
     const rotation = sampleNumeric(timelines?.rotate ?? [], time, 0, true);
 
     bones[bone.name] = {
@@ -192,7 +207,9 @@ export function sampleAnimationPose(
       y: bone.y + translate.y,
       rotation: bone.rotation + rotation,
       scaleX: bone.scaleX * scale.x,
-      scaleY: bone.scaleY * scale.y
+      scaleY: bone.scaleY * scale.y,
+      shearX: bone.shearX + shear.x,
+      shearY: bone.shearY + shear.y
     };
   }
 
@@ -219,7 +236,7 @@ export function sampleAnimationPose(
     duration: animation.duration,
     bones,
     slots,
-    drawOrder: [...model.slotOrder]
+    drawOrder: sampleDrawOrder(animation.drawOrder, time, model.slotOrder)
   };
 }
 

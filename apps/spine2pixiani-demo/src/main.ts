@@ -1,11 +1,11 @@
 import { Application, Assets, Container } from "pixi.js";
-import { cabinAnimationData, cabinAnimationNames } from "./data/cabin-animation-data.js";
-import { cabinAtlasText } from "./data/cabin-atlas.js";
-import cabinAtlasImageUrl from "./assets/cabin.png";
+import { animationBundles, defaultAnimationBundle, getAnimationBundle } from "./data/animation-bundles.js";
 import { computeCanvasLayout } from "./layout.js";
 import { loadAtlasTextures } from "./runtime/atlas.js";
 import { CabinAnimationEntity } from "./ani/cabin/cabin-animation.js";
 import { createDebugNodeIndex, buildDebugTree } from "./runtime/debug-tree.js";
+import { computeSlotSelectionBounds, mergeAxisAlignedBounds } from "./runtime/debug-bounds.js";
+import { computeWorldBoneTransforms, sampleAnimationPose } from "./runtime/timeline-sampler.js";
 import { createViewportState, panViewport, zoomViewportAtPoint } from "./runtime/viewport-controller.js";
 import { createAnimationSelect, type MouseMode } from "./ui/animation-select.js";
 import { createNodeTreePanel } from "./ui/node-tree.js";
@@ -23,7 +23,16 @@ async function bootstrap() {
   const shell = document.createElement("main");
   shell.className = "shell";
 
-  const controls = createAnimationSelect(cabinAnimationNames);
+  const controls = createAnimationSelect(
+    animationBundles.map((bundle) => ({
+      id: bundle.id,
+      label: bundle.label,
+      description: bundle.description,
+      animationCount: bundle.animationNames.length
+    })),
+    defaultAnimationBundle.id,
+    defaultAnimationBundle.animationNames
+  );
   const nodeTree = createNodeTreePanel();
   const stageShell = document.createElement("section");
   stageShell.className = "stage-shell";
@@ -51,20 +60,12 @@ async function bootstrap() {
   app.stage.addChild(viewportRoot);
   viewportRoot.addChild(sceneRoot);
 
-  const textures = await loadAtlasTextures(cabinAtlasText, cabinAtlasImageUrl);
-  const cabinEntity = new CabinAnimationEntity(cabinAnimationData, textures);
-  sceneRoot.addChild(cabinEntity);
-
-  const skeletonScale = Math.min(
-    (designWidth * 0.72) / cabinAnimationData.skeleton.width,
-    (designHeight * 0.82) / cabinAnimationData.skeleton.height
-  );
-  sceneRoot.position.set(designWidth * 0.52, designHeight * 0.84);
-  sceneRoot.scale.set(skeletonScale, skeletonScale);
-  cabinEntity.play("cabin");
-
-  const debugTree = buildDebugTree(cabinAnimationData);
-  const debugNodeIndex = createDebugNodeIndex(debugTree);
+  const textureCache = new Map<string, Awaited<ReturnType<typeof loadAtlasTextures>>>();
+  let currentBundle = defaultAnimationBundle;
+  let currentEntity: CabinAnimationEntity | null = null;
+  let debugNodeIndex = new Map<string, ReturnType<typeof createDebugNodeIndex> extends Map<infer K, infer V> ? V : never>();
+  let detachBoneListener: (() => void) | null = null;
+  let bundleLoadToken = 0;
   const viewport = {
     state: createViewportState({
       zoom: 1,
@@ -93,6 +94,61 @@ async function bootstrap() {
     controls.setZoom(viewport.state.zoom);
   };
 
+  const getBundleTextures = async (bundle = currentBundle) => {
+    const cached = textureCache.get(bundle.id);
+    if (cached) {
+      return cached;
+    }
+
+    const textures = await loadAtlasTextures(bundle.atlasText, bundle.atlasImageUrl);
+    textureCache.set(bundle.id, textures);
+    return textures;
+  };
+
+  const estimateSceneBounds = (bundle = currentBundle, animationName = bundle.defaultAnimationName) => {
+    const pose = sampleAnimationPose(bundle.model, animationName, 0, true);
+    const worldBones = computeWorldBoneTransforms(bundle.model, pose.bones);
+    const slotBounds = bundle.model.slotOrder
+      .map((slotName) => {
+        const slotPose = pose.slots[slotName];
+        return slotPose ? computeSlotSelectionBounds(worldBones[slotPose.boneName], slotPose)?.aabb ?? null : null;
+      })
+      .filter((bounds): bounds is NonNullable<ReturnType<typeof computeSlotSelectionBounds>>["aabb"] => bounds !== null);
+
+    const mergedBounds = mergeAxisAlignedBounds(slotBounds);
+    if (mergedBounds) {
+      return mergedBounds;
+    }
+
+    const xValues = Object.values(worldBones).map((bone) => bone.x);
+    const yValues = Object.values(worldBones).map((bone) => -bone.y);
+    const minX = Math.min(...xValues, -240);
+    const maxX = Math.max(...xValues, 240);
+    const minY = Math.min(...yValues, -240);
+    const maxY = Math.max(...yValues, 240);
+
+    return {
+      minX,
+      minY,
+      maxX,
+      maxY,
+      width: maxX - minX,
+      height: maxY - minY
+    };
+  };
+
+  const applyScenePlacement = (bundle = currentBundle, animationName = bundle.defaultAnimationName) => {
+    const bounds = estimateSceneBounds(bundle, animationName);
+    const width = Math.max(bounds.width, 320);
+    const height = Math.max(bounds.height, 320);
+    const scale = Math.min((designWidth * 0.72) / width, (designHeight * 0.74) / height);
+    const centerX = bounds.minX + width / 2;
+    const centerY = bounds.minY + height / 2;
+
+    sceneRoot.scale.set(scale, scale);
+    sceneRoot.position.set(designWidth * 0.52 - centerX * scale, designHeight * 0.56 - centerY * scale);
+  };
+
   const setMouseMode = (nextMode: MouseMode) => {
     mouseMode = nextMode;
     controls.setMouseMode(nextMode);
@@ -100,12 +156,12 @@ async function bootstrap() {
     if (dragState && nextMode !== "pan") {
       finishDragging();
     }
-    cabinEntity.setPickingEnabled(nextMode === "select");
+    currentEntity?.setPickingEnabled(nextMode === "select");
   };
 
   const setSelectedNode = (nodeId: string | null) => {
     selectedNodeId = nodeId;
-    cabinEntity.setSelectedNode(nodeId);
+    currentEntity?.setSelectedNode(nodeId);
     nodeTree.setSelectedNodeId(nodeId);
 
     const node = nodeId ? debugNodeIndex.get(nodeId) : null;
@@ -156,26 +212,67 @@ async function bootstrap() {
     app.canvas.style.top = `${layout.offsetY}px`;
   }
 
-  controls.select.value = "cabin";
-  controls.onMouseModeChange(setMouseMode);
-  controls.select.addEventListener("change", () => {
-    cabinEntity.play(controls.select.value);
-  });
-  controls.replayButton.addEventListener("click", () => {
-    cabinEntity.replay();
-  });
-  controls.loopCheckbox.addEventListener("change", () => {
-    cabinEntity.setLoop(controls.loopCheckbox.checked);
-  });
-  nodeTree.setNodes(debugTree);
-  nodeTree.setOnSelect((nodeId) => {
-    setSelectedNode(nodeId);
-  });
-  cabinEntity.onBoneSelected((boneName) => {
-    if (mouseMode !== "select") {
+  const applyBundle = async (bundleId: string) => {
+    const nextBundle = getAnimationBundle(bundleId);
+    const loadToken = ++bundleLoadToken;
+    const textures = await getBundleTextures(nextBundle);
+    if (loadToken !== bundleLoadToken) {
       return;
     }
-    setSelectedNode(`bone:${boneName}`);
+
+    currentBundle = nextBundle;
+    detachBoneListener?.();
+    detachBoneListener = null;
+    if (currentEntity) {
+      sceneRoot.removeChild(currentEntity);
+      currentEntity.destroy({ children: true });
+      currentEntity = null;
+    }
+
+    const nextEntity = new CabinAnimationEntity(nextBundle.model, textures, nextBundle.defaultAnimationName);
+    currentEntity = nextEntity;
+    sceneRoot.addChild(nextEntity);
+    nextEntity.setLoop(controls.loopCheckbox.checked);
+    nextEntity.setPickingEnabled(mouseMode === "select");
+
+    const debugTree = buildDebugTree(nextBundle.model);
+    debugNodeIndex = createDebugNodeIndex(debugTree);
+    nodeTree.setNodes(debugTree);
+    controls.bundleSelect.value = nextBundle.id;
+    controls.setBundleDetails({
+      id: nextBundle.id,
+      label: nextBundle.label,
+      description: nextBundle.description,
+      animationCount: nextBundle.animationNames.length
+    });
+    controls.setAnimationOptions(nextBundle.animationNames, nextBundle.defaultAnimationName);
+    nextEntity.play(nextBundle.defaultAnimationName);
+    applyScenePlacement(nextBundle, nextBundle.defaultAnimationName);
+    setSelectedNode(null);
+
+    detachBoneListener = nextEntity.onBoneSelected((boneName) => {
+      if (mouseMode !== "select") {
+        return;
+      }
+      setSelectedNode(`bone:${boneName}`);
+    });
+  };
+
+  controls.onMouseModeChange(setMouseMode);
+  controls.bundleSelect.addEventListener("change", () => {
+    void applyBundle(controls.bundleSelect.value);
+  });
+  controls.select.addEventListener("change", () => {
+    currentEntity?.play(controls.select.value);
+  });
+  controls.replayButton.addEventListener("click", () => {
+    currentEntity?.replay();
+  });
+  controls.loopCheckbox.addEventListener("change", () => {
+    currentEntity?.setLoop(controls.loopCheckbox.checked);
+  });
+  nodeTree.setOnSelect((nodeId) => {
+    setSelectedNode(nodeId);
   });
 
   stageHost.addEventListener("pointerdown", (event) => {
@@ -229,9 +326,10 @@ async function bootstrap() {
   );
 
   app.ticker.add((ticker) => {
-    cabinEntity.update(ticker.deltaMS / 1000);
+    currentEntity?.update(ticker.deltaMS / 1000);
   });
 
+  await applyBundle(defaultAnimationBundle.id);
   setSelectedNode(selectedNodeId);
   setMouseMode(mouseMode);
   applyLayout();

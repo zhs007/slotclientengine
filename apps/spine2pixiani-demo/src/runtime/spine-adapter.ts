@@ -3,9 +3,11 @@ import type {
   AttachmentKeyframe,
   BoneAnimation,
   ColorKeyframe,
+  DrawOrderKeyframe,
   NumericKeyframe,
   RawAttachmentFrame,
   RawColorFrame,
+  RawDrawOrderFrame,
   RawNumericFrame,
   RawSpineSkeleton,
   SlotAnimation,
@@ -71,9 +73,57 @@ function adaptColorFrames(frames?: RawColorFrame[]) {
   }));
 }
 
+function expandDrawOrderFrame(slotOrder: string[], frame: RawDrawOrderFrame): string[] {
+  const offsets = frame.offsets ?? [];
+  if (offsets.length === 0) {
+    return [...slotOrder];
+  }
+
+  const slotIndices = new Map(slotOrder.map((slotName, index) => [slotName, index]));
+  const expandedOrder = new Array<string>(slotOrder.length);
+  const unchangedSlots: string[] = [];
+  let originalIndex = 0;
+
+  for (const offset of offsets) {
+    const slotIndex = slotIndices.get(offset.slot);
+    if (slotIndex === undefined) {
+      continue;
+    }
+
+    while (originalIndex < slotIndex) {
+      unchangedSlots.push(slotOrder[originalIndex]);
+      originalIndex += 1;
+    }
+
+    expandedOrder[slotIndex + offset.offset] = slotOrder[slotIndex];
+    originalIndex += 1;
+  }
+
+  while (originalIndex < slotOrder.length) {
+    unchangedSlots.push(slotOrder[originalIndex]);
+    originalIndex += 1;
+  }
+
+  for (let index = expandedOrder.length - 1; index >= 0; index -= 1) {
+    if (!expandedOrder[index]) {
+      expandedOrder[index] = unchangedSlots.pop() ?? slotOrder[index];
+    }
+  }
+
+  return expandedOrder;
+}
+
+function adaptDrawOrderFrames(slotOrder: string[], frames?: RawDrawOrderFrame[]) {
+  return (frames ?? []).map<DrawOrderKeyframe>((frame) => ({
+    time: frame.time,
+    slotOrder: expandDrawOrderFrame(slotOrder, frame)
+  }));
+}
+
 function computeAnimationDuration(animation: {
-  bones?: Record<string, { rotate?: RawNumericFrame[]; translate?: RawNumericFrame[]; scale?: RawNumericFrame[] }>;
+  bones?: Record<string, { rotate?: RawNumericFrame[]; translate?: RawNumericFrame[]; scale?: RawNumericFrame[]; shear?: RawNumericFrame[] }>;
   slots?: Record<string, { attachment?: RawAttachmentFrame[]; color?: RawColorFrame[] }>;
+  drawOrder?: RawDrawOrderFrame[];
 }) {
   let duration = 0;
   for (const slot of Object.values(animation.slots ?? {})) {
@@ -94,6 +144,12 @@ function computeAnimationDuration(animation: {
     for (const frame of bone.scale ?? []) {
       duration = Math.max(duration, frame.time);
     }
+    for (const frame of bone.shear ?? []) {
+      duration = Math.max(duration, frame.time);
+    }
+  }
+  for (const frame of animation.drawOrder ?? []) {
+    duration = Math.max(duration, frame.time);
   }
   return duration;
 }
@@ -120,7 +176,9 @@ export function adaptSpineData(raw: RawSpineSkeleton): SpineModel {
     y: bone.y ?? 0,
     rotation: bone.rotation ?? 0,
     scaleX: bone.scaleX ?? 1,
-    scaleY: bone.scaleY ?? 1
+    scaleY: bone.scaleY ?? 1,
+    shearX: bone.shearX ?? 0,
+    shearY: bone.shearY ?? 0
   }));
 
   const slots: SpineModel["slots"] = raw.slots.map((slot) => ({
@@ -148,7 +206,8 @@ export function adaptSpineData(raw: RawSpineSkeleton): SpineModel {
         bonesAnimation[boneName] = {
           rotate: adaptNumericFrames(bone.rotate, "angle") as NumericKeyframe[],
           translate: adaptNumericFrames(bone.translate) as VectorKeyframe[],
-          scale: adaptScaleFrames(bone.scale)
+          scale: adaptScaleFrames(bone.scale),
+          shear: adaptNumericFrames(bone.shear) as VectorKeyframe[]
         };
       }
 
@@ -160,13 +219,16 @@ export function adaptSpineData(raw: RawSpineSkeleton): SpineModel {
         };
       }
 
+      const drawOrder = adaptDrawOrderFrames(slots.map((slot) => slot.name), animation.drawOrder);
+
       return [
         animationName,
         {
           name: animationName,
           duration: computeAnimationDuration(animation),
           bones: bonesAnimation,
-          slots: slotsAnimation
+          slots: slotsAnimation,
+          drawOrder
         }
       ];
     })

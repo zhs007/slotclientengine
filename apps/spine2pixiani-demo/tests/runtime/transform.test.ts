@@ -46,7 +46,9 @@ describe("transform", () => {
       y: 80,
       rotation: 35,
       scaleX: -1,
-      scaleY: 0.75
+      scaleY: 0.75,
+      shearX: 0,
+      shearY: 0
     });
 
     const attachmentMatrix = createMatrixFromTransform({
@@ -54,7 +56,9 @@ describe("transform", () => {
       y: 25,
       rotation: -20,
       scaleX: 1.2,
-      scaleY: 0.8
+      scaleY: 0.8,
+      shearX: 0,
+      shearY: 0
     });
 
     const composed = composeWorldTransform(
@@ -63,13 +67,34 @@ describe("transform", () => {
         y: 25,
         rotation: -20,
         scaleX: 1.2,
-        scaleY: 0.8
+        scaleY: 0.8,
+        shearX: 0,
+        shearY: 0
       },
       bone
     );
     const manual = deriveWorldTransform(multiplyAffineMatrices(bone.matrix, attachmentMatrix));
 
     expect(composed.matrix).toEqual(manual.matrix);
+  });
+
+  it("builds the expected local matrix when shear is present", () => {
+    const matrix = createMatrixFromTransform({
+      x: 12,
+      y: -8,
+      rotation: 10,
+      scaleX: 2,
+      scaleY: 3,
+      shearX: 15,
+      shearY: -20
+    });
+
+    expect(matrix.a).toBeCloseTo(Math.cos((25 * Math.PI) / 180) * 2, 6);
+    expect(matrix.b).toBeCloseTo(Math.sin((25 * Math.PI) / 180) * 2, 6);
+    expect(matrix.c).toBeCloseTo(Math.cos((80 * Math.PI) / 180) * 3, 6);
+    expect(matrix.d).toBeCloseTo(Math.sin((80 * Math.PI) / 180) * 3, 6);
+    expect(matrix.tx).toBe(12);
+    expect(matrix.ty).toBe(-8);
   });
 
   it("keeps ui_k and ui_k2 sample branches mirrored in the default pose", () => {

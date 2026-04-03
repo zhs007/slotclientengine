@@ -1,6 +1,16 @@
-import type { AffineMatrix, BonePose, WorldTransform } from "./spine-types.js";
+import type { AffineMatrix, WorldTransform } from "./spine-types.js";
 
 const RADIAN_FACTOR = Math.PI / 180;
+
+type TransformLike = {
+  x: number;
+  y: number;
+  rotation: number;
+  scaleX: number;
+  scaleY: number;
+  shearX?: number;
+  shearY?: number;
+};
 
 export function createIdentityMatrix(): AffineMatrix {
   return {
@@ -13,16 +23,15 @@ export function createIdentityMatrix(): AffineMatrix {
   };
 }
 
-export function createMatrixFromTransform(transform: BonePose): AffineMatrix {
-  const radians = transform.rotation * RADIAN_FACTOR;
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
+export function createMatrixFromTransform(transform: TransformLike): AffineMatrix {
+  const shearXRadians = (transform.rotation + (transform.shearX ?? 0)) * RADIAN_FACTOR;
+  const shearYRadians = (transform.rotation + 90 + (transform.shearY ?? 0)) * RADIAN_FACTOR;
 
   return {
-    a: cos * transform.scaleX,
-    b: sin * transform.scaleX,
-    c: -sin * transform.scaleY,
-    d: cos * transform.scaleY,
+    a: Math.cos(shearXRadians) * transform.scaleX,
+    b: Math.sin(shearXRadians) * transform.scaleX,
+    c: Math.cos(shearYRadians) * transform.scaleY,
+    d: Math.sin(shearYRadians) * transform.scaleY,
     tx: transform.x,
     ty: transform.y
   };
@@ -72,7 +81,7 @@ export function deriveWorldTransform(matrix: AffineMatrix): WorldTransform {
   };
 }
 
-export function composeWorldTransform(transform: BonePose, parent?: WorldTransform): WorldTransform {
+export function composeWorldTransform(transform: TransformLike, parent?: WorldTransform): WorldTransform {
   const localMatrix = createMatrixFromTransform(transform);
   const matrix = parent ? multiplyAffineMatrices(parent.matrix, localMatrix) : localMatrix;
 

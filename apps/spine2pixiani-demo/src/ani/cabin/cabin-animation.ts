@@ -9,13 +9,16 @@ export class CabinAnimationEntity extends VisualEntity<{ animationName: string; 
   private elapsedSeconds = 0;
   private loop = true;
   private running = true;
-  private activeAnimationName = "cabin";
+  private readonly defaultAnimationName: string;
+  private activeAnimationName: string;
   private lastPose: SampledAnimationPose;
 
-  constructor(model: SpineModel, textures: Record<string, Texture>) {
+  constructor(model: SpineModel, textures: Record<string, Texture>, initialAnimationName?: string) {
     super();
     this.scene = new CabinScene(model, textures);
     this.addChild(this.scene.view);
+    this.defaultAnimationName = initialAnimationName ?? Object.keys(model.animations)[0] ?? "";
+    this.activeAnimationName = this.defaultAnimationName;
     this.lastPose = sampleAnimationPose(model, this.activeAnimationName, 0, true);
     this.scene.applyPose(this.lastPose);
     this.model = model;
