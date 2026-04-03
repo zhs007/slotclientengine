@@ -25,7 +25,7 @@ export class VictoryPlayer {
   ) {
     registerBuiltinAnimations(this.registry);
     this.instances = createLayerInstances(project.layers, textures);
-    for (const layer of project.layers) {
+    for (const layer of getRenderOrderedLayers(project.layers)) {
       this.root.addChild(this.instances.get(layer.id)!.container);
     }
     applyMasks(project.layers, this.instances);
@@ -137,4 +137,8 @@ export class VictoryPlayer {
       listener(this.playing);
     }
   }
+}
+
+export function getRenderOrderedLayers(layers: VictoryProjectConfig["layers"]) {
+  return [...layers].reverse();
 }
