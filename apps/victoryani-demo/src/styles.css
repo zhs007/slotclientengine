@@ -1,0 +1,199 @@
+:root {
+  color: #f8f3e8;
+  background:
+    radial-gradient(circle at top, rgba(255, 191, 108, 0.18), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(94, 150, 255, 0.14), transparent 32%),
+    #050817;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(248, 176, 88, 0.16), transparent 24%),
+    radial-gradient(circle at 100% 30%, rgba(69, 146, 255, 0.18), transparent 30%),
+    linear-gradient(180deg, #090e22 0%, #030510 100%);
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 24px;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.control-panel,
+.stage-shell {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 28px;
+  background: rgba(9, 14, 34, 0.78);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.35);
+}
+
+.control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 28px;
+}
+
+.control-panel__title {
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: 0.03em;
+}
+
+.control-panel__meta,
+.control-panel__status,
+.control-panel__time {
+  margin: 0;
+  color: rgba(248, 243, 232, 0.78);
+  font-family: "Trebuchet MS", sans-serif;
+}
+
+.control-panel__actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.control-panel__button {
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 16px;
+  color: #f8f3e8;
+  background: rgba(255, 255, 255, 0.08);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    background 180ms ease;
+}
+
+.control-panel__button:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.control-panel__button.is-primary {
+  background: linear-gradient(135deg, #ffb55d, #ff7a18);
+  color: #1e1429;
+  font-weight: 700;
+}
+
+.control-panel__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: "Trebuchet MS", sans-serif;
+}
+
+.control-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.control-panel__section-title {
+  margin: 0;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag-list__item {
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: rgba(123, 200, 255, 0.14);
+  color: #9fd7ff;
+  font-family: "Trebuchet MS", sans-serif;
+  font-size: 0.92rem;
+}
+
+.support-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 38vh;
+  overflow: auto;
+}
+
+.support-list__item {
+  border-radius: 16px;
+  padding: 10px 12px;
+  line-height: 1.45;
+  font-family: "Trebuchet MS", sans-serif;
+  font-size: 0.92rem;
+}
+
+.support-list__item--supported {
+  background: rgba(83, 210, 135, 0.12);
+  color: #b4f4cb;
+}
+
+.support-list__item--implemented-not-used {
+  background: rgba(102, 190, 255, 0.12);
+  color: #b7e0ff;
+}
+
+.support-list__item--unsupported {
+  background: rgba(255, 156, 118, 0.12);
+  color: #ffd0bf;
+}
+
+.stage-shell {
+  position: relative;
+  padding: 20px;
+  min-height: calc(100vh - 48px);
+}
+
+.stage-host {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: calc(100vh - 88px);
+  overflow: hidden;
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0)),
+    #050817;
+}
+
+.stage-host canvas {
+  position: absolute;
+}
+
+@media (max-width: 1080px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .stage-shell {
+    min-height: 60vh;
+  }
+
+  .stage-host {
+    min-height: 56vh;
+  }
+}
