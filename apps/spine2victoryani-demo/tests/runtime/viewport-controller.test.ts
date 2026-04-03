@@ -26,5 +26,8 @@ describe("viewport-controller", () => {
 
     const clamped = zoomViewportAtPoint(next, 2, anchor);
     expect(clamped.zoom).toBe(1.5);
+
+    const minClamped = zoomViewportAtPoint(clamped, 0.1, anchor);
+    expect(minClamped.zoom).toBe(0.75);
   });
 });

@@ -57,8 +57,8 @@ function encodeTimeline(frames: EncodedTimelineFrame[], fps: number): string {
   return JSON.stringify(payload);
 }
 
-function createHiddenFrame(): EncodedTimelineFrame {
-  return [0, 0, 1, 1, 0, 0, 0];
+function createHiddenFrame(drawOrder = 0): EncodedTimelineFrame {
+  return [0, 0, 1, 1, 0, 0, 0, drawOrder];
 }
 
 function createProjectLayer(layer: SlotAttachmentLayer, assetPath: string, duration: number, fps: number, frames: EncodedTimelineFrame[]): VictoryLayerConfigRaw {
@@ -134,16 +134,19 @@ export function buildVictoryProject(
   const layers = collectSlotAttachmentLayers(model);
   const frameCount = Math.max(1, Math.ceil(animation.duration * fps));
   const layerFrames = new Map<string, EncodedTimelineFrame[]>(layers.map((layer) => [layer.id, []]));
+  const baseSlotOrder = new Map(model.slotOrder.map((slotName, index) => [slotName, index]));
 
   for (let frameIndex = 0; frameIndex <= frameCount; frameIndex += 1) {
     const time = Math.min(animation.duration, frameIndex / fps);
     const pose = sampleAnimationPose(model, animationName, time, false);
     const worldBones = computeWorldBoneTransforms(model, pose.bones);
+    const drawOrder = new Map(pose.drawOrder.map((slotName, index) => [slotName, index]));
 
     for (const layer of layers) {
       const slotPose = pose.slots[layer.slotName];
+      const orderIndex = drawOrder.get(layer.slotName) ?? baseSlotOrder.get(layer.slotName) ?? 0;
       if (!slotPose || !slotPose.attachment || slotPose.attachmentName !== layer.attachmentName) {
-        layerFrames.get(layer.id)!.push(createHiddenFrame());
+        layerFrames.get(layer.id)!.push(createHiddenFrame(orderIndex));
         continue;
       }
 
@@ -158,7 +161,8 @@ export function buildVictoryProject(
         round(scene.scaleY * stageScale),
         round((scene.rotation * Math.PI) / 180),
         round(clamp01(color.alpha)),
-        1
+        1,
+        orderIndex
       ]);
     }
   }

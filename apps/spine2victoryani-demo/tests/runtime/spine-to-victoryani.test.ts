@@ -32,5 +32,8 @@ describe("spine-to-victoryani", () => {
     expect(payload.kind).toBe("timeline");
     expect(payload.fps).toBe(cabinAnimationData.skeleton.fps);
     expect(payload.frames.length).toBeGreaterThan(1);
+    expect(payload.frames[0]).toHaveLength(8);
+    expect(typeof payload.frames[0][7]).toBe("number");
+    expect(payload.frames.every((frame: unknown[]) => Number.isInteger(frame[7] as number) && (frame[7] as number) >= 0)).toBe(true);
   });
 });

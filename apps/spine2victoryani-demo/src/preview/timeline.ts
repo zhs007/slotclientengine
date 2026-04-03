@@ -9,6 +9,7 @@ export interface LayerSample {
   rotation: number;
   alpha: number;
   visible: boolean;
+  drawOrder: number;
 }
 
 function lerp(from: number, to: number, progress: number) {
@@ -43,7 +44,8 @@ export function sampleTimelineLayer(layer: VictoryLayerConfig, time: number): La
       scaleY: layer.scaleY,
       rotation: layer.rotation,
       alpha: layer.alpha,
-      visible: layer.visible
+      visible: layer.visible,
+      drawOrder: 0
     };
   }
 
@@ -60,6 +62,7 @@ export function sampleTimelineLayer(layer: VictoryLayerConfig, time: number): La
     scaleY: lerp(current[3], next[3], progress),
     rotation: lerp(current[4], next[4], progress),
     alpha: lerp(current[5], next[5], progress),
-    visible: current[6] === 1
+    visible: current[6] === 1,
+    drawOrder: current[7]
   };
 }

@@ -58,6 +58,14 @@
 - curve: `linear`、`stepped`、4 点 bezier
 - atlas fields: `rotate`、`xy`、`size`、`orig`、`offset`、`index`
 
+## 预览交互
+
+- 点击预览渲染区后进入相机激活态，右上角状态标签会切换为 `Camera Zoom Active`
+- 激活态下，鼠标滚轮会以指针所在位置为锚点缩放整个导出场景
+- 鼠标左键拖拽渲染区可平移场景，拖拽中状态标签会显示 `Panning Scene`
+- 点击侧边栏、详情面板或页面其他区域会退出激活态，滚轮不再控制场景缩放
+- 浏览器窗口 resize 只会重新计算 canvas 的显示尺寸，不会重置当前平移和缩放状态
+
 ## 已知限制
 
 - 当前导出器按本仓库 `cabin` 示例定制，没有覆盖通用 Spine 特性全集。
@@ -78,12 +86,23 @@ pnpm --filter spine2victoryani-demo typecheck
 pnpm --filter spine2victoryani-demo build
 ```
 
+## 手工验收
+
+1. 执行 `pnpm --filter spine2victoryani-demo dev` 并打开预览页面。
+2. 不点击预览区直接滚动鼠标滚轮，确认页面不会触发场景缩放。
+3. 点击预览区激活相机后滚动鼠标滚轮，确认场景围绕鼠标附近位置缩放。
+4. 在预览区按住鼠标左键拖拽，确认场景持续平移，松开后拖拽状态立即结束。
+5. 点击侧边栏或右侧详情面板后再次滚轮，确认不会误触场景缩放。
+6. 调整浏览器窗口大小，确认当前视口平移和缩放状态仍被保留。
+
 ## 测试覆盖
 
 - Spine 输入解析与导出结构映射
 - atlas 切图输出
 - 镜像分支对称性
 - 导出 manifest 与资源引用完整性
+- 视口平移、锚点缩放、缩放边界
+- 激活态门禁、拖拽收尾、视口 transform 应用
 
 ## 目录说明
 

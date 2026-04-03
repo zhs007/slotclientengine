@@ -1,10 +1,21 @@
-import { Application, Assets } from "pixi.js";
+import { Application, Assets, Container } from "pixi.js";
 import { normalizeProjectConfig } from "./config/victory-project.js";
 import type { VictoryProjectConfigRaw } from "./config/victory-types.js";
 import { computeCanvasLayout } from "./layout.js";
 import { loadProjectTextures } from "./preview/asset-loader.js";
 import { ExportPreviewPlayer } from "./preview/player.js";
 import type { ExportManifest } from "./runtime/export-types.js";
+import { createViewportState } from "./runtime/viewport-controller.js";
+import {
+  activateViewportInteraction,
+  applyViewportTransform,
+  beginViewportDrag,
+  createViewportInteractionState,
+  deactivateViewportInteraction,
+  endViewportDrag,
+  updateViewportDrag,
+  zoomViewportWithWheel
+} from "./runtime/viewport-interaction.js";
 import "./styles.css";
 
 async function fetchJson<T>(input: string | URL): Promise<T> {
@@ -80,6 +91,51 @@ async function bootstrap() {
   });
   stageHost.appendChild(app.canvas);
 
+  const viewportRoot = new Container();
+  const sceneRoot = new Container();
+  viewportRoot.addChild(sceneRoot);
+  app.stage.addChild(viewportRoot);
+
+  let viewportState = createViewportState();
+  let viewportInteraction = createViewportInteractionState();
+
+  const applyViewport = () => {
+    applyViewportTransform(viewportRoot, viewportState);
+  };
+
+  const syncStageState = () => {
+    stageHost.classList.toggle("is-active", viewportInteraction.isActive);
+    stageHost.classList.toggle("is-dragging", viewportInteraction.isDragging);
+  };
+
+  const finishDrag = (pointerId?: number) => {
+    if (pointerId !== undefined && stageHost.hasPointerCapture(pointerId)) {
+      stageHost.releasePointerCapture(pointerId);
+    }
+
+    viewportInteraction = endViewportDrag(viewportInteraction, pointerId);
+    syncStageState();
+  };
+
+  const getCanvasAnchor = (event: MouseEvent | PointerEvent | WheelEvent) => {
+    const rect = app.canvas.getBoundingClientRect();
+    const width = rect.width || designWidth;
+    const height = rect.height || designHeight;
+
+    return {
+      x: ((event.clientX - rect.left) / width) * designWidth,
+      y: ((event.clientY - rect.top) / height) * designHeight
+    };
+  };
+
+  const isPointerInsideCanvas = (event: MouseEvent | PointerEvent | WheelEvent) => {
+    const rect = app.canvas.getBoundingClientRect();
+    return event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
+  };
+
+  applyViewport();
+  syncStageState();
+
   const animationSelect = sidebar.querySelector<HTMLSelectElement>("#animation-select");
   const playToggle = sidebar.querySelector<HTMLButtonElement>("#play-toggle");
   const replayButton = sidebar.querySelector<HTMLButtonElement>("#replay-button");
@@ -142,7 +198,7 @@ async function bootstrap() {
   const loadProject = async (projectPath: string) => {
     player?.stop();
     if (player) {
-      app.stage.removeChild(player.root);
+      sceneRoot.removeChild(player.root);
       player.root.destroy({ children: true });
     }
 
@@ -151,7 +207,7 @@ async function bootstrap() {
     const textures = await loadProjectTextures(project);
     player = new ExportPreviewPlayer(app, project, textures);
     player.setLoop(loopToggle.checked);
-    app.stage.addChild(player.root);
+    sceneRoot.addChild(player.root);
     player.play();
     playToggle.textContent = "Pause";
     renderSummary(project.name, project.layers.length, project.duration);
@@ -172,6 +228,82 @@ async function bootstrap() {
 
   animationSelect.addEventListener("change", () => {
     void loadProject(animationSelect.value);
+  });
+
+  stageHost.addEventListener("pointerdown", (event) => {
+    viewportInteraction = activateViewportInteraction(viewportInteraction);
+    syncStageState();
+
+    if (event.button !== 0 || !event.isPrimary || !isPointerInsideCanvas(event)) {
+      return;
+    }
+
+    viewportInteraction = beginViewportDrag(viewportInteraction, {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      panX: viewportState.panX,
+      panY: viewportState.panY
+    });
+    stageHost.setPointerCapture(event.pointerId);
+    syncStageState();
+    event.preventDefault();
+  });
+
+  stageHost.addEventListener("pointermove", (event) => {
+    const next = updateViewportDrag(viewportInteraction, viewportState, {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+    viewportInteraction = next.interactionState;
+    viewportState = next.viewportState;
+    applyViewport();
+  });
+
+  stageHost.addEventListener("pointerup", (event) => {
+    finishDrag(event.pointerId);
+  });
+
+  stageHost.addEventListener("pointercancel", (event) => {
+    finishDrag(event.pointerId);
+  });
+
+  stageHost.addEventListener("lostpointercapture", () => {
+    finishDrag();
+  });
+
+  stageHost.addEventListener(
+    "wheel",
+    (event) => {
+      const next = zoomViewportWithWheel(viewportState, viewportInteraction, {
+        deltaY: event.deltaY,
+        anchor: getCanvasAnchor(event),
+        isPointerInsideStage: isPointerInsideCanvas(event)
+      });
+      if (!next.handled) {
+        return;
+      }
+
+      viewportState = next.viewportState;
+      applyViewport();
+      event.preventDefault();
+    },
+    { passive: false }
+  );
+
+  document.addEventListener("pointerdown", (event) => {
+    const target = event.target;
+    if (target instanceof Node && stageHost.contains(target)) {
+      return;
+    }
+
+    viewportInteraction = deactivateViewportInteraction(viewportInteraction);
+    syncStageState();
+  });
+
+  window.addEventListener("blur", () => {
+    finishDrag();
   });
 
   playToggle.addEventListener("click", () => {
