@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, Texture } from "pixi.js";
+import { Container, Graphics, Matrix, Sprite, Texture } from "pixi.js";
 import { applySlotVisual, createSlotSprite } from "../../runtime/display-factory.js";
 import {
   computeBoneSelectionBounds,
@@ -14,7 +14,10 @@ import {
   sampleAnimationPose
 } from "../../runtime/timeline-sampler.js";
 import type { SampledAnimationPose, SpineModel, WorldTransform } from "../../runtime/spine-types.js";
+import { createSceneMatrix } from "../../runtime/transform.js";
 import { getBoneDebugNodeId } from "../../runtime/debug-tree.js";
+
+const tempMatrix = new Matrix();
 
 export class CabinScene {
   readonly view = new Container();
@@ -132,9 +135,9 @@ export class CabinScene {
       }
 
       const world = composeAttachmentTransform(this.currentWorldBones[slotPose.boneName], slotPose.attachment);
-      sprite.position.set(world.x, -world.y);
-      sprite.rotation = (-world.rotation * Math.PI) / 180;
-      sprite.scale.set(world.scaleX, world.scaleY);
+      const sceneMatrix = createSceneMatrix(world.matrix);
+      tempMatrix.set(sceneMatrix.a, sceneMatrix.b, sceneMatrix.c, sceneMatrix.d, sceneMatrix.tx, sceneMatrix.ty);
+      sprite.setFromMatrix(tempMatrix);
     }
 
     this.refreshSelectionHighlight();

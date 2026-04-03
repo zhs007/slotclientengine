@@ -37,6 +37,13 @@ class MockContainer {
     }
   };
 
+  setFromMatrix(matrix: { a: number; b: number; c: number; d: number; tx: number; ty: number }) {
+    this.position.set(matrix.tx, matrix.ty);
+    this.scale.set(Math.hypot(matrix.a, matrix.b), Math.hypot(matrix.c, matrix.d));
+    this.rotation = Math.atan2(matrix.b, matrix.a);
+    return this;
+  }
+
   addChild<T extends Child>(child: T) {
     child.parent = this;
     this.children.push(child);
@@ -85,6 +92,25 @@ class MockSprite extends MockContainer {
   }
 }
 
+class MockMatrix {
+  a = 1;
+  b = 0;
+  c = 0;
+  d = 1;
+  tx = 0;
+  ty = 0;
+
+  set(a: number, b: number, c: number, d: number, tx: number, ty: number) {
+    this.a = a;
+    this.b = b;
+    this.c = c;
+    this.d = d;
+    this.tx = tx;
+    this.ty = ty;
+    return this;
+  }
+}
+
 class MockGraphics extends MockContainer {
   clear() {
     return this;
@@ -122,6 +148,7 @@ class MockGraphics extends MockContainer {
 vi.mock("pixi.js", () => ({
   Container: MockContainer,
   Graphics: MockGraphics,
+  Matrix: MockMatrix,
   Sprite: MockSprite,
   Texture: MockTexture
 }));

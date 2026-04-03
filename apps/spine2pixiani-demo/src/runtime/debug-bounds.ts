@@ -1,5 +1,6 @@
 import { composeAttachmentTransform } from "./timeline-sampler.js";
 import type { AttachmentPose, SampledAnimationPose, SlotPose, SpineModel, WorldTransform } from "./spine-types.js";
+import { applyWorldTransformToScenePoint } from "./transform.js";
 
 export type ScenePoint = {
   x: number;
@@ -184,14 +185,7 @@ export function computeBoneSelectionBounds(
 }
 
 function projectScenePoint(transform: WorldTransform, localX: number, localY: number): ScenePoint {
-  const radians = (-transform.rotation * Math.PI) / 180;
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-
-  return {
-    x: transform.x + localX * transform.scaleX * cos - localY * transform.scaleY * sin,
-    y: -transform.y + localX * transform.scaleX * sin + localY * transform.scaleY * cos
-  };
+  return applyWorldTransformToScenePoint(transform, { x: localX, y: localY });
 }
 
 function axisAlignedBoundsToQuad(bounds: AxisAlignedBounds): [ScenePoint, ScenePoint, ScenePoint, ScenePoint] {

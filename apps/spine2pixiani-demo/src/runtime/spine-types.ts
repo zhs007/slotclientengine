@@ -174,7 +174,18 @@ export type BonePose = {
   scaleY: number;
 };
 
-export type WorldTransform = BonePose;
+export type AffineMatrix = {
+  a: number;
+  b: number;
+  c: number;
+  d: number;
+  tx: number;
+  ty: number;
+};
+
+export type WorldTransform = BonePose & {
+  matrix: AffineMatrix;
+};
 
 export type SlotPose = {
   slotName: string;

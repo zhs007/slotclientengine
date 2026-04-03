@@ -10,6 +10,7 @@ import type {
   VectorKeyframe,
   WorldTransform
 } from "./spine-types.js";
+import { composeWorldTransform } from "./transform.js";
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -222,47 +223,18 @@ export function sampleAnimationPose(
   };
 }
 
-function rotateAndScale(point: { x: number; y: number }, transform: WorldTransform) {
-  const radians = (transform.rotation * Math.PI) / 180;
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  return {
-    x: point.x * transform.scaleX * cos - point.y * transform.scaleY * sin,
-    y: point.x * transform.scaleX * sin + point.y * transform.scaleY * cos
-  };
-}
-
 export function computeWorldBoneTransforms(model: SpineModel, localBones: Record<string, BonePose>) {
   const worldBones: Record<string, WorldTransform> = {};
 
   for (const bone of model.bones) {
     const local = localBones[bone.name];
-    if (!bone.parentName) {
-      worldBones[bone.name] = { ...local };
-      continue;
-    }
-
-    const parent = worldBones[bone.parentName];
-    const translated = rotateAndScale({ x: local.x, y: local.y }, parent);
-    worldBones[bone.name] = {
-      x: parent.x + translated.x,
-      y: parent.y + translated.y,
-      rotation: parent.rotation + local.rotation,
-      scaleX: parent.scaleX * local.scaleX,
-      scaleY: parent.scaleY * local.scaleY
-    };
+    const parent = bone.parentName ? worldBones[bone.parentName] : undefined;
+    worldBones[bone.name] = composeWorldTransform(local, parent);
   }
 
   return worldBones;
 }
 
 export function composeAttachmentTransform(bone: WorldTransform, attachment: NonNullable<SlotPose["attachment"]>) {
-  const translated = rotateAndScale({ x: attachment.x, y: attachment.y }, bone);
-  return {
-    x: bone.x + translated.x,
-    y: bone.y + translated.y,
-    rotation: bone.rotation + attachment.rotation,
-    scaleX: bone.scaleX * attachment.scaleX,
-    scaleY: bone.scaleY * attachment.scaleY
-  };
+  return composeWorldTransform(attachment, bone);
 }
