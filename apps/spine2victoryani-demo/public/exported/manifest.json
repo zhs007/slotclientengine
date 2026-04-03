@@ -1,0 +1,50 @@
+{
+  "version": "0.1.0",
+  "generatedAt": "2026-04-03T07:35:32.081Z",
+  "defaultAnimation": "cabin",
+  "stage": {
+    "width": 1280,
+    "height": 900,
+    "anchorX": 665.6,
+    "anchorY": 756,
+    "scale": 0.35079046686503595
+  },
+  "source": {
+    "skeletonWidth": 2351.13,
+    "skeletonHeight": 2103.82,
+    "bones": 31,
+    "slots": 67,
+    "attachments": 29
+  },
+  "assetCount": 29,
+  "animations": [
+    {
+      "name": "cabin",
+      "duration": 2,
+      "fps": 24,
+      "projectPath": "./animations/cabin.project.json",
+      "layerCount": 67
+    },
+    {
+      "name": "cabin_s",
+      "duration": 0,
+      "fps": 24,
+      "projectPath": "./animations/cabin_s.project.json",
+      "layerCount": 67
+    }
+  ],
+  "mirrorChecks": [
+    {
+      "leftLayerId": "ui14__ui6",
+      "rightLayerId": "ui20__ui6"
+    },
+    {
+      "leftLayerId": "ui16__ui6",
+      "rightLayerId": "ui25__ui6"
+    },
+    {
+      "leftLayerId": "ui3__ui3",
+      "rightLayerId": "ui15__ui3"
+    }
+  ]
+}
