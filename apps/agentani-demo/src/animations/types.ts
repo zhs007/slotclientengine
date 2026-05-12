@@ -1,10 +1,16 @@
 export type CodeAnimationEffectType =
   | "fadeIn"
   | "fadeOut"
+  | "fireDistortion"
+  | "float"
+  | "leafFall"
+  | "particleBurst"
   | "pulse"
+  | "slideOut"
   | "starlight"
   | "sweepLight"
-  | "swing";
+  | "swing"
+  | "zoomIn";
 
 export type CodeBlendMode = "normal" | "add" | "multiply" | "screen";
 
@@ -28,6 +34,7 @@ export interface CodeAnimationLayer {
   blendMode: CodeBlendMode;
   visible: boolean;
   maskId?: string;
+  mergedLayerIds?: string[];
   animations: CodeAnimationStep[];
 }
 

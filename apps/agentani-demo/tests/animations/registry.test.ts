@@ -6,7 +6,7 @@ import {
 } from "../../src/animations/registry.js";
 
 describe("animation registry", () => {
-  it("contains all editor2 directories with bg ready", () => {
+  it("contains all editor2 directories as ready code animations", () => {
     expect(animationRegistry.map((entry) => entry.id)).toEqual([
       "bg",
       "fang",
@@ -17,17 +17,28 @@ describe("animation registry", () => {
       "竹子1",
     ]);
     expect(getReadyAnimation("bg")?.project.id).toBe("bg");
-    expect(getReadyAnimation("fang")).toBeUndefined();
+    expect(getReadyAnimation("fang")?.project.layers).toHaveLength(6);
+    expect(getReadyAnimation("heart")?.project.layers).toHaveLength(6);
+    expect(getReadyAnimation("mei")?.project.layers).toHaveLength(6);
+    expect(getReadyAnimation("tao")?.project.layers).toHaveLength(6);
+    expect(getReadyAnimation("海滩")?.project.layers).toHaveLength(13);
+    expect(getReadyAnimation("竹子1")?.project.layers).toHaveLength(18);
   });
 
-  it("registers every bg animation effect explicitly", () => {
+  it("registers every converted animation effect explicitly", () => {
     expect(Object.keys(animationEffects).sort()).toEqual([
       "fadeIn",
       "fadeOut",
+      "fireDistortion",
+      "float",
+      "leafFall",
+      "particleBurst",
       "pulse",
+      "slideOut",
       "starlight",
       "sweepLight",
       "swing",
+      "zoomIn",
     ]);
   });
 });

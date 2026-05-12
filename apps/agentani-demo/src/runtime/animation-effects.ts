@@ -1,5 +1,5 @@
 import { gsap } from "gsap";
-import type { Container } from "pixi.js";
+import { Sprite, Texture, type Container } from "pixi.js";
 import type {
   CodeAnimationEffectType,
   CodeAnimationStep,
@@ -36,7 +36,7 @@ export const animationEffects = {
         alpha: layer.initial.alpha,
         duration: step.duration,
         ease: easeParam(step),
-        immediateRender: false,
+        immediateRender: true,
       },
     );
   },
@@ -52,30 +52,116 @@ export const animationEffects = {
 
   pulse({ layer, target, step }) {
     const scale = numberParam(step, "scale", 1.1);
+    return gsap.to(target.scale, {
+      x: layer.initial.scaleX * scale,
+      y: layer.initial.scaleY * scale,
+      duration: 0.5,
+      ease: "sine.inOut",
+      repeat: Math.max(0, Math.floor(step.duration / 0.5) - 1),
+      yoyo: true,
+      immediateRender: false,
+    });
+  },
+
+  particleBurst({ layer, target, step }) {
+    const parent = target.parent;
+    if (!parent) {
+      return gsap.timeline();
+    }
+
+    const count = Math.max(1, Math.round(numberParam(step, "count", 30)));
+    const range = numberParam(step, "range", 160);
     const speed = numberParam(step, "speed", 2);
-    const minAlphaRaw = numberParam(step, "minAlpha", layer.initial.alpha);
-    const minAlpha = minAlphaRaw > 1 ? minAlphaRaw / 100 : minAlphaRaw;
+    const size = numberParam(step, "size", 0.2);
+    const emissionTime = numberParam(step, "emissionTime", 0);
+    const particles: Sprite[] = [];
     const timeline = gsap.timeline();
-    timeline.to(
-      target,
-      {
-        alpha: minAlpha,
-        duration: Math.max(0.05, step.duration / Math.max(1, speed)),
-        ease: "sine.inOut",
-        repeat: Math.max(1, Math.round(speed)),
-        yoyo: true,
-        immediateRender: false,
+
+    for (let index = 0; index < count; index += 1) {
+      const particle = new Sprite(layer.sprite.texture);
+      particle.anchor.set(0.5);
+      particle.scale.set(size);
+      particle.position.set(layer.initial.x, layer.initial.y);
+      particle.alpha = 0;
+      particle.blendMode = target.blendMode;
+      parent.addChild(particle);
+      particles.push(particle);
+
+      const angle = Math.random() * Math.PI * 2;
+      const distance = range * (0.4 + Math.random() * 0.6);
+      const delay = Math.random() * emissionTime;
+
+      timeline.to(
+        particle,
+        {
+          x: layer.initial.x + Math.cos(angle) * distance,
+          y: layer.initial.y + Math.sin(angle) * distance,
+          alpha: 1,
+          rotation: Math.random() * Math.PI * 2,
+          duration: 0.2,
+          ease: "power1.out",
+        },
+        delay,
+      );
+      timeline.to(
+        particle,
+        {
+          alpha: 0,
+          scaleX: 0,
+          scaleY: 0,
+          duration: step.duration / Math.max(0.1, speed),
+          ease: "power2.in",
+          onComplete: () => {
+            particle.parent?.removeChild(particle);
+            if (!particle.destroyed) {
+              particle.destroy({ children: true, texture: false });
+            }
+          },
+        },
+        delay + 0.2,
+      );
+    }
+
+    timeline.add(
+      () => {
+        for (const particle of particles) {
+          gsap.killTweensOf(particle);
+          particle.parent?.removeChild(particle);
+          if (!particle.destroyed) {
+            particle.destroy({ children: true, texture: false });
+          }
+        }
       },
-      0,
+      step.duration + emissionTime + 0.25,
     );
+
+    return timeline;
+  },
+
+  fireDistortion({ layer, target, step }) {
+    const strength = numberParam(step, "strength", 8);
+    const frequency = Math.max(0.1, numberParam(step, "frequency", 1));
+    const speed = numberParam(step, "speed", 1);
+    const timeline = gsap.timeline();
+    const cycleDuration = Math.max(0.2, 1 / frequency);
+    timeline.to(target, {
+      x: layer.initial.x + strength * 0.08,
+      y: layer.initial.y - strength * 0.06,
+      rotation: layer.initial.rotation + strength * 0.0008,
+      duration: cycleDuration,
+      ease: "sine.inOut",
+      repeat: Math.max(1, Math.round(step.duration / cycleDuration)),
+      yoyo: true,
+      immediateRender: false,
+    });
     timeline.to(
       target.scale,
       {
-        x: layer.initial.scaleX * scale,
-        y: layer.initial.scaleY * scale,
-        duration: Math.max(0.05, step.duration / Math.max(1, speed)),
+        x: layer.initial.scaleX * (1 + strength * 0.001 + speed * 0.002),
+        y: layer.initial.scaleY * (1 - strength * 0.0005),
+        duration: cycleDuration,
         ease: "sine.inOut",
-        repeat: Math.max(1, Math.round(speed)),
+        repeat: Math.max(1, Math.round(step.duration / cycleDuration)),
         yoyo: true,
         immediateRender: false,
       },
@@ -84,45 +170,151 @@ export const animationEffects = {
     return timeline;
   },
 
-  starlight({ layer, target, step }) {
-    const count = Math.max(1, Math.round(numberParam(step, "count", 8)));
-    const size = numberParam(step, "size", 18) / 100;
-    const tick = step.duration / count;
+  slideOut({ layer, target, step }) {
+    const fallbackX =
+      layer.initial.x >= 600 ? layer.initial.x + 700 : layer.initial.x - 700;
     const timeline = gsap.timeline();
-    for (let index = 0; index < count; index += 1) {
-      timeline.to(target, {
-        alpha: index % 2 === 0 ? 0.35 : 1,
-        rotation: layer.initial.rotation + (index % 2 === 0 ? 0.08 : -0.08),
-        duration: tick / 2,
-        ease: "sine.inOut",
-      });
-      timeline.to(
-        target.scale,
-        {
-          x: layer.initial.scaleX * (1 + size),
-          y: layer.initial.scaleY * (1 + size),
-          duration: tick / 2,
-          ease: "sine.inOut",
-        },
-        "<",
-      );
-      timeline.to(target, {
+    timeline.to(target, {
+      x: numberParam(step, "toX", fallbackX),
+      y: numberParam(step, "toY", layer.initial.y),
+      alpha: numberParam(step, "toAlpha", layer.initial.alpha),
+      duration: step.duration,
+      ease: easeParam(step),
+      immediateRender: false,
+    });
+    timeline.set(target, { alpha: 0, visible: false });
+    return timeline;
+  },
+
+  float({ layer, target, step }) {
+    const amplitude = numberParam(step, "amplitude", 8);
+    const speed = numberParam(step, "speed", 4);
+    return gsap.to(target, {
+      y: layer.initial.y - amplitude,
+      duration: Math.max(0.05, step.duration / Math.max(1, speed)),
+      ease: "sine.inOut",
+      repeat: Math.max(1, Math.round(speed)),
+      yoyo: true,
+      immediateRender: false,
+    });
+  },
+
+  leafFall({ layer, target, step }) {
+    const swing = numberParam(step, "swing", 40);
+    const speed = numberParam(step, "speed", 4);
+    const timeline = gsap.timeline();
+    timeline.to(target, {
+      x: layer.initial.x + swing,
+      y: layer.initial.y + 360,
+      rotation: layer.initial.rotation + 0.6,
+      alpha: 0,
+      duration: step.duration,
+      ease: speed > 4 ? "power1.in" : "sine.in",
+      immediateRender: false,
+    });
+    timeline.set(target, { alpha: 0, visible: false });
+    return timeline;
+  },
+
+  zoomIn({ layer, target, step }) {
+    const fromScale = numberParam(step, "fromScale", 0.2);
+    const timeline = gsap.timeline();
+    timeline.fromTo(
+      target.scale,
+      {
+        x: layer.initial.scaleX * fromScale,
+        y: layer.initial.scaleY * fromScale,
+      },
+      {
+        x: layer.initial.scaleX,
+        y: layer.initial.scaleY,
+        duration: step.duration,
+        ease: easeParam(step),
+        immediateRender: true,
+      },
+      0,
+    );
+    timeline.fromTo(
+      target,
+      { alpha: 0 },
+      {
         alpha: layer.initial.alpha,
-        rotation: layer.initial.rotation,
-        duration: tick / 2,
+        duration: step.duration,
+        ease: easeParam(step),
+        immediateRender: true,
+      },
+      0,
+    );
+    return timeline;
+  },
+
+  starlight({ layer, target, step }) {
+    const parent = target.parent;
+    if (!parent) {
+      return gsap.timeline();
+    }
+
+    const count = Math.max(1, Math.round(numberParam(step, "count", 8)));
+    const range = numberParam(step, "range", 400);
+    const flashDuration = numberParam(step, "flashDuration", 1);
+    const interval = numberParam(step, "interval", 0.5);
+    const size = numberParam(step, "size", 20);
+    const texture =
+      layer.sprite.texture && layer.sprite.texture !== Texture.WHITE
+        ? layer.sprite.texture
+        : Texture.WHITE;
+    const stars: Sprite[] = [];
+    const timeline = gsap.timeline();
+
+    for (let index = 0; index < count; index += 1) {
+      const star = new Sprite(texture);
+      star.anchor.set(0.5);
+      star.alpha = 0;
+      star.blendMode = target.blendMode;
+      if (texture === Texture.WHITE) {
+        star.width = size;
+        star.height = size;
+      } else {
+        const ratio = size / Math.max(texture.width, texture.height);
+        star.scale.set(ratio);
+      }
+      parent.addChild(star);
+      stars.push(star);
+
+      const delay = Math.random() * step.duration;
+      const cycle = flashDuration + interval;
+      const repeat = Math.max(0, Math.floor((step.duration - delay) / cycle));
+      const starTimeline = gsap.timeline({ repeat, delay });
+      starTimeline.add(() => {
+        star.position.set(
+          layer.initial.x + (Math.random() - 0.5) * range,
+          layer.initial.y + (Math.random() - 0.5) * range,
+        );
+      });
+      starTimeline.to(star, {
+        alpha: 1,
+        duration: flashDuration / 2,
         ease: "sine.inOut",
       });
-      timeline.to(
-        target.scale,
-        {
-          x: layer.initial.scaleX,
-          y: layer.initial.scaleY,
-          duration: tick / 2,
-          ease: "sine.inOut",
-        },
-        "<",
-      );
+      starTimeline.to(star, {
+        alpha: 0,
+        duration: flashDuration / 2,
+        ease: "sine.inOut",
+      });
+      starTimeline.to({}, { duration: interval });
+      timeline.add(starTimeline, 0);
     }
+
+    timeline.add(() => {
+      for (const star of stars) {
+        gsap.killTweensOf(star);
+        star.parent?.removeChild(star);
+        if (!star.destroyed) {
+          star.destroy({ children: true, texture: false });
+        }
+      }
+    }, step.duration);
+
     return timeline;
   },
 

@@ -52,6 +52,7 @@ class MockContainer {
 
 class MockTexture {
   static EMPTY = new MockTexture();
+  static WHITE = new MockTexture();
 
   width = 64;
   height = 64;

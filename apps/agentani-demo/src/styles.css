@@ -121,6 +121,13 @@ button:hover {
 .stage-host canvas {
   position: absolute;
   display: block;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.stage-host canvas.is-dragging {
+  cursor: grabbing;
 }
 
 @media (max-width: 800px) {

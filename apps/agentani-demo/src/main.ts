@@ -45,7 +45,20 @@ async function bootstrap() {
     panel.title.textContent = `${entry.label} / ${entry.project.duration.toFixed(1)}s`;
     panel.statusLabel.textContent = "加载中";
     await player.load(entry.project);
-    panel.statusLabel.textContent = "已加载，可播放、暂停或重播。";
+    player.resetViewport();
+    panel.statusLabel.textContent = "已加载，可拖动画面移动，滚轮缩放。";
+  };
+
+  const toStagePoint = (event: PointerEvent | WheelEvent) => {
+    const rect = app.canvas.getBoundingClientRect();
+    const scaleX = app.screen.width / rect.width;
+    const scaleY = app.screen.height / rect.height;
+    return {
+      x: (event.clientX - rect.left) * scaleX,
+      y: (event.clientY - rect.top) * scaleY,
+      scaleX,
+      scaleY,
+    };
   };
 
   const applyLayout = () => {
@@ -59,6 +72,58 @@ async function bootstrap() {
     app.canvas.style.left = `${(width - canvasWidth) / 2}px`;
     app.canvas.style.top = `${(height - canvasHeight) / 2}px`;
   };
+
+  let dragState: {
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+  } | null = null;
+
+  app.canvas.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) {
+      return;
+    }
+    dragState = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    };
+    app.canvas.setPointerCapture(event.pointerId);
+    app.canvas.classList.add("is-dragging");
+  });
+
+  app.canvas.addEventListener("pointermove", (event) => {
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+    const point = toStagePoint(event);
+    player.panBy(
+      (event.clientX - dragState.clientX) * point.scaleX,
+      (event.clientY - dragState.clientY) * point.scaleY,
+    );
+    dragState.clientX = event.clientX;
+    dragState.clientY = event.clientY;
+  });
+
+  const stopDrag = (event: PointerEvent) => {
+    if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+    dragState = null;
+    app.canvas.classList.remove("is-dragging");
+    if (app.canvas.hasPointerCapture(event.pointerId)) {
+      app.canvas.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  app.canvas.addEventListener("pointerup", stopDrag);
+  app.canvas.addEventListener("pointercancel", stopDrag);
+  app.canvas.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const point = toStagePoint(event);
+    const factor = Math.exp(-event.deltaY * 0.001);
+    player.zoomAt(point.x, point.y, factor);
+  });
 
   panel.select.addEventListener("change", () => {
     void loadSelected();

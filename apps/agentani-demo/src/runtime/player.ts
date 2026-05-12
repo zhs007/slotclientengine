@@ -46,7 +46,11 @@ export class AgentAnimationPlayer {
 
   private scene: ProjectScene | null = null;
   private timeline: gsap.core.Timeline | null = null;
+  private project: CodeAnimationProject | null = null;
+  private textures: Map<string, Texture> | null = null;
   private loop = true;
+  private readonly minViewportScale = 0.25;
+  private readonly maxViewportScale = 4;
 
   constructor(private readonly app: Application) {
     this.app.stage.addChild(this.root);
@@ -54,12 +58,31 @@ export class AgentAnimationPlayer {
 
   async load(project: CodeAnimationProject) {
     this.clear();
-    const textures = await loadProjectTextures(project);
-    this.scene = createProjectScene(project, textures);
+    this.project = project;
+    this.textures = await loadProjectTextures(project);
+    this.rebuildScene();
+    this.timeline?.play(0);
+  }
+
+  private rebuildScene() {
+    if (!this.project || !this.textures) {
+      return;
+    }
+
+    this.timeline?.kill();
+    this.timeline = null;
+    this.scene?.root.destroy({ children: true });
+    this.scene = createProjectScene(this.project, this.textures);
+    this.root.removeChildren();
     this.root.addChild(this.scene.root);
-    this.timeline = buildProjectTimeline(project, this.scene.layers);
-    this.timeline.repeat(this.loop ? -1 : 0);
-    this.timeline.play(0);
+    this.timeline = buildProjectTimeline(this.project, this.scene.layers);
+    this.timeline.eventCallback("onComplete", () => {
+      if (!this.loop) {
+        return;
+      }
+      this.rebuildScene();
+      this.timeline?.play(0);
+    });
   }
 
   play() {
@@ -71,15 +94,41 @@ export class AgentAnimationPlayer {
   }
 
   replay() {
-    if (!this.timeline) {
-      return;
-    }
-    this.timeline.restart();
+    this.rebuildScene();
+    this.timeline?.play(0);
   }
 
   setLoop(loop: boolean) {
     this.loop = loop;
-    this.timeline?.repeat(loop ? -1 : 0);
+  }
+
+  panBy(dx: number, dy: number) {
+    this.root.position.set(this.root.x + dx, this.root.y + dy);
+  }
+
+  zoomAt(stageX: number, stageY: number, factor: number) {
+    const currentScale = this.root.scale.x;
+    const nextScale = Math.min(
+      this.maxViewportScale,
+      Math.max(this.minViewportScale, currentScale * factor),
+    );
+    if (nextScale === currentScale) {
+      return nextScale;
+    }
+
+    const localX = (stageX - this.root.x) / currentScale;
+    const localY = (stageY - this.root.y) / currentScale;
+    this.root.scale.set(nextScale);
+    this.root.position.set(
+      stageX - localX * nextScale,
+      stageY - localY * nextScale,
+    );
+    return nextScale;
+  }
+
+  resetViewport() {
+    this.root.position.set(0, 0);
+    this.root.scale.set(1);
   }
 
   clear() {
@@ -87,6 +136,8 @@ export class AgentAnimationPlayer {
     this.timeline = null;
     this.scene?.root.destroy({ children: true });
     this.scene = null;
+    this.project = null;
+    this.textures = null;
     this.root.removeChildren();
   }
 }

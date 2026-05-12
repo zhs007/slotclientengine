@@ -1,0 +1,295 @@
+import layer00Url from "../assets/beach/layer-00.png";
+import layer01Url from "../assets/beach/layer-01.png";
+import layer02Url from "../assets/beach/layer-02.png";
+import layer03Url from "../assets/beach/layer-03.png";
+import layer04Url from "../assets/beach/layer-04.png";
+import layer05Url from "../assets/beach/layer-05.png";
+import layer06Url from "../assets/beach/layer-06.png";
+import layer07Url from "../assets/beach/layer-07.png";
+import layer08Url from "../assets/beach/layer-08.png";
+import layer09Url from "../assets/beach/layer-09.png";
+import layer10Url from "../assets/beach/layer-10.png";
+import layer11Url from "../assets/beach/layer-11.png";
+import layer12Url from "../assets/beach/layer-12.jpeg";
+import type { CodeAnimationProject } from "./types.js";
+
+export const beachProject: CodeAnimationProject = {
+  id: "海滩",
+  label: "海滩",
+  duration: 20,
+  size: { width: 1200, height: 600 },
+  layers: [
+    {
+      id: "船3",
+      type: "pic",
+      texture: layer00Url,
+      x: 619,
+      y: 298,
+      scaleX: 0.29,
+      scaleY: 0.29,
+      rotation: 0,
+      alpha: 1,
+      blendMode: "normal",
+      visible: true,
+      animations: [
+        {
+          type: "fireDistortion",
+          startTime: 0,
+          duration: 20,
+          params: {
+            frequency: 1.3,
+          },
+        },
+      ],
+    },
+    {
+      id: "船2",
+      type: "pic",
+      texture: layer01Url,
+      x: 619,
+      y: 298,
+      scaleX: 0.29,
+      scaleY: 0.29,
+      rotation: 0,
+      alpha: 1,
+      blendMode: "normal",
+      visible: true,
+      animations: [
+        {
+          type: "fireDistortion",
+          startTime: 0,
+          duration: 20,
+          params: {
+            frequency: 1.3,
+          },
+        },
+      ],
+    },
+    {
+      id: "船1",
+      type: "pic",
+      texture: layer02Url,
+      x: 619,
+      y: 298,
+      scaleX: 0.29,
+      scaleY: 0.29,
+      rotation: 0,
+      alpha: 1,
+      blendMode: "normal",
+      visible: true,
+      animations: [
+        {
+          type: "fireDistortion",
+          startTime: 0,
+          duration: 20,
+          params: {
+            strength: 0,
+            frequency: 1.3,
+          },
+        },
+      ],
+    },
+    {
+      id: "海",
+      type: "pic",
+      texture: layer03Url,
+      x: 619,
+      y: 298,
+      scaleX: 0.29,
+      scaleY: 0.29,
+      rotation: 0,
+      alpha: 1,
+      blendMode: "normal",
+      visible: true,
+      animations: [
+        {
+          type: "fireDistortion",
+          startTime: 0,
+          duration: 20,
+          params: {
+            strength: 20,
+            frequency: 1,
+            speed: 0,
+            noiseSize: 5,
+          },
+        },
+        {
+          type: "pulse",
+          startTime: 0,
+          duration: 20,
+          params: {
+            speed: 0.3,
+            scale: 1.04,
+            minAlpha: 100,
+          },
+        },
+      ],
+    },
+    {
+      id: "沙滩",
+      type: "pic",
+      texture: layer04Url,
+      x: 619,
+      y: 298,
+      scaleX: 0.29,
+      scaleY: 0.29,
+      rotation: 0,
+      alpha: 1,
+      blendMode: "normal",
+      visible: true,
+      animations: [],
+    },
+    {
+      id: "山",
+      type: "pic",
+      texture: layer05Url,
+      x: 619,
+      y: 298,
+      scaleX: 0.29,
+      scaleY: 0.29,
+      rotation: 0,
+      alpha: 1,
+      blendMode: "normal",
+      visible: true,
+      animations: [],
+    },
+    {
+      id: "云2",
+      type: "pic",
+      texture: layer06Url,
+      x: 619,
+      y: 298,
+      scaleX: 0.29,
+      scaleY: 0.29,
+      rotation: 0,
+      alpha: 1,
+      blendMode: "normal",
+      visible: true,
+      animations: [
+        {
+          type: "slideOut",
+          startTime: 0,
+          duration: 40,
+        },
+      ],
+    },
+    {
+      id: "云1",
+      type: "pic",
+      texture: layer07Url,
+      x: 619,
+      y: 298,
+      scaleX: 0.29,
+      scaleY: 0.29,
+      rotation: 0,
+      alpha: 1,
+      blendMode: "normal",
+      visible: true,
+      animations: [
+        {
+          type: "slideOut",
+          startTime: 0,
+          duration: 30,
+        },
+      ],
+    },
+    {
+      id: "极光3",
+      type: "pic",
+      texture: layer08Url,
+      x: 619,
+      y: 298,
+      scaleX: 0.29,
+      scaleY: 0.29,
+      rotation: 0,
+      alpha: 1,
+      blendMode: "normal",
+      visible: true,
+      animations: [
+        {
+          type: "fireDistortion",
+          startTime: 0,
+          duration: 20,
+          params: {
+            strength: 20,
+          },
+        },
+      ],
+    },
+    {
+      id: "极光2",
+      type: "pic",
+      texture: layer09Url,
+      x: 619,
+      y: 298,
+      scaleX: 0.29,
+      scaleY: 0.29,
+      rotation: 0,
+      alpha: 1,
+      blendMode: "normal",
+      visible: true,
+      animations: [
+        {
+          type: "fireDistortion",
+          startTime: 0,
+          duration: 20,
+          params: {
+            frequency: 0,
+            strength: 20,
+          },
+        },
+      ],
+    },
+    {
+      id: "极光",
+      type: "pic",
+      texture: layer10Url,
+      x: 619,
+      y: 298,
+      scaleX: 0.29,
+      scaleY: 0.29,
+      rotation: 0,
+      alpha: 1,
+      blendMode: "normal",
+      visible: true,
+      animations: [
+        {
+          type: "fireDistortion",
+          startTime: 0,
+          duration: 20,
+          params: {
+            strength: 20,
+          },
+        },
+      ],
+    },
+    {
+      id: "天",
+      type: "pic",
+      texture: layer11Url,
+      x: 619,
+      y: 298,
+      scaleX: 0.29,
+      scaleY: 0.29,
+      rotation: 0,
+      alpha: 1,
+      blendMode: "normal",
+      visible: true,
+      animations: [],
+    },
+    {
+      id: "样式",
+      type: "pic",
+      texture: layer12Url,
+      x: 619,
+      y: 298,
+      scaleX: 0.29,
+      scaleY: 0.29,
+      rotation: 0,
+      alpha: 1,
+      blendMode: "normal",
+      visible: false,
+      animations: [],
+    },
+  ],
+};
