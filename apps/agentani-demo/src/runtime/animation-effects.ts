@@ -1,5 +1,12 @@
 import { gsap } from "gsap";
-import { Sprite, Texture, type Container } from "pixi.js";
+import {
+  DisplacementFilter,
+  Sprite,
+  Texture,
+  WRAP_MODES,
+  type Container,
+  type Filter,
+} from "pixi.js";
 import type {
   CodeAnimationEffectType,
   CodeAnimationStep,
@@ -24,6 +31,29 @@ function numberParam(step: CodeAnimationStep, name: string, fallback: number) {
 function easeParam(step: CodeAnimationStep) {
   const value = step.params?.ease;
   return typeof value === "string" ? value : "sine.inOut";
+}
+
+function createNoiseCanvas(noiseSize: number) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Canvas 2D context is unavailable.");
+  }
+
+  const gridSize = Math.max(2, Math.floor(noiseSize));
+  for (let x = 0; x < canvas.width; x += gridSize) {
+    for (let y = 0; y < canvas.height; y += gridSize) {
+      const channel = Math.floor(Math.random() * 255);
+      context.fillStyle = `rgb(${channel},${channel},${channel})`;
+      context.fillRect(x, y, gridSize, gridSize);
+    }
+  }
+
+  context.filter = `blur(${gridSize}px)`;
+  context.drawImage(canvas, 0, 0);
+  return canvas;
 }
 
 export const animationEffects = {
@@ -138,35 +168,59 @@ export const animationEffects = {
     return timeline;
   },
 
-  fireDistortion({ layer, target, step }) {
-    const strength = numberParam(step, "strength", 8);
-    const frequency = Math.max(0.1, numberParam(step, "frequency", 1));
-    const speed = numberParam(step, "speed", 1);
+  fireDistortion({ layer, step }) {
+    const strength = numberParam(step, "strength", 30);
+    const speed = numberParam(step, "speed", 1.2);
+    const frequency = Math.max(0.01, numberParam(step, "frequency", 1.5));
+    const noiseSize = numberParam(step, "noiseSize", 32);
+    const noiseTexture = Texture.from(createNoiseCanvas(noiseSize));
+    noiseTexture.source.wrapMode = WRAP_MODES.REPEAT;
+    const noiseSprite = new Sprite(noiseTexture);
+    noiseSprite.scale.set(4 / frequency);
+    noiseSprite.alpha = 0;
+
+    const filter = new DisplacementFilter(noiseSprite, strength);
+    layer.container.addChild(noiseSprite);
+    layer.sprite.filters = [...((layer.sprite.filters ?? []) as Filter[]), filter];
+
     const timeline = gsap.timeline();
-    const cycleDuration = Math.max(0.2, 1 / frequency);
-    timeline.to(target, {
-      x: layer.initial.x + strength * 0.08,
-      y: layer.initial.y - strength * 0.06,
-      rotation: layer.initial.rotation + strength * 0.0008,
-      duration: cycleDuration,
-      ease: "sine.inOut",
-      repeat: Math.max(1, Math.round(step.duration / cycleDuration)),
-      yoyo: true,
-      immediateRender: false,
-    });
     timeline.to(
-      target.scale,
+      noiseSprite,
       {
-        x: layer.initial.scaleX * (1 + strength * 0.001 + speed * 0.002),
-        y: layer.initial.scaleY * (1 - strength * 0.0005),
-        duration: cycleDuration,
-        ease: "sine.inOut",
-        repeat: Math.max(1, Math.round(step.duration / cycleDuration)),
-        yoyo: true,
-        immediateRender: false,
+        x: `+=${128 * speed * 0.2}`,
+        y: `-=${512 * speed}`,
+        duration: step.duration,
+        ease: "none",
       },
       0,
     );
+    timeline.to(
+      filter.scale,
+      {
+        x: strength * 1.2,
+        y: strength * 0.8,
+        duration: 0.5,
+        repeat: Math.max(0, Math.floor(step.duration / 0.5) - 1),
+        yoyo: true,
+        ease: "sine.inOut",
+      },
+      0,
+    );
+    timeline.add(() => {
+      layer.sprite.filters = ((layer.sprite.filters ?? []) as Filter[]).filter(
+        (existingFilter) => existingFilter !== filter,
+      );
+      gsap.killTweensOf(noiseSprite);
+      gsap.killTweensOf(filter.scale);
+      noiseSprite.parent?.removeChild(noiseSprite);
+      if (!noiseSprite.destroyed) {
+        noiseSprite.destroy({ children: true, texture: false });
+      }
+      if (!noiseTexture.destroyed) {
+        noiseTexture.destroy(true);
+      }
+    }, step.duration);
+
     return timeline;
   },
 
