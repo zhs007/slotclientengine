@@ -33,7 +33,7 @@ export function createProjectScene(
     return createLayer(layer, texture);
   });
 
-  for (const layer of layers) {
+  for (const layer of [...layers].reverse()) {
     root.addChild(layer.container);
   }
 
