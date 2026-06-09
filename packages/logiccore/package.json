@@ -1,0 +1,52 @@
+{
+  "name": "@slotclientengine/logiccore",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Internal game logic parser and query library for slotclientengine.",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --coverage",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . --ext .ts,.cjs",
+    "lint:fix": "eslint . --ext .ts,.cjs --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm lint && pnpm test && pnpm typecheck && pnpm build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/zhs007/slotclientengine.git",
+    "directory": "packages/logiccore"
+  },
+  "keywords": [
+    "slot",
+    "game-logic",
+    "typescript"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/zhs007/slotclientengine/issues"
+  },
+  "homepage": "https://github.com/zhs007/slotclientengine/tree/main/packages/logiccore",
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "^4.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.15.0"
+  }
+}

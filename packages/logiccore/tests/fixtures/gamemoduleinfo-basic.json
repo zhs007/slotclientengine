@@ -1,0 +1,164 @@
+{
+  "msgid": "gamemoduleinfo",
+  "gamemodulename": "CqbQ0Y7gtBpO5419j8h02",
+  "gameid": 69002,
+  "gmi": {
+    "defaultScene": {
+      "values": [
+        { "values": [0, 4, 0, 4, 0] },
+        { "values": [0, 5, 0, 3, 0] },
+        { "values": [2, 0, 2, 0, 4] },
+        { "values": [1, 1, 1, 1, 1] },
+        { "values": [0, 8, 0, 6, 0] }
+      ],
+      "indexes": [],
+      "validRow": []
+    },
+    "replyPlay": {
+      "randomNumbers": [1, 1, 34, 0, 27],
+      "results": [
+        {
+          "coinWin": 55,
+          "cashWin": 275,
+          "clientData": {
+            "scenes": [
+              {
+                "values": [
+                  { "values": [2, 0, 3, 0, 4] },
+                  { "values": [2, 0, 3, 0, 4] },
+                  { "values": [0, 4, 0, 5, 0] },
+                  { "values": [1, 1, 1, 1, 1] },
+                  { "values": [9, 0, 6, 0, 6] }
+                ],
+                "indexes": [],
+                "validRow": []
+              }
+            ],
+            "otherScenes": [],
+            "results": [
+              {
+                "pos": [4, 0],
+                "type": 5,
+                "lineIndex": -1,
+                "symbol": 9,
+                "mul": 0,
+                "coinWin": 0,
+                "cashWin": 0,
+                "otherMul": 0,
+                "wilds": 0,
+                "symbolNums": 1,
+                "value": 0
+              },
+              {
+                "pos": [0, 2, 1, 2],
+                "type": 13,
+                "lineIndex": -1,
+                "symbol": -1,
+                "mul": 0,
+                "coinWin": 55,
+                "cashWin": 275,
+                "otherMul": 0,
+                "wilds": 0,
+                "symbolNums": 0,
+                "value": 0
+              }
+            ],
+            "curGameMod": "basic",
+            "curGameModParam": {
+              "historyComponents": ["bg-spin", "bg-trigger-x5", "bg-pay"],
+              "respinComponents": [],
+              "historyComponentsEx": [
+                "bg-spin",
+                "bg-trigger-sc",
+                "bg-trigger-rs",
+                "bg-trigger-x2",
+                "bg-trigger-x5",
+                "bg-trigger-x10",
+                "bg-pay",
+                "bg-branch-jk"
+              ],
+              "mapComponents": {
+                "bg-spin": {
+                  "basicComponentData": {
+                    "usedScenes": [0],
+                    "usedOtherScenes": [],
+                    "usedResults": [],
+                    "usedPrizeScenes": [],
+                    "srcScenes": [],
+                    "pos": [],
+                    "mapUsedSPGrid": {},
+                    "coinWin": 0,
+                    "cashWin": 0,
+                    "targetScene": 0,
+                    "runIndex": 0,
+                    "output": 0,
+                    "strOutput": ""
+                  },
+                  "@type": "type.googleapis.com/sgc7pb.BasicComponentData"
+                },
+                "bg-trigger-x5": {
+                  "basicComponentData": {
+                    "usedScenes": [],
+                    "usedOtherScenes": [],
+                    "usedResults": [0],
+                    "usedPrizeScenes": [],
+                    "srcScenes": [],
+                    "pos": [],
+                    "mapUsedSPGrid": {},
+                    "coinWin": 0,
+                    "cashWin": 0,
+                    "targetScene": 0,
+                    "runIndex": 0,
+                    "output": 0,
+                    "strOutput": ""
+                  },
+                  "nextComponent": "",
+                  "symbolNum": 1,
+                  "wildNum": 0,
+                  "respinNum": 0,
+                  "wins": 0,
+                  "winMulti": 1,
+                  "@type": "type.googleapis.com/sgc7pb.ScatterTriggerData"
+                },
+                "bg-pay": {
+                  "type_url": "type.googleapis.com/sgc7pb.MoneyTriggerData",
+                  "value": {
+                    "type": "Buffer",
+                    "data": [10, 8, 26, 1, 1, 40, 55, 48, 147, 2]
+                  }
+                }
+              },
+              "mapVals": {
+                "1": 5,
+                "2": 5,
+                "7": 0
+              },
+              "mapStrVals": {},
+              "firstComponent": "",
+              "nextStepFirstComponent": "",
+              "@type": "type.googleapis.com/sgc7pb.GameParam"
+            },
+            "nextGameMod": "basic",
+            "curIndex": 0,
+            "parentIndex": 0,
+            "modType": "",
+            "prizeCoinWin": 0,
+            "prizeCashWin": 0,
+            "jackpotCoinWin": 0,
+            "jackpotCashWin": 0,
+            "jackpotType": 0
+          }
+        }
+      ],
+      "finished": true,
+      "stake": null,
+      "playStartTime": 1780995420064
+    }
+  },
+  "playIndex": -1,
+  "bet": 5,
+  "lines": 10,
+  "totalwin": 275,
+  "playwin": 0,
+  "maxWinLimit": 500000
+}
