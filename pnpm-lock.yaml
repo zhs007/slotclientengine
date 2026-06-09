@@ -89,6 +89,37 @@ importers:
         specifier: ^15.15.0
         version: 15.15.0
 
+  apps/gameclientcli:
+    dependencies:
+      '@slotclientengine/netcore':
+        specifier: workspace:*
+        version: link:../../packages/netcore
+      ws:
+        specifier: ^8.18.0
+        version: 8.20.0
+    devDependencies:
+      '@eslint/js':
+        specifier: ^9.34.0
+        version: 9.39.4
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
+      '@typescript-eslint/eslint-plugin':
+        specifier: ^8.0.0
+        version: 8.58.0(@typescript-eslint/parser@8.58.0(eslint@10.1.0)(typescript@6.0.2))(eslint@10.1.0)(typescript@6.0.2)
+      '@typescript-eslint/parser':
+        specifier: ^8.0.0
+        version: 8.58.0(eslint@10.1.0)(typescript@6.0.2)
+      '@vitest/coverage-v8':
+        specifier: ^4.0.0
+        version: 4.1.2(vitest@4.1.2(@types/node@24.12.0)(vite@8.0.3(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@24.12.0)(esbuild@0.27.7)(tsx@4.21.0)))
+      eslint-config-prettier:
+        specifier: ^9.1.0
+        version: 9.1.2(eslint@10.1.0)
+      globals:
+        specifier: ^15.15.0
+        version: 15.15.0
+
   apps/spine2pixiani-demo:
     dependencies:
       gsap:
