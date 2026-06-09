@@ -1,0 +1,121 @@
+{
+  "msgid": "gamemoduleinfo",
+  "gamemodulename": "multistep-demo",
+  "gameid": 10001,
+  "gmi": {
+    "defaultScene": {
+      "values": [{ "values": [1, 2] }, { "values": [3, 4] }],
+      "indexes": [],
+      "validRow": []
+    },
+    "replyPlay": {
+      "randomNumbers": [7, 8, 9],
+      "results": [
+        {
+          "coinWin": 11,
+          "cashWin": 22,
+          "clientData": {
+            "scenes": [
+              {
+                "values": [{ "values": [10] }, { "values": [11] }],
+                "indexes": [],
+                "validRow": []
+              }
+            ],
+            "results": [
+              {
+                "pos": [0, 0],
+                "type": 1,
+                "coinWin": 11,
+                "cashWin": 22,
+                "extraStep": "first"
+              }
+            ],
+            "curGameMod": "base",
+            "curGameModParam": {
+              "historyComponents": ["shared"],
+              "historyComponentsEx": ["shared"],
+              "mapComponents": {
+                "shared": {
+                  "basicComponentData": {
+                    "usedScenes": [0],
+                    "usedResults": [0],
+                    "usedOtherScenes": [],
+                    "usedPrizeScenes": [],
+                    "srcScenes": [],
+                    "pos": [],
+                    "mapUsedSPGrid": {},
+                    "coinWin": 11,
+                    "cashWin": 22,
+                    "targetScene": 0,
+                    "runIndex": 0,
+                    "output": 0,
+                    "strOutput": ""
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "coinWin": 33,
+          "cashWin": 44,
+          "clientData": {
+            "scenes": [
+              {
+                "values": [{ "values": [20] }, { "values": [21] }],
+                "indexes": [],
+                "validRow": []
+              },
+              {
+                "values": [{ "values": [30] }, { "values": [31] }],
+                "indexes": [],
+                "validRow": []
+              }
+            ],
+            "results": [
+              {
+                "pos": [1, 0],
+                "type": 2,
+                "coinWin": 33,
+                "cashWin": 44,
+                "extraStep": "second"
+              }
+            ],
+            "curGameMod": "respin",
+            "curGameModParam": {
+              "historyComponents": ["shared"],
+              "historyComponentsEx": ["shared"],
+              "mapComponents": {
+                "shared": {
+                  "basicComponentData": {
+                    "usedScenes": [1],
+                    "usedResults": [0],
+                    "usedOtherScenes": [],
+                    "usedPrizeScenes": [],
+                    "srcScenes": [],
+                    "pos": [],
+                    "mapUsedSPGrid": {},
+                    "coinWin": 33,
+                    "cashWin": 44,
+                    "targetScene": 1,
+                    "runIndex": 1,
+                    "output": 0,
+                    "strOutput": ""
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "finished": true
+    }
+  },
+  "playIndex": 3,
+  "bet": 2,
+  "lines": 5,
+  "totalwin": 66,
+  "playwin": 66,
+  "maxWinLimit": 1000
+}
