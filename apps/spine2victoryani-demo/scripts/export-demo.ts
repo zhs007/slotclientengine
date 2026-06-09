@@ -4,7 +4,13 @@ import { fileURLToPath } from "node:url";
 import { adaptSpineData } from "../src/runtime/spine-adapter.js";
 import { parseAtlas, sanitizeAssetName } from "../src/runtime/atlas-core.js";
 import { writeSlicedAtlasAssets } from "../src/runtime/atlas-slicer.js";
-import { buildVictoryProject, createMirrorCheckPairs, EXPORT_STAGE, EXPORT_VERSION, getStageScale } from "../src/runtime/spine-to-victoryani.js";
+import {
+  buildVictoryProject,
+  createMirrorCheckPairs,
+  EXPORT_STAGE,
+  EXPORT_VERSION,
+  getStageScale,
+} from "../src/runtime/spine-to-victoryani.js";
 import type { ExportManifest } from "../src/runtime/export-types.js";
 import type { RawSpineSkeleton } from "../src/runtime/spine-types.js";
 
@@ -20,42 +26,75 @@ const outputAnimationsDir = join(outputRoot, "animations");
 async function main() {
   const [atlasText, rawSpineText] = await Promise.all([
     readFile(sourceAtlasPath, "utf8"),
-    readFile(sourceSpinePath, "utf8")
+    readFile(sourceSpinePath, "utf8"),
   ]);
 
   const atlas = parseAtlas(atlasText);
   const model = adaptSpineData(JSON.parse(rawSpineText) as RawSpineSkeleton);
   const fileNames = Object.fromEntries(
-    Object.keys(atlas.regions).map((regionName) => [regionName, `${sanitizeAssetName(regionName)}.png`])
+    Object.keys(atlas.regions).map((regionName) => [
+      regionName,
+      `${sanitizeAssetName(regionName)}.png`,
+    ]),
   );
 
   await rm(outputRoot, { recursive: true, force: true });
-  await Promise.all([mkdir(outputAssetsDir, { recursive: true }), mkdir(outputAnimationsDir, { recursive: true })]);
+  await Promise.all([
+    mkdir(outputAssetsDir, { recursive: true }),
+    mkdir(outputAnimationsDir, { recursive: true }),
+  ]);
 
-  const slicedAssets = await writeSlicedAtlasAssets(sourceImagePath, atlas, outputAssetsDir, fileNames);
-  const assetPaths = Object.fromEntries(slicedAssets.map((asset) => [asset.textureName, asset.relativePath]));
+  const slicedAssets = await writeSlicedAtlasAssets(
+    sourceImagePath,
+    atlas,
+    outputAssetsDir,
+    fileNames,
+  );
+  const assetPaths = Object.fromEntries(
+    slicedAssets.map((asset) => [asset.textureName, asset.relativePath]),
+  );
+  const animationAssetPaths = Object.fromEntries(
+    Object.entries(assetPaths).map(([textureName, relativePath]) => [
+      textureName,
+      relativePath.replace(/^\.\//, "../"),
+    ]),
+  );
   const animationNames = Object.keys(model.animations);
-  const defaultAnimation = animationNames.includes("cabin") ? "cabin" : animationNames[0];
+  const defaultAnimation = animationNames.includes("cabin")
+    ? "cabin"
+    : animationNames[0];
   const projects = new Map<string, ReturnType<typeof buildVictoryProject>>();
 
   for (const animationName of animationNames) {
-    const animationAssetPaths = Object.fromEntries(
-      Object.entries(assetPaths).map(([textureName, relativePath]) => [textureName, relativePath.replace(/^\.\//, "../")])
-    );
     const project = buildVictoryProject(model, animationName, {
       fps: model.skeleton.fps,
       assetPaths: animationAssetPaths,
       stageWidth: EXPORT_STAGE.width,
       stageHeight: EXPORT_STAGE.height,
       stageAnchorX: EXPORT_STAGE.anchorX,
-      stageAnchorY: EXPORT_STAGE.anchorY
+      stageAnchorY: EXPORT_STAGE.anchorY,
     });
 
     projects.set(animationName, project);
-    await writeFile(join(outputAnimationsDir, `${animationName}.project.json`), JSON.stringify(project, null, 2));
+    await writeFile(
+      join(outputAnimationsDir, `${animationName}.project.json`),
+      JSON.stringify(project, null, 2),
+    );
   }
 
-  await writeFile(join(outputRoot, "project.json"), JSON.stringify(projects.get(defaultAnimation), null, 2));
+  const defaultProject = buildVictoryProject(model, defaultAnimation, {
+    fps: model.skeleton.fps,
+    assetPaths,
+    stageWidth: EXPORT_STAGE.width,
+    stageHeight: EXPORT_STAGE.height,
+    stageAnchorX: EXPORT_STAGE.anchorX,
+    stageAnchorY: EXPORT_STAGE.anchorY,
+  });
+
+  await writeFile(
+    join(outputRoot, "project.json"),
+    JSON.stringify(defaultProject, null, 2),
+  );
 
   const manifest: ExportManifest = {
     version: EXPORT_VERSION,
@@ -66,14 +105,14 @@ async function main() {
       height: EXPORT_STAGE.height,
       anchorX: EXPORT_STAGE.anchorX,
       anchorY: EXPORT_STAGE.anchorY,
-      scale: getStageScale(model, EXPORT_STAGE.width, EXPORT_STAGE.height)
+      scale: getStageScale(model, EXPORT_STAGE.width, EXPORT_STAGE.height),
     },
     source: {
       skeletonWidth: model.skeleton.width,
       skeletonHeight: model.skeleton.height,
       bones: model.bones.length,
       slots: model.slots.length,
-      attachments: model.attachmentNames.length
+      attachments: model.attachmentNames.length,
     },
     assetCount: slicedAssets.length,
     animations: animationNames.map((animationName) => ({
@@ -81,12 +120,15 @@ async function main() {
       duration: model.animations[animationName].duration,
       fps: model.skeleton.fps,
       projectPath: `./animations/${animationName}.project.json`,
-      layerCount: projects.get(animationName)?.layers?.length ?? 0
+      layerCount: projects.get(animationName)?.layers?.length ?? 0,
     })),
-    mirrorChecks: createMirrorCheckPairs()
+    mirrorChecks: createMirrorCheckPairs(),
   };
 
-  await writeFile(join(outputRoot, "manifest.json"), JSON.stringify(manifest, null, 2));
+  await writeFile(
+    join(outputRoot, "manifest.json"),
+    JSON.stringify(manifest, null, 2),
+  );
 }
 
 void main().catch((error) => {
