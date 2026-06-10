@@ -83,29 +83,50 @@ describe("parseReelsWorkbook", () => {
     ["decimal string", "1"],
     ["boolean", true],
     ["date", new Date("2026-01-01T00:00:00Z")],
-  ])("rejects invalid line cell: %s", (_label, value) => {
+  ])("ignores line cell data: %s", (_label, value) => {
     const file = writeReels([
       ["line", "R1"],
       [value, "WL"],
     ]);
 
-    expect(() => parseReelsWorkbook(file, basicSymbolCodes)).toThrow("line");
+    expect(parseReelsWorkbook(file, basicSymbolCodes).reels).toEqual([[0]]);
   });
 
-  it("rejects formula line cells", () => {
+  it("ignores formula line cells", () => {
     const file = writeReels(validReelsRows(), {
       A2: { t: "n", f: "1+1", v: 2 },
     });
 
-    expect(() => parseReelsWorkbook(file, basicSymbolCodes)).toThrow("line 不允许使用公式单元格");
+    expect(parseReelsWorkbook(file, basicSymbolCodes).reels).toEqual([
+      [0, 1],
+      [1, 0],
+    ]);
   });
 
-  it("rejects numeric lines whose formatted text looks like an integer", () => {
+  it("ignores numeric lines whose formatted text looks like an integer", () => {
     const file = writeReels(validReelsRows(), {
       A2: { t: "n", v: 1.2, w: "1" },
     });
 
-    expect(() => parseReelsWorkbook(file, basicSymbolCodes)).toThrow("line 必须是非负安全整数");
+    expect(parseReelsWorkbook(file, basicSymbolCodes).reels).toEqual([
+      [0, 1],
+      [1, 0],
+    ]);
+  });
+
+  it("ignores rows with no R data without ending reel columns", () => {
+    const file = writeReels([
+      ["line", "R1", "R2"],
+      [0, "WL", "H1"],
+      [1, undefined, undefined],
+      [2, "H1", "WL"],
+      [3, undefined, undefined],
+    ]);
+
+    expect(parseReelsWorkbook(file, basicSymbolCodes).reels).toEqual([
+      [0, 1],
+      [1, 0],
+    ]);
   });
 
   it("rejects non-continuous R headers", () => {
