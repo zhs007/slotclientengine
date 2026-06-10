@@ -52,12 +52,34 @@ export function assertOptionalString(value: unknown, path: string): string | und
   return value;
 }
 
+export function assertNonEmptyString(value: unknown, path: string): string {
+  if (typeof value !== 'string') {
+    throw new LogicParseError(`${path} must be a string.`);
+  }
+
+  if (value.length === 0) {
+    throw new LogicParseError(`${path} must be a non-empty string.`);
+  }
+
+  return value;
+}
+
 export function assertInteger(value: unknown, path: string): number {
   if (typeof value !== 'number' || !Number.isInteger(value)) {
     throw new LogicParseError(`${path} must be an integer.`);
   }
 
   return value;
+}
+
+export function assertSafeNonNegativeInteger(value: unknown, path: string): number {
+  const parsed = assertInteger(value, path);
+
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new LogicParseError(`${path} must be a non-negative safe integer.`);
+  }
+
+  return parsed;
 }
 
 export function assertNumberArray(value: unknown, path: string): readonly number[] {

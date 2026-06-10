@@ -1,5 +1,70 @@
 export type SceneMatrix = readonly (readonly number[])[];
 
+export interface GameConfigPaytableEntry {
+  readonly code: number;
+  readonly symbol: string;
+  readonly pays: readonly number[];
+}
+
+export interface GameConfig {
+  readonly paytable: Readonly<Record<string, GameConfigPaytableEntry>>;
+  readonly symbolCodes: Readonly<Record<string, number>>;
+  readonly reels: Readonly<Record<string, readonly (readonly number[])[]>>;
+}
+
+export interface LogicGameConfig {
+  getRawConfig(): unknown;
+  getPaytableEntry(code: number): GameConfigPaytableEntry | undefined;
+  getSymbolCode(symbol: string): number | undefined;
+  getReelNames(): readonly string[];
+  getReels(name: string): LogicReels;
+  getStopYCoordinates(options: ReelStopYOptions): readonly number[];
+  getSpinStartYCoordinates(options: ReelSpinStartYsOptions): readonly number[];
+}
+
+export interface LogicReels {
+  getName(): string;
+  getReelCount(): number;
+  getLength(x: number): number;
+  get(x: number, y: number): number;
+  normalizeY(x: number, y: number): number;
+  findStopYCandidates(x: number, visibleSymbols: readonly number[]): readonly number[];
+  getStopY(x: number, visibleSymbols: readonly number[]): number;
+  calculateSpinStartY(options: ReelSpinStartYOptions): number;
+}
+
+export interface ReelStopYOptions {
+  readonly reelsName: string;
+  readonly sceneName: string;
+  readonly scene: SceneMatrix;
+}
+
+export type ReelSpinDirection = 'forward' | 'backward';
+
+export interface ReelSpinStartYOptions {
+  readonly x: number;
+  readonly finalY: number;
+  readonly durationMs: number;
+  readonly speedSymbolsPerSecond: number;
+  readonly direction?: ReelSpinDirection;
+}
+
+export interface ReelSpinStartYsOptions {
+  readonly reelsName: string;
+  readonly finalYs: readonly number[];
+  readonly durationMs: number;
+  readonly speedSymbolsPerSecond: number;
+  readonly direction?: ReelSpinDirection;
+}
+
+export interface ParsedGameConfigData {
+  readonly rawConfig: unknown;
+  readonly paytable: Readonly<Record<string, GameConfigPaytableEntry>>;
+  readonly symbolCodes: Readonly<Record<string, number>>;
+  readonly reels: Readonly<Record<string, readonly (readonly number[])[]>>;
+  readonly reelNames: readonly string[];
+}
+
 export interface GameLogicMeta {
   readonly msgid?: string;
   readonly gamemodulename?: string;
