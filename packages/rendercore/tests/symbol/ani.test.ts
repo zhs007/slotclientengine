@@ -2,15 +2,20 @@ import { Container, Sprite, Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import {
   ManualSymbolAni,
+  SymbolAssetError,
   SymbolAnimationError,
   createAppearSymbolAni,
   createLoopSymbolAni,
   createStaticSymbolAni,
-  createWinSymbolAni
+  createWinSymbolAni,
+  resolveSymbolTextureForState
 } from "../../src/symbol/index.js";
 import type { SymbolAnimationContext } from "../../src/symbol/index.js";
 
-function createContext(state = "normal"): SymbolAnimationContext {
+function createContext(
+  state = "normal",
+  options: Pick<Partial<SymbolAnimationContext>, "stateTextures" | "requiredStateTextures"> = {}
+): SymbolAnimationContext {
   const root = new Container();
   const sprite = new Sprite(Texture.WHITE);
   const overlayLayer = new Container();
@@ -27,6 +32,8 @@ function createContext(state = "normal"): SymbolAnimationContext {
       playback: state === "normal" ? "static" : "once"
     },
     texture: Texture.WHITE,
+    stateTextures: options.stateTextures ?? {},
+    requiredStateTextures: options.requiredStateTextures ?? [],
     root,
     sprite,
     overlayLayer
@@ -68,6 +75,30 @@ describe("ManualSymbolAni", () => {
 });
 
 describe("default viewer ani factories", () => {
+  it("resolves state textures with fail-fast required texture checks", () => {
+    const spinBlurTexture = Texture.EMPTY;
+    const context = createContext("spinBlur", {
+      stateTextures: { spinBlur: spinBlurTexture },
+      requiredStateTextures: ["spinBlur", "disabled"]
+    });
+
+    expect(resolveSymbolTextureForState(context)).toBe(spinBlurTexture);
+    expect(resolveSymbolTextureForState(context, "normal")).toBe(Texture.WHITE);
+    expect(() => resolveSymbolTextureForState(context, "disabled")).toThrow(SymbolAssetError);
+  });
+
+  it("uses requested state texture when resetting static display", () => {
+    const spinBlurTexture = Texture.EMPTY;
+    const context = createContext("spinBlur", {
+      stateTextures: { spinBlur: spinBlurTexture }
+    });
+    const ani = createStaticSymbolAni(context);
+
+    ani.reset();
+
+    expect(context.sprite.texture).toBe(spinBlurTexture);
+  });
+
   it("scales appear to about 1.5 and resets at completion", () => {
     const context = createContext("appear");
     const ani = createAppearSymbolAni(context);
@@ -105,5 +136,17 @@ describe("default viewer ani factories", () => {
     expect(context.overlayLayer.scale.x).toBe(1);
     expect(shineSprite?.mask ?? null).toBeNull();
     expect(context.overlayLayer.children.length).toBe(0);
+  });
+
+  it("uses a state texture for the win shine overlay when one is configured", () => {
+    const winTexture = Texture.EMPTY;
+    const context = createContext("win", {
+      stateTextures: { win: winTexture }
+    });
+    const ani = createWinSymbolAni(context);
+
+    ani.reset();
+
+    expect((context.overlayLayer.children[0] as Sprite).texture).toBe(winTexture);
   });
 });

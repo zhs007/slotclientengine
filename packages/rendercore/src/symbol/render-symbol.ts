@@ -9,6 +9,7 @@ import type {
   RenderSymbolUpdateResult,
   SymbolAni,
   SymbolAnimationContext,
+  SymbolStateId,
   SymbolStateSnapshot
 } from "./types.js";
 
@@ -17,6 +18,8 @@ export class RenderSymbol extends VisualEntity<void> {
   readonly symbol: string;
   readonly pays: readonly number[];
   readonly texture: Texture;
+  readonly stateTextures: Readonly<Partial<Record<SymbolStateId, Texture>>>;
+  readonly requiredStateTextures: readonly SymbolStateId[];
   readonly sprite: Sprite;
   readonly overlayLayer: Container;
   readonly #stateMachine: SymbolStateMachine;
@@ -30,6 +33,8 @@ export class RenderSymbol extends VisualEntity<void> {
     this.symbol = options.definition.symbol;
     this.pays = Object.freeze([...options.definition.pays]);
     this.texture = options.texture;
+    this.stateTextures = Object.freeze({ ...(options.stateTextures ?? {}) });
+    this.requiredStateTextures = Object.freeze([...(options.requiredStateTextures ?? [])]);
     this.sprite = new Sprite(options.texture);
     this.overlayLayer = new Container();
     this.#stateMachine = new SymbolStateMachine(options.definition);
@@ -135,6 +140,8 @@ export class RenderSymbol extends VisualEntity<void> {
       resolvedState: snapshot.resolvedState,
       state: this.#stateMachine.getCurrentStateDefinition(),
       texture: this.texture,
+      stateTextures: this.stateTextures,
+      requiredStateTextures: this.requiredStateTextures,
       root: this,
       sprite: this.sprite,
       overlayLayer: this.overlayLayer

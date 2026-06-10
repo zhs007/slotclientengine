@@ -1,5 +1,5 @@
 import { Graphics, Sprite } from "pixi.js";
-import { SymbolAnimationError } from "./errors.js";
+import { SymbolAnimationError, SymbolAssetError } from "./errors.js";
 import type {
   SymbolAni,
   SymbolAniUpdateResult,
@@ -195,8 +195,26 @@ export function assertValidDeltaSeconds(deltaSeconds: number): void {
   }
 }
 
+export function resolveSymbolTextureForState(
+  context: SymbolAnimationContext,
+  state: SymbolStateId = context.requestedState
+) {
+  const stateTexture = context.stateTextures[state];
+  if (stateTexture) {
+    return stateTexture;
+  }
+
+  if (context.requiredStateTextures.includes(state)) {
+    throw new SymbolAssetError(
+      `Symbol "${context.symbol}" is missing required texture for state "${state}".`
+    );
+  }
+
+  return context.texture;
+}
+
 export function resetBaseDisplay(context: SymbolAnimationContext): void {
-  context.sprite.texture = context.texture;
+  context.sprite.texture = resolveSymbolTextureForState(context);
   context.sprite.alpha = 1;
   context.sprite.rotation = 0;
   context.sprite.scale.set(1);
@@ -213,8 +231,9 @@ function createShineOverlay(context: SymbolAnimationContext): {
   readonly sprite: Sprite;
   readonly mask: Graphics;
 } {
-  const width = getTextureWidth(context);
-  const height = getTextureHeight(context);
+  const texture = resolveSymbolTextureForState(context);
+  const width = getTextureWidth(context, texture);
+  const height = getTextureHeight(context, texture);
   const shineWidth = Math.max(24, width * 0.28);
   const shineHeight = Math.max(56, height * 1.6);
   const mask = new Graphics()
@@ -223,7 +242,7 @@ function createShineOverlay(context: SymbolAnimationContext): {
   mask.rotation = Math.PI / 7;
   mask.x = -width;
 
-  const sprite = new Sprite(context.texture);
+  const sprite = new Sprite(texture);
   sprite.anchor.set(0.5);
   sprite.alpha = 0;
   sprite.blendMode = "screen";
@@ -243,10 +262,10 @@ function clearShineOverlay(context: SymbolAnimationContext, shineSprite: Sprite 
   context.overlayLayer.removeChildren();
 }
 
-function getTextureWidth(context: SymbolAnimationContext): number {
-  return Math.max(1, context.texture.width || context.sprite.width || 1);
+function getTextureWidth(context: SymbolAnimationContext, texture = context.texture): number {
+  return Math.max(1, texture.width || context.sprite.width || 1);
 }
 
-function getTextureHeight(context: SymbolAnimationContext): number {
-  return Math.max(1, context.texture.height || context.sprite.height || 1);
+function getTextureHeight(context: SymbolAnimationContext, texture = context.texture): number {
+  return Math.max(1, texture.height || context.sprite.height || 1);
 }

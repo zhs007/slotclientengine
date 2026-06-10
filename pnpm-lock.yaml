@@ -384,6 +384,9 @@ importers:
       globals:
         specifier: ^15.15.0
         version: 15.15.0
+      sharp:
+        specifier: ^0.34.4
+        version: 0.34.5
 
 packages:
 

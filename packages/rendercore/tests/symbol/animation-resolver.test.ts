@@ -25,6 +25,8 @@ const createContext = (requestedState: string, resolvedState = requestedState): 
       playback: resolvedState === "normal" ? "static" : "once"
     },
     texture: Texture.WHITE,
+    stateTextures: {},
+    requiredStateTextures: [],
     root,
     sprite,
     overlayLayer

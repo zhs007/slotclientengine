@@ -16,21 +16,31 @@ import type {
   SymbolCatalog,
   SymbolCatalogValidation,
   SymbolDefinition,
+  SymbolStateId,
+  SymbolTextureSet,
   SymbolStatePreset
 } from "./types.js";
+
+type NormalizedTextureSet = SymbolTextureSet<Texture | string>;
 
 export class SymbolCatalogModel implements SymbolCatalog {
   readonly #definitionsBySymbol: ReadonlyMap<string, SymbolDefinition>;
   readonly #paytableBySymbol: ReadonlyMap<string, GameConfigPaytableEntry>;
-  readonly #assets: SymbolAssetMap;
+  readonly #textureSets: ReadonlyMap<string, NormalizedTextureSet>;
   readonly #validation: SymbolCatalogValidation;
   readonly #animationResolver: SymbolAnimationResolver;
+  readonly #requiredStateTextures: readonly SymbolStateId[];
 
   constructor(options: CreateSymbolCatalogOptions) {
     const statePreset = options.statePreset ?? createDefaultSymbolStatePreset();
-    validateSymbolStatePreset(statePreset);
+    const validatedPreset = validateSymbolStatePreset(statePreset);
+    const textureSets = normalizeAssetMap(options.assets, validatedPreset.statesById);
+    const requiredStateTextures = normalizeRequiredStateTextures(
+      options.texturePolicy?.requiredStateTextures ?? [],
+      validatedPreset.statesById
+    );
     const paytableEntries = extractPaytableEntries(options.gameConfig);
-    const assetSymbols = Object.keys(options.assets).sort();
+    const assetSymbols = [...textureSets.keys()].sort();
     const assetSymbolSet = new Set(assetSymbols);
     const paytableSymbolSet = new Set(paytableEntries.map((entry) => entry.symbol));
     const displayableEntries = paytableEntries.filter((entry) => assetSymbolSet.has(entry.symbol));
@@ -39,8 +49,17 @@ export class SymbolCatalogModel implements SymbolCatalog {
       .map((entry) => entry.symbol);
     const ignoredAssetsWithoutPaytable = assetSymbols.filter((symbol) => !paytableSymbolSet.has(symbol));
 
-    this.#assets = Object.freeze({ ...options.assets });
+    for (const entry of displayableEntries) {
+      const textureSet = textureSets.get(entry.symbol);
+      if (!textureSet) {
+        throw new SymbolAssetError(`Symbol "${entry.symbol}" asset is missing.`);
+      }
+      assertRequiredStateTextures(entry.symbol, textureSet, requiredStateTextures);
+    }
+
+    this.#textureSets = textureSets;
     this.#animationResolver = options.animationResolver ?? createDefaultSymbolAnimationResolver();
+    this.#requiredStateTextures = requiredStateTextures;
     this.#validation = Object.freeze({
       displayableSymbols: Object.freeze(displayableEntries.map((entry) => entry.symbol)),
       ignoredPaytableSymbolsWithoutAssets: Object.freeze(ignoredPaytableSymbolsWithoutAssets),
@@ -91,21 +110,34 @@ export class SymbolCatalogModel implements SymbolCatalog {
   }
 
   getAsset(symbol: string): Texture | string {
+    return this.getTextureSet(symbol).normal;
+  }
+
+  getTextureSet(symbol: string): SymbolTextureSet {
     this.getDefinition(symbol);
-    return this.#assets[symbol];
+    const textureSet = this.#textureSets.get(symbol);
+    if (!textureSet) {
+      throw new SymbolAssetError(`Symbol "${symbol}" asset is missing.`);
+    }
+    return cloneTextureSet(textureSet);
   }
 
   createRenderSymbol(symbol: string, options: CreateCatalogRenderSymbolOptions = {}): RenderSymbol {
-    const asset = options.texture ?? this.getAsset(symbol);
+    const textureSet = this.getTextureSet(symbol);
+    const asset = options.texture ?? textureSet.normal;
     if (typeof asset === "string") {
       throw new SymbolAssetError(
         `Symbol "${symbol}" asset is a URL string; pass a loaded Texture to createRenderSymbol().`
       );
     }
+    const stateTextures = options.stateTextures ?? textureSet.states ?? {};
+    const loadedStateTextures = assertLoadedStateTextures(symbol, stateTextures);
 
     return new RenderSymbol({
       definition: this.getDefinition(symbol),
       texture: asset,
+      stateTextures: loadedStateTextures,
+      requiredStateTextures: this.#requiredStateTextures,
       animationResolver: options.animationResolver ?? this.#animationResolver
     });
   }
@@ -117,6 +149,121 @@ export function createSymbolCatalog(options: CreateSymbolCatalogOptions): Symbol
 
 export function createSymbolAssetMapFromUrls(urlsBySymbol: Record<string, string>): SymbolAssetMap {
   return Object.freeze({ ...urlsBySymbol });
+}
+
+function normalizeAssetMap(
+  assets: SymbolAssetMap,
+  statesById: ReadonlyMap<SymbolStateId, unknown>
+): ReadonlyMap<string, NormalizedTextureSet> {
+  const entries = Object.entries(assets).map(([symbol, asset]) => [
+    symbol,
+    normalizeTextureSet(symbol, asset, statesById)
+  ] as const);
+  return new Map(entries);
+}
+
+function normalizeTextureSet(
+  symbol: string,
+  asset: SymbolAssetMap[string],
+  statesById: ReadonlyMap<SymbolStateId, unknown>
+): NormalizedTextureSet {
+  if (isSymbolTextureSet(asset)) {
+    if (asset.normal === undefined || asset.normal === null) {
+      throw new SymbolAssetError(`Symbol "${symbol}" texture set must include a normal texture.`);
+    }
+    return Object.freeze({
+      normal: asset.normal,
+      states: normalizeTextureStates(symbol, asset.states ?? {}, statesById)
+    });
+  }
+
+  if (asset === undefined || asset === null) {
+    throw new SymbolAssetError(`Symbol "${symbol}" asset must include a normal texture.`);
+  }
+  return Object.freeze({
+    normal: asset,
+    states: Object.freeze({})
+  });
+}
+
+function normalizeTextureStates(
+  symbol: string,
+  states: Readonly<Partial<Record<SymbolStateId, Texture | string>>>,
+  statesById: ReadonlyMap<SymbolStateId, unknown>
+): Readonly<Partial<Record<SymbolStateId, Texture | string>>> {
+  if (typeof states !== "object" || states === null || Array.isArray(states)) {
+    throw new SymbolAssetError(`Symbol "${symbol}" texture states must be an object.`);
+  }
+
+  const normalized: Partial<Record<SymbolStateId, Texture | string>> = {};
+  for (const [state, texture] of Object.entries(states)) {
+    if (!statesById.has(state)) {
+      throw new SymbolAssetError(`Symbol "${symbol}" declares texture for unknown state "${state}".`);
+    }
+    if (texture === undefined || texture === null) {
+      throw new SymbolAssetError(`Symbol "${symbol}" texture for state "${state}" must exist.`);
+    }
+    normalized[state] = texture;
+  }
+
+  return Object.freeze(normalized);
+}
+
+function normalizeRequiredStateTextures(
+  requiredStateTextures: readonly SymbolStateId[],
+  statesById: ReadonlyMap<SymbolStateId, unknown>
+): readonly SymbolStateId[] {
+  const unique: SymbolStateId[] = [];
+  for (const state of requiredStateTextures) {
+    if (!statesById.has(state)) {
+      throw new SymbolAssetError(`Required texture state "${state}" does not exist in state preset.`);
+    }
+    if (!unique.includes(state)) {
+      unique.push(state);
+    }
+  }
+  return Object.freeze(unique);
+}
+
+function assertRequiredStateTextures(
+  symbol: string,
+  textureSet: NormalizedTextureSet,
+  requiredStateTextures: readonly SymbolStateId[]
+): void {
+  for (const state of requiredStateTextures) {
+    if (!textureSet.states?.[state]) {
+      throw new SymbolAssetError(`Symbol "${symbol}" is missing required texture for state "${state}".`);
+    }
+  }
+}
+
+function assertLoadedStateTextures(
+  symbol: string,
+  states: Readonly<Partial<Record<SymbolStateId, Texture | string>>>
+): Readonly<Partial<Record<SymbolStateId, Texture>>> {
+  const loaded: Partial<Record<SymbolStateId, Texture>> = {};
+  for (const [state, texture] of Object.entries(states)) {
+    if (typeof texture === "string") {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" texture for state "${state}" is not loaded; pass a loaded Texture.`
+      );
+    }
+    if (texture !== undefined) {
+      loaded[state] = texture;
+    }
+  }
+  return Object.freeze(loaded);
+}
+
+function cloneTextureSet(textureSet: NormalizedTextureSet): SymbolTextureSet {
+  return Object.freeze({
+    normal: textureSet.normal,
+    states: Object.freeze({ ...(textureSet.states ?? {}) })
+  });
+}
+
+function isSymbolTextureSet(asset: SymbolAssetMap[string]): asset is SymbolTextureSet {
+  return typeof asset === "object" && asset !== null && "normal" in asset;
 }
 
 function extractPaytableEntries(gameConfig: LogicGameConfig): readonly GameConfigPaytableEntry[] {

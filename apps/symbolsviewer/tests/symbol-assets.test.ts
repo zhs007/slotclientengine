@@ -7,7 +7,9 @@ import {
 import game2Config from "../../../assets/gamecfg/game2.json";
 import { describe, expect, it } from "vitest";
 import {
+  SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
   createSymbolAssetMapFromModules,
+  createStatefulSymbolAssetMapFromModules,
   createSymbolsViewerCatalog,
   getSymbolNameFromPath
 } from "../src/symbol-assets.js";
@@ -33,18 +35,78 @@ describe("symbolsviewer assets", () => {
     expect(createGameConfig(game2Config).getSymbolCode("S00")).toBe(1);
   });
 
-  it("keeps only the paytable and image intersection for display", () => {
-    const catalog = createSymbolsViewerCatalog(
-      game2Config,
-      createSymbolAssetMapFromModules({
+  it("splits normal and generated state PNGs into a stateful asset map", () => {
+    const assets = createStatefulSymbolAssetMapFromModules({
+      modules: {
         "../../../assets/symbols/S00.png": "/assets/S00.png",
-        "../../../assets/symbols/S0.png": "/assets/S0.png",
-        "../../../assets/symbols/S1.png": "/assets/S1.png",
-        "../../../assets/symbols/S5.png": "/assets/S5.png",
-        "../../../assets/symbols/S10.png": "/assets/S10.png",
+        "../../../assets/symbols/S00.spinBlur.png": "/assets/S00.spinBlur.png",
+        "../../../assets/symbols/S00.disabled.png": "/assets/S00.disabled.png",
         "../../../assets/symbols/SX.png": "/assets/SX.png"
+      },
+      manifest: createManifest(["S00"]),
+      requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
+    });
+
+    expect(Object.keys(assets)).toEqual(["S00", "SX"]);
+    expect(Object.keys(assets)).not.toContain("S00.spinBlur");
+    expect(assets).toEqual({
+      S00: {
+        normal: "/assets/S00.png",
+        states: {
+          spinBlur: "/assets/S00.spinBlur.png",
+          disabled: "/assets/S00.disabled.png"
+        }
+      },
+      SX: {
+        normal: "/assets/SX.png",
+        states: {}
+      }
+    });
+  });
+
+  it("rejects missing state texture files and unknown state declarations", () => {
+    expect(() =>
+      createStatefulSymbolAssetMapFromModules({
+        modules: {
+          "../../../assets/symbols/S00.png": "/assets/S00.png",
+          "../../../assets/symbols/S00.disabled.png": "/assets/S00.disabled.png"
+        },
+        manifest: createManifest(["S00"]),
+        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
       })
-    );
+    ).toThrow(/spinBlur/);
+
+    expect(() =>
+      createStatefulSymbolAssetMapFromModules({
+        modules: {
+          "../../../assets/symbols/S00.png": "/assets/S00.png",
+          "../../../assets/symbols/S00.spinBlur.png": "/assets/S00.spinBlur.png",
+          "../../../assets/symbols/S00.disabled.png": "/assets/S00.disabled.png",
+          "../../../assets/symbols/S00.blurred.png": "/assets/S00.blurred.png"
+        },
+        manifest: createManifest(["S00"]),
+        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
+      })
+    ).toThrow(/unknown state "blurred"/);
+
+    expect(() =>
+      createStatefulSymbolAssetMapFromModules({
+        modules: {
+          "../../../assets/symbols/S00.png": "/assets/S00.png",
+          "../../../assets/symbols/S00.spinBlur.png": "/assets/S00.spinBlur.png",
+          "../../../assets/symbols/S00.disabled.png": "/assets/S00.disabled.png"
+        },
+        manifest: {
+          ...createManifest(["S00"]),
+          states: ["spinBlur", "disabled", "blurred"]
+        },
+        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
+      })
+    ).toThrow(/unknown state "blurred"/);
+  });
+
+  it("keeps only the paytable and image intersection for display with required state textures", () => {
+    const catalog = createSymbolsViewerCatalog(game2Config, createViewerStatefulAssets());
 
     expect(catalog.getValidation()).toMatchObject({
       displayableSymbols: ["S00", "S0", "S1", "S5", "S10"],
@@ -69,6 +131,53 @@ describe("symbolsviewer assets", () => {
     expect(catalog.getDisplayableSymbols()).toEqual(["S00", "S0", "S1", "S5", "S10"]);
   });
 });
+
+function createViewerStatefulAssets() {
+  return createStatefulSymbolAssetMapFromModules({
+    modules: createViewerModules(["S00", "S0", "S1", "S5", "S10"], ["SX"]),
+    manifest: createManifest(["S00", "S0", "S1", "S5", "S10"]),
+    requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
+  });
+}
+
+function createViewerModules(symbols: readonly string[], orphanSymbols: readonly string[]) {
+  return Object.fromEntries(
+    [...symbols, ...orphanSymbols].flatMap((symbol) => {
+      const normal = [`../../../assets/symbols/${symbol}.png`, `/assets/${symbol}.png`] as const;
+      if (orphanSymbols.includes(symbol)) {
+        return [normal];
+      }
+      return [
+        normal,
+        [
+          `../../../assets/symbols/${symbol}.spinBlur.png`,
+          `/assets/${symbol}.spinBlur.png`
+        ] as const,
+        [
+          `../../../assets/symbols/${symbol}.disabled.png`,
+          `/assets/${symbol}.disabled.png`
+        ] as const
+      ];
+    })
+  );
+}
+
+function createManifest(symbols: readonly string[]) {
+  return {
+    version: 1,
+    states: ["spinBlur", "disabled"],
+    symbols: Object.fromEntries(
+      symbols.map((symbol) => [
+        symbol,
+        {
+          normal: `./${symbol}.png`,
+          spinBlur: `./${symbol}.spinBlur.png`,
+          disabled: `./${symbol}.disabled.png`
+        }
+      ])
+    )
+  };
+}
 
 describe("symbolsviewer sequence helpers", () => {
   it("provides the default global sequence and supports edit operations", () => {

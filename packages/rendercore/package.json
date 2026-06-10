@@ -25,6 +25,7 @@
   "scripts": {
     "prepare:deps": "pnpm --filter @slotclientengine/logiccore build && pnpm --filter @slotclientengine/pixiani build",
     "build": "pnpm run prepare:deps && tsc -p tsconfig.build.json",
+    "generate:symbol-state-textures": "node ./scripts/generate-symbol-state-textures.mjs",
     "lint": "eslint .",
     "test": "vitest run --coverage",
     "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",
@@ -42,6 +43,7 @@
     "@typescript-eslint/parser": "^8.0.0",
     "@vitest/coverage-v8": "^4.0.0",
     "eslint-config-prettier": "^9.1.0",
-    "globals": "^15.15.0"
+    "globals": "^15.15.0",
+    "sharp": "^0.34.4"
   }
 }

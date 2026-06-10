@@ -1,15 +1,22 @@
 import { Application, Assets, Container, Text, type Texture } from "pixi.js";
 import rawGameConfig from "../../../assets/gamecfg/game2.json";
+import stateTextureManifest from "../../../assets/symbols/symbol-state-textures.manifest.json";
 import {
   createDefaultSymbolStatePreset,
   createSymbolCatalog,
   SymbolStateSequenceController,
   type RenderSymbol,
+  type SymbolAssetInput,
+  type SymbolAssetMap,
   type SymbolSequenceStep,
-  type SymbolStateId
+  type SymbolStateId,
+  type SymbolTextureSet
 } from "@slotclientengine/rendercore";
 import { createGameConfig } from "@slotclientengine/logiccore";
-import { createSymbolAssetMapFromModules } from "./symbol-assets.js";
+import {
+  createStatefulSymbolAssetMapFromModules,
+  SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
+} from "./symbol-assets.js";
 import { DEFAULT_VIEWER_SEQUENCE, VIEWER_STATE_ORDER } from "./viewer-sequence.js";
 import "./styles.css";
 
@@ -41,12 +48,19 @@ async function bootstrap(): Promise<void> {
     import: "default",
     query: "?url"
   }) as Record<string, string>;
-  const symbolAssetUrls = createSymbolAssetMapFromModules(rawSymbolAssetModules);
+  const symbolAssetUrls = createStatefulSymbolAssetMapFromModules({
+    modules: rawSymbolAssetModules,
+    manifest: stateTextureManifest,
+    requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
+  });
   const textures = await loadSymbolTextures(symbolAssetUrls);
   const catalog = createSymbolCatalog({
     gameConfig: createGameConfig(rawGameConfig),
     assets: textures,
-    statePreset
+    statePreset,
+    texturePolicy: {
+      requiredStateTextures: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
+    }
   });
   const validation = catalog.getValidation();
 
@@ -267,17 +281,42 @@ async function bootstrap(): Promise<void> {
   });
 }
 
-async function loadSymbolTextures(symbolAssetUrls: Record<string, Texture | string>) {
+async function loadSymbolTextures(symbolAssetUrls: SymbolAssetMap): Promise<SymbolAssetMap> {
   const entries = await Promise.all(
-    Object.entries(symbolAssetUrls).map(async ([symbol, url]) => {
-      if (typeof url !== "string") {
-        return [symbol, url] as const;
-      }
-      const texture = await Assets.load<Texture>(url);
-      return [symbol, texture] as const;
+    Object.entries(symbolAssetUrls).map(async ([symbol, asset]) => {
+      return [symbol, await loadSymbolAssetInput(asset)] as const;
     })
   );
   return Object.freeze(Object.fromEntries(entries));
+}
+
+async function loadSymbolAssetInput(asset: SymbolAssetInput): Promise<SymbolAssetInput> {
+  if (isSymbolTextureSet(asset)) {
+    const stateEntries = await Promise.all(
+      Object.entries(asset.states ?? {})
+        .filter((entry): entry is [string, Texture | string] => entry[1] !== undefined)
+        .map(async ([state, urlOrTexture]) => {
+          return [state, await loadTexture(urlOrTexture)] as const;
+        })
+    );
+    return Object.freeze({
+      normal: await loadTexture(asset.normal),
+      states: Object.freeze(Object.fromEntries(stateEntries))
+    });
+  }
+
+  return loadTexture(asset);
+}
+
+async function loadTexture(texture: Texture | string): Promise<Texture> {
+  if (typeof texture === "string") {
+    return Assets.load<Texture>(texture);
+  }
+  return texture;
+}
+
+function isSymbolTextureSet(asset: SymbolAssetInput): asset is SymbolTextureSet {
+  return typeof asset === "object" && asset !== null && "normal" in asset;
 }
 
 function createRenderedSymbols(

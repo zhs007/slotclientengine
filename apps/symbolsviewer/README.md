@@ -8,8 +8,19 @@
 
 - `assets/gamecfg/game2.json`
 - `assets/symbols/*.png`
+- `assets/symbols/*.spinBlur.png`
+- `assets/symbols/*.disabled.png`
+- `assets/symbols/symbol-state-textures.manifest.json`
 
-viewer 只展示 paytable 与图片资源的交集。当前可展示 symbol 是 `S00`、`S0`、`S1`、`S5`、`S10`。paytable 中缺图的 `BN`、`SC`、`RS`、`X2`、`X5`、`X10` 不会进入展示列表；孤儿图片 `SX.png` 也不会进入展示列表。
+viewer 只展示 paytable 与普通图片资源的交集。当前可展示 symbol 是 `S00`、`S0`、`S1`、`S5`、`S10`。paytable 中缺图的 `BN`、`SC`、`RS`、`X2`、`X5`、`X10` 不会进入展示列表；孤儿图片 `SX.png` 也不会进入展示列表。
+
+`spinBlur` 和 `disabled` 状态图由 `rendercore` 的 Node 脚本生成：
+
+```bash
+pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --symbols S00,S0,S1,S5,S10
+```
+
+viewer 会读取 manifest，并要求当前可展示 symbol 同时具备 `spinBlur` 和 `disabled` 贴图；缺失或写入未知状态会直接报错。
 
 ## 运行
 
@@ -27,7 +38,7 @@ pnpm --filter symbolsviewer dev -- --host 0.0.0.0
 - `appear` 和 `win` 是单次状态，等待全部图标播放完成后进入下一步。
 - 状态面板显示每个 symbol 的 requested/resolved/default/pending 状态。
 
-默认序列是 `normal -> appear -> win -> spinBlur -> disabled`。本任务中 `spinBlur` 和 `disabled` 等价到 `normal`，所以面板会显示 requested 分别为 `spinBlur` / `disabled`，resolved 为 `normal`。
+默认序列是 `normal -> appear -> win -> spinBlur -> disabled`。`spinBlur` 和 `disabled` 的状态机 resolved 仍是 `normal`，所以面板会显示 requested 分别为 `spinBlur` / `disabled`，resolved 为 `normal`；画面会根据 requested state 分别使用纵向模糊贴图和灰色贴图。
 
 ## 验收
 
@@ -36,7 +47,10 @@ PC 横屏建议使用 `1280x720` 或更大视口确认：
 - Pixi canvas 非空。
 - `S00`、`S0`、`S1`、`S5`、`S10` 全部可见。
 - 默认序列自动播放。
+- `normal` 显示普通图。
 - `appear` 有放大弹回效果。
 - `win` 有扫光效果。
+- `spinBlur` 显示纵向模糊图，不是普通图。
+- `disabled` 显示灰色图，不是普通图。
 - 移除、调整、增加状态后，播放顺序按当前序列执行。
-- 修改默认 stable 状态后，单次状态结束回到新的默认状态。
+- 修改默认 stable 状态后，单次状态结束回到新的默认状态；默认状态是 `spinBlur` 或 `disabled` 时，`appear` / `win` 结束后分别回到模糊图或灰图。

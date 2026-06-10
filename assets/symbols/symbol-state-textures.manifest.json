@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "states": [
+    "spinBlur",
+    "disabled"
+  ],
+  "settings": {
+    "spinBlur": {
+      "kind": "verticalBoxBlur",
+      "kernelHeight": 21
+    },
+    "disabled": {
+      "kind": "grayscale",
+      "brightness": 0.72
+    }
+  },
+  "symbols": {
+    "S00": {
+      "normal": "./S00.png",
+      "spinBlur": "./S00.spinBlur.png",
+      "disabled": "./S00.disabled.png"
+    },
+    "S0": {
+      "normal": "./S0.png",
+      "spinBlur": "./S0.spinBlur.png",
+      "disabled": "./S0.disabled.png"
+    },
+    "S1": {
+      "normal": "./S1.png",
+      "spinBlur": "./S1.spinBlur.png",
+      "disabled": "./S1.disabled.png"
+    },
+    "S5": {
+      "normal": "./S5.png",
+      "spinBlur": "./S5.spinBlur.png",
+      "disabled": "./S5.disabled.png"
+    },
+    "S10": {
+      "normal": "./S10.png",
+      "spinBlur": "./S10.spinBlur.png",
+      "disabled": "./S10.disabled.png"
+    }
+  }
+}
