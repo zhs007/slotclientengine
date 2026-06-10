@@ -13,6 +13,11 @@ import {
   validateSpinOutcome,
 } from "../src/rtp-runner";
 import { RtpCliConfig, SlotcraftClientLike } from "../src/types";
+import {
+  createBasicComponent,
+  createSpinResultFixture,
+  createWinResult,
+} from "./fixtures/logic-gmi";
 
 type Listener = (...args: any[]) => void;
 
@@ -136,6 +141,57 @@ describe("runRtp", () => {
 
     expect(summary.completedSpins).toBe(3);
     expect(summary.totalStake).toBe(300);
+    expect(summary.gameplay.completedSpins).toBe(3);
+  });
+
+  it("returns gameplay stats and output sections for component results", async () => {
+    const fake = new FakeSlotcraftClient();
+    fake.spinHandler = async () => {
+      fake.state = ConnectionState.SPINEND;
+      return spinResult(25, 1);
+    };
+
+    const { summary, output } = await runWithExistingFakeAndOutput(fake, {
+      spins: 1,
+    });
+
+    expect(summary.gameplay.totalResults).toBe(1);
+    expect(summary.gameplay.components[0]).toMatchObject({
+      name: "SpinPay",
+      triggeredSpins: 1,
+      totalTriggers: 1,
+    });
+    expect(output).toContain("玩法统计");
+    expect(output).toContain("组件触发统计");
+    expect(output).toContain("result.type 分布");
+  });
+
+  it("keeps gameplay sample count stable for 1000 fake spins", async () => {
+    const { summary } = await runWithFakeClient({
+      spins: 1000,
+      progressInterval: 100,
+    });
+
+    expect(summary.completedSpins).toBe(1000);
+    expect(summary.gameplay.completedSpins).toBe(1000);
+    expect(summary.gameplay.zeroWinSpinProbability).toBe(1);
+    expect(summary.gameplay.stepCountDistribution).toMatchObject([
+      { steps: 1, spinCount: 1000, spinProbability: 1 },
+    ]);
+  });
+
+  it("honors progressInterval while always printing the final spin", async () => {
+    const fake = new FakeSlotcraftClient();
+    const { output } = await runWithExistingFakeAndOutput(fake, {
+      spins: 5,
+      progressInterval: 2,
+    });
+
+    expect(output.filter((line) => line.startsWith("spin "))).toEqual([
+      "spin 2/5: totalwin=0, totalStake=200, totalWin=0, rtp=0.0000%",
+      "spin 4/5: totalwin=0, totalStake=400, totalWin=0, rtp=0.0000%",
+      "spin 5/5: totalwin=0, totalStake=500, totalWin=0, rtp=0.0000%",
+    ]);
   });
 
   it("rejects missing balance before spinning", async () => {
@@ -156,6 +212,27 @@ describe("runRtp", () => {
 
     await expect(runWithExistingFake(fake, { spins: 2 })).rejects.toThrow(
       "spin failed",
+    );
+    expect(fake.spinCalls).toHaveLength(1);
+  });
+
+  it("rejects logiccore parse failures and does not continue spinning", async () => {
+    const fake = new FakeSlotcraftClient();
+    fake.spinHandler = async () => {
+      fake.state = ConnectionState.IN_GAME;
+      return {
+        totalwin: 0,
+        results: 1,
+        gmi: {
+          replyPlay: {
+            results: [{}],
+          },
+        },
+      };
+    };
+
+    await expect(runWithExistingFake(fake, { spins: 2 })).rejects.toThrow(
+      "logiccore 解析 gmi 失败",
     );
     expect(fake.spinCalls).toHaveLength(1);
   });
@@ -365,6 +442,14 @@ async function runWithExistingFake(
   fake: FakeSlotcraftClient,
   overrides: Partial<RtpCliConfig> = {},
 ) {
+  const { summary } = await runWithExistingFakeAndOutput(fake, overrides);
+  return summary;
+}
+
+async function runWithExistingFakeAndOutput(
+  fake: FakeSlotcraftClient,
+  overrides: Partial<RtpCliConfig> = {},
+) {
   const config = createConfig(overrides);
   const output: string[] = [];
   const summary = await runRtp(config, {
@@ -375,7 +460,7 @@ async function runWithExistingFake(
     output: (line) => output.push(line),
   });
 
-  return summary;
+  return { summary, output };
 }
 
 function createConfig(overrides: Partial<RtpCliConfig> = {}): RtpCliConfig {
@@ -391,15 +476,33 @@ function createConfig(overrides: Partial<RtpCliConfig> = {}): RtpCliConfig {
 }
 
 function spinResult(totalwin: number, results: number, bet = 10, lines = 10) {
-  return {
+  const steps = Array.from({ length: results }, (_, index) => {
+    const isWinningStep = index === 0 && totalwin > 0;
+
+    return {
+      coinWin: isWinningStep ? totalwin : 0,
+      cashWin: isWinningStep ? totalwin : 0,
+      results: isWinningStep
+        ? [
+            createWinResult({
+              coinWin: totalwin,
+              cashWin: totalwin,
+            }),
+          ]
+        : [],
+      historyComponents: isWinningStep ? ["SpinPay"] : [],
+      mapComponents: isWinningStep
+        ? {
+            SpinPay: createBasicComponent([0], [0]),
+          }
+        : {},
+    };
+  });
+
+  return createSpinResultFixture({
     totalwin,
-    results,
-    gmi: {
-      bet,
-      lines,
-      replyPlay: {
-        results: Array.from({ length: results }, (_, index) => ({ index })),
-      },
-    },
-  };
+    bet,
+    lines,
+    steps,
+  });
 }

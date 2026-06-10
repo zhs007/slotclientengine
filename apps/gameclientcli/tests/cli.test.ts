@@ -4,6 +4,7 @@ import {
   DEFAULT_AUTONUMS,
   DEFAULT_BET,
   DEFAULT_LINES,
+  DEFAULT_PROGRESS_INTERVAL,
   DEFAULT_TIMES,
 } from "../src/config";
 
@@ -29,6 +30,7 @@ describe("parseCliArgs", () => {
       times: DEFAULT_TIMES,
       autonums: DEFAULT_AUTONUMS,
     });
+    expect(config.progressInterval).toBe(DEFAULT_PROGRESS_INTERVAL);
   });
 
   it("accepts the pnpm script argument separator", () => {
@@ -55,6 +57,8 @@ describe("parseCliArgs", () => {
       "3",
       "--request-timeout-ms",
       "1000",
+      "--progress-interval",
+      "100",
       "--verbose",
     ]);
 
@@ -65,8 +69,10 @@ describe("parseCliArgs", () => {
     expect(config.spin.lines).toBe(20);
     expect(config.spin.times).toBe(3);
     expect(config.requestTimeoutMs).toBe(1000);
+    expect(config.progressInterval).toBe(100);
     expect(config.verbose).toBe(true);
     expect(config.overrides).toContain("token=token-a");
+    expect(config.overrides).toContain("progress-interval=100");
   });
 
   it.each([
@@ -74,6 +80,10 @@ describe("parseCliArgs", () => {
     ["--lines", "1.5"],
     ["--times", "-1"],
     ["--request-timeout-ms", "abc"],
+    ["--progress-interval", "0"],
+    ["--progress-interval", "-1"],
+    ["--progress-interval", "1.5"],
+    ["--progress-interval", "abc"],
   ])("rejects invalid override %s %s", (option, value) => {
     expect(() => parseCliArgs(["--spins", "1", option, value])).toThrow();
   });

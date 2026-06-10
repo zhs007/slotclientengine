@@ -12,6 +12,7 @@ export const DEFAULT_LINES = 10;
 export const DEFAULT_TIMES = 1;
 export const DEFAULT_AUTONUMS = -1;
 export const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
+export const DEFAULT_PROGRESS_INTERVAL = 1;
 
 export const DEFAULT_SPIN_CONFIG: SpinRequestConfig = {
   bet: DEFAULT_BET,
@@ -30,6 +31,7 @@ export function createDefaultConfig(): RtpCliConfig {
     clienttype: DEFAULT_CLIENT_TYPE,
     language: DEFAULT_LANGUAGE,
     requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
+    progressInterval: DEFAULT_PROGRESS_INTERVAL,
     spin: { ...DEFAULT_SPIN_CONFIG },
     spins: 0,
     verbose: false,

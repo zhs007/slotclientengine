@@ -19,6 +19,10 @@ const OPTION_SPECS = new Map<string, OptionSpec>([
     "--request-timeout-ms",
     { property: "requestTimeoutMs", kind: "positive-integer" },
   ],
+  [
+    "--progress-interval",
+    { property: "progressInterval", kind: "positive-integer" },
+  ],
 ]);
 
 export function parseCliArgs(argv: string[]): RtpCliConfig {
@@ -107,6 +111,10 @@ function applyOption(
     case "requestTimeoutMs":
       config.requestTimeoutMs = parsePositiveInteger(rawValue, optionName);
       config.overrides.push(`request-timeout-ms=${config.requestTimeoutMs}`);
+      break;
+    case "progressInterval":
+      config.progressInterval = parsePositiveInteger(rawValue, optionName);
+      config.overrides.push(`progress-interval=${config.progressInterval}`);
       break;
     default:
       throw new Error(`未实现参数：${optionName}`);
