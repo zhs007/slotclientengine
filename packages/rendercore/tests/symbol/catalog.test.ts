@@ -1,5 +1,6 @@
 import { createGameConfig } from "@slotclientengine/logiccore";
 import game2Config from "../../../../assets/gamecfg/game2.json";
+import { Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import {
   SymbolAssetError,
@@ -35,6 +36,107 @@ describe("createSymbolCatalog", () => {
     expect(catalog.getDisplayableSymbols()).toEqual(["S00", "S0", "S1", "S5", "S10"]);
   });
 
+  it("normalizes legacy assets into texture sets while keeping getAsset compatible", () => {
+    const catalog = createCatalog();
+
+    expect(catalog.getAsset("S00")).toBe("S00.png");
+    expect(catalog.getTextureSet("S00")).toEqual({
+      normal: "S00.png",
+      states: {}
+    });
+  });
+
+  it("accepts loaded state texture sets and passes them into render symbols", () => {
+    const spinBlurTexture = new Texture({ source: Texture.WHITE.source });
+    const disabledTexture = new Texture({ source: Texture.WHITE.source });
+    const catalog = createSymbolCatalog({
+      gameConfig: createGameConfig(game2Config),
+      assets: {
+        S00: {
+          normal: Texture.WHITE,
+          states: {
+            spinBlur: spinBlurTexture,
+            disabled: disabledTexture
+          }
+        }
+      },
+      texturePolicy: {
+        requiredStateTextures: ["spinBlur", "disabled"]
+      }
+    });
+
+    expect(catalog.getTextureSet("S00")).toEqual({
+      normal: Texture.WHITE,
+      states: {
+        spinBlur: spinBlurTexture,
+        disabled: disabledTexture
+      }
+    });
+    const renderSymbol = catalog.createRenderSymbol("S00");
+    expect(renderSymbol.stateTextures.spinBlur).toBe(spinBlurTexture);
+    expect(renderSymbol.stateTextures.disabled).toBe(disabledTexture);
+    expect(renderSymbol.requiredStateTextures).toEqual(["spinBlur", "disabled"]);
+  });
+
+  it("requires configured state textures only for displayable symbols", () => {
+    const spinBlurTexture = new Texture({ source: Texture.WHITE.source });
+    const disabledTexture = new Texture({ source: Texture.WHITE.source });
+    const catalog = createSymbolCatalog({
+      gameConfig: createGameConfig(game2Config),
+      assets: {
+        S00: {
+          normal: Texture.WHITE,
+          states: {
+            spinBlur: spinBlurTexture,
+            disabled: disabledTexture
+          }
+        },
+        SX: "SX.png"
+      },
+      texturePolicy: {
+        requiredStateTextures: ["spinBlur", "disabled"]
+      }
+    });
+
+    expect(catalog.getValidation()).toMatchObject({
+      displayableSymbols: ["S00"],
+      ignoredAssetsWithoutPaytable: ["SX"]
+    });
+  });
+
+  it("rejects missing required state textures and unknown state texture ids", () => {
+    expect(() =>
+      createSymbolCatalog({
+        gameConfig: createGameConfig(game2Config),
+        assets: {
+          S00: {
+            normal: Texture.WHITE,
+            states: {
+              disabled: Texture.WHITE
+            }
+          }
+        },
+        texturePolicy: {
+          requiredStateTextures: ["spinBlur", "disabled"]
+        }
+      })
+    ).toThrow(SymbolAssetError);
+
+    expect(() =>
+      createSymbolCatalog({
+        gameConfig: createGameConfig(game2Config),
+        assets: {
+          S00: {
+            normal: Texture.WHITE,
+            states: {
+              blurred: Texture.WHITE
+            }
+          }
+        }
+      })
+    ).toThrow(SymbolAssetError);
+  });
+
   it("keeps paytable data on definitions and rejects non-displayable symbols", () => {
     const catalog = createCatalog();
     const definition = catalog.getDefinition("S10");
@@ -53,6 +155,23 @@ describe("createSymbolCatalog", () => {
 
   it("does not create render symbols from unloaded URL assets", () => {
     const catalog = createCatalog();
+
+    expect(() => catalog.createRenderSymbol("S00")).toThrow(SymbolAssetError);
+  });
+
+  it("does not create render symbols from unloaded state texture URL assets", () => {
+    const catalog = createSymbolCatalog({
+      gameConfig: createGameConfig(game2Config),
+      assets: {
+        S00: {
+          normal: Texture.WHITE,
+          states: {
+            spinBlur: "S00.spinBlur.png",
+            disabled: Texture.WHITE
+          }
+        }
+      }
+    });
 
     expect(() => catalog.createRenderSymbol("S00")).toThrow(SymbolAssetError);
   });

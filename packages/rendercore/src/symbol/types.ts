@@ -83,6 +83,8 @@ export interface SymbolAnimationContext {
   readonly resolvedState: SymbolStateId;
   readonly state: SymbolStateDefinition;
   readonly texture: Texture;
+  readonly stateTextures: Readonly<Partial<Record<SymbolStateId, Texture>>>;
+  readonly requiredStateTextures: readonly SymbolStateId[];
   readonly root: Container;
   readonly sprite: Sprite;
   readonly overlayLayer: Container;
@@ -102,11 +104,24 @@ export interface RenderSymbolUpdateResult {
 export interface RenderSymbolOptions {
   readonly definition: SymbolDefinition;
   readonly texture: Texture;
+  readonly stateTextures?: Readonly<Partial<Record<SymbolStateId, Texture>>>;
+  readonly requiredStateTextures?: readonly SymbolStateId[];
   readonly animationResolver: SymbolAnimationResolver;
 }
 
+export interface SymbolTextureSet<TTexture = Texture | string> {
+  readonly normal: TTexture;
+  readonly states?: Readonly<Partial<Record<SymbolStateId, TTexture>>>;
+}
+
+export type SymbolAssetInput = Texture | string | SymbolTextureSet;
+
 export interface SymbolAssetMap {
-  readonly [symbol: string]: Texture | string;
+  readonly [symbol: string]: SymbolAssetInput;
+}
+
+export interface SymbolTexturePolicy {
+  readonly requiredStateTextures?: readonly SymbolStateId[];
 }
 
 export interface SymbolCatalogValidation {
@@ -120,10 +135,12 @@ export interface CreateSymbolCatalogOptions {
   readonly assets: SymbolAssetMap;
   readonly statePreset?: SymbolStatePreset;
   readonly animationResolver?: SymbolAnimationResolver;
+  readonly texturePolicy?: SymbolTexturePolicy;
 }
 
 export interface CreateCatalogRenderSymbolOptions {
   readonly texture?: Texture;
+  readonly stateTextures?: Readonly<Partial<Record<SymbolStateId, Texture>>>;
   readonly animationResolver?: SymbolAnimationResolver;
 }
 
@@ -133,5 +150,6 @@ export interface SymbolCatalog {
   getDefinition(symbol: string): SymbolDefinition;
   getPaytableEntry(symbol: string): GameConfigPaytableEntry;
   getAsset(symbol: string): Texture | string;
+  getTextureSet(symbol: string): SymbolTextureSet;
   createRenderSymbol(symbol: string, options?: CreateCatalogRenderSymbolOptions): RenderSymbol;
 }

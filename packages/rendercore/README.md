@@ -17,7 +17,7 @@ import {
 } from "@slotclientengine/rendercore";
 ```
 
-`SymbolDefinition` 保留 paytable 关联信息：`code`、`symbol`、`pays`。`RenderSymbol` 只持有一个主 `Sprite` 和传入的共享 `Texture` 引用；`normal`、`appear`、`win` 等状态不会复制图片资源。
+`SymbolDefinition` 保留 paytable 关联信息：`code`、`symbol`、`pays`。`RenderSymbol` 只持有一个主 `Sprite`、普通 `Texture` 和可选状态贴图引用；`normal`、`appear`、`win` 等状态不会复制图片资源。
 
 ## 状态语义
 
@@ -32,6 +32,32 @@ import {
 - 显式 `frameDurationSeconds` 不得小于 `1 / 60` 秒。
 
 默认 preset 包含 `normal`、`spinBlur`、`disabled`、`appear`、`win`。其中 `spinBlur -> normal`、`disabled -> normal` 是状态等价配置；等价目标必须存在、phase 必须一致、链路不能有环。
+
+## 状态贴图
+
+资源 map 兼容旧写法，也支持显式状态贴图集合：
+
+```ts
+const catalog = createSymbolCatalog({
+  gameConfig,
+  assets: {
+    S00: {
+      normal: normalTexture,
+      states: {
+        spinBlur: spinBlurTexture,
+        disabled: disabledTexture
+      }
+    }
+  },
+  texturePolicy: {
+    requiredStateTextures: ["spinBlur", "disabled"]
+  }
+});
+```
+
+`normal` 是普通贴图，`states` 可以提供 `spinBlur`、`disabled` 等状态贴图。`spinBlur` / `disabled` 可以在状态机语义上继续等价到 `normal`，但默认静态 ani 会按 `requestedState` 选择状态贴图；因此 snapshot 仍可显示 `spinBlur -> normal`，画面使用 `spinBlur` 贴图。
+
+`texturePolicy.requiredStateTextures` 用于声明某些状态贴图必须存在。缺少必需贴图、状态贴图声明了未知 state，或 `createRenderSymbol()` 收到尚未加载的 URL 字符串时都会抛错，避免静默回退到普通图。
 
 ## 动画解耦
 
@@ -73,6 +99,8 @@ const catalog = createSymbolCatalog({
 
 catalog 只把 paytable 与资源 map 的交集加入 `displayableSymbols`。请求创建不可展示 symbol、未知状态、非法默认状态、非法等价配置或 URL 资产未加载为 `Texture` 时都会抛错。
 
+`getAsset(symbol)` 继续返回普通贴图以保持兼容；需要完整状态贴图集合时使用 `getTextureSet(symbol)`。
+
 ## Ticker
 
 `RenderSymbol` 不创建 Pixi `Application`，也不从磁盘加载图片。调用方负责加载 `Texture`，并在游戏主循环里显式推进：
@@ -94,6 +122,12 @@ symbol.requestState("win");
 `SymbolStateSequenceController` 只决定下一步请求哪个状态，不直接操作 Pixi。viewer 或游戏层把返回的状态广播给全部 `RenderSymbol`。`once` 状态需要等全部 symbol 都上报 `onceCompleted` 后再推进。
 
 ## 命令
+
+状态贴图生成脚本只在 Node 侧使用 `sharp`，不会进入浏览器运行时代码或发布 bundle。当前 viewer 资源可用下面命令生成：
+
+```bash
+pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --symbols S00,S0,S1,S5,S10
+```
 
 ```bash
 pnpm --filter @slotclientengine/rendercore lint

@@ -18,6 +18,8 @@ const createDefinition = () =>
     preset: createDefaultSymbolStatePreset()
   });
 
+const createDistinctTexture = () => new Texture({ source: Texture.WHITE.source });
+
 describe("RenderSymbol", () => {
   it("keeps paytable data and reuses one main sprite texture across states", () => {
     const renderSymbol = new RenderSymbol({
@@ -64,9 +66,16 @@ describe("RenderSymbol", () => {
   });
 
   it("resolves spinBlur and disabled to normal while retaining requested state", () => {
+    const spinBlurTexture = createDistinctTexture();
+    const disabledTexture = createDistinctTexture();
     const renderSymbol = new RenderSymbol({
       definition: createDefinition(),
       texture: Texture.WHITE,
+      stateTextures: {
+        spinBlur: spinBlurTexture,
+        disabled: disabledTexture
+      },
+      requiredStateTextures: ["spinBlur", "disabled"],
       animationResolver: createDefaultSymbolAnimationResolver()
     });
 
@@ -75,12 +84,51 @@ describe("RenderSymbol", () => {
       requestedState: "spinBlur",
       resolvedState: "normal"
     });
+    expect(renderSymbol.sprite.texture).toBe(spinBlurTexture);
 
     renderSymbol.requestState("disabled");
     expect(renderSymbol.getStateSnapshot()).toMatchObject({
       requestedState: "disabled",
       resolvedState: "normal"
     });
+    expect(renderSymbol.sprite.texture).toBe(disabledTexture);
+
+    renderSymbol.requestState("normal");
+    expect(renderSymbol.sprite.texture).toBe(Texture.WHITE);
+  });
+
+  it("restores the configured default state texture after once animations complete", () => {
+    const spinBlurTexture = createDistinctTexture();
+    const disabledTexture = createDistinctTexture();
+    const renderSymbol = new RenderSymbol({
+      definition: createDefinition(),
+      texture: Texture.WHITE,
+      stateTextures: {
+        spinBlur: spinBlurTexture,
+        disabled: disabledTexture
+      },
+      animationResolver: createDefaultSymbolAnimationResolver()
+    });
+
+    renderSymbol.setDefaultState("spinBlur");
+    renderSymbol.requestState("appear");
+    expect(renderSymbol.sprite.texture).toBe(Texture.WHITE);
+    expect(renderSymbol.update(1).onceCompleted).toBe(true);
+    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+      requestedState: "spinBlur",
+      resolvedState: "normal"
+    });
+    expect(renderSymbol.sprite.texture).toBe(spinBlurTexture);
+
+    renderSymbol.setDefaultState("disabled");
+    renderSymbol.requestState("win");
+    expect(renderSymbol.sprite.texture).toBe(Texture.WHITE);
+    expect(renderSymbol.update(1).onceCompleted).toBe(true);
+    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+      requestedState: "disabled",
+      resolvedState: "normal"
+    });
+    expect(renderSymbol.sprite.texture).toBe(disabledTexture);
   });
 
   it("allows custom resolver differences for the same state on different symbols", () => {
