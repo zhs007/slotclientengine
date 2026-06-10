@@ -6,6 +6,7 @@ import {
   SpinParams,
   UserInfo,
 } from "@slotclientengine/netcore";
+import type { GameplayStatsSnapshot } from "./gameplay-stats";
 
 export type OutputSink = (line: string) => void;
 
@@ -25,6 +26,7 @@ export interface RtpCliConfig {
   clienttype: string;
   language: string;
   requestTimeoutMs: number;
+  progressInterval: number;
   spin: SpinRequestConfig;
   spins: number;
   verbose: boolean;
@@ -58,6 +60,7 @@ export interface RtpRunSummary extends RtpStatsSnapshot {
   initialBalance: number;
   finalBalance: number;
   balanceDelta: number;
+  gameplay: GameplayStatsSnapshot;
 }
 
 export interface SlotcraftClientLike {

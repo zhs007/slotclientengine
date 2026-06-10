@@ -8,6 +8,10 @@ export default defineConfig({
         __dirname,
         "../../packages/netcore/src/index.ts",
       ),
+      "@slotclientengine/logiccore": resolve(
+        __dirname,
+        "../../packages/logiccore/src/index.ts",
+      ),
     },
   },
   test: {

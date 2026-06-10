@@ -5,17 +5,18 @@
   "type": "commonjs",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
-    "prepare:netcore": "pnpm --filter @slotclientengine/netcore build",
-    "build": "pnpm run prepare:netcore && tsc -p tsconfig.json",
+    "prepare:deps": "pnpm --filter @slotclientengine/netcore build && pnpm --filter @slotclientengine/logiccore build",
+    "build": "pnpm run prepare:deps && tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "dev": "pnpm run prepare:netcore && ts-node src/index.ts",
+    "dev": "pnpm run prepare:deps && ts-node src/index.ts",
     "lint": "eslint . --ext .ts,.cjs",
-    "test": "pnpm run prepare:netcore && vitest run --coverage",
-    "typecheck": "pnpm run prepare:netcore && tsc -p tsconfig.json --noEmit",
+    "test": "pnpm run prepare:deps && vitest run --coverage",
+    "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@slotclientengine/logiccore": "workspace:*",
     "@slotclientengine/netcore": "workspace:*",
     "ws": "^8.18.0"
   },

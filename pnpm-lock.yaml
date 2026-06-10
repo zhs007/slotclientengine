@@ -91,6 +91,9 @@ importers:
 
   apps/gameclientcli:
     dependencies:
+      '@slotclientengine/logiccore':
+        specifier: workspace:*
+        version: link:../../packages/logiccore
       '@slotclientengine/netcore':
         specifier: workspace:*
         version: link:../../packages/netcore

@@ -13,6 +13,10 @@ import {
   assertNonNegativeInteger,
 } from "./stats";
 import {
+  GameplayStatsAccumulator,
+  outputGameplayStats,
+} from "./gameplay-stats";
+import {
   FailFastEventHandlers,
   RtpCliConfig,
   RtpRunSummary,
@@ -107,8 +111,10 @@ export async function runRtp(
   const client = createClient(config, monitor.logger, dependencies);
   attachFailFastHandlers(client, monitor);
   const stats = new RtpStatsAccumulator(config.spin);
+  const gameplayStats = new GameplayStatsAccumulator(config.spin);
   let initialBalance = 0;
 
+  assertPositiveInteger(config.progressInterval, "progressInterval");
   outputStartupSummary(config, output);
 
   try {
@@ -159,14 +165,27 @@ export async function runRtp(
         needsFinalCollect ? "already-collected" : "forbid-collect",
       );
 
-      const snapshot = stats.addSpin(outcome.totalwin, outcome.results);
-      outputSpinProgress(
-        index + 1,
-        config.spins,
-        outcome.totalwin,
-        snapshot,
-        output,
+      gameplayStats.addSpin(
+        outcome,
+        config.spin,
+        readOptionalGameId(client.getUserInfo()),
       );
+      const snapshot = stats.addSpin(outcome.totalwin, outcome.results);
+      if (
+        shouldOutputSpinProgress(
+          index + 1,
+          config.spins,
+          config.progressInterval,
+        )
+      ) {
+        outputSpinProgress(
+          index + 1,
+          config.spins,
+          outcome.totalwin,
+          snapshot,
+          output,
+        );
+      }
     }
 
     const finalBalance = readFiniteBalance(
@@ -183,9 +202,11 @@ export async function runRtp(
       initialBalance,
       finalBalance,
       balanceDelta: finalBalance - initialBalance,
+      gameplay: gameplayStats.snapshot(),
     };
 
     outputFinalSummary(summary, output);
+    outputGameplayStats(summary.gameplay, output);
     return summary;
   } finally {
     monitor.markDisconnectExpected();
@@ -391,6 +412,21 @@ function readFiniteBalance(
   return balance as number;
 }
 
+function readOptionalGameId(userInfo: Readonly<UserInfo>): number | undefined {
+  if (userInfo.gameid === undefined) {
+    return undefined;
+  }
+
+  assertFiniteNumber(userInfo.gameid as number, "gameid");
+  return userInfo.gameid as number;
+}
+
+function assertPositiveInteger(value: number, fieldName: string): void {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${fieldName} 必须是正整数`);
+  }
+}
+
 function outputStartupSummary(
   config: RtpCliConfig,
   output: (line: string) => void,
@@ -404,6 +440,7 @@ function outputStartupSummary(
   output(`times: ${config.spin.times}`);
   output(`autonums: ${config.spin.autonums}`);
   output(`requestTimeoutMs: ${config.requestTimeoutMs}`);
+  output(`progressInterval: ${config.progressInterval}`);
   if (config.overrides.length > 0) {
     output(`overrides: ${config.overrides.join(", ")}`);
   }
@@ -450,6 +487,14 @@ function outputSpinProgress(
       4,
     )}%`,
   );
+}
+
+function shouldOutputSpinProgress(
+  completed: number,
+  total: number,
+  progressInterval: number,
+): boolean {
+  return completed === total || completed % progressInterval === 0;
 }
 
 function outputFinalSummary(
