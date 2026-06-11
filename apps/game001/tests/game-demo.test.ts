@@ -21,7 +21,6 @@ const TARGET_SCENE = Object.freeze([
   Object.freeze([1, 1, 1, 1, 1]),
   Object.freeze([9, 0, 6, 0, 6]),
 ]);
-
 describe("game001 reel runtime", () => {
   it("keeps reels hidden until a live scene is applied", () => {
     const runtime = createGame001ReelRuntime({
@@ -88,6 +87,55 @@ describe("game001 reel runtime", () => {
     expect(runtime.reelSet.getVisibleScene()).toEqual(TARGET_SCENE);
   });
 
+  it("plays SC win keyframes when a visible SC is manually requested", () => {
+    const runtime = createGame001ReelRuntime({
+      rawGameConfig,
+      symbolAssets: createGame001Textures(),
+      initialScene: TARGET_SCENE,
+    });
+    const scSymbol = findVisibleSymbol(runtime, "SC");
+    const scLayer = scSymbol.getLayerSprites()[1];
+
+    expect(scLayer.keyframes).toHaveLength(5);
+    scSymbol.requestState("win");
+    expect(scLayer.sprite.texture).toBe(scLayer.keyframes[0]);
+
+    scSymbol.update(0.2);
+    expect(scLayer.sprite.texture).toBe(scLayer.keyframes[1]);
+  });
+
+  it("rotates RS layer 1 left while it scales during appear and win", () => {
+    const rsScene = Object.freeze([
+      ...TARGET_SCENE.slice(0, 4),
+      Object.freeze([0, 6, 0, 7, 0]),
+    ]);
+    const runtime = createGame001ReelRuntime({
+      rawGameConfig,
+      symbolAssets: createGame001Textures(),
+      initialScene: rsScene,
+    });
+    const rsSymbol = findVisibleSymbol(runtime, "RS");
+    const layerOne = rsSymbol.getLayerSprites()[1];
+
+    rsSymbol.requestState("appear");
+    rsSymbol.update(0.2);
+
+    expect(layerOne.sprite.scale.x).toBeGreaterThan(1);
+    expect(layerOne.sprite.rotation).toBeLessThan(0);
+
+    rsSymbol.update(1);
+    expect(layerOne.sprite.rotation).toBe(0);
+
+    rsSymbol.requestState("win");
+    rsSymbol.update(0.2);
+
+    expect(layerOne.sprite.scale.x).toBeGreaterThan(1);
+    expect(layerOne.sprite.rotation).toBeLessThan(0);
+
+    rsSymbol.update(1);
+    expect(layerOne.sprite.rotation).toBe(0);
+  });
+
   it("rejects scenes that are not 5 x 5 before starting animation", () => {
     const runtime = createGame001ReelRuntime({
       rawGameConfig,
@@ -143,23 +191,35 @@ function createGame001Textures(): SymbolAssetMap {
     ].map((symbol) => [
       symbol,
       specialLayerCounts[symbol]
-        ? createLayeredTextureSet(specialLayerCounts[symbol])
+        ? createLayeredTextureSet(specialLayerCounts[symbol], symbol === "SC")
         : createTextureSet(20, 20),
     ]),
   );
 }
 
-function createLayeredTextureSet(layerCount: number) {
+function createLayeredTextureSet(layerCount: number, withKeyframes = false) {
   return Object.freeze({
     normal: Object.freeze({
       kind: "layered",
       layers: Object.freeze(
-        Array.from({ length: layerCount }, (_unused, index) =>
-          Object.freeze({
+        Array.from({ length: layerCount }, (_unused, index) => {
+          const texture = createTestTexture(20, 20);
+          return Object.freeze({
             index,
-            texture: createTestTexture(20, 20),
-          }),
-        ),
+            texture,
+            ...(withKeyframes && index === 1
+              ? {
+                  keyframes: Object.freeze([
+                    texture,
+                    createTestTexture(20, 20),
+                    createTestTexture(20, 20),
+                    createTestTexture(20, 20),
+                    createTestTexture(20, 20),
+                  ]),
+                }
+              : {}),
+          });
+        }),
       ),
     }),
     states: Object.freeze({
@@ -174,7 +234,8 @@ function findVisibleSymbol(
 ): RenderSymbol {
   const visibleSymbol = runtime.reelSet.reels
     .flatMap((reel) => reel.getSlotSnapshots())
-    .find((slot) => slot.symbol?.symbol === symbol)?.symbol;
+    .find((slot) => slot.container.visible && slot.symbol?.symbol === symbol)
+    ?.symbol;
   if (!visibleSymbol) {
     throw new Error(`Expected visible symbol "${symbol}".`);
   }

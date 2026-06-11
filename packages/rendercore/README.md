@@ -68,14 +68,20 @@ const layered = {
     kind: "layered",
     layers: [
       { index: 0, texture: bottomTexture },
-      { index: 1, texture: topTexture }
+      {
+        index: 1,
+        texture: topTexture,
+        keyframes: [topTexture, topOpenTexture, topOpenedTexture]
+      }
     ]
   },
   states: { spinBlur, disabled }
 };
 ```
 
-layer index 必须从 `0` 开始连续，不能重复、缺层或为负数；已加载 `Texture` 的多层 symbol 会校验每层尺寸一致。`getTextureSet(symbol)` 返回规范化后的 source；`getAsset(symbol)` 只用于旧单图 symbol，遇到 layered symbol 会抛错，避免把 layer `0` 伪装成普通图。
+layer index 必须从 `0` 开始连续，不能重复、缺层或为负数；已加载 `Texture` 的多层 symbol 会校验每层尺寸一致。layer 可选 `keyframes` 表示同一 layer 的贴图序列；声明后必须非空，第一帧必须等于该 layer 的静态 `texture`，所有已加载帧尺寸必须一致。未声明 keyframes 的 layer 会规范化为空序列，但外部配置不能写 `keyframes: []`。
+
+`getTextureSet(symbol)` 返回规范化后的 source；`getAsset(symbol)` 只用于旧单图 symbol，遇到 layered symbol 会抛错，避免把 layer `0` 伪装成普通图。
 
 `states` 可以提供 `spinBlur`、`disabled` 等状态贴图。`spinBlur` / `disabled` 可以在状态机语义上继续等价到 `normal`，但默认静态 ani 会按 `requestedState` 选择状态贴图；因此 snapshot 仍可显示 `spinBlur -> normal`，画面使用 `spinBlur` 贴图。多层 symbol 进入状态贴图时，`RenderSymbol` 会隐藏普通 layers，并用单张 `stateSprite` 展示合成后的状态图；回到 `normal`、`appear`、`win` 后恢复普通 layers。
 
@@ -125,13 +131,14 @@ const resolver = createNamedSymbolAnimationResolver({
 
 内置 named animation：
 
-- `layerBounceScale`：参数 `layer`、`maxScale`、`offsetY`、`cycles`、`delaySeconds`。
-- `layerShineScale`：参数 `layer`、`maxScale`、`shineAlpha`、`shineWidthRatio`、`delaySeconds`、`durationRatio`。
+- `layerTextureSequence`：参数 `layer`、`frameDurationSeconds`、`delaySeconds`、`durationRatio`，按 layer 的 `keyframes` 切换贴图，结束后恢复静态 `texture`。
+- `layerBounceScale`：参数 `layer`、`maxScale`、`offsetY`、`cycles`、`delaySeconds`、`rotationDegrees`。`rotationDegrees` 为可选峰值旋转角度，负数表示逆时针/向左旋转，缩放归零时会还原到 `0`。
+- `layerShineScale`：参数 `layer`、`maxScale`、`shineAlpha`、`shineWidthRatio`、`delaySeconds`、`durationRatio`、`rotationDegrees`。`rotationDegrees` 与缩放脉冲同步，结束后还原到 `0`。
 - `layerStaggeredShineScale`：参数 `layers`、`maxScale`、`staggerSeconds`、`durationRatio`。
 - `singleSpriteAppear`：兼容单图 `appear`。
 - `singleSpriteWinShine`：兼容单图 `win`。
 
-未知动画名、未知参数、错误参数类型、非法范围或引用不存在的 layer 都会抛 `SymbolAnimationError`。
+`layerTextureSequence` 引用不存在的 layer、目标 layer 未声明至少两帧 keyframes、参数类型错误、`durationRatio` 超出 `(0, 1]` 或未知参数都会抛 `SymbolAnimationError`。其他 named animation 遇到未知动画名、未知参数、错误参数类型、非法范围或引用不存在的 layer 也会抛 `SymbolAnimationError`。
 
 ## Catalog
 
@@ -249,7 +256,7 @@ reelSet.spin(plan);
 
 ## 命令
 
-状态贴图生成脚本只在 Node 侧使用 `sharp`，不会进入浏览器运行时代码或发布 bundle。`assets/symbols/symbol-composites.json` 可声明多层资源；复合 symbol 会先按 layer 顺序合成完整图标，再从合成结果生成 `spinBlur` 和 `disabled`，manifest 的 `normal` 会写为 layered object。当前 viewer/reels 资源可用下面命令生成：
+状态贴图生成脚本只在 Node 侧使用 `sharp`，不会进入浏览器运行时代码或发布 bundle。`assets/symbols/symbol-composites.json` 可声明多层资源；旧字符串 layer 继续用文件名推导 index，对象 layer 使用显式 `index`、`texture` 和可选 `keyframes`。复合 symbol 会先按 layer 静态 `texture` 顺序合成完整图标，再从合成结果生成 `spinBlur` 和 `disabled`，manifest 的 `normal` 会写为 layered object 并保留对象 layer 的 keyframes。当前 viewer/reels 资源可用下面命令生成：
 
 ```bash
 pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --symbols S00,S0,S1,S5,S10,SC,RS,X2,X5,X10 --composites assets/symbols/symbol-composites.json

@@ -164,24 +164,63 @@ async function loadCompositeConfig(compositesPath, explicit) {
     if (!Array.isArray(symbolRecord.layers) || symbolRecord.layers.length === 0) {
       throw new Error(`Symbol "${symbol}" composite layers must be a non-empty array.`);
     }
-    const layers = symbolRecord.layers.map((layerPath) => {
-      if (typeof layerPath !== "string" || layerPath.length === 0) {
-        throw new Error(`Symbol "${symbol}" composite layer path must be a non-empty string.`);
-      }
-      const fileName = basename(layerPath);
-      const match = fileName.match(/^(.+)-(\d+)\.png$/u);
-      if (!match || match[1] !== symbol) {
-        throw new Error(`Symbol "${symbol}" composite layer file "${fileName}" must match ${symbol}-{index}.png.`);
-      }
-      return Object.freeze({
-        index: Number.parseInt(match[2], 10),
-        manifestPath: layerPath.startsWith("./") ? layerPath : `./${fileName}`,
-        filePath: resolve(baseDir, layerPath)
-      });
-    });
+    const layers = symbolRecord.layers.map((layer) => parseCompositeLayer(symbol, layer, baseDir));
     composites.set(symbol, Object.freeze(validateCompositeLayers(symbol, layers)));
   }
   return composites;
+}
+
+function parseCompositeLayer(symbol, layer, baseDir) {
+  if (typeof layer === "string") {
+    if (layer.length === 0) {
+      throw new Error(`Symbol "${symbol}" composite layer path must be a non-empty string.`);
+    }
+    const fileName = basename(layer);
+    const match = fileName.match(/^(.+)-(\d+)\.png$/u);
+    if (!match || match[1] !== symbol) {
+      throw new Error(`Symbol "${symbol}" composite layer file "${fileName}" must match ${symbol}-{index}.png.`);
+    }
+    return Object.freeze({
+      index: Number.parseInt(match[2], 10),
+      manifestPath: normalizeManifestPath(layer),
+      filePath: resolve(baseDir, layer)
+    });
+  }
+
+  const record = assertRecord(layer, `symbol "${symbol}" composite layer`);
+  if (!Number.isInteger(record.index) || record.index < 0) {
+    throw new Error(`Symbol "${symbol}" composite layer index must be a non-negative integer.`);
+  }
+  const texturePath = assertNonEmptyString(record.texture, `Symbol "${symbol}" composite layer texture`);
+  const manifestPath = normalizeManifestPath(texturePath);
+  const rawKeyframes = record.keyframes;
+  let keyframes = undefined;
+  let keyframeFilePaths = undefined;
+  if (rawKeyframes !== undefined) {
+    if (!Array.isArray(rawKeyframes) || rawKeyframes.length === 0) {
+      throw new Error(`Symbol "${symbol}" composite layer ${record.index} keyframes must be a non-empty array.`);
+    }
+    const keyframePaths = rawKeyframes.map((keyframe) =>
+      assertNonEmptyString(keyframe, `Symbol "${symbol}" composite layer ${record.index} keyframe`)
+    );
+    keyframes = Object.freeze(
+      keyframePaths.map((keyframePath) => normalizeManifestPath(keyframePath))
+    );
+    keyframeFilePaths = Object.freeze(keyframePaths.map((keyframePath) => resolve(baseDir, keyframePath)));
+    if (keyframes[0] !== manifestPath) {
+      throw new Error(
+        `Symbol "${symbol}" composite layer ${record.index} keyframes must start with the layer texture.`
+      );
+    }
+  }
+
+  return Object.freeze({
+    index: record.index,
+    manifestPath,
+    filePath: resolve(baseDir, texturePath),
+    keyframes,
+    keyframeFilePaths
+  });
 }
 
 function validateCompositeLayers(symbol, layers) {
@@ -214,6 +253,7 @@ async function createCompositeSymbolBuffer(symbol, layers) {
     if (metadata.width !== width || metadata.height !== height) {
       throw new Error(`Symbol "${symbol}" composite layers must have identical dimensions.`);
     }
+    await assertLayerKeyframeDimensions(symbol, layer, metadata.width, metadata.height);
     compositeInputs.push({
       input: await image.png().toBuffer()
     });
@@ -230,6 +270,20 @@ async function createCompositeSymbolBuffer(symbol, layers) {
     .composite(compositeInputs)
     .png()
     .toBuffer();
+}
+
+async function assertLayerKeyframeDimensions(symbol, layer, width, height) {
+  for (const keyframeFilePath of layer.keyframeFilePaths ?? []) {
+    const metadata = await sharp(keyframeFilePath).metadata();
+    if (!metadata.width || !metadata.height) {
+      throw new Error(`Symbol "${symbol}" layer ${layer.index} keyframe must have readable dimensions.`);
+    }
+    if (metadata.width !== width || metadata.height !== height) {
+      throw new Error(
+        `Symbol "${symbol}" layer ${layer.index} keyframe textures must match the layer texture dimensions.`
+      );
+    }
+  }
 }
 
 async function cleanupGeneratedFiles(outputDir) {
@@ -286,7 +340,7 @@ function createManifest(symbols, composites) {
             normal: composites.has(symbol)
               ? Object.freeze({
                   kind: "layered",
-                  layers: Object.freeze(composites.get(symbol).map((layer) => layer.manifestPath))
+                  layers: Object.freeze(composites.get(symbol).map((layer) => createManifestLayer(layer)))
                 })
               : `./${symbol}.png`,
             [SPIN_BLUR_STATE]: `./${symbol}.${SPIN_BLUR_STATE}.png`,
@@ -295,6 +349,17 @@ function createManifest(symbols, composites) {
         ])
       )
     )
+  });
+}
+
+function createManifestLayer(layer) {
+  if (!layer.keyframes) {
+    return layer.manifestPath;
+  }
+  return Object.freeze({
+    index: layer.index,
+    texture: layer.manifestPath,
+    keyframes: layer.keyframes
   });
 }
 
@@ -326,6 +391,17 @@ function readOptionValue(args, index) {
     throw new Error(`Argument "${args[index]}" requires a value.`);
   }
   return value;
+}
+
+function assertNonEmptyString(value, label) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${label} must be a non-empty string.`);
+  }
+  return value;
+}
+
+function normalizeManifestPath(value) {
+  return value.startsWith("./") ? value : `./${basename(value)}`;
 }
 
 function isNormalPngFile(fileName) {

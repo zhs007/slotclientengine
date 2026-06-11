@@ -24,9 +24,11 @@ finalYs = [1, 1, 4, 0, 27]
 - `CO.png`、`SX.png` 当前不在 paytable 中，是孤儿图片，不参与 reels 渲染。
 - 共享 state texture manifest 支持单图 normal string 和 layered normal object。
 - `SC`、`RS`、`X2`、`X5`、`X10` 在 reels 中按 layered normal 渲染普通态，`SC-0` 这类 layer 文件不会成为独立 paytable asset。
-- `SC` / `RS` 的 `appear` 与 symbolsviewer 一致：layer `0` 不动，layer `1` 弹动缩放，layer `2` 扫光缩放。
+- `SC` 的普通态 layer `1` 使用 `SC-1-0.png`，并通过 manifest keyframes 声明 `SC-1-0.png` 到 `SC-1-4.png`。
+- `SC` / `RS` 的 `appear` 与 symbolsviewer 一致：layer `0` 不动，layer `1` 弹动缩放，layer `2` 扫光缩放；其中 `RS` layer `1` 放大时向左旋转约 `20` 度，缩小时还原。
 - `X2` / `X5` / `X10` 的 `appear` 与 symbolsviewer 一致：layer `0` 不动，layer `1` 扫光缩放。
-- 特殊 symbol 的 `win` 使用 named animation profile 让上层做错峰扫光缩放，layer `0` 不动。
+- `SC.win` 使用 `layerTextureSequence` 播放 layer `1` 的 5 帧贴图序列；`RS/X2/X5/X10.win` 不播放贴图序列。
+- 特殊 symbol 的 `win` 使用 named animation profile 让上层做错峰扫光缩放，layer `0` 不动；其中 `RS` layer `1` 放大时向左旋转约 `20` 度，缩小时还原。
 - 每种 symbol 都可以通过 `symbolScales` 配置整体缩放；默认 `SC`、`RS`、`X2`、`X5`、`X10` 为 `1.5`。
 - `spinBlur` 使用从完整复合图标生成的合成状态贴图，不回退普通 layers。
 - cell 尺寸由非空、可渲染普通图在应用 `symbolScales` 后的最大宽高计算；多层 symbol 使用 layer 共同尺寸，小图居中显示。
@@ -60,3 +62,4 @@ pnpm --filter reelsviewer dev -- --host 0.0.0.0
 - 停止后非空可见 symbol 播放 `appear`。
 - `appear` 后回到 `normal`。
 - 最终 scene 与 GMI step0 scene0 一致。
+- 手动请求可见 `SC.win` 时，layer `1` 贴图会从 `SC-1-0` 推进到后续 keyframe。

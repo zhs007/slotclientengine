@@ -149,18 +149,21 @@ describe("RenderSymbol", () => {
   });
 
   it("resets all layered sprite transforms and masks", () => {
+    const staticTexture = createSizedTexture(24, 24);
+    const keyframeTexture = createSizedTexture(24, 24);
     const renderSymbol = new RenderSymbol({
       definition: { ...createDefinition(), symbol: "SC" },
       texture: {
         kind: "layered",
         layers: [
           { index: 0, texture: createSizedTexture(24, 24) },
-          { index: 1, texture: createSizedTexture(24, 24) }
+          { index: 1, texture: staticTexture, keyframes: [staticTexture, keyframeTexture] }
         ]
       },
       animationResolver: createDefaultSymbolAnimationResolver()
     });
     const [, topLayer] = renderSymbol.getLayerSprites();
+    topLayer.sprite.texture = keyframeTexture;
     topLayer.sprite.position.set(4, 5);
     topLayer.sprite.scale.set(2);
     topLayer.sprite.rotation = 0.4;
@@ -169,6 +172,8 @@ describe("RenderSymbol", () => {
 
     renderSymbol.reset();
 
+    expect(topLayer.keyframes).toEqual([staticTexture, keyframeTexture]);
+    expect(topLayer.sprite.texture).toBe(staticTexture);
     expect(topLayer.sprite.position.x).toBe(0);
     expect(topLayer.sprite.position.y).toBe(0);
     expect(topLayer.sprite.scale.x).toBe(1);

@@ -104,6 +104,7 @@ describe("createSymbolCatalog", () => {
   it("accepts layered normal texture sources without treating layer 0 as a legacy asset", () => {
     const bottom = createTestTexture(20, 24);
     const top = createTestTexture(20, 24);
+    const openFrame = createTestTexture(20, 24);
     const catalog = createSymbolCatalog({
       gameConfig: createGameConfig(game2Config),
       assets: {
@@ -112,7 +113,7 @@ describe("createSymbolCatalog", () => {
             kind: "layered",
             layers: [
               { index: 1, texture: top },
-              { index: 0, texture: bottom }
+              { index: 0, texture: bottom, keyframes: [bottom, openFrame] }
             ]
           },
           states: {
@@ -137,6 +138,7 @@ describe("createSymbolCatalog", () => {
     const renderSymbol = catalog.createRenderSymbol("SC");
     expect(renderSymbol.getLayerSprites().map((layer) => layer.index)).toEqual([0, 1]);
     expect(renderSymbol.getLayerSprites()[0].sprite.texture).toBe(bottom);
+    expect(renderSymbol.getLayerSprites()[0].keyframes).toEqual([bottom, openFrame]);
   });
 
   it("rejects malformed layered normal texture sources", () => {
@@ -187,6 +189,68 @@ describe("createSymbolCatalog", () => {
         }
       })
     ).toThrow(/identical dimensions/);
+
+    expect(() =>
+      createSymbolCatalog({
+        gameConfig: createGameConfig(game2Config),
+        assets: {
+          SC: {
+            normal: {
+              kind: "layered",
+              layers: [
+                {
+                  index: 0,
+                  texture: createTestTexture(20, 24),
+                  keyframes: []
+                }
+              ]
+            }
+          }
+        }
+      })
+    ).toThrow(/keyframes/);
+
+    expect(() => {
+      const texture = createTestTexture(20, 24);
+      return createSymbolCatalog({
+        gameConfig: createGameConfig(game2Config),
+        assets: {
+          SC: {
+            normal: {
+              kind: "layered",
+              layers: [
+                {
+                  index: 0,
+                  texture,
+                  keyframes: [createTestTexture(20, 24), texture]
+                }
+              ]
+            }
+          }
+        }
+      });
+    }).toThrow(/start with the layer texture/);
+
+    expect(() => {
+      const texture = createTestTexture(20, 24);
+      return createSymbolCatalog({
+        gameConfig: createGameConfig(game2Config),
+        assets: {
+          SC: {
+            normal: {
+              kind: "layered",
+              layers: [
+                {
+                  index: 0,
+                  texture,
+                  keyframes: [texture, createTestTexture(21, 24)]
+                }
+              ]
+            }
+          }
+        }
+      });
+    }).toThrow(/keyframe textures/);
   });
 
   it("requires configured state textures only for displayable symbols", () => {
@@ -285,6 +349,29 @@ describe("createSymbolCatalog", () => {
     });
 
     expect(() => catalog.createRenderSymbol("S00")).toThrow(SymbolAssetError);
+  });
+
+  it("does not create render symbols from unloaded layer keyframe URL assets", () => {
+    const texture = createTestTexture(20, 24);
+    const catalog = createSymbolCatalog({
+      gameConfig: createGameConfig(game2Config),
+      assets: {
+        SC: {
+          normal: {
+            kind: "layered",
+            layers: [
+              {
+                index: 0,
+                texture,
+                keyframes: [texture, "/assets/SC-0-1.png"]
+              }
+            ]
+          }
+        }
+      }
+    });
+
+    expect(() => catalog.createRenderSymbol("SC")).toThrow(/keyframe texture is a URL string/);
   });
 
   it("rejects malformed LogicGameConfig-like objects at the catalog boundary", () => {

@@ -115,6 +115,7 @@ export interface RenderSymbolOptions {
 export interface SymbolLayerTextureSource<TTexture = Texture | string> {
   readonly index: number;
   readonly texture: TTexture;
+  readonly keyframes?: readonly TTexture[];
 }
 
 export interface SingleSymbolTextureSource<TTexture = Texture | string> {
@@ -134,6 +135,7 @@ export type SymbolNormalTextureSource<TTexture = Texture | string> =
 export interface SymbolVisualLayer {
   readonly index: number;
   readonly texture: Texture;
+  readonly keyframes: readonly Texture[];
   readonly sprite: Sprite;
 }
 

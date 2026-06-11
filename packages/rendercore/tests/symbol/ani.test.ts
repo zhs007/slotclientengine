@@ -44,6 +44,7 @@ function createContext(
       {
         index: 0,
         texture: Texture.WHITE,
+        keyframes: [],
         sprite
       }
     ],

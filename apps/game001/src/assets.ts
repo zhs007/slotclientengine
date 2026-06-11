@@ -20,7 +20,13 @@ type ParsedManifestNormal = string | ParsedLayeredManifestNormal;
 
 interface ParsedLayeredManifestNormal {
   readonly kind: "layered";
-  readonly layers: readonly string[];
+  readonly layers: readonly ParsedManifestLayer[];
+}
+
+interface ParsedManifestLayer {
+  readonly index: number;
+  readonly texture: string;
+  readonly keyframes: readonly string[];
 }
 
 type ParsedManifestSymbol = {
@@ -28,7 +34,7 @@ type ParsedManifestSymbol = {
 } & Record<string, string | ParsedManifestNormal>;
 
 interface ParsedCompositeSymbol {
-  readonly layers: readonly string[];
+  readonly layers: readonly ParsedManifestLayer[];
 }
 
 export function createGame001SymbolAssetMapFromModules(options: {
@@ -265,7 +271,7 @@ function validateCompositeManifest(
         `Symbol "${symbol}" manifest normal must be layered to match composites.`,
       );
     }
-    if (!sameStringList(compositeSymbol.layers, manifestNormal.layers)) {
+    if (!sameManifestLayers(compositeSymbol.layers, manifestNormal.layers)) {
       throw new Error(
         `Symbol "${symbol}" composite layers must match state manifest layered normal.`,
       );
@@ -287,9 +293,9 @@ function parseCompositeSymbol(
     );
   }
   const layers = record.layers.map((layer) =>
-    assertString(layer, `symbol "${symbol}" composite layer`),
+    parseManifestLayer(symbol, layer, "composite"),
   );
-  assertConsecutiveLayerPaths(symbol, layers, "composite");
+  assertConsecutiveManifestLayers(symbol, layers, "composite");
   return Object.freeze({
     layers: Object.freeze(layers),
   });
@@ -319,10 +325,10 @@ function createNormalAssetFromManifest(
     return asset;
   }
 
-  const layers = normal.layers.map((layerPath) =>
-    createLayerAssetFromManifestPath(
+  const layers = normal.layers.map((layer) =>
+    createLayerAssetFromManifestLayer(
       symbol,
-      layerPath,
+      layer,
       sources.assetsByFileName,
     ),
   );
@@ -332,27 +338,32 @@ function createNormalAssetFromManifest(
   });
 }
 
-function createLayerAssetFromManifestPath(
+function createLayerAssetFromManifestLayer(
   symbol: string,
-  layerPath: string,
+  layer: ParsedManifestLayer,
   assetsByFileName: Record<string, string>,
 ): SymbolLayerTextureSource<string> {
-  const fileName = getFileNameFromManifestPath(layerPath);
-  const match = fileName.match(/^(.+)-(\d+)\.png$/u);
-  if (!match || match[1] !== symbol) {
-    throw new Error(
-      `Symbol "${symbol}" manifest layer file "${fileName}" must match ${symbol}-{index}.png.`,
-    );
-  }
+  const fileName = getFileNameFromManifestPath(layer.texture);
   const texture = assetsByFileName[fileName];
   if (!texture) {
     throw new Error(
       `Symbol "${symbol}" is missing layered texture file "${fileName}".`,
     );
   }
+  const keyframes = layer.keyframes.map((keyframePath) => {
+    const keyframeFileName = getFileNameFromManifestPath(keyframePath);
+    const keyframe = assetsByFileName[keyframeFileName];
+    if (!keyframe) {
+      throw new Error(
+        `Symbol "${symbol}" is missing layer ${layer.index} keyframe file "${keyframeFileName}".`,
+      );
+    }
+    return keyframe;
+  });
   return Object.freeze({
-    index: Number.parseInt(match[2], 10),
+    index: layer.index,
     texture,
+    ...(keyframes.length > 0 ? { keyframes: Object.freeze(keyframes) } : {}),
   });
 }
 
@@ -374,34 +385,97 @@ function parseManifestNormal(
       `Symbol "${symbol}" manifest layered normal must include layers.`,
     );
   }
-  const layers = record.layers.map((layerPath) =>
-    assertString(layerPath, `symbol "${symbol}" manifest layer texture`),
+  const layers = record.layers.map((layer) =>
+    parseManifestLayer(symbol, layer, "manifest"),
   );
-  assertConsecutiveLayerPaths(symbol, layers, "manifest");
+  assertConsecutiveManifestLayers(symbol, layers, "manifest");
   return Object.freeze({
     kind: "layered",
     layers: Object.freeze(layers),
   });
 }
 
-function assertConsecutiveLayerPaths(
+function parseManifestLayer(
   symbol: string,
-  layers: readonly string[],
+  layer: unknown,
   label: string,
-): void {
-  const indexes = layers.map((layerPath) => {
-    const fileName = getFileNameFromManifestPath(layerPath);
+): ParsedManifestLayer {
+  if (typeof layer === "string") {
+    const fileName = getFileNameFromManifestPath(layer);
     const match = fileName.match(/^(.+)-(\d+)\.png$/u);
     if (!match || match[1] !== symbol) {
       throw new Error(
         `Symbol "${symbol}" ${label} layer file "${fileName}" must match ${symbol}-{index}.png.`,
       );
     }
-    return Number.parseInt(match[2], 10);
+    return Object.freeze({
+      index: Number.parseInt(match[2], 10),
+      texture: layer,
+      keyframes: Object.freeze([]),
+    });
+  }
+
+  const record = assertRecord(layer, `symbol "${symbol}" ${label} layer`);
+  const index = record.index;
+  if (!Number.isInteger(index) || (index as number) < 0) {
+    throw new Error(
+      `Symbol "${symbol}" ${label} layer index must be a non-negative integer.`,
+    );
+  }
+  const layerIndex = index as number;
+  const texture = assertString(
+    record.texture,
+    `symbol "${symbol}" ${label} layer ${layerIndex} texture`,
+  );
+  const keyframes =
+    record.keyframes === undefined
+      ? []
+      : parseManifestLayerKeyframes(
+          symbol,
+          label,
+          layerIndex,
+          texture,
+          record.keyframes,
+        );
+
+  return Object.freeze({
+    index: layerIndex,
+    texture,
+    keyframes: Object.freeze(keyframes),
   });
-  const sorted = [...indexes].sort((left, right) => left - right);
-  for (const [expectedIndex, index] of sorted.entries()) {
-    if (index !== expectedIndex) {
+}
+
+function parseManifestLayerKeyframes(
+  symbol: string,
+  label: string,
+  index: number,
+  texture: string,
+  keyframes: unknown,
+): readonly string[] {
+  if (!Array.isArray(keyframes) || keyframes.length === 0) {
+    throw new Error(
+      `Symbol "${symbol}" ${label} layer ${index} keyframes must be a non-empty array.`,
+    );
+  }
+  const parsed = keyframes.map((keyframe) =>
+    assertString(keyframe, `symbol "${symbol}" ${label} layer ${index} keyframe`),
+  );
+  if (parsed[0] !== texture) {
+    throw new Error(
+      `Symbol "${symbol}" ${label} layer ${index} keyframes must start with the layer texture.`,
+    );
+  }
+  return Object.freeze(parsed);
+}
+
+function assertConsecutiveManifestLayers(
+  symbol: string,
+  layers: readonly ParsedManifestLayer[],
+  label: string,
+): void {
+  const sorted = [...layers].sort((left, right) => left.index - right.index);
+  for (const [expectedIndex, layer] of sorted.entries()) {
+    if (layer.index !== expectedIndex) {
       throw new Error(
         `Symbol "${symbol}" ${label} layered normal must use consecutive indexes from 0.`,
       );
@@ -446,12 +520,20 @@ async function loadNormalTextureSource(
       });
     }
     const layers = await Promise.all(
-      normal.layers.map(async (layer) =>
-        Object.freeze({
+      normal.layers.map(async (layer) => {
+        const keyframes = await Promise.all(
+          (layer.keyframes ?? []).map((keyframe) =>
+            loadAssetTexture(keyframe),
+          ),
+        );
+        return Object.freeze({
           index: layer.index,
           texture: await loadAssetTexture(layer.texture),
-        }),
-      ),
+          ...(keyframes.length > 0
+            ? { keyframes: Object.freeze(keyframes) }
+            : {}),
+        });
+      }),
     );
     return Object.freeze({
       kind: "layered",
@@ -515,7 +597,25 @@ function getFileNameFromManifestPath(manifestPath: string): string {
 }
 
 function isLayerFileStem(stem: string): boolean {
-  return /-\d+$/u.test(stem);
+  return /-\d+(?:-|$)/u.test(stem);
+}
+
+function sameManifestLayers(
+  left: readonly ParsedManifestLayer[],
+  right: readonly ParsedManifestLayer[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((layer, index) => {
+      const other = right[index];
+      return (
+        other !== undefined &&
+        layer.index === other.index &&
+        layer.texture === other.texture &&
+        sameStringList(layer.keyframes, other.keyframes)
+      );
+    })
+  );
 }
 
 function sameStringList(

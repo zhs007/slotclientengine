@@ -37,6 +37,7 @@ const createContext = (requestedState: string, resolvedState = requestedState): 
       {
         index: 0,
         texture: Texture.WHITE,
+        keyframes: [],
         sprite
       }
     ],
