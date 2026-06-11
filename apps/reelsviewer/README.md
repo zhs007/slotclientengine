@@ -6,6 +6,7 @@
 
 - 游戏配置：`assets/gamecfg/game2.json`
 - symbol 图片和状态贴图：`assets/symbols`
+- 复合 symbol 配置：`assets/symbols/symbol-composites.json`
 - 状态贴图 manifest：`assets/symbols/symbol-state-textures.manifest.json`
 - GMI：直接引用 `packages/logiccore/tests/fixtures/gamemoduleinfo-basic.json`
 
@@ -21,7 +22,10 @@ finalYs = [1, 1, 4, 0, 27]
 - paytable 中缺少普通图的 symbol 按空 cell 处理。
 - 有普通图且参与 reels 渲染的 symbol 必须有 `spinBlur` 状态贴图。
 - `CO.png`、`SX.png` 当前不在 paytable 中，是孤儿图片，不参与 reels 渲染。
-- cell 尺寸由非空、可渲染普通图的最大宽高计算，小图居中显示。
+- 共享 state texture manifest 支持单图 normal string 和 layered normal object。
+- `SC`、`RS`、`X2`、`X5`、`X10` 在 reels 中按 layered normal 渲染普通态，`SC-0` 这类 layer 文件不会成为独立 paytable asset。
+- `spinBlur` 使用从完整复合图标生成的合成状态贴图，不回退普通 layers。
+- cell 尺寸由非空、可渲染普通图的最大宽高计算；多层 symbol 使用 layer 共同尺寸，小图居中显示。
 
 默认 viewer 配置在 `src/reels-config.ts`：
 

@@ -214,12 +214,43 @@ export function resolveSymbolTextureForState(
 }
 
 export function resetBaseDisplay(context: SymbolAnimationContext): void {
-  context.sprite.texture = resolveSymbolTextureForState(context);
-  context.sprite.alpha = 1;
-  context.sprite.rotation = 0;
-  context.sprite.scale.set(1);
+  for (const layer of context.layers) {
+    layer.sprite.texture = layer.texture;
+    layer.sprite.alpha = 1;
+    layer.sprite.rotation = 0;
+    layer.sprite.position.set(0);
+    layer.sprite.scale.set(1);
+    layer.sprite.visible = true;
+    layer.sprite.mask = null;
+  }
+  context.baseLayer.visible = true;
+  context.baseLayer.alpha = 1;
+  context.baseLayer.rotation = 0;
+  context.baseLayer.position.set(0);
+  context.baseLayer.scale.set(1);
+  context.stateSprite.visible = false;
+  context.stateSprite.texture = context.texture;
+  context.stateSprite.alpha = 1;
+  context.stateSprite.rotation = 0;
+  context.stateSprite.position.set(0);
+  context.stateSprite.scale.set(1);
+  context.stateSprite.mask = null;
+
+  const stateTexture = context.stateTextures[context.requestedState];
+  if (stateTexture) {
+    context.sprite.texture = stateTexture;
+    context.baseLayer.visible = false;
+    context.stateSprite.texture = stateTexture;
+    context.stateSprite.visible = true;
+  } else if (context.requiredStateTextures.includes(context.requestedState)) {
+    throw new SymbolAssetError(
+      `Symbol "${context.symbol}" is missing required texture for state "${context.requestedState}".`
+    );
+  }
+
   context.overlayLayer.alpha = 1;
   context.overlayLayer.rotation = 0;
+  context.overlayLayer.position.set(0);
   context.overlayLayer.scale.set(1);
   for (const child of context.overlayLayer.children) {
     child.mask = null;

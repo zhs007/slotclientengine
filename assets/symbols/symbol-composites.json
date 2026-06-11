@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "symbols": {
+    "SC": {
+      "layers": ["./SC-0.png", "./SC-1.png", "./SC-2.png"]
+    },
+    "RS": {
+      "layers": ["./RS-0.png", "./RS-1.png", "./RS-2.png"]
+    },
+    "X2": {
+      "layers": ["./X2-0.png", "./X2-1.png"]
+    },
+    "X5": {
+      "layers": ["./X5-0.png", "./X5-1.png"]
+    },
+    "X10": {
+      "layers": ["./X10-0.png", "./X10-1.png"]
+    }
+  }
+}

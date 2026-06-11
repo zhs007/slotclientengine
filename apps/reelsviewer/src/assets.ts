@@ -1,5 +1,22 @@
 import { Assets, type Texture } from "pixi.js";
-import type { SymbolAssetInput, SymbolAssetMap } from "@slotclientengine/rendercore";
+import type {
+  SymbolAssetInput,
+  SymbolAssetMap,
+  SymbolLayerTextureSource,
+  SymbolNormalTextureSource,
+  SymbolTextureSet
+} from "@slotclientengine/rendercore";
+
+type ParsedManifestNormal = string | ParsedLayeredManifestNormal;
+
+interface ParsedLayeredManifestNormal {
+  readonly kind: "layered";
+  readonly layers: readonly string[];
+}
+
+type ParsedManifestSymbol = {
+  readonly normal: ParsedManifestNormal;
+} & Record<string, string | ParsedManifestNormal>;
 
 export function createStatefulReelAssetMapFromModules(options: {
   readonly modules: Record<string, string>;
@@ -8,47 +25,45 @@ export function createStatefulReelAssetMapFromModules(options: {
 }): SymbolAssetMap {
   const requiredStates = Object.freeze([...options.requiredStates]);
   const manifest = parseStateTextureManifest(options.manifest, requiredStates);
-  const { normalAssets, stateAssets } = splitSymbolPngModules(options.modules, manifest.states);
+  const { normalAssets, stateAssets, assetsByFileName } = splitSymbolPngModules(
+    options.modules,
+    manifest.states
+  );
+  const assets: Record<string, SymbolAssetInput> = {};
 
   for (const [symbol, manifestSymbol] of Object.entries(manifest.symbols)) {
-    if (!normalAssets[symbol]) {
-      throw new Error(`Symbol state texture manifest references missing normal texture "${symbol}".`);
-    }
-
-    const normalFileName = `${symbol}.png`;
-    if (getFileNameFromManifestPath(manifestSymbol.normal) !== normalFileName) {
-      throw new Error(`Symbol "${symbol}" manifest normal texture must be "./${normalFileName}".`);
-    }
-
+    const normal = createNormalAssetFromManifest(symbol, manifestSymbol.normal, {
+      normalAssets,
+      assetsByFileName
+    });
     for (const state of requiredStates) {
       const stateFileName = `${symbol}.${state}.png`;
-      if (getFileNameFromManifestPath(manifestSymbol[state]) !== stateFileName) {
+      const manifestStatePath = assertString(manifestSymbol[state], `symbol "${symbol}" ${state} texture`);
+      if (getFileNameFromManifestPath(manifestStatePath) !== stateFileName) {
         throw new Error(`Symbol "${symbol}" manifest texture for state "${state}" must be "./${stateFileName}".`);
       }
       if (!stateAssets[symbol]?.[state]) {
         throw new Error(`Symbol "${symbol}" is missing required state texture file "${stateFileName}".`);
       }
     }
+    assets[symbol] = Object.freeze({
+      normal,
+      states: Object.freeze(
+        Object.fromEntries(requiredStates.map((state) => [state, stateAssets[symbol]?.[state] as string]))
+      )
+    });
   }
 
-  return Object.freeze(
-    Object.fromEntries(
-      Object.entries(normalAssets).map(([symbol, normal]) => {
-        const manifestSymbol = manifest.symbols[symbol];
-        const asset: SymbolAssetInput = Object.freeze({
-          normal,
-          states: Object.freeze(
-            manifestSymbol
-              ? Object.fromEntries(
-                  requiredStates.map((state) => [state, stateAssets[symbol]?.[state] as string])
-                )
-              : {}
-          )
-        });
-        return [symbol, asset];
-      })
-    )
-  );
+  for (const [symbol, normal] of Object.entries(normalAssets)) {
+    if (!manifest.symbols[symbol]) {
+      assets[symbol] = Object.freeze({
+        normal,
+        states: Object.freeze({})
+      });
+    }
+  }
+
+  return Object.freeze(assets);
 }
 
 export async function loadReelSymbolTextures(assetUrls: SymbolAssetMap): Promise<SymbolAssetMap> {
@@ -68,9 +83,11 @@ function splitSymbolPngModules(
 ): {
   readonly normalAssets: Record<string, string>;
   readonly stateAssets: Record<string, Record<string, string>>;
+  readonly assetsByFileName: Record<string, string>;
 } {
   const normalAssets: Record<string, string> = {};
   const stateAssets: Record<string, Record<string, string>> = {};
+  const assetsByFileName: Record<string, string> = {};
   const allowedStateSet = new Set(allowedStates);
 
   for (const [modulePath, url] of Object.entries(modules)) {
@@ -78,8 +95,13 @@ function splitSymbolPngModules(
     if (!filename.endsWith(".png")) {
       continue;
     }
+    assetsByFileName[filename] = url;
 
     const stem = filename.slice(0, -".png".length);
+    if (isLayerFileStem(stem)) {
+      continue;
+    }
+
     const parts = stem.split(".");
     if (parts.length === 1) {
       normalAssets[parts[0]] = url;
@@ -101,7 +123,8 @@ function splitSymbolPngModules(
 
   return {
     normalAssets,
-    stateAssets
+    stateAssets,
+    assetsByFileName
   };
 }
 
@@ -111,7 +134,7 @@ function parseStateTextureManifest(
 ): {
   readonly version: 1;
   readonly states: readonly string[];
-  readonly symbols: Record<string, Record<string, string>>;
+  readonly symbols: Record<string, ParsedManifestSymbol>;
 } {
   const manifestRecord = assertRecord(manifest, "symbol state texture manifest");
   if (manifestRecord.version !== 1) {
@@ -129,11 +152,11 @@ function parseStateTextureManifest(
   }
 
   const rawSymbols = assertRecord(manifestRecord.symbols, "symbol state texture manifest symbols");
-  const symbols: Record<string, Record<string, string>> = {};
+  const symbols: Record<string, ParsedManifestSymbol> = {};
   for (const [symbol, rawSymbol] of Object.entries(rawSymbols)) {
     const rawSymbolRecord = assertRecord(rawSymbol, `symbol state texture manifest symbol "${symbol}"`);
-    const parsedSymbol: Record<string, string> = {
-      normal: assertString(rawSymbolRecord.normal, `symbol "${symbol}" normal texture`)
+    const parsedSymbol: ParsedManifestSymbol = {
+      normal: parseManifestNormal(rawSymbolRecord.normal, symbol)
     };
     for (const state of requiredStates) {
       parsedSymbol[state] = assertString(rawSymbolRecord[state], `symbol "${symbol}" ${state} texture`);
@@ -146,6 +169,93 @@ function parseStateTextureManifest(
     states,
     symbols
   };
+}
+
+function createNormalAssetFromManifest(
+  symbol: string,
+  normal: ParsedManifestNormal,
+  sources: {
+    readonly normalAssets: Record<string, string>;
+    readonly assetsByFileName: Record<string, string>;
+  }
+): string | SymbolNormalTextureSource<string> {
+  if (typeof normal === "string") {
+    const normalFileName = `${symbol}.png`;
+    if (getFileNameFromManifestPath(normal) !== normalFileName) {
+      throw new Error(`Symbol "${symbol}" manifest normal texture must be "./${normalFileName}".`);
+    }
+    const asset = sources.normalAssets[symbol];
+    if (!asset) {
+      throw new Error(`Symbol state texture manifest references missing normal texture "${symbol}".`);
+    }
+    return asset;
+  }
+
+  const layers = normal.layers.map((layerPath) =>
+    createLayerAssetFromManifestPath(symbol, layerPath, sources.assetsByFileName)
+  );
+  return Object.freeze({
+    kind: "layered",
+    layers: Object.freeze(layers)
+  });
+}
+
+function createLayerAssetFromManifestPath(
+  symbol: string,
+  layerPath: string,
+  assetsByFileName: Record<string, string>
+): SymbolLayerTextureSource<string> {
+  const fileName = getFileNameFromManifestPath(layerPath);
+  const match = fileName.match(/^(.+)-(\d+)\.png$/u);
+  if (!match || match[1] !== symbol) {
+    throw new Error(`Symbol "${symbol}" manifest layer file "${fileName}" must match ${symbol}-{index}.png.`);
+  }
+  const texture = assetsByFileName[fileName];
+  if (!texture) {
+    throw new Error(`Symbol "${symbol}" is missing layered texture file "${fileName}".`);
+  }
+  return Object.freeze({
+    index: Number.parseInt(match[2], 10),
+    texture
+  });
+}
+
+function parseManifestNormal(normal: unknown, symbol: string): ParsedManifestNormal {
+  if (typeof normal === "string" && normal.length > 0) {
+    return normal;
+  }
+  const record = assertRecord(normal, `symbol "${symbol}" normal texture`);
+  if (record.kind !== "layered") {
+    throw new Error(`Symbol "${symbol}" manifest normal texture kind must be "layered".`);
+  }
+  if (!Array.isArray(record.layers) || record.layers.length === 0) {
+    throw new Error(`Symbol "${symbol}" manifest layered normal must include layers.`);
+  }
+  const layers = record.layers.map((layerPath) =>
+    assertString(layerPath, `symbol "${symbol}" manifest layer texture`)
+  );
+  assertConsecutiveLayerPaths(symbol, layers);
+  return Object.freeze({
+    kind: "layered",
+    layers: Object.freeze(layers)
+  });
+}
+
+function assertConsecutiveLayerPaths(symbol: string, layers: readonly string[]): void {
+  const indexes = layers.map((layerPath) => {
+    const fileName = getFileNameFromManifestPath(layerPath);
+    const match = fileName.match(/^(.+)-(\d+)\.png$/u);
+    if (!match || match[1] !== symbol) {
+      throw new Error(`Symbol "${symbol}" manifest layer file "${fileName}" must match ${symbol}-{index}.png.`);
+    }
+    return Number.parseInt(match[2], 10);
+  });
+  const sorted = [...indexes].sort((left, right) => left - right);
+  for (const [expectedIndex, index] of sorted.entries()) {
+    if (index !== expectedIndex) {
+      throw new Error(`Symbol "${symbol}" manifest layered normal must use consecutive indexes from 0.`);
+    }
+  }
 }
 
 async function loadSymbolAssetInput(asset: SymbolAssetInput): Promise<SymbolAssetInput> {
@@ -161,7 +271,7 @@ async function loadSymbolAssetInput(asset: SymbolAssetInput): Promise<SymbolAsse
       ] as const)
     );
     return Object.freeze({
-      normal: await loadAssetTexture(asset.normal),
+      normal: await loadNormalTextureSource(asset.normal),
       states: Object.freeze(Object.fromEntries(stateEntries))
     });
   }
@@ -169,15 +279,49 @@ async function loadSymbolAssetInput(asset: SymbolAssetInput): Promise<SymbolAsse
   return asset;
 }
 
+async function loadNormalTextureSource(
+  normal: SymbolTextureSet["normal"]
+): Promise<Texture | SymbolNormalTextureSource<Texture>> {
+  if (isSymbolNormalTextureSource(normal)) {
+    if (normal.kind === "single") {
+      return Object.freeze({
+        kind: "single",
+        texture: await loadAssetTexture(normal.texture)
+      });
+    }
+    const layers = await Promise.all(
+      normal.layers.map(async (layer) =>
+        Object.freeze({
+          index: layer.index,
+          texture: await loadAssetTexture(layer.texture)
+        })
+      )
+    );
+    return Object.freeze({
+      kind: "layered",
+      layers: Object.freeze(layers)
+    });
+  }
+  return loadAssetTexture(normal);
+}
+
 async function loadAssetTexture(asset: Texture | string): Promise<Texture> {
   return typeof asset === "string" ? Assets.load<Texture>(asset) : asset;
 }
 
-function isSymbolTextureSet(asset: SymbolAssetInput): asset is {
-  readonly normal: Texture | string;
-  readonly states?: Readonly<Partial<Record<string, Texture | string>>>;
-} {
+function isSymbolTextureSet(asset: SymbolAssetInput): asset is SymbolTextureSet {
   return typeof asset === "object" && asset !== null && "normal" in asset;
+}
+
+function isSymbolNormalTextureSource(
+  normal: SymbolTextureSet["normal"]
+): normal is SymbolNormalTextureSource<Texture | string> {
+  return (
+    typeof normal === "object" &&
+    normal !== null &&
+    "kind" in normal &&
+    (normal.kind === "single" || normal.kind === "layered")
+  );
 }
 
 function assertRecord(value: unknown, label: string): Record<string, unknown> {
@@ -208,4 +352,8 @@ function getFileNameFromManifestPath(manifestPath: string): string {
     throw new Error(`Cannot extract file name from manifest path "${manifestPath}".`);
   }
   return filename;
+}
+
+function isLayerFileStem(stem: string): boolean {
+  return /-\d+$/u.test(stem);
 }

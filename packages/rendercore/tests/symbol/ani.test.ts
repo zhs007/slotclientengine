@@ -18,8 +18,11 @@ function createContext(
 ): SymbolAnimationContext {
   const root = new Container();
   const sprite = new Sprite(Texture.WHITE);
+  const baseLayer = new Container();
+  const stateSprite = new Sprite(Texture.WHITE);
   const overlayLayer = new Container();
-  root.addChild(sprite, overlayLayer);
+  baseLayer.addChild(sprite);
+  root.addChild(baseLayer, stateSprite, overlayLayer);
   return {
     code: 1,
     symbol: "S00",
@@ -35,7 +38,16 @@ function createContext(
     stateTextures: options.stateTextures ?? {},
     requiredStateTextures: options.requiredStateTextures ?? [],
     root,
+    baseLayer,
     sprite,
+    layers: [
+      {
+        index: 0,
+        texture: Texture.WHITE,
+        sprite
+      }
+    ],
+    stateSprite,
     overlayLayer
   };
 }
@@ -97,6 +109,9 @@ describe("default viewer ani factories", () => {
     ani.reset();
 
     expect(context.sprite.texture).toBe(spinBlurTexture);
+    expect(context.baseLayer.visible).toBe(false);
+    expect(context.stateSprite.visible).toBe(true);
+    expect(context.stateSprite.texture).toBe(spinBlurTexture);
   });
 
   it("scales appear to about 1.5 and resets at completion", () => {

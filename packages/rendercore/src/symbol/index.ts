@@ -3,6 +3,7 @@ export * from "./errors.js";
 export * from "./state-machine.js";
 export * from "./ani.js";
 export * from "./animation-resolver.js";
+export * from "./named-animations.js";
 export * from "./sequence.js";
 export * from "./catalog.js";
 export * from "./render-symbol.js";

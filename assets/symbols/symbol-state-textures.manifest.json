@@ -41,27 +41,59 @@
       "disabled": "./S10.disabled.png"
     },
     "SC": {
-      "normal": "./SC.png",
+      "normal": {
+        "kind": "layered",
+        "layers": [
+          "./SC-0.png",
+          "./SC-1.png",
+          "./SC-2.png"
+        ]
+      },
       "spinBlur": "./SC.spinBlur.png",
       "disabled": "./SC.disabled.png"
     },
     "RS": {
-      "normal": "./RS.png",
+      "normal": {
+        "kind": "layered",
+        "layers": [
+          "./RS-0.png",
+          "./RS-1.png",
+          "./RS-2.png"
+        ]
+      },
       "spinBlur": "./RS.spinBlur.png",
       "disabled": "./RS.disabled.png"
     },
     "X2": {
-      "normal": "./X2.png",
+      "normal": {
+        "kind": "layered",
+        "layers": [
+          "./X2-0.png",
+          "./X2-1.png"
+        ]
+      },
       "spinBlur": "./X2.spinBlur.png",
       "disabled": "./X2.disabled.png"
     },
     "X5": {
-      "normal": "./X5.png",
+      "normal": {
+        "kind": "layered",
+        "layers": [
+          "./X5-0.png",
+          "./X5-1.png"
+        ]
+      },
       "spinBlur": "./X5.spinBlur.png",
       "disabled": "./X5.disabled.png"
     },
     "X10": {
-      "normal": "./X10.png",
+      "normal": {
+        "kind": "layered",
+        "layers": [
+          "./X10-0.png",
+          "./X10-1.png"
+        ]
+      },
       "spinBlur": "./X10.spinBlur.png",
       "disabled": "./X10.disabled.png"
     }

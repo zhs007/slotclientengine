@@ -11,6 +11,8 @@ import type {
   SymbolAnimationResolver,
   SymbolAssetMap,
   SymbolDefinition,
+  SymbolLayerTextureSource,
+  SymbolNormalTextureSource,
   SymbolStateId,
   SymbolTextureSet
 } from "../symbol/index.js";
@@ -23,7 +25,10 @@ import type {
   ReelSymbolRegistryValidation
 } from "./types.js";
 
-type NormalizedTextureSet = SymbolTextureSet<Texture>;
+interface NormalizedTextureSet {
+  readonly normal: SymbolNormalTextureSource<Texture>;
+  readonly states?: Readonly<Partial<Record<SymbolStateId, Texture>>>;
+}
 
 export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
   readonly #entriesByCode: ReadonlyMap<number, ReelSymbolRegistryEntry>;
@@ -197,14 +202,80 @@ function normalizeTextureSet(symbol: string, asset: SymbolAssetMap[string]): Nor
 
   if (isSymbolTextureSet(asset)) {
     return Object.freeze({
-      normal: assertLoadedTexture(symbol, "normal", asset.normal),
+      normal: normalizeNormalTextureSource(symbol, asset.normal),
       states: normalizeTextureStates(symbol, asset.states ?? {})
     });
   }
 
   return Object.freeze({
-    normal: assertLoadedTexture(symbol, "normal", asset),
+    normal: normalizeNormalTextureSource(symbol, asset),
     states: Object.freeze({})
+  });
+}
+
+function normalizeNormalTextureSource(
+  symbol: string,
+  normal: Texture | string | SymbolNormalTextureSource<Texture | string>
+): SymbolNormalTextureSource<Texture> {
+  if (isSymbolNormalTextureSource(normal)) {
+    if (normal.kind === "single") {
+      return Object.freeze({
+        kind: "single",
+        texture: assertLoadedTexture(symbol, "normal", normal.texture)
+      });
+    }
+    return normalizeLayeredTextureSource(symbol, normal.layers);
+  }
+
+  return Object.freeze({
+    kind: "single",
+    texture: assertLoadedTexture(symbol, "normal", normal)
+  });
+}
+
+function normalizeLayeredTextureSource(
+  symbol: string,
+  layers: readonly SymbolLayerTextureSource<Texture | string>[]
+): SymbolNormalTextureSource<Texture> {
+  if (!Array.isArray(layers) || layers.length === 0) {
+    throw new ReelAssetError(`Symbol "${symbol}" layered normal texture must include layers.`);
+  }
+
+  const seen = new Set<number>();
+  let width: number | null = null;
+  let height: number | null = null;
+  const normalizedLayers = [...layers]
+    .sort((left, right) => left.index - right.index)
+    .map((layer, expectedIndex) => {
+      if (!Number.isInteger(layer.index) || layer.index < 0) {
+        throw new ReelAssetError(`Symbol "${symbol}" layer index must be a non-negative integer.`);
+      }
+      if (seen.has(layer.index)) {
+        throw new ReelAssetError(`Symbol "${symbol}" declares duplicate layer index ${layer.index}.`);
+      }
+      seen.add(layer.index);
+      if (layer.index !== expectedIndex) {
+        throw new ReelAssetError(
+          `Symbol "${symbol}" layered normal texture must use consecutive indexes from 0.`
+        );
+      }
+      const texture = assertLoadedTexture(symbol, `layer ${layer.index}`, layer.texture);
+      const layerWidth = getTextureWidth(texture);
+      const layerHeight = getTextureHeight(texture);
+      width ??= layerWidth;
+      height ??= layerHeight;
+      if (width !== layerWidth || height !== layerHeight) {
+        throw new ReelAssetError(`Symbol "${symbol}" layered textures must have identical dimensions.`);
+      }
+      return Object.freeze({
+        index: layer.index,
+        texture
+      });
+    });
+
+  return Object.freeze({
+    kind: "layered",
+    layers: Object.freeze(normalizedLayers)
   });
 }
 
@@ -257,8 +328,9 @@ function calculateCellSize(textureSets: readonly NormalizedTextureSet[]): ReelCe
   let width = 0;
   let height = 0;
   for (const textureSet of textureSets) {
-    width = Math.max(width, getTextureWidth(textureSet.normal));
-    height = Math.max(height, getTextureHeight(textureSet.normal));
+    const normalSize = getNormalTextureSize(textureSet.normal);
+    width = Math.max(width, normalSize.width);
+    height = Math.max(height, normalSize.height);
   }
 
   if (width <= 0 || height <= 0) {
@@ -266,6 +338,14 @@ function calculateCellSize(textureSets: readonly NormalizedTextureSet[]): ReelCe
   }
 
   return Object.freeze({ width, height });
+}
+
+function getNormalTextureSize(normal: SymbolNormalTextureSource<Texture>): ReelCellSize {
+  const texture = normal.kind === "single" ? normal.texture : normal.layers[0].texture;
+  return Object.freeze({
+    width: getTextureWidth(texture),
+    height: getTextureHeight(texture)
+  });
 }
 
 function getTextureWidth(texture: Texture): number {
@@ -278,6 +358,17 @@ function getTextureHeight(texture: Texture): number {
 
 function isSymbolTextureSet(asset: SymbolAssetMap[string]): asset is SymbolTextureSet<Texture | string> {
   return typeof asset === "object" && asset !== null && "normal" in asset;
+}
+
+function isSymbolNormalTextureSource(
+  normal: Texture | string | SymbolNormalTextureSource<Texture | string>
+): normal is SymbolNormalTextureSource<Texture | string> {
+  return (
+    typeof normal === "object" &&
+    normal !== null &&
+    "kind" in normal &&
+    (normal.kind === "single" || normal.kind === "layered")
+  );
 }
 
 function normalizeRequiredStateTextures(

@@ -20,6 +20,19 @@ const createDefinition = () =>
 
 const createDistinctTexture = () => new Texture({ source: Texture.WHITE.source });
 
+const createSizedTexture = (width: number, height: number) => {
+  const texture = createDistinctTexture();
+  Object.defineProperty(texture, "width", {
+    configurable: true,
+    value: width
+  });
+  Object.defineProperty(texture, "height", {
+    configurable: true,
+    value: height
+  });
+  return texture;
+};
+
 describe("RenderSymbol", () => {
   it("keeps paytable data and reuses one main sprite texture across states", () => {
     const renderSymbol = new RenderSymbol({
@@ -95,6 +108,73 @@ describe("RenderSymbol", () => {
 
     renderSymbol.requestState("normal");
     expect(renderSymbol.sprite.texture).toBe(Texture.WHITE);
+  });
+
+  it("creates ordered layered sprites and swaps to stateSprite for generated states", () => {
+    const bottom = createSizedTexture(24, 24);
+    const top = createSizedTexture(24, 24);
+    const spinBlurTexture = createSizedTexture(24, 24);
+    const renderSymbol = new RenderSymbol({
+      definition: { ...createDefinition(), symbol: "SC" },
+      texture: {
+        kind: "layered",
+        layers: [
+          { index: 0, texture: bottom },
+          { index: 1, texture: top }
+        ]
+      },
+      stateTextures: {
+        spinBlur: spinBlurTexture
+      },
+      animationResolver: createDefaultSymbolAnimationResolver()
+    });
+
+    expect(renderSymbol.texture).toBe(bottom);
+    expect(renderSymbol.getBaseLayer().children).toEqual([
+      renderSymbol.getLayerSprites()[0].sprite,
+      renderSymbol.getLayerSprites()[1].sprite
+    ]);
+    expect(renderSymbol.getLayerSprites().map((layer) => layer.texture)).toEqual([bottom, top]);
+
+    renderSymbol.requestState("spinBlur");
+    expect(renderSymbol.getBaseLayer().visible).toBe(false);
+    expect(renderSymbol.getStateSprite().visible).toBe(true);
+    expect(renderSymbol.getStateSprite().texture).toBe(spinBlurTexture);
+
+    renderSymbol.requestState("normal");
+    expect(renderSymbol.getBaseLayer().visible).toBe(true);
+    expect(renderSymbol.getStateSprite().visible).toBe(false);
+    expect(renderSymbol.getLayerSprites()[0].sprite.texture).toBe(bottom);
+    expect(renderSymbol.getLayerSprites()[1].sprite.texture).toBe(top);
+  });
+
+  it("resets all layered sprite transforms and masks", () => {
+    const renderSymbol = new RenderSymbol({
+      definition: { ...createDefinition(), symbol: "SC" },
+      texture: {
+        kind: "layered",
+        layers: [
+          { index: 0, texture: createSizedTexture(24, 24) },
+          { index: 1, texture: createSizedTexture(24, 24) }
+        ]
+      },
+      animationResolver: createDefaultSymbolAnimationResolver()
+    });
+    const [, topLayer] = renderSymbol.getLayerSprites();
+    topLayer.sprite.position.set(4, 5);
+    topLayer.sprite.scale.set(2);
+    topLayer.sprite.rotation = 0.4;
+    topLayer.sprite.alpha = 0.2;
+    topLayer.sprite.mask = renderSymbol.overlayLayer;
+
+    renderSymbol.reset();
+
+    expect(topLayer.sprite.position.x).toBe(0);
+    expect(topLayer.sprite.position.y).toBe(0);
+    expect(topLayer.sprite.scale.x).toBe(1);
+    expect(topLayer.sprite.rotation).toBe(0);
+    expect(topLayer.sprite.alpha).toBe(1);
+    expect(topLayer.sprite.mask ?? null).toBeNull();
   });
 
   it("restores the configured default state texture after once animations complete", () => {
