@@ -17,7 +17,7 @@ viewer 只展示 paytable 与普通图片资源的交集。当前可展示 symbo
 
 `SC`、`RS`、`X2`、`X5`、`X10` 使用拆层资源作为普通态来源：
 
-- `SC`: `SC-0.png`、`SC-1.png`、`SC-2.png`
+- `SC`: `SC-0.png`、`SC-1-0.png`、`SC-2.png`；其中 layer `1` 还有 `SC-1-0.png` 到 `SC-1-4.png` 五帧 keyframes
 - `RS`: `RS-0.png`、`RS-1.png`、`RS-2.png`
 - `X2`: `X2-0.png`、`X2-1.png`
 - `X5`: `X5-0.png`、`X5-1.png`
@@ -35,10 +35,15 @@ pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --s
 
 ## 特殊动画
 
-`SC` / `RS`：
+`SC`：
 
 - `appear`: layer `0` 不动，layer `1` 上下弹动并缩放到约 `1.2`，layer `2` 缩放到约 `1.2` 并扫光。
-- `win`: layer `0` 不动，layer `1`、`2` 错峰扫光并缩放到约 `1.2`。
+- `win`: layer `1` 播放 `SC-1-0.png` 到 `SC-1-4.png` 的贴图序列，同时 layer `1`、`2` 错峰扫光并缩放到约 `1.2`。
+
+`RS`：
+
+- `appear`: layer `0` 不动，layer `1` 上下弹动并缩放到约 `1.2`，同时向左旋转到约 `20` 度并在缩小时还原；layer `2` 缩放到约 `1.2` 并扫光。
+- `win`: layer `0` 不动；layer `1` 扫光缩放到约 `1.2`，同时向左旋转到约 `20` 度并在缩小时还原；layer `2` 延迟 `0.08s` 扫光缩放到约 `1.2`。
 
 `X2` / `X5` / `X10`：
 
@@ -74,9 +79,10 @@ PC 横屏建议使用 `1280x720` 或更大视口确认：
 - `SC`、`RS`、`X2`、`X5`、`X10` 的普通态来自多层图，不是旧单图。
 - 默认序列自动播放。
 - `normal` 显示普通图。
-- `SC` / `RS` 的 `appear` 中 layer `0` 不动，layer `1` 弹动缩放，layer `2` 扫光缩放。
+- `SC` / `RS` 的 `appear` 中 layer `0` 不动，layer `1` 弹动缩放，layer `2` 扫光缩放；其中 `RS` layer `1` 会在放大时向左旋转约 `20` 度并还原。
 - `X2` / `X5` / `X10` 的 `appear` 中 layer `0` 不动，layer `1` 扫光缩放。
-- `win` 中特殊 symbol 只让上层按各自 layer 错峰扫光缩放，layer `0` 不动。
+- `SC.win` 中 layer `1` 播放 `SC-1-0.png` 到 `SC-1-4.png`，`RS/X2/X5/X10.win` 不播放贴图序列。
+- `win` 中特殊 symbol 上层按各自 layer 错峰扫光缩放，layer `0` 不动；其中 `RS` layer `1` 会在放大时向左旋转约 `20` 度并还原。
 - `spinBlur` 显示纵向模糊图，不是普通图。
 - `disabled` 显示灰色图，不是普通图。
 - 移除、调整、增加状态后，播放顺序按当前序列执行。

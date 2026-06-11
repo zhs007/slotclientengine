@@ -13,7 +13,7 @@
 - `assets/symbols/symbol-composites.json`
 - `assets/symbols/symbol-state-textures.manifest.json`
 
-`symbol-composites.json` 是任务 23 复合图标配置契约。运行时会校验 `SC`、`RS`、`X2`、`X5`、`X10` 在该文件中的 layers 与 `symbol-state-textures.manifest.json` 的 layered normal 完全一致。
+`symbol-composites.json` 是复合图标配置契约。运行时会校验 `SC`、`RS`、`X2`、`X5`、`X10` 在该文件中的 layers 与 `symbol-state-textures.manifest.json` 的 layered normal 完全一致。`SC` 的普通态 layer `1` 使用 `SC-1-0.png`，并声明 `SC-1-0.png` 到 `SC-1-4.png` 五帧 keyframes；`SC.spinBlur.png` 基于 `SC-1-0.png` 这一静态普通态合成。
 
 ## 布局
 
@@ -79,6 +79,10 @@ pnpm --filter game001 typecheck
 pnpm --filter game001 build
 ```
 
+## Symbol 动画
+
+`SC`、`RS`、`X2`、`X5`、`X10` 的 profile 位于 `src/symbol-animation-config.ts`。`SC.win` 绑定 `layerTextureSequence`，手动请求可见 `SC` 的 `win` 状态时，layer `1` 会播放 `SC-1-0.png` 到 `SC-1-4.png`。`RS.appear` 与 `RS.win` 会让 layer `1` 在放大时向左旋转约 `20` 度，并在缩小时还原；本 demo 不在没有中奖线坐标契约的情况下推断哪些 SC 应自动进入 `win`。
+
 如果依赖安装失败，可先设置代理：
 
 ```bash
@@ -90,7 +94,7 @@ pnpm install
 
 - 显式提供空 env、非法 URL 或非正数：页面进入 `ERROR` 状态，Spin 禁用。
 - `VITE_GAME001_SERVER_URL` 使用 `http(s)`：明确失败，不进入 replay。
-- `symbol-composites.json` 与 manifest layered normal 不一致：资源加载失败。
+- `symbol-composites.json` 与 manifest layered normal 或 SC keyframes 不一致：资源加载失败。
 - server 返回的 GMI 无法被 `createGameLogicFromGmi()` 解析：不启动动画。
 - 主 scene 不是 `5 x 5`：不启动动画。
 - `gameConfig.getStopYCoordinates()` 无法反查停轴：不启动动画。

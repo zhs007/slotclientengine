@@ -40,18 +40,39 @@ describe("game001 assets", () => {
     ]);
     expect(Object.keys(assets)).not.toContain("SC-0");
     expect(Object.keys(assets)).not.toContain("RS-0");
+    expect(Object.keys(assets)).not.toContain("SC-1-0");
     expect(Object.keys(assets)).not.toContain("X2-0");
     expect(assets.SC).toMatchObject({
       normal: {
         kind: "layered",
         layers: [
           { index: 0, texture: "/assets/SC-0.png" },
-          { index: 1, texture: "/assets/SC-1.png" },
+          {
+            index: 1,
+            texture: "/assets/SC-1-0.png",
+            keyframes: [
+              "/assets/SC-1-0.png",
+              "/assets/SC-1-1.png",
+              "/assets/SC-1-2.png",
+              "/assets/SC-1-3.png",
+              "/assets/SC-1-4.png",
+            ],
+          },
           { index: 2, texture: "/assets/SC-2.png" },
         ],
       },
       states: {
         spinBlur: "/assets/SC.spinBlur.png",
+      },
+    });
+    expect(assets.RS).toMatchObject({
+      normal: {
+        kind: "layered",
+        layers: [
+          { index: 0, texture: "/assets/RS-0.png" },
+          { index: 1, texture: "/assets/RS-1.png" },
+          { index: 2, texture: "/assets/RS-2.png" },
+        ],
       },
     });
   });
@@ -82,6 +103,22 @@ describe("game001 assets", () => {
         requiredStates: GAME001_REQUIRED_STATE_TEXTURES,
       }),
     ).toThrow(/S00.spinBlur/);
+  });
+
+  it("fails when an SC keyframe module is missing", () => {
+    const modules = createModules(
+      ["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10"],
+      [],
+    );
+    delete modules["../../../assets/symbols/SC-1-3.png"];
+
+    expect(() =>
+      createGame001SymbolAssetMapFromModules({
+        modules,
+        stateTextureManifest,
+        compositeManifest,
+      }),
+    ).toThrow(/SC-1-3/);
   });
 
   it("rejects state files that the manifest does not declare", () => {
@@ -150,6 +187,30 @@ describe("game001 assets", () => {
         },
       }),
     ).toThrow(/must match state manifest/);
+
+    expect(() =>
+      createGame001SymbolAssetMapFromModules({
+        modules: createModules(["SC", "RS", "X2", "X5", "X10"], []),
+        stateTextureManifest,
+        compositeManifest: {
+          version: 1,
+          symbols: {
+            ...compositeManifest.symbols,
+            SC: {
+              layers: [
+                "./SC-0.png",
+                {
+                  index: 1,
+                  texture: "./SC-1-0.png",
+                  keyframes: ["./SC-1-0.png", "./SC-1-2.png"],
+                },
+                "./SC-2.png",
+              ],
+            },
+          },
+        },
+      }),
+    ).toThrow(/must match state manifest/);
   });
 
   it("loads string, single, layered, and already-loaded texture assets", async () => {
@@ -166,7 +227,13 @@ describe("game001 assets", () => {
       C: {
         normal: {
           kind: "layered",
-          layers: [{ index: 0, texture: "/assets/C-0.png" }],
+          layers: [
+            {
+              index: 0,
+              texture: "/assets/C-0.png",
+              keyframes: ["/assets/C-0.png", "/assets/C-0-1.png"],
+            },
+          ],
         },
         states: {},
       },
@@ -179,7 +246,10 @@ describe("game001 assets", () => {
       states: { spinBlur: loaded },
     });
     expect(textures.C).toMatchObject({
-      normal: { kind: "layered", layers: [{ index: 0, texture: loaded }] },
+      normal: {
+        kind: "layered",
+        layers: [{ index: 0, texture: loaded, keyframes: [loaded, loaded] }],
+      },
     });
     expect(textures.D).toBe(existing);
   });
@@ -313,14 +383,17 @@ function createModules(
         `../../../assets/symbols/${symbol}.png`,
         `/assets/${symbol}.png`,
       ] as const;
-      const layers = Array.from(
-        { length: compositeLayerCounts[symbol] ?? 0 },
-        (_unused, index) =>
-          [
-            `../../../assets/symbols/${symbol}-${index}.png`,
-            `/assets/${symbol}-${index}.png`,
-          ] as const,
-      );
+      const layers =
+        symbol === "SC"
+          ? createScLayerModules()
+          : Array.from(
+              { length: compositeLayerCounts[symbol] ?? 0 },
+              (_unused, index) =>
+                [
+                  `../../../assets/symbols/${symbol}-${index}.png`,
+                  `/assets/${symbol}-${index}.png`,
+                ] as const,
+            );
       if (orphanSymbols.includes(symbol)) {
         return [normal];
       }
@@ -336,6 +409,18 @@ function createModules(
   );
 }
 
+function createScLayerModules() {
+  return [
+    ["../../../assets/symbols/SC-0.png", "/assets/SC-0.png"] as const,
+    ["../../../assets/symbols/SC-1-0.png", "/assets/SC-1-0.png"] as const,
+    ["../../../assets/symbols/SC-1-1.png", "/assets/SC-1-1.png"] as const,
+    ["../../../assets/symbols/SC-1-2.png", "/assets/SC-1-2.png"] as const,
+    ["../../../assets/symbols/SC-1-3.png", "/assets/SC-1-3.png"] as const,
+    ["../../../assets/symbols/SC-1-4.png", "/assets/SC-1-4.png"] as const,
+    ["../../../assets/symbols/SC-2.png", "/assets/SC-2.png"] as const,
+  ];
+}
+
 function createCompositeModules() {
   return createModules(["SC", "RS", "X2", "X5", "X10"], []);
 }
@@ -344,11 +429,32 @@ function layeredSymbol(symbol: string, layerCount: number) {
   return {
     normal: {
       kind: "layered",
-      layers: Array.from(
-        { length: layerCount },
-        (_unused, index) => `./${symbol}-${index}.png`,
-      ),
+      layers:
+        symbol === "SC"
+          ? scManifestLayers()
+          : Array.from(
+              { length: layerCount },
+              (_unused, index) => `./${symbol}-${index}.png`,
+            ),
     },
     spinBlur: `./${symbol}.spinBlur.png`,
   };
+}
+
+function scManifestLayers() {
+  return [
+    "./SC-0.png",
+    {
+      index: 1,
+      texture: "./SC-1-0.png",
+      keyframes: [
+        "./SC-1-0.png",
+        "./SC-1-1.png",
+        "./SC-1-2.png",
+        "./SC-1-3.png",
+        "./SC-1-4.png",
+      ],
+    },
+    "./SC-2.png",
+  ];
 }

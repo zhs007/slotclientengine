@@ -19,12 +19,23 @@ describe("reelsviewer assets", () => {
 
     expect(Object.keys(assets)).toEqual(["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10", "CO", "SX"]);
     expect(Object.keys(assets)).not.toContain("SC-0");
+    expect(Object.keys(assets)).not.toContain("SC-1-0");
     expect(assets.SC).toMatchObject({
       normal: {
         kind: "layered",
         layers: [
           { index: 0, texture: "/assets/SC-0.png" },
-          { index: 1, texture: "/assets/SC-1.png" },
+          {
+            index: 1,
+            texture: "/assets/SC-1-0.png",
+            keyframes: [
+              "/assets/SC-1-0.png",
+              "/assets/SC-1-1.png",
+              "/assets/SC-1-2.png",
+              "/assets/SC-1-3.png",
+              "/assets/SC-1-4.png"
+            ]
+          },
           { index: 2, texture: "/assets/SC-2.png" }
         ]
       }
@@ -32,6 +43,16 @@ describe("reelsviewer assets", () => {
     expect(assets.SC).toMatchObject({
       states: {
         spinBlur: "/assets/SC.spinBlur.png"
+      }
+    });
+    expect(assets.RS).toMatchObject({
+      normal: {
+        kind: "layered",
+        layers: [
+          { index: 0, texture: "/assets/RS-0.png" },
+          { index: 1, texture: "/assets/RS-1.png" },
+          { index: 2, texture: "/assets/RS-2.png" }
+        ]
       }
     });
   });
@@ -80,6 +101,19 @@ describe("reelsviewer assets", () => {
       })
     ).toThrow(/unknown state "blurred"/);
   });
+
+  it("fails when a manifest keyframe file is missing", () => {
+    const modules = createModules(["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10"], []);
+    delete modules["../../../assets/symbols/SC-1-3.png"];
+
+    expect(() =>
+      createStatefulReelAssetMapFromModules({
+        modules,
+        manifest: stateTextureManifest,
+        requiredStates: REELS_VIEWER_REQUIRED_STATE_TEXTURES
+      })
+    ).toThrow(/SC-1-3/);
+  });
 });
 
 function createModules(symbols: readonly string[], orphanSymbols: readonly string[]) {
@@ -94,10 +128,13 @@ function createModules(symbols: readonly string[], orphanSymbols: readonly strin
   return Object.fromEntries(
     [...symbols, ...orphanSymbols].flatMap((symbol) => {
       const normal = [`../../../assets/symbols/${symbol}.png`, `/assets/${symbol}.png`] as const;
-      const layers = Array.from({ length: compositeLayerCounts[symbol] ?? 0 }, (_unused, index) => [
-        `../../../assets/symbols/${symbol}-${index}.png`,
-        `/assets/${symbol}-${index}.png`
-      ] as const);
+      const layers =
+        symbol === "SC"
+          ? createScLayerModules()
+          : Array.from({ length: compositeLayerCounts[symbol] ?? 0 }, (_unused, index) => [
+              `../../../assets/symbols/${symbol}-${index}.png`,
+              `/assets/${symbol}-${index}.png`
+            ] as const);
       if (orphanSymbols.includes(symbol)) {
         return [normal];
       }
@@ -111,4 +148,16 @@ function createModules(symbols: readonly string[], orphanSymbols: readonly strin
       ];
     })
   );
+}
+
+function createScLayerModules() {
+  return [
+    ["../../../assets/symbols/SC-0.png", "/assets/SC-0.png"] as const,
+    ["../../../assets/symbols/SC-1-0.png", "/assets/SC-1-0.png"] as const,
+    ["../../../assets/symbols/SC-1-1.png", "/assets/SC-1-1.png"] as const,
+    ["../../../assets/symbols/SC-1-2.png", "/assets/SC-1-2.png"] as const,
+    ["../../../assets/symbols/SC-1-3.png", "/assets/SC-1-3.png"] as const,
+    ["../../../assets/symbols/SC-1-4.png", "/assets/SC-1-4.png"] as const,
+    ["../../../assets/symbols/SC-2.png", "/assets/SC-2.png"] as const
+  ];
 }

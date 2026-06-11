@@ -281,9 +281,11 @@ function normalizeLayeredTextureSource(
       if (width !== layerWidth || height !== layerHeight) {
         throw new ReelAssetError(`Symbol "${symbol}" layered textures must have identical dimensions.`);
       }
+      const keyframes = normalizeLayerKeyframes(symbol, layer, texture);
       return Object.freeze({
         index: layer.index,
-        texture
+        texture,
+        keyframes
       });
     });
 
@@ -291,6 +293,34 @@ function normalizeLayeredTextureSource(
     kind: "layered",
     layers: Object.freeze(normalizedLayers)
   });
+}
+
+function normalizeLayerKeyframes(
+  symbol: string,
+  layer: SymbolLayerTextureSource<Texture | string>,
+  texture: Texture
+): readonly Texture[] {
+  if (layer.keyframes === undefined) {
+    return Object.freeze([]);
+  }
+  if (!Array.isArray(layer.keyframes) || layer.keyframes.length === 0) {
+    throw new ReelAssetError(`Symbol "${symbol}" layer ${layer.index} keyframes must be a non-empty array.`);
+  }
+  const width = getTextureWidth(texture);
+  const height = getTextureHeight(texture);
+  const keyframes = layer.keyframes.map((keyframe, keyframeIndex) => {
+    const loadedKeyframe = assertLoadedTexture(symbol, `layer ${layer.index} keyframe ${keyframeIndex}`, keyframe);
+    if (getTextureWidth(loadedKeyframe) !== width || getTextureHeight(loadedKeyframe) !== height) {
+      throw new ReelAssetError(
+        `Symbol "${symbol}" layer ${layer.index} keyframe textures must match the layer texture dimensions.`
+      );
+    }
+    return loadedKeyframe;
+  });
+  if (keyframes[0] !== texture) {
+    throw new ReelAssetError(`Symbol "${symbol}" layer ${layer.index} keyframes must start with the layer texture.`);
+  }
+  return Object.freeze(keyframes);
 }
 
 function normalizeTextureStates(

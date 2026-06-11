@@ -207,9 +207,12 @@ function normalizeRenderSymbolNormalSource(
                 "Layered symbol normal texture must use consecutive indexes from 0."
               );
             }
+            const layerTexture = assertTexture(layer.texture, `layer ${layer.index}`);
+            const keyframes = normalizeLayerKeyframes(layer.index, layerTexture, layer.keyframes ?? []);
             return Object.freeze({
               index: layer.index,
-              texture: assertTexture(layer.texture, `layer ${layer.index}`)
+              texture: layerTexture,
+              keyframes
             });
           })
       )
@@ -225,7 +228,7 @@ function normalizeRenderSymbolNormalSource(
 function createVisualLayers(normalSource: SymbolNormalTextureSource<Texture>): SymbolVisualLayer[] {
   const layerSources =
     normalSource.kind === "single"
-      ? [Object.freeze({ index: 0, texture: normalSource.texture })]
+      ? [Object.freeze({ index: 0, texture: normalSource.texture, keyframes: Object.freeze([]) })]
       : normalSource.layers;
 
   return layerSources.map((layer) => {
@@ -234,9 +237,36 @@ function createVisualLayers(normalSource: SymbolNormalTextureSource<Texture>): S
     return Object.freeze({
       index: layer.index,
       texture: layer.texture,
+      keyframes: layer.keyframes ?? Object.freeze([]),
       sprite
     });
   });
+}
+
+function normalizeLayerKeyframes(
+  index: number,
+  texture: Texture,
+  keyframes: readonly Texture[]
+): readonly Texture[] {
+  if (keyframes.length === 0) {
+    return Object.freeze([]);
+  }
+  if (keyframes[0] !== texture) {
+    throw new SymbolAnimationError(`Symbol layer ${index} keyframes must start with the layer texture.`);
+  }
+  const width = getTextureWidth(texture);
+  const height = getTextureHeight(texture);
+  return Object.freeze(
+    keyframes.map((keyframe, keyframeIndex) => {
+      const loadedKeyframe = assertTexture(keyframe, `layer ${index} keyframe ${keyframeIndex}`);
+      if (getTextureWidth(loadedKeyframe) !== width || getTextureHeight(loadedKeyframe) !== height) {
+        throw new SymbolAnimationError(
+          `Symbol layer ${index} keyframe textures must match the layer texture dimensions.`
+        );
+      }
+      return loadedKeyframe;
+    })
+  );
 }
 
 function isNormalSource(
@@ -255,4 +285,12 @@ function assertTexture(texture: Texture, label: string): Texture {
     throw new SymbolAnimationError(`Symbol ${label} texture must exist.`);
   }
   return texture;
+}
+
+function getTextureWidth(texture: Texture): number {
+  return Math.max(0, texture.width || texture.source?.width || texture.orig?.width || 0);
+}
+
+function getTextureHeight(texture: Texture): number {
+  return Math.max(0, texture.height || texture.source?.height || texture.orig?.height || 0);
 }

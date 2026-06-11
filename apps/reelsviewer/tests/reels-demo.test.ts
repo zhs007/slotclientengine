@@ -68,6 +68,7 @@ describe("reelsviewer demo", () => {
     expect(baseLayer.sprite.position.y).toBe(0);
     expect(bounceLayer.sprite.scale.x).toBeGreaterThan(1);
     expect(bounceLayer.sprite.position.y).not.toBe(0);
+    expect(bounceLayer.sprite.rotation).toBe(0);
     expect(shineLayer.sprite.scale.x).toBeGreaterThan(1);
 
     specialSymbol.update(1);
@@ -79,6 +80,52 @@ describe("reelsviewer demo", () => {
     expect(baseLayer.sprite.position.x).toBe(0);
     expect(baseLayer.sprite.position.y).toBe(0);
     expect(bounceLayer.sprite.scale.x).toBeGreaterThan(1);
+  });
+
+  it("plays SC win keyframes when a visible SC is manually requested", () => {
+    const demo = createReelsDemo({
+      rawGameConfig,
+      symbolAssets: createViewerTextures()
+    });
+    const scSymbol = findVisibleSymbol(demo, "SC");
+    const scLayer = scSymbol.getLayerSprites()[1];
+
+    expect(scLayer.keyframes).toHaveLength(5);
+    scSymbol.requestState("win");
+    expect(scLayer.sprite.texture).toBe(scLayer.keyframes[0]);
+
+    scSymbol.update(0.2);
+    expect(scLayer.sprite.texture).toBe(scLayer.keyframes[1]);
+  });
+
+  it("keeps RS win profile free of texture sequence keyframes", () => {
+    const demo = createReelsDemo({
+      rawGameConfig,
+      symbolAssets: createViewerTextures()
+    });
+    demo.reelSet.resetToFinalYs([1, 1, 4, 0, 1]);
+    const specialSymbol = findVisibleSymbol(demo, "RS");
+    const layerOne = specialSymbol.getLayerSprites()[1];
+
+    expect(layerOne.keyframes).toHaveLength(0);
+    specialSymbol.requestState("appear");
+    specialSymbol.update(0.2);
+
+    expect(layerOne.sprite.scale.x).toBeGreaterThan(1);
+    expect(layerOne.sprite.rotation).toBeLessThan(0);
+
+    specialSymbol.update(1);
+    expect(layerOne.sprite.rotation).toBe(0);
+
+    specialSymbol.requestState("win");
+    specialSymbol.update(0.2);
+
+    expect(layerOne.sprite.texture).toBe(layerOne.texture);
+    expect(layerOne.sprite.scale.x).toBeGreaterThan(1);
+    expect(layerOne.sprite.rotation).toBeLessThan(0);
+
+    specialSymbol.update(1);
+    expect(layerOne.sprite.rotation).toBe(0);
   });
 
   it("uses configured symbol scales for both visual scale and reel cell size", () => {
@@ -109,23 +156,37 @@ function createViewerTextures(): SymbolAssetMap {
     ["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10", "CO", "SX"].map(
       (symbol) => [
         symbol,
-        specialLayerCounts[symbol] ? createLayeredTextureSet(specialLayerCounts[symbol]) : createTextureSet(20, 20)
+        specialLayerCounts[symbol]
+          ? createLayeredTextureSet(specialLayerCounts[symbol], symbol === "SC")
+          : createTextureSet(20, 20)
       ]
     )
   );
 }
 
-function createLayeredTextureSet(layerCount: number) {
+function createLayeredTextureSet(layerCount: number, withKeyframes = false) {
   return Object.freeze({
     normal: Object.freeze({
       kind: "layered",
       layers: Object.freeze(
-        Array.from({ length: layerCount }, (_unused, index) =>
-          Object.freeze({
+        Array.from({ length: layerCount }, (_unused, index) => {
+          const texture = createTestTexture(20, 20);
+          return Object.freeze({
             index,
-            texture: createTestTexture(20, 20)
-          })
-        )
+            texture,
+            ...(withKeyframes && index === 1
+              ? {
+                  keyframes: Object.freeze([
+                    texture,
+                    createTestTexture(20, 20),
+                    createTestTexture(20, 20),
+                    createTestTexture(20, 20),
+                    createTestTexture(20, 20)
+                  ])
+                }
+              : {})
+          });
+        })
       )
     }),
     states: Object.freeze({
@@ -137,7 +198,7 @@ function createLayeredTextureSet(layerCount: number) {
 function findVisibleSymbol(demo: ReturnType<typeof createReelsDemo>, symbol: string): RenderSymbol {
   const visibleSymbol = demo.reelSet.reels
     .flatMap((reel) => reel.getSlotSnapshots())
-    .find((slot) => slot.symbol?.symbol === symbol)?.symbol;
+    .find((slot) => slot.container.visible && slot.symbol?.symbol === symbol)?.symbol;
   if (!visibleSymbol) {
     throw new Error(`Expected visible symbol "${symbol}".`);
   }

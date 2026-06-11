@@ -245,9 +245,10 @@ function normalizeLayeredTextureSource(
         `Symbol "${symbol}" layered normal texture must use consecutive indexes from 0.`
       );
     }
-    if (layer.texture === undefined || layer.texture === null) {
+    if (layer.texture === undefined || layer.texture === null || layer.texture === "") {
       throw new SymbolAssetError(`Symbol "${symbol}" layer ${layer.index} texture must exist.`);
     }
+    const keyframes = normalizeLayerKeyframes(symbol, layer);
     if (typeof layer.texture !== "string") {
       const layerWidth = getTextureWidth(layer.texture);
       const layerHeight = getTextureHeight(layer.texture);
@@ -261,10 +262,22 @@ function normalizeLayeredTextureSource(
       if (width !== layerWidth || height !== layerHeight) {
         throw new SymbolAssetError(`Symbol "${symbol}" layered textures must have identical dimensions.`);
       }
+      for (const keyframe of keyframes) {
+        if (typeof keyframe !== "string") {
+          const keyframeWidth = getTextureWidth(keyframe);
+          const keyframeHeight = getTextureHeight(keyframe);
+          if (keyframeWidth !== layerWidth || keyframeHeight !== layerHeight) {
+            throw new SymbolAssetError(
+              `Symbol "${symbol}" layer ${layer.index} keyframe textures must match the layer texture dimensions.`
+            );
+          }
+        }
+      }
     }
     return Object.freeze({
       index: layer.index,
-      texture: layer.texture
+      texture: layer.texture,
+      keyframes
     });
   });
 
@@ -272,6 +285,30 @@ function normalizeLayeredTextureSource(
     kind: "layered",
     layers: Object.freeze(normalizedLayers)
   });
+}
+
+function normalizeLayerKeyframes(
+  symbol: string,
+  layer: SymbolLayerTextureSource<Texture | string>
+): readonly (Texture | string)[] {
+  if (layer.keyframes === undefined) {
+    return Object.freeze([]);
+  }
+  if (!Array.isArray(layer.keyframes) || layer.keyframes.length === 0) {
+    throw new SymbolAssetError(`Symbol "${symbol}" layer ${layer.index} keyframes must be a non-empty array.`);
+  }
+  const keyframes = layer.keyframes.map((keyframe) => {
+    if (keyframe === undefined || keyframe === null || keyframe === "") {
+      throw new SymbolAssetError(`Symbol "${symbol}" layer ${layer.index} keyframe texture must exist.`);
+    }
+    return keyframe;
+  });
+  if (keyframes[0] !== layer.texture) {
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" layer ${layer.index} keyframes must start with the layer texture.`
+    );
+  }
+  return Object.freeze(keyframes);
 }
 
 function normalizeTextureStates(
@@ -369,9 +406,18 @@ function assertLoadedNormalSource(
             `Symbol "${symbol}" layer ${layer.index} texture is a URL string; pass a loaded Texture.`
           );
         }
+        const keyframes = (layer.keyframes ?? []).map((keyframe) => {
+          if (typeof keyframe === "string") {
+            throw new SymbolAssetError(
+              `Symbol "${symbol}" layer ${layer.index} keyframe texture is a URL string; pass a loaded Texture.`
+            );
+          }
+          return keyframe;
+        });
         return Object.freeze({
           index: layer.index,
-          texture: layer.texture
+          texture: layer.texture,
+          keyframes: Object.freeze(keyframes)
         });
       })
     )
@@ -403,7 +449,10 @@ function cloneNormalTextureSource(
       normalized.layers.map((layer) =>
         Object.freeze({
           index: layer.index,
-          texture: layer.texture
+          texture: layer.texture,
+          ...(layer.keyframes && layer.keyframes.length > 0
+            ? { keyframes: Object.freeze([...layer.keyframes]) }
+            : {})
         })
       )
     )

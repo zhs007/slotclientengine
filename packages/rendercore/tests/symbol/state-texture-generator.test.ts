@@ -67,6 +67,68 @@ describe("generate-symbol-state-textures script", () => {
     }
   });
 
+  it("preserves explicit composite layer keyframes in the generated manifest", async () => {
+    const generator = await loadGeneratorModule();
+    const tempDir = await mkdtemp(join(tmpdir(), "rendercore-symbol-generator-"));
+    try {
+      await writePng(join(tempDir, "SC-0.png"), 4, 4, "#111111");
+      await writePng(join(tempDir, "SC-1-0.png"), 4, 4, "#222222");
+      await writePng(join(tempDir, "SC-1-1.png"), 4, 4, "#333333");
+      await writePng(join(tempDir, "SC-1-2.png"), 4, 4, "#444444");
+      await writePng(join(tempDir, "SC-1-3.png"), 4, 4, "#555555");
+      await writePng(join(tempDir, "SC-1-4.png"), 4, 4, "#666666");
+      await writePng(join(tempDir, "SC-2.png"), 4, 4, "#777777");
+      const compositesPath = join(tempDir, "symbol-composites.json");
+      await writeFile(
+        compositesPath,
+        JSON.stringify({
+          version: 1,
+          symbols: {
+            SC: {
+              layers: [
+                "./SC-0.png",
+                {
+                  index: 1,
+                  texture: "./SC-1-0.png",
+                  keyframes: [
+                    "./SC-1-0.png",
+                    "./SC-1-1.png",
+                    "./SC-1-2.png",
+                    "./SC-1-3.png",
+                    "./SC-1-4.png"
+                  ]
+                },
+                "./SC-2.png"
+              ]
+            }
+          }
+        }),
+        "utf8"
+      );
+
+      const result = await generator.generateSymbolStateTextures({
+        inputDir: tempDir,
+        outputDir: tempDir,
+        symbols: ["SC"],
+        composites: compositesPath
+      });
+      const manifest = JSON.parse(await readFile(result.manifestPath, "utf8"));
+
+      expect(manifest.symbols.SC.normal.layers).toEqual([
+        "./SC-0.png",
+        {
+          index: 1,
+          texture: "./SC-1-0.png",
+          keyframes: ["./SC-1-0.png", "./SC-1-1.png", "./SC-1-2.png", "./SC-1-3.png", "./SC-1-4.png"]
+        },
+        "./SC-2.png"
+      ]);
+      await expect(stat(join(tempDir, "SC.spinBlur.png"))).resolves.toMatchObject({ size: expect.any(Number) });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("fails when composite layer dimensions differ", async () => {
     const generator = await loadGeneratorModule();
     const tempDir = await mkdtemp(join(tmpdir(), "rendercore-symbol-generator-"));
@@ -95,6 +157,109 @@ describe("generate-symbol-state-textures script", () => {
           composites: compositesPath
         })
       ).rejects.toThrow(/identical dimensions/);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails when explicit keyframe contracts are invalid", async () => {
+    const generator = await loadGeneratorModule();
+    const tempDir = await mkdtemp(join(tmpdir(), "rendercore-symbol-generator-"));
+    try {
+      await writePng(join(tempDir, "SC-0.png"), 4, 4, "#111111");
+      await writePng(join(tempDir, "SC-1-0.png"), 4, 4, "#222222");
+      await writePng(join(tempDir, "SC-1-1.png"), 5, 4, "#333333");
+      await writePng(join(tempDir, "SC-2.png"), 4, 4, "#777777");
+      const compositesPath = join(tempDir, "symbol-composites.json");
+      await writeFile(
+        compositesPath,
+        JSON.stringify({
+          version: 1,
+          symbols: {
+            SC: {
+              layers: [
+                "./SC-0.png",
+                {
+                  index: 1,
+                  texture: "./SC-1-0.png",
+                  keyframes: ["./SC-1-0.png", "./SC-1-1.png"]
+                },
+                "./SC-2.png"
+              ]
+            }
+          }
+        }),
+        "utf8"
+      );
+
+      await expect(
+        generator.generateSymbolStateTextures({
+          inputDir: tempDir,
+          outputDir: tempDir,
+          symbols: ["SC"],
+          composites: compositesPath
+        })
+      ).rejects.toThrow(/keyframe textures/);
+
+      await writeFile(
+        compositesPath,
+        JSON.stringify({
+          version: 1,
+          symbols: {
+            SC: {
+              layers: [
+                "./SC-0.png",
+                {
+                  index: 1,
+                  texture: "./SC-1-0.png",
+                  keyframes: ["./SC-1-2.png", "./SC-1-0.png"]
+                },
+                "./SC-2.png"
+              ]
+            }
+          }
+        }),
+        "utf8"
+      );
+
+      await expect(
+        generator.generateSymbolStateTextures({
+          inputDir: tempDir,
+          outputDir: tempDir,
+          symbols: ["SC"],
+          composites: compositesPath
+        })
+      ).rejects.toThrow(/start with the layer texture/);
+
+      await writeFile(
+        compositesPath,
+        JSON.stringify({
+          version: 1,
+          symbols: {
+            SC: {
+              layers: [
+                "./SC-0.png",
+                {
+                  index: 1,
+                  texture: "./SC-1-0.png",
+                  keyframes: ["./SC-1-0.png", "./SC-1-2.png"]
+                },
+                "./SC-2.png"
+              ]
+            }
+          }
+        }),
+        "utf8"
+      );
+
+      await expect(
+        generator.generateSymbolStateTextures({
+          inputDir: tempDir,
+          outputDir: tempDir,
+          symbols: ["SC"],
+          composites: compositesPath
+        })
+      ).rejects.toThrow();
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

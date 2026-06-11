@@ -20,6 +20,8 @@ export interface CreateNamedSymbolAnimationResolverOptions {
 const DEFAULT_MAX_SCALE = 1.2;
 const DEFAULT_SHINE_ALPHA = 0.95;
 const DEFAULT_SHINE_WIDTH_RATIO = 0.28;
+const DEG_TO_RAD = Math.PI / 180;
+const SHINE_MASK_ROTATION = Math.PI / 7;
 
 export function createNamedSymbolAnimationResolver(
   options: CreateNamedSymbolAnimationResolverOptions
@@ -68,6 +70,7 @@ export function createNamedSymbolAnimationResolver(
 
 export function createDefaultNamedSymbolAnimationRegistry(): NamedSymbolAnimationRegistry {
   return Object.freeze({
+    layerTextureSequence: createLayerTextureSequenceEffect,
     layerBounceScale: createLayerBounceScaleEffect,
     layerShineScale: createLayerShineScaleEffect,
     layerStaggeredShineScale: createLayerStaggeredShineScaleEffect,
@@ -89,33 +92,86 @@ function createEffect(
   return factory(context, spec.params ?? {}, profile);
 }
 
+function createLayerTextureSequenceEffect(
+  context: SymbolAnimationContext,
+  params: Readonly<Record<string, unknown>>,
+  profile: SymbolAnimationProfile
+): SymbolLayerEffect {
+  assertKnownParams(params, ["layer", "frameDurationSeconds", "delaySeconds", "durationRatio"]);
+  const layer = getLayer(context, readIntegerParam(params, "layer"));
+  if (layer.keyframes.length < 2) {
+    throw new SymbolAnimationError(
+      `Symbol "${context.symbol}" layer ${layer.index} must declare at least two keyframes for layerTextureSequence.`
+    );
+  }
+  const delaySeconds = readNonNegativeNumberParam(params, "delaySeconds", 0);
+  const durationRatio = readRatioParam(params, "durationRatio", 1);
+  const frameDurationSeconds =
+    params.frameDurationSeconds === undefined
+      ? (profile.durationSeconds * durationRatio) / layer.keyframes.length
+      : readPositiveNumberParam(params, "frameDurationSeconds", 1 / 60);
+
+  return Object.freeze({
+    reset: () => {
+      layer.sprite.texture = layer.texture;
+    },
+    progress: (progress: number) => {
+      const elapsedSeconds = progress * profile.durationSeconds - delaySeconds;
+      const sequenceDurationSeconds = profile.durationSeconds * durationRatio;
+      const clampedElapsedSeconds = Math.min(
+        Math.max(elapsedSeconds, 0),
+        sequenceDurationSeconds
+      );
+      const frameIndex = Math.min(
+        layer.keyframes.length - 1,
+        Math.floor((clampedElapsedSeconds + 1e-9) / frameDurationSeconds)
+      );
+      layer.sprite.texture = layer.keyframes[frameIndex] ?? layer.texture;
+    },
+    complete: () => {
+      layer.sprite.texture = layer.texture;
+    }
+  });
+}
+
 function createLayerBounceScaleEffect(
   context: SymbolAnimationContext,
   params: Readonly<Record<string, unknown>>,
   profile: SymbolAnimationProfile
 ): SymbolLayerEffect {
-  assertKnownParams(params, ["layer", "maxScale", "offsetY", "cycles", "delaySeconds"]);
+  assertKnownParams(params, [
+    "layer",
+    "maxScale",
+    "offsetY",
+    "cycles",
+    "delaySeconds",
+    "rotationDegrees"
+  ]);
   const layer = getLayer(context, readIntegerParam(params, "layer"));
   const maxScale = readPositiveNumberParam(params, "maxScale", DEFAULT_MAX_SCALE);
   const offsetY = readFiniteNumberParam(params, "offsetY", -10);
   const cycles = readPositiveNumberParam(params, "cycles", 1);
   const delaySeconds = readNonNegativeNumberParam(params, "delaySeconds", 0);
+  const rotationRadians = readFiniteNumberParam(params, "rotationDegrees", 0) * DEG_TO_RAD;
 
   return Object.freeze({
     reset: () => {
       layer.sprite.position.set(0);
       layer.sprite.scale.set(1);
+      layer.sprite.rotation = 0;
     },
     progress: (progress: number) => {
       const localProgress = createLocalProgress(progress, profile.durationSeconds, delaySeconds, 1);
       const pulse = Math.sin(Math.PI * localProgress);
       const bob = Math.sin(Math.PI * 2 * cycles * localProgress);
       layer.sprite.scale.set(1 + pulse * (maxScale - 1));
+      layer.sprite.rotation = pulse * rotationRadians;
       layer.sprite.y = bob * offsetY;
     },
     complete: () => {
       layer.sprite.position.set(0);
       layer.sprite.scale.set(1);
+      layer.sprite.rotation = 0;
     }
   });
 }
@@ -131,7 +187,8 @@ function createLayerShineScaleEffect(
     "shineAlpha",
     "shineWidthRatio",
     "delaySeconds",
-    "durationRatio"
+    "durationRatio",
+    "rotationDegrees"
   ]);
   const layer = getLayer(context, readIntegerParam(params, "layer"));
   const maxScale = readPositiveNumberParam(params, "maxScale", DEFAULT_MAX_SCALE);
@@ -139,6 +196,7 @@ function createLayerShineScaleEffect(
   const shineWidthRatio = readPositiveNumberParam(params, "shineWidthRatio", DEFAULT_SHINE_WIDTH_RATIO);
   const delaySeconds = readNonNegativeNumberParam(params, "delaySeconds", 0);
   const durationRatio = readPositiveNumberParam(params, "durationRatio", 1);
+  const rotationRadians = readFiniteNumberParam(params, "rotationDegrees", 0) * DEG_TO_RAD;
   let shineSprite: Sprite | null = null;
   let shineMask: Graphics | null = null;
 
@@ -146,6 +204,7 @@ function createLayerShineScaleEffect(
     reset: () => {
       layer.sprite.position.set(0);
       layer.sprite.scale.set(1);
+      layer.sprite.rotation = 0;
       const overlay = createLayerShineOverlay(layer.texture, shineWidthRatio);
       shineSprite = overlay.sprite;
       shineMask = overlay.mask;
@@ -165,15 +224,19 @@ function createLayerShineScaleEffect(
       const pulseScale = 1 + Math.sin(Math.PI * localProgress) * (maxScale - 1);
       const width = getTextureWidth(layer.texture);
       layer.sprite.scale.set(pulseScale);
+      layer.sprite.rotation = Math.sin(Math.PI * localProgress) * rotationRadians;
       shineSprite.position.copyFrom(layer.sprite.position);
       shineSprite.scale.copyFrom(layer.sprite.scale);
+      shineSprite.rotation = layer.sprite.rotation;
       shineMask.x = -width * 0.85 + width * 1.7 * easedSweep;
       shineMask.y = layer.sprite.y;
+      shineMask.rotation = SHINE_MASK_ROTATION + layer.sprite.rotation;
       shineSprite.alpha = Math.sin(Math.PI * localProgress) * shineAlpha;
     },
     complete: () => {
       layer.sprite.position.set(0);
       layer.sprite.scale.set(1);
+      layer.sprite.rotation = 0;
       clearOverlay(context, shineSprite);
       shineSprite = null;
       shineMask = null;
@@ -295,7 +358,7 @@ function createLayerShineOverlay(texture: import("pixi.js").Texture, shineWidthR
   const mask = new Graphics()
     .rect(-shineWidth / 2, -shineHeight / 2, shineWidth, shineHeight)
     .fill({ color: 0xffffff, alpha: 1 });
-  mask.rotation = Math.PI / 7;
+  mask.rotation = SHINE_MASK_ROTATION;
   mask.x = -width;
 
   const sprite = new Sprite(texture);
@@ -370,6 +433,18 @@ function readNonNegativeNumberParam(
   const value = readFiniteNumberParam(params, key, defaultValue);
   if (value < 0) {
     throw new SymbolAnimationError(`Animation param "${key}" must be non-negative.`);
+  }
+  return value;
+}
+
+function readRatioParam(
+  params: Readonly<Record<string, unknown>>,
+  key: string,
+  defaultValue: number
+): number {
+  const value = readPositiveNumberParam(params, key, defaultValue);
+  if (value > 1) {
+    throw new SymbolAnimationError(`Animation param "${key}" must be less than or equal to 1.`);
   }
   return value;
 }

@@ -67,6 +67,8 @@ describe("ReelSymbolRegistry", () => {
   });
 
   it("accepts layered normal sources and keeps layered render symbols", () => {
+    const layerOne = createTextureSet(18, 22).normal;
+    const layerOneOpen = createTextureSet(18, 22).normal;
     const registry = createReelSymbolRegistry({
       gameConfig: createGameConfig(basicGameConfig),
       assets: createBasicAssets({
@@ -75,7 +77,7 @@ describe("ReelSymbolRegistry", () => {
             kind: "layered",
             layers: [
               { index: 0, texture: createTextureSet(18, 22).normal },
-              { index: 1, texture: createTextureSet(18, 22).normal }
+              { index: 1, texture: layerOne, keyframes: [layerOne, layerOneOpen] }
             ]
           },
           states: {
@@ -92,6 +94,7 @@ describe("ReelSymbolRegistry", () => {
     expect(registry.getCellSize()).toEqual({ width: 18, height: 22 });
     const renderSymbol = registry.createRenderSymbolByCode(1);
     expect(renderSymbol?.getLayerSprites().map((layer) => layer.index)).toEqual([0, 1]);
+    expect(renderSymbol?.getLayerSprites()[1].keyframes).toEqual([layerOne, layerOneOpen]);
   });
 
   it("rejects layered normal sources with inconsistent layer dimensions", () => {

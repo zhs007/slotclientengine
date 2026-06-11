@@ -327,12 +327,16 @@ async function loadNormalTextureSource(
       });
     }
     const layers = await Promise.all(
-      normal.layers.map(async (layer) =>
-        Object.freeze({
+      normal.layers.map(async (layer) => {
+        const keyframes = await Promise.all(
+          (layer.keyframes ?? []).map((keyframe) => loadTexture(keyframe))
+        );
+        return Object.freeze({
           index: layer.index,
-          texture: await loadTexture(layer.texture)
-        })
-      )
+          texture: await loadTexture(layer.texture),
+          ...(keyframes.length > 0 ? { keyframes: Object.freeze(keyframes) } : {})
+        });
+      })
     );
     return Object.freeze({
       kind: "layered",
