@@ -45,6 +45,60 @@ describe("ReelSymbolRegistry", () => {
     expect(registry.getCellSize()).toEqual({ width: 15, height: 12 });
   });
 
+  it("accepts layered normal sources and keeps layered render symbols", () => {
+    const registry = createReelSymbolRegistry({
+      gameConfig: createGameConfig(basicGameConfig),
+      assets: createBasicAssets({
+        A: {
+          normal: {
+            kind: "layered",
+            layers: [
+              { index: 0, texture: createTextureSet(18, 22).normal },
+              { index: 1, texture: createTextureSet(18, 22).normal }
+            ]
+          },
+          states: {
+            spinBlur: createTextureSet(18, 22).states.spinBlur
+          }
+        }
+      }),
+      emptySymbols: ["BN"],
+      texturePolicy: {
+        requiredStateTextures: ["spinBlur"]
+      }
+    });
+
+    expect(registry.getCellSize()).toEqual({ width: 18, height: 22 });
+    const renderSymbol = registry.createRenderSymbolByCode(1);
+    expect(renderSymbol?.getLayerSprites().map((layer) => layer.index)).toEqual([0, 1]);
+  });
+
+  it("rejects layered normal sources with inconsistent layer dimensions", () => {
+    expect(() =>
+      createReelSymbolRegistry({
+        gameConfig: createGameConfig(basicGameConfig),
+        assets: createBasicAssets({
+          A: {
+            normal: {
+              kind: "layered",
+              layers: [
+                { index: 0, texture: createTextureSet(18, 22).normal },
+                { index: 1, texture: createTextureSet(19, 22).normal }
+              ]
+            },
+            states: {
+              spinBlur: createTextureSet(18, 22).states.spinBlur
+            }
+          }
+        }),
+        emptySymbols: ["BN"],
+        texturePolicy: {
+          requiredStateTextures: ["spinBlur"]
+        }
+      })
+    ).toThrow(/identical dimensions/);
+  });
+
   it("fails clearly for required state textures, unknown empty symbols and missing textured symbols", () => {
     expect(() =>
       createReelSymbolRegistry({

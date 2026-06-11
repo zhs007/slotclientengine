@@ -16,6 +16,8 @@ import type {
   SymbolCatalog,
   SymbolCatalogValidation,
   SymbolDefinition,
+  SymbolLayerTextureSource,
+  SymbolNormalTextureSource,
   SymbolStateId,
   SymbolTextureSet,
   SymbolStatePreset
@@ -110,7 +112,13 @@ export class SymbolCatalogModel implements SymbolCatalog {
   }
 
   getAsset(symbol: string): Texture | string {
-    return this.getTextureSet(symbol).normal;
+    const normal = this.getNormalTextureSource(symbol);
+    if (normal.kind === "layered") {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" is layered; use getTextureSet() or getNormalTextureSource() instead of getAsset().`
+      );
+    }
+    return normal.texture;
   }
 
   getTextureSet(symbol: string): SymbolTextureSet {
@@ -122,20 +130,20 @@ export class SymbolCatalogModel implements SymbolCatalog {
     return cloneTextureSet(textureSet);
   }
 
+  getNormalTextureSource(symbol: string): SymbolNormalTextureSource {
+    return cloneNormalTextureSource(this.getTextureSet(symbol).normal);
+  }
+
   createRenderSymbol(symbol: string, options: CreateCatalogRenderSymbolOptions = {}): RenderSymbol {
     const textureSet = this.getTextureSet(symbol);
     const asset = options.texture ?? textureSet.normal;
-    if (typeof asset === "string") {
-      throw new SymbolAssetError(
-        `Symbol "${symbol}" asset is a URL string; pass a loaded Texture to createRenderSymbol().`
-      );
-    }
+    const normalSource = assertLoadedNormalSource(symbol, asset);
     const stateTextures = options.stateTextures ?? textureSet.states ?? {};
     const loadedStateTextures = assertLoadedStateTextures(symbol, stateTextures);
 
     return new RenderSymbol({
       definition: this.getDefinition(symbol),
-      texture: asset,
+      texture: normalSource,
       stateTextures: loadedStateTextures,
       requiredStateTextures: this.#requiredStateTextures,
       animationResolver: options.animationResolver ?? this.#animationResolver
@@ -172,7 +180,7 @@ function normalizeTextureSet(
       throw new SymbolAssetError(`Symbol "${symbol}" texture set must include a normal texture.`);
     }
     return Object.freeze({
-      normal: asset.normal,
+      normal: normalizeNormalTextureSource(symbol, asset.normal),
       states: normalizeTextureStates(symbol, asset.states ?? {}, statesById)
     });
   }
@@ -181,8 +189,88 @@ function normalizeTextureSet(
     throw new SymbolAssetError(`Symbol "${symbol}" asset must include a normal texture.`);
   }
   return Object.freeze({
-    normal: asset,
+    normal: normalizeNormalTextureSource(symbol, asset),
     states: Object.freeze({})
+  });
+}
+
+function normalizeNormalTextureSource(
+  symbol: string,
+  normal: Texture | string | SymbolNormalTextureSource<Texture | string>
+): SymbolNormalTextureSource<Texture | string> {
+  if (isSymbolNormalTextureSource(normal)) {
+    if (normal.kind === "single") {
+      if (normal.texture === undefined || normal.texture === null) {
+        throw new SymbolAssetError(`Symbol "${symbol}" single normal texture must exist.`);
+      }
+      return Object.freeze({
+        kind: "single",
+        texture: normal.texture
+      });
+    }
+    return normalizeLayeredTextureSource(symbol, normal.layers);
+  }
+
+  if (normal === undefined || normal === null) {
+    throw new SymbolAssetError(`Symbol "${symbol}" normal texture must exist.`);
+  }
+  return Object.freeze({
+    kind: "single",
+    texture: normal
+  });
+}
+
+function normalizeLayeredTextureSource(
+  symbol: string,
+  layers: readonly SymbolLayerTextureSource<Texture | string>[]
+): SymbolNormalTextureSource<Texture | string> {
+  if (!Array.isArray(layers) || layers.length === 0) {
+    throw new SymbolAssetError(`Symbol "${symbol}" layered normal texture must include layers.`);
+  }
+
+  const sortedLayers = [...layers].sort((left, right) => left.index - right.index);
+  const seen = new Set<number>();
+  let width: number | null = null;
+  let height: number | null = null;
+  const normalizedLayers = sortedLayers.map((layer, expectedIndex) => {
+    if (!Number.isInteger(layer.index) || layer.index < 0) {
+      throw new SymbolAssetError(`Symbol "${symbol}" layer index must be a non-negative integer.`);
+    }
+    if (seen.has(layer.index)) {
+      throw new SymbolAssetError(`Symbol "${symbol}" declares duplicate layer index ${layer.index}.`);
+    }
+    seen.add(layer.index);
+    if (layer.index !== expectedIndex) {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" layered normal texture must use consecutive indexes from 0.`
+      );
+    }
+    if (layer.texture === undefined || layer.texture === null) {
+      throw new SymbolAssetError(`Symbol "${symbol}" layer ${layer.index} texture must exist.`);
+    }
+    if (typeof layer.texture !== "string") {
+      const layerWidth = getTextureWidth(layer.texture);
+      const layerHeight = getTextureHeight(layer.texture);
+      if (layerWidth <= 0 || layerHeight <= 0) {
+        throw new SymbolAssetError(
+          `Symbol "${symbol}" layer ${layer.index} texture must have positive dimensions.`
+        );
+      }
+      width ??= layerWidth;
+      height ??= layerHeight;
+      if (width !== layerWidth || height !== layerHeight) {
+        throw new SymbolAssetError(`Symbol "${symbol}" layered textures must have identical dimensions.`);
+      }
+    }
+    return Object.freeze({
+      index: layer.index,
+      texture: layer.texture
+    });
+  });
+
+  return Object.freeze({
+    kind: "layered",
+    layers: Object.freeze(normalizedLayers)
   });
 }
 
@@ -255,15 +343,94 @@ function assertLoadedStateTextures(
   return Object.freeze(loaded);
 }
 
+function assertLoadedNormalSource(
+  symbol: string,
+  normal: Texture | string | SymbolNormalTextureSource<Texture | string>
+): SymbolNormalTextureSource<Texture> {
+  const normalized = normalizeNormalTextureSource(symbol, normal);
+  if (normalized.kind === "single") {
+    if (typeof normalized.texture === "string") {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" asset is a URL string; pass a loaded Texture to createRenderSymbol().`
+      );
+    }
+    return Object.freeze({
+      kind: "single",
+      texture: normalized.texture
+    });
+  }
+
+  return Object.freeze({
+    kind: "layered",
+    layers: Object.freeze(
+      normalized.layers.map((layer) => {
+        if (typeof layer.texture === "string") {
+          throw new SymbolAssetError(
+            `Symbol "${symbol}" layer ${layer.index} texture is a URL string; pass a loaded Texture.`
+          );
+        }
+        return Object.freeze({
+          index: layer.index,
+          texture: layer.texture
+        });
+      })
+    )
+  });
+}
+
 function cloneTextureSet(textureSet: NormalizedTextureSet): SymbolTextureSet {
   return Object.freeze({
-    normal: textureSet.normal,
+    normal: cloneNormalTextureSource(textureSet.normal),
     states: Object.freeze({ ...(textureSet.states ?? {}) })
+  });
+}
+
+function cloneNormalTextureSource(
+  normal: Texture | string | SymbolNormalTextureSource<Texture | string>
+): SymbolNormalTextureSource {
+  const normalized = isSymbolNormalTextureSource(normal)
+    ? normal
+    : normalizeNormalTextureSource("unknown", normal);
+  if (normalized.kind === "single") {
+    return Object.freeze({
+      kind: "single",
+      texture: normalized.texture
+    });
+  }
+  return Object.freeze({
+    kind: "layered",
+    layers: Object.freeze(
+      normalized.layers.map((layer) =>
+        Object.freeze({
+          index: layer.index,
+          texture: layer.texture
+        })
+      )
+    )
   });
 }
 
 function isSymbolTextureSet(asset: SymbolAssetMap[string]): asset is SymbolTextureSet {
   return typeof asset === "object" && asset !== null && "normal" in asset;
+}
+
+function isSymbolNormalTextureSource(
+  normal: Texture | string | SymbolNormalTextureSource<Texture | string>
+): normal is SymbolNormalTextureSource<Texture | string> {
+  return (
+    typeof normal === "object" &&
+    normal !== null &&
+    "kind" in normal &&
+    (normal.kind === "single" || normal.kind === "layered")
+  );
+}
+
+function getTextureWidth(texture: Texture): number {
+  return Math.max(0, texture.width || texture.source?.width || texture.orig?.width || 0);
+}
+
+function getTextureHeight(texture: Texture): number {
+  return Math.max(0, texture.height || texture.source?.height || texture.orig?.height || 0);
 }
 
 function extractPaytableEntries(gameConfig: LogicGameConfig): readonly GameConfigPaytableEntry[] {

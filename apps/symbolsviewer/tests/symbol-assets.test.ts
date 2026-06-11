@@ -13,6 +13,7 @@ import {
   createSymbolsViewerCatalog,
   getSymbolNameFromPath
 } from "../src/symbol-assets.js";
+import { SYMBOL_VIEWER_ANIMATION_PROFILES } from "../src/symbol-animation-config.js";
 import {
   DEFAULT_VIEWER_SEQUENCE,
   moveSequenceStep,
@@ -60,6 +61,38 @@ describe("symbolsviewer assets", () => {
       SX: {
         normal: "/assets/SX.png",
         states: {}
+      }
+    });
+  });
+
+  it("assembles manifest layered normals without exposing layer files as symbols", () => {
+    const assets = createStatefulSymbolAssetMapFromModules({
+      modules: {
+        "../../../assets/symbols/SC.png": "/assets/SC.png",
+        "../../../assets/symbols/SC-0.png": "/assets/SC-0.png",
+        "../../../assets/symbols/SC-1.png": "/assets/SC-1.png",
+        "../../../assets/symbols/SC-2.png": "/assets/SC-2.png",
+        "../../../assets/symbols/SC.spinBlur.png": "/assets/SC.spinBlur.png",
+        "../../../assets/symbols/SC.disabled.png": "/assets/SC.disabled.png"
+      },
+      manifest: createManifest(["SC"]),
+      requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
+    });
+
+    expect(Object.keys(assets)).toEqual(["SC"]);
+    expect(Object.keys(assets)).not.toContain("SC-0");
+    expect(assets.SC).toMatchObject({
+      normal: {
+        kind: "layered",
+        layers: [
+          { index: 0, texture: "/assets/SC-0.png" },
+          { index: 1, texture: "/assets/SC-1.png" },
+          { index: 2, texture: "/assets/SC-2.png" }
+        ]
+      },
+      states: {
+        spinBlur: "/assets/SC.spinBlur.png",
+        disabled: "/assets/SC.disabled.png"
       }
     });
   });
@@ -113,6 +146,14 @@ describe("symbolsviewer assets", () => {
       ignoredPaytableSymbolsWithoutAssets: ["BN"],
       ignoredAssetsWithoutPaytable: ["CO", "SX"]
     });
+    expect(catalog.getTextureSet("SC").normal).toMatchObject({
+      kind: "layered",
+      layers: [
+        { index: 0, texture: "/assets/SC-0.png" },
+        { index: 1, texture: "/assets/SC-1.png" },
+        { index: 2, texture: "/assets/SC-2.png" }
+      ]
+    });
   });
 
   it("matches rendercore catalog behavior for the default viewer fixture", () => {
@@ -149,6 +190,31 @@ describe("symbolsviewer assets", () => {
   });
 });
 
+describe("symbolsviewer animation config", () => {
+  it("binds special symbols to the expected layer animation profiles", () => {
+    for (const symbol of ["SC", "RS"] as const) {
+      expect(SYMBOL_VIEWER_ANIMATION_PROFILES[symbol]?.appear?.effects).toMatchObject([
+        { name: "layerBounceScale", params: { layer: 1, maxScale: 1.2, offsetY: -12 } },
+        { name: "layerShineScale", params: { layer: 2, maxScale: 1.2 } }
+      ]);
+      expect(SYMBOL_VIEWER_ANIMATION_PROFILES[symbol]?.win?.effects[0]).toMatchObject({
+        name: "layerStaggeredShineScale",
+        params: { layers: [0, 1, 2], maxScale: 1.2, staggerSeconds: 0.08 }
+      });
+    }
+
+    for (const symbol of ["X2", "X5", "X10"] as const) {
+      expect(SYMBOL_VIEWER_ANIMATION_PROFILES[symbol]?.appear?.effects).toMatchObject([
+        { name: "layerShineScale", params: { layer: 1, maxScale: 1.2 } }
+      ]);
+      expect(SYMBOL_VIEWER_ANIMATION_PROFILES[symbol]?.win?.effects[0]).toMatchObject({
+        name: "layerStaggeredShineScale",
+        params: { layers: [0, 1], maxScale: 1.2, staggerSeconds: 0.1 }
+      });
+    }
+  });
+});
+
 function createViewerStatefulAssets() {
   const displayableSymbols = ["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10"];
   return createStatefulSymbolAssetMapFromModules({
@@ -159,14 +225,27 @@ function createViewerStatefulAssets() {
 }
 
 function createViewerModules(symbols: readonly string[], orphanSymbols: readonly string[]) {
+  const compositeLayerCounts: Record<string, number> = {
+    SC: 3,
+    RS: 3,
+    X2: 2,
+    X5: 2,
+    X10: 2
+  };
+
   return Object.fromEntries(
     [...symbols, ...orphanSymbols].flatMap((symbol) => {
       const normal = [`../../../assets/symbols/${symbol}.png`, `/assets/${symbol}.png`] as const;
+      const layers = Array.from({ length: compositeLayerCounts[symbol] ?? 0 }, (_unused, index) => [
+        `../../../assets/symbols/${symbol}-${index}.png`,
+        `/assets/${symbol}-${index}.png`
+      ] as const);
       if (orphanSymbols.includes(symbol)) {
         return [normal];
       }
       return [
         normal,
+        ...layers,
         [
           `../../../assets/symbols/${symbol}.spinBlur.png`,
           `/assets/${symbol}.spinBlur.png`
@@ -181,6 +260,14 @@ function createViewerModules(symbols: readonly string[], orphanSymbols: readonly
 }
 
 function createManifest(symbols: readonly string[]) {
+  const compositeLayers: Record<string, readonly string[]> = {
+    SC: ["./SC-0.png", "./SC-1.png", "./SC-2.png"],
+    RS: ["./RS-0.png", "./RS-1.png", "./RS-2.png"],
+    X2: ["./X2-0.png", "./X2-1.png"],
+    X5: ["./X5-0.png", "./X5-1.png"],
+    X10: ["./X10-0.png", "./X10-1.png"]
+  };
+
   return {
     version: 1,
     states: ["spinBlur", "disabled"],
@@ -188,7 +275,12 @@ function createManifest(symbols: readonly string[]) {
       symbols.map((symbol) => [
         symbol,
         {
-          normal: `./${symbol}.png`,
+          normal: compositeLayers[symbol]
+            ? {
+                kind: "layered",
+                layers: compositeLayers[symbol]
+              }
+            : `./${symbol}.png`,
           spinBlur: `./${symbol}.spinBlur.png`,
           disabled: `./${symbol}.disabled.png`
         }

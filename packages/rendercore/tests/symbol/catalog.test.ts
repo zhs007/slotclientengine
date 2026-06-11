@@ -24,6 +24,19 @@ const createCatalog = () =>
     animationResolver: createDefaultSymbolAnimationResolver()
   });
 
+const createTestTexture = (width = 16, height = 18) => {
+  const texture = new Texture({ source: Texture.WHITE.source });
+  Object.defineProperty(texture, "width", {
+    configurable: true,
+    value: width
+  });
+  Object.defineProperty(texture, "height", {
+    configurable: true,
+    value: height
+  });
+  return texture;
+};
+
 describe("createSymbolCatalog", () => {
   it("builds displayable symbols from the current game2 paytable and symbol assets", () => {
     const catalog = createCatalog();
@@ -41,8 +54,15 @@ describe("createSymbolCatalog", () => {
 
     expect(catalog.getAsset("S00")).toBe("S00.png");
     expect(catalog.getTextureSet("S00")).toEqual({
-      normal: "S00.png",
+      normal: {
+        kind: "single",
+        texture: "S00.png"
+      },
       states: {}
+    });
+    expect(catalog.getNormalTextureSource("S00")).toEqual({
+      kind: "single",
+      texture: "S00.png"
     });
   });
 
@@ -66,7 +86,10 @@ describe("createSymbolCatalog", () => {
     });
 
     expect(catalog.getTextureSet("S00")).toEqual({
-      normal: Texture.WHITE,
+      normal: {
+        kind: "single",
+        texture: Texture.WHITE
+      },
       states: {
         spinBlur: spinBlurTexture,
         disabled: disabledTexture
@@ -76,6 +99,94 @@ describe("createSymbolCatalog", () => {
     expect(renderSymbol.stateTextures.spinBlur).toBe(spinBlurTexture);
     expect(renderSymbol.stateTextures.disabled).toBe(disabledTexture);
     expect(renderSymbol.requiredStateTextures).toEqual(["spinBlur", "disabled"]);
+  });
+
+  it("accepts layered normal texture sources without treating layer 0 as a legacy asset", () => {
+    const bottom = createTestTexture(20, 24);
+    const top = createTestTexture(20, 24);
+    const catalog = createSymbolCatalog({
+      gameConfig: createGameConfig(game2Config),
+      assets: {
+        SC: {
+          normal: {
+            kind: "layered",
+            layers: [
+              { index: 1, texture: top },
+              { index: 0, texture: bottom }
+            ]
+          },
+          states: {
+            spinBlur: createTestTexture(20, 24),
+            disabled: createTestTexture(20, 24)
+          }
+        }
+      },
+      texturePolicy: {
+        requiredStateTextures: ["spinBlur", "disabled"]
+      }
+    });
+
+    expect(() => catalog.getAsset("SC")).toThrow(/layered/);
+    expect(catalog.getNormalTextureSource("SC")).toMatchObject({
+      kind: "layered",
+      layers: [
+        { index: 0, texture: bottom },
+        { index: 1, texture: top }
+      ]
+    });
+    const renderSymbol = catalog.createRenderSymbol("SC");
+    expect(renderSymbol.getLayerSprites().map((layer) => layer.index)).toEqual([0, 1]);
+    expect(renderSymbol.getLayerSprites()[0].sprite.texture).toBe(bottom);
+  });
+
+  it("rejects malformed layered normal texture sources", () => {
+    expect(() =>
+      createSymbolCatalog({
+        gameConfig: createGameConfig(game2Config),
+        assets: {
+          SC: {
+            normal: {
+              kind: "layered",
+              layers: []
+            }
+          }
+        }
+      })
+    ).toThrow(/layers/);
+
+    expect(() =>
+      createSymbolCatalog({
+        gameConfig: createGameConfig(game2Config),
+        assets: {
+          SC: {
+            normal: {
+              kind: "layered",
+              layers: [
+                { index: 0, texture: createTestTexture() },
+                { index: 0, texture: createTestTexture() }
+              ]
+            }
+          }
+        }
+      })
+    ).toThrow(/duplicate/);
+
+    expect(() =>
+      createSymbolCatalog({
+        gameConfig: createGameConfig(game2Config),
+        assets: {
+          SC: {
+            normal: {
+              kind: "layered",
+              layers: [
+                { index: 0, texture: createTestTexture(20, 24) },
+                { index: 1, texture: createTestTexture(21, 24) }
+              ]
+            }
+          }
+        }
+      })
+    ).toThrow(/identical dimensions/);
   });
 
   it("requires configured state textures only for displayable symbols", () => {

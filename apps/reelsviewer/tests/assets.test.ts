@@ -18,6 +18,17 @@ describe("reelsviewer assets", () => {
     });
 
     expect(Object.keys(assets)).toEqual(["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10", "CO", "SX"]);
+    expect(Object.keys(assets)).not.toContain("SC-0");
+    expect(assets.SC).toMatchObject({
+      normal: {
+        kind: "layered",
+        layers: [
+          { index: 0, texture: "/assets/SC-0.png" },
+          { index: 1, texture: "/assets/SC-1.png" },
+          { index: 2, texture: "/assets/SC-2.png" }
+        ]
+      }
+    });
     expect(assets.SC).toMatchObject({
       states: {
         spinBlur: "/assets/SC.spinBlur.png"
@@ -72,14 +83,27 @@ describe("reelsviewer assets", () => {
 });
 
 function createModules(symbols: readonly string[], orphanSymbols: readonly string[]) {
+  const compositeLayerCounts: Record<string, number> = {
+    SC: 3,
+    RS: 3,
+    X2: 2,
+    X5: 2,
+    X10: 2
+  };
+
   return Object.fromEntries(
     [...symbols, ...orphanSymbols].flatMap((symbol) => {
       const normal = [`../../../assets/symbols/${symbol}.png`, `/assets/${symbol}.png`] as const;
+      const layers = Array.from({ length: compositeLayerCounts[symbol] ?? 0 }, (_unused, index) => [
+        `../../../assets/symbols/${symbol}-${index}.png`,
+        `/assets/${symbol}-${index}.png`
+      ] as const);
       if (orphanSymbols.includes(symbol)) {
         return [normal];
       }
       return [
         normal,
+        ...layers,
         [
           `../../../assets/symbols/${symbol}.spinBlur.png`,
           `/assets/${symbol}.spinBlur.png`

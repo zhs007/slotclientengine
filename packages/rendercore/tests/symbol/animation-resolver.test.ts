@@ -11,8 +11,11 @@ import type { SymbolAnimationContext, SymbolAnimationResolver } from "../../src/
 const createContext = (requestedState: string, resolvedState = requestedState): SymbolAnimationContext => {
   const root = new Container();
   const sprite = new Sprite(Texture.WHITE);
+  const baseLayer = new Container();
+  const stateSprite = new Sprite(Texture.WHITE);
   const overlayLayer = new Container();
-  root.addChild(sprite, overlayLayer);
+  baseLayer.addChild(sprite);
+  root.addChild(baseLayer, stateSprite, overlayLayer);
   return {
     code: 1,
     symbol: "S00",
@@ -28,7 +31,16 @@ const createContext = (requestedState: string, resolvedState = requestedState): 
     stateTextures: {},
     requiredStateTextures: [],
     root,
+    baseLayer,
     sprite,
+    layers: [
+      {
+        index: 0,
+        texture: Texture.WHITE,
+        sprite
+      }
+    ],
+    stateSprite,
     overlayLayer
   };
 };

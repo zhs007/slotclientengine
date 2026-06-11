@@ -9,8 +9,10 @@ import type {
   RenderSymbolUpdateResult,
   SymbolAni,
   SymbolAnimationContext,
+  SymbolNormalTextureSource,
   SymbolStateId,
-  SymbolStateSnapshot
+  SymbolStateSnapshot,
+  SymbolVisualLayer
 } from "./types.js";
 
 export class RenderSymbol extends VisualEntity<void> {
@@ -21,7 +23,11 @@ export class RenderSymbol extends VisualEntity<void> {
   readonly stateTextures: Readonly<Partial<Record<SymbolStateId, Texture>>>;
   readonly requiredStateTextures: readonly SymbolStateId[];
   readonly sprite: Sprite;
+  readonly baseLayer: Container;
+  readonly layers: readonly SymbolVisualLayer[];
+  readonly stateSprite: Sprite;
   readonly overlayLayer: Container;
+  readonly normalSource: SymbolNormalTextureSource<Texture>;
   readonly #stateMachine: SymbolStateMachine;
   readonly #animationResolver: RenderSymbolOptions["animationResolver"];
   #currentAni: SymbolAni;
@@ -32,16 +38,25 @@ export class RenderSymbol extends VisualEntity<void> {
     this.code = options.definition.code;
     this.symbol = options.definition.symbol;
     this.pays = Object.freeze([...options.definition.pays]);
-    this.texture = options.texture;
+    this.normalSource = normalizeRenderSymbolNormalSource(options.texture);
+    this.texture =
+      this.normalSource.kind === "single"
+        ? this.normalSource.texture
+        : this.normalSource.layers[0].texture;
     this.stateTextures = Object.freeze({ ...(options.stateTextures ?? {}) });
     this.requiredStateTextures = Object.freeze([...(options.requiredStateTextures ?? [])]);
-    this.sprite = new Sprite(options.texture);
+    this.baseLayer = new Container();
+    this.layers = Object.freeze(createVisualLayers(this.normalSource));
+    this.sprite = this.layers[0].sprite;
+    this.stateSprite = new Sprite(this.texture);
     this.overlayLayer = new Container();
     this.#stateMachine = new SymbolStateMachine(options.definition);
     this.#animationResolver = options.animationResolver;
 
-    this.sprite.anchor.set(0.5);
-    this.addChild(this.sprite, this.overlayLayer);
+    this.stateSprite.anchor.set(0.5);
+    this.stateSprite.visible = false;
+    this.baseLayer.addChild(...this.layers.map((layer) => layer.sprite));
+    this.addChild(this.baseLayer, this.stateSprite, this.overlayLayer);
 
     this.#lastAniKey = this.createAniKey(this.#stateMachine.getSnapshot());
     this.#currentAni = this.createCurrentAni();
@@ -59,6 +74,18 @@ export class RenderSymbol extends VisualEntity<void> {
 
   getMainSprite(): Sprite {
     return this.sprite;
+  }
+
+  getLayerSprites(): readonly SymbolVisualLayer[] {
+    return Object.freeze([...this.layers]);
+  }
+
+  getBaseLayer(): Container {
+    return this.baseLayer;
+  }
+
+  getStateSprite(): Sprite {
+    return this.stateSprite;
   }
 
   setDefaultState(state: string): void {
@@ -143,7 +170,10 @@ export class RenderSymbol extends VisualEntity<void> {
       stateTextures: this.stateTextures,
       requiredStateTextures: this.requiredStateTextures,
       root: this,
+      baseLayer: this.baseLayer,
       sprite: this.sprite,
+      layers: this.layers,
+      stateSprite: this.stateSprite,
       overlayLayer: this.overlayLayer
     });
   }
@@ -151,4 +181,78 @@ export class RenderSymbol extends VisualEntity<void> {
   private createAniKey(snapshot: SymbolStateSnapshot): string {
     return `${snapshot.requestedState}->${snapshot.resolvedState}`;
   }
+}
+
+function normalizeRenderSymbolNormalSource(
+  texture: Texture | SymbolNormalTextureSource<Texture>
+): SymbolNormalTextureSource<Texture> {
+  if (isNormalSource(texture)) {
+    if (texture.kind === "single") {
+      return Object.freeze({
+        kind: "single",
+        texture: assertTexture(texture.texture, "single normal")
+      });
+    }
+    if (texture.layers.length === 0) {
+      throw new SymbolAnimationError("Layered symbol normal texture must include at least one layer.");
+    }
+    return Object.freeze({
+      kind: "layered",
+      layers: Object.freeze(
+        [...texture.layers]
+          .sort((left, right) => left.index - right.index)
+          .map((layer, expectedIndex) => {
+            if (layer.index !== expectedIndex) {
+              throw new SymbolAnimationError(
+                "Layered symbol normal texture must use consecutive indexes from 0."
+              );
+            }
+            return Object.freeze({
+              index: layer.index,
+              texture: assertTexture(layer.texture, `layer ${layer.index}`)
+            });
+          })
+      )
+    });
+  }
+
+  return Object.freeze({
+    kind: "single",
+    texture: assertTexture(texture, "normal")
+  });
+}
+
+function createVisualLayers(normalSource: SymbolNormalTextureSource<Texture>): SymbolVisualLayer[] {
+  const layerSources =
+    normalSource.kind === "single"
+      ? [Object.freeze({ index: 0, texture: normalSource.texture })]
+      : normalSource.layers;
+
+  return layerSources.map((layer) => {
+    const sprite = new Sprite(layer.texture);
+    sprite.anchor.set(0.5);
+    return Object.freeze({
+      index: layer.index,
+      texture: layer.texture,
+      sprite
+    });
+  });
+}
+
+function isNormalSource(
+  texture: Texture | SymbolNormalTextureSource<Texture>
+): texture is SymbolNormalTextureSource<Texture> {
+  return (
+    typeof texture === "object" &&
+    texture !== null &&
+    "kind" in texture &&
+    (texture.kind === "single" || texture.kind === "layered")
+  );
+}
+
+function assertTexture(texture: Texture, label: string): Texture {
+  if (!texture || typeof texture !== "object") {
+    throw new SymbolAnimationError(`Symbol ${label} texture must exist.`);
+  }
+  return texture;
 }

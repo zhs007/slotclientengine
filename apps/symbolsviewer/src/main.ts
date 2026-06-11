@@ -2,12 +2,15 @@ import { Application, Assets, Container, Text, type Texture } from "pixi.js";
 import rawGameConfig from "../../../assets/gamecfg/game2.json";
 import stateTextureManifest from "../../../assets/symbols/symbol-state-textures.manifest.json";
 import {
+  createDefaultSymbolAnimationResolver,
   createDefaultSymbolStatePreset,
+  createNamedSymbolAnimationResolver,
   createSymbolCatalog,
   SymbolStateSequenceController,
   type RenderSymbol,
   type SymbolAssetInput,
   type SymbolAssetMap,
+  type SymbolNormalTextureSource,
   type SymbolSequenceStep,
   type SymbolStateId,
   type SymbolTextureSet
@@ -17,6 +20,7 @@ import {
   createStatefulSymbolAssetMapFromModules,
   SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
 } from "./symbol-assets.js";
+import { SYMBOL_VIEWER_ANIMATION_PROFILES } from "./symbol-animation-config.js";
 import { DEFAULT_VIEWER_SEQUENCE, VIEWER_STATE_ORDER } from "./viewer-sequence.js";
 import "./styles.css";
 
@@ -58,6 +62,10 @@ async function bootstrap(): Promise<void> {
     gameConfig: createGameConfig(rawGameConfig),
     assets: textures,
     statePreset,
+    animationResolver: createNamedSymbolAnimationResolver({
+      profiles: SYMBOL_VIEWER_ANIMATION_PROFILES,
+      fallback: createDefaultSymbolAnimationResolver()
+    }),
     texturePolicy: {
       requiredStateTextures: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
     }
@@ -300,12 +308,39 @@ async function loadSymbolAssetInput(asset: SymbolAssetInput): Promise<SymbolAsse
         })
     );
     return Object.freeze({
-      normal: await loadTexture(asset.normal),
+      normal: await loadNormalTextureSource(asset.normal),
       states: Object.freeze(Object.fromEntries(stateEntries))
     });
   }
 
   return loadTexture(asset);
+}
+
+async function loadNormalTextureSource(
+  normal: SymbolTextureSet["normal"]
+): Promise<Texture | SymbolNormalTextureSource<Texture>> {
+  if (isSymbolNormalTextureSource(normal)) {
+    if (normal.kind === "single") {
+      return Object.freeze({
+        kind: "single",
+        texture: await loadTexture(normal.texture)
+      });
+    }
+    const layers = await Promise.all(
+      normal.layers.map(async (layer) =>
+        Object.freeze({
+          index: layer.index,
+          texture: await loadTexture(layer.texture)
+        })
+      )
+    );
+    return Object.freeze({
+      kind: "layered",
+      layers: Object.freeze(layers)
+    });
+  }
+
+  return loadTexture(normal);
 }
 
 async function loadTexture(texture: Texture | string): Promise<Texture> {
@@ -319,6 +354,17 @@ function isSymbolTextureSet(asset: SymbolAssetInput): asset is SymbolTextureSet 
   return typeof asset === "object" && asset !== null && "normal" in asset;
 }
 
+function isSymbolNormalTextureSource(
+  normal: SymbolTextureSet["normal"]
+): normal is SymbolNormalTextureSource<Texture | string> {
+  return (
+    typeof normal === "object" &&
+    normal !== null &&
+    "kind" in normal &&
+    (normal.kind === "single" || normal.kind === "layered")
+  );
+}
+
 function createRenderedSymbols(
   catalog: ReturnType<typeof createSymbolCatalog>,
   symbols: readonly string[],
@@ -327,8 +373,7 @@ function createRenderedSymbols(
   const startX = STAGE_WIDTH / 2 - ((symbols.length - 1) * SYMBOL_CELL_WIDTH) / 2;
   return symbols.map((symbol, index) => {
     const renderSymbol = catalog.createRenderSymbol(symbol);
-    const texture = renderSymbol.texture;
-    const scale = Math.min(1, 126 / Math.max(texture.width || 1, texture.height || 1));
+    const scale = Math.min(1, 126 / getRenderSymbolMaxTextureSize(renderSymbol));
     renderSymbol.position.set(startX + SYMBOL_CELL_WIDTH * index, SYMBOL_Y);
     renderSymbol.scale.set(scale);
 
@@ -347,6 +392,15 @@ function createRenderedSymbols(
     root.addChild(renderSymbol, label);
     return { renderSymbol, label };
   });
+}
+
+function getRenderSymbolMaxTextureSize(renderSymbol: RenderSymbol): number {
+  return Math.max(
+    1,
+    ...renderSymbol
+      .getLayerSprites()
+      .map((layer) => Math.max(layer.texture.width || 1, layer.texture.height || 1))
+  );
 }
 
 function createSequenceDom(steps: readonly SymbolSequenceStep[]): SequenceDom {

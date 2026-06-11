@@ -86,7 +86,10 @@ export interface SymbolAnimationContext {
   readonly stateTextures: Readonly<Partial<Record<SymbolStateId, Texture>>>;
   readonly requiredStateTextures: readonly SymbolStateId[];
   readonly root: Container;
+  readonly baseLayer: Container;
   readonly sprite: Sprite;
+  readonly layers: readonly SymbolVisualLayer[];
+  readonly stateSprite: Sprite;
   readonly overlayLayer: Container;
 }
 
@@ -103,14 +106,39 @@ export interface RenderSymbolUpdateResult {
 
 export interface RenderSymbolOptions {
   readonly definition: SymbolDefinition;
-  readonly texture: Texture;
+  readonly texture: Texture | SymbolNormalTextureSource<Texture>;
   readonly stateTextures?: Readonly<Partial<Record<SymbolStateId, Texture>>>;
   readonly requiredStateTextures?: readonly SymbolStateId[];
   readonly animationResolver: SymbolAnimationResolver;
 }
 
+export interface SymbolLayerTextureSource<TTexture = Texture | string> {
+  readonly index: number;
+  readonly texture: TTexture;
+}
+
+export interface SingleSymbolTextureSource<TTexture = Texture | string> {
+  readonly kind: "single";
+  readonly texture: TTexture;
+}
+
+export interface LayeredSymbolTextureSource<TTexture = Texture | string> {
+  readonly kind: "layered";
+  readonly layers: readonly SymbolLayerTextureSource<TTexture>[];
+}
+
+export type SymbolNormalTextureSource<TTexture = Texture | string> =
+  | SingleSymbolTextureSource<TTexture>
+  | LayeredSymbolTextureSource<TTexture>;
+
+export interface SymbolVisualLayer {
+  readonly index: number;
+  readonly texture: Texture;
+  readonly sprite: Sprite;
+}
+
 export interface SymbolTextureSet<TTexture = Texture | string> {
-  readonly normal: TTexture;
+  readonly normal: TTexture | SymbolNormalTextureSource<TTexture>;
   readonly states?: Readonly<Partial<Record<SymbolStateId, TTexture>>>;
 }
 
@@ -139,9 +167,40 @@ export interface CreateSymbolCatalogOptions {
 }
 
 export interface CreateCatalogRenderSymbolOptions {
-  readonly texture?: Texture;
+  readonly texture?: Texture | SymbolNormalTextureSource<Texture>;
   readonly stateTextures?: Readonly<Partial<Record<SymbolStateId, Texture>>>;
   readonly animationResolver?: SymbolAnimationResolver;
+}
+
+export interface SymbolNamedAnimationSpec {
+  readonly name: string;
+  readonly params?: Readonly<Record<string, unknown>>;
+}
+
+export interface SymbolAnimationProfile {
+  readonly playback: SymbolPlaybackKind;
+  readonly durationSeconds: number;
+  readonly effects: readonly SymbolNamedAnimationSpec[];
+}
+
+export type SymbolAnimationProfileMap = Readonly<
+  Record<string, Readonly<Partial<Record<SymbolStateId, SymbolAnimationProfile>>>>
+>;
+
+export interface SymbolLayerEffect {
+  reset(): void;
+  progress(progress: number): void;
+  complete(): void;
+}
+
+export type NamedSymbolAnimationFactory = (
+  context: SymbolAnimationContext,
+  params: Readonly<Record<string, unknown>>,
+  profile: SymbolAnimationProfile
+) => SymbolLayerEffect;
+
+export interface NamedSymbolAnimationRegistry {
+  readonly [name: string]: NamedSymbolAnimationFactory;
 }
 
 export interface SymbolCatalog {
@@ -151,5 +210,6 @@ export interface SymbolCatalog {
   getPaytableEntry(symbol: string): GameConfigPaytableEntry;
   getAsset(symbol: string): Texture | string;
   getTextureSet(symbol: string): SymbolTextureSet;
+  getNormalTextureSource(symbol: string): SymbolNormalTextureSource;
   createRenderSymbol(symbol: string, options?: CreateCatalogRenderSymbolOptions): RenderSymbol;
 }
