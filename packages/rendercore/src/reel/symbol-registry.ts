@@ -28,6 +28,7 @@ import type {
 interface NormalizedTextureSet {
   readonly normal: SymbolNormalTextureSource<Texture>;
   readonly states?: Readonly<Partial<Record<SymbolStateId, Texture>>>;
+  readonly scale: number;
 }
 
 export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
@@ -51,6 +52,7 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
     const configuredEmptySymbolSet = new Set(options.emptySymbols ?? []);
     const paytableEntries = extractPaytableEntries(options.gameConfig);
     const paytableSymbolSet = new Set(paytableEntries.map((entry) => entry.symbol));
+    const symbolScales = normalizeSymbolScales(options.symbolScales, paytableSymbolSet);
     const assetSymbols = Object.keys(options.assets).sort();
     const assetSymbolSet = new Set(assetSymbols);
 
@@ -83,7 +85,11 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
         continue;
       }
 
-      const textureSet = normalizeTextureSet(entry.symbol, options.assets[entry.symbol]);
+      const textureSet = normalizeTextureSet(
+        entry.symbol,
+        options.assets[entry.symbol],
+        symbolScales.get(entry.symbol) ?? 1
+      );
       assertRequiredStateTextures(entry.symbol, textureSet, requiredStateTextures);
       this.addEntry(entriesByCode, entriesBySymbol, entry, "textured");
       definitionsByCode.set(
@@ -164,13 +170,15 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
       throw new ReelAssetError(`Textured symbol code ${code} is missing render assets.`);
     }
 
-    return new RenderSymbol({
+    const renderSymbol = new RenderSymbol({
       definition,
       texture: textureSet.normal,
       stateTextures: textureSet.states,
       requiredStateTextures: this.#requiredStateTextures,
       animationResolver: this.#animationResolver
     });
+    renderSymbol.scale.set(textureSet.scale);
+    return renderSymbol;
   }
 
   private addEntry(
@@ -195,7 +203,11 @@ export function createReelSymbolRegistry(
   return new ReelSymbolRegistryModel(options);
 }
 
-function normalizeTextureSet(symbol: string, asset: SymbolAssetMap[string]): NormalizedTextureSet {
+function normalizeTextureSet(
+  symbol: string,
+  asset: SymbolAssetMap[string],
+  scale: number
+): NormalizedTextureSet {
   if (asset === undefined || asset === null) {
     throw new ReelAssetError(`Symbol "${symbol}" asset must include a normal texture.`);
   }
@@ -203,13 +215,15 @@ function normalizeTextureSet(symbol: string, asset: SymbolAssetMap[string]): Nor
   if (isSymbolTextureSet(asset)) {
     return Object.freeze({
       normal: normalizeNormalTextureSource(symbol, asset.normal),
-      states: normalizeTextureStates(symbol, asset.states ?? {})
+      states: normalizeTextureStates(symbol, asset.states ?? {}),
+      scale
     });
   }
 
   return Object.freeze({
     normal: normalizeNormalTextureSource(symbol, asset),
-    states: Object.freeze({})
+    states: Object.freeze({}),
+    scale
   });
 }
 
@@ -329,8 +343,8 @@ function calculateCellSize(textureSets: readonly NormalizedTextureSet[]): ReelCe
   let height = 0;
   for (const textureSet of textureSets) {
     const normalSize = getNormalTextureSize(textureSet.normal);
-    width = Math.max(width, normalSize.width);
-    height = Math.max(height, normalSize.height);
+    width = Math.max(width, normalSize.width * textureSet.scale);
+    height = Math.max(height, normalSize.height * textureSet.scale);
   }
 
   if (width <= 0 || height <= 0) {
@@ -354,6 +368,23 @@ function getTextureWidth(texture: Texture): number {
 
 function getTextureHeight(texture: Texture): number {
   return Math.max(0, texture.height || texture.source?.height || texture.orig?.height || 0);
+}
+
+function normalizeSymbolScales(
+  symbolScales: Readonly<Record<string, number>> | undefined,
+  paytableSymbolSet: ReadonlySet<string>
+): ReadonlyMap<string, number> {
+  const normalized = new Map<string, number>();
+  for (const [symbol, scale] of Object.entries(symbolScales ?? {})) {
+    if (!paytableSymbolSet.has(symbol)) {
+      throw new ReelAssetError(`Symbol scale for "${symbol}" does not exist in paytable.`);
+    }
+    if (!Number.isFinite(scale) || scale <= 0) {
+      throw new ReelAssetError(`Symbol "${symbol}" scale must be a positive number.`);
+    }
+    normalized.set(symbol, scale);
+  }
+  return normalized;
 }
 
 function isSymbolTextureSet(asset: SymbolAssetMap[string]): asset is SymbolTextureSet<Texture | string> {

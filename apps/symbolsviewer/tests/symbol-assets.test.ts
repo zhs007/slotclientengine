@@ -199,7 +199,7 @@ describe("symbolsviewer animation config", () => {
       ]);
       expect(SYMBOL_VIEWER_ANIMATION_PROFILES[symbol]?.win?.effects[0]).toMatchObject({
         name: "layerStaggeredShineScale",
-        params: { layers: [0, 1, 2], maxScale: 1.2, staggerSeconds: 0.08 }
+        params: { layers: [1, 2], maxScale: 1.2, staggerSeconds: 0.08 }
       });
     }
 
@@ -209,7 +209,7 @@ describe("symbolsviewer animation config", () => {
       ]);
       expect(SYMBOL_VIEWER_ANIMATION_PROFILES[symbol]?.win?.effects[0]).toMatchObject({
         name: "layerStaggeredShineScale",
-        params: { layers: [0, 1], maxScale: 1.2, staggerSeconds: 0.1 }
+        params: { layers: [1], maxScale: 1.2, staggerSeconds: 0.1 }
       });
     }
   });

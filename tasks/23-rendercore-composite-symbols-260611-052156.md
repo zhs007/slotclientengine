@@ -71,3 +71,30 @@ rg -n '"sharp"|from "sharp"|node:fs|node:path|generate-symbol-state-textures' pa
 ## 浏览器验收
 
 按本次要求未执行浏览器验收。
+
+## 补充修复
+
+后续检查发现 `reelsviewer` 虽已使用 layered normal，但没有接入 named animation profile，仍走 rendercore 默认 `appear/win`；默认动画操作 `context.sprite`，而 layered symbol 的兼容 `sprite` 指向 layer `0`，因此特殊 symbol 在 reelsviewer 中会出现 layer `0` 动画。
+
+已补充：
+
+- `apps/reelsviewer/src/symbol-animation-config.ts`
+- `apps/reelsviewer/src/reels-demo.ts` 接入 `createNamedSymbolAnimationResolver()`
+- `apps/symbolsviewer/src/symbol-animation-config.ts` 和 `apps/reelsviewer/src/symbol-animation-config.ts` 的特殊 symbol `win` 配置改为只驱动上层，layer `0` 不动
+- `apps/reelsviewer/tests/reels-demo.test.ts` 增加 `appear` / `win` 下 layer `0` 不动的回归测试
+- `apps/reelsviewer/README.md` 补充 reelsviewer 特殊 symbol 动画约定
+
+## 补充修复 2
+
+后续检查发现特殊 symbol 在 reelsviewer 中整体偏小，需要按 symbol 配置缩放，并且 cell 尺寸必须按缩放后的实际尺寸计算，避免只视觉放大但布局仍按旧尺寸。
+
+已补充：
+
+- `packages/rendercore/src/reel/types.ts` 新增 `ReelSymbolRegistryOptions.symbolScales`
+- `packages/rendercore/src/reel/symbol-registry.ts` 使用 `texture width/height * scale` 计算 cell 最大宽高，并在创建 `RenderSymbol` 时把 scale 应用到根容器
+- `symbolScales` 对未知 paytable symbol、非正数或非有限数会直接抛 `ReelAssetError`
+- `apps/reelsviewer/src/reels-config.ts` 默认配置 `SC`、`RS`、`X2`、`X5`、`X10` 为 `1.5`
+- `apps/reelsviewer/src/reels-demo.ts` 把 `config.symbolScales` 传入 reel registry
+- `packages/rendercore/tests/reel/symbol-registry.test.ts` 增加缩放后 cell size、RenderSymbol 根容器缩放和非法配置测试
+- `apps/reelsviewer/tests/reels-demo.test.ts` 增加默认特殊 symbol `1.5` 缩放和 cell size 回归测试
+- `packages/rendercore/README.md`、`apps/reelsviewer/README.md` 补充 symbol scale 规则

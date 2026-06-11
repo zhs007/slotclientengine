@@ -45,6 +45,27 @@ describe("ReelSymbolRegistry", () => {
     expect(registry.getCellSize()).toEqual({ width: 15, height: 12 });
   });
 
+  it("applies configured symbol scales to cell size and render symbols", () => {
+    const registry = createReelSymbolRegistry({
+      gameConfig: createGameConfig(basicGameConfig),
+      assets: createBasicAssets({
+        B: createTextureSet(6, 6)
+      }),
+      emptySymbols: ["BN"],
+      symbolScales: {
+        A: 1.5
+      },
+      texturePolicy: {
+        requiredStateTextures: ["spinBlur"]
+      }
+    });
+
+    expect(registry.getCellSize()).toEqual({ width: 15, height: 18 });
+    expect(registry.createRenderSymbolByCode(1)?.scale.x).toBe(1.5);
+    expect(registry.createRenderSymbolByCode(1)?.scale.y).toBe(1.5);
+    expect(registry.createRenderSymbolByCode(2)?.scale.x).toBe(1);
+  });
+
   it("accepts layered normal sources and keeps layered render symbols", () => {
     const registry = createReelSymbolRegistry({
       gameConfig: createGameConfig(basicGameConfig),
@@ -131,6 +152,28 @@ describe("ReelSymbolRegistry", () => {
         emptySymbols: ["BN"]
       })
     ).toThrow(/at least one textured symbol/);
+
+    expect(() =>
+      createReelSymbolRegistry({
+        gameConfig: createGameConfig(basicGameConfig),
+        assets: createBasicAssets(),
+        emptySymbols: ["BN"],
+        symbolScales: {
+          A: 0
+        }
+      })
+    ).toThrow(/scale.*positive/);
+
+    expect(() =>
+      createReelSymbolRegistry({
+        gameConfig: createGameConfig(basicGameConfig),
+        assets: createBasicAssets(),
+        emptySymbols: ["BN"],
+        symbolScales: {
+          NOPE: 1.5
+        }
+      })
+    ).toThrow(/NOPE.*paytable/);
   });
 
   it("fails for URL assets, invalid texture states and unknown lookups", () => {
