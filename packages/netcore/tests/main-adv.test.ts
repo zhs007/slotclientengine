@@ -161,6 +161,38 @@ describe('SlotcraftClient Advanced Tests', () => {
     expect(collectHandler.mock.calls[1][0].playIndex).toBe(2);
   });
 
+  it('should allow callers to disable intermediate auto-collect', async () => {
+    client.disconnect();
+    client = new SlotcraftClient({
+      url: `ws://localhost:${port}`,
+      reconnectDelay: 10,
+      requestTimeout: 100,
+      logger: null,
+      autoCollectIntermediateResults: false,
+    });
+    await connectAndEnterGame();
+
+    const collectHandler = vi.fn((msg, ws) => {
+      server.send(ws, { msgid: 'cmdret', cmdid: 'collect', isok: true, req: msg });
+    });
+    server.on('collect', collectHandler);
+
+    server.on('gamectrl3', (msg, ws) => {
+      server.send(ws, {
+        msgid: 'gamemoduleinfo',
+        gmi: { replyPlay: { results: [{}, {}, {}] } },
+        totalwin: 10,
+      });
+      server.send(ws, { msgid: 'cmdret', cmdid: 'gamectrl3', isok: true });
+    });
+
+    await client.spin({ bet: 1, lines: 1 });
+    await sleep(20);
+
+    expect(collectHandler).not.toHaveBeenCalled();
+    expect(client.getState()).toBe(ConnectionState.SPINEND);
+  });
+
   it('should delegate event emitter methods correctly', () => {
     const implementation = (client as any).implementation;
     const onSpy = vi.spyOn(implementation, 'on');
