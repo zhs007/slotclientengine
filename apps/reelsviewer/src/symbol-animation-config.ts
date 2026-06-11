@@ -60,7 +60,7 @@ const createTwoLayerMultiplierProfiles = () =>
     })
   });
 
-export const SYMBOL_VIEWER_ANIMATION_PROFILES = Object.freeze({
+export const REELS_VIEWER_ANIMATION_PROFILES = Object.freeze({
   SC: createThreeLayerBonusProfiles(),
   RS: createThreeLayerBonusProfiles(),
   X2: createTwoLayerMultiplierProfiles(),

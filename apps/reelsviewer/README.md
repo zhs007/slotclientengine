@@ -24,14 +24,19 @@ finalYs = [1, 1, 4, 0, 27]
 - `CO.png`、`SX.png` 当前不在 paytable 中，是孤儿图片，不参与 reels 渲染。
 - 共享 state texture manifest 支持单图 normal string 和 layered normal object。
 - `SC`、`RS`、`X2`、`X5`、`X10` 在 reels 中按 layered normal 渲染普通态，`SC-0` 这类 layer 文件不会成为独立 paytable asset。
+- `SC` / `RS` 的 `appear` 与 symbolsviewer 一致：layer `0` 不动，layer `1` 弹动缩放，layer `2` 扫光缩放。
+- `X2` / `X5` / `X10` 的 `appear` 与 symbolsviewer 一致：layer `0` 不动，layer `1` 扫光缩放。
+- 特殊 symbol 的 `win` 使用 named animation profile 让上层做错峰扫光缩放，layer `0` 不动。
+- 每种 symbol 都可以通过 `symbolScales` 配置整体缩放；默认 `SC`、`RS`、`X2`、`X5`、`X10` 为 `1.5`。
 - `spinBlur` 使用从完整复合图标生成的合成状态贴图，不回退普通 layers。
-- cell 尺寸由非空、可渲染普通图的最大宽高计算；多层 symbol 使用 layer 共同尺寸，小图居中显示。
+- cell 尺寸由非空、可渲染普通图在应用 `symbolScales` 后的最大宽高计算；多层 symbol 使用 layer 共同尺寸，小图居中显示。
 
 默认 viewer 配置在 `src/reels-config.ts`：
 
 - `reelsName = "reels01"`
 - `visibleRows = 5`
 - `emptySymbols = ["BN"]`
+- `symbolScales = { SC: 1.5, RS: 1.5, X2: 1.5, X5: 1.5, X10: 1.5 }`
 - `minimumSpinCycles = 10`
 - `baseDurationMs = 1600`
 - `speedSymbolsPerSecond = 42`

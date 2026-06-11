@@ -18,10 +18,13 @@ export interface ReelCellSize {
   readonly height: number;
 }
 
+export type ReelSymbolScaleMap = Readonly<Record<string, number>>;
+
 export interface ReelSymbolRegistryOptions {
   readonly gameConfig: LogicGameConfig;
   readonly assets: SymbolAssetMap;
   readonly emptySymbols?: readonly string[];
+  readonly symbolScales?: ReelSymbolScaleMap;
   readonly statePreset?: SymbolStatePreset;
   readonly animationResolver?: SymbolAnimationResolver;
   readonly texturePolicy?: SymbolTexturePolicy;

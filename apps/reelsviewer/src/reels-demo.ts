@@ -7,13 +7,18 @@ import {
   type ReelSpinPlan,
   type RenderReelSetUpdateResult
 } from "@slotclientengine/rendercore/reel";
-import type { SymbolAssetMap } from "@slotclientengine/rendercore";
+import {
+  createDefaultSymbolAnimationResolver,
+  createNamedSymbolAnimationResolver,
+  type SymbolAssetMap
+} from "@slotclientengine/rendercore";
 import { getDefaultFinalYs, getDefaultGmiScene } from "./gmi.js";
 import {
   DEFAULT_REELS_VIEWER_CONFIG,
   REELS_VIEWER_REQUIRED_STATE_TEXTURES,
   type ReelsViewerConfig
 } from "./reels-config.js";
+import { REELS_VIEWER_ANIMATION_PROFILES } from "./symbol-animation-config.js";
 
 export interface ReelsDemoOptions {
   readonly rawGameConfig: unknown;
@@ -50,6 +55,11 @@ export function createReelsDemo(options: ReelsDemoOptions): ReelsDemo {
     gameConfig,
     assets: options.symbolAssets,
     emptySymbols: config.emptySymbols,
+    symbolScales: config.symbolScales,
+    animationResolver: createNamedSymbolAnimationResolver({
+      profiles: REELS_VIEWER_ANIMATION_PROFILES,
+      fallback: createDefaultSymbolAnimationResolver()
+    }),
     texturePolicy: {
       requiredStateTextures: REELS_VIEWER_REQUIRED_STATE_TEXTURES
     }

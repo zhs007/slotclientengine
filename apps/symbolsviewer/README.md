@@ -38,12 +38,12 @@ pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --s
 `SC` / `RS`：
 
 - `appear`: layer `0` 不动，layer `1` 上下弹动并缩放到约 `1.2`，layer `2` 缩放到约 `1.2` 并扫光。
-- `win`: layer `0`、`1`、`2` 错峰扫光并缩放到约 `1.2`。
+- `win`: layer `0` 不动，layer `1`、`2` 错峰扫光并缩放到约 `1.2`。
 
 `X2` / `X5` / `X10`：
 
 - `appear`: layer `0` 不动，layer `1` 缩放到约 `1.2` 并扫光。
-- `win`: layer `0`、`1` 错峰扫光并缩放到约 `1.2`。
+- `win`: layer `0` 不动，layer `1` 扫光并缩放到约 `1.2`。
 
 动画配置位于 `src/symbol-animation-config.ts`，执行和参数校验由 `@slotclientengine/rendercore` 的 named animation resolver 完成。
 
@@ -76,7 +76,7 @@ PC 横屏建议使用 `1280x720` 或更大视口确认：
 - `normal` 显示普通图。
 - `SC` / `RS` 的 `appear` 中 layer `0` 不动，layer `1` 弹动缩放，layer `2` 扫光缩放。
 - `X2` / `X5` / `X10` 的 `appear` 中 layer `0` 不动，layer `1` 扫光缩放。
-- `win` 中特殊 symbol 按各自 layer 错峰扫光缩放。
+- `win` 中特殊 symbol 只让上层按各自 layer 错峰扫光缩放，layer `0` 不动。
 - `spinBlur` 显示纵向模糊图，不是普通图。
 - `disabled` 显示灰色图，不是普通图。
 - 移除、调整、增加状态后，播放顺序按当前序列执行。
