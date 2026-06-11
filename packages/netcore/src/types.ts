@@ -91,6 +91,12 @@ export interface SlotcraftClientOptions {
   fetch?: (url: string, init?: any) => Promise<any>;
   /** Optional: A custom logger. Set to `null` to disable logging. Defaults to `console`. */
   logger?: Logger | null;
+  /**
+   * Optional: Auto-collect intermediate multi-result stages in live mode.
+   * Defaults to true for existing consumers. Set false when the UI must surface
+   * collect-required states explicitly.
+   */
+  autoCollectIntermediateResults?: boolean;
 }
 
 /**

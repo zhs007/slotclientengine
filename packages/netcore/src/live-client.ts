@@ -325,7 +325,9 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
       // Unlike spin, we don't need to guess defaults. We use the last known spin params.
       const { bet, lines, times } = curSpinParams || {};
       if (bet === undefined || lines === undefined || times === undefined) {
-        this.logger.warn('Spin parameters are not available for selectSomething. Sending without them.');
+        this.logger.warn(
+          'Spin parameters are not available for selectSomething. Sending without them.'
+        );
       }
 
       // Cache the new client parameter.
@@ -583,18 +585,12 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
               // that the user has "seen" the intermediate results, reducing the number of
               // required manual `collect` calls and improving protocol efficiency.
               // The last result is left uncollected for the user to manually trigger.
-              if (
-                this.userInfo.lastResultsCount &&
-                this.userInfo.lastResultsCount > 1
-              ) {
-                const autoCollectIndex = this.userInfo.lastResultsCount - 2;
+              const autoCollectIndex = this.getAutoCollectIntermediateIndex();
+              if (autoCollectIndex !== null) {
                 this.collect(autoCollectIndex).catch((err) => {
                   // Log the error but do not throw, as auto-collect is a background
                   // optimization and should not disrupt the main game flow.
-                  this.logger.warn(
-                    `Auto-collect for playIndex ${autoCollectIndex} failed:`,
-                    err
-                  );
+                  this.logger.warn(`Auto-collect for playIndex ${autoCollectIndex} failed:`, err);
                 });
               }
               break;
@@ -646,11 +642,8 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
 
               // Just like after a regular spin, if the resume state includes multiple
               // results, we auto-collect the second-to-last one to streamline the UX.
-              if (
-                this.userInfo.lastResultsCount &&
-                this.userInfo.lastResultsCount > 1
-              ) {
-                const autoCollectIndex = this.userInfo.lastResultsCount - 2;
+              const autoCollectIndex = this.getAutoCollectIntermediateIndex();
+              if (autoCollectIndex !== null) {
                 this.collect(autoCollectIndex).catch((err) => {
                   this.logger.warn(
                     `Auto-collect on resume for playIndex ${autoCollectIndex} failed:`,
@@ -862,6 +855,17 @@ export class SlotcraftClientLive implements ISlotcraftClientImpl {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
     }
+  }
+
+  private getAutoCollectIntermediateIndex(): number | null {
+    if (this.options.autoCollectIntermediateResults === false) {
+      return null;
+    }
+    const resultsCount = this.userInfo.lastResultsCount;
+    if (typeof resultsCount !== 'number' || resultsCount <= 1) {
+      return null;
+    }
+    return resultsCount - 2;
   }
 
   private startHeartbeat(): void {
