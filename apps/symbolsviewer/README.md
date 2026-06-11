@@ -12,12 +12,12 @@
 - `assets/symbols/*.disabled.png`
 - `assets/symbols/symbol-state-textures.manifest.json`
 
-viewer 只展示 paytable 与普通图片资源的交集。当前可展示 symbol 是 `S00`、`S0`、`S1`、`S5`、`S10`。paytable 中缺图的 `BN`、`SC`、`RS`、`X2`、`X5`、`X10` 不会进入展示列表；孤儿图片 `SX.png` 也不会进入展示列表。
+viewer 只展示 paytable 与普通图片资源的交集。当前可展示 symbol 是 `S00`、`S0`、`S1`、`S5`、`S10`、`SC`、`RS`、`X2`、`X5`、`X10`。paytable 中缺图的 `BN` 不会进入展示列表；孤儿图片 `CO.png`、`SX.png` 也不会进入展示列表。
 
 `spinBlur` 和 `disabled` 状态图由 `rendercore` 的 Node 脚本生成：
 
 ```bash
-pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --symbols S00,S0,S1,S5,S10
+pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --symbols S00,S0,S1,S5,S10,SC,RS,X2,X5,X10
 ```
 
 viewer 会读取 manifest，并要求当前可展示 symbol 同时具备 `spinBlur` 和 `disabled` 贴图；缺失或写入未知状态会直接报错。
@@ -45,7 +45,7 @@ pnpm --filter symbolsviewer dev -- --host 0.0.0.0
 PC 横屏建议使用 `1280x720` 或更大视口确认：
 
 - Pixi canvas 非空。
-- `S00`、`S0`、`S1`、`S5`、`S10` 全部可见。
+- `S00`、`S0`、`S1`、`S5`、`S10`、`SC`、`RS`、`X2`、`X5`、`X10` 全部可见。
 - 默认序列自动播放。
 - `normal` 显示普通图。
 - `appear` 有放大弹回效果。
