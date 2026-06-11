@@ -109,9 +109,9 @@ describe("symbolsviewer assets", () => {
     const catalog = createSymbolsViewerCatalog(game2Config, createViewerStatefulAssets());
 
     expect(catalog.getValidation()).toMatchObject({
-      displayableSymbols: ["S00", "S0", "S1", "S5", "S10"],
-      ignoredPaytableSymbolsWithoutAssets: ["BN", "SC", "RS", "X2", "X5", "X10"],
-      ignoredAssetsWithoutPaytable: ["SX"]
+      displayableSymbols: ["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10"],
+      ignoredPaytableSymbolsWithoutAssets: ["BN"],
+      ignoredAssetsWithoutPaytable: ["CO", "SX"]
     });
   });
 
@@ -124,18 +124,36 @@ describe("symbolsviewer assets", () => {
         S1: "/assets/S1.png",
         S5: "/assets/S5.png",
         S10: "/assets/S10.png",
+        SC: "/assets/SC.png",
+        RS: "/assets/RS.png",
+        X2: "/assets/X2.png",
+        X5: "/assets/X5.png",
+        X10: "/assets/X10.png",
+        CO: "/assets/CO.png",
         SX: "/assets/SX.png"
       }
     });
 
-    expect(catalog.getDisplayableSymbols()).toEqual(["S00", "S0", "S1", "S5", "S10"]);
+    expect(catalog.getDisplayableSymbols()).toEqual([
+      "S00",
+      "S0",
+      "S1",
+      "S5",
+      "S10",
+      "SC",
+      "RS",
+      "X2",
+      "X5",
+      "X10"
+    ]);
   });
 });
 
 function createViewerStatefulAssets() {
+  const displayableSymbols = ["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10"];
   return createStatefulSymbolAssetMapFromModules({
-    modules: createViewerModules(["S00", "S0", "S1", "S5", "S10"], ["SX"]),
-    manifest: createManifest(["S00", "S0", "S1", "S5", "S10"]),
+    modules: createViewerModules(displayableSymbols, ["CO", "SX"]),
+    manifest: createManifest(displayableSymbols),
     requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
   });
 }

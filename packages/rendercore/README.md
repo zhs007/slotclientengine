@@ -1,6 +1,6 @@
 # @slotclientengine/rendercore
 
-`rendercore` 是 slot 前端渲染核心库。它基于 `pixi.js` v8、复用 `@slotclientengine/pixiani` 的基础显示对象生命周期，并复用 `@slotclientengine/logiccore` 的 game config/paytable 契约。`apps/symbolsviewer` 是本包的调试 app，业务展示逻辑不放进核心库。
+`rendercore` 是 slot 前端渲染核心库。它基于 `pixi.js` v8、复用 `@slotclientengine/pixiani` 的基础显示对象生命周期，并复用 `@slotclientengine/logiccore` 的 game config/paytable 契约。`apps/symbolsviewer` 和 `apps/reelsviewer` 是调试 app，业务展示逻辑不放进核心库。
 
 ## Symbol API
 
@@ -117,16 +117,87 @@ symbol.requestState("appear");
 symbol.requestState("win");
 ```
 
+## Reel API
+
+reel 能力从主入口和子路径导出：
+
+```ts
+import {
+  RenderReelSet,
+  createReelLayout,
+  createReelSpinPlan,
+  createReelSymbolRegistry
+} from "@slotclientengine/rendercore/reel";
+```
+
+`ReelSymbolRegistry` 把 `LogicGameConfig` 的 paytable、已加载 `Texture`、空图标配置和 symbol 状态贴图合并成可渲染 registry：
+
+- `texturedSymbols`：paytable 中有普通图且可创建 `RenderSymbol` 的 symbol。
+- `configuredEmptySymbols`：调用方显式配置为空的 symbol，例如 viewer 里的 `BN`。
+- `missingAssetEmptySymbols`：paytable 中缺少普通图的 symbol，按空 cell 处理。
+- `ignoredAssetsWithoutPaytable`：有图片但不在 paytable 的孤儿资产，不参与 reels 渲染。
+
+空图标会占据 cell 和 reel 位置，但 `createRenderSymbolByCode()` 返回 `null`，状态请求是 no-op。有普通图的 symbol 如果缺少 `texturePolicy.requiredStateTextures` 声明的状态贴图会直接抛错，不会静默回退到普通图。
+
+cell 尺寸由当前参与 reels 渲染的非空普通图动态计算：宽度取最大普通图宽度，高度取最大普通图高度。显式空图标、缺图空图标、孤儿图片和状态贴图都不参与尺寸计算。`RenderReel` 会把每个非空 symbol 放在 cell 中心。
+
+典型流程：
+
+```ts
+const finalYs = gameConfig.getStopYCoordinates({
+  reelsName: "reels01",
+  sceneName: "step0.scene0",
+  scene
+});
+
+const registry = createReelSymbolRegistry({
+  gameConfig,
+  assets: loadedTextures,
+  emptySymbols: ["BN"],
+  texturePolicy: { requiredStateTextures: ["spinBlur"] }
+});
+
+const cellSize = registry.getCellSize();
+const layout = createReelLayout({
+  reelCount: reels.getReelCount(),
+  visibleRows: 5,
+  cellWidth: cellSize.width,
+  cellHeight: cellSize.height
+});
+
+const reelSet = new RenderReelSet({ reels, layout, registry });
+reelSet.resetToFinalYs(finalYs);
+const plan = createReelSpinPlan({
+  reels,
+  finalYs,
+  visibleRows: 5,
+  minimumSpinCycles: 10,
+  baseDurationMs: 1600,
+  speedSymbolsPerSecond: 42,
+  startDelayMs: 90,
+  stopDelayMs: 180
+});
+reelSet.spin(plan);
+```
+
+`createReelSpinPlan()` 先使用最终 y、时长、速度和最小转动距离反推每轴 `travelSymbols` 与 `startY`。默认 viewer 语义下每轴至少转动 `minimumSpinCycles * visibleRows`，即 `10 * 5 = 50` 个 symbol 位置。`RenderReelSet.update(deltaSeconds)` 按 `startDelayMs` 一轴一轴启动，并按每轴 `stopAtMs` 一轴一轴停下。
+
+状态流转由核心库触发：
+
+- 旋转中，非空 symbol 请求 `spinBlur`。
+- 落点刷新后，可见非空 symbol 请求 `appear`。
+- `appear` 播放完成后，`RenderSymbol` 回到默认 `normal`。
+
 ## 全局序列
 
 `SymbolStateSequenceController` 只决定下一步请求哪个状态，不直接操作 Pixi。viewer 或游戏层把返回的状态广播给全部 `RenderSymbol`。`once` 状态需要等全部 symbol 都上报 `onceCompleted` 后再推进。
 
 ## 命令
 
-状态贴图生成脚本只在 Node 侧使用 `sharp`，不会进入浏览器运行时代码或发布 bundle。当前 viewer 资源可用下面命令生成：
+状态贴图生成脚本只在 Node 侧使用 `sharp`，不会进入浏览器运行时代码或发布 bundle。当前 viewer/reels 资源可用下面命令生成：
 
 ```bash
-pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --symbols S00,S0,S1,S5,S10
+pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --symbols S00,S0,S1,S5,S10,SC,RS,X2,X5,X10
 ```
 
 ```bash
@@ -134,4 +205,5 @@ pnpm --filter @slotclientengine/rendercore lint
 pnpm --filter @slotclientengine/rendercore test
 pnpm --filter @slotclientengine/rendercore typecheck
 pnpm --filter @slotclientengine/rendercore build
+pnpm --filter reelsviewer dev -- --host 0.0.0.0
 ```

@@ -39,6 +39,31 @@
       "normal": "./S10.png",
       "spinBlur": "./S10.spinBlur.png",
       "disabled": "./S10.disabled.png"
+    },
+    "SC": {
+      "normal": "./SC.png",
+      "spinBlur": "./SC.spinBlur.png",
+      "disabled": "./SC.disabled.png"
+    },
+    "RS": {
+      "normal": "./RS.png",
+      "spinBlur": "./RS.spinBlur.png",
+      "disabled": "./RS.disabled.png"
+    },
+    "X2": {
+      "normal": "./X2.png",
+      "spinBlur": "./X2.spinBlur.png",
+      "disabled": "./X2.disabled.png"
+    },
+    "X5": {
+      "normal": "./X5.png",
+      "spinBlur": "./X5.spinBlur.png",
+      "disabled": "./X5.disabled.png"
+    },
+    "X10": {
+      "normal": "./X10.png",
+      "spinBlur": "./X10.spinBlur.png",
+      "disabled": "./X10.disabled.png"
     }
   }
 }
