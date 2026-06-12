@@ -32,14 +32,25 @@ Pixi canvas 的 backing size 和背景图像素尺寸一致，固定为 `941 x 1
 - 副转轮背景：`x=95`, `y=826`, `751 x 641`
 - Spin 按钮：`x=470.5`, `y=1550`
 
-主 scene 始终按完整 `5 x 5` 解析、反查停轴和验收。视觉上只通过 viewport mask 显示中间一行，以及上方相邻一行的下半部分和下方相邻一行的上半部分。裁剪规则为 `cropY = 1.5 * cellHeight`，`cropHeight = 2 * cellHeight`。
+主 scene 始终按完整 `5 x 5` 解析、反查停轴和验收。视觉上普通轴只通过 viewport mask 显示中心行附近内容；mask 以 `y=2` 中心行为中心，最多显示 `2 * cellHeight`，但会按 `backgroundLocalFrame.height` 反推的本地高度封顶，保证可见区域被裁切在主转轮背板内框高度内。
+
+主转轮对齐不使用整张 `reels1bk.png` 的 `1025px` 宽度做 fit，而是使用 game001 专用的底图内框校准：
+
+- `backgroundLocalFrame`: `x=25`, `y=96`, `width=975`, `height=281`
+- `columnCentersX`: `[125, 319, 514, 708, 902]`
 
 主转轮宽度适配规则：
 
 1. 根据 rendercore registry 得到 cell 尺寸。
-2. 计算 `rawReelsContentWidth = reelCount * cellWidth + (reelCount - 1) * columnGap`。
-3. 计算 `mainReelsFitScale = reels1bk.width / rawReelsContentWidth`。
-4. `SC`、`RS`、`X2`、`X5`、`X10` 保留自身 `1.5` 缩放，再由主转轮父容器追加 `mainReelsFitScale`。
+2. 计算 raw 列中心：`rawCenterX(x) = layout.getReelX(x) + cellWidth / 2`。
+3. 计算 `mainReelsFitScale = (columnCentersX[4] - columnCentersX[0]) / (rawCenterX(4) - rawCenterX(0))`。
+4. 用第 1 列底图中心反推主转轮内容 layer 的 `x`。
+5. 用 `backgroundLocalFrame` 的垂直中心反推主转轮内容 layer 的 `y`，并让 mask 高度被 `backgroundLocalFrame.height` 裁切。
+6. `SC`、`RS`、`X2`、`X5`、`X10` 保留自身 `1.75` 倍缩放，再由主转轮父容器追加 `mainReelsFitScale`。
+
+第 4 轴是 game001 特殊视觉需求，不是 rendercore 通用行为。这里的“第 4 轴”按用户语义表示从左到右第 4 列，也就是 0-based `x=3`；中心行是 `y=2`。主转轮 view 只为普通轴 `x=0,1,2,4` 创建 `RenderReel`，第 4 轴只显示 `scene[3][2]` 对应的一个中心 symbol。第 4 轴不参与 spin，不上下 bounce，不请求 `spinBlur`；spin 完成时硬切到目标 scene 的 `scene[3][2]`，并保持在第 4 列中心。如果 live `defaultScene` 存在，初始化显示 `defaultScene[3][2]`；如果没有 live `defaultScene`，第一次 live spin 结算前锁定轴保持 hidden，不使用 `y=0`、fixture 或旧画面兜底。
+
+动画完成后的视觉验收口径也是 game001 专用：普通轴 visible scene 必须分别等于目标 scene 的 `x=0,1,2,4` 列；锁定轴只校验当前显示 code 等于目标 `scene[3][2]` 且只显示一个 symbol。完整 `5 x 5` scene 仍然会先严格解析，并用于 `gameConfig.getStopYCoordinates()` 的完整停轴反查。未来如果别的游戏也需要锁定轴，应另开任务抽象通用 API，不在本 demo 里提前泛化到 rendercore。
 
 副转轮区当前只显示 `reels2bk.png` 背景。本任务没有猜测或伪造副 scene 数据。
 
@@ -81,7 +92,7 @@ pnpm --filter game001 build
 
 ## Symbol 动画
 
-`SC`、`RS`、`X2`、`X5`、`X10` 的 profile 位于 `src/symbol-animation-config.ts`。`SC.win` 绑定 `layerTextureSequence`，手动请求可见 `SC` 的 `win` 状态时，layer `1` 会播放 `SC-1-0.png` 到 `SC-1-4.png`。`RS.appear` 与 `RS.win` 会让 layer `1` 在放大时向左旋转约 `20` 度，并在缩小时还原；本 demo 不在没有中奖线坐标契约的情况下推断哪些 SC 应自动进入 `win`。
+`SC`、`RS`、`X2`、`X5`、`X10` 的 profile 位于 `src/symbol-animation-config.ts`，基础缩放为 `1.75` 倍。`SC.win` 绑定 `layerTextureSequence`，手动请求可见 `SC` 的 `win` 状态时，layer `1` 会播放 `SC-1-0.png` 到 `SC-1-4.png`。`RS.appear` 与 `RS.win` 会让 layer `1` 在放大时向左旋转约 `20` 度，并在缩小时还原；`appear` 只用于普通轴停轴落地，下一次 spin 启动前会清除未完成的 `appear` 状态，避免它在旋转开始阶段继续播放。本 demo 不在没有中奖线坐标契约的情况下推断哪些 SC 应自动进入 `win`。
 
 如果依赖安装失败，可先设置代理：
 
@@ -98,4 +109,5 @@ pnpm install
 - server 返回的 GMI 无法被 `createGameLogicFromGmi()` 解析：不启动动画。
 - 主 scene 不是 `5 x 5`：不启动动画。
 - `gameConfig.getStopYCoordinates()` 无法反查停轴：不启动动画。
-- 动画完成后完整 visible scene 与目标 scene 不一致：进入错误状态。
+- 动画完成后普通轴 visible scene 与目标 scene 对应列不一致：进入错误状态。
+- 动画完成后第 4 轴显示 code 不等于目标 `scene[3][2]`，或锁定轴不是恰好一个可见 symbol：进入错误状态。
