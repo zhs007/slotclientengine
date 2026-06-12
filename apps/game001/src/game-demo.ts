@@ -1,11 +1,10 @@
-import { Container, Graphics } from "pixi.js";
+import { Container } from "pixi.js";
 import {
   createGameConfig,
   type LogicGameConfig,
   type SceneMatrix,
 } from "@slotclientengine/logiccore";
 import {
-  RenderReelSet,
   createReelLayout,
   createReelSpinPlan,
   createReelSymbolRegistry,
@@ -13,7 +12,6 @@ import {
   type ReelSpinDirection,
   type ReelSpinPlan,
   type ReelSymbolScaleMap,
-  type RenderReelSetUpdateResult,
 } from "@slotclientengine/rendercore/reel";
 import {
   createDefaultSymbolAnimationResolver,
@@ -26,15 +24,21 @@ import {
   type MainReelsLayerLayout,
 } from "./game-layout.js";
 import { GAME001_REQUIRED_STATE_TEXTURES } from "./assets.js";
-import { assertScenesEqual, validateGame001Scene } from "./scene.js";
+import { validateGame001Scene } from "./scene.js";
 import { GAME001_ANIMATION_PROFILES } from "./symbol-animation-config.js";
+import {
+  createGame001MainReelsView,
+  type Game001MainReelsView,
+  type Game001MainReelsViewUpdateResult,
+  type Game001MainReelsVisualSnapshot,
+} from "./main-reels-view.js";
 
 export const GAME001_SYMBOL_SCALES = Object.freeze({
-  SC: 1.5,
-  RS: 1.5,
-  X2: 1.5,
-  X5: 1.5,
-  X10: 1.5,
+  SC: 1.75,
+  RS: 1.75,
+  X2: 1.75,
+  X5: 1.75,
+  X10: 1.75,
 } satisfies ReelSymbolScaleMap);
 
 export interface Game001ReelConfig {
@@ -75,16 +79,16 @@ export interface Game001ReelRuntime {
   readonly gameConfig: LogicGameConfig;
   readonly layout: ReelLayout;
   readonly mainReelsLayer: Container;
-  readonly mainReelsViewport: Container;
-  readonly reelSet: RenderReelSet;
+  readonly mainReelsView: Game001MainReelsView;
   readonly layerLayout: MainReelsLayerLayout;
   getCurrentScene(): SceneMatrix | null;
   getTargetScene(): SceneMatrix | null;
   getFinalYs(): readonly number[] | null;
+  getVisualSnapshot(): Game001MainReelsVisualSnapshot;
   applyScene(scene: SceneMatrix, sceneName?: string): readonly number[];
   createSpinPlan(scene: SceneMatrix, sceneName?: string): ReelSpinPlan;
   spinToScene(scene: SceneMatrix, sceneName?: string): ReelSpinPlan;
-  update(deltaSeconds: number): RenderReelSetUpdateResult;
+  update(deltaSeconds: number): Game001MainReelsViewUpdateResult;
   isSpinning(): boolean;
 }
 
@@ -115,36 +119,15 @@ export function createGame001ReelRuntime(
     cellHeight: cellSize.height,
     columnGap: Math.max(8, Math.round(cellSize.width * 0.08)),
   });
-  const reelSet = new RenderReelSet({
+  const layerLayout = createMainReelsLayerLayout(layout, createGame001Layout());
+  const mainReelsView = createGame001MainReelsView({
     reels,
     layout,
     registry,
+    layerLayout,
   });
-  const layerLayout = createMainReelsLayerLayout(layout, createGame001Layout());
-  const mainReelsLayer = new Container();
-  const mainReelsViewport = new Container();
-  const viewportMask = new Graphics()
-    .rect(
-      0,
-      layerLayout.cropY,
-      layerLayout.rawReelsContentWidth,
-      layerLayout.cropHeight,
-    )
-    .fill({ color: 0xffffff, alpha: 1 });
 
-  mainReelsViewport.addChild(reelSet);
-  mainReelsViewport.addChild(viewportMask);
-  mainReelsViewport.mask = viewportMask;
-  mainReelsLayer.addChild(mainReelsViewport);
-  mainReelsLayer.x = layerLayout.x;
-  mainReelsLayer.y = layerLayout.y;
-  mainReelsLayer.scale.set(layerLayout.mainReelsFitScale);
-  mainReelsLayer.visible = false;
-
-  let currentScene: SceneMatrix | null = null;
-  let targetScene: SceneMatrix | null = null;
   let finalYs: readonly number[] | null = null;
-  let spinning = false;
 
   const calculateFinalYs = (scene: SceneMatrix, sceneName: string) =>
     gameConfig.getStopYCoordinates({
@@ -157,18 +140,20 @@ export function createGame001ReelRuntime(
     config,
     gameConfig,
     layout,
-    mainReelsLayer,
-    mainReelsViewport,
-    reelSet,
+    mainReelsLayer: mainReelsView.root,
+    mainReelsView,
     layerLayout,
     getCurrentScene(): SceneMatrix | null {
-      return currentScene;
+      return mainReelsView.getCurrentScene();
     },
     getTargetScene(): SceneMatrix | null {
-      return targetScene;
+      return mainReelsView.getTargetScene();
     },
     getFinalYs(): readonly number[] | null {
       return finalYs;
+    },
+    getVisualSnapshot(): Game001MainReelsVisualSnapshot {
+      return mainReelsView.getVisualSnapshot();
     },
     applyScene(
       scene: SceneMatrix,
@@ -176,17 +161,8 @@ export function createGame001ReelRuntime(
     ): readonly number[] {
       const validScene = validateGame001Scene(scene, sceneName);
       const nextFinalYs = calculateFinalYs(validScene, sceneName);
-      reelSet.resetToFinalYs(nextFinalYs);
+      mainReelsView.applyScene(validScene, nextFinalYs);
       finalYs = nextFinalYs;
-      currentScene = validScene;
-      targetScene = null;
-      spinning = false;
-      mainReelsLayer.visible = true;
-      assertScenesEqual(
-        reelSet.getVisibleScene(),
-        validScene,
-        "reelSet visible scene",
-      );
       return nextFinalYs;
     },
     createSpinPlan(
@@ -211,7 +187,7 @@ export function createGame001ReelRuntime(
       scene: SceneMatrix,
       sceneName = "game001.spinScene",
     ): ReelSpinPlan {
-      if (spinning) {
+      if (mainReelsView.isSpinning()) {
         throw new Error("game001 reels are already spinning.");
       }
       const validScene = validateGame001Scene(scene, sceneName);
@@ -227,29 +203,15 @@ export function createGame001ReelRuntime(
         startDelayMs: config.startDelayMs,
         stopDelayMs: config.stopDelayMs,
       });
-      targetScene = validScene;
       finalYs = nextFinalYs;
-      spinning = true;
-      mainReelsLayer.visible = true;
-      reelSet.spin(plan);
+      mainReelsView.spinToScene(validScene, nextFinalYs, plan);
       return plan;
     },
-    update(deltaSeconds: number): RenderReelSetUpdateResult {
-      const result = reelSet.update(deltaSeconds);
-      if (result.completed && targetScene) {
-        assertScenesEqual(
-          reelSet.getVisibleScene(),
-          targetScene,
-          "completed reelSet visible scene",
-        );
-        currentScene = targetScene;
-        targetScene = null;
-        spinning = false;
-      }
-      return result;
+    update(deltaSeconds: number): Game001MainReelsViewUpdateResult {
+      return mainReelsView.update(deltaSeconds);
     },
     isSpinning(): boolean {
-      return spinning;
+      return mainReelsView.isSpinning();
     },
   });
 

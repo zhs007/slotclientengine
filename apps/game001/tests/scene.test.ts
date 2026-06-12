@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertScenesEqual,
+  getGame001LockedCenterCode,
   getReplyPlayResultsLength,
   sceneEquals,
   validateGame001Scene,
@@ -17,6 +18,7 @@ const SCENE = Object.freeze([
 describe("game001 scene helpers", () => {
   it("validates and compares scenes", () => {
     expect(validateGame001Scene(SCENE, "scene")).toEqual(SCENE);
+    expect(getGame001LockedCenterCode(SCENE, "scene")).toBe(4);
     expect(sceneEquals(SCENE, SCENE)).toBe(true);
     expect(sceneEquals(SCENE, [[1, 1, 1, 1, 1]] as any)).toBe(false);
     expect(() =>
@@ -60,6 +62,21 @@ describe("game001 scene helpers", () => {
           [1, 2, 3, 4, 5],
           [1, 2, 3, 4, 5],
           [1, 2, 3, 4, 5],
+          [1, 2, 3, 4, 5],
+        ],
+        "scene",
+      ),
+    ).toThrow(/non-negative integer/);
+    expect(() =>
+      getGame001LockedCenterCode([[1, 2, 3, 4, 5]] as any, "scene"),
+    ).toThrow(/width/);
+    expect(() =>
+      getGame001LockedCenterCode(
+        [
+          [1, 2, 3, 4, 5],
+          [1, 2, 3, 4, 5],
+          [1, 2, 3, 4, 5],
+          [1, 2, -1, 4, 5],
           [1, 2, 3, 4, 5],
         ],
         "scene",

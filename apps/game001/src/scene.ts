@@ -1,4 +1,8 @@
 import type { SceneMatrix } from "@slotclientengine/logiccore";
+import {
+  GAME001_LOCKED_AXIS_INDEX,
+  GAME001_LOCKED_CENTER_Y,
+} from "./game-layout.js";
 
 export const GAME001_SCENE_WIDTH = 5;
 export const GAME001_SCENE_HEIGHT = 5;
@@ -57,6 +61,20 @@ export function sceneEquals(left: SceneMatrix, right: SceneMatrix): boolean {
         leftColumn.every((code, y) => code === right[x][y]),
     )
   );
+}
+
+export function getGame001LockedCenterCode(
+  scene: SceneMatrix,
+  label = "scene",
+): number {
+  const validScene = validateGame001Scene(scene, label);
+  const code = validScene[GAME001_LOCKED_AXIS_INDEX][GAME001_LOCKED_CENTER_Y];
+  if (!Number.isInteger(code) || code < 0) {
+    throw new Error(
+      `${label}[${GAME001_LOCKED_AXIS_INDEX}][${GAME001_LOCKED_CENTER_Y}] must be a non-negative integer symbol code.`,
+    );
+  }
+  return code;
 }
 
 export function getReplyPlayResultsLength(gmi: unknown): number {

@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
+import { Container } from "pixi.js";
 import rawGameConfig from "../../../assets/gamecfg/game2.json";
-import type {
+import {
   RenderSymbol,
-  SymbolAssetMap,
+  type SymbolAssetMap,
 } from "@slotclientengine/rendercore";
 import {
   createTestTexture,
   createTextureSet,
 } from "../../../packages/rendercore/tests/reel/helpers.js";
-import { GAME_ASSET_SIZE } from "../src/game-layout.js";
+import {
+  GAME001_LOCKED_CENTER_Y,
+  GAME_ASSET_SIZE,
+} from "../src/game-layout.js";
 import {
   GAME001_SYMBOL_SCALES,
   createGame001ReelRuntime,
@@ -29,13 +33,15 @@ describe("game001 reel runtime", () => {
     });
 
     expect(runtime.mainReelsLayer.visible).toBe(false);
+    expect(runtime.getVisualSnapshot().lockedAxis.code).toBeNull();
+    expect(runtime.getVisualSnapshot().lockedAxis.visibleSymbolCount).toBe(0);
     const finalYs = runtime.applyScene(TARGET_SCENE, "test.scene");
 
     expect(finalYs).toEqual([1, 1, 4, 0, 27]);
     expect(runtime.getFinalYs()).toEqual(finalYs);
     expect(runtime.getTargetScene()).toBeNull();
     expect(runtime.mainReelsLayer.visible).toBe(true);
-    expect(runtime.reelSet.getVisibleScene()).toEqual(TARGET_SCENE);
+    expectRuntimeVisualMatchesScene(runtime, TARGET_SCENE);
   });
 
   it("uses parent fit scale without changing special symbol scale", () => {
@@ -47,16 +53,27 @@ describe("game001 reel runtime", () => {
     const rawWidth =
       runtime.layout.reelCount * runtime.layout.cellWidth +
       (runtime.layout.reelCount - 1) * runtime.layout.columnGap;
+    const oldFullBackgroundScale =
+      GAME_ASSET_SIZE.mainReelsBackground.width / rawWidth;
     const specialSymbol = findVisibleSymbol(runtime, "SC");
 
-    expect(GAME001_SYMBOL_SCALES.SC).toBe(1.5);
-    expect(specialSymbol.scale.x).toBe(1.5);
-    expect(specialSymbol.scale.y).toBe(1.5);
+    expect(GAME001_SYMBOL_SCALES.SC).toBe(1.75);
+    expect(specialSymbol.scale.x).toBe(1.75);
+    expect(specialSymbol.scale.y).toBe(1.75);
     expect(runtime.mainReelsLayer.scale.x).toBe(
-      GAME_ASSET_SIZE.mainReelsBackground.width / rawWidth,
+      runtime.layerLayout.mainReelsFitScale,
     );
-    expect(runtime.layerLayout.cropY).toBe(1.5 * runtime.layout.cellHeight);
-    expect(runtime.layerLayout.cropHeight).toBe(2 * runtime.layout.cellHeight);
+    expect(runtime.mainReelsLayer.scale.x).not.toBe(oldFullBackgroundScale);
+    expect(runtime.layerLayout.cropY).toBeCloseTo(
+      (GAME001_LOCKED_CENTER_Y + 0.5) * runtime.layout.cellHeight -
+        runtime.layerLayout.cropHeight / 2,
+    );
+    expect(runtime.layerLayout.cropHeight).toBeLessThan(
+      2 * runtime.layout.cellHeight,
+    );
+    expect(runtime.layerLayout.visibleHeight).toBeCloseTo(
+      runtime.layerLayout.stageVisibleFrame.height,
+    );
   });
 
   it("spins to a full 5 x 5 target scene and checks the final scene", () => {
@@ -75,8 +92,20 @@ describe("game001 reel runtime", () => {
     expect(runtime.getTargetScene()).toEqual(TARGET_SCENE);
     expect(runtime.isSpinning()).toBe(true);
     expect(() => runtime.spinToScene(TARGET_SCENE)).toThrow(/already spinning/);
+    const spinningSnapshot = runtime.getVisualSnapshot();
+    const lockedAxis = spinningSnapshot.lockedAxis;
+    expect(spinningSnapshot.startedNormalAxes).not.toContain(3);
+    expect(lockedAxis.code).toBe(TARGET_SCENE[3][2]);
+    expect(lockedAxis.rotation).toBe(0);
+    expect(lockedAxis.requestedState).toBe("normal");
+    expect(lockedAxis.requestedState).not.toBe("spinBlur");
 
     let result = runtime.update(0.1);
+    const updatingLockedAxis = runtime.getVisualSnapshot().lockedAxis;
+    expect(updatingLockedAxis.code).toBe(lockedAxis.code);
+    expect(updatingLockedAxis.x).toBe(lockedAxis.x);
+    expect(updatingLockedAxis.y).toBe(lockedAxis.y);
+    expect(updatingLockedAxis.rotation).toBe(0);
     for (let index = 0; index < 80 && !result.completed; index += 1) {
       result = runtime.update(0.1);
     }
@@ -84,7 +113,7 @@ describe("game001 reel runtime", () => {
     expect(result.completed).toBe(true);
     expect(runtime.isSpinning()).toBe(false);
     expect(runtime.getCurrentScene()).toEqual(TARGET_SCENE);
-    expect(runtime.reelSet.getVisibleScene()).toEqual(TARGET_SCENE);
+    expectRuntimeVisualMatchesScene(runtime, TARGET_SCENE);
   });
 
   it("plays SC win keyframes when a visible SC is manually requested", () => {
@@ -232,12 +261,38 @@ function findVisibleSymbol(
   runtime: ReturnType<typeof createGame001ReelRuntime>,
   symbol: string,
 ): RenderSymbol {
-  const visibleSymbol = runtime.reelSet.reels
-    .flatMap((reel) => reel.getSlotSnapshots())
-    .find((slot) => slot.container.visible && slot.symbol?.symbol === symbol)
-    ?.symbol;
-  if (!visibleSymbol) {
-    throw new Error(`Expected visible symbol "${symbol}".`);
+  const stack: Container[] = [...runtime.mainReelsLayer.children];
+  while (stack.length > 0) {
+    const child = stack.shift();
+    if (!child) {
+      continue;
+    }
+    if (
+      child instanceof RenderSymbol &&
+      child.visible &&
+      child.symbol === symbol
+    ) {
+      return child;
+    }
+    stack.push(...child.children.filter((item) => item instanceof Container));
   }
-  return visibleSymbol;
+  throw new Error(`Expected visible symbol "${symbol}".`);
+}
+
+function expectRuntimeVisualMatchesScene(
+  runtime: ReturnType<typeof createGame001ReelRuntime>,
+  scene: typeof TARGET_SCENE,
+): void {
+  const snapshot = runtime.getVisualSnapshot();
+  expect(snapshot.normalAxisIndexes).toEqual([0, 1, 2, 4]);
+  expect(snapshot.normalVisibleScene).toEqual([
+    scene[0],
+    scene[1],
+    scene[2],
+    scene[4],
+  ]);
+  expect(snapshot.lockedAxis.xIndex).toBe(3);
+  expect(snapshot.lockedAxis.sceneY).toBe(2);
+  expect(snapshot.lockedAxis.code).toBe(scene[3][2]);
+  expect(snapshot.lockedAxis.visibleSymbolCount).toBe(1);
 }
