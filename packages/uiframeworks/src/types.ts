@@ -5,7 +5,7 @@ import type {
   Logger,
   SlotcraftClientOptions,
   SpinParams,
-  UserInfo
+  UserInfo,
 } from "@slotclientengine/netcore";
 
 export interface SlotUiDesignSize {
@@ -29,6 +29,19 @@ export interface SlotUiLiveConfig {
   readonly jurisdiction?: string;
   readonly language?: string;
   readonly requestTimeoutMs?: number;
+}
+
+export interface SlotUiClockOptions {
+  readonly now?: () => Date;
+  readonly locale?: string;
+  readonly hour12?: boolean;
+  readonly updateIntervalMs?: number;
+  readonly format?: (date: Date) => string;
+}
+
+export interface SlotUiBuyBonusOptions {
+  readonly label?: string;
+  readonly enabled?: boolean;
 }
 
 export type SlotUiSpinState =
@@ -112,6 +125,10 @@ export interface SlotUiFrameworkOptions {
   readonly initialMuted?: boolean;
   readonly initialFastMode?: boolean;
   readonly initialAutoMode?: boolean;
+  readonly brandLabel?: string;
+  readonly clock?: false | SlotUiClockOptions;
+  readonly buyBonus?: false | SlotUiBuyBonusOptions;
+  readonly showFastToggle?: boolean;
   readonly currency?: string;
   readonly locale?: string;
   readonly formatMoney?: (amount: number) => string;
@@ -122,6 +139,10 @@ export interface SlotUiFrameworkOptions {
   readonly clientFactory?: SlotcraftClientFactory;
   readonly logicFactory?: (gmi: unknown, meta: GameLogicMeta) => GameLogic;
   readonly logger?: Logger | null;
+  readonly onMenu?: () => void;
+  readonly onInfo?: () => void;
+  readonly onSettings?: () => void;
+  readonly onBuyBonus?: () => void;
   readonly onStateChange?: (state: SlotUiStateSnapshot) => void;
   readonly onError?: (error: Error) => void;
 }
