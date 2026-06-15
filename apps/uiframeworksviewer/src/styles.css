@@ -1,8 +1,13 @@
 :root {
   color: #f8fbff;
-  background: #12161c;
+  background: #050505;
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
     sans-serif;
 }
 
@@ -23,7 +28,7 @@ body {
   height: 100%;
   display: grid;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-  background: linear-gradient(135deg, #151a20 0%, #263233 48%, #151515 100%);
+  background: #050505;
 }
 
 .viewer-toolbar {
@@ -32,7 +37,7 @@ body {
   align-content: start;
   gap: 12px;
   padding: 18px;
-  background: rgba(10, 14, 18, 0.92);
+  background: #111316;
   border-right: 1px solid rgba(255, 255, 255, 0.12);
   z-index: 5;
 }
@@ -49,8 +54,8 @@ body {
   width: fit-content;
   padding: 5px 9px;
   border-radius: 6px;
-  color: #081014;
-  background: #65dfce;
+  color: #050505;
+  background: #ffe600;
   font-size: 13px;
   font-weight: 850;
   text-transform: uppercase;
@@ -69,7 +74,7 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 6px;
   color: #f8fbff;
-  background: #202832;
+  background: #1d2024;
   font: inherit;
 }
 
@@ -116,10 +121,8 @@ body {
   gap: 28px;
   padding: 36px;
   border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 18%),
-    linear-gradient(160deg, rgba(15, 39, 47, 0.82), rgba(10, 16, 23, 0.86));
-  border: 2px solid rgba(101, 223, 206, 0.45);
+  background: rgba(10, 10, 10, 0.46);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
@@ -132,7 +135,7 @@ body {
 }
 
 .ui-viewer-game-title {
-  color: #f4d865;
+  color: #ffe600;
   font-size: 38px;
   font-weight: 900;
 }
@@ -168,11 +171,13 @@ body {
   display: grid;
   place-items: center;
   border-radius: 8px;
-  color: #12161c;
-  background: linear-gradient(160deg, #fff3aa, #65dfce);
+  color: #ffffff;
+  background: #181c20;
   font-size: 40px;
   font-weight: 900;
-  box-shadow: inset 0 -8px 14px rgba(0, 0, 0, 0.18);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    inset 0 -8px 14px rgba(0, 0, 0, 0.18);
 }
 
 .viewer-fatal {
@@ -186,7 +191,7 @@ body {
   font-weight: 760;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 1100px) {
   .viewer-shell {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);

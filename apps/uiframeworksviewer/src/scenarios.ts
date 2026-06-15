@@ -2,7 +2,6 @@ import type {
   SlotUiBetOption,
   SlotUiDesignSize,
   SlotUiLiveConfig,
-  SlotUiSpinState
 } from "@slotclientengine/uiframeworks";
 
 export type ViewerScenarioId =
@@ -12,9 +11,13 @@ export type ViewerScenarioId =
   | "long-numbers"
   | "loading-and-disabled"
   | "win-state"
-  | "toggles-off"
+  | "sound-off"
   | "error-state"
-  | "auto-active";
+  | "auto-active"
+  | "buy-bonus-disabled"
+  | "no-brand"
+  | "clock-disabled"
+  | "fast-active";
 
 export interface ViewerScenario {
   readonly id: ViewerScenarioId;
@@ -26,7 +29,9 @@ export interface ViewerScenario {
   readonly muted: boolean;
   readonly fastMode: boolean;
   readonly autoMode: boolean;
-  readonly spinState?: SlotUiSpinState;
+  readonly brandLabel?: string;
+  readonly clockLabel?: string | false;
+  readonly buyBonusEnabled: boolean;
   readonly mockTotalWin: number;
   readonly mockBalanceAfterSpin: number;
   readonly mockConnectMode?: "normal" | "pending" | "error";
@@ -43,7 +48,7 @@ export const VIEWER_BET_OPTIONS: readonly SlotUiBetOption[] = Object.freeze([
   Object.freeze({ bet: 1, lines: 10 }),
   Object.freeze({ bet: 2, lines: 10, times: 2, label: "2.00" }),
   Object.freeze({ bet: 5, lines: 20 }),
-  Object.freeze({ bet: 25, lines: 50, label: "25.00 x 50" })
+  Object.freeze({ bet: 25, lines: 50, label: "25.00 x 50" }),
 ]);
 
 const DEFAULT_DESIGN_SIZE = Object.freeze({ width: 941, height: 1672 });
@@ -56,7 +61,7 @@ export const VIEWER_SCENARIOS: readonly ViewerScenario[] = Object.freeze([
     win: 0,
     betIndex: 1,
     mockTotalWin: 45,
-    mockBalanceAfterSpin: 1043
+    mockBalanceAfterSpin: 1043,
   }),
   scenario({
     id: "small-mobile",
@@ -65,7 +70,7 @@ export const VIEWER_SCENARIOS: readonly ViewerScenario[] = Object.freeze([
     win: 0,
     betIndex: 0,
     mockTotalWin: 5,
-    mockBalanceAfterSpin: 879.25
+    mockBalanceAfterSpin: 879.25,
   }),
   scenario({
     id: "landscape-letterbox",
@@ -74,7 +79,7 @@ export const VIEWER_SCENARIOS: readonly ViewerScenario[] = Object.freeze([
     win: 20,
     betIndex: 2,
     mockTotalWin: 0,
-    mockBalanceAfterSpin: 6415
+    mockBalanceAfterSpin: 6415,
   }),
   scenario({
     id: "long-numbers",
@@ -83,7 +88,7 @@ export const VIEWER_SCENARIOS: readonly ViewerScenario[] = Object.freeze([
     win: 123456789.25,
     betIndex: 3,
     mockTotalWin: 987654.25,
-    mockBalanceAfterSpin: 9877530839.8
+    mockBalanceAfterSpin: 9877530839.8,
   }),
   scenario({
     id: "loading-and-disabled",
@@ -91,10 +96,9 @@ export const VIEWER_SCENARIOS: readonly ViewerScenario[] = Object.freeze([
     balance: 1000,
     win: 0,
     betIndex: 0,
-    spinState: "connecting",
     mockTotalWin: 0,
     mockBalanceAfterSpin: 1000,
-    mockConnectMode: "pending"
+    mockConnectMode: "pending",
   }),
   scenario({
     id: "win-state",
@@ -103,18 +107,17 @@ export const VIEWER_SCENARIOS: readonly ViewerScenario[] = Object.freeze([
     win: 240,
     betIndex: 1,
     mockTotalWin: 240,
-    mockBalanceAfterSpin: 1638
+    mockBalanceAfterSpin: 1638,
   }),
   scenario({
-    id: "toggles-off",
-    label: "Toggles off",
+    id: "sound-off",
+    label: "Sound off",
     balance: 510,
     win: 0,
     betIndex: 1,
     muted: true,
-    fastMode: false,
     mockTotalWin: 0,
-    mockBalanceAfterSpin: 508
+    mockBalanceAfterSpin: 508,
   }),
   scenario({
     id: "error-state",
@@ -124,7 +127,7 @@ export const VIEWER_SCENARIOS: readonly ViewerScenario[] = Object.freeze([
     betIndex: 1,
     mockTotalWin: 0,
     mockBalanceAfterSpin: 1000,
-    mockConnectMode: "error"
+    mockConnectMode: "error",
   }),
   scenario({
     id: "auto-active",
@@ -134,8 +137,48 @@ export const VIEWER_SCENARIOS: readonly ViewerScenario[] = Object.freeze([
     betIndex: 2,
     autoMode: true,
     mockTotalWin: 15,
-    mockBalanceAfterSpin: 3210
-  })
+    mockBalanceAfterSpin: 3210,
+  }),
+  scenario({
+    id: "buy-bonus-disabled",
+    label: "Buy bonus disabled",
+    balance: 1000,
+    win: 0,
+    betIndex: 1,
+    buyBonusEnabled: false,
+    mockTotalWin: 0,
+    mockBalanceAfterSpin: 998,
+  }),
+  scenario({
+    id: "no-brand",
+    label: "No brand",
+    balance: 1000,
+    win: 0,
+    betIndex: 1,
+    brandLabel: undefined,
+    mockTotalWin: 0,
+    mockBalanceAfterSpin: 998,
+  }),
+  scenario({
+    id: "clock-disabled",
+    label: "Clock disabled",
+    balance: 1000,
+    win: 0,
+    betIndex: 1,
+    clockLabel: false,
+    mockTotalWin: 0,
+    mockBalanceAfterSpin: 998,
+  }),
+  scenario({
+    id: "fast-active",
+    label: "Fast active",
+    balance: 1600,
+    win: 0,
+    betIndex: 2,
+    fastMode: true,
+    mockTotalWin: 8,
+    mockBalanceAfterSpin: 1603,
+  }),
 ]);
 
 export function getViewerScenario(id: string): ViewerScenario {
@@ -154,8 +197,8 @@ export function getViewerRuntimeConfig(env: ViewerEnv): ViewerRuntimeConfig {
       live: {
         serverUrl: "ws://mock.uiframeworksviewer.local",
         token: "mock-token",
-        gamecode: "mock-game"
-      }
+        gamecode: "mock-game",
+      },
     };
   }
 
@@ -170,22 +213,48 @@ export function getViewerRuntimeConfig(env: ViewerEnv): ViewerRuntimeConfig {
       gamecode,
       businessid: readOptionalEnv(env, "VITE_UIFRAMEWORKSVIEWER_BUSINESSID"),
       clienttype: readOptionalEnv(env, "VITE_UIFRAMEWORKSVIEWER_CLIENTTYPE"),
-      jurisdiction: readOptionalEnv(env, "VITE_UIFRAMEWORKSVIEWER_JURISDICTION"),
-      language: readOptionalEnv(env, "VITE_UIFRAMEWORKSVIEWER_LANGUAGE")
-    }
+      jurisdiction: readOptionalEnv(
+        env,
+        "VITE_UIFRAMEWORKSVIEWER_JURISDICTION",
+      ),
+      language: readOptionalEnv(env, "VITE_UIFRAMEWORKSVIEWER_LANGUAGE"),
+    },
   };
 }
 
 function scenario(
-  config: Omit<ViewerScenario, "designSize" | "muted" | "fastMode" | "autoMode"> &
-    Partial<Pick<ViewerScenario, "designSize" | "muted" | "fastMode" | "autoMode">>,
+  config: Omit<
+    ViewerScenario,
+    | "designSize"
+    | "muted"
+    | "fastMode"
+    | "autoMode"
+    | "brandLabel"
+    | "clockLabel"
+    | "buyBonusEnabled"
+  > &
+    Partial<
+      Pick<
+        ViewerScenario,
+        | "designSize"
+        | "muted"
+        | "fastMode"
+        | "autoMode"
+        | "brandLabel"
+        | "clockLabel"
+        | "buyBonusEnabled"
+      >
+    >,
 ): ViewerScenario {
   return Object.freeze({
     designSize: DEFAULT_DESIGN_SIZE,
     muted: false,
     fastMode: false,
     autoMode: false,
-    ...config
+    brandLabel: "HYPER GAMING",
+    clockLabel: "18:25",
+    buyBonusEnabled: true,
+    ...config,
   });
 }
 

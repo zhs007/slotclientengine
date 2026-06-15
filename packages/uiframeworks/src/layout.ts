@@ -3,16 +3,21 @@ import type { SlotUiDesignSize } from "./types.js";
 
 export const DEFAULT_SLOT_UI_DESIGN_SIZE: SlotUiDesignSize = Object.freeze({
   width: 941,
-  height: 1672
+  height: 1672,
 });
 
 export interface SlotUiLayout {
   readonly designSize: SlotUiDesignSize;
-  readonly bottomBannerHeight: number;
   readonly topInset: number;
   readonly sideInset: number;
+  readonly bottomHudHeight: number;
+  readonly leftRailButtonSize: number;
+  readonly leftRailGap: number;
+  readonly buyBonusWidth: number;
+  readonly buyBonusHeight: number;
   readonly spinButtonDiameter: number;
   readonly autoButtonDiameter: number;
+  readonly betStepButtonDiameter: number;
 }
 
 export function validateDesignSize(
@@ -23,7 +28,7 @@ export function validateDesignSize(
 
   return Object.freeze({
     width: designSize.width,
-    height: designSize.height
+    height: designSize.height,
   });
 }
 
@@ -44,15 +49,21 @@ export function createDefaultSlotLayout(
 ): SlotUiLayout {
   const size = validateDesignSize(designSize);
   const shortSide = Math.min(size.width, size.height);
-  const bottomBannerHeight = clamp(size.height * 0.15, 220, 280);
+  const longSide = Math.max(size.width, size.height);
+  const uiScale = shortSide / DEFAULT_SLOT_UI_DESIGN_SIZE.width;
 
   return Object.freeze({
     designSize: size,
-    bottomBannerHeight,
-    topInset: Math.max(38, shortSide * 0.045),
-    sideInset: Math.max(38, shortSide * 0.045),
-    spinButtonDiameter: clamp(shortSide * 0.22, 174, 224),
-    autoButtonDiameter: clamp(shortSide * 0.13, 112, 148)
+    topInset: clamp(longSide * 0.014, 18, 34),
+    sideInset: clamp(shortSide * 0.024, 20, 34),
+    bottomHudHeight: clamp(longSide * 0.138, 188, 238),
+    leftRailButtonSize: clamp(58 * uiScale, 46, 68),
+    leftRailGap: clamp(22 * uiScale, 14, 28),
+    buyBonusWidth: clamp(184 * uiScale, 144, 204),
+    buyBonusHeight: clamp(92 * uiScale, 72, 106),
+    spinButtonDiameter: clamp(146 * uiScale, 108, 154),
+    autoButtonDiameter: clamp(72 * uiScale, 56, 82),
+    betStepButtonDiameter: clamp(50 * uiScale, 42, 58),
   });
 }
 

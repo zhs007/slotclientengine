@@ -30,7 +30,8 @@
   },
   "dependencies": {
     "@slotclientengine/logiccore": "workspace:*",
-    "@slotclientengine/netcore": "workspace:*"
+    "@slotclientengine/netcore": "workspace:*",
+    "lucide": "^1.18.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.34.0",

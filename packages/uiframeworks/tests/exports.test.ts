@@ -4,9 +4,14 @@ import {
   SlotUiConfigError,
   SlotUiRuntimeError,
   createSlotUiFramework,
-  validateBetOptions
+  validateBetOptions,
 } from "../src/index.js";
-import { BET_OPTIONS, MockClient, createMockGameLogic, createSpinResult } from "./test-helpers.js";
+import {
+  BET_OPTIONS,
+  MockClient,
+  createMockGameLogic,
+  createSpinResult,
+} from "./test-helpers.js";
 import type { SlotGameAdapter, SlotUiSpinResult } from "../src/index.js";
 
 describe("public exports and framework", () => {
@@ -29,9 +34,10 @@ describe("public exports and framework", () => {
     client.userInfo = Object.freeze({
       balance: 988,
       gameid: 7,
-      defaultScene: [[1, 2, 3]]
+      defaultScene: [[1, 2, 3]],
     });
     const states: string[] = [];
+    const callbacks: string[] = [];
     const adapter = createAdapter(true);
     const framework = createSlotUiFramework({
       root,
@@ -39,16 +45,28 @@ describe("public exports and framework", () => {
       live: { serverUrl: "ws://localhost", token: "t", gamecode: "g" },
       betOptions: BET_OPTIONS,
       initialBetIndex: 1,
+      brandLabel: "HYPER GAMING",
+      clock: { format: () => "18:25", updateIntervalMs: 60_000 },
+      buyBonus: { label: "BUY BONUS" },
+      onMenu: () => callbacks.push("menu"),
+      onBuyBonus: () => callbacks.push("buyBonus"),
       currency: "USD",
       clientFactory: () => client,
       logicFactory: createMockGameLogic,
-      onStateChange: (state) => states.push(state.spinState)
+      onStateChange: (state) => states.push(state.spinState),
     });
 
     expect(root.querySelector(".slot-ui-frame")).toBeTruthy();
+    expect(root.querySelector(".slot-ui-brand")?.textContent).toBe(
+      "HYPER GAMING",
+    );
+    expect(root.querySelector(".slot-ui-clock")?.textContent).toBe("18:25");
     expect(framework.getState().betIndex).toBe(1);
     await framework.connect();
-    expect(framework.getState()).toMatchObject({ connected: true, balance: 988 });
+    expect(framework.getState()).toMatchObject({
+      connected: true,
+      balance: 988,
+    });
     const result = await framework.spin();
     expect(result.totalwin).toBe(12);
     expect(adapter.initialBalance).toBe(988);
@@ -64,6 +82,19 @@ describe("public exports and framework", () => {
     const decreaseButton = root.querySelector(
       ".slot-ui-bet-decrease",
     ) as HTMLButtonElement;
+    const menuButton = root.querySelector(
+      ".slot-ui-menu-button",
+    ) as HTMLButtonElement;
+    const fastButton = root.querySelector(
+      ".slot-ui-fast-button",
+    ) as HTMLButtonElement;
+    const buyBonusButton = root.querySelector(
+      ".slot-ui-buy-bonus-button",
+    ) as HTMLButtonElement;
+    menuButton.click();
+    fastButton.click();
+    buyBonusButton.click();
+    expect(callbacks).toEqual(["menu", "buyBonus"]);
     increaseButton.click();
     expect(framework.getState().betIndex).toBe(2);
     decreaseButton.click();
@@ -79,7 +110,7 @@ describe("public exports and framework", () => {
       muted: true,
       fastMode: true,
       autoMode: true,
-      balance: 777
+      balance: 777,
     });
     framework.destroy();
     framework.destroy();
@@ -96,7 +127,7 @@ describe("public exports and framework", () => {
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
       clientFactory: () => client,
-      logicFactory: createMockGameLogic
+      logicFactory: createMockGameLogic,
     });
     await expect(framework.spin()).rejects.toThrow(/before connect/);
     framework.destroy();
@@ -111,7 +142,7 @@ describe("public exports and framework", () => {
       betOptions: BET_OPTIONS,
       clientFactory: () => failing,
       logicFactory: createMockGameLogic,
-      onError: (error) => errors.push(error.message)
+      onError: (error) => errors.push(error.message),
     });
     await expect(failedFramework.connect()).rejects.toThrow(/balance/);
     expect(failedFramework.getState().spinState).toBe("error");
@@ -128,18 +159,18 @@ describe("public exports and framework", () => {
         mount: () => undefined,
         applySpinResult: () => {
           throw new Error("adapter failed");
-        }
+        },
       },
       live: { serverUrl: "ws://localhost" },
       betOptions: BET_OPTIONS,
       clientFactory: () => client,
-      logicFactory: createMockGameLogic
+      logicFactory: createMockGameLogic,
     });
     await framework.connect();
     await expect(framework.spin()).rejects.toThrow(/adapter failed/);
     expect(framework.getState()).toMatchObject({
       spinState: "error",
-      error: "adapter failed"
+      error: "adapter failed",
     });
     framework.destroy();
   });
@@ -150,7 +181,7 @@ describe("public exports and framework", () => {
         root: document.createElement("div"),
         gameAdapter: createAdapter(),
         live: { serverUrl: "http://localhost" },
-        betOptions: BET_OPTIONS
+        betOptions: BET_OPTIONS,
       }),
     ).toThrow(/ws/);
     expect(() =>
@@ -158,7 +189,7 @@ describe("public exports and framework", () => {
         root: {} as HTMLElement,
         gameAdapter: createAdapter(),
         live: { serverUrl: "ws://localhost" },
-        betOptions: BET_OPTIONS
+        betOptions: BET_OPTIONS,
       }),
     ).toThrow(/root/);
     expect(() =>
@@ -166,7 +197,7 @@ describe("public exports and framework", () => {
         root: document.createElement("div"),
         gameAdapter: { mount: () => undefined } as unknown as SlotGameAdapter,
         live: { serverUrl: "ws://localhost" },
-        betOptions: BET_OPTIONS
+        betOptions: BET_OPTIONS,
       }),
     ).toThrow(/gameAdapter/);
     expect(() =>
@@ -174,9 +205,18 @@ describe("public exports and framework", () => {
         root: document.createElement("div"),
         gameAdapter: createAdapter(),
         live: {} as never,
-        betOptions: BET_OPTIONS
+        betOptions: BET_OPTIONS,
       }),
     ).toThrow(/serverUrl/);
+    expect(() =>
+      createSlotUiFramework({
+        root: document.createElement("div"),
+        gameAdapter: createAdapter(),
+        live: { serverUrl: "ws://localhost" },
+        betOptions: BET_OPTIONS,
+        clock: { updateIntervalMs: 0 },
+      }),
+    ).toThrow(/clock\.updateIntervalMs/);
   });
 });
 
@@ -205,6 +245,6 @@ function createAdapter(readContext = false): SlotGameAdapter & {
     },
     destroy() {
       this.destroyed = true;
-    }
+    },
   };
 }

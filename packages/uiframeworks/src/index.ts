@@ -1,7 +1,11 @@
 import "./styles.css";
 
 import { createSlotUiDom, type SlotUiDom } from "./dom.js";
-import { toSlotUiError, SlotUiConfigError, SlotUiRuntimeError } from "./errors.js";
+import {
+  toSlotUiError,
+  SlotUiConfigError,
+  SlotUiRuntimeError,
+} from "./errors.js";
 import { createMoneyFormatter } from "./format.js";
 import { validateDesignSize } from "./layout.js";
 import { SlotUiLiveSession, requireFiniteBalance } from "./session.js";
@@ -11,7 +15,7 @@ import type {
   SlotUiFramework,
   SlotUiFrameworkOptions,
   SlotUiSpinResult,
-  SlotUiStateSnapshot
+  SlotUiStateSnapshot,
 } from "./types.js";
 
 export function createSlotUiFramework(
@@ -40,14 +44,20 @@ class SlotUiFrameworkImpl implements SlotUiFramework {
       initialWin: options.initialWin,
       initialMuted: options.initialMuted,
       initialFastMode: options.initialFastMode,
-      initialAutoMode: options.initialAutoMode
+      initialAutoMode: options.initialAutoMode,
     });
     this.#dom = createSlotUiDom({
       root: options.root,
       designSize,
+      brandLabel: options.brandLabel,
+      clock: options.clock,
+      buyBonus: options.buyBonus,
+      showFastToggle: options.showFastToggle,
       formatMoney: createMoneyFormatter(options),
       getBetControls: () => this.#state.getBetControls(),
       handlers: {
+        onMenu: options.onMenu ?? options.onInfo,
+        onBuyBonus: options.onBuyBonus,
         onSpin: () => {
           void this.spin().catch(() => undefined);
         },
@@ -61,14 +71,14 @@ class SlotUiFrameworkImpl implements SlotUiFramework {
         },
         onMutedChange: (muted) => this.setMuted(muted),
         onFastModeChange: (enabled) => this.setFastMode(enabled),
-        onAutoModeChange: (enabled) => this.setAutoMode(enabled)
-      }
+        onAutoModeChange: (enabled) => this.setAutoMode(enabled),
+      },
     });
     this.#session = new SlotUiLiveSession({
       live: options.live,
       clientFactory: options.clientFactory,
       logicFactory: options.logicFactory,
-      logger: options.logger
+      logger: options.logger,
     });
     this.#mountPromise = this.#mountGameAdapter(designSize);
     this.#applyState();
@@ -82,7 +92,10 @@ class SlotUiFrameworkImpl implements SlotUiFramework {
       this.#state.setSpinState("connecting");
       this.#applyState();
       const userInfo = await this.#session.connect();
-      const balance = requireFiniteBalance(userInfo, this.#options.initialBalance);
+      const balance = requireFiniteBalance(
+        userInfo,
+        this.#options.initialBalance,
+      );
       this.#state.setConnected(true);
       this.#state.setBalance(balance);
       this.#state.setSpinState("idle");
@@ -93,7 +106,7 @@ class SlotUiFrameworkImpl implements SlotUiFramework {
         balance,
         ...(userInfo.defaultScene === undefined
           ? {}
-          : { defaultScene: userInfo.defaultScene })
+          : { defaultScene: userInfo.defaultScene }),
       });
       this.#applyState();
     } catch (error) {
@@ -109,7 +122,9 @@ class SlotUiFrameworkImpl implements SlotUiFramework {
       throw new SlotUiRuntimeError("Cannot spin before connect succeeds.");
     }
     if (current.spinState !== "idle") {
-      throw new SlotUiRuntimeError("A slot UI spin request is already in progress.");
+      throw new SlotUiRuntimeError(
+        "A slot UI spin request is already in progress.",
+      );
     }
 
     try {
@@ -123,7 +138,7 @@ class SlotUiFrameworkImpl implements SlotUiFramework {
         onCollectStart: () => {
           this.#state.setSpinState("collecting");
           this.#applyState();
-        }
+        },
       });
       const balance = requireFiniteBalance(result.userInfo);
       this.#state.setWinAmount(result.totalwin);
@@ -190,9 +205,12 @@ class SlotUiFrameworkImpl implements SlotUiFramework {
       frame: this.#dom.elements.frame,
       gameLayer: this.#dom.elements.gameLayer,
       overlay: this.#dom.elements.overlay,
-      getState: () => this.#state.getState()
+      getState: () => this.#state.getState(),
     });
-    await this.#options.gameAdapter.mount(this.#dom.elements.gameLayer, context);
+    await this.#options.gameAdapter.mount(
+      this.#dom.elements.gameLayer,
+      context,
+    );
   }
 
   #applyState(): void {
@@ -245,6 +263,17 @@ function validateFrameworkOptions(options: SlotUiFrameworkOptions): void {
   if (!options.live || typeof options.live.serverUrl !== "string") {
     throw new SlotUiConfigError("live.serverUrl is required.");
   }
+  if (
+    options.clock !== undefined &&
+    options.clock !== false &&
+    options.clock.updateIntervalMs !== undefined &&
+    (!Number.isInteger(options.clock.updateIntervalMs) ||
+      options.clock.updateIntervalMs <= 0)
+  ) {
+    throw new SlotUiConfigError(
+      "clock.updateIntervalMs must be a positive integer.",
+    );
+  }
 }
 
 export { SlotUiConfigError, SlotUiRuntimeError } from "./errors.js";
@@ -252,13 +281,13 @@ export {
   DEFAULT_SLOT_UI_DESIGN_SIZE,
   calculateFrameScale,
   createDefaultSlotLayout,
-  validateDesignSize
+  validateDesignSize,
 } from "./layout.js";
 export { createMoneyFormatter } from "./format.js";
 export {
   SlotUiStateStore,
   getBetControls,
-  validateBetOptions
+  validateBetOptions,
 } from "./state.js";
 export {
   SlotUiLiveSession,
@@ -267,13 +296,15 @@ export {
   requireFiniteBalance,
   shouldCollectFinalResult,
   validateLiveServerUrl,
-  validateSlotUiSpinResult
+  validateSlotUiSpinResult,
 } from "./session.js";
 export type {
   SlotGameAdapter,
   SlotGameMountContext,
   SlotInitialState,
   SlotUiBetOption,
+  SlotUiBuyBonusOptions,
+  SlotUiClockOptions,
   SlotUiDesignSize,
   SlotUiFramework,
   SlotUiFrameworkOptions,
@@ -282,5 +313,5 @@ export type {
   SlotUiSpinState,
   SlotUiStateSnapshot,
   SlotcraftClientFactory,
-  SlotcraftClientLike
+  SlotcraftClientLike,
 } from "./types.js";

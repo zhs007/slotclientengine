@@ -1,6 +1,7 @@
 import {
   createSlotUiFramework,
-  type SlotUiFramework
+  type SlotUiClockOptions,
+  type SlotUiFramework,
 } from "@slotclientengine/uiframeworks";
 import "@slotclientengine/uiframeworks/styles.css";
 import "./styles.css";
@@ -13,7 +14,7 @@ import {
   getViewerRuntimeConfig,
   getViewerScenario,
   type ViewerRuntimeConfig,
-  type ViewerScenario
+  type ViewerScenario,
 } from "./scenarios.js";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -58,7 +59,14 @@ async function bootstrap(
   const stage = element("section", "viewer-stage");
   stage.setAttribute("aria-label", "Slot UI stage");
 
-  toolbar.append(title, modeBadge, scenarioLabel, scenarioSelect, reloadButton, status);
+  toolbar.append(
+    title,
+    modeBadge,
+    scenarioLabel,
+    scenarioSelect,
+    reloadButton,
+    status,
+  );
   shell.append(toolbar, stage);
   root.replaceChildren(shell);
 
@@ -84,11 +92,20 @@ async function bootstrap(
       initialMuted: scenario.muted,
       initialFastMode: scenario.fastMode,
       initialAutoMode: scenario.autoMode,
+      brandLabel: scenario.brandLabel,
+      clock: createScenarioClock(scenario),
+      buyBonus: { label: "BUY BONUS", enabled: scenario.buyBonusEnabled },
       currency: "USD",
+      onMenu: () => {
+        status.textContent = "menu";
+      },
+      onBuyBonus: () => {
+        status.textContent = "buy-bonus";
+      },
       clientFactory:
         runtime.mode === "mock"
           ? (live) => createViewerMockClient({ scenario, live })
-          : undefined
+          : undefined,
     });
     currentFramework = framework;
 
@@ -119,6 +136,20 @@ async function bootstrap(
   });
 
   await runScenario(currentScenario);
+}
+
+function createScenarioClock(
+  scenario: ViewerScenario,
+): false | SlotUiClockOptions {
+  if (scenario.clockLabel === false) {
+    return false;
+  }
+  const label = scenario.clockLabel ?? "18:25";
+  return {
+    now: () => new Date("2026-06-15T10:25:00.000Z"),
+    format: () => label,
+    updateIntervalMs: 60_000,
+  };
 }
 
 function renderFatalError(root: HTMLElement, error: unknown): void {

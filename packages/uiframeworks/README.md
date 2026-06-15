@@ -2,14 +2,14 @@
 
 通用 slot 游戏 DOM UI 框架。该包负责固定设计分辨率 frame、游戏层、UI overlay、slot HUD 控件、viewport 缩放，以及 live `netcore` + `logiccore` 的 spin 数据流编排。
 
-UI 只使用 DOM 和 CSS 绘制，不创建 canvas，不使用 SVG、图片图标或 icon font。具体游戏如果需要自己的渲染层，应在 `SlotGameAdapter` 的 game layer 内显式实现。
+默认 HUD 参考 `docs/ui002.png` 的黑底扁平风格：白色 icon、轻量文字、底部裸排信息区和金色 `BUY BONUS`。UI 不创建 canvas；默认 icon 由受控现成 icon 包 `lucide` 提供；不使用图片 HUD 资产或 icon font，也不在 DOM/CSS 中散落复杂手绘 icon。具体游戏如果需要自己的渲染层，应在 `SlotGameAdapter` 的 game layer 内显式实现。
 
 ## 基本用法
 
 ```ts
 import {
   createSlotUiFramework,
-  type SlotGameAdapter
+  type SlotGameAdapter,
 } from "@slotclientengine/uiframeworks";
 import "@slotclientengine/uiframeworks/styles.css";
 
@@ -19,7 +19,7 @@ const adapter: SlotGameAdapter = {
   },
   applySpinResult(result) {
     console.log(result.totalwin, result.logic.getStepCount());
-  }
+  },
 };
 
 const framework = createSlotUiFramework({
@@ -28,13 +28,21 @@ const framework = createSlotUiFramework({
   live: {
     serverUrl: "wss://example.test/game",
     token: "token",
-    gamecode: "game001"
+    gamecode: "game001",
   },
   betOptions: [
     { bet: 1, lines: 10 },
-    { bet: 2, lines: 10, times: 2 }
+    { bet: 2, lines: 10, times: 2 },
   ],
-  currency: "USD"
+  brandLabel: "HYPER GAMING",
+  clock: {
+    format: () => "18:25",
+  },
+  buyBonus: {
+    label: "BUY BONUS",
+    enabled: true,
+  },
+  currency: "USD",
 });
 
 await framework.connect();
@@ -58,13 +66,20 @@ await framework.spin();
 
 ## HUD 控件
 
-- 顶部左侧：菜单按钮，三条 DOM/CSS 横线。
-- 顶部右侧：声音和快速 toggle，关闭态灰掉并显示斜线。
-- 底部：完整 banner，包含 `balance`、`win`、下注区、圆形 `auto`。
-- 下注区：`-`、`bet`、`+`，边界按钮 disabled。
-- `spin`：大圆形主按钮，支持 `idle`、`connecting`、`spinning`、`collecting`、`error`、`disabled`。
+- 顶部：左侧时间 `.slot-ui-clock`，右侧可选品牌 `.slot-ui-brand`。
+- 左侧竖排：menu、fast、sound，默认使用 `lucide` SVG icon，颜色走 `currentColor`；fast 和 sound 都是 toggle 控件。
+- 底部：上排可选 `BUY BONUS` CTA 与居中的 `WIN`，下排 `BALANCE`、带币种的 `BET`、竖排 `+/-`、大号 spin 和小号 auto。
+- `showFastToggle` 默认显示 fast toggle；显式传 `false` 时隐藏左侧 fast 按钮，但仍保留 `fastMode`、`setFastMode()` 和 `buildSpinParams()` 行为。
+- `spin` 支持 `idle`、`connecting`、`spinning`、`collecting`、`error`、`disabled`，禁用态保持可见。
 
 金额默认使用 `Intl.NumberFormat`；也可以传入 `currency`、`locale` 或 `formatMoney(amount)`。金额输入必须是 finite number。
+
+新增配置：
+
+- `brandLabel?: string`：右上品牌文案；不传则不渲染品牌，基础库不硬编码品牌。
+- `clock?: false | SlotUiClockOptions`：`false` 时不渲染时间；`now`、`format`、`locale`、`hour12` 和 `updateIntervalMs` 可用于稳定测试或本地化。`updateIntervalMs` 必须是正整数。
+- `buyBonus?: false | SlotUiBuyBonusOptions`：`false` 时不渲染按钮；`label` 默认 `BUY BONUS`，`enabled: false` 会同步 disabled 和 `aria-disabled`。
+- `onMenu` / `onBuyBonus`：对应 HUD 按钮 callback；未传 callback 时点击不会伪造业务逻辑。`onInfo` 会作为 menu 的兼容 fallback。
 
 ## Game Adapter
 
@@ -106,7 +121,7 @@ await framework.spin();
 
 ## Viewer
 
-`apps/uiframeworksviewer` 提供 mock/live 两种模式，用来检查不同视口、长金额、toggle、error、loading、win 和 auto 状态。
+`apps/uiframeworksviewer` 提供 mock/live 两种模式，用来检查 `docs/ui002.png` 风格、不同视口、长金额、sound off、error、loading、win、auto、fast active、buy bonus disabled、no brand 和 clock disabled 状态。
 
 ```bash
 pnpm --filter uiframeworksviewer dev -- --host 0.0.0.0
