@@ -1,0 +1,45 @@
+{
+  "name": "@slotclientengine/anieditorv5runtime-cc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cocos Creator 3.8.6 runtime adapter for V5G animation exports.",
+  "packageManager": "pnpm@10.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    },
+    "./cocos": {
+      "types": "./dist/cocos/index.d.ts",
+      "import": "./dist/cocos/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "test": "vitest run --coverage",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "^4.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.15.0"
+  }
+}

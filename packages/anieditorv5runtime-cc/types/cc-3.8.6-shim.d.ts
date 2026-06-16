@@ -1,0 +1,69 @@
+declare module "cc" {
+  export class Color {
+    constructor(r?: number, g?: number, b?: number, a?: number);
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+    static readonly WHITE: Color;
+  }
+
+  export class Vec3 {
+    constructor(x?: number, y?: number, z?: number);
+    x: number;
+    y: number;
+    z: number;
+  }
+
+  export class Node {
+    name: string;
+    active: boolean;
+    parent: Node | null;
+    children: Node[];
+    constructor(name?: string);
+    addChild(child: Node): void;
+    removeFromParent(): void;
+    destroy(): void;
+    setPosition(x: number, y: number, z?: number): void;
+    setScale(x: number, y: number, z?: number): void;
+    setRotationFromEuler(x: number, y: number, z: number): void;
+    addComponent<T>(component: new (...args: never[]) => T): T;
+    getComponent<T>(component: new (...args: never[]) => T): T | null;
+  }
+
+  export class UITransform {
+    setContentSize(width: number, height: number): void;
+    setAnchorPoint(x: number, y: number): void;
+  }
+
+  export class UIOpacity {
+    opacity: number;
+  }
+
+  export class SpriteFrame {
+    originalSize?: { width: number; height: number };
+    rect?: { width: number; height: number };
+    width?: number;
+    height?: number;
+  }
+
+  export class Sprite {
+    spriteFrame: SpriteFrame | null;
+    color: Color;
+    srcBlendFactor?: number;
+    dstBlendFactor?: number;
+  }
+
+  export class Graphics {
+    fillColor: Color;
+    rect(x: number, y: number, width: number, height: number): void;
+    fill(): void;
+    clear(): void;
+  }
+
+  export enum BlendFactor {
+    SRC_ALPHA = 770,
+    ONE_MINUS_SRC_ALPHA = 771,
+    ONE = 1,
+  }
+}
