@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "include": [
     "src/**/*.ts",
+    "standalone/**/*.ts",
     "tests/**/*.ts",
     "types/**/*.d.ts",
     "vitest.config.ts"

@@ -1,0 +1,814 @@
+{
+  "schemaVersion": "V5G_0.0051",
+  "editor": {
+    "name": "victory_editor_v5_g",
+    "version": "V5G_0.0051"
+  },
+  "engineTarget": {
+    "name": "cocos_creator",
+    "version": "3.8.6"
+  },
+  "name": "superwin",
+  "stage": {
+    "width": 2000,
+    "height": 2000,
+    "coordinate": "center",
+    "duration": 5,
+    "backgroundColor": "#0a0a0a"
+  },
+  "assets": [
+    {
+      "id": "asset_image_mqgmihl5_7",
+      "type": "image",
+      "path": "assets/super_asset_image_mqgmihl5_7.png",
+      "originalName": "super.png",
+      "width": 966,
+      "height": 251
+    },
+    {
+      "id": "asset_image_mqgmin3j_9",
+      "type": "image",
+      "path": "assets/super_win_asset_image_mqgmin3j_9.png",
+      "originalName": "super win.png",
+      "width": 438,
+      "height": 207
+    },
+    {
+      "id": "asset_image_mqgmiqo0_b",
+      "type": "image",
+      "path": "assets/superwin_asset_image_mqgmiqo0_b.png",
+      "originalName": "superwin线光.png",
+      "width": 730,
+      "height": 735
+    },
+    {
+      "id": "asset_image_mqgmjujq_d",
+      "type": "image",
+      "path": "assets/effect4_asset_image_mqgmjujq_d.png",
+      "originalName": "effect4.png",
+      "width": 320,
+      "height": 277
+    },
+    {
+      "id": "asset_image_mqgmk7jx_f",
+      "type": "image",
+      "path": "assets/2_asset_image_mqgmk7jx_f.png",
+      "originalName": "光点2.png",
+      "width": 50,
+      "height": 50
+    },
+    {
+      "id": "asset_image_mqgmko6a_h",
+      "type": "image",
+      "path": "assets/image_asset_image_mqgmko6a_h.png",
+      "originalName": "右车.png",
+      "width": 477,
+      "height": 190
+    },
+    {
+      "id": "asset_image_mqgmkqkl_j",
+      "type": "image",
+      "path": "assets/image_asset_image_mqgmkqkl_j.png",
+      "originalName": "左车.png",
+      "width": 545,
+      "height": 221
+    },
+    {
+      "id": "asset_image_mqgmksgb_l",
+      "type": "image",
+      "path": "assets/image_asset_image_mqgmksgb_l.png",
+      "originalName": "中车.png",
+      "width": 346,
+      "height": 267
+    },
+    {
+      "id": "asset_image_mqgn4aqi_1q",
+      "type": "image",
+      "path": "assets/image_asset_image_mqgn4aqi_1q.png",
+      "originalName": "钱.png",
+      "width": 241,
+      "height": 161
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer_image_mqgmiqo0_c",
+      "name": "线光.png",
+      "type": "image",
+      "assetId": "asset_image_mqgmiqo0_b",
+      "parentId": null,
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mqgmmdjd_n",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 4467,
+          "params": {
+            "fromScaleX": 0.01,
+            "fromScaleY": 0.01,
+            "toScaleX": 1.2,
+            "toScaleY": 1.2,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqgmmdjd_o",
+          "type": "rotate",
+          "name": "Rotate 旋转",
+          "startTime": 0,
+          "duration": 4.2,
+          "enabled": true,
+          "seed": 46578,
+          "params": {
+            "fromRotation": 0,
+            "toRotation": 360,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqgmmdjd_p",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 4,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 43258,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mqgmjujq_e",
+      "name": "蓝底.png",
+      "type": "image",
+      "assetId": "asset_image_mqgmjujq_d",
+      "parentId": null,
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mqgmnhbt_q",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 67426,
+          "params": {
+            "fromScaleX": 0.01,
+            "fromScaleY": 1,
+            "toScaleX": 2,
+            "toScaleY": 1,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqgmnhbt_r",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0,
+          "duration": 4,
+          "enabled": true,
+          "seed": 45363,
+          "params": {
+            "fromScaleX": 2,
+            "fromScaleY": 1,
+            "toScaleX": 2,
+            "toScaleY": 2,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqgmnhbt_s",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 4,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 87202,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mqgn4aqj_1r",
+      "name": "钱.png",
+      "type": "image",
+      "assetId": "asset_image_mqgn4aqi_1q",
+      "parentId": null,
+      "visible": true,
+      "locked": false,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mqgn4du1_1s",
+          "type": "particles",
+          "name": "Particles 粒子爆发",
+          "startTime": 0.4,
+          "duration": 1,
+          "enabled": true,
+          "seed": 90024,
+          "params": {
+            "count": 20,
+            "spread": 500,
+            "speed": 80,
+            "size": 200,
+            "gravity": 90,
+            "fadeOut": true,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mqgmko6a_i",
+      "name": "右车.png",
+      "type": "image",
+      "assetId": "asset_image_mqgmko6a_h",
+      "parentId": null,
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mqgmnyk8_t",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0.4,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 39293,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 320,
+            "toY": -85,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeInOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqgmnyk8_u",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 0.4,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 80603,
+          "params": {
+            "fromOpacity": 0,
+            "toOpacity": 1,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqgmnyk8_v",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.4,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 9062,
+          "params": {
+            "fromScaleX": 0.2,
+            "fromScaleY": 0.2,
+            "toScaleX": 1,
+            "toScaleY": 1,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqgmnyk8_w",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.6,
+          "duration": 3.8,
+          "enabled": true,
+          "seed": 90675,
+          "params": {
+            "fromScaleX": 1,
+            "fromScaleY": 1,
+            "toScaleX": 1.1,
+            "toScaleY": 1.1,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqgmnyk8_y",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 4,
+          "duration": 0.4,
+          "enabled": true,
+          "seed": 29245,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "easeInOutQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mqgmkqkm_k",
+      "name": "左车.png",
+      "type": "image",
+      "assetId": "asset_image_mqgmkqkl_j",
+      "parentId": null,
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mqgmvx3t_1f",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0.4,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 39293,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": -300,
+            "toY": -100,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeInOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqgmvx3t_1g",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 0.4,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 80603,
+          "params": {
+            "fromOpacity": 0,
+            "toOpacity": 1,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqgmvx3t_1h",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.4,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 9062,
+          "params": {
+            "fromScaleX": 0.2,
+            "fromScaleY": 0.2,
+            "toScaleX": 1,
+            "toScaleY": 1,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqgmvx3t_1i",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.6,
+          "duration": 3.8,
+          "enabled": true,
+          "seed": 90675,
+          "params": {
+            "fromScaleX": 1,
+            "fromScaleY": 1,
+            "toScaleX": 1.1,
+            "toScaleY": 1.1,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqgmvx3t_1j",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 4,
+          "duration": 0.4,
+          "enabled": true,
+          "seed": 29245,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "easeInOutQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mqgmihl5_8",
+      "name": "super.png",
+      "type": "image",
+      "assetId": "asset_image_mqgmihl5_7",
+      "parentId": null,
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 600,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mqgmph95_15",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 0,
+          "duration": 0.1,
+          "enabled": true,
+          "seed": 89890,
+          "params": {
+            "fromOpacity": 0,
+            "toOpacity": 1,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqgmph95_16",
+          "type": "shake",
+          "name": "Shake 抖动",
+          "startTime": 0,
+          "duration": 0.8,
+          "enabled": true,
+          "seed": 95961,
+          "params": {
+            "amplitudeX": 0,
+            "amplitudeY": 20,
+            "cycles": 2,
+            "decay": true,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqgmph95_17",
+          "type": "pulse",
+          "name": "Pulse 呼吸",
+          "startTime": 0,
+          "duration": 4.2,
+          "enabled": true,
+          "seed": 47954,
+          "params": {
+            "scale": 1.025,
+            "cycles": 2,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqgmph95_18",
+          "type": "slide_in",
+          "name": "Slide In 滑入",
+          "startTime": 0.1,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 14157,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 0,
+            "toY": -500,
+            "fadeIn": true,
+            "easing": "backOut"
+          }
+        },
+        {
+          "id": "anim_module_mqgmph95_19",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 4,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 87202,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mqgmin3j_a",
+      "name": "win.png",
+      "type": "image",
+      "assetId": "asset_image_mqgmin3j_9",
+      "parentId": null,
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 500,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mqgmq1tt_1a",
+          "type": "slide_in",
+          "name": "Slide In 滑入",
+          "startTime": 0,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 14157,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 0,
+            "toY": -600,
+            "fadeIn": true,
+            "easing": "backOut"
+          }
+        },
+        {
+          "id": "anim_module_mqgmq1tt_1b",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 0,
+          "duration": 0.1,
+          "enabled": true,
+          "seed": 89890,
+          "params": {
+            "fromOpacity": 0,
+            "toOpacity": 1,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqgmq1tt_1c",
+          "type": "shake",
+          "name": "Shake 抖动",
+          "startTime": 0,
+          "duration": 0.8,
+          "enabled": true,
+          "seed": 95961,
+          "params": {
+            "amplitudeX": 0,
+            "amplitudeY": 25,
+            "cycles": 2,
+            "decay": true,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqgmq1tt_1d",
+          "type": "pulse",
+          "name": "Pulse 呼吸",
+          "startTime": 0,
+          "duration": 4.2,
+          "enabled": true,
+          "seed": 47954,
+          "params": {
+            "scale": 1.025,
+            "cycles": 2,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqgmq1tt_1e",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 4,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 87202,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mqgmksgb_m",
+      "name": "中车.png",
+      "type": "image",
+      "assetId": "asset_image_mqgmksgb_l",
+      "parentId": null,
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mqgn0so9_1k",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0.4,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 39293,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 0,
+            "toY": -200,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeInOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqgn0so9_1l",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 0.4,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 80603,
+          "params": {
+            "fromOpacity": 0,
+            "toOpacity": 1,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqgn0so9_1m",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.4,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 9062,
+          "params": {
+            "fromScaleX": 0.2,
+            "fromScaleY": 0.2,
+            "toScaleX": 1,
+            "toScaleY": 1,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqgn0so9_1n",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.6,
+          "duration": 3.8,
+          "enabled": true,
+          "seed": 90675,
+          "params": {
+            "fromScaleX": 1,
+            "fromScaleY": 1,
+            "toScaleX": 1.1,
+            "toScaleY": 1.1,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqgn0so9_1o",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 4,
+          "duration": 0.4,
+          "enabled": true,
+          "seed": 29245,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "easeInOutQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mqgmk7jx_g",
+      "name": "光点2.png",
+      "type": "image",
+      "assetId": "asset_image_mqgmk7jx_f",
+      "parentId": null,
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mqgn2jch_1p",
+          "type": "particle_twinkle",
+          "name": "Particle Twinkle 随机闪烁粒子",
+          "startTime": 0,
+          "duration": 4.2,
+          "enabled": true,
+          "seed": 42720,
+          "params": {
+            "radius": 300,
+            "count": 100,
+            "spawnInterval": 0.15,
+            "twinkleDuration": 0.6,
+            "batchMin": 1,
+            "batchMax": 3,
+            "size": 80,
+            "easing": "easeInQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    }
+  ],
+  "particles": []
+}

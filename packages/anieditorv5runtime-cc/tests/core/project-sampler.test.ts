@@ -78,6 +78,33 @@ describe("project-sampler", () => {
     expect(sampled.visible).toBe(false);
   });
 
+  it("marks particle animation frames as particle-rendered instead of image-rendered", () => {
+    const sampled = sampleLayerAtTime(
+      layer({}, [
+        {
+          id: "particles",
+          type: "particles",
+          startTime: 0,
+          duration: 1,
+          enabled: true,
+          seed: 1,
+          params: {
+            count: 2,
+            spread: 10,
+            speed: 10,
+            size: 8,
+            gravity: 0,
+          },
+        },
+      ]),
+      0.5,
+    );
+
+    expect(sampled.visible).toBe(true);
+    expect(sampled.renderImageDisplay).toBe(false);
+    expect(sampled.hasActiveParticleAnimation).toBe(true);
+  });
+
   it("clamps project time to stage duration", () => {
     const project: V5GProjectConfig = {
       schemaVersion: "V5G_0.0014",

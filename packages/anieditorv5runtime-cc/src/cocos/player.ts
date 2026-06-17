@@ -1,4 +1,5 @@
 import { sampleProjectAtTime } from "../core/project-sampler.js";
+import { sampleParticleSpritesForLayer } from "../core/particle-sampler.js";
 import { validateCocosV5GProject, parseColorHex } from "../core/validation.js";
 import { getCocosBlendModeConfig } from "./blend-mode.js";
 import {
@@ -24,7 +25,10 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     ManagedLayer<TNode, TSpriteFrame>
   >();
   private stageNode: TNode | null = null;
+  private contentNode: TNode | null = null;
+  private particleRootNode: TNode | null = null;
   private backgroundNode: TNode | null = null;
+  private readonly particleNodes: TNode[] = [];
   private currentTime = 0;
   private isPlaying = false;
   private loop: boolean;
@@ -64,6 +68,22 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
       driver.appendChild(stage, background);
       this.backgroundNode = background;
 
+      const content = driver.createNode("V5G Content");
+      driver.setContentSize(content, project.stage.width, project.stage.height);
+      driver.setAnchorPoint(content, 0.5, 0.5);
+      driver.appendChild(stage, content);
+      this.contentNode = content;
+
+      const particleRoot = driver.createNode("V5G Particles");
+      driver.setContentSize(
+        particleRoot,
+        project.stage.width,
+        project.stage.height,
+      );
+      driver.setAnchorPoint(particleRoot, 0.5, 0.5);
+      driver.appendChild(stage, particleRoot);
+      this.particleRootNode = particleRoot;
+
       const assetsById = new Map(
         project.assets.map((asset) => [asset.id, asset]),
       );
@@ -88,7 +108,7 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
           layer.transform.anchorY,
         );
         driver.applyBlendMode(node, getCocosBlendModeConfig(layer.blendMode));
-        driver.appendChild(stage, node);
+        driver.appendChild(content, node);
 
         this.layers.set(layer.id, {
           layer,
@@ -105,6 +125,8 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
       driver.destroyNode(stage);
       this.stageNode = null;
       this.backgroundNode = null;
+      this.contentNode = null;
+      this.particleRootNode = null;
       this.layers.clear();
       throw error;
     }
@@ -137,9 +159,13 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
         managed.node,
         opacityToCocosOpacity(sampledLayer.opacity),
       );
-      this.options.driver.setActive(managed.node, sampledLayer.visible);
+      this.options.driver.setActive(
+        managed.node,
+        sampledLayer.renderImageDisplay,
+      );
     }
 
+    this.drawParticles(sampledProject.layers);
     this.options.onTimeChange?.(this.currentTime);
   }
 
@@ -193,11 +219,14 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
   }
 
   private destroyManagedNodes(): void {
+    this.clearParticles();
     if (this.stageNode !== null) {
       this.options.driver.destroyNode(this.stageNode);
     }
     this.stageNode = null;
     this.backgroundNode = null;
+    this.contentNode = null;
+    this.particleRootNode = null;
     this.layers.clear();
   }
 
@@ -236,6 +265,78 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
       throw new Error(
         `Cocos SpriteFrame size mismatch for V5G asset "${asset.id}" at "${asset.path}": expected ${asset.width}x${asset.height}, got ${actualSize.width}x${actualSize.height}.`,
       );
+    }
+  }
+
+  private drawParticles(
+    sampledLayers: ReturnType<typeof sampleProjectAtTime>["layers"],
+  ): void {
+    this.clearParticles();
+    const particleRoot = this.particleRootNode;
+    if (particleRoot === null) {
+      throw new Error("V5GCocosPlayer particle root is not initialized.");
+    }
+
+    for (const sampledLayer of sampledLayers) {
+      if (!sampledLayer.hasActiveParticleAnimation) continue;
+      const managed = this.layers.get(sampledLayer.layerId);
+      if (!managed) {
+        throw new Error(
+          `Missing runtime node for V5G particle layer "${sampledLayer.layerId}".`,
+        );
+      }
+      const emitterPosition = v5gTransformToCocosPosition(
+        sampledLayer.transform,
+      );
+      const particles = sampleParticleSpritesForLayer(
+        managed.layer,
+        sampledLayer,
+        {
+          width: managed.asset.width,
+          height: managed.asset.height,
+        },
+        this.currentTime,
+      );
+
+      for (const particle of particles) {
+        const node = this.options.driver.createImageNode(
+          `V5G Particle ${particle.layerId} ${particle.animationId}`,
+          managed.spriteFrame,
+        );
+        this.options.driver.setContentSize(
+          node,
+          managed.asset.width,
+          managed.asset.height,
+        );
+        this.options.driver.setAnchorPoint(node, 0.5, 0.5);
+        this.options.driver.setPosition(
+          node,
+          emitterPosition.x + particle.offsetX,
+          emitterPosition.y + particle.offsetY,
+        );
+        this.options.driver.setScale(node, particle.scale, particle.scale);
+        this.options.driver.setRotationDegrees(
+          node,
+          (particle.rotation * 180) / Math.PI,
+        );
+        this.options.driver.setOpacity(
+          node,
+          opacityToCocosOpacity(particle.alpha),
+        );
+        this.options.driver.applyBlendMode(
+          node,
+          getCocosBlendModeConfig(particle.blendMode),
+        );
+        this.options.driver.appendChild(particleRoot, node);
+        this.particleNodes.push(node);
+      }
+    }
+  }
+
+  private clearParticles(): void {
+    while (this.particleNodes.length > 0) {
+      const node = this.particleNodes.pop();
+      if (node !== undefined) this.options.driver.destroyNode(node);
     }
   }
 }

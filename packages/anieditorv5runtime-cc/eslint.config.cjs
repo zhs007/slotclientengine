@@ -21,6 +21,16 @@ module.exports = [
       "no-undef": "off",
     },
   },
+  {
+    files: ["scripts/**/*.mjs", "vitest.config.ts"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
   js.configs.recommended,
   {
     files: ["**/*.ts"],

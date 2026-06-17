@@ -24,12 +24,15 @@
   },
   "files": [
     "dist",
+    "standalone",
     "README.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint .",
+    "standalone:check": "node scripts/check-standalone.mjs",
     "test": "vitest run --coverage",
+    "typecheck:standalone": "tsc -p tsconfig.standalone.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

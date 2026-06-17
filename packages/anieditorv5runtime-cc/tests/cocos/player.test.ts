@@ -224,7 +224,9 @@ describe("V5GCocosPlayer", () => {
     expect(stage.height).toBe(project.stage.height);
     expect(stage.children[0].name).toBe("V5G Background");
     expect(stage.children[0].backgroundColor).toBe(0x101827);
-    expect(stage.children.slice(1).map((node) => node.name)).toEqual(
+    expect(stage.children[1].name).toBe("V5G Content");
+    expect(stage.children[2].name).toBe("V5G Particles");
+    expect(stage.children[1].children.map((node) => node.name)).toEqual(
       project.layers.map((layer) => layer.name),
     );
   });
@@ -233,7 +235,7 @@ describe("V5GCocosPlayer", () => {
     const { root, player } = makePlayer(tinyProject());
     player.init();
 
-    const layerNode = root.children[0].children[1];
+    const layerNode = root.children[0].children[1].children[0];
     expect(layerNode.x).toBe(100);
     expect(layerNode.y).toBe(50);
     expect(layerNode.scaleX).toBe(-1);
@@ -320,6 +322,44 @@ describe("V5GCocosPlayer", () => {
 
     expect(player.time).toBe(1);
     expect(player.playing).toBe(false);
+  });
+
+  it("renders active layer particles above the content root and clears old particles", () => {
+    const project = tinyProject({
+      animations: [
+        {
+          id: "burst",
+          type: "particles",
+          startTime: 0,
+          duration: 1,
+          enabled: true,
+          seed: 9,
+          params: {
+            count: 3,
+            spread: 20,
+            speed: 30,
+            size: 10,
+            gravity: 0,
+          },
+        },
+      ],
+    });
+    const { root, player } = makePlayer(project);
+    player.init();
+
+    const stage = root.children[0];
+    const content = stage.children[1];
+    const particleRoot = stage.children[2];
+    expect(content.children[0].active).toBe(false);
+    expect(particleRoot.children).toHaveLength(3);
+
+    const firstParticle = particleRoot.children[0];
+    player.seek(0.5);
+
+    expect(firstParticle.destroyed).toBe(true);
+    expect(particleRoot.children).toHaveLength(3);
+    expect(particleRoot.children[0].spriteFrame?.id).toBe("asset-1");
+    expect(Number.isFinite(particleRoot.children[0].rotation)).toBe(true);
   });
 
   it("restart seeks to zero and destroy only removes runtime nodes", () => {

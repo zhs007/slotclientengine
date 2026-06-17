@@ -153,6 +153,76 @@ describe("animation-sampler", () => {
     expect(swing.transform.rotation).toBe(40);
   });
 
+  it("samples entry, exit, emphasis, and particle marker animations", () => {
+    const scaleIn = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [animation("scale_in", { fromScale: 0, toScale: 1 })],
+      0.5,
+    );
+    expect(scaleIn.transform.scaleX).toBe(0.5);
+    expect(scaleIn.opacity).toBe(0.5);
+
+    const scaleOut = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [animation("scale_out", { fromScale: 1, toScale: 0 })],
+      0.5,
+    );
+    expect(scaleOut.transform.scaleX).toBe(0.5);
+    expect(scaleOut.opacity).toBe(0.5);
+
+    const pop = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [animation("pop", { peakScale: 1.4, settleScale: 1, peakAt: 0.5 })],
+      0.5,
+    );
+    expect(pop.transform.scaleX).toBe(1.4);
+
+    const shake = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [
+        animation("shake", {
+          amplitudeX: 10,
+          amplitudeY: 20,
+          cycles: 1,
+          decay: false,
+        }),
+      ],
+      0.25,
+    );
+    expect(shake.transform.x).toBe(110);
+    expect(shake.transform.y).toBe(39.0195);
+
+    const blink = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [
+        animation("blink", {
+          minOpacity: 0.2,
+          maxOpacity: 1,
+          blinks: 1,
+          endOpacity: 1,
+        }),
+      ],
+      0.5,
+    );
+    expect(blink.opacity).toBe(0.2);
+
+    const particleMarker = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 0.8 },
+      [
+        animation("particles", {
+          count: 4,
+          spread: 20,
+          speed: 40,
+          size: 8,
+          gravity: 0,
+        }),
+      ],
+      0.5,
+    );
+    expect(particleMarker.transform).toEqual(baseTransform);
+    expect(particleMarker.opacity).toBe(0.8);
+  });
+
   it("ignores disabled animations and applies overlaps in startTime order", () => {
     const disabled = sampleLayerAnimationsAtTime(
       { transform: baseTransform, opacity: 0.7 },
