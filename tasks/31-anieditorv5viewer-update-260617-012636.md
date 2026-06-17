@@ -188,3 +188,34 @@ app 级：
 - README 已从单 `project.json` 更新为 4 项目说明。
 - `data-v5g-project-id` 已加入 player 诊断；浏览器数据按用户要求未采集。
 - dev server 已停止。
+
+## 追加修复：首帧入场透明度
+
+追加时间：`260617-074642`。
+
+用户浏览 `bigwin` 时发现动画最开始会提前显示部分元素；`project.json` 首帧也疑似有元素提前露出。排查后确认 viewer 的 `sampleLayerAtTime()` 只判断“任意 enabled 动画是否覆盖当前时间”。当图层存在 `pulse@0` / `shake@0` 这类非透明动画，但真正的 `fade fromOpacity:0` 或 `slide_in.fadeIn` 从稍后才开始时，viewer 会在入场透明动画开始前用 base opacity 显示图层。
+
+修复：
+
+- `apps/anieditorv5viewer/src/runtime/project-sampler.ts`
+  - 新增 pending opacity entry 判断。
+  - 如果图层有明确入场透明动画尚未开始，则强制 opacity 为 `0`。
+  - 明确入场透明动画包括：
+    - `fade` 且 `fromOpacity === 0`
+    - `slide_in.fadeIn !== false`
+    - `bounce_in.fadeIn !== false`
+    - `scale_in.fadeIn !== false`
+- `apps/anieditorv5viewer/tests/runtime/project-sampler.test.ts`
+  - 新增 `pulse@0` 但 `fade@0.1` 前应隐藏的回归测试。
+  - 新增 delayed `slide_in.fadeIn` 在自身开始帧仍从 opacity `0` 起播的回归测试。
+
+追加验证：
+
+- `pnpm --filter anieditorv5viewer typecheck`：通过。
+- `pnpm --filter anieditorv5viewer test`：通过，6 个测试文件，51 个测试。
+- `pnpm --filter anieditorv5viewer lint`：通过。
+- `pnpm --filter anieditorv5viewer build`：通过。
+- `pnpm --filter anieditorv5viewer format:check`：通过。
+- `git diff --check`：通过。
+
+浏览器视觉复查仍按用户要求由用户处理。
