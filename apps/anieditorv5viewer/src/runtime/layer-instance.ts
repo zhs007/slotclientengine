@@ -11,6 +11,8 @@ import type {
 export interface V5GLayerInstance {
   layer: V5GLayerConfig;
   display: PIXI.Container;
+  texture: PIXI.Texture | null;
+  textureSize: { width: number; height: number } | null;
 }
 
 export function createLayerInstance(
@@ -19,6 +21,8 @@ export function createLayerInstance(
 ): V5GLayerInstance {
   const display = new PIXI.Container();
   display.label = layer.name;
+  let instanceTexture: PIXI.Texture | null = null;
+  let textureSize: { width: number; height: number } | null = null;
 
   if (layer.type === "image") {
     if (!layer.assetId) {
@@ -30,6 +34,11 @@ export function createLayerInstance(
         `V5G image layer "${layer.id}" is missing texture for asset "${layer.assetId}".`,
       );
     }
+    instanceTexture = texture;
+    textureSize = {
+      width: Math.round(texture.width),
+      height: Math.round(texture.height),
+    };
     const sprite = new PIXI.Sprite(texture);
     sprite.anchor.set(layer.transform.anchorX, layer.transform.anchorY);
     display.addChild(sprite);
@@ -56,7 +65,7 @@ export function createLayerInstance(
     throw new Error(`Unsupported V5G layer type: ${layer.type}`);
   }
 
-  return { layer, display };
+  return { layer, display, texture: instanceTexture, textureSize };
 }
 
 export function applySampledLayerState(
@@ -77,7 +86,7 @@ export function applySampledLayerState(
   );
   instance.display.rotation = (sampled.transform.rotation * Math.PI) / 180;
   instance.display.alpha = sampled.opacity;
-  instance.display.visible = sampled.visible;
+  instance.display.visible = sampled.renderImageDisplay;
   instance.display.blendMode = toPixiBlendMode(sampled.blendMode);
 }
 

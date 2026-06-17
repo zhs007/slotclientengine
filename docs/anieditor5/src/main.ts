@@ -85,6 +85,22 @@ const undoStack: V5GProjectConfig[] = [];
 const collapsedAnimationIds = new Set<string>();
 const expandedTimelineLayerIds = new Set<string>();
 let selectedAnimationId: string | null = null;
+let animationClipboard:
+  | {
+      kind: "layer";
+      sourceLayerName: string;
+      animations: V5GAnimationConfig[];
+    }
+  | {
+      kind: "single";
+      sourceLayerName: string;
+      animation: V5GAnimationConfig;
+    }
+  | null = null;
+let pendingAnimationPaste:
+  | { targetLayerId: string; source: "layer-toolbar" }
+  | { targetLayerId: string; source: "animation-toolbar" }
+  | null = null;
 let autoSaveTimer = 0;
 let saveRunId = 0;
 
@@ -117,7 +133,13 @@ const els = {
   btnSwitchProject: getButton("btn-switch-project"),
   btnResetView: getButton("btn-reset-view"),
   btnAddText: getButton("btn-add-text"),
+  fileReplaceImage: getInput("file-replace-image"),
+  btnReplaceImage: getButton("btn-replace-image"),
   btnSaveMoveAnim: getButton("btn-save-move-anim"),
+  animToolbar: getElement("anim-toolbar"),
+  btnPasteCopiedAnim: getButton("btn-paste-copied-anim"),
+  btnConfirmPasteCopiedAnim: getButton("btn-confirm-paste-copied-anim"),
+  btnCancelPasteCopiedAnim: getButton("btn-cancel-paste-copied-anim"),
   btnExportZip: getButton("btn-export-zip"),
   animType: getSelect("anim-type"),
   animDescription: getElement("anim-description"),
@@ -165,6 +187,12 @@ const els = {
   propScaleY: getInput("prop-scale-y"),
   btnFlipX: getButton("btn-flip-x"),
   btnFlipY: getButton("btn-flip-y"),
+  btnCopyLayerAnimations: getButton("btn-copy-layer-animations"),
+  btnPasteLayerAnimations: getButton("btn-paste-layer-animations"),
+  btnConfirmPasteLayerAnimations: getButton(
+    "btn-confirm-paste-layer-animations",
+  ),
+  btnCancelPasteLayerAnimations: getButton("btn-cancel-paste-layer-animations"),
   propRotation: getInput("prop-rotation"),
   propOpacity: getInput("prop-opacity"),
   propBlendMode: getSelect("prop-blend-mode"),
@@ -342,6 +370,15 @@ function bindEvents(): void {
   els.btnSaveMoveAnim.addEventListener("click", () =>
     saveConfiguredAnimation(),
   );
+  els.btnPasteCopiedAnim.addEventListener("click", () =>
+    requestPasteAnimationsToSelectedLayer("animation-toolbar"),
+  );
+  els.btnConfirmPasteCopiedAnim.addEventListener("click", () =>
+    confirmPendingAnimationPaste(),
+  );
+  els.btnCancelPasteCopiedAnim.addEventListener("click", () =>
+    cancelPendingAnimationPaste(),
+  );
   els.durationSeconds.addEventListener("change", () => {
     applyProjectDurationFromInput();
   });
@@ -391,6 +428,21 @@ function bindEvents(): void {
     els.fileImage.value = "";
     if (!file) return;
     await importImage(file);
+  });
+
+  els.btnReplaceImage.addEventListener("click", () => {
+    const layer = getSelectedLayer(state);
+    if (!layer || layer.type !== "image") {
+      showStatus("请选择一个图片图层再替换资源。", "error");
+      return;
+    }
+    els.fileReplaceImage.click();
+  });
+  els.fileReplaceImage.addEventListener("change", async () => {
+    const file = els.fileReplaceImage.files?.[0];
+    els.fileReplaceImage.value = "";
+    if (!file) return;
+    await replaceSelectedImageResource(file);
   });
 
   els.fileZip.addEventListener("change", async () => {
@@ -444,6 +496,26 @@ function bindEvents(): void {
   }
   els.btnFlipX.addEventListener("click", () => flipSelectedLayer("x"));
   els.btnFlipY.addEventListener("click", () => flipSelectedLayer("y"));
+  els.btnCopyLayerAnimations.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    copySelectedLayerAnimations();
+  });
+  els.btnPasteLayerAnimations.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    requestPasteAnimationsToSelectedLayer("layer-toolbar");
+  });
+  els.btnConfirmPasteLayerAnimations.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    confirmPendingAnimationPaste();
+  });
+  els.btnCancelPasteLayerAnimations.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    cancelPendingAnimationPaste();
+  });
   els.propBlendMode.addEventListener("change", () =>
     updateSelectedLayerFromProperties(),
   );
@@ -565,6 +637,39 @@ async function importImage(file: File): Promise<void> {
     showStatus(`已导入图片：${file.name}`, "success");
   } catch (error) {
     showStatus(`导入图片失败：${getErrorMessage(error)}`, "error");
+  }
+}
+
+async function replaceSelectedImageResource(file: File): Promise<void> {
+  const layer = getSelectedLayer(state);
+  if (!layer || layer.type !== "image") {
+    showStatus("请选择一个图片图层再替换资源。", "error");
+    return;
+  }
+  if (!file.type.startsWith("image/")) {
+    showStatus("请选择图片文件。", "error");
+    return;
+  }
+
+  try {
+    const previousAssetId = layer.assetId;
+    const size = await readImageSize(file);
+    const asset = createImageAsset(file, size.width, size.height);
+    const runtimeAsset = createRuntimeAsset(asset.id, file);
+    pushUndoSnapshot();
+    state.project.assets.push(asset);
+    state.runtimeAssets.push(runtimeAsset);
+    layer.assetId = asset.id;
+    removeUnusedAssetById(previousAssetId);
+    clearLayerPreview(layer.id);
+    await renderAllAsync();
+    scheduleAutoSave(0);
+    showStatus(
+      `已替换「${layer.name}」的图片资源：${file.name}。其他图层仍保留原资源。`,
+      "success",
+    );
+  } catch (error) {
+    showStatus(`替换资源失败：${getErrorMessage(error)}`, "error");
   }
 }
 
@@ -1291,18 +1396,23 @@ function deleteLayerAt(index: number): void {
 }
 
 function removeUnusedAssetForDeletedLayer(deletedLayer: V5GLayerConfig): void {
-  if (!deletedLayer.assetId) return;
+  removeUnusedAssetById(deletedLayer.assetId);
+}
+
+function removeUnusedAssetById(assetId: string | null): void {
+  if (!assetId) return;
   const stillUsed = state.project.layers.some(
-    (layer) => layer.assetId === deletedLayer.assetId,
+    (layer) => layer.assetId === assetId,
   );
   if (stillUsed) return;
 
   state.project.assets = state.project.assets.filter(
-    (asset) => asset.id !== deletedLayer.assetId,
+    (asset) => asset.id !== assetId,
   );
   // Keep runtimeAssets in memory and IndexedDB until the next full project cleanup.
-  // This makes Delete + Ctrl/Cmd+Z safe for image layers without duplicating File blobs
-  // in the undo stack. Export/save only uses assets still referenced by project.assets.
+  // This makes Delete/Replace + Ctrl/Cmd+Z safe for image layers without duplicating
+  // File blobs in the undo stack. Export/save only uses assets still referenced by
+  // project.assets.
 }
 
 function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
@@ -1671,7 +1781,213 @@ function renderProperties(): void {
   els.propRotation.value = String(layer.transform.rotation);
   els.propOpacity.value = String(layer.opacity);
   els.propBlendMode.value = normalizeBlendMode(layer.blendMode);
+  els.btnReplaceImage.classList.toggle("hidden", layer.type !== "image");
+  syncLayerAnimationClipboardButtons(layer);
   syncAnimationPanel(layer);
+}
+
+function syncLayerAnimationClipboardButtons(layer: V5GLayerConfig): void {
+  els.btnCopyLayerAnimations.disabled = layer.animations.length === 0;
+  els.btnCopyLayerAnimations.classList.toggle(
+    "opacity-45",
+    layer.animations.length === 0,
+  );
+  els.btnCopyLayerAnimations.classList.toggle(
+    "cursor-not-allowed",
+    layer.animations.length === 0,
+  );
+  const canPaste = animationClipboard !== null;
+  els.btnPasteLayerAnimations.disabled = !canPaste;
+  els.btnPasteLayerAnimations.classList.toggle("opacity-45", !canPaste);
+  els.btnPasteLayerAnimations.classList.toggle("cursor-not-allowed", !canPaste);
+  const showingConfirm = isPendingAnimationPasteFor(layer.id, "layer-toolbar");
+  els.btnConfirmPasteLayerAnimations.classList.toggle(
+    "hidden",
+    !showingConfirm,
+  );
+  els.btnCancelPasteLayerAnimations.classList.toggle("hidden", !showingConfirm);
+  els.btnPasteLayerAnimations.classList.toggle("hidden", showingConfirm);
+}
+
+function copySelectedLayerAnimations(): void {
+  const layer = getSelectedLayer(state);
+  if (!layer) {
+    showStatus("请先选择一个图层再复制动画。", "error");
+    return;
+  }
+  if (layer.animations.length === 0) {
+    showStatus("当前图层还没有动画可复制。", "error");
+    return;
+  }
+
+  animationClipboard = {
+    kind: "layer",
+    sourceLayerName: layer.name,
+    animations: layer.animations
+      .slice()
+      .sort((a, b) => a.startTime - b.startTime)
+      .map(cloneAnimationConfig),
+  };
+  pendingAnimationPaste = null;
+  renderAll();
+  showStatus(
+    `已复制「${layer.name}」上的 ${layer.animations.length} 个动画模块。请选择目标图层后点击粘贴。`,
+    "success",
+  );
+}
+
+function copySingleAnimation(layerId: string, animationId: string): void {
+  const layer = findLayer(layerId);
+  const animation = layer?.animations.find((item) => item.id === animationId);
+  if (!layer || !animation) return;
+
+  animationClipboard = {
+    kind: "single",
+    sourceLayerName: layer.name,
+    animation: cloneAnimationConfig(animation),
+  };
+  pendingAnimationPaste = null;
+  renderAll();
+  showStatus(
+    `已复制「${layer.name}」的 ${getAnimationDisplayName(animation)} 动画模块。请选择目标图层后点击粘贴。`,
+    "success",
+  );
+}
+
+function requestPasteAnimationsToSelectedLayer(
+  source: "layer-toolbar" | "animation-toolbar",
+): void {
+  const layer = getSelectedLayer(state);
+  if (!layer) {
+    showStatus("请先选择一个目标图层再粘贴动画。", "error");
+    return;
+  }
+  requestPasteAnimationsToLayer(layer.id, source);
+}
+
+function requestPasteAnimationsToLayer(
+  targetLayerId: string,
+  source: "layer-toolbar" | "animation-toolbar",
+): void {
+  const targetLayer = findLayer(targetLayerId);
+  if (!targetLayer) return;
+  if (!animationClipboard) {
+    showStatus("还没有复制过动画。请先复制整层动画或单个动画模块。", "error");
+    return;
+  }
+  if (source === "animation-toolbar" && animationClipboard.kind !== "single") {
+    showStatus(
+      "顶部粘贴动画只用于单个动画模块。请先复制某一个动画模块。",
+      "error",
+    );
+    return;
+  }
+
+  pendingAnimationPaste = { targetLayerId, source };
+  renderAll();
+  showStatus(
+    `确认要把${getAnimationClipboardDescription()}粘贴到「${targetLayer.name}」吗？请点击确认。`,
+    "info",
+  );
+}
+
+function confirmPendingAnimationPaste(): void {
+  if (!pendingAnimationPaste) {
+    showStatus("没有待确认的动画粘贴操作。", "info");
+    return;
+  }
+  if (!animationClipboard) {
+    pendingAnimationPaste = null;
+    renderAll();
+    showStatus("动画剪贴板为空，无法粘贴。", "error");
+    return;
+  }
+  const targetLayer = findLayer(pendingAnimationPaste.targetLayerId);
+  if (!targetLayer) {
+    pendingAnimationPaste = null;
+    renderAll();
+    showStatus("目标图层不存在，已取消粘贴。", "error");
+    return;
+  }
+
+  const pastedAnimations = createPastedAnimationsFromClipboard();
+  if (pastedAnimations.length === 0) {
+    pendingAnimationPaste = null;
+    renderAll();
+    showStatus("没有可粘贴的动画模块。", "error");
+    return;
+  }
+
+  pushUndoSnapshot();
+  targetLayer.animations.push(...pastedAnimations);
+  targetLayer.animations.sort((a, b) => a.startTime - b.startTime);
+  state.selectedLayerId = targetLayer.id;
+  selectedAnimationId = pastedAnimations[0]?.id ?? null;
+  expandedTimelineLayerIds.add(targetLayer.id);
+  for (const animation of pastedAnimations) {
+    collapsedAnimationIds.delete(animation.id);
+  }
+  pendingAnimationPaste = null;
+  normalizeProjectDurationToAnimationEnd({ silent: true });
+  clearPreviewBaseCache();
+  setPlayheadSeconds(pastedAnimations[0]?.startTime ?? state.playheadSeconds);
+  renderAll();
+  scheduleAutoSave(0);
+  showStatus(
+    `已粘贴 ${pastedAnimations.length} 个动画模块到「${targetLayer.name}」。`,
+    "success",
+  );
+}
+
+function cancelPendingAnimationPaste(): void {
+  if (!pendingAnimationPaste) return;
+  pendingAnimationPaste = null;
+  renderAll();
+  showStatus("已取消粘贴动画。", "info");
+}
+
+function isPendingAnimationPasteFor(
+  targetLayerId: string,
+  source: "layer-toolbar" | "animation-toolbar",
+): boolean {
+  return (
+    pendingAnimationPaste?.targetLayerId === targetLayerId &&
+    pendingAnimationPaste.source === source
+  );
+}
+
+function getAnimationClipboardDescription(): string {
+  if (!animationClipboard) return "剪贴板中的动画";
+  if (animationClipboard.kind === "layer") {
+    return `「${animationClipboard.sourceLayerName}」的 ${animationClipboard.animations.length} 个动画模块`;
+  }
+  return `「${animationClipboard.sourceLayerName}」的 ${getAnimationDisplayName(animationClipboard.animation)} 动画模块`;
+}
+
+function createPastedAnimationsFromClipboard(): V5GAnimationConfig[] {
+  if (!animationClipboard) return [];
+  if (animationClipboard.kind === "layer") {
+    return animationClipboard.animations.map(createPastedAnimationConfig);
+  }
+  return [createPastedAnimationConfig(animationClipboard.animation)];
+}
+
+function createPastedAnimationConfig(
+  animation: V5GAnimationConfig,
+): V5GAnimationConfig {
+  return {
+    ...cloneAnimationConfig(animation),
+    id: createId("anim_module"),
+  };
+}
+
+function cloneAnimationConfig(
+  animation: V5GAnimationConfig,
+): V5GAnimationConfig {
+  return {
+    ...animation,
+    params: { ...animation.params },
+  };
 }
 
 function updateSelectedLayerFromProperties(): void {
@@ -1745,24 +2061,30 @@ function saveConfiguredAnimation(): void {
     return;
   }
 
+  const selectedAnimationType = els.animType.value;
+  if (!isV5GAnimationType(selectedAnimationType)) {
+    showStatus("请选择有效的动画类型。", "error");
+    return;
+  }
+
   pushUndoSnapshot();
-  const animationType: V5GAnimationType = "scale_up";
+  const animationType = selectedAnimationType;
   const preset = getAnimationPreset(animationType);
   const startTime = readAnimationStart(els.animStart, state.playheadSeconds);
   const duration = readAnimationDuration(
     els.animDuration,
     preset?.defaultDuration ?? 1,
   );
-  const params = createDefaultAnimationParams(animationType, {
-    transform: layer.transform,
-    opacity: layer.opacity,
-  });
-  params.easing = preset?.defaultEasing ?? "linear";
+  const params = readAnimationParamsFromContainer(
+    animationType,
+    els.animParamFields,
+  );
+  params.easing = els.animEasing.value || preset?.defaultEasing || "linear";
 
   const nextAnimation: V5GAnimationConfig = {
     id: createId("anim_module"),
     type: animationType,
-    name: getNextAnimationModuleName(layer),
+    name: getAnimationTypeDisplayName(animationType),
     startTime,
     duration,
     enabled: true,
@@ -1784,15 +2106,6 @@ function saveConfiguredAnimation(): void {
     `已为「${layer.name}」添加动画模块：${nextAnimation.name}。`,
     "success",
   );
-}
-
-function getNextAnimationModuleName(layer: V5GLayerConfig): string {
-  let index = layer.animations.length + 1;
-  const existingNames = new Set(
-    layer.animations.map((animation) => animation.name),
-  );
-  while (existingNames.has(`动画${index}`)) index += 1;
-  return `动画${index}`;
 }
 
 function getAnimationDisplayName(animation: V5GAnimationConfig): string {
@@ -2339,7 +2652,30 @@ function syncAnimationPanel(layer: V5GLayerConfig): void {
     ? easing
     : "linear";
   renderAnimationParamFields(layer, currentType, undefined);
+  syncAnimationToolbarButtons(layer);
   renderAnimationList(layer);
+}
+
+function syncAnimationToolbarButtons(layer: V5GLayerConfig): void {
+  const hasSingleAnimationClipboard = animationClipboard?.kind === "single";
+  const showingConfirm = isPendingAnimationPasteFor(
+    layer.id,
+    "animation-toolbar",
+  );
+  els.animToolbar.classList.toggle(
+    "grid-cols-2",
+    hasSingleAnimationClipboard && !showingConfirm,
+  );
+  els.animToolbar.classList.toggle(
+    "grid-cols-1",
+    !hasSingleAnimationClipboard || showingConfirm,
+  );
+  els.btnPasteCopiedAnim.classList.toggle(
+    "hidden",
+    !hasSingleAnimationClipboard || showingConfirm,
+  );
+  els.btnConfirmPasteCopiedAnim.classList.toggle("hidden", !showingConfirm);
+  els.btnCancelPasteCopiedAnim.classList.toggle("hidden", !showingConfirm);
 }
 
 function populateAnimationOptions(): void {
@@ -2495,6 +2831,9 @@ function renderAnimationList(layer: V5GLayerConfig): void {
             <input type="checkbox" data-animation-enabled class="h-3.5 w-3.5 accent-zinc-100" ${animation.enabled ? "checked" : ""} />
             <span>启用</span>
           </label>
+          <button type="button" data-animation-action="copy" class="rounded bg-zinc-900 px-1.5 py-1 text-[10px] text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-950" title="复制这个动画模块；复制后可用上方“粘贴动画”粘贴到当前选中图层">
+            <i class="fa-solid fa-copy"></i>
+          </button>
           <button type="button" data-animation-action="delete" class="rounded bg-zinc-900 px-1.5 py-1 text-[10px] text-zinc-400 transition hover:bg-red-950/70 hover:text-red-200" title="删除动画模块">
             <i class="fa-solid fa-trash"></i>
           </button>
@@ -2592,6 +2931,8 @@ function renderAnimationList(layer: V5GLayerConfig): void {
         const action = actionButton.dataset.animationAction;
         if (action === "delete") {
           deleteAnimationFromLayer(layer.id, animation.id);
+        } else if (action === "copy") {
+          copySingleAnimation(layer.id, animation.id);
         } else if (action === "apply") {
           updateAnimationFromModule(layer.id, animation.id, details);
         } else if (action === "reverse-offset-x") {
@@ -3163,7 +3504,7 @@ function handleGlobalShortcut(event: KeyboardEvent): void {
     return;
   }
 
-  if (event.key !== "Delete" && event.key !== "Backspace") return;
+  if (event.key !== "Delete") return;
   const selectedLayerId = state.selectedLayerId;
   if (!selectedLayerId) return;
   const index = state.project.layers.findIndex(

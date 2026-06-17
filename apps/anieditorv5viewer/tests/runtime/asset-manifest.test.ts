@@ -4,7 +4,7 @@ import {
   createAssetUrlManifest,
   resolveProjectAssetUrls,
 } from "../../src/runtime/asset-manifest";
-import { bundledProject } from "../../src/config/bundled-project";
+import { bundledProjects } from "../../src/config/bundled-projects";
 
 describe("asset-manifest", () => {
   it("normalizes vite module paths to V5G asset.path keys", () => {
@@ -15,20 +15,29 @@ describe("asset-manifest", () => {
     expect(manifest["assets/example.png"]).toBe("/compiled/example.png");
   });
 
-  it("resolves all current bundled project assets", () => {
-    const resolved = resolveProjectAssetUrls(
-      bundledProject,
-      bundledAssetUrlManifest,
-    );
+  it("resolves all bundled project assets", () => {
+    expect(bundledProjects.map((project) => project.id)).toEqual([
+      "project",
+      "bigwin",
+      "megawin",
+      "superwin",
+    ]);
 
-    expect(Object.keys(resolved).sort()).toEqual(
-      bundledProject.assets.map((asset) => asset.path).sort(),
-    );
+    for (const bundledProject of bundledProjects) {
+      const resolved = resolveProjectAssetUrls(
+        bundledProject.project,
+        bundledAssetUrlManifest,
+      );
+
+      expect(Object.keys(resolved).sort()).toEqual(
+        bundledProject.project.assets.map((asset) => asset.path).sort(),
+      );
+    }
   });
 
   it("throws when a project asset is missing", () => {
-    expect(() => resolveProjectAssetUrls(bundledProject, {})).toThrow(
-      "missing from manifest",
-    );
+    expect(() =>
+      resolveProjectAssetUrls(bundledProjects[0].project, {}),
+    ).toThrow("missing from manifest");
   });
 });

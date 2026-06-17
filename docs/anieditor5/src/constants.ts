@@ -1,5 +1,5 @@
 export const TOOL_NAME = "victory_editor_v5_g";
-export const V5G_VERSION = "V5G_0.0041";
+export const V5G_VERSION = "V5G_0.0051";
 export const COCOS_TARGET_VERSION = "3.8.6";
 
 export const DEFAULT_STAGE_WIDTH = 900;

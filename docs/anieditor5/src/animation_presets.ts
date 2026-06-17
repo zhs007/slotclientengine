@@ -359,6 +359,195 @@ export const V5G_ANIMATION_PRESETS: V5GAnimationPresetSpec[] = [
     ],
   },
   {
+    type: "scale_in",
+    label: "Scale In 缩放进入",
+    description: "从指定倍率缩放进入到基础尺寸，可选同步淡入。",
+    defaultDuration: 0.6,
+    recommendedDuration: "tips：0.2 ~ 1s",
+    defaultEasing: "easeOutQuad",
+    params: [
+      numberParam(
+        "fromScale",
+        "起始倍率",
+        0,
+        0,
+        20,
+        0.05,
+        "fromScale：相对基础缩放的起始倍率",
+      ),
+      numberParam(
+        "toScale",
+        "目标倍率",
+        1,
+        0,
+        20,
+        0.05,
+        "toScale：1 表示回到基础缩放",
+      ),
+      checkboxParam(
+        "fadeIn",
+        "同步淡入",
+        true,
+        "开启后透明度从 0 过渡到当前基础透明度",
+      ),
+    ],
+  },
+  {
+    type: "scale_out",
+    label: "Scale Out 缩放退出",
+    description: "从基础尺寸缩放退出到指定倍率，可选同步淡出。",
+    defaultDuration: 0.5,
+    recommendedDuration: "tips：0.2 ~ 1s",
+    defaultEasing: "easeInQuad",
+    params: [
+      numberParam(
+        "fromScale",
+        "起始倍率",
+        1,
+        0,
+        20,
+        0.05,
+        "fromScale：1 表示从基础缩放出发",
+      ),
+      numberParam(
+        "toScale",
+        "目标倍率",
+        0,
+        0,
+        20,
+        0.05,
+        "toScale：0 表示缩到不可见",
+      ),
+      checkboxParam(
+        "fadeOut",
+        "同步淡出",
+        true,
+        "开启后透明度从当前基础透明度过渡到 0",
+      ),
+    ],
+  },
+  {
+    type: "pop",
+    label: "Pop 弹一下",
+    description: "快速放大到峰值再回落，适合奖励数字、按钮反馈和强调提示。",
+    defaultDuration: 0.45,
+    recommendedDuration: "tips：0.2 ~ 0.8s",
+    defaultEasing: "easeOutQuad",
+    params: [
+      numberParam(
+        "peakScale",
+        "峰值倍率",
+        1.25,
+        0.01,
+        20,
+        0.05,
+        "peakScale：弹起时的最大倍率",
+      ),
+      numberParam(
+        "settleScale",
+        "回落倍率",
+        1,
+        0.01,
+        20,
+        0.05,
+        "settleScale：结束时相对基础缩放的倍率",
+      ),
+      numberParam(
+        "peakAt",
+        "峰值时间",
+        0.38,
+        0.05,
+        0.95,
+        0.05,
+        "peakAt：0~1，数值越小弹起越快",
+      ),
+    ],
+  },
+  {
+    type: "shake",
+    label: "Shake 抖动",
+    description: "围绕基础位置做水平或 XY 抖动，适合冲击、警告、强调。",
+    defaultDuration: 0.5,
+    recommendedDuration: "tips：0.2 ~ 1s",
+    defaultEasing: "linear",
+    params: [
+      numberParam(
+        "amplitudeX",
+        "水平幅度",
+        18,
+        0,
+        1000,
+        1,
+        "amplitudeX：左右抖动最大偏移",
+      ),
+      numberParam(
+        "amplitudeY",
+        "垂直幅度",
+        0,
+        0,
+        1000,
+        1,
+        "amplitudeY：上下抖动最大偏移",
+      ),
+      numberParam(
+        "cycles",
+        "抖动次数",
+        6,
+        1,
+        60,
+        1,
+        "cycles：该动画持续时间内抖动次数",
+      ),
+      checkboxParam("decay", "逐渐减弱", true, "开启后抖动幅度随时间衰减为 0"),
+    ],
+  },
+  {
+    type: "blink",
+    label: "Blink 闪烁",
+    description: "在最小和最大透明度之间闪烁，适合提示、光标和高亮。",
+    defaultDuration: 1,
+    recommendedDuration: "tips：0.3 ~ 3s",
+    defaultEasing: "linear",
+    params: [
+      numberParam(
+        "minOpacity",
+        "最低透明度",
+        0.15,
+        0,
+        1,
+        0.05,
+        "minOpacity：闪烁最低透明度 0~1",
+      ),
+      numberParam(
+        "maxOpacity",
+        "最高透明度",
+        1,
+        0,
+        1,
+        0.05,
+        "maxOpacity：闪烁最高透明度 0~1",
+      ),
+      numberParam(
+        "blinks",
+        "闪烁次数",
+        3,
+        0.5,
+        30,
+        0.5,
+        "blinks：该动画持续时间内闪烁次数",
+      ),
+      numberParam(
+        "endOpacity",
+        "结束透明度",
+        1,
+        0,
+        1,
+        0.05,
+        "endOpacity：动画结束瞬间的透明度",
+      ),
+    ],
+  },
+  {
     type: "pulse",
     label: "Pulse 呼吸",
     description: "围绕基础缩放循环放大缩小，适合强调按钮、奖励图标。",
@@ -439,6 +628,137 @@ export const V5G_ANIMATION_PRESETS: V5GAnimationPresetSpec[] = [
         20,
         0.25,
         "cycles：该动画持续时间内完成的摇摆次数",
+      ),
+    ],
+  },
+  {
+    type: "particles",
+    label: "Particles 粒子爆发",
+    description:
+      "使用当前图片图层的图片本身作为粒子纹理，从图层当前位置向外爆发扩散；可与位移、抖动、缩放同时播放。",
+    defaultDuration: 1.2,
+    recommendedDuration: "tips：0.5 ~ 2s",
+    defaultEasing: "linear",
+    params: [
+      numberParam(
+        "count",
+        "粒子数量",
+        32,
+        1,
+        200,
+        1,
+        "count：1 ~ 200，数量越多效果越密集",
+      ),
+      numberParam(
+        "spread",
+        "初始扩散半径",
+        70,
+        0,
+        1000,
+        1,
+        "spread：粒子从图层中心附近散开的初始范围",
+      ),
+      numberParam(
+        "speed",
+        "爆发速度",
+        180,
+        0,
+        2000,
+        1,
+        "speed：粒子向外飞散的速度",
+      ),
+      numberParam(
+        "size",
+        "粒子大小",
+        48,
+        1,
+        400,
+        1,
+        "size：图片粒子的目标最长边像素，适合星光/金币/碎片等小图",
+      ),
+      numberParam(
+        "gravity",
+        "下落重力",
+        90,
+        -2000,
+        2000,
+        1,
+        "gravity：正数向下坠落，负数向上漂浮",
+      ),
+      checkboxParam("fadeOut", "逐渐消失", true, "开启后粒子会随时间淡出"),
+    ],
+  },
+  {
+    type: "particle_twinkle",
+    label: "Particle Twinkle 随机闪烁粒子",
+    description:
+      "使用当前图片图层的图片作为闪烁粒子，在指定圆形范围内按随机批次生成并闪烁，适合星光、萤火、背景光点。",
+    defaultDuration: 3,
+    recommendedDuration: "tips：1 ~ 10s",
+    defaultEasing: "linear",
+    params: [
+      numberParam(
+        "radius",
+        "圆形范围半径",
+        240,
+        0,
+        3000,
+        1,
+        "radius：粒子在图层中心周围随机出现的圆形半径",
+      ),
+      numberParam(
+        "count",
+        "总生成数量",
+        60,
+        1,
+        1000,
+        1,
+        "count：整个动画期间最多生成的粒子总数",
+      ),
+      numberParam(
+        "spawnInterval",
+        "生成间隔秒",
+        0.12,
+        0.01,
+        10,
+        0.01,
+        "spawnInterval：每隔多少秒生成一批粒子，数值越小生成越快",
+      ),
+      numberParam(
+        "twinkleDuration",
+        "单颗闪烁秒",
+        0.45,
+        0.03,
+        10,
+        0.01,
+        "twinkleDuration：每颗粒子从亮起到消失的时间",
+      ),
+      numberParam(
+        "batchMin",
+        "每批最少数量",
+        1,
+        1,
+        100,
+        1,
+        "batchMin：每次生成时至少同时出现多少颗",
+      ),
+      numberParam(
+        "batchMax",
+        "每批最多数量",
+        3,
+        1,
+        100,
+        1,
+        "batchMax：每次生成时最多同时出现多少颗",
+      ),
+      numberParam(
+        "size",
+        "粒子大小",
+        48,
+        1,
+        400,
+        1,
+        "size：图片闪烁粒子的目标最长边像素",
       ),
     ],
   },
@@ -524,9 +844,39 @@ export function createDefaultAnimationParams(
       toScaleY: roundTo(baseScaleY * 0.85, 3),
     };
   }
+  if (type === "scale_in") return { fromScale: 0, toScale: 1, fadeIn: true };
+  if (type === "scale_out") return { fromScale: 1, toScale: 0, fadeOut: true };
+  if (type === "pop") return { peakScale: 1.25, settleScale: 1, peakAt: 0.38 };
+  if (type === "shake") {
+    return { amplitudeX: 18, amplitudeY: 0, cycles: 6, decay: true };
+  }
+  if (type === "blink") {
+    return { minOpacity: 0.15, maxOpacity: 1, blinks: 3, endOpacity: 1 };
+  }
   if (type === "pulse") return { scale: 1.1, cycles: 2 };
   if (type === "float") return { amplitude: 20, cycles: 2 };
   if (type === "swing") return { angle: 12, cycles: 2 };
+  if (type === "particles") {
+    return {
+      count: 32,
+      spread: 70,
+      speed: 180,
+      size: 48,
+      gravity: 90,
+      fadeOut: true,
+    };
+  }
+  if (type === "particle_twinkle") {
+    return {
+      radius: 240,
+      count: 60,
+      spawnInterval: 0.12,
+      twinkleDuration: 0.45,
+      batchMin: 1,
+      batchMax: 3,
+      size: 48,
+    };
+  }
   if (type === "rotate") {
     return {
       fromRotation: 0,
@@ -559,8 +909,7 @@ export function sampleLayerAnimationsAtTime(
           "linear",
       ),
     );
-    if (animation.type === "move")
-      sampleMove(result, animation, easedProgress, base.transform);
+    if (animation.type === "move") sampleMove(result, animation, easedProgress);
     else if (animation.type === "slide_in" || animation.type === "slide_out")
       sampleSlide(result, animation, easedProgress, base);
     else if (animation.type === "fade")
@@ -569,14 +918,21 @@ export function sampleLayerAnimationsAtTime(
       sampleBounceIn(result, animation, progress, base);
     else if (animation.type === "scale_up" || animation.type === "scale_down")
       sampleScale(result, animation, easedProgress, base.transform);
+    else if (animation.type === "scale_in" || animation.type === "scale_out")
+      sampleScaleEntryExit(result, animation, easedProgress, base);
+    else if (animation.type === "pop") samplePop(result, animation, progress);
+    else if (animation.type === "shake")
+      sampleShake(result, animation, progress);
+    else if (animation.type === "blink")
+      sampleBlink(result, animation, progress);
     else if (animation.type === "pulse")
-      samplePulse(result, animation, progress, base.transform);
+      samplePulse(result, animation, progress);
     else if (animation.type === "float")
-      sampleFloat(result, animation, progress, base.transform);
+      sampleFloat(result, animation, progress);
     else if (animation.type === "swing")
-      sampleSwing(result, animation, progress, base.transform);
+      sampleSwing(result, animation, progress);
     else if (animation.type === "rotate")
-      sampleRotate(result, animation, easedProgress, base.transform);
+      sampleRotate(result, animation, easedProgress);
   }
   result.transform.x = roundTo(result.transform.x, 4);
   result.transform.y = roundTo(result.transform.y, 4);
@@ -605,20 +961,15 @@ function sampleMove(
   result: V5GAnimationSampleResult,
   animation: V5GAnimationConfig,
   progress: number,
-  baseTransform: V5GTransformConfig,
 ): void {
   const fromX = getNumberParam(animation, "fromX", 0);
   const fromY = getNumberParam(animation, "fromY", 0);
   const originX = getNumberParam(animation, "baseX", fromX);
   const originY = getNumberParam(animation, "baseY", fromY);
-  result.transform.x =
-    baseTransform.x +
-    lerp(fromX, getNumberParam(animation, "toX", fromX), progress) -
-    originX;
-  result.transform.y =
-    baseTransform.y +
-    lerp(fromY, getNumberParam(animation, "toY", fromY), progress) -
-    originY;
+  result.transform.x +=
+    lerp(fromX, getNumberParam(animation, "toX", fromX), progress) - originX;
+  result.transform.y +=
+    lerp(fromY, getNumberParam(animation, "toY", fromY), progress) - originY;
 }
 
 function sampleSlide(
@@ -627,20 +978,16 @@ function sampleSlide(
   progress: number,
   base: V5GAnimationSampleBase,
 ): void {
-  result.transform.x =
-    base.transform.x +
-    lerp(
-      getNumberParam(animation, "fromX", 0),
-      getNumberParam(animation, "toX", 0),
-      progress,
-    );
-  result.transform.y =
-    base.transform.y +
-    lerp(
-      getNumberParam(animation, "fromY", 0),
-      getNumberParam(animation, "toY", 0),
-      progress,
-    );
+  result.transform.x += lerp(
+    getNumberParam(animation, "fromX", 0),
+    getNumberParam(animation, "toX", 0),
+    progress,
+  );
+  result.transform.y += lerp(
+    getNumberParam(animation, "fromY", 0),
+    getNumberParam(animation, "toY", 0),
+    progress,
+  );
   if (
     animation.type === "slide_in" &&
     getBooleanParam(animation, "fadeIn", true)
@@ -680,8 +1027,8 @@ function sampleBounceIn(
   const fromScale = getNumberParam(animation, "fromScale", 0.2);
   const toScale = getNumberParam(animation, "toScale", 1);
   const scaleRatio = Math.max(0, lerp(fromScale, toScale, ratio));
-  result.transform.scaleX = base.transform.scaleX * scaleRatio;
-  result.transform.scaleY = base.transform.scaleY * scaleRatio;
+  result.transform.scaleX *= scaleRatio;
+  result.transform.scaleY *= scaleRatio;
   if (getBooleanParam(animation, "fadeIn", true)) {
     result.opacity = lerp(0, base.opacity, clampNumber(progress * 1.25, 0, 1));
   }
@@ -693,76 +1040,141 @@ function sampleScale(
   progress: number,
   baseTransform: V5GTransformConfig,
 ): void {
-  const fromScaleX = getNumberParam(
-    animation,
-    "fromScaleX",
-    baseTransform.scaleX,
+  const baseScaleX = Math.abs(baseTransform.scaleX) || 1;
+  const baseScaleY = Math.abs(baseTransform.scaleY) || 1;
+  const fromScaleX = getNumberParam(animation, "fromScaleX", baseScaleX);
+  const fromScaleY = getNumberParam(animation, "fromScaleY", baseScaleY);
+  const toScaleX = getNumberParam(animation, "toScaleX", baseScaleX);
+  const toScaleY = getNumberParam(animation, "toScaleY", baseScaleY);
+  const scaleRatioX = lerp(fromScaleX, toScaleX, progress) / baseScaleX;
+  const scaleRatioY = lerp(fromScaleY, toScaleY, progress) / baseScaleY;
+  result.transform.scaleX *= Math.abs(scaleRatioX);
+  result.transform.scaleY *= Math.abs(scaleRatioY);
+}
+
+function sampleScaleEntryExit(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  progress: number,
+  base: V5GAnimationSampleBase,
+): void {
+  const fromScale = getNumberParam(animation, "fromScale", 1);
+  const toScale = getNumberParam(animation, "toScale", 1);
+  const scaleRatio = Math.max(0, lerp(fromScale, toScale, progress));
+  result.transform.scaleX *= scaleRatio;
+  result.transform.scaleY *= scaleRatio;
+  if (
+    animation.type === "scale_in" &&
+    getBooleanParam(animation, "fadeIn", true)
+  ) {
+    result.opacity = lerp(0, base.opacity, progress);
+  }
+  if (
+    animation.type === "scale_out" &&
+    getBooleanParam(animation, "fadeOut", true)
+  ) {
+    result.opacity = lerp(base.opacity, 0, progress);
+  }
+}
+
+function samplePop(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  progress: number,
+): void {
+  const peakAt = clampNumber(
+    getNumberParam(animation, "peakAt", 0.38),
+    0.05,
+    0.95,
   );
-  const fromScaleY = getNumberParam(
-    animation,
-    "fromScaleY",
-    baseTransform.scaleY,
-  );
-  const toScaleX = getNumberParam(animation, "toScaleX", baseTransform.scaleX);
-  const toScaleY = getNumberParam(animation, "toScaleY", baseTransform.scaleY);
-  const signX = getScaleSign(baseTransform.scaleX);
-  const signY = getScaleSign(baseTransform.scaleY);
-  result.transform.scaleX =
-    signX * Math.abs(lerp(fromScaleX, toScaleX, progress));
-  result.transform.scaleY =
-    signY * Math.abs(lerp(fromScaleY, toScaleY, progress));
+  const peakScale = getNumberParam(animation, "peakScale", 1.25);
+  const settleScale = getNumberParam(animation, "settleScale", 1);
+  const ratio =
+    progress <= peakAt
+      ? lerp(1, peakScale, easeProgress(progress / peakAt, "easeOutQuad"))
+      : lerp(
+          peakScale,
+          settleScale,
+          easeProgress((progress - peakAt) / (1 - peakAt), "easeOutQuad"),
+        );
+  result.transform.scaleX *= ratio;
+  result.transform.scaleY *= ratio;
+}
+
+function sampleShake(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  progress: number,
+): void {
+  const cycles = getNumberParam(animation, "cycles", 6);
+  const decay = getBooleanParam(animation, "decay", true) ? 1 - progress : 1;
+  const waveX = Math.sin(progress * Math.PI * 2 * cycles);
+  const waveY = Math.cos(progress * Math.PI * 2 * cycles * 1.37);
+  result.transform.x +=
+    getNumberParam(animation, "amplitudeX", 18) * waveX * decay;
+  result.transform.y +=
+    getNumberParam(animation, "amplitudeY", 0) * waveY * decay;
+}
+
+function sampleBlink(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  progress: number,
+): void {
+  if (progress >= 1) {
+    result.opacity = getNumberParam(animation, "endOpacity", result.opacity);
+    return;
+  }
+  const minOpacity = getNumberParam(animation, "minOpacity", 0.15);
+  const maxOpacity = getNumberParam(animation, "maxOpacity", 1);
+  const blinks = getNumberParam(animation, "blinks", 3);
+  const wave = getLoopWave(progress, blinks);
+  result.opacity = lerp(maxOpacity, minOpacity, wave);
 }
 
 function samplePulse(
   result: V5GAnimationSampleResult,
   animation: V5GAnimationConfig,
   progress: number,
-  baseTransform: V5GTransformConfig,
 ): void {
   const maxScale = getNumberParam(animation, "scale", 1.1);
   const cycle = getLoopWave(progress, getNumberParam(animation, "cycles", 2));
   const scaleRatio = lerp(1, maxScale, cycle);
-  result.transform.scaleX = baseTransform.scaleX * scaleRatio;
-  result.transform.scaleY = baseTransform.scaleY * scaleRatio;
+  result.transform.scaleX *= scaleRatio;
+  result.transform.scaleY *= scaleRatio;
 }
 
 function sampleFloat(
   result: V5GAnimationSampleResult,
   animation: V5GAnimationConfig,
   progress: number,
-  baseTransform: V5GTransformConfig,
 ): void {
   const amplitude = getNumberParam(animation, "amplitude", 20);
   const cycles = getNumberParam(animation, "cycles", 2);
-  result.transform.y =
-    baseTransform.y + Math.sin(progress * Math.PI * 2 * cycles) * amplitude;
+  result.transform.y += Math.sin(progress * Math.PI * 2 * cycles) * amplitude;
 }
 
 function sampleSwing(
   result: V5GAnimationSampleResult,
   animation: V5GAnimationConfig,
   progress: number,
-  baseTransform: V5GTransformConfig,
 ): void {
   const angle = getNumberParam(animation, "angle", 12);
   const cycles = getNumberParam(animation, "cycles", 2);
-  result.transform.rotation =
-    baseTransform.rotation + Math.sin(progress * Math.PI * 2 * cycles) * angle;
+  result.transform.rotation +=
+    Math.sin(progress * Math.PI * 2 * cycles) * angle;
 }
 
 function sampleRotate(
   result: V5GAnimationSampleResult,
   animation: V5GAnimationConfig,
   progress: number,
-  baseTransform: V5GTransformConfig,
 ): void {
-  result.transform.rotation =
-    baseTransform.rotation +
-    lerp(
-      getNumberParam(animation, "fromRotation", 0),
-      getNumberParam(animation, "toRotation", 0),
-      progress,
-    );
+  result.transform.rotation += lerp(
+    getNumberParam(animation, "fromRotation", 0),
+    getNumberParam(animation, "toRotation", 0),
+    progress,
+  );
 }
 
 function getAnimationProgress(
@@ -832,10 +1244,6 @@ function checkboxParam(
     defaultValue,
     recommendedRange,
   };
-}
-
-function getScaleSign(scale: number): number {
-  return scale < 0 ? -1 : 1;
 }
 
 function getLoopWave(progress: number, cycles: number): number {

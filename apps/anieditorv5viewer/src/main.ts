@@ -1,8 +1,5 @@
 import "./styles.css";
-import {
-  bundledProject,
-  bundledProjectAssetUrls,
-} from "./config/bundled-project";
+import { bundledProjects, getBundledProject } from "./config/bundled-projects";
 import { V5GPlayer } from "./runtime/v5g-player";
 import { createViewerControls } from "./ui/controls";
 
@@ -27,9 +24,14 @@ async function bootstrap(): Promise<void> {
   appRoot.appendChild(shell);
 
   let player: V5GPlayer | null = null;
+  let loadToken = 0;
   const controls = createViewerControls({
-    project: bundledProject,
+    projects: bundledProjects,
+    selectedProjectId: "project",
     container: controlsMount,
+    onProjectChange: (projectId) => {
+      void loadProject(projectId).catch(showFatalError);
+    },
     onTogglePlay: () => {
       if (!player) return;
       if (player.isPlaying()) player.pause();
@@ -49,15 +51,36 @@ async function bootstrap(): Promise<void> {
     },
   });
 
-  player = new V5GPlayer({
-    container: stageMount,
-    project: bundledProject,
-    assetUrls: bundledProjectAssetUrls,
-    onTimeChange: (time) => controls.setTime(time),
-    onPlayingChange: (isPlaying) => controls.setPlaying(isPlaying),
-  });
-  await player.init();
-  controls.setLoop(player.getLoop());
+  async function loadProject(projectId: string): Promise<void> {
+    const selectedProject = getBundledProject(projectId);
+    const token = (loadToken += 1);
+
+    player?.destroy();
+    player = null;
+    stageMount.replaceChildren();
+    controls.setProject(selectedProject);
+    controls.setPlaying(false);
+    controls.setTime(0);
+
+    const nextPlayer = new V5GPlayer({
+      container: stageMount,
+      projectId: selectedProject.id,
+      project: selectedProject.project,
+      assetUrls: selectedProject.assetUrls,
+      onTimeChange: (time) => controls.setTime(time),
+      onPlayingChange: (isPlaying) => controls.setPlaying(isPlaying),
+    });
+    await nextPlayer.init();
+    if (token !== loadToken) {
+      nextPlayer.destroy();
+      return;
+    }
+    player = nextPlayer;
+    controls.setLoop(player.getLoop());
+    controls.setTime(player.getTime());
+  }
+
+  await loadProject("project");
 }
 
 function showFatalError(error: unknown): void {

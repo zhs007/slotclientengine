@@ -81,6 +81,36 @@ describe("project-sampler", () => {
     expect(sampled.visible).toBe(false);
   });
 
+  it("marks active particle layers to hide the image display only", () => {
+    const particleLayer = layer({}, [
+      {
+        id: "particles",
+        type: "particles",
+        startTime: 0,
+        duration: 1,
+        enabled: true,
+        seed: 1,
+        params: {
+          count: 4,
+          spread: 20,
+          speed: 30,
+          size: 16,
+          gravity: 10,
+        },
+      },
+    ]);
+
+    const active = sampleLayerAtTime(particleLayer, 0.5);
+    expect(active.opacity).toBe(1);
+    expect(active.visible).toBe(true);
+    expect(active.hasActiveParticleAnimation).toBe(true);
+    expect(active.renderImageDisplay).toBe(false);
+
+    const atEnd = sampleLayerAtTime(particleLayer, 1);
+    expect(atEnd.hasActiveParticleAnimation).toBe(false);
+    expect(atEnd.renderImageDisplay).toBe(true);
+  });
+
   it("clamps project time to stage duration", () => {
     const project: V5GProjectConfig = {
       schemaVersion: "V5G_0.0014",

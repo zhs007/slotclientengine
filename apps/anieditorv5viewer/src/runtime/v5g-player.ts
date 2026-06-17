@@ -1,6 +1,9 @@
 import * as PIXI from "pixi.js";
+import { toPixiBlendMode } from "./blend-mode";
+import { editorToPixi } from "./coordinates";
 import { parseColorHex } from "./validation";
 import { sampleProjectAtTime } from "./project-sampler";
+import { sampleParticleSpritesForLayer } from "./particle-sampler";
 import {
   applySampledLayerState,
   createLayerInstance,
@@ -8,10 +11,12 @@ import {
   type V5GLayerInstance,
 } from "./layer-instance";
 import type { AssetUrlManifest } from "./asset-manifest";
+import type { SampledLayerState } from "./project-sampler";
 import type { V5GAssetConfig, V5GProjectConfig } from "../v5g/types";
 
 export interface V5GPlayerOptions {
   container: HTMLElement;
+  projectId: string;
   project: V5GProjectConfig;
   assetUrls: AssetUrlManifest;
   onTimeChange?: (time: number) => void;
@@ -23,7 +28,9 @@ export class V5GPlayer {
   private readonly stageRoot = new PIXI.Container();
   private readonly stageBackground = new PIXI.Graphics();
   private readonly contentRoot = new PIXI.Container();
+  private readonly particleRoot = new PIXI.Container();
   private readonly container: HTMLElement;
+  private readonly projectId: string;
   private readonly project: V5GProjectConfig;
   private readonly assetUrls: AssetUrlManifest;
   private readonly onTimeChange?: (time: number) => void;
@@ -39,6 +46,7 @@ export class V5GPlayer {
 
   constructor(options: V5GPlayerOptions) {
     this.container = options.container;
+    this.projectId = options.projectId;
     this.project = options.project;
     this.assetUrls = options.assetUrls;
     this.onTimeChange = options.onTimeChange;
@@ -58,7 +66,11 @@ export class V5GPlayer {
     this.container.appendChild(this.app.canvas);
     this.drawStageBackground(backgroundColor);
     this.app.stage.addChild(this.stageRoot);
-    this.stageRoot.addChild(this.stageBackground, this.contentRoot);
+    this.stageRoot.addChild(
+      this.stageBackground,
+      this.contentRoot,
+      this.particleRoot,
+    );
 
     const texturesByAssetId = await this.loadTextures();
     for (const layer of this.project.layers) {
@@ -111,6 +123,7 @@ export class V5GPlayer {
       }
       applySampledLayerState(instance, sampledLayer, this.project.stage);
     }
+    this.drawParticles(sampled.layers);
     this.updateDiagnostics(
       sampled.layers.filter((layer) => layer.visible).length,
     );
@@ -141,6 +154,7 @@ export class V5GPlayer {
     }
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.clearParticles();
     this.app.destroy(true);
   }
 
@@ -227,7 +241,55 @@ export class V5GPlayer {
     return texture;
   }
 
+  private drawParticles(sampledLayers: readonly SampledLayerState[]): void {
+    this.clearParticles();
+    for (const sampledLayer of sampledLayers) {
+      if (!sampledLayer.hasActiveParticleAnimation) continue;
+      const instance = this.layerInstances.get(sampledLayer.layerId);
+      if (!instance) {
+        throw new Error(`Missing V5G layer instance: ${sampledLayer.layerId}`);
+      }
+      if (!instance.texture || !instance.textureSize) {
+        throw new Error(
+          `V5G particle layer "${sampledLayer.layerId}" is missing image texture.`,
+        );
+      }
+      const emitter = editorToPixi(
+        sampledLayer.transform.x,
+        sampledLayer.transform.y,
+        this.project.stage.width,
+        this.project.stage.height,
+      );
+      const particles = sampleParticleSpritesForLayer(
+        instance.layer,
+        sampledLayer,
+        instance.textureSize,
+        this.currentTime,
+      );
+      for (const particle of particles) {
+        const sprite = new PIXI.Sprite(instance.texture);
+        sprite.anchor.set(0.5);
+        sprite.position.set(
+          emitter.x + particle.offsetX,
+          emitter.y + particle.offsetY,
+        );
+        sprite.scale.set(particle.scale);
+        sprite.rotation = particle.rotation;
+        sprite.alpha = particle.alpha;
+        sprite.blendMode = toPixiBlendMode(particle.blendMode);
+        this.particleRoot.addChild(sprite);
+      }
+    }
+  }
+
+  private clearParticles(): void {
+    for (const child of this.particleRoot.removeChildren()) {
+      child.destroy();
+    }
+  }
+
   private updateDiagnostics(visibleLayerCount: number): void {
+    this.container.dataset.v5gProjectId = this.projectId;
     this.container.dataset.v5gTime = this.currentTime.toFixed(2);
     this.container.dataset.v5gVisibleLayers = String(visibleLayerCount);
     if (this.pixelDiagnosticsRafId !== null) {

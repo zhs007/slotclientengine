@@ -35,13 +35,20 @@ export type V5GAnimationType =
   | "fade"
   | "scale_up"
   | "scale_down"
+  | "scale_in"
+  | "scale_out"
+  | "pop"
+  | "shake"
+  | "blink"
   | "rotate"
   | "slide_in"
   | "slide_out"
   | "bounce_in"
   | "pulse"
   | "float"
-  | "swing";
+  | "swing"
+  | "particles"
+  | "particle_twinkle";
 
 export type V5GAnimationParamValue = string | number | boolean;
 
