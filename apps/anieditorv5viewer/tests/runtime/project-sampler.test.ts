@@ -81,6 +81,72 @@ describe("project-sampler", () => {
     expect(sampled.visible).toBe(false);
   });
 
+  it("hides layers before a delayed opacity entry even when other animations are active", () => {
+    const sampled = sampleLayerAtTime(
+      layer({}, [
+        {
+          id: "pulse",
+          type: "pulse",
+          startTime: 0,
+          duration: 4,
+          enabled: true,
+          seed: 1,
+          params: { scale: 1.1, cycles: 2, easing: "linear" },
+        },
+        {
+          id: "fade-in",
+          type: "fade",
+          startTime: 0.1,
+          duration: 0.1,
+          enabled: true,
+          seed: 1,
+          params: { fromOpacity: 0, toOpacity: 1, easing: "linear" },
+        },
+      ]),
+      0.05,
+    );
+
+    expect(sampled.opacity).toBe(0);
+    expect(sampled.visible).toBe(false);
+    expect(sampled.renderImageDisplay).toBe(false);
+  });
+
+  it("starts delayed opacity entry at its own start frame", () => {
+    const sampled = sampleLayerAtTime(
+      layer({}, [
+        {
+          id: "pulse",
+          type: "pulse",
+          startTime: 0,
+          duration: 4,
+          enabled: true,
+          seed: 1,
+          params: { scale: 1.1, cycles: 2, easing: "linear" },
+        },
+        {
+          id: "slide-in",
+          type: "slide_in",
+          startTime: 0.1,
+          duration: 0.3,
+          enabled: true,
+          seed: 1,
+          params: {
+            fromX: 0,
+            fromY: 0,
+            toX: 0,
+            toY: -500,
+            fadeIn: true,
+            easing: "backOut",
+          },
+        },
+      ]),
+      0.1,
+    );
+
+    expect(sampled.opacity).toBe(0);
+    expect(sampled.visible).toBe(false);
+  });
+
   it("marks active particle layers to hide the image display only", () => {
     const particleLayer = layer({}, [
       {
