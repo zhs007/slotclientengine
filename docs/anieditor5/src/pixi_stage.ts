@@ -1,7 +1,13 @@
 import * as PIXI from "pixi.js";
 import gsap from "gsap";
-import { editorToPixi, pixiToEditor, roundTo } from "./coordinates";
+import {
+  clampNumber,
+  editorToPixi,
+  pixiToEditor,
+  roundTo,
+} from "./coordinates";
 import type {
+  V5GAnimationConfig,
   V5GBlendMode,
   V5GEditorState,
   V5GLayerConfig,
@@ -27,9 +33,11 @@ export class V5GPixiStage {
   private readonly root = new PIXI.Container();
   private readonly stageContainer = new PIXI.Container();
   private readonly contentContainer = new PIXI.Container();
+  private readonly particleContainer = new PIXI.Container();
   private readonly guideGraphics = new PIXI.Graphics();
   private readonly selectionGraphics = new PIXI.Graphics();
   private readonly layerDisplayMap = new Map<string, PIXI.Container>();
+  private readonly layerAssetIdMap = new Map<string, string | null>();
   private readonly callbacks: RenderCallbacks;
   private state: V5GEditorState;
   private container: HTMLElement;
@@ -66,6 +74,7 @@ export class V5GPixiStage {
     this.stageContainer.addChild(
       this.guideGraphics,
       this.contentContainer,
+      this.particleContainer,
       this.selectionGraphics,
     );
 
@@ -90,6 +99,7 @@ export class V5GPixiStage {
     this.state = nextState;
     await this.syncLayers();
     this.drawGuides();
+    this.drawParticles();
     this.drawSelection();
   }
 
@@ -142,6 +152,7 @@ export class V5GPixiStage {
   setViewportScale(scale: number): void {
     this.viewScale = clampViewportScale(scale);
     this.applyViewTransform();
+    this.drawParticles();
     this.drawSelection();
     this.notifyViewportChange();
   }
@@ -228,14 +239,26 @@ export class V5GPixiStage {
       if (!liveLayerIds.has(layerId)) {
         display.destroy({ children: true });
         this.layerDisplayMap.delete(layerId);
+        this.layerAssetIdMap.delete(layerId);
       }
     }
 
     for (const layer of this.state.project.layers) {
       let display = this.layerDisplayMap.get(layer.id);
+      const shouldRecreateImageDisplay =
+        layer.type === "image" &&
+        display !== undefined &&
+        this.layerAssetIdMap.get(layer.id) !== layer.assetId;
+      if (shouldRecreateImageDisplay && display) {
+        display.destroy({ children: true });
+        this.layerDisplayMap.delete(layer.id);
+        this.layerAssetIdMap.delete(layer.id);
+        display = undefined;
+      }
       if (!display) {
         display = await this.createLayerDisplay(layer);
         this.layerDisplayMap.set(layer.id, display);
+        this.layerAssetIdMap.set(layer.id, layer.assetId);
         this.contentContainer.addChild(display);
       } else if (layer.type === "text") {
         const textNode = display.children[0];
@@ -256,7 +279,7 @@ export class V5GPixiStage {
     layer: V5GLayerConfig,
   ): Promise<PIXI.Container> {
     const display = new PIXI.Container();
-    display.eventMode = "static";
+    display.eventMode = layer.locked ? "none" : "static";
     display.cursor = layer.locked ? "default" : "pointer";
     display.on("pointerdown", (event) =>
       this.handleLayerPointerDown(event, layer.id),
@@ -343,7 +366,10 @@ export class V5GPixiStage {
     display.rotation = (transform.rotation * Math.PI) / 180;
     display.alpha = opacity;
     display.blendMode = toPixiBlendMode(layer.blendMode);
-    display.visible = layer.visible;
+    display.visible =
+      layer.visible &&
+      !hasActiveParticleAnimation(layer, this.state.playheadSeconds);
+    display.eventMode = layer.locked ? "none" : "static";
     display.cursor =
       this.draggingLayerId === layer.id
         ? "grabbing"
@@ -374,6 +400,225 @@ export class V5GPixiStage {
     }
     for (let y = 100; y < stage.height; y += 100) {
       this.guideGraphics.moveTo(0, y).lineTo(stage.width, y).stroke(tickColor);
+    }
+  }
+
+  private drawParticles(): void {
+    for (const child of this.particleContainer.removeChildren()) {
+      child.destroy();
+    }
+    const stage = this.state.project.stage;
+    const playheadSeconds = this.state.playheadSeconds;
+    for (const layer of this.state.project.layers) {
+      if (!layer.visible || layer.type !== "image") continue;
+      const texture = this.getLayerImageTexture(layer);
+      if (!texture) continue;
+      const previewLayer = this.state.previewLayers?.[layer.id];
+      const transform = previewLayer?.transform ?? layer.transform;
+      const layerOpacity = previewLayer?.opacity ?? layer.opacity;
+      if (layerOpacity <= 0) continue;
+      const emitter = editorToPixi(
+        transform.x,
+        transform.y,
+        stage.width,
+        stage.height,
+      );
+      for (const animation of layer.animations) {
+        if (!animation.enabled) continue;
+        const progress = getAnimationProgress(animation, playheadSeconds);
+        if (progress === null) continue;
+        if (animation.type === "particles") {
+          this.drawParticleBurst(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layerOpacity,
+            layer.blendMode,
+          );
+        } else if (animation.type === "particle_twinkle") {
+          this.drawParticleTwinkle(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layerOpacity,
+            layer.blendMode,
+          );
+        }
+      }
+    }
+  }
+
+  private getLayerImageTexture(layer: V5GLayerConfig): PIXI.Texture | null {
+    const display = this.layerDisplayMap.get(layer.id);
+    const sprite = display?.children.find(
+      (child): child is PIXI.Sprite => child instanceof PIXI.Sprite,
+    );
+    return sprite?.texture ?? null;
+  }
+
+  private drawParticleBurst(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    blendMode: V5GBlendMode,
+  ): void {
+    const count = Math.round(
+      clampParticleNumber(getParticleParam(animation, "count", 32), 1, 200),
+    );
+    const spread = clampParticleNumber(
+      getParticleParam(animation, "spread", 70),
+      0,
+      1000,
+    );
+    const speed = clampParticleNumber(
+      getParticleParam(animation, "speed", 180),
+      0,
+      2000,
+    );
+    const size = clampParticleNumber(
+      getParticleParam(animation, "size", 48),
+      1,
+      400,
+    );
+    const gravity = clampParticleNumber(
+      getParticleParam(animation, "gravity", 90),
+      -2000,
+      2000,
+    );
+    const fadeOut = animation.params.fadeOut !== false;
+    const duration = Math.max(animation.duration, 0.0001);
+    const age = progress * duration;
+    const alphaBase =
+      layerOpacity * (fadeOut ? Math.pow(1 - progress, 1.35) : 1);
+    if (alphaBase <= 0.002) return;
+
+    const textureEdge = getTextureLongestEdge(texture);
+    const baseTextureScale = size / textureEdge;
+
+    for (let index = 0; index < count; index += 1) {
+      const randomA = seededRandom(animation.seed, index, 1);
+      const randomB = seededRandom(animation.seed, index, 2);
+      const randomC = seededRandom(animation.seed, index, 3);
+      const randomD = seededRandom(animation.seed, index, 4);
+      const randomE = seededRandom(animation.seed, index, 5);
+      const angle = randomA * Math.PI * 2;
+      const burstPower = 0.55 + randomB * 0.85;
+      const startRadius = spread * 0.22 * randomC;
+      const travel = spread * progress + speed * age * burstPower;
+      const x = emitterX + Math.cos(angle) * (startRadius + travel);
+      const y =
+        emitterY +
+        Math.sin(angle) * (startRadius + travel) +
+        0.5 * gravity * age * age;
+      const scale = Math.max(
+        0.01,
+        baseTextureScale * (0.55 + randomD * 0.9) * (1 - progress * 0.25),
+      );
+      const alpha = alphaBase * (0.55 + randomC * 0.45);
+      const sprite = new PIXI.Sprite(texture);
+      sprite.anchor.set(0.5);
+      sprite.position.set(x, y);
+      sprite.scale.set(scale);
+      sprite.rotation =
+        (randomE - 0.5) * Math.PI * 0.75 + progress * Math.PI * (0.5 + randomB);
+      sprite.alpha = alpha;
+      sprite.blendMode = toPixiBlendMode(blendMode);
+      this.particleContainer.addChild(sprite);
+    }
+  }
+
+  private drawParticleTwinkle(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    blendMode: V5GBlendMode,
+  ): void {
+    const count = Math.round(
+      clampParticleNumber(getParticleParam(animation, "count", 60), 1, 1000),
+    );
+    const radius = clampParticleNumber(
+      getParticleParam(animation, "radius", 240),
+      0,
+      3000,
+    );
+    const spawnInterval = clampParticleNumber(
+      getParticleParam(animation, "spawnInterval", 0.12),
+      0.01,
+      10,
+    );
+    const twinkleDuration = clampParticleNumber(
+      getParticleParam(animation, "twinkleDuration", 0.45),
+      0.03,
+      10,
+    );
+    const batchMin = Math.round(
+      clampParticleNumber(getParticleParam(animation, "batchMin", 1), 1, 100),
+    );
+    const batchMax = Math.round(
+      clampParticleNumber(
+        getParticleParam(animation, "batchMax", 3),
+        batchMin,
+        100,
+      ),
+    );
+    const size = clampParticleNumber(
+      getParticleParam(animation, "size", 48),
+      1,
+      400,
+    );
+    const duration = Math.max(animation.duration, 0.0001);
+    const elapsed = progress * duration;
+    const textureEdge = getTextureLongestEdge(texture);
+    const baseTextureScale = size / textureEdge;
+    let spawnedCount = 0;
+
+    for (let batchIndex = 0; spawnedCount < count; batchIndex += 1) {
+      const spawnTime = batchIndex * spawnInterval;
+      if (spawnTime > elapsed) break;
+      const batchRandom = seededRandom(animation.seed, batchIndex, 11);
+      const batchCount = Math.min(
+        count - spawnedCount,
+        batchMin + Math.floor(batchRandom * (batchMax - batchMin + 1)),
+      );
+      for (let itemIndex = 0; itemIndex < batchCount; itemIndex += 1) {
+        const particleIndex = spawnedCount + itemIndex;
+        const localAge = (elapsed - spawnTime) / twinkleDuration;
+        if (localAge < 0 || localAge > 1) continue;
+        const randomA = seededRandom(animation.seed, particleIndex, 21);
+        const randomB = seededRandom(animation.seed, particleIndex, 22);
+        const randomC = seededRandom(animation.seed, particleIndex, 23);
+        const randomD = seededRandom(animation.seed, particleIndex, 24);
+        const angle = randomA * Math.PI * 2;
+        const distance = Math.sqrt(randomB) * radius;
+        const x = emitterX + Math.cos(angle) * distance;
+        const y = emitterY + Math.sin(angle) * distance;
+        const waveAlpha = Math.sin(localAge * Math.PI);
+        const shimmer =
+          0.78 + 0.22 * Math.sin(localAge * Math.PI * 6 + randomC * 6);
+        const alpha = layerOpacity * Math.max(0, waveAlpha * shimmer);
+        if (alpha <= 0.002) continue;
+        const sprite = new PIXI.Sprite(texture);
+        sprite.anchor.set(0.5);
+        sprite.position.set(x, y);
+        sprite.scale.set(
+          Math.max(0.01, baseTextureScale * (0.65 + randomC * 0.85)),
+        );
+        sprite.rotation = (randomD - 0.5) * Math.PI * 2;
+        sprite.alpha = alpha;
+        sprite.blendMode = toPixiBlendMode(blendMode);
+        this.particleContainer.addChild(sprite);
+      }
+      spawnedCount += batchCount;
     }
   }
 
@@ -410,11 +655,14 @@ export class V5GPixiStage {
     event: PIXI.FederatedPointerEvent,
     layerId: string,
   ): void {
-    event.stopPropagation();
-    this.callbacks.onSelectLayer(layerId);
     const layer = this.state.project.layers.find((item) => item.id === layerId);
     const display = this.layerDisplayMap.get(layerId);
-    if (!layer || layer.locked) return;
+    if (!layer || layer.locked) {
+      // 锁定图层不拦截事件，让点击穿透到下层
+      return;
+    }
+    event.stopPropagation();
+    this.callbacks.onSelectLayer(layerId);
 
     const startGlobal = event.global.clone();
     const startX = layer.transform.x;
@@ -529,6 +777,65 @@ function clampViewportScale(scale: number): number {
 
 function sanitizeViewportNumber(value: number): number {
   return Number.isFinite(value) ? value : 0;
+}
+
+function hasActiveParticleAnimation(
+  layer: V5GLayerConfig,
+  time: number,
+): boolean {
+  if (layer.type !== "image") return false;
+  return layer.animations.some(
+    (animation) =>
+      animation.enabled &&
+      (animation.type === "particles" ||
+        animation.type === "particle_twinkle") &&
+      getAnimationProgress(animation, time) !== null,
+  );
+}
+
+function getAnimationProgress(
+  animation: V5GAnimationConfig,
+  time: number,
+): number | null {
+  const start = animation.startTime;
+  const end = animation.startTime + animation.duration;
+  if (time < start || time >= end) return null;
+  return clampNumber(
+    (time - start) / Math.max(animation.duration, 0.0001),
+    0,
+    1,
+  );
+}
+
+function getParticleParam(
+  animation: V5GAnimationConfig,
+  key: string,
+  fallback: number,
+): number {
+  const value = animation.params[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+function clampParticleNumber(value: number, min: number, max: number): number {
+  return clampNumber(Number.isFinite(value) ? value : min, min, max);
+}
+
+function seededRandom(seed: number, index: number, salt: number): number {
+  const raw =
+    Math.sin(seed * 12.9898 + index * 78.233 + salt * 37.719) * 43758.5453123;
+  return raw - Math.floor(raw);
+}
+
+function getTextureLongestEdge(texture: PIXI.Texture): number {
+  const width = Number(texture.width);
+  const height = Number(texture.height);
+  const longestEdge = Math.max(width, height);
+  return Number.isFinite(longestEdge) && longestEdge > 0 ? longestEdge : 1;
 }
 
 function toPixiBlendMode(blendMode: V5GBlendMode): V5GBlendMode {

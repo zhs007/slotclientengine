@@ -106,6 +106,138 @@ describe("animation-sampler", () => {
     expect(sampled.transform.rotation).toBe(55);
   });
 
+  it("samples scale_in and scale_out with optional fades", () => {
+    const scaleIn = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [animation("scale_in", { fromScale: 0, toScale: 2, fadeIn: true })],
+      0.5,
+    );
+    const scaleOut = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [animation("scale_out", { fromScale: 1, toScale: 0, fadeOut: true })],
+      0.5,
+    );
+
+    expect(scaleIn.transform.scaleX).toBe(1);
+    expect(scaleIn.opacity).toBe(0.5);
+    expect(scaleOut.transform.scaleX).toBe(0.5);
+    expect(scaleOut.opacity).toBe(0.5);
+  });
+
+  it("samples pop before and after peakAt", () => {
+    const beforePeak = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [animation("pop", { peakScale: 2, settleScale: 1, peakAt: 0.5 })],
+      0.25,
+    );
+    const afterPeak = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [animation("pop", { peakScale: 2, settleScale: 1, peakAt: 0.5 })],
+      0.75,
+    );
+
+    expect(beforePeak.transform.scaleX).toBe(1.75);
+    expect(afterPeak.transform.scaleX).toBe(1.25);
+  });
+
+  it("uses blink endOpacity at the end frame", () => {
+    const sampled = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [
+        animation("blink", {
+          minOpacity: 0.2,
+          maxOpacity: 1,
+          blinks: 2,
+          endOpacity: 0.35,
+        }),
+      ],
+      1,
+    );
+
+    expect(sampled.opacity).toBe(0.35);
+  });
+
+  it("adds move and shake instead of resetting to base", () => {
+    const sampled = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [
+        animation("move", { fromX: 0, fromY: 0, toX: 20, toY: 0 }),
+        animation("shake", {
+          amplitudeX: 10,
+          amplitudeY: 0,
+          cycles: 1,
+          decay: false,
+        }),
+      ],
+      0.25,
+    );
+
+    expect(sampled.transform.x).toBe(115);
+  });
+
+  it("adds rotate and swing instead of resetting to base", () => {
+    const sampled = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [
+        animation("rotate", { fromRotation: 0, toRotation: 90 }),
+        animation("swing", { angle: 10, cycles: 1 }),
+      ],
+      0.25,
+    );
+
+    expect(sampled.transform.rotation).toBe(42.5);
+  });
+
+  it("multiplies scale_up and pulse instead of resetting to base", () => {
+    const sampled = sampleLayerAnimationsAtTime(
+      {
+        transform: { ...baseTransform, scaleX: 2, scaleY: 2 },
+        opacity: 1,
+      },
+      [
+        animation("scale_up", {
+          fromScaleX: 2,
+          fromScaleY: 2,
+          toScaleX: 4,
+          toScaleY: 4,
+        }),
+        animation("pulse", { scale: 2, cycles: 1 }),
+      ],
+      0.25,
+    );
+
+    expect(sampled.transform.scaleX).toBe(3.75);
+    expect(sampled.transform.scaleY).toBe(3.75);
+  });
+
+  it("leaves transform and opacity unchanged for particle animations", () => {
+    const sampled = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 0.8 },
+      [
+        animation("particles", {
+          count: 4,
+          spread: 20,
+          speed: 30,
+          size: 16,
+          gravity: 10,
+        }),
+        animation("particle_twinkle", {
+          radius: 20,
+          count: 4,
+          spawnInterval: 0.1,
+          twinkleDuration: 0.4,
+          batchMin: 1,
+          batchMax: 2,
+          size: 16,
+        }),
+      ],
+      0.5,
+    );
+
+    expect(sampled.transform).toEqual(baseTransform);
+    expect(sampled.opacity).toBe(0.8);
+  });
+
   it("ignores disabled animations", () => {
     const sampled = sampleLayerAnimationsAtTime(
       { transform: baseTransform, opacity: 0.7 },

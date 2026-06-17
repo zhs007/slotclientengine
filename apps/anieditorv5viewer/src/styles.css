@@ -29,7 +29,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -75,6 +76,31 @@ input {
   border: 1px solid rgba(186, 197, 186, 0.18);
   border-radius: 8px;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.26);
+}
+
+.project-row {
+  min-width: 0;
+}
+
+.project-picker {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 360px);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  color: #e2e8e4;
+  font-size: 13px;
+}
+
+.project-picker select {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  color: #f5f7f4;
+  background: #202622;
+  border: 1px solid rgba(216, 224, 216, 0.24);
+  border-radius: 6px;
 }
 
 .viewer-summary {
@@ -196,6 +222,10 @@ input {
 
   .control-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .project-picker {
+    grid-template-columns: 1fr;
   }
 
   .control-button {

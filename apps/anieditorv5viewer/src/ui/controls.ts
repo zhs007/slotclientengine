@@ -1,8 +1,17 @@
 import type { V5GProjectConfig } from "../v5g/types";
 
-export interface ViewerControlsOptions {
+export interface ViewerControlsProject {
+  id: string;
+  label: string;
+  sourcePath: string;
   project: V5GProjectConfig;
+}
+
+export interface ViewerControlsOptions {
+  projects: readonly ViewerControlsProject[];
+  selectedProjectId: string;
   container: HTMLElement;
+  onProjectChange: (projectId: string) => void;
   onTogglePlay: () => void;
   onRestart: () => void;
   onLoopChange: (loop: boolean) => void;
@@ -11,6 +20,7 @@ export interface ViewerControlsOptions {
 }
 
 export interface ViewerControls {
+  setProject(project: ViewerControlsProject): void;
   setPlaying(isPlaying: boolean): void;
   setTime(time: number): void;
   setLoop(loop: boolean): void;
@@ -19,24 +29,42 @@ export interface ViewerControls {
 export function createViewerControls(
   options: ViewerControlsOptions,
 ): ViewerControls {
+  const selectedProject = options.projects.find(
+    (project) => project.id === options.selectedProjectId,
+  );
+  if (!selectedProject) {
+    throw new Error(
+      `Unknown selected V5G project: ${options.selectedProjectId}`,
+    );
+  }
+  let currentProject: ViewerControlsProject = selectedProject;
+
   const root = document.createElement("div");
   root.className = "viewer-controls";
 
+  const projectRow = document.createElement("div");
+  projectRow.className = "project-row";
+  const projectLabel = document.createElement("label");
+  projectLabel.className = "project-picker";
+  const projectText = document.createElement("span");
+  projectText.textContent = "Project";
+  const projectSelect = document.createElement("select");
+  projectSelect.setAttribute("aria-label", "V5G project");
+  for (const project of options.projects) {
+    const option = document.createElement("option");
+    option.value = project.id;
+    option.textContent = project.label;
+    projectSelect.appendChild(option);
+  }
+  projectSelect.value = currentProject.id;
+  projectSelect.addEventListener("change", () => {
+    options.onProjectChange(projectSelect.value);
+  });
+  projectLabel.append(projectText, projectSelect);
+  projectRow.appendChild(projectLabel);
+
   const summary = document.createElement("div");
   summary.className = "viewer-summary";
-  const animationTypes = [
-    ...new Set(
-      options.project.layers.flatMap((layer) =>
-        layer.animations.map((animation) => animation.type),
-      ),
-    ),
-  ].join(", ");
-  summary.innerHTML = `
-    <strong>${escapeHtml(options.project.name)}</strong>
-    <span>${options.project.layers.length} layers</span>
-    <span>${options.project.assets.length} assets</span>
-    <span>${escapeHtml(animationTypes)}</span>
-  `;
 
   const controls = document.createElement("div");
   controls.className = "control-row";
@@ -67,25 +95,47 @@ export function createViewerControls(
 
   const timeText = document.createElement("span");
   timeText.className = "time-readout";
-  timeText.textContent = `0.00 / ${formatTime(options.project.stage.duration)}`;
 
   const range = document.createElement("input");
   range.type = "range";
   range.className = "timeline";
   range.min = "0";
-  range.max = String(options.project.stage.duration);
   range.step = "0.01";
-  range.value = "0";
   range.addEventListener("pointerdown", options.onSeekStart);
   range.addEventListener("input", () => {
     options.onSeek(Number(range.value));
   });
 
   controls.append(playButton, restartButton, loopLabel, timeText, range);
-  root.append(summary, controls);
+  root.append(projectRow, summary, controls);
   options.container.appendChild(root);
 
+  function renderProject(project: ViewerControlsProject): void {
+    currentProject = project;
+    projectSelect.value = project.id;
+    summary.replaceChildren(
+      createSummaryStrong(project.project.name),
+      createSummaryItem(project.sourcePath),
+      createSummaryItem(`${project.project.layers.length} layers`),
+      createSummaryItem(`${project.project.assets.length} assets`),
+      createSummaryItem(
+        `${formatTime(project.project.stage.duration)}s duration`,
+      ),
+      createSummaryItem(getAnimationTypeSummary(project.project)),
+    );
+    range.max = String(project.project.stage.duration);
+    range.value = "0.00";
+    timeText.textContent = `0.00 / ${formatTime(project.project.stage.duration)}`;
+    playButton.textContent = "Play";
+    playButton.classList.remove("is-playing");
+  }
+
+  renderProject(currentProject);
+
   return {
+    setProject(project: ViewerControlsProject): void {
+      renderProject(project);
+    },
     setPlaying(isPlaying: boolean): void {
       playButton.textContent = isPlaying ? "Pause" : "Play";
       playButton.classList.toggle("is-playing", isPlaying);
@@ -94,7 +144,7 @@ export function createViewerControls(
       const formatted = formatTime(time);
       range.value = formatted;
       timeText.textContent = `${formatted} / ${formatTime(
-        options.project.stage.duration,
+        currentProject.project.stage.duration,
       )}`;
     },
     setLoop(loop: boolean): void {
@@ -103,14 +153,31 @@ export function createViewerControls(
   };
 }
 
-function formatTime(time: number): string {
-  return time.toFixed(2);
+function createSummaryStrong(value: string): HTMLElement {
+  const element = document.createElement("strong");
+  element.textContent = value;
+  return element;
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+function createSummaryItem(value: string): HTMLElement {
+  const element = document.createElement("span");
+  element.textContent = value;
+  return element;
+}
+
+function getAnimationTypeSummary(project: V5GProjectConfig): string {
+  const animationTypes = [
+    ...new Set(
+      project.layers.flatMap((layer) =>
+        layer.animations.map((animation) => animation.type),
+      ),
+    ),
+  ];
+  return animationTypes.length > 0
+    ? animationTypes.join(", ")
+    : "no animations";
+}
+
+function formatTime(time: number): string {
+  return time.toFixed(2);
 }
