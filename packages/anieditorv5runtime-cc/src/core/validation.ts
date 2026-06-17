@@ -6,6 +6,7 @@ import {
 import type {
   V5GAnimationConfig,
   V5GAnimationParamValue,
+  V5GAnimationType,
   V5GAssetConfig,
   V5GBlendMode,
   V5GLayerConfig,
@@ -23,11 +24,18 @@ const SUPPORTED_BLEND_MODES: readonly V5GBlendMode[] = [
 
 const COCOS_SUPPORTED_BLEND_MODES: readonly V5GBlendMode[] = ["normal", "add"];
 
-const REQUIRED_NUMERIC_PARAMS: Readonly<Record<string, readonly string[]>> = {
+const REQUIRED_NUMERIC_PARAMS: Readonly<
+  Record<V5GAnimationType, readonly string[]>
+> = {
   move: ["fromX", "fromY", "toX", "toY"],
   fade: ["fromOpacity", "toOpacity"],
   scale_up: ["fromScaleX", "fromScaleY", "toScaleX", "toScaleY"],
   scale_down: ["fromScaleX", "fromScaleY", "toScaleX", "toScaleY"],
+  scale_in: ["fromScale", "toScale"],
+  scale_out: ["fromScale", "toScale"],
+  pop: ["peakScale", "settleScale", "peakAt"],
+  shake: ["amplitudeX", "amplitudeY", "cycles"],
+  blink: ["minOpacity", "maxOpacity", "blinks", "endOpacity"],
   rotate: ["fromRotation", "toRotation"],
   slide_in: ["fromX", "fromY", "toX", "toY"],
   slide_out: ["fromX", "fromY", "toX", "toY"],
@@ -35,6 +43,28 @@ const REQUIRED_NUMERIC_PARAMS: Readonly<Record<string, readonly string[]>> = {
   pulse: ["scale", "cycles"],
   float: ["amplitude", "cycles"],
   swing: ["angle", "cycles"],
+  particles: ["count", "spread", "speed", "size", "gravity"],
+  particle_twinkle: [
+    "radius",
+    "count",
+    "spawnInterval",
+    "twinkleDuration",
+    "batchMin",
+    "batchMax",
+    "size",
+  ],
+};
+
+const OPTIONAL_BOOLEAN_PARAMS: Readonly<
+  Partial<Record<V5GAnimationType, readonly string[]>>
+> = {
+  slide_in: ["fadeIn"],
+  slide_out: ["fadeOut"],
+  bounce_in: ["fadeIn"],
+  scale_in: ["fadeIn"],
+  scale_out: ["fadeOut"],
+  shake: ["decay"],
+  particles: ["fadeOut"],
 };
 
 export interface ValidateCocosV5GProjectOptions {
@@ -140,7 +170,7 @@ export function validateV5GProject(project: V5GProjectConfig): void {
 
   if (project.particles.length > 0) {
     throw new Error(
-      "Unsupported V5G particles: particles are not implemented.",
+      "Unsupported V5G top-level particles: layer particle animations are supported, project.particles is not implemented.",
     );
   }
 
@@ -288,8 +318,9 @@ export function assertSupportedAnimation(
   }
   assertOptionalNumber(animation, "baseX");
   assertOptionalNumber(animation, "baseY");
-  assertOptionalBoolean(animation, "fadeIn");
-  assertOptionalBoolean(animation, "fadeOut");
+  for (const paramKey of OPTIONAL_BOOLEAN_PARAMS[animation.type] ?? []) {
+    assertOptionalBoolean(animation, paramKey);
+  }
 }
 
 function assertAsset(value: unknown, index: number): V5GAssetConfig {

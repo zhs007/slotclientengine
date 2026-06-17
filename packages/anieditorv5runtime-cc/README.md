@@ -20,12 +20,14 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - `normal`、`add` blend mode
 - `scale_up`、`scale_down`、`fade`、`rotate`、`move`
 - `slide_in`、`slide_out`、`bounce_in`、`pulse`、`float`、`swing`
+- `scale_in`、`scale_out`、`pop`、`shake`、`blink`
+- 图层动画 `particles`、`particle_twinkle`：复用当前图层的 `SpriteFrame` 创建粒子 Sprite，粒子层位于普通内容层上方
 - 由宿主 Cocos Component 在 `update(deltaTime)` 中显式驱动播放
 
 明确不支持：
 
 - `text` 图层
-- `particles`
+- 顶层 `project.particles`
 - 非空 `keyframes`
 - `group` 图层
 - 嵌套 `parentId`
@@ -34,18 +36,56 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 
 遇到未支持能力会直接抛错。runtime 不创建 missing placeholder，不把未知 blend mode 当成 `normal`，不自动猜测资源路径。
 
-## 导入 Cocos Creator 3.8.6 项目测试
+## 单文件复制导入
+
+推荐 Cocos Creator 项目优先使用单文件 runtime，而不是直接依赖 pnpm workspace package。Cocos Creator 对 pnpm symlink、package `exports`、monorepo 构建产物和源码内 `.js` 后缀相对 import 的处理可能与 Node/Vite 不一致；单文件复制可以把运行时边界收敛到一个只依赖内置 `"cc"` 模块的 TypeScript 文件。
+
+复制路径示例：
+
+```text
+packages/anieditorv5runtime-cc/standalone/anieditorv5runtime-cc.ts
+-> CocosProject/assets/scripts/vendor/anieditorv5runtime-cc.ts
+```
+
+宿主业务 Component 通过相对路径导入：
+
+```ts
+import {
+  assertV5GProject,
+  createV5GCocosPlayer,
+  validateCocosV5GProject,
+  type V5GCocosAssetResolver,
+  type V5GCocosPlayer,
+} from "./vendor/anieditorv5runtime-cc";
+```
 
 样例数据来源：
 
 ```text
 docs/anieditor5/export/project.json
+docs/anieditor5/export/bigwin.json
+docs/anieditor5/export/megawin.json
+docs/anieditor5/export/superwin.json
 docs/anieditor5/export/assets/*
 ```
 
-导入方式二选一：
+runtime 只接收已经得到的 `V5GProjectConfig` 对象，不读取、导入、加载或解析 `project.json`。JSON 绑定、`JsonAsset` 读取、资源导入、Canvas/root 缩放和屏幕适配都属于宿主 Cocos 项目职责。runtime 只创建 `project.stage.width x project.stage.height` 的中心坐标内容。
 
-1. 如果 Cocos Creator 能解析 pnpm workspace / npm 包，从包入口导入：
+宿主项目必须显式绑定 `asset.id -> SpriteFrame`。`getSpriteFrame(assetPath, assetId)` 返回 `null` 会直接抛错，错误会包含 asset id 和 path；如果能从 `SpriteFrame` 读取原始尺寸，runtime 会校验它与 JSON `asset.width/height` 一致。不要依赖 `SpriteFrame.name` 猜测资源。
+
+可复制 Component 示例见：
+
+```text
+packages/anieditorv5runtime-cc/standalone/V5GPreview.example.ts
+```
+
+该示例 Component 不是 runtime 的必需入口；它展示了宿主侧如何用 `JsonAsset` 准备 project 对象、用 `assetIds: string[]` + `spriteFrames: SpriteFrame[]` 显式绑定资源、在 `update(deltaTime)` 中调用 `player.update(deltaTime)`，并在 `onDestroy()` 中调用 `player.destroy()`。
+
+本仓库当前没有执行真实 Cocos Creator 3.8.6 编辑器导入验收；已完成的是 monorepo 内 TypeScript、Vitest fake `cc`、standalone 边界扫描和构建验收。真实编辑器内的 `.meta`、场景绑定、资源导入结果仍需在宿主 Cocos 项目中人工确认。
+
+## Package 导入
+
+如果某个环境确认可以正确解析 pnpm workspace 和 package `exports`，仍可从 package 入口导入模块化版本：
 
 ```ts
 import {
@@ -54,68 +94,7 @@ import {
 } from "@slotclientengine/anieditorv5runtime-cc/cocos";
 ```
 
-2. 如果编辑器无法解析 pnpm workspace symlink，把 `packages/anieditorv5runtime-cc/src` 或构建后的 `packages/anieditorv5runtime-cc/dist` 拷贝进 Cocos 项目的 `assets/scripts/vendor/anieditorv5runtime-cc`，再按相对路径导入。
-
-宿主项目需要把每个 V5G `asset.path` / `asset.id` 显式映射到 Cocos `SpriteFrame`。runtime 不自动使用 `resources` 路径。
-
-最小 Component 示例：
-
-```ts
-import { _decorator, Component, Node, SpriteFrame } from "cc";
-import {
-  createV5GCocosPlayer,
-  type V5GCocosAssetResolver,
-  type V5GCocosPlayer,
-} from "@slotclientengine/anieditorv5runtime-cc/cocos";
-import project from "./project.json";
-
-const { ccclass, property } = _decorator;
-
-@ccclass("V5GPreview")
-export class V5GPreview extends Component {
-  @property(Node)
-  root: Node | null = null;
-
-  @property([SpriteFrame])
-  spriteFrames: SpriteFrame[] = [];
-
-  private player: V5GCocosPlayer | null = null;
-
-  start(): void {
-    if (!this.root) throw new Error("V5GPreview.root is required.");
-
-    const assetMap = new Map<string, SpriteFrame>();
-    for (const frame of this.spriteFrames) {
-      assetMap.set(frame.name, frame);
-    }
-
-    const assets: V5GCocosAssetResolver = {
-      getSpriteFrame(assetPath, assetId) {
-        return assetMap.get(assetPath) ?? assetMap.get(assetId) ?? null;
-      },
-    };
-
-    this.player = createV5GCocosPlayer({
-      root: this.root,
-      project,
-      assets,
-      loop: true,
-    });
-    this.player.init();
-    this.player.play();
-  }
-
-  update(deltaTime: number): void {
-    this.player?.update(deltaTime);
-  }
-
-  onDestroy(): void {
-    this.player?.destroy();
-  }
-}
-```
-
-宿主 Cocos 项目负责 Canvas/root 缩放和屏幕适配。本 runtime 只创建 `project.stage.width x project.stage.height` 的中心坐标内容，不自动猜测适配策略。
+这条路径面向能解析 package 的工程化环境；面向普通 Cocos Creator 项目交付时，优先复制 `standalone/anieditorv5runtime-cc.ts`。
 
 ## 背景层和 blend mode
 
@@ -126,7 +105,7 @@ runtime 会在 stage 下创建 `V5G Background`，使用 Cocos `Graphics` 画 `p
 - `normal`: `SRC_ALPHA` / `ONE_MINUS_SRC_ALPHA`
 - `add`: `SRC_ALPHA` / `ONE`
 
-如果真实 Cocos Creator 3.8.6 项目里 Sprite blend factor API 不可用，adapter 会抛错。需要在编辑器内确认后再扩展，不要把未确认模式静默降级。
+如果真实 Cocos Creator 3.8.6 项目里 Sprite blend factor API 不可用，adapter 会抛错。需要在编辑器内确认后再扩展，不要把未确认模式静默降级。`screen`、`multiply`、`lighten` 当前会被 `validateCocosV5GProject()` 显式拒绝。
 
 ## `cc` 类型 shim
 

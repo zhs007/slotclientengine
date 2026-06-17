@@ -1,4 +1,20 @@
 declare module "cc" {
+  export const _decorator: {
+    ccclass: (name: string) => ClassDecorator;
+    property: (type?: unknown) => PropertyDecorator;
+  };
+
+  export class Component {
+    node: Node;
+    start?(): void;
+    update?(deltaTime: number): void;
+    onDestroy?(): void;
+  }
+
+  export class JsonAsset {
+    json: unknown;
+  }
+
   export class Color {
     constructor(r?: number, g?: number, b?: number, a?: number);
     r: number;
