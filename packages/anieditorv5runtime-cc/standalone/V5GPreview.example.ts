@@ -33,7 +33,9 @@ export class V5GPreview extends Component {
       throw new Error("V5GPreview.root must be assigned.");
     }
     if (!this.projectJson) {
-      throw new Error("V5GPreview.projectJson must be assigned by host code.");
+      throw new Error(
+        "V5GPreview.projectJson must be assigned to the selected V5G/VNI project, for example runtime_50/project.json.",
+      );
     }
 
     const project = assertV5GProject(this.projectJson.json);
@@ -112,7 +114,7 @@ export class V5GPreview extends Component {
       const spriteFrame = this.spriteFrames[index];
       if (!spriteFrame) {
         throw new Error(
-          `Missing SpriteFrame binding for V5G asset ${assetId}.`,
+          `Missing same-profile SpriteFrame binding for V5G asset ${assetId}.`,
         );
       }
       spriteFramesByAssetId.set(assetId, spriteFrame);
@@ -121,7 +123,7 @@ export class V5GPreview extends Component {
     for (const asset of project.assets) {
       if (!spriteFramesByAssetId.has(asset.id)) {
         throw new Error(
-          `Missing SpriteFrame binding for V5G asset "${asset.id}" at "${asset.path}".`,
+          `Missing same-profile SpriteFrame binding for V5G asset "${asset.id}" at "${asset.path}".`,
         );
       }
     }

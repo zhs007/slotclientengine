@@ -185,7 +185,11 @@ function framesFor(project: V5GProjectConfig): Map<string, FakeSpriteFrame> {
   return new Map(
     project.assets.map((asset) => [
       asset.id,
-      { id: asset.id, width: asset.width, height: asset.height },
+      {
+        id: asset.id,
+        width: asset.fileWidth ?? asset.width,
+        height: asset.fileHeight ?? asset.height,
+      },
     ]),
   );
 }
@@ -275,6 +279,42 @@ describe("V5GCocosPlayer", () => {
 
     expect(() => player.init()).toThrow(
       'Cocos SpriteFrame size mismatch for V5G asset "asset-1"',
+    );
+  });
+
+  it("validates compressed SpriteFrame file size while keeping logical node size", () => {
+    const project = tinyProject(
+      {},
+      {
+        width: 100,
+        height: 50,
+        fileWidth: 50,
+        fileHeight: 25,
+        fileScale: 0.5,
+      },
+    );
+    project.schemaVersion = "VNI_0.002";
+    project.editor = { name: "VNI", version: "VNI_0.002" };
+    project.exportProfile = {
+      id: "runtime_50",
+      purpose: "runtime",
+      assetScale: 0.5,
+    };
+
+    const { root, frames, player } = makePlayer(project);
+    frames.set("asset-1", { id: "asset-1", width: 50, height: 25 });
+    player.init();
+
+    const layerNode = root.children[0].children[1].children[0];
+    expect(layerNode.width).toBe(100);
+    expect(layerNode.height).toBe(50);
+    expect(layerNode.scaleX).toBe(-1);
+    expect(layerNode.scaleY).toBe(2);
+
+    const wrongSize = makePlayer(project);
+    wrongSize.frames.set("asset-1", { id: "asset-1", width: 100, height: 50 });
+    expect(() => wrongSize.player.init()).toThrow(
+      "logical 100x50, expected file 50x25, got 100x50",
     );
   });
 
@@ -622,6 +662,8 @@ describe("V5GCocosPlayer", () => {
     expect(firstParticle.destroyed).toBe(true);
     expect(particleRoot.children).toHaveLength(3);
     expect(particleRoot.children[0].spriteFrame?.id).toBe("asset-1");
+    expect(particleRoot.children[0].width).toBe(project.assets[0].width);
+    expect(particleRoot.children[0].height).toBe(project.assets[0].height);
     expect(Number.isFinite(particleRoot.children[0].rotation)).toBe(true);
   });
 

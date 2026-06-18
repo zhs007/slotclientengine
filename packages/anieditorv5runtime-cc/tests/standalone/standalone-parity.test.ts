@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Node, SpriteFrame } from "cc";
 import bigwinData from "../fixtures/bigwin.json";
+import export2Runtime50Data from "../fixtures/export2-runtime-50.json";
 import megawinData from "../fixtures/megawin.json";
 import projectData from "../fixtures/project.json";
 import superwinData from "../fixtures/superwin.json";
@@ -31,6 +32,7 @@ const fixtures = [
   ["bigwin", bigwinData],
   ["megawin", megawinData],
   ["superwin", superwinData],
+  ["export2-runtime-50", export2Runtime50Data],
 ] as const;
 
 const sampleTimes = [0, 0.1, 0.6, 0.8, 1, 2, 4, 4.4];
@@ -94,6 +96,20 @@ describe("standalone runtime parity", () => {
     const project = assertV5GProject(bigwinData);
     expect(() => validateCocosV5GProject(project)).not.toThrow();
     expect(() => standalone.validateCocosV5GProject(project)).not.toThrow();
+  });
+
+  it("matches modular runtime compressed metadata rejection", () => {
+    const project = assertV5GProject(export2Runtime50Data);
+    project.assets[0].fileScale = 0.25;
+    project.assets[0].fileWidth = 183;
+    project.assets[0].fileHeight = 184;
+
+    expect(() => validateV5GProject(project)).toThrow(
+      "does not match exportProfile.assetScale",
+    );
+    expect(() => standalone.validateV5GProject(project)).toThrow(
+      "does not match exportProfile.assetScale",
+    );
   });
 
   it("matches modular player range playback marker and complete state", () => {
@@ -286,7 +302,11 @@ function makeModularPlayer(
   const frames = new Map(
     project.assets.map((asset) => [
       asset.id,
-      { id: asset.id, width: asset.width, height: asset.height },
+      {
+        id: asset.id,
+        width: asset.fileWidth ?? asset.width,
+        height: asset.fileHeight ?? asset.height,
+      },
     ]),
   );
   return new V5GCocosPlayer({
@@ -313,7 +333,10 @@ function makeStandalonePlayer(
   const frames = new Map(
     project.assets.map((asset) => [
       asset.id,
-      makeSpriteFrame(asset.width, asset.height),
+      makeSpriteFrame(
+        asset.fileWidth ?? asset.width,
+        asset.fileHeight ?? asset.height,
+      ),
     ]),
   );
   return standalone.createV5GCocosPlayer({

@@ -41,6 +41,16 @@ interface NormalizedPlaybackEvent {
 const SIZE_EPSILON = 0.01;
 const PLAYBACK_EPSILON = 1e-9;
 
+function getExpectedSpriteFrameSize(asset: V5GAssetConfig): {
+  width: number;
+  height: number;
+} {
+  return {
+    width: asset.fileWidth ?? asset.width,
+    height: asset.fileHeight ?? asset.height,
+  };
+}
+
 export class V5GCocosPlayer<TNode, TSpriteFrame> {
   private readonly options: V5GCocosPlayerOptions<TNode, TSpriteFrame>;
   private readonly layers = new Map<
@@ -553,12 +563,13 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
   ): void {
     const actualSize = this.options.driver.getSpriteFrameSize(spriteFrame);
     if (actualSize === null) return;
+    const expectedSize = getExpectedSpriteFrameSize(asset);
     if (
-      Math.abs(actualSize.width - asset.width) > SIZE_EPSILON ||
-      Math.abs(actualSize.height - asset.height) > SIZE_EPSILON
+      Math.abs(actualSize.width - expectedSize.width) > SIZE_EPSILON ||
+      Math.abs(actualSize.height - expectedSize.height) > SIZE_EPSILON
     ) {
       throw new Error(
-        `Cocos SpriteFrame size mismatch for V5G asset "${asset.id}" at "${asset.path}": expected ${asset.width}x${asset.height}, got ${actualSize.width}x${actualSize.height}.`,
+        `Cocos SpriteFrame size mismatch for V5G asset "${asset.id}" at "${asset.path}": logical ${asset.width}x${asset.height}, expected file ${expectedSize.width}x${expectedSize.height}, got ${actualSize.width}x${actualSize.height}.`,
       );
     }
   }

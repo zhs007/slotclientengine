@@ -47,6 +47,8 @@ for (const [pattern, message] of forbiddenPatterns) {
 const requiredExports = [
   "export type V5GCoordinateMode",
   "export type V5GAnimationType",
+  "export interface V5GAssetConfig",
+  "export interface V5GExportProfileConfig",
   "export interface V5GProjectConfig",
   "export interface SampledLayerState",
   "export interface ParticleSpriteSample",
