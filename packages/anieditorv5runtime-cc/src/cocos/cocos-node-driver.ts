@@ -1,5 +1,4 @@
 import {
-  BlendFactor,
   Color,
   Graphics,
   Node,
@@ -7,6 +6,7 @@ import {
   SpriteFrame,
   UITransform,
   UIOpacity,
+  gfx,
 } from "cc";
 import type { CocosBlendFactor, CocosBlendModeConfig } from "./blend-mode.js";
 import type { V5GCocosNodeDriver, V5GSize } from "./node-driver.js";
@@ -113,10 +113,11 @@ function numberToColor(color: number, alpha: number): Color {
   return new Color((color >> 16) & 255, (color >> 8) & 255, color & 255, alpha);
 }
 
-function toCocosBlendFactor(factor: CocosBlendFactor): BlendFactor {
-  if (factor === "SRC_ALPHA") return BlendFactor.SRC_ALPHA;
-  if (factor === "ONE_MINUS_SRC_ALPHA") return BlendFactor.ONE_MINUS_SRC_ALPHA;
-  if (factor === "ONE") return BlendFactor.ONE;
+function toCocosBlendFactor(factor: CocosBlendFactor): gfx.BlendFactor {
+  if (factor === "SRC_ALPHA") return gfx.BlendFactor.SRC_ALPHA;
+  if (factor === "ONE_MINUS_SRC_ALPHA")
+    return gfx.BlendFactor.ONE_MINUS_SRC_ALPHA;
+  if (factor === "ONE") return gfx.BlendFactor.ONE;
   throw new Error(`Unsupported Cocos blend factor: ${factor}.`);
 }
 

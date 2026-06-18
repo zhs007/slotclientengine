@@ -152,17 +152,17 @@ export function easeProgress(progress: number, easing: V5GEasingName): number {
 export function isSupportedAnimationType(
   value: string,
 ): value is V5GAnimationType {
-  return SUPPORTED_ANIMATION_TYPES.includes(value as V5GAnimationType);
+  return hasStringValue(SUPPORTED_ANIMATION_TYPES, value);
 }
 
 export function isParticleAnimationType(
   value: string,
 ): value is V5GAnimationType {
-  return PARTICLE_ANIMATION_TYPES.includes(value as V5GAnimationType);
+  return hasStringValue(PARTICLE_ANIMATION_TYPES, value);
 }
 
 export function isSupportedEasing(value: string): value is V5GEasingName {
-  return SUPPORTED_EASINGS.includes(value as V5GEasingName);
+  return hasStringValue(SUPPORTED_EASINGS, value);
 }
 
 export function getDefaultEasing(type: V5GAnimationType): V5GEasingName {
@@ -474,4 +474,14 @@ function getLoopWave(progress: number, cycles: number): number {
 
 function lerp(from: number, to: number, ratio: number): number {
   return from + (to - from) * clampNumber(ratio, 0, 1);
+}
+
+function hasStringValue<T extends string>(
+  values: readonly T[],
+  value: string,
+): value is T {
+  for (let index = 0; index < values.length; index += 1) {
+    if (values[index] === value) return true;
+  }
+  return false;
 }

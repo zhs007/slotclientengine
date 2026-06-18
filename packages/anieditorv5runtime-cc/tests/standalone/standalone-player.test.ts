@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  BlendFactor,
   Graphics,
   Node,
   Sprite,
   SpriteFrame,
   UITransform,
   UIOpacity,
+  gfx,
 } from "cc";
 import {
   createV5GCocosPlayer,
@@ -135,8 +135,10 @@ describe("standalone V5GCocosPlayer", () => {
     expect(layerNode.active).toBe(true);
     expect(inspectTransform(layerNode).anchorX).toBe(0.25);
     expect(inspectTransform(layerNode).anchorY).toBe(0.75);
-    expect(requireSprite(layerNode).srcBlendFactor).toBe(BlendFactor.SRC_ALPHA);
-    expect(requireSprite(layerNode).dstBlendFactor).toBe(BlendFactor.ONE);
+    expect(requireSprite(layerNode).srcBlendFactor).toBe(
+      gfx.BlendFactor.SRC_ALPHA,
+    );
+    expect(requireSprite(layerNode).dstBlendFactor).toBe(gfx.BlendFactor.ONE);
   });
 
   it("fails fast for missing SpriteFrame and size mismatch", () => {
