@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import bigwinData from "../fixtures/bigwin.json";
+import export2Runtime50Data from "../fixtures/export2-runtime-50.json";
 import megawinData from "../fixtures/megawin.json";
 import projectData from "../fixtures/project.json";
 import superwinData from "../fixtures/superwin.json";
@@ -23,9 +24,16 @@ const fixtures = [projectData, bigwinData, megawinData, superwinData] as const;
 const exportRootDir = fileURLToPath(
   new URL("../../../../docs/anieditor5/export/", import.meta.url),
 );
+const runtime50ExportRootDir = fileURLToPath(
+  new URL("../../../../docs/anieditor5/export2/runtime_50/", import.meta.url),
+);
 
 function validProject(): V5GProjectConfig {
   return structuredClone(assertV5GProject(projectData));
+}
+
+function validRuntime50Project(): V5GProjectConfig {
+  return structuredClone(assertV5GProject(export2Runtime50Data));
 }
 
 function expectInvalid(
@@ -67,6 +75,27 @@ describe("validation", () => {
     }
   });
 
+  it("accepts the runtime_50 VNI export profile", () => {
+    const project = validRuntime50Project();
+    expect(project.schemaVersion).toMatch(/^VNI_0\.\d+$/u);
+    expect(project.editor.name).toBe("victory_editor_v5_g");
+    expect(project.exportProfile).toEqual({
+      id: "runtime_50",
+      purpose: "runtime",
+      assetScale: 0.5,
+      label: undefined,
+    });
+    expect(project.assets[0]).toMatchObject({
+      width: 730,
+      height: 735,
+      fileWidth: 365,
+      fileHeight: 368,
+      fileScale: 0.5,
+    });
+    expect(() => validateV5GProject(project)).not.toThrow();
+    expect(() => validateCocosV5GProject(project)).not.toThrow();
+  });
+
   it("keeps copied fixture asset paths aligned with docs export assets", () => {
     const uniqueAssetPaths = new Set<string>();
     for (const fixture of fixtures) {
@@ -77,6 +106,13 @@ describe("validation", () => {
       }
     }
     expect(uniqueAssetPaths.size).toBe(28);
+  });
+
+  it("keeps runtime_50 fixture asset paths aligned with docs export2 runtime assets", () => {
+    const project = validRuntime50Project();
+    for (const asset of project.assets) {
+      expect(existsSync(join(runtime50ExportRootDir, asset.path))).toBe(true);
+    }
   });
 
   it("supports the viewer animation type surface", () => {
@@ -133,13 +169,21 @@ describe("validation", () => {
     );
   });
 
-  it("rejects unsupported schema, editor, and engine target", () => {
+  it("accepts supported schema/editor families and rejects unknown ones", () => {
+    const vniProject = validProject();
+    vniProject.schemaVersion = "VNI_0.003";
+    vniProject.editor = { name: "VNI", version: "VNI_0.003" };
+    expect(() => validateV5GProject(vniProject)).not.toThrow();
+
     expectInvalid((project) => {
       project.schemaVersion = "V6G_0.0001";
     }, "Unsupported V5G schemaVersion");
     expectInvalid((project) => {
       project.editor.name = "other_editor";
     }, "Unsupported V5G editor");
+  });
+
+  it("rejects unsupported engine target", () => {
     expectInvalid((project) => {
       (project.engineTarget as { name: string }).name = "pixi";
     }, "Unsupported V5G engine target");
@@ -149,6 +193,76 @@ describe("validation", () => {
         engineTarget: { name: "pixi", version: "1.0.0" },
       }),
     ).toThrow("engineTarget.name must be cocos_creator");
+  });
+
+  it("validates compressed asset metadata strictly", () => {
+    const legacyProject = validProject();
+    legacyProject.assets[0].fileWidth = legacyProject.assets[0].width;
+    expect(() => validateV5GProject(legacyProject)).toThrow(
+      "fileWidth/fileHeight/fileScale must be provided together",
+    );
+
+    const nonNumeric = structuredClone(export2Runtime50Data);
+    nonNumeric.assets[0].fileWidth = "365" as unknown as number;
+    expect(() => assertV5GProject(nonNumeric)).toThrow(
+      "project.assets[0].fileWidth must be a finite number",
+    );
+
+    const zeroWidth = validRuntime50Project();
+    zeroWidth.assets[0].fileWidth = 0;
+    expect(() => validateV5GProject(zeroWidth)).toThrow(
+      "fileWidth must be a positive finite number",
+    );
+
+    const zeroScale = validRuntime50Project();
+    zeroScale.assets[0].fileScale = 0;
+    expect(() => validateV5GProject(zeroScale)).toThrow("fileScale");
+
+    const oversizedScale = validRuntime50Project();
+    oversizedScale.assets[0].fileScale = 1.2;
+    expect(() => validateV5GProject(oversizedScale)).toThrow("fileScale");
+
+    const mismatchedSize = validRuntime50Project();
+    mismatchedSize.assets[0].fileWidth = 366;
+    expect(() => validateV5GProject(mismatchedSize)).toThrow(
+      "file size metadata mismatch",
+    );
+  });
+
+  it("enforces exportProfile asset scale requirements", () => {
+    const mismatchedAssetScale = validRuntime50Project();
+    mismatchedAssetScale.assets[0].fileScale = 0.25;
+    mismatchedAssetScale.assets[0].fileWidth = 183;
+    mismatchedAssetScale.assets[0].fileHeight = 184;
+    expect(() => validateV5GProject(mismatchedAssetScale)).toThrow(
+      "does not match exportProfile.assetScale",
+    );
+
+    const runtimeMissingMetadata = validRuntime50Project();
+    delete runtimeMissingMetadata.assets[0].fileWidth;
+    delete runtimeMissingMetadata.assets[0].fileHeight;
+    delete runtimeMissingMetadata.assets[0].fileScale;
+    expect(() => validateV5GProject(runtimeMissingMetadata)).toThrow(
+      'must provide fileWidth/fileHeight/fileScale for exportProfile "runtime_50"',
+    );
+
+    const editingScaledMissingMetadata = validProject();
+    editingScaledMissingMetadata.exportProfile = {
+      id: "edit_half",
+      purpose: "editing",
+      assetScale: 0.5,
+    };
+    expect(() => validateV5GProject(editingScaledMissingMetadata)).toThrow(
+      'must provide fileWidth/fileHeight/fileScale for exportProfile "edit_half"',
+    );
+
+    const fullEditingMissingMetadata = validProject();
+    fullEditingMissingMetadata.exportProfile = {
+      id: "edit_full",
+      purpose: "editing",
+      assetScale: 1,
+    };
+    expect(() => validateV5GProject(fullEditingMissingMetadata)).not.toThrow();
   });
 
   it("rejects unsupported Cocos Creator versions", () => {

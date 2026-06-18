@@ -75,7 +75,10 @@ function framesFor(project: V5GProjectConfig): Map<string, SpriteFrame> {
   return new Map(
     project.assets.map((asset) => [
       asset.id,
-      makeSpriteFrame(asset.width, asset.height),
+      makeSpriteFrame(
+        asset.fileWidth ?? asset.width,
+        asset.fileHeight ?? asset.height,
+      ),
     ]),
   );
 }
@@ -186,6 +189,40 @@ describe("standalone V5GCocosPlayer", () => {
     });
     expect(() => wrongSize.init()).toThrow(
       'Cocos SpriteFrame size mismatch for V5G asset "asset-1"',
+    );
+  });
+
+  it("accepts compressed SpriteFrame size while preserving logical node size", () => {
+    const project = tinyProject(
+      {},
+      {
+        width: 100,
+        height: 50,
+        fileWidth: 50,
+        fileHeight: 25,
+        fileScale: 0.5,
+      },
+    );
+    project.schemaVersion = "VNI_0.002";
+    project.editor = { name: "VNI", version: "VNI_0.002" };
+    project.exportProfile = {
+      id: "runtime_50",
+      purpose: "runtime",
+      assetScale: 0.5,
+    };
+    const { root, frames, player } = makePlayer(project);
+    frames.set("asset-1", makeSpriteFrame(50, 25));
+    player.init();
+
+    const layerNode = root.children[0].children[1].children[0];
+    expect(inspectTransform(layerNode).width).toBe(100);
+    expect(inspectTransform(layerNode).height).toBe(50);
+    expect(inspectNode(layerNode).scale).toEqual({ x: -1, y: 2, z: 1 });
+
+    const wrongSize = makePlayer(project);
+    wrongSize.frames.set("asset-1", makeSpriteFrame(100, 50));
+    expect(() => wrongSize.player.init()).toThrow(
+      "logical 100x50, expected file 50x25, got 100x50",
     );
   });
 
@@ -352,6 +389,12 @@ describe("standalone V5GCocosPlayer", () => {
     );
     expect(requireSprite(particleRoot.children[0]).spriteFrame).toBe(
       frames.get("asset-1"),
+    );
+    expect(inspectTransform(particleRoot.children[0]).width).toBe(
+      project.assets[0].width,
+    );
+    expect(inspectTransform(particleRoot.children[0]).height).toBe(
+      project.assets[0].height,
     );
   });
 });

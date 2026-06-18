@@ -1,7 +1,32 @@
 import { describe, expect, it } from "vitest";
 import * as runtime from "../../standalone/anieditorv5runtime-cc";
+import type {
+  V5GAssetConfig,
+  V5GExportProfileConfig,
+} from "../../standalone/anieditorv5runtime-cc";
 
 describe("standalone runtime import", () => {
+  it("exports compressed asset metadata types", () => {
+    const profile: V5GExportProfileConfig = {
+      id: "runtime_50",
+      purpose: "runtime",
+      assetScale: 0.5,
+    };
+    const asset: V5GAssetConfig = {
+      id: "asset",
+      type: "image",
+      path: "assets/a.png",
+      originalName: "a.png",
+      width: 100,
+      height: 50,
+      fileWidth: 50,
+      fileHeight: 25,
+      fileScale: profile.assetScale,
+    };
+
+    expect(asset.fileScale).toBe(profile.assetScale);
+  });
+
   it("imports directly with only the cc alias and exposes the public API", () => {
     expect(runtime.SUPPORTED_ANIMATION_TYPES).toEqual(
       expect.arrayContaining([
