@@ -17,7 +17,7 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - 中心坐标：Cocos 节点位置直接使用 `transform.x/y`，不做 Pixi 的左上角坐标转换
 - 负 `scaleX/scaleY` 镜像
 - `opacity`、`visible`、`rotation`、锚点
-- `normal`、`add` blend mode
+- 已知 V5G blend mode 字段：`normal`、`add`、`screen`、`multiply`、`lighten` 会被解析和接受；Cocos runtime 不修改 Sprite blend 参数，实际统一按 Cocos 默认 normal 透明混合渲染
 - `scale_up`、`scale_down`、`fade`、`rotate`、`move`
 - `slide_in`、`slide_out`、`bounce_in`、`pulse`、`float`、`swing`
 - `scale_in`、`scale_out`、`pop`、`shake`、`blink`
@@ -31,10 +31,9 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - 非空 `keyframes`
 - `group` 图层
 - 嵌套 `parentId`
-- 未确认的 `screen`、`multiply`、`lighten` Cocos blend mode
 - 未知资源、未知动画、未知 easing、未知 blend mode 的静默兜底
 
-遇到未支持能力会直接抛错。runtime 不创建 missing placeholder，不把未知 blend mode 当成 `normal`，不自动猜测资源路径。
+遇到未支持能力会直接抛错。runtime 不创建 missing placeholder，不自动猜测资源路径。未知 V5G blend mode 仍会在通用校验失败；已知但未适配 Cocos 的 blend mode 会保留配置值但按默认 normal 渲染。
 
 ## 单文件复制导入
 
@@ -100,12 +99,9 @@ import {
 
 runtime 会在 stage 下创建 `V5G Background`，使用 Cocos `Graphics` 画 `project.stage.backgroundColor` 对应的纯色矩形，背景层始终在所有 V5G 图层下方。
 
-`normal` 和 `add` 使用 Sprite 的 blend factor 配置：
+Cocos adapter 当前不会读取或写入 Sprite 的 blend factor / material / effect 配置。无论导出图层写的是 `normal`、`add`、`screen`、`multiply` 还是 `lighten`，runtime 都保持 Cocos Sprite 默认混合状态，因此实际按 normal 透明混合渲染。
 
-- `normal`: `SRC_ALPHA` / `ONE_MINUS_SRC_ALPHA`
-- `add`: `SRC_ALPHA` / `ONE`
-
-如果真实 Cocos Creator 3.8.6 项目里 Sprite blend factor API 不可用，adapter 会抛错。需要在编辑器内确认后再扩展，不要把未确认模式静默降级。`screen`、`multiply`、`lighten` 当前会被 `validateCocosV5GProject()` 显式拒绝。
+后续如果要恢复 `add`、`screen` 等真实混合效果，需要先在真实 Cocos Creator 3.8.6 项目里补充并验收 Material/Effect adapter；在此之前不要依赖 Sprite blend factor API。
 
 ## `cc` 类型 shim
 

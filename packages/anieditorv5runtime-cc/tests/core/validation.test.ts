@@ -214,7 +214,7 @@ describe("validation", () => {
     }, 'requires numeric param "toScaleX"');
   });
 
-  it("rejects text layers and unconfirmed blend modes for Cocos", () => {
+  it("rejects text layers for Cocos", () => {
     expectInvalidCocos((project) => {
       project.layers[0] = {
         ...project.layers[0],
@@ -223,16 +223,11 @@ describe("validation", () => {
         text: "hello",
       };
     }, "Unsupported Cocos V5G layer type: text");
-    expectInvalidCocos((project) => {
-      project.layers[0].blendMode = "screen";
-    }, "Unsupported Cocos V5G blendMode: screen");
   });
 
-  it("rejects exported screen blend mode at the Cocos runtime layer until verified", () => {
+  it("accepts exported non-normal blend modes at the Cocos runtime layer", () => {
     const project = assertV5GProject(bigwinData);
     expect(() => validateV5GProject(project)).not.toThrow();
-    expect(() => validateCocosV5GProject(project)).toThrow(
-      "Unsupported Cocos V5G blendMode: screen",
-    );
+    expect(() => validateCocosV5GProject(project)).not.toThrow();
   });
 });

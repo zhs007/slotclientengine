@@ -81,14 +81,10 @@ describe("standalone runtime parity", () => {
     );
   });
 
-  it("matches modular runtime Cocos blend-mode failures", () => {
+  it("matches modular runtime Cocos blend-mode acceptance", () => {
     const project = assertV5GProject(bigwinData);
-    expect(() => validateCocosV5GProject(project)).toThrow(
-      "Unsupported Cocos V5G blendMode: screen",
-    );
-    expect(() => standalone.validateCocosV5GProject(project)).toThrow(
-      "Unsupported Cocos V5G blendMode: screen",
-    );
+    expect(() => validateCocosV5GProject(project)).not.toThrow();
+    expect(() => standalone.validateCocosV5GProject(project)).not.toThrow();
   });
 });
 
