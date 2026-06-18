@@ -16,6 +16,7 @@
 - `packages/anieditorv5runtime-cc/standalone/anieditorv5runtime-cc.ts`
 - `packages/anieditorv5runtime-cc/standalone/V5GPreview.example.ts`
 - `packages/anieditorv5runtime-cc/scripts/check-standalone.mjs`
+- `packages/anieditorv5runtime-cc/tsconfig.standalone.json`
 - `packages/anieditorv5runtime-cc/README.md`
 - `packages/anieditorv5runtime-cc/tests/fixtures/export2-runtime-50.json`
 - `packages/anieditorv5runtime-cc/tests/core/validation.test.ts`
@@ -137,6 +138,7 @@ git diff --check
 
 - 已执行关键字扫描：`V5G_0`、`VNI_0`、`fileWidth`、`fileHeight`、`fileScale`、`exportProfile`、`SpriteFrame size mismatch`、`runtime_50`、`edit_full`。
 - `src` 和 `standalone` 均已同步压缩资源合同。
+- 反馈后追加检查：standalone runtime 面向 Cocos Creator ES2015，已移除 `.includes(...)`，`tsconfig.standalone.json` 已收紧为 `target: ES2015` / `lib: ES2015`，`standalone:check` 已禁止 standalone runtime 源码出现 `.includes(`。
 - `src/index.ts` 仍未 runtime re-export `createV5GCocosPlayer` 或 `createCocosNodeDriver`。
 - 没有复制 `edit_full` 图片资源或 `runtime_50/assets` 图片资源到 runtime package。
 - 未新增 npm 依赖，未执行 `pnpm install`，`pnpm-lock.yaml` 未变化。

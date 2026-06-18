@@ -156,11 +156,7 @@ export function validateV5GProject(project: V5GProjectConfig): void {
       `Unsupported V5G schemaVersion: ${project.schemaVersion}. Expected V5G_0.x or VNI_0.x.`,
     );
   }
-  if (
-    !SUPPORTED_EDITOR_NAMES.includes(
-      project.editor.name as (typeof SUPPORTED_EDITOR_NAMES)[number],
-    )
-  ) {
+  if (!hasStringValue(SUPPORTED_EDITOR_NAMES, project.editor.name)) {
     throw new Error(`Unsupported V5G editor: ${project.editor.name}.`);
   }
   if (project.engineTarget.name !== "cocos_creator") {
