@@ -148,11 +148,3 @@ export class Graphics {
     this.filled = false;
   }
 }
-
-export namespace gfx {
-  export enum BlendFactor {
-    SRC_ALPHA = 770,
-    ONE_MINUS_SRC_ALPHA = 771,
-    ONE = 1,
-  }
-}

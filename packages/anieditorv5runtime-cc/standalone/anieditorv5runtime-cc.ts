@@ -6,7 +6,6 @@ import {
   SpriteFrame,
   UITransform,
   UIOpacity,
-  gfx,
 } from "cc";
 
 export type V5GCoordinateMode = "center";
@@ -1013,8 +1012,6 @@ const SUPPORTED_BLEND_MODES: readonly V5GBlendMode[] = [
   "lighten",
 ];
 
-const COCOS_SUPPORTED_BLEND_MODES: readonly V5GBlendMode[] = ["normal", "add"];
-
 const REQUIRED_NUMERIC_PARAMS: Readonly<
   Record<V5GAnimationType, readonly string[]>
 > = {
@@ -1211,9 +1208,6 @@ export function validateCocosV5GProject(
   for (const layer of project.layers) {
     if (layer.type !== "image") {
       throw new Error(`Unsupported Cocos V5G layer type: ${layer.type}.`);
-    }
-    if (!hasStringValue(COCOS_SUPPORTED_BLEND_MODES, layer.blendMode)) {
-      throw new Error(`Unsupported Cocos V5G blendMode: ${layer.blendMode}.`);
     }
   }
 }
@@ -1543,33 +1537,16 @@ function hasStringValue<T extends string>(
   return false;
 }
 
-export type CocosBlendFactor = "SRC_ALPHA" | "ONE_MINUS_SRC_ALPHA" | "ONE";
-export type SupportedCocosBlendMode = "normal" | "add";
+export type SupportedCocosBlendMode = "normal";
 
 export interface CocosBlendModeConfig {
   mode: SupportedCocosBlendMode;
-  sourceFactor: CocosBlendFactor;
-  destinationFactor: CocosBlendFactor;
 }
 
 export function getCocosBlendModeConfig(
-  blendMode: V5GBlendMode,
+  _blendMode: V5GBlendMode,
 ): CocosBlendModeConfig {
-  if (blendMode === "normal") {
-    return {
-      mode: "normal",
-      sourceFactor: "SRC_ALPHA",
-      destinationFactor: "ONE_MINUS_SRC_ALPHA",
-    };
-  }
-  if (blendMode === "add") {
-    return {
-      mode: "add",
-      sourceFactor: "SRC_ALPHA",
-      destinationFactor: "ONE",
-    };
-  }
-  throw new Error(`Unsupported Cocos V5G blendMode: ${blendMode}.`);
+  return { mode: "normal" };
 }
 
 export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
@@ -1661,15 +1638,8 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
     getSpriteFrameSize(spriteFrame) {
       return readSpriteFrameSize(spriteFrame);
     },
-    applyBlendMode(node, config) {
-      const sprite = requireSprite(node);
-      if (!("srcBlendFactor" in sprite) || !("dstBlendFactor" in sprite)) {
-        throw new Error(
-          "Cocos Sprite blend factor API is unavailable; verify the Cocos Creator 3.8.6 adapter before using V5G blend modes.",
-        );
-      }
-      sprite.srcBlendFactor = toCocosBlendFactor(config.sourceFactor);
-      sprite.dstBlendFactor = toCocosBlendFactor(config.destinationFactor);
+    applyBlendMode(node, _config) {
+      requireSprite(node);
     },
   };
 }
@@ -1694,14 +1664,6 @@ function requireSprite(node: Node): Sprite {
 
 function numberToColor(color: number, alpha: number): Color {
   return new Color((color >> 16) & 255, (color >> 8) & 255, color & 255, alpha);
-}
-
-function toCocosBlendFactor(factor: CocosBlendFactor): gfx.BlendFactor {
-  if (factor === "SRC_ALPHA") return gfx.BlendFactor.SRC_ALPHA;
-  if (factor === "ONE_MINUS_SRC_ALPHA")
-    return gfx.BlendFactor.ONE_MINUS_SRC_ALPHA;
-  if (factor === "ONE") return gfx.BlendFactor.ONE;
-  throw new Error(`Unsupported Cocos blend factor: ${factor}.`);
 }
 
 function readSpriteFrameSize(spriteFrame: SpriteFrame): V5GSize | null {

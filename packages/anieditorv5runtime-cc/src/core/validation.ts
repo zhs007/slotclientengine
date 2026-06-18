@@ -22,8 +22,6 @@ const SUPPORTED_BLEND_MODES: readonly V5GBlendMode[] = [
   "lighten",
 ];
 
-const COCOS_SUPPORTED_BLEND_MODES: readonly V5GBlendMode[] = ["normal", "add"];
-
 const REQUIRED_NUMERIC_PARAMS: Readonly<
   Record<V5GAnimationType, readonly string[]>
 > = {
@@ -220,9 +218,6 @@ export function validateCocosV5GProject(
   for (const layer of project.layers) {
     if (layer.type !== "image") {
       throw new Error(`Unsupported Cocos V5G layer type: ${layer.type}.`);
-    }
-    if (!hasStringValue(COCOS_SUPPORTED_BLEND_MODES, layer.blendMode)) {
-      throw new Error(`Unsupported Cocos V5G blendMode: ${layer.blendMode}.`);
     }
   }
 }

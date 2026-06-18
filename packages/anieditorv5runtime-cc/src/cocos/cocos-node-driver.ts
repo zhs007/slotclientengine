@@ -6,9 +6,8 @@ import {
   SpriteFrame,
   UITransform,
   UIOpacity,
-  gfx,
 } from "cc";
-import type { CocosBlendFactor, CocosBlendModeConfig } from "./blend-mode.js";
+import type { CocosBlendModeConfig } from "./blend-mode.js";
 import type { V5GCocosNodeDriver, V5GSize } from "./node-driver.js";
 
 interface ReadableSpriteFrameSize {
@@ -78,15 +77,8 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
     getSpriteFrameSize(spriteFrame) {
       return readSpriteFrameSize(spriteFrame);
     },
-    applyBlendMode(node, config) {
-      const sprite = requireSprite(node);
-      if (!("srcBlendFactor" in sprite) || !("dstBlendFactor" in sprite)) {
-        throw new Error(
-          "Cocos Sprite blend factor API is unavailable; verify the Cocos Creator 3.8.6 adapter before using V5G blend modes.",
-        );
-      }
-      sprite.srcBlendFactor = toCocosBlendFactor(config.sourceFactor);
-      sprite.dstBlendFactor = toCocosBlendFactor(config.destinationFactor);
+    applyBlendMode(node, _config) {
+      requireSprite(node);
     },
   };
 }
@@ -111,14 +103,6 @@ function requireSprite(node: Node): Sprite {
 
 function numberToColor(color: number, alpha: number): Color {
   return new Color((color >> 16) & 255, (color >> 8) & 255, color & 255, alpha);
-}
-
-function toCocosBlendFactor(factor: CocosBlendFactor): gfx.BlendFactor {
-  if (factor === "SRC_ALPHA") return gfx.BlendFactor.SRC_ALPHA;
-  if (factor === "ONE_MINUS_SRC_ALPHA")
-    return gfx.BlendFactor.ONE_MINUS_SRC_ALPHA;
-  if (factor === "ONE") return gfx.BlendFactor.ONE;
-  throw new Error(`Unsupported Cocos blend factor: ${factor}.`);
 }
 
 function readSpriteFrameSize(spriteFrame: SpriteFrame): V5GSize | null {

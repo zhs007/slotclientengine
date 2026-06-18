@@ -6,7 +6,6 @@ import {
   SpriteFrame,
   UITransform,
   UIOpacity,
-  gfx,
 } from "cc";
 import {
   createV5GCocosPlayer,
@@ -111,7 +110,7 @@ describe("standalone V5GCocosPlayer", () => {
     expect(stage.children[1].children[0].name).toBe("Layer 1");
   });
 
-  it("writes transform, opacity, active, anchor, and blend mode on seek", () => {
+  it("writes transform, opacity, active, anchor, and leaves blend mode untouched", () => {
     const project = tinyProject();
     const root = new Node("Root");
     const frames = framesFor(project);
@@ -135,10 +134,8 @@ describe("standalone V5GCocosPlayer", () => {
     expect(layerNode.active).toBe(true);
     expect(inspectTransform(layerNode).anchorX).toBe(0.25);
     expect(inspectTransform(layerNode).anchorY).toBe(0.75);
-    expect(requireSprite(layerNode).srcBlendFactor).toBe(
-      gfx.BlendFactor.SRC_ALPHA,
-    );
-    expect(requireSprite(layerNode).dstBlendFactor).toBe(gfx.BlendFactor.ONE);
+    expect(requireSprite(layerNode).srcBlendFactor).toBeUndefined();
+    expect(requireSprite(layerNode).dstBlendFactor).toBeUndefined();
   });
 
   it("fails fast for missing SpriteFrame and size mismatch", () => {

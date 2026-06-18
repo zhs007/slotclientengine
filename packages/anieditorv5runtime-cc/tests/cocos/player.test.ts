@@ -231,7 +231,7 @@ describe("V5GCocosPlayer", () => {
     );
   });
 
-  it("writes sampled transform, opacity, active state, and blend mode on seek", () => {
+  it("writes sampled transform, opacity, active state, and normalizes blend mode on seek", () => {
     const { root, player } = makePlayer(tinyProject());
     player.init();
 
@@ -245,11 +245,7 @@ describe("V5GCocosPlayer", () => {
     expect(layerNode.active).toBe(true);
     expect(layerNode.anchorX).toBe(0.25);
     expect(layerNode.anchorY).toBe(0.75);
-    expect(layerNode.blendMode).toEqual({
-      mode: "add",
-      sourceFactor: "SRC_ALPHA",
-      destinationFactor: "ONE",
-    });
+    expect(layerNode.blendMode).toEqual({ mode: "normal" });
   });
 
   it("fails when an asset resolver cannot provide a SpriteFrame", () => {
