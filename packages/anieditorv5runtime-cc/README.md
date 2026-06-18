@@ -82,6 +82,67 @@ packages/anieditorv5runtime-cc/standalone/V5GPreview.example.ts
 
 本仓库当前没有执行真实 Cocos Creator 3.8.6 编辑器导入验收；已完成的是 monorepo 内 TypeScript、Vitest fake `cc`、standalone 边界扫描和构建验收。真实编辑器内的 `.meta`、场景绑定、资源导入结果仍需在宿主 Cocos 项目中人工确认。
 
+## 播放控制和事件
+
+`play()`、`pause()`、`restart()`、`seek(time)`、`setLoop(loop)` 和 `update(deltaTime)` 继续可用。`pause(); play();` 会恢复当前未完成的 range；`restart()` 会清空 range 并回到从 0 秒开始的全时长播放语义。
+
+播放 0 到 4 秒，结束后停止：
+
+```ts
+player.playRange({
+  range: { unit: "time", start: 0, end: 4 },
+  loop: false,
+});
+```
+
+播放第 30 到第 60 帧并循环：
+
+```ts
+player.playRange({
+  range: { unit: "frame", start: 30, end: 60, fps: 60 },
+  loop: true,
+});
+```
+
+帧 API 必须显式传入 `fps`，runtime 不默认 60fps，也不会从 Cocos 的 `update(deltaTime)` 频率猜测。
+
+注册时间点 marker：
+
+```ts
+const disposeMarker = player.addPlaybackEvent({
+  id: "intro-pop",
+  at: { unit: "time", at: 1.25 },
+  once: true,
+  listener(event) {
+    // event.time 是 marker 时间；event.currentTime 是本次 update 推进到的时间。
+  },
+});
+```
+
+注册帧 marker：
+
+```ts
+player.addPlaybackEvent({
+  id: "frame-45",
+  at: { unit: "frame", at: 45, fps: 60 },
+  listener(event) {
+    // loopIndex 从 0 开始，循环 range 每跨过一圈递增。
+  },
+});
+```
+
+监听当前非循环播放任务完成：
+
+```ts
+const disposeComplete = player.onPlaybackComplete((event) => {
+  // event.startTime / event.endTime 对应本次 playRange 或全时长播放边界。
+});
+```
+
+marker 和 complete 都由宿主继续调用 `player.update(deltaTime)` 同步驱动，不使用 `setTimeout`、Promise、Cocos tween 或异步计时器。手动 `seek(...)`、`init()` 和 `restart()` 不会触发 marker；单次大 `deltaTime` 跨过多个 marker 时，会按时间从小到大同步触发。callback 抛错不会被 runtime 吞掉，会从当前 public method 继续抛出。
+
+`destroy()` 会销毁 runtime 创建的节点、停止播放、清空当前 range、清空所有 marker 和 complete listener，避免宿主 Component 销毁后遗留 callback。
+
 ## Package 导入
 
 如果某个环境确认可以正确解析 pnpm workspace 和 package `exports`，仍可从 package 入口导入模块化版本：

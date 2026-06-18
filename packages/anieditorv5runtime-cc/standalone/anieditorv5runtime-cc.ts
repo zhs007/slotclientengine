@@ -1719,6 +1719,41 @@ export type V5GCocosPlayerFactoryOptions = Omit<
   "driver"
 >;
 
+export type V5GCocosPlaybackRange =
+  | { unit: "time"; start: number; end: number }
+  | { unit: "frame"; start: number; end: number; fps: number };
+
+export interface V5GCocosPlayRangeOptions {
+  range: V5GCocosPlaybackRange;
+  loop?: boolean;
+}
+
+export type V5GCocosPlaybackPoint =
+  | { unit: "time"; at: number }
+  | { unit: "frame"; at: number; fps: number };
+
+export interface V5GCocosPlaybackEventContext {
+  id: string;
+  time: number;
+  previousTime: number;
+  currentTime: number;
+  loopIndex: number;
+}
+
+export interface V5GCocosPlaybackEventOptions {
+  id: string;
+  at: V5GCocosPlaybackPoint;
+  once?: boolean;
+  listener: (event: V5GCocosPlaybackEventContext) => void;
+}
+
+export interface V5GCocosPlaybackCompleteContext {
+  startTime: number;
+  endTime: number;
+  currentTime: number;
+  loopIndex: number;
+}
+
 interface ManagedLayer<TNode, TSpriteFrame> {
   layer: V5GLayerConfig;
   asset: V5GAssetConfig;
@@ -1726,7 +1761,22 @@ interface ManagedLayer<TNode, TSpriteFrame> {
   spriteFrame: TSpriteFrame;
 }
 
+interface PlaybackBoundary {
+  startTime: number;
+  endTime: number;
+  loop: boolean;
+}
+
+interface NormalizedPlaybackEvent {
+  id: string;
+  time: number;
+  once: boolean;
+  order: number;
+  listener: (event: V5GCocosPlaybackEventContext) => void;
+}
+
 const SIZE_EPSILON = 0.01;
+const PLAYBACK_EPSILON = 1e-9;
 
 export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   private readonly options: V5GCocosPlayerOptions<TNode, TSpriteFrame>;
@@ -1742,6 +1792,13 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   private currentTime = 0;
   private isPlaying = false;
   private loop: boolean;
+  private activeRange: PlaybackBoundary | null = null;
+  private readonly playbackEvents = new Map<string, NormalizedPlaybackEvent>();
+  private readonly completeListeners = new Set<
+    (event: V5GCocosPlaybackCompleteContext) => void
+  >();
+  private loopIndex = 0;
+  private nextPlaybackEventOrder = 0;
 
   constructor(options: V5GCocosPlayerOptions<TNode, TSpriteFrame>) {
     this.options = options;
@@ -1887,17 +1944,113 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     }
     if (!this.isPlaying) return;
 
-    const duration = this.options.project.stage.duration;
-    let nextTime = this.currentTime + deltaSeconds;
-    if (nextTime > duration) {
-      if (this.loop) {
-        nextTime %= duration;
-      } else {
-        nextTime = duration;
-        this.setPlaying(false);
-      }
+    const boundary = this.getPlaybackBoundary();
+    const previousTime = this.currentTime;
+    const nextTime = previousTime + deltaSeconds;
+    if (nextTime < boundary.endTime - PLAYBACK_EPSILON) {
+      this.seek(nextTime);
+      this.emitPlaybackEventsBetween(
+        previousTime,
+        nextTime,
+        this.loopIndex,
+        boundary,
+      );
+      return;
     }
-    this.seek(nextTime);
+
+    this.seek(boundary.endTime);
+    this.emitPlaybackEventsBetween(
+      previousTime,
+      boundary.endTime,
+      this.loopIndex,
+      boundary,
+    );
+
+    if (!boundary.loop) {
+      const completeContext: V5GCocosPlaybackCompleteContext = {
+        startTime: boundary.startTime,
+        endTime: boundary.endTime,
+        currentTime: boundary.endTime,
+        loopIndex: this.loopIndex,
+      };
+      this.activeRange = null;
+      this.setPlaying(false);
+      this.emitPlaybackComplete(completeContext);
+      return;
+    }
+
+    this.advanceLoopingPlayback(Math.max(0, nextTime - boundary.endTime));
+  }
+
+  playRange(options: V5GCocosPlayRangeOptions): void {
+    this.assertInitialized();
+    const range = this.normalizePlaybackRange(
+      options.range,
+      "V5GCocosPlayer.playRange",
+    );
+    this.activeRange = {
+      ...range,
+      loop: options.loop ?? this.loop,
+    };
+    this.loopIndex = 0;
+    this.seek(range.startTime);
+    this.setPlaying(true);
+  }
+
+  addPlaybackEvent(options: V5GCocosPlaybackEventOptions): () => void {
+    if (typeof options.id !== "string" || options.id.length === 0) {
+      throw new Error("V5GCocosPlayer.addPlaybackEvent id must be non-empty.");
+    }
+    if (this.playbackEvents.has(options.id)) {
+      throw new Error(
+        `V5GCocosPlayer.addPlaybackEvent id must be unique: ${options.id}.`,
+      );
+    }
+    if (typeof options.listener !== "function") {
+      throw new Error(
+        "V5GCocosPlayer.addPlaybackEvent listener must be a function.",
+      );
+    }
+
+    this.playbackEvents.set(options.id, {
+      id: options.id,
+      time: this.normalizePlaybackPoint(
+        options.at,
+        "V5GCocosPlayer.addPlaybackEvent",
+      ),
+      once: options.once ?? false,
+      order: this.nextPlaybackEventOrder,
+      listener: options.listener,
+    });
+    this.nextPlaybackEventOrder += 1;
+
+    return () => {
+      this.playbackEvents.delete(options.id);
+    };
+  }
+
+  clearPlaybackEvent(id: string): void {
+    if (!this.playbackEvents.delete(id)) {
+      throw new Error(`V5GCocosPlayer.clearPlaybackEvent unknown id: ${id}.`);
+    }
+  }
+
+  clearPlaybackEvents(): void {
+    this.playbackEvents.clear();
+  }
+
+  onPlaybackComplete(
+    listener: (event: V5GCocosPlaybackCompleteContext) => void,
+  ): () => void {
+    if (typeof listener !== "function") {
+      throw new Error(
+        "V5GCocosPlayer.onPlaybackComplete listener must be a function.",
+      );
+    }
+    this.completeListeners.add(listener);
+    return () => {
+      this.completeListeners.delete(listener);
+    };
   }
 
   play(): void {
@@ -1909,6 +2062,8 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   }
 
   restart(): void {
+    this.activeRange = null;
+    this.loopIndex = 0;
     this.seek(0);
   }
 
@@ -1918,8 +2073,175 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
 
   destroy(): void {
     this.destroyManagedNodes();
+    this.activeRange = null;
+    this.playbackEvents.clear();
+    this.completeListeners.clear();
+    this.loopIndex = 0;
     this.setPlaying(false);
     this.currentTime = 0;
+  }
+
+  private advanceLoopingPlayback(overflowSeconds: number): void {
+    const boundary = this.getPlaybackBoundary();
+    const rangeDuration = boundary.endTime - boundary.startTime;
+    let remaining = overflowSeconds;
+
+    while (remaining >= rangeDuration - PLAYBACK_EPSILON) {
+      this.loopIndex += 1;
+      this.seek(boundary.endTime);
+      this.emitPlaybackEventsBetween(
+        boundary.startTime,
+        boundary.endTime,
+        this.loopIndex,
+        boundary,
+      );
+      remaining -= rangeDuration;
+    }
+
+    this.loopIndex += 1;
+    const clampedRemaining =
+      Math.abs(remaining) <= PLAYBACK_EPSILON ? 0 : remaining;
+    const nextTime = boundary.startTime + clampedRemaining;
+    this.seek(nextTime);
+    this.emitPlaybackEventsBetween(
+      boundary.startTime,
+      nextTime,
+      this.loopIndex,
+      boundary,
+    );
+  }
+
+  private getPlaybackBoundary(): PlaybackBoundary {
+    return (
+      this.activeRange ?? {
+        startTime: 0,
+        endTime: this.options.project.stage.duration,
+        loop: this.loop,
+      }
+    );
+  }
+
+  private normalizePlaybackRange(
+    range: V5GCocosPlaybackRange,
+    apiName: string,
+  ): Omit<PlaybackBoundary, "loop"> {
+    if (range.unit === "time") {
+      this.assertFiniteNumber(range.start, `${apiName} range.start`);
+      this.assertFiniteNumber(range.end, `${apiName} range.end`);
+      return this.assertPlaybackRangeTimes(range.start, range.end, apiName);
+    }
+
+    if (range.unit === "frame") {
+      this.assertNonNegativeInteger(range.start, `${apiName} range.start`);
+      this.assertNonNegativeInteger(range.end, `${apiName} range.end`);
+      this.assertPositiveFiniteNumber(range.fps, `${apiName} range.fps`);
+      return this.assertPlaybackRangeTimes(
+        range.start / range.fps,
+        range.end / range.fps,
+        apiName,
+      );
+    }
+
+    throw new Error(`${apiName} range.unit must be "time" or "frame".`);
+  }
+
+  private normalizePlaybackPoint(
+    point: V5GCocosPlaybackPoint,
+    apiName: string,
+  ): number {
+    let time: number;
+    if (point.unit === "time") {
+      this.assertFiniteNumber(point.at, `${apiName} at`);
+      time = point.at;
+    } else if (point.unit === "frame") {
+      this.assertNonNegativeInteger(point.at, `${apiName} at`);
+      this.assertPositiveFiniteNumber(point.fps, `${apiName} fps`);
+      time = point.at / point.fps;
+    } else {
+      throw new Error(`${apiName} at.unit must be "time" or "frame".`);
+    }
+
+    const duration = this.options.project.stage.duration;
+    if (time < 0 || time > duration) {
+      throw new Error(
+        `${apiName} at must resolve to a time between 0 and project.stage.duration (${duration}).`,
+      );
+    }
+    return time;
+  }
+
+  private assertPlaybackRangeTimes(
+    startTime: number,
+    endTime: number,
+    apiName: string,
+  ): Omit<PlaybackBoundary, "loop"> {
+    const duration = this.options.project.stage.duration;
+    if (startTime < 0) {
+      throw new Error(`${apiName} range.start must be >= 0.`);
+    }
+    if (startTime >= endTime) {
+      throw new Error(`${apiName} range.start must be less than range.end.`);
+    }
+    if (endTime > duration) {
+      throw new Error(
+        `${apiName} range.end must be <= project.stage.duration (${duration}).`,
+      );
+    }
+    return { startTime, endTime };
+  }
+
+  private emitPlaybackEventsBetween(
+    previousTime: number,
+    currentTime: number,
+    loopIndex: number,
+    boundary: PlaybackBoundary,
+  ): void {
+    const events = [...this.playbackEvents.values()]
+      .filter(
+        (event) =>
+          event.time >= boundary.startTime &&
+          event.time <= boundary.endTime + PLAYBACK_EPSILON &&
+          event.time > previousTime + PLAYBACK_EPSILON &&
+          event.time <= currentTime + PLAYBACK_EPSILON,
+      )
+      .sort((a, b) => a.time - b.time || a.order - b.order);
+
+    for (const event of events) {
+      if (event.once) {
+        this.playbackEvents.delete(event.id);
+      }
+      event.listener({
+        id: event.id,
+        time: event.time,
+        previousTime,
+        currentTime,
+        loopIndex,
+      });
+    }
+  }
+
+  private emitPlaybackComplete(context: V5GCocosPlaybackCompleteContext): void {
+    for (const listener of [...this.completeListeners]) {
+      listener(context);
+    }
+  }
+
+  private assertFiniteNumber(value: number, field: string): void {
+    if (!Number.isFinite(value)) {
+      throw new Error(`${field} must be a finite number.`);
+    }
+  }
+
+  private assertPositiveFiniteNumber(value: number, field: string): void {
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new Error(`${field} must be a positive finite number.`);
+    }
+  }
+
+  private assertNonNegativeInteger(value: number, field: string): void {
+    if (!Number.isInteger(value) || value < 0) {
+      throw new Error(`${field} must be a non-negative integer.`);
+    }
   }
 
   private setPlaying(nextPlaying: boolean): void {

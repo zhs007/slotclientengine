@@ -24,6 +24,19 @@ describe("standalone runtime import", () => {
     expect(runtime.validateV5GProject).toBeTypeOf("function");
     expect(runtime.validateCocosV5GProject).toBeTypeOf("function");
     expect(runtime.parseColorHex).toBeTypeOf("function");
+    expect(runtime.V5GCocosPlayer.prototype.playRange).toBeTypeOf("function");
+    expect(runtime.V5GCocosPlayer.prototype.addPlaybackEvent).toBeTypeOf(
+      "function",
+    );
+    expect(runtime.V5GCocosPlayer.prototype.clearPlaybackEvent).toBeTypeOf(
+      "function",
+    );
+    expect(runtime.V5GCocosPlayer.prototype.clearPlaybackEvents).toBeTypeOf(
+      "function",
+    );
+    expect(runtime.V5GCocosPlayer.prototype.onPlaybackComplete).toBeTypeOf(
+      "function",
+    );
     expect(runtime.sampleProjectAtTime).toBeTypeOf("function");
     expect(runtime.sampleLayerAtTime).toBeTypeOf("function");
     expect(runtime.sampleLayerAnimationsAtTime).toBeTypeOf("function");

@@ -25,6 +25,8 @@ export class V5GPreview extends Component {
   spriteFrames: SpriteFrame[] = [];
 
   private player: V5GCocosPlayer | null = null;
+  private lastPlaybackEventId = "";
+  private completedPlaybackTasks = 0;
 
   start(): void {
     if (!this.root) {
@@ -50,7 +52,35 @@ export class V5GPreview extends Component {
       loop: true,
     });
     this.player.init();
-    this.player.play();
+
+    const previewEndTime = Math.min(project.stage.duration, 4);
+    const previewFps = 60;
+    const midpointFrame = Math.floor((previewEndTime / 2) * previewFps);
+    if (midpointFrame > 0) {
+      this.player.addPlaybackEvent({
+        id: "preview-midpoint-frame",
+        at: { unit: "frame", at: midpointFrame, fps: previewFps },
+        once: true,
+        listener: (event) => {
+          this.lastPlaybackEventId = event.id;
+        },
+      });
+    }
+    this.player.addPlaybackEvent({
+      id: "preview-end-time",
+      at: { unit: "time", at: previewEndTime },
+      once: true,
+      listener: (event) => {
+        this.lastPlaybackEventId = event.id;
+      },
+    });
+    this.player.onPlaybackComplete(() => {
+      this.completedPlaybackTasks += 1;
+    });
+    this.player.playRange({
+      range: { unit: "time", start: 0, end: previewEndTime },
+      loop: false,
+    });
   }
 
   update(deltaTime: number): void {
