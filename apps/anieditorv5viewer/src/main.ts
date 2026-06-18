@@ -65,6 +65,10 @@ async function bootstrap(): Promise<void> {
     const nextPlayer = new V5GPlayer({
       container: stageMount,
       projectId: selectedProject.id,
+      bundleId: selectedProject.bundleId,
+      profileId: selectedProject.profileId,
+      profilePurpose: selectedProject.purpose,
+      assetScale: selectedProject.assetScale,
       project: selectedProject.project,
       assetUrls: selectedProject.assetUrls,
       onTimeChange: (time) => controls.setTime(time),

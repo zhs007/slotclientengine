@@ -128,8 +128,42 @@ describe("particle-sampler", () => {
     expect(first[0].blendMode).toBe("add");
   });
 
+  it("keeps particle sampling deterministic for scaled runtime textures", () => {
+    const animation = particleBurst();
+    const fullTexture = sampleParticleSpritesForLayer(
+      layer(animation),
+      sampledLayer,
+      { width: 730, height: 735 },
+      0.5,
+    );
+    const runtimeTexture = sampleParticleSpritesForLayer(
+      layer(animation),
+      sampledLayer,
+      { width: 365, height: 368 },
+      0.5,
+    );
+    const runtimeTextureAgain = sampleParticleSpritesForLayer(
+      layer(animation),
+      sampledLayer,
+      { width: 365, height: 368 },
+      0.5,
+    );
+
+    expect(runtimeTexture).toEqual(runtimeTextureAgain);
+    expect(runtimeTexture[0].scale).toBeGreaterThan(fullTexture[0].scale);
+  });
+
   it("samples particle twinkle batches and stops at the end boundary", () => {
     const animation = particleTwinkle();
+    expect(
+      sampleParticleSpritesForLayer(
+        layer(animation),
+        sampledLayer,
+        { width: 100, height: 50 },
+        0,
+      ),
+    ).toHaveLength(0);
+
     const sampled = sampleParticleSpritesForLayer(
       layer(animation),
       sampledLayer,
@@ -153,6 +187,7 @@ describe("particle-sampler", () => {
   it("detects active particle animations only inside coverage", () => {
     const particleLayer = layer(particleBurst());
 
+    expect(hasActiveParticleAnimation(particleLayer, 0)).toBe(true);
     expect(hasActiveParticleAnimation(particleLayer, 0.5)).toBe(true);
     expect(hasActiveParticleAnimation(particleLayer, 1)).toBe(false);
     expect(hasActiveParticleAnimation(particleLayer, -0.1)).toBe(false);

@@ -18,6 +18,16 @@ export interface V5GAssetConfig {
   originalName: string;
   width: number;
   height: number;
+  fileWidth?: number;
+  fileHeight?: number;
+  fileScale?: number;
+}
+
+export interface V5GExportProfileConfig {
+  id: string;
+  purpose: "editing" | "runtime";
+  assetScale: number;
+  label?: string;
 }
 
 export interface V5GTransformConfig {
@@ -115,8 +125,23 @@ export interface V5GProjectConfig {
     version: string;
   };
   name: string;
+  exportProfile?: V5GExportProfileConfig;
   stage: V5GStageConfig;
   assets: V5GAssetConfig[];
   layers: V5GLayerConfig[];
   particles: V5GParticleConfig[];
+}
+
+export interface V5GBundleManifestEntry {
+  id: string;
+  purpose: "editing" | "runtime";
+  assetScale: number;
+  path: string;
+  label?: string;
+}
+
+export interface V5GBundleManifest {
+  type: "vni_export_bundle";
+  version: string;
+  exports: V5GBundleManifestEntry[];
 }

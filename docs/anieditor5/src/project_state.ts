@@ -5,7 +5,7 @@ import {
   DEFAULT_STAGE_HEIGHT,
   DEFAULT_STAGE_WIDTH,
   TOOL_NAME,
-  V5G_VERSION,
+  VNI_VERSION,
 } from "./constants";
 import type {
   V5GAssetConfig,
@@ -24,10 +24,10 @@ export function createId(prefix: string): string {
 
 export function createDefaultProject(): V5GProjectConfig {
   return {
-    schemaVersion: V5G_VERSION,
+    schemaVersion: VNI_VERSION,
     editor: {
       name: TOOL_NAME,
-      version: V5G_VERSION,
+      version: VNI_VERSION,
     },
     engineTarget: {
       name: "cocos_creator",
@@ -99,6 +99,9 @@ export function createImageAsset(
     originalName: file.name,
     width,
     height,
+    fileWidth: width,
+    fileHeight: height,
+    fileScale: 1,
   };
 }
 
