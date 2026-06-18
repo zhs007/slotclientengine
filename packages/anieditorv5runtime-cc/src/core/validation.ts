@@ -221,7 +221,7 @@ export function validateCocosV5GProject(
     if (layer.type !== "image") {
       throw new Error(`Unsupported Cocos V5G layer type: ${layer.type}.`);
     }
-    if (!COCOS_SUPPORTED_BLEND_MODES.includes(layer.blendMode)) {
+    if (!hasStringValue(COCOS_SUPPORTED_BLEND_MODES, layer.blendMode)) {
       throw new Error(`Unsupported Cocos V5G blendMode: ${layer.blendMode}.`);
     }
   }
@@ -271,7 +271,7 @@ export function assertSupportedLayer(
   }
   validateTransform(layer.transform, `layer "${layer.id}" transform`);
   assertFiniteRange(layer.opacity, 0, 1, `layer "${layer.id}" opacity`);
-  if (!SUPPORTED_BLEND_MODES.includes(layer.blendMode)) {
+  if (!hasStringValue(SUPPORTED_BLEND_MODES, layer.blendMode)) {
     throw new Error(`Unsupported V5G blendMode: ${layer.blendMode}.`);
   }
 }
@@ -540,4 +540,14 @@ function assertFiniteRange(
   if (!Number.isFinite(value) || value < min || value > max) {
     throw new Error(`${path} must be in range ${min}..${max}.`);
   }
+}
+
+function hasStringValue<T extends string>(
+  values: readonly T[],
+  value: string,
+): value is T {
+  for (let index = 0; index < values.length; index += 1) {
+    if (values[index] === value) return true;
+  }
+  return false;
 }

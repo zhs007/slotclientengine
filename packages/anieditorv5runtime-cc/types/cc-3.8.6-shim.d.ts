@@ -77,9 +77,11 @@ declare module "cc" {
     clear(): void;
   }
 
-  export enum BlendFactor {
-    SRC_ALPHA = 770,
-    ONE_MINUS_SRC_ALPHA = 771,
-    ONE = 1,
+  export namespace gfx {
+    export enum BlendFactor {
+      SRC_ALPHA = 770,
+      ONE_MINUS_SRC_ALPHA = 771,
+      ONE = 1,
+    }
   }
 }

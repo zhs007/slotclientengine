@@ -1,5 +1,4 @@
 import {
-  BlendFactor,
   Color,
   Graphics,
   Node,
@@ -7,6 +6,7 @@ import {
   SpriteFrame,
   UITransform,
   UIOpacity,
+  gfx,
 } from "cc";
 
 export type V5GCoordinateMode = "center";
@@ -311,17 +311,17 @@ export function easeProgress(progress: number, easing: V5GEasingName): number {
 export function isSupportedAnimationType(
   value: string,
 ): value is V5GAnimationType {
-  return SUPPORTED_ANIMATION_TYPES.includes(value as V5GAnimationType);
+  return hasStringValue(SUPPORTED_ANIMATION_TYPES, value);
 }
 
 export function isParticleAnimationType(
   value: string,
 ): value is V5GAnimationType {
-  return PARTICLE_ANIMATION_TYPES.includes(value as V5GAnimationType);
+  return hasStringValue(PARTICLE_ANIMATION_TYPES, value);
 }
 
 export function isSupportedEasing(value: string): value is V5GEasingName {
-  return SUPPORTED_EASINGS.includes(value as V5GEasingName);
+  return hasStringValue(SUPPORTED_EASINGS, value);
 }
 
 export function getDefaultEasing(type: V5GAnimationType): V5GEasingName {
@@ -1212,7 +1212,7 @@ export function validateCocosV5GProject(
     if (layer.type !== "image") {
       throw new Error(`Unsupported Cocos V5G layer type: ${layer.type}.`);
     }
-    if (!COCOS_SUPPORTED_BLEND_MODES.includes(layer.blendMode)) {
+    if (!hasStringValue(COCOS_SUPPORTED_BLEND_MODES, layer.blendMode)) {
       throw new Error(`Unsupported Cocos V5G blendMode: ${layer.blendMode}.`);
     }
   }
@@ -1262,7 +1262,7 @@ export function assertSupportedLayer(
   }
   validateTransform(layer.transform, `layer "${layer.id}" transform`);
   assertFiniteRange(layer.opacity, 0, 1, `layer "${layer.id}" opacity`);
-  if (!SUPPORTED_BLEND_MODES.includes(layer.blendMode)) {
+  if (!hasStringValue(SUPPORTED_BLEND_MODES, layer.blendMode)) {
     throw new Error(`Unsupported V5G blendMode: ${layer.blendMode}.`);
   }
 }
@@ -1533,6 +1533,16 @@ function assertFiniteRange(
   }
 }
 
+function hasStringValue<T extends string>(
+  values: readonly T[],
+  value: string,
+): value is T {
+  for (let index = 0; index < values.length; index += 1) {
+    if (values[index] === value) return true;
+  }
+  return false;
+}
+
 export type CocosBlendFactor = "SRC_ALPHA" | "ONE_MINUS_SRC_ALPHA" | "ONE";
 export type SupportedCocosBlendMode = "normal" | "add";
 
@@ -1686,10 +1696,11 @@ function numberToColor(color: number, alpha: number): Color {
   return new Color((color >> 16) & 255, (color >> 8) & 255, color & 255, alpha);
 }
 
-function toCocosBlendFactor(factor: CocosBlendFactor): BlendFactor {
-  if (factor === "SRC_ALPHA") return BlendFactor.SRC_ALPHA;
-  if (factor === "ONE_MINUS_SRC_ALPHA") return BlendFactor.ONE_MINUS_SRC_ALPHA;
-  if (factor === "ONE") return BlendFactor.ONE;
+function toCocosBlendFactor(factor: CocosBlendFactor): gfx.BlendFactor {
+  if (factor === "SRC_ALPHA") return gfx.BlendFactor.SRC_ALPHA;
+  if (factor === "ONE_MINUS_SRC_ALPHA")
+    return gfx.BlendFactor.ONE_MINUS_SRC_ALPHA;
+  if (factor === "ONE") return gfx.BlendFactor.ONE;
   throw new Error(`Unsupported Cocos blend factor: ${factor}.`);
 }
 
