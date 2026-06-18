@@ -11,6 +11,7 @@ import {
   createV5GCocosPlayer,
   type V5GAssetConfig,
   type V5GLayerConfig,
+  type V5GCocosPlayer,
   type V5GProjectConfig,
 } from "../../standalone/anieditorv5runtime-cc";
 
@@ -77,6 +78,25 @@ function framesFor(project: V5GProjectConfig): Map<string, SpriteFrame> {
       makeSpriteFrame(asset.width, asset.height),
     ]),
   );
+}
+
+function makePlayer(project = tinyProject()): {
+  root: Node;
+  player: V5GCocosPlayer;
+  frames: Map<string, SpriteFrame>;
+} {
+  const root = new Node("Root");
+  const frames = framesFor(project);
+  const player = createV5GCocosPlayer({
+    root,
+    project,
+    assets: {
+      getSpriteFrame(_assetPath, assetId) {
+        return frames.get(assetId) ?? null;
+      },
+    },
+  });
+  return { root, player, frames };
 }
 
 describe("standalone V5GCocosPlayer", () => {
@@ -201,6 +221,81 @@ describe("standalone V5GCocosPlayer", () => {
     expect(inspectNode(stage).destroyed).toBe(true);
     expect(inspectNode(root).destroyed).toBe(false);
     expect(root.children).toHaveLength(0);
+  });
+
+  it("plays time ranges with markers and completion", () => {
+    const { player } = makePlayer();
+    const events: string[] = [];
+    const complete: unknown[] = [];
+    player.init();
+    player.addPlaybackEvent({
+      id: "end",
+      at: { unit: "time", at: 0.4 },
+      listener: (event) => events.push(`${event.id}:${event.loopIndex}`),
+    });
+    player.onPlaybackComplete((event) => {
+      events.push("complete");
+      complete.push(event);
+    });
+
+    player.playRange({
+      range: { unit: "time", start: 0, end: 0.4 },
+      loop: false,
+    });
+    player.update(0.4);
+
+    expect(player.time).toBe(0.4);
+    expect(player.playing).toBe(false);
+    expect(events).toEqual(["end:0", "complete"]);
+    expect(complete).toEqual([
+      { startTime: 0, endTime: 0.4, currentTime: 0.4, loopIndex: 0 },
+    ]);
+  });
+
+  it("plays frame ranges and loops within the converted time span", () => {
+    const { player } = makePlayer();
+    const hits: number[] = [];
+    player.init();
+    player.addPlaybackEvent({
+      id: "frame-marker",
+      at: { unit: "frame", at: 45, fps: 60 },
+      listener: (event) => hits.push(event.loopIndex),
+    });
+
+    player.playRange({
+      range: { unit: "frame", start: 30, end: 60, fps: 60 },
+      loop: true,
+    });
+    expect(player.time).toBe(0.5);
+    player.update(0.75);
+
+    expect(player.time).toBeCloseTo(0.75, 5);
+    expect(player.playing).toBe(true);
+    expect(hits).toEqual([0, 1]);
+  });
+
+  it("removes standalone marker and complete listeners through disposers", () => {
+    const { player } = makePlayer();
+    const events: string[] = [];
+    player.init();
+    const disposeMarker = player.addPlaybackEvent({
+      id: "marker",
+      at: { unit: "time", at: 0.2 },
+      listener: () => events.push("marker"),
+    });
+    const disposeComplete = player.onPlaybackComplete(() => {
+      events.push("complete");
+    });
+
+    disposeMarker();
+    disposeMarker();
+    disposeComplete();
+    disposeComplete();
+    player.setLoop(false);
+    player.play();
+    player.update(1);
+
+    expect(events).toEqual([]);
   });
 
   it("renders particle nodes with degree rotation and clears prior frame nodes", () => {

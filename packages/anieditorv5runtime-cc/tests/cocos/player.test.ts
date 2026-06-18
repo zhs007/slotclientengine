@@ -305,7 +305,7 @@ describe("V5GCocosPlayer", () => {
 
     expect(player.time).toBe(0.25);
     expect(player.playing).toBe(true);
-    expect(timeChanges).toEqual([0, 0.75, 0.25]);
+    expect(timeChanges).toEqual([0, 0.75, 1, 0.25]);
     expect(playingChanges).toEqual([true]);
   });
 
@@ -318,6 +318,273 @@ describe("V5GCocosPlayer", () => {
 
     expect(player.time).toBe(1);
     expect(player.playing).toBe(false);
+  });
+
+  it("plays a non-looping time range to its exact end and emits marker before complete", () => {
+    const { player } = makePlayer(tinyProject());
+    const events: string[] = [];
+    const complete: unknown[] = [];
+    player.init();
+    player.addPlaybackEvent({
+      id: "range-end",
+      at: { unit: "time", at: 0.4 },
+      listener(event) {
+        events.push(`${event.id}:${event.loopIndex}`);
+      },
+    });
+    player.onPlaybackComplete((event) => {
+      events.push("complete");
+      complete.push(event);
+    });
+
+    player.playRange({
+      range: { unit: "time", start: 0, end: 0.4 },
+      loop: false,
+    });
+    player.update(0.4);
+
+    expect(player.time).toBe(0.4);
+    expect(player.playing).toBe(false);
+    expect(events).toEqual(["range-end:0", "complete"]);
+    expect(complete).toEqual([
+      { startTime: 0, endTime: 0.4, currentTime: 0.4, loopIndex: 0 },
+    ]);
+  });
+
+  it("loops inside a time range and keeps play() resume scoped to the active range", () => {
+    const { player } = makePlayer(tinyProject());
+    player.init();
+
+    player.playRange({
+      range: { unit: "time", start: 0.2, end: 0.6 },
+      loop: true,
+    });
+    player.update(0.5);
+    expect(player.time).toBeCloseTo(0.3, 5);
+    expect(player.playing).toBe(true);
+
+    player.pause();
+    player.update(0.3);
+    expect(player.time).toBeCloseTo(0.3, 5);
+    player.play();
+    player.update(0.2);
+    expect(player.time).toBeCloseTo(0.5, 5);
+  });
+
+  it("converts frame ranges with an explicit fps", () => {
+    const { player } = makePlayer(tinyProject());
+    const complete: unknown[] = [];
+    player.init();
+    player.onPlaybackComplete((event) => complete.push(event));
+
+    player.playRange({
+      range: { unit: "frame", start: 30, end: 60, fps: 60 },
+      loop: false,
+    });
+    expect(player.time).toBe(0.5);
+    player.update(0.5);
+
+    expect(player.time).toBe(1);
+    expect(player.playing).toBe(false);
+    expect(complete).toEqual([
+      { startTime: 0.5, endTime: 1, currentTime: 1, loopIndex: 0 },
+    ]);
+  });
+
+  it("rejects invalid range and marker inputs without guessing fps", () => {
+    const { player } = makePlayer(tinyProject());
+    player.init();
+    const missingFpsRange = {
+      unit: "frame",
+      start: 0,
+      end: 1,
+    } as unknown as Parameters<typeof player.playRange>[0]["range"];
+
+    expect(() => player.playRange({ range: missingFpsRange })).toThrow(
+      "V5GCocosPlayer.playRange range.fps",
+    );
+    expect(() =>
+      player.playRange({
+        range: { unit: "frame", start: 0.5, end: 2, fps: 60 },
+      }),
+    ).toThrow("V5GCocosPlayer.playRange range.start");
+    expect(() =>
+      player.playRange({
+        range: { unit: "frame", start: 0, end: 2, fps: 0 },
+      }),
+    ).toThrow("V5GCocosPlayer.playRange range.fps");
+    expect(() =>
+      player.playRange({ range: { unit: "time", start: 0.4, end: 0.4 } }),
+    ).toThrow("range.start must be less than range.end");
+    expect(() =>
+      player.playRange({ range: { unit: "time", start: 0, end: 1.1 } }),
+    ).toThrow("range.end must be <= project.stage.duration");
+    expect(() =>
+      player.addPlaybackEvent({
+        id: "bad-frame",
+        at: { unit: "frame", at: 1, fps: 0 },
+        listener() {},
+      }),
+    ).toThrow("V5GCocosPlayer.addPlaybackEvent fps");
+    expect(() =>
+      player.addPlaybackEvent({
+        id: "too-late",
+        at: { unit: "time", at: 1.1 },
+        listener() {},
+      }),
+    ).toThrow("between 0 and project.stage.duration");
+  });
+
+  it("fires time and frame markers crossed by a large delta in timeline order", () => {
+    const { player } = makePlayer(tinyProject());
+    const events: string[] = [];
+    player.init();
+    player.addPlaybackEvent({
+      id: "time",
+      at: { unit: "time", at: 0.3 },
+      listener: (event) => events.push(`${event.id}:${event.currentTime}`),
+    });
+    player.addPlaybackEvent({
+      id: "frame",
+      at: { unit: "frame", at: 24, fps: 60 },
+      listener: (event) => events.push(`${event.id}:${event.currentTime}`),
+    });
+
+    player.playRange({
+      range: { unit: "time", start: 0, end: 0.5 },
+      loop: false,
+    });
+    player.update(0.5);
+
+    expect(events).toEqual(["time:0.5", "frame:0.5"]);
+  });
+
+  it("fires looping markers once per crossed cycle and removes once markers before callbacks", () => {
+    const { player } = makePlayer(tinyProject());
+    const repeated: number[] = [];
+    const onceHits: number[] = [];
+    player.init();
+    player.addPlaybackEvent({
+      id: "repeated",
+      at: { unit: "time", at: 0.3 },
+      listener: (event) => repeated.push(event.loopIndex),
+    });
+    player.addPlaybackEvent({
+      id: "once",
+      at: { unit: "time", at: 0.35 },
+      once: true,
+      listener: (event) => onceHits.push(event.loopIndex),
+    });
+
+    player.playRange({
+      range: { unit: "time", start: 0.2, end: 0.4 },
+      loop: true,
+    });
+    player.update(0.65);
+
+    expect(player.time).toBeCloseTo(0.25, 5);
+    expect(repeated).toEqual([0, 1, 2]);
+    expect(onceHits).toEqual([0]);
+    expect(() => player.clearPlaybackEvent("once")).toThrow("unknown id");
+  });
+
+  it("supports event and complete disposers and fails on unknown event clears", () => {
+    const { player } = makePlayer(tinyProject());
+    const events: string[] = [];
+    player.init();
+    const disposeEvent = player.addPlaybackEvent({
+      id: "marker",
+      at: { unit: "time", at: 0.2 },
+      listener: () => events.push("marker"),
+    });
+    const disposeComplete = player.onPlaybackComplete(() => {
+      events.push("complete");
+    });
+
+    disposeEvent();
+    disposeEvent();
+    disposeComplete();
+    disposeComplete();
+    expect(() => player.clearPlaybackEvent("marker")).toThrow("unknown id");
+
+    player.setLoop(false);
+    player.play();
+    player.update(1);
+    expect(events).toEqual([]);
+  });
+
+  it("does not trigger markers on seek, pause, or restart and restart clears active range", () => {
+    const { player } = makePlayer(tinyProject());
+    const events: string[] = [];
+    player.init();
+    player.addPlaybackEvent({
+      id: "marker",
+      at: { unit: "time", at: 0.3 },
+      listener: () => events.push("marker"),
+    });
+
+    player.seek(0.4);
+    expect(events).toEqual([]);
+
+    player.playRange({
+      range: { unit: "time", start: 0, end: 0.4 },
+      loop: false,
+    });
+    player.pause();
+    player.update(0.35);
+    expect(events).toEqual([]);
+
+    player.play();
+    player.restart();
+    player.update(0.5);
+    expect(player.time).toBe(0.5);
+    expect(player.playing).toBe(true);
+    expect(events).toEqual(["marker"]);
+  });
+
+  it("propagates marker and complete listener errors", () => {
+    const { player } = makePlayer(tinyProject());
+    player.init();
+    player.addPlaybackEvent({
+      id: "throw-once",
+      at: { unit: "time", at: 0.2 },
+      once: true,
+      listener() {
+        throw new Error("marker failed");
+      },
+    });
+    player.playRange({
+      range: { unit: "time", start: 0, end: 0.4 },
+      loop: false,
+    });
+
+    expect(() => player.update(0.2)).toThrow("marker failed");
+    expect(() => player.clearPlaybackEvent("throw-once")).toThrow("unknown id");
+
+    const { player: completePlayer } = makePlayer(tinyProject());
+    completePlayer.init();
+    completePlayer.onPlaybackComplete(() => {
+      throw new Error("complete failed");
+    });
+    completePlayer.setLoop(false);
+    completePlayer.play();
+    expect(() => completePlayer.update(1)).toThrow("complete failed");
+  });
+
+  it("emits complete for the old full-duration non-looping play task", () => {
+    const { player } = makePlayer(tinyProject());
+    const complete: unknown[] = [];
+    player.init();
+    player.onPlaybackComplete((event) => complete.push(event));
+    player.setLoop(false);
+    player.play();
+    player.update(1);
+
+    expect(player.time).toBe(1);
+    expect(player.playing).toBe(false);
+    expect(complete).toEqual([
+      { startTime: 0, endTime: 1, currentTime: 1, loopIndex: 0 },
+    ]);
   });
 
   it("renders active layer particles above the content root and clears old particles", () => {
