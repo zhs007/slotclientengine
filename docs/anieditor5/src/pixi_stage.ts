@@ -287,10 +287,13 @@ export class V5GPixiStage {
 
     if (layer.type === "image") {
       const runtimeAsset = this.findRuntimeAsset(layer.assetId);
+      const asset = this.findProjectAsset(layer.assetId);
       if (runtimeAsset) {
         const texture = await this.loadImageTexture(runtimeAsset);
         const sprite = new PIXI.Sprite(texture);
         sprite.anchor.set(layer.transform.anchorX, layer.transform.anchorY);
+        const compensation = getAssetDisplayCompensation(asset, texture);
+        sprite.scale.set(compensation.x, compensation.y);
         display.addChild(sprite);
       } else {
         display.addChild(this.createMissingAssetBox(layer.name));
@@ -768,6 +771,15 @@ export class V5GPixiStage {
       this.state.runtimeAssets.find((asset) => asset.id === assetId) ?? null
     );
   }
+
+  private findProjectAsset(
+    assetId: string | null,
+  ): V5GEditorState["project"]["assets"][number] | null {
+    if (!assetId) return null;
+    return (
+      this.state.project.assets.find((asset) => asset.id === assetId) ?? null
+    );
+  }
 }
 
 function clampViewportScale(scale: number): number {
@@ -836,6 +848,40 @@ function getTextureLongestEdge(texture: PIXI.Texture): number {
   const height = Number(texture.height);
   const longestEdge = Math.max(width, height);
   return Number.isFinite(longestEdge) && longestEdge > 0 ? longestEdge : 1;
+}
+
+function getAssetDisplayCompensation(
+  asset: V5GEditorState["project"]["assets"][number] | null,
+  texture: PIXI.Texture,
+): { x: number; y: number } {
+  if (!asset) return { x: 1, y: 1 };
+  const textureWidth = Number(texture.width);
+  const textureHeight = Number(texture.height);
+  const logicalWidth = Number(asset.width);
+  const logicalHeight = Number(asset.height);
+  const x =
+    Number.isFinite(textureWidth) &&
+    textureWidth > 0 &&
+    Number.isFinite(logicalWidth) &&
+    logicalWidth > 0
+      ? logicalWidth / textureWidth
+      : asset.fileScale && asset.fileScale > 0
+        ? 1 / asset.fileScale
+        : 1;
+  const y =
+    Number.isFinite(textureHeight) &&
+    textureHeight > 0 &&
+    Number.isFinite(logicalHeight) &&
+    logicalHeight > 0
+      ? logicalHeight / textureHeight
+      : asset.fileScale && asset.fileScale > 0
+        ? 1 / asset.fileScale
+        : 1;
+  return { x: sanitizeCompensation(x), y: sanitizeCompensation(y) };
+}
+
+function sanitizeCompensation(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 1;
 }
 
 function toPixiBlendMode(blendMode: V5GBlendMode): V5GBlendMode {

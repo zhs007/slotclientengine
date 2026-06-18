@@ -1,15 +1,21 @@
 # anieditorv5viewer
 
-`apps/anieditorv5viewer` is a Vite + TypeScript + Pixi.js viewer for V5G exports from `docs/anieditor5/export`.
+`apps/anieditorv5viewer` is a Vite + TypeScript + Pixi.js viewer for V5G/VNI exports from `docs/anieditor5/export` and `docs/anieditor5/export2`.
 
 ## Bundled Projects
 
-The app bundles four exported projects:
+The app bundles the legacy V5G full-size exports:
 
 - `docs/anieditor5/export/project.json`
 - `docs/anieditor5/export/bigwin.json`
 - `docs/anieditor5/export/megawin.json`
 - `docs/anieditor5/export/superwin.json`
+
+It also bundles the VNI export2 bundle:
+
+- `docs/anieditor5/export2/manifest.json`
+- `docs/anieditor5/export2/edit_full/project.json`
+- `docs/anieditor5/export2/runtime_50/project.json`
 
 The copied runtime files live under `src/assets`:
 
@@ -18,14 +24,24 @@ The copied runtime files live under `src/assets`:
 - `src/assets/projects/megawin.json`
 - `src/assets/projects/superwin.json`
 - `src/assets/assets/*`
+- `src/assets/export2/manifest.json`
+- `src/assets/export2/edit_full/project.json`
+- `src/assets/export2/edit_full/assets/*`
+- `src/assets/export2/runtime_50/project.json`
+- `src/assets/export2/runtime_50/assets/*`
 
 The UI project selector can switch between all bundled projects. JSON `asset.path` values are resolved through a Vite URL manifest and must match copied files exactly.
+
+`edit_full` is the 100% original-image profile. `runtime_50` stores 50% file pixels, but the player restores each image layer to its original logical design size with sprite-level compensation. Legacy exports and VNI single-project 100% exports may omit `fileWidth`, `fileHeight`, `fileScale`, and `exportProfile`; those are treated as full-size original-image profiles.
 
 ## Supported Runtime
 
 Supported now:
 
-- V5G `schemaVersion` in the `V5G_0.x` family with `editor.name === "victory_editor_v5_g"`
+- `schemaVersion` in the `V5G_0.x` or `VNI_0.x` families
+- `editor.name` of `victory_editor_v5_g` or `VNI`
+- asset file metadata: `fileWidth`, `fileHeight`, and `fileScale` must be all absent or all present
+- VNI bundle manifest entries whose project `exportProfile` matches `id`, `purpose`, and `assetScale`
 - center-coordinate stage rendering
 - image layers and basic text layers
 - `normal`, `add`, `screen`, `multiply`, `lighten` blend modes
@@ -39,7 +55,9 @@ Explicitly unsupported:
 - non-empty layer keyframes
 - group layers
 - nested `parentId`
-- unknown resources, layer types, animation types, blend modes, or easing names
+- unknown schema/editor values, resources, layer types, animation types, blend modes, or easing names
+- partial or inconsistent asset file metadata
+- bundle profile projects whose `exportProfile` does not match the manifest entry
 
 Unsupported or invalid data fails fast instead of rendering placeholders or silently falling back.
 

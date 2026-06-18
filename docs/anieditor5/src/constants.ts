@@ -1,5 +1,5 @@
-export const TOOL_NAME = "victory_editor_v5_g";
-export const V5G_VERSION = "V5G_0.0051";
+export const TOOL_NAME = "VNI";
+export const VNI_VERSION = "VNI_0.003";
 export const COCOS_TARGET_VERSION = "3.8.6";
 
 export const DEFAULT_STAGE_WIDTH = 900;
@@ -8,4 +8,4 @@ export const DEFAULT_DURATION_SECONDS = 5;
 export const DEFAULT_BACKGROUND_COLOR = "#0a0a0a";
 
 export const EXPORT_JSON_FILENAME = "project.json";
-export const DEFAULT_EXPORT_ZIP_FILENAME = "v5g_export.zip";
+export const DEFAULT_EXPORT_ZIP_FILENAME = "vni_export.zip";

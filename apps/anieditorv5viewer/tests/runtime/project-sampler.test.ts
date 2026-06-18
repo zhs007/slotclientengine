@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import export2Runtime50Data from "../../src/assets/export2/runtime_50/project.json";
 import {
   sampleLayerAtTime,
   sampleProjectAtTime,
 } from "../../src/runtime/project-sampler";
+import { assertV5GProject } from "../../src/runtime/validation";
 import type {
   V5GAnimationConfig,
   V5GLayerConfig,
@@ -51,6 +53,15 @@ function layer(
 }
 
 describe("project-sampler", () => {
+  it("keeps export2 runtime_50 blank at the exact start frame", () => {
+    const project = assertV5GProject(export2Runtime50Data);
+    const sampled = sampleProjectAtTime(project, 0);
+
+    expect(
+      sampled.layers.filter((layer) => layer.renderImageDisplay),
+    ).toHaveLength(0);
+  });
+
   it("hides animated layers before animation coverage", () => {
     expect(sampleLayerAtTime(layer(), 0.5).opacity).toBe(0);
     expect(sampleLayerAtTime(layer(), 0.5).visible).toBe(false);
@@ -145,6 +156,64 @@ describe("project-sampler", () => {
 
     expect(sampled.opacity).toBe(0);
     expect(sampled.visible).toBe(false);
+  });
+
+  it("hides near-zero scale entry layers on the start frame", () => {
+    const sampled = sampleLayerAtTime(
+      layer({}, [
+        {
+          id: "scale-entry",
+          type: "scale_up",
+          startTime: 0,
+          duration: 0.3,
+          enabled: true,
+          seed: 1,
+          params: {
+            fromScaleX: 0.01,
+            fromScaleY: 0.01,
+            toScaleX: 1.2,
+            toScaleY: 1.2,
+            easing: "easeOutQuad",
+          },
+        },
+        {
+          id: "rotate",
+          type: "rotate",
+          startTime: 0,
+          duration: 4,
+          enabled: true,
+          seed: 1,
+          params: { fromRotation: 0, toRotation: 360, easing: "linear" },
+        },
+      ]),
+      0,
+    );
+    const afterStart = sampleLayerAtTime(
+      layer({}, [
+        {
+          id: "scale-entry",
+          type: "scale_up",
+          startTime: 0,
+          duration: 0.3,
+          enabled: true,
+          seed: 1,
+          params: {
+            fromScaleX: 0.01,
+            fromScaleY: 0.01,
+            toScaleX: 1.2,
+            toScaleY: 1.2,
+            easing: "easeOutQuad",
+          },
+        },
+      ]),
+      0.01,
+    );
+
+    expect(sampled.opacity).toBe(0);
+    expect(sampled.visible).toBe(false);
+    expect(sampled.renderImageDisplay).toBe(false);
+    expect(afterStart.opacity).toBe(1);
+    expect(afterStart.visible).toBe(true);
   });
 
   it("marks active particle layers to hide the image display only", () => {

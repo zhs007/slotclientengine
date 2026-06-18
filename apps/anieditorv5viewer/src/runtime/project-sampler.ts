@@ -9,6 +9,8 @@ import type {
   V5GTransformConfig,
 } from "../v5g/types";
 
+const VISUAL_ENTRY_SCALE_THRESHOLD = 0.011;
+
 export interface SampledLayerState {
   layerId: string;
   transform: V5GTransformConfig;
@@ -56,6 +58,12 @@ export function sampleLayerAtTime(
       isOpacityEntryAnimation(animation) &&
       time < animation.startTime,
   );
+  const hasPendingScaleEntry = layer.animations.some(
+    (animation) =>
+      animation.enabled &&
+      isScaleEntryAnimation(animation) &&
+      time <= animation.startTime,
+  );
   const hasActiveCoverage = hasAnyEnabled
     ? layer.animations.some(
         (animation) =>
@@ -65,7 +73,9 @@ export function sampleLayerAtTime(
       )
     : true;
   const opacity =
-    hasPendingOpacityEntry || (hasAnyEnabled && !hasActiveCoverage)
+    hasPendingOpacityEntry ||
+    hasPendingScaleEntry ||
+    (hasAnyEnabled && !hasActiveCoverage)
       ? 0
       : roundTo(clampNumber(sampled.opacity, 0, 1), 4);
   const activeParticleAnimation =
@@ -95,6 +105,21 @@ function isOpacityEntryAnimation(animation: V5GAnimationConfig): boolean {
   }
   if (animation.type === "scale_in") {
     return getBooleanParam(animation, "fadeIn", true);
+  }
+  return false;
+}
+
+function isScaleEntryAnimation(animation: V5GAnimationConfig): boolean {
+  if (animation.type === "scale_up") {
+    return (
+      getNumberParam(animation, "fromScaleX") <= VISUAL_ENTRY_SCALE_THRESHOLD ||
+      getNumberParam(animation, "fromScaleY") <= VISUAL_ENTRY_SCALE_THRESHOLD
+    );
+  }
+  if (animation.type === "scale_in" || animation.type === "bounce_in") {
+    return (
+      getNumberParam(animation, "fromScale") <= VISUAL_ENTRY_SCALE_THRESHOLD
+    );
   }
   return false;
 }

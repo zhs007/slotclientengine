@@ -8,6 +8,7 @@ import {
   applySampledLayerState,
   createLayerInstance,
   getLayerAsset,
+  getAssetTextureSize,
   type V5GLayerInstance,
 } from "./layer-instance";
 import type { AssetUrlManifest } from "./asset-manifest";
@@ -17,6 +18,10 @@ import type { V5GAssetConfig, V5GProjectConfig } from "../v5g/types";
 export interface V5GPlayerOptions {
   container: HTMLElement;
   projectId: string;
+  bundleId: string;
+  profileId: string;
+  profilePurpose: string;
+  assetScale: number;
   project: V5GProjectConfig;
   assetUrls: AssetUrlManifest;
   onTimeChange?: (time: number) => void;
@@ -31,8 +36,13 @@ export class V5GPlayer {
   private readonly particleRoot = new PIXI.Container();
   private readonly container: HTMLElement;
   private readonly projectId: string;
+  private readonly bundleId: string;
+  private readonly profileId: string;
+  private readonly profilePurpose: string;
+  private readonly assetScale: number;
   private readonly project: V5GProjectConfig;
   private readonly assetUrls: AssetUrlManifest;
+  private readonly assetsById: ReadonlyMap<string, V5GAssetConfig>;
   private readonly onTimeChange?: (time: number) => void;
   private readonly onPlayingChange?: (isPlaying: boolean) => void;
   private readonly layerInstances = new Map<string, V5GLayerInstance>();
@@ -47,8 +57,15 @@ export class V5GPlayer {
   constructor(options: V5GPlayerOptions) {
     this.container = options.container;
     this.projectId = options.projectId;
+    this.bundleId = options.bundleId;
+    this.profileId = options.profileId;
+    this.profilePurpose = options.profilePurpose;
+    this.assetScale = options.assetScale;
     this.project = options.project;
     this.assetUrls = options.assetUrls;
+    this.assetsById = new Map(
+      options.project.assets.map((asset) => [asset.id, asset] as const),
+    );
     this.onTimeChange = options.onTimeChange;
     this.onPlayingChange = options.onPlayingChange;
   }
@@ -74,7 +91,11 @@ export class V5GPlayer {
 
     const texturesByAssetId = await this.loadTextures();
     for (const layer of this.project.layers) {
-      const instance = createLayerInstance(layer, texturesByAssetId);
+      const instance = createLayerInstance(
+        layer,
+        texturesByAssetId,
+        this.assetsById,
+      );
       this.layerInstances.set(layer.id, instance);
       this.contentRoot.addChild(instance.display);
     }
@@ -155,6 +176,7 @@ export class V5GPlayer {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.clearParticles();
+    this.clearDiagnostics();
     this.app.destroy(true);
   }
 
@@ -209,11 +231,8 @@ export class V5GPlayer {
   }
 
   private async loadTextures(): Promise<ReadonlyMap<string, PIXI.Texture>> {
-    const assetsById = new Map(
-      this.project.assets.map((asset) => [asset.id, asset] as const),
-    );
     for (const layer of this.project.layers) {
-      getLayerAsset(layer, assetsById);
+      getLayerAsset(layer, this.assetsById);
     }
 
     const entries = await Promise.all(
@@ -233,9 +252,10 @@ export class V5GPlayer {
     const texture = (await PIXI.Assets.load(url)) as PIXI.Texture;
     const width = Math.round(texture.width);
     const height = Math.round(texture.height);
-    if (width !== asset.width || height !== asset.height) {
+    const expected = getAssetTextureSize(asset);
+    if (width !== expected.width || height !== expected.height) {
       throw new Error(
-        `V5G asset texture size mismatch for ${asset.id} (${asset.path}): expected ${asset.width}x${asset.height}, got ${width}x${height}.`,
+        `VNI asset texture size mismatch for ${asset.id} (${asset.path}): logical ${asset.width}x${asset.height}, expected file ${expected.width}x${expected.height}, got ${width}x${height}.`,
       );
     }
     return texture;
@@ -292,6 +312,10 @@ export class V5GPlayer {
     this.container.dataset.v5gProjectId = this.projectId;
     this.container.dataset.v5gTime = this.currentTime.toFixed(2);
     this.container.dataset.v5gVisibleLayers = String(visibleLayerCount);
+    this.container.dataset.vniBundleId = this.bundleId;
+    this.container.dataset.vniProfileId = this.profileId;
+    this.container.dataset.vniAssetScale = String(this.assetScale);
+    this.container.dataset.vniProfilePurpose = this.profilePurpose;
     if (this.pixelDiagnosticsRafId !== null) {
       cancelAnimationFrame(this.pixelDiagnosticsRafId);
     }
@@ -347,5 +371,19 @@ export class V5GPlayer {
     this.container.dataset.v5gNonBackgroundSamples = String(nonBackground);
     this.container.dataset.v5gMaxPixelDelta = String(maxDelta);
     delete this.container.dataset.v5gPixelSampleError;
+  }
+
+  private clearDiagnostics(): void {
+    delete this.container.dataset.v5gProjectId;
+    delete this.container.dataset.v5gTime;
+    delete this.container.dataset.v5gVisibleLayers;
+    delete this.container.dataset.v5gPixelSamples;
+    delete this.container.dataset.v5gNonBackgroundSamples;
+    delete this.container.dataset.v5gMaxPixelDelta;
+    delete this.container.dataset.v5gPixelSampleError;
+    delete this.container.dataset.vniBundleId;
+    delete this.container.dataset.vniProfileId;
+    delete this.container.dataset.vniAssetScale;
+    delete this.container.dataset.vniProfilePurpose;
   }
 }

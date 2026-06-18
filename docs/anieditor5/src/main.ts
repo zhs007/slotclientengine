@@ -6,7 +6,7 @@ import {
   isV5GAnimationType,
   sampleLayerAnimationsAtTime,
 } from "./animation_presets";
-import { V5G_VERSION } from "./constants";
+import { VNI_VERSION } from "./constants";
 import { clampNumber, roundTo } from "./coordinates";
 import {
   exportProjectZip,
@@ -141,6 +141,7 @@ const els = {
   btnConfirmPasteCopiedAnim: getButton("btn-confirm-paste-copied-anim"),
   btnCancelPasteCopiedAnim: getButton("btn-cancel-paste-copied-anim"),
   btnExportZip: getButton("btn-export-zip"),
+  exportAssetScale: getSelect("select-export-asset-scale"),
   animType: getSelect("anim-type"),
   animDescription: getElement("anim-description"),
   animDurationHint: getElement("anim-duration-hint"),
@@ -212,7 +213,7 @@ const els = {
 void bootstrap();
 
 async function bootstrap(): Promise<void> {
-  els.versionLabel.textContent = V5G_VERSION;
+  els.versionLabel.textContent = VNI_VERSION;
   initResizableLayout();
   setAutoSaveLabel("正在加载工作区…", "info");
 
@@ -269,7 +270,7 @@ async function bootstrap(): Promise<void> {
   renderAll();
   setAutoSaveLabel("已自动保存", "success");
   showStatus(
-    `${V5G_VERSION} 已启动：动画由参数面板配置；支持导入 ZIP 恢复编辑。`,
+    `${VNI_VERSION} 已启动：支持 100% 编辑备份 + 缩小运行资源的安全导出。`,
     "success",
   );
 }
@@ -454,11 +455,19 @@ function bindEvents(): void {
 
   els.btnExportZip.addEventListener("click", async () => {
     const zipFilename = sanitizeZipFilename(state.project.name);
+    const assetScale = readExportAssetScale();
     els.zipName.value = zipFilename.replace(/\.zip$/i, "");
     setButtonLoading(els.btnExportZip, true, "导出中");
     try {
-      await exportProjectZip(state, zipFilename);
-      showStatus(`已导出 ZIP：${zipFilename}`, "success");
+      await exportProjectZip(state, zipFilename, { assetScale });
+      if (assetScale < 0.999) {
+        showStatus(
+          `已导出安全 Bundle：${zipFilename}，包含 100% 原图编辑备份和 ${Math.round(assetScale * 100)}% 运行资源。`,
+          "success",
+        );
+      } else {
+        showStatus(`已导出 100% 编辑 ZIP：${zipFilename}`, "success");
+      }
     } catch (error) {
       showStatus(`导出 ZIP 失败：${getErrorMessage(error)}`, "error");
     } finally {
@@ -721,7 +730,9 @@ async function importZipAsWorkspaceProject(file: File): Promise<void> {
     updateZoomLabel(pixiStage.getViewportState().scale);
     setAutoSaveLabel("已自动保存", "success");
     showStatus(
-      `已导入 ZIP 为新项目：${importedProject.name}，可继续编辑。`,
+      imported.importNote
+        ? `已导入 ZIP 为新项目：${importedProject.name}。${imported.importNote}`
+        : `已导入 ZIP 为新项目：${importedProject.name}，可继续编辑。`,
       "success",
     );
   } catch (error) {
@@ -3591,6 +3602,12 @@ function readImageSize(file: File): Promise<{ width: number; height: number }> {
 function readNumberInput(input: HTMLInputElement, fallback: number): number {
   const value = Number(input.value);
   return Number.isFinite(value) ? value : fallback;
+}
+
+function readExportAssetScale(): number {
+  const value = Number(els.exportAssetScale.value);
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  return Math.min(1, Math.max(0.01, value));
 }
 
 function formatCursorCoordinate(value: number): string {

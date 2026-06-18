@@ -3,9 +3,15 @@ import projectData from "../../src/assets/project.json";
 import bigwinData from "../../src/assets/projects/bigwin.json";
 import megawinData from "../../src/assets/projects/megawin.json";
 import superwinData from "../../src/assets/projects/superwin.json";
+import export2ManifestData from "../../src/assets/export2/manifest.json";
+import export2EditFullData from "../../src/assets/export2/edit_full/project.json";
+import export2Runtime50Data from "../../src/assets/export2/runtime_50/project.json";
 import {
+  assertV5GBundleManifest,
   assertV5GProject,
   parseColorHex,
+  validateManifestProjectProfile,
+  validateV5GBundleManifest,
   validateV5GProject,
 } from "../../src/runtime/validation";
 import type {
@@ -19,6 +25,8 @@ const bundledProjectData = [
   bigwinData,
   megawinData,
   superwinData,
+  export2EditFullData,
+  export2Runtime50Data,
 ] as const;
 
 const newAnimationParams: Readonly<
@@ -80,6 +88,92 @@ describe("validation", () => {
     }
   });
 
+  it("accepts VNI projects and legacy assets without file scale metadata", () => {
+    const project = validProject();
+    project.schemaVersion = "VNI_0.003";
+    project.editor = { name: "VNI", version: "VNI_0.003" };
+
+    expect(project.assets[0].fileWidth).toBeUndefined();
+    expect(() => validateV5GProject(project)).not.toThrow();
+  });
+
+  it("accepts VNI single-project 100% exports without exportProfile", () => {
+    const project = structuredClone(assertV5GProject(export2EditFullData));
+    delete project.exportProfile;
+
+    expect(() => validateV5GProject(project)).not.toThrow();
+  });
+
+  it("accepts runtime_50 file metadata and rejects partial metadata", () => {
+    const project = structuredClone(assertV5GProject(export2Runtime50Data));
+    const asset = project.assets.find(
+      (item) => item.path === "assets/bigwin_asset_image_mqgf7e6h_g.png",
+    );
+
+    expect(asset).toMatchObject({
+      width: 730,
+      height: 735,
+      fileWidth: 365,
+      fileHeight: 368,
+      fileScale: 0.5,
+    });
+    expect(() => validateV5GProject(project)).not.toThrow();
+
+    expectInvalid((legacyProject) => {
+      legacyProject.assets[0].fileWidth = legacyProject.assets[0].width;
+    }, "fileWidth/fileHeight/fileScale must be provided together");
+  });
+
+  it("rejects invalid file metadata values and mismatched rounded sizes", () => {
+    expectInvalid((project) => {
+      project.assets[0].fileWidth = 0;
+      project.assets[0].fileHeight = project.assets[0].height;
+      project.assets[0].fileScale = 1;
+    }, "fileWidth must be a positive finite number");
+
+    expectInvalid((project) => {
+      project.assets[0].fileWidth = project.assets[0].width;
+      project.assets[0].fileHeight = project.assets[0].height;
+      project.assets[0].fileScale = 0;
+    }, "fileScale");
+
+    expectInvalid((project) => {
+      project.assets[0].fileWidth = project.assets[0].width;
+      project.assets[0].fileHeight = project.assets[0].height;
+      project.assets[0].fileScale = 1.2;
+    }, "fileScale");
+
+    expectInvalid((project) => {
+      project.assets[0].fileWidth = project.assets[0].width - 1;
+      project.assets[0].fileHeight = project.assets[0].height;
+      project.assets[0].fileScale = 1;
+    }, "file size metadata mismatch");
+  });
+
+  it("validates VNI bundle manifests and project profile consistency", () => {
+    const manifest = assertV5GBundleManifest(export2ManifestData);
+    expect(() => validateV5GBundleManifest(manifest)).not.toThrow();
+    expect(manifest.exports.map((entry) => entry.id)).toEqual([
+      "edit_full",
+      "runtime_50",
+    ]);
+
+    const editFull = assertV5GProject(export2EditFullData);
+    expect(() =>
+      validateManifestProjectProfile(manifest.exports[0], editFull),
+    ).not.toThrow();
+
+    const mismatched = structuredClone(editFull);
+    mismatched.exportProfile = {
+      id: "runtime_50",
+      purpose: "runtime",
+      assetScale: 0.5,
+    };
+    expect(() =>
+      validateManifestProjectProfile(manifest.exports[0], mismatched),
+    ).toThrow("profile mismatch");
+  });
+
   it("parses valid hex colors and rejects invalid ones", () => {
     expect(parseColorHex("#101827")).toBe(0x101827);
     expect(() => parseColorHex("101827")).toThrow(
@@ -96,7 +190,13 @@ describe("validation", () => {
   it("rejects unsupported schema major", () => {
     expectInvalid((project) => {
       project.schemaVersion = "V6G_0.0001";
-    }, "Unsupported V5G schemaVersion");
+    }, "Expected V5G_0.x or VNI_0.x");
+  });
+
+  it("rejects unsupported editor names", () => {
+    expectInvalid((project) => {
+      project.editor.name = "some_editor";
+    }, "Unsupported V5G editor");
   });
 
   it("rejects top-level particles", () => {

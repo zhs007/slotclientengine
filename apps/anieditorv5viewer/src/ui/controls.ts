@@ -4,6 +4,10 @@ export interface ViewerControlsProject {
   id: string;
   label: string;
   sourcePath: string;
+  bundleId: string;
+  profileId: string;
+  purpose: string;
+  assetScale: number;
   project: V5GProjectConfig;
 }
 
@@ -116,6 +120,10 @@ export function createViewerControls(
     summary.replaceChildren(
       createSummaryStrong(project.project.name),
       createSummaryItem(project.sourcePath),
+      createSummaryItem(`schema ${project.project.schemaVersion}`),
+      createSummaryItem(`profile ${project.profileId}`),
+      createSummaryItem(`purpose ${project.purpose}`),
+      createSummaryItem(`assetScale ${formatScale(project.assetScale)}`),
       createSummaryItem(`${project.project.layers.length} layers`),
       createSummaryItem(`${project.project.assets.length} assets`),
       createSummaryItem(
@@ -180,4 +188,8 @@ function getAnimationTypeSummary(project: V5GProjectConfig): string {
 
 function formatTime(time: number): string {
   return time.toFixed(2);
+}
+
+function formatScale(scale: number): string {
+  return Number.isFinite(scale) ? String(scale) : "unknown";
 }

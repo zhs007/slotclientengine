@@ -9,10 +9,15 @@ import type {
   V5GAnimationType,
   V5GAssetConfig,
   V5GBlendMode,
+  V5GBundleManifest,
+  V5GBundleManifestEntry,
+  V5GExportProfileConfig,
   V5GLayerConfig,
   V5GProjectConfig,
   V5GTransformConfig,
 } from "../v5g/types";
+
+const SUPPORTED_EDITOR_NAMES = ["victory_editor_v5_g", "VNI"] as const;
 
 const SUPPORTED_BLEND_MODES: readonly V5GBlendMode[] = [
   "normal",
@@ -89,6 +94,10 @@ export function assertV5GProject(value: unknown): V5GProjectConfig {
   );
 
   const projectName = assertString(project.name, "project.name");
+  const exportProfile =
+    project.exportProfile === undefined
+      ? undefined
+      : assertExportProfile(project.exportProfile, "project.exportProfile");
 
   const stage = assertRecord(project.stage, "project.stage");
   const stageWidth = assertNumber(stage.width, "project.stage.width");
@@ -125,6 +134,7 @@ export function assertV5GProject(value: unknown): V5GProjectConfig {
       version: engineTargetVersion,
     },
     name: projectName,
+    exportProfile,
     stage: {
       width: stageWidth,
       height: stageHeight,
@@ -139,12 +149,16 @@ export function assertV5GProject(value: unknown): V5GProjectConfig {
 }
 
 export function validateV5GProject(project: V5GProjectConfig): void {
-  if (!/^V5G_0\.\d+$/u.test(project.schemaVersion)) {
+  if (!isSupportedProjectSchemaVersion(project.schemaVersion)) {
     throw new Error(
-      `Unsupported V5G schemaVersion: ${project.schemaVersion}. Expected V5G_0.x.`,
+      `Unsupported V5G schemaVersion: ${project.schemaVersion}. Expected V5G_0.x or VNI_0.x.`,
     );
   }
-  if (project.editor.name !== "victory_editor_v5_g") {
+  if (
+    !SUPPORTED_EDITOR_NAMES.includes(
+      project.editor.name as (typeof SUPPORTED_EDITOR_NAMES)[number],
+    )
+  ) {
     throw new Error(`Unsupported V5G editor: ${project.editor.name}.`);
   }
   if (project.stage.coordinate !== "center") {
@@ -162,6 +176,9 @@ export function validateV5GProject(project: V5GProjectConfig): void {
       "Unsupported V5G top-level particles: layer particle animations are supported, project.particles is not implemented.",
     );
   }
+  if (project.exportProfile) {
+    validateExportProfile(project.exportProfile, "project.exportProfile");
+  }
 
   const assetsById = new Map<string, V5GAssetConfig>();
   const assetPaths = new Set<string>();
@@ -177,6 +194,7 @@ export function validateV5GProject(project: V5GProjectConfig): void {
     }
     assertPositiveFinite(asset.width, `asset "${asset.id}" width`);
     assertPositiveFinite(asset.height, `asset "${asset.id}" height`);
+    validateAssetFileMetadata(asset);
     assetsById.set(asset.id, asset);
     assetPaths.add(asset.path);
   }
@@ -191,6 +209,71 @@ export function validateV5GProject(project: V5GProjectConfig): void {
     for (const animation of layer.animations) {
       assertSupportedAnimation(animation, layer.id, project.stage.duration);
     }
+  }
+}
+
+export function assertV5GBundleManifest(value: unknown): V5GBundleManifest {
+  const manifest = assertRecord(value, "VNI bundle manifest");
+  const type = assertString(manifest.type, "manifest.type");
+  if (type !== "vni_export_bundle") {
+    throw new Error(`Unsupported VNI bundle manifest type: ${type}.`);
+  }
+  const version = assertString(manifest.version, "manifest.version");
+  const exports = assertArray(manifest.exports, "manifest.exports").map(
+    (entry, index) => assertBundleManifestEntry(entry, index),
+  );
+  return {
+    type: "vni_export_bundle",
+    version,
+    exports,
+  };
+}
+
+export function validateV5GBundleManifest(manifest: V5GBundleManifest): void {
+  if (!/^VNI_0\.\d+$/u.test(manifest.version)) {
+    throw new Error(
+      `Unsupported VNI bundle manifest version: ${manifest.version}. Expected VNI_0.x.`,
+    );
+  }
+  const ids = new Set<string>();
+  for (const entry of manifest.exports) {
+    if (ids.has(entry.id)) {
+      throw new Error(`Duplicate VNI bundle export id: ${entry.id}.`);
+    }
+    ids.add(entry.id);
+    validateExportProfile(
+      {
+        id: entry.id,
+        purpose: entry.purpose,
+        assetScale: entry.assetScale,
+        label: entry.label,
+      },
+      `manifest export "${entry.id}"`,
+    );
+    if (!entry.path.endsWith(".json")) {
+      throw new Error(`VNI bundle export "${entry.id}" path must be JSON.`);
+    }
+  }
+}
+
+export function validateManifestProjectProfile(
+  entry: V5GBundleManifestEntry,
+  project: V5GProjectConfig,
+): void {
+  const profile = project.exportProfile;
+  if (!profile) {
+    throw new Error(
+      `VNI bundle export "${entry.id}" project is missing exportProfile.`,
+    );
+  }
+  if (
+    profile.id !== entry.id ||
+    profile.purpose !== entry.purpose ||
+    profile.assetScale !== entry.assetScale
+  ) {
+    throw new Error(
+      `VNI bundle export "${entry.id}" profile mismatch: manifest ${entry.purpose}/${entry.assetScale}, project ${profile.id}/${profile.purpose}/${profile.assetScale}.`,
+    );
   }
 }
 
@@ -305,6 +388,60 @@ function assertAsset(value: unknown, index: number): V5GAssetConfig {
     ),
     width: assertNumber(asset.width, `project.assets[${index}].width`),
     height: assertNumber(asset.height, `project.assets[${index}].height`),
+    fileWidth: assertOptionalNumberField(
+      asset.fileWidth,
+      `project.assets[${index}].fileWidth`,
+    ),
+    fileHeight: assertOptionalNumberField(
+      asset.fileHeight,
+      `project.assets[${index}].fileHeight`,
+    ),
+    fileScale: assertOptionalNumberField(
+      asset.fileScale,
+      `project.assets[${index}].fileScale`,
+    ),
+  };
+}
+
+function assertExportProfile(
+  value: unknown,
+  path: string,
+): V5GExportProfileConfig {
+  const profile = assertRecord(value, path);
+  return {
+    id: assertString(profile.id, `${path}.id`),
+    purpose: assertString(
+      profile.purpose,
+      `${path}.purpose`,
+    ) as V5GExportProfileConfig["purpose"],
+    assetScale: assertNumber(profile.assetScale, `${path}.assetScale`),
+    label:
+      profile.label === undefined
+        ? undefined
+        : assertString(profile.label, `${path}.label`),
+  };
+}
+
+function assertBundleManifestEntry(
+  value: unknown,
+  index: number,
+): V5GBundleManifestEntry {
+  const entry = assertRecord(value, `manifest.exports[${index}]`);
+  return {
+    id: assertString(entry.id, `manifest.exports[${index}].id`),
+    purpose: assertString(
+      entry.purpose,
+      `manifest.exports[${index}].purpose`,
+    ) as V5GBundleManifestEntry["purpose"],
+    assetScale: assertNumber(
+      entry.assetScale,
+      `manifest.exports[${index}].assetScale`,
+    ),
+    path: assertString(entry.path, `manifest.exports[${index}].path`),
+    label:
+      entry.label === undefined
+        ? undefined
+        : assertString(entry.label, `manifest.exports[${index}].label`),
   };
 }
 
@@ -472,6 +609,14 @@ function assertString(value: unknown, path: string): string {
   return value;
 }
 
+function assertOptionalNumberField(
+  value: unknown,
+  path: string,
+): number | undefined {
+  if (value === undefined) return undefined;
+  return assertNumber(value, path);
+}
+
 function assertNumber(value: unknown, path: string): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new Error(`${path} must be a finite number.`);
@@ -506,5 +651,75 @@ function assertFiniteRange(
 ): void {
   if (!Number.isFinite(value) || value < min || value > max) {
     throw new Error(`${path} must be in range ${min}..${max}.`);
+  }
+}
+
+function isSupportedProjectSchemaVersion(value: string): boolean {
+  return /^V5G_0\.\d+$/u.test(value) || /^VNI_0\.\d+$/u.test(value);
+}
+
+function validateAssetFileMetadata(asset: V5GAssetConfig): void {
+  const fields = [asset.fileWidth, asset.fileHeight, asset.fileScale];
+  const presentCount = fields.filter((value) => value !== undefined).length;
+  if (presentCount === 0) return;
+  if (presentCount !== fields.length) {
+    throw new Error(
+      `V5G asset "${asset.id}" fileWidth/fileHeight/fileScale must be provided together.`,
+    );
+  }
+  if (
+    asset.fileWidth === undefined ||
+    asset.fileHeight === undefined ||
+    asset.fileScale === undefined
+  ) {
+    throw new Error(
+      `V5G asset "${asset.id}" fileWidth/fileHeight/fileScale must be provided together.`,
+    );
+  }
+  assertPositiveInteger(asset.fileWidth, `asset "${asset.id}" fileWidth`);
+  assertPositiveInteger(asset.fileHeight, `asset "${asset.id}" fileHeight`);
+  const fileWidth = asset.fileWidth;
+  const fileHeight = asset.fileHeight;
+  const fileScale = asset.fileScale;
+  assertFiniteRange(
+    fileScale,
+    Number.MIN_VALUE,
+    1,
+    `asset "${asset.id}" fileScale`,
+  );
+
+  const expectedFileWidth = Math.max(1, Math.round(asset.width * fileScale));
+  const expectedFileHeight = Math.max(1, Math.round(asset.height * fileScale));
+  if (fileWidth !== expectedFileWidth || fileHeight !== expectedFileHeight) {
+    throw new Error(
+      `V5G asset "${asset.id}" file size metadata mismatch: expected ${expectedFileWidth}x${expectedFileHeight} from logical ${asset.width}x${asset.height} at scale ${fileScale}, got ${fileWidth}x${fileHeight}.`,
+    );
+  }
+}
+
+function validateExportProfile(
+  profile: V5GExportProfileConfig,
+  path: string,
+): void {
+  if (profile.id.length === 0) {
+    throw new Error(`${path}.id must be a non-empty string.`);
+  }
+  if (profile.purpose !== "editing" && profile.purpose !== "runtime") {
+    throw new Error(`${path}.purpose must be editing or runtime.`);
+  }
+  assertFiniteRange(
+    profile.assetScale,
+    Number.MIN_VALUE,
+    1,
+    `${path}.assetScale`,
+  );
+}
+
+function assertPositiveInteger(value: number | undefined, path: string): void {
+  if (!Number.isFinite(value) || value === undefined || value <= 0) {
+    throw new Error(`${path} must be a positive finite number.`);
+  }
+  if (!Number.isInteger(value)) {
+    throw new Error(`${path} must be an integer.`);
   }
 }

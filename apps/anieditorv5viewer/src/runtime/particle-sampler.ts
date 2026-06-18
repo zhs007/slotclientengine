@@ -75,6 +75,7 @@ export function sampleParticleSpritesForLayer(
     }
     const progress = getParticleProgress(animation, time);
     if (progress === null) continue;
+    if (progress <= 0) continue;
 
     if (animation.type === "particles") {
       sprites.push(

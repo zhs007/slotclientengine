@@ -15,9 +15,15 @@ export interface V5GLayerInstance {
   textureSize: { width: number; height: number } | null;
 }
 
+export interface TextureSize {
+  width: number;
+  height: number;
+}
+
 export function createLayerInstance(
   layer: V5GLayerConfig,
   texturesByAssetId: ReadonlyMap<string, PIXI.Texture>,
+  assetsById: ReadonlyMap<string, V5GAssetConfig>,
 ): V5GLayerInstance {
   const display = new PIXI.Container();
   display.label = layer.name;
@@ -34,6 +40,10 @@ export function createLayerInstance(
         `V5G image layer "${layer.id}" is missing texture for asset "${layer.assetId}".`,
       );
     }
+    const asset = getLayerAsset(layer, assetsById);
+    if (!asset) {
+      throw new Error(`V5G image layer "${layer.id}" is missing asset.`);
+    }
     instanceTexture = texture;
     textureSize = {
       width: Math.round(texture.width),
@@ -41,6 +51,8 @@ export function createLayerInstance(
     };
     const sprite = new PIXI.Sprite(texture);
     sprite.anchor.set(layer.transform.anchorX, layer.transform.anchorY);
+    const compensation = getAssetDisplayCompensation(asset, textureSize);
+    sprite.scale.set(compensation.x, compensation.y);
     display.addChild(sprite);
   } else if (layer.type === "text") {
     const text = new PIXI.Text({
@@ -105,4 +117,25 @@ export function getLayerAsset(
     );
   }
   return asset;
+}
+
+export function getAssetTextureSize(asset: V5GAssetConfig): TextureSize {
+  return {
+    width: asset.fileWidth ?? asset.width,
+    height: asset.fileHeight ?? asset.height,
+  };
+}
+
+export function getAssetDisplayCompensation(
+  asset: V5GAssetConfig,
+  textureSize: TextureSize,
+): { x: number; y: number } {
+  const x = asset.width / textureSize.width;
+  const y = asset.height / textureSize.height;
+  if (!Number.isFinite(x) || x <= 0 || !Number.isFinite(y) || y <= 0) {
+    throw new Error(
+      `Invalid V5G asset display compensation for ${asset.id}: logical ${asset.width}x${asset.height}, texture ${textureSize.width}x${textureSize.height}.`,
+    );
+  }
+  return { x, y };
 }

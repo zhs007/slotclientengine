@@ -16,8 +16,16 @@ export interface V5GAssetConfig {
   type: V5GAssetType;
   path: string;
   originalName: string;
+  /** Design-time logical width. Keep this as the original full-size asset width. */
   width: number;
+  /** Design-time logical height. Keep this as the original full-size asset height. */
   height: number;
+  /** Actual pixel width of the file stored in the current ZIP/runtime asset. */
+  fileWidth?: number;
+  /** Actual pixel height of the file stored in the current ZIP/runtime asset. */
+  fileHeight?: number;
+  /** Current file pixels divided by design pixels. 1 = full quality, 0.5 = half-size file. */
+  fileScale?: number;
 }
 
 export interface V5GTransformConfig {
@@ -103,6 +111,13 @@ export interface V5GParticleConfig {
   params: Record<string, string | number | boolean>;
 }
 
+export interface V5GExportProfileConfig {
+  id: string;
+  purpose: "editing" | "runtime";
+  assetScale: number;
+  label?: string;
+}
+
 export interface V5GProjectConfig {
   schemaVersion: string;
   editor: {
@@ -114,10 +129,25 @@ export interface V5GProjectConfig {
     version: string;
   };
   name: string;
+  exportProfile?: V5GExportProfileConfig;
   stage: V5GStageConfig;
   assets: V5GAssetConfig[];
   layers: V5GLayerConfig[];
   particles: V5GParticleConfig[];
+}
+
+export interface V5GBundleManifestEntry {
+  id: string;
+  purpose: "editing" | "runtime";
+  assetScale: number;
+  path: string;
+  label?: string;
+}
+
+export interface V5GBundleManifest {
+  type: "vni_export_bundle";
+  version: string;
+  exports: V5GBundleManifestEntry[];
 }
 
 export interface V5GRuntimeAsset {
