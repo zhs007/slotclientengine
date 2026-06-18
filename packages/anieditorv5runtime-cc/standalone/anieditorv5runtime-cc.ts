@@ -1882,8 +1882,8 @@ export type V5GCocosPlayerFactoryOptions = Omit<
 >;
 
 export type V5GCocosPlaybackRange =
-  | { unit: "time"; start: number; end: number }
-  | { unit: "frame"; start: number; end: number; fps: number };
+  | { unit: "time"; start: number; end?: number }
+  | { unit: "frame"; start: number; end?: number; fps: number };
 
 export interface V5GCocosPlayRangeOptions {
   range: V5GCocosPlaybackRange;
@@ -2299,22 +2299,38 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   ): Omit<PlaybackBoundary, "loop"> {
     if (range.unit === "time") {
       this.assertFiniteNumber(range.start, `${apiName} range.start`);
-      this.assertFiniteNumber(range.end, `${apiName} range.end`);
-      return this.assertPlaybackRangeTimes(range.start, range.end, apiName);
+      const endTime =
+        range.end === undefined || range.end === -1
+          ? this.options.project.stage.duration
+          : range.end;
+      this.assertFiniteNumber(endTime, `${apiName} range.end`);
+      return this.assertPlaybackRangeTimes(range.start, endTime, apiName);
     }
 
     if (range.unit === "frame") {
       this.assertNonNegativeInteger(range.start, `${apiName} range.start`);
-      this.assertNonNegativeInteger(range.end, `${apiName} range.end`);
       this.assertPositiveFiniteNumber(range.fps, `${apiName} range.fps`);
+      const endTime =
+        range.end === undefined || range.end === -1
+          ? this.options.project.stage.duration
+          : this.normalizePlaybackFrameEnd(range.end, range.fps, apiName);
       return this.assertPlaybackRangeTimes(
         range.start / range.fps,
-        range.end / range.fps,
+        endTime,
         apiName,
       );
     }
 
     throw new Error(`${apiName} range.unit must be "time" or "frame".`);
+  }
+
+  private normalizePlaybackFrameEnd(
+    endFrame: number,
+    fps: number,
+    apiName: string,
+  ): number {
+    this.assertNonNegativeInteger(endFrame, `${apiName} range.end`);
+    return endFrame / fps;
   }
 
   private normalizePlaybackPoint(
