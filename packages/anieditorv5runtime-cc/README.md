@@ -109,6 +109,20 @@ player.playRange({
 });
 ```
 
+`playRange(...)` 的 `range.end` 可以省略，也可以显式传 `undefined` 或 `-1`，表示播放到 `project.stage.duration`：
+
+```ts
+player.playRange({
+  range: { unit: "time", start: 1.25 },
+  loop: false,
+});
+
+player.playRange({
+  range: { unit: "frame", start: 30, end: -1, fps: 60 },
+  loop: false,
+});
+```
+
 帧 API 必须显式传入 `fps`，runtime 不默认 60fps，也不会从 Cocos 的 `update(deltaTime)` 频率猜测。
 
 注册时间点 marker：

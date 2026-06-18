@@ -311,6 +311,66 @@ describe("standalone V5GCocosPlayer", () => {
     expect(hits).toEqual([0, 1]);
   });
 
+  it("plays open-ended ranges to the project duration", () => {
+    const omittedTimeEnd = makePlayer();
+    const omittedTimeComplete: unknown[] = [];
+    omittedTimeEnd.player.init();
+    omittedTimeEnd.player.onPlaybackComplete((event) =>
+      omittedTimeComplete.push(event),
+    );
+    omittedTimeEnd.player.playRange({
+      range: { unit: "time", start: 0.25 },
+      loop: false,
+    });
+    omittedTimeEnd.player.update(1);
+    expect(omittedTimeEnd.player.time).toBe(1);
+    expect(omittedTimeComplete).toEqual([
+      { startTime: 0.25, endTime: 1, currentTime: 1, loopIndex: 0 },
+    ]);
+
+    const undefinedTimeEnd = makePlayer();
+    undefinedTimeEnd.player.init();
+    undefinedTimeEnd.player.playRange({
+      range: { unit: "time", start: 0.25, end: undefined },
+      loop: false,
+    });
+    undefinedTimeEnd.player.update(1);
+    expect(undefinedTimeEnd.player.time).toBe(1);
+    expect(undefinedTimeEnd.player.playing).toBe(false);
+
+    const sentinelTimeEnd = makePlayer();
+    sentinelTimeEnd.player.init();
+    sentinelTimeEnd.player.playRange({
+      range: { unit: "time", start: 0.25, end: -1 },
+      loop: false,
+    });
+    sentinelTimeEnd.player.update(1);
+    expect(sentinelTimeEnd.player.time).toBe(1);
+    expect(sentinelTimeEnd.player.playing).toBe(false);
+
+    const omittedFrameEnd = makePlayer();
+    omittedFrameEnd.player.init();
+    omittedFrameEnd.player.playRange({
+      range: { unit: "frame", start: 30, fps: 60 },
+      loop: false,
+    });
+    expect(omittedFrameEnd.player.time).toBe(0.5);
+    omittedFrameEnd.player.update(1);
+    expect(omittedFrameEnd.player.time).toBe(1);
+    expect(omittedFrameEnd.player.playing).toBe(false);
+
+    const sentinelFrameEnd = makePlayer();
+    sentinelFrameEnd.player.init();
+    sentinelFrameEnd.player.playRange({
+      range: { unit: "frame", start: 30, end: -1, fps: 60 },
+      loop: false,
+    });
+    expect(sentinelFrameEnd.player.time).toBe(0.5);
+    sentinelFrameEnd.player.update(1);
+    expect(sentinelFrameEnd.player.time).toBe(1);
+    expect(sentinelFrameEnd.player.playing).toBe(false);
+  });
+
   it("removes standalone marker and complete listeners through disposers", () => {
     const { player } = makePlayer();
     const events: string[] = [];

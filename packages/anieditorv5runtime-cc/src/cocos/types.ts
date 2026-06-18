@@ -25,8 +25,8 @@ export type V5GCocosPlayerFactoryOptions = Omit<
 >;
 
 export type V5GCocosPlaybackRange =
-  | { unit: "time"; start: number; end: number }
-  | { unit: "frame"; start: number; end: number; fps: number };
+  | { unit: "time"; start: number; end?: number }
+  | { unit: "frame"; start: number; end?: number; fps: number };
 
 export interface V5GCocosPlayRangeOptions {
   range: V5GCocosPlaybackRange;
