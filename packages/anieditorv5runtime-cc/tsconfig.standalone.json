@@ -1,7 +1,10 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "experimentalDecorators": true
+    "experimentalDecorators": true,
+    "target": "ES2015",
+    "lib": ["ES2015"],
+    "types": []
   },
   "include": ["standalone/**/*.ts", "types/**/*.d.ts"],
   "exclude": ["dist", "coverage", "node_modules", "tests"]

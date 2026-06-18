@@ -38,6 +38,10 @@ const forbiddenPatterns = [
     /\bsrc\/(?:core|cocos)\b/u,
     "runtime must not depend on package source paths",
   ],
+  [
+    /\.includes\s*\(/u,
+    "ES2016 includes() is not allowed in the ES2015 standalone runtime",
+  ],
 ];
 
 for (const [pattern, message] of forbiddenPatterns) {
