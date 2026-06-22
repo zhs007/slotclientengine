@@ -1,10 +1,14 @@
 /* v8 ignore file -- public type declarations only. */
 
 import type {
+  GameConfigPaytableEntry,
   GameLogic,
   GameLogicMeta,
   GameLogicStep,
+  LogicGameConfig,
   LogicComponent,
+  LogicReels,
+  ReelStopYOptions,
   SceneMatrix,
   WinResult,
 } from "@slotclientengine/logiccore";
@@ -15,10 +19,14 @@ import type {
 } from "@slotclientengine/netcore";
 
 export type {
+  GameConfigPaytableEntry,
   GameLogic,
   GameLogicMeta,
   GameLogicStep,
+  LogicGameConfig,
   LogicComponent,
+  LogicReels,
+  ReelStopYOptions,
   SceneMatrix,
   WinResult,
 };

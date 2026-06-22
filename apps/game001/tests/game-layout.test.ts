@@ -69,16 +69,14 @@ describe("game001 layout", () => {
       }),
     ).toThrow(/increase/);
     expect(() =>
-      validateGame001MainReelsCalibration(
-        GAME001_MAIN_REELS_CALIBRATION,
-        { lockedAxisIndex: 2 },
-      ),
+      validateGame001MainReelsCalibration(GAME001_MAIN_REELS_CALIBRATION, {
+        lockedAxisIndex: 2,
+      }),
     ).toThrow(/LOCKED_AXIS/);
     expect(() =>
-      validateGame001MainReelsCalibration(
-        GAME001_MAIN_REELS_CALIBRATION,
-        { lockedCenterY: 1 },
-      ),
+      validateGame001MainReelsCalibration(GAME001_MAIN_REELS_CALIBRATION, {
+        lockedCenterY: 1,
+      }),
     ).toThrow(/LOCKED_CENTER/);
   });
 
@@ -117,8 +115,7 @@ describe("game001 layout", () => {
     });
 
     for (const x of [0, 1, 2, 4]) {
-      const rawCenter =
-        reelLayout.getReelX(x) + reelLayout.cellWidth / 2;
+      const rawCenter = reelLayout.getReelX(x) + reelLayout.cellWidth / 2;
       const mappedCenter =
         layerLayout.x + rawCenter * layerLayout.mainReelsFitScale;
       expect(

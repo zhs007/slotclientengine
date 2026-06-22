@@ -26,17 +26,6 @@ export default defineConfig({
           "../../packages/rendercore/src/index.ts",
         ),
       },
-      {
-        find: "@slotclientengine/logiccore",
-        replacement: resolve(
-          __dirname,
-          "../../packages/logiccore/src/index.ts",
-        ),
-      },
-      {
-        find: "@slotclientengine/netcore",
-        replacement: resolve(__dirname, "../../packages/netcore/src/index.ts"),
-      },
     ],
   },
   server: {
@@ -48,7 +37,7 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    environment: "node",
+    environment: "happy-dom",
     setupFiles: "./tests/setup.ts",
     coverage: {
       provider: "v8",

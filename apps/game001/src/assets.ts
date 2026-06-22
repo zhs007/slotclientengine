@@ -326,11 +326,7 @@ function createNormalAssetFromManifest(
   }
 
   const layers = normal.layers.map((layer) =>
-    createLayerAssetFromManifestLayer(
-      symbol,
-      layer,
-      sources.assetsByFileName,
-    ),
+    createLayerAssetFromManifestLayer(symbol, layer, sources.assetsByFileName),
   );
   return Object.freeze({
     kind: "layered",
@@ -458,7 +454,10 @@ function parseManifestLayerKeyframes(
     );
   }
   const parsed = keyframes.map((keyframe) =>
-    assertString(keyframe, `symbol "${symbol}" ${label} layer ${index} keyframe`),
+    assertString(
+      keyframe,
+      `symbol "${symbol}" ${label} layer ${index} keyframe`,
+    ),
   );
   if (parsed[0] !== texture) {
     throw new Error(
@@ -522,9 +521,7 @@ async function loadNormalTextureSource(
     const layers = await Promise.all(
       normal.layers.map(async (layer) => {
         const keyframes = await Promise.all(
-          (layer.keyframes ?? []).map((keyframe) =>
-            loadAssetTexture(keyframe),
-          ),
+          (layer.keyframes ?? []).map((keyframe) => loadAssetTexture(keyframe)),
         );
         return Object.freeze({
           index: layer.index,

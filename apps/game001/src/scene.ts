@@ -1,4 +1,4 @@
-import type { SceneMatrix } from "@slotclientengine/logiccore";
+import type { SceneMatrix } from "@slotclientengine/gameframeworks";
 import {
   GAME001_LOCKED_AXIS_INDEX,
   GAME001_LOCKED_CENTER_Y,

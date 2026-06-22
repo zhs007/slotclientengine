@@ -1,9 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_GAME001_ENV_CONFIG, parseGame001Env } from "../src/env.js";
+import {
+  DEFAULT_GAME001_ENV_CONFIG,
+  parseGame001Env,
+  parseGame001FrameworkConfig,
+} from "../src/env.js";
 
 describe("game001 env", () => {
   it("uses the previous live defaults when env is absent", () => {
     expect(parseGame001Env({})).toEqual(DEFAULT_GAME001_ENV_CONFIG);
+    expect(parseGame001FrameworkConfig({})).toEqual({
+      live: {
+        serverUrl: DEFAULT_GAME001_ENV_CONFIG.serverUrl,
+        token: DEFAULT_GAME001_ENV_CONFIG.token,
+        gamecode: DEFAULT_GAME001_ENV_CONFIG.gamecode,
+        businessid: DEFAULT_GAME001_ENV_CONFIG.businessid,
+        clienttype: DEFAULT_GAME001_ENV_CONFIG.clienttype,
+        jurisdiction: DEFAULT_GAME001_ENV_CONFIG.jurisdiction,
+        language: DEFAULT_GAME001_ENV_CONFIG.language,
+        requestTimeoutMs: DEFAULT_GAME001_ENV_CONFIG.requestTimeoutMs,
+      },
+      betOptions: [
+        {
+          bet: DEFAULT_GAME001_ENV_CONFIG.bet,
+          lines: DEFAULT_GAME001_ENV_CONFIG.lines,
+          times: DEFAULT_GAME001_ENV_CONFIG.times,
+        },
+      ],
+      initialBetIndex: 0,
+      spinRequest: {
+        bet: DEFAULT_GAME001_ENV_CONFIG.bet,
+        lines: DEFAULT_GAME001_ENV_CONFIG.lines,
+        times: DEFAULT_GAME001_ENV_CONFIG.times,
+        autonums: DEFAULT_GAME001_ENV_CONFIG.autonums,
+      },
+    });
   });
 
   it("parses explicit live config over defaults", () => {
@@ -18,7 +48,18 @@ describe("game001 env", () => {
       bet: 10,
       lines: 25,
       times: 1,
+      autonums: -1,
       requestTimeoutMs: 30000,
+    });
+    expect(parseGame001FrameworkConfig(validEnv())).toMatchObject({
+      live: {
+        serverUrl: "wss://example.test/game",
+        token: "token-1",
+        gamecode: "game001",
+      },
+      betOptions: [{ bet: 10, lines: 25, times: 1 }],
+      initialBetIndex: 0,
+      spinRequest: { bet: 10, lines: 25, times: 1, autonums: -1 },
     });
   });
 
@@ -65,6 +106,15 @@ describe("game001 env", () => {
     expect(() =>
       parseGame001Env({ ...validEnv(), VITE_GAME001_TIMES: "-1" }),
     ).toThrow(/TIMES/);
+    expect(() =>
+      parseGame001Env({
+        ...validEnv(),
+        VITE_GAME001_REQUEST_TIMEOUT_MS: "0",
+      }),
+    ).toThrow(/REQUEST_TIMEOUT/);
+    expect(() =>
+      parseGame001Env({ ...validEnv(), VITE_GAME001_AUTONUMS: "1.2" }),
+    ).toThrow(/AUTONUMS/);
   });
 
   it("parses explicit optional fields", () => {
@@ -76,6 +126,7 @@ describe("game001 env", () => {
         VITE_GAME001_JURISDICTION: "UK",
         VITE_GAME001_LANGUAGE: "fr",
         VITE_GAME001_TIMES: "3",
+        VITE_GAME001_AUTONUMS: "5",
         VITE_GAME001_REQUEST_TIMEOUT_MS: "2500",
       }),
     ).toMatchObject({
@@ -84,6 +135,7 @@ describe("game001 env", () => {
       jurisdiction: "UK",
       language: "fr",
       times: 3,
+      autonums: 5,
       requestTimeoutMs: 2500,
     });
   });
