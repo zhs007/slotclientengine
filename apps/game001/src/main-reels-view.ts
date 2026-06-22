@@ -1,5 +1,5 @@
 import { Container, Graphics } from "pixi.js";
-import type { LogicReels, SceneMatrix } from "@slotclientengine/logiccore";
+import type { LogicReels, SceneMatrix } from "@slotclientengine/gameframeworks";
 import {
   RenderReel,
   type ReelLayout,
@@ -60,7 +60,7 @@ export interface Game001MainReelsView {
   readonly normalAxisIndexes: readonly number[];
   readonly lockedAxisIndex: typeof GAME001_LOCKED_AXIS_INDEX;
   readonly lockedCenterY: typeof GAME001_LOCKED_CENTER_Y;
-  applyScene(scene: SceneMatrix, finalYs: readonly number[]): void;
+  applyScene(scene: SceneMatrix, finalYs?: readonly number[] | null): void;
   spinToScene(
     scene: SceneMatrix,
     finalYs: readonly number[],
@@ -94,9 +94,14 @@ export function assertGame001MainReelsVisualMatchesTarget(
     }
   }
 
-  const expectedLockedCode = getGame001LockedCenterCode(validTargetScene, label);
+  const expectedLockedCode = getGame001LockedCenterCode(
+    validTargetScene,
+    label,
+  );
   if (snapshot.lockedAxis.code !== expectedLockedCode) {
-    throw new Error(`${label} locked axis center symbol does not match target.`);
+    throw new Error(
+      `${label} locked axis center symbol does not match target.`,
+    );
   }
   if (snapshot.lockedAxis.visibleSymbolCount !== 1) {
     throw new Error(`${label} locked axis must show exactly one symbol.`);
@@ -149,14 +154,23 @@ class Game001MainReelsViewModel implements Game001MainReelsView {
     this.root.visible = false;
   }
 
-  applyScene(scene: SceneMatrix, finalYs: readonly number[]): void {
+  applyScene(
+    scene: SceneMatrix,
+    finalYs: readonly number[] | null = null,
+  ): void {
     const validScene = validateGame001Scene(scene, "game001 main reels scene");
-    this.assertFinalYs(finalYs);
+    if (finalYs) {
+      this.assertFinalYs(finalYs);
+    }
     this.#spinPlan = null;
     this.#elapsedMs = 0;
     this.#startedAxes = new Set();
     for (const x of this.normalAxisIndexes) {
-      this.requireNormalReel(x).resetToY(finalYs[x]);
+      if (finalYs) {
+        this.requireNormalReel(x).resetToY(finalYs[x]);
+      } else {
+        this.requireNormalReel(x).resetToVisibleSymbols(validScene[x]);
+      }
     }
     this.syncLockedSymbol(validScene, "game001 main reels scene");
     this.#currentScene = validScene;
@@ -215,10 +229,10 @@ class Game001MainReelsViewModel implements Game001MainReelsView {
 
     const completed = Boolean(
       this.#spinPlan &&
-        this.normalAxisIndexes.every((x) => this.#startedAxes.has(x)) &&
-        this.normalAxisIndexes.every(
-          (x) => this.requireNormalReel(x).getSnapshot().phase === "stopped",
-        ),
+      this.normalAxisIndexes.every((x) => this.#startedAxes.has(x)) &&
+      this.normalAxisIndexes.every(
+        (x) => this.requireNormalReel(x).getSnapshot().phase === "stopped",
+      ),
     );
 
     if (completed && this.#targetScene) {
@@ -256,7 +270,9 @@ class Game001MainReelsViewModel implements Game001MainReelsView {
       visible: this.root.visible,
       spinning: this.#spinPlan !== null,
       normalAxisIndexes: this.normalAxisIndexes,
-      startedNormalAxes: Object.freeze([...this.#startedAxes].sort(compareNumber)),
+      startedNormalAxes: Object.freeze(
+        [...this.#startedAxes].sort(compareNumber),
+      ),
       stoppedNormalAxes: this.getStoppedNormalAxes(),
       normalVisibleScene: Object.freeze(
         this.normalAxisIndexes.map((x) =>
@@ -350,7 +366,11 @@ class Game001MainReelsViewModel implements Game001MainReelsView {
       }
       const reel = this.requireNormalReel(x);
       this.resetNormalReelSymbolsBeforeSpin(reel);
-      reel.start(axis);
+      const targetVisibleSymbols = this.#targetScene?.[x];
+      reel.start(
+        axis,
+        targetVisibleSymbols ? { targetVisibleSymbols } : undefined,
+      );
       this.#startedAxes.add(x);
     }
   }

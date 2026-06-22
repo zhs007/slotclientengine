@@ -3,7 +3,7 @@ import {
   createGameConfig,
   type LogicGameConfig,
   type SceneMatrix,
-} from "@slotclientengine/logiccore";
+} from "@slotclientengine/gameframeworks";
 import {
   createReelLayout,
   createReelSpinPlan,
@@ -129,12 +129,19 @@ export function createGame001ReelRuntime(
 
   let finalYs: readonly number[] | null = null;
 
-  const calculateFinalYs = (scene: SceneMatrix, sceneName: string) =>
-    gameConfig.getStopYCoordinates({
-      reelsName: config.reelsName,
-      sceneName,
-      scene,
-    });
+  const resolveFinalYs = (scene: SceneMatrix) =>
+    Object.freeze(
+      scene.map((visibleSymbols, x) => {
+        const candidates = reels.findStopYCandidates(x, visibleSymbols);
+        return candidates[0] ?? reels.normalizeY(x, 0);
+      }),
+    );
+
+  const canResolveEveryFinalY = (scene: SceneMatrix) =>
+    scene.every(
+      (visibleSymbols, x) =>
+        reels.findStopYCandidates(x, visibleSymbols).length > 0,
+    );
 
   const runtime: Game001ReelRuntime = Object.freeze({
     config,
@@ -160,8 +167,11 @@ export function createGame001ReelRuntime(
       sceneName = "game001.initialScene",
     ): readonly number[] {
       const validScene = validateGame001Scene(scene, sceneName);
-      const nextFinalYs = calculateFinalYs(validScene, sceneName);
-      mainReelsView.applyScene(validScene, nextFinalYs);
+      const nextFinalYs = resolveFinalYs(validScene);
+      mainReelsView.applyScene(
+        validScene,
+        canResolveEveryFinalY(validScene) ? nextFinalYs : null,
+      );
       finalYs = nextFinalYs;
       return nextFinalYs;
     },
@@ -170,7 +180,7 @@ export function createGame001ReelRuntime(
       sceneName = "game001.spinScene",
     ): ReelSpinPlan {
       const validScene = validateGame001Scene(scene, sceneName);
-      const nextFinalYs = calculateFinalYs(validScene, sceneName);
+      const nextFinalYs = resolveFinalYs(validScene);
       return createReelSpinPlan({
         reels,
         finalYs: nextFinalYs,
@@ -191,7 +201,7 @@ export function createGame001ReelRuntime(
         throw new Error("game001 reels are already spinning.");
       }
       const validScene = validateGame001Scene(scene, sceneName);
-      const nextFinalYs = calculateFinalYs(validScene, sceneName);
+      const nextFinalYs = resolveFinalYs(validScene);
       const plan = createReelSpinPlan({
         reels,
         finalYs: nextFinalYs,

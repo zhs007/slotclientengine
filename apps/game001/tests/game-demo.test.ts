@@ -25,6 +25,14 @@ const TARGET_SCENE = Object.freeze([
   Object.freeze([1, 1, 1, 1, 1]),
   Object.freeze([9, 0, 6, 0, 6]),
 ]);
+
+const SERVER_SCENE_WITH_REDACTED_REEL_STOP = Object.freeze([
+  Object.freeze([2, 0, 2, 0, 3]),
+  TARGET_SCENE[1],
+  TARGET_SCENE[2],
+  TARGET_SCENE[3],
+  TARGET_SCENE[4],
+]);
 describe("game001 reel runtime", () => {
   it("keeps reels hidden until a live scene is applied", () => {
     const runtime = createGame001ReelRuntime({
@@ -42,6 +50,21 @@ describe("game001 reel runtime", () => {
     expect(runtime.getTargetScene()).toBeNull();
     expect(runtime.mainReelsLayer.visible).toBe(true);
     expectRuntimeVisualMatchesScene(runtime, TARGET_SCENE);
+  });
+
+  it("renders a live scene even when the redacted client reel has no exact stop y", () => {
+    const runtime = createGame001ReelRuntime({
+      rawGameConfig,
+      symbolAssets: createGame001Textures(),
+    });
+
+    expect(runtime.applyScene(SERVER_SCENE_WITH_REDACTED_REEL_STOP)).toEqual([
+      0, 1, 4, 0, 27,
+    ]);
+    expectRuntimeVisualMatchesScene(
+      runtime,
+      SERVER_SCENE_WITH_REDACTED_REEL_STOP,
+    );
   });
 
   it("uses parent fit scale without changing special symbol scale", () => {
@@ -178,19 +201,31 @@ describe("game001 reel runtime", () => {
     expect(runtime.isSpinning()).toBe(false);
   });
 
-  it("fails before animation when stop y cannot be resolved", () => {
+  it("injects the server target scene when the redacted client reel has no exact stop y", () => {
     const runtime = createGame001ReelRuntime({
       rawGameConfig,
       symbolAssets: createGame001Textures(),
       initialScene: TARGET_SCENE,
     });
-    const impossibleScene = TARGET_SCENE.map((column) => [
-      ...column,
-    ]) as number[][];
-    impossibleScene[0] = [10, 10, 10, 10, 10];
 
-    expect(() => runtime.spinToScene(impossibleScene)).toThrow();
+    const plan = runtime.spinToScene(SERVER_SCENE_WITH_REDACTED_REEL_STOP);
+    expect(plan.axes[0].finalY).toBe(0);
+    expect(runtime.isSpinning()).toBe(true);
+
+    let result = runtime.update(0.1);
+    for (let index = 0; index < 80 && !result.completed; index += 1) {
+      result = runtime.update(0.1);
+    }
+
+    expect(result.completed).toBe(true);
     expect(runtime.isSpinning()).toBe(false);
+    expect(runtime.getCurrentScene()).toEqual(
+      SERVER_SCENE_WITH_REDACTED_REEL_STOP,
+    );
+    expectRuntimeVisualMatchesScene(
+      runtime,
+      SERVER_SCENE_WITH_REDACTED_REEL_STOP,
+    );
   });
 });
 
@@ -281,7 +316,7 @@ function findVisibleSymbol(
 
 function expectRuntimeVisualMatchesScene(
   runtime: ReturnType<typeof createGame001ReelRuntime>,
-  scene: typeof TARGET_SCENE,
+  scene: typeof TARGET_SCENE | typeof SERVER_SCENE_WITH_REDACTED_REEL_STOP,
 ): void {
   const snapshot = runtime.getVisualSnapshot();
   expect(snapshot.normalAxisIndexes).toEqual([0, 1, 2, 4]);

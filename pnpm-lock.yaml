@@ -116,12 +116,9 @@ importers:
 
   apps/game001:
     dependencies:
-      '@slotclientengine/logiccore':
+      '@slotclientengine/gameframeworks':
         specifier: workspace:*
-        version: link:../../packages/logiccore
-      '@slotclientengine/netcore':
-        specifier: workspace:*
-        version: link:../../packages/netcore
+        version: link:../../packages/gameframeworks
       '@slotclientengine/rendercore':
         specifier: workspace:*
         version: link:../../packages/rendercore
@@ -147,6 +144,9 @@ importers:
       globals:
         specifier: ^15.15.0
         version: 15.15.0
+      happy-dom:
+        specifier: ^20.0.10
+        version: 20.10.2
 
   apps/gameclientcli:
     dependencies:

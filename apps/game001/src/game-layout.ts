@@ -141,7 +141,10 @@ export function getMainReelsVisibleWindow(
     throw new Error("cellHeight must be a positive number.");
   }
   let cropHeight = 2 * cellHeight;
-  if (options.maxVisibleHeight !== undefined || options.fitScale !== undefined) {
+  if (
+    options.maxVisibleHeight !== undefined ||
+    options.fitScale !== undefined
+  ) {
     if (
       options.maxVisibleHeight === undefined ||
       !Number.isFinite(options.maxVisibleHeight) ||
@@ -156,7 +159,10 @@ export function getMainReelsVisibleWindow(
     ) {
       throw new Error("fitScale must be a positive number.");
     }
-    cropHeight = Math.min(cropHeight, options.maxVisibleHeight / options.fitScale);
+    cropHeight = Math.min(
+      cropHeight,
+      options.maxVisibleHeight / options.fitScale,
+    );
   }
   const centerY = (GAME001_LOCKED_CENTER_Y + 0.5) * cellHeight;
   return Object.freeze({
@@ -243,10 +249,8 @@ export function createMainReelsLayerLayout(
   const mainReelsFitScale =
     (columnCentersX[columnCentersX.length - 1] - columnCentersX[0]) /
     rawCenterDistance;
-  const backgroundFrame =
-    GAME001_MAIN_REELS_CALIBRATION.backgroundLocalFrame;
-  const targetVisibleTop =
-    gameLayout.mainReelsBackground.y + backgroundFrame.y;
+  const backgroundFrame = GAME001_MAIN_REELS_CALIBRATION.backgroundLocalFrame;
+  const targetVisibleTop = gameLayout.mainReelsBackground.y + backgroundFrame.y;
   const targetVisibleHeight = backgroundFrame.height;
   const { cropY, cropHeight } = getMainReelsVisibleWindow(layout.cellHeight, {
     maxVisibleHeight: targetVisibleHeight,

@@ -1,5 +1,6 @@
 import "./styles.css";
 
+export { createGameConfig } from "@slotclientengine/logiccore";
 export { createSlotGameFramework, buildSpinParams } from "./framework.js";
 export {
   SlotGameConfigError,
@@ -28,10 +29,14 @@ export {
   getComponentScenesByName,
 } from "./component-helpers.js";
 export type {
+  GameConfigPaytableEntry,
   GameLogic,
   GameLogicMeta,
   GameLogicStep,
+  LogicGameConfig,
   LogicComponent,
+  LogicReels,
+  ReelStopYOptions,
   SceneMatrix,
   SlotGameAdapter,
   SlotGameBetOption,

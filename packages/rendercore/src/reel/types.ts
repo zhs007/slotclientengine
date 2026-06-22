@@ -1,4 +1,8 @@
-import type { LogicGameConfig, LogicReels, SceneMatrix } from "@slotclientengine/logiccore";
+import type {
+  LogicGameConfig,
+  LogicReels,
+  SceneMatrix,
+} from "@slotclientengine/logiccore";
 import type { Container, Texture } from "pixi.js";
 import type {
   RenderSymbol,
@@ -6,12 +10,17 @@ import type {
   SymbolAssetMap,
   SymbolStateId,
   SymbolStatePreset,
-  SymbolTexturePolicy
+  SymbolTexturePolicy,
 } from "../symbol/index.js";
 
 export type ReelSymbolKind = "textured" | "empty";
 export type ReelSpinDirection = "forward" | "backward";
-export type RenderReelPhase = "idle" | "starting" | "spinning" | "settling" | "stopped";
+export type RenderReelPhase =
+  | "idle"
+  | "starting"
+  | "spinning"
+  | "settling"
+  | "stopped";
 
 export interface ReelCellSize {
   readonly width: number;
@@ -124,6 +133,10 @@ export interface RenderReelOptions {
   readonly x: number;
   readonly layout: ReelLayout;
   readonly registry: ReelSymbolRegistry;
+}
+
+export interface RenderReelSpinOptions {
+  readonly targetVisibleSymbols?: readonly number[];
 }
 
 export interface RenderReelUpdateResult {

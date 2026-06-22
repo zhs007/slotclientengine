@@ -10,14 +10,6 @@ export default defineConfig({
       fileName: () => "index.js",
       cssFileName: "gameframeworks",
     },
-    rollupOptions: {
-      external: [
-        "@slotclientengine/uiframeworks",
-        "@slotclientengine/uiframeworks/styles.css",
-        "@slotclientengine/netcore",
-        "@slotclientengine/logiccore",
-      ],
-    },
   },
   resolve: {
     alias: [

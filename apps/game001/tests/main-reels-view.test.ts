@@ -6,7 +6,7 @@ import {
   type LogicGameConfig,
   type LogicReels,
   type SceneMatrix,
-} from "@slotclientengine/logiccore";
+} from "@slotclientengine/gameframeworks";
 import {
   RenderSymbol,
   type SymbolAssetMap,
@@ -52,6 +52,14 @@ const TARGET_WITH_CHANGED_LOCK = Object.freeze([
   INITIAL_SCENE[4],
 ]);
 
+const SERVER_SCENE_WITH_REDACTED_REEL_STOP = Object.freeze([
+  Object.freeze([2, 0, 2, 0, 3]),
+  INITIAL_SCENE[1],
+  INITIAL_SCENE[2],
+  INITIAL_SCENE[3],
+  INITIAL_SCENE[4],
+]);
+
 describe("game001 main reels view", () => {
   it("applies a full scene while rendering only normal axes plus one locked center symbol", () => {
     const fixture = createFixture();
@@ -78,6 +86,23 @@ describe("game001 main reels view", () => {
       INITIAL_SCENE[2],
       INITIAL_SCENE[4],
     ]);
+  });
+
+  it("can apply a live scene without stop y coordinates", () => {
+    const fixture = createFixture();
+    fixture.view.applyScene(SERVER_SCENE_WITH_REDACTED_REEL_STOP);
+    const snapshot = fixture.view.getVisualSnapshot();
+
+    expect(snapshot.visible).toBe(true);
+    expect(snapshot.normalVisibleScene).toEqual([
+      SERVER_SCENE_WITH_REDACTED_REEL_STOP[0],
+      SERVER_SCENE_WITH_REDACTED_REEL_STOP[1],
+      SERVER_SCENE_WITH_REDACTED_REEL_STOP[2],
+      SERVER_SCENE_WITH_REDACTED_REEL_STOP[4],
+    ]);
+    expect(snapshot.lockedAxis.code).toBe(
+      SERVER_SCENE_WITH_REDACTED_REEL_STOP[3][2],
+    );
   });
 
   it("spins only normal axes and keeps the locked symbol fixed until completion", () => {
@@ -131,9 +156,9 @@ describe("game001 main reels view", () => {
     for (const symbol of collectNormalRenderSymbols(fixture.view.root)) {
       symbol.requestState("appear");
     }
-    expect(fixture.view.getVisualSnapshot().normalRequestedStates.flat()).toContain(
-      "appear",
-    );
+    expect(
+      fixture.view.getVisualSnapshot().normalRequestedStates.flat(),
+    ).toContain("appear");
 
     fixture.view.spinToScene(
       TARGET_WITH_CHANGED_LOCK,
@@ -141,8 +166,9 @@ describe("game001 main reels view", () => {
       createFastPlan(fixture.reels, fixture.finalYs),
     );
 
-    const requestedStates =
-      fixture.view.getVisualSnapshot().normalRequestedStates.flat();
+    const requestedStates = fixture.view
+      .getVisualSnapshot()
+      .normalRequestedStates.flat();
     expect(requestedStates).toContain("spinBlur");
     expect(requestedStates).not.toContain("appear");
   });
@@ -153,12 +179,16 @@ describe("game001 main reels view", () => {
 
     expect(fixture.view.root.visible).toBe(false);
     expect(fixture.view.getVisualSnapshot().lockedAxis.code).toBeNull();
-    expect(fixture.view.getVisualSnapshot().lockedAxis.visibleSymbolCount).toBe(0);
+    expect(fixture.view.getVisualSnapshot().lockedAxis.visibleSymbolCount).toBe(
+      0,
+    );
 
     fixture.view.spinToScene(INITIAL_SCENE, fixture.finalYs, plan);
     expect(fixture.view.root.visible).toBe(false);
     expect(fixture.view.getVisualSnapshot().lockedAxis.code).toBeNull();
-    expect(fixture.view.getVisualSnapshot().lockedAxis.visibleSymbolCount).toBe(0);
+    expect(fixture.view.getVisualSnapshot().lockedAxis.visibleSymbolCount).toBe(
+      0,
+    );
 
     let result = fixture.view.update(0.05);
     for (let index = 0; index < 20 && !result.completed; index += 1) {
@@ -170,7 +200,9 @@ describe("game001 main reels view", () => {
     expect(fixture.view.getVisualSnapshot().lockedAxis.code).toBe(
       INITIAL_SCENE[3][2],
     );
-    expect(fixture.view.getVisualSnapshot().lockedAxis.visibleSymbolCount).toBe(1);
+    expect(fixture.view.getVisualSnapshot().lockedAxis.visibleSymbolCount).toBe(
+      1,
+    );
   });
 
   it("rejects invalid locked axis symbols and never accumulates old symbols", () => {
@@ -180,17 +212,21 @@ describe("game001 main reels view", () => {
     const unknownLockedScene = cloneScene(INITIAL_SCENE);
     unknownLockedScene[3][2] = 999;
 
-    expect(() => fixture.view.applyScene(emptyLockedScene, fixture.finalYs)).toThrow(
-      /empty symbol/,
-    );
+    expect(() =>
+      fixture.view.applyScene(emptyLockedScene, fixture.finalYs),
+    ).toThrow(/empty symbol/);
     expect(() =>
       fixture.view.applyScene(unknownLockedScene, fixture.finalYs),
     ).toThrow(/does not exist/);
 
     fixture.view.applyScene(INITIAL_SCENE, fixture.finalYs);
-    expect(fixture.view.getVisualSnapshot().lockedAxis.visibleSymbolCount).toBe(1);
+    expect(fixture.view.getVisualSnapshot().lockedAxis.visibleSymbolCount).toBe(
+      1,
+    );
     fixture.view.applyScene(TARGET_WITH_CHANGED_LOCK, fixture.finalYs);
-    expect(fixture.view.getVisualSnapshot().lockedAxis.visibleSymbolCount).toBe(1);
+    expect(fixture.view.getVisualSnapshot().lockedAxis.visibleSymbolCount).toBe(
+      1,
+    );
     expect(fixture.view.getVisualSnapshot().lockedAxis.code).toBe(2);
   });
 });

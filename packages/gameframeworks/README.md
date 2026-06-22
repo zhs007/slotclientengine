@@ -55,6 +55,16 @@ await framework.spin();
 
 helper 只接收 `GameLogic`，不会暴露 raw 协议 wrapper。
 
+## 游戏配置 Helper
+
+本包窄重导出浏览器侧游戏配置能力，当前包括：
+
+- `createGameConfig(config)`
+- `LogicGameConfig`
+- `LogicReels`
+
+游戏需要读取 reel 配置或反查 stop y 时，应从 `@slotclientengine/gameframeworks` 导入这些 facade API，不直接依赖 `@slotclientengine/logiccore`。本包不会重导出 `logiccore/node` 或文件系统 loader。
+
 ## Fail-fast 策略
 
 - live URL 只允许 `ws://` 或 `wss://`。

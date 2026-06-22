@@ -2,7 +2,10 @@ import { Container, Graphics } from "pixi.js";
 import { assertValidDeltaSeconds } from "../symbol/ani.js";
 import { ReelError } from "./errors.js";
 import { createReelWindowSnapshot } from "./reel-window.js";
-import { createTemporaryReelStrip, type TemporaryReelStrip } from "./spin-strip.js";
+import {
+  createTemporaryReelStrip,
+  type TemporaryReelStrip,
+} from "./spin-strip.js";
 import type {
   ReelAxisSpinPlan,
   ReelLayout,
@@ -10,10 +13,11 @@ import type {
   ReelSymbolRegistry,
   RenderReelOptions,
   RenderReelPhase,
+  RenderReelSpinOptions,
   RenderReelSlotSnapshot,
   ReelWindowSnapshot,
   RenderReelSnapshot,
-  RenderReelUpdateResult
+  RenderReelUpdateResult,
 } from "./types.js";
 import type { LogicReels } from "@slotclientengine/logiccore";
 import type { RenderSymbol, SymbolStateId } from "../symbol/index.js";
@@ -39,6 +43,8 @@ export class RenderReel extends Container {
   #spinLocalY = 0;
   #elapsedMs = 0;
   #currentY = 0;
+  #staticVisibleSymbols: readonly number[] | null = null;
+  #targetVisibleSymbols: readonly number[] | null = null;
   #landed = false;
 
   constructor(options: RenderReelOptions) {
@@ -48,7 +54,12 @@ export class RenderReel extends Container {
     this.layout = options.layout;
     this.#registry = options.registry;
     this.#clipMask = new Graphics()
-      .rect(0, 0, options.layout.cellWidth, options.layout.visibleRows * options.layout.cellHeight)
+      .rect(
+        0,
+        0,
+        options.layout.cellWidth,
+        options.layout.visibleRows * options.layout.cellHeight,
+      )
       .fill({ color: 0xffffff, alpha: 1 });
     this.#slots = Object.freeze(this.createSlots());
     this.x = options.layout.getReelX(options.x);
@@ -56,13 +67,22 @@ export class RenderReel extends Container {
     this.resetToY(0);
   }
 
-  start(plan: ReelAxisSpinPlan): void {
+  start(plan: ReelAxisSpinPlan, options: RenderReelSpinOptions = {}): void {
     if (plan.x !== this.xIndex) {
-      throw new ReelError(`Cannot start reel ${this.xIndex} with axis plan ${plan.x}.`);
+      throw new ReelError(
+        `Cannot start reel ${this.xIndex} with axis plan ${plan.x}.`,
+      );
     }
     if (this.#phase !== "idle" && this.#phase !== "stopped") {
-      throw new ReelError(`Cannot start reel ${this.xIndex} while phase is "${this.#phase}".`);
+      throw new ReelError(
+        `Cannot start reel ${this.xIndex} while phase is "${this.#phase}".`,
+      );
     }
+    const targetVisibleSymbols = parseVisibleSymbols(
+      options.targetVisibleSymbols,
+      this.layout.visibleRows,
+      "targetVisibleSymbols",
+    );
 
     this.#plan = plan;
     this.#spinStrip = createTemporaryReelStrip({
@@ -70,8 +90,11 @@ export class RenderReel extends Container {
       x: this.xIndex,
       layout: this.layout,
       plan,
-      currentY: this.#currentY
+      currentVisibleSymbols: this.getVisibleScene(),
+      targetVisibleSymbols,
     });
+    this.#staticVisibleSymbols = null;
+    this.#targetVisibleSymbols = targetVisibleSymbols ?? null;
     this.#spinLocalY = 0;
     this.#elapsedMs = 0;
     this.#phase = "starting";
@@ -86,14 +109,25 @@ export class RenderReel extends Container {
     let landedThisUpdate = false;
 
     if (this.#plan && !this.#landed) {
-      this.#elapsedMs = Math.min(this.#elapsedMs + deltaSeconds * 1000, this.#plan.durationMs);
-      const progress = this.#plan.durationMs === 0 ? 1 : this.#elapsedMs / this.#plan.durationMs;
+      this.#elapsedMs = Math.min(
+        this.#elapsedMs + deltaSeconds * 1000,
+        this.#plan.durationMs,
+      );
+      const progress =
+        this.#plan.durationMs === 0
+          ? 1
+          : this.#elapsedMs / this.#plan.durationMs;
 
       if (progress >= 1) {
         this.land();
         landedThisUpdate = true;
       } else {
-        this.#phase = progress < 0.12 ? "starting" : progress < 0.86 ? "spinning" : "settling";
+        this.#phase =
+          progress < 0.12
+            ? "starting"
+            : progress < 0.86
+              ? "spinning"
+              : "settling";
         this.#spinLocalY = this.calculateSpinLocalY(progress);
         this.y = calculateBounceOffset(progress, this.layout.cellHeight);
         this.syncClippingForPhase();
@@ -106,7 +140,7 @@ export class RenderReel extends Container {
     return Object.freeze({
       phase: this.#phase,
       completed: this.#phase === "stopped",
-      landed: !wasLanded && this.#landed
+      landed: !wasLanded && this.#landed,
     });
   }
 
@@ -116,6 +150,29 @@ export class RenderReel extends Container {
     this.#spinLocalY = 0;
     this.#elapsedMs = 0;
     this.#currentY = y;
+    this.#staticVisibleSymbols = null;
+    this.#targetVisibleSymbols = null;
+    this.#phase = "stopped";
+    this.#landed = true;
+    this.y = 0;
+    this.syncClippingForPhase();
+    this.renderAtY(y, "normal");
+    this.updateVisibleSymbols(0);
+  }
+
+  resetToVisibleSymbols(visibleSymbols: readonly number[], y = 0): void {
+    const parsedVisibleSymbols = parseVisibleSymbols(
+      visibleSymbols,
+      this.layout.visibleRows,
+      "visibleSymbols",
+    )!;
+    this.#plan = null;
+    this.#spinStrip = null;
+    this.#spinLocalY = 0;
+    this.#elapsedMs = 0;
+    this.#currentY = y;
+    this.#staticVisibleSymbols = parsedVisibleSymbols;
+    this.#targetVisibleSymbols = null;
     this.#phase = "stopped";
     this.#landed = true;
     this.y = 0;
@@ -125,7 +182,9 @@ export class RenderReel extends Container {
   }
 
   getVisibleScene(): readonly number[] {
-    return this.createWindowSnapshot(this.#spinStrip ? this.#spinLocalY : this.#currentY).visibleScene;
+    return this.createWindowSnapshot(
+      this.#spinStrip ? this.#spinLocalY : this.#currentY,
+    ).visibleScene;
   }
 
   getSlotSnapshots(): readonly RenderReelSlotSnapshot[] {
@@ -136,9 +195,10 @@ export class RenderReel extends Container {
           kind: slot.kind ?? "empty",
           symbol: slot.symbol,
           container: slot.container,
-          requestedState: slot.symbol?.getStateSnapshot().requestedState ?? null
-        })
-      )
+          requestedState:
+            slot.symbol?.getStateSnapshot().requestedState ?? null,
+        }),
+      ),
     );
   }
 
@@ -150,7 +210,7 @@ export class RenderReel extends Container {
       finalY: this.#plan?.finalY ?? null,
       startY: this.#plan?.startY ?? null,
       elapsedMs: this.#elapsedMs,
-      visibleScene: this.getVisibleScene()
+      visibleScene: this.getVisibleScene(),
     });
   }
 
@@ -170,7 +230,7 @@ export class RenderReel extends Container {
         container,
         code: null,
         kind: null,
-        symbol: null
+        symbol: null,
       });
     }
     return slots;
@@ -180,12 +240,18 @@ export class RenderReel extends Container {
     const snapshot = this.createWindowSnapshot(y);
 
     for (const slotData of snapshot.slots) {
-      const slot = this.#slots.find((candidate) => candidate.windowY === slotData.windowY);
+      const slot = this.#slots.find(
+        (candidate) => candidate.windowY === slotData.windowY,
+      );
       if (!slot) {
-        throw new ReelError(`Missing reel slot for windowY ${slotData.windowY}.`);
+        throw new ReelError(
+          `Missing reel slot for windowY ${slotData.windowY}.`,
+        );
       }
       slot.container.y =
-        this.layout.getCellY(slotData.windowY) + this.layout.cellHeight / 2 + snapshot.pixelOffsetY;
+        this.layout.getCellY(slotData.windowY) +
+        this.layout.cellHeight / 2 +
+        snapshot.pixelOffsetY;
       slot.container.visible = this.shouldShowSlot(slotData.windowY);
       this.syncSlot(slot, slotData.code);
       slot.symbol?.requestState(state);
@@ -194,13 +260,25 @@ export class RenderReel extends Container {
 
   private createWindowSnapshot(y: number): ReelWindowSnapshot {
     const spinStrip = this.#spinStrip;
+    const staticVisibleSymbols = spinStrip ? null : this.#staticVisibleSymbols;
+    const staticBaseY = Math.floor(y);
 
     return createReelWindowSnapshot({
       reels: this.#reels,
       x: this.xIndex,
       y,
       layout: this.layout,
-      codeAt: spinStrip ? (symbolY) => spinStrip.get(symbolY) : undefined
+      codeAt: spinStrip
+        ? (symbolY) => spinStrip.get(symbolY)
+        : staticVisibleSymbols
+          ? (symbolY) => {
+              const visibleY = symbolY - staticBaseY;
+              if (visibleY >= 0 && visibleY < this.layout.visibleRows) {
+                return staticVisibleSymbols[visibleY];
+              }
+              return this.#reels.get(this.xIndex, symbolY);
+            }
+          : undefined,
     });
   }
 
@@ -234,6 +312,8 @@ export class RenderReel extends Container {
 
     this.#elapsedMs = plan.durationMs;
     this.#currentY = plan.finalY;
+    this.#staticVisibleSymbols = this.#targetVisibleSymbols;
+    this.#targetVisibleSymbols = null;
     this.#spinStrip = null;
     this.#spinLocalY = 0;
     this.#phase = "stopped";
@@ -250,7 +330,9 @@ export class RenderReel extends Container {
     }
 
     const eased = easeSpinTravel(progress);
-    return plan.direction === "forward" ? plan.travelSymbols * eased : -plan.travelSymbols * eased;
+    return plan.direction === "forward"
+      ? plan.travelSymbols * eased
+      : -plan.travelSymbols * eased;
   }
 
   private syncClippingForPhase(): void {
@@ -270,6 +352,29 @@ export class RenderReel extends Container {
     }
     return windowY >= 0 && windowY < this.layout.visibleRows;
   }
+}
+
+function parseVisibleSymbols(
+  value: readonly number[] | undefined,
+  expectedLength: number,
+  label: string,
+): readonly number[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value) || value.length !== expectedLength) {
+    throw new ReelError(`${label} length must be ${expectedLength}.`);
+  }
+  return Object.freeze(
+    value.map((code, index) => {
+      if (!Number.isInteger(code) || code < 0) {
+        throw new ReelError(
+          `${label}[${index}] must be a non-negative integer.`,
+        );
+      }
+      return code;
+    }),
+  );
 }
 
 function easeSpinTravel(progress: number): number {
