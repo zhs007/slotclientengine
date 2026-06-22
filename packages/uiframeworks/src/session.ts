@@ -6,7 +6,7 @@ import type {
   Logger,
   SlotcraftClientOptions,
   SpinParams,
-  UserInfo
+  UserInfo,
 } from "@slotclientengine/netcore";
 import { SlotUiConfigError, SlotUiRuntimeError } from "./errors.js";
 import type {
@@ -15,7 +15,7 @@ import type {
   SlotcraftClientLike,
   SlotUiLiveConfig,
   SlotUiSpinResult,
-  SlotUiStateSnapshot
+  SlotUiStateSnapshot,
 } from "./types.js";
 
 type Listener = (...args: unknown[]) => void;
@@ -51,7 +51,10 @@ export class SlotUiLiveSession {
     this.#live = options.live;
     this.#monitor = new FailFastMonitor(options.logger);
     this.#logicFactory = options.logicFactory ?? createGameLogicFromGmi;
-    const clientOptions = createSlotcraftClientOptions(options.live, this.#monitor.logger);
+    const clientOptions = createSlotcraftClientOptions(
+      options.live,
+      this.#monitor.logger,
+    );
     const clientFactory =
       options.clientFactory ??
       ((_live, slotcraftOptions) => new SlotcraftClient(slotcraftOptions));
@@ -75,19 +78,25 @@ export class SlotUiLiveSession {
       throw new SlotUiRuntimeError("Cannot spin before connect succeeds.");
     }
     if (this.#spinInFlight) {
-      throw new SlotUiRuntimeError("A slot UI spin request is already in progress.");
+      throw new SlotUiRuntimeError(
+        "A slot UI spin request is already in progress.",
+      );
     }
 
     this.#spinInFlight = true;
     try {
-      const params = buildSpinParams(options.state, options.bet, options.buildSpinParams);
+      const params = buildSpinParams(
+        options.state,
+        options.bet,
+        options.buildSpinParams,
+      );
       const rawResult = await this.#monitor.race(this.#client.spin(params));
       this.#monitor.throwIfFailed();
       const result = validateSlotUiSpinResult(rawResult, {
         state: options.state,
         bet: options.bet,
         userInfo: this.#client.getUserInfo(),
-        logicFactory: this.#logicFactory
+        logicFactory: this.#logicFactory,
       });
 
       if (shouldCollectFinalResult(result.totalwin, result.results)) {
@@ -100,7 +109,7 @@ export class SlotUiLiveSession {
       validateLiveUserInfo(userInfo);
       return Object.freeze({
         ...result,
-        userInfo
+        userInfo,
       });
     } finally {
       this.#spinInFlight = false;
@@ -144,7 +153,7 @@ export function createSlotcraftClientOptions(
     requestTimeout: live.requestTimeoutMs,
     maxReconnectAttempts: 0,
     autoCollectIntermediateResults: true,
-    logger
+    logger,
   });
 }
 
@@ -158,7 +167,11 @@ export function buildSpinParams(
 ): SpinParams {
   if (buildSpinParamsCallback) {
     const params = buildSpinParamsCallback(state, bet);
-    if (typeof params !== "object" || params === null || Array.isArray(params)) {
+    if (
+      typeof params !== "object" ||
+      params === null ||
+      Array.isArray(params)
+    ) {
       throw new SlotUiConfigError("buildSpinParams must return an object.");
     }
     return params;
@@ -167,7 +180,7 @@ export function buildSpinParams(
   return Object.freeze({
     bet: bet.bet,
     lines: bet.lines,
-    ...(bet.times === undefined ? {} : { times: bet.times })
+    ...(bet.times === undefined ? {} : { times: bet.times }),
   });
 }
 
@@ -192,8 +205,14 @@ export function validateSlotUiSpinResult(
   }
 
   const gmi = resultRecord.gmi;
-  const totalwin = assertFiniteNumber(resultRecord.totalwin, "spin result totalwin");
-  const results = assertNonNegativeInteger(resultRecord.results, "spin result results");
+  const totalwin = assertFiniteNumber(
+    resultRecord.totalwin,
+    "spin result totalwin",
+  );
+  const results = assertNonNegativeInteger(
+    resultRecord.results,
+    "spin result results",
+  );
   const replyPlayResultsLength = getReplyPlayResultsLength(gmi);
   if (results !== replyPlayResultsLength) {
     throw new SlotUiRuntimeError(
@@ -211,11 +230,14 @@ export function validateSlotUiSpinResult(
     gmi,
     logic,
     totalwin,
-    results
+    results,
   });
 }
 
-export function shouldCollectFinalResult(totalwin: number, results: number): boolean {
+export function shouldCollectFinalResult(
+  totalwin: number,
+  results: number,
+): boolean {
   assertFiniteNumber(totalwin, "totalwin");
   assertNonNegativeInteger(results, "results");
   return (totalwin > 0 && results >= 1) || (totalwin === 0 && results > 1);
@@ -246,16 +268,15 @@ function createLogicMeta(
     bet: bet.bet,
     lines: bet.lines,
     totalwin,
-    ...(gameid === undefined ? {} : { gameid })
+    ...(gameid === undefined ? {} : { gameid }),
   });
 }
 
 function validateLiveUserInfo(userInfo: Readonly<UserInfo>): void {
-  if (
-    userInfo.balance !== undefined &&
-    !Number.isFinite(userInfo.balance)
-  ) {
-    throw new SlotUiRuntimeError("live userInfo.balance must be finite when present.");
+  if (userInfo.balance !== undefined && !Number.isFinite(userInfo.balance)) {
+    throw new SlotUiRuntimeError(
+      "live userInfo.balance must be finite when present.",
+    );
   }
   if (
     userInfo.gameid !== undefined &&
@@ -276,7 +297,7 @@ function attachFailFastHandlers(
       "error",
       (error: unknown) => {
         monitor.fail(`client error event: ${formatUnknown(error)}`);
-      }
+      },
     ],
     [
       "disconnect",
@@ -284,13 +305,13 @@ function attachFailFastHandlers(
         if (!monitor.disconnectExpected) {
           monitor.fail(`client disconnect event: ${formatUnknown(payload)}`);
         }
-      }
+      },
     ],
     [
       "reconnecting",
       (payload: unknown) => {
         monitor.fail(`client reconnecting event: ${formatUnknown(payload)}`);
-      }
+      },
     ],
     [
       "message",
@@ -298,8 +319,8 @@ function attachFailFastHandlers(
         if (isServerFailureMessage(message)) {
           monitor.fail(`server error message: ${formatUnknown(message)}`);
         }
-      }
-    ]
+      },
+    ],
   ];
 
   for (const [event, listener] of bindings) {
@@ -334,7 +355,7 @@ class FailFastMonitor {
       error: (...args: unknown[]) => {
         baseLogger?.error(...args);
         this.fail(`netcore logger.error: ${formatUnknownList(args)}`);
-      }
+      },
     };
   }
 
@@ -369,7 +390,8 @@ class FailFastMonitor {
     if (this.failure) {
       return;
     }
-    this.failure = reason instanceof Error ? reason : new SlotUiRuntimeError(reason);
+    this.failure =
+      reason instanceof Error ? reason : new SlotUiRuntimeError(reason);
     for (const reject of this.#waiters) {
       reject(this.failure);
     }
@@ -421,11 +443,15 @@ function isServerFailureMessage(value: unknown): boolean {
   );
 }
 
-function parseMaybeStringRecord(value: unknown): Record<string, unknown> | null {
+function parseMaybeStringRecord(
+  value: unknown,
+): Record<string, unknown> | null {
   if (typeof value === "string") {
     try {
       const parsed = JSON.parse(value) as unknown;
-      return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      return typeof parsed === "object" &&
+        parsed !== null &&
+        !Array.isArray(parsed)
         ? (parsed as Record<string, unknown>)
         : null;
     } catch {

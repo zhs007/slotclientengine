@@ -3,12 +3,14 @@ import { resolve } from "node:path";
 import {
   SlotUiConfigError,
   SlotUiRuntimeError,
+  createSlotUiController,
   createSlotUiFramework,
   validateBetOptions,
 } from "../src/index.js";
 import {
   BET_OPTIONS,
   MockClient,
+  createStateSnapshot,
   createMockGameLogic,
   createSpinResult,
 } from "./test-helpers.js";
@@ -17,6 +19,7 @@ import type { SlotGameAdapter, SlotUiSpinResult } from "../src/index.js";
 describe("public exports and framework", () => {
   it("exports stable public API and CSS package path", () => {
     expect(typeof createSlotUiFramework).toBe("function");
+    expect(typeof createSlotUiController).toBe("function");
     expect(() => validateBetOptions(BET_OPTIONS)).not.toThrow();
     expect(new SlotUiConfigError("bad")).toBeInstanceOf(Error);
     expect(new SlotUiRuntimeError("bad")).toBeInstanceOf(Error);
@@ -24,6 +27,40 @@ describe("public exports and framework", () => {
       readFileSync(resolve(__dirname, "../package.json"), "utf8"),
     ) as { exports: Record<string, unknown> };
     expect(packageJson.exports["./styles.css"]).toBe("./dist/uiframeworks.css");
+  });
+
+  it("creates a UI-only controller without live session ownership", () => {
+    const root = document.createElement("div");
+    const calls: string[] = [];
+    const controller = createSlotUiController({
+      root,
+      betOptions: BET_OPTIONS,
+      initialBalance: 100,
+      handlers: {
+        onSpin: () => calls.push("spin"),
+        onIncreaseBet: () => calls.push("increase"),
+        onDecreaseBet: () => calls.push("decrease"),
+        onMutedChange: (muted) => calls.push(`muted:${muted}`),
+        onFastModeChange: (enabled) => calls.push(`fast:${enabled}`),
+        onAutoModeChange: (enabled) => calls.push(`auto:${enabled}`),
+      },
+    });
+
+    expect(root.querySelector(".slot-ui-frame")).toBe(
+      controller.elements.frame,
+    );
+    controller.update(createStateSnapshot({ spinState: "presenting" }));
+    const spinButton = root.querySelector(
+      ".slot-ui-spin-button",
+    ) as HTMLButtonElement;
+    spinButton.click();
+    expect(calls).toEqual([]);
+    expect(controller.elements.frame.dataset.slotSpinState).toBe("presenting");
+
+    controller.update(createStateSnapshot({ spinState: "idle" }));
+    spinButton.click();
+    expect(calls).toEqual(["spin"]);
+    controller.destroy();
   });
 
   it("connects, spins, updates UI state, and destroys adapter", async () => {

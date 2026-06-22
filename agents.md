@@ -17,6 +17,7 @@
 
 - `apps/`：可运行项目
 - `packages/`：内部依赖库
+- `packages/gameframeworks`：后续 slot 游戏默认 facade，整合 UI、网络和逻辑数据流。
 - `tasks/`：任务计划、任务报告和执行记录
 - `docs/`：项目文档
 
@@ -24,6 +25,7 @@
 
 - 新增空目录时请放置 `.keepme` 文件，避免目录丢失。
 - 子项目如需使用根级基础工具链依赖，应与根目录版本保持一致。
+- 后续游戏默认依赖 `@slotclientengine/gameframeworks`，不要直接依赖 `@slotclientengine/uiframeworks`、`@slotclientengine/netcore`、`@slotclientengine/logiccore`，除非是在框架内部或任务明确要求。
 - 若依赖安装失败，可先执行：
   `export http_proxy=http://127.0.0.1:1087;export https_proxy=http://127.0.0.1:1087;`
 - 当任务影响仓库协作规则、目录规范或基础脚本时，需要同步更新本文件。

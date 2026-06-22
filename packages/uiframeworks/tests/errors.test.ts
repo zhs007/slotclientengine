@@ -9,7 +9,7 @@ describe("errors", () => {
   it("wraps string and unknown errors", () => {
     expect(toSlotUiError("plain", "fallback")).toMatchObject({
       name: "SlotUiRuntimeError",
-      message: "plain"
+      message: "plain",
     });
     expect(toSlotUiError(null, "fallback")).toBeInstanceOf(SlotUiRuntimeError);
     expect(toSlotUiError(null, "fallback").message).toBe("fallback");

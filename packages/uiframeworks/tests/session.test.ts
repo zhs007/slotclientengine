@@ -6,7 +6,7 @@ import {
   requireFiniteBalance,
   shouldCollectFinalResult,
   validateLiveServerUrl,
-  validateSlotUiSpinResult
+  validateSlotUiSpinResult,
 } from "../src/index.js";
 import {
   BET_OPTIONS,
@@ -14,15 +14,19 @@ import {
   createGmiFixture,
   createMockGameLogic,
   createSpinResult,
-  createStateSnapshot
+  createStateSnapshot,
 } from "./test-helpers.js";
 import type { SlotcraftClientLike } from "../src/index.js";
 
 describe("session", () => {
   it("rejects non-live URL protocols before client creation", () => {
-    expect(() => validateLiveServerUrl("http://localhost/replay")).toThrow(/ws/);
+    expect(() => validateLiveServerUrl("http://localhost/replay")).toThrow(
+      /ws/,
+    );
     expect(() => validateLiveServerUrl("bad-url")).toThrow(/valid URL/);
-    expect(() => validateLiveServerUrl("wss://example.test/game")).not.toThrow();
+    expect(() =>
+      validateLiveServerUrl("wss://example.test/game"),
+    ).not.toThrow();
   });
 
   it("creates strict SlotcraftClient options", () => {
@@ -32,7 +36,7 @@ describe("session", () => {
         serverUrl: "ws://localhost",
         token: "token",
         gamecode: "game",
-        requestTimeoutMs: 123
+        requestTimeoutMs: 123,
       },
       logger,
     );
@@ -43,7 +47,7 @@ describe("session", () => {
       requestTimeout: 123,
       maxReconnectAttempts: 0,
       autoCollectIntermediateResults: true,
-      logger
+      logger,
     });
   });
 
@@ -54,13 +58,15 @@ describe("session", () => {
     expect(client.calls.slice(0, 3)).toEqual([
       "connect:token",
       "enterGame:game001",
-      "getUserInfo"
+      "getUserInfo",
     ]);
 
     const missingBalance = new MockClient();
     missingBalance.userInfo = Object.freeze({ gameid: 1 });
     await createSession(missingBalance).connect();
-    expect(() => requireFiniteBalance(missingBalance.userInfo)).toThrow(/balance/);
+    expect(() => requireFiniteBalance(missingBalance.userInfo)).toThrow(
+      /balance/,
+    );
   });
 
   it("builds default and callback spin params without using fast implicitly", () => {
@@ -68,12 +74,18 @@ describe("session", () => {
     expect(buildSpinParams(state, BET_OPTIONS[1])).toEqual({
       bet: 2,
       lines: 10,
-      times: 2
+      times: 2,
     });
     expect(
-      buildSpinParams(state, BET_OPTIONS[0], () => ({ bet: 9, lines: 1, fast: true })),
+      buildSpinParams(state, BET_OPTIONS[0], () => ({
+        bet: 9,
+        lines: 1,
+        fast: true,
+      })),
     ).toEqual({ bet: 9, lines: 1, fast: true });
-    expect(() => buildSpinParams(state, BET_OPTIONS[0], () => null as never)).toThrow(/object/);
+    expect(() =>
+      buildSpinParams(state, BET_OPTIONS[0], () => null as never),
+    ).toThrow(/object/);
   });
 
   it("validates spin result fields and replyPlay length", () => {
@@ -83,11 +95,14 @@ describe("session", () => {
         state,
         bet: BET_OPTIONS[0],
         userInfo: { gameid: 1 },
-        logicFactory: createMockGameLogic
+        logicFactory: createMockGameLogic,
       }),
     ).toMatchObject({ totalwin: 3, results: 1 });
     expect(() =>
-      validateSlotUiSpinResult({ totalwin: 0, results: 1 }, resultOptions(state)),
+      validateSlotUiSpinResult(
+        { totalwin: 0, results: 1 },
+        resultOptions(state),
+      ),
     ).toThrow(/gmi/);
     expect(() =>
       validateSlotUiSpinResult(
@@ -115,7 +130,7 @@ describe("session", () => {
         ...resultOptions(state),
         logicFactory: () => {
           throw new Error("logic fail");
-        }
+        },
       }),
     ).toThrow(/logic fail/);
   });
@@ -137,7 +152,7 @@ describe("session", () => {
     await slowSession.connect();
     const first = slowSession.spin({
       state: createStateSnapshot(),
-      bet: BET_OPTIONS[0]
+      bet: BET_OPTIONS[0],
     });
     await expect(
       slowSession.spin({ state: createStateSnapshot(), bet: BET_OPTIONS[0] }),
@@ -173,13 +188,13 @@ describe("session", () => {
         capturedLogger = options.logger;
         return warnClient;
       },
-      logicFactory: createMockGameLogic
+      logicFactory: createMockGameLogic,
     });
     await warnSession.connect();
     warnClient.spinPromise = new Promise(() => undefined);
     const spin = warnSession.spin({
       state: createStateSnapshot(),
-      bet: BET_OPTIONS[0]
+      bet: BET_OPTIONS[0],
     });
     capturedLogger?.warn("warning from client");
     await expect(spin).rejects.toThrow(/logger.warn/);
@@ -192,7 +207,7 @@ describe("session", () => {
     await reconnectingSession.connect();
     const spin = reconnectingSession.spin({
       state: createStateSnapshot(),
-      bet: BET_OPTIONS[0]
+      bet: BET_OPTIONS[0],
     });
     reconnecting.emit("reconnecting", { attempt: 1 });
     await expect(spin).rejects.toThrow(/reconnecting/);
@@ -203,7 +218,7 @@ describe("session", () => {
     await noticeSession.connect();
     const noticeSpin = noticeSession.spin({
       state: createStateSnapshot(),
-      bet: BET_OPTIONS[0]
+      bet: BET_OPTIONS[0],
     });
     notice.emit("message", { msgid: "noticemsg2", message: "server says no" });
     await expect(noticeSpin).rejects.toThrow(/server error/);
@@ -214,17 +229,21 @@ describe("session", () => {
     await disconnectedSession.connect();
     const disconnectSpin = disconnectedSession.spin({
       state: createStateSnapshot(),
-      bet: BET_OPTIONS[0]
+      bet: BET_OPTIONS[0],
     });
-    disconnected.emit("disconnect", { code: 1006, reason: "lost", wasClean: false });
+    disconnected.emit("disconnect", {
+      code: 1006,
+      reason: "lost",
+      wasClean: false,
+    });
     await expect(disconnectSpin).rejects.toThrow(/disconnect/);
   });
 
   it("covers strict validation edge cases and parsed server messages", async () => {
     expect(() => shouldCollectFinalResult(0, -1)).toThrow(/non-negative/);
-    expect(() =>
-      validateSlotUiSpinResult(null, resultOptions()),
-    ).toThrow(/object/);
+    expect(() => validateSlotUiSpinResult(null, resultOptions())).toThrow(
+      /object/,
+    );
     expect(() =>
       validateSlotUiSpinResult(
         { gmi: { replyPlay: { results: {} } }, totalwin: 0, results: 0 },
@@ -234,7 +253,7 @@ describe("session", () => {
     expect(() =>
       validateSlotUiSpinResult(createSpinResult(0), {
         ...resultOptions(),
-        userInfo: { gameid: -1 }
+        userInfo: { gameid: -1 },
       }),
     ).toThrow(/gameid/);
 
@@ -242,9 +261,12 @@ describe("session", () => {
     client.spinPromise = new Promise(() => undefined);
     const session = createSession(client);
     await session.connect();
-    const spin = session.spin({ state: createStateSnapshot(), bet: BET_OPTIONS[0] });
+    const spin = session.spin({
+      state: createStateSnapshot(),
+      bet: BET_OPTIONS[0],
+    });
     client.emit("message", "not-json");
-    client.emit("message", "{\"errorMessage\":\"server failed\"}");
+    client.emit("message", '{"errorMessage":"server failed"}');
     await expect(spin).rejects.toThrow(/server error/);
   });
 
@@ -263,7 +285,7 @@ describe("session", () => {
       spin: (params) => noOffSource.spin(params),
       collect: (playIndex) => noOffSource.collect(playIndex),
       disconnect: () => noOffSource.disconnect(),
-      on: (event, callback) => noOffSource.on(event, callback)
+      on: (event, callback) => noOffSource.on(event, callback),
     };
     const noOffSession = createSession(noOffClient);
     await noOffSession.connect();
@@ -276,10 +298,10 @@ function createSession(client: SlotcraftClientLike): SlotUiLiveSession {
     live: {
       serverUrl: "ws://localhost",
       token: "token",
-      gamecode: "game001"
+      gamecode: "game001",
     },
     clientFactory: () => client,
-    logicFactory: createMockGameLogic
+    logicFactory: createMockGameLogic,
   });
 }
 
@@ -288,7 +310,7 @@ function resultOptions(state = createStateSnapshot()) {
     state,
     bet: BET_OPTIONS[0],
     userInfo: { gameid: 1 },
-    logicFactory: createMockGameLogic
+    logicFactory: createMockGameLogic,
   };
 }
 

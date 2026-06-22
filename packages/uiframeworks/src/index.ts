@@ -284,6 +284,7 @@ export {
   validateDesignSize,
 } from "./layout.js";
 export { createMoneyFormatter } from "./format.js";
+export { createSlotUiController } from "./controller.js";
 export {
   SlotUiStateStore,
   getBetControls,
@@ -302,6 +303,10 @@ export type {
   SlotGameAdapter,
   SlotGameMountContext,
   SlotInitialState,
+  SlotUiController,
+  SlotUiControllerElements,
+  SlotUiControllerHandlers,
+  SlotUiControllerOptions,
   SlotUiBetOption,
   SlotUiBuyBonusOptions,
   SlotUiClockOptions,

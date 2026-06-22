@@ -5,7 +5,7 @@ import type {
   SlotUiBetOption,
   SlotUiDesignSize,
   SlotUiSpinState,
-  SlotUiStateSnapshot
+  SlotUiStateSnapshot,
 } from "./types.js";
 
 export interface SlotUiStateInit {
@@ -30,7 +30,9 @@ export class SlotUiStateStore {
   #state: SlotUiStateSnapshot;
 
   constructor(init: SlotUiStateInit) {
-    this.#designSize = validateDesignSize(init.designSize ?? DEFAULT_SLOT_UI_DESIGN_SIZE);
+    this.#designSize = validateDesignSize(
+      init.designSize ?? DEFAULT_SLOT_UI_DESIGN_SIZE,
+    );
     this.#betOptions = validateBetOptions(init.betOptions);
     const betIndex = init.initialBetIndex ?? 0;
     assertBetIndex(betIndex, this.#betOptions);
@@ -49,7 +51,7 @@ export class SlotUiStateStore {
       muted: Boolean(init.initialMuted),
       fastMode: Boolean(init.initialFastMode),
       autoMode: Boolean(init.initialAutoMode),
-      error: null
+      error: null,
     });
   }
 
@@ -73,7 +75,7 @@ export class SlotUiStateStore {
     assertBetIndex(index, this.#betOptions);
     return this.#replace({
       betIndex: index,
-      betOption: this.#betOptions[index]
+      betOption: this.#betOptions[index],
     });
   }
 
@@ -93,13 +95,13 @@ export class SlotUiStateStore {
 
   setBalance(balance: number): SlotUiStateSnapshot {
     return this.#replace({
-      balance: assertFiniteMoneyAmount(balance, "balance")
+      balance: assertFiniteMoneyAmount(balance, "balance"),
     });
   }
 
   setWinAmount(win: number): SlotUiStateSnapshot {
     return this.#replace({
-      win: assertFiniteMoneyAmount(win, "win")
+      win: assertFiniteMoneyAmount(win, "win"),
     });
   }
 
@@ -122,15 +124,16 @@ export class SlotUiStateStore {
 
   setError(error: Error | string | null): SlotUiStateSnapshot {
     return this.#replace({
-      error: error === null ? null : error instanceof Error ? error.message : error,
-      spinState: error === null ? this.#state.spinState : "error"
+      error:
+        error === null ? null : error instanceof Error ? error.message : error,
+      spinState: error === null ? this.#state.spinState : "error",
     });
   }
 
   #replace(patch: Partial<SlotUiStateSnapshot>): SlotUiStateSnapshot {
     this.#state = freezeState({
       ...this.#state,
-      ...patch
+      ...patch,
     });
     return this.#state;
   }
@@ -151,7 +154,9 @@ export function validateBetOptions(
         assertPositiveFinite(option.times, `betOptions[${index}].times`);
       }
       if (option.label !== undefined && option.label.length === 0) {
-        throw new SlotUiConfigError(`betOptions[${index}].label must not be empty.`);
+        throw new SlotUiConfigError(
+          `betOptions[${index}].label must not be empty.`,
+        );
       }
       return Object.freeze({ ...option });
     }),
@@ -164,7 +169,8 @@ export function getBetControls(
 ): BetControlsState {
   return Object.freeze({
     canDecrease: state.betIndex > 0 && state.spinState === "idle",
-    canIncrease: state.betIndex < betOptions.length - 1 && state.spinState === "idle"
+    canIncrease:
+      state.betIndex < betOptions.length - 1 && state.spinState === "idle",
   });
 }
 
@@ -194,6 +200,7 @@ function assertSpinState(value: SlotUiSpinState): void {
     value !== "idle" &&
     value !== "connecting" &&
     value !== "spinning" &&
+    value !== "presenting" &&
     value !== "collecting" &&
     value !== "error" &&
     value !== "disabled"
@@ -206,6 +213,6 @@ function freezeState(state: SlotUiStateSnapshot): SlotUiStateSnapshot {
   return Object.freeze({
     ...state,
     designSize: Object.freeze({ ...state.designSize }),
-    betOption: Object.freeze({ ...state.betOption })
+    betOption: Object.freeze({ ...state.betOption }),
   });
 }
