@@ -3,13 +3,13 @@ import type { SpinParams, UserInfo } from "@slotclientengine/netcore";
 import type {
   SlotUiBetOption,
   SlotUiStateSnapshot,
-  SlotcraftClientLike
+  SlotcraftClientLike,
 } from "../src/index.js";
 
 export const BET_OPTIONS: readonly SlotUiBetOption[] = Object.freeze([
   Object.freeze({ bet: 1, lines: 10 }),
   Object.freeze({ bet: 2, lines: 10, times: 2, label: "2 x 10" }),
-  Object.freeze({ bet: 5, lines: 20 })
+  Object.freeze({ bet: 5, lines: 20 }),
 ]);
 
 export function createStateSnapshot(
@@ -28,7 +28,7 @@ export function createStateSnapshot(
     fastMode: false,
     autoMode: false,
     error: null,
-    ...overrides
+    ...overrides,
   });
 }
 
@@ -54,7 +54,7 @@ export function createMockGameLogic(): GameLogic {
     hasComponent: () => false,
     getComponent: () => undefined,
     getComponentScenes: () => [],
-    getComponentResults: () => []
+    getComponentResults: () => [],
   };
 }
 
@@ -72,29 +72,35 @@ export function createGmiFixture(stepCount = 1): Record<string, unknown> {
           curGameMod: "base",
           curGameModParam: {
             historyComponents: [],
-            mapComponents: {}
-          }
-        }
-      }))
-    }
+            mapComponents: {},
+          },
+        },
+      })),
+    },
   };
 }
 
-export function createSpinResult(totalwin = 0, stepCount = 1): Record<string, unknown> {
+export function createSpinResult(
+  totalwin = 0,
+  stepCount = 1,
+): Record<string, unknown> {
   return {
     gmi: createGmiFixture(stepCount),
     totalwin,
-    results: stepCount
+    results: stepCount,
   };
 }
 
 export class MockClient implements SlotcraftClientLike {
   public readonly calls: string[] = [];
-  public readonly listeners = new Map<string, Set<(...args: unknown[]) => void>>();
+  public readonly listeners = new Map<
+    string,
+    Set<(...args: unknown[]) => void>
+  >();
   public userInfo: Readonly<UserInfo> = Object.freeze({
     balance: 1000,
     gameid: 7,
-    defaultScene: [[1, 2, 3]]
+    defaultScene: [[1, 2, 3]],
   });
   public spinResult: unknown = createSpinResult();
   public connectPromise: Promise<void> | null = null;
@@ -155,9 +161,9 @@ function createScene(seed: number): Record<string, unknown> {
     values: [
       { values: [seed, 1, 2] },
       { values: [3, seed, 4] },
-      { values: [5, 6, seed] }
+      { values: [5, 6, seed] },
     ],
     indexes: [],
-    validRow: []
+    validRow: [],
   };
 }

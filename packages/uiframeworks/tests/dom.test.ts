@@ -194,6 +194,15 @@ describe("dom", () => {
 
     renderState(
       dom.elements,
+      createStateSnapshot({ connected: true, spinState: "presenting" }),
+      createMoneyFormatter(),
+      { canDecrease: false, canIncrease: false },
+    );
+    expect(dom.elements.spinButton.disabled).toBe(true);
+    expect(dom.elements.statusText.textContent).toBe("Presenting");
+
+    renderState(
+      dom.elements,
       createStateSnapshot({ error: "bad", spinState: "error" }),
       createMoneyFormatter(),
       { canDecrease: false, canIncrease: false },

@@ -1,0 +1,45 @@
+{
+  "name": "@slotclientengine/gameframeworks",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Integrated slot game framework facade for UI, network and game logic.",
+  "packageManager": "pnpm@10.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./dist/gameframeworks.css",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "prepare:deps": "pnpm --filter @slotclientengine/uiframeworks build && pnpm --filter @slotclientengine/netcore build && pnpm --filter @slotclientengine/logiccore build",
+    "build": "pnpm run prepare:deps && vite build && tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "lint": "eslint .",
+    "test": "vitest run --coverage",
+    "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@slotclientengine/logiccore": "workspace:*",
+    "@slotclientengine/netcore": "workspace:*",
+    "@slotclientengine/uiframeworks": "workspace:*"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "^4.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.15.0",
+    "happy-dom": "^20.0.10"
+  }
+}

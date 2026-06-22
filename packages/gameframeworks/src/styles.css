@@ -1,0 +1,5 @@
+@import "@slotclientengine/uiframeworks/styles.css";
+
+.slot-gameframeworks-logic-list {
+  pointer-events: auto;
+}

@@ -23,7 +23,9 @@ export function createMoneyFormatter(
       assertFiniteMoneyAmount(amount, "amount");
       const formatted = options.formatMoney?.(amount);
       if (typeof formatted !== "string" || formatted.length === 0) {
-        throw new SlotUiConfigError("formatMoney must return a non-empty string.");
+        throw new SlotUiConfigError(
+          "formatMoney must return a non-empty string.",
+        );
       }
       return formatted;
     };
@@ -33,14 +35,15 @@ export function createMoneyFormatter(
     options.currency === undefined
       ? new Intl.NumberFormat(options.locale ?? "en-US", {
           minimumFractionDigits: 2,
-          maximumFractionDigits: 2
+          maximumFractionDigits: 2,
         })
       : new Intl.NumberFormat(options.locale ?? "en-US", {
           style: "currency",
           currency: options.currency,
           minimumFractionDigits: 2,
-          maximumFractionDigits: 2
+          maximumFractionDigits: 2,
         });
 
-  return (amount: number) => formatter.format(assertFiniteMoneyAmount(amount, "amount"));
+  return (amount: number) =>
+    formatter.format(assertFiniteMoneyAmount(amount, "amount"));
 }

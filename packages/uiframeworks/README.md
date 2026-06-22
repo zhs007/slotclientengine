@@ -1,6 +1,8 @@
 # @slotclientengine/uiframeworks
 
-通用 slot 游戏 DOM UI 框架。该包负责固定设计分辨率 frame、游戏层、UI overlay、slot HUD 控件、viewport 缩放，以及 live `netcore` + `logiccore` 的 spin 数据流编排。
+通用 slot 游戏 DOM UI 框架。该包负责固定设计分辨率 frame、游戏层、UI overlay、slot HUD 控件、viewport 缩放，以及兼容旧调用方的 live `netcore` + `logiccore` spin 数据流编排。
+
+后续完整游戏默认应优先依赖 `@slotclientengine/gameframeworks`。`uiframeworks` 现在同时提供 UI-only controller，供上层框架复用 HUD/DOM/状态渲染，而不强制使用本包旧的网络与 collect 流程。
 
 默认 HUD 参考 `docs/ui002.png` 的黑底扁平风格：白色 icon、轻量文字、底部裸排信息区和金色 `BUY BONUS`。UI 不创建 canvas；默认 icon 由受控现成 icon 包 `lucide` 提供；不使用图片 HUD 资产或 icon font，也不在 DOM/CSS 中散落复杂手绘 icon。具体游戏如果需要自己的渲染层，应在 `SlotGameAdapter` 的 game layer 内显式实现。
 
@@ -70,7 +72,7 @@ await framework.spin();
 - 左侧竖排：menu、fast、sound，默认使用 `lucide` SVG icon，颜色走 `currentColor`；fast 和 sound 都是 toggle 控件。
 - 底部：上排可选 `BUY BONUS` CTA 与居中的 `WIN`，下排 `BALANCE`、带币种的 `BET`、竖排 `+/-`、大号 spin 和小号 auto。
 - `showFastToggle` 默认显示 fast toggle；显式传 `false` 时隐藏左侧 fast 按钮，但仍保留 `fastMode`、`setFastMode()` 和 `buildSpinParams()` 行为。
-- `spin` 支持 `idle`、`connecting`、`spinning`、`collecting`、`error`、`disabled`，禁用态保持可见。
+- `spin` 支持 `idle`、`connecting`、`spinning`、`presenting`、`collecting`、`error`、`disabled`，禁用态保持可见。`presenting` 用于游戏展示本次逻辑结果期间保持 spin 按钮禁用。
 
 金额默认使用 `Intl.NumberFormat`；也可以传入 `currency`、`locale` 或 `formatMoney(amount)`。金额输入必须是 finite number。
 
@@ -93,6 +95,29 @@ await framework.spin();
 - `applyInitialState(state)`
 - `setUiState(snapshot)`
 - `destroy()`
+
+## UI-only Controller
+
+`createSlotUiController()` 只负责创建 HUD DOM、绑定按钮 handler、渲染 `SlotUiStateSnapshot`，不接受 `live`、`clientFactory` 或 `logicFactory`。上层框架可以用它接管 spin/bet/sound/fast/auto/buy bonus，再自行安排网络、logic 转换和 collect 时序。
+
+```ts
+import { createSlotUiController } from "@slotclientengine/uiframeworks";
+
+const controller = createSlotUiController({
+  root,
+  betOptions: [{ bet: 1, lines: 10 }],
+  handlers: {
+    onSpin: () => void frameworkSpin(),
+    onIncreaseBet: () => setBetIndex(1),
+    onDecreaseBet: () => setBetIndex(0),
+    onMutedChange: setMuted,
+    onFastModeChange: setFastMode,
+    onAutoModeChange: setAutoMode,
+  },
+});
+
+controller.update(snapshot);
+```
 
 ## Live 数据流
 

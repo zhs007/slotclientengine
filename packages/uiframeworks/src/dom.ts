@@ -362,6 +362,9 @@ function spinStatusText(state: SlotUiStateSnapshot): string {
   if (state.spinState === "spinning") {
     return "Spinning";
   }
+  if (state.spinState === "presenting") {
+    return "Presenting";
+  }
   if (state.spinState === "collecting") {
     return "Collecting";
   }

@@ -48,6 +48,7 @@ export type SlotUiSpinState =
   | "idle"
   | "connecting"
   | "spinning"
+  | "presenting"
   | "collecting"
   | "error"
   | "disabled";
@@ -95,6 +96,49 @@ export interface SlotGameAdapter {
   applySpinResult(result: SlotUiSpinResult): void | Promise<void>;
   setUiState?(state: SlotUiStateSnapshot): void;
   destroy?(): void;
+}
+
+export interface SlotUiControllerElements {
+  readonly frame: HTMLElement;
+  readonly gameLayer: HTMLElement;
+  readonly overlay: HTMLElement;
+}
+
+export interface SlotUiControllerHandlers {
+  readonly onMenu?: () => void;
+  readonly onBuyBonus?: () => void;
+  readonly onSpin: () => void;
+  readonly onIncreaseBet: () => void;
+  readonly onDecreaseBet: () => void;
+  readonly onMutedChange: (muted: boolean) => void;
+  readonly onFastModeChange: (enabled: boolean) => void;
+  readonly onAutoModeChange: (enabled: boolean) => void;
+}
+
+export interface SlotUiControllerOptions {
+  readonly root: HTMLElement;
+  readonly designSize?: SlotUiDesignSize;
+  readonly betOptions: readonly SlotUiBetOption[];
+  readonly initialBetIndex?: number;
+  readonly initialBalance?: number;
+  readonly initialWin?: number;
+  readonly initialMuted?: boolean;
+  readonly initialFastMode?: boolean;
+  readonly initialAutoMode?: boolean;
+  readonly brandLabel?: string;
+  readonly clock?: false | SlotUiClockOptions;
+  readonly buyBonus?: false | SlotUiBuyBonusOptions;
+  readonly showFastToggle?: boolean;
+  readonly currency?: string;
+  readonly locale?: string;
+  readonly formatMoney?: (amount: number) => string;
+  readonly handlers: SlotUiControllerHandlers;
+}
+
+export interface SlotUiController {
+  readonly elements: SlotUiControllerElements;
+  update(state: SlotUiStateSnapshot): void;
+  destroy(): void;
 }
 
 export interface SlotcraftClientLike {
