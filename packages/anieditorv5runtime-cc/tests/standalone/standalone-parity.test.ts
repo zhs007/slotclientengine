@@ -195,6 +195,89 @@ describe("standalone runtime parity", () => {
     });
   });
 
+  it("matches modular player atlas binding, missing errors, and stage roots", () => {
+    const project = tinyProject();
+    const modularRoot = new FakeNode("Root");
+    const modularFrame = {
+      id: "asset-1",
+      width: 100,
+      height: 50,
+    };
+    const modularFrames = new Map([["a", modularFrame]]);
+    const modularQueries: string[] = [];
+    const modular = new V5GCocosPlayer({
+      root: modularRoot,
+      project,
+      assets: {
+        atlas: {
+          getSpriteFrame(name) {
+            modularQueries.push(name);
+            return modularFrames.get(name) ?? null;
+          },
+        },
+      },
+      driver: new FakeDriver(),
+    });
+
+    const standaloneRoot = new Node("Root");
+    const standaloneFrame = makeSpriteFrame(100, 50);
+    const standaloneFrames = new Map([["a", standaloneFrame]]);
+    const standaloneQueries: string[] = [];
+    const single = standalone.createV5GCocosPlayer({
+      root: standaloneRoot,
+      project,
+      assets: {
+        atlas: {
+          getSpriteFrame(name) {
+            standaloneQueries.push(name);
+            return standaloneFrames.get(name) ?? null;
+          },
+        },
+      },
+    });
+
+    modular.init();
+    single.init();
+
+    expect(standaloneQueries).toEqual(modularQueries);
+    expect(standaloneQueries).toEqual(["a"]);
+    expect(
+      standaloneRoot.children[0].children.map((node) => node.name),
+    ).toEqual(modularRoot.children[0].children.map((node) => node.name));
+    expect(
+      standaloneRoot.children[0].children.map((node) => node.name),
+    ).toEqual(["V5G Content", "V5G Particles"]);
+
+    const missingModular = new V5GCocosPlayer({
+      root: new FakeNode("Root"),
+      project,
+      assets: {
+        atlas: {
+          getSpriteFrame() {
+            return null;
+          },
+        },
+      },
+      driver: new FakeDriver(),
+    });
+    const missingStandalone = standalone.createV5GCocosPlayer({
+      root: new Node("Root"),
+      project,
+      assets: {
+        atlas: {
+          getSpriteFrame() {
+            return null;
+          },
+        },
+      },
+    });
+
+    const expectedError =
+      'Missing Cocos SpriteFrame for V5G asset "asset-1" at "assets/a.png" using atlas key "a".';
+    expect(() => missingModular.init()).toThrow(expectedError);
+    expect(() => missingStandalone.init()).toThrow(expectedError);
+  });
+
   it("matches modular segmented playback state and particle drain", () => {
     const project = tinyProject({
       animations: [particleWallAnimation({ duration: 1 })],
@@ -335,10 +418,6 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
   setOpacity(): void {}
 
   setActive(): void {}
-
-  createBackgroundNode(name: string): FakeNode {
-    return new FakeNode(name);
-  }
 
   createImageNode(name: string): FakeNode {
     return new FakeNode(name);

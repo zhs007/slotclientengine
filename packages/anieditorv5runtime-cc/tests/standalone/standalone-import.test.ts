@@ -1,8 +1,12 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import * as runtime from "../../standalone/anieditorv5runtime-cc";
 import type {
   V5GAssetConfig,
   V5GExportProfileConfig,
+  V5GCocosAssetSource,
+  V5GCocosSpriteAtlasAssetSource,
 } from "../../standalone/anieditorv5runtime-cc";
 
 describe("standalone runtime import", () => {
@@ -25,6 +29,32 @@ describe("standalone runtime import", () => {
     };
 
     expect(asset.fileScale).toBe(profile.assetScale);
+  });
+
+  it("exports atlas asset source types", () => {
+    const atlasSource: V5GCocosSpriteAtlasAssetSource<string> = {
+      atlas: {
+        getSpriteFrame(name) {
+          return name === "asset" ? "frame" : null;
+        },
+      },
+    };
+    const assetSource: V5GCocosAssetSource<string> = atlasSource;
+
+    expect(assetSource.atlas.getSpriteFrame("asset")).toBe("frame");
+  });
+
+  it("keeps the preview example on atlas filename binding", () => {
+    const examplePath = fileURLToPath(
+      new URL("../../standalone/V5GPreview.example.ts", import.meta.url),
+    );
+    const source = readFileSync(examplePath, "utf8");
+
+    expect(source).toContain("@property(SpriteAtlas)");
+    expect(source).toContain("V5GPreview.atlas must be assigned.");
+    expect(source).not.toContain("assetPrefix");
+    expect(source).not.toContain("assetIds");
+    expect(source).not.toContain("spriteFrames");
   });
 
   it("imports directly with only the cc alias and exposes the public API", () => {

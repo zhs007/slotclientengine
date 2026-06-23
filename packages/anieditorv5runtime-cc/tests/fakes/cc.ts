@@ -149,6 +149,18 @@ export class SpriteFrame {
   }
 }
 
+export class SpriteAtlas {
+  private readonly frames = new Map<string, SpriteFrame>();
+
+  setSpriteFrame(name: string, frame: SpriteFrame): void {
+    this.frames.set(name, frame);
+  }
+
+  getSpriteFrame(name: string): SpriteFrame | null {
+    return this.frames.get(name) ?? null;
+  }
+}
+
 export class BlendTarget {
   blend = false;
   blendEq = BlendOp.ADD;

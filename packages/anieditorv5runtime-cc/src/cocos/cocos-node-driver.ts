@@ -1,12 +1,4 @@
-import {
-  Color,
-  Graphics,
-  Node,
-  Sprite,
-  SpriteFrame,
-  UITransform,
-  UIOpacity,
-} from "cc";
+import { Color, Node, Sprite, SpriteFrame, UITransform, UIOpacity } from "cc";
 import type {
   CocosBlendFactorName,
   CocosBlendModeConfig,
@@ -112,16 +104,6 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
     },
     setActive(node, active) {
       node.active = active;
-    },
-    createBackgroundNode(name, color, width, height) {
-      const node = new Node(name);
-      requireUITransform(node).setContentSize(width, height);
-      requireUITransform(node).setAnchorPoint(0.5, 0.5);
-      const graphics = node.addComponent(Graphics);
-      graphics.fillColor = numberToColor(color, 255);
-      graphics.rect(-width / 2, -height / 2, width, height);
-      graphics.fill();
-      return node;
     },
     createImageNode(name, spriteFrame) {
       const node = new Node(name);
@@ -306,10 +288,6 @@ function getCocosBlendOperation(
     );
   }
   return cocosOperation;
-}
-
-function numberToColor(color: number, alpha: number): Color {
-  return new Color((color >> 16) & 255, (color >> 8) & 255, color & 255, alpha);
 }
 
 function readSpriteFrameSize(spriteFrame: SpriteFrame): V5GSize | null {

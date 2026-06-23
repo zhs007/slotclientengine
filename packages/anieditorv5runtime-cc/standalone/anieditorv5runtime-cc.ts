@@ -1,12 +1,4 @@
-import {
-  Color,
-  Graphics,
-  Node,
-  Sprite,
-  SpriteFrame,
-  UITransform,
-  UIOpacity,
-} from "cc";
+import { Color, Node, Sprite, SpriteFrame, UITransform, UIOpacity } from "cc";
 
 export type V5GCoordinateMode = "center";
 export type V5GLayerType = "image" | "text" | "group";
@@ -2501,12 +2493,6 @@ export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
   setRotationDegrees(node: TNode, degrees: number): void;
   setOpacity(node: TNode, opacity: number): void;
   setActive(node: TNode, active: boolean): void;
-  createBackgroundNode(
-    name: string,
-    color: number,
-    width: number,
-    height: number,
-  ): TNode;
   createImageNode(name: string, spriteFrame: TSpriteFrame): TNode;
   getSpriteFrameSize(spriteFrame: TSpriteFrame): V5GSize | null;
   applyBlendMode(node: TNode, config: CocosBlendModeConfig): void;
@@ -2610,16 +2596,6 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
     },
     setActive(node, active) {
       node.active = active;
-    },
-    createBackgroundNode(name, color, width, height) {
-      const node = new Node(name);
-      requireUITransform(node).setContentSize(width, height);
-      requireUITransform(node).setAnchorPoint(0.5, 0.5);
-      const graphics = node.addComponent(Graphics);
-      graphics.fillColor = numberToColor(color, 255);
-      graphics.rect(-width / 2, -height / 2, width, height);
-      graphics.fill();
-      return node;
     },
     createImageNode(name, spriteFrame) {
       const node = new Node(name);
@@ -2804,10 +2780,6 @@ function getCocosBlendOperation(
     );
   }
   return cocosOperation;
-}
-
-function numberToColor(color: number, alpha: number): Color {
-  return new Color((color >> 16) & 255, (color >> 8) & 255, color & 255, alpha);
 }
 
 function readSpriteFrameSize(spriteFrame: SpriteFrame): V5GSize | null {
@@ -3430,13 +3402,25 @@ export interface V5GCocosAssetResolver<TSpriteFrame = SpriteFrame> {
   getSpriteFrame(assetPath: string, assetId: string): TSpriteFrame | null;
 }
 
+export interface V5GCocosSpriteAtlasLike<TSpriteFrame = SpriteFrame> {
+  getSpriteFrame(name: string): TSpriteFrame | null;
+}
+
+export interface V5GCocosSpriteAtlasAssetSource<TSpriteFrame = SpriteFrame> {
+  atlas: V5GCocosSpriteAtlasLike<TSpriteFrame>;
+}
+
+export type V5GCocosAssetSource<TSpriteFrame = SpriteFrame> =
+  | V5GCocosAssetResolver<TSpriteFrame>
+  | V5GCocosSpriteAtlasAssetSource<TSpriteFrame>;
+
 export interface V5GCocosPlayerOptions<
   TNode = Node,
   TSpriteFrame = SpriteFrame,
 > {
   root: TNode;
   project: V5GProjectConfig;
-  assets: V5GCocosAssetResolver<TSpriteFrame>;
+  assets: V5GCocosAssetSource<TSpriteFrame>;
   driver: V5GCocosNodeDriver<TNode, TSpriteFrame>;
   loop?: boolean;
   onTimeChange?: (time: number) => void;
@@ -3514,6 +3498,11 @@ interface PlaybackFrameOptions {
   liveParticleDeltaSeconds?: number;
 }
 
+interface ResolvedSpriteFrame<TSpriteFrame> {
+  spriteFrame: TSpriteFrame;
+  shouldValidateSize: boolean;
+}
+
 const SIZE_EPSILON = 0.01;
 const PLAYBACK_EPSILON = 1e-9;
 
@@ -3537,7 +3526,6 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   private stageNode: TNode | null = null;
   private contentNode: TNode | null = null;
   private particleRootNode: TNode | null = null;
-  private backgroundNode: TNode | null = null;
   private currentTime = 0;
   private isPlaying = false;
   private loop: boolean;
@@ -3581,16 +3569,6 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       driver.setContentSize(stage, project.stage.width, project.stage.height);
       driver.setAnchorPoint(stage, 0.5, 0.5);
 
-      const backgroundColor = parseColorHex(project.stage.backgroundColor);
-      const background = driver.createBackgroundNode(
-        "V5G Background",
-        backgroundColor,
-        project.stage.width,
-        project.stage.height,
-      );
-      driver.appendChild(stage, background);
-      this.backgroundNode = background;
-
       const content = driver.createNode("V5G Content");
       driver.setContentSize(content, project.stage.width, project.stage.height);
       driver.setAnchorPoint(content, 0.5, 0.5);
@@ -3612,16 +3590,11 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       );
       for (const layer of project.layers) {
         const asset = this.requireImageAsset(layer, assetsById);
-        const spriteFrame = this.options.assets.getSpriteFrame(
-          asset.path,
-          asset.id,
-        );
-        if (spriteFrame === null) {
-          throw new Error(
-            `Missing Cocos SpriteFrame for V5G asset "${asset.id}" at "${asset.path}".`,
-          );
+        const resolvedSpriteFrame = this.resolveSpriteFrame(asset);
+        const spriteFrame = resolvedSpriteFrame.spriteFrame;
+        if (resolvedSpriteFrame.shouldValidateSize) {
+          this.assertSpriteFrameSize(asset, spriteFrame);
         }
-        this.assertSpriteFrameSize(asset, spriteFrame);
 
         const node = driver.createImageNode(layer.name, spriteFrame);
         driver.setContentSize(node, asset.width, asset.height);
@@ -3658,7 +3631,6 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     } catch (error) {
       driver.destroyNode(stage);
       this.stageNode = null;
-      this.backgroundNode = null;
       this.contentNode = null;
       this.particleRootNode = null;
       this.layers.clear();
@@ -4410,7 +4382,6 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       this.options.driver.destroyNode(this.stageNode);
     }
     this.stageNode = null;
-    this.backgroundNode = null;
     this.contentNode = null;
     this.particleRootNode = null;
     this.layers.clear();
@@ -4455,6 +4426,39 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     }
   }
 
+  private resolveSpriteFrame(
+    asset: V5GAssetConfig,
+  ): ResolvedSpriteFrame<TSpriteFrame> {
+    const source = this.options.assets as
+      | V5GCocosAssetSource<TSpriteFrame>
+      | null
+      | undefined;
+    if (isAssetResolver(source)) {
+      const spriteFrame = source.getSpriteFrame(asset.path, asset.id);
+      if (spriteFrame === null) {
+        throw new Error(
+          `Missing Cocos SpriteFrame for V5G asset "${asset.id}" at "${asset.path}".`,
+        );
+      }
+      return { spriteFrame, shouldValidateSize: true };
+    }
+
+    if (isSpriteAtlasAssetSource(source)) {
+      const atlasKey = getAssetFrameNameFromPath(asset.path);
+      const spriteFrame = source.atlas.getSpriteFrame(atlasKey);
+      if (spriteFrame === null) {
+        throw new Error(
+          `Missing Cocos SpriteFrame for V5G asset "${asset.id}" at "${asset.path}" using atlas key "${atlasKey}".`,
+        );
+      }
+      return { spriteFrame, shouldValidateSize: false };
+    }
+
+    throw new Error(
+      "V5GCocosPlayer assets.atlas must provide getSpriteFrame(name).",
+    );
+  }
+
   private clearParticles(): void {
     for (const managed of this.layers.values()) {
       while (managed.particleNodes.length > 0) {
@@ -4477,6 +4481,37 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     if (this.segmentedPlayback) return this.segmentedPlayback.getPhase();
     return this.playbackPhase;
   }
+}
+
+function isAssetResolver<TSpriteFrame>(
+  source: V5GCocosAssetSource<TSpriteFrame> | null | undefined,
+): source is V5GCocosAssetResolver<TSpriteFrame> {
+  return (
+    source !== null &&
+    source !== undefined &&
+    typeof (source as Partial<V5GCocosAssetResolver<TSpriteFrame>>)
+      .getSpriteFrame === "function"
+  );
+}
+
+function getAssetFrameNameFromPath(assetPath: string): string {
+  const normalized = assetPath.replace(/\\/g, "/");
+  const slashIndex = normalized.lastIndexOf("/");
+  const fileName =
+    slashIndex >= 0 ? normalized.slice(slashIndex + 1) : normalized;
+  const dotIndex = fileName.lastIndexOf(".");
+  return dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName;
+}
+
+function isSpriteAtlasAssetSource<TSpriteFrame>(
+  source: V5GCocosAssetSource<TSpriteFrame> | null | undefined,
+): source is V5GCocosSpriteAtlasAssetSource<TSpriteFrame> {
+  return (
+    source !== null &&
+    source !== undefined &&
+    typeof (source as Partial<V5GCocosSpriteAtlasAssetSource<TSpriteFrame>>)
+      .atlas?.getSpriteFrame === "function"
+  );
 }
 
 export function createV5GCocosPlayer(

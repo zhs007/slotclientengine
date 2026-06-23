@@ -1,12 +1,10 @@
-import { _decorator, Component, JsonAsset, Node, SpriteFrame } from "cc";
+import { _decorator, Component, JsonAsset, Node, SpriteAtlas } from "cc";
 import {
   assertV5GProject,
   createV5GCocosPlayer,
   validateCocosV5GProject,
-  type V5GCocosAssetResolver,
   type V5GCocosPlaybackState,
   type V5GCocosPlayer,
-  type V5GProjectConfig,
 } from "./anieditorv5runtime-cc";
 
 const { ccclass, property } = _decorator;
@@ -19,11 +17,8 @@ export class V5GPreview extends Component {
   @property(JsonAsset)
   projectJson: JsonAsset | null = null;
 
-  @property([String])
-  assetIds: string[] = [];
-
-  @property([SpriteFrame])
-  spriteFrames: SpriteFrame[] = [];
+  @property(SpriteAtlas)
+  atlas: SpriteAtlas | null = null;
 
   @property(Boolean)
   segmentedPreview = false;
@@ -47,24 +42,23 @@ export class V5GPreview extends Component {
         "V5GPreview.projectJson must be assigned to the selected V5G/VNI project, for example runtime_50/project.json.",
       );
     }
+    if (!this.atlas) {
+      throw new Error("V5GPreview.atlas must be assigned.");
+    }
 
     const project = assertV5GProject(this.projectJson.json);
     validateCocosV5GProject(project);
-    const spriteFramesByAssetId = this.createSpriteFrameMap(project);
-    const resolver: V5GCocosAssetResolver = {
-      getSpriteFrame(_assetPath, assetId) {
-        return spriteFramesByAssetId.get(assetId) ?? null;
-      },
-    };
 
     this.player = createV5GCocosPlayer({
       root: this.root,
       project,
-      assets: resolver,
+      assets: {
+        atlas: this.atlas,
+      },
       loop: true,
     });
-    // Runtime applies V5G special blend modes through Cocos Sprite/material pass state.
-    // The host only binds SpriteFrames; no normal fallback or extra Effect asset is required.
+    // All image assets used by project.assets must exist in this atlas as the asset.path filename without extension.
+    // The runtime fails fast when a frame is missing; it never guesses resource names.
     this.player.init();
 
     const previewEndTime = Math.min(project.stage.duration, 4);
@@ -129,42 +123,5 @@ export class V5GPreview extends Component {
   onDestroy(): void {
     this.player?.destroy();
     this.player = null;
-  }
-
-  private createSpriteFrameMap(
-    project: V5GProjectConfig,
-  ): ReadonlyMap<string, SpriteFrame> {
-    if (this.assetIds.length !== this.spriteFrames.length) {
-      throw new Error(
-        "V5GPreview.assetIds and spriteFrames must have the same length.",
-      );
-    }
-
-    const spriteFramesByAssetId = new Map<string, SpriteFrame>();
-    this.assetIds.forEach((assetId, index) => {
-      if (!assetId) {
-        throw new Error(`V5GPreview.assetIds[${index}] must be non-empty.`);
-      }
-      if (spriteFramesByAssetId.has(assetId)) {
-        throw new Error(`Duplicate V5GPreview asset id binding: ${assetId}.`);
-      }
-      const spriteFrame = this.spriteFrames[index];
-      if (!spriteFrame) {
-        throw new Error(
-          `Missing same-profile SpriteFrame binding for V5G asset ${assetId}.`,
-        );
-      }
-      spriteFramesByAssetId.set(assetId, spriteFrame);
-    });
-
-    for (const asset of project.assets) {
-      if (!spriteFramesByAssetId.has(asset.id)) {
-        throw new Error(
-          `Missing same-profile SpriteFrame binding for V5G asset "${asset.id}" at "${asset.path}".`,
-        );
-      }
-    }
-
-    return spriteFramesByAssetId;
   }
 }

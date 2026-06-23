@@ -87,6 +87,10 @@ declare module "cc" {
     height?: number;
   }
 
+  export class SpriteAtlas {
+    getSpriteFrame(name: string): SpriteFrame | null;
+  }
+
   export class Sprite {
     spriteFrame: SpriteFrame | null;
     color: Color;
