@@ -11,6 +11,7 @@ import type {
 export interface V5GLayerInstance {
   layer: V5GLayerConfig;
   display: PIXI.Container;
+  particleDisplay: PIXI.Container;
   texture: PIXI.Texture | null;
   textureSize: { width: number; height: number } | null;
 }
@@ -27,6 +28,8 @@ export function createLayerInstance(
 ): V5GLayerInstance {
   const display = new PIXI.Container();
   display.label = layer.name;
+  const particleDisplay = new PIXI.Container();
+  particleDisplay.label = `${layer.name} particles`;
   let instanceTexture: PIXI.Texture | null = null;
   let textureSize: { width: number; height: number } | null = null;
 
@@ -77,7 +80,13 @@ export function createLayerInstance(
     throw new Error(`Unsupported V5G layer type: ${layer.type}`);
   }
 
-  return { layer, display, texture: instanceTexture, textureSize };
+  return {
+    layer,
+    display,
+    particleDisplay,
+    texture: instanceTexture,
+    textureSize,
+  };
 }
 
 export function applySampledLayerState(

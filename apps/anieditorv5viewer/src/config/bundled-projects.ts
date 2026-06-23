@@ -1,6 +1,13 @@
 import projectData from "../assets/project.json";
+import twoXData from "../assets/projects/2x.json";
+import fiveXData from "../assets/projects/5x.json";
+import tenXData from "../assets/projects/10x.json";
 import bigwinData from "../assets/projects/bigwin.json";
 import megawinData from "../assets/projects/megawin.json";
+import multipayData from "../assets/projects/multipay.json";
+import respinData from "../assets/projects/respin.json";
+import scatter1Data from "../assets/projects/scatter1.json";
+import scatter2Data from "../assets/projects/scatter2.json";
 import superwinData from "../assets/projects/superwin.json";
 import export2ManifestData from "../assets/export2/manifest.json";
 import export2EditFullProjectData from "../assets/export2/edit_full/project.json";
@@ -26,6 +33,13 @@ export type BundledProjectId =
   | "bigwin"
   | "megawin"
   | "superwin"
+  | "2x"
+  | "5x"
+  | "10x"
+  | "respin"
+  | "scatter1"
+  | "scatter2"
+  | "multipay"
   | "bigwin-edit-full"
   | "bigwin-runtime-50";
 
@@ -109,6 +123,83 @@ const bundledProjectDefinitions: readonly BundledProjectDefinition[] = [
     purpose: "legacy",
     assetScale: 1,
     data: superwinData,
+    assetUrlManifest: bundledAssetUrlManifest,
+  },
+  {
+    id: "2x",
+    filename: "2x.json",
+    sourcePath: "docs/anieditor5/export/2x.json",
+    bundleId: "legacy",
+    profileId: "legacy_full",
+    purpose: "legacy",
+    assetScale: 1,
+    data: twoXData,
+    assetUrlManifest: bundledAssetUrlManifest,
+  },
+  {
+    id: "5x",
+    filename: "5x.json",
+    sourcePath: "docs/anieditor5/export/5x.json",
+    bundleId: "legacy",
+    profileId: "legacy_full",
+    purpose: "legacy",
+    assetScale: 1,
+    data: fiveXData,
+    assetUrlManifest: bundledAssetUrlManifest,
+  },
+  {
+    id: "10x",
+    filename: "10x.json",
+    sourcePath: "docs/anieditor5/export/10x.json",
+    bundleId: "legacy",
+    profileId: "legacy_full",
+    purpose: "legacy",
+    assetScale: 1,
+    data: tenXData,
+    assetUrlManifest: bundledAssetUrlManifest,
+  },
+  {
+    id: "respin",
+    filename: "respin.json",
+    sourcePath: "docs/anieditor5/export/respin.json",
+    bundleId: "legacy",
+    profileId: "legacy_full",
+    purpose: "legacy",
+    assetScale: 1,
+    data: respinData,
+    assetUrlManifest: bundledAssetUrlManifest,
+  },
+  {
+    id: "scatter1",
+    filename: "scatter1.json",
+    sourcePath: "docs/anieditor5/export/scatter1.json",
+    bundleId: "legacy",
+    profileId: "legacy_full",
+    purpose: "legacy",
+    assetScale: 1,
+    data: scatter1Data,
+    assetUrlManifest: bundledAssetUrlManifest,
+  },
+  {
+    id: "scatter2",
+    filename: "scatter2.json",
+    sourcePath: "docs/anieditor5/export/scatter2.json",
+    bundleId: "legacy",
+    profileId: "legacy_full",
+    purpose: "legacy",
+    assetScale: 1,
+    data: scatter2Data,
+    assetUrlManifest: bundledAssetUrlManifest,
+  },
+  {
+    id: "multipay",
+    filename: "multipay.json",
+    sourcePath: "docs/anieditor5/export/multipay.json",
+    bundleId: "legacy",
+    profileId: "legacy_full",
+    purpose: "legacy",
+    assetScale: 1,
+    data: multipayData,
     assetUrlManifest: bundledAssetUrlManifest,
   },
   {

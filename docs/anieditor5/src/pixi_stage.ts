@@ -33,10 +33,10 @@ export class V5GPixiStage {
   private readonly root = new PIXI.Container();
   private readonly stageContainer = new PIXI.Container();
   private readonly contentContainer = new PIXI.Container();
-  private readonly particleContainer = new PIXI.Container();
   private readonly guideGraphics = new PIXI.Graphics();
   private readonly selectionGraphics = new PIXI.Graphics();
   private readonly layerDisplayMap = new Map<string, PIXI.Container>();
+  private readonly layerParticleMap = new Map<string, PIXI.Container>();
   private readonly layerAssetIdMap = new Map<string, string | null>();
   private readonly callbacks: RenderCallbacks;
   private state: V5GEditorState;
@@ -74,7 +74,6 @@ export class V5GPixiStage {
     this.stageContainer.addChild(
       this.guideGraphics,
       this.contentContainer,
-      this.particleContainer,
       this.selectionGraphics,
     );
 
@@ -239,6 +238,9 @@ export class V5GPixiStage {
       if (!liveLayerIds.has(layerId)) {
         display.destroy({ children: true });
         this.layerDisplayMap.delete(layerId);
+        const particleGroup = this.layerParticleMap.get(layerId);
+        particleGroup?.destroy({ children: true });
+        this.layerParticleMap.delete(layerId);
         this.layerAssetIdMap.delete(layerId);
       }
     }
@@ -252,6 +254,9 @@ export class V5GPixiStage {
       if (shouldRecreateImageDisplay && display) {
         display.destroy({ children: true });
         this.layerDisplayMap.delete(layer.id);
+        const particleGroup = this.layerParticleMap.get(layer.id);
+        particleGroup?.destroy({ children: true });
+        this.layerParticleMap.delete(layer.id);
         this.layerAssetIdMap.delete(layer.id);
         display = undefined;
       }
@@ -267,12 +272,29 @@ export class V5GPixiStage {
         }
       }
       this.applyLayerTransform(layer);
+      if (layer.type === "image") {
+        this.ensureParticleGroup(layer.id);
+      }
     }
 
     for (const layer of this.state.project.layers) {
       const display = this.layerDisplayMap.get(layer.id);
-      if (display) this.contentContainer.addChild(display);
+      if (display) {
+        this.contentContainer.addChild(display);
+        const particleGroup = this.layerParticleMap.get(layer.id);
+        if (particleGroup) this.contentContainer.addChild(particleGroup);
+      }
     }
+  }
+
+  private ensureParticleGroup(layerId: string): PIXI.Container {
+    let particleGroup = this.layerParticleMap.get(layerId);
+    if (!particleGroup || particleGroup.destroyed) {
+      particleGroup = new PIXI.Container();
+      particleGroup.eventMode = "none";
+      this.layerParticleMap.set(layerId, particleGroup);
+    }
+    return particleGroup;
   }
 
   private async createLayerDisplay(
@@ -369,9 +391,7 @@ export class V5GPixiStage {
     display.rotation = (transform.rotation * Math.PI) / 180;
     display.alpha = opacity;
     display.blendMode = toPixiBlendMode(layer.blendMode);
-    display.visible =
-      layer.visible &&
-      !hasActiveParticleAnimation(layer, this.state.playheadSeconds);
+    display.visible = layer.visible;
     display.eventMode = layer.locked ? "none" : "static";
     display.cursor =
       this.draggingLayerId === layer.id
@@ -407,19 +427,32 @@ export class V5GPixiStage {
   }
 
   private drawParticles(): void {
-    for (const child of this.particleContainer.removeChildren()) {
-      child.destroy();
+    for (const particleGroup of this.layerParticleMap.values()) {
+      for (const child of particleGroup.removeChildren()) {
+        child.destroy();
+      }
     }
+
     const stage = this.state.project.stage;
     const playheadSeconds = this.state.playheadSeconds;
     for (const layer of this.state.project.layers) {
       if (!layer.visible || layer.type !== "image") continue;
+      const display = this.layerDisplayMap.get(layer.id);
+      if (!display) continue;
+      const particleGroup = this.layerParticleMap.get(layer.id);
+      if (!particleGroup) continue;
       const texture = this.getLayerImageTexture(layer);
       if (!texture) continue;
       const previewLayer = this.state.previewLayers?.[layer.id];
       const transform = previewLayer?.transform ?? layer.transform;
       const layerOpacity = previewLayer?.opacity ?? layer.opacity;
-      if (layerOpacity <= 0) continue;
+      const hasActiveParticleCombo = layer.animations.some(
+        (animation) =>
+          animation.enabled &&
+          animation.type === "particle_combo" &&
+          getAnimationProgress(animation, playheadSeconds) !== null,
+      );
+      if (layerOpacity <= 0 && !hasActiveParticleCombo) continue;
       const emitter = editorToPixi(
         transform.x,
         transform.y,
@@ -439,6 +472,7 @@ export class V5GPixiStage {
             progress,
             layerOpacity,
             layer.blendMode,
+            particleGroup,
           );
         } else if (animation.type === "particle_twinkle") {
           this.drawParticleTwinkle(
@@ -449,6 +483,29 @@ export class V5GPixiStage {
             progress,
             layerOpacity,
             layer.blendMode,
+            particleGroup,
+          );
+        } else if (animation.type === "particle_wall") {
+          this.drawParticleWall(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layerOpacity,
+            layer.blendMode,
+            particleGroup,
+          );
+        } else if (animation.type === "particle_combo") {
+          this.drawParticleCombo(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layer.opacity,
+            layer.blendMode,
+            particleGroup,
           );
         }
       }
@@ -471,6 +528,7 @@ export class V5GPixiStage {
     progress: number,
     layerOpacity: number,
     blendMode: V5GBlendMode,
+    target: PIXI.Container,
   ): void {
     const count = Math.round(
       clampParticleNumber(getParticleParam(animation, "count", 32), 1, 200),
@@ -533,7 +591,7 @@ export class V5GPixiStage {
         (randomE - 0.5) * Math.PI * 0.75 + progress * Math.PI * (0.5 + randomB);
       sprite.alpha = alpha;
       sprite.blendMode = toPixiBlendMode(blendMode);
-      this.particleContainer.addChild(sprite);
+      target.addChild(sprite);
     }
   }
 
@@ -545,6 +603,7 @@ export class V5GPixiStage {
     progress: number,
     layerOpacity: number,
     blendMode: V5GBlendMode,
+    target: PIXI.Container,
   ): void {
     const count = Math.round(
       clampParticleNumber(getParticleParam(animation, "count", 60), 1, 1000),
@@ -619,9 +678,299 @@ export class V5GPixiStage {
         sprite.rotation = (randomD - 0.5) * Math.PI * 2;
         sprite.alpha = alpha;
         sprite.blendMode = toPixiBlendMode(blendMode);
-        this.particleContainer.addChild(sprite);
+        target.addChild(sprite);
       }
       spawnedCount += batchCount;
+    }
+  }
+
+  private drawParticleWall(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    blendMode: V5GBlendMode,
+    target: PIXI.Container,
+  ): void {
+    const emitterWidth = clampParticleNumber(
+      getParticleParam(animation, "emitterWidth", 300),
+      0,
+      3000,
+    );
+    const direction = clampParticleNumber(
+      getParticleParam(animation, "direction", 270),
+      0,
+      360,
+    );
+    const spreadAngle = clampParticleNumber(
+      getParticleParam(animation, "spreadAngle", 15),
+      0,
+      180,
+    );
+    const speed = clampParticleNumber(
+      getParticleParam(animation, "speed", 200),
+      0,
+      2000,
+    );
+    const lifetimeMin = clampParticleNumber(
+      getParticleParam(animation, "lifetimeMin", 0.8),
+      0.05,
+      10,
+    );
+    const lifetimeMax = clampParticleNumber(
+      getParticleParam(animation, "lifetimeMax", 2),
+      lifetimeMin,
+      10,
+    );
+    const spawnRate = clampParticleNumber(
+      getParticleParam(animation, "spawnRate", 30),
+      1,
+      500,
+    );
+    const size = clampParticleNumber(
+      getParticleParam(animation, "size", 48),
+      1,
+      400,
+    );
+    const gravity = clampParticleNumber(
+      getParticleParam(animation, "gravity", 0),
+      -2000,
+      2000,
+    );
+    const startScaleMin = clampParticleNumber(
+      getParticleParam(animation, "startScaleMin", 0.6),
+      0.01,
+      2,
+    );
+    const startScaleMax = clampParticleNumber(
+      getParticleParam(animation, "startScaleMax", 1),
+      startScaleMin,
+      2,
+    );
+    const endScaleMin = clampParticleNumber(
+      getParticleParam(animation, "endScaleMin", 0.3),
+      0.01,
+      2,
+    );
+    const endScaleMax = clampParticleNumber(
+      getParticleParam(animation, "endScaleMax", 0.8),
+      endScaleMin,
+      2,
+    );
+    const fadeOut = animation.params.fadeOut !== false;
+    const duration = Math.max(animation.duration, 0.0001);
+    const elapsed = progress * duration;
+    const textureEdge = getTextureLongestEdge(texture);
+    const baseTextureScale = size / textureEdge;
+
+    const dirRad = (direction * Math.PI) / 180;
+    const dirX = Math.cos(dirRad);
+    const dirY = Math.sin(dirRad);
+    // perpendicular direction for width spread
+    const perpX = -dirY;
+    const perpY = dirX;
+
+    const totalSpawnCount = Math.floor(elapsed * spawnRate);
+
+    for (let index = 0; index < totalSpawnCount; index += 1) {
+      const particleRandomA = seededRandom(animation.seed, index, 101);
+      const particleRandomB = seededRandom(animation.seed, index, 102);
+      const particleRandomC = seededRandom(animation.seed, index, 103);
+      const particleRandomD = seededRandom(animation.seed, index, 104);
+      const particleRandomE = seededRandom(animation.seed, index, 105);
+
+      // Each particle has its own lifetime in [lifetimeMin, lifetimeMax]
+      const lifetime =
+        lifetimeMin + particleRandomA * (lifetimeMax - lifetimeMin);
+      // Spawn time for this particle (evenly across elapsed)
+      const spawnTime =
+        totalSpawnCount <= 1 ? 0 : (index / (totalSpawnCount - 1)) * elapsed;
+      const localAge = (elapsed - spawnTime) / Math.max(lifetime, 0.0001);
+      if (localAge < 0 || localAge > 1) continue;
+
+      // Random position along the emitter line (width)
+      const widthOffset = (particleRandomB - 0.5) * emitterWidth;
+      const startX = emitterX + perpX * widthOffset;
+      const startY = emitterY + perpY * widthOffset;
+
+      // Random angle spread within spreadAngle
+      const spreadRad =
+        (particleRandomC - 0.5) * 2 * ((spreadAngle * Math.PI) / 180);
+      const flyDirX = Math.cos(dirRad + spreadRad);
+      const flyDirY = Math.sin(dirRad + spreadRad);
+
+      const distance = speed * localAge * lifetime;
+      const x = startX + flyDirX * distance;
+      const y =
+        startY +
+        flyDirY * distance +
+        0.5 * gravity * localAge * lifetime * localAge * lifetime;
+
+      // Scale interpolation: startScale -> endScale based on localAge
+      const startScaleVal =
+        startScaleMin + particleRandomD * (startScaleMax - startScaleMin);
+      const endScaleVal =
+        endScaleMin + particleRandomE * (endScaleMax - endScaleMin);
+      const scale = Math.max(
+        0.01,
+        baseTextureScale *
+          (startScaleVal + (endScaleVal - startScaleVal) * localAge),
+      );
+
+      const alpha = fadeOut
+        ? layerOpacity * Math.max(0, 1 - localAge)
+        : layerOpacity;
+      if (alpha <= 0.002) continue;
+
+      const sprite = new PIXI.Sprite(texture);
+      sprite.anchor.set(0.5);
+      sprite.position.set(x, y);
+      sprite.scale.set(scale);
+      sprite.rotation =
+        (particleRandomA - 0.5) * Math.PI * 0.5 +
+        localAge * Math.PI * (0.5 + particleRandomB);
+      sprite.alpha = alpha;
+      sprite.blendMode = toPixiBlendMode(blendMode);
+      target.addChild(sprite);
+    }
+  }
+
+  private drawParticleCombo(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    blendMode: V5GBlendMode,
+    target: PIXI.Container,
+  ): void {
+    const count = Math.round(
+      clampParticleNumber(getParticleParam(animation, "count", 36), 1, 300),
+    );
+    const size = clampParticleNumber(
+      getParticleParam(animation, "size", 42),
+      1,
+      400,
+    );
+    const spawnMode = Math.round(
+      clampParticleNumber(getParticleParam(animation, "spawnMode", 1), 0, 1),
+    );
+    const spawnRadius = clampParticleNumber(
+      getParticleParam(animation, "spawnRadius", 90),
+      0,
+      3000,
+    );
+    const spawnRatio = clampParticleNumber(
+      getParticleParam(animation, "spawnRatio", 0.18),
+      0.01,
+      0.8,
+    );
+    const targetOffsetX = getParticleParam(animation, "targetX", 320);
+    const targetOffsetY = -getParticleParam(animation, "targetY", 0);
+    const travelMode = Math.round(
+      clampParticleNumber(getParticleParam(animation, "travelMode", 1), 0, 2),
+    );
+    const curve = getParticleParam(animation, "curve", 160);
+    const orbitRadius = clampParticleNumber(
+      getParticleParam(animation, "orbitRadius", 80),
+      0,
+      3000,
+    );
+    const orbitTurns = clampParticleNumber(
+      getParticleParam(animation, "orbitTurns", 1),
+      -10,
+      10,
+    );
+    const orbitSpeed = clampParticleNumber(
+      getParticleParam(animation, "orbitSpeed", 1),
+      0.1,
+      5,
+    );
+    const orbitRatio = clampParticleNumber(
+      getParticleParam(animation, "orbitRatio", 0.35) / orbitSpeed,
+      0.03,
+      0.95,
+    );
+    const staggerRatio = clampParticleNumber(
+      getParticleParam(animation, "staggerRatio", 0.28),
+      0,
+      0.9,
+    );
+    const trailCount = Math.round(
+      clampParticleNumber(getParticleParam(animation, "trailCount", 4), 0, 12),
+    );
+    const trailSpacing = clampParticleNumber(
+      getParticleParam(animation, "trailSpacing", 0.045),
+      0.005,
+      0.25,
+    );
+    const trailFade = clampParticleNumber(
+      getParticleParam(animation, "trailFade", 0.55),
+      0.05,
+      0.95,
+    );
+    const vanishMode = Math.round(
+      clampParticleNumber(getParticleParam(animation, "vanishMode", 1), 0, 2),
+    );
+    const vanishRatio = clampParticleNumber(
+      getParticleParam(animation, "vanishRatio", 0.18),
+      0.01,
+      0.8,
+    );
+    const flashScale = clampParticleNumber(
+      getParticleParam(animation, "flashScale", 1.6),
+      0.1,
+      8,
+    );
+    const flashIntensity = clampParticleNumber(
+      getParticleParam(animation, "flashIntensity", 1.4),
+      0.1,
+      3,
+    );
+    const textureEdge = getTextureLongestEdge(texture);
+    const baseTextureScale = size / textureEdge;
+    const effectiveTravelWindow = Math.max(0.001, 1 - staggerRatio);
+
+    for (let index = 0; index < count; index += 1) {
+      const stagger =
+        count <= 1 ? 0 : (index / Math.max(1, count - 1)) * staggerRatio;
+      for (let trailIndex = trailCount; trailIndex >= 0; trailIndex -= 1) {
+        const trailProgress = progress - trailIndex * trailSpacing;
+        const localProgress = (trailProgress - stagger) / effectiveTravelWindow;
+        if (localProgress < 0 || localProgress > 1) continue;
+        const point = sampleParticleComboPoint(
+          animation,
+          index,
+          localProgress,
+          spawnMode,
+          spawnRadius,
+          spawnRatio,
+          targetOffsetX,
+          targetOffsetY,
+          travelMode,
+          curve,
+          orbitRadius,
+          orbitTurns,
+          orbitRatio,
+          vanishMode,
+          vanishRatio,
+          flashScale,
+          flashIntensity,
+        );
+        if (point.alpha <= 0.002) continue;
+        const trailAlpha = Math.pow(trailFade, trailIndex);
+        const sprite = new PIXI.Sprite(texture);
+        sprite.anchor.set(0.5);
+        sprite.position.set(emitterX + point.x, emitterY + point.y);
+        sprite.scale.set(Math.max(0.01, baseTextureScale * point.scale));
+        sprite.rotation = point.rotation;
+        sprite.alpha = layerOpacity * point.alpha * trailAlpha;
+        sprite.blendMode = toPixiBlendMode(blendMode);
+        target.addChild(sprite);
+      }
     }
   }
 
@@ -791,20 +1140,6 @@ function sanitizeViewportNumber(value: number): number {
   return Number.isFinite(value) ? value : 0;
 }
 
-function hasActiveParticleAnimation(
-  layer: V5GLayerConfig,
-  time: number,
-): boolean {
-  if (layer.type !== "image") return false;
-  return layer.animations.some(
-    (animation) =>
-      animation.enabled &&
-      (animation.type === "particles" ||
-        animation.type === "particle_twinkle") &&
-      getAnimationProgress(animation, time) !== null,
-  );
-}
-
 function getAnimationProgress(
   animation: V5GAnimationConfig,
   time: number,
@@ -835,6 +1170,176 @@ function getParticleParam(
 
 function clampParticleNumber(value: number, min: number, max: number): number {
   return clampNumber(Number.isFinite(value) ? value : min, min, max);
+}
+
+interface ParticleComboPoint {
+  x: number;
+  y: number;
+  alpha: number;
+  scale: number;
+  rotation: number;
+}
+
+function sampleParticleComboPoint(
+  animation: V5GAnimationConfig,
+  index: number,
+  progress: number,
+  spawnMode: number,
+  spawnRadius: number,
+  spawnRatio: number,
+  targetOffsetX: number,
+  targetOffsetY: number,
+  travelMode: number,
+  curve: number,
+  orbitRadius: number,
+  orbitTurns: number,
+  orbitRatio: number,
+  vanishMode: number,
+  vanishRatio: number,
+  flashScale: number,
+  flashIntensity: number,
+): ParticleComboPoint {
+  const p = clampNumber(progress, 0, 1);
+  const randomA = seededRandom(animation.seed, index, 301);
+  const randomB = seededRandom(animation.seed, index, 302);
+  const randomC = seededRandom(animation.seed, index, 303);
+  const randomD = seededRandom(animation.seed, index, 304);
+  const randomE = seededRandom(animation.seed, index, 305);
+  const spawnAngle = randomA * Math.PI * 2;
+  const spawnDistance = Math.sqrt(randomB) * spawnRadius;
+  const spawnX = Math.cos(spawnAngle) * spawnDistance;
+  const spawnY = Math.sin(spawnAngle) * spawnDistance;
+  const targetX = targetOffsetX;
+  const targetY = targetOffsetY;
+  const travelStart = spawnRatio;
+  const vanishStart = Math.max(travelStart + 0.001, 1 - vanishRatio);
+  const travelDuration = Math.max(0.001, vanishStart - travelStart);
+  const spawnPhase = clampNumber(p / Math.max(spawnRatio, 0.001), 0, 1);
+  const travelPhase = clampNumber((p - travelStart) / travelDuration, 0, 1);
+  const vanishPhase = clampNumber(
+    (p - vanishStart) / Math.max(vanishRatio, 0.001),
+    0,
+    1,
+  );
+  const easedSpawn = easeOutQuad(spawnPhase);
+  const easedTravel = easeInOutQuad(travelPhase);
+  const easedVanish = easeOutQuad(vanishPhase);
+
+  let x = spawnX;
+  let y = spawnY;
+  if (p < travelStart) {
+    if (spawnMode === 1) {
+      x = spawnX * easedSpawn;
+      y = spawnY * easedSpawn;
+    }
+  } else if (travelMode === 2) {
+    const orbitEnd = clampNumber(orbitRatio, 0.03, 0.95);
+    if (travelPhase <= orbitEnd) {
+      const orbitPhase = clampNumber(travelPhase / orbitEnd, 0, 1);
+      const orbitAngle =
+        spawnAngle + orbitPhase * Math.PI * 2 * orbitTurns + randomC * Math.PI;
+      const orbitEase = easeInOutQuad(orbitPhase);
+      x =
+        spawnX + Math.cos(orbitAngle) * orbitRadius * (0.35 + orbitEase * 0.65);
+      y =
+        spawnY + Math.sin(orbitAngle) * orbitRadius * (0.35 + orbitEase * 0.65);
+    } else {
+      const flyPhase = clampNumber(
+        (travelPhase - orbitEnd) / (1 - orbitEnd),
+        0,
+        1,
+      );
+      const flyEase = easeInOutQuad(flyPhase);
+      const orbitAngle =
+        spawnAngle + Math.PI * 2 * orbitTurns + randomC * Math.PI;
+      const fromX = spawnX + Math.cos(orbitAngle) * orbitRadius;
+      const fromY = spawnY + Math.sin(orbitAngle) * orbitRadius;
+      const curved = quadraticPoint(
+        fromX,
+        fromY,
+        targetX,
+        targetY,
+        curve * 0.45 * (randomD < 0.5 ? -1 : 1),
+        flyEase,
+      );
+      x = curved.x;
+      y = curved.y;
+    }
+  } else if (travelMode === 1) {
+    const curved = quadraticPoint(
+      spawnX,
+      spawnY,
+      targetX,
+      targetY,
+      curve,
+      easedTravel,
+    );
+    x = curved.x;
+    y = curved.y;
+  } else {
+    x = lerpNumber(spawnX, targetX, easedTravel);
+    y = lerpNumber(spawnY, targetY, easedTravel);
+  }
+
+  let alpha = p < travelStart ? easeOutQuad(spawnPhase) : 1;
+  let scale = 0.65 + randomE * 0.7;
+  if (p < travelStart) scale *= 0.25 + easedSpawn * 0.75;
+  if (vanishPhase > 0) {
+    if (vanishMode === 1) {
+      const flash = Math.sin(vanishPhase * Math.PI);
+      alpha *= Math.max(
+        0,
+        1 - easedVanish * 0.75 + flash * (flashIntensity - 1) * 0.35,
+      );
+      scale *= 1 + flash * (flashScale - 1);
+    } else if (vanishMode === 2) {
+      scale *= lerpNumber(1, flashScale, easedVanish);
+      alpha *= Math.max(0, 1 - easedVanish);
+    } else {
+      alpha *= Math.max(0, 1 - easedVanish);
+    }
+  }
+
+  const rotation =
+    (randomC - 0.5) * Math.PI * 2 + p * Math.PI * 2 * (0.35 + randomD);
+  return { x, y, alpha: Math.max(0, alpha), scale, rotation };
+}
+
+function quadraticPoint(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  curve: number,
+  progress: number,
+): { x: number; y: number } {
+  const t = clampNumber(progress, 0, 1);
+  const midX = (fromX + toX) / 2;
+  const midY = (fromY + toY) / 2;
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const length = Math.hypot(dx, dy) || 1;
+  const controlX = midX + (-dy / length) * curve;
+  const controlY = midY + (dx / length) * curve;
+  const inv = 1 - t;
+  return {
+    x: inv * inv * fromX + 2 * inv * t * controlX + t * t * toX,
+    y: inv * inv * fromY + 2 * inv * t * controlY + t * t * toY,
+  };
+}
+
+function easeOutQuad(progress: number): number {
+  const t = clampNumber(progress, 0, 1);
+  return 1 - (1 - t) * (1 - t);
+}
+
+function easeInOutQuad(progress: number): number {
+  const t = clampNumber(progress, 0, 1);
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+function lerpNumber(from: number, to: number, progress: number): number {
+  return from + (to - from) * clampNumber(progress, 0, 1);
 }
 
 function seededRandom(seed: number, index: number, salt: number): number {

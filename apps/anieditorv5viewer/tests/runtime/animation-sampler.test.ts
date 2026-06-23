@@ -210,7 +210,7 @@ describe("animation-sampler", () => {
     expect(sampled.transform.scaleY).toBe(3.75);
   });
 
-  it("leaves transform and opacity unchanged for particle animations", () => {
+  it("leaves transform and opacity unchanged for non-combo particle animations", () => {
     const sampled = sampleLayerAnimationsAtTime(
       { transform: baseTransform, opacity: 0.8 },
       [
@@ -230,12 +230,119 @@ describe("animation-sampler", () => {
           batchMax: 2,
           size: 16,
         }),
+        animation("particle_wall", {
+          emitterWidth: 300,
+          direction: 270,
+          spreadAngle: 15,
+          speed: 200,
+          lifetimeMin: 0.8,
+          lifetimeMax: 2,
+          spawnRate: 30,
+          size: 48,
+          gravity: 0,
+          startScaleMin: 0.6,
+          startScaleMax: 1,
+          endScaleMin: 0.3,
+          endScaleMax: 0.8,
+          fadeOut: true,
+        }),
       ],
       0.5,
     );
 
     expect(sampled.transform).toEqual(baseTransform);
     expect(sampled.opacity).toBe(0.8);
+  });
+
+  it("samples particle_combo source opacity for the image layer only", () => {
+    const hiddenSource = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 0.8 },
+      [
+        animation("particle_combo", {
+          count: 36,
+          size: 42,
+          sourceOpacity: 0,
+          spawnMode: 1,
+          spawnRadius: 90,
+          spawnRatio: 0.18,
+          targetX: 320,
+          targetY: 0,
+          travelMode: 1,
+          curve: 160,
+          orbitRadius: 80,
+          orbitTurns: 1,
+          orbitSpeed: 1,
+          orbitRatio: 0.35,
+          staggerRatio: 0.28,
+          trailCount: 4,
+          trailSpacing: 0.045,
+          trailFade: 0.55,
+          vanishMode: 1,
+          vanishRatio: 0.18,
+          flashScale: 1.6,
+          flashIntensity: 1.4,
+        }),
+      ],
+      0.5,
+    );
+    const visibleSource = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 0.8 },
+      [
+        animation("particle_combo", {
+          count: 36,
+          size: 42,
+          sourceOpacity: 0.25,
+          spawnMode: 1,
+          spawnRadius: 90,
+          spawnRatio: 0.18,
+          targetX: 320,
+          targetY: 0,
+          travelMode: 1,
+          curve: 160,
+          orbitRadius: 80,
+          orbitTurns: 1,
+          orbitSpeed: 1,
+          orbitRatio: 0.35,
+          staggerRatio: 0.28,
+          trailCount: 4,
+          trailSpacing: 0.045,
+          trailFade: 0.55,
+          vanishMode: 1,
+          vanishRatio: 0.18,
+          flashScale: 1.6,
+          flashIntensity: 1.4,
+        }),
+      ],
+      0.5,
+    );
+
+    expect(hiddenSource.transform).toEqual(baseTransform);
+    expect(hiddenSource.opacity).toBe(0);
+    expect(visibleSource.opacity).toBe(0.2);
+  });
+
+  it("samples squash_stretch displacement and elastic scale", () => {
+    const sampled = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [
+        animation("squash_stretch", {
+          squashAngle: 90,
+          squashAmount: 0.2,
+          decayOscillateCount: 3,
+          fromX: 0,
+          fromY: -100,
+          toX: 20,
+          toY: 0,
+          easing: "easeOutQuad",
+        }),
+      ],
+      0.5,
+    );
+
+    expect(sampled.transform.x).toBeGreaterThan(baseTransform.x);
+    expect(sampled.transform.y).toBeGreaterThan(baseTransform.y - 100);
+    expect(sampled.transform.scaleX).not.toBe(1);
+    expect(sampled.transform.scaleY).toBe(1);
   });
 
   it("ignores disabled animations", () => {

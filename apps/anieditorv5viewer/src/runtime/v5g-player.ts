@@ -33,7 +33,6 @@ export class V5GPlayer {
   private readonly stageRoot = new PIXI.Container();
   private readonly stageBackground = new PIXI.Graphics();
   private readonly contentRoot = new PIXI.Container();
-  private readonly particleRoot = new PIXI.Container();
   private readonly container: HTMLElement;
   private readonly projectId: string;
   private readonly bundleId: string;
@@ -83,11 +82,7 @@ export class V5GPlayer {
     this.container.appendChild(this.app.canvas);
     this.drawStageBackground(backgroundColor);
     this.app.stage.addChild(this.stageRoot);
-    this.stageRoot.addChild(
-      this.stageBackground,
-      this.contentRoot,
-      this.particleRoot,
-    );
+    this.stageRoot.addChild(this.stageBackground, this.contentRoot);
 
     const texturesByAssetId = await this.loadTextures();
     for (const layer of this.project.layers) {
@@ -97,7 +92,7 @@ export class V5GPlayer {
         this.assetsById,
       );
       this.layerInstances.set(layer.id, instance);
-      this.contentRoot.addChild(instance.display);
+      this.contentRoot.addChild(instance.display, instance.particleDisplay);
     }
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -144,9 +139,10 @@ export class V5GPlayer {
       }
       applySampledLayerState(instance, sampledLayer, this.project.stage);
     }
-    this.drawParticles(sampled.layers);
+    const particleSpriteCount = this.drawParticles(sampled.layers);
     this.updateDiagnostics(
       sampled.layers.filter((layer) => layer.visible).length,
+      particleSpriteCount,
     );
     this.onTimeChange?.(this.currentTime);
   }
@@ -261,8 +257,9 @@ export class V5GPlayer {
     return texture;
   }
 
-  private drawParticles(sampledLayers: readonly SampledLayerState[]): void {
+  private drawParticles(sampledLayers: readonly SampledLayerState[]): number {
     this.clearParticles();
+    let particleSpriteCount = 0;
     for (const sampledLayer of sampledLayers) {
       if (!sampledLayer.hasActiveParticleAnimation) continue;
       const instance = this.layerInstances.get(sampledLayer.layerId);
@@ -286,6 +283,7 @@ export class V5GPlayer {
         instance.textureSize,
         this.currentTime,
       );
+      particleSpriteCount += particles.length;
       for (const particle of particles) {
         const sprite = new PIXI.Sprite(instance.texture);
         sprite.anchor.set(0.5);
@@ -297,21 +295,28 @@ export class V5GPlayer {
         sprite.rotation = particle.rotation;
         sprite.alpha = particle.alpha;
         sprite.blendMode = toPixiBlendMode(particle.blendMode);
-        this.particleRoot.addChild(sprite);
+        instance.particleDisplay.addChild(sprite);
+      }
+    }
+    return particleSpriteCount;
+  }
+
+  private clearParticles(): void {
+    for (const instance of this.layerInstances.values()) {
+      for (const child of instance.particleDisplay.removeChildren()) {
+        child.destroy();
       }
     }
   }
 
-  private clearParticles(): void {
-    for (const child of this.particleRoot.removeChildren()) {
-      child.destroy();
-    }
-  }
-
-  private updateDiagnostics(visibleLayerCount: number): void {
+  private updateDiagnostics(
+    visibleLayerCount: number,
+    particleSpriteCount: number,
+  ): void {
     this.container.dataset.v5gProjectId = this.projectId;
     this.container.dataset.v5gTime = this.currentTime.toFixed(2);
     this.container.dataset.v5gVisibleLayers = String(visibleLayerCount);
+    this.container.dataset.v5gParticleSprites = String(particleSpriteCount);
     this.container.dataset.vniBundleId = this.bundleId;
     this.container.dataset.vniProfileId = this.profileId;
     this.container.dataset.vniAssetScale = String(this.assetScale);
@@ -377,6 +382,7 @@ export class V5GPlayer {
     delete this.container.dataset.v5gProjectId;
     delete this.container.dataset.v5gTime;
     delete this.container.dataset.v5gVisibleLayers;
+    delete this.container.dataset.v5gParticleSprites;
     delete this.container.dataset.v5gPixelSamples;
     delete this.container.dataset.v5gNonBackgroundSamples;
     delete this.container.dataset.v5gMaxPixelDelta;

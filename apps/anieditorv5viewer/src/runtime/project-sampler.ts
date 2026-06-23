@@ -14,6 +14,7 @@ const VISUAL_ENTRY_SCALE_THRESHOLD = 0.011;
 export interface SampledLayerState {
   layerId: string;
   transform: V5GTransformConfig;
+  baseOpacity: number;
   opacity: number;
   visible: boolean;
   renderImageDisplay: boolean;
@@ -78,16 +79,18 @@ export function sampleLayerAtTime(
     (hasAnyEnabled && !hasActiveCoverage)
       ? 0
       : roundTo(clampNumber(sampled.opacity, 0, 1), 4);
+  const baseOpacity = roundTo(clampNumber(layer.opacity, 0, 1), 4);
   const activeParticleAnimation =
-    opacity > 0 && hasActiveParticleAnimation(layer, time);
+    layer.visible && baseOpacity > 0 && hasActiveParticleAnimation(layer, time);
   const visible = layer.visible && opacity > 0;
 
   return {
     layerId: layer.id,
     transform: sampled.transform,
+    baseOpacity,
     opacity,
     visible,
-    renderImageDisplay: visible && !activeParticleAnimation,
+    renderImageDisplay: visible,
     hasActiveParticleAnimation: activeParticleAnimation,
     blendMode: layer.blendMode,
   };

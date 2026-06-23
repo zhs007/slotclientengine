@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import projectData from "../../src/assets/project.json";
+import twoXData from "../../src/assets/projects/2x.json";
+import fiveXData from "../../src/assets/projects/5x.json";
+import tenXData from "../../src/assets/projects/10x.json";
 import bigwinData from "../../src/assets/projects/bigwin.json";
 import megawinData from "../../src/assets/projects/megawin.json";
+import multipayData from "../../src/assets/projects/multipay.json";
+import respinData from "../../src/assets/projects/respin.json";
+import scatter1Data from "../../src/assets/projects/scatter1.json";
+import scatter2Data from "../../src/assets/projects/scatter2.json";
 import superwinData from "../../src/assets/projects/superwin.json";
 import export2ManifestData from "../../src/assets/export2/manifest.json";
 import export2EditFullData from "../../src/assets/export2/edit_full/project.json";
@@ -25,6 +32,13 @@ const bundledProjectData = [
   bigwinData,
   megawinData,
   superwinData,
+  twoXData,
+  fiveXData,
+  tenXData,
+  respinData,
+  scatter1Data,
+  scatter2Data,
+  multipayData,
   export2EditFullData,
   export2Runtime50Data,
 ] as const;
@@ -65,6 +79,55 @@ const newAnimationParams: Readonly<
     batchMax: 2,
     size: 16,
   },
+  particle_wall: {
+    emitterWidth: 300,
+    direction: 270,
+    spreadAngle: 15,
+    speed: 200,
+    lifetimeMin: 0.8,
+    lifetimeMax: 2,
+    spawnRate: 30,
+    size: 48,
+    gravity: 0,
+    startScaleMin: 0.6,
+    startScaleMax: 1,
+    endScaleMin: 0.3,
+    endScaleMax: 0.8,
+    fadeOut: true,
+  },
+  particle_combo: {
+    count: 36,
+    size: 42,
+    sourceOpacity: 0,
+    spawnMode: 1,
+    spawnRadius: 90,
+    spawnRatio: 0.18,
+    targetX: 320,
+    targetY: 0,
+    travelMode: 1,
+    curve: 160,
+    orbitRadius: 80,
+    orbitTurns: 1,
+    orbitSpeed: 1,
+    orbitRatio: 0.35,
+    staggerRatio: 0.28,
+    trailCount: 4,
+    trailSpacing: 0.045,
+    trailFade: 0.55,
+    vanishMode: 1,
+    vanishRatio: 0.18,
+    flashScale: 1.6,
+    flashIntensity: 1.4,
+  },
+  squash_stretch: {
+    squashAngle: 270,
+    squashAmount: 0.4,
+    decayOscillateCount: 0,
+    fromX: 0,
+    fromY: -300,
+    toX: 0,
+    toY: 0,
+  },
 };
 
 function validProject(): V5GProjectConfig {
@@ -86,6 +149,31 @@ describe("validation", () => {
       const project = assertV5GProject(data);
       expect(() => validateV5GProject(project)).not.toThrow();
     }
+  });
+
+  it("accepts new particle and squash bundled projects", () => {
+    const multipay = assertV5GProject(multipayData);
+    const scatter1 = assertV5GProject(scatter1Data);
+    const scatter2 = assertV5GProject(scatter2Data);
+
+    expect(
+      multipay.layers.flatMap((layer) =>
+        layer.animations.map((animation) => animation.type),
+      ),
+    ).toEqual(expect.arrayContaining(["particle_wall", "particle_combo"]));
+    expect(
+      scatter1.layers.flatMap((layer) =>
+        layer.animations.map((animation) => animation.type),
+      ),
+    ).toContain("squash_stretch");
+    expect(
+      scatter2.layers.flatMap((layer) =>
+        layer.animations.map((animation) => animation.type),
+      ),
+    ).toContain("squash_stretch");
+    expect(() => validateV5GProject(multipay)).not.toThrow();
+    expect(() => validateV5GProject(scatter1)).not.toThrow();
+    expect(() => validateV5GProject(scatter2)).not.toThrow();
   });
 
   it("accepts VNI projects and legacy assets without file scale metadata", () => {
@@ -266,6 +354,24 @@ describe("validation", () => {
         animation("scale_in", { fromScale: 0, fadeIn: true }),
       ];
     }, 'requires numeric param "toScale"');
+
+    expectInvalid((project) => {
+      const params = { ...newAnimationParams.particle_wall };
+      delete params.spawnRate;
+      project.layers[0].animations = [animation("particle_wall", params)];
+    }, 'requires numeric param "spawnRate"');
+
+    expectInvalid((project) => {
+      const params = { ...newAnimationParams.particle_combo };
+      delete params.targetY;
+      project.layers[0].animations = [animation("particle_combo", params)];
+    }, 'requires numeric param "targetY"');
+
+    expectInvalid((project) => {
+      const params = { ...newAnimationParams.squash_stretch };
+      delete params.squashAmount;
+      project.layers[0].animations = [animation("squash_stretch", params)];
+    }, 'requires numeric param "squashAmount"');
   });
 
   it("rejects string numeric params", () => {
@@ -278,6 +384,15 @@ describe("validation", () => {
         }),
       ];
     }, 'requires numeric param "toScale"');
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("particle_combo", {
+          ...newAnimationParams.particle_combo,
+          sourceOpacity: "0",
+        }),
+      ];
+    }, 'requires numeric param "sourceOpacity"');
   });
 
   it("rejects non-boolean optional flags", () => {

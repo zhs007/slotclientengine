@@ -10,6 +10,13 @@ The app bundles the legacy V5G full-size exports:
 - `docs/anieditor5/export/bigwin.json`
 - `docs/anieditor5/export/megawin.json`
 - `docs/anieditor5/export/superwin.json`
+- `docs/anieditor5/export/2x.json`
+- `docs/anieditor5/export/5x.json`
+- `docs/anieditor5/export/10x.json`
+- `docs/anieditor5/export/respin.json`
+- `docs/anieditor5/export/scatter1.json`
+- `docs/anieditor5/export/scatter2.json`
+- `docs/anieditor5/export/multipay.json`
 
 It also bundles the VNI export2 bundle:
 
@@ -23,6 +30,13 @@ The copied runtime files live under `src/assets`:
 - `src/assets/projects/bigwin.json`
 - `src/assets/projects/megawin.json`
 - `src/assets/projects/superwin.json`
+- `src/assets/projects/2x.json`
+- `src/assets/projects/5x.json`
+- `src/assets/projects/10x.json`
+- `src/assets/projects/respin.json`
+- `src/assets/projects/scatter1.json`
+- `src/assets/projects/scatter2.json`
+- `src/assets/projects/multipay.json`
 - `src/assets/assets/*`
 - `src/assets/export2/manifest.json`
 - `src/assets/export2/edit_full/project.json`
@@ -46,7 +60,9 @@ Supported now:
 - image layers and basic text layers
 - `normal`, `add`, `screen`, `multiply`, `lighten` blend modes
 - `move`, `fade`, `scale_up`, `scale_down`, `scale_in`, `scale_out`, `pop`, `shake`, `blink`, `rotate`, `slide_in`, `slide_out`, `bounce_in`, `pulse`, `float`, `swing`
-- layer animation particles: `particles`, `particle_twinkle`
+- `squash_stretch` elastic displacement and squash/stretch sampling
+- layer animation particles: `particles`, `particle_twinkle`, `particle_wall`, `particle_combo`
+- `particle_combo.sourceOpacity` controls only the source image layer opacity; combo particles continue to render from the layer base opacity when `sourceOpacity` is `0`
 - deterministic `seek()` sampling for play, restart, loop, timeline drag, project switching, and particle redraws
 
 Explicitly unsupported:
@@ -56,7 +72,10 @@ Explicitly unsupported:
 - group layers
 - nested `parentId`
 - unknown schema/editor values, resources, layer types, animation types, blend modes, or easing names
+- missing required numeric animation parameters, including particle parameters
+- numeric parameters encoded as strings
 - partial or inconsistent asset file metadata
+- image texture dimensions that do not match `fileWidth` / `fileHeight` when scaled metadata is present
 - bundle profile projects whose `exportProfile` does not match the manifest entry
 
 Unsupported or invalid data fails fast instead of rendering placeholders or silently falling back.
