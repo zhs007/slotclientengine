@@ -8,5 +8,6 @@ pnpm --filter @slotclientengine/vnicore examples:typecheck
 
 - `basic-player.ts`: 创建 `VNIPlayer`、`init()`、`play()`、`seek()`、`destroy()`。
 - `playback-events.ts`: 使用 `playRange(...)`、time/frame range、marker、complete listener 和 disposer。
+- `segmented-playback.ts`: 使用 hold-frame 和 range-loop 三段式高级播放。
 - `validate-project.ts`: 使用 `assertVNIProject`、`validateVNIProject`、manifest 校验，错误会显式抛出。
 - `vite-asset-manifest.ts`: 宿主应用如何用 Vite `import.meta.glob` 生成 `AssetUrlManifest`。

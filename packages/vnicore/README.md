@@ -27,7 +27,7 @@ The root import re-exports both `./core` and `./pixi`. The `V5G*` names are lega
 - all-or-none `fileWidth` / `fileHeight` / `fileScale` asset metadata
 - `runtime_50` file pixels with logical-size display compensation
 - animation and particle sampling used by `apps/anieditorv5viewer`
-- `play()`, `pause()`, `restart()`, `seek()`, `setLoop()`, `playRange(...)`, playback markers, and complete listeners
+- `play()`, `play({ mode: "segmented", ... })`, `pause()`, `restart()`, `seek()`, `setLoop()`, `playRange(...)`, playback markers, particle-draining, and complete listeners
 
 Invalid data fails fast. Missing assets, bad numeric params, unknown animation/easing/blend modes, texture size mismatches, unsupported group/parent/keyframe structures, and manifest/profile mismatches throw instead of rendering placeholders.
 

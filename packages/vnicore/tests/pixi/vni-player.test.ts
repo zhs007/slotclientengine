@@ -527,6 +527,14 @@ describe("VNIPlayer", () => {
     });
     player.update(0.6);
 
+    expect(events).toEqual(["quarter:0", "end:0"]);
+    expect(player.getPlaybackState()).toMatchObject({
+      mode: "range",
+      phase: "particle-draining",
+      isPlaying: false,
+      isDrainingParticles: true,
+    });
+    player.update(1.6);
     expect(events).toEqual(["quarter:0", "end:0", "complete:0.6:0"]);
     expect(player.isPlaying()).toBe(false);
     expect(player.getTime()).toBe(0.6);
@@ -547,6 +555,7 @@ describe("VNIPlayer", () => {
     player.playRange({ range: { unit: "time", start: 0, end: 0.5 } });
     player.playRange({ range: { unit: "time", start: 0, end: 0.75 } });
     player.update(0.75);
+    player.update(1.6);
 
     expect(events).toEqual(["frame-marker:0.5", "complete"]);
     expect(player.isPlaying()).toBe(false);
@@ -591,6 +600,7 @@ describe("VNIPlayer", () => {
     player.setLoop(false);
     player.update(2);
     expect(player.getTime()).toBe(2);
+    player.update(1.6);
     player.play();
     expect(player.getTime()).toBe(0);
   });
@@ -632,6 +642,8 @@ describe("VNIPlayer", () => {
     });
     expect(player.getTime()).toBe(0.5);
     player.update(0.5);
+    expect(completed).toEqual([]);
+    player.update(1.6);
     expect(completed).toEqual([1]);
 
     player.playRange({
@@ -639,6 +651,8 @@ describe("VNIPlayer", () => {
       loop: false,
     });
     player.update(1);
+    expect(completed).toEqual([1]);
+    player.update(1.6);
     expect(completed).toEqual([1, 2]);
   });
 
@@ -818,5 +832,121 @@ describe("VNIPlayer", () => {
     completePlayer.setLoop(false);
     completePlayer.play();
     expect(() => completePlayer.update(2)).toThrow("complete failed");
+  });
+
+  it("supports segmented hold playback, user-requested ending, and particle drain", async () => {
+    const player = await createInitializedPlayer();
+    const completed: string[] = [];
+    player.onPlaybackComplete((event) =>
+      completed.push(`${event.currentTime}:${event.loopIndex}`),
+    );
+
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.5 },
+      loopEnd: { unit: "time", at: 0.5 },
+    });
+    player.setLoop(false);
+    player.update(0.8);
+
+    expect(player.getTime()).toBe(0.5);
+    expect(player.getPlaybackState()).toMatchObject({
+      mode: "segmented",
+      phase: "loop",
+      keepParticlesAlive: true,
+      isPlaying: true,
+    });
+    expect(player.getPlaybackState().liveParticleCount).toBeGreaterThan(0);
+    const internals = player as unknown as {
+      layerInstances: Map<
+        string,
+        {
+          particleDisplay: InstanceType<typeof pixiMock.MockContainer>;
+        }
+      >;
+    };
+    const layerA = internals.layerInstances.get("layer-a");
+    if (!layerA) throw new Error("Missing layer-a instance.");
+    const firstHoldParticles = layerA.particleDisplay.children.map((child) => ({
+      x: child.position.x,
+      y: child.position.y,
+      alpha: child.alpha,
+      rotation: child.rotation,
+      scaleX: child.scale.x,
+      scaleY: child.scale.y,
+    }));
+
+    player.update(0.5);
+    expect(player.getTime()).toBe(0.5);
+    expect(player.getPlaybackState().phase).toBe("loop");
+    const secondHoldParticles = layerA.particleDisplay.children.map(
+      (child) => ({
+        x: child.position.x,
+        y: child.position.y,
+        alpha: child.alpha,
+        rotation: child.rotation,
+        scaleX: child.scale.x,
+        scaleY: child.scale.y,
+      }),
+    );
+    expect(secondHoldParticles.length).toBeGreaterThan(0);
+    expect(secondHoldParticles).not.toEqual(firstHoldParticles);
+
+    player.requestSegmentedPlaybackEnd();
+    expect(player.getPlaybackState().phase).toBe("ending");
+    player.update(1.5);
+    expect(player.getPlaybackState()).toMatchObject({
+      phase: "particle-draining",
+      isPlaying: false,
+      isDrainingParticles: true,
+    });
+    expect(completed).toEqual([]);
+
+    player.update(1.6);
+    expect(player.getPlaybackState()).toMatchObject({
+      phase: "complete",
+      isDrainingParticles: false,
+      liveParticleCount: 0,
+    });
+    expect(completed).toEqual(["2:0"]);
+  });
+
+  it("supports segmented range loops and explicit errors outside segmented state", async () => {
+    const player = await createInitializedPlayer();
+
+    expect(() => player.requestSegmentedPlaybackEnd()).toThrow(
+      "No active VNI segmented playback",
+    );
+    expect(() =>
+      player.play({
+        mode: "segmented",
+        loopStart: { unit: "time", at: 1 },
+        loopEnd: { unit: "time", at: 0.5 },
+      }),
+    ).toThrow("loopStart <= loopEnd");
+
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.4 },
+      loopEnd: { unit: "time", at: 0.8 },
+      keepParticlesAlive: false,
+    });
+    player.update(1.1);
+
+    expect(player.getPlaybackState()).toMatchObject({
+      mode: "segmented",
+      phase: "loop",
+      loopIndex: 1,
+      keepParticlesAlive: false,
+    });
+    expect(player.getTime()).toBeCloseTo(0.7);
+
+    player.seek(0.2);
+    expect(player.getPlaybackState()).toMatchObject({
+      mode: "timeline",
+      phase: "idle",
+      isDrainingParticles: false,
+    });
+    expect(player.getTime()).toBe(0.2);
   });
 });
