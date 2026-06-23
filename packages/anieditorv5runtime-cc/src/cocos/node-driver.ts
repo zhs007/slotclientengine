@@ -16,12 +16,6 @@ export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
   setRotationDegrees(node: TNode, degrees: number): void;
   setOpacity(node: TNode, opacity: number): void;
   setActive(node: TNode, active: boolean): void;
-  createBackgroundNode(
-    name: string,
-    color: number,
-    width: number,
-    height: number,
-  ): TNode;
   createImageNode(name: string, spriteFrame: TSpriteFrame): TNode;
   getSpriteFrameSize(spriteFrame: TSpriteFrame): V5GSize | null;
   applyBlendMode(node: TNode, config: CocosBlendModeConfig): void;

@@ -35,7 +35,6 @@ class FakeNode {
   scaleY = 1;
   rotation = 0;
   opacity = 255;
-  backgroundColor: number | null = null;
   spriteFrame: FakeSpriteFrame | null = null;
   blendMode: CocosBlendModeConfig | null = null;
 
@@ -92,19 +91,6 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
 
   setActive(node: FakeNode, active: boolean): void {
     node.active = active;
-  }
-
-  createBackgroundNode(
-    name: string,
-    color: number,
-    width: number,
-    height: number,
-  ): FakeNode {
-    const node = new FakeNode(name);
-    node.backgroundColor = color;
-    node.width = width;
-    node.height = height;
-    return node;
   }
 
   createImageNode(name: string, spriteFrame: FakeSpriteFrame): FakeNode {
@@ -251,7 +237,7 @@ function makePlayer(project = tinyProject()): {
 }
 
 describe("V5GCocosPlayer", () => {
-  it("creates a stage background below layers and preserves layer order", () => {
+  it("creates stage content and particle roots without a background node", () => {
     const project = sampleProject();
     const { root, player } = makePlayer(project);
     player.init();
@@ -260,12 +246,12 @@ describe("V5GCocosPlayer", () => {
     expect(stage.name).toBe("V5G Stage");
     expect(stage.width).toBe(project.stage.width);
     expect(stage.height).toBe(project.stage.height);
-    expect(stage.children[0].name).toBe("V5G Background");
-    expect(stage.children[0].backgroundColor).toBe(0x101827);
-    expect(stage.children[1].name).toBe("V5G Content");
-    expect(stage.children[2].name).toBe("V5G Particles");
-    expect(stage.children[2].children).toHaveLength(0);
-    expect(stage.children[1].children.map((node) => node.name)).toEqual(
+    expect(stage.children.map((node) => node.name)).toEqual([
+      "V5G Content",
+      "V5G Particles",
+    ]);
+    expect(stage.children[1].children).toHaveLength(0);
+    expect(stage.children[0].children.map((node) => node.name)).toEqual(
       project.layers.flatMap((layer) => [
         layer.name,
         `${layer.name} Particles`,
@@ -277,7 +263,7 @@ describe("V5GCocosPlayer", () => {
     const { root, player } = makePlayer(tinyProject());
     player.init();
 
-    const layerNode = root.children[0].children[1].children[0];
+    const layerNode = root.children[0].children[0].children[0];
     expect(layerNode.x).toBe(100);
     expect(layerNode.y).toBe(50);
     expect(layerNode.scaleX).toBe(-1);
@@ -310,6 +296,103 @@ describe("V5GCocosPlayer", () => {
     expect(root.children).toHaveLength(0);
   });
 
+  it("resolves SpriteFrames from an atlas using the asset path filename", () => {
+    const project = tinyProject();
+    const root = new FakeNode("Root");
+    const frames = framesFor(project);
+    const queries: string[] = [];
+    const player = new V5GCocosPlayer({
+      root,
+      project,
+      assets: {
+        atlas: {
+          getSpriteFrame(name) {
+            queries.push(name);
+            return frames.get(name) ?? null;
+          },
+        },
+      },
+      driver: new FakeDriver(),
+    });
+    const frame = frames.get("asset-1");
+    if (!frame) throw new Error("Missing fixture frame asset-1.");
+    frames.set("a", frame);
+    frames.delete("asset-1");
+
+    player.init();
+
+    expect(queries).toEqual(["a"]);
+    expect(root.children[0].children[0].children[0].spriteFrame?.id).toBe(
+      "asset-1",
+    );
+  });
+
+  it("strips directories and extensions from atlas lookup keys", () => {
+    const project = tinyProject({}, { path: "assets/nested/respin_a.png" });
+    const root = new FakeNode("Root");
+    const frames = framesFor(project);
+    const frame = frames.get("asset-1");
+    if (!frame) throw new Error("Missing fixture frame asset-1.");
+    frames.set("respin_a", frame);
+    frames.delete("asset-1");
+    const queries: string[] = [];
+    const player = new V5GCocosPlayer({
+      root,
+      project,
+      assets: {
+        atlas: {
+          getSpriteFrame(name) {
+            queries.push(name);
+            return frames.get(name) ?? null;
+          },
+        },
+      },
+      driver: new FakeDriver(),
+    });
+
+    player.init();
+
+    expect(queries).toEqual(["respin_a"]);
+  });
+
+  it("fails fast when an atlas source cannot provide a SpriteFrame", () => {
+    const project = tinyProject();
+    const root = new FakeNode("Root");
+    const player = new V5GCocosPlayer({
+      root,
+      project,
+      assets: {
+        atlas: {
+          getSpriteFrame() {
+            return null;
+          },
+        },
+      },
+      driver: new FakeDriver(),
+    });
+
+    expect(() => player.init()).toThrow(
+      'Missing Cocos SpriteFrame for V5G asset "asset-1" at "assets/a.png" using atlas key "a".',
+    );
+    expect(root.children).toHaveLength(0);
+  });
+
+  it("fails fast when assets.atlas is invalid", () => {
+    const project = tinyProject();
+    const root = new FakeNode("Root");
+    const player = new V5GCocosPlayer({
+      root,
+      project,
+      assets: { atlas: {} } as never,
+      driver: new FakeDriver(),
+    });
+
+    expect(() => player.init()).toThrow(
+      "V5GCocosPlayer assets.atlas must provide getSpriteFrame(name).",
+    );
+    expect(root.children).toHaveLength(0);
+  });
+
   it("fails on SpriteFrame size mismatch when size can be read", () => {
     const project = tinyProject();
     const { frames, player } = makePlayer(project);
@@ -318,6 +401,29 @@ describe("V5GCocosPlayer", () => {
     expect(() => player.init()).toThrow(
       'Cocos SpriteFrame size mismatch for V5G asset "asset-1"',
     );
+  });
+
+  it("does not reject trimmed atlas SpriteFrame size", () => {
+    const project = tinyProject();
+    const root = new FakeNode("Root");
+    const player = new V5GCocosPlayer({
+      root,
+      project,
+      assets: {
+        atlas: {
+          getSpriteFrame(name) {
+            if (name !== "a") return null;
+            return { id: "asset-1", width: 60, height: 30 };
+          },
+        },
+      },
+      driver: new FakeDriver(),
+    });
+
+    expect(() => player.init()).not.toThrow();
+    const layerNode = root.children[0].children[0].children[0];
+    expect(layerNode.width).toBe(100);
+    expect(layerNode.height).toBe(50);
   });
 
   it("validates compressed SpriteFrame file size while keeping logical node size", () => {
@@ -343,7 +449,7 @@ describe("V5GCocosPlayer", () => {
     frames.set("asset-1", { id: "asset-1", width: 50, height: 25 });
     player.init();
 
-    const layerNode = root.children[0].children[1].children[0];
+    const layerNode = root.children[0].children[0].children[0];
     expect(layerNode.width).toBe(100);
     expect(layerNode.height).toBe(50);
     expect(layerNode.scaleX).toBe(-1);
@@ -749,8 +855,8 @@ describe("V5GCocosPlayer", () => {
     player.init();
 
     const stage = root.children[0];
-    const content = stage.children[1];
-    const particleRoot = stage.children[2];
+    const content = stage.children[0];
+    const particleRoot = stage.children[1];
     const layerNode = content.children[0];
     const particleContainer = content.children[1];
     expect(layerNode.active).toBe(true);
@@ -800,7 +906,7 @@ describe("V5GCocosPlayer", () => {
     });
     player.update(0.6);
 
-    const particleContainer = root.children[0].children[1].children[1];
+    const particleContainer = root.children[0].children[0].children[1];
     expect(player.time).toBe(0.5);
     expect(player.getPlaybackState()).toMatchObject({
       mode: "segmented",

@@ -16,13 +16,25 @@ export interface V5GCocosAssetResolver<TSpriteFrame = SpriteFrame> {
   getSpriteFrame(assetPath: string, assetId: string): TSpriteFrame | null;
 }
 
+export interface V5GCocosSpriteAtlasLike<TSpriteFrame = SpriteFrame> {
+  getSpriteFrame(name: string): TSpriteFrame | null;
+}
+
+export interface V5GCocosSpriteAtlasAssetSource<TSpriteFrame = SpriteFrame> {
+  atlas: V5GCocosSpriteAtlasLike<TSpriteFrame>;
+}
+
+export type V5GCocosAssetSource<TSpriteFrame = SpriteFrame> =
+  | V5GCocosAssetResolver<TSpriteFrame>
+  | V5GCocosSpriteAtlasAssetSource<TSpriteFrame>;
+
 export interface V5GCocosPlayerOptions<
   TNode = Node,
   TSpriteFrame = SpriteFrame,
 > {
   root: TNode;
   project: V5GProjectConfig;
-  assets: V5GCocosAssetResolver<TSpriteFrame>;
+  assets: V5GCocosAssetSource<TSpriteFrame>;
   driver: V5GCocosNodeDriver<TNode, TSpriteFrame>;
   loop?: boolean;
   onTimeChange?: (time: number) => void;
