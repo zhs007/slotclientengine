@@ -36,20 +36,59 @@ async function bootstrap(): Promise<void> {
       if (!player) return;
       if (player.isPlaying()) player.pause();
       else player.play();
+      syncPlaybackState();
     },
     onRestart: () => {
       player?.restart();
+      syncPlaybackState();
     },
     onLoopChange: (loop) => {
       player?.setLoop(loop);
+      syncPlaybackState();
     },
     onSeekStart: () => {
       player?.pause();
+      syncPlaybackState();
     },
     onSeek: (time) => {
       player?.seek(time);
+      syncPlaybackState();
+    },
+    onSegmentedStart: (advanced) => {
+      if (!player) return;
+      try {
+        player.play({
+          mode: "segmented",
+          loopStart: { unit: "time", at: advanced.loopStart },
+          loopEnd: { unit: "time", at: advanced.loopEnd },
+          keepParticlesAlive: advanced.keepParticlesAlive,
+        });
+        controls.setAdvancedError(null);
+        syncPlaybackState();
+      } catch (error) {
+        controls.setAdvancedError(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    },
+    onSegmentedEnd: () => {
+      if (!player) return;
+      try {
+        player.requestSegmentedPlaybackEnd();
+        controls.setAdvancedError(null);
+        syncPlaybackState();
+      } catch (error) {
+        controls.setAdvancedError(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     },
   });
+
+  function syncPlaybackState(): void {
+    if (!player) return;
+    controls.setPlaybackState(player.getPlaybackState());
+  }
 
   async function loadProject(projectId: string): Promise<void> {
     const selectedProject = getBundledProject(projectId);
@@ -71,8 +110,14 @@ async function bootstrap(): Promise<void> {
       assetScale: selectedProject.assetScale,
       project: selectedProject.project,
       assetUrls: selectedProject.assetUrls,
-      onTimeChange: (time) => controls.setTime(time),
-      onPlayingChange: (isPlaying) => controls.setPlaying(isPlaying),
+      onTimeChange: (time) => {
+        controls.setTime(time);
+        syncPlaybackState();
+      },
+      onPlayingChange: (isPlaying) => {
+        controls.setPlaying(isPlaying);
+        syncPlaybackState();
+      },
     });
     await nextPlayer.init();
     if (token !== loadToken) {
@@ -82,6 +127,7 @@ async function bootstrap(): Promise<void> {
     player = nextPlayer;
     controls.setLoop(player.getLoop());
     controls.setTime(player.getTime());
+    syncPlaybackState();
   }
 
   await loadProject("project");

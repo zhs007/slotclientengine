@@ -1,9 +1,28 @@
 import * as PIXI from "pixi.js";
 import { toPixiBlendMode } from "./blend-mode.js";
-import { editorToPixi } from "../core/coordinates.js";
 import { parseColorHex } from "../core/validation.js";
 import { sampleProjectAtTime } from "../core/project-sampler.js";
-import { sampleParticleSpritesForLayer } from "../core/particle-sampler.js";
+import {
+  VNIParticleRuntime,
+  sampleLiveParticleSprites,
+  type VNILiveParticleSpriteSample,
+  type VNIParticleRuntimeLayer,
+} from "../core/particle-runtime.js";
+import {
+  VNISegmentedPlaybackSequence,
+  assertPositiveFinite,
+  normalizePlaybackPoint,
+  normalizePlaybackRange,
+  normalizeSegmentedPlaybackOptions,
+  type VNIPlayOptions,
+  type VNIPlaybackMode,
+  type VNIPlaybackPoint,
+  type VNIPlaybackRange,
+  type VNIPlaybackState,
+  type VNIPlayRangeOptions,
+  type VNISegmentedPlaybackOptions,
+  type VNISegmentedPlaybackPhase,
+} from "../core/playback-sequence.js";
 import {
   applySampledLayerState,
   createLayerInstance,
@@ -15,18 +34,16 @@ import type { AssetUrlManifest } from "../core/asset-manifest.js";
 import type { SampledLayerState } from "../core/project-sampler.js";
 import type { V5GAssetConfig, VNIProjectConfig } from "../core/types.js";
 
-export type VNIPlaybackRange =
-  | { unit: "time"; start: number; end?: number }
-  | { unit: "frame"; start: number; end?: number; fps: number };
-
-export interface VNIPlayRangeOptions {
-  range: VNIPlaybackRange;
-  loop?: boolean;
-}
-
-export type VNIPlaybackPoint =
-  | { unit: "time"; at: number }
-  | { unit: "frame"; at: number; fps: number };
+export type {
+  VNIPlayOptions,
+  VNIPlaybackMode,
+  VNIPlaybackPoint,
+  VNIPlaybackRange,
+  VNIPlaybackState,
+  VNIPlayRangeOptions,
+  VNISegmentedPlaybackOptions,
+  VNISegmentedPlaybackPhase,
+};
 
 export interface VNIPlaybackEventContext {
   id: string;
@@ -77,6 +94,11 @@ interface PlaybackMarker {
   listener: (event: VNIPlaybackEventContext) => void;
 }
 
+interface VNIPlaybackFrameOptions {
+  liveParticles?: boolean;
+  liveParticleDeltaSeconds?: number;
+}
+
 export class VNIPlayer {
   private readonly app = new PIXI.Application();
   private readonly stageRoot = new PIXI.Container();
@@ -94,6 +116,11 @@ export class VNIPlayer {
   private readonly onTimeChange?: (time: number) => void;
   private readonly onPlayingChange?: (isPlaying: boolean) => void;
   private readonly layerInstances = new Map<string, V5GLayerInstance>();
+  private readonly particleRuntime: VNIParticleRuntime;
+  private readonly liveParticleSpritesByLayer = new Map<
+    string,
+    PIXI.Sprite[]
+  >();
   private resizeObserver: ResizeObserver | null = null;
   private rafId: number | null = null;
   private pixelDiagnosticsRafId: number | null = null;
@@ -101,8 +128,13 @@ export class VNIPlayer {
   private currentTime = 0;
   private loop = true;
   private playing = false;
+  private drainPaused = false;
   private initialized = false;
+  private playbackMode: VNIPlaybackMode = "timeline";
+  private playbackPhase: VNISegmentedPlaybackPhase = "idle";
   private activeRange: ActivePlaybackRange | null = null;
+  private segmentedPlayback: VNISegmentedPlaybackSequence | null = null;
+  private pendingComplete: VNIPlaybackCompleteContext | null = null;
   private readonly playbackMarkers = new Map<string, PlaybackMarker>();
   private readonly playbackCompleteListeners = new Set<
     (event: VNIPlaybackCompleteContext) => void
@@ -120,6 +152,7 @@ export class VNIPlayer {
     this.assetsById = new Map(
       options.project.assets.map((asset) => [asset.id, asset] as const),
     );
+    this.particleRuntime = new VNIParticleRuntime(options.project.layers);
     this.onTimeChange = options.onTimeChange;
     this.onPlayingChange = options.onPlayingChange;
   }
@@ -154,54 +187,75 @@ export class VNIPlayer {
     this.resizeObserver.observe(this.container);
     this.resize();
     this.initialized = true;
-    this.seek(0);
+    this.renderDeterministicFrame(0);
   }
 
-  play(): void {
-    if (this.playing) return;
-    if (!this.activeRange && this.currentTime >= this.project.stage.duration) {
-      this.seek(0);
+  play(options?: VNIPlayOptions): void {
+    if (options?.mode === "range") {
+      this.startRangePlayback(options);
+      return;
     }
+    if (options?.mode === "segmented") {
+      this.startSegmentedPlayback(options);
+      return;
+    }
+    this.startTimelinePlayback();
+  }
+
+  private startTimelinePlayback(): void {
+    if (this.playing) return;
+    this.assertInitialized("play");
+    if (this.particleRuntime.isDraining()) {
+      this.drainPaused = false;
+      this.ensureTicker();
+      return;
+    }
+    this.playbackMode = "timeline";
+    this.playbackPhase = "start";
+    if (!this.activeRange && this.currentTime >= this.project.stage.duration) {
+      this.renderPlaybackFrame(0, 0);
+    }
+    this.activeRange = null;
+    this.segmentedPlayback = null;
     this.playing = true;
     this.lastTickMs = performance.now();
     this.onPlayingChange?.(true);
-    this.rafId = requestAnimationFrame(this.tick);
+    this.ensureTicker();
   }
 
   pause(): void {
+    if (this.particleRuntime.isDraining()) {
+      this.drainPaused = true;
+    }
     if (!this.playing) return;
     this.playing = false;
-    if (this.rafId !== null) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = null;
-    }
+    this.cancelTicker();
     this.onPlayingChange?.(false);
   }
 
   restart(): void {
     this.activeRange = null;
-    this.seek(0);
+    this.segmentedPlayback = null;
+    this.playbackMode = "timeline";
+    this.playbackPhase = "idle";
+    this.pendingComplete = null;
+    this.drainPaused = false;
+    this.particleRuntime.reset();
+    this.renderDeterministicFrame(0);
     if (this.playing) {
       this.lastTickMs = performance.now();
     }
   }
 
   seek(time: number): void {
-    const sampled = sampleProjectAtTime(this.project, time);
-    this.currentTime = sampled.time;
-    for (const sampledLayer of sampled.layers) {
-      const instance = this.layerInstances.get(sampledLayer.layerId);
-      if (!instance) {
-        throw new Error(`Missing V5G layer instance: ${sampledLayer.layerId}`);
-      }
-      applySampledLayerState(instance, sampledLayer, this.project.stage);
-    }
-    const particleSpriteCount = this.drawParticles(sampled.layers);
-    this.updateDiagnostics(
-      sampled.layers.filter((layer) => layer.visible).length,
-      particleSpriteCount,
-    );
-    this.onTimeChange?.(this.currentTime);
+    this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.playbackMode = "timeline";
+    this.playbackPhase = "idle";
+    this.drainPaused = false;
+    this.particleRuntime.reset();
+    this.renderDeterministicFrame(time);
   }
 
   setLoop(loop: boolean): void {
@@ -220,9 +274,35 @@ export class VNIPlayer {
     return this.playing;
   }
 
+  getPlaybackState(): VNIPlaybackState {
+    const phase = this.getEffectivePlaybackPhase();
+    return {
+      mode: this.playbackMode,
+      phase,
+      currentTime: this.currentTime,
+      isPlaying: this.playing,
+      isDrainingParticles: this.particleRuntime.isDraining(),
+      liveParticleCount: this.getRenderedParticleCount(),
+      loopIndex:
+        this.segmentedPlayback?.getLoopIndex() ??
+        this.activeRange?.loopIndex ??
+        0,
+      keepParticlesAlive: this.segmentedPlayback?.keepParticlesAlive ?? true,
+    };
+  }
+
   update(deltaSeconds: number): void {
     assertPositiveFinite(deltaSeconds, "deltaSeconds");
-    if (!this.playing) return;
+    if (!this.playing) {
+      if (this.particleRuntime.isDraining() && !this.drainPaused) {
+        this.advanceParticleDrain(deltaSeconds);
+      }
+      return;
+    }
+    if (this.segmentedPlayback) {
+      this.advanceSegmentedPlayback(deltaSeconds);
+      return;
+    }
     if (this.activeRange) {
       this.advanceActiveRange(deltaSeconds);
       return;
@@ -231,19 +311,69 @@ export class VNIPlayer {
   }
 
   playRange(options: VNIPlayRangeOptions): void {
+    this.startRangePlayback(options);
+  }
+
+  requestSegmentedPlaybackEnd(): void {
+    if (!this.segmentedPlayback) {
+      throw new Error("No active VNI segmented playback.");
+    }
+    this.segmentedPlayback.requestEnd();
+    this.playbackPhase = this.segmentedPlayback.getPhase();
+    if (!this.playing) {
+      this.playing = true;
+      this.drainPaused = false;
+      this.lastTickMs = performance.now();
+      this.onPlayingChange?.(true);
+      this.ensureTicker();
+    }
+  }
+
+  private startRangePlayback(options: VNIPlayRangeOptions): void {
     this.assertInitialized("playRange");
     const normalized = normalizePlaybackRange(
       options.range,
       this.project.stage.duration,
     );
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.particleRuntime.reset();
+    this.playbackMode = "range";
+    this.playbackPhase = "start";
     this.activeRange = {
       ...normalized,
       loop: options.loop ?? this.loop,
       loopIndex: 0,
     };
-    this.seek(normalized.startTime);
+    this.renderPlaybackFrame(normalized.startTime, normalized.startTime);
     if (!this.playing) {
-      this.play();
+      this.playing = true;
+      this.lastTickMs = performance.now();
+      this.onPlayingChange?.(true);
+      this.ensureTicker();
+    } else {
+      this.lastTickMs = performance.now();
+    }
+  }
+
+  private startSegmentedPlayback(options: VNISegmentedPlaybackOptions): void {
+    this.assertInitialized("play");
+    const normalized = normalizeSegmentedPlaybackOptions(
+      options,
+      this.project.stage.duration,
+    );
+    this.activeRange = null;
+    this.pendingComplete = null;
+    this.particleRuntime.reset();
+    this.playbackMode = "segmented";
+    this.segmentedPlayback = new VNISegmentedPlaybackSequence(normalized);
+    this.playbackPhase = "start";
+    this.renderPlaybackFrame(0, 0);
+    if (!this.playing) {
+      this.playing = true;
+      this.lastTickMs = performance.now();
+      this.onPlayingChange?.(true);
+      this.ensureTicker();
     } else {
       this.lastTickMs = performance.now();
     }
@@ -308,20 +438,28 @@ export class VNIPlayer {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
     this.playbackMarkers.clear();
     this.playbackCompleteListeners.clear();
+    this.particleRuntime.reset();
     this.clearParticles();
     this.clearDiagnostics();
     this.app.destroy(true);
   }
 
   private readonly tick = (now: number): void => {
-    if (!this.playing) return;
+    if (!this.isTickerNeeded()) {
+      this.rafId = null;
+      return;
+    }
     const deltaSeconds = Math.max(0, (now - this.lastTickMs) / 1000);
     this.lastTickMs = now;
     this.update(deltaSeconds);
-    if (this.playing) {
+    if (this.isTickerNeeded()) {
       this.rafId = requestAnimationFrame(this.tick);
+    } else {
+      this.rafId = null;
     }
   };
 
@@ -332,16 +470,15 @@ export class VNIPlayer {
       const timeToEnd = duration - this.currentTime;
       if (remaining >= timeToEnd) {
         const previousTime = this.currentTime;
-        this.seek(duration);
         this.triggerPlaybackEvents(previousTime, duration, 0);
         if (this.loop) {
           remaining -= Math.max(timeToEnd, 0);
-          this.seek(0);
+          this.renderPlaybackFrame(duration, duration);
+          this.renderPlaybackFrame(0, 0);
           if (timeToEnd <= 0) break;
           continue;
         }
-        this.pause();
-        this.triggerPlaybackComplete({
+        this.startParticleDrain(duration, {
           startTime: 0,
           endTime: duration,
           currentTime: duration,
@@ -351,7 +488,7 @@ export class VNIPlayer {
       }
       const previousTime = this.currentTime;
       const nextTime = previousTime + remaining;
-      this.seek(nextTime);
+      this.renderPlaybackFrame(nextTime, nextTime);
       this.triggerPlaybackEvents(previousTime, nextTime, 0);
       return;
     }
@@ -365,7 +502,6 @@ export class VNIPlayer {
       const timeToEnd = range.endTime - this.currentTime;
       if (remaining >= timeToEnd) {
         const previousTime = this.currentTime;
-        this.seek(range.endTime);
         this.triggerPlaybackEvents(
           previousTime,
           range.endTime,
@@ -373,14 +509,14 @@ export class VNIPlayer {
         );
         if (range.loop) {
           remaining -= Math.max(timeToEnd, 0);
+          this.renderPlaybackFrame(range.endTime, range.endTime);
           range.loopIndex += 1;
-          this.seek(range.startTime);
+          this.renderPlaybackFrame(range.startTime, range.startTime);
           if (timeToEnd <= 0) break;
           continue;
         }
-        this.pause();
         this.activeRange = null;
-        this.triggerPlaybackComplete({
+        this.startParticleDrain(range.endTime, {
           startTime: range.startTime,
           endTime: range.endTime,
           currentTime: range.endTime,
@@ -390,9 +526,136 @@ export class VNIPlayer {
       }
       const previousTime = this.currentTime;
       const nextTime = previousTime + remaining;
-      this.seek(nextTime);
+      this.renderPlaybackFrame(nextTime, nextTime);
       this.triggerPlaybackEvents(previousTime, nextTime, range.loopIndex);
       return;
+    }
+  }
+
+  private advanceSegmentedPlayback(deltaSeconds: number): void {
+    const segmented = this.segmentedPlayback;
+    if (!segmented) return;
+    const result = segmented.advance(deltaSeconds);
+    this.playbackPhase = result.phase;
+    this.triggerSegmentedPlaybackEvents(segmented, result);
+    if (result.timelineEnded) {
+      this.startParticleDrain(this.project.stage.duration, {
+        startTime: 0,
+        endTime: this.project.stage.duration,
+        currentTime: this.project.stage.duration,
+        loopIndex: result.loopIndex,
+      });
+      return;
+    }
+    const particleTime = this.getSegmentedParticleSampleTime(segmented);
+    this.renderPlaybackFrame(result.currentTime, particleTime, {
+      liveParticles:
+        segmented.keepParticlesAlive && segmented.getPhase() === "loop",
+      liveParticleDeltaSeconds: deltaSeconds,
+    });
+  }
+
+  private triggerSegmentedPlaybackEvents(
+    segmented: VNISegmentedPlaybackSequence,
+    result: {
+      previousTime: number;
+      currentTime: number;
+      loopIndex: number;
+    },
+  ): void {
+    if (
+      segmented.getPhase() === "loop" &&
+      segmented.getLoopStartTime() < segmented.getLoopEndTime() &&
+      result.currentTime < result.previousTime
+    ) {
+      this.triggerPlaybackEvents(
+        result.previousTime,
+        segmented.getLoopEndTime(),
+        Math.max(0, result.loopIndex - 1),
+      );
+      this.triggerPlaybackEvents(
+        segmented.getLoopStartTime(),
+        result.currentTime,
+        result.loopIndex,
+      );
+      return;
+    }
+    this.triggerPlaybackEvents(
+      result.previousTime,
+      result.currentTime,
+      result.loopIndex,
+    );
+  }
+
+  private getSegmentedParticleSampleTime(
+    segmented: VNISegmentedPlaybackSequence,
+  ): number {
+    return segmented.getCurrentTime();
+  }
+
+  private startParticleDrain(
+    endTime: number,
+    completeEvent: VNIPlaybackCompleteContext,
+  ): void {
+    this.playing = false;
+    this.currentTime = endTime;
+    this.pendingComplete = completeEvent;
+    this.playbackPhase = "particle-draining";
+    this.onPlayingChange?.(false);
+    const sampled = this.applyProjectSample(endTime);
+    const particleLayers = this.getParticleRuntimeLayers(sampled.layers);
+    if (particleLayers.length > 0) {
+      const endParticles = sampleLiveParticleSprites(
+        particleLayers,
+        this.project.stage,
+        endTime,
+      );
+      if (endParticles.length > 0) {
+        this.particleRuntime.emit(particleLayers, this.project.stage, endTime);
+      }
+    }
+    const frame = this.particleRuntime.beginDrain();
+    const particleSpriteCount = this.renderParticleSamples(frame.particles);
+    this.updateDiagnostics(
+      sampled.layers.filter((layer) => layer.visible).length,
+      particleSpriteCount,
+    );
+    this.onTimeChange?.(this.currentTime);
+    if (frame.isComplete) {
+      this.finishParticleDrain();
+      return;
+    }
+    this.drainPaused = false;
+    this.ensureTicker();
+  }
+
+  private advanceParticleDrain(deltaSeconds: number): void {
+    const frame = this.particleRuntime.advanceDrain(deltaSeconds);
+    const particleSpriteCount = this.renderParticleSamples(frame.particles);
+    const sampled = sampleProjectAtTime(this.project, this.currentTime);
+    this.updateDiagnostics(
+      sampled.layers.filter((layer) => layer.visible).length,
+      particleSpriteCount,
+    );
+    if (frame.isComplete) {
+      this.finishParticleDrain();
+    }
+  }
+
+  private finishParticleDrain(): void {
+    this.playbackPhase = "complete";
+    this.segmentedPlayback?.markParticleDrainComplete();
+    this.clearParticles();
+    this.updateDiagnostics(
+      sampleProjectAtTime(this.project, this.currentTime).layers.filter(
+        (layer) => layer.visible,
+      ).length,
+      0,
+    );
+    const event = this.pendingComplete;
+    this.pendingComplete = null;
+    if (event) {
+      this.triggerPlaybackComplete(event);
     }
   }
 
@@ -430,6 +693,30 @@ export class VNIPlayer {
     if (!this.initialized) {
       throw new Error(`VNIPlayer.${methodName}() requires init() first.`);
     }
+  }
+
+  private ensureTicker(): void {
+    if (this.rafId !== null) return;
+    this.lastTickMs = performance.now();
+    this.rafId = requestAnimationFrame(this.tick);
+  }
+
+  private cancelTicker(): void {
+    if (this.rafId === null) return;
+    cancelAnimationFrame(this.rafId);
+    this.rafId = null;
+  }
+
+  private isTickerNeeded(): boolean {
+    return (
+      this.playing || (this.particleRuntime.isDraining() && !this.drainPaused)
+    );
+  }
+
+  private getEffectivePlaybackPhase(): VNISegmentedPlaybackPhase {
+    if (this.particleRuntime.isDraining()) return "particle-draining";
+    if (this.segmentedPlayback) return this.segmentedPlayback.getPhase();
+    return this.playbackPhase;
   }
 
   private resize(): void {
@@ -491,48 +778,133 @@ export class VNIPlayer {
     return texture;
   }
 
-  private drawParticles(sampledLayers: readonly SampledLayerState[]): number {
-    this.clearParticles();
-    let particleSpriteCount = 0;
+  private renderDeterministicFrame(time: number): void {
+    const sampled = this.applyProjectSample(time);
+    const particles = sampleLiveParticleSprites(
+      this.getParticleRuntimeLayers(sampled.layers),
+      this.project.stage,
+      this.currentTime,
+    );
+    const particleSpriteCount = this.renderParticleSamples(particles);
+    this.updateDiagnostics(
+      sampled.layers.filter((layer) => layer.visible).length,
+      particleSpriteCount,
+    );
+    this.onTimeChange?.(this.currentTime);
+  }
+
+  private renderPlaybackFrame(
+    nonParticleTime: number,
+    particleTime: number,
+    options: VNIPlaybackFrameOptions = {},
+  ): void {
+    const sampled = this.applyProjectSample(nonParticleTime);
+    const particleLayers = this.getParticleRuntimeLayers(sampled.layers);
+    const frame = options.liveParticles
+      ? this.particleRuntime.emitLive(
+          particleLayers,
+          this.project.stage,
+          particleTime,
+          options.liveParticleDeltaSeconds ?? 0,
+        )
+      : this.particleRuntime.emit(
+          particleLayers,
+          this.project.stage,
+          particleTime,
+        );
+    const particleSpriteCount = this.renderParticleSamples(frame.particles);
+    this.updateDiagnostics(
+      sampled.layers.filter((layer) => layer.visible).length,
+      particleSpriteCount,
+    );
+    this.onTimeChange?.(this.currentTime);
+  }
+
+  private applyProjectSample(time: number): {
+    time: number;
+    layers: SampledLayerState[];
+  } {
+    const sampled = sampleProjectAtTime(this.project, time);
+    this.currentTime = sampled.time;
+    for (const sampledLayer of sampled.layers) {
+      const instance = this.layerInstances.get(sampledLayer.layerId);
+      if (!instance) {
+        throw new Error(`Missing V5G layer instance: ${sampledLayer.layerId}`);
+      }
+      applySampledLayerState(instance, sampledLayer, this.project.stage);
+    }
+    return sampled;
+  }
+
+  private getParticleRuntimeLayers(
+    sampledLayers: readonly SampledLayerState[],
+  ): VNIParticleRuntimeLayer[] {
+    const layers: VNIParticleRuntimeLayer[] = [];
     for (const sampledLayer of sampledLayers) {
       if (!sampledLayer.hasActiveParticleAnimation) continue;
       const instance = this.layerInstances.get(sampledLayer.layerId);
       if (!instance) {
         throw new Error(`Missing V5G layer instance: ${sampledLayer.layerId}`);
       }
-      if (!instance.texture || !instance.textureSize) {
+      if (!instance.textureSize) {
         throw new Error(
           `V5G particle layer "${sampledLayer.layerId}" is missing image texture.`,
         );
       }
-      const emitter = editorToPixi(
-        sampledLayer.transform.x,
-        sampledLayer.transform.y,
-        this.project.stage.width,
-        this.project.stage.height,
-      );
-      const particles = sampleParticleSpritesForLayer(
-        instance.layer,
+      layers.push({
+        layer: instance.layer,
         sampledLayer,
-        instance.textureSize,
-        this.currentTime,
-      );
-      particleSpriteCount += particles.length;
-      for (const particle of particles) {
+        textureSize: instance.textureSize,
+      });
+    }
+    return layers;
+  }
+
+  private renderParticleSamples(
+    particles: readonly VNILiveParticleSpriteSample[],
+  ): number {
+    const particlesByLayer = new Map<string, VNILiveParticleSpriteSample[]>();
+    for (const particle of particles) {
+      const layerParticles = particlesByLayer.get(particle.layerId) ?? [];
+      layerParticles.push(particle);
+      particlesByLayer.set(particle.layerId, layerParticles);
+    }
+
+    for (const instance of this.layerInstances.values()) {
+      const layerParticles = particlesByLayer.get(instance.layer.id) ?? [];
+      let sprites = this.liveParticleSpritesByLayer.get(instance.layer.id);
+      if (!sprites) {
+        sprites = [];
+        this.liveParticleSpritesByLayer.set(instance.layer.id, sprites);
+      }
+      while (sprites.length < layerParticles.length) {
+        if (!instance.texture) {
+          throw new Error(
+            `V5G particle layer "${instance.layer.id}" is missing image texture.`,
+          );
+        }
         const sprite = new PIXI.Sprite(instance.texture);
         sprite.anchor.set(0.5);
-        sprite.position.set(
-          emitter.x + particle.offsetX,
-          emitter.y + particle.offsetY,
-        );
+        instance.particleDisplay.addChild(sprite);
+        sprites.push(sprite);
+      }
+      for (let index = 0; index < layerParticles.length; index += 1) {
+        const particle = layerParticles[index];
+        const sprite = sprites[index];
+        sprite.position.set(particle.x, particle.y);
         sprite.scale.set(particle.scale);
         sprite.rotation = particle.rotation;
         sprite.alpha = particle.alpha;
         sprite.blendMode = toPixiBlendMode(particle.blendMode);
-        instance.particleDisplay.addChild(sprite);
+        sprite.visible = true;
+      }
+      while (sprites.length > layerParticles.length) {
+        const sprite = sprites.pop();
+        sprite?.destroy();
       }
     }
-    return particleSpriteCount;
+
+    return particles.length;
   }
 
   private clearParticles(): void {
@@ -541,6 +913,15 @@ export class VNIPlayer {
         child.destroy();
       }
     }
+    this.liveParticleSpritesByLayer.clear();
+  }
+
+  private getRenderedParticleCount(): number {
+    let count = 0;
+    for (const sprites of this.liveParticleSpritesByLayer.values()) {
+      count += sprites.length;
+    }
+    return count;
   }
 
   private updateDiagnostics(
@@ -551,6 +932,12 @@ export class VNIPlayer {
     this.container.dataset.vniTime = this.currentTime.toFixed(2);
     this.container.dataset.vniVisibleLayers = String(visibleLayerCount);
     this.container.dataset.vniParticleSprites = String(particleSpriteCount);
+    this.container.dataset.vniPlaybackMode = this.playbackMode;
+    this.container.dataset.vniPlaybackPhase = this.getEffectivePlaybackPhase();
+    this.container.dataset.vniParticleDraining = String(
+      this.particleRuntime.isDraining(),
+    );
+    this.container.dataset.vniLiveParticles = String(particleSpriteCount);
     this.container.dataset.v5gProjectId = this.projectId;
     this.container.dataset.v5gTime = this.currentTime.toFixed(2);
     this.container.dataset.v5gVisibleLayers = String(visibleLayerCount);
@@ -626,6 +1013,10 @@ export class VNIPlayer {
     delete this.container.dataset.vniTime;
     delete this.container.dataset.vniVisibleLayers;
     delete this.container.dataset.vniParticleSprites;
+    delete this.container.dataset.vniPlaybackMode;
+    delete this.container.dataset.vniPlaybackPhase;
+    delete this.container.dataset.vniParticleDraining;
+    delete this.container.dataset.vniLiveParticles;
     delete this.container.dataset.vniPixelSamples;
     delete this.container.dataset.vniNonBackgroundSamples;
     delete this.container.dataset.vniMaxPixelDelta;
@@ -647,89 +1038,3 @@ export class VNIPlayer {
 
 export type V5GPlayerOptions = VNIPlayerOptions;
 export const V5GPlayer = VNIPlayer;
-
-function normalizePlaybackRange(
-  range: VNIPlaybackRange,
-  duration: number,
-): { startTime: number; endTime: number } {
-  if (range.unit === "time") {
-    const startTime = assertFiniteNumber(range.start, "playback range start");
-    const endTime = normalizeOptionalEnd(
-      range.end,
-      duration,
-      "playback range end",
-    );
-    assertNormalizedRange(startTime, endTime, duration);
-    return { startTime, endTime };
-  }
-  const fps = assertPositiveFinite(range.fps, "playback range fps");
-  const startFrame = assertNonNegativeInteger(
-    range.start,
-    "playback range start frame",
-  );
-  const endTime =
-    range.end === undefined || range.end === -1
-      ? duration
-      : assertNonNegativeInteger(range.end, "playback range end frame") / fps;
-  const startTime = startFrame / fps;
-  assertNormalizedRange(startTime, endTime, duration);
-  return { startTime, endTime };
-}
-
-function normalizePlaybackPoint(
-  point: VNIPlaybackPoint,
-  duration: number,
-  path: string,
-): number {
-  const time =
-    point.unit === "time"
-      ? assertFiniteNumber(point.at, `${path} time`)
-      : assertNonNegativeInteger(point.at, `${path} frame`) /
-        assertPositiveFinite(point.fps, `${path} fps`);
-  if (time < 0 || time > duration) {
-    throw new Error(`${path} must be within project duration.`);
-  }
-  return time;
-}
-
-function normalizeOptionalEnd(
-  value: number | undefined,
-  duration: number,
-  path: string,
-): number {
-  if (value === undefined || value === -1) return duration;
-  return assertFiniteNumber(value, path);
-}
-
-function assertNormalizedRange(
-  startTime: number,
-  endTime: number,
-  duration: number,
-): void {
-  if (startTime < 0 || !(startTime < endTime) || endTime > duration) {
-    throw new Error(
-      `Invalid VNI playback range: expected 0 <= start < end <= ${duration}, got ${startTime}..${endTime}.`,
-    );
-  }
-}
-
-function assertFiniteNumber(value: number, path: string): number {
-  if (!Number.isFinite(value)) {
-    throw new Error(`${path} must be a finite number.`);
-  }
-  return value;
-}
-
-function assertPositiveFinite(value: number, path: string): number {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`${path} must be a positive finite number.`);
-  }
-  return value;
-}
-
-function assertNonNegativeInteger(value: number, path: string): number {
-  if (!Number.isInteger(value) || value < 0) {
-    throw new Error(`${path} must be a non-negative integer.`);
-  }
-  return value;
-}

@@ -51,12 +51,14 @@ player.play();
 ## 生命周期
 
 - `init()`: 加载贴图、校验真实 texture size、创建 Pixi app、初始化 layer 和 particle 容器。
-- `play()`: 使用 RAF 自动推进时间轴。
-- `pause()`: 暂停 RAF，不清空 range、marker 或 complete listener。
-- `restart()`: 清空 active range 并回到 0 秒。
-- `seek(time)`: 采样指定时间并重绘 layer/particle；不会触发 marker。
+- `play()`: 使用 RAF 自动推进普通时间轴；无参数旧行为保持不变。
+- `pause()`: 暂停用户播放，冻结主时间轴和 live 粒子年龄，不清空 range、marker 或 complete listener。
+- `restart()`: 清空 active range、segmented 状态和 live 粒子，回到 0 秒。
+- `seek(time)`: 退出 range/segmented live playback，清空 live 粒子状态，并按指定时间做确定性预览；不会触发 marker。
 - `setLoop(loop)` / `getLoop()`: 控制普通播放和未显式传 `loop` 的 range 播放。
 - `destroy()`: 停止 RAF、断开 `ResizeObserver`、清理 particles、diagnostics、marker 和 complete listener，并销毁 Pixi app。
+
+播放到终点和视觉完全结束不是同一件事。非循环 timeline、非循环 range 和 segmented end 段到达终点后会停止发射器并进入 `particle-draining`；已有 live 粒子继续衰减，排空后才进入 `complete` 并触发 `onPlaybackComplete(...)`。`isPlaying()` 在主时间轴停止推进后会是 `false`，但内部 RAF 可能仍会继续驱动粒子排空；使用 `getPlaybackState().isDrainingParticles` 判断排空状态。
 
 ## Range 和事件
 
@@ -82,6 +84,23 @@ const disposeComplete = player.onPlaybackComplete((event) => {
 
 `end` 省略、`undefined` 或 `-1` 都表示播放到 `project.stage.duration`。marker 只在播放推进跨过时间点时触发；`seek()`、`init()`、`restart()` 不触发 marker。marker 与终点同一时刻时，marker 先于 complete。
 
+## Segmented 高级播放
+
+三段式播放把动画拆成 `0 -> loopStart`、`loopStart -> loopEnd`、`loopEnd -> duration`。`loopStart` 和 `loopEnd` 必须是合法秒数或帧点，满足 `0 <= loopStart <= loopEnd <= duration`，非法输入会显式失败，不会被 clamp。
+
+```ts
+player.play({
+  mode: "segmented",
+  loopStart: { unit: "time", at: 3 },
+  loopEnd: { unit: "time", at: 3 },
+  keepParticlesAlive: true,
+});
+
+player.requestSegmentedPlaybackEnd();
+```
+
+`loopStart === loopEnd` 表示非粒子动画维持在该帧；粒子发射器维持该帧的配置，但已经发射的粒子继续按运行时 delta 老化、移动，连续发射器也会继续发射。`loopStart < loopEnd` 表示非粒子动画和发射器配置都在 `[loopStart, loopEnd)` 循环；开启 `keepParticlesAlive` 时，live 粒子不会因为 loop 时间回绕而重置。`keepParticlesAlive` 默认是 `true`。`setLoop(false)` 不会让 segmented loop 自动结束，只有 `requestSegmentedPlaybackEnd()` 会进入 end 段。
+
 ## Diagnostics
 
 播放器会在 `container.dataset` 写入：
@@ -90,6 +109,10 @@ const disposeComplete = player.onPlaybackComplete((event) => {
 - `data-vni-time`
 - `data-vni-visible-layers`
 - `data-vni-particle-sprites`
+- `data-vni-playback-mode`
+- `data-vni-playback-phase`
+- `data-vni-particle-draining`
+- `data-vni-live-particles`
 - `data-vni-bundle-id`
 - `data-vni-profile-id`
 - `data-vni-asset-scale`

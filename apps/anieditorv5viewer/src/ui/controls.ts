@@ -1,4 +1,7 @@
-import type { VNIProjectConfig } from "@slotclientengine/vnicore/core";
+import type {
+  VNIPlaybackState,
+  VNIProjectConfig,
+} from "@slotclientengine/vnicore/core";
 
 export interface ViewerControlsProject {
   id: string;
@@ -21,6 +24,12 @@ export interface ViewerControlsOptions {
   onLoopChange: (loop: boolean) => void;
   onSeekStart: () => void;
   onSeek: (time: number) => void;
+  onSegmentedStart: (options: {
+    loopStart: number;
+    loopEnd: number;
+    keepParticlesAlive: boolean;
+  }) => void;
+  onSegmentedEnd: () => void;
 }
 
 export interface ViewerControls {
@@ -28,6 +37,8 @@ export interface ViewerControls {
   setPlaying(isPlaying: boolean): void;
   setTime(time: number): void;
   setLoop(loop: boolean): void;
+  setPlaybackState(state: VNIPlaybackState): void;
+  setAdvancedError(message: string | null): void;
 }
 
 export function createViewerControls(
@@ -110,8 +121,97 @@ export function createViewerControls(
     options.onSeek(Number(range.value));
   });
 
+  const advancedPanel = document.createElement("section");
+  advancedPanel.className = "advanced-playback-panel";
+  advancedPanel.setAttribute("aria-label", "高级播放");
+
+  const advancedHeader = document.createElement("div");
+  advancedHeader.className = "advanced-playback-header";
+  const advancedTitle = document.createElement("strong");
+  advancedTitle.textContent = "高级播放";
+  const advancedPhase = document.createElement("span");
+  advancedPhase.className = "advanced-phase";
+  advancedPhase.textContent = "idle";
+  advancedHeader.append(advancedTitle, advancedPhase);
+
+  const advancedControls = document.createElement("div");
+  advancedControls.className = "advanced-control-row";
+
+  const loopStartLabel = document.createElement("label");
+  loopStartLabel.className = "advanced-number";
+  const loopStartText = document.createElement("span");
+  loopStartText.textContent = "loopStart";
+  const loopStartInput = document.createElement("input");
+  loopStartInput.type = "number";
+  loopStartInput.step = "0.1";
+  loopStartInput.min = "0";
+  loopStartInput.setAttribute("aria-label", "segmented loop start seconds");
+  loopStartLabel.append(loopStartText, loopStartInput);
+
+  const loopEndLabel = document.createElement("label");
+  loopEndLabel.className = "advanced-number";
+  const loopEndText = document.createElement("span");
+  loopEndText.textContent = "loopEnd";
+  const loopEndInput = document.createElement("input");
+  loopEndInput.type = "number";
+  loopEndInput.step = "0.1";
+  loopEndInput.min = "0";
+  loopEndInput.setAttribute("aria-label", "segmented loop end seconds");
+  loopEndLabel.append(loopEndText, loopEndInput);
+
+  const keepParticlesLabel = document.createElement("label");
+  keepParticlesLabel.className = "keep-particles-toggle";
+  const keepParticlesInput = document.createElement("input");
+  keepParticlesInput.type = "checkbox";
+  keepParticlesInput.checked = true;
+  keepParticlesInput.setAttribute("aria-label", "维持粒子活动");
+  const keepParticlesText = document.createElement("span");
+  keepParticlesText.textContent = "维持粒子活动";
+  keepParticlesLabel.append(keepParticlesInput, keepParticlesText);
+
+  const segmentedStartButton = document.createElement("button");
+  segmentedStartButton.type = "button";
+  segmentedStartButton.className = "control-button primary";
+  segmentedStartButton.textContent = "开始";
+
+  const segmentedEndButton = document.createElement("button");
+  segmentedEndButton.type = "button";
+  segmentedEndButton.className = "control-button";
+  segmentedEndButton.textContent = "结束";
+  segmentedEndButton.disabled = true;
+
+  const advancedError = document.createElement("div");
+  advancedError.className = "advanced-error";
+  advancedError.setAttribute("role", "status");
+
+  advancedControls.append(
+    loopStartLabel,
+    loopEndLabel,
+    keepParticlesLabel,
+    segmentedStartButton,
+    segmentedEndButton,
+  );
+  advancedPanel.append(advancedHeader, advancedControls, advancedError);
+
+  loopStartInput.addEventListener("input", updateAdvancedValidation);
+  loopEndInput.addEventListener("input", updateAdvancedValidation);
+  segmentedStartButton.addEventListener("click", () => {
+    const parsed = parseAdvancedInputs();
+    if (!parsed.ok) {
+      setAdvancedError(parsed.message);
+      return;
+    }
+    setAdvancedError(null);
+    options.onSegmentedStart({
+      loopStart: parsed.loopStart,
+      loopEnd: parsed.loopEnd,
+      keepParticlesAlive: keepParticlesInput.checked,
+    });
+  });
+  segmentedEndButton.addEventListener("click", options.onSegmentedEnd);
+
   controls.append(playButton, restartButton, loopLabel, timeText, range);
-  root.append(projectRow, summary, controls);
+  root.append(projectRow, summary, controls, advancedPanel);
   options.container.appendChild(root);
 
   function renderProject(project: ViewerControlsProject): void {
@@ -133,6 +233,7 @@ export function createViewerControls(
     );
     range.max = String(project.project.stage.duration);
     range.value = "0.00";
+    resetAdvancedDefaults(project);
     timeText.textContent = `0.00 / ${formatTime(project.project.stage.duration)}`;
     playButton.textContent = "Play";
     playButton.classList.remove("is-playing");
@@ -158,7 +259,69 @@ export function createViewerControls(
     setLoop(loop: boolean): void {
       loopInput.checked = loop;
     },
+    setPlaybackState(state: VNIPlaybackState): void {
+      advancedPhase.textContent = state.phase;
+      segmentedEndButton.disabled = !(
+        state.mode === "segmented" &&
+        (state.phase === "start" || state.phase === "loop")
+      );
+    },
+    setAdvancedError(message: string | null): void {
+      setAdvancedError(message);
+    },
   };
+
+  function resetAdvancedDefaults(project: ViewerControlsProject): void {
+    const duration = project.project.stage.duration;
+    const defaultTime = Math.min(3, duration);
+    const loopTime =
+      project.id === "multipay" ? Math.min(3, duration) : defaultTime;
+    loopStartInput.max = String(duration);
+    loopEndInput.max = String(duration);
+    loopStartInput.value = formatTime(loopTime);
+    loopEndInput.value = formatTime(loopTime);
+    keepParticlesInput.checked = true;
+    advancedPhase.textContent = "idle";
+    segmentedEndButton.disabled = true;
+    setAdvancedError(null);
+    updateAdvancedValidation();
+  }
+
+  function updateAdvancedValidation(): void {
+    const parsed = parseAdvancedInputs();
+    segmentedStartButton.disabled = !parsed.ok;
+    if (parsed.ok) {
+      setAdvancedError(null);
+    } else {
+      setAdvancedError(parsed.message);
+    }
+  }
+
+  function parseAdvancedInputs():
+    | { ok: true; loopStart: number; loopEnd: number }
+    | { ok: false; message: string } {
+    const loopStart = Number(loopStartInput.value);
+    const loopEnd = Number(loopEndInput.value);
+    const duration = currentProject.project.stage.duration;
+    if (!Number.isFinite(loopStart) || !Number.isFinite(loopEnd)) {
+      return { ok: false, message: "loopStart 和 loopEnd 必须是数字" };
+    }
+    if (loopStart < 0 || loopEnd < 0) {
+      return { ok: false, message: "loopStart 和 loopEnd 不能小于 0" };
+    }
+    if (loopStart > loopEnd) {
+      return { ok: false, message: "loopStart 不能大于 loopEnd" };
+    }
+    if (loopEnd > duration) {
+      return { ok: false, message: "loopEnd 不能超过项目时长" };
+    }
+    return { ok: true, loopStart, loopEnd };
+  }
+
+  function setAdvancedError(message: string | null): void {
+    advancedError.textContent = message ?? "";
+    advancedError.classList.toggle("is-visible", Boolean(message));
+  }
 }
 
 function createSummaryStrong(value: string): HTMLElement {

@@ -32,6 +32,11 @@ export interface ParticleSpriteSample {
   blendMode: V5GBlendMode;
 }
 
+export interface ParticleAnimationRuntimeState {
+  animationId: string;
+  elapsed: number;
+}
+
 export function hasActiveParticleAnimation(
   layer: V5GLayerConfig,
   time: number,
@@ -99,7 +104,7 @@ export function sampleParticleSpritesForLayer(
           animation,
           particleLayer,
           textureSize,
-          progress,
+          progress * Math.max(animation.duration, 0.0001),
         ),
       );
     } else if (animation.type === "particle_wall") {
@@ -107,6 +112,73 @@ export function sampleParticleSpritesForLayer(
         ...sampleParticleWall(animation, particleLayer, textureSize, progress),
       );
     } else if (animation.type === "particle_combo") {
+      sprites.push(
+        ...sampleParticleCombo(animation, particleLayer, textureSize, progress),
+      );
+    }
+  }
+  return sprites;
+}
+
+export function sampleParticleSpritesForLayerRuntime(
+  layer: V5GLayerConfig,
+  sampledLayer: ParticleLayerSampleState,
+  textureSize: TextureSize,
+  runtimeStates: readonly ParticleAnimationRuntimeState[],
+): ParticleSpriteSample[] {
+  if (
+    layer.type !== "image" ||
+    !layer.visible ||
+    sampledLayer.baseOpacity <= 0
+  ) {
+    return [];
+  }
+
+  const stateByAnimationId = new Map(
+    runtimeStates.map((state) => [state.animationId, state] as const),
+  );
+  const sprites: ParticleSpriteSample[] = [];
+  for (const animation of layer.animations) {
+    if (!animation.enabled || !isParticleAnimationType(animation.type)) {
+      continue;
+    }
+    const runtimeState = stateByAnimationId.get(animation.id);
+    if (!runtimeState || runtimeState.elapsed <= 0) continue;
+
+    const particleOpacity =
+      animation.type === "particle_combo"
+        ? sampledLayer.baseOpacity
+        : sampledLayer.opacity;
+    if (particleOpacity <= 0) continue;
+    const particleLayer = { ...sampledLayer, opacity: particleOpacity };
+
+    if (animation.type === "particles") {
+      const progress = getRuntimeProgress(animation, runtimeState.elapsed);
+      if (progress === null) continue;
+      sprites.push(
+        ...sampleParticleBurst(animation, particleLayer, textureSize, progress),
+      );
+    } else if (animation.type === "particle_twinkle") {
+      sprites.push(
+        ...sampleParticleTwinkle(
+          animation,
+          particleLayer,
+          textureSize,
+          runtimeState.elapsed,
+        ),
+      );
+    } else if (animation.type === "particle_wall") {
+      sprites.push(
+        ...sampleParticleWallFromElapsed(
+          animation,
+          particleLayer,
+          textureSize,
+          runtimeState.elapsed,
+        ),
+      );
+    } else if (animation.type === "particle_combo") {
+      const progress = getRuntimeProgress(animation, runtimeState.elapsed);
+      if (progress === null) continue;
       sprites.push(
         ...sampleParticleCombo(animation, particleLayer, textureSize, progress),
       );
@@ -201,7 +273,7 @@ function sampleParticleTwinkle(
   animation: V5GAnimationConfig,
   sampledLayer: ParticleLayerSampleState,
   textureSize: TextureSize,
-  progress: number,
+  elapsed: number,
 ): ParticleSpriteSample[] {
   const count = Math.round(
     clampParticleNumber(getNumberParam(animation, "count"), 1, 1000),
@@ -228,8 +300,6 @@ function sampleParticleTwinkle(
     clampParticleNumber(getNumberParam(animation, "batchMax"), batchMin, 100),
   );
   const size = clampParticleNumber(getNumberParam(animation, "size"), 1, 400);
-  const duration = Math.max(animation.duration, 0.0001);
-  const elapsed = progress * duration;
   const textureEdge = getTextureLongestEdge(textureSize);
   const baseTextureScale = size / textureEdge;
   const sprites: ParticleSpriteSample[] = [];
@@ -283,6 +353,20 @@ function sampleParticleWall(
   sampledLayer: ParticleLayerSampleState,
   textureSize: TextureSize,
   progress: number,
+): ParticleSpriteSample[] {
+  return sampleParticleWallFromElapsed(
+    animation,
+    sampledLayer,
+    textureSize,
+    progress * Math.max(animation.duration, 0.0001),
+  );
+}
+
+function sampleParticleWallFromElapsed(
+  animation: V5GAnimationConfig,
+  sampledLayer: ParticleLayerSampleState,
+  textureSize: TextureSize,
+  elapsed: number,
 ): ParticleSpriteSample[] {
   const emitterWidth = clampParticleNumber(
     getNumberParam(animation, "emitterWidth"),
@@ -346,8 +430,6 @@ function sampleParticleWall(
     2,
   );
   const fadeOut = getOptionalBooleanParam(animation, "fadeOut", true);
-  const duration = Math.max(animation.duration, 0.0001);
-  const elapsed = progress * duration;
   const textureEdge = getTextureLongestEdge(textureSize);
   const baseTextureScale = size / textureEdge;
   const dirRad = (direction * Math.PI) / 180;
@@ -716,6 +798,15 @@ function easeInOutQuad(progress: number): number {
 
 function lerpNumber(from: number, to: number, progress: number): number {
   return from + (to - from) * clampNumber(progress, 0, 1);
+}
+
+function getRuntimeProgress(
+  animation: V5GAnimationConfig,
+  elapsed: number,
+): number | null {
+  const duration = Math.max(animation.duration, 0.0001);
+  if (elapsed < 0 || elapsed >= duration) return null;
+  return clampNumber(elapsed / duration, 0, 1);
 }
 
 function getNumberParam(animation: V5GAnimationConfig, key: string): number {

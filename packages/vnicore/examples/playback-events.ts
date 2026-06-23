@@ -27,6 +27,8 @@ export function wirePlaybackEvents(player: VNIPlayer): () => void {
     console.info("complete", event.startTime, event.endTime);
   });
 
+  console.info("state", player.getPlaybackState().phase);
+
   return () => {
     disposeMarker();
     disposeFrameMarker();

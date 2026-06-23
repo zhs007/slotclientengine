@@ -2,7 +2,7 @@
 
 `apps/anieditorv5viewer` is a Vite + TypeScript viewer shell for V5G/VNI exports from `docs/anieditor5/export` and `docs/anieditor5/export2`.
 
-The animation runtime comes from `@slotclientengine/vnicore`. This app owns bundled JSON/assets, the project selector, controls, styles, and browser assembly. Validation, sampling, Pixi.js v8 rendering, texture-size checks, particles, playback ranges, and diagnostics live in `packages/vnicore`.
+The animation runtime comes from `@slotclientengine/vnicore`. This app owns bundled JSON/assets, the project selector, controls, styles, and browser assembly. Validation, sampling, Pixi.js v8 rendering, texture-size checks, particles, playback ranges, segmented playback, particle-draining, and diagnostics live in `packages/vnicore`.
 
 ## Bundled Projects
 
@@ -66,7 +66,7 @@ Supported by `@slotclientengine/vnicore`:
 - layer animation particles: `particles`, `particle_twinkle`, `particle_wall`, `particle_combo`
 - `particle_combo.sourceOpacity` controls only the source image layer opacity; combo particles continue to render from the layer base opacity when `sourceOpacity` is `0`
 - deterministic `seek()` sampling for play, restart, loop, timeline drag, project switching, and particle redraws
-- playback ranges, playback markers, and complete listeners
+- playback ranges, segmented advanced playback, playback markers, particle-draining, and complete listeners
 
 Explicitly unsupported:
 
@@ -91,6 +91,10 @@ The stage mount receives runtime diagnostics from `VNIPlayer`:
 - `data-vni-time`
 - `data-vni-visible-layers`
 - `data-vni-particle-sprites`
+- `data-vni-playback-mode`
+- `data-vni-playback-phase`
+- `data-vni-particle-draining`
+- `data-vni-live-particles`
 - `data-vni-bundle-id`
 - `data-vni-profile-id`
 - `data-vni-asset-scale`
@@ -100,6 +104,10 @@ The stage mount receives runtime diagnostics from `VNIPlayer`:
 - `data-vni-max-pixel-delta`
 
 Legacy `data-v5g-*` aliases are still written for old browser checks and are cleared together with the VNI fields when a project switches or the player is destroyed.
+
+## Advanced Playback UI
+
+The viewer has a separate advanced playback section for segmented playback. It passes `loopStart`, `loopEnd`, and `维持粒子活动` directly to `VNIPlayer.play({ mode: "segmented", ... })`, and calls `requestSegmentedPlaybackEnd()` for the end button. The viewer does not own the segmented state machine; it only validates form input, displays the current phase, and mirrors runtime errors.
 
 ## Commands
 
