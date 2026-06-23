@@ -63,6 +63,8 @@ export class V5GPreview extends Component {
       assets: resolver,
       loop: true,
     });
+    // Runtime applies V5G special blend modes through Cocos Sprite/material pass state.
+    // The host only binds SpriteFrames; no normal fallback or extra Effect asset is required.
     this.player.init();
 
     const previewEndTime = Math.min(project.stage.duration, 4);

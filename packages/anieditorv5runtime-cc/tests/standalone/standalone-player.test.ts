@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  BlendFactor,
+  BlendOp,
   Graphics,
   Node,
   Sprite,
@@ -9,6 +11,7 @@ import {
 } from "cc";
 import {
   createV5GCocosPlayer,
+  getCocosBlendModeConfig,
   type V5GAnimationConfig,
   type V5GAssetConfig,
   type V5GLayerConfig,
@@ -168,7 +171,7 @@ describe("standalone V5GCocosPlayer", () => {
     ]);
   });
 
-  it("writes transform, opacity, active, anchor, and leaves blend mode untouched", () => {
+  it("writes transform, opacity, active, anchor, and Cocos blend state", () => {
     const project = tinyProject();
     const root = new Node("Root");
     const frames = framesFor(project);
@@ -192,8 +195,19 @@ describe("standalone V5GCocosPlayer", () => {
     expect(layerNode.active).toBe(true);
     expect(inspectTransform(layerNode).anchorX).toBe(0.25);
     expect(inspectTransform(layerNode).anchorY).toBe(0.75);
-    expect(requireSprite(layerNode).srcBlendFactor).toBeUndefined();
-    expect(requireSprite(layerNode).dstBlendFactor).toBeUndefined();
+    const sprite = requireSprite(layerNode);
+    const pass = sprite.getMaterialInstance(0)?.passes[0];
+    const target = pass?.blendState.targets[0];
+    expect(getCocosBlendModeConfig("add")).toMatchObject({
+      mode: "add",
+      strategy: "sprite-blend-state",
+    });
+    expect(sprite.srcBlendFactor).toBe(BlendFactor.SRC_ALPHA);
+    expect(sprite.dstBlendFactor).toBe(BlendFactor.ONE);
+    expect(target?.blend).toBe(true);
+    expect(target?.blendSrc).toBe(BlendFactor.SRC_ALPHA);
+    expect(target?.blendDst).toBe(BlendFactor.ONE);
+    expect(target?.blendEq).toBe(BlendOp.ADD);
   });
 
   it("fails fast for missing SpriteFrame and size mismatch", () => {
