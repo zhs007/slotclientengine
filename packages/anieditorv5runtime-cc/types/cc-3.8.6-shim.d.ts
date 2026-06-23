@@ -31,6 +31,56 @@ declare module "cc" {
     z: number;
   }
 
+  export enum BlendFactor {
+    ZERO,
+    ONE,
+    SRC_ALPHA,
+    DST_ALPHA,
+    ONE_MINUS_SRC_ALPHA,
+    ONE_MINUS_DST_ALPHA,
+    SRC_COLOR,
+    DST_COLOR,
+    ONE_MINUS_SRC_COLOR,
+    ONE_MINUS_DST_COLOR,
+    SRC_ALPHA_SATURATE,
+    CONSTANT_COLOR,
+    ONE_MINUS_CONSTANT_COLOR,
+    CONSTANT_ALPHA,
+    ONE_MINUS_CONSTANT_ALPHA,
+  }
+
+  export enum BlendOp {
+    ADD,
+    SUB,
+    REV_SUB,
+    MIN,
+    MAX,
+  }
+
+  export class BlendTarget {
+    blend: boolean;
+    blendEq: BlendOp;
+    blendAlphaEq: BlendOp;
+    blendSrc: BlendFactor;
+    blendDst: BlendFactor;
+    blendSrcAlpha: BlendFactor;
+    blendDstAlpha: BlendFactor;
+  }
+
+  export class BlendState {
+    targets: BlendTarget[];
+    setTarget(index: number, target: BlendTarget): void;
+  }
+
+  export class Pass {
+    blendState: BlendState;
+    _updatePassHash(): void;
+  }
+
+  export class MaterialInstance {
+    passes: Pass[];
+  }
+
   export class Node {
     name: string;
     active: boolean;
@@ -66,8 +116,11 @@ declare module "cc" {
   export class Sprite {
     spriteFrame: SpriteFrame | null;
     color: Color;
-    srcBlendFactor?: number;
-    dstBlendFactor?: number;
+    srcBlendFactor: BlendFactor;
+    dstBlendFactor: BlendFactor;
+    updateMaterial(): void;
+    _updateBlendFunc(): void;
+    getMaterialInstance(index: number): MaterialInstance | null;
   }
 
   export class Graphics {

@@ -30,6 +30,32 @@ export class Color {
   ) {}
 }
 
+export enum BlendFactor {
+  ZERO,
+  ONE,
+  SRC_ALPHA,
+  DST_ALPHA,
+  ONE_MINUS_SRC_ALPHA,
+  ONE_MINUS_DST_ALPHA,
+  SRC_COLOR,
+  DST_COLOR,
+  ONE_MINUS_SRC_COLOR,
+  ONE_MINUS_DST_COLOR,
+  SRC_ALPHA_SATURATE,
+  CONSTANT_COLOR,
+  ONE_MINUS_CONSTANT_COLOR,
+  CONSTANT_ALPHA,
+  ONE_MINUS_CONSTANT_ALPHA,
+}
+
+export enum BlendOp {
+  ADD,
+  SUB,
+  REV_SUB,
+  MIN,
+  MAX,
+}
+
 export class Node {
   active = true;
   parent: Node | null = null;
@@ -123,11 +149,68 @@ export class SpriteFrame {
   }
 }
 
+export class BlendTarget {
+  blend = false;
+  blendEq = BlendOp.ADD;
+  blendAlphaEq = BlendOp.ADD;
+  blendSrc = BlendFactor.SRC_ALPHA;
+  blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
+  blendSrcAlpha = BlendFactor.SRC_ALPHA;
+  blendDstAlpha = BlendFactor.ONE_MINUS_SRC_ALPHA;
+}
+
+export class BlendState {
+  targets = [new BlendTarget()];
+
+  setTarget(index: number, target: BlendTarget): void {
+    this.targets[index] = target;
+  }
+}
+
+export class Pass {
+  blendState = new BlendState();
+  passHashUpdates = 0;
+
+  _updatePassHash(): void {
+    this.passHashUpdates += 1;
+  }
+}
+
+export class MaterialInstance {
+  passes = [new Pass()];
+}
+
 export class Sprite {
   spriteFrame: SpriteFrame | null = null;
   color = Color.WHITE;
-  srcBlendFactor?: number;
-  dstBlendFactor?: number;
+  srcBlendFactor = BlendFactor.SRC_ALPHA;
+  dstBlendFactor = BlendFactor.ONE_MINUS_SRC_ALPHA;
+  materialUpdates = 0;
+  private readonly materialInstance = new MaterialInstance();
+
+  updateMaterial(): void {
+    this.materialUpdates += 1;
+    this._updateBlendFunc();
+  }
+
+  _updateBlendFunc(): void {
+    const pass = this.materialInstance.passes[0];
+    const target = pass.blendState.targets[0];
+    target.blend = true;
+    target.blendEq = BlendOp.ADD;
+    target.blendAlphaEq = BlendOp.ADD;
+    target.blendSrc = this.srcBlendFactor;
+    target.blendDst = this.dstBlendFactor;
+    target.blendSrcAlpha = BlendFactor.SRC_ALPHA;
+    target.blendDstAlpha = BlendFactor.ONE_MINUS_SRC_ALPHA;
+    pass.blendState.setTarget(0, target);
+    pass._updatePassHash();
+  }
+
+  getMaterialInstance(index: number): MaterialInstance | null {
+    if (index !== 0) return null;
+    return this.materialInstance;
+  }
 }
 
 export class Graphics {

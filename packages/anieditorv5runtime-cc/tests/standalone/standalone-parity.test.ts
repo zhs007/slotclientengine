@@ -13,7 +13,10 @@ import scatter1Data from "../fixtures/scatter1.json";
 import scatter2Data from "../fixtures/scatter2.json";
 import superwinData from "../fixtures/superwin.json";
 import { V5GCocosPlayer } from "../../src/cocos/player";
-import type { CocosBlendModeConfig } from "../../src/cocos/blend-mode";
+import {
+  getCocosBlendModeConfig,
+  type CocosBlendModeConfig,
+} from "../../src/cocos/blend-mode";
 import {
   opacityToCocosOpacity,
   v5gTransformToCocosPosition,
@@ -111,6 +114,21 @@ describe("standalone runtime parity", () => {
     const project = assertV5GProject(bigwinData);
     expect(() => validateCocosV5GProject(project)).not.toThrow();
     expect(() => standalone.validateCocosV5GProject(project)).not.toThrow();
+  });
+
+  it("matches modular runtime Cocos blend-mode configs", () => {
+    const blendModes = [
+      "normal",
+      "add",
+      "screen",
+      "multiply",
+      "lighten",
+    ] as const;
+    for (const blendMode of blendModes) {
+      expect(standalone.getCocosBlendModeConfig(blendMode)).toEqual(
+        getCocosBlendModeConfig(blendMode),
+      );
+    }
   });
 
   it("matches modular runtime compressed metadata rejection", () => {

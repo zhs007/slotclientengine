@@ -18,7 +18,7 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - 中心坐标：Cocos 节点位置直接使用 `transform.x/y`，不做 Pixi 的左上角坐标转换
 - 负 `scaleX/scaleY` 镜像
 - `opacity`、`visible`、`rotation`、锚点
-- 已知 V5G blend mode 字段：`normal`、`add`、`screen`、`multiply`、`lighten` 会被解析和接受；Cocos runtime 不修改 Sprite blend 参数，实际统一按 Cocos 默认 normal 透明混合渲染
+- 已知 V5G blend mode：`normal`、`add`、`screen`、`multiply`、`lighten` 会被解析、接受并写入 Cocos Sprite / material pass blend state
 - `scale_up`、`scale_down`、`fade`、`rotate`、`move`
 - `slide_in`、`slide_out`、`bounce_in`、`pulse`、`float`、`swing`
 - `scale_in`、`scale_out`、`pop`、`shake`、`blink`
@@ -37,7 +37,7 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - 嵌套 `parentId`
 - 未知资源、未知动画、未知 easing、未知 blend mode 的静默兜底
 
-遇到未支持能力会直接抛错。runtime 不创建 missing placeholder，不自动猜测资源路径。未知 V5G blend mode 仍会在通用校验失败；已知但未适配 Cocos 的 blend mode 会保留配置值但按默认 normal 渲染。
+遇到未支持能力会直接抛错。runtime 不创建 missing placeholder，不自动猜测资源路径。未知 V5G blend mode 仍会在通用校验失败；已知 blend mode 如果无法写入 Cocos Sprite blend factor 或 material pass blend state，会在 `init()` / `applyBlendMode(...)` 阶段显式抛错，不会静默退回 normal。
 
 ## 单文件复制导入
 
@@ -211,9 +211,22 @@ import {
 
 runtime 会在 stage 下创建 `V5G Background`，使用 Cocos `Graphics` 画 `project.stage.backgroundColor` 对应的纯色矩形，背景层始终在所有 V5G 图层下方。
 
-Cocos adapter 当前不会读取或写入 Sprite 的 blend factor / material / effect 配置。无论导出图层写的是 `normal`、`add`、`screen`、`multiply` 还是 `lighten`，runtime 都保持 Cocos Sprite 默认混合状态，因此实际按 normal 透明混合渲染。
+runtime 当前使用 Cocos Creator 3.8.6 原生 `Sprite.srcBlendFactor` / `dstBlendFactor` 和 material pass `blendState` 应用 V5G blend mode，不需要额外 shader / Effect 资产：
 
-后续如果要恢复 `add`、`screen` 等真实混合效果，需要先在真实 Cocos Creator 3.8.6 项目里补充并验收 Material/Effect adapter；在此之前不要依赖 Sprite blend factor API。
+- `normal`：`ADD` + `SRC_ALPHA / ONE_MINUS_SRC_ALPHA`
+- `add`：`ADD` + `SRC_ALPHA / ONE`
+- `screen`：`ADD` + `SRC_ALPHA / ONE_MINUS_SRC_COLOR`
+- `multiply`：`ADD` + `DST_COLOR / ONE_MINUS_SRC_ALPHA`
+- `lighten`：`MAX` + `SRC_ALPHA / ONE`
+
+standalone 交付仍只需要复制：
+
+```text
+standalone/anieditorv5runtime-cc.ts
+standalone/V5GPreview.example.ts
+```
+
+宿主不需要绑定额外 Material / Effect。若运行环境里的 Sprite 不暴露 blend factor、material instance、pass blend target 或 pass hash 刷新能力，runtime 会直接抛出包含节点名和 blend mode 的错误；这类错误需要回到 Cocos 版本/API 兼容性排查，不能用 normal fallback 掩盖。
 
 ## `cc` 类型 shim
 
