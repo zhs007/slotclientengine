@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BlendFactor, BlendOp, Sprite, SpriteFrame } from "cc";
+import { Sprite, SpriteFrame } from "cc";
 import { getCocosBlendModeConfig } from "../../src/cocos/blend-mode";
 import { createCocosNodeDriver } from "../../src/cocos/cocos-node-driver";
 import type { V5GBlendMode } from "../../src/core/types";
@@ -11,6 +11,19 @@ const blendModes: readonly V5GBlendMode[] = [
   "multiply",
   "lighten",
 ];
+
+const COCOS_BLEND_FACTOR = {
+  ONE: 1,
+  SRC_ALPHA: 2,
+  ONE_MINUS_SRC_ALPHA: 4,
+  DST_COLOR: 7,
+  ONE_MINUS_SRC_COLOR: 8,
+} as const;
+
+const COCOS_BLEND_OP = {
+  ADD: 0,
+  MAX: 4,
+} as const;
 
 describe("cocos blend mode", () => {
   it("maps every known V5G blend mode to a distinct Cocos blend-state config", () => {
@@ -46,43 +59,50 @@ describe("cocos blend mode", () => {
     }
   });
 
+  it("keeps normal mode on default Sprite rendering without blend APIs", () => {
+    const driver = createCocosNodeDriver();
+    const node = driver.createImageNode("normal", new SpriteFrame());
+    const sprite = requireSprite(node);
+    delete (sprite as Partial<Sprite>).srcBlendFactor;
+    delete (sprite as Partial<Sprite>).dstBlendFactor;
+    sprite.getMaterialInstance = undefined as never;
+
+    expect(() =>
+      driver.applyBlendMode(node, getCocosBlendModeConfig("normal")),
+    ).not.toThrow();
+  });
+
   it("applies native Sprite blend factors and pass blend state", () => {
     const driver = createCocosNodeDriver();
     const cases: Array<{
-      mode: V5GBlendMode;
-      src: BlendFactor;
-      dst: BlendFactor;
-      op: BlendOp;
+      mode: Exclude<V5GBlendMode, "normal">;
+      src: number;
+      dst: number;
+      op: number;
     }> = [
       {
-        mode: "normal",
-        src: BlendFactor.SRC_ALPHA,
-        dst: BlendFactor.ONE_MINUS_SRC_ALPHA,
-        op: BlendOp.ADD,
-      },
-      {
         mode: "add",
-        src: BlendFactor.SRC_ALPHA,
-        dst: BlendFactor.ONE,
-        op: BlendOp.ADD,
+        src: COCOS_BLEND_FACTOR.SRC_ALPHA,
+        dst: COCOS_BLEND_FACTOR.ONE,
+        op: COCOS_BLEND_OP.ADD,
       },
       {
         mode: "screen",
-        src: BlendFactor.SRC_ALPHA,
-        dst: BlendFactor.ONE_MINUS_SRC_COLOR,
-        op: BlendOp.ADD,
+        src: COCOS_BLEND_FACTOR.SRC_ALPHA,
+        dst: COCOS_BLEND_FACTOR.ONE_MINUS_SRC_COLOR,
+        op: COCOS_BLEND_OP.ADD,
       },
       {
         mode: "multiply",
-        src: BlendFactor.DST_COLOR,
-        dst: BlendFactor.ONE_MINUS_SRC_ALPHA,
-        op: BlendOp.ADD,
+        src: COCOS_BLEND_FACTOR.DST_COLOR,
+        dst: COCOS_BLEND_FACTOR.ONE_MINUS_SRC_ALPHA,
+        op: COCOS_BLEND_OP.ADD,
       },
       {
         mode: "lighten",
-        src: BlendFactor.SRC_ALPHA,
-        dst: BlendFactor.ONE,
-        op: BlendOp.MAX,
+        src: COCOS_BLEND_FACTOR.SRC_ALPHA,
+        dst: COCOS_BLEND_FACTOR.ONE,
+        op: COCOS_BLEND_OP.MAX,
       },
     ];
 
@@ -101,13 +121,33 @@ describe("cocos blend mode", () => {
       expect(target?.blendSrc).toBe(src);
       expect(target?.blendDst).toBe(dst);
       expect(target?.blendEq).toBe(op);
-      expect(target?.blendSrcAlpha).toBe(BlendFactor.SRC_ALPHA);
-      expect(target?.blendDstAlpha).toBe(BlendFactor.ONE_MINUS_SRC_ALPHA);
-      expect(target?.blendAlphaEq).toBe(BlendOp.ADD);
+      expect(target?.blendSrcAlpha).toBe(COCOS_BLEND_FACTOR.SRC_ALPHA);
+      expect(target?.blendDstAlpha).toBe(
+        COCOS_BLEND_FACTOR.ONE_MINUS_SRC_ALPHA,
+      );
+      expect(target?.blendAlphaEq).toBe(COCOS_BLEND_OP.ADD);
       expect(
         (pass as typeof pass & { passHashUpdates: number }).passHashUpdates,
       ).toBe(2);
     }
+  });
+
+  it("uses Cocos protected blend factor storage when public accessors are unavailable", () => {
+    const driver = createCocosNodeDriver();
+    const node = driver.createImageNode("PrivateBlend", new SpriteFrame());
+    const sprite = requireSprite(node) as Sprite & {
+      _srcBlendFactor?: number;
+      _dstBlendFactor?: number;
+    };
+    delete (sprite as Partial<Sprite>).srcBlendFactor;
+    delete (sprite as Partial<Sprite>).dstBlendFactor;
+    sprite._srcBlendFactor = COCOS_BLEND_FACTOR.SRC_ALPHA;
+    sprite._dstBlendFactor = COCOS_BLEND_FACTOR.ONE_MINUS_SRC_ALPHA;
+
+    driver.applyBlendMode(node, getCocosBlendModeConfig("add"));
+
+    expect(sprite._srcBlendFactor).toBe(COCOS_BLEND_FACTOR.SRC_ALPHA);
+    expect(sprite._dstBlendFactor).toBe(COCOS_BLEND_FACTOR.ONE);
   });
 
   it("fails instead of falling back to normal when Cocos blend APIs are missing", () => {

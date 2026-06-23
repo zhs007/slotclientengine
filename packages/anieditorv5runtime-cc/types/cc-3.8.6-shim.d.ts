@@ -31,53 +31,27 @@ declare module "cc" {
     z: number;
   }
 
-  export enum BlendFactor {
-    ZERO,
-    ONE,
-    SRC_ALPHA,
-    DST_ALPHA,
-    ONE_MINUS_SRC_ALPHA,
-    ONE_MINUS_DST_ALPHA,
-    SRC_COLOR,
-    DST_COLOR,
-    ONE_MINUS_SRC_COLOR,
-    ONE_MINUS_DST_COLOR,
-    SRC_ALPHA_SATURATE,
-    CONSTANT_COLOR,
-    ONE_MINUS_CONSTANT_COLOR,
-    CONSTANT_ALPHA,
-    ONE_MINUS_CONSTANT_ALPHA,
-  }
-
-  export enum BlendOp {
-    ADD,
-    SUB,
-    REV_SUB,
-    MIN,
-    MAX,
-  }
-
-  export class BlendTarget {
+  interface BlendTarget {
     blend: boolean;
-    blendEq: BlendOp;
-    blendAlphaEq: BlendOp;
-    blendSrc: BlendFactor;
-    blendDst: BlendFactor;
-    blendSrcAlpha: BlendFactor;
-    blendDstAlpha: BlendFactor;
+    blendEq: number;
+    blendAlphaEq: number;
+    blendSrc: number;
+    blendDst: number;
+    blendSrcAlpha: number;
+    blendDstAlpha: number;
   }
 
-  export class BlendState {
+  interface BlendState {
     targets: BlendTarget[];
     setTarget(index: number, target: BlendTarget): void;
   }
 
-  export class Pass {
+  interface Pass {
     blendState: BlendState;
     _updatePassHash(): void;
   }
 
-  export class MaterialInstance {
+  interface MaterialInstance {
     passes: Pass[];
   }
 
@@ -116,8 +90,8 @@ declare module "cc" {
   export class Sprite {
     spriteFrame: SpriteFrame | null;
     color: Color;
-    srcBlendFactor: BlendFactor;
-    dstBlendFactor: BlendFactor;
+    srcBlendFactor: number;
+    dstBlendFactor: number;
     updateMaterial(): void;
     _updateBlendFunc(): void;
     getMaterialInstance(index: number): MaterialInstance | null;

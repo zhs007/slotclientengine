@@ -1,6 +1,4 @@
 import {
-  BlendFactor,
-  BlendOp,
   Color,
   Graphics,
   Node,
@@ -2530,12 +2528,12 @@ interface ReadableSpriteFrame {
 
 interface CocosBlendTargetLike {
   blend: boolean;
-  blendEq: BlendOp;
-  blendAlphaEq: BlendOp;
-  blendSrc: BlendFactor;
-  blendDst: BlendFactor;
-  blendSrcAlpha: BlendFactor;
-  blendDstAlpha: BlendFactor;
+  blendEq: number;
+  blendAlphaEq: number;
+  blendSrc: number;
+  blendDst: number;
+  blendSrcAlpha: number;
+  blendDstAlpha: number;
 }
 
 interface CocosBlendStateLike {
@@ -2553,26 +2551,31 @@ interface CocosMaterialInstanceLike {
 }
 
 interface BlendableSprite {
-  srcBlendFactor: BlendFactor;
-  dstBlendFactor: BlendFactor;
+  srcBlendFactor: number;
+  dstBlendFactor: number;
+  _srcBlendFactor?: number;
+  _dstBlendFactor?: number;
   updateMaterial?: () => void;
   _updateBlendFunc?: () => void;
+  getRenderMaterial?: (index: number) => CocosMaterialInstanceLike | null;
   getMaterialInstance?: (index: number) => CocosMaterialInstanceLike | null;
 }
 
-const COCOS_BLEND_FACTORS: Record<CocosBlendFactorName, BlendFactor> = {
-  ZERO: BlendFactor.ZERO,
-  ONE: BlendFactor.ONE,
-  SRC_ALPHA: BlendFactor.SRC_ALPHA,
-  ONE_MINUS_SRC_ALPHA: BlendFactor.ONE_MINUS_SRC_ALPHA,
-  SRC_COLOR: BlendFactor.SRC_COLOR,
-  DST_COLOR: BlendFactor.DST_COLOR,
-  ONE_MINUS_SRC_COLOR: BlendFactor.ONE_MINUS_SRC_COLOR,
+// Cocos Creator 3.8.6 exposes these enum values internally, but not all builds
+// re-export BlendFactor / BlendOp from "cc".
+const COCOS_BLEND_FACTORS: Record<CocosBlendFactorName, number> = {
+  ZERO: 0,
+  ONE: 1,
+  SRC_ALPHA: 2,
+  ONE_MINUS_SRC_ALPHA: 4,
+  SRC_COLOR: 6,
+  DST_COLOR: 7,
+  ONE_MINUS_SRC_COLOR: 8,
 };
 
-const COCOS_BLEND_OPERATIONS: Record<CocosBlendOperationName, BlendOp> = {
-  ADD: BlendOp.ADD,
-  MAX: BlendOp.MAX,
+const COCOS_BLEND_OPERATIONS: Record<CocosBlendOperationName, number> = {
+  ADD: 0,
+  MAX: 4,
 };
 
 export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
@@ -2663,19 +2666,16 @@ function applySpriteBlendMode(
     );
   }
 
-  const blendable = sprite as Sprite & Partial<BlendableSprite>;
-  if (!("srcBlendFactor" in blendable) || !("dstBlendFactor" in blendable)) {
-    throw new Error(
-      `Cocos Sprite on node "${nodeName}" does not expose blend factor fields required for V5G blend mode "${config.mode}".`,
-    );
+  if (config.mode === "normal") {
+    return;
   }
 
-  blendable.srcBlendFactor = getCocosBlendFactor(
-    config.color.sourceFactor,
-    config.mode,
-  );
-  blendable.dstBlendFactor = getCocosBlendFactor(
-    config.color.destinationFactor,
+  const blendable = sprite as Sprite & Partial<BlendableSprite>;
+  setSpriteBlendFactors(
+    nodeName,
+    blendable,
+    getCocosBlendFactor(config.color.sourceFactor, config.mode),
+    getCocosBlendFactor(config.color.destinationFactor, config.mode),
     config.mode,
   );
 
@@ -2720,17 +2720,43 @@ function applySpriteBlendMode(
   pass._updatePassHash();
 }
 
+function setSpriteBlendFactors(
+  nodeName: string,
+  sprite: Partial<BlendableSprite>,
+  sourceFactor: number,
+  destinationFactor: number,
+  blendMode: string,
+): void {
+  if ("srcBlendFactor" in sprite && "dstBlendFactor" in sprite) {
+    sprite.srcBlendFactor = sourceFactor;
+    sprite.dstBlendFactor = destinationFactor;
+    return;
+  }
+  if ("_srcBlendFactor" in sprite && "_dstBlendFactor" in sprite) {
+    sprite._srcBlendFactor = sourceFactor;
+    sprite._dstBlendFactor = destinationFactor;
+    return;
+  }
+  throw new Error(
+    `Cocos Sprite on node "${nodeName}" does not expose blend factor fields required for V5G blend mode "${blendMode}".`,
+  );
+}
+
 function getCocosSpriteBlendPass(
   nodeName: string,
   sprite: Partial<BlendableSprite>,
   blendMode: string,
 ): CocosPassLike {
-  if (typeof sprite.getMaterialInstance !== "function") {
+  if (
+    typeof sprite.getMaterialInstance !== "function" &&
+    typeof sprite.getRenderMaterial !== "function"
+  ) {
     throw new Error(
       `Cocos Sprite on node "${nodeName}" cannot provide a material instance for V5G blend mode "${blendMode}".`,
     );
   }
-  const material = sprite.getMaterialInstance(0);
+  const material =
+    sprite.getMaterialInstance?.(0) ?? sprite.getRenderMaterial?.(0);
   const pass = material?.passes[0];
   if (!pass) {
     throw new Error(
@@ -2757,7 +2783,7 @@ function getCocosSpriteBlendPass(
 function getCocosBlendFactor(
   factor: CocosBlendFactorName,
   blendMode: string,
-): BlendFactor {
+): number {
   const cocosFactor = COCOS_BLEND_FACTORS[factor];
   if (cocosFactor === undefined) {
     throw new Error(
@@ -2770,7 +2796,7 @@ function getCocosBlendFactor(
 function getCocosBlendOperation(
   operation: CocosBlendOperationName,
   blendMode: string,
-): BlendOp {
+): number {
   const cocosOperation = COCOS_BLEND_OPERATIONS[operation];
   if (cocosOperation === undefined) {
     throw new Error(
