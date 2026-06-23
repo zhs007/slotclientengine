@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "paths": {
+      "@slotclientengine/vnicore": ["src/index.ts"],
+      "@slotclientengine/vnicore/core": ["src/core/index.ts"],
+      "@slotclientengine/vnicore/pixi": ["src/pixi/index.ts"]
+    },
+    "types": ["node", "vite/client"]
+  },
+  "include": ["examples/**/*.ts", "src/**/*.ts"],
+  "exclude": ["dist", "coverage", "node_modules", "tests"]
+}

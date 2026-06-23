@@ -1,6 +1,6 @@
 import "./styles.css";
 import { bundledProjects, getBundledProject } from "./config/bundled-projects";
-import { V5GPlayer } from "./runtime/v5g-player";
+import { VNIPlayer } from "@slotclientengine/vnicore/pixi";
 import { createViewerControls } from "./ui/controls";
 
 async function bootstrap(): Promise<void> {
@@ -23,7 +23,7 @@ async function bootstrap(): Promise<void> {
   shell.append(stage, controlsMount);
   appRoot.appendChild(shell);
 
-  let player: V5GPlayer | null = null;
+  let player: VNIPlayer | null = null;
   let loadToken = 0;
   const controls = createViewerControls({
     projects: bundledProjects,
@@ -62,7 +62,7 @@ async function bootstrap(): Promise<void> {
     controls.setPlaying(false);
     controls.setTime(0);
 
-    const nextPlayer = new V5GPlayer({
+    const nextPlayer = new VNIPlayer({
       container: stageMount,
       projectId: selectedProject.id,
       bundleId: selectedProject.bundleId,
@@ -98,7 +98,7 @@ function showFatalError(error: unknown): void {
     const panel = document.createElement("section");
     panel.className = "fatal-error";
     const title = document.createElement("h1");
-    title.textContent = "V5G viewer failed";
+    title.textContent = "VNI viewer failed";
     const detail = document.createElement("pre");
     detail.textContent = message;
     panel.append(title, detail);

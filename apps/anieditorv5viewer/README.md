@@ -1,6 +1,8 @@
 # anieditorv5viewer
 
-`apps/anieditorv5viewer` is a Vite + TypeScript + Pixi.js viewer for V5G/VNI exports from `docs/anieditor5/export` and `docs/anieditor5/export2`.
+`apps/anieditorv5viewer` is a Vite + TypeScript viewer shell for V5G/VNI exports from `docs/anieditor5/export` and `docs/anieditor5/export2`.
+
+The animation runtime comes from `@slotclientengine/vnicore`. This app owns bundled JSON/assets, the project selector, controls, styles, and browser assembly. Validation, sampling, Pixi.js v8 rendering, texture-size checks, particles, playback ranges, and diagnostics live in `packages/vnicore`.
 
 ## Bundled Projects
 
@@ -48,9 +50,9 @@ The UI project selector can switch between all bundled projects. JSON `asset.pat
 
 `edit_full` is the 100% original-image profile. `runtime_50` stores 50% file pixels, but the player restores each image layer to its original logical design size with sprite-level compensation. Legacy exports and VNI single-project 100% exports may omit `fileWidth`, `fileHeight`, `fileScale`, and `exportProfile`; those are treated as full-size original-image profiles.
 
-## Supported Runtime
+## Runtime Boundary
 
-Supported now:
+Supported by `@slotclientengine/vnicore`:
 
 - `schemaVersion` in the `V5G_0.x` or `VNI_0.x` families
 - `editor.name` of `victory_editor_v5_g` or `VNI`
@@ -64,6 +66,7 @@ Supported now:
 - layer animation particles: `particles`, `particle_twinkle`, `particle_wall`, `particle_combo`
 - `particle_combo.sourceOpacity` controls only the source image layer opacity; combo particles continue to render from the layer base opacity when `sourceOpacity` is `0`
 - deterministic `seek()` sampling for play, restart, loop, timeline drag, project switching, and particle redraws
+- playback ranges, playback markers, and complete listeners
 
 Explicitly unsupported:
 
@@ -79,6 +82,24 @@ Explicitly unsupported:
 - bundle profile projects whose `exportProfile` does not match the manifest entry
 
 Unsupported or invalid data fails fast instead of rendering placeholders or silently falling back.
+
+## Browser Diagnostics
+
+The stage mount receives runtime diagnostics from `VNIPlayer`:
+
+- `data-vni-project-id`
+- `data-vni-time`
+- `data-vni-visible-layers`
+- `data-vni-particle-sprites`
+- `data-vni-bundle-id`
+- `data-vni-profile-id`
+- `data-vni-asset-scale`
+- `data-vni-profile-purpose`
+- `data-vni-pixel-samples`
+- `data-vni-non-background-samples`
+- `data-vni-max-pixel-delta`
+
+Legacy `data-v5g-*` aliases are still written for old browser checks and are cleared together with the VNI fields when a project switches or the player is destroyed.
 
 ## Commands
 

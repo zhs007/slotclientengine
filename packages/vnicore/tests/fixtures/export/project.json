@@ -1,0 +1,589 @@
+{
+  "schemaVersion": "V5G_0.0014",
+  "editor": {
+    "name": "victory_editor_v5_g",
+    "version": "V5G_0.0014"
+  },
+  "engineTarget": {
+    "name": "cocos_creator",
+    "version": "3.8.6"
+  },
+  "name": "胜利测试",
+  "stage": {
+    "width": 1600,
+    "height": 1600,
+    "coordinate": "center",
+    "duration": 10,
+    "backgroundColor": "#101827"
+  },
+  "assets": [
+    {
+      "id": "asset_image_mq6i4x4l_a",
+      "type": "image",
+      "path": "assets/epic_asset_image_mq6i4x4l_a.png",
+      "originalName": "epic.png",
+      "width": 770,
+      "height": 465
+    },
+    {
+      "id": "asset_image_mq6j09f0_k",
+      "type": "image",
+      "path": "assets/effect2_asset_image_mq6j09f0_k.png",
+      "originalName": "effect2.png",
+      "width": 320,
+      "height": 277
+    },
+    {
+      "id": "asset_image_mq6m8cly_4",
+      "type": "image",
+      "path": "assets/effect1_asset_image_mq6m8cly_4.png",
+      "originalName": "effect1.png",
+      "width": 583,
+      "height": 587
+    },
+    {
+      "id": "asset_image_mqasjj80_3",
+      "type": "image",
+      "path": "assets/image_asset_image_mqasjj80_3.png",
+      "originalName": "飞机右.png",
+      "width": 671,
+      "height": 490
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer_image_mq6j09f0_l",
+      "name": "eff.png",
+      "type": "image",
+      "assetId": "asset_image_mq6j09f0_k",
+      "parentId": null,
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": -4.3,
+        "y": 21.1,
+        "scaleX": 2,
+        "scaleY": 2,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mq7yv01u_5",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.6,
+          "duration": 0.1,
+          "enabled": true,
+          "seed": 67426,
+          "params": {
+            "fromScaleX": 0.01,
+            "fromScaleY": 2,
+            "toScaleX": 4,
+            "toScaleY": 2,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqatq8cz_8",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.7,
+          "duration": 3.3,
+          "enabled": true,
+          "seed": 45363,
+          "params": {
+            "fromScaleX": 4,
+            "fromScaleY": 2,
+            "toScaleX": 5,
+            "toScaleY": 2.4,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mq7zl58i_c",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 4,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 87202,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mq6m8clz_5",
+      "name": "effect1.png",
+      "type": "image",
+      "assetId": "asset_image_mq6m8cly_4",
+      "parentId": null,
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 11.2,
+        "y": 10.7,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mq7z02yb_7",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0,
+          "duration": 0.5,
+          "enabled": true,
+          "seed": 4467,
+          "params": {
+            "fromScaleX": 0.01,
+            "fromScaleY": 0.01,
+            "toScaleX": 1.2,
+            "toScaleY": 1.2,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mq7z0zg2_8",
+          "type": "rotate",
+          "name": "Rotate 旋转",
+          "startTime": 0,
+          "duration": 4.2,
+          "enabled": true,
+          "seed": 46578,
+          "params": {
+            "fromRotation": 0,
+            "toRotation": 360,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mq7zk7bu_b",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 4,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 43258,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mqasjj81_4",
+      "name": "飞机右.png",
+      "type": "image",
+      "assetId": "asset_image_mqasjj80_3",
+      "parentId": null,
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 64.5,
+        "y": -3.9,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mqasldml_6",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0.6,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 39293,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 400,
+            "toY": 50,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeInOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqasoenv_7",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 0.6,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 80603,
+          "params": {
+            "fromOpacity": 0,
+            "toOpacity": 1,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqaskqau_5",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.6,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 9062,
+          "params": {
+            "fromScaleX": 0.2,
+            "fromScaleY": 0.2,
+            "toScaleX": 1,
+            "toScaleY": 1,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqate8dc_6",
+          "type": "rotate",
+          "name": "Rotate 旋转",
+          "startTime": 0.8,
+          "duration": 3.6,
+          "enabled": true,
+          "seed": 85504,
+          "params": {
+            "fromRotation": 0,
+            "toRotation": -5,
+            "easing": "easeInOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqatd4nz_5",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0.8,
+          "duration": 3.6,
+          "enabled": true,
+          "seed": 34047,
+          "params": {
+            "fromX": 400,
+            "fromY": 50,
+            "toX": 450,
+            "toY": 70,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqata21f_4",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.8,
+          "duration": 3.6,
+          "enabled": true,
+          "seed": 90675,
+          "params": {
+            "fromScaleX": 1,
+            "fromScaleY": 1,
+            "toScaleX": 1.1,
+            "toScaleY": 1.1,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqatjgfw_7",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 4,
+          "duration": 0.4,
+          "enabled": true,
+          "seed": 29245,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "easeInOutQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mqay44vw_3",
+      "name": "飞机左",
+      "type": "image",
+      "assetId": "asset_image_mqasjj80_3",
+      "parentId": null,
+      "visible": true,
+      "locked": false,
+      "transform": {
+        "x": 20.9,
+        "y": -27.5,
+        "scaleX": -1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mqay44vw_4",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0.6,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 39293,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": -400,
+            "toY": 50,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeInOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqay44vw_5",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 0.6,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 80603,
+          "params": {
+            "fromOpacity": 0,
+            "toOpacity": 1,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqay44vw_6",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.6,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 9062,
+          "params": {
+            "fromScaleX": 0.2,
+            "fromScaleY": 0.2,
+            "toScaleX": 1,
+            "toScaleY": 1,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqay44vw_7",
+          "type": "rotate",
+          "name": "Rotate 旋转",
+          "startTime": 0.8,
+          "duration": 3.6,
+          "enabled": true,
+          "seed": 85504,
+          "params": {
+            "fromRotation": 0,
+            "toRotation": 5,
+            "easing": "easeInOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqay44vw_8",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0.8,
+          "duration": 3.6,
+          "enabled": true,
+          "seed": 34047,
+          "params": {
+            "fromX": -400,
+            "fromY": 50,
+            "toX": -450,
+            "toY": 70,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqay44vw_9",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.8,
+          "duration": 3.6,
+          "enabled": true,
+          "seed": 90675,
+          "params": {
+            "fromScaleX": 1,
+            "fromScaleY": 1,
+            "toScaleX": 1.1,
+            "toScaleY": 1.1,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqay44vw_a",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 4,
+          "duration": 0.4,
+          "enabled": true,
+          "seed": 29245,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "easeInOutQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mq6i4x4l_b",
+      "name": "epic.png",
+      "type": "image",
+      "assetId": "asset_image_mq6i4x4l_a",
+      "parentId": null,
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": -2.8,
+        "y": -12.1,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 0,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mq7vnqpu_7",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 0,
+          "duration": 0.1,
+          "enabled": true,
+          "seed": 89890,
+          "params": {
+            "fromOpacity": 0,
+            "toOpacity": 1,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mq7y8apm_3",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0,
+          "duration": 0.1,
+          "enabled": true,
+          "seed": 8154,
+          "params": {
+            "fromScaleX": 0.3,
+            "fromScaleY": 0.3,
+            "toScaleX": 1,
+            "toScaleY": 1,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mq7yrgfu_3",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.1,
+          "duration": 0.5,
+          "enabled": true,
+          "seed": 2042,
+          "params": {
+            "fromScaleX": 1,
+            "fromScaleY": 1,
+            "toScaleX": 1.2,
+            "toScaleY": 1.2,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mq7yt1uq_4",
+          "type": "scale_down",
+          "name": "Scale Down 缩小",
+          "startTime": 0.6,
+          "duration": 0.1,
+          "enabled": true,
+          "seed": 76450,
+          "params": {
+            "fromScaleX": 1.1,
+            "fromScaleY": 1.1,
+            "toScaleX": 1,
+            "toScaleY": 1,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqat59po_3",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.7,
+          "duration": 3.3,
+          "enabled": true,
+          "seed": 67340,
+          "params": {
+            "fromScaleX": 1,
+            "fromScaleY": 1,
+            "toScaleX": 1,
+            "toScaleY": 1,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mq7zen8y_9",
+          "type": "scale_down",
+          "name": "Scale Down 缩小",
+          "startTime": 4,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 83954,
+          "params": {
+            "fromScaleX": 1,
+            "fromScaleY": 1,
+            "toScaleX": 1.2,
+            "toScaleY": 1.2,
+            "easing": "easeInQuad"
+          }
+        },
+        {
+          "id": "anim_module_mq7zid1e_a",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 4,
+          "duration": 0.1,
+          "enabled": true,
+          "seed": 57346,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    }
+  ],
+  "particles": []
+}

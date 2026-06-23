@@ -1,0 +1,20 @@
+{
+  "type": "vni_export_bundle",
+  "version": "VNI_0.002",
+  "exports": [
+    {
+      "id": "edit_full",
+      "purpose": "editing",
+      "assetScale": 1,
+      "path": "edit_full/project.json",
+      "label": "100% 原图编辑备份"
+    },
+    {
+      "id": "runtime_50",
+      "purpose": "runtime",
+      "assetScale": 0.5,
+      "path": "runtime_50/project.json",
+      "label": "50% 运行发布包"
+    }
+  ]
+}
