@@ -5,6 +5,7 @@ import { assertV5GProject } from "../../src/core/validation";
 import type { CocosBlendModeConfig } from "../../src/cocos/blend-mode";
 import type { V5GCocosNodeDriver, V5GSize } from "../../src/cocos/node-driver";
 import type {
+  V5GAnimationConfig,
   V5GAssetConfig,
   V5GLayerConfig,
   V5GProjectConfig,
@@ -181,6 +182,36 @@ function tinyProject(
   };
 }
 
+function particleWallAnimation(
+  overrides: Partial<V5GAnimationConfig> = {},
+): V5GAnimationConfig {
+  return {
+    id: "wall",
+    type: "particle_wall",
+    startTime: 0,
+    duration: 1,
+    enabled: true,
+    seed: 11,
+    params: {
+      emitterWidth: 100,
+      direction: 270,
+      spreadAngle: 15,
+      speed: 80,
+      lifetimeMin: 0.5,
+      lifetimeMax: 1,
+      spawnRate: 20,
+      size: 24,
+      gravity: 0,
+      startScaleMin: 0.6,
+      startScaleMax: 1,
+      endScaleMin: 0.3,
+      endScaleMax: 0.8,
+      fadeOut: true,
+    },
+    ...overrides,
+  };
+}
+
 function framesFor(project: V5GProjectConfig): Map<string, FakeSpriteFrame> {
   return new Map(
     project.assets.map((asset) => [
@@ -230,8 +261,12 @@ describe("V5GCocosPlayer", () => {
     expect(stage.children[0].backgroundColor).toBe(0x101827);
     expect(stage.children[1].name).toBe("V5G Content");
     expect(stage.children[2].name).toBe("V5G Particles");
+    expect(stage.children[2].children).toHaveLength(0);
     expect(stage.children[1].children.map((node) => node.name)).toEqual(
-      project.layers.map((layer) => layer.name),
+      project.layers.flatMap((layer) => [
+        layer.name,
+        `${layer.name} Particles`,
+      ]),
     );
   });
 
@@ -345,7 +380,7 @@ describe("V5GCocosPlayer", () => {
 
     expect(player.time).toBe(0.25);
     expect(player.playing).toBe(true);
-    expect(timeChanges).toEqual([0, 0.75, 1, 0.25]);
+    expect(timeChanges).toEqual([0, 0.75, 1, 0, 0.25]);
     expect(playingChanges).toEqual([true]);
   });
 
@@ -687,7 +722,7 @@ describe("V5GCocosPlayer", () => {
     ]);
   });
 
-  it("renders active layer particles above the content root and clears old particles", () => {
+  it("renders active layer particles in the layer particle container", () => {
     const project = tinyProject({
       animations: [
         {
@@ -713,18 +748,108 @@ describe("V5GCocosPlayer", () => {
     const stage = root.children[0];
     const content = stage.children[1];
     const particleRoot = stage.children[2];
-    expect(content.children[0].active).toBe(false);
-    expect(particleRoot.children).toHaveLength(3);
+    const layerNode = content.children[0];
+    const particleContainer = content.children[1];
+    expect(layerNode.active).toBe(true);
+    expect(particleRoot.children).toHaveLength(0);
+    expect(particleContainer.name).toBe("Layer 1 Particles");
+    expect(particleContainer.children).toHaveLength(0);
 
-    const firstParticle = particleRoot.children[0];
     player.seek(0.5);
+    expect(particleContainer.children).toHaveLength(3);
+    const firstParticle = particleContainer.children[0];
+    const firstRotation = firstParticle.rotation;
+    player.seek(0.75);
 
-    expect(firstParticle.destroyed).toBe(true);
-    expect(particleRoot.children).toHaveLength(3);
-    expect(particleRoot.children[0].spriteFrame?.id).toBe("asset-1");
-    expect(particleRoot.children[0].width).toBe(project.assets[0].width);
-    expect(particleRoot.children[0].height).toBe(project.assets[0].height);
-    expect(Number.isFinite(particleRoot.children[0].rotation)).toBe(true);
+    expect(firstParticle.destroyed).toBe(false);
+    expect(particleRoot.children).toHaveLength(0);
+    expect(particleContainer.children).toHaveLength(3);
+    expect(particleContainer.children[0]).toBe(firstParticle);
+    expect(particleContainer.children[0].spriteFrame?.id).toBe("asset-1");
+    expect(particleContainer.children[0].width).toBe(project.assets[0].width);
+    expect(particleContainer.children[0].height).toBe(project.assets[0].height);
+    expect(Number.isFinite(particleContainer.children[0].rotation)).toBe(true);
+    expect(particleContainer.children[0].rotation).not.toBe(firstRotation);
+  });
+
+  it("supports segmented hold playback, user-requested ending, and particle drain", () => {
+    const project = tinyProject({
+      animations: [particleWallAnimation({ duration: 1 })],
+    });
+    project.stage.duration = 2;
+    const { root, player } = makePlayer(project);
+    const complete: unknown[] = [];
+    player.init();
+    player.setLoop(false);
+    player.onPlaybackComplete((event) => complete.push(event));
+
+    expect(() => player.requestSegmentedPlaybackEnd()).toThrow(
+      "No active V5G segmented playback",
+    );
+
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.5 },
+      loopEnd: { unit: "time", at: 0.5 },
+    });
+    player.update(0.6);
+
+    const particleContainer = root.children[0].children[1].children[1];
+    expect(player.time).toBe(0.5);
+    expect(player.getPlaybackState()).toMatchObject({
+      mode: "segmented",
+      phase: "loop",
+      keepParticlesAlive: true,
+    });
+    expect(particleContainer.children.length).toBeGreaterThan(0);
+    const firstX = particleContainer.children[0].x;
+
+    player.update(0.6);
+    expect(player.time).toBe(0.5);
+    expect(particleContainer.children.length).toBeGreaterThan(0);
+    expect(particleContainer.children[0].x).not.toBe(firstX);
+
+    player.requestSegmentedPlaybackEnd();
+    expect(player.getPlaybackState().phase).toBe("ending");
+    player.update(2);
+    expect(player.getPlaybackState().phase).toBe("particle-draining");
+    expect(player.playing).toBe(false);
+    expect(complete).toEqual([]);
+
+    player.pause();
+    player.update(1);
+    expect(player.getPlaybackState().phase).toBe("particle-draining");
+    expect(complete).toEqual([]);
+
+    player.play();
+    player.update(1);
+    expect(player.getPlaybackState().phase).toBe("complete");
+    expect(complete).toEqual([
+      { startTime: 0, endTime: 2, currentTime: 2, loopIndex: 0 },
+    ]);
+  });
+
+  it("supports segmented range loops", () => {
+    const project = tinyProject();
+    project.stage.duration = 2;
+    const { player } = makePlayer(project);
+    player.init();
+
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.5 },
+      loopEnd: { unit: "time", at: 1 },
+      keepParticlesAlive: false,
+    });
+    player.update(1.25);
+
+    expect(player.getPlaybackState()).toMatchObject({
+      mode: "segmented",
+      phase: "loop",
+      loopIndex: 1,
+      keepParticlesAlive: false,
+    });
+    expect(player.time).toBeCloseTo(0.75, 5);
   });
 
   it("restart seeks to zero and destroy only removes runtime nodes", () => {

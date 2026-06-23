@@ -22,7 +22,10 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - `scale_up`、`scale_down`、`fade`、`rotate`、`move`
 - `slide_in`、`slide_out`、`bounce_in`、`pulse`、`float`、`swing`
 - `scale_in`、`scale_out`、`pop`、`shake`、`blink`
-- 图层动画 `particles`、`particle_twinkle`：复用当前图层的 `SpriteFrame` 创建粒子 Sprite，粒子层位于普通内容层上方
+- `particle_wall`、`particle_combo`、`squash_stretch`
+- 图层动画 `particles`、`particle_twinkle`、`particle_wall`、`particle_combo`：复用当前图层的 `SpriteFrame` 创建粒子 Sprite；真实粒子节点挂在对应图层后面的 `<layer name> Particles` 容器下，全局 `V5G Particles` 节点只保留为空占位
+- `particle_combo.params.sourceOpacity` 只影响源图像显示，不会把同层粒子透明度一起清零；粒子透明度使用图层原始 `opacity`
+- 粒子动画在 `progress <= 0` 时不发射粒子；接近 0 缩放的入场首帧会保持隐藏，避免首帧漏图
 - 由宿主 Cocos Component 在 `update(deltaTime)` 中显式驱动播放
 
 明确不支持：
@@ -55,6 +58,7 @@ import {
   createV5GCocosPlayer,
   validateCocosV5GProject,
   type V5GCocosAssetResolver,
+  type V5GCocosPlaybackState,
   type V5GCocosPlayer,
 } from "./vendor/anieditorv5runtime-cc";
 ```
@@ -90,6 +94,34 @@ packages/anieditorv5runtime-cc/standalone/V5GPreview.example.ts
 ## 播放控制和事件
 
 `play()`、`pause()`、`restart()`、`seek(time)`、`setLoop(loop)` 和 `update(deltaTime)` 继续可用。`pause(); play();` 会恢复当前未完成的 range；`restart()` 会清空 range 并回到从 0 秒开始的全时长播放语义。
+
+`play({ mode: "segmented", loopStart, loopEnd, keepParticlesAlive })` 可用于“先播放到 loopStart，再在 loopStart..loopEnd 内循环，最后由宿主请求结束并播放到结尾”的胜利动画流程。`keepParticlesAlive` 默认 `true`，循环段会按真实经过时间推进 live 粒子；设为 `false` 时只按当前时间采样确定性粒子。
+
+在固定点 hold：
+
+```ts
+player.play({
+  mode: "segmented",
+  loopStart: { unit: "time", at: 2.4 },
+  loopEnd: { unit: "time", at: 2.4 },
+});
+```
+
+在一段区间循环，之后由宿主结束：
+
+```ts
+player.play({
+  mode: "segmented",
+  loopStart: { unit: "frame", at: 120, fps: 60 },
+  loopEnd: { unit: "frame", at: 180, fps: 60 },
+  keepParticlesAlive: true,
+});
+
+// 用户点击继续、奖励结算完成或外部流程允许收尾时调用。
+player.requestSegmentedPlaybackEnd();
+```
+
+`getPlaybackState()` 会返回当前 `mode`、`phase`、`currentTime`、`loopIndex`、`liveParticleCount` 和粒子排空状态。segmented 或非循环播放到结尾后，如果仍有 live 粒子，会进入 `particle-draining`，继续由 `update(deltaTime)` 推进；排空完成后才触发 `onPlaybackComplete(...)`。
 
 播放 0 到 4 秒，结束后停止：
 

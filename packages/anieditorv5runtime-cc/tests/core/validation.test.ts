@@ -2,10 +2,17 @@ import { describe, expect, it } from "vitest";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import tenXData from "../fixtures/10x.json";
+import twoXData from "../fixtures/2x.json";
+import fiveXData from "../fixtures/5x.json";
 import bigwinData from "../fixtures/bigwin.json";
 import export2Runtime50Data from "../fixtures/export2-runtime-50.json";
 import megawinData from "../fixtures/megawin.json";
+import multipayData from "../fixtures/multipay.json";
 import projectData from "../fixtures/project.json";
+import respinData from "../fixtures/respin.json";
+import scatter1Data from "../fixtures/scatter1.json";
+import scatter2Data from "../fixtures/scatter2.json";
 import superwinData from "../fixtures/superwin.json";
 import {
   assertSupportedAnimation,
@@ -21,6 +28,15 @@ import type {
 } from "../../src/core/types";
 
 const fixtures = [projectData, bigwinData, megawinData, superwinData] as const;
+const newExportFixtures = [
+  twoXData,
+  fiveXData,
+  tenXData,
+  respinData,
+  scatter1Data,
+  scatter2Data,
+  multipayData,
+] as const;
 const exportRootDir = fileURLToPath(
   new URL("../../../../docs/anieditor5/export/", import.meta.url),
 );
@@ -72,6 +88,19 @@ describe("validation", () => {
       });
       expect(project.stage.coordinate).toBe("center");
       expect(() => validateV5GProject(project)).not.toThrow();
+    }
+  });
+
+  it("accepts current VNI particle and segmented-era export fixtures", () => {
+    for (const fixture of newExportFixtures) {
+      const project = assertV5GProject(fixture);
+      expect(project.schemaVersion).toMatch(/^(?:V5G|VNI)_0\.\d+$/u);
+      expect(project.engineTarget).toEqual({
+        name: "cocos_creator",
+        version: "3.8.6",
+      });
+      expect(() => validateV5GProject(project)).not.toThrow();
+      expect(() => validateCocosV5GProject(project)).not.toThrow();
     }
   });
 
@@ -143,6 +172,55 @@ describe("validation", () => {
           batchMin: 1,
           batchMax: 2,
           size: 12,
+        },
+        particle_wall: {
+          emitterWidth: 100,
+          direction: 270,
+          spreadAngle: 15,
+          speed: 80,
+          lifetimeMin: 0.5,
+          lifetimeMax: 1,
+          spawnRate: 20,
+          size: 24,
+          gravity: 0,
+          startScaleMin: 0.6,
+          startScaleMax: 1,
+          endScaleMin: 0.3,
+          endScaleMax: 0.8,
+          fadeOut: true,
+        },
+        particle_combo: {
+          count: 12,
+          size: 18,
+          sourceOpacity: 0,
+          spawnMode: 1,
+          spawnRadius: 60,
+          spawnRatio: 0.2,
+          targetX: 30,
+          targetY: 40,
+          travelMode: 2,
+          curve: 20,
+          orbitRadius: 80,
+          orbitTurns: 1,
+          orbitSpeed: 1.5,
+          orbitRatio: 0.4,
+          staggerRatio: 0.2,
+          trailCount: 2,
+          trailSpacing: 0.03,
+          trailFade: 0.6,
+          vanishMode: 1,
+          vanishRatio: 0.2,
+          flashScale: 1.8,
+          flashIntensity: 1.2,
+        },
+        squash_stretch: {
+          squashAngle: 90,
+          squashAmount: 0.35,
+          decayOscillateCount: 2,
+          fromX: 0,
+          fromY: 0,
+          toX: 12,
+          toY: -8,
         },
       };
 
@@ -326,6 +404,41 @@ describe("validation", () => {
     expectInvalid((project) => {
       delete project.layers[0].animations[0].params.toScaleX;
     }, 'requires numeric param "toScaleX"');
+  });
+
+  it("rejects new particle numeric strings and missing params", () => {
+    const missingWallParam = assertV5GProject(structuredClone(multipayData));
+    const wall = missingWallParam.layers
+      .flatMap((layer) => layer.animations)
+      .find((animation) => animation.type === "particle_wall");
+    expect(wall).toBeDefined();
+    if (!wall) throw new Error("missing particle_wall fixture");
+    delete wall.params.emitterWidth;
+    expect(() => validateV5GProject(missingWallParam)).toThrow(
+      'requires numeric param "emitterWidth"',
+    );
+
+    const stringComboParam = assertV5GProject(structuredClone(multipayData));
+    const combo = stringComboParam.layers
+      .flatMap((layer) => layer.animations)
+      .find((animation) => animation.type === "particle_combo");
+    expect(combo).toBeDefined();
+    if (!combo) throw new Error("missing particle_combo fixture");
+    combo.params.sourceOpacity = "0";
+    expect(() => validateV5GProject(stringComboParam)).toThrow(
+      'requires numeric param "sourceOpacity"',
+    );
+
+    const unknownSquashEasing = assertV5GProject(structuredClone(scatter1Data));
+    const squash = unknownSquashEasing.layers
+      .flatMap((layer) => layer.animations)
+      .find((animation) => animation.type === "squash_stretch");
+    expect(squash).toBeDefined();
+    if (!squash) throw new Error("missing squash_stretch fixture");
+    squash.params.easing = "spring";
+    expect(() => validateV5GProject(unknownSquashEasing)).toThrow(
+      "Unsupported V5G easing",
+    );
   });
 
   it("rejects text layers for Cocos", () => {

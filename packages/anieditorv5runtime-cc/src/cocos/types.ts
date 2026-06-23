@@ -1,5 +1,15 @@
 import type { Node, SpriteFrame } from "cc";
 import type { V5GProjectConfig } from "../core/types.js";
+import type {
+  V5GPlaybackMode,
+  V5GPlaybackPoint,
+  V5GPlaybackRange,
+  V5GPlaybackState,
+  V5GPlayOptions,
+  V5GPlayRangeOptions,
+  V5GSegmentedPlaybackOptions,
+  V5GSegmentedPlaybackPhase,
+} from "../core/playback-sequence.js";
 import type { V5GCocosNodeDriver } from "./node-driver.js";
 
 export interface V5GCocosAssetResolver<TSpriteFrame = SpriteFrame> {
@@ -24,18 +34,21 @@ export type V5GCocosPlayerFactoryOptions = Omit<
   "driver"
 >;
 
-export type V5GCocosPlaybackRange =
-  | { unit: "time"; start: number; end?: number }
-  | { unit: "frame"; start: number; end?: number; fps: number };
+export type V5GCocosPlaybackRange = V5GPlaybackRange;
 
-export interface V5GCocosPlayRangeOptions {
-  range: V5GCocosPlaybackRange;
-  loop?: boolean;
-}
+export type V5GCocosPlayRangeOptions = V5GPlayRangeOptions;
 
-export type V5GCocosPlaybackPoint =
-  | { unit: "time"; at: number }
-  | { unit: "frame"; at: number; fps: number };
+export type V5GCocosPlaybackPoint = V5GPlaybackPoint;
+
+export type V5GCocosPlaybackMode = V5GPlaybackMode;
+
+export type V5GCocosSegmentedPlaybackPhase = V5GSegmentedPlaybackPhase;
+
+export type V5GCocosSegmentedPlaybackOptions = V5GSegmentedPlaybackOptions;
+
+export type V5GCocosPlayOptions = V5GPlayOptions;
+
+export type V5GCocosPlaybackState = V5GPlaybackState;
 
 export interface V5GCocosPlaybackEventContext {
   id: string;

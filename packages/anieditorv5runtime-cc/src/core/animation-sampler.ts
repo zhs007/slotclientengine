@@ -33,6 +33,8 @@ export const SUPPORTED_EASINGS: readonly V5GEasingName[] = [
 export const PARTICLE_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "particles",
   "particle_twinkle",
+  "particle_wall",
+  "particle_combo",
 ];
 
 export const SUPPORTED_ANIMATION_TYPES: readonly V5GAnimationType[] = [
@@ -54,6 +56,9 @@ export const SUPPORTED_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "swing",
   "particles",
   "particle_twinkle",
+  "particle_wall",
+  "particle_combo",
+  "squash_stretch",
 ];
 
 const DEFAULT_EASING_BY_TYPE: Readonly<
@@ -77,6 +82,9 @@ const DEFAULT_EASING_BY_TYPE: Readonly<
   swing: "linear",
   particles: "linear",
   particle_twinkle: "linear",
+  particle_wall: "linear",
+  particle_combo: "easeInOutQuad",
+  squash_stretch: "easeOutQuad",
 };
 
 export function sampleLayerAnimationsAtTime(
@@ -123,6 +131,10 @@ export function sampleLayerAnimationsAtTime(
       sampleSwing(result, animation, progress);
     else if (animation.type === "rotate")
       sampleRotate(result, animation, easedProgress);
+    else if (animation.type === "squash_stretch")
+      sampleSquashStretch(result, animation, easedProgress);
+    else if (animation.type === "particle_combo")
+      sampleParticleComboSource(result, animation, base);
     else if (isParticleAnimationType(animation.type)) {
       // Particle animations are sampled by particle-sampler. They do not alter
       // the base layer transform or opacity here.
@@ -410,6 +422,61 @@ function sampleRotate(
     getNumberParam(animation, "toRotation"),
     progress,
   );
+}
+
+function sampleParticleComboSource(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  base: V5GAnimationSampleBase,
+): void {
+  result.opacity = base.opacity * getNumberParam(animation, "sourceOpacity");
+}
+
+function sampleSquashStretch(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  easedProgress: number,
+): void {
+  const squashAngle = getNumberParam(animation, "squashAngle");
+  const squashAmount = getNumberParam(animation, "squashAmount");
+  const decayOscillateCount = getNumberParam(animation, "decayOscillateCount");
+  const fromX = getNumberParam(animation, "fromX");
+  const fromY = getNumberParam(animation, "fromY");
+  const toX = getNumberParam(animation, "toX");
+  const toY = getNumberParam(animation, "toY");
+
+  result.transform.x += lerp(fromX, toX, easedProgress);
+  result.transform.y += lerp(fromY, toY, easedProgress);
+
+  if (squashAmount <= 0.001) return;
+
+  const angleRad = squashAngle * (Math.PI / 180);
+  const forceX = Math.cos(angleRad);
+  const forceY = Math.sin(angleRad);
+  const peakAt = 0.35;
+  let squashFactor: number;
+  if (easedProgress <= peakAt) {
+    const phase = clampNumber(easedProgress / peakAt, 0, 1);
+    squashFactor = 1 - squashAmount * easeProgress(phase, "easeOutQuad");
+  } else {
+    const decayPhase = (easedProgress - peakAt) / Math.max(1 - peakAt, 0.0001);
+    if (decayOscillateCount <= 0) {
+      const overshoot = squashAmount * 0.35;
+      squashFactor =
+        1 - squashAmount + overshoot * Math.sin(decayPhase * Math.PI);
+    } else {
+      const totalCycles = 1 + decayOscillateCount;
+      const inner = decayPhase * Math.PI * 2 * totalCycles;
+      const decay = Math.exp(-decayPhase * 4);
+      squashFactor = 1 - squashAmount * decay * Math.cos(inner);
+    }
+  }
+
+  squashFactor = clampNumber(squashFactor, 0.11, 3);
+  const stretchX = 1 + (1 - squashFactor) * Math.abs(forceY);
+  const stretchY = 1 + (1 - squashFactor) * Math.abs(forceX);
+  result.transform.scaleX *= stretchX;
+  result.transform.scaleY *= stretchY;
 }
 
 function getAnimationProgress(

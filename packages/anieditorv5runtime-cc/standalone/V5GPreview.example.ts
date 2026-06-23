@@ -4,6 +4,7 @@ import {
   createV5GCocosPlayer,
   validateCocosV5GProject,
   type V5GCocosAssetResolver,
+  type V5GCocosPlaybackState,
   type V5GCocosPlayer,
   type V5GProjectConfig,
 } from "./anieditorv5runtime-cc";
@@ -23,6 +24,15 @@ export class V5GPreview extends Component {
 
   @property([SpriteFrame])
   spriteFrames: SpriteFrame[] = [];
+
+  @property(Boolean)
+  segmentedPreview = false;
+
+  @property(Number)
+  segmentedLoopStart = 0;
+
+  @property(Number)
+  segmentedLoopEnd = 0;
 
   private player: V5GCocosPlayer | null = null;
   private lastPlaybackEventId = "";
@@ -79,14 +89,39 @@ export class V5GPreview extends Component {
     this.player.onPlaybackComplete(() => {
       this.completedPlaybackTasks += 1;
     });
-    this.player.playRange({
-      range: { unit: "time", start: 0, end: previewEndTime },
-      loop: false,
-    });
+    if (this.segmentedPreview) {
+      const loopStart = Math.max(
+        0,
+        Math.min(project.stage.duration, this.segmentedLoopStart),
+      );
+      const loopEnd = Math.max(
+        loopStart,
+        Math.min(project.stage.duration, this.segmentedLoopEnd),
+      );
+      this.player.play({
+        mode: "segmented",
+        loopStart: { unit: "time", at: loopStart },
+        loopEnd: { unit: "time", at: loopEnd },
+        keepParticlesAlive: true,
+      });
+    } else {
+      this.player.playRange({
+        range: { unit: "time", start: 0, end: previewEndTime },
+        loop: false,
+      });
+    }
   }
 
   update(deltaTime: number): void {
     this.player?.update(deltaTime);
+  }
+
+  requestSegmentedPlaybackEnd(): void {
+    this.player?.requestSegmentedPlaybackEnd();
+  }
+
+  getPlaybackState(): V5GCocosPlaybackState | null {
+    return this.player?.getPlaybackState() ?? null;
   }
 
   onDestroy(): void {
