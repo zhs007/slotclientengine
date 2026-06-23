@@ -30,31 +30,31 @@ export class Color {
   ) {}
 }
 
-export enum BlendFactor {
-  ZERO,
-  ONE,
-  SRC_ALPHA,
-  DST_ALPHA,
-  ONE_MINUS_SRC_ALPHA,
-  ONE_MINUS_DST_ALPHA,
-  SRC_COLOR,
-  DST_COLOR,
-  ONE_MINUS_SRC_COLOR,
-  ONE_MINUS_DST_COLOR,
-  SRC_ALPHA_SATURATE,
-  CONSTANT_COLOR,
-  ONE_MINUS_CONSTANT_COLOR,
-  CONSTANT_ALPHA,
-  ONE_MINUS_CONSTANT_ALPHA,
-}
+const BlendFactor = {
+  ZERO: 0,
+  ONE: 1,
+  SRC_ALPHA: 2,
+  DST_ALPHA: 3,
+  ONE_MINUS_SRC_ALPHA: 4,
+  ONE_MINUS_DST_ALPHA: 5,
+  SRC_COLOR: 6,
+  DST_COLOR: 7,
+  ONE_MINUS_SRC_COLOR: 8,
+  ONE_MINUS_DST_COLOR: 9,
+  SRC_ALPHA_SATURATE: 10,
+  CONSTANT_COLOR: 11,
+  ONE_MINUS_CONSTANT_COLOR: 12,
+  CONSTANT_ALPHA: 13,
+  ONE_MINUS_CONSTANT_ALPHA: 14,
+} as const;
 
-export enum BlendOp {
-  ADD,
-  SUB,
-  REV_SUB,
-  MIN,
-  MAX,
-}
+const BlendOp = {
+  ADD: 0,
+  SUB: 1,
+  REV_SUB: 2,
+  MIN: 3,
+  MAX: 4,
+} as const;
 
 export class Node {
   active = true;

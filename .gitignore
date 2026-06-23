@@ -9,3 +9,4 @@ coverage
 .idea
 .vscode/*.code-workspace
 *.tsbuildinfo
+*.zip

@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  BlendFactor,
-  BlendOp,
   Graphics,
   Node,
   Sprite,
@@ -18,6 +16,15 @@ import {
   type V5GCocosPlayer,
   type V5GProjectConfig,
 } from "../../standalone/anieditorv5runtime-cc";
+
+const COCOS_BLEND_FACTOR = {
+  ONE: 1,
+  SRC_ALPHA: 2,
+} as const;
+
+const COCOS_BLEND_OP = {
+  ADD: 0,
+} as const;
 
 function tinyProject(
   layerOverrides: Partial<V5GLayerConfig> = {},
@@ -202,12 +209,12 @@ describe("standalone V5GCocosPlayer", () => {
       mode: "add",
       strategy: "sprite-blend-state",
     });
-    expect(sprite.srcBlendFactor).toBe(BlendFactor.SRC_ALPHA);
-    expect(sprite.dstBlendFactor).toBe(BlendFactor.ONE);
+    expect(sprite.srcBlendFactor).toBe(COCOS_BLEND_FACTOR.SRC_ALPHA);
+    expect(sprite.dstBlendFactor).toBe(COCOS_BLEND_FACTOR.ONE);
     expect(target?.blend).toBe(true);
-    expect(target?.blendSrc).toBe(BlendFactor.SRC_ALPHA);
-    expect(target?.blendDst).toBe(BlendFactor.ONE);
-    expect(target?.blendEq).toBe(BlendOp.ADD);
+    expect(target?.blendSrc).toBe(COCOS_BLEND_FACTOR.SRC_ALPHA);
+    expect(target?.blendDst).toBe(COCOS_BLEND_FACTOR.ONE);
+    expect(target?.blendEq).toBe(COCOS_BLEND_OP.ADD);
   });
 
   it("fails fast for missing SpriteFrame and size mismatch", () => {

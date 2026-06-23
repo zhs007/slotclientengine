@@ -24,6 +24,10 @@
 - `cocos/gfx/base/define.ts`：`BlendFactor` 包含 `SRC_ALPHA`、`ONE`、`ONE_MINUS_SRC_ALPHA`、`DST_COLOR`、`ONE_MINUS_SRC_COLOR` 等；`BlendOp` 包含 `ADD` 和 `MAX`。
 - `cocos/render-scene/core/pass.ts`：pass hash 包含 `blendEq`、`blendAlphaEq`、`blendSrc`、`blendDst`、`blendSrcAlpha`、`blendDstAlpha`，可通过 `blendState.setTarget(...)` 更新。
 
+注意：`BlendFactor` / `BlendOp` 是 Cocos 3.8.6 官方源码里的内部 enum 语义，不假设它们可从 `"cc"` 命名导入。runtime 和 standalone 现在写入与官方 enum 对应的 number 值，避免依赖不存在的 `cc` 导出。
+
+真实项目反馈补充：部分 Cocos 运行面上 `normal` Sprite 不暴露 public `srcBlendFactor/dstBlendFactor`。已修正为 `normal` 直接保持 Cocos 默认 Sprite 渲染，不要求任何 blend factor API；非 `normal` 模式兼容 public 字段和运行时可见的 protected `_srcBlendFactor/_dstBlendFactor`。
+
 结论：代码路线选择 Cocos 原生 Sprite blend factor + material pass blend target，不新增 shader / Effect。真实编辑器截图级验收仍待用户在 Cocos Creator 3.8.6 环境换机执行。
 
 ## 3. 修改文件清单
@@ -118,8 +122,8 @@ standalone/V5GPreview.example.ts
 ## 7. 已知限制和风险
 
 - monorepo 自动化验收已通过，但真实 Cocos Creator 3.8.6 编辑器视觉验收未在当前机器运行。
-- `lighten` 依赖 Cocos pass blend op `MAX`。官方源码显示该 API 存在；仍需真实编辑器截图确认目标平台渲染结果。
-- 当前实现不依赖 shader / Effect 资产，因此不存在 shader 资产缺失场景；若宿主 Cocos 运行环境缺少 Sprite blend factor 或 material pass API，会显式失败而不是 normal fallback。
+- `lighten` 依赖 Cocos pass blend op `MAX` 对应的官方 enum 数值。runtime 不从 `"cc"` 导入 `BlendOp`；仍需真实编辑器截图确认目标平台渲染结果。
+- 当前实现不依赖 shader / Effect 资产，因此不存在 shader 资产缺失场景；`normal` 不要求 Sprite blend API，非 `normal` 若宿主 Cocos 运行环境缺少 Sprite blend factor 或 material pass API，会显式失败而不是 normal fallback。
 
 ## 8. 二次遗漏检查
 

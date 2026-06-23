@@ -219,6 +219,8 @@ runtime 当前使用 Cocos Creator 3.8.6 原生 `Sprite.srcBlendFactor` / `dstBl
 - `multiply`：`ADD` + `DST_COLOR / ONE_MINUS_SRC_ALPHA`
 - `lighten`：`MAX` + `SRC_ALPHA / ONE`
 
+`normal` 保持 Cocos Sprite 默认状态，不要求宿主 Sprite 暴露 blend factor API。非 `normal` 模式会写入 Cocos Creator 3.8.6 官方 enum 数值，并兼容 public `srcBlendFactor/dstBlendFactor` 或运行时可见的 `_srcBlendFactor/_dstBlendFactor`；实现不会从 `"cc"` 命名导入 `BlendFactor` / `BlendOp`，以兼容不重新导出这两个名字的 Cocos 项目。
+
 standalone 交付仍只需要复制：
 
 ```text
