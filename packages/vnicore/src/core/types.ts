@@ -1,0 +1,168 @@
+export type V5GCoordinateMode = "center";
+export type V5GLayerType = "image" | "text" | "group";
+export type V5GAssetType = "image";
+export type V5GBlendMode = "normal" | "add" | "screen" | "multiply" | "lighten";
+
+export interface V5GStageConfig {
+  width: number;
+  height: number;
+  coordinate: V5GCoordinateMode;
+  duration: number;
+  backgroundColor: string;
+}
+
+export interface V5GAssetConfig {
+  id: string;
+  type: V5GAssetType;
+  path: string;
+  originalName: string;
+  width: number;
+  height: number;
+  fileWidth?: number;
+  fileHeight?: number;
+  fileScale?: number;
+}
+
+export interface V5GExportProfileConfig {
+  id: string;
+  purpose: "editing" | "runtime";
+  assetScale: number;
+  label?: string;
+}
+
+export interface V5GTransformConfig {
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number;
+  rotation: number;
+  anchorX: number;
+  anchorY: number;
+}
+
+export type V5GAnimationType =
+  | "move"
+  | "fade"
+  | "scale_up"
+  | "scale_down"
+  | "scale_in"
+  | "scale_out"
+  | "pop"
+  | "shake"
+  | "blink"
+  | "rotate"
+  | "slide_in"
+  | "slide_out"
+  | "bounce_in"
+  | "pulse"
+  | "float"
+  | "swing"
+  | "particles"
+  | "particle_twinkle"
+  | "particle_wall"
+  | "particle_combo"
+  | "squash_stretch";
+
+export type V5GAnimationParamValue = string | number | boolean;
+
+export interface V5GAnimationConfig {
+  id: string;
+  type: V5GAnimationType;
+  name?: string;
+  startTime: number;
+  duration: number;
+  enabled: boolean;
+  seed: number;
+  params: Record<string, V5GAnimationParamValue>;
+}
+
+export interface V5GLayerKeyframeConfig {
+  id: string;
+  time: number;
+  transform: V5GTransformConfig;
+  opacity: number;
+  easing: "linear";
+}
+
+export interface V5GLayerConfig {
+  id: string;
+  name: string;
+  type: V5GLayerType;
+  assetId: string | null;
+  parentId: string | null;
+  visible: boolean;
+  locked: boolean;
+  transform: V5GTransformConfig;
+  opacity: number;
+  blendMode: V5GBlendMode;
+  text?: string;
+  animations: V5GAnimationConfig[];
+  keyframes?: V5GLayerKeyframeConfig[];
+}
+
+export interface V5GParticleConfig {
+  id: string;
+  name: string;
+  assetId: string | null;
+  startTime: number;
+  duration: number;
+  seed: number;
+  emitter: {
+    x: number;
+    y: number;
+    type: "burst" | "rain" | "trail";
+    count: number;
+    radius: number;
+  };
+  params: Record<string, V5GAnimationParamValue>;
+}
+
+export interface V5GProjectConfig {
+  schemaVersion: string;
+  editor: {
+    name: string;
+    version: string;
+  };
+  engineTarget: {
+    name: "cocos_creator";
+    version: string;
+  };
+  name: string;
+  exportProfile?: V5GExportProfileConfig;
+  stage: V5GStageConfig;
+  assets: V5GAssetConfig[];
+  layers: V5GLayerConfig[];
+  particles: V5GParticleConfig[];
+}
+
+export interface V5GBundleManifestEntry {
+  id: string;
+  purpose: "editing" | "runtime";
+  assetScale: number;
+  path: string;
+  label?: string;
+}
+
+export interface V5GBundleManifest {
+  type: "vni_export_bundle";
+  version: string;
+  exports: V5GBundleManifestEntry[];
+}
+
+export type VNICoordinateMode = V5GCoordinateMode;
+export type VNILayerType = V5GLayerType;
+export type VNIAssetType = V5GAssetType;
+export type VNIBlendMode = V5GBlendMode;
+export type VNIStageConfig = V5GStageConfig;
+export type VNIAssetConfig = V5GAssetConfig;
+export type VNIExportProfileConfig = V5GExportProfileConfig;
+export type VNITransformConfig = V5GTransformConfig;
+export type VNIAnimationType = V5GAnimationType;
+export type VNIAnimationParamValue = V5GAnimationParamValue;
+export type VNIAnimationConfig = V5GAnimationConfig;
+export type VNILayerKeyframeConfig = V5GLayerKeyframeConfig;
+export type VNILayerConfig = V5GLayerConfig;
+export type VNIParticleConfig = V5GParticleConfig;
+export type VNIProjectConfig = V5GProjectConfig;
+export type VNIBundleManifestEntry = V5GBundleManifestEntry;
+export type VNIBundleManifest = V5GBundleManifest;

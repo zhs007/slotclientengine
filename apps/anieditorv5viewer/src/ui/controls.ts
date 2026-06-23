@@ -1,4 +1,4 @@
-import type { V5GProjectConfig } from "../v5g/types";
+import type { VNIProjectConfig } from "@slotclientengine/vnicore/core";
 
 export interface ViewerControlsProject {
   id: string;
@@ -8,7 +8,7 @@ export interface ViewerControlsProject {
   profileId: string;
   purpose: string;
   assetScale: number;
-  project: V5GProjectConfig;
+  project: VNIProjectConfig;
 }
 
 export interface ViewerControlsOptions {
@@ -173,7 +173,7 @@ function createSummaryItem(value: string): HTMLElement {
   return element;
 }
 
-function getAnimationTypeSummary(project: V5GProjectConfig): string {
+function getAnimationTypeSummary(project: VNIProjectConfig): string {
   const animationTypes = [
     ...new Set(
       project.layers.flatMap((layer) =>

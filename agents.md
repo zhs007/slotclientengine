@@ -18,6 +18,7 @@
 - `apps/`：可运行项目
 - `packages/`：内部依赖库
 - `packages/gameframeworks`：后续 slot 游戏默认 facade，整合 UI、网络和逻辑数据流。
+- `packages/vnicore`：Pixi.js v8 VNI 动画核心库，供 `apps/anieditorv5viewer` 等 Pixi 运行时使用；不要与 `packages/anieditorv5runtime-cc` 的 Cocos Creator runtime 混用。
 - `tasks/`：任务计划、任务报告和执行记录
 - `docs/`：项目文档
 

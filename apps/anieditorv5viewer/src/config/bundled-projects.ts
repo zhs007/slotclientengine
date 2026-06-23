@@ -20,13 +20,14 @@ import {
   type AssetUrlManifest,
 } from "../runtime/asset-manifest";
 import {
-  assertV5GBundleManifest,
-  assertV5GProject,
+  assertVNIBundleManifest,
+  assertVNIProject,
   validateManifestProjectProfile,
-  validateV5GBundleManifest,
-  validateV5GProject,
-} from "../runtime/validation";
-import type { V5GBundleManifestEntry, V5GProjectConfig } from "../v5g/types";
+  validateVNIBundleManifest,
+  validateVNIProject,
+  type VNIBundleManifestEntry,
+  type VNIProjectConfig,
+} from "@slotclientengine/vnicore/core";
 
 export type BundledProjectId =
   | "project"
@@ -51,7 +52,7 @@ export interface BundledV5GProject {
   profileId: string;
   purpose: "editing" | "runtime" | "legacy";
   assetScale: number;
-  project: V5GProjectConfig;
+  project: VNIProjectConfig;
   assetUrls: AssetUrlManifest;
 }
 
@@ -65,11 +66,11 @@ interface BundledProjectDefinition {
   assetScale: number;
   data: unknown;
   assetUrlManifest: AssetUrlManifest;
-  manifestEntry?: V5GBundleManifestEntry;
+  manifestEntry?: VNIBundleManifestEntry;
 }
 
-const export2Manifest = assertV5GBundleManifest(export2ManifestData);
-validateV5GBundleManifest(export2Manifest);
+const export2Manifest = assertVNIBundleManifest(export2ManifestData);
+validateVNIBundleManifest(export2Manifest);
 validateExport2ManifestPaths(export2Manifest.exports);
 const export2EditFullEntry = requireExport2ManifestEntry(
   "edit_full",
@@ -230,8 +231,8 @@ const bundledProjectDefinitions: readonly BundledProjectDefinition[] = [
 
 export const bundledProjects: readonly BundledV5GProject[] = Object.freeze(
   bundledProjectDefinitions.map((definition) => {
-    const project = assertV5GProject(definition.data);
-    validateV5GProject(project);
+    const project = assertVNIProject(definition.data);
+    validateVNIProject(project);
     if (definition.manifestEntry) {
       validateManifestProjectProfile(definition.manifestEntry, project);
     }
@@ -260,7 +261,7 @@ export function getBundledProject(id: string): BundledV5GProject {
 function requireExport2ManifestEntry(
   id: string,
   expectedPath: string,
-): V5GBundleManifestEntry {
+): VNIBundleManifestEntry {
   const entry = export2Manifest.exports.find((item) => item.id === id);
   if (!entry) {
     throw new Error(`VNI bundle manifest is missing export "${id}".`);
@@ -274,7 +275,7 @@ function requireExport2ManifestEntry(
 }
 
 function validateExport2ManifestPaths(
-  entries: readonly V5GBundleManifestEntry[],
+  entries: readonly VNIBundleManifestEntry[],
 ): void {
   const knownPaths = new Set([
     "edit_full/project.json",
@@ -291,7 +292,7 @@ function validateExport2ManifestPaths(
 
 function createBundledProjectLabel(
   definition: BundledProjectDefinition,
-  project: V5GProjectConfig,
+  project: VNIProjectConfig,
 ): string {
   if (definition.bundleId === "legacy") {
     return `${project.name} (legacy/${definition.filename}, 100%)`;
