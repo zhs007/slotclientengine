@@ -9,6 +9,7 @@ import {
 } from "cc";
 import {
   createV5GCocosPlayer,
+  type V5GAnimationConfig,
   type V5GAssetConfig,
   type V5GLayerConfig,
   type V5GCocosPlayer,
@@ -71,6 +72,36 @@ function tinyProject(
   };
 }
 
+function particleWallAnimation(
+  overrides: Partial<V5GAnimationConfig> = {},
+): V5GAnimationConfig {
+  return {
+    id: "wall",
+    type: "particle_wall",
+    startTime: 0,
+    duration: 1,
+    enabled: true,
+    seed: 11,
+    params: {
+      emitterWidth: 100,
+      direction: 270,
+      spreadAngle: 15,
+      speed: 80,
+      lifetimeMin: 0.5,
+      lifetimeMax: 1,
+      spawnRate: 20,
+      size: 24,
+      gravity: 0,
+      startScaleMin: 0.6,
+      startScaleMax: 1,
+      endScaleMin: 0.3,
+      endScaleMax: 0.8,
+      fadeOut: true,
+    },
+    ...overrides,
+  };
+}
+
 function framesFor(project: V5GProjectConfig): Map<string, SpriteFrame> {
   return new Map(
     project.assets.map((asset) => [
@@ -130,7 +161,11 @@ describe("standalone V5GCocosPlayer", () => {
     ]);
     expect(inspectTransform(stage.children[0]).width).toBe(320);
     expect(inspectGraphics(stage.children[0]).filled).toBe(true);
-    expect(stage.children[1].children[0].name).toBe("Layer 1");
+    expect(stage.children[2].children).toHaveLength(0);
+    expect(stage.children[1].children.map((node) => node.name)).toEqual([
+      "Layer 1",
+      "Layer 1 Particles",
+    ]);
   });
 
   it("writes transform, opacity, active, anchor, and leaves blend mode untouched", () => {
@@ -395,7 +430,7 @@ describe("standalone V5GCocosPlayer", () => {
     expect(events).toEqual([]);
   });
 
-  it("renders particle nodes with degree rotation and clears prior frame nodes", () => {
+  it("renders particle nodes under the layer particle container", () => {
     const project = tinyProject({
       animations: [
         {
@@ -432,30 +467,78 @@ describe("standalone V5GCocosPlayer", () => {
     const stage = root.children[0];
     const content = stage.children[1];
     const particleRoot = stage.children[2];
-    expect(content.children[0].active).toBe(false);
-    expect(particleRoot.children).toHaveLength(3);
+    const layerNode = content.children[0];
+    const particleContainer = content.children[1];
+    expect(layerNode.active).toBe(true);
+    expect(particleRoot.children).toHaveLength(0);
+    expect(particleContainer.name).toBe("Layer 1 Particles");
+    expect(particleContainer.children).toHaveLength(0);
 
-    const firstParticle = particleRoot.children[0];
-    const firstRotation = inspectNode(firstParticle).rotation.z;
     player.seek(0.5);
+    expect(particleContainer.children).toHaveLength(3);
+    const firstParticle = particleContainer.children[0];
+    const firstRotation = inspectNode(firstParticle).rotation.z;
+    player.seek(0.75);
 
-    expect(inspectNode(firstParticle).destroyed).toBe(true);
-    expect(particleRoot.children).toHaveLength(3);
+    expect(inspectNode(firstParticle).destroyed).toBe(false);
+    expect(particleRoot.children).toHaveLength(0);
+    expect(particleContainer.children).toHaveLength(3);
+    expect(particleContainer.children[0]).toBe(firstParticle);
     expect(
-      Number.isFinite(inspectNode(particleRoot.children[0]).rotation.z),
+      Number.isFinite(inspectNode(particleContainer.children[0]).rotation.z),
     ).toBe(true);
-    expect(inspectNode(particleRoot.children[0]).rotation.z).not.toBe(
+    expect(inspectNode(particleContainer.children[0]).rotation.z).not.toBe(
       firstRotation,
     );
-    expect(requireSprite(particleRoot.children[0]).spriteFrame).toBe(
+    expect(requireSprite(particleContainer.children[0]).spriteFrame).toBe(
       frames.get("asset-1"),
     );
-    expect(inspectTransform(particleRoot.children[0]).width).toBe(
+    expect(inspectTransform(particleContainer.children[0]).width).toBe(
       project.assets[0].width,
     );
-    expect(inspectTransform(particleRoot.children[0]).height).toBe(
+    expect(inspectTransform(particleContainer.children[0]).height).toBe(
       project.assets[0].height,
     );
+  });
+
+  it("supports segmented playback ending and particle drain in standalone", () => {
+    const project = tinyProject({
+      animations: [particleWallAnimation({ duration: 1 })],
+    });
+    project.stage.duration = 2;
+    const { root, player } = makePlayer(project);
+    const complete: unknown[] = [];
+    player.init();
+    player.setLoop(false);
+    player.onPlaybackComplete((event) => complete.push(event));
+
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.5 },
+      loopEnd: { unit: "time", at: 0.5 },
+    });
+    player.update(0.6);
+
+    const particleContainer = root.children[0].children[1].children[1];
+    expect(player.time).toBe(0.5);
+    expect(player.getPlaybackState()).toMatchObject({
+      mode: "segmented",
+      phase: "loop",
+      keepParticlesAlive: true,
+    });
+    expect(particleContainer.children.length).toBeGreaterThan(0);
+
+    player.requestSegmentedPlaybackEnd();
+    player.update(2);
+    expect(player.getPlaybackState().phase).toBe("particle-draining");
+    expect(complete).toEqual([]);
+
+    player.play();
+    player.update(1);
+    expect(player.getPlaybackState().phase).toBe("complete");
+    expect(complete).toEqual([
+      { startTime: 0, endTime: 2, currentTime: 2, loopIndex: 0 },
+    ]);
   });
 });
 

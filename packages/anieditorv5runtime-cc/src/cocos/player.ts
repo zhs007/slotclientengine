@@ -1,5 +1,17 @@
-import { sampleProjectAtTime } from "../core/project-sampler.js";
-import { sampleParticleSpritesForLayer } from "../core/particle-sampler.js";
+import {
+  V5GParticleRuntime,
+  sampleLiveParticleSprites,
+  type V5GLiveParticleSpriteSample,
+  type V5GParticleRuntimeLayer,
+} from "../core/particle-runtime.js";
+import {
+  sampleProjectAtTime,
+  type SampledLayerState,
+} from "../core/project-sampler.js";
+import {
+  V5GSegmentedPlaybackSequence,
+  normalizeSegmentedPlaybackOptions,
+} from "../core/playback-sequence.js";
 import { validateCocosV5GProject, parseColorHex } from "../core/validation.js";
 import { getCocosBlendModeConfig } from "./blend-mode.js";
 import {
@@ -11,16 +23,22 @@ import type {
   V5GCocosPlaybackCompleteContext,
   V5GCocosPlaybackEventContext,
   V5GCocosPlaybackEventOptions,
+  V5GCocosPlaybackMode,
   V5GCocosPlaybackPoint,
   V5GCocosPlaybackRange,
+  V5GCocosPlaybackState,
   V5GCocosPlayerOptions,
+  V5GCocosPlayOptions,
   V5GCocosPlayRangeOptions,
+  V5GCocosSegmentedPlaybackPhase,
 } from "./types.js";
 
 interface ManagedLayer<TNode, TSpriteFrame> {
   layer: V5GLayerConfig;
   asset: V5GAssetConfig;
   node: TNode;
+  particleContainer: TNode;
+  particleNodes: TNode[];
   spriteFrame: TSpriteFrame;
 }
 
@@ -36,6 +54,11 @@ interface NormalizedPlaybackEvent {
   once: boolean;
   order: number;
   listener: (event: V5GCocosPlaybackEventContext) => void;
+}
+
+interface PlaybackFrameOptions {
+  liveParticles?: boolean;
+  liveParticleDeltaSeconds?: number;
 }
 
 const SIZE_EPSILON = 0.01;
@@ -57,15 +80,20 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     string,
     ManagedLayer<TNode, TSpriteFrame>
   >();
+  private readonly particleRuntime: V5GParticleRuntime;
   private stageNode: TNode | null = null;
   private contentNode: TNode | null = null;
   private particleRootNode: TNode | null = null;
   private backgroundNode: TNode | null = null;
-  private readonly particleNodes: TNode[] = [];
   private currentTime = 0;
   private isPlaying = false;
   private loop: boolean;
+  private playbackMode: V5GCocosPlaybackMode = "timeline";
+  private playbackPhase: V5GCocosSegmentedPlaybackPhase = "idle";
   private activeRange: PlaybackBoundary | null = null;
+  private segmentedPlayback: V5GSegmentedPlaybackSequence | null = null;
+  private pendingComplete: V5GCocosPlaybackCompleteContext | null = null;
+  private drainPaused = false;
   private readonly playbackEvents = new Map<string, NormalizedPlaybackEvent>();
   private readonly completeListeners = new Set<
     (event: V5GCocosPlaybackCompleteContext) => void
@@ -76,6 +104,7 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
   constructor(options: V5GCocosPlayerOptions<TNode, TSpriteFrame>) {
     this.options = options;
     this.loop = options.loop ?? true;
+    this.particleRuntime = new V5GParticleRuntime(options.project.layers);
   }
 
   get time(): number {
@@ -88,6 +117,7 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
 
   init(): void {
     this.destroyManagedNodes();
+    this.resetPlaybackRuntime();
     validateCocosV5GProject(this.options.project);
 
     const driver = this.options.driver;
@@ -150,17 +180,28 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
         driver.applyBlendMode(node, getCocosBlendModeConfig(layer.blendMode));
         driver.appendChild(content, node);
 
+        const particleContainer = driver.createNode(`${layer.name} Particles`);
+        driver.setContentSize(
+          particleContainer,
+          project.stage.width,
+          project.stage.height,
+        );
+        driver.setAnchorPoint(particleContainer, 0.5, 0.5);
+        driver.appendChild(content, particleContainer);
+
         this.layers.set(layer.id, {
           layer,
           asset,
           node,
+          particleContainer,
+          particleNodes: [],
           spriteFrame,
         });
       }
 
       driver.appendChild(this.options.root, stage);
       this.stageNode = stage;
-      this.seek(this.currentTime);
+      this.renderDeterministicFrame(this.currentTime);
     } catch (error) {
       driver.destroyNode(stage);
       this.stageNode = null;
@@ -174,39 +215,15 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
 
   seek(time: number): void {
     this.assertInitialized();
-    const sampledProject = sampleProjectAtTime(this.options.project, time);
-    this.currentTime = sampledProject.time;
-
-    for (const sampledLayer of sampledProject.layers) {
-      const managed = this.layers.get(sampledLayer.layerId);
-      if (!managed) {
-        throw new Error(
-          `Missing runtime node for V5G layer "${sampledLayer.layerId}".`,
-        );
-      }
-      const position = v5gTransformToCocosPosition(sampledLayer.transform);
-      this.options.driver.setPosition(managed.node, position.x, position.y);
-      this.options.driver.setScale(
-        managed.node,
-        sampledLayer.transform.scaleX,
-        sampledLayer.transform.scaleY,
-      );
-      this.options.driver.setRotationDegrees(
-        managed.node,
-        sampledLayer.transform.rotation,
-      );
-      this.options.driver.setOpacity(
-        managed.node,
-        opacityToCocosOpacity(sampledLayer.opacity),
-      );
-      this.options.driver.setActive(
-        managed.node,
-        sampledLayer.renderImageDisplay,
-      );
-    }
-
-    this.drawParticles(sampledProject.layers);
-    this.options.onTimeChange?.(this.currentTime);
+    this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.playbackMode = "timeline";
+    this.playbackPhase = "idle";
+    this.drainPaused = false;
+    this.loopIndex = 0;
+    this.particleRuntime.reset();
+    this.renderDeterministicFrame(time);
   }
 
   update(deltaSeconds: number): void {
@@ -215,59 +232,62 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
         "V5GCocosPlayer.update(deltaSeconds) requires a non-negative finite number.",
       );
     }
-    if (!this.isPlaying) return;
-
-    const boundary = this.getPlaybackBoundary();
-    const previousTime = this.currentTime;
-    const nextTime = previousTime + deltaSeconds;
-    if (nextTime < boundary.endTime - PLAYBACK_EPSILON) {
-      this.seek(nextTime);
-      this.emitPlaybackEventsBetween(
-        previousTime,
-        nextTime,
-        this.loopIndex,
-        boundary,
-      );
+    if (!this.isPlaying) {
+      if (this.particleRuntime.isDraining() && !this.drainPaused) {
+        this.advanceParticleDrain(deltaSeconds);
+      }
       return;
     }
-
-    this.seek(boundary.endTime);
-    this.emitPlaybackEventsBetween(
-      previousTime,
-      boundary.endTime,
-      this.loopIndex,
-      boundary,
-    );
-
-    if (!boundary.loop) {
-      const completeContext: V5GCocosPlaybackCompleteContext = {
-        startTime: boundary.startTime,
-        endTime: boundary.endTime,
-        currentTime: boundary.endTime,
-        loopIndex: this.loopIndex,
-      };
-      this.activeRange = null;
-      this.setPlaying(false);
-      this.emitPlaybackComplete(completeContext);
+    if (this.segmentedPlayback) {
+      this.advanceSegmentedPlayback(deltaSeconds);
       return;
     }
+    if (this.activeRange) {
+      this.advanceActiveRange(deltaSeconds);
+      return;
+    }
+    this.advanceFullTimeline(deltaSeconds);
+  }
 
-    this.advanceLoopingPlayback(Math.max(0, nextTime - boundary.endTime));
+  play(options?: V5GCocosPlayOptions): void {
+    if (options?.mode === "range") {
+      this.startRangePlayback(options);
+      return;
+    }
+    if (options?.mode === "segmented") {
+      this.startSegmentedPlayback(options);
+      return;
+    }
+    this.startTimelinePlayback();
   }
 
   playRange(options: V5GCocosPlayRangeOptions): void {
-    this.assertInitialized();
-    const range = this.normalizePlaybackRange(
-      options.range,
-      "V5GCocosPlayer.playRange",
-    );
-    this.activeRange = {
-      ...range,
-      loop: options.loop ?? this.loop,
+    this.startRangePlayback(options);
+  }
+
+  requestSegmentedPlaybackEnd(): void {
+    if (!this.segmentedPlayback) {
+      throw new Error("No active V5G segmented playback.");
+    }
+    this.segmentedPlayback.requestEnd();
+    this.playbackPhase = this.segmentedPlayback.getPhase();
+    if (!this.isPlaying) {
+      this.setPlaying(true);
+    }
+    this.drainPaused = false;
+  }
+
+  getPlaybackState(): V5GCocosPlaybackState {
+    return {
+      mode: this.playbackMode,
+      phase: this.getEffectivePlaybackPhase(),
+      currentTime: this.currentTime,
+      isPlaying: this.isPlaying,
+      isDrainingParticles: this.particleRuntime.isDraining(),
+      liveParticleCount: this.getRenderedParticleCount(),
+      loopIndex: this.segmentedPlayback?.getLoopIndex() ?? this.loopIndex,
+      keepParticlesAlive: this.segmentedPlayback?.keepParticlesAlive ?? true,
     };
-    this.loopIndex = 0;
-    this.seek(range.startTime);
-    this.setPlaying(true);
   }
 
   addPlaybackEvent(options: V5GCocosPlaybackEventOptions): () => void {
@@ -326,18 +346,23 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     };
   }
 
-  play(): void {
-    this.setPlaying(true);
-  }
-
   pause(): void {
+    if (this.particleRuntime.isDraining()) {
+      this.drainPaused = true;
+    }
     this.setPlaying(false);
   }
 
   restart(): void {
     this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.playbackMode = "timeline";
+    this.playbackPhase = "idle";
+    this.drainPaused = false;
     this.loopIndex = 0;
-    this.seek(0);
+    this.particleRuntime.reset();
+    this.renderDeterministicFrame(0);
   }
 
   setLoop(loop: boolean): void {
@@ -347,51 +372,426 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
   destroy(): void {
     this.destroyManagedNodes();
     this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
     this.playbackEvents.clear();
     this.completeListeners.clear();
     this.loopIndex = 0;
+    this.drainPaused = false;
+    this.particleRuntime.reset();
     this.setPlaying(false);
     this.currentTime = 0;
+    this.playbackMode = "timeline";
+    this.playbackPhase = "idle";
   }
 
-  private advanceLoopingPlayback(overflowSeconds: number): void {
-    const boundary = this.getPlaybackBoundary();
-    const rangeDuration = boundary.endTime - boundary.startTime;
-    let remaining = overflowSeconds;
-
-    while (remaining >= rangeDuration - PLAYBACK_EPSILON) {
-      this.loopIndex += 1;
-      this.seek(boundary.endTime);
-      this.emitPlaybackEventsBetween(
-        boundary.startTime,
-        boundary.endTime,
-        this.loopIndex,
-        boundary,
-      );
-      remaining -= rangeDuration;
+  private startTimelinePlayback(): void {
+    this.assertInitialized();
+    if (this.particleRuntime.isDraining()) {
+      this.drainPaused = false;
+      return;
     }
-
-    this.loopIndex += 1;
-    const clampedRemaining =
-      Math.abs(remaining) <= PLAYBACK_EPSILON ? 0 : remaining;
-    const nextTime = boundary.startTime + clampedRemaining;
-    this.seek(nextTime);
-    this.emitPlaybackEventsBetween(
-      boundary.startTime,
-      nextTime,
-      this.loopIndex,
-      boundary,
-    );
+    this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.playbackMode = "timeline";
+    this.playbackPhase = "start";
+    this.loopIndex = 0;
+    this.particleRuntime.reset();
+    if (this.currentTime >= this.options.project.stage.duration) {
+      this.renderPlaybackFrame(0, 0);
+    }
+    this.setPlaying(true);
   }
 
-  private getPlaybackBoundary(): PlaybackBoundary {
-    return (
-      this.activeRange ?? {
+  private startRangePlayback(options: V5GCocosPlayRangeOptions): void {
+    this.assertInitialized();
+    const range = this.normalizePlaybackRange(
+      options.range,
+      "V5GCocosPlayer.playRange",
+    );
+    this.activeRange = {
+      ...range,
+      loop: options.loop ?? this.loop,
+    };
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.playbackMode = "range";
+    this.playbackPhase = "start";
+    this.drainPaused = false;
+    this.loopIndex = 0;
+    this.particleRuntime.reset();
+    this.renderPlaybackFrame(range.startTime, range.startTime);
+    this.setPlaying(true);
+  }
+
+  private startSegmentedPlayback(
+    options: Extract<V5GCocosPlayOptions, { mode: "segmented" }>,
+  ): void {
+    this.assertInitialized();
+    const normalized = normalizeSegmentedPlaybackOptions(
+      options,
+      this.options.project.stage.duration,
+    );
+    this.activeRange = null;
+    this.pendingComplete = null;
+    this.playbackMode = "segmented";
+    this.playbackPhase = "start";
+    this.drainPaused = false;
+    this.loopIndex = 0;
+    this.particleRuntime.reset();
+    this.segmentedPlayback = new V5GSegmentedPlaybackSequence(normalized);
+    this.renderPlaybackFrame(0, 0);
+    this.setPlaying(true);
+  }
+
+  private advanceFullTimeline(deltaSeconds: number): void {
+    const duration = this.options.project.stage.duration;
+    const boundary: PlaybackBoundary = {
+      startTime: 0,
+      endTime: duration,
+      loop: this.loop,
+    };
+    let remaining = deltaSeconds;
+
+    while (remaining > 0 && this.isPlaying) {
+      const timeToEnd = duration - this.currentTime;
+      if (remaining >= timeToEnd - PLAYBACK_EPSILON) {
+        const previousTime = this.currentTime;
+        this.emitPlaybackEventsBetween(previousTime, duration, 0, boundary);
+        if (this.loop) {
+          remaining -= Math.max(timeToEnd, 0);
+          this.renderPlaybackFrame(duration, duration);
+          this.renderPlaybackFrame(0, 0);
+          if (timeToEnd <= PLAYBACK_EPSILON) break;
+          continue;
+        }
+        this.startParticleDrain(duration, {
+          startTime: 0,
+          endTime: duration,
+          currentTime: duration,
+          loopIndex: 0,
+        });
+        return;
+      }
+
+      const previousTime = this.currentTime;
+      const nextTime = previousTime + remaining;
+      this.renderPlaybackFrame(nextTime, nextTime);
+      this.emitPlaybackEventsBetween(previousTime, nextTime, 0, boundary);
+      return;
+    }
+  }
+
+  private advanceActiveRange(deltaSeconds: number): void {
+    const range = this.activeRange;
+    if (!range) return;
+    let remaining = deltaSeconds;
+
+    while (remaining > 0 && this.isPlaying && this.activeRange === range) {
+      const timeToEnd = range.endTime - this.currentTime;
+      if (remaining >= timeToEnd - PLAYBACK_EPSILON) {
+        const previousTime = this.currentTime;
+        this.emitPlaybackEventsBetween(
+          previousTime,
+          range.endTime,
+          this.loopIndex,
+          range,
+        );
+        if (range.loop) {
+          remaining -= Math.max(timeToEnd, 0);
+          this.renderPlaybackFrame(range.endTime, range.endTime);
+          this.loopIndex += 1;
+          this.renderPlaybackFrame(range.startTime, range.startTime);
+          if (timeToEnd <= PLAYBACK_EPSILON) break;
+          continue;
+        }
+        this.activeRange = null;
+        this.startParticleDrain(range.endTime, {
+          startTime: range.startTime,
+          endTime: range.endTime,
+          currentTime: range.endTime,
+          loopIndex: this.loopIndex,
+        });
+        return;
+      }
+
+      const previousTime = this.currentTime;
+      const nextTime = previousTime + remaining;
+      this.renderPlaybackFrame(nextTime, nextTime);
+      this.emitPlaybackEventsBetween(
+        previousTime,
+        nextTime,
+        this.loopIndex,
+        range,
+      );
+      return;
+    }
+  }
+
+  private advanceSegmentedPlayback(deltaSeconds: number): void {
+    const segmented = this.segmentedPlayback;
+    if (!segmented) return;
+    const result = segmented.advance(deltaSeconds);
+    this.playbackPhase = result.phase;
+    this.triggerSegmentedPlaybackEvents(segmented, result);
+    if (result.timelineEnded) {
+      this.startParticleDrain(this.options.project.stage.duration, {
         startTime: 0,
         endTime: this.options.project.stage.duration,
-        loop: this.loop,
-      }
+        currentTime: this.options.project.stage.duration,
+        loopIndex: result.loopIndex,
+      });
+      return;
+    }
+
+    const particleTime = segmented.getCurrentTime();
+    this.renderPlaybackFrame(result.currentTime, particleTime, {
+      liveParticles:
+        segmented.keepParticlesAlive && segmented.getPhase() === "loop",
+      liveParticleDeltaSeconds: deltaSeconds,
+    });
+  }
+
+  private triggerSegmentedPlaybackEvents(
+    segmented: V5GSegmentedPlaybackSequence,
+    result: {
+      previousTime: number;
+      currentTime: number;
+      loopIndex: number;
+    },
+  ): void {
+    if (
+      segmented.getPhase() === "loop" &&
+      segmented.getLoopStartTime() < segmented.getLoopEndTime() &&
+      result.currentTime < result.previousTime
+    ) {
+      this.emitPlaybackEventsBetween(
+        result.previousTime,
+        segmented.getLoopEndTime(),
+        Math.max(0, result.loopIndex - 1),
+        {
+          startTime: segmented.getLoopStartTime(),
+          endTime: segmented.getLoopEndTime(),
+          loop: true,
+        },
+      );
+      this.emitPlaybackEventsBetween(
+        segmented.getLoopStartTime(),
+        result.currentTime,
+        result.loopIndex,
+        {
+          startTime: segmented.getLoopStartTime(),
+          endTime: segmented.getLoopEndTime(),
+          loop: true,
+        },
+      );
+      return;
+    }
+
+    this.emitPlaybackEventsBetween(
+      result.previousTime,
+      result.currentTime,
+      result.loopIndex,
+      {
+        startTime: 0,
+        endTime: this.options.project.stage.duration,
+        loop: false,
+      },
     );
+  }
+
+  private startParticleDrain(
+    endTime: number,
+    completeContext: V5GCocosPlaybackCompleteContext,
+  ): void {
+    this.setPlaying(false);
+    this.currentTime = endTime;
+    this.pendingComplete = completeContext;
+    this.playbackPhase = "particle-draining";
+    const sampled = this.applyProjectSample(endTime);
+    const particleLayers = this.getParticleRuntimeLayers(sampled.layers);
+    if (particleLayers.length > 0) {
+      const endParticles = sampleLiveParticleSprites(particleLayers, endTime);
+      if (endParticles.length > 0) {
+        this.particleRuntime.emit(particleLayers, endTime);
+      }
+    }
+    const frame = this.particleRuntime.beginDrain();
+    this.renderParticleSamples(frame.particles);
+    this.options.onTimeChange?.(this.currentTime);
+    if (frame.isComplete) {
+      this.finishParticleDrain();
+      return;
+    }
+    this.drainPaused = false;
+  }
+
+  private advanceParticleDrain(deltaSeconds: number): void {
+    const frame = this.particleRuntime.advanceDrain(deltaSeconds);
+    this.renderParticleSamples(frame.particles);
+    if (frame.isComplete) {
+      this.finishParticleDrain();
+    }
+  }
+
+  private finishParticleDrain(): void {
+    this.playbackPhase = "complete";
+    this.segmentedPlayback?.markParticleDrainComplete();
+    this.clearParticles();
+    const event = this.pendingComplete;
+    this.pendingComplete = null;
+    if (event) {
+      this.emitPlaybackComplete(event);
+    }
+  }
+
+  private renderDeterministicFrame(time: number): void {
+    const sampled = this.applyProjectSample(time);
+    const frame = this.particleRuntime.emit(
+      this.getParticleRuntimeLayers(sampled.layers),
+      this.currentTime,
+    );
+    this.renderParticleSamples(frame.particles);
+    this.options.onTimeChange?.(this.currentTime);
+  }
+
+  private renderPlaybackFrame(
+    nonParticleTime: number,
+    particleTime: number,
+    options: PlaybackFrameOptions = {},
+  ): void {
+    const sampled = this.applyProjectSample(nonParticleTime);
+    const particleLayers = this.getParticleRuntimeLayers(sampled.layers);
+    const frame = options.liveParticles
+      ? this.particleRuntime.emitLive(
+          particleLayers,
+          particleTime,
+          options.liveParticleDeltaSeconds ?? 0,
+        )
+      : this.particleRuntime.emit(particleLayers, particleTime);
+    this.renderParticleSamples(frame.particles);
+    this.options.onTimeChange?.(this.currentTime);
+  }
+
+  private applyProjectSample(time: number): {
+    time: number;
+    layers: SampledLayerState[];
+  } {
+    const sampledProject = sampleProjectAtTime(this.options.project, time);
+    this.currentTime = sampledProject.time;
+
+    for (const sampledLayer of sampledProject.layers) {
+      const managed = this.layers.get(sampledLayer.layerId);
+      if (!managed) {
+        throw new Error(
+          `Missing runtime node for V5G layer "${sampledLayer.layerId}".`,
+        );
+      }
+      const position = v5gTransformToCocosPosition(sampledLayer.transform);
+      this.options.driver.setPosition(managed.node, position.x, position.y);
+      this.options.driver.setScale(
+        managed.node,
+        sampledLayer.transform.scaleX,
+        sampledLayer.transform.scaleY,
+      );
+      this.options.driver.setRotationDegrees(
+        managed.node,
+        sampledLayer.transform.rotation,
+      );
+      this.options.driver.setOpacity(
+        managed.node,
+        opacityToCocosOpacity(sampledLayer.opacity),
+      );
+      this.options.driver.setActive(
+        managed.node,
+        sampledLayer.renderImageDisplay,
+      );
+    }
+
+    return sampledProject;
+  }
+
+  private getParticleRuntimeLayers(
+    sampledLayers: readonly SampledLayerState[],
+  ): V5GParticleRuntimeLayer[] {
+    const layers: V5GParticleRuntimeLayer[] = [];
+    for (const sampledLayer of sampledLayers) {
+      if (!sampledLayer.hasActiveParticleAnimation) continue;
+      const managed = this.layers.get(sampledLayer.layerId);
+      if (!managed) {
+        throw new Error(
+          `Missing runtime node for V5G particle layer "${sampledLayer.layerId}".`,
+        );
+      }
+      layers.push({
+        layer: managed.layer,
+        sampledLayer,
+        textureSize: {
+          width: managed.asset.width,
+          height: managed.asset.height,
+        },
+      });
+    }
+    return layers;
+  }
+
+  private renderParticleSamples(
+    particles: readonly V5GLiveParticleSpriteSample[],
+  ): void {
+    const particlesByLayer = new Map<string, V5GLiveParticleSpriteSample[]>();
+    for (const particle of particles) {
+      const layerParticles = particlesByLayer.get(particle.layerId) ?? [];
+      layerParticles.push(particle);
+      particlesByLayer.set(particle.layerId, layerParticles);
+    }
+
+    for (const managed of this.layers.values()) {
+      const layerParticles = particlesByLayer.get(managed.layer.id) ?? [];
+      while (managed.particleNodes.length < layerParticles.length) {
+        const node = this.options.driver.createImageNode(
+          `V5G Particle ${managed.layer.id}`,
+          managed.spriteFrame,
+        );
+        this.options.driver.setContentSize(
+          node,
+          managed.asset.width,
+          managed.asset.height,
+        );
+        this.options.driver.setAnchorPoint(node, 0.5, 0.5);
+        this.options.driver.applyBlendMode(
+          node,
+          getCocosBlendModeConfig(managed.layer.blendMode),
+        );
+        this.options.driver.appendChild(managed.particleContainer, node);
+        managed.particleNodes.push(node);
+      }
+
+      for (let index = 0; index < layerParticles.length; index += 1) {
+        const particle = layerParticles[index];
+        const node = managed.particleNodes[index];
+        this.options.driver.setPosition(node, particle.x, particle.y);
+        this.options.driver.setScale(node, particle.scale, particle.scale);
+        this.options.driver.setRotationDegrees(
+          node,
+          (particle.rotation * 180) / Math.PI,
+        );
+        this.options.driver.setOpacity(
+          node,
+          opacityToCocosOpacity(particle.alpha),
+        );
+        this.options.driver.applyBlendMode(
+          node,
+          getCocosBlendModeConfig(particle.blendMode),
+        );
+        this.options.driver.setActive(node, true);
+      }
+
+      while (managed.particleNodes.length > layerParticles.length) {
+        const node = managed.particleNodes.pop();
+        if (node !== undefined) this.options.driver.destroyNode(node);
+      }
+    }
   }
 
   private normalizePlaybackRange(
@@ -539,6 +939,18 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     this.options.onPlayingChange?.(this.isPlaying);
   }
 
+  private resetPlaybackRuntime(): void {
+    this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.playbackMode = "timeline";
+    this.playbackPhase = "idle";
+    this.loopIndex = 0;
+    this.drainPaused = false;
+    this.particleRuntime.reset();
+    this.setPlaying(false);
+  }
+
   private destroyManagedNodes(): void {
     this.clearParticles();
     if (this.stageNode !== null) {
@@ -590,75 +1002,26 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     }
   }
 
-  private drawParticles(
-    sampledLayers: ReturnType<typeof sampleProjectAtTime>["layers"],
-  ): void {
-    this.clearParticles();
-    const particleRoot = this.particleRootNode;
-    if (particleRoot === null) {
-      throw new Error("V5GCocosPlayer particle root is not initialized.");
-    }
-
-    for (const sampledLayer of sampledLayers) {
-      if (!sampledLayer.hasActiveParticleAnimation) continue;
-      const managed = this.layers.get(sampledLayer.layerId);
-      if (!managed) {
-        throw new Error(
-          `Missing runtime node for V5G particle layer "${sampledLayer.layerId}".`,
-        );
-      }
-      const emitterPosition = v5gTransformToCocosPosition(
-        sampledLayer.transform,
-      );
-      const particles = sampleParticleSpritesForLayer(
-        managed.layer,
-        sampledLayer,
-        {
-          width: managed.asset.width,
-          height: managed.asset.height,
-        },
-        this.currentTime,
-      );
-
-      for (const particle of particles) {
-        const node = this.options.driver.createImageNode(
-          `V5G Particle ${particle.layerId} ${particle.animationId}`,
-          managed.spriteFrame,
-        );
-        this.options.driver.setContentSize(
-          node,
-          managed.asset.width,
-          managed.asset.height,
-        );
-        this.options.driver.setAnchorPoint(node, 0.5, 0.5);
-        this.options.driver.setPosition(
-          node,
-          emitterPosition.x + particle.offsetX,
-          emitterPosition.y + particle.offsetY,
-        );
-        this.options.driver.setScale(node, particle.scale, particle.scale);
-        this.options.driver.setRotationDegrees(
-          node,
-          (particle.rotation * 180) / Math.PI,
-        );
-        this.options.driver.setOpacity(
-          node,
-          opacityToCocosOpacity(particle.alpha),
-        );
-        this.options.driver.applyBlendMode(
-          node,
-          getCocosBlendModeConfig(particle.blendMode),
-        );
-        this.options.driver.appendChild(particleRoot, node);
-        this.particleNodes.push(node);
+  private clearParticles(): void {
+    for (const managed of this.layers.values()) {
+      while (managed.particleNodes.length > 0) {
+        const node = managed.particleNodes.pop();
+        if (node !== undefined) this.options.driver.destroyNode(node);
       }
     }
   }
 
-  private clearParticles(): void {
-    while (this.particleNodes.length > 0) {
-      const node = this.particleNodes.pop();
-      if (node !== undefined) this.options.driver.destroyNode(node);
+  private getRenderedParticleCount(): number {
+    let count = 0;
+    for (const managed of this.layers.values()) {
+      count += managed.particleNodes.length;
     }
+    return count;
+  }
+
+  private getEffectivePlaybackPhase(): V5GCocosSegmentedPlaybackPhase {
+    if (this.particleRuntime.isDraining()) return "particle-draining";
+    if (this.segmentedPlayback) return this.segmentedPlayback.getPhase();
+    return this.playbackPhase;
   }
 }

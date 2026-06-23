@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { Node, SpriteFrame } from "cc";
+import export10xData from "../fixtures/10x.json";
+import export2xData from "../fixtures/2x.json";
+import export5xData from "../fixtures/5x.json";
 import bigwinData from "../fixtures/bigwin.json";
 import export2Runtime50Data from "../fixtures/export2-runtime-50.json";
 import megawinData from "../fixtures/megawin.json";
+import multipayData from "../fixtures/multipay.json";
 import projectData from "../fixtures/project.json";
+import respinData from "../fixtures/respin.json";
+import scatter1Data from "../fixtures/scatter1.json";
+import scatter2Data from "../fixtures/scatter2.json";
 import superwinData from "../fixtures/superwin.json";
 import { V5GCocosPlayer } from "../../src/cocos/player";
 import type { CocosBlendModeConfig } from "../../src/cocos/blend-mode";
@@ -22,6 +29,7 @@ import { sampleProjectAtTime } from "../../src/core/project-sampler";
 import * as standalone from "../../standalone/anieditorv5runtime-cc";
 import type { SampledProjectState } from "../../src/core/project-sampler";
 import type {
+  V5GAnimationConfig,
   V5GAssetConfig,
   V5GLayerConfig,
   V5GProjectConfig,
@@ -33,6 +41,13 @@ const fixtures = [
   ["megawin", megawinData],
   ["superwin", superwinData],
   ["export2-runtime-50", export2Runtime50Data],
+  ["2x", export2xData],
+  ["5x", export5xData],
+  ["10x", export10xData],
+  ["respin", respinData],
+  ["scatter1", scatter1Data],
+  ["scatter2", scatter2Data],
+  ["multipay", multipayData],
 ] as const;
 
 const sampleTimes = [0, 0.1, 0.6, 0.8, 1, 2, 4, 4.4];
@@ -161,6 +176,57 @@ describe("standalone runtime parity", () => {
       events: modularEvents,
     });
   });
+
+  it("matches modular segmented playback state and particle drain", () => {
+    const project = tinyProject({
+      animations: [particleWallAnimation({ duration: 1 })],
+    });
+    project.stage.duration = 2;
+    const modular = makeModularPlayer(project);
+    const single = makeStandalonePlayer(project);
+    const modularEvents: unknown[] = [];
+    const standaloneEvents: unknown[] = [];
+    modular.init();
+    single.init();
+    modular.setLoop(false);
+    single.setLoop(false);
+    modular.onPlaybackComplete((event) => modularEvents.push(event));
+    single.onPlaybackComplete((event) => standaloneEvents.push(event));
+
+    const playOptions = {
+      mode: "segmented" as const,
+      loopStart: { unit: "time" as const, at: 0.5 },
+      loopEnd: { unit: "time" as const, at: 0.5 },
+    };
+    modular.play(playOptions);
+    single.play(playOptions);
+    modular.update(0.6);
+    single.update(0.6);
+
+    expect(comparablePlaybackState(single.getPlaybackState())).toEqual(
+      comparablePlaybackState(modular.getPlaybackState()),
+    );
+
+    modular.requestSegmentedPlaybackEnd();
+    single.requestSegmentedPlaybackEnd();
+    modular.update(2);
+    single.update(2);
+
+    expect(comparablePlaybackState(single.getPlaybackState())).toEqual(
+      comparablePlaybackState(modular.getPlaybackState()),
+    );
+    expect(standaloneEvents).toEqual(modularEvents);
+
+    modular.play();
+    single.play();
+    modular.update(1);
+    single.update(1);
+
+    expect(comparablePlaybackState(single.getPlaybackState())).toEqual(
+      comparablePlaybackState(modular.getPlaybackState()),
+    );
+    expect(standaloneEvents).toEqual(modularEvents);
+  });
 });
 
 function comparableSample(sample: SampledProjectState): SampledProjectState {
@@ -170,12 +236,39 @@ function comparableSample(sample: SampledProjectState): SampledProjectState {
       layerId: layer.layerId,
       transform: layer.transform,
       opacity: layer.opacity,
+      baseOpacity: layer.baseOpacity,
       visible: layer.visible,
       renderImageDisplay: layer.renderImageDisplay,
       hasActiveParticleAnimation: layer.hasActiveParticleAnimation,
       blendMode: layer.blendMode,
     })),
   };
+}
+
+function comparablePlaybackState(
+  state: ComparablePlaybackStateInput,
+): ComparablePlaybackStateInput {
+  return {
+    mode: state.mode,
+    phase: state.phase,
+    currentTime: state.currentTime,
+    isPlaying: state.isPlaying,
+    isDrainingParticles: state.isDrainingParticles,
+    liveParticleCount: state.liveParticleCount,
+    loopIndex: state.loopIndex,
+    keepParticlesAlive: state.keepParticlesAlive,
+  };
+}
+
+interface ComparablePlaybackStateInput {
+  mode: string;
+  phase: string;
+  currentTime: number;
+  isPlaying: boolean;
+  isDrainingParticles: boolean;
+  liveParticleCount: number;
+  loopIndex: number;
+  keepParticlesAlive: boolean;
 }
 
 interface FakeSpriteFrame {
@@ -293,6 +386,36 @@ function tinyProject(
       },
     ],
     particles: [],
+  };
+}
+
+function particleWallAnimation(
+  overrides: Partial<V5GAnimationConfig> = {},
+): V5GAnimationConfig {
+  return {
+    id: "wall",
+    type: "particle_wall",
+    startTime: 0,
+    duration: 1,
+    enabled: true,
+    seed: 11,
+    params: {
+      emitterWidth: 100,
+      direction: 270,
+      spreadAngle: 15,
+      speed: 80,
+      lifetimeMin: 0.5,
+      lifetimeMax: 1,
+      spawnRate: 20,
+      size: 24,
+      gravity: 0,
+      startScaleMin: 0.6,
+      startScaleMax: 1,
+      endScaleMin: 0.3,
+      endScaleMax: 0.8,
+      fadeOut: true,
+    },
+    ...overrides,
   };
 }
 

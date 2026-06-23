@@ -78,7 +78,7 @@ describe("project-sampler", () => {
     expect(sampled.visible).toBe(false);
   });
 
-  it("marks particle animation frames as particle-rendered instead of image-rendered", () => {
+  it("keeps source image display controlled by image opacity during particle frames", () => {
     const sampled = sampleLayerAtTime(
       layer({}, [
         {
@@ -101,8 +101,75 @@ describe("project-sampler", () => {
     );
 
     expect(sampled.visible).toBe(true);
+    expect(sampled.renderImageDisplay).toBe(true);
+    expect(sampled.baseOpacity).toBe(1);
+    expect(sampled.hasActiveParticleAnimation).toBe(true);
+  });
+
+  it("hides particle_combo source image by sourceOpacity while particles remain active", () => {
+    const sampled = sampleLayerAtTime(
+      layer({}, [
+        {
+          id: "combo",
+          type: "particle_combo",
+          startTime: 0,
+          duration: 1,
+          enabled: true,
+          seed: 2,
+          params: {
+            count: 4,
+            size: 12,
+            sourceOpacity: 0,
+            spawnMode: 1,
+            spawnRadius: 30,
+            spawnRatio: 0.2,
+            targetX: 10,
+            targetY: 20,
+            travelMode: 0,
+            curve: 0,
+            orbitRadius: 10,
+            orbitTurns: 1,
+            orbitSpeed: 1,
+            orbitRatio: 0.4,
+            staggerRatio: 0,
+            trailCount: 0,
+            trailSpacing: 0.03,
+            trailFade: 0.6,
+            vanishMode: 0,
+            vanishRatio: 0.2,
+            flashScale: 1.2,
+            flashIntensity: 1,
+          },
+        },
+      ]),
+      0.5,
+    );
+
+    expect(sampled.baseOpacity).toBe(1);
+    expect(sampled.opacity).toBe(0);
+    expect(sampled.visible).toBe(false);
     expect(sampled.renderImageDisplay).toBe(false);
     expect(sampled.hasActiveParticleAnimation).toBe(true);
+  });
+
+  it("suppresses near-zero scale entry on the first frame", () => {
+    const sampled = sampleLayerAtTime(
+      layer({}, [
+        {
+          id: "scale",
+          type: "scale_in",
+          startTime: 0,
+          duration: 1,
+          enabled: true,
+          seed: 1,
+          params: { fromScale: 0, toScale: 1, fadeIn: false },
+        },
+      ]),
+      0,
+    );
+
+    expect(sampled.opacity).toBe(0);
+    expect(sampled.visible).toBe(false);
   });
 
   it("clamps project time to stage duration", () => {

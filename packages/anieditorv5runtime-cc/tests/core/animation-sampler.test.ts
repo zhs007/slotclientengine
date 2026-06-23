@@ -223,6 +223,69 @@ describe("animation-sampler", () => {
     expect(particleMarker.opacity).toBe(0.8);
   });
 
+  it("samples particle_combo source opacity for the image layer only", () => {
+    const sampled = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 0.8 },
+      [
+        animation("particle_combo", {
+          count: 4,
+          size: 12,
+          sourceOpacity: 0.25,
+          spawnMode: 1,
+          spawnRadius: 30,
+          spawnRatio: 0.2,
+          targetX: 10,
+          targetY: 20,
+          travelMode: 0,
+          curve: 0,
+          orbitRadius: 10,
+          orbitTurns: 1,
+          orbitSpeed: 1,
+          orbitRatio: 0.4,
+          staggerRatio: 0,
+          trailCount: 0,
+          trailSpacing: 0.03,
+          trailFade: 0.6,
+          vanishMode: 0,
+          vanishRatio: 0.2,
+          flashScale: 1.2,
+          flashIntensity: 1,
+        }),
+      ],
+      0.5,
+    );
+
+    expect(sampled.opacity).toBe(0.2);
+    expect(sampled.transform).toEqual(baseTransform);
+  });
+
+  it("samples squash_stretch displacement and elastic scale", () => {
+    const sampled = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [
+        animation(
+          "squash_stretch",
+          {
+            squashAngle: 90,
+            squashAmount: 0.4,
+            decayOscillateCount: 2,
+            fromX: 0,
+            fromY: 0,
+            toX: 20,
+            toY: -10,
+          },
+          { startTime: 0, duration: 1 },
+        ),
+      ],
+      0.5,
+    );
+
+    expect(sampled.transform.x).not.toBe(baseTransform.x);
+    expect(sampled.transform.y).not.toBe(baseTransform.y);
+    expect(sampled.transform.scaleX).not.toBe(baseTransform.scaleX);
+    expect(sampled.opacity).toBe(1);
+  });
+
   it("ignores disabled animations and applies overlaps in startTime order", () => {
     const disabled = sampleLayerAnimationsAtTime(
       { transform: baseTransform, opacity: 0.7 },

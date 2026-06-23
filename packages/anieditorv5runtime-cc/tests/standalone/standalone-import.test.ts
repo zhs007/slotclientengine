@@ -37,11 +37,16 @@ describe("standalone runtime import", () => {
         "blink",
         "particles",
         "particle_twinkle",
+        "particle_wall",
+        "particle_combo",
+        "squash_stretch",
       ]),
     );
     expect(runtime.PARTICLE_ANIMATION_TYPES).toEqual([
       "particles",
       "particle_twinkle",
+      "particle_wall",
+      "particle_combo",
     ]);
     expect(runtime.createV5GCocosPlayer).toBeTypeOf("function");
     expect(runtime.V5GCocosPlayer).toBeTypeOf("function");
@@ -62,10 +67,19 @@ describe("standalone runtime import", () => {
     expect(runtime.V5GCocosPlayer.prototype.onPlaybackComplete).toBeTypeOf(
       "function",
     );
+    expect(
+      runtime.V5GCocosPlayer.prototype.requestSegmentedPlaybackEnd,
+    ).toBeTypeOf("function");
+    expect(runtime.V5GCocosPlayer.prototype.getPlaybackState).toBeTypeOf(
+      "function",
+    );
     expect(runtime.sampleProjectAtTime).toBeTypeOf("function");
     expect(runtime.sampleLayerAtTime).toBeTypeOf("function");
     expect(runtime.sampleLayerAnimationsAtTime).toBeTypeOf("function");
     expect(runtime.sampleParticleSpritesForLayer).toBeTypeOf("function");
+    expect(runtime.sampleParticleSpritesForLayerRuntime).toBeTypeOf("function");
+    expect(runtime.sampleLiveParticleSprites).toBeTypeOf("function");
+    expect(runtime.normalizeSegmentedPlaybackOptions).toBeTypeOf("function");
     expect(runtime.hasActiveParticleAnimation).toBeTypeOf("function");
     expect(runtime.opacityToCocosOpacity(0.5)).toBe(128);
     expect(runtime.v5gTransformToCocosPosition).toBeTypeOf("function");

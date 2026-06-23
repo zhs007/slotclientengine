@@ -68,7 +68,10 @@ export type V5GAnimationType =
   | "float"
   | "swing"
   | "particles"
-  | "particle_twinkle";
+  | "particle_twinkle"
+  | "particle_wall"
+  | "particle_combo"
+  | "squash_stretch";
 
 export type V5GAnimationParamValue = string | number | boolean;
 
@@ -203,6 +206,8 @@ export const SUPPORTED_EASINGS: readonly V5GEasingName[] = [
 export const PARTICLE_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "particles",
   "particle_twinkle",
+  "particle_wall",
+  "particle_combo",
 ];
 
 export const SUPPORTED_ANIMATION_TYPES: readonly V5GAnimationType[] = [
@@ -224,6 +229,9 @@ export const SUPPORTED_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "swing",
   "particles",
   "particle_twinkle",
+  "particle_wall",
+  "particle_combo",
+  "squash_stretch",
 ];
 
 const DEFAULT_EASING_BY_TYPE: Readonly<
@@ -247,6 +255,9 @@ const DEFAULT_EASING_BY_TYPE: Readonly<
   swing: "linear",
   particles: "linear",
   particle_twinkle: "linear",
+  particle_wall: "linear",
+  particle_combo: "easeInOutQuad",
+  squash_stretch: "easeOutQuad",
 };
 
 export function sampleLayerAnimationsAtTime(
@@ -293,6 +304,10 @@ export function sampleLayerAnimationsAtTime(
       sampleSwing(result, animation, progress);
     else if (animation.type === "rotate")
       sampleRotate(result, animation, easedProgress);
+    else if (animation.type === "squash_stretch")
+      sampleSquashStretch(result, animation, easedProgress);
+    else if (animation.type === "particle_combo")
+      sampleParticleComboSource(result, animation, base);
     else if (isParticleAnimationType(animation.type)) {
       // Particle animations are sampled by sampleParticleSpritesForLayer().
     } else throw new Error(`Unsupported V5G animation type: ${animation.type}`);
@@ -581,6 +596,61 @@ function sampleRotate(
   );
 }
 
+function sampleParticleComboSource(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  base: V5GAnimationSampleBase,
+): void {
+  result.opacity = base.opacity * getNumberParam(animation, "sourceOpacity");
+}
+
+function sampleSquashStretch(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  easedProgress: number,
+): void {
+  const squashAngle = getNumberParam(animation, "squashAngle");
+  const squashAmount = getNumberParam(animation, "squashAmount");
+  const decayOscillateCount = getNumberParam(animation, "decayOscillateCount");
+  const fromX = getNumberParam(animation, "fromX");
+  const fromY = getNumberParam(animation, "fromY");
+  const toX = getNumberParam(animation, "toX");
+  const toY = getNumberParam(animation, "toY");
+
+  result.transform.x += lerp(fromX, toX, easedProgress);
+  result.transform.y += lerp(fromY, toY, easedProgress);
+
+  if (squashAmount <= 0.001) return;
+
+  const angleRad = squashAngle * (Math.PI / 180);
+  const forceX = Math.cos(angleRad);
+  const forceY = Math.sin(angleRad);
+  const peakAt = 0.35;
+  let squashFactor: number;
+  if (easedProgress <= peakAt) {
+    const phase = clampNumber(easedProgress / peakAt, 0, 1);
+    squashFactor = 1 - squashAmount * easeProgress(phase, "easeOutQuad");
+  } else {
+    const decayPhase = (easedProgress - peakAt) / Math.max(1 - peakAt, 0.0001);
+    if (decayOscillateCount <= 0) {
+      const overshoot = squashAmount * 0.35;
+      squashFactor =
+        1 - squashAmount + overshoot * Math.sin(decayPhase * Math.PI);
+    } else {
+      const totalCycles = 1 + decayOscillateCount;
+      const inner = decayPhase * Math.PI * 2 * totalCycles;
+      const decay = Math.exp(-decayPhase * 4);
+      squashFactor = 1 - squashAmount * decay * Math.cos(inner);
+    }
+  }
+
+  squashFactor = clampNumber(squashFactor, 0.11, 3);
+  const stretchX = 1 + (1 - squashFactor) * Math.abs(forceY);
+  const stretchY = 1 + (1 - squashFactor) * Math.abs(forceX);
+  result.transform.scaleX *= stretchX;
+  result.transform.scaleY *= stretchY;
+}
+
 function getAnimationProgress(
   animation: V5GAnimationConfig,
   time: number,
@@ -653,6 +723,7 @@ export interface TextureSize {
 export interface ParticleLayerSampleState {
   layerId: string;
   transform: V5GTransformConfig;
+  baseOpacity: number;
   opacity: number;
   visible: boolean;
   blendMode: V5GBlendMode;
@@ -667,6 +738,11 @@ export interface ParticleSpriteSample {
   rotation: number;
   alpha: number;
   blendMode: V5GBlendMode;
+}
+
+export interface ParticleAnimationRuntimeState {
+  animationId: string;
+  elapsed: number;
 }
 
 export function hasActiveParticleAnimation(
@@ -702,7 +778,11 @@ export function sampleParticleSpritesForLayer(
   textureSize: TextureSize,
   time: number,
 ): ParticleSpriteSample[] {
-  if (layer.type !== "image" || !layer.visible || sampledLayer.opacity <= 0) {
+  if (
+    layer.type !== "image" ||
+    !layer.visible ||
+    sampledLayer.baseOpacity <= 0
+  ) {
     return [];
   }
 
@@ -713,19 +793,102 @@ export function sampleParticleSpritesForLayer(
     }
     const progress = getParticleProgress(animation, time);
     if (progress === null) continue;
+    if (progress <= 0) continue;
+
+    const particleOpacity =
+      animation.type === "particle_combo"
+        ? sampledLayer.baseOpacity
+        : sampledLayer.opacity;
+    if (particleOpacity <= 0) continue;
+    const particleLayer = { ...sampledLayer, opacity: particleOpacity };
 
     if (animation.type === "particles") {
       sprites.push(
-        ...sampleParticleBurst(animation, sampledLayer, textureSize, progress),
+        ...sampleParticleBurst(animation, particleLayer, textureSize, progress),
       );
     } else if (animation.type === "particle_twinkle") {
       sprites.push(
         ...sampleParticleTwinkle(
           animation,
-          sampledLayer,
+          particleLayer,
           textureSize,
-          progress,
+          progress * Math.max(animation.duration, 0.0001),
         ),
+      );
+    } else if (animation.type === "particle_wall") {
+      sprites.push(
+        ...sampleParticleWall(animation, particleLayer, textureSize, progress),
+      );
+    } else if (animation.type === "particle_combo") {
+      sprites.push(
+        ...sampleParticleCombo(animation, particleLayer, textureSize, progress),
+      );
+    }
+  }
+  return sprites;
+}
+
+export function sampleParticleSpritesForLayerRuntime(
+  layer: V5GLayerConfig,
+  sampledLayer: ParticleLayerSampleState,
+  textureSize: TextureSize,
+  runtimeStates: readonly ParticleAnimationRuntimeState[],
+): ParticleSpriteSample[] {
+  if (
+    layer.type !== "image" ||
+    !layer.visible ||
+    sampledLayer.baseOpacity <= 0
+  ) {
+    return [];
+  }
+
+  const stateByAnimationId = new Map(
+    runtimeStates.map((state) => [state.animationId, state] as const),
+  );
+  const sprites: ParticleSpriteSample[] = [];
+  for (const animation of layer.animations) {
+    if (!animation.enabled || !isParticleAnimationType(animation.type)) {
+      continue;
+    }
+    const runtimeState = stateByAnimationId.get(animation.id);
+    if (!runtimeState || runtimeState.elapsed <= 0) continue;
+
+    const particleOpacity =
+      animation.type === "particle_combo"
+        ? sampledLayer.baseOpacity
+        : sampledLayer.opacity;
+    if (particleOpacity <= 0) continue;
+    const particleLayer = { ...sampledLayer, opacity: particleOpacity };
+
+    if (animation.type === "particles") {
+      const progress = getRuntimeProgress(animation, runtimeState.elapsed);
+      if (progress === null) continue;
+      sprites.push(
+        ...sampleParticleBurst(animation, particleLayer, textureSize, progress),
+      );
+    } else if (animation.type === "particle_twinkle") {
+      sprites.push(
+        ...sampleParticleTwinkle(
+          animation,
+          particleLayer,
+          textureSize,
+          runtimeState.elapsed,
+        ),
+      );
+    } else if (animation.type === "particle_wall") {
+      sprites.push(
+        ...sampleParticleWallFromElapsed(
+          animation,
+          particleLayer,
+          textureSize,
+          runtimeState.elapsed,
+        ),
+      );
+    } else if (animation.type === "particle_combo") {
+      const progress = getRuntimeProgress(animation, runtimeState.elapsed);
+      if (progress === null) continue;
+      sprites.push(
+        ...sampleParticleCombo(animation, particleLayer, textureSize, progress),
       );
     }
   }
@@ -818,7 +981,7 @@ function sampleParticleTwinkle(
   animation: V5GAnimationConfig,
   sampledLayer: ParticleLayerSampleState,
   textureSize: TextureSize,
-  progress: number,
+  elapsed: number,
 ): ParticleSpriteSample[] {
   const count = Math.round(
     clampParticleNumber(getNumberParam(animation, "count"), 1, 1000),
@@ -845,8 +1008,6 @@ function sampleParticleTwinkle(
     clampParticleNumber(getNumberParam(animation, "batchMax"), batchMin, 100),
   );
   const size = clampParticleNumber(getNumberParam(animation, "size"), 1, 400);
-  const duration = Math.max(animation.duration, 0.0001);
-  const elapsed = progress * duration;
   const textureEdge = getTextureLongestEdge(textureSize);
   const baseTextureScale = size / textureEdge;
   const sprites: ParticleSpriteSample[] = [];
@@ -895,6 +1056,467 @@ function sampleParticleTwinkle(
   return sprites;
 }
 
+function sampleParticleWall(
+  animation: V5GAnimationConfig,
+  sampledLayer: ParticleLayerSampleState,
+  textureSize: TextureSize,
+  progress: number,
+): ParticleSpriteSample[] {
+  return sampleParticleWallFromElapsed(
+    animation,
+    sampledLayer,
+    textureSize,
+    progress * Math.max(animation.duration, 0.0001),
+  );
+}
+
+function sampleParticleWallFromElapsed(
+  animation: V5GAnimationConfig,
+  sampledLayer: ParticleLayerSampleState,
+  textureSize: TextureSize,
+  elapsed: number,
+): ParticleSpriteSample[] {
+  const emitterWidth = clampParticleNumber(
+    getNumberParam(animation, "emitterWidth"),
+    0,
+    3000,
+  );
+  const direction = clampParticleNumber(
+    getNumberParam(animation, "direction"),
+    0,
+    360,
+  );
+  const spreadAngle = clampParticleNumber(
+    getNumberParam(animation, "spreadAngle"),
+    0,
+    180,
+  );
+  const speed = clampParticleNumber(
+    getNumberParam(animation, "speed"),
+    0,
+    2000,
+  );
+  const lifetimeMin = clampParticleNumber(
+    getNumberParam(animation, "lifetimeMin"),
+    0.05,
+    10,
+  );
+  const lifetimeMax = clampParticleNumber(
+    getNumberParam(animation, "lifetimeMax"),
+    lifetimeMin,
+    10,
+  );
+  const spawnRate = clampParticleNumber(
+    getNumberParam(animation, "spawnRate"),
+    1,
+    500,
+  );
+  const size = clampParticleNumber(getNumberParam(animation, "size"), 1, 400);
+  const gravity = clampParticleNumber(
+    getNumberParam(animation, "gravity"),
+    -2000,
+    2000,
+  );
+  const startScaleMin = clampParticleNumber(
+    getNumberParam(animation, "startScaleMin"),
+    0.01,
+    2,
+  );
+  const startScaleMax = clampParticleNumber(
+    getNumberParam(animation, "startScaleMax"),
+    startScaleMin,
+    2,
+  );
+  const endScaleMin = clampParticleNumber(
+    getNumberParam(animation, "endScaleMin"),
+    0.01,
+    2,
+  );
+  const endScaleMax = clampParticleNumber(
+    getNumberParam(animation, "endScaleMax"),
+    endScaleMin,
+    2,
+  );
+  const fadeOut = getOptionalBooleanParam(animation, "fadeOut", true);
+  const textureEdge = getTextureLongestEdge(textureSize);
+  const baseTextureScale = size / textureEdge;
+  const dirRad = (direction * Math.PI) / 180;
+  const dirX = Math.cos(dirRad);
+  const dirY = Math.sin(dirRad);
+  const perpX = -dirY;
+  const perpY = dirX;
+  const totalSpawnCount = Math.floor(elapsed * spawnRate);
+  const sprites: ParticleSpriteSample[] = [];
+
+  for (let index = 0; index < totalSpawnCount; index += 1) {
+    const randomA = seededRandom(animation.seed, index, 101);
+    const randomB = seededRandom(animation.seed, index, 102);
+    const randomC = seededRandom(animation.seed, index, 103);
+    const randomD = seededRandom(animation.seed, index, 104);
+    const randomE = seededRandom(animation.seed, index, 105);
+    const lifetime = lifetimeMin + randomA * (lifetimeMax - lifetimeMin);
+    const spawnTime =
+      totalSpawnCount <= 1 ? 0 : (index / (totalSpawnCount - 1)) * elapsed;
+    const localAge = (elapsed - spawnTime) / Math.max(lifetime, 0.0001);
+    if (localAge < 0 || localAge > 1) continue;
+
+    const widthOffset = (randomB - 0.5) * emitterWidth;
+    const spreadRad = (randomC - 0.5) * 2 * ((spreadAngle * Math.PI) / 180);
+    const flyDirX = Math.cos(dirRad + spreadRad);
+    const flyDirY = Math.sin(dirRad + spreadRad);
+    const distance = speed * localAge * lifetime;
+    const ageSeconds = localAge * lifetime;
+    const startScaleValue =
+      startScaleMin + randomD * (startScaleMax - startScaleMin);
+    const endScaleValue = endScaleMin + randomE * (endScaleMax - endScaleMin);
+    const scale = Math.max(
+      0.01,
+      baseTextureScale *
+        (startScaleValue + (endScaleValue - startScaleValue) * localAge),
+    );
+    const alpha = fadeOut
+      ? sampledLayer.opacity * Math.max(0, 1 - localAge)
+      : sampledLayer.opacity;
+    if (alpha <= 0.002) continue;
+
+    sprites.push({
+      layerId: sampledLayer.layerId,
+      animationId: animation.id,
+      offsetX: roundTo(perpX * widthOffset + flyDirX * distance, 4),
+      offsetY: roundTo(
+        perpY * widthOffset +
+          flyDirY * distance +
+          0.5 * gravity * ageSeconds * ageSeconds,
+        4,
+      ),
+      scale: roundTo(scale, 4),
+      rotation: roundTo(
+        (randomA - 0.5) * Math.PI * 0.5 + localAge * Math.PI * (0.5 + randomB),
+        4,
+      ),
+      alpha: roundTo(clampNumber(alpha, 0, 1), 4),
+      blendMode: sampledLayer.blendMode,
+    });
+  }
+
+  return sprites;
+}
+
+function sampleParticleCombo(
+  animation: V5GAnimationConfig,
+  sampledLayer: ParticleLayerSampleState,
+  textureSize: TextureSize,
+  progress: number,
+): ParticleSpriteSample[] {
+  const count = Math.round(
+    clampParticleNumber(getNumberParam(animation, "count"), 1, 300),
+  );
+  const size = clampParticleNumber(getNumberParam(animation, "size"), 1, 400);
+  const spawnMode = Math.round(
+    clampParticleNumber(getNumberParam(animation, "spawnMode"), 0, 1),
+  );
+  const spawnRadius = clampParticleNumber(
+    getNumberParam(animation, "spawnRadius"),
+    0,
+    3000,
+  );
+  const spawnRatio = clampParticleNumber(
+    getNumberParam(animation, "spawnRatio"),
+    0.01,
+    0.8,
+  );
+  const targetOffsetX = getNumberParam(animation, "targetX");
+  const targetOffsetY = -getNumberParam(animation, "targetY");
+  const travelMode = Math.round(
+    clampParticleNumber(getNumberParam(animation, "travelMode"), 0, 2),
+  );
+  const curve = getNumberParam(animation, "curve");
+  const orbitRadius = clampParticleNumber(
+    getNumberParam(animation, "orbitRadius"),
+    0,
+    3000,
+  );
+  const orbitTurns = clampParticleNumber(
+    getNumberParam(animation, "orbitTurns"),
+    -10,
+    10,
+  );
+  const orbitSpeed = clampParticleNumber(
+    getNumberParam(animation, "orbitSpeed"),
+    0.1,
+    5,
+  );
+  const orbitRatio = clampParticleNumber(
+    getNumberParam(animation, "orbitRatio") / orbitSpeed,
+    0.03,
+    0.95,
+  );
+  const staggerRatio = clampParticleNumber(
+    getNumberParam(animation, "staggerRatio"),
+    0,
+    0.9,
+  );
+  const trailCount = Math.round(
+    clampParticleNumber(getNumberParam(animation, "trailCount"), 0, 12),
+  );
+  const trailSpacing = clampParticleNumber(
+    getNumberParam(animation, "trailSpacing"),
+    0.005,
+    0.25,
+  );
+  const trailFade = clampParticleNumber(
+    getNumberParam(animation, "trailFade"),
+    0.05,
+    0.95,
+  );
+  const vanishMode = Math.round(
+    clampParticleNumber(getNumberParam(animation, "vanishMode"), 0, 2),
+  );
+  const vanishRatio = clampParticleNumber(
+    getNumberParam(animation, "vanishRatio"),
+    0.01,
+    0.8,
+  );
+  const flashScale = clampParticleNumber(
+    getNumberParam(animation, "flashScale"),
+    0.1,
+    8,
+  );
+  const flashIntensity = clampParticleNumber(
+    getNumberParam(animation, "flashIntensity"),
+    0.1,
+    3,
+  );
+  const textureEdge = getTextureLongestEdge(textureSize);
+  const baseTextureScale = size / textureEdge;
+  const effectiveTravelWindow = Math.max(0.001, 1 - staggerRatio);
+  const sprites: ParticleSpriteSample[] = [];
+
+  for (let index = 0; index < count; index += 1) {
+    const stagger =
+      count <= 1 ? 0 : (index / Math.max(1, count - 1)) * staggerRatio;
+    for (let trailIndex = trailCount; trailIndex >= 0; trailIndex -= 1) {
+      const trailProgress = progress - trailIndex * trailSpacing;
+      const localProgress = (trailProgress - stagger) / effectiveTravelWindow;
+      if (localProgress < 0 || localProgress > 1) continue;
+      const point = sampleParticleComboPoint(
+        animation,
+        index,
+        localProgress,
+        spawnMode,
+        spawnRadius,
+        spawnRatio,
+        targetOffsetX,
+        targetOffsetY,
+        travelMode,
+        curve,
+        orbitRadius,
+        orbitTurns,
+        orbitRatio,
+        vanishMode,
+        vanishRatio,
+        flashScale,
+        flashIntensity,
+      );
+      if (point.alpha <= 0.002) continue;
+      const trailAlpha = Math.pow(trailFade, trailIndex);
+      const alpha = sampledLayer.opacity * point.alpha * trailAlpha;
+      if (alpha <= 0.002) continue;
+      sprites.push({
+        layerId: sampledLayer.layerId,
+        animationId: animation.id,
+        offsetX: roundTo(point.x, 4),
+        offsetY: roundTo(point.y, 4),
+        scale: roundTo(Math.max(0.01, baseTextureScale * point.scale), 4),
+        rotation: roundTo(point.rotation, 4),
+        alpha: roundTo(clampNumber(alpha, 0, 1), 4),
+        blendMode: sampledLayer.blendMode,
+      });
+    }
+  }
+
+  return sprites;
+}
+
+interface ParticleComboPoint {
+  x: number;
+  y: number;
+  alpha: number;
+  scale: number;
+  rotation: number;
+}
+
+function sampleParticleComboPoint(
+  animation: V5GAnimationConfig,
+  index: number,
+  progress: number,
+  spawnMode: number,
+  spawnRadius: number,
+  spawnRatio: number,
+  targetOffsetX: number,
+  targetOffsetY: number,
+  travelMode: number,
+  curve: number,
+  orbitRadius: number,
+  orbitTurns: number,
+  orbitRatio: number,
+  vanishMode: number,
+  vanishRatio: number,
+  flashScale: number,
+  flashIntensity: number,
+): ParticleComboPoint {
+  const p = clampNumber(progress, 0, 1);
+  const randomA = seededRandom(animation.seed, index, 301);
+  const randomB = seededRandom(animation.seed, index, 302);
+  const randomC = seededRandom(animation.seed, index, 303);
+  const randomD = seededRandom(animation.seed, index, 304);
+  const randomE = seededRandom(animation.seed, index, 305);
+  const spawnAngle = randomA * Math.PI * 2;
+  const spawnDistance = Math.sqrt(randomB) * spawnRadius;
+  const spawnX = Math.cos(spawnAngle) * spawnDistance;
+  const spawnY = Math.sin(spawnAngle) * spawnDistance;
+  const targetX = targetOffsetX;
+  const targetY = targetOffsetY;
+  const travelStart = spawnRatio;
+  const vanishStart = Math.max(travelStart + 0.001, 1 - vanishRatio);
+  const travelDuration = Math.max(0.001, vanishStart - travelStart);
+  const spawnPhase = clampNumber(p / Math.max(spawnRatio, 0.001), 0, 1);
+  const travelPhase = clampNumber((p - travelStart) / travelDuration, 0, 1);
+  const vanishPhase = clampNumber(
+    (p - vanishStart) / Math.max(vanishRatio, 0.001),
+    0,
+    1,
+  );
+  const easedSpawn = easeOutQuad(spawnPhase);
+  const easedTravel = easeInOutQuad(travelPhase);
+  const easedVanish = easeOutQuad(vanishPhase);
+
+  let x = spawnX;
+  let y = spawnY;
+  if (p < travelStart) {
+    if (spawnMode === 1) {
+      x = spawnX * easedSpawn;
+      y = spawnY * easedSpawn;
+    }
+  } else if (travelMode === 2) {
+    const orbitEnd = clampNumber(orbitRatio, 0.03, 0.95);
+    if (travelPhase <= orbitEnd) {
+      const orbitPhase = clampNumber(travelPhase / orbitEnd, 0, 1);
+      const orbitAngle =
+        spawnAngle + orbitPhase * Math.PI * 2 * orbitTurns + randomC * Math.PI;
+      const orbitEase = easeInOutQuad(orbitPhase);
+      x =
+        spawnX + Math.cos(orbitAngle) * orbitRadius * (0.35 + orbitEase * 0.65);
+      y =
+        spawnY + Math.sin(orbitAngle) * orbitRadius * (0.35 + orbitEase * 0.65);
+    } else {
+      const flyPhase = clampNumber(
+        (travelPhase - orbitEnd) / (1 - orbitEnd),
+        0,
+        1,
+      );
+      const flyEase = easeInOutQuad(flyPhase);
+      const orbitAngle =
+        spawnAngle + Math.PI * 2 * orbitTurns + randomC * Math.PI;
+      const fromX = spawnX + Math.cos(orbitAngle) * orbitRadius;
+      const fromY = spawnY + Math.sin(orbitAngle) * orbitRadius;
+      const curved = quadraticPoint(
+        fromX,
+        fromY,
+        targetX,
+        targetY,
+        curve * 0.45 * (randomD < 0.5 ? -1 : 1),
+        flyEase,
+      );
+      x = curved.x;
+      y = curved.y;
+    }
+  } else if (travelMode === 1) {
+    const curved = quadraticPoint(
+      spawnX,
+      spawnY,
+      targetX,
+      targetY,
+      curve,
+      easedTravel,
+    );
+    x = curved.x;
+    y = curved.y;
+  } else {
+    x = lerpNumber(spawnX, targetX, easedTravel);
+    y = lerpNumber(spawnY, targetY, easedTravel);
+  }
+
+  let alpha = p < travelStart ? easeOutQuad(spawnPhase) : 1;
+  let scale = 0.65 + randomE * 0.7;
+  if (p < travelStart) scale *= 0.25 + easedSpawn * 0.75;
+  if (vanishPhase > 0) {
+    if (vanishMode === 1) {
+      const flash = Math.sin(vanishPhase * Math.PI);
+      alpha *= Math.max(
+        0,
+        1 - easedVanish * 0.75 + flash * (flashIntensity - 1) * 0.35,
+      );
+      scale *= 1 + flash * (flashScale - 1);
+    } else if (vanishMode === 2) {
+      scale *= lerpNumber(1, flashScale, easedVanish);
+      alpha *= Math.max(0, 1 - easedVanish);
+    } else {
+      alpha *= Math.max(0, 1 - easedVanish);
+    }
+  }
+
+  const rotation =
+    (randomC - 0.5) * Math.PI * 2 + p * Math.PI * 2 * (0.35 + randomD);
+  return { x, y, alpha: Math.max(0, alpha), scale, rotation };
+}
+
+function quadraticPoint(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  curve: number,
+  progress: number,
+): { x: number; y: number } {
+  const t = clampNumber(progress, 0, 1);
+  const midX = (fromX + toX) / 2;
+  const midY = (fromY + toY) / 2;
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const length = Math.hypot(dx, dy) || 1;
+  const controlX = midX + (-dy / length) * curve;
+  const controlY = midY + (dx / length) * curve;
+  const inv = 1 - t;
+  return {
+    x: inv * inv * fromX + 2 * inv * t * controlX + t * t * toX,
+    y: inv * inv * fromY + 2 * inv * t * controlY + t * t * toY,
+  };
+}
+
+function easeOutQuad(progress: number): number {
+  const t = clampNumber(progress, 0, 1);
+  return 1 - (1 - t) * (1 - t);
+}
+
+function easeInOutQuad(progress: number): number {
+  const t = clampNumber(progress, 0, 1);
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+function lerpNumber(from: number, to: number, progress: number): number {
+  return from + (to - from) * clampNumber(progress, 0, 1);
+}
+
+function getRuntimeProgress(
+  animation: V5GAnimationConfig,
+  elapsed: number,
+): number | null {
+  const duration = Math.max(animation.duration, 0.0001);
+  if (elapsed < 0 || elapsed >= duration) return null;
+  return clampNumber(elapsed / duration, 0, 1);
+}
+
 function clampParticleNumber(value: number, min: number, max: number): number {
   return clampNumber(Number.isFinite(value) ? value : min, min, max);
 }
@@ -906,9 +1528,12 @@ function getTextureLongestEdge(textureSize: TextureSize): number {
   return Number.isFinite(longestEdge) && longestEdge > 0 ? longestEdge : 1;
 }
 
+const VISUAL_ENTRY_SCALE_THRESHOLD = 0.011;
+
 export interface SampledLayerState {
   layerId: string;
   transform: V5GTransformConfig;
+  baseOpacity: number;
   opacity: number;
   visible: boolean;
   renderImageDisplay: boolean;
@@ -953,6 +1578,12 @@ export function sampleLayerAtTime(
       isOpacityEntryAnimation(animation) &&
       time < animation.startTime,
   );
+  const hasPendingScaleEntry = layer.animations.some(
+    (animation) =>
+      animation.enabled &&
+      isScaleEntryAnimation(animation) &&
+      time <= animation.startTime,
+  );
   const hasActiveCoverage = hasAnyEnabled
     ? layer.animations.some(
         (animation) =>
@@ -962,19 +1593,23 @@ export function sampleLayerAtTime(
       )
     : true;
   const opacity =
-    hasPendingOpacityEntry || (hasAnyEnabled && !hasActiveCoverage)
+    hasPendingOpacityEntry ||
+    hasPendingScaleEntry ||
+    (hasAnyEnabled && !hasActiveCoverage)
       ? 0
       : roundTo(clampNumber(sampled.opacity, 0, 1), 4);
+  const baseOpacity = roundTo(clampNumber(layer.opacity, 0, 1), 4);
   const activeParticleAnimation =
-    opacity > 0 && hasActiveParticleAnimation(layer, time);
+    layer.visible && baseOpacity > 0 && hasActiveParticleAnimation(layer, time);
   const visible = layer.visible && opacity > 0;
 
   return {
     layerId: layer.id,
     transform: sampled.transform,
+    baseOpacity,
     opacity,
     visible,
-    renderImageDisplay: visible && !activeParticleAnimation,
+    renderImageDisplay: visible,
     hasActiveParticleAnimation: activeParticleAnimation,
     blendMode: layer.blendMode,
   };
@@ -992,6 +1627,24 @@ function isOpacityEntryAnimation(animation: V5GAnimationConfig): boolean {
   }
   if (animation.type === "scale_in") {
     return getProjectBooleanParam(animation, "fadeIn", true);
+  }
+  return false;
+}
+
+function isScaleEntryAnimation(animation: V5GAnimationConfig): boolean {
+  if (animation.type === "scale_up") {
+    return (
+      getProjectNumberParam(animation, "fromScaleX") <=
+        VISUAL_ENTRY_SCALE_THRESHOLD ||
+      getProjectNumberParam(animation, "fromScaleY") <=
+        VISUAL_ENTRY_SCALE_THRESHOLD
+    );
+  }
+  if (animation.type === "scale_in" || animation.type === "bounce_in") {
+    return (
+      getProjectNumberParam(animation, "fromScale") <=
+      VISUAL_ENTRY_SCALE_THRESHOLD
+    );
   }
   return false;
 }
@@ -1052,6 +1705,54 @@ const REQUIRED_NUMERIC_PARAMS: Readonly<
     "batchMax",
     "size",
   ],
+  particle_wall: [
+    "emitterWidth",
+    "direction",
+    "spreadAngle",
+    "speed",
+    "lifetimeMin",
+    "lifetimeMax",
+    "spawnRate",
+    "size",
+    "gravity",
+    "startScaleMin",
+    "startScaleMax",
+    "endScaleMin",
+    "endScaleMax",
+  ],
+  particle_combo: [
+    "count",
+    "size",
+    "sourceOpacity",
+    "spawnMode",
+    "spawnRadius",
+    "spawnRatio",
+    "targetX",
+    "targetY",
+    "travelMode",
+    "curve",
+    "orbitRadius",
+    "orbitTurns",
+    "orbitSpeed",
+    "orbitRatio",
+    "staggerRatio",
+    "trailCount",
+    "trailSpacing",
+    "trailFade",
+    "vanishMode",
+    "vanishRatio",
+    "flashScale",
+    "flashIntensity",
+  ],
+  squash_stretch: [
+    "squashAngle",
+    "squashAmount",
+    "decayOscillateCount",
+    "fromX",
+    "fromY",
+    "toX",
+    "toY",
+  ],
 };
 
 const OPTIONAL_BOOLEAN_PARAMS: Readonly<
@@ -1064,6 +1765,7 @@ const OPTIONAL_BOOLEAN_PARAMS: Readonly<
   scale_out: ["fadeOut"],
   shake: ["decay"],
   particles: ["fadeOut"],
+  particle_wall: ["fadeOut"],
 };
 
 const SUPPORTED_EDITOR_NAMES = ["victory_editor_v5_g", "VNI"] as const;
@@ -1859,6 +2561,591 @@ function isReadableSize(value: unknown): value is ReadableSpriteFrameSize {
   );
 }
 
+export type V5GPlaybackRange =
+  | { unit: "time"; start: number; end?: number }
+  | { unit: "frame"; start: number; end?: number; fps: number };
+
+export type V5GPlaybackPoint =
+  | { unit: "time"; at: number }
+  | { unit: "frame"; at: number; fps: number };
+
+export interface V5GPlayRangeOptions {
+  range: V5GPlaybackRange;
+  loop?: boolean;
+}
+
+export interface V5GTimelinePlayOptions {
+  mode?: "timeline";
+}
+
+export interface V5GRangePlayOptions extends V5GPlayRangeOptions {
+  mode: "range";
+}
+
+export interface V5GSegmentedPlaybackOptions {
+  mode: "segmented";
+  loopStart: V5GPlaybackPoint;
+  loopEnd: V5GPlaybackPoint;
+  keepParticlesAlive?: boolean;
+}
+
+export type V5GPlayOptions =
+  | V5GTimelinePlayOptions
+  | V5GRangePlayOptions
+  | V5GSegmentedPlaybackOptions;
+
+export type V5GPlaybackMode = "timeline" | "range" | "segmented";
+
+export type V5GSegmentedPlaybackPhase =
+  | "idle"
+  | "start"
+  | "loop"
+  | "ending"
+  | "particle-draining"
+  | "complete";
+
+export interface V5GPlaybackState {
+  mode: V5GPlaybackMode;
+  phase: V5GSegmentedPlaybackPhase;
+  currentTime: number;
+  isPlaying: boolean;
+  isDrainingParticles: boolean;
+  liveParticleCount: number;
+  loopIndex: number;
+  keepParticlesAlive: boolean;
+}
+
+export interface V5GNormalizedPlaybackRange {
+  startTime: number;
+  endTime: number;
+}
+
+export interface V5GNormalizedSegmentedPlayback {
+  loopStartTime: number;
+  loopEndTime: number;
+  duration: number;
+  keepParticlesAlive: boolean;
+}
+
+export interface V5GSegmentedAdvanceResult {
+  previousTime: number;
+  currentTime: number;
+  phase: V5GSegmentedPlaybackPhase;
+  loopIndex: number;
+  timelineEnded: boolean;
+}
+
+export class V5GSegmentedPlaybackSequence {
+  private readonly loopStartTime: number;
+  private readonly loopEndTime: number;
+  private readonly duration: number;
+  readonly keepParticlesAlive: boolean;
+  private phase: V5GSegmentedPlaybackPhase = "start";
+  private currentTime = 0;
+  private loopIndex = 0;
+  private endRequested = false;
+  private loopElapsedTime = 0;
+
+  constructor(config: V5GNormalizedSegmentedPlayback) {
+    this.loopStartTime = config.loopStartTime;
+    this.loopEndTime = config.loopEndTime;
+    this.duration = config.duration;
+    this.keepParticlesAlive = config.keepParticlesAlive;
+  }
+
+  getCurrentTime(): number {
+    return this.currentTime;
+  }
+
+  getPhase(): V5GSegmentedPlaybackPhase {
+    return this.phase;
+  }
+
+  getLoopIndex(): number {
+    return this.loopIndex;
+  }
+
+  getLoopStartTime(): number {
+    return this.loopStartTime;
+  }
+
+  getLoopEndTime(): number {
+    return this.loopEndTime;
+  }
+
+  getLoopElapsedTime(): number {
+    return this.loopElapsedTime;
+  }
+
+  requestEnd(): void {
+    if (this.phase !== "start" && this.phase !== "loop") {
+      throw new Error(
+        `Cannot request segmented playback end while phase is "${this.phase}".`,
+      );
+    }
+    this.endRequested = true;
+    if (this.phase === "loop") {
+      this.phase = "ending";
+      this.currentTime = this.loopEndTime;
+    }
+  }
+
+  advance(deltaSeconds: number): V5GSegmentedAdvanceResult {
+    assertPlaybackPositiveFinite(
+      deltaSeconds,
+      "segmented playback deltaSeconds",
+    );
+    const previousTime = this.currentTime;
+    let remaining = deltaSeconds;
+    let timelineEnded = false;
+
+    while (remaining > 0 && !timelineEnded) {
+      if (this.phase === "start") {
+        const timeToLoopStart = this.loopStartTime - this.currentTime;
+        if (remaining < timeToLoopStart) {
+          this.currentTime += remaining;
+          remaining = 0;
+        } else {
+          remaining -= Math.max(timeToLoopStart, 0);
+          this.currentTime = this.loopStartTime;
+          if (this.endRequested) {
+            this.phase = "ending";
+            this.currentTime = this.loopEndTime;
+          } else {
+            this.phase = "loop";
+          }
+        }
+      } else if (this.phase === "loop") {
+        if (this.endRequested) {
+          this.phase = "ending";
+          this.currentTime = this.loopEndTime;
+          continue;
+        }
+        this.loopElapsedTime += remaining;
+        if (this.loopStartTime === this.loopEndTime) {
+          this.currentTime = this.loopStartTime;
+          remaining = 0;
+        } else {
+          const span = this.loopEndTime - this.loopStartTime;
+          const advanced = this.currentTime + remaining;
+          if (advanced < this.loopEndTime) {
+            this.currentTime = advanced;
+            remaining = 0;
+          } else {
+            const overflow = advanced - this.loopEndTime;
+            this.loopIndex += 1 + Math.floor(overflow / span);
+            this.currentTime = this.loopStartTime + (overflow % span);
+            remaining = 0;
+          }
+        }
+      } else if (this.phase === "ending") {
+        const timeToEnd = this.duration - this.currentTime;
+        if (remaining < timeToEnd) {
+          this.currentTime += remaining;
+          remaining = 0;
+        } else {
+          this.currentTime = this.duration;
+          this.phase = "particle-draining";
+          timelineEnded = true;
+          remaining = 0;
+        }
+      } else {
+        remaining = 0;
+      }
+    }
+
+    return {
+      previousTime,
+      currentTime: this.currentTime,
+      phase: this.phase,
+      loopIndex: this.loopIndex,
+      timelineEnded,
+    };
+  }
+
+  markParticleDrainComplete(): void {
+    if (this.phase === "particle-draining") {
+      this.phase = "complete";
+    }
+  }
+}
+
+export function normalizePlaybackRange(
+  range: V5GPlaybackRange,
+  duration: number,
+): V5GNormalizedPlaybackRange {
+  if (range.unit === "time") {
+    const startTime = assertFiniteNumber(range.start, "playback range start");
+    const endTime = normalizeOptionalEnd(
+      range.end,
+      duration,
+      "playback range end",
+    );
+    assertNormalizedRange(startTime, endTime, duration);
+    return { startTime, endTime };
+  }
+  const fps = assertPlaybackPositiveFinite(range.fps, "playback range fps");
+  const startFrame = assertNonNegativeInteger(
+    range.start,
+    "playback range start frame",
+  );
+  const endTime =
+    range.end === undefined || range.end === -1
+      ? duration
+      : assertNonNegativeInteger(range.end, "playback range end frame") / fps;
+  const startTime = startFrame / fps;
+  assertNormalizedRange(startTime, endTime, duration);
+  return { startTime, endTime };
+}
+
+export function normalizePlaybackPoint(
+  point: V5GPlaybackPoint,
+  duration: number,
+  path: string,
+): number {
+  const time =
+    point.unit === "time"
+      ? assertFiniteNumber(point.at, `${path} time`)
+      : assertNonNegativeInteger(point.at, `${path} frame`) /
+        assertPlaybackPositiveFinite(point.fps, `${path} fps`);
+  if (time < 0 || time > duration) {
+    throw new Error(`${path} must be within project duration.`);
+  }
+  return time;
+}
+
+export function normalizeSegmentedPlaybackOptions(
+  options: V5GSegmentedPlaybackOptions,
+  duration: number,
+): V5GNormalizedSegmentedPlayback {
+  const loopStartTime = normalizePlaybackPoint(
+    options.loopStart,
+    duration,
+    "segmented loopStart",
+  );
+  const loopEndTime = normalizePlaybackPoint(
+    options.loopEnd,
+    duration,
+    "segmented loopEnd",
+  );
+  if (loopStartTime > loopEndTime) {
+    throw new Error(
+      `Invalid V5G segmented playback: expected 0 <= loopStart <= loopEnd <= ${duration}, got ${loopStartTime}..${loopEndTime}.`,
+    );
+  }
+  return {
+    loopStartTime,
+    loopEndTime,
+    duration,
+    keepParticlesAlive: options.keepParticlesAlive ?? true,
+  };
+}
+
+function assertPlaybackPositiveFinite(value: number, path: string): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${path} must be a positive finite number.`);
+  }
+  return value;
+}
+
+export interface V5GParticleRuntimeLayer {
+  layer: V5GLayerConfig;
+  sampledLayer: ParticleLayerSampleState & {
+    hasActiveParticleAnimation?: boolean;
+  };
+  textureSize: TextureSize;
+}
+
+export interface V5GLiveParticleSpriteSample extends ParticleSpriteSample {
+  x: number;
+  y: number;
+}
+
+export interface V5GParticleRuntimeFrame {
+  particles: V5GLiveParticleSpriteSample[];
+  isDraining: boolean;
+  isComplete: boolean;
+}
+
+interface V5GLiveParticleAnimationLayer extends V5GParticleRuntimeLayer {
+  runtimeStates: ParticleAnimationRuntimeState[];
+}
+
+export class V5GParticleRuntime {
+  private lastParticles: V5GLiveParticleSpriteSample[] = [];
+  private liveAnimationElapsedByKey = new Map<string, number>();
+  private draining = false;
+  private drainElapsed = 0;
+  private drainDuration = 0;
+  private readonly maxDrainDuration: number;
+
+  constructor(projectLayers: readonly V5GLayerConfig[]) {
+    this.maxDrainDuration = getMaxParticleDrainDuration(projectLayers);
+  }
+
+  reset(): void {
+    this.lastParticles = [];
+    this.liveAnimationElapsedByKey.clear();
+    this.draining = false;
+    this.drainElapsed = 0;
+    this.drainDuration = 0;
+  }
+
+  emit(
+    layers: readonly V5GParticleRuntimeLayer[],
+    time: number,
+  ): V5GParticleRuntimeFrame {
+    this.liveAnimationElapsedByKey.clear();
+    this.draining = false;
+    this.drainElapsed = 0;
+    this.drainDuration = 0;
+    const particles = sampleLiveParticleSprites(layers, time);
+    this.lastParticles = particles;
+    return {
+      particles,
+      isDraining: false,
+      isComplete: false,
+    };
+  }
+
+  emitLive(
+    layers: readonly V5GParticleRuntimeLayer[],
+    configTime: number,
+    deltaSeconds: number,
+  ): V5GParticleRuntimeFrame {
+    this.draining = false;
+    this.drainElapsed = 0;
+    this.drainDuration = 0;
+    const liveLayers = this.prepareLiveParticleLayers(
+      layers,
+      configTime,
+      deltaSeconds,
+    );
+    const particles = sampleLiveParticleSpritesForRuntime(liveLayers);
+    this.lastParticles = particles;
+    return {
+      particles,
+      isDraining: false,
+      isComplete: false,
+    };
+  }
+
+  beginDrain(): V5GParticleRuntimeFrame {
+    this.liveAnimationElapsedByKey.clear();
+    if (this.lastParticles.length === 0 || this.maxDrainDuration <= 0) {
+      this.reset();
+      return {
+        particles: [],
+        isDraining: false,
+        isComplete: true,
+      };
+    }
+    this.draining = true;
+    this.drainElapsed = 0;
+    this.drainDuration = this.maxDrainDuration;
+    return {
+      particles: this.lastParticles,
+      isDraining: true,
+      isComplete: false,
+    };
+  }
+
+  advanceDrain(deltaSeconds: number): V5GParticleRuntimeFrame {
+    if (!this.draining) {
+      return {
+        particles: this.lastParticles,
+        isDraining: false,
+        isComplete: this.lastParticles.length === 0,
+      };
+    }
+    this.drainElapsed += deltaSeconds;
+    const ratio = this.drainElapsed / this.drainDuration;
+    if (ratio >= 1) {
+      this.reset();
+      return {
+        particles: [],
+        isDraining: false,
+        isComplete: true,
+      };
+    }
+    const alphaMultiplier = Math.max(0, 1 - ratio);
+    return {
+      particles: this.lastParticles
+        .map((particle) => ({
+          ...particle,
+          alpha: particle.alpha * alphaMultiplier,
+        }))
+        .filter((particle) => particle.alpha > 0.002),
+      isDraining: true,
+      isComplete: false,
+    };
+  }
+
+  isDraining(): boolean {
+    return this.draining;
+  }
+
+  getLiveParticleCount(): number {
+    return this.lastParticles.length;
+  }
+
+  private prepareLiveParticleLayers(
+    layers: readonly V5GParticleRuntimeLayer[],
+    configTime: number,
+    deltaSeconds: number,
+  ): V5GLiveParticleAnimationLayer[] {
+    const nextActiveKeys = new Set<string>();
+    const liveLayers: V5GLiveParticleAnimationLayer[] = [];
+    for (const entry of layers) {
+      const runtimeStates: ParticleAnimationRuntimeState[] = [];
+      for (const animation of entry.layer.animations) {
+        if (!animation.enabled || !isParticleAnimationType(animation.type)) {
+          continue;
+        }
+        const configProgress = getParticleProgress(animation, configTime);
+        if (configProgress === null || configProgress <= 0) continue;
+        const key = getLiveAnimationKey(entry.layer.id, animation.id);
+        const configuredElapsed = Math.max(0, configTime - animation.startTime);
+        const previousElapsed = this.liveAnimationElapsedByKey.get(key);
+        const elapsed =
+          previousElapsed === undefined
+            ? configuredElapsed
+            : Math.max(
+                configuredElapsed,
+                previousElapsed + Math.max(0, deltaSeconds),
+              );
+        this.liveAnimationElapsedByKey.set(key, elapsed);
+        nextActiveKeys.add(key);
+        runtimeStates.push({
+          animationId: animation.id,
+          elapsed,
+        });
+      }
+      if (runtimeStates.length > 0) {
+        liveLayers.push({ ...entry, runtimeStates });
+      }
+    }
+    for (const key of this.liveAnimationElapsedByKey.keys()) {
+      if (!nextActiveKeys.has(key)) {
+        this.liveAnimationElapsedByKey.delete(key);
+      }
+    }
+    return liveLayers;
+  }
+}
+
+export function sampleLiveParticleSprites(
+  layers: readonly V5GParticleRuntimeLayer[],
+  time: number,
+): V5GLiveParticleSpriteSample[] {
+  const particles: V5GLiveParticleSpriteSample[] = [];
+  for (const entry of layers) {
+    if (entry.sampledLayer.hasActiveParticleAnimation === false) continue;
+    for (const particle of sampleParticleSpritesForLayer(
+      entry.layer,
+      entry.sampledLayer,
+      entry.textureSize,
+      time,
+    )) {
+      particles.push({
+        ...particle,
+        x: entry.sampledLayer.transform.x + particle.offsetX,
+        y: entry.sampledLayer.transform.y + particle.offsetY,
+      });
+    }
+  }
+  return particles;
+}
+
+function sampleLiveParticleSpritesForRuntime(
+  layers: readonly V5GLiveParticleAnimationLayer[],
+): V5GLiveParticleSpriteSample[] {
+  const particles: V5GLiveParticleSpriteSample[] = [];
+  for (const entry of layers) {
+    if (entry.sampledLayer.hasActiveParticleAnimation === false) continue;
+    for (const particle of sampleParticleSpritesForLayerRuntime(
+      entry.layer,
+      entry.sampledLayer,
+      entry.textureSize,
+      entry.runtimeStates,
+    )) {
+      particles.push({
+        ...particle,
+        x: entry.sampledLayer.transform.x + particle.offsetX,
+        y: entry.sampledLayer.transform.y + particle.offsetY,
+      });
+    }
+  }
+  return particles;
+}
+
+function normalizeOptionalEnd(
+  value: number | undefined,
+  duration: number,
+  path: string,
+): number {
+  if (value === undefined || value === -1) return duration;
+  return assertFiniteNumber(value, path);
+}
+
+function assertNormalizedRange(
+  startTime: number,
+  endTime: number,
+  duration: number,
+): void {
+  if (startTime < 0 || !(startTime < endTime) || endTime > duration) {
+    throw new Error(
+      `Invalid V5G playback range: expected 0 <= start < end <= ${duration}, got ${startTime}..${endTime}.`,
+    );
+  }
+}
+
+function assertFiniteNumber(value: number, path: string): number {
+  if (!Number.isFinite(value)) {
+    throw new Error(`${path} must be a finite number.`);
+  }
+  return value;
+}
+
+function assertNonNegativeInteger(value: number, path: string): number {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`${path} must be a non-negative integer.`);
+  }
+  return value;
+}
+
+function getLiveAnimationKey(layerId: string, animationId: string): string {
+  return `${layerId}\u0000${animationId}`;
+}
+
+function getMaxParticleDrainDuration(
+  layers: readonly V5GLayerConfig[],
+): number {
+  let maxDuration = 0;
+  for (const layer of layers) {
+    for (const animation of layer.animations) {
+      if (!animation.enabled || !isParticleAnimationType(animation.type)) {
+        continue;
+      }
+      maxDuration = Math.max(maxDuration, getParticleDrainDuration(animation));
+    }
+  }
+  return maxDuration;
+}
+
+function getParticleDrainDuration(animation: V5GAnimationConfig): number {
+  if (animation.type === "particle_wall") {
+    return getNumberParam(animation, "lifetimeMax");
+  }
+  if (animation.type === "particle_twinkle") {
+    return getNumberParam(animation, "twinkleDuration");
+  }
+  if (animation.type === "particle_combo") {
+    return Math.max(animation.duration, 0);
+  }
+  return Math.max(animation.duration, 0);
+}
+
 export interface V5GCocosAssetResolver<TSpriteFrame = SpriteFrame> {
   getSpriteFrame(assetPath: string, assetId: string): TSpriteFrame | null;
 }
@@ -1881,18 +3168,21 @@ export type V5GCocosPlayerFactoryOptions = Omit<
   "driver"
 >;
 
-export type V5GCocosPlaybackRange =
-  | { unit: "time"; start: number; end?: number }
-  | { unit: "frame"; start: number; end?: number; fps: number };
+export type V5GCocosPlaybackRange = V5GPlaybackRange;
 
-export interface V5GCocosPlayRangeOptions {
-  range: V5GCocosPlaybackRange;
-  loop?: boolean;
-}
+export type V5GCocosPlayRangeOptions = V5GPlayRangeOptions;
 
-export type V5GCocosPlaybackPoint =
-  | { unit: "time"; at: number }
-  | { unit: "frame"; at: number; fps: number };
+export type V5GCocosPlaybackPoint = V5GPlaybackPoint;
+
+export type V5GCocosPlaybackMode = V5GPlaybackMode;
+
+export type V5GCocosSegmentedPlaybackPhase = V5GSegmentedPlaybackPhase;
+
+export type V5GCocosSegmentedPlaybackOptions = V5GSegmentedPlaybackOptions;
+
+export type V5GCocosPlayOptions = V5GPlayOptions;
+
+export type V5GCocosPlaybackState = V5GPlaybackState;
 
 export interface V5GCocosPlaybackEventContext {
   id: string;
@@ -1920,6 +3210,8 @@ interface ManagedLayer<TNode, TSpriteFrame> {
   layer: V5GLayerConfig;
   asset: V5GAssetConfig;
   node: TNode;
+  particleContainer: TNode;
+  particleNodes: TNode[];
   spriteFrame: TSpriteFrame;
 }
 
@@ -1935,6 +3227,11 @@ interface NormalizedPlaybackEvent {
   once: boolean;
   order: number;
   listener: (event: V5GCocosPlaybackEventContext) => void;
+}
+
+interface PlaybackFrameOptions {
+  liveParticles?: boolean;
+  liveParticleDeltaSeconds?: number;
 }
 
 const SIZE_EPSILON = 0.01;
@@ -1956,15 +3253,20 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     string,
     ManagedLayer<TNode, TSpriteFrame>
   >();
+  private readonly particleRuntime: V5GParticleRuntime;
   private stageNode: TNode | null = null;
   private contentNode: TNode | null = null;
   private particleRootNode: TNode | null = null;
   private backgroundNode: TNode | null = null;
-  private readonly particleNodes: TNode[] = [];
   private currentTime = 0;
   private isPlaying = false;
   private loop: boolean;
+  private playbackMode: V5GCocosPlaybackMode = "timeline";
+  private playbackPhase: V5GCocosSegmentedPlaybackPhase = "idle";
   private activeRange: PlaybackBoundary | null = null;
+  private segmentedPlayback: V5GSegmentedPlaybackSequence | null = null;
+  private pendingComplete: V5GCocosPlaybackCompleteContext | null = null;
+  private drainPaused = false;
   private readonly playbackEvents = new Map<string, NormalizedPlaybackEvent>();
   private readonly completeListeners = new Set<
     (event: V5GCocosPlaybackCompleteContext) => void
@@ -1975,6 +3277,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   constructor(options: V5GCocosPlayerOptions<TNode, TSpriteFrame>) {
     this.options = options;
     this.loop = options.loop ?? true;
+    this.particleRuntime = new V5GParticleRuntime(options.project.layers);
   }
 
   get time(): number {
@@ -1987,6 +3290,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
 
   init(): void {
     this.destroyManagedNodes();
+    this.resetPlaybackRuntime();
     validateCocosV5GProject(this.options.project);
 
     const driver = this.options.driver;
@@ -2049,17 +3353,28 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
         driver.applyBlendMode(node, getCocosBlendModeConfig(layer.blendMode));
         driver.appendChild(content, node);
 
+        const particleContainer = driver.createNode(`${layer.name} Particles`);
+        driver.setContentSize(
+          particleContainer,
+          project.stage.width,
+          project.stage.height,
+        );
+        driver.setAnchorPoint(particleContainer, 0.5, 0.5);
+        driver.appendChild(content, particleContainer);
+
         this.layers.set(layer.id, {
           layer,
           asset,
           node,
+          particleContainer,
+          particleNodes: [],
           spriteFrame,
         });
       }
 
       driver.appendChild(this.options.root, stage);
       this.stageNode = stage;
-      this.seek(this.currentTime);
+      this.renderDeterministicFrame(this.currentTime);
     } catch (error) {
       driver.destroyNode(stage);
       this.stageNode = null;
@@ -2073,39 +3388,15 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
 
   seek(time: number): void {
     this.assertInitialized();
-    const sampledProject = sampleProjectAtTime(this.options.project, time);
-    this.currentTime = sampledProject.time;
-
-    for (const sampledLayer of sampledProject.layers) {
-      const managed = this.layers.get(sampledLayer.layerId);
-      if (!managed) {
-        throw new Error(
-          `Missing runtime node for V5G layer "${sampledLayer.layerId}".`,
-        );
-      }
-      const position = v5gTransformToCocosPosition(sampledLayer.transform);
-      this.options.driver.setPosition(managed.node, position.x, position.y);
-      this.options.driver.setScale(
-        managed.node,
-        sampledLayer.transform.scaleX,
-        sampledLayer.transform.scaleY,
-      );
-      this.options.driver.setRotationDegrees(
-        managed.node,
-        sampledLayer.transform.rotation,
-      );
-      this.options.driver.setOpacity(
-        managed.node,
-        opacityToCocosOpacity(sampledLayer.opacity),
-      );
-      this.options.driver.setActive(
-        managed.node,
-        sampledLayer.renderImageDisplay,
-      );
-    }
-
-    this.drawParticles(sampledProject.layers);
-    this.options.onTimeChange?.(this.currentTime);
+    this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.playbackMode = "timeline";
+    this.playbackPhase = "idle";
+    this.drainPaused = false;
+    this.loopIndex = 0;
+    this.particleRuntime.reset();
+    this.renderDeterministicFrame(time);
   }
 
   update(deltaSeconds: number): void {
@@ -2114,59 +3405,62 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
         "V5GCocosPlayer.update(deltaSeconds) requires a non-negative finite number.",
       );
     }
-    if (!this.isPlaying) return;
-
-    const boundary = this.getPlaybackBoundary();
-    const previousTime = this.currentTime;
-    const nextTime = previousTime + deltaSeconds;
-    if (nextTime < boundary.endTime - PLAYBACK_EPSILON) {
-      this.seek(nextTime);
-      this.emitPlaybackEventsBetween(
-        previousTime,
-        nextTime,
-        this.loopIndex,
-        boundary,
-      );
+    if (!this.isPlaying) {
+      if (this.particleRuntime.isDraining() && !this.drainPaused) {
+        this.advanceParticleDrain(deltaSeconds);
+      }
       return;
     }
-
-    this.seek(boundary.endTime);
-    this.emitPlaybackEventsBetween(
-      previousTime,
-      boundary.endTime,
-      this.loopIndex,
-      boundary,
-    );
-
-    if (!boundary.loop) {
-      const completeContext: V5GCocosPlaybackCompleteContext = {
-        startTime: boundary.startTime,
-        endTime: boundary.endTime,
-        currentTime: boundary.endTime,
-        loopIndex: this.loopIndex,
-      };
-      this.activeRange = null;
-      this.setPlaying(false);
-      this.emitPlaybackComplete(completeContext);
+    if (this.segmentedPlayback) {
+      this.advanceSegmentedPlayback(deltaSeconds);
       return;
     }
+    if (this.activeRange) {
+      this.advanceActiveRange(deltaSeconds);
+      return;
+    }
+    this.advanceFullTimeline(deltaSeconds);
+  }
 
-    this.advanceLoopingPlayback(Math.max(0, nextTime - boundary.endTime));
+  play(options?: V5GCocosPlayOptions): void {
+    if (options?.mode === "range") {
+      this.startRangePlayback(options);
+      return;
+    }
+    if (options?.mode === "segmented") {
+      this.startSegmentedPlayback(options);
+      return;
+    }
+    this.startTimelinePlayback();
   }
 
   playRange(options: V5GCocosPlayRangeOptions): void {
-    this.assertInitialized();
-    const range = this.normalizePlaybackRange(
-      options.range,
-      "V5GCocosPlayer.playRange",
-    );
-    this.activeRange = {
-      ...range,
-      loop: options.loop ?? this.loop,
+    this.startRangePlayback(options);
+  }
+
+  requestSegmentedPlaybackEnd(): void {
+    if (!this.segmentedPlayback) {
+      throw new Error("No active V5G segmented playback.");
+    }
+    this.segmentedPlayback.requestEnd();
+    this.playbackPhase = this.segmentedPlayback.getPhase();
+    if (!this.isPlaying) {
+      this.setPlaying(true);
+    }
+    this.drainPaused = false;
+  }
+
+  getPlaybackState(): V5GCocosPlaybackState {
+    return {
+      mode: this.playbackMode,
+      phase: this.getEffectivePlaybackPhase(),
+      currentTime: this.currentTime,
+      isPlaying: this.isPlaying,
+      isDrainingParticles: this.particleRuntime.isDraining(),
+      liveParticleCount: this.getRenderedParticleCount(),
+      loopIndex: this.segmentedPlayback?.getLoopIndex() ?? this.loopIndex,
+      keepParticlesAlive: this.segmentedPlayback?.keepParticlesAlive ?? true,
     };
-    this.loopIndex = 0;
-    this.seek(range.startTime);
-    this.setPlaying(true);
   }
 
   addPlaybackEvent(options: V5GCocosPlaybackEventOptions): () => void {
@@ -2225,18 +3519,23 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     };
   }
 
-  play(): void {
-    this.setPlaying(true);
-  }
-
   pause(): void {
+    if (this.particleRuntime.isDraining()) {
+      this.drainPaused = true;
+    }
     this.setPlaying(false);
   }
 
   restart(): void {
     this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.playbackMode = "timeline";
+    this.playbackPhase = "idle";
+    this.drainPaused = false;
     this.loopIndex = 0;
-    this.seek(0);
+    this.particleRuntime.reset();
+    this.renderDeterministicFrame(0);
   }
 
   setLoop(loop: boolean): void {
@@ -2246,51 +3545,426 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   destroy(): void {
     this.destroyManagedNodes();
     this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
     this.playbackEvents.clear();
     this.completeListeners.clear();
     this.loopIndex = 0;
+    this.drainPaused = false;
+    this.particleRuntime.reset();
     this.setPlaying(false);
     this.currentTime = 0;
+    this.playbackMode = "timeline";
+    this.playbackPhase = "idle";
   }
 
-  private advanceLoopingPlayback(overflowSeconds: number): void {
-    const boundary = this.getPlaybackBoundary();
-    const rangeDuration = boundary.endTime - boundary.startTime;
-    let remaining = overflowSeconds;
-
-    while (remaining >= rangeDuration - PLAYBACK_EPSILON) {
-      this.loopIndex += 1;
-      this.seek(boundary.endTime);
-      this.emitPlaybackEventsBetween(
-        boundary.startTime,
-        boundary.endTime,
-        this.loopIndex,
-        boundary,
-      );
-      remaining -= rangeDuration;
+  private startTimelinePlayback(): void {
+    this.assertInitialized();
+    if (this.particleRuntime.isDraining()) {
+      this.drainPaused = false;
+      return;
     }
-
-    this.loopIndex += 1;
-    const clampedRemaining =
-      Math.abs(remaining) <= PLAYBACK_EPSILON ? 0 : remaining;
-    const nextTime = boundary.startTime + clampedRemaining;
-    this.seek(nextTime);
-    this.emitPlaybackEventsBetween(
-      boundary.startTime,
-      nextTime,
-      this.loopIndex,
-      boundary,
-    );
+    this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.playbackMode = "timeline";
+    this.playbackPhase = "start";
+    this.loopIndex = 0;
+    this.particleRuntime.reset();
+    if (this.currentTime >= this.options.project.stage.duration) {
+      this.renderPlaybackFrame(0, 0);
+    }
+    this.setPlaying(true);
   }
 
-  private getPlaybackBoundary(): PlaybackBoundary {
-    return (
-      this.activeRange ?? {
+  private startRangePlayback(options: V5GCocosPlayRangeOptions): void {
+    this.assertInitialized();
+    const range = this.normalizePlaybackRange(
+      options.range,
+      "V5GCocosPlayer.playRange",
+    );
+    this.activeRange = {
+      ...range,
+      loop: options.loop ?? this.loop,
+    };
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.playbackMode = "range";
+    this.playbackPhase = "start";
+    this.drainPaused = false;
+    this.loopIndex = 0;
+    this.particleRuntime.reset();
+    this.renderPlaybackFrame(range.startTime, range.startTime);
+    this.setPlaying(true);
+  }
+
+  private startSegmentedPlayback(
+    options: Extract<V5GCocosPlayOptions, { mode: "segmented" }>,
+  ): void {
+    this.assertInitialized();
+    const normalized = normalizeSegmentedPlaybackOptions(
+      options,
+      this.options.project.stage.duration,
+    );
+    this.activeRange = null;
+    this.pendingComplete = null;
+    this.playbackMode = "segmented";
+    this.playbackPhase = "start";
+    this.drainPaused = false;
+    this.loopIndex = 0;
+    this.particleRuntime.reset();
+    this.segmentedPlayback = new V5GSegmentedPlaybackSequence(normalized);
+    this.renderPlaybackFrame(0, 0);
+    this.setPlaying(true);
+  }
+
+  private advanceFullTimeline(deltaSeconds: number): void {
+    const duration = this.options.project.stage.duration;
+    const boundary: PlaybackBoundary = {
+      startTime: 0,
+      endTime: duration,
+      loop: this.loop,
+    };
+    let remaining = deltaSeconds;
+
+    while (remaining > 0 && this.isPlaying) {
+      const timeToEnd = duration - this.currentTime;
+      if (remaining >= timeToEnd - PLAYBACK_EPSILON) {
+        const previousTime = this.currentTime;
+        this.emitPlaybackEventsBetween(previousTime, duration, 0, boundary);
+        if (this.loop) {
+          remaining -= Math.max(timeToEnd, 0);
+          this.renderPlaybackFrame(duration, duration);
+          this.renderPlaybackFrame(0, 0);
+          if (timeToEnd <= PLAYBACK_EPSILON) break;
+          continue;
+        }
+        this.startParticleDrain(duration, {
+          startTime: 0,
+          endTime: duration,
+          currentTime: duration,
+          loopIndex: 0,
+        });
+        return;
+      }
+
+      const previousTime = this.currentTime;
+      const nextTime = previousTime + remaining;
+      this.renderPlaybackFrame(nextTime, nextTime);
+      this.emitPlaybackEventsBetween(previousTime, nextTime, 0, boundary);
+      return;
+    }
+  }
+
+  private advanceActiveRange(deltaSeconds: number): void {
+    const range = this.activeRange;
+    if (!range) return;
+    let remaining = deltaSeconds;
+
+    while (remaining > 0 && this.isPlaying && this.activeRange === range) {
+      const timeToEnd = range.endTime - this.currentTime;
+      if (remaining >= timeToEnd - PLAYBACK_EPSILON) {
+        const previousTime = this.currentTime;
+        this.emitPlaybackEventsBetween(
+          previousTime,
+          range.endTime,
+          this.loopIndex,
+          range,
+        );
+        if (range.loop) {
+          remaining -= Math.max(timeToEnd, 0);
+          this.renderPlaybackFrame(range.endTime, range.endTime);
+          this.loopIndex += 1;
+          this.renderPlaybackFrame(range.startTime, range.startTime);
+          if (timeToEnd <= PLAYBACK_EPSILON) break;
+          continue;
+        }
+        this.activeRange = null;
+        this.startParticleDrain(range.endTime, {
+          startTime: range.startTime,
+          endTime: range.endTime,
+          currentTime: range.endTime,
+          loopIndex: this.loopIndex,
+        });
+        return;
+      }
+
+      const previousTime = this.currentTime;
+      const nextTime = previousTime + remaining;
+      this.renderPlaybackFrame(nextTime, nextTime);
+      this.emitPlaybackEventsBetween(
+        previousTime,
+        nextTime,
+        this.loopIndex,
+        range,
+      );
+      return;
+    }
+  }
+
+  private advanceSegmentedPlayback(deltaSeconds: number): void {
+    const segmented = this.segmentedPlayback;
+    if (!segmented) return;
+    const result = segmented.advance(deltaSeconds);
+    this.playbackPhase = result.phase;
+    this.triggerSegmentedPlaybackEvents(segmented, result);
+    if (result.timelineEnded) {
+      this.startParticleDrain(this.options.project.stage.duration, {
         startTime: 0,
         endTime: this.options.project.stage.duration,
-        loop: this.loop,
-      }
+        currentTime: this.options.project.stage.duration,
+        loopIndex: result.loopIndex,
+      });
+      return;
+    }
+
+    const particleTime = segmented.getCurrentTime();
+    this.renderPlaybackFrame(result.currentTime, particleTime, {
+      liveParticles:
+        segmented.keepParticlesAlive && segmented.getPhase() === "loop",
+      liveParticleDeltaSeconds: deltaSeconds,
+    });
+  }
+
+  private triggerSegmentedPlaybackEvents(
+    segmented: V5GSegmentedPlaybackSequence,
+    result: {
+      previousTime: number;
+      currentTime: number;
+      loopIndex: number;
+    },
+  ): void {
+    if (
+      segmented.getPhase() === "loop" &&
+      segmented.getLoopStartTime() < segmented.getLoopEndTime() &&
+      result.currentTime < result.previousTime
+    ) {
+      this.emitPlaybackEventsBetween(
+        result.previousTime,
+        segmented.getLoopEndTime(),
+        Math.max(0, result.loopIndex - 1),
+        {
+          startTime: segmented.getLoopStartTime(),
+          endTime: segmented.getLoopEndTime(),
+          loop: true,
+        },
+      );
+      this.emitPlaybackEventsBetween(
+        segmented.getLoopStartTime(),
+        result.currentTime,
+        result.loopIndex,
+        {
+          startTime: segmented.getLoopStartTime(),
+          endTime: segmented.getLoopEndTime(),
+          loop: true,
+        },
+      );
+      return;
+    }
+
+    this.emitPlaybackEventsBetween(
+      result.previousTime,
+      result.currentTime,
+      result.loopIndex,
+      {
+        startTime: 0,
+        endTime: this.options.project.stage.duration,
+        loop: false,
+      },
     );
+  }
+
+  private startParticleDrain(
+    endTime: number,
+    completeContext: V5GCocosPlaybackCompleteContext,
+  ): void {
+    this.setPlaying(false);
+    this.currentTime = endTime;
+    this.pendingComplete = completeContext;
+    this.playbackPhase = "particle-draining";
+    const sampled = this.applyProjectSample(endTime);
+    const particleLayers = this.getParticleRuntimeLayers(sampled.layers);
+    if (particleLayers.length > 0) {
+      const endParticles = sampleLiveParticleSprites(particleLayers, endTime);
+      if (endParticles.length > 0) {
+        this.particleRuntime.emit(particleLayers, endTime);
+      }
+    }
+    const frame = this.particleRuntime.beginDrain();
+    this.renderParticleSamples(frame.particles);
+    this.options.onTimeChange?.(this.currentTime);
+    if (frame.isComplete) {
+      this.finishParticleDrain();
+      return;
+    }
+    this.drainPaused = false;
+  }
+
+  private advanceParticleDrain(deltaSeconds: number): void {
+    const frame = this.particleRuntime.advanceDrain(deltaSeconds);
+    this.renderParticleSamples(frame.particles);
+    if (frame.isComplete) {
+      this.finishParticleDrain();
+    }
+  }
+
+  private finishParticleDrain(): void {
+    this.playbackPhase = "complete";
+    this.segmentedPlayback?.markParticleDrainComplete();
+    this.clearParticles();
+    const event = this.pendingComplete;
+    this.pendingComplete = null;
+    if (event) {
+      this.emitPlaybackComplete(event);
+    }
+  }
+
+  private renderDeterministicFrame(time: number): void {
+    const sampled = this.applyProjectSample(time);
+    const frame = this.particleRuntime.emit(
+      this.getParticleRuntimeLayers(sampled.layers),
+      this.currentTime,
+    );
+    this.renderParticleSamples(frame.particles);
+    this.options.onTimeChange?.(this.currentTime);
+  }
+
+  private renderPlaybackFrame(
+    nonParticleTime: number,
+    particleTime: number,
+    options: PlaybackFrameOptions = {},
+  ): void {
+    const sampled = this.applyProjectSample(nonParticleTime);
+    const particleLayers = this.getParticleRuntimeLayers(sampled.layers);
+    const frame = options.liveParticles
+      ? this.particleRuntime.emitLive(
+          particleLayers,
+          particleTime,
+          options.liveParticleDeltaSeconds ?? 0,
+        )
+      : this.particleRuntime.emit(particleLayers, particleTime);
+    this.renderParticleSamples(frame.particles);
+    this.options.onTimeChange?.(this.currentTime);
+  }
+
+  private applyProjectSample(time: number): {
+    time: number;
+    layers: SampledLayerState[];
+  } {
+    const sampledProject = sampleProjectAtTime(this.options.project, time);
+    this.currentTime = sampledProject.time;
+
+    for (const sampledLayer of sampledProject.layers) {
+      const managed = this.layers.get(sampledLayer.layerId);
+      if (!managed) {
+        throw new Error(
+          `Missing runtime node for V5G layer "${sampledLayer.layerId}".`,
+        );
+      }
+      const position = v5gTransformToCocosPosition(sampledLayer.transform);
+      this.options.driver.setPosition(managed.node, position.x, position.y);
+      this.options.driver.setScale(
+        managed.node,
+        sampledLayer.transform.scaleX,
+        sampledLayer.transform.scaleY,
+      );
+      this.options.driver.setRotationDegrees(
+        managed.node,
+        sampledLayer.transform.rotation,
+      );
+      this.options.driver.setOpacity(
+        managed.node,
+        opacityToCocosOpacity(sampledLayer.opacity),
+      );
+      this.options.driver.setActive(
+        managed.node,
+        sampledLayer.renderImageDisplay,
+      );
+    }
+
+    return sampledProject;
+  }
+
+  private getParticleRuntimeLayers(
+    sampledLayers: readonly SampledLayerState[],
+  ): V5GParticleRuntimeLayer[] {
+    const layers: V5GParticleRuntimeLayer[] = [];
+    for (const sampledLayer of sampledLayers) {
+      if (!sampledLayer.hasActiveParticleAnimation) continue;
+      const managed = this.layers.get(sampledLayer.layerId);
+      if (!managed) {
+        throw new Error(
+          `Missing runtime node for V5G particle layer "${sampledLayer.layerId}".`,
+        );
+      }
+      layers.push({
+        layer: managed.layer,
+        sampledLayer,
+        textureSize: {
+          width: managed.asset.width,
+          height: managed.asset.height,
+        },
+      });
+    }
+    return layers;
+  }
+
+  private renderParticleSamples(
+    particles: readonly V5GLiveParticleSpriteSample[],
+  ): void {
+    const particlesByLayer = new Map<string, V5GLiveParticleSpriteSample[]>();
+    for (const particle of particles) {
+      const layerParticles = particlesByLayer.get(particle.layerId) ?? [];
+      layerParticles.push(particle);
+      particlesByLayer.set(particle.layerId, layerParticles);
+    }
+
+    for (const managed of this.layers.values()) {
+      const layerParticles = particlesByLayer.get(managed.layer.id) ?? [];
+      while (managed.particleNodes.length < layerParticles.length) {
+        const node = this.options.driver.createImageNode(
+          `V5G Particle ${managed.layer.id}`,
+          managed.spriteFrame,
+        );
+        this.options.driver.setContentSize(
+          node,
+          managed.asset.width,
+          managed.asset.height,
+        );
+        this.options.driver.setAnchorPoint(node, 0.5, 0.5);
+        this.options.driver.applyBlendMode(
+          node,
+          getCocosBlendModeConfig(managed.layer.blendMode),
+        );
+        this.options.driver.appendChild(managed.particleContainer, node);
+        managed.particleNodes.push(node);
+      }
+
+      for (let index = 0; index < layerParticles.length; index += 1) {
+        const particle = layerParticles[index];
+        const node = managed.particleNodes[index];
+        this.options.driver.setPosition(node, particle.x, particle.y);
+        this.options.driver.setScale(node, particle.scale, particle.scale);
+        this.options.driver.setRotationDegrees(
+          node,
+          (particle.rotation * 180) / Math.PI,
+        );
+        this.options.driver.setOpacity(
+          node,
+          opacityToCocosOpacity(particle.alpha),
+        );
+        this.options.driver.applyBlendMode(
+          node,
+          getCocosBlendModeConfig(particle.blendMode),
+        );
+        this.options.driver.setActive(node, true);
+      }
+
+      while (managed.particleNodes.length > layerParticles.length) {
+        const node = managed.particleNodes.pop();
+        if (node !== undefined) this.options.driver.destroyNode(node);
+      }
+    }
   }
 
   private normalizePlaybackRange(
@@ -2438,6 +4112,18 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.options.onPlayingChange?.(this.isPlaying);
   }
 
+  private resetPlaybackRuntime(): void {
+    this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.playbackMode = "timeline";
+    this.playbackPhase = "idle";
+    this.loopIndex = 0;
+    this.drainPaused = false;
+    this.particleRuntime.reset();
+    this.setPlaying(false);
+  }
+
   private destroyManagedNodes(): void {
     this.clearParticles();
     if (this.stageNode !== null) {
@@ -2453,76 +4139,6 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   private assertInitialized(): void {
     if (this.stageNode === null) {
       throw new Error("V5GCocosPlayer must be initialized before seek/update.");
-    }
-  }
-
-  private drawParticles(sampledLayers: readonly SampledLayerState[]): void {
-    this.clearParticles();
-    const particleRoot = this.particleRootNode;
-    if (particleRoot === null) {
-      throw new Error("V5GCocosPlayer particle root is not initialized.");
-    }
-
-    for (const sampledLayer of sampledLayers) {
-      if (!sampledLayer.hasActiveParticleAnimation) continue;
-      const managed = this.layers.get(sampledLayer.layerId);
-      if (!managed) {
-        throw new Error(
-          `Missing runtime node for V5G particle layer "${sampledLayer.layerId}".`,
-        );
-      }
-      const emitterPosition = v5gTransformToCocosPosition(
-        sampledLayer.transform,
-      );
-      const particles = sampleParticleSpritesForLayer(
-        managed.layer,
-        sampledLayer,
-        {
-          width: managed.asset.width,
-          height: managed.asset.height,
-        },
-        this.currentTime,
-      );
-
-      for (const particle of particles) {
-        const node = this.options.driver.createImageNode(
-          `V5G Particle ${particle.layerId} ${particle.animationId}`,
-          managed.spriteFrame,
-        );
-        this.options.driver.setContentSize(
-          node,
-          managed.asset.width,
-          managed.asset.height,
-        );
-        this.options.driver.setAnchorPoint(node, 0.5, 0.5);
-        this.options.driver.setPosition(
-          node,
-          emitterPosition.x + particle.offsetX,
-          emitterPosition.y + particle.offsetY,
-        );
-        this.options.driver.setScale(node, particle.scale, particle.scale);
-        this.options.driver.setRotationDegrees(
-          node,
-          (particle.rotation * 180) / Math.PI,
-        );
-        this.options.driver.setOpacity(
-          node,
-          opacityToCocosOpacity(particle.alpha),
-        );
-        this.options.driver.applyBlendMode(
-          node,
-          getCocosBlendModeConfig(particle.blendMode),
-        );
-        this.options.driver.appendChild(particleRoot, node);
-        this.particleNodes.push(node);
-      }
-    }
-  }
-
-  private clearParticles(): void {
-    while (this.particleNodes.length > 0) {
-      const node = this.particleNodes.pop();
-      if (node !== undefined) this.options.driver.destroyNode(node);
     }
   }
 
@@ -2557,6 +4173,29 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
         `Cocos SpriteFrame size mismatch for V5G asset "${asset.id}" at "${asset.path}": logical ${asset.width}x${asset.height}, expected file ${expectedSize.width}x${expectedSize.height}, got ${actualSize.width}x${actualSize.height}.`,
       );
     }
+  }
+
+  private clearParticles(): void {
+    for (const managed of this.layers.values()) {
+      while (managed.particleNodes.length > 0) {
+        const node = managed.particleNodes.pop();
+        if (node !== undefined) this.options.driver.destroyNode(node);
+      }
+    }
+  }
+
+  private getRenderedParticleCount(): number {
+    let count = 0;
+    for (const managed of this.layers.values()) {
+      count += managed.particleNodes.length;
+    }
+    return count;
+  }
+
+  private getEffectivePlaybackPhase(): V5GCocosSegmentedPlaybackPhase {
+    if (this.particleRuntime.isDraining()) return "particle-draining";
+    if (this.segmentedPlayback) return this.segmentedPlayback.getPhase();
+    return this.playbackPhase;
   }
 }
 
