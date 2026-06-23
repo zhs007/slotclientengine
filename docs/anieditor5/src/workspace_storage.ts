@@ -9,6 +9,7 @@ const DB_VERSION = 1;
 const PROJECT_STORE = "projects";
 const ASSET_STORE = "assets";
 const INDEX_KEY = "victory_editor_v5_g_workspace_index";
+const IDB_TIMEOUT_MS = 12000;
 
 export interface V5GProjectSummary {
   id: string;
@@ -151,16 +152,27 @@ export async function loadProjectConfig(
 export async function saveRuntimeAssets(
   projectId: string,
   runtimeAssets: V5GRuntimeAsset[],
+  options: { skipExisting?: boolean } = {},
 ): Promise<void> {
+  if (runtimeAssets.length === 0) return;
   const db = await openDB();
+  let assetsToSave = runtimeAssets;
+  if (options.skipExisting) {
+    const existingFlags = await Promise.all(
+      runtimeAssets.map((asset) => getAssetRecord(db, projectId, asset.id)),
+    );
+    assetsToSave = runtimeAssets.filter((_, index) => !existingFlags[index]);
+    if (assetsToSave.length === 0) return;
+  }
   await runTransaction(db, ASSET_STORE, "readwrite", (store) => {
-    for (const runtimeAsset of runtimeAssets) {
+    const now = Date.now();
+    for (const runtimeAsset of assetsToSave) {
       const record: StoredAssetRecord = {
         key: buildAssetKey(projectId, runtimeAsset.id),
         projectId,
         assetId: runtimeAsset.id,
         file: runtimeAsset.file,
-        updatedAt: Date.now(),
+        updatedAt: now,
       };
       store.put(record);
     }
@@ -207,13 +219,18 @@ async function loadProjectRecord(
   projectId: string,
 ): Promise<StoredProjectRecord | null> {
   const db = await openDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(PROJECT_STORE, "readonly");
-    const request = tx.objectStore(PROJECT_STORE).get(projectId);
-    request.onsuccess = () =>
-      resolve((request.result as StoredProjectRecord | undefined) ?? null);
-    request.onerror = () => reject(request.error);
-  });
+  return withTimeout(
+    new Promise((resolve, reject) => {
+      const tx = db.transaction(PROJECT_STORE, "readonly");
+      const request = tx.objectStore(PROJECT_STORE).get(projectId);
+      request.onsuccess = () =>
+        resolve((request.result as StoredProjectRecord | undefined) ?? null);
+      request.onerror = () => reject(request.error);
+      tx.onabort = () =>
+        reject(tx.error ?? new Error("读取本地项目记录已中止"));
+    }),
+    "读取本地项目记录",
+  );
 }
 
 function getAssetRecord(
@@ -221,37 +238,46 @@ function getAssetRecord(
   projectId: string,
   assetId: string,
 ): Promise<StoredAssetRecord | null> {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(ASSET_STORE, "readonly");
-    const request = tx
-      .objectStore(ASSET_STORE)
-      .get(buildAssetKey(projectId, assetId));
-    request.onsuccess = () =>
-      resolve((request.result as StoredAssetRecord | undefined) ?? null);
-    request.onerror = () => reject(request.error);
-  });
+  return withTimeout(
+    new Promise((resolve, reject) => {
+      const tx = db.transaction(ASSET_STORE, "readonly");
+      const request = tx
+        .objectStore(ASSET_STORE)
+        .get(buildAssetKey(projectId, assetId));
+      request.onsuccess = () =>
+        resolve((request.result as StoredAssetRecord | undefined) ?? null);
+      request.onerror = () => reject(request.error);
+      tx.onabort = () =>
+        reject(tx.error ?? new Error("读取本地资源记录已中止"));
+    }),
+    "读取本地资源记录",
+  );
 }
 
 function deleteAssetsForProject(
   db: IDBDatabase,
   projectId: string,
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(ASSET_STORE, "readwrite");
-    const store = tx.objectStore(ASSET_STORE);
-    const request = store.openCursor();
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (!cursor) return;
-      const record = cursor.value as StoredAssetRecord;
-      if (record.projectId === projectId) {
-        cursor.delete();
-      }
-      cursor.continue();
-    };
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+  return withTimeout(
+    new Promise((resolve, reject) => {
+      const tx = db.transaction(ASSET_STORE, "readwrite");
+      const store = tx.objectStore(ASSET_STORE);
+      const request = store.openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        const record = cursor.value as StoredAssetRecord;
+        if (record.projectId === projectId) {
+          cursor.delete();
+        }
+        cursor.continue();
+      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error("删除本地资源失败"));
+      tx.onabort = () => reject(tx.error ?? new Error("删除本地资源已中止"));
+    }),
+    "删除本地资源",
+  );
 }
 
 function buildAssetKey(projectId: string, assetId: string): string {
@@ -259,20 +285,29 @@ function buildAssetKey(projectId: string, assetId: string): string {
 }
 
 function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(PROJECT_STORE)) {
-        db.createObjectStore(PROJECT_STORE, { keyPath: "id" });
-      }
-      if (!db.objectStoreNames.contains(ASSET_STORE)) {
-        db.createObjectStore(ASSET_STORE, { keyPath: "key" });
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+  return withTimeout(
+    new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(PROJECT_STORE)) {
+          db.createObjectStore(PROJECT_STORE, { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains(ASSET_STORE)) {
+          db.createObjectStore(ASSET_STORE, { keyPath: "key" });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+      request.onblocked = () =>
+        reject(
+          new Error(
+            "本地工作区数据库被其他页面占用，请关闭重复打开的 VNI 页面后重试",
+          ),
+        );
+    }),
+    "打开本地工作区数据库",
+  );
 }
 
 function runTransaction(
@@ -281,10 +316,30 @@ function runTransaction(
   mode: IDBTransactionMode,
   callback: (store: IDBObjectStore) => void,
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, mode);
-    callback(tx.objectStore(storeName));
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+  return withTimeout(
+    new Promise((resolve, reject) => {
+      const tx = db.transaction(storeName, mode);
+      callback(tx.objectStore(storeName));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error("本地工作区写入失败"));
+      tx.onabort = () => reject(tx.error ?? new Error("本地工作区写入已中止"));
+    }),
+    "写入本地工作区",
+  );
+}
+
+function withTimeout<T>(promise: Promise<T>, action: string): Promise<T> {
+  let timer = 0;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = window.setTimeout(() => {
+      reject(
+        new Error(
+          `${action}超时。可能是浏览器本地存储繁忙、空间不足，或同时打开了多个编辑器页面；请稍后重试，必要时刷新页面或清理旧项目。`,
+        ),
+      );
+    }, IDB_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) window.clearTimeout(timer);
   });
 }

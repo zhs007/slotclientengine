@@ -103,6 +103,8 @@ let pendingAnimationPaste:
   | null = null;
 let autoSaveTimer = 0;
 let saveRunId = 0;
+let isWorkspaceOperationRunning = false;
+let assetsDirty = false;
 
 const MIN_STAGE_SIZE = 100;
 const MAX_STAGE_SIZE = 5000;
@@ -641,6 +643,7 @@ async function importImage(file: File): Promise<void> {
     state.runtimeAssets.push(runtimeAsset);
     state.project.layers.push(layer);
     state.selectedLayerId = layer.id;
+    assetsDirty = true;
     await renderAllAsync();
     scheduleAutoSave(0);
     showStatus(`已导入图片：${file.name}`, "success");
@@ -670,6 +673,7 @@ async function replaceSelectedImageResource(file: File): Promise<void> {
     state.runtimeAssets.push(runtimeAsset);
     layer.assetId = asset.id;
     removeUnusedAssetById(previousAssetId);
+    assetsDirty = true;
     clearLayerPreview(layer.id);
     await renderAllAsync();
     scheduleAutoSave(0);
@@ -718,7 +722,10 @@ async function importZipAsWorkspaceProject(file: File): Promise<void> {
     clearUndoHistory();
     clearPreviewBaseCache();
     await saveProjectRecord(projectId, state.project, now, now);
-    await saveRuntimeAssets(projectId, state.runtimeAssets);
+    await saveRuntimeAssets(projectId, state.runtimeAssets, {
+      skipExisting: true,
+    });
+    assetsDirty = false;
     saveWorkspaceIndex(workspaceIndex);
 
     hideResetConfirmation();
@@ -778,7 +785,14 @@ async function switchProject(projectId: string): Promise<void> {
 
 async function createNewWorkspaceProject(): Promise<void> {
   if (!workspaceIndex) return;
+  if (isWorkspaceOperationRunning) {
+    showStatus("当前已有项目操作进行中，请稍候。", "info");
+    return;
+  }
+  isWorkspaceOperationRunning = true;
+  setButtonLoading(els.btnNewProject, true, "新建中");
   try {
+    setAutoSaveLabel("正在保存当前项目…", "info");
     await flushAutoSave();
     stopPlayback({ silent: true });
     revokeRuntimeAssetUrls();
@@ -804,17 +818,28 @@ async function createNewWorkspaceProject(): Promise<void> {
     await renderAllAsync();
     pixiStage.resetView();
     updateZoomLabel(pixiStage.getViewportState().scale);
+    assetsDirty = false;
     setAutoSaveLabel("已自动保存", "success");
     showStatus("已新建项目，并已切换到新项目。", "success");
   } catch (error) {
     setAutoSaveLabel("新建失败", "error");
     showStatus(`新建项目失败：${getErrorMessage(error)}`, "error");
+  } finally {
+    isWorkspaceOperationRunning = false;
+    setButtonLoading(els.btnNewProject, false);
   }
 }
 
 async function duplicateCurrentWorkspaceProject(): Promise<void> {
   if (!workspaceIndex || !currentProjectId) return;
+  if (isWorkspaceOperationRunning) {
+    showStatus("当前已有项目操作进行中，请稍候。", "info");
+    return;
+  }
+  isWorkspaceOperationRunning = true;
+  setButtonLoading(els.btnDuplicateProject, true, "复制中");
   try {
+    setAutoSaveLabel("正在保存当前项目…", "info");
     await flushAutoSave();
     const projectId = createWorkspaceProjectId();
     const now = Date.now();
@@ -833,7 +858,10 @@ async function duplicateCurrentWorkspaceProject(): Promise<void> {
     clearUndoHistory();
     clearPreviewBaseCache();
     await saveProjectRecord(projectId, state.project, now, now);
-    await saveRuntimeAssets(projectId, state.runtimeAssets);
+    await saveRuntimeAssets(projectId, state.runtimeAssets, {
+      skipExisting: true,
+    });
+    assetsDirty = false;
     saveWorkspaceIndex(workspaceIndex);
     syncProjectControls();
     syncProjectFields();
@@ -845,6 +873,9 @@ async function duplicateCurrentWorkspaceProject(): Promise<void> {
   } catch (error) {
     setAutoSaveLabel("复制失败", "error");
     showStatus(`复制项目失败：${getErrorMessage(error)}`, "error");
+  } finally {
+    isWorkspaceOperationRunning = false;
+    setButtonLoading(els.btnDuplicateProject, false);
   }
 }
 
@@ -3250,7 +3281,12 @@ async function performAutoSave(): Promise<void> {
   try {
     updateCurrentProjectSummary();
     await saveProjectRecord(currentProjectId, state.project);
-    await saveRuntimeAssets(currentProjectId, state.runtimeAssets);
+    if (assetsDirty) {
+      await saveRuntimeAssets(currentProjectId, state.runtimeAssets, {
+        skipExisting: true,
+      });
+      assetsDirty = false;
+    }
     saveWorkspaceIndex(workspaceIndex);
     if (runId === saveRunId) {
       setAutoSaveLabel("已自动保存", "success");

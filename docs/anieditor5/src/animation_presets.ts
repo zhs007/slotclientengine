@@ -763,6 +763,344 @@ export const V5G_ANIMATION_PRESETS: V5GAnimationPresetSpec[] = [
     ],
   },
   {
+    type: "particle_wall",
+    label: "Particle Wall 粒子幕墙",
+    description:
+      "使用当前图层图片为粒子纹理，在发射区域宽度内随机生成，向指定方向持续发射并淡出消失，形成持续粒子流幕墙效果。",
+    defaultDuration: 3,
+    recommendedDuration: "tips：1 ~ 10s",
+    defaultEasing: "linear",
+    params: [
+      numberParam(
+        "emitterWidth",
+        "发射区宽度",
+        300,
+        0,
+        3000,
+        1,
+        "emitterWidth：粒子在发射边缘随机生成的宽度范围",
+      ),
+      numberParam(
+        "direction",
+        "发射角度°",
+        270,
+        0,
+        360,
+        1,
+        "direction：粒子发射方向角度，0=正右 90=正下 180=正左 270=正上",
+      ),
+      numberParam(
+        "spreadAngle",
+        "扩散角度°",
+        15,
+        0,
+        180,
+        1,
+        "spreadAngle：在发射方向两侧随机扩散的最大角度",
+      ),
+      numberParam(
+        "speed",
+        "飞行速度",
+        200,
+        0,
+        2000,
+        1,
+        "speed：粒子飞行的像素/秒速度",
+      ),
+      numberParam(
+        "lifetimeMin",
+        "最短存活秒",
+        0.8,
+        0.05,
+        10,
+        0.01,
+        "lifetimeMin：每颗粒子的最短存活时间",
+      ),
+      numberParam(
+        "lifetimeMax",
+        "最长存活秒",
+        2,
+        0.05,
+        10,
+        0.01,
+        "lifetimeMax：每颗粒子的最长存活时间（实际在两者间随机）",
+      ),
+      numberParam(
+        "spawnRate",
+        "每秒生成数",
+        30,
+        1,
+        500,
+        1,
+        "spawnRate：每秒生成多少颗粒子",
+      ),
+      numberParam(
+        "size",
+        "粒子大小",
+        48,
+        1,
+        400,
+        1,
+        "size：图片粒子的目标最长边像素",
+      ),
+      numberParam(
+        "gravity",
+        "重力",
+        0,
+        -2000,
+        2000,
+        1,
+        "gravity：0=无重力，正数向下加速，负数向上加速",
+      ),
+      numberParam(
+        "startScaleMin",
+        "起始缩放最小",
+        0.6,
+        0.01,
+        2,
+        0.01,
+        "startScaleMin：粒子出生时最小缩放随机下限",
+      ),
+      numberParam(
+        "startScaleMax",
+        "起始缩放最大",
+        1,
+        0.01,
+        2,
+        0.01,
+        "startScaleMax：粒子出生时最大缩放随机上限",
+      ),
+      numberParam(
+        "endScaleMin",
+        "结束缩放最小",
+        0.3,
+        0.01,
+        2,
+        0.01,
+        "endScaleMin：粒子消失时最小缩放随机下限",
+      ),
+      numberParam(
+        "endScaleMax",
+        "结束缩放最大",
+        0.8,
+        0.01,
+        2,
+        0.01,
+        "endScaleMax：粒子消失时最大缩放随机上限",
+      ),
+      checkboxParam("fadeOut", "逐渐消失", true, "开启后粒子会随时间淡出"),
+    ],
+  },
+  {
+    type: "particle_combo",
+    label: "Particle Combo 三段粒子",
+    description:
+      "组合粒子效果：粒子生成 → 沿直线/曲线/绕圈轨迹移动 → 在目标点淡出、闪亮或放大消失。使用当前图片图层作为粒子纹理。模式参数：spawnMode 0=范围随机 1=中心发散；travelMode 0=直线 1=曲线 2=绕圈后飞；vanishMode 0=淡出 1=亮一下 2=放大淡出。",
+    defaultDuration: 2.2,
+    recommendedDuration: "tips：1 ~ 5s；用错峰和拖尾避免粒子挤在一起",
+    defaultEasing: "easeInOutQuad",
+    params: [
+      numberParam(
+        "count",
+        "粒子数量",
+        36,
+        1,
+        300,
+        1,
+        "count：1~300，数量越大越密集",
+      ),
+      numberParam(
+        "size",
+        "粒子大小",
+        42,
+        1,
+        400,
+        1,
+        "size：粒子贴图最长边像素",
+      ),
+      numberParam(
+        "sourceOpacity",
+        "原图层透明度",
+        0,
+        0,
+        1,
+        0.05,
+        "sourceOpacity：播放粒子时原始图层自身的透明度，0=只显示粒子",
+      ),
+      numberParam(
+        "spawnMode",
+        "生成模式 0/1",
+        1,
+        0,
+        1,
+        1,
+        "spawnMode：0=目标范围内随机出现；1=从中心发散到随机范围",
+      ),
+      numberParam(
+        "spawnRadius",
+        "生成半径",
+        90,
+        0,
+        3000,
+        1,
+        "spawnRadius：起点周围随机生成/发散的半径",
+      ),
+      numberParam(
+        "spawnRatio",
+        "生成阶段占比",
+        0.18,
+        0.01,
+        0.8,
+        0.01,
+        "spawnRatio：总时长中用于生成的比例",
+      ),
+      numberParam(
+        "targetX",
+        "目标偏移 X",
+        320,
+        -5000,
+        5000,
+        1,
+        "targetX：目标点相对图层中心的 X 偏移",
+      ),
+      numberParam(
+        "targetY",
+        "目标偏移 Y",
+        0,
+        -5000,
+        5000,
+        1,
+        "targetY：目标点相对图层中心的 Y 偏移，正数向上",
+      ),
+      numberParam(
+        "travelMode",
+        "移动模式 0/1/2",
+        1,
+        0,
+        2,
+        1,
+        "travelMode：0=直线；1=曲线；2=先绕圈再飞向目标",
+      ),
+      numberParam(
+        "curve",
+        "曲线弯曲",
+        160,
+        -3000,
+        3000,
+        1,
+        "curve：曲线控制点偏移；正负决定弯曲方向",
+      ),
+      numberParam(
+        "orbitRadius",
+        "绕圈半径",
+        80,
+        0,
+        3000,
+        1,
+        "orbitRadius：travelMode=2 时的原地绕圈半径",
+      ),
+      numberParam(
+        "orbitTurns",
+        "绕圈圈数",
+        1,
+        -10,
+        10,
+        0.25,
+        "orbitTurns：绕圈圈数，负数反向",
+      ),
+      numberParam(
+        "orbitSpeed",
+        "绕圈速度",
+        1,
+        0.1,
+        5,
+        0.1,
+        "orbitSpeed：绕圈阶段速度倍率，越大越快结束绕圈并飞出",
+      ),
+      numberParam(
+        "orbitRatio",
+        "绕圈阶段占比",
+        0.35,
+        0.05,
+        0.9,
+        0.01,
+        "orbitRatio：travelMode=2 时，移动阶段里用于绕圈的比例",
+      ),
+      numberParam(
+        "staggerRatio",
+        "粒子错峰占比",
+        0.28,
+        0,
+        0.9,
+        0.01,
+        "staggerRatio：粒子依次出发的时间错峰比例，避免挤在一起",
+      ),
+      numberParam(
+        "trailCount",
+        "拖尾层数",
+        4,
+        0,
+        12,
+        1,
+        "trailCount：每颗粒子后面绘制多少层拖尾",
+      ),
+      numberParam(
+        "trailSpacing",
+        "拖尾间距",
+        0.045,
+        0.005,
+        0.25,
+        0.005,
+        "trailSpacing：拖尾每层回退的时间间隔",
+      ),
+      numberParam(
+        "trailFade",
+        "拖尾衰减",
+        0.55,
+        0.05,
+        0.95,
+        0.05,
+        "trailFade：拖尾透明度衰减，越大拖尾越明显",
+      ),
+      numberParam(
+        "vanishMode",
+        "消失模式 0/1/2",
+        1,
+        0,
+        2,
+        1,
+        "vanishMode：0=直接淡出；1=到目标点亮一下；2=放大淡出",
+      ),
+      numberParam(
+        "vanishRatio",
+        "消失阶段占比",
+        0.18,
+        0.01,
+        0.8,
+        0.01,
+        "vanishRatio：总时长中用于消失的比例",
+      ),
+      numberParam(
+        "flashScale",
+        "闪光/放大倍率",
+        1.6,
+        0.1,
+        8,
+        0.05,
+        "flashScale：闪亮或放大消失时的峰值倍率",
+      ),
+      numberParam(
+        "flashIntensity",
+        "闪光强度",
+        1.4,
+        0.1,
+        3,
+        0.05,
+        "flashIntensity：vanishMode=1 时峰值亮度倍率",
+      ),
+    ],
+  },
+  {
     type: "rotate",
     label: "Rotate 旋转",
     description: "旋转。",
@@ -787,6 +1125,80 @@ export const V5G_ANIMATION_PRESETS: V5GAnimationPresetSpec[] = [
         3600,
         1,
         "toRotation：-3600° ~ 3600°",
+      ),
+    ],
+  },
+  {
+    type: "squash_stretch",
+    label: "SquashStretch 弹性挤压",
+    description:
+      "位移 + 弹性挤压/拉伸。支持自由起终点坐标(XY)、挤压方向角度和两种弹性模式。",
+    defaultDuration: 1.2,
+    recommendedDuration: "tips：0.5 ~ 3s",
+    defaultEasing: "easeOutQuad",
+    params: [
+      numberParam(
+        "squashAngle",
+        "挤压角度°",
+        270,
+        0,
+        360,
+        1,
+        "squashAngle：挤压力的方向角度。0°=从右边来, 90°=从下方来, 180°=从左边来, 270°=从上方来",
+      ),
+      numberParam(
+        "squashAmount",
+        "挤压幅度",
+        0.4,
+        0,
+        1,
+        0.05,
+        "squashAmount：0~1，0=不挤压，1=几乎压扁。建议 0.2~0.6",
+      ),
+      numberParam(
+        "decayOscillateCount",
+        "额外震荡次数",
+        0,
+        0,
+        10,
+        1,
+        "decayOscillateCount：0=单次过冲回弹(single bounce)，1~10=衰减震荡(decay oscillate)，数值越大震荡越久",
+      ),
+      numberParam(
+        "fromX",
+        "起始偏移 X",
+        0,
+        -5000,
+        5000,
+        1,
+        "fromX：相对基础位置的 X 起始偏移，设为和 toX 相同可原地挤压",
+      ),
+      numberParam(
+        "fromY",
+        "起始偏移 Y",
+        -300,
+        -5000,
+        5000,
+        1,
+        "fromY：相对基础位置的 Y 起始偏移，设为和 toY 相同可原地挤压",
+      ),
+      numberParam(
+        "toX",
+        "结束偏移 X",
+        0,
+        -5000,
+        5000,
+        1,
+        "toX：位移终点偏移，设为和 fromX 相同可原地挤压",
+      ),
+      numberParam(
+        "toY",
+        "结束偏移 Y",
+        0,
+        -5000,
+        5000,
+        1,
+        "toY：位移终点偏移，设为和 fromY 相同可原地挤压",
       ),
     ],
   },
@@ -877,10 +1289,65 @@ export function createDefaultAnimationParams(
       size: 48,
     };
   }
+  if (type === "particle_combo") {
+    return {
+      count: 36,
+      size: 42,
+      sourceOpacity: 0,
+      spawnMode: 1,
+      spawnRadius: 90,
+      spawnRatio: 0.18,
+      targetX: 320,
+      targetY: 0,
+      travelMode: 1,
+      curve: 160,
+      orbitRadius: 80,
+      orbitTurns: 1,
+      orbitSpeed: 1,
+      orbitRatio: 0.35,
+      staggerRatio: 0.28,
+      trailCount: 4,
+      trailSpacing: 0.045,
+      trailFade: 0.55,
+      vanishMode: 1,
+      vanishRatio: 0.18,
+      flashScale: 1.6,
+      flashIntensity: 1.4,
+    };
+  }
   if (type === "rotate") {
     return {
       fromRotation: 0,
       toRotation: 360,
+    };
+  }
+  if (type === "squash_stretch") {
+    return {
+      squashAngle: 270,
+      squashAmount: 0.4,
+      decayOscillateCount: 0,
+      fromX: 0,
+      fromY: -300,
+      toX: 0,
+      toY: 0,
+    };
+  }
+  if (type === "particle_wall") {
+    return {
+      emitterWidth: 300,
+      direction: 270,
+      spreadAngle: 15,
+      speed: 200,
+      lifetimeMin: 0.8,
+      lifetimeMax: 2,
+      spawnRate: 30,
+      size: 48,
+      gravity: 0,
+      startScaleMin: 0.6,
+      startScaleMax: 1,
+      endScaleMin: 0.3,
+      endScaleMax: 0.8,
+      fadeOut: true,
     };
   }
   return {};
@@ -933,6 +1400,10 @@ export function sampleLayerAnimationsAtTime(
       sampleSwing(result, animation, progress);
     else if (animation.type === "rotate")
       sampleRotate(result, animation, easedProgress);
+    else if (animation.type === "squash_stretch")
+      sampleSquashStretch(result, animation, easedProgress);
+    else if (animation.type === "particle_combo")
+      sampleParticleComboSource(result, animation, base);
   }
   result.transform.x = roundTo(result.transform.x, 4);
   result.transform.y = roundTo(result.transform.y, 4);
@@ -1175,6 +1646,77 @@ function sampleRotate(
     getNumberParam(animation, "toRotation", 0),
     progress,
   );
+}
+
+function sampleParticleComboSource(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  base: V5GAnimationSampleBase,
+): void {
+  result.opacity = base.opacity * getNumberParam(animation, "sourceOpacity", 0);
+}
+
+function sampleSquashStretch(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  easedProgress: number,
+): void {
+  const squashAngle = getNumberParam(animation, "squashAngle", 270);
+  const squashAmount = getNumberParam(animation, "squashAmount", 0.4);
+  const decayOscillateCount = getNumberParam(
+    animation,
+    "decayOscillateCount",
+    0,
+  );
+  const fromX = getNumberParam(animation, "fromX", 0);
+  const fromY = getNumberParam(animation, "fromY", -300);
+  const toX = getNumberParam(animation, "toX", 0);
+  const toY = getNumberParam(animation, "toY", 0);
+
+  // Displacement: interpolate from/to in world space (relative to base).
+  result.transform.x += lerp(fromX, toX, easedProgress);
+  result.transform.y += lerp(fromY, toY, easedProgress);
+
+  if (squashAmount <= 0.001) return;
+
+  // Squash direction: given angle in degrees.
+  // 0° = from right, 90° = from bottom, 180° = from left, 270° = from top.
+  const angleRad = squashAngle * (Math.PI / 180);
+  const forceX = Math.cos(angleRad);
+  const forceY = Math.sin(angleRad);
+
+  // Squash profile:
+  // progress 0 -> force applies, squash increases to peak at peakAt
+  // progress peakAt->1 -> squash releases with possible oscillation.
+  const peakAt = 0.35;
+  let squashFactor: number;
+  if (easedProgress <= peakAt) {
+    // Ramp up
+    const phase = clampNumber(easedProgress / peakAt, 0, 1);
+    squashFactor = 1 - squashAmount * easeProgress(phase, "easeOutQuad");
+  } else {
+    const decayPhase = (easedProgress - peakAt) / Math.max(1 - peakAt, 0.0001);
+    if (decayOscillateCount <= 0) {
+      // Single overshoot spring
+      const overshoot = squashAmount * 0.35;
+      squashFactor =
+        1 - squashAmount + overshoot * Math.sin(decayPhase * Math.PI);
+    } else {
+      // Decay oscillate
+      const totalCycles = 1 + decayOscillateCount;
+      const inner = decayPhase * Math.PI * 2 * totalCycles;
+      const decay = Math.exp(-decayPhase * 4);
+      squashFactor = 1 - squashAmount * decay * Math.cos(inner);
+    }
+  }
+  squashFactor = clampNumber(squashFactor, 0.11, 3);
+
+  // Apply squash/stretch: squash along force axis, stretch on orthogonal axis.
+  // Volume conservation: stretchX * stretchY ≈ 1 for a pure squash.
+  const stretchX = 1 + (1 - squashFactor) * Math.abs(forceY);
+  const stretchY = 1 + (1 - squashFactor) * Math.abs(forceX);
+  result.transform.scaleX *= stretchX;
+  result.transform.scaleY *= stretchY;
 }
 
 function getAnimationProgress(

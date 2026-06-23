@@ -56,7 +56,10 @@ export type V5GAnimationType =
   | "float"
   | "swing"
   | "particles"
-  | "particle_twinkle";
+  | "particle_twinkle"
+  | "particle_wall"
+  | "particle_combo"
+  | "squash_stretch";
 export type V5GAnimationParamValue = string | number | boolean;
 
 export interface V5GAnimationConfig {

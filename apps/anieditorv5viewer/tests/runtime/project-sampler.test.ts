@@ -53,13 +53,15 @@ function layer(
 }
 
 describe("project-sampler", () => {
-  it("keeps export2 runtime_50 blank at the exact start frame", () => {
+  it("does not auto-hide source images just because particles are active", () => {
     const project = assertV5GProject(export2Runtime50Data);
     const sampled = sampleProjectAtTime(project, 0);
+    const renderedImageLayers = sampled.layers.filter(
+      (layer) => layer.renderImageDisplay,
+    );
 
-    expect(
-      sampled.layers.filter((layer) => layer.renderImageDisplay),
-    ).toHaveLength(0);
+    expect(renderedImageLayers).toHaveLength(1);
+    expect(renderedImageLayers[0].hasActiveParticleAnimation).toBe(true);
   });
 
   it("hides animated layers before animation coverage", () => {
@@ -216,7 +218,7 @@ describe("project-sampler", () => {
     expect(afterStart.visible).toBe(true);
   });
 
-  it("marks active particle layers to hide the image display only", () => {
+  it("keeps active non-combo particle layers visible as normal images", () => {
     const particleLayer = layer({}, [
       {
         id: "particles",
@@ -239,11 +241,101 @@ describe("project-sampler", () => {
     expect(active.opacity).toBe(1);
     expect(active.visible).toBe(true);
     expect(active.hasActiveParticleAnimation).toBe(true);
-    expect(active.renderImageDisplay).toBe(false);
+    expect(active.renderImageDisplay).toBe(true);
 
     const atEnd = sampleLayerAtTime(particleLayer, 1);
     expect(atEnd.hasActiveParticleAnimation).toBe(false);
     expect(atEnd.renderImageDisplay).toBe(true);
+  });
+
+  it("hides particle_combo source image at sourceOpacity 0 while keeping particles active", () => {
+    const comboLayer = layer({}, [
+      {
+        id: "combo",
+        type: "particle_combo",
+        startTime: 0,
+        duration: 1.6,
+        enabled: true,
+        seed: 1,
+        params: {
+          count: 36,
+          size: 42,
+          sourceOpacity: 0,
+          spawnMode: 1,
+          spawnRadius: 90,
+          spawnRatio: 0.18,
+          targetX: 320,
+          targetY: 0,
+          travelMode: 1,
+          curve: 160,
+          orbitRadius: 80,
+          orbitTurns: 1,
+          orbitSpeed: 1,
+          orbitRatio: 0.35,
+          staggerRatio: 0.28,
+          trailCount: 4,
+          trailSpacing: 0.045,
+          trailFade: 0.55,
+          vanishMode: 1,
+          vanishRatio: 0.18,
+          flashScale: 1.6,
+          flashIntensity: 1.4,
+        },
+      },
+    ]);
+
+    const active = sampleLayerAtTime(comboLayer, 0.5);
+
+    expect(active.baseOpacity).toBe(1);
+    expect(active.opacity).toBe(0);
+    expect(active.visible).toBe(false);
+    expect(active.renderImageDisplay).toBe(false);
+    expect(active.hasActiveParticleAnimation).toBe(true);
+  });
+
+  it("shows particle_combo source image by sourceOpacity while particles remain active", () => {
+    const comboLayer = layer({ opacity: 0.8 }, [
+      {
+        id: "combo",
+        type: "particle_combo",
+        startTime: 0,
+        duration: 1.6,
+        enabled: true,
+        seed: 1,
+        params: {
+          count: 36,
+          size: 42,
+          sourceOpacity: 0.25,
+          spawnMode: 1,
+          spawnRadius: 90,
+          spawnRatio: 0.18,
+          targetX: 320,
+          targetY: 0,
+          travelMode: 1,
+          curve: 160,
+          orbitRadius: 80,
+          orbitTurns: 1,
+          orbitSpeed: 1,
+          orbitRatio: 0.35,
+          staggerRatio: 0.28,
+          trailCount: 4,
+          trailSpacing: 0.045,
+          trailFade: 0.55,
+          vanishMode: 1,
+          vanishRatio: 0.18,
+          flashScale: 1.6,
+          flashIntensity: 1.4,
+        },
+      },
+    ]);
+
+    const active = sampleLayerAtTime(comboLayer, 0.5);
+
+    expect(active.baseOpacity).toBe(0.8);
+    expect(active.opacity).toBe(0.2);
+    expect(active.visible).toBe(true);
+    expect(active.renderImageDisplay).toBe(true);
+    expect(active.hasActiveParticleAnimation).toBe(true);
   });
 
   it("clamps project time to stage duration", () => {

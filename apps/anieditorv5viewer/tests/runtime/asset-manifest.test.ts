@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import {
-  bundledAssetUrlManifest,
   createAssetUrlManifest,
   export2EditFullAssetUrlManifest,
   export2Runtime50AssetUrlManifest,
@@ -24,6 +23,13 @@ describe("asset-manifest", () => {
       "bigwin",
       "megawin",
       "superwin",
+      "2x",
+      "5x",
+      "10x",
+      "respin",
+      "scatter1",
+      "scatter2",
+      "multipay",
       "bigwin-edit-full",
       "bigwin-runtime-50",
     ]);
@@ -31,7 +37,7 @@ describe("asset-manifest", () => {
     for (const bundledProject of bundledProjects) {
       const resolved = resolveProjectAssetUrls(
         bundledProject.project,
-        bundledAssetUrlManifest,
+        bundledProject.assetUrls,
       );
 
       expect(Object.keys(resolved).sort()).toEqual(
