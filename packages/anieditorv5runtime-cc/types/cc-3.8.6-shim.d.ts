@@ -31,6 +31,14 @@ declare module "cc" {
     z: number;
   }
 
+  export class Quat {
+    constructor(x?: number, y?: number, z?: number, w?: number);
+    x: number;
+    y: number;
+    z: number;
+    w: number;
+  }
+
   interface BlendTarget {
     blend: boolean;
     blendEq: number;
@@ -60,6 +68,9 @@ declare module "cc" {
     active: boolean;
     parent: Node | null;
     children: Node[];
+    position: Vec3;
+    scale: Vec3;
+    eulerAngles: Vec3;
     constructor(name?: string);
     addChild(child: Node): void;
     removeFromParent(): void;
@@ -67,6 +78,12 @@ declare module "cc" {
     setPosition(x: number, y: number, z?: number): void;
     setScale(x: number, y: number, z?: number): void;
     setRotationFromEuler(x: number, y: number, z: number): void;
+    getWorldPosition(out?: Vec3): Vec3;
+    setWorldPosition(x: number, y: number, z?: number): void;
+    getWorldScale(out?: Vec3): Vec3;
+    setWorldScale(x: number, y: number, z?: number): void;
+    getWorldRotation(out?: Quat): Quat;
+    setWorldRotation(rotation: Quat): void;
     addComponent<T>(component: new (...args: never[]) => T): T;
     getComponent<T>(component: new (...args: never[]) => T): T | null;
   }

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Node, SpriteFrame } from "cc";
+import threeReelMultipay01Data from "../fixtures/3reel_multipay_01.json";
+import threeReelMultipay02Data from "../fixtures/3reel_multipay_02.json";
 import export10xData from "../fixtures/10x.json";
 import export2xData from "../fixtures/2x.json";
 import export5xData from "../fixtures/5x.json";
@@ -17,6 +19,13 @@ import {
   getCocosBlendModeConfig,
   type CocosBlendModeConfig,
 } from "../../src/cocos/blend-mode";
+import {
+  assertVNIAdjacentLayerGroupSlot,
+  getVNIProjectLayerGroupSlots,
+  getVNIProjectRenderGroupOrder,
+  normalizeVNIProjectLayerGroups,
+  DEFAULT_VNI_LAYER_GROUP_ID,
+} from "../../src/core/layer-groups";
 import {
   opacityToCocosOpacity,
   v5gTransformToCocosPosition,
@@ -51,6 +60,8 @@ const fixtures = [
   ["scatter1", scatter1Data],
   ["scatter2", scatter2Data],
   ["multipay", multipayData],
+  ["3reel_multipay_01", threeReelMultipay01Data],
+  ["3reel_multipay_02", threeReelMultipay02Data],
 ] as const;
 
 const sampleTimes = [0, 0.1, 0.6, 0.8, 1, 2, 4, 4.4];
@@ -110,10 +121,53 @@ describe("standalone runtime parity", () => {
     );
   });
 
+  it("matches modular layer group helper behavior", () => {
+    const project = assertV5GProject(threeReelMultipay02Data);
+    const singleProject = standalone.assertV5GProject(threeReelMultipay02Data);
+    expect(standalone.DEFAULT_VNI_LAYER_GROUP_ID).toBe(
+      DEFAULT_VNI_LAYER_GROUP_ID,
+    );
+    expect(standalone.normalizeVNIProjectLayerGroups(project)).toEqual(
+      normalizeVNIProjectLayerGroups(project),
+    );
+    expect(standalone.getVNIProjectRenderGroupOrder(singleProject)).toEqual(
+      getVNIProjectRenderGroupOrder(project),
+    );
+    expect(standalone.getVNIProjectLayerGroupSlots(singleProject)).toEqual(
+      getVNIProjectLayerGroupSlots(project),
+    );
+    expect(
+      standalone.assertVNIAdjacentLayerGroupSlot(
+        singleProject,
+        "layer_group_mqqo4zrn_6",
+        "group_default",
+      ),
+    ).toEqual(
+      assertVNIAdjacentLayerGroupSlot(
+        project,
+        "layer_group_mqqo4zrn_6",
+        "group_default",
+      ),
+    );
+  });
+
   it("matches modular runtime Cocos blend-mode acceptance", () => {
     const project = assertV5GProject(bigwinData);
     expect(() => validateCocosV5GProject(project)).not.toThrow();
     expect(() => standalone.validateCocosV5GProject(project)).not.toThrow();
+  });
+
+  it("matches modular Cocos render effect fail-fast", () => {
+    const project = assertV5GProject(threeReelMultipay01Data);
+    const singleProject = standalone.assertV5GProject(threeReelMultipay01Data);
+    expect(() => validateV5GProject(project)).not.toThrow();
+    expect(() => standalone.validateV5GProject(singleProject)).not.toThrow();
+    expect(() => validateCocosV5GProject(project)).toThrow(
+      "Cocos runtime does not support VNI render effect animations yet",
+    );
+    expect(() => standalone.validateCocosV5GProject(singleProject)).toThrow(
+      "Cocos runtime does not support VNI render effect animations yet",
+    );
   });
 
   it("matches modular runtime Cocos blend-mode configs", () => {
@@ -382,8 +436,21 @@ class FakeNode {
   children: FakeNode[] = [];
   parent: FakeNode | null = null;
   destroyed = false;
+  x = 0;
+  y = 0;
+  scaleX = 1;
+  scaleY = 1;
+  rotation = 0;
 
   constructor(readonly name: string) {}
+}
+
+interface FakeNodeTransformSnapshot {
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number;
+  rotation: number;
 }
 
 class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
@@ -392,8 +459,50 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
   }
 
   appendChild(parent: FakeNode, child: FakeNode): void {
+    if (child.parent) {
+      this.removeChild(child.parent, child);
+    } else {
+      parent.children = parent.children.filter(
+        (candidate) => candidate !== child,
+      );
+    }
     child.parent = parent;
     parent.children.push(child);
+  }
+
+  removeChild(parent: FakeNode, child: FakeNode): void {
+    parent.children = parent.children.filter(
+      (candidate) => candidate !== child,
+    );
+    if (child.parent === parent) {
+      child.parent = null;
+    }
+  }
+
+  getParent(node: FakeNode): FakeNode | null {
+    return node.parent;
+  }
+
+  captureLocalTransform(node: FakeNode): unknown {
+    return captureFakeLocalTransform(node);
+  }
+
+  restoreLocalTransform(node: FakeNode, snapshot: unknown): void {
+    applyFakeLocalTransform(node, snapshot as FakeNodeTransformSnapshot);
+  }
+
+  captureWorldTransform(node: FakeNode): unknown {
+    return captureFakeWorldTransform(node);
+  }
+
+  restoreWorldTransform(node: FakeNode, snapshot: unknown): void {
+    applyFakeLocalTransform(
+      node,
+      getFakeLocalTransformForWorld(
+        snapshot as FakeNodeTransformSnapshot,
+        node.parent,
+      ),
+    );
   }
 
   destroyNode(node: FakeNode): void {
@@ -402,6 +511,7 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
       node.parent.children = node.parent.children.filter(
         (child) => child !== node,
       );
+      node.parent = null;
     }
   }
 
@@ -428,6 +538,65 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
   }
 
   applyBlendMode(_node: FakeNode, _config: CocosBlendModeConfig): void {}
+}
+
+function captureFakeLocalTransform(node: FakeNode): FakeNodeTransformSnapshot {
+  return {
+    x: node.x,
+    y: node.y,
+    scaleX: node.scaleX,
+    scaleY: node.scaleY,
+    rotation: node.rotation,
+  };
+}
+
+function captureFakeWorldTransform(node: FakeNode): FakeNodeTransformSnapshot {
+  const local = captureFakeLocalTransform(node);
+  if (!node.parent) return local;
+  const parentWorld = captureFakeWorldTransform(node.parent);
+  const radians = (parentWorld.rotation * Math.PI) / 180;
+  const scaledX = local.x * parentWorld.scaleX;
+  const scaledY = local.y * parentWorld.scaleY;
+  return {
+    x:
+      parentWorld.x + scaledX * Math.cos(radians) - scaledY * Math.sin(radians),
+    y:
+      parentWorld.y + scaledX * Math.sin(radians) + scaledY * Math.cos(radians),
+    scaleX: parentWorld.scaleX * local.scaleX,
+    scaleY: parentWorld.scaleY * local.scaleY,
+    rotation: parentWorld.rotation + local.rotation,
+  };
+}
+
+function getFakeLocalTransformForWorld(
+  world: FakeNodeTransformSnapshot,
+  parent: FakeNode | null,
+): FakeNodeTransformSnapshot {
+  if (!parent) return { ...world };
+  const parentWorld = captureFakeWorldTransform(parent);
+  const radians = (-parentWorld.rotation * Math.PI) / 180;
+  const dx = world.x - parentWorld.x;
+  const dy = world.y - parentWorld.y;
+  const unrotatedX = dx * Math.cos(radians) - dy * Math.sin(radians);
+  const unrotatedY = dx * Math.sin(radians) + dy * Math.cos(radians);
+  return {
+    x: unrotatedX / parentWorld.scaleX,
+    y: unrotatedY / parentWorld.scaleY,
+    scaleX: world.scaleX / parentWorld.scaleX,
+    scaleY: world.scaleY / parentWorld.scaleY,
+    rotation: world.rotation - parentWorld.rotation,
+  };
+}
+
+function applyFakeLocalTransform(
+  node: FakeNode,
+  transform: FakeNodeTransformSnapshot,
+): void {
+  node.x = transform.x;
+  node.y = transform.y;
+  node.scaleX = transform.scaleX;
+  node.scaleY = transform.scaleY;
+  node.rotation = transform.rotation;
 }
 
 function tinyProject(
@@ -457,6 +626,15 @@ function tinyProject(
         ...assetOverrides,
       },
     ],
+    layerGroups: [
+      {
+        id: "group_default",
+        name: "Default",
+        visible: true,
+        collapsed: false,
+        order: 0,
+      },
+    ],
     layers: [
       {
         id: "layer-1",
@@ -464,6 +642,7 @@ function tinyProject(
         type: "image",
         assetId: "asset-1",
         parentId: null,
+        groupId: "group_default",
         visible: true,
         locked: false,
         transform: {

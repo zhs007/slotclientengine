@@ -30,6 +30,23 @@ export class Color {
   ) {}
 }
 
+export class Vec3 {
+  constructor(
+    public x = 0,
+    public y = 0,
+    public z = 0,
+  ) {}
+}
+
+export class Quat {
+  constructor(
+    public x = 0,
+    public y = 0,
+    public z = 0,
+    public w = 1,
+  ) {}
+}
+
 const BlendFactor = {
   ZERO: 0,
   ONE: 1,
@@ -61,14 +78,20 @@ export class Node {
   parent: Node | null = null;
   children: Node[] = [];
   destroyed = false;
-  position = { x: 0, y: 0, z: 0 };
-  scale = { x: 1, y: 1, z: 1 };
-  rotation = { x: 0, y: 0, z: 0 };
+  position = new Vec3();
+  scale = new Vec3(1, 1, 1);
+  rotation = new Vec3();
   private readonly components = new Map<new () => unknown, unknown>();
 
   constructor(readonly name = "") {}
 
+  get eulerAngles(): Vec3 {
+    return new Vec3(this.rotation.x, this.rotation.y, this.rotation.z);
+  }
+
   addChild(child: Node): void {
+    child.removeFromParent();
+    this.children = this.children.filter((candidate) => candidate !== child);
     child.parent = this;
     this.children.push(child);
   }
@@ -87,15 +110,71 @@ export class Node {
   }
 
   setPosition(x: number, y: number, z = 0): void {
-    this.position = { x, y, z };
+    this.position = new Vec3(x, y, z);
   }
 
   setScale(x: number, y: number, z = 1): void {
-    this.scale = { x, y, z };
+    this.scale = new Vec3(x, y, z);
   }
 
   setRotationFromEuler(x: number, y: number, z: number): void {
-    this.rotation = { x, y, z };
+    this.rotation = new Vec3(x, y, z);
+  }
+
+  getWorldPosition(out = new Vec3()): Vec3 {
+    const transform = captureNodeWorldTransform(this);
+    out.x = transform.x;
+    out.y = transform.y;
+    out.z = this.position.z;
+    return out;
+  }
+
+  setWorldPosition(x: number, y: number, z = 0): void {
+    const local = getNodeLocalTransformForWorld(
+      {
+        ...captureNodeWorldTransform(this),
+        x,
+        y,
+      },
+      this.parent,
+    );
+    this.position = new Vec3(local.x, local.y, z);
+  }
+
+  getWorldScale(out = new Vec3()): Vec3 {
+    const transform = captureNodeWorldTransform(this);
+    out.x = transform.scaleX;
+    out.y = transform.scaleY;
+    out.z = this.scale.z;
+    return out;
+  }
+
+  setWorldScale(x: number, y: number, z = 1): void {
+    const local = getNodeLocalTransformForWorld(
+      {
+        ...captureNodeWorldTransform(this),
+        scaleX: x,
+        scaleY: y,
+      },
+      this.parent,
+    );
+    this.scale = new Vec3(local.scaleX, local.scaleY, z);
+  }
+
+  getWorldRotation(out = new Quat()): Quat {
+    out.z = captureNodeWorldTransform(this).rotation;
+    return out;
+  }
+
+  setWorldRotation(rotation: Quat): void {
+    const local = getNodeLocalTransformForWorld(
+      {
+        ...captureNodeWorldTransform(this),
+        rotation: rotation.z,
+      },
+      this.parent,
+    );
+    this.rotation = new Vec3(this.rotation.x, this.rotation.y, local.rotation);
   }
 
   addComponent<T>(component: new () => T): T {
@@ -107,6 +186,62 @@ export class Node {
   getComponent<T>(component: new () => T): T | null {
     return (this.components.get(component) as T | undefined) ?? null;
   }
+}
+
+interface NodeTransformSnapshot {
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number;
+  rotation: number;
+}
+
+function captureNodeLocalTransform(node: Node): NodeTransformSnapshot {
+  return {
+    x: node.position.x,
+    y: node.position.y,
+    scaleX: node.scale.x,
+    scaleY: node.scale.y,
+    rotation: node.rotation.z,
+  };
+}
+
+function captureNodeWorldTransform(node: Node): NodeTransformSnapshot {
+  const local = captureNodeLocalTransform(node);
+  if (!node.parent) return local;
+  const parentWorld = captureNodeWorldTransform(node.parent);
+  const radians = (parentWorld.rotation * Math.PI) / 180;
+  const scaledX = local.x * parentWorld.scaleX;
+  const scaledY = local.y * parentWorld.scaleY;
+  return {
+    x:
+      parentWorld.x + scaledX * Math.cos(radians) - scaledY * Math.sin(radians),
+    y:
+      parentWorld.y + scaledX * Math.sin(radians) + scaledY * Math.cos(radians),
+    scaleX: parentWorld.scaleX * local.scaleX,
+    scaleY: parentWorld.scaleY * local.scaleY,
+    rotation: parentWorld.rotation + local.rotation,
+  };
+}
+
+function getNodeLocalTransformForWorld(
+  world: NodeTransformSnapshot,
+  parent: Node | null,
+): NodeTransformSnapshot {
+  if (!parent) return { ...world };
+  const parentWorld = captureNodeWorldTransform(parent);
+  const radians = (-parentWorld.rotation * Math.PI) / 180;
+  const dx = world.x - parentWorld.x;
+  const dy = world.y - parentWorld.y;
+  const unrotatedX = dx * Math.cos(radians) - dy * Math.sin(radians);
+  const unrotatedY = dx * Math.sin(radians) + dy * Math.cos(radians);
+  return {
+    x: unrotatedX / parentWorld.scaleX,
+    y: unrotatedY / parentWorld.scaleY,
+    scaleX: world.scaleX / parentWorld.scaleX,
+    scaleY: world.scaleY / parentWorld.scaleY,
+    rotation: world.rotation - parentWorld.rotation,
+  };
 }
 
 export class UITransform {

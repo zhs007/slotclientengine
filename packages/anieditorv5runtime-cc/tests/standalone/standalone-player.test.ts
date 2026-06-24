@@ -46,6 +46,15 @@ function tinyProject(
         ...assetOverrides,
       },
     ],
+    layerGroups: [
+      {
+        id: "group_default",
+        name: "Default",
+        visible: true,
+        collapsed: false,
+        order: 0,
+      },
+    ],
     layers: [
       {
         id: "layer-1",
@@ -53,6 +62,7 @@ function tinyProject(
         type: "image",
         assetId: "asset-1",
         parentId: null,
+        groupId: "group_default",
         visible: true,
         locked: false,
         transform: {
@@ -73,6 +83,34 @@ function tinyProject(
     ],
     particles: [],
   };
+}
+
+function twoGroupProject(): V5GProjectConfig {
+  const project = tinyProject();
+  project.layerGroups = [
+    {
+      id: "upper",
+      name: "Upper",
+      visible: true,
+      collapsed: false,
+      order: 0,
+    },
+    {
+      id: "lower",
+      name: "Lower",
+      visible: true,
+      collapsed: false,
+      order: 1,
+    },
+  ];
+  project.layers[0].groupId = "lower";
+  project.layers.push({
+    ...structuredClone(project.layers[0]),
+    id: "layer-2",
+    name: "Layer 2",
+    groupId: "upper",
+  });
+  return project;
 }
 
 function particleWallAnimation(
@@ -136,6 +174,30 @@ function makePlayer(project = tinyProject()): {
   return { root, player, frames };
 }
 
+function getStage(root: Node): Node {
+  return root.children[0];
+}
+
+function getContent(root: Node): Node {
+  return getStage(root).children[0];
+}
+
+function getParticleRoot(root: Node): Node {
+  return getStage(root).children[1];
+}
+
+function getFirstGroup(root: Node): Node {
+  return getContent(root).children[0];
+}
+
+function getFirstLayerNode(root: Node): Node {
+  return getFirstGroup(root).children[0];
+}
+
+function getFirstParticleContainer(root: Node): Node {
+  return getFirstGroup(root).children[1];
+}
+
 describe("standalone V5GCocosPlayer", () => {
   it("creates stage content and particle roots without a background node", () => {
     const project = tinyProject();
@@ -153,7 +215,7 @@ describe("standalone V5GCocosPlayer", () => {
 
     player.init();
 
-    const stage = root.children[0];
+    const stage = getStage(root);
     expect(stage.name).toBe("V5G Stage");
     expect(inspectTransform(stage).width).toBe(320);
     expect(inspectTransform(stage).height).toBe(240);
@@ -161,10 +223,179 @@ describe("standalone V5GCocosPlayer", () => {
       "V5G Content",
       "V5G Particles",
     ]);
-    expect(stage.children[1].children).toHaveLength(0);
-    expect(stage.children[0].children.map((node) => node.name)).toEqual([
+    expect(getParticleRoot(root).children).toHaveLength(0);
+    expect(getContent(root).children.map((node) => node.name)).toEqual([
+      "V5G Group group_default",
+    ]);
+    expect(getFirstGroup(root).children.map((node) => node.name)).toEqual([
       "Layer 1",
       "Layer 1 Particles",
+    ]);
+  });
+
+  it("creates group slots and mounts nodes in standalone", () => {
+    const { root, player } = makePlayer(twoGroupProject());
+    player.init();
+
+    expect(getContent(root).children.map((node) => node.name)).toEqual([
+      "V5G Group lower",
+      "V5G Slot lower -> upper",
+      "V5G Group upper",
+    ]);
+    expect(player.getLayerGroupSlots()).toEqual([
+      {
+        afterGroupId: "lower",
+        afterGroupName: "Lower",
+        beforeGroupId: "upper",
+        beforeGroupName: "Upper",
+        renderIndex: 0,
+      },
+    ]);
+
+    const external = new Node("External");
+    external.setPosition(12, -7, 0);
+    const dispose = player.attachNodeBetweenLayerGroups({
+      id: "external",
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      node: external,
+    });
+    expect(external.parent).toBe(getContent(root).children[1]);
+    expect(inspectNode(external).position).toEqual({ x: 12, y: -7, z: 0 });
+    dispose();
+    dispose();
+    expect(external.parent).toBeNull();
+    expect(inspectNode(external).destroyed).toBe(false);
+
+    const assetDispose = player.attachProjectAssetBetweenLayerGroups({
+      id: "asset-node",
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      assetId: "asset-1",
+      opacity: 0.25,
+    });
+    const assetNode = getContent(root).children[1].children[0];
+    expect(assetNode.name).toBe("V5G Mounted Image asset-1");
+    expect(requireOpacity(assetNode).opacity).toBe(64);
+    assetDispose();
+    expect(inspectNode(assetNode).destroyed).toBe(true);
+  });
+
+  it("mounts node batches, reorders repeated nodes, and restores original parents", () => {
+    const { root, player } = makePlayer(twoGroupProject());
+    player.init();
+    const slot = getContent(root).children[1];
+    const host = new Node("Host");
+    const first = new Node("First");
+    const second = new Node("Second");
+    const floating = new Node("Floating");
+    host.setPosition(100, 20, 0);
+    host.setScale(2, 3, 1);
+    host.setRotationFromEuler(0, 0, 30);
+    slot.setPosition(-75, 12, 0);
+    slot.setScale(0.5, 2, 1);
+    slot.setRotationFromEuler(0, 0, -15);
+    first.setPosition(25, -10, 0);
+    first.setScale(1.5, 1, 1);
+    first.setRotationFromEuler(0, 0, 5);
+    second.setPosition(-8, 12, 0);
+    second.setScale(1, 0.5, 1);
+    second.setRotationFromEuler(0, 0, -12);
+    host.addChild(first);
+    host.addChild(second);
+    const firstOriginalLocal = captureNodeLocalTransform(first);
+    const secondOriginalLocal = captureNodeLocalTransform(second);
+    const firstWorldBeforeMount = captureNodeWorldTransform(first);
+    const secondWorldBeforeMount = captureNodeWorldTransform(second);
+
+    const batchDispose = player.attachNodeBetweenLayerGroups({
+      ids: ["first", "second"],
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      nodes: [first, second],
+    });
+    expect(slot.children.map((node) => node.name)).toEqual(["First", "Second"]);
+    expect(host.children).toHaveLength(0);
+    expect(captureNodeLocalTransform(first).x).not.toBe(firstOriginalLocal.x);
+    expect(captureNodeLocalTransform(second).x).not.toBe(secondOriginalLocal.x);
+    expectNodeTransformClose(
+      captureNodeWorldTransform(first),
+      firstWorldBeforeMount,
+    );
+    expectNodeTransformClose(
+      captureNodeWorldTransform(second),
+      secondWorldBeforeMount,
+    );
+
+    const floatingDispose = player.attachNodeBetweenLayerGroups({
+      id: "floating",
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      node: floating,
+    });
+    expect(slot.children.map((node) => node.name)).toEqual([
+      "First",
+      "Second",
+      "Floating",
+    ]);
+
+    const moveDispose = player.attachNodeBetweenLayerGroups({
+      id: "first-moved",
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      node: first,
+    });
+    expect(slot.children.map((node) => node.name)).toEqual([
+      "Second",
+      "Floating",
+      "First",
+    ]);
+    expectNodeTransformClose(
+      captureNodeWorldTransform(first),
+      firstWorldBeforeMount,
+    );
+
+    batchDispose();
+    expect(slot.children.map((node) => node.name)).toEqual([
+      "Floating",
+      "First",
+    ]);
+    expect(second.parent).toBe(host);
+    expect(first.parent).toBe(slot);
+    expectNodeTransformClose(
+      captureNodeLocalTransform(second),
+      secondOriginalLocal,
+    );
+
+    player.detachMountedNodes([floating, "first-moved"]);
+    expect(floating.parent).toBeNull();
+    expect(first.parent).toBe(host);
+    expectNodeTransformClose(
+      captureNodeLocalTransform(first),
+      firstOriginalLocal,
+    );
+    expect(host.children.map((node) => node.name)).toEqual(["Second", "First"]);
+
+    moveDispose();
+    floatingDispose();
+    const clearFirst = new Node("Clear First");
+    const clearSecond = new Node("Clear Second");
+    host.addChild(clearFirst);
+    host.addChild(clearSecond);
+    player.attachNodeBetweenLayerGroups({
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      nodes: [clearFirst, clearSecond],
+    });
+
+    player.clearMountedNodes();
+    expect(clearFirst.parent).toBe(host);
+    expect(clearSecond.parent).toBe(host);
+    expect(host.children.map((node) => node.name)).toEqual([
+      "Second",
+      "First",
+      "Clear First",
+      "Clear Second",
     ]);
   });
 
@@ -184,7 +415,7 @@ describe("standalone V5GCocosPlayer", () => {
 
     player.init();
 
-    const layerNode = root.children[0].children[0].children[0];
+    const layerNode = getFirstLayerNode(root);
     expect(inspectNode(layerNode).position).toEqual({ x: 100, y: 50, z: 0 });
     expect(inspectNode(layerNode).scale).toEqual({ x: -1, y: 2, z: 1 });
     expect(inspectNode(layerNode).rotation.z).toBe(30);
@@ -245,9 +476,7 @@ describe("standalone V5GCocosPlayer", () => {
     atlasFrames.delete("asset-1");
     atlasPlayer.init();
     expect(atlasQueries).toEqual(["a"]);
-    expect(
-      requireSprite(atlasRoot.children[0].children[0].children[0]).spriteFrame,
-    ).toBe(frame);
+    expect(requireSprite(getFirstLayerNode(atlasRoot)).spriteFrame).toBe(frame);
 
     const nestedProject = tinyProject(
       {},
@@ -325,8 +554,7 @@ describe("standalone V5GCocosPlayer", () => {
       },
     });
     expect(() => trimmedAtlas.init()).not.toThrow();
-    const trimmedLayerNode =
-      trimmedAtlasRoot.children[0].children[0].children[0];
+    const trimmedLayerNode = getFirstLayerNode(trimmedAtlasRoot);
     expect(inspectTransform(trimmedLayerNode).width).toBe(100);
     expect(inspectTransform(trimmedLayerNode).height).toBe(50);
   });
@@ -353,7 +581,7 @@ describe("standalone V5GCocosPlayer", () => {
     frames.set("asset-1", makeSpriteFrame(50, 25));
     player.init();
 
-    const layerNode = root.children[0].children[0].children[0];
+    const layerNode = getFirstLayerNode(root);
     expect(inspectTransform(layerNode).width).toBe(100);
     expect(inspectTransform(layerNode).height).toBe(50);
     expect(inspectNode(layerNode).scale).toEqual({ x: -1, y: 2, z: 1 });
@@ -568,11 +796,9 @@ describe("standalone V5GCocosPlayer", () => {
 
     player.init();
 
-    const stage = root.children[0];
-    const content = stage.children[0];
-    const particleRoot = stage.children[1];
-    const layerNode = content.children[0];
-    const particleContainer = content.children[1];
+    const particleRoot = getParticleRoot(root);
+    const layerNode = getFirstLayerNode(root);
+    const particleContainer = getFirstParticleContainer(root);
     expect(layerNode.active).toBe(true);
     expect(particleRoot.children).toHaveLength(0);
     expect(particleContainer.name).toBe("Layer 1 Particles");
@@ -623,7 +849,7 @@ describe("standalone V5GCocosPlayer", () => {
     });
     player.update(0.6);
 
-    const particleContainer = root.children[0].children[0].children[1];
+    const particleContainer = getFirstParticleContainer(root);
     expect(player.time).toBe(0.5);
     expect(player.getPlaybackState()).toMatchObject({
       mode: "segmented",
@@ -672,12 +898,55 @@ interface InspectableSpriteFrame extends SpriteFrame {
   originalSize?: { width: number; height: number };
 }
 
+interface NodeTransformSnapshot {
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number;
+  rotation: number;
+}
+
 function inspectNode(node: Node): InspectableNode {
   return node as InspectableNode;
 }
 
 function inspectTransform(node: Node): InspectableTransform {
   return requireTransform(node) as InspectableTransform;
+}
+
+function captureNodeLocalTransform(node: Node): NodeTransformSnapshot {
+  const inspected = inspectNode(node);
+  return {
+    x: inspected.position.x,
+    y: inspected.position.y,
+    scaleX: inspected.scale.x,
+    scaleY: inspected.scale.y,
+    rotation: inspected.rotation.z,
+  };
+}
+
+function captureNodeWorldTransform(node: Node): NodeTransformSnapshot {
+  const position = node.getWorldPosition();
+  const scale = node.getWorldScale();
+  const rotation = node.getWorldRotation();
+  return {
+    x: position.x,
+    y: position.y,
+    scaleX: scale.x,
+    scaleY: scale.y,
+    rotation: rotation.z,
+  };
+}
+
+function expectNodeTransformClose(
+  actual: NodeTransformSnapshot,
+  expected: NodeTransformSnapshot,
+): void {
+  expect(actual.x).toBeCloseTo(expected.x, 6);
+  expect(actual.y).toBeCloseTo(expected.y, 6);
+  expect(actual.scaleX).toBeCloseTo(expected.scaleX, 6);
+  expect(actual.scaleY).toBeCloseTo(expected.scaleY, 6);
+  expect(actual.rotation).toBeCloseTo(expected.rotation, 6);
 }
 
 function makeSpriteFrame(width: number, height: number): SpriteFrame {

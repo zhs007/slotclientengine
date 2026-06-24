@@ -60,6 +60,7 @@ describe("standalone runtime import", () => {
   it("imports directly with only the cc alias and exposes the public API", () => {
     expect(runtime.SUPPORTED_ANIMATION_TYPES).toEqual(
       expect.arrayContaining([
+        "idle",
         "scale_in",
         "scale_out",
         "pop",
@@ -69,6 +70,8 @@ describe("standalone runtime import", () => {
         "particle_twinkle",
         "particle_wall",
         "particle_combo",
+        "shatter",
+        "glow",
         "squash_stretch",
       ]),
     );
@@ -103,6 +106,35 @@ describe("standalone runtime import", () => {
     expect(runtime.V5GCocosPlayer.prototype.getPlaybackState).toBeTypeOf(
       "function",
     );
+    expect(runtime.V5GCocosPlayer.prototype.getLayerGroups).toBeTypeOf(
+      "function",
+    );
+    expect(runtime.V5GCocosPlayer.prototype.getLayerGroupSlots).toBeTypeOf(
+      "function",
+    );
+    expect(
+      runtime.V5GCocosPlayer.prototype.attachNodeBetweenLayerGroups,
+    ).toBeTypeOf("function");
+    expect(
+      runtime.V5GCocosPlayer.prototype.attachProjectAssetBetweenLayerGroups,
+    ).toBeTypeOf("function");
+    expect(
+      runtime.V5GCocosPlayer.prototype.attachSpriteFrameBetweenLayerGroups,
+    ).toBeTypeOf("function");
+    expect(runtime.V5GCocosPlayer.prototype.detachMountedNode).toBeTypeOf(
+      "function",
+    );
+    expect(runtime.V5GCocosPlayer.prototype.detachMountedNodes).toBeTypeOf(
+      "function",
+    );
+    expect(runtime.V5GCocosPlayer.prototype.clearMountedNodes).toBeTypeOf(
+      "function",
+    );
+    expect(runtime.DEFAULT_VNI_LAYER_GROUP_ID).toBe("group_default");
+    expect(runtime.normalizeVNIProjectLayerGroups).toBeTypeOf("function");
+    expect(runtime.getVNIProjectRenderGroupOrder).toBeTypeOf("function");
+    expect(runtime.getVNIProjectLayerGroupSlots).toBeTypeOf("function");
+    expect(runtime.assertVNIAdjacentLayerGroupSlot).toBeTypeOf("function");
     expect(runtime.sampleProjectAtTime).toBeTypeOf("function");
     expect(runtime.sampleLayerAtTime).toBeTypeOf("function");
     expect(runtime.sampleLayerAnimationsAtTime).toBeTypeOf("function");

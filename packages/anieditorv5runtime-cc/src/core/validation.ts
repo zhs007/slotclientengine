@@ -3,6 +3,10 @@ import {
   isSupportedAnimationType,
   isSupportedEasing,
 } from "./animation-sampler.js";
+import {
+  getVNIProjectRenderGroupOrder,
+  normalizeVNIProjectLayerGroups,
+} from "./layer-groups.js";
 import type {
   V5GAnimationConfig,
   V5GAnimationParamValue,
@@ -11,6 +15,7 @@ import type {
   V5GBlendMode,
   V5GExportProfileConfig,
   V5GLayerConfig,
+  V5GLayerGroupConfig,
   V5GProjectConfig,
   V5GTransformConfig,
 } from "./types.js";
@@ -28,6 +33,7 @@ const SUPPORTED_BLEND_MODES: readonly V5GBlendMode[] = [
 const REQUIRED_NUMERIC_PARAMS: Readonly<
   Record<V5GAnimationType, readonly string[]>
 > = {
+  idle: [],
   move: ["fromX", "fromY", "toX", "toY"],
   fade: ["fromOpacity", "toOpacity"],
   scale_up: ["fromScaleX", "fromScaleY", "toScaleX", "toScaleY"],
@@ -93,6 +99,17 @@ const REQUIRED_NUMERIC_PARAMS: Readonly<
     "flashScale",
     "flashIntensity",
   ],
+  shatter: [
+    "count",
+    "pieceSize",
+    "force",
+    "impactAngle",
+    "spreadAngle",
+    "gravity",
+    "spin",
+    "sourceOpacity",
+  ],
+  glow: ["intensity", "spread", "minAlpha", "maxAlpha", "pulses", "blendMode"],
   squash_stretch: [
     "squashAngle",
     "squashAmount",
@@ -115,6 +132,8 @@ const OPTIONAL_BOOLEAN_PARAMS: Readonly<
   shake: ["decay"],
   particles: ["fadeOut"],
   particle_wall: ["fadeOut"],
+  shatter: ["fadeOut"],
+  glow: ["keepOriginal"],
 };
 
 export interface ValidateCocosV5GProjectOptions {
@@ -166,6 +185,12 @@ export function assertV5GProject(value: unknown): V5GProjectConfig {
   const assets = assertArray(project.assets, "project.assets").map(
     (asset, index) => assertAsset(asset, index),
   );
+  const layerGroups =
+    project.layerGroups === undefined
+      ? undefined
+      : assertArray(project.layerGroups, "project.layerGroups").map(
+          (group, index) => assertLayerGroup(group, index),
+        );
   const layers = assertArray(project.layers, "project.layers").map(
     (layer, index) => assertLayer(layer, index),
   );
@@ -174,7 +199,7 @@ export function assertV5GProject(value: unknown): V5GProjectConfig {
     "project.particles",
   ) as V5GProjectConfig["particles"];
 
-  return {
+  return normalizeVNIProjectLayerGroups({
     schemaVersion,
     editor: {
       name: editorName,
@@ -194,9 +219,10 @@ export function assertV5GProject(value: unknown): V5GProjectConfig {
       backgroundColor: stageBackgroundColor,
     },
     assets,
+    layerGroups,
     layers,
     particles,
-  };
+  });
 }
 
 export function validateV5GProject(project: V5GProjectConfig): void {
@@ -231,6 +257,7 @@ export function validateV5GProject(project: V5GProjectConfig): void {
   if (project.exportProfile) {
     validateExportProfile(project.exportProfile, "project.exportProfile");
   }
+  validateLayerGroups(project);
 
   const assetsById = new Map<string, V5GAssetConfig>();
   const assetPaths = new Set<string>();
@@ -263,6 +290,7 @@ export function validateV5GProject(project: V5GProjectConfig): void {
       assertSupportedAnimation(animation, layer.id, project.stage.duration);
     }
   }
+  getVNIProjectRenderGroupOrder(project);
 }
 
 export function validateCocosV5GProject(
@@ -280,6 +308,16 @@ export function validateCocosV5GProject(
   for (const layer of project.layers) {
     if (layer.type !== "image") {
       throw new Error(`Unsupported Cocos V5G layer type: ${layer.type}.`);
+    }
+    for (const animation of layer.animations) {
+      if (
+        animation.enabled &&
+        (animation.type === "shatter" || animation.type === "glow")
+      ) {
+        throw new Error(
+          `Cocos runtime does not support VNI render effect animations yet: project "${project.name}", layer "${layer.id}", animation "${animation.id}", type "${animation.type}".`,
+        );
+      }
     }
   }
 }
@@ -330,6 +368,39 @@ export function assertSupportedLayer(
   assertFiniteRange(layer.opacity, 0, 1, `layer "${layer.id}" opacity`);
   if (!hasStringValue(SUPPORTED_BLEND_MODES, layer.blendMode)) {
     throw new Error(`Unsupported V5G blendMode: ${layer.blendMode}.`);
+  }
+}
+
+function validateLayerGroups(project: V5GProjectConfig): void {
+  if (project.layerGroups.length === 0) {
+    throw new Error("VNI project.layerGroups must be a non-empty array.");
+  }
+
+  const groupIds = new Set<string>();
+  const groupOrders = new Set<number>();
+  for (const group of project.layerGroups) {
+    if (groupIds.has(group.id)) {
+      throw new Error(`Duplicate VNI layer group id: ${group.id}.`);
+    }
+    groupIds.add(group.id);
+    if (!Number.isFinite(group.order)) {
+      throw new Error(`VNI layer group "${group.id}" order must be finite.`);
+    }
+    if (groupOrders.has(group.order)) {
+      throw new Error(`Duplicate VNI layer group order: ${group.order}.`);
+    }
+    groupOrders.add(group.order);
+  }
+
+  for (const layer of project.layers) {
+    if (!layer.groupId) {
+      throw new Error(`VNI layer "${layer.id}" is missing groupId.`);
+    }
+    if (!groupIds.has(layer.groupId)) {
+      throw new Error(
+        `VNI layer "${layer.id}" references missing layer group "${layer.groupId}".`,
+      );
+    }
   }
 }
 
@@ -446,6 +517,10 @@ function assertLayer(value: unknown, index: number): V5GLayerConfig {
       layer.parentId === null
         ? null
         : assertString(layer.parentId, `project.layers[${index}].parentId`),
+    groupId:
+      layer.groupId === undefined
+        ? undefined
+        : assertString(layer.groupId, `project.layers[${index}].groupId`),
     visible: assertBoolean(layer.visible, `project.layers[${index}].visible`),
     locked: assertBoolean(layer.locked, `project.layers[${index}].locked`),
     transform: assertTransform(
@@ -471,6 +546,23 @@ function assertLayer(value: unknown, index: number): V5GLayerConfig {
       layer.keyframes ?? [],
       `project.layers[${index}].keyframes`,
     ) as V5GLayerConfig["keyframes"],
+  };
+}
+
+function assertLayerGroup(value: unknown, index: number): V5GLayerGroupConfig {
+  const group = assertRecord(value, `project.layerGroups[${index}]`);
+  return {
+    id: assertString(group.id, `project.layerGroups[${index}].id`),
+    name: assertString(group.name, `project.layerGroups[${index}].name`),
+    visible: assertBoolean(
+      group.visible,
+      `project.layerGroups[${index}].visible`,
+    ),
+    collapsed: assertBoolean(
+      group.collapsed,
+      `project.layerGroups[${index}].collapsed`,
+    ),
+    order: assertNumber(group.order, `project.layerGroups[${index}].order`),
   };
 }
 

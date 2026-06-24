@@ -1,5 +1,6 @@
 import type { Node, SpriteFrame } from "cc";
-import type { V5GProjectConfig } from "../core/types.js";
+import type { VNILayerGroupSlot } from "../core/layer-groups.js";
+import type { V5GBlendMode, V5GProjectConfig } from "../core/types.js";
 import type {
   V5GPlaybackMode,
   V5GPlaybackPoint,
@@ -61,6 +62,65 @@ export type V5GCocosSegmentedPlaybackOptions = V5GSegmentedPlaybackOptions;
 export type V5GCocosPlayOptions = V5GPlayOptions;
 
 export type V5GCocosPlaybackState = V5GPlaybackState;
+
+export interface V5GCocosLayerGroupInfo {
+  id: string;
+  name: string;
+  visible: boolean;
+  order: number;
+  layerIds: readonly string[];
+  renderIndex: number;
+}
+
+export type V5GCocosLayerGroupSlot = VNILayerGroupSlot;
+
+export interface V5GCocosAttachNodeBetweenLayerGroupsOptions<TNode = Node> {
+  id?: string;
+  ids?: readonly string[];
+  afterGroupId: string;
+  beforeGroupId: string;
+  node?: TNode;
+  nodes?: readonly TNode[];
+  destroyOnDetach?: boolean;
+}
+
+export interface V5GCocosAttachProjectAssetBetweenLayerGroupsOptions {
+  id: string;
+  afterGroupId: string;
+  beforeGroupId: string;
+  assetId: string;
+  x?: number;
+  y?: number;
+  scaleX?: number;
+  scaleY?: number;
+  rotation?: number;
+  anchorX?: number;
+  anchorY?: number;
+  opacity?: number;
+  blendMode?: V5GBlendMode;
+  destroyOnDetach?: boolean;
+}
+
+export interface V5GCocosAttachSpriteFrameBetweenLayerGroupsOptions<
+  TSpriteFrame = SpriteFrame,
+> {
+  id: string;
+  afterGroupId: string;
+  beforeGroupId: string;
+  spriteFrame: TSpriteFrame;
+  width: number;
+  height: number;
+  x?: number;
+  y?: number;
+  scaleX?: number;
+  scaleY?: number;
+  rotation?: number;
+  anchorX?: number;
+  anchorY?: number;
+  opacity?: number;
+  blendMode?: V5GBlendMode;
+  destroyOnDetach?: boolean;
+}
 
 export interface V5GCocosPlaybackEventContext {
   id: string;

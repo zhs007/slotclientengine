@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import threeReelMultipay01Data from "../fixtures/3reel_multipay_01.json";
+import threeReelMultipay02Data from "../fixtures/3reel_multipay_02.json";
 import projectData from "../fixtures/project.json";
 import { V5GCocosPlayer } from "../../src/cocos/player";
 import { assertV5GProject } from "../../src/core/validation";
@@ -41,14 +43,64 @@ class FakeNode {
   constructor(readonly name: string) {}
 }
 
+interface FakeNodeTransformSnapshot {
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number;
+  rotation: number;
+}
+
 class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
   createNode(name: string): FakeNode {
     return new FakeNode(name);
   }
 
   appendChild(parent: FakeNode, child: FakeNode): void {
+    if (child.parent) {
+      this.removeChild(child.parent, child);
+    } else {
+      parent.children = parent.children.filter(
+        (candidate) => candidate !== child,
+      );
+    }
     child.parent = parent;
     parent.children.push(child);
+  }
+
+  removeChild(parent: FakeNode, child: FakeNode): void {
+    parent.children = parent.children.filter(
+      (candidate) => candidate !== child,
+    );
+    if (child.parent === parent) {
+      child.parent = null;
+    }
+  }
+
+  getParent(node: FakeNode): FakeNode | null {
+    return node.parent;
+  }
+
+  captureLocalTransform(node: FakeNode): unknown {
+    return captureFakeLocalTransform(node);
+  }
+
+  restoreLocalTransform(node: FakeNode, snapshot: unknown): void {
+    applyFakeLocalTransform(node, snapshot as FakeNodeTransformSnapshot);
+  }
+
+  captureWorldTransform(node: FakeNode): unknown {
+    return captureFakeWorldTransform(node);
+  }
+
+  restoreWorldTransform(node: FakeNode, snapshot: unknown): void {
+    applyFakeLocalTransform(
+      node,
+      getFakeLocalTransformForWorld(
+        snapshot as FakeNodeTransformSnapshot,
+        node.parent,
+      ),
+    );
   }
 
   destroyNode(node: FakeNode): void {
@@ -111,6 +163,76 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
   }
 }
 
+function captureFakeLocalTransform(node: FakeNode): FakeNodeTransformSnapshot {
+  return {
+    x: node.x,
+    y: node.y,
+    scaleX: node.scaleX,
+    scaleY: node.scaleY,
+    rotation: node.rotation,
+  };
+}
+
+function captureFakeWorldTransform(node: FakeNode): FakeNodeTransformSnapshot {
+  const local = captureFakeLocalTransform(node);
+  if (!node.parent) return local;
+  const parentWorld = captureFakeWorldTransform(node.parent);
+  const radians = (parentWorld.rotation * Math.PI) / 180;
+  const scaledX = local.x * parentWorld.scaleX;
+  const scaledY = local.y * parentWorld.scaleY;
+  return {
+    x:
+      parentWorld.x + scaledX * Math.cos(radians) - scaledY * Math.sin(radians),
+    y:
+      parentWorld.y + scaledX * Math.sin(radians) + scaledY * Math.cos(radians),
+    scaleX: parentWorld.scaleX * local.scaleX,
+    scaleY: parentWorld.scaleY * local.scaleY,
+    rotation: parentWorld.rotation + local.rotation,
+  };
+}
+
+function getFakeLocalTransformForWorld(
+  world: FakeNodeTransformSnapshot,
+  parent: FakeNode | null,
+): FakeNodeTransformSnapshot {
+  if (!parent) return { ...world };
+  const parentWorld = captureFakeWorldTransform(parent);
+  const radians = (-parentWorld.rotation * Math.PI) / 180;
+  const dx = world.x - parentWorld.x;
+  const dy = world.y - parentWorld.y;
+  const unrotatedX = dx * Math.cos(radians) - dy * Math.sin(radians);
+  const unrotatedY = dx * Math.sin(radians) + dy * Math.cos(radians);
+  return {
+    x: unrotatedX / parentWorld.scaleX,
+    y: unrotatedY / parentWorld.scaleY,
+    scaleX: world.scaleX / parentWorld.scaleX,
+    scaleY: world.scaleY / parentWorld.scaleY,
+    rotation: world.rotation - parentWorld.rotation,
+  };
+}
+
+function applyFakeLocalTransform(
+  node: FakeNode,
+  transform: FakeNodeTransformSnapshot,
+): void {
+  node.x = transform.x;
+  node.y = transform.y;
+  node.scaleX = transform.scaleX;
+  node.scaleY = transform.scaleY;
+  node.rotation = transform.rotation;
+}
+
+function expectFakeTransformClose(
+  actual: FakeNodeTransformSnapshot,
+  expected: FakeNodeTransformSnapshot,
+): void {
+  expect(actual.x).toBeCloseTo(expected.x, 6);
+  expect(actual.y).toBeCloseTo(expected.y, 6);
+  expect(actual.scaleX).toBeCloseTo(expected.scaleX, 6);
+  expect(actual.scaleY).toBeCloseTo(expected.scaleY, 6);
+  expect(actual.rotation).toBeCloseTo(expected.rotation, 6);
+}
+
 function sampleProject(): V5GProjectConfig {
   return structuredClone(assertV5GProject(projectData));
 }
@@ -142,6 +264,15 @@ function tinyProject(
         ...assetOverrides,
       },
     ],
+    layerGroups: [
+      {
+        id: "group_default",
+        name: "Default",
+        visible: true,
+        collapsed: false,
+        order: 0,
+      },
+    ],
     layers: [
       {
         id: "layer-1",
@@ -149,6 +280,7 @@ function tinyProject(
         type: "image",
         assetId: "asset-1",
         parentId: null,
+        groupId: "group_default",
         visible: true,
         locked: false,
         transform: {
@@ -169,6 +301,39 @@ function tinyProject(
     ],
     particles: [],
   };
+}
+
+function twoGroupProject(): V5GProjectConfig {
+  const project = tinyProject();
+  project.layerGroups = [
+    {
+      id: "upper",
+      name: "Upper",
+      visible: true,
+      collapsed: false,
+      order: 0,
+    },
+    {
+      id: "lower",
+      name: "Lower",
+      visible: true,
+      collapsed: false,
+      order: 1,
+    },
+  ];
+  project.layers[0].groupId = "lower";
+  project.layers.push({
+    ...structuredClone(project.layers[0]),
+    id: "layer-2",
+    name: "Layer 2",
+    groupId: "upper",
+    transform: {
+      ...project.layers[0].transform,
+      x: -50,
+      y: -25,
+    },
+  });
+  return project;
 }
 
 function particleWallAnimation(
@@ -236,13 +401,37 @@ function makePlayer(project = tinyProject()): {
   return { root, driver, player, frames };
 }
 
+function getStage(root: FakeNode): FakeNode {
+  return root.children[0];
+}
+
+function getContent(root: FakeNode): FakeNode {
+  return getStage(root).children[0];
+}
+
+function getParticleRoot(root: FakeNode): FakeNode {
+  return getStage(root).children[1];
+}
+
+function getFirstGroup(root: FakeNode): FakeNode {
+  return getContent(root).children[0];
+}
+
+function getFirstLayerNode(root: FakeNode): FakeNode {
+  return getFirstGroup(root).children[0];
+}
+
+function getFirstParticleContainer(root: FakeNode): FakeNode {
+  return getFirstGroup(root).children[1];
+}
+
 describe("V5GCocosPlayer", () => {
   it("creates stage content and particle roots without a background node", () => {
     const project = sampleProject();
     const { root, player } = makePlayer(project);
     player.init();
 
-    const stage = root.children[0];
+    const stage = getStage(root);
     expect(stage.name).toBe("V5G Stage");
     expect(stage.width).toBe(project.stage.width);
     expect(stage.height).toBe(project.stage.height);
@@ -250,8 +439,11 @@ describe("V5GCocosPlayer", () => {
       "V5G Content",
       "V5G Particles",
     ]);
-    expect(stage.children[1].children).toHaveLength(0);
-    expect(stage.children[0].children.map((node) => node.name)).toEqual(
+    expect(getParticleRoot(root).children).toHaveLength(0);
+    expect(getContent(root).children.map((node) => node.name)).toEqual([
+      "V5G Group group_default",
+    ]);
+    expect(getFirstGroup(root).children.map((node) => node.name)).toEqual(
       project.layers.flatMap((layer) => [
         layer.name,
         `${layer.name} Particles`,
@@ -259,11 +451,271 @@ describe("V5GCocosPlayer", () => {
     );
   });
 
+  it("creates group-aware content slots and exposes adjacent group metadata", () => {
+    const project = twoGroupProject();
+    const { root, player } = makePlayer(project);
+    player.init();
+
+    expect(getContent(root).children.map((node) => node.name)).toEqual([
+      "V5G Group lower",
+      "V5G Slot lower -> upper",
+      "V5G Group upper",
+    ]);
+    expect(
+      getContent(root).children[0].children.map((node) => node.name),
+    ).toEqual(["Layer 1", "Layer 1 Particles"]);
+    expect(
+      getContent(root).children[2].children.map((node) => node.name),
+    ).toEqual(["Layer 2", "Layer 2 Particles"]);
+    expect(player.getLayerGroups().map((group) => group.id)).toEqual([
+      "lower",
+      "upper",
+    ]);
+    expect(player.getLayerGroups().map((group) => group.order)).toEqual([1, 0]);
+    expect(player.getLayerGroupSlots()).toEqual([
+      {
+        afterGroupId: "lower",
+        afterGroupName: "Lower",
+        beforeGroupId: "upper",
+        beforeGroupName: "Upper",
+        renderIndex: 0,
+      },
+    ]);
+  });
+
+  it("mounts external and runtime-owned nodes between adjacent groups", () => {
+    const { root, player } = makePlayer(twoGroupProject());
+    player.init();
+    const slot = getContent(root).children[1];
+    const external = new FakeNode("External");
+    external.x = 17;
+    external.y = -23;
+    external.scaleX = 2;
+
+    const dispose = player.attachNodeBetweenLayerGroups({
+      id: " external ",
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      node: external,
+    });
+    expect(external.parent).toBe(slot);
+    expect(external.x).toBe(17);
+    expect(external.y).toBe(-23);
+    expect(external.scaleX).toBe(2);
+    expect(() =>
+      player.attachNodeBetweenLayerGroups({
+        id: "external",
+        afterGroupId: "lower",
+        beforeGroupId: "upper",
+        node: new FakeNode("Duplicate"),
+      }),
+    ).toThrow("Duplicate V5G Cocos mounted node id: external");
+    expect(() =>
+      player.attachNodeBetweenLayerGroups({
+        id: "unknown",
+        afterGroupId: "missing",
+        beforeGroupId: "upper",
+        node: new FakeNode("Unknown"),
+      }),
+    ).toThrow("Unknown VNI layer group: missing");
+    expect(() =>
+      player.attachNodeBetweenLayerGroups({
+        id: "reversed",
+        afterGroupId: "upper",
+        beforeGroupId: "lower",
+        node: new FakeNode("Reversed"),
+      }),
+    ).toThrow("not adjacent in render order");
+
+    dispose();
+    dispose();
+    expect(external.parent).toBeNull();
+    expect(external.destroyed).toBe(false);
+    expect(() => player.detachMountedNode("external")).toThrow(
+      "Unknown V5G Cocos mounted node id: external",
+    );
+
+    const disposeProjectAsset = player.attachProjectAssetBetweenLayerGroups({
+      id: "asset-node",
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      assetId: "asset-1",
+      x: 3,
+      y: 4,
+      opacity: 0.25,
+    });
+    const assetNode = slot.children[0];
+    expect(assetNode.name).toBe("V5G Mounted Image asset-1");
+    expect(assetNode.x).toBe(3);
+    expect(assetNode.y).toBe(4);
+    expect(assetNode.opacity).toBe(64);
+    disposeProjectAsset();
+    expect(assetNode.destroyed).toBe(true);
+
+    const spriteFrameNodeDispose = player.attachSpriteFrameBetweenLayerGroups({
+      id: "sprite-frame-node",
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      spriteFrame: { id: "custom", width: 10, height: 12 },
+      width: 10,
+      height: 12,
+    });
+    expect(slot.children[0].name).toBe("V5G Mounted SpriteFrame");
+    player.clearMountedNodes();
+    expect(slot.children).toHaveLength(0);
+    spriteFrameNodeDispose();
+  });
+
+  it("mounts node batches, reorders repeated nodes, and restores original parents", () => {
+    const { root, driver, player } = makePlayer(twoGroupProject());
+    player.init();
+    const slot = getContent(root).children[1];
+    const host = new FakeNode("Host");
+    const first = new FakeNode("First");
+    const second = new FakeNode("Second");
+    const floating = new FakeNode("Floating");
+    host.x = 100;
+    host.y = 20;
+    host.scaleX = 2;
+    host.scaleY = 3;
+    host.rotation = 30;
+    slot.x = -75;
+    slot.y = 12;
+    slot.scaleX = 0.5;
+    slot.scaleY = 2;
+    slot.rotation = -15;
+    first.x = 25;
+    first.y = -10;
+    first.scaleX = 1.5;
+    first.rotation = 5;
+    second.x = -8;
+    second.y = 12;
+    second.scaleY = 0.5;
+    second.rotation = -12;
+    driver.appendChild(host, first);
+    driver.appendChild(host, second);
+    const firstOriginalLocal = captureFakeLocalTransform(first);
+    const secondOriginalLocal = captureFakeLocalTransform(second);
+    const firstWorldBeforeMount = captureFakeWorldTransform(first);
+    const secondWorldBeforeMount = captureFakeWorldTransform(second);
+
+    const batchDispose = player.attachNodeBetweenLayerGroups({
+      ids: ["first", "second"],
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      nodes: [first, second],
+    });
+    expect(slot.children.map((node) => node.name)).toEqual(["First", "Second"]);
+    expect(host.children).toHaveLength(0);
+    expect(first.x).not.toBe(firstOriginalLocal.x);
+    expect(second.x).not.toBe(secondOriginalLocal.x);
+    expectFakeTransformClose(
+      captureFakeWorldTransform(first),
+      firstWorldBeforeMount,
+    );
+    expectFakeTransformClose(
+      captureFakeWorldTransform(second),
+      secondWorldBeforeMount,
+    );
+
+    const floatingDispose = player.attachNodeBetweenLayerGroups({
+      id: "floating",
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      node: floating,
+    });
+    expect(slot.children.map((node) => node.name)).toEqual([
+      "First",
+      "Second",
+      "Floating",
+    ]);
+
+    const moveDispose = player.attachNodeBetweenLayerGroups({
+      id: "first-moved",
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      node: first,
+    });
+    expect(slot.children.map((node) => node.name)).toEqual([
+      "Second",
+      "Floating",
+      "First",
+    ]);
+    expect(() => player.detachMountedNode("first")).toThrow(
+      "Unknown V5G Cocos mounted node id: first",
+    );
+    expectFakeTransformClose(
+      captureFakeWorldTransform(first),
+      firstWorldBeforeMount,
+    );
+
+    batchDispose();
+    expect(slot.children.map((node) => node.name)).toEqual([
+      "Floating",
+      "First",
+    ]);
+    expect(second.parent).toBe(host);
+    expect(first.parent).toBe(slot);
+    expectFakeTransformClose(
+      captureFakeLocalTransform(second),
+      secondOriginalLocal,
+    );
+
+    player.detachMountedNodes([floating, "first-moved"]);
+    expect(floating.parent).toBeNull();
+    expect(first.parent).toBe(host);
+    expectFakeTransformClose(
+      captureFakeLocalTransform(first),
+      firstOriginalLocal,
+    );
+    expect(host.children.map((node) => node.name)).toEqual(["Second", "First"]);
+
+    moveDispose();
+    floatingDispose();
+    const clearFirst = new FakeNode("Clear First");
+    const clearSecond = new FakeNode("Clear Second");
+    driver.appendChild(host, clearFirst);
+    driver.appendChild(host, clearSecond);
+    player.attachNodeBetweenLayerGroups({
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      nodes: [clearFirst, clearSecond],
+    });
+
+    player.clearMountedNodes();
+    expect(clearFirst.parent).toBe(host);
+    expect(clearSecond.parent).toBe(host);
+    expect(host.children.map((node) => node.name)).toEqual([
+      "Second",
+      "First",
+      "Clear First",
+      "Clear Second",
+    ]);
+  });
+
+  it("clears mounted nodes on destroy", () => {
+    const { root, player } = makePlayer(twoGroupProject());
+    player.init();
+    const external = new FakeNode("External");
+    player.attachNodeBetweenLayerGroups({
+      id: "external",
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      node: external,
+    });
+
+    player.destroy();
+
+    expect(external.parent).toBeNull();
+    expect(external.destroyed).toBe(false);
+    expect(root.children).toHaveLength(0);
+  });
+
   it("writes sampled transform, opacity, active state, and layer blend mode on seek", () => {
     const { root, player } = makePlayer(tinyProject());
     player.init();
 
-    const layerNode = root.children[0].children[0].children[0];
+    const layerNode = getFirstLayerNode(root);
     expect(layerNode.x).toBe(100);
     expect(layerNode.y).toBe(50);
     expect(layerNode.scaleX).toBe(-1);
@@ -296,6 +748,48 @@ describe("V5GCocosPlayer", () => {
     expect(root.children).toHaveLength(0);
   });
 
+  it("fails before creating nodes for unsupported Cocos render effects", () => {
+    const project = assertV5GProject(threeReelMultipay01Data);
+    const { root, player } = makePlayer(project);
+
+    expect(() => player.init()).toThrow(
+      "Cocos runtime does not support VNI render effect animations yet",
+    );
+    expect(root.children).toHaveLength(0);
+  });
+
+  it("plays the non-effect 3reel group fixture and supports slot mounting", () => {
+    const project = assertV5GProject(threeReelMultipay02Data);
+    const { root, player } = makePlayer(project);
+    player.init();
+
+    expect(player.getLayerGroupSlots()[0]).toMatchObject({
+      afterGroupId: "layer_group_mqqo4zrn_6",
+      beforeGroupId: "group_default",
+    });
+    expect(getContent(root).children.map((node) => node.name)).toEqual([
+      "V5G Group layer_group_mqqo4zrn_6",
+      "V5G Slot layer_group_mqqo4zrn_6 -> group_default",
+      "V5G Group group_default",
+    ]);
+
+    const external = new FakeNode("External Reel");
+    player.attachNodeBetweenLayerGroups({
+      id: "reel",
+      afterGroupId: "layer_group_mqqo4zrn_6",
+      beforeGroupId: "group_default",
+      node: external,
+    });
+    expect(external.parent).toBe(getContent(root).children[1]);
+    player.playRange({
+      range: { unit: "time", start: 0, end: 0.5 },
+      loop: false,
+    });
+    player.update(0.25);
+    expect(player.time).toBe(0.25);
+    expect(external.parent).toBe(getContent(root).children[1]);
+  });
+
   it("resolves SpriteFrames from an atlas using the asset path filename", () => {
     const project = tinyProject();
     const root = new FakeNode("Root");
@@ -322,9 +816,7 @@ describe("V5GCocosPlayer", () => {
     player.init();
 
     expect(queries).toEqual(["a"]);
-    expect(root.children[0].children[0].children[0].spriteFrame?.id).toBe(
-      "asset-1",
-    );
+    expect(getFirstLayerNode(root).spriteFrame?.id).toBe("asset-1");
   });
 
   it("strips directories and extensions from atlas lookup keys", () => {
@@ -421,7 +913,7 @@ describe("V5GCocosPlayer", () => {
     });
 
     expect(() => player.init()).not.toThrow();
-    const layerNode = root.children[0].children[0].children[0];
+    const layerNode = getFirstLayerNode(root);
     expect(layerNode.width).toBe(100);
     expect(layerNode.height).toBe(50);
   });
@@ -449,7 +941,7 @@ describe("V5GCocosPlayer", () => {
     frames.set("asset-1", { id: "asset-1", width: 50, height: 25 });
     player.init();
 
-    const layerNode = root.children[0].children[0].children[0];
+    const layerNode = getFirstLayerNode(root);
     expect(layerNode.width).toBe(100);
     expect(layerNode.height).toBe(50);
     expect(layerNode.scaleX).toBe(-1);
@@ -854,11 +1346,9 @@ describe("V5GCocosPlayer", () => {
     const { root, player } = makePlayer(project);
     player.init();
 
-    const stage = root.children[0];
-    const content = stage.children[0];
-    const particleRoot = stage.children[1];
-    const layerNode = content.children[0];
-    const particleContainer = content.children[1];
+    const particleRoot = getParticleRoot(root);
+    const layerNode = getFirstLayerNode(root);
+    const particleContainer = getFirstParticleContainer(root);
     expect(layerNode.active).toBe(true);
     expect(particleRoot.children).toHaveLength(0);
     expect(particleContainer.name).toBe("Layer 1 Particles");
@@ -906,7 +1396,7 @@ describe("V5GCocosPlayer", () => {
     });
     player.update(0.6);
 
-    const particleContainer = root.children[0].children[0].children[1];
+    const particleContainer = getFirstParticleContainer(root);
     expect(player.time).toBe(0.5);
     expect(player.getPlaybackState()).toMatchObject({
       mode: "segmented",
