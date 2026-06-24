@@ -88,7 +88,10 @@ describe("particle-runtime", () => {
     expect(particles.length).toBeGreaterThan(0);
     expect(particles[0].layerId).toBe("layer");
     expect(particles[0].x).toBeCloseTo(10 + particles[0].offsetX);
-    expect(particles[0].y).toBeCloseTo(20 + particles[0].offsetY);
+    expect(particles[0].y).toBeCloseTo(20 - particles[0].offsetY);
+    expect(
+      particles.some((particle) => particle.offsetY < 0 && particle.y > 20),
+    ).toBe(true);
   });
 
   it("keeps emitted particles during drain and completes after lifetime", () => {

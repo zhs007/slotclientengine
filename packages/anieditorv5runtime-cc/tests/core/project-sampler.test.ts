@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import threeReelMultipay01Data from "../fixtures/3reel_multipay_01.json";
 import {
   sampleLayerAtTime,
   sampleProjectAtTime,
 } from "../../src/core/project-sampler";
+import { assertV5GProject } from "../../src/core/validation";
 import type {
   V5GAnimationConfig,
   V5GLayerConfig,
@@ -65,6 +67,44 @@ describe("project-sampler", () => {
     const atEnd = sampleLayerAtTime(layer(), 2);
     expect(atEnd.opacity).toBe(1);
     expect(atEnd.visible).toBe(true);
+  });
+
+  it("holds opacity between a completed entry fade and a pending exit fade", () => {
+    const sampled = layer({}, [
+      {
+        id: "fade-in",
+        type: "fade",
+        startTime: 1.3,
+        duration: 0.3,
+        enabled: true,
+        seed: 1,
+        params: { fromOpacity: 0, toOpacity: 1, easing: "linear" },
+      },
+      {
+        id: "fade-out",
+        type: "fade",
+        startTime: 4.7,
+        duration: 0.3,
+        enabled: true,
+        seed: 2,
+        params: { fromOpacity: 1, toOpacity: 0, easing: "linear" },
+      },
+    ]);
+
+    const before = sampleLayerAtTime(sampled, 1.29);
+    const duringFadeIn = sampleLayerAtTime(sampled, 1.5);
+    const held = sampleLayerAtTime(sampled, 2.5);
+    const duringFadeOut = sampleLayerAtTime(sampled, 4.85);
+    const after = sampleLayerAtTime(sampled, 5.1);
+
+    expect(before.visible).toBe(false);
+    expect(duringFadeIn.opacity).toBeCloseTo(0.6667, 4);
+    expect(duringFadeIn.visible).toBe(true);
+    expect(held.opacity).toBe(1);
+    expect(held.visible).toBe(true);
+    expect(duringFadeOut.opacity).toBeCloseTo(0.5, 4);
+    expect(duringFadeOut.visible).toBe(true);
+    expect(after.visible).toBe(false);
   });
 
   it("keeps layers with no enabled animations visible by base state", () => {
@@ -151,6 +191,56 @@ describe("project-sampler", () => {
     expect(sampled.visible).toBe(false);
     expect(sampled.renderImageDisplay).toBe(false);
     expect(sampled.hasActiveParticleAnimation).toBe(true);
+  });
+
+  it("keeps the 3reel multipay wheel light visible across its glow window", () => {
+    const project = assertV5GProject(threeReelMultipay01Data);
+    const lightLayerId = "layer_image_mqp31v5g_15";
+    const before = sampleProjectAtTime(project, 1.29).layers.find(
+      (sampled) => sampled.layerId === lightLayerId,
+    );
+    const fadeIn = sampleProjectAtTime(project, 1.5).layers.find(
+      (sampled) => sampled.layerId === lightLayerId,
+    );
+    const sustained = sampleProjectAtTime(project, 2.5).layers.find(
+      (sampled) => sampled.layerId === lightLayerId,
+    );
+    const fadeOut = sampleProjectAtTime(project, 4.85).layers.find(
+      (sampled) => sampled.layerId === lightLayerId,
+    );
+    const after = sampleProjectAtTime(project, 5.1).layers.find(
+      (sampled) => sampled.layerId === lightLayerId,
+    );
+
+    expect(before?.visible).toBe(false);
+    expect(fadeIn?.opacity).toBeCloseTo(0.6667, 4);
+    expect(fadeIn?.visible).toBe(true);
+    expect(sustained?.opacity).toBe(1);
+    expect(sustained?.visible).toBe(true);
+    expect(fadeOut?.opacity).toBeCloseTo(0.5, 4);
+    expect(fadeOut?.visible).toBe(true);
+    expect(after?.visible).toBe(false);
+  });
+
+  it("keeps the 3reel multipay wheel light visible when glow is removed", () => {
+    const project = assertV5GProject(
+      JSON.parse(JSON.stringify(threeReelMultipay01Data)),
+    );
+    const lightLayerId = "layer_image_mqp31v5g_15";
+    const lightLayer = project.layers.find(
+      (layerConfig) => layerConfig.id === lightLayerId,
+    );
+    expect(lightLayer).toBeDefined();
+    lightLayer!.animations = lightLayer!.animations.filter(
+      (animation) => animation.type !== "glow",
+    );
+
+    const sustained = sampleProjectAtTime(project, 2.5).layers.find(
+      (sampled) => sampled.layerId === lightLayerId,
+    );
+
+    expect(sustained?.opacity).toBe(1);
+    expect(sustained?.visible).toBe(true);
   });
 
   it("suppresses near-zero scale entry on the first frame", () => {
