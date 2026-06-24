@@ -4,8 +4,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const playerMock = vi.hoisted(() => {
   const instances: MockVNIPlayer[] = [];
+  const threeReelSlot = {
+    afterGroupId: "layer_group_mqqo064b_4",
+    afterGroupName: "下层光效",
+    beforeGroupId: "group_default",
+    beforeGroupName: "上层光效",
+    renderIndex: 0,
+  };
 
   class MockVNIPlayer {
+    private readonly layerGroupSlots: Array<typeof threeReelSlot>;
     readonly destroy = vi.fn();
     readonly init = vi.fn(async () => Promise.resolve());
     readonly isPlaying = vi.fn(() => false);
@@ -17,6 +25,10 @@ const playerMock = vi.hoisted(() => {
     readonly getTime = vi.fn(() => 0);
     readonly seek = vi.fn();
     readonly requestSegmentedPlaybackEnd = vi.fn();
+    readonly getLayerGroupSlots = vi.fn(() => this.layerGroupSlots);
+    readonly attachImageBetweenLayerGroups = vi.fn();
+    readonly attachExternalImageBetweenLayerGroups = vi.fn(async () => vi.fn());
+    readonly clearMountedNodes = vi.fn();
     readonly getPlaybackState = vi.fn(() => ({
       mode: "timeline",
       phase: "idle",
@@ -29,6 +41,14 @@ const playerMock = vi.hoisted(() => {
     }));
 
     constructor(readonly options: unknown) {
+      const projectId =
+        typeof options === "object" &&
+        options !== null &&
+        "projectId" in options
+          ? String((options as { projectId: unknown }).projectId)
+          : "";
+      this.layerGroupSlots =
+        projectId === "3reel-multipay-01" ? [threeReelSlot] : [];
       instances.push(this);
     }
   }
@@ -142,6 +162,121 @@ describe("anieditorv5viewer main", () => {
     expect(endButton.disabled).toBe(false);
     endButton.click();
     expect(player.requestSegmentedPlaybackEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it("wires timeline seek controls to VNIPlayer", async () => {
+    document.body.innerHTML = '<div id="app"></div>';
+
+    await import("../src/main");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const player = playerMock.instances[0];
+    const timeline = document.querySelector<HTMLInputElement>("input.timeline");
+    expect(timeline).not.toBeNull();
+    if (!timeline) throw new Error("Missing timeline control.");
+
+    timeline.value = "1.25";
+    timeline.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    timeline.dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect(player.pause).toHaveBeenCalledTimes(1);
+    expect(player.seek).toHaveBeenCalledWith(1.25);
+  });
+
+  it("wires group insertion controls to VNIPlayer layer group slots", async () => {
+    document.body.innerHTML = '<div id="app"></div>';
+
+    await import("../src/main");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const projectSelect = document.querySelector<HTMLSelectElement>(
+      'select[aria-label="V5G project"]',
+    );
+    const insertButton = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent === "插入",
+    );
+    expect(insertButton?.disabled).toBe(true);
+    if (!projectSelect || !insertButton) {
+      throw new Error("Missing project or insertion controls.");
+    }
+
+    projectSelect.value = "3reel-multipay-01";
+    projectSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const player = playerMock.instances[1];
+    const assetSelect = document.querySelector<HTMLSelectElement>(
+      'select[aria-label="插入 asset"]',
+    );
+    const slotSelect = document.querySelector<HTMLSelectElement>(
+      'select[aria-label="组间 slot"]',
+    );
+    const clearButton = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent === "移除",
+    );
+    if (!assetSelect || !slotSelect || !clearButton) {
+      throw new Error("Missing group insertion controls.");
+    }
+
+    const slotOptions = Array.from(slotSelect.options);
+    expect(slotOptions).toHaveLength(1);
+    expect(slotOptions[0].textContent).toBe("下层光效 -> 上层光效");
+    expect(assetSelect.options.length).toBeGreaterThan(3);
+    assetSelect.value = "assets/image_asset_image_mqp31v5g_14.jpg";
+    assetSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    insertButton.click();
+
+    expect(player.attachImageBetweenLayerGroups).toHaveBeenCalledWith({
+      id: "viewer-group-slot-image",
+      afterGroupId: "layer_group_mqqo064b_4",
+      beforeGroupId: "group_default",
+      assetId: "asset_image_mqp31v5g_14",
+      x: 1000,
+      y: 1000,
+      anchorX: 0.5,
+      anchorY: 0.5,
+      opacity: 1,
+    });
+    expect(clearButton.disabled).toBe(false);
+
+    clearButton.click();
+    expect(player.clearMountedNodes).toHaveBeenCalledTimes(1);
+    expect(clearButton.disabled).toBe(true);
+
+    const projectAssetPaths = new Set([
+      "assets/1_asset_image_mqp1egz4_b.png",
+      "assets/image_asset_image_mqp31v5g_14.jpg",
+      "assets/2_asset_image_mqp4tfmw_i.jpg",
+    ]);
+    const externalOption = Array.from(assetSelect.options).find(
+      (option) => !projectAssetPaths.has(option.value),
+    );
+    expect(externalOption).toBeDefined();
+    if (!externalOption) throw new Error("Missing external insertion asset.");
+
+    assetSelect.value = externalOption.value;
+    assetSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    insertButton.click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(player.attachExternalImageBetweenLayerGroups).toHaveBeenCalledWith({
+      id: "viewer-group-slot-image",
+      afterGroupId: "layer_group_mqqo064b_4",
+      beforeGroupId: "group_default",
+      imageUrl: expect.any(String),
+      label: externalOption.value,
+      x: 1000,
+      y: 1000,
+      anchorX: 0.5,
+      anchorY: 0.5,
+      opacity: 1,
+    });
   });
 
   it("blocks invalid segmented times before calling runtime", async () => {

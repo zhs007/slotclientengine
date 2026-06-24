@@ -28,8 +28,14 @@ The root import re-exports both `./core` and `./pixi`. The `V5G*` names are lega
 - `runtime_50` file pixels with logical-size display compensation
 - animation and particle sampling used by `apps/anieditorv5viewer`
 - `play()`, `play({ mode: "segmented", ... })`, `pause()`, `restart()`, `seek()`, `setLoop()`, `playRange(...)`, playback markers, particle-draining, and complete listeners
+- `project.layerGroups + layer.groupId` layer group schema, with render order derived from `project.layers`
+- adjacent layer-group slot APIs for mounting host Pixi nodes, project asset images, or explicit external image URLs between two neighboring groups
 
 Invalid data fails fast. Missing assets, bad numeric params, unknown animation/easing/blend modes, texture size mismatches, unsupported group/parent/keyframe structures, and manifest/profile mismatches throw instead of rendering placeholders.
+
+Layer group slots are exposed through `VNIPlayer.getLayerGroupSlots()`. The slot order follows the actual `project.layers` render order, not `layerGroups.order`. `attachNodeBetweenLayerGroups(...)`, `attachImageBetweenLayerGroups(...)`, and `attachExternalImageBetweenLayerGroups(...)` require the two group ids to be an adjacent slot; reversed, unknown, or non-adjacent ids throw. Project images keep the project texture-size validation path; external image URLs are for host-owned assets that are not listed in `project.assets`.
+
+Supported animation types include transform/opacity animations, live particles, segmented particle draining, and deterministic render effects such as `idle`, `shatter`, and `glow`. `idle` is a coverage-only no-op; `shatter` and `glow` are sampled separately from live particles.
 
 ## Docs And Examples
 

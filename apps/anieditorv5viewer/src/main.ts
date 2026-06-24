@@ -3,6 +3,8 @@ import { bundledProjects, getBundledProject } from "./config/bundled-projects";
 import { VNIPlayer } from "@slotclientengine/vnicore/pixi";
 import { createViewerControls } from "./ui/controls";
 
+const VIEWER_INSERTED_NODE_ID = "viewer-group-slot-image";
+
 async function bootstrap(): Promise<void> {
   const appRoot = document.querySelector<HTMLDivElement>("#app");
   if (!appRoot) {
@@ -25,6 +27,7 @@ async function bootstrap(): Promise<void> {
 
   let player: VNIPlayer | null = null;
   let loadToken = 0;
+  let activeProject = getBundledProject("project");
   const controls = createViewerControls({
     projects: bundledProjects,
     selectedProjectId: "project",
@@ -83,6 +86,55 @@ async function bootstrap(): Promise<void> {
         );
       }
     },
+    onInsertBetweenGroups: (insertion) => {
+      const currentPlayer = player;
+      if (!currentPlayer) return;
+      void (async () => {
+        const attachOptions = {
+          id: VIEWER_INSERTED_NODE_ID,
+          afterGroupId: insertion.afterGroupId,
+          beforeGroupId: insertion.beforeGroupId,
+          x: activeProject.project.stage.width / 2,
+          y: activeProject.project.stage.height / 2,
+          anchorX: 0.5,
+          anchorY: 0.5,
+          opacity: 1,
+        };
+        const dispose = insertion.projectAssetId
+          ? currentPlayer.attachImageBetweenLayerGroups({
+              ...attachOptions,
+              assetId: insertion.projectAssetId,
+            })
+          : await currentPlayer.attachExternalImageBetweenLayerGroups({
+              ...attachOptions,
+              imageUrl: insertion.assetUrl,
+              label: insertion.assetPath,
+            });
+        if (currentPlayer !== player) {
+          dispose();
+          return;
+        }
+        controls.setInsertedNodeActive(true);
+        controls.setInsertionError(null);
+      })().catch((error: unknown) => {
+        if (currentPlayer !== player) return;
+        controls.setInsertionError(
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+    },
+    onClearInsertedNodes: () => {
+      if (!player) return;
+      try {
+        player.clearMountedNodes();
+        controls.setInsertedNodeActive(false);
+        controls.setInsertionError(null);
+      } catch (error) {
+        controls.setInsertionError(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    },
   });
 
   function syncPlaybackState(): void {
@@ -93,6 +145,7 @@ async function bootstrap(): Promise<void> {
   async function loadProject(projectId: string): Promise<void> {
     const selectedProject = getBundledProject(projectId);
     const token = (loadToken += 1);
+    activeProject = selectedProject;
 
     player?.destroy();
     player = null;
@@ -125,6 +178,8 @@ async function bootstrap(): Promise<void> {
       return;
     }
     player = nextPlayer;
+    controls.setLayerGroupSlots(player.getLayerGroupSlots());
+    controls.setInsertedNodeActive(false);
     controls.setLoop(player.getLoop());
     controls.setTime(player.getTime());
     syncPlaybackState();

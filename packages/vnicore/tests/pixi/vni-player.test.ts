@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Container as PixiContainer } from "pixi.js";
 
 const pixiMock = vi.hoisted(() => {
   const textureByUrl = new Map<string, { width: number; height: number }>();
@@ -15,29 +16,50 @@ const pixiMock = vi.hoisted(() => {
 
   class MockContainer {
     children: MockContainer[] = [];
+    parent: MockContainer | null = null;
     label = "";
     position = new MockPoint();
     pivot = new MockPoint();
     scale = new MockPoint();
     anchor = new MockPoint();
+    mask: MockContainer | null = null;
     rotation = 0;
     alpha = 1;
     visible = true;
     blendMode = "normal";
 
     addChild(...children: MockContainer[]): MockContainer | undefined {
+      for (const child of children) {
+        child.parent?.removeChild(child);
+        child.parent = this;
+      }
       this.children.push(...children);
+      return children[0];
+    }
+
+    removeChild(...children: MockContainer[]): MockContainer | undefined {
+      for (const child of children) {
+        const index = this.children.indexOf(child);
+        if (index >= 0) {
+          this.children.splice(index, 1);
+          child.parent = null;
+        }
+      }
       return children[0];
     }
 
     removeChildren(): MockContainer[] {
       const children = this.children;
+      for (const child of children) {
+        child.parent = null;
+      }
       this.children = [];
       return children;
     }
 
     destroy(): void {
       this.children = [];
+      this.parent = null;
     }
   }
 
@@ -129,6 +151,10 @@ function createContainer(): HTMLElement {
   } as unknown as HTMLElement;
 }
 
+function createMockPixiContainer(): PixiContainer {
+  return new pixiMock.MockContainer() as unknown as PixiContainer;
+}
+
 function createProject(): V5GProjectConfig {
   return {
     schemaVersion: "VNI_0.010",
@@ -160,6 +186,22 @@ function createProject(): V5GProjectConfig {
         height: 100,
       },
     ],
+    layerGroups: [
+      {
+        id: "group_default",
+        name: "Upper",
+        visible: true,
+        collapsed: false,
+        order: 0,
+      },
+      {
+        id: "lower",
+        name: "Lower",
+        visible: true,
+        collapsed: false,
+        order: 1,
+      },
+    ],
     layers: [
       {
         id: "layer-a",
@@ -167,6 +209,7 @@ function createProject(): V5GProjectConfig {
         type: "image",
         assetId: "asset-a",
         parentId: null,
+        groupId: "lower",
         visible: true,
         locked: false,
         transform: {
@@ -222,6 +265,7 @@ function createProject(): V5GProjectConfig {
         type: "image",
         assetId: "asset-b",
         parentId: null,
+        groupId: "group_default",
         visible: true,
         locked: false,
         transform: {
@@ -243,9 +287,73 @@ function createProject(): V5GProjectConfig {
   };
 }
 
+function createThreeGroupProject(): V5GProjectConfig {
+  const project = createProject();
+  project.layerGroups.push({
+    id: "middle",
+    name: "Middle",
+    visible: true,
+    collapsed: false,
+    order: 2,
+  });
+  project.layers.splice(1, 0, {
+    ...project.layers[1],
+    id: "layer-middle",
+    name: "Layer Middle",
+    groupId: "middle",
+  });
+  return project;
+}
+
+function createRenderEffectProject(): V5GProjectConfig {
+  const project = createProject();
+  project.layers[0].animations = [
+    {
+      id: "shatter",
+      type: "shatter",
+      startTime: 0,
+      duration: 1,
+      enabled: true,
+      seed: 3,
+      params: {
+        count: 8,
+        pieceSize: 32,
+        force: 200,
+        impactAngle: 90,
+        spreadAngle: 120,
+        gravity: 500,
+        spin: 4,
+        sourceOpacity: 0,
+        fadeOut: true,
+      },
+    },
+  ];
+  project.layers[1].animations = [
+    {
+      id: "glow",
+      type: "glow",
+      startTime: 0,
+      duration: 1,
+      enabled: true,
+      seed: 4,
+      params: {
+        intensity: 0.75,
+        spread: 0.12,
+        minAlpha: 0.15,
+        maxAlpha: 0.75,
+        pulses: 2,
+        blendMode: 2,
+        keepOriginal: false,
+      },
+    },
+  ];
+  return project;
+}
+
 async function createInitializedPlayer(
   options: {
     onPlayingChange?: (isPlaying: boolean) => void;
+    project?: V5GProjectConfig;
   } = {},
 ): Promise<VNIPlayer> {
   vi.stubGlobal("window", { devicePixelRatio: 1 });
@@ -265,7 +373,7 @@ async function createInitializedPlayer(
     profileId: "legacy_full",
     profilePurpose: "legacy",
     assetScale: 1,
-    project: createProject(),
+    project: options.project ?? createProject(),
     assetUrls: {
       "assets/a.png": "/a.png",
       "assets/b.png": "/b.png",
@@ -347,19 +455,35 @@ describe("VNIPlayer", () => {
         string,
         {
           display: InstanceType<typeof pixiMock.MockContainer>;
+          effectDisplay: InstanceType<typeof pixiMock.MockContainer>;
           particleDisplay: InstanceType<typeof pixiMock.MockContainer>;
         }
+      >;
+      groupContainersById: Map<
+        string,
+        InstanceType<typeof pixiMock.MockContainer>
       >;
     };
     const layerA = internals.layerInstances.get("layer-a");
     const layerB = internals.layerInstances.get("layer-b");
+    const lowerGroup = internals.groupContainersById.get("lower");
+    const defaultGroup = internals.groupContainersById.get("group_default");
 
     expect(layerA).toBeDefined();
     expect(layerB).toBeDefined();
-    expect(internals.contentRoot.children).toEqual([
+    expect(lowerGroup).toBeDefined();
+    expect(defaultGroup).toBeDefined();
+    expect(internals.contentRoot.children).toHaveLength(3);
+    expect(internals.contentRoot.children[0]).toBe(lowerGroup);
+    expect(internals.contentRoot.children[2]).toBe(defaultGroup);
+    expect(lowerGroup?.children).toEqual([
       layerA?.display,
+      layerA?.effectDisplay,
       layerA?.particleDisplay,
+    ]);
+    expect(defaultGroup?.children).toEqual([
       layerB?.display,
+      layerB?.effectDisplay,
       layerB?.particleDisplay,
     ]);
     expect(layerA?.display.visible).toBe(false);
@@ -434,6 +558,302 @@ describe("VNIPlayer", () => {
     expect(() =>
       player.playRange({ range: { unit: "time", start: 0, end: 1 } }),
     ).toThrow("requires init");
+    expect(() =>
+      player.attachNodeBetweenLayerGroups({
+        id: " ",
+        afterGroupId: "lower",
+        beforeGroupId: "group_default",
+        node: createMockPixiContainer(),
+      }),
+    ).toThrow("requires init");
+  });
+
+  it("exposes render-order layer groups and legal slots", async () => {
+    const player = await createInitializedPlayer();
+
+    expect(player.getLayerGroups().map((group) => group.id)).toEqual([
+      "lower",
+      "group_default",
+    ]);
+    expect(player.getLayerGroupSlots()).toEqual([
+      {
+        afterGroupId: "lower",
+        afterGroupName: "Lower",
+        beforeGroupId: "group_default",
+        beforeGroupName: "Upper",
+        renderIndex: 0,
+      },
+    ]);
+  });
+
+  it("attaches and detaches host nodes between adjacent groups", async () => {
+    const container = createContainer();
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    pixiMock.textureByUrl.set("/a.png", { width: 100, height: 100 });
+    pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
+
+    const player = new VNIPlayer({
+      container,
+      projectId: "player-test",
+      bundleId: "legacy",
+      profileId: "legacy_full",
+      profilePurpose: "legacy",
+      assetScale: 1,
+      project: createProject(),
+      assetUrls: {
+        "assets/a.png": "/a.png",
+        "assets/b.png": "/b.png",
+      },
+    });
+    await player.init();
+
+    const node = new pixiMock.MockContainer();
+    const destroySpy = vi.spyOn(node, "destroy");
+    const dispose = player.attachNodeBetweenLayerGroups({
+      id: "host-node",
+      afterGroupId: "lower",
+      beforeGroupId: "group_default",
+      node: node as unknown as PixiContainer,
+    });
+    const internals = player as unknown as {
+      contentRoot: InstanceType<typeof pixiMock.MockContainer>;
+    };
+    const slotContainer = internals.contentRoot.children[1];
+
+    expect(slotContainer.children).toEqual([node]);
+    expect(container.dataset.vniMountedNodes).toBe("1");
+    expect(() =>
+      player.attachNodeBetweenLayerGroups({
+        id: "host-node",
+        afterGroupId: "lower",
+        beforeGroupId: "group_default",
+        node: createMockPixiContainer(),
+      }),
+    ).toThrow("Duplicate VNI mounted node id");
+    expect(() =>
+      player.attachNodeBetweenLayerGroups({
+        id: " ",
+        afterGroupId: "lower",
+        beforeGroupId: "group_default",
+        node: createMockPixiContainer(),
+      }),
+    ).toThrow("mounted node id");
+
+    dispose();
+    dispose();
+
+    expect(slotContainer.children).toEqual([]);
+    expect(destroySpy).not.toHaveBeenCalled();
+    expect(container.dataset.vniMountedNodes).toBe("0");
+    expect(() => player.detachMountedNode("host-node")).toThrow("Unknown");
+  });
+
+  it("destroys mounted nodes only when destroyOnDetach is true", async () => {
+    const player = await createInitializedPlayer();
+    const node = new pixiMock.MockContainer();
+    const destroySpy = vi.spyOn(node, "destroy");
+
+    player.attachNodeBetweenLayerGroups({
+      id: "destroy-me",
+      afterGroupId: "lower",
+      beforeGroupId: "group_default",
+      node: node as unknown as PixiContainer,
+      destroyOnDetach: true,
+    });
+    player.clearMountedNodes();
+
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders deterministic render effects and clears start-frame leakage", async () => {
+    const player = await createInitializedPlayer({
+      project: createRenderEffectProject(),
+    });
+    const internals = player as unknown as {
+      layerInstances: Map<
+        string,
+        {
+          display: InstanceType<typeof pixiMock.MockContainer>;
+          effectDisplay: InstanceType<typeof pixiMock.MockContainer>;
+        }
+      >;
+    };
+    const layerA = internals.layerInstances.get("layer-a");
+    const layerB = internals.layerInstances.get("layer-b");
+    if (!layerA || !layerB) throw new Error("Missing test layers.");
+
+    player.seek(0.5);
+
+    expect(layerA.display.visible).toBe(false);
+    expect(layerA.effectDisplay.children.length).toBeGreaterThan(0);
+    expect(layerB.display.visible).toBe(false);
+    expect(layerB.effectDisplay.children.length).toBeGreaterThan(0);
+
+    player.seek(0);
+
+    expect(layerA.effectDisplay.children).toEqual([]);
+    expect(layerB.effectDisplay.children).toEqual([]);
+  });
+
+  it("fails fast for reversed, unknown, and non-adjacent group slots", async () => {
+    const player = await createInitializedPlayer({
+      project: createThreeGroupProject(),
+    });
+    const node = createMockPixiContainer();
+
+    expect(() =>
+      player.attachNodeBetweenLayerGroups({
+        id: "reverse",
+        afterGroupId: "group_default",
+        beforeGroupId: "middle",
+        node,
+      }),
+    ).toThrow("not adjacent");
+    expect(() =>
+      player.attachNodeBetweenLayerGroups({
+        id: "unknown",
+        afterGroupId: "missing",
+        beforeGroupId: "group_default",
+        node,
+      }),
+    ).toThrow("Unknown VNI layer group");
+    expect(() =>
+      player.attachNodeBetweenLayerGroups({
+        id: "non-adjacent",
+        afterGroupId: "lower",
+        beforeGroupId: "group_default",
+        node,
+      }),
+    ).toThrow("not adjacent");
+  });
+
+  it("attaches project images using loaded textures and display compensation", async () => {
+    const player = await createInitializedPlayer();
+    const dispose = player.attachImageBetweenLayerGroups({
+      id: "asset-node",
+      afterGroupId: "lower",
+      beforeGroupId: "group_default",
+      assetId: "asset-b",
+      x: 25,
+      y: 35,
+      scaleX: 2,
+      scaleY: 3,
+      rotation: 90,
+      anchorX: 0.25,
+      anchorY: 0.75,
+      opacity: 0.5,
+      blendMode: "add",
+    });
+    const internals = player as unknown as {
+      contentRoot: InstanceType<typeof pixiMock.MockContainer>;
+    };
+    const slotContainer = internals.contentRoot.children[1];
+    const sprite = slotContainer.children[0];
+
+    expect(sprite.position).toMatchObject({ x: 25, y: 35 });
+    expect(sprite.scale).toMatchObject({ x: 2, y: 3 });
+    expect(sprite.rotation).toBeCloseTo(Math.PI / 2);
+    expect(sprite.alpha).toBe(0.5);
+    expect(sprite.blendMode).toBe("add");
+
+    dispose();
+    expect(slotContainer.children).toEqual([]);
+    expect(() =>
+      player.attachImageBetweenLayerGroups({
+        id: "missing-asset",
+        afterGroupId: "lower",
+        beforeGroupId: "group_default",
+        assetId: "missing",
+      }),
+    ).toThrow("Unknown VNI asset id");
+  });
+
+  it("attaches external images from explicit URLs", async () => {
+    pixiMock.textureByUrl.set("/external.png", { width: 64, height: 32 });
+    const player = await createInitializedPlayer();
+    const dispose = await player.attachExternalImageBetweenLayerGroups({
+      id: "external-asset",
+      afterGroupId: "lower",
+      beforeGroupId: "group_default",
+      imageUrl: "/external.png",
+      label: "assets/external.png",
+      x: 12,
+      y: 18,
+      scaleX: 0.5,
+      scaleY: 0.75,
+      opacity: 0.8,
+    });
+    const internals = player as unknown as {
+      contentRoot: InstanceType<typeof pixiMock.MockContainer>;
+    };
+    const slotContainer = internals.contentRoot.children[1];
+    const sprite = slotContainer.children[0];
+
+    expect(sprite.label).toBe("VNI mounted external image assets/external.png");
+    expect(sprite.position).toMatchObject({ x: 12, y: 18 });
+    expect(sprite.scale).toMatchObject({ x: 0.5, y: 0.75 });
+    expect(sprite.alpha).toBe(0.8);
+
+    dispose();
+    expect(slotContainer.children).toEqual([]);
+    await expect(
+      player.attachExternalImageBetweenLayerGroups({
+        id: "missing-external",
+        afterGroupId: "lower",
+        beforeGroupId: "group_default",
+        imageUrl: "/missing.png",
+      }),
+    ).rejects.toThrow("failed to load a valid Pixi texture");
+  });
+
+  it("clears mounted nodes and diagnostics on destroy", async () => {
+    const container = createContainer();
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    pixiMock.textureByUrl.set("/a.png", { width: 100, height: 100 });
+    pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
+
+    const player = new VNIPlayer({
+      container,
+      projectId: "player-test",
+      bundleId: "legacy",
+      profileId: "legacy_full",
+      profilePurpose: "legacy",
+      assetScale: 1,
+      project: createProject(),
+      assetUrls: {
+        "assets/a.png": "/a.png",
+        "assets/b.png": "/b.png",
+      },
+    });
+    await player.init();
+    player.attachNodeBetweenLayerGroups({
+      id: "destroyed",
+      afterGroupId: "lower",
+      beforeGroupId: "group_default",
+      node: createMockPixiContainer(),
+    });
+
+    expect(container.dataset.vniLayerGroups).toBe("2");
+    expect(container.dataset.vniLayerGroupSlots).toBe("1");
+    expect(container.dataset.vniMountedNodes).toBe("1");
+
+    player.destroy();
+
+    expect(container.dataset.vniLayerGroups).toBeUndefined();
+    expect(container.dataset.vniLayerGroupSlots).toBeUndefined();
+    expect(container.dataset.vniMountedNodes).toBeUndefined();
   });
 
   it("writes pixel diagnostics when a WebGL context is readable", async () => {

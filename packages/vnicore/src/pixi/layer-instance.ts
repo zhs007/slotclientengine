@@ -11,6 +11,7 @@ import type {
 export interface V5GLayerInstance {
   layer: V5GLayerConfig;
   display: PIXI.Container;
+  effectDisplay: PIXI.Container;
   particleDisplay: PIXI.Container;
   texture: PIXI.Texture | null;
   textureSize: { width: number; height: number } | null;
@@ -28,6 +29,8 @@ export function createLayerInstance(
 ): V5GLayerInstance {
   const display = new PIXI.Container();
   display.label = layer.name;
+  const effectDisplay = new PIXI.Container();
+  effectDisplay.label = `${layer.name} effects`;
   const particleDisplay = new PIXI.Container();
   particleDisplay.label = `${layer.name} particles`;
   let instanceTexture: PIXI.Texture | null = null;
@@ -83,6 +86,7 @@ export function createLayerInstance(
   return {
     layer,
     display,
+    effectDisplay,
     particleDisplay,
     texture: instanceTexture,
     textureSize,

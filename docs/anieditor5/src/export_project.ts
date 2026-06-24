@@ -1,7 +1,7 @@
 import JSZip from "jszip";
 import {
+  buildExportJsonFilename,
   DEFAULT_EXPORT_ZIP_FILENAME,
-  EXPORT_JSON_FILENAME,
   VNI_VERSION,
 } from "./constants";
 import { toExportProject } from "./project_state";
@@ -16,6 +16,7 @@ import type {
 } from "./types";
 
 const BUNDLE_MANIFEST_FILENAME = "manifest.json";
+const IMPORT_CANDIDATE_JSON_PATTERN = /\.json$/i;
 
 export interface ImportedV5GZipProject {
   project: V5GProjectConfig;
@@ -30,6 +31,64 @@ export interface ExportV5GZipOptions {
 interface PreparedExportAsset {
   asset: V5GAssetConfig;
   file: File | Blob;
+}
+
+async function compactDuplicateProjectAssetsForExport(
+  state: V5GEditorState,
+  project: V5GProjectConfig,
+): Promise<void> {
+  const canonicalBySource = new Map<string, V5GAssetConfig>();
+  const assetIdRemap = new Map<string, string>();
+  const uniqueAssets: V5GAssetConfig[] = [];
+
+  for (const asset of project.assets) {
+    const sourceKey = await getExportAssetSourceKey(state, asset);
+    const canonical = canonicalBySource.get(sourceKey);
+    if (!canonical) {
+      canonicalBySource.set(sourceKey, asset);
+      uniqueAssets.push(asset);
+      continue;
+    }
+    assetIdRemap.set(asset.id, canonical.id);
+  }
+
+  if (assetIdRemap.size === 0) return;
+
+  for (const layer of project.layers) {
+    if (layer.assetId && assetIdRemap.has(layer.assetId)) {
+      layer.assetId = assetIdRemap.get(layer.assetId) ?? layer.assetId;
+    }
+  }
+  for (const particle of project.particles) {
+    if (particle.assetId && assetIdRemap.has(particle.assetId)) {
+      particle.assetId = assetIdRemap.get(particle.assetId) ?? particle.assetId;
+    }
+  }
+  project.assets = uniqueAssets;
+}
+
+async function getExportAssetSourceKey(
+  state: V5GEditorState,
+  asset: V5GAssetConfig,
+): Promise<string> {
+  const runtimeAsset = state.runtimeAssets.find((item) => item.id === asset.id);
+  if (!runtimeAsset) {
+    return `asset:${asset.originalName}:${asset.width}x${asset.height}:${asset.path}`;
+  }
+  return `file:${runtimeAsset.file.name}:${runtimeAsset.file.size}:${runtimeAsset.file.lastModified}:${await hashBlob(runtimeAsset.file)}`;
+}
+
+async function hashBlob(blob: Blob): Promise<string> {
+  if (!globalThis.crypto?.subtle) {
+    return `${blob.size}:${blob.type}`;
+  }
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    await blob.arrayBuffer(),
+  );
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 export function buildProjectJson(state: V5GEditorState): string {
@@ -52,6 +111,7 @@ export async function exportProjectZip(
 ): Promise<void> {
   const assetScale = normalizeAssetScale(options.assetScale ?? 1);
   const zip = new JSZip();
+  const jsonFilename = `${buildExportJsonFilename(state.project.name)}.json`;
   if (assetScale >= 0.999) {
     await addProjectProfileToZip(zip, state, "", {
       id: "project_full",
@@ -69,14 +129,14 @@ export async function exportProjectZip(
           id: "edit_full",
           purpose: "editing",
           assetScale: 1,
-          path: `edit_full/${EXPORT_JSON_FILENAME}`,
+          path: `edit_full/${jsonFilename}`,
           label: "100% 原图编辑备份",
         },
         {
           id: runtimeProfileId,
           purpose: "runtime",
           assetScale,
-          path: `${runtimeProfileId}/${EXPORT_JSON_FILENAME}`,
+          path: `${runtimeProfileId}/${jsonFilename}`,
           label: `${Math.round(assetScale * 100)}% 运行发布包`,
         },
       ],
@@ -111,21 +171,13 @@ export async function importProjectZip(
 
   const discoveredProject = findImportProjectEntry(zip);
   if (!discoveredProject) {
-    throw new Error(
-      `ZIP 中缺少 ${EXPORT_JSON_FILENAME}；如果项目文件在子文件夹中，请确认该子文件夹也一起压入 ZIP。`,
-    );
+    throw new Error("ZIP 中缺少有效项目 JSON 文件；请确认 ZIP 包含项目文件。");
   }
   const imported = await importSingleProjectZip(
     zip,
     discoveredProject.path,
     discoveredProject.basePath,
   );
-  if (discoveredProject.path !== EXPORT_JSON_FILENAME) {
-    imported.importNote = joinImportNotes(
-      `检测到 ${EXPORT_JSON_FILENAME} 位于 ${discoveredProject.basePath}，已自动按该文件夹导入。`,
-      imported.importNote,
-    );
-  }
   return imported;
 }
 
@@ -144,12 +196,13 @@ async function addProjectProfileToZip(
   prefix: string,
   profile: V5GExportProfileConfig & { includeExportProfile: boolean },
 ): Promise<void> {
-  const preparedAssets = await Promise.all(
-    state.project.assets.map((asset) =>
-      prepareExportAsset(state, asset, profile.assetScale),
-    ),
-  );
   const project = toExportProject(state.project);
+  await compactDuplicateProjectAssetsForExport(state, project);
+  const preparedAssets = await prepareExportAssets(
+    state,
+    project,
+    profile.assetScale,
+  );
   project.schemaVersion = VNI_VERSION;
   project.editor.version = VNI_VERSION;
   project.assets = preparedAssets.map((item) => item.asset);
@@ -163,13 +216,41 @@ async function addProjectProfileToZip(
   } else {
     delete project.exportProfile;
   }
-  zip.file(
-    `${prefix}${EXPORT_JSON_FILENAME}`,
-    JSON.stringify(project, null, 2),
-  );
+  const jsonFilename = `${buildExportJsonFilename(state.project.name)}.json`;
+  zip.file(`${prefix}${jsonFilename}`, JSON.stringify(project, null, 2));
   for (const prepared of preparedAssets) {
     zip.file(`${prefix}${prepared.asset.path}`, prepared.file);
   }
+}
+
+async function prepareExportAssets(
+  state: V5GEditorState,
+  project: V5GProjectConfig,
+  requestedScale: number,
+): Promise<PreparedExportAsset[]> {
+  const prepared: PreparedExportAsset[] = [];
+  const exportedBySource = new Map<string, PreparedExportAsset>();
+  for (const asset of project.assets) {
+    const sourceKey = await getExportAssetSourceKey(state, asset);
+    const existing = exportedBySource.get(sourceKey);
+    if (existing) {
+      prepared.push({
+        asset: {
+          ...normalizeAssetMetadata(asset, existing.asset.fileScale),
+          path: existing.asset.path,
+          fileWidth: existing.asset.fileWidth,
+          fileHeight: existing.asset.fileHeight,
+          fileScale: existing.asset.fileScale,
+        },
+        file: existing.file,
+      });
+      continue;
+    }
+    const next = await prepareExportAsset(state, asset, requestedScale);
+    exportedBySource.set(sourceKey, next);
+    prepared.push(next);
+  }
+  return prepared;
 }
 
 async function prepareExportAsset(
@@ -283,11 +364,11 @@ function parseProjectConfig(rawProject: string): V5GProjectConfig {
   try {
     parsed = JSON.parse(rawProject);
   } catch {
-    throw new Error(`${EXPORT_JSON_FILENAME} 不是有效 JSON`);
+    throw new Error("项目 JSON 文件不是有效 JSON");
   }
 
   if (!isProjectConfig(parsed)) {
-    throw new Error(`${EXPORT_JSON_FILENAME} 不是有效的 V5G 项目文件`);
+    throw new Error("项目 JSON 文件不是有效的 VNI 项目文件");
   }
   return parsed;
 }
@@ -361,16 +442,14 @@ function selectImportManifestEntry(
 function findImportProjectEntry(
   zip: JSZip,
 ): { path: string; basePath: string } | null {
-  const rootEntry = zip.file(EXPORT_JSON_FILENAME);
-  if (rootEntry) {
-    return { path: EXPORT_JSON_FILENAME, basePath: "" };
-  }
+  const jsonEntries = zip.filter(
+    (_relativePath, entry) =>
+      !entry.dir && IMPORT_CANDIDATE_JSON_PATTERN.test(entry.name),
+  );
 
-  const candidates = zip
-    .filter(
-      (relativePath, entry) =>
-        !entry.dir && relativePath.endsWith(`/${EXPORT_JSON_FILENAME}`),
-    )
+  if (jsonEntries.length === 0) return null;
+
+  const candidates = jsonEntries
     .map((entry) => entry.name)
     .sort((left, right) => {
       const leftScore = scoreProjectPath(left);
@@ -390,14 +469,8 @@ function findImportProjectEntry(
 function scoreProjectPath(path: string): number {
   if (path.startsWith("edit_full/")) return 0;
   if (/^runtime_\d+\//.test(path)) return 1;
-  return 2;
-}
-
-function joinImportNotes(
-  first: string | undefined,
-  second: string | undefined,
-): string | undefined {
-  return [first, second].filter(Boolean).join(" ") || undefined;
+  if (path === "project.json") return 2;
+  return 3;
 }
 
 function normalizeAssetMetadata(

@@ -38,6 +38,7 @@ export const PARTICLE_ANIMATION_TYPES: readonly V5GAnimationType[] = [
 ];
 
 export const SUPPORTED_ANIMATION_TYPES: readonly V5GAnimationType[] = [
+  "idle",
   "move",
   "fade",
   "scale_up",
@@ -58,12 +59,15 @@ export const SUPPORTED_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "particle_twinkle",
   "particle_wall",
   "particle_combo",
+  "shatter",
+  "glow",
   "squash_stretch",
 ];
 
 const DEFAULT_EASING_BY_TYPE: Readonly<
   Record<V5GAnimationType, V5GEasingName>
 > = {
+  idle: "linear",
   move: "easeOutQuad",
   fade: "linear",
   scale_up: "easeOutQuad",
@@ -84,6 +88,8 @@ const DEFAULT_EASING_BY_TYPE: Readonly<
   particle_twinkle: "linear",
   particle_wall: "linear",
   particle_combo: "easeInOutQuad",
+  shatter: "easeOutQuad",
+  glow: "linear",
   squash_stretch: "easeOutQuad",
 };
 
@@ -135,9 +141,15 @@ export function sampleLayerAnimationsAtTime(
       sampleSquashStretch(result, animation, easedProgress);
     else if (animation.type === "particle_combo")
       sampleParticleComboSource(result, animation, base);
+    else if (animation.type === "shatter")
+      sampleShatterSource(result, animation, base);
+    else if (animation.type === "glow") sampleGlowSource(result, animation);
     else if (isParticleAnimationType(animation.type)) {
       // Particle animations are sampled by particle-sampler. They do not alter
       // the base layer transform or opacity here.
+    } else if (animation.type === "idle") {
+      // Idle is a timeline coverage marker. It intentionally leaves base
+      // transform and opacity unchanged.
     } else throw new Error(`Unsupported V5G animation type: ${animation.type}`);
   }
 
@@ -430,6 +442,22 @@ function sampleParticleComboSource(
   base: V5GAnimationSampleBase,
 ): void {
   result.opacity = base.opacity * getNumberParam(animation, "sourceOpacity");
+}
+
+function sampleShatterSource(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  base: V5GAnimationSampleBase,
+): void {
+  result.opacity = base.opacity * getNumberParam(animation, "sourceOpacity");
+}
+
+function sampleGlowSource(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+): void {
+  if (getOptionalBooleanParam(animation, "keepOriginal", true)) return;
+  result.opacity = 0;
 }
 
 function sampleSquashStretch(

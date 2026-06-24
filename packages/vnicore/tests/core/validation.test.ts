@@ -6,6 +6,8 @@ import tenXData from "../fixtures/export/10x.json";
 import bigwinData from "../fixtures/export/bigwin.json";
 import megawinData from "../fixtures/export/megawin.json";
 import multipayData from "../fixtures/export/multipay.json";
+import threeReelMultipay01Data from "../fixtures/export/3reel_multipay_01.json";
+import threeReelMultipay02Data from "../fixtures/export/3reel_multipay_02.json";
 import respinData from "../fixtures/export/respin.json";
 import scatter1Data from "../fixtures/export/scatter1.json";
 import scatter2Data from "../fixtures/export/scatter2.json";
@@ -25,6 +27,11 @@ import {
   validateVNIBundleManifest,
   validateVNIProject,
 } from "../../src/core/validation";
+import {
+  DEFAULT_VNI_LAYER_GROUP_ID,
+  getVNIProjectLayerGroupSlots,
+  getVNIProjectRenderGroupOrder,
+} from "../../src/core/layer-groups";
 import type {
   V5GAnimationConfig,
   V5GAnimationType,
@@ -43,6 +50,8 @@ const bundledProjectData = [
   scatter1Data,
   scatter2Data,
   multipayData,
+  threeReelMultipay01Data,
+  threeReelMultipay02Data,
   export2EditFullData,
   export2Runtime50Data,
 ] as const;
@@ -50,6 +59,7 @@ const bundledProjectData = [
 const newAnimationParams: Readonly<
   Record<V5GAnimationType, V5GAnimationConfig["params"]>
 > = {
+  idle: {},
   move: { fromX: 0, fromY: 0, toX: 1, toY: 1 },
   fade: { fromOpacity: 0, toOpacity: 1 },
   scale_up: { fromScaleX: 1, fromScaleY: 1, toScaleX: 2, toScaleY: 2 },
@@ -123,6 +133,26 @@ const newAnimationParams: Readonly<
     flashScale: 1.6,
     flashIntensity: 1.4,
   },
+  shatter: {
+    count: 64,
+    pieceSize: 72,
+    force: 420,
+    impactAngle: 90,
+    spreadAngle: 160,
+    gravity: 900,
+    spin: 5,
+    sourceOpacity: 0,
+    fadeOut: true,
+  },
+  glow: {
+    intensity: 0.75,
+    spread: 0.12,
+    minAlpha: 0.15,
+    maxAlpha: 0.75,
+    pulses: 2,
+    blendMode: 0,
+    keepOriginal: true,
+  },
   squash_stretch: {
     squashAngle: 270,
     squashAmount: 0.4,
@@ -190,12 +220,44 @@ describe("validation", () => {
     expect(() => validateV5GProject(scatter2)).not.toThrow();
   });
 
+  it("accepts VNI layer group projects and derives render slots from project.layers", () => {
+    const project01 = assertV5GProject(threeReelMultipay01Data);
+    const project02 = assertV5GProject(threeReelMultipay02Data);
+
+    expect(() => validateV5GProject(project01)).not.toThrow();
+    expect(() => validateV5GProject(project02)).not.toThrow();
+    expect(
+      project01.layers.flatMap((layer) =>
+        layer.animations.map((animation) => animation.type),
+      ),
+    ).toEqual(expect.arrayContaining(["glow", "particle_wall"]));
+    expect(
+      getVNIProjectRenderGroupOrder(project01).map((group) => group.id),
+    ).toEqual(["layer_group_mqqo064b_4", "group_default"]);
+    expect(getVNIProjectLayerGroupSlots(project01)).toEqual([
+      {
+        afterGroupId: "layer_group_mqqo064b_4",
+        afterGroupName: "下层光效",
+        beforeGroupId: "group_default",
+        beforeGroupName: "上层光效",
+        renderIndex: 0,
+      },
+    ]);
+  });
+
   it("accepts VNI projects and legacy assets without file scale metadata", () => {
     const project = validProject();
     project.schemaVersion = "VNI_0.003";
     project.editor = { name: "VNI", version: "VNI_0.003" };
 
     expect(project.assets[0].fileWidth).toBeUndefined();
+    expect(project.layerGroups).toHaveLength(1);
+    expect(project.layerGroups[0].id).toBe(DEFAULT_VNI_LAYER_GROUP_ID);
+    expect(
+      project.layers.every(
+        (layer) => layer.groupId === DEFAULT_VNI_LAYER_GROUP_ID,
+      ),
+    ).toBe(true);
     expect(() => validateV5GProject(project)).not.toThrow();
   });
 
@@ -386,6 +448,18 @@ describe("validation", () => {
       delete params.squashAmount;
       project.layers[0].animations = [animation("squash_stretch", params)];
     }, 'requires numeric param "squashAmount"');
+
+    expectInvalid((project) => {
+      const params = { ...newAnimationParams.shatter };
+      delete params.sourceOpacity;
+      project.layers[0].animations = [animation("shatter", params)];
+    }, 'requires numeric param "sourceOpacity"');
+
+    expectInvalid((project) => {
+      const params = { ...newAnimationParams.glow };
+      delete params.blendMode;
+      project.layers[0].animations = [animation("glow", params)];
+    }, 'requires numeric param "blendMode"');
   });
 
   it("rejects string numeric params", () => {
@@ -433,6 +507,24 @@ describe("validation", () => {
         }),
       ];
     }, 'param "decay" must be a boolean');
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("shatter", {
+          ...newAnimationParams.shatter,
+          fadeOut: 1,
+        }),
+      ];
+    }, 'param "fadeOut" must be a boolean');
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("glow", {
+          ...newAnimationParams.glow,
+          keepOriginal: "false",
+        }),
+      ];
+    }, 'param "keepOriginal" must be a boolean');
   });
 
   it("rejects group layers and nested layers", () => {
@@ -442,6 +534,65 @@ describe("validation", () => {
     expectInvalid((project) => {
       project.layers[0].parentId = "parent";
     }, "Unsupported V5G parentId");
+  });
+
+  it("rejects invalid layer group schema and references", () => {
+    expectInvalid((project) => {
+      project.layerGroups = [];
+    }, "project.layerGroups must be a non-empty array");
+
+    expectInvalid((project) => {
+      project.layerGroups.push({ ...project.layerGroups[0] });
+    }, "Duplicate VNI layer group id");
+
+    expectInvalid((project) => {
+      project.layerGroups.push({
+        id: "another",
+        name: "Another",
+        visible: true,
+        collapsed: false,
+        order: project.layerGroups[0].order,
+      });
+    }, "Duplicate VNI layer group order");
+
+    expectInvalid((project) => {
+      project.layers[0].groupId = "missing";
+    }, 'references missing layer group "missing"');
+
+    expectInvalid((project) => {
+      delete project.layers[0].groupId;
+    }, 'layer "');
+  });
+
+  it("rejects groupId without layerGroups and non-contiguous group runs", () => {
+    expect(() =>
+      assertV5GProject({
+        ...(projectData as object),
+        layers: [
+          {
+            ...(projectData as { layers: Record<string, unknown>[] }).layers[0],
+            groupId: DEFAULT_VNI_LAYER_GROUP_ID,
+          },
+        ],
+        layerGroups: undefined,
+      }),
+    ).toThrow("missing project.layerGroups");
+
+    const project = validProject();
+    project.layerGroups.push({
+      id: "upper",
+      name: "Upper",
+      visible: true,
+      collapsed: false,
+      order: 1,
+    });
+    project.layers = [
+      { ...project.layers[0], id: "a", groupId: DEFAULT_VNI_LAYER_GROUP_ID },
+      { ...project.layers[0], id: "b", groupId: "upper" },
+      { ...project.layers[0], id: "c", groupId: DEFAULT_VNI_LAYER_GROUP_ID },
+    ];
+
+    expect(() => validateV5GProject(project)).toThrow("not contiguous");
   });
 });
 

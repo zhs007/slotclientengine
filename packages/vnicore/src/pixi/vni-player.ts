@@ -1,7 +1,15 @@
 import * as PIXI from "pixi.js";
 import { toPixiBlendMode } from "./blend-mode.js";
+import { editorToPixi } from "../core/coordinates.js";
 import { parseColorHex } from "../core/validation.js";
 import { sampleProjectAtTime } from "../core/project-sampler.js";
+import {
+  assertVNIAdjacentLayerGroupSlot,
+  getVNIProjectLayerGroupSlots,
+  getVNIProjectRenderGroupOrder,
+  type VNILayerGroupSlot,
+  type VNIRenderGroupInfo,
+} from "../core/layer-groups.js";
 import {
   VNIParticleRuntime,
   sampleLiveParticleSprites,
@@ -24,15 +32,24 @@ import {
   type VNISegmentedPlaybackPhase,
 } from "../core/playback-sequence.js";
 import {
+  sampleRenderEffectSpritesForLayer,
+  type VNIRenderEffectSpriteSample,
+} from "../core/render-effect-sampler.js";
+import {
   applySampledLayerState,
   createLayerInstance,
   getLayerAsset,
+  getAssetDisplayCompensation,
   getAssetTextureSize,
   type V5GLayerInstance,
 } from "./layer-instance.js";
 import type { AssetUrlManifest } from "../core/asset-manifest.js";
 import type { SampledLayerState } from "../core/project-sampler.js";
-import type { V5GAssetConfig, VNIProjectConfig } from "../core/types.js";
+import type {
+  V5GAssetConfig,
+  VNIBlendMode,
+  VNIProjectConfig,
+} from "../core/types.js";
 
 export type {
   VNIPlayOptions,
@@ -80,6 +97,58 @@ export interface VNIPlayerOptions {
   onPlayingChange?: (isPlaying: boolean) => void;
 }
 
+export interface VNILayerGroupInfo {
+  id: string;
+  name: string;
+  visible: boolean;
+  order: number;
+  layerIds: readonly string[];
+  renderIndex: number;
+}
+
+export interface VNIAttachNodeBetweenLayerGroupsOptions {
+  id: string;
+  afterGroupId: string;
+  beforeGroupId: string;
+  node: PIXI.Container;
+  destroyOnDetach?: boolean;
+}
+
+export interface VNIAttachImageBetweenLayerGroupsOptions {
+  id: string;
+  afterGroupId: string;
+  beforeGroupId: string;
+  assetId: string;
+  x?: number;
+  y?: number;
+  scaleX?: number;
+  scaleY?: number;
+  rotation?: number;
+  anchorX?: number;
+  anchorY?: number;
+  opacity?: number;
+  blendMode?: VNIBlendMode;
+  destroyOnDetach?: boolean;
+}
+
+export interface VNIAttachExternalImageBetweenLayerGroupsOptions {
+  id: string;
+  afterGroupId: string;
+  beforeGroupId: string;
+  imageUrl: string;
+  label?: string;
+  x?: number;
+  y?: number;
+  scaleX?: number;
+  scaleY?: number;
+  rotation?: number;
+  anchorX?: number;
+  anchorY?: number;
+  opacity?: number;
+  blendMode?: VNIBlendMode;
+  destroyOnDetach?: boolean;
+}
+
 interface ActivePlaybackRange {
   startTime: number;
   endTime: number;
@@ -99,6 +168,30 @@ interface VNIPlaybackFrameOptions {
   liveParticleDeltaSeconds?: number;
 }
 
+interface VNIMountedNode {
+  id: string;
+  node: PIXI.Container;
+  slotContainer: PIXI.Container;
+  destroyOnDetach: boolean;
+}
+
+interface VNIMountedImageSpriteOptions {
+  id: string;
+  afterGroupId: string;
+  beforeGroupId: string;
+  x?: number;
+  y?: number;
+  scaleX?: number;
+  scaleY?: number;
+  rotation?: number;
+  anchorX?: number;
+  anchorY?: number;
+  opacity?: number;
+  blendMode?: VNIBlendMode;
+  destroyOnDetach?: boolean;
+  compensation: { x: number; y: number };
+}
+
 export class VNIPlayer {
   private readonly app = new PIXI.Application();
   private readonly stageRoot = new PIXI.Container();
@@ -113,10 +206,16 @@ export class VNIPlayer {
   private readonly project: VNIProjectConfig;
   private readonly assetUrls: AssetUrlManifest;
   private readonly assetsById: ReadonlyMap<string, V5GAssetConfig>;
+  private readonly layerGroups: readonly VNIRenderGroupInfo[];
+  private readonly layerGroupSlots: readonly VNILayerGroupSlot[];
   private readonly onTimeChange?: (time: number) => void;
   private readonly onPlayingChange?: (isPlaying: boolean) => void;
   private readonly layerInstances = new Map<string, V5GLayerInstance>();
+  private readonly groupContainersById = new Map<string, PIXI.Container>();
+  private readonly slotContainersByKey = new Map<string, PIXI.Container>();
+  private readonly mountedNodesById = new Map<string, VNIMountedNode>();
   private readonly particleRuntime: VNIParticleRuntime;
+  private texturesByAssetId: ReadonlyMap<string, PIXI.Texture> = new Map();
   private readonly liveParticleSpritesByLayer = new Map<
     string,
     PIXI.Sprite[]
@@ -152,6 +251,8 @@ export class VNIPlayer {
     this.assetsById = new Map(
       options.project.assets.map((asset) => [asset.id, asset] as const),
     );
+    this.layerGroups = getVNIProjectRenderGroupOrder(options.project);
+    this.layerGroupSlots = getVNIProjectLayerGroupSlots(options.project);
     this.particleRuntime = new VNIParticleRuntime(options.project.layers);
     this.onTimeChange = options.onTimeChange;
     this.onPlayingChange = options.onPlayingChange;
@@ -172,15 +273,41 @@ export class VNIPlayer {
     this.app.stage.addChild(this.stageRoot);
     this.stageRoot.addChild(this.stageBackground, this.contentRoot);
 
-    const texturesByAssetId = await this.loadTextures();
-    for (const layer of this.project.layers) {
-      const instance = createLayerInstance(
-        layer,
-        texturesByAssetId,
-        this.assetsById,
+    this.texturesByAssetId = await this.loadTextures();
+    const layersById = new Map(
+      this.project.layers.map((layer) => [layer.id, layer] as const),
+    );
+    for (const group of this.layerGroups) {
+      const groupContainer = new PIXI.Container();
+      groupContainer.label = `VNI group ${group.id}`;
+      this.groupContainersById.set(group.id, groupContainer);
+      this.contentRoot.addChild(groupContainer);
+      for (const layerId of group.layerIds) {
+        const layer = layersById.get(layerId);
+        if (!layer) {
+          throw new Error(`Missing VNI layer for render group: ${layerId}.`);
+        }
+        const instance = createLayerInstance(
+          layer,
+          this.texturesByAssetId,
+          this.assetsById,
+        );
+        this.layerInstances.set(layer.id, instance);
+        groupContainer.addChild(
+          instance.display,
+          instance.effectDisplay,
+          instance.particleDisplay,
+        );
+      }
+      const slot = this.layerGroupSlots.find(
+        (candidate) => candidate.afterGroupId === group.id,
       );
-      this.layerInstances.set(layer.id, instance);
-      this.contentRoot.addChild(instance.display, instance.particleDisplay);
+      if (slot) {
+        const slotContainer = new PIXI.Container();
+        slotContainer.label = `VNI slot ${slot.afterGroupId} -> ${slot.beforeGroupId}`;
+        this.slotContainersByKey.set(getLayerGroupSlotKey(slot), slotContainer);
+        this.contentRoot.addChild(slotContainer);
+      }
     }
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -188,6 +315,160 @@ export class VNIPlayer {
     this.resize();
     this.initialized = true;
     this.renderDeterministicFrame(0);
+  }
+
+  getLayerGroups(): readonly VNILayerGroupInfo[] {
+    return this.layerGroups.map((group) =>
+      Object.freeze({
+        id: group.id,
+        name: group.name,
+        visible: group.visible,
+        order: group.order,
+        layerIds: group.layerIds,
+        renderIndex: group.renderIndex,
+      }),
+    );
+  }
+
+  getLayerGroupSlots(): readonly VNILayerGroupSlot[] {
+    return this.layerGroupSlots.map((slot) => Object.freeze({ ...slot }));
+  }
+
+  attachNodeBetweenLayerGroups(
+    options: VNIAttachNodeBetweenLayerGroupsOptions,
+  ): () => void {
+    this.assertInitialized("attachNodeBetweenLayerGroups");
+    const id = normalizeMountedNodeId(options.id);
+    if (this.mountedNodesById.has(id)) {
+      throw new Error(`Duplicate VNI mounted node id: ${id}.`);
+    }
+    const slot = assertVNIAdjacentLayerGroupSlot(
+      this.project,
+      options.afterGroupId,
+      options.beforeGroupId,
+    );
+    const slotContainer = this.slotContainersByKey.get(
+      getLayerGroupSlotKey(slot),
+    );
+    if (!slotContainer) {
+      throw new Error(
+        `Missing VNI layer group slot container: ${slot.afterGroupId} -> ${slot.beforeGroupId}.`,
+      );
+    }
+    slotContainer.addChild(options.node);
+    this.mountedNodesById.set(id, {
+      id,
+      node: options.node,
+      slotContainer,
+      destroyOnDetach: options.destroyOnDetach === true,
+    });
+    this.updateMountedNodeDiagnostics();
+    let disposed = false;
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      this.detachMountedNode(id);
+    };
+  }
+
+  attachImageBetweenLayerGroups(
+    options: VNIAttachImageBetweenLayerGroupsOptions,
+  ): () => void {
+    this.assertInitialized("attachImageBetweenLayerGroups");
+    const asset = this.assetsById.get(options.assetId);
+    if (!asset) {
+      throw new Error(`Unknown VNI asset id: ${options.assetId}.`);
+    }
+    const texture = this.texturesByAssetId.get(asset.id);
+    if (!texture) {
+      throw new Error(`VNI asset "${asset.id}" is not loaded.`);
+    }
+    const textureSize = {
+      width: Math.round(texture.width),
+      height: Math.round(texture.height),
+    };
+    const compensation = getAssetDisplayCompensation(asset, textureSize);
+    return this.attachMountedImageSprite(
+      texture,
+      `VNI mounted image ${asset.id}`,
+      {
+        ...options,
+        compensation,
+      },
+    );
+  }
+
+  async attachExternalImageBetweenLayerGroups(
+    options: VNIAttachExternalImageBetweenLayerGroupsOptions,
+  ): Promise<() => void> {
+    this.assertInitialized("attachExternalImageBetweenLayerGroups");
+    const imageUrl = options.imageUrl.trim();
+    if (!imageUrl) {
+      throw new Error("VNI external mounted image url must be non-empty.");
+    }
+    const texture = (await PIXI.Assets.load(imageUrl)) as PIXI.Texture;
+    assertLoadedTexture(texture, `VNI external mounted image: ${imageUrl}`);
+    return this.attachMountedImageSprite(
+      texture,
+      `VNI mounted external image ${options.label ?? imageUrl}`,
+      {
+        ...options,
+        compensation: { x: 1, y: 1 },
+      },
+    );
+  }
+
+  private attachMountedImageSprite(
+    texture: PIXI.Texture,
+    label: string,
+    options: VNIMountedImageSpriteOptions,
+  ): () => void {
+    const sprite = new PIXI.Sprite(texture);
+    sprite.label = label;
+    sprite.anchor.set(options.anchorX ?? 0.5, options.anchorY ?? 0.5);
+    sprite.position.set(
+      options.x ?? this.project.stage.width / 2,
+      options.y ?? this.project.stage.height / 2,
+    );
+    sprite.scale.set(
+      options.compensation.x * (options.scaleX ?? 1),
+      options.compensation.y * (options.scaleY ?? 1),
+    );
+    sprite.rotation = ((options.rotation ?? 0) * Math.PI) / 180;
+    sprite.alpha = options.opacity ?? 1;
+    sprite.blendMode = toPixiBlendMode(options.blendMode ?? "normal");
+    try {
+      return this.attachNodeBetweenLayerGroups({
+        id: options.id,
+        afterGroupId: options.afterGroupId,
+        beforeGroupId: options.beforeGroupId,
+        node: sprite,
+        destroyOnDetach: options.destroyOnDetach ?? true,
+      });
+    } catch (error) {
+      sprite.destroy({ children: true });
+      throw error;
+    }
+  }
+
+  detachMountedNode(id: string): void {
+    const normalizedId = normalizeMountedNodeId(id);
+    const mounted = this.mountedNodesById.get(normalizedId);
+    if (!mounted) {
+      throw new Error(`Unknown VNI mounted node id: ${normalizedId}.`);
+    }
+    mounted.slotContainer.removeChild(mounted.node);
+    if (mounted.destroyOnDetach) {
+      mounted.node.destroy({ children: true });
+    }
+    this.mountedNodesById.delete(normalizedId);
+    this.updateMountedNodeDiagnostics();
+  }
+
+  clearMountedNodes(): void {
+    for (const id of [...this.mountedNodesById.keys()]) {
+      this.detachMountedNode(id);
+    }
   }
 
   play(options?: VNIPlayOptions): void {
@@ -443,9 +724,12 @@ export class VNIPlayer {
     this.playbackMarkers.clear();
     this.playbackCompleteListeners.clear();
     this.particleRuntime.reset();
+    this.clearMountedNodes();
+    this.clearRenderEffects();
     this.clearParticles();
     this.clearDiagnostics();
     this.app.destroy(true);
+    this.initialized = false;
   }
 
   private readonly tick = (now: number): void => {
@@ -603,6 +887,10 @@ export class VNIPlayer {
     this.playbackPhase = "particle-draining";
     this.onPlayingChange?.(false);
     const sampled = this.applyProjectSample(endTime);
+    const renderEffectSpriteCount = this.renderRenderEffectSamples(
+      sampled.layers,
+      endTime,
+    );
     const particleLayers = this.getParticleRuntimeLayers(sampled.layers);
     if (particleLayers.length > 0) {
       const endParticles = sampleLiveParticleSprites(
@@ -619,6 +907,7 @@ export class VNIPlayer {
     this.updateDiagnostics(
       sampled.layers.filter((layer) => layer.visible).length,
       particleSpriteCount,
+      renderEffectSpriteCount,
     );
     this.onTimeChange?.(this.currentTime);
     if (frame.isComplete) {
@@ -636,6 +925,7 @@ export class VNIPlayer {
     this.updateDiagnostics(
       sampled.layers.filter((layer) => layer.visible).length,
       particleSpriteCount,
+      this.getRenderedRenderEffectCount(),
     );
     if (frame.isComplete) {
       this.finishParticleDrain();
@@ -651,6 +941,7 @@ export class VNIPlayer {
         (layer) => layer.visible,
       ).length,
       0,
+      this.getRenderedRenderEffectCount(),
     );
     const event = this.pendingComplete;
     this.pendingComplete = null;
@@ -780,6 +1071,10 @@ export class VNIPlayer {
 
   private renderDeterministicFrame(time: number): void {
     const sampled = this.applyProjectSample(time);
+    const renderEffectSpriteCount = this.renderRenderEffectSamples(
+      sampled.layers,
+      this.currentTime,
+    );
     const particles = sampleLiveParticleSprites(
       this.getParticleRuntimeLayers(sampled.layers),
       this.project.stage,
@@ -789,6 +1084,7 @@ export class VNIPlayer {
     this.updateDiagnostics(
       sampled.layers.filter((layer) => layer.visible).length,
       particleSpriteCount,
+      renderEffectSpriteCount,
     );
     this.onTimeChange?.(this.currentTime);
   }
@@ -799,6 +1095,10 @@ export class VNIPlayer {
     options: VNIPlaybackFrameOptions = {},
   ): void {
     const sampled = this.applyProjectSample(nonParticleTime);
+    const renderEffectSpriteCount = this.renderRenderEffectSamples(
+      sampled.layers,
+      nonParticleTime,
+    );
     const particleLayers = this.getParticleRuntimeLayers(sampled.layers);
     const frame = options.liveParticles
       ? this.particleRuntime.emitLive(
@@ -816,6 +1116,7 @@ export class VNIPlayer {
     this.updateDiagnostics(
       sampled.layers.filter((layer) => layer.visible).length,
       particleSpriteCount,
+      renderEffectSpriteCount,
     );
     this.onTimeChange?.(this.currentTime);
   }
@@ -858,6 +1159,120 @@ export class VNIPlayer {
       });
     }
     return layers;
+  }
+
+  private renderRenderEffectSamples(
+    sampledLayers: readonly SampledLayerState[],
+    time: number,
+  ): number {
+    let spriteCount = 0;
+    for (const instance of this.layerInstances.values()) {
+      for (const child of instance.effectDisplay.removeChildren()) {
+        child.destroy({ children: true });
+      }
+    }
+
+    for (const sampledLayer of sampledLayers) {
+      if (!sampledLayer.hasActiveRenderEffect) continue;
+      const instance = this.layerInstances.get(sampledLayer.layerId);
+      if (!instance) {
+        throw new Error(`Missing V5G layer instance: ${sampledLayer.layerId}`);
+      }
+      if (!instance.texture || !instance.textureSize) {
+        throw new Error(
+          `V5G render effect layer "${sampledLayer.layerId}" is missing image texture.`,
+        );
+      }
+      const asset = getLayerAsset(instance.layer, this.assetsById);
+      if (!asset) {
+        throw new Error(
+          `V5G render effect layer "${sampledLayer.layerId}" is missing image asset.`,
+        );
+      }
+      const compensation = getAssetDisplayCompensation(
+        asset,
+        instance.textureSize,
+      );
+      const emitter = editorToPixi(
+        sampledLayer.transform.x,
+        sampledLayer.transform.y,
+        this.project.stage.width,
+        this.project.stage.height,
+      );
+      const effects = sampleRenderEffectSpritesForLayer(
+        instance.layer,
+        sampledLayer,
+        instance.textureSize,
+        time,
+      );
+      for (const effect of effects) {
+        this.renderRenderEffectSprite(
+          instance,
+          effect,
+          emitter,
+          compensation,
+          sampledLayer,
+        );
+      }
+      spriteCount += effects.length;
+    }
+    return spriteCount;
+  }
+
+  private renderRenderEffectSprite(
+    instance: V5GLayerInstance,
+    effect: VNIRenderEffectSpriteSample,
+    emitter: { x: number; y: number },
+    compensation: { x: number; y: number },
+    sampledLayer: SampledLayerState,
+  ): void {
+    if (!instance.texture) {
+      throw new Error(
+        `V5G render effect layer "${instance.layer.id}" is missing image texture.`,
+      );
+    }
+    if (effect.type === "glow") {
+      const sprite = new PIXI.Sprite(instance.texture);
+      sprite.anchor.set(
+        sampledLayer.transform.anchorX,
+        sampledLayer.transform.anchorY,
+      );
+      sprite.position.set(emitter.x + effect.x, emitter.y + effect.y);
+      sprite.scale.set(
+        effect.scaleX * compensation.x,
+        effect.scaleY * compensation.y,
+      );
+      sprite.rotation = effect.rotation;
+      sprite.alpha = effect.alpha;
+      sprite.blendMode = toPixiBlendMode(effect.blendMode);
+      instance.effectDisplay.addChild(sprite);
+      return;
+    }
+
+    const piece = new PIXI.Container();
+    const sprite = new PIXI.Sprite(instance.texture);
+    const mask = new PIXI.Graphics();
+    sprite.anchor.set(
+      sampledLayer.transform.anchorX,
+      sampledLayer.transform.anchorY,
+    );
+    sprite.position.set(-effect.localX, -effect.localY);
+    mask
+      .rect(
+        -effect.pieceWidth / 2,
+        -effect.pieceHeight / 2,
+        effect.pieceWidth,
+        effect.pieceHeight,
+      )
+      .fill(0xffffff);
+    sprite.mask = mask;
+    piece.addChild(sprite, mask);
+    piece.position.set(emitter.x + effect.x, emitter.y + effect.y);
+    piece.scale.set(effect.scaleX, effect.scaleY);
+    piece.rotation = effect.rotation;
+    piece.alpha = effect.alpha;
+    piece.blendMode = toPixiBlendMode(effect.blendMode);
+    instance.effectDisplay.addChild(piece);
   }
 
   private renderParticleSamples(
@@ -916,6 +1331,22 @@ export class VNIPlayer {
     this.liveParticleSpritesByLayer.clear();
   }
 
+  private clearRenderEffects(): void {
+    for (const instance of this.layerInstances.values()) {
+      for (const child of instance.effectDisplay.removeChildren()) {
+        child.destroy({ children: true });
+      }
+    }
+  }
+
+  private getRenderedRenderEffectCount(): number {
+    let count = 0;
+    for (const instance of this.layerInstances.values()) {
+      count += instance.effectDisplay.children.length;
+    }
+    return count;
+  }
+
   private getRenderedParticleCount(): number {
     let count = 0;
     for (const sprites of this.liveParticleSpritesByLayer.values()) {
@@ -924,20 +1355,33 @@ export class VNIPlayer {
     return count;
   }
 
+  private updateMountedNodeDiagnostics(): void {
+    this.container.dataset.vniMountedNodes = String(this.mountedNodesById.size);
+  }
+
   private updateDiagnostics(
     visibleLayerCount: number,
     particleSpriteCount: number,
+    renderEffectSpriteCount: number,
   ): void {
     this.container.dataset.vniProjectId = this.projectId;
     this.container.dataset.vniTime = this.currentTime.toFixed(2);
     this.container.dataset.vniVisibleLayers = String(visibleLayerCount);
     this.container.dataset.vniParticleSprites = String(particleSpriteCount);
+    this.container.dataset.vniRenderEffectSprites = String(
+      renderEffectSpriteCount,
+    );
     this.container.dataset.vniPlaybackMode = this.playbackMode;
     this.container.dataset.vniPlaybackPhase = this.getEffectivePlaybackPhase();
     this.container.dataset.vniParticleDraining = String(
       this.particleRuntime.isDraining(),
     );
     this.container.dataset.vniLiveParticles = String(particleSpriteCount);
+    this.container.dataset.vniLayerGroups = String(this.layerGroups.length);
+    this.container.dataset.vniLayerGroupSlots = String(
+      this.layerGroupSlots.length,
+    );
+    this.updateMountedNodeDiagnostics();
     this.container.dataset.v5gProjectId = this.projectId;
     this.container.dataset.v5gTime = this.currentTime.toFixed(2);
     this.container.dataset.v5gVisibleLayers = String(visibleLayerCount);
@@ -1013,10 +1457,14 @@ export class VNIPlayer {
     delete this.container.dataset.vniTime;
     delete this.container.dataset.vniVisibleLayers;
     delete this.container.dataset.vniParticleSprites;
+    delete this.container.dataset.vniRenderEffectSprites;
     delete this.container.dataset.vniPlaybackMode;
     delete this.container.dataset.vniPlaybackPhase;
     delete this.container.dataset.vniParticleDraining;
     delete this.container.dataset.vniLiveParticles;
+    delete this.container.dataset.vniLayerGroups;
+    delete this.container.dataset.vniLayerGroupSlots;
+    delete this.container.dataset.vniMountedNodes;
     delete this.container.dataset.vniPixelSamples;
     delete this.container.dataset.vniNonBackgroundSamples;
     delete this.container.dataset.vniMaxPixelDelta;
@@ -1038,3 +1486,31 @@ export class VNIPlayer {
 
 export type V5GPlayerOptions = VNIPlayerOptions;
 export const V5GPlayer = VNIPlayer;
+
+function getLayerGroupSlotKey(slot: {
+  afterGroupId: string;
+  beforeGroupId: string;
+}): string {
+  return `${slot.afterGroupId}\u0000${slot.beforeGroupId}`;
+}
+
+function normalizeMountedNodeId(id: string): string {
+  const normalized = id.trim();
+  if (!normalized) {
+    throw new Error("VNI mounted node id must be a non-empty string.");
+  }
+  return normalized;
+}
+
+function assertLoadedTexture(
+  texture: PIXI.Texture | null | undefined,
+  context: string,
+): asserts texture is PIXI.Texture {
+  if (
+    !texture ||
+    !Number.isFinite(texture.width) ||
+    !Number.isFinite(texture.height)
+  ) {
+    throw new Error(`${context} failed to load a valid Pixi texture.`);
+  }
+}

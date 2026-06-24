@@ -11,6 +11,14 @@ import type {
   V5GProjectConfig,
 } from "../../src/core/types";
 
+const defaultLayerGroup = {
+  id: "group_default",
+  name: "Default",
+  visible: true,
+  collapsed: false,
+  order: 0,
+};
+
 const transform = {
   x: 0,
   y: 0,
@@ -86,6 +94,28 @@ describe("project-sampler", () => {
     const sampled = sampleLayerAtTime(layer({}, []), 8);
     expect(sampled.opacity).toBe(1);
     expect(sampled.visible).toBe(true);
+  });
+
+  it("uses idle as coverage without changing transform or opacity", () => {
+    const idleLayer = layer({}, [
+      {
+        id: "idle",
+        type: "idle",
+        startTime: 1,
+        duration: 2,
+        enabled: true,
+        seed: 1,
+        params: {},
+      },
+    ]);
+
+    const before = sampleLayerAtTime(idleLayer, 0.5);
+    const active = sampleLayerAtTime(idleLayer, 1.5);
+
+    expect(before.visible).toBe(false);
+    expect(active.visible).toBe(true);
+    expect(active.opacity).toBe(1);
+    expect(active.transform).toEqual(transform);
   });
 
   it("keeps invisible layers hidden", () => {
@@ -338,6 +368,71 @@ describe("project-sampler", () => {
     expect(active.hasActiveParticleAnimation).toBe(true);
   });
 
+  it("hides glow source image while preserving active render effect", () => {
+    const glowLayer = layer({}, [
+      {
+        id: "glow",
+        type: "glow",
+        startTime: 0,
+        duration: 1,
+        enabled: true,
+        seed: 1,
+        params: {
+          intensity: 0.75,
+          spread: 0.12,
+          minAlpha: 0.15,
+          maxAlpha: 0.75,
+          pulses: 2,
+          blendMode: 0,
+          keepOriginal: false,
+        },
+      },
+    ]);
+
+    const atStart = sampleLayerAtTime(glowLayer, 0);
+    const active = sampleLayerAtTime(glowLayer, 0.5);
+
+    expect(atStart.hasActiveRenderEffect).toBe(false);
+    expect(atStart.renderImageDisplay).toBe(false);
+    expect(active.opacity).toBe(0);
+    expect(active.visible).toBe(true);
+    expect(active.renderImageDisplay).toBe(false);
+    expect(active.hasActiveRenderEffect).toBe(true);
+  });
+
+  it("hides shatter source image while preserving active render effect", () => {
+    const shatterLayer = layer({}, [
+      {
+        id: "shatter",
+        type: "shatter",
+        startTime: 0,
+        duration: 1,
+        enabled: true,
+        seed: 1,
+        params: {
+          count: 16,
+          pieceSize: 32,
+          force: 200,
+          impactAngle: 90,
+          spreadAngle: 120,
+          gravity: 500,
+          spin: 4,
+          sourceOpacity: 0,
+          fadeOut: true,
+        },
+      },
+    ]);
+
+    const atStart = sampleLayerAtTime(shatterLayer, 0);
+    const active = sampleLayerAtTime(shatterLayer, 0.5);
+
+    expect(atStart.hasActiveRenderEffect).toBe(false);
+    expect(active.opacity).toBe(0);
+    expect(active.visible).toBe(true);
+    expect(active.renderImageDisplay).toBe(false);
+    expect(active.hasActiveRenderEffect).toBe(true);
+  });
+
   it("clamps project time to stage duration", () => {
     const project: V5GProjectConfig = {
       schemaVersion: "V5G_0.0014",
@@ -352,6 +447,7 @@ describe("project-sampler", () => {
         backgroundColor: "#101827",
       },
       assets: [],
+      layerGroups: [defaultLayerGroup],
       layers: [layer()],
       particles: [],
     };

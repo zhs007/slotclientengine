@@ -5,6 +5,8 @@ import tenXData from "../assets/projects/10x.json";
 import bigwinData from "../assets/projects/bigwin.json";
 import megawinData from "../assets/projects/megawin.json";
 import multipayData from "../assets/projects/multipay.json";
+import threeReelMultipay01Data from "../assets/projects/3reel_multipay_01.json";
+import threeReelMultipay02Data from "../assets/projects/3reel_multipay_02.json";
 import respinData from "../assets/projects/respin.json";
 import scatter1Data from "../assets/projects/scatter1.json";
 import scatter2Data from "../assets/projects/scatter2.json";
@@ -41,6 +43,8 @@ export type BundledProjectId =
   | "scatter1"
   | "scatter2"
   | "multipay"
+  | "3reel-multipay-01"
+  | "3reel-multipay-02"
   | "bigwin-edit-full"
   | "bigwin-runtime-50";
 
@@ -54,6 +58,14 @@ export interface BundledV5GProject {
   assetScale: number;
   project: VNIProjectConfig;
   assetUrls: AssetUrlManifest;
+  insertionAssets: readonly BundledInsertionAsset[];
+}
+
+export interface BundledInsertionAsset {
+  path: string;
+  label: string;
+  url: string;
+  projectAssetId?: string;
 }
 
 interface BundledProjectDefinition {
@@ -204,6 +216,28 @@ const bundledProjectDefinitions: readonly BundledProjectDefinition[] = [
     assetUrlManifest: bundledAssetUrlManifest,
   },
   {
+    id: "3reel-multipay-01",
+    filename: "3reel_multipay_01.json",
+    sourcePath: "docs/anieditor5/export/3reel_multipay_01.json",
+    bundleId: "legacy",
+    profileId: "legacy_full",
+    purpose: "legacy",
+    assetScale: 1,
+    data: threeReelMultipay01Data,
+    assetUrlManifest: bundledAssetUrlManifest,
+  },
+  {
+    id: "3reel-multipay-02",
+    filename: "3reel_multipay_02.json",
+    sourcePath: "docs/anieditor5/export/3reel_multipay_02.json",
+    bundleId: "legacy",
+    profileId: "legacy_full",
+    purpose: "legacy",
+    assetScale: 1,
+    data: threeReelMultipay02Data,
+    assetUrlManifest: bundledAssetUrlManifest,
+  },
+  {
     id: "bigwin-edit-full",
     filename: "export2/edit_full/project.json",
     sourcePath: "docs/anieditor5/export2/edit_full/project.json",
@@ -236,6 +270,10 @@ export const bundledProjects: readonly BundledV5GProject[] = Object.freeze(
     if (definition.manifestEntry) {
       validateManifestProjectProfile(definition.manifestEntry, project);
     }
+    const assetUrls = resolveProjectAssetUrls(
+      project,
+      definition.assetUrlManifest,
+    );
     return Object.freeze({
       id: definition.id,
       label: createBundledProjectLabel(definition, project),
@@ -245,7 +283,11 @@ export const bundledProjects: readonly BundledV5GProject[] = Object.freeze(
       purpose: definition.purpose,
       assetScale: definition.assetScale,
       project,
-      assetUrls: resolveProjectAssetUrls(project, definition.assetUrlManifest),
+      assetUrls,
+      insertionAssets: createBundledInsertionAssets(
+        project,
+        definition.assetUrlManifest,
+      ),
     });
   }),
 );
@@ -300,4 +342,41 @@ function createBundledProjectLabel(
   const percent = Math.round(definition.assetScale * 100);
   const suffix = definition.purpose === "runtime" ? "运行资源" : "原图";
   return `${project.name} (export2/${definition.profileId}, ${percent}% ${suffix})`;
+}
+
+function createBundledInsertionAssets(
+  project: VNIProjectConfig,
+  assetUrlManifest: AssetUrlManifest,
+): readonly BundledInsertionAsset[] {
+  const projectAssetByPath = new Map(
+    project.assets.map((asset) => [asset.path, asset] as const),
+  );
+  return Object.freeze(
+    Object.entries(assetUrlManifest)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([path, url]) => {
+        const projectAsset = projectAssetByPath.get(path);
+        const filename = getPathFilename(path);
+        const insertionAsset = {
+          path,
+          label: projectAsset
+            ? `${projectAsset.originalName} (${path})`
+            : `${filename} (${path})`,
+          url,
+        };
+        return Object.freeze(
+          projectAsset
+            ? { ...insertionAsset, projectAssetId: projectAsset.id }
+            : insertionAsset,
+        );
+      }),
+  );
+}
+
+function getPathFilename(path: string): string {
+  const filename = path.split(/[\\/]/u).at(-1);
+  if (!filename) {
+    throw new Error(`Cannot parse bundled VNI asset path: ${path}`);
+  }
+  return filename;
 }
