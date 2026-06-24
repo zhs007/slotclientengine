@@ -5,9 +5,23 @@ export interface V5GSize {
   height: number;
 }
 
+export type V5GCocosNodeTransformSnapshot = unknown;
+
 export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
   createNode(name: string): TNode;
   appendChild(parent: TNode, child: TNode): void;
+  removeChild(parent: TNode, child: TNode): void;
+  getParent(node: TNode): TNode | null;
+  captureLocalTransform(node: TNode): V5GCocosNodeTransformSnapshot;
+  restoreLocalTransform(
+    node: TNode,
+    snapshot: V5GCocosNodeTransformSnapshot,
+  ): void;
+  captureWorldTransform(node: TNode): V5GCocosNodeTransformSnapshot;
+  restoreWorldTransform(
+    node: TNode,
+    snapshot: V5GCocosNodeTransformSnapshot,
+  ): void;
   destroyNode(node: TNode): void;
   setContentSize(node: TNode, width: number, height: number): void;
   setAnchorPoint(node: TNode, x: number, y: number): void;

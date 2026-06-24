@@ -9,6 +9,13 @@ import {
   type SampledLayerState,
 } from "../core/project-sampler.js";
 import {
+  assertVNIAdjacentLayerGroupSlot,
+  getVNIProjectLayerGroupSlots,
+  getVNIProjectRenderGroupOrder,
+  type VNILayerGroupSlot,
+  type VNIRenderGroupInfo,
+} from "../core/layer-groups.js";
+import {
   V5GSegmentedPlaybackSequence,
   normalizeSegmentedPlaybackOptions,
 } from "../core/playback-sequence.js";
@@ -18,6 +25,7 @@ import {
   opacityToCocosOpacity,
   v5gTransformToCocosPosition,
 } from "./coordinates.js";
+import type { V5GCocosNodeTransformSnapshot } from "./node-driver.js";
 import type { V5GAssetConfig, V5GLayerConfig } from "../core/types.js";
 import type {
   V5GCocosPlaybackCompleteContext,
@@ -29,6 +37,11 @@ import type {
   V5GCocosPlaybackState,
   V5GCocosAssetResolver,
   V5GCocosAssetSource,
+  V5GCocosAttachNodeBetweenLayerGroupsOptions,
+  V5GCocosAttachProjectAssetBetweenLayerGroupsOptions,
+  V5GCocosAttachSpriteFrameBetweenLayerGroupsOptions,
+  V5GCocosLayerGroupInfo,
+  V5GCocosLayerGroupSlot,
   V5GCocosSpriteAtlasAssetSource,
   V5GCocosPlayerOptions,
   V5GCocosPlayOptions,
@@ -69,6 +82,33 @@ interface ResolvedSpriteFrame<TSpriteFrame> {
   shouldValidateSize: boolean;
 }
 
+interface MountedNodeRecord<TNode> {
+  id: string | null;
+  node: TNode;
+  slotNode: TNode;
+  originalParent: TNode | null;
+  originalLocalTransform: V5GCocosNodeTransformSnapshot;
+  destroyOnDetach: boolean;
+  version: number;
+}
+
+interface NormalizedMountedNode<TNode> {
+  id: string | null;
+  node: TNode;
+}
+
+interface MountedImageNodeOptions {
+  x?: number;
+  y?: number;
+  scaleX?: number;
+  scaleY?: number;
+  rotation?: number;
+  anchorX?: number;
+  anchorY?: number;
+  opacity?: number;
+  blendMode?: V5GLayerConfig["blendMode"];
+}
+
 const SIZE_EPSILON = 0.01;
 const PLAYBACK_EPSILON = 1e-9;
 
@@ -87,6 +127,18 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
   private readonly layers = new Map<
     string,
     ManagedLayer<TNode, TSpriteFrame>
+  >();
+  private layerGroups: readonly VNIRenderGroupInfo[] = [];
+  private layerGroupSlots: readonly VNILayerGroupSlot[] = [];
+  private readonly groupNodesById = new Map<string, TNode>();
+  private readonly slotNodesByKey = new Map<string, TNode>();
+  private readonly mountedNodesById = new Map<
+    string,
+    MountedNodeRecord<TNode>
+  >();
+  private readonly mountedNodesByNode = new Map<
+    TNode,
+    MountedNodeRecord<TNode>
   >();
   private readonly particleRuntime: V5GParticleRuntime;
   private stageNode: TNode | null = null;
@@ -126,6 +178,8 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     this.destroyManagedNodes();
     this.resetPlaybackRuntime();
     validateCocosV5GProject(this.options.project);
+    this.layerGroups = getVNIProjectRenderGroupOrder(this.options.project);
+    this.layerGroupSlots = getVNIProjectLayerGroupSlots(this.options.project);
 
     const driver = this.options.driver;
     const project = this.options.project;
@@ -154,41 +208,79 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
       const assetsById = new Map(
         project.assets.map((asset) => [asset.id, asset]),
       );
-      for (const layer of project.layers) {
-        const asset = this.requireImageAsset(layer, assetsById);
-        const resolvedSpriteFrame = this.resolveSpriteFrame(asset);
-        const spriteFrame = resolvedSpriteFrame.spriteFrame;
-        if (resolvedSpriteFrame.shouldValidateSize) {
-          this.assertSpriteFrameSize(asset, spriteFrame);
-        }
-
-        const node = driver.createImageNode(layer.name, spriteFrame);
-        driver.setContentSize(node, asset.width, asset.height);
-        driver.setAnchorPoint(
-          node,
-          layer.transform.anchorX,
-          layer.transform.anchorY,
-        );
-        driver.applyBlendMode(node, getCocosBlendModeConfig(layer.blendMode));
-        driver.appendChild(content, node);
-
-        const particleContainer = driver.createNode(`${layer.name} Particles`);
+      const layersById = new Map(
+        project.layers.map((layer) => [layer.id, layer] as const),
+      );
+      for (const group of this.layerGroups) {
+        const groupNode = driver.createNode(`V5G Group ${group.id}`);
         driver.setContentSize(
-          particleContainer,
+          groupNode,
           project.stage.width,
           project.stage.height,
         );
-        driver.setAnchorPoint(particleContainer, 0.5, 0.5);
-        driver.appendChild(content, particleContainer);
+        driver.setAnchorPoint(groupNode, 0.5, 0.5);
+        driver.appendChild(content, groupNode);
+        this.groupNodesById.set(group.id, groupNode);
 
-        this.layers.set(layer.id, {
-          layer,
-          asset,
-          node,
-          particleContainer,
-          particleNodes: [],
-          spriteFrame,
-        });
+        for (const layerId of group.layerIds) {
+          const layer = layersById.get(layerId);
+          if (!layer) {
+            throw new Error(`Missing V5G layer for render group: ${layerId}.`);
+          }
+          const asset = this.requireImageAsset(layer, assetsById);
+          const resolvedSpriteFrame = this.resolveSpriteFrame(asset);
+          const spriteFrame = resolvedSpriteFrame.spriteFrame;
+          if (resolvedSpriteFrame.shouldValidateSize) {
+            this.assertSpriteFrameSize(asset, spriteFrame);
+          }
+
+          const node = driver.createImageNode(layer.name, spriteFrame);
+          driver.setContentSize(node, asset.width, asset.height);
+          driver.setAnchorPoint(
+            node,
+            layer.transform.anchorX,
+            layer.transform.anchorY,
+          );
+          driver.applyBlendMode(node, getCocosBlendModeConfig(layer.blendMode));
+          driver.appendChild(groupNode, node);
+
+          const particleContainer = driver.createNode(
+            `${layer.name} Particles`,
+          );
+          driver.setContentSize(
+            particleContainer,
+            project.stage.width,
+            project.stage.height,
+          );
+          driver.setAnchorPoint(particleContainer, 0.5, 0.5);
+          driver.appendChild(groupNode, particleContainer);
+
+          this.layers.set(layer.id, {
+            layer,
+            asset,
+            node,
+            particleContainer,
+            particleNodes: [],
+            spriteFrame,
+          });
+        }
+
+        const slot = this.layerGroupSlots.find(
+          (candidate) => candidate.afterGroupId === group.id,
+        );
+        if (slot) {
+          const slotNode = driver.createNode(
+            `V5G Slot ${slot.afterGroupId} -> ${slot.beforeGroupId}`,
+          );
+          driver.setContentSize(
+            slotNode,
+            project.stage.width,
+            project.stage.height,
+          );
+          driver.setAnchorPoint(slotNode, 0.5, 0.5);
+          driver.appendChild(content, slotNode);
+          this.slotNodesByKey.set(getLayerGroupSlotKey(slot), slotNode);
+        }
       }
 
       driver.appendChild(this.options.root, stage);
@@ -200,6 +292,12 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
       this.contentNode = null;
       this.particleRootNode = null;
       this.layers.clear();
+      this.groupNodesById.clear();
+      this.slotNodesByKey.clear();
+      this.mountedNodesById.clear();
+      this.mountedNodesByNode.clear();
+      this.layerGroups = [];
+      this.layerGroupSlots = [];
       throw error;
     }
   }
@@ -279,6 +377,131 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
       loopIndex: this.segmentedPlayback?.getLoopIndex() ?? this.loopIndex,
       keepParticlesAlive: this.segmentedPlayback?.keepParticlesAlive ?? true,
     };
+  }
+
+  getLayerGroups(): readonly V5GCocosLayerGroupInfo[] {
+    return this.layerGroups.map((group) =>
+      Object.freeze({
+        id: group.id,
+        name: group.name,
+        visible: group.visible,
+        order: group.order,
+        layerIds: group.layerIds,
+        renderIndex: group.renderIndex,
+      }),
+    );
+  }
+
+  getLayerGroupSlots(): readonly V5GCocosLayerGroupSlot[] {
+    return this.layerGroupSlots.map((slot) => Object.freeze({ ...slot }));
+  }
+
+  attachNodeBetweenLayerGroups(
+    options: V5GCocosAttachNodeBetweenLayerGroupsOptions<TNode>,
+  ): () => void {
+    this.assertInitialized("attachNodeBetweenLayerGroups");
+    const nodes = normalizeMountedNodes(options);
+    this.assertMountableNodeIds(nodes);
+    const slot = assertVNIAdjacentLayerGroupSlot(
+      this.options.project,
+      options.afterGroupId,
+      options.beforeGroupId,
+    );
+    const slotNode = this.slotNodesByKey.get(getLayerGroupSlotKey(slot));
+    if (!slotNode) {
+      throw new Error(
+        `Missing V5G Cocos layer group slot container: ${slot.afterGroupId} -> ${slot.beforeGroupId}.`,
+      );
+    }
+    const mountedVersions = nodes.map((node) => {
+      const mounted = this.attachMountedNodeRecord(
+        node,
+        slotNode,
+        options.destroyOnDetach === true,
+      );
+      return { node: mounted.node, version: mounted.version };
+    });
+
+    let disposed = false;
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      for (const mountedVersion of mountedVersions) {
+        const mounted = this.mountedNodesByNode.get(mountedVersion.node);
+        if (mounted?.version === mountedVersion.version) {
+          this.detachMountedNodeRecordAndUnregister(mounted);
+        }
+      }
+    };
+  }
+
+  attachProjectAssetBetweenLayerGroups(
+    options: V5GCocosAttachProjectAssetBetweenLayerGroupsOptions,
+  ): () => void {
+    this.assertInitialized("attachProjectAssetBetweenLayerGroups");
+    const asset = this.options.project.assets.find(
+      (candidate) => candidate.id === options.assetId,
+    );
+    if (!asset) {
+      throw new Error(`Unknown V5G asset id: ${options.assetId}.`);
+    }
+    const resolvedSpriteFrame = this.resolveSpriteFrame(asset);
+    if (resolvedSpriteFrame.shouldValidateSize) {
+      this.assertSpriteFrameSize(asset, resolvedSpriteFrame.spriteFrame);
+    }
+    return this.attachRuntimeOwnedImageNode(
+      `V5G Mounted Image ${asset.id}`,
+      resolvedSpriteFrame.spriteFrame,
+      asset.width,
+      asset.height,
+      options,
+    );
+  }
+
+  attachSpriteFrameBetweenLayerGroups(
+    options: V5GCocosAttachSpriteFrameBetweenLayerGroupsOptions<TSpriteFrame>,
+  ): () => void {
+    this.assertInitialized("attachSpriteFrameBetweenLayerGroups");
+    this.assertPositiveFiniteNumber(
+      options.width,
+      "V5GCocosPlayer.attachSpriteFrameBetweenLayerGroups width",
+    );
+    this.assertPositiveFiniteNumber(
+      options.height,
+      "V5GCocosPlayer.attachSpriteFrameBetweenLayerGroups height",
+    );
+    return this.attachRuntimeOwnedImageNode(
+      "V5G Mounted SpriteFrame",
+      options.spriteFrame,
+      options.width,
+      options.height,
+      options,
+    );
+  }
+
+  detachMountedNode(target: string | TNode): void {
+    this.detachMountedNodeRecordAndUnregister(
+      this.requireMountedNodeRecord(target),
+    );
+  }
+
+  detachMountedNodes(targets: readonly (string | TNode)[]): void {
+    const mountedNodes = targets.map((target) =>
+      this.requireMountedNodeRecord(target),
+    );
+    const detached = new Set<MountedNodeRecord<TNode>>();
+    for (const mounted of mountedNodes) {
+      if (!detached.has(mounted)) {
+        this.detachMountedNodeRecordAndUnregister(mounted);
+        detached.add(mounted);
+      }
+    }
+  }
+
+  clearMountedNodes(): void {
+    for (const mounted of [...this.mountedNodesByNode.values()]) {
+      this.detachMountedNodeRecordAndUnregister(mounted);
+    }
   }
 
   addPlaybackEvent(options: V5GCocosPlaybackEventOptions): () => void {
@@ -785,6 +1008,199 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     }
   }
 
+  private attachRuntimeOwnedImageNode(
+    name: string,
+    spriteFrame: TSpriteFrame,
+    width: number,
+    height: number,
+    options: MountedImageNodeOptions & {
+      id: string;
+      afterGroupId: string;
+      beforeGroupId: string;
+      destroyOnDetach?: boolean;
+    },
+  ): () => void {
+    const node = this.options.driver.createImageNode(name, spriteFrame);
+    try {
+      this.configureMountedImageNode(node, width, height, options);
+      return this.attachNodeBetweenLayerGroups({
+        id: options.id,
+        afterGroupId: options.afterGroupId,
+        beforeGroupId: options.beforeGroupId,
+        node,
+        destroyOnDetach: options.destroyOnDetach ?? true,
+      });
+    } catch (error) {
+      this.options.driver.destroyNode(node);
+      throw error;
+    }
+  }
+
+  private configureMountedImageNode(
+    node: TNode,
+    width: number,
+    height: number,
+    options: MountedImageNodeOptions,
+  ): void {
+    this.assertPositiveFiniteNumber(width, "mounted image width");
+    this.assertPositiveFiniteNumber(height, "mounted image height");
+    const opacity = options.opacity ?? 1;
+    if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) {
+      throw new Error("mounted image opacity must be in range 0..1.");
+    }
+    this.options.driver.setContentSize(node, width, height);
+    this.options.driver.setAnchorPoint(
+      node,
+      options.anchorX ?? 0.5,
+      options.anchorY ?? 0.5,
+    );
+    this.options.driver.setPosition(node, options.x ?? 0, options.y ?? 0);
+    this.options.driver.setScale(
+      node,
+      options.scaleX ?? 1,
+      options.scaleY ?? 1,
+    );
+    this.options.driver.setRotationDegrees(node, options.rotation ?? 0);
+    this.options.driver.setOpacity(node, opacityToCocosOpacity(opacity));
+    this.options.driver.setActive(node, true);
+    this.options.driver.applyBlendMode(
+      node,
+      getCocosBlendModeConfig(options.blendMode ?? "normal"),
+    );
+  }
+
+  private assertMountableNodeIds(
+    nodes: readonly NormalizedMountedNode<TNode>[],
+  ): void {
+    const idOwners = new Map<string, TNode>();
+    const nodeIds = new Map<TNode, string | null>();
+    for (const mounted of this.mountedNodesByNode.values()) {
+      nodeIds.set(mounted.node, mounted.id);
+      if (mounted.id !== null) {
+        idOwners.set(mounted.id, mounted.node);
+      }
+    }
+    for (const mounted of nodes) {
+      if (mounted.id !== null) {
+        const owner = idOwners.get(mounted.id);
+        if (owner !== undefined && owner !== mounted.node) {
+          throw new Error(
+            `Duplicate V5G Cocos mounted node id: ${mounted.id}.`,
+          );
+        }
+      }
+      const previousId = nodeIds.get(mounted.node);
+      if (previousId !== undefined && previousId !== null) {
+        idOwners.delete(previousId);
+      }
+      nodeIds.set(mounted.node, mounted.id);
+      if (mounted.id !== null) {
+        idOwners.set(mounted.id, mounted.node);
+      }
+    }
+  }
+
+  private attachMountedNodeRecord(
+    mountedNode: NormalizedMountedNode<TNode>,
+    slotNode: TNode,
+    destroyOnDetach: boolean,
+  ): MountedNodeRecord<TNode> {
+    const existingById =
+      mountedNode.id === null
+        ? undefined
+        : this.mountedNodesById.get(mountedNode.id);
+    if (existingById !== undefined && existingById.node !== mountedNode.node) {
+      throw new Error(
+        `Duplicate V5G Cocos mounted node id: ${mountedNode.id}.`,
+      );
+    }
+
+    let mounted = this.mountedNodesByNode.get(mountedNode.node);
+    const previousParent = this.options.driver.getParent(mountedNode.node);
+    const worldTransform =
+      previousParent === null
+        ? null
+        : this.options.driver.captureWorldTransform(mountedNode.node);
+    if (mounted === undefined) {
+      mounted = {
+        id: null,
+        node: mountedNode.node,
+        slotNode,
+        originalParent: previousParent,
+        originalLocalTransform: this.options.driver.captureLocalTransform(
+          mountedNode.node,
+        ),
+        destroyOnDetach,
+        version: 0,
+      };
+      this.mountedNodesByNode.set(mountedNode.node, mounted);
+    } else if (mounted.id !== null) {
+      this.mountedNodesById.delete(mounted.id);
+    }
+
+    mounted.id = mountedNode.id;
+    mounted.slotNode = slotNode;
+    mounted.destroyOnDetach = destroyOnDetach;
+    mounted.version += 1;
+    this.options.driver.appendChild(slotNode, mountedNode.node);
+    if (worldTransform !== null) {
+      this.options.driver.restoreWorldTransform(
+        mountedNode.node,
+        worldTransform,
+      );
+    }
+    if (mounted.id !== null) {
+      this.mountedNodesById.set(mounted.id, mounted);
+    }
+    return mounted;
+  }
+
+  private requireMountedNodeRecord(
+    target: string | TNode,
+  ): MountedNodeRecord<TNode> {
+    if (typeof target === "string") {
+      const normalizedId = normalizeMountedNodeId(target);
+      const mounted = this.mountedNodesById.get(normalizedId);
+      if (!mounted) {
+        throw new Error(`Unknown V5G Cocos mounted node id: ${normalizedId}.`);
+      }
+      return mounted;
+    }
+    const mounted = this.mountedNodesByNode.get(target);
+    if (!mounted) {
+      throw new Error("Unknown V5G Cocos mounted node.");
+    }
+    return mounted;
+  }
+
+  private detachMountedNodeRecordAndUnregister(
+    mounted: MountedNodeRecord<TNode>,
+  ): void {
+    this.detachMountedNodeRecord(mounted);
+    if (mounted.id !== null) {
+      this.mountedNodesById.delete(mounted.id);
+    }
+    this.mountedNodesByNode.delete(mounted.node);
+  }
+
+  private detachMountedNodeRecord(mounted: MountedNodeRecord<TNode>): void {
+    if (mounted.destroyOnDetach) {
+      this.options.driver.destroyNode(mounted.node);
+      return;
+    }
+    const currentParent = this.options.driver.getParent(mounted.node);
+    if (currentParent !== null) {
+      this.options.driver.removeChild(currentParent, mounted.node);
+    }
+    if (mounted.originalParent !== null) {
+      this.options.driver.appendChild(mounted.originalParent, mounted.node);
+    }
+    this.options.driver.restoreLocalTransform(
+      mounted.node,
+      mounted.originalLocalTransform,
+    );
+  }
+
   private normalizePlaybackRange(
     range: V5GCocosPlaybackRange,
     apiName: string,
@@ -943,6 +1359,7 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
   }
 
   private destroyManagedNodes(): void {
+    this.clearMountedNodes();
     this.clearParticles();
     if (this.stageNode !== null) {
       this.options.driver.destroyNode(this.stageNode);
@@ -951,11 +1368,17 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     this.contentNode = null;
     this.particleRootNode = null;
     this.layers.clear();
+    this.groupNodesById.clear();
+    this.slotNodesByKey.clear();
+    this.mountedNodesById.clear();
+    this.mountedNodesByNode.clear();
+    this.layerGroups = [];
+    this.layerGroupSlots = [];
   }
 
-  private assertInitialized(): void {
+  private assertInitialized(apiName = "seek/update"): void {
     if (this.stageNode === null) {
-      throw new Error("V5GCocosPlayer must be initialized before seek/update.");
+      throw new Error(`V5GCocosPlayer must be initialized before ${apiName}.`);
     }
   }
 
@@ -1078,4 +1501,78 @@ function isSpriteAtlasAssetSource<TSpriteFrame>(
     typeof (source as Partial<V5GCocosSpriteAtlasAssetSource<TSpriteFrame>>)
       .atlas?.getSpriteFrame === "function"
   );
+}
+
+function getLayerGroupSlotKey(slot: VNILayerGroupSlot): string {
+  return `${slot.afterGroupId}\u0000${slot.beforeGroupId}`;
+}
+
+function normalizeMountedNodes<TNode>(
+  options: V5GCocosAttachNodeBetweenLayerGroupsOptions<TNode>,
+): readonly NormalizedMountedNode<TNode>[] {
+  if (options.node !== undefined && options.nodes !== undefined) {
+    throw new Error(
+      "V5GCocosPlayer.attachNodeBetweenLayerGroups accepts node or nodes, not both.",
+    );
+  }
+  const nodes =
+    options.nodes !== undefined
+      ? [...options.nodes]
+      : options.node !== undefined
+        ? [options.node]
+        : [];
+  if (nodes.length === 0) {
+    throw new Error(
+      "V5GCocosPlayer.attachNodeBetweenLayerGroups requires at least one node.",
+    );
+  }
+  if (options.id !== undefined && options.ids !== undefined) {
+    throw new Error(
+      "V5GCocosPlayer.attachNodeBetweenLayerGroups accepts id or ids, not both.",
+    );
+  }
+  const ids = normalizeMountedNodeIds(options.id, options.ids, nodes.length);
+  return nodes.map((node, index) => {
+    if (node === null || node === undefined) {
+      throw new Error(
+        "V5GCocosPlayer.attachNodeBetweenLayerGroups node must be non-null.",
+      );
+    }
+    return { id: ids[index], node };
+  });
+}
+
+function normalizeMountedNodeIds(
+  id: string | undefined,
+  ids: readonly string[] | undefined,
+  nodeCount: number,
+): readonly (string | null)[] {
+  if (ids !== undefined) {
+    if (ids.length !== nodeCount) {
+      throw new Error(
+        "V5GCocosPlayer.attachNodeBetweenLayerGroups ids length must match nodes length.",
+      );
+    }
+    return ids.map((candidate) => normalizeMountedNodeId(candidate));
+  }
+  if (id !== undefined) {
+    if (nodeCount !== 1) {
+      throw new Error(
+        "V5GCocosPlayer.attachNodeBetweenLayerGroups id can only be used with one node; use ids for multiple nodes.",
+      );
+    }
+    return [normalizeMountedNodeId(id)];
+  }
+  return Array.from({ length: nodeCount }, () => null);
+}
+
+function normalizeMountedNodeId(id: string): string {
+  if (typeof id !== "string") {
+    throw new Error("V5G Cocos mounted node id must be a string.");
+  }
+  const normalized = id.trim();
+  if (normalized.length === 0) {
+    throw new Error("V5G Cocos mounted node id must be non-empty.");
+  }
+  return normalized;
 }

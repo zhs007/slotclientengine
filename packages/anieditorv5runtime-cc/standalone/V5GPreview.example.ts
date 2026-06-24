@@ -30,6 +30,7 @@ export class V5GPreview extends Component {
   segmentedLoopEnd = 0;
 
   private player: V5GCocosPlayer | null = null;
+  private slotProbeDispose: (() => void) | null = null;
   private lastPlaybackEventId = "";
   private completedPlaybackTasks = 0;
 
@@ -60,6 +61,17 @@ export class V5GPreview extends Component {
     // All image assets used by project.assets must exist in this atlas as the asset.path filename without extension.
     // The runtime fails fast when a frame is missing; it never guesses resource names.
     this.player.init();
+
+    const firstSlot = this.player.getLayerGroupSlots()[0];
+    if (firstSlot) {
+      const slotProbe = new Node("V5GPreview Slot Probe");
+      this.slotProbeDispose = this.player.attachNodeBetweenLayerGroups({
+        id: "preview-slot-probe",
+        afterGroupId: firstSlot.afterGroupId,
+        beforeGroupId: firstSlot.beforeGroupId,
+        node: slotProbe,
+      });
+    }
 
     const previewEndTime = Math.min(project.stage.duration, 4);
     const previewFps = 60;
@@ -121,6 +133,8 @@ export class V5GPreview extends Component {
   }
 
   onDestroy(): void {
+    this.slotProbeDispose?.();
+    this.slotProbeDispose = null;
     this.player?.destroy();
     this.player = null;
   }

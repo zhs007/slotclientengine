@@ -3,6 +3,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import tenXData from "../fixtures/10x.json";
+import threeReelMultipay01Data from "../fixtures/3reel_multipay_01.json";
+import threeReelMultipay02Data from "../fixtures/3reel_multipay_02.json";
 import twoXData from "../fixtures/2x.json";
 import fiveXData from "../fixtures/5x.json";
 import bigwinData from "../fixtures/bigwin.json";
@@ -36,6 +38,7 @@ const newExportFixtures = [
   scatter1Data,
   scatter2Data,
   multipayData,
+  threeReelMultipay02Data,
 ] as const;
 const exportRootDir = fileURLToPath(
   new URL("../../../../docs/anieditor5/export/", import.meta.url),
@@ -104,6 +107,15 @@ describe("validation", () => {
     }
   });
 
+  it("accepts render-effect exports generically but fails fast for Cocos runtime", () => {
+    const project = assertV5GProject(threeReelMultipay01Data);
+    expect(project.schemaVersion).toBe("VNI_0.016");
+    expect(() => validateV5GProject(project)).not.toThrow();
+    expect(() => validateCocosV5GProject(project)).toThrow(
+      'Cocos runtime does not support VNI render effect animations yet: project "3reel_MultiPay_01", layer "layer_image_mqp31v5g_15", animation "anim_module_mqp32bt3_16", type "glow".',
+    );
+  });
+
   it("accepts the runtime_50 VNI export profile", () => {
     const project = validRuntime50Project();
     expect(project.schemaVersion).toMatch(/^VNI_0\.\d+$/u);
@@ -147,6 +159,7 @@ describe("validation", () => {
   it("supports the viewer animation type surface", () => {
     const paramsByType: Record<V5GAnimationType, V5GAnimationConfig["params"]> =
       {
+        idle: {},
         move: { fromX: 0, fromY: 0, toX: 1, toY: 1 },
         fade: { fromOpacity: 0, toOpacity: 1 },
         scale_up: { fromScaleX: 1, fromScaleY: 1, toScaleX: 2, toScaleY: 2 },
@@ -212,6 +225,26 @@ describe("validation", () => {
           vanishRatio: 0.2,
           flashScale: 1.8,
           flashIntensity: 1.2,
+        },
+        shatter: {
+          count: 8,
+          pieceSize: 24,
+          force: 120,
+          impactAngle: 90,
+          spreadAngle: 45,
+          gravity: 80,
+          spin: 1,
+          sourceOpacity: 0.25,
+          fadeOut: true,
+        },
+        glow: {
+          intensity: 1.4,
+          spread: 12,
+          minAlpha: 0.2,
+          maxAlpha: 0.8,
+          pulses: 2,
+          blendMode: 0,
+          keepOriginal: true,
         },
         squash_stretch: {
           squashAngle: 90,
@@ -438,6 +471,52 @@ describe("validation", () => {
     squash.params.easing = "spring";
     expect(() => validateV5GProject(unknownSquashEasing)).toThrow(
       "Unsupported V5G easing",
+    );
+  });
+
+  it("rejects malformed render effect params generically", () => {
+    const missingGlowParam = assertV5GProject(
+      structuredClone(threeReelMultipay01Data),
+    );
+    const glow = missingGlowParam.layers
+      .flatMap((layer) => layer.animations)
+      .find((animation) => animation.type === "glow");
+    expect(glow).toBeDefined();
+    if (!glow) throw new Error("missing glow fixture");
+    delete glow.params.intensity;
+    expect(() => validateV5GProject(missingGlowParam)).toThrow(
+      'requires numeric param "intensity"',
+    );
+
+    const shatterProject = validProject();
+    shatterProject.layers[0].animations = [
+      {
+        id: "shatter",
+        type: "shatter",
+        startTime: 0,
+        duration: 1,
+        enabled: true,
+        seed: 1,
+        params: {
+          count: 8,
+          pieceSize: 24,
+          force: 120,
+          impactAngle: 90,
+          spreadAngle: 45,
+          gravity: 80,
+          spin: 1,
+          sourceOpacity: 0.5,
+          fadeOut: true,
+        },
+      },
+    ];
+    expect(() => validateV5GProject(shatterProject)).not.toThrow();
+    expect(() => validateCocosV5GProject(shatterProject)).toThrow(
+      "Cocos runtime does not support VNI render effect animations yet",
+    );
+    shatterProject.layers[0].animations[0].params.fadeOut = "true";
+    expect(() => validateV5GProject(shatterProject)).toThrow(
+      'param "fadeOut" must be a boolean',
     );
   });
 

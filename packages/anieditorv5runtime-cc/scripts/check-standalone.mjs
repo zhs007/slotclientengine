@@ -53,7 +53,15 @@ const requiredExports = [
   "export type V5GAnimationType",
   "export interface V5GAssetConfig",
   "export interface V5GExportProfileConfig",
+  "export interface V5GLayerGroupConfig",
   "export interface V5GProjectConfig",
+  "export const DEFAULT_VNI_LAYER_GROUP_ID",
+  "export interface VNIRenderGroupInfo",
+  "export interface VNILayerGroupSlot",
+  "export function normalizeVNIProjectLayerGroups",
+  "export function getVNIProjectRenderGroupOrder",
+  "export function getVNIProjectLayerGroupSlots",
+  "export function assertVNIAdjacentLayerGroupSlot",
   "export interface SampledLayerState",
   "export interface ParticleSpriteSample",
   "export interface ParticleAnimationRuntimeState",
@@ -67,6 +75,7 @@ const requiredExports = [
   "export interface V5GCocosSpriteAtlasAssetSource",
   "export type V5GCocosAssetSource",
   "export interface V5GCocosPlayerOptions",
+  "export interface V5GCocosNodeDriver",
   "export type V5GCocosPlaybackRange",
   "export type V5GCocosPlaybackPoint",
   "export type V5GCocosPlayRangeOptions",
@@ -75,11 +84,17 @@ const requiredExports = [
   "export type V5GCocosSegmentedPlaybackOptions",
   "export type V5GCocosPlayOptions",
   "export type V5GCocosPlaybackState",
+  "export interface V5GCocosLayerGroupInfo",
+  "export type V5GCocosLayerGroupSlot",
+  "export interface V5GCocosAttachNodeBetweenLayerGroupsOptions",
+  "export interface V5GCocosAttachProjectAssetBetweenLayerGroupsOptions",
+  "export interface V5GCocosAttachSpriteFrameBetweenLayerGroupsOptions",
   "export interface V5GCocosPlaybackEventOptions",
   "export interface V5GCocosPlaybackEventContext",
   "export interface V5GCocosPlaybackCompleteContext",
   "export type SupportedCocosBlendMode",
   "export interface CocosBlendModeConfig",
+  "export type V5GCocosNodeTransformSnapshot",
   "export class V5GSegmentedPlaybackSequence",
   "export class V5GParticleRuntime",
   "export class V5GCocosPlayer",
@@ -104,6 +119,19 @@ const requiredExports = [
 for (const expected of requiredExports) {
   if (!source.includes(expected)) {
     violations.push(`missing public API: ${expected}`);
+  }
+}
+
+const requiredSnippets = [
+  "getParent(node: TNode): TNode | null",
+  "captureLocalTransform(node: TNode): V5GCocosNodeTransformSnapshot",
+  "captureWorldTransform(node: TNode): V5GCocosNodeTransformSnapshot",
+  "detachMountedNodes(targets: readonly (string | TNode)[]): void",
+];
+
+for (const expected of requiredSnippets) {
+  if (!source.includes(expected)) {
+    violations.push(`missing standalone runtime snippet: ${expected}`);
   }
 }
 

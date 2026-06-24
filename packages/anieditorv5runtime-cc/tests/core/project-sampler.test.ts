@@ -39,6 +39,7 @@ function layer(
     type: "image",
     assetId: "asset",
     parentId: null,
+    groupId: "group_default",
     visible: true,
     locked: false,
     transform,
@@ -186,11 +187,41 @@ describe("project-sampler", () => {
         backgroundColor: "#101827",
       },
       assets: [],
+      layerGroups: [
+        {
+          id: "group_default",
+          name: "Default",
+          visible: true,
+          collapsed: false,
+          order: 0,
+        },
+      ],
       layers: [layer()],
       particles: [],
     };
 
     expect(sampleProjectAtTime(project, 11).time).toBe(10);
     expect(sampleProjectAtTime(project, -1).time).toBe(0);
+  });
+
+  it("keeps idle-covered layers visible without changing source image state", () => {
+    const sampled = sampleLayerAtTime(
+      layer({}, [
+        {
+          id: "idle",
+          type: "idle",
+          startTime: 0,
+          duration: 1,
+          enabled: true,
+          seed: 1,
+          params: {},
+        },
+      ]),
+      0.5,
+    );
+
+    expect(sampled.opacity).toBe(1);
+    expect(sampled.visible).toBe(true);
+    expect(sampled.renderImageDisplay).toBe(true);
   });
 });

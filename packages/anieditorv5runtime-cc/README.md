@@ -14,6 +14,7 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - `engineTarget.version === "3.8.6"`
 - `stage.coordinate === "center"`
 - `fileWidth`、`fileHeight`、`fileScale` 压缩资源 metadata
+- `project.layerGroups + layer.groupId`：runtime 按 `project.layers` 中连续的 group run 决定渲染顺序，不使用 `layerGroups.order` 重排画面
 - `image` 图层
 - 中心坐标：Cocos 节点位置直接使用 `transform.x/y`，不做 Pixi 的左上角坐标转换
 - 负 `scaleX/scaleY` 镜像
@@ -22,6 +23,7 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - `scale_up`、`scale_down`、`fade`、`rotate`、`move`
 - `slide_in`、`slide_out`、`bounce_in`、`pulse`、`float`、`swing`
 - `scale_in`、`scale_out`、`pop`、`shake`、`blink`
+- `idle`：作为 timeline coverage marker，不改变 transform 或 opacity
 - `particle_wall`、`particle_combo`、`squash_stretch`
 - 图层动画 `particles`、`particle_twinkle`、`particle_wall`、`particle_combo`：复用当前图层的 `SpriteFrame` 创建粒子 Sprite；真实粒子节点挂在对应图层后面的 `<layer name> Particles` 容器下，全局 `V5G Particles` 节点只保留为空占位
 - `particle_combo.params.sourceOpacity` 只影响源图像显示，不会把同层粒子透明度一起清零；粒子透明度使用图层原始 `opacity`
@@ -35,9 +37,83 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - 非空 `keyframes`
 - `group` 图层
 - 嵌套 `parentId`
+- Cocos deterministic render effect：enabled `shatter` / `glow` 会在 `validateCocosV5GProject(...)` / `init()` 阶段显式失败；通用 `assertV5GProject(...)` 和 `validateV5GProject(...)` 仍会解析并校验其导出参数，便于诊断导出合同
 - 未知资源、未知动画、未知 easing、未知 blend mode 的静默兜底
 
 遇到未支持能力会直接抛错。runtime 不创建 missing placeholder，不自动猜测资源路径。未知 V5G blend mode 仍会在通用校验失败；已知 blend mode 如果无法写入 Cocos Sprite blend factor 或 material pass blend state，会在 `init()` / `applyBlendMode(...)` 阶段显式抛错，不会静默退回 normal。
+
+## Layer group slot
+
+runtime 初始化后会创建 group-aware tree：
+
+```text
+V5G Stage
+  V5G Content
+    V5G Group <lower group id>
+      <layer image node>
+      <layer particles node>
+    V5G Slot <lower group id> -> <upper group id>
+      <mounted external nodes>
+    V5G Group <upper group id>
+      <layer image node>
+      <layer particles node>
+  V5G Particles
+```
+
+`V5G Particles` 仍保留为空占位；真实 layer particle 节点挂在对应 group 内的 `<layer name> Particles` 容器。group container 和 slot container 都使用 stage center 坐标体系，外部 `Node` 挂接时不会被 runtime 重置 transform。
+
+查询合法 slot 并插入宿主节点：
+
+```ts
+const [slot] = player.getLayerGroupSlots();
+if (slot) {
+  const dispose = player.attachNodeBetweenLayerGroups({
+    id: "slot-reel",
+    afterGroupId: slot.afterGroupId,
+    beforeGroupId: slot.beforeGroupId,
+    node: reelRoot,
+  });
+}
+```
+
+也可以一次挂接多个节点，数组中先出现的节点会保持在更低的 sibling 顺序：
+
+```ts
+player.attachNodeBetweenLayerGroups({
+  ids: ["bonus-bg", "bonus-ui"],
+  afterGroupId: slot.afterGroupId,
+  beforeGroupId: slot.beforeGroupId,
+  nodes: [bonusBackground, bonusHud],
+});
+```
+
+`attachNodeBetweenLayerGroups(...)` 只接受相邻 render group。未知 group、反向 group、非相邻 group、已被其他节点占用的 id、空 id、`id`/`ids` 或 `node`/`nodes` 的歧义组合都会显式失败。插入或重复插入已有父节点的外部节点时，runtime 会先捕获当前 world transform，挂到 slot 后再恢复 world transform，避免父节点坐标系不同导致画面跳动。重复插入同一个节点会移动它到新的插入顺序，并保留第一次插入前的原父节点和 local transform；移除时会从当前父节点摘下，恢复到这个最早的父节点和相对位置。外部节点默认不销毁；传 `destroyOnDetach: true` 时才销毁。
+
+移除可以使用返回的 disposer，也可以用 `player.detachMountedNode(idOrNode)` 移除单个 id 或节点，用 `player.detachMountedNodes([idOrNode, ...])` 一次移除多个指定节点，或无参数调用 `player.clearMountedNodes()` 清空所有已挂接节点。没有 id 的节点仍可通过节点引用、disposer 或 `clearMountedNodes()` 移除。
+
+也可以用 Cocos-native helper 创建 runtime-owned image node：
+
+```ts
+player.attachProjectAssetBetweenLayerGroups({
+  id: "debug-asset",
+  afterGroupId: slot.afterGroupId,
+  beforeGroupId: slot.beforeGroupId,
+  assetId: "asset_image_mqp31v5g_14",
+  x: 0,
+  y: 0,
+});
+
+player.attachSpriteFrameBetweenLayerGroups({
+  id: "debug-frame",
+  afterGroupId: slot.afterGroupId,
+  beforeGroupId: slot.beforeGroupId,
+  spriteFrame,
+  width: 320,
+  height: 180,
+});
+```
+
+这两个 helper 创建的节点默认 `destroyOnDetach: true`，并复用 runtime 的 SpriteFrame resolver、逻辑尺寸、anchor、opacity 和 blend mode 规则。runtime 不提供 URL loader，也不会调用 `resources.load()`。
 
 ## 单文件复制导入
 
@@ -229,7 +305,7 @@ const disposeComplete = player.onPlaybackComplete((event) => {
 
 marker 和 complete 都由宿主继续调用 `player.update(deltaTime)` 同步驱动，不使用 `setTimeout`、Promise、Cocos tween 或异步计时器。手动 `seek(...)`、`init()` 和 `restart()` 不会触发 marker；单次大 `deltaTime` 跨过多个 marker 时，会按时间从小到大同步触发。callback 抛错不会被 runtime 吞掉，会从当前 public method 继续抛出。
 
-`destroy()` 会销毁 runtime 创建的节点、停止播放、清空当前 range、清空所有 marker 和 complete listener，避免宿主 Component 销毁后遗留 callback。
+`destroy()` 会销毁 runtime 创建的节点、停止播放、清空当前 range、清空所有 marker、complete listener 和 mounted node registry，避免宿主 Component 销毁后遗留 callback 或业务节点引用。
 
 ## Package 导入
 

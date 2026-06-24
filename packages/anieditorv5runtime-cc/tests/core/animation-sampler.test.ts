@@ -259,6 +259,56 @@ describe("animation-sampler", () => {
     expect(sampled.transform).toEqual(baseTransform);
   });
 
+  it("keeps idle as a no-op coverage marker", () => {
+    const sampled = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 0.7 },
+      [animation("idle", {})],
+      0.5,
+    );
+
+    expect(sampled.transform).toEqual(baseTransform);
+    expect(sampled.opacity).toBe(0.7);
+  });
+
+  it("samples render effect source image opacity without creating live particles", () => {
+    const shatter = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 0.8 },
+      [
+        animation("shatter", {
+          count: 8,
+          pieceSize: 24,
+          force: 120,
+          impactAngle: 90,
+          spreadAngle: 45,
+          gravity: 80,
+          spin: 1,
+          sourceOpacity: 0.25,
+        }),
+      ],
+      0.5,
+    );
+    expect(shatter.opacity).toBe(0.2);
+    expect(shatter.transform).toEqual(baseTransform);
+
+    const glowHiddenSource = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 0.8 },
+      [
+        animation("glow", {
+          intensity: 1.4,
+          spread: 12,
+          minAlpha: 0.2,
+          maxAlpha: 0.8,
+          pulses: 2,
+          blendMode: 0,
+          keepOriginal: false,
+        }),
+      ],
+      0.5,
+    );
+    expect(glowHiddenSource.opacity).toBe(0);
+    expect(glowHiddenSource.transform).toEqual(baseTransform);
+  });
+
   it("samples squash_stretch displacement and elastic scale", () => {
     const sampled = sampleLayerAnimationsAtTime(
       { transform: baseTransform, opacity: 1 },

@@ -1,10 +1,23 @@
-import { Color, Node, Sprite, SpriteFrame, UITransform, UIOpacity } from "cc";
+import {
+  Color,
+  Node,
+  Quat,
+  Sprite,
+  SpriteFrame,
+  UITransform,
+  UIOpacity,
+  Vec3,
+} from "cc";
 import type {
   CocosBlendFactorName,
   CocosBlendModeConfig,
   CocosBlendOperationName,
 } from "./blend-mode.js";
-import type { V5GCocosNodeDriver, V5GSize } from "./node-driver.js";
+import type {
+  V5GCocosNodeDriver,
+  V5GCocosNodeTransformSnapshot,
+  V5GSize,
+} from "./node-driver.js";
 
 interface ReadableSpriteFrameSize {
   width: number;
@@ -55,6 +68,18 @@ interface BlendableSprite {
   getMaterialInstance?: (index: number) => CocosMaterialInstanceLike | null;
 }
 
+interface CocosLocalTransformSnapshot {
+  position: Vec3;
+  scale: Vec3;
+  eulerAngles: Vec3;
+}
+
+interface CocosWorldTransformSnapshot {
+  position: Vec3;
+  scale: Vec3;
+  rotation: Quat;
+}
+
 // Cocos Creator 3.8.6 exposes these enum values internally, but not all builds
 // re-export BlendFactor / BlendOp from "cc".
 const COCOS_BLEND_FACTORS: Record<CocosBlendFactorName, number> = {
@@ -79,6 +104,56 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
     },
     appendChild(parent, child) {
       parent.addChild(child);
+    },
+    removeChild(parent, child) {
+      if (child.parent === parent) {
+        child.removeFromParent();
+      }
+    },
+    getParent(node) {
+      return node.parent;
+    },
+    captureLocalTransform(node) {
+      return {
+        position: copyVec3(node.position),
+        scale: copyVec3(node.scale),
+        eulerAngles: copyVec3(node.eulerAngles),
+      };
+    },
+    restoreLocalTransform(node, snapshot) {
+      const transform = requireLocalTransformSnapshot(snapshot);
+      node.setPosition(
+        transform.position.x,
+        transform.position.y,
+        transform.position.z,
+      );
+      node.setScale(transform.scale.x, transform.scale.y, transform.scale.z);
+      node.setRotationFromEuler(
+        transform.eulerAngles.x,
+        transform.eulerAngles.y,
+        transform.eulerAngles.z,
+      );
+    },
+    captureWorldTransform(node) {
+      return {
+        position: node.getWorldPosition(new Vec3()),
+        scale: node.getWorldScale(new Vec3()),
+        rotation: node.getWorldRotation(new Quat()),
+      };
+    },
+    restoreWorldTransform(node, snapshot) {
+      const transform = requireWorldTransformSnapshot(snapshot);
+      node.setWorldPosition(
+        transform.position.x,
+        transform.position.y,
+        transform.position.z,
+      );
+      node.setWorldScale(
+        transform.scale.x,
+        transform.scale.y,
+        transform.scale.z,
+      );
+      node.setWorldRotation(transform.rotation);
     },
     destroyNode(node) {
       node.removeFromParent();
@@ -119,6 +194,22 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
       applySpriteBlendMode(node.name, requireSprite(node), config);
     },
   };
+}
+
+function copyVec3(source: Vec3): Vec3 {
+  return new Vec3(source.x, source.y, source.z);
+}
+
+function requireLocalTransformSnapshot(
+  snapshot: V5GCocosNodeTransformSnapshot,
+): CocosLocalTransformSnapshot {
+  return snapshot as CocosLocalTransformSnapshot;
+}
+
+function requireWorldTransformSnapshot(
+  snapshot: V5GCocosNodeTransformSnapshot,
+): CocosWorldTransformSnapshot {
+  return snapshot as CocosWorldTransformSnapshot;
 }
 
 function requireUITransform(node: Node): UITransform {
