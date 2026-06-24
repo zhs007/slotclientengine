@@ -212,7 +212,7 @@ export function sampleLiveParticleSprites(
       particles.push({
         ...particle,
         x: entry.sampledLayer.transform.x + particle.offsetX,
-        y: entry.sampledLayer.transform.y + particle.offsetY,
+        y: entry.sampledLayer.transform.y - particle.offsetY,
       });
     }
   }
@@ -234,7 +234,7 @@ function sampleLiveParticleSpritesForRuntime(
       particles.push({
         ...particle,
         x: entry.sampledLayer.transform.x + particle.offsetX,
-        y: entry.sampledLayer.transform.y + particle.offsetY,
+        y: entry.sampledLayer.transform.y - particle.offsetY,
       });
     }
   }

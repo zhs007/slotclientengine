@@ -1823,10 +1823,14 @@ export function sampleLayerAtTime(
           time <= animation.startTime + animation.duration,
       )
     : true;
+  const hasOpacityHoldCoverage = hasOpacityEntryToExitHoldCoverage(
+    layer.animations,
+    time,
+  );
   const opacity =
     hasPendingOpacityEntry ||
     hasPendingScaleEntry ||
-    (hasAnyEnabled && !hasActiveCoverage)
+    (hasAnyEnabled && !hasActiveCoverage && !hasOpacityHoldCoverage)
       ? 0
       : roundTo(clampNumber(sampled.opacity, 0, 1), 4);
   const baseOpacity = roundTo(clampNumber(layer.opacity, 0, 1), 4);
@@ -1860,6 +1864,39 @@ function isOpacityEntryAnimation(animation: V5GAnimationConfig): boolean {
     return getProjectBooleanParam(animation, "fadeIn", true);
   }
   return false;
+}
+
+function isOpacityExitAnimation(animation: V5GAnimationConfig): boolean {
+  if (animation.type === "fade") {
+    return getProjectNumberParam(animation, "toOpacity") === 0;
+  }
+  if (animation.type === "slide_out") {
+    return getProjectBooleanParam(animation, "fadeOut", true);
+  }
+  if (animation.type === "scale_out") {
+    return getProjectBooleanParam(animation, "fadeOut", true);
+  }
+  return false;
+}
+
+function hasOpacityEntryToExitHoldCoverage(
+  animations: readonly V5GAnimationConfig[],
+  time: number,
+): boolean {
+  const hasCompletedEntry = animations.some(
+    (animation) =>
+      animation.enabled &&
+      isOpacityEntryAnimation(animation) &&
+      time > animation.startTime + animation.duration,
+  );
+  if (!hasCompletedEntry) return false;
+
+  return animations.some(
+    (animation) =>
+      animation.enabled &&
+      isOpacityExitAnimation(animation) &&
+      time < animation.startTime,
+  );
 }
 
 function isScaleEntryAnimation(animation: V5GAnimationConfig): boolean {
@@ -3720,7 +3757,7 @@ export function sampleLiveParticleSprites(
       particles.push({
         ...particle,
         x: entry.sampledLayer.transform.x + particle.offsetX,
-        y: entry.sampledLayer.transform.y + particle.offsetY,
+        y: entry.sampledLayer.transform.y - particle.offsetY,
       });
     }
   }
@@ -3742,7 +3779,7 @@ function sampleLiveParticleSpritesForRuntime(
       particles.push({
         ...particle,
         x: entry.sampledLayer.transform.x + particle.offsetX,
-        y: entry.sampledLayer.transform.y + particle.offsetY,
+        y: entry.sampledLayer.transform.y - particle.offsetY,
       });
     }
   }
