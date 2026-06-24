@@ -1,4 +1,5 @@
 import type {
+  VNILayerGroupSlot,
   VNIPlaybackState,
   VNIProjectConfig,
 } from "@slotclientengine/vnicore/core";
@@ -12,6 +13,14 @@ export interface ViewerControlsProject {
   purpose: string;
   assetScale: number;
   project: VNIProjectConfig;
+  insertionAssets: readonly ViewerInsertionAsset[];
+}
+
+export interface ViewerInsertionAsset {
+  path: string;
+  label: string;
+  url: string;
+  projectAssetId?: string;
 }
 
 export interface ViewerControlsOptions {
@@ -30,6 +39,14 @@ export interface ViewerControlsOptions {
     keepParticlesAlive: boolean;
   }) => void;
   onSegmentedEnd: () => void;
+  onInsertBetweenGroups: (options: {
+    assetPath: string;
+    assetUrl: string;
+    projectAssetId?: string;
+    afterGroupId: string;
+    beforeGroupId: string;
+  }) => void;
+  onClearInsertedNodes: () => void;
 }
 
 export interface ViewerControls {
@@ -39,6 +56,9 @@ export interface ViewerControls {
   setLoop(loop: boolean): void;
   setPlaybackState(state: VNIPlaybackState): void;
   setAdvancedError(message: string | null): void;
+  setLayerGroupSlots(slots: readonly VNILayerGroupSlot[]): void;
+  setInsertionError(message: string | null): void;
+  setInsertedNodeActive(active: boolean): void;
 }
 
 export function createViewerControls(
@@ -53,6 +73,8 @@ export function createViewerControls(
     );
   }
   let currentProject: ViewerControlsProject = selectedProject;
+  let currentLayerGroupSlots: readonly VNILayerGroupSlot[] = [];
+  let insertedNodeActive = false;
 
   const root = document.createElement("div");
   root.className = "viewer-controls";
@@ -193,6 +215,60 @@ export function createViewerControls(
   );
   advancedPanel.append(advancedHeader, advancedControls, advancedError);
 
+  const insertionPanel = document.createElement("section");
+  insertionPanel.className = "group-insertion-panel";
+  insertionPanel.setAttribute("aria-label", "组间插入");
+
+  const insertionHeader = document.createElement("div");
+  insertionHeader.className = "group-insertion-header";
+  const insertionTitle = document.createElement("strong");
+  insertionTitle.textContent = "组间插入";
+  const insertionStatus = document.createElement("span");
+  insertionStatus.className = "group-insertion-status";
+  insertionHeader.append(insertionTitle, insertionStatus);
+
+  const insertionControls = document.createElement("div");
+  insertionControls.className = "group-insertion-row";
+
+  const insertionAssetLabel = document.createElement("label");
+  insertionAssetLabel.className = "insertion-select";
+  const insertionAssetText = document.createElement("span");
+  insertionAssetText.textContent = "asset";
+  const insertionAssetSelect = document.createElement("select");
+  insertionAssetSelect.setAttribute("aria-label", "插入 asset");
+  insertionAssetLabel.append(insertionAssetText, insertionAssetSelect);
+
+  const insertionSlotLabel = document.createElement("label");
+  insertionSlotLabel.className = "insertion-select";
+  const insertionSlotText = document.createElement("span");
+  insertionSlotText.textContent = "slot";
+  const insertionSlotSelect = document.createElement("select");
+  insertionSlotSelect.setAttribute("aria-label", "组间 slot");
+  insertionSlotLabel.append(insertionSlotText, insertionSlotSelect);
+
+  const insertionButton = document.createElement("button");
+  insertionButton.type = "button";
+  insertionButton.className = "control-button primary";
+  insertionButton.textContent = "插入";
+
+  const clearInsertionButton = document.createElement("button");
+  clearInsertionButton.type = "button";
+  clearInsertionButton.className = "control-button";
+  clearInsertionButton.textContent = "移除";
+  clearInsertionButton.disabled = true;
+
+  const insertionError = document.createElement("div");
+  insertionError.className = "group-insertion-error";
+  insertionError.setAttribute("role", "status");
+
+  insertionControls.append(
+    insertionAssetLabel,
+    insertionSlotLabel,
+    insertionButton,
+    clearInsertionButton,
+  );
+  insertionPanel.append(insertionHeader, insertionControls, insertionError);
+
   loopStartInput.addEventListener("input", updateAdvancedValidation);
   loopEndInput.addEventListener("input", updateAdvancedValidation);
   segmentedStartButton.addEventListener("click", () => {
@@ -209,9 +285,24 @@ export function createViewerControls(
     });
   });
   segmentedEndButton.addEventListener("click", options.onSegmentedEnd);
+  insertionAssetSelect.addEventListener("change", updateInsertionControls);
+  insertionSlotSelect.addEventListener("change", updateInsertionControls);
+  insertionButton.addEventListener("click", () => {
+    const parsed = parseInsertionInputs();
+    if (!parsed.ok) {
+      setInsertionError(parsed.message);
+      return;
+    }
+    setInsertionError(null);
+    options.onInsertBetweenGroups(parsed);
+  });
+  clearInsertionButton.addEventListener("click", () => {
+    setInsertionError(null);
+    options.onClearInsertedNodes();
+  });
 
   controls.append(playButton, restartButton, loopLabel, timeText, range);
-  root.append(projectRow, summary, controls, advancedPanel);
+  root.append(projectRow, summary, controls, advancedPanel, insertionPanel);
   options.container.appendChild(root);
 
   function renderProject(project: ViewerControlsProject): void {
@@ -234,6 +325,7 @@ export function createViewerControls(
     range.max = String(project.project.stage.duration);
     range.value = "0.00";
     resetAdvancedDefaults(project);
+    resetInsertionDefaults(project);
     timeText.textContent = `0.00 / ${formatTime(project.project.stage.duration)}`;
     playButton.textContent = "Play";
     playButton.classList.remove("is-playing");
@@ -268,6 +360,19 @@ export function createViewerControls(
     },
     setAdvancedError(message: string | null): void {
       setAdvancedError(message);
+    },
+    setLayerGroupSlots(slots: readonly VNILayerGroupSlot[]): void {
+      currentLayerGroupSlots = [...slots];
+      renderInsertionSlots();
+      updateInsertionControls();
+    },
+    setInsertionError(message: string | null): void {
+      setInsertionError(message);
+    },
+    setInsertedNodeActive(active: boolean): void {
+      insertedNodeActive = active;
+      clearInsertionButton.disabled = !insertedNodeActive;
+      updateInsertionControls();
     },
   };
 
@@ -322,6 +427,84 @@ export function createViewerControls(
     advancedError.textContent = message ?? "";
     advancedError.classList.toggle("is-visible", Boolean(message));
   }
+
+  function resetInsertionDefaults(project: ViewerControlsProject): void {
+    currentLayerGroupSlots = [];
+    insertedNodeActive = false;
+    insertionAssetSelect.replaceChildren();
+    for (const asset of project.insertionAssets) {
+      const option = document.createElement("option");
+      option.value = asset.path;
+      option.textContent = asset.label;
+      insertionAssetSelect.appendChild(option);
+    }
+    renderInsertionSlots();
+    setInsertionError(null);
+    clearInsertionButton.disabled = true;
+    updateInsertionControls();
+  }
+
+  function renderInsertionSlots(): void {
+    insertionSlotSelect.replaceChildren();
+    for (const slot of currentLayerGroupSlots) {
+      const option = document.createElement("option");
+      option.value = getSlotValue(slot);
+      option.textContent = `${slot.afterGroupName} -> ${slot.beforeGroupName}`;
+      insertionSlotSelect.appendChild(option);
+    }
+  }
+
+  function updateInsertionControls(): void {
+    const hasAsset = insertionAssetSelect.options.length > 0;
+    const hasSlot = insertionSlotSelect.options.length > 0;
+    insertionAssetSelect.disabled = !hasAsset;
+    insertionSlotSelect.disabled = !hasSlot;
+    insertionButton.disabled = !hasAsset || !hasSlot;
+    clearInsertionButton.disabled = !insertedNodeActive;
+    if (!hasSlot) {
+      insertionStatus.textContent = "无合法 slot";
+    } else if (insertedNodeActive) {
+      insertionStatus.textContent = "已插入";
+    } else {
+      insertionStatus.textContent = `${currentLayerGroupSlots.length} slot`;
+    }
+  }
+
+  function parseInsertionInputs():
+    | {
+        ok: true;
+        assetPath: string;
+        assetUrl: string;
+        projectAssetId?: string;
+        afterGroupId: string;
+        beforeGroupId: string;
+      }
+    | { ok: false; message: string } {
+    const assetPath = insertionAssetSelect.value;
+    const asset = currentProject.insertionAssets.find(
+      (candidate) => candidate.path === assetPath,
+    );
+    if (!asset) return { ok: false, message: "请选择 asset" };
+    const slot = currentLayerGroupSlots.find(
+      (candidate) => getSlotValue(candidate) === insertionSlotSelect.value,
+    );
+    if (!slot) return { ok: false, message: "请选择合法 group slot" };
+    const parsed = {
+      ok: true as const,
+      assetPath: asset.path,
+      assetUrl: asset.url,
+      afterGroupId: slot.afterGroupId,
+      beforeGroupId: slot.beforeGroupId,
+    };
+    return asset.projectAssetId
+      ? { ...parsed, projectAssetId: asset.projectAssetId }
+      : parsed;
+  }
+
+  function setInsertionError(message: string | null): void {
+    insertionError.textContent = message ?? "";
+    insertionError.classList.toggle("is-visible", Boolean(message));
+  }
 }
 
 function createSummaryStrong(value: string): HTMLElement {
@@ -355,4 +538,8 @@ function formatTime(time: number): string {
 
 function formatScale(scale: number): string {
   return Number.isFinite(scale) ? String(scale) : "unknown";
+}
+
+function getSlotValue(slot: VNILayerGroupSlot): string {
+  return `${slot.afterGroupId}\u0000${slot.beforeGroupId}`;
 }

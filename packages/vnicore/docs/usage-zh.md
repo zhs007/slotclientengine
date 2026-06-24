@@ -56,7 +56,7 @@ player.play();
 - `restart()`: 清空 active range、segmented 状态和 live 粒子，回到 0 秒。
 - `seek(time)`: 退出 range/segmented live playback，清空 live 粒子状态，并按指定时间做确定性预览；不会触发 marker。
 - `setLoop(loop)` / `getLoop()`: 控制普通播放和未显式传 `loop` 的 range 播放。
-- `destroy()`: 停止 RAF、断开 `ResizeObserver`、清理 particles、diagnostics、marker 和 complete listener，并销毁 Pixi app。
+- `destroy()`: 停止 RAF、断开 `ResizeObserver`、清理 mounted nodes、render effects、particles、diagnostics、marker 和 complete listener，并销毁 Pixi app。
 
 播放到终点和视觉完全结束不是同一件事。非循环 timeline、非循环 range 和 segmented end 段到达终点后会停止发射器并进入 `particle-draining`；已有 live 粒子继续衰减，排空后才进入 `complete` 并触发 `onPlaybackComplete(...)`。`isPlaying()` 在主时间轴停止推进后会是 `false`，但内部 RAF 可能仍会继续驱动粒子排空；使用 `getPlaybackState().isDrainingParticles` 判断排空状态。
 
@@ -101,6 +101,50 @@ player.requestSegmentedPlaybackEnd();
 
 `loopStart === loopEnd` 表示非粒子动画维持在该帧；粒子发射器维持该帧的配置，但已经发射的粒子继续按运行时 delta 老化、移动，连续发射器也会继续发射。`loopStart < loopEnd` 表示非粒子动画和发射器配置都在 `[loopStart, loopEnd)` 循环；开启 `keepParticlesAlive` 时，live 粒子不会因为 loop 时间回绕而重置。`keepParticlesAlive` 默认是 `true`。`setLoop(false)` 不会让 segmented loop 自动结束，只有 `requestSegmentedPlaybackEnd()` 会进入 end 段。
 
+## Layer group 和组间插入
+
+VNI layer group 使用 `project.layerGroups + layer.groupId`。`type: "group"` layer 和 `parentId` 嵌套仍不支持。旧导出只有在整个 project 没有 `layerGroups` 且所有 layer 都没有 `groupId` 时，才会被规范化为单个 `group_default`。
+
+runtime render order 来自 `project.layers`，不是 `layerGroups.order`。`getLayerGroupSlots()` 只返回两个相邻 group run 之间的合法边界；反向、未知或非相邻 group id 会显式失败。
+
+```ts
+const [slot] = player.getLayerGroupSlots();
+if (!slot) throw new Error("no slot");
+
+const dispose = player.attachImageBetweenLayerGroups({
+  id: "slot-reel-preview",
+  afterGroupId: slot.afterGroupId,
+  beforeGroupId: slot.beforeGroupId,
+  assetId: "asset_image_mqp31v5g_14",
+  x: project.stage.width / 2,
+  y: project.stage.height / 2,
+  anchorX: 0.5,
+  anchorY: 0.5,
+});
+
+dispose();
+```
+
+如果宿主要挂接当前 assets 目录里未被当前 project 引用的图片，使用显式 URL API：
+
+```ts
+const disposeExternal = await player.attachExternalImageBetweenLayerGroups({
+  id: "slot-any-asset-preview",
+  afterGroupId: slot.afterGroupId,
+  beforeGroupId: slot.beforeGroupId,
+  imageUrl: assetUrlManifest["assets/extra.png"],
+  label: "assets/extra.png",
+  x: project.stage.width / 2,
+  y: project.stage.height / 2,
+  anchorX: 0.5,
+  anchorY: 0.5,
+});
+
+disposeExternal();
+```
+
+挂接坐标是 Pixi stage content 坐标，`x=0,y=0` 是 stage 左上角。`attachImageBetweenLayerGroups(...)` 复用 `VNIPlayer` 已加载且已通过 texture size 校验的 project asset texture。`attachExternalImageBetweenLayerGroups(...)` 不把外部图片伪装成 project asset，适合 viewer 的当前 assets 目录全集选择。`attachNodeBetweenLayerGroups(...)` 默认只 remove 外部传入 node，不 destroy；传 `destroyOnDetach: true` 才销毁。`detachMountedNode(id)` 找不到 id 会失败，`clearMountedNodes()` 清理所有挂接节点。
+
 ## Diagnostics
 
 播放器会在 `container.dataset` 写入：
@@ -109,10 +153,14 @@ player.requestSegmentedPlaybackEnd();
 - `data-vni-time`
 - `data-vni-visible-layers`
 - `data-vni-particle-sprites`
+- `data-vni-render-effect-sprites`
 - `data-vni-playback-mode`
 - `data-vni-playback-phase`
 - `data-vni-particle-draining`
 - `data-vni-live-particles`
+- `data-vni-layer-groups`
+- `data-vni-layer-group-slots`
+- `data-vni-mounted-nodes`
 - `data-vni-bundle-id`
 - `data-vni-profile-id`
 - `data-vni-asset-scale`
@@ -135,4 +183,11 @@ player.requestSegmentedPlaybackEnd();
 - manifest entry 与 project `exportProfile` 不一致。
 - 未知 animation/easing/blend mode。
 - 必需 numeric param 缺失、`NaN`、`Infinity` 或被写成字符串。
-- group layer、非空 keyframes、非空 top-level `project.particles`。
+- 非法 `layerGroups`、未知 `groupId`、非连续 group run、反向或非相邻 group slot。
+- group layer、非空 `parentId`、非空 keyframes、非空 top-level `project.particles`。
+
+## 新动画类型
+
+- `idle`: 只提供 animation coverage，不改变 transform/opacity。
+- `shatter`: deterministic render effect。`sourceOpacity` 控制原图透明度，碎片在 `progress <= 0` 不渲染。
+- `glow`: deterministic render effect。`keepOriginal === false` 会隐藏原图但保留 glow effect；`blendMode` 使用 `0=add`、`1=screen`、`2=lighten`。

@@ -7,6 +7,7 @@ import {
 import {
   export2EditFullAssetUrlManifest,
   export2Runtime50AssetUrlManifest,
+  legacyAssetUrlManifest,
   resolveProjectAssetUrls,
 } from "../src/runtime/asset-manifest";
 
@@ -24,6 +25,8 @@ describe("bundled projects", () => {
       "scatter1",
       "scatter2",
       "multipay",
+      "3reel-multipay-01",
+      "3reel-multipay-02",
       "bigwin-edit-full",
       "bigwin-runtime-50",
     ]);
@@ -40,6 +43,36 @@ describe("bundled projects", () => {
         bundledProject.project.assets.map((asset) => asset.path).sort(),
       );
     }
+  });
+
+  it("offers every asset from the current asset manifest for group insertion", () => {
+    const threeReel = getBundledProject("3reel-multipay-01");
+    const projectAssetPaths = new Set(
+      threeReel.project.assets.map((asset) => asset.path),
+    );
+
+    expect(threeReel.insertionAssets.map((asset) => asset.path).sort()).toEqual(
+      Object.keys(legacyAssetUrlManifest).sort(),
+    );
+    expect(threeReel.insertionAssets.length).toBeGreaterThan(
+      threeReel.project.assets.length,
+    );
+    expect(
+      threeReel.insertionAssets.find(
+        (asset) => asset.path === "assets/image_asset_image_mqp31v5g_14.jpg",
+      )?.projectAssetId,
+    ).toBe("asset_image_mqp31v5g_14");
+
+    const externalAsset = threeReel.insertionAssets.find(
+      (asset) => !projectAssetPaths.has(asset.path),
+    );
+    expect(externalAsset).toBeDefined();
+    expect(externalAsset).not.toHaveProperty("projectAssetId");
+
+    const editFull = getBundledProject("bigwin-edit-full");
+    expect(editFull.insertionAssets.map((asset) => asset.path).sort()).toEqual(
+      Object.keys(export2EditFullAssetUrlManifest).sort(),
+    );
   });
 
   it("keeps export2 edit_full and runtime_50 asset URLs profile scoped", () => {

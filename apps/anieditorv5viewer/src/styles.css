@@ -272,6 +272,72 @@ select {
   display: block;
 }
 
+.group-insertion-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 10px;
+  border-top: 1px solid rgba(216, 224, 216, 0.14);
+}
+
+.group-insertion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  color: #f5f7f4;
+}
+
+.group-insertion-header strong {
+  font-size: 14px;
+}
+
+.group-insertion-status {
+  min-width: 88px;
+  color: #b8c7bf;
+  font-size: 13px;
+  text-align: right;
+}
+
+.group-insertion-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto auto;
+  gap: 10px;
+  align-items: end;
+  min-width: 0;
+}
+
+.insertion-select {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: #dbe5df;
+  font-size: 12px;
+}
+
+.insertion-select select {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  color: #f5f7f4;
+  background: #202622;
+  border: 1px solid rgba(216, 224, 216, 0.24);
+  border-radius: 6px;
+}
+
+.group-insertion-error {
+  display: none;
+  min-height: 18px;
+  color: #ffc9c9;
+  font-size: 12px;
+}
+
+.group-insertion-error.is-visible {
+  display: block;
+}
+
 .control-button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
@@ -346,6 +412,10 @@ select {
   .keep-particles-toggle,
   .advanced-control-row .control-button {
     grid-column: 1 / -1;
+  }
+
+  .group-insertion-row {
+    grid-template-columns: 1fr;
   }
 
   .advanced-phase {

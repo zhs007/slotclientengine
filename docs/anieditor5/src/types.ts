@@ -39,6 +39,7 @@ export interface V5GTransformConfig {
 }
 
 export type V5GAnimationType =
+  | "idle"
   | "move"
   | "fade"
   | "scale_up"
@@ -59,6 +60,8 @@ export type V5GAnimationType =
   | "particle_twinkle"
   | "particle_wall"
   | "particle_combo"
+  | "shatter"
+  | "glow"
   | "squash_stretch";
 export type V5GAnimationParamValue = string | number | boolean;
 
@@ -87,6 +90,8 @@ export interface V5GLayerConfig {
   type: V5GLayerType;
   assetId: string | null;
   parentId: string | null;
+  /** Export/runtime layer group. Missing values are normalized to the default group. */
+  groupId?: string;
   visible: boolean;
   locked: boolean;
   transform: V5GTransformConfig;
@@ -95,6 +100,17 @@ export interface V5GLayerConfig {
   text?: string;
   animations: V5GAnimationConfig[];
   keyframes?: V5GLayerKeyframeConfig[];
+}
+
+export interface V5GLayerGroupConfig {
+  id: string;
+  name: string;
+  /** Group-level visibility. Hidden groups are hidden on canvas and skipped on export. */
+  visible: boolean;
+  /** Editor-only collapsed state for the layer list. */
+  collapsed: boolean;
+  /** Display/export ordering for group headers. */
+  order: number;
 }
 
 export interface V5GParticleConfig {
@@ -135,6 +151,7 @@ export interface V5GProjectConfig {
   exportProfile?: V5GExportProfileConfig;
   stage: V5GStageConfig;
   assets: V5GAssetConfig[];
+  layerGroups: V5GLayerGroupConfig[];
   layers: V5GLayerConfig[];
   particles: V5GParticleConfig[];
 }

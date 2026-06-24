@@ -1,6 +1,7 @@
 import { clampNumber, roundTo } from "./coordinates.js";
 import { sampleLayerAnimationsAtTime } from "./animation-sampler.js";
 import { hasActiveParticleAnimation } from "./particle-sampler.js";
+import { hasActiveRenderEffectAnimation } from "./render-effect-sampler.js";
 import type {
   V5GAnimationConfig,
   V5GBlendMode,
@@ -19,6 +20,7 @@ export interface SampledLayerState {
   visible: boolean;
   renderImageDisplay: boolean;
   hasActiveParticleAnimation: boolean;
+  hasActiveRenderEffect: boolean;
   blendMode: V5GBlendMode;
 }
 
@@ -82,7 +84,11 @@ export function sampleLayerAtTime(
   const baseOpacity = roundTo(clampNumber(layer.opacity, 0, 1), 4);
   const activeParticleAnimation =
     layer.visible && baseOpacity > 0 && hasActiveParticleAnimation(layer, time);
-  const visible = layer.visible && opacity > 0;
+  const activeRenderEffect =
+    layer.visible &&
+    baseOpacity > 0 &&
+    hasActiveRenderEffectAnimation(layer, time);
+  const visible = layer.visible && (opacity > 0 || activeRenderEffect);
 
   return {
     layerId: layer.id,
@@ -90,8 +96,9 @@ export function sampleLayerAtTime(
     baseOpacity,
     opacity,
     visible,
-    renderImageDisplay: visible,
+    renderImageDisplay: layer.visible && opacity > 0,
     hasActiveParticleAnimation: activeParticleAnimation,
+    hasActiveRenderEffect: activeRenderEffect,
     blendMode: layer.blendMode,
   };
 }

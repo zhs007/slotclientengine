@@ -54,6 +54,15 @@ export const V5G_EASINGS: { value: V5GEasingName; label: string }[] = [
 
 export const V5G_ANIMATION_PRESETS: V5GAnimationPresetSpec[] = [
   {
+    type: "idle",
+    label: "Idle 待机",
+    description: "保持不动，仅控制该时间段内图层可见。可修改持续时间。",
+    defaultDuration: 2,
+    recommendedDuration: "tips：0.5 ~ 10s",
+    defaultEasing: "linear",
+    params: [],
+  },
+  {
     type: "move",
     label: "Move 位移",
     description: "基于当前基础位置的相对位移。拖动图层后会从新位置开始播放。",
@@ -1101,6 +1110,161 @@ export const V5G_ANIMATION_PRESETS: V5GAnimationPresetSpec[] = [
     ],
   },
   {
+    type: "shatter",
+    label: "Shatter 破碎掉落",
+    description:
+      "把当前图片切成碎片后向外爆开并受重力掉落。可调碎片数量/大小、冲击方向、力度、旋转、重力和淡出。",
+    defaultDuration: 1.4,
+    recommendedDuration: "tips：0.6 ~ 3s；碎片越多越耗性能，建议 20 ~ 120",
+    defaultEasing: "easeOutQuad",
+    params: [
+      numberParam(
+        "count",
+        "碎片数量上限",
+        64,
+        4,
+        400,
+        1,
+        "count：最多绘制多少块碎片，建议 20~120",
+      ),
+      numberParam(
+        "pieceSize",
+        "目标碎片大小",
+        72,
+        8,
+        512,
+        1,
+        "pieceSize：碎片目标边长像素，越小越碎",
+      ),
+      numberParam(
+        "force",
+        "爆散力度",
+        420,
+        0,
+        3000,
+        1,
+        "force：碎片被击飞的初速度/距离强度",
+      ),
+      numberParam(
+        "impactAngle",
+        "冲击方向°",
+        90,
+        0,
+        360,
+        1,
+        "impactAngle：主要飞散方向，0=右 90=下 180=左 270=上",
+      ),
+      numberParam(
+        "spreadAngle",
+        "扩散角度°",
+        160,
+        0,
+        360,
+        1,
+        "spreadAngle：围绕冲击方向随机扩散的角度范围",
+      ),
+      numberParam(
+        "gravity",
+        "重力",
+        900,
+        -3000,
+        5000,
+        1,
+        "gravity：正数向下掉落，负数向上漂浮",
+      ),
+      numberParam(
+        "spin",
+        "旋转强度",
+        5,
+        0,
+        30,
+        0.1,
+        "spin：碎片飞行时的随机旋转圈速",
+      ),
+      numberParam(
+        "sourceOpacity",
+        "原图保留透明度",
+        0,
+        0,
+        1,
+        0.05,
+        "sourceOpacity：破碎期间原图本体保留多少透明度，0=完全只看碎片",
+      ),
+      checkboxParam("fadeOut", "碎片逐渐消失", true, "开启后碎片会随时间淡出"),
+    ],
+  },
+  {
+    type: "glow",
+    label: "Glow 发光高亮",
+    description:
+      "在当前图片上叠加一层放大加亮的复制图，形成发光、高亮或闪烁效果。适合奖励、按钮、图标强调。",
+    defaultDuration: 1.2,
+    recommendedDuration: "tips：0.4 ~ 3s；闪烁次数 0 表示单次呼吸",
+    defaultEasing: "linear",
+    params: [
+      numberParam(
+        "intensity",
+        "高亮强度",
+        0.75,
+        0,
+        3,
+        0.05,
+        "intensity：叠加发光层的整体强度",
+      ),
+      numberParam(
+        "spread",
+        "扩散比例",
+        0.12,
+        0,
+        1,
+        0.01,
+        "spread：发光层相对原图放大的比例",
+      ),
+      numberParam(
+        "minAlpha",
+        "最低亮度",
+        0.15,
+        0,
+        1,
+        0.05,
+        "minAlpha：闪烁谷值透明度",
+      ),
+      numberParam(
+        "maxAlpha",
+        "最高亮度",
+        0.75,
+        0,
+        1,
+        0.05,
+        "maxAlpha：闪烁峰值透明度",
+      ),
+      numberParam(
+        "pulses",
+        "闪烁次数",
+        2,
+        0,
+        20,
+        0.25,
+        "pulses：持续时间内闪烁/呼吸次数，0=保持高亮",
+      ),
+      numberParam(
+        "blendMode",
+        "混合模式 0/1/2",
+        0,
+        0,
+        2,
+        1,
+        "blendMode：0=add强发光 1=screen柔和提亮 2=lighten高亮",
+      ),
+      checkboxParam(
+        "keepOriginal",
+        "保留原图",
+        true,
+        "关闭后只显示发光叠加层，可做闪白/闪烁",
+      ),
+    ],
+  },
+  {
     type: "rotate",
     label: "Rotate 旋转",
     description: "旋转。",
@@ -1214,6 +1378,7 @@ export function createDefaultAnimationParams(
   type: V5GAnimationType,
   base: V5GAnimationSampleBase,
 ): Record<string, V5GAnimationParamValue> {
+  if (type === "idle") return {};
   if (type === "move") {
     return {
       fromX: 0,
@@ -1315,6 +1480,30 @@ export function createDefaultAnimationParams(
       flashIntensity: 1.4,
     };
   }
+  if (type === "shatter") {
+    return {
+      count: 64,
+      pieceSize: 72,
+      force: 420,
+      impactAngle: 90,
+      spreadAngle: 160,
+      gravity: 900,
+      spin: 5,
+      sourceOpacity: 0,
+      fadeOut: true,
+    };
+  }
+  if (type === "glow") {
+    return {
+      intensity: 0.75,
+      spread: 0.12,
+      minAlpha: 0.15,
+      maxAlpha: 0.75,
+      pulses: 2,
+      blendMode: 0,
+      keepOriginal: true,
+    };
+  }
   if (type === "rotate") {
     return {
       fromRotation: 0,
@@ -1404,6 +1593,9 @@ export function sampleLayerAnimationsAtTime(
       sampleSquashStretch(result, animation, easedProgress);
     else if (animation.type === "particle_combo")
       sampleParticleComboSource(result, animation, base);
+    else if (animation.type === "shatter")
+      sampleShatterSource(result, animation, base);
+    else if (animation.type === "glow") sampleGlowSource(result, animation);
   }
   result.transform.x = roundTo(result.transform.x, 4);
   result.transform.y = roundTo(result.transform.y, 4);
@@ -1654,6 +1846,22 @@ function sampleParticleComboSource(
   base: V5GAnimationSampleBase,
 ): void {
   result.opacity = base.opacity * getNumberParam(animation, "sourceOpacity", 0);
+}
+
+function sampleShatterSource(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  base: V5GAnimationSampleBase,
+): void {
+  result.opacity = base.opacity * getNumberParam(animation, "sourceOpacity", 0);
+}
+
+function sampleGlowSource(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+): void {
+  if (getBooleanParam(animation, "keepOriginal", true)) return;
+  result.opacity = 0;
 }
 
 function sampleSquashStretch(

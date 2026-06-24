@@ -15,13 +15,17 @@ import {
 } from "./export_project";
 import { V5GPixiStage } from "./pixi_stage";
 import {
+  createDefaultLayerGroup,
   createId,
   createImageAsset,
   createImageLayer,
   createInitialEditorState,
   createRuntimeAsset,
   createTextLayer,
+  getLayerGroup,
   getSelectedLayer,
+  isLayerEffectivelyVisible,
+  normalizeProjectLayerGroups,
 } from "./project_state";
 import type {
   V5GAnimationConfig,
@@ -30,6 +34,7 @@ import type {
   V5GBlendMode,
   V5GEditorState,
   V5GLayerConfig,
+  V5GLayerGroupConfig,
   V5GProjectConfig,
   V5GPreviewLayerState,
   V5GTransformConfig,
@@ -135,6 +140,7 @@ const els = {
   btnSwitchProject: getButton("btn-switch-project"),
   btnResetView: getButton("btn-reset-view"),
   btnAddText: getButton("btn-add-text"),
+  btnAddGroup: getButton("btn-add-group"),
   fileReplaceImage: getInput("file-replace-image"),
   btnReplaceImage: getButton("btn-replace-image"),
   btnSaveMoveAnim: getButton("btn-save-move-anim"),
@@ -199,6 +205,7 @@ const els = {
   propRotation: getInput("prop-rotation"),
   propOpacity: getInput("prop-opacity"),
   propBlendMode: getSelect("prop-blend-mode"),
+  propLayerGroup: getSelect("prop-layer-group"),
   animCountLabel: getElement("anim-count-label"),
   animStart: getInput("anim-start"),
   animDuration: getInput("anim-duration"),
@@ -359,12 +366,17 @@ function bindEvents(): void {
       0,
       0,
     );
+    layer.groupId = getPreferredNewLayerGroupId();
     pushUndoSnapshot();
     state.project.layers.push(layer);
     state.selectedLayerId = layer.id;
     await renderAllAsync();
     scheduleAutoSave();
     showStatus("已添加文字图层。", "success");
+  });
+
+  els.btnAddGroup.addEventListener("click", () => {
+    createLayerGroupFromButton();
   });
 
   els.animType.addEventListener("change", () => {
@@ -530,6 +542,9 @@ function bindEvents(): void {
   els.propBlendMode.addEventListener("change", () =>
     updateSelectedLayerFromProperties(),
   );
+  els.propLayerGroup.addEventListener("change", () =>
+    updateSelectedLayerGroupFromProperties(),
+  );
 
   window.addEventListener("beforeunload", () => {
     if (!workspaceIndex || !currentProjectId) return;
@@ -638,6 +653,7 @@ async function importImage(file: File): Promise<void> {
     const asset = createImageAsset(file, size.width, size.height);
     const runtimeAsset = createRuntimeAsset(asset.id, file);
     const layer = createImageLayer(asset);
+    layer.groupId = getPreferredNewLayerGroupId();
     pushUndoSnapshot();
     state.project.assets.push(asset);
     state.runtimeAssets.push(runtimeAsset);
@@ -1014,82 +1030,29 @@ async function renderAllAsync(): Promise<void> {
 }
 
 function renderStaticUi(): void {
+  normalizeProjectLayerGroups(state.project);
   const timelineScrollBackup = els.timelineTrack.scrollTop;
   els.layerList.innerHTML = "";
   els.timelineItems.innerHTML = "";
   els.layerCountLabel.textContent = String(state.project.layers.length);
   els.stageSizeLabel.textContent = `${state.project.stage.height}×${state.project.stage.width}`;
-  const orderedLayers = [...state.project.layers].reverse();
 
-  for (const layer of orderedLayers) {
-    appendLayerDropIndicator(layer.id, "before");
-    const card = document.createElement("div");
-    const selected = layer.id === state.selectedLayerId;
-    const layerIndex = state.project.layers.findIndex(
-      (item) => item.id === layer.id,
-    );
-    card.dataset.layerId = layer.id;
-    card.className = [
-      "w-full cursor-pointer rounded-lg border p-2 text-left transition",
-      selected
-        ? "border-zinc-400/70 bg-zinc-200 text-black"
-        : "border-white/10 bg-[#10141d] hover:border-zinc-400/40 hover:bg-slate-800/70",
-      layer.visible ? "" : "opacity-55",
-      draggedLayerId === layer.id ? "opacity-35" : "",
-    ].join(" ");
-    card.innerHTML = `
-      <div class="layer-select flex w-full items-center gap-2 text-left">
-        <span class="layer-drag-handle flex h-5 w-5 shrink-0 cursor-pointer touch-none items-center justify-center rounded-full bg-white font-mono text-[10px] font-bold text-black" title="按住拖动调整图层顺序">${layerIndex + 1}</span>
-        <i class="fa-solid ${layer.type === "image" ? "fa-image" : "fa-font"} ${selected ? "text-black" : layer.visible ? "text-zinc-300" : "text-zinc-600"}"></i>
-        <input type="text" data-layer-name="${escapeHtml(layer.id)}" value="${escapeHtml(layer.name)}" class="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs ${selected ? "text-black placeholder:text-black" : "text-slate-100"} outline-none transition focus:border-zinc-400 focus:bg-white/10" title="直接修改图层名称" />
-        <div class="flex shrink-0 items-center gap-1">
-          <button type="button" data-action="visible" class="layer-action rounded px-1.5 py-1 text-[10px] ${selected ? "bg-black/10 text-black hover:bg-black/20" : layer.visible ? "bg-zinc-900 text-zinc-200 hover:bg-zinc-800" : "bg-zinc-900 text-zinc-500 hover:bg-zinc-800"} transition" title="隐藏 / 显示">
-            <i class="fa-solid ${layer.visible ? "fa-eye" : "fa-eye-slash"}"></i>
-          </button>
-          <button type="button" data-action="lock" class="layer-action rounded px-1.5 py-1 text-[10px] ${layer.locked ? "text-[#ffe28b]" : selected ? "text-black/60" : "text-zinc-500"} ${selected ? "bg-black/10 hover:bg-black/20" : "bg-zinc-900 hover:bg-zinc-800"} transition" title="锁定 / 解锁图层拖动">
-            <i class="fa-solid ${layer.locked ? "fa-lock" : "fa-lock-open"}"></i>
-          </button>
-          <button type="button" data-action="duplicate" class="layer-action rounded px-1.5 py-1 text-[10px] ${selected ? "bg-black/10 text-black hover:bg-black/20" : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800"} transition" title="复制图层：复用资源，复制基础属性和动画">
-            <i class="fa-solid fa-clone"></i>
-          </button>
-          <button type="button" data-action="delete" class="layer-action rounded px-1.5 py-1 text-[10px] ${selected ? "bg-black/10 text-black hover:bg-black/20" : "bg-zinc-900 text-zinc-400 hover:bg-red-950/70 hover:text-red-200"} transition" title="删除图层">
-            <i class="fa-solid fa-trash"></i>
-          </button>
-        </div>
-      </div>
-    `;
-    const selectButton = card.querySelector(".layer-select");
-    selectButton?.addEventListener("click", () => {
-      state.selectedLayerId = layer.id;
-      renderAll();
-    });
-    const nameInput = card.querySelector<HTMLInputElement>("[data-layer-name]");
-    nameInput?.addEventListener("click", (event) => event.stopPropagation());
-    nameInput?.addEventListener("input", (event) => {
-      event.stopPropagation();
-      updateLayerNameFromList(layer.id, nameInput.value);
-    });
-    nameInput?.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter") return;
-      event.preventDefault();
-      nameInput.blur();
-    });
-    for (const actionButton of card.querySelectorAll(".layer-action")) {
-      actionButton.addEventListener("click", (event) => {
-        event.stopPropagation();
-        const action = (event.currentTarget as HTMLButtonElement).dataset
-          .action;
-        handleLayerAction(layer.id, action ?? "");
-      });
+  for (const group of getOrderedLayerGroups()) {
+    appendLayerGroupHeader(group);
+    if (group.collapsed) continue;
+    const orderedLayers = state.project.layers
+      .filter((layer) => layer.groupId === group.id)
+      .reverse();
+    for (const layer of orderedLayers) {
+      appendLayerDropIndicator(layer.id, "before");
+      appendLayerCard(layer);
     }
-    bindLayerDragEvents(card, layer.id);
-    els.layerList.appendChild(card);
-  }
-  if (orderedLayers.length > 0) {
-    appendLayerDropIndicator(
-      orderedLayers[orderedLayers.length - 1].id,
-      "after",
-    );
+    if (orderedLayers.length > 0) {
+      appendLayerDropIndicator(
+        orderedLayers[orderedLayers.length - 1].id,
+        "after",
+      );
+    }
   }
 
   const normalizedDuration = normalizeProjectDurationToAnimationEnd({
@@ -1098,6 +1061,213 @@ function renderStaticUi(): void {
   els.durationSeconds.value = normalizedDuration.toFixed(1);
   els.timeLabel.textContent = `${state.playheadSeconds.toFixed(2)}s / ${normalizedDuration.toFixed(2)}s`;
   renderTimelineAnimations({ scrollTop: timelineScrollBackup });
+}
+
+function appendLayerCard(layer: V5GLayerConfig): void {
+  const card = document.createElement("div");
+  const selected = layer.id === state.selectedLayerId;
+  const group = getLayerGroup(state.project, layer.groupId);
+  const layerIndex = state.project.layers.findIndex(
+    (item) => item.id === layer.id,
+  );
+  card.dataset.layerId = layer.id;
+  card.className = [
+    "ml-2 w-[calc(100%-0.5rem)] cursor-pointer rounded-lg border p-2 text-left transition",
+    selected
+      ? "border-zinc-400/70 bg-zinc-200 text-black"
+      : "border-white/10 bg-[#10141d] hover:border-zinc-400/40 hover:bg-slate-800/70",
+    layer.visible && group?.visible !== false ? "" : "opacity-55",
+    draggedLayerId === layer.id ? "opacity-35" : "",
+  ].join(" ");
+  card.innerHTML = `
+    <div class="layer-select flex w-full items-center gap-2 text-left">
+      <span class="layer-drag-handle flex h-5 w-5 shrink-0 cursor-pointer touch-none items-center justify-center rounded-full bg-white font-mono text-[10px] font-bold text-black" title="按住拖动调整图层顺序">${layerIndex + 1}</span>
+      <i class="fa-solid ${layer.type === "image" ? "fa-image" : "fa-font"} ${selected ? "text-black" : layer.visible ? "text-zinc-300" : "text-zinc-600"}"></i>
+      <input type="text" data-layer-name="${escapeHtml(layer.id)}" value="${escapeHtml(layer.name)}" class="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs ${selected ? "text-black placeholder:text-black" : "text-slate-100"} outline-none transition focus:border-zinc-400 focus:bg-white/10" title="直接修改图层名称" />
+      <div class="flex shrink-0 items-center gap-1">
+        <button type="button" data-action="visible" class="layer-action rounded px-1.5 py-1 text-[10px] ${selected ? "bg-black/10 text-black hover:bg-black/20" : layer.visible ? "bg-zinc-900 text-zinc-200 hover:bg-zinc-800" : "bg-zinc-900 text-zinc-500 hover:bg-zinc-800"} transition" title="隐藏 / 显示"><i class="fa-solid ${layer.visible ? "fa-eye" : "fa-eye-slash"}"></i></button>
+        <button type="button" data-action="lock" class="layer-action rounded px-1.5 py-1 text-[10px] ${layer.locked ? "text-[#ffe28b]" : selected ? "text-black/60" : "text-zinc-500"} ${selected ? "bg-black/10 hover:bg-black/20" : "bg-zinc-900 hover:bg-zinc-800"} transition" title="锁定 / 解锁图层拖动"><i class="fa-solid ${layer.locked ? "fa-lock" : "fa-lock-open"}"></i></button>
+        <button type="button" data-action="duplicate" class="layer-action rounded px-1.5 py-1 text-[10px] ${selected ? "bg-black/10 text-black hover:bg-black/20" : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800"} transition" title="复制图层：复用资源，复制基础属性和动画"><i class="fa-solid fa-clone"></i></button>
+        <button type="button" data-action="delete" class="layer-action rounded px-1.5 py-1 text-[10px] ${selected ? "bg-black/10 text-black hover:bg-black/20" : "bg-zinc-900 text-zinc-400 hover:bg-red-950/70 hover:text-red-200"} transition" title="删除图层"><i class="fa-solid fa-trash"></i></button>
+      </div>
+    </div>
+  `;
+  const selectButton = card.querySelector(".layer-select");
+  selectButton?.addEventListener("click", () => {
+    state.selectedLayerId = layer.id;
+    renderAll();
+  });
+  const nameInput = card.querySelector<HTMLInputElement>("[data-layer-name]");
+  nameInput?.addEventListener("click", (event) => event.stopPropagation());
+  nameInput?.addEventListener("input", (event) => {
+    event.stopPropagation();
+    updateLayerNameFromList(layer.id, nameInput.value);
+  });
+  nameInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    nameInput.blur();
+  });
+  for (const actionButton of card.querySelectorAll(".layer-action")) {
+    actionButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const action = (event.currentTarget as HTMLButtonElement).dataset.action;
+      handleLayerAction(layer.id, action ?? "");
+    });
+  }
+  bindLayerDragEvents(card, layer.id);
+  els.layerList.appendChild(card);
+}
+
+function getOrderedLayerGroups(): V5GLayerGroupConfig[] {
+  normalizeProjectLayerGroups(state.project);
+  return [...state.project.layerGroups].sort(
+    (left, right) => left.order - right.order,
+  );
+}
+
+function appendLayerGroupHeader(group: V5GLayerGroupConfig): void {
+  const groupLayers = state.project.layers.filter(
+    (layer) => layer.groupId === group.id,
+  );
+  const header = document.createElement("div");
+  header.dataset.layerGroupId = group.id;
+  header.className = [
+    "rounded-md border border-white/10 bg-zinc-950/80 px-2 py-1.5 text-[10px] text-zinc-300",
+    group.visible ? "" : "opacity-55",
+  ].join(" ");
+  header.innerHTML = `
+    <div class="flex items-center gap-1.5">
+      <button type="button" data-group-action="collapse" class="rounded px-1 py-0.5 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100" title="展开 / 收起分组"><i class="fa-solid ${group.collapsed ? "fa-chevron-right" : "fa-chevron-down"}"></i></button>
+      <i class="fa-solid fa-layer-group text-zinc-500"></i>
+      <input type="text" data-group-name="${escapeHtml(group.id)}" value="${escapeHtml(group.name)}" class="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-[11px] font-semibold text-zinc-200 outline-none transition focus:border-zinc-500 focus:bg-white/10" title="直接修改分组名称" />
+      <span class="font-mono text-[9px] text-zinc-600">${groupLayers.length}</span>
+      <button type="button" data-group-action="visible" class="rounded px-1.5 py-1 text-[10px] ${group.visible ? "text-zinc-300" : "text-zinc-600"} transition hover:bg-zinc-800 hover:text-zinc-100" title="整体隐藏 / 显示此分组"><i class="fa-solid ${group.visible ? "fa-eye" : "fa-eye-slash"}"></i></button>
+    </div>
+  `;
+  header
+    .querySelector<HTMLElement>('[data-group-action="collapse"]')
+    ?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleLayerGroupCollapsed(group.id);
+    });
+  header
+    .querySelector<HTMLElement>('[data-group-action="visible"]')
+    ?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleLayerGroupVisible(group.id);
+    });
+  const nameInput = header.querySelector<HTMLInputElement>("[data-group-name]");
+  nameInput?.addEventListener("click", (event) => event.stopPropagation());
+  nameInput?.addEventListener("change", () =>
+    renameLayerGroup(group.id, nameInput.value),
+  );
+  nameInput?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    nameInput.blur();
+  });
+  els.layerList.appendChild(header);
+}
+
+function createLayerGroupFromButton(): void {
+  pushUndoSnapshot();
+  const nextOrder = state.project.layerGroups.length;
+  const group = createDefaultLayerGroup(nextOrder, `分组 ${nextOrder + 1}`);
+  state.project.layerGroups.push(group);
+  renderAll();
+  scheduleAutoSave(0);
+  showStatus(
+    `已新建分组：${group.name}。选中图层后可在右侧基础属性里切换到该分组。`,
+    "success",
+  );
+}
+
+function toggleLayerGroupCollapsed(groupId: string): void {
+  const group = getLayerGroup(state.project, groupId);
+  if (!group) return;
+  group.collapsed = !group.collapsed;
+  renderStaticUi();
+  scheduleAutoSave();
+}
+
+function toggleLayerGroupVisible(groupId: string): void {
+  const group = getLayerGroup(state.project, groupId);
+  if (!group) return;
+  pushUndoSnapshot();
+  group.visible = !group.visible;
+  clearPreviewBaseCache();
+  renderAll();
+  scheduleAutoSave(0);
+  showStatus(
+    group.visible
+      ? `分组「${group.name}」已显示。`
+      : `分组「${group.name}」已隐藏，导出时会跳过。`,
+    "success",
+  );
+}
+
+function renameLayerGroup(groupId: string, value: string): void {
+  const group = getLayerGroup(state.project, groupId);
+  if (!group) return;
+  const nextName = value.trim();
+  if (!nextName) {
+    renderStaticUi();
+    showStatus("分组名不能为空，已恢复原名称。", "error");
+    return;
+  }
+  group.name = nextName;
+  syncLayerGroupSelect(getSelectedLayer(state));
+  scheduleAutoSave();
+}
+
+function getPreferredNewLayerGroupId(): string {
+  normalizeProjectLayerGroups(state.project);
+  const selectedLayer = getSelectedLayer(state);
+  if (
+    selectedLayer?.groupId &&
+    getLayerGroup(state.project, selectedLayer.groupId)
+  ) {
+    return selectedLayer.groupId;
+  }
+  const firstVisibleGroup = getOrderedLayerGroups().find(
+    (group) => group.visible,
+  );
+  return (
+    firstVisibleGroup?.id ?? state.project.layerGroups[0]?.id ?? "group_default"
+  );
+}
+
+function syncLayerGroupSelect(layer: V5GLayerConfig | null): void {
+  normalizeProjectLayerGroups(state.project);
+  els.propLayerGroup.innerHTML = "";
+  for (const group of getOrderedLayerGroups()) {
+    const option = document.createElement("option");
+    option.value = group.id;
+    option.textContent = group.visible ? group.name : `${group.name}（隐藏）`;
+    option.style.backgroundColor = "#050505";
+    option.style.color = "#f4f4f5";
+    els.propLayerGroup.appendChild(option);
+  }
+  els.propLayerGroup.value =
+    layer?.groupId ?? state.project.layerGroups[0]?.id ?? "";
+}
+
+function updateSelectedLayerGroupFromProperties(): void {
+  const layer = getSelectedLayer(state);
+  const nextGroupId = els.propLayerGroup.value;
+  if (!layer || !nextGroupId || layer.groupId === nextGroupId) return;
+  const group = getLayerGroup(state.project, nextGroupId);
+  if (!group) {
+    syncLayerGroupSelect(layer);
+    showStatus("目标分组不存在，已恢复当前分组。", "error");
+    return;
+  }
+  pushUndoSnapshot();
+  layer.groupId = group.id;
+  renderAll();
+  scheduleAutoSave(0);
+  showStatus(`已将「${layer.name}」移动到分组「${group.name}」。`, "success");
 }
 
 function handleLayerAction(layerId: string, action: string): void {
@@ -1353,6 +1523,10 @@ function completeLayerDrop(): void {
     clearLayerDragState();
     return;
   }
+  const targetLayer = state.project.layers.find(
+    (layer) => layer.id === targetLayerId,
+  );
+  if (targetLayer?.groupId) movingLayer.groupId = targetLayer.groupId;
   if (targetPosition === "before") insertIndex += 1;
   state.project.layers.splice(insertIndex, 0, movingLayer);
   state.selectedLayerId = movingLayer.id;
@@ -1489,7 +1663,7 @@ function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
     row.className = [
       "grid grid-cols-[136px_minmax(0,1fr)] items-start gap-2 rounded border bg-zinc-900/60 px-2 py-1 transition hover:border-amber-300/50",
       selected ? "border-amber-300/70" : "border-white/10",
-      layer.visible ? "" : "opacity-55",
+      isLayerEffectivelyVisible(state.project, layer) ? "" : "opacity-55",
     ].join(" ");
     row.dataset.timelineLayerId = layer.id;
     row.title = `第 ${layerIndex + 1} 层 · ${layer.name}`;
@@ -1523,7 +1697,7 @@ function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
       "min-w-0 flex-1 text-left text-[10px] text-zinc-400 transition hover:text-zinc-200";
     label.innerHTML = `
       <div class="flex min-w-0 items-center gap-1">
-        <i class="fa-solid ${layer.type === "image" ? "fa-image" : "fa-font"} ${layer.visible ? "text-zinc-300" : "text-slate-600"}"></i>
+        <i class="fa-solid ${layer.type === "image" ? "fa-image" : "fa-font"} ${isLayerEffectivelyVisible(state.project, layer) ? "text-zinc-300" : "text-slate-600"}"></i>
         <span class="truncate ${selected ? "text-zinc-100" : "text-zinc-300"}">${escapeHtml(layer.name)}</span>
       </div>
       <div class="mt-0.5 font-mono text-[9px] text-slate-500">L${layerIndex + 1} · ${enabledAnimations.length} 个动画</div>
@@ -1823,6 +1997,7 @@ function renderProperties(): void {
   els.propRotation.value = String(layer.transform.rotation);
   els.propOpacity.value = String(layer.opacity);
   els.propBlendMode.value = normalizeBlendMode(layer.blendMode);
+  syncLayerGroupSelect(layer);
   els.btnReplaceImage.classList.toggle("hidden", layer.type !== "image");
   syncLayerAnimationClipboardButtons(layer);
   syncAnimationPanel(layer);
@@ -2684,7 +2859,7 @@ function syncAnimationPanel(layer: V5GLayerConfig): void {
   els.animCountLabel.textContent = String(layer.animations.length);
   const currentType = isV5GAnimationType(els.animType.value)
     ? els.animType.value
-    : "move";
+    : "idle";
   els.animType.value = currentType;
   const preset = getAnimationPreset(currentType);
   els.animStart.value = String(state.playheadSeconds);
@@ -3398,6 +3573,7 @@ function createEditorState(
   project: V5GEditorState["project"],
   runtimeAssets: V5GEditorState["runtimeAssets"],
 ): V5GEditorState {
+  normalizeProjectLayerGroups(project);
   normalizeProjectBlendModes(project);
   return {
     project,

@@ -11,9 +11,12 @@ import type {
   V5GAssetConfig,
   V5GEditorState,
   V5GLayerConfig,
+  V5GLayerGroupConfig,
   V5GProjectConfig,
   V5GRuntimeAsset,
 } from "./types";
+
+export const DEFAULT_LAYER_GROUP_ID = "group_default";
 
 let idCounter = 1;
 
@@ -22,7 +25,26 @@ export function createId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${idCounter.toString(36)}`;
 }
 
+export function createDefaultLayerGroup(
+  order = 0,
+  name = "默认组",
+): V5GLayerGroupConfig {
+  return {
+    id:
+      order === 0 && name === "默认组"
+        ? DEFAULT_LAYER_GROUP_ID
+        : createId("layer_group"),
+    name,
+    visible: true,
+    collapsed: false,
+    order,
+  };
+}
+
 export function createDefaultProject(): V5GProjectConfig {
+  const defaultGroup = createDefaultLayerGroup();
+  const defaultLayer = createTextLayer("胜利！", 0, 110);
+  defaultLayer.groupId = defaultGroup.id;
   return {
     schemaVersion: VNI_VERSION,
     editor: {
@@ -42,7 +64,8 @@ export function createDefaultProject(): V5GProjectConfig {
       backgroundColor: DEFAULT_BACKGROUND_COLOR,
     },
     assets: [],
-    layers: [createTextLayer("胜利！", 0, 110)],
+    layerGroups: [defaultGroup],
+    layers: [defaultLayer],
     particles: [],
   };
 }
@@ -66,6 +89,7 @@ export function createTextLayer(text: string, x = 0, y = 0): V5GLayerConfig {
     type: "text",
     assetId: null,
     parentId: null,
+    groupId: DEFAULT_LAYER_GROUP_ID,
     visible: true,
     locked: false,
     transform: {
@@ -123,6 +147,7 @@ export function createImageLayer(asset: V5GAssetConfig): V5GLayerConfig {
     type: "image",
     assetId: asset.id,
     parentId: null,
+    groupId: DEFAULT_LAYER_GROUP_ID,
     visible: true,
     locked: false,
     transform: {
@@ -148,8 +173,96 @@ export function getSelectedLayer(state: V5GEditorState): V5GLayerConfig | null {
   );
 }
 
+export function normalizeProjectLayerGroups(project: V5GProjectConfig): void {
+  const rawGroups = Array.isArray(project.layerGroups)
+    ? project.layerGroups
+    : [];
+  const normalizedGroups: V5GLayerGroupConfig[] = [];
+  const seenGroupIds = new Set<string>();
+
+  for (const [index, group] of rawGroups.entries()) {
+    const id = sanitizeGroupId(group.id) || createId("layer_group");
+    if (seenGroupIds.has(id)) continue;
+    seenGroupIds.add(id);
+    normalizedGroups.push({
+      id,
+      name: String(group.name || `分组 ${index + 1}`),
+      visible: group.visible !== false,
+      collapsed: group.collapsed === true,
+      order: Number.isFinite(group.order) ? group.order : index,
+    });
+  }
+
+  if (normalizedGroups.length === 0) {
+    normalizedGroups.push(createDefaultLayerGroup());
+  }
+
+  if (!normalizedGroups.some((group) => group.id === DEFAULT_LAYER_GROUP_ID)) {
+    normalizedGroups.unshift({
+      id: DEFAULT_LAYER_GROUP_ID,
+      name: "默认组",
+      visible: true,
+      collapsed: false,
+      order: Math.min(-1, ...normalizedGroups.map((group) => group.order - 1)),
+    });
+  }
+
+  normalizedGroups.sort((left, right) => left.order - right.order);
+  normalizedGroups.forEach((group, index) => {
+    group.order = index;
+  });
+
+  const validGroupIds = new Set(normalizedGroups.map((group) => group.id));
+  for (const layer of project.layers) {
+    if (!layer.groupId || !validGroupIds.has(layer.groupId)) {
+      layer.groupId = DEFAULT_LAYER_GROUP_ID;
+    }
+  }
+
+  project.layerGroups = normalizedGroups;
+}
+
+export function getLayerGroup(
+  project: V5GProjectConfig,
+  groupId: string | undefined,
+): V5GLayerGroupConfig | null {
+  return project.layerGroups.find((group) => group.id === groupId) ?? null;
+}
+
+export function isLayerEffectivelyVisible(
+  project: V5GProjectConfig,
+  layer: V5GLayerConfig,
+): boolean {
+  const group = getLayerGroup(project, layer.groupId);
+  return layer.visible && group?.visible !== false;
+}
+
 export function toExportProject(project: V5GProjectConfig): V5GProjectConfig {
-  return JSON.parse(JSON.stringify(project)) as V5GProjectConfig;
+  const cloned = JSON.parse(JSON.stringify(project)) as V5GProjectConfig;
+  normalizeProjectLayerGroups(cloned);
+  const visibleLayers = cloned.layers.filter((layer) =>
+    isLayerEffectivelyVisible(cloned, layer),
+  );
+  const exportedGroupIds = new Set(
+    visibleLayers.map((layer) => layer.groupId ?? DEFAULT_LAYER_GROUP_ID),
+  );
+  cloned.layerGroups = cloned.layerGroups
+    .filter((group) => exportedGroupIds.has(group.id))
+    .map((group, index) => ({ ...group, collapsed: false, order: index }));
+  const referencedAssetIds = new Set<string>();
+  for (const layer of visibleLayers) {
+    if (layer.assetId) referencedAssetIds.add(layer.assetId);
+  }
+  cloned.assets = cloned.assets.filter((asset) =>
+    referencedAssetIds.has(asset.id),
+  );
+  cloned.layers = visibleLayers;
+  return cloned;
+}
+
+function sanitizeGroupId(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.trim().replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
 function getExtension(filename: string): string {
