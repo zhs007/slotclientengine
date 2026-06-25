@@ -63,6 +63,8 @@ const requiredExports = [
   "export function getVNIProjectLayerGroupSlots",
   "export function assertVNIAdjacentLayerGroupSlot",
   "export interface SampledLayerState",
+  "export interface VNISafeGlowLayerSampleState",
+  "export interface VNISafeGlowSpriteSample",
   "export interface ParticleSpriteSample",
   "export interface ParticleAnimationRuntimeState",
   "export interface V5GPlayRangeOptions",
@@ -107,6 +109,9 @@ const requiredExports = [
   "export function sampleProjectAtTime",
   "export function sampleLayerAtTime",
   "export function sampleLayerAnimationsAtTime",
+  "export function getSafeGlowProgress",
+  "export function hasActiveSafeGlowAnimation",
+  "export function sampleSafeGlowSpritesForLayer",
   "export function sampleParticleSpritesForLayer",
   "export function sampleParticleSpritesForLayerRuntime",
   "export function sampleLiveParticleSprites",
@@ -127,6 +132,8 @@ const requiredSnippets = [
   "captureLocalTransform(node: TNode): V5GCocosNodeTransformSnapshot",
   "captureWorldTransform(node: TNode): V5GCocosNodeTransformSnapshot",
   "detachMountedNodes(targets: readonly (string | TNode)[]): void",
+  "hasActiveSafeGlowAnimation: boolean",
+  "safe_glow",
 ];
 
 for (const expected of requiredSnippets) {

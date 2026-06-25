@@ -143,6 +143,27 @@ function particleWallAnimation(
   };
 }
 
+function safeGlowAnimation(
+  overrides: Partial<V5GAnimationConfig> = {},
+): V5GAnimationConfig {
+  return {
+    id: "safe-glow",
+    type: "safe_glow",
+    startTime: 0,
+    duration: 1,
+    enabled: true,
+    seed: 11,
+    params: {
+      spread: 0.2,
+      minOpacity: 0.4,
+      maxOpacity: 0.8,
+      pulses: 1,
+      keepOriginal: false,
+    },
+    ...overrides,
+  };
+}
+
 function framesFor(project: V5GProjectConfig): Map<string, SpriteFrame> {
   return new Map(
     project.assets.map((asset) => [
@@ -194,8 +215,12 @@ function getFirstLayerNode(root: Node): Node {
   return getFirstGroup(root).children[0];
 }
 
-function getFirstParticleContainer(root: Node): Node {
+function getFirstSafeGlowContainer(root: Node): Node {
   return getFirstGroup(root).children[1];
+}
+
+function getFirstParticleContainer(root: Node): Node {
+  return getFirstGroup(root).children[2];
 }
 
 describe("standalone V5GCocosPlayer", () => {
@@ -229,6 +254,7 @@ describe("standalone V5GCocosPlayer", () => {
     ]);
     expect(getFirstGroup(root).children.map((node) => node.name)).toEqual([
       "Layer 1",
+      "Layer 1 Safe Glow",
       "Layer 1 Particles",
     ]);
   });
@@ -436,6 +462,54 @@ describe("standalone V5GCocosPlayer", () => {
     expect(target?.blendSrc).toBe(COCOS_BLEND_FACTOR.SRC_ALPHA);
     expect(target?.blendDst).toBe(COCOS_BLEND_FACTOR.ONE);
     expect(target?.blendEq).toBe(COCOS_BLEND_OP.ADD);
+  });
+
+  it("renders safe_glow nodes between the source image and particle container", () => {
+    const project = tinyProject({
+      animations: [safeGlowAnimation()],
+    });
+    const { root, frames, player } = makePlayer(project);
+    player.init();
+
+    const layerNode = getFirstLayerNode(root);
+    const safeGlowContainer = getFirstSafeGlowContainer(root);
+    const particleContainer = getFirstParticleContainer(root);
+    expect(getFirstGroup(root).children.map((node) => node.name)).toEqual([
+      "Layer 1",
+      "Layer 1 Safe Glow",
+      "Layer 1 Particles",
+    ]);
+    expect(particleContainer.name).toBe("Layer 1 Particles");
+    expect(layerNode.active).toBe(false);
+    expect(safeGlowContainer.children).toHaveLength(1);
+
+    const safeGlowNode = safeGlowContainer.children[0];
+    expect(safeGlowNode.name).toBe("V5G Safe Glow layer-1");
+    expect(safeGlowNode.active).toBe(true);
+    expect(requireSprite(safeGlowNode).spriteFrame).toBe(frames.get("asset-1"));
+    expect(inspectTransform(safeGlowNode).width).toBe(100);
+    expect(inspectTransform(safeGlowNode).height).toBe(50);
+    expect(inspectTransform(safeGlowNode).anchorX).toBe(0.25);
+    expect(inspectTransform(safeGlowNode).anchorY).toBe(0.75);
+    expect(inspectNode(safeGlowNode).position).toEqual({
+      x: 100,
+      y: 50,
+      z: 0,
+    });
+    expect(inspectNode(safeGlowNode).scale).toEqual({
+      x: -1.2,
+      y: 2.4,
+      z: 1,
+    });
+    expect(inspectNode(safeGlowNode).rotation.z).toBeCloseTo(30, 3);
+    expect(requireOpacity(safeGlowNode).opacity).toBe(51);
+    expect(requireSprite(safeGlowNode).srcBlendFactor).toBe(
+      COCOS_BLEND_FACTOR.SRC_ALPHA,
+    );
+
+    player.seek(1);
+    expect(safeGlowContainer.children).toHaveLength(0);
+    expect(inspectNode(safeGlowNode).destroyed).toBe(true);
   });
 
   it("fails fast for missing SpriteFrame and size mismatch", () => {

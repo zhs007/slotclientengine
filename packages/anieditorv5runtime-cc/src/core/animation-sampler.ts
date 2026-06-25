@@ -61,6 +61,7 @@ export const SUPPORTED_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "particle_combo",
   "shatter",
   "glow",
+  "safe_glow",
   "squash_stretch",
 ];
 
@@ -90,6 +91,7 @@ const DEFAULT_EASING_BY_TYPE: Readonly<
   particle_combo: "easeInOutQuad",
   shatter: "easeOutQuad",
   glow: "linear",
+  safe_glow: "linear",
   squash_stretch: "easeOutQuad",
 };
 
@@ -143,7 +145,8 @@ export function sampleLayerAnimationsAtTime(
       sampleParticleComboSource(result, animation, base);
     else if (animation.type === "shatter")
       sampleShatterSource(result, animation, base);
-    else if (animation.type === "glow") sampleGlowSource(result, animation);
+    else if (animation.type === "glow" || animation.type === "safe_glow")
+      sampleGlowSource(result, animation);
     else if (isParticleAnimationType(animation.type)) {
       // Particle animations are sampled by particle-sampler. They do not alter
       // the base layer transform or opacity here.

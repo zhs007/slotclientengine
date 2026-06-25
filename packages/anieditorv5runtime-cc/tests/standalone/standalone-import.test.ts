@@ -72,6 +72,7 @@ describe("standalone runtime import", () => {
         "particle_combo",
         "shatter",
         "glow",
+        "safe_glow",
         "squash_stretch",
       ]),
     );
@@ -138,6 +139,9 @@ describe("standalone runtime import", () => {
     expect(runtime.sampleProjectAtTime).toBeTypeOf("function");
     expect(runtime.sampleLayerAtTime).toBeTypeOf("function");
     expect(runtime.sampleLayerAnimationsAtTime).toBeTypeOf("function");
+    expect(runtime.getSafeGlowProgress).toBeTypeOf("function");
+    expect(runtime.hasActiveSafeGlowAnimation).toBeTypeOf("function");
+    expect(runtime.sampleSafeGlowSpritesForLayer).toBeTypeOf("function");
     expect(runtime.sampleParticleSpritesForLayer).toBeTypeOf("function");
     expect(runtime.sampleParticleSpritesForLayerRuntime).toBeTypeOf("function");
     expect(runtime.sampleLiveParticleSprites).toBeTypeOf("function");
