@@ -12,7 +12,7 @@
   min-height: 100vh;
   display: grid;
   place-items: start center;
-  overflow: hidden;
+  overflow: clip;
   background: #000000;
   color: #ffffff;
   font-family:

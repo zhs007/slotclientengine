@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { applyFrameScale, createSlotUiDom, renderState } from "../src/dom.js";
 import { createMoneyFormatter } from "../src/index.js";
 import { BET_OPTIONS, createStateSnapshot } from "./test-helpers.js";
@@ -255,6 +257,15 @@ describe("dom", () => {
     const scale = applyFrameScale(frame, root, { width: 941, height: 1672 });
     expect(scale).toBe(0.5);
     expect(frame.style.transform).toBe("translate(-235.25px, 0px) scale(0.5)");
+  });
+
+  it("clips the page without creating a scroll container", () => {
+    const styles = readFileSync(
+      resolve(__dirname, "../src/styles.css"),
+      "utf8",
+    );
+
+    expect(styles).toMatch(/\.slot-ui-page\s*\{[\s\S]*?overflow:\s*clip;/);
   });
 });
 
