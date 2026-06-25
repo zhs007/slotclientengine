@@ -112,6 +112,7 @@ const REQUIRED_NUMERIC_PARAMS: Readonly<
     "sourceOpacity",
   ],
   glow: ["intensity", "spread", "minAlpha", "maxAlpha", "pulses", "blendMode"],
+  safe_glow: ["spread", "minOpacity", "maxOpacity", "pulses"],
   squash_stretch: [
     "squashAngle",
     "squashAmount",
@@ -136,6 +137,7 @@ const OPTIONAL_BOOLEAN_PARAMS: Readonly<
   particle_wall: ["fadeOut"],
   shatter: ["fadeOut"],
   glow: ["keepOriginal"],
+  safe_glow: ["keepOriginal"],
 };
 
 export function assertV5GProject(value: unknown): V5GProjectConfig {

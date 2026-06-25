@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import projectData from "../fixtures/export/project.json";
+import lock01Data from "../fixtures/export/lock_01.json";
 import twoXData from "../fixtures/export/2x.json";
 import fiveXData from "../fixtures/export/5x.json";
 import tenXData from "../fixtures/export/10x.json";
@@ -40,6 +41,7 @@ import type {
 
 const bundledProjectData = [
   projectData,
+  lock01Data,
   bigwinData,
   megawinData,
   superwinData,
@@ -153,6 +155,13 @@ const newAnimationParams: Readonly<
     blendMode: 0,
     keepOriginal: true,
   },
+  safe_glow: {
+    spread: 0.12,
+    minOpacity: 0.12,
+    maxOpacity: 0.65,
+    pulses: 2,
+    keepOriginal: true,
+  },
   squash_stretch: {
     squashAngle: 270,
     squashAmount: 0.4,
@@ -218,6 +227,23 @@ describe("validation", () => {
     expect(() => validateV5GProject(multipay)).not.toThrow();
     expect(() => validateV5GProject(scatter1)).not.toThrow();
     expect(() => validateV5GProject(scatter2)).not.toThrow();
+  });
+
+  it("accepts lock_01 VNI_0.017 safe_glow export", () => {
+    const project = assertV5GProject(lock01Data);
+    const animationTypes = [
+      ...new Set(
+        project.layers.flatMap((layer) =>
+          layer.animations.map((animation) => animation.type),
+        ),
+      ),
+    ];
+
+    expect(project.schemaVersion).toBe("VNI_0.017");
+    expect(animationTypes).toEqual(
+      expect.arrayContaining(["safe_glow", "idle", "particle_twinkle"]),
+    );
+    expect(() => validateV5GProject(project)).not.toThrow();
   });
 
   it("accepts VNI layer group projects and derives render slots from project.layers", () => {
@@ -460,6 +486,12 @@ describe("validation", () => {
       delete params.blendMode;
       project.layers[0].animations = [animation("glow", params)];
     }, 'requires numeric param "blendMode"');
+
+    expectInvalid((project) => {
+      const params = { ...newAnimationParams.safe_glow };
+      delete params.spread;
+      project.layers[0].animations = [animation("safe_glow", params)];
+    }, 'requires numeric param "spread"');
   });
 
   it("rejects string numeric params", () => {
@@ -481,6 +513,15 @@ describe("validation", () => {
         }),
       ];
     }, 'requires numeric param "sourceOpacity"');
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("safe_glow", {
+          ...newAnimationParams.safe_glow,
+          spread: "0.12",
+        }),
+      ];
+    }, 'requires numeric param "spread"');
   });
 
   it("rejects non-boolean optional flags", () => {
@@ -521,6 +562,15 @@ describe("validation", () => {
       project.layers[0].animations = [
         animation("glow", {
           ...newAnimationParams.glow,
+          keepOriginal: "false",
+        }),
+      ];
+    }, 'param "keepOriginal" must be a boolean');
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("safe_glow", {
+          ...newAnimationParams.safe_glow,
           keepOriginal: "false",
         }),
       ];

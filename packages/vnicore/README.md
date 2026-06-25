@@ -35,7 +35,7 @@ Invalid data fails fast. Missing assets, bad numeric params, unknown animation/e
 
 Layer group slots are exposed through `VNIPlayer.getLayerGroupSlots()`. The slot order follows the actual `project.layers` render order, not `layerGroups.order`. `attachNodeBetweenLayerGroups(...)`, `attachImageBetweenLayerGroups(...)`, and `attachExternalImageBetweenLayerGroups(...)` require the two group ids to be an adjacent slot; reversed, unknown, or non-adjacent ids throw. Project images keep the project texture-size validation path; external image URLs are for host-owned assets that are not listed in `project.assets`.
 
-Supported animation types include transform/opacity animations, live particles, segmented particle draining, and deterministic render effects such as `idle`, `shatter`, and `glow`. `idle` is a coverage-only no-op; `shatter` and `glow` are sampled separately from live particles.
+Supported animation types include transform/opacity animations, live particles, segmented particle draining, deterministic render effects such as `shatter` and `glow`, and the cross-engine-safe `safe_glow` overlay. `idle` is a coverage-only no-op; `shatter` and `glow` are sampled as render effects, while `safe_glow` is a normal-blend duplicate-image overlay and is counted separately from render effects.
 
 ## Docs And Examples
 

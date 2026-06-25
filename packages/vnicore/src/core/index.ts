@@ -4,6 +4,7 @@ export * from "./animation-sampler.js";
 export * from "./particle-sampler.js";
 export * from "./particle-runtime.js";
 export * from "./render-effect-sampler.js";
+export * from "./safe-glow-sampler.js";
 export * from "./playback-sequence.js";
 export * from "./project-sampler.js";
 export * from "./layer-groups.js";

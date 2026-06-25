@@ -350,6 +350,29 @@ function createRenderEffectProject(): V5GProjectConfig {
   return project;
 }
 
+function createSafeGlowProject(): V5GProjectConfig {
+  const project = createProject();
+  project.layers[0].animations = [
+    {
+      id: "safe-glow",
+      type: "safe_glow",
+      startTime: 0,
+      duration: 1,
+      enabled: true,
+      seed: 5,
+      params: {
+        spread: 0.12,
+        minOpacity: 0.12,
+        maxOpacity: 0.65,
+        pulses: 2,
+        keepOriginal: false,
+      },
+    },
+  ];
+  project.layers[1].animations = [];
+  return project;
+}
+
 async function createInitializedPlayer(
   options: {
     onPlayingChange?: (isPlaying: boolean) => void;
@@ -455,6 +478,7 @@ describe("VNIPlayer", () => {
         string,
         {
           display: InstanceType<typeof pixiMock.MockContainer>;
+          safeGlowDisplay: InstanceType<typeof pixiMock.MockContainer>;
           effectDisplay: InstanceType<typeof pixiMock.MockContainer>;
           particleDisplay: InstanceType<typeof pixiMock.MockContainer>;
         }
@@ -478,11 +502,13 @@ describe("VNIPlayer", () => {
     expect(internals.contentRoot.children[2]).toBe(defaultGroup);
     expect(lowerGroup?.children).toEqual([
       layerA?.display,
+      layerA?.safeGlowDisplay,
       layerA?.effectDisplay,
       layerA?.particleDisplay,
     ]);
     expect(defaultGroup?.children).toEqual([
       layerB?.display,
+      layerB?.safeGlowDisplay,
       layerB?.effectDisplay,
       layerB?.particleDisplay,
     ]);
@@ -495,6 +521,7 @@ describe("VNIPlayer", () => {
     expect(container.dataset.v5gParticleSprites).toBeUndefined();
     expect(container.dataset.v5gProjectId).toBeUndefined();
     expect(container.dataset.vniParticleSprites).toBeUndefined();
+    expect(container.dataset.vniSafeGlowSprites).toBeUndefined();
     expect(container.dataset.vniProjectId).toBeUndefined();
   });
 
@@ -699,6 +726,57 @@ describe("VNIPlayer", () => {
 
     expect(layerA.effectDisplay.children).toEqual([]);
     expect(layerB.effectDisplay.children).toEqual([]);
+  });
+
+  it("renders safe glow as an independent normal-blend overlay", async () => {
+    const container = createContainer();
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    pixiMock.textureByUrl.set("/a.png", { width: 100, height: 100 });
+    pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
+
+    const player = new VNIPlayer({
+      container,
+      projectId: "player-test",
+      bundleId: "legacy",
+      profileId: "legacy_full",
+      profilePurpose: "legacy",
+      assetScale: 1,
+      project: createSafeGlowProject(),
+      assetUrls: {
+        "assets/a.png": "/a.png",
+        "assets/b.png": "/b.png",
+      },
+    });
+    await player.init();
+    const internals = player as unknown as {
+      layerInstances: Map<
+        string,
+        {
+          display: InstanceType<typeof pixiMock.MockContainer>;
+          safeGlowDisplay: InstanceType<typeof pixiMock.MockContainer>;
+          effectDisplay: InstanceType<typeof pixiMock.MockContainer>;
+        }
+      >;
+    };
+    const layerA = internals.layerInstances.get("layer-a");
+    if (!layerA) throw new Error("Missing layer-a instance.");
+
+    expect(layerA.display.visible).toBe(false);
+    expect(layerA.safeGlowDisplay.children).toHaveLength(1);
+    expect(layerA.effectDisplay.children).toHaveLength(0);
+    expect(layerA.safeGlowDisplay.children[0].blendMode).toBe("normal");
+    expect(container.dataset.vniSafeGlowSprites).toBe("1");
+    expect(container.dataset.vniRenderEffectSprites).toBe("0");
+
+    player.destroy();
+
+    expect(container.dataset.vniSafeGlowSprites).toBeUndefined();
   });
 
   it("fails fast for reversed, unknown, and non-adjacent group slots", async () => {

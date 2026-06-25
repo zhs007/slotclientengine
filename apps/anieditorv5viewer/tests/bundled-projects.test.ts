@@ -15,6 +15,7 @@ describe("bundled projects", () => {
   it("keeps the full bundled VNI project list available", () => {
     expect(bundledProjects.map((project) => project.id)).toEqual([
       "project",
+      "lock-01",
       "bigwin",
       "megawin",
       "superwin",
@@ -72,6 +73,34 @@ describe("bundled projects", () => {
     const editFull = getBundledProject("bigwin-edit-full");
     expect(editFull.insertionAssets.map((asset) => asset.path).sort()).toEqual(
       Object.keys(export2EditFullAssetUrlManifest).sort(),
+    );
+  });
+
+  it("registers lock_01 with safe_glow and all bundled insertion assets", () => {
+    const lock01 = getBundledProject("lock-01");
+    const animationTypes = [
+      ...new Set(
+        lock01.project.layers.flatMap((layer) =>
+          layer.animations.map((animation) => animation.type),
+        ),
+      ),
+    ];
+
+    expect(lock01.project.schemaVersion).toBe("VNI_0.017");
+    expect(animationTypes).toEqual(
+      expect.arrayContaining(["safe_glow", "idle", "particle_twinkle"]),
+    );
+    expect(lock01.assetScale).toBe(1);
+    expect(lock01.insertionAssets.map((asset) => asset.path)).toEqual(
+      expect.arrayContaining([
+        "assets/2_asset_image_mqqlcjh9_h.png",
+        "assets/image_asset_image_mqp7sep7_i.png",
+        "assets/image_asset_image_mqp7sgo9_k.png",
+        "assets/image_asset_image_mqp7sii7_m.png",
+        "assets/image_asset_image_mqp7sjxy_o.png",
+        "assets/image_asset_image_mqs1j1mw_g.png",
+        "assets/image_asset_image_mqs1pl10_h.png",
+      ]),
     );
   });
 
