@@ -73,14 +73,10 @@ export function sampleLayerAtTime(
           time <= animation.startTime + animation.duration,
       )
     : true;
-  const hasOpacityHoldCoverage = hasOpacityEntryToExitHoldCoverage(
-    layer.animations,
-    time,
-  );
   const opacity =
     hasPendingOpacityEntry ||
     hasPendingScaleEntry ||
-    (hasAnyEnabled && !hasActiveCoverage && !hasOpacityHoldCoverage)
+    (hasAnyEnabled && !hasActiveCoverage)
       ? 0
       : roundTo(clampNumber(sampled.opacity, 0, 1), 4);
   const baseOpacity = roundTo(clampNumber(layer.opacity, 0, 1), 4);
@@ -114,39 +110,6 @@ function isOpacityEntryAnimation(animation: V5GAnimationConfig): boolean {
     return getBooleanParam(animation, "fadeIn", true);
   }
   return false;
-}
-
-function isOpacityExitAnimation(animation: V5GAnimationConfig): boolean {
-  if (animation.type === "fade") {
-    return getNumberParam(animation, "toOpacity") === 0;
-  }
-  if (animation.type === "slide_out") {
-    return getBooleanParam(animation, "fadeOut", true);
-  }
-  if (animation.type === "scale_out") {
-    return getBooleanParam(animation, "fadeOut", true);
-  }
-  return false;
-}
-
-function hasOpacityEntryToExitHoldCoverage(
-  animations: readonly V5GAnimationConfig[],
-  time: number,
-): boolean {
-  const hasCompletedEntry = animations.some(
-    (animation) =>
-      animation.enabled &&
-      isOpacityEntryAnimation(animation) &&
-      time > animation.startTime + animation.duration,
-  );
-  if (!hasCompletedEntry) return false;
-
-  return animations.some(
-    (animation) =>
-      animation.enabled &&
-      isOpacityExitAnimation(animation) &&
-      time < animation.startTime,
-  );
 }
 
 function isScaleEntryAnimation(animation: V5GAnimationConfig): boolean {
