@@ -8,7 +8,10 @@ import {
   writeWorkbook,
 } from "./workbook-helpers";
 
-const assetPaytable = resolve(__dirname, "../../../assets/gamecfg/paytables.xlsx");
+const assetPaytable = resolve(
+  __dirname,
+  "../../../assets/gamecfg/paytables.xlsx",
+);
 
 describe("parsePaytableWorkbook", () => {
   afterEach(() => {
@@ -66,25 +69,67 @@ describe("parsePaytableWorkbook", () => {
 
   it("rejects missing Code or Symbol header", () => {
     expect(() =>
-      parsePaytableWorkbook(writePaytable([["Cod", "Symbol", "X1"], [0, "WL", 0]])),
+      parsePaytableWorkbook(
+        writePaytable([
+          ["Cod", "Symbol", "X1"],
+          [0, "WL", 0],
+        ]),
+      ),
     ).toThrow("必须是 Code");
 
     expect(() =>
-      parsePaytableWorkbook(writePaytable([["Code", "Sym", "X1"], [0, "WL", 0]])),
+      parsePaytableWorkbook(
+        writePaytable([
+          ["Code", "Sym", "X1"],
+          [0, "WL", 0],
+        ]),
+      ),
     ).toThrow("必须是 Symbol");
   });
 
   it("rejects non-continuous X headers", () => {
-    const file = writePaytable([["Code", "Symbol", "X1", "X3"], [0, "WL", 0, 0]]);
+    const file = writePaytable([
+      ["Code", "Symbol", "X1", "X3"],
+      [0, "WL", 0, 0],
+    ]);
 
     expect(() => parsePaytableWorkbook(file)).toThrow("paytable X 列必须连续");
+  });
+
+  it("accepts integer text in Code and pay cells", () => {
+    const file = writePaytable([
+      ["Code", "Symbol", "X1", "X2"],
+      ["0", "WL", "0", "10"],
+      ["1", "H1", "5", "20"],
+    ]);
+
+    expect(parsePaytableWorkbook(file)).toMatchObject({
+      paytable: {
+        "0": { code: 0, symbol: "WL", pays: [0, 10] },
+        "1": { code: 1, symbol: "H1", pays: [5, 20] },
+      },
+      symbolCodes: {
+        WL: 0,
+        H1: 1,
+      },
+    });
+  });
+
+  it("accepts numeric symbol cell content", () => {
+    const file = writePaytable([
+      ["Code", "Symbol", "X1"],
+      [0, 10, 0],
+    ]);
+
+    expect(parsePaytableWorkbook(file).symbolCodes).toEqual({ "10": 0 });
   });
 
   it.each([
     ["empty", undefined],
     ["negative", -1],
     ["float", 1.2],
-    ["decimal string", "1"],
+    ["decimal string", "1.2"],
+    ["non-number", "abc"],
     ["boolean", true],
     ["date", new Date("2026-01-01T00:00:00Z")],
   ])("rejects invalid Code cell: %s", (_label, value) => {
@@ -101,14 +146,16 @@ describe("parsePaytableWorkbook", () => {
       A2: { t: "n", f: "1+1", v: 2 },
     });
 
-    expect(() => parsePaytableWorkbook(file)).toThrow("Code 不允许使用公式单元格");
+    expect(() => parsePaytableWorkbook(file)).toThrow(
+      "Code 不允许使用公式单元格",
+    );
   });
 
   it.each([
     ["empty", undefined],
     ["negative", -1],
     ["float", 1.2],
-    ["decimal string", "1"],
+    ["decimal string", "1.2"],
     ["boolean", true],
     ["date", new Date("2026-01-01T00:00:00Z")],
     ["non-number", "abc"],
@@ -126,12 +173,13 @@ describe("parsePaytableWorkbook", () => {
       C2: { t: "n", f: "1+1", v: 2 },
     });
 
-    expect(() => parsePaytableWorkbook(file)).toThrow("X1 不允许使用公式单元格");
+    expect(() => parsePaytableWorkbook(file)).toThrow(
+      "X1 不允许使用公式单元格",
+    );
   });
 
   it.each([
     ["empty", ""],
-    ["number", 1],
     ["boolean", true],
     ["date", new Date("2026-01-01T00:00:00Z")],
   ])("rejects invalid Symbol cell: %s", (_label, value) => {
@@ -148,7 +196,9 @@ describe("parsePaytableWorkbook", () => {
       B2: { t: "s", f: '"WL"', v: "WL" },
     });
 
-    expect(() => parsePaytableWorkbook(file)).toThrow("Symbol 不允许使用公式单元格");
+    expect(() => parsePaytableWorkbook(file)).toThrow(
+      "Symbol 不允许使用公式单元格",
+    );
   });
 
   it("rejects numeric cells whose formatted text looks like an integer", () => {
@@ -156,7 +206,9 @@ describe("parsePaytableWorkbook", () => {
       A2: { t: "n", v: 1.2, w: "1" },
     });
 
-    expect(() => parsePaytableWorkbook(file)).toThrow("Code 必须是非负安全整数");
+    expect(() => parsePaytableWorkbook(file)).toThrow(
+      "Code 必须是非负安全整数",
+    );
   });
 });
 

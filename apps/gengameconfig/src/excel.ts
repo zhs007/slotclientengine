@@ -123,11 +123,7 @@ export function isBlankCell(raw: RawCell): boolean {
 export function requireTextCell(raw: RawCell, label: string): string {
   ensureNotFormula(raw, label);
 
-  if (!raw.cell || !isTextCellType(raw.cell.t)) {
-    failAtCell(raw, `${label} 必须是原始文本单元格，实际为 ${describeCell(raw)}`);
-  }
-
-  const value = String(raw.cell.v).trim();
+  const value = readCellText(raw, label);
   if (!value) {
     failAtCell(raw, `${label} 不能为空`);
   }
@@ -135,18 +131,17 @@ export function requireTextCell(raw: RawCell, label: string): string {
   return value;
 }
 
-export function readOptionalTextCell(raw: RawCell, label: string): string | undefined {
+export function readOptionalTextCell(
+  raw: RawCell,
+  label: string,
+): string | undefined {
   if (isBlankCell(raw)) {
     return undefined;
   }
 
   ensureNotFormula(raw, label);
 
-  if (!raw.cell || !isTextCellType(raw.cell.t)) {
-    failAtCell(raw, `${label} 必须是原始文本单元格，实际为 ${describeCell(raw)}`);
-  }
-
-  const value = String(raw.cell.v).trim();
+  const value = readCellText(raw, label);
   return value || undefined;
 }
 
@@ -156,15 +151,12 @@ export function requireNonNegativeIntegerCell(
 ): number {
   ensureNotFormula(raw, label);
 
-  if (!raw.cell || raw.cell.t !== "n" || typeof raw.cell.v !== "number") {
-    failAtCell(raw, `${label} 必须是原始数值单元格，实际为 ${describeCell(raw)}`);
+  const value = readCellInteger(raw, label);
+  if (!Number.isSafeInteger(value) || value < 0) {
+    failAtCell(raw, `${label} 必须是非负安全整数，实际值为 ${String(value)}`);
   }
 
-  if (!Number.isSafeInteger(raw.cell.v) || raw.cell.v < 0) {
-    failAtCell(raw, `${label} 必须是非负安全整数，实际值为 ${String(raw.cell.v)}`);
-  }
-
-  return raw.cell.v;
+  return value;
 }
 
 function ensureNotFormula(raw: RawCell, label: string): void {
@@ -179,6 +171,51 @@ function hasFormula(cell: XLSX.CellObject): boolean {
 
 function isTextCellType(cellType: XLSX.ExcelDataType | undefined): boolean {
   return cellType === "s" || String(cellType) === "str";
+}
+
+function readCellText(raw: RawCell, label: string): string {
+  const cell = raw.cell;
+  if (!cell || cell.v === undefined || cell.v === null || cell.t === "z") {
+    failAtCell(raw, `${label} 不能为空`);
+  }
+
+  if (isTextCellType(cell.t)) {
+    return String(cell.v).trim();
+  }
+
+  if (cell.t === "n" && typeof cell.v === "number" && Number.isFinite(cell.v)) {
+    return String(cell.v).trim();
+  }
+
+  failAtCell(raw, `${label} 必须是文本或数值内容，实际为 ${describeCell(raw)}`);
+}
+
+function readCellInteger(raw: RawCell, label: string): number {
+  const cell = raw.cell;
+  if (!cell || cell.v === undefined || cell.v === null || cell.t === "z") {
+    failAtCell(raw, `${label} 不能为空`);
+  }
+
+  if (cell.t === "n" && typeof cell.v === "number") {
+    return cell.v;
+  }
+
+  if (isTextCellType(cell.t)) {
+    const value = String(cell.v).trim();
+    if (!/^\d+$/.test(value)) {
+      failAtCell(raw, `${label} 必须是非负安全整数，实际值为 ${value || "空"}`);
+    }
+    const parsed = Number(value);
+    if (!Number.isSafeInteger(parsed)) {
+      failAtCell(raw, `${label} 必须是非负安全整数，实际值为 ${value}`);
+    }
+    return parsed;
+  }
+
+  failAtCell(
+    raw,
+    `${label} 必须是数值或整数文本内容，实际为 ${describeCell(raw)}`,
+  );
 }
 
 function describeCell(raw: RawCell): string {
