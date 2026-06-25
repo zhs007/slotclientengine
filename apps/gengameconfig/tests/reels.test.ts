@@ -9,7 +9,10 @@ import {
   writeWorkbook,
 } from "./workbook-helpers";
 
-const assetPaytable = resolve(__dirname, "../../../assets/gamecfg/paytables.xlsx");
+const assetPaytable = resolve(
+  __dirname,
+  "../../../assets/gamecfg/paytables.xlsx",
+);
 const assetReel = resolve(__dirname, "../../../assets/gamecfg/bg-reel01.xlsx");
 const basicSymbolCodes = {
   WL: 0,
@@ -27,12 +30,24 @@ describe("parseReelsWorkbook", () => {
 
     expect(model.key).toBe("bg-reel01");
     expect(model.reels).toHaveLength(6);
-    expect(model.reels[0].slice(0, 12)).toEqual([1, 2, 6, 3, 1, 2, 7, 8, 1, 8, 7, 7]);
-    expect(model.reels[1].slice(0, 12)).toEqual([1, 9, 3, 9, 0, 10, 6, 10, 1, 8, 4, 5]);
-    expect(model.reels[2].slice(0, 12)).toEqual([1, 11, 2, 6, 1, 3, 5, 10, 1, 10, 4, 5]);
-    expect(model.reels[3].slice(0, 12)).toEqual([2, 7, 8, 7, 1, 6, 2, 4, 1, 2, 9, 4]);
-    expect(model.reels[4].slice(0, 12)).toEqual([1, 8, 6, 11, 1, 7, 5, 7, 1, 8, 8, 6]);
-    expect(model.reels[5].slice(0, 12)).toEqual([1, 8, 6, 11, 1, 7, 5, 7, 1, 8, 8, 6]);
+    expect(model.reels[0].slice(0, 12)).toEqual([
+      1, 2, 6, 3, 1, 2, 7, 8, 1, 8, 7, 7,
+    ]);
+    expect(model.reels[1].slice(0, 12)).toEqual([
+      1, 9, 3, 9, 0, 10, 6, 10, 1, 8, 4, 5,
+    ]);
+    expect(model.reels[2].slice(0, 12)).toEqual([
+      1, 11, 2, 6, 1, 3, 5, 10, 1, 10, 4, 5,
+    ]);
+    expect(model.reels[3].slice(0, 12)).toEqual([
+      2, 7, 8, 7, 1, 6, 2, 4, 1, 2, 9, 4,
+    ]);
+    expect(model.reels[4].slice(0, 12)).toEqual([
+      1, 8, 6, 11, 1, 7, 5, 7, 1, 8, 8, 6,
+    ]);
+    expect(model.reels[5].slice(0, 12)).toEqual([
+      1, 8, 6, 11, 1, 7, 5, 7, 1, 8, 8, 6,
+    ]);
   });
 
   it("keeps different reel lengths without padding", () => {
@@ -43,7 +58,10 @@ describe("parseReelsWorkbook", () => {
       [2, "WL", undefined],
     ]);
 
-    expect(parseReelsWorkbook(file, basicSymbolCodes).reels).toEqual([[0, 1, 0], [1]]);
+    expect(parseReelsWorkbook(file, basicSymbolCodes).reels).toEqual([
+      [0, 1, 0],
+      [1],
+    ]);
   });
 
   it("rejects unknown symbols", () => {
@@ -52,11 +70,32 @@ describe("parseReelsWorkbook", () => {
       [0, "NOPE"],
     ]);
 
-    expect(() => parseReelsWorkbook(file, basicSymbolCodes)).toThrow("未知 symbol：NOPE");
+    expect(() => parseReelsWorkbook(file, basicSymbolCodes)).toThrow(
+      "未知 symbol：NOPE",
+    );
+  });
+
+  it("accepts numeric R cell content when the symbol exists", () => {
+    const file = writeReels([
+      ["line", "R1"],
+      [0, 1],
+    ]);
+
+    expect(parseReelsWorkbook(file, { "1": 7 }).reels).toEqual([[7]]);
+  });
+
+  it("reports numeric R cell content as an unknown symbol when it is not configured", () => {
+    const file = writeReels([
+      ["line", "R1"],
+      [0, 1],
+    ]);
+
+    expect(() => parseReelsWorkbook(file, basicSymbolCodes)).toThrow(
+      "未知 symbol：1",
+    );
   });
 
   it.each([
-    ["number", 1],
     ["boolean", true],
     ["date", new Date("2026-01-01T00:00:00Z")],
   ])("rejects invalid R cell: %s", (_label, value) => {
@@ -73,7 +112,9 @@ describe("parseReelsWorkbook", () => {
       B2: { t: "s", f: '"WL"', v: "WL" },
     });
 
-    expect(() => parseReelsWorkbook(file, basicSymbolCodes)).toThrow("R1 不允许使用公式单元格");
+    expect(() => parseReelsWorkbook(file, basicSymbolCodes)).toThrow(
+      "R1 不允许使用公式单元格",
+    );
   });
 
   it.each([
@@ -135,7 +176,9 @@ describe("parseReelsWorkbook", () => {
       [0, "WL", "H1"],
     ]);
 
-    expect(() => parseReelsWorkbook(file, basicSymbolCodes)).toThrow("reels R 列必须连续");
+    expect(() => parseReelsWorkbook(file, basicSymbolCodes)).toThrow(
+      "reels R 列必须连续",
+    );
   });
 
   it("rejects symbols after a reel column has ended", () => {
@@ -146,7 +189,9 @@ describe("parseReelsWorkbook", () => {
       [2, "H1", "H1"],
     ]);
 
-    expect(() => parseReelsWorkbook(file, basicSymbolCodes)).toThrow("在尾部空白后又出现 symbol");
+    expect(() => parseReelsWorkbook(file, basicSymbolCodes)).toThrow(
+      "在尾部空白后又出现 symbol",
+    );
   });
 });
 
