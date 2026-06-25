@@ -24,7 +24,6 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - `slide_in`、`slide_out`、`bounce_in`、`pulse`、`float`、`swing`
 - `scale_in`、`scale_out`、`pop`、`shake`、`blink`
 - `idle`：作为 timeline coverage marker，不改变 transform 或 opacity
-- 完成的透明度入场动画到后续透明度出场动画之间，会沿用已采样的 opacity，避免删除中间 render effect 后出现一帧式闪烁
 - `particle_wall`、`particle_combo`、`squash_stretch`
 - 图层动画 `particles`、`particle_twinkle`、`particle_wall`、`particle_combo`：复用当前图层的 `SpriteFrame` 创建粒子 Sprite；真实粒子节点挂在对应图层后面的 `<layer name> Particles` 容器下，全局 `V5G Particles` 节点只保留为空占位
 - 粒子参数仍按 VNI/Pixi 导出语义解释：`direction: 270` 表示向上，`gravity` 正数表示向下；Cocos 渲染时会把粒子 Y offset 转成 Cocos UI 坐标系，避免上下方向反转
