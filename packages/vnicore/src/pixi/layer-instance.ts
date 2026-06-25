@@ -11,6 +11,7 @@ import type {
 export interface V5GLayerInstance {
   layer: V5GLayerConfig;
   display: PIXI.Container;
+  safeGlowDisplay: PIXI.Container;
   effectDisplay: PIXI.Container;
   particleDisplay: PIXI.Container;
   texture: PIXI.Texture | null;
@@ -29,6 +30,8 @@ export function createLayerInstance(
 ): V5GLayerInstance {
   const display = new PIXI.Container();
   display.label = layer.name;
+  const safeGlowDisplay = new PIXI.Container();
+  safeGlowDisplay.label = `${layer.name} safe glow`;
   const effectDisplay = new PIXI.Container();
   effectDisplay.label = `${layer.name} effects`;
   const particleDisplay = new PIXI.Container();
@@ -86,6 +89,7 @@ export function createLayerInstance(
   return {
     layer,
     display,
+    safeGlowDisplay,
     effectDisplay,
     particleDisplay,
     texture: instanceTexture,

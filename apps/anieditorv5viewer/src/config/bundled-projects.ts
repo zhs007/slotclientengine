@@ -1,4 +1,5 @@
 import projectData from "../assets/project.json";
+import lock01Data from "../assets/projects/lock_01.json";
 import twoXData from "../assets/projects/2x.json";
 import fiveXData from "../assets/projects/5x.json";
 import tenXData from "../assets/projects/10x.json";
@@ -33,6 +34,7 @@ import {
 
 export type BundledProjectId =
   | "project"
+  | "lock-01"
   | "bigwin"
   | "megawin"
   | "superwin"
@@ -103,6 +105,17 @@ const bundledProjectDefinitions: readonly BundledProjectDefinition[] = [
     purpose: "legacy",
     assetScale: 1,
     data: projectData,
+    assetUrlManifest: bundledAssetUrlManifest,
+  },
+  {
+    id: "lock-01",
+    filename: "lock_01.json",
+    sourcePath: "docs/anieditor5/export/lock_01.json",
+    bundleId: "legacy",
+    profileId: "legacy_full",
+    purpose: "legacy",
+    assetScale: 1,
+    data: lock01Data,
     assetUrlManifest: bundledAssetUrlManifest,
   },
   {

@@ -36,6 +36,7 @@
 - `sampleLayerAnimationsAtTime(base, animations, time)`: 采样 animation 栈。
 - `sampleParticleSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样粒子 sprite。
 - `sampleRenderEffectSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样 `shatter` / `glow` render effect sprite。
+- `sampleSafeGlowSpritesForLayer(layer, sampledLayer, time)`: 采样 `safe_glow` 同图副本高亮 sprite；它不是 `render-effect-sampler` 的 effect。
 - `sampleLiveParticleSprites(layers, stage, time)`: 生成带 Pixi 坐标的 live 粒子 sample。
 - `VNIParticleRuntime`: 保存 live 粒子状态，支持停止发射后的排空。
 - `VNISegmentedPlaybackSequence`: 三段式播放纯状态机。
@@ -97,6 +98,7 @@ Layer group 合同：
 - `idle`: coverage-only no-op，不改 transform/opacity。
 - `shatter`: deterministic render effect，要求 `count/pieceSize/force/impactAngle/spreadAngle/gravity/spin/sourceOpacity`，`fadeOut` 可选 boolean。
 - `glow`: deterministic render effect，要求 `intensity/spread/minAlpha/maxAlpha/pulses/blendMode`，`keepOriginal` 可选 boolean；`blendMode` 数值为 `0=add`、`1=screen`、`2=lighten`。
+- `safe_glow`: 普通同图副本高亮，要求 `spread/minOpacity/maxOpacity/pulses`，`keepOriginal` 可选 boolean；固定 normal blend，不进入 `VNIRenderEffectType`。
 
 ## 内部 helper 边界
 

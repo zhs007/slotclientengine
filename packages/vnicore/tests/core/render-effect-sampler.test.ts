@@ -50,6 +50,7 @@ describe("render-effect-sampler", () => {
 
     expect(isRenderEffectAnimationType("glow")).toBe(true);
     expect(isRenderEffectAnimationType("shatter")).toBe(true);
+    expect(isRenderEffectAnimationType("safe_glow")).toBe(false);
     expect(isRenderEffectAnimationType("particle_combo")).toBe(false);
     expect(getRenderEffectProgress(glow, -0.1)).toBeNull();
     expect(getRenderEffectProgress(glow, 0)).toBeNull();

@@ -56,7 +56,7 @@ player.play();
 - `restart()`: 清空 active range、segmented 状态和 live 粒子，回到 0 秒。
 - `seek(time)`: 退出 range/segmented live playback，清空 live 粒子状态，并按指定时间做确定性预览；不会触发 marker。
 - `setLoop(loop)` / `getLoop()`: 控制普通播放和未显式传 `loop` 的 range 播放。
-- `destroy()`: 停止 RAF、断开 `ResizeObserver`、清理 mounted nodes、render effects、particles、diagnostics、marker 和 complete listener，并销毁 Pixi app。
+- `destroy()`: 停止 RAF、断开 `ResizeObserver`、清理 mounted nodes、safe glow overlays、render effects、particles、diagnostics、marker 和 complete listener，并销毁 Pixi app。
 
 播放到终点和视觉完全结束不是同一件事。非循环 timeline、非循环 range 和 segmented end 段到达终点后会停止发射器并进入 `particle-draining`；已有 live 粒子继续衰减，排空后才进入 `complete` 并触发 `onPlaybackComplete(...)`。`isPlaying()` 在主时间轴停止推进后会是 `false`，但内部 RAF 可能仍会继续驱动粒子排空；使用 `getPlaybackState().isDrainingParticles` 判断排空状态。
 
@@ -154,6 +154,7 @@ disposeExternal();
 - `data-vni-visible-layers`
 - `data-vni-particle-sprites`
 - `data-vni-render-effect-sprites`
+- `data-vni-safe-glow-sprites`
 - `data-vni-playback-mode`
 - `data-vni-playback-phase`
 - `data-vni-particle-draining`
@@ -169,6 +170,8 @@ disposeExternal();
 - `data-vni-non-background-samples`
 - `data-vni-max-pixel-delta`
 - `data-vni-pixel-sample-error`
+
+`data-vni-safe-glow-sprites` 只统计 `safe_glow` 的 normal-blend 同图副本；`data-vni-render-effect-sprites` 只统计旧 `shatter` / `glow` render effect，两者不会混计。
 
 当前也保留 `data-v5g-*` 的 legacy diagnostics alias，用于旧验收脚本兼容；`destroy()` 会清理新旧字段。
 
@@ -191,3 +194,6 @@ disposeExternal();
 - `idle`: 只提供 animation coverage，不改变 transform/opacity。
 - `shatter`: deterministic render effect。`sourceOpacity` 控制原图透明度，碎片在 `progress <= 0` 不渲染。
 - `glow`: deterministic render effect。`keepOriginal === false` 会隐藏原图但保留 glow effect；`blendMode` 使用 `0=add`、`1=screen`、`2=lighten`。
+- `safe_glow`: 跨引擎安全发光方案。它不是 render effect，也不使用滤镜、模糊或特殊混合；runtime 用同一张图片的副本，通过 `spread` 放大、`minOpacity/maxOpacity/pulses` 透明度呼吸来模拟高亮，固定 normal blend。`keepOriginal === false` 会隐藏原图，但 safe glow 副本仍会渲染；起始帧即可采样出副本。
+
+`glow` 和 `safe_glow` 的关键区别：`glow` 是旧 deterministic render effect，可以使用 `add/screen/lighten` 等特殊 blend；`safe_glow` 是普通 sprite overlay，只使用 normal blend，适合跨 Pixi 和 Cocos 等运行时复现。

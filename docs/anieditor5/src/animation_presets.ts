@@ -1194,6 +1194,60 @@ export const V5G_ANIMATION_PRESETS: V5GAnimationPresetSpec[] = [
     ],
   },
   {
+    type: "safe_glow",
+    label: "Safe Glow Cocos发光",
+    description:
+      "Cocos 安全发光：只用同图副本、缩放和透明度呼吸模拟高亮，不依赖滤镜、模糊或 screen/lighten 混合。",
+    defaultDuration: 1.2,
+    recommendedDuration:
+      "tips：0.4 ~ 3s；Cocos 可用 Sprite + UIOpacity + scale 还原",
+    defaultEasing: "linear",
+    params: [
+      numberParam(
+        "spread",
+        "扩散比例",
+        0.12,
+        0,
+        1,
+        0.01,
+        "spread：发光副本相对原图放大的比例，Cocos 中直接放大 Sprite",
+      ),
+      numberParam(
+        "minOpacity",
+        "最低透明度",
+        0.12,
+        0,
+        1,
+        0.05,
+        "minOpacity：发光副本呼吸谷值透明度 0~1",
+      ),
+      numberParam(
+        "maxOpacity",
+        "最高透明度",
+        0.65,
+        0,
+        1,
+        0.05,
+        "maxOpacity：发光副本呼吸峰值透明度 0~1",
+      ),
+      numberParam(
+        "pulses",
+        "呼吸次数",
+        2,
+        0,
+        20,
+        0.25,
+        "pulses：持续时间内呼吸次数，0=保持最高透明度",
+      ),
+      checkboxParam(
+        "keepOriginal",
+        "保留原图",
+        true,
+        "开启后原图正常显示，关闭后只显示发光副本",
+      ),
+    ],
+  },
+  {
     type: "glow",
     label: "Glow 发光高亮",
     description:
@@ -1493,6 +1547,15 @@ export function createDefaultAnimationParams(
       fadeOut: true,
     };
   }
+  if (type === "safe_glow") {
+    return {
+      spread: 0.12,
+      minOpacity: 0.12,
+      maxOpacity: 0.65,
+      pulses: 2,
+      keepOriginal: true,
+    };
+  }
   if (type === "glow") {
     return {
       intensity: 0.75,
@@ -1595,7 +1658,8 @@ export function sampleLayerAnimationsAtTime(
       sampleParticleComboSource(result, animation, base);
     else if (animation.type === "shatter")
       sampleShatterSource(result, animation, base);
-    else if (animation.type === "glow") sampleGlowSource(result, animation);
+    else if (animation.type === "glow" || animation.type === "safe_glow")
+      sampleGlowSource(result, animation);
   }
   result.transform.x = roundTo(result.transform.x, 4);
   result.transform.y = roundTo(result.transform.y, 4);

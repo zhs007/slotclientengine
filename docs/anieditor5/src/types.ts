@@ -62,6 +62,7 @@ export type V5GAnimationType =
   | "particle_combo"
   | "shatter"
   | "glow"
+  | "safe_glow"
   | "squash_stretch";
 export type V5GAnimationParamValue = string | number | boolean;
 

@@ -465,7 +465,8 @@ export class V5GPixiStage {
           animation.enabled &&
           (animation.type === "particle_combo" ||
             animation.type === "shatter" ||
-            animation.type === "glow") &&
+            animation.type === "glow" ||
+            animation.type === "safe_glow") &&
           getAnimationProgress(animation, playheadSeconds) !== null,
       );
       if (layerOpacity <= 0 && !hasActiveRenderEffect) continue;
@@ -537,6 +538,17 @@ export class V5GPixiStage {
           );
         } else if (animation.type === "glow") {
           this.drawGlow(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layer.opacity,
+            transform,
+            particleGroup,
+          );
+        } else if (animation.type === "safe_glow") {
+          this.drawSafeGlow(
             animation,
             texture,
             emitter.x,
@@ -1190,6 +1202,55 @@ export class V5GPixiStage {
       sprite.blendMode = blendMode;
       target.addChild(sprite);
     }
+  }
+
+  private drawSafeGlow(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    transform: V5GLayerConfig["transform"],
+    target: PIXI.Container,
+  ): void {
+    const spread = clampParticleNumber(
+      getParticleParam(animation, "spread", 0.12),
+      0,
+      1,
+    );
+    const minOpacity = clampParticleNumber(
+      getParticleParam(animation, "minOpacity", 0.12),
+      0,
+      1,
+    );
+    const maxOpacity = clampParticleNumber(
+      getParticleParam(animation, "maxOpacity", 0.65),
+      0,
+      1,
+    );
+    const pulses = clampParticleNumber(
+      getParticleParam(animation, "pulses", 2),
+      0,
+      60,
+    );
+    const wave =
+      pulses <= 0 ? 1 : (1 - Math.cos(progress * Math.PI * 2 * pulses)) / 2;
+    const alpha = layerOpacity * lerpNumber(minOpacity, maxOpacity, wave);
+    if (alpha <= 0.002 || spread <= 0.001) return;
+
+    const sprite = new PIXI.Sprite(texture);
+    sprite.anchor.set(transform.anchorX, transform.anchorY);
+    sprite.position.set(emitterX, emitterY);
+    const glowScale = 1 + spread;
+    sprite.scale.set(
+      transform.scaleX * glowScale,
+      transform.scaleY * glowScale,
+    );
+    sprite.rotation = (transform.rotation * Math.PI) / 180;
+    sprite.alpha = alpha;
+    sprite.blendMode = "normal";
+    target.addChild(sprite);
   }
 
   private drawSelection(): void {

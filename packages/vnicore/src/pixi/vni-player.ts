@@ -36,6 +36,10 @@ import {
   type VNIRenderEffectSpriteSample,
 } from "../core/render-effect-sampler.js";
 import {
+  sampleSafeGlowSpritesForLayer,
+  type VNISafeGlowSpriteSample,
+} from "../core/safe-glow-sampler.js";
+import {
   applySampledLayerState,
   createLayerInstance,
   getLayerAsset,
@@ -295,6 +299,7 @@ export class VNIPlayer {
         this.layerInstances.set(layer.id, instance);
         groupContainer.addChild(
           instance.display,
+          instance.safeGlowDisplay,
           instance.effectDisplay,
           instance.particleDisplay,
         );
@@ -725,6 +730,7 @@ export class VNIPlayer {
     this.playbackCompleteListeners.clear();
     this.particleRuntime.reset();
     this.clearMountedNodes();
+    this.clearSafeGlow();
     this.clearRenderEffects();
     this.clearParticles();
     this.clearDiagnostics();
@@ -887,6 +893,10 @@ export class VNIPlayer {
     this.playbackPhase = "particle-draining";
     this.onPlayingChange?.(false);
     const sampled = this.applyProjectSample(endTime);
+    const safeGlowSpriteCount = this.renderSafeGlowSamples(
+      sampled.layers,
+      endTime,
+    );
     const renderEffectSpriteCount = this.renderRenderEffectSamples(
       sampled.layers,
       endTime,
@@ -908,6 +918,7 @@ export class VNIPlayer {
       sampled.layers.filter((layer) => layer.visible).length,
       particleSpriteCount,
       renderEffectSpriteCount,
+      safeGlowSpriteCount,
     );
     this.onTimeChange?.(this.currentTime);
     if (frame.isComplete) {
@@ -922,10 +933,15 @@ export class VNIPlayer {
     const frame = this.particleRuntime.advanceDrain(deltaSeconds);
     const particleSpriteCount = this.renderParticleSamples(frame.particles);
     const sampled = sampleProjectAtTime(this.project, this.currentTime);
+    const safeGlowSpriteCount = this.renderSafeGlowSamples(
+      sampled.layers,
+      this.currentTime,
+    );
     this.updateDiagnostics(
       sampled.layers.filter((layer) => layer.visible).length,
       particleSpriteCount,
       this.getRenderedRenderEffectCount(),
+      safeGlowSpriteCount,
     );
     if (frame.isComplete) {
       this.finishParticleDrain();
@@ -942,6 +958,7 @@ export class VNIPlayer {
       ).length,
       0,
       this.getRenderedRenderEffectCount(),
+      this.getRenderedSafeGlowCount(),
     );
     const event = this.pendingComplete;
     this.pendingComplete = null;
@@ -1071,6 +1088,10 @@ export class VNIPlayer {
 
   private renderDeterministicFrame(time: number): void {
     const sampled = this.applyProjectSample(time);
+    const safeGlowSpriteCount = this.renderSafeGlowSamples(
+      sampled.layers,
+      this.currentTime,
+    );
     const renderEffectSpriteCount = this.renderRenderEffectSamples(
       sampled.layers,
       this.currentTime,
@@ -1085,6 +1106,7 @@ export class VNIPlayer {
       sampled.layers.filter((layer) => layer.visible).length,
       particleSpriteCount,
       renderEffectSpriteCount,
+      safeGlowSpriteCount,
     );
     this.onTimeChange?.(this.currentTime);
   }
@@ -1095,6 +1117,10 @@ export class VNIPlayer {
     options: VNIPlaybackFrameOptions = {},
   ): void {
     const sampled = this.applyProjectSample(nonParticleTime);
+    const safeGlowSpriteCount = this.renderSafeGlowSamples(
+      sampled.layers,
+      nonParticleTime,
+    );
     const renderEffectSpriteCount = this.renderRenderEffectSamples(
       sampled.layers,
       nonParticleTime,
@@ -1117,6 +1143,7 @@ export class VNIPlayer {
       sampled.layers.filter((layer) => layer.visible).length,
       particleSpriteCount,
       renderEffectSpriteCount,
+      safeGlowSpriteCount,
     );
     this.onTimeChange?.(this.currentTime);
   }
@@ -1159,6 +1186,91 @@ export class VNIPlayer {
       });
     }
     return layers;
+  }
+
+  private renderSafeGlowSamples(
+    sampledLayers: readonly SampledLayerState[],
+    time: number,
+  ): number {
+    let spriteCount = 0;
+    for (const instance of this.layerInstances.values()) {
+      for (const child of instance.safeGlowDisplay.removeChildren()) {
+        child.destroy({ children: true });
+      }
+    }
+
+    for (const sampledLayer of sampledLayers) {
+      if (!sampledLayer.hasActiveSafeGlowAnimation) continue;
+      const instance = this.layerInstances.get(sampledLayer.layerId);
+      if (!instance) {
+        throw new Error(`Missing V5G layer instance: ${sampledLayer.layerId}`);
+      }
+      if (!instance.texture || !instance.textureSize) {
+        throw new Error(
+          `V5G safe glow layer "${sampledLayer.layerId}" is missing image texture.`,
+        );
+      }
+      const asset = getLayerAsset(instance.layer, this.assetsById);
+      if (!asset) {
+        throw new Error(
+          `V5G safe glow layer "${sampledLayer.layerId}" is missing image asset.`,
+        );
+      }
+      const compensation = getAssetDisplayCompensation(
+        asset,
+        instance.textureSize,
+      );
+      const emitter = editorToPixi(
+        sampledLayer.transform.x,
+        sampledLayer.transform.y,
+        this.project.stage.width,
+        this.project.stage.height,
+      );
+      const safeGlows = sampleSafeGlowSpritesForLayer(
+        instance.layer,
+        sampledLayer,
+        time,
+      );
+      for (const safeGlow of safeGlows) {
+        this.renderSafeGlowSprite(
+          instance,
+          safeGlow,
+          emitter,
+          compensation,
+          sampledLayer,
+        );
+      }
+      spriteCount += safeGlows.length;
+    }
+    return spriteCount;
+  }
+
+  private renderSafeGlowSprite(
+    instance: V5GLayerInstance,
+    safeGlow: VNISafeGlowSpriteSample,
+    emitter: { x: number; y: number },
+    compensation: { x: number; y: number },
+    sampledLayer: SampledLayerState,
+  ): void {
+    if (!instance.texture) {
+      throw new Error(
+        `V5G safe glow layer "${instance.layer.id}" is missing image texture.`,
+      );
+    }
+    const sprite = new PIXI.Sprite(instance.texture);
+    sprite.anchor.set(
+      sampledLayer.transform.anchorX,
+      sampledLayer.transform.anchorY,
+    );
+    sprite.position.set(emitter.x + safeGlow.x, emitter.y + safeGlow.y);
+    sprite.scale.set(
+      safeGlow.scaleX * compensation.x,
+      safeGlow.scaleY * compensation.y,
+    );
+    sprite.rotation = safeGlow.rotation;
+    sprite.alpha = safeGlow.alpha;
+    sprite.blendMode = toPixiBlendMode(safeGlow.blendMode);
+    instance.safeGlowDisplay.addChild(sprite);
   }
 
   private renderRenderEffectSamples(
@@ -1339,6 +1451,22 @@ export class VNIPlayer {
     }
   }
 
+  private clearSafeGlow(): void {
+    for (const instance of this.layerInstances.values()) {
+      for (const child of instance.safeGlowDisplay.removeChildren()) {
+        child.destroy({ children: true });
+      }
+    }
+  }
+
+  private getRenderedSafeGlowCount(): number {
+    let count = 0;
+    for (const instance of this.layerInstances.values()) {
+      count += instance.safeGlowDisplay.children.length;
+    }
+    return count;
+  }
+
   private getRenderedRenderEffectCount(): number {
     let count = 0;
     for (const instance of this.layerInstances.values()) {
@@ -1363,6 +1491,7 @@ export class VNIPlayer {
     visibleLayerCount: number,
     particleSpriteCount: number,
     renderEffectSpriteCount: number,
+    safeGlowSpriteCount: number,
   ): void {
     this.container.dataset.vniProjectId = this.projectId;
     this.container.dataset.vniTime = this.currentTime.toFixed(2);
@@ -1371,6 +1500,7 @@ export class VNIPlayer {
     this.container.dataset.vniRenderEffectSprites = String(
       renderEffectSpriteCount,
     );
+    this.container.dataset.vniSafeGlowSprites = String(safeGlowSpriteCount);
     this.container.dataset.vniPlaybackMode = this.playbackMode;
     this.container.dataset.vniPlaybackPhase = this.getEffectivePlaybackPhase();
     this.container.dataset.vniParticleDraining = String(
@@ -1458,6 +1588,7 @@ export class VNIPlayer {
     delete this.container.dataset.vniVisibleLayers;
     delete this.container.dataset.vniParticleSprites;
     delete this.container.dataset.vniRenderEffectSprites;
+    delete this.container.dataset.vniSafeGlowSprites;
     delete this.container.dataset.vniPlaybackMode;
     delete this.container.dataset.vniPlaybackPhase;
     delete this.container.dataset.vniParticleDraining;

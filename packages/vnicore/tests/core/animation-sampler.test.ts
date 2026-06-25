@@ -321,6 +321,40 @@ describe("animation-sampler", () => {
     expect(visibleSource.opacity).toBe(0.2);
   });
 
+  it("samples safe_glow source visibility without changing transform", () => {
+    const visibleSource = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 0.8 },
+      [
+        animation("safe_glow", {
+          spread: 0.12,
+          minOpacity: 0.12,
+          maxOpacity: 0.65,
+          pulses: 2,
+          keepOriginal: true,
+        }),
+      ],
+      0.5,
+    );
+    const hiddenSource = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 0.8 },
+      [
+        animation("safe_glow", {
+          spread: 0.12,
+          minOpacity: 0.12,
+          maxOpacity: 0.65,
+          pulses: 2,
+          keepOriginal: false,
+        }),
+      ],
+      0.5,
+    );
+
+    expect(visibleSource.transform).toEqual(baseTransform);
+    expect(visibleSource.opacity).toBe(0.8);
+    expect(hiddenSource.transform).toEqual(baseTransform);
+    expect(hiddenSource.opacity).toBe(0);
+  });
+
   it("samples squash_stretch displacement and elastic scale", () => {
     const sampled = sampleLayerAnimationsAtTime(
       { transform: baseTransform, opacity: 1 },

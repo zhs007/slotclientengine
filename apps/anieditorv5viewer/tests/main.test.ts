@@ -279,6 +279,50 @@ describe("anieditorv5viewer main", () => {
     });
   });
 
+  it("loads lock_01 with no legal insertion slot", async () => {
+    document.body.innerHTML = '<div id="app"></div>';
+
+    await import("../src/main");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const projectSelect = document.querySelector<HTMLSelectElement>(
+      'select[aria-label="V5G project"]',
+    );
+    const insertButton = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent === "插入",
+    );
+    if (!projectSelect || !insertButton) {
+      throw new Error("Missing project or insertion controls.");
+    }
+
+    projectSelect.value = "lock-01";
+    projectSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const summary = document.querySelector(".viewer-summary");
+    const assetSelect = document.querySelector<HTMLSelectElement>(
+      'select[aria-label="插入 asset"]',
+    );
+    const slotSelect = document.querySelector<HTMLSelectElement>(
+      'select[aria-label="组间 slot"]',
+    );
+    const insertionStatus = document.querySelector(".group-insertion-status");
+    if (!summary || !assetSelect || !slotSelect || !insertionStatus) {
+      throw new Error("Missing lock_01 viewer controls.");
+    }
+
+    expect(playerMock.instances.at(-1)?.getLayerGroupSlots()).toEqual([]);
+    expect(summary.textContent).toContain("schema VNI_0.017");
+    expect(summary.textContent).toContain("safe_glow");
+    expect(assetSelect.options.length).toBeGreaterThanOrEqual(7);
+    expect(slotSelect.disabled).toBe(true);
+    expect(insertButton.disabled).toBe(true);
+    expect(insertionStatus.textContent).toBe("无合法 slot");
+  });
+
   it("blocks invalid segmented times before calling runtime", async () => {
     document.body.innerHTML = '<div id="app"></div>';
 

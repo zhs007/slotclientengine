@@ -12,3 +12,5 @@ pnpm --filter @slotclientengine/vnicore examples:typecheck
 - `group-slot-insertion.ts`: 读取相邻 layer group slot，并把 Pixi node 或 project asset image 插入两个 group 之间。
 - `validate-project.ts`: 使用 `assertVNIProject`、`validateVNIProject`、manifest 校验，错误会显式抛出。
 - `vite-asset-manifest.ts`: 宿主应用如何用 Vite `import.meta.glob` 生成 `AssetUrlManifest`。
+
+`safe_glow` 的 runtime 支持由 core/Pixi tests 和 `lock_01` fixture 覆盖；它是 normal-blend 同图副本高亮，不属于 `shatter` / `glow` render effect 示例。

@@ -400,6 +400,38 @@ describe("project-sampler", () => {
     expect(active.hasActiveRenderEffect).toBe(true);
   });
 
+  it("hides safe_glow source image while preserving active safe glow", () => {
+    const safeGlowLayer = layer({}, [
+      {
+        id: "safe-glow",
+        type: "safe_glow",
+        startTime: 0,
+        duration: 1,
+        enabled: true,
+        seed: 1,
+        params: {
+          spread: 0.12,
+          minOpacity: 0.12,
+          maxOpacity: 0.65,
+          pulses: 2,
+          keepOriginal: false,
+        },
+      },
+    ]);
+
+    const atStart = sampleLayerAtTime(safeGlowLayer, 0);
+    const inactiveEnd = sampleLayerAtTime(safeGlowLayer, 1);
+
+    expect(atStart.opacity).toBe(0);
+    expect(atStart.visible).toBe(true);
+    expect(atStart.renderImageDisplay).toBe(false);
+    expect(atStart.hasActiveSafeGlowAnimation).toBe(true);
+    expect(atStart.hasActiveRenderEffect).toBe(false);
+    expect(inactiveEnd.visible).toBe(false);
+    expect(inactiveEnd.renderImageDisplay).toBe(false);
+    expect(inactiveEnd.hasActiveSafeGlowAnimation).toBe(false);
+  });
+
   it("hides shatter source image while preserving active render effect", () => {
     const shatterLayer = layer({}, [
       {
