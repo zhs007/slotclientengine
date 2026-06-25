@@ -1,19 +1,26 @@
 import { createGameConfig } from "@slotclientengine/logiccore";
 import { describe, expect, it } from "vitest";
-import { ReelAssetError, createReelSymbolRegistry } from "../../src/reel/index.js";
-import { createBasicAssets, basicGameConfig, createTextureSet } from "./helpers.js";
+import {
+  ReelAssetError,
+  createReelSymbolRegistry,
+} from "../../src/reel/index.js";
+import {
+  createBasicAssets,
+  basicGameConfig,
+  createTextureSet,
+} from "./helpers.js";
 
 describe("ReelSymbolRegistry", () => {
   it("tracks explicit empty symbols, missing-asset empty symbols and orphan assets", () => {
     const registry = createReelSymbolRegistry({
       gameConfig: createGameConfig(basicGameConfig),
       assets: createBasicAssets({
-        BN: createTextureSet(20, 20)
+        BN: createTextureSet(20, 20),
       }),
       emptySymbols: ["BN"],
       texturePolicy: {
-        requiredStateTextures: ["spinBlur"]
-      }
+        requiredStateTextures: ["spinBlur"],
+      },
     });
 
     expect(registry.getValidation()).toEqual({
@@ -21,10 +28,16 @@ describe("ReelSymbolRegistry", () => {
       configuredEmptySymbols: ["BN"],
       configuredEmptySymbolsWithAssets: ["BN"],
       missingAssetEmptySymbols: ["C"],
-      ignoredAssetsWithoutPaytable: ["ORPHAN"]
+      ignoredAssetsWithoutPaytable: ["ORPHAN"],
     });
-    expect(registry.getEntryBySymbol("BN")).toMatchObject({ code: 0, kind: "empty" });
-    expect(registry.getEntryBySymbol("C")).toMatchObject({ code: 3, kind: "empty" });
+    expect(registry.getEntryBySymbol("BN")).toMatchObject({
+      code: 0,
+      kind: "empty",
+    });
+    expect(registry.getEntryBySymbol("C")).toMatchObject({
+      code: 3,
+      kind: "empty",
+    });
     expect(registry.createRenderSymbolByCode(0)).toBeNull();
     expect(registry.createRenderSymbolByCode(1)?.symbol).toBe("A");
   });
@@ -34,12 +47,12 @@ describe("ReelSymbolRegistry", () => {
       gameConfig: createGameConfig(basicGameConfig),
       assets: createBasicAssets({
         BN: createTextureSet(200, 200),
-        ORPHAN: createTextureSet(120, 120)
+        ORPHAN: createTextureSet(120, 120),
       }),
       emptySymbols: ["BN"],
       texturePolicy: {
-        requiredStateTextures: ["spinBlur"]
-      }
+        requiredStateTextures: ["spinBlur"],
+      },
     });
 
     expect(registry.getCellSize()).toEqual({ width: 15, height: 12 });
@@ -49,15 +62,15 @@ describe("ReelSymbolRegistry", () => {
     const registry = createReelSymbolRegistry({
       gameConfig: createGameConfig(basicGameConfig),
       assets: createBasicAssets({
-        B: createTextureSet(6, 6)
+        B: createTextureSet(6, 6),
       }),
       emptySymbols: ["BN"],
       symbolScales: {
-        A: 1.5
+        A: 1.5,
       },
       texturePolicy: {
-        requiredStateTextures: ["spinBlur"]
-      }
+        requiredStateTextures: ["spinBlur"],
+      },
     });
 
     expect(registry.getCellSize()).toEqual({ width: 15, height: 18 });
@@ -77,24 +90,33 @@ describe("ReelSymbolRegistry", () => {
             kind: "layered",
             layers: [
               { index: 0, texture: createTextureSet(18, 22).normal },
-              { index: 1, texture: layerOne, keyframes: [layerOne, layerOneOpen] }
-            ]
+              {
+                index: 1,
+                texture: layerOne,
+                keyframes: [layerOne, layerOneOpen],
+              },
+            ],
           },
           states: {
-            spinBlur: createTextureSet(18, 22).states.spinBlur
-          }
-        }
+            spinBlur: createTextureSet(18, 22).states.spinBlur,
+          },
+        },
       }),
       emptySymbols: ["BN"],
       texturePolicy: {
-        requiredStateTextures: ["spinBlur"]
-      }
+        requiredStateTextures: ["spinBlur"],
+      },
     });
 
     expect(registry.getCellSize()).toEqual({ width: 18, height: 22 });
     const renderSymbol = registry.createRenderSymbolByCode(1);
-    expect(renderSymbol?.getLayerSprites().map((layer) => layer.index)).toEqual([0, 1]);
-    expect(renderSymbol?.getLayerSprites()[1].keyframes).toEqual([layerOne, layerOneOpen]);
+    expect(renderSymbol?.getLayerSprites().map((layer) => layer.index)).toEqual(
+      [0, 1],
+    );
+    expect(renderSymbol?.getLayerSprites()[1].keyframes).toEqual([
+      layerOne,
+      layerOneOpen,
+    ]);
   });
 
   it("rejects layered normal sources with inconsistent layer dimensions", () => {
@@ -107,19 +129,19 @@ describe("ReelSymbolRegistry", () => {
               kind: "layered",
               layers: [
                 { index: 0, texture: createTextureSet(18, 22).normal },
-                { index: 1, texture: createTextureSet(19, 22).normal }
-              ]
+                { index: 1, texture: createTextureSet(19, 22).normal },
+              ],
             },
             states: {
-              spinBlur: createTextureSet(18, 22).states.spinBlur
-            }
-          }
+              spinBlur: createTextureSet(18, 22).states.spinBlur,
+            },
+          },
         }),
         emptySymbols: ["BN"],
         texturePolicy: {
-          requiredStateTextures: ["spinBlur"]
-        }
-      })
+          requiredStateTextures: ["spinBlur"],
+        },
+      }),
     ).toThrow(/identical dimensions/);
   });
 
@@ -130,30 +152,30 @@ describe("ReelSymbolRegistry", () => {
         assets: createBasicAssets({
           A: {
             normal: createTextureSet(10, 10).normal,
-            states: {}
-          }
+            states: {},
+          },
         }),
         emptySymbols: ["BN"],
         texturePolicy: {
-          requiredStateTextures: ["spinBlur"]
-        }
-      })
+          requiredStateTextures: ["spinBlur"],
+        },
+      }),
     ).toThrow(/A.*spinBlur/);
 
     expect(() =>
       createReelSymbolRegistry({
         gameConfig: createGameConfig(basicGameConfig),
         assets: createBasicAssets(),
-        emptySymbols: ["NOPE"]
-      })
+        emptySymbols: ["NOPE"],
+      }),
     ).toThrow(ReelAssetError);
 
     expect(() =>
       createReelSymbolRegistry({
         gameConfig: createGameConfig(basicGameConfig),
         assets: {},
-        emptySymbols: ["BN"]
-      })
+        emptySymbols: ["BN"],
+      }),
     ).toThrow(/at least one textured symbol/);
 
     expect(() =>
@@ -162,9 +184,9 @@ describe("ReelSymbolRegistry", () => {
         assets: createBasicAssets(),
         emptySymbols: ["BN"],
         symbolScales: {
-          A: 0
-        }
-      })
+          A: 0,
+        },
+      }),
     ).toThrow(/scale.*positive/);
 
     expect(() =>
@@ -173,9 +195,9 @@ describe("ReelSymbolRegistry", () => {
         assets: createBasicAssets(),
         emptySymbols: ["BN"],
         symbolScales: {
-          NOPE: 1.5
-        }
-      })
+          NOPE: 1.5,
+        },
+      }),
     ).toThrow(/NOPE.*paytable/);
   });
 
@@ -184,10 +206,10 @@ describe("ReelSymbolRegistry", () => {
       createReelSymbolRegistry({
         gameConfig: createGameConfig(basicGameConfig),
         assets: createBasicAssets({
-          A: "/assets/A.png"
+          A: "/assets/A.png",
         }),
-        emptySymbols: ["BN"]
-      })
+        emptySymbols: ["BN"],
+      }),
     ).toThrow(/URL string/);
 
     expect(() =>
@@ -197,12 +219,12 @@ describe("ReelSymbolRegistry", () => {
           A: {
             normal: createTextureSet(10, 10).normal,
             states: {
-              spinBlur: "/assets/A.spinBlur.png"
-            }
-          }
+              spinBlur: "/assets/A.spinBlur.png",
+            },
+          },
         }),
-        emptySymbols: ["BN"]
-      })
+        emptySymbols: ["BN"],
+      }),
     ).toThrow(/URL string/);
 
     expect(() =>
@@ -211,15 +233,15 @@ describe("ReelSymbolRegistry", () => {
         assets: createBasicAssets(),
         emptySymbols: ["BN"],
         texturePolicy: {
-          requiredStateTextures: ["missing"]
-        }
-      })
+          requiredStateTextures: ["missing"],
+        },
+      }),
     ).toThrow(/Required texture state/);
 
     const registry = createReelSymbolRegistry({
       gameConfig: createGameConfig(basicGameConfig),
       assets: createBasicAssets(),
-      emptySymbols: ["BN"]
+      emptySymbols: ["BN"],
     });
     expect(() => registry.getEntryByCode(999)).toThrow(/999/);
     expect(() => registry.getEntryBySymbol("NOPE")).toThrow(/NOPE/);

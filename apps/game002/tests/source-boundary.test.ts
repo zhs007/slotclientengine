@@ -43,6 +43,16 @@ describe("game002 source boundary", () => {
       "pixi.js": "^8.1.6",
     });
   });
+
+  it("keeps Vite source aliases limited to rendercore entrypoints", () => {
+    const viteConfig = readFileSync(join(APP_ROOT, "vite.config.ts"), "utf8");
+
+    expect(viteConfig).toContain("@slotclientengine/rendercore");
+    expect(viteConfig).toContain("../../packages/rendercore/src/index.ts");
+    expect(viteConfig).not.toMatch(
+      /\.\.\/\.\.\/packages\/(?:logiccore|netcore|uiframeworks)\//,
+    );
+  });
 });
 
 function listFiles(

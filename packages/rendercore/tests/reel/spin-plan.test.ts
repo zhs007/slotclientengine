@@ -12,7 +12,7 @@ describe("createReelSpinPlan", () => {
     const finalYs = gameConfig.getStopYCoordinates({
       reelsName: "reels01",
       sceneName: "step0.scene0",
-      scene
+      scene,
     });
 
     const plan = createReelSpinPlan({
@@ -23,18 +23,24 @@ describe("createReelSpinPlan", () => {
       baseDurationMs: 1600,
       speedSymbolsPerSecond: 42,
       startDelayMs: 90,
-      stopDelayMs: 180
+      stopDelayMs: 180,
     });
 
     expect(finalYs).toEqual([1, 1, 4, 0, 27]);
     expect(plan.axes.map((axis) => axis.finalY)).toEqual([1, 1, 4, 0, 27]);
-    expect(plan.axes.map((axis) => axis.startDelayMs)).toEqual([0, 90, 180, 270, 360]);
+    expect(plan.axes.map((axis) => axis.startDelayMs)).toEqual([
+      0, 90, 180, 270, 360,
+    ]);
     for (const axis of plan.axes) {
       expect(axis.travelSymbols).toBeGreaterThanOrEqual(50);
-      expect(axis.startY).toBe(reels.normalizeY(axis.x, axis.finalY - axis.travelSymbols));
+      expect(axis.startY).toBe(
+        reels.normalizeY(axis.x, axis.finalY - axis.travelSymbols),
+      );
     }
     expect(plan.axes.map((axis) => axis.stopAtMs)).toEqual(
-      [...plan.axes.map((axis) => axis.stopAtMs)].sort((left, right) => left - right)
+      [...plan.axes.map((axis) => axis.stopAtMs)].sort(
+        (left, right) => left - right,
+      ),
     );
   });
 
@@ -48,7 +54,7 @@ describe("createReelSpinPlan", () => {
       baseDurationMs: 1000,
       speedSymbolsPerSecond: 10,
       startDelayMs: 0,
-      stopDelayMs: 0
+      stopDelayMs: 0,
     });
     const slower = createReelSpinPlan({
       reels,
@@ -58,10 +64,12 @@ describe("createReelSpinPlan", () => {
       baseDurationMs: 1600,
       speedSymbolsPerSecond: 20,
       startDelayMs: 0,
-      stopDelayMs: 0
+      stopDelayMs: 0,
     });
 
-    expect(slower.axes[0].travelSymbols).toBeGreaterThan(fast.axes[0].travelSymbols);
+    expect(slower.axes[0].travelSymbols).toBeGreaterThan(
+      fast.axes[0].travelSymbols,
+    );
     expect(slower.axes[0].startY).not.toBe(fast.axes[0].startY);
   });
 
@@ -76,14 +84,14 @@ describe("createReelSpinPlan", () => {
       speedSymbolsPerSecond: 1,
       startDelayMs: 0,
       stopDelayMs: 0,
-      extraTravelSymbolsPerReel: [1, 2, 3, 4, 5]
+      extraTravelSymbolsPerReel: [1, 2, 3, 4, 5],
     });
 
     expect(plan.direction).toBe("backward");
     expect(plan.axes[0]).toMatchObject({
       direction: "backward",
       travelSymbols: 51,
-      startY: reels.normalizeY(0, 1 + 51)
+      startY: reels.normalizeY(0, 1 + 51),
     });
     expect(plan.axes[4].travelSymbols).toBe(75);
   });
@@ -97,31 +105,44 @@ describe("createReelSpinPlan", () => {
       baseDurationMs: 1600,
       speedSymbolsPerSecond: 42,
       startDelayMs: 90,
-      stopDelayMs: 180
+      stopDelayMs: 180,
     };
 
-    expect(() => createReelSpinPlan({ ...valid, finalYs: [1] })).toThrow(ReelError);
-    expect(() => createReelSpinPlan({ ...valid, visibleRows: 0 })).toThrow(/visibleRows/);
-    expect(() => createReelSpinPlan({ ...valid, baseDurationMs: 0 })).toThrow(/baseDurationMs/);
-    expect(() => createReelSpinPlan({ ...valid, speedSymbolsPerSecond: 0 })).toThrow(
-      /speedSymbolsPerSecond/
+    expect(() => createReelSpinPlan({ ...valid, finalYs: [1] })).toThrow(
+      ReelError,
     );
-    expect(() => createReelSpinPlan({ ...valid, startDelayMs: -1 })).toThrow(/startDelayMs/);
-    expect(() => createReelSpinPlan({ ...valid, stopDelayMs: -1 })).toThrow(/stopDelayMs/);
-    expect(() => createReelSpinPlan({ ...valid, minimumSpinCycles: 0 })).toThrow(
-      /minimumSpinCycles/
+    expect(() => createReelSpinPlan({ ...valid, visibleRows: 0 })).toThrow(
+      /visibleRows/,
+    );
+    expect(() => createReelSpinPlan({ ...valid, baseDurationMs: 0 })).toThrow(
+      /baseDurationMs/,
     );
     expect(() =>
-      createReelSpinPlan({ ...valid, extraTravelSymbolsPerReel: [0] })
+      createReelSpinPlan({ ...valid, speedSymbolsPerSecond: 0 }),
+    ).toThrow(/speedSymbolsPerSecond/);
+    expect(() => createReelSpinPlan({ ...valid, startDelayMs: -1 })).toThrow(
+      /startDelayMs/,
+    );
+    expect(() => createReelSpinPlan({ ...valid, stopDelayMs: -1 })).toThrow(
+      /stopDelayMs/,
+    );
+    expect(() =>
+      createReelSpinPlan({ ...valid, minimumSpinCycles: 0 }),
+    ).toThrow(/minimumSpinCycles/);
+    expect(() =>
+      createReelSpinPlan({ ...valid, extraTravelSymbolsPerReel: [0] }),
     ).toThrow(/extraTravelSymbolsPerReel/);
     expect(() =>
-      createReelSpinPlan({ ...valid, finalYs: [1, 1, 4, 0, 27.5] })
+      createReelSpinPlan({ ...valid, finalYs: [1, 1, 4, 0, 27.5] }),
     ).toThrow(/finalYs/);
     expect(() =>
-      createReelSpinPlan({ ...valid, direction: "sideways" as never })
+      createReelSpinPlan({ ...valid, direction: "sideways" as never }),
     ).toThrow(/direction/);
     expect(() =>
-      createReelSpinPlan({ ...valid, extraTravelSymbolsPerReel: [0, 0, 0, 0, -1] })
+      createReelSpinPlan({
+        ...valid,
+        extraTravelSymbolsPerReel: [0, 0, 0, 0, -1],
+      }),
     ).toThrow(/extraTravelSymbolsPerReel/);
   });
 });

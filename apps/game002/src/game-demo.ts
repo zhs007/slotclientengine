@@ -5,13 +5,18 @@ import {
   type SceneMatrix,
 } from "@slotclientengine/gameframeworks";
 import {
-  RenderReelSet,
-  createReelSpinPlan,
+  RenderGridCellReelSet,
+  createGridCellOrder,
+  createGridCellReelSpinPlan,
   createReelSymbolRegistry,
+  type GridCellDimmingPattern,
+  type GridCellOrderMode,
+  type GridCellReelSpinPlan,
+  type GridCellReelSpinTiming,
   type ReelLayout,
   type ReelSpinDirection,
-  type ReelSpinPlan,
-  type RenderReelSetUpdateResult,
+  type RenderGridCellReelCellSnapshot,
+  type RenderGridCellReelSetUpdateResult,
 } from "@slotclientengine/rendercore/reel";
 import type {
   ReelSymbolScaleMap,
@@ -25,6 +30,9 @@ import {
   GAME002_REEL_COUNT,
   GAME002_REELS_NAME,
   GAME002_VISIBLE_ROWS,
+  GAME002_GRID_CELL_DIMMING,
+  GAME002_GRID_CELL_REEL_ORDER,
+  GAME002_GRID_CELL_REEL_TIMING,
   createGame002Layout,
   createGame002ReelLayerLayout,
   createGame002ReelLayout,
@@ -39,28 +47,22 @@ import {
 
 export interface Game002ReelConfig {
   readonly reelsName: string;
-  readonly visibleRows: number;
   readonly emptySymbols: readonly string[];
   readonly symbolScales: ReelSymbolScaleMap;
   readonly direction: ReelSpinDirection;
-  readonly minimumSpinCycles: number;
-  readonly baseDurationMs: number;
-  readonly speedSymbolsPerSecond: number;
-  readonly startDelayMs: number;
-  readonly stopDelayMs: number;
+  readonly orderMode: GridCellOrderMode;
+  readonly timing: GridCellReelSpinTiming;
+  readonly dimming: GridCellDimmingPattern;
 }
 
 export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   reelsName: GAME002_REELS_NAME,
-  visibleRows: GAME002_VISIBLE_ROWS,
   emptySymbols: GAME002_EMPTY_SYMBOLS,
   symbolScales: GAME002_SYMBOL_SCALES,
   direction: "forward",
-  minimumSpinCycles: 8,
-  baseDurationMs: 1700,
-  speedSymbolsPerSecond: 56,
-  startDelayMs: 80,
-  stopDelayMs: 120,
+  orderMode: GAME002_GRID_CELL_REEL_ORDER,
+  timing: GAME002_GRID_CELL_REEL_TIMING,
+  dimming: GAME002_GRID_CELL_DIMMING,
 });
 
 export interface Game002ReelRuntimeOptions {
@@ -76,6 +78,7 @@ export interface Game002ReelVisualSnapshot {
   readonly visibleScene: SceneMatrix;
   readonly requestedStates: readonly (readonly (string | null)[])[];
   readonly reelCount: number;
+  readonly gridCellCount: number;
   readonly layerX: number;
   readonly layerY: number;
 }
@@ -91,9 +94,9 @@ export interface Game002ReelRuntime {
   getFinalYs(): readonly number[] | null;
   getVisualSnapshot(): Game002ReelVisualSnapshot;
   applyScene(scene: SceneMatrix, sceneName?: string): readonly number[];
-  createSpinPlan(scene: SceneMatrix, sceneName?: string): ReelSpinPlan;
-  spinToScene(scene: SceneMatrix, sceneName?: string): ReelSpinPlan;
-  update(deltaSeconds: number): RenderReelSetUpdateResult;
+  createSpinPlan(scene: SceneMatrix, sceneName?: string): GridCellReelSpinPlan;
+  spinToScene(scene: SceneMatrix, sceneName?: string): GridCellReelSpinPlan;
+  update(deltaSeconds: number): RenderGridCellReelSetUpdateResult;
   isSpinning(): boolean;
 }
 
@@ -123,10 +126,19 @@ export function createGame002ReelRuntime(
     layout,
     createGame002Layout(),
   );
-  const reelSet = new RenderReelSet({
+  const order = createGridCellOrder({
+    columns: GAME002_REEL_COUNT,
+    rows: GAME002_VISIBLE_ROWS,
+    mode: config.orderMode,
+  });
+  const reelSet = new RenderGridCellReelSet({
     reels,
-    layout,
     registry,
+    columns: GAME002_REEL_COUNT,
+    rows: GAME002_VISIBLE_ROWS,
+    cellWidth: layout.cellWidth,
+    cellHeight: layout.cellHeight,
+    order,
   });
   reelSet.x = layerLayout.x;
   reelSet.y = layerLayout.y;
@@ -162,24 +174,20 @@ export function createGame002ReelRuntime(
       return finalYs;
     },
     getVisualSnapshot(): Game002ReelVisualSnapshot {
+      const gridSnapshot = reelSet.getSnapshot();
       return Object.freeze({
         visible: reelSet.visible,
-        spinning: reelSet.getSnapshot().spinning,
+        spinning: gridSnapshot.spinning,
         visibleScene: validateGame002Scene(
-          reelSet.getVisibleScene(),
+          gridSnapshot.visibleScene,
           "game002 reel visual snapshot",
         ),
-        requestedStates: Object.freeze(
-          reelSet.reels.map((reel) =>
-            Object.freeze(
-              reel
-                .getSlotSnapshots()
-                .filter((slot) => slot.container.visible)
-                .map((slot) => slot.requestedState),
-            ),
-          ),
+        requestedStates: createGridCellSnapshotMatrix(
+          gridSnapshot.cells,
+          (cell) => cell.requestedState,
         ),
-        reelCount: reelSet.reels.length,
+        reelCount: GAME002_REEL_COUNT,
+        gridCellCount: gridSnapshot.cells.length,
         layerX: reelSet.x,
         layerY: reelSet.y,
       });
@@ -190,7 +198,7 @@ export function createGame002ReelRuntime(
     ): readonly number[] {
       const validScene = validateGame002Scene(scene, sceneName);
       const nextFinalYs = resolveFinalYs(validScene, sceneName);
-      reelSet.resetToFinalYs(nextFinalYs);
+      reelSet.resetToScene(validScene, nextFinalYs);
       const visibleScene = validateGame002Scene(
         reelSet.getVisibleScene(),
         `${sceneName} visible scene`,
@@ -205,40 +213,40 @@ export function createGame002ReelRuntime(
     createSpinPlan(
       scene: SceneMatrix,
       sceneName = "game002.spinScene",
-    ): ReelSpinPlan {
+    ): GridCellReelSpinPlan {
       const validScene = validateGame002Scene(scene, sceneName);
       const nextFinalYs = resolveFinalYs(validScene, sceneName);
-      return createReelSpinPlan({
+      return createGridCellReelSpinPlan({
         reels,
         finalYs: nextFinalYs,
-        visibleRows: config.visibleRows,
+        targetScene: validScene,
+        columns: GAME002_REEL_COUNT,
+        rows: GAME002_VISIBLE_ROWS,
+        order,
         direction: config.direction,
-        minimumSpinCycles: config.minimumSpinCycles,
-        baseDurationMs: config.baseDurationMs,
-        speedSymbolsPerSecond: config.speedSymbolsPerSecond,
-        startDelayMs: config.startDelayMs,
-        stopDelayMs: config.stopDelayMs,
+        timing: config.timing,
+        dimming: config.dimming,
       });
     },
     spinToScene(
       scene: SceneMatrix,
       sceneName = "game002.spinScene",
-    ): ReelSpinPlan {
+    ): GridCellReelSpinPlan {
       if (reelSet.getSnapshot().spinning) {
         throw new Error("game002 reels are already spinning.");
       }
       const validScene = validateGame002Scene(scene, sceneName);
       const nextFinalYs = resolveFinalYs(validScene, sceneName);
-      const plan = createReelSpinPlan({
+      const plan = createGridCellReelSpinPlan({
         reels,
         finalYs: nextFinalYs,
-        visibleRows: config.visibleRows,
+        targetScene: validScene,
+        columns: GAME002_REEL_COUNT,
+        rows: GAME002_VISIBLE_ROWS,
+        order,
         direction: config.direction,
-        minimumSpinCycles: config.minimumSpinCycles,
-        baseDurationMs: config.baseDurationMs,
-        speedSymbolsPerSecond: config.speedSymbolsPerSecond,
-        startDelayMs: config.startDelayMs,
-        stopDelayMs: config.stopDelayMs,
+        timing: config.timing,
+        dimming: config.dimming,
       });
       finalYs = nextFinalYs;
       targetScene = validScene;
@@ -246,7 +254,7 @@ export function createGame002ReelRuntime(
       reelSet.visible = currentScene !== null;
       return plan;
     },
-    update(deltaSeconds: number): RenderReelSetUpdateResult {
+    update(deltaSeconds: number): RenderGridCellReelSetUpdateResult {
       const result = reelSet.update(deltaSeconds);
       if (result.completed && targetScene) {
         const visibleScene = validateGame002Scene(
@@ -284,4 +292,29 @@ export function assertGame002ReelVisualMatchesTarget(
   if (!sceneEquals(snapshot.visibleScene, validTargetScene)) {
     throw new Error(`${label} visible scene does not match target scene.`);
   }
+}
+
+function createGridCellSnapshotMatrix<T>(
+  cells: readonly RenderGridCellReelCellSnapshot[],
+  selector: (cell: RenderGridCellReelCellSnapshot) => T,
+): readonly (readonly T[])[] {
+  const matrix: Array<Array<T | undefined>> = Array.from(
+    { length: GAME002_REEL_COUNT },
+    () => Array.from({ length: GAME002_VISIBLE_ROWS }),
+  );
+  for (const cell of cells) {
+    matrix[cell.x][cell.y] = selector(cell);
+  }
+  return Object.freeze(
+    matrix.map((column, x) =>
+      Object.freeze(
+        column.map((value, y) => {
+          if (value === undefined) {
+            throw new Error(`Missing game002 grid cell snapshot (${x},${y}).`);
+          }
+          return value;
+        }),
+      ),
+    ),
+  );
 }

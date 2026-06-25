@@ -3,31 +3,49 @@ import type {
   ReelAxisSpinPlan,
   ReelSpinDirection,
   ReelSpinPlan,
-  ReelSpinPlanOptions
+  ReelSpinPlanOptions,
 } from "./types.js";
 
 export function createReelSpinPlan(options: ReelSpinPlanOptions): ReelSpinPlan {
   const reelCount = options.reels.getReelCount();
   const visibleRows = assertPositiveInteger(options.visibleRows, "visibleRows");
-  const minimumSpinCycles = assertMinimumSpinCycles(options.minimumSpinCycles ?? 10);
-  const baseDurationMs = assertPositiveNumber(options.baseDurationMs, "baseDurationMs");
+  const minimumSpinCycles = assertMinimumSpinCycles(
+    options.minimumSpinCycles ?? 10,
+  );
+  const baseDurationMs = assertPositiveNumber(
+    options.baseDurationMs,
+    "baseDurationMs",
+  );
   const speedSymbolsPerSecond = assertPositiveNumber(
     options.speedSymbolsPerSecond,
-    "speedSymbolsPerSecond"
+    "speedSymbolsPerSecond",
   );
-  const startDelayStepMs = assertNonNegativeNumber(options.startDelayMs, "startDelayMs");
-  const stopDelayStepMs = assertNonNegativeNumber(options.stopDelayMs, "stopDelayMs");
+  const startDelayStepMs = assertNonNegativeNumber(
+    options.startDelayMs,
+    "startDelayMs",
+  );
+  const stopDelayStepMs = assertNonNegativeNumber(
+    options.stopDelayMs,
+    "stopDelayMs",
+  );
   const finalYs = parseFinalYs(options.finalYs, reelCount);
-  const extraTravelSymbolsPerReel = parseExtraTravel(options.extraTravelSymbolsPerReel, reelCount);
+  const extraTravelSymbolsPerReel = parseExtraTravel(
+    options.extraTravelSymbolsPerReel,
+    reelCount,
+  );
   const direction = parseDirection(options.direction);
   const minimumTravel = minimumSpinCycles * visibleRows;
 
   const axes = finalYs.map((finalY, x): ReelAxisSpinPlan => {
     const startDelayMs = x * startDelayStepMs;
     const durationMs = baseDurationMs + x * stopDelayStepMs;
-    const durationTravel = Math.ceil((durationMs / 1000) * speedSymbolsPerSecond);
+    const durationTravel = Math.ceil(
+      (durationMs / 1000) * speedSymbolsPerSecond,
+    );
     const travelSymbols =
-      Math.max(minimumTravel, durationTravel) + x * visibleRows + extraTravelSymbolsPerReel[x];
+      Math.max(minimumTravel, durationTravel) +
+      x * visibleRows +
+      extraTravelSymbolsPerReel[x];
     const startY =
       direction === "forward"
         ? options.reels.normalizeY(x, finalY - travelSymbols)
@@ -41,42 +59,53 @@ export function createReelSpinPlan(options: ReelSpinPlanOptions): ReelSpinPlan {
       travelSymbols,
       startDelayMs,
       durationMs,
-      stopAtMs: startDelayMs + durationMs
+      stopAtMs: startDelayMs + durationMs,
     });
   });
 
   return Object.freeze({
     direction,
     axes: Object.freeze(axes),
-    totalDurationMs: Math.max(...axes.map((axis) => axis.stopAtMs))
+    totalDurationMs: Math.max(...axes.map((axis) => axis.stopAtMs)),
   });
 }
 
-function parseFinalYs(value: readonly number[], reelCount: number): readonly number[] {
+function parseFinalYs(
+  value: readonly number[],
+  reelCount: number,
+): readonly number[] {
   if (!Array.isArray(value) || value.length !== reelCount) {
-    throw new ReelError(`finalYs length ${value.length} does not match reels reel count ${reelCount}.`);
+    throw new ReelError(
+      `finalYs length ${value.length} does not match reels reel count ${reelCount}.`,
+    );
   }
-  return Object.freeze(value.map((finalY, x) => assertInteger(finalY, `finalYs[${x}]`)));
+  return Object.freeze(
+    value.map((finalY, x) => assertInteger(finalY, `finalYs[${x}]`)),
+  );
 }
 
 function parseExtraTravel(
   value: readonly number[] | undefined,
-  reelCount: number
+  reelCount: number,
 ): readonly number[] {
   if (value === undefined) {
     return Object.freeze(Array.from({ length: reelCount }, () => 0));
   }
   if (!Array.isArray(value) || value.length !== reelCount) {
     throw new ReelError(
-      `extraTravelSymbolsPerReel length ${value.length} does not match reels reel count ${reelCount}.`
+      `extraTravelSymbolsPerReel length ${value.length} does not match reels reel count ${reelCount}.`,
     );
   }
   return Object.freeze(
-    value.map((extra, x) => assertNonNegativeInteger(extra, `extraTravelSymbolsPerReel[${x}]`))
+    value.map((extra, x) =>
+      assertNonNegativeInteger(extra, `extraTravelSymbolsPerReel[${x}]`),
+    ),
   );
 }
 
-function parseDirection(value: ReelSpinDirection | undefined): ReelSpinDirection {
+function parseDirection(
+  value: ReelSpinDirection | undefined,
+): ReelSpinDirection {
   if (value === undefined) {
     return "forward";
   }

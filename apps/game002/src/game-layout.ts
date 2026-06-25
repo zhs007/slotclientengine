@@ -1,5 +1,8 @@
 import {
   createReelLayout,
+  type GridCellDimmingPattern,
+  type GridCellOrderMode,
+  type GridCellReelSpinTiming,
   type ReelLayout,
 } from "@slotclientengine/rendercore/reel";
 
@@ -16,6 +19,21 @@ export const GAME002_REELS_NAME = "reels-001";
 export const GAME002_REEL_COUNT = 6;
 export const GAME002_VISIBLE_ROWS = 9;
 export const GAME002_CELL_SIZE = 120;
+export const GAME002_GRID_CELL_REEL_ORDER =
+  "top-down-left-right" satisfies GridCellOrderMode;
+export const GAME002_GRID_CELL_REEL_TIMING = Object.freeze({
+  startStepMs: 16,
+  stopStepMs: 16,
+  settleAfterLastStartMs: 180,
+  minimumSpinCycles: 6,
+  speedSymbolsPerSecond: 54,
+}) satisfies GridCellReelSpinTiming;
+export const GAME002_GRID_CELL_DIMMING = Object.freeze({
+  evenAlpha: 0.5,
+  oddAlpha: 0.35,
+  fadeInMs: 80,
+  fadeOutMs: 160,
+}) satisfies GridCellDimmingPattern;
 
 export const GAME002_BOARD_FRAME = Object.freeze({
   x: 200,

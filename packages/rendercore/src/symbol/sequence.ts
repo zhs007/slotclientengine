@@ -8,7 +8,7 @@ import type {
   SymbolStateDefinition,
   SymbolStateId,
   SymbolStatePreset,
-  SymbolStateSequenceControllerOptions
+  SymbolStateSequenceControllerOptions,
 } from "./types.js";
 
 export class SymbolStateSequenceController {
@@ -19,9 +19,13 @@ export class SymbolStateSequenceController {
   #playing: boolean;
 
   constructor(options: SymbolStateSequenceControllerOptions) {
-    this.#statesById = validateSymbolStatePreset(options.statePreset).statesById;
+    this.#statesById = validateSymbolStatePreset(
+      options.statePreset,
+    ).statesById;
     if (options.steps.length === 0) {
-      throw new SymbolStateError("Symbol state sequence must contain at least one step.");
+      throw new SymbolStateError(
+        "Symbol state sequence must contain at least one step.",
+      );
     }
     this.#steps = options.steps.map((step) => this.normalizeStep(step));
     this.#playing = options.autoplay ?? true;
@@ -82,7 +86,9 @@ export class SymbolStateSequenceController {
   removeStep(index: number): void {
     this.assertStepIndex(index);
     if (this.#steps.length === 1) {
-      throw new SymbolStateError("Cannot remove the last symbol state sequence step.");
+      throw new SymbolStateError(
+        "Cannot remove the last symbol state sequence step.",
+      );
     }
 
     this.#steps.splice(index, 1);
@@ -105,9 +111,15 @@ export class SymbolStateSequenceController {
     this.#steps.splice(toIndex, 0, step);
     if (this.#currentIndex === fromIndex) {
       this.#currentIndex = toIndex;
-    } else if (fromIndex < this.#currentIndex && toIndex >= this.#currentIndex) {
+    } else if (
+      fromIndex < this.#currentIndex &&
+      toIndex >= this.#currentIndex
+    ) {
       this.#currentIndex -= 1;
-    } else if (fromIndex > this.#currentIndex && toIndex <= this.#currentIndex) {
+    } else if (
+      fromIndex > this.#currentIndex &&
+      toIndex <= this.#currentIndex
+    ) {
       this.#currentIndex += 1;
     }
     this.#elapsedSeconds = 0;
@@ -118,7 +130,9 @@ export class SymbolStateSequenceController {
     const currentStep = this.getCurrentStep();
     const currentState = this.#statesById.get(currentStep.state);
     if (!currentState) {
-      throw new SymbolStateError(`Unknown sequence state "${currentStep.state}".`);
+      throw new SymbolStateError(
+        `Unknown sequence state "${currentStep.state}".`,
+      );
     }
 
     if (!this.#playing) {
@@ -150,32 +164,42 @@ export class SymbolStateSequenceController {
       step.holdSeconds !== undefined &&
       (!Number.isFinite(step.holdSeconds) || step.holdSeconds < 0)
     ) {
-      throw new SymbolStateError(`Sequence holdSeconds for "${step.state}" must be non-negative.`);
+      throw new SymbolStateError(
+        `Sequence holdSeconds for "${step.state}" must be non-negative.`,
+      );
     }
     return Object.freeze({
       state: step.state,
-      ...(step.holdSeconds === undefined ? {} : { holdSeconds: step.holdSeconds })
+      ...(step.holdSeconds === undefined
+        ? {}
+        : { holdSeconds: step.holdSeconds }),
     });
   }
 
-  private createUpdateResult(shouldRequestState: boolean): SymbolSequenceUpdateResult {
+  private createUpdateResult(
+    shouldRequestState: boolean,
+  ): SymbolSequenceUpdateResult {
     return Object.freeze({
       shouldRequestState,
       state: this.getCurrentStep().state,
-      currentIndex: this.#currentIndex
+      currentIndex: this.#currentIndex,
     });
   }
 
   private assertStepIndex(index: number): void {
     if (!Number.isInteger(index) || index < 0 || index >= this.#steps.length) {
-      throw new SymbolStateError(`Sequence step index ${index} is out of range.`);
+      throw new SymbolStateError(
+        `Sequence step index ${index} is out of range.`,
+      );
     }
   }
 }
 
 function clampIndex(index: number, min: number, max: number): number {
   if (!Number.isInteger(index)) {
-    throw new SymbolStateError(`Sequence step index ${index} must be an integer.`);
+    throw new SymbolStateError(
+      `Sequence step index ${index} must be an integer.`,
+    );
   }
   return Math.min(max, Math.max(min, index));
 }

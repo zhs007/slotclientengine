@@ -23,7 +23,8 @@ interface GenerateSymbolStateTexturesModule {
 
 async function loadGenerator(): Promise<GenerateSymbolStateTexturesModule> {
   return (await import(
-    new URL("../../scripts/generate-symbol-state-textures.mjs", import.meta.url).href
+    new URL("../../scripts/generate-symbol-state-textures.mjs", import.meta.url)
+      .href
   )) as GenerateSymbolStateTexturesModule;
 }
 
@@ -31,14 +32,17 @@ describe("generate-symbol-state-textures", () => {
   it("parses pnpm-style leading separators and direct node arguments", async () => {
     const generator = await loadGenerator();
 
-    expect(generator.parseGenerateSymbolStateTextureArgs(["--", "--symbols", "S00,S0"]).symbols).toEqual([
-      "S00",
-      "S0"
-    ]);
-    expect(generator.parseGenerateSymbolStateTextureArgs(["--symbols=S00,S0"]).symbols).toEqual([
-      "S00",
-      "S0"
-    ]);
+    expect(
+      generator.parseGenerateSymbolStateTextureArgs([
+        "--",
+        "--symbols",
+        "S00,S0",
+      ]).symbols,
+    ).toEqual(["S00", "S0"]);
+    expect(
+      generator.parseGenerateSymbolStateTextureArgs(["--symbols=S00,S0"])
+        .symbols,
+    ).toEqual(["S00", "S0"]);
   });
 
   it("generates deterministic spinBlur and disabled PNGs with a stable manifest", async () => {
@@ -52,8 +56,8 @@ describe("generate-symbol-state-textures", () => {
         raw: {
           width,
           height,
-          channels: 4
-        }
+          channels: 4,
+        },
       })
         .png()
         .toFile(inputFile);
@@ -61,14 +65,20 @@ describe("generate-symbol-state-textures", () => {
       const result = await generator.generateSymbolStateTextures({
         inputDir: tempDir,
         outputDir: tempDir,
-        symbols: ["S00"]
+        symbols: ["S00"],
       });
 
       const spinBlurFile = join(tempDir, "S00.spinBlur.png");
       const disabledFile = join(tempDir, "S00.disabled.png");
-      expect(result.files).toEqual([spinBlurFile, disabledFile, result.manifestPath]);
+      expect(result.files).toEqual([
+        spinBlurFile,
+        disabledFile,
+        result.manifestPath,
+      ]);
 
-      const manifest = JSON.parse(await readFile(result.manifestPath, "utf8")) as {
+      const manifest = JSON.parse(
+        await readFile(result.manifestPath, "utf8"),
+      ) as {
         readonly version: number;
         readonly states: readonly string[];
         readonly settings: Record<string, unknown>;
@@ -81,31 +91,37 @@ describe("generate-symbol-state-textures", () => {
         settings: {
           spinBlur: {
             kind: "verticalBoxBlur",
-            kernelHeight: 21
+            kernelHeight: 21,
           },
           disabled: {
             kind: "grayscale",
-            brightness: 0.72
-          }
+            brightness: 0.72,
+          },
         },
         symbols: {
           S00: {
             normal: "./S00.png",
             spinBlur: "./S00.spinBlur.png",
-            disabled: "./S00.disabled.png"
-          }
-        }
+            disabled: "./S00.disabled.png",
+          },
+        },
       });
 
       await expectImageSize(spinBlurFile, width, height);
       await expectImageSize(disabledFile, width, height);
 
-      const disabledRaw = await sharp(disabledFile).ensureAlpha().raw().toBuffer();
+      const disabledRaw = await sharp(disabledFile)
+        .ensureAlpha()
+        .raw()
+        .toBuffer();
       expect(Math.abs(disabledRaw[0] - disabledRaw[1])).toBeLessThanOrEqual(1);
       expect(Math.abs(disabledRaw[1] - disabledRaw[2])).toBeLessThanOrEqual(1);
 
       const sourceRaw = await sharp(inputFile).ensureAlpha().raw().toBuffer();
-      const spinBlurRaw = await sharp(spinBlurFile).ensureAlpha().raw().toBuffer();
+      const spinBlurRaw = await sharp(spinBlurFile)
+        .ensureAlpha()
+        .raw()
+        .toBuffer();
       expect(Buffer.compare(sourceRaw, spinBlurRaw)).not.toBe(0);
       const mixedRed = spinBlurRaw[(11 * width + 1) * 4];
       expect(mixedRed).toBeGreaterThan(0);
@@ -116,7 +132,11 @@ describe("generate-symbol-state-textures", () => {
   });
 });
 
-async function expectImageSize(filePath: string, width: number, height: number): Promise<void> {
+async function expectImageSize(
+  filePath: string,
+  width: number,
+  height: number,
+): Promise<void> {
   const metadata = await sharp(filePath).metadata();
   expect(metadata.width).toBe(width);
   expect(metadata.height).toBe(height);

@@ -113,6 +113,57 @@ export interface ReelSpinPlan {
   readonly totalDurationMs: number;
 }
 
+export interface GridCellCoordinate {
+  readonly x: number;
+  readonly y: number;
+  readonly orderIndex: number;
+}
+
+export type GridCellOrderMode = "top-down-left-right";
+
+export interface GridCellReelSpinTiming {
+  readonly startStepMs: number;
+  readonly stopStepMs: number;
+  readonly settleAfterLastStartMs: number;
+  readonly minimumSpinCycles: number;
+  readonly speedSymbolsPerSecond: number;
+}
+
+export interface GridCellDimmingPattern {
+  readonly evenAlpha: number;
+  readonly oddAlpha: number;
+  readonly fadeInMs: number;
+  readonly fadeOutMs: number;
+}
+
+export type GridCellReelPhase =
+  | "idle"
+  | "waiting"
+  | "spinning"
+  | "landed"
+  | "completed";
+
+export interface GridCellReelPlanCell {
+  readonly x: number;
+  readonly y: number;
+  readonly orderIndex: number;
+  readonly startAtMs: number;
+  readonly stopAtMs: number;
+  readonly durationMs: number;
+  readonly axisPlan: ReelAxisSpinPlan;
+  readonly targetVisibleSymbols: readonly [number];
+  readonly dimmingAlpha: number;
+}
+
+export interface GridCellReelSpinPlan {
+  readonly direction: ReelSpinDirection;
+  readonly columns: number;
+  readonly rows: number;
+  readonly dimming: GridCellDimmingPattern;
+  readonly cells: readonly GridCellReelPlanCell[];
+  readonly lastStopAtMs: number;
+}
+
 export interface ReelWindowSlot {
   readonly windowY: number;
   readonly symbolY: number;
@@ -181,4 +232,44 @@ export interface RenderReelSlotSnapshot {
   readonly symbol: RenderSymbol | null;
   readonly container: Container;
   readonly requestedState: SymbolStateId | null;
+}
+
+export interface RenderGridCellReelSetOptions {
+  readonly reels: LogicReels;
+  readonly registry: ReelSymbolRegistry;
+  readonly columns: number;
+  readonly rows: number;
+  readonly cellWidth: number;
+  readonly cellHeight: number;
+  readonly order: readonly GridCellCoordinate[];
+}
+
+export interface RenderGridCellReelSetUpdateResult {
+  readonly spinning: boolean;
+  readonly completed: boolean;
+  readonly startedCells: readonly GridCellCoordinate[];
+  readonly landedCells: readonly GridCellCoordinate[];
+}
+
+export interface RenderGridCellReelCellSnapshot {
+  readonly x: number;
+  readonly y: number;
+  readonly orderIndex: number;
+  readonly phase: GridCellReelPhase;
+  readonly hasClipMask: boolean;
+  readonly cellX: number;
+  readonly cellY: number;
+  readonly reelX: number;
+  readonly reelY: number;
+  readonly dimmingOnReel: boolean;
+  readonly dimmingAlpha: number;
+  readonly requestedState: string | null;
+  readonly visibleSymbol: number;
+}
+
+export interface RenderGridCellReelSetSnapshot {
+  readonly spinning: boolean;
+  readonly completed: boolean;
+  readonly visibleScene: SceneMatrix;
+  readonly cells: readonly RenderGridCellReelCellSnapshot[];
 }

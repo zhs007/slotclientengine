@@ -22,15 +22,6 @@ import {
 } from "../src/game-demo.js";
 import { GAME002_CELL_SIZE } from "../src/game-layout.js";
 
-const FAST_REEL_CONFIG = Object.freeze({
-  ...DEFAULT_GAME002_REEL_CONFIG,
-  minimumSpinCycles: 1,
-  baseDurationMs: 80,
-  speedSymbolsPerSecond: 500,
-  startDelayMs: 0,
-  stopDelayMs: 0,
-});
-
 describe("game002 reel runtime", () => {
   it("locks gamecfg002 reels, symbol codes and task sample stop y values", () => {
     const runtime = createRuntime();
@@ -87,6 +78,7 @@ describe("game002 reel runtime", () => {
       visible: false,
       spinning: false,
       reelCount: 6,
+      gridCellCount: 54,
       layerX: 200,
       layerY: 330,
     });
@@ -108,7 +100,7 @@ describe("game002 reel runtime", () => {
     );
   });
 
-  it("spins all 6 reels to the target scene and checks the final visible scene", () => {
+  it("spins all 54 grid cell reels to the target scene and checks completion", () => {
     const runtime = createRuntime(GAME002_SAMPLE_DEFAULT_SCENE);
 
     const dryRunPlan = runtime.createSpinPlan(
@@ -116,13 +108,47 @@ describe("game002 reel runtime", () => {
       "test.spin.plan",
     );
     const plan = runtime.spinToScene(GAME002_SAMPLE_SPIN_SCENE, "test.spin");
-    expect(plan.axes).toHaveLength(6);
-    expect(dryRunPlan.axes.map((axis) => axis.finalY)).toEqual(
-      plan.axes.map((axis) => axis.finalY),
+    expect(plan.cells).toHaveLength(54);
+    expect(dryRunPlan.cells.map((cell) => cell.axisPlan.finalY)).toEqual(
+      plan.cells.map((cell) => cell.axisPlan.finalY),
     );
-    expect(plan.axes.map((axis) => axis.finalY)).toEqual(
-      GAME002_SAMPLE_RANDOM_NUMBERS,
+    expect(plan.cells[0]).toMatchObject({
+      x: 0,
+      y: 0,
+      orderIndex: 0,
+      dimmingAlpha: 0.5,
+    });
+    expect(plan.cells[8]).toMatchObject({
+      x: 0,
+      y: 8,
+      orderIndex: 8,
+      dimmingAlpha: 0.5,
+    });
+    expect(plan.cells[9]).toMatchObject({
+      x: 1,
+      y: 0,
+      orderIndex: 9,
+      dimmingAlpha: 0.35,
+    });
+    expect(plan.cells[53]).toMatchObject({
+      x: 5,
+      y: 8,
+      orderIndex: 53,
+      dimmingAlpha: 0.35,
+    });
+    const reels = runtime.gameConfig.getReels(
+      DEFAULT_GAME002_REEL_CONFIG.reelsName,
     );
+    expect(plan.cells[0].axisPlan.finalY).toBe(
+      reels.normalizeY(0, GAME002_SAMPLE_RANDOM_NUMBERS[0]),
+    );
+    expect(plan.cells[8].axisPlan.finalY).toBe(
+      reels.normalizeY(0, GAME002_SAMPLE_RANDOM_NUMBERS[0] + 8),
+    );
+    expect(plan.cells[53].axisPlan.finalY).toBe(
+      reels.normalizeY(5, GAME002_SAMPLE_RANDOM_NUMBERS[5] + 8),
+    );
+    expect(plan.lastStopAtMs).toBe(1876);
     expect(runtime.getTargetScene()).toEqual(GAME002_SAMPLE_SPIN_SCENE);
     expect(runtime.isSpinning()).toBe(true);
     expect(() => runtime.spinToScene(GAME002_SAMPLE_SPIN_SCENE)).toThrow(
@@ -133,11 +159,14 @@ describe("game002 reel runtime", () => {
     expect(runtime.getVisualSnapshot().requestedStates.flat()).toContain(
       "spinBlur",
     );
-    for (let index = 0; index < 20 && !result.completed; index += 1) {
+    let elapsedSeconds = 0.01;
+    for (let index = 0; index < 60 && !result.completed; index += 1) {
       result = runtime.update(0.05);
+      elapsedSeconds += 0.05;
     }
 
     expect(result.completed).toBe(true);
+    expect(elapsedSeconds).toBeLessThanOrEqual(2.6);
     expect(runtime.isSpinning()).toBe(false);
     expect(runtime.getCurrentScene()).toEqual(GAME002_SAMPLE_SPIN_SCENE);
     assertGame002ReelVisualMatchesTarget(
@@ -169,7 +198,6 @@ describe("game002 reel runtime", () => {
           reels: { "reels-001": rawGameConfig.reels["reels-001"].slice(0, 5) },
         },
         symbolAssets: createGame002Textures(),
-        config: FAST_REEL_CONFIG,
       }),
     ).toThrow(/must contain 6 reels/);
 
@@ -181,6 +209,7 @@ describe("game002 reel runtime", () => {
           visibleScene: GAME002_SAMPLE_DEFAULT_SCENE,
           requestedStates: [],
           reelCount: 6,
+          gridCellCount: 54,
           layerX: 200,
           layerY: 330,
         },
@@ -197,6 +226,7 @@ describe("game002 reel runtime", () => {
           visibleScene: GAME002_SAMPLE_DEFAULT_SCENE,
           requestedStates: [],
           reelCount: 6,
+          gridCellCount: 54,
           layerX: 200,
           layerY: 330,
         },
@@ -211,7 +241,6 @@ function createRuntime(initialScene?: SceneMatrix) {
   return createGame002ReelRuntime({
     rawGameConfig,
     symbolAssets: createGame002Textures(),
-    config: FAST_REEL_CONFIG,
     initialScene,
   });
 }

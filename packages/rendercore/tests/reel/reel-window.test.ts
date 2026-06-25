@@ -10,7 +10,7 @@ describe("createReelWindowSnapshot", () => {
       reels,
       x: 0,
       y: 1.5,
-      layout
+      layout,
     });
 
     expect(snapshot.baseY).toBe(1);
@@ -21,7 +21,7 @@ describe("createReelWindowSnapshot", () => {
       reels.get(0, 1),
       reels.get(0, 2),
       reels.get(0, 3),
-      reels.get(0, 4)
+      reels.get(0, 4),
     ]);
   });
 });

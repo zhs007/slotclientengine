@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ReelError, assertLayoutMatchesReels, createReelLayout } from "../../src/reel/index.js";
+import {
+  ReelError,
+  assertLayoutMatchesReels,
+  createReelLayout,
+} from "../../src/reel/index.js";
 
 describe("createReelLayout", () => {
   it("creates stable 5x5 cell coordinates with buffer rows", () => {
@@ -8,7 +12,7 @@ describe("createReelLayout", () => {
       visibleRows: 5,
       cellWidth: 100,
       cellHeight: 80,
-      columnGap: 12
+      columnGap: 12,
     });
 
     expect(layout.getReelX(0)).toBe(0);
@@ -21,19 +25,39 @@ describe("createReelLayout", () => {
 
   it("rejects invalid dimensions and reel count mismatches", () => {
     expect(() =>
-      createReelLayout({ reelCount: 0, visibleRows: 5, cellWidth: 1, cellHeight: 1 })
+      createReelLayout({
+        reelCount: 0,
+        visibleRows: 5,
+        cellWidth: 1,
+        cellHeight: 1,
+      }),
     ).toThrow(/reelCount/);
     expect(() =>
-      createReelLayout({ reelCount: 5, visibleRows: 0, cellWidth: 1, cellHeight: 1 })
+      createReelLayout({
+        reelCount: 5,
+        visibleRows: 0,
+        cellWidth: 1,
+        cellHeight: 1,
+      }),
     ).toThrow(/visibleRows/);
     expect(() =>
-      createReelLayout({ reelCount: 5, visibleRows: 5, cellWidth: 0, cellHeight: 1 })
+      createReelLayout({
+        reelCount: 5,
+        visibleRows: 5,
+        cellWidth: 0,
+        cellHeight: 1,
+      }),
     ).toThrow(/cellWidth/);
     expect(() =>
       assertLayoutMatchesReels(
-        createReelLayout({ reelCount: 5, visibleRows: 5, cellWidth: 1, cellHeight: 1 }),
-        4
-      )
+        createReelLayout({
+          reelCount: 5,
+          visibleRows: 5,
+          cellWidth: 1,
+          cellHeight: 1,
+        }),
+        4,
+      ),
     ).toThrow(/does not match/);
   });
 });

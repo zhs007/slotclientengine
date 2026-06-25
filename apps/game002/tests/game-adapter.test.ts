@@ -298,8 +298,8 @@ class FakeRuntime {
           return {
             completed: false,
             spinning: true,
-            startedAxes: [0, 1, 2, 3, 4, 5],
-            stoppedAxes: [],
+            startedCells: [{ x: 0, y: 0, orderIndex: 0 }],
+            landedCells: [],
           };
         }
         this.currentScene = this.targetScene;
@@ -309,8 +309,8 @@ class FakeRuntime {
         return {
           completed: true,
           spinning: false,
-          startedAxes: [0, 1, 2, 3, 4, 5],
-          stoppedAxes: [0, 1, 2, 3, 4, 5],
+          startedCells: [{ x: 0, y: 0, orderIndex: 0 }],
+          landedCells: [{ x: 0, y: 0, orderIndex: 0 }],
         };
       },
       isSpinning: () => this.spinning,
@@ -332,6 +332,7 @@ class FakeRuntime {
             ["normal"],
           ],
           reelCount: 6,
+          gridCellCount: 54,
           layerX: 200,
           layerY: 330,
         };
