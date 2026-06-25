@@ -7,6 +7,7 @@ import export2xData from "../fixtures/2x.json";
 import export5xData from "../fixtures/5x.json";
 import bigwinData from "../fixtures/bigwin.json";
 import export2Runtime50Data from "../fixtures/export2-runtime-50.json";
+import lock01Data from "../fixtures/lock_01.json";
 import megawinData from "../fixtures/megawin.json";
 import multipayData from "../fixtures/multipay.json";
 import projectData from "../fixtures/project.json";
@@ -38,6 +39,7 @@ import {
   validateV5GProject,
 } from "../../src/core/validation";
 import { sampleProjectAtTime } from "../../src/core/project-sampler";
+import { sampleSafeGlowSpritesForLayer } from "../../src/core/safe-glow-sampler";
 import * as standalone from "../../standalone/anieditorv5runtime-cc";
 import type { SampledProjectState } from "../../src/core/project-sampler";
 import type {
@@ -62,6 +64,7 @@ const fixtures = [
   ["multipay", multipayData],
   ["3reel_multipay_01", threeReelMultipay01Data],
   ["3reel_multipay_02", threeReelMultipay02Data],
+  ["lock_01", lock01Data],
 ] as const;
 
 const sampleTimes = [0, 0.1, 0.6, 0.8, 1, 2, 4, 4.4];
@@ -155,6 +158,29 @@ describe("standalone runtime parity", () => {
     const project = assertV5GProject(bigwinData);
     expect(() => validateCocosV5GProject(project)).not.toThrow();
     expect(() => standalone.validateCocosV5GProject(project)).not.toThrow();
+  });
+
+  it("matches modular safe_glow sampler output", () => {
+    const project = assertV5GProject(lock01Data);
+    const singleProject = standalone.assertV5GProject(lock01Data);
+    const layer = project.layers.find((candidate) =>
+      candidate.animations.some((animation) => animation.type === "safe_glow"),
+    );
+    const singleLayer = singleProject.layers.find(
+      (candidate) => candidate.id === layer?.id,
+    );
+    if (!layer || !singleLayer) throw new Error("missing safe_glow layer");
+    const sampled = sampleProjectAtTime(project, 0.5).layers.find(
+      (candidate) => candidate.layerId === layer.id,
+    );
+    const singleSampled = standalone
+      .sampleProjectAtTime(singleProject, 0.5)
+      .layers.find((candidate) => candidate.layerId === layer.id);
+    if (!sampled || !singleSampled) throw new Error("missing sampled layer");
+
+    expect(
+      standalone.sampleSafeGlowSpritesForLayer(singleLayer, singleSampled, 0.5),
+    ).toEqual(sampleSafeGlowSpritesForLayer(layer, sampled, 0.5));
   });
 
   it("matches modular Cocos render effect fail-fast", () => {
@@ -395,6 +421,7 @@ function comparableSample(sample: SampledProjectState): SampledProjectState {
       visible: layer.visible,
       renderImageDisplay: layer.renderImageDisplay,
       hasActiveParticleAnimation: layer.hasActiveParticleAnimation,
+      hasActiveSafeGlowAnimation: layer.hasActiveSafeGlowAnimation,
       blendMode: layer.blendMode,
     })),
   };

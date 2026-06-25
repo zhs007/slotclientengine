@@ -2,6 +2,7 @@ export * from "./types.js";
 export * from "./coordinates.js";
 export * from "./layer-groups.js";
 export * from "./animation-sampler.js";
+export * from "./safe-glow-sampler.js";
 export * from "./particle-sampler.js";
 export * from "./particle-runtime.js";
 export * from "./playback-sequence.js";

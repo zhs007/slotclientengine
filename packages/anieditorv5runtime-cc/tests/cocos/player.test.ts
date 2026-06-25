@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import threeReelMultipay01Data from "../fixtures/3reel_multipay_01.json";
 import threeReelMultipay02Data from "../fixtures/3reel_multipay_02.json";
+import lock01Data from "../fixtures/lock_01.json";
 import projectData from "../fixtures/project.json";
 import { V5GCocosPlayer } from "../../src/cocos/player";
 import { assertV5GProject } from "../../src/core/validation";
@@ -366,6 +367,27 @@ function particleWallAnimation(
   };
 }
 
+function safeGlowAnimation(
+  overrides: Partial<V5GAnimationConfig> = {},
+): V5GAnimationConfig {
+  return {
+    id: "safe-glow",
+    type: "safe_glow",
+    startTime: 0,
+    duration: 1,
+    enabled: true,
+    seed: 11,
+    params: {
+      spread: 0.2,
+      minOpacity: 0.4,
+      maxOpacity: 0.8,
+      pulses: 1,
+      keepOriginal: false,
+    },
+    ...overrides,
+  };
+}
+
 function framesFor(project: V5GProjectConfig): Map<string, FakeSpriteFrame> {
   return new Map(
     project.assets.map((asset) => [
@@ -421,8 +443,12 @@ function getFirstLayerNode(root: FakeNode): FakeNode {
   return getFirstGroup(root).children[0];
 }
 
-function getFirstParticleContainer(root: FakeNode): FakeNode {
+function getFirstSafeGlowContainer(root: FakeNode): FakeNode {
   return getFirstGroup(root).children[1];
+}
+
+function getFirstParticleContainer(root: FakeNode): FakeNode {
+  return getFirstGroup(root).children[2];
 }
 
 describe("V5GCocosPlayer", () => {
@@ -446,6 +472,7 @@ describe("V5GCocosPlayer", () => {
     expect(getFirstGroup(root).children.map((node) => node.name)).toEqual(
       project.layers.flatMap((layer) => [
         layer.name,
+        `${layer.name} Safe Glow`,
         `${layer.name} Particles`,
       ]),
     );
@@ -463,10 +490,10 @@ describe("V5GCocosPlayer", () => {
     ]);
     expect(
       getContent(root).children[0].children.map((node) => node.name),
-    ).toEqual(["Layer 1", "Layer 1 Particles"]);
+    ).toEqual(["Layer 1", "Layer 1 Safe Glow", "Layer 1 Particles"]);
     expect(
       getContent(root).children[2].children.map((node) => node.name),
-    ).toEqual(["Layer 2", "Layer 2 Particles"]);
+    ).toEqual(["Layer 2", "Layer 2 Safe Glow", "Layer 2 Particles"]);
     expect(player.getLayerGroups().map((group) => group.id)).toEqual([
       "lower",
       "upper",
@@ -726,6 +753,59 @@ describe("V5GCocosPlayer", () => {
     expect(layerNode.anchorX).toBe(0.25);
     expect(layerNode.anchorY).toBe(0.75);
     expect(layerNode.blendMode).toEqual(getCocosBlendModeConfig("add"));
+  });
+
+  it("renders safe_glow nodes between the source image and particle container", () => {
+    const project = tinyProject({
+      animations: [safeGlowAnimation()],
+    });
+    const { root, frames, player } = makePlayer(project);
+    player.init();
+
+    const layerNode = getFirstLayerNode(root);
+    const safeGlowContainer = getFirstSafeGlowContainer(root);
+    const particleContainer = getFirstParticleContainer(root);
+    expect(getFirstGroup(root).children.map((node) => node.name)).toEqual([
+      "Layer 1",
+      "Layer 1 Safe Glow",
+      "Layer 1 Particles",
+    ]);
+    expect(safeGlowContainer.name).toBe("Layer 1 Safe Glow");
+    expect(particleContainer.name).toBe("Layer 1 Particles");
+    expect(layerNode.active).toBe(false);
+    expect(safeGlowContainer.children).toHaveLength(1);
+
+    const safeGlowNode = safeGlowContainer.children[0];
+    expect(safeGlowNode.name).toBe("V5G Safe Glow layer-1");
+    expect(safeGlowNode.active).toBe(true);
+    expect(safeGlowNode.spriteFrame).toBe(frames.get("asset-1"));
+    expect(safeGlowNode.blendMode).toEqual(getCocosBlendModeConfig("normal"));
+    expect(safeGlowNode.width).toBe(100);
+    expect(safeGlowNode.height).toBe(50);
+    expect(safeGlowNode.anchorX).toBe(0.25);
+    expect(safeGlowNode.anchorY).toBe(0.75);
+    expect(safeGlowNode.x).toBe(100);
+    expect(safeGlowNode.y).toBe(50);
+    expect(safeGlowNode.scaleX).toBe(-1.2);
+    expect(safeGlowNode.scaleY).toBe(2.4);
+    expect(safeGlowNode.rotation).toBeCloseTo(30, 3);
+    expect(safeGlowNode.opacity).toBe(51);
+
+    player.seek(1);
+    expect(safeGlowContainer.children).toHaveLength(0);
+    expect(safeGlowNode.destroyed).toBe(true);
+  });
+
+  it("initializes the lock_01 safe_glow export without creating layer slots", () => {
+    const project = assertV5GProject(lock01Data);
+    const { player } = makePlayer(project);
+
+    expect(project.schemaVersion).toBe("VNI_0.017");
+    expect(player.getLayerGroupSlots()).toEqual([]);
+    player.init();
+    expect(player.getLayerGroupSlots()).toEqual([]);
+    expect(player.getLayerGroups()).toHaveLength(1);
+    player.seek(0.5);
   });
 
   it("fails when an asset resolver cannot provide a SpriteFrame", () => {

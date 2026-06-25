@@ -9,6 +9,7 @@ import twoXData from "../fixtures/2x.json";
 import fiveXData from "../fixtures/5x.json";
 import bigwinData from "../fixtures/bigwin.json";
 import export2Runtime50Data from "../fixtures/export2-runtime-50.json";
+import lock01Data from "../fixtures/lock_01.json";
 import megawinData from "../fixtures/megawin.json";
 import multipayData from "../fixtures/multipay.json";
 import projectData from "../fixtures/project.json";
@@ -23,6 +24,7 @@ import {
   validateCocosV5GProject,
   validateV5GProject,
 } from "../../src/core/validation";
+import { getVNIProjectLayerGroupSlots } from "../../src/core/layer-groups";
 import type {
   V5GAnimationConfig,
   V5GAnimationType,
@@ -105,6 +107,29 @@ describe("validation", () => {
       expect(() => validateV5GProject(project)).not.toThrow();
       expect(() => validateCocosV5GProject(project)).not.toThrow();
     }
+  });
+
+  it("accepts the VNI_0.017 lock_01 safe_glow fixture for Cocos runtime", () => {
+    const project = assertV5GProject(structuredClone(lock01Data));
+    const animationTypes = new Set(
+      project.layers.flatMap((layer) =>
+        layer.animations.map((animation) => animation.type),
+      ),
+    );
+
+    expect(project.schemaVersion).toBe("VNI_0.017");
+    expect(project.name).toBe("lock_01");
+    expect(project.engineTarget).toEqual({
+      name: "cocos_creator",
+      version: "3.8.6",
+    });
+    expect(animationTypes.has("safe_glow")).toBe(true);
+    expect(animationTypes.has("idle")).toBe(true);
+    expect(animationTypes.has("particle_twinkle")).toBe(true);
+    expect(project.layerGroups).toHaveLength(1);
+    expect(getVNIProjectLayerGroupSlots(project)).toEqual([]);
+    expect(() => validateV5GProject(project)).not.toThrow();
+    expect(() => validateCocosV5GProject(project)).not.toThrow();
   });
 
   it("accepts render-effect exports generically but fails fast for Cocos runtime", () => {
@@ -244,6 +269,13 @@ describe("validation", () => {
           maxAlpha: 0.8,
           pulses: 2,
           blendMode: 0,
+          keepOriginal: true,
+        },
+        safe_glow: {
+          spread: 0.12,
+          minOpacity: 0.1,
+          maxOpacity: 0.8,
+          pulses: 2,
           keepOriginal: true,
         },
         squash_stretch: {
@@ -517,6 +549,31 @@ describe("validation", () => {
     shatterProject.layers[0].animations[0].params.fadeOut = "true";
     expect(() => validateV5GProject(shatterProject)).toThrow(
       'param "fadeOut" must be a boolean',
+    );
+  });
+
+  it("rejects malformed safe_glow params generically", () => {
+    const project = assertV5GProject(structuredClone(lock01Data));
+    const safeGlow = project.layers
+      .flatMap((layer) => layer.animations)
+      .find((animation) => animation.type === "safe_glow");
+    expect(safeGlow).toBeDefined();
+    if (!safeGlow) throw new Error("missing safe_glow fixture");
+
+    delete safeGlow.params.spread;
+    expect(() => validateV5GProject(project)).toThrow(
+      'requires numeric param "spread"',
+    );
+
+    const stringBoolean = assertV5GProject(structuredClone(lock01Data));
+    const stringKeepOriginal = stringBoolean.layers
+      .flatMap((layer) => layer.animations)
+      .find((animation) => animation.type === "safe_glow");
+    expect(stringKeepOriginal).toBeDefined();
+    if (!stringKeepOriginal) throw new Error("missing safe_glow fixture");
+    stringKeepOriginal.params.keepOriginal = "false";
+    expect(() => validateV5GProject(stringBoolean)).toThrow(
+      'param "keepOriginal" must be a boolean',
     );
   });
 

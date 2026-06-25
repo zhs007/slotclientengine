@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   easeProgress,
+  getDefaultEasing,
   sampleLayerAnimationsAtTime,
 } from "../../src/core/animation-sampler";
 import type {
@@ -257,6 +258,42 @@ describe("animation-sampler", () => {
 
     expect(sampled.opacity).toBe(0.2);
     expect(sampled.transform).toEqual(baseTransform);
+  });
+
+  it("samples safe_glow source opacity without changing transform", () => {
+    expect(getDefaultEasing("safe_glow")).toBe("linear");
+
+    const keepOriginal = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 0.8 },
+      [
+        animation("safe_glow", {
+          spread: 0.12,
+          minOpacity: 0.12,
+          maxOpacity: 0.65,
+          pulses: 2,
+          keepOriginal: true,
+        }),
+      ],
+      0,
+    );
+    expect(keepOriginal.opacity).toBe(0.8);
+    expect(keepOriginal.transform).toEqual(baseTransform);
+
+    const hideOriginal = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 0.8 },
+      [
+        animation("safe_glow", {
+          spread: 0.12,
+          minOpacity: 0.12,
+          maxOpacity: 0.65,
+          pulses: 2,
+          keepOriginal: false,
+        }),
+      ],
+      0.5,
+    );
+    expect(hideOriginal.opacity).toBe(0);
+    expect(hideOriginal.transform).toEqual(baseTransform);
   });
 
   it("keeps idle as a no-op coverage marker", () => {

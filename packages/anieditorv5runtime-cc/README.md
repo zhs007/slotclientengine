@@ -24,10 +24,12 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - `slide_in`、`slide_out`、`bounce_in`、`pulse`、`float`、`swing`
 - `scale_in`、`scale_out`、`pop`、`shake`、`blink`
 - `idle`：作为 timeline coverage marker，不改变 transform 或 opacity
+- `safe_glow`：使用当前图层同一张 `SpriteFrame` 创建 normal blend 副本，通过缩放和透明度呼吸模拟高亮，不需要 shader、Effect、滤镜、模糊或特殊 blend mode
 - `particle_wall`、`particle_combo`、`squash_stretch`
 - 图层动画 `particles`、`particle_twinkle`、`particle_wall`、`particle_combo`：复用当前图层的 `SpriteFrame` 创建粒子 Sprite；真实粒子节点挂在对应图层后面的 `<layer name> Particles` 容器下，全局 `V5G Particles` 节点只保留为空占位
 - 粒子参数仍按 VNI/Pixi 导出语义解释：`direction: 270` 表示向上，`gravity` 正数表示向下；Cocos 渲染时会把粒子 Y offset 转成 Cocos UI 坐标系，避免上下方向反转
 - `particle_combo.params.sourceOpacity` 只影响源图像显示，不会把同层粒子透明度一起清零；粒子透明度使用图层原始 `opacity`
+- `safe_glow.params.keepOriginal=false` 只隐藏源图像节点；safe glow 副本仍会在 `<layer name> Safe Glow` 容器中渲染
 - 粒子动画在 `progress <= 0` 时不发射粒子；接近 0 缩放的入场首帧会保持隐藏，避免首帧漏图
 - 由宿主 Cocos Component 在 `update(deltaTime)` 中显式驱动播放
 
@@ -52,16 +54,18 @@ V5G Stage
   V5G Content
     V5G Group <lower group id>
       <layer image node>
+      <layer safe glow container>
       <layer particles node>
     V5G Slot <lower group id> -> <upper group id>
       <mounted external nodes>
     V5G Group <upper group id>
       <layer image node>
+      <layer safe glow container>
       <layer particles node>
   V5G Particles
 ```
 
-`V5G Particles` 仍保留为空占位；真实 layer particle 节点挂在对应 group 内的 `<layer name> Particles` 容器。group container 和 slot container 都使用 stage center 坐标体系，外部 `Node` 挂接时不会被 runtime 重置 transform。
+`V5G Particles` 仍保留为空占位；真实 layer particle 节点挂在对应 group 内的 `<layer name> Particles` 容器。`safe_glow` 副本节点挂在同一图层的 `<layer name> Safe Glow` 容器中，位于源图像节点之后、粒子容器之前。group container 和 slot container 都使用 stage center 坐标体系，外部 `Node` 挂接时不会被 runtime 重置 transform。
 
 查询合法 slot 并插入宿主节点：
 
@@ -149,6 +153,7 @@ docs/anieditor5/export/project.json
 docs/anieditor5/export/bigwin.json
 docs/anieditor5/export/megawin.json
 docs/anieditor5/export/superwin.json
+docs/anieditor5/export/lock_01.json
 docs/anieditor5/export/assets/*
 ```
 
@@ -342,7 +347,7 @@ standalone/anieditorv5runtime-cc.ts
 standalone/V5GPreview.example.ts
 ```
 
-宿主不需要绑定额外 Material / Effect。若运行环境里的 Sprite 不暴露 blend factor、material instance、pass blend target 或 pass hash 刷新能力，runtime 会直接抛出包含节点名和 blend mode 的错误；这类错误需要回到 Cocos 版本/API 兼容性排查，不能用 normal fallback 掩盖。
+宿主不需要为 `safe_glow` 或其它当前支持能力绑定额外 Material / Effect；`safe_glow` 固定使用同图 `SpriteFrame` 副本、normal blend、scale 和 opacity。若运行环境里的 Sprite 不暴露 blend factor、material instance、pass blend target 或 pass hash 刷新能力，runtime 会直接抛出包含节点名和 blend mode 的错误；这类错误需要回到 Cocos 版本/API 兼容性排查，不能用 normal fallback 掩盖。
 
 ## `cc` 类型 shim
 

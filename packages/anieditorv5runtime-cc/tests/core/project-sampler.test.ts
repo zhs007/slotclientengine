@@ -153,6 +153,58 @@ describe("project-sampler", () => {
     expect(sampled.hasActiveParticleAnimation).toBe(true);
   });
 
+  it("hides safe_glow source image while keeping the layer visible for glow sprites", () => {
+    const sampled = sampleLayerAtTime(
+      layer({}, [
+        {
+          id: "safe-glow",
+          type: "safe_glow",
+          startTime: 0,
+          duration: 1,
+          enabled: true,
+          seed: 1,
+          params: {
+            spread: 0.12,
+            minOpacity: 0.12,
+            maxOpacity: 0.65,
+            pulses: 2,
+            keepOriginal: false,
+          },
+        },
+      ]),
+      0,
+    );
+    const inactiveEnd = sampleLayerAtTime(
+      layer({}, [
+        {
+          id: "safe-glow",
+          type: "safe_glow",
+          startTime: 0,
+          duration: 1,
+          enabled: true,
+          seed: 1,
+          params: {
+            spread: 0.12,
+            minOpacity: 0.12,
+            maxOpacity: 0.65,
+            pulses: 2,
+            keepOriginal: false,
+          },
+        },
+      ]),
+      1,
+    );
+
+    expect(sampled.baseOpacity).toBe(1);
+    expect(sampled.opacity).toBe(0);
+    expect(sampled.visible).toBe(true);
+    expect(sampled.renderImageDisplay).toBe(false);
+    expect(sampled.hasActiveSafeGlowAnimation).toBe(true);
+    expect(inactiveEnd.visible).toBe(false);
+    expect(inactiveEnd.renderImageDisplay).toBe(false);
+    expect(inactiveEnd.hasActiveSafeGlowAnimation).toBe(false);
+  });
+
   it("suppresses near-zero scale entry on the first frame", () => {
     const sampled = sampleLayerAtTime(
       layer({}, [
