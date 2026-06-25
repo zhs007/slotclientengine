@@ -4,7 +4,7 @@
 
 ## 运行结构
 
-生产入口由 `createSlotGameFramework()` 创建通用 slot shell、HUD、live 连接、enter game、spin、`GameLogic` 转换、余额/下注/win 状态和最终 `collect()`。`game002` 提供 `SlotGameAdapter`，只负责把 Pixi canvas 挂到 `context.gameLayer`、加载 game002 资源、应用 live `defaultScene`、读取 `GameLogic` 主 scene，并驱动 `6 x 9` reels 展示。
+生产入口由 `createSlotGameFramework()` 创建通用 slot shell、HUD、live 连接、enter game、spin、`GameLogic` 转换、余额/下注/win 状态和最终 `collect()`。`game002` 提供 `SlotGameAdapter`，只负责把 Pixi canvas 挂到 `context.gameLayer`、加载 game002 资源、应用 live `defaultScene`、读取 `GameLogic` 主 scene，并配置 `@slotclientengine/rendercore` 的 `54` 个 grid cell reels 展示。
 
 `game002` 不直接创建 live client，不直接调用 `collect()`，也不直接依赖底层 live、UI 或 logic 包。需要读取 game config、reels 或 stop y 时，从 `@slotclientengine/gameframeworks` facade 导入 `createGameConfig`、`LogicGameConfig`、`SceneMatrix` 等 API / type。
 
@@ -40,6 +40,8 @@ Pixi canvas 位于 `.slot-ui-game-layer` 内，backing size 固定为 `1125 x 20
 - reels：`reels-001`
 - symbol：`500 x 500` 原图按 `40%` 缩放显示，并以 cell 中心定位
 
+每个棋盘格都有 `120 x 120` 的永久裁切矩形，格子内是独立 `visibleRows=1` 的垂直微型 reel。深浅交替的暗度 strip 挂在每个转动微型 reel 内部，随 reel 滚动经过裁切窗口，所以每个格子在旋转中会快速明暗变化。格子启动和停止顺序固定为从上到下、从左到右：`x=0,y=0..8`，然后 `x=1,y=0..8`，直到 `x=5,y=8`。
+
 如果 live `defaultScene` 存在，初始化显示该 scene；如果不存在，第一次 live spin 结算前 reels 层保持 hidden，不用本地数据顶替。
 
 ## Live 配置
@@ -69,14 +71,27 @@ Pixi canvas 位于 `.slot-ui-game-layer` 内，backing size 固定为 `1125 x 20
 点击 framework HUD Spin
   -> gameframeworks live spin
   -> gameframeworks 创建 GameLogic
-  -> game002 adapter.playSpin(logic) 播放 6x9 reels
-  -> reels 展示完成并校验目标 scene
+  -> game002 adapter.playSpin(logic) 播放 54 个 grid cell reels
+  -> 最后一个格子 landed、目标 symbol 保持 normal、暗度淡出归零
+  -> 校验最终可见 scene 等于目标 scene
   -> adapter.playSpin resolve
   -> gameframeworks optional collect
   -> HUD 回 idle
 ```
 
 `adapter.playSpin(logic)` 的 Promise resolve 是 framework 执行 optional `collect()` 的边界。adapter reject 时，framework 进入 error，且本局不会结算最终 `collect()`。
+
+默认 grid-cell 表现参数：
+
+- order：`top-down-left-right`
+- start/stop step：`16ms / 16ms`
+- settle after last start：`180ms`
+- minimum spin cycles：`6`
+- speed：`54` symbols/s
+- dimming：偶数 order index `alpha=0.50`，奇数 order index `alpha=0.35`
+- dim fade：`80ms` 淡入，`160ms` 淡出
+
+旋转中非空 symbol 请求 `spinBlur` 状态；格子落点后直接复位到目标 symbol 的 `normal` 状态，不播放 `appear`，只等待随轮滚动的暗度 strip 淡出后允许本局 spin resolve。
 
 ## 金额显示
 
@@ -107,6 +122,7 @@ pnpm install
 - `symbols002` manifest 缺少普通图、`spinBlur`、`disabled` 或出现未知 state。
 - 主 scene 不是完整 `6 x 9`。
 - 目标 scene 在 `reels-001` 找不到 stop y。
+- grid cell order、timing 或 dimming 参数非法。
 - spin 完成后可见 scene 不等于目标 scene。
 - 断线、鉴权失败、服务端错误消息、logger warn/error 或最终 `collect()` 失败。
 

@@ -1,11 +1,14 @@
-import type { GameConfigPaytableEntry, LogicGameConfig } from "@slotclientengine/logiccore";
+import type {
+  GameConfigPaytableEntry,
+  LogicGameConfig,
+} from "@slotclientengine/logiccore";
 import type { Texture } from "pixi.js";
 import { RenderSymbol } from "../symbol/render-symbol.js";
 import {
   createDefaultSymbolAnimationResolver,
   createDefaultSymbolStatePreset,
   createSymbolDefinitionFromPreset,
-  validateSymbolStatePreset
+  validateSymbolStatePreset,
 } from "../symbol/index.js";
 import type {
   SymbolAnimationResolver,
@@ -14,7 +17,7 @@ import type {
   SymbolLayerTextureSource,
   SymbolNormalTextureSource,
   SymbolStateId,
-  SymbolTextureSet
+  SymbolTextureSet,
 } from "../symbol/index.js";
 import { ReelAssetError } from "./errors.js";
 import type {
@@ -22,7 +25,7 @@ import type {
   ReelSymbolRegistry,
   ReelSymbolRegistryEntry,
   ReelSymbolRegistryOptions,
-  ReelSymbolRegistryValidation
+  ReelSymbolRegistryValidation,
 } from "./types.js";
 
 interface NormalizedTextureSet {
@@ -46,13 +49,19 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
     const validatedPreset = validateSymbolStatePreset(statePreset);
     const requiredStateTextures = normalizeRequiredStateTextures(
       options.texturePolicy?.requiredStateTextures ?? [],
-      validatedPreset.statesById
+      validatedPreset.statesById,
     );
-    const animationResolver = options.animationResolver ?? createDefaultSymbolAnimationResolver();
+    const animationResolver =
+      options.animationResolver ?? createDefaultSymbolAnimationResolver();
     const configuredEmptySymbolSet = new Set(options.emptySymbols ?? []);
     const paytableEntries = extractPaytableEntries(options.gameConfig);
-    const paytableSymbolSet = new Set(paytableEntries.map((entry) => entry.symbol));
-    const symbolScales = normalizeSymbolScales(options.symbolScales, paytableSymbolSet);
+    const paytableSymbolSet = new Set(
+      paytableEntries.map((entry) => entry.symbol),
+    );
+    const symbolScales = normalizeSymbolScales(
+      options.symbolScales,
+      paytableSymbolSet,
+    );
     const assetSymbols = Object.keys(options.assets).sort();
     const assetSymbolSet = new Set(assetSymbols);
 
@@ -66,7 +75,9 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
 
     for (const emptySymbol of configuredEmptySymbolSet) {
       if (!paytableSymbolSet.has(emptySymbol)) {
-        throw new ReelAssetError(`Configured empty symbol "${emptySymbol}" does not exist in paytable.`);
+        throw new ReelAssetError(
+          `Configured empty symbol "${emptySymbol}" does not exist in paytable.`,
+        );
       }
     }
 
@@ -88,9 +99,13 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
       const textureSet = normalizeTextureSet(
         entry.symbol,
         options.assets[entry.symbol],
-        symbolScales.get(entry.symbol) ?? 1
+        symbolScales.get(entry.symbol) ?? 1,
       );
-      assertRequiredStateTextures(entry.symbol, textureSet, requiredStateTextures);
+      assertRequiredStateTextures(
+        entry.symbol,
+        textureSet,
+        requiredStateTextures,
+      );
       this.addEntry(entriesByCode, entriesBySymbol, entry, "textured");
       definitionsByCode.set(
         entry.code,
@@ -98,18 +113,22 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
           code: entry.code,
           symbol: entry.symbol,
           pays: entry.pays,
-          preset: statePreset
-        })
+          preset: statePreset,
+        }),
       );
       textureSetsByCode.set(entry.code, textureSet);
       texturedSymbols.push(entry.symbol);
     }
 
     if (texturedSymbols.length === 0) {
-      throw new ReelAssetError("Reel symbol registry requires at least one textured symbol.");
+      throw new ReelAssetError(
+        "Reel symbol registry requires at least one textured symbol.",
+      );
     }
 
-    const ignoredAssetsWithoutPaytable = assetSymbols.filter((symbol) => !paytableSymbolSet.has(symbol));
+    const ignoredAssetsWithoutPaytable = assetSymbols.filter(
+      (symbol) => !paytableSymbolSet.has(symbol),
+    );
     this.#entriesByCode = entriesByCode;
     this.#entriesBySymbol = entriesBySymbol;
     this.#definitionsByCode = definitionsByCode;
@@ -120,28 +139,38 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
     this.#validation = Object.freeze({
       texturedSymbols: Object.freeze(texturedSymbols),
       configuredEmptySymbols: Object.freeze([...configuredEmptySymbolSet]),
-      configuredEmptySymbolsWithAssets: Object.freeze(configuredEmptySymbolsWithAssets),
+      configuredEmptySymbolsWithAssets: Object.freeze(
+        configuredEmptySymbolsWithAssets,
+      ),
       missingAssetEmptySymbols: Object.freeze(missingAssetEmptySymbols),
-      ignoredAssetsWithoutPaytable: Object.freeze(ignoredAssetsWithoutPaytable)
+      ignoredAssetsWithoutPaytable: Object.freeze(ignoredAssetsWithoutPaytable),
     });
   }
 
   getValidation(): ReelSymbolRegistryValidation {
     return Object.freeze({
       texturedSymbols: Object.freeze([...this.#validation.texturedSymbols]),
-      configuredEmptySymbols: Object.freeze([...this.#validation.configuredEmptySymbols]),
-      configuredEmptySymbolsWithAssets: Object.freeze([
-        ...this.#validation.configuredEmptySymbolsWithAssets
+      configuredEmptySymbols: Object.freeze([
+        ...this.#validation.configuredEmptySymbols,
       ]),
-      missingAssetEmptySymbols: Object.freeze([...this.#validation.missingAssetEmptySymbols]),
-      ignoredAssetsWithoutPaytable: Object.freeze([...this.#validation.ignoredAssetsWithoutPaytable])
+      configuredEmptySymbolsWithAssets: Object.freeze([
+        ...this.#validation.configuredEmptySymbolsWithAssets,
+      ]),
+      missingAssetEmptySymbols: Object.freeze([
+        ...this.#validation.missingAssetEmptySymbols,
+      ]),
+      ignoredAssetsWithoutPaytable: Object.freeze([
+        ...this.#validation.ignoredAssetsWithoutPaytable,
+      ]),
     });
   }
 
   getEntryByCode(code: number): ReelSymbolRegistryEntry {
     const entry = this.#entriesByCode.get(code);
     if (!entry) {
-      throw new ReelAssetError(`Symbol code ${code} does not exist in reel registry.`);
+      throw new ReelAssetError(
+        `Symbol code ${code} does not exist in reel registry.`,
+      );
     }
     return entry;
   }
@@ -149,7 +178,9 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
   getEntryBySymbol(symbol: string): ReelSymbolRegistryEntry {
     const entry = this.#entriesBySymbol.get(symbol);
     if (!entry) {
-      throw new ReelAssetError(`Symbol "${symbol}" does not exist in reel registry.`);
+      throw new ReelAssetError(
+        `Symbol "${symbol}" does not exist in reel registry.`,
+      );
     }
     return entry;
   }
@@ -167,7 +198,9 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
     const definition = this.#definitionsByCode.get(code);
     const textureSet = this.#textureSetsByCode.get(code);
     if (!definition || !textureSet) {
-      throw new ReelAssetError(`Textured symbol code ${code} is missing render assets.`);
+      throw new ReelAssetError(
+        `Textured symbol code ${code} is missing render assets.`,
+      );
     }
 
     const renderSymbol = new RenderSymbol({
@@ -175,7 +208,7 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
       texture: textureSet.normal,
       stateTextures: textureSet.states,
       requiredStateTextures: this.#requiredStateTextures,
-      animationResolver: this.#animationResolver
+      animationResolver: this.#animationResolver,
     });
     renderSymbol.scale.set(textureSet.scale);
     return renderSymbol;
@@ -185,12 +218,12 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
     entriesByCode: Map<number, ReelSymbolRegistryEntry>,
     entriesBySymbol: Map<string, ReelSymbolRegistryEntry>,
     entry: GameConfigPaytableEntry,
-    kind: ReelSymbolRegistryEntry["kind"]
+    kind: ReelSymbolRegistryEntry["kind"],
   ): void {
     const registryEntry = Object.freeze({
       code: entry.code,
       symbol: entry.symbol,
-      kind
+      kind,
     });
     entriesByCode.set(entry.code, registryEntry);
     entriesBySymbol.set(entry.symbol, registryEntry);
@@ -198,7 +231,7 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
 }
 
 export function createReelSymbolRegistry(
-  options: ReelSymbolRegistryOptions
+  options: ReelSymbolRegistryOptions,
 ): ReelSymbolRegistryModel {
   return new ReelSymbolRegistryModel(options);
 }
@@ -206,36 +239,38 @@ export function createReelSymbolRegistry(
 function normalizeTextureSet(
   symbol: string,
   asset: SymbolAssetMap[string],
-  scale: number
+  scale: number,
 ): NormalizedTextureSet {
   if (asset === undefined || asset === null) {
-    throw new ReelAssetError(`Symbol "${symbol}" asset must include a normal texture.`);
+    throw new ReelAssetError(
+      `Symbol "${symbol}" asset must include a normal texture.`,
+    );
   }
 
   if (isSymbolTextureSet(asset)) {
     return Object.freeze({
       normal: normalizeNormalTextureSource(symbol, asset.normal),
       states: normalizeTextureStates(symbol, asset.states ?? {}),
-      scale
+      scale,
     });
   }
 
   return Object.freeze({
     normal: normalizeNormalTextureSource(symbol, asset),
     states: Object.freeze({}),
-    scale
+    scale,
   });
 }
 
 function normalizeNormalTextureSource(
   symbol: string,
-  normal: Texture | string | SymbolNormalTextureSource<Texture | string>
+  normal: Texture | string | SymbolNormalTextureSource<Texture | string>,
 ): SymbolNormalTextureSource<Texture> {
   if (isSymbolNormalTextureSource(normal)) {
     if (normal.kind === "single") {
       return Object.freeze({
         kind: "single",
-        texture: assertLoadedTexture(symbol, "normal", normal.texture)
+        texture: assertLoadedTexture(symbol, "normal", normal.texture),
       });
     }
     return normalizeLayeredTextureSource(symbol, normal.layers);
@@ -243,16 +278,18 @@ function normalizeNormalTextureSource(
 
   return Object.freeze({
     kind: "single",
-    texture: assertLoadedTexture(symbol, "normal", normal)
+    texture: assertLoadedTexture(symbol, "normal", normal),
   });
 }
 
 function normalizeLayeredTextureSource(
   symbol: string,
-  layers: readonly SymbolLayerTextureSource<Texture | string>[]
+  layers: readonly SymbolLayerTextureSource<Texture | string>[],
 ): SymbolNormalTextureSource<Texture> {
   if (!Array.isArray(layers) || layers.length === 0) {
-    throw new ReelAssetError(`Symbol "${symbol}" layered normal texture must include layers.`);
+    throw new ReelAssetError(
+      `Symbol "${symbol}" layered normal texture must include layers.`,
+    );
   }
 
   const seen = new Set<number>();
@@ -262,95 +299,124 @@ function normalizeLayeredTextureSource(
     .sort((left, right) => left.index - right.index)
     .map((layer, expectedIndex) => {
       if (!Number.isInteger(layer.index) || layer.index < 0) {
-        throw new ReelAssetError(`Symbol "${symbol}" layer index must be a non-negative integer.`);
+        throw new ReelAssetError(
+          `Symbol "${symbol}" layer index must be a non-negative integer.`,
+        );
       }
       if (seen.has(layer.index)) {
-        throw new ReelAssetError(`Symbol "${symbol}" declares duplicate layer index ${layer.index}.`);
+        throw new ReelAssetError(
+          `Symbol "${symbol}" declares duplicate layer index ${layer.index}.`,
+        );
       }
       seen.add(layer.index);
       if (layer.index !== expectedIndex) {
         throw new ReelAssetError(
-          `Symbol "${symbol}" layered normal texture must use consecutive indexes from 0.`
+          `Symbol "${symbol}" layered normal texture must use consecutive indexes from 0.`,
         );
       }
-      const texture = assertLoadedTexture(symbol, `layer ${layer.index}`, layer.texture);
+      const texture = assertLoadedTexture(
+        symbol,
+        `layer ${layer.index}`,
+        layer.texture,
+      );
       const layerWidth = getTextureWidth(texture);
       const layerHeight = getTextureHeight(texture);
       width ??= layerWidth;
       height ??= layerHeight;
       if (width !== layerWidth || height !== layerHeight) {
-        throw new ReelAssetError(`Symbol "${symbol}" layered textures must have identical dimensions.`);
+        throw new ReelAssetError(
+          `Symbol "${symbol}" layered textures must have identical dimensions.`,
+        );
       }
       const keyframes = normalizeLayerKeyframes(symbol, layer, texture);
       return Object.freeze({
         index: layer.index,
         texture,
-        keyframes
+        keyframes,
       });
     });
 
   return Object.freeze({
     kind: "layered",
-    layers: Object.freeze(normalizedLayers)
+    layers: Object.freeze(normalizedLayers),
   });
 }
 
 function normalizeLayerKeyframes(
   symbol: string,
   layer: SymbolLayerTextureSource<Texture | string>,
-  texture: Texture
+  texture: Texture,
 ): readonly Texture[] {
   if (layer.keyframes === undefined) {
     return Object.freeze([]);
   }
   if (!Array.isArray(layer.keyframes) || layer.keyframes.length === 0) {
-    throw new ReelAssetError(`Symbol "${symbol}" layer ${layer.index} keyframes must be a non-empty array.`);
+    throw new ReelAssetError(
+      `Symbol "${symbol}" layer ${layer.index} keyframes must be a non-empty array.`,
+    );
   }
   const width = getTextureWidth(texture);
   const height = getTextureHeight(texture);
   const keyframes = layer.keyframes.map((keyframe, keyframeIndex) => {
-    const loadedKeyframe = assertLoadedTexture(symbol, `layer ${layer.index} keyframe ${keyframeIndex}`, keyframe);
-    if (getTextureWidth(loadedKeyframe) !== width || getTextureHeight(loadedKeyframe) !== height) {
+    const loadedKeyframe = assertLoadedTexture(
+      symbol,
+      `layer ${layer.index} keyframe ${keyframeIndex}`,
+      keyframe,
+    );
+    if (
+      getTextureWidth(loadedKeyframe) !== width ||
+      getTextureHeight(loadedKeyframe) !== height
+    ) {
       throw new ReelAssetError(
-        `Symbol "${symbol}" layer ${layer.index} keyframe textures must match the layer texture dimensions.`
+        `Symbol "${symbol}" layer ${layer.index} keyframe textures must match the layer texture dimensions.`,
       );
     }
     return loadedKeyframe;
   });
   if (keyframes[0] !== texture) {
-    throw new ReelAssetError(`Symbol "${symbol}" layer ${layer.index} keyframes must start with the layer texture.`);
+    throw new ReelAssetError(
+      `Symbol "${symbol}" layer ${layer.index} keyframes must start with the layer texture.`,
+    );
   }
   return Object.freeze(keyframes);
 }
 
 function normalizeTextureStates(
   symbol: string,
-  states: Readonly<Partial<Record<string, Texture | string>>>
+  states: Readonly<Partial<Record<string, Texture | string>>>,
 ): Readonly<Partial<Record<SymbolStateId, Texture>>> {
   const normalized: Partial<Record<SymbolStateId, Texture>> = {};
   for (const [state, texture] of Object.entries(states)) {
     if (texture === undefined) {
-      throw new ReelAssetError(`Symbol "${symbol}" texture for state "${state}" must exist.`);
+      throw new ReelAssetError(
+        `Symbol "${symbol}" texture for state "${state}" must exist.`,
+      );
     }
     normalized[state] = assertLoadedTexture(symbol, state, texture);
   }
   return Object.freeze(normalized);
 }
 
-function assertLoadedTexture(symbol: string, state: string, texture: Texture | string): Texture {
+function assertLoadedTexture(
+  symbol: string,
+  state: string,
+  texture: Texture | string,
+): Texture {
   if (typeof texture === "string") {
     throw new ReelAssetError(
-      `Symbol "${symbol}" texture for state "${state}" is a URL string; pass a loaded Texture.`
+      `Symbol "${symbol}" texture for state "${state}" is a URL string; pass a loaded Texture.`,
     );
   }
   if (!texture || typeof texture !== "object") {
-    throw new ReelAssetError(`Symbol "${symbol}" texture for state "${state}" must exist.`);
+    throw new ReelAssetError(
+      `Symbol "${symbol}" texture for state "${state}" must exist.`,
+    );
   }
   const width = getTextureWidth(texture);
   const height = getTextureHeight(texture);
   if (width <= 0 || height <= 0) {
     throw new ReelAssetError(
-      `Symbol "${symbol}" texture for state "${state}" must have positive dimensions.`
+      `Symbol "${symbol}" texture for state "${state}" must have positive dimensions.`,
     );
   }
   return texture;
@@ -359,16 +425,20 @@ function assertLoadedTexture(symbol: string, state: string, texture: Texture | s
 function assertRequiredStateTextures(
   symbol: string,
   textureSet: NormalizedTextureSet,
-  requiredStateTextures: readonly SymbolStateId[]
+  requiredStateTextures: readonly SymbolStateId[],
 ): void {
   for (const state of requiredStateTextures) {
     if (!textureSet.states?.[state]) {
-      throw new ReelAssetError(`Symbol "${symbol}" is missing required texture for state "${state}".`);
+      throw new ReelAssetError(
+        `Symbol "${symbol}" is missing required texture for state "${state}".`,
+      );
     }
   }
 }
 
-function calculateCellSize(textureSets: readonly NormalizedTextureSet[]): ReelCellSize {
+function calculateCellSize(
+  textureSets: readonly NormalizedTextureSet[],
+): ReelCellSize {
   let width = 0;
   let height = 0;
   for (const textureSet of textureSets) {
@@ -378,51 +448,68 @@ function calculateCellSize(textureSets: readonly NormalizedTextureSet[]): ReelCe
   }
 
   if (width <= 0 || height <= 0) {
-    throw new ReelAssetError("Reel symbol registry cannot calculate cell size without textures.");
+    throw new ReelAssetError(
+      "Reel symbol registry cannot calculate cell size without textures.",
+    );
   }
 
   return Object.freeze({ width, height });
 }
 
-function getNormalTextureSize(normal: SymbolNormalTextureSource<Texture>): ReelCellSize {
-  const texture = normal.kind === "single" ? normal.texture : normal.layers[0].texture;
+function getNormalTextureSize(
+  normal: SymbolNormalTextureSource<Texture>,
+): ReelCellSize {
+  const texture =
+    normal.kind === "single" ? normal.texture : normal.layers[0].texture;
   return Object.freeze({
     width: getTextureWidth(texture),
-    height: getTextureHeight(texture)
+    height: getTextureHeight(texture),
   });
 }
 
 function getTextureWidth(texture: Texture): number {
-  return Math.max(0, texture.width || texture.source?.width || texture.orig?.width || 0);
+  return Math.max(
+    0,
+    texture.width || texture.source?.width || texture.orig?.width || 0,
+  );
 }
 
 function getTextureHeight(texture: Texture): number {
-  return Math.max(0, texture.height || texture.source?.height || texture.orig?.height || 0);
+  return Math.max(
+    0,
+    texture.height || texture.source?.height || texture.orig?.height || 0,
+  );
 }
 
 function normalizeSymbolScales(
   symbolScales: Readonly<Record<string, number>> | undefined,
-  paytableSymbolSet: ReadonlySet<string>
+  paytableSymbolSet: ReadonlySet<string>,
 ): ReadonlyMap<string, number> {
   const normalized = new Map<string, number>();
   for (const [symbol, scale] of Object.entries(symbolScales ?? {})) {
     if (!paytableSymbolSet.has(symbol)) {
-      throw new ReelAssetError(`Symbol scale for "${symbol}" does not exist in paytable.`);
+      throw new ReelAssetError(
+        `Symbol scale for "${symbol}" does not exist in paytable.`,
+      );
     }
     if (!Number.isFinite(scale) || scale <= 0) {
-      throw new ReelAssetError(`Symbol "${symbol}" scale must be a positive number.`);
+      throw new ReelAssetError(
+        `Symbol "${symbol}" scale must be a positive number.`,
+      );
     }
     normalized.set(symbol, scale);
   }
   return normalized;
 }
 
-function isSymbolTextureSet(asset: SymbolAssetMap[string]): asset is SymbolTextureSet<Texture | string> {
+function isSymbolTextureSet(
+  asset: SymbolAssetMap[string],
+): asset is SymbolTextureSet<Texture | string> {
   return typeof asset === "object" && asset !== null && "normal" in asset;
 }
 
 function isSymbolNormalTextureSource(
-  normal: Texture | string | SymbolNormalTextureSource<Texture | string>
+  normal: Texture | string | SymbolNormalTextureSource<Texture | string>,
 ): normal is SymbolNormalTextureSource<Texture | string> {
   return (
     typeof normal === "object" &&
@@ -434,12 +521,14 @@ function isSymbolNormalTextureSource(
 
 function normalizeRequiredStateTextures(
   requiredStateTextures: readonly SymbolStateId[],
-  statesById: ReadonlyMap<SymbolStateId, unknown>
+  statesById: ReadonlyMap<SymbolStateId, unknown>,
 ): readonly SymbolStateId[] {
   const unique: SymbolStateId[] = [];
   for (const state of requiredStateTextures) {
     if (!statesById.has(state)) {
-      throw new ReelAssetError(`Required texture state "${state}" does not exist in state preset.`);
+      throw new ReelAssetError(
+        `Required texture state "${state}" does not exist in state preset.`,
+      );
     }
     if (!unique.includes(state)) {
       unique.push(state);
@@ -448,10 +537,15 @@ function normalizeRequiredStateTextures(
   return Object.freeze(unique);
 }
 
-function extractPaytableEntries(gameConfig: LogicGameConfig): readonly GameConfigPaytableEntry[] {
+function extractPaytableEntries(
+  gameConfig: LogicGameConfig,
+): readonly GameConfigPaytableEntry[] {
   const rawConfig = gameConfig.getRawConfig();
   const rawConfigRecord = assertRecord(rawConfig, "gameConfig");
-  const paytableRecord = assertRecord(rawConfigRecord.paytable, "gameConfig.paytable");
+  const paytableRecord = assertRecord(
+    rawConfigRecord.paytable,
+    "gameConfig.paytable",
+  );
 
   return Object.freeze(
     Object.keys(paytableRecord)
@@ -460,14 +554,16 @@ function extractPaytableEntries(gameConfig: LogicGameConfig): readonly GameConfi
       .map((code) => {
         const entry = gameConfig.getPaytableEntry(code);
         if (!entry) {
-          throw new ReelAssetError(`Paytable entry code ${code} was not accepted by gameConfig.`);
+          throw new ReelAssetError(
+            `Paytable entry code ${code} was not accepted by gameConfig.`,
+          );
         }
         return Object.freeze({
           code: entry.code,
           symbol: entry.symbol,
-          pays: Object.freeze([...entry.pays])
+          pays: Object.freeze([...entry.pays]),
         });
-      })
+      }),
   );
 }
 

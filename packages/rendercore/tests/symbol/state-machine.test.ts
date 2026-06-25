@@ -4,16 +4,21 @@ import {
   createSymbolDefinitionFromPreset,
   MIN_SYMBOL_FRAME_DURATION_SECONDS,
   SymbolStateError,
-  SymbolStateMachine
+  SymbolStateMachine,
 } from "../../src/symbol/index.js";
-import type { SymbolDefinition, SymbolStatePreset } from "../../src/symbol/index.js";
+import type {
+  SymbolDefinition,
+  SymbolStatePreset,
+} from "../../src/symbol/index.js";
 
-const createDefinition = (overrides: Partial<SymbolDefinition> = {}): SymbolDefinition => ({
+const createDefinition = (
+  overrides: Partial<SymbolDefinition> = {},
+): SymbolDefinition => ({
   code: 1,
   symbol: "S00",
   pays: [0, 1, 2],
   ...createDefaultSymbolStatePreset(),
-  ...overrides
+  ...overrides,
 });
 
 describe("SymbolStateMachine validation", () => {
@@ -25,51 +30,43 @@ describe("SymbolStateMachine validation", () => {
       resolvedState: "normal",
       defaultState: "normal",
       pendingState: null,
-      isOnce: false
+      isOnce: false,
     });
 
     machine.requestState("spinBlur");
     expect(machine.getSnapshot()).toMatchObject({
       requestedState: "spinBlur",
-      resolvedState: "normal"
+      resolvedState: "normal",
     });
 
     machine.requestState("disabled");
     expect(machine.getSnapshot()).toMatchObject({
       requestedState: "disabled",
-      resolvedState: "normal"
+      resolvedState: "normal",
     });
   });
 
   it.each([
-    [
-      "missing default",
-      { defaultState: "missing" },
-      "does not exist"
-    ],
-    [
-      "once default",
-      { defaultState: "appear" },
-      "must be stable"
-    ],
+    ["missing default", { defaultState: "missing" }, "does not exist"],
+    ["once default", { defaultState: "appear" }, "must be stable"],
     [
       "duplicate state",
       {
         states: [
           ...createDefaultSymbolStatePreset().states,
-          { id: "normal", phase: "stable", playback: "static" }
-        ]
+          { id: "normal", phase: "stable", playback: "static" },
+        ],
       },
-      "Duplicate"
+      "Duplicate",
     ],
     [
       "phase playback mismatch",
       {
         states: [{ id: "bad", phase: "stable", playback: "once" }],
         defaultState: "bad",
-        equivalences: []
+        equivalences: [],
       },
-      "stable phase"
+      "stable phase",
     ],
     [
       "short frame",
@@ -79,43 +76,52 @@ describe("SymbolStateMachine validation", () => {
             id: "normal",
             phase: "stable",
             playback: "static",
-            frameDurationSeconds: MIN_SYMBOL_FRAME_DURATION_SECONDS / 2
-          }
+            frameDurationSeconds: MIN_SYMBOL_FRAME_DURATION_SECONDS / 2,
+          },
         ],
-        equivalences: []
+        equivalences: [],
       },
-      "frameDurationSeconds"
-    ]
-  ] as const)("rejects invalid state definitions: %s", (_label, overrides, message) => {
-    expect(() => new SymbolStateMachine(createDefinition(overrides as Partial<SymbolDefinition>))).toThrow(
-      SymbolStateError
-    );
-    expect(() => new SymbolStateMachine(createDefinition(overrides as Partial<SymbolDefinition>))).toThrow(
-      message
-    );
-  });
+      "frameDurationSeconds",
+    ],
+  ] as const)(
+    "rejects invalid state definitions: %s",
+    (_label, overrides, message) => {
+      expect(
+        () =>
+          new SymbolStateMachine(
+            createDefinition(overrides as Partial<SymbolDefinition>),
+          ),
+      ).toThrow(SymbolStateError);
+      expect(
+        () =>
+          new SymbolStateMachine(
+            createDefinition(overrides as Partial<SymbolDefinition>),
+          ),
+      ).toThrow(message);
+    },
+  );
 
   it.each([
     [
       "unknown target",
       {
-        equivalences: [{ from: "spinBlur", to: "missing" }]
+        equivalences: [{ from: "spinBlur", to: "missing" }],
       },
-      "target"
+      "target",
     ],
     [
       "stable to once",
       {
-        equivalences: [{ from: "spinBlur", to: "appear" }]
+        equivalences: [{ from: "spinBlur", to: "appear" }],
       },
-      "same phase"
+      "same phase",
     ],
     [
       "once to stable",
       {
-        equivalences: [{ from: "appear", to: "normal" }]
+        equivalences: [{ from: "appear", to: "normal" }],
       },
-      "same phase"
+      "same phase",
     ],
     [
       "cycle",
@@ -123,20 +129,26 @@ describe("SymbolStateMachine validation", () => {
         states: [
           { id: "normal", phase: "stable", playback: "static" },
           { id: "a", phase: "stable", playback: "static" },
-          { id: "b", phase: "stable", playback: "static" }
+          { id: "b", phase: "stable", playback: "static" },
         ],
         equivalences: [
           { from: "a", to: "b" },
-          { from: "b", to: "a" }
-        ]
+          { from: "b", to: "a" },
+        ],
       },
-      "cycle"
-    ]
-  ] as const)("rejects invalid equivalence: %s", (_label, overrides, message) => {
-    expect(() => new SymbolStateMachine(createDefinition(overrides as Partial<SymbolDefinition>))).toThrow(
-      message
-    );
-  });
+      "cycle",
+    ],
+  ] as const)(
+    "rejects invalid equivalence: %s",
+    (_label, overrides, message) => {
+      expect(
+        () =>
+          new SymbolStateMachine(
+            createDefinition(overrides as Partial<SymbolDefinition>),
+          ),
+      ).toThrow(message);
+    },
+  );
 
   it("resolves multi-level equivalence chains", () => {
     const machine = new SymbolStateMachine(
@@ -144,13 +156,13 @@ describe("SymbolStateMachine validation", () => {
         states: [
           { id: "normal", phase: "stable", playback: "static" },
           { id: "a", phase: "stable", playback: "static" },
-          { id: "b", phase: "stable", playback: "static" }
+          { id: "b", phase: "stable", playback: "static" },
         ],
         equivalences: [
           { from: "a", to: "b" },
-          { from: "b", to: "normal" }
-        ]
-      })
+          { from: "b", to: "normal" },
+        ],
+      }),
     );
 
     machine.requestState("a");
@@ -166,7 +178,7 @@ describe("SymbolStateMachine transitions", () => {
     expect(machine.getSnapshot()).toMatchObject({
       requestedState: "appear",
       resolvedState: "appear",
-      isOnce: true
+      isOnce: true,
     });
     expect(() => machine.requestState("missing")).toThrow(SymbolStateError);
   });
@@ -177,23 +189,30 @@ describe("SymbolStateMachine transitions", () => {
       states: [
         { id: "normal", phase: "stable", playback: "loop" },
         { id: "disabled", phase: "stable", playback: "static" },
-        { id: "spinBlur", phase: "stable", playback: "static" }
-      ]
+        { id: "spinBlur", phase: "stable", playback: "static" },
+      ],
     };
-    const machine = new SymbolStateMachine(createSymbolDefinitionFromPreset({ code: 1, symbol: "S00", pays: [], preset }));
+    const machine = new SymbolStateMachine(
+      createSymbolDefinitionFromPreset({
+        code: 1,
+        symbol: "S00",
+        pays: [],
+        preset,
+      }),
+    );
 
     machine.requestState("disabled");
     machine.requestState("spinBlur");
     expect(machine.getSnapshot()).toMatchObject({
       requestedState: "normal",
-      pendingState: "spinBlur"
+      pendingState: "spinBlur",
     });
 
     machine.notifyLoopComplete();
     expect(machine.getSnapshot()).toMatchObject({
       requestedState: "spinBlur",
       resolvedState: "spinBlur",
-      pendingState: null
+      pendingState: null,
     });
   });
 
@@ -210,7 +229,7 @@ describe("SymbolStateMachine transitions", () => {
       requestedState: "spinBlur",
       resolvedState: "normal",
       defaultState: "spinBlur",
-      pendingState: null
+      pendingState: null,
     });
   });
 
@@ -223,7 +242,7 @@ describe("SymbolStateMachine transitions", () => {
 
     expect(machine.getSnapshot()).toMatchObject({
       requestedState: "normal",
-      pendingState: null
+      pendingState: null,
     });
   });
 });

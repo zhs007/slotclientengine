@@ -6,9 +6,18 @@ export function createReelLayout(options: ReelLayoutOptions): ReelLayout {
   const visibleRows = assertPositiveInteger(options.visibleRows, "visibleRows");
   const cellWidth = assertPositiveNumber(options.cellWidth, "cellWidth");
   const cellHeight = assertPositiveNumber(options.cellHeight, "cellHeight");
-  const columnGap = assertNonNegativeNumber(options.columnGap ?? 0, "columnGap");
-  const bufferRowsBefore = assertNonNegativeInteger(options.bufferRowsBefore ?? 1, "bufferRowsBefore");
-  const bufferRowsAfter = assertNonNegativeInteger(options.bufferRowsAfter ?? 1, "bufferRowsAfter");
+  const columnGap = assertNonNegativeNumber(
+    options.columnGap ?? 0,
+    "columnGap",
+  );
+  const bufferRowsBefore = assertNonNegativeInteger(
+    options.bufferRowsBefore ?? 1,
+    "bufferRowsBefore",
+  );
+  const bufferRowsAfter = assertNonNegativeInteger(
+    options.bufferRowsAfter ?? 1,
+    "bufferRowsAfter",
+  );
 
   return Object.freeze({
     reelCount,
@@ -29,14 +38,17 @@ export function createReelLayout(options: ReelLayoutOptions): ReelLayout {
         throw new ReelError(`visibleY ${visibleY} must be an integer.`);
       }
       return visibleY * cellHeight;
-    }
+    },
   });
 }
 
-export function assertLayoutMatchesReels(layout: ReelLayout, reelCount: number): void {
+export function assertLayoutMatchesReels(
+  layout: ReelLayout,
+  reelCount: number,
+): void {
   if (layout.reelCount !== reelCount) {
     throw new ReelError(
-      `layout reelCount ${layout.reelCount} does not match reels reel count ${reelCount}.`
+      `layout reelCount ${layout.reelCount} does not match reels reel count ${reelCount}.`,
     );
   }
 }

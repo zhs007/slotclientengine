@@ -6,7 +6,7 @@ import {
   RenderReelSet,
   createReelLayout,
   createReelSpinPlan,
-  createReelSymbolRegistry
+  createReelSymbolRegistry,
 } from "../../src/reel/index.js";
 import { createTextureSet } from "./helpers.js";
 
@@ -18,20 +18,19 @@ describe("RenderReelSet", () => {
     const finalYs = gameConfig.getStopYCoordinates({
       reelsName: "reels01",
       sceneName: "step0.scene0",
-      scene
+      scene,
     });
     const registry = createReelSymbolRegistry({
       gameConfig,
       assets: Object.fromEntries(
-        ["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10"].map((symbol) => [
-          symbol,
-          createTextureSet(20, 20)
-        ])
+        ["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10"].map(
+          (symbol) => [symbol, createTextureSet(20, 20)],
+        ),
       ),
       emptySymbols: ["BN"],
       texturePolicy: {
-        requiredStateTextures: ["spinBlur"]
-      }
+        requiredStateTextures: ["spinBlur"],
+      },
     });
     const reelSet = new RenderReelSet({
       reels,
@@ -39,9 +38,9 @@ describe("RenderReelSet", () => {
         reelCount: 5,
         visibleRows: 5,
         cellWidth: 20,
-        cellHeight: 20
+        cellHeight: 20,
       }),
-      registry
+      registry,
     });
     const plan = createReelSpinPlan({
       reels,
@@ -51,7 +50,7 @@ describe("RenderReelSet", () => {
       baseDurationMs: 300,
       speedSymbolsPerSecond: 200,
       startDelayMs: 40,
-      stopDelayMs: 30
+      stopDelayMs: 30,
     });
 
     reelSet.spin(plan);
@@ -71,7 +70,7 @@ describe("RenderReelSet", () => {
       "stopped",
       "stopped",
       "stopped",
-      "stopped"
+      "stopped",
     ]);
   });
 
@@ -81,12 +80,11 @@ describe("RenderReelSet", () => {
     const registry = createReelSymbolRegistry({
       gameConfig,
       assets: Object.fromEntries(
-        ["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10"].map((symbol) => [
-          symbol,
-          createTextureSet(20, 20)
-        ])
+        ["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10"].map(
+          (symbol) => [symbol, createTextureSet(20, 20)],
+        ),
       ),
-      emptySymbols: ["BN"]
+      emptySymbols: ["BN"],
     });
     const reelSet = new RenderReelSet({
       reels,
@@ -94,9 +92,9 @@ describe("RenderReelSet", () => {
         reelCount: 5,
         visibleRows: 5,
         cellWidth: 20,
-        cellHeight: 20
+        cellHeight: 20,
       }),
-      registry
+      registry,
     });
 
     expect(() => reelSet.resetToFinalYs([1])).toThrow(/finalYs/);
@@ -106,8 +104,8 @@ describe("RenderReelSet", () => {
       reelSet.spin({
         direction: "forward",
         totalDurationMs: 0,
-        axes: []
-      })
+        axes: [],
+      }),
     ).toThrow(/axes length/);
   });
 });

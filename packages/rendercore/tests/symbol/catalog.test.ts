@@ -6,7 +6,7 @@ import {
   SymbolAssetError,
   createDefaultSymbolAnimationResolver,
   createDefaultSymbolStatePreset,
-  createSymbolCatalog
+  createSymbolCatalog,
 } from "../../src/symbol/index.js";
 
 const createCatalog = () =>
@@ -18,21 +18,21 @@ const createCatalog = () =>
       S1: "S1.png",
       S5: "S5.png",
       S10: "S10.png",
-      SX: "SX.png"
+      SX: "SX.png",
     },
     statePreset: createDefaultSymbolStatePreset(),
-    animationResolver: createDefaultSymbolAnimationResolver()
+    animationResolver: createDefaultSymbolAnimationResolver(),
   });
 
 const createTestTexture = (width = 16, height = 18) => {
   const texture = new Texture({ source: Texture.WHITE.source });
   Object.defineProperty(texture, "width", {
     configurable: true,
-    value: width
+    value: width,
   });
   Object.defineProperty(texture, "height", {
     configurable: true,
-    value: height
+    value: height,
   });
   return texture;
 };
@@ -43,10 +43,23 @@ describe("createSymbolCatalog", () => {
 
     expect(catalog.getValidation()).toEqual({
       displayableSymbols: ["S00", "S0", "S1", "S5", "S10"],
-      ignoredPaytableSymbolsWithoutAssets: ["BN", "SC", "RS", "X2", "X5", "X10"],
-      ignoredAssetsWithoutPaytable: ["SX"]
+      ignoredPaytableSymbolsWithoutAssets: [
+        "BN",
+        "SC",
+        "RS",
+        "X2",
+        "X5",
+        "X10",
+      ],
+      ignoredAssetsWithoutPaytable: ["SX"],
     });
-    expect(catalog.getDisplayableSymbols()).toEqual(["S00", "S0", "S1", "S5", "S10"]);
+    expect(catalog.getDisplayableSymbols()).toEqual([
+      "S00",
+      "S0",
+      "S1",
+      "S5",
+      "S10",
+    ]);
   });
 
   it("normalizes legacy assets into texture sets while keeping getAsset compatible", () => {
@@ -56,13 +69,13 @@ describe("createSymbolCatalog", () => {
     expect(catalog.getTextureSet("S00")).toEqual({
       normal: {
         kind: "single",
-        texture: "S00.png"
+        texture: "S00.png",
       },
-      states: {}
+      states: {},
     });
     expect(catalog.getNormalTextureSource("S00")).toEqual({
       kind: "single",
-      texture: "S00.png"
+      texture: "S00.png",
     });
   });
 
@@ -76,29 +89,32 @@ describe("createSymbolCatalog", () => {
           normal: Texture.WHITE,
           states: {
             spinBlur: spinBlurTexture,
-            disabled: disabledTexture
-          }
-        }
+            disabled: disabledTexture,
+          },
+        },
       },
       texturePolicy: {
-        requiredStateTextures: ["spinBlur", "disabled"]
-      }
+        requiredStateTextures: ["spinBlur", "disabled"],
+      },
     });
 
     expect(catalog.getTextureSet("S00")).toEqual({
       normal: {
         kind: "single",
-        texture: Texture.WHITE
+        texture: Texture.WHITE,
       },
       states: {
         spinBlur: spinBlurTexture,
-        disabled: disabledTexture
-      }
+        disabled: disabledTexture,
+      },
     });
     const renderSymbol = catalog.createRenderSymbol("S00");
     expect(renderSymbol.stateTextures.spinBlur).toBe(spinBlurTexture);
     expect(renderSymbol.stateTextures.disabled).toBe(disabledTexture);
-    expect(renderSymbol.requiredStateTextures).toEqual(["spinBlur", "disabled"]);
+    expect(renderSymbol.requiredStateTextures).toEqual([
+      "spinBlur",
+      "disabled",
+    ]);
   });
 
   it("accepts layered normal texture sources without treating layer 0 as a legacy asset", () => {
@@ -113,18 +129,18 @@ describe("createSymbolCatalog", () => {
             kind: "layered",
             layers: [
               { index: 1, texture: top },
-              { index: 0, texture: bottom, keyframes: [bottom, openFrame] }
-            ]
+              { index: 0, texture: bottom, keyframes: [bottom, openFrame] },
+            ],
           },
           states: {
             spinBlur: createTestTexture(20, 24),
-            disabled: createTestTexture(20, 24)
-          }
-        }
+            disabled: createTestTexture(20, 24),
+          },
+        },
       },
       texturePolicy: {
-        requiredStateTextures: ["spinBlur", "disabled"]
-      }
+        requiredStateTextures: ["spinBlur", "disabled"],
+      },
     });
 
     expect(() => catalog.getAsset("SC")).toThrow(/layered/);
@@ -132,13 +148,18 @@ describe("createSymbolCatalog", () => {
       kind: "layered",
       layers: [
         { index: 0, texture: bottom },
-        { index: 1, texture: top }
-      ]
+        { index: 1, texture: top },
+      ],
     });
     const renderSymbol = catalog.createRenderSymbol("SC");
-    expect(renderSymbol.getLayerSprites().map((layer) => layer.index)).toEqual([0, 1]);
+    expect(renderSymbol.getLayerSprites().map((layer) => layer.index)).toEqual([
+      0, 1,
+    ]);
     expect(renderSymbol.getLayerSprites()[0].sprite.texture).toBe(bottom);
-    expect(renderSymbol.getLayerSprites()[0].keyframes).toEqual([bottom, openFrame]);
+    expect(renderSymbol.getLayerSprites()[0].keyframes).toEqual([
+      bottom,
+      openFrame,
+    ]);
   });
 
   it("rejects malformed layered normal texture sources", () => {
@@ -149,11 +170,11 @@ describe("createSymbolCatalog", () => {
           SC: {
             normal: {
               kind: "layered",
-              layers: []
-            }
-          }
-        }
-      })
+              layers: [],
+            },
+          },
+        },
+      }),
     ).toThrow(/layers/);
 
     expect(() =>
@@ -165,12 +186,12 @@ describe("createSymbolCatalog", () => {
               kind: "layered",
               layers: [
                 { index: 0, texture: createTestTexture() },
-                { index: 0, texture: createTestTexture() }
-              ]
-            }
-          }
-        }
-      })
+                { index: 0, texture: createTestTexture() },
+              ],
+            },
+          },
+        },
+      }),
     ).toThrow(/duplicate/);
 
     expect(() =>
@@ -182,12 +203,12 @@ describe("createSymbolCatalog", () => {
               kind: "layered",
               layers: [
                 { index: 0, texture: createTestTexture(20, 24) },
-                { index: 1, texture: createTestTexture(21, 24) }
-              ]
-            }
-          }
-        }
-      })
+                { index: 1, texture: createTestTexture(21, 24) },
+              ],
+            },
+          },
+        },
+      }),
     ).toThrow(/identical dimensions/);
 
     expect(() =>
@@ -201,13 +222,13 @@ describe("createSymbolCatalog", () => {
                 {
                   index: 0,
                   texture: createTestTexture(20, 24),
-                  keyframes: []
-                }
-              ]
-            }
-          }
-        }
-      })
+                  keyframes: [],
+                },
+              ],
+            },
+          },
+        },
+      }),
     ).toThrow(/keyframes/);
 
     expect(() => {
@@ -222,12 +243,12 @@ describe("createSymbolCatalog", () => {
                 {
                   index: 0,
                   texture,
-                  keyframes: [createTestTexture(20, 24), texture]
-                }
-              ]
-            }
-          }
-        }
+                  keyframes: [createTestTexture(20, 24), texture],
+                },
+              ],
+            },
+          },
+        },
       });
     }).toThrow(/start with the layer texture/);
 
@@ -243,12 +264,12 @@ describe("createSymbolCatalog", () => {
                 {
                   index: 0,
                   texture,
-                  keyframes: [texture, createTestTexture(21, 24)]
-                }
-              ]
-            }
-          }
-        }
+                  keyframes: [texture, createTestTexture(21, 24)],
+                },
+              ],
+            },
+          },
+        },
       });
     }).toThrow(/keyframe textures/);
   });
@@ -263,19 +284,19 @@ describe("createSymbolCatalog", () => {
           normal: Texture.WHITE,
           states: {
             spinBlur: spinBlurTexture,
-            disabled: disabledTexture
-          }
+            disabled: disabledTexture,
+          },
         },
-        SX: "SX.png"
+        SX: "SX.png",
       },
       texturePolicy: {
-        requiredStateTextures: ["spinBlur", "disabled"]
-      }
+        requiredStateTextures: ["spinBlur", "disabled"],
+      },
     });
 
     expect(catalog.getValidation()).toMatchObject({
       displayableSymbols: ["S00"],
-      ignoredAssetsWithoutPaytable: ["SX"]
+      ignoredAssetsWithoutPaytable: ["SX"],
     });
   });
 
@@ -287,14 +308,14 @@ describe("createSymbolCatalog", () => {
           S00: {
             normal: Texture.WHITE,
             states: {
-              disabled: Texture.WHITE
-            }
-          }
+              disabled: Texture.WHITE,
+            },
+          },
         },
         texturePolicy: {
-          requiredStateTextures: ["spinBlur", "disabled"]
-        }
-      })
+          requiredStateTextures: ["spinBlur", "disabled"],
+        },
+      }),
     ).toThrow(SymbolAssetError);
 
     expect(() =>
@@ -304,11 +325,11 @@ describe("createSymbolCatalog", () => {
           S00: {
             normal: Texture.WHITE,
             states: {
-              blurred: Texture.WHITE
-            }
-          }
-        }
-      })
+              blurred: Texture.WHITE,
+            },
+          },
+        },
+      }),
     ).toThrow(SymbolAssetError);
   });
 
@@ -319,7 +340,7 @@ describe("createSymbolCatalog", () => {
     expect(definition).toMatchObject({
       code: 5,
       symbol: "S10",
-      defaultState: "normal"
+      defaultState: "normal",
     });
     expect(definition.pays).toEqual([0, 0, 0, 0, 0]);
     expect(catalog.getPaytableEntry("S10").code).toBe(5);
@@ -342,10 +363,10 @@ describe("createSymbolCatalog", () => {
           normal: Texture.WHITE,
           states: {
             spinBlur: "S00.spinBlur.png",
-            disabled: Texture.WHITE
-          }
-        }
-      }
+            disabled: Texture.WHITE,
+          },
+        },
+      },
     });
 
     expect(() => catalog.createRenderSymbol("S00")).toThrow(SymbolAssetError);
@@ -363,15 +384,17 @@ describe("createSymbolCatalog", () => {
               {
                 index: 0,
                 texture,
-                keyframes: [texture, "/assets/SC-0-1.png"]
-              }
-            ]
-          }
-        }
-      }
+                keyframes: [texture, "/assets/SC-0-1.png"],
+              },
+            ],
+          },
+        },
+      },
     });
 
-    expect(() => catalog.createRenderSymbol("SC")).toThrow(/keyframe texture is a URL string/);
+    expect(() => catalog.createRenderSymbol("SC")).toThrow(
+      /keyframe texture is a URL string/,
+    );
   });
 
   it("rejects malformed LogicGameConfig-like objects at the catalog boundary", () => {
@@ -386,10 +409,10 @@ describe("createSymbolCatalog", () => {
             throw new Error("unused");
           },
           getStopYCoordinates: () => [],
-          getSpinStartYCoordinates: () => []
+          getSpinStartYCoordinates: () => [],
         },
-        assets: {}
-      })
+        assets: {},
+      }),
     ).toThrow(SymbolAssetError);
   });
 });

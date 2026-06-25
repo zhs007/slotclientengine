@@ -7,7 +7,7 @@ import type {
   SymbolStateId,
   SymbolStatePhase,
   SymbolStatePreset,
-  SymbolStateSnapshot
+  SymbolStateSnapshot,
 } from "./types.js";
 
 export const MIN_SYMBOL_FRAME_DURATION_SECONDS = 1 / 60;
@@ -58,14 +58,16 @@ export class SymbolStateMachine {
       resolvedState: this.#resolvedState,
       defaultState: this.#defaultState,
       pendingState: this.#pendingState,
-      isOnce: this.getCurrentStateDefinition().phase === "once"
+      isOnce: this.getCurrentStateDefinition().phase === "once",
     });
   }
 
   setDefaultState(state: SymbolStateId): void {
     this.assertKnownState(state);
     if (this.getStateDefinition(state).phase !== "stable") {
-      throw new SymbolStateError(`Default symbol state "${state}" must be stable.`);
+      throw new SymbolStateError(
+        `Default symbol state "${state}" must be stable.`,
+      );
     }
     this.#defaultState = state;
   }
@@ -123,7 +125,9 @@ export class SymbolStateMachine {
     let current = state;
     while (this.#equivalences.has(current)) {
       if (seen.has(current)) {
-        throw new SymbolStateError(`Symbol state equivalence cycle detected at "${current}".`);
+        throw new SymbolStateError(
+          `Symbol state equivalence cycle detected at "${current}".`,
+        );
       }
       seen.add(current);
       current = this.#equivalences.get(current) as SymbolStateId;
@@ -153,35 +157,35 @@ export function createDefaultSymbolStatePreset(): SymbolStatePreset {
         id: "normal",
         phase: "stable",
         playback: "static",
-        frameDurationSeconds: MIN_SYMBOL_FRAME_DURATION_SECONDS
+        frameDurationSeconds: MIN_SYMBOL_FRAME_DURATION_SECONDS,
       }),
       Object.freeze({
         id: "spinBlur",
         phase: "stable",
         playback: "static",
-        frameDurationSeconds: MIN_SYMBOL_FRAME_DURATION_SECONDS
+        frameDurationSeconds: MIN_SYMBOL_FRAME_DURATION_SECONDS,
       }),
       Object.freeze({
         id: "disabled",
         phase: "stable",
         playback: "static",
-        frameDurationSeconds: MIN_SYMBOL_FRAME_DURATION_SECONDS
+        frameDurationSeconds: MIN_SYMBOL_FRAME_DURATION_SECONDS,
       }),
       Object.freeze({
         id: "appear",
         phase: "once",
-        playback: "once"
+        playback: "once",
       }),
       Object.freeze({
         id: "win",
         phase: "once",
-        playback: "once"
-      })
+        playback: "once",
+      }),
     ]),
     equivalences: Object.freeze([
       Object.freeze({ from: "spinBlur", to: "normal" }),
-      Object.freeze({ from: "disabled", to: "normal" })
-    ])
+      Object.freeze({ from: "disabled", to: "normal" }),
+    ]),
   });
 }
 
@@ -197,38 +201,54 @@ export function createSymbolDefinitionFromPreset(options: {
     symbol: options.symbol,
     pays: Object.freeze([...options.pays]),
     defaultState: preset.defaultState,
-    states: Object.freeze(preset.states.map((state) => Object.freeze({ ...state }))),
+    states: Object.freeze(
+      preset.states.map((state) => Object.freeze({ ...state })),
+    ),
     equivalences: Object.freeze(
-      (preset.equivalences ?? []).map((equivalence) => Object.freeze({ ...equivalence }))
-    )
+      (preset.equivalences ?? []).map((equivalence) =>
+        Object.freeze({ ...equivalence }),
+      ),
+    ),
   });
 }
 
-export function validateSymbolDefinition(definition: SymbolDefinition): ValidatedSymbolStates {
+export function validateSymbolDefinition(
+  definition: SymbolDefinition,
+): ValidatedSymbolStates {
   const statesById = validateStateDefinitions(definition.states);
   validateDefaultState(definition.defaultState, statesById);
-  const equivalences = validateStateEquivalences(definition.equivalences ?? [], statesById);
+  const equivalences = validateStateEquivalences(
+    definition.equivalences ?? [],
+    statesById,
+  );
   return {
     statesById,
-    equivalences
+    equivalences,
   };
 }
 
-export function validateSymbolStatePreset(preset: SymbolStatePreset): ValidatedSymbolStates {
+export function validateSymbolStatePreset(
+  preset: SymbolStatePreset,
+): ValidatedSymbolStates {
   const statesById = validateStateDefinitions(preset.states);
   validateDefaultState(preset.defaultState, statesById);
-  const equivalences = validateStateEquivalences(preset.equivalences ?? [], statesById);
+  const equivalences = validateStateEquivalences(
+    preset.equivalences ?? [],
+    statesById,
+  );
   return {
     statesById,
-    equivalences
+    equivalences,
   };
 }
 
 function validateStateDefinitions(
-  states: readonly SymbolStateDefinition[]
+  states: readonly SymbolStateDefinition[],
 ): ReadonlyMap<SymbolStateId, SymbolStateDefinition> {
   if (!Array.isArray(states) || states.length === 0) {
-    throw new SymbolStateError("Symbol states must contain at least one state.");
+    throw new SymbolStateError(
+      "Symbol states must contain at least one state.",
+    );
   }
 
   const statesById = new Map<SymbolStateId, SymbolStateDefinition>();
@@ -251,29 +271,37 @@ function validateStateDefinitions(
 
 function validateDefaultState(
   defaultState: SymbolStateId,
-  statesById: ReadonlyMap<SymbolStateId, SymbolStateDefinition>
+  statesById: ReadonlyMap<SymbolStateId, SymbolStateDefinition>,
 ): void {
   const state = statesById.get(defaultState);
   if (!state) {
-    throw new SymbolStateError(`Default symbol state "${defaultState}" does not exist.`);
+    throw new SymbolStateError(
+      `Default symbol state "${defaultState}" does not exist.`,
+    );
   }
 
   if (state.phase !== "stable") {
-    throw new SymbolStateError(`Default symbol state "${defaultState}" must be stable.`);
+    throw new SymbolStateError(
+      `Default symbol state "${defaultState}" must be stable.`,
+    );
   }
 }
 
 function validatePhaseAndPlayback(
   id: SymbolStateId,
   phase: SymbolStatePhase,
-  playback: SymbolPlaybackKind
+  playback: SymbolPlaybackKind,
 ): void {
   if (phase === "once" && playback !== "once") {
-    throw new SymbolStateError(`Symbol state "${id}" phase "once" must use playback "once".`);
+    throw new SymbolStateError(
+      `Symbol state "${id}" phase "once" must use playback "once".`,
+    );
   }
 
   if (phase === "stable" && playback === "once") {
-    throw new SymbolStateError(`Symbol state "${id}" stable phase cannot use once playback.`);
+    throw new SymbolStateError(
+      `Symbol state "${id}" stable phase cannot use once playback.`,
+    );
   }
 }
 
@@ -287,14 +315,14 @@ function validateFrameDuration(state: SymbolStateDefinition): void {
     state.frameDurationSeconds < MIN_SYMBOL_FRAME_DURATION_SECONDS
   ) {
     throw new SymbolStateError(
-      `Symbol state "${state.id}" frameDurationSeconds must be at least ${MIN_SYMBOL_FRAME_DURATION_SECONDS}.`
+      `Symbol state "${state.id}" frameDurationSeconds must be at least ${MIN_SYMBOL_FRAME_DURATION_SECONDS}.`,
     );
   }
 }
 
 function validateStateEquivalences(
   equivalences: readonly SymbolStateEquivalence[],
-  statesById: ReadonlyMap<SymbolStateId, SymbolStateDefinition>
+  statesById: ReadonlyMap<SymbolStateId, SymbolStateDefinition>,
 ): ReadonlyMap<SymbolStateId, SymbolStateId> {
   const equivalenceMap = new Map<SymbolStateId, SymbolStateId>();
 
@@ -302,14 +330,18 @@ function validateStateEquivalences(
     const from = statesById.get(equivalence.from);
     const to = statesById.get(equivalence.to);
     if (!from) {
-      throw new SymbolStateError(`Symbol state equivalence source "${equivalence.from}" does not exist.`);
+      throw new SymbolStateError(
+        `Symbol state equivalence source "${equivalence.from}" does not exist.`,
+      );
     }
     if (!to) {
-      throw new SymbolStateError(`Symbol state equivalence target "${equivalence.to}" does not exist.`);
+      throw new SymbolStateError(
+        `Symbol state equivalence target "${equivalence.to}" does not exist.`,
+      );
     }
     if (from.phase !== to.phase) {
       throw new SymbolStateError(
-        `Symbol state equivalence "${equivalence.from}" -> "${equivalence.to}" must keep the same phase.`
+        `Symbol state equivalence "${equivalence.from}" -> "${equivalence.to}" must keep the same phase.`,
       );
     }
     equivalenceMap.set(equivalence.from, equivalence.to);
@@ -324,14 +356,16 @@ function validateStateEquivalences(
 
 function assertNoEquivalenceCycle(
   state: SymbolStateId,
-  equivalenceMap: ReadonlyMap<SymbolStateId, SymbolStateId>
+  equivalenceMap: ReadonlyMap<SymbolStateId, SymbolStateId>,
 ): void {
   const seen = new Set<SymbolStateId>();
   let current: SymbolStateId | undefined = state;
 
   while (current !== undefined) {
     if (seen.has(current)) {
-      throw new SymbolStateError(`Symbol state equivalence cycle detected at "${current}".`);
+      throw new SymbolStateError(
+        `Symbol state equivalence cycle detected at "${current}".`,
+      );
     }
     seen.add(current);
     current = equivalenceMap.get(current);

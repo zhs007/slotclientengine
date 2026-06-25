@@ -2,9 +2,13 @@ import { SymbolAnimationError } from "./errors.js";
 import {
   createAppearSymbolAni,
   createStaticSymbolAni,
-  createWinSymbolAni
+  createWinSymbolAni,
 } from "./ani.js";
-import type { SymbolAni, SymbolAnimationContext, SymbolAnimationResolver } from "./types.js";
+import type {
+  SymbolAni,
+  SymbolAnimationContext,
+  SymbolAnimationResolver,
+} from "./types.js";
 
 export function createDefaultSymbolAnimationResolver(): SymbolAnimationResolver {
   return (context) => {
@@ -21,12 +25,15 @@ export function createDefaultSymbolAnimationResolver(): SymbolAnimationResolver 
     }
 
     throw new SymbolAnimationError(
-      `No default symbol animation is registered for resolved state "${context.resolvedState}".`
+      `No default symbol animation is registered for resolved state "${context.resolvedState}".`,
     );
   };
 }
 
-export function assertResolvedSymbolAni(value: unknown, stateId: string): asserts value is SymbolAni {
+export function assertResolvedSymbolAni(
+  value: unknown,
+  stateId: string,
+): asserts value is SymbolAni {
   const candidate = value as Partial<SymbolAni> | null;
   if (
     !candidate ||
@@ -34,6 +41,8 @@ export function assertResolvedSymbolAni(value: unknown, stateId: string): assert
     typeof candidate.reset !== "function" ||
     typeof candidate.update !== "function"
   ) {
-    throw new SymbolAnimationError(`Animation resolver did not return a SymbolAni for "${stateId}".`);
+    throw new SymbolAnimationError(
+      `Animation resolver did not return a SymbolAni for "${stateId}".`,
+    );
   }
 }

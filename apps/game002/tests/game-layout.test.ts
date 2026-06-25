@@ -3,6 +3,9 @@ import {
   GAME002_ASSET_SIZE,
   GAME002_BOARD_FRAME,
   GAME002_CELL_SIZE,
+  GAME002_GRID_CELL_DIMMING,
+  GAME002_GRID_CELL_REEL_ORDER,
+  GAME002_GRID_CELL_REEL_TIMING,
   GAME002_REEL_COUNT,
   GAME002_STAGE_SIZE,
   GAME002_VISIBLE_ROWS,
@@ -71,6 +74,23 @@ describe("game002 layout", () => {
       x: 200,
       y: 330,
       stageVisibleFrame: GAME002_BOARD_FRAME,
+    });
+  });
+
+  it("locks grid cell reel order, timing and dimming parameters", () => {
+    expect(GAME002_GRID_CELL_REEL_ORDER).toBe("top-down-left-right");
+    expect(GAME002_GRID_CELL_REEL_TIMING).toEqual({
+      startStepMs: 16,
+      stopStepMs: 16,
+      settleAfterLastStartMs: 180,
+      minimumSpinCycles: 6,
+      speedSymbolsPerSecond: 54,
+    });
+    expect(GAME002_GRID_CELL_DIMMING).toEqual({
+      evenAlpha: 0.5,
+      oddAlpha: 0.35,
+      fadeInMs: 80,
+      fadeOutMs: 160,
     });
   });
 

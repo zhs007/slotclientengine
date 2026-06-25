@@ -10,7 +10,9 @@ export function createReelWindowSnapshot(options: {
 }): ReelWindowSnapshot {
   const baseY = Math.floor(options.y);
   const fractionalY = options.y - baseY;
-  const codeAt = options.codeAt ?? ((symbolY: number) => options.reels.get(options.x, symbolY));
+  const codeAt =
+    options.codeAt ??
+    ((symbolY: number) => options.reels.get(options.x, symbolY));
   const slots = [];
 
   for (
@@ -23,8 +25,8 @@ export function createReelWindowSnapshot(options: {
       Object.freeze({
         windowY,
         symbolY,
-        code: codeAt(symbolY)
-      })
+        code: codeAt(symbolY),
+      }),
     );
   }
 
@@ -35,9 +37,9 @@ export function createReelWindowSnapshot(options: {
     pixelOffsetY: -fractionalY * options.layout.cellHeight,
     visibleScene: Object.freeze(
       Array.from({ length: options.layout.visibleRows }, (_, visibleY) =>
-        codeAt(baseY + visibleY)
-      )
+        codeAt(baseY + visibleY),
+      ),
     ),
-    slots: Object.freeze(slots)
+    slots: Object.freeze(slots),
   });
 }

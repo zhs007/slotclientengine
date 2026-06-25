@@ -1,0 +1,183 @@
+import { describe, expect, it } from "vitest";
+import {
+  createGridCellOrder,
+  createGridCellReelSpinPlan,
+  type GridCellDimmingPattern,
+  type GridCellReelSpinTiming,
+} from "../../src/reel/index.js";
+import { createBasicReels } from "./helpers.js";
+
+const TARGET_SCENE = Object.freeze([
+  Object.freeze([1, 0, 2]),
+  Object.freeze([2, 1, 0]),
+]);
+const TIMING = Object.freeze({
+  startStepMs: 10,
+  stopStepMs: 20,
+  settleAfterLastStartMs: 100,
+  minimumSpinCycles: 3,
+  speedSymbolsPerSecond: 10,
+}) satisfies GridCellReelSpinTiming;
+const DIMMING = Object.freeze({
+  evenAlpha: 0.5,
+  oddAlpha: 0.35,
+  fadeInMs: 80,
+  fadeOutMs: 160,
+}) satisfies GridCellDimmingPattern;
+
+describe("createGridCellReelSpinPlan", () => {
+  it("creates deterministic per-cell timing, target symbols and dimming", () => {
+    const reels = createBasicReels();
+    const order = createGridCellOrder({
+      columns: 2,
+      rows: 3,
+      mode: "top-down-left-right",
+    });
+    const plan = createGridCellReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      targetScene: TARGET_SCENE,
+      columns: 2,
+      rows: 3,
+      order,
+      timing: TIMING,
+      dimming: DIMMING,
+    });
+
+    expect(plan.cells).toHaveLength(6);
+    expect(plan.lastStopAtMs).toBe(250);
+    expect(plan.dimming).toEqual(DIMMING);
+    expect(plan.cells.map((cell) => cell.startAtMs)).toEqual([
+      0, 10, 20, 30, 40, 50,
+    ]);
+    expect(plan.cells.map((cell) => cell.stopAtMs)).toEqual([
+      150, 170, 190, 210, 230, 250,
+    ]);
+    expect(plan.cells.every((cell) => cell.stopAtMs > cell.startAtMs)).toBe(
+      true,
+    );
+    expect(plan.cells.map((cell) => cell.axisPlan.finalY)).toEqual([
+      reels.normalizeY(0, 2),
+      reels.normalizeY(0, 3),
+      reels.normalizeY(0, 4),
+      reels.normalizeY(1, 1),
+      reels.normalizeY(1, 2),
+      reels.normalizeY(1, 3),
+    ]);
+    expect(plan.cells.map((cell) => cell.targetVisibleSymbols)).toEqual([
+      [1],
+      [0],
+      [2],
+      [2],
+      [1],
+      [0],
+    ]);
+    expect(plan.cells.map((cell) => cell.dimmingAlpha)).toEqual([
+      0.5, 0.35, 0.5, 0.35, 0.5, 0.35,
+    ]);
+    expect(plan.cells[0].axisPlan).toMatchObject({
+      x: 0,
+      startDelayMs: 0,
+      durationMs: 150,
+      stopAtMs: 150,
+      travelSymbols: 3,
+    });
+  });
+
+  it("rejects malformed scenes, final y values, order, timing and dimming", () => {
+    const reels = createBasicReels();
+    const order = createGridCellOrder({
+      columns: 2,
+      rows: 3,
+      mode: "top-down-left-right",
+    });
+    const baseOptions = {
+      reels,
+      finalYs: [2, 1],
+      targetScene: TARGET_SCENE,
+      columns: 2,
+      rows: 3,
+      order,
+      timing: TIMING,
+      dimming: DIMMING,
+    };
+
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        targetScene: [[1, 2, 3]],
+      }),
+    ).toThrow(/targetScene length/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        targetScene: [
+          [1, 2],
+          [3, 4],
+        ] as any,
+      }),
+    ).toThrow(/targetScene\[0\]/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        finalYs: [1],
+      }),
+    ).toThrow(/finalYs/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        order: [order[0], order[0], order[2], order[3], order[4], order[5]],
+      }),
+    ).toThrow(/orderIndex|duplicate/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        order: order.slice(0, 5),
+      }),
+    ).toThrow(/order length/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        order: [...order.slice(0, 5), { x: 2, y: 0, orderIndex: 5 }],
+      }),
+    ).toThrow(/out of range/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        timing: {
+          ...TIMING,
+          speedSymbolsPerSecond: 0,
+        },
+      }),
+    ).toThrow(/speedSymbolsPerSecond/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        timing: {
+          ...TIMING,
+          settleAfterLastStartMs: 0,
+          startStepMs: 0,
+          stopStepMs: 0,
+        },
+      }),
+    ).toThrow(/stopAtMs/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        dimming: {
+          ...DIMMING,
+          evenAlpha: 1.1,
+        },
+      }),
+    ).toThrow(/evenAlpha/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        dimming: {
+          ...DIMMING,
+          fadeOutMs: -1,
+        },
+      }),
+    ).toThrow(/fadeOutMs/);
+  });
+});
