@@ -1,5 +1,8 @@
 import type { Container, Sprite, Texture } from "pixi.js";
-import type { GameConfigPaytableEntry, LogicGameConfig } from "@slotclientengine/logiccore";
+import type {
+  GameConfigPaytableEntry,
+  LogicGameConfig,
+} from "@slotclientengine/logiccore";
 import type { RenderSymbol } from "./render-symbol.js";
 
 export type SymbolStateId = string;
@@ -86,6 +89,7 @@ export interface SymbolAnimationContext {
   readonly stateTextures: Readonly<Partial<Record<SymbolStateId, Texture>>>;
   readonly requiredStateTextures: readonly SymbolStateId[];
   readonly root: Container;
+  readonly underlayLayer: Container;
   readonly baseLayer: Container;
   readonly sprite: Sprite;
   readonly layers: readonly SymbolVisualLayer[];
@@ -94,7 +98,9 @@ export interface SymbolAnimationContext {
 }
 
 export type SymbolAniFactory = (context: SymbolAnimationContext) => SymbolAni;
-export type SymbolAnimationResolver = (context: SymbolAnimationContext) => SymbolAni;
+export type SymbolAnimationResolver = (
+  context: SymbolAnimationContext,
+) => SymbolAni;
 
 export interface RenderSymbolUpdateResult {
   readonly requestedState: SymbolStateId;
@@ -186,7 +192,10 @@ export interface SymbolAnimationProfile {
 }
 
 export type SymbolAnimationProfileMap = Readonly<
-  Record<string, Readonly<Partial<Record<SymbolStateId, SymbolAnimationProfile>>>>
+  Record<
+    string,
+    Readonly<Partial<Record<SymbolStateId, SymbolAnimationProfile>>>
+  >
 >;
 
 export interface SymbolLayerEffect {
@@ -198,7 +207,7 @@ export interface SymbolLayerEffect {
 export type NamedSymbolAnimationFactory = (
   context: SymbolAnimationContext,
   params: Readonly<Record<string, unknown>>,
-  profile: SymbolAnimationProfile
+  profile: SymbolAnimationProfile,
 ) => SymbolLayerEffect;
 
 export interface NamedSymbolAnimationRegistry {
@@ -213,5 +222,8 @@ export interface SymbolCatalog {
   getAsset(symbol: string): Texture | string;
   getTextureSet(symbol: string): SymbolTextureSet;
   getNormalTextureSource(symbol: string): SymbolNormalTextureSource;
-  createRenderSymbol(symbol: string, options?: CreateCatalogRenderSymbolOptions): RenderSymbol;
+  createRenderSymbol(
+    symbol: string,
+    options?: CreateCatalogRenderSymbolOptions,
+  ): RenderSymbol;
 }

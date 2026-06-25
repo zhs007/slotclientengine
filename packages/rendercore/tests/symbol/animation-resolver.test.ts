@@ -4,18 +4,25 @@ import {
   ManualSymbolAni,
   SymbolAnimationError,
   assertResolvedSymbolAni,
-  createDefaultSymbolAnimationResolver
+  createDefaultSymbolAnimationResolver,
 } from "../../src/symbol/index.js";
-import type { SymbolAnimationContext, SymbolAnimationResolver } from "../../src/symbol/index.js";
+import type {
+  SymbolAnimationContext,
+  SymbolAnimationResolver,
+} from "../../src/symbol/index.js";
 
-const createContext = (requestedState: string, resolvedState = requestedState): SymbolAnimationContext => {
+const createContext = (
+  requestedState: string,
+  resolvedState = requestedState,
+): SymbolAnimationContext => {
   const root = new Container();
   const sprite = new Sprite(Texture.WHITE);
+  const underlayLayer = new Container();
   const baseLayer = new Container();
   const stateSprite = new Sprite(Texture.WHITE);
   const overlayLayer = new Container();
   baseLayer.addChild(sprite);
-  root.addChild(baseLayer, stateSprite, overlayLayer);
+  root.addChild(underlayLayer, baseLayer, stateSprite, overlayLayer);
   return {
     code: 1,
     symbol: "S00",
@@ -25,12 +32,13 @@ const createContext = (requestedState: string, resolvedState = requestedState): 
     state: {
       id: resolvedState,
       phase: resolvedState === "normal" ? "stable" : "once",
-      playback: resolvedState === "normal" ? "static" : "once"
+      playback: resolvedState === "normal" ? "static" : "once",
     },
     texture: Texture.WHITE,
     stateTextures: {},
     requiredStateTextures: [],
     root,
+    underlayLayer,
     baseLayer,
     sprite,
     layers: [
@@ -38,11 +46,11 @@ const createContext = (requestedState: string, resolvedState = requestedState): 
         index: 0,
         texture: Texture.WHITE,
         keyframes: [],
-        sprite
-      }
+        sprite,
+      },
     ],
     stateSprite,
-    overlayLayer
+    overlayLayer,
   };
 };
 
@@ -59,7 +67,10 @@ describe("createDefaultSymbolAnimationResolver", () => {
     const seen: string[] = [];
     const resolver: SymbolAnimationResolver = (context) => {
       seen.push(`${context.requestedState}->${context.resolvedState}`);
-      return new ManualSymbolAni({ stateId: context.resolvedState, playback: "static" });
+      return new ManualSymbolAni({
+        stateId: context.resolvedState,
+        playback: "static",
+      });
     };
 
     resolver(createContext("spinBlur", "normal"));
@@ -72,11 +83,15 @@ describe("createDefaultSymbolAnimationResolver", () => {
       new ManualSymbolAni({
         stateId: `${context.symbol}-${context.resolvedState}`,
         playback: context.symbol === "S10" ? "loop" : "once",
-        durationSeconds: 1
+        durationSeconds: 1,
       });
 
-    expect(resolver({ ...createContext("win"), symbol: "S00" }).playback).toBe("once");
-    expect(resolver({ ...createContext("win"), symbol: "S10" }).playback).toBe("loop");
+    expect(resolver({ ...createContext("win"), symbol: "S00" }).playback).toBe(
+      "once",
+    );
+    expect(resolver({ ...createContext("win"), symbol: "S10" }).playback).toBe(
+      "loop",
+    );
   });
 
   it("throws when no animation exists or resolver returns an invalid value", () => {
@@ -85,9 +100,11 @@ describe("createDefaultSymbolAnimationResolver", () => {
     expect(() =>
       resolver({
         ...createContext("custom"),
-        state: { id: "custom", phase: "stable", playback: "static" }
-      })
+        state: { id: "custom", phase: "stable", playback: "static" },
+      }),
     ).toThrow(SymbolAnimationError);
-    expect(() => assertResolvedSymbolAni(undefined, "custom")).toThrow(SymbolAnimationError);
+    expect(() => assertResolvedSymbolAni(undefined, "custom")).toThrow(
+      SymbolAnimationError,
+    );
   });
 });

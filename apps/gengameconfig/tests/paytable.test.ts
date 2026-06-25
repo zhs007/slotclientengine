@@ -124,6 +124,20 @@ describe("parsePaytableWorkbook", () => {
     expect(parsePaytableWorkbook(file).symbolCodes).toEqual({ "10": 0 });
   });
 
+  it("uses formatted text when numeric Symbol cells have display formatting", () => {
+    const file = writePaytable(
+      [
+        ["Code", "Symbol", "X1"],
+        [0, 1, 0],
+      ],
+      {
+        B2: { t: "n", v: 1, z: "000" },
+      },
+    );
+
+    expect(parsePaytableWorkbook(file).symbolCodes).toEqual({ "001": 0 });
+  });
+
   it.each([
     ["empty", undefined],
     ["negative", -1],
