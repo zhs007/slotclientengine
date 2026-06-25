@@ -84,6 +84,20 @@ describe("parseReelsWorkbook", () => {
     expect(parseReelsWorkbook(file, { "1": 7 }).reels).toEqual([[7]]);
   });
 
+  it("uses formatted text when numeric R cells have display formatting", () => {
+    const file = writeReels(
+      [
+        ["line", "R1"],
+        [0, 1],
+      ],
+      {
+        B2: { t: "n", v: 1, z: "000" },
+      },
+    );
+
+    expect(parseReelsWorkbook(file, { "001": 7 }).reels).toEqual([[7]]);
+  });
+
   it("reports numeric R cell content as an unknown symbol when it is not configured", () => {
     const file = writeReels([
       ["line", "R1"],

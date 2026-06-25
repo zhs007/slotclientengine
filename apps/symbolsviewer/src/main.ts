@@ -1,33 +1,39 @@
 import { Application, Assets, Container, Text, type Texture } from "pixi.js";
-import rawGameConfig from "../../../assets/gamecfg/game2.json";
-import stateTextureManifest from "../../../assets/symbols/symbol-state-textures.manifest.json";
 import {
-  createDefaultSymbolAnimationResolver,
   createDefaultSymbolStatePreset,
-  createNamedSymbolAnimationResolver,
   createSymbolCatalog,
   SymbolStateSequenceController,
   type RenderSymbol,
   type SymbolAssetInput,
   type SymbolAssetMap,
+  type SymbolCatalog,
+  type SymbolCatalogValidation,
   type SymbolNormalTextureSource,
   type SymbolSequenceStep,
   type SymbolStateId,
-  type SymbolTextureSet
+  type SymbolTextureSet,
 } from "@slotclientengine/rendercore";
 import { createGameConfig } from "@slotclientengine/logiccore";
+import { createStatefulSymbolAssetMapFromModules } from "./symbol-assets.js";
 import {
-  createStatefulSymbolAssetMapFromModules,
-  SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
-} from "./symbol-assets.js";
-import { SYMBOL_VIEWER_ANIMATION_PROFILES } from "./symbol-animation-config.js";
-import { DEFAULT_VIEWER_SEQUENCE, VIEWER_STATE_ORDER } from "./viewer-sequence.js";
+  getSymbolSetConfig,
+  SYMBOL_SET_CONFIGS,
+  type SymbolSetConfig,
+} from "./symbol-set-config.js";
+import {
+  DEFAULT_VIEWER_SEQUENCE,
+  VIEWER_STATE_ORDER,
+} from "./viewer-sequence.js";
 import "./styles.css";
 
-const STAGE_WIDTH = 1080;
-const STAGE_HEIGHT = 520;
-const SYMBOL_CELL_WIDTH = 184;
-const SYMBOL_Y = 250;
+const STAGE_WIDTH = 860;
+const STAGE_HEIGHT = 980;
+const MAX_SYMBOL_COLUMNS = 6;
+const STAGE_HORIZONTAL_PADDING = 50;
+const STAGE_TOP_PADDING = 46;
+const STAGE_BOTTOM_PADDING = 30;
+const SYMBOL_LABEL_GAP = 16;
+const MIN_SYMBOL_CELL_GAP = 24;
 
 interface RenderedViewerSymbol {
   readonly renderSymbol: RenderSymbol;
@@ -47,36 +53,15 @@ async function bootstrap(): Promise<void> {
   }
 
   const statePreset = createDefaultSymbolStatePreset();
-  const rawSymbolAssetModules = import.meta.glob("../../../assets/symbols/*.png", {
-    eager: true,
-    import: "default",
-    query: "?url"
-  }) as Record<string, string>;
-  const symbolAssetUrls = createStatefulSymbolAssetMapFromModules({
-    modules: rawSymbolAssetModules,
-    manifest: stateTextureManifest,
-    requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
-  });
-  const textures = await loadSymbolTextures(symbolAssetUrls);
-  const catalog = createSymbolCatalog({
-    gameConfig: createGameConfig(rawGameConfig),
-    assets: textures,
-    statePreset,
-    animationResolver: createNamedSymbolAnimationResolver({
-      profiles: SYMBOL_VIEWER_ANIMATION_PROFILES,
-      fallback: createDefaultSymbolAnimationResolver()
-    }),
-    texturePolicy: {
-      requiredStateTextures: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
-    }
-  });
-  const validation = catalog.getValidation();
-
   const shell = document.createElement("main");
   shell.className = "app-shell";
 
   const toolbar = document.createElement("header");
   toolbar.className = "toolbar";
+  const symbolSetSelect = createSelect(
+    SYMBOL_SET_CONFIGS.map((config) => config.id),
+  );
+  symbolSetSelect.dataset.testid = "symbol-set";
   const playButton = createButton("Pause");
   playButton.dataset.testid = "play-toggle";
   const nextButton = createButton("Next");
@@ -84,10 +69,18 @@ async function bootstrap(): Promise<void> {
   const resetButton = createButton("Reset");
   resetButton.dataset.testid = "reset-sequence";
   const defaultStateSelect = createSelect(
-    statePreset.states.filter((state) => state.phase === "stable").map((state) => state.id)
+    statePreset.states
+      .filter((state) => state.phase === "stable")
+      .map((state) => state.id),
   );
   defaultStateSelect.dataset.testid = "default-state";
-  toolbar.append(playButton, nextButton, resetButton, createLabel("Default", defaultStateSelect));
+  toolbar.append(
+    createLabel("Set", symbolSetSelect),
+    playButton,
+    nextButton,
+    resetButton,
+    createLabel("Default", defaultStateSelect),
+  );
 
   const body = document.createElement("section");
   body.className = "viewer-body";
@@ -100,7 +93,12 @@ async function bootstrap(): Promise<void> {
   const statusPanel = document.createElement("div");
   statusPanel.className = "status-panel";
   statusPanel.dataset.testid = "status-panel";
-  sidePanel.append(sequenceDom.list, sequenceDom.addSelect, sequenceDom.addButton, statusPanel);
+  sidePanel.append(
+    sequenceDom.list,
+    sequenceDom.addSelect,
+    sequenceDom.addButton,
+    statusPanel,
+  );
   body.append(stageHost, sidePanel);
   shell.append(toolbar, body);
   root.appendChild(shell);
@@ -112,17 +110,20 @@ async function bootstrap(): Promise<void> {
     antialias: true,
     background: "#12141d",
     autoDensity: true,
-    resolution: window.devicePixelRatio || 1
+    resolution: window.devicePixelRatio || 1,
   });
   stageHost.appendChild(app.canvas);
 
   const symbolsRoot = new Container();
   app.stage.addChild(symbolsRoot);
-  const renderedSymbols = createRenderedSymbols(catalog, validation.displayableSymbols, symbolsRoot);
+  let renderedSymbols: RenderedViewerSymbol[] = [];
+  let activeSymbolSet = getSymbolSetConfig(symbolSetSelect.value);
+  let activeValidation: SymbolCatalogValidation | null = null;
+  let loadVersion = 0;
   let sequenceController = new SymbolStateSequenceController({
     statePreset,
     steps: DEFAULT_VIEWER_SEQUENCE,
-    autoplay: true
+    autoplay: true,
   });
 
   const broadcastState = (state: SymbolStateId) => {
@@ -133,7 +134,9 @@ async function bootstrap(): Promise<void> {
 
   const syncSequenceDom = () => {
     const currentSteps = sequenceController.getSteps();
-    sequenceDom.list.replaceChildren(...createSequenceStepRows(currentSteps, sequenceController));
+    sequenceDom.list.replaceChildren(
+      ...createSequenceStepRows(currentSteps, sequenceController),
+    );
   };
 
   const rebuildSequence = (steps: readonly SymbolSequenceStep[]) => {
@@ -141,7 +144,7 @@ async function bootstrap(): Promise<void> {
     sequenceController = new SymbolStateSequenceController({
       statePreset,
       steps,
-      autoplay: wasPlaying
+      autoplay: wasPlaying,
     });
     if (!wasPlaying) {
       sequenceController.pause();
@@ -150,8 +153,62 @@ async function bootstrap(): Promise<void> {
     broadcastState(sequenceController.getCurrentStep().state);
   };
 
+  const loadSymbolSet = async (id: string) => {
+    const version = ++loadVersion;
+    const config = getSymbolSetConfig(id);
+    symbolSetSelect.disabled = true;
+    statusPanel.replaceChildren(createStatusLine(`Loading ${config.label}`));
+
+    const { catalog, validation } = await createCatalogForSymbolSet(
+      config,
+      statePreset,
+    );
+    if (version !== loadVersion) {
+      return;
+    }
+
+    destroyRenderedSymbols(renderedSymbols);
+    symbolsRoot.removeChildren();
+    activeSymbolSet = config;
+    activeValidation = validation;
+    renderedSymbols = createRenderedSymbols(
+      catalog,
+      validation.displayableSymbols,
+      symbolsRoot,
+      config,
+    );
+    defaultStateSelect.value = statePreset.defaultState;
+    sequenceController = new SymbolStateSequenceController({
+      statePreset,
+      steps: DEFAULT_VIEWER_SEQUENCE,
+      autoplay: true,
+    });
+    playButton.textContent = "Pause";
+    symbolSetSelect.value = config.id;
+    symbolSetSelect.disabled = false;
+    syncSequenceDom();
+    broadcastState(sequenceController.getCurrentStep().state);
+    updateStatusPanel();
+  };
+
   sequenceDom.addButton.addEventListener("click", () => {
-    rebuildSequence([...sequenceController.getSteps(), { state: sequenceDom.addSelect.value }]);
+    rebuildSequence([
+      ...sequenceController.getSteps(),
+      { state: sequenceDom.addSelect.value },
+    ]);
+  });
+  symbolSetSelect.addEventListener("change", () => {
+    const previousId = activeSymbolSet.id;
+    void loadSymbolSet(symbolSetSelect.value).catch((error) => {
+      console.error("symbolsviewer symbol set switch failed", error);
+      symbolSetSelect.value = previousId;
+      symbolSetSelect.disabled = false;
+      statusPanel.replaceChildren(
+        createStatusLine(
+          error instanceof Error ? error.message : String(error),
+        ),
+      );
+    });
   });
   playButton.addEventListener("click", () => {
     if (sequenceController.isPlaying()) {
@@ -183,11 +240,14 @@ async function bootstrap(): Promise<void> {
 
   function createSequenceStepRows(
     steps: readonly SymbolSequenceStep[],
-    controller: SymbolStateSequenceController
+    controller: SymbolStateSequenceController,
   ): HTMLElement[] {
     return steps.map((step, index) => {
       const row = document.createElement("div");
-      row.className = index === controller.getCurrentIndex() ? "sequence-row is-current" : "sequence-row";
+      row.className =
+        index === controller.getCurrentIndex()
+          ? "sequence-row is-current"
+          : "sequence-row";
       row.dataset.testid = `sequence-row-${index}`;
       const stateSelect = createSelect([...VIEWER_STATE_ORDER], step.state);
       stateSelect.dataset.testid = `sequence-state-${index}`;
@@ -196,7 +256,9 @@ async function bootstrap(): Promise<void> {
       holdInput.step = "0.1";
       holdInput.min = "0";
       holdInput.value = String(step.holdSeconds ?? 0);
-      holdInput.disabled = statePreset.states.find((state) => state.id === step.state)?.phase === "once";
+      holdInput.disabled =
+        statePreset.states.find((state) => state.id === step.state)?.phase ===
+        "once";
       holdInput.dataset.testid = `sequence-hold-${index}`;
       const upButton = createButton("Up");
       upButton.dataset.testid = `sequence-up-${index}`;
@@ -206,17 +268,27 @@ async function bootstrap(): Promise<void> {
       removeButton.dataset.testid = `sequence-remove-${index}`;
 
       stateSelect.addEventListener("change", () => {
-        const nextStep = normalizeViewerStep(stateSelect.value, Number.parseFloat(holdInput.value));
-        const nextSteps = controller.getSteps().map((current, currentIndex) =>
-          currentIndex === index ? nextStep : current
+        const nextStep = normalizeViewerStep(
+          stateSelect.value,
+          Number.parseFloat(holdInput.value),
         );
+        const nextSteps = controller
+          .getSteps()
+          .map((current, currentIndex) =>
+            currentIndex === index ? nextStep : current,
+          );
         rebuildSequence(nextSteps);
       });
       holdInput.addEventListener("change", () => {
-        const nextStep = normalizeViewerStep(stateSelect.value, Number.parseFloat(holdInput.value));
-        const nextSteps = controller.getSteps().map((current, currentIndex) =>
-          currentIndex === index ? nextStep : current
+        const nextStep = normalizeViewerStep(
+          stateSelect.value,
+          Number.parseFloat(holdInput.value),
         );
+        const nextSteps = controller
+          .getSteps()
+          .map((current, currentIndex) =>
+            currentIndex === index ? nextStep : current,
+          );
         rebuildSequence(nextSteps);
       });
       upButton.addEventListener("click", () => {
@@ -237,7 +309,11 @@ async function bootstrap(): Promise<void> {
       });
       removeButton.addEventListener("click", () => {
         if (controller.getSteps().length > 1) {
-          rebuildSequence(controller.getSteps().filter((_current, currentIndex) => currentIndex !== index));
+          rebuildSequence(
+            controller
+              .getSteps()
+              .filter((_current, currentIndex) => currentIndex !== index),
+          );
         }
       });
       row.append(stateSelect, holdInput, upButton, downButton, removeButton);
@@ -252,29 +328,40 @@ async function bootstrap(): Promise<void> {
       return `${item.renderSymbol.symbol}: ${snapshot.requestedState} -> ${snapshot.resolvedState} / ${snapshot.defaultState}${snapshot.pendingState ? ` / ${snapshot.pendingState}` : ""}`;
     });
     statusPanel.replaceChildren(
-      createStatusLine(`Index ${sequenceController.getCurrentIndex()} · ${currentStep.state}`),
+      createStatusLine(`Set ${activeSymbolSet.label}`),
+      createStatusLine(
+        `Index ${sequenceController.getCurrentIndex()} · ${currentStep.state}`,
+      ),
       createStatusLine(sequenceController.isPlaying() ? "Playing" : "Paused"),
-      ...lines.map(createStatusLine)
+      createStatusLine(
+        `Displayable ${activeValidation?.displayableSymbols.length ?? 0}`,
+      ),
+      ...lines.map(createStatusLine),
     );
   }
 
   let elapsedSincePanelUpdate = 0;
-  broadcastState(sequenceController.getCurrentStep().state);
-  syncSequenceDom();
-  updateStatusPanel();
+  await loadSymbolSet(symbolSetSelect.value);
 
   app.ticker.add((ticker) => {
     const deltaSeconds = ticker.deltaMS / 1000;
     const currentStep = sequenceController.getCurrentStep();
-    const currentState = statePreset.states.find((state) => state.id === currentStep.state);
-    const results = renderedSymbols.map((item) => item.renderSymbol.update(deltaSeconds));
+    const currentState = statePreset.states.find(
+      (state) => state.id === currentStep.state,
+    );
+    const results = renderedSymbols.map((item) =>
+      item.renderSymbol.update(deltaSeconds),
+    );
     const onceCompleted =
       currentState?.phase === "once" &&
       results.length > 0 &&
-      results.every((result) => result.onceCompleted || result.requestedState !== currentStep.state);
+      results.every(
+        (result) =>
+          result.onceCompleted || result.requestedState !== currentStep.state,
+      );
     const sequenceResult = sequenceController.update({
       deltaSeconds,
-      onceCompleted
+      onceCompleted,
     });
     if (sequenceResult.shouldRequestState) {
       broadcastState(sequenceResult.state);
@@ -289,27 +376,34 @@ async function bootstrap(): Promise<void> {
   });
 }
 
-async function loadSymbolTextures(symbolAssetUrls: SymbolAssetMap): Promise<SymbolAssetMap> {
+async function loadSymbolTextures(
+  symbolAssetUrls: SymbolAssetMap,
+): Promise<SymbolAssetMap> {
   const entries = await Promise.all(
     Object.entries(symbolAssetUrls).map(async ([symbol, asset]) => {
       return [symbol, await loadSymbolAssetInput(asset)] as const;
-    })
+    }),
   );
   return Object.freeze(Object.fromEntries(entries));
 }
 
-async function loadSymbolAssetInput(asset: SymbolAssetInput): Promise<SymbolAssetInput> {
+async function loadSymbolAssetInput(
+  asset: SymbolAssetInput,
+): Promise<SymbolAssetInput> {
   if (isSymbolTextureSet(asset)) {
     const stateEntries = await Promise.all(
       Object.entries(asset.states ?? {})
-        .filter((entry): entry is [string, Texture | string] => entry[1] !== undefined)
+        .filter(
+          (entry): entry is [string, Texture | string] =>
+            entry[1] !== undefined,
+        )
         .map(async ([state, urlOrTexture]) => {
           return [state, await loadTexture(urlOrTexture)] as const;
-        })
+        }),
     );
     return Object.freeze({
       normal: await loadNormalTextureSource(asset.normal),
-      states: Object.freeze(Object.fromEntries(stateEntries))
+      states: Object.freeze(Object.fromEntries(stateEntries)),
     });
   }
 
@@ -317,30 +411,32 @@ async function loadSymbolAssetInput(asset: SymbolAssetInput): Promise<SymbolAsse
 }
 
 async function loadNormalTextureSource(
-  normal: SymbolTextureSet["normal"]
+  normal: SymbolTextureSet["normal"],
 ): Promise<Texture | SymbolNormalTextureSource<Texture>> {
   if (isSymbolNormalTextureSource(normal)) {
     if (normal.kind === "single") {
       return Object.freeze({
         kind: "single",
-        texture: await loadTexture(normal.texture)
+        texture: await loadTexture(normal.texture),
       });
     }
     const layers = await Promise.all(
       normal.layers.map(async (layer) => {
         const keyframes = await Promise.all(
-          (layer.keyframes ?? []).map((keyframe) => loadTexture(keyframe))
+          (layer.keyframes ?? []).map((keyframe) => loadTexture(keyframe)),
         );
         return Object.freeze({
           index: layer.index,
           texture: await loadTexture(layer.texture),
-          ...(keyframes.length > 0 ? { keyframes: Object.freeze(keyframes) } : {})
+          ...(keyframes.length > 0
+            ? { keyframes: Object.freeze(keyframes) }
+            : {}),
         });
-      })
+      }),
     );
     return Object.freeze({
       kind: "layered",
-      layers: Object.freeze(layers)
+      layers: Object.freeze(layers),
     });
   }
 
@@ -354,12 +450,14 @@ async function loadTexture(texture: Texture | string): Promise<Texture> {
   return texture;
 }
 
-function isSymbolTextureSet(asset: SymbolAssetInput): asset is SymbolTextureSet {
+function isSymbolTextureSet(
+  asset: SymbolAssetInput,
+): asset is SymbolTextureSet {
   return typeof asset === "object" && asset !== null && "normal" in asset;
 }
 
 function isSymbolNormalTextureSource(
-  normal: SymbolTextureSet["normal"]
+  normal: SymbolTextureSet["normal"],
 ): normal is SymbolNormalTextureSource<Texture | string> {
   return (
     typeof normal === "object" &&
@@ -370,32 +468,80 @@ function isSymbolNormalTextureSource(
 }
 
 function createRenderedSymbols(
-  catalog: ReturnType<typeof createSymbolCatalog>,
+  catalog: SymbolCatalog,
   symbols: readonly string[],
-  root: Container
+  root: Container,
+  config: SymbolSetConfig,
 ): RenderedViewerSymbol[] {
-  const startX = STAGE_WIDTH / 2 - ((symbols.length - 1) * SYMBOL_CELL_WIDTH) / 2;
-  return symbols.map((symbol, index) => {
+  const entries = symbols.map((symbol) => {
     const renderSymbol = catalog.createRenderSymbol(symbol);
-    const scale = Math.min(1, 126 / getRenderSymbolMaxTextureSize(renderSymbol));
-    renderSymbol.position.set(startX + SYMBOL_CELL_WIDTH * index, SYMBOL_Y);
-    renderSymbol.scale.set(scale);
-
-    const label = new Text({
-      text: symbol,
-      style: {
-        fill: "#f8fafc",
-        fontSize: 18,
-        fontFamily: "Inter, Arial, sans-serif",
-        fontWeight: "700"
-      }
-    });
-    label.anchor.set(0.5);
-    label.position.set(renderSymbol.x, SYMBOL_Y + 112);
-
-    root.addChild(renderSymbol, label);
-    return { renderSymbol, label };
+    const maxTextureSize = getRenderSymbolMaxTextureSize(renderSymbol);
+    const scale = getSymbolScale(config, symbol);
+    return { symbol, renderSymbol, maxTextureSize, scale };
   });
+  const maxScaledTextureSize = Math.max(
+    1,
+    ...entries.map((entry) => entry.maxTextureSize * entry.scale),
+  );
+  const columns = getSymbolColumnCount(symbols.length, maxScaledTextureSize);
+  const rows = Math.max(1, Math.ceil(symbols.length / columns));
+  const cellWidth = (STAGE_WIDTH - STAGE_HORIZONTAL_PADDING * 2) / columns;
+  const cellHeight =
+    (STAGE_HEIGHT - STAGE_TOP_PADDING - STAGE_BOTTOM_PADDING) / rows;
+
+  return entries.map(
+    ({ symbol, renderSymbol, maxTextureSize, scale }, index) => {
+      const row = Math.floor(index / columns);
+      const column = index % columns;
+      const rowLength = Math.min(columns, symbols.length - row * columns);
+      const rowStartX = STAGE_WIDTH / 2 - ((rowLength - 1) * cellWidth) / 2;
+      const x = rowStartX + cellWidth * column;
+      const y = STAGE_TOP_PADDING + cellHeight * row + cellHeight / 2;
+      const scaledSize = maxTextureSize * scale;
+      renderSymbol.position.set(x, y);
+      renderSymbol.scale.set(scale);
+
+      const label = new Text({
+        text: symbol,
+        style: {
+          fill: "#f8fafc",
+          fontSize: 18,
+          fontFamily: "Inter, Arial, sans-serif",
+          fontWeight: "700",
+        },
+      });
+      label.anchor.set(0.5);
+      label.position.set(
+        renderSymbol.x,
+        Math.min(STAGE_HEIGHT - 18, y + scaledSize / 2 + SYMBOL_LABEL_GAP),
+      );
+
+      root.addChild(renderSymbol, label);
+      return { renderSymbol, label };
+    },
+  );
+}
+
+function getSymbolScale(config: SymbolSetConfig, symbol: string): number {
+  return config.symbolScales?.[symbol] ?? 1;
+}
+
+function getSymbolColumnCount(
+  symbolCount: number,
+  maxScaledTextureSize: number,
+): number {
+  const availableWidth = STAGE_WIDTH - STAGE_HORIZONTAL_PADDING * 2;
+  const maxColumnsByWidth = Math.max(
+    1,
+    Math.floor(
+      (availableWidth + MIN_SYMBOL_CELL_GAP) /
+        (maxScaledTextureSize + MIN_SYMBOL_CELL_GAP),
+    ),
+  );
+  return Math.max(
+    1,
+    Math.min(MAX_SYMBOL_COLUMNS, symbolCount, maxColumnsByWidth),
+  );
 }
 
 function getRenderSymbolMaxTextureSize(renderSymbol: RenderSymbol): number {
@@ -403,7 +549,9 @@ function getRenderSymbolMaxTextureSize(renderSymbol: RenderSymbol): number {
     1,
     ...renderSymbol
       .getLayerSprites()
-      .map((layer) => Math.max(layer.texture.width || 1, layer.texture.height || 1))
+      .map((layer) =>
+        Math.max(layer.texture.width || 1, layer.texture.height || 1),
+      ),
   );
 }
 
@@ -426,7 +574,10 @@ function createButton(text: string): HTMLButtonElement {
   return button;
 }
 
-function createSelect(values: readonly string[], selected = values[0]): HTMLSelectElement {
+function createSelect(
+  values: readonly string[],
+  selected = values[0],
+): HTMLSelectElement {
   const select = document.createElement("select");
   for (const value of values) {
     const option = document.createElement("option");
@@ -454,16 +605,57 @@ function createStatusLine(text: string): HTMLElement {
   return line;
 }
 
-function normalizeViewerStep(state: string, holdSeconds: number): SymbolSequenceStep {
+function normalizeViewerStep(
+  state: string,
+  holdSeconds: number,
+): SymbolSequenceStep {
   if (state === "appear" || state === "win") {
     return Object.freeze({ state });
   }
   return Object.freeze({
     state,
-    holdSeconds: Number.isFinite(holdSeconds) && holdSeconds >= 0 ? holdSeconds : 0.5
+    holdSeconds:
+      Number.isFinite(holdSeconds) && holdSeconds >= 0 ? holdSeconds : 0.5,
   });
 }
 
 void bootstrap().catch((error) => {
   console.error("symbolsviewer bootstrap failed", error);
 });
+
+async function createCatalogForSymbolSet(
+  config: SymbolSetConfig,
+  statePreset: ReturnType<typeof createDefaultSymbolStatePreset>,
+): Promise<{
+  readonly catalog: SymbolCatalog;
+  readonly validation: SymbolCatalogValidation;
+}> {
+  const symbolAssetUrls = createStatefulSymbolAssetMapFromModules({
+    modules: config.modules,
+    manifest: config.manifest,
+    requiredStates: config.requiredStates,
+  });
+  const textures = await loadSymbolTextures(symbolAssetUrls);
+  const catalog = createSymbolCatalog({
+    gameConfig: createGameConfig(config.rawGameConfig),
+    assets: textures,
+    statePreset,
+    animationResolver: config.animationResolver,
+    texturePolicy: {
+      requiredStateTextures: config.requiredStates,
+    },
+  });
+  return Object.freeze({
+    catalog,
+    validation: catalog.getValidation(),
+  });
+}
+
+function destroyRenderedSymbols(
+  renderedSymbols: readonly RenderedViewerSymbol[],
+): void {
+  for (const item of renderedSymbols) {
+    item.renderSymbol.destroy({ children: true });
+    item.label.destroy();
+  }
+}

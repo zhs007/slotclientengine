@@ -12,7 +12,7 @@ import type {
   SymbolNormalTextureSource,
   SymbolStateId,
   SymbolStateSnapshot,
-  SymbolVisualLayer
+  SymbolVisualLayer,
 } from "./types.js";
 
 export class RenderSymbol extends VisualEntity<void> {
@@ -23,6 +23,7 @@ export class RenderSymbol extends VisualEntity<void> {
   readonly stateTextures: Readonly<Partial<Record<SymbolStateId, Texture>>>;
   readonly requiredStateTextures: readonly SymbolStateId[];
   readonly sprite: Sprite;
+  readonly underlayLayer: Container;
   readonly baseLayer: Container;
   readonly layers: readonly SymbolVisualLayer[];
   readonly stateSprite: Sprite;
@@ -44,7 +45,10 @@ export class RenderSymbol extends VisualEntity<void> {
         ? this.normalSource.texture
         : this.normalSource.layers[0].texture;
     this.stateTextures = Object.freeze({ ...(options.stateTextures ?? {}) });
-    this.requiredStateTextures = Object.freeze([...(options.requiredStateTextures ?? [])]);
+    this.requiredStateTextures = Object.freeze([
+      ...(options.requiredStateTextures ?? []),
+    ]);
+    this.underlayLayer = new Container();
     this.baseLayer = new Container();
     this.layers = Object.freeze(createVisualLayers(this.normalSource));
     this.sprite = this.layers[0].sprite;
@@ -56,7 +60,12 @@ export class RenderSymbol extends VisualEntity<void> {
     this.stateSprite.anchor.set(0.5);
     this.stateSprite.visible = false;
     this.baseLayer.addChild(...this.layers.map((layer) => layer.sprite));
-    this.addChild(this.baseLayer, this.stateSprite, this.overlayLayer);
+    this.addChild(
+      this.underlayLayer,
+      this.baseLayer,
+      this.stateSprite,
+      this.overlayLayer,
+    );
 
     this.#lastAniKey = this.createAniKey(this.#stateMachine.getSnapshot());
     this.#currentAni = this.createCurrentAni();
@@ -74,6 +83,10 @@ export class RenderSymbol extends VisualEntity<void> {
 
   getMainSprite(): Sprite {
     return this.sprite;
+  }
+
+  getUnderlayLayer(): Container {
+    return this.underlayLayer;
   }
 
   getLayerSprites(): readonly SymbolVisualLayer[] {
@@ -120,7 +133,7 @@ export class RenderSymbol extends VisualEntity<void> {
       resolvedState: snapshot.resolvedState,
       loopCompleted: aniResult.loopCompleted,
       onceCompleted: aniResult.onceCompleted,
-      stateChanged
+      stateChanged,
     });
   }
 
@@ -151,7 +164,7 @@ export class RenderSymbol extends VisualEntity<void> {
     assertResolvedSymbolAni(ani, context.resolvedState);
     if (ani.playback !== context.state.playback) {
       throw new SymbolAnimationError(
-        `Animation resolver returned playback "${ani.playback}" for state "${context.resolvedState}", expected "${context.state.playback}".`
+        `Animation resolver returned playback "${ani.playback}" for state "${context.resolvedState}", expected "${context.state.playback}".`,
       );
     }
     return ani;
@@ -170,11 +183,12 @@ export class RenderSymbol extends VisualEntity<void> {
       stateTextures: this.stateTextures,
       requiredStateTextures: this.requiredStateTextures,
       root: this,
+      underlayLayer: this.underlayLayer,
       baseLayer: this.baseLayer,
       sprite: this.sprite,
       layers: this.layers,
       stateSprite: this.stateSprite,
-      overlayLayer: this.overlayLayer
+      overlayLayer: this.overlayLayer,
     });
   }
 
@@ -184,17 +198,19 @@ export class RenderSymbol extends VisualEntity<void> {
 }
 
 function normalizeRenderSymbolNormalSource(
-  texture: Texture | SymbolNormalTextureSource<Texture>
+  texture: Texture | SymbolNormalTextureSource<Texture>,
 ): SymbolNormalTextureSource<Texture> {
   if (isNormalSource(texture)) {
     if (texture.kind === "single") {
       return Object.freeze({
         kind: "single",
-        texture: assertTexture(texture.texture, "single normal")
+        texture: assertTexture(texture.texture, "single normal"),
       });
     }
     if (texture.layers.length === 0) {
-      throw new SymbolAnimationError("Layered symbol normal texture must include at least one layer.");
+      throw new SymbolAnimationError(
+        "Layered symbol normal texture must include at least one layer.",
+      );
     }
     return Object.freeze({
       kind: "layered",
@@ -204,31 +220,46 @@ function normalizeRenderSymbolNormalSource(
           .map((layer, expectedIndex) => {
             if (layer.index !== expectedIndex) {
               throw new SymbolAnimationError(
-                "Layered symbol normal texture must use consecutive indexes from 0."
+                "Layered symbol normal texture must use consecutive indexes from 0.",
               );
             }
-            const layerTexture = assertTexture(layer.texture, `layer ${layer.index}`);
-            const keyframes = normalizeLayerKeyframes(layer.index, layerTexture, layer.keyframes ?? []);
+            const layerTexture = assertTexture(
+              layer.texture,
+              `layer ${layer.index}`,
+            );
+            const keyframes = normalizeLayerKeyframes(
+              layer.index,
+              layerTexture,
+              layer.keyframes ?? [],
+            );
             return Object.freeze({
               index: layer.index,
               texture: layerTexture,
-              keyframes
+              keyframes,
             });
-          })
-      )
+          }),
+      ),
     });
   }
 
   return Object.freeze({
     kind: "single",
-    texture: assertTexture(texture, "normal")
+    texture: assertTexture(texture, "normal"),
   });
 }
 
-function createVisualLayers(normalSource: SymbolNormalTextureSource<Texture>): SymbolVisualLayer[] {
+function createVisualLayers(
+  normalSource: SymbolNormalTextureSource<Texture>,
+): SymbolVisualLayer[] {
   const layerSources =
     normalSource.kind === "single"
-      ? [Object.freeze({ index: 0, texture: normalSource.texture, keyframes: Object.freeze([]) })]
+      ? [
+          Object.freeze({
+            index: 0,
+            texture: normalSource.texture,
+            keyframes: Object.freeze([]),
+          }),
+        ]
       : normalSource.layers;
 
   return layerSources.map((layer) => {
@@ -238,7 +269,7 @@ function createVisualLayers(normalSource: SymbolNormalTextureSource<Texture>): S
       index: layer.index,
       texture: layer.texture,
       keyframes: layer.keyframes ?? Object.freeze([]),
-      sprite
+      sprite,
     });
   });
 }
@@ -246,31 +277,39 @@ function createVisualLayers(normalSource: SymbolNormalTextureSource<Texture>): S
 function normalizeLayerKeyframes(
   index: number,
   texture: Texture,
-  keyframes: readonly Texture[]
+  keyframes: readonly Texture[],
 ): readonly Texture[] {
   if (keyframes.length === 0) {
     return Object.freeze([]);
   }
   if (keyframes[0] !== texture) {
-    throw new SymbolAnimationError(`Symbol layer ${index} keyframes must start with the layer texture.`);
+    throw new SymbolAnimationError(
+      `Symbol layer ${index} keyframes must start with the layer texture.`,
+    );
   }
   const width = getTextureWidth(texture);
   const height = getTextureHeight(texture);
   return Object.freeze(
     keyframes.map((keyframe, keyframeIndex) => {
-      const loadedKeyframe = assertTexture(keyframe, `layer ${index} keyframe ${keyframeIndex}`);
-      if (getTextureWidth(loadedKeyframe) !== width || getTextureHeight(loadedKeyframe) !== height) {
+      const loadedKeyframe = assertTexture(
+        keyframe,
+        `layer ${index} keyframe ${keyframeIndex}`,
+      );
+      if (
+        getTextureWidth(loadedKeyframe) !== width ||
+        getTextureHeight(loadedKeyframe) !== height
+      ) {
         throw new SymbolAnimationError(
-          `Symbol layer ${index} keyframe textures must match the layer texture dimensions.`
+          `Symbol layer ${index} keyframe textures must match the layer texture dimensions.`,
         );
       }
       return loadedKeyframe;
-    })
+    }),
   );
 }
 
 function isNormalSource(
-  texture: Texture | SymbolNormalTextureSource<Texture>
+  texture: Texture | SymbolNormalTextureSource<Texture>,
 ): texture is SymbolNormalTextureSource<Texture> {
   return (
     typeof texture === "object" &&
@@ -288,9 +327,15 @@ function assertTexture(texture: Texture, label: string): Texture {
 }
 
 function getTextureWidth(texture: Texture): number {
-  return Math.max(0, texture.width || texture.source?.width || texture.orig?.width || 0);
+  return Math.max(
+    0,
+    texture.width || texture.source?.width || texture.orig?.width || 0,
+  );
 }
 
 function getTextureHeight(texture: Texture): number {
-  return Math.max(0, texture.height || texture.source?.height || texture.orig?.height || 0);
+  return Math.max(
+    0,
+    texture.height || texture.source?.height || texture.orig?.height || 0,
+  );
 }

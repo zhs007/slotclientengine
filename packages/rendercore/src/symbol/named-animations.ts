@@ -8,7 +8,7 @@ import type {
   SymbolAnimationProfileMap,
   SymbolAnimationResolver,
   SymbolLayerEffect,
-  SymbolNamedAnimationSpec
+  SymbolNamedAnimationSpec,
 } from "./types.js";
 
 export interface CreateNamedSymbolAnimationResolverOptions {
@@ -24,11 +24,11 @@ const DEG_TO_RAD = Math.PI / 180;
 const SHINE_MASK_ROTATION = Math.PI / 7;
 
 export function createNamedSymbolAnimationResolver(
-  options: CreateNamedSymbolAnimationResolverOptions
+  options: CreateNamedSymbolAnimationResolverOptions,
 ): SymbolAnimationResolver {
   const registry = Object.freeze({
     ...createDefaultNamedSymbolAnimationRegistry(),
-    ...(options.registry ?? {})
+    ...(options.registry ?? {}),
   });
 
   return (context) => {
@@ -36,14 +36,16 @@ export function createNamedSymbolAnimationResolver(
     if (!profile) {
       if (!options.fallback) {
         throw new SymbolAnimationError(
-          `No named symbol animation profile for "${context.symbol}" state "${context.resolvedState}".`
+          `No named symbol animation profile for "${context.symbol}" state "${context.resolvedState}".`,
         );
       }
       return options.fallback(context);
     }
 
     assertAnimationProfile(context, profile);
-    const effects = profile.effects.map((spec) => createEffect(context, profile, spec, registry));
+    const effects = profile.effects.map((spec) =>
+      createEffect(context, profile, spec, registry),
+    );
     return new ManualSymbolAni({
       stateId: context.resolvedState,
       playback: profile.playback,
@@ -63,7 +65,7 @@ export function createNamedSymbolAnimationResolver(
         for (const effect of effects) {
           effect.complete();
         }
-      }
+      },
     });
   };
 }
@@ -75,7 +77,8 @@ export function createDefaultNamedSymbolAnimationRegistry(): NamedSymbolAnimatio
     layerShineScale: createLayerShineScaleEffect,
     layerStaggeredShineScale: createLayerStaggeredShineScaleEffect,
     singleSpriteAppear: createSingleSpriteAppearEffect,
-    singleSpriteWinShine: createSingleSpriteWinShineEffect
+    singleSpriteUnderlayScale: createSingleSpriteUnderlayScaleEffect,
+    singleSpriteWinShine: createSingleSpriteWinShineEffect,
   });
 }
 
@@ -83,7 +86,7 @@ function createEffect(
   context: SymbolAnimationContext,
   profile: SymbolAnimationProfile,
   spec: SymbolNamedAnimationSpec,
-  registry: NamedSymbolAnimationRegistry
+  registry: NamedSymbolAnimationRegistry,
 ): SymbolLayerEffect {
   const factory = registry[spec.name];
   if (!factory) {
@@ -95,13 +98,18 @@ function createEffect(
 function createLayerTextureSequenceEffect(
   context: SymbolAnimationContext,
   params: Readonly<Record<string, unknown>>,
-  profile: SymbolAnimationProfile
+  profile: SymbolAnimationProfile,
 ): SymbolLayerEffect {
-  assertKnownParams(params, ["layer", "frameDurationSeconds", "delaySeconds", "durationRatio"]);
+  assertKnownParams(params, [
+    "layer",
+    "frameDurationSeconds",
+    "delaySeconds",
+    "durationRatio",
+  ]);
   const layer = getLayer(context, readIntegerParam(params, "layer"));
   if (layer.keyframes.length < 2) {
     throw new SymbolAnimationError(
-      `Symbol "${context.symbol}" layer ${layer.index} must declare at least two keyframes for layerTextureSequence.`
+      `Symbol "${context.symbol}" layer ${layer.index} must declare at least two keyframes for layerTextureSequence.`,
     );
   }
   const delaySeconds = readNonNegativeNumberParam(params, "delaySeconds", 0);
@@ -120,24 +128,24 @@ function createLayerTextureSequenceEffect(
       const sequenceDurationSeconds = profile.durationSeconds * durationRatio;
       const clampedElapsedSeconds = Math.min(
         Math.max(elapsedSeconds, 0),
-        sequenceDurationSeconds
+        sequenceDurationSeconds,
       );
       const frameIndex = Math.min(
         layer.keyframes.length - 1,
-        Math.floor((clampedElapsedSeconds + 1e-9) / frameDurationSeconds)
+        Math.floor((clampedElapsedSeconds + 1e-9) / frameDurationSeconds),
       );
       layer.sprite.texture = layer.keyframes[frameIndex] ?? layer.texture;
     },
     complete: () => {
       layer.sprite.texture = layer.texture;
-    }
+    },
   });
 }
 
 function createLayerBounceScaleEffect(
   context: SymbolAnimationContext,
   params: Readonly<Record<string, unknown>>,
-  profile: SymbolAnimationProfile
+  profile: SymbolAnimationProfile,
 ): SymbolLayerEffect {
   assertKnownParams(params, [
     "layer",
@@ -145,14 +153,19 @@ function createLayerBounceScaleEffect(
     "offsetY",
     "cycles",
     "delaySeconds",
-    "rotationDegrees"
+    "rotationDegrees",
   ]);
   const layer = getLayer(context, readIntegerParam(params, "layer"));
-  const maxScale = readPositiveNumberParam(params, "maxScale", DEFAULT_MAX_SCALE);
+  const maxScale = readPositiveNumberParam(
+    params,
+    "maxScale",
+    DEFAULT_MAX_SCALE,
+  );
   const offsetY = readFiniteNumberParam(params, "offsetY", -10);
   const cycles = readPositiveNumberParam(params, "cycles", 1);
   const delaySeconds = readNonNegativeNumberParam(params, "delaySeconds", 0);
-  const rotationRadians = readFiniteNumberParam(params, "rotationDegrees", 0) * DEG_TO_RAD;
+  const rotationRadians =
+    readFiniteNumberParam(params, "rotationDegrees", 0) * DEG_TO_RAD;
 
   return Object.freeze({
     reset: () => {
@@ -161,7 +174,12 @@ function createLayerBounceScaleEffect(
       layer.sprite.rotation = 0;
     },
     progress: (progress: number) => {
-      const localProgress = createLocalProgress(progress, profile.durationSeconds, delaySeconds, 1);
+      const localProgress = createLocalProgress(
+        progress,
+        profile.durationSeconds,
+        delaySeconds,
+        1,
+      );
       const pulse = Math.sin(Math.PI * localProgress);
       const bob = Math.sin(Math.PI * 2 * cycles * localProgress);
       layer.sprite.scale.set(1 + pulse * (maxScale - 1));
@@ -172,14 +190,14 @@ function createLayerBounceScaleEffect(
       layer.sprite.position.set(0);
       layer.sprite.scale.set(1);
       layer.sprite.rotation = 0;
-    }
+    },
   });
 }
 
 function createLayerShineScaleEffect(
   context: SymbolAnimationContext,
   params: Readonly<Record<string, unknown>>,
-  profile: SymbolAnimationProfile
+  profile: SymbolAnimationProfile,
 ): SymbolLayerEffect {
   assertKnownParams(params, [
     "layer",
@@ -188,15 +206,28 @@ function createLayerShineScaleEffect(
     "shineWidthRatio",
     "delaySeconds",
     "durationRatio",
-    "rotationDegrees"
+    "rotationDegrees",
   ]);
   const layer = getLayer(context, readIntegerParam(params, "layer"));
-  const maxScale = readPositiveNumberParam(params, "maxScale", DEFAULT_MAX_SCALE);
-  const shineAlpha = readNonNegativeNumberParam(params, "shineAlpha", DEFAULT_SHINE_ALPHA);
-  const shineWidthRatio = readPositiveNumberParam(params, "shineWidthRatio", DEFAULT_SHINE_WIDTH_RATIO);
+  const maxScale = readPositiveNumberParam(
+    params,
+    "maxScale",
+    DEFAULT_MAX_SCALE,
+  );
+  const shineAlpha = readNonNegativeNumberParam(
+    params,
+    "shineAlpha",
+    DEFAULT_SHINE_ALPHA,
+  );
+  const shineWidthRatio = readPositiveNumberParam(
+    params,
+    "shineWidthRatio",
+    DEFAULT_SHINE_WIDTH_RATIO,
+  );
   const delaySeconds = readNonNegativeNumberParam(params, "delaySeconds", 0);
   const durationRatio = readPositiveNumberParam(params, "durationRatio", 1);
-  const rotationRadians = readFiniteNumberParam(params, "rotationDegrees", 0) * DEG_TO_RAD;
+  const rotationRadians =
+    readFiniteNumberParam(params, "rotationDegrees", 0) * DEG_TO_RAD;
   let shineSprite: Sprite | null = null;
   let shineMask: Graphics | null = null;
 
@@ -218,13 +249,14 @@ function createLayerShineScaleEffect(
         progress,
         profile.durationSeconds,
         delaySeconds,
-        durationRatio
+        durationRatio,
       );
       const easedSweep = easeOutCubic(localProgress);
       const pulseScale = 1 + Math.sin(Math.PI * localProgress) * (maxScale - 1);
       const width = getTextureWidth(layer.texture);
       layer.sprite.scale.set(pulseScale);
-      layer.sprite.rotation = Math.sin(Math.PI * localProgress) * rotationRadians;
+      layer.sprite.rotation =
+        Math.sin(Math.PI * localProgress) * rotationRadians;
       shineSprite.position.copyFrom(layer.sprite.position);
       shineSprite.scale.copyFrom(layer.sprite.scale);
       shineSprite.rotation = layer.sprite.rotation;
@@ -240,22 +272,37 @@ function createLayerShineScaleEffect(
       clearOverlay(context, shineSprite);
       shineSprite = null;
       shineMask = null;
-    }
+    },
   });
 }
 
 function createLayerStaggeredShineScaleEffect(
   context: SymbolAnimationContext,
   params: Readonly<Record<string, unknown>>,
-  profile: SymbolAnimationProfile
+  profile: SymbolAnimationProfile,
 ): SymbolLayerEffect {
-  assertKnownParams(params, ["layers", "maxScale", "staggerSeconds", "durationRatio"]);
+  assertKnownParams(params, [
+    "layers",
+    "maxScale",
+    "staggerSeconds",
+    "durationRatio",
+  ]);
   const layerIndexes = readIntegerArrayParam(params, "layers");
   if (layerIndexes.length === 0) {
-    throw new SymbolAnimationError('Animation param "layers" must include at least one layer.');
+    throw new SymbolAnimationError(
+      'Animation param "layers" must include at least one layer.',
+    );
   }
-  const maxScale = readPositiveNumberParam(params, "maxScale", DEFAULT_MAX_SCALE);
-  const staggerSeconds = readNonNegativeNumberParam(params, "staggerSeconds", 0.08);
+  const maxScale = readPositiveNumberParam(
+    params,
+    "maxScale",
+    DEFAULT_MAX_SCALE,
+  );
+  const staggerSeconds = readNonNegativeNumberParam(
+    params,
+    "staggerSeconds",
+    0.08,
+  );
   const durationRatio = readPositiveNumberParam(params, "durationRatio", 0.78);
   const effects = layerIndexes.map((layerIndex, index) =>
     createLayerShineScaleEffect(
@@ -264,10 +311,10 @@ function createLayerStaggeredShineScaleEffect(
         layer: layerIndex,
         maxScale,
         delaySeconds: staggerSeconds * index,
-        durationRatio
+        durationRatio,
       },
-      profile
-    )
+      profile,
+    ),
   );
 
   return Object.freeze({
@@ -285,14 +332,14 @@ function createLayerStaggeredShineScaleEffect(
       for (const effect of effects) {
         effect.complete();
       }
-    }
+    },
   });
 }
 
 function createSingleSpriteAppearEffect(
   context: SymbolAnimationContext,
   params: Readonly<Record<string, unknown>>,
-  _profile: SymbolAnimationProfile
+  _profile: SymbolAnimationProfile,
 ): SymbolLayerEffect {
   assertKnownParams(params, ["maxScale"]);
   const maxScale = readPositiveNumberParam(params, "maxScale", 1.5);
@@ -302,39 +349,89 @@ function createSingleSpriteAppearEffect(
       context.sprite.scale.set(1);
     },
     progress: (progress: number) => {
-      context.sprite.scale.set(1 + Math.sin(Math.PI * progress) * (maxScale - 1));
+      context.sprite.scale.set(
+        1 + Math.sin(Math.PI * progress) * (maxScale - 1),
+      );
     },
     complete: () => {
       context.sprite.scale.set(1);
-    }
+    },
+  });
+}
+
+function createSingleSpriteUnderlayScaleEffect(
+  context: SymbolAnimationContext,
+  params: Readonly<Record<string, unknown>>,
+  _profile: SymbolAnimationProfile,
+): SymbolLayerEffect {
+  assertKnownParams(params, ["maxScale", "maxAlpha"]);
+  if (context.layers.length !== 1) {
+    throw new SymbolAnimationError(
+      `Symbol "${context.symbol}" must be a single-image symbol for singleSpriteUnderlayScale.`,
+    );
+  }
+  const maxScale = readGreaterThanOneNumberParam(params, "maxScale", 1.6);
+  const maxAlpha = readUnitIntervalNumberParam(params, "maxAlpha", 0.4);
+  let underlaySprite: Sprite | null = null;
+
+  return Object.freeze({
+    reset: () => {
+      context.sprite.scale.set(1);
+      context.underlayLayer.removeChildren();
+      underlaySprite = new Sprite(context.texture);
+      underlaySprite.anchor.set(0.5);
+      underlaySprite.alpha = 0;
+      underlaySprite.scale.set(1);
+      context.underlayLayer.addChild(underlaySprite);
+    },
+    progress: (progress: number) => {
+      if (!underlaySprite) {
+        return;
+      }
+      const pulse = Math.sin(Math.PI * progress);
+      underlaySprite.scale.set(1 + pulse * (maxScale - 1));
+      underlaySprite.alpha = pulse * maxAlpha;
+      context.sprite.scale.set(1);
+    },
+    complete: () => {
+      context.sprite.scale.set(1);
+      if (underlaySprite) {
+        underlaySprite.mask = null;
+      }
+      context.underlayLayer.removeChildren();
+      underlaySprite = null;
+    },
   });
 }
 
 function createSingleSpriteWinShineEffect(
   context: SymbolAnimationContext,
   params: Readonly<Record<string, unknown>>,
-  profile: SymbolAnimationProfile
+  profile: SymbolAnimationProfile,
 ): SymbolLayerEffect {
   return createLayerShineScaleEffect(context, { layer: 0, ...params }, profile);
 }
 
 function assertAnimationProfile(
   context: SymbolAnimationContext,
-  profile: SymbolAnimationProfile
+  profile: SymbolAnimationProfile,
 ): void {
   if (profile.playback !== context.state.playback) {
     throw new SymbolAnimationError(
-      `Animation profile for "${context.symbol}" state "${context.resolvedState}" has playback "${profile.playback}", expected "${context.state.playback}".`
+      `Animation profile for "${context.symbol}" state "${context.resolvedState}" has playback "${profile.playback}", expected "${context.state.playback}".`,
     );
   }
-  if (!Number.isFinite(profile.durationSeconds) || profile.durationSeconds <= 0) {
+  if (
+    !Number.isFinite(profile.durationSeconds) ||
+    profile.durationSeconds <= 0
+  ) {
     throw new SymbolAnimationError(
-      `Animation profile for "${context.symbol}" state "${context.resolvedState}" must have positive durationSeconds.`
+      `Animation profile for "${context.symbol}" state "${context.resolvedState}" must have positive durationSeconds.`,
     );
   }
   if (!Array.isArray(profile.effects) || profile.effects.length === 0) {
     throw new SymbolAnimationError(
-      `Animation profile for "${context.symbol}" state "${context.resolvedState}" must include effects.`
+      `Animation profile for "${context.symbol}" state "${context.resolvedState}" must include effects.`,
     );
   }
 }
@@ -342,12 +439,17 @@ function assertAnimationProfile(
 function getLayer(context: SymbolAnimationContext, index: number) {
   const layer = context.layers.find((candidate) => candidate.index === index);
   if (!layer) {
-    throw new SymbolAnimationError(`Symbol "${context.symbol}" does not have layer ${index}.`);
+    throw new SymbolAnimationError(
+      `Symbol "${context.symbol}" does not have layer ${index}.`,
+    );
   }
   return layer;
 }
 
-function createLayerShineOverlay(texture: import("pixi.js").Texture, shineWidthRatio: number): {
+function createLayerShineOverlay(
+  texture: import("pixi.js").Texture,
+  shineWidthRatio: number,
+): {
   readonly sprite: Sprite;
   readonly mask: Graphics;
 } {
@@ -370,14 +472,20 @@ function createLayerShineOverlay(texture: import("pixi.js").Texture, shineWidthR
   return { sprite, mask };
 }
 
-function clearOverlay(context: SymbolAnimationContext, shineSprite: Sprite | null): void {
+function clearOverlay(
+  context: SymbolAnimationContext,
+  shineSprite: Sprite | null,
+): void {
   if (shineSprite) {
     shineSprite.mask = null;
   }
   context.overlayLayer.removeChildren();
 }
 
-function assertKnownParams(params: Readonly<Record<string, unknown>>, allowed: readonly string[]): void {
+function assertKnownParams(
+  params: Readonly<Record<string, unknown>>,
+  allowed: readonly string[],
+): void {
   for (const key of Object.keys(params)) {
     if (!allowed.includes(key)) {
       throw new SymbolAnimationError(`Unknown animation param "${key}".`);
@@ -385,18 +493,28 @@ function assertKnownParams(params: Readonly<Record<string, unknown>>, allowed: r
   }
 }
 
-function readIntegerParam(params: Readonly<Record<string, unknown>>, key: string): number {
+function readIntegerParam(
+  params: Readonly<Record<string, unknown>>,
+  key: string,
+): number {
   const value = params[key];
   if (!Number.isInteger(value)) {
-    throw new SymbolAnimationError(`Animation param "${key}" must be an integer.`);
+    throw new SymbolAnimationError(
+      `Animation param "${key}" must be an integer.`,
+    );
   }
   return value as number;
 }
 
-function readIntegerArrayParam(params: Readonly<Record<string, unknown>>, key: string): readonly number[] {
+function readIntegerArrayParam(
+  params: Readonly<Record<string, unknown>>,
+  key: string,
+): readonly number[] {
   const value = params[key];
   if (!Array.isArray(value) || !value.every(Number.isInteger)) {
-    throw new SymbolAnimationError(`Animation param "${key}" must be an integer array.`);
+    throw new SymbolAnimationError(
+      `Animation param "${key}" must be an integer array.`,
+    );
   }
   return Object.freeze([...value]);
 }
@@ -404,11 +522,13 @@ function readIntegerArrayParam(params: Readonly<Record<string, unknown>>, key: s
 function readFiniteNumberParam(
   params: Readonly<Record<string, unknown>>,
   key: string,
-  defaultValue: number
+  defaultValue: number,
 ): number {
   const value = params[key] ?? defaultValue;
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new SymbolAnimationError(`Animation param "${key}" must be a finite number.`);
+    throw new SymbolAnimationError(
+      `Animation param "${key}" must be a finite number.`,
+    );
   }
   return value;
 }
@@ -416,11 +536,27 @@ function readFiniteNumberParam(
 function readPositiveNumberParam(
   params: Readonly<Record<string, unknown>>,
   key: string,
-  defaultValue: number
+  defaultValue: number,
 ): number {
   const value = readFiniteNumberParam(params, key, defaultValue);
   if (value <= 0) {
-    throw new SymbolAnimationError(`Animation param "${key}" must be positive.`);
+    throw new SymbolAnimationError(
+      `Animation param "${key}" must be positive.`,
+    );
+  }
+  return value;
+}
+
+function readGreaterThanOneNumberParam(
+  params: Readonly<Record<string, unknown>>,
+  key: string,
+  defaultValue: number,
+): number {
+  const value = readFiniteNumberParam(params, key, defaultValue);
+  if (value <= 1) {
+    throw new SymbolAnimationError(
+      `Animation param "${key}" must be greater than 1.`,
+    );
   }
   return value;
 }
@@ -428,11 +564,27 @@ function readPositiveNumberParam(
 function readNonNegativeNumberParam(
   params: Readonly<Record<string, unknown>>,
   key: string,
-  defaultValue: number
+  defaultValue: number,
 ): number {
   const value = readFiniteNumberParam(params, key, defaultValue);
   if (value < 0) {
-    throw new SymbolAnimationError(`Animation param "${key}" must be non-negative.`);
+    throw new SymbolAnimationError(
+      `Animation param "${key}" must be non-negative.`,
+    );
+  }
+  return value;
+}
+
+function readUnitIntervalNumberParam(
+  params: Readonly<Record<string, unknown>>,
+  key: string,
+  defaultValue: number,
+): number {
+  const value = readFiniteNumberParam(params, key, defaultValue);
+  if (value < 0 || value > 1) {
+    throw new SymbolAnimationError(
+      `Animation param "${key}" must be between 0 and 1.`,
+    );
   }
   return value;
 }
@@ -440,11 +592,13 @@ function readNonNegativeNumberParam(
 function readRatioParam(
   params: Readonly<Record<string, unknown>>,
   key: string,
-  defaultValue: number
+  defaultValue: number,
 ): number {
   const value = readPositiveNumberParam(params, key, defaultValue);
   if (value > 1) {
-    throw new SymbolAnimationError(`Animation param "${key}" must be less than or equal to 1.`);
+    throw new SymbolAnimationError(
+      `Animation param "${key}" must be less than or equal to 1.`,
+    );
   }
   return value;
 }
@@ -453,7 +607,7 @@ function createLocalProgress(
   progress: number,
   durationSeconds: number,
   delaySeconds: number,
-  durationRatio: number
+  durationRatio: number,
 ): number {
   const duration = Math.max(1 / 60, durationSeconds * durationRatio);
   const elapsed = progress * durationSeconds;
@@ -469,9 +623,15 @@ function easeOutCubic(progress: number): number {
 }
 
 function getTextureWidth(texture: import("pixi.js").Texture): number {
-  return Math.max(1, texture.width || texture.source?.width || texture.orig?.width || 1);
+  return Math.max(
+    1,
+    texture.width || texture.source?.width || texture.orig?.width || 1,
+  );
 }
 
 function getTextureHeight(texture: import("pixi.js").Texture): number {
-  return Math.max(1, texture.height || texture.source?.height || texture.orig?.height || 1);
+  return Math.max(
+    1,
+    texture.height || texture.source?.height || texture.orig?.height || 1,
+  );
 }

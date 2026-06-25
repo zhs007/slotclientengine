@@ -577,6 +577,7 @@ jq -r '.reels | keys[]' assets/gamecfg002/gameconfig.json
 必须确认：
 
 - `gameconfig.json` 存在且是稳定格式 JSON。
+- `gameconfig.json` 保持 `gengameconfig` 原生输出，不再用 Prettier 或手工格式化改写。
 - paytable symbol 为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`。
 - `symbolCodes.BN === 12`。
 - reels key 包含 `reels-001`。

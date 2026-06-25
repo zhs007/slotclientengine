@@ -1,4 +1,4 @@
-import { Texture } from "pixi.js";
+import { Sprite, Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import {
   ManualSymbolAni,
@@ -6,7 +6,7 @@ import {
   SymbolAnimationError,
   createDefaultSymbolAnimationResolver,
   createDefaultSymbolStatePreset,
-  createSymbolDefinitionFromPreset
+  createSymbolDefinitionFromPreset,
 } from "../../src/symbol/index.js";
 import type { SymbolAnimationResolver } from "../../src/symbol/index.js";
 
@@ -15,20 +15,21 @@ const createDefinition = () =>
     code: 1,
     symbol: "S00",
     pays: [0, 2, 4],
-    preset: createDefaultSymbolStatePreset()
+    preset: createDefaultSymbolStatePreset(),
   });
 
-const createDistinctTexture = () => new Texture({ source: Texture.WHITE.source });
+const createDistinctTexture = () =>
+  new Texture({ source: Texture.WHITE.source });
 
 const createSizedTexture = (width: number, height: number) => {
   const texture = createDistinctTexture();
   Object.defineProperty(texture, "width", {
     configurable: true,
-    value: width
+    value: width,
   });
   Object.defineProperty(texture, "height", {
     configurable: true,
-    value: height
+    value: height,
   });
   return texture;
 };
@@ -38,7 +39,7 @@ describe("RenderSymbol", () => {
     const renderSymbol = new RenderSymbol({
       definition: createDefinition(),
       texture: Texture.WHITE,
-      animationResolver: createDefaultSymbolAnimationResolver()
+      animationResolver: createDefaultSymbolAnimationResolver(),
     });
 
     const sprite = renderSymbol.getMainSprite();
@@ -46,6 +47,12 @@ describe("RenderSymbol", () => {
     expect(renderSymbol.symbol).toBe("S00");
     expect(renderSymbol.pays).toEqual([0, 2, 4]);
     expect(sprite.texture).toBe(Texture.WHITE);
+    expect(renderSymbol.children).toEqual([
+      renderSymbol.underlayLayer,
+      renderSymbol.baseLayer,
+      renderSymbol.stateSprite,
+      renderSymbol.overlayLayer,
+    ]);
 
     renderSymbol.requestState("appear");
     renderSymbol.update(0.2);
@@ -63,7 +70,7 @@ describe("RenderSymbol", () => {
     const renderSymbol = new RenderSymbol({
       definition: createDefinition(),
       texture: Texture.WHITE,
-      animationResolver: createDefaultSymbolAnimationResolver()
+      animationResolver: createDefaultSymbolAnimationResolver(),
     });
 
     renderSymbol.requestState("appear");
@@ -73,7 +80,7 @@ describe("RenderSymbol", () => {
     expect(completed.stateChanged).toBe(true);
     expect(renderSymbol.getStateSnapshot()).toMatchObject({
       requestedState: "normal",
-      resolvedState: "normal"
+      resolvedState: "normal",
     });
     expect(renderSymbol.update(1).onceCompleted).toBe(false);
   });
@@ -86,23 +93,23 @@ describe("RenderSymbol", () => {
       texture: Texture.WHITE,
       stateTextures: {
         spinBlur: spinBlurTexture,
-        disabled: disabledTexture
+        disabled: disabledTexture,
       },
       requiredStateTextures: ["spinBlur", "disabled"],
-      animationResolver: createDefaultSymbolAnimationResolver()
+      animationResolver: createDefaultSymbolAnimationResolver(),
     });
 
     renderSymbol.requestState("spinBlur");
     expect(renderSymbol.getStateSnapshot()).toMatchObject({
       requestedState: "spinBlur",
-      resolvedState: "normal"
+      resolvedState: "normal",
     });
     expect(renderSymbol.sprite.texture).toBe(spinBlurTexture);
 
     renderSymbol.requestState("disabled");
     expect(renderSymbol.getStateSnapshot()).toMatchObject({
       requestedState: "disabled",
-      resolvedState: "normal"
+      resolvedState: "normal",
     });
     expect(renderSymbol.sprite.texture).toBe(disabledTexture);
 
@@ -120,21 +127,23 @@ describe("RenderSymbol", () => {
         kind: "layered",
         layers: [
           { index: 0, texture: bottom },
-          { index: 1, texture: top }
-        ]
+          { index: 1, texture: top },
+        ],
       },
       stateTextures: {
-        spinBlur: spinBlurTexture
+        spinBlur: spinBlurTexture,
       },
-      animationResolver: createDefaultSymbolAnimationResolver()
+      animationResolver: createDefaultSymbolAnimationResolver(),
     });
 
     expect(renderSymbol.texture).toBe(bottom);
     expect(renderSymbol.getBaseLayer().children).toEqual([
       renderSymbol.getLayerSprites()[0].sprite,
-      renderSymbol.getLayerSprites()[1].sprite
+      renderSymbol.getLayerSprites()[1].sprite,
     ]);
-    expect(renderSymbol.getLayerSprites().map((layer) => layer.texture)).toEqual([bottom, top]);
+    expect(
+      renderSymbol.getLayerSprites().map((layer) => layer.texture),
+    ).toEqual([bottom, top]);
 
     renderSymbol.requestState("spinBlur");
     expect(renderSymbol.getBaseLayer().visible).toBe(false);
@@ -157,12 +166,17 @@ describe("RenderSymbol", () => {
         kind: "layered",
         layers: [
           { index: 0, texture: createSizedTexture(24, 24) },
-          { index: 1, texture: staticTexture, keyframes: [staticTexture, keyframeTexture] }
-        ]
+          {
+            index: 1,
+            texture: staticTexture,
+            keyframes: [staticTexture, keyframeTexture],
+          },
+        ],
       },
-      animationResolver: createDefaultSymbolAnimationResolver()
+      animationResolver: createDefaultSymbolAnimationResolver(),
     });
     const [, topLayer] = renderSymbol.getLayerSprites();
+    renderSymbol.underlayLayer.addChild(new Sprite(Texture.WHITE));
     topLayer.sprite.texture = keyframeTexture;
     topLayer.sprite.position.set(4, 5);
     topLayer.sprite.scale.set(2);
@@ -172,6 +186,7 @@ describe("RenderSymbol", () => {
 
     renderSymbol.reset();
 
+    expect(renderSymbol.underlayLayer.children.length).toBe(0);
     expect(topLayer.keyframes).toEqual([staticTexture, keyframeTexture]);
     expect(topLayer.sprite.texture).toBe(staticTexture);
     expect(topLayer.sprite.position.x).toBe(0);
@@ -190,9 +205,9 @@ describe("RenderSymbol", () => {
       texture: Texture.WHITE,
       stateTextures: {
         spinBlur: spinBlurTexture,
-        disabled: disabledTexture
+        disabled: disabledTexture,
       },
-      animationResolver: createDefaultSymbolAnimationResolver()
+      animationResolver: createDefaultSymbolAnimationResolver(),
     });
 
     renderSymbol.setDefaultState("spinBlur");
@@ -201,7 +216,7 @@ describe("RenderSymbol", () => {
     expect(renderSymbol.update(1).onceCompleted).toBe(true);
     expect(renderSymbol.getStateSnapshot()).toMatchObject({
       requestedState: "spinBlur",
-      resolvedState: "normal"
+      resolvedState: "normal",
     });
     expect(renderSymbol.sprite.texture).toBe(spinBlurTexture);
 
@@ -211,7 +226,7 @@ describe("RenderSymbol", () => {
     expect(renderSymbol.update(1).onceCompleted).toBe(true);
     expect(renderSymbol.getStateSnapshot()).toMatchObject({
       requestedState: "disabled",
-      resolvedState: "normal"
+      resolvedState: "normal",
     });
     expect(renderSymbol.sprite.texture).toBe(disabledTexture);
   });
@@ -223,18 +238,18 @@ describe("RenderSymbol", () => {
       return new ManualSymbolAni({
         stateId: context.resolvedState,
         playback: context.state.playback,
-        durationSeconds: 0.1
+        durationSeconds: 0.1,
       });
     };
     const first = new RenderSymbol({
       definition: createDefinition(),
       texture: Texture.WHITE,
-      animationResolver: resolver
+      animationResolver: resolver,
     });
     const second = new RenderSymbol({
       definition: { ...createDefinition(), code: 5, symbol: "S10" },
       texture: Texture.WHITE,
-      animationResolver: resolver
+      animationResolver: resolver,
     });
 
     first.requestState("win");
@@ -248,7 +263,7 @@ describe("RenderSymbol", () => {
     const renderSymbol = new RenderSymbol({
       definition: createDefinition(),
       texture: Texture.WHITE,
-      animationResolver: createDefaultSymbolAnimationResolver()
+      animationResolver: createDefaultSymbolAnimationResolver(),
     });
 
     renderSymbol.requestState("appear");
@@ -263,7 +278,9 @@ describe("RenderSymbol", () => {
     renderSymbol.update(0.2);
     expect(renderSymbol.overlayLayer.children.length).toBe(2);
     expect(renderSymbol.sprite.mask ?? null).toBeNull();
-    expect(renderSymbol.overlayLayer.children[0]?.mask).toBe(renderSymbol.overlayLayer.children[1]);
+    expect(renderSymbol.overlayLayer.children[0]?.mask).toBe(
+      renderSymbol.overlayLayer.children[1],
+    );
     expect(renderSymbol.sprite.scale.x).toBeGreaterThan(1);
     expect(renderSymbol.overlayLayer.scale.x).toBeGreaterThan(1);
     renderSymbol.reset();
@@ -282,9 +299,9 @@ describe("RenderSymbol", () => {
             new ManualSymbolAni({
               stateId: context.resolvedState,
               playback: "loop",
-              durationSeconds: 1
-            })
-        })
+              durationSeconds: 1,
+            }),
+        }),
     ).toThrow(SymbolAnimationError);
   });
 });

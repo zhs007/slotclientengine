@@ -184,7 +184,7 @@ function readCellText(raw: RawCell, label: string): string {
   }
 
   if (cell.t === "n" && typeof cell.v === "number" && Number.isFinite(cell.v)) {
-    return String(cell.v).trim();
+    return String(cell.w ?? cell.v).trim();
   }
 
   failAtCell(raw, `${label} 必须是文本或数值内容，实际为 ${describeCell(raw)}`);

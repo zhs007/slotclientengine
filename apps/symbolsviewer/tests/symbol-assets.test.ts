@@ -2,7 +2,7 @@ import { createGameConfig } from "@slotclientengine/logiccore";
 import {
   SymbolStateSequenceController,
   createDefaultSymbolStatePreset,
-  createSymbolCatalog
+  createSymbolCatalog,
 } from "@slotclientengine/rendercore";
 import game2Config from "../../../assets/gamecfg/game2.json";
 import { describe, expect, it } from "vitest";
@@ -11,27 +11,32 @@ import {
   createSymbolAssetMapFromModules,
   createStatefulSymbolAssetMapFromModules,
   createSymbolsViewerCatalog,
-  getSymbolNameFromPath
+  getSymbolNameFromPath,
 } from "../src/symbol-assets.js";
-import { SYMBOL_VIEWER_ANIMATION_PROFILES } from "../src/symbol-animation-config.js";
+import {
+  SYMBOLS002_ANIMATION_PROFILES,
+  SYMBOL_VIEWER_ANIMATION_PROFILES,
+} from "../src/symbol-animation-config.js";
 import {
   DEFAULT_VIEWER_SEQUENCE,
   moveSequenceStep,
   removeSequenceStep,
-  replaceSequenceStep
+  replaceSequenceStep,
 } from "../src/viewer-sequence.js";
 
 describe("symbolsviewer assets", () => {
   it("parses game2 config and converts asset glob modules into a symbol asset map", () => {
     const assets = createSymbolAssetMapFromModules({
       "../../../assets/symbols/S00.png": "/assets/S00.png",
-      "../../../assets/symbols/SX.png": "/assets/SX.png"
+      "../../../assets/symbols/SX.png": "/assets/SX.png",
     });
 
-    expect(getSymbolNameFromPath("../../../assets/symbols/S10.png")).toBe("S10");
+    expect(getSymbolNameFromPath("../../../assets/symbols/S10.png")).toBe(
+      "S10",
+    );
     expect(assets).toEqual({
       S00: "/assets/S00.png",
-      SX: "/assets/SX.png"
+      SX: "/assets/SX.png",
     });
     expect(createGameConfig(game2Config).getSymbolCode("S00")).toBe(1);
   });
@@ -42,10 +47,10 @@ describe("symbolsviewer assets", () => {
         "../../../assets/symbols/S00.png": "/assets/S00.png",
         "../../../assets/symbols/S00.spinBlur.png": "/assets/S00.spinBlur.png",
         "../../../assets/symbols/S00.disabled.png": "/assets/S00.disabled.png",
-        "../../../assets/symbols/SX.png": "/assets/SX.png"
+        "../../../assets/symbols/SX.png": "/assets/SX.png",
       },
       manifest: createManifest(["S00"]),
-      requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
+      requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
     });
 
     expect(Object.keys(assets)).toEqual(["S00", "SX"]);
@@ -55,13 +60,13 @@ describe("symbolsviewer assets", () => {
         normal: "/assets/S00.png",
         states: {
           spinBlur: "/assets/S00.spinBlur.png",
-          disabled: "/assets/S00.disabled.png"
-        }
+          disabled: "/assets/S00.disabled.png",
+        },
       },
       SX: {
         normal: "/assets/SX.png",
-        states: {}
-      }
+        states: {},
+      },
     });
   });
 
@@ -73,10 +78,10 @@ describe("symbolsviewer assets", () => {
         "../../../assets/symbols/RS-1.png": "/assets/RS-1.png",
         "../../../assets/symbols/RS-2.png": "/assets/RS-2.png",
         "../../../assets/symbols/RS.spinBlur.png": "/assets/RS.spinBlur.png",
-        "../../../assets/symbols/RS.disabled.png": "/assets/RS.disabled.png"
+        "../../../assets/symbols/RS.disabled.png": "/assets/RS.disabled.png",
       },
       manifest: createManifest(["RS"]),
-      requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
+      requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
     });
 
     expect(Object.keys(assets)).toEqual(["RS"]);
@@ -87,13 +92,13 @@ describe("symbolsviewer assets", () => {
         layers: [
           { index: 0, texture: "/assets/RS-0.png" },
           { index: 1, texture: "/assets/RS-1.png" },
-          { index: 2, texture: "/assets/RS-2.png" }
-        ]
+          { index: 2, texture: "/assets/RS-2.png" },
+        ],
       },
       states: {
         spinBlur: "/assets/RS.spinBlur.png",
-        disabled: "/assets/RS.disabled.png"
-      }
+        disabled: "/assets/RS.disabled.png",
+      },
     });
   });
 
@@ -102,7 +107,7 @@ describe("symbolsviewer assets", () => {
     const assets = createStatefulSymbolAssetMapFromModules({
       modules,
       manifest: createManifest(["SC"]),
-      requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
+      requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
     });
 
     expect(Object.keys(assets)).toEqual(["SC"]);
@@ -120,12 +125,12 @@ describe("symbolsviewer assets", () => {
               "/assets/SC-1-1.png",
               "/assets/SC-1-2.png",
               "/assets/SC-1-3.png",
-              "/assets/SC-1-4.png"
-            ]
+              "/assets/SC-1-4.png",
+            ],
           },
-          { index: 2, texture: "/assets/SC-2.png" }
-        ]
-      }
+          { index: 2, texture: "/assets/SC-2.png" },
+        ],
+      },
     });
   });
 
@@ -134,39 +139,44 @@ describe("symbolsviewer assets", () => {
       createStatefulSymbolAssetMapFromModules({
         modules: {
           "../../../assets/symbols/S00.png": "/assets/S00.png",
-          "../../../assets/symbols/S00.disabled.png": "/assets/S00.disabled.png"
+          "../../../assets/symbols/S00.disabled.png":
+            "/assets/S00.disabled.png",
         },
         manifest: createManifest(["S00"]),
-        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
-      })
+        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+      }),
     ).toThrow(/spinBlur/);
 
     expect(() =>
       createStatefulSymbolAssetMapFromModules({
         modules: {
           "../../../assets/symbols/S00.png": "/assets/S00.png",
-          "../../../assets/symbols/S00.spinBlur.png": "/assets/S00.spinBlur.png",
-          "../../../assets/symbols/S00.disabled.png": "/assets/S00.disabled.png",
-          "../../../assets/symbols/S00.blurred.png": "/assets/S00.blurred.png"
+          "../../../assets/symbols/S00.spinBlur.png":
+            "/assets/S00.spinBlur.png",
+          "../../../assets/symbols/S00.disabled.png":
+            "/assets/S00.disabled.png",
+          "../../../assets/symbols/S00.blurred.png": "/assets/S00.blurred.png",
         },
         manifest: createManifest(["S00"]),
-        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
-      })
+        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+      }),
     ).toThrow(/unknown state "blurred"/);
 
     expect(() =>
       createStatefulSymbolAssetMapFromModules({
         modules: {
           "../../../assets/symbols/S00.png": "/assets/S00.png",
-          "../../../assets/symbols/S00.spinBlur.png": "/assets/S00.spinBlur.png",
-          "../../../assets/symbols/S00.disabled.png": "/assets/S00.disabled.png"
+          "../../../assets/symbols/S00.spinBlur.png":
+            "/assets/S00.spinBlur.png",
+          "../../../assets/symbols/S00.disabled.png":
+            "/assets/S00.disabled.png",
         },
         manifest: {
           ...createManifest(["S00"]),
-          states: ["spinBlur", "disabled", "blurred"]
+          states: ["spinBlur", "disabled", "blurred"],
         },
-        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
-      })
+        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+      }),
     ).toThrow(/unknown state "blurred"/);
 
     const missingKeyframeModules = createViewerModules(["SC"], []);
@@ -175,8 +185,8 @@ describe("symbolsviewer assets", () => {
       createStatefulSymbolAssetMapFromModules({
         modules: missingKeyframeModules,
         manifest: createManifest(["SC"]),
-        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
-      })
+        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+      }),
     ).toThrow(/SC-1-3/);
 
     expect(() =>
@@ -193,28 +203,42 @@ describe("symbolsviewer assets", () => {
                   {
                     index: 1,
                     texture: "./SC-1-0.png",
-                    keyframes: ["./SC-1-1.png", "./SC-1-0.png"]
+                    keyframes: ["./SC-1-1.png", "./SC-1-0.png"],
                   },
-                  "./SC-2.png"
-                ]
+                  "./SC-2.png",
+                ],
               },
               spinBlur: "./SC.spinBlur.png",
-              disabled: "./SC.disabled.png"
-            }
-          }
+              disabled: "./SC.disabled.png",
+            },
+          },
         },
-        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
-      })
+        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+      }),
     ).toThrow(/start with the layer texture/);
   });
 
   it("keeps only the paytable and image intersection for display with required state textures", () => {
-    const catalog = createSymbolsViewerCatalog(game2Config, createViewerStatefulAssets());
+    const catalog = createSymbolsViewerCatalog(
+      game2Config,
+      createViewerStatefulAssets(),
+    );
 
     expect(catalog.getValidation()).toMatchObject({
-      displayableSymbols: ["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10"],
+      displayableSymbols: [
+        "S00",
+        "S0",
+        "S1",
+        "S5",
+        "S10",
+        "SC",
+        "RS",
+        "X2",
+        "X5",
+        "X10",
+      ],
       ignoredPaytableSymbolsWithoutAssets: ["BN"],
-      ignoredAssetsWithoutPaytable: ["CO", "SX"]
+      ignoredAssetsWithoutPaytable: ["CO", "SX"],
     });
     expect(catalog.getTextureSet("SC").normal).toMatchObject({
       kind: "layered",
@@ -228,19 +252,19 @@ describe("symbolsviewer assets", () => {
             "/assets/SC-1-1.png",
             "/assets/SC-1-2.png",
             "/assets/SC-1-3.png",
-            "/assets/SC-1-4.png"
-          ]
+            "/assets/SC-1-4.png",
+          ],
         },
-        { index: 2, texture: "/assets/SC-2.png" }
-      ]
+        { index: 2, texture: "/assets/SC-2.png" },
+      ],
     });
     expect(catalog.getTextureSet("RS").normal).toMatchObject({
       kind: "layered",
       layers: [
         { index: 0, texture: "/assets/RS-0.png" },
         { index: 1, texture: "/assets/RS-1.png" },
-        { index: 2, texture: "/assets/RS-2.png" }
-      ]
+        { index: 2, texture: "/assets/RS-2.png" },
+      ],
     });
   });
 
@@ -259,8 +283,8 @@ describe("symbolsviewer assets", () => {
         X5: "/assets/X5.png",
         X10: "/assets/X10.png",
         CO: "/assets/CO.png",
-        SX: "/assets/SX.png"
-      }
+        SX: "/assets/SX.png",
+      },
     });
 
     expect(catalog.getDisplayableSymbols()).toEqual([
@@ -273,7 +297,7 @@ describe("symbolsviewer assets", () => {
       "RS",
       "X2",
       "X5",
-      "X10"
+      "X10",
     ]);
   });
 });
@@ -281,78 +305,141 @@ describe("symbolsviewer assets", () => {
 describe("symbolsviewer animation config", () => {
   it("binds special symbols to the expected layer animation profiles", () => {
     expect(SYMBOL_VIEWER_ANIMATION_PROFILES.SC?.appear?.effects).toMatchObject([
-      { name: "layerBounceScale", params: { layer: 1, maxScale: 1.2, offsetY: -12 } },
-      { name: "layerShineScale", params: { layer: 2, maxScale: 1.2 } }
+      {
+        name: "layerBounceScale",
+        params: { layer: 1, maxScale: 1.2, offsetY: -12 },
+      },
+      { name: "layerShineScale", params: { layer: 2, maxScale: 1.2 } },
     ]);
-    expect(SYMBOL_VIEWER_ANIMATION_PROFILES.SC?.appear?.effects[0]?.params).not.toHaveProperty(
-      "rotationDegrees"
-    );
+    expect(
+      SYMBOL_VIEWER_ANIMATION_PROFILES.SC?.appear?.effects[0]?.params,
+    ).not.toHaveProperty("rotationDegrees");
     expect(SYMBOL_VIEWER_ANIMATION_PROFILES.SC?.win?.effects).toMatchObject([
       { name: "layerTextureSequence", params: { layer: 1 } },
       {
         name: "layerStaggeredShineScale",
-        params: { layers: [1, 2], maxScale: 1.2, staggerSeconds: 0.08 }
-      }
+        params: { layers: [1, 2], maxScale: 1.2, staggerSeconds: 0.08 },
+      },
     ]);
 
     expect(SYMBOL_VIEWER_ANIMATION_PROFILES.RS?.appear?.effects).toMatchObject([
       {
         name: "layerBounceScale",
-        params: { layer: 1, maxScale: 1.2, offsetY: -12, rotationDegrees: -20 }
+        params: { layer: 1, maxScale: 1.2, offsetY: -12, rotationDegrees: -20 },
       },
-      { name: "layerShineScale", params: { layer: 2, maxScale: 1.2 } }
+      { name: "layerShineScale", params: { layer: 2, maxScale: 1.2 } },
     ]);
     expect(SYMBOL_VIEWER_ANIMATION_PROFILES.RS?.win?.effects).toMatchObject([
       {
         name: "layerShineScale",
-        params: { layer: 1, maxScale: 1.2, durationRatio: 0.78, rotationDegrees: -20 }
+        params: {
+          layer: 1,
+          maxScale: 1.2,
+          durationRatio: 0.78,
+          rotationDegrees: -20,
+        },
       },
       {
         name: "layerShineScale",
-        params: { layer: 2, maxScale: 1.2, delaySeconds: 0.08, durationRatio: 0.78 }
-      }
+        params: {
+          layer: 2,
+          maxScale: 1.2,
+          delaySeconds: 0.08,
+          durationRatio: 0.78,
+        },
+      },
     ]);
 
     for (const symbol of ["X2", "X5", "X10"] as const) {
-      expect(SYMBOL_VIEWER_ANIMATION_PROFILES[symbol]?.appear?.effects).toMatchObject([
-        { name: "layerShineScale", params: { layer: 1, maxScale: 1.2 } }
+      expect(
+        SYMBOL_VIEWER_ANIMATION_PROFILES[symbol]?.appear?.effects,
+      ).toMatchObject([
+        { name: "layerShineScale", params: { layer: 1, maxScale: 1.2 } },
       ]);
-      expect(SYMBOL_VIEWER_ANIMATION_PROFILES[symbol]?.win?.effects[0]).toMatchObject({
+      expect(
+        SYMBOL_VIEWER_ANIMATION_PROFILES[symbol]?.win?.effects[0],
+      ).toMatchObject({
         name: "layerStaggeredShineScale",
-        params: { layers: [1], maxScale: 1.2, staggerSeconds: 0.1 }
+        params: { layers: [1], maxScale: 1.2, staggerSeconds: 0.1 },
       });
+    }
+  });
+
+  it("binds symbols002 appear to an underlay scale profile for every displayable symbol", () => {
+    expect(Object.keys(SYMBOLS002_ANIMATION_PROFILES)).toEqual([
+      "WL",
+      "H1",
+      "H2",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "WM",
+      "CN",
+      "CM",
+      "CO",
+      "AF",
+    ]);
+    for (const profile of Object.values(SYMBOLS002_ANIMATION_PROFILES)) {
+      expect(profile.appear?.effects).toEqual([
+        {
+          name: "singleSpriteUnderlayScale",
+          params: { maxScale: 1.6, maxAlpha: 0.4 },
+        },
+      ]);
     }
   });
 });
 
 function createViewerStatefulAssets() {
-  const displayableSymbols = ["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10"];
+  const displayableSymbols = [
+    "S00",
+    "S0",
+    "S1",
+    "S5",
+    "S10",
+    "SC",
+    "RS",
+    "X2",
+    "X5",
+    "X10",
+  ];
   return createStatefulSymbolAssetMapFromModules({
     modules: createViewerModules(displayableSymbols, ["CO", "SX"]),
     manifest: createManifest(displayableSymbols),
-    requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES
+    requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
   });
 }
 
-function createViewerModules(symbols: readonly string[], orphanSymbols: readonly string[]) {
+function createViewerModules(
+  symbols: readonly string[],
+  orphanSymbols: readonly string[],
+) {
   const compositeLayerCounts: Record<string, number> = {
     SC: 3,
     RS: 3,
     X2: 2,
     X5: 2,
-    X10: 2
+    X10: 2,
   };
 
   return Object.fromEntries(
     [...symbols, ...orphanSymbols].flatMap((symbol) => {
-      const normal = [`../../../assets/symbols/${symbol}.png`, `/assets/${symbol}.png`] as const;
+      const normal = [
+        `../../../assets/symbols/${symbol}.png`,
+        `/assets/${symbol}.png`,
+      ] as const;
       const layers =
         symbol === "SC"
           ? createScLayerModules()
-          : Array.from({ length: compositeLayerCounts[symbol] ?? 0 }, (_unused, index) => [
-              `../../../assets/symbols/${symbol}-${index}.png`,
-              `/assets/${symbol}-${index}.png`
-            ] as const);
+          : Array.from(
+              { length: compositeLayerCounts[symbol] ?? 0 },
+              (_unused, index) =>
+                [
+                  `../../../assets/symbols/${symbol}-${index}.png`,
+                  `/assets/${symbol}-${index}.png`,
+                ] as const,
+            );
       if (orphanSymbols.includes(symbol)) {
         return [normal];
       }
@@ -361,14 +448,14 @@ function createViewerModules(symbols: readonly string[], orphanSymbols: readonly
         ...layers,
         [
           `../../../assets/symbols/${symbol}.spinBlur.png`,
-          `/assets/${symbol}.spinBlur.png`
+          `/assets/${symbol}.spinBlur.png`,
         ] as const,
         [
           `../../../assets/symbols/${symbol}.disabled.png`,
-          `/assets/${symbol}.disabled.png`
-        ] as const
+          `/assets/${symbol}.disabled.png`,
+        ] as const,
       ];
-    })
+    }),
   );
 }
 
@@ -380,7 +467,7 @@ function createScLayerModules() {
     ["../../../assets/symbols/SC-1-2.png", "/assets/SC-1-2.png"] as const,
     ["../../../assets/symbols/SC-1-3.png", "/assets/SC-1-3.png"] as const,
     ["../../../assets/symbols/SC-1-4.png", "/assets/SC-1-4.png"] as const,
-    ["../../../assets/symbols/SC-2.png", "/assets/SC-2.png"] as const
+    ["../../../assets/symbols/SC-2.png", "/assets/SC-2.png"] as const,
   ];
 }
 
@@ -391,14 +478,20 @@ function createManifest(symbols: readonly string[]) {
       {
         index: 1,
         texture: "./SC-1-0.png",
-        keyframes: ["./SC-1-0.png", "./SC-1-1.png", "./SC-1-2.png", "./SC-1-3.png", "./SC-1-4.png"]
+        keyframes: [
+          "./SC-1-0.png",
+          "./SC-1-1.png",
+          "./SC-1-2.png",
+          "./SC-1-3.png",
+          "./SC-1-4.png",
+        ],
       },
-      "./SC-2.png"
+      "./SC-2.png",
     ],
     RS: ["./RS-0.png", "./RS-1.png", "./RS-2.png"],
     X2: ["./X2-0.png", "./X2-1.png"],
     X5: ["./X5-0.png", "./X5-1.png"],
-    X10: ["./X10-0.png", "./X10-1.png"]
+    X10: ["./X10-0.png", "./X10-1.png"],
   };
 
   return {
@@ -411,14 +504,14 @@ function createManifest(symbols: readonly string[]) {
           normal: compositeLayers[symbol]
             ? {
                 kind: "layered",
-                layers: compositeLayers[symbol]
+                layers: compositeLayers[symbol],
               }
             : `./${symbol}.png`,
           spinBlur: `./${symbol}.spinBlur.png`,
-          disabled: `./${symbol}.disabled.png`
-        }
-      ])
-    )
+          disabled: `./${symbol}.disabled.png`,
+        },
+      ]),
+    ),
   };
 }
 
@@ -429,7 +522,7 @@ describe("symbolsviewer sequence helpers", () => {
       "appear",
       "win",
       "spinBlur",
-      "disabled"
+      "disabled",
     ]);
 
     const removed = removeSequenceStep(DEFAULT_VIEWER_SEQUENCE, 1);
@@ -445,7 +538,7 @@ describe("symbolsviewer sequence helpers", () => {
   it("feeds rendercore sequence controller after add, remove and reorder changes", () => {
     const controller = new SymbolStateSequenceController({
       statePreset: createDefaultSymbolStatePreset(),
-      steps: DEFAULT_VIEWER_SEQUENCE
+      steps: DEFAULT_VIEWER_SEQUENCE,
     });
 
     controller.removeStep(1);
@@ -457,7 +550,7 @@ describe("symbolsviewer sequence helpers", () => {
       "appear",
       "normal",
       "spinBlur",
-      "disabled"
+      "disabled",
     ]);
   });
 });

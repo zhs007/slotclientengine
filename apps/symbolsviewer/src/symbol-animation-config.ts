@@ -8,13 +8,13 @@ const createThreeLayerBonusProfiles = () =>
       effects: Object.freeze([
         Object.freeze({
           name: "layerBounceScale",
-          params: Object.freeze({ layer: 1, maxScale: 1.2, offsetY: -12 })
+          params: Object.freeze({ layer: 1, maxScale: 1.2, offsetY: -12 }),
         }),
         Object.freeze({
           name: "layerShineScale",
-          params: Object.freeze({ layer: 2, maxScale: 1.2 })
-        })
-      ])
+          params: Object.freeze({ layer: 2, maxScale: 1.2 }),
+        }),
+      ]),
     }),
     win: Object.freeze({
       playback: "once",
@@ -25,11 +25,11 @@ const createThreeLayerBonusProfiles = () =>
           params: Object.freeze({
             layers: Object.freeze([1, 2]),
             maxScale: 1.2,
-            staggerSeconds: 0.08
-          })
-        })
-      ])
-    })
+            staggerSeconds: 0.08,
+          }),
+        }),
+      ]),
+    }),
   });
 
 const createTwoLayerMultiplierProfiles = () =>
@@ -40,9 +40,9 @@ const createTwoLayerMultiplierProfiles = () =>
       effects: Object.freeze([
         Object.freeze({
           name: "layerShineScale",
-          params: Object.freeze({ layer: 1, maxScale: 1.2 })
-        })
-      ])
+          params: Object.freeze({ layer: 1, maxScale: 1.2 }),
+        }),
+      ]),
     }),
     win: Object.freeze({
       playback: "once",
@@ -53,11 +53,25 @@ const createTwoLayerMultiplierProfiles = () =>
           params: Object.freeze({
             layers: Object.freeze([1]),
             maxScale: 1.2,
-            staggerSeconds: 0.1
-          })
-        })
-      ])
-    })
+            staggerSeconds: 0.1,
+          }),
+        }),
+      ]),
+    }),
+  });
+
+const createSingleImageUnderlayProfiles = () =>
+  Object.freeze({
+    appear: Object.freeze({
+      playback: "once",
+      durationSeconds: 0.48,
+      effects: Object.freeze([
+        Object.freeze({
+          name: "singleSpriteUnderlayScale",
+          params: Object.freeze({ maxScale: 1.6, maxAlpha: 0.4 }),
+        }),
+      ]),
+    }),
   });
 
 const createRsBonusProfiles = () =>
@@ -68,13 +82,18 @@ const createRsBonusProfiles = () =>
       effects: Object.freeze([
         Object.freeze({
           name: "layerBounceScale",
-          params: Object.freeze({ layer: 1, maxScale: 1.2, offsetY: -12, rotationDegrees: -20 })
+          params: Object.freeze({
+            layer: 1,
+            maxScale: 1.2,
+            offsetY: -12,
+            rotationDegrees: -20,
+          }),
         }),
         Object.freeze({
           name: "layerShineScale",
-          params: Object.freeze({ layer: 2, maxScale: 1.2 })
-        })
-      ])
+          params: Object.freeze({ layer: 2, maxScale: 1.2 }),
+        }),
+      ]),
     }),
     win: Object.freeze({
       playback: "once",
@@ -86,8 +105,8 @@ const createRsBonusProfiles = () =>
             layer: 1,
             maxScale: 1.2,
             durationRatio: 0.78,
-            rotationDegrees: -20
-          })
+            rotationDegrees: -20,
+          }),
         }),
         Object.freeze({
           name: "layerShineScale",
@@ -95,11 +114,11 @@ const createRsBonusProfiles = () =>
             layer: 2,
             maxScale: 1.2,
             delaySeconds: 0.08,
-            durationRatio: 0.78
-          })
-        })
-      ])
-    })
+            durationRatio: 0.78,
+          }),
+        }),
+      ]),
+    }),
   });
 
 const createScBonusProfiles = () => {
@@ -112,18 +131,18 @@ const createScBonusProfiles = () => {
       effects: Object.freeze([
         Object.freeze({
           name: "layerTextureSequence",
-          params: Object.freeze({ layer: 1 })
+          params: Object.freeze({ layer: 1 }),
         }),
         Object.freeze({
           name: "layerStaggeredShineScale",
           params: Object.freeze({
             layers: Object.freeze([1, 2]),
             maxScale: 1.2,
-            staggerSeconds: 0.08
-          })
-        })
-      ])
-    })
+            staggerSeconds: 0.08,
+          }),
+        }),
+      ]),
+    }),
   });
 };
 
@@ -132,5 +151,24 @@ export const SYMBOL_VIEWER_ANIMATION_PROFILES = Object.freeze({
   RS: createRsBonusProfiles(),
   X2: createTwoLayerMultiplierProfiles(),
   X5: createTwoLayerMultiplierProfiles(),
-  X10: createTwoLayerMultiplierProfiles()
+  X10: createTwoLayerMultiplierProfiles(),
 }) satisfies SymbolAnimationProfileMap;
+
+export const SYMBOLS002_ANIMATION_PROFILES = Object.freeze(
+  Object.fromEntries(
+    [
+      "WL",
+      "H1",
+      "H2",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "WM",
+      "CN",
+      "CM",
+      "CO",
+      "AF",
+    ].map((symbol) => [symbol, createSingleImageUnderlayProfiles()] as const),
+  ),
+) satisfies SymbolAnimationProfileMap;

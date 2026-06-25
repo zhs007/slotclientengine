@@ -5,12 +5,12 @@ import type {
   SymbolAniUpdateResult,
   SymbolAnimationContext,
   SymbolPlaybackKind,
-  SymbolStateId
+  SymbolStateId,
 } from "./types.js";
 
 const EMPTY_UPDATE_RESULT: SymbolAniUpdateResult = Object.freeze({
   loopCompleted: false,
-  onceCompleted: false
+  onceCompleted: false,
 });
 
 const WIN_SHINE_DURATION_SECONDS = 0.58;
@@ -45,7 +45,9 @@ export class ManualSymbolAni implements SymbolAni {
     this.#onComplete = options.onComplete;
 
     if (!Number.isFinite(this.#durationSeconds) || this.#durationSeconds <= 0) {
-      throw new SymbolAnimationError(`Symbol ani "${this.stateId}" duration must be positive.`);
+      throw new SymbolAnimationError(
+        `Symbol ani "${this.stateId}" duration must be positive.`,
+      );
     }
   }
 
@@ -62,7 +64,7 @@ export class ManualSymbolAni implements SymbolAni {
     if (this.playback === "static") {
       return Object.freeze({
         loopCompleted: true,
-        onceCompleted: false
+        onceCompleted: false,
       });
     }
 
@@ -85,7 +87,7 @@ export class ManualSymbolAni implements SymbolAni {
 
     return Object.freeze({
       loopCompleted,
-      onceCompleted: false
+      onceCompleted: false,
     });
   }
 
@@ -94,7 +96,10 @@ export class ManualSymbolAni implements SymbolAni {
       return EMPTY_UPDATE_RESULT;
     }
 
-    this.#elapsedSeconds = Math.min(this.#elapsedSeconds + deltaSeconds, this.#durationSeconds);
+    this.#elapsedSeconds = Math.min(
+      this.#elapsedSeconds + deltaSeconds,
+      this.#durationSeconds,
+    );
     const progress = this.#elapsedSeconds / this.#durationSeconds;
     this.#onProgress?.(progress);
 
@@ -103,7 +108,7 @@ export class ManualSymbolAni implements SymbolAni {
       this.#onComplete?.();
       return Object.freeze({
         loopCompleted: false,
-        onceCompleted: true
+        onceCompleted: true,
       });
     }
 
@@ -111,13 +116,15 @@ export class ManualSymbolAni implements SymbolAni {
   }
 }
 
-export function createStaticSymbolAni(context: SymbolAnimationContext): SymbolAni {
+export function createStaticSymbolAni(
+  context: SymbolAnimationContext,
+): SymbolAni {
   return new ManualSymbolAni({
     stateId: context.resolvedState,
     playback: "static",
     onReset: () => {
       resetBaseDisplay(context);
-    }
+    },
   });
 }
 
@@ -130,11 +137,13 @@ export function createLoopSymbolAni(options: {
     stateId: options.stateId,
     playback: "loop",
     durationSeconds: options.durationSeconds,
-    onProgress: options.onProgress
+    onProgress: options.onProgress,
   });
 }
 
-export function createAppearSymbolAni(context: SymbolAnimationContext): SymbolAni {
+export function createAppearSymbolAni(
+  context: SymbolAnimationContext,
+): SymbolAni {
   return new ManualSymbolAni({
     stateId: context.resolvedState,
     playback: "once",
@@ -148,7 +157,7 @@ export function createAppearSymbolAni(context: SymbolAnimationContext): SymbolAn
     },
     onComplete: () => {
       context.sprite.scale.set(1);
-    }
+    },
   });
 }
 
@@ -173,7 +182,8 @@ export function createWinSymbolAni(context: SymbolAnimationContext): SymbolAni {
       }
       const width = getTextureWidth(context);
       const easedSweep = easeOutCubic(progress);
-      const pulseScale = 1 + Math.sin(Math.PI * progress) * (WIN_SHINE_MAX_SCALE - 1);
+      const pulseScale =
+        1 + Math.sin(Math.PI * progress) * (WIN_SHINE_MAX_SCALE - 1);
       shineMask.x = -width * 0.85 + width * 1.7 * easedSweep;
       shineSprite.alpha = Math.sin(Math.PI * progress) * WIN_SHINE_MAX_ALPHA;
       context.sprite.scale.set(pulseScale);
@@ -185,19 +195,21 @@ export function createWinSymbolAni(context: SymbolAnimationContext): SymbolAni {
       clearShineOverlay(context, shineSprite);
       shineSprite = null;
       shineMask = null;
-    }
+    },
   });
 }
 
 export function assertValidDeltaSeconds(deltaSeconds: number): void {
   if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
-    throw new SymbolAnimationError("deltaSeconds must be a finite non-negative number.");
+    throw new SymbolAnimationError(
+      "deltaSeconds must be a finite non-negative number.",
+    );
   }
 }
 
 export function resolveSymbolTextureForState(
   context: SymbolAnimationContext,
-  state: SymbolStateId = context.requestedState
+  state: SymbolStateId = context.requestedState,
 ) {
   const stateTexture = context.stateTextures[state];
   if (stateTexture) {
@@ -206,7 +218,7 @@ export function resolveSymbolTextureForState(
 
   if (context.requiredStateTextures.includes(state)) {
     throw new SymbolAssetError(
-      `Symbol "${context.symbol}" is missing required texture for state "${state}".`
+      `Symbol "${context.symbol}" is missing required texture for state "${state}".`,
     );
   }
 
@@ -236,6 +248,15 @@ export function resetBaseDisplay(context: SymbolAnimationContext): void {
   context.stateSprite.scale.set(1);
   context.stateSprite.mask = null;
 
+  context.underlayLayer.alpha = 1;
+  context.underlayLayer.rotation = 0;
+  context.underlayLayer.position.set(0);
+  context.underlayLayer.scale.set(1);
+  for (const child of context.underlayLayer.children) {
+    child.mask = null;
+  }
+  context.underlayLayer.removeChildren();
+
   const stateTexture = context.stateTextures[context.requestedState];
   if (stateTexture) {
     context.sprite.texture = stateTexture;
@@ -244,7 +265,7 @@ export function resetBaseDisplay(context: SymbolAnimationContext): void {
     context.stateSprite.visible = true;
   } else if (context.requiredStateTextures.includes(context.requestedState)) {
     throw new SymbolAssetError(
-      `Symbol "${context.symbol}" is missing required texture for state "${context.requestedState}".`
+      `Symbol "${context.symbol}" is missing required texture for state "${context.requestedState}".`,
     );
   }
 
@@ -286,17 +307,26 @@ function easeOutCubic(progress: number): number {
   return 1 - Math.pow(1 - progress, 3);
 }
 
-function clearShineOverlay(context: SymbolAnimationContext, shineSprite: Sprite | null): void {
+function clearShineOverlay(
+  context: SymbolAnimationContext,
+  shineSprite: Sprite | null,
+): void {
   if (shineSprite) {
     shineSprite.mask = null;
   }
   context.overlayLayer.removeChildren();
 }
 
-function getTextureWidth(context: SymbolAnimationContext, texture = context.texture): number {
+function getTextureWidth(
+  context: SymbolAnimationContext,
+  texture = context.texture,
+): number {
   return Math.max(1, texture.width || context.sprite.width || 1);
 }
 
-function getTextureHeight(context: SymbolAnimationContext, texture = context.texture): number {
+function getTextureHeight(
+  context: SymbolAnimationContext,
+  texture = context.texture,
+): number {
   return Math.max(1, texture.height || context.sprite.height || 1);
 }

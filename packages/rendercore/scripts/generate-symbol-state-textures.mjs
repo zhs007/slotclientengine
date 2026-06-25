@@ -6,7 +6,6 @@ import sharp from "sharp";
 const SCRIPT_DIR = fileURLToPath(new URL(".", import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, "../../..");
 const DEFAULT_SYMBOLS_DIR = resolve(REPO_ROOT, "assets/symbols");
-const DEFAULT_COMPOSITES_FILE = resolve(DEFAULT_SYMBOLS_DIR, "symbol-composites.json");
 const MANIFEST_FILE_NAME = "symbol-state-textures.manifest.json";
 const SPIN_BLUR_STATE = "spinBlur";
 const DISABLED_STATE = "disabled";
@@ -69,10 +68,21 @@ export function parseGenerateSymbolStateTextureArgs(argv) {
 export async function generateSymbolStateTextures(options = {}) {
   const inputDir = resolveRepoPath(options.inputDir, DEFAULT_SYMBOLS_DIR);
   const outputDir = resolveRepoPath(options.outputDir, inputDir);
-  const compositesPath = resolveRepoPath(options.composites, DEFAULT_COMPOSITES_FILE);
-  const composites = await loadCompositeConfig(compositesPath, Boolean(options.composites));
+  const explicitComposites = Boolean(options.composites);
+  const compositesPath = resolveRepoPath(
+    options.composites,
+    join(inputDir, "symbol-composites.json"),
+  );
+  const composites = await loadCompositeConfig(
+    compositesPath,
+    explicitComposites,
+  );
   const sourceFiles = await discoverNormalSymbolFiles(inputDir);
-  const selectedSymbols = selectSymbols(sourceFiles, composites, options.symbols);
+  const selectedSymbols = selectSymbols(
+    sourceFiles,
+    composites,
+    options.symbols,
+  );
 
   await mkdir(outputDir, { recursive: true });
   await cleanupGeneratedFiles(outputDir);
@@ -83,7 +93,9 @@ export async function generateSymbolStateTextures(options = {}) {
       ? await createCompositeSymbolBuffer(symbol, composites.get(symbol))
       : sourceFiles.get(symbol);
     if (!input) {
-      throw new Error(`Symbol "${symbol}" source PNG was not found in "${inputDir}".`);
+      throw new Error(
+        `Symbol "${symbol}" source PNG was not found in "${inputDir}".`,
+      );
     }
     const spinBlurFile = join(outputDir, `${symbol}.${SPIN_BLUR_STATE}.png`);
     const disabledFile = join(outputDir, `${symbol}.${DISABLED_STATE}.png`);
@@ -94,12 +106,16 @@ export async function generateSymbolStateTextures(options = {}) {
 
   const manifest = createManifest(selectedSymbols, composites);
   const manifestPath = join(outputDir, MANIFEST_FILE_NAME);
-  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    "utf8",
+  );
 
   return Object.freeze({
     symbols: Object.freeze([...selectedSymbols]),
     manifestPath,
-    files: Object.freeze([...generatedFiles, manifestPath])
+    files: Object.freeze([...generatedFiles, manifestPath]),
   });
 }
 
@@ -117,7 +133,10 @@ async function discoverNormalSymbolFiles(inputDir) {
     .map((dirent) => dirent.name)
     .filter(isNormalPngFile)
     .sort((left, right) => left.localeCompare(right))
-    .map((fileName) => [fileName.slice(0, -".png".length), join(inputDir, fileName)]);
+    .map((fileName) => [
+      fileName.slice(0, -".png".length),
+      join(inputDir, fileName),
+    ]);
 
   return new Map(entries);
 }
@@ -161,11 +180,21 @@ async function loadCompositeConfig(compositesPath, explicit) {
   const composites = new Map();
   for (const [symbol, value] of Object.entries(symbols)) {
     const symbolRecord = assertRecord(value, `symbol composite "${symbol}"`);
-    if (!Array.isArray(symbolRecord.layers) || symbolRecord.layers.length === 0) {
-      throw new Error(`Symbol "${symbol}" composite layers must be a non-empty array.`);
+    if (
+      !Array.isArray(symbolRecord.layers) ||
+      symbolRecord.layers.length === 0
+    ) {
+      throw new Error(
+        `Symbol "${symbol}" composite layers must be a non-empty array.`,
+      );
     }
-    const layers = symbolRecord.layers.map((layer) => parseCompositeLayer(symbol, layer, baseDir));
-    composites.set(symbol, Object.freeze(validateCompositeLayers(symbol, layers)));
+    const layers = symbolRecord.layers.map((layer) =>
+      parseCompositeLayer(symbol, layer, baseDir),
+    );
+    composites.set(
+      symbol,
+      Object.freeze(validateCompositeLayers(symbol, layers)),
+    );
   }
   return composites;
 }
@@ -173,43 +202,59 @@ async function loadCompositeConfig(compositesPath, explicit) {
 function parseCompositeLayer(symbol, layer, baseDir) {
   if (typeof layer === "string") {
     if (layer.length === 0) {
-      throw new Error(`Symbol "${symbol}" composite layer path must be a non-empty string.`);
+      throw new Error(
+        `Symbol "${symbol}" composite layer path must be a non-empty string.`,
+      );
     }
     const fileName = basename(layer);
     const match = fileName.match(/^(.+)-(\d+)\.png$/u);
     if (!match || match[1] !== symbol) {
-      throw new Error(`Symbol "${symbol}" composite layer file "${fileName}" must match ${symbol}-{index}.png.`);
+      throw new Error(
+        `Symbol "${symbol}" composite layer file "${fileName}" must match ${symbol}-{index}.png.`,
+      );
     }
     return Object.freeze({
       index: Number.parseInt(match[2], 10),
       manifestPath: normalizeManifestPath(layer),
-      filePath: resolve(baseDir, layer)
+      filePath: resolve(baseDir, layer),
     });
   }
 
   const record = assertRecord(layer, `symbol "${symbol}" composite layer`);
   if (!Number.isInteger(record.index) || record.index < 0) {
-    throw new Error(`Symbol "${symbol}" composite layer index must be a non-negative integer.`);
+    throw new Error(
+      `Symbol "${symbol}" composite layer index must be a non-negative integer.`,
+    );
   }
-  const texturePath = assertNonEmptyString(record.texture, `Symbol "${symbol}" composite layer texture`);
+  const texturePath = assertNonEmptyString(
+    record.texture,
+    `Symbol "${symbol}" composite layer texture`,
+  );
   const manifestPath = normalizeManifestPath(texturePath);
   const rawKeyframes = record.keyframes;
   let keyframes = undefined;
   let keyframeFilePaths = undefined;
   if (rawKeyframes !== undefined) {
     if (!Array.isArray(rawKeyframes) || rawKeyframes.length === 0) {
-      throw new Error(`Symbol "${symbol}" composite layer ${record.index} keyframes must be a non-empty array.`);
+      throw new Error(
+        `Symbol "${symbol}" composite layer ${record.index} keyframes must be a non-empty array.`,
+      );
     }
     const keyframePaths = rawKeyframes.map((keyframe) =>
-      assertNonEmptyString(keyframe, `Symbol "${symbol}" composite layer ${record.index} keyframe`)
+      assertNonEmptyString(
+        keyframe,
+        `Symbol "${symbol}" composite layer ${record.index} keyframe`,
+      ),
     );
     keyframes = Object.freeze(
-      keyframePaths.map((keyframePath) => normalizeManifestPath(keyframePath))
+      keyframePaths.map((keyframePath) => normalizeManifestPath(keyframePath)),
     );
-    keyframeFilePaths = Object.freeze(keyframePaths.map((keyframePath) => resolve(baseDir, keyframePath)));
+    keyframeFilePaths = Object.freeze(
+      keyframePaths.map((keyframePath) => resolve(baseDir, keyframePath)),
+    );
     if (keyframes[0] !== manifestPath) {
       throw new Error(
-        `Symbol "${symbol}" composite layer ${record.index} keyframes must start with the layer texture.`
+        `Symbol "${symbol}" composite layer ${record.index} keyframes must start with the layer texture.`,
       );
     }
   }
@@ -219,20 +264,26 @@ function parseCompositeLayer(symbol, layer, baseDir) {
     manifestPath,
     filePath: resolve(baseDir, texturePath),
     keyframes,
-    keyframeFilePaths
+    keyframeFilePaths,
   });
 }
 
 function validateCompositeLayers(symbol, layers) {
-  const sortedLayers = [...layers].sort((left, right) => left.index - right.index);
+  const sortedLayers = [...layers].sort(
+    (left, right) => left.index - right.index,
+  );
   const seen = new Set();
   for (const [expectedIndex, layer] of sortedLayers.entries()) {
     if (seen.has(layer.index)) {
-      throw new Error(`Symbol "${symbol}" composite declares duplicate layer index ${layer.index}.`);
+      throw new Error(
+        `Symbol "${symbol}" composite declares duplicate layer index ${layer.index}.`,
+      );
     }
     seen.add(layer.index);
     if (layer.index !== expectedIndex) {
-      throw new Error(`Symbol "${symbol}" composite layers must be consecutive from 0.`);
+      throw new Error(
+        `Symbol "${symbol}" composite layers must be consecutive from 0.`,
+      );
     }
   }
   return Object.freeze(sortedLayers);
@@ -246,16 +297,25 @@ async function createCompositeSymbolBuffer(symbol, layers) {
     const image = sharp(layer.filePath).ensureAlpha();
     const metadata = await image.metadata();
     if (!metadata.width || !metadata.height) {
-      throw new Error(`Symbol "${symbol}" layer ${layer.index} must have readable dimensions.`);
+      throw new Error(
+        `Symbol "${symbol}" layer ${layer.index} must have readable dimensions.`,
+      );
     }
     width ??= metadata.width;
     height ??= metadata.height;
     if (metadata.width !== width || metadata.height !== height) {
-      throw new Error(`Symbol "${symbol}" composite layers must have identical dimensions.`);
+      throw new Error(
+        `Symbol "${symbol}" composite layers must have identical dimensions.`,
+      );
     }
-    await assertLayerKeyframeDimensions(symbol, layer, metadata.width, metadata.height);
+    await assertLayerKeyframeDimensions(
+      symbol,
+      layer,
+      metadata.width,
+      metadata.height,
+    );
     compositeInputs.push({
-      input: await image.png().toBuffer()
+      input: await image.png().toBuffer(),
     });
   }
 
@@ -264,8 +324,8 @@ async function createCompositeSymbolBuffer(symbol, layers) {
       width,
       height,
       channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 }
-    }
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
   })
     .composite(compositeInputs)
     .png()
@@ -276,11 +336,13 @@ async function assertLayerKeyframeDimensions(symbol, layer, width, height) {
   for (const keyframeFilePath of layer.keyframeFilePaths ?? []) {
     const metadata = await sharp(keyframeFilePath).metadata();
     if (!metadata.width || !metadata.height) {
-      throw new Error(`Symbol "${symbol}" layer ${layer.index} keyframe must have readable dimensions.`);
+      throw new Error(
+        `Symbol "${symbol}" layer ${layer.index} keyframe must have readable dimensions.`,
+      );
     }
     if (metadata.width !== width || metadata.height !== height) {
       throw new Error(
-        `Symbol "${symbol}" layer ${layer.index} keyframe textures must match the layer texture dimensions.`
+        `Symbol "${symbol}" layer ${layer.index} keyframe textures must match the layer texture dimensions.`,
       );
     }
   }
@@ -293,7 +355,7 @@ async function cleanupGeneratedFiles(outputDir) {
       .filter((dirent) => dirent.isFile())
       .map((dirent) => dirent.name)
       .filter(isGeneratedFile)
-      .map((fileName) => rm(join(outputDir, fileName)))
+      .map((fileName) => rm(join(outputDir, fileName))),
   );
 }
 
@@ -303,7 +365,7 @@ async function generateSpinBlurPng(inputFile, outputFile) {
     .convolve({
       width: SPIN_BLUR_KERNEL_WIDTH,
       height: SPIN_BLUR_KERNEL_HEIGHT,
-      kernel: createVerticalBoxBlurKernel(SPIN_BLUR_KERNEL_HEIGHT)
+      kernel: createVerticalBoxBlurKernel(SPIN_BLUR_KERNEL_HEIGHT),
     })
     .png()
     .toFile(outputFile);
@@ -325,12 +387,12 @@ function createManifest(symbols, composites) {
     settings: Object.freeze({
       [SPIN_BLUR_STATE]: Object.freeze({
         kind: "verticalBoxBlur",
-        kernelHeight: SPIN_BLUR_KERNEL_HEIGHT
+        kernelHeight: SPIN_BLUR_KERNEL_HEIGHT,
       }),
       [DISABLED_STATE]: Object.freeze({
         kind: "grayscale",
-        brightness: DISABLED_BRIGHTNESS
-      })
+        brightness: DISABLED_BRIGHTNESS,
+      }),
     }),
     symbols: Object.freeze(
       Object.fromEntries(
@@ -340,15 +402,19 @@ function createManifest(symbols, composites) {
             normal: composites.has(symbol)
               ? Object.freeze({
                   kind: "layered",
-                  layers: Object.freeze(composites.get(symbol).map((layer) => createManifestLayer(layer)))
+                  layers: Object.freeze(
+                    composites
+                      .get(symbol)
+                      .map((layer) => createManifestLayer(layer)),
+                  ),
                 })
               : `./${symbol}.png`,
             [SPIN_BLUR_STATE]: `./${symbol}.${SPIN_BLUR_STATE}.png`,
-            [DISABLED_STATE]: `./${symbol}.${DISABLED_STATE}.png`
-          })
-        ])
-      )
-    )
+            [DISABLED_STATE]: `./${symbol}.${DISABLED_STATE}.png`,
+          }),
+        ]),
+      ),
+    ),
   });
 }
 
@@ -359,7 +425,7 @@ function createManifestLayer(layer) {
   return Object.freeze({
     index: layer.index,
     texture: layer.manifestPath,
-    keyframes: layer.keyframes
+    keyframes: layer.keyframes,
   });
 }
 
@@ -422,7 +488,10 @@ function isGeneratedFile(fileName) {
 
 function isDirectRun() {
   const entryPoint = process.argv[1];
-  return Boolean(entryPoint) && import.meta.url === pathToFileURL(resolve(entryPoint)).href;
+  return (
+    Boolean(entryPoint) &&
+    import.meta.url === pathToFileURL(resolve(entryPoint)).href
+  );
 }
 
 function assertRecord(value, label) {
@@ -433,10 +502,10 @@ function assertRecord(value, label) {
 }
 
 if (isDirectRun()) {
-  generateSymbolStateTextures(parseGenerateSymbolStateTextureArgs(process.argv.slice(2))).catch(
-    (error) => {
-      console.error(error instanceof Error ? error.message : error);
-      process.exitCode = 1;
-    }
-  );
+  generateSymbolStateTextures(
+    parseGenerateSymbolStateTextureArgs(process.argv.slice(2)),
+  ).catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
 }
