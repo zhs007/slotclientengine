@@ -1,46 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_GAME002_ENV_CONFIG,
-  parseGame002Env,
-  parseGame002FrameworkConfig,
+  parseGame002FrameworkConfigFromQuery,
+  parseGame002QueryConfig,
 } from "../src/env.js";
 
-describe("game002 env", () => {
-  it("uses the task 49 live defaults when env is absent", () => {
-    expect(parseGame002Env({})).toEqual(DEFAULT_GAME002_ENV_CONFIG);
-    expect(parseGame002FrameworkConfig({})).toEqual({
-      live: {
-        serverUrl: DEFAULT_GAME002_ENV_CONFIG.serverUrl,
-        token: DEFAULT_GAME002_ENV_CONFIG.token,
-        gamecode: DEFAULT_GAME002_ENV_CONFIG.gamecode,
-        businessid: DEFAULT_GAME002_ENV_CONFIG.businessid,
-        clienttype: DEFAULT_GAME002_ENV_CONFIG.clienttype,
-        jurisdiction: DEFAULT_GAME002_ENV_CONFIG.jurisdiction,
-        language: DEFAULT_GAME002_ENV_CONFIG.language,
-        requestTimeoutMs: DEFAULT_GAME002_ENV_CONFIG.requestTimeoutMs,
-      },
-      betOptions: [
-        {
-          bet: DEFAULT_GAME002_ENV_CONFIG.bet,
-          lines: DEFAULT_GAME002_ENV_CONFIG.lines,
-          times: DEFAULT_GAME002_ENV_CONFIG.times,
-        },
-      ],
-      initialBetIndex: 0,
-      spinRequest: {
-        bet: DEFAULT_GAME002_ENV_CONFIG.bet,
-        lines: DEFAULT_GAME002_ENV_CONFIG.lines,
-        times: DEFAULT_GAME002_ENV_CONFIG.times,
-        autonums: DEFAULT_GAME002_ENV_CONFIG.autonums,
-      },
-    });
-  });
-
-  it("parses explicit live config over defaults", () => {
-    expect(parseGame002Env(validEnv())).toMatchObject({
+describe("game002 runtime query config", () => {
+  it("parses a complete query string", () => {
+    expect(parseGame002QueryConfig(validQuery())).toEqual({
       serverUrl: "wss://example.test/game",
-      token: "token-2",
-      gamecode: "game002",
+      token: "TOKEN",
+      gamecode: "GAME_CODE",
       businessid: "guest",
       clienttype: "web",
       jurisdiction: "MT",
@@ -51,11 +20,19 @@ describe("game002 env", () => {
       autonums: -1,
       requestTimeoutMs: 30000,
     });
-    expect(parseGame002FrameworkConfig(validEnv())).toMatchObject({
+  });
+
+  it("maps query config into the framework live and spin contracts", () => {
+    expect(parseGame002FrameworkConfigFromQuery(validQuery())).toEqual({
       live: {
         serverUrl: "wss://example.test/game",
-        token: "token-2",
-        gamecode: "game002",
+        token: "TOKEN",
+        gamecode: "GAME_CODE",
+        businessid: "guest",
+        clienttype: "web",
+        jurisdiction: "MT",
+        language: "en",
+        requestTimeoutMs: 30000,
       },
       betOptions: [{ bet: 5, lines: 30, times: 1 }],
       initialBetIndex: 0,
@@ -63,90 +40,137 @@ describe("game002 env", () => {
     });
   });
 
-  it("accepts ws and wss only", () => {
+  it("requires every supported runtime query parameter exactly once", () => {
+    for (const name of REQUIRED_PARAMS) {
+      const params = validParams();
+      params.delete(name);
+
+      expect(
+        () => parseGame002QueryConfig(params),
+        `${name} should be required`,
+      ).toThrow(new RegExp(`${name} query parameter is required`));
+    }
+
+    expect(() =>
+      parseGame002QueryConfig(`${validQuery()}&token=SECOND_TOKEN`),
+    ).toThrow(/token query parameter must not be provided more than once/);
+  });
+
+  it("rejects empty or whitespace-only parameters", () => {
+    for (const name of REQUIRED_PARAMS) {
+      expect(
+        () => parseGame002QueryConfig(validQuery({ [name]: "   " })),
+        `${name} should reject whitespace`,
+      ).toThrow(new RegExp(`${name} query parameter must not be empty`));
+    }
+  });
+
+  it("accepts only WebSocket server URLs", () => {
     expect(
-      parseGame002Env({
-        ...validEnv(),
-        VITE_GAME002_SERVER_URL: "ws://localhost:8080",
+      parseGame002QueryConfig(validQuery({ serverUrl: "ws://127.0.0.1:9/" }), {
+        pageProtocol: "http:",
       }).serverUrl,
-    ).toBe("ws://localhost:8080");
+    ).toBe("ws://127.0.0.1:9/");
+
     expect(() =>
-      parseGame002Env({
-        ...validEnv(),
-        VITE_GAME002_SERVER_URL: "http://localhost/replay.json",
-      }),
+      parseGame002QueryConfig(
+        validQuery({ serverUrl: "http://example.test/" }),
+      ),
     ).toThrow(/ws:\/\/ or wss:\/\//);
     expect(() =>
-      parseGame002Env({
-        ...validEnv(),
-        VITE_GAME002_SERVER_URL: "https://localhost/replay.json",
-      }),
+      parseGame002QueryConfig(
+        validQuery({ serverUrl: "https://example.test/" }),
+      ),
     ).toThrow(/ws:\/\/ or wss:\/\//);
     expect(() =>
-      parseGame002Env({ ...validEnv(), VITE_GAME002_SERVER_URL: "not a url" }),
+      parseGame002QueryConfig(validQuery({ serverUrl: "not-a-url" })),
     ).toThrow(/valid ws:\/\/ or wss:\/\//);
   });
 
-  it("rejects explicit empty fields and invalid numbers", () => {
+  it("rejects ws server URLs from https pages before the browser blocks them", () => {
     expect(() =>
-      parseGame002Env({ ...validEnv(), VITE_GAME002_SERVER_URL: "" }),
-    ).toThrow(/SERVER_URL/);
-    expect(() =>
-      parseGame002Env({ ...validEnv(), VITE_GAME002_TOKEN: "" }),
-    ).toThrow(/TOKEN/);
-    expect(() =>
-      parseGame002Env({ ...validEnv(), VITE_GAME002_GAMECODE: "" }),
-    ).toThrow(/GAMECODE/);
-    expect(() =>
-      parseGame002Env({ ...validEnv(), VITE_GAME002_BET: "0" }),
-    ).toThrow(/BET/);
-    expect(() =>
-      parseGame002Env({ ...validEnv(), VITE_GAME002_LINES: "NaN" }),
-    ).toThrow(/LINES/);
-    expect(() =>
-      parseGame002Env({ ...validEnv(), VITE_GAME002_TIMES: "-1" }),
-    ).toThrow(/TIMES/);
-    expect(() =>
-      parseGame002Env({
-        ...validEnv(),
-        VITE_GAME002_REQUEST_TIMEOUT_MS: "0",
+      parseGame002QueryConfig(validQuery({ serverUrl: "ws://127.0.0.1:9/" }), {
+        pageProtocol: "https:",
       }),
-    ).toThrow(/REQUEST_TIMEOUT/);
-    expect(() =>
-      parseGame002Env({ ...validEnv(), VITE_GAME002_AUTONUMS: "1.2" }),
-    ).toThrow(/AUTONUMS/);
+    ).toThrow(/must use wss:\/\/ when the page is served over https:/);
   });
 
-  it("parses explicit optional fields", () => {
+  it("round trips URL-encoded token special characters", () => {
     expect(
-      parseGame002Env({
-        ...validEnv(),
-        VITE_GAME002_BUSINESSID: "biz",
-        VITE_GAME002_CLIENTTYPE: "mobile",
-        VITE_GAME002_JURISDICTION: "UK",
-        VITE_GAME002_LANGUAGE: "fr",
-        VITE_GAME002_TIMES: "3",
-        VITE_GAME002_AUTONUMS: "5",
-        VITE_GAME002_REQUEST_TIMEOUT_MS: "2500",
-      }),
-    ).toMatchObject({
-      businessid: "biz",
-      clienttype: "mobile",
-      jurisdiction: "UK",
-      language: "fr",
-      times: 3,
-      autonums: 5,
-      requestTimeoutMs: 2500,
-    });
+      parseGame002QueryConfig(
+        validQuery({ token: "TOKEN+WITH&RESERVED=CHARS" }),
+      ).token,
+    ).toBe("TOKEN+WITH&RESERVED=CHARS");
+  });
+
+  it("does not silently repair an unencoded plus in the token", () => {
+    const query = validQuery().replace("token=TOKEN", "token=SECRET+TOKEN");
+
+    expect(() => parseGame002QueryConfig(query)).toThrow(
+      /token query parameter must be URL encoded/,
+    );
+    try {
+      parseGame002QueryConfig(query);
+    } catch (error) {
+      expect(
+        error instanceof Error ? error.message : String(error),
+      ).not.toMatch(/SECRET/);
+    }
+  });
+
+  it("rejects invalid numeric parameters", () => {
+    expect(() => parseGame002QueryConfig(validQuery({ bet: "0" }))).toThrow(
+      /bet query parameter/,
+    );
+    expect(() => parseGame002QueryConfig(validQuery({ lines: "NaN" }))).toThrow(
+      /lines query parameter/,
+    );
+    expect(() => parseGame002QueryConfig(validQuery({ times: "-1" }))).toThrow(
+      /times query parameter/,
+    );
+    expect(() =>
+      parseGame002QueryConfig(validQuery({ requestTimeoutMs: "0" })),
+    ).toThrow(/requestTimeoutMs query parameter/);
+    expect(() =>
+      parseGame002QueryConfig(validQuery({ autonums: "1.2" })),
+    ).toThrow(/autonums query parameter must be an integer/);
   });
 });
 
-function validEnv(): Record<string, unknown> {
-  return {
-    VITE_GAME002_SERVER_URL: "wss://example.test/game",
-    VITE_GAME002_TOKEN: "token-2",
-    VITE_GAME002_GAMECODE: "game002",
-    VITE_GAME002_BET: "5",
-    VITE_GAME002_LINES: "30",
-  };
+const REQUIRED_PARAMS = Object.freeze([
+  "serverUrl",
+  "gamecode",
+  "token",
+  "businessid",
+  "clienttype",
+  "jurisdiction",
+  "language",
+  "bet",
+  "lines",
+  "times",
+  "autonums",
+  "requestTimeoutMs",
+] as const);
+
+function validQuery(overrides: Record<string, string> = {}): string {
+  return `?${validParams(overrides).toString()}`;
+}
+
+function validParams(overrides: Record<string, string> = {}): URLSearchParams {
+  const params = new URLSearchParams({
+    serverUrl: "wss://example.test/game",
+    token: "TOKEN",
+    gamecode: "GAME_CODE",
+    businessid: "guest",
+    clienttype: "web",
+    jurisdiction: "MT",
+    language: "en",
+    bet: "5",
+    lines: "30",
+    times: "1",
+    autonums: "-1",
+    requestTimeoutMs: "30000",
+    ...overrides,
+  });
+  return params;
 }

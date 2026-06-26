@@ -21,6 +21,16 @@ module.exports = [
       "no-undef": "off",
     },
   },
+  {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
   js.configs.recommended,
   {
     files: ["**/*.ts"],

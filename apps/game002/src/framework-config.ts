@@ -5,7 +5,7 @@ import {
   type SlotGameSpinRequest,
 } from "@slotclientengine/gameframeworks";
 
-export interface Game002EnvConfig {
+export interface Game002QueryConfig {
   readonly serverUrl: string;
   readonly token: string;
   readonly gamecode: string;
@@ -27,95 +27,40 @@ export interface Game002FrameworkConfig {
   readonly spinRequest: SlotGameSpinRequest;
 }
 
-export const DEFAULT_GAME002_ENV_CONFIG: Game002EnvConfig = Object.freeze({
-  serverUrl: "wss://gameserv.rgstest.slammerstudios.com/",
-  token: "7a82f5ca45b5aa3246b2ad0123272295",
-  gamecode: "065P8NOEgwdSXFTB6uDqX",
-  businessid: "guest",
-  clienttype: "web",
-  jurisdiction: "MT",
-  language: "en",
-  bet: 5,
-  lines: 30,
-  times: 1,
-  autonums: -1,
-  requestTimeoutMs: 30000,
-});
+export interface Game002QueryParseOptions {
+  readonly pageProtocol?: string;
+}
 
-export function parseGame002Env(
-  env: Record<string, unknown>,
-): Game002EnvConfig {
-  const serverUrl = parseStringWithDefault(
-    env.VITE_GAME002_SERVER_URL,
-    "VITE_GAME002_SERVER_URL",
-    DEFAULT_GAME002_ENV_CONFIG.serverUrl,
-  );
-  validateGame002ServerUrl(serverUrl);
+export function parseGame002QueryConfig(
+  search: string | URLSearchParams,
+  options: Game002QueryParseOptions = {},
+): Game002QueryConfig {
+  const params =
+    search instanceof URLSearchParams ? search : new URLSearchParams(search);
+  const serverUrl = parseRequiredQueryString(params, "serverUrl");
+  validateGame002ServerUrl(serverUrl, options.pageProtocol);
 
   return Object.freeze({
     serverUrl,
-    token: parseStringWithDefault(
-      env.VITE_GAME002_TOKEN,
-      "VITE_GAME002_TOKEN",
-      DEFAULT_GAME002_ENV_CONFIG.token,
-    ),
-    gamecode: parseStringWithDefault(
-      env.VITE_GAME002_GAMECODE,
-      "VITE_GAME002_GAMECODE",
-      DEFAULT_GAME002_ENV_CONFIG.gamecode,
-    ),
-    businessid: parseStringWithDefault(
-      env.VITE_GAME002_BUSINESSID,
-      "VITE_GAME002_BUSINESSID",
-      DEFAULT_GAME002_ENV_CONFIG.businessid,
-    ),
-    clienttype: parseStringWithDefault(
-      env.VITE_GAME002_CLIENTTYPE,
-      "VITE_GAME002_CLIENTTYPE",
-      DEFAULT_GAME002_ENV_CONFIG.clienttype,
-    ),
-    jurisdiction: parseStringWithDefault(
-      env.VITE_GAME002_JURISDICTION,
-      "VITE_GAME002_JURISDICTION",
-      DEFAULT_GAME002_ENV_CONFIG.jurisdiction,
-    ),
-    language: parseStringWithDefault(
-      env.VITE_GAME002_LANGUAGE,
-      "VITE_GAME002_LANGUAGE",
-      DEFAULT_GAME002_ENV_CONFIG.language,
-    ),
-    bet: parsePositiveNumberWithDefault(
-      env.VITE_GAME002_BET,
-      "VITE_GAME002_BET",
-      DEFAULT_GAME002_ENV_CONFIG.bet,
-    ),
-    lines: parsePositiveNumberWithDefault(
-      env.VITE_GAME002_LINES,
-      "VITE_GAME002_LINES",
-      DEFAULT_GAME002_ENV_CONFIG.lines,
-    ),
-    times: parsePositiveNumberWithDefault(
-      env.VITE_GAME002_TIMES,
-      "VITE_GAME002_TIMES",
-      DEFAULT_GAME002_ENV_CONFIG.times,
-    ),
-    autonums: parseIntegerWithDefault(
-      env.VITE_GAME002_AUTONUMS,
-      "VITE_GAME002_AUTONUMS",
-      DEFAULT_GAME002_ENV_CONFIG.autonums,
-    ),
-    requestTimeoutMs: parsePositiveNumberWithDefault(
-      env.VITE_GAME002_REQUEST_TIMEOUT_MS,
-      "VITE_GAME002_REQUEST_TIMEOUT_MS",
-      DEFAULT_GAME002_ENV_CONFIG.requestTimeoutMs,
-    ),
+    token: parseRequiredQueryString(params, "token"),
+    gamecode: parseRequiredQueryString(params, "gamecode"),
+    businessid: parseRequiredQueryString(params, "businessid"),
+    clienttype: parseRequiredQueryString(params, "clienttype"),
+    jurisdiction: parseRequiredQueryString(params, "jurisdiction"),
+    language: parseRequiredQueryString(params, "language"),
+    bet: parsePositiveQueryNumber(params, "bet"),
+    lines: parsePositiveQueryNumber(params, "lines"),
+    times: parsePositiveQueryNumber(params, "times"),
+    autonums: parseQueryInteger(params, "autonums"),
+    requestTimeoutMs: parsePositiveQueryNumber(params, "requestTimeoutMs"),
   });
 }
 
-export function parseGame002FrameworkConfig(
-  env: Record<string, unknown>,
+export function parseGame002FrameworkConfigFromQuery(
+  search: string | URLSearchParams,
+  options: Game002QueryParseOptions = {},
 ): Game002FrameworkConfig {
-  const parsed = parseGame002Env(env);
+  const parsed = parseGame002QueryConfig(search, options);
   const betOption: SlotGameBetOption = Object.freeze({
     bet: parsed.bet,
     lines: parsed.lines,
@@ -145,74 +90,68 @@ export function parseGame002FrameworkConfig(
   });
 }
 
-function validateGame002ServerUrl(value: string): void {
+function validateGame002ServerUrl(value: string, pageProtocol?: string): void {
   try {
     validateLiveServerUrl(value);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `VITE_GAME002_SERVER_URL must be a valid ws:// or wss:// live URL. ${reason}`,
+      `serverUrl query parameter must be a valid ws:// or wss:// live URL. ${reason}`,
+    );
+  }
+
+  const parsed = new URL(value);
+  if (pageProtocol === "https:" && parsed.protocol === "ws:") {
+    throw new Error(
+      "serverUrl query parameter must use wss:// when the page is served over https:.",
     );
   }
 }
 
-function parseRequiredString(value: unknown, label: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${label} is required.`);
-  }
-  return value.trim();
-}
-
-function parseStringWithDefault(
-  value: unknown,
-  label: string,
-  fallback: string,
+function parseRequiredQueryString(
+  params: URLSearchParams,
+  name: string,
 ): string {
-  if (value === undefined || value === null) {
-    return fallback;
+  const values = params.getAll(name);
+  if (values.length === 0) {
+    throw new Error(`${name} query parameter is required.`);
   }
-  if (typeof value !== "string") {
-    throw new Error(`${label} must be a string.`);
+  if (values.length > 1) {
+    throw new Error(
+      `${name} query parameter must not be provided more than once.`,
+    );
   }
-  const trimmed = value.trim();
+  const trimmed = values[0]?.trim() ?? "";
   if (trimmed.length === 0) {
-    throw new Error(`${label} must not be empty when provided.`);
+    throw new Error(`${name} query parameter must not be empty.`);
+  }
+  if (/\s/.test(trimmed)) {
+    throw new Error(
+      `${name} query parameter must be URL encoded and must not contain whitespace.`,
+    );
   }
   return trimmed;
 }
 
-function parsePositiveNumber(value: unknown, label: string): number {
-  const raw = parseRequiredString(value, label);
+function parsePositiveQueryNumber(
+  params: URLSearchParams,
+  name: string,
+): number {
+  const raw = parseRequiredQueryString(params, name);
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(`${label} must be a finite positive number.`);
+    throw new Error(
+      `${name} query parameter must be a finite positive number.`,
+    );
   }
   return parsed;
 }
 
-function parsePositiveNumberWithDefault(
-  value: unknown,
-  label: string,
-  fallback: number,
-): number {
-  if (value === undefined || value === null) {
-    return fallback;
-  }
-  return parsePositiveNumber(value, label);
-}
-
-function parseIntegerWithDefault(
-  value: unknown,
-  label: string,
-  fallback: number,
-): number {
-  if (value === undefined || value === null) {
-    return fallback;
-  }
-  const raw = parseRequiredString(value, label);
+function parseQueryInteger(params: URLSearchParams, name: string): number {
+  const raw = parseRequiredQueryString(params, name);
   const parsed = Number(raw);
   if (!Number.isInteger(parsed)) {
-    throw new Error(`${label} must be an integer.`);
+    throw new Error(`${name} query parameter must be an integer.`);
   }
   return parsed;
 }

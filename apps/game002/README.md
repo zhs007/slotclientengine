@@ -40,7 +40,7 @@ art 坐标和旧坐标映射：
 - cell：`120 x 120`
 - scene：`6 x 9`
 - reels：`reels-001`
-- symbol：`500 x 500` 原图按 `40%` 缩放显示，并以 cell 中心定位
+- symbol：`200 x 200` 原图按 `100%` 缩放显示，并以 cell 中心定位
 
 不同 viewport 的期望：
 
@@ -56,24 +56,81 @@ live spin 的滚动过程使用本地 `reels-001` 公开轮带。服务器真实
 
 ## Live 配置
 
-运行态只支持 live WebSocket，`VITE_GAME002_SERVER_URL` 只接受 `ws://` 或 `wss://`。
+静态发布版只从页面 URL query 读取 live 和 spin 参数，不从构建环境、hash、cookie、`localStorage`、远程配置文件或默认值读取运行参数。第一屏仍然直接启动游戏画面；参数缺失或非法时初始化显式失败，不进入 mock、replay 或本地默认 scene。
 
-| 变量                              | 必需 | 默认值                                       | 说明                       |
-| --------------------------------- | ---- | -------------------------------------------- | -------------------------- |
-| `VITE_GAME002_SERVER_URL`         | 否   | `wss://gameserv.rgstest.slammerstudios.com/` | live WebSocket 地址        |
-| `VITE_GAME002_TOKEN`              | 否   | `7a82f5ca45b5aa3246b2ad0123272295`           | 登录 token                 |
-| `VITE_GAME002_GAMECODE`           | 否   | `065P8NOEgwdSXFTB6uDqX`                      | 游戏 code                  |
-| `VITE_GAME002_BUSINESSID`         | 否   | `guest`                                      | business id                |
-| `VITE_GAME002_CLIENTTYPE`         | 否   | `web`                                        | client type                |
-| `VITE_GAME002_JURISDICTION`       | 否   | `MT`                                         | jurisdiction               |
-| `VITE_GAME002_LANGUAGE`           | 否   | `en`                                         | language                   |
-| `VITE_GAME002_BET`                | 否   | `5`                                          | 正数                       |
-| `VITE_GAME002_LINES`              | 否   | `30`                                         | 正数                       |
-| `VITE_GAME002_TIMES`              | 否   | `1`                                          | 正数                       |
-| `VITE_GAME002_AUTONUMS`           | 否   | `-1`                                         | 整数，随 spin request 发送 |
-| `VITE_GAME002_REQUEST_TIMEOUT_MS` | 否   | `30000`                                      | 正数                       |
+| 参数               | 必需 | 说明                                            |
+| ------------------ | ---- | ----------------------------------------------- |
+| `serverUrl`        | 是   | live WebSocket 地址，只接受 `ws://` 或 `wss://` |
+| `gamecode`         | 是   | live game code，非空                            |
+| `token`            | 是   | 登录 token，非空                                |
+| `businessid`       | 是   | business id，非空                               |
+| `clienttype`       | 是   | client type，非空                               |
+| `jurisdiction`     | 是   | jurisdiction，非空                              |
+| `language`         | 是   | language，非空                                  |
+| `bet`              | 是   | 正数，按服务端整数单位发送                      |
+| `lines`            | 是   | 正数                                            |
+| `times`            | 是   | 正数                                            |
+| `autonums`         | 是   | 整数，允许 `-1`                                 |
+| `requestTimeoutMs` | 是   | 正数，传给 live request timeout                 |
 
-缺省 env 会使用默认值；显式提供空字符串、非法 URL、非正数 bet/lines/times/request timeout 或非法 `autonums` 会明确失败。
+示例：
+
+```text
+http://127.0.0.1:5207/?serverUrl=wss%3A%2F%2Fexample.test%2F&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
+```
+
+参数值必须先用 `encodeURIComponent()` 编码再拼到 URL，尤其是 `serverUrl` 中的 `:`、`/`，以及 token 中可能出现的 `+`、`&`、`=`。如果页面通过 HTTPS 发布，`serverUrl` 必须使用 `wss://`，避免浏览器混合内容拦截。
+
+URL query 会进入浏览器地址栏、历史记录、Caddy/CDN access log、监控日志和可能的 Referer。发布环境应使用短期 token 或一次性启动 token，并按安全策略处理日志。
+
+## 静态发布
+
+生产构建产物位于：
+
+```text
+apps/game002/dist/
+```
+
+构建和检查：
+
+```bash
+pnpm --filter game002 build
+pnpm --filter game002 release:check
+```
+
+本地静态预览：
+
+```bash
+pnpm --filter game002 exec vite preview --host 127.0.0.1 --port 5207 --strictPort
+```
+
+发布方只需要复制：
+
+```text
+apps/game002/dist/index.html
+apps/game002/dist/assets/*
+```
+
+到 Caddy/CDN 静态目录，不需要复制源码、`node_modules`、coverage、`.turbo` 或测试文件，也不需要向 HTML 注入运行配置。
+
+Caddy 示例：
+
+```caddyfile
+game002.example.com {
+  root * /srv/game002
+  file_server
+}
+```
+
+子目录部署示例：
+
+```text
+/srv/www/game002/index.html
+/srv/www/game002/assets/*
+https://cdn.example.com/game002/?serverUrl=...
+```
+
+由于 Vite `base: "./"` 会让资源从当前目录下的 `./assets/` 加载，子目录访问地址必须带尾斜杠，例如 `https://cdn.example.com/game002/?serverUrl=...`。不要使用 `https://cdn.example.com/game002?serverUrl=...`；如需兼容无尾斜杠入口，Caddy/CDN 必须配置保留原 query 参数的重定向。
 
 ## Spin 时序
 
@@ -107,7 +164,7 @@ adapter 会对单个 Pixi ticker 帧的 `deltaMS` 做上限保护，resize、切
 
 ## 金额显示
 
-服务端金额单位按整数传输，`100` 对应 `1` 美元。`game002` 保持 spin request、balance、win、bet 的原始整数协议值不变，只在 HUD 展示时格式化为 USD。因此默认 `VITE_GAME002_BET=5` 会发送 `5`，HUD 显示为 `$0.05`。
+服务端金额单位按整数传输，`100` 对应 `1` 美元。`game002` 保持 spin request、balance、win、bet 的原始整数协议值不变，只在 HUD 展示时格式化为 USD。因此 URL query 中 `bet=5` 会发送 `5`，HUD 显示为 `$0.05`。
 
 ## 命令
 
@@ -117,6 +174,7 @@ pnpm --filter game002 lint
 pnpm --filter game002 test
 pnpm --filter game002 typecheck
 pnpm --filter game002 build
+pnpm --filter game002 release:check
 ```
 
 如果依赖安装失败，可先设置代理：
@@ -128,8 +186,11 @@ pnpm install
 
 ## 常见失败
 
-- `VITE_GAME002_SERVER_URL` 使用非 WebSocket 协议。
-- 显式提供空 env、非法 URL 或非正数。
+- 缺少必需 URL query 参数、参数为空或同一参数重复出现。
+- `serverUrl` 使用非 WebSocket 协议，或 HTTPS 页面使用 `ws://`。
+- `bet`、`lines`、`times`、`requestTimeoutMs` 非正数，或 `autonums` 不是整数。
+- token 等参数没有正确 URL encode，导致 `+`、`&`、`=` 被错误解析。
+- 子目录静态发布入口缺少尾斜杠，导致 `./assets/*` 解析到错误路径。
 - `bgfull.jpg` 尺寸不是 `2000 x 2000`。
 - viewport policy 输出超过 `2000 x 2000`，或 focus 区域加 margin 无法放入当前 canvas 逻辑尺寸。
 - `symbols002` manifest 缺少普通图、`spinBlur`、`disabled` 或出现未知 state。
