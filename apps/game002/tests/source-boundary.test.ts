@@ -53,6 +53,17 @@ describe("game002 source boundary", () => {
       /\.\.\/\.\.\/packages\/(?:logiccore|netcore|uiframeworks)\//,
     );
   });
+
+  it("uses bgfull as the runtime background instead of the old portrait crop", () => {
+    const adapterSource = readFileSync(
+      join(APP_ROOT, "src/game-adapter.ts"),
+      "utf8",
+    );
+
+    expect(adapterSource).toContain("assets/game002/bgfull.jpg?url");
+    expect(adapterSource).not.toContain("assets/game002/bg.jpg?url");
+    expect(adapterSource).toContain('"bgfull.jpg"');
+  });
 });
 
 function listFiles(

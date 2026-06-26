@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Container, Graphics } from "pixi.js";
 import {
   RenderGridCellReelSet,
   createGridCellOrder,
@@ -32,14 +33,14 @@ const DIMMING = Object.freeze({
 }) satisfies GridCellDimmingPattern;
 
 describe("RenderGridCellReelSet", () => {
-  it("keeps a permanent cell mask and applies x/y offsets once", () => {
+  it("keeps clipping content separate from the cell root and applies offsets once", () => {
     const reelSet = createGridReelSet();
     const snapshot = reelSet.getSnapshot();
 
     expect(snapshot.cells).toHaveLength(6);
     expect(
       snapshot.cells.every(
-        (cell) => cell.hasClipMask && cell.dimmingOnReel && cell.reelX === 0,
+        (cell) => !cell.hasClipMask && cell.dimmingOnReel && cell.reelX === 0,
       ),
     ).toBe(true);
     expect(
@@ -52,6 +53,20 @@ describe("RenderGridCellReelSet", () => {
       [1, 1, 15, 12],
       [1, 2, 15, 24],
     ]);
+    const firstRoot = reelSet.children[0];
+    expect(firstRoot).toBeInstanceOf(Container);
+    expect(firstRoot.mask).toBeUndefined();
+    const clipMask = firstRoot.children.find(
+      (child): child is Graphics => child instanceof Graphics,
+    );
+    const clipContent = firstRoot.children.find(
+      (child): child is Container =>
+        child instanceof Container && !(child instanceof Graphics),
+    );
+    expect(clipMask).toBeInstanceOf(Graphics);
+    expect(clipMask?.visible).toBe(false);
+    expect(clipContent).toBeInstanceOf(Container);
+    expect(clipContent?.mask).toBeUndefined();
   });
 
   it("resets to a scene, spins by cell order, skips appear and clears dimming", () => {
@@ -76,11 +91,14 @@ describe("RenderGridCellReelSet", () => {
     let snapshot = reelSet.getSnapshot();
     expect(snapshot.cells[0]).toMatchObject({
       phase: "spinning",
+      hasClipMask: true,
       requestedState: "spinBlur",
       dimmingAlpha: 0,
     });
+    expect(getCellClipMask(reelSet, 0).visible).toBe(true);
     expect(snapshot.cells[1]).toMatchObject({
       phase: "waiting",
+      hasClipMask: false,
       requestedState: null,
     });
 
@@ -93,6 +111,9 @@ describe("RenderGridCellReelSet", () => {
     expect(snapshot.cells[0].dimmingAlpha).toBeCloseTo(0.5);
     expect(snapshot.cells[1].dimmingAlpha).toBeCloseTo(0);
     expect(snapshot.cells[0].requestedState).toBe("spinBlur");
+    expect(snapshot.cells[0].hasClipMask).toBe(true);
+    expect(snapshot.cells[1].hasClipMask).toBe(true);
+    expect(snapshot.cells[2].hasClipMask).toBe(false);
 
     result = reelSet.update(0.26);
     expect(result.completed).toBe(false);
@@ -111,6 +132,12 @@ describe("RenderGridCellReelSet", () => {
     ).toBe(true);
     expect(reelSet.getVisibleScene()).toEqual(TARGET_SCENE);
     expect(snapshot.cells.some((cell) => cell.dimmingAlpha > 0)).toBe(true);
+    expect(
+      snapshot.cells
+        .filter((cell) => cell.phase === "landed")
+        .every((cell) => !cell.hasClipMask),
+    ).toBe(true);
+    expect(getCellClipMask(reelSet, 0).visible).toBe(false);
 
     for (let index = 0; index < 12 && !result.completed; index += 1) {
       result = reelSet.update(0.05);
@@ -130,7 +157,10 @@ describe("RenderGridCellReelSet", () => {
     );
     expect(
       snapshot.cells.every(
-        (cell) => cell.dimmingAlpha === 0 && cell.requestedState !== "appear",
+        (cell) =>
+          !cell.hasClipMask &&
+          cell.dimmingAlpha === 0 &&
+          cell.requestedState !== "appear",
       ),
     ).toBe(true);
   });
@@ -182,6 +212,23 @@ describe("RenderGridCellReelSet", () => {
     ).toThrow(/columns/);
   });
 });
+
+function getCellClipMask(
+  reelSet: RenderGridCellReelSet,
+  orderIndex: number,
+): Graphics {
+  const root = reelSet.children[orderIndex];
+  if (!(root instanceof Container)) {
+    throw new Error(`Missing grid cell root ${orderIndex}.`);
+  }
+  const clipMask = root.children.find(
+    (child): child is Graphics => child instanceof Graphics,
+  );
+  if (!clipMask) {
+    throw new Error(`Missing grid cell clip mask ${orderIndex}.`);
+  }
+  return clipMask;
+}
 
 function createGridReelSet(): RenderGridCellReelSet {
   return new RenderGridCellReelSet({

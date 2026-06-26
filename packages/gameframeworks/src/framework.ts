@@ -18,6 +18,7 @@ import type {
   SlotGameMountContext,
   SlotGameSpinRequest,
   SlotGameStateSnapshot,
+  SlotGameViewportListener,
 } from "./types.js";
 
 export function createSlotGameFramework(
@@ -52,6 +53,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       initialBetIndex: options.initialBetIndex,
       initialBalance: options.initialBalance,
       initialWin: options.initialWin,
+      framePolicy: options.framePolicy,
       brandLabel: options.brandLabel,
       currency: options.currency,
       locale: options.locale,
@@ -213,6 +215,16 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       gameLayer: this.#ui.elements.gameLayer,
       overlay: this.#ui.elements.overlay,
       getState: () => this.#state.getState(),
+      getViewport: () => this.#ui.getViewport(),
+      onViewportChange: (listener: SlotGameViewportListener) =>
+        this.#ui.onViewportChange((viewport) => {
+          try {
+            listener(viewport);
+          } catch (error) {
+            this.#handleFailure(error, "Slot game viewport change failed.");
+            throw error;
+          }
+        }),
     });
     await this.#options.gameAdapter.mount(context);
   }

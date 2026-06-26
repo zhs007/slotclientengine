@@ -20,6 +20,10 @@
       "types": "./dist/reel/index.d.ts",
       "import": "./dist/reel/index.js"
     },
+    "./viewport": {
+      "types": "./dist/viewport/index.d.ts",
+      "import": "./dist/viewport/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

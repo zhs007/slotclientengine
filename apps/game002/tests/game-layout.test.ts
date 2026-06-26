@@ -1,15 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
+  GAME002_ART_SIZE,
   GAME002_ASSET_SIZE,
   GAME002_BOARD_FRAME,
+  GAME002_BOARD_FRAME_IN_REFERENCE,
   GAME002_CELL_SIZE,
+  GAME002_FOCUS_MARGIN,
   GAME002_GRID_CELL_DIMMING,
   GAME002_GRID_CELL_REEL_ORDER,
   GAME002_GRID_CELL_REEL_TIMING,
+  GAME002_REFERENCE_SIZE,
+  GAME002_REFERENCE_VISIBLE_RECT_IN_ART,
   GAME002_REEL_COUNT,
   GAME002_STAGE_SIZE,
   GAME002_VISIBLE_ROWS,
   calculateGame002FrameScale,
+  createGame002FramePolicy,
   createGame002Layout,
   createGame002ReelLayerLayout,
   createGame002ReelLayout,
@@ -17,21 +23,45 @@ import {
 } from "../src/game-layout.js";
 
 describe("game002 layout", () => {
-  it("locks the stage, background and board frame to task 49 pixels", () => {
+  it("locks art size, reference crop and mapped board frame", () => {
     const layout = createGame002Layout();
 
-    expect(GAME002_STAGE_SIZE).toEqual({ width: 1125, height: 2000 });
-    expect(GAME002_ASSET_SIZE.background).toEqual({
+    expect(GAME002_ART_SIZE).toEqual({ width: 2000, height: 2000 });
+    expect(GAME002_STAGE_SIZE).toEqual(GAME002_ART_SIZE);
+    expect(GAME002_REFERENCE_SIZE).toEqual({ width: 1125, height: 2000 });
+    expect(GAME002_REFERENCE_VISIBLE_RECT_IN_ART).toEqual({
+      x: 437.5,
+      y: 0,
       width: 1125,
       height: 2000,
     });
+    expect(GAME002_ASSET_SIZE.background).toEqual({
+      width: 2000,
+      height: 2000,
+    });
     expect(layout.background).toEqual({ x: 0, y: 0 });
-    expect(layout.boardFrame).toEqual({
+    expect(layout.backgroundFrame).toEqual({
+      x: 0,
+      y: 0,
+      width: 2000,
+      height: 2000,
+    });
+    expect(GAME002_BOARD_FRAME_IN_REFERENCE).toEqual({
       x: 200,
       y: 330,
       width: 720,
       height: 1080,
     });
+    expect(layout.boardFrame).toEqual({
+      x: 637.5,
+      y: 330,
+      width: 720,
+      height: 1080,
+    });
+    expect(layout.visibleRect).toEqual(GAME002_REFERENCE_VISIBLE_RECT_IN_ART);
+    expect(layout.boardFrameInViewport).toEqual(
+      GAME002_BOARD_FRAME_IN_REFERENCE,
+    );
     expect(GAME002_BOARD_FRAME.width).toBe(
       GAME002_REEL_COUNT * GAME002_CELL_SIZE,
     );
@@ -71,9 +101,38 @@ describe("game002 layout", () => {
     expect(layerLayout).toMatchObject({
       rawReelsContentWidth: 720,
       rawReelsContentHeight: 1080,
-      x: 200,
+      x: 637.5,
       y: 330,
       stageVisibleFrame: GAME002_BOARD_FRAME,
+      viewportVisibleFrame: GAME002_BOARD_FRAME_IN_REFERENCE,
+    });
+  });
+
+  it("calculates focused art viewports for portrait, square and landscape", () => {
+    expect(createGame002Layout({ width: 1125, height: 2000 })).toMatchObject({
+      visibleRect: { x: 437.5, y: 0, width: 1125, height: 2000 },
+      worldOffset: { x: -437.5, y: -0 },
+      boardFrameInViewport: { x: 200, y: 330, width: 720, height: 1080 },
+    });
+    expect(createGame002Layout({ width: 1200, height: 1200 })).toMatchObject({
+      visibleRect: { x: 397.5, y: 270, width: 1200, height: 1200 },
+      worldOffset: { x: -397.5, y: -270 },
+      boardFrameInViewport: { x: 240, y: 60, width: 720, height: 1080 },
+    });
+    expect(createGame002Layout({ width: 2000, height: 1200 })).toMatchObject({
+      visibleRect: { x: 0, y: 270, width: 2000, height: 1200 },
+      worldOffset: { x: -0, y: -270 },
+      boardFrameInViewport: { x: 637.5, y: 60, width: 720, height: 1080 },
+    });
+  });
+
+  it("creates the game002 framework focus policy", () => {
+    expect(createGame002FramePolicy()).toEqual({
+      mode: "focus",
+      maxDesignSize: GAME002_ART_SIZE,
+      preferredPortraitSize: GAME002_REFERENCE_SIZE,
+      focusRect: { width: 720, height: 1080 },
+      minFocusMargin: GAME002_FOCUS_MARGIN,
     });
   });
 
@@ -112,10 +171,10 @@ describe("game002 layout", () => {
   });
 
   it("scales the complete stage into the viewport and rejects invalid viewport sizes", () => {
-    expect(calculateGame002FrameScale(1125, 2000)).toBe(1);
-    expect(calculateGame002FrameScale(2250, 4000)).toBe(2);
+    expect(calculateGame002FrameScale(2000, 2000)).toBe(1);
+    expect(calculateGame002FrameScale(4000, 4000)).toBe(2);
     expect(calculateGame002FrameScale(1920, 1080)).toBeCloseTo(1080 / 2000);
-    expect(calculateGame002FrameScale(562.5, 2000)).toBe(0.5);
+    expect(calculateGame002FrameScale(1000, 2000)).toBe(0.5);
     expect(() => calculateGame002FrameScale(0, 100)).toThrow(/viewportWidth/);
     expect(() => calculateGame002FrameScale(100, 0)).toThrow(/viewportHeight/);
   });

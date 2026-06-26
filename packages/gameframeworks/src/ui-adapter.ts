@@ -1,6 +1,16 @@
 import { createSlotUiController } from "@slotclientengine/uiframeworks";
-import type { SlotUiController } from "@slotclientengine/uiframeworks";
-import type { SlotGameBetOption, SlotGameStateSnapshot } from "./types.js";
+import type {
+  SlotUiController,
+  SlotUiFramePolicy,
+  SlotUiViewportSnapshot,
+} from "@slotclientengine/uiframeworks";
+import type {
+  SlotGameBetOption,
+  SlotGameFramePolicy,
+  SlotGameStateSnapshot,
+  SlotGameViewportListener,
+  SlotGameViewportSnapshot,
+} from "./types.js";
 
 export interface SlotGameUiAdapterOptions {
   readonly root: HTMLElement;
@@ -9,6 +19,7 @@ export interface SlotGameUiAdapterOptions {
   readonly initialBetIndex?: number;
   readonly initialBalance?: number;
   readonly initialWin?: number;
+  readonly framePolicy?: SlotGameFramePolicy;
   readonly brandLabel?: string;
   readonly currency?: string;
   readonly locale?: string;
@@ -30,6 +41,7 @@ export class SlotGameUiAdapter {
     this.#controller = createSlotUiController({
       root: options.root,
       designSize: options.designSize,
+      framePolicy: options.framePolicy as SlotUiFramePolicy | undefined,
       betOptions: options.betOptions,
       initialBetIndex: options.initialBetIndex,
       initialBalance: options.initialBalance,
@@ -53,6 +65,16 @@ export class SlotGameUiAdapter {
     return this.#controller.elements;
   }
 
+  getViewport(): SlotGameViewportSnapshot {
+    return toSlotGameViewport(this.#controller.getViewport());
+  }
+
+  onViewportChange(listener: SlotGameViewportListener): () => void {
+    return this.#controller.onViewportChange((viewport) => {
+      listener(toSlotGameViewport(viewport));
+    });
+  }
+
   update(state: SlotGameStateSnapshot): void {
     this.#controller.update(
       Object.freeze({
@@ -65,4 +87,17 @@ export class SlotGameUiAdapter {
   destroy(): void {
     this.#controller.destroy();
   }
+}
+
+function toSlotGameViewport(
+  viewport: SlotUiViewportSnapshot,
+): SlotGameViewportSnapshot {
+  return Object.freeze({
+    pageSize: Object.freeze({ ...viewport.pageSize }),
+    frameDesignSize: Object.freeze({ ...viewport.frameDesignSize }),
+    scale: viewport.scale,
+    cssSize: Object.freeze({ ...viewport.cssSize }),
+    offsetX: viewport.offsetX,
+    offsetY: viewport.offsetY,
+  });
 }

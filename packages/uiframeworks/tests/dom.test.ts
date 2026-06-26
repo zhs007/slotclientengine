@@ -251,12 +251,11 @@ describe("dom", () => {
 
   it("applies scale from root dimensions", () => {
     const root = document.createElement("div");
-    Object.defineProperty(root, "clientWidth", { value: 470.5 });
-    Object.defineProperty(root, "clientHeight", { value: 836 });
+    setRootSize(root, 470.5, 836);
     const frame = document.createElement("div");
     const scale = applyFrameScale(frame, root, { width: 941, height: 1672 });
     expect(scale).toBe(0.5);
-    expect(frame.style.transform).toBe("translate(-235.25px, 0px) scale(0.5)");
+    expect(frame.style.transform).toBe("translate(0px, 0px) scale(0.5)");
   });
 
   it("clips the page without creating a scroll container", () => {
@@ -266,6 +265,79 @@ describe("dom", () => {
     );
 
     expect(styles).toMatch(/\.slot-ui-page\s*\{[\s\S]*?overflow:\s*clip;/);
+    expect(styles).toMatch(/\.slot-ui-page\s*\{[\s\S]*?background:\s*#000000;/);
+    expect(styles).toMatch(
+      /\.slot-ui-frame\s*\{[\s\S]*?transform-origin:\s*top left;/,
+    );
+  });
+
+  it("applies focus frame policy and emits viewport changes on resize", () => {
+    const root = document.createElement("div");
+    setRootSize(root, 1125, 2000);
+    const dom = createSlotUiDom({
+      root,
+      designSize: { width: 1125, height: 2000 },
+      framePolicy: createFocusPolicy(),
+      clock: false,
+      formatMoney: createMoneyFormatter(),
+      getBetControls: () => ({ canDecrease: true, canIncrease: true }),
+      handlers: createHandlers(),
+    });
+    const snapshots: unknown[] = [];
+    const unsubscribe = dom.onViewportChange((viewport) => {
+      snapshots.push(viewport);
+    });
+
+    expect(dom.getViewport().frameDesignSize).toEqual({
+      width: 1125,
+      height: 2000,
+    });
+    expect(dom.elements.frame.style.width).toBe("1125px");
+    expect(dom.elements.frame.style.height).toBe("2000px");
+
+    setRootSize(root, 3000, 1200);
+    window.dispatchEvent(new Event("resize"));
+
+    expect(dom.getViewport()).toMatchObject({
+      frameDesignSize: { width: 2000, height: 1200 },
+      cssSize: { width: 2000, height: 1200 },
+      offsetX: 500,
+      offsetY: 0,
+    });
+    expect(dom.elements.frame.style.width).toBe("2000px");
+    expect(dom.elements.frame.style.height).toBe("1200px");
+    expect(dom.elements.frame.style.transform).toBe(
+      "translate(500px, 0px) scale(1)",
+    );
+    expect(snapshots).toHaveLength(1);
+
+    unsubscribe();
+    setRootSize(root, 1200, 1200);
+    window.dispatchEvent(new Event("resize"));
+    expect(snapshots).toHaveLength(1);
+    dom.destroy();
+  });
+
+  it("removes focus frame listeners on destroy", () => {
+    const root = document.createElement("div");
+    setRootSize(root, 1125, 2000);
+    const dom = createSlotUiDom({
+      root,
+      designSize: { width: 1125, height: 2000 },
+      framePolicy: createFocusPolicy(),
+      clock: false,
+      formatMoney: createMoneyFormatter(),
+      getBetControls: () => ({ canDecrease: true, canIncrease: true }),
+      handlers: createHandlers(),
+    });
+    const listener = vi.fn();
+    dom.onViewportChange(listener);
+    dom.destroy();
+
+    setRootSize(root, 1200, 1200);
+    window.dispatchEvent(new Event("resize"));
+
+    expect(listener).not.toHaveBeenCalled();
   });
 });
 
@@ -288,4 +360,30 @@ function stableClock() {
     format: () => "18:25",
     updateIntervalMs: 60_000,
   };
+}
+
+function createFocusPolicy() {
+  return {
+    mode: "focus" as const,
+    maxDesignSize: { width: 2000, height: 2000 },
+    preferredPortraitSize: { width: 1125, height: 2000 },
+    focusRect: { width: 720, height: 1080 },
+    minFocusMargin: {
+      left: 60,
+      right: 60,
+      top: 60,
+      bottom: 60,
+    },
+  };
+}
+
+function setRootSize(root: HTMLElement, width: number, height: number): void {
+  Object.defineProperty(root, "clientWidth", {
+    configurable: true,
+    value: width,
+  });
+  Object.defineProperty(root, "clientHeight", {
+    configurable: true,
+    value: height,
+  });
 }

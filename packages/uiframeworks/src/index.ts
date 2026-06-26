@@ -16,6 +16,8 @@ import type {
   SlotUiFrameworkOptions,
   SlotUiSpinResult,
   SlotUiStateSnapshot,
+  SlotUiViewportListener,
+  SlotUiViewportSnapshot,
 } from "./types.js";
 
 export function createSlotUiFramework(
@@ -49,6 +51,7 @@ class SlotUiFrameworkImpl implements SlotUiFramework {
     this.#dom = createSlotUiDom({
       root: options.root,
       designSize,
+      framePolicy: options.framePolicy,
       brandLabel: options.brandLabel,
       clock: options.clock,
       buyBonus: options.buyBonus,
@@ -187,6 +190,14 @@ class SlotUiFrameworkImpl implements SlotUiFramework {
     return this.#state.getState();
   }
 
+  getViewport(): SlotUiViewportSnapshot {
+    return this.#dom.getViewport();
+  }
+
+  onViewportChange(listener: SlotUiViewportListener): () => void {
+    return this.#dom.onViewportChange(listener);
+  }
+
   destroy(): void {
     if (this.#destroyed) {
       return;
@@ -206,6 +217,9 @@ class SlotUiFrameworkImpl implements SlotUiFramework {
       gameLayer: this.#dom.elements.gameLayer,
       overlay: this.#dom.elements.overlay,
       getState: () => this.#state.getState(),
+      getViewport: () => this.#dom.getViewport(),
+      onViewportChange: (listener: SlotUiViewportListener) =>
+        this.#dom.onViewportChange(listener),
     });
     await this.#options.gameAdapter.mount(
       this.#dom.elements.gameLayer,
@@ -280,6 +294,7 @@ export { SlotUiConfigError, SlotUiRuntimeError } from "./errors.js";
 export {
   DEFAULT_SLOT_UI_DESIGN_SIZE,
   calculateFrameScale,
+  calculateSlotUiFrameViewport,
   createDefaultSlotLayout,
   validateDesignSize,
 } from "./layout.js";
@@ -311,12 +326,16 @@ export type {
   SlotUiBuyBonusOptions,
   SlotUiClockOptions,
   SlotUiDesignSize,
+  SlotUiFocusFramePolicy,
+  SlotUiFramePolicy,
   SlotUiFramework,
   SlotUiFrameworkOptions,
   SlotUiLiveConfig,
   SlotUiSpinResult,
   SlotUiSpinState,
   SlotUiStateSnapshot,
+  SlotUiViewportListener,
+  SlotUiViewportSnapshot,
   SlotcraftClientFactory,
   SlotcraftClientLike,
 } from "./types.js";

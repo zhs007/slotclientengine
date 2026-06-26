@@ -1,30 +1,21 @@
-import {
-  Application,
-  Assets,
-  Sprite,
-  type Container,
-  type Texture,
-} from "pixi.js";
+import { Application, Assets, Container, Sprite, type Texture } from "pixi.js";
 import rawGameConfig from "../../../assets/gamecfg002/gameconfig.json";
 import stateTextureManifest from "../../../assets/symbols002/symbol-state-textures.manifest.json";
-import backgroundUrl from "../../../assets/game002/bg.jpg?url";
+import backgroundUrl from "../../../assets/game002/bgfull.jpg?url";
 import type {
   GameLogic,
   SlotGameAdapter,
   SlotGameInitialState,
   SlotGameMountContext,
   SlotGameStateSnapshot,
+  SlotGameViewportSnapshot,
 } from "@slotclientengine/gameframeworks";
 import type { SymbolAssetMap } from "@slotclientengine/rendercore";
 import {
   createGame002SymbolAssetMapFromModules,
   loadGame002SymbolTextures,
 } from "./assets.js";
-import {
-  GAME002_ASSET_SIZE,
-  GAME002_STAGE_SIZE,
-  createGame002Layout,
-} from "./game-layout.js";
+import { GAME002_ASSET_SIZE, createGame002Layout } from "./game-layout.js";
 import {
   assertGame002ReelVisualMatchesTarget,
   createGame002ReelRuntime,
@@ -47,6 +38,9 @@ export type Game002TickerListener = (ticker: Game002TickerSnapshot) => void;
 export interface Game002PixiApplication {
   readonly canvas: HTMLElement;
   readonly stage: Pick<Container, "addChild">;
+  readonly renderer: {
+    resize(width: number, height: number): void;
+  };
   readonly ticker: {
     add(listener: Game002TickerListener): void;
     remove(listener: Game002TickerListener): void;
@@ -79,6 +73,8 @@ interface PendingAnimation {
   reject(error: Error): void;
 }
 
+const GAME002_MAX_TICK_DELTA_SECONDS = 1 / 30;
+
 export function createGame002Adapter(
   options: Game002AdapterOptions = {},
 ): SlotGameAdapter {
@@ -91,8 +87,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
   readonly #loadSymbolTextures: () => Promise<SymbolAssetMap>;
   readonly #createRuntime: (symbolAssets: SymbolAssetMap) => Game002ReelRuntime;
   #app: Game002PixiApplication | null = null;
+  #worldLayer: Container | null = null;
   #runtime: Game002ReelRuntime | null = null;
   #pendingAnimation: PendingAnimation | null = null;
+  #unsubscribeViewport: (() => void) | null = null;
 
   constructor(options: Game002AdapterOptions) {
     this.#createApplication =
@@ -114,9 +112,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
     }
 
     const app = this.#createApplication();
+    const initialViewport = context.getViewport();
     await app.init({
-      width: GAME002_STAGE_SIZE.width,
-      height: GAME002_STAGE_SIZE.height,
+      width: initialViewport.frameDesignSize.width,
+      height: initialViewport.frameDesignSize.height,
       antialias: true,
       autoDensity: false,
       resolution: 1,
@@ -130,14 +129,21 @@ class Game002PixiAdapter implements SlotGameAdapter {
     ]);
     const runtime = this.#createRuntime(symbolTextures);
 
-    app.stage.addChild(
+    const worldLayer = new Container();
+    worldLayer.addChild(
       createPositionedSprite(staticTextures.background, layout.background),
     );
-    app.stage.addChild(runtime.mainReelsLayer);
+    worldLayer.addChild(runtime.mainReelsLayer);
+    app.stage.addChild(worldLayer);
 
     app.ticker.add(this.#onTick);
     this.#app = app;
+    this.#worldLayer = worldLayer;
     this.#runtime = runtime;
+    this.#applyViewport(initialViewport);
+    this.#unsubscribeViewport = context.onViewportChange((viewport) => {
+      this.#applyViewport(viewport);
+    });
   }
 
   applyInitialState(state: SlotGameInitialState): void {
@@ -177,11 +183,14 @@ class Game002PixiAdapter implements SlotGameAdapter {
 
   destroy(): void {
     this.#rejectPending(new Error("game002 adapter was destroyed."));
+    this.#unsubscribeViewport?.();
+    this.#unsubscribeViewport = null;
     this.#app?.ticker.remove(this.#onTick);
     this.#app?.ticker.stop();
     this.#app?.canvas.remove();
     this.#app?.destroy();
     this.#app = null;
+    this.#worldLayer = null;
     this.#runtime = null;
   }
 
@@ -195,7 +204,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     }
 
     try {
-      const result = this.#runtime.update(ticker.deltaMS / 1000);
+      const result = this.#runtime.update(normalizeTickerDeltaSeconds(ticker));
       if (!result.completed) {
         return;
       }
@@ -223,6 +232,18 @@ class Game002PixiAdapter implements SlotGameAdapter {
     return this.#runtime;
   }
 
+  #applyViewport(viewport: SlotGameViewportSnapshot): void {
+    if (!this.#app || !this.#worldLayer) {
+      throw new Error("game002 adapter is not mounted.");
+    }
+    const layout = createGame002Layout(viewport.frameDesignSize);
+    this.#app.renderer.resize(
+      layout.viewportSize.width,
+      layout.viewportSize.height,
+    );
+    this.#worldLayer.position.set(layout.worldOffset.x, layout.worldOffset.y);
+  }
+
   #rejectPending(error: Error): void {
     const pending = this.#pendingAnimation;
     if (!pending) {
@@ -233,13 +254,23 @@ class Game002PixiAdapter implements SlotGameAdapter {
   }
 }
 
+function normalizeTickerDeltaSeconds(ticker: Game002TickerSnapshot): number {
+  const deltaSeconds = ticker.deltaMS / 1000;
+  if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
+    throw new Error(
+      "game002 ticker deltaMS must be a finite non-negative number.",
+    );
+  }
+  return Math.min(deltaSeconds, GAME002_MAX_TICK_DELTA_SECONDS);
+}
+
 function createPixiApplication(): Game002PixiApplication {
   return new Application() as unknown as Game002PixiApplication;
 }
 
 async function loadStaticTextures(): Promise<Game002StaticTextures> {
   const background = await loadTextureWithSize(
-    "bg.jpg",
+    "bgfull.jpg",
     backgroundUrl,
     GAME002_ASSET_SIZE.background,
   );

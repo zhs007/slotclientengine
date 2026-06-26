@@ -33,6 +33,7 @@ export function createSlotUiController(
   const dom = createSlotUiDom({
     root: options.root,
     designSize,
+    framePolicy: options.framePolicy,
     brandLabel: options.brandLabel,
     clock: options.clock,
     buyBonus: options.buyBonus,
@@ -49,6 +50,8 @@ export function createSlotUiController(
       gameLayer: dom.elements.gameLayer,
       overlay: dom.elements.overlay,
     }),
+    getViewport: () => dom.getViewport(),
+    onViewportChange: (listener) => dom.onViewportChange(listener),
     update(state: SlotUiStateSnapshot): void {
       latestState = state;
       dom.update(state);

@@ -19,6 +19,7 @@ import type { LogicReels, SceneMatrix } from "@slotclientengine/logiccore";
 interface RuntimeCell {
   readonly coordinate: GridCellCoordinate;
   readonly root: Container;
+  readonly clipContent: Container;
   readonly reel: RenderReel;
   readonly clipMask: Graphics;
   readonly dimOverlay: Container;
@@ -92,6 +93,7 @@ export class RenderGridCellReelSet extends Container {
       cell.fadeOutStartAlpha = 0;
       cell.dimOverlay.alpha = 0;
       cell.dimOverlay.y = 0;
+      this.setCellClipMask(cell, false);
     }
   }
 
@@ -115,6 +117,7 @@ export class RenderGridCellReelSet extends Container {
       cell.fadeOutStartAlpha = 0;
       cell.dimOverlay.alpha = 0;
       cell.dimOverlay.y = 0;
+      this.setCellClipMask(cell, false);
     }
   }
 
@@ -194,6 +197,9 @@ export class RenderGridCellReelSet extends Container {
     const clipMask = new Graphics()
       .rect(0, 0, this.#cellWidth, this.#cellHeight)
       .fill({ color: 0xffffff, alpha: 1 });
+    clipMask.visible = false;
+    const clipContent = new Container();
+
     const reel = new RenderReel({
       reels: this.#reels,
       x: coordinate.x,
@@ -215,13 +221,14 @@ export class RenderGridCellReelSet extends Container {
 
     reel.addChild(dimOverlay);
     dimOverlay.addChild(...dimRows.map((row) => row.graphic));
-    root.addChild(clipMask, reel);
-    root.mask = clipMask;
+    clipContent.addChild(reel);
+    root.addChild(clipMask, clipContent);
     this.addChild(root);
 
     return {
       coordinate,
       root,
+      clipContent,
       reel,
       clipMask,
       dimOverlay,
@@ -247,6 +254,7 @@ export class RenderGridCellReelSet extends Container {
     }
 
     if (cell.phase === "waiting" && elapsedMs >= planCell.startAtMs) {
+      this.setCellClipMask(cell, true);
       cell.reel.start(planCell.axisPlan, {
         targetVisibleSymbols: planCell.targetVisibleSymbols,
       });
@@ -266,7 +274,8 @@ export class RenderGridCellReelSet extends Container {
           planCell.axisPlan.finalY,
         );
         resetReelSlotSymbols(cell);
-        this.syncDimmingStrip(cell, plan);
+        this.syncLandedDimming(cell, planCell);
+        this.setCellClipMask(cell, false);
         cell.phase = "landed";
         cell.hasLandedThisSpin = true;
         cell.fadeOutElapsedMs = 0;
@@ -307,7 +316,9 @@ export class RenderGridCellReelSet extends Container {
     plan: GridCellReelSpinPlan,
     deltaMs: number,
   ): void {
-    this.syncDimmingStrip(cell, plan);
+    if (cell.planCell) {
+      this.syncLandedDimming(cell, cell.planCell);
+    }
     const fadeOutMs = plan.dimming.fadeOutMs;
     if (fadeOutMs === 0) {
       cell.dimOverlay.alpha = 0;
@@ -388,7 +399,8 @@ export class RenderGridCellReelSet extends Container {
       y: cell.coordinate.y,
       orderIndex: cell.coordinate.orderIndex,
       phase: cell.phase,
-      hasClipMask: cell.root.mask === cell.clipMask,
+      hasClipMask:
+        cell.root.mask == null && cell.clipContent.mask === cell.clipMask,
       cellX: cell.root.x,
       cellY: cell.root.y,
       reelX: cell.reel.x,
@@ -414,6 +426,21 @@ export class RenderGridCellReelSet extends Container {
           ? plan.dimming.evenAlpha
           : plan.dimming.oddAlpha;
     }
+  }
+
+  private syncLandedDimming(
+    cell: RuntimeCell,
+    planCell: GridCellReelPlanCell,
+  ): void {
+    cell.dimOverlay.y = 0;
+    for (const row of cell.dimRows) {
+      row.graphic.alpha = row.windowY === 0 ? planCell.dimmingAlpha : 0;
+    }
+  }
+
+  private setCellClipMask(cell: RuntimeCell, enabled: boolean): void {
+    cell.clipContent.mask = enabled ? cell.clipMask : null;
+    cell.clipMask.visible = enabled;
   }
 
   private getVisibleDimmingAlpha(cell: RuntimeCell): number {

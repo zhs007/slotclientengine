@@ -191,6 +191,77 @@ describe("framework flow", () => {
     expect(new SlotGameRuntimeError("bad")).toBeInstanceOf(Error);
   });
 
+  it("passes frame policy viewport snapshots to the mounted adapter", () => {
+    const root = document.createElement("div");
+    setRootSize(root, 1125, 2000);
+    const adapter = new MockAdapter();
+    const framework = createSlotGameFramework({
+      root,
+      gameAdapter: adapter,
+      live: { serverUrl: "ws://localhost" },
+      betOptions: BET_OPTIONS,
+      designSize: { width: 1125, height: 2000 },
+      framePolicy: createFocusPolicy(),
+      clientFactory: () => new MockClient(),
+    });
+
+    expect(adapter.context?.getViewport()).toMatchObject({
+      frameDesignSize: { width: 1125, height: 2000 },
+      scale: 1,
+    });
+    const snapshots: unknown[] = [];
+    const unsubscribe = adapter.context?.onViewportChange((viewport) => {
+      snapshots.push(viewport);
+    });
+
+    setRootSize(root, 3000, 1200);
+    window.dispatchEvent(new Event("resize"));
+
+    expect(adapter.context?.getViewport()).toMatchObject({
+      frameDesignSize: { width: 2000, height: 1200 },
+      cssSize: { width: 2000, height: 1200 },
+      offsetX: 500,
+    });
+    expect(snapshots).toHaveLength(1);
+    unsubscribe?.();
+    framework.destroy();
+
+    setRootSize(root, 1200, 1200);
+    window.dispatchEvent(new Event("resize"));
+    expect(snapshots).toHaveLength(1);
+  });
+
+  it("routes viewport listener errors through the framework error path", () => {
+    const root = document.createElement("div");
+    setRootSize(root, 1125, 2000);
+    const adapter = new MockAdapter();
+    const errors: Error[] = [];
+    const framework = createSlotGameFramework({
+      root,
+      gameAdapter: adapter,
+      live: { serverUrl: "ws://localhost" },
+      betOptions: BET_OPTIONS,
+      designSize: { width: 1125, height: 2000 },
+      framePolicy: createFocusPolicy(),
+      clientFactory: () => new MockClient(),
+      onError: (error) => errors.push(error),
+    });
+    adapter.context?.onViewportChange(() => {
+      throw new Error("viewport exploded");
+    });
+
+    setRootSize(root, 1200, 1200);
+    try {
+      window.dispatchEvent(new Event("resize"));
+    } catch {
+      // Browser event dispatch surfaces listener failures; the framework still
+      // records the error before rethrowing.
+    }
+
+    expect(errors.map((error) => error.message)).toContain("viewport exploded");
+    expect(framework.getState()).toMatchObject({ spinState: "error" });
+  });
+
   it("fails fast on bad framework configuration and spin request shape", async () => {
     expect(() =>
       createSlotGameFramework({
@@ -248,4 +319,30 @@ async function waitForState(
     }
   }
   throw new Error(`state did not become ${expected}: ${getState()}`);
+}
+
+function createFocusPolicy() {
+  return {
+    mode: "focus" as const,
+    maxDesignSize: { width: 2000, height: 2000 },
+    preferredPortraitSize: { width: 1125, height: 2000 },
+    focusRect: { width: 720, height: 1080 },
+    minFocusMargin: {
+      left: 60,
+      right: 60,
+      top: 60,
+      bottom: 60,
+    },
+  };
+}
+
+function setRootSize(root: HTMLElement, width: number, height: number): void {
+  Object.defineProperty(root, "clientWidth", {
+    configurable: true,
+    value: width,
+  });
+  Object.defineProperty(root, "clientHeight", {
+    configurable: true,
+    value: height,
+  });
 }

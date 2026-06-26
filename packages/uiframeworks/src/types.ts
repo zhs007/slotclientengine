@@ -13,6 +13,37 @@ export interface SlotUiDesignSize {
   readonly height: number;
 }
 
+export interface SlotUiFocusFramePolicy {
+  readonly mode: "focus";
+  readonly maxDesignSize: SlotUiDesignSize;
+  readonly preferredPortraitSize: SlotUiDesignSize;
+  readonly focusRect: {
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly minFocusMargin?: {
+    readonly left?: number;
+    readonly right?: number;
+    readonly top?: number;
+    readonly bottom?: number;
+  };
+}
+
+export type SlotUiFramePolicy =
+  | { readonly mode: "fixed" }
+  | SlotUiFocusFramePolicy;
+
+export interface SlotUiViewportSnapshot {
+  readonly pageSize: SlotUiDesignSize;
+  readonly frameDesignSize: SlotUiDesignSize;
+  readonly scale: number;
+  readonly cssSize: SlotUiDesignSize;
+  readonly offsetX: number;
+  readonly offsetY: number;
+}
+
+export type SlotUiViewportListener = (viewport: SlotUiViewportSnapshot) => void;
+
 export interface SlotUiBetOption {
   readonly bet: number;
   readonly lines: number;
@@ -88,6 +119,8 @@ export interface SlotGameMountContext {
   readonly gameLayer: HTMLElement;
   readonly overlay: HTMLElement;
   getState(): SlotUiStateSnapshot;
+  getViewport(): SlotUiViewportSnapshot;
+  onViewportChange(listener: SlotUiViewportListener): () => void;
 }
 
 export interface SlotGameAdapter {
@@ -118,6 +151,7 @@ export interface SlotUiControllerHandlers {
 export interface SlotUiControllerOptions {
   readonly root: HTMLElement;
   readonly designSize?: SlotUiDesignSize;
+  readonly framePolicy?: SlotUiFramePolicy;
   readonly betOptions: readonly SlotUiBetOption[];
   readonly initialBetIndex?: number;
   readonly initialBalance?: number;
@@ -137,6 +171,8 @@ export interface SlotUiControllerOptions {
 
 export interface SlotUiController {
   readonly elements: SlotUiControllerElements;
+  getViewport(): SlotUiViewportSnapshot;
+  onViewportChange(listener: SlotUiViewportListener): () => void;
   update(state: SlotUiStateSnapshot): void;
   destroy(): void;
 }
@@ -161,6 +197,7 @@ export interface SlotUiFrameworkOptions {
   readonly root: HTMLElement;
   readonly gameAdapter: SlotGameAdapter;
   readonly designSize?: SlotUiDesignSize;
+  readonly framePolicy?: SlotUiFramePolicy;
   readonly live: SlotUiLiveConfig;
   readonly betOptions: readonly SlotUiBetOption[];
   readonly initialBetIndex?: number;
@@ -200,5 +237,7 @@ export interface SlotUiFramework {
   setFastMode(enabled: boolean): void;
   setAutoMode(enabled: boolean): void;
   getState(): SlotUiStateSnapshot;
+  getViewport(): SlotUiViewportSnapshot;
+  onViewportChange(listener: SlotUiViewportListener): () => void;
   destroy(): void;
 }

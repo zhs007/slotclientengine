@@ -1,7 +1,10 @@
 import { createSlotGameFramework } from "@slotclientengine/gameframeworks";
 import "@slotclientengine/gameframeworks/styles.css";
 import { createGame002Adapter } from "./game-adapter.js";
-import { GAME002_STAGE_SIZE } from "./game-layout.js";
+import {
+  GAME002_REFERENCE_SIZE,
+  createGame002FramePolicy,
+} from "./game-layout.js";
 import { parseGame002FrameworkConfig } from "./framework-config.js";
 import { formatServerUsdAmount } from "./money.js";
 import "./styles.css";
@@ -19,7 +22,8 @@ try {
     live: config.live,
     betOptions: config.betOptions,
     initialBetIndex: config.initialBetIndex,
-    designSize: GAME002_STAGE_SIZE,
+    designSize: GAME002_REFERENCE_SIZE,
+    framePolicy: createGame002FramePolicy(),
     brandLabel: "game002",
     currency: "USD",
     locale: "en-US",

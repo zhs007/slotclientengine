@@ -12,13 +12,21 @@ import {
 } from "@slotclientengine/gameframeworks";
 import "@slotclientengine/gameframeworks/styles.css";
 
+let unsubscribeViewport = () => undefined;
 const gameAdapter: SlotGameAdapter = {
   mount(context) {
+    console.log(context.getViewport().frameDesignSize);
     context.gameLayer.append(document.createElement("ol"));
+    unsubscribeViewport = context.onViewportChange((viewport) => {
+      console.log("resize", viewport.frameDesignSize);
+    });
   },
   async playSpin(logic) {
     const scenes = getComponentScenesByName(logic, "lineWin");
     console.log(logic.getTotalWin(), scenes.length);
+  },
+  destroy() {
+    unsubscribeViewport();
   },
 };
 
@@ -44,6 +52,30 @@ await framework.spin();
 - `adapter.playSpin(logic)` 的 Promise resolve 表示游戏动画或展示完成；框架随后按协议自动 collect。
 - 游戏不要解析 `gmi.replyPlay` 或调用 `client.collect()`。
 - `balance`、`bet`、`win`、spin 状态和 collect 状态由框架自动驱动 HUD。
+- 游戏如需动态 canvas backing size，应通过 `context.getViewport()` 读取初始 viewport，并通过 `context.onViewportChange(listener)` 订阅后续 resize；不要从游戏 app 直接依赖 `@slotclientengine/uiframeworks`。
+
+## Frame Policy
+
+`createSlotGameFramework()` 接受 `framePolicy` 并透传给底层 `uiframeworks`。默认不传时保持固定设计分辨率行为；传入 focus policy 时，DOM frame 会根据浏览器 viewport 计算提交给游戏 canvas 的逻辑尺寸、CSS 缩放和黑边居中：
+
+```ts
+const framework = createSlotGameFramework({
+  root,
+  gameAdapter,
+  live,
+  betOptions,
+  designSize: { width: 1125, height: 2000 },
+  framePolicy: {
+    mode: "focus",
+    maxDesignSize: { width: 2000, height: 2000 },
+    preferredPortraitSize: { width: 1125, height: 2000 },
+    focusRect: { width: 720, height: 1080 },
+    minFocusMargin: { left: 60, right: 60, top: 60, bottom: 60 },
+  },
+});
+```
+
+`framePolicy` 只影响 DOM frame 和 canvas 逻辑尺寸，不改变 live、spin、presenting、collect、money 或 state 语义。adapter 的 viewport listener 抛错时会进入框架 error 路径，不会被静默吞掉。
 
 ## 逻辑读取
 
