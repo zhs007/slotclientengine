@@ -12,6 +12,7 @@ import megawinData from "../fixtures/megawin.json";
 import multipayData from "../fixtures/multipay.json";
 import projectData from "../fixtures/project.json";
 import respinData from "../fixtures/respin.json";
+import roundreelData from "../fixtures/roundreel.json";
 import scatter1Data from "../fixtures/scatter1.json";
 import scatter2Data from "../fixtures/scatter2.json";
 import superwinData from "../fixtures/superwin.json";
@@ -65,6 +66,7 @@ const fixtures = [
   ["3reel_multipay_01", threeReelMultipay01Data],
   ["3reel_multipay_02", threeReelMultipay02Data],
   ["lock_01", lock01Data],
+  ["roundreel", roundreelData],
 ] as const;
 
 const sampleTimes = [0, 0.1, 0.6, 0.8, 1, 2, 4, 4.4];
@@ -161,26 +163,41 @@ describe("standalone runtime parity", () => {
   });
 
   it("matches modular safe_glow sampler output", () => {
-    const project = assertV5GProject(lock01Data);
-    const singleProject = standalone.assertV5GProject(lock01Data);
-    const layer = project.layers.find((candidate) =>
-      candidate.animations.some((animation) => animation.type === "safe_glow"),
-    );
-    const singleLayer = singleProject.layers.find(
-      (candidate) => candidate.id === layer?.id,
-    );
-    if (!layer || !singleLayer) throw new Error("missing safe_glow layer");
-    const sampled = sampleProjectAtTime(project, 0.5).layers.find(
-      (candidate) => candidate.layerId === layer.id,
-    );
-    const singleSampled = standalone
-      .sampleProjectAtTime(singleProject, 0.5)
-      .layers.find((candidate) => candidate.layerId === layer.id);
-    if (!sampled || !singleSampled) throw new Error("missing sampled layer");
+    const cases = [
+      { fixture: lock01Data, time: 0.5, expectedBlendMode: "normal" },
+      { fixture: roundreelData, time: 1.175, expectedBlendMode: "add" },
+    ] as const;
 
-    expect(
-      standalone.sampleSafeGlowSpritesForLayer(singleLayer, singleSampled, 0.5),
-    ).toEqual(sampleSafeGlowSpritesForLayer(layer, sampled, 0.5));
+    for (const item of cases) {
+      const project = assertV5GProject(item.fixture);
+      const singleProject = standalone.assertV5GProject(item.fixture);
+      const layer = project.layers.find((candidate) =>
+        candidate.animations.some(
+          (animation) => animation.type === "safe_glow",
+        ),
+      );
+      const singleLayer = singleProject.layers.find(
+        (candidate) => candidate.id === layer?.id,
+      );
+      if (!layer || !singleLayer) throw new Error("missing safe_glow layer");
+      const sampled = sampleProjectAtTime(project, item.time).layers.find(
+        (candidate) => candidate.layerId === layer.id,
+      );
+      const singleSampled = standalone
+        .sampleProjectAtTime(singleProject, item.time)
+        .layers.find((candidate) => candidate.layerId === layer.id);
+      if (!sampled || !singleSampled) throw new Error("missing sampled layer");
+
+      const singleSprites = standalone.sampleSafeGlowSpritesForLayer(
+        singleLayer,
+        singleSampled,
+        item.time,
+      );
+      expect(singleSprites).toEqual(
+        sampleSafeGlowSpritesForLayer(layer, sampled, item.time),
+      );
+      expect(singleSprites[0]?.blendMode).toBe(item.expectedBlendMode);
+    }
   });
 
   it("matches modular Cocos render effect fail-fast", () => {

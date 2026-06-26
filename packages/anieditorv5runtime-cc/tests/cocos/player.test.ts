@@ -3,6 +3,7 @@ import threeReelMultipay01Data from "../fixtures/3reel_multipay_01.json";
 import threeReelMultipay02Data from "../fixtures/3reel_multipay_02.json";
 import lock01Data from "../fixtures/lock_01.json";
 import projectData from "../fixtures/project.json";
+import roundreelData from "../fixtures/roundreel.json";
 import { V5GCocosPlayer } from "../../src/cocos/player";
 import { assertV5GProject } from "../../src/core/validation";
 import {
@@ -779,7 +780,8 @@ describe("V5GCocosPlayer", () => {
     expect(safeGlowNode.name).toBe("V5G Safe Glow layer-1");
     expect(safeGlowNode.active).toBe(true);
     expect(safeGlowNode.spriteFrame).toBe(frames.get("asset-1"));
-    expect(safeGlowNode.blendMode).toEqual(getCocosBlendModeConfig("normal"));
+    expect(layerNode.blendMode).toEqual(getCocosBlendModeConfig("add"));
+    expect(safeGlowNode.blendMode).toEqual(getCocosBlendModeConfig("add"));
     expect(safeGlowNode.width).toBe(100);
     expect(safeGlowNode.height).toBe(50);
     expect(safeGlowNode.anchorX).toBe(0.25);
@@ -806,6 +808,32 @@ describe("V5GCocosPlayer", () => {
     expect(player.getLayerGroupSlots()).toEqual([]);
     expect(player.getLayerGroups()).toHaveLength(1);
     player.seek(0.5);
+  });
+
+  it("initializes the roundreel runtime_100 export and renders safe_glow with inherited add blend", () => {
+    const project = assertV5GProject(roundreelData);
+    const { root, player } = makePlayer(project);
+
+    expect(project.schemaVersion).toBe("VNI_0.020");
+    expect(project.exportProfile).toMatchObject({
+      id: "runtime_100",
+      purpose: "runtime",
+      assetScale: 1,
+    });
+    player.init();
+    expect(player.getLayerGroups()).toHaveLength(1);
+
+    player.seek(1.175);
+
+    const layerNode = getFirstLayerNode(root);
+    const safeGlowContainer = getFirstSafeGlowContainer(root);
+    expect(layerNode.blendMode).toEqual(getCocosBlendModeConfig("add"));
+    expect(safeGlowContainer.children).toHaveLength(1);
+    const safeGlowNode = safeGlowContainer.children[0];
+    expect(safeGlowNode.blendMode).toEqual(getCocosBlendModeConfig("add"));
+    expect(safeGlowNode.spriteFrame?.id).toBe("asset_image_mqtjdi3v_3");
+    expect(safeGlowNode.width).toBe(256);
+    expect(safeGlowNode.height).toBe(256);
   });
 
   it("fails when an asset resolver cannot provide a SpriteFrame", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import tenXData from "../fixtures/10x.json";
@@ -14,6 +14,7 @@ import megawinData from "../fixtures/megawin.json";
 import multipayData from "../fixtures/multipay.json";
 import projectData from "../fixtures/project.json";
 import respinData from "../fixtures/respin.json";
+import roundreelData from "../fixtures/roundreel.json";
 import scatter1Data from "../fixtures/scatter1.json";
 import scatter2Data from "../fixtures/scatter2.json";
 import superwinData from "../fixtures/superwin.json";
@@ -41,6 +42,7 @@ const newExportFixtures = [
   scatter2Data,
   multipayData,
   threeReelMultipay02Data,
+  roundreelData,
 ] as const;
 const exportRootDir = fileURLToPath(
   new URL("../../../../docs/anieditor5/export/", import.meta.url),
@@ -55,6 +57,10 @@ function validProject(): V5GProjectConfig {
 
 function validRuntime50Project(): V5GProjectConfig {
   return structuredClone(assertV5GProject(export2Runtime50Data));
+}
+
+function validRoundreelProject(): V5GProjectConfig {
+  return structuredClone(assertV5GProject(roundreelData));
 }
 
 function expectInvalid(
@@ -128,6 +134,45 @@ describe("validation", () => {
     expect(animationTypes.has("particle_twinkle")).toBe(true);
     expect(project.layerGroups).toHaveLength(1);
     expect(getVNIProjectLayerGroupSlots(project)).toEqual([]);
+    expect(() => validateV5GProject(project)).not.toThrow();
+    expect(() => validateCocosV5GProject(project)).not.toThrow();
+  });
+
+  it("accepts the VNI_0.020 roundreel runtime_100 safe_glow fixture", () => {
+    const docsRoundreel = JSON.parse(
+      readFileSync(join(exportRootDir, "roundreel.json"), "utf8"),
+    ) as unknown;
+    expect(roundreelData).toEqual(docsRoundreel);
+
+    const project = validRoundreelProject();
+    const animationTypes = new Set(
+      project.layers.flatMap((layer) =>
+        layer.animations.map((animation) => animation.type),
+      ),
+    );
+    const blendModes = new Set(project.layers.map((layer) => layer.blendMode));
+
+    expect(project.schemaVersion).toBe("VNI_0.020");
+    expect(project.editor.name).toBe("VNI");
+    expect(project.engineTarget).toEqual({
+      name: "cocos_creator",
+      version: "3.8.6",
+    });
+    expect(project.name).toBe("roundreel");
+    expect(project.exportProfile).toEqual({
+      id: "runtime_100",
+      purpose: "runtime",
+      assetScale: 1,
+      label: undefined,
+    });
+    expect(animationTypes.has("safe_glow")).toBe(true);
+    expect(blendModes.has("add")).toBe(true);
+    for (const asset of project.assets) {
+      expect(asset.fileWidth).toBe(asset.width);
+      expect(asset.fileHeight).toBe(asset.height);
+      expect(asset.fileScale).toBe(1);
+      expect(existsSync(join(exportRootDir, asset.path))).toBe(true);
+    }
     expect(() => validateV5GProject(project)).not.toThrow();
     expect(() => validateCocosV5GProject(project)).not.toThrow();
   });
@@ -389,6 +434,14 @@ describe("validation", () => {
       'must provide fileWidth/fileHeight/fileScale for exportProfile "runtime_50"',
     );
 
+    const runtime100MissingMetadata = validRoundreelProject();
+    delete runtime100MissingMetadata.assets[0].fileWidth;
+    delete runtime100MissingMetadata.assets[0].fileHeight;
+    delete runtime100MissingMetadata.assets[0].fileScale;
+    expect(() => validateV5GProject(runtime100MissingMetadata)).toThrow(
+      'must provide fileWidth/fileHeight/fileScale for exportProfile "runtime_100"',
+    );
+
     const editingScaledMissingMetadata = validProject();
     editingScaledMissingMetadata.exportProfile = {
       id: "edit_half",
@@ -588,7 +641,7 @@ describe("validation", () => {
     }, "Unsupported Cocos V5G layer type: text");
   });
 
-  it("accepts exported non-normal blend modes at the Cocos runtime layer", () => {
+  it("accepts exported special blend modes at the Cocos runtime layer", () => {
     const project = assertV5GProject(bigwinData);
     expect(() => validateV5GProject(project)).not.toThrow();
     expect(() => validateCocosV5GProject(project)).not.toThrow();

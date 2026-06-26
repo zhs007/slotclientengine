@@ -134,6 +134,9 @@ const requiredSnippets = [
   "detachMountedNodes(targets: readonly (string | TNode)[]): void",
   "hasActiveSafeGlowAnimation: boolean",
   "safe_glow",
+  "blendMode: V5GBlendMode;",
+  "blendMode: sampledLayer.blendMode",
+  "getCocosBlendModeConfig(safeGlow.blendMode)",
 ];
 
 for (const expected of requiredSnippets) {

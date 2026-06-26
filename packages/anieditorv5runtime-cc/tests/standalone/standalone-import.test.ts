@@ -7,6 +7,8 @@ import type {
   V5GExportProfileConfig,
   V5GCocosAssetSource,
   V5GCocosSpriteAtlasAssetSource,
+  VNISafeGlowLayerSampleState,
+  VNISafeGlowSpriteSample,
 } from "../../standalone/anieditorv5runtime-cc";
 
 describe("standalone runtime import", () => {
@@ -42,6 +44,37 @@ describe("standalone runtime import", () => {
     const assetSource: V5GCocosAssetSource<string> = atlasSource;
 
     expect(assetSource.atlas.getSpriteFrame("asset")).toBe("frame");
+  });
+
+  it("exports safe_glow sample types with inherited blend modes", () => {
+    const layer: VNISafeGlowLayerSampleState = {
+      layerId: "layer",
+      transform: {
+        x: 0,
+        y: 0,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 0,
+        anchorX: 0.5,
+        anchorY: 0.5,
+      },
+      baseOpacity: 1,
+      blendMode: "add",
+    };
+    const sprite: VNISafeGlowSpriteSample = {
+      type: "safe_glow",
+      layerId: layer.layerId,
+      animationId: "safe-glow",
+      x: 0,
+      y: 0,
+      scaleX: 1.2,
+      scaleY: 1.2,
+      rotation: 0,
+      alpha: 0.8,
+      blendMode: layer.blendMode,
+    };
+
+    expect(sprite.blendMode).toBe("add");
   });
 
   it("keeps the preview example on atlas filename binding", () => {
