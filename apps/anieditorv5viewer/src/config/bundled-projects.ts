@@ -12,6 +12,7 @@ import respinData from "../assets/projects/respin.json";
 import scatter1Data from "../assets/projects/scatter1.json";
 import scatter2Data from "../assets/projects/scatter2.json";
 import superwinData from "../assets/projects/superwin.json";
+import roundreelData from "../assets/projects/roundreel.json";
 import export2ManifestData from "../assets/export2/manifest.json";
 import export2EditFullProjectData from "../assets/export2/edit_full/project.json";
 import export2Runtime50ProjectData from "../assets/export2/runtime_50/project.json";
@@ -29,12 +30,14 @@ import {
   validateVNIBundleManifest,
   validateVNIProject,
   type VNIBundleManifestEntry,
+  type VNIExportProfileConfig,
   type VNIProjectConfig,
 } from "@slotclientengine/vnicore/core";
 
 export type BundledProjectId =
   | "project"
   | "lock-01"
+  | "roundreel"
   | "bigwin"
   | "megawin"
   | "superwin"
@@ -94,6 +97,10 @@ const export2Runtime50Entry = requireExport2ManifestEntry(
   "runtime_50",
   "runtime_50/project.json",
 );
+const roundreelProfile = requireBundledExportProfile(
+  roundreelData,
+  "roundreel",
+);
 
 const bundledProjectDefinitions: readonly BundledProjectDefinition[] = [
   {
@@ -116,6 +123,17 @@ const bundledProjectDefinitions: readonly BundledProjectDefinition[] = [
     purpose: "legacy",
     assetScale: 1,
     data: lock01Data,
+    assetUrlManifest: bundledAssetUrlManifest,
+  },
+  {
+    id: "roundreel",
+    filename: "roundreel.json",
+    sourcePath: "docs/anieditor5/export/roundreel.json",
+    bundleId: "export",
+    profileId: roundreelProfile.id,
+    purpose: roundreelProfile.purpose,
+    assetScale: roundreelProfile.assetScale,
+    data: roundreelData,
     assetUrlManifest: bundledAssetUrlManifest,
   },
   {
@@ -313,6 +331,17 @@ export function getBundledProject(id: string): BundledV5GProject {
   return project;
 }
 
+function requireBundledExportProfile(
+  data: unknown,
+  name: string,
+): VNIExportProfileConfig {
+  const project = assertVNIProject(data);
+  if (!project.exportProfile) {
+    throw new Error(`Bundled VNI project "${name}" is missing exportProfile.`);
+  }
+  return project.exportProfile;
+}
+
 function requireExport2ManifestEntry(
   id: string,
   expectedPath: string,
@@ -351,6 +380,11 @@ function createBundledProjectLabel(
 ): string {
   if (definition.bundleId === "legacy") {
     return `${project.name} (legacy/${definition.filename}, 100%)`;
+  }
+  if (definition.bundleId === "export") {
+    const percent = Math.round(definition.assetScale * 100);
+    const suffix = definition.purpose === "runtime" ? "运行资源" : "原图";
+    return `${project.name} (export/${definition.filename}, ${definition.profileId}, ${percent}% ${suffix})`;
   }
   const percent = Math.round(definition.assetScale * 100);
   const suffix = definition.purpose === "runtime" ? "运行资源" : "原图";

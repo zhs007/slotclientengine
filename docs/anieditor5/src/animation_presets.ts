@@ -1197,7 +1197,7 @@ export const V5G_ANIMATION_PRESETS: V5GAnimationPresetSpec[] = [
     type: "safe_glow",
     label: "Safe Glow Cocos发光",
     description:
-      "Cocos 安全发光：只用同图副本、缩放和透明度呼吸模拟高亮，不依赖滤镜、模糊或 screen/lighten 混合。",
+      "Cocos 安全发光：只用同图副本、缩放和透明度呼吸模拟高亮；预览副本会继承图层显示模式（如 add/screen/lighten），但不依赖滤镜或模糊。",
     defaultDuration: 1.2,
     recommendedDuration:
       "tips：0.4 ~ 3s；Cocos 可用 Sprite + UIOpacity + scale 还原",

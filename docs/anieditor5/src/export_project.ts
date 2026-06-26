@@ -4,7 +4,7 @@ import {
   DEFAULT_EXPORT_ZIP_FILENAME,
   VNI_VERSION,
 } from "./constants";
-import { toExportProject } from "./project_state";
+import { toExportProject, type V5GExportProjectPurpose } from "./project_state";
 import type {
   V5GAssetConfig,
   V5GBundleManifest,
@@ -92,7 +92,7 @@ async function hashBlob(blob: Blob): Promise<string> {
 }
 
 export function buildProjectJson(state: V5GEditorState): string {
-  return JSON.stringify(toExportProject(state.project), null, 2);
+  return JSON.stringify(toExportProject(state.project, "runtime"), null, 2);
 }
 
 export function downloadText(
@@ -112,49 +112,42 @@ export async function exportProjectZip(
   const assetScale = normalizeAssetScale(options.assetScale ?? 1);
   const zip = new JSZip();
   const jsonFilename = `${buildExportJsonFilename(state.project.name)}.json`;
-  if (assetScale >= 0.999) {
-    await addProjectProfileToZip(zip, state, "", {
-      id: "project_full",
-      purpose: "editing",
-      assetScale: 1,
-      includeExportProfile: false,
-    });
-  } else {
-    const runtimeProfileId = `runtime_${Math.round(assetScale * 100)}`;
-    const manifest: V5GBundleManifest = {
-      type: "vni_export_bundle",
-      version: VNI_VERSION,
-      exports: [
-        {
-          id: "edit_full",
-          purpose: "editing",
-          assetScale: 1,
-          path: `edit_full/${jsonFilename}`,
-          label: "100% 原图编辑备份",
-        },
-        {
-          id: runtimeProfileId,
-          purpose: "runtime",
-          assetScale,
-          path: `${runtimeProfileId}/${jsonFilename}`,
-          label: `${Math.round(assetScale * 100)}% 运行发布包`,
-        },
-      ],
-    };
-    zip.file(BUNDLE_MANIFEST_FILENAME, JSON.stringify(manifest, null, 2));
-    await addProjectProfileToZip(zip, state, "edit_full/", {
-      id: "edit_full",
-      purpose: "editing",
-      assetScale: 1,
-      includeExportProfile: true,
-    });
-    await addProjectProfileToZip(zip, state, `${runtimeProfileId}/`, {
-      id: runtimeProfileId,
-      purpose: "runtime",
-      assetScale,
-      includeExportProfile: true,
-    });
-  }
+  const runtimeProfileId = `runtime_${Math.round(assetScale * 100)}`;
+  const manifest: V5GBundleManifest = {
+    type: "vni_export_bundle",
+    version: VNI_VERSION,
+    exports: [
+      {
+        id: "edit_full",
+        purpose: "editing",
+        assetScale: 1,
+        path: `edit_full/${jsonFilename}`,
+        label: "100% 完整编辑备份",
+      },
+      {
+        id: runtimeProfileId,
+        purpose: "runtime",
+        assetScale,
+        path: `${runtimeProfileId}/${jsonFilename}`,
+        label: `${Math.round(assetScale * 100)}% 运行发布包`,
+      },
+    ],
+  };
+  zip.file(BUNDLE_MANIFEST_FILENAME, JSON.stringify(manifest, null, 2));
+  await addProjectProfileToZip(zip, state, "edit_full/", {
+    id: "edit_full",
+    purpose: "editing",
+    assetScale: 1,
+    includeExportProfile: true,
+    projectPurpose: "editing",
+  });
+  await addProjectProfileToZip(zip, state, `${runtimeProfileId}/`, {
+    id: runtimeProfileId,
+    purpose: "runtime",
+    assetScale,
+    includeExportProfile: true,
+    projectPurpose: "runtime",
+  });
 
   const blob = await zip.generateAsync({ type: "blob" });
   downloadBlob(ensureZipExtension(filename), blob);
@@ -194,9 +187,15 @@ async function addProjectProfileToZip(
   zip: JSZip,
   state: V5GEditorState,
   prefix: string,
-  profile: V5GExportProfileConfig & { includeExportProfile: boolean },
+  profile: V5GExportProfileConfig & {
+    includeExportProfile: boolean;
+    projectPurpose?: V5GExportProjectPurpose;
+  },
 ): Promise<void> {
-  const project = toExportProject(state.project);
+  const project = toExportProject(
+    state.project,
+    profile.projectPurpose ?? profile.purpose,
+  );
   await compactDuplicateProjectAssetsForExport(state, project);
   const preparedAssets = await prepareExportAssets(
     state,

@@ -16,6 +16,7 @@ describe("bundled projects", () => {
     expect(bundledProjects.map((project) => project.id)).toEqual([
       "project",
       "lock-01",
+      "roundreel",
       "bigwin",
       "megawin",
       "superwin",
@@ -101,6 +102,42 @@ describe("bundled projects", () => {
         "assets/image_asset_image_mqs1j1mw_g.png",
         "assets/image_asset_image_mqs1pl10_h.png",
       ]),
+    );
+  });
+
+  it("registers roundreel as a VNI_0.020 runtime_100 export-style project", () => {
+    const roundreel = getBundledProject("roundreel");
+    const animationTypes = [
+      ...new Set(
+        roundreel.project.layers.flatMap((layer) =>
+          layer.animations.map((animation) => animation.type),
+        ),
+      ),
+    ];
+
+    expect(roundreel.sourcePath).toBe("docs/anieditor5/export/roundreel.json");
+    expect(roundreel.project.schemaVersion).toBe("VNI_0.020");
+    expect(roundreel.project.exportProfile).toMatchObject({
+      id: "runtime_100",
+      purpose: "runtime",
+      assetScale: 1,
+    });
+    expect(roundreel.profileId).toBe("runtime_100");
+    expect(roundreel.profileId).toBe(roundreel.project.exportProfile?.id);
+    expect(roundreel.purpose).toBe("runtime");
+    expect(roundreel.purpose).toBe(roundreel.project.exportProfile?.purpose);
+    expect(roundreel.assetScale).toBe(1);
+    expect(roundreel.assetScale).toBe(
+      roundreel.project.exportProfile?.assetScale,
+    );
+    expect(roundreel.project.layers.map((layer) => layer.blendMode)).toContain(
+      "add",
+    );
+    expect(animationTypes).toEqual(
+      expect.arrayContaining(["rotate", "safe_glow", "blink", "scale_out"]),
+    );
+    expect(Object.keys(roundreel.assetUrls).sort()).toEqual(
+      roundreel.project.assets.map((asset) => asset.path).sort(),
     );
   });
 

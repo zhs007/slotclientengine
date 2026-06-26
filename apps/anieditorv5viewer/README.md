@@ -1,6 +1,6 @@
 # anieditorv5viewer
 
-`apps/anieditorv5viewer` is a Vite + TypeScript viewer shell for V5G/VNI exports from `docs/anieditor5/export` and `docs/anieditor5/export2`.
+`apps/anieditorv5viewer` is a Vite + TypeScript viewer shell for V5G/VNI exports from `docs/anieditor5/export`.
 
 The animation runtime comes from `@slotclientengine/vnicore`. This app owns bundled JSON/assets, the project selector, controls, styles, and browser assembly. Validation, sampling, Pixi.js v8 rendering, texture-size checks, particles, playback ranges, segmented playback, particle-draining, and diagnostics live in `packages/vnicore`.
 
@@ -19,8 +19,9 @@ The app bundles the legacy V5G full-size exports:
 - `docs/anieditor5/export/scatter1.json`
 - `docs/anieditor5/export/scatter2.json`
 - `docs/anieditor5/export/multipay.json`
+- `docs/anieditor5/export/roundreel.json`
 
-It also bundles the VNI export2 bundle:
+It also keeps the older VNI export2 bundle as a non-regression fixture:
 
 - `docs/anieditor5/export2/manifest.json`
 - `docs/anieditor5/export2/edit_full/project.json`
@@ -39,6 +40,7 @@ The copied runtime files live under `src/assets`:
 - `src/assets/projects/scatter1.json`
 - `src/assets/projects/scatter2.json`
 - `src/assets/projects/multipay.json`
+- `src/assets/projects/roundreel.json`
 - `src/assets/assets/*`
 - `src/assets/export2/manifest.json`
 - `src/assets/export2/edit_full/project.json`
@@ -48,7 +50,7 @@ The copied runtime files live under `src/assets`:
 
 The UI project selector can switch between all bundled projects. JSON `asset.path` values are resolved through a Vite URL manifest and must match copied files exactly.
 
-`edit_full` is the 100% original-image profile. `runtime_50` stores 50% file pixels, but the player restores each image layer to its original logical design size with sprite-level compensation. Legacy exports and VNI single-project 100% exports may omit `fileWidth`, `fileHeight`, `fileScale`, and `exportProfile`; those are treated as full-size original-image profiles.
+`roundreel` is a `VNI_0.020` single-project runtime export stored in the same JSON + `assets/` resource pool as the other `docs/anieditor5/export` projects. Its profile id, purpose, and scale come from JSON `exportProfile`, not from the directory name. `runtime_50` stores 50% file pixels, but the player restores each image layer to its original logical design size with sprite-level compensation. Legacy exports and VNI single-project 100% exports may omit `fileWidth`, `fileHeight`, `fileScale`, and `exportProfile`; those are treated as full-size original-image profiles.
 
 ## Runtime Boundary
 

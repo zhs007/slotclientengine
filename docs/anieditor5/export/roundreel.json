@@ -1,0 +1,225 @@
+{
+  "schemaVersion": "VNI_0.020",
+  "editor": {
+    "name": "VNI",
+    "version": "VNI_0.020"
+  },
+  "engineTarget": {
+    "name": "cocos_creator",
+    "version": "3.8.6"
+  },
+  "name": "roundreel",
+  "stage": {
+    "width": 2000,
+    "height": 2000,
+    "coordinate": "center",
+    "duration": 3.1,
+    "backgroundColor": "#0a0a0a"
+  },
+  "assets": [
+    {
+      "id": "asset_image_mqthi919_1e",
+      "type": "image",
+      "path": "assets/gx_6_asset_image_mqthi919_1e.png",
+      "originalName": "gx_6.png",
+      "width": 256,
+      "height": 256,
+      "fileWidth": 256,
+      "fileHeight": 256,
+      "fileScale": 1
+    },
+    {
+      "id": "asset_image_mqtjdi3v_3",
+      "type": "image",
+      "path": "assets/image_asset_image_mqtjdi3v_3.jpg",
+      "originalName": "光圈.jpg",
+      "width": 256,
+      "height": 256,
+      "fileWidth": 256,
+      "fileHeight": 256,
+      "fileScale": 1
+    }
+  ],
+  "layerGroups": [
+    {
+      "id": "group_default",
+      "name": "默认组",
+      "visible": true,
+      "collapsed": false,
+      "order": 0
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer_image_mqthsnuw_1l",
+      "name": "光圈.jpg",
+      "type": "image",
+      "assetId": "asset_image_mqtjdi3v_3",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": false,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 2,
+        "scaleY": 2,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mqtjp31x_4",
+          "type": "rotate",
+          "name": "Rotate 旋转",
+          "startTime": 0,
+          "duration": 3.1,
+          "enabled": false,
+          "seed": 53013,
+          "params": {
+            "fromRotation": 0,
+            "toRotation": 5,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqtj7x8s_6",
+          "type": "safe_glow",
+          "name": "Safe Glow Cocos发光",
+          "startTime": 1,
+          "duration": 0.7,
+          "enabled": true,
+          "seed": 2549,
+          "params": {
+            "spread": 0.25,
+            "minOpacity": 0,
+            "maxOpacity": 1,
+            "pulses": 1,
+            "keepOriginal": true,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mqtasf6r_d",
+      "name": "扩散光效",
+      "type": "image",
+      "assetId": "asset_image_mqthi919_1e",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mqthijqi_1f",
+          "type": "blink",
+          "name": "Blink 闪烁",
+          "startTime": 0,
+          "duration": 0.5,
+          "enabled": true,
+          "seed": 88810,
+          "params": {
+            "minOpacity": 0.15,
+            "maxOpacity": 1,
+            "blinks": 1,
+            "endOpacity": 1,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqthjbhm_1g",
+          "type": "scale_out",
+          "name": "Scale Out 缩放退出",
+          "startTime": 0,
+          "duration": 0.5,
+          "enabled": true,
+          "seed": 24778,
+          "params": {
+            "fromScale": 1,
+            "toScale": 3,
+            "fadeOut": true,
+            "easing": "easeInQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mqthm2nv_1h",
+      "name": "扩散光效",
+      "type": "image",
+      "assetId": "asset_image_mqthi919_1e",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 90,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mqthm2nv_1i",
+          "type": "blink",
+          "name": "Blink 闪烁",
+          "startTime": 0,
+          "duration": 0.5,
+          "enabled": true,
+          "seed": 88810,
+          "params": {
+            "minOpacity": 0.15,
+            "maxOpacity": 1,
+            "blinks": 1,
+            "endOpacity": 1,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqthm2nv_1j",
+          "type": "scale_out",
+          "name": "Scale Out 缩放退出",
+          "startTime": 0,
+          "duration": 0.5,
+          "enabled": true,
+          "seed": 24778,
+          "params": {
+            "fromScale": 1,
+            "toScale": 3,
+            "fadeOut": true,
+            "easing": "easeInQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    }
+  ],
+  "particles": [],
+  "exportProfile": {
+    "id": "runtime_100",
+    "purpose": "runtime",
+    "assetScale": 1
+  }
+}

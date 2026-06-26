@@ -13,6 +13,7 @@ import respinData from "../fixtures/export/respin.json";
 import scatter1Data from "../fixtures/export/scatter1.json";
 import scatter2Data from "../fixtures/export/scatter2.json";
 import superwinData from "../fixtures/export/superwin.json";
+import roundreelData from "../fixtures/export/roundreel.json";
 import export2ManifestData from "../fixtures/export2/manifest.json";
 import export2EditFullData from "../fixtures/export2/edit_full/project.json";
 import export2Runtime50Data from "../fixtures/export2/runtime_50/project.json";
@@ -54,6 +55,7 @@ const bundledProjectData = [
   multipayData,
   threeReelMultipay01Data,
   threeReelMultipay02Data,
+  roundreelData,
   export2EditFullData,
   export2Runtime50Data,
 ] as const;
@@ -353,6 +355,20 @@ describe("validation", () => {
       validateManifestProjectProfile(manifest.exports[0], editFull),
     ).not.toThrow();
 
+    const runtime100 = assertV5GProject(roundreelData);
+    expect(runtime100.schemaVersion).toBe("VNI_0.020");
+    expect(runtime100.name).toBe("roundreel");
+    expect(runtime100.exportProfile).toMatchObject({
+      id: "runtime_100",
+      purpose: "runtime",
+      assetScale: 1,
+    });
+    expect(
+      runtime100.layers.flatMap((layer) =>
+        layer.animations.map((animation) => animation.type),
+      ),
+    ).toContain("safe_glow");
+
     const mismatched = structuredClone(editFull);
     mismatched.exportProfile = {
       id: "runtime_50",
@@ -362,6 +378,68 @@ describe("validation", () => {
     expect(() =>
       validateManifestProjectProfile(manifest.exports[0], mismatched),
     ).toThrow("profile mismatch");
+  });
+
+  it("accepts runtime_100 profiles without deriving them from path segments", () => {
+    const manifest = assertV5GBundleManifest({
+      type: "vni_export_bundle",
+      version: "VNI_0.020",
+      exports: [
+        {
+          id: "runtime_100",
+          purpose: "runtime",
+          assetScale: 1,
+          path: "profiles/roundreel.json",
+          label: "100% 运行发布包",
+        },
+      ],
+    });
+    const project = assertV5GProject(roundreelData);
+
+    expect(() => validateV5GBundleManifest(manifest)).not.toThrow();
+    expect(() =>
+      validateManifestProjectProfile(manifest.exports[0], project),
+    ).not.toThrow();
+  });
+
+  it("rejects unsafe VNI bundle manifest paths without inferring profile from directories", () => {
+    const manifest = assertV5GBundleManifest({
+      type: "vni_export_bundle",
+      version: "VNI_0.020",
+      exports: [
+        {
+          id: "runtime_100",
+          purpose: "runtime",
+          assetScale: 1,
+          path: "runtime_100/roundreel.json",
+        },
+      ],
+    });
+
+    expect(() =>
+      validateV5GBundleManifest({
+        ...manifest,
+        exports: [{ ...manifest.exports[0], path: "/runtime_100/a.json" }],
+      }),
+    ).toThrow("relative POSIX path");
+    expect(() =>
+      validateV5GBundleManifest({
+        ...manifest,
+        exports: [{ ...manifest.exports[0], path: "../runtime_100/a.json" }],
+      }),
+    ).toThrow("parent segments");
+    expect(() =>
+      validateV5GBundleManifest({
+        ...manifest,
+        exports: [{ ...manifest.exports[0], path: "runtime_100/a.txt" }],
+      }),
+    ).toThrow("path must be JSON");
+    expect(() =>
+      validateV5GBundleManifest({
+        ...manifest,
+        exports: [{ ...manifest.exports[0], path: "other/roundreel.json" }],
+      }),
+    ).not.toThrow();
   });
 
   it("parses valid hex colors and rejects invalid ones", () => {

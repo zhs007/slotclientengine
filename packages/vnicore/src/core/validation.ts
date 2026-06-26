@@ -330,9 +330,7 @@ export function validateV5GBundleManifest(manifest: V5GBundleManifest): void {
       },
       `manifest export "${entry.id}"`,
     );
-    if (!entry.path.endsWith(".json")) {
-      throw new Error(`VNI bundle export "${entry.id}" path must be JSON.`);
-    }
+    validateBundleManifestEntryPath(entry);
   }
 }
 
@@ -556,6 +554,29 @@ function assertBundleManifestEntry(
         ? undefined
         : assertString(entry.label, `manifest.exports[${index}].label`),
   };
+}
+
+function validateBundleManifestEntryPath(entry: V5GBundleManifestEntry): void {
+  if (!entry.path.endsWith(".json")) {
+    throw new Error(`VNI bundle export "${entry.id}" path must be JSON.`);
+  }
+  if (
+    entry.path.startsWith("/") ||
+    entry.path.startsWith("\\") ||
+    entry.path.includes("\\")
+  ) {
+    throw new Error(
+      `VNI bundle export "${entry.id}" path must be a relative POSIX path.`,
+    );
+  }
+  const parts = entry.path.split("/");
+  if (
+    parts.some((part) => part.length === 0 || part === "." || part === "..")
+  ) {
+    throw new Error(
+      `VNI bundle export "${entry.id}" path must not contain empty or parent segments.`,
+    );
+  }
 }
 
 function assertLayer(value: unknown, index: number): V5GLayerConfig {

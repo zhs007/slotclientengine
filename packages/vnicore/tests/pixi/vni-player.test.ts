@@ -728,7 +728,7 @@ describe("VNIPlayer", () => {
     expect(layerB.effectDisplay.children).toEqual([]);
   });
 
-  it("renders safe glow as an independent normal-blend overlay", async () => {
+  it("renders safe glow as an independent inherited-blend overlay", async () => {
     const container = createContainer();
     vi.stubGlobal("window", { devicePixelRatio: 1 });
     vi.stubGlobal("ResizeObserver", MockResizeObserver);
@@ -770,7 +770,7 @@ describe("VNIPlayer", () => {
     expect(layerA.display.visible).toBe(false);
     expect(layerA.safeGlowDisplay.children).toHaveLength(1);
     expect(layerA.effectDisplay.children).toHaveLength(0);
-    expect(layerA.safeGlowDisplay.children[0].blendMode).toBe("normal");
+    expect(layerA.safeGlowDisplay.children[0].blendMode).toBe("add");
     expect(container.dataset.vniSafeGlowSprites).toBe("1");
     expect(container.dataset.vniRenderEffectSprites).toBe("0");
 
