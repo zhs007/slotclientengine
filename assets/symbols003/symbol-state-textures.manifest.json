@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "states": [
+    "spinBlur",
+    "disabled"
+  ],
+  "settings": {
+    "spinBlur": {
+      "kind": "verticalBoxBlur",
+      "kernelHeight": 21
+    },
+    "disabled": {
+      "kind": "grayscale",
+      "brightness": 0.72
+    }
+  },
+  "symbols": {
+    "WL": {
+      "normal": "./WL.png",
+      "spinBlur": "./WL.spinBlur.png",
+      "disabled": "./WL.disabled.png"
+    },
+    "H1": {
+      "normal": "./H1.png",
+      "spinBlur": "./H1.spinBlur.png",
+      "disabled": "./H1.disabled.png"
+    },
+    "H2": {
+      "normal": "./H2.png",
+      "spinBlur": "./H2.spinBlur.png",
+      "disabled": "./H2.disabled.png"
+    },
+    "L1": {
+      "normal": "./L1.png",
+      "spinBlur": "./L1.spinBlur.png",
+      "disabled": "./L1.disabled.png"
+    },
+    "L2": {
+      "normal": "./L2.png",
+      "spinBlur": "./L2.spinBlur.png",
+      "disabled": "./L2.disabled.png"
+    },
+    "L3": {
+      "normal": "./L3.png",
+      "spinBlur": "./L3.spinBlur.png",
+      "disabled": "./L3.disabled.png"
+    },
+    "L4": {
+      "normal": "./L4.png",
+      "spinBlur": "./L4.spinBlur.png",
+      "disabled": "./L4.disabled.png"
+    },
+    "CN": {
+      "normal": "./CN.png",
+      "spinBlur": "./CN.spinBlur.png",
+      "disabled": "./CN.disabled.png"
+    },
+    "CO": {
+      "normal": "./CO.png",
+      "spinBlur": "./CO.spinBlur.png",
+      "disabled": "./CO.disabled.png"
+    }
+  }
+}

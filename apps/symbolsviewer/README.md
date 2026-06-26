@@ -4,7 +4,7 @@
 
 ## 资产
 
-viewer 支持两套显式 symbol set。每套都绑定自己的 runtime game config、PNG glob 和状态贴图 manifest；缺少 manifest、缺少必需状态图或 manifest 引用不存在的 PNG 会直接报错。
+viewer 支持三套显式 symbol set。每套都绑定自己的 runtime game config、PNG glob 和状态贴图 manifest；缺少 manifest、缺少必需状态图或 manifest 引用不存在的 PNG 会直接报错。
 
 第一套 `symbols` 使用仓库根目录资产：
 
@@ -36,6 +36,16 @@ pnpm --filter gengameconfig dev -- \
 
 第二套可展示 symbol 是 `WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`WM`、`CN`、`CM`、`CO`、`AF`。paytable 中缺图的 `BN` 不会进入展示列表；当前没有孤儿图片。第二套 PNG 保留美术原始 `200 x 200` 文件，`spinBlur` / `disabled` 派生图与普通图尺寸一致；viewer 通过 `symbols002.symbolScales` 为每个可展示 symbol 配置 `1`，按 100% 逻辑尺寸展示。
 
+第三套 `symbols003` 复用第二套 runtime game config：
+
+- `assets/gamecfg002/gameconfig.json`
+- `assets/symbols003/*.png`
+- `assets/symbols003/*.spinBlur.png`
+- `assets/symbols003/*.disabled.png`
+- `assets/symbols003/symbol-state-textures.manifest.json`
+
+第三套可展示 symbol 是 `WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`CN`、`CO`。`gamecfg002` paytable 中当前缺少第三套图片的 `WM`、`CM`、`AF`、`BN` 不会进入展示列表，也不会用第二套图片、placeholder 或空纹理顶替。第三套 PNG 保留美术原始 `180 x 180` 文件，`spinBlur` / `disabled` 派生图与普通图尺寸一致；viewer 通过 `symbols003.symbolScales` 为每个可展示 symbol 配置 `1`，按 100% 逻辑尺寸展示。
+
 `SC`、`RS`、`X2`、`X5`、`X10` 使用拆层资源作为普通态来源：
 
 - `SC`: `SC-0.png`、`SC-1-0.png`、`SC-2.png`；其中 layer `1` 还有 `SC-1-0.png` 到 `SC-1-4.png` 五帧 keyframes
@@ -58,6 +68,12 @@ pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --s
 pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --input-dir assets/symbols002 --output-dir assets/symbols002 --symbols WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF
 ```
 
+第三套状态图生成命令：
+
+```bash
+pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --input-dir assets/symbols003 --output-dir assets/symbols003 --symbols WL,H1,H2,L1,L2,L3,L4,CN,CO
+```
+
 复合 symbol 的 `spinBlur` 和 `disabled` 是“先合成完整 symbol，再生成状态贴图”的结果，不是逐层模糊/置灰后再叠加。viewer 会读取 manifest，并要求当前可展示 symbol 同时具备 `spinBlur` 和 `disabled` 贴图；缺失或写入未知状态会直接报错。
 
 ## 特殊动画
@@ -77,7 +93,7 @@ pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --i
 - `appear`: layer `0` 不动，layer `1` 缩放到约 `1.2` 并扫光。
 - `win`: layer `0` 不动，layer `1` 扫光并缩放到约 `1.2`。
 
-`symbols002` 的所有可展示 symbol：
+`symbols002` 和 `symbols003` 的所有可展示 symbol：
 
 - `appear`: 主普通图保持原始 scale，普通图后方额外出现一张半透明普通图副本，副本放大到约 `1.6` 后消退。
 - `win`: 使用默认单图扫光效果。
@@ -95,7 +111,7 @@ pnpm --filter symbolsviewer dev -- --host 0.0.0.0
 第一屏就是状态展示工具：
 
 - 顶部工具栏可播放、暂停、进入下一状态、重置和切换默认 stable 状态。
-- 顶部 `Set` selector 可在 `symbols` 和 `symbols002` 之间切换；切换时会重建 catalog、Pixi symbol 和状态序列。
+- 顶部 `Set` selector 可在 `symbols`、`symbols002` 和 `symbols003` 之间切换；切换时会重建 catalog、Pixi symbol 和状态序列。
 - 右侧序列区可增加、移除、上移、下移状态。
 - `stable` 状态可设置停留秒数。
 - `appear` 和 `win` 是单次状态，等待全部图标播放完成后进入下一步。
@@ -125,4 +141,9 @@ PC 横屏建议使用 `1280x720` 或更大视口确认：
 - `symbols002` 的 12 个图标使用逐 symbol 的 `1` 缩放系数展示，并按当前舞台宽度自动换行，图标和 label 不重叠。
 - `symbols002.appear` 中主图不缩放，图后半透明副本放大消退。
 - `symbols002.spinBlur` 显示纵向模糊图，`symbols002.disabled` 显示灰色图。
-- 连续执行 `symbols -> symbols002 -> symbols` 至少 3 次，旧 symbol、旧状态面板和旧 Pixi 对象不残留，浏览器 console 无错误。
+- 切换到 `symbols003` 后，`WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`CN`、`CO` 全部可见，`WM`、`CM`、`AF`、`BN` 不显示。
+- `symbols003` 的 9 个图标使用逐 symbol 的 `1` 缩放系数展示，并按当前舞台宽度自动换行，图标和 label 不重叠。
+- `symbols003.appear` 中主图不缩放，图后半透明副本放大消退。
+- `symbols003.win` 使用默认单图扫光效果。
+- `symbols003.spinBlur` 显示纵向模糊图，`symbols003.disabled` 显示灰色图。
+- 连续执行 `symbols -> symbols002 -> symbols003 -> symbols` 至少 3 次，旧 symbol、旧状态面板和旧 Pixi 对象不残留，浏览器 console 无错误。

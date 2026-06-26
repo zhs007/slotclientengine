@@ -172,3 +172,11 @@ export const SYMBOLS002_ANIMATION_PROFILES = Object.freeze(
     ].map((symbol) => [symbol, createSingleImageUnderlayProfiles()] as const),
   ),
 ) satisfies SymbolAnimationProfileMap;
+
+export const SYMBOLS003_ANIMATION_PROFILES = Object.freeze(
+  Object.fromEntries(
+    ["WL", "H1", "H2", "L1", "L2", "L3", "L4", "CN", "CO"].map(
+      (symbol) => [symbol, createSingleImageUnderlayProfiles()] as const,
+    ),
+  ),
+) satisfies SymbolAnimationProfileMap;

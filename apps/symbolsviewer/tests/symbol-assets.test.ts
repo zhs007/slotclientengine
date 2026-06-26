@@ -15,6 +15,7 @@ import {
 } from "../src/symbol-assets.js";
 import {
   SYMBOLS002_ANIMATION_PROFILES,
+  SYMBOLS003_ANIMATION_PROFILES,
   SYMBOL_VIEWER_ANIMATION_PROFILES,
 } from "../src/symbol-animation-config.js";
 import {
@@ -381,6 +382,28 @@ describe("symbolsviewer animation config", () => {
       "AF",
     ]);
     for (const profile of Object.values(SYMBOLS002_ANIMATION_PROFILES)) {
+      expect(profile.appear?.effects).toEqual([
+        {
+          name: "singleSpriteUnderlayScale",
+          params: { maxScale: 1.6, maxAlpha: 0.4 },
+        },
+      ]);
+    }
+  });
+
+  it("binds symbols003 appear to an underlay scale profile for every displayable symbol", () => {
+    expect(Object.keys(SYMBOLS003_ANIMATION_PROFILES)).toEqual([
+      "WL",
+      "H1",
+      "H2",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "CN",
+      "CO",
+    ]);
+    for (const profile of Object.values(SYMBOLS003_ANIMATION_PROFILES)) {
       expect(profile.appear?.effects).toEqual([
         {
           name: "singleSpriteUnderlayScale",
