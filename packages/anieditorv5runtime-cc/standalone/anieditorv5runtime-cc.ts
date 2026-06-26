@@ -954,6 +954,7 @@ export interface VNISafeGlowLayerSampleState {
   layerId: string;
   transform: V5GTransformConfig;
   baseOpacity: number;
+  blendMode: V5GBlendMode;
 }
 
 export interface VNISafeGlowSpriteSample {
@@ -966,7 +967,7 @@ export interface VNISafeGlowSpriteSample {
   scaleY: number;
   rotation: number;
   alpha: number;
-  blendMode: "normal";
+  blendMode: V5GBlendMode;
 }
 
 export function getSafeGlowProgress(
@@ -1057,7 +1058,7 @@ function sampleSafeGlowSprite(
     scaleY: roundTo(sampledLayer.transform.scaleY * glowScale, 4),
     rotation: roundTo((sampledLayer.transform.rotation * Math.PI) / 180, 4),
     alpha: roundTo(clampNumber(alpha, 0, 1), 4),
-    blendMode: "normal",
+    blendMode: sampledLayer.blendMode,
   };
 }
 

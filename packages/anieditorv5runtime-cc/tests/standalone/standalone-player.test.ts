@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { Node, Sprite, SpriteFrame, UITransform, UIOpacity } from "cc";
+import roundreelData from "../fixtures/roundreel.json";
 import {
+  assertV5GProject,
   createV5GCocosPlayer,
   getCocosBlendModeConfig,
   type V5GAnimationConfig,
@@ -506,10 +508,51 @@ describe("standalone V5GCocosPlayer", () => {
     expect(requireSprite(safeGlowNode).srcBlendFactor).toBe(
       COCOS_BLEND_FACTOR.SRC_ALPHA,
     );
+    expect(requireSprite(safeGlowNode).dstBlendFactor).toBe(
+      COCOS_BLEND_FACTOR.ONE,
+    );
+    const safeGlowTarget =
+      requireSprite(safeGlowNode).getMaterialInstance(0)?.passes[0].blendState
+        .targets[0];
+    expect(safeGlowTarget?.blend).toBe(true);
+    expect(safeGlowTarget?.blendSrc).toBe(COCOS_BLEND_FACTOR.SRC_ALPHA);
+    expect(safeGlowTarget?.blendDst).toBe(COCOS_BLEND_FACTOR.ONE);
+    expect(safeGlowTarget?.blendEq).toBe(COCOS_BLEND_OP.ADD);
 
     player.seek(1);
     expect(safeGlowContainer.children).toHaveLength(0);
     expect(inspectNode(safeGlowNode).destroyed).toBe(true);
+  });
+
+  it("renders the roundreel runtime_100 safe_glow node with inherited add blend", () => {
+    const project = assertV5GProject(roundreelData);
+    const { root, frames, player } = makePlayer(project);
+
+    expect(project.schemaVersion).toBe("VNI_0.020");
+    expect(project.exportProfile).toMatchObject({
+      id: "runtime_100",
+      purpose: "runtime",
+      assetScale: 1,
+    });
+    player.init();
+    player.seek(1.175);
+
+    const layerSprite = requireSprite(getFirstLayerNode(root));
+    const safeGlowContainer = getFirstSafeGlowContainer(root);
+    expect(layerSprite.srcBlendFactor).toBe(COCOS_BLEND_FACTOR.SRC_ALPHA);
+    expect(layerSprite.dstBlendFactor).toBe(COCOS_BLEND_FACTOR.ONE);
+    expect(safeGlowContainer.children).toHaveLength(1);
+
+    const safeGlowSprite = requireSprite(safeGlowContainer.children[0]);
+    expect(safeGlowSprite.spriteFrame).toBe(
+      frames.get("asset_image_mqtjdi3v_3"),
+    );
+    expect(safeGlowSprite.srcBlendFactor).toBe(COCOS_BLEND_FACTOR.SRC_ALPHA);
+    expect(safeGlowSprite.dstBlendFactor).toBe(COCOS_BLEND_FACTOR.ONE);
+    const target =
+      safeGlowSprite.getMaterialInstance(0)?.passes[0].blendState.targets[0];
+    expect(target?.blend).toBe(true);
+    expect(target?.blendDst).toBe(COCOS_BLEND_FACTOR.ONE);
   });
 
   it("fails fast for missing SpriteFrame and size mismatch", () => {
