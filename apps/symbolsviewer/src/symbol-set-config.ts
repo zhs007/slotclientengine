@@ -55,7 +55,7 @@ const symbols002SymbolScales = Object.freeze(
       "CM",
       "CO",
       "AF",
-    ].map((symbol) => [symbol, 0.4] as const),
+    ].map((symbol) => [symbol, 1] as const),
   ),
 ) satisfies ReelSymbolScaleMap;
 

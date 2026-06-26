@@ -34,7 +34,7 @@ pnpm --filter gengameconfig dev -- \
   --out assets/gamecfg002/gameconfig.json
 ```
 
-第二套可展示 symbol 是 `WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`WM`、`CN`、`CM`、`CO`、`AF`。paytable 中缺图的 `BN` 不会进入展示列表；当前没有孤儿图片。第二套 PNG 保留美术原始 `500 x 500` 文件，viewer 通过 `symbols002.symbolScales` 为每个可展示 symbol 配置 `0.4`，按 40% 逻辑尺寸展示。
+第二套可展示 symbol 是 `WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`WM`、`CN`、`CM`、`CO`、`AF`。paytable 中缺图的 `BN` 不会进入展示列表；当前没有孤儿图片。第二套 PNG 保留美术原始 `200 x 200` 文件，`spinBlur` / `disabled` 派生图与普通图尺寸一致；viewer 通过 `symbols002.symbolScales` 为每个可展示 symbol 配置 `1`，按 100% 逻辑尺寸展示。
 
 `SC`、`RS`、`X2`、`X5`、`X10` 使用拆层资源作为普通态来源：
 
@@ -122,7 +122,7 @@ PC 横屏建议使用 `1280x720` 或更大视口确认：
 - 移除、调整、增加状态后，播放顺序按当前序列执行。
 - 修改默认 stable 状态后，单次状态结束回到新的默认状态；默认状态是 `spinBlur` 或 `disabled` 时，`appear` / `win` 结束后分别回到模糊图或灰图。
 - 切换到 `symbols002` 后，`WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`WM`、`CN`、`CM`、`CO`、`AF` 全部可见，`BN` 不显示。
-- `symbols002` 的 12 个图标使用逐 symbol 的 `0.4` 缩放系数展示，并按当前舞台宽度自动换行，图标和 label 不重叠。
+- `symbols002` 的 12 个图标使用逐 symbol 的 `1` 缩放系数展示，并按当前舞台宽度自动换行，图标和 label 不重叠。
 - `symbols002.appear` 中主图不缩放，图后半透明副本放大消退。
 - `symbols002.spinBlur` 显示纵向模糊图，`symbols002.disabled` 显示灰色图。
 - 连续执行 `symbols -> symbols002 -> symbols` 至少 3 次，旧 symbol、旧状态面板和旧 Pixi 对象不残留，浏览器 console 无错误。

@@ -40,7 +40,7 @@ describe("symbolsviewer symbol set config", () => {
     expect(getSymbolSetConfig("symbols002").label).toBe("symbols002");
     expect(getSymbolSetConfig("symbols002").symbolScales).toEqual(
       Object.fromEntries(
-        SYMBOLS002_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 0.4]),
+        SYMBOLS002_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 1]),
       ),
     );
     expect(() => getSymbolSetConfig("missing")).toThrow(
