@@ -1,7 +1,5 @@
 import { Application, Assets, Container, Sprite, type Texture } from "pixi.js";
 import rawGameConfig from "../../../assets/gamecfg002/gameconfig.json";
-import stateTextureManifest from "../../../assets/symbols002/symbol-state-textures.manifest.json";
-import backgroundUrl from "../../../assets/game002/bgfull.jpg?url";
 import type {
   GameLogic,
   SlotGameAdapter,
@@ -17,20 +15,13 @@ import {
 } from "./assets.js";
 import { GAME002_ASSET_SIZE, createGame002Layout } from "./game-layout.js";
 import {
+  DEFAULT_GAME002_REEL_CONFIG,
   assertGame002ReelVisualMatchesTarget,
   createGame002ReelRuntime,
   type Game002ReelRuntime,
 } from "./game-demo.js";
 import { validateGame002Scene } from "./scene.js";
-
-const rawSymbolAssetModules = import.meta.glob(
-  "../../../assets/symbols002/*.png",
-  {
-    eager: true,
-    import: "default",
-    query: "?url",
-  },
-) as Record<string, string>;
+import type { Game002SkinConfig } from "./skin-config.js";
 
 export type Game002TickerSnapshot = { readonly deltaMS: number };
 export type Game002TickerListener = (ticker: Game002TickerSnapshot) => void;
@@ -61,6 +52,7 @@ export interface Game002StaticTextures {
 }
 
 export interface Game002AdapterOptions {
+  readonly skin: Game002SkinConfig;
   readonly createApplication?: () => Game002PixiApplication;
   readonly loadStaticTextures?: () => Promise<Game002StaticTextures>;
   readonly loadSymbolTextures?: () => Promise<SymbolAssetMap>;
@@ -76,7 +68,7 @@ interface PendingAnimation {
 const GAME002_MAX_TICK_DELTA_SECONDS = 1 / 30;
 
 export function createGame002Adapter(
-  options: Game002AdapterOptions = {},
+  options: Game002AdapterOptions,
 ): SlotGameAdapter {
   return new Game002PixiAdapter(options);
 }
@@ -93,16 +85,25 @@ class Game002PixiAdapter implements SlotGameAdapter {
   #unsubscribeViewport: (() => void) | null = null;
 
   constructor(options: Game002AdapterOptions) {
+    const skin = options.skin;
     this.#createApplication =
       options.createApplication ?? createPixiApplication;
-    this.#loadStaticTextures = options.loadStaticTextures ?? loadStaticTextures;
-    this.#loadSymbolTextures = options.loadSymbolTextures ?? loadSymbolTextures;
+    this.#loadStaticTextures =
+      options.loadStaticTextures ?? (() => loadStaticTextures(skin));
+    this.#loadSymbolTextures =
+      options.loadSymbolTextures ?? (() => loadSymbolTextures(skin));
     this.#createRuntime =
       options.createRuntime ??
       ((symbolAssets) =>
         createGame002ReelRuntime({
           rawGameConfig,
           symbolAssets,
+          config: {
+            ...DEFAULT_GAME002_REEL_CONFIG,
+            emptySymbols: skin.emptySymbols,
+            texturedSymbols: skin.displaySymbols,
+            missingAssetLabel: skin.label,
+          },
         }));
   }
 
@@ -268,10 +269,12 @@ function createPixiApplication(): Game002PixiApplication {
   return new Application() as unknown as Game002PixiApplication;
 }
 
-async function loadStaticTextures(): Promise<Game002StaticTextures> {
+async function loadStaticTextures(
+  skin: Game002SkinConfig,
+): Promise<Game002StaticTextures> {
   const background = await loadTextureWithSize(
-    "bgfull.jpg",
-    backgroundUrl,
+    skin.backgroundLabel,
+    skin.backgroundUrl,
     GAME002_ASSET_SIZE.background,
   );
   return Object.freeze({
@@ -279,10 +282,14 @@ async function loadStaticTextures(): Promise<Game002StaticTextures> {
   });
 }
 
-async function loadSymbolTextures(): Promise<SymbolAssetMap> {
+async function loadSymbolTextures(
+  skin: Game002SkinConfig,
+): Promise<SymbolAssetMap> {
   const assetUrls = createGame002SymbolAssetMapFromModules({
-    modules: rawSymbolAssetModules,
-    stateTextureManifest,
+    modules: skin.symbolModules,
+    stateTextureManifest: skin.stateTextureManifest,
+    displaySymbols: skin.displaySymbols,
+    emptySymbols: skin.emptySymbols,
   });
   return loadGame002SymbolTextures(assetUrls);
 }

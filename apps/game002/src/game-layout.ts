@@ -1,7 +1,9 @@
 import {
+  createGridCellReelOffsetMatrix,
   createReelLayout,
   type GridCellDimmingPattern,
   type GridCellOrderMode,
+  type GridCellReelOffsetMatrix,
   type GridCellReelSpinTiming,
   type ReelLayout,
 } from "@slotclientengine/rendercore/reel";
@@ -49,6 +51,11 @@ export const GAME002_GRID_CELL_REEL_TIMING = Object.freeze({
   minimumSpinCycles: 6,
   speedSymbolsPerSecond: 54,
 }) satisfies GridCellReelSpinTiming;
+export const GAME002_GRID_CELL_REEL_OFFSETS = createGridCellReelOffsetMatrix({
+  columns: GAME002_REEL_COUNT,
+  rows: GAME002_VISIBLE_ROWS,
+  rowOffsetStep: 16,
+}) satisfies GridCellReelOffsetMatrix;
 export const GAME002_GRID_CELL_DIMMING = Object.freeze({
   evenAlpha: 0.5,
   oddAlpha: 0.35,

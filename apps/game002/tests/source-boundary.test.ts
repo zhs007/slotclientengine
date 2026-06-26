@@ -85,15 +85,22 @@ describe("game002 source boundary", () => {
     expect(mainSource).not.toContain("import.meta.env");
   });
 
-  it("uses bgfull as the runtime background instead of the old portrait crop", () => {
+  it("collects both runtime skin backgrounds without using the old portrait crop", () => {
+    const skinConfigSource = readFileSync(
+      join(APP_ROOT, "src/skin-config.ts"),
+      "utf8",
+    );
     const adapterSource = readFileSync(
       join(APP_ROOT, "src/game-adapter.ts"),
       "utf8",
     );
 
-    expect(adapterSource).toContain("assets/game002/bgfull.jpg?url");
+    expect(skinConfigSource).toContain("assets/game002/bgfull.jpg?url");
+    expect(skinConfigSource).toContain("assets/game003/bg.jpg?url");
+    expect(skinConfigSource).not.toContain("assets/game002/bg.jpg?url");
     expect(adapterSource).not.toContain("assets/game002/bg.jpg?url");
-    expect(adapterSource).toContain('"bgfull.jpg"');
+    expect(adapterSource).toContain("skin.backgroundUrl");
+    expect(adapterSource).toContain("skin.symbolModules");
   });
 });
 

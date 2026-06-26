@@ -7,6 +7,7 @@ import {
 describe("game002 runtime query config", () => {
   it("parses a complete query string", () => {
     expect(parseGame002QueryConfig(validQuery())).toEqual({
+      skin: "2",
       serverUrl: "wss://example.test/game",
       token: "TOKEN",
       gamecode: "GAME_CODE",
@@ -24,6 +25,7 @@ describe("game002 runtime query config", () => {
 
   it("maps query config into the framework live and spin contracts", () => {
     expect(parseGame002FrameworkConfigFromQuery(validQuery())).toEqual({
+      skin: "2",
       live: {
         serverUrl: "wss://example.test/game",
         token: "TOKEN",
@@ -36,6 +38,16 @@ describe("game002 runtime query config", () => {
       },
       betOptions: [{ bet: 5, lines: 30, times: 1 }],
       initialBetIndex: 0,
+      spinRequest: { bet: 5, lines: 30, times: 1, autonums: -1 },
+    });
+    expect(
+      parseGame002FrameworkConfigFromQuery(validQuery({ skin: "3" })),
+    ).toMatchObject({
+      skin: "3",
+      live: {
+        gamecode: "GAME_CODE",
+        token: "TOKEN",
+      },
       spinRequest: { bet: 5, lines: 30, times: 1, autonums: -1 },
     });
   });
@@ -54,6 +66,9 @@ describe("game002 runtime query config", () => {
     expect(() =>
       parseGame002QueryConfig(`${validQuery()}&token=SECOND_TOKEN`),
     ).toThrow(/token query parameter must not be provided more than once/);
+    expect(() => parseGame002QueryConfig(`${validQuery()}&skin=3`)).toThrow(
+      /skin query parameter must not be provided more than once/,
+    );
   });
 
   it("rejects empty or whitespace-only parameters", () => {
@@ -85,6 +100,28 @@ describe("game002 runtime query config", () => {
     expect(() =>
       parseGame002QueryConfig(validQuery({ serverUrl: "not-a-url" })),
     ).toThrow(/valid ws:\/\/ or wss:\/\//);
+  });
+
+  it("accepts only explicit skin ids 2 and 3", () => {
+    expect(parseGame002QueryConfig(validQuery({ skin: "2" })).skin).toBe("2");
+    expect(parseGame002QueryConfig(validQuery({ skin: "3" })).skin).toBe("3");
+
+    for (const skin of ["02", "game002", "game003", "1", "4"]) {
+      expect(
+        () => parseGame002QueryConfig(validQuery({ skin })),
+        `${skin} should be rejected`,
+      ).toThrow(/skin query parameter must be either "2" or "3"/);
+    }
+  });
+
+  it("does not leak tokens in skin validation errors", () => {
+    try {
+      parseGame002QueryConfig(validQuery({ skin: "4", token: "SECRET" }));
+    } catch (error) {
+      expect(
+        error instanceof Error ? error.message : String(error),
+      ).not.toMatch(/SECRET/);
+    }
   });
 
   it("rejects ws server URLs from https pages before the browser blocks them", () => {
@@ -138,6 +175,7 @@ describe("game002 runtime query config", () => {
 });
 
 const REQUIRED_PARAMS = Object.freeze([
+  "skin",
   "serverUrl",
   "gamecode",
   "token",
@@ -158,6 +196,7 @@ function validQuery(overrides: Record<string, string> = {}): string {
 
 function validParams(overrides: Record<string, string> = {}): URLSearchParams {
   const params = new URLSearchParams({
+    skin: "2",
     serverUrl: "wss://example.test/game",
     token: "TOKEN",
     gamecode: "GAME_CODE",

@@ -11,6 +11,7 @@ import {
   createReelSymbolRegistry,
   type GridCellDimmingPattern,
   type GridCellOrderMode,
+  type GridCellReelOffsetMatrix,
   type GridCellReelSpinPlan,
   type GridCellReelSpinTiming,
   type ReelLayout,
@@ -24,6 +25,7 @@ import type {
 } from "@slotclientengine/rendercore";
 import {
   GAME002_EMPTY_SYMBOLS,
+  GAME002_DISPLAY_SYMBOLS,
   GAME002_REQUIRED_STATE_TEXTURES,
 } from "./assets.js";
 import {
@@ -31,6 +33,7 @@ import {
   GAME002_REELS_NAME,
   GAME002_VISIBLE_ROWS,
   GAME002_GRID_CELL_DIMMING,
+  GAME002_GRID_CELL_REEL_OFFSETS,
   GAME002_GRID_CELL_REEL_ORDER,
   GAME002_GRID_CELL_REEL_TIMING,
   createGame002Layout,
@@ -48,7 +51,10 @@ import {
 export interface Game002ReelConfig {
   readonly reelsName: string;
   readonly emptySymbols: readonly string[];
+  readonly texturedSymbols: readonly string[];
+  readonly missingAssetLabel: string;
   readonly symbolScales: ReelSymbolScaleMap;
+  readonly cellReelOffsets: GridCellReelOffsetMatrix;
   readonly direction: ReelSpinDirection;
   readonly orderMode: GridCellOrderMode;
   readonly timing: GridCellReelSpinTiming;
@@ -58,7 +64,10 @@ export interface Game002ReelConfig {
 export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   reelsName: GAME002_REELS_NAME,
   emptySymbols: GAME002_EMPTY_SYMBOLS,
+  texturedSymbols: GAME002_DISPLAY_SYMBOLS,
+  missingAssetLabel: "skin 2",
   symbolScales: GAME002_SYMBOL_SCALES,
+  cellReelOffsets: GAME002_GRID_CELL_REEL_OFFSETS,
   direction: "forward",
   orderMode: GAME002_GRID_CELL_REEL_ORDER,
   timing: GAME002_GRID_CELL_REEL_TIMING,
@@ -152,7 +161,7 @@ export function createGame002ReelRuntime(
     scene: SceneMatrix,
     sceneName: string,
   ): readonly number[] => {
-    assertRenderableSceneCodes(scene, sceneName, gameConfig);
+    assertRenderableSceneCodes(scene, sceneName, gameConfig, config);
     const resolvedFinalYs = scene.map((visibleSymbols, x) => {
       const candidates = reels.findStopYCandidates(x, visibleSymbols);
       return candidates[0];
@@ -211,7 +220,7 @@ export function createGame002ReelRuntime(
     ): readonly number[] {
       const validScene = validateGame002Scene(scene, sceneName);
       const nextFinalYs = resolveSceneFinalYs(validScene, sceneName);
-      reelSet.resetToScene(validScene, nextFinalYs);
+      reelSet.resetToScene(validScene, nextFinalYs, config.cellReelOffsets);
       const visibleScene = validateGame002Scene(
         reelSet.getVisibleScene(),
         `${sceneName} visible scene`,
@@ -236,6 +245,7 @@ export function createGame002ReelRuntime(
         columns: GAME002_REEL_COUNT,
         rows: GAME002_VISIBLE_ROWS,
         order,
+        cellReelOffsets: config.cellReelOffsets,
         direction: config.direction,
         timing: config.timing,
         dimming: config.dimming,
@@ -257,6 +267,7 @@ export function createGame002ReelRuntime(
         columns: GAME002_REEL_COUNT,
         rows: GAME002_VISIBLE_ROWS,
         order,
+        cellReelOffsets: config.cellReelOffsets,
         direction: config.direction,
         timing: config.timing,
         dimming: config.dimming,
@@ -336,12 +347,24 @@ function assertRenderableSceneCodes(
   scene: SceneMatrix,
   label: string,
   gameConfig: LogicGameConfig,
+  config: Game002ReelConfig,
 ): void {
+  const emptySymbols = new Set(config.emptySymbols);
+  const texturedSymbols = new Set(config.texturedSymbols);
   for (const [x, column] of scene.entries()) {
     for (const [y, code] of column.entries()) {
-      if (!gameConfig.getPaytableEntry(code)) {
+      const entry = gameConfig.getPaytableEntry(code);
+      if (!entry) {
         throw new Error(
           `${label}[${x}][${y}] symbol code ${code} does not exist in game002 paytable.`,
+        );
+      }
+      if (emptySymbols.has(entry.symbol)) {
+        continue;
+      }
+      if (!texturedSymbols.has(entry.symbol)) {
+        throw new Error(
+          `${label}[${x}][${y}] symbol code ${code} (${entry.symbol}) is missing assets for ${config.missingAssetLabel}.`,
         );
       }
     }

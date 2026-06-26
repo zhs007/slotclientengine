@@ -1,8 +1,10 @@
 import { ReelError } from "./errors.js";
+import { normalizeGridCellReelOffsetMatrix } from "./grid-cell-reel-offsets.js";
 import type {
   GridCellCoordinate,
   GridCellDimmingPattern,
   GridCellReelPlanCell,
+  GridCellReelOffsetMatrix,
   GridCellReelSpinPlan,
   GridCellReelSpinTiming,
   ReelAxisSpinPlan,
@@ -17,6 +19,7 @@ export function createGridCellReelSpinPlan(options: {
   readonly columns: number;
   readonly rows: number;
   readonly order: readonly GridCellCoordinate[];
+  readonly cellReelOffsets?: GridCellReelOffsetMatrix;
   readonly direction?: ReelSpinDirection;
   readonly timing: GridCellReelSpinTiming;
   readonly dimming: GridCellDimmingPattern;
@@ -31,6 +34,11 @@ export function createGridCellReelSpinPlan(options: {
   const finalYs = parseFinalYs(options.finalYs, columns);
   const targetScene = parseTargetScene(options.targetScene, columns, rows);
   const order = parseOrder(options.order, columns, rows);
+  const cellReelOffsets = normalizeGridCellReelOffsetMatrix(
+    options.cellReelOffsets,
+    columns,
+    rows,
+  );
   const timing = parseTiming(options.timing);
   const dimming = parseDimming(options.dimming);
   const direction = parseDirection(options.direction);
@@ -48,7 +56,11 @@ export function createGridCellReelSpinPlan(options: {
       );
     }
 
-    const finalY = options.reels.normalizeY(cell.x, finalYs[cell.x] + cell.y);
+    const reelOffsetY = cellReelOffsets[cell.x][cell.y];
+    const finalY = options.reels.normalizeY(
+      cell.x,
+      finalYs[cell.x] + cell.y + reelOffsetY,
+    );
     const durationTravel = Math.ceil(
       (durationMs / 1000) * timing.speedSymbolsPerSecond,
     );
@@ -72,6 +84,7 @@ export function createGridCellReelSpinPlan(options: {
       x: cell.x,
       y: cell.y,
       orderIndex: cell.orderIndex,
+      reelOffsetY,
       startAtMs,
       stopAtMs,
       durationMs,

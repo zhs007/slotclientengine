@@ -13,6 +13,8 @@ import { parseGame002FrameworkConfigFromQuery } from "../src/framework-config.js
 describe("game002 framework flow", () => {
   it("uses game002 default spin request and collects only after adapter play resolves", async () => {
     const config = parseGame002FrameworkConfigFromQuery(validQuery());
+    expect(config.skin).toBe("2");
+    expect(config.live.gamecode).toBe("GAME_CODE");
     const client = new FakeClient();
     client.spinResult = createSpinResult({ totalwin: 1575, results: 1 });
     const adapter = new FlowAdapter();
@@ -56,7 +58,11 @@ describe("game002 framework flow", () => {
   });
 
   it("passes live defaultScene to the adapter without inventing one", async () => {
-    const config = parseGame002FrameworkConfigFromQuery(validQuery());
+    const config = parseGame002FrameworkConfigFromQuery(
+      validQuery({ skin: "3" }),
+    );
+    expect(config.skin).toBe("3");
+    expect(config.live.gamecode).toBe("GAME_CODE");
     const client = new FakeClient();
     client.userInfo.defaultScene = GAME002_SAMPLE_DEFAULT_SCENE;
     const adapter = new FlowAdapter();
@@ -113,8 +119,9 @@ describe("game002 framework flow", () => {
   });
 });
 
-function validQuery(): string {
+function validQuery(overrides: Record<string, string> = {}): string {
   return `?${new URLSearchParams({
+    skin: "2",
     serverUrl: "wss://example.test/game",
     token: "TOKEN",
     gamecode: "GAME_CODE",
@@ -127,6 +134,7 @@ function validQuery(): string {
     times: "1",
     autonums: "-1",
     requestTimeoutMs: "30000",
+    ...overrides,
   }).toString()}`;
 }
 

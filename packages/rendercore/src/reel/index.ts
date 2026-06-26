@@ -4,6 +4,7 @@ export * from "./symbol-registry.js";
 export * from "./layout.js";
 export * from "./spin-plan.js";
 export * from "./grid-cell-order.js";
+export * from "./grid-cell-reel-offsets.js";
 export * from "./grid-cell-spin-plan.js";
 export * from "./reel-window.js";
 export * from "./render-reel.js";

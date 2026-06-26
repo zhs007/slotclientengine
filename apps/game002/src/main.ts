@@ -7,6 +7,7 @@ import {
 } from "./game-layout.js";
 import { parseGame002FrameworkConfigFromQuery } from "./framework-config.js";
 import { formatServerUsdAmount } from "./money.js";
+import { getGame002SkinConfig } from "./skin-config.js";
 import "./styles.css";
 
 const root = document.getElementById("app");
@@ -18,9 +19,10 @@ try {
   const config = parseGame002FrameworkConfigFromQuery(window.location.search, {
     pageProtocol: window.location.protocol,
   });
+  const skin = getGame002SkinConfig(config.skin);
   const framework = createSlotGameFramework({
     root,
-    gameAdapter: createGame002Adapter(),
+    gameAdapter: createGame002Adapter({ skin }),
     live: config.live,
     betOptions: config.betOptions,
     initialBetIndex: config.initialBetIndex,

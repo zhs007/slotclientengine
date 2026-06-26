@@ -1,10 +1,12 @@
 import { Container, Graphics } from "pixi.js";
 import { assertValidDeltaSeconds } from "../symbol/ani.js";
 import { ReelError } from "./errors.js";
+import { normalizeGridCellReelOffsetMatrix } from "./grid-cell-reel-offsets.js";
 import { createReelLayout } from "./layout.js";
 import { RenderReel } from "./render-reel.js";
 import type {
   GridCellCoordinate,
+  GridCellReelOffsetMatrix,
   GridCellReelPhase,
   GridCellReelPlanCell,
   GridCellReelSpinPlan,
@@ -75,15 +77,27 @@ export class RenderGridCellReelSet extends Container {
     );
   }
 
-  resetToScene(scene: SceneMatrix, finalYs: readonly number[]): void {
+  resetToScene(
+    scene: SceneMatrix,
+    finalYs: readonly number[],
+    cellReelOffsets?: GridCellReelOffsetMatrix,
+  ): void {
     const parsedScene = parseScene(scene, this.#columns, this.#rows);
     const parsedFinalYs = parseFinalYs(finalYs, this.#columns);
+    const parsedCellReelOffsets = normalizeGridCellReelOffsetMatrix(
+      cellReelOffsets,
+      this.#columns,
+      this.#rows,
+    );
     this.#spinPlan = null;
     this.#elapsedMs = 0;
 
     for (const cell of this.#cells) {
       const { x, y } = cell.coordinate;
-      const cellFinalY = this.#reels.normalizeY(x, parsedFinalYs[x] + y);
+      const cellFinalY = this.#reels.normalizeY(
+        x,
+        parsedFinalYs[x] + y + parsedCellReelOffsets[x][y],
+      );
       cell.reel.resetToVisibleSymbols([parsedScene[x][y]], cellFinalY);
       cell.planCell = null;
       cell.phase = "completed";
