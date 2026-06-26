@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Assets } from "pixi.js";
 import stateTextureManifest from "../../../assets/symbols002/symbol-state-textures.manifest.json";
@@ -220,6 +222,21 @@ describe("game002 assets", () => {
       },
     });
   });
+
+  it("locks runtime and legacy background image dimensions", () => {
+    expect(
+      readJpegSize(resolve(__dirname, "../../../assets/game002/bg.jpg")),
+    ).toEqual({
+      width: 1125,
+      height: 2000,
+    });
+    expect(
+      readJpegSize(resolve(__dirname, "../../../assets/game002/bgfull.jpg")),
+    ).toEqual({
+      width: 2000,
+      height: 2000,
+    });
+  });
 });
 
 function createModules(symbols: readonly string[]): Record<string, string> {
@@ -236,4 +253,33 @@ function createModules(symbols: readonly string[]): Record<string, string> {
       ],
     ]),
   );
+}
+
+function readJpegSize(file: string): {
+  readonly width: number;
+  readonly height: number;
+} {
+  const bytes = readFileSync(file);
+  let offset = 2;
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    throw new Error(`${file} is not a JPEG file.`);
+  }
+
+  while (offset < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = bytes[offset + 1];
+    const length = bytes.readUInt16BE(offset + 2);
+    if (marker >= 0xc0 && marker <= 0xc3) {
+      return Object.freeze({
+        height: bytes.readUInt16BE(offset + 5),
+        width: bytes.readUInt16BE(offset + 7),
+      });
+    }
+    offset += 2 + length;
+  }
+
+  throw new Error(`${file} does not contain a JPEG size marker.`);
 }

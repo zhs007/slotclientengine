@@ -11,7 +11,7 @@
   height: 100%;
   min-height: 100vh;
   display: grid;
-  place-items: start center;
+  place-items: start;
   overflow: clip;
   background: #000000;
   color: #ffffff;
@@ -28,7 +28,7 @@
   position: relative;
   overflow: hidden;
   flex: none;
-  transform-origin: top center;
+  transform-origin: top left;
   background: #000000;
 }
 

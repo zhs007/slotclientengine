@@ -1,5 +1,9 @@
 # game002 grid cell reels 任务计划
 
+> 260626 合同修订：任务51 responsive 适配后，grid-cell 的外层 `120 x 120` 裁切从“永久裁切”修订为“转动期裁切”。每个 cell 开始滚动时开启外层裁切，单个 cell 落地后立即移除外层裁切；落地暗度折叠到当前 cell 内继续淡出，最终静态 symbol 不继续依赖 mask。本文后续出现的“永久裁切”旧表述均以本修订为准。
+
+> 260626 live 轮带合同修订：服务器真实轮带不会下发给前端，前端 spin 必须使用本地公开轮带滚动。拿到服务器最终 scene 后，如果该目标窗口无法在本地轮带反查连续 stop y，不视为服务端结果非法；渲染层应构造“本地轮带 + 本轮服务器落点窗口”的临时融合轮带。未知 symbol code、缺失贴图、非法 scene 仍然显式失败。本文后续出现的“impossible stop y 必须失败”旧表述均以本修订为准。
+
 ## 1. 任务目标
 
 为 `apps/game002` 实现一种可复用的特殊转轮表现：棋盘上的每个格子都有自己的裁切矩形，格子内独立垂直滚动；所有格子按“从上到下、从左到右”的顺序依次启动，再按同一顺序依次停下；旋转期间棋盘格式暗度方块必须挂在每个格子的微型 reel 内部并跟随滚动，让固定格子能看到快速明暗变化；停下后不播放 symbol 出现动画，只移除暗度并保持最终 symbol 的 `normal` 状态。
@@ -185,7 +189,7 @@ import {
 - 不增加 mock/replay/local scene 兜底。
 - 不把 game002 资源路径、symbol 名或 `6 x 9` 常量写死进 `rendercore`。
 - 不为了测试方便暴露不该公开的内部状态；如果测试导致奇怪写法，优先改测试方式或增加合理 snapshot API。
-- 不用自动猜测 stop y、自动补资源、自动跳过缺失状态图等隐藏 fallback。逻辑 bug 越早暴露越好。
+- 不用自动补资源、自动跳过缺失状态图或用本地 scene 替代服务器 scene 等隐藏 fallback。目标 scene 不在本地轮带时使用临时融合轮带，这是 live 前端保护真实轮带的既定合同，不属于 mock/replay/local scene 兜底。
 
 ## 5. rendercore 设计方案
 
@@ -585,7 +589,7 @@ export const GAME002_GRID_CELL_DIMMING = Object.freeze({
 - 校验 `plan.lastStopAtMs` 和 runtime 完整完成时间在可接受范围内，例如 `lastStopAtMs >= 1800ms` 且完整完成时间 `<= 2600ms`；若实际参数不同，测试应锁定最终选择值。
 - spin 过程中 snapshot 能看到 `spinBlur`。
 - 最终完成后 visible scene 等于目标 scene。
-- invalid scene 和 impossible stop y 继续 fail-fast。
+- invalid scene、未知 symbol code、资源缺失继续 fail-fast；目标 scene 无法在本地轮带反查 stop y 时，按 live 轮带合同使用临时融合轮带。
 
 更新 `apps/game002/tests/game-adapter.test.ts`：
 
@@ -722,7 +726,7 @@ http://127.0.0.1:5206/
 - [ ] 停下后不请求 `appear`，暗度最终归零。
 - [ ] `adapter.playSpin` 等 grid runtime 完整完成后才 resolve。
 - [ ] 最终 `getVisibleScene()` 与 `GameLogic` 目标 scene 完全一致。
-- [ ] invalid scene、impossible stop y、资源缺失、order 错误、timing 错误都显式失败。
+- [ ] invalid scene、未知 symbol code、资源缺失、order 错误、timing 错误都显式失败；目标 scene 无法在本地轮带反查 stop y 时使用临时融合轮带。
 - [ ] 没有 mock/replay/local scene fallback。
 - [ ] 没有为了测试改坏生产边界；奇怪测试应改测试。
 - [ ] `packages/rendercore/README.md`、`apps/game002/README.md` 已同步。

@@ -179,6 +179,27 @@ symbol.requestState("appear");
 symbol.requestState("win");
 ```
 
+## Viewport API
+
+viewport 能力从主入口和子路径导出：
+
+```ts
+import {
+  calculateFocusedArtViewport,
+  mapReferenceRectToArt,
+} from "@slotclientengine/rendercore/viewport";
+```
+
+`calculateFocusedArtViewport()` 用于“完整 art 坐标系 + 当前 canvas 逻辑尺寸 + 游戏 focus rect”的裁切计算。调用方传入完整背景或最大美术空间 `artSize`、当前 canvas backing 的 `viewportSize`、必须完整保留的 `focusRect`，可选传入 `minMargin`。返回值包含：
+
+- `visibleRect`：当前 viewport 应显示 art 中的哪一块。
+- `worldOffset`：把完整 art world container 移到 viewport 内的偏移，等于 `-visibleRect.x/y`。
+- `focusRectInViewport`：focus rect 在当前 viewport 内的位置，用于测试和诊断。
+
+该 helper 只做通用几何计算，不读取资源、不创建 Pixi 对象，也不包含任何 game002 路径、symbol 名或棋盘常量。`viewportSize` 大于 `artSize`、`focusRect` 超出 art、focus 加 margin 无法放入 viewport、`NaN`/`Infinity`/非正数都会显式抛错，避免运行时静默裁掉关键区域。
+
+`mapReferenceRectToArt()` 用于把旧设计稿或旧 portrait crop 里的矩形映射到新的完整 art 坐标。典型用法是把旧 `1125 x 2000` 坐标中的棋盘矩形映射到 `2000 x 2000` art 中，再把映射后的矩形作为 focus rect。
+
 ## Reel API
 
 reel 能力从主入口和子路径导出：
@@ -255,7 +276,7 @@ reelSet.spin(plan);
 
 ## Grid Cell Reel API
 
-grid-cell reel 用于棋盘格、逐格启动、逐格停止的特殊转轮表现。每个 cell 都有长期存在的裁切矩形，内部复用 `RenderReel` 的 `visibleRows=1` 微型 reel；暗度 overlay 是挂在微型 reel 内部的交替深浅 strip，会随 reel 的 `currentY` 滚动并覆盖在 symbol 上方，所以固定格子中能看到快速明暗变化。
+grid-cell reel 用于棋盘格、逐格启动、逐格停止的特殊转轮表现。每个正在滚动的 cell 都有 `cellWidth x cellHeight` 的裁切窗口，内部复用 `RenderReel` 的 `visibleRows=1` 微型 reel；暗度 overlay 是挂在微型 reel 内部的交替深浅 strip，会随 reel 的 `currentY` 滚动并覆盖在 symbol 上方，所以固定格子中能看到快速明暗变化。单个 cell 落地后会立即移除外层裁切，最终静态 symbol 不继续依赖 mask；落地暗度会折叠到当前 cell 内淡出，避免没有 mask 时影响邻格。
 
 ```ts
 import {
@@ -305,7 +326,7 @@ const plan = createGridCellReelSpinPlan({
 gridReels.spin(plan);
 ```
 
-`createGridCellOrder({ mode: "top-down-left-right" })` 生成 `(0,0),(0,1)...(0,rows-1),(1,0)...` 的稳定顺序。`createGridCellReelSpinPlan()` 对每个 cell 计算 `startAtMs`、`stopAtMs`、`durationMs`、`axisPlan`、`targetVisibleSymbols` 和交替暗度；每个 cell 的最终 y 使用 `reels.normalizeY(x, finalYs[x] + y)`，因此完成后的 `getVisibleScene()` 能还原目标 scene。
+`createGridCellOrder({ mode: "top-down-left-right" })` 生成 `(0,0),(0,1)...(0,rows-1),(1,0)...` 的稳定顺序。`createGridCellReelSpinPlan()` 对每个 cell 计算 `startAtMs`、`stopAtMs`、`durationMs`、`axisPlan`、`targetVisibleSymbols` 和交替暗度；每个 cell 的最终 y 使用 `reels.normalizeY(x, finalYs[x] + y)`，并把 `targetVisibleSymbols` 注入临时 spin strip 的落点窗口，因此完成后的 `getVisibleScene()` 能还原目标 scene。调用方可以用本地公开轮带提供滚动内容，再把服务器本轮目标窗口叠加到临时 strip，不需要也不应该暴露服务器真实轮带。
 
 grid-cell API 会 fail-fast 校验 scene 尺寸、final y 长度、order 重复/越界/缺失、timing、alpha 范围和 reel 列数。资源状态缺失仍由 `ReelSymbolRegistry` / `RenderSymbol` 按 `texturePolicy.requiredStateTextures` 显式失败，不会静默回退到普通图。
 

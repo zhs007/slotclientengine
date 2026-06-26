@@ -56,7 +56,12 @@ describe("game002 adapter", () => {
       resolution: 1,
     });
     expect([...context.gameLayer.children]).toEqual([fakeApp.canvas]);
-    expect(fakeApp.stage.children).toHaveLength(2);
+    expect(fakeApp.stage.children).toHaveLength(1);
+    expect(fakeApp.resizeCalls).toEqual([[1125, 2000]]);
+    expect(fakeApp.stage.children[0]?.position).toMatchObject({
+      x: -437.5,
+      y: -0,
+    });
     adapter.applyInitialState?.({ userInfo: {}, balance: 100 });
     expect(runtime.appliedScenes).toEqual([]);
 
@@ -66,6 +71,35 @@ describe("game002 adapter", () => {
       defaultScene: GAME002_SAMPLE_DEFAULT_SCENE,
     });
     expect(runtime.appliedScenes).toEqual([GAME002_SAMPLE_DEFAULT_SCENE]);
+  });
+
+  it("resizes Pixi backing size and moves the art world on viewport changes", async () => {
+    const fakeApp = createFakeApplication();
+    const context = createMountContext();
+    const adapter = createGame002Adapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => new FakeRuntime().asRuntime(),
+    });
+
+    await adapter.mount(context);
+    context.emitViewport({ width: 1200, height: 1200 });
+    expect(fakeApp.resizeCalls).toEqual([
+      [1125, 2000],
+      [1200, 1200],
+    ]);
+    expect(fakeApp.stage.children[0]?.position).toMatchObject({
+      x: -397.5,
+      y: -270,
+    });
+
+    context.emitViewport({ width: 2000, height: 1200 });
+    expect(fakeApp.resizeCalls.at(-1)).toEqual([2000, 1200]);
+    expect(fakeApp.stage.children[0]?.position).toMatchObject({
+      x: -0,
+      y: -270,
+    });
   });
 
   it("resolves playSpin only after runtime completion and visual scene verification", async () => {
@@ -100,6 +134,39 @@ describe("game002 adapter", () => {
     await spinPromise;
     expect(resolved).toBe(true);
     expect(runtime.currentScene).toEqual(GAME002_SAMPLE_SPIN_SCENE);
+  });
+
+  it("caps oversized ticker deltas so grid-cell spin stays visible after resize", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const adapter = createGame002Adapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+    });
+    await adapter.mount(createMountContext());
+
+    const spinPromise = Promise.resolve(
+      adapter.playSpin(createLogic(GAME002_SAMPLE_SPIN_SCENE)),
+    );
+    let resolved = false;
+    void spinPromise.then(() => {
+      resolved = true;
+    });
+
+    fakeApp.tick(5_000);
+    await Promise.resolve();
+
+    expect(runtime.updateDeltas).toHaveLength(1);
+    expect(runtime.updateDeltas[0]).toBeCloseTo(1 / 30);
+    expect(runtime.spinning).toBe(true);
+    expect(resolved).toBe(false);
+
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await spinPromise;
+    expect(resolved).toBe(true);
   });
 
   it("rejects playSpin on runtime errors and prevents concurrent animations", async () => {
@@ -163,6 +230,9 @@ describe("game002 adapter", () => {
     expect(context.gameLayer.children).toHaveLength(0);
     expect(fakeApp.stopped).toBe(true);
     expect(fakeApp.destroyed).toBe(true);
+    const resizeCount = fakeApp.resizeCalls.length;
+    context.emitViewport({ width: 1200, height: 1200 });
+    expect(fakeApp.resizeCalls).toHaveLength(resizeCount);
   });
 });
 
@@ -170,6 +240,12 @@ function createMountContext() {
   const frame = document.createElement("div");
   const gameLayer = document.createElement("div");
   const overlay = document.createElement("div");
+  type TestViewportSnapshot = ReturnType<typeof createViewportSnapshot>;
+  let viewport: TestViewportSnapshot = createViewportSnapshot({
+    width: 1125,
+    height: 2000,
+  });
+  const viewportListeners = new Set<(next: TestViewportSnapshot) => void>();
   return {
     frame,
     gameLayer,
@@ -186,6 +262,22 @@ function createMountContext() {
       autoMode: false,
       error: null,
     }),
+    getViewport: () => viewport,
+    onViewportChange: (listener: (next: TestViewportSnapshot) => void) => {
+      viewportListeners.add(listener);
+      return () => {
+        viewportListeners.delete(listener);
+      };
+    },
+    emitViewport: (frameDesignSize: {
+      readonly width: number;
+      readonly height: number;
+    }) => {
+      viewport = createViewportSnapshot(frameDesignSize);
+      for (const listener of viewportListeners) {
+        listener(viewport);
+      }
+    },
   };
 }
 
@@ -197,14 +289,21 @@ function createFakeApplication() {
     stopped: boolean;
     destroyed: boolean;
     initOptions: unknown;
+    resizeCalls: number[][];
   } = {
     stopped: false,
     destroyed: false,
     initOptions: null,
+    resizeCalls: [],
   };
   const app = {
     canvas,
     stage,
+    renderer: {
+      resize(width: number, height: number) {
+        state.resizeCalls.push([width, height]);
+      },
+    },
     ticker: {
       add(listener: (ticker: { readonly deltaMS: number }) => void) {
         listeners.add(listener);
@@ -239,11 +338,28 @@ function createFakeApplication() {
     get initOptions() {
       return state.initOptions;
     },
+    get resizeCalls() {
+      return state.resizeCalls;
+    },
     tick(deltaMS: number) {
       for (const listener of listeners) {
         listener({ deltaMS });
       }
     },
+  };
+}
+
+function createViewportSnapshot(frameDesignSize: {
+  readonly width: number;
+  readonly height: number;
+}) {
+  return {
+    pageSize: frameDesignSize,
+    frameDesignSize,
+    scale: 1,
+    cssSize: frameDesignSize,
+    offsetX: 0,
+    offsetY: 0,
   };
 }
 
@@ -271,6 +387,7 @@ class FakeRuntime {
   updateError: Error | null = null;
   spinning = false;
   forceVisualScene: SceneMatrix | null = null;
+  readonly updateDeltas: number[] = [];
 
   asRuntime(): Game002ReelRuntime {
     return {
@@ -290,7 +407,8 @@ class FakeRuntime {
         this.spinning = true;
         return {} as any;
       },
-      update: () => {
+      update: (deltaSeconds: number) => {
+        this.updateDeltas.push(deltaSeconds);
         if (this.updateError) {
           throw this.updateError;
         }
@@ -333,7 +451,7 @@ class FakeRuntime {
           ],
           reelCount: 6,
           gridCellCount: 54,
-          layerX: 200,
+          layerX: 637.5,
           layerY: 330,
         };
       },

@@ -16,7 +16,10 @@
 ## 基本用法
 
 ```ts
-import { createGameLogic, createGameLogicFromGmi } from '@slotclientengine/logiccore';
+import {
+  createGameLogic,
+  createGameLogicFromGmi,
+} from "@slotclientengine/logiccore";
 
 const logic = createGameLogic(gameModuleInfoMessage);
 
@@ -28,8 +31,8 @@ const firstWinResult = firstStep.getResult(0);
 const sameScene = logic.getScene(0, 0);
 const sameWinResult = logic.getResult(0, 0);
 
-if (firstStep.hasComponent('bg-spin')) {
-  const scenes = firstStep.getComponentScenes('bg-spin');
+if (firstStep.hasComponent("bg-spin")) {
+  const scenes = firstStep.getComponentScenes("bg-spin");
 }
 
 const logicFromGmi = createGameLogicFromGmi(gameModuleInfoMessage.gmi, {
@@ -47,19 +50,21 @@ const logicFromGmi = createGameLogicFromGmi(gameModuleInfoMessage.gmi, {
 `createGameConfig(rawJson)` 用于消费 `apps/gengameconfig` 从 Excel 生成的游戏配置 JSON。浏览器、Vite app、Node 中已经持有 JSON object 的场景都使用顶层入口：
 
 ```ts
-import { createGameConfig } from '@slotclientengine/logiccore';
+import { createGameConfig } from "@slotclientengine/logiccore";
 
 const gameConfig = createGameConfig(rawJson);
-const reels = gameConfig.getReels('reels01');
+const reels = gameConfig.getReels("reels01");
 const symbol = reels.get(0, -1);
 ```
 
 Node 中需要从 JSON 文件加载时，使用 Node-only 子入口：
 
 ```ts
-import { loadGameConfigFromJsonFile } from '@slotclientengine/logiccore/node';
+import { loadGameConfigFromJsonFile } from "@slotclientengine/logiccore/node";
 
-const gameConfig = await loadGameConfigFromJsonFile('assets/gamecfg/output.json');
+const gameConfig = await loadGameConfigFromJsonFile(
+  "assets/gamecfg/output.json",
+);
 ```
 
 不要从顶层入口读取文件。`@slotclientengine/logiccore` 不 import `node:fs`、`node:path` 等 Node-only API，供浏览器 bundler 安全使用；`@slotclientengine/logiccore/node` 才包含文件系统能力。
@@ -83,8 +88,8 @@ normalized = ((y % length) + length) % length;
 ```ts
 const scene = logic.getStep(0).getScene(0);
 const stopYCoordinates = gameConfig.getStopYCoordinates({
-  reelsName: 'reels01',
-  sceneName: 'step0.scene0',
+  reelsName: "reels01",
+  sceneName: "step0.scene0",
   scene,
 });
 ```
@@ -96,6 +101,12 @@ scene[x][visibleY] === reels.get(x, stopYCoordinates[x] + visibleY);
 ```
 
 如果 scene 宽度和 reels 轴数不一致、某列为空、某列找不到匹配，接口会失败。某列存在多个匹配时会取第一个候选，也就是最小 y；实际服务端停留 y 不参与消歧，只要求可见 scene 完全一致。
+
+### Live 前端临时轮带
+
+真实服务器轮带不下发到前端，前端也不应通过其它配置或缓存暴露真实轮带。live spin 渲染时应使用本地公开轮带生成滚动过程；拿到服务器返回的最终 scene 后，只把本轮目标可见窗口叠加到渲染用的临时轮带落点窗口中。
+
+因此，`getStopYCoordinates()` 适合做本地配置校验、fixture 校验或存在本地 exact stop 时的定位；但 live spin 的目标 scene 在本地轮带里找不到连续 stop y 时，不应直接判定服务端结果非法。此时调用方应保留本地轮带作为滚动内容，并在渲染层构造“本地轮带 + 服务器本轮落点窗口”的临时融合数据。
 
 ### 旋转起始坐标
 
@@ -126,10 +137,7 @@ const startY = reels.calculateSpinStartY({
 
 ```json
 {
-  "values": [
-    { "values": [0, 4, 0, 4, 0] },
-    { "values": [0, 5, 0, 3, 0] }
-  ]
+  "values": [{ "values": [0, 4, 0, 4, 0] }, { "values": [0, 5, 0, 3, 0] }]
 }
 ```
 

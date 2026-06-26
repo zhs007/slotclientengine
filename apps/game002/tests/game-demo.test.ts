@@ -79,7 +79,7 @@ describe("game002 reel runtime", () => {
       spinning: false,
       reelCount: 6,
       gridCellCount: 54,
-      layerX: 200,
+      layerX: 637.5,
       layerY: 330,
     });
 
@@ -97,6 +97,20 @@ describe("game002 reel runtime", () => {
       runtime.getVisualSnapshot(),
       GAME002_SAMPLE_DEFAULT_SCENE,
       "applied game002 scene",
+    );
+  });
+
+  it("shows the grid-cell reels during the first live spin without a default scene", () => {
+    const runtime = createRuntime();
+
+    runtime.spinToScene(GAME002_SAMPLE_SPIN_SCENE, "first live spin");
+    expect(runtime.mainReelsLayer.visible).toBe(true);
+    expect(runtime.getCurrentScene()).toBeNull();
+    expect(runtime.getTargetScene()).toEqual(GAME002_SAMPLE_SPIN_SCENE);
+
+    runtime.update(0.01);
+    expect(runtime.getVisualSnapshot().requestedStates.flat()).toContain(
+      "spinBlur",
     );
   });
 
@@ -176,7 +190,47 @@ describe("game002 reel runtime", () => {
     );
   });
 
-  it("rejects invalid scenes and impossible stop y without local fallback", () => {
+  it("fuses server target windows into the local reel strip when stop y is absent", () => {
+    const runtime = createRuntime(GAME002_SAMPLE_DEFAULT_SCENE);
+    const localReelOnlyScene = cloneScene(GAME002_SAMPLE_SPIN_SCENE);
+    localReelOnlyScene[0] = [1, 2, 3, 4, 5, 6, 7, 8, 0];
+
+    expect(() => runtime.spinToScene([[1, 2, 3]] as any)).toThrow(/width/);
+    expect(runtime.isSpinning()).toBe(false);
+
+    const reels = runtime.gameConfig.getReels(
+      DEFAULT_GAME002_REEL_CONFIG.reelsName,
+    );
+    expect(reels.findStopYCandidates(0, localReelOnlyScene[0])).toEqual([]);
+
+    const plan = runtime.spinToScene(
+      localReelOnlyScene,
+      "server target not in local strip",
+    );
+    expect(plan.cells[0].axisPlan.finalY).toBe(
+      reels.normalizeY(0, GAME002_SAMPLE_DEFAULT_STOP_Y[0]),
+    );
+    expect(runtime.getFinalYs()?.[0]).toBe(GAME002_SAMPLE_DEFAULT_STOP_Y[0]);
+    expect(runtime.getTargetScene()).toEqual(localReelOnlyScene);
+
+    let result = runtime.update(0.01);
+    expect(runtime.getVisualSnapshot().requestedStates.flat()).toContain(
+      "spinBlur",
+    );
+    for (let index = 0; index < 60 && !result.completed; index += 1) {
+      result = runtime.update(0.05);
+    }
+
+    expect(result.completed).toBe(true);
+    expect(runtime.getCurrentScene()).toEqual(localReelOnlyScene);
+    assertGame002ReelVisualMatchesTarget(
+      runtime.getVisualSnapshot(),
+      localReelOnlyScene,
+      "completed local strip fused scene",
+    );
+  });
+
+  it("rejects invalid scenes and unknown symbol codes without local fallback", () => {
     const runtime = createRuntime(GAME002_SAMPLE_DEFAULT_SCENE);
 
     expect(() => runtime.spinToScene([[1, 2, 3]] as any)).toThrow(/width/);
@@ -186,7 +240,7 @@ describe("game002 reel runtime", () => {
     impossibleScene[0][0] = 999;
     expect(() =>
       runtime.spinToScene(impossibleScene, "impossible game002 scene"),
-    ).toThrow(/No stop y candidate/);
+    ).toThrow(/does not exist in game002 paytable/);
     expect(runtime.isSpinning()).toBe(false);
   });
 
@@ -210,7 +264,7 @@ describe("game002 reel runtime", () => {
           requestedStates: [],
           reelCount: 6,
           gridCellCount: 54,
-          layerX: 200,
+          layerX: 637.5,
           layerY: 330,
         },
         GAME002_SAMPLE_DEFAULT_SCENE,
@@ -227,7 +281,7 @@ describe("game002 reel runtime", () => {
           requestedStates: [],
           reelCount: 6,
           gridCellCount: 54,
-          layerX: 200,
+          layerX: 637.5,
           layerY: 330,
         },
         GAME002_SAMPLE_SPIN_SCENE,

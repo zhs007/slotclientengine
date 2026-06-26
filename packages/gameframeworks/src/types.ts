@@ -49,6 +49,45 @@ export interface SlotGameBetOption {
   readonly label?: string;
 }
 
+export interface SlotGameFocusFramePolicy {
+  readonly mode: "focus";
+  readonly maxDesignSize: { readonly width: number; readonly height: number };
+  readonly preferredPortraitSize: {
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly focusRect: {
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly minFocusMargin?: {
+    readonly left?: number;
+    readonly right?: number;
+    readonly top?: number;
+    readonly bottom?: number;
+  };
+}
+
+export type SlotGameFramePolicy =
+  | { readonly mode: "fixed" }
+  | SlotGameFocusFramePolicy;
+
+export interface SlotGameViewportSnapshot {
+  readonly pageSize: { readonly width: number; readonly height: number };
+  readonly frameDesignSize: {
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly scale: number;
+  readonly cssSize: { readonly width: number; readonly height: number };
+  readonly offsetX: number;
+  readonly offsetY: number;
+}
+
+export type SlotGameViewportListener = (
+  viewport: SlotGameViewportSnapshot,
+) => void;
+
 export interface SlotGameSpinRequest {
   readonly bet?: number;
   readonly lines?: number;
@@ -85,6 +124,8 @@ export interface SlotGameMountContext {
   readonly gameLayer: HTMLElement;
   readonly overlay: HTMLElement;
   getState(): SlotGameStateSnapshot;
+  getViewport(): SlotGameViewportSnapshot;
+  onViewportChange(listener: SlotGameViewportListener): () => void;
 }
 
 export interface SlotGameInitialState {
@@ -123,6 +164,7 @@ export interface SlotGameFrameworkOptions {
   readonly initialBalance?: number;
   readonly initialWin?: number;
   readonly designSize?: { readonly width: number; readonly height: number };
+  readonly framePolicy?: SlotGameFramePolicy;
   readonly brandLabel?: string;
   readonly currency?: string;
   readonly locale?: string;

@@ -64,7 +64,32 @@ await framework.spin();
 </main>
 ```
 
-`.slot-ui-frame` 使用设计分辨率固定宽高，默认 `941 x 1672`，并通过 `calculateFrameScale(viewportWidth, viewportHeight, designSize)` 按完整 frame 缩放。游戏层始终保持设计坐标，不需要自己适配浏览器视口。
+默认不传 `framePolicy` 时，`.slot-ui-frame` 使用设计分辨率固定宽高，默认 `941 x 1672`，并通过 `calculateFrameScale(viewportWidth, viewportHeight, designSize)` 按完整 frame 缩放。游戏层始终保持设计坐标，不需要自己适配浏览器视口。
+
+需要让游戏画面根据 focus 区域适配不同设备时，可以传 `framePolicy: { mode: "focus" }`。`uiframeworks` 会根据真实浏览器 viewport 计算 `frameDesignSize`、CSS 缩放、居中 offset 和黑边空间，并保证提交给 canvas 的逻辑尺寸不超过 `maxDesignSize`：
+
+```ts
+const controller = createSlotUiController({
+  root,
+  designSize: { width: 1125, height: 2000 },
+  framePolicy: {
+    mode: "focus",
+    maxDesignSize: { width: 2000, height: 2000 },
+    preferredPortraitSize: { width: 1125, height: 2000 },
+    focusRect: { width: 720, height: 1080 },
+    minFocusMargin: { left: 60, right: 60, top: 60, bottom: 60 },
+  },
+  betOptions,
+  handlers,
+});
+
+const viewport = controller.getViewport();
+const unsubscribe = controller.onViewportChange((next) => {
+  console.log(next.frameDesignSize);
+});
+```
+
+`SlotUiViewportSnapshot` 包含 `pageSize`、`frameDesignSize`、`scale`、`cssSize`、`offsetX` 和 `offsetY`。例如真实页面为 `3000 x 1200` 且 `maxDesignSize=2000 x 2000` 时，focus policy 可以输出 `frameDesignSize=2000 x 1200`，外侧多余区域由 `.slot-ui-page` 的黑色背景承接。非法 policy、非正尺寸或 focus 加 margin 无法放入最大设计空间时会抛 `SlotUiConfigError`。
 
 ## HUD 控件
 

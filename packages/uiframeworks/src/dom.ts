@@ -1,4 +1,8 @@
-import { calculateFrameScale, createDefaultSlotLayout } from "./layout.js";
+import {
+  calculateFrameScale,
+  calculateSlotUiFrameViewport,
+  createDefaultSlotLayout,
+} from "./layout.js";
 import { SlotUiConfigError } from "./errors.js";
 import type { MoneyFormatter } from "./format.js";
 import { createSlotIcon, type SlotUiIconName } from "./icons.js";
@@ -6,7 +10,10 @@ import type {
   SlotUiBuyBonusOptions,
   SlotUiClockOptions,
   SlotUiDesignSize,
+  SlotUiFramePolicy,
   SlotUiStateSnapshot,
+  SlotUiViewportListener,
+  SlotUiViewportSnapshot,
 } from "./types.js";
 import type { BetControlsState } from "./state.js";
 
@@ -26,6 +33,7 @@ export interface SlotUiDomHandlers {
 export interface SlotUiDomOptions {
   readonly root: HTMLElement;
   readonly designSize: SlotUiDesignSize;
+  readonly framePolicy?: SlotUiFramePolicy;
   readonly brandLabel?: string;
   readonly clock?: false | SlotUiClockOptions;
   readonly buyBonus?: false | SlotUiBuyBonusOptions;
@@ -61,6 +69,8 @@ export interface SlotUiDomElements {
 
 export interface SlotUiDom {
   readonly elements: SlotUiDomElements;
+  getViewport(): SlotUiViewportSnapshot;
+  onViewportChange(listener: SlotUiViewportListener): () => void;
   update(state: SlotUiStateSnapshot): void;
   destroy(): void;
 }
@@ -72,48 +82,19 @@ interface ListenerBinding {
 }
 
 export function createSlotUiDom(options: SlotUiDomOptions): SlotUiDom {
-  const layout = createDefaultSlotLayout(options.designSize);
+  let viewportSnapshot = calculateSlotUiFrameViewport({
+    ...readRootViewport(options.root),
+    designSize: options.designSize,
+    policy: options.framePolicy,
+  });
+  const layout = createDefaultSlotLayout(viewportSnapshot.frameDesignSize);
   const page = element("main", "slot-ui-page");
   const frame = element("div", "slot-ui-frame");
   const gameLayer = element("div", "slot-ui-game-layer");
   const overlay = element("div", "slot-ui-overlay");
 
   page.setAttribute("data-slot-ui", "dom");
-  frame.style.width = `${layout.designSize.width}px`;
-  frame.style.height = `${layout.designSize.height}px`;
-  frame.style.setProperty("--slot-ui-width", `${layout.designSize.width}px`);
-  frame.style.setProperty("--slot-ui-height", `${layout.designSize.height}px`);
-  frame.style.setProperty(
-    "--slot-ui-bottom-hud-height",
-    `${layout.bottomHudHeight}px`,
-  );
-  frame.style.setProperty(
-    "--slot-ui-left-rail-button-size",
-    `${layout.leftRailButtonSize}px`,
-  );
-  frame.style.setProperty("--slot-ui-left-rail-gap", `${layout.leftRailGap}px`);
-  frame.style.setProperty(
-    "--slot-ui-buy-bonus-width",
-    `${layout.buyBonusWidth}px`,
-  );
-  frame.style.setProperty(
-    "--slot-ui-buy-bonus-height",
-    `${layout.buyBonusHeight}px`,
-  );
-  frame.style.setProperty(
-    "--slot-ui-spin-size",
-    `${layout.spinButtonDiameter}px`,
-  );
-  frame.style.setProperty(
-    "--slot-ui-auto-size",
-    `${layout.autoButtonDiameter}px`,
-  );
-  frame.style.setProperty(
-    "--slot-ui-bet-step-size",
-    `${layout.betStepButtonDiameter}px`,
-  );
-  frame.style.setProperty("--slot-ui-top-inset", `${layout.topInset}px`);
-  frame.style.setProperty("--slot-ui-side-inset", `${layout.sideInset}px`);
+  applyFrameViewport(frame, viewportSnapshot, layout);
 
   const topHud = element("div", "slot-ui-top-hud");
   const clock =
@@ -226,8 +207,17 @@ export function createSlotUiDom(options: SlotUiDomOptions): SlotUiDom {
     }
   });
 
+  const viewportListeners = new Set<SlotUiViewportListener>();
   const resizeListener = () => {
-    applyFrameScale(frame, options.root, layout.designSize);
+    viewportSnapshot = calculateSlotUiFrameViewport({
+      ...readRootViewport(options.root),
+      designSize: options.designSize,
+      policy: options.framePolicy,
+    });
+    applyFrameViewport(frame, viewportSnapshot);
+    for (const listener of viewportListeners) {
+      listener(viewportSnapshot);
+    }
   };
   window.addEventListener("resize", resizeListener);
   resizeListener();
@@ -262,6 +252,15 @@ export function createSlotUiDom(options: SlotUiDomOptions): SlotUiDom {
 
   return {
     elements,
+    getViewport(): SlotUiViewportSnapshot {
+      return viewportSnapshot;
+    },
+    onViewportChange(listener: SlotUiViewportListener): () => void {
+      viewportListeners.add(listener);
+      return () => {
+        viewportListeners.delete(listener);
+      };
+    },
     update(state: SlotUiStateSnapshot): void {
       renderState(
         elements,
@@ -277,6 +276,7 @@ export function createSlotUiDom(options: SlotUiDomOptions): SlotUiDom {
         binding.element.removeEventListener(binding.type, binding.listener);
       }
       bindings.length = 0;
+      viewportListeners.clear();
     },
   };
 }
@@ -286,17 +286,61 @@ export function applyFrameScale(
   root: HTMLElement,
   designSize: SlotUiDesignSize,
 ): number {
-  const viewportWidth = root.clientWidth || window.innerWidth;
-  const viewportHeight = root.clientHeight || window.innerHeight;
-  const scale = calculateFrameScale(viewportWidth, viewportHeight, designSize);
-  const offsetX =
-    viewportWidth < designSize.width
-      ? -Math.max(0, (designSize.width - designSize.width * scale) / 2)
-      : 0;
-  const offsetY = Math.max(0, (viewportHeight - designSize.height * scale) / 2);
-  frame.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
-  frame.style.setProperty("--slot-ui-scale", String(scale));
-  return scale;
+  const viewport = calculateSlotUiFrameViewport({
+    ...readRootViewport(root),
+    designSize,
+    policy: { mode: "fixed" },
+  });
+  applyFrameViewport(frame, viewport);
+  return calculateFrameScale(
+    viewport.pageSize.width,
+    viewport.pageSize.height,
+    designSize,
+  );
+}
+
+export function applyFrameViewport(
+  frame: HTMLElement,
+  viewport: SlotUiViewportSnapshot,
+  layout = createDefaultSlotLayout(viewport.frameDesignSize),
+): void {
+  frame.style.width = `${layout.designSize.width}px`;
+  frame.style.height = `${layout.designSize.height}px`;
+  frame.style.setProperty("--slot-ui-width", `${layout.designSize.width}px`);
+  frame.style.setProperty("--slot-ui-height", `${layout.designSize.height}px`);
+  frame.style.setProperty(
+    "--slot-ui-bottom-hud-height",
+    `${layout.bottomHudHeight}px`,
+  );
+  frame.style.setProperty(
+    "--slot-ui-left-rail-button-size",
+    `${layout.leftRailButtonSize}px`,
+  );
+  frame.style.setProperty("--slot-ui-left-rail-gap", `${layout.leftRailGap}px`);
+  frame.style.setProperty(
+    "--slot-ui-buy-bonus-width",
+    `${layout.buyBonusWidth}px`,
+  );
+  frame.style.setProperty(
+    "--slot-ui-buy-bonus-height",
+    `${layout.buyBonusHeight}px`,
+  );
+  frame.style.setProperty(
+    "--slot-ui-spin-size",
+    `${layout.spinButtonDiameter}px`,
+  );
+  frame.style.setProperty(
+    "--slot-ui-auto-size",
+    `${layout.autoButtonDiameter}px`,
+  );
+  frame.style.setProperty(
+    "--slot-ui-bet-step-size",
+    `${layout.betStepButtonDiameter}px`,
+  );
+  frame.style.setProperty("--slot-ui-top-inset", `${layout.topInset}px`);
+  frame.style.setProperty("--slot-ui-side-inset", `${layout.sideInset}px`);
+  frame.style.setProperty("--slot-ui-scale", String(viewport.scale));
+  frame.style.transform = `translate(${viewport.offsetX}px, ${viewport.offsetY}px) scale(${viewport.scale})`;
 }
 
 export function renderState(
@@ -502,6 +546,16 @@ function bind(
 ): void {
   element.addEventListener(type, listener);
   bindings.push({ element, type, listener });
+}
+
+function readRootViewport(root: HTMLElement): {
+  readonly viewportWidth: number;
+  readonly viewportHeight: number;
+} {
+  return Object.freeze({
+    viewportWidth: root.clientWidth || window.innerWidth,
+    viewportHeight: root.clientHeight || window.innerHeight,
+  });
 }
 
 function withoutNull<T>(...items: readonly (T | null)[]): T[] {

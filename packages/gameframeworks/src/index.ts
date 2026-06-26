@@ -42,6 +42,8 @@ export type {
   SlotGameBetOption,
   SlotGameClientFactory,
   SlotGameClientLike,
+  SlotGameFocusFramePolicy,
+  SlotGameFramePolicy,
   SlotGameFramework,
   SlotGameFrameworkOptions,
   SlotGameInitialState,
@@ -51,5 +53,7 @@ export type {
   SlotGameSpinRequest,
   SlotGameSpinState,
   SlotGameStateSnapshot,
+  SlotGameViewportListener,
+  SlotGameViewportSnapshot,
   WinResult,
 } from "./types.js";

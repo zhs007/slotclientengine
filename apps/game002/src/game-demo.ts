@@ -148,15 +148,28 @@ export function createGame002ReelRuntime(
   let targetScene: SceneMatrix | null = null;
   let finalYs: readonly number[] | null = null;
 
-  const resolveFinalYs = (
+  const resolveSceneFinalYs = (
     scene: SceneMatrix,
     sceneName: string,
-  ): readonly number[] =>
-    gameConfig.getStopYCoordinates({
-      reelsName: config.reelsName,
-      sceneName,
-      scene,
+  ): readonly number[] => {
+    assertRenderableSceneCodes(scene, sceneName, gameConfig);
+    const resolvedFinalYs = scene.map((visibleSymbols, x) => {
+      const candidates = reels.findStopYCandidates(x, visibleSymbols);
+      return candidates[0];
     });
+    if (resolvedFinalYs.every((finalY) => finalY !== undefined)) {
+      return Object.freeze(resolvedFinalYs as number[]);
+    }
+
+    return Object.freeze(
+      resolvedFinalYs.map((finalY, x) => {
+        if (finalY !== undefined) {
+          return finalY;
+        }
+        return reels.normalizeY(x, finalYs?.[x] ?? 0);
+      }),
+    );
+  };
 
   const runtime: Game002ReelRuntime = Object.freeze({
     config,
@@ -197,7 +210,7 @@ export function createGame002ReelRuntime(
       sceneName = "game002.initialScene",
     ): readonly number[] {
       const validScene = validateGame002Scene(scene, sceneName);
-      const nextFinalYs = resolveFinalYs(validScene, sceneName);
+      const nextFinalYs = resolveSceneFinalYs(validScene, sceneName);
       reelSet.resetToScene(validScene, nextFinalYs);
       const visibleScene = validateGame002Scene(
         reelSet.getVisibleScene(),
@@ -215,7 +228,7 @@ export function createGame002ReelRuntime(
       sceneName = "game002.spinScene",
     ): GridCellReelSpinPlan {
       const validScene = validateGame002Scene(scene, sceneName);
-      const nextFinalYs = resolveFinalYs(validScene, sceneName);
+      const nextFinalYs = resolveSceneFinalYs(validScene, sceneName);
       return createGridCellReelSpinPlan({
         reels,
         finalYs: nextFinalYs,
@@ -236,7 +249,7 @@ export function createGame002ReelRuntime(
         throw new Error("game002 reels are already spinning.");
       }
       const validScene = validateGame002Scene(scene, sceneName);
-      const nextFinalYs = resolveFinalYs(validScene, sceneName);
+      const nextFinalYs = resolveSceneFinalYs(validScene, sceneName);
       const plan = createGridCellReelSpinPlan({
         reels,
         finalYs: nextFinalYs,
@@ -251,7 +264,7 @@ export function createGame002ReelRuntime(
       finalYs = nextFinalYs;
       targetScene = validScene;
       reelSet.spin(plan);
-      reelSet.visible = currentScene !== null;
+      reelSet.visible = true;
       return plan;
     },
     update(deltaSeconds: number): RenderGridCellReelSetUpdateResult {
@@ -317,4 +330,20 @@ function createGridCellSnapshotMatrix<T>(
       ),
     ),
   );
+}
+
+function assertRenderableSceneCodes(
+  scene: SceneMatrix,
+  label: string,
+  gameConfig: LogicGameConfig,
+): void {
+  for (const [x, column] of scene.entries()) {
+    for (const [y, code] of column.entries()) {
+      if (!gameConfig.getPaytableEntry(code)) {
+        throw new Error(
+          `${label}[${x}][${y}] symbol code ${code} does not exist in game002 paytable.`,
+        );
+      }
+    }
+  }
 }
