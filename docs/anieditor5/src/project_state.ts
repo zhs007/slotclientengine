@@ -237,9 +237,19 @@ export function isLayerEffectivelyVisible(
   return layer.visible && group?.visible !== false;
 }
 
-export function toExportProject(project: V5GProjectConfig): V5GProjectConfig {
+export type V5GExportProjectPurpose = "editing" | "runtime";
+
+export function toExportProject(
+  project: V5GProjectConfig,
+  purpose: V5GExportProjectPurpose = "runtime",
+): V5GProjectConfig {
   const cloned = JSON.parse(JSON.stringify(project)) as V5GProjectConfig;
   normalizeProjectLayerGroups(cloned);
+
+  if (purpose === "editing") {
+    return cloned;
+  }
+
   const visibleLayers = cloned.layers.filter((layer) =>
     isLayerEffectivelyVisible(cloned, layer),
   );
@@ -252,6 +262,9 @@ export function toExportProject(project: V5GProjectConfig): V5GProjectConfig {
   const referencedAssetIds = new Set<string>();
   for (const layer of visibleLayers) {
     if (layer.assetId) referencedAssetIds.add(layer.assetId);
+  }
+  for (const particle of cloned.particles) {
+    if (particle.assetId) referencedAssetIds.add(particle.assetId);
   }
   cloned.assets = cloned.assets.filter((asset) =>
     referencedAssetIds.has(asset.id),

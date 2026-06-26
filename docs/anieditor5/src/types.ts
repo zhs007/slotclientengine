@@ -106,7 +106,7 @@ export interface V5GLayerConfig {
 export interface V5GLayerGroupConfig {
   id: string;
   name: string;
-  /** Group-level visibility. Hidden groups are hidden on canvas and skipped on export. */
+  /** Group-level visibility. Hidden groups are hidden on canvas; runtime export skips them, editing export preserves them. */
   visible: boolean;
   /** Editor-only collapsed state for the layer list. */
   collapsed: boolean;

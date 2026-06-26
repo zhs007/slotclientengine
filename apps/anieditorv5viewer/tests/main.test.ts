@@ -94,6 +94,38 @@ describe("anieditorv5viewer main", () => {
     expect(document.querySelectorAll("canvas")).toHaveLength(0);
   });
 
+  it("loads roundreel as a runtime_100 export-style project", async () => {
+    document.body.innerHTML = '<div id="app"></div>';
+
+    await import("../src/main");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const select = document.querySelector<HTMLSelectElement>(
+      'select[aria-label="V5G project"]',
+    );
+    if (!select) throw new Error("Missing project select.");
+
+    select.value = "roundreel";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const player = playerMock.instances.at(-1);
+    const summary = document.querySelector(".viewer-summary");
+
+    expect(player?.options).toMatchObject({
+      projectId: "roundreel",
+      bundleId: "export",
+      profileId: "runtime_100",
+      profilePurpose: "runtime",
+      assetScale: 1,
+    });
+    expect(summary?.textContent).toContain("schema VNI_0.020");
+    expect(summary?.textContent).toContain("profile runtime_100");
+    expect(summary?.textContent).toContain("safe_glow");
+  });
+
   it("wires segmented playback controls to VNIPlayer", async () => {
     document.body.innerHTML = '<div id="app"></div>';
 

@@ -13,4 +13,4 @@ pnpm --filter @slotclientengine/vnicore examples:typecheck
 - `validate-project.ts`: 使用 `assertVNIProject`、`validateVNIProject`、manifest 校验，错误会显式抛出。
 - `vite-asset-manifest.ts`: 宿主应用如何用 Vite `import.meta.glob` 生成 `AssetUrlManifest`。
 
-`safe_glow` 的 runtime 支持由 core/Pixi tests 和 `lock_01` fixture 覆盖；它是 normal-blend 同图副本高亮，不属于 `shatter` / `glow` render effect 示例。
+`safe_glow` 的 runtime 支持由 core/Pixi tests 和 `lock_01` / `roundreel` fixture 覆盖；它是继承 layer blendMode 的同图副本高亮，不属于 `shatter` / `glow` render effect 示例。

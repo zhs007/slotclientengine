@@ -4,7 +4,11 @@ import {
   hasActiveSafeGlowAnimation,
   sampleSafeGlowSpritesForLayer,
 } from "../../src/core/safe-glow-sampler";
-import type { V5GAnimationConfig, V5GLayerConfig } from "../../src/core/types";
+import type {
+  V5GAnimationConfig,
+  V5GBlendMode,
+  V5GLayerConfig,
+} from "../../src/core/types";
 
 const transform = {
   x: 0,
@@ -34,11 +38,12 @@ function imageLayer(animation: V5GAnimationConfig): V5GLayerConfig {
   };
 }
 
-function sampleState() {
+function sampleState(blendMode: V5GBlendMode = "normal") {
   return {
     layerId: "layer",
     transform,
     baseOpacity: 0.8,
+    blendMode,
   };
 }
 
@@ -75,7 +80,7 @@ describe("safe-glow-sampler", () => {
     ]);
   });
 
-  it("uses spread, opacity wave, and fixed normal blend deterministically", () => {
+  it("uses spread, opacity wave, and inherited blend deterministically", () => {
     const layer = imageLayer(
       safeGlowAnimation({
         spread: 0.2,
@@ -85,14 +90,18 @@ describe("safe-glow-sampler", () => {
       }),
     );
 
-    const sprites = sampleSafeGlowSpritesForLayer(layer, sampleState(), 0.25);
+    const sprites = sampleSafeGlowSpritesForLayer(
+      layer,
+      sampleState("add"),
+      0.25,
+    );
 
     expect(sprites).toHaveLength(1);
     expect(sprites[0]).toMatchObject({
       scaleX: 1.2,
       scaleY: 2.4,
       alpha: 0.32,
-      blendMode: "normal",
+      blendMode: "add",
     });
   });
 

@@ -9,7 +9,7 @@
 ## 主要类型
 
 - `VNIProjectConfig`: VNI/V5G export JSON 的项目结构。
-- `VNIBundleManifest`: `export2/manifest.json` 结构。
+- `VNIBundleManifest`: VNI bundle manifest 结构；旧 `export2` fixture 仍可用于 profile/project 一致性非回归。
 - `AssetUrlManifest`: `Readonly<Record<string, string>>`，key 是 `asset.path`。
 - `VNIPlayerOptions`: `VNIPlayer` 构造参数。
 - `VNIPlaybackRange`: time 或 frame range。
@@ -98,7 +98,7 @@ Layer group 合同：
 - `idle`: coverage-only no-op，不改 transform/opacity。
 - `shatter`: deterministic render effect，要求 `count/pieceSize/force/impactAngle/spreadAngle/gravity/spin/sourceOpacity`，`fadeOut` 可选 boolean。
 - `glow`: deterministic render effect，要求 `intensity/spread/minAlpha/maxAlpha/pulses/blendMode`，`keepOriginal` 可选 boolean；`blendMode` 数值为 `0=add`、`1=screen`、`2=lighten`。
-- `safe_glow`: 普通同图副本高亮，要求 `spread/minOpacity/maxOpacity/pulses`，`keepOriginal` 可选 boolean；固定 normal blend，不进入 `VNIRenderEffectType`。
+- `safe_glow`: 普通同图副本高亮，要求 `spread/minOpacity/maxOpacity/pulses`，`keepOriginal` 可选 boolean；副本继承当前 layer `blendMode`，不进入 `VNIRenderEffectType`。
 
 ## 内部 helper 边界
 

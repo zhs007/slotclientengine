@@ -556,6 +556,7 @@ export class V5GPixiStage {
             progress,
             layer.opacity,
             transform,
+            layer.blendMode,
             particleGroup,
           );
         }
@@ -1212,6 +1213,7 @@ export class V5GPixiStage {
     progress: number,
     layerOpacity: number,
     transform: V5GLayerConfig["transform"],
+    blendMode: V5GBlendMode,
     target: PIXI.Container,
   ): void {
     const spread = clampParticleNumber(
@@ -1249,7 +1251,7 @@ export class V5GPixiStage {
     );
     sprite.rotation = (transform.rotation * Math.PI) / 180;
     sprite.alpha = alpha;
-    sprite.blendMode = "normal";
+    sprite.blendMode = toPixiBlendMode(blendMode);
     target.addChild(sprite);
   }
 

@@ -279,7 +279,7 @@ async function bootstrap(): Promise<void> {
   renderAll();
   setAutoSaveLabel("已自动保存", "success");
   showStatus(
-    `${VNI_VERSION} 已启动：支持 100% 编辑备份 + 缩小运行资源的安全导出。`,
+    `${VNI_VERSION} 已启动：所有资源比例都会导出 edit_full + runtime 双份 Bundle。`,
     "success",
   );
 }
@@ -474,14 +474,10 @@ function bindEvents(): void {
     setButtonLoading(els.btnExportZip, true, "导出中");
     try {
       await exportProjectZip(state, zipFilename, { assetScale });
-      if (assetScale < 0.999) {
-        showStatus(
-          `已导出安全 Bundle：${zipFilename}，包含 100% 原图编辑备份和 ${Math.round(assetScale * 100)}% 运行资源。`,
-          "success",
-        );
-      } else {
-        showStatus(`已导出 100% 编辑 ZIP：${zipFilename}`, "success");
-      }
+      showStatus(
+        `已导出安全 Bundle：${zipFilename}，包含 100% 完整编辑备份和 ${Math.round(assetScale * 100)}% 运行资源。`,
+        "success",
+      );
     } catch (error) {
       showStatus(`导出 ZIP 失败：${getErrorMessage(error)}`, "error");
     } finally {
@@ -1202,7 +1198,7 @@ function toggleLayerGroupVisible(groupId: string): void {
   showStatus(
     group.visible
       ? `分组「${group.name}」已显示。`
-      : `分组「${group.name}」已隐藏，导出时会跳过。`,
+      : `分组「${group.name}」已隐藏；编辑包会保留，运行包会跳过。`,
     "success",
   );
 }

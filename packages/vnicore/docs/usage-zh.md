@@ -35,11 +35,11 @@ validateVNIProject(project);
 
 const player = new VNIPlayer({
   container,
-  projectId: "bigwin-runtime-50",
-  bundleId: "export2",
-  profileId: "runtime_50",
+  projectId: "roundreel",
+  bundleId: "legacy",
+  profileId: "runtime_100",
   profilePurpose: "runtime",
-  assetScale: 0.5,
+  assetScale: 1,
   project,
   assetUrls: resolveProjectAssetUrls(project, manifest),
 });
@@ -171,13 +171,13 @@ disposeExternal();
 - `data-vni-max-pixel-delta`
 - `data-vni-pixel-sample-error`
 
-`data-vni-safe-glow-sprites` 只统计 `safe_glow` 的 normal-blend 同图副本；`data-vni-render-effect-sprites` 只统计旧 `shatter` / `glow` render effect，两者不会混计。
+`data-vni-safe-glow-sprites` 只统计 `safe_glow` 的同图副本；副本继承当前 layer 的 `blendMode`，但仍不进入旧 render effect 统计。`data-vni-render-effect-sprites` 只统计旧 `shatter` / `glow` render effect，两者不会混计。
 
 当前也保留 `data-v5g-*` 的 legacy diagnostics alias，用于旧验收脚本兼容；`destroy()` 会清理新旧字段。
 
 ## runtime_50 尺寸关系
 
-`runtime_50` 的 PNG 文件像素是 50%，但 JSON 中的 `asset.width` / `asset.height` 仍表示设计逻辑尺寸。`vnicore` 会用 `fileWidth` / `fileHeight` 校验真实贴图，再对 sprite 做显示补偿。缺失或部分填写 `fileWidth` / `fileHeight` / `fileScale` 会失败。
+`runtime_50` 的 PNG 文件像素是 50%，但 JSON 中的 `asset.width` / `asset.height` 仍表示设计逻辑尺寸。`vnicore` 会用 `fileWidth` / `fileHeight` 校验真实贴图，再对 sprite 做显示补偿。`runtime_100` 是合法运行包，`assetScale` 为 `1` 时也不会跳过 `exportProfile` 和资源校验。profile id、purpose 和 assetScale 来自 JSON 的 `exportProfile`，不是从目录名或文件名推断。缺失或部分填写 `fileWidth` / `fileHeight` / `fileScale` 会失败。
 
 ## 常见显式失败
 
@@ -194,6 +194,6 @@ disposeExternal();
 - `idle`: 只提供 animation coverage，不改变 transform/opacity。
 - `shatter`: deterministic render effect。`sourceOpacity` 控制原图透明度，碎片在 `progress <= 0` 不渲染。
 - `glow`: deterministic render effect。`keepOriginal === false` 会隐藏原图但保留 glow effect；`blendMode` 使用 `0=add`、`1=screen`、`2=lighten`。
-- `safe_glow`: 跨引擎安全发光方案。它不是 render effect，也不使用滤镜、模糊或特殊混合；runtime 用同一张图片的副本，通过 `spread` 放大、`minOpacity/maxOpacity/pulses` 透明度呼吸来模拟高亮，固定 normal blend。`keepOriginal === false` 会隐藏原图，但 safe glow 副本仍会渲染；起始帧即可采样出副本。
+- `safe_glow`: 跨引擎安全发光方案。它不是 render effect，也不使用滤镜或模糊；runtime 用同一张图片的副本，通过 `spread` 放大、`minOpacity/maxOpacity/pulses` 透明度呼吸来模拟高亮，副本继承当前 layer 的 `blendMode`。`keepOriginal === false` 会隐藏原图，但 safe glow 副本仍会渲染；起始帧即可采样出副本。
 
-`glow` 和 `safe_glow` 的关键区别：`glow` 是旧 deterministic render effect，可以使用 `add/screen/lighten` 等特殊 blend；`safe_glow` 是普通 sprite overlay，只使用 normal blend，适合跨 Pixi 和 Cocos 等运行时复现。
+`glow` 和 `safe_glow` 的关键区别：`glow` 是旧 deterministic render effect，使用自己的 effect 采样和统计；`safe_glow` 是普通 sprite overlay，继承 layer blendMode，适合跨 Pixi 和 Cocos 等运行时复现。
