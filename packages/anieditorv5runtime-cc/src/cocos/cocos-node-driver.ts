@@ -80,6 +80,10 @@ interface CocosWorldTransformSnapshot {
   rotation: Quat;
 }
 
+interface CocosNodeWithValidity extends Node {
+  isValid?: boolean;
+}
+
 // Cocos Creator 3.8.6 exposes these enum values internally, but not all builds
 // re-export BlendFactor / BlendOp from "cc".
 const COCOS_BLEND_FACTORS: Record<CocosBlendFactorName, number> = {
@@ -102,6 +106,9 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
     createNode(name) {
       return new Node(name);
     },
+    isValidNode(node) {
+      return isValidCocosNode(node);
+    },
     appendChild(parent, child) {
       parent.addChild(child);
     },
@@ -111,6 +118,7 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
       }
     },
     getParent(node) {
+      if (!isValidCocosNode(node)) return null;
       return node.parent;
     },
     captureLocalTransform(node) {
@@ -156,6 +164,7 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
       node.setWorldRotation(transform.rotation);
     },
     destroyNode(node) {
+      if (!isValidCocosNode(node)) return;
       node.removeFromParent();
       node.destroy();
     },
@@ -194,6 +203,14 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
       applySpriteBlendMode(node.name, requireSprite(node), config);
     },
   };
+}
+
+function isValidCocosNode(node: Node | null | undefined): node is Node {
+  return (
+    node !== null &&
+    node !== undefined &&
+    (node as CocosNodeWithValidity).isValid !== false
+  );
 }
 
 function copyVec3(source: Vec3): Vec3 {
