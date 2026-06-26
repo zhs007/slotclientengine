@@ -2941,6 +2941,7 @@ export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
   createNode(name: string): TNode;
   appendChild(parent: TNode, child: TNode): void;
   removeChild(parent: TNode, child: TNode): void;
+  isValidNode?(node: TNode | null | undefined): node is TNode;
   getParent(node: TNode): TNode | null;
   captureLocalTransform(node: TNode): V5GCocosNodeTransformSnapshot;
   restoreLocalTransform(
@@ -3026,6 +3027,10 @@ interface CocosWorldTransformSnapshot {
   rotation: Quat;
 }
 
+interface CocosNodeWithValidity extends Node {
+  isValid?: boolean;
+}
+
 // Cocos Creator 3.8.6 exposes these enum values internally, but not all builds
 // re-export BlendFactor / BlendOp from "cc".
 const COCOS_BLEND_FACTORS: Record<CocosBlendFactorName, number> = {
@@ -3048,6 +3053,9 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
     createNode(name) {
       return new Node(name);
     },
+    isValidNode(node) {
+      return isValidCocosNode(node);
+    },
     appendChild(parent, child) {
       parent.addChild(child);
     },
@@ -3057,6 +3065,7 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
       }
     },
     getParent(node) {
+      if (!isValidCocosNode(node)) return null;
       return node.parent;
     },
     captureLocalTransform(node) {
@@ -3102,6 +3111,7 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
       node.setWorldRotation(transform.rotation);
     },
     destroyNode(node) {
+      if (!isValidCocosNode(node)) return;
       node.removeFromParent();
       node.destroy();
     },
@@ -3140,6 +3150,14 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
       applySpriteBlendMode(node.name, requireSprite(node), config);
     },
   };
+}
+
+function isValidCocosNode(node: Node | null | undefined): node is Node {
+  return (
+    node !== null &&
+    node !== undefined &&
+    (node as CocosNodeWithValidity).isValid !== false
+  );
 }
 
 function copyVec3(source: Vec3): Vec3 {
@@ -5306,21 +5324,31 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   }
 
   private detachMountedNodeRecord(mounted: MountedNodeRecord<TNode>): void {
+    const node = mounted.node as TNode | null | undefined;
+    if (!this.isDriverNodeValid(node)) return;
     if (mounted.destroyOnDetach) {
-      this.options.driver.destroyNode(mounted.node);
+      this.options.driver.destroyNode(node);
       return;
     }
-    const currentParent = this.options.driver.getParent(mounted.node);
-    if (currentParent !== null) {
-      this.options.driver.removeChild(currentParent, mounted.node);
+    const currentParent = this.options.driver.getParent(node);
+    if (currentParent !== null && this.isDriverNodeValid(currentParent)) {
+      this.options.driver.removeChild(currentParent, node);
     }
-    if (mounted.originalParent !== null) {
-      this.options.driver.appendChild(mounted.originalParent, mounted.node);
+    if (
+      mounted.originalParent !== null &&
+      this.isDriverNodeValid(mounted.originalParent)
+    ) {
+      this.options.driver.appendChild(mounted.originalParent, node);
     }
     this.options.driver.restoreLocalTransform(
-      mounted.node,
+      node,
       mounted.originalLocalTransform,
     );
+  }
+
+  private isDriverNodeValid(node: TNode | null | undefined): node is TNode {
+    if (node === null || node === undefined) return false;
+    return this.options.driver.isValidNode?.(node) ?? true;
   }
 
   private normalizePlaybackRange(

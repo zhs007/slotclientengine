@@ -1285,21 +1285,31 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
   }
 
   private detachMountedNodeRecord(mounted: MountedNodeRecord<TNode>): void {
+    const node = mounted.node as TNode | null | undefined;
+    if (!this.isDriverNodeValid(node)) return;
     if (mounted.destroyOnDetach) {
-      this.options.driver.destroyNode(mounted.node);
+      this.options.driver.destroyNode(node);
       return;
     }
-    const currentParent = this.options.driver.getParent(mounted.node);
-    if (currentParent !== null) {
-      this.options.driver.removeChild(currentParent, mounted.node);
+    const currentParent = this.options.driver.getParent(node);
+    if (currentParent !== null && this.isDriverNodeValid(currentParent)) {
+      this.options.driver.removeChild(currentParent, node);
     }
-    if (mounted.originalParent !== null) {
-      this.options.driver.appendChild(mounted.originalParent, mounted.node);
+    if (
+      mounted.originalParent !== null &&
+      this.isDriverNodeValid(mounted.originalParent)
+    ) {
+      this.options.driver.appendChild(mounted.originalParent, node);
     }
     this.options.driver.restoreLocalTransform(
-      mounted.node,
+      node,
       mounted.originalLocalTransform,
     );
+  }
+
+  private isDriverNodeValid(node: TNode | null | undefined): node is TNode {
+    if (node === null || node === undefined) return false;
+    return this.options.driver.isValidNode?.(node) ?? true;
   }
 
   private normalizePlaybackRange(

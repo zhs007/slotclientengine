@@ -85,6 +85,10 @@ export class Node {
 
   constructor(readonly name = "") {}
 
+  get isValid(): boolean {
+    return !this.destroyed;
+  }
+
   get eulerAngles(): Vec3 {
     return new Vec3(this.rotation.x, this.rotation.y, this.rotation.z);
   }

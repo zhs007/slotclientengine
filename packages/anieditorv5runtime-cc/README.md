@@ -94,7 +94,7 @@ player.attachNodeBetweenLayerGroups({
 
 `attachNodeBetweenLayerGroups(...)` 只接受相邻 render group。未知 group、反向 group、非相邻 group、已被其他节点占用的 id、空 id、`id`/`ids` 或 `node`/`nodes` 的歧义组合都会显式失败。插入或重复插入已有父节点的外部节点时，runtime 会先捕获当前 world transform，挂到 slot 后再恢复 world transform，避免父节点坐标系不同导致画面跳动。重复插入同一个节点会移动它到新的插入顺序，并保留第一次插入前的原父节点和 local transform；移除时会从当前父节点摘下，恢复到这个最早的父节点和相对位置。外部节点默认不销毁；传 `destroyOnDetach: true` 时才销毁。
 
-移除可以使用返回的 disposer，也可以用 `player.detachMountedNode(idOrNode)` 移除单个 id 或节点，用 `player.detachMountedNodes([idOrNode, ...])` 一次移除多个指定节点，或无参数调用 `player.clearMountedNodes()` 清空所有已挂接节点。没有 id 的节点仍可通过节点引用、disposer 或 `clearMountedNodes()` 移除。
+移除可以使用返回的 disposer，也可以用 `player.detachMountedNode(idOrNode)` 移除单个 id 或节点，用 `player.detachMountedNodes([idOrNode, ...])` 一次移除多个指定节点，或无参数调用 `player.clearMountedNodes()` 清空所有已挂接节点。没有 id 的节点仍可通过节点引用、disposer 或 `clearMountedNodes()` 移除。若宿主在 Cocos 发布包生命周期里已经先销毁外部挂接节点，runtime 清理时会跳过失效节点并注销 registry，不再访问失效节点的 `parent` 或 transform。
 
 也可以用 Cocos-native helper 创建 runtime-owned image node：
 
@@ -312,7 +312,7 @@ const disposeComplete = player.onPlaybackComplete((event) => {
 
 marker 和 complete 都由宿主继续调用 `player.update(deltaTime)` 同步驱动，不使用 `setTimeout`、Promise、Cocos tween 或异步计时器。手动 `seek(...)`、`init()` 和 `restart()` 不会触发 marker；单次大 `deltaTime` 跨过多个 marker 时，会按时间从小到大同步触发。callback 抛错不会被 runtime 吞掉，会从当前 public method 继续抛出。
 
-`destroy()` 会销毁 runtime 创建的节点、停止播放、清空当前 range、清空所有 marker、complete listener 和 mounted node registry，避免宿主 Component 销毁后遗留 callback 或业务节点引用。
+`destroy()` 会销毁 runtime 创建的节点、停止播放、清空当前 range、清空所有 marker、complete listener 和 mounted node registry，避免宿主 Component 销毁后遗留 callback 或业务节点引用；已被宿主提前销毁的外部 mounted node 会被安全跳过。
 
 ## Package 导入
 

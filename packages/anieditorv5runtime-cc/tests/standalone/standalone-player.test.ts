@@ -309,6 +309,27 @@ describe("standalone V5GCocosPlayer", () => {
     expect(inspectNode(assetNode).destroyed).toBe(true);
   });
 
+  it("ignores host-destroyed mounted nodes while reinitializing standalone", () => {
+    const { root, player } = makePlayer(twoGroupProject());
+    player.init();
+    const external = new Node("External");
+    const dispose = player.attachNodeBetweenLayerGroups({
+      id: "external",
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      node: external,
+    });
+    external.destroy();
+
+    expect(() => player.init()).not.toThrow();
+
+    expect(root.children).toHaveLength(1);
+    expect(() => player.detachMountedNode("external")).toThrow(
+      "Unknown V5G Cocos mounted node id: external",
+    );
+    dispose();
+  });
+
   it("mounts node batches, reorders repeated nodes, and restores original parents", () => {
     const { root, player } = makePlayer(twoGroupProject());
     player.init();

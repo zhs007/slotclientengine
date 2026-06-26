@@ -79,6 +79,10 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
     }
   }
 
+  isValidNode(node: FakeNode | null | undefined): node is FakeNode {
+    return node !== null && node !== undefined && !node.destroyed;
+  }
+
   getParent(node: FakeNode): FakeNode | null {
     return node.parent;
   }
@@ -737,6 +741,27 @@ describe("V5GCocosPlayer", () => {
     expect(external.parent).toBeNull();
     expect(external.destroyed).toBe(false);
     expect(root.children).toHaveLength(0);
+  });
+
+  it("ignores host-destroyed mounted nodes while reinitializing", () => {
+    const { root, player } = makePlayer(twoGroupProject());
+    player.init();
+    const external = new FakeNode("External");
+    const dispose = player.attachNodeBetweenLayerGroups({
+      id: "external",
+      afterGroupId: "lower",
+      beforeGroupId: "upper",
+      node: external,
+    });
+    external.destroyed = true;
+
+    expect(() => player.init()).not.toThrow();
+
+    expect(root.children).toHaveLength(1);
+    expect(() => player.detachMountedNode("external")).toThrow(
+      "Unknown V5G Cocos mounted node id: external",
+    );
+    dispose();
   });
 
   it("writes sampled transform, opacity, active state, and layer blend mode on seek", () => {
