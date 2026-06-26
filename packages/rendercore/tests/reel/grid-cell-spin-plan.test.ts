@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createGridCellOrder,
+  createGridCellReelOffsetMatrix,
   createGridCellReelSpinPlan,
   type GridCellDimmingPattern,
   type GridCellReelSpinTiming,
@@ -84,6 +85,56 @@ describe("createGridCellReelSpinPlan", () => {
     });
   });
 
+  it("can add per-cell reel offsets while preserving target symbols", () => {
+    const reels = createBasicReels();
+    const order = createGridCellOrder({
+      columns: 2,
+      rows: 3,
+      mode: "top-down-left-right",
+    });
+    const cellReelOffsets = createGridCellReelOffsetMatrix({
+      columns: 2,
+      rows: 3,
+      rowOffsetStep: 2,
+      columnOffsetStep: 5,
+    });
+    const plan = createGridCellReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      targetScene: TARGET_SCENE,
+      columns: 2,
+      rows: 3,
+      order,
+      cellReelOffsets,
+      timing: TIMING,
+      dimming: DIMMING,
+    });
+
+    expect(cellReelOffsets).toEqual([
+      [0, 2, 4],
+      [5, 7, 9],
+    ]);
+    expect(plan.cells.map((cell) => cell.reelOffsetY)).toEqual([
+      0, 2, 4, 5, 7, 9,
+    ]);
+    expect(plan.cells.map((cell) => cell.axisPlan.finalY)).toEqual([
+      reels.normalizeY(0, 2),
+      reels.normalizeY(0, 2 + 1 + 2),
+      reels.normalizeY(0, 2 + 2 + 4),
+      reels.normalizeY(1, 1 + 5),
+      reels.normalizeY(1, 1 + 1 + 7),
+      reels.normalizeY(1, 1 + 2 + 9),
+    ]);
+    expect(plan.cells.map((cell) => cell.targetVisibleSymbols)).toEqual([
+      [1],
+      [0],
+      [2],
+      [2],
+      [1],
+      [0],
+    ]);
+  });
+
   it("rejects malformed scenes, final y values, order, timing and dimming", () => {
     const reels = createBasicReels();
     const order = createGridCellOrder({
@@ -123,6 +174,30 @@ describe("createGridCellReelSpinPlan", () => {
         finalYs: [1],
       }),
     ).toThrow(/finalYs/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        cellReelOffsets: [[0, 1, 2]] as any,
+      }),
+    ).toThrow(/cellReelOffsets length/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        cellReelOffsets: [
+          [0, 1],
+          [0, 1, 2],
+        ] as any,
+      }),
+    ).toThrow(/cellReelOffsets\[0\]/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        cellReelOffsets: [
+          [0, 1.5, 2],
+          [0, 1, 2],
+        ] as any,
+      }),
+    ).toThrow(/cellReelOffsets\[0\]\[1\]/);
     expect(() =>
       createGridCellReelSpinPlan({
         ...baseOptions,

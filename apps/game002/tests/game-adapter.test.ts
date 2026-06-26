@@ -5,13 +5,17 @@ import {
   GAME002_SAMPLE_DEFAULT_SCENE,
   GAME002_SAMPLE_SPIN_SCENE,
 } from "./fixtures/game002-gmi.js";
-import { createGame002Adapter } from "../src/game-adapter.js";
+import {
+  createGame002Adapter,
+  type Game002AdapterOptions,
+} from "../src/game-adapter.js";
 import type { Game002ReelRuntime } from "../src/game-demo.js";
+import { getGame002SkinConfig } from "../src/skin-config.js";
 
 describe("game002 adapter", () => {
   it("fails clearly before mount and when mounting twice", async () => {
     const fakeApp = createFakeApplication();
-    const adapter = createGame002Adapter({
+    const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
       loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
@@ -39,7 +43,7 @@ describe("game002 adapter", () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();
     const context = createMountContext();
-    const adapter = createGame002Adapter({
+    const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
       loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
@@ -76,7 +80,7 @@ describe("game002 adapter", () => {
   it("resizes Pixi backing size and moves the art world on viewport changes", async () => {
     const fakeApp = createFakeApplication();
     const context = createMountContext();
-    const adapter = createGame002Adapter({
+    const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
       loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
@@ -105,7 +109,7 @@ describe("game002 adapter", () => {
   it("resolves playSpin only after runtime completion and visual scene verification", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();
-    const adapter = createGame002Adapter({
+    const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
       loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
@@ -139,7 +143,7 @@ describe("game002 adapter", () => {
   it("caps oversized ticker deltas so grid-cell spin stays visible after resize", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();
-    const adapter = createGame002Adapter({
+    const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
       loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
@@ -172,7 +176,7 @@ describe("game002 adapter", () => {
   it("rejects playSpin on runtime errors and prevents concurrent animations", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();
-    const adapter = createGame002Adapter({
+    const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
       loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
@@ -196,7 +200,7 @@ describe("game002 adapter", () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();
     runtime.forceVisualScene = GAME002_SAMPLE_DEFAULT_SCENE;
-    const adapter = createGame002Adapter({
+    const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
       loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
@@ -214,7 +218,7 @@ describe("game002 adapter", () => {
 
   it("destroy rejects pending animation and removes the canvas", async () => {
     const fakeApp = createFakeApplication();
-    const adapter = createGame002Adapter({
+    const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
       loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
@@ -235,6 +239,13 @@ describe("game002 adapter", () => {
     expect(fakeApp.resizeCalls).toHaveLength(resizeCount);
   });
 });
+
+function createTestAdapter(options: Omit<Game002AdapterOptions, "skin">) {
+  return createGame002Adapter({
+    skin: getGame002SkinConfig("2"),
+    ...options,
+  });
+}
 
 function createMountContext() {
   const frame = document.createElement("div");

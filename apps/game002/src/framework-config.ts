@@ -4,8 +4,10 @@ import {
   type SlotGameLiveConfig,
   type SlotGameSpinRequest,
 } from "@slotclientengine/gameframeworks";
+import { parseGame002SkinId, type Game002SkinId } from "./skin-id.js";
 
 export interface Game002QueryConfig {
+  readonly skin: Game002SkinId;
   readonly serverUrl: string;
   readonly token: string;
   readonly gamecode: string;
@@ -21,6 +23,7 @@ export interface Game002QueryConfig {
 }
 
 export interface Game002FrameworkConfig {
+  readonly skin: Game002SkinId;
   readonly live: SlotGameLiveConfig;
   readonly betOptions: readonly SlotGameBetOption[];
   readonly initialBetIndex: number;
@@ -37,10 +40,12 @@ export function parseGame002QueryConfig(
 ): Game002QueryConfig {
   const params =
     search instanceof URLSearchParams ? search : new URLSearchParams(search);
+  const skin = parseGame002SkinId(parseRequiredQueryString(params, "skin"));
   const serverUrl = parseRequiredQueryString(params, "serverUrl");
   validateGame002ServerUrl(serverUrl, options.pageProtocol);
 
   return Object.freeze({
+    skin,
     serverUrl,
     token: parseRequiredQueryString(params, "token"),
     gamecode: parseRequiredQueryString(params, "gamecode"),
@@ -74,6 +79,7 @@ export function parseGame002FrameworkConfigFromQuery(
   });
 
   return Object.freeze({
+    skin: parsed.skin,
     live: Object.freeze({
       serverUrl: parsed.serverUrl,
       token: parsed.token,

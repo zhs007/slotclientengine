@@ -119,6 +119,16 @@ export interface GridCellCoordinate {
   readonly orderIndex: number;
 }
 
+export type GridCellReelOffsetMatrix = readonly (readonly number[])[];
+
+export interface GridCellReelOffsetMatrixOptions {
+  readonly columns: number;
+  readonly rows: number;
+  readonly rowOffsetStep?: number;
+  readonly columnOffsetStep?: number;
+  readonly originOffset?: number;
+}
+
 export type GridCellOrderMode = "top-down-left-right";
 
 export interface GridCellReelSpinTiming {
@@ -147,6 +157,7 @@ export interface GridCellReelPlanCell {
   readonly x: number;
   readonly y: number;
   readonly orderIndex: number;
+  readonly reelOffsetY: number;
   readonly startAtMs: number;
   readonly stopAtMs: number;
   readonly durationMs: number;

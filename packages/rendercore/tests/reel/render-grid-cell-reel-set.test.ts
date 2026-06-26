@@ -3,6 +3,7 @@ import { Container, Graphics } from "pixi.js";
 import {
   RenderGridCellReelSet,
   createGridCellOrder,
+  createGridCellReelOffsetMatrix,
   createGridCellReelSpinPlan,
   type GridCellDimmingPattern,
   type GridCellReelSpinTiming,
@@ -199,6 +200,40 @@ describe("RenderGridCellReelSet", () => {
     expect(alphaSamples).toContain(0.35);
   });
 
+  it("accepts per-cell reel offsets for reset and spin without changing the target scene", () => {
+    const reelSet = createGridReelSet();
+    const cellReelOffsets = createGridCellReelOffsetMatrix({
+      columns: 2,
+      rows: 3,
+      rowOffsetStep: 2,
+      columnOffsetStep: 5,
+    });
+
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS, cellReelOffsets);
+    expect(reelSet.getVisibleScene()).toEqual(INITIAL_SCENE);
+
+    const plan = createPlan(cellReelOffsets);
+    expect(plan.cells.map((cell) => cell.reelOffsetY)).toEqual([
+      0, 2, 4, 5, 7, 9,
+    ]);
+    reelSet.spin(plan);
+    let result = reelSet.update(0.01);
+    for (let index = 0; index < 12 && !result.completed; index += 1) {
+      result = reelSet.update(0.05);
+    }
+
+    expect(result.completed).toBe(true);
+    expect(reelSet.getVisibleScene()).toEqual(TARGET_SCENE);
+  });
+
+  it("rejects malformed per-cell reel offsets on reset", () => {
+    const reelSet = createGridReelSet();
+
+    expect(() =>
+      reelSet.resetToScene(INITIAL_SCENE, FINAL_YS, [[0, 1, 2]]),
+    ).toThrow(/cellReelOffsets length/);
+  });
+
   it("rejects invalid delta, bad reset data and bad spin plans", () => {
     const reelSet = createGridReelSet();
     expect(() => reelSet.update(-0.01)).toThrow(/deltaSeconds/);
@@ -246,7 +281,9 @@ function createGridReelSet(): RenderGridCellReelSet {
   });
 }
 
-function createPlan() {
+function createPlan(
+  cellReelOffsets?: ReturnType<typeof createGridCellReelOffsetMatrix>,
+) {
   const reels = createBasicReels();
   return createGridCellReelSpinPlan({
     reels,
@@ -259,6 +296,7 @@ function createPlan() {
       rows: 3,
       mode: "top-down-left-right",
     }),
+    cellReelOffsets,
     timing: TIMING,
     dimming: DIMMING,
   });

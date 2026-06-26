@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Assets } from "pixi.js";
 import stateTextureManifest from "../../../assets/symbols002/symbol-state-textures.manifest.json";
+import symbols003StateTextureManifest from "../../../assets/symbols003/symbol-state-textures.manifest.json";
 import { createTestTexture } from "../../../packages/rendercore/tests/reel/helpers.js";
 import {
   GAME002_DISPLAY_SYMBOLS,
@@ -11,6 +12,10 @@ import {
   createGame002SymbolAssetMapFromModules,
   loadGame002SymbolTextures,
 } from "../src/assets.js";
+import {
+  GAME002_SKIN3_DISPLAY_SYMBOLS,
+  getGame002SkinConfig,
+} from "../src/skin-config.js";
 
 describe("game002 assets", () => {
   afterEach(() => {
@@ -27,10 +32,67 @@ describe("game002 assets", () => {
     expect(Object.keys(assets)).not.toContain(GAME002_EMPTY_SYMBOLS[0]);
     for (const symbol of GAME002_DISPLAY_SYMBOLS) {
       expect(assets[symbol]).toMatchObject({
-        normal: `/assets/${symbol}.png`,
+        normal: `/assets/symbols002/${symbol}.png`,
         states: {
-          spinBlur: `/assets/${symbol}.spinBlur.png`,
-          disabled: `/assets/${symbol}.disabled.png`,
+          spinBlur: `/assets/symbols002/${symbol}.spinBlur.png`,
+          disabled: `/assets/symbols002/${symbol}.disabled.png`,
+        },
+      });
+    }
+  });
+
+  it("declares explicit skin configs without sharing symbol directories", () => {
+    const skin2 = getGame002SkinConfig("2");
+    const skin3 = getGame002SkinConfig("3");
+
+    expect(skin2).toMatchObject({
+      id: "2",
+      label: "skin 2",
+      backgroundLabel: "skin 2 bgfull.jpg",
+      displaySymbols: GAME002_DISPLAY_SYMBOLS,
+      emptySymbols: GAME002_EMPTY_SYMBOLS,
+    });
+    expect(skin3).toMatchObject({
+      id: "3",
+      label: "skin 3",
+      backgroundLabel: "skin 3 bg.jpg",
+      displaySymbols: GAME002_SKIN3_DISPLAY_SYMBOLS,
+      emptySymbols: GAME002_EMPTY_SYMBOLS,
+    });
+    expect(skin2.backgroundUrl).toContain("bgfull");
+    expect(skin3.backgroundUrl).toContain("bg");
+    expect(
+      Object.keys(skin2.symbolModules).every((key) =>
+        key.includes("symbols002"),
+      ),
+    ).toBe(true);
+    expect(
+      Object.keys(skin3.symbolModules).every((key) =>
+        key.includes("symbols003"),
+      ),
+    ).toBe(true);
+    expect(skin3.symbolModules).not.toBe(skin2.symbolModules);
+    expect(skin3.stateTextureManifest).toBe(symbols003StateTextureManifest);
+  });
+
+  it("builds the symbols003 asset map from its own manifest and required states", () => {
+    const assets = createGame002SymbolAssetMapFromModules({
+      modules: createModules(GAME002_SKIN3_DISPLAY_SYMBOLS, "symbols003"),
+      stateTextureManifest: symbols003StateTextureManifest,
+      displaySymbols: GAME002_SKIN3_DISPLAY_SYMBOLS,
+      emptySymbols: GAME002_EMPTY_SYMBOLS,
+    });
+
+    expect(Object.keys(assets)).toEqual(GAME002_SKIN3_DISPLAY_SYMBOLS);
+    expect(Object.keys(assets)).not.toEqual(
+      expect.arrayContaining(["WM", "CM", "AF", "BN"]),
+    );
+    for (const symbol of GAME002_SKIN3_DISPLAY_SYMBOLS) {
+      expect(assets[symbol]).toMatchObject({
+        normal: `/assets/symbols003/${symbol}.png`,
+        states: {
+          spinBlur: `/assets/symbols003/${symbol}.spinBlur.png`,
+          disabled: `/assets/symbols003/${symbol}.disabled.png`,
         },
       });
     }
@@ -46,6 +108,31 @@ describe("game002 assets", () => {
         stateTextureManifest,
       }),
     ).toThrow(/WL\.spinBlur/);
+
+    expect(() =>
+      createGame002SymbolAssetMapFromModules({
+        modules: createModules(GAME002_SKIN3_DISPLAY_SYMBOLS, "symbols003"),
+        stateTextureManifest: symbols003StateTextureManifest,
+        displaySymbols: GAME002_SKIN3_DISPLAY_SYMBOLS,
+        emptySymbols: GAME002_EMPTY_SYMBOLS,
+      }),
+    ).not.toThrow();
+
+    const missingSkin3StateModules = createModules(
+      GAME002_SKIN3_DISPLAY_SYMBOLS,
+      "symbols003",
+    );
+    delete missingSkin3StateModules[
+      "../../../assets/symbols003/WL.disabled.png"
+    ];
+    expect(() =>
+      createGame002SymbolAssetMapFromModules({
+        modules: missingSkin3StateModules,
+        stateTextureManifest: symbols003StateTextureManifest,
+        displaySymbols: GAME002_SKIN3_DISPLAY_SYMBOLS,
+        emptySymbols: GAME002_EMPTY_SYMBOLS,
+      }),
+    ).toThrow(/WL\.disabled/);
 
     expect(() =>
       createGame002SymbolAssetMapFromModules({
@@ -236,20 +323,32 @@ describe("game002 assets", () => {
       width: 2000,
       height: 2000,
     });
+    expect(
+      readJpegSize(resolve(__dirname, "../../../assets/game003/bg.jpg")),
+    ).toEqual({
+      width: 2000,
+      height: 2000,
+    });
   });
 });
 
-function createModules(symbols: readonly string[]): Record<string, string> {
+function createModules(
+  symbols: readonly string[],
+  directory = "symbols002",
+): Record<string, string> {
   return Object.fromEntries(
     symbols.flatMap((symbol) => [
-      [`../../../assets/symbols002/${symbol}.png`, `/assets/${symbol}.png`],
       [
-        `../../../assets/symbols002/${symbol}.spinBlur.png`,
-        `/assets/${symbol}.spinBlur.png`,
+        `../../../assets/${directory}/${symbol}.png`,
+        `/assets/${directory}/${symbol}.png`,
       ],
       [
-        `../../../assets/symbols002/${symbol}.disabled.png`,
-        `/assets/${symbol}.disabled.png`,
+        `../../../assets/${directory}/${symbol}.spinBlur.png`,
+        `/assets/${directory}/${symbol}.spinBlur.png`,
+      ],
+      [
+        `../../../assets/${directory}/${symbol}.disabled.png`,
+        `/assets/${directory}/${symbol}.disabled.png`,
       ],
     ]),
   );

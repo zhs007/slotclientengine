@@ -17,10 +17,15 @@ import {
 import { GAME002_DISPLAY_SYMBOLS } from "../src/assets.js";
 import {
   DEFAULT_GAME002_REEL_CONFIG,
+  type Game002ReelConfig,
   assertGame002ReelVisualMatchesTarget,
   createGame002ReelRuntime,
 } from "../src/game-demo.js";
-import { GAME002_CELL_SIZE } from "../src/game-layout.js";
+import {
+  GAME002_CELL_SIZE,
+  GAME002_GRID_CELL_REEL_OFFSETS,
+} from "../src/game-layout.js";
+import { GAME002_SKIN3_DISPLAY_SYMBOLS } from "../src/skin-config.js";
 
 describe("game002 reel runtime", () => {
   it("locks gamecfg002 reels, symbol codes and task sample stop y values", () => {
@@ -156,11 +161,28 @@ describe("game002 reel runtime", () => {
     expect(plan.cells[0].axisPlan.finalY).toBe(
       reels.normalizeY(0, GAME002_SAMPLE_RANDOM_NUMBERS[0]),
     );
+    expect(plan.cells[0].reelOffsetY).toBe(0);
+    expect(plan.cells[8].reelOffsetY).toBe(
+      GAME002_GRID_CELL_REEL_OFFSETS[0][8],
+    );
     expect(plan.cells[8].axisPlan.finalY).toBe(
-      reels.normalizeY(0, GAME002_SAMPLE_RANDOM_NUMBERS[0] + 8),
+      reels.normalizeY(
+        0,
+        GAME002_SAMPLE_RANDOM_NUMBERS[0] +
+          8 +
+          GAME002_GRID_CELL_REEL_OFFSETS[0][8],
+      ),
+    );
+    expect(plan.cells[1].axisPlan.finalY).not.toBe(
+      reels.normalizeY(0, GAME002_SAMPLE_RANDOM_NUMBERS[0] + 1),
     );
     expect(plan.cells[53].axisPlan.finalY).toBe(
-      reels.normalizeY(5, GAME002_SAMPLE_RANDOM_NUMBERS[5] + 8),
+      reels.normalizeY(
+        5,
+        GAME002_SAMPLE_RANDOM_NUMBERS[5] +
+          8 +
+          GAME002_GRID_CELL_REEL_OFFSETS[5][8],
+      ),
     );
     expect(plan.lastStopAtMs).toBe(1876);
     expect(runtime.getTargetScene()).toEqual(GAME002_SAMPLE_SPIN_SCENE);
@@ -230,6 +252,58 @@ describe("game002 reel runtime", () => {
     );
   });
 
+  it("creates a skin 3 runtime from current textured symbols and shared gamecfg002", () => {
+    const runtime = createRuntimeWithSymbols(GAME002_SKIN3_DISPLAY_SYMBOLS, {
+      missingAssetLabel: "skin 3",
+    });
+    const reels = runtime.gameConfig.getReels(
+      DEFAULT_GAME002_REEL_CONFIG.reelsName,
+    );
+    const localSymbols = new Set<string>();
+    for (let x = 0; x < reels.getReelCount(); x += 1) {
+      for (let y = 0; y < reels.getLength(x); y += 1) {
+        const entry = runtime.gameConfig.getPaytableEntry(reels.get(x, y));
+        if (entry) {
+          localSymbols.add(entry.symbol);
+        }
+      }
+    }
+
+    expect([...localSymbols].sort()).toEqual(
+      ["WL", "H1", "H2", "L1", "L2", "L3", "L4", "CN"].sort(),
+    );
+    expect(
+      runtime.applyScene(GAME002_SAMPLE_DEFAULT_SCENE, "skin 3 default"),
+    ).toEqual(GAME002_SAMPLE_DEFAULT_STOP_Y);
+    expect(() =>
+      runtime.createSpinPlan(GAME002_SAMPLE_SPIN_SCENE, "skin 3 spin plan"),
+    ).not.toThrow();
+  });
+
+  it.each([
+    [7, "WM"],
+    [9, "CM"],
+    [11, "AF"],
+  ])(
+    "rejects symbol code %i (%s) when the selected skin has no texture",
+    (code, symbol) => {
+      const runtime = createRuntimeWithSymbols(GAME002_SKIN3_DISPLAY_SYMBOLS, {
+        missingAssetLabel: "skin 3",
+      });
+      const scene = cloneScene(GAME002_SAMPLE_SPIN_SCENE);
+      scene[0][0] = code;
+
+      expect(() =>
+        runtime.spinToScene(scene, "skin 3 missing asset scene"),
+      ).toThrow(
+        new RegExp(
+          `skin 3 missing asset scene\\[0\\]\\[0\\] symbol code ${code} \\(${symbol}\\) is missing assets for skin 3`,
+        ),
+      );
+      expect(runtime.isSpinning()).toBe(false);
+    },
+  );
+
   it("rejects invalid scenes and unknown symbol codes without local fallback", () => {
     const runtime = createRuntime(GAME002_SAMPLE_DEFAULT_SCENE);
 
@@ -251,7 +325,7 @@ describe("game002 reel runtime", () => {
           ...rawGameConfig,
           reels: { "reels-001": rawGameConfig.reels["reels-001"].slice(0, 5) },
         },
-        symbolAssets: createGame002Textures(),
+        symbolAssets: createGame002Textures(GAME002_DISPLAY_SYMBOLS),
       }),
     ).toThrow(/must contain 6 reels/);
 
@@ -292,20 +366,36 @@ describe("game002 reel runtime", () => {
 });
 
 function createRuntime(initialScene?: SceneMatrix) {
+  return createRuntimeWithSymbols(GAME002_DISPLAY_SYMBOLS, {}, initialScene);
+}
+
+function createRuntimeWithSymbols(
+  symbols: readonly string[],
+  config: Partial<
+    Pick<Game002ReelConfig, "missingAssetLabel" | "emptySymbols">
+  > = {},
+  initialScene?: SceneMatrix,
+) {
   return createGame002ReelRuntime({
     rawGameConfig,
-    symbolAssets: createGame002Textures(),
+    symbolAssets: createGame002Textures(symbols),
     initialScene,
+    config: {
+      ...DEFAULT_GAME002_REEL_CONFIG,
+      texturedSymbols: symbols,
+      missingAssetLabel:
+        config.missingAssetLabel ??
+        DEFAULT_GAME002_REEL_CONFIG.missingAssetLabel,
+      emptySymbols:
+        config.emptySymbols ?? DEFAULT_GAME002_REEL_CONFIG.emptySymbols,
+    },
   });
 }
 
-function createGame002Textures(): SymbolAssetMap {
+function createGame002Textures(symbols: readonly string[]): SymbolAssetMap {
   return Object.freeze(
     Object.fromEntries(
-      GAME002_DISPLAY_SYMBOLS.map((symbol) => [
-        symbol,
-        createTextureSet(200, 200),
-      ]),
+      symbols.map((symbol) => [symbol, createTextureSet(200, 200)]),
     ),
   );
 }

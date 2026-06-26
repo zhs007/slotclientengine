@@ -26,25 +26,64 @@ const SENSITIVE_PATTERNS = Object.freeze([
   },
 ]);
 
-const REQUIRED_SYMBOLS = Object.freeze([
-  "WL",
-  "H1",
-  "H2",
-  "L1",
-  "L2",
-  "L3",
-  "L4",
-  "WM",
-  "CN",
-  "CM",
-  "CO",
-  "AF",
+const REQUIRED_SKIN_ASSETS = Object.freeze([
+  {
+    id: "skin 2",
+    background: {
+      pattern: /^bgfull-[A-Za-z0-9_-]+\.jpg$/,
+      label: "bgfull-*.jpg",
+      width: 2000,
+      height: 2000,
+    },
+    symbolWidth: 200,
+    symbolHeight: 200,
+    symbols: Object.freeze([
+      "WL",
+      "H1",
+      "H2",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "WM",
+      "CN",
+      "CM",
+      "CO",
+      "AF",
+    ]),
+  },
+  {
+    id: "skin 3",
+    background: {
+      pattern: /^bg-[A-Za-z0-9_-]+\.jpg$/,
+      label: "bg-*.jpg",
+      width: 2000,
+      height: 2000,
+    },
+    symbolWidth: 180,
+    symbolHeight: 180,
+    symbols: Object.freeze([
+      "WL",
+      "H1",
+      "H2",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "CN",
+      "CO",
+    ]),
+  },
 ]);
 
 const REQUIRED_SYMBOL_STATES = Object.freeze([
   "normal",
   "disabled",
   "spinBlur",
+]);
+
+const PNG_SIGNATURE = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
 
 const failures = [];
@@ -114,12 +153,26 @@ function verifyIndexHtml(indexHtml) {
 function verifyAssets(assetNames) {
   assertAsset(assetNames, /^index-[A-Za-z0-9_-]+\.js$/, "index-*.js");
   assertAsset(assetNames, /^index-[A-Za-z0-9_-]+\.css$/, "index-*.css");
-  assertAsset(assetNames, /^bgfull-[A-Za-z0-9_-]+\.jpg$/, "bgfull-*.jpg");
 
-  for (const symbol of REQUIRED_SYMBOLS) {
-    for (const state of REQUIRED_SYMBOL_STATES) {
-      const pattern = createSymbolAssetPattern(symbol, state);
-      assertAsset(assetNames, pattern, `${symbol} ${state} PNG`);
+  for (const skin of REQUIRED_SKIN_ASSETS) {
+    assertAssetWithSize(
+      assetNames,
+      skin.background.pattern,
+      `${skin.id} ${skin.background.label}`,
+      skin.background.width,
+      skin.background.height,
+    );
+    for (const symbol of skin.symbols) {
+      for (const state of REQUIRED_SYMBOL_STATES) {
+        const pattern = createSymbolAssetPattern(symbol, state);
+        assertAssetWithSize(
+          assetNames,
+          pattern,
+          `${skin.id} ${symbol} ${state} PNG`,
+          skin.symbolWidth,
+          skin.symbolHeight,
+        );
+      }
     }
   }
 }
@@ -132,6 +185,34 @@ function createSymbolAssetPattern(symbol, state) {
 function assertAsset(assetNames, pattern, label) {
   if (!assetNames.some((name) => pattern.test(name))) {
     failures.push(`dist/assets is missing ${label}.`);
+  }
+}
+
+function assertAssetWithSize(assetNames, pattern, label, width, height) {
+  const names = assetNames.filter((name) => pattern.test(name));
+  if (names.length === 0) {
+    failures.push(`dist/assets is missing ${label}.`);
+    return;
+  }
+
+  const matchingSize = names.some((name) => {
+    const file = join(ASSETS_ROOT, name);
+    try {
+      const size = readImageSize(file);
+      return size.width === width && size.height === height;
+    } catch (error) {
+      failures.push(
+        `${relative(APP_ROOT, file)} size could not be read: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return false;
+    }
+  });
+  if (!matchingSize) {
+    failures.push(
+      `dist/assets is missing ${label} with size ${width} x ${height}.`,
+    );
   }
 }
 
@@ -176,4 +257,38 @@ function listFiles(directory) {
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function readImageSize(file) {
+  const bytes = readFileSync(file);
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+    return readJpegSize(file, bytes);
+  }
+  if (bytes.subarray(0, 8).equals(PNG_SIGNATURE)) {
+    return Object.freeze({
+      width: bytes.readUInt32BE(16),
+      height: bytes.readUInt32BE(20),
+    });
+  }
+  throw new Error(`${file} is not a supported JPEG or PNG file.`);
+}
+
+function readJpegSize(file, bytes) {
+  let offset = 2;
+  while (offset < bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = bytes[offset + 1];
+    const length = bytes.readUInt16BE(offset + 2);
+    if (marker >= 0xc0 && marker <= 0xc3) {
+      return Object.freeze({
+        height: bytes.readUInt16BE(offset + 5),
+        width: bytes.readUInt16BE(offset + 7),
+      });
+    }
+    offset += 2 + length;
+  }
+  throw new Error(`${file} does not contain a JPEG size marker.`);
 }
