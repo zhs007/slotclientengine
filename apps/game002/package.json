@@ -9,6 +9,7 @@
     "build": "pnpm run prepare:deps && vite build",
     "dev": "pnpm run prepare:deps && sh -c 'if [ \"$1\" = \"--\" ]; then shift; fi; exec vite \"$@\"' sh",
     "lint": "eslint .",
+    "release:check": "pnpm run build && node scripts/verify-static-dist.mjs",
     "test": "pnpm run prepare:deps && vitest run --coverage",
     "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",
     "format": "prettier --write .",

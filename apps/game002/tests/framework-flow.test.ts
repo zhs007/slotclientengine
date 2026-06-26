@@ -8,11 +8,11 @@ import {
   type SlotGameInitialState,
 } from "@slotclientengine/gameframeworks";
 import { GAME002_SAMPLE_DEFAULT_SCENE } from "./fixtures/game002-gmi.js";
-import { parseGame002FrameworkConfig } from "../src/framework-config.js";
+import { parseGame002FrameworkConfigFromQuery } from "../src/framework-config.js";
 
 describe("game002 framework flow", () => {
   it("uses game002 default spin request and collects only after adapter play resolves", async () => {
-    const config = parseGame002FrameworkConfig({});
+    const config = parseGame002FrameworkConfigFromQuery(validQuery());
     const client = new FakeClient();
     client.spinResult = createSpinResult({ totalwin: 1575, results: 1 });
     const adapter = new FlowAdapter();
@@ -56,7 +56,7 @@ describe("game002 framework flow", () => {
   });
 
   it("passes live defaultScene to the adapter without inventing one", async () => {
-    const config = parseGame002FrameworkConfig({});
+    const config = parseGame002FrameworkConfigFromQuery(validQuery());
     const client = new FakeClient();
     client.userInfo.defaultScene = GAME002_SAMPLE_DEFAULT_SCENE;
     const adapter = new FlowAdapter();
@@ -92,7 +92,7 @@ describe("game002 framework flow", () => {
   });
 
   it("does not collect when adapter rejects", async () => {
-    const config = parseGame002FrameworkConfig({});
+    const config = parseGame002FrameworkConfigFromQuery(validQuery());
     const client = new FakeClient();
     client.spinResult = createSpinResult({ totalwin: 5, results: 1 });
     const adapter = new FlowAdapter();
@@ -112,6 +112,23 @@ describe("game002 framework flow", () => {
     expect(framework.getState().spinState).toBe("error");
   });
 });
+
+function validQuery(): string {
+  return `?${new URLSearchParams({
+    serverUrl: "wss://example.test/game",
+    token: "TOKEN",
+    gamecode: "GAME_CODE",
+    businessid: "guest",
+    clienttype: "web",
+    jurisdiction: "MT",
+    language: "en",
+    bet: "5",
+    lines: "30",
+    times: "1",
+    autonums: "-1",
+    requestTimeoutMs: "30000",
+  }).toString()}`;
+}
 
 function createSpinResult(options: {
   readonly totalwin: number;

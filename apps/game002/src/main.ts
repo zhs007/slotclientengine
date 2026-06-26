@@ -5,7 +5,7 @@ import {
   GAME002_REFERENCE_SIZE,
   createGame002FramePolicy,
 } from "./game-layout.js";
-import { parseGame002FrameworkConfig } from "./framework-config.js";
+import { parseGame002FrameworkConfigFromQuery } from "./framework-config.js";
 import { formatServerUsdAmount } from "./money.js";
 import "./styles.css";
 
@@ -15,7 +15,9 @@ if (!root) {
 }
 
 try {
-  const config = parseGame002FrameworkConfig(import.meta.env);
+  const config = parseGame002FrameworkConfigFromQuery(window.location.search, {
+    pageProtocol: window.location.protocol,
+  });
   const framework = createSlotGameFramework({
     root,
     gameAdapter: createGame002Adapter(),

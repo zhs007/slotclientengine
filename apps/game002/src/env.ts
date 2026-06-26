@@ -1,7 +1,7 @@
 export {
-  DEFAULT_GAME002_ENV_CONFIG,
-  parseGame002Env,
-  parseGame002FrameworkConfig,
-  type Game002EnvConfig,
+  parseGame002FrameworkConfigFromQuery,
+  parseGame002QueryConfig,
   type Game002FrameworkConfig,
+  type Game002QueryConfig,
+  type Game002QueryParseOptions,
 } from "./framework-config.js";

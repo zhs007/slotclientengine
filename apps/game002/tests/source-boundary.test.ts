@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -7,6 +7,12 @@ const BANNED_IMPORTS = Object.freeze([
   "@slotclientengine/netcore",
   "@slotclientengine/uiframeworks",
   "@slotclientengine/logiccore",
+]);
+const BANNED_RUNTIME_CONFIG_STRINGS = Object.freeze([
+  ["VITE", "GAME002"].join("_"),
+  ["7a82f5ca", "45b5aa32", "46b2ad01", "23272295"].join(""),
+  ["065P8N", "OEgwd", "SXFTB6uDqX"].join(""),
+  ["gameserv", "rgstest", "slammerstudios", "com"].join("."),
 ]);
 
 describe("game002 source boundary", () => {
@@ -54,6 +60,31 @@ describe("game002 source boundary", () => {
     );
   });
 
+  it("keeps static release config out of build-time env and old defaults", () => {
+    const files = [
+      ...listFiles(join(APP_ROOT, "src"), (file) => file.endsWith(".ts")),
+      ...listFiles(join(APP_ROOT, "tests"), (file) => file.endsWith(".ts")),
+      ...listFilesIfExists(join(APP_ROOT, "scripts"), (file) =>
+        file.endsWith(".mjs"),
+      ),
+      join(APP_ROOT, "package.json"),
+      join(APP_ROOT, "vite.config.ts"),
+      join(APP_ROOT, "README.md"),
+    ];
+
+    for (const file of files) {
+      const content = readFileSync(file, "utf8");
+      for (const banned of BANNED_RUNTIME_CONFIG_STRINGS) {
+        expect(content, `${file} must not contain ${banned}`).not.toContain(
+          banned,
+        );
+      }
+    }
+
+    const mainSource = readFileSync(join(APP_ROOT, "src/main.ts"), "utf8");
+    expect(mainSource).not.toContain("import.meta.env");
+  });
+
   it("uses bgfull as the runtime background instead of the old portrait crop", () => {
     const adapterSource = readFileSync(
       join(APP_ROOT, "src/game-adapter.ts"),
@@ -83,4 +114,11 @@ function listFiles(
     }
   }
   return files.sort();
+}
+
+function listFilesIfExists(
+  directory: string,
+  predicate: (file: string) => boolean,
+): string[] {
+  return existsSync(directory) ? listFiles(directory, predicate) : [];
 }

@@ -304,7 +304,7 @@ function createGame002Textures(): SymbolAssetMap {
     Object.fromEntries(
       GAME002_DISPLAY_SYMBOLS.map((symbol) => [
         symbol,
-        createTextureSet(500, 500),
+        createTextureSet(200, 200),
       ]),
     ),
   );
