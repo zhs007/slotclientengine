@@ -23,20 +23,25 @@
 - `assets/game002-s1/bg.jpg`
 - `assets/symbols001/*.png`
 - `assets/symbols001/symbol-state-textures.manifest.json`
+- manifest 中每个 symbol 的 `scale` 必须为 `0.8`
 
 `skin=2` 使用：
 
 - `assets/game002/bgfull.jpg`
 - `assets/symbols002/*.png`
 - `assets/symbols002/symbol-state-textures.manifest.json`
+- manifest 中每个 symbol 的 `scale` 必须为 `1`
 
 `skin=3` 使用：
 
 - `assets/game003/bg.jpg`
 - `assets/symbols003/*.png`
 - `assets/symbols003/symbol-state-textures.manifest.json`
+- manifest 中每个 symbol 的 `scale` 必须为 `1`
 
 运行时背景尺寸均为 `2000 x 2000`。`assets/game002/bg.jpg` 是旧 `1125 x 2000` portrait 参考图，不再作为运行时背景。
+
+每套皮肤的显示缩放系数从对应 `symbol-state-textures.manifest.json` 的 `scale` 字段读取。`scale` 必须是有限正数；仓库内生成出的 manifest 必须显式写出该字段。新增或重新生成 symbol set 时要使用 `@slotclientengine/rendercore` 生成器的 `--scale` 参数，不要在 `game002` 中维护第二份手写 scale 表。
 
 `skin=1` 当前可贴图 symbol 是 `WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`CN`、`BN`。其中 `BN` 是透明空图标，作为显式贴图参与加载；它不是通用 catalog fallback。`skin=1` 当前缺贴图的 `WM`、`CM`、`CO`、`AF` 仍然显式失败，不会自动映射为 `BN`。
 
@@ -76,6 +81,7 @@ Pixi canvas 位于 `.slot-ui-game-layer` 内，backing size 由 `gameframeworks`
 - scene：`6 x 9`
 - reels：`reels-001`
 - `BN`：透明贴图，scene code 为 `BN` 时显示为空，但仍走显式 symbol 资源
+- symbol：`200 x 200` 原图按 manifest `scale=0.8` 缩放显示，并以 cell 中心定位
 
 不同 viewport 的期望：
 
@@ -151,7 +157,7 @@ apps/game002/dist/assets/*
 
 到 Caddy/CDN 静态目录，不需要复制源码、`node_modules`、coverage、`.turbo` 或测试文件，也不需要向 HTML 注入运行配置。
 
-`release:check` 会确认 dist 同时包含 `skin=1`、`skin=2` 和 `skin=3` 的背景、普通 symbol、`spinBlur` 和 `disabled` 资源。因为多套 symbol 有同名文件，检查会按构建产物图片尺寸和必需文件名确认资源被打包；`skin=1` 还会检查透明 `BN` 资源。
+`release:check` 会确认 dist 同时包含 `skin=1`、`skin=2` 和 `skin=3` 的背景、普通 symbol、`spinBlur` 和 `disabled` 资源，并审计源 manifest scale：`symbols001` 必须全部为 `0.8`，`symbols002` / `symbols003` 必须全部为 `1`。因为多套 symbol 有同名文件，检查会按构建产物图片尺寸和必需文件名确认资源被打包；`skin=1` 还会检查透明 `BN` 资源。
 
 Caddy 示例：
 

@@ -345,10 +345,10 @@ grid-cell API 会 fail-fast 校验 scene 尺寸、final y 长度、order 重复/
 
 ## 命令
 
-状态贴图生成脚本只在 Node 侧使用 `sharp`，不会进入浏览器运行时代码或发布 bundle。`assets/symbols/symbol-composites.json` 可声明多层资源；旧字符串 layer 继续用文件名推导 index，对象 layer 使用显式 `index`、`texture` 和可选 `keyframes`。复合 symbol 会先按 layer 静态 `texture` 顺序合成完整图标，再从合成结果生成 `spinBlur` 和 `disabled`，manifest 的 `normal` 会写为 layered object 并保留对象 layer 的 keyframes。当前 viewer/reels 资源可用下面命令生成：
+状态贴图生成脚本只在 Node 侧使用 `sharp`，不会进入浏览器运行时代码或发布 bundle。`assets/symbols/symbol-composites.json` 可声明多层资源；旧字符串 layer 继续用文件名推导 index，对象 layer 使用显式 `index`、`texture` 和可选 `keyframes`。复合 symbol 会先按 layer 静态 `texture` 顺序合成完整图标，再从合成结果生成 `spinBlur` 和 `disabled`，manifest 的 `normal` 会写为 layered object 并保留对象 layer 的 keyframes。生成器会为每个 symbol 写入显示缩放系数 `scale`，默认值为 `1`，也可以通过 `--scale` 指定；`scale` 必须是有限正数。仓库内生成物应显式写出 `scale`，consumer 应从 manifest 读取，不要维护第二份手写 scale 表。当前 viewer/reels 资源可用下面命令生成：
 
 ```bash
-pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --symbols S00,S0,S1,S5,S10,SC,RS,X2,X5,X10 --composites assets/symbols/symbol-composites.json
+pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --symbols S00,S0,S1,S5,S10,SC,RS,X2,X5,X10 --composites assets/symbols/symbol-composites.json --scale 1
 ```
 
 ```bash

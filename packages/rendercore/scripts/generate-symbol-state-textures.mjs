@@ -13,6 +13,7 @@ const REQUIRED_STATES = Object.freeze([SPIN_BLUR_STATE, DISABLED_STATE]);
 const SPIN_BLUR_KERNEL_WIDTH = 3;
 const SPIN_BLUR_KERNEL_HEIGHT = 21;
 const DISABLED_BRIGHTNESS = 0.72;
+const DEFAULT_SYMBOL_SCALE = 1;
 
 export function parseGenerateSymbolStateTextureArgs(argv) {
   const args = [...argv];
@@ -59,6 +60,15 @@ export function parseGenerateSymbolStateTextureArgs(argv) {
       options.composites = arg.slice("--composites=".length);
       continue;
     }
+    if (arg === "--scale") {
+      options.scale = parseScale(readOptionValue(args, index));
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--scale=")) {
+      options.scale = parseScale(arg.slice("--scale=".length));
+      continue;
+    }
     throw new Error(`Unknown argument "${arg}".`);
   }
 
@@ -68,6 +78,7 @@ export function parseGenerateSymbolStateTextureArgs(argv) {
 export async function generateSymbolStateTextures(options = {}) {
   const inputDir = resolveRepoPath(options.inputDir, DEFAULT_SYMBOLS_DIR);
   const outputDir = resolveRepoPath(options.outputDir, inputDir);
+  const scale = normalizeScale(options.scale);
   const explicitComposites = Boolean(options.composites);
   const compositesPath = resolveRepoPath(
     options.composites,
@@ -104,7 +115,7 @@ export async function generateSymbolStateTextures(options = {}) {
     generatedFiles.push(spinBlurFile, disabledFile);
   }
 
-  const manifest = createManifest(selectedSymbols, composites);
+  const manifest = createManifest(selectedSymbols, composites, scale);
   const manifestPath = join(outputDir, MANIFEST_FILE_NAME);
   await writeFile(
     manifestPath,
@@ -380,7 +391,7 @@ async function generateDisabledPng(inputFile, outputFile) {
     .toFile(outputFile);
 }
 
-function createManifest(symbols, composites) {
+function createManifest(symbols, composites, scale) {
   return Object.freeze({
     version: 1,
     states: REQUIRED_STATES,
@@ -411,6 +422,7 @@ function createManifest(symbols, composites) {
               : `./${symbol}.png`,
             [SPIN_BLUR_STATE]: `./${symbol}.${SPIN_BLUR_STATE}.png`,
             [DISABLED_STATE]: `./${symbol}.${DISABLED_STATE}.png`,
+            scale,
           }),
         ]),
       ),
@@ -438,6 +450,33 @@ function parseSymbols(value) {
     throw new Error("--symbols must include at least one symbol.");
   }
   return Object.freeze(symbols);
+}
+
+function normalizeScale(value) {
+  if (value === undefined) {
+    return DEFAULT_SYMBOL_SCALE;
+  }
+  if (typeof value === "number") {
+    return assertPositiveFiniteScale(value);
+  }
+  if (typeof value === "string") {
+    return parseScale(value);
+  }
+  throw new Error("--scale must be a finite positive number.");
+}
+
+function parseScale(value) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error("--scale must be a finite positive number.");
+  }
+  return assertPositiveFiniteScale(Number(value));
+}
+
+function assertPositiveFiniteScale(value) {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error("--scale must be a finite positive number.");
+  }
+  return value;
 }
 
 function createVerticalBoxBlurKernel(height) {

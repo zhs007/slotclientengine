@@ -1,5 +1,6 @@
 import { Assets, type Texture } from "pixi.js";
 import type {
+  ReelSymbolScaleMap,
   SymbolAssetInput,
   SymbolAssetMap,
   SymbolNormalTextureSource,
@@ -30,7 +31,9 @@ export const GAME002_EMPTY_SYMBOLS = Object.freeze(["BN"]);
 
 type ParsedManifestSymbol = {
   readonly normal: string;
-} & Record<string, string>;
+  readonly scale: number;
+  readonly hasExplicitScale: boolean;
+} & Record<string, boolean | number | string>;
 
 export function createGame002SymbolAssetMapFromModules(options: {
   readonly modules: Record<string, string>;
@@ -109,6 +112,37 @@ export function createGame002SymbolAssetMapFromModules(options: {
   }
 
   return Object.freeze(assets);
+}
+
+export function createGame002SymbolScaleMapFromManifest(options: {
+  readonly stateTextureManifest: unknown;
+  readonly displaySymbols?: readonly string[];
+  readonly requiredStates?: readonly string[];
+  readonly requireExplicitScale?: boolean;
+}): ReelSymbolScaleMap {
+  const displaySymbols = Object.freeze([
+    ...(options.displaySymbols ?? GAME002_DISPLAY_SYMBOLS),
+  ]);
+  const manifest = parseStateTextureManifest(
+    options.stateTextureManifest,
+    options.requiredStates ?? GAME002_REQUIRED_STATE_TEXTURES,
+  );
+
+  const entries = displaySymbols.map((symbol) => {
+    const manifestSymbol = manifest.symbols[symbol];
+    if (!manifestSymbol) {
+      throw new Error(`Symbol state texture manifest is missing "${symbol}".`);
+    }
+    if (options.requireExplicitScale && !manifestSymbol.hasExplicitScale) {
+      throw new Error(
+        `Symbol "${symbol}" manifest must explicitly declare scale.`,
+      );
+    }
+    return [symbol, manifestSymbol.scale] as const;
+  });
+  return Object.freeze(
+    Object.fromEntries(entries),
+  ) satisfies ReelSymbolScaleMap;
 }
 
 export async function loadGame002SymbolTextures(
@@ -197,6 +231,14 @@ function parseStateTextureManifest(
       );
     }
   }
+  const requiredStateSet = new Set(requiredStates);
+  for (const state of states) {
+    if (!requiredStateSet.has(state)) {
+      throw new Error(
+        `Symbol state texture manifest declares unknown state "${state}".`,
+      );
+    }
+  }
 
   const rawSymbols = assertRecord(
     manifestRecord.symbols,
@@ -208,11 +250,24 @@ function parseStateTextureManifest(
       rawSymbol,
       `symbol state texture manifest symbol "${symbol}"`,
     );
+    for (const key of Object.keys(rawSymbolRecord)) {
+      if (key !== "normal" && key !== "scale" && !requiredStateSet.has(key)) {
+        throw new Error(
+          `Symbol "${symbol}" manifest declares unknown field "${key}".`,
+        );
+      }
+    }
+    const hasExplicitScale = Object.prototype.hasOwnProperty.call(
+      rawSymbolRecord,
+      "scale",
+    );
     const parsedSymbol: ParsedManifestSymbol = {
       normal: assertString(
         rawSymbolRecord.normal,
         `symbol "${symbol}" normal texture`,
       ),
+      scale: parseManifestScale(rawSymbolRecord.scale, symbol),
+      hasExplicitScale,
     };
     for (const state of requiredStates) {
       parsedSymbol[state] = assertString(
@@ -228,6 +283,18 @@ function parseStateTextureManifest(
     states,
     symbols,
   };
+}
+
+function parseManifestScale(scale: unknown, symbol: string): number {
+  if (scale === undefined) {
+    return 1;
+  }
+  if (typeof scale !== "number" || !Number.isFinite(scale) || scale <= 0) {
+    throw new Error(
+      `Symbol "${symbol}" scale must be a finite positive number.`,
+    );
+  }
+  return scale;
 }
 
 async function loadSymbolAssetInput(

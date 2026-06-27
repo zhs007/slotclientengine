@@ -9,11 +9,13 @@ import { describe, expect, it } from "vitest";
 import {
   SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
   createSymbolAssetMapFromModules,
+  createSymbolScaleMapFromManifest,
   createStatefulSymbolAssetMapFromModules,
   createSymbolsViewerCatalog,
   getSymbolNameFromPath,
 } from "../src/symbol-assets.js";
 import {
+  SYMBOLS001_ANIMATION_PROFILES,
   SYMBOLS002_ANIMATION_PROFILES,
   SYMBOLS003_ANIMATION_PROFILES,
   SYMBOL_VIEWER_ANIMATION_PROFILES,
@@ -69,6 +71,38 @@ describe("symbolsviewer assets", () => {
         states: {},
       },
     });
+  });
+
+  it("creates symbol scale maps from manifest data with explicit-scale enforcement", () => {
+    expect(
+      createSymbolScaleMapFromManifest({
+        manifest: createManifest(["S00"]),
+        displaySymbols: ["S00"],
+      }),
+    ).toEqual({ S00: 1 });
+
+    expect(
+      createSymbolScaleMapFromManifest({
+        manifest: createManifest(["WL", "BN"], 0.8),
+        displaySymbols: ["WL", "BN"],
+        requireExplicitScale: true,
+      }),
+    ).toEqual({ WL: 0.8, BN: 0.8 });
+
+    expect(() =>
+      createSymbolScaleMapFromManifest({
+        manifest: createManifest(["S00"]),
+        displaySymbols: ["S00"],
+        requireExplicitScale: true,
+      }),
+    ).toThrow(/S00.*scale/);
+
+    expect(() =>
+      createSymbolScaleMapFromManifest({
+        manifest: createManifest(["S00"], 0),
+        displaySymbols: ["S00"],
+      }),
+    ).toThrow(/S00.*scale/);
   });
 
   it("assembles manifest layered normals without exposing layer files as symbols", () => {
@@ -162,6 +196,28 @@ describe("symbolsviewer assets", () => {
         requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
       }),
     ).toThrow(/unknown state "blurred"/);
+
+    expect(() =>
+      createStatefulSymbolAssetMapFromModules({
+        modules: {
+          "../../../assets/symbols/S00.png": "/assets/S00.png",
+          "../../../assets/symbols/S00.spinBlur.png":
+            "/assets/S00.spinBlur.png",
+          "../../../assets/symbols/S00.disabled.png":
+            "/assets/S00.disabled.png",
+        },
+        manifest: {
+          ...createManifest(["S00"], 1),
+          symbols: {
+            S00: {
+              ...createManifest(["S00"], 1).symbols.S00,
+              unexpected: "./S00.unexpected.png",
+            },
+          },
+        },
+        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+      }),
+    ).toThrow(/unknown field "unexpected"/);
 
     expect(() =>
       createStatefulSymbolAssetMapFromModules({
@@ -391,6 +447,28 @@ describe("symbolsviewer animation config", () => {
     }
   });
 
+  it("binds symbols001 appear to an underlay scale profile for every displayable symbol", () => {
+    expect(Object.keys(SYMBOLS001_ANIMATION_PROFILES)).toEqual([
+      "WL",
+      "H1",
+      "H2",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "CN",
+      "BN",
+    ]);
+    for (const profile of Object.values(SYMBOLS001_ANIMATION_PROFILES)) {
+      expect(profile.appear?.effects).toEqual([
+        {
+          name: "singleSpriteUnderlayScale",
+          params: { maxScale: 1.6, maxAlpha: 0.4 },
+        },
+      ]);
+    }
+  });
+
   it("binds symbols003 appear to an underlay scale profile for every displayable symbol", () => {
     expect(Object.keys(SYMBOLS003_ANIMATION_PROFILES)).toEqual([
       "WL",
@@ -494,7 +572,7 @@ function createScLayerModules() {
   ];
 }
 
-function createManifest(symbols: readonly string[]) {
+function createManifest(symbols: readonly string[], scale?: number) {
   const compositeLayers: Record<string, readonly unknown[]> = {
     SC: [
       "./SC-0.png",
@@ -532,6 +610,7 @@ function createManifest(symbols: readonly string[]) {
             : `./${symbol}.png`,
           spinBlur: `./${symbol}.spinBlur.png`,
           disabled: `./${symbol}.disabled.png`,
+          ...(scale === undefined ? {} : { scale }),
         },
       ]),
     ),

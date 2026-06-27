@@ -38,6 +38,7 @@ const REQUIRED_SKIN_ASSETS = Object.freeze([
       minimumMatches: 2,
     },
     inlineSymbols: Object.freeze(["BN"]),
+    manifestScale: 0.8,
     symbolWidth: 200,
     symbolHeight: 200,
     symbols: Object.freeze([
@@ -61,6 +62,7 @@ const REQUIRED_SKIN_ASSETS = Object.freeze([
       width: 2000,
       height: 2000,
     },
+    manifestScale: 1,
     symbolWidth: 200,
     symbolHeight: 200,
     symbols: Object.freeze([
@@ -88,6 +90,7 @@ const REQUIRED_SKIN_ASSETS = Object.freeze([
       height: 2000,
       minimumMatches: 2,
     },
+    manifestScale: 1,
     symbolWidth: 180,
     symbolHeight: 180,
     symbols: Object.freeze([
@@ -195,6 +198,7 @@ function verifyAssets(assetNames) {
       skin.background.minimumMatches,
     );
     for (const symbol of skin.symbols) {
+      assertSourceManifestScale(skin, symbol);
       for (const state of REQUIRED_SYMBOL_STATES) {
         assertSymbolStateAsset(
           assetNames,
@@ -206,6 +210,38 @@ function verifyAssets(assetNames) {
         );
       }
     }
+  }
+}
+
+function assertSourceManifestScale(skin, symbol) {
+  const manifestPath = resolve(
+    APP_ROOT,
+    "..",
+    "..",
+    "assets",
+    skin.symbolDirectory,
+    "symbol-state-textures.manifest.json",
+  );
+  if (!existsSync(manifestPath)) {
+    failures.push(
+      `${skin.id} source manifest ${relative(APP_ROOT, manifestPath)} is missing.`,
+    );
+    return;
+  }
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const manifestSymbol = manifest.symbols?.[symbol];
+  if (!manifestSymbol) {
+    failures.push(`${skin.id} source manifest is missing ${symbol}.`);
+    return;
+  }
+  if (!Object.prototype.hasOwnProperty.call(manifestSymbol, "scale")) {
+    failures.push(`${skin.id} source manifest ${symbol} is missing scale.`);
+    return;
+  }
+  if (manifestSymbol.scale !== skin.manifestScale) {
+    failures.push(
+      `${skin.id} source manifest ${symbol} scale must be ${skin.manifestScale}, got ${manifestSymbol.scale}.`,
+    );
   }
 }
 

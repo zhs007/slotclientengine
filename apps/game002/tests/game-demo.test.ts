@@ -4,7 +4,11 @@ import {
   createSlotGameLogicResult,
   type SceneMatrix,
 } from "@slotclientengine/gameframeworks";
-import type { SymbolAssetMap } from "@slotclientengine/rendercore";
+import {
+  RenderSymbol,
+  type ReelSymbolScaleMap,
+  type SymbolAssetMap,
+} from "@slotclientengine/rendercore";
 import { createTextureSet } from "../../../packages/rendercore/tests/reel/helpers.js";
 import {
   GAME002_SAMPLE_DEFAULT_SCENE,
@@ -288,6 +292,7 @@ describe("game002 reel runtime", () => {
     const runtime = createRuntimeWithSymbols(GAME002_SKIN1_DISPLAY_SYMBOLS, {
       missingAssetLabel: "skin 1",
       emptySymbols: [],
+      symbolScales: createScaleMap(GAME002_SKIN1_DISPLAY_SYMBOLS, 0.8),
       gridLayout: GAME002_SKIN1_GRID_LAYOUT,
     });
 
@@ -311,6 +316,15 @@ describe("game002 reel runtime", () => {
     expect(() =>
       runtime.applyScene(bnScene, "skin 1 transparent BN scene"),
     ).not.toThrow();
+
+    const renderSymbols = collectRenderSymbols(runtime.mainReelsLayer);
+    expect(renderSymbols.length).toBeGreaterThan(0);
+    expect(new Set(renderSymbols.map((symbol) => symbol.scale.x))).toEqual(
+      new Set([0.8]),
+    );
+    expect(new Set(renderSymbols.map((symbol) => symbol.scale.y))).toEqual(
+      new Set([0.8]),
+    );
   });
 
   it.each([
@@ -348,6 +362,7 @@ describe("game002 reel runtime", () => {
       const runtime = createRuntimeWithSymbols(GAME002_SKIN1_DISPLAY_SYMBOLS, {
         missingAssetLabel: "skin 1",
         emptySymbols: [],
+        symbolScales: createScaleMap(GAME002_SKIN1_DISPLAY_SYMBOLS, 0.8),
         gridLayout: GAME002_SKIN1_GRID_LAYOUT,
       });
       const scene = cloneScene(GAME002_SAMPLE_SPIN_SCENE);
@@ -432,7 +447,10 @@ function createRuntime(initialScene?: SceneMatrix) {
 function createRuntimeWithSymbols(
   symbols: readonly string[],
   config: Partial<
-    Pick<Game002ReelConfig, "missingAssetLabel" | "emptySymbols" | "gridLayout">
+    Pick<
+      Game002ReelConfig,
+      "missingAssetLabel" | "emptySymbols" | "gridLayout" | "symbolScales"
+    >
   > = {},
   initialScene?: SceneMatrix,
 ) {
@@ -448,9 +466,41 @@ function createRuntimeWithSymbols(
         DEFAULT_GAME002_REEL_CONFIG.missingAssetLabel,
       emptySymbols:
         config.emptySymbols ?? DEFAULT_GAME002_REEL_CONFIG.emptySymbols,
+      symbolScales:
+        config.symbolScales ?? DEFAULT_GAME002_REEL_CONFIG.symbolScales,
       gridLayout: config.gridLayout ?? DEFAULT_GAME002_REEL_CONFIG.gridLayout,
     },
   });
+}
+
+function createScaleMap(
+  symbols: readonly string[],
+  scale: number,
+): ReelSymbolScaleMap {
+  return Object.freeze(
+    Object.fromEntries(symbols.map((symbol) => [symbol, scale] as const)),
+  );
+}
+
+function collectRenderSymbols(root: unknown): RenderSymbol[] {
+  const found: RenderSymbol[] = [];
+  const visit = (node: unknown) => {
+    if (node instanceof RenderSymbol) {
+      found.push(node);
+    }
+    if (
+      typeof node === "object" &&
+      node !== null &&
+      "children" in node &&
+      Array.isArray(node.children)
+    ) {
+      for (const child of node.children) {
+        visit(child);
+      }
+    }
+  };
+  visit(root);
+  return found;
 }
 
 function createGame002Textures(symbols: readonly string[]): SymbolAssetMap {

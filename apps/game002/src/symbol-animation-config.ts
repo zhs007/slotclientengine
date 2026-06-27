@@ -1,8 +1,14 @@
+import symbols002StateTextureManifest from "../../../assets/symbols002/symbol-state-textures.manifest.json";
 import type { ReelSymbolScaleMap } from "@slotclientengine/rendercore";
-import { GAME002_DISPLAY_SYMBOLS } from "./assets.js";
+import {
+  GAME002_DISPLAY_SYMBOLS,
+  createGame002SymbolScaleMapFromManifest,
+} from "./assets.js";
 
 export const GAME002_SYMBOL_SCALES = Object.freeze(
-  Object.fromEntries(
-    GAME002_DISPLAY_SYMBOLS.map((symbol) => [symbol, 1] as const),
-  ),
+  createGame002SymbolScaleMapFromManifest({
+    stateTextureManifest: symbols002StateTextureManifest,
+    displaySymbols: GAME002_DISPLAY_SYMBOLS,
+    requireExplicitScale: true,
+  }),
 ) satisfies ReelSymbolScaleMap;

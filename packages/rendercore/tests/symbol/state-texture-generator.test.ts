@@ -10,12 +10,14 @@ interface GeneratorModule {
     readonly outputDir?: string;
     readonly symbols?: readonly string[];
     readonly composites?: string;
+    readonly scale?: number;
   };
   readonly generateSymbolStateTextures: (options: {
     readonly inputDir: string;
     readonly outputDir: string;
     readonly symbols: readonly string[];
     readonly composites?: string;
+    readonly scale?: number;
   }) => Promise<{
     readonly symbols: readonly string[];
     readonly manifestPath: string;
@@ -67,10 +69,12 @@ describe("generate-symbol-state-textures script", () => {
 
       expect(result.symbols).toEqual(["S00", "SC"]);
       expect(manifest.symbols.S00.normal).toBe("./S00.png");
+      expect(manifest.symbols.S00.scale).toBe(1);
       expect(manifest.symbols.SC.normal).toEqual({
         kind: "layered",
         layers: ["./SC-0.png", "./SC-1.png", "./SC-2.png"],
       });
+      expect(manifest.symbols.SC.scale).toBe(1);
       await expect(
         stat(join(tempDir, "SC.spinBlur.png")),
       ).resolves.toMatchObject({ size: expect.any(Number) });
@@ -140,8 +144,10 @@ describe("generate-symbol-state-textures script", () => {
         tempDir,
         "--symbols",
         "WL,H1",
+        "--scale",
+        "0.8",
       ]);
-      if (!args.inputDir || !args.outputDir || !args.symbols) {
+      if (!args.inputDir || !args.outputDir || !args.symbols || !args.scale) {
         throw new Error(
           "Expected input-dir style arguments to parse completely.",
         );
@@ -150,6 +156,7 @@ describe("generate-symbol-state-textures script", () => {
         inputDir: args.inputDir,
         outputDir: args.outputDir,
         symbols: args.symbols,
+        scale: args.scale,
       });
       const manifest = JSON.parse(await readFile(result.manifestPath, "utf8"));
 
@@ -158,6 +165,8 @@ describe("generate-symbol-state-textures script", () => {
       expect(manifest.symbols.H1.normal).toBe("./H1.png");
       expect(manifest.symbols.WL.spinBlur).toBe("./WL.spinBlur.png");
       expect(manifest.symbols.H1.disabled).toBe("./H1.disabled.png");
+      expect(manifest.symbols.WL.scale).toBe(0.8);
+      expect(manifest.symbols.H1.scale).toBe(0.8);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -227,6 +236,7 @@ describe("generate-symbol-state-textures script", () => {
         },
         "./SC-2.png",
       ]);
+      expect(manifest.symbols.SC.scale).toBe(1);
       await expect(
         stat(join(tempDir, "SC.spinBlur.png")),
       ).resolves.toMatchObject({ size: expect.any(Number) });
@@ -370,6 +380,39 @@ describe("generate-symbol-state-textures script", () => {
           composites: compositesPath,
         }),
       ).rejects.toThrow();
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects invalid symbol display scales", async () => {
+    const generator = await loadGeneratorModule();
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "rendercore-symbol-generator-"),
+    );
+    try {
+      await writePng(join(tempDir, "WL.png"), 4, 4, "#ff0000");
+
+      for (const argv of [
+        ["--input-dir", tempDir, "--symbols", "WL", "--scale", "0"],
+        ["--input-dir", tempDir, "--symbols", "WL", "--scale=-1"],
+        ["--input-dir", tempDir, "--symbols", "WL", "--scale=NaN"],
+        ["--input-dir", tempDir, "--symbols", "WL", "--scale="],
+        ["--input-dir", tempDir, "--symbols", "WL", "--scale", "abc"],
+      ]) {
+        expect(() =>
+          generator.parseGenerateSymbolStateTextureArgs(argv),
+        ).toThrow(/scale/);
+      }
+
+      await expect(
+        generator.generateSymbolStateTextures({
+          inputDir: tempDir,
+          outputDir: tempDir,
+          symbols: ["WL"],
+          scale: 0,
+        }),
+      ).rejects.toThrow(/scale/);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
