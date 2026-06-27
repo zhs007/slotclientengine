@@ -18,62 +18,74 @@
     "WL": {
       "normal": "./WL.png",
       "spinBlur": "./WL.spinBlur.png",
-      "disabled": "./WL.disabled.png"
+      "disabled": "./WL.disabled.png",
+      "scale": 1
     },
     "H1": {
       "normal": "./H1.png",
       "spinBlur": "./H1.spinBlur.png",
-      "disabled": "./H1.disabled.png"
+      "disabled": "./H1.disabled.png",
+      "scale": 1
     },
     "H2": {
       "normal": "./H2.png",
       "spinBlur": "./H2.spinBlur.png",
-      "disabled": "./H2.disabled.png"
+      "disabled": "./H2.disabled.png",
+      "scale": 1
     },
     "L1": {
       "normal": "./L1.png",
       "spinBlur": "./L1.spinBlur.png",
-      "disabled": "./L1.disabled.png"
+      "disabled": "./L1.disabled.png",
+      "scale": 1
     },
     "L2": {
       "normal": "./L2.png",
       "spinBlur": "./L2.spinBlur.png",
-      "disabled": "./L2.disabled.png"
+      "disabled": "./L2.disabled.png",
+      "scale": 1
     },
     "L3": {
       "normal": "./L3.png",
       "spinBlur": "./L3.spinBlur.png",
-      "disabled": "./L3.disabled.png"
+      "disabled": "./L3.disabled.png",
+      "scale": 1
     },
     "L4": {
       "normal": "./L4.png",
       "spinBlur": "./L4.spinBlur.png",
-      "disabled": "./L4.disabled.png"
+      "disabled": "./L4.disabled.png",
+      "scale": 1
     },
     "WM": {
       "normal": "./WM.png",
       "spinBlur": "./WM.spinBlur.png",
-      "disabled": "./WM.disabled.png"
+      "disabled": "./WM.disabled.png",
+      "scale": 1
     },
     "CN": {
       "normal": "./CN.png",
       "spinBlur": "./CN.spinBlur.png",
-      "disabled": "./CN.disabled.png"
+      "disabled": "./CN.disabled.png",
+      "scale": 1
     },
     "CM": {
       "normal": "./CM.png",
       "spinBlur": "./CM.spinBlur.png",
-      "disabled": "./CM.disabled.png"
+      "disabled": "./CM.disabled.png",
+      "scale": 1
     },
     "CO": {
       "normal": "./CO.png",
       "spinBlur": "./CO.spinBlur.png",
-      "disabled": "./CO.disabled.png"
+      "disabled": "./CO.disabled.png",
+      "scale": 1
     },
     "AF": {
       "normal": "./AF.png",
       "spinBlur": "./AF.spinBlur.png",
-      "disabled": "./AF.disabled.png"
+      "disabled": "./AF.disabled.png",
+      "scale": 1
     }
   }
 }

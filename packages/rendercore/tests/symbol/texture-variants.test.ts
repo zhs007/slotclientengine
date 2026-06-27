@@ -82,7 +82,7 @@ describe("generate-symbol-state-textures", () => {
         readonly version: number;
         readonly states: readonly string[];
         readonly settings: Record<string, unknown>;
-        readonly symbols: Record<string, Record<string, string>>;
+        readonly symbols: Record<string, Record<string, number | string>>;
       };
       expect(JSON.stringify(manifest)).not.toContain("generated");
       expect(manifest).toEqual({
@@ -103,6 +103,7 @@ describe("generate-symbol-state-textures", () => {
             normal: "./S00.png",
             spinBlur: "./S00.spinBlur.png",
             disabled: "./S00.disabled.png",
+            scale: 1,
           },
         },
       });

@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { Container, Texture } from "pixi.js";
 import type { GameLogic, SceneMatrix } from "@slotclientengine/gameframeworks";
 import {
+  RenderSymbol,
+  type SymbolAssetMap,
+} from "@slotclientengine/rendercore";
+import { createTextureSet } from "../../../packages/rendercore/tests/reel/helpers.js";
+import {
   GAME002_SAMPLE_DEFAULT_SCENE,
   GAME002_SAMPLE_SPIN_SCENE,
 } from "./fixtures/game002-gmi.js";
@@ -10,7 +15,10 @@ import {
   type Game002AdapterOptions,
 } from "../src/game-adapter.js";
 import type { Game002ReelRuntime } from "../src/game-demo.js";
-import { getGame002SkinConfig } from "../src/skin-config.js";
+import {
+  GAME002_SKIN1_DISPLAY_SYMBOLS,
+  getGame002SkinConfig,
+} from "../src/skin-config.js";
 
 describe("game002 adapter", () => {
   it("fails clearly before mount and when mounting twice", async () => {
@@ -75,6 +83,33 @@ describe("game002 adapter", () => {
       defaultScene: GAME002_SAMPLE_DEFAULT_SCENE,
     });
     expect(runtime.appliedScenes).toEqual([GAME002_SAMPLE_DEFAULT_SCENE]);
+  });
+
+  it("passes the selected skin symbol scale map into the default runtime", async () => {
+    const fakeApp = createFakeApplication();
+    const adapter = createGame002Adapter({
+      skin: getGame002SkinConfig("1"),
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () =>
+        createSymbolTextures(GAME002_SKIN1_DISPLAY_SYMBOLS),
+    });
+
+    await adapter.mount(createMountContext());
+    adapter.applyInitialState?.({
+      userInfo: {},
+      balance: 100,
+      defaultScene: GAME002_SAMPLE_DEFAULT_SCENE,
+    });
+
+    const renderSymbols = collectRenderSymbols(fakeApp.stage);
+    expect(renderSymbols.length).toBeGreaterThan(0);
+    expect(new Set(renderSymbols.map((symbol) => symbol.scale.x))).toEqual(
+      new Set([0.8]),
+    );
+    expect(new Set(renderSymbols.map((symbol) => symbol.scale.y))).toEqual(
+      new Set([0.8]),
+    );
   });
 
   it("resizes Pixi backing size and moves the art world on viewport changes", async () => {
@@ -378,6 +413,35 @@ async function loadFakeStaticTextures() {
   return {
     background: Texture.EMPTY,
   };
+}
+
+function createSymbolTextures(symbols: readonly string[]): SymbolAssetMap {
+  return Object.freeze(
+    Object.fromEntries(
+      symbols.map((symbol) => [symbol, createTextureSet(200, 200)]),
+    ),
+  );
+}
+
+function collectRenderSymbols(root: unknown): RenderSymbol[] {
+  const found: RenderSymbol[] = [];
+  const visit = (node: unknown) => {
+    if (node instanceof RenderSymbol) {
+      found.push(node);
+    }
+    if (
+      typeof node === "object" &&
+      node !== null &&
+      "children" in node &&
+      Array.isArray(node.children)
+    ) {
+      for (const child of node.children) {
+        visit(child);
+      }
+    }
+  };
+  visit(root);
+  return found;
 }
 
 function createLogic(scene: SceneMatrix): GameLogic {

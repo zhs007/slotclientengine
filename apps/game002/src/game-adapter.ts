@@ -105,6 +105,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
             emptySymbols: skin.emptySymbols,
             texturedSymbols: skin.displaySymbols,
             missingAssetLabel: skin.label,
+            symbolScales: skin.symbolScales,
             gridLayout: skin.gridLayout,
           },
         }));

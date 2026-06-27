@@ -4,7 +4,12 @@ import symbols003StateTextureManifest from "../../../assets/symbols003/symbol-st
 import skin1BackgroundUrl from "../../../assets/game002-s1/bg.jpg?url";
 import skin2BackgroundUrl from "../../../assets/game002/bgfull.jpg?url";
 import skin3BackgroundUrl from "../../../assets/game003/bg.jpg?url";
-import { GAME002_DISPLAY_SYMBOLS, GAME002_EMPTY_SYMBOLS } from "./assets.js";
+import {
+  GAME002_DISPLAY_SYMBOLS,
+  GAME002_EMPTY_SYMBOLS,
+  createGame002SymbolScaleMapFromManifest,
+} from "./assets.js";
+import type { ReelSymbolScaleMap } from "@slotclientengine/rendercore";
 import {
   GAME002_DEFAULT_GRID_LAYOUT,
   GAME002_SKIN1_GRID_LAYOUT,
@@ -67,6 +72,7 @@ export interface Game002SkinConfig {
   readonly stateTextureManifest: unknown;
   readonly displaySymbols: readonly string[];
   readonly emptySymbols: readonly string[];
+  readonly symbolScales: ReelSymbolScaleMap;
   readonly gridLayout: Game002GridLayout;
 }
 
@@ -81,6 +87,11 @@ const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
       stateTextureManifest: symbols001StateTextureManifest,
       displaySymbols: GAME002_SKIN1_DISPLAY_SYMBOLS,
       emptySymbols: Object.freeze([]),
+      symbolScales: createGame002SymbolScaleMapFromManifest({
+        stateTextureManifest: symbols001StateTextureManifest,
+        displaySymbols: GAME002_SKIN1_DISPLAY_SYMBOLS,
+        requireExplicitScale: true,
+      }),
       gridLayout: GAME002_SKIN1_GRID_LAYOUT,
     }),
     "2": Object.freeze({
@@ -92,6 +103,11 @@ const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
       stateTextureManifest: symbols002StateTextureManifest,
       displaySymbols: GAME002_DISPLAY_SYMBOLS,
       emptySymbols: GAME002_EMPTY_SYMBOLS,
+      symbolScales: createGame002SymbolScaleMapFromManifest({
+        stateTextureManifest: symbols002StateTextureManifest,
+        displaySymbols: GAME002_DISPLAY_SYMBOLS,
+        requireExplicitScale: true,
+      }),
       gridLayout: GAME002_DEFAULT_GRID_LAYOUT,
     }),
     "3": Object.freeze({
@@ -103,6 +119,11 @@ const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
       stateTextureManifest: symbols003StateTextureManifest,
       displaySymbols: GAME002_SKIN3_DISPLAY_SYMBOLS,
       emptySymbols: GAME002_EMPTY_SYMBOLS,
+      symbolScales: createGame002SymbolScaleMapFromManifest({
+        stateTextureManifest: symbols003StateTextureManifest,
+        displaySymbols: GAME002_SKIN3_DISPLAY_SYMBOLS,
+        requireExplicitScale: true,
+      }),
       gridLayout: GAME002_DEFAULT_GRID_LAYOUT,
     }),
   });

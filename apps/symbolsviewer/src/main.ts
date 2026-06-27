@@ -523,7 +523,18 @@ function createRenderedSymbols(
 }
 
 function getSymbolScale(config: SymbolSetConfig, symbol: string): number {
-  return config.symbolScales?.[symbol] ?? 1;
+  const scale = config.symbolScales[symbol];
+  if (scale === undefined) {
+    throw new Error(
+      `Symbol set "${config.id}" is missing manifest scale for "${symbol}".`,
+    );
+  }
+  if (!Number.isFinite(scale) || scale <= 0) {
+    throw new Error(
+      `Symbol set "${config.id}" scale for "${symbol}" must be a finite positive number.`,
+    );
+  }
+  return scale;
 }
 
 function getSymbolColumnCount(

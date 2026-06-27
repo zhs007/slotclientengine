@@ -10,6 +10,7 @@ import {
   GAME002_DISPLAY_SYMBOLS,
   GAME002_EMPTY_SYMBOLS,
   GAME002_REQUIRED_STATE_TEXTURES,
+  createGame002SymbolScaleMapFromManifest,
   createGame002SymbolAssetMapFromModules,
   loadGame002SymbolTextures,
 } from "../src/assets.js";
@@ -98,6 +99,86 @@ describe("game002 assets", () => {
     expect(skin3.symbolModules).not.toBe(skin2.symbolModules);
     expect(skin1.stateTextureManifest).toBe(symbols001StateTextureManifest);
     expect(skin3.stateTextureManifest).toBe(symbols003StateTextureManifest);
+    expect(skin1.symbolScales).toEqual(
+      Object.fromEntries(
+        GAME002_SKIN1_DISPLAY_SYMBOLS.map((symbol) => [symbol, 0.8]),
+      ),
+    );
+    expect(skin2.symbolScales).toEqual(
+      Object.fromEntries(GAME002_DISPLAY_SYMBOLS.map((symbol) => [symbol, 1])),
+    );
+    expect(skin3.symbolScales).toEqual(
+      Object.fromEntries(
+        GAME002_SKIN3_DISPLAY_SYMBOLS.map((symbol) => [symbol, 1]),
+      ),
+    );
+  });
+
+  it("creates skin scale maps from manifest data with explicit-scale enforcement", () => {
+    expect(
+      createGame002SymbolScaleMapFromManifest({
+        stateTextureManifest: symbols001StateTextureManifest,
+        displaySymbols: GAME002_SKIN1_DISPLAY_SYMBOLS,
+        requireExplicitScale: true,
+      }),
+    ).toEqual(
+      Object.fromEntries(
+        GAME002_SKIN1_DISPLAY_SYMBOLS.map((symbol) => [symbol, 0.8]),
+      ),
+    );
+
+    expect(
+      createGame002SymbolScaleMapFromManifest({
+        stateTextureManifest: {
+          version: 1,
+          states: ["spinBlur", "disabled"],
+          symbols: {
+            WL: {
+              normal: "./WL.png",
+              spinBlur: "./WL.spinBlur.png",
+              disabled: "./WL.disabled.png",
+            },
+          },
+        },
+        displaySymbols: ["WL"],
+      }),
+    ).toEqual({ WL: 1 });
+
+    expect(() =>
+      createGame002SymbolScaleMapFromManifest({
+        stateTextureManifest: {
+          version: 1,
+          states: ["spinBlur", "disabled"],
+          symbols: {
+            WL: {
+              normal: "./WL.png",
+              spinBlur: "./WL.spinBlur.png",
+              disabled: "./WL.disabled.png",
+            },
+          },
+        },
+        displaySymbols: ["WL"],
+        requireExplicitScale: true,
+      }),
+    ).toThrow(/WL.*scale/);
+
+    expect(() =>
+      createGame002SymbolScaleMapFromManifest({
+        stateTextureManifest: {
+          version: 1,
+          states: ["spinBlur", "disabled"],
+          symbols: {
+            WL: {
+              normal: "./WL.png",
+              spinBlur: "./WL.spinBlur.png",
+              disabled: "./WL.disabled.png",
+              scale: -1,
+            },
+          },
+        },
+        displaySymbols: ["WL"],
+      }),
+    ).toThrow(/WL.*scale/);
   });
 
   it("builds the symbols001 asset map including the transparent BN texture", () => {
@@ -304,7 +385,27 @@ describe("game002 assets", () => {
         },
         displaySymbols: ["WL"],
       }),
-    ).toThrow(/Cannot parse/);
+    ).toThrow(/unknown state "foo"/);
+
+    expect(() =>
+      createGame002SymbolAssetMapFromModules({
+        modules: createModules(["WL"]),
+        stateTextureManifest: {
+          version: 1,
+          states: ["spinBlur", "disabled"],
+          symbols: {
+            WL: {
+              normal: "./WL.png",
+              spinBlur: "./WL.spinBlur.png",
+              disabled: "./WL.disabled.png",
+              scale: 1,
+              unexpected: "./WL.unexpected.png",
+            },
+          },
+        },
+        displaySymbols: ["WL"],
+      }),
+    ).toThrow(/unknown field "unexpected"/);
   });
 
   it("loads string, single, layered and already-loaded texture assets", async () => {
