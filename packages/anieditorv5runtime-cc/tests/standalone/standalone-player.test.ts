@@ -900,6 +900,25 @@ describe("standalone V5GCocosPlayer", () => {
     expect(events).toEqual([]);
   });
 
+  it("deduplicates standalone complete listener registrations", () => {
+    const { player } = makePlayer();
+    const complete: unknown[] = [];
+    const listener = (event: unknown): void => {
+      complete.push(event);
+    };
+    player.init();
+    const disposeFirst = player.onPlaybackComplete(listener);
+    const disposeSecond = player.onPlaybackComplete(listener);
+
+    player.setLoop(false);
+    player.play();
+    player.update(1);
+
+    expect(complete).toHaveLength(1);
+    disposeFirst();
+    disposeSecond();
+  });
+
   it("renders particle nodes under the layer particle container", () => {
     const project = tinyProject({
       animations: [

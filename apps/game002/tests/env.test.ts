@@ -102,15 +102,16 @@ describe("game002 runtime query config", () => {
     ).toThrow(/valid ws:\/\/ or wss:\/\//);
   });
 
-  it("accepts only explicit skin ids 2 and 3", () => {
+  it("accepts only explicit skin ids 1, 2 and 3", () => {
+    expect(parseGame002QueryConfig(validQuery({ skin: "1" })).skin).toBe("1");
     expect(parseGame002QueryConfig(validQuery({ skin: "2" })).skin).toBe("2");
     expect(parseGame002QueryConfig(validQuery({ skin: "3" })).skin).toBe("3");
 
-    for (const skin of ["02", "game002", "game003", "1", "4"]) {
+    for (const skin of ["01", "02", "game002", "game003", "4"]) {
       expect(
         () => parseGame002QueryConfig(validQuery({ skin })),
         `${skin} should be rejected`,
-      ).toThrow(/skin query parameter must be either "2" or "3"/);
+      ).toThrow(/skin query parameter must be "1", "2" or "3"/);
     }
   });
 

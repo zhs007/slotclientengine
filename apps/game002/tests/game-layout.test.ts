@@ -9,6 +9,10 @@ import {
   GAME002_GRID_CELL_DIMMING,
   GAME002_GRID_CELL_REEL_ORDER,
   GAME002_GRID_CELL_REEL_TIMING,
+  GAME002_SKIN1_BOARD_FRAME,
+  GAME002_SKIN1_CELL_HEIGHT,
+  GAME002_SKIN1_CELL_WIDTH,
+  GAME002_SKIN1_GRID_LAYOUT,
   GAME002_REFERENCE_SIZE,
   GAME002_REFERENCE_VISIBLE_RECT_IN_ART,
   GAME002_REEL_COUNT,
@@ -70,6 +74,45 @@ describe("game002 layout", () => {
     );
   });
 
+  it("locks skin 1 to the larger background grid instead of cropping the bottom row", () => {
+    const layout = createGame002Layout({
+      gridLayout: GAME002_SKIN1_GRID_LAYOUT,
+    });
+    const reelLayout = createGame002ReelLayout(GAME002_SKIN1_GRID_LAYOUT);
+    const layerLayout = createGame002ReelLayerLayout(reelLayout, layout);
+
+    expect(GAME002_SKIN1_CELL_WIDTH).toBe(125);
+    expect(GAME002_SKIN1_CELL_HEIGHT).toBeCloseTo(133.3333333333);
+    expect(GAME002_SKIN1_BOARD_FRAME).toEqual({
+      x: 620,
+      y: 465,
+      width: 750,
+      height: 1200,
+    });
+    expect(layout.boardFrame).toEqual(GAME002_SKIN1_BOARD_FRAME);
+    expect(layout.boardFrameInViewport).toEqual({
+      x: 182.5,
+      y: 465,
+      width: 750,
+      height: 1200,
+    });
+    expect(reelLayout).toMatchObject({
+      reelCount: 6,
+      visibleRows: 9,
+      cellWidth: 125,
+      cellHeight: 400 / 3,
+      columnGap: 0,
+    });
+    expect(layerLayout).toMatchObject({
+      rawReelsContentWidth: 750,
+      rawReelsContentHeight: 1200,
+      x: 620,
+      y: 465,
+      stageVisibleFrame: GAME002_SKIN1_BOARD_FRAME,
+      viewportVisibleFrame: layout.boardFrameInViewport,
+    });
+  });
+
   it("validates board frame dimensions and stage containment", () => {
     expect(() => validateGame002BoardFrame()).not.toThrow();
     expect(() =>
@@ -80,6 +123,14 @@ describe("game002 layout", () => {
     ).toThrow(/width/);
     expect(() =>
       validateGame002BoardFrame({ ...GAME002_BOARD_FRAME, height: 1079 }),
+    ).toThrow(/height/);
+    expect(() =>
+      validateGame002BoardFrame(
+        { ...GAME002_SKIN1_BOARD_FRAME, height: 1080 },
+        GAME002_STAGE_SIZE,
+        GAME002_SKIN1_CELL_WIDTH,
+        GAME002_SKIN1_CELL_HEIGHT,
+      ),
     ).toThrow(/height/);
     expect(() =>
       validateGame002BoardFrame({
@@ -134,6 +185,10 @@ describe("game002 layout", () => {
       focusRect: { width: 720, height: 1080 },
       minFocusMargin: GAME002_FOCUS_MARGIN,
     });
+    expect(createGame002FramePolicy(GAME002_SKIN1_GRID_LAYOUT)).toMatchObject({
+      mode: "focus",
+      focusRect: { width: 750, height: 1200 },
+    });
   });
 
   it("locks grid cell reel order, timing and dimming parameters", () => {
@@ -164,7 +219,7 @@ describe("game002 layout", () => {
     ).toThrow(/visibleRows/);
     expect(() =>
       createGame002ReelLayerLayout({ ...reelLayout, cellWidth: 119 }),
-    ).toThrow(/cell size/);
+    ).toThrow(/board width/);
     expect(() =>
       createGame002ReelLayerLayout({ ...reelLayout, columnGap: 1 }),
     ).toThrow(/columnGap/);

@@ -85,7 +85,7 @@ describe("game002 source boundary", () => {
     expect(mainSource).not.toContain("import.meta.env");
   });
 
-  it("collects both runtime skin backgrounds without using the old portrait crop", () => {
+  it("collects runtime skin backgrounds without using the old portrait crop", () => {
     const skinConfigSource = readFileSync(
       join(APP_ROOT, "src/skin-config.ts"),
       "utf8",
@@ -95,6 +95,7 @@ describe("game002 source boundary", () => {
       "utf8",
     );
 
+    expect(skinConfigSource).toContain("assets/game002-s1/bg.jpg?url");
     expect(skinConfigSource).toContain("assets/game002/bgfull.jpg?url");
     expect(skinConfigSource).toContain("assets/game003/bg.jpg?url");
     expect(skinConfigSource).not.toContain("assets/game002/bg.jpg?url");

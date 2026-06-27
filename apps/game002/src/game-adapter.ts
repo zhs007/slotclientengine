@@ -74,6 +74,7 @@ export function createGame002Adapter(
 }
 
 class Game002PixiAdapter implements SlotGameAdapter {
+  readonly #skin: Game002SkinConfig;
   readonly #createApplication: () => Game002PixiApplication;
   readonly #loadStaticTextures: () => Promise<Game002StaticTextures>;
   readonly #loadSymbolTextures: () => Promise<SymbolAssetMap>;
@@ -86,6 +87,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
 
   constructor(options: Game002AdapterOptions) {
     const skin = options.skin;
+    this.#skin = skin;
     this.#createApplication =
       options.createApplication ?? createPixiApplication;
     this.#loadStaticTextures =
@@ -103,6 +105,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
             emptySymbols: skin.emptySymbols,
             texturedSymbols: skin.displaySymbols,
             missingAssetLabel: skin.label,
+            gridLayout: skin.gridLayout,
           },
         }));
   }
@@ -123,7 +126,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     });
     context.gameLayer.replaceChildren(app.canvas);
 
-    const layout = createGame002Layout();
+    const layout = createGame002Layout({ gridLayout: this.#skin.gridLayout });
     const [staticTextures, symbolTextures] = await Promise.all([
       this.#loadStaticTextures(),
       this.#loadSymbolTextures(),
@@ -237,7 +240,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
     if (!this.#app || !this.#worldLayer) {
       throw new Error("game002 adapter is not mounted.");
     }
-    const layout = createGame002Layout(viewport.frameDesignSize);
+    const layout = createGame002Layout({
+      viewportSize: viewport.frameDesignSize,
+      gridLayout: this.#skin.gridLayout,
+    });
     this.#app.renderer.resize(
       layout.viewportSize.width,
       layout.viewportSize.height,

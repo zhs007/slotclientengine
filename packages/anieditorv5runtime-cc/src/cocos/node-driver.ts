@@ -11,7 +11,7 @@ export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
   createNode(name: string): TNode;
   appendChild(parent: TNode, child: TNode): void;
   removeChild(parent: TNode, child: TNode): void;
-  isValidNode?(node: TNode | null | undefined): node is TNode;
+  isValidNode?(node: TNode): boolean;
   getParent(node: TNode): TNode | null;
   captureLocalTransform(node: TNode): V5GCocosNodeTransformSnapshot;
   restoreLocalTransform(
