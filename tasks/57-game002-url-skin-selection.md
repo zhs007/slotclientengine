@@ -1,5 +1,22 @@
 # game002 url skin selection 任务计划
 
+## 0. 2026-06-27 追加需求：skin=1
+
+本节为任务 57 的追加范围，执行优先级高于下文旧计划中“只接受 `2` 或 `3`”“两套皮肤”等表述。追加完成后的最终合同是：`apps/game002` 的 URL query 必需参数 `skin` 只接受 `1`、`2`、`3`，三套皮肤继续共用 `assets/gamecfg002/gameconfig.json`、同一套 live 参数、同一个 `gamecode`、同一个 spin/collect 流程。
+
+新增 `skin=1` 要求：
+
+- `skin=1` 使用 `assets/game002-s1/bg.jpg` 作为背景，背景尺寸必须是 `2000 x 2000`。
+- `skin=1` 使用 `assets/symbols001`，并复用 `assets/gamecfg002/gameconfig.json`。
+- `assets/symbols001` 必须生成完整 `normal`、`spinBlur`、`disabled` PNG 和 `symbol-state-textures.manifest.json`，状态要求与 `symbols002`、`symbols003` 一致。
+- `assets/symbols001` 的可展示 symbol 集合为 `WL,H1,H2,L1,L2,L3,L4,CN,BN`。
+- `BN` 是显式配置的透明空图标，只能用于 skin=1 里已配置的透明 symbol 或明确服务器映射边界的兜底入口；不要把缺图、缺 manifest 或缺配置错误静默吞掉。
+- `skin=1` 暂不支持 `WM,CM,CO,AF` 贴图。若 scene 或未来本地轮带出现这些 symbol，必须显式失败，并在错误中暴露缺失 symbol/code。
+- `assets/game002-s1/bg.jpg` 与 `assets/game002/bgfull.jpg`、`assets/game003/bg.jpg` 的棋盘位置不同，必须为 `skin=1` 单独配置布局，不要沿用 skin=2/3 的棋盘坐标。
+- `skin=1` 的棋盘格要更大，背景下方格子不是装饰，不能裁掉底部行。当前落地坐标为 stage 内 `x=620, y=465, width=750, height=1200`，对应 6 列 x 9 行，cell 约 `125 x 133.333333`。
+- `packages/rendercore` 仍拥有通用 grid-cell reel、symbol 状态和裁切算法；`apps/game002` 只能传 skin 级配置，不要复制通用算法。
+- 浏览器验收由用户处理，执行方不需要启动浏览器或 Playwright。
+
 ## 1. 任务目标
 
 为现有 `apps/game002` 增加 URL query 参数驱动的皮肤选择能力。最终同一个静态发布入口、同一套 live 服务器、同一个 `gamecode` 和同一份 `assets/gamecfg002/gameconfig.json`，可以根据 URL 参数选择第二套或第三套皮肤：

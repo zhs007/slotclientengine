@@ -24,8 +24,12 @@ import {
 import {
   GAME002_CELL_SIZE,
   GAME002_GRID_CELL_REEL_OFFSETS,
+  GAME002_SKIN1_GRID_LAYOUT,
 } from "../src/game-layout.js";
-import { GAME002_SKIN3_DISPLAY_SYMBOLS } from "../src/skin-config.js";
+import {
+  GAME002_SKIN1_DISPLAY_SYMBOLS,
+  GAME002_SKIN3_DISPLAY_SYMBOLS,
+} from "../src/skin-config.js";
 
 describe("game002 reel runtime", () => {
   it("locks gamecfg002 reels, symbol codes and task sample stop y values", () => {
@@ -280,6 +284,35 @@ describe("game002 reel runtime", () => {
     ).not.toThrow();
   });
 
+  it("creates a skin 1 runtime on the larger background grid with transparent BN", () => {
+    const runtime = createRuntimeWithSymbols(GAME002_SKIN1_DISPLAY_SYMBOLS, {
+      missingAssetLabel: "skin 1",
+      emptySymbols: [],
+      gridLayout: GAME002_SKIN1_GRID_LAYOUT,
+    });
+
+    expect(runtime.layout).toMatchObject({
+      cellWidth: 125,
+      cellHeight: 400 / 3,
+    });
+    expect(runtime.layerLayout).toMatchObject({
+      rawReelsContentWidth: 750,
+      rawReelsContentHeight: 1200,
+      x: 620,
+      y: 465,
+    });
+    expect(
+      runtime.applyScene(GAME002_SAMPLE_DEFAULT_SCENE, "skin 1 default"),
+    ).toEqual(GAME002_SAMPLE_DEFAULT_STOP_Y);
+
+    const bnScene = cloneScene(GAME002_SAMPLE_DEFAULT_SCENE);
+    bnScene[0][0] = 12;
+
+    expect(() =>
+      runtime.applyScene(bnScene, "skin 1 transparent BN scene"),
+    ).not.toThrow();
+  });
+
   it.each([
     [7, "WM"],
     [9, "CM"],
@@ -298,6 +331,33 @@ describe("game002 reel runtime", () => {
       ).toThrow(
         new RegExp(
           `skin 3 missing asset scene\\[0\\]\\[0\\] symbol code ${code} \\(${symbol}\\) is missing assets for skin 3`,
+        ),
+      );
+      expect(runtime.isSpinning()).toBe(false);
+    },
+  );
+
+  it.each([
+    [7, "WM"],
+    [9, "CM"],
+    [10, "CO"],
+    [11, "AF"],
+  ])(
+    "rejects symbol code %i (%s) for skin 1 while keeping BN explicit",
+    (code, symbol) => {
+      const runtime = createRuntimeWithSymbols(GAME002_SKIN1_DISPLAY_SYMBOLS, {
+        missingAssetLabel: "skin 1",
+        emptySymbols: [],
+        gridLayout: GAME002_SKIN1_GRID_LAYOUT,
+      });
+      const scene = cloneScene(GAME002_SAMPLE_SPIN_SCENE);
+      scene[0][0] = code;
+
+      expect(() =>
+        runtime.spinToScene(scene, "skin 1 missing asset scene"),
+      ).toThrow(
+        new RegExp(
+          `skin 1 missing asset scene\\[0\\]\\[0\\] symbol code ${code} \\(${symbol}\\) is missing assets for skin 1`,
         ),
       );
       expect(runtime.isSpinning()).toBe(false);
@@ -372,7 +432,7 @@ function createRuntime(initialScene?: SceneMatrix) {
 function createRuntimeWithSymbols(
   symbols: readonly string[],
   config: Partial<
-    Pick<Game002ReelConfig, "missingAssetLabel" | "emptySymbols">
+    Pick<Game002ReelConfig, "missingAssetLabel" | "emptySymbols" | "gridLayout">
   > = {},
   initialScene?: SceneMatrix,
 ) {
@@ -388,6 +448,7 @@ function createRuntimeWithSymbols(
         DEFAULT_GAME002_REEL_CONFIG.missingAssetLabel,
       emptySymbols:
         config.emptySymbols ?? DEFAULT_GAME002_REEL_CONFIG.emptySymbols,
+      gridLayout: config.gridLayout ?? DEFAULT_GAME002_REEL_CONFIG.gridLayout,
     },
   });
 }

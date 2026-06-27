@@ -28,7 +28,33 @@ const SENSITIVE_PATTERNS = Object.freeze([
 
 const REQUIRED_SKIN_ASSETS = Object.freeze([
   {
+    id: "skin 1",
+    symbolDirectory: "symbols001",
+    background: {
+      pattern: /^bg-[A-Za-z0-9_-]+\.jpg$/,
+      label: "bg-*.jpg",
+      width: 2000,
+      height: 2000,
+      minimumMatches: 2,
+    },
+    inlineSymbols: Object.freeze(["BN"]),
+    symbolWidth: 200,
+    symbolHeight: 200,
+    symbols: Object.freeze([
+      "WL",
+      "H1",
+      "H2",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "CN",
+      "BN",
+    ]),
+  },
+  {
     id: "skin 2",
+    symbolDirectory: "symbols002",
     background: {
       pattern: /^bgfull-[A-Za-z0-9_-]+\.jpg$/,
       label: "bgfull-*.jpg",
@@ -54,11 +80,13 @@ const REQUIRED_SKIN_ASSETS = Object.freeze([
   },
   {
     id: "skin 3",
+    symbolDirectory: "symbols003",
     background: {
       pattern: /^bg-[A-Za-z0-9_-]+\.jpg$/,
       label: "bg-*.jpg",
       width: 2000,
       height: 2000,
+      minimumMatches: 2,
     },
     symbolWidth: 180,
     symbolHeight: 180,
@@ -154,6 +182,9 @@ function verifyAssets(assetNames) {
   assertAsset(assetNames, /^index-[A-Za-z0-9_-]+\.js$/, "index-*.js");
   assertAsset(assetNames, /^index-[A-Za-z0-9_-]+\.css$/, "index-*.css");
 
+  const bundledJavaScript = readBundledJavaScript(assetNames);
+  const inlinePngBindings = findInlinePngBindings(bundledJavaScript);
+
   for (const skin of REQUIRED_SKIN_ASSETS) {
     assertAssetWithSize(
       assetNames,
@@ -161,16 +192,17 @@ function verifyAssets(assetNames) {
       `${skin.id} ${skin.background.label}`,
       skin.background.width,
       skin.background.height,
+      skin.background.minimumMatches,
     );
     for (const symbol of skin.symbols) {
       for (const state of REQUIRED_SYMBOL_STATES) {
-        const pattern = createSymbolAssetPattern(symbol, state);
-        assertAssetWithSize(
+        assertSymbolStateAsset(
           assetNames,
-          pattern,
-          `${skin.id} ${symbol} ${state} PNG`,
-          skin.symbolWidth,
-          skin.symbolHeight,
+          skin,
+          symbol,
+          state,
+          bundledJavaScript,
+          inlinePngBindings,
         );
       }
     }
@@ -182,38 +214,152 @@ function createSymbolAssetPattern(symbol, state) {
   return new RegExp(`^${escapeRegExp(prefix)}-[A-Za-z0-9_-]+\\.png$`);
 }
 
+function createSymbolSourcePath(directory, symbol, state) {
+  const prefix = state === "normal" ? symbol : `${symbol}.${state}`;
+  return `../../../assets/${directory}/${prefix}.png`;
+}
+
 function assertAsset(assetNames, pattern, label) {
   if (!assetNames.some((name) => pattern.test(name))) {
     failures.push(`dist/assets is missing ${label}.`);
   }
 }
 
-function assertAssetWithSize(assetNames, pattern, label, width, height) {
-  const names = assetNames.filter((name) => pattern.test(name));
-  if (names.length === 0) {
+function assertSymbolStateAsset(
+  assetNames,
+  skin,
+  symbol,
+  state,
+  bundledJavaScript,
+  inlinePngBindings,
+) {
+  const label = `${skin.id} ${symbol} ${state} PNG`;
+  const matches = countAssetMatchesWithSize(
+    assetNames,
+    createSymbolAssetPattern(symbol, state),
+    skin.symbolWidth,
+    skin.symbolHeight,
+  );
+  pushAssetReadErrors(matches);
+
+  if (matches.names.length > 0) {
+    if (matches.matchingSizeCount === 0) {
+      failures.push(
+        `dist/assets is missing ${label} with size ${skin.symbolWidth} x ${skin.symbolHeight}.`,
+      );
+    }
+    return;
+  }
+
+  const allowsInline =
+    skin.inlineSymbols !== undefined && skin.inlineSymbols.includes(symbol);
+  const sourcePath = createSymbolSourcePath(
+    skin.symbolDirectory,
+    symbol,
+    state,
+  );
+  if (
+    allowsInline &&
+    hasInlineAssetBinding(bundledJavaScript, inlinePngBindings, sourcePath)
+  ) {
+    return;
+  }
+
+  if (allowsInline) {
+    failures.push(
+      `dist/assets is missing ${label}, and bundled JS does not inline ${sourcePath}.`,
+    );
+    return;
+  }
+
+  failures.push(`dist/assets is missing ${label}.`);
+}
+
+function assertAssetWithSize(
+  assetNames,
+  pattern,
+  label,
+  width,
+  height,
+  minimumMatches = 1,
+) {
+  const matches = countAssetMatchesWithSize(assetNames, pattern, width, height);
+  pushAssetReadErrors(matches);
+
+  if (matches.names.length === 0) {
     failures.push(`dist/assets is missing ${label}.`);
     return;
   }
 
-  const matchingSize = names.some((name) => {
+  if (matches.matchingSizeCount < minimumMatches) {
+    failures.push(
+      `dist/assets is missing ${label} with size ${width} x ${height}; expected ${minimumMatches}, got ${matches.matchingSizeCount}.`,
+    );
+  }
+}
+
+function countAssetMatchesWithSize(assetNames, pattern, width, height) {
+  const names = assetNames.filter((name) => pattern.test(name));
+  let matchingSizeCount = 0;
+  const readErrors = [];
+  for (const name of names) {
     const file = join(ASSETS_ROOT, name);
     try {
       const size = readImageSize(file);
-      return size.width === width && size.height === height;
+      if (size.width === width && size.height === height) {
+        matchingSizeCount += 1;
+      }
     } catch (error) {
-      failures.push(
+      readErrors.push(
         `${relative(APP_ROOT, file)} size could not be read: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      return false;
     }
-  });
-  if (!matchingSize) {
-    failures.push(
-      `dist/assets is missing ${label} with size ${width} x ${height}.`,
-    );
   }
+
+  return Object.freeze({
+    names: Object.freeze(names),
+    matchingSizeCount,
+    readErrors: Object.freeze(readErrors),
+  });
+}
+
+function pushAssetReadErrors(matches) {
+  for (const error of matches.readErrors) {
+    failures.push(error);
+  }
+}
+
+function readBundledJavaScript(assetNames) {
+  return assetNames
+    .filter((name) => /\.js$/.test(name))
+    .map((name) => readFileSync(join(ASSETS_ROOT, name), "utf8"))
+    .join("\n");
+}
+
+function findInlinePngBindings(bundledJavaScript) {
+  const bindings = new Set();
+  const pattern = /\b([A-Za-z_$][\w$]*)=`data:image\/png;base64,[^`]+`/g;
+  for (const match of bundledJavaScript.matchAll(pattern)) {
+    bindings.add(match[1]);
+  }
+  return bindings;
+}
+
+function hasInlineAssetBinding(
+  bundledJavaScript,
+  inlinePngBindings,
+  sourcePath,
+) {
+  for (const binding of inlinePngBindings) {
+    if (
+      bundledJavaScript.includes(`${JSON.stringify(sourcePath)}:${binding}`)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function verifyNoSensitiveStrings(files) {

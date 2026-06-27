@@ -80,10 +80,6 @@ interface CocosWorldTransformSnapshot {
   rotation: Quat;
 }
 
-interface CocosNodeWithValidity extends Node {
-  isValid?: boolean;
-}
-
 // Cocos Creator 3.8.6 exposes these enum values internally, but not all builds
 // re-export BlendFactor / BlendOp from "cc".
 const COCOS_BLEND_FACTORS: Record<CocosBlendFactorName, number> = {
@@ -206,11 +202,7 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
 }
 
 function isValidCocosNode(node: Node | null | undefined): node is Node {
-  return (
-    node !== null &&
-    node !== undefined &&
-    (node as CocosNodeWithValidity).isValid !== false
-  );
+  return node !== null && node !== undefined && node.isValid !== false;
 }
 
 function copyVec3(source: Vec3): Vec3 {

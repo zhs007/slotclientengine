@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Assets } from "pixi.js";
+import symbols001StateTextureManifest from "../../../assets/symbols001/symbol-state-textures.manifest.json";
 import stateTextureManifest from "../../../assets/symbols002/symbol-state-textures.manifest.json";
 import symbols003StateTextureManifest from "../../../assets/symbols003/symbol-state-textures.manifest.json";
 import { createTestTexture } from "../../../packages/rendercore/tests/reel/helpers.js";
@@ -13,6 +14,7 @@ import {
   loadGame002SymbolTextures,
 } from "../src/assets.js";
 import {
+  GAME002_SKIN1_DISPLAY_SYMBOLS,
   GAME002_SKIN3_DISPLAY_SYMBOLS,
   getGame002SkinConfig,
 } from "../src/skin-config.js";
@@ -42,9 +44,17 @@ describe("game002 assets", () => {
   });
 
   it("declares explicit skin configs without sharing symbol directories", () => {
+    const skin1 = getGame002SkinConfig("1");
     const skin2 = getGame002SkinConfig("2");
     const skin3 = getGame002SkinConfig("3");
 
+    expect(skin1).toMatchObject({
+      id: "1",
+      label: "skin 1",
+      backgroundLabel: "skin 1 bg.jpg",
+      displaySymbols: GAME002_SKIN1_DISPLAY_SYMBOLS,
+      emptySymbols: [],
+    });
     expect(skin2).toMatchObject({
       id: "2",
       label: "skin 2",
@@ -59,8 +69,20 @@ describe("game002 assets", () => {
       displaySymbols: GAME002_SKIN3_DISPLAY_SYMBOLS,
       emptySymbols: GAME002_EMPTY_SYMBOLS,
     });
+    expect(skin1.backgroundUrl).toContain("bg");
     expect(skin2.backgroundUrl).toContain("bgfull");
     expect(skin3.backgroundUrl).toContain("bg");
+    expect(skin1.gridLayout.boardFrame).toEqual({
+      x: 620,
+      y: 465,
+      width: 750,
+      height: 1200,
+    });
+    expect(
+      Object.keys(skin1.symbolModules).every((key) =>
+        key.includes("symbols001"),
+      ),
+    ).toBe(true);
     expect(
       Object.keys(skin2.symbolModules).every((key) =>
         key.includes("symbols002"),
@@ -71,8 +93,41 @@ describe("game002 assets", () => {
         key.includes("symbols003"),
       ),
     ).toBe(true);
+    expect(skin1.symbolModules).not.toBe(skin2.symbolModules);
+    expect(skin1.symbolModules).not.toBe(skin3.symbolModules);
     expect(skin3.symbolModules).not.toBe(skin2.symbolModules);
+    expect(skin1.stateTextureManifest).toBe(symbols001StateTextureManifest);
     expect(skin3.stateTextureManifest).toBe(symbols003StateTextureManifest);
+  });
+
+  it("builds the symbols001 asset map including the transparent BN texture", () => {
+    const assets = createGame002SymbolAssetMapFromModules({
+      modules: createModules(GAME002_SKIN1_DISPLAY_SYMBOLS, "symbols001"),
+      stateTextureManifest: symbols001StateTextureManifest,
+      displaySymbols: GAME002_SKIN1_DISPLAY_SYMBOLS,
+      emptySymbols: [],
+    });
+
+    expect(Object.keys(assets)).toEqual(GAME002_SKIN1_DISPLAY_SYMBOLS);
+    expect(Object.keys(assets)).not.toEqual(
+      expect.arrayContaining(["WM", "CM", "CO", "AF"]),
+    );
+    expect(assets.BN).toMatchObject({
+      normal: "/assets/symbols001/BN.png",
+      states: {
+        spinBlur: "/assets/symbols001/BN.spinBlur.png",
+        disabled: "/assets/symbols001/BN.disabled.png",
+      },
+    });
+    for (const symbol of GAME002_SKIN1_DISPLAY_SYMBOLS) {
+      expect(assets[symbol]).toMatchObject({
+        normal: `/assets/symbols001/${symbol}.png`,
+        states: {
+          spinBlur: `/assets/symbols001/${symbol}.spinBlur.png`,
+          disabled: `/assets/symbols001/${symbol}.disabled.png`,
+        },
+      });
+    }
   });
 
   it("builds the symbols003 asset map from its own manifest and required states", () => {
@@ -315,6 +370,12 @@ describe("game002 assets", () => {
       readJpegSize(resolve(__dirname, "../../../assets/game002/bg.jpg")),
     ).toEqual({
       width: 1125,
+      height: 2000,
+    });
+    expect(
+      readJpegSize(resolve(__dirname, "../../../assets/game002-s1/bg.jpg")),
+    ).toEqual({
+      width: 2000,
       height: 2000,
     });
     expect(

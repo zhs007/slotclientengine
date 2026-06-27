@@ -160,9 +160,9 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
   private pendingComplete: V5GCocosPlaybackCompleteContext | null = null;
   private drainPaused = false;
   private readonly playbackEvents = new Map<string, NormalizedPlaybackEvent>();
-  private readonly completeListeners = new Set<
+  private readonly completeListeners: Array<
     (event: V5GCocosPlaybackCompleteContext) => void
-  >();
+  > = [];
   private loopIndex = 0;
   private nextPlaybackEventOrder = 0;
 
@@ -573,9 +573,14 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
         "V5GCocosPlayer.onPlaybackComplete listener must be a function.",
       );
     }
-    this.completeListeners.add(listener);
+    if (this.completeListeners.indexOf(listener) < 0) {
+      this.completeListeners.push(listener);
+    }
     return () => {
-      this.completeListeners.delete(listener);
+      const listenerIndex = this.completeListeners.indexOf(listener);
+      if (listenerIndex >= 0) {
+        this.completeListeners.splice(listenerIndex, 1);
+      }
     };
   }
 
@@ -608,7 +613,7 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     this.segmentedPlayback = null;
     this.pendingComplete = null;
     this.playbackEvents.clear();
-    this.completeListeners.clear();
+    this.completeListeners.length = 0;
     this.loopIndex = 0;
     this.drainPaused = false;
     this.particleRuntime.reset();
@@ -1428,7 +1433,10 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
   }
 
   private emitPlaybackComplete(context: V5GCocosPlaybackCompleteContext): void {
-    for (const listener of [...this.completeListeners]) {
+    const listeners = this.completeListeners.slice();
+    for (let index = 0; index < listeners.length; index += 1) {
+      const listener = listeners[index];
+      if (typeof listener !== "function") continue;
       listener(context);
     }
   }

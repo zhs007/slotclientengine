@@ -36,9 +36,11 @@ import {
   GAME002_GRID_CELL_REEL_OFFSETS,
   GAME002_GRID_CELL_REEL_ORDER,
   GAME002_GRID_CELL_REEL_TIMING,
+  GAME002_DEFAULT_GRID_LAYOUT,
   createGame002Layout,
   createGame002ReelLayerLayout,
   createGame002ReelLayout,
+  type Game002GridLayout,
   type Game002ReelLayerLayout,
 } from "./game-layout.js";
 import { GAME002_SYMBOL_SCALES } from "./symbol-animation-config.js";
@@ -54,6 +56,7 @@ export interface Game002ReelConfig {
   readonly texturedSymbols: readonly string[];
   readonly missingAssetLabel: string;
   readonly symbolScales: ReelSymbolScaleMap;
+  readonly gridLayout: Game002GridLayout;
   readonly cellReelOffsets: GridCellReelOffsetMatrix;
   readonly direction: ReelSpinDirection;
   readonly orderMode: GridCellOrderMode;
@@ -67,6 +70,7 @@ export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   texturedSymbols: GAME002_DISPLAY_SYMBOLS,
   missingAssetLabel: "skin 2",
   symbolScales: GAME002_SYMBOL_SCALES,
+  gridLayout: GAME002_DEFAULT_GRID_LAYOUT,
   cellReelOffsets: GAME002_GRID_CELL_REEL_OFFSETS,
   direction: "forward",
   orderMode: GAME002_GRID_CELL_REEL_ORDER,
@@ -130,10 +134,10 @@ export function createGame002ReelRuntime(
       requiredStateTextures: GAME002_REQUIRED_STATE_TEXTURES,
     },
   });
-  const layout = createGame002ReelLayout();
+  const layout = createGame002ReelLayout(config.gridLayout);
   const layerLayout = createGame002ReelLayerLayout(
     layout,
-    createGame002Layout(),
+    createGame002Layout({ gridLayout: config.gridLayout }),
   );
   const order = createGridCellOrder({
     columns: GAME002_REEL_COUNT,

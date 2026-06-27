@@ -65,6 +65,7 @@ declare module "cc" {
 
   export class Node {
     name: string;
+    readonly isValid: boolean;
     active: boolean;
     parent: Node | null;
     children: Node[];

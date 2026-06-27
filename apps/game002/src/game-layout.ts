@@ -42,6 +42,8 @@ export const GAME002_REELS_NAME = "reels-001";
 export const GAME002_REEL_COUNT = 6;
 export const GAME002_VISIBLE_ROWS = 9;
 export const GAME002_CELL_SIZE = 120;
+export const GAME002_SKIN1_CELL_WIDTH = 125;
+export const GAME002_SKIN1_CELL_HEIGHT = 400 / 3;
 export const GAME002_GRID_CELL_REEL_ORDER =
   "top-down-left-right" satisfies GridCellOrderMode;
 export const GAME002_GRID_CELL_REEL_TIMING = Object.freeze({
@@ -78,6 +80,25 @@ export const GAME002_BOARD_FRAME = Object.freeze(
   }),
 );
 
+export const GAME002_SKIN1_BOARD_FRAME = Object.freeze({
+  x: 620,
+  y: 465,
+  width: GAME002_REEL_COUNT * GAME002_SKIN1_CELL_WIDTH,
+  height: GAME002_VISIBLE_ROWS * GAME002_SKIN1_CELL_HEIGHT,
+});
+
+export const GAME002_DEFAULT_GRID_LAYOUT = Object.freeze({
+  boardFrame: GAME002_BOARD_FRAME,
+  cellWidth: GAME002_CELL_SIZE,
+  cellHeight: GAME002_CELL_SIZE,
+}) satisfies Game002GridLayout;
+
+export const GAME002_SKIN1_GRID_LAYOUT = Object.freeze({
+  boardFrame: GAME002_SKIN1_BOARD_FRAME,
+  cellWidth: GAME002_SKIN1_CELL_WIDTH,
+  cellHeight: GAME002_SKIN1_CELL_HEIGHT,
+}) satisfies Game002GridLayout;
+
 export const GAME002_FOCUS_MARGIN = Object.freeze({
   left: 60,
   right: 60,
@@ -97,6 +118,17 @@ export interface Rect {
   readonly height: number;
 }
 
+export interface Game002GridLayout {
+  readonly boardFrame: Rect;
+  readonly cellWidth: number;
+  readonly cellHeight: number;
+}
+
+export interface Game002LayoutOptions {
+  readonly viewportSize?: RenderViewportSize;
+  readonly gridLayout?: Game002GridLayout;
+}
+
 export interface Game002Layout {
   readonly artSize: typeof GAME002_ART_SIZE;
   readonly stage: typeof GAME002_ART_SIZE;
@@ -105,7 +137,7 @@ export interface Game002Layout {
   readonly worldOffset: FocusedArtViewport["worldOffset"];
   readonly background: Point;
   readonly backgroundFrame: Rect;
-  readonly boardFrame: typeof GAME002_BOARD_FRAME;
+  readonly boardFrame: Rect;
   readonly boardFrameInViewport: Rect;
 }
 
@@ -117,6 +149,8 @@ export interface Game002ReelLayerLayout {
   readonly stageVisibleFrame: Rect;
   readonly viewportVisibleFrame: Rect;
 }
+
+type Game002LayoutInput = RenderViewportSize | Game002LayoutOptions;
 
 export function calculateGame002FrameScale(
   viewportWidth: number,
@@ -132,27 +166,31 @@ export function calculateGame002FrameScale(
   return Math.min(viewportWidth / stage.width, viewportHeight / stage.height);
 }
 
-export function createGame002FramePolicy(): SlotGameFramePolicy {
+export function createGame002FramePolicy(
+  gridLayout: Game002GridLayout = GAME002_DEFAULT_GRID_LAYOUT,
+): SlotGameFramePolicy {
+  validateGame002GridLayout(gridLayout);
   return Object.freeze({
     mode: "focus",
     maxDesignSize: GAME002_ART_SIZE,
     preferredPortraitSize: GAME002_REFERENCE_SIZE,
     focusRect: Object.freeze({
-      width: GAME002_BOARD_FRAME.width,
-      height: GAME002_BOARD_FRAME.height,
+      width: gridLayout.boardFrame.width,
+      height: gridLayout.boardFrame.height,
     }),
     minFocusMargin: GAME002_FOCUS_MARGIN,
   });
 }
 
 export function createGame002Layout(
-  viewportSize: RenderViewportSize = GAME002_REFERENCE_SIZE,
+  input: Game002LayoutInput = GAME002_REFERENCE_SIZE,
 ): Game002Layout {
-  validateGame002BoardFrame();
+  const { viewportSize, gridLayout } = normalizeGame002LayoutInput(input);
+  validateGame002GridLayout(gridLayout);
   const viewport = calculateFocusedArtViewport({
     artSize: GAME002_ART_SIZE,
     viewportSize,
-    focusRect: GAME002_BOARD_FRAME,
+    focusRect: gridLayout.boardFrame,
     minMargin: GAME002_FOCUS_MARGIN,
   });
   return Object.freeze({
@@ -168,14 +206,27 @@ export function createGame002Layout(
       width: GAME002_ART_SIZE.width,
       height: GAME002_ART_SIZE.height,
     }),
-    boardFrame: GAME002_BOARD_FRAME,
+    boardFrame: gridLayout.boardFrame,
     boardFrameInViewport: viewport.focusRectInViewport,
   });
+}
+
+export function validateGame002GridLayout(
+  gridLayout: Game002GridLayout = GAME002_DEFAULT_GRID_LAYOUT,
+): void {
+  validateGame002BoardFrame(
+    gridLayout.boardFrame,
+    GAME002_ART_SIZE,
+    gridLayout.cellWidth,
+    gridLayout.cellHeight,
+  );
 }
 
 export function validateGame002BoardFrame(
   frame: Rect = GAME002_BOARD_FRAME,
   stage: typeof GAME002_ART_SIZE = GAME002_ART_SIZE,
+  cellWidth = GAME002_CELL_SIZE,
+  cellHeight = GAME002_CELL_SIZE,
 ): void {
   if (!Number.isFinite(frame.x) || frame.x < 0) {
     throw new Error("game002 board frame x must be a non-negative number.");
@@ -189,11 +240,17 @@ export function validateGame002BoardFrame(
   if (!Number.isFinite(frame.height) || frame.height <= 0) {
     throw new Error("game002 board frame height must be a positive number.");
   }
-  if (frame.width !== GAME002_REEL_COUNT * GAME002_CELL_SIZE) {
-    throw new Error("game002 board width must be 6 * 120.");
+  if (!Number.isFinite(cellWidth) || cellWidth <= 0) {
+    throw new Error("game002 cell width must be a positive number.");
   }
-  if (frame.height !== GAME002_VISIBLE_ROWS * GAME002_CELL_SIZE) {
-    throw new Error("game002 board height must be 9 * 120.");
+  if (!Number.isFinite(cellHeight) || cellHeight <= 0) {
+    throw new Error("game002 cell height must be a positive number.");
+  }
+  if (!numbersClose(frame.width, GAME002_REEL_COUNT * cellWidth)) {
+    throw new Error("game002 board width must be reelCount * cellWidth.");
+  }
+  if (!numbersClose(frame.height, GAME002_VISIBLE_ROWS * cellHeight)) {
+    throw new Error("game002 board height must be visibleRows * cellHeight.");
   }
   if (
     frame.x + frame.width > stage.width ||
@@ -203,12 +260,15 @@ export function validateGame002BoardFrame(
   }
 }
 
-export function createGame002ReelLayout(): ReelLayout {
+export function createGame002ReelLayout(
+  gridLayout: Game002GridLayout = GAME002_DEFAULT_GRID_LAYOUT,
+): ReelLayout {
+  validateGame002GridLayout(gridLayout);
   return createReelLayout({
     reelCount: GAME002_REEL_COUNT,
     visibleRows: GAME002_VISIBLE_ROWS,
-    cellWidth: GAME002_CELL_SIZE,
-    cellHeight: GAME002_CELL_SIZE,
+    cellWidth: gridLayout.cellWidth,
+    cellHeight: gridLayout.cellHeight,
     columnGap: 0,
   });
 }
@@ -217,7 +277,12 @@ export function createGame002ReelLayerLayout(
   layout: ReelLayout,
   gameLayout: Game002Layout = createGame002Layout(),
 ): Game002ReelLayerLayout {
-  validateGame002BoardFrame(gameLayout.boardFrame, gameLayout.stage);
+  validateGame002BoardFrame(
+    gameLayout.boardFrame,
+    gameLayout.stage,
+    layout.cellWidth,
+    layout.cellHeight,
+  );
   if (layout.reelCount !== GAME002_REEL_COUNT) {
     throw new Error("game002 reel layout reelCount must be 6.");
   }
@@ -225,10 +290,16 @@ export function createGame002ReelLayerLayout(
     throw new Error("game002 reel layout visibleRows must be 9.");
   }
   if (
-    layout.cellWidth !== GAME002_CELL_SIZE ||
-    layout.cellHeight !== GAME002_CELL_SIZE
+    !numbersClose(
+      gameLayout.boardFrame.width,
+      layout.reelCount * layout.cellWidth,
+    ) ||
+    !numbersClose(
+      gameLayout.boardFrame.height,
+      layout.visibleRows * layout.cellHeight,
+    )
   ) {
-    throw new Error("game002 reel layout cell size must be 120 x 120.");
+    throw new Error("game002 reel layout cell size must match board frame.");
   }
   if (layout.columnGap !== 0) {
     throw new Error("game002 reel layout columnGap must be 0.");
@@ -244,4 +315,24 @@ export function createGame002ReelLayerLayout(
     stageVisibleFrame: gameLayout.boardFrame,
     viewportVisibleFrame: gameLayout.boardFrameInViewport,
   });
+}
+
+function normalizeGame002LayoutInput(input: Game002LayoutInput): {
+  readonly viewportSize: RenderViewportSize;
+  readonly gridLayout: Game002GridLayout;
+} {
+  if ("width" in input && "height" in input) {
+    return {
+      viewportSize: input,
+      gridLayout: GAME002_DEFAULT_GRID_LAYOUT,
+    };
+  }
+  return {
+    viewportSize: input.viewportSize ?? GAME002_REFERENCE_SIZE,
+    gridLayout: input.gridLayout ?? GAME002_DEFAULT_GRID_LAYOUT,
+  };
+}
+
+function numbersClose(left: number, right: number): boolean {
+  return Math.abs(left - right) < 1e-6;
 }

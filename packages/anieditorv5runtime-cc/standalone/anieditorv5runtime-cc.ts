@@ -2941,7 +2941,7 @@ export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
   createNode(name: string): TNode;
   appendChild(parent: TNode, child: TNode): void;
   removeChild(parent: TNode, child: TNode): void;
-  isValidNode?(node: TNode | null | undefined): node is TNode;
+  isValidNode?(node: TNode): boolean;
   getParent(node: TNode): TNode | null;
   captureLocalTransform(node: TNode): V5GCocosNodeTransformSnapshot;
   restoreLocalTransform(
@@ -3025,10 +3025,6 @@ interface CocosWorldTransformSnapshot {
   position: Vec3;
   scale: Vec3;
   rotation: Quat;
-}
-
-interface CocosNodeWithValidity extends Node {
-  isValid?: boolean;
 }
 
 // Cocos Creator 3.8.6 exposes these enum values internally, but not all builds
@@ -3153,11 +3149,7 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
 }
 
 function isValidCocosNode(node: Node | null | undefined): node is Node {
-  return (
-    node !== null &&
-    node !== undefined &&
-    (node as CocosNodeWithValidity).isValid !== false
-  );
+  return node !== null && node !== undefined && node.isValid !== false;
 }
 
 function copyVec3(source: Vec3): Vec3 {
@@ -4199,9 +4191,9 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   private pendingComplete: V5GCocosPlaybackCompleteContext | null = null;
   private drainPaused = false;
   private readonly playbackEvents = new Map<string, NormalizedPlaybackEvent>();
-  private readonly completeListeners = new Set<
+  private readonly completeListeners: Array<
     (event: V5GCocosPlaybackCompleteContext) => void
-  >();
+  > = [];
   private loopIndex = 0;
   private nextPlaybackEventOrder = 0;
 
@@ -4612,9 +4604,14 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
         "V5GCocosPlayer.onPlaybackComplete listener must be a function.",
       );
     }
-    this.completeListeners.add(listener);
+    if (this.completeListeners.indexOf(listener) < 0) {
+      this.completeListeners.push(listener);
+    }
     return () => {
-      this.completeListeners.delete(listener);
+      const listenerIndex = this.completeListeners.indexOf(listener);
+      if (listenerIndex >= 0) {
+        this.completeListeners.splice(listenerIndex, 1);
+      }
     };
   }
 
@@ -4647,7 +4644,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.segmentedPlayback = null;
     this.pendingComplete = null;
     this.playbackEvents.clear();
-    this.completeListeners.clear();
+    this.completeListeners.length = 0;
     this.loopIndex = 0;
     this.drainPaused = false;
     this.particleRuntime.reset();
@@ -5467,7 +5464,10 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   }
 
   private emitPlaybackComplete(context: V5GCocosPlaybackCompleteContext): void {
-    for (const listener of [...this.completeListeners]) {
+    const listeners = this.completeListeners.slice();
+    for (let index = 0; index < listeners.length; index += 1) {
+      const listener = listeners[index];
+      if (typeof listener !== "function") continue;
       listener(context);
     }
   }

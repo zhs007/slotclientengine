@@ -129,7 +129,7 @@ for (const expected of requiredExports) {
 
 const requiredSnippets = [
   "getParent(node: TNode): TNode | null",
-  "isValidNode?(node: TNode | null | undefined): node is TNode",
+  "isValidNode?(node: TNode): boolean",
   "captureLocalTransform(node: TNode): V5GCocosNodeTransformSnapshot",
   "captureWorldTransform(node: TNode): V5GCocosNodeTransformSnapshot",
   "detachMountedNodes(targets: readonly (string | TNode)[]): void",

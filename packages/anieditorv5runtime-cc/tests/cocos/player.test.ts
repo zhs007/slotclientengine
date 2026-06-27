@@ -79,8 +79,8 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
     }
   }
 
-  isValidNode(node: FakeNode | null | undefined): node is FakeNode {
-    return node !== null && node !== undefined && !node.destroyed;
+  isValidNode(node: FakeNode): boolean {
+    return !node.destroyed;
   }
 
   getParent(node: FakeNode): FakeNode | null {
@@ -1380,6 +1380,25 @@ describe("V5GCocosPlayer", () => {
     player.play();
     player.update(1);
     expect(events).toEqual([]);
+  });
+
+  it("deduplicates complete listener registrations", () => {
+    const { player } = makePlayer(tinyProject());
+    const complete: unknown[] = [];
+    const listener = (event: unknown): void => {
+      complete.push(event);
+    };
+    player.init();
+    const disposeFirst = player.onPlaybackComplete(listener);
+    const disposeSecond = player.onPlaybackComplete(listener);
+
+    player.setLoop(false);
+    player.play();
+    player.update(1);
+
+    expect(complete).toHaveLength(1);
+    disposeFirst();
+    disposeSecond();
   });
 
   it("does not trigger markers on seek, pause, or restart and restart clears active range", () => {
