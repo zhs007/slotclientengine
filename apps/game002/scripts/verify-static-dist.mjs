@@ -20,10 +20,6 @@ const SENSITIVE_PATTERNS = Object.freeze([
     label: "old default gamecode",
     value: ["065P8N", "OEgwd", "SXFTB6uDqX"].join(""),
   },
-  {
-    label: "old default live server host",
-    value: ["gameserv", "rgstest", "slammerstudios", "com"].join("."),
-  },
 ]);
 
 const REQUIRED_SKIN_ASSETS = Object.freeze([

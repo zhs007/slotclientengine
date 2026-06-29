@@ -8,12 +8,16 @@ import {
   type SlotGameInitialState,
 } from "@slotclientengine/gameframeworks";
 import { GAME002_SAMPLE_DEFAULT_SCENE } from "./fixtures/game002-gmi.js";
-import { parseGame002FrameworkConfigFromQuery } from "../src/framework-config.js";
+import {
+  GAME002_LIVE_SERVER_URL,
+  parseGame002FrameworkConfigFromQuery,
+} from "../src/framework-config.js";
 
 describe("game002 framework flow", () => {
   it("uses game002 default spin request and collects only after adapter play resolves", async () => {
     const config = parseGame002FrameworkConfigFromQuery(validQuery());
     expect(config.skin).toBe("2");
+    expect(config.live.serverUrl).toBe(GAME002_LIVE_SERVER_URL);
     expect(config.live.gamecode).toBe("GAME_CODE");
     const client = new FakeClient();
     client.spinResult = createSpinResult({ totalwin: 1575, results: 1 });
@@ -122,7 +126,6 @@ describe("game002 framework flow", () => {
 function validQuery(overrides: Record<string, string> = {}): string {
   return `?${new URLSearchParams({
     skin: "2",
-    serverUrl: "wss://example.test/game",
     token: "TOKEN",
     gamecode: "GAME_CODE",
     businessid: "guest",

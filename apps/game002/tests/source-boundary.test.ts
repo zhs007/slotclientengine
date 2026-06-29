@@ -12,7 +12,6 @@ const BANNED_RUNTIME_CONFIG_STRINGS = Object.freeze([
   ["VITE", "GAME002"].join("_"),
   ["7a82f5ca", "45b5aa32", "46b2ad01", "23272295"].join(""),
   ["065P8N", "OEgwd", "SXFTB6uDqX"].join(""),
-  ["gameserv", "rgstest", "slammerstudios", "com"].join("."),
 ]);
 
 describe("game002 source boundary", () => {

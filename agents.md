@@ -34,6 +34,7 @@
 - `packages/rendercore` 拥有 Pixi 游戏内部的 art-size、focus-rect、visible-viewport 适配算法；游戏 app 只能配置 art 尺寸、focus 区域和资源，不要在 app 内复制通用裁切、居中或可见区域策略。
 - `game002` 的响应式适配重点区域必须由每套 skin 显式配置，坐标相对于完整 `2000 x 2000` 背景；不要把转轮 board frame 当作隐式适配 focus，也不要在 app 内复制 `rendercore` 的 art-viewport 映射算法。
 - `game002` 当前支持 `skin=1|2|3|4|5`；`skin=4` 映射 `assets/game002-s2/bg.png` 和 `assets/game002-s2` symbols，`skin=5` 映射 `assets/game002-s3/bg.jpg` 和 `assets/game002-s3` symbols。`assets/game002-s2/bg.png` 是背景不是 symbol，不要让 viewer/runtime 把它当成 symbol catalog fallback；新 skin 仍复用 `assets/gamecfg002/gameconfig.json` 和本地公开轮带，不改变 live 参数、`gamecode` 或服务器协议。
+- `game002` / `game003` 的 live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`；URL query 中不要提供 `serverUrl`，旧链接继续携带 `serverUrl` 时应显式失败而不是静默覆盖或忽略。
 - `game003` 使用 `apps/game003`、`assets/gamecfg003/gameconfig.json` 和 `assets/game003-s1`；第一版只支持 `skin=1`，并固定 live `gamecode=EfedJuHEaydXNghnmO9KI`，不要把 `game003-s1` 做成 `game002` 的新皮肤。
 - `game003-s1` 横版使用 `bg1.jpg`，竖版使用 `bg2.jpg`；横竖屏 art variant 和 focus-rect 选择属于 `packages/rendercore` 的通用适配能力，game app 只能配置 art 尺寸、focus 区域和资源。
 - `game003` 的 DOM frame 使用 `packages/uiframeworks` / `packages/gameframeworks` 的 `orientation-focus` policy 提交横竖屏不同 canvas 逻辑上限；不要在 app 内用私有 CSS/DOM resize 绕过 framework，也不要让横版 focus 宽度撑爆竖版 art。

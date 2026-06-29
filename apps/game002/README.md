@@ -10,12 +10,12 @@
 
 ## 数据来源
 
-`game002` 是单 app、多皮肤入口，不新增 `apps/game003`，也不新增 `assets/gamecfg003`。页面 URL 的 `skin` query 参数只选择前端背景和 symbol 资源，不改变 live 服务器、`gamecode`、token、下注参数、spin request 或 collect 流程。
+`game002` 是单 app、多皮肤入口，不新增 `apps/game003`，也不新增 `assets/gamecfg003`。页面 URL 的 `skin` query 参数只选择前端背景和 symbol 资源，不改变固定 live 服务器、`gamecode`、token、下注参数、spin request 或 collect 流程。
 
 五套皮肤共用：
 
 - `assets/gamecfg002/gameconfig.json`
-- 同一份 live `serverUrl`
+- 固定 live server：`wss://gameserv.rgstest.slammerstudios.com/`
 - 同一个 URL 传入的 `gamecode`
 
 `skin=1` 使用：
@@ -121,35 +121,34 @@ live spin 的滚动过程使用本地 `reels-001` 公开轮带。服务器真实
 
 ## Live 配置
 
-静态发布版只从页面 URL query 读取 live 和 spin 参数，不从构建环境、hash、cookie、`localStorage`、远程配置文件或默认值读取运行参数。第一屏仍然直接启动游戏画面；参数缺失或非法时初始化显式失败，不进入 mock、replay 或本地默认 scene。
+静态发布版只从页面 URL query 读取除服务器地址以外的 live 和 spin 参数，不从构建环境、hash、cookie、`localStorage`、远程配置文件或默认值读取运行参数。live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`，URL 中不支持 `serverUrl` 参数。第一屏仍然直接启动游戏画面；参数缺失或非法时初始化显式失败，不进入 mock、replay 或本地默认 scene。
 
-| 参数               | 必需 | 说明                                            |
-| ------------------ | ---- | ----------------------------------------------- |
-| `skin`             | 是   | 皮肤 id，只接受 `1`、`2`、`3`、`4` 或 `5`       |
-| `serverUrl`        | 是   | live WebSocket 地址，只接受 `ws://` 或 `wss://` |
-| `gamecode`         | 是   | live game code，非空；不从 skin 推导            |
-| `token`            | 是   | 登录 token，非空                                |
-| `businessid`       | 是   | business id，非空                               |
-| `clienttype`       | 是   | client type，非空                               |
-| `jurisdiction`     | 是   | jurisdiction，非空                              |
-| `language`         | 是   | language，非空                                  |
-| `bet`              | 是   | 正数，按服务端整数单位发送                      |
-| `lines`            | 是   | 正数                                            |
-| `times`            | 是   | 正数                                            |
-| `autonums`         | 是   | 整数，允许 `-1`                                 |
-| `requestTimeoutMs` | 是   | 正数，传给 live request timeout                 |
+| 参数               | 必需 | 说明                                      |
+| ------------------ | ---- | ----------------------------------------- |
+| `skin`             | 是   | 皮肤 id，只接受 `1`、`2`、`3`、`4` 或 `5` |
+| `gamecode`         | 是   | live game code，非空；不从 skin 推导      |
+| `token`            | 是   | 登录 token，非空                          |
+| `businessid`       | 是   | business id，非空                         |
+| `clienttype`       | 是   | client type，非空                         |
+| `jurisdiction`     | 是   | jurisdiction，非空                        |
+| `language`         | 是   | language，非空                            |
+| `bet`              | 是   | 正数，按服务端整数单位发送                |
+| `lines`            | 是   | 正数                                      |
+| `times`            | 是   | 正数                                      |
+| `autonums`         | 是   | 整数，允许 `-1`                           |
+| `requestTimeoutMs` | 是   | 正数，传给 live request timeout           |
 
 示例：
 
 ```text
-http://127.0.0.1:5207/?skin=2&serverUrl=wss%3A%2F%2Fexample.test%2F&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
-http://127.0.0.1:5207/?skin=1&serverUrl=wss%3A%2F%2Fexample.test%2F&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
-http://127.0.0.1:5207/?skin=3&serverUrl=wss%3A%2F%2Fexample.test%2F&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
-http://127.0.0.1:5207/?skin=4&serverUrl=wss%3A%2F%2Fexample.test%2F&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
-http://127.0.0.1:5207/?skin=5&serverUrl=wss%3A%2F%2Fexample.test%2F&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
+http://127.0.0.1:5207/?skin=2&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
+http://127.0.0.1:5207/?skin=1&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
+http://127.0.0.1:5207/?skin=3&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
+http://127.0.0.1:5207/?skin=4&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
+http://127.0.0.1:5207/?skin=5&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
 ```
 
-参数值必须先用 `encodeURIComponent()` 编码再拼到 URL，尤其是 `serverUrl` 中的 `:`、`/`，以及 token 中可能出现的 `+`、`&`、`=`。如果页面通过 HTTPS 发布，`serverUrl` 必须使用 `wss://`，避免浏览器混合内容拦截。
+参数值必须先用 `encodeURIComponent()` 编码再拼到 URL，尤其是 token 中可能出现的 `+`、`&`、`=`。如果 URL 中继续携带旧的 `serverUrl` 参数，初始化会显式失败，避免误以为服务器地址仍可由链接覆盖。
 
 URL query 会进入浏览器地址栏、历史记录、Caddy/CDN access log、监控日志和可能的 Referer。发布环境应使用短期 token 或一次性启动 token，并按安全策略处理日志。
 
@@ -199,10 +198,10 @@ game002.example.com {
 ```text
 /srv/www/game002/index.html
 /srv/www/game002/assets/*
-https://cdn.example.com/game002/?serverUrl=...
+https://cdn.example.com/game002/?skin=2&gamecode=GAME_CODE&token=TOKEN&...
 ```
 
-由于 Vite `base: "./"` 会让资源从当前目录下的 `./assets/` 加载，子目录访问地址必须带尾斜杠，例如 `https://cdn.example.com/game002/?serverUrl=...`。不要使用 `https://cdn.example.com/game002?serverUrl=...`；如需兼容无尾斜杠入口，Caddy/CDN 必须配置保留原 query 参数的重定向。
+由于 Vite `base: "./"` 会让资源从当前目录下的 `./assets/` 加载，子目录访问地址必须带尾斜杠，例如 `https://cdn.example.com/game002/?skin=2&gamecode=GAME_CODE&token=TOKEN&...`。不要使用 `https://cdn.example.com/game002?skin=2&...`；如需兼容无尾斜杠入口，Caddy/CDN 必须配置保留原 query 参数的重定向。
 
 ## Spin 时序
 
@@ -261,7 +260,7 @@ pnpm install
 
 - 缺少必需 URL query 参数、参数为空或同一参数重复出现。
 - 缺少 `skin`、`skin` 重复、`skin` 为空，或 `skin` 不是 `1` / `2` / `3` / `4` / `5`。
-- `serverUrl` 使用非 WebSocket 协议，或 HTTPS 页面使用 `ws://`。
+- URL 中携带旧的 `serverUrl` 参数；服务器地址已固定在 app 内。
 - `bet`、`lines`、`times`、`requestTimeoutMs` 非正数，或 `autonums` 不是整数。
 - token 等参数没有正确 URL encode，导致 `+`、`&`、`=` 被错误解析。
 - 子目录静态发布入口缺少尾斜杠，导致 `./assets/*` 解析到错误路径。

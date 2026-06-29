@@ -1,14 +1,15 @@
-import {
-  validateLiveServerUrl,
-  type SlotGameBetOption,
-  type SlotGameLiveConfig,
-  type SlotGameSpinRequest,
+import type {
+  SlotGameBetOption,
+  SlotGameLiveConfig,
+  SlotGameSpinRequest,
 } from "@slotclientengine/gameframeworks";
 import { parseGame002SkinId, type Game002SkinId } from "./skin-id.js";
 
+export const GAME002_LIVE_SERVER_URL =
+  "wss://gameserv.rgstest.slammerstudios.com/";
+
 export interface Game002QueryConfig {
   readonly skin: Game002SkinId;
-  readonly serverUrl: string;
   readonly token: string;
   readonly gamecode: string;
   readonly businessid: string;
@@ -30,23 +31,16 @@ export interface Game002FrameworkConfig {
   readonly spinRequest: SlotGameSpinRequest;
 }
 
-export interface Game002QueryParseOptions {
-  readonly pageProtocol?: string;
-}
-
 export function parseGame002QueryConfig(
   search: string | URLSearchParams,
-  options: Game002QueryParseOptions = {},
 ): Game002QueryConfig {
   const params =
     search instanceof URLSearchParams ? search : new URLSearchParams(search);
+  rejectUnsupportedQueryParameter(params, "serverUrl");
   const skin = parseGame002SkinId(parseRequiredQueryString(params, "skin"));
-  const serverUrl = parseRequiredQueryString(params, "serverUrl");
-  validateGame002ServerUrl(serverUrl, options.pageProtocol);
 
   return Object.freeze({
     skin,
-    serverUrl,
     token: parseRequiredQueryString(params, "token"),
     gamecode: parseRequiredQueryString(params, "gamecode"),
     businessid: parseRequiredQueryString(params, "businessid"),
@@ -63,9 +57,8 @@ export function parseGame002QueryConfig(
 
 export function parseGame002FrameworkConfigFromQuery(
   search: string | URLSearchParams,
-  options: Game002QueryParseOptions = {},
 ): Game002FrameworkConfig {
-  const parsed = parseGame002QueryConfig(search, options);
+  const parsed = parseGame002QueryConfig(search);
   const betOption: SlotGameBetOption = Object.freeze({
     bet: parsed.bet,
     lines: parsed.lines,
@@ -81,7 +74,7 @@ export function parseGame002FrameworkConfigFromQuery(
   return Object.freeze({
     skin: parsed.skin,
     live: Object.freeze({
-      serverUrl: parsed.serverUrl,
+      serverUrl: GAME002_LIVE_SERVER_URL,
       token: parsed.token,
       gamecode: parsed.gamecode,
       businessid: parsed.businessid,
@@ -96,20 +89,13 @@ export function parseGame002FrameworkConfigFromQuery(
   });
 }
 
-function validateGame002ServerUrl(value: string, pageProtocol?: string): void {
-  try {
-    validateLiveServerUrl(value);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+function rejectUnsupportedQueryParameter(
+  params: URLSearchParams,
+  name: string,
+): void {
+  if (params.has(name)) {
     throw new Error(
-      `serverUrl query parameter must be a valid ws:// or wss:// live URL. ${reason}`,
-    );
-  }
-
-  const parsed = new URL(value);
-  if (pageProtocol === "https:" && parsed.protocol === "ws:") {
-    throw new Error(
-      "serverUrl query parameter must use wss:// when the page is served over https:.",
+      `${name} query parameter is not supported; game002 uses a fixed live server.`,
     );
   }
 }

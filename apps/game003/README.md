@@ -1,6 +1,6 @@
 # game003
 
-`apps/game003` 是 `game003` live slot 客户端。入口第一屏直接加载游戏画面，通过 URL query 读取 live 参数，并使用 `@slotclientengine/gameframeworks` 作为 UI / live / logic facade。
+`apps/game003` 是 `game003` live slot 客户端。入口第一屏直接加载游戏画面，通过 URL query 读取除服务器地址外的 live 参数，并使用 `@slotclientengine/gameframeworks` 作为 UI / live / logic facade。
 
 ## 资源
 
@@ -50,7 +50,6 @@ DOM frame 使用 `gameframeworks` / `uiframeworks` 的 `orientation-focus` polic
 
 ```text
 skin=1
-serverUrl=<ws/wss url>
 gamecode=EfedJuHEaydXNghnmO9KI
 token=<token>
 businessid=<business id>
@@ -64,13 +63,15 @@ autonums=-1
 requestTimeoutMs=30000
 ```
 
+live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`，URL 中不支持 `serverUrl` 参数。
+
 示例：
 
 ```text
-http://127.0.0.1:5208/?skin=1&serverUrl=wss%3A%2F%2Fexample.test%2F&gamecode=EfedJuHEaydXNghnmO9KI&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=10&times=1&autonums=-1&requestTimeoutMs=30000
+http://127.0.0.1:5208/?skin=1&gamecode=EfedJuHEaydXNghnmO9KI&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=10&times=1&autonums=-1&requestTimeoutMs=30000
 ```
 
-`token` 中如果包含 `+`、`&`、`=` 等字符，调用方必须先使用 `encodeURIComponent()`。
+`token` 中如果包含 `+`、`&`、`=` 等字符，调用方必须先使用 `encodeURIComponent()`。如果 URL 中继续携带旧的 `serverUrl` 参数，初始化会显式失败，避免误以为服务器地址仍可由链接覆盖。
 
 ## Reel 边界
 

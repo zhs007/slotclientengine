@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   GAME003_GAMECODE,
+  GAME003_LIVE_SERVER_URL,
   parseGame003FrameworkConfigFromQuery,
   parseGame003QueryConfig,
 } from "../src/env.js";
@@ -9,7 +10,6 @@ describe("game003 runtime query config", () => {
   it("parses a complete query string and maps it to framework contracts", () => {
     expect(parseGame003QueryConfig(validQuery())).toEqual({
       skin: "1",
-      serverUrl: "wss://example.test/game",
       token: "TOKEN",
       gamecode: GAME003_GAMECODE,
       businessid: "guest",
@@ -26,7 +26,7 @@ describe("game003 runtime query config", () => {
     expect(parseGame003FrameworkConfigFromQuery(validQuery())).toEqual({
       skin: "1",
       live: {
-        serverUrl: "wss://example.test/game",
+        serverUrl: GAME003_LIVE_SERVER_URL,
         token: "TOKEN",
         gamecode: GAME003_GAMECODE,
         businessid: "guest",
@@ -75,20 +75,18 @@ describe("game003 runtime query config", () => {
     );
   });
 
-  it("rejects invalid URLs, unsafe ws on https, whitespace and invalid numbers", () => {
+  it("uses a fixed live server and rejects the old serverUrl query parameter", () => {
     expect(
-      parseGame003QueryConfig(validQuery({ serverUrl: "ws://127.0.0.1:9/" }), {
-        pageProtocol: "http:",
-      }).serverUrl,
-    ).toBe("ws://127.0.0.1:9/");
+      parseGame003FrameworkConfigFromQuery(validQuery()).live.serverUrl,
+    ).toBe(GAME003_LIVE_SERVER_URL);
     expect(() =>
-      parseGame003QueryConfig(validQuery({ serverUrl: "https://example/" })),
-    ).toThrow(/ws:\/\/ or wss:\/\//);
-    expect(() =>
-      parseGame003QueryConfig(validQuery({ serverUrl: "ws://127.0.0.1:9/" }), {
-        pageProtocol: "https:",
-      }),
-    ).toThrow(/must use wss:\/\//);
+      parseGame003QueryConfig(
+        `${validQuery()}&serverUrl=wss%3A%2F%2Fold.test%2F`,
+      ),
+    ).toThrow(/serverUrl query parameter is not supported/);
+  });
+
+  it("rejects whitespace and invalid numbers", () => {
     expect(() => parseGame003QueryConfig(validQuery({ bet: "0" }))).toThrow(
       /bet query parameter/,
     );
@@ -123,7 +121,6 @@ describe("game003 runtime query config", () => {
 
 const REQUIRED_PARAMS = Object.freeze([
   "skin",
-  "serverUrl",
   "gamecode",
   "token",
   "businessid",
@@ -144,7 +141,6 @@ function validQuery(overrides: Record<string, string> = {}): string {
 function validParams(overrides: Record<string, string> = {}): URLSearchParams {
   const params = new URLSearchParams({
     skin: "1",
-    serverUrl: "wss://example.test/game",
     gamecode: GAME003_GAMECODE,
     token: "TOKEN",
     businessid: "guest",

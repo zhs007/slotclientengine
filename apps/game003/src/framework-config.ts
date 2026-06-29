@@ -1,16 +1,16 @@
-import {
-  validateLiveServerUrl,
-  type SlotGameBetOption,
-  type SlotGameLiveConfig,
-  type SlotGameSpinRequest,
+import type {
+  SlotGameBetOption,
+  SlotGameLiveConfig,
+  SlotGameSpinRequest,
 } from "@slotclientengine/gameframeworks";
 import { parseGame003SkinId, type Game003SkinId } from "./skin-id.js";
 
 export const GAME003_GAMECODE = "EfedJuHEaydXNghnmO9KI";
+export const GAME003_LIVE_SERVER_URL =
+  "wss://gameserv.rgstest.slammerstudios.com/";
 
 export interface Game003QueryConfig {
   readonly skin: Game003SkinId;
-  readonly serverUrl: string;
   readonly token: string;
   readonly gamecode: typeof GAME003_GAMECODE;
   readonly businessid: string;
@@ -32,19 +32,13 @@ export interface Game003FrameworkConfig {
   readonly spinRequest: SlotGameSpinRequest;
 }
 
-export interface Game003QueryParseOptions {
-  readonly pageProtocol?: string;
-}
-
 export function parseGame003QueryConfig(
   search: string | URLSearchParams,
-  options: Game003QueryParseOptions = {},
 ): Game003QueryConfig {
   const params =
     search instanceof URLSearchParams ? search : new URLSearchParams(search);
+  rejectUnsupportedQueryParameter(params, "serverUrl");
   const skin = parseGame003SkinId(parseRequiredQueryString(params, "skin"));
-  const serverUrl = parseRequiredQueryString(params, "serverUrl");
-  validateGame003ServerUrl(serverUrl, options.pageProtocol);
   const gamecode = parseRequiredQueryString(params, "gamecode");
   if (gamecode !== GAME003_GAMECODE) {
     throw new Error(`gamecode query parameter must be ${GAME003_GAMECODE}.`);
@@ -52,7 +46,6 @@ export function parseGame003QueryConfig(
 
   return Object.freeze({
     skin,
-    serverUrl,
     token: parseRequiredQueryString(params, "token"),
     gamecode,
     businessid: parseRequiredQueryString(params, "businessid"),
@@ -69,9 +62,8 @@ export function parseGame003QueryConfig(
 
 export function parseGame003FrameworkConfigFromQuery(
   search: string | URLSearchParams,
-  options: Game003QueryParseOptions = {},
 ): Game003FrameworkConfig {
-  const parsed = parseGame003QueryConfig(search, options);
+  const parsed = parseGame003QueryConfig(search);
   const betOption: SlotGameBetOption = Object.freeze({
     bet: parsed.bet,
     lines: parsed.lines,
@@ -87,7 +79,7 @@ export function parseGame003FrameworkConfigFromQuery(
   return Object.freeze({
     skin: parsed.skin,
     live: Object.freeze({
-      serverUrl: parsed.serverUrl,
+      serverUrl: GAME003_LIVE_SERVER_URL,
       token: parsed.token,
       gamecode: parsed.gamecode,
       businessid: parsed.businessid,
@@ -102,20 +94,13 @@ export function parseGame003FrameworkConfigFromQuery(
   });
 }
 
-function validateGame003ServerUrl(value: string, pageProtocol?: string): void {
-  try {
-    validateLiveServerUrl(value);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+function rejectUnsupportedQueryParameter(
+  params: URLSearchParams,
+  name: string,
+): void {
+  if (params.has(name)) {
     throw new Error(
-      `serverUrl query parameter must be a valid ws:// or wss:// live URL. ${reason}`,
-    );
-  }
-
-  const parsed = new URL(value);
-  if (pageProtocol === "https:" && parsed.protocol === "ws:") {
-    throw new Error(
-      "serverUrl query parameter must use wss:// when the page is served over https:.",
+      `${name} query parameter is not supported; game003 uses a fixed live server.`,
     );
   }
 }
