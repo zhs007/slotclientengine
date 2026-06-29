@@ -376,7 +376,7 @@ function readBundledJavaScript(assetNames) {
 
 function findInlinePngBindings(bundledJavaScript) {
   const bindings = new Set();
-  const pattern = /\b([A-Za-z_$][\w$]*)=`data:image\/png;base64,[^`]+`/g;
+  const pattern = /([A-Za-z_$][\w$]*)=`data:image\/png;base64,[^`]+`/g;
   for (const match of bundledJavaScript.matchAll(pattern)) {
     bindings.add(match[1]);
   }

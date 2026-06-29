@@ -19,6 +19,13 @@ import {
   GAME002_SKIN3_DISPLAY_SYMBOLS,
   getGame002SkinConfig,
 } from "../src/skin-config.js";
+import {
+  GAME002_ART_SIZE,
+  GAME002_SKIN1_FOCUS_REGION,
+  GAME002_SKIN2_FOCUS_REGION,
+  GAME002_SKIN3_FOCUS_REGION,
+  validateGame002FocusRegion,
+} from "../src/game-layout.js";
 
 describe("game002 assets", () => {
   afterEach(() => {
@@ -79,6 +86,14 @@ describe("game002 assets", () => {
       width: 750,
       height: 1200,
     });
+    expect(skin1.focusRegion).toEqual(GAME002_SKIN1_FOCUS_REGION);
+    expect(skin2.focusRegion).toEqual(GAME002_SKIN2_FOCUS_REGION);
+    expect(skin3.focusRegion).toEqual(GAME002_SKIN3_FOCUS_REGION);
+    for (const skin of [skin1, skin2, skin3]) {
+      expect(() =>
+        validateGame002FocusRegion(skin.focusRegion, GAME002_ART_SIZE),
+      ).not.toThrow();
+    }
     expect(
       Object.keys(skin1.symbolModules).every((key) =>
         key.includes("symbols001"),

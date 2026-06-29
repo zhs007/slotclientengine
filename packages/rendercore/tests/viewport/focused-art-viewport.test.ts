@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateFocusedArtViewport,
+  mapArtRectToViewport,
   mapReferenceRectToArt,
 } from "../../src/viewport/index.js";
 
@@ -72,6 +73,52 @@ describe("focused art viewport", () => {
     ).toMatchObject({
       visibleRect: { x: 0, y: 270, width: 2000, height: 1200 },
       focusRectInViewport: { x: 637.5, y: 60, width: 720, height: 1080 },
+    });
+  });
+
+  it("maps an art rect through a visible rect even when it differs from focus", () => {
+    const focusRect = Object.freeze({
+      x: 760,
+      y: 210,
+      width: 480,
+      height: 600,
+    });
+    const boardRect = Object.freeze({
+      x: 637.5,
+      y: 330,
+      width: 720,
+      height: 1080,
+    });
+    const viewport = calculateFocusedArtViewport({
+      artSize: ART_SIZE,
+      viewportSize: { width: 1200, height: 1200 },
+      focusRect,
+      minMargin: MARGIN,
+    });
+
+    expect(viewport.visibleRect).toEqual({
+      x: 400,
+      y: 0,
+      width: 1200,
+      height: 1200,
+    });
+    expect(viewport.focusRectInViewport).toEqual({
+      x: 360,
+      y: 210,
+      width: 480,
+      height: 600,
+    });
+    expect(
+      mapArtRectToViewport({
+        artSize: ART_SIZE,
+        visibleRect: viewport.visibleRect,
+        rect: boardRect,
+      }),
+    ).toEqual({
+      x: 237.5,
+      y: 330,
+      width: 720,
+      height: 1080,
     });
   });
 
@@ -182,5 +229,29 @@ describe("focused art viewport", () => {
         align: "left" as never,
       }),
     ).toThrow(/align/);
+  });
+
+  it("rejects invalid art rect viewport mappings", () => {
+    expect(() =>
+      mapArtRectToViewport({
+        artSize: ART_SIZE,
+        visibleRect: { x: 900, y: 0, width: 1200, height: 1200 },
+        rect: FOCUS_RECT,
+      }),
+    ).toThrow(/visibleRect/);
+    expect(() =>
+      mapArtRectToViewport({
+        artSize: ART_SIZE,
+        visibleRect: { x: 0, y: 0, width: 1200, height: 1200 },
+        rect: { x: 1500, y: 0, width: 600, height: 100 },
+      }),
+    ).toThrow(/rect/);
+    expect(() =>
+      mapArtRectToViewport({
+        artSize: ART_SIZE,
+        visibleRect: { x: 0, y: 0, width: 1200, height: 1200 },
+        rect: { x: 0, y: 0, width: Number.NaN, height: 100 },
+      }),
+    ).toThrow(/rect.width/);
   });
 });

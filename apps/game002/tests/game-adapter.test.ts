@@ -141,6 +141,36 @@ describe("game002 adapter", () => {
     });
   });
 
+  it("uses the selected skin focus region instead of the board frame on resize", async () => {
+    const fakeApp = createFakeApplication();
+    const context = createMountContext();
+    const skin = {
+      ...getGame002SkinConfig("2"),
+      focusRegion: Object.freeze({
+        x: 760,
+        y: 210,
+        width: 480,
+        height: 600,
+      }),
+    };
+    const adapter = createGame002Adapter({
+      skin,
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => new FakeRuntime().asRuntime(),
+    });
+
+    await adapter.mount(context);
+    context.emitViewport({ width: 1200, height: 1200 });
+
+    expect(fakeApp.resizeCalls.at(-1)).toEqual([1200, 1200]);
+    expect(fakeApp.stage.children[0]?.position).toMatchObject({
+      x: -400,
+      y: -0,
+    });
+  });
+
   it("resolves playSpin only after runtime completion and visual scene verification", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();

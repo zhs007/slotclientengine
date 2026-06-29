@@ -27,7 +27,7 @@ try {
     betOptions: config.betOptions,
     initialBetIndex: config.initialBetIndex,
     designSize: GAME002_REFERENCE_SIZE,
-    framePolicy: createGame002FramePolicy(skin.gridLayout),
+    framePolicy: createGame002FramePolicy(skin.focusRegion),
     brandLabel: "game002",
     currency: "USD",
     locale: "en-US",

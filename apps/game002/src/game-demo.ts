@@ -37,9 +37,11 @@ import {
   GAME002_GRID_CELL_REEL_ORDER,
   GAME002_GRID_CELL_REEL_TIMING,
   GAME002_DEFAULT_GRID_LAYOUT,
+  GAME002_DEFAULT_FOCUS_REGION,
   createGame002Layout,
   createGame002ReelLayerLayout,
   createGame002ReelLayout,
+  type Game002FocusRegion,
   type Game002GridLayout,
   type Game002ReelLayerLayout,
 } from "./game-layout.js";
@@ -57,6 +59,7 @@ export interface Game002ReelConfig {
   readonly missingAssetLabel: string;
   readonly symbolScales: ReelSymbolScaleMap;
   readonly gridLayout: Game002GridLayout;
+  readonly focusRegion: Game002FocusRegion;
   readonly cellReelOffsets: GridCellReelOffsetMatrix;
   readonly direction: ReelSpinDirection;
   readonly orderMode: GridCellOrderMode;
@@ -71,6 +74,7 @@ export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   missingAssetLabel: "skin 2",
   symbolScales: GAME002_SYMBOL_SCALES,
   gridLayout: GAME002_DEFAULT_GRID_LAYOUT,
+  focusRegion: GAME002_DEFAULT_FOCUS_REGION,
   cellReelOffsets: GAME002_GRID_CELL_REEL_OFFSETS,
   direction: "forward",
   orderMode: GAME002_GRID_CELL_REEL_ORDER,
@@ -137,7 +141,10 @@ export function createGame002ReelRuntime(
   const layout = createGame002ReelLayout(config.gridLayout);
   const layerLayout = createGame002ReelLayerLayout(
     layout,
-    createGame002Layout({ gridLayout: config.gridLayout }),
+    createGame002Layout({
+      gridLayout: config.gridLayout,
+      focusRegion: config.focusRegion,
+    }),
   );
   const order = createGridCellOrder({
     columns: GAME002_REEL_COUNT,

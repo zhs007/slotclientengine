@@ -12,7 +12,11 @@ import {
 import type { ReelSymbolScaleMap } from "@slotclientengine/rendercore";
 import {
   GAME002_DEFAULT_GRID_LAYOUT,
+  GAME002_SKIN1_FOCUS_REGION,
   GAME002_SKIN1_GRID_LAYOUT,
+  GAME002_SKIN2_FOCUS_REGION,
+  GAME002_SKIN3_FOCUS_REGION,
+  type Game002FocusRegion,
   type Game002GridLayout,
 } from "./game-layout.js";
 import {
@@ -74,6 +78,7 @@ export interface Game002SkinConfig {
   readonly emptySymbols: readonly string[];
   readonly symbolScales: ReelSymbolScaleMap;
   readonly gridLayout: Game002GridLayout;
+  readonly focusRegion: Game002FocusRegion;
 }
 
 const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
@@ -93,6 +98,7 @@ const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
         requireExplicitScale: true,
       }),
       gridLayout: GAME002_SKIN1_GRID_LAYOUT,
+      focusRegion: GAME002_SKIN1_FOCUS_REGION,
     }),
     "2": Object.freeze({
       id: "2",
@@ -109,6 +115,7 @@ const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
         requireExplicitScale: true,
       }),
       gridLayout: GAME002_DEFAULT_GRID_LAYOUT,
+      focusRegion: GAME002_SKIN2_FOCUS_REGION,
     }),
     "3": Object.freeze({
       id: "3",
@@ -125,6 +132,7 @@ const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
         requireExplicitScale: true,
       }),
       gridLayout: GAME002_DEFAULT_GRID_LAYOUT,
+      focusRegion: GAME002_SKIN3_FOCUS_REGION,
     }),
   });
 

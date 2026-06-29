@@ -28,6 +28,7 @@ import {
 import {
   GAME002_CELL_SIZE,
   GAME002_GRID_CELL_REEL_OFFSETS,
+  GAME002_SKIN1_FOCUS_REGION,
   GAME002_SKIN1_GRID_LAYOUT,
 } from "../src/game-layout.js";
 import {
@@ -294,6 +295,7 @@ describe("game002 reel runtime", () => {
       emptySymbols: [],
       symbolScales: createScaleMap(GAME002_SKIN1_DISPLAY_SYMBOLS, 0.8),
       gridLayout: GAME002_SKIN1_GRID_LAYOUT,
+      focusRegion: GAME002_SKIN1_FOCUS_REGION,
     });
 
     expect(runtime.layout).toMatchObject({
@@ -364,6 +366,7 @@ describe("game002 reel runtime", () => {
         emptySymbols: [],
         symbolScales: createScaleMap(GAME002_SKIN1_DISPLAY_SYMBOLS, 0.8),
         gridLayout: GAME002_SKIN1_GRID_LAYOUT,
+        focusRegion: GAME002_SKIN1_FOCUS_REGION,
       });
       const scene = cloneScene(GAME002_SAMPLE_SPIN_SCENE);
       scene[0][0] = code;
@@ -449,26 +452,28 @@ function createRuntimeWithSymbols(
   config: Partial<
     Pick<
       Game002ReelConfig,
-      "missingAssetLabel" | "emptySymbols" | "gridLayout" | "symbolScales"
+      | "missingAssetLabel"
+      | "emptySymbols"
+      | "gridLayout"
+      | "focusRegion"
+      | "symbolScales"
     >
   > = {},
   initialScene?: SceneMatrix,
 ) {
+  if (config.gridLayout && !("focusRegion" in config)) {
+    throw new Error(
+      "test config with custom gridLayout must include focusRegion.",
+    );
+  }
   return createGame002ReelRuntime({
     rawGameConfig,
     symbolAssets: createGame002Textures(symbols),
     initialScene,
     config: {
       ...DEFAULT_GAME002_REEL_CONFIG,
+      ...config,
       texturedSymbols: symbols,
-      missingAssetLabel:
-        config.missingAssetLabel ??
-        DEFAULT_GAME002_REEL_CONFIG.missingAssetLabel,
-      emptySymbols:
-        config.emptySymbols ?? DEFAULT_GAME002_REEL_CONFIG.emptySymbols,
-      symbolScales:
-        config.symbolScales ?? DEFAULT_GAME002_REEL_CONFIG.symbolScales,
-      gridLayout: config.gridLayout ?? DEFAULT_GAME002_REEL_CONFIG.gridLayout,
     },
   });
 }
