@@ -91,6 +91,25 @@ const unsubscribe = controller.onViewportChange((next) => {
 
 `SlotUiViewportSnapshot` 包含 `pageSize`、`frameDesignSize`、`scale`、`cssSize`、`offsetX` 和 `offsetY`。例如真实页面为 `3000 x 1200` 且 `maxDesignSize=2000 x 2000` 时，focus policy 可以输出 `frameDesignSize=2000 x 1200`，外侧多余区域由 `.slot-ui-page` 的黑色背景承接。非法 policy、非正尺寸或 focus 加 margin 无法放入最大设计空间时会抛 `SlotUiConfigError`。
 
+如果游戏横竖屏使用不同 art 尺寸或不同重点区域，可以传 `framePolicy: { mode: "orientation-focus" }`。`uiframeworks` 会按真实浏览器 viewport 的 `height > width` 选择 `portrait` variant，否则选择 `landscape` variant；每个 variant 有自己的 `maxDesignSize`、`focusRect` 和可选 `minFocusMargin`，用于防止竖版 canvas 被横版 focus 宽度撑到超过竖版 art：
+
+```ts
+framePolicy: {
+  mode: "orientation-focus",
+  variants: {
+    landscape: {
+      maxDesignSize: { width: 2000, height: 2000 },
+      focusRect: { width: 1424, height: 1061 },
+    },
+    portrait: {
+      maxDesignSize: { width: 1174, height: 2000 },
+      focusRect: { width: 1130, height: 1061 },
+      minFocusMargin: { left: 22, right: 22 },
+    },
+  },
+}
+```
+
 ## HUD 控件
 
 - 顶部：左侧时间 `.slot-ui-clock`，右侧可选品牌 `.slot-ui-brand`。

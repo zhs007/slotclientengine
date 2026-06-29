@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "states": [
+    "spinBlur",
+    "disabled"
+  ],
+  "settings": {
+    "spinBlur": {
+      "kind": "verticalBoxBlur",
+      "kernelHeight": 21
+    },
+    "disabled": {
+      "kind": "grayscale",
+      "brightness": 0.72
+    }
+  },
+  "symbols": {
+    "WL": {
+      "normal": "./WL.png",
+      "spinBlur": "./WL.spinBlur.png",
+      "disabled": "./WL.disabled.png",
+      "scale": 1
+    },
+    "H1": {
+      "normal": "./H1.png",
+      "spinBlur": "./H1.spinBlur.png",
+      "disabled": "./H1.disabled.png",
+      "scale": 1
+    },
+    "H2": {
+      "normal": "./H2.png",
+      "spinBlur": "./H2.spinBlur.png",
+      "disabled": "./H2.disabled.png",
+      "scale": 1
+    },
+    "H3": {
+      "normal": "./H3.png",
+      "spinBlur": "./H3.spinBlur.png",
+      "disabled": "./H3.disabled.png",
+      "scale": 1
+    },
+    "H4": {
+      "normal": "./H4.png",
+      "spinBlur": "./H4.spinBlur.png",
+      "disabled": "./H4.disabled.png",
+      "scale": 1
+    },
+    "H5": {
+      "normal": "./H5.png",
+      "spinBlur": "./H5.spinBlur.png",
+      "disabled": "./H5.disabled.png",
+      "scale": 1
+    },
+    "L1": {
+      "normal": "./L1.png",
+      "spinBlur": "./L1.spinBlur.png",
+      "disabled": "./L1.disabled.png",
+      "scale": 1
+    },
+    "L2": {
+      "normal": "./L2.png",
+      "spinBlur": "./L2.spinBlur.png",
+      "disabled": "./L2.disabled.png",
+      "scale": 1
+    },
+    "L3": {
+      "normal": "./L3.png",
+      "spinBlur": "./L3.spinBlur.png",
+      "disabled": "./L3.disabled.png",
+      "scale": 1
+    },
+    "L4": {
+      "normal": "./L4.png",
+      "spinBlur": "./L4.spinBlur.png",
+      "disabled": "./L4.disabled.png",
+      "scale": 1
+    },
+    "L5": {
+      "normal": "./L5.png",
+      "spinBlur": "./L5.spinBlur.png",
+      "disabled": "./L5.disabled.png",
+      "scale": 1
+    },
+    "CO": {
+      "normal": "./CO.png",
+      "spinBlur": "./CO.spinBlur.png",
+      "disabled": "./CO.disabled.png",
+      "scale": 1
+    },
+    "CL": {
+      "normal": "./CL.png",
+      "spinBlur": "./CL.spinBlur.png",
+      "disabled": "./CL.disabled.png",
+      "scale": 1
+    },
+    "SC": {
+      "normal": "./SC.png",
+      "spinBlur": "./SC.spinBlur.png",
+      "disabled": "./SC.disabled.png",
+      "scale": 1
+    }
+  }
+}

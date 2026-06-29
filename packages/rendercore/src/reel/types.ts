@@ -223,6 +223,10 @@ export interface RenderReelSetOptions {
   readonly registry: ReelSymbolRegistry;
 }
 
+export interface RenderReelSetSpinOptions {
+  readonly targetVisibleScene?: SceneMatrix;
+}
+
 export interface RenderReelSetUpdateResult {
   readonly completed: boolean;
   readonly spinning: boolean;

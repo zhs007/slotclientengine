@@ -77,6 +77,25 @@ const framework = createSlotGameFramework({
 
 `framePolicy` 只影响 DOM frame 和 canvas 逻辑尺寸，不改变 live、spin、presenting、collect、money 或 state 语义。adapter 的 viewport listener 抛错时会进入框架 error 路径，不会被静默吞掉。
 
+横竖屏 art 尺寸不同的游戏可以传 `mode: "orientation-focus"`，按浏览器 viewport 的 `height > width` 选择 `portrait` variant，否则选择 `landscape` variant。该模式仍只透传给 `uiframeworks` 计算 DOM frame，不承载游戏图片名、symbol、reel 或 live 逻辑：
+
+```ts
+framePolicy: {
+  mode: "orientation-focus",
+  variants: {
+    landscape: {
+      maxDesignSize: { width: 2000, height: 2000 },
+      focusRect: { width: 1424, height: 1061 },
+    },
+    portrait: {
+      maxDesignSize: { width: 1174, height: 2000 },
+      focusRect: { width: 1130, height: 1061 },
+      minFocusMargin: { left: 22, right: 22 },
+    },
+  },
+}
+```
+
 ## 逻辑读取
 
 本包重新导出 `GameLogic`、`GameLogicStep`、`LogicComponent`、`SceneMatrix`、`WinResult` 等常用类型。游戏可通过 `logic.getStep(index)`、`logic.getComponentScenes(stepIndex, name)`，或以下 helper 按组件名读取：
