@@ -29,9 +29,32 @@ export interface SlotUiFocusFramePolicy {
   };
 }
 
+export interface SlotUiOrientationFocusFrameVariant {
+  readonly maxDesignSize: SlotUiDesignSize;
+  readonly focusRect: {
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly minFocusMargin?: {
+    readonly left?: number;
+    readonly right?: number;
+    readonly top?: number;
+    readonly bottom?: number;
+  };
+}
+
+export interface SlotUiOrientationFocusFramePolicy {
+  readonly mode: "orientation-focus";
+  readonly variants: {
+    readonly landscape: SlotUiOrientationFocusFrameVariant;
+    readonly portrait: SlotUiOrientationFocusFrameVariant;
+  };
+}
+
 export type SlotUiFramePolicy =
   | { readonly mode: "fixed" }
-  | SlotUiFocusFramePolicy;
+  | SlotUiFocusFramePolicy
+  | SlotUiOrientationFocusFramePolicy;
 
 export interface SlotUiViewportSnapshot {
   readonly pageSize: SlotUiDesignSize;

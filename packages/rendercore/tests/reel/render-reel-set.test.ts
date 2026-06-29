@@ -108,4 +108,141 @@ describe("RenderReelSet", () => {
       }),
     ).toThrow(/axes length/);
   });
+
+  it("resets directly to a target visible scene", () => {
+    const gameConfig = createGameConfig(game2Config);
+    const reels = gameConfig.getReels("reels01");
+    const registry = createReelSymbolRegistry({
+      gameConfig,
+      assets: Object.fromEntries(
+        ["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10"].map(
+          (symbol) => [symbol, createTextureSet(20, 20)],
+        ),
+      ),
+      emptySymbols: ["BN"],
+    });
+    const reelSet = new RenderReelSet({
+      reels,
+      layout: createReelLayout({
+        reelCount: 5,
+        visibleRows: 5,
+        cellWidth: 20,
+        cellHeight: 20,
+      }),
+      registry,
+    });
+    const scene = createGameLogic(basicMessage).getStep(0).getScene(0);
+    const targetVisibleScene = scene.map((column) =>
+      Object.freeze([...column].reverse()),
+    );
+
+    reelSet.resetToVisibleScene(targetVisibleScene, [0, 0, 0, 0, 0]);
+
+    expect(reelSet.getVisibleScene()).toEqual(targetVisibleScene);
+    expect(reelSet.getSnapshot().spinning).toBe(false);
+  });
+
+  it("injects target visible symbols without requiring the target window to exist on the public reel strip", () => {
+    const gameConfig = createGameConfig(game2Config);
+    const reels = gameConfig.getReels("reels01");
+    const scene = createGameLogic(basicMessage).getStep(0).getScene(0);
+    const finalYs = gameConfig.getStopYCoordinates({
+      reelsName: "reels01",
+      sceneName: "step0.scene0",
+      scene,
+    });
+    const targetVisibleScene = scene.map((column) =>
+      Object.freeze([...column].reverse()),
+    );
+    const registry = createReelSymbolRegistry({
+      gameConfig,
+      assets: Object.fromEntries(
+        ["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10"].map(
+          (symbol) => [symbol, createTextureSet(20, 20)],
+        ),
+      ),
+      emptySymbols: ["BN"],
+      texturePolicy: {
+        requiredStateTextures: ["spinBlur"],
+      },
+    });
+    const reelSet = new RenderReelSet({
+      reels,
+      layout: createReelLayout({
+        reelCount: 5,
+        visibleRows: 5,
+        cellWidth: 20,
+        cellHeight: 20,
+      }),
+      registry,
+    });
+    const plan = createReelSpinPlan({
+      reels,
+      finalYs,
+      visibleRows: 5,
+      minimumSpinCycles: 10,
+      baseDurationMs: 300,
+      speedSymbolsPerSecond: 200,
+      startDelayMs: 40,
+      stopDelayMs: 30,
+    });
+
+    reelSet.spin(plan, { targetVisibleScene });
+    let result = reelSet.update(0);
+    for (let index = 0; index < 20 && !result.completed; index += 1) {
+      result = reelSet.update(0.05);
+    }
+
+    expect(result.completed).toBe(true);
+    expect(reelSet.getVisibleScene()).toEqual(targetVisibleScene);
+  });
+
+  it("validates target visible scene width and height", () => {
+    const gameConfig = createGameConfig(game2Config);
+    const reels = gameConfig.getReels("reels01");
+    const registry = createReelSymbolRegistry({
+      gameConfig,
+      assets: Object.fromEntries(
+        ["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10"].map(
+          (symbol) => [symbol, createTextureSet(20, 20)],
+        ),
+      ),
+      emptySymbols: ["BN"],
+    });
+    const reelSet = new RenderReelSet({
+      reels,
+      layout: createReelLayout({
+        reelCount: 5,
+        visibleRows: 5,
+        cellWidth: 20,
+        cellHeight: 20,
+      }),
+      registry,
+    });
+    const plan = createReelSpinPlan({
+      reels,
+      finalYs: [1, 1, 4, 0, 27],
+      visibleRows: 5,
+      minimumSpinCycles: 10,
+      baseDurationMs: 300,
+      speedSymbolsPerSecond: 200,
+      startDelayMs: 40,
+      stopDelayMs: 30,
+    });
+
+    expect(() =>
+      reelSet.spin(plan, { targetVisibleScene: [[1, 2, 3, 4, 5]] }),
+    ).toThrow(/column count/);
+    expect(() =>
+      reelSet.spin(plan, {
+        targetVisibleScene: [
+          [1, 2, 3, 4],
+          [1, 2, 3, 4, 5],
+          [1, 2, 3, 4, 5],
+          [1, 2, 3, 4, 5],
+          [1, 2, 3, 4, 5],
+        ],
+      }),
+    ).toThrow(/length/);
+  });
 });

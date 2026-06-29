@@ -68,9 +68,35 @@ export interface SlotGameFocusFramePolicy {
   };
 }
 
+export interface SlotGameOrientationFocusFrameVariant {
+  readonly maxDesignSize: {
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly focusRect: {
+    readonly width: number;
+    readonly height: number;
+  };
+  readonly minFocusMargin?: {
+    readonly left?: number;
+    readonly right?: number;
+    readonly top?: number;
+    readonly bottom?: number;
+  };
+}
+
+export interface SlotGameOrientationFocusFramePolicy {
+  readonly mode: "orientation-focus";
+  readonly variants: {
+    readonly landscape: SlotGameOrientationFocusFrameVariant;
+    readonly portrait: SlotGameOrientationFocusFrameVariant;
+  };
+}
+
 export type SlotGameFramePolicy =
   | { readonly mode: "fixed" }
-  | SlotGameFocusFramePolicy;
+  | SlotGameFocusFramePolicy
+  | SlotGameOrientationFocusFramePolicy;
 
 export interface SlotGameViewportSnapshot {
   readonly pageSize: { readonly width: number; readonly height: number };

@@ -115,23 +115,68 @@ function calculateFrameDesignSize(options: {
   if (policy.mode === "fixed") {
     return designSize;
   }
-  if (policy.mode !== "focus") {
-    throw new SlotUiConfigError("framePolicy.mode must be fixed or focus.");
+  if (policy.mode === "focus") {
+    return calculateFocusFrameDesignSize({
+      viewportWidth: options.viewportWidth,
+      viewportHeight: options.viewportHeight,
+      maxDesignSize: policy.maxDesignSize,
+      preferredPortraitSize: policy.preferredPortraitSize,
+      focusRect: policy.focusRect,
+      minFocusMargin: policy.minFocusMargin,
+    });
+  }
+  if (policy.mode === "orientation-focus") {
+    const variants = policy.variants;
+    if (!variants?.landscape) {
+      throw new SlotUiConfigError(
+        "framePolicy orientation-focus variants must include landscape.",
+      );
+    }
+    if (!variants.portrait) {
+      throw new SlotUiConfigError(
+        "framePolicy orientation-focus variants must include portrait.",
+      );
+    }
+    const variant =
+      options.viewportHeight > options.viewportWidth
+        ? variants.portrait
+        : variants.landscape;
+    return calculateFocusFrameDesignSize({
+      viewportWidth: options.viewportWidth,
+      viewportHeight: options.viewportHeight,
+      maxDesignSize: variant.maxDesignSize,
+      preferredPortraitSize: variant.maxDesignSize,
+      focusRect: variant.focusRect,
+      minFocusMargin: variant.minFocusMargin,
+    });
   }
 
-  const maxDesignSize = validateDesignSize(policy.maxDesignSize);
+  throw new SlotUiConfigError(
+    "framePolicy.mode must be fixed, focus, or orientation-focus.",
+  );
+}
+
+function calculateFocusFrameDesignSize(options: {
+  readonly viewportWidth: number;
+  readonly viewportHeight: number;
+  readonly maxDesignSize: SlotUiDesignSize;
+  readonly preferredPortraitSize: SlotUiDesignSize;
+  readonly focusRect: SlotUiFocusFramePolicy["focusRect"];
+  readonly minFocusMargin: SlotUiFocusFramePolicy["minFocusMargin"];
+}): SlotUiDesignSize {
+  const maxDesignSize = validateDesignSize(options.maxDesignSize);
   const preferredPortraitSize = validateDesignSize(
-    policy.preferredPortraitSize,
+    options.preferredPortraitSize,
   );
   const focusWidth = readPositiveFinite(
-    policy.focusRect.width,
+    options.focusRect.width,
     "framePolicy.focusRect.width",
   );
   const focusHeight = readPositiveFinite(
-    policy.focusRect.height,
+    options.focusRect.height,
     "framePolicy.focusRect.height",
   );
-  const margin = normalizeFocusMargin(policy.minFocusMargin);
+  const margin = normalizeFocusMargin(options.minFocusMargin);
   const minFocusWidth = focusWidth + margin.left + margin.right;
   const minFocusHeight = focusHeight + margin.top + margin.bottom;
 

@@ -6,6 +6,7 @@ import { RenderReel } from "./render-reel.js";
 import type {
   ReelSpinPlan,
   RenderReelSetOptions,
+  RenderReelSetSpinOptions,
   RenderReelSetSnapshot,
   RenderReelSetUpdateResult,
 } from "./types.js";
@@ -13,6 +14,7 @@ import type {
 export class RenderReelSet extends Container {
   readonly reels: readonly RenderReel[];
   #spinPlan: ReelSpinPlan | null = null;
+  #spinOptions: RenderReelSetSpinOptions | null = null;
   #elapsedMs = 0;
   #startedAxes = new Set<number>();
 
@@ -34,7 +36,7 @@ export class RenderReelSet extends Container {
     );
   }
 
-  spin(plan: ReelSpinPlan): void {
+  spin(plan: ReelSpinPlan, options: RenderReelSetSpinOptions = {}): void {
     if (this.#spinPlan) {
       throw new ReelError(
         "Cannot start a new reel spin while another spin is active.",
@@ -45,8 +47,10 @@ export class RenderReelSet extends Container {
         `spin plan axes length ${plan.axes.length} does not match reel count.`,
       );
     }
+    this.assertTargetVisibleScene(options.targetVisibleScene);
 
     this.#spinPlan = plan;
+    this.#spinOptions = options;
     this.#elapsedMs = 0;
     this.#startedAxes = new Set();
   }
@@ -86,6 +90,7 @@ export class RenderReelSet extends Container {
 
     if (completed) {
       this.#spinPlan = null;
+      this.#spinOptions = null;
     }
 
     return Object.freeze({
@@ -105,10 +110,30 @@ export class RenderReelSet extends Container {
       );
     }
     this.#spinPlan = null;
+    this.#spinOptions = null;
     this.#elapsedMs = 0;
     this.#startedAxes = new Set();
     for (const [x, y] of finalYs.entries()) {
       this.reels[x].resetToY(y);
+    }
+  }
+
+  resetToVisibleScene(
+    visibleScene: readonly (readonly number[])[],
+    finalYs?: readonly number[],
+  ): void {
+    this.assertTargetVisibleScene(visibleScene);
+    if (finalYs !== undefined && finalYs.length !== this.reels.length) {
+      throw new ReelError(
+        `finalYs length ${finalYs.length} does not match reel count ${this.reels.length}.`,
+      );
+    }
+    this.#spinPlan = null;
+    this.#spinOptions = null;
+    this.#elapsedMs = 0;
+    this.#startedAxes = new Set();
+    for (const [x, column] of visibleScene.entries()) {
+      this.reels[x].resetToVisibleSymbols(column, finalYs?.[x] ?? 0);
     }
   }
 
@@ -138,8 +163,33 @@ export class RenderReelSet extends Container {
       ) {
         continue;
       }
-      this.reels[axis.x].start(axis);
+      this.reels[axis.x].start(axis, {
+        targetVisibleSymbols: this.#spinOptions?.targetVisibleScene?.[axis.x],
+      });
       this.#startedAxes.add(axis.x);
+    }
+  }
+
+  private assertTargetVisibleScene(
+    targetVisibleScene: RenderReelSetSpinOptions["targetVisibleScene"],
+  ): void {
+    if (targetVisibleScene === undefined) {
+      return;
+    }
+    if (targetVisibleScene.length !== this.reels.length) {
+      throw new ReelError(
+        `targetVisibleScene column count ${targetVisibleScene.length} does not match reel count ${this.reels.length}.`,
+      );
+    }
+    for (const [x, column] of targetVisibleScene.entries()) {
+      if (!Array.isArray(column)) {
+        throw new ReelError(`targetVisibleScene[${x}] must be an array.`);
+      }
+      if (column.length !== this.reels[x].layout.visibleRows) {
+        throw new ReelError(
+          `targetVisibleScene[${x}] length must be ${this.reels[x].layout.visibleRows}.`,
+        );
+      }
     }
   }
 }

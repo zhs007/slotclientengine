@@ -1,0 +1,145 @@
+import { describe, expect, it } from "vitest";
+import rawGameConfig from "../../../assets/gamecfg003/gameconfig.json";
+import { createTextureSet } from "../../../packages/rendercore/tests/reel/helpers.js";
+import type { SymbolAssetMap } from "@slotclientengine/rendercore";
+import {
+  GAME003_DEFAULT_SCENE,
+  GAME003_SPIN_SCENE,
+} from "./fixtures/game003-gmi.js";
+import { GAME003_DISPLAY_SYMBOLS } from "../src/assets.js";
+import {
+  DEFAULT_GAME003_REEL_CONFIG,
+  assertGame003ReelVisualMatchesTarget,
+  createGame003ReelRuntime,
+} from "../src/game-demo.js";
+import {
+  GAME003_REEL_COUNT,
+  GAME003_VISIBLE_ROWS,
+} from "../src/game-layout.js";
+
+describe("game003 reel runtime", () => {
+  it("locks gamecfg003 reels and symbol codes", () => {
+    const runtime = createRuntime();
+    const gameConfig = runtime.gameConfig;
+
+    expect(gameConfig.getReelNames()).toContain("bg-reel01");
+    expect(gameConfig.getReels("bg-reel01").getReelCount()).toBe(5);
+    expect(gameConfig.getSymbolCode("WL")).toBe(0);
+    expect(gameConfig.getSymbolCode("SC")).toBe(22);
+    expect(runtime.layout.visibleRows).toBe(GAME003_VISIBLE_ROWS);
+    expect(runtime.layout.reelCount).toBe(GAME003_REEL_COUNT);
+  });
+
+  it("keeps reels hidden until a live scene is applied", () => {
+    const runtime = createRuntime();
+
+    expect(runtime.mainReelsLayer.visible).toBe(false);
+    expect(runtime.getVisualSnapshot()).toMatchObject({
+      visible: false,
+      spinning: false,
+      reelCount: 5,
+    });
+
+    const finalYs = runtime.applyScene(GAME003_DEFAULT_SCENE, "test.default");
+
+    expect(finalYs).toHaveLength(5);
+    expect(runtime.getFinalYs()).toEqual(finalYs);
+    expect(runtime.getTargetScene()).toBeNull();
+    expect(runtime.mainReelsLayer.visible).toBe(true);
+    assertGame003ReelVisualMatchesTarget(
+      runtime.getVisualSnapshot(),
+      GAME003_DEFAULT_SCENE,
+      "applied game003 scene",
+    );
+  });
+
+  it("spins to the server target scene through temporary visible window injection", () => {
+    const runtime = createRuntime(GAME003_DEFAULT_SCENE);
+    const plan = runtime.spinToScene(GAME003_SPIN_SCENE, "test.spin");
+
+    expect(plan.axes).toHaveLength(5);
+    expect(runtime.getTargetScene()).toEqual(GAME003_SPIN_SCENE);
+    expect(runtime.isSpinning()).toBe(true);
+    expect(() => runtime.spinToScene(GAME003_SPIN_SCENE)).toThrow(
+      /already spinning/,
+    );
+
+    let result = runtime.update(0.01);
+    expect(runtime.getVisualSnapshot().requestedStates.flat()).toContain(
+      "spinBlur",
+    );
+    for (let index = 0; index < 60 && !result.completed; index += 1) {
+      result = runtime.update(0.05);
+    }
+
+    expect(result.completed).toBe(true);
+    expect(runtime.isSpinning()).toBe(false);
+    expect(runtime.getCurrentScene()).toEqual(GAME003_SPIN_SCENE);
+    assertGame003ReelVisualMatchesTarget(
+      runtime.getVisualSnapshot(),
+      GAME003_SPIN_SCENE,
+      "completed game003 scene",
+    );
+  });
+
+  it("does not fail when a renderable target window cannot be found on the public reel strip", () => {
+    const runtime = createRuntime(GAME003_DEFAULT_SCENE);
+    const localReelMissingScene = [
+      [22, 22, 22, 22, 22],
+      ...GAME003_SPIN_SCENE.slice(1),
+    ];
+    const reels = runtime.gameConfig.getReels(
+      DEFAULT_GAME003_REEL_CONFIG.reelsName,
+    );
+    expect(reels.findStopYCandidates(0, localReelMissingScene[0])).toEqual([]);
+
+    const plan = runtime.spinToScene(localReelMissingScene, "missing stop y");
+
+    expect(plan.axes[0].finalY).toBe(
+      reels.normalizeY(0, runtime.getFinalYs()?.[0] ?? 0),
+    );
+    for (
+      let result = runtime.update(0.05), index = 0;
+      index < 60 && !result.completed;
+      index += 1, result = runtime.update(0.05)
+    ) {
+      if (index === 59) {
+        expect(result.completed).toBe(true);
+      }
+    }
+    expect(runtime.getCurrentScene()).toEqual(localReelMissingScene);
+  });
+
+  it("fails fast for unknown or currently unrenderable paytable symbols", () => {
+    const runtime = createRuntime();
+    expect(() =>
+      runtime.applyScene(
+        [[13, 8, 9, 12, 1], ...GAME003_DEFAULT_SCENE.slice(1)],
+        "BN scene",
+      ),
+    ).toThrow(/BN.*missing assets/);
+
+    expect(() =>
+      createGame003ReelRuntime({
+        rawGameConfig,
+        symbolAssets: createSymbolTextures(["WL"]),
+      }),
+    ).toThrow(/missing assets/);
+  });
+});
+
+function createRuntime(initialScene?: typeof GAME003_DEFAULT_SCENE) {
+  return createGame003ReelRuntime({
+    rawGameConfig,
+    symbolAssets: createSymbolTextures(GAME003_DISPLAY_SYMBOLS),
+    initialScene,
+  });
+}
+
+function createSymbolTextures(symbols: readonly string[]): SymbolAssetMap {
+  return Object.freeze(
+    Object.fromEntries(
+      symbols.map((symbol) => [symbol, createTextureSet(172, 130)]),
+    ),
+  );
+}

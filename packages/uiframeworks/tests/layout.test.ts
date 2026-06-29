@@ -18,6 +18,21 @@ const FOCUS_POLICY = Object.freeze({
   }),
 });
 
+const ORIENTATION_FOCUS_POLICY = Object.freeze({
+  mode: "orientation-focus" as const,
+  variants: Object.freeze({
+    landscape: Object.freeze({
+      maxDesignSize: Object.freeze({ width: 2000, height: 2000 }),
+      focusRect: Object.freeze({ width: 1424, height: 1061 }),
+    }),
+    portrait: Object.freeze({
+      maxDesignSize: Object.freeze({ width: 1174, height: 2000 }),
+      focusRect: Object.freeze({ width: 1130, height: 1061 }),
+      minFocusMargin: Object.freeze({ left: 22, right: 22 }),
+    }),
+  }),
+});
+
 describe("layout", () => {
   it("calculates frame scale for portrait and exact design viewports", () => {
     expect(calculateFrameScale(941, 1672)).toBe(1);
@@ -111,6 +126,33 @@ describe("layout", () => {
     expect(phone.frameDesignSize.width).toBeGreaterThanOrEqual(840);
   });
 
+  it("calculates orientation focus frame viewports with separate art caps", () => {
+    const landscape = calculateSlotUiFrameViewport({
+      viewportWidth: 1280,
+      viewportHeight: 720,
+      designSize: { width: 1174, height: 2000 },
+      policy: ORIENTATION_FOCUS_POLICY,
+    });
+    expect(landscape.frameDesignSize.width).toBeCloseTo(1886.222, 3);
+    expect(landscape.frameDesignSize.height).toBe(1061);
+
+    const square = calculateSlotUiFrameViewport({
+      viewportWidth: 1000,
+      viewportHeight: 1000,
+      designSize: { width: 1174, height: 2000 },
+      policy: ORIENTATION_FOCUS_POLICY,
+    });
+    expect(square.frameDesignSize).toEqual({ width: 2000, height: 2000 });
+
+    const portrait = calculateSlotUiFrameViewport({
+      viewportWidth: 390,
+      viewportHeight: 844,
+      designSize: { width: 1174, height: 2000 },
+      policy: ORIENTATION_FOCUS_POLICY,
+    });
+    expect(portrait.frameDesignSize).toEqual({ width: 1174, height: 2000 });
+  });
+
   it("rejects invalid focus frame policies", () => {
     expect(() =>
       calculateSlotUiFrameViewport({
@@ -140,6 +182,18 @@ describe("layout", () => {
         policy: { mode: "fluid" } as never,
       }),
     ).toThrow(/framePolicy.mode/);
+    expect(() =>
+      calculateSlotUiFrameViewport({
+        viewportWidth: 1000,
+        viewportHeight: 1000,
+        policy: {
+          mode: "orientation-focus",
+          variants: {
+            landscape: ORIENTATION_FOCUS_POLICY.variants.landscape,
+          },
+        } as never,
+      }),
+    ).toThrow(/include portrait/);
   });
 
   it("clamps flat HUD control sizes for compact and large designs", () => {
