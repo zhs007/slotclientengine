@@ -30,10 +30,16 @@ import {
   GAME002_GRID_CELL_REEL_OFFSETS,
   GAME002_SKIN1_FOCUS_REGION,
   GAME002_SKIN1_GRID_LAYOUT,
+  GAME002_SKIN4_FOCUS_REGION,
+  GAME002_SKIN4_GRID_LAYOUT,
+  GAME002_SKIN5_FOCUS_REGION,
+  GAME002_SKIN5_GRID_LAYOUT,
 } from "../src/game-layout.js";
 import {
   GAME002_SKIN1_DISPLAY_SYMBOLS,
   GAME002_SKIN3_DISPLAY_SYMBOLS,
+  GAME002_SKIN4_DISPLAY_SYMBOLS,
+  GAME002_SKIN5_DISPLAY_SYMBOLS,
 } from "../src/skin-config.js";
 
 describe("game002 reel runtime", () => {
@@ -289,6 +295,72 @@ describe("game002 reel runtime", () => {
     ).not.toThrow();
   });
 
+  it("creates a skin 4 runtime from current textured symbols and shared gamecfg002", () => {
+    const runtime = createRuntimeWithSymbols(GAME002_SKIN4_DISPLAY_SYMBOLS, {
+      missingAssetLabel: "skin 4",
+      gridLayout: GAME002_SKIN4_GRID_LAYOUT,
+      focusRegion: GAME002_SKIN4_FOCUS_REGION,
+    });
+    const reels = runtime.gameConfig.getReels(
+      DEFAULT_GAME002_REEL_CONFIG.reelsName,
+    );
+    const localSymbols = new Set<string>();
+    for (let x = 0; x < reels.getReelCount(); x += 1) {
+      for (let y = 0; y < reels.getLength(x); y += 1) {
+        const entry = runtime.gameConfig.getPaytableEntry(reels.get(x, y));
+        if (entry) {
+          localSymbols.add(entry.symbol);
+        }
+      }
+    }
+
+    expect([...localSymbols].sort()).toEqual(
+      ["WL", "H1", "H2", "L1", "L2", "L3", "L4", "CN"].sort(),
+    );
+    expect(runtime.layout).toMatchObject({
+      cellWidth: 120,
+      cellHeight: 120,
+    });
+    expect(
+      runtime.applyScene(GAME002_SAMPLE_DEFAULT_SCENE, "skin 4 default"),
+    ).toEqual(GAME002_SAMPLE_DEFAULT_STOP_Y);
+    expect(() =>
+      runtime.createSpinPlan(GAME002_SAMPLE_SPIN_SCENE, "skin 4 spin plan"),
+    ).not.toThrow();
+  });
+
+  it("creates a skin 5 runtime and treats BN as an explicit empty symbol", () => {
+    const runtime = createRuntimeWithSymbols(GAME002_SKIN5_DISPLAY_SYMBOLS, {
+      missingAssetLabel: "skin 5",
+      gridLayout: GAME002_SKIN5_GRID_LAYOUT,
+      focusRegion: GAME002_SKIN5_FOCUS_REGION,
+    });
+
+    expect(runtime.layout).toMatchObject({
+      cellWidth: 120,
+      cellHeight: 120,
+    });
+    expect(
+      runtime.applyScene(GAME002_SAMPLE_DEFAULT_SCENE, "skin 5 default"),
+    ).toEqual(GAME002_SAMPLE_DEFAULT_STOP_Y);
+
+    const bnScene = cloneScene(GAME002_SAMPLE_DEFAULT_SCENE);
+    bnScene[0][0] = 12;
+
+    expect(() =>
+      runtime.applyScene(bnScene, "skin 5 empty BN scene"),
+    ).not.toThrow();
+
+    const renderSymbols = collectRenderSymbols(runtime.mainReelsLayer);
+    expect(renderSymbols.length).toBeGreaterThan(0);
+    expect(new Set(renderSymbols.map((symbol) => symbol.scale.x))).toEqual(
+      new Set([1]),
+    );
+    expect(new Set(renderSymbols.map((symbol) => symbol.scale.y))).toEqual(
+      new Set([1]),
+    );
+  });
+
   it("creates a skin 1 runtime on the larger background grid with transparent BN", () => {
     const runtime = createRuntimeWithSymbols(GAME002_SKIN1_DISPLAY_SYMBOLS, {
       missingAssetLabel: "skin 1",
@@ -347,6 +419,32 @@ describe("game002 reel runtime", () => {
       ).toThrow(
         new RegExp(
           `skin 3 missing asset scene\\[0\\]\\[0\\] symbol code ${code} \\(${symbol}\\) is missing assets for skin 3`,
+        ),
+      );
+      expect(runtime.isSpinning()).toBe(false);
+    },
+  );
+
+  it.each([
+    [7, "WM"],
+    [9, "CM"],
+    [11, "AF"],
+  ])(
+    "rejects symbol code %i (%s) for skin 4 when the selected skin has no texture",
+    (code, symbol) => {
+      const runtime = createRuntimeWithSymbols(GAME002_SKIN4_DISPLAY_SYMBOLS, {
+        missingAssetLabel: "skin 4",
+        gridLayout: GAME002_SKIN4_GRID_LAYOUT,
+        focusRegion: GAME002_SKIN4_FOCUS_REGION,
+      });
+      const scene = cloneScene(GAME002_SAMPLE_SPIN_SCENE);
+      scene[0][0] = code;
+
+      expect(() =>
+        runtime.spinToScene(scene, "skin 4 missing asset scene"),
+      ).toThrow(
+        new RegExp(
+          `skin 4 missing asset scene\\[0\\]\\[0\\] symbol code ${code} \\(${symbol}\\) is missing assets for skin 4`,
         ),
       );
       expect(runtime.isSpinning()).toBe(false);

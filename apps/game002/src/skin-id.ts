@@ -1,4 +1,10 @@
-export const GAME002_SUPPORTED_SKINS = Object.freeze(["1", "2", "3"] as const);
+export const GAME002_SUPPORTED_SKINS = Object.freeze([
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+] as const);
 
 export type Game002SkinId = (typeof GAME002_SUPPORTED_SKINS)[number];
 
@@ -6,7 +12,7 @@ export function parseGame002SkinId(value: string): Game002SkinId {
   if (isGame002SkinId(value)) {
     return value;
   }
-  throw new Error('skin query parameter must be "1", "2" or "3".');
+  throw new Error('skin query parameter must be "1", "2", "3", "4" or "5".');
 }
 
 function isGame002SkinId(value: string): value is Game002SkinId {

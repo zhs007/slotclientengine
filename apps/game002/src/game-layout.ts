@@ -100,6 +100,18 @@ export const GAME002_SKIN1_GRID_LAYOUT = Object.freeze({
   cellHeight: GAME002_SKIN1_CELL_HEIGHT,
 }) satisfies Game002GridLayout;
 
+export const GAME002_SKIN4_GRID_LAYOUT = Object.freeze({
+  boardFrame: GAME002_BOARD_FRAME,
+  cellWidth: GAME002_CELL_SIZE,
+  cellHeight: GAME002_CELL_SIZE,
+}) satisfies Game002GridLayout;
+
+export const GAME002_SKIN5_GRID_LAYOUT = Object.freeze({
+  boardFrame: GAME002_BOARD_FRAME,
+  cellWidth: GAME002_CELL_SIZE,
+  cellHeight: GAME002_CELL_SIZE,
+}) satisfies Game002GridLayout;
+
 export const GAME002_SKIN1_FOCUS_REGION = Object.freeze({
   x: 555,
   y: 150,
@@ -115,6 +127,20 @@ export const GAME002_SKIN2_FOCUS_REGION = Object.freeze({
 }) satisfies Game002FocusRegion;
 
 export const GAME002_SKIN3_FOCUS_REGION = Object.freeze({
+  x: 637.5,
+  y: 330,
+  width: 720,
+  height: 1080,
+}) satisfies Game002FocusRegion;
+
+export const GAME002_SKIN4_FOCUS_REGION = Object.freeze({
+  x: 637.5,
+  y: 330,
+  width: 720,
+  height: 1080,
+}) satisfies Game002FocusRegion;
+
+export const GAME002_SKIN5_FOCUS_REGION = Object.freeze({
   x: 637.5,
   y: 330,
   width: 720,

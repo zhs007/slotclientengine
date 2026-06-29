@@ -50,6 +50,26 @@ describe("game002 runtime query config", () => {
       },
       spinRequest: { bet: 5, lines: 30, times: 1, autonums: -1 },
     });
+    expect(
+      parseGame002FrameworkConfigFromQuery(validQuery({ skin: "4" })),
+    ).toMatchObject({
+      skin: "4",
+      live: {
+        gamecode: "GAME_CODE",
+        token: "TOKEN",
+      },
+      spinRequest: { bet: 5, lines: 30, times: 1, autonums: -1 },
+    });
+    expect(
+      parseGame002FrameworkConfigFromQuery(validQuery({ skin: "5" })),
+    ).toMatchObject({
+      skin: "5",
+      live: {
+        gamecode: "GAME_CODE",
+        token: "TOKEN",
+      },
+      spinRequest: { bet: 5, lines: 30, times: 1, autonums: -1 },
+    });
   });
 
   it("requires every supported runtime query parameter exactly once", () => {
@@ -102,22 +122,24 @@ describe("game002 runtime query config", () => {
     ).toThrow(/valid ws:\/\/ or wss:\/\//);
   });
 
-  it("accepts only explicit skin ids 1, 2 and 3", () => {
+  it("accepts only explicit skin ids 1, 2, 3, 4 and 5", () => {
     expect(parseGame002QueryConfig(validQuery({ skin: "1" })).skin).toBe("1");
     expect(parseGame002QueryConfig(validQuery({ skin: "2" })).skin).toBe("2");
     expect(parseGame002QueryConfig(validQuery({ skin: "3" })).skin).toBe("3");
+    expect(parseGame002QueryConfig(validQuery({ skin: "4" })).skin).toBe("4");
+    expect(parseGame002QueryConfig(validQuery({ skin: "5" })).skin).toBe("5");
 
-    for (const skin of ["01", "02", "game002", "game003", "4"]) {
+    for (const skin of ["01", "02", "game002", "game003", "6"]) {
       expect(
         () => parseGame002QueryConfig(validQuery({ skin })),
         `${skin} should be rejected`,
-      ).toThrow(/skin query parameter must be "1", "2" or "3"/);
+      ).toThrow(/skin query parameter must be "1", "2", "3", "4" or "5"/);
     }
   });
 
   it("does not leak tokens in skin validation errors", () => {
     try {
-      parseGame002QueryConfig(validQuery({ skin: "4", token: "SECRET" }));
+      parseGame002QueryConfig(validQuery({ skin: "6", token: "SECRET" }));
     } catch (error) {
       expect(
         error instanceof Error ? error.message : String(error),
