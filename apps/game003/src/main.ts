@@ -16,9 +16,7 @@ if (!root) {
 }
 
 try {
-  const config = parseGame003FrameworkConfigFromQuery(window.location.search, {
-    pageProtocol: window.location.protocol,
-  });
+  const config = parseGame003FrameworkConfigFromQuery(window.location.search);
   const skin = getGame003SkinConfig(config.skin);
   const framework = createSlotGameFramework({
     root,

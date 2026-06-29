@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  GAME002_LIVE_SERVER_URL,
   parseGame002FrameworkConfigFromQuery,
   parseGame002QueryConfig,
 } from "../src/env.js";
@@ -8,7 +9,6 @@ describe("game002 runtime query config", () => {
   it("parses a complete query string", () => {
     expect(parseGame002QueryConfig(validQuery())).toEqual({
       skin: "2",
-      serverUrl: "wss://example.test/game",
       token: "TOKEN",
       gamecode: "GAME_CODE",
       businessid: "guest",
@@ -27,7 +27,7 @@ describe("game002 runtime query config", () => {
     expect(parseGame002FrameworkConfigFromQuery(validQuery())).toEqual({
       skin: "2",
       live: {
-        serverUrl: "wss://example.test/game",
+        serverUrl: GAME002_LIVE_SERVER_URL,
         token: "TOKEN",
         gamecode: "GAME_CODE",
         businessid: "guest",
@@ -100,26 +100,15 @@ describe("game002 runtime query config", () => {
     }
   });
 
-  it("accepts only WebSocket server URLs", () => {
+  it("uses a fixed live server and rejects the old serverUrl query parameter", () => {
     expect(
-      parseGame002QueryConfig(validQuery({ serverUrl: "ws://127.0.0.1:9/" }), {
-        pageProtocol: "http:",
-      }).serverUrl,
-    ).toBe("ws://127.0.0.1:9/");
-
+      parseGame002FrameworkConfigFromQuery(validQuery()).live.serverUrl,
+    ).toBe(GAME002_LIVE_SERVER_URL);
     expect(() =>
       parseGame002QueryConfig(
-        validQuery({ serverUrl: "http://example.test/" }),
+        `${validQuery()}&serverUrl=wss%3A%2F%2Fold.test%2F`,
       ),
-    ).toThrow(/ws:\/\/ or wss:\/\//);
-    expect(() =>
-      parseGame002QueryConfig(
-        validQuery({ serverUrl: "https://example.test/" }),
-      ),
-    ).toThrow(/ws:\/\/ or wss:\/\//);
-    expect(() =>
-      parseGame002QueryConfig(validQuery({ serverUrl: "not-a-url" })),
-    ).toThrow(/valid ws:\/\/ or wss:\/\//);
+    ).toThrow(/serverUrl query parameter is not supported/);
   });
 
   it("accepts only explicit skin ids 1, 2, 3, 4 and 5", () => {
@@ -145,14 +134,6 @@ describe("game002 runtime query config", () => {
         error instanceof Error ? error.message : String(error),
       ).not.toMatch(/SECRET/);
     }
-  });
-
-  it("rejects ws server URLs from https pages before the browser blocks them", () => {
-    expect(() =>
-      parseGame002QueryConfig(validQuery({ serverUrl: "ws://127.0.0.1:9/" }), {
-        pageProtocol: "https:",
-      }),
-    ).toThrow(/must use wss:\/\/ when the page is served over https:/);
   });
 
   it("round trips URL-encoded token special characters", () => {
@@ -199,7 +180,6 @@ describe("game002 runtime query config", () => {
 
 const REQUIRED_PARAMS = Object.freeze([
   "skin",
-  "serverUrl",
   "gamecode",
   "token",
   "businessid",
@@ -220,7 +200,6 @@ function validQuery(overrides: Record<string, string> = {}): string {
 function validParams(overrides: Record<string, string> = {}): URLSearchParams {
   const params = new URLSearchParams({
     skin: "2",
-    serverUrl: "wss://example.test/game",
     token: "TOKEN",
     gamecode: "GAME_CODE",
     businessid: "guest",

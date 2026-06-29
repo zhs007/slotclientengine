@@ -10,6 +10,7 @@ import {
 import { GAME003_DEFAULT_SCENE } from "./fixtures/game003-gmi.js";
 import {
   GAME003_GAMECODE,
+  GAME003_LIVE_SERVER_URL,
   parseGame003FrameworkConfigFromQuery,
 } from "../src/framework-config.js";
 
@@ -17,6 +18,7 @@ describe("game003 framework flow", () => {
   it("uses game003 default spin request and collects only after adapter play resolves", async () => {
     const config = parseGame003FrameworkConfigFromQuery(validQuery());
     expect(config.skin).toBe("1");
+    expect(config.live.serverUrl).toBe(GAME003_LIVE_SERVER_URL);
     expect(config.live.gamecode).toBe(GAME003_GAMECODE);
     const client = new FakeClient();
     client.spinResult = createSpinResult({ totalwin: 500, results: 1 });
@@ -121,7 +123,6 @@ describe("game003 framework flow", () => {
 function validQuery(overrides: Record<string, string> = {}): string {
   return `?${new URLSearchParams({
     skin: "1",
-    serverUrl: "wss://example.test/game",
     token: "TOKEN",
     gamecode: GAME003_GAMECODE,
     businessid: "guest",
