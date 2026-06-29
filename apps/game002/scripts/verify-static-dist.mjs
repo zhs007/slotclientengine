@@ -105,6 +105,58 @@ const REQUIRED_SKIN_ASSETS = Object.freeze([
       "CO",
     ]),
   },
+  {
+    id: "skin 4",
+    symbolDirectory: "game002-s2",
+    background: {
+      pattern: /^bg-[A-Za-z0-9_-]+\.png$/,
+      label: "bg-*.png",
+      width: 2000,
+      height: 2000,
+    },
+    manifestScale: 1,
+    symbolWidth: 200,
+    symbolHeight: 200,
+    symbols: Object.freeze([
+      "WL",
+      "H1",
+      "H2",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "CN",
+      "CO",
+    ]),
+  },
+  {
+    id: "skin 5",
+    symbolDirectory: "game002-s3",
+    background: {
+      pattern: /^bg-[A-Za-z0-9_-]+\.jpg$/,
+      label: "bg-*.jpg",
+      width: 2000,
+      height: 2000,
+      minimumMatches: 3,
+    },
+    manifestScale: 1,
+    symbolWidth: 200,
+    symbolHeight: 200,
+    symbols: Object.freeze([
+      "WL",
+      "H1",
+      "H2",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "WM",
+      "CN",
+      "CM",
+      "CO",
+      "AF",
+    ]),
+  },
 ]);
 
 const REQUIRED_SYMBOL_STATES = Object.freeze([
@@ -189,6 +241,7 @@ function verifyAssets(assetNames) {
   const inlinePngBindings = findInlinePngBindings(bundledJavaScript);
 
   for (const skin of REQUIRED_SKIN_ASSETS) {
+    assertBundledSkinSourceReferences(skin, bundledJavaScript);
     assertAssetWithSize(
       assetNames,
       skin.background.pattern,
@@ -210,6 +263,15 @@ function verifyAssets(assetNames) {
         );
       }
     }
+  }
+}
+
+function assertBundledSkinSourceReferences(skin, bundledJavaScript) {
+  const sourceDirectory = `../../../assets/${skin.symbolDirectory}/`;
+  if (!bundledJavaScript.includes(sourceDirectory)) {
+    failures.push(
+      `${skin.id} bundle does not reference source directory ${sourceDirectory}.`,
+    );
   }
 }
 

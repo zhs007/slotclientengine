@@ -18,6 +18,10 @@ import {
   GAME002_SKIN1_GRID_LAYOUT,
   GAME002_SKIN2_FOCUS_REGION,
   GAME002_SKIN3_FOCUS_REGION,
+  GAME002_SKIN4_FOCUS_REGION,
+  GAME002_SKIN4_GRID_LAYOUT,
+  GAME002_SKIN5_FOCUS_REGION,
+  GAME002_SKIN5_GRID_LAYOUT,
   GAME002_REFERENCE_SIZE,
   GAME002_REFERENCE_VISIBLE_RECT_IN_ART,
   GAME002_REEL_COUNT,
@@ -129,6 +133,45 @@ describe("game002 layout", () => {
       stageVisibleFrame: GAME002_SKIN1_BOARD_FRAME,
       viewportVisibleFrame: layout.boardFrameInViewport,
     });
+  });
+
+  it("locks skin 4 and 5 to the same explicit layout and focus as skin 2 and 3", () => {
+    expect(GAME002_SKIN4_GRID_LAYOUT).toEqual(GAME002_DEFAULT_GRID_LAYOUT);
+    expect(GAME002_SKIN5_GRID_LAYOUT).toEqual(GAME002_DEFAULT_GRID_LAYOUT);
+    expect(GAME002_SKIN4_FOCUS_REGION).toEqual(GAME002_SKIN2_FOCUS_REGION);
+    expect(GAME002_SKIN5_FOCUS_REGION).toEqual(GAME002_SKIN3_FOCUS_REGION);
+
+    for (const [gridLayout, focusRegion] of [
+      [GAME002_SKIN4_GRID_LAYOUT, GAME002_SKIN4_FOCUS_REGION],
+      [GAME002_SKIN5_GRID_LAYOUT, GAME002_SKIN5_FOCUS_REGION],
+    ] as const) {
+      const layout = createGame002Layout({ gridLayout, focusRegion });
+      const reelLayout = createGame002ReelLayout(gridLayout);
+
+      expect(layout.boardFrame).toEqual({
+        x: 637.5,
+        y: 330,
+        width: 720,
+        height: 1080,
+      });
+      expect(layout.focusRegion).toEqual({
+        x: 637.5,
+        y: 330,
+        width: 720,
+        height: 1080,
+      });
+      expect(reelLayout).toMatchObject({
+        reelCount: 6,
+        visibleRows: 9,
+        cellWidth: 120,
+        cellHeight: 120,
+        columnGap: 0,
+      });
+      expect(() =>
+        validateGame002BoardFrame(gridLayout.boardFrame),
+      ).not.toThrow();
+      expect(() => validateGame002FocusRegion(focusRegion)).not.toThrow();
+    }
   });
 
   it("validates board frame dimensions and stage containment", () => {
@@ -268,6 +311,14 @@ describe("game002 layout", () => {
       focusRect: { width: 862, height: 1537 },
     });
     expect(createGame002FramePolicy(GAME002_SKIN3_FOCUS_REGION)).toMatchObject({
+      mode: "focus",
+      focusRect: { width: 720, height: 1080 },
+    });
+    expect(createGame002FramePolicy(GAME002_SKIN4_FOCUS_REGION)).toMatchObject({
+      mode: "focus",
+      focusRect: { width: 720, height: 1080 },
+    });
+    expect(createGame002FramePolicy(GAME002_SKIN5_FOCUS_REGION)).toMatchObject({
       mode: "focus",
       focusRect: { width: 720, height: 1080 },
     });

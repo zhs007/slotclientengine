@@ -4,6 +4,8 @@ import symbolsStateTextureManifest from "../../../assets/symbols/symbol-state-te
 import symbols001StateTextureManifest from "../../../assets/symbols001/symbol-state-textures.manifest.json";
 import symbols002StateTextureManifest from "../../../assets/symbols002/symbol-state-textures.manifest.json";
 import symbols003StateTextureManifest from "../../../assets/symbols003/symbol-state-textures.manifest.json";
+import game002S2StateTextureManifest from "../../../assets/game002-s2/symbol-state-textures.manifest.json";
+import game002S3StateTextureManifest from "../../../assets/game002-s3/symbol-state-textures.manifest.json";
 import {
   createDefaultSymbolAnimationResolver,
   createNamedSymbolAnimationResolver,
@@ -19,13 +21,17 @@ import {
   SYMBOLS002_ANIMATION_PROFILES,
   SYMBOLS003_ANIMATION_PROFILES,
   SYMBOL_VIEWER_ANIMATION_PROFILES,
+  GAME002_S2_ANIMATION_PROFILES,
+  GAME002_S3_ANIMATION_PROFILES,
 } from "./symbol-animation-config.js";
 
 export type SymbolSetId =
   | "symbols"
   | "symbols001"
   | "symbols002"
-  | "symbols003";
+  | "symbols003"
+  | "game002-s2"
+  | "game002-s3";
 
 export interface SymbolSetConfig {
   readonly id: SymbolSetId;
@@ -57,6 +63,18 @@ const symbols002Modules = import.meta.glob("../../../assets/symbols002/*.png", {
 }) as Record<string, string>;
 
 const symbols003Modules = import.meta.glob("../../../assets/symbols003/*.png", {
+  eager: true,
+  import: "default",
+  query: "?url",
+}) as Record<string, string>;
+
+const game002S2Modules = import.meta.glob("../../../assets/game002-s2/*.png", {
+  eager: true,
+  import: "default",
+  query: "?url",
+}) as Record<string, string>;
+
+const game002S3Modules = import.meta.glob("../../../assets/game002-s3/*.png", {
   eager: true,
   import: "default",
   query: "?url",
@@ -111,6 +129,31 @@ const SYMBOLS003_DISPLAYABLE_SYMBOLS = Object.freeze([
   "L4",
   "CN",
   "CO",
+]);
+const GAME002_S2_DISPLAYABLE_SYMBOLS = Object.freeze([
+  "WL",
+  "H1",
+  "H2",
+  "L1",
+  "L2",
+  "L3",
+  "L4",
+  "CN",
+  "CO",
+]);
+const GAME002_S3_DISPLAYABLE_SYMBOLS = Object.freeze([
+  "WL",
+  "H1",
+  "H2",
+  "L1",
+  "L2",
+  "L3",
+  "L4",
+  "WM",
+  "CN",
+  "CM",
+  "CO",
+  "AF",
 ]);
 
 const createRequiredScaleMap = (
@@ -189,6 +232,38 @@ export const SYMBOL_SET_CONFIGS = Object.freeze([
       fallback: defaultAnimationResolver,
     }),
   }),
+  Object.freeze({
+    id: "game002-s2",
+    label: "game002-s2",
+    symbolScales: createRequiredScaleMap(
+      game002S2StateTextureManifest,
+      GAME002_S2_DISPLAYABLE_SYMBOLS,
+    ),
+    rawGameConfig: rawSymbols002GameConfig,
+    modules: removePngModules(game002S2Modules, ["bg.png"]),
+    manifest: game002S2StateTextureManifest,
+    requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+    animationResolver: createNamedSymbolAnimationResolver({
+      profiles: GAME002_S2_ANIMATION_PROFILES,
+      fallback: defaultAnimationResolver,
+    }),
+  }),
+  Object.freeze({
+    id: "game002-s3",
+    label: "game002-s3",
+    symbolScales: createRequiredScaleMap(
+      game002S3StateTextureManifest,
+      GAME002_S3_DISPLAYABLE_SYMBOLS,
+    ),
+    rawGameConfig: rawSymbols002GameConfig,
+    modules: game002S3Modules,
+    manifest: game002S3StateTextureManifest,
+    requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+    animationResolver: createNamedSymbolAnimationResolver({
+      profiles: GAME002_S3_ANIMATION_PROFILES,
+      fallback: defaultAnimationResolver,
+    }),
+  }),
 ] satisfies readonly SymbolSetConfig[]);
 
 export function getSymbolSetConfig(id: string): SymbolSetConfig {
@@ -197,4 +272,19 @@ export function getSymbolSetConfig(id: string): SymbolSetConfig {
     throw new Error(`Unknown symbolsviewer symbol set "${id}".`);
   }
   return config;
+}
+
+function removePngModules(
+  modules: Record<string, string>,
+  filenames: readonly string[],
+): Record<string, string> {
+  const excluded = new Set(filenames);
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(modules).filter(([modulePath]) => {
+        const filename = modulePath.split("/").at(-1);
+        return filename === undefined || !excluded.has(filename);
+      }),
+    ),
+  );
 }

@@ -98,6 +98,8 @@ describe("game002 source boundary", () => {
     expect(skinConfigSource).toContain("assets/game002-s1/bg.jpg?url");
     expect(skinConfigSource).toContain("assets/game002/bgfull.jpg?url");
     expect(skinConfigSource).toContain("assets/game003/bg.jpg?url");
+    expect(skinConfigSource).toContain("assets/game002-s2/bg.png?url");
+    expect(skinConfigSource).toContain("assets/game002-s3/bg.jpg?url");
     expect(skinConfigSource).not.toContain("assets/game002/bg.jpg?url");
     expect(adapterSource).not.toContain("assets/game002/bg.jpg?url");
     expect(adapterSource).toContain("skin.backgroundUrl");
@@ -130,6 +132,12 @@ describe("game002 source boundary", () => {
     );
     expect(skinConfigSource).toContain(
       "focusRegion: GAME002_SKIN3_FOCUS_REGION",
+    );
+    expect(skinConfigSource).toContain(
+      "focusRegion: GAME002_SKIN4_FOCUS_REGION",
+    );
+    expect(skinConfigSource).toContain(
+      "focusRegion: GAME002_SKIN5_FOCUS_REGION",
     );
     expect(layoutSource).toContain("mapArtRectToViewport");
     expect(mainSource).toContain("createGame002FramePolicy(skin.focusRegion)");

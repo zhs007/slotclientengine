@@ -4,7 +4,7 @@
 
 ## 资产
 
-viewer 支持四套显式 symbol set。每套都绑定自己的 runtime game config、PNG glob 和状态贴图 manifest；缺少 manifest、缺少必需状态图、manifest 引用不存在的 PNG、未知 manifest 字段或非法 `scale` 会直接报错。每个可展示 symbol 的显示缩放系数从 `symbol-state-textures.manifest.json` 的 `scale` 字段读取，仓库内生成物必须显式写出 `scale`，不要在 viewer 里维护第二份手写 scale 表。
+viewer 支持六套显式 symbol set。每套都绑定自己的 runtime game config、PNG glob 和状态贴图 manifest；缺少 manifest、缺少必需状态图、manifest 引用不存在的 PNG、未知 manifest 字段或非法 `scale` 会直接报错。每个可展示 symbol 的显示缩放系数从 `symbol-state-textures.manifest.json` 的 `scale` 字段读取，仓库内生成物必须显式写出 `scale`，不要在 viewer 里维护第二份手写 scale 表。
 
 第一套 `symbols` 使用仓库根目录资产：
 
@@ -35,7 +35,7 @@ viewer 支持四套显式 symbol set。每套都绑定自己的 runtime game con
 - `assets/symbols002/*.disabled.png`
 - `assets/symbols002/symbol-state-textures.manifest.json`
 
-`symbols001`、`symbols002` 和 `symbols003` 使用的 runtime game config 由 `gengameconfig` 从 Excel 生成，viewer 只消费生成后的 `assets/gamecfg002/gameconfig.json`，不在 viewer 侧解析编辑器原始导出：
+`symbols001`、`symbols002`、`symbols003`、`game002-s2` 和 `game002-s3` 使用的 runtime game config 由 `gengameconfig` 从 Excel 生成，viewer 只消费生成后的 `assets/gamecfg002/gameconfig.json`，不在 viewer 侧解析编辑器原始导出：
 
 ```bash
 pnpm --filter gengameconfig dev -- \
@@ -55,6 +55,26 @@ pnpm --filter gengameconfig dev -- \
 - `assets/symbols003/symbol-state-textures.manifest.json`
 
 第四套可展示 symbol 是 `WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`CN`、`CO`。`gamecfg002` paytable 中当前缺少第四套图片的 `WM`、`CM`、`AF`、`BN` 不会进入展示列表，也不会用其它 set 的图片、placeholder 或空纹理顶替。第四套 PNG 保留美术原始 `180 x 180` 文件，`spinBlur` / `disabled` 派生图与普通图尺寸一致；manifest scale 全部为 `1`，按 100% 逻辑尺寸展示。
+
+第五套 `game002-s2` 复用同一份 runtime game config：
+
+- `assets/gamecfg002/gameconfig.json`
+- `assets/game002-s2/*.png`
+- `assets/game002-s2/*.spinBlur.png`
+- `assets/game002-s2/*.disabled.png`
+- `assets/game002-s2/symbol-state-textures.manifest.json`
+
+第五套可展示 symbol 是 `WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`CN`、`CO`。`gamecfg002` paytable 中当前缺少第五套图片的 `WM`、`CM`、`AF`、`BN` 不会进入展示列表，也不会用其它 set 的图片、placeholder 或空纹理顶替。`assets/game002-s2/bg.png` 是 game002 背景图，不是 symbol；viewer 会在 set 配置层排除它，不能把它展示为 orphan symbol。第五套 PNG 保留美术原始 `200 x 200` 文件，`spinBlur` / `disabled` 派生图与普通图尺寸一致；manifest scale 全部为 `1`，按 100% 逻辑尺寸展示。
+
+第六套 `game002-s3` 复用同一份 runtime game config：
+
+- `assets/gamecfg002/gameconfig.json`
+- `assets/game002-s3/*.png`
+- `assets/game002-s3/*.spinBlur.png`
+- `assets/game002-s3/*.disabled.png`
+- `assets/game002-s3/symbol-state-textures.manifest.json`
+
+第六套可展示 symbol 是 `WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`WM`、`CN`、`CM`、`CO`、`AF`。paytable 中缺图的 `BN` 不会进入展示列表。第六套 PNG 保留美术原始 `200 x 200` 文件，`spinBlur` / `disabled` 派生图与普通图尺寸一致；manifest scale 全部为 `1`，按 100% 逻辑尺寸展示。
 
 `SC`、`RS`、`X2`、`X5`、`X10` 使用拆层资源作为普通态来源：
 
@@ -90,6 +110,18 @@ pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --i
 pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --input-dir assets/symbols003 --output-dir assets/symbols003 --symbols WL,H1,H2,L1,L2,L3,L4,CN,CO --scale 1
 ```
 
+`game002-s2` 状态图生成命令：
+
+```bash
+pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --input-dir assets/game002-s2 --output-dir assets/game002-s2 --symbols WL,H1,H2,L1,L2,L3,L4,CN,CO --scale 1
+```
+
+`game002-s3` 状态图生成命令：
+
+```bash
+pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --input-dir assets/game002-s3 --output-dir assets/game002-s3 --symbols WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF --scale 1
+```
+
 复合 symbol 的 `spinBlur` 和 `disabled` 是“先合成完整 symbol，再生成状态贴图”的结果，不是逐层模糊/置灰后再叠加。viewer 会读取 manifest，并要求当前可展示 symbol 同时具备 `spinBlur` 和 `disabled` 贴图；缺失或写入未知状态会直接报错。
 
 ## 特殊动画
@@ -109,7 +141,7 @@ pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --i
 - `appear`: layer `0` 不动，layer `1` 缩放到约 `1.2` 并扫光。
 - `win`: layer `0` 不动，layer `1` 扫光并缩放到约 `1.2`。
 
-`symbols001`、`symbols002` 和 `symbols003` 的所有可展示 symbol：
+`symbols001`、`symbols002`、`symbols003`、`game002-s2` 和 `game002-s3` 的所有可展示 symbol：
 
 - `appear`: 主普通图保持原始 scale，普通图后方额外出现一张半透明普通图副本，副本放大到约 `1.6` 后消退。
 - `win`: 使用默认单图扫光效果。
@@ -127,7 +159,7 @@ pnpm --filter symbolsviewer dev -- --host 0.0.0.0
 第一屏就是状态展示工具：
 
 - 顶部工具栏可播放、暂停、进入下一状态、重置和切换默认 stable 状态。
-- 顶部 `Set` selector 可在 `symbols`、`symbols001`、`symbols002` 和 `symbols003` 之间切换；切换时会重建 catalog、Pixi symbol 和状态序列。
+- 顶部 `Set` selector 可在 `symbols`、`symbols001`、`symbols002`、`symbols003`、`game002-s2` 和 `game002-s3` 之间切换；切换时会重建 catalog、Pixi symbol 和状态序列。
 - 右侧序列区可增加、移除、上移、下移状态。
 - `stable` 状态可设置停留秒数。
 - `appear` 和 `win` 是单次状态，等待全部图标播放完成后进入下一步。
@@ -164,4 +196,10 @@ PC 横屏建议使用 `1280x720` 或更大视口确认：
 - `symbols003.appear` 中主图不缩放，图后半透明副本放大消退。
 - `symbols003.win` 使用默认单图扫光效果。
 - `symbols003.spinBlur` 显示纵向模糊图，`symbols003.disabled` 显示灰色图。
-- 连续执行 `symbols -> symbols001 -> symbols002 -> symbols003 -> symbols` 至少 3 次，旧 symbol、旧状态面板和旧 Pixi 对象不残留，浏览器 console 无错误。
+- 切换到 `game002-s2` 后，`WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`CN`、`CO` 全部可见，`WM`、`CM`、`AF`、`BN` 不显示，`bg` 不显示且不出现在 orphan 资产列表。
+- `game002-s2` 的 9 个图标使用 manifest 中的 `1` 缩放系数展示，并按当前舞台宽度自动换行，图标和 label 不重叠。
+- `game002-s2.appear` 中主图不缩放，图后半透明副本放大消退；`spinBlur` 显示纵向模糊图，`disabled` 显示灰色图。
+- 切换到 `game002-s3` 后，`WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`WM`、`CN`、`CM`、`CO`、`AF` 全部可见，`BN` 不显示。
+- `game002-s3` 的 12 个图标使用 manifest 中的 `1` 缩放系数展示，并按当前舞台宽度自动换行，图标和 label 不重叠。
+- `game002-s3.appear` 中主图不缩放，图后半透明副本放大消退；`win` 使用默认单图扫光效果，`spinBlur` 显示纵向模糊图，`disabled` 显示灰色图。
+- 连续执行 `symbols -> symbols001 -> symbols002 -> symbols003 -> game002-s2 -> game002-s3 -> symbols` 至少 3 次，旧 symbol、旧状态面板和旧 Pixi 对象不残留，浏览器 console 无错误。

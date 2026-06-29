@@ -188,3 +188,30 @@ export const SYMBOLS003_ANIMATION_PROFILES = Object.freeze(
     ),
   ),
 ) satisfies SymbolAnimationProfileMap;
+
+export const GAME002_S2_ANIMATION_PROFILES = Object.freeze(
+  Object.fromEntries(
+    ["WL", "H1", "H2", "L1", "L2", "L3", "L4", "CN", "CO"].map(
+      (symbol) => [symbol, createSingleImageUnderlayProfiles()] as const,
+    ),
+  ),
+) satisfies SymbolAnimationProfileMap;
+
+export const GAME002_S3_ANIMATION_PROFILES = Object.freeze(
+  Object.fromEntries(
+    [
+      "WL",
+      "H1",
+      "H2",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "WM",
+      "CN",
+      "CM",
+      "CO",
+      "AF",
+    ].map((symbol) => [symbol, createSingleImageUnderlayProfiles()] as const),
+  ),
+) satisfies SymbolAnimationProfileMap;
