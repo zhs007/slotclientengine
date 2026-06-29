@@ -107,6 +107,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
             missingAssetLabel: skin.label,
             symbolScales: skin.symbolScales,
             gridLayout: skin.gridLayout,
+            focusRegion: skin.focusRegion,
           },
         }));
   }
@@ -127,7 +128,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
     });
     context.gameLayer.replaceChildren(app.canvas);
 
-    const layout = createGame002Layout({ gridLayout: this.#skin.gridLayout });
+    const layout = createGame002Layout({
+      gridLayout: this.#skin.gridLayout,
+      focusRegion: this.#skin.focusRegion,
+    });
     const [staticTextures, symbolTextures] = await Promise.all([
       this.#loadStaticTextures(),
       this.#loadSymbolTextures(),
@@ -244,6 +248,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     const layout = createGame002Layout({
       viewportSize: viewport.frameDesignSize,
       gridLayout: this.#skin.gridLayout,
+      focusRegion: this.#skin.focusRegion,
     });
     this.#app.renderer.resize(
       layout.viewportSize.width,

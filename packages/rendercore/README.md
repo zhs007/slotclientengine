@@ -186,6 +186,7 @@ viewport 能力从主入口和子路径导出：
 ```ts
 import {
   calculateFocusedArtViewport,
+  mapArtRectToViewport,
   mapReferenceRectToArt,
 } from "@slotclientengine/rendercore/viewport";
 ```
@@ -199,6 +200,8 @@ import {
 该 helper 只做通用几何计算，不读取资源、不创建 Pixi 对象，也不包含任何 game002 路径、symbol 名或棋盘常量。`viewportSize` 大于 `artSize`、`focusRect` 超出 art、focus 加 margin 无法放入 viewport、`NaN`/`Infinity`/非正数都会显式抛错，避免运行时静默裁掉关键区域。
 
 `mapReferenceRectToArt()` 用于把旧设计稿或旧 portrait crop 里的矩形映射到新的完整 art 坐标。典型用法是把旧 `1125 x 2000` 坐标中的棋盘矩形映射到 `2000 x 2000` art 中，再把映射后的矩形作为 focus rect。
+
+`mapArtRectToViewport()` 用于在已有 `visibleRect` 下，把完整 art 坐标系中的任意矩形映射到当前 viewport 坐标。典型用法是 focus rect 与棋盘、调试框或其它 art rect 不同的时候，先用 `calculateFocusedArtViewport()` 得到裁切结果，再用该 helper 映射其它矩形。`rect` 和 `visibleRect` 都必须在 `artSize` 内；`rect` 不要求完全落在 `visibleRect` 内，超出当前可见区域时仍返回确定坐标。app 不应自行复制 `rect.x - visibleRect.x` 这类通用映射算法。
 
 ## Reel API
 

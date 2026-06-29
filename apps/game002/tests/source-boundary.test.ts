@@ -103,6 +103,48 @@ describe("game002 source boundary", () => {
     expect(adapterSource).toContain("skin.backgroundUrl");
     expect(adapterSource).toContain("skin.symbolModules");
   });
+
+  it("keeps skin focus regions explicit and delegates art rect mapping to rendercore", () => {
+    const sourceFiles = listFiles(join(APP_ROOT, "src"), (file) =>
+      file.endsWith(".ts"),
+    );
+    const layoutSource = readFileSync(
+      join(APP_ROOT, "src/game-layout.ts"),
+      "utf8",
+    );
+    const mainSource = readFileSync(join(APP_ROOT, "src/main.ts"), "utf8");
+    const skinConfigSource = readFileSync(
+      join(APP_ROOT, "src/skin-config.ts"),
+      "utf8",
+    );
+    const bannedMappingPairs = Object.freeze([
+      ["rect.x", "visibleRect.x"],
+      ["rect.y", "visibleRect.y"],
+    ]);
+
+    expect(skinConfigSource).toContain(
+      "focusRegion: GAME002_SKIN1_FOCUS_REGION",
+    );
+    expect(skinConfigSource).toContain(
+      "focusRegion: GAME002_SKIN2_FOCUS_REGION",
+    );
+    expect(skinConfigSource).toContain(
+      "focusRegion: GAME002_SKIN3_FOCUS_REGION",
+    );
+    expect(layoutSource).toContain("mapArtRectToViewport");
+    expect(mainSource).toContain("createGame002FramePolicy(skin.focusRegion)");
+    expect(layoutSource).not.toMatch(/focusRegion\s*\?\?/);
+    expect(layoutSource).not.toMatch(/focusRegion\s*\|\|/);
+
+    for (const file of sourceFiles) {
+      const content = readFileSync(file, "utf8");
+      for (const [left, right] of bannedMappingPairs) {
+        expect(content, `${file} must delegate ${left} mapping`).not.toContain(
+          `${left} - ${right}`,
+        );
+      }
+    }
+  });
 });
 
 function listFiles(

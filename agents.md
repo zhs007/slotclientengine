@@ -32,6 +32,7 @@
 - game002 系列 symbols 中的透明 `BN` 只能作为显式配置的空图标或明确服务器映射边界的兜底入口；不要在通用 symbol catalog 中静默吞掉缺图、缺 manifest 或缺配置错误。
 - game002 系列 symbol manifest 的每个 symbol 必须声明显示 `scale`；当前 `skin=1` / `assets/symbols001` 为 `0.8`，`assets/symbols`、`assets/symbols002`、`assets/symbols003` 为 `1`。`symbolsviewer` 和 `game002` 应从 manifest 读取 scale，不要在 app 内维护第二份手写 scale 表。
 - `packages/rendercore` 拥有 Pixi 游戏内部的 art-size、focus-rect、visible-viewport 适配算法；游戏 app 只能配置 art 尺寸、focus 区域和资源，不要在 app 内复制通用裁切、居中或可见区域策略。
+- `game002` 的响应式适配重点区域必须由每套 skin 显式配置，坐标相对于完整 `2000 x 2000` 背景；不要把转轮 board frame 当作隐式适配 focus，也不要在 app 内复制 `rendercore` 的 art-viewport 映射算法。
 - `packages/uiframeworks` 拥有页面 DOM frame、canvas 逻辑尺寸上限、黑边居中和 viewport resize 适配；游戏 app 不要直接用 CSS/DOM 私有逻辑绕过 framework 的 frame policy。
 - `packages/vnicore` 拥有 VNI 播放状态机、segmented 高级播放、live 粒子排空、layer group render order 和 group slot 挂接语义；viewer 只能做 UI 配置、输入校验、状态展示和调用，不要在 `apps/anieditorv5viewer` 里复制播放状态机、group adjacency 算法或直接操作 runtime 私有 Pixi container。
 - 更新 `packages/anieditorv5runtime-cc` 的 public runtime 行为时，必须同步模块化源码、`standalone/anieditorv5runtime-cc.ts`、`scripts/check-standalone.mjs`、standalone 测试和 `standalone.zip`，避免 Cocos 主要交付面与 workspace package 漂移。

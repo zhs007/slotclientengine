@@ -32,6 +32,12 @@ export interface FocusedArtViewport {
   readonly focusRectInViewport: RenderViewportRect;
 }
 
+export interface MapArtRectToViewportOptions {
+  readonly artSize: RenderViewportSize;
+  readonly visibleRect: RenderViewportRect;
+  readonly rect: RenderViewportRect;
+}
+
 export function calculateFocusedArtViewport(
   options: FocusedArtViewportOptions,
 ): FocusedArtViewport {
@@ -102,6 +108,34 @@ export function calculateFocusedArtViewport(
       y: -visibleRect.y,
     }),
     focusRectInViewport,
+  });
+}
+
+export function mapArtRectToViewport(
+  options: MapArtRectToViewportOptions,
+): RenderViewportRect {
+  const artSize = validateSize(options.artSize, "artSize");
+  const visibleRect = validateRect(options.visibleRect, "visibleRect");
+  const rect = validateRect(options.rect, "rect");
+
+  if (
+    visibleRect.x + visibleRect.width > artSize.width ||
+    visibleRect.y + visibleRect.height > artSize.height
+  ) {
+    throw new Error("visibleRect must fit inside artSize.");
+  }
+  if (
+    rect.x + rect.width > artSize.width ||
+    rect.y + rect.height > artSize.height
+  ) {
+    throw new Error("rect must fit inside artSize.");
+  }
+
+  return freezeRect({
+    x: rect.x - visibleRect.x,
+    y: rect.y - visibleRect.y,
+    width: rect.width,
+    height: rect.height,
   });
 }
 

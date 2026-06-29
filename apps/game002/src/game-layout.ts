@@ -10,6 +10,7 @@ import {
 import type { SlotGameFramePolicy } from "@slotclientengine/gameframeworks";
 import {
   calculateFocusedArtViewport,
+  mapArtRectToViewport,
   mapReferenceRectToArt,
   type FocusedArtViewport,
   type RenderViewportSize,
@@ -99,6 +100,29 @@ export const GAME002_SKIN1_GRID_LAYOUT = Object.freeze({
   cellHeight: GAME002_SKIN1_CELL_HEIGHT,
 }) satisfies Game002GridLayout;
 
+export const GAME002_SKIN1_FOCUS_REGION = Object.freeze({
+  x: 555,
+  y: 150,
+  width: 862,
+  height: 1537,
+}) satisfies Game002FocusRegion;
+
+export const GAME002_SKIN2_FOCUS_REGION = Object.freeze({
+  x: 637.5,
+  y: 330,
+  width: 720,
+  height: 1080,
+}) satisfies Game002FocusRegion;
+
+export const GAME002_SKIN3_FOCUS_REGION = Object.freeze({
+  x: 637.5,
+  y: 330,
+  width: 720,
+  height: 1080,
+}) satisfies Game002FocusRegion;
+
+export const GAME002_DEFAULT_FOCUS_REGION = GAME002_SKIN2_FOCUS_REGION;
+
 export const GAME002_FOCUS_MARGIN = Object.freeze({
   left: 60,
   right: 60,
@@ -118,6 +142,13 @@ export interface Rect {
   readonly height: number;
 }
 
+export interface Game002FocusRegion {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface Game002GridLayout {
   readonly boardFrame: Rect;
   readonly cellWidth: number;
@@ -126,7 +157,8 @@ export interface Game002GridLayout {
 
 export interface Game002LayoutOptions {
   readonly viewportSize?: RenderViewportSize;
-  readonly gridLayout?: Game002GridLayout;
+  readonly gridLayout: Game002GridLayout;
+  readonly focusRegion: Game002FocusRegion;
 }
 
 export interface Game002Layout {
@@ -135,6 +167,8 @@ export interface Game002Layout {
   readonly viewportSize: RenderViewportSize;
   readonly visibleRect: FocusedArtViewport["visibleRect"];
   readonly worldOffset: FocusedArtViewport["worldOffset"];
+  readonly focusRegion: Game002FocusRegion;
+  readonly focusRegionInViewport: Rect;
   readonly background: Point;
   readonly backgroundFrame: Rect;
   readonly boardFrame: Rect;
@@ -167,16 +201,16 @@ export function calculateGame002FrameScale(
 }
 
 export function createGame002FramePolicy(
-  gridLayout: Game002GridLayout = GAME002_DEFAULT_GRID_LAYOUT,
+  focusRegion: Game002FocusRegion = GAME002_DEFAULT_FOCUS_REGION,
 ): SlotGameFramePolicy {
-  validateGame002GridLayout(gridLayout);
+  validateGame002FocusRegion(focusRegion);
   return Object.freeze({
     mode: "focus",
     maxDesignSize: GAME002_ART_SIZE,
     preferredPortraitSize: GAME002_REFERENCE_SIZE,
     focusRect: Object.freeze({
-      width: gridLayout.boardFrame.width,
-      height: gridLayout.boardFrame.height,
+      width: focusRegion.width,
+      height: focusRegion.height,
     }),
     minFocusMargin: GAME002_FOCUS_MARGIN,
   });
@@ -185,13 +219,20 @@ export function createGame002FramePolicy(
 export function createGame002Layout(
   input: Game002LayoutInput = GAME002_REFERENCE_SIZE,
 ): Game002Layout {
-  const { viewportSize, gridLayout } = normalizeGame002LayoutInput(input);
+  const { viewportSize, gridLayout, focusRegion } =
+    normalizeGame002LayoutInput(input);
   validateGame002GridLayout(gridLayout);
+  validateGame002FocusRegion(focusRegion);
   const viewport = calculateFocusedArtViewport({
     artSize: GAME002_ART_SIZE,
     viewportSize,
-    focusRect: gridLayout.boardFrame,
+    focusRect: focusRegion,
     minMargin: GAME002_FOCUS_MARGIN,
+  });
+  const boardFrameInViewport = mapArtRectToViewport({
+    artSize: GAME002_ART_SIZE,
+    visibleRect: viewport.visibleRect,
+    rect: gridLayout.boardFrame,
   });
   return Object.freeze({
     artSize: GAME002_ART_SIZE,
@@ -199,6 +240,8 @@ export function createGame002Layout(
     viewportSize: viewport.viewportSize,
     visibleRect: viewport.visibleRect,
     worldOffset: viewport.worldOffset,
+    focusRegion,
+    focusRegionInViewport: viewport.focusRectInViewport,
     background: Object.freeze({ x: 0, y: 0 }),
     backgroundFrame: Object.freeze({
       x: 0,
@@ -207,7 +250,7 @@ export function createGame002Layout(
       height: GAME002_ART_SIZE.height,
     }),
     boardFrame: gridLayout.boardFrame,
-    boardFrameInViewport: viewport.focusRectInViewport,
+    boardFrameInViewport,
   });
 }
 
@@ -220,6 +263,33 @@ export function validateGame002GridLayout(
     gridLayout.cellWidth,
     gridLayout.cellHeight,
   );
+}
+
+export function validateGame002FocusRegion(
+  focusRegion: Game002FocusRegion,
+  artSize: typeof GAME002_ART_SIZE = GAME002_ART_SIZE,
+): void {
+  if (!focusRegion) {
+    throw new Error("game002 focusRegion must be configured.");
+  }
+  if (!Number.isFinite(focusRegion.x) || focusRegion.x < 0) {
+    throw new Error("game002 focusRegion x must be a non-negative number.");
+  }
+  if (!Number.isFinite(focusRegion.y) || focusRegion.y < 0) {
+    throw new Error("game002 focusRegion y must be a non-negative number.");
+  }
+  if (!Number.isFinite(focusRegion.width) || focusRegion.width <= 0) {
+    throw new Error("game002 focusRegion width must be a positive number.");
+  }
+  if (!Number.isFinite(focusRegion.height) || focusRegion.height <= 0) {
+    throw new Error("game002 focusRegion height must be a positive number.");
+  }
+  if (
+    focusRegion.x + focusRegion.width > artSize.width ||
+    focusRegion.y + focusRegion.height > artSize.height
+  ) {
+    throw new Error("game002 focusRegion must fit inside the art size.");
+  }
 }
 
 export function validateGame002BoardFrame(
@@ -320,16 +390,25 @@ export function createGame002ReelLayerLayout(
 function normalizeGame002LayoutInput(input: Game002LayoutInput): {
   readonly viewportSize: RenderViewportSize;
   readonly gridLayout: Game002GridLayout;
+  readonly focusRegion: Game002FocusRegion;
 } {
   if ("width" in input && "height" in input) {
     return {
       viewportSize: input,
       gridLayout: GAME002_DEFAULT_GRID_LAYOUT,
+      focusRegion: GAME002_DEFAULT_FOCUS_REGION,
     };
+  }
+  if (!input.gridLayout) {
+    throw new Error("game002 gridLayout must be configured.");
+  }
+  if (!input.focusRegion) {
+    throw new Error("game002 focusRegion must be configured.");
   }
   return {
     viewportSize: input.viewportSize ?? GAME002_REFERENCE_SIZE,
-    gridLayout: input.gridLayout ?? GAME002_DEFAULT_GRID_LAYOUT,
+    gridLayout: input.gridLayout,
+    focusRegion: input.focusRegion,
   };
 }
 

@@ -62,12 +62,17 @@ Framework 创建：
 
 Pixi canvas 位于 `.slot-ui-game-layer` 内，backing size 由 `gameframeworks` 透传的 viewport snapshot 决定。`game002` 使用 `framePolicy` 提交最大不超过 `2000 x 2000` 的逻辑尺寸，并在 Pixi stage 内使用完整 `2000 x 2000` art world；resize 时只调用 renderer resize 并移动 world container，不重建 live/framework。`game002` 只补充 canvas 样式，不复制 HUD 布局。
 
+响应式适配使用每套皮肤显式声明的 `focusRegion`，坐标相对于完整 `2000 x 2000` 背景。`focusRegion` 只表示当前皮肤希望保留在 viewport 内的视觉重点区域；`gridLayout.boardFrame` 只表示转轮棋盘和 cell 布局。二者当前可以数值相同，但不能互相推导、不能共享隐式默认值，也不能在 app 内复制 `rendercore` 的 art-to-viewport 映射算法。配置缺失、非法或 focus 加 margin 无法放入当前逻辑 viewport 时会显式失败。
+
+当前三套皮肤继续共享 `preferredPortraitSize=1125 x 2000` 和 `GAME002_FOCUS_MARGIN=60px`，因为 DOM frame policy 仍是同一个 portrait 发布边界；需要换图或重新对齐时，只调整对应 skin 的 `focusRegion` 和 `gridLayout`。
+
 `skin=2` / `skin=3` 的 art 坐标和旧坐标映射：
 
 - art/background：`2000 x 2000`，运行时背景为 `bgfull.jpg`
 - 旧 reference crop：`1125 x 2000`，在 art 中为 `x=437.5`, `y=0`
 - 旧 board frame：`x=200`, `y=330`, `width=720`, `height=1080`
 - art board frame：`x=637.5`, `y=330`, `width=720`, `height=1080`
+- focusRegion：逐 skin 显式配置为 `x=637.5`, `y=330`, `width=720`, `height=1080`
 - cell：`120 x 120`
 - scene：`6 x 9`
 - reels：`reels-001`
@@ -77,6 +82,7 @@ Pixi canvas 位于 `.slot-ui-game-layer` 内，backing size 由 `gameframeworks`
 
 - background：`assets/game002-s1/bg.jpg`
 - board frame：`x=620`, `y=465`, `width=750`, `height=1200`
+- focusRegion：显式配置为 `x=555`, `y=150`, `width=862`, `height=1537`，用于把羊等背景主体纳入适配重点
 - cell：`125 x 133.333333`
 - scene：`6 x 9`
 - reels：`reels-001`
