@@ -15,6 +15,7 @@ import type {
   SlotGameBetOption,
   SlotGameFramework,
   SlotGameFrameworkOptions,
+  SlotGameLiveSessionLike,
   SlotGameMountContext,
   SlotGameSpinRequest,
   SlotGameStateSnapshot,
@@ -31,7 +32,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
   readonly #options: SlotGameFrameworkOptions;
   readonly #state: SlotGameStateStore;
   readonly #ui: SlotGameUiAdapter;
-  readonly #session: SlotGameLiveSession;
+  readonly #session: SlotGameLiveSessionLike;
   readonly #mountPromise: Promise<void>;
   #destroyed = false;
   #roundId = 0;
@@ -73,10 +74,12 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       onFastModeChange: (enabled) => this.setFastMode(enabled),
       onAutoModeChange: (enabled) => this.setAutoMode(enabled),
     });
-    this.#session = new SlotGameLiveSession({
-      live: options.live,
-      clientFactory: options.clientFactory,
-    });
+    this.#session =
+      options.liveSession ??
+      new SlotGameLiveSession({
+        live: options.live,
+        clientFactory: options.clientFactory,
+      });
     this.#mountPromise = this.#mountGameAdapter();
     this.#applyState();
   }
@@ -304,6 +307,11 @@ function validateFrameworkOptions(options: SlotGameFrameworkOptions): void {
   }
   if (!options.live || typeof options.live.serverUrl !== "string") {
     throw new SlotGameConfigError("live.serverUrl is required.");
+  }
+  if (options.liveSession && options.clientFactory) {
+    throw new SlotGameConfigError(
+      "liveSession and clientFactory cannot be provided at the same time.",
+    );
   }
 }
 

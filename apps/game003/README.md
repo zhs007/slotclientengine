@@ -1,11 +1,12 @@
 # game003
 
-`apps/game003` 是 `game003` live slot 客户端。入口第一屏直接加载游戏画面，通过 URL query 读取除服务器地址外的 live 参数，并使用 `@slotclientengine/gameframeworks` 作为 UI / live / logic facade。
+`apps/game003` 是 `game003` live slot 客户端。入口第一屏先显示轻量 loading 页面，通过游戏包体内的 loading 资源清单预加载静态资源；资源阶段最多到 `99%`，随后在 `99%` 回调中连接固定 live server 并完成 `enterGame`。只有 loading 到 `100%` 后，才创建 `@slotclientengine/gameframeworks` framework、挂载 Pixi 画面并进入正式游戏渲染。
 
 ## 资源
 
 - 静态配置源：`apps/game003/config/game-static.yaml`
 - 生成配置模块：`apps/game003/src/generated/game-static.generated.ts`
+- loading 资源生成模块：`apps/game003/src/generated/game-loading.generated.ts`
 - 游戏配置：`assets/gamecfg003/gameconfig.json`
 - Excel 输入：`assets/gamecfg003/paytable.xlsx`、`assets/gamecfg003/bg-reel01.xlsx`
 - 视觉资源：`assets/game003-s1`
@@ -35,7 +36,9 @@ CI=true pnpm --filter @slotclientengine/rendercore generate:symbol-state-texture
 
 `config/game-static.yaml` 是 `game003` 可编辑静态配置源，保留中文注释给美术、配置人员和发布流程理解字段用途、坐标基准与修改边界。注释只给人看，构建工具只读取 YAML 数据字段。
 
-`src/generated/game-static.generated.ts` 由 `apps/buildgamestatic` 生成，禁止手改。修改 YAML 后执行：
+`src/generated/game-static.generated.ts` 由 `apps/buildgamestatic` 生成，禁止手改。
+`src/generated/game-loading.generated.ts` 同样由 `apps/buildgamestatic` 生成，禁止手改。
+修改 YAML 后执行：
 
 ```bash
 CI=true pnpm --filter game003 generate:static-config
@@ -43,6 +46,18 @@ CI=true pnpm --filter game003 check:static-config
 ```
 
 `gameConfig` 字段只引用 `assets/gamecfg003/gameconfig.json`；Excel 到 JSON 仍由 `apps/gengameconfig` 负责。symbol scale 仍由 `assets/game003-s1/symbol-state-textures.manifest.json` 负责，不在 YAML 或 app 内维护第二份 scale 表。
+
+`loading.resources` 只承载随游戏包发布的静态资源 path/glob 和权重，不承载 token、cookie、serverUrl、服务器真实轮带或玩家本次下注。glob 必须是明确资源组，不能用 `assets/game003-s1/*.png` 这类宽泛写法把主转轮框、传送带和 symbol 混在一起。
+
+## Loading 启动顺序
+
+- `src/main.ts` 是轻入口，只静态导入 `@slotclientengine/gameloading` 和 `src/loading-resources.ts`。
+- `src/loading-resources.ts` 合并 `game-loading.generated.ts` 的静态资源和 `game003-runtime-module` 动态模块资源。
+- `src/game-entry.ts` 才导入 `gameframeworks`、Pixi adapter、game layout 和正式游戏配置。
+- loading 资源阶段完成后停在 `99%`，调用 `prepareGame003At99()` 解析 query、拒绝旧 `serverUrl`、创建预连接 live session，并完成真实 `connect + enterGame`。
+- `prepareGame003At99()` 成功后进度到 `100%`，再调用 `enterGame003()` 创建 framework 和 Pixi adapter。
+- framework 使用同一个预连接 session，`framework.connect()` 不会产生第二次 WebSocket connect / enterGame。
+- loading DOM 和 game DOM 分别挂载到 `loadingHost` / `gameHost`，进入游戏失败时会保留 loading 错误态，不留下半挂载 canvas。
 
 ## 布局边界
 

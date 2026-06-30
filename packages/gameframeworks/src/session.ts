@@ -10,6 +10,7 @@ import type {
   SlotGameClientFactory,
   SlotGameClientLike,
   SlotGameLiveConfig,
+  SlotGameLiveSessionLike,
 } from "./types.js";
 
 type Listener = (...args: unknown[]) => void;
@@ -20,7 +21,7 @@ export interface SlotGameSessionOptions {
   readonly logger?: Logger | null;
 }
 
-export class SlotGameLiveSession {
+export class SlotGameLiveSession implements SlotGameLiveSessionLike {
   readonly #live: SlotGameLiveConfig;
   readonly #monitor: FailFastMonitor;
   readonly #client: SlotGameClientLike;
@@ -48,6 +49,12 @@ export class SlotGameLiveSession {
   }
 
   async connect(): Promise<Readonly<UserInfo>> {
+    if (this.#connected) {
+      this.#monitor.throwIfFailed();
+      const currentUserInfo = this.#client.getUserInfo();
+      validateLiveUserInfo(currentUserInfo);
+      return currentUserInfo;
+    }
     await this.#monitor.race(this.#client.connect(this.#live.token));
     this.#monitor.throwIfFailed();
     await this.#monitor.race(this.#client.enterGame(this.#live.gamecode));
@@ -94,6 +101,20 @@ export class SlotGameLiveSession {
     this.#detachHandlers();
     this.#client.disconnect();
     this.#connected = false;
+  }
+}
+
+export async function prepareSlotGameLiveSession(options: {
+  readonly live: SlotGameLiveConfig;
+  readonly clientFactory?: SlotGameClientFactory;
+}): Promise<SlotGameLiveSession> {
+  const session = new SlotGameLiveSession(options);
+  try {
+    await session.connect();
+    return session;
+  } catch (error) {
+    session.disconnect();
+    throw error;
   }
 }
 

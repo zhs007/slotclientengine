@@ -156,6 +156,79 @@ describe("buildgamestatic YAML loader", () => {
       right: 22,
     });
   });
+
+  it("validates loading resources when present", () => {
+    const root = createFixtureRoot();
+    const config = parseGameStaticYamlValue(
+      {
+        ...createYamlObject(),
+        loading: {
+          resources: [
+            {
+              id: "game003-bg-landscape",
+              path: "assets/game003-s1/bg1.jpg",
+              weight: 8,
+            },
+            {
+              id: "game003-scene-parts",
+              glob: "assets/game003-s1/{conveyor1,conveyor2,mainreelbg}.png",
+              weight: 6,
+            },
+          ],
+        },
+      },
+      { rootDir: root, inputPath: "game.yaml" },
+    );
+
+    expect(config.loading?.resources).toHaveLength(2);
+    expect(config.loading?.resources[1]).toMatchObject({
+      id: "game003-scene-parts",
+      weight: 6,
+    });
+
+    expect(() =>
+      parseGameStaticYamlValue(
+        {
+          ...createYamlObject(),
+          loading: {
+            resources: [
+              { id: "dup", path: "assets/game003-s1/bg1.jpg" },
+              { id: "dup", path: "assets/game003-s1/bg2.jpg" },
+            ],
+          },
+        },
+        { rootDir: root, inputPath: "game.yaml" },
+      ),
+    ).toThrow(/重复值/);
+    expect(() =>
+      parseGameStaticYamlValue(
+        {
+          ...createYamlObject(),
+          loading: {
+            resources: [
+              {
+                id: "bad",
+                path: "assets/game003-s1/bg1.jpg",
+                glob: "assets/game003-s1/{bg1}.jpg",
+              },
+            ],
+          },
+        },
+        { rootDir: root, inputPath: "game.yaml" },
+      ),
+    ).toThrow(/只能提供 path 或 glob/);
+    expect(() =>
+      parseGameStaticYamlValue(
+        {
+          ...createYamlObject(),
+          loading: {
+            resources: [{ id: "wide", glob: "assets/game003-s1/*.png" }],
+          },
+        },
+        { rootDir: root, inputPath: "game.yaml" },
+      ),
+    ).toThrow(/宽泛 \*\.png glob/);
+  });
 });
 
 function createFixtureRoot(): string {

@@ -176,6 +176,14 @@ export type SlotGameClientFactory = (
   options: SlotcraftClientOptions,
 ) => SlotGameClientLike;
 
+export interface SlotGameLiveSessionLike {
+  getUserInfo(): Readonly<UserInfo>;
+  connect(): Promise<Readonly<UserInfo>>;
+  spin(params: SpinParams): Promise<unknown>;
+  collect(playIndex?: number): Promise<Readonly<UserInfo>>;
+  disconnect(): void;
+}
+
 export type SlotGameLogicFactory = (
   gmi: unknown,
   meta: GameLogicMeta,
@@ -199,6 +207,7 @@ export interface SlotGameFrameworkOptions {
     state: SlotGameStateSnapshot,
     bet: SlotGameBetOption,
   ) => SlotGameSpinRequest;
+  readonly liveSession?: SlotGameLiveSessionLike;
   readonly clientFactory?: SlotGameClientFactory;
   readonly logicFactory?: SlotGameLogicFactory;
   readonly onStateChange?: (state: SlotGameStateSnapshot) => void;

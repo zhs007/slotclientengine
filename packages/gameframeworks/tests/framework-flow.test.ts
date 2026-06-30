@@ -3,6 +3,7 @@ import {
   buildSpinParams,
   createSlotGameFramework,
   toSlotGameError,
+  type SlotGameLiveSessionLike,
 } from "../src/index.js";
 import {
   BET_OPTIONS,
@@ -89,6 +90,42 @@ describe("framework flow", () => {
     await expect(framework.spin()).rejects.toThrow(/already in progress/);
     resolveSpin(createSpinResult({ totalwin: 0 }));
     await first;
+  });
+
+  it("uses an externally prepared live session and rejects ambiguous factories", async () => {
+    const root = document.createElement("div");
+    const liveSession = new MockLiveSession();
+    const adapter = new MockAdapter();
+    const framework = createSlotGameFramework({
+      root,
+      gameAdapter: adapter,
+      live: { serverUrl: "ws://localhost" },
+      betOptions: BET_OPTIONS,
+      liveSession,
+    });
+
+    await framework.connect();
+
+    expect(liveSession.calls).toEqual(["connect"]);
+    expect(adapter.calls).toContain("initial");
+    expect(framework.getState()).toMatchObject({
+      connected: true,
+      balance: 500,
+    });
+
+    framework.destroy();
+    expect(liveSession.calls).toContain("disconnect");
+
+    expect(() =>
+      createSlotGameFramework({
+        root: document.createElement("div"),
+        gameAdapter: new MockAdapter(),
+        live: { serverUrl: "ws://localhost" },
+        betOptions: BET_OPTIONS,
+        liveSession: new MockLiveSession(),
+        clientFactory: () => new MockClient(),
+      }),
+    ).toThrow(/liveSession and clientFactory/);
   });
 
   it("does not collect on single zero-win result and keeps zero multi-result collect", async () => {
@@ -345,4 +382,36 @@ function setRootSize(root: HTMLElement, width: number, height: number): void {
     configurable: true,
     value: height,
   });
+}
+
+class MockLiveSession implements SlotGameLiveSessionLike {
+  readonly calls: string[] = [];
+  readonly userInfo = Object.freeze({
+    balance: 500,
+    gameid: 7,
+    defaultScene: [[1, 2, 3]],
+  });
+
+  getUserInfo() {
+    return this.userInfo;
+  }
+
+  async connect() {
+    this.calls.push("connect");
+    return this.userInfo;
+  }
+
+  async spin(): Promise<unknown> {
+    this.calls.push("spin");
+    return createSpinResult();
+  }
+
+  async collect() {
+    this.calls.push("collect");
+    return this.userInfo;
+  }
+
+  disconnect(): void {
+    this.calls.push("disconnect");
+  }
 }

@@ -11,6 +11,7 @@ describe("game003 source boundary", () => {
     ) as { dependencies: Record<string, string> };
 
     expect(pkg.dependencies).toHaveProperty("@slotclientengine/gameframeworks");
+    expect(pkg.dependencies).toHaveProperty("@slotclientengine/gameloading");
     expect(pkg.dependencies).toHaveProperty("@slotclientengine/rendercore");
     expect(pkg.dependencies).not.toHaveProperty("@slotclientengine/netcore");
     expect(pkg.dependencies).not.toHaveProperty(
@@ -32,6 +33,18 @@ describe("game003 source boundary", () => {
 
     expect(source).not.toMatch(/import\.meta\.env/);
     expect(source).not.toMatch(/VITE_GAME003_/);
+  });
+
+  it("keeps main.ts as a light loading entry without static game runtime imports", () => {
+    const mainSource = readFileSync(join(APP_ROOT, "src/main.ts"), "utf8");
+
+    expect(mainSource).toMatch(/@slotclientengine\/gameloading/);
+    expect(mainSource).not.toMatch(/@slotclientengine\/gameframeworks/);
+    expect(mainSource).not.toMatch(/@slotclientengine\/rendercore/);
+    expect(mainSource).not.toMatch(/pixi\.js/);
+    expect(mainSource).not.toMatch(/\.\/game-entry/);
+    expect(mainSource).not.toMatch(/\.\/game-adapter/);
+    expect(mainSource).not.toMatch(/\.\/game-demo/);
   });
 });
 

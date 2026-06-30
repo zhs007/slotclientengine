@@ -11,6 +11,7 @@ export { SlotGameStateStore } from "./state.js";
 export {
   SlotGameLiveSession,
   createSlotcraftClientOptions,
+  prepareSlotGameLiveSession,
   requireFiniteBalance,
   validateLiveServerUrl,
 } from "./session.js";
@@ -48,6 +49,7 @@ export type {
   SlotGameFrameworkOptions,
   SlotGameInitialState,
   SlotGameLiveConfig,
+  SlotGameLiveSessionLike,
   SlotGameLogicFactory,
   SlotGameMountContext,
   SlotGameSpinRequest,

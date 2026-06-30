@@ -13,6 +13,10 @@ const GENERATED_STATIC_CONFIG = join(
   APP_ROOT,
   "src/generated/game-static.generated.ts",
 );
+const GENERATED_LOADING_CONFIG = join(
+  APP_ROOT,
+  "src/generated/game-loading.generated.ts",
+);
 const SOURCE_MANIFEST = join(
   REPO_ROOT,
   "assets/game003-s1/symbol-state-textures.manifest.json",
@@ -71,9 +75,15 @@ function verify() {
   assertFile(INDEX_HTML);
   assertFile(GAME_STATIC_YAML);
   assertFile(GENERATED_STATIC_CONFIG);
+  assertFile(GENERATED_LOADING_CONFIG);
   assertDirectory(ASSETS_ROOT);
   assertFile(SOURCE_MANIFEST);
   verifyGeneratedStaticConfigSync();
+  if (existsSync(GENERATED_LOADING_CONFIG)) {
+    verifyGeneratedLoadingConfigSource(
+      readFileSync(GENERATED_LOADING_CONFIG, "utf8"),
+    );
+  }
 
   if (existsSync(INDEX_HTML)) {
     verifyIndexHtml(readFileSync(INDEX_HTML, "utf8"));
@@ -105,6 +115,8 @@ function verifyGeneratedStaticConfigSync() {
         "apps/game003/config/game-static.yaml",
         "--out",
         "apps/game003/src/generated/game-static.generated.ts",
+        "--loading-out",
+        "apps/game003/src/generated/game-loading.generated.ts",
         "--game",
         "game003",
         "--check",
@@ -123,6 +135,22 @@ function verifyGeneratedStaticConfigSync() {
           ? error.message
           : String(error);
     failures.push(`generated static config is not in sync: ${detail.trim()}`);
+  }
+}
+
+function verifyGeneratedLoadingConfigSource(content) {
+  for (const forbidden of [
+    "rawGameConfig",
+    "@slotclientengine/gameframeworks",
+    "@slotclientengine/rendercore",
+    "pixi.js",
+    "serverUrl",
+    "token",
+    "cookie",
+  ]) {
+    if (content.includes(forbidden)) {
+      failures.push(`generated loading config must not contain ${forbidden}.`);
+    }
   }
 }
 
@@ -165,6 +193,16 @@ function verifyIndexHtml(indexHtml) {
 function verifyAssets(assetNames) {
   assertAsset(assetNames, /^index-[A-Za-z0-9_-]+\.js$/, "index-*.js");
   assertAsset(assetNames, /^index-[A-Za-z0-9_-]+\.css$/, "index-*.css");
+  const jsAssets = assetNames.filter((name) => /\.js$/.test(name));
+  if (jsAssets.length < 2) {
+    failures.push("dist/assets must contain multiple JS chunks.");
+  }
+  const entryChunk = assetNames.find((name) =>
+    /^index-[A-Za-z0-9_-]+\.js$/.test(name),
+  );
+  if (entryChunk) {
+    verifyEntryChunkIsLight(join(ASSETS_ROOT, entryChunk));
+  }
 
   for (const asset of REQUIRED_SCENE_ASSETS) {
     assertAsset(assetNames, asset.pattern, asset.label);
@@ -186,6 +224,15 @@ function verifyAssets(assetNames) {
       new RegExp(`^${escapeRegExp(symbol)}\\.disabled-[A-Za-z0-9_-]+\\.png$`),
       `${symbol}.disabled-*.png`,
     );
+  }
+}
+
+function verifyEntryChunkIsLight(entryChunkPath) {
+  const content = readFileSync(entryChunkPath, "utf8");
+  for (const forbidden of ["game-adapter", "RenderReelSet", "pixi.js"]) {
+    if (content.includes(forbidden)) {
+      failures.push(`entry chunk contains game runtime marker ${forbidden}.`);
+    }
   }
 }
 

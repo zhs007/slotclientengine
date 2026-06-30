@@ -71,6 +71,66 @@ describe("buildgamestatic generator", () => {
       }),
     ).rejects.toThrow(/--game 必须/);
   });
+
+  it("generates and checks the lightweight loading resource module", async () => {
+    const root = createFixtureRoot();
+    appendLoadingBlock(root);
+    const options = {
+      rootDir: root,
+      inputPath: "apps/game003/config/game-static.yaml",
+      outPath: "apps/game003/src/generated/game-static.generated.ts",
+      loadingOutPath: "apps/game003/src/generated/game-loading.generated.ts",
+      gameId: "game003",
+      check: false,
+    };
+
+    const result = await generateGameStaticConfigFile(options);
+    const loadingOutPath = join(root, options.loadingOutPath);
+
+    expect(result.loadingChanged).toBe(true);
+    expect(existsSync(loadingOutPath)).toBe(true);
+    expect(result.loadingGenerated).toContain("GAME003_LOADING_RESOURCE_URLS");
+    expect(result.loadingGenerated).toContain("import.meta.glob");
+    expect(result.loadingGenerated).toContain(
+      "assets/game003-s1/{conveyor1,conveyor2,mainreelbg}.png",
+    );
+    expect(result.loadingGenerated).not.toContain("rawGameConfig");
+    await expect(
+      generateGameStaticConfigFile({ ...options, check: true }),
+    ).resolves.toMatchObject({ checked: true, loadingChanged: false });
+
+    writeFileSync(loadingOutPath, "stale loading generated file", "utf8");
+    await expect(
+      generateGameStaticConfigFile({ ...options, check: true }),
+    ).rejects.toThrow(/game-loading\.generated\.ts/);
+  });
+
+  it("requires --loading-out exactly when YAML loading resources are present", async () => {
+    const root = createFixtureRoot();
+    appendLoadingBlock(root);
+
+    await expect(
+      generateGameStaticConfigFile({
+        rootDir: root,
+        inputPath: "apps/game003/config/game-static.yaml",
+        outPath: "apps/game003/src/generated/game-static.generated.ts",
+        gameId: "game003",
+        check: false,
+      }),
+    ).rejects.toThrow(/--loading-out/);
+
+    const noLoadingRoot = createFixtureRoot();
+    await expect(
+      generateGameStaticConfigFile({
+        rootDir: noLoadingRoot,
+        inputPath: "apps/game003/config/game-static.yaml",
+        outPath: "apps/game003/src/generated/game-static.generated.ts",
+        loadingOutPath: "apps/game003/src/generated/game-loading.generated.ts",
+        gameId: "game003",
+        check: false,
+      }),
+    ).rejects.toThrow(/loading.resources/);
+  });
 });
 
 function createFixtureRoot(): string {
@@ -149,4 +209,22 @@ skins:
     "utf8",
   );
   return root;
+}
+
+function appendLoadingBlock(root: string): void {
+  const yamlPath = join(root, "apps/game003/config/game-static.yaml");
+  writeFileSync(
+    yamlPath,
+    `${readFileSync(yamlPath, "utf8")}
+loading:
+  resources:
+    - id: game003-bg-landscape
+      path: assets/game003-s1/bg1.jpg
+      weight: 8
+    - id: game003-scene-parts
+      glob: assets/game003-s1/{conveyor1,conveyor2,mainreelbg}.png
+      weight: 6
+`,
+    "utf8",
+  );
 }

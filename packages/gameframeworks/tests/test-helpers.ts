@@ -126,6 +126,8 @@ export class MockClient implements SlotGameClientLike {
     defaultScene: [[1, 2, 3]],
   });
   public spinResult: unknown = createSpinResult();
+  public connectPromise: Promise<void> | null = null;
+  public enterGamePromise: Promise<unknown> | null = null;
   public spinPromise: Promise<unknown> | null = null;
   public collectPromise: Promise<unknown> | null = null;
 
@@ -136,10 +138,16 @@ export class MockClient implements SlotGameClientLike {
 
   async connect(token?: string): Promise<void> {
     this.calls.push(`connect:${token ?? ""}`);
+    if (this.connectPromise) {
+      return this.connectPromise;
+    }
   }
 
   async enterGame(gamecode?: string): Promise<unknown> {
     this.calls.push(`enterGame:${gamecode ?? ""}`);
+    if (this.enterGamePromise) {
+      return this.enterGamePromise;
+    }
     return {};
   }
 

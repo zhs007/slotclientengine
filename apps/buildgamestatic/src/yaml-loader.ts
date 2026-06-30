@@ -13,6 +13,8 @@ import type {
   GameStaticYamlConfig,
   GameStaticYamlConveyor,
   GameStaticYamlImage,
+  GameStaticYamlLoadingConfig,
+  GameStaticYamlLoadingResource,
   GameStaticYamlLiveConfig,
   GameStaticYamlMargin,
   GameStaticYamlReelConfig,
@@ -47,16 +49,24 @@ export function parseGameStaticYamlValue(
   options: { readonly rootDir: string; readonly inputPath: string },
 ): GameStaticYamlConfig {
   const record = assertRecord(value, "game static YAML");
-  assertKeys(record, "game static YAML", [
-    "schemaVersion",
-    "gameId",
-    "brandLabel",
-    "live",
-    "supportedSkins",
-    "gameConfig",
-    "reel",
-    "skins",
-  ]);
+  assertKeys(
+    record,
+    "game static YAML",
+    [
+      "schemaVersion",
+      "gameId",
+      "brandLabel",
+      "live",
+      "supportedSkins",
+      "gameConfig",
+      "reel",
+      "skins",
+      "loading",
+    ],
+    {
+      optional: ["loading"],
+    },
+  );
   if (record.schemaVersion !== 1) {
     throw new Error("schemaVersion 当前只支持 1。");
   }
@@ -71,11 +81,17 @@ export function parseGameStaticYamlValue(
     gameConfig: assertPath(record.gameConfig, "gameConfig"),
     reel: parseReel(record.reel),
     skins: parseSkins(record.skins),
+    ...(record.loading !== undefined
+      ? { loading: parseLoading(record.loading) }
+      : {}),
   });
   assertUnique(config.supportedSkins, "supportedSkins");
   assertExistingFile(options.rootDir, config.gameConfig);
   assertExtension(config.gameConfig, [".json"], "gameConfig");
   validateSkins(config, options.rootDir);
+  if (config.loading) {
+    validateLoading(config.loading, options.rootDir);
+  }
   return config;
 }
 
@@ -157,6 +173,56 @@ function parseSkins(
     skins[skinId] = parseSkin(skinValue, `skins.${skinId}`);
   }
   return Object.freeze(skins);
+}
+
+function parseLoading(value: unknown): GameStaticYamlLoadingConfig {
+  const record = assertRecord(value, "loading");
+  assertKeys(record, "loading", ["resources"]);
+  if (!Array.isArray(record.resources) || record.resources.length === 0) {
+    throw new Error("loading.resources 必须是非空数组。");
+  }
+  const resources = Object.freeze(
+    record.resources.map((resource, index) =>
+      parseLoadingResource(resource, `loading.resources[${index}]`),
+    ),
+  );
+  assertUnique(
+    resources.map((resource) => resource.id),
+    "loading.resources.id",
+  );
+  return Object.freeze({ resources });
+}
+
+function parseLoadingResource(
+  value: unknown,
+  label: string,
+): GameStaticYamlLoadingResource {
+  const record = assertRecord(value, label);
+  assertOnlyKnownKeys(record, label, ["id", "path", "glob", "kind", "weight"]);
+  const hasPath = Object.prototype.hasOwnProperty.call(record, "path");
+  const hasGlob = Object.prototype.hasOwnProperty.call(record, "glob");
+  if (hasPath === hasGlob) {
+    throw new Error(`${label} 必须且只能提供 path 或 glob。`);
+  }
+  const base = {
+    id: assertNonEmptyString(record.id, `${label}.id`),
+    ...(record.kind !== undefined
+      ? { kind: assertLoadingKind(record.kind, `${label}.kind`) }
+      : {}),
+    ...(record.weight !== undefined
+      ? { weight: assertPositiveNumber(record.weight, `${label}.weight`) }
+      : {}),
+  };
+  if (hasPath) {
+    return Object.freeze({
+      ...base,
+      path: assertPath(record.path, `${label}.path`),
+    });
+  }
+  return Object.freeze({
+    ...base,
+    glob: assertPath(record.glob, `${label}.glob`),
+  });
 }
 
 function parseSkin(value: unknown, label: string): GameStaticYamlSkinConfig {
@@ -253,13 +319,14 @@ function parseArtVariant(
   label: string,
 ): GameStaticYamlArtVariant {
   const record = assertRecord(value, label);
-  assertKeys(record, label, [
-    "background",
-    "focusRect",
-    "frameFocusRect",
-    "minFocusMargin",
-    "conveyor",
-  ]);
+  assertKeys(
+    record,
+    label,
+    ["background", "focusRect", "frameFocusRect", "minFocusMargin", "conveyor"],
+    {
+      optional: ["minFocusMargin"],
+    },
+  );
   return Object.freeze({
     background: parseImage(record.background, `${label}.background`),
     focusRect: parseRect(record.focusRect, `${label}.focusRect`),
@@ -379,6 +446,37 @@ function validateSkins(config: GameStaticYamlConfig, rootDir: string): void {
   }
 }
 
+function validateLoading(
+  loading: GameStaticYamlLoadingConfig,
+  rootDir: string,
+): void {
+  for (const resource of loading.resources) {
+    if ("path" in resource) {
+      assertExistingFile(rootDir, resource.path);
+      continue;
+    }
+    assertExistingDirectory(rootDir, getLoadingGlobDirectory(resource.glob));
+    if (/\/\*\.png$/i.test(resource.glob)) {
+      throw new Error(
+        `loading resource "${resource.id}" 不能使用宽泛 *.png glob，必须使用显式 brace glob 或精确资源组。`,
+      );
+    }
+  }
+}
+
+function getLoadingGlobDirectory(glob: string): string {
+  const firstGlobIndex = glob.search(/[*{[]/);
+  if (firstGlobIndex === -1) {
+    throw new Error(`loading glob 必须包含 glob 表达式：${glob}`);
+  }
+  const prefix = glob.slice(0, firstGlobIndex);
+  const slashIndex = prefix.lastIndexOf("/");
+  if (slashIndex <= 0) {
+    throw new Error(`loading glob 必须包含可验证目录：${glob}`);
+  }
+  return prefix.slice(0, slashIndex);
+}
+
 function validateArtPaths(
   rootDir: string,
   skinId: string,
@@ -452,8 +550,10 @@ function assertKeys(
   record: Record<string, unknown>,
   label: string,
   allowed: readonly string[],
+  options: { readonly optional?: readonly string[] } = {},
 ): void {
   const allowedSet = new Set(allowed);
+  const optionalSet = new Set(options.optional ?? []);
   for (const key of Object.keys(record)) {
     if (!allowedSet.has(key)) {
       throw new Error(`${label} 包含未知字段 "${key}"。`);
@@ -462,7 +562,7 @@ function assertKeys(
   for (const key of allowed) {
     if (
       !Object.prototype.hasOwnProperty.call(record, key) &&
-      key !== "minFocusMargin"
+      !optionalSet.has(key)
     ) {
       throw new Error(`${label}.${key} 是必填字段。`);
     }
@@ -529,6 +629,18 @@ function assertPositiveNumber(value: unknown, label: string): number {
     throw new Error(`${label} 必须是有限正数。`);
   }
   return value;
+}
+
+function assertLoadingKind(value: unknown, label: string): string {
+  const kind = assertNonEmptyString(value, label);
+  if (
+    !["image", "json", "text", "binary", "wasm", "module", "style"].includes(
+      kind,
+    )
+  ) {
+    throw new Error(`${label} 必须是有效 loading 资源类型。`);
+  }
+  return kind;
 }
 
 function assertNonNegativeNumber(value: unknown, label: string): number {
