@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { GAME003_LOADING_RESOURCE_URLS } from "../src/generated/game-loading.generated.js";
 import { GAME003_STATIC_CONFIG } from "../src/generated/game-static.generated.js";
 import { getGame003SkinConfig } from "../src/skin-config.js";
 
@@ -7,7 +8,7 @@ describe("game003 generated static config", () => {
     expect(GAME003_STATIC_CONFIG).toMatchObject({
       schemaVersion: 1,
       gameId: "game003",
-      brandLabel: "game003",
+      brandLabel: "minecart2",
       live: {
         serverUrl: "wss://gameserv.rgstest.slammerstudios.com/",
         gamecode: "EfedJuHEaydXNghnmO9KI",
@@ -69,5 +70,26 @@ describe("game003 generated static config", () => {
     expect(() => getGame003SkinConfig("2" as never)).toThrow(
       /Unknown game003 skin/,
     );
+  });
+
+  it("generates a separate lightweight loading resource config", () => {
+    expect(GAME003_LOADING_RESOURCE_URLS.length).toBeGreaterThan(40);
+    expect(
+      GAME003_LOADING_RESOURCE_URLS.map((resource) => resource.id),
+    ).toEqual(
+      expect.arrayContaining([
+        "game003-bg-landscape",
+        "game003-bg-portrait",
+        "game003-scene-parts:mainreelbg.png",
+        "game003-symbol-normal-pngs:H1.png",
+        "game003-symbol-spin-blur-pngs:H1.spinBlur.png",
+        "game003-symbol-disabled-pngs:H1.disabled.png",
+      ]),
+    );
+    expect(
+      GAME003_LOADING_RESOURCE_URLS.some((resource) =>
+        resource.id.startsWith("game003-symbol-normal-pngs:mainreelbg"),
+      ),
+    ).toBe(false);
   });
 });

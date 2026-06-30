@@ -5,12 +5,14 @@ import {
   createGameConfig,
   createSlotGameFramework,
   findComponentSteps,
+  prepareSlotGameLiveSession,
 } from "../src/index.js";
 import { assertSlotGameStaticConfig } from "../src/static-config/index.js";
 
 describe("exports", () => {
   it("exports the package entry and styles path", () => {
     expect(typeof createSlotGameFramework).toBe("function");
+    expect(typeof prepareSlotGameLiveSession).toBe("function");
     expect(typeof createGameConfig).toBe("function");
     expect(typeof findComponentSteps).toBe("function");
     expect(typeof assertSlotGameStaticConfig).toBe("function");

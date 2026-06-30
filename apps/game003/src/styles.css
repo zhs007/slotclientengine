@@ -17,6 +17,16 @@ body {
   height: 100%;
 }
 
+.game003-loading-host,
+.game003-game-host {
+  width: 100%;
+  height: 100%;
+}
+
+.game003-game-host[hidden] {
+  display: none;
+}
+
 .slot-ui-game-layer canvas {
   display: block;
   width: 100%;

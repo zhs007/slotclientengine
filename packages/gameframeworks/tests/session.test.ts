@@ -1,6 +1,7 @@
 import {
   SlotGameLiveSession,
   createSlotcraftClientOptions,
+  prepareSlotGameLiveSession,
   validateLiveServerUrl,
 } from "../src/index.js";
 import { MockClient, createSpinResult } from "./test-helpers.js";
@@ -52,6 +53,48 @@ describe("session", () => {
     expect(client.calls).toContain("collect:");
     session.disconnect();
     expect(client.calls.at(-1)).toBe("disconnect");
+  });
+
+  it("returns current user info on repeated connect without double client connect", async () => {
+    const client = new MockClient();
+    const session = new SlotGameLiveSession({
+      live: { serverUrl: "ws://localhost", token: "t", gamecode: "g" },
+      clientFactory: () => client,
+    });
+
+    await session.connect();
+    await session.connect();
+
+    expect(client.calls).toEqual([
+      "connect:t",
+      "enterGame:g",
+      "getUserInfo",
+      "getUserInfo",
+    ]);
+
+    client.emit("error", new Error("late failure"));
+    await expect(session.connect()).rejects.toThrow(/late failure/);
+  });
+
+  it("prepares a connected live session and disconnects on prepare failure", async () => {
+    const client = new MockClient();
+    const session = await prepareSlotGameLiveSession({
+      live: { serverUrl: "ws://localhost", token: "t", gamecode: "g" },
+      clientFactory: () => client,
+    });
+
+    expect(session).toBeInstanceOf(SlotGameLiveSession);
+    expect(client.calls).toEqual(["connect:t", "enterGame:g", "getUserInfo"]);
+
+    const failingClient = new MockClient();
+    failingClient.connectPromise = Promise.reject(new Error("connect failed"));
+    await expect(
+      prepareSlotGameLiveSession({
+        live: { serverUrl: "ws://localhost", token: "bad" },
+        clientFactory: () => failingClient,
+      }),
+    ).rejects.toThrow(/connect failed/);
+    expect(failingClient.calls).toEqual(["connect:bad", "disconnect"]);
   });
 
   it("rejects session operations before connect and concurrent spin", async () => {

@@ -1,6 +1,7 @@
 export interface BuildGameStaticCliOptions {
   readonly inputPath: string;
   readonly outPath: string;
+  readonly loadingOutPath?: string;
   readonly gameId: string;
   readonly rootDir?: string;
   readonly check: boolean;
@@ -9,6 +10,7 @@ export interface BuildGameStaticCliOptions {
 export interface BuildGameStaticResolvedOptions {
   readonly inputPath: string;
   readonly outPath: string;
+  readonly loadingOutPath?: string;
   readonly gameId: string;
   readonly rootDir: string;
   readonly check: boolean;
@@ -18,6 +20,9 @@ export interface BuildGameStaticResult {
   readonly outputPath: string;
   readonly generated: string;
   readonly changed: boolean;
+  readonly loadingOutputPath?: string;
+  readonly loadingGenerated?: string;
+  readonly loadingChanged?: boolean;
   readonly checked: boolean;
 }
 
@@ -30,6 +35,7 @@ export interface GameStaticYamlConfig {
   readonly gameConfig: string;
   readonly reel: GameStaticYamlReelConfig;
   readonly skins: Readonly<Record<string, GameStaticYamlSkinConfig>>;
+  readonly loading?: GameStaticYamlLoadingConfig;
 }
 
 export interface GameStaticYamlLiveConfig {
@@ -107,3 +113,21 @@ export interface GameStaticYamlArtConfig {
   readonly mainReelBackground: GameStaticYamlImage;
   readonly reelWindowInMainReelBackground: GameStaticYamlRect;
 }
+
+export interface GameStaticYamlLoadingConfig {
+  readonly resources: readonly GameStaticYamlLoadingResource[];
+}
+
+export type GameStaticYamlLoadingResource =
+  | {
+      readonly id: string;
+      readonly path: string;
+      readonly kind?: string;
+      readonly weight?: number;
+    }
+  | {
+      readonly id: string;
+      readonly glob: string;
+      readonly kind?: string;
+      readonly weight?: number;
+    };

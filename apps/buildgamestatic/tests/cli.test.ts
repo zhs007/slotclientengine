@@ -32,6 +32,7 @@ describe("buildgamestatic CLI args", () => {
     ).toEqual({
       inputPath: "apps/game003/config/game-static.yaml",
       outPath: "apps/game003/src/generated/game-static.generated.ts",
+      loadingOutPath: undefined,
       gameId: "game003",
       rootDir: undefined,
       check: true,
@@ -68,6 +69,20 @@ describe("buildgamestatic CLI args", () => {
     expect(() =>
       parseCliArgs(["--input", "--out", "out.ts", "--game", "game003"]),
     ).toThrow(/--input 需要/);
+    expect(() =>
+      parseCliArgs([
+        "--input",
+        "a.yaml",
+        "--out",
+        "out.ts",
+        "--loading-out",
+        "a.ts",
+        "--loading-out",
+        "b.ts",
+        "--game",
+        "game003",
+      ]),
+    ).toThrow(/--loading-out 不能重复/);
     expect(() =>
       parseCliArgs([
         "--input",

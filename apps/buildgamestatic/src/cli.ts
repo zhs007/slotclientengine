@@ -34,6 +34,7 @@ export function parseCliArgs(
   const options: {
     inputPath?: string;
     outPath?: string;
+    loadingOutPath?: string;
     gameId?: string;
     rootDir?: string;
     check: boolean;
@@ -54,6 +55,7 @@ export function parseCliArgs(
     if (
       arg === "--input" ||
       arg === "--out" ||
+      arg === "--loading-out" ||
       arg === "--game" ||
       arg === "--root"
     ) {
@@ -70,6 +72,8 @@ export function parseCliArgs(
         options.inputPath = value;
       } else if (arg === "--out") {
         options.outPath = value;
+      } else if (arg === "--loading-out") {
+        options.loadingOutPath = value;
       } else if (arg === "--game") {
         options.gameId = value;
       } else {
@@ -92,6 +96,7 @@ export function parseCliArgs(
   return Object.freeze({
     inputPath: options.inputPath,
     outPath: options.outPath,
+    loadingOutPath: options.loadingOutPath,
     gameId: options.gameId,
     rootDir: options.rootDir,
     check: options.check ?? false,

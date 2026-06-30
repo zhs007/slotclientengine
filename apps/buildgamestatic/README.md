@@ -10,26 +10,27 @@ YAML 中的资源路径统一写仓库根目录相对路径，例如：
 gameConfig: assets/gamecfg003/gameconfig.json
 ```
 
-生成 TS 时会把这些路径转换成相对生成文件的 import 路径。图片 import 会保留 `?url`，symbol PNG 集合会生成静态字面量 `import.meta.glob(...)`，确保 Vite 能分析和打包。
+生成 TS 时会把这些路径转换成相对生成文件的 import 路径。图片 import 会保留 `?url`，symbol PNG 集合和 loading glob 资源会生成静态字面量 `import.meta.glob(...)`，确保 Vite 能分析和打包。
 
 ## CLI
 
 生成：
 
 ```bash
-CI=true pnpm --filter buildgamestatic dev -- --input apps/game003/config/game-static.yaml --out apps/game003/src/generated/game-static.generated.ts --game game003
+CI=true pnpm --filter buildgamestatic dev -- --input apps/game003/config/game-static.yaml --out apps/game003/src/generated/game-static.generated.ts --loading-out apps/game003/src/generated/game-loading.generated.ts --game game003
 ```
 
 只校验同步、不写文件：
 
 ```bash
-CI=true pnpm --filter buildgamestatic dev -- --input apps/game003/config/game-static.yaml --out apps/game003/src/generated/game-static.generated.ts --game game003 --check
+CI=true pnpm --filter buildgamestatic dev -- --input apps/game003/config/game-static.yaml --out apps/game003/src/generated/game-static.generated.ts --loading-out apps/game003/src/generated/game-loading.generated.ts --game game003 --check
 ```
 
 参数：
 
 - `--input <yaml-file>`：必填，只接受 `.yaml` / `.yml`。
 - `--out <ts-file>`：必填，只接受 `.ts`。
+- `--loading-out <ts-file>`：可选，只接受 `.ts`；当 YAML 存在 `loading.resources` 时必填，并同步生成轻量 loading 资源模块。
 - `--game <game-id>`：必填，必须与 YAML `gameId` 一致。
 - `--root <repo-root>`：可选，默认从当前目录向上查找仓库根。
 - `--check`：可选，只比较生成内容与磁盘文件是否一致，不覆盖输出。
@@ -39,4 +40,5 @@ CI=true pnpm --filter buildgamestatic dev -- --input apps/game003/config/game-st
 - YAML 未知字段、缺字段、重复 skin、非法 URL、非法数字、非法路径或引用文件不存在都会显式失败。
 - `gameConfig` 只引用已生成的 JSON，不把 Excel、reel 或 paytable 内容复制进 YAML。
 - `symbol-state-textures.manifest.json` 仍是 symbol 集合和 scale 的权威来源。
+- `loading.resources` 如果存在，id 必须唯一，path / glob 必须二选一，weight 必须是有限正数；宽泛 `*.png` loading glob 会显式失败。
 - 生成内容确定性，不包含时间戳、绝对路径、用户名或 token。

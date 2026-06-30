@@ -33,6 +33,30 @@ reel:
   startDelayMs: 80
   stopDelayMs: 120
 
+# 首屏 loading 资源清单。这里只放随游戏包发布的静态资源，不放 token、cookie、服务器真实轮带或本次下注。
+# path 是仓库根目录相对路径；glob 必须是明确资源组，不能用宽泛 *.png 混入其它美术资源。
+# weight 是资源组总权重；glob 展开后由生成文件平均分摊到每个具体资源。
+loading:
+  resources:
+    - id: game003-bg-landscape
+      path: assets/game003-s1/bg1.jpg
+      weight: 8
+    - id: game003-bg-portrait
+      path: assets/game003-s1/bg2.jpg
+      weight: 8
+    - id: game003-scene-parts
+      glob: assets/game003-s1/{mainreelbg,conveyor1,conveyor2}.png
+      weight: 6
+    - id: game003-symbol-normal-pngs
+      glob: assets/game003-s1/{WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC}.png
+      weight: 10
+    - id: game003-symbol-spin-blur-pngs
+      glob: assets/game003-s1/{WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC}.spinBlur.png
+      weight: 6
+    - id: game003-symbol-disabled-pngs
+      glob: assets/game003-s1/{WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC}.disabled.png
+      weight: 6
+
 # 每套皮肤的资源和布局配置。这里适合美术或发布配置人员改静态路径和坐标。
 skins:
   "1":

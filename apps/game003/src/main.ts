@@ -1,14 +1,11 @@
-import { createSlotGameFramework } from "@slotclientengine/gameframeworks";
-import "@slotclientengine/gameframeworks/styles.css";
-import { createGame003Adapter } from "./game-adapter.js";
-import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
+import { createGameLoading } from "@slotclientengine/gameloading";
 import {
-  GAME003_REFERENCE_SIZE,
-  createGame003FramePolicy,
-} from "./game-layout.js";
-import { parseGame003FrameworkConfigFromQuery } from "./framework-config.js";
-import { formatServerUsdAmount } from "./money.js";
-import { getGame003SkinConfig } from "./skin-config.js";
+  createGame003LoadingResources,
+  readGame003RuntimeModule,
+  type Game003EnteredGameLike,
+  type Game003PreparedLoadingSessionLike,
+  type Game003RuntimeModule,
+} from "./loading-resources.js";
 import "./styles.css";
 
 const root = document.getElementById("app");
@@ -16,39 +13,51 @@ if (!root) {
   throw new Error("Missing #app root.");
 }
 
-try {
-  const config = parseGame003FrameworkConfigFromQuery(window.location.search);
-  const skin = getGame003SkinConfig(config.skin);
-  const framework = createSlotGameFramework({
-    root,
-    gameAdapter: createGame003Adapter({ skin }),
-    live: config.live,
-    betOptions: config.betOptions,
-    initialBetIndex: config.initialBetIndex,
-    designSize: GAME003_REFERENCE_SIZE,
-    framePolicy: createGame003FramePolicy(),
-    brandLabel: GAME003_STATIC_CONFIG.brandLabel,
-    currency: "USD",
-    locale: "en-US",
-    formatMoney: formatServerUsdAmount,
-    buildSpinRequest: () => config.spinRequest,
-    onError: (error) => {
-      console.error(error);
-    },
-  });
+const loadingHost = document.createElement("div");
+loadingHost.className = "game003-loading-host";
+const gameHost = document.createElement("div");
+gameHost.className = "game003-game-host";
+gameHost.hidden = true;
+root.replaceChildren(loadingHost, gameHost);
 
-  void framework.connect().catch((error) => {
+let enteredGame: Game003EnteredGameLike | null = null;
+
+const loading = createGameLoading<{
+  readonly runtimeModule: Game003RuntimeModule;
+  readonly prepared: Game003PreparedLoadingSessionLike;
+}>({
+  root: loadingHost,
+  resources: createGame003LoadingResources(),
+  onBeforeComplete: async ({ loadedResources }) => {
+    const runtimeModule = readGame003RuntimeModule(loadedResources);
+    const prepared = await runtimeModule.prepareGame003At99({
+      search: window.location.search,
+    });
+    return Object.freeze({ runtimeModule, prepared });
+  },
+  onEnterGame: async ({ prepareResult }) => {
+    gameHost.hidden = false;
+    gameHost.replaceChildren();
+    try {
+      enteredGame = await prepareResult.runtimeModule.enterGame003({
+        root: gameHost,
+        prepared: prepareResult.prepared,
+      });
+      loading.destroy();
+      loadingHost.remove();
+    } catch (error) {
+      gameHost.hidden = true;
+      gameHost.replaceChildren();
+      throw error;
+    }
+  },
+  onError: (error) => {
     console.error(error);
-  });
+  },
+});
 
-  window.addEventListener("beforeunload", () => {
-    framework.destroy();
-  });
-} catch (error) {
-  root.textContent = formatError(error);
-  throw error;
-}
+void loading.start();
 
-function formatError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+window.addEventListener("beforeunload", () => {
+  enteredGame?.destroy();
+});
