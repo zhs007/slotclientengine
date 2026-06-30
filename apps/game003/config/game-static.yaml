@@ -71,9 +71,10 @@ skins:
         - spinBlur
         - disabled
     # 横竖屏 art 适配。focusRect 坐标相对于对应完整背景 art。
+    # focusRect 既是背景图上的重点区域，也是 game003 主转轴框和传送带的相对定位 anchor。
+    # 坐标基准是完整背景 art，不是 CSS 像素、viewport 像素或裁切后的 visible rect。
     art:
       mode: orientation-focus
-      scenePartGap: 10
       variants:
         landscape:
           # 横版背景和重点区域。frameFocusRect 给 DOM frame 计算逻辑尺寸上限使用。
@@ -89,11 +90,18 @@ skins:
           frameFocusRect:
             width: 1424
             height: 1061
+          # mainreelbg.png 左上角相对 focusRect 左上角的偏移；横屏主转轮相对原位置上移 10px。
+          mainReelBackgroundPositionInFocusRect:
+            x: 294
+            y: -10
           conveyor:
             path: assets/game003-s1/conveyor1.png
             width: 284
             height: 775
-            placement: left-bottom-of-main-reel
+            # 传送带左上角相对 focusRect 左上角的偏移；横屏与主转轮垂直中心对齐。
+            positionInFocusRect:
+              x: 0
+              y: 14.5
         portrait:
           # 竖版背景和重点区域。minFocusMargin 约束竖版两侧黑边裁切。
           background:
@@ -111,11 +119,18 @@ skins:
           minFocusMargin:
             left: 22
             right: 22
+          # mainreelbg.png 左上角相对 focusRect 左上角的偏移；竖屏主转轮与传送带作为一组继续上移 50px。
+          mainReelBackgroundPositionInFocusRect:
+            x: 0
+            y: 147
           conveyor:
             path: assets/game003-s1/conveyor2.png
             width: 934
             height: 227
-            placement: top-center-of-main-reel
+            # 传送带左上角相对 focusRect 左上角的偏移；竖屏与主转轮之间保持 0px 间距，并随主转轮整体上移。
+            positionInFocusRect:
+              x: 98
+              y: -80
       # 主转轮框资源和窗口坐标属于 game003 专属布局，不上移到 rendercore。
       mainReelBackground:
         path: assets/game003-s1/mainreelbg.png

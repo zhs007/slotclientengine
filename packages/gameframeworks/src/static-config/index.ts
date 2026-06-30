@@ -11,6 +11,7 @@ export type {
   SlotGameStaticLiveConfig,
   SlotGameStaticMargin,
   SlotGameStaticNormalReelConfig,
+  SlotGameStaticPoint,
   SlotGameStaticRect,
   SlotGameStaticReelConfig,
   SlotGameStaticReelDirection,

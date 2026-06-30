@@ -59,7 +59,6 @@ export const GAME003_STATIC_CONFIG = Object.freeze({
       }),
       art: Object.freeze({
         mode: "orientation-focus",
-        scenePartGap: 10,
         variants: Object.freeze({
           landscape: Object.freeze({
             background: Object.freeze({
@@ -77,11 +76,15 @@ export const GAME003_STATIC_CONFIG = Object.freeze({
               width: 1424,
               height: 1061,
             } as const),
+            mainReelBackgroundPositionInFocusRect: Object.freeze({
+              x: 294,
+              y: -10,
+            } as const),
             conveyor: Object.freeze({
               url: game003Skin1LandscapeConveyorUrl,
               width: 284,
               height: 775,
-              placement: "left-bottom-of-main-reel",
+              positionInFocusRect: Object.freeze({ x: 0, y: 14.5 } as const),
             } as const),
           }),
           portrait: Object.freeze({
@@ -101,11 +104,15 @@ export const GAME003_STATIC_CONFIG = Object.freeze({
               height: 1061,
             } as const),
             minFocusMargin: Object.freeze({ left: 22, right: 22 } as const),
+            mainReelBackgroundPositionInFocusRect: Object.freeze({
+              x: 0,
+              y: 147,
+            } as const),
             conveyor: Object.freeze({
               url: game003Skin1PortraitConveyorUrl,
               width: 934,
               height: 227,
-              placement: "top-center-of-main-reel",
+              positionInFocusRect: Object.freeze({ x: 98, y: -80 } as const),
             } as const),
           }),
         }),

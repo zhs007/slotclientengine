@@ -46,6 +46,22 @@ describe("game003 source boundary", () => {
     expect(mainSource).not.toMatch(/\.\/game-adapter/);
     expect(mainSource).not.toMatch(/\.\/game-demo/);
   });
+
+  it("keeps layout anchored by static focus-relative positions", () => {
+    const source = readSourceTree(join(APP_ROOT, "src"));
+
+    expect(source).toMatch(/mainReelBackgroundPositionInFocusRect/);
+    expect(source).toMatch(/positionInFocusRect/);
+    expect(source).not.toMatch(
+      new RegExp(["left", "bottom", "of", "main", "reel"].join("-")),
+    );
+    expect(source).not.toMatch(
+      new RegExp(["top", "center", "of", "main", "reel"].join("-")),
+    );
+    expect(source).not.toMatch(new RegExp(["scenePart", "Gap"].join("")));
+    expect(source).not.toMatch(/rect\.x - visibleRect\.x/);
+    expect(source).not.toMatch(/rect\.y - visibleRect\.y/);
+  });
 });
 
 function readSourceTree(root: string): string {

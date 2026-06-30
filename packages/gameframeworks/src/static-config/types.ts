@@ -8,6 +8,11 @@ export interface SlotGameStaticRect extends SlotGameStaticSize {
   readonly y: number;
 }
 
+export interface SlotGameStaticPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
 export interface SlotGameStaticMargin {
   readonly left?: number;
   readonly right?: number;
@@ -64,7 +69,7 @@ export type SlotGameStaticArtVariantId = "landscape" | "portrait";
 export interface SlotGameStaticFrameFocusRect extends SlotGameStaticSize {}
 
 export interface SlotGameStaticConveyorConfig extends SlotGameStaticImageResource {
-  readonly placement: string;
+  readonly positionInFocusRect: SlotGameStaticPoint;
 }
 
 export interface SlotGameStaticArtVariant {
@@ -72,12 +77,12 @@ export interface SlotGameStaticArtVariant {
   readonly focusRect: SlotGameStaticRect;
   readonly frameFocusRect: SlotGameStaticFrameFocusRect;
   readonly minFocusMargin?: SlotGameStaticMargin;
-  readonly conveyor: SlotGameStaticConveyorConfig;
+  readonly mainReelBackgroundPositionInFocusRect: SlotGameStaticPoint;
+  readonly conveyor?: SlotGameStaticConveyorConfig;
 }
 
 export interface SlotGameStaticOrientationFocusArtConfig {
   readonly mode: "orientation-focus";
-  readonly scenePartGap: number;
   readonly variants: Readonly<
     Record<SlotGameStaticArtVariantId, SlotGameStaticArtVariant>
   >;

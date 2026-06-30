@@ -42,10 +42,14 @@ const GAME003_SKIN_CONFIGS: Readonly<Record<Game003SkinId, Game003SkinConfig>> =
       portraitBackgroundUrl:
         game003StaticSkin1.art.variants.portrait.background.url,
       mainReelBackgroundUrl: game003StaticSkin1.art.mainReelBackground.url,
-      landscapeConveyorUrl:
-        game003StaticSkin1.art.variants.landscape.conveyor.url,
-      portraitConveyorUrl:
-        game003StaticSkin1.art.variants.portrait.conveyor.url,
+      landscapeConveyorUrl: getGame003ConveyorUrl(
+        game003StaticSkin1.art.variants.landscape.conveyor,
+        "landscape",
+      ),
+      portraitConveyorUrl: getGame003ConveyorUrl(
+        game003StaticSkin1.art.variants.portrait.conveyor,
+        "portrait",
+      ),
       symbolModules: game003StaticSkin1.symbols.pngModules,
       stateTextureManifest: game003StaticSkin1.symbols.manifest,
       displaySymbols: game003Skin1DisplaySymbols,
@@ -65,6 +69,16 @@ export function getGame003SkinConfig(id: Game003SkinId): Game003SkinConfig {
     throw new Error(`Unknown game003 skin "${id}".`);
   }
   return config;
+}
+
+function getGame003ConveyorUrl(
+  conveyor: { readonly url: string } | undefined,
+  orientation: "landscape" | "portrait",
+): string {
+  if (!conveyor) {
+    throw new Error(`game003 ${orientation} conveyor config is required.`);
+  }
+  return conveyor.url;
 }
 
 export { GAME003_SUPPORTED_SKINS, parseGame003SkinId, type Game003SkinId };

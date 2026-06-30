@@ -4,18 +4,20 @@ import {
   GAME003_CELL_HEIGHT,
   GAME003_CELL_WIDTH,
   GAME003_REEL_WINDOW_IN_MAIN_REEL_BG,
-  GAME003_SCENE_PART_GAP,
   GAME003_SKIN1_LANDSCAPE_SCENE_PARTS,
+  GAME003_SKIN1_LANDSCAPE_ART_SIZE,
   GAME003_SKIN1_PORTRAIT_SCENE_PARTS,
+  createGame003ScenePartsForVariant,
   createGame003FramePolicy,
   createGame003Layout,
   createGame003ReelLayerLayout,
   createGame003ReelLayout,
   validateGame003ReelWindow,
 } from "../src/game-layout.js";
+import { GAME003_STATIC_CONFIG } from "../src/generated/game-static.generated.js";
 
 describe("game003 layout", () => {
-  it("computes landscape scene parts with conveyor on the left and bottom aligned", () => {
+  it("computes landscape scene parts from focus-relative coordinates", () => {
     const parts = GAME003_SKIN1_LANDSCAPE_SCENE_PARTS;
 
     expect(parts.groupFrame).toEqual({
@@ -24,17 +26,31 @@ describe("game003 layout", () => {
       width: 1424,
       height: 824,
     });
-    expect(parts.conveyor.x).toBe(parts.groupFrame.x);
-    expect(parts.mainReelBackground.x).toBe(
-      parts.conveyor.x + parts.conveyor.width + GAME003_SCENE_PART_GAP,
-    );
-    expect(parts.conveyor.y + parts.conveyor.height).toBe(
-      parts.mainReelBackground.y + parts.mainReelBackground.height,
+    expect(parts.mainReelBackground).toEqual({
+      x: 582,
+      y: 578,
+      width: 1130,
+      height: 824,
+    });
+    expect(parts.conveyor).toEqual({
+      x: 288,
+      y: 602.5,
+      width: 284,
+      height: 775,
+    });
+    expect(parts.reelWindow).toEqual({
+      x: 717,
+      y: 665,
+      width: 860,
+      height: 650,
+    });
+    expect(parts.conveyor.y + parts.conveyor.height / 2).toBe(
+      parts.mainReelBackground.y + parts.mainReelBackground.height / 2,
     );
     expect(parts.focusRegion).toBe(parts.groupFrame);
   });
 
-  it("computes portrait scene parts with conveyor above and centered", () => {
+  it("computes portrait scene parts from focus-relative coordinates", () => {
     const parts = GAME003_SKIN1_PORTRAIT_SCENE_PARTS;
 
     expect(parts.groupFrame).toEqual({
@@ -43,14 +59,73 @@ describe("game003 layout", () => {
       width: 1130,
       height: 1061,
     });
-    expect(
-      parts.conveyor.y + parts.conveyor.height + GAME003_SCENE_PART_GAP,
-    ).toBe(parts.mainReelBackground.y);
-    expect(parts.conveyor.x).toBe(
-      parts.groupFrame.x + (parts.groupFrame.width - parts.conveyor.width) / 2,
+    expect(parts.mainReelBackground).toEqual({
+      x: 22,
+      y: 616.5,
+      width: 1130,
+      height: 824,
+    });
+    expect(parts.conveyor).toEqual({
+      x: 120,
+      y: 389.5,
+      width: 934,
+      height: 227,
+    });
+    expect(parts.reelWindow).toEqual({
+      x: 157,
+      y: 703.5,
+      width: 860,
+      height: 650,
+    });
+    expect(parts.conveyor.y + parts.conveyor.height).toBe(
+      parts.mainReelBackground.y,
     );
-    expect(parts.mainReelBackground.x).toBe(parts.groupFrame.x);
     expect(parts.focusRegion).toBe(parts.groupFrame);
+  });
+
+  it("uses explicit main reel focus offsets instead of conveyor width formulas", () => {
+    const variant = GAME003_STATIC_CONFIG.skins["1"].art.variants.landscape;
+    const parts = createGame003ScenePartsForVariant({
+      orientation: "landscape",
+      artSize: GAME003_SKIN1_LANDSCAPE_ART_SIZE,
+      variant: {
+        ...variant,
+        mainReelBackgroundPositionInFocusRect: { x: 310, y: -8 },
+      },
+    });
+
+    expect(parts.mainReelBackground).toEqual({
+      x: 598,
+      y: 580,
+      width: 1130,
+      height: 824,
+    });
+    expect(parts.mainReelBackground.x).not.toBe(
+      parts.conveyor.x + parts.conveyor.width + 10,
+    );
+  });
+
+  it("fails fast when game003 conveyor or anchored positions are invalid", () => {
+    const variant = GAME003_STATIC_CONFIG.skins["1"].art.variants.landscape;
+
+    expect(() =>
+      createGame003ScenePartsForVariant({
+        orientation: "landscape",
+        artSize: GAME003_SKIN1_LANDSCAPE_ART_SIZE,
+        variant: { ...variant, conveyor: undefined },
+      }),
+    ).toThrow(/conveyor config is required/);
+
+    expect(() =>
+      createGame003ScenePartsForVariant({
+        orientation: "landscape",
+        artSize: GAME003_SKIN1_LANDSCAPE_ART_SIZE,
+        variant: {
+          ...variant,
+          mainReelBackgroundPositionInFocusRect: { x: 900, y: 0 },
+        },
+      }),
+    ).toThrow(/rect mapped/);
   });
 
   it("selects backgrounds and focus regions by viewport orientation", () => {

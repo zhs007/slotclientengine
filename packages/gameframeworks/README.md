@@ -121,6 +121,8 @@ framePolicy: {
 }
 ```
 
+从静态 YAML 派生 frame policy 时，`packages/gameframeworks` 只读取每个 art variant 的 `background`、`frameFocusRect` 和 `minFocusMargin`。`focusRect`、`mainReelBackgroundPositionInFocusRect`、`conveyor.positionInFocusRect` 等游戏画面部件坐标由游戏 app 和 `rendercore` 通用几何 helper 使用，不能让 DOM frame policy 参与主转轴或传送带定位。
+
 ## 逻辑读取
 
 本包重新导出 `GameLogic`、`GameLogicStep`、`LogicComponent`、`SceneMatrix`、`WinResult` 等常用类型。游戏可通过 `logic.getStep(index)`、`logic.getComponentScenes(stepIndex, name)`，或以下 helper 按组件名读取：

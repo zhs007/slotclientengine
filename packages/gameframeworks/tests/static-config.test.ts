@@ -118,6 +118,82 @@ describe("slot game static config", () => {
       }),
     ).toThrow(/width must divide reel.reelCount/);
   });
+
+  it("validates focus-relative scene part positions without requiring conveyor", () => {
+    const config = createValidConfig();
+
+    expect(() =>
+      assertSlotGameStaticConfig({
+        ...config,
+        skins: {
+          "1": {
+            ...config.skins["1"],
+            art: {
+              ...config.skins["1"].art,
+              variants: {
+                landscape: {
+                  ...config.skins["1"].art.variants.landscape,
+                  conveyor: undefined,
+                },
+                portrait: {
+                  ...config.skins["1"].art.variants.portrait,
+                  conveyor: undefined,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      assertSlotGameStaticConfig({
+        ...config,
+        skins: {
+          "1": {
+            ...config.skins["1"],
+            art: {
+              ...config.skins["1"].art,
+              variants: {
+                ...config.skins["1"].art.variants,
+                landscape: {
+                  ...config.skins["1"].art.variants.landscape,
+                  mainReelBackgroundPositionInFocusRect: {
+                    x: 900,
+                    y: 0,
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    ).toThrow(/mainReelBackgroundPositionInFocusRect/);
+
+    expect(() =>
+      assertSlotGameStaticConfig({
+        ...config,
+        skins: {
+          "1": {
+            ...config.skins["1"],
+            art: {
+              ...config.skins["1"].art,
+              variants: {
+                ...config.skins["1"].art.variants,
+                landscape: {
+                  ...config.skins["1"].art.variants.landscape,
+                  conveyor: {
+                    ...config.skins["1"].art.variants.landscape.conveyor,
+                    placement: "legacy-placement",
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    ).toThrow(/unknown field "placement"/);
+  });
 });
 
 function createValidConfig(): SlotGameStaticConfig {
@@ -156,7 +232,6 @@ function createValidConfig(): SlotGameStaticConfig {
         }),
         art: Object.freeze({
           mode: "orientation-focus",
-          scenePartGap: 10,
           variants: Object.freeze({
             landscape: Object.freeze({
               background: Object.freeze({
@@ -171,11 +246,15 @@ function createValidConfig(): SlotGameStaticConfig {
                 height: 824,
               }),
               frameFocusRect: Object.freeze({ width: 1424, height: 1061 }),
+              mainReelBackgroundPositionInFocusRect: Object.freeze({
+                x: 294,
+                y: -10,
+              }),
               conveyor: Object.freeze({
                 url: "/assets/conveyor1.png",
                 width: 284,
                 height: 775,
-                placement: "left-bottom-of-main-reel",
+                positionInFocusRect: Object.freeze({ x: 0, y: 14.5 }),
               }),
             }),
             portrait: Object.freeze({
@@ -192,11 +271,15 @@ function createValidConfig(): SlotGameStaticConfig {
               }),
               frameFocusRect: Object.freeze({ width: 1130, height: 1061 }),
               minFocusMargin: Object.freeze({ left: 22, right: 22 }),
+              mainReelBackgroundPositionInFocusRect: Object.freeze({
+                x: 0,
+                y: 147,
+              }),
               conveyor: Object.freeze({
                 url: "/assets/conveyor2.png",
                 width: 934,
                 height: 227,
-                placement: "top-center-of-main-reel",
+                positionInFocusRect: Object.freeze({ x: 98, y: -80 }),
               }),
             }),
           }),

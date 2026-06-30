@@ -65,14 +65,22 @@ CI=true pnpm --filter game003 check:static-config
 
 - 当前 canvas 逻辑尺寸 `height > width` 时使用竖版 `bg2.jpg`。
 - 其它情况使用横版 `bg1.jpg`，包括正方形。
-- 横版 focus region 是 `conveyor1 + 10px gap + mainreelbg` 的 union rect。
-- 竖版 focus region 是 `conveyor2 + 10px gap + mainreelbg` 的 union rect。
+- `focusRect` 是背景图上的重点区域，也是 `mainreelbg` 和传送带的相对定位 anchor。
+- 横版和竖版分别在 `config/game-static.yaml` 中声明自己的 `focusRect`、`mainReelBackgroundPositionInFocusRect` 和 `conveyor.positionInFocusRect`。
+- `positionInFocusRect` 坐标允许负数；例如横屏主转轮相对 `focusRect` 上移 10px 时使用 `y: -10`。
 
-DOM frame 使用 `gameframeworks` / `uiframeworks` 的 `orientation-focus` policy 提交横竖屏不同 canvas 逻辑上限：横版不超过 `2000 x 2000`，竖版不超过 `1174 x 2000`。实际 art 裁切、居中和 focus-rect 映射仍由 `rendercore` 完成，app 不直接绕过 framework 的 DOM frame policy。
+DOM frame 使用 `gameframeworks` / `uiframeworks` 的 `orientation-focus` policy 提交横竖屏不同 canvas 逻辑上限：横版不超过 `2000 x 2000`，竖版不超过 `1174 x 2000`。实际 art 裁切、居中、anchor rect 和 focus-rect 映射仍由 `rendercore` 完成，app 不直接绕过 framework 的 DOM frame policy，也不复制 `rect.x - visibleRect.x` 这类通用映射算法。
 
-`mainreelbg`、`conveyor1`、`conveyor2` 的组合、间距、层级和校准属于 game003 app 专属实现，位于 `apps/game003/src/game-layout.ts` 和 `apps/game003/src/game-adapter.ts`，不要上移到 `rendercore`。
+`mainreelbg`、`conveyor1`、`conveyor2` 的组合、10px 视觉间隔、层级和校准属于 game003 app 专属实现，位于 `apps/game003/src/game-layout.ts` 和 `apps/game003/src/game-adapter.ts`，不要上移到 `rendercore`。间隔已经体现在 `positionInFocusRect` 数值中，运行时代码不再通过 conveyor 尺寸、gap 或 placement 枚举推导位置。
 
 第一版主转轮窗口校准为 `mainreelbg.png` 内 `{ x: 135, y: 87, width: 860, height: 650 }`，对应 5 列 x 5 行、单格 `172 x 130`。
+
+修改 `config/game-static.yaml` 后必须同步执行：
+
+```bash
+CI=true pnpm --filter game003 generate:static-config
+CI=true pnpm --filter game003 check:static-config
+```
 
 ## Live URL
 

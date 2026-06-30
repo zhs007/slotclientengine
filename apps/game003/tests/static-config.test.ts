@@ -50,7 +50,28 @@ describe("game003 generated static config", () => {
       width: 860,
       height: 650,
     });
-    expect(art.scenePartGap).toBe(10);
+    expect(
+      art.variants.landscape.mainReelBackgroundPositionInFocusRect,
+    ).toEqual({
+      x: 294,
+      y: -10,
+    });
+    expect(art.variants.landscape.conveyor?.positionInFocusRect).toEqual({
+      x: 0,
+      y: 14.5,
+    });
+    expect(art.variants.portrait.mainReelBackgroundPositionInFocusRect).toEqual(
+      {
+        x: 0,
+        y: 147,
+      },
+    );
+    expect(art.variants.portrait.conveyor?.positionInFocusRect).toEqual({
+      x: 98,
+      y: -80,
+    });
+    expect(art).not.toHaveProperty(["scenePart", "Gap"].join(""));
+    expect(art.variants.landscape.conveyor).not.toHaveProperty("placement");
   });
 
   it("uses manifest symbols and does not carry a second scale table in YAML output", () => {
