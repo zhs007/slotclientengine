@@ -1,22 +1,22 @@
-import { describe, expect, it } from 'vitest';
-import basicMessage from './fixtures/gamemoduleinfo-basic.json';
-import multiStepMessage from './fixtures/gamemoduleinfo-multistep.json';
+import { describe, expect, it } from "vitest";
+import basicMessage from "./fixtures/gamemoduleinfo-basic.json";
+import multiStepMessage from "./fixtures/gamemoduleinfo-multistep.json";
 import {
   createGameLogic,
   createGameLogicFromGmi,
   GameLogic,
   LogicParseError,
   SceneMatrix,
-} from '../src';
+} from "../src";
 
 const cloneFixture = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
-describe('GameLogicModel', () => {
-  it('creates queryable logic from a gamemoduleinfo message', () => {
+describe("GameLogicModel", () => {
+  it("creates queryable logic from a gamemoduleinfo message", () => {
     const logic = createGameLogic(basicMessage);
     const step = logic.getStep(0);
 
-    expect(logic.getGameModuleName()).toBe('CqbQ0Y7gtBpO5419j8h02');
+    expect(logic.getGameModuleName()).toBe("CqbQ0Y7gtBpO5419j8h02");
     expect(logic.getGameId()).toBe(69002);
     expect(logic.getBet()).toBe(5);
     expect(logic.getLines()).toBe(10);
@@ -46,14 +46,14 @@ describe('GameLogicModel', () => {
     expect(step.getResult(1).cashWin).toBe(275);
     expect(step.getResults()[1].symbol).toBe(-1);
     expect(logic.getResult(0, 1).cashWin).toBe(275);
-    expect(step.getCurGameMod()).toBe('basic');
+    expect(step.getCurGameMod()).toBe("basic");
     expect(step.getCurGameModParam()).toMatchObject({
-      firstComponent: '',
-      nextStepFirstComponent: '',
+      firstComponent: "",
+      nextStepFirstComponent: "",
     });
   });
 
-  it('creates equivalent logic from gmi + meta input', () => {
+  it("creates equivalent logic from gmi + meta input", () => {
     const fromMessage = createGameLogic(basicMessage);
     const fromGmi = createGameLogicFromGmi(basicMessage.gmi, {
       bet: basicMessage.bet,
@@ -68,9 +68,11 @@ describe('GameLogicModel', () => {
 
     expect(fromGmi.getDefaultScene()).toEqual(fromMessage.getDefaultScene());
     expect(fromGmi.getRandomNumbers()).toEqual(fromMessage.getRandomNumbers());
-    expect(fromGmi.getStep(0).getResult(1)).toEqual(fromMessage.getStep(0).getResult(1));
+    expect(fromGmi.getStep(0).getResult(1)).toEqual(
+      fromMessage.getStep(0).getResult(1),
+    );
     expect(fromGmi.getRawMessage()).toMatchObject({
-      msgid: 'gamemoduleinfo',
+      msgid: "gamemoduleinfo",
       bet: 5,
       lines: 10,
       totalwin: 275,
@@ -78,7 +80,7 @@ describe('GameLogicModel', () => {
     });
   });
 
-  it('throws RangeError for invalid step, scene, and result indexes', () => {
+  it("throws RangeError for invalid step, scene, and result indexes", () => {
     const logic = createGameLogic(basicMessage);
     const step = logic.getStep(0);
 
@@ -90,36 +92,42 @@ describe('GameLogicModel', () => {
     expect(() => logic.getResult(0, 999)).toThrow(RangeError);
   });
 
-  it('does not let returned scenes, arrays, raw data, or component raw mutate internal state', () => {
+  it("does not let returned scenes, arrays, raw data, or component raw mutate internal state", () => {
     const logic = createGameLogic(basicMessage);
     tryMutate(() => ((logic.getDefaultScene() as number[][])[0][0] = 999));
     tryMutate(() => ((logic.getRandomNumbers() as number[])[0] = 999));
-    tryMutate(() => ((logic.getStep(0).getResults() as any[])[0] = { pos: [] }));
+    tryMutate(
+      () => ((logic.getStep(0).getResults() as any[])[0] = { pos: [] }),
+    );
 
     const rawMessage = logic.getRawMessage() as any;
     const rawGmi = logic.getRawGmi() as any;
     const rawStep = logic.getStep(0).getRawStep() as any;
     const rawClientData = logic.getStep(0).getRawClientData() as any;
-    const payRaw = logic.getStep(0).getComponent('bg-pay')?.raw as any;
+    const payRaw = logic.getStep(0).getComponent("bg-pay")?.raw as any;
     tryMutate(() => (rawMessage.bet = 999));
     tryMutate(() => (rawGmi.defaultScene.values[0].values[0] = 999));
     tryMutate(() => (rawStep.coinWin = 999));
-    tryMutate(() => (rawClientData.nextGameMod = 'changed'));
-    tryMutate(() => (payRaw.type_url = 'changed'));
+    tryMutate(() => (rawClientData.nextGameMod = "changed"));
+    tryMutate(() => (payRaw.type_url = "changed"));
 
     expect(logic.getDefaultScene()[0][0]).toBe(0);
     expect(logic.getRandomNumbers()[0]).toBe(1);
     expect(logic.getStep(0).getResult(0).pos).toEqual([4, 0]);
     expect((logic.getRawMessage() as any).bet).toBe(5);
-    expect(((logic.getRawGmi() as any).defaultScene.values[0].values as number[])[0]).toBe(0);
+    expect(
+      ((logic.getRawGmi() as any).defaultScene.values[0].values as number[])[0],
+    ).toBe(0);
     expect((logic.getStep(0).getRawStep() as any).coinWin).toBe(55);
-    expect((logic.getStep(0).getRawClientData() as any).nextGameMod).toBe('basic');
-    expect((logic.getStep(0).getComponent('bg-pay')?.raw as any).type_url).toBe(
-      'type.googleapis.com/sgc7pb.MoneyTriggerData'
+    expect((logic.getStep(0).getRawClientData() as any).nextGameMod).toBe(
+      "basic",
+    );
+    expect((logic.getStep(0).getComponent("bg-pay")?.raw as any).type_url).toBe(
+      "type.googleapis.com/sgc7pb.MoneyTriggerData",
     );
   });
 
-  it('keeps constructor input mutation from polluting parsed logic', () => {
+  it("keeps constructor input mutation from polluting parsed logic", () => {
     const message = cloneFixture(basicMessage);
     const logic = createGameLogic(message);
 
@@ -132,26 +140,32 @@ describe('GameLogicModel', () => {
     expect(logic.getResult(0, 1).cashWin).toBe(275);
   });
 
-  it('keeps multi-step component scene and result indexes scoped to the current step', () => {
+  it("keeps multi-step component scene and result indexes scoped to the current step", () => {
     const logic = createGameLogic(multiStepMessage);
 
     expect(logic.getStepCount()).toBe(2);
     expect(logic.getStep(1).getCoinWin()).toBe(33);
-    expect(logic.getStep(0).getComponentScenes('shared')[0][0][0]).toBe(10);
-    expect(logic.getStep(0).getComponentResults('shared')[0].extraStep).toBe('first');
-    expect(logic.getStep(1).getComponentScenes('shared')[0][0][0]).toBe(30);
-    expect(logic.getStep(1).getComponentResults('shared')[0].extraStep).toBe('second');
+    expect(logic.getStep(0).getComponentScenes("shared")[0][0][0]).toBe(10);
+    expect(logic.getStep(0).getComponentResults("shared")[0].extraStep).toBe(
+      "first",
+    );
+    expect(logic.getStep(1).getComponentScenes("shared")[0][0][0]).toBe(30);
+    expect(logic.getStep(1).getComponentResults("shared")[0].extraStep).toBe(
+      "second",
+    );
   });
 
-  it('throws public LogicParseError for invalid public inputs', () => {
-    expect(() => createGameLogic({ ...basicMessage, msgid: 'wrong' })).toThrow(LogicParseError);
+  it("throws public LogicParseError for invalid public inputs", () => {
+    expect(() => createGameLogic({ ...basicMessage, msgid: "wrong" })).toThrow(
+      LogicParseError,
+    );
     expect(() =>
       createGameLogicFromGmi(basicMessage.gmi, {
         bet: basicMessage.bet,
         lines: basicMessage.lines,
         totalwin: basicMessage.totalwin,
         maxWinLimit: Number.NaN,
-      })
+      }),
     ).toThrow(LogicParseError);
   });
 });

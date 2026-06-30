@@ -164,6 +164,58 @@ describe("RenderReel", () => {
       currentY: 0,
     });
   });
+
+  it("requests visible symbol states after stopping and advances once animations", () => {
+    const reels = createBasicReels();
+    const reel = new RenderReel({
+      reels,
+      x: 0,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    const axisPlan = createReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      visibleRows: 3,
+      baseDurationMs: 300,
+      speedSymbolsPerSecond: 30,
+      startDelayMs: 0,
+      stopDelayMs: 0,
+    }).axes[0];
+
+    expect(reel.getVisibleSymbolStateSnapshot(0)).toMatchObject({
+      x: 0,
+      y: 0,
+      requestedState: "normal",
+      resolvedState: "normal",
+      isOnce: false,
+    });
+
+    reel.requestVisibleSymbolState(0, "win");
+    expect(reel.getVisibleSymbolStateSnapshot(0)).toMatchObject({
+      requestedState: "win",
+      resolvedState: "win",
+      isOnce: true,
+    });
+
+    reel.update(0);
+    expect(reel.getVisibleSymbolStateSnapshot(0).requestedState).toBe("win");
+
+    reel.update(0.58);
+    expect(reel.getVisibleSymbolStateSnapshot(0)).toMatchObject({
+      requestedState: "normal",
+      resolvedState: "normal",
+      isOnce: false,
+    });
+
+    expect(() => reel.requestVisibleSymbolState(1, "win")).toThrow(/empty/);
+    expect(() => reel.requestVisibleSymbolState(3, "win")).toThrow(
+      /out of range/,
+    );
+
+    reel.start(axisPlan);
+    expect(() => reel.requestVisibleSymbolState(0, "win")).toThrow(/phase/);
+  });
 });
 
 function findReelClipMask(reel: RenderReel): Graphics {

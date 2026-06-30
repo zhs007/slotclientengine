@@ -114,6 +114,16 @@ http://127.0.0.1:5208/?skin=1&token=TOKEN&businessid=guest&clienttype=web&jurisd
 
 `game003` 使用 `assets/gamecfg003/gameconfig.json` 中的本地公开轮带 `bg-reel01` 进行普通 reel 滚动。服务器返回的 scene 只作为本轮目标可见窗口叠加进临时 strip；如果目标窗口无法在本地公开轮带反查 stop y，不作为 live spin 失败条件。未知 symbol code 或当前资源缺失的 paytable symbol 仍然显式失败。
 
+## 中奖播放
+
+`bg-wins` 是 `game003` 当前的中奖组件名，只在 app 层配置和识别；`logiccore`、`gameframeworks` 和 `rendercore` 只提供通用组件 result 解析和可见 symbol 状态 API，不硬编码 `bg-wins`。
+
+live spin 停到服务器目标 scene 并完成可见窗口校验后，`apps/game003/src/win-sequence.ts` 读取第 0 step 的 `bg-wins.basicComponentData.usedResults`。每个索引指向同 step 的 `clientData.results[]`，并保留 `usedResults` 顺序生成中奖播放队列。
+
+`result.pos` 是 `[x, y]` 成对坐标，坐标基准是当前 5 列 x 5 行主转轮可见窗口：`x` 为列索引，`y` 为列内可见行索引。一个 result 内的所有 `pos` 同时请求 symbol `win` 状态；多个 result 按 `usedResults` 顺序依次播放。全部中奖组的 once 动画回到 `normal` 后，`playSpin()` 才 resolve，framework 才进入后续 collect 流程。
+
+当前 `game003` 不对 `result.symbol` 和 `targetScene[x][y]` 做默认一致性校验，因为 Ways 游戏里的 wild / 替代 symbol 规则可能随游戏变化，且同一游戏也可能存在多个 wild。`logiccore` / `gameframeworks` 只提供可选的 per-position validator 接口；不传 validator 时不做 symbol 语义校验。`game003` 仍会校验 `pos` 非成对、空坐标、重复坐标、越界和 win 金额汇总不一致，并且不会因为缺少 `bg-wins` 就自动遍历全部 results 作为隐藏兜底。`symbolNums` / `symbolNum` 在 Ways 中奖里不等同于可见坐标数量，不作为 `pos` 数量校验依据。
+
 ## 命令
 
 ```bash
