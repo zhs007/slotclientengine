@@ -30,6 +30,7 @@ describe("game003 reel runtime", () => {
     expect(gameConfig.getSymbolCode("SC")).toBe(22);
     expect(runtime.layout.visibleRows).toBe(GAME003_VISIBLE_ROWS);
     expect(runtime.layout.reelCount).toBe(GAME003_REEL_COUNT);
+    expect(runtime.layout.columnGap).toBe(15);
   });
 
   it("keeps reels hidden until a live scene is applied", () => {

@@ -136,9 +136,11 @@ skins:
         path: assets/game003-s1/mainreelbg.png
         width: 1130
         height: 824
-      # 主转轮窗口坐标相对于 mainreelbg.png。
-      reelWindowInMainReelBackground:
-        x: 135
-        y: 87
-        width: 860
-        height: 650
+      # 转轮区坐标相对于 mainreelbg.png；它不是主转轮背景框本身，单独控制转轮内容位置、轴间距和 5x5 单格尺寸。
+      reelAreaInMainReelBackground:
+        x: 124
+        y: 130
+        reelCount: 5
+        reelGap: 15
+        cellWidth: 165
+        cellHeight: 130

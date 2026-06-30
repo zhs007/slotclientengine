@@ -13,6 +13,7 @@ export type {
   SlotGameStaticNormalReelConfig,
   SlotGameStaticPoint,
   SlotGameStaticRect,
+  SlotGameStaticReelAreaConfig,
   SlotGameStaticReelConfig,
   SlotGameStaticReelDirection,
   SlotGameStaticSize,

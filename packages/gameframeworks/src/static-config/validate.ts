@@ -7,6 +7,7 @@ import type {
   SlotGameStaticLiveConfig,
   SlotGameStaticMargin,
   SlotGameStaticPoint,
+  SlotGameStaticReelAreaConfig,
   SlotGameStaticReelConfig,
   SlotGameStaticRect,
   SlotGameStaticSkinConfig,
@@ -61,11 +62,11 @@ export function assertSlotGameStaticConfig(
 
   const reel = assertReelConfig(record.reel);
   for (const skinId of supportedSkins) {
-    assertReelWindowMatchesReelConfig(
+    assertReelAreaMatchesReelConfig(
       (skins[skinId] as SlotGameStaticSkinConfig).art
-        .reelWindowInMainReelBackground,
+        .reelAreaInMainReelBackground,
       reel,
-      `static config skins.${skinId}.art.reelWindowInMainReelBackground`,
+      `static config skins.${skinId}.art.reelAreaInMainReelBackground`,
     );
   }
 
@@ -154,7 +155,7 @@ function assertArtConfig(
     "mode",
     "variants",
     "mainReelBackground",
-    "reelWindowInMainReelBackground",
+    "reelAreaInMainReelBackground",
   ]);
   if (record.mode !== "orientation-focus") {
     throw new Error(`${label}.mode must be orientation-focus.`);
@@ -175,14 +176,14 @@ function assertArtConfig(
     `${label}.variants.portrait`,
     mainReelBackground,
   );
-  const reelWindow = assertRect(
-    record.reelWindowInMainReelBackground,
-    `${label}.reelWindowInMainReelBackground`,
+  const reelArea = assertReelArea(
+    record.reelAreaInMainReelBackground,
+    `${label}.reelAreaInMainReelBackground`,
   );
   assertRectFitsSize(
-    reelWindow,
+    reelArea,
     mainReelBackground,
-    `${label}.reelWindowInMainReelBackground`,
+    `${label}.reelAreaInMainReelBackground`,
     `${label}.mainReelBackground`,
   );
 }
@@ -309,16 +310,25 @@ function assertReelConfig(value: unknown): SlotGameStaticReelConfig {
   return record as unknown as SlotGameStaticReelConfig;
 }
 
-function assertReelWindowMatchesReelConfig(
-  reelWindow: SlotGameStaticRect,
+function assertReelAreaMatchesReelConfig(
+  reelArea: SlotGameStaticReelAreaConfig,
   reel: SlotGameStaticReelConfig,
   label: string,
 ): void {
-  if (reelWindow.width % reel.reelCount !== 0) {
-    throw new Error(`${label}.width must divide reel.reelCount.`);
+  if (reelArea.reelCount !== reel.reelCount) {
+    throw new Error(`${label}.reelCount must match reel.reelCount.`);
   }
-  if (reelWindow.height % reel.visibleRows !== 0) {
-    throw new Error(`${label}.height must divide reel.visibleRows.`);
+  const expectedWidth =
+    reelArea.reelCount * reelArea.cellWidth +
+    (reelArea.reelCount - 1) * reelArea.reelGap;
+  if (!nearlyEqual(reelArea.width, expectedWidth)) {
+    throw new Error(
+      `${label}.width must equal reelCount * cellWidth plus total reel gaps.`,
+    );
+  }
+  const expectedHeight = reel.visibleRows * reelArea.cellHeight;
+  if (!nearlyEqual(reelArea.height, expectedHeight)) {
+    throw new Error(`${label}.height must equal visibleRows * cellHeight.`);
   }
 }
 
@@ -340,6 +350,31 @@ function assertRect(value: unknown, label: string): SlotGameStaticRect {
   assertNonNegativeFiniteNumber(record.y, `${label}.y`);
   assertSize(record, label);
   return record as unknown as SlotGameStaticRect;
+}
+
+function assertReelArea(
+  value: unknown,
+  label: string,
+): SlotGameStaticReelAreaConfig {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "x",
+    "y",
+    "width",
+    "height",
+    "reelCount",
+    "reelGap",
+    "cellWidth",
+    "cellHeight",
+  ]);
+  assertNonNegativeFiniteNumber(record.x, `${label}.x`);
+  assertNonNegativeFiniteNumber(record.y, `${label}.y`);
+  assertSize(record, label);
+  assertPositiveInteger(record.reelCount, `${label}.reelCount`);
+  assertNonNegativeFiniteNumber(record.reelGap, `${label}.reelGap`);
+  assertPositiveFiniteNumber(record.cellWidth, `${label}.cellWidth`);
+  assertPositiveFiniteNumber(record.cellHeight, `${label}.cellHeight`);
+  return record as unknown as SlotGameStaticReelAreaConfig;
 }
 
 function assertPoint(value: unknown, label: string): SlotGameStaticPoint {
@@ -391,6 +426,10 @@ function assertRectFitsSize(
   if (rect.x + rect.width > size.width || rect.y + rect.height > size.height) {
     throw new Error(`${rectLabel} must fit inside ${sizeLabel}.`);
   }
+}
+
+function nearlyEqual(left: number, right: number): boolean {
+  return Math.abs(left - right) <= 0.000001;
 }
 
 function assertPositionedSizeFits(

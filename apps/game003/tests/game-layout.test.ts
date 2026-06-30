@@ -3,7 +3,8 @@ import {
   GAME003_ASSET_SIZE,
   GAME003_CELL_HEIGHT,
   GAME003_CELL_WIDTH,
-  GAME003_REEL_WINDOW_IN_MAIN_REEL_BG,
+  GAME003_REEL_AREA_IN_MAIN_REEL_BG,
+  GAME003_REEL_GAP,
   GAME003_SKIN1_LANDSCAPE_SCENE_PARTS,
   GAME003_SKIN1_LANDSCAPE_ART_SIZE,
   GAME003_SKIN1_PORTRAIT_SCENE_PARTS,
@@ -12,7 +13,7 @@ import {
   createGame003Layout,
   createGame003ReelLayerLayout,
   createGame003ReelLayout,
-  validateGame003ReelWindow,
+  validateGame003ReelArea,
 } from "../src/game-layout.js";
 import { GAME003_STATIC_CONFIG } from "../src/generated/game-static.generated.js";
 
@@ -38,10 +39,10 @@ describe("game003 layout", () => {
       width: 284,
       height: 775,
     });
-    expect(parts.reelWindow).toEqual({
-      x: 717,
-      y: 665,
-      width: 860,
+    expect(parts.reelArea).toEqual({
+      x: 706,
+      y: 708,
+      width: 885,
       height: 650,
     });
     expect(parts.conveyor.y + parts.conveyor.height / 2).toBe(
@@ -71,10 +72,10 @@ describe("game003 layout", () => {
       width: 934,
       height: 227,
     });
-    expect(parts.reelWindow).toEqual({
-      x: 157,
-      y: 703.5,
-      width: 860,
+    expect(parts.reelArea).toEqual({
+      x: 146,
+      y: 746.5,
+      width: 885,
       height: 650,
     });
     expect(parts.conveyor.y + parts.conveyor.height).toBe(
@@ -163,18 +164,32 @@ describe("game003 layout", () => {
     ).toBe("landscape");
   });
 
-  it("locks reel window calibration and reel layer placement", () => {
-    expect(GAME003_REEL_WINDOW_IN_MAIN_REEL_BG).toEqual({
-      x: 135,
-      y: 87,
-      width: 860,
+  it("locks reel area calibration and reel layer placement", () => {
+    expect(GAME003_REEL_AREA_IN_MAIN_REEL_BG).toEqual({
+      x: 124,
+      y: 130,
+      width: 885,
       height: 650,
+      reelCount: 5,
+      reelGap: 15,
+      cellWidth: 165,
+      cellHeight: 130,
     });
-    expect(GAME003_CELL_WIDTH).toBe(172);
+    expect(GAME003_CELL_WIDTH).toBe(165);
     expect(GAME003_CELL_HEIGHT).toBe(130);
-    expect(() => validateGame003ReelWindow()).not.toThrow();
+    expect(GAME003_REEL_GAP).toBe(15);
+    expect(() => validateGame003ReelArea()).not.toThrow();
     expect(() =>
-      validateGame003ReelWindow({ x: 300, y: 300, width: 900, height: 650 }),
+      validateGame003ReelArea({
+        x: 300,
+        y: 300,
+        width: 900,
+        height: 650,
+        reelCount: 5,
+        reelGap: 15,
+        cellWidth: 165,
+        cellHeight: 130,
+      }),
     ).toThrow(/fit inside/);
 
     const layout = createGame003Layout({
@@ -183,11 +198,14 @@ describe("game003 layout", () => {
     const reelLayout = createGame003ReelLayout();
     const layer = createGame003ReelLayerLayout(reelLayout, layout);
     expect(layer).toMatchObject({
-      rawReelsContentWidth: 860,
+      rawReelsContentWidth: 885,
       rawReelsContentHeight: 650,
-      x: GAME003_SKIN1_LANDSCAPE_SCENE_PARTS.reelWindow.x,
-      y: GAME003_SKIN1_LANDSCAPE_SCENE_PARTS.reelWindow.y,
+      x: GAME003_SKIN1_LANDSCAPE_SCENE_PARTS.reelArea.x,
+      y: GAME003_SKIN1_LANDSCAPE_SCENE_PARTS.reelArea.y,
     });
+    expect(reelLayout.columnGap).toBe(15);
+    expect(reelLayout.getReelX(1)).toBe(180);
+    expect(reelLayout.getReelX(4) + GAME003_CELL_WIDTH).toBeCloseTo(885);
   });
 
   it("uses framework focus policy only for canvas sizing, not game003 scene part rules", () => {

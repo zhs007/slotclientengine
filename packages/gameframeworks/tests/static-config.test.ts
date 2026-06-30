@@ -106,17 +106,21 @@ describe("slot game static config", () => {
             ...createValidConfig().skins["1"],
             art: {
               ...createValidConfig().skins["1"].art,
-              reelWindowInMainReelBackground: {
-                x: 135,
-                y: 87,
-                width: 861,
+              reelAreaInMainReelBackground: {
+                x: 124,
+                y: 130,
+                width: 885,
                 height: 650,
+                reelCount: 6,
+                reelGap: 15,
+                cellWidth: 165,
+                cellHeight: 130,
               },
             },
           },
         },
       }),
-    ).toThrow(/width must divide reel.reelCount/);
+    ).toThrow(/reelCount must match reel.reelCount/);
   });
 
   it("validates focus-relative scene part positions without requiring conveyor", () => {
@@ -288,11 +292,15 @@ function createValidConfig(): SlotGameStaticConfig {
             width: 1130,
             height: 824,
           }),
-          reelWindowInMainReelBackground: Object.freeze({
-            x: 135,
-            y: 87,
-            width: 860,
+          reelAreaInMainReelBackground: Object.freeze({
+            x: 124,
+            y: 130,
+            width: 885,
             height: 650,
+            reelCount: 5,
+            reelGap: 15,
+            cellWidth: 165,
+            cellHeight: 130,
           }),
         }),
       }),

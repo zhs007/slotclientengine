@@ -125,6 +125,25 @@ describe("buildgamestatic YAML loader", () => {
               ...createYamlObject().skins["1"],
               art: {
                 ...createYamlObject().skins["1"].art,
+                reelAreaInMainReelBackground: {
+                  ...createYamlObject().skins["1"].art
+                    .reelAreaInMainReelBackground,
+                  width: 885,
+                },
+              },
+            },
+          },
+        },
+        /reelAreaInMainReelBackground.*width/,
+      ],
+      [
+        {
+          ...createYamlObject(),
+          skins: {
+            "1": {
+              ...createYamlObject().skins["1"],
+              art: {
+                ...createYamlObject().skins["1"].art,
                 variants: {
                   ...createYamlObject().skins["1"].art.variants,
                   landscape: {
@@ -395,11 +414,13 @@ function createYamlObject() {
             width: 1130,
             height: 824,
           },
-          reelWindowInMainReelBackground: {
-            x: 135,
-            y: 87,
-            width: 860,
-            height: 650,
+          reelAreaInMainReelBackground: {
+            x: 124,
+            y: 130,
+            reelCount: 5,
+            reelGap: 15,
+            cellWidth: 165,
+            cellHeight: 130,
           },
         },
       },
@@ -476,10 +497,12 @@ skins:
         path: assets/game003-s1/mainreelbg.png
         width: 1130
         height: 824
-      reelWindowInMainReelBackground:
-        x: 135
-        y: 87
-        width: 860
-        height: 650
+      reelAreaInMainReelBackground:
+        x: 124
+        y: 130
+        reelCount: 5
+        reelGap: 15
+        cellWidth: 165
+        cellHeight: 130
 `;
 }

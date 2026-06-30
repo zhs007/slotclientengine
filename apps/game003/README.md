@@ -71,9 +71,9 @@ CI=true pnpm --filter game003 check:static-config
 
 DOM frame 使用 `gameframeworks` / `uiframeworks` 的 `orientation-focus` policy 提交横竖屏不同 canvas 逻辑上限：横版不超过 `2000 x 2000`，竖版不超过 `1174 x 2000`。实际 art 裁切、居中、anchor rect 和 focus-rect 映射仍由 `rendercore` 完成，app 不直接绕过 framework 的 DOM frame policy，也不复制 `rect.x - visibleRect.x` 这类通用映射算法。
 
-`mainreelbg`、`conveyor1`、`conveyor2` 的组合、10px 视觉间隔、层级和校准属于 game003 app 专属实现，位于 `apps/game003/src/game-layout.ts` 和 `apps/game003/src/game-adapter.ts`，不要上移到 `rendercore`。间隔已经体现在 `positionInFocusRect` 数值中，运行时代码不再通过 conveyor 尺寸、gap 或 placement 枚举推导位置。
+`mainreelbg`、`conveyor1`、`conveyor2` 的组合、视觉间隔、层级和校准属于 game003 app 专属实现，位于 `apps/game003/src/game-layout.ts` 和 `apps/game003/src/game-adapter.ts`，不要上移到 `rendercore`。间隔已经体现在 `positionInFocusRect` 数值中，运行时代码不再通过 conveyor 尺寸、gap 或 placement 枚举推导位置。
 
-第一版主转轮窗口校准为 `mainreelbg.png` 内 `{ x: 135, y: 87, width: 860, height: 650 }`，对应 5 列 x 5 行、单格 `172 x 130`。
+第一版转轮区独立配置为 `mainreelbg.png` 内 `{ x: 124, y: 130, reelCount: 5, reelGap: 15, cellWidth: 165, cellHeight: 130 }`，它不是主转轮背景框本身；单轴宽度和单格高度由 YAML 显式给出，内容区 `width=885`、`height=650` 由 buildgamestatic 派生。转动中按单轴裁切，停止后彻底取消裁切，允许偏大的 symbol 超出格子外框。
 
 修改 `config/game-static.yaml` 后必须同步执行：
 

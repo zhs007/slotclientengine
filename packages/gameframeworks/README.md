@@ -121,7 +121,7 @@ framePolicy: {
 }
 ```
 
-从静态 YAML 派生 frame policy 时，`packages/gameframeworks` 只读取每个 art variant 的 `background`、`frameFocusRect` 和 `minFocusMargin`。`focusRect`、`mainReelBackgroundPositionInFocusRect`、`conveyor.positionInFocusRect` 等游戏画面部件坐标由游戏 app 和 `rendercore` 通用几何 helper 使用，不能让 DOM frame policy 参与主转轴或传送带定位。
+从静态 YAML 派生 frame policy 时，`packages/gameframeworks` 只读取每个 art variant 的 `background`、`frameFocusRect` 和 `minFocusMargin`。`focusRect`、`mainReelBackgroundPositionInFocusRect`、`conveyor.positionInFocusRect`、`reelAreaInMainReelBackground` 等游戏画面部件坐标由游戏 app 和 `rendercore` 通用几何 helper 使用，不能让 DOM frame policy 参与主转轴、传送带或转轮内容区定位。
 
 ## 逻辑读取
 
@@ -155,7 +155,7 @@ helper 只接收 `GameLogic`，不会暴露 raw 协议 wrapper。
 - `assertNoRejectedQueryParams(params, rejectedNames)`：拒绝 `serverUrl` 等静态构建不允许覆盖的 query。
 - `createSlotGameFramePolicyFromStaticConfig(config, skinId)`：从静态配置生成 `orientation-focus` frame policy。
 
-所有 helper 都采用 fail-fast 策略：缺字段、未知字段、非法 URL、非法数字、focus rect 越界、reel window 与 reel 行列不匹配都会抛错，不补默认值或静默忽略。
+所有 helper 都采用 fail-fast 策略：缺字段、未知字段、非法 URL、非法数字、focus rect 越界、reel area 与 reel 配置不匹配都会抛错，不补默认值或静默忽略。
 
 ## Fail-fast 策略
 

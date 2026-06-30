@@ -61,6 +61,8 @@ export class RenderReel extends Container {
         options.layout.visibleRows * options.layout.cellHeight,
       )
       .fill({ color: 0xffffff, alpha: 1 });
+    this.#clipMask.visible = false;
+    this.#clipMask.renderable = false;
     this.#slots = Object.freeze(this.createSlots());
     this.x = options.layout.getReelX(options.x);
     this.addChild(this.#clipMask);
@@ -320,7 +322,7 @@ export class RenderReel extends Container {
     this.#landed = true;
     this.y = 0;
     this.syncClippingForPhase();
-    this.renderAtY(plan.finalY, "appear");
+    this.renderAtY(plan.finalY, "normal");
   }
 
   private calculateSpinLocalY(progress: number): number {
@@ -338,12 +340,18 @@ export class RenderReel extends Container {
   private syncClippingForPhase(): void {
     if (this.#phase === "stopped") {
       this.mask = null;
+      this.#clipMask.visible = false;
+      this.#clipMask.renderable = false;
       this.#clipMask.includeInBuild = false;
       this.#clipMask.measurable = false;
       return;
     }
 
     this.mask = this.#clipMask;
+    this.#clipMask.visible = true;
+    this.#clipMask.renderable = true;
+    this.#clipMask.includeInBuild = false;
+    this.#clipMask.measurable = false;
   }
 
   private shouldShowSlot(windowY: number): boolean {

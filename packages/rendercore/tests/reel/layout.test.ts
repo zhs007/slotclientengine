@@ -49,6 +49,15 @@ describe("createReelLayout", () => {
       }),
     ).toThrow(/cellWidth/);
     expect(() =>
+      createReelLayout({
+        reelCount: 5,
+        visibleRows: 5,
+        cellWidth: 1,
+        cellHeight: 1,
+        columnGap: -1,
+      }),
+    ).toThrow(/columnGap/);
+    expect(() =>
       assertLayoutMatchesReels(
         createReelLayout({
           reelCount: 5,

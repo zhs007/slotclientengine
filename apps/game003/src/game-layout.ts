@@ -4,6 +4,7 @@ import {
   type SlotGameStaticArtVariant,
   type SlotGameStaticConveyorConfig,
   type SlotGameStaticNormalReelConfig,
+  type SlotGameStaticReelAreaConfig,
 } from "@slotclientengine/gameframeworks/static-config";
 import type { SlotGameFramePolicy } from "@slotclientengine/gameframeworks";
 import {
@@ -68,17 +69,20 @@ export const GAME003_ASSET_SIZE = Object.freeze({
   }),
 });
 
-export const GAME003_REEL_WINDOW_IN_MAIN_REEL_BG = Object.freeze({
-  x: GAME003_STATIC_SKIN.art.reelWindowInMainReelBackground.x,
-  y: GAME003_STATIC_SKIN.art.reelWindowInMainReelBackground.y,
-  width: GAME003_STATIC_SKIN.art.reelWindowInMainReelBackground.width,
-  height: GAME003_STATIC_SKIN.art.reelWindowInMainReelBackground.height,
+export const GAME003_REEL_AREA_IN_MAIN_REEL_BG = Object.freeze({
+  x: GAME003_STATIC_SKIN.art.reelAreaInMainReelBackground.x,
+  y: GAME003_STATIC_SKIN.art.reelAreaInMainReelBackground.y,
+  width: GAME003_STATIC_SKIN.art.reelAreaInMainReelBackground.width,
+  height: GAME003_STATIC_SKIN.art.reelAreaInMainReelBackground.height,
+  reelCount: GAME003_STATIC_SKIN.art.reelAreaInMainReelBackground.reelCount,
+  reelGap: GAME003_STATIC_SKIN.art.reelAreaInMainReelBackground.reelGap,
+  cellWidth: GAME003_STATIC_SKIN.art.reelAreaInMainReelBackground.cellWidth,
+  cellHeight: GAME003_STATIC_SKIN.art.reelAreaInMainReelBackground.cellHeight,
 });
 
-export const GAME003_CELL_WIDTH =
-  GAME003_REEL_WINDOW_IN_MAIN_REEL_BG.width / GAME003_REEL_COUNT;
-export const GAME003_CELL_HEIGHT =
-  GAME003_REEL_WINDOW_IN_MAIN_REEL_BG.height / GAME003_VISIBLE_ROWS;
+export const GAME003_REEL_GAP = GAME003_REEL_AREA_IN_MAIN_REEL_BG.reelGap;
+export const GAME003_CELL_WIDTH = GAME003_REEL_AREA_IN_MAIN_REEL_BG.cellWidth;
+export const GAME003_CELL_HEIGHT = GAME003_REEL_AREA_IN_MAIN_REEL_BG.cellHeight;
 
 export interface Point {
   readonly x: number;
@@ -100,7 +104,7 @@ export interface Game003ScenePartLayout {
   readonly conveyor: Rect;
   readonly groupFrame: Rect;
   readonly focusRegion: Rect;
-  readonly reelWindow: Rect;
+  readonly reelArea: Rect;
 }
 
 export interface Game003LayoutOptions {
@@ -120,7 +124,7 @@ export interface Game003Layout {
   readonly sceneParts: Game003ScenePartLayout;
   readonly mainReelBackgroundInViewport: Rect;
   readonly conveyorInViewport: Rect;
-  readonly reelWindowInViewport: Rect;
+  readonly reelAreaInViewport: Rect;
 }
 
 export interface Game003ReelLayerLayout {
@@ -184,10 +188,10 @@ export function createGame003Layout(
     visibleRect: viewport.visibleRect,
     rect: sceneParts.conveyor,
   });
-  const reelWindowInViewport = mapArtRectToViewport({
+  const reelAreaInViewport = mapArtRectToViewport({
     artSize: viewport.artSize,
     visibleRect: viewport.visibleRect,
-    rect: sceneParts.reelWindow,
+    rect: sceneParts.reelArea,
   });
 
   return Object.freeze({
@@ -203,7 +207,7 @@ export function createGame003Layout(
     sceneParts,
     mainReelBackgroundInViewport,
     conveyorInViewport,
-    reelWindowInViewport,
+    reelAreaInViewport,
   });
 }
 
@@ -213,6 +217,7 @@ export function createGame003ReelLayout(): ReelLayout {
     visibleRows: GAME003_VISIBLE_ROWS,
     cellWidth: GAME003_CELL_WIDTH,
     cellHeight: GAME003_CELL_HEIGHT,
+    columnGap: GAME003_REEL_GAP,
     bufferRowsBefore: 1,
     bufferRowsAfter: 1,
   });
@@ -222,46 +227,55 @@ export function createGame003ReelLayerLayout(
   reelLayout: ReelLayout,
   layout: Game003Layout,
 ): Game003ReelLayerLayout {
-  validateGame003ReelWindow(GAME003_REEL_WINDOW_IN_MAIN_REEL_BG);
+  validateGame003ReelArea(GAME003_REEL_AREA_IN_MAIN_REEL_BG);
   const rawReelsContentWidth =
     reelLayout.reelCount * reelLayout.cellWidth +
     (reelLayout.reelCount - 1) * reelLayout.columnGap;
   const rawReelsContentHeight = reelLayout.visibleRows * reelLayout.cellHeight;
   if (
-    rawReelsContentWidth !== GAME003_REEL_WINDOW_IN_MAIN_REEL_BG.width ||
-    rawReelsContentHeight !== GAME003_REEL_WINDOW_IN_MAIN_REEL_BG.height
+    rawReelsContentWidth !== GAME003_REEL_AREA_IN_MAIN_REEL_BG.width ||
+    rawReelsContentHeight !== GAME003_REEL_AREA_IN_MAIN_REEL_BG.height
   ) {
-    throw new Error("game003 reel layout must match the calibrated window.");
+    throw new Error("game003 reel layout must match the calibrated reel area.");
   }
 
   return Object.freeze({
     rawReelsContentWidth,
     rawReelsContentHeight,
-    x: layout.sceneParts.reelWindow.x,
-    y: layout.sceneParts.reelWindow.y,
-    stageVisibleFrame: layout.sceneParts.reelWindow,
-    viewportVisibleFrame: layout.reelWindowInViewport,
+    x: layout.sceneParts.reelArea.x,
+    y: layout.sceneParts.reelArea.y,
+    stageVisibleFrame: layout.sceneParts.reelArea,
+    viewportVisibleFrame: layout.reelAreaInViewport,
   });
 }
 
-export function validateGame003ReelWindow(
-  reelWindow: Rect = GAME003_REEL_WINDOW_IN_MAIN_REEL_BG,
+export function validateGame003ReelArea(
+  reelArea: SlotGameStaticReelAreaConfig = GAME003_REEL_AREA_IN_MAIN_REEL_BG,
 ): void {
-  validateRect(reelWindow, "GAME003_REEL_WINDOW_IN_MAIN_REEL_BG");
+  validateRect(reelArea, "GAME003_REEL_AREA_IN_MAIN_REEL_BG");
   if (
-    reelWindow.x + reelWindow.width >
-      GAME003_ASSET_SIZE.mainReelBackground.width ||
-    reelWindow.y + reelWindow.height >
-      GAME003_ASSET_SIZE.mainReelBackground.height
+    reelArea.x + reelArea.width > GAME003_ASSET_SIZE.mainReelBackground.width ||
+    reelArea.y + reelArea.height > GAME003_ASSET_SIZE.mainReelBackground.height
   ) {
-    throw new Error("game003 reel window must fit inside mainreelbg.png.");
+    throw new Error("game003 reel area must fit inside mainreelbg.png.");
   }
-  if (reelWindow.width % GAME003_REEL_COUNT !== 0) {
-    throw new Error("game003 reel window width must divide 5 columns.");
+  if (reelArea.reelCount !== GAME003_REEL_COUNT) {
+    throw new Error("game003 reel area count must match reel.reelCount.");
   }
-  if (reelWindow.height % GAME003_VISIBLE_ROWS !== 0) {
-    throw new Error("game003 reel window height must divide 5 rows.");
+  const expectedWidth =
+    reelArea.reelCount * reelArea.cellWidth +
+    (reelArea.reelCount - 1) * reelArea.reelGap;
+  if (!nearlyEqual(reelArea.width, expectedWidth)) {
+    throw new Error("game003 reel area width must match cell sizes and gaps.");
   }
+  const expectedHeight = GAME003_VISIBLE_ROWS * reelArea.cellHeight;
+  if (!nearlyEqual(reelArea.height, expectedHeight)) {
+    throw new Error("game003 reel area height must match cell sizes.");
+  }
+}
+
+function nearlyEqual(left: number, right: number): boolean {
+  return Math.abs(left - right) <= 0.000001;
 }
 
 export function createGame003ScenePartsForVariant(options: {
@@ -292,8 +306,8 @@ export function createGame003ScenePartsForVariant(options: {
       height: conveyorConfig.height,
     },
   });
-  const reelWindow = translateRect(
-    GAME003_REEL_WINDOW_IN_MAIN_REEL_BG,
+  const reelArea = translateRect(
+    GAME003_REEL_AREA_IN_MAIN_REEL_BG,
     mainReelBackground,
   );
 
@@ -310,7 +324,7 @@ export function createGame003ScenePartsForVariant(options: {
     conveyor,
     groupFrame,
     focusRegion: groupFrame,
-    reelWindow,
+    reelArea,
   });
 }
 
