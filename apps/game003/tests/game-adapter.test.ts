@@ -70,8 +70,8 @@ describe("game003 adapter", () => {
     expect(fakeApp.stage.children).toHaveLength(1);
     expect(fakeApp.resizeCalls).toEqual([[1174, 2000]]);
     expect(runtime.layoutCalls.at(-1)).toMatchObject({
-      x: GAME003_SKIN1_PORTRAIT_SCENE_PARTS.reelWindow.x,
-      y: GAME003_SKIN1_PORTRAIT_SCENE_PARTS.reelWindow.y,
+      x: GAME003_SKIN1_PORTRAIT_SCENE_PARTS.reelArea.x,
+      y: GAME003_SKIN1_PORTRAIT_SCENE_PARTS.reelArea.y,
     });
 
     adapter.applyInitialState?.({ userInfo: {}, balance: 100 });
@@ -86,8 +86,8 @@ describe("game003 adapter", () => {
     context.emitViewport({ width: 1600, height: 1000 });
     expect(fakeApp.resizeCalls.at(-1)).toEqual([1600, 1000]);
     expect(runtime.layoutCalls.at(-1)).toMatchObject({
-      x: GAME003_SKIN1_LANDSCAPE_SCENE_PARTS.reelWindow.x,
-      y: GAME003_SKIN1_LANDSCAPE_SCENE_PARTS.reelWindow.y,
+      x: GAME003_SKIN1_LANDSCAPE_SCENE_PARTS.reelArea.x,
+      y: GAME003_SKIN1_LANDSCAPE_SCENE_PARTS.reelArea.y,
     });
     expect(fakeApp.stage.children).toHaveLength(1);
   });

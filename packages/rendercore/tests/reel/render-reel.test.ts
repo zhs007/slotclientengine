@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Graphics } from "pixi.js";
 import { RenderReel, createReelSpinPlan } from "../../src/reel/index.js";
 import {
   createBasicLayout,
@@ -7,7 +8,7 @@ import {
 } from "./helpers.js";
 
 describe("RenderReel", () => {
-  it("requests spinBlur while spinning, appear on landing, and normal after appear completes", () => {
+  it("requests spinBlur while spinning and normal after landing", () => {
     const reels = createBasicReels();
     const reel = new RenderReel({
       reels,
@@ -27,15 +28,20 @@ describe("RenderReel", () => {
     }).axes[0];
 
     const visibleBeforeSpin = reel.getVisibleScene();
+    const clipMask = findReelClipMask(reel);
     expect(reel.mask ?? null).toBeNull();
+    expect(clipMask.visible).toBe(false);
+    expect(clipMask.renderable).toBe(false);
     reel.start(axisPlan);
     expect(reel.getVisibleScene()).toEqual(visibleBeforeSpin);
     expect(reel.mask).not.toBeNull();
     const activeMask = reel.mask as {
       includeInBuild?: boolean;
       renderable?: boolean;
+      visible?: boolean;
     } | null;
-    expect(activeMask?.renderable).not.toBe(false);
+    expect(activeMask?.visible).toBe(true);
+    expect(activeMask?.renderable).toBe(true);
     expect(activeMask?.includeInBuild).toBe(false);
     expect(
       reel.getSlotSnapshots().every((slot) => slot.container.visible),
@@ -52,6 +58,8 @@ describe("RenderReel", () => {
     const landed = reel.update(0.3);
     expect(landed.landed).toBe(true);
     expect(reel.mask ?? null).toBeNull();
+    expect(clipMask.visible).toBe(false);
+    expect(clipMask.renderable).toBe(false);
     expect(activeMask?.includeInBuild).toBe(false);
     expect(reel.getSnapshot()).toMatchObject({
       phase: "stopped",
@@ -65,15 +73,36 @@ describe("RenderReel", () => {
       reel
         .getSlotSnapshots()
         .filter((slot) => slot.symbol)
-        .every((slot) => slot.requestedState === "appear"),
-    ).toBe(true);
-
-    reel.update(0.5);
-    expect(
-      reel
-        .getSlotSnapshots()
-        .filter((slot) => slot.symbol)
         .every((slot) => slot.requestedState === "normal"),
+    ).toBe(true);
+  });
+
+  it("centers each symbol container in its cell", () => {
+    const reel = new RenderReel({
+      reels: createBasicReels(),
+      x: 0,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+
+    const visibleSlots = reel
+      .getSlotSnapshots()
+      .filter((slot) => slot.container.visible);
+
+    expect(visibleSlots).toHaveLength(3);
+    expect(visibleSlots.map((slot) => slot.container.x)).toEqual([
+      7.5, 7.5, 7.5,
+    ]);
+    expect(visibleSlots.map((slot) => slot.container.y)).toEqual([6, 18, 30]);
+    expect(
+      visibleSlots
+        .filter((slot) => slot.symbol)
+        .every((slot) => slot.symbol?.getMainSprite().anchor.x === 0.5),
+    ).toBe(true);
+    expect(
+      visibleSlots
+        .filter((slot) => slot.symbol)
+        .every((slot) => slot.symbol?.getMainSprite().anchor.y === 0.5),
     ).toBe(true);
   });
 
@@ -136,3 +165,13 @@ describe("RenderReel", () => {
     });
   });
 });
+
+function findReelClipMask(reel: RenderReel): Graphics {
+  const clipMask = reel.children.find(
+    (child): child is Graphics => child instanceof Graphics,
+  );
+  if (!clipMask) {
+    throw new Error("Missing reel clip mask.");
+  }
+  return clipMask;
+}

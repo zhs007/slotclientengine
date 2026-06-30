@@ -8,17 +8,18 @@
 
 - 横版 `mainReelBackgroundPositionInFocusRect = { x: 294, y: -10 }`，映射后 `mainReelBackground = { x: 582, y: 578, width: 1130, height: 824 }`。
 - 横版 `conveyor.positionInFocusRect = { x: 0, y: 14.5 }`，映射后 `conveyor = { x: 288, y: 602.5, width: 284, height: 775 }`，与主转轮垂直中心对齐。
-- 横版 `reelWindow = { x: 717, y: 665, width: 860, height: 650 }`。
+- 横版 `reelAreaInMainReelBackground = { x: 124, y: 130, reelCount: 5, reelGap: 15, cellWidth: 165, cellHeight: 130 }`，派生 `width=885`、`height=650`，映射后 `reelArea = { x: 706, y: 708, width: 885, height: 650 }`。
 - 竖版 `mainReelBackgroundPositionInFocusRect = { x: 0, y: 147 }`，映射后 `mainReelBackground = { x: 22, y: 616.5, width: 1130, height: 824 }`。
 - 竖版 `conveyor.positionInFocusRect = { x: 98, y: -80 }`，映射后 `conveyor = { x: 120, y: 389.5, width: 934, height: 227 }`，与主转轮之间为 0px 间距，并作为整体继续上移 50px。
-- 竖版 `reelWindow = { x: 157, y: 703.5, width: 860, height: 650 }`。
+- 竖版 `reelAreaInMainReelBackground = { x: 124, y: 130, reelCount: 5, reelGap: 15, cellWidth: 165, cellHeight: 130 }`，派生 `width=885`、`height=650`，映射后 `reelArea = { x: 146, y: 746.5, width: 885, height: 650 }`。
 
 ## 2. 主要改动
 
 - `packages/rendercore` 新增通用 `mapAnchorRectToArt(...)`，只负责 anchor rect + child rect 到完整 art 坐标的映射和 fail-fast 校验，不包含 game003 专属语义。
-- `apps/buildgamestatic` / `packages/gameframeworks/static-config` 新增 `Point` 类型和 `mainReelBackgroundPositionInFocusRect` / `positionInFocusRect` 校验；focus-relative point 允许负偏移，但映射后的矩形必须位于完整背景 art 内；`conveyor` 在通用类型中可选，game003 自己要求必填。
+- `packages/rendercore` 的普通转轮仍只在转动中裁切单轴，停止后彻底取消裁切；game003 不再请求 `appear` 状态，落地后直接回到 `normal`。
+- `apps/buildgamestatic` / `packages/gameframeworks/static-config` 新增 `Point` 类型、`mainReelBackgroundPositionInFocusRect` / `positionInFocusRect` 校验和独立 `reelAreaInMainReelBackground` 校验；focus-relative point 允许负偏移，但映射后的矩形必须位于完整背景 art 内；`conveyor` 在通用类型中可选，game003 自己要求必填。
 - 删除运行时 `scenePartGap` 字段，旧 `placement` 字段会按 unknown field 显式失败。
-- `apps/game003/src/game-layout.ts` 改为调用 `rendercore` anchor helper，停止用 conveyor 尺寸、gap 或 placement 枚举推导位置。
+- `apps/game003/src/game-layout.ts` 改为调用 `rendercore` anchor helper，停止用 conveyor 尺寸、gap 或 placement 枚举推导位置；转轮内容区使用 `reelAreaInMainReelBackground` 单独控制位置、轴数、轴间距和单格宽高。
 - 同步 `apps/game003/config/game-static.yaml`、`game-static.generated.ts`、README 和 `agents.md` 协作规则。
 
 ## 3. 自动验收
@@ -74,7 +75,7 @@
 
 自动化已覆盖：
 
-- 横竖屏 scene parts 最终坐标。
+- 横竖屏 scene parts 最终坐标和转轮区轴间距。
 - 显式 `mainReelBackgroundPositionInFocusRect` 驱动布局而非旧尺寸公式。
 - 缺失 game003 conveyor 显式失败。
 - anchor 映射越界显式失败。

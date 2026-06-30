@@ -87,6 +87,13 @@ export interface GameStaticYamlConveyor extends GameStaticYamlImage {
   readonly positionInFocusRect: GameStaticYamlPoint;
 }
 
+export interface GameStaticYamlReelArea extends GameStaticYamlRect {
+  readonly reelCount: number;
+  readonly reelGap: number;
+  readonly cellWidth: number;
+  readonly cellHeight: number;
+}
+
 export interface GameStaticYamlSkinConfig {
   readonly label: string;
   readonly symbols: GameStaticYamlSymbolsConfig;
@@ -116,7 +123,7 @@ export interface GameStaticYamlArtConfig {
     Record<"landscape" | "portrait", GameStaticYamlArtVariant>
   >;
   readonly mainReelBackground: GameStaticYamlImage;
-  readonly reelWindowInMainReelBackground: GameStaticYamlRect;
+  readonly reelAreaInMainReelBackground: GameStaticYamlReelArea;
 }
 
 export interface GameStaticYamlLoadingConfig {

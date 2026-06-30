@@ -72,6 +72,13 @@ export interface SlotGameStaticConveyorConfig extends SlotGameStaticImageResourc
   readonly positionInFocusRect: SlotGameStaticPoint;
 }
 
+export interface SlotGameStaticReelAreaConfig extends SlotGameStaticRect {
+  readonly reelCount: number;
+  readonly reelGap: number;
+  readonly cellWidth: number;
+  readonly cellHeight: number;
+}
+
 export interface SlotGameStaticArtVariant {
   readonly background: SlotGameStaticImageResource;
   readonly focusRect: SlotGameStaticRect;
@@ -87,7 +94,7 @@ export interface SlotGameStaticOrientationFocusArtConfig {
     Record<SlotGameStaticArtVariantId, SlotGameStaticArtVariant>
   >;
   readonly mainReelBackground: SlotGameStaticImageResource;
-  readonly reelWindowInMainReelBackground: SlotGameStaticRect;
+  readonly reelAreaInMainReelBackground: SlotGameStaticReelAreaConfig;
 }
 
 export type SlotGameStaticArtConfig = SlotGameStaticOrientationFocusArtConfig;

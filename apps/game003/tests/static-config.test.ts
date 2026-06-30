@@ -44,11 +44,15 @@ describe("game003 generated static config", () => {
       width: 1424,
       height: 1061,
     });
-    expect(art.reelWindowInMainReelBackground).toEqual({
-      x: 135,
-      y: 87,
-      width: 860,
+    expect(art.reelAreaInMainReelBackground).toEqual({
+      x: 124,
+      y: 130,
+      width: 885,
       height: 650,
+      reelCount: 5,
+      reelGap: 15,
+      cellWidth: 165,
+      cellHeight: 130,
     });
     expect(
       art.variants.landscape.mainReelBackgroundPositionInFocusRect,

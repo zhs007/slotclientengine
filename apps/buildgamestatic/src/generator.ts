@@ -431,8 +431,8 @@ function renderSkinConfig(options: {
       skin.art.mainReelBackground,
       names.mainReelBackground,
     )}),`,
-    `        reelWindowInMainReelBackground: Object.freeze(${json(
-      skin.art.reelWindowInMainReelBackground,
+    `        reelAreaInMainReelBackground: Object.freeze(${json(
+      skin.art.reelAreaInMainReelBackground,
     )} as const)`,
     "      })",
     "    }),",

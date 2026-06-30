@@ -207,7 +207,7 @@ import {
 
 `mapAnchorRectToArt()` 用于把相对某个 art-space anchor 左上角的 child rect 映射回完整 art 坐标。`anchorRect` 必须位于 `artSize` 内，child rect 的 `x/y` 是相对 anchor 的偏移，可以是负数；child 可以视觉上越过 anchor 边界，但映射后的 rect 必须仍位于完整 art 内。该 helper 不知道具体游戏的部件语义，只做通用 anchor/focus rect 几何映射和 fail-fast 校验。
 
-`calculateResponsiveArtViewport()` 用于横竖屏有不同 art 和 focus rect 的场景。调用方必须同时传入 `landscape` 和 `portrait` 两套 variant；当 `viewportSize.height > viewportSize.width` 时选择 `portrait`，否则选择 `landscape`，包括正方形 viewport。选中 variant 后仍复用 `calculateFocusedArtViewport()` 的校验和返回语义，因此 variant 缺失、focus rect 越界或 margin 放不进 viewport 都会显式失败。该 API 只处理通用横竖屏 art 选择和几何裁切，不包含具体游戏的资源名、部件摆放或转轮窗口常量。
+`calculateResponsiveArtViewport()` 用于横竖屏有不同 art 和 focus rect 的场景。调用方必须同时传入 `landscape` 和 `portrait` 两套 variant；当 `viewportSize.height > viewportSize.width` 时选择 `portrait`，否则选择 `landscape`，包括正方形 viewport。选中 variant 后仍复用 `calculateFocusedArtViewport()` 的校验和返回语义，因此 variant 缺失、focus rect 越界或 margin 放不进 viewport 都会显式失败。该 API 只处理通用横竖屏 art 选择和几何裁切，不包含具体游戏的资源名、部件摆放或转轮区常量。
 
 ## Reel API
 
@@ -232,6 +232,8 @@ import {
 空图标会占据 cell 和 reel 位置，但 `createRenderSymbolByCode()` 返回 `null`，状态请求是 no-op。有普通图的 symbol 如果缺少 `texturePolicy.requiredStateTextures` 声明的状态贴图会直接抛错，不会静默回退到普通图。
 
 cell 尺寸由当前参与 reels 渲染的非空普通图动态计算：单图使用普通 texture 尺寸，多层 symbol 使用 layer 共同尺寸；若配置了 `symbolScales`，则使用 `texture width/height * scale` 后的尺寸参与最大宽高计算。显式空图标、缺图空图标、孤儿图片和状态贴图都不参与尺寸计算。`RenderReel` 会把每个非空 symbol 放在 cell 中心，并在创建 `RenderSymbol` 时把对应 `scale` 应用到根容器。`symbolScales` 只能配置 paytable 中存在的 symbol，缩放系数必须是正数。
+
+`createReelLayout()` 支持 `columnGap` 控制轴间距；`RenderReel` 只在 starting / spinning / settling 等非静止态裁切单轴内容，停止态会取消裁切，允许偏大的 symbol 自然超出格子外框。
 
 典型流程：
 

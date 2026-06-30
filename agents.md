@@ -39,7 +39,7 @@
 - `game003` 使用 `apps/game003`、`assets/gamecfg003/gameconfig.json` 和 `assets/game003-s1`；第一版只支持 `skin=1`，并固定 live `gamecode=EfedJuHEaydXNghnmO9KI`，不要把 `game003-s1` 做成 `game002` 的新皮肤。
 - `game003-s1` 横版使用 `bg1.jpg`，竖版使用 `bg2.jpg`；横竖屏 art variant 和 focus-rect 选择属于 `packages/rendercore` 的通用适配能力，game app 只能配置 art 尺寸、focus 区域和资源。
 - `game003` 的 DOM frame 使用 `packages/uiframeworks` / `packages/gameframeworks` 的 `orientation-focus` policy 提交横竖屏不同 canvas 逻辑上限；不要在 app 内用私有 CSS/DOM resize 绕过 framework，也不要让横版 focus 宽度撑爆竖版 art。
-- `game003` 的 `mainreelbg.png` / `conveyor1.png` / `conveyor2.png` 组合、10px 视觉间隔、横竖屏相对位置和转轮窗口校准属于 `apps/game003` 专属 layout / adapter，不要放进 `rendercore`；主转轴背景和传送带位置必须由 YAML 中相对横竖屏 `focusRect` 的显式 `mainReelBackgroundPositionInFocusRect` / `positionInFocusRect` 决定，不要在 app 内用 conveyor 尺寸、gap 或 placement 枚举推导主转轴位置。
+- `game003` 的 `mainreelbg.png` / `conveyor1.png` / `conveyor2.png` 组合、视觉间隔、横竖屏相对位置和转轮区校准属于 `apps/game003` 专属 layout / adapter，不要放进 `rendercore`；主转轴背景和传送带位置必须由 YAML 中相对横竖屏 `focusRect` 的显式 `mainReelBackgroundPositionInFocusRect` / `positionInFocusRect` 决定，转轮内容区必须由 `reelAreaInMainReelBackground` 显式配置 `x/y/reelCount/reelGap/cellWidth/cellHeight`，`width/height` 由 buildgamestatic 派生，不要在 app 内用 conveyor 尺寸、gap 或 placement 枚举推导主转轴位置。
 - `assets/game003-s1` 的可展示 symbol manifest scale 必须显式为 `1`；若美术给到 JPG symbol 普通态，先一次性转成同名 PNG，再生成状态贴图和 manifest，不要扩展共享 symbol 生成器或运行时去支持 JPG 普通态。
 - `game003` 继续遵守本地公开轮带边界：spin 使用 `assets/gamecfg003/gameconfig.json` 内 `bg-reel01` 滚动，服务器目标 scene 只叠加进本轮临时可见窗口；不要读取、缓存或泄露服务器真实轮带。
 - `game003` 首屏必须先走 `packages/gameloading`；live 初始化必须在 loading `99%` 回调中完成，`100%` 后才创建 `gameframeworks` framework / Pixi 游戏画面，避免 loading 前挂载游戏或产生双 WebSocket 连接。

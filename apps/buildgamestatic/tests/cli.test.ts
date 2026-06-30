@@ -212,7 +212,7 @@ skins:
             height: 227
             positionInFocusRect: { x: 98, y: -80 }
       mainReelBackground: { path: assets/game003-s1/mainreelbg.png, width: 1130, height: 824 }
-      reelWindowInMainReelBackground: { x: 135, y: 87, width: 860, height: 650 }
+      reelAreaInMainReelBackground: { x: 124, y: 130, reelCount: 5, reelGap: 15, cellWidth: 165, cellHeight: 130 }
 `,
     "utf8",
   );

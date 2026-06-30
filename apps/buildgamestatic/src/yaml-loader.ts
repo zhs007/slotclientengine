@@ -19,6 +19,7 @@ import type {
   GameStaticYamlMargin,
   GameStaticYamlPoint,
   GameStaticYamlReelConfig,
+  GameStaticYamlReelArea,
   GameStaticYamlRect,
   GameStaticYamlSize,
   GameStaticYamlSkinConfig,
@@ -71,6 +72,7 @@ export function parseGameStaticYamlValue(
   if (record.schemaVersion !== 1) {
     throw new Error("schemaVersion 当前只支持 1。");
   }
+  const reel = parseReel(record.reel);
   const config: GameStaticYamlConfig = Object.freeze({
     schemaVersion: 1,
     gameId: assertNonEmptyString(record.gameId, "gameId"),
@@ -80,8 +82,8 @@ export function parseGameStaticYamlValue(
       nonEmpty: true,
     }),
     gameConfig: assertPath(record.gameConfig, "gameConfig"),
-    reel: parseReel(record.reel),
-    skins: parseSkins(record.skins),
+    reel,
+    skins: parseSkins(record.skins, reel.visibleRows),
     ...(record.loading !== undefined
       ? { loading: parseLoading(record.loading) }
       : {}),
@@ -164,6 +166,7 @@ function parseReel(value: unknown): GameStaticYamlReelConfig {
 
 function parseSkins(
   value: unknown,
+  visibleRows: number,
 ): Readonly<Record<string, GameStaticYamlSkinConfig>> {
   const record = assertRecord(value, "skins");
   const skins: Record<string, GameStaticYamlSkinConfig> = {};
@@ -171,7 +174,7 @@ function parseSkins(
     if (skinId.trim().length === 0) {
       throw new Error("skins 不能包含空 skin id。");
     }
-    skins[skinId] = parseSkin(skinValue, `skins.${skinId}`);
+    skins[skinId] = parseSkin(skinValue, `skins.${skinId}`, visibleRows);
   }
   return Object.freeze(skins);
 }
@@ -226,13 +229,17 @@ function parseLoadingResource(
   });
 }
 
-function parseSkin(value: unknown, label: string): GameStaticYamlSkinConfig {
+function parseSkin(
+  value: unknown,
+  label: string,
+  visibleRows: number,
+): GameStaticYamlSkinConfig {
   const record = assertRecord(value, label);
   assertKeys(record, label, ["label", "symbols", "art"]);
   return Object.freeze({
     label: assertNonEmptyString(record.label, `${label}.label`),
     symbols: parseSymbols(record.symbols, `${label}.symbols`),
-    art: parseArt(record.art, `${label}.art`),
+    art: parseArt(record.art, `${label}.art`, visibleRows),
   });
 }
 
@@ -274,13 +281,17 @@ function parseSymbols(
   });
 }
 
-function parseArt(value: unknown, label: string): GameStaticYamlArtConfig {
+function parseArt(
+  value: unknown,
+  label: string,
+  visibleRows: number,
+): GameStaticYamlArtConfig {
   const record = assertRecord(value, label);
   assertKeys(record, label, [
     "mode",
     "variants",
     "mainReelBackground",
-    "reelWindowInMainReelBackground",
+    "reelAreaInMainReelBackground",
   ]);
   if (record.mode !== "orientation-focus") {
     throw new Error(`${label}.mode 必须是 orientation-focus。`);
@@ -303,9 +314,10 @@ function parseArt(value: unknown, label: string): GameStaticYamlArtConfig {
       record.mainReelBackground,
       `${label}.mainReelBackground`,
     ),
-    reelWindowInMainReelBackground: parseRect(
-      record.reelWindowInMainReelBackground,
-      `${label}.reelWindowInMainReelBackground`,
+    reelAreaInMainReelBackground: parseReelArea(
+      record.reelAreaInMainReelBackground,
+      `${label}.reelAreaInMainReelBackground`,
+      visibleRows,
     ),
   });
 }
@@ -371,6 +383,45 @@ function parseConveyor(value: unknown, label: string): GameStaticYamlConveyor {
       record.positionInFocusRect,
       `${label}.positionInFocusRect`,
     ),
+  });
+}
+
+function parseReelArea(
+  value: unknown,
+  label: string,
+  visibleRows: number,
+): GameStaticYamlReelArea {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "x",
+    "y",
+    "reelCount",
+    "reelGap",
+    "cellWidth",
+    "cellHeight",
+  ]);
+  const reelCount = assertPositiveInteger(
+    record.reelCount,
+    `${label}.reelCount`,
+  );
+  const reelGap = assertNonNegativeNumber(record.reelGap, `${label}.reelGap`);
+  const cellWidth = assertPositiveNumber(
+    record.cellWidth,
+    `${label}.cellWidth`,
+  );
+  const cellHeight = assertPositiveNumber(
+    record.cellHeight,
+    `${label}.cellHeight`,
+  );
+  return Object.freeze({
+    x: assertNonNegativeNumber(record.x, `${label}.x`),
+    y: assertNonNegativeNumber(record.y, `${label}.y`),
+    width: reelCount * cellWidth + (reelCount - 1) * reelGap,
+    height: visibleRows * cellHeight,
+    reelCount,
+    reelGap,
+    cellWidth,
+    cellHeight,
   });
 }
 
@@ -458,12 +509,12 @@ function validateSkins(config: GameStaticYamlConfig, rootDir: string): void {
     assertExistingDirectory(rootDir, getGlobDirectory(skin.symbols.pngGlob));
     validateArtPaths(rootDir, skinId, skin);
     validateRectFits(
-      skin.art.reelWindowInMainReelBackground,
+      skin.art.reelAreaInMainReelBackground,
       skin.art.mainReelBackground,
-      `skins.${skinId}.art.reelWindowInMainReelBackground`,
+      `skins.${skinId}.art.reelAreaInMainReelBackground`,
       `skins.${skinId}.art.mainReelBackground`,
     );
-    validateReelWindow(config, skinId, skin);
+    validateReelArea(config, skinId, skin);
   }
 }
 
@@ -553,22 +604,35 @@ function validateArtPaths(
   );
 }
 
-function validateReelWindow(
+function validateReelArea(
   config: GameStaticYamlConfig,
   skinId: string,
   skin: GameStaticYamlSkinConfig,
 ): void {
-  const reelWindow = skin.art.reelWindowInMainReelBackground;
-  if (reelWindow.width % config.reel.reelCount !== 0) {
+  const reelArea = skin.art.reelAreaInMainReelBackground;
+  if (reelArea.reelCount !== config.reel.reelCount) {
     throw new Error(
-      `skins.${skinId}.art.reelWindowInMainReelBackground.width 必须整除 reelCount。`,
+      `skins.${skinId}.art.reelAreaInMainReelBackground.reelCount 必须等于 reel.reelCount。`,
     );
   }
-  if (reelWindow.height % config.reel.visibleRows !== 0) {
+  const expectedWidth =
+    reelArea.reelCount * reelArea.cellWidth +
+    (reelArea.reelCount - 1) * reelArea.reelGap;
+  if (!nearlyEqual(reelArea.width, expectedWidth)) {
     throw new Error(
-      `skins.${skinId}.art.reelWindowInMainReelBackground.height 必须整除 visibleRows。`,
+      `skins.${skinId}.art.reelAreaInMainReelBackground.width 必须等于 reelCount * cellWidth + 所有轴间距之和。`,
     );
   }
+  const expectedHeight = config.reel.visibleRows * reelArea.cellHeight;
+  if (!nearlyEqual(reelArea.height, expectedHeight)) {
+    throw new Error(
+      `skins.${skinId}.art.reelAreaInMainReelBackground.height 必须等于 visibleRows * cellHeight。`,
+    );
+  }
+}
+
+function nearlyEqual(left: number, right: number): boolean {
+  return Math.abs(left - right) <= 0.000001;
 }
 
 function validateRectFits(
