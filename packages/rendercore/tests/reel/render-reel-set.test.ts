@@ -245,4 +245,90 @@ describe("RenderReelSet", () => {
       }),
     ).toThrow(/length/);
   });
+
+  it("requests visible symbol states by window coordinate after reels stop", () => {
+    const gameConfig = createGameConfig(game2Config);
+    const reels = gameConfig.getReels("reels01");
+    const registry = createReelSymbolRegistry({
+      gameConfig,
+      assets: Object.fromEntries(
+        ["S00", "S0", "S1", "S5", "S10", "SC", "RS", "X2", "X5", "X10"].map(
+          (symbol) => [symbol, createTextureSet(20, 20)],
+        ),
+      ),
+      emptySymbols: ["BN"],
+    });
+    const reelSet = new RenderReelSet({
+      reels,
+      layout: createReelLayout({
+        reelCount: 5,
+        visibleRows: 5,
+        cellWidth: 20,
+        cellHeight: 20,
+      }),
+      registry,
+    });
+    const targetVisibleScene = [
+      [2, 0, 3, 0, 4],
+      [1, 2, 3, 0, 4],
+      [3, 5, 10, 1, 2],
+      [6, 6, 8, 9, 10],
+      [1, 2, 3, 4, 5],
+    ];
+
+    reelSet.resetToVisibleScene(targetVisibleScene, [1, 1, 4, 0, 27]);
+    reelSet.requestVisibleSymbolStates(
+      [
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ],
+      "win",
+    );
+
+    expect(
+      reelSet
+        .getVisibleSymbolStateSnapshots([
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ])
+        .map((snapshot) => snapshot.requestedState),
+    ).toEqual(["win", "win"]);
+
+    reelSet.update(0);
+    expect(reelSet.getVisibleSymbolStateSnapshot(0, 0).requestedState).toBe(
+      "win",
+    );
+
+    reelSet.update(0.58);
+    expect(
+      reelSet
+        .getVisibleSymbolStateSnapshots([
+          { x: 0, y: 0 },
+          { x: 1, y: 1 },
+        ])
+        .every((snapshot) => snapshot.requestedState === "normal"),
+    ).toBe(true);
+
+    expect(() => reelSet.requestVisibleSymbolState(0, 1, "win")).toThrow(
+      /empty/,
+    );
+    expect(() => reelSet.requestVisibleSymbolState(5, 0, "win")).toThrow(
+      /out of range/,
+    );
+
+    const plan = createReelSpinPlan({
+      reels,
+      finalYs: [1, 1, 4, 0, 27],
+      visibleRows: 5,
+      minimumSpinCycles: 10,
+      baseDurationMs: 300,
+      speedSymbolsPerSecond: 200,
+      startDelayMs: 40,
+      stopDelayMs: 30,
+    });
+    reelSet.spin(plan);
+    expect(() => reelSet.requestVisibleSymbolState(0, 0, "win")).toThrow(
+      /spinning/,
+    );
+  });
 });

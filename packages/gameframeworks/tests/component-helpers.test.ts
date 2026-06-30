@@ -3,6 +3,7 @@ import {
   findComponentSteps,
   getComponentResultsByName,
   getComponentScenesByName,
+  getComponentWinResultGroupsByName,
 } from "../src/index.js";
 import { createGmiFixture } from "./test-helpers.js";
 
@@ -24,5 +25,33 @@ describe("component helpers", () => {
     expect(() =>
       getComponentScenesByName(logic, "lineWin", { stepIndex: 99 }),
     ).toThrow(/stepIndex/);
+  });
+
+  it("reads component win result positions through the facade", () => {
+    const logic = createGameLogicFromGmi(
+      createGmiFixture({
+        totalwin: 4,
+        results: 2,
+        componentName: "lineWin",
+      }),
+      { bet: 1, lines: 10, totalwin: 4 },
+    );
+
+    expect(
+      getComponentWinResultGroupsByName(logic, "lineWin", {
+        stepIndex: 1,
+        scene: logic.getStep(1).getScene(0),
+      }),
+    ).toMatchObject([
+      {
+        stepIndex: 1,
+        resultIndex: 0,
+        positions: [{ x: 0, y: 1 }],
+      },
+    ]);
+    expect(getComponentWinResultGroupsByName(logic, "missing")).toEqual([]);
+    expect(() => getComponentWinResultGroupsByName(logic, "")).toThrow(
+      /component name/,
+    );
   });
 });

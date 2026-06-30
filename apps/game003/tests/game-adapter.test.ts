@@ -1,10 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { Assets, Container, Texture } from "pixi.js";
-import type { GameLogic, SceneMatrix } from "@slotclientengine/gameframeworks";
+import {
+  createSlotGameLogicResult,
+  type GameLogic,
+  type SceneMatrix,
+} from "@slotclientengine/gameframeworks";
 import type { SymbolAssetMap } from "@slotclientengine/rendercore";
 import {
   GAME003_DEFAULT_SCENE,
+  GAME003_SAMPLE_WIN_SPIN_RESULT,
   GAME003_SPIN_SCENE,
+  GAME003_WIN_SPIN_SCENE,
 } from "./fixtures/game003-gmi.js";
 import {
   createGame003Adapter,
@@ -168,6 +174,60 @@ describe("game003 adapter", () => {
     await spinPromise;
     expect(resolved).toBe(true);
     expect(runtime.currentScene).toEqual(GAME003_SPIN_SCENE);
+  });
+
+  it("plays bg-wins groups in order before resolving playSpin", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+    });
+    await adapter.mount(createMountContext());
+
+    const spinPromise = Promise.resolve(adapter.playSpin(createWinLogic()));
+    let resolved = false;
+    void spinPromise.then(() => {
+      resolved = true;
+    });
+
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    expect(runtime.spinTargets).toEqual([GAME003_WIN_SPIN_SCENE]);
+    expect(runtime.winRequests).toEqual([
+      {
+        state: "win",
+        positions: [
+          { x: 0, y: 4 },
+          { x: 1, y: 2 },
+          { x: 2, y: 0 },
+        ],
+      },
+    ]);
+    expect(() => adapter.playSpin(createLogic(GAME003_SPIN_SCENE))).toThrow(
+      /already in progress/,
+    );
+
+    fakeApp.tick(16);
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    expect(runtime.winRequests).toHaveLength(2);
+    expect(runtime.winRequests[1]).toEqual({
+      state: "win",
+      positions: [
+        { x: 0, y: 2 },
+        { x: 1, y: 3 },
+        { x: 2, y: 4 },
+      ],
+    });
+
+    fakeApp.tick(16);
+    await spinPromise;
+    expect(resolved).toBe(true);
   });
 
   it("rejects playSpin errors, visual mismatches, and destroy removes listeners", async () => {
@@ -412,11 +472,21 @@ function createSizedTexture(width: number, height: number): Texture {
 }
 
 function createLogic(scene: SceneMatrix): GameLogic {
+  const step = {
+    getScene: () => scene,
+    hasComponent: () => false,
+    getComponent: () => undefined,
+  };
   return {
-    getStep: () => ({
-      getScene: () => scene,
-    }),
+    getStep: () => step,
   } as unknown as GameLogic;
+}
+
+function createWinLogic(): GameLogic {
+  return createSlotGameLogicResult(GAME003_SAMPLE_WIN_SPIN_RESULT, {
+    bet: { bet: 5, lines: 10, times: 1 },
+    userInfo: { balance: 1000, gameid: 69003 },
+  }).logic;
 }
 
 class FakeRuntime {
@@ -431,6 +501,14 @@ class FakeRuntime {
   spinning = false;
   forceVisualScene: SceneMatrix | null = null;
   readonly updateDeltas: number[] = [];
+  readonly winRequests: Array<{
+    readonly positions: readonly { readonly x: number; readonly y: number }[];
+    readonly state: string;
+  }> = [];
+  activeWinPositions: readonly { readonly x: number; readonly y: number }[] =
+    [];
+  activeWinState: string | null = null;
+  winUpdateCount = 0;
 
   asRuntime(): Game003ReelRuntime {
     return {
@@ -455,6 +533,19 @@ class FakeRuntime {
         if (this.updateError) {
           throw this.updateError;
         }
+        if (!this.spinning && this.activeWinState) {
+          this.winUpdateCount += 1;
+          if (this.winUpdateCount >= 1) {
+            this.activeWinState = null;
+            this.activeWinPositions = [];
+          }
+          return {
+            completed: false,
+            spinning: false,
+            startedAxes: [],
+            stoppedAxes: [],
+          };
+        }
         if (!this.completeNextUpdate || !this.targetScene) {
           return {
             completed: false,
@@ -475,6 +566,38 @@ class FakeRuntime {
         };
       },
       isSpinning: () => this.spinning,
+      requestVisibleSymbolStates: (
+        positions: readonly { readonly x: number; readonly y: number }[],
+        state: string,
+      ) => {
+        this.winRequests.push({
+          positions: positions.map((position) => ({ ...position })),
+          state,
+        });
+        this.activeWinPositions = positions;
+        this.activeWinState = state;
+        this.winUpdateCount = 0;
+      },
+      getVisibleSymbolStateSnapshots: (
+        positions: readonly { readonly x: number; readonly y: number }[],
+      ) =>
+        positions.map((position) => {
+          const isActive = this.activeWinPositions.some(
+            (active) => active.x === position.x && active.y === position.y,
+          );
+          const requestedState = isActive
+            ? (this.activeWinState ?? "normal")
+            : "normal";
+          return {
+            x: position.x,
+            y: position.y,
+            code: 1,
+            kind: "textured" as const,
+            requestedState,
+            resolvedState: requestedState,
+            isOnce: requestedState === "win",
+          };
+        }),
       getVisualSnapshot: () => {
         const scene = this.forceVisualScene ?? this.currentScene;
         if (!scene) {

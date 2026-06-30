@@ -217,6 +217,16 @@ export interface RenderReelSnapshot {
   readonly visibleScene: readonly number[];
 }
 
+export interface RenderVisibleSymbolStateSnapshot {
+  readonly x: number;
+  readonly y: number;
+  readonly code: number;
+  readonly kind: ReelSymbolKind;
+  readonly requestedState: SymbolStateId | null;
+  readonly resolvedState: SymbolStateId | null;
+  readonly isOnce: boolean;
+}
+
 export interface RenderReelSetOptions {
   readonly reels: LogicReels;
   readonly layout: ReelLayout;
@@ -242,11 +252,14 @@ export interface RenderReelSetSnapshot {
 }
 
 export interface RenderReelSlotSnapshot {
+  readonly windowY: number;
   readonly code: number;
   readonly kind: ReelSymbolKind;
   readonly symbol: RenderSymbol | null;
   readonly container: Container;
   readonly requestedState: SymbolStateId | null;
+  readonly resolvedState: SymbolStateId | null;
+  readonly isOnce: boolean;
 }
 
 export interface RenderGridCellReelSetOptions {

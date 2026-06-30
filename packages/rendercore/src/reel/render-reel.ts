@@ -15,6 +15,7 @@ import type {
   RenderReelPhase,
   RenderReelSpinOptions,
   RenderReelSlotSnapshot,
+  RenderVisibleSymbolStateSnapshot,
   ReelWindowSnapshot,
   RenderReelSnapshot,
   RenderReelUpdateResult,
@@ -191,17 +192,35 @@ export class RenderReel extends Container {
 
   getSlotSnapshots(): readonly RenderReelSlotSnapshot[] {
     return Object.freeze(
-      this.#slots.map((slot) =>
-        Object.freeze({
-          code: slot.code ?? -1,
-          kind: slot.kind ?? "empty",
-          symbol: slot.symbol,
-          container: slot.container,
-          requestedState:
-            slot.symbol?.getStateSnapshot().requestedState ?? null,
-        }),
-      ),
+      this.#slots.map((slot) => this.createSlotSnapshot(slot)),
     );
+  }
+
+  requestVisibleSymbolState(windowY: number, state: SymbolStateId): void {
+    const slot = this.getVisibleSlot(windowY);
+    if (slot.kind === "empty" || !slot.symbol) {
+      throw new ReelError(
+        `Cannot request state "${state}" for empty visible symbol at reel ${this.xIndex}, y ${windowY}.`,
+      );
+    }
+
+    slot.symbol.requestState(state);
+  }
+
+  getVisibleSymbolStateSnapshot(
+    windowY: number,
+  ): RenderVisibleSymbolStateSnapshot {
+    const slot = this.getVisibleSlot(windowY);
+    const snapshot = this.createSlotSnapshot(slot);
+    return Object.freeze({
+      x: this.xIndex,
+      y: windowY,
+      code: snapshot.code,
+      kind: snapshot.kind,
+      requestedState: snapshot.requestedState,
+      resolvedState: snapshot.resolvedState,
+      isOnce: snapshot.isOnce,
+    });
   }
 
   getSnapshot(): RenderReelSnapshot {
@@ -214,6 +233,46 @@ export class RenderReel extends Container {
       elapsedMs: this.#elapsedMs,
       visibleScene: this.getVisibleScene(),
     });
+  }
+
+  private createSlotSnapshot(slot: ReelSlot): RenderReelSlotSnapshot {
+    const stateSnapshot = slot.symbol?.getStateSnapshot();
+    return Object.freeze({
+      windowY: slot.windowY,
+      code: slot.code ?? -1,
+      kind: slot.kind ?? "empty",
+      symbol: slot.symbol,
+      container: slot.container,
+      requestedState: stateSnapshot?.requestedState ?? null,
+      resolvedState: stateSnapshot?.resolvedState ?? null,
+      isOnce: stateSnapshot?.isOnce ?? false,
+    });
+  }
+
+  private getVisibleSlot(windowY: number): ReelSlot {
+    if (
+      !Number.isInteger(windowY) ||
+      windowY < 0 ||
+      windowY >= this.layout.visibleRows
+    ) {
+      throw new ReelError(
+        `visible window y ${windowY} is out of range for reel ${this.xIndex}.`,
+      );
+    }
+    if (this.#phase !== "stopped") {
+      throw new ReelError(
+        `Cannot request visible symbol state while reel ${this.xIndex} phase is "${this.#phase}".`,
+      );
+    }
+
+    const slot = this.#slots.find((candidate) => candidate.windowY === windowY);
+    if (!slot) {
+      throw new ReelError(
+        `Missing visible reel slot for reel ${this.xIndex}, y ${windowY}.`,
+      );
+    }
+
+    return slot;
   }
 
   private createSlots(): ReelSlot[] {

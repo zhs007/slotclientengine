@@ -1,9 +1,11 @@
-import { stat, readFile } from 'node:fs/promises';
-import { LogicParseError } from './errors';
-import { createGameConfig } from './game-config';
-import { LogicGameConfig } from './types';
+import { stat, readFile } from "node:fs/promises";
+import { LogicParseError } from "./errors";
+import { createGameConfig } from "./game-config";
+import { LogicGameConfig } from "./types";
 
-export async function loadGameConfigFromJsonFile(filePath: string): Promise<LogicGameConfig> {
+export async function loadGameConfigFromJsonFile(
+  filePath: string,
+): Promise<LogicGameConfig> {
   try {
     const fileStat = await stat(filePath);
     if (!fileStat.isFile()) {
@@ -15,16 +17,16 @@ export async function loadGameConfigFromJsonFile(filePath: string): Promise<Logi
     }
 
     throw new LogicParseError(
-      `Failed to stat game config JSON file "${filePath}": ${formatError(error)}.`
+      `Failed to stat game config JSON file "${filePath}": ${formatError(error)}.`,
     );
   }
 
   let rawJson: string;
   try {
-    rawJson = await readFile(filePath, 'utf8');
+    rawJson = await readFile(filePath, "utf8");
   } catch (error) {
     throw new LogicParseError(
-      `Failed to read game config JSON file "${filePath}": ${formatError(error)}.`
+      `Failed to read game config JSON file "${filePath}": ${formatError(error)}.`,
     );
   }
 
@@ -33,7 +35,7 @@ export async function loadGameConfigFromJsonFile(filePath: string): Promise<Logi
     parsed = JSON.parse(rawJson) as unknown;
   } catch (error) {
     throw new LogicParseError(
-      `Failed to parse game config JSON file "${filePath}": ${formatError(error)}.`
+      `Failed to parse game config JSON file "${filePath}": ${formatError(error)}.`,
     );
   }
 
@@ -42,7 +44,7 @@ export async function loadGameConfigFromJsonFile(filePath: string): Promise<Logi
   } catch (error) {
     if (error instanceof LogicParseError) {
       throw new LogicParseError(
-        `Invalid game config JSON file "${filePath}": ${error.message}`
+        `Invalid game config JSON file "${filePath}": ${error.message}`,
       );
     }
 

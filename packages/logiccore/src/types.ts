@@ -28,7 +28,10 @@ export interface LogicReels {
   getLength(x: number): number;
   get(x: number, y: number): number;
   normalizeY(x: number, y: number): number;
-  findStopYCandidates(x: number, visibleSymbols: readonly number[]): readonly number[];
+  findStopYCandidates(
+    x: number,
+    visibleSymbols: readonly number[],
+  ): readonly number[];
   getStopY(x: number, visibleSymbols: readonly number[]): number;
   calculateSpinStartY(options: ReelSpinStartYOptions): number;
 }
@@ -39,7 +42,7 @@ export interface ReelStopYOptions {
   readonly scene: SceneMatrix;
 }
 
-export type ReelSpinDirection = 'forward' | 'backward';
+export type ReelSpinDirection = "forward" | "backward";
 
 export interface ReelSpinStartYOptions {
   readonly x: number;
@@ -78,7 +81,7 @@ export interface GameLogicMeta {
 }
 
 export interface ParsedGameLogicMeta {
-  readonly msgid: 'gamemoduleinfo';
+  readonly msgid: "gamemoduleinfo";
   readonly gamemodulename?: string;
   readonly gameid?: number;
   readonly playIndex?: number;

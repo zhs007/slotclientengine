@@ -28,8 +28,12 @@ export {
   findComponentSteps,
   getComponentResultsByName,
   getComponentScenesByName,
+  getComponentWinResultGroupsByName,
 } from "./component-helpers.js";
 export type {
+  ComponentWinResultGroup,
+  ComponentWinResultPositionValidationContext,
+  ComponentWinResultPositionValidator,
   GameConfigPaytableEntry,
   GameLogic,
   GameLogicMeta,
@@ -58,4 +62,5 @@ export type {
   SlotGameViewportListener,
   SlotGameViewportSnapshot,
   WinResult,
+  WinResultPosition,
 } from "./types.js";

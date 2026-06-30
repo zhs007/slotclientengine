@@ -11,6 +11,7 @@ import {
   type ReelLayout,
   type ReelSpinDirection,
   type ReelSpinPlan,
+  type RenderVisibleSymbolStateSnapshot,
   type RenderReelSetUpdateResult,
 } from "@slotclientengine/rendercore/reel";
 import type {
@@ -101,6 +102,13 @@ export interface Game003ReelRuntime {
   spinToScene(scene: SceneMatrix, sceneName?: string): ReelSpinPlan;
   update(deltaSeconds: number): RenderReelSetUpdateResult;
   isSpinning(): boolean;
+  requestVisibleSymbolStates(
+    positions: readonly { readonly x: number; readonly y: number }[],
+    state: string,
+  ): void;
+  getVisibleSymbolStateSnapshots(
+    positions: readonly { readonly x: number; readonly y: number }[],
+  ): readonly RenderVisibleSymbolStateSnapshot[];
   applyLayout(layout: Game003ReelLayerLayout): void;
 }
 
@@ -286,6 +294,17 @@ export function createGame003ReelRuntime(
     },
     isSpinning(): boolean {
       return reelSet.getSnapshot().spinning;
+    },
+    requestVisibleSymbolStates(
+      positions: readonly { readonly x: number; readonly y: number }[],
+      state: string,
+    ): void {
+      reelSet.requestVisibleSymbolStates(positions, state);
+    },
+    getVisibleSymbolStateSnapshots(
+      positions: readonly { readonly x: number; readonly y: number }[],
+    ): readonly RenderVisibleSymbolStateSnapshot[] {
+      return reelSet.getVisibleSymbolStateSnapshots(positions);
     },
     applyLayout(nextLayerLayout: Game003ReelLayerLayout): void {
       layerLayout = nextLayerLayout;

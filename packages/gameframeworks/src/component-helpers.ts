@@ -1,5 +1,12 @@
 import { SlotGameConfigError } from "./errors.js";
-import type { GameLogic, SceneMatrix, WinResult } from "./types.js";
+import { getComponentWinResultGroups } from "@slotclientengine/logiccore";
+import type {
+  ComponentWinResultGroup,
+  ComponentWinResultPositionValidator,
+  GameLogic,
+  SceneMatrix,
+  WinResult,
+} from "./types.js";
 
 export function findComponentSteps(
   logic: GameLogic,
@@ -39,6 +46,29 @@ export function getComponentResultsByName(
   return Object.freeze(
     steps.flatMap((stepIndex) =>
       Array.from(logic.getComponentResults(stepIndex, componentName)),
+    ),
+  );
+}
+
+export function getComponentWinResultGroupsByName(
+  logic: GameLogic,
+  name: string,
+  options: {
+    readonly stepIndex?: number;
+    readonly scene?: SceneMatrix;
+    readonly validatePosition?: ComponentWinResultPositionValidator;
+  } = {},
+): readonly ComponentWinResultGroup[] {
+  const componentName = validateComponentName(name);
+  const steps = getTargetStepIndexes(logic, componentName, options.stepIndex);
+  return Object.freeze(
+    steps.flatMap((stepIndex) =>
+      Array.from(
+        getComponentWinResultGroups(logic.getStep(stepIndex), componentName, {
+          scene: options.scene,
+          validatePosition: options.validatePosition,
+        }),
+      ),
     ),
   );
 }

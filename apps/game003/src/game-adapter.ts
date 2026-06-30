@@ -27,6 +27,10 @@ import {
 } from "./game-demo.js";
 import { validateGame003Scene } from "./scene.js";
 import type { Game003SkinConfig } from "./skin-config.js";
+import {
+  createGame003WinSymbolSequence,
+  type Game003WinSymbolGroup,
+} from "./win-sequence.js";
 
 export type Game003TickerSnapshot = { readonly deltaMS: number };
 export type Game003TickerListener = (ticker: Game003TickerSnapshot) => void;
@@ -70,6 +74,11 @@ export interface Game003AdapterOptions {
 
 interface PendingAnimation {
   readonly targetScene: ReturnType<typeof validateGame003Scene>;
+  phase: "spinning" | "win-sequence";
+  winQueue: readonly Game003WinSymbolGroup[];
+  winIndex: number;
+  winGroupStarted: boolean;
+  winGroupAdvanced: boolean;
   resolve(): void;
   reject(error: Error): void;
 }
@@ -195,11 +204,17 @@ class Game003PixiAdapter implements SlotGameAdapter {
       logic.getStep(0).getScene(0),
       "spin main scene",
     );
+    const winQueue = createGame003WinSymbolSequence(logic, targetScene);
     runtime.spinToScene(targetScene, "spin main scene");
 
     return new Promise((resolve, reject) => {
       this.#pendingAnimation = {
         targetScene,
+        phase: "spinning",
+        winQueue,
+        winIndex: 0,
+        winGroupStarted: false,
+        winGroupAdvanced: false,
         resolve,
         reject,
       };
@@ -226,28 +241,17 @@ class Game003PixiAdapter implements SlotGameAdapter {
   }
 
   readonly #onTick: Game003TickerListener = (ticker) => {
-    if (
-      !this.#runtime ||
-      !this.#pendingAnimation ||
-      !this.#runtime.isSpinning()
-    ) {
+    if (!this.#runtime || !this.#pendingAnimation) {
       return;
     }
 
     try {
-      const result = this.#runtime.update(normalizeTickerDeltaSeconds(ticker));
-      if (!result.completed) {
-        return;
+      const deltaSeconds = normalizeTickerDeltaSeconds(ticker);
+      if (this.#pendingAnimation.phase === "spinning") {
+        this.#tickSpinPhase(deltaSeconds);
+      } else {
+        this.#tickWinSequencePhase(deltaSeconds);
       }
-
-      const pending = this.#pendingAnimation;
-      assertGame003ReelVisualMatchesTarget(
-        this.#runtime.getVisualSnapshot(),
-        pending.targetScene,
-        "completed game003 adapter spin",
-      );
-      this.#pendingAnimation = null;
-      pending.resolve();
     } catch (error) {
       this.#app?.ticker.stop();
       this.#rejectPending(
@@ -255,6 +259,89 @@ class Game003PixiAdapter implements SlotGameAdapter {
       );
     }
   };
+
+  #tickSpinPhase(deltaSeconds: number): void {
+    const runtime = this.#requireRuntime();
+    const result = runtime.update(deltaSeconds);
+    if (!result.completed) {
+      return;
+    }
+
+    const pending = this.#pendingAnimation;
+    if (!pending) {
+      return;
+    }
+    assertGame003ReelVisualMatchesTarget(
+      runtime.getVisualSnapshot(),
+      pending.targetScene,
+      "completed game003 adapter spin",
+    );
+    if (pending.winQueue.length === 0) {
+      this.#completePending(pending);
+      return;
+    }
+
+    pending.phase = "win-sequence";
+    pending.winIndex = 0;
+    this.#startCurrentWinGroup(pending);
+  }
+
+  #tickWinSequencePhase(deltaSeconds: number): void {
+    const runtime = this.#requireRuntime();
+    const pending = this.#pendingAnimation;
+    if (!pending) {
+      return;
+    }
+
+    runtime.update(deltaSeconds);
+    pending.winGroupAdvanced = true;
+    if (!this.#isCurrentWinGroupComplete(pending)) {
+      return;
+    }
+
+    pending.winIndex += 1;
+    if (pending.winIndex >= pending.winQueue.length) {
+      this.#completePending(pending);
+      return;
+    }
+    this.#startCurrentWinGroup(pending);
+  }
+
+  #startCurrentWinGroup(pending: PendingAnimation): void {
+    const group = pending.winQueue[pending.winIndex];
+    if (!group) {
+      this.#completePending(pending);
+      return;
+    }
+    this.#requireRuntime().requestVisibleSymbolStates(group.positions, "win");
+    pending.winGroupStarted = true;
+    pending.winGroupAdvanced = false;
+  }
+
+  #isCurrentWinGroupComplete(pending: PendingAnimation): boolean {
+    if (!pending.winGroupStarted || !pending.winGroupAdvanced) {
+      return false;
+    }
+    const group = pending.winQueue[pending.winIndex];
+    if (!group) {
+      return true;
+    }
+    return this.#requireRuntime()
+      .getVisibleSymbolStateSnapshots(group.positions)
+      .every(
+        (snapshot) =>
+          snapshot.requestedState === "normal" &&
+          snapshot.resolvedState === "normal",
+      );
+  }
+
+  #completePending(pending: PendingAnimation): void {
+    if (this.#pendingAnimation !== pending) {
+      return;
+    }
+    this.#pendingAnimation = null;
+    pending.resolve();
+  }
 
   #requireRuntime(): Game003ReelRuntime {
     if (!this.#runtime) {

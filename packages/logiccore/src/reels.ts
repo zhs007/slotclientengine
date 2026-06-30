@@ -1,6 +1,11 @@
-import { LogicParseError } from './errors';
-import { LogicReels, ReelSpinDirection, ReelSpinStartYOptions } from './types';
-import { assertArray, assertFiniteNumber, assertInteger, freezeArray } from './validation';
+import { LogicParseError } from "./errors";
+import { LogicReels, ReelSpinDirection, ReelSpinStartYOptions } from "./types";
+import {
+  assertArray,
+  assertFiniteNumber,
+  assertInteger,
+  freezeArray,
+} from "./validation";
 
 export class LogicReelsModel implements LogicReels {
   readonly #name: string;
@@ -38,21 +43,27 @@ export class LogicReelsModel implements LogicReels {
 
   normalizeY(x: number, y: number): number {
     this.#assertReelIndex(x);
-    assertFiniteNumber(y, 'reel y');
+    assertFiniteNumber(y, "reel y");
 
     const length = this.#reels[x].length;
     return ((y % length) + length) % length;
   }
 
-  findStopYCandidates(x: number, visibleSymbols: readonly number[]): readonly number[] {
+  findStopYCandidates(
+    x: number,
+    visibleSymbols: readonly number[],
+  ): readonly number[] {
     this.#assertReelIndex(x);
-    const parsedVisibleSymbols = parseVisibleSymbols(visibleSymbols, 'visibleSymbols');
+    const parsedVisibleSymbols = parseVisibleSymbols(
+      visibleSymbols,
+      "visibleSymbols",
+    );
     const length = this.#reels[x].length;
     const candidates: number[] = [];
 
     for (let y = 0; y < length; y += 1) {
       const matches = parsedVisibleSymbols.every(
-        (symbol, visibleY) => this.get(x, y + visibleY) === symbol
+        (symbol, visibleY) => this.get(x, y + visibleY) === symbol,
       );
 
       if (matches) {
@@ -69,8 +80,8 @@ export class LogicReelsModel implements LogicReels {
     if (candidates.length === 0) {
       throw new LogicParseError(
         `No stop y candidate found for reels "${this.#name}", x ${x}, visibleSymbols ${JSON.stringify(
-          visibleSymbols
-        )}.`
+          visibleSymbols,
+        )}.`,
       );
     }
 
@@ -79,15 +90,18 @@ export class LogicReelsModel implements LogicReels {
 
   calculateSpinStartY(options: ReelSpinStartYOptions): number {
     this.#assertReelIndex(options.x);
-    const finalY = assertFiniteNumber(options.finalY, 'spinStart.finalY');
-    const durationMs = assertNonNegativeFiniteNumber(options.durationMs, 'spinStart.durationMs');
+    const finalY = assertFiniteNumber(options.finalY, "spinStart.finalY");
+    const durationMs = assertNonNegativeFiniteNumber(
+      options.durationMs,
+      "spinStart.durationMs",
+    );
     const speedSymbolsPerSecond = assertNonNegativeFiniteNumber(
       options.speedSymbolsPerSecond,
-      'spinStart.speedSymbolsPerSecond'
+      "spinStart.speedSymbolsPerSecond",
     );
     const direction = parseSpinDirection(options.direction);
     const travel = (speedSymbolsPerSecond * durationMs) / 1000;
-    const startY = direction === 'forward' ? finalY - travel : finalY + travel;
+    const startY = direction === "forward" ? finalY - travel : finalY + travel;
 
     return this.normalizeY(options.x, startY);
   }
@@ -101,7 +115,7 @@ export class LogicReelsModel implements LogicReels {
 
 function parseVisibleSymbols(value: unknown, path: string): readonly number[] {
   const symbols = assertArray(value, path).map((symbol, index) =>
-    assertInteger(symbol, `${path}[${index}]`)
+    assertInteger(symbol, `${path}[${index}]`),
   );
 
   if (symbols.length === 0) {
@@ -123,12 +137,14 @@ function assertNonNegativeFiniteNumber(value: unknown, path: string): number {
 
 function parseSpinDirection(value: unknown): ReelSpinDirection {
   if (value === undefined) {
-    return 'forward';
+    return "forward";
   }
 
-  if (value === 'forward' || value === 'backward') {
+  if (value === "forward" || value === "backward") {
     return value;
   }
 
-  throw new LogicParseError('spinStart.direction must be "forward" or "backward".');
+  throw new LogicParseError(
+    'spinStart.direction must be "forward" or "backward".',
+  );
 }

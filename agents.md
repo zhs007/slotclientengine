@@ -43,6 +43,7 @@
 - `assets/game003-s1` 的可展示 symbol manifest scale 必须显式为 `1`；若美术给到 JPG symbol 普通态，先一次性转成同名 PNG，再生成状态贴图和 manifest，不要扩展共享 symbol 生成器或运行时去支持 JPG 普通态。
 - `game003` 继续遵守本地公开轮带边界：spin 使用 `assets/gamecfg003/gameconfig.json` 内 `bg-reel01` 滚动，服务器目标 scene 只叠加进本轮临时可见窗口；不要读取、缓存或泄露服务器真实轮带。
 - `game003` 首屏必须先走 `packages/gameloading`；live 初始化必须在 loading `99%` 回调中完成，`100%` 后才创建 `gameframeworks` framework / Pixi 游戏画面，避免 loading 前挂载游戏或产生双 WebSocket 连接。
+- `game003` 的中奖组件名当前为 `bg-wins`，只能在 `apps/game003` app 层配置和识别；`logiccore` / `gameframeworks` / `rendercore` 只能提供通用组件 result 解析、facade 和可见 symbol 状态 API，不硬编码 `bg-wins`、game003、GMI、WaysTriggerData、WL 或 wild 规则。中奖播放必须按 `bg-wins.basicComponentData.usedResults` 指向的 `clientData.results[]` 顺序执行，`result.pos` 坐标基准固定为当前 5 x 5 主转轮可见窗口；game003 是 Ways 游戏，`symbolNums` / `symbolNum` 不等同于 `pos` 数量。symbol 语义校验只能由游戏 app 显式传可选 validator，不传时不要默认检查 `result.symbol` 和 target scene 是否一致；缺失、pos 越界要显式失败，不要用全部 results 或 totalwin 做隐藏兜底。
 - 游戏静态 YAML 只承载美术、配置人员或发布流程可改的静态配置，不承载 token、cookie、服务器真实轮带或玩家本次下注等运行期输入。
 - 游戏静态 YAML 应保留中文注释，说明字段用途、坐标基准和修改边界；注释只给人看，不作为构建逻辑依据。
 - `game-static.generated.ts` 和 `game-loading.generated.ts` 由 `apps/buildgamestatic` 生成，禁止手改；修改 YAML 后必须同步执行生成和 `--check` 校验。

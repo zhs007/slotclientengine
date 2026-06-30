@@ -4,6 +4,7 @@ import type { SymbolAssetMap } from "@slotclientengine/rendercore";
 import {
   GAME003_DEFAULT_SCENE,
   GAME003_SPIN_SCENE,
+  GAME003_WIN_SPIN_SCENE,
 } from "./fixtures/game003-gmi.js";
 import { GAME003_STATIC_CONFIG } from "../src/generated/game-static.generated.js";
 import {
@@ -111,6 +112,44 @@ describe("game003 reel runtime", () => {
       }
     }
     expect(runtime.getCurrentScene()).toEqual(localReelMissingScene);
+  });
+
+  it("requests win state on visible positions and lets once animation return to normal", () => {
+    const runtime = createRuntime(GAME003_WIN_SPIN_SCENE);
+    const positions = [
+      { x: 0, y: 4 },
+      { x: 1, y: 2 },
+      { x: 2, y: 0 },
+    ];
+
+    runtime.requestVisibleSymbolStates(positions, "win");
+
+    expect(
+      runtime.getVisibleSymbolStateSnapshots(positions).map((snapshot) => ({
+        x: snapshot.x,
+        y: snapshot.y,
+        requestedState: snapshot.requestedState,
+      })),
+    ).toEqual([
+      { x: 0, y: 4, requestedState: "win" },
+      { x: 1, y: 2, requestedState: "win" },
+      { x: 2, y: 0, requestedState: "win" },
+    ]);
+    expect(runtime.getVisualSnapshot().requestedStates[0][4]).toBe("win");
+
+    runtime.update(0);
+    expect(
+      runtime
+        .getVisibleSymbolStateSnapshots(positions)
+        .every((snapshot) => snapshot.requestedState === "win"),
+    ).toBe(true);
+
+    runtime.update(0.58);
+    expect(
+      runtime
+        .getVisibleSymbolStateSnapshots(positions)
+        .every((snapshot) => snapshot.requestedState === "normal"),
+    ).toBe(true);
   });
 
   it("fails fast for unknown or currently unrenderable paytable symbols", () => {

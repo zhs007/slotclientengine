@@ -1,14 +1,20 @@
-import { LogicParseError } from './errors';
+import { LogicParseError } from "./errors";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function hasOwn(record: Readonly<Record<string, unknown>>, key: string): boolean {
+export function hasOwn(
+  record: Readonly<Record<string, unknown>>,
+  key: string,
+): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
 }
 
-export function assertRecord(value: unknown, path: string): Record<string, unknown> {
+export function assertRecord(
+  value: unknown,
+  path: string,
+): Record<string, unknown> {
   if (!isRecord(value)) {
     throw new LogicParseError(`${path} must be an object.`);
   }
@@ -25,14 +31,17 @@ export function assertArray(value: unknown, path: string): readonly unknown[] {
 }
 
 export function assertFiniteNumber(value: unknown, path: string): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new LogicParseError(`${path} must be a finite number.`);
   }
 
   return value;
 }
 
-export function assertOptionalFiniteNumber(value: unknown, path: string): number | undefined {
+export function assertOptionalFiniteNumber(
+  value: unknown,
+  path: string,
+): number | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -40,12 +49,15 @@ export function assertOptionalFiniteNumber(value: unknown, path: string): number
   return assertFiniteNumber(value, path);
 }
 
-export function assertOptionalString(value: unknown, path: string): string | undefined {
+export function assertOptionalString(
+  value: unknown,
+  path: string,
+): string | undefined {
   if (value === undefined) {
     return undefined;
   }
 
-  if (typeof value !== 'string') {
+  if (typeof value !== "string") {
     throw new LogicParseError(`${path} must be a string.`);
   }
 
@@ -53,7 +65,7 @@ export function assertOptionalString(value: unknown, path: string): string | und
 }
 
 export function assertNonEmptyString(value: unknown, path: string): string {
-  if (typeof value !== 'string') {
+  if (typeof value !== "string") {
     throw new LogicParseError(`${path} must be a string.`);
   }
 
@@ -65,14 +77,17 @@ export function assertNonEmptyString(value: unknown, path: string): string {
 }
 
 export function assertInteger(value: unknown, path: string): number {
-  if (typeof value !== 'number' || !Number.isInteger(value)) {
+  if (typeof value !== "number" || !Number.isInteger(value)) {
     throw new LogicParseError(`${path} must be an integer.`);
   }
 
   return value;
 }
 
-export function assertSafeNonNegativeInteger(value: unknown, path: string): number {
+export function assertSafeNonNegativeInteger(
+  value: unknown,
+  path: string,
+): number {
   const parsed = assertInteger(value, path);
 
   if (!Number.isSafeInteger(parsed) || parsed < 0) {
@@ -82,51 +97,66 @@ export function assertSafeNonNegativeInteger(value: unknown, path: string): numb
   return parsed;
 }
 
-export function assertNumberArray(value: unknown, path: string): readonly number[] {
+export function assertNumberArray(
+  value: unknown,
+  path: string,
+): readonly number[] {
   return freezeArray(
     assertArray(value, path).map((item, index) =>
-      assertFiniteNumber(item, `${path}[${index}]`)
-    )
+      assertFiniteNumber(item, `${path}[${index}]`),
+    ),
   );
 }
 
-export function assertIntegerArray(value: unknown, path: string): readonly number[] {
+export function assertIntegerArray(
+  value: unknown,
+  path: string,
+): readonly number[] {
   return freezeArray(
-    assertArray(value, path).map((item, index) => assertInteger(item, `${path}[${index}]`))
+    assertArray(value, path).map((item, index) =>
+      assertInteger(item, `${path}[${index}]`),
+    ),
   );
 }
 
-export function assertNonNegativeIntegerArray(value: unknown, path: string): readonly number[] {
+export function assertNonNegativeIntegerArray(
+  value: unknown,
+  path: string,
+): readonly number[] {
   return freezeArray(
     assertArray(value, path).map((item, index) => {
       const parsed = assertInteger(item, `${path}[${index}]`);
 
       if (parsed < 0) {
-        throw new LogicParseError(`${path}[${index}] must be a non-negative integer.`);
+        throw new LogicParseError(
+          `${path}[${index}] must be a non-negative integer.`,
+        );
       }
 
       return parsed;
-    })
+    }),
   );
 }
 
 export function assertStringArray(
   value: unknown,
   path: string,
-  options: { readonly nonEmptyItems?: boolean } = {}
+  options: { readonly nonEmptyItems?: boolean } = {},
 ): readonly string[] {
   return freezeArray(
     assertArray(value, path).map((item, index) => {
-      if (typeof item !== 'string') {
+      if (typeof item !== "string") {
         throw new LogicParseError(`${path}[${index}] must be a string.`);
       }
 
       if (options.nonEmptyItems === true && item.length === 0) {
-        throw new LogicParseError(`${path}[${index}] must be a non-empty string.`);
+        throw new LogicParseError(
+          `${path}[${index}] must be a non-empty string.`,
+        );
       }
 
       return item;
-    })
+    }),
   );
 }
 

@@ -3,8 +3,8 @@ import {
   getComponentResultsForStep,
   getComponentScenesForStep,
   hasTriggeredComponent,
-} from './component';
-import { parseGameModuleInfoMessage, parseGmiWithMeta } from './parser';
+} from "./component";
+import { parseGameModuleInfoMessage, parseGmiWithMeta } from "./parser";
 import {
   GameLogic,
   GameLogicMeta,
@@ -14,13 +14,16 @@ import {
   ParsedGameLogicStepData,
   SceneMatrix,
   WinResult,
-} from './types';
+} from "./types";
 
 export function createGameLogic(message: unknown): GameLogic {
   return new GameLogicModel(parseGameModuleInfoMessage(message));
 }
 
-export function createGameLogicFromGmi(gmi: unknown, meta: GameLogicMeta): GameLogic {
+export function createGameLogicFromGmi(
+  gmi: unknown,
+  meta: GameLogicMeta,
+): GameLogic {
   return new GameLogicModel(parseGmiWithMeta(gmi, meta));
 }
 
@@ -30,7 +33,9 @@ export class GameLogicModel implements GameLogic {
 
   constructor(data: ParsedGameLogicData) {
     this.#data = data;
-    this.#steps = Object.freeze(data.steps.map((step) => new GameLogicStepModel(step)));
+    this.#steps = Object.freeze(
+      data.steps.map((step) => new GameLogicStepModel(step)),
+    );
     Object.freeze(this);
   }
 
@@ -79,7 +84,7 @@ export class GameLogicModel implements GameLogic {
   }
 
   getStep(index: number): GameLogicStep {
-    assertIndex(index, this.#steps.length, 'step');
+    assertIndex(index, this.#steps.length, "step");
 
     return this.#steps[index];
   }
@@ -154,7 +159,7 @@ export class GameLogicStepModel implements GameLogicStep {
   }
 
   getScene(index: number): SceneMatrix {
-    assertIndex(index, this.#data.scenes.length, 'scene');
+    assertIndex(index, this.#data.scenes.length, "scene");
 
     return this.#data.scenes[index];
   }
@@ -168,7 +173,7 @@ export class GameLogicStepModel implements GameLogicStep {
   }
 
   getResult(index: number): WinResult {
-    assertIndex(index, this.#data.results.length, 'result');
+    assertIndex(index, this.#data.results.length, "result");
 
     return this.#data.results[index];
   }

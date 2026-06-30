@@ -9,7 +9,9 @@ import type {
   RenderReelSetSpinOptions,
   RenderReelSetSnapshot,
   RenderReelSetUpdateResult,
+  RenderVisibleSymbolStateSnapshot,
 } from "./types.js";
+import type { SymbolStateId } from "../symbol/index.js";
 
 export class RenderReelSet extends Container {
   readonly reels: readonly RenderReel[];
@@ -141,6 +143,41 @@ export class RenderReelSet extends Container {
     return Object.freeze(this.reels.map((reel) => reel.getVisibleScene()));
   }
 
+  requestVisibleSymbolState(x: number, y: number, state: SymbolStateId): void {
+    if (this.#spinPlan) {
+      throw new ReelError(
+        "Cannot request visible symbol state while reel set is spinning.",
+      );
+    }
+    this.getReelAt(x).requestVisibleSymbolState(y, state);
+  }
+
+  requestVisibleSymbolStates(
+    positions: readonly { readonly x: number; readonly y: number }[],
+    state: SymbolStateId,
+  ): void {
+    for (const position of positions) {
+      this.requestVisibleSymbolState(position.x, position.y, state);
+    }
+  }
+
+  getVisibleSymbolStateSnapshot(
+    x: number,
+    y: number,
+  ): RenderVisibleSymbolStateSnapshot {
+    return this.getReelAt(x).getVisibleSymbolStateSnapshot(y);
+  }
+
+  getVisibleSymbolStateSnapshots(
+    positions: readonly { readonly x: number; readonly y: number }[],
+  ): readonly RenderVisibleSymbolStateSnapshot[] {
+    return Object.freeze(
+      positions.map((position) =>
+        this.getVisibleSymbolStateSnapshot(position.x, position.y),
+      ),
+    );
+  }
+
   getSnapshot(): RenderReelSetSnapshot {
     return Object.freeze({
       spinning: this.#spinPlan !== null,
@@ -148,6 +185,13 @@ export class RenderReelSet extends Container {
       visibleScene: this.getVisibleScene(),
       reels: Object.freeze(this.reels.map((reel) => reel.getSnapshot())),
     });
+  }
+
+  private getReelAt(x: number): RenderReel {
+    if (!Number.isInteger(x) || x < 0 || x >= this.reels.length) {
+      throw new ReelError(`visible symbol x ${x} is out of range.`);
+    }
+    return this.reels[x];
   }
 
   private startDueAxes(): void {

@@ -1,6 +1,9 @@
 /* v8 ignore file -- public type declarations only. */
 
 import type {
+  ComponentWinResultGroup,
+  ComponentWinResultPositionValidationContext,
+  ComponentWinResultPositionValidator,
   GameConfigPaytableEntry,
   GameLogic,
   GameLogicMeta,
@@ -11,6 +14,7 @@ import type {
   ReelStopYOptions,
   SceneMatrix,
   WinResult,
+  WinResultPosition,
 } from "@slotclientengine/logiccore";
 import type {
   SlotcraftClientOptions,
@@ -19,6 +23,9 @@ import type {
 } from "@slotclientengine/netcore";
 
 export type {
+  ComponentWinResultGroup,
+  ComponentWinResultPositionValidationContext,
+  ComponentWinResultPositionValidator,
   GameConfigPaytableEntry,
   GameLogic,
   GameLogicMeta,
@@ -29,6 +36,7 @@ export type {
   ReelStopYOptions,
   SceneMatrix,
   WinResult,
+  WinResultPosition,
 };
 
 export interface SlotGameLiveConfig {

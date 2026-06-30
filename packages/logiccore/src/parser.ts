@@ -1,12 +1,12 @@
-import { LogicParseError } from './errors';
-import { parseScene } from './scene';
+import { LogicParseError } from "./errors";
+import { parseScene } from "./scene";
 import {
   GameLogicMeta,
   ParsedGameLogicData,
   ParsedGameLogicMeta,
   ParsedGameLogicStepData,
   WinResult,
-} from './types';
+} from "./types";
 import {
   assertArray,
   assertFiniteNumber,
@@ -18,20 +18,25 @@ import {
   assertStringArray,
   cloneAndFreeze,
   freezeArray,
-} from './validation';
+} from "./validation";
 
-export function parseGameModuleInfoMessage(message: unknown): ParsedGameLogicData {
-  const messageRecord = assertRecord(message, 'message');
-  const meta = parseMeta(messageRecord, 'message', { requireMsgid: true });
-  const gmi = assertRecord(messageRecord.gmi, 'message.gmi');
+export function parseGameModuleInfoMessage(
+  message: unknown,
+): ParsedGameLogicData {
+  const messageRecord = assertRecord(message, "message");
+  const meta = parseMeta(messageRecord, "message", { requireMsgid: true });
+  const gmi = assertRecord(messageRecord.gmi, "message.gmi");
 
   return parseGmiCore(gmi, meta, message);
 }
 
-export function parseGmiWithMeta(gmi: unknown, meta: GameLogicMeta): ParsedGameLogicData {
-  const gmiRecord = assertRecord(gmi, 'gmi');
-  const metaRecord = assertRecord(meta, 'meta');
-  const parsedMeta = parseMeta(metaRecord, 'meta', { requireMsgid: false });
+export function parseGmiWithMeta(
+  gmi: unknown,
+  meta: GameLogicMeta,
+): ParsedGameLogicData {
+  const gmiRecord = assertRecord(gmi, "gmi");
+  const metaRecord = assertRecord(meta, "meta");
+  const parsedMeta = parseMeta(metaRecord, "meta", { requireMsgid: false });
   const rawMessage = buildMessageFromGmi(gmi, parsedMeta);
 
   return parseGmiCore(gmiRecord, parsedMeta, rawMessage);
@@ -40,16 +45,16 @@ export function parseGmiWithMeta(gmi: unknown, meta: GameLogicMeta): ParsedGameL
 function parseGmiCore(
   gmi: Record<string, unknown>,
   meta: ParsedGameLogicMeta,
-  rawMessage: unknown
+  rawMessage: unknown,
 ): ParsedGameLogicData {
-  const defaultScene = parseScene(gmi.defaultScene, 'gmi.defaultScene');
-  const replyPlay = assertRecord(gmi.replyPlay, 'gmi.replyPlay');
+  const defaultScene = parseScene(gmi.defaultScene, "gmi.defaultScene");
+  const replyPlay = assertRecord(gmi.replyPlay, "gmi.replyPlay");
   const randomNumbers = assertIntegerArray(
     replyPlay.randomNumbers,
-    'gmi.replyPlay.randomNumbers'
+    "gmi.replyPlay.randomNumbers",
   );
-  const steps = assertArray(replyPlay.results, 'gmi.replyPlay.results').map((step, index) =>
-    parseStep(step, index)
+  const steps = assertArray(replyPlay.results, "gmi.replyPlay.results").map(
+    (step, index) => parseStep(step, index),
   );
 
   return Object.freeze({
@@ -65,7 +70,7 @@ function parseGmiCore(
 function parseMeta(
   metaSource: Record<string, unknown>,
   path: string,
-  options: { readonly requireMsgid: boolean }
+  options: { readonly requireMsgid: boolean },
 ): ParsedGameLogicMeta {
   const rawMsgid = assertOptionalString(metaSource.msgid, `${path}.msgid`);
 
@@ -73,24 +78,36 @@ function parseMeta(
     throw new LogicParseError(`${path}.msgid must be "gamemoduleinfo".`);
   }
 
-  if (rawMsgid !== undefined && rawMsgid !== 'gamemoduleinfo') {
+  if (rawMsgid !== undefined && rawMsgid !== "gamemoduleinfo") {
     throw new LogicParseError(`${path}.msgid must be "gamemoduleinfo".`);
   }
 
   const meta: ParsedGameLogicMeta = {
-    msgid: 'gamemoduleinfo',
+    msgid: "gamemoduleinfo",
     bet: assertFiniteNumber(metaSource.bet, `${path}.bet`),
     lines: assertFiniteNumber(metaSource.lines, `${path}.lines`),
     totalwin: assertFiniteNumber(metaSource.totalwin, `${path}.totalwin`),
   };
   const gamemodulename = assertOptionalString(
     metaSource.gamemodulename,
-    `${path}.gamemodulename`
+    `${path}.gamemodulename`,
   );
-  const gameid = assertOptionalFiniteNumber(metaSource.gameid, `${path}.gameid`);
-  const playIndex = assertOptionalFiniteNumber(metaSource.playIndex, `${path}.playIndex`);
-  const playwin = assertOptionalFiniteNumber(metaSource.playwin, `${path}.playwin`);
-  const maxWinLimit = assertOptionalFiniteNumber(metaSource.maxWinLimit, `${path}.maxWinLimit`);
+  const gameid = assertOptionalFiniteNumber(
+    metaSource.gameid,
+    `${path}.gameid`,
+  );
+  const playIndex = assertOptionalFiniteNumber(
+    metaSource.playIndex,
+    `${path}.playIndex`,
+  );
+  const playwin = assertOptionalFiniteNumber(
+    metaSource.playwin,
+    `${path}.playwin`,
+  );
+  const maxWinLimit = assertOptionalFiniteNumber(
+    metaSource.maxWinLimit,
+    `${path}.maxWinLimit`,
+  );
 
   return Object.freeze({
     ...meta,
@@ -106,33 +123,45 @@ function parseStep(step: unknown, index: number): ParsedGameLogicStepData {
   const stepRecord = assertRecord(step, `gmi.replyPlay.results[${index}]`);
   const clientData = assertRecord(
     stepRecord.clientData,
-    `gmi.replyPlay.results[${index}].clientData`
+    `gmi.replyPlay.results[${index}].clientData`,
   );
   const curGameModParam = assertRecord(
     clientData.curGameModParam,
-    `gmi.replyPlay.results[${index}].clientData.curGameModParam`
+    `gmi.replyPlay.results[${index}].clientData.curGameModParam`,
   );
   const scenes = assertArray(
     clientData.scenes,
-    `gmi.replyPlay.results[${index}].clientData.scenes`
+    `gmi.replyPlay.results[${index}].clientData.scenes`,
   ).map((scene, sceneIndex) =>
-    parseScene(scene, `gmi.replyPlay.results[${index}].clientData.scenes[${sceneIndex}]`)
+    parseScene(
+      scene,
+      `gmi.replyPlay.results[${index}].clientData.scenes[${sceneIndex}]`,
+    ),
   );
   const results = assertArray(
     clientData.results,
-    `gmi.replyPlay.results[${index}].clientData.results`
+    `gmi.replyPlay.results[${index}].clientData.results`,
   ).map((result, resultIndex) =>
-    parseWinResult(result, `gmi.replyPlay.results[${index}].clientData.results[${resultIndex}]`)
+    parseWinResult(
+      result,
+      `gmi.replyPlay.results[${index}].clientData.results[${resultIndex}]`,
+    ),
   );
   const curGameMod = assertOptionalString(
     clientData.curGameMod,
-    `gmi.replyPlay.results[${index}].clientData.curGameMod`
+    `gmi.replyPlay.results[${index}].clientData.curGameMod`,
   );
 
   return Object.freeze({
     index,
-    coinWin: assertFiniteNumber(stepRecord.coinWin, `gmi.replyPlay.results[${index}].coinWin`),
-    cashWin: assertFiniteNumber(stepRecord.cashWin, `gmi.replyPlay.results[${index}].cashWin`),
+    coinWin: assertFiniteNumber(
+      stepRecord.coinWin,
+      `gmi.replyPlay.results[${index}].coinWin`,
+    ),
+    cashWin: assertFiniteNumber(
+      stepRecord.cashWin,
+      `gmi.replyPlay.results[${index}].cashWin`,
+    ),
     rawStep: cloneAndFreeze(stepRecord),
     rawClientData: cloneAndFreeze(clientData),
     ...(curGameMod === undefined ? {} : { curGameMod }),
@@ -142,13 +171,13 @@ function parseStep(step: unknown, index: number): ParsedGameLogicStepData {
     historyComponents: assertStringArray(
       curGameModParam.historyComponents,
       `gmi.replyPlay.results[${index}].clientData.curGameModParam.historyComponents`,
-      { nonEmptyItems: true }
+      { nonEmptyItems: true },
     ),
     mapComponents: cloneAndFreeze(
       assertRecord(
         curGameModParam.mapComponents,
-        `gmi.replyPlay.results[${index}].clientData.curGameModParam.mapComponents`
-      )
+        `gmi.replyPlay.results[${index}].clientData.curGameModParam.mapComponents`,
+      ),
     ),
   });
 }
@@ -168,10 +197,15 @@ function parseWinResult(result: unknown, path: string): WinResult {
   return cloneAndFreeze(resultRecord) as WinResult;
 }
 
-function buildMessageFromGmi(gmi: unknown, meta: ParsedGameLogicMeta): Readonly<Record<string, unknown>> {
+function buildMessageFromGmi(
+  gmi: unknown,
+  meta: ParsedGameLogicMeta,
+): Readonly<Record<string, unknown>> {
   return Object.freeze({
     msgid: meta.msgid,
-    ...(meta.gamemodulename === undefined ? {} : { gamemodulename: meta.gamemodulename }),
+    ...(meta.gamemodulename === undefined
+      ? {}
+      : { gamemodulename: meta.gamemodulename }),
     ...(meta.gameid === undefined ? {} : { gameid: meta.gameid }),
     gmi,
     ...(meta.playIndex === undefined ? {} : { playIndex: meta.playIndex }),
@@ -179,6 +213,8 @@ function buildMessageFromGmi(gmi: unknown, meta: ParsedGameLogicMeta): Readonly<
     lines: meta.lines,
     totalwin: meta.totalwin,
     ...(meta.playwin === undefined ? {} : { playwin: meta.playwin }),
-    ...(meta.maxWinLimit === undefined ? {} : { maxWinLimit: meta.maxWinLimit }),
+    ...(meta.maxWinLimit === undefined
+      ? {}
+      : { maxWinLimit: meta.maxWinLimit }),
   });
 }
