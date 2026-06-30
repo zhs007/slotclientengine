@@ -38,6 +38,12 @@ export interface MapArtRectToViewportOptions {
   readonly rect: RenderViewportRect;
 }
 
+export interface MapAnchorRectToArtOptions {
+  readonly artSize: RenderViewportSize;
+  readonly anchorRect: RenderViewportRect;
+  readonly rect: RenderViewportRect;
+}
+
 export function calculateFocusedArtViewport(
   options: FocusedArtViewportOptions,
 ): FocusedArtViewport {
@@ -137,6 +143,50 @@ export function mapArtRectToViewport(
     width: rect.width,
     height: rect.height,
   });
+}
+
+export function mapAnchorRectToArt(
+  options: MapAnchorRectToArtOptions,
+): RenderViewportRect {
+  const artSize = validateSize(options.artSize, "artSize");
+  const anchorRect = validateRect(options.anchorRect, "anchorRect");
+  const rect = validateAnchorChildRect(options.rect, "rect");
+
+  if (
+    anchorRect.x + anchorRect.width > artSize.width ||
+    anchorRect.y + anchorRect.height > artSize.height
+  ) {
+    throw new Error("anchorRect must fit inside artSize.");
+  }
+
+  const mappedRect = freezeRect({
+    x: anchorRect.x + rect.x,
+    y: anchorRect.y + rect.y,
+    width: rect.width,
+    height: rect.height,
+  });
+
+  if (
+    mappedRect.x < 0 ||
+    mappedRect.y < 0 ||
+    mappedRect.x + mappedRect.width > artSize.width ||
+    mappedRect.y + mappedRect.height > artSize.height
+  ) {
+    throw new Error("rect mapped from anchorRect must fit inside artSize.");
+  }
+
+  return mappedRect;
+}
+
+function validateAnchorChildRect(
+  rect: RenderViewportRect,
+  label: string,
+): RenderViewportRect {
+  assertFinite(rect.x, `${label}.x`);
+  assertFinite(rect.y, `${label}.y`);
+  assertPositiveFinite(rect.width, `${label}.width`);
+  assertPositiveFinite(rect.height, `${label}.height`);
+  return freezeRect(rect);
 }
 
 export function mapReferenceRectToArt(options: {

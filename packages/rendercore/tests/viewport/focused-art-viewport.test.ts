@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateFocusedArtViewport,
+  mapAnchorRectToArt,
   mapArtRectToViewport,
   mapReferenceRectToArt,
 } from "../../src/viewport/index.js";
@@ -120,6 +121,58 @@ describe("focused art viewport", () => {
       width: 720,
       height: 1080,
     });
+  });
+
+  it("maps a child rect from an anchor rect into art coordinates", () => {
+    expect(
+      mapAnchorRectToArt({
+        artSize: ART_SIZE,
+        anchorRect: { x: 288, y: 588, width: 1424, height: 824 },
+        rect: { x: 294, y: 0, width: 1130, height: 824 },
+      }),
+    ).toEqual({ x: 582, y: 588, width: 1130, height: 824 });
+  });
+
+  it("allows anchored child rects to extend beyond the anchor when they fit art", () => {
+    expect(
+      mapAnchorRectToArt({
+        artSize: { width: 1200, height: 1200 },
+        anchorRect: { x: 100, y: 100, width: 200, height: 200 },
+        rect: { x: 150, y: 160, width: 400, height: 500 },
+      }),
+    ).toEqual({ x: 250, y: 260, width: 400, height: 500 });
+  });
+
+  it("allows anchored child rects to use negative offsets when they fit art", () => {
+    expect(
+      mapAnchorRectToArt({
+        artSize: { width: 2000, height: 2000 },
+        anchorRect: { x: 288, y: 588, width: 1424, height: 824 },
+        rect: { x: 294, y: -10, width: 1130, height: 824 },
+      }),
+    ).toEqual({ x: 582, y: 578, width: 1130, height: 824 });
+  });
+
+  it("composes anchored art rect mapping with viewport mapping", () => {
+    const viewport = calculateFocusedArtViewport({
+      artSize: ART_SIZE,
+      viewportSize: { width: 1600, height: 1200 },
+      focusRect: { x: 288, y: 588, width: 1424, height: 824 },
+    });
+    const anchoredRect = mapAnchorRectToArt({
+      artSize: ART_SIZE,
+      anchorRect: { x: 288, y: 588, width: 1424, height: 824 },
+      rect: { x: 0, y: 49, width: 284, height: 775 },
+    });
+
+    expect(anchoredRect).toEqual({ x: 288, y: 637, width: 284, height: 775 });
+    expect(
+      mapArtRectToViewport({
+        artSize: ART_SIZE,
+        visibleRect: viewport.visibleRect,
+        rect: anchoredRect,
+      }),
+    ).toEqual({ x: 88, y: 237, width: 284, height: 775 });
   });
 
   it("clamps visible rects to the art boundary while keeping margins", () => {
@@ -253,5 +306,43 @@ describe("focused art viewport", () => {
         rect: { x: 0, y: 0, width: Number.NaN, height: 100 },
       }),
     ).toThrow(/rect.width/);
+  });
+
+  it("rejects invalid anchored rect mappings", () => {
+    expect(() =>
+      mapAnchorRectToArt({
+        artSize: ART_SIZE,
+        anchorRect: { x: 1900, y: 0, width: 200, height: 100 },
+        rect: { x: 0, y: 0, width: 50, height: 50 },
+      }),
+    ).toThrow(/anchorRect/);
+    expect(() =>
+      mapAnchorRectToArt({
+        artSize: ART_SIZE,
+        anchorRect: { x: 288, y: 588, width: 1424, height: 824 },
+        rect: { x: 1400, y: 0, width: 400, height: 100 },
+      }),
+    ).toThrow(/rect mapped/);
+    expect(() =>
+      mapAnchorRectToArt({
+        artSize: ART_SIZE,
+        anchorRect: { x: 288, y: 588, width: 1424, height: 824 },
+        rect: { x: 0, y: -600, width: 400, height: 100 },
+      }),
+    ).toThrow(/rect mapped/);
+    expect(() =>
+      mapAnchorRectToArt({
+        artSize: ART_SIZE,
+        anchorRect: { x: 288, y: 588, width: 1424, height: 824 },
+        rect: { x: 0, y: Number.NaN, width: 400, height: 100 },
+      }),
+    ).toThrow(/rect.y/);
+    expect(() =>
+      mapAnchorRectToArt({
+        artSize: { width: 100, height: Number.POSITIVE_INFINITY },
+        anchorRect: { x: 0, y: 0, width: 10, height: 10 },
+        rect: { x: 0, y: 0, width: 10, height: 10 },
+      }),
+    ).toThrow(/artSize.height/);
   });
 });

@@ -187,6 +187,7 @@ viewport 能力从主入口和子路径导出：
 import {
   calculateFocusedArtViewport,
   calculateResponsiveArtViewport,
+  mapAnchorRectToArt,
   mapArtRectToViewport,
   mapReferenceRectToArt,
 } from "@slotclientengine/rendercore/viewport";
@@ -204,7 +205,9 @@ import {
 
 `mapArtRectToViewport()` 用于在已有 `visibleRect` 下，把完整 art 坐标系中的任意矩形映射到当前 viewport 坐标。典型用法是 focus rect 与棋盘、调试框或其它 art rect 不同的时候，先用 `calculateFocusedArtViewport()` 得到裁切结果，再用该 helper 映射其它矩形。`rect` 和 `visibleRect` 都必须在 `artSize` 内；`rect` 不要求完全落在 `visibleRect` 内，超出当前可见区域时仍返回确定坐标。app 不应自行复制 `rect.x - visibleRect.x` 这类通用映射算法。
 
-`calculateResponsiveArtViewport()` 用于横竖屏有不同 art 和 focus rect 的场景。调用方必须同时传入 `landscape` 和 `portrait` 两套 variant；当 `viewportSize.height > viewportSize.width` 时选择 `portrait`，否则选择 `landscape`，包括正方形 viewport。选中 variant 后仍复用 `calculateFocusedArtViewport()` 的校验和返回语义，因此 variant 缺失、focus rect 越界或 margin 放不进 viewport 都会显式失败。该 API 只处理通用横竖屏 art 选择和几何裁切，不包含具体游戏的资源名、conveyor 摆放或转轮窗口常量。
+`mapAnchorRectToArt()` 用于把相对某个 art-space anchor 左上角的 child rect 映射回完整 art 坐标。`anchorRect` 必须位于 `artSize` 内，child rect 的 `x/y` 是相对 anchor 的偏移，可以是负数；child 可以视觉上越过 anchor 边界，但映射后的 rect 必须仍位于完整 art 内。该 helper 不知道具体游戏的部件语义，只做通用 anchor/focus rect 几何映射和 fail-fast 校验。
+
+`calculateResponsiveArtViewport()` 用于横竖屏有不同 art 和 focus rect 的场景。调用方必须同时传入 `landscape` 和 `portrait` 两套 variant；当 `viewportSize.height > viewportSize.width` 时选择 `portrait`，否则选择 `landscape`，包括正方形 viewport。选中 variant 后仍复用 `calculateFocusedArtViewport()` 的校验和返回语义，因此 variant 缺失、focus rect 越界或 margin 放不进 viewport 都会显式失败。该 API 只处理通用横竖屏 art 选择和几何裁切，不包含具体游戏的资源名、部件摆放或转轮窗口常量。
 
 ## Reel API
 

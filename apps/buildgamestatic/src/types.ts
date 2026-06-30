@@ -67,6 +67,11 @@ export interface GameStaticYamlRect extends GameStaticYamlSize {
   readonly y: number;
 }
 
+export interface GameStaticYamlPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
 export interface GameStaticYamlMargin {
   readonly left?: number;
   readonly right?: number;
@@ -79,7 +84,7 @@ export interface GameStaticYamlImage extends GameStaticYamlSize {
 }
 
 export interface GameStaticYamlConveyor extends GameStaticYamlImage {
-  readonly placement: string;
+  readonly positionInFocusRect: GameStaticYamlPoint;
 }
 
 export interface GameStaticYamlSkinConfig {
@@ -101,12 +106,12 @@ export interface GameStaticYamlArtVariant {
   readonly focusRect: GameStaticYamlRect;
   readonly frameFocusRect: GameStaticYamlSize;
   readonly minFocusMargin?: GameStaticYamlMargin;
-  readonly conveyor: GameStaticYamlConveyor;
+  readonly mainReelBackgroundPositionInFocusRect: GameStaticYamlPoint;
+  readonly conveyor?: GameStaticYamlConveyor;
 }
 
 export interface GameStaticYamlArtConfig {
   readonly mode: "orientation-focus";
-  readonly scenePartGap: number;
   readonly variants: Readonly<
     Record<"landscape" | "portrait", GameStaticYamlArtVariant>
   >;

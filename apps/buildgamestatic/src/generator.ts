@@ -171,21 +171,29 @@ export async function generateGameStaticConfigModule(options: {
           skin.art.mainReelBackground.path,
         )}?url`,
       )};`,
-      `import ${names.landscapeConveyor} from ${quote(
-        `${toImportSpecifierFromRoot(
-          options.rootDir,
-          options.outPath,
-          skin.art.variants.landscape.conveyor.path,
-        )}?url`,
-      )};`,
-      `import ${names.portraitConveyor} from ${quote(
-        `${toImportSpecifierFromRoot(
-          options.rootDir,
-          options.outPath,
-          skin.art.variants.portrait.conveyor.path,
-        )}?url`,
-      )};`,
     );
+    if (skin.art.variants.landscape.conveyor && names.landscapeConveyor) {
+      lines.push(
+        `import ${names.landscapeConveyor} from ${quote(
+          `${toImportSpecifierFromRoot(
+            options.rootDir,
+            options.outPath,
+            skin.art.variants.landscape.conveyor.path,
+          )}?url`,
+        )};`,
+      );
+    }
+    if (skin.art.variants.portrait.conveyor && names.portraitConveyor) {
+      lines.push(
+        `import ${names.portraitConveyor} from ${quote(
+          `${toImportSpecifierFromRoot(
+            options.rootDir,
+            options.outPath,
+            skin.art.variants.portrait.conveyor.path,
+          )}?url`,
+        )};`,
+      );
+    }
   }
 
   lines.push("");
@@ -409,7 +417,6 @@ function renderSkinConfig(options: {
     "      }),",
     "      art: Object.freeze({",
     `        mode: ${quote(skin.art.mode)},`,
-    `        scenePartGap: ${numberLiteral(skin.art.scenePartGap)},`,
     "        variants: Object.freeze({",
     ...renderVariant("landscape", skin.art.variants.landscape, {
       background: names.landscapeBackground,
@@ -470,7 +477,7 @@ function renderLoadingOptionalFields(
 function renderVariant(
   variantId: "landscape" | "portrait",
   variant: GameStaticYamlArtVariant,
-  names: { readonly background: string; readonly conveyor: string },
+  names: { readonly background: string; readonly conveyor?: string },
 ): readonly string[] {
   return [
     `          ${variantId}: Object.freeze({`,
@@ -487,10 +494,18 @@ function renderVariant(
           )} as const),`,
         ]
       : []),
-    `            conveyor: Object.freeze(${renderConveyorWithUrl(
-      variant.conveyor,
-      names.conveyor,
-    )})`,
+    `            mainReelBackgroundPositionInFocusRect: Object.freeze(${json(
+      variant.mainReelBackgroundPositionInFocusRect,
+    )} as const)`,
+    ...(variant.conveyor && names.conveyor
+      ? [
+          `,`,
+          `            conveyor: Object.freeze(${renderConveyorWithUrl(
+            variant.conveyor,
+            names.conveyor,
+          )})`,
+        ]
+      : []),
     "          }),",
   ];
 }
@@ -508,15 +523,17 @@ function renderConveyorWithUrl(
   conveyor: {
     readonly width: number;
     readonly height: number;
-    readonly placement: string;
+    readonly positionInFocusRect: { readonly x: number; readonly y: number };
   },
   urlName: string,
 ): string {
   return `{ url: ${urlName}, width: ${numberLiteral(
     conveyor.width,
-  )}, height: ${numberLiteral(conveyor.height)}, placement: ${quote(
-    conveyor.placement,
-  )} } as const`;
+  )}, height: ${numberLiteral(
+    conveyor.height,
+  )}, positionInFocusRect: Object.freeze(${json(
+    conveyor.positionInFocusRect,
+  )} as const) } as const`;
 }
 
 interface ImportNames {
@@ -525,8 +542,8 @@ interface ImportNames {
   readonly landscapeBackground: string;
   readonly portraitBackground: string;
   readonly mainReelBackground: string;
-  readonly landscapeConveyor: string;
-  readonly portraitConveyor: string;
+  readonly landscapeConveyor?: string;
+  readonly portraitConveyor?: string;
 }
 
 function createImportNames(

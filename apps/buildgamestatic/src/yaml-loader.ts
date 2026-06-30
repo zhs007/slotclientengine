@@ -17,6 +17,7 @@ import type {
   GameStaticYamlLoadingResource,
   GameStaticYamlLiveConfig,
   GameStaticYamlMargin,
+  GameStaticYamlPoint,
   GameStaticYamlReelConfig,
   GameStaticYamlRect,
   GameStaticYamlSize,
@@ -277,7 +278,6 @@ function parseArt(value: unknown, label: string): GameStaticYamlArtConfig {
   const record = assertRecord(value, label);
   assertKeys(record, label, [
     "mode",
-    "scenePartGap",
     "variants",
     "mainReelBackground",
     "reelWindowInMainReelBackground",
@@ -289,10 +289,6 @@ function parseArt(value: unknown, label: string): GameStaticYamlArtConfig {
   assertKeys(variants, `${label}.variants`, ["landscape", "portrait"]);
   return Object.freeze({
     mode: "orientation-focus",
-    scenePartGap: assertNonNegativeNumber(
-      record.scenePartGap,
-      `${label}.scenePartGap`,
-    ),
     variants: Object.freeze({
       landscape: parseArtVariant(
         variants.landscape,
@@ -322,15 +318,26 @@ function parseArtVariant(
   assertKeys(
     record,
     label,
-    ["background", "focusRect", "frameFocusRect", "minFocusMargin", "conveyor"],
+    [
+      "background",
+      "focusRect",
+      "frameFocusRect",
+      "minFocusMargin",
+      "mainReelBackgroundPositionInFocusRect",
+      "conveyor",
+    ],
     {
-      optional: ["minFocusMargin"],
+      optional: ["minFocusMargin", "conveyor"],
     },
   );
   return Object.freeze({
     background: parseImage(record.background, `${label}.background`),
     focusRect: parseRect(record.focusRect, `${label}.focusRect`),
     frameFocusRect: parseSize(record.frameFocusRect, `${label}.frameFocusRect`),
+    mainReelBackgroundPositionInFocusRect: parsePoint(
+      record.mainReelBackgroundPositionInFocusRect,
+      `${label}.mainReelBackgroundPositionInFocusRect`,
+    ),
     ...(record.minFocusMargin !== undefined
       ? {
           minFocusMargin: parseMargin(
@@ -339,7 +346,9 @@ function parseArtVariant(
           ),
         }
       : {}),
-    conveyor: parseConveyor(record.conveyor, `${label}.conveyor`),
+    ...(record.conveyor !== undefined
+      ? { conveyor: parseConveyor(record.conveyor, `${label}.conveyor`) }
+      : {}),
   });
 }
 
@@ -354,11 +363,23 @@ function parseImage(value: unknown, label: string): GameStaticYamlImage {
 
 function parseConveyor(value: unknown, label: string): GameStaticYamlConveyor {
   const record = assertRecord(value, label);
-  assertKeys(record, label, ["path", "width", "height", "placement"]);
+  assertKeys(record, label, ["path", "width", "height", "positionInFocusRect"]);
   return Object.freeze({
     path: assertPath(record.path, `${label}.path`),
     ...parseSize(record, label),
-    placement: assertNonEmptyString(record.placement, `${label}.placement`),
+    positionInFocusRect: parsePoint(
+      record.positionInFocusRect,
+      `${label}.positionInFocusRect`,
+    ),
+  });
+}
+
+function parsePoint(value: unknown, label: string): GameStaticYamlPoint {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, ["x", "y"]);
+  return Object.freeze({
+    x: assertFiniteNumber(record.x, `${label}.x`),
+    y: assertFiniteNumber(record.y, `${label}.y`),
   });
 }
 
@@ -489,18 +510,40 @@ function validateArtPaths(
       [".jpg", ".jpeg", ".png"],
       `skins.${skinId}.art.variants.${variantId}.background.path`,
     );
-    assertExistingFile(rootDir, variant.conveyor.path);
-    assertExtension(
-      variant.conveyor.path,
-      [".png"],
-      `skins.${skinId}.art.variants.${variantId}.conveyor.path`,
-    );
     validateRectFits(
       variant.focusRect,
       variant.background,
       `skins.${skinId}.art.variants.${variantId}.focusRect`,
       `skins.${skinId}.art.variants.${variantId}.background`,
     );
+    validatePositionedSizeFits(
+      variant.mainReelBackgroundPositionInFocusRect,
+      skin.art.mainReelBackground,
+      variant.focusRect,
+      variant.background,
+      `skins.${skinId}.art.variants.${variantId}.mainReelBackgroundPositionInFocusRect`,
+      `skins.${skinId}.art.mainReelBackground`,
+      `skins.${skinId}.art.variants.${variantId}.focusRect`,
+      `skins.${skinId}.art.variants.${variantId}.background`,
+    );
+    if (variant.conveyor) {
+      assertExistingFile(rootDir, variant.conveyor.path);
+      assertExtension(
+        variant.conveyor.path,
+        [".png"],
+        `skins.${skinId}.art.variants.${variantId}.conveyor.path`,
+      );
+      validatePositionedSizeFits(
+        variant.conveyor.positionInFocusRect,
+        variant.conveyor,
+        variant.focusRect,
+        variant.background,
+        `skins.${skinId}.art.variants.${variantId}.conveyor.positionInFocusRect`,
+        `skins.${skinId}.art.variants.${variantId}.conveyor`,
+        `skins.${skinId}.art.variants.${variantId}.focusRect`,
+        `skins.${skinId}.art.variants.${variantId}.background`,
+      );
+    }
   }
   assertExistingFile(rootDir, skin.art.mainReelBackground.path);
   assertExtension(
@@ -536,6 +579,30 @@ function validateRectFits(
 ): void {
   if (rect.x + rect.width > size.width || rect.y + rect.height > size.height) {
     throw new Error(`${rectLabel} 必须位于 ${sizeLabel} 范围内。`);
+  }
+}
+
+function validatePositionedSizeFits(
+  positionInFocusRect: GameStaticYamlPoint,
+  size: GameStaticYamlSize,
+  focusRect: GameStaticYamlRect,
+  background: GameStaticYamlSize,
+  positionLabel: string,
+  sizeLabel: string,
+  focusRectLabel: string,
+  backgroundLabel: string,
+): void {
+  const x = focusRect.x + positionInFocusRect.x;
+  const y = focusRect.y + positionInFocusRect.y;
+  if (
+    x < 0 ||
+    y < 0 ||
+    x + size.width > background.width ||
+    y + size.height > background.height
+  ) {
+    throw new Error(
+      `${positionLabel} + ${sizeLabel} 必须经 ${focusRectLabel} 映射后位于 ${backgroundLabel} 范围内。`,
+    );
   }
 }
 
@@ -646,6 +713,13 @@ function assertLoadingKind(value: unknown, label: string): string {
 function assertNonNegativeNumber(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     throw new Error(`${label} 必须是有限非负数。`);
+  }
+  return value;
+}
+
+function assertFiniteNumber(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${label} 必须是有限数值。`);
   }
   return value;
 }

@@ -2,9 +2,11 @@ import type {
   SlotGameStaticArtConfig,
   SlotGameStaticArtVariant,
   SlotGameStaticConfig,
+  SlotGameStaticConveyorConfig,
   SlotGameStaticImageResource,
   SlotGameStaticLiveConfig,
   SlotGameStaticMargin,
+  SlotGameStaticPoint,
   SlotGameStaticReelConfig,
   SlotGameStaticRect,
   SlotGameStaticSkinConfig,
@@ -150,7 +152,6 @@ function assertArtConfig(
   const record = assertRecord(value, label);
   assertKeys(record, label, [
     "mode",
-    "scenePartGap",
     "variants",
     "mainReelBackground",
     "reelWindowInMainReelBackground",
@@ -158,14 +159,21 @@ function assertArtConfig(
   if (record.mode !== "orientation-focus") {
     throw new Error(`${label}.mode must be orientation-focus.`);
   }
-  assertNonNegativeFiniteNumber(record.scenePartGap, `${label}.scenePartGap`);
   const variants = assertRecord(record.variants, `${label}.variants`);
   assertKeys(variants, `${label}.variants`, ["landscape", "portrait"]);
-  assertArtVariant(variants.landscape, `${label}.variants.landscape`);
-  assertArtVariant(variants.portrait, `${label}.variants.portrait`);
   const mainReelBackground = assertImageResource(
     record.mainReelBackground,
     `${label}.mainReelBackground`,
+  );
+  assertArtVariant(
+    variants.landscape,
+    `${label}.variants.landscape`,
+    mainReelBackground,
+  );
+  assertArtVariant(
+    variants.portrait,
+    `${label}.variants.portrait`,
+    mainReelBackground,
   );
   const reelWindow = assertRect(
     record.reelWindowInMainReelBackground,
@@ -182,15 +190,22 @@ function assertArtConfig(
 function assertArtVariant(
   value: unknown,
   label: string,
+  mainReelBackground: SlotGameStaticImageResource,
 ): SlotGameStaticArtVariant {
   const record = assertRecord(value, label);
-  assertKeys(record, label, [
-    "background",
-    "focusRect",
-    "frameFocusRect",
-    "minFocusMargin",
-    "conveyor",
-  ]);
+  assertKeys(
+    record,
+    label,
+    [
+      "background",
+      "focusRect",
+      "frameFocusRect",
+      "minFocusMargin",
+      "mainReelBackgroundPositionInFocusRect",
+      "conveyor",
+    ],
+    { optional: ["minFocusMargin", "conveyor"] },
+  );
   const background = assertImageResource(
     record.background,
     `${label}.background`,
@@ -206,16 +221,46 @@ function assertArtVariant(
   if (record.minFocusMargin !== undefined) {
     assertMargin(record.minFocusMargin, `${label}.minFocusMargin`);
   }
-  assertConveyor(record.conveyor, `${label}.conveyor`);
+  const mainReelBackgroundPositionInFocusRect = assertPoint(
+    record.mainReelBackgroundPositionInFocusRect,
+    `${label}.mainReelBackgroundPositionInFocusRect`,
+  );
+  assertPositionedSizeFits(
+    mainReelBackgroundPositionInFocusRect,
+    mainReelBackground,
+    focusRect,
+    background,
+    `${label}.mainReelBackgroundPositionInFocusRect`,
+    `${label}.mainReelBackground`,
+    `${label}.focusRect`,
+    `${label}.background`,
+  );
+  if (record.conveyor !== undefined) {
+    const conveyor = assertConveyor(record.conveyor, `${label}.conveyor`);
+    assertPositionedSizeFits(
+      conveyor.positionInFocusRect,
+      conveyor,
+      focusRect,
+      background,
+      `${label}.conveyor.positionInFocusRect`,
+      `${label}.conveyor`,
+      `${label}.focusRect`,
+      `${label}.background`,
+    );
+  }
   return record as unknown as SlotGameStaticArtVariant;
 }
 
-function assertConveyor(value: unknown, label: string): void {
+function assertConveyor(
+  value: unknown,
+  label: string,
+): SlotGameStaticConveyorConfig {
   const record = assertRecord(value, label);
-  assertKeys(record, label, ["url", "width", "height", "placement"]);
+  assertKeys(record, label, ["url", "width", "height", "positionInFocusRect"]);
   assertNonEmptyString(record.url, `${label}.url`);
   assertSize(record, label);
-  assertNonEmptyString(record.placement, `${label}.placement`);
+  assertPoint(record.positionInFocusRect, `${label}.positionInFocusRect`);
+  return record as unknown as SlotGameStaticConveyorConfig;
 }
 
 function assertReelConfig(value: unknown): SlotGameStaticReelConfig {
@@ -297,6 +342,14 @@ function assertRect(value: unknown, label: string): SlotGameStaticRect {
   return record as unknown as SlotGameStaticRect;
 }
 
+function assertPoint(value: unknown, label: string): SlotGameStaticPoint {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, ["x", "y"]);
+  assertFiniteNumber(record.x, `${label}.x`);
+  assertFiniteNumber(record.y, `${label}.y`);
+  return record as unknown as SlotGameStaticPoint;
+}
+
 function assertSize(value: unknown, label: string): void {
   const record = assertRecord(value, label);
   assertPositiveFiniteNumber(record.width, `${label}.width`);
@@ -340,6 +393,30 @@ function assertRectFitsSize(
   }
 }
 
+function assertPositionedSizeFits(
+  positionInFocusRect: SlotGameStaticPoint,
+  size: SlotGameStaticImageResource,
+  focusRect: SlotGameStaticRect,
+  background: SlotGameStaticImageResource,
+  positionLabel: string,
+  sizeLabel: string,
+  focusRectLabel: string,
+  backgroundLabel: string,
+): void {
+  const x = focusRect.x + positionInFocusRect.x;
+  const y = focusRect.y + positionInFocusRect.y;
+  if (
+    x < 0 ||
+    y < 0 ||
+    x + size.width > background.width ||
+    y + size.height > background.height
+  ) {
+    throw new Error(
+      `${positionLabel} + ${sizeLabel} must map from ${focusRectLabel} inside ${backgroundLabel}.`,
+    );
+  }
+}
+
 function assertRecord(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`${label} must be an object.`);
@@ -364,8 +441,10 @@ function assertKeys(
   record: Record<string, unknown>,
   label: string,
   allowed: readonly string[],
+  options: { readonly optional?: readonly string[] } = {},
 ): void {
   const allowedSet = new Set(allowed);
+  const optionalSet = new Set(options.optional ?? []);
   for (const key of Object.keys(record)) {
     if (!allowedSet.has(key)) {
       throw new Error(`${label} declares unknown field "${key}".`);
@@ -374,7 +453,7 @@ function assertKeys(
   for (const key of allowed) {
     if (
       !Object.prototype.hasOwnProperty.call(record, key) &&
-      key !== "minFocusMargin"
+      !optionalSet.has(key)
     ) {
       throw new Error(`${label}.${key} is required.`);
     }
@@ -440,6 +519,13 @@ function assertPositiveFiniteNumber(value: unknown, label: string): number {
 function assertNonNegativeFiniteNumber(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     throw new Error(`${label} must be a finite non-negative number.`);
+  }
+  return value;
+}
+
+function assertFiniteNumber(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${label} must be a finite number.`);
   }
   return value;
 }

@@ -40,5 +40,8 @@ CI=true pnpm --filter buildgamestatic dev -- --input apps/game003/config/game-st
 - YAML 未知字段、缺字段、重复 skin、非法 URL、非法数字、非法路径或引用文件不存在都会显式失败。
 - `gameConfig` 只引用已生成的 JSON，不把 Excel、reel 或 paytable 内容复制进 YAML。
 - `symbol-state-textures.manifest.json` 仍是 symbol 集合和 scale 的权威来源。
+- `orientation-focus` art variant 必须声明 `focusRect`、`frameFocusRect` 和 `mainReelBackgroundPositionInFocusRect`；如果声明 `conveyor`，必须使用 `positionInFocusRect`，旧 `placement` 字段会按未知字段失败。
+- `mainReelBackgroundPositionInFocusRect` 和 `conveyor.positionInFocusRect` 是相对 `focusRect` 左上角的偏移，允许负数用于向上或向左微调；映射后的 `rect + size` 必须仍位于背景 art 内。
 - `loading.resources` 如果存在，id 必须唯一，path / glob 必须二选一，weight 必须是有限正数；宽泛 `*.png` loading glob 会显式失败。
 - 生成内容确定性，不包含时间戳、绝对路径、用户名或 token。
+- `game-static.generated.ts` 和 `game-loading.generated.ts` 是生成物；修改 YAML 后必须重新生成并使用 `--check` 校验同步。
