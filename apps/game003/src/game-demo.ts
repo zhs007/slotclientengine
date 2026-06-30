@@ -17,11 +17,8 @@ import type {
   ReelSymbolScaleMap,
   SymbolAssetMap,
 } from "@slotclientengine/rendercore";
-import {
-  GAME003_DISPLAY_SYMBOLS,
-  GAME003_EMPTY_SYMBOLS,
-  GAME003_REQUIRED_STATE_TEXTURES,
-} from "./assets.js";
+import { GAME003_REQUIRED_STATE_TEXTURES } from "./assets.js";
+import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
 import {
   GAME003_REEL_COUNT,
   GAME003_REELS_NAME,
@@ -32,6 +29,7 @@ import {
   type Game003ReelLayerLayout,
 } from "./game-layout.js";
 import { GAME003_SYMBOL_SCALES } from "./symbol-animation-config.js";
+import { getGame003SkinConfig } from "./skin-config.js";
 import {
   assertScenesEqual,
   sceneEquals,
@@ -39,6 +37,7 @@ import {
 } from "./scene.js";
 
 export interface Game003ReelConfig {
+  readonly kind: "normal";
   readonly reelsName: string;
   readonly emptySymbols: readonly string[];
   readonly texturedSymbols: readonly string[];
@@ -52,18 +51,22 @@ export interface Game003ReelConfig {
   readonly stopDelayMs: number;
 }
 
+const GAME003_DEFAULT_SKIN_CONFIG = getGame003SkinConfig("1");
+const GAME003_STATIC_REEL_CONFIG = getGame003StaticNormalReelConfig();
+
 export const DEFAULT_GAME003_REEL_CONFIG: Game003ReelConfig = Object.freeze({
-  reelsName: GAME003_REELS_NAME,
-  emptySymbols: GAME003_EMPTY_SYMBOLS,
-  texturedSymbols: GAME003_DISPLAY_SYMBOLS,
-  missingAssetLabel: "skin 1",
+  kind: "normal",
+  reelsName: GAME003_STATIC_REEL_CONFIG.reelsName,
+  emptySymbols: GAME003_DEFAULT_SKIN_CONFIG.emptySymbols,
+  texturedSymbols: GAME003_DEFAULT_SKIN_CONFIG.displaySymbols,
+  missingAssetLabel: GAME003_DEFAULT_SKIN_CONFIG.label,
   symbolScales: GAME003_SYMBOL_SCALES,
-  direction: "forward",
-  minimumSpinCycles: 8,
-  baseDurationMs: 1300,
-  speedSymbolsPerSecond: 44,
-  startDelayMs: 80,
-  stopDelayMs: 120,
+  direction: GAME003_STATIC_REEL_CONFIG.direction,
+  minimumSpinCycles: GAME003_STATIC_REEL_CONFIG.minimumSpinCycles,
+  baseDurationMs: GAME003_STATIC_REEL_CONFIG.baseDurationMs,
+  speedSymbolsPerSecond: GAME003_STATIC_REEL_CONFIG.speedSymbolsPerSecond,
+  startDelayMs: GAME003_STATIC_REEL_CONFIG.startDelayMs,
+  stopDelayMs: GAME003_STATIC_REEL_CONFIG.stopDelayMs,
 });
 
 export interface Game003ReelRuntimeOptions {
@@ -105,6 +108,9 @@ export function createGame003ReelRuntime(
   options: Game003ReelRuntimeOptions,
 ): Game003ReelRuntime {
   const config = options.config ?? DEFAULT_GAME003_REEL_CONFIG;
+  if (config.kind !== "normal") {
+    throw new Error("game003 first release only supports normal reels.");
+  }
   const gameConfig = createGameConfig(options.rawGameConfig);
   const reels = gameConfig.getReels(config.reelsName);
   if (reels.getReelCount() !== GAME003_REEL_COUNT) {
@@ -307,6 +313,14 @@ export function assertGame003ReelVisualMatchesTarget(
   if (!sceneEquals(snapshot.visibleScene, validTargetScene)) {
     throw new Error(`${label} visible scene does not match target scene.`);
   }
+}
+
+function getGame003StaticNormalReelConfig() {
+  const reel = GAME003_STATIC_CONFIG.reel;
+  if (reel.kind !== "normal") {
+    throw new Error("game003 first release only supports normal reels.");
+  }
+  return reel;
 }
 
 function assertRenderableSceneCodes(

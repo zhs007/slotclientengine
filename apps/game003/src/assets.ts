@@ -37,6 +37,17 @@ type ParsedManifestSymbol = {
   readonly hasExplicitScale: boolean;
 } & Record<string, boolean | number | string>;
 
+export function getGame003DisplaySymbolsFromManifest(
+  stateTextureManifest: unknown,
+  requiredStates: readonly string[] = GAME003_REQUIRED_STATE_TEXTURES,
+): readonly string[] {
+  const manifest = parseStateTextureManifest(
+    stateTextureManifest,
+    requiredStates,
+  );
+  return Object.freeze(Object.keys(manifest.symbols));
+}
+
 export function createGame003SymbolAssetMapFromModules(options: {
   readonly modules: Record<string, string>;
   readonly stateTextureManifest: unknown;

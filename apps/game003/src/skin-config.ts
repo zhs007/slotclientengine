@@ -1,26 +1,15 @@
-import game003StateTextureManifest from "../../../assets/game003-s1/symbol-state-textures.manifest.json";
-import landscapeBackgroundUrl from "../../../assets/game003-s1/bg1.jpg?url";
-import portraitBackgroundUrl from "../../../assets/game003-s1/bg2.jpg?url";
-import mainReelBackgroundUrl from "../../../assets/game003-s1/mainreelbg.png?url";
-import landscapeConveyorUrl from "../../../assets/game003-s1/conveyor1.png?url";
-import portraitConveyorUrl from "../../../assets/game003-s1/conveyor2.png?url";
+import { getSlotGameStaticSkin } from "@slotclientengine/gameframeworks/static-config";
 import type { ReelSymbolScaleMap } from "@slotclientengine/rendercore";
 import {
-  GAME003_DISPLAY_SYMBOLS,
-  GAME003_EMPTY_SYMBOLS,
   createGame003SymbolScaleMapFromManifest,
+  getGame003DisplaySymbolsFromManifest,
 } from "./assets.js";
+import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
 import {
   GAME003_SUPPORTED_SKINS,
   parseGame003SkinId,
   type Game003SkinId,
 } from "./skin-id.js";
-
-const game003S1Modules = import.meta.glob("../../../assets/game003-s1/*.png", {
-  eager: true,
-  import: "default",
-  query: "?url",
-}) as Record<string, string>;
 
 export interface Game003SkinConfig {
   readonly id: Game003SkinId;
@@ -37,24 +26,35 @@ export interface Game003SkinConfig {
   readonly symbolScales: ReelSymbolScaleMap;
 }
 
+const game003StaticSkin1 = getSlotGameStaticSkin(GAME003_STATIC_CONFIG, "1");
+const game003Skin1DisplaySymbols = getGame003DisplaySymbolsFromManifest(
+  game003StaticSkin1.symbols.manifest,
+  game003StaticSkin1.symbols.requiredStates,
+);
+
 const GAME003_SKIN_CONFIGS: Readonly<Record<Game003SkinId, Game003SkinConfig>> =
   Object.freeze({
     "1": Object.freeze({
-      id: "1",
-      label: "skin 1",
-      landscapeBackgroundUrl,
-      portraitBackgroundUrl,
-      mainReelBackgroundUrl,
-      landscapeConveyorUrl,
-      portraitConveyorUrl,
-      symbolModules: game003S1Modules,
-      stateTextureManifest: game003StateTextureManifest,
-      displaySymbols: GAME003_DISPLAY_SYMBOLS,
-      emptySymbols: GAME003_EMPTY_SYMBOLS,
+      id: parseGame003SkinId("1"),
+      label: game003StaticSkin1.label,
+      landscapeBackgroundUrl:
+        game003StaticSkin1.art.variants.landscape.background.url,
+      portraitBackgroundUrl:
+        game003StaticSkin1.art.variants.portrait.background.url,
+      mainReelBackgroundUrl: game003StaticSkin1.art.mainReelBackground.url,
+      landscapeConveyorUrl:
+        game003StaticSkin1.art.variants.landscape.conveyor.url,
+      portraitConveyorUrl:
+        game003StaticSkin1.art.variants.portrait.conveyor.url,
+      symbolModules: game003StaticSkin1.symbols.pngModules,
+      stateTextureManifest: game003StaticSkin1.symbols.manifest,
+      displaySymbols: game003Skin1DisplaySymbols,
+      emptySymbols: game003StaticSkin1.symbols.emptySymbols,
       symbolScales: createGame003SymbolScaleMapFromManifest({
-        stateTextureManifest: game003StateTextureManifest,
-        displaySymbols: GAME003_DISPLAY_SYMBOLS,
-        requireExplicitScale: true,
+        stateTextureManifest: game003StaticSkin1.symbols.manifest,
+        displaySymbols: game003Skin1DisplaySymbols,
+        requiredStates: game003StaticSkin1.symbols.requiredStates,
+        requireExplicitScale: game003StaticSkin1.symbols.requireExplicitScale,
       }),
     }),
   });

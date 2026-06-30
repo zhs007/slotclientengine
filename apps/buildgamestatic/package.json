@@ -1,0 +1,36 @@
+{
+  "name": "buildgamestatic",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Compile editable slot game static YAML into deterministic TypeScript modules.",
+  "type": "module",
+  "packageManager": "pnpm@10.0.0",
+  "bin": {
+    "buildgamestatic": "dist/index.js"
+  },
+  "scripts": {
+    "prepare:deps": "pnpm --filter @slotclientengine/gameframeworks build",
+    "build": "pnpm run prepare:deps && tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "pnpm run prepare:deps && node --loader ts-node/esm src/index.ts",
+    "lint": "eslint .",
+    "test": "vitest run --coverage",
+    "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm lint && pnpm test && pnpm typecheck && pnpm build"
+  },
+  "dependencies": {
+    "@slotclientengine/gameframeworks": "workspace:*",
+    "prettier": "^3.8.1",
+    "yaml": "^2.4.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "^4.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.15.0"
+  }
+}

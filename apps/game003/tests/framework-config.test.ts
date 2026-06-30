@@ -7,8 +7,10 @@ import {
 } from "../src/env.js";
 
 describe("game003 runtime query config", () => {
-  it("parses a complete query string and maps it to framework contracts", () => {
-    expect(parseGame003QueryConfig(validQuery())).toEqual({
+  it("parses runtime query without gamecode and maps fixed static live config", () => {
+    const query = validQuery({}, { includeGamecode: false });
+
+    expect(parseGame003QueryConfig(query)).toEqual({
       skin: "1",
       token: "TOKEN",
       gamecode: GAME003_GAMECODE,
@@ -23,7 +25,7 @@ describe("game003 runtime query config", () => {
       requestTimeoutMs: 30000,
     });
 
-    expect(parseGame003FrameworkConfigFromQuery(validQuery())).toEqual({
+    expect(parseGame003FrameworkConfigFromQuery(query)).toEqual({
       skin: "1",
       live: {
         serverUrl: GAME003_LIVE_SERVER_URL,
@@ -60,14 +62,18 @@ describe("game003 runtime query config", () => {
     );
   });
 
-  it("accepts only skin 1 and the fixed game003 gamecode", () => {
+  it("accepts only skin 1 and rejects mismatched legacy gamecode", () => {
     expect(parseGame003QueryConfig(validQuery({ skin: "1" })).skin).toBe("1");
     for (const skin of ["01", "2", "game003"]) {
       expect(() => parseGame003QueryConfig(validQuery({ skin }))).toThrow(
-        /skin query parameter must be "1"/,
+        /skin query parameter must be one of: 1/,
       );
     }
 
+    expect(
+      parseGame003QueryConfig(validQuery({ gamecode: GAME003_GAMECODE }))
+        .gamecode,
+    ).toBe(GAME003_GAMECODE);
     expect(() =>
       parseGame003QueryConfig(validQuery({ gamecode: "OTHER" })),
     ).toThrow(
@@ -121,7 +127,6 @@ describe("game003 runtime query config", () => {
 
 const REQUIRED_PARAMS = Object.freeze([
   "skin",
-  "gamecode",
   "token",
   "businessid",
   "clienttype",
@@ -134,14 +139,19 @@ const REQUIRED_PARAMS = Object.freeze([
   "requestTimeoutMs",
 ] as const);
 
-function validQuery(overrides: Record<string, string> = {}): string {
-  return `?${validParams(overrides).toString()}`;
+function validQuery(
+  overrides: Record<string, string> = {},
+  options: { readonly includeGamecode?: boolean } = {},
+): string {
+  return `?${validParams(overrides, options).toString()}`;
 }
 
-function validParams(overrides: Record<string, string> = {}): URLSearchParams {
+function validParams(
+  overrides: Record<string, string> = {},
+  options: { readonly includeGamecode?: boolean } = {},
+): URLSearchParams {
   const params = new URLSearchParams({
     skin: "1",
-    gamecode: GAME003_GAMECODE,
     token: "TOKEN",
     businessid: "guest",
     clienttype: "web",
@@ -153,6 +163,9 @@ function validParams(overrides: Record<string, string> = {}): URLSearchParams {
     autonums: "-1",
     requestTimeoutMs: "30000",
   });
+  if (options.includeGamecode !== false) {
+    params.set("gamecode", GAME003_GAMECODE);
+  }
   for (const [key, value] of Object.entries(overrides)) {
     params.set(key, value);
   }

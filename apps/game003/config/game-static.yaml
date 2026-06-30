@@ -1,0 +1,105 @@
+# 配置版本。后续 schema 变化时递增，当前 buildgamestatic 只支持 1。
+schemaVersion: 1
+
+# 游戏静态身份。brandLabel 会显示在框架 UI 上，发布流程可改文案但不改运行时代码。
+gameId: game003
+brandLabel: minecart2
+
+# 固定 live 连接信息。serverUrl 不允许被 URL query 覆盖，gamecode 可由旧链接携带但必须完全一致。
+live:
+  serverUrl: wss://gameserv.rgstest.slammerstudios.com/
+  gamecode: EfedJuHEaydXNghnmO9KI
+  # 旧链接如果继续携带这些参数，初始化必须显式失败。
+  rejectQueryParams:
+    - serverUrl
+
+# 当前第一版只支持 skin=1；新增皮肤时先补这里和下方 skins。
+supportedSkins:
+  - "1"
+
+# 只引用 apps/gengameconfig 已生成的逻辑配置，不在 YAML 里复制 reel / paytable 内容。
+gameConfig: assets/gamecfg003/gameconfig.json
+
+# 主转轮表现参数。kind=normal 表示继续使用 rendercore 普通转轮和本地公开轮带。
+reel:
+  kind: normal
+  reelsName: bg-reel01
+  reelCount: 5
+  visibleRows: 5
+  direction: forward
+  minimumSpinCycles: 8
+  baseDurationMs: 1300
+  speedSymbolsPerSecond: 44
+  startDelayMs: 80
+  stopDelayMs: 120
+
+# 每套皮肤的资源和布局配置。这里适合美术或发布配置人员改静态路径和坐标。
+skins:
+  "1":
+    label: skin 1
+    # symbol 集合和缩放以 manifest 为准，YAML 不维护第二份 scale 表。
+    symbols:
+      manifest: assets/game003-s1/symbol-state-textures.manifest.json
+      pngGlob: assets/game003-s1/*.png
+      emptySymbols: []
+      requireExplicitScale: true
+      requiredStates:
+        - spinBlur
+        - disabled
+    # 横竖屏 art 适配。focusRect 坐标相对于对应完整背景 art。
+    art:
+      mode: orientation-focus
+      scenePartGap: 10
+      variants:
+        landscape:
+          # 横版背景和重点区域。frameFocusRect 给 DOM frame 计算逻辑尺寸上限使用。
+          background:
+            path: assets/game003-s1/bg1.jpg
+            width: 2000
+            height: 2000
+          focusRect:
+            x: 288
+            y: 588
+            width: 1424
+            height: 824
+          frameFocusRect:
+            width: 1424
+            height: 1061
+          conveyor:
+            path: assets/game003-s1/conveyor1.png
+            width: 284
+            height: 775
+            placement: left-bottom-of-main-reel
+        portrait:
+          # 竖版背景和重点区域。minFocusMargin 约束竖版两侧黑边裁切。
+          background:
+            path: assets/game003-s1/bg2.jpg
+            width: 1174
+            height: 2000
+          focusRect:
+            x: 22
+            y: 469.5
+            width: 1130
+            height: 1061
+          frameFocusRect:
+            width: 1130
+            height: 1061
+          minFocusMargin:
+            left: 22
+            right: 22
+          conveyor:
+            path: assets/game003-s1/conveyor2.png
+            width: 934
+            height: 227
+            placement: top-center-of-main-reel
+      # 主转轮框资源和窗口坐标属于 game003 专属布局，不上移到 rendercore。
+      mainReelBackground:
+        path: assets/game003-s1/mainreelbg.png
+        width: 1130
+        height: 824
+      # 主转轮窗口坐标相对于 mainreelbg.png。
+      reelWindowInMainReelBackground:
+        x: 135
+        y: 87
+        width: 860
+        height: 650

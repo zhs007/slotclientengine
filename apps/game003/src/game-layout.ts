@@ -1,3 +1,8 @@
+import {
+  createSlotGameFramePolicyFromStaticConfig,
+  getSlotGameStaticSkin,
+  type SlotGameStaticNormalReelConfig,
+} from "@slotclientengine/gameframeworks/static-config";
 import type { SlotGameFramePolicy } from "@slotclientengine/gameframeworks";
 import {
   calculateResponsiveArtViewport,
@@ -10,19 +15,23 @@ import {
   createReelLayout,
   type ReelLayout,
 } from "@slotclientengine/rendercore/reel";
+import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
 
-export const GAME003_REELS_NAME = "bg-reel01";
-export const GAME003_REEL_COUNT = 5;
-export const GAME003_VISIBLE_ROWS = 5;
+const GAME003_STATIC_SKIN = getSlotGameStaticSkin(GAME003_STATIC_CONFIG, "1");
+const GAME003_STATIC_REEL = getGame003StaticNormalReelConfig();
+
+export const GAME003_REELS_NAME = GAME003_STATIC_REEL.reelsName;
+export const GAME003_REEL_COUNT = GAME003_STATIC_REEL.reelCount;
+export const GAME003_VISIBLE_ROWS = GAME003_STATIC_REEL.visibleRows;
 
 export const GAME003_SKIN1_LANDSCAPE_ART_SIZE = Object.freeze({
-  width: 2000,
-  height: 2000,
+  width: GAME003_STATIC_SKIN.art.variants.landscape.background.width,
+  height: GAME003_STATIC_SKIN.art.variants.landscape.background.height,
 });
 
 export const GAME003_SKIN1_PORTRAIT_ART_SIZE = Object.freeze({
-  width: 1174,
-  height: 2000,
+  width: GAME003_STATIC_SKIN.art.variants.portrait.background.width,
+  height: GAME003_STATIC_SKIN.art.variants.portrait.background.height,
 });
 
 export const GAME003_REFERENCE_SIZE = GAME003_SKIN1_PORTRAIT_ART_SIZE;
@@ -30,18 +39,27 @@ export const GAME003_REFERENCE_SIZE = GAME003_SKIN1_PORTRAIT_ART_SIZE;
 export const GAME003_ASSET_SIZE = Object.freeze({
   landscapeBackground: GAME003_SKIN1_LANDSCAPE_ART_SIZE,
   portraitBackground: GAME003_SKIN1_PORTRAIT_ART_SIZE,
-  mainReelBackground: Object.freeze({ width: 1130, height: 824 }),
-  landscapeConveyor: Object.freeze({ width: 284, height: 775 }),
-  portraitConveyor: Object.freeze({ width: 934, height: 227 }),
+  mainReelBackground: Object.freeze({
+    width: GAME003_STATIC_SKIN.art.mainReelBackground.width,
+    height: GAME003_STATIC_SKIN.art.mainReelBackground.height,
+  }),
+  landscapeConveyor: Object.freeze({
+    width: GAME003_STATIC_SKIN.art.variants.landscape.conveyor.width,
+    height: GAME003_STATIC_SKIN.art.variants.landscape.conveyor.height,
+  }),
+  portraitConveyor: Object.freeze({
+    width: GAME003_STATIC_SKIN.art.variants.portrait.conveyor.width,
+    height: GAME003_STATIC_SKIN.art.variants.portrait.conveyor.height,
+  }),
 });
 
-export const GAME003_SCENE_PART_GAP = 10;
+export const GAME003_SCENE_PART_GAP = GAME003_STATIC_SKIN.art.scenePartGap;
 
 export const GAME003_REEL_WINDOW_IN_MAIN_REEL_BG = Object.freeze({
-  x: 135,
-  y: 87,
-  width: 860,
-  height: 650,
+  x: GAME003_STATIC_SKIN.art.reelWindowInMainReelBackground.x,
+  y: GAME003_STATIC_SKIN.art.reelWindowInMainReelBackground.y,
+  width: GAME003_STATIC_SKIN.art.reelWindowInMainReelBackground.width,
+  height: GAME003_STATIC_SKIN.art.reelWindowInMainReelBackground.height,
 });
 
 export const GAME003_CELL_WIDTH =
@@ -121,32 +139,7 @@ export const GAME003_RESPONSIVE_VARIANTS = Object.freeze({
 });
 
 export function createGame003FramePolicy(): SlotGameFramePolicy {
-  return Object.freeze({
-    mode: "orientation-focus",
-    variants: Object.freeze({
-      landscape: Object.freeze({
-        maxDesignSize: GAME003_SKIN1_LANDSCAPE_ART_SIZE,
-        focusRect: Object.freeze({
-          width: GAME003_SKIN1_LANDSCAPE_SCENE_PARTS.focusRegion.width,
-          height: GAME003_SKIN1_PORTRAIT_SCENE_PARTS.focusRegion.height,
-        }),
-      }),
-      portrait: Object.freeze({
-        maxDesignSize: GAME003_SKIN1_PORTRAIT_ART_SIZE,
-        focusRect: Object.freeze({
-          width: GAME003_SKIN1_PORTRAIT_SCENE_PARTS.focusRegion.width,
-          height: GAME003_SKIN1_PORTRAIT_SCENE_PARTS.focusRegion.height,
-        }),
-        minFocusMargin: Object.freeze({
-          left: GAME003_SKIN1_PORTRAIT_SCENE_PARTS.focusRegion.x,
-          right:
-            GAME003_SKIN1_PORTRAIT_ART_SIZE.width -
-            GAME003_SKIN1_PORTRAIT_SCENE_PARTS.focusRegion.x -
-            GAME003_SKIN1_PORTRAIT_SCENE_PARTS.focusRegion.width,
-        }),
-      }),
-    }),
-  });
+  return createSlotGameFramePolicyFromStaticConfig(GAME003_STATIC_CONFIG, "1");
 }
 
 export function createGame003Layout(
@@ -251,23 +244,13 @@ export function validateGame003ReelWindow(
 }
 
 function createLandscapeSceneParts(): Game003ScenePartLayout {
-  const groupFrame = Object.freeze({
-    x:
-      (GAME003_SKIN1_LANDSCAPE_ART_SIZE.width -
-        GAME003_ASSET_SIZE.landscapeConveyor.width -
-        GAME003_SCENE_PART_GAP -
-        GAME003_ASSET_SIZE.mainReelBackground.width) /
-      2,
-    y:
-      (GAME003_SKIN1_LANDSCAPE_ART_SIZE.height -
-        GAME003_ASSET_SIZE.mainReelBackground.height) /
-      2,
-    width:
-      GAME003_ASSET_SIZE.landscapeConveyor.width +
-      GAME003_SCENE_PART_GAP +
-      GAME003_ASSET_SIZE.mainReelBackground.width,
-    height: GAME003_ASSET_SIZE.mainReelBackground.height,
-  });
+  const variant = GAME003_STATIC_SKIN.art.variants.landscape;
+  assertGame003ConveyorPlacement(
+    variant.conveyor.placement,
+    "left-bottom-of-main-reel",
+    "landscape",
+  );
+  const groupFrame = freezeRect(variant.focusRect);
   const mainReelBackground = Object.freeze({
     x:
       groupFrame.x +
@@ -309,23 +292,13 @@ function createLandscapeSceneParts(): Game003ScenePartLayout {
 }
 
 function createPortraitSceneParts(): Game003ScenePartLayout {
-  const groupFrame = Object.freeze({
-    x:
-      (GAME003_SKIN1_PORTRAIT_ART_SIZE.width -
-        GAME003_ASSET_SIZE.mainReelBackground.width) /
-      2,
-    y:
-      (GAME003_SKIN1_PORTRAIT_ART_SIZE.height -
-        GAME003_ASSET_SIZE.portraitConveyor.height -
-        GAME003_SCENE_PART_GAP -
-        GAME003_ASSET_SIZE.mainReelBackground.height) /
-      2,
-    width: GAME003_ASSET_SIZE.mainReelBackground.width,
-    height:
-      GAME003_ASSET_SIZE.portraitConveyor.height +
-      GAME003_SCENE_PART_GAP +
-      GAME003_ASSET_SIZE.mainReelBackground.height,
-  });
+  const variant = GAME003_STATIC_SKIN.art.variants.portrait;
+  assertGame003ConveyorPlacement(
+    variant.conveyor.placement,
+    "top-center-of-main-reel",
+    "portrait",
+  );
+  const groupFrame = freezeRect(variant.focusRect);
   const conveyor = Object.freeze({
     x:
       groupFrame.x +
@@ -374,6 +347,35 @@ function translateRect(rect: Rect, origin: Rect): Rect {
     width: rect.width,
     height: rect.height,
   });
+}
+
+function freezeRect(rect: Rect): Rect {
+  return Object.freeze({
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+  });
+}
+
+function getGame003StaticNormalReelConfig(): SlotGameStaticNormalReelConfig {
+  const reel = GAME003_STATIC_CONFIG.reel;
+  if (reel.kind !== "normal") {
+    throw new Error("game003 first release only supports normal reels.");
+  }
+  return reel;
+}
+
+function assertGame003ConveyorPlacement(
+  actual: string,
+  expected: string,
+  variant: string,
+): void {
+  if (actual !== expected) {
+    throw new Error(
+      `game003 ${variant} conveyor placement must be ${expected}.`,
+    );
+  }
 }
 
 function validateRect(rect: Rect, label: string): void {

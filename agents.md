@@ -41,6 +41,10 @@
 - `game003` 的 `mainreelbg.png` / `conveyor1.png` / `conveyor2.png` 组合、10px 间隔、横版左侧底部对齐、竖版上方居中和转轮窗口校准属于 `apps/game003` 专属 layout / adapter，不要放进 `rendercore`。
 - `assets/game003-s1` 的可展示 symbol manifest scale 必须显式为 `1`；若美术给到 JPG symbol 普通态，先一次性转成同名 PNG，再生成状态贴图和 manifest，不要扩展共享 symbol 生成器或运行时去支持 JPG 普通态。
 - `game003` 继续遵守本地公开轮带边界：spin 使用 `assets/gamecfg003/gameconfig.json` 内 `bg-reel01` 滚动，服务器目标 scene 只叠加进本轮临时可见窗口；不要读取、缓存或泄露服务器真实轮带。
+- 游戏静态 YAML 只承载美术、配置人员或发布流程可改的静态配置，不承载 token、cookie、服务器真实轮带或玩家本次下注等运行期输入。
+- 游戏静态 YAML 应保留中文注释，说明字段用途、坐标基准和修改边界；注释只给人看，不作为构建逻辑依据。
+- `game-static.generated.ts` 由 `apps/buildgamestatic` 生成，禁止手改；修改 YAML 后必须同步执行生成和 `--check` 校验。
+- `game003` 的 symbol scale 仍以 `assets/game003-s1/symbol-state-textures.manifest.json` 为准，不在 YAML 或 app 内维护第二份 scale 表。
 - `packages/uiframeworks` 拥有页面 DOM frame、canvas 逻辑尺寸上限、黑边居中和 viewport resize 适配；游戏 app 不要直接用 CSS/DOM 私有逻辑绕过 framework 的 frame policy。
 - `packages/vnicore` 拥有 VNI 播放状态机、segmented 高级播放、live 粒子排空、layer group render order 和 group slot 挂接语义；viewer 只能做 UI 配置、输入校验、状态展示和调用，不要在 `apps/anieditorv5viewer` 里复制播放状态机、group adjacency 算法或直接操作 runtime 私有 Pixi container。
 - 更新 `packages/anieditorv5runtime-cc` 的 public runtime 行为时，必须同步模块化源码、`standalone/anieditorv5runtime-cc.ts`、`scripts/check-standalone.mjs`、standalone 测试和 `standalone.zip`，避免 Cocos 主要交付面与 workspace package 漂移。

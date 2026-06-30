@@ -1,5 +1,4 @@
 import { Application, Assets, Container, Sprite, type Texture } from "pixi.js";
-import rawGameConfig from "../../../assets/gamecfg003/gameconfig.json";
 import type {
   GameLogic,
   SlotGameAdapter,
@@ -13,6 +12,7 @@ import {
   createGame003SymbolAssetMapFromModules,
   loadGame003SymbolTextures,
 } from "./assets.js";
+import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
 import {
   GAME003_ASSET_SIZE,
   createGame003Layout,
@@ -114,10 +114,11 @@ class Game003PixiAdapter implements SlotGameAdapter {
       options.createRuntime ??
       ((symbolAssets) =>
         createGame003ReelRuntime({
-          rawGameConfig,
+          rawGameConfig: GAME003_STATIC_CONFIG.gameConfig,
           symbolAssets,
           config: {
             ...DEFAULT_GAME003_REEL_CONFIG,
+            kind: "normal",
             emptySymbols: this.#skin.emptySymbols,
             texturedSymbols: this.#skin.displaySymbols,
             missingAssetLabel: this.#skin.label,

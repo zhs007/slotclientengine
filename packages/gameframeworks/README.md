@@ -116,6 +116,20 @@ helper 只接收 `GameLogic`，不会暴露 raw 协议 wrapper。
 
 游戏需要读取 reel 配置或反查 stop y 时，应从 `@slotclientengine/gameframeworks` 导入这些 facade API，不直接依赖 `@slotclientengine/logiccore`。本包不会重导出 `logiccore/node` 或文件系统 loader。
 
+## 静态配置 Helper
+
+`@slotclientengine/gameframeworks/static-config` 提供浏览器安全的静态配置类型和 helper。这个子路径不解析 YAML、不读取文件系统，也不知道具体游戏的图片名；YAML 到 TS 的编译由 `apps/buildgamestatic` 负责。
+
+常用 API：
+
+- `assertSlotGameStaticConfig(config)`：校验 schema、skin、live server、art variant、frame focus、reel 参数和资源对象形态。
+- `getSlotGameStaticSkin(config, skinId)`：按 skin id 取配置，缺失时显式失败。
+- `parseSlotGameStaticSkinId(config, value)`：按 `supportedSkins` 校验 URL 中的 skin。
+- `assertNoRejectedQueryParams(params, rejectedNames)`：拒绝 `serverUrl` 等静态构建不允许覆盖的 query。
+- `createSlotGameFramePolicyFromStaticConfig(config, skinId)`：从静态配置生成 `orientation-focus` frame policy。
+
+所有 helper 都采用 fail-fast 策略：缺字段、未知字段、非法 URL、非法数字、focus rect 越界、reel window 与 reel 行列不匹配都会抛错，不补默认值或静默忽略。
+
 ## Fail-fast 策略
 
 - live URL 只允许 `ws://` 或 `wss://`。
@@ -147,4 +161,5 @@ pnpm --filter @slotclientengine/gameframeworks lint
 pnpm --filter @slotclientengine/gameframeworks test
 pnpm --filter @slotclientengine/gameframeworks typecheck
 pnpm --filter @slotclientengine/gameframeworks build
+pnpm --filter @slotclientengine/gameframeworks format:check
 ```

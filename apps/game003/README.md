@@ -4,6 +4,8 @@
 
 ## 资源
 
+- 静态配置源：`apps/game003/config/game-static.yaml`
+- 生成配置模块：`apps/game003/src/generated/game-static.generated.ts`
 - 游戏配置：`assets/gamecfg003/gameconfig.json`
 - Excel 输入：`assets/gamecfg003/paytable.xlsx`、`assets/gamecfg003/bg-reel01.xlsx`
 - 视觉资源：`assets/game003-s1`
@@ -29,6 +31,19 @@ CI=true pnpm --filter @slotclientengine/rendercore generate:symbol-state-texture
 
 `symbol-state-textures.manifest.json` 只能包含 `WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC`，每个 symbol 必须显式 `scale: 1`。背景、主转轮框和传送带不是 symbol。
 
+## 静态配置
+
+`config/game-static.yaml` 是 `game003` 可编辑静态配置源，保留中文注释给美术、配置人员和发布流程理解字段用途、坐标基准与修改边界。注释只给人看，构建工具只读取 YAML 数据字段。
+
+`src/generated/game-static.generated.ts` 由 `apps/buildgamestatic` 生成，禁止手改。修改 YAML 后执行：
+
+```bash
+CI=true pnpm --filter game003 generate:static-config
+CI=true pnpm --filter game003 check:static-config
+```
+
+`gameConfig` 字段只引用 `assets/gamecfg003/gameconfig.json`；Excel 到 JSON 仍由 `apps/gengameconfig` 负责。symbol scale 仍由 `assets/game003-s1/symbol-state-textures.manifest.json` 负责，不在 YAML 或 app 内维护第二份 scale 表。
+
 ## 布局边界
 
 横竖屏 art 和 focus region 选择使用 `@slotclientengine/rendercore` 的 `calculateResponsiveArtViewport(...)`：
@@ -50,7 +65,6 @@ DOM frame 使用 `gameframeworks` / `uiframeworks` 的 `orientation-focus` polic
 
 ```text
 skin=1
-gamecode=EfedJuHEaydXNghnmO9KI
 token=<token>
 businessid=<business id>
 clienttype=<client type>
@@ -63,12 +77,12 @@ autonums=-1
 requestTimeoutMs=30000
 ```
 
-live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`，URL 中不支持 `serverUrl` 参数。
+live server 和 gamecode 固定来自 `config/game-static.yaml`。URL 中不支持 `serverUrl` 参数；旧链接继续携带 `gamecode` 时可以省略，若提供则必须等于 `EfedJuHEaydXNghnmO9KI`。
 
 示例：
 
 ```text
-http://127.0.0.1:5208/?skin=1&gamecode=EfedJuHEaydXNghnmO9KI&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=10&times=1&autonums=-1&requestTimeoutMs=30000
+http://127.0.0.1:5208/?skin=1&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=10&times=1&autonums=-1&requestTimeoutMs=30000
 ```
 
 `token` 中如果包含 `+`、`&`、`=` 等字符，调用方必须先使用 `encodeURIComponent()`。如果 URL 中继续携带旧的 `serverUrl` 参数，初始化会显式失败，避免误以为服务器地址仍可由链接覆盖。
@@ -81,6 +95,8 @@ http://127.0.0.1:5208/?skin=1&gamecode=EfedJuHEaydXNghnmO9KI&token=TOKEN&busines
 
 ```bash
 CI=true pnpm --filter game003 lint
+CI=true pnpm --filter game003 generate:static-config
+CI=true pnpm --filter game003 check:static-config
 CI=true pnpm --filter game003 test
 CI=true pnpm --filter game003 typecheck
 CI=true pnpm --filter game003 build
