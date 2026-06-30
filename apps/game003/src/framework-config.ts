@@ -3,11 +3,12 @@ import type {
   SlotGameLiveConfig,
   SlotGameSpinRequest,
 } from "@slotclientengine/gameframeworks";
+import { assertNoRejectedQueryParams } from "@slotclientengine/gameframeworks/static-config";
+import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
 import { parseGame003SkinId, type Game003SkinId } from "./skin-id.js";
 
-export const GAME003_GAMECODE = "EfedJuHEaydXNghnmO9KI";
-export const GAME003_LIVE_SERVER_URL =
-  "wss://gameserv.rgstest.slammerstudios.com/";
+export const GAME003_GAMECODE = GAME003_STATIC_CONFIG.live.gamecode;
+export const GAME003_LIVE_SERVER_URL = GAME003_STATIC_CONFIG.live.serverUrl;
 
 export interface Game003QueryConfig {
   readonly skin: Game003SkinId;
@@ -37,9 +38,13 @@ export function parseGame003QueryConfig(
 ): Game003QueryConfig {
   const params =
     search instanceof URLSearchParams ? search : new URLSearchParams(search);
-  rejectUnsupportedQueryParameter(params, "serverUrl");
+  assertNoRejectedQueryParams(
+    params,
+    GAME003_STATIC_CONFIG.live.rejectQueryParams,
+  );
   const skin = parseGame003SkinId(parseRequiredQueryString(params, "skin"));
-  const gamecode = parseRequiredQueryString(params, "gamecode");
+  const gamecode =
+    parseOptionalQueryString(params, "gamecode") ?? GAME003_GAMECODE;
   if (gamecode !== GAME003_GAMECODE) {
     throw new Error(`gamecode query parameter must be ${GAME003_GAMECODE}.`);
   }
@@ -94,24 +99,24 @@ export function parseGame003FrameworkConfigFromQuery(
   });
 }
 
-function rejectUnsupportedQueryParameter(
-  params: URLSearchParams,
-  name: string,
-): void {
-  if (params.has(name)) {
-    throw new Error(
-      `${name} query parameter is not supported; game003 uses a fixed live server.`,
-    );
-  }
-}
-
 function parseRequiredQueryString(
   params: URLSearchParams,
   name: string,
 ): string {
+  const value = parseOptionalQueryString(params, name);
+  if (value === null) {
+    throw new Error(`${name} query parameter is required.`);
+  }
+  return value;
+}
+
+function parseOptionalQueryString(
+  params: URLSearchParams,
+  name: string,
+): string | null {
   const values = params.getAll(name);
   if (values.length === 0) {
-    throw new Error(`${name} query parameter is required.`);
+    return null;
   }
   if (values.length > 1) {
     throw new Error(

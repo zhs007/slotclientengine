@@ -1,6 +1,7 @@
 import { createSlotGameFramework } from "@slotclientengine/gameframeworks";
 import "@slotclientengine/gameframeworks/styles.css";
 import { createGame003Adapter } from "./game-adapter.js";
+import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
 import {
   GAME003_REFERENCE_SIZE,
   createGame003FramePolicy,
@@ -26,7 +27,7 @@ try {
     initialBetIndex: config.initialBetIndex,
     designSize: GAME003_REFERENCE_SIZE,
     framePolicy: createGame003FramePolicy(),
-    brandLabel: "game003",
+    brandLabel: GAME003_STATIC_CONFIG.brandLabel,
     currency: "USD",
     locale: "en-US",
     formatMoney: formatServerUsdAmount,

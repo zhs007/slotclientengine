@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import rawGameConfig from "../../../assets/gamecfg003/gameconfig.json";
 import { createTextureSet } from "../../../packages/rendercore/tests/reel/helpers.js";
 import type { SymbolAssetMap } from "@slotclientengine/rendercore";
 import {
   GAME003_DEFAULT_SCENE,
   GAME003_SPIN_SCENE,
 } from "./fixtures/game003-gmi.js";
-import { GAME003_DISPLAY_SYMBOLS } from "../src/assets.js";
+import { GAME003_STATIC_CONFIG } from "../src/generated/game-static.generated.js";
 import {
   DEFAULT_GAME003_REEL_CONFIG,
   assertGame003ReelVisualMatchesTarget,
@@ -16,6 +15,9 @@ import {
   GAME003_REEL_COUNT,
   GAME003_VISIBLE_ROWS,
 } from "../src/game-layout.js";
+import { getGame003SkinConfig } from "../src/skin-config.js";
+
+const GAME003_SKIN = getGame003SkinConfig("1");
 
 describe("game003 reel runtime", () => {
   it("locks gamecfg003 reels and symbol codes", () => {
@@ -121,17 +123,30 @@ describe("game003 reel runtime", () => {
 
     expect(() =>
       createGame003ReelRuntime({
-        rawGameConfig,
+        rawGameConfig: GAME003_STATIC_CONFIG.gameConfig,
         symbolAssets: createSymbolTextures(["WL"]),
       }),
     ).toThrow(/missing assets/);
+  });
+
+  it("fails fast if the static reel kind is not the supported normal mode", () => {
+    expect(() =>
+      createGame003ReelRuntime({
+        rawGameConfig: GAME003_STATIC_CONFIG.gameConfig,
+        symbolAssets: createSymbolTextures(GAME003_SKIN.displaySymbols),
+        config: {
+          ...DEFAULT_GAME003_REEL_CONFIG,
+          kind: "grid-cell" as never,
+        },
+      }),
+    ).toThrow(/only supports normal reels/);
   });
 });
 
 function createRuntime(initialScene?: typeof GAME003_DEFAULT_SCENE) {
   return createGame003ReelRuntime({
-    rawGameConfig,
-    symbolAssets: createSymbolTextures(GAME003_DISPLAY_SYMBOLS),
+    rawGameConfig: GAME003_STATIC_CONFIG.gameConfig,
+    symbolAssets: createSymbolTextures(GAME003_SKIN.displaySymbols),
     initialScene,
   });
 }

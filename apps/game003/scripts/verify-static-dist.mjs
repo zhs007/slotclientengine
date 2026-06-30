@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +8,11 @@ const REPO_ROOT = resolve(APP_ROOT, "../..");
 const DIST_ROOT = join(APP_ROOT, "dist");
 const ASSETS_ROOT = join(DIST_ROOT, "assets");
 const INDEX_HTML = join(DIST_ROOT, "index.html");
+const GAME_STATIC_YAML = join(APP_ROOT, "config/game-static.yaml");
+const GENERATED_STATIC_CONFIG = join(
+  APP_ROOT,
+  "src/generated/game-static.generated.ts",
+);
 const SOURCE_MANIFEST = join(
   REPO_ROOT,
   "assets/game003-s1/symbol-state-textures.manifest.json",
@@ -45,6 +51,7 @@ const SENSITIVE_PATTERNS = Object.freeze([
   { label: "placeholder token", value: "SECRET" },
   { label: "README example host", value: "example.test" },
   { label: "old static env access", value: "import.meta.env" },
+  { label: "serverUrl query example", value: "serverUrl=" },
 ]);
 
 const failures = [];
@@ -62,8 +69,11 @@ if (failures.length > 0) {
 
 function verify() {
   assertFile(INDEX_HTML);
+  assertFile(GAME_STATIC_YAML);
+  assertFile(GENERATED_STATIC_CONFIG);
   assertDirectory(ASSETS_ROOT);
   assertFile(SOURCE_MANIFEST);
+  verifyGeneratedStaticConfigSync();
 
   if (existsSync(INDEX_HTML)) {
     verifyIndexHtml(readFileSync(INDEX_HTML, "utf8"));
@@ -77,6 +87,42 @@ function verify() {
   if (existsSync(DIST_ROOT)) {
     verifyNoSensitiveStrings(listFiles(DIST_ROOT));
     verifyNoJpgSymbolRuntimeReferences(listFiles(DIST_ROOT));
+  }
+}
+
+function verifyGeneratedStaticConfigSync() {
+  try {
+    execFileSync(
+      "pnpm",
+      [
+        "--dir",
+        REPO_ROOT,
+        "--filter",
+        "buildgamestatic",
+        "dev",
+        "--",
+        "--input",
+        "apps/game003/config/game-static.yaml",
+        "--out",
+        "apps/game003/src/generated/game-static.generated.ts",
+        "--game",
+        "game003",
+        "--check",
+      ],
+      {
+        cwd: REPO_ROOT,
+        encoding: "utf8",
+        stdio: "pipe",
+      },
+    );
+  } catch (error) {
+    const detail =
+      error instanceof Error && "stderr" in error
+        ? String(error.stderr)
+        : error instanceof Error
+          ? error.message
+          : String(error);
+    failures.push(`generated static config is not in sync: ${detail.trim()}`);
   }
 }
 
