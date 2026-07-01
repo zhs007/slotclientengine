@@ -70,6 +70,14 @@ const pixiMock = vi.hoisted(() => {
       return children[0];
     }
 
+    addChildAt(child: MockContainer, index: number): MockContainer {
+      child.parent?.removeChild(child);
+      child.parent = this;
+      const insertionIndex = Math.max(0, Math.min(index, this.children.length));
+      this.children.splice(insertionIndex, 0, child);
+      return child;
+    }
+
     removeChild(...children: MockContainer[]): MockContainer | undefined {
       for (const child of children) {
         const index = this.children.indexOf(child);
@@ -390,6 +398,14 @@ function createProject(): V5GProjectConfig {
   };
 }
 
+function createStaticProject(): V5GProjectConfig {
+  const project = createProject();
+  for (const layer of project.layers) {
+    layer.animations = [];
+  }
+  return project;
+}
+
 function createThreeGroupProject(): V5GProjectConfig {
   const project = createProject();
   project.layerGroups.push({
@@ -516,13 +532,32 @@ async function createInitializedPlayer(
 
 describe("VNIPlayer", () => {
   it("mounts only runtime content and never renders exported stage background", async () => {
-    const player = await createInitializedPlayer();
+    const player = await createInitializedPlayer({
+      project: createStaticProject(),
+    });
     const internals = player as unknown as {
       stageRoot: InstanceType<typeof pixiMock.MockContainer>;
-      contentRoot: InstanceType<typeof pixiMock.MockContainer>;
+      layerInstances: Map<
+        string,
+        {
+          display: InstanceType<typeof pixiMock.MockContainer>;
+        }
+      >;
+      slotContainersByKey: Map<
+        string,
+        InstanceType<typeof pixiMock.MockContainer>
+      >;
     };
+    const layerA = internals.layerInstances.get("layer-a");
+    const layerB = internals.layerInstances.get("layer-b");
+    const [slotContainer] = [...internals.slotContainersByKey.values()];
 
-    expect(internals.stageRoot.children).toEqual([internals.contentRoot]);
+    expect(internals.stageRoot.parent?.children).toEqual([internals.stageRoot]);
+    expect(internals.stageRoot.children).toEqual([
+      layerA?.display,
+      slotContainer,
+      layerB?.display,
+    ]);
   });
 
   it("destroys only its own display tree and leaves the external Pixi host alive", async () => {
@@ -782,7 +817,7 @@ describe("VNIPlayer", () => {
     player.destroy();
   });
 
-  it("draws particles in per-layer containers and updates diagnostics", async () => {
+  it("draws particles as direct runtime sprites and updates diagnostics", async () => {
     vi.stubGlobal("window", { devicePixelRatio: 1 });
     vi.stubGlobal("ResizeObserver", MockResizeObserver);
     vi.stubGlobal(
@@ -814,47 +849,39 @@ describe("VNIPlayer", () => {
     player.seek(0.8);
 
     const internals = player as unknown as {
-      contentRoot: InstanceType<typeof pixiMock.MockContainer>;
+      stageRoot: InstanceType<typeof pixiMock.MockContainer>;
       layerInstances: Map<
         string,
         {
           display: InstanceType<typeof pixiMock.MockContainer>;
-          safeGlowDisplay: InstanceType<typeof pixiMock.MockContainer>;
-          effectDisplay: InstanceType<typeof pixiMock.MockContainer>;
-          particleDisplay: InstanceType<typeof pixiMock.MockContainer>;
         }
       >;
-      groupContainersById: Map<
+      slotContainersByKey: Map<
         string,
         InstanceType<typeof pixiMock.MockContainer>
+      >;
+      liveParticleSpritesByLayer: Map<
+        string,
+        InstanceType<typeof pixiMock.MockContainer>[]
       >;
     };
     const layerA = internals.layerInstances.get("layer-a");
     const layerB = internals.layerInstances.get("layer-b");
-    const lowerGroup = internals.groupContainersById.get("lower");
-    const defaultGroup = internals.groupContainersById.get("group_default");
+    const [slotContainer] = [...internals.slotContainersByKey.values()];
+    const layerAParticles =
+      internals.liveParticleSpritesByLayer.get("layer-a") ?? [];
 
     expect(layerA).toBeDefined();
     expect(layerB).toBeDefined();
-    expect(lowerGroup).toBeDefined();
-    expect(defaultGroup).toBeDefined();
-    expect(internals.contentRoot.children).toHaveLength(3);
-    expect(internals.contentRoot.children[0]).toBe(lowerGroup);
-    expect(internals.contentRoot.children[2]).toBe(defaultGroup);
-    expect(lowerGroup?.children).toEqual([
+    expect(slotContainer).toBeDefined();
+    expect(internals.stageRoot.children).toEqual([
       layerA?.display,
-      layerA?.safeGlowDisplay,
-      layerA?.effectDisplay,
-      layerA?.particleDisplay,
-    ]);
-    expect(defaultGroup?.children).toEqual([
+      ...layerAParticles,
+      slotContainer,
       layerB?.display,
-      layerB?.safeGlowDisplay,
-      layerB?.effectDisplay,
-      layerB?.particleDisplay,
     ]);
     expect(layerA?.display.visible).toBe(false);
-    expect(layerA?.particleDisplay.children.length).toBeGreaterThan(0);
+    expect(layerAParticles.length).toBeGreaterThan(0);
     expect(Number(container.dataset.v5gParticleSprites)).toBeGreaterThan(0);
 
     player.destroy();
@@ -992,9 +1019,12 @@ describe("VNIPlayer", () => {
       node: node as unknown as PixiContainer,
     });
     const internals = player as unknown as {
-      contentRoot: InstanceType<typeof pixiMock.MockContainer>;
+      slotContainersByKey: Map<
+        string,
+        InstanceType<typeof pixiMock.MockContainer>
+      >;
     };
-    const slotContainer = internals.contentRoot.children[1];
+    const [slotContainer] = [...internals.slotContainersByKey.values()];
 
     expect(slotContainer.children).toEqual([node]);
     expect(container.dataset.vniMountedNodes).toBe("1");
@@ -1046,29 +1076,53 @@ describe("VNIPlayer", () => {
       project: createRenderEffectProject(),
     });
     const internals = player as unknown as {
+      stageRoot: InstanceType<typeof pixiMock.MockContainer>;
       layerInstances: Map<
         string,
         {
           display: InstanceType<typeof pixiMock.MockContainer>;
-          effectDisplay: InstanceType<typeof pixiMock.MockContainer>;
         }
+      >;
+      slotContainersByKey: Map<
+        string,
+        InstanceType<typeof pixiMock.MockContainer>
+      >;
+      renderEffectDisplaysByLayer: Map<
+        string,
+        InstanceType<typeof pixiMock.MockContainer>[]
       >;
     };
     const layerA = internals.layerInstances.get("layer-a");
     const layerB = internals.layerInstances.get("layer-b");
+    const [slotContainer] = [...internals.slotContainersByKey.values()];
     if (!layerA || !layerB) throw new Error("Missing test layers.");
 
     player.seek(0.5);
 
+    const layerAEffects =
+      internals.renderEffectDisplaysByLayer.get("layer-a") ?? [];
+    const layerBEffects =
+      internals.renderEffectDisplaysByLayer.get("layer-b") ?? [];
     expect(layerA.display.visible).toBe(false);
-    expect(layerA.effectDisplay.children.length).toBeGreaterThan(0);
+    expect(layerAEffects.length).toBeGreaterThan(0);
     expect(layerB.display.visible).toBe(false);
-    expect(layerB.effectDisplay.children.length).toBeGreaterThan(0);
+    expect(layerBEffects.length).toBeGreaterThan(0);
+    expect(internals.stageRoot.children).toEqual([
+      layerA.display,
+      ...layerAEffects,
+      slotContainer,
+      layerB.display,
+      ...layerBEffects,
+    ]);
 
     player.seek(0);
 
-    expect(layerA.effectDisplay.children).toEqual([]);
-    expect(layerB.effectDisplay.children).toEqual([]);
+    expect(internals.renderEffectDisplaysByLayer.get("layer-a") ?? []).toEqual(
+      [],
+    );
+    expect(internals.renderEffectDisplaysByLayer.get("layer-b") ?? []).toEqual(
+      [],
+    );
   });
 
   it("renders safe glow as an independent inherited-blend overlay", async () => {
@@ -1100,22 +1154,27 @@ describe("VNIPlayer", () => {
     });
     await player.init();
     const internals = player as unknown as {
+      stageRoot: InstanceType<typeof pixiMock.MockContainer>;
       layerInstances: Map<
         string,
         {
           display: InstanceType<typeof pixiMock.MockContainer>;
-          safeGlowDisplay: InstanceType<typeof pixiMock.MockContainer>;
-          effectDisplay: InstanceType<typeof pixiMock.MockContainer>;
         }
+      >;
+      safeGlowSpritesByLayer: Map<
+        string,
+        InstanceType<typeof pixiMock.MockContainer>[]
       >;
     };
     const layerA = internals.layerInstances.get("layer-a");
     if (!layerA) throw new Error("Missing layer-a instance.");
+    const safeGlowSprites =
+      internals.safeGlowSpritesByLayer.get("layer-a") ?? [];
 
     expect(layerA.display.visible).toBe(false);
-    expect(layerA.safeGlowDisplay.children).toHaveLength(1);
-    expect(layerA.effectDisplay.children).toHaveLength(0);
-    expect(layerA.safeGlowDisplay.children[0].blendMode).toBe("add");
+    expect(safeGlowSprites).toHaveLength(1);
+    expect(internals.stageRoot.children).toContain(safeGlowSprites[0]);
+    expect(safeGlowSprites[0].blendMode).toBe("add");
     expect(container.dataset.vniSafeGlowSprites).toBe("1");
     expect(container.dataset.vniRenderEffectSprites).toBe("0");
 
@@ -1174,9 +1233,12 @@ describe("VNIPlayer", () => {
       blendMode: "add",
     });
     const internals = player as unknown as {
-      contentRoot: InstanceType<typeof pixiMock.MockContainer>;
+      slotContainersByKey: Map<
+        string,
+        InstanceType<typeof pixiMock.MockContainer>
+      >;
     };
-    const slotContainer = internals.contentRoot.children[1];
+    const [slotContainer] = [...internals.slotContainersByKey.values()];
     const sprite = slotContainer.children[0];
 
     expect(sprite.position).toMatchObject({ x: 25, y: 35 });
@@ -1213,9 +1275,12 @@ describe("VNIPlayer", () => {
       opacity: 0.8,
     });
     const internals = player as unknown as {
-      contentRoot: InstanceType<typeof pixiMock.MockContainer>;
+      slotContainersByKey: Map<
+        string,
+        InstanceType<typeof pixiMock.MockContainer>
+      >;
     };
-    const slotContainer = internals.contentRoot.children[1];
+    const [slotContainer] = [...internals.slotContainersByKey.values()];
     const sprite = slotContainer.children[0];
 
     expect(sprite.label).toBe("VNI mounted external image assets/external.png");
@@ -1704,16 +1769,14 @@ describe("VNIPlayer", () => {
     });
     expect(player.getPlaybackState().liveParticleCount).toBeGreaterThan(0);
     const internals = player as unknown as {
-      layerInstances: Map<
+      liveParticleSpritesByLayer: Map<
         string,
-        {
-          particleDisplay: InstanceType<typeof pixiMock.MockContainer>;
-        }
+        InstanceType<typeof pixiMock.MockContainer>[]
       >;
     };
-    const layerA = internals.layerInstances.get("layer-a");
-    if (!layerA) throw new Error("Missing layer-a instance.");
-    const firstHoldParticles = layerA.particleDisplay.children.map((child) => ({
+    const firstHoldParticles = (
+      internals.liveParticleSpritesByLayer.get("layer-a") ?? []
+    ).map((child) => ({
       x: child.position.x,
       y: child.position.y,
       alpha: child.alpha,
@@ -1725,16 +1788,16 @@ describe("VNIPlayer", () => {
     player.update(0.5);
     expect(player.getTime()).toBe(0.5);
     expect(player.getPlaybackState().phase).toBe("loop");
-    const secondHoldParticles = layerA.particleDisplay.children.map(
-      (child) => ({
-        x: child.position.x,
-        y: child.position.y,
-        alpha: child.alpha,
-        rotation: child.rotation,
-        scaleX: child.scale.x,
-        scaleY: child.scale.y,
-      }),
-    );
+    const secondHoldParticles = (
+      internals.liveParticleSpritesByLayer.get("layer-a") ?? []
+    ).map((child) => ({
+      x: child.position.x,
+      y: child.position.y,
+      alpha: child.alpha,
+      rotation: child.rotation,
+      scaleX: child.scale.x,
+      scaleY: child.scale.y,
+    }));
     expect(secondHoldParticles.length).toBeGreaterThan(0);
     expect(secondHoldParticles).not.toEqual(firstHoldParticles);
 

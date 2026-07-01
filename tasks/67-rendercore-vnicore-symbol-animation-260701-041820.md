@@ -8,8 +8,8 @@ UTC 时间：`260701-041820`
 
 - `packages/rendercore` 已新增共享 symbol manifest parser、manifest 驱动的 VNI symbol animation resource 解析和 VNI-backed `SymbolAni`。
 - `packages/vnicore` 已支持 `autoTick: false` 和 `fitPadding`，供 rendercore 用游戏 ticker 手动推进 VNI player。
-- `apps/symbolsviewer` 已新增 `game003-s1` symbol set，可通过同一套 rendercore manifest/VNI resolver 预览 `L1.win` VNI 动画。
-- `apps/game003` 已通过 manifest、YAML VNI glob 和生成配置接入 `assets/game003-s1/L1-wins.json`，中奖流程仍只请求可见 symbol 进入 `win` 状态，不在 app 业务播放代码里硬编码 VNI。
+- `apps/symbolsviewer` 已新增 `game003-s1` symbol set，可通过同一套 rendercore manifest/VNI resolver 预览 `L1.win` 到 `L5.win` VNI 动画。
+- `apps/game003` 已通过 manifest、YAML VNI glob 和生成配置接入 `assets/game003-s1/L1-wins.json` 到 `assets/game003-s1/L5-wins.json`，中奖流程仍只请求可见 symbol 进入 `win` 状态，不在 app 业务播放代码里硬编码 VNI。
 - `game-static.generated.ts` 和 `game-loading.generated.ts` 已由 `apps/buildgamestatic` 重新生成并通过 `--check`。
 - `agents.md`、相关 README 和本报告已同步。
 
@@ -25,10 +25,10 @@ UTC 时间：`260701-041820`
   - 提供 `createSymbolAssetMapFromManifestModules`、`createSymbolScaleMapFromManifest`、`getSymbolDisplaySymbolsFromManifest`、`createSymbolVniAnimationResourcesFromManifest`。
   - 对未知字段、未知 state、缺 asset、非法 scale、非法 VNI project、非法 `stageRect`、缺 VNI asset 显式失败。
 - 新增 `packages/rendercore/src/symbol/vni-animation.ts`：
-  - 用 `@slotclientengine/vnicore/pixi` 的 `VNIPlayer` 渲染隐藏 canvas。
-  - 以 manifest `stageRect` 裁剪成 Pixi overlay texture。
+  - 用 `@slotclientengine/vnicore/pixi` 的 `VNIPlayer` 直接把 VNI Pixi display tree 挂到 symbol `overlayLayer`。
+  - runtime 不创建隐藏 canvas、canvas-to-texture、额外 renderer、`stageRect` viewport 或 mask。
   - 由 `RenderSymbol.update(deltaSeconds)` 手动推进，避免 RAF 和游戏 ticker 双推进。
-  - `destroy()` 释放 player、隐藏 DOM container、overlay sprite。
+  - `destroy()` 释放 player 和已挂载的 Pixi 节点。
 - `SymbolAni` 增加 optional `destroy()`；`RenderSymbol` 在状态切换和销毁时释放旧动画。
 - `generate-symbol-state-textures.mjs` 重新生成 manifest 时保留仍有效的 `animations`，避免重生成状态贴图丢失 VNI 配置。
 - `packages/rendercore/package.json` 新增 `@slotclientengine/vnicore: workspace:*`，`pnpm-lock.yaml` 相应增加 workspace link。
@@ -43,18 +43,18 @@ UTC 时间：`260701-041820`
 
 ### 2.3 game003
 
-- `assets/game003-s1/symbol-state-textures.manifest.json` 中新增 `L1.animations.win`：
-  - `kind: "vni"`
-  - `project: "./L1-wins.json"`
-  - `stageRect: { x: 744, y: 744, width: 512, height: 512 }`
-  - `playback: { mode: "range", startTime: 0, endTime: 2, loop: false }`
+- `assets/game003-s1/symbol-state-textures.manifest.json` 中新增并维护 `L1` 到 `L5` 的 animation metadata：
+  - `L1.appear` 到 `L5.appear` 为 `kind: "static"`，直接保持普通态。
+  - `L1.win` 到 `L5.win` 为 `kind: "vni"`，分别指向 `./L*-wins.json`。
+  - 其它可展示 symbol 的 `appear` / `win` 为 `kind: "builtin"`，秒数由 manifest `durationSeconds` 声明。
+  - runtime 不声明、不读取 `stageRect`。
 - `apps/game003/config/game-static.yaml` 新增 VNI project/assets loading 资源和 `symbols.vniProjectGlob` / `symbols.vniAssetGlob`。
 - 生成物新增 VNI modules：
   - `apps/game003/src/generated/game-static.generated.ts`
   - `apps/game003/src/generated/game-loading.generated.ts`
 - `apps/game003/src/assets.ts` 改为复用 rendercore manifest helper，不再保留 app-local parser。
 - `apps/game003/src/skin-config.ts` 通过 manifest resolver 构建 symbol animation resolver。
-- `game-adapter.ts` / `game-demo.ts` 仅接收 resolver，不写 `L1-wins`、`stageRect` 或 VNI 播放细节。
+- `game-adapter.ts` / `game-demo.ts` 仅接收 resolver，不写 `L1-wins`、VNI 播放细节或 animation duration。
 
 ### 2.4 symbolsviewer
 
@@ -286,7 +286,7 @@ CI=true pnpm --filter anieditorv5viewer dev -- --host 127.0.0.1 --port 5175 --st
 - `VNIPlayer` 不再创建 `PIXI.Application`、renderer、canvas、`ResizeObserver` 或 pixel diagnostics；宿主如需 DOM diagnostics，显式传 `diagnosticsElement`。
 - `VNIPlayer` 新增 `getDisplayObject()`、`setViewportSize(width, height)`、`viewport` 和 `requestRender` 选项，供 viewer 适配外部 canvas 和手动 render。
 - `apps/anieditorv5viewer` 现在自己创建 Pixi `Application` / canvas，把 `app.stage` 传给 `VNIPlayer`；animation viewer 也保持透明，不显示 JSON `stage.backgroundColor`。
-- `packages/rendercore` 的 VNI symbol animation 直接把 `VNIPlayer` display tree 挂到 symbol 的 `overlayLayer` 中；rendercore 只创建带 mask 的 Pixi viewport，并按 `stageRect` 中心对齐 VNI root，不再创建隐藏 DOM、隐藏 canvas、canvas texture 或额外 renderer。
+- `packages/rendercore` 的 VNI symbol animation 直接把 `VNIPlayer` display tree 挂到 symbol 的 `overlayLayer` 中；rendercore 不再创建隐藏 DOM、隐藏 canvas、canvas texture、额外 renderer、`stageRect` viewport 或 mask。
 - `game003` / `symbolsviewer` 通过 rendercore 走同一条 Pixi tree 直挂路径。
 - 继续保持美术资源不变：未修改 `assets/game003-s1/L1-wins.json`、`assets/game003-s1/assets/*`、`assets/game003-s1/symbol-state-textures.manifest.json`，也未强改 `L1` blendMode。
 - `VNIPlayer` 是 runtime-only，已彻底移除 stage background 绘制开关；runtime 和 animation viewer 均不绘制 stage background。
@@ -458,17 +458,17 @@ rg -n "renderStageBackground|stageBackground|drawStageBackground|display\\.blend
 
 用户继续指出：基础 image layer 已经是确定图片，不应该还有无意义的 `Container -> Sprite` 包装。第 11 节的 child blendMode 修正虽然把 blendMode 落到了 renderable child，但仍保留了不必要的 base layer transform container，因此本节继续收敛到更简单的 Pixi 节点树。
 
-最终节点树：
+本节最终节点树：
 
 ```text
 VNIPlayer parent
 └─ stageRoot Container
-   └─ contentRoot Container
-      └─ VNI group <groupId> Container
-         ├─ base layer Sprite/Text
-         ├─ safeGlowDisplay Container
-         ├─ effectDisplay Container
-         └─ particleDisplay Container
+   ├─ base layer Sprite/Text
+   ├─ safe glow Sprite(s), only while active
+   ├─ render effect Sprite(s) / shatter piece Container(s), only while active
+   ├─ particle Sprite(s), only while live
+   ├─ VNI slot Container, only between adjacent layer groups that may host nodes
+   └─ next base layer Sprite/Text
 ```
 
 说明：
@@ -478,8 +478,13 @@ VNIPlayer parent
 - `blendMode` 直接写到 base `Sprite/Text` 本体：`instance.display.blendMode = toPixiBlendMode(sampled.blendMode)`。
 - 删除第 11 节中临时的 `Container -> Sprite` child blendMode 落点方案；运行代码中不再有 `applyBlendModeToLayerRenderables(...)`。
 - 原先 child sprite 上的 asset display compensation 迁移为 `displayScaleCompensation`，在采样时乘到 `instance.display.scale` 上，保持视觉尺寸不变。
-- `safeGlowDisplay`、`effectDisplay`、`particleDisplay` 仍保留为 Container，因为这些路径每帧可能生成多个动态 Sprite 或 mask piece，不是单一确定图片。
-- `stageRoot`、`contentRoot`、`groupContainer`、`slotContainer` 仍保留为有语义的结构节点：分别负责外部挂载、stage viewport 适配、layer group 顺序和 group slot 插入。
+- `safeGlowDisplay`、`effectDisplay`、`particleDisplay` 不再存在；safe glow、render effect、particle 的运行期对象由 `VNIPlayer` 内部 Map 持有引用，直接挂到与 base layer 相同的父节点。
+- safe glow 是同图副本 Sprite，直接挂载；不需要单独 Container。
+- render effect 的 glow 分支是直接 Sprite；shatter 分支的单个碎片仍可使用 `piece Container` 承载 `sprite + mask`，这是碎片自身的必要显示对象，不是每层 wrapper。
+- particle 直接复用并挂载 Sprite，清理靠 `liveParticleSpritesByLayer` 的引用数组，不再为了“一次性移除”额外加 Container。
+- `contentRoot`、`groupContainer` 已删除；layer group 顺序由 `stageRoot.children` 的线性顺序表达。
+- `slotContainer` 仅在相邻 layer group 之间存在，用于 `rendercore` / 游戏 runtime 在两个 group 中间挂接节点；没有 group slot 的动画不会因此多出容器。
+- `stageRoot` 仍保留，因为它承担整个 VNI display tree 的 viewport fit、pivot、scale 和从宿主 parent 移除/销毁的生命周期边界。
 
 本次追加验收命令均通过：
 
@@ -600,3 +605,204 @@ rg -n "additiveMatte|deriveAdditiveMatteTexture|shouldDeriveAdditiveMatteTexture
 ```
 
 结果：没有恢复 `VNIPlayer` 自己的 `PIXI.Application` / canvas / stage background；旧的 `applyBlendModeToLayerRenderables` helper 仍不存在。`stage.backgroundColor` 只在 schema validation 中作为导出元数据保留。additive matte 入口只存在于 `packages/vnicore/src/pixi/additive-matte-texture.ts`、`VNIPlayer.loadTexture(...)` 和对应单测。
+
+## 14. 260701-152700 VNI runtime 节点树继续简化
+
+用户继续追问 `safeGlowDisplay` / `effectDisplay` / `particleDisplay` 是否真的需要单独 `Container`，并明确要求游戏 runtime 不要为了管理方便引入复杂节点树。
+
+本次结论：
+
+- `safeGlowDisplay` 不需要。safe glow 是同图副本 Sprite，可以直接挂到 base layer Sprite 后面。
+- `effectDisplay` 不需要。render effect 的 glow 分支是直接 Sprite；shatter 分支只有单个碎片因 mask 需要 `piece Container(sprite + mask)`，这是碎片自身的显示对象，不是每层 wrapper。
+- `particleDisplay` 不需要。粒子 Sprite 由 `liveParticleSpritesByLayer` 持有引用并直接挂载；清理和复用靠数组引用，不靠“一层容器一次性移除”。
+- `contentRoot` / `groupContainer` 不需要。layer group 的渲染顺序由 `stageRoot.children` 线性表达。
+- 仍保留 `stageRoot`：用于 VNI 整体 pivot/scale/viewport fit 和生命周期移除。
+- 仍保留 `slotContainer`：只在相邻 layer group 之间需要给宿主挂节点时存在；单 group 动画不会额外生成 group wrapper。
+
+当前普通 VNI 动画树形态：
+
+```text
+host Pixi parent
+└─ stageRoot Container
+   ├─ base layer Sprite/Text
+   ├─ safe glow Sprite(s), only while active
+   ├─ render effect Sprite(s) or shatter piece Container(s), only while active
+   ├─ particle Sprite(s), only while live
+   ├─ optional slot Container, only between adjacent layer groups
+   └─ next base layer Sprite/Text
+```
+
+同步修正：
+
+- `packages/vnicore/src/pixi/layer-instance.ts` 的 layer instance 不再保存 `safeGlowDisplay` / `effectDisplay` / `particleDisplay`。
+- `packages/vnicore/src/pixi/vni-player.ts` 改为用 `safeGlowSpritesByLayer`、`renderEffectDisplaysByLayer`、`liveParticleSpritesByLayer` 追踪运行期对象，并用 direct child 顺序插入保持 `base -> safe glow -> render effect -> particle`。
+- `packages/vnicore/tests/pixi/vni-player.test.ts` 增加 direct children 顺序断言，避免 wrapper 回归。
+- `apps/symbolsviewer/src/symbol-set-config.ts` 显式纳入 `assets/game003-s1/L1-wins.json` 到 `assets/game003-s1/L5-wins.json`，防止 symbolsviewer 的 VNI project modules 漏掉 manifest 中声明的项目。
+- `assets/game003-s1/symbol-state-textures.manifest.json` 将 `L1.win` 到 `L5.win` 都声明为 VNI；runtime 不再读取或声明 `stageRect`，每个 VNI project 自己的 300x300 stage 决定动画内部坐标。
+- `apps/game003` / `apps/symbolsviewer` 相关测试从旧的 `l1_asset` 期待改为真实 VNI project 引用的 `j1_asset`。
+
+本节追加非浏览器验收：
+
+```bash
+CI=true pnpm --filter @slotclientengine/vnicore test
+CI=true pnpm --filter @slotclientengine/vnicore typecheck
+CI=true pnpm --filter @slotclientengine/vnicore build
+CI=true pnpm --filter @slotclientengine/vnicore lint
+CI=true pnpm --filter @slotclientengine/vnicore format:check
+CI=true pnpm --filter @slotclientengine/rendercore test
+CI=true pnpm --filter @slotclientengine/rendercore typecheck
+CI=true pnpm --filter @slotclientengine/rendercore build
+CI=true pnpm --filter @slotclientengine/rendercore lint
+CI=true pnpm --filter @slotclientengine/rendercore format:check
+CI=true pnpm --filter anieditorv5viewer test
+CI=true pnpm --filter anieditorv5viewer typecheck
+CI=true pnpm --filter anieditorv5viewer build
+CI=true pnpm --filter anieditorv5viewer lint
+CI=true pnpm --filter anieditorv5viewer format:check
+CI=true pnpm --filter game003 test
+CI=true pnpm --filter game003 typecheck
+CI=true pnpm --filter game003 release:check
+CI=true pnpm --filter game003 lint
+CI=true pnpm --filter game003 format:check
+CI=true pnpm --filter symbolsviewer test
+CI=true pnpm --filter symbolsviewer typecheck
+CI=true pnpm --filter symbolsviewer build
+CI=true pnpm --filter symbolsviewer lint
+CI=true pnpm --filter symbolsviewer format:check
+```
+
+说明：浏览器视觉验收按用户要求不在本节代验，仍交由用户在 anieditorv5viewer / symbolsviewer / game003 中确认。
+
+## 15. 260701-154500 game003 L1-L5 win VNI 更新与 appear 静态化
+
+用户更新了 `assets/game003-s1` 下的 L1-L5 win 动画，并明确要求 L1-L5 的出现动画全部删除，直接保持普通状态静态图。
+
+本次同步：
+
+- `assets/game003-s1/symbol-state-textures.manifest.json` 已将 `L1.win` 到 `L5.win` 都指向对应的 `./L*-wins.json` VNI project。
+- L1-L5 的 VNI `playback` 统一为 `startTime: 0`、`endTime: 1`、`loop: false`；runtime 不再读取或声明 `stageRect`。
+- `assets/game003-s1/symbol-state-textures.manifest.json` 对 `L1.appear` 到 `L5.appear` 声明 `kind: "static"`，只 reset 普通图显示，不执行默认 appear 放大动画。
+- `apps/game003/src/skin-config.ts` 和 `apps/symbolsviewer/src/symbol-set-config.ts` 都只接入 `createSymbolManifestAnimationResolver(...)`；`game003-s1` 的 L1-L5 appear 静态、win VNI 都来自 manifest，不再在 app/viewer 里特判 symbol。
+- `apps/anieditorv5viewer` 已注册 `game003-l1-wins` 到 `game003-l5-wins`，都直接引用 `assets/game003-s1` 原始 JSON 和 asset pool，不复制 fixture。
+- `apps/game003/scripts/verify-static-dist.mjs` 改为按源 PNG 内容哈希验证 symbol 资源已进入 dist，避免 Vite 对 L1-L4 普通图和 VNI 内部同图 asset 去重后被旧文件名断言误判。
+
+本轮脚本复核：
+
+```text
+L1 L1 300 300 1 assets/j1_asset_image_mr1qgfc2_r.png 1
+L2 L2 300 300 1 assets/k_asset_image_mr1qedmv_m.png 1
+L3 L3 300 300 1 assets/q_asset_image_mr1qdnbi_h.png 1
+L4 L4 300 300 1 assets/j_asset_image_mr1qc29b_c.png 1
+L5 L5 300 300 1 assets/10_asset_image_mr1pfdqf_7.png 1
+```
+
+本轮非浏览器验收均已通过：
+
+```bash
+CI=true pnpm --filter game003 test
+CI=true pnpm --filter game003 typecheck
+CI=true pnpm --filter game003 release:check
+CI=true pnpm --filter game003 lint
+CI=true pnpm --filter game003 format:check
+CI=true pnpm --filter symbolsviewer test
+CI=true pnpm --filter symbolsviewer typecheck
+CI=true pnpm --filter symbolsviewer build
+CI=true pnpm --filter symbolsviewer lint
+CI=true pnpm --filter symbolsviewer format:check
+CI=true pnpm --filter @slotclientengine/vnicore test
+CI=true pnpm --filter @slotclientengine/vnicore typecheck
+CI=true pnpm --filter @slotclientengine/vnicore build
+CI=true pnpm --filter @slotclientengine/vnicore lint
+CI=true pnpm --filter @slotclientengine/vnicore format:check
+CI=true pnpm --filter @slotclientengine/rendercore test
+CI=true pnpm --filter @slotclientengine/rendercore typecheck
+CI=true pnpm --filter @slotclientengine/rendercore build
+CI=true pnpm --filter @slotclientengine/rendercore lint
+CI=true pnpm --filter @slotclientengine/rendercore format:check
+CI=true pnpm --filter anieditorv5viewer test
+CI=true pnpm --filter anieditorv5viewer typecheck
+CI=true pnpm --filter anieditorv5viewer build
+CI=true pnpm --filter anieditorv5viewer lint
+CI=true pnpm --filter anieditorv5viewer format:check
+```
+
+补充 grep / 脚本验收：
+
+```bash
+rg -n "safeGlowDisplay|effectDisplay|particleDisplay|contentRoot|groupContainersById|new PIXI\\.Application|renderStageBackground|drawStageBackground" packages/vnicore/src packages/vnicore/tests packages/rendercore/src
+rg -n "l1_asset|game003S1L1Wins|endTime\\\": 2" apps/game003 apps/symbolsviewer apps/anieditorv5viewer assets/game003-s1 --glob '!dist/**'
+node --input-type=module -e '... assertVNIProject for L1-L5 ...'
+node --input-type=module -e '... assert manifest L1-L5 win VNI playback ...'
+```
+
+结果：VNI runtime wrapper container 名称未回归；`new PIXI.Application` 和 stage background 渲染入口未回到 `packages/vnicore`；旧 `l1_asset` 和旧 `endTime: 2` 未出现在当前 app/viewer/assets 代码中。`game003S1L1WinsProject` 仅作为 symbolsviewer 显式导入 `L1-wins.json` 的变量名存在，L2-L5 同样有显式导入。
+
+说明：浏览器视觉验收仍按用户要求交由用户在 anieditorv5viewer / symbolsviewer / game003 中执行。
+
+## 16. 260701-161500 默认动画收口与 symbolsviewer 范围收窄
+
+用户进一步确认：`rendercore` 不应存在默认的 `win` / `appear` 动画；`appear` 作为 once 动画可以存在，但动画长度不能写在 `rendercore` 默认逻辑里，只能由每个 symbol manifest 显式声明。同时本轮先专注 `game003` 和 `symbolsviewer`，`symbolsviewer` 可只保留 `game003` symbols。
+
+本次修正：
+
+- `createDefaultSymbolAnimationResolver()` 现在只解析 `normal` 静态态；请求 `appear` / `win` 会显式失败，不再提供全局默认动画。
+- manifest animation kind 从 `default` 改名为 `builtin`，含义是“该 symbol/state 在 manifest 中显式选择 rendercore 内置效果”；这不是运行时默认兜底。
+- `builtin` 的 `durationSeconds` 必须写在 `symbol-state-textures.manifest.json` 内，`rendercore` 不再维护 `durationSecondsByState` 或默认 `0.42s` / `0.58s`。
+- `assets/game003-s1/symbol-state-textures.manifest.json` 中：
+  - 非 L 系 symbol 的 `appear` / `win` 为 `kind: "builtin"`，时长由 manifest 声明。
+  - `L1` 到 `L5` 的 `appear` 为 `kind: "static"`。
+  - `L1` 到 `L5` 的 `win` 为 `kind: "vni"`，播放区间为 `0 -> 1`。
+  - runtime manifest 不再声明 `stageRect`；如果写入会作为未知字段显式失败。
+- `packages/rendercore` runtime 不读取、不裁切、不应用 VNI `stageRect`；VNI project 自己的 stage 仅用于动画内部坐标，动画挂到目标 symbol 的 overlay 位置播放。
+- `apps/symbolsviewer` 已删除旧 `symbol-animation-config.ts`，`SYMBOL_SET_CONFIGS` 只保留 `game003-s1`。
+- 本轮未继续修改 `apps/game001` 或 `apps/reelsviewer`。
+
+本轮非浏览器验收均已通过：
+
+```bash
+CI=true pnpm --filter @slotclientengine/rendercore test
+CI=true pnpm --filter @slotclientengine/rendercore typecheck
+CI=true pnpm --filter @slotclientengine/rendercore build
+CI=true pnpm --filter @slotclientengine/rendercore lint
+CI=true pnpm --filter @slotclientengine/rendercore format:check
+CI=true pnpm --filter game003 test
+CI=true pnpm --filter game003 typecheck
+CI=true pnpm --filter game003 lint
+CI=true pnpm --filter game003 release:check
+CI=true pnpm --filter game003 format:check
+CI=true pnpm --filter symbolsviewer test
+CI=true pnpm --filter symbolsviewer typecheck
+CI=true pnpm --filter symbolsviewer build
+CI=true pnpm --filter symbolsviewer lint
+CI=true pnpm --filter symbolsviewer format:check
+CI=true pnpm --filter @slotclientengine/vnicore test
+CI=true pnpm --filter @slotclientengine/vnicore typecheck
+CI=true pnpm --filter @slotclientengine/vnicore build
+CI=true pnpm --filter @slotclientengine/vnicore lint
+CI=true pnpm --filter @slotclientengine/vnicore format:check
+CI=true pnpm --filter anieditorv5viewer test
+CI=true pnpm --filter anieditorv5viewer typecheck
+CI=true pnpm --filter anieditorv5viewer build
+CI=true pnpm --filter anieditorv5viewer lint
+CI=true pnpm --filter anieditorv5viewer format:check
+```
+
+补充验收：
+
+```bash
+git diff --check
+node --input-type=module -e '... assert game003 manifest symbols, scale, builtin/static/vni, no stageRect ...'
+rg -n 'kind: "default"|"kind": "default"|durationSecondsByState|stageRect|symbols001|symbols002|symbols003|game002-s2|game002-s3|symbol-animation-config' packages/rendercore/src apps/game003/src apps/symbolsviewer/src assets/game003-s1/symbol-state-textures.manifest.json apps/symbolsviewer/README.md apps/game003/README.md --glob '!**/dist/**'
+git diff -- apps/reelsviewer/src/reels-demo.ts apps/game001/src/game-demo.ts
+```
+
+结果：
+
+- `git diff --check` 无输出。
+- manifest 脚本输出 `game003 manifest ok 14`。
+- 源码/manifest 中无 `kind: "default"`、`durationSecondsByState`、旧 symbolsviewer set 或 `game002` / `symbols001` 系列残留。
+- `stageRect` 只在 README 中作为“runtime 不读取，manifest 写入会显式失败”的说明出现。
+- `symbol-animation-config` 只剩 `game003/src` 的 scale map 配置文件名；`symbolsviewer/src/symbol-animation-config.ts` 已删除。
+- `game001` / `reelsviewer` diff 为空。
+
+浏览器验收仍按用户要求交由用户在 symbolsviewer / game003 中执行。

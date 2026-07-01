@@ -32,11 +32,25 @@ describe("game003 loading resources", () => {
         "game003-symbol-spin-blur-pngs:SC.spinBlur.png",
         "game003-symbol-disabled-pngs:SC.disabled.png",
         "game003-symbol-vni-projects:L1-wins.json",
+        "game003-symbol-vni-projects:L2-wins.json",
+        "game003-symbol-vni-projects:L3-wins.json",
+        "game003-symbol-vni-projects:L4-wins.json",
+        "game003-symbol-vni-projects:L5-wins.json",
       ]),
     );
-    expect(
-      ids.some((id) => id.startsWith("game003-symbol-vni-assets:l1_asset")),
-    ).toBe(true);
+    for (const assetPrefix of [
+      "j1_asset",
+      "k_asset",
+      "q_asset",
+      "j_asset",
+      "10_asset",
+    ]) {
+      expect(
+        ids.some((id) =>
+          id.startsWith(`game003-symbol-vni-assets:${assetPrefix}`),
+        ),
+      ).toBe(true);
+    }
     expect(ids).not.toContain("game003-symbol-normal-pngs:mainreelbg.png");
   });
 

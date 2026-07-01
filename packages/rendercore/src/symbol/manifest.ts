@@ -17,13 +17,6 @@ import type {
   SymbolStateId,
 } from "./types.js";
 
-export interface SymbolManifestStageRect {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-}
-
 export interface SymbolManifestRangePlaybackSpec {
   readonly mode: "range";
   readonly startTime: number;
@@ -31,14 +24,26 @@ export interface SymbolManifestRangePlaybackSpec {
   readonly loop: false;
 }
 
+export interface SymbolManifestBuiltinAnimationSpec {
+  readonly kind: "builtin";
+  readonly durationSeconds: number;
+}
+
+export interface SymbolManifestStaticAnimationSpec {
+  readonly kind: "static";
+  readonly durationSeconds: number;
+}
+
 export interface SymbolManifestVniAnimationSpec {
   readonly kind: "vni";
   readonly project: string;
-  readonly stageRect: SymbolManifestStageRect;
   readonly playback: SymbolManifestRangePlaybackSpec;
 }
 
-export type SymbolManifestAnimationSpec = SymbolManifestVniAnimationSpec;
+export type SymbolManifestAnimationSpec =
+  | SymbolManifestBuiltinAnimationSpec
+  | SymbolManifestStaticAnimationSpec
+  | SymbolManifestVniAnimationSpec;
 
 export type SymbolManifestNormal = string | SymbolManifestLayeredNormal;
 
@@ -351,7 +356,6 @@ export function createSymbolVniAnimationResourcesFromManifest(
         );
       }
       const project = assertVNIProject(rawProject);
-      assertStageRectFitsProject(symbol, state, animation.stageRect, project);
       const assetUrls = resolveProjectAssetUrls(project, assetUrlManifest);
       resources[symbol] = resources[symbol] ?? {};
       resources[symbol][state] = Object.freeze({
@@ -638,57 +642,49 @@ function parseManifestAnimationSpec(
   state: string,
 ): SymbolManifestAnimationSpec {
   const record = assertRecord(value, `symbol "${symbol}" ${state} animation`);
+  if (record.kind === "builtin") {
+    assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} animation`, [
+      "kind",
+      "durationSeconds",
+    ]);
+    return Object.freeze({
+      kind: "builtin",
+      durationSeconds: assertFinitePositiveNumber(
+        record.durationSeconds,
+        `symbol "${symbol}" ${state} animation.durationSeconds`,
+      ),
+    });
+  }
+  if (record.kind === "static") {
+    assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} animation`, [
+      "kind",
+      "durationSeconds",
+    ]);
+    return Object.freeze({
+      kind: "static",
+      durationSeconds: assertFinitePositiveNumber(
+        record.durationSeconds,
+        `symbol "${symbol}" ${state} animation.durationSeconds`,
+      ),
+    });
+  }
+  if (record.kind !== "vni") {
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" ${state} animation kind must be "builtin", "static" or "vni".`,
+    );
+  }
   assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} animation`, [
     "kind",
     "project",
-    "stageRect",
     "playback",
   ]);
-  if (record.kind !== "vni") {
-    throw new SymbolAssetError(
-      `Symbol "${symbol}" ${state} animation kind must be "vni".`,
-    );
-  }
   return Object.freeze({
     kind: "vni",
     project: assertString(
       record.project,
       `symbol "${symbol}" ${state} VNI project`,
     ),
-    stageRect: parseStageRect(record.stageRect, symbol, state),
     playback: parseRangePlayback(record.playback, symbol, state),
-  });
-}
-
-function parseStageRect(
-  value: unknown,
-  symbol: string,
-  state: string,
-): SymbolManifestStageRect {
-  const record = assertRecord(value, `symbol "${symbol}" ${state} stageRect`);
-  assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} stageRect`, [
-    "x",
-    "y",
-    "width",
-    "height",
-  ]);
-  return Object.freeze({
-    x: assertFiniteNonNegativeNumber(
-      record.x,
-      `symbol "${symbol}" ${state} stageRect.x`,
-    ),
-    y: assertFiniteNonNegativeNumber(
-      record.y,
-      `symbol "${symbol}" ${state} stageRect.y`,
-    ),
-    width: assertFinitePositiveNumber(
-      record.width,
-      `symbol "${symbol}" ${state} stageRect.width`,
-    ),
-    height: assertFinitePositiveNumber(
-      record.height,
-      `symbol "${symbol}" ${state} stageRect.height`,
-    ),
   });
 }
 
@@ -733,22 +729,6 @@ function parseRangePlayback(
     endTime,
     loop: false,
   });
-}
-
-function assertStageRectFitsProject(
-  symbol: string,
-  state: string,
-  rect: SymbolManifestStageRect,
-  project: VNIProjectConfig,
-): void {
-  if (
-    rect.x + rect.width > project.stage.width ||
-    rect.y + rect.height > project.stage.height
-  ) {
-    throw new SymbolAssetError(
-      `Symbol "${symbol}" ${state} VNI stageRect must fit within project stage ${project.stage.width}x${project.stage.height}.`,
-    );
-  }
 }
 
 function createManifestPathModuleMap(
@@ -862,7 +842,11 @@ function escapeRegExp(value: string): string {
 export function getSymbolPlaybackKindForManifestAnimation(
   spec: SymbolManifestAnimationSpec,
 ): SymbolPlaybackKind {
-  if (spec.kind === "vni") {
+  if (
+    spec.kind === "builtin" ||
+    spec.kind === "static" ||
+    spec.kind === "vni"
+  ) {
     return "once";
   }
   throw new SymbolAssetError(`Unsupported symbol manifest animation kind.`);

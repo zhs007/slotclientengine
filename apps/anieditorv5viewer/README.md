@@ -30,9 +30,9 @@ It also keeps the older VNI export2 bundle as a non-regression fixture:
 - `docs/anieditor5/export2/runtime_50/project.json`
 
 For game-specific animation review, the viewer also registers the original
-`game003-s1` L1 win animation without copying or rewriting its assets:
+`game003-s1` L1-L5 win animations without copying or rewriting their assets:
 
-- `assets/game003-s1/L1-wins.json`
+- `assets/game003-s1/L1-wins.json` to `assets/game003-s1/L5-wins.json`
 - `assets/game003-s1/assets/*`
 
 The copied runtime files live under `src/assets`:
@@ -60,7 +60,7 @@ The UI project selector can switch between all bundled projects. JSON `asset.pat
 
 `roundreel` is a `VNI_0.020` single-project runtime export stored in the same JSON + `assets/` resource pool as the other `docs/anieditor5/export` projects. Its profile id, purpose, and scale come from JSON `exportProfile`, not from the directory name. `runtime_50` stores 50% file pixels, but the player restores each image layer to its original logical design size with sprite-level compensation. Legacy exports and VNI single-project 100% exports may omit `fileWidth`, `fileHeight`, `fileScale`, and `exportProfile`; those are treated as full-size original-image profiles.
 
-`game003-l1-wins` is registered as a direct source project from `assets/game003-s1`; it is intended for visual comparison of the raw VNI animation in this viewer, not as a copied docs fixture.
+`game003-l1-wins` to `game003-l5-wins` are registered as direct source projects from `assets/game003-s1`; they are intended for visual comparison of the raw VNI animations in this viewer, not as copied docs fixtures.
 
 ## Runtime Boundary
 

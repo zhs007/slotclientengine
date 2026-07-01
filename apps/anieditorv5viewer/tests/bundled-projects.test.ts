@@ -7,10 +7,43 @@ import {
 import {
   export2EditFullAssetUrlManifest,
   export2Runtime50AssetUrlManifest,
-  game003S1L1WinsAssetUrlManifest,
+  game003S1AssetUrlManifest,
   legacyAssetUrlManifest,
   resolveProjectAssetUrls,
 } from "../src/runtime/asset-manifest";
+
+const GAME003_S1_WIN_PROJECTS = [
+  {
+    id: "game003-l1-wins",
+    symbol: "L1",
+    sourcePath: "assets/game003-s1/L1-wins.json",
+    assetPath: "assets/j1_asset_image_mr1qgfc2_r.png",
+  },
+  {
+    id: "game003-l2-wins",
+    symbol: "L2",
+    sourcePath: "assets/game003-s1/L2-wins.json",
+    assetPath: "assets/k_asset_image_mr1qedmv_m.png",
+  },
+  {
+    id: "game003-l3-wins",
+    symbol: "L3",
+    sourcePath: "assets/game003-s1/L3-wins.json",
+    assetPath: "assets/q_asset_image_mr1qdnbi_h.png",
+  },
+  {
+    id: "game003-l4-wins",
+    symbol: "L4",
+    sourcePath: "assets/game003-s1/L4-wins.json",
+    assetPath: "assets/j_asset_image_mr1qc29b_c.png",
+  },
+  {
+    id: "game003-l5-wins",
+    symbol: "L5",
+    sourcePath: "assets/game003-s1/L5-wins.json",
+    assetPath: "assets/10_asset_image_mr1pfdqf_7.png",
+  },
+] as const;
 
 describe("bundled projects", () => {
   it("keeps the full bundled VNI project list available", () => {
@@ -31,6 +64,10 @@ describe("bundled projects", () => {
       "3reel-multipay-01",
       "3reel-multipay-02",
       "game003-l1-wins",
+      "game003-l2-wins",
+      "game003-l3-wins",
+      "game003-l4-wins",
+      "game003-l5-wins",
       "bigwin-edit-full",
       "bigwin-runtime-50",
     ]);
@@ -143,31 +180,31 @@ describe("bundled projects", () => {
     );
   });
 
-  it("registers game003 L1 wins against the original game003-s1 asset pool", () => {
-    const l1Wins = getBundledProject("game003-l1-wins");
-    const resolved = resolveProjectAssetUrls(
-      l1Wins.project,
-      game003S1L1WinsAssetUrlManifest,
-    );
+  it("registers game003 L1-L5 wins against the original game003-s1 asset pool", () => {
+    for (const expected of GAME003_S1_WIN_PROJECTS) {
+      const project = getBundledProject(expected.id);
+      const resolved = resolveProjectAssetUrls(
+        project.project,
+        game003S1AssetUrlManifest,
+      );
 
-    expect(l1Wins.sourcePath).toBe("assets/game003-s1/L1-wins.json");
-    expect(l1Wins.bundleId).toBe("game003-s1");
-    expect(l1Wins.profileId).toBe("game003-s1");
-    expect(l1Wins.purpose).toBe("runtime");
-    expect(l1Wins.project.schemaVersion).toBe("VNI_0.022");
-    expect(l1Wins.project.name).toBe("SCATTER1");
-    expect(l1Wins.label).toContain("game003-s1/L1-wins.json");
-    expect(Object.keys(l1Wins.assetUrls).sort()).toEqual(
-      l1Wins.project.assets.map((asset) => asset.path).sort(),
-    );
-    expect(l1Wins.assetUrls).toEqual(resolved);
-    expect(Object.keys(l1Wins.assetUrls).sort()).toEqual([
-      "assets/01_asset_image_mql7nr09_l.jpg",
-      "assets/02_asset_image_mqkuxzs8_5.jpg",
-      "assets/05_asset_image_mql7lnt5_h.jpg",
-      "assets/image_asset_image_mqksg37p_9.jpg",
-      "assets/l1_asset_image_mr075krb_3.png",
-    ]);
+      expect(project.sourcePath).toBe(expected.sourcePath);
+      expect(project.bundleId).toBe("game003-s1");
+      expect(project.profileId).toBe("game003-s1");
+      expect(project.purpose).toBe("runtime");
+      expect(project.project.schemaVersion).toBe("VNI_0.022");
+      expect(project.project.name).toBe(expected.symbol);
+      expect(project.label).toContain(
+        expected.sourcePath.replace("assets/", ""),
+      );
+      expect(Object.keys(project.assetUrls).sort()).toEqual(
+        project.project.assets.map((asset) => asset.path).sort(),
+      );
+      expect(project.assetUrls).toEqual(resolved);
+      expect(Object.keys(project.assetUrls).sort()).toEqual([
+        expected.assetPath,
+      ]);
+    }
   });
 
   it("keeps export2 edit_full and runtime_50 asset URLs profile scoped", () => {

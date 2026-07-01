@@ -11,9 +11,6 @@ import type {
 export interface V5GLayerInstance {
   layer: V5GLayerConfig;
   display: PIXI.Container;
-  safeGlowDisplay: PIXI.Container;
-  effectDisplay: PIXI.Container;
-  particleDisplay: PIXI.Container;
   texture: PIXI.Texture | null;
   textureSize: { width: number; height: number } | null;
   displayScaleCompensation: { x: number; y: number };
@@ -29,12 +26,6 @@ export function createLayerInstance(
   texturesByAssetId: ReadonlyMap<string, PIXI.Texture>,
   assetsById: ReadonlyMap<string, V5GAssetConfig>,
 ): V5GLayerInstance {
-  const safeGlowDisplay = new PIXI.Container();
-  safeGlowDisplay.label = `${layer.name} safe glow`;
-  const effectDisplay = new PIXI.Container();
-  effectDisplay.label = `${layer.name} effects`;
-  const particleDisplay = new PIXI.Container();
-  particleDisplay.label = `${layer.name} particles`;
   let display: PIXI.Container;
   let instanceTexture: PIXI.Texture | null = null;
   let textureSize: { width: number; height: number } | null = null;
@@ -91,9 +82,6 @@ export function createLayerInstance(
   return {
     layer,
     display,
-    safeGlowDisplay,
-    effectDisplay,
-    particleDisplay,
     texture: instanceTexture,
     textureSize,
     displayScaleCompensation,

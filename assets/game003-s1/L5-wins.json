@@ -8,7 +8,7 @@
     "name": "cocos_creator",
     "version": "3.8.6"
   },
-  "name": "L1",
+  "name": "L5",
   "stage": {
     "width": 300,
     "height": 300,
@@ -18,10 +18,10 @@
   },
   "assets": [
     {
-      "id": "asset_image_mr1qgfc2_r",
+      "id": "asset_image_mr1pfdqf_7",
       "type": "image",
-      "path": "assets/j1_asset_image_mr1qgfc2_r.png",
-      "originalName": "j1.png",
+      "path": "assets/10_asset_image_mr1pfdqf_7.png",
+      "originalName": "10.png",
       "width": 172,
       "height": 130,
       "fileWidth": 172,
@@ -40,10 +40,10 @@
   ],
   "layers": [
     {
-      "id": "layer_image_mr1qgfc3_s",
-      "name": "j1.png",
+      "id": "layer_image_mr1pfdqi_8",
+      "name": "10.png",
       "type": "image",
-      "assetId": "asset_image_mr1qgfc2_r",
+      "assetId": "asset_image_mr1pfdqf_7",
       "parentId": null,
       "groupId": "group_default",
       "visible": true,
@@ -61,7 +61,7 @@
       "blendMode": "normal",
       "animations": [
         {
-          "id": "anim_module_mr1qglh8_t",
+          "id": "anim_module_mr1pgav1_9",
           "type": "glow",
           "name": "Glow 发光高亮",
           "startTime": 0,
@@ -80,7 +80,7 @@
           }
         },
         {
-          "id": "anim_module_mr1qglh8_u",
+          "id": "anim_module_mr1pgav1_a",
           "type": "pop",
           "name": "Pop 弹一下",
           "startTime": 0,
@@ -95,7 +95,7 @@
           }
         },
         {
-          "id": "anim_module_mr1qglh8_v",
+          "id": "anim_module_mr1pgav1_b",
           "type": "swing",
           "name": "Swing 摇摆",
           "startTime": 0,

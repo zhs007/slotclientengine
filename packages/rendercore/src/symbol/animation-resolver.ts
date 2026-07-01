@@ -1,27 +1,11 @@
 import { SymbolAnimationError } from "./errors.js";
-import {
-  createAppearSymbolAni,
-  createStaticSymbolAni,
-  createWinSymbolAni,
-} from "./ani.js";
-import type {
-  SymbolAni,
-  SymbolAnimationContext,
-  SymbolAnimationResolver,
-} from "./types.js";
+import { createStaticSymbolAni } from "./ani.js";
+import type { SymbolAni, SymbolAnimationResolver } from "./types.js";
 
 export function createDefaultSymbolAnimationResolver(): SymbolAnimationResolver {
   return (context) => {
     if (context.resolvedState === "normal") {
       return createStaticSymbolAni(context);
-    }
-
-    if (context.resolvedState === "appear") {
-      return createAppearSymbolAni(context);
-    }
-
-    if (context.resolvedState === "win") {
-      return createWinSymbolAni(context);
     }
 
     throw new SymbolAnimationError(

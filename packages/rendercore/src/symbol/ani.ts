@@ -13,7 +13,6 @@ const EMPTY_UPDATE_RESULT: SymbolAniUpdateResult = Object.freeze({
   onceCompleted: false,
 });
 
-const WIN_SHINE_DURATION_SECONDS = 0.58;
 const WIN_SHINE_MAX_ALPHA = 0.95;
 const WIN_SHINE_MAX_SCALE = 1.2;
 
@@ -143,11 +142,12 @@ export function createLoopSymbolAni(options: {
 
 export function createAppearSymbolAni(
   context: SymbolAnimationContext,
+  options: { readonly durationSeconds: number },
 ): SymbolAni {
   return new ManualSymbolAni({
     stateId: context.resolvedState,
     playback: "once",
-    durationSeconds: 0.42,
+    durationSeconds: options.durationSeconds,
     onReset: () => {
       resetBaseDisplay(context);
     },
@@ -161,14 +161,17 @@ export function createAppearSymbolAni(
   });
 }
 
-export function createWinSymbolAni(context: SymbolAnimationContext): SymbolAni {
+export function createWinSymbolAni(
+  context: SymbolAnimationContext,
+  options: { readonly durationSeconds: number },
+): SymbolAni {
   let shineSprite: Sprite | null = null;
   let shineMask: Graphics | null = null;
 
   return new ManualSymbolAni({
     stateId: context.resolvedState,
     playback: "once",
-    durationSeconds: WIN_SHINE_DURATION_SECONDS,
+    durationSeconds: options.durationSeconds,
     onReset: () => {
       resetBaseDisplay(context);
       const shineOverlay = createShineOverlay(context);

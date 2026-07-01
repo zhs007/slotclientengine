@@ -210,7 +210,6 @@ interface VNIMountedImageSpriteOptions {
 
 export class VNIPlayer {
   private readonly stageRoot = new PIXI.Container();
-  private readonly contentRoot = new PIXI.Container();
   private readonly parent: PIXI.Container;
   private readonly diagnosticsElement: HTMLElement | undefined;
   private readonly requestRenderCallback: (() => void) | undefined;
@@ -230,12 +229,16 @@ export class VNIPlayer {
   private readonly onTimeChange?: (time: number) => void;
   private readonly onPlayingChange?: (isPlaying: boolean) => void;
   private readonly layerInstances = new Map<string, V5GLayerInstance>();
-  private readonly groupContainersById = new Map<string, PIXI.Container>();
   private readonly slotContainersByKey = new Map<string, PIXI.Container>();
   private readonly mountedNodesById = new Map<string, VNIMountedNode>();
   private readonly particleRuntime: VNIParticleRuntime;
   private texturesByAssetId: ReadonlyMap<string, PIXI.Texture> = new Map();
   private readonly ownedTextures = new Set<PIXI.Texture>();
+  private readonly safeGlowSpritesByLayer = new Map<string, PIXI.Container[]>();
+  private readonly renderEffectDisplaysByLayer = new Map<
+    string,
+    PIXI.Container[]
+  >();
   private readonly liveParticleSpritesByLayer = new Map<
     string,
     PIXI.Sprite[]
@@ -287,17 +290,12 @@ export class VNIPlayer {
 
   async init(): Promise<void> {
     this.parent.addChild(this.stageRoot);
-    this.stageRoot.addChild(this.contentRoot);
 
     this.texturesByAssetId = await this.loadTextures();
     const layersById = new Map(
       this.project.layers.map((layer) => [layer.id, layer] as const),
     );
     for (const group of this.layerGroups) {
-      const groupContainer = new PIXI.Container();
-      groupContainer.label = `VNI group ${group.id}`;
-      this.groupContainersById.set(group.id, groupContainer);
-      this.contentRoot.addChild(groupContainer);
       for (const layerId of group.layerIds) {
         const layer = layersById.get(layerId);
         if (!layer) {
@@ -309,12 +307,7 @@ export class VNIPlayer {
           this.assetsById,
         );
         this.layerInstances.set(layer.id, instance);
-        groupContainer.addChild(
-          instance.display,
-          instance.safeGlowDisplay,
-          instance.effectDisplay,
-          instance.particleDisplay,
-        );
+        this.stageRoot.addChild(instance.display);
       }
       const slot = this.layerGroupSlots.find(
         (candidate) => candidate.afterGroupId === group.id,
@@ -323,7 +316,7 @@ export class VNIPlayer {
         const slotContainer = new PIXI.Container();
         slotContainer.label = `VNI slot ${slot.afterGroupId} -> ${slot.beforeGroupId}`;
         this.slotContainersByKey.set(getLayerGroupSlotKey(slot), slotContainer);
-        this.contentRoot.addChild(slotContainer);
+        this.stageRoot.addChild(slotContainer);
       }
     }
 
@@ -1223,16 +1216,82 @@ export class VNIPlayer {
     return layers;
   }
 
+  private insertLayerRuntimeDisplay(
+    instance: V5GLayerInstance,
+    display: PIXI.Container,
+  ): void {
+    const parent = instance.display.parent;
+    if (!parent) {
+      throw new Error(
+        `VNI layer "${instance.layer.id}" display is not mounted.`,
+      );
+    }
+    const orderedDisplays = this.getLayerRuntimeDisplayOrder(instance);
+    const displayOrderIndex = orderedDisplays.indexOf(display);
+    let insertAfter = instance.display;
+    const safeDisplayOrderIndex =
+      displayOrderIndex >= 0 ? displayOrderIndex : 1;
+    for (let index = 0; index < safeDisplayOrderIndex; index += 1) {
+      const candidate = orderedDisplays[index];
+      if (candidate.parent === parent) {
+        insertAfter = candidate;
+      }
+    }
+    const insertAfterIndex = parent.children.indexOf(insertAfter);
+    if (insertAfterIndex < 0) {
+      parent.addChild(display);
+      return;
+    }
+    parent.addChildAt(
+      display,
+      Math.min(insertAfterIndex + 1, parent.children.length),
+    );
+  }
+
+  private getLayerRuntimeDisplayOrder(
+    instance: V5GLayerInstance,
+  ): PIXI.Container[] {
+    return [
+      instance.display,
+      ...(this.safeGlowSpritesByLayer.get(instance.layer.id) ?? []),
+      ...(this.renderEffectDisplaysByLayer.get(instance.layer.id) ?? []),
+      ...(this.liveParticleSpritesByLayer.get(instance.layer.id) ?? []),
+    ];
+  }
+
+  private addTrackedRuntimeDisplay<T extends PIXI.Container>(
+    instance: V5GLayerInstance,
+    displaysByLayer: Map<string, T[]>,
+    display: T,
+  ): void {
+    const displays = displaysByLayer.get(instance.layer.id) ?? [];
+    displays.push(display);
+    displaysByLayer.set(instance.layer.id, displays);
+    this.insertLayerRuntimeDisplay(instance, display);
+  }
+
+  private clearTrackedRuntimeDisplays<T extends PIXI.Container>(
+    displaysByLayer: Map<string, T[]>,
+  ): void {
+    for (const displays of displaysByLayer.values()) {
+      for (const display of displays) {
+        this.destroyRuntimeDisplay(display);
+      }
+    }
+    displaysByLayer.clear();
+  }
+
+  private destroyRuntimeDisplay(display: PIXI.Container): void {
+    display.parent?.removeChild(display);
+    display.destroy({ children: true });
+  }
+
   private renderSafeGlowSamples(
     sampledLayers: readonly SampledLayerState[],
     time: number,
   ): number {
     let spriteCount = 0;
-    for (const instance of this.layerInstances.values()) {
-      for (const child of instance.safeGlowDisplay.removeChildren()) {
-        child.destroy({ children: true });
-      }
-    }
+    this.clearTrackedRuntimeDisplays(this.safeGlowSpritesByLayer);
 
     for (const sampledLayer of sampledLayers) {
       if (!sampledLayer.hasActiveSafeGlowAnimation) continue;
@@ -1305,7 +1364,11 @@ export class VNIPlayer {
     sprite.rotation = safeGlow.rotation;
     sprite.alpha = safeGlow.alpha;
     sprite.blendMode = toPixiBlendMode(safeGlow.blendMode);
-    instance.safeGlowDisplay.addChild(sprite);
+    this.addTrackedRuntimeDisplay(
+      instance,
+      this.safeGlowSpritesByLayer,
+      sprite,
+    );
   }
 
   private renderRenderEffectSamples(
@@ -1313,11 +1376,7 @@ export class VNIPlayer {
     time: number,
   ): number {
     let spriteCount = 0;
-    for (const instance of this.layerInstances.values()) {
-      for (const child of instance.effectDisplay.removeChildren()) {
-        child.destroy({ children: true });
-      }
-    }
+    this.clearTrackedRuntimeDisplays(this.renderEffectDisplaysByLayer);
 
     for (const sampledLayer of sampledLayers) {
       if (!sampledLayer.hasActiveRenderEffect) continue;
@@ -1392,7 +1451,11 @@ export class VNIPlayer {
       sprite.rotation = effect.rotation;
       sprite.alpha = effect.alpha;
       sprite.blendMode = toPixiBlendMode(effect.blendMode);
-      instance.effectDisplay.addChild(sprite);
+      this.addTrackedRuntimeDisplay(
+        instance,
+        this.renderEffectDisplaysByLayer,
+        sprite,
+      );
       return;
     }
 
@@ -1419,7 +1482,11 @@ export class VNIPlayer {
     piece.rotation = effect.rotation;
     piece.alpha = effect.alpha;
     piece.blendMode = toPixiBlendMode(effect.blendMode);
-    instance.effectDisplay.addChild(piece);
+    this.addTrackedRuntimeDisplay(
+      instance,
+      this.renderEffectDisplaysByLayer,
+      piece,
+    );
   }
 
   private renderParticleSamples(
@@ -1434,6 +1501,16 @@ export class VNIPlayer {
 
     for (const instance of this.layerInstances.values()) {
       const layerParticles = particlesByLayer.get(instance.layer.id) ?? [];
+      if (layerParticles.length === 0) {
+        const sprites = this.liveParticleSpritesByLayer.get(instance.layer.id);
+        if (sprites) {
+          for (const sprite of sprites) {
+            this.destroyRuntimeDisplay(sprite);
+          }
+          this.liveParticleSpritesByLayer.delete(instance.layer.id);
+        }
+        continue;
+      }
       let sprites = this.liveParticleSpritesByLayer.get(instance.layer.id);
       if (!sprites) {
         sprites = [];
@@ -1447,8 +1524,8 @@ export class VNIPlayer {
         }
         const sprite = new PIXI.Sprite(instance.texture);
         sprite.anchor.set(0.5);
-        instance.particleDisplay.addChild(sprite);
         sprites.push(sprite);
+        this.insertLayerRuntimeDisplay(instance, sprite);
       }
       for (let index = 0; index < layerParticles.length; index += 1) {
         const particle = layerParticles[index];
@@ -1462,7 +1539,9 @@ export class VNIPlayer {
       }
       while (sprites.length > layerParticles.length) {
         const sprite = sprites.pop();
-        sprite?.destroy();
+        if (sprite) {
+          this.destroyRuntimeDisplay(sprite);
+        }
       }
     }
 
@@ -1470,42 +1549,29 @@ export class VNIPlayer {
   }
 
   private clearParticles(): void {
-    for (const instance of this.layerInstances.values()) {
-      for (const child of instance.particleDisplay.removeChildren()) {
-        child.destroy();
-      }
-    }
-    this.liveParticleSpritesByLayer.clear();
+    this.clearTrackedRuntimeDisplays(this.liveParticleSpritesByLayer);
   }
 
   private clearRenderEffects(): void {
-    for (const instance of this.layerInstances.values()) {
-      for (const child of instance.effectDisplay.removeChildren()) {
-        child.destroy({ children: true });
-      }
-    }
+    this.clearTrackedRuntimeDisplays(this.renderEffectDisplaysByLayer);
   }
 
   private clearSafeGlow(): void {
-    for (const instance of this.layerInstances.values()) {
-      for (const child of instance.safeGlowDisplay.removeChildren()) {
-        child.destroy({ children: true });
-      }
-    }
+    this.clearTrackedRuntimeDisplays(this.safeGlowSpritesByLayer);
   }
 
   private getRenderedSafeGlowCount(): number {
     let count = 0;
-    for (const instance of this.layerInstances.values()) {
-      count += instance.safeGlowDisplay.children.length;
+    for (const sprites of this.safeGlowSpritesByLayer.values()) {
+      count += sprites.length;
     }
     return count;
   }
 
   private getRenderedRenderEffectCount(): number {
     let count = 0;
-    for (const instance of this.layerInstances.values()) {
-      count += instance.effectDisplay.children.length;
+    for (const displays of this.renderEffectDisplaysByLayer.values()) {
+      count += displays.length;
     }
     return count;
   }

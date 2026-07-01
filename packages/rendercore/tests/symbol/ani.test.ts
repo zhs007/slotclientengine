@@ -170,7 +170,7 @@ describe("default viewer ani factories", () => {
 
   it("scales appear to about 1.5 and resets at completion", () => {
     const context = createContext("appear");
-    const ani = createAppearSymbolAni(context);
+    const ani = createAppearSymbolAni(context, { durationSeconds: 0.42 });
     ani.reset();
 
     ani.update(0.21);
@@ -183,7 +183,7 @@ describe("default viewer ani factories", () => {
 
   it("creates and clears a win shine overlay", () => {
     const context = createContext("win");
-    const ani = createWinSymbolAni(context);
+    const ani = createWinSymbolAni(context, { durationSeconds: 0.58 });
     ani.reset();
 
     expect(context.overlayLayer.children.length).toBe(2);
@@ -212,7 +212,7 @@ describe("default viewer ani factories", () => {
     const context = createContext("win", {
       stateTextures: { win: winTexture },
     });
-    const ani = createWinSymbolAni(context);
+    const ani = createWinSymbolAni(context, { durationSeconds: 0.58 });
 
     ani.reset();
 

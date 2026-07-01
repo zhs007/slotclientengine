@@ -15,8 +15,8 @@
 - 主转轮框：`assets/game003-s1/mainreelbg.png`
 - 横版传送带：`assets/game003-s1/conveyor1.png`
 - 竖版传送带：`assets/game003-s1/conveyor2.png`
-- `L1` 中奖 VNI project：`assets/game003-s1/L1-wins.json`
-- `L1` 中奖 VNI assets：`assets/game003-s1/assets/*.{png,jpg,jpeg,webp}`
+- `L1`-`L5` 中奖 VNI project：`assets/game003-s1/L1-wins.json` 到 `assets/game003-s1/L5-wins.json`
+- `L1`-`L5` 中奖 VNI assets：`assets/game003-s1/assets/*.{png,jpg,jpeg,webp}`
 
 生成 `gameconfig.json`：
 
@@ -32,7 +32,7 @@ CI=true pnpm --filter gengameconfig dev -- --paytable assets/gamecfg003/paytable
 CI=true pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --input-dir assets/game003-s1 --output-dir assets/game003-s1 --symbols WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC --scale 1
 ```
 
-`symbol-state-textures.manifest.json` 只能包含 `WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC`，每个 symbol 必须显式 `scale: 1`。背景、主转轮框和传送带不是 symbol。`L1.win` 的 VNI animation 也由这个 manifest 声明；重新生成状态贴图时，生成器会保留仍然有效的 `animations` 元数据，不能手动丢掉。
+`symbol-state-textures.manifest.json` 只能包含 `WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC`，每个 symbol 必须显式 `scale: 1`。背景、主转轮框和传送带不是 symbol。`appear` / `win` 的动画类型和 `durationSeconds` 由这个 manifest 声明：`L1.appear` 到 `L5.appear` 是静态普通态，`L1.win` 到 `L5.win` 是 VNI animation，其它 symbol 的 `appear` / `win` 使用 manifest 里的 `builtin` animation 秒数。重新生成状态贴图时，生成器会保留仍然有效的 `animations` 元数据，不能手动丢掉。
 
 ## 静态配置
 
@@ -56,11 +56,11 @@ CI=true pnpm --filter game003 check:static-config
 `game003` 的 symbol 动画 resolver 来自 `@slotclientengine/rendercore`：
 
 - app 层从生成配置读取 symbol manifest、VNI project modules 和 VNI asset modules。
-- `rendercore` 解析 manifest，并优先使用 manifest 声明的 VNI animation。
-- 未声明 VNI animation 的 symbol 继续走默认或 named fallback 动画。
-- app 的中奖逻辑仍只按可见窗口坐标请求 symbol 状态为 `win`，不在 `game-adapter.ts`、`game-demo.ts` 或 `win-sequence.ts` 中写 `L1-wins.json`、`stageRect` 或 VNI 播放细节。
+- `rendercore` 解析 manifest，并优先使用 manifest 声明的 `builtin` / `static` / `vni` animation。
+- 未声明 animation 的 symbol 状态才会走 fallback；fallback 不承载 game003 的 `appear` / `win` 秒数。
+- app 的中奖逻辑仍只按可见窗口坐标请求 symbol 状态为 `win`，不在 `game-adapter.ts`、`game-demo.ts` 或 `win-sequence.ts` 中写 `L1-wins.json` 到 `L5-wins.json`、VNI 播放细节或动画秒数。
 
-缺 VNI project、缺 VNI asset、非法 `stageRect`、非法 manifest 字段或 VNI 初始化失败都会显式失败，避免中奖动画悄悄退回普通扫光后难以排查。
+runtime 不读取 VNI `stageRect`，VNI 动画按 project 自己的 stage 在目标 symbol 位置播放；如果 manifest 里写入 `stageRect`，会作为未知字段显式失败。缺 animation `durationSeconds`、缺 VNI project、缺 VNI asset、非法 manifest 字段或 VNI 初始化失败都会显式失败，避免中奖动画悄悄退回普通扫光后难以排查。
 
 ## Loading 启动顺序
 

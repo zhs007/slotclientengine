@@ -55,12 +55,12 @@ const createContext = (
 };
 
 describe("createDefaultSymbolAnimationResolver", () => {
-  it("resolves normal, appear and win without binding effects to state definitions", () => {
+  it("resolves only the normal static state", () => {
     const resolver = createDefaultSymbolAnimationResolver();
 
     expect(resolver(createContext("normal")).playback).toBe("static");
-    expect(resolver(createContext("appear")).playback).toBe("once");
-    expect(resolver(createContext("win")).playback).toBe("once");
+    expect(() => resolver(createContext("appear"))).toThrow(/No default/);
+    expect(() => resolver(createContext("win"))).toThrow(/No default/);
   });
 
   it("receives requested and resolved states for equivalent states", () => {

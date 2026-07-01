@@ -24,10 +24,13 @@ function createManifest() {
         disabled: "./L1.disabled.png",
         scale: 1,
         animations: {
+          appear: {
+            kind: "builtin",
+            durationSeconds: 0.42,
+          },
           win: {
             kind: "vni",
             project: "./L1-wins.json",
-            stageRect: { x: 4, y: 5, width: 32, height: 32 },
             playback: {
               mode: "range",
               startTime: 0,
@@ -45,6 +48,12 @@ function createManifest() {
         spinBlur: "./SC.spinBlur.png",
         disabled: "./SC.disabled.png",
         scale: 0.8,
+        animations: {
+          appear: {
+            kind: "static",
+            durationSeconds: 1 / 60,
+          },
+        },
       },
     },
   };
@@ -175,12 +184,7 @@ describe("symbol state texture manifest helpers", () => {
     expect(resources.L1?.win?.assetUrls).toEqual({
       "assets/l1.png": "/assets/l1.png",
     });
-    expect(resources.L1?.win?.spec.stageRect).toEqual({
-      x: 4,
-      y: 5,
-      width: 32,
-      height: 32,
-    });
+    expect(resources.L1?.win?.spec.playback.endTime).toBe(2);
   });
 
   it("fails fast for invalid schema and missing VNI resources", () => {
@@ -225,8 +229,8 @@ describe("symbol state texture manifest helpers", () => {
       }),
     ).toThrow(/missing from modules/);
     expect(() =>
-      createSymbolVniAnimationResourcesFromManifest({
-        manifest: {
+      parseSymbolStateTextureManifest(
+        {
           ...manifest,
           symbols: {
             L1: {
@@ -234,21 +238,34 @@ describe("symbol state texture manifest helpers", () => {
               animations: {
                 win: {
                   ...manifest.symbols.L1.animations.win,
-                  stageRect: { x: 80, y: 80, width: 32, height: 32 },
+                  stageRect: { x: 0, y: 0, width: 32, height: 32 },
                 },
               },
             },
           },
         },
-        requiredStates,
-        vniProjectModules: {
-          "../../../assets/game003-s1/L1-wins.json": createProject(),
+        { requiredStates },
+      ),
+    ).toThrow(/unknown field "stageRect"/);
+    expect(() =>
+      parseSymbolStateTextureManifest(
+        {
+          ...manifest,
+          symbols: {
+            L1: {
+              ...manifest.symbols.L1,
+              animations: {
+                appear: {
+                  kind: "builtin",
+                  durationSeconds: 0,
+                },
+              },
+            },
+          },
         },
-        vniAssetModules: {
-          "../../../assets/game003-s1/assets/l1.png": "/assets/l1.png",
-        },
-      }),
-    ).toThrow(/stageRect/);
+        { requiredStates },
+      ),
+    ).toThrow(/durationSeconds/);
     expect(() =>
       createSymbolVniAnimationResourcesFromManifest({
         manifest,
