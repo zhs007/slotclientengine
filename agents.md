@@ -46,13 +46,15 @@
 - `game003` 的中奖组件名当前为 `bg-wins`，只能在 `apps/game003` app 层配置和识别；`logiccore` / `gameframeworks` / `rendercore` 只能提供通用组件 result 解析、facade 和可见 symbol 状态 API，不硬编码 `bg-wins`、game003、GMI、WaysTriggerData、WL 或 wild 规则。中奖播放必须按 `bg-wins.basicComponentData.usedResults` 指向的 `clientData.results[]` 顺序执行，`result.pos` 坐标基准固定为当前 5 x 5 主转轮可见窗口；game003 是 Ways 游戏，`symbolNums` / `symbolNum` 不等同于 `pos` 数量。symbol 语义校验只能由游戏 app 显式传可选 validator，不传时不要默认检查 `result.symbol` 和 target scene 是否一致；缺失、pos 越界要显式失败，不要用全部 results 或 totalwin 做隐藏兜底。
 - `packages/rendercore` 拥有 symbol manifest 解析、manifest 驱动的 symbol animation resolver 和 VNI-backed symbol animation adapter；`apps/game003`、`apps/symbolsviewer` 等 app 只能传入 manifest、Vite modules 和 fallback resolver，不要在 app 内复制 manifest schema、VNI 播放生命周期、stageRect 裁切或 `if symbol === "L1"` 这类专属运行时代码。
 - `assets/game003-s1/L1-wins.json` 和 `assets/game003-s1/assets/*` 是 `symbol-state-textures.manifest.json` 驱动的 `L1.win` VNI 动画资源；新增或调整 VNI symbol 动画时，必须同步 manifest、YAML VNI glob、loading 资源、生成物、symbolsviewer 预览和 game runtime resolver。
+- VNI project 的 `stage.backgroundColor` 是导出 schema 背景元数据，`packages/vnicore` 的 `VNIPlayer` 是 runtime-only，不读取、不绘制、不提供 stage background 开关；slot symbol 动画、animation viewer 和 game runtime 都必须保持透明。
+- `packages/vnicore` 的 `VNIPlayer` 不拥有 `PIXI.Application`、renderer、canvas 或 DOM 容器；viewer/game runtime 必须提供外部 Pixi `parent`，动画节点直接挂进同一个 Pixi 渲染树。不要在 `VNIPlayer`、rendercore symbol animation 或 game runtime 中恢复隐藏 canvas、canvas-to-texture 桥接或独立 renderer。
 - 游戏静态 YAML 只承载美术、配置人员或发布流程可改的静态配置，不承载 token、cookie、服务器真实轮带或玩家本次下注等运行期输入。
 - 游戏静态 YAML 应保留中文注释，说明字段用途、坐标基准和修改边界；注释只给人看，不作为构建逻辑依据。
 - `game-static.generated.ts` 和 `game-loading.generated.ts` 由 `apps/buildgamestatic` 生成，禁止手改；修改 YAML 后必须同步执行生成和 `--check` 校验。
 - `game003` 的 symbol scale 仍以 `assets/game003-s1/symbol-state-textures.manifest.json` 为准，不在 YAML 或 app 内维护第二份 scale 表。
 - `packages/rendercore` 只能提供通用 anchor/focus rect 映射能力，不承载 `game003` 的 mainreelbg、conveyor 或其它专属部件语义。
 - `packages/uiframeworks` 拥有页面 DOM frame、canvas 逻辑尺寸上限、黑边居中和 viewport resize 适配；游戏 app 不要直接用 CSS/DOM 私有逻辑绕过 framework 的 frame policy。
-- `packages/vnicore` 拥有 VNI 播放状态机、segmented 高级播放、live 粒子排空、layer group render order 和 group slot 挂接语义；viewer 只能做 UI 配置、输入校验、状态展示和调用，不要在 `apps/anieditorv5viewer` 里复制播放状态机、group adjacency 算法或直接操作 runtime 私有 Pixi container。
+- `packages/vnicore` 拥有 VNI 播放状态机、segmented 高级播放、live 粒子排空、layer group render order 和 group slot 挂接语义；viewer 只能做 UI 配置、输入校验、状态展示和调用，不要在 `apps/anieditorv5viewer` 里复制播放状态机、group adjacency 算法或直接操作 runtime 私有 Pixi display tree。
 - 更新 `packages/anieditorv5runtime-cc` 的 public runtime 行为时，必须同步模块化源码、`standalone/anieditorv5runtime-cc.ts`、`scripts/check-standalone.mjs`、standalone 测试和 `standalone.zip`，避免 Cocos 主要交付面与 workspace package 漂移。
 - Prettier 校验不应覆盖 `dist/`、`coverage/` 等生成物；如果 package 脚本在子目录内执行 `prettier --check .`，需要在对应 package 放置 `.prettierignore` 保持一致。
 - 若依赖安装失败，可先执行：

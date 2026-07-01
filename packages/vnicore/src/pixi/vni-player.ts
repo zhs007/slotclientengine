@@ -1,7 +1,6 @@
 import * as PIXI from "pixi.js";
 import { toPixiBlendMode } from "./blend-mode.js";
 import { editorToPixi } from "../core/coordinates.js";
-import { parseColorHex } from "../core/validation.js";
 import { sampleProjectAtTime } from "../core/project-sampler.js";
 import {
   assertVNIAdjacentLayerGroupSlot,
@@ -47,6 +46,11 @@ import {
   getAssetTextureSize,
   type V5GLayerInstance,
 } from "./layer-instance.js";
+import {
+  deriveAdditiveMatteTexture,
+  getAdditiveMatteAssetIds,
+  shouldDeriveAdditiveMatteTexture,
+} from "./additive-matte-texture.js";
 import type { AssetUrlManifest } from "../core/asset-manifest.js";
 import type { SampledLayerState } from "../core/project-sampler.js";
 import type {
@@ -89,7 +93,13 @@ export interface VNIPlaybackCompleteContext {
 }
 
 export interface VNIPlayerOptions {
-  container: HTMLElement;
+  parent: PIXI.Container;
+  diagnosticsElement?: HTMLElement;
+  viewport?: {
+    readonly width: number;
+    readonly height: number;
+  };
+  requestRender?: () => void;
   projectId: string;
   bundleId: string;
   profileId: string;
@@ -199,11 +209,11 @@ interface VNIMountedImageSpriteOptions {
 }
 
 export class VNIPlayer {
-  private readonly app = new PIXI.Application();
   private readonly stageRoot = new PIXI.Container();
-  private readonly stageBackground = new PIXI.Graphics();
   private readonly contentRoot = new PIXI.Container();
-  private readonly container: HTMLElement;
+  private readonly parent: PIXI.Container;
+  private readonly diagnosticsElement: HTMLElement | undefined;
+  private readonly requestRenderCallback: (() => void) | undefined;
   private readonly projectId: string;
   private readonly bundleId: string;
   private readonly profileId: string;
@@ -216,6 +226,7 @@ export class VNIPlayer {
   private readonly assetsById: ReadonlyMap<string, V5GAssetConfig>;
   private readonly layerGroups: readonly VNIRenderGroupInfo[];
   private readonly layerGroupSlots: readonly VNILayerGroupSlot[];
+  private readonly additiveMatteAssetIds: ReadonlySet<string>;
   private readonly onTimeChange?: (time: number) => void;
   private readonly onPlayingChange?: (isPlaying: boolean) => void;
   private readonly layerInstances = new Map<string, V5GLayerInstance>();
@@ -224,13 +235,13 @@ export class VNIPlayer {
   private readonly mountedNodesById = new Map<string, VNIMountedNode>();
   private readonly particleRuntime: VNIParticleRuntime;
   private texturesByAssetId: ReadonlyMap<string, PIXI.Texture> = new Map();
+  private readonly ownedTextures = new Set<PIXI.Texture>();
   private readonly liveParticleSpritesByLayer = new Map<
     string,
     PIXI.Sprite[]
   >();
-  private resizeObserver: ResizeObserver | null = null;
   private rafId: number | null = null;
-  private pixelDiagnosticsRafId: number | null = null;
+  private viewport: { width: number; height: number } | null = null;
   private lastTickMs = 0;
   private currentTime = 0;
   private loop = true;
@@ -248,7 +259,12 @@ export class VNIPlayer {
   >();
 
   constructor(options: VNIPlayerOptions) {
-    this.container = options.container;
+    this.parent = options.parent;
+    this.diagnosticsElement = options.diagnosticsElement;
+    this.requestRenderCallback = options.requestRender;
+    this.viewport = options.viewport
+      ? normalizeViewportSize(options.viewport)
+      : null;
     this.projectId = options.projectId;
     this.bundleId = options.bundleId;
     this.profileId = options.profileId;
@@ -263,25 +279,15 @@ export class VNIPlayer {
     );
     this.layerGroups = getVNIProjectRenderGroupOrder(options.project);
     this.layerGroupSlots = getVNIProjectLayerGroupSlots(options.project);
+    this.additiveMatteAssetIds = getAdditiveMatteAssetIds(options.project);
     this.particleRuntime = new VNIParticleRuntime(options.project.layers);
     this.onTimeChange = options.onTimeChange;
     this.onPlayingChange = options.onPlayingChange;
   }
 
   async init(): Promise<void> {
-    const backgroundColor = parseColorHex(this.project.stage.backgroundColor);
-    await this.app.init({
-      backgroundColor,
-      resizeTo: this.container,
-      antialias: true,
-      autoDensity: true,
-      resolution: window.devicePixelRatio || 1,
-    });
-
-    this.container.appendChild(this.app.canvas);
-    this.drawStageBackground(backgroundColor);
-    this.app.stage.addChild(this.stageRoot);
-    this.stageRoot.addChild(this.stageBackground, this.contentRoot);
+    this.parent.addChild(this.stageRoot);
+    this.stageRoot.addChild(this.contentRoot);
 
     this.texturesByAssetId = await this.loadTextures();
     const layersById = new Map(
@@ -321,9 +327,7 @@ export class VNIPlayer {
       }
     }
 
-    this.resizeObserver = new ResizeObserver(() => this.resize());
-    this.resizeObserver.observe(this.container);
-    this.resize();
+    this.applyViewportLayout();
     this.initialized = true;
     this.renderDeterministicFrame(0);
   }
@@ -583,6 +587,16 @@ export class VNIPlayer {
     };
   }
 
+  getDisplayObject(): PIXI.Container {
+    return this.stageRoot;
+  }
+
+  setViewportSize(width: number, height: number): void {
+    this.viewport = normalizeViewportSize({ width, height });
+    this.applyViewportLayout();
+    this.requestHostRender();
+  }
+
   update(deltaSeconds: number): void {
     assertPositiveFinite(deltaSeconds, "deltaSeconds");
     if (!this.playing) {
@@ -723,12 +737,6 @@ export class VNIPlayer {
 
   destroy(): void {
     this.pause();
-    if (this.pixelDiagnosticsRafId !== null) {
-      cancelAnimationFrame(this.pixelDiagnosticsRafId);
-      this.pixelDiagnosticsRafId = null;
-    }
-    this.resizeObserver?.disconnect();
-    this.resizeObserver = null;
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
@@ -740,7 +748,12 @@ export class VNIPlayer {
     this.clearRenderEffects();
     this.clearParticles();
     this.clearDiagnostics();
-    this.app.destroy(true);
+    this.stageRoot.parent?.removeChild(this.stageRoot);
+    this.stageRoot.destroy({ children: true });
+    for (const texture of this.ownedTextures) {
+      texture.destroy(true);
+    }
+    this.ownedTextures.clear();
     this.initialized = false;
   }
 
@@ -927,6 +940,7 @@ export class VNIPlayer {
       safeGlowSpriteCount,
     );
     this.onTimeChange?.(this.currentTime);
+    this.renderIfHostDriven();
     if (frame.isComplete) {
       this.finishParticleDrain();
       return;
@@ -951,7 +965,9 @@ export class VNIPlayer {
     );
     if (frame.isComplete) {
       this.finishParticleDrain();
+      return;
     }
+    this.renderIfHostDriven();
   }
 
   private finishParticleDrain(): void {
@@ -966,6 +982,7 @@ export class VNIPlayer {
       this.getRenderedRenderEffectCount(),
       this.getRenderedSafeGlowCount(),
     );
+    this.renderIfHostDriven();
     const event = this.pendingComplete;
     this.pendingComplete = null;
     if (event) {
@@ -1034,11 +1051,12 @@ export class VNIPlayer {
     return this.playbackPhase;
   }
 
-  private resize(): void {
-    const width = this.container.clientWidth || 1;
-    const height = this.container.clientHeight || 1;
-    this.app.renderer.resize(width, height);
-
+  private applyViewportLayout(): void {
+    const viewport = this.viewport;
+    if (!viewport) {
+      return;
+    }
+    const { width, height } = viewport;
     const padding = this.fitPadding ?? (width < 720 ? 16 : 32);
     const fitScale = Math.max(
       0.05,
@@ -1053,13 +1071,6 @@ export class VNIPlayer {
       this.project.stage.height / 2,
     );
     this.stageRoot.scale.set(Number.isFinite(fitScale) ? fitScale : 1);
-  }
-
-  private drawStageBackground(backgroundColor: number): void {
-    this.stageBackground.clear();
-    this.stageBackground
-      .rect(0, 0, this.project.stage.width, this.project.stage.height)
-      .fill(backgroundColor);
   }
 
   private async loadTextures(): Promise<ReadonlyMap<string, PIXI.Texture>> {
@@ -1090,6 +1101,11 @@ export class VNIPlayer {
         `VNI asset texture size mismatch for ${asset.id} (${asset.path}): logical ${asset.width}x${asset.height}, expected file ${expected.width}x${expected.height}, got ${width}x${height}.`,
       );
     }
+    if (shouldDeriveAdditiveMatteTexture(asset, this.additiveMatteAssetIds)) {
+      const matteTexture = deriveAdditiveMatteTexture(texture, asset);
+      this.ownedTextures.add(matteTexture);
+      return matteTexture;
+    }
     return texture;
   }
 
@@ -1116,6 +1132,7 @@ export class VNIPlayer {
       safeGlowSpriteCount,
     );
     this.onTimeChange?.(this.currentTime);
+    this.renderIfHostDriven();
   }
 
   private renderPlaybackFrame(
@@ -1153,6 +1170,7 @@ export class VNIPlayer {
       safeGlowSpriteCount,
     );
     this.onTimeChange?.(this.currentTime);
+    this.renderIfHostDriven();
   }
 
   private applyProjectSample(time: number): {
@@ -1169,6 +1187,16 @@ export class VNIPlayer {
       applySampledLayerState(instance, sampledLayer, this.project.stage);
     }
     return sampled;
+  }
+
+  private renderIfHostDriven(): void {
+    this.requestHostRender();
+  }
+
+  private requestHostRender(): void {
+    if (this.initialized) {
+      this.requestRenderCallback?.();
+    }
   }
 
   private getParticleRuntimeLayers(
@@ -1491,7 +1519,12 @@ export class VNIPlayer {
   }
 
   private updateMountedNodeDiagnostics(): void {
-    this.container.dataset.vniMountedNodes = String(this.mountedNodesById.size);
+    if (!this.diagnosticsElement) {
+      return;
+    }
+    this.diagnosticsElement.dataset.vniMountedNodes = String(
+      this.mountedNodesById.size,
+    );
   }
 
   private updateDiagnostics(
@@ -1500,128 +1533,65 @@ export class VNIPlayer {
     renderEffectSpriteCount: number,
     safeGlowSpriteCount: number,
   ): void {
-    this.container.dataset.vniProjectId = this.projectId;
-    this.container.dataset.vniTime = this.currentTime.toFixed(2);
-    this.container.dataset.vniVisibleLayers = String(visibleLayerCount);
-    this.container.dataset.vniParticleSprites = String(particleSpriteCount);
-    this.container.dataset.vniRenderEffectSprites = String(
+    const diagnostics = this.diagnosticsElement;
+    if (!diagnostics) {
+      return;
+    }
+    diagnostics.dataset.vniProjectId = this.projectId;
+    diagnostics.dataset.vniTime = this.currentTime.toFixed(2);
+    diagnostics.dataset.vniVisibleLayers = String(visibleLayerCount);
+    diagnostics.dataset.vniParticleSprites = String(particleSpriteCount);
+    diagnostics.dataset.vniRenderEffectSprites = String(
       renderEffectSpriteCount,
     );
-    this.container.dataset.vniSafeGlowSprites = String(safeGlowSpriteCount);
-    this.container.dataset.vniPlaybackMode = this.playbackMode;
-    this.container.dataset.vniPlaybackPhase = this.getEffectivePlaybackPhase();
-    this.container.dataset.vniParticleDraining = String(
+    diagnostics.dataset.vniSafeGlowSprites = String(safeGlowSpriteCount);
+    diagnostics.dataset.vniPlaybackMode = this.playbackMode;
+    diagnostics.dataset.vniPlaybackPhase = this.getEffectivePlaybackPhase();
+    diagnostics.dataset.vniParticleDraining = String(
       this.particleRuntime.isDraining(),
     );
-    this.container.dataset.vniLiveParticles = String(particleSpriteCount);
-    this.container.dataset.vniLayerGroups = String(this.layerGroups.length);
-    this.container.dataset.vniLayerGroupSlots = String(
+    diagnostics.dataset.vniLiveParticles = String(particleSpriteCount);
+    diagnostics.dataset.vniLayerGroups = String(this.layerGroups.length);
+    diagnostics.dataset.vniLayerGroupSlots = String(
       this.layerGroupSlots.length,
     );
     this.updateMountedNodeDiagnostics();
-    this.container.dataset.v5gProjectId = this.projectId;
-    this.container.dataset.v5gTime = this.currentTime.toFixed(2);
-    this.container.dataset.v5gVisibleLayers = String(visibleLayerCount);
-    this.container.dataset.v5gParticleSprites = String(particleSpriteCount);
-    this.container.dataset.vniBundleId = this.bundleId;
-    this.container.dataset.vniProfileId = this.profileId;
-    this.container.dataset.vniAssetScale = String(this.assetScale);
-    this.container.dataset.vniProfilePurpose = this.profilePurpose;
-    if (!this.autoTick) {
-      return;
-    }
-    if (this.pixelDiagnosticsRafId !== null) {
-      cancelAnimationFrame(this.pixelDiagnosticsRafId);
-    }
-    this.pixelDiagnosticsRafId = requestAnimationFrame(() => {
-      this.pixelDiagnosticsRafId = null;
-      this.updatePixelDiagnostics();
-    });
-  }
-
-  private updatePixelDiagnostics(): void {
-    const canvas = this.app.canvas;
-    const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
-    if (!gl) {
-      this.container.dataset.vniPixelSampleError = "missing-webgl-context";
-      this.container.dataset.v5gPixelSampleError = "missing-webgl-context";
-      return;
-    }
-
-    const backgroundColor = parseColorHex(this.project.stage.backgroundColor);
-    const bg = [
-      (backgroundColor >> 16) & 0xff,
-      (backgroundColor >> 8) & 0xff,
-      backgroundColor & 0xff,
-    ];
-    const width = gl.drawingBufferWidth;
-    const height = gl.drawingBufferHeight;
-    const pixel = new Uint8Array(4);
-    let sampled = 0;
-    let nonBackground = 0;
-    let maxDelta = 0;
-
-    for (let y = 0.2; y <= 0.8; y += 0.1) {
-      for (let x = 0.2; x <= 0.8; x += 0.1) {
-        gl.readPixels(
-          Math.floor(width * x),
-          Math.floor(height * y),
-          1,
-          1,
-          gl.RGBA,
-          gl.UNSIGNED_BYTE,
-          pixel,
-        );
-        sampled += 1;
-        const delta =
-          Math.abs(pixel[0] - bg[0]) +
-          Math.abs(pixel[1] - bg[1]) +
-          Math.abs(pixel[2] - bg[2]);
-        maxDelta = Math.max(maxDelta, delta);
-        if (delta > 28) nonBackground += 1;
-      }
-    }
-
-    this.container.dataset.vniPixelSamples = String(sampled);
-    this.container.dataset.vniNonBackgroundSamples = String(nonBackground);
-    this.container.dataset.vniMaxPixelDelta = String(maxDelta);
-    delete this.container.dataset.vniPixelSampleError;
-    this.container.dataset.v5gPixelSamples = String(sampled);
-    this.container.dataset.v5gNonBackgroundSamples = String(nonBackground);
-    this.container.dataset.v5gMaxPixelDelta = String(maxDelta);
-    delete this.container.dataset.v5gPixelSampleError;
+    diagnostics.dataset.v5gProjectId = this.projectId;
+    diagnostics.dataset.v5gTime = this.currentTime.toFixed(2);
+    diagnostics.dataset.v5gVisibleLayers = String(visibleLayerCount);
+    diagnostics.dataset.v5gParticleSprites = String(particleSpriteCount);
+    diagnostics.dataset.vniBundleId = this.bundleId;
+    diagnostics.dataset.vniProfileId = this.profileId;
+    diagnostics.dataset.vniAssetScale = String(this.assetScale);
+    diagnostics.dataset.vniProfilePurpose = this.profilePurpose;
   }
 
   private clearDiagnostics(): void {
-    delete this.container.dataset.vniProjectId;
-    delete this.container.dataset.vniTime;
-    delete this.container.dataset.vniVisibleLayers;
-    delete this.container.dataset.vniParticleSprites;
-    delete this.container.dataset.vniRenderEffectSprites;
-    delete this.container.dataset.vniSafeGlowSprites;
-    delete this.container.dataset.vniPlaybackMode;
-    delete this.container.dataset.vniPlaybackPhase;
-    delete this.container.dataset.vniParticleDraining;
-    delete this.container.dataset.vniLiveParticles;
-    delete this.container.dataset.vniLayerGroups;
-    delete this.container.dataset.vniLayerGroupSlots;
-    delete this.container.dataset.vniMountedNodes;
-    delete this.container.dataset.vniPixelSamples;
-    delete this.container.dataset.vniNonBackgroundSamples;
-    delete this.container.dataset.vniMaxPixelDelta;
-    delete this.container.dataset.vniPixelSampleError;
-    delete this.container.dataset.v5gProjectId;
-    delete this.container.dataset.v5gTime;
-    delete this.container.dataset.v5gVisibleLayers;
-    delete this.container.dataset.v5gParticleSprites;
-    delete this.container.dataset.v5gPixelSamples;
-    delete this.container.dataset.v5gNonBackgroundSamples;
-    delete this.container.dataset.v5gMaxPixelDelta;
-    delete this.container.dataset.v5gPixelSampleError;
-    delete this.container.dataset.vniBundleId;
-    delete this.container.dataset.vniProfileId;
-    delete this.container.dataset.vniAssetScale;
-    delete this.container.dataset.vniProfilePurpose;
+    const diagnostics = this.diagnosticsElement;
+    if (!diagnostics) {
+      return;
+    }
+    delete diagnostics.dataset.vniProjectId;
+    delete diagnostics.dataset.vniTime;
+    delete diagnostics.dataset.vniVisibleLayers;
+    delete diagnostics.dataset.vniParticleSprites;
+    delete diagnostics.dataset.vniRenderEffectSprites;
+    delete diagnostics.dataset.vniSafeGlowSprites;
+    delete diagnostics.dataset.vniPlaybackMode;
+    delete diagnostics.dataset.vniPlaybackPhase;
+    delete diagnostics.dataset.vniParticleDraining;
+    delete diagnostics.dataset.vniLiveParticles;
+    delete diagnostics.dataset.vniLayerGroups;
+    delete diagnostics.dataset.vniLayerGroupSlots;
+    delete diagnostics.dataset.vniMountedNodes;
+    delete diagnostics.dataset.v5gProjectId;
+    delete diagnostics.dataset.v5gTime;
+    delete diagnostics.dataset.v5gVisibleLayers;
+    delete diagnostics.dataset.v5gParticleSprites;
+    delete diagnostics.dataset.vniBundleId;
+    delete diagnostics.dataset.vniProfileId;
+    delete diagnostics.dataset.vniAssetScale;
+    delete diagnostics.dataset.vniProfilePurpose;
   }
 }
 
@@ -1635,6 +1605,24 @@ function normalizeFitPadding(value: number | undefined): number | undefined {
     );
   }
   return value;
+}
+
+function normalizeViewportSize(value: {
+  readonly width: number;
+  readonly height: number;
+}): { readonly width: number; readonly height: number } {
+  if (
+    !Number.isFinite(value.width) ||
+    value.width <= 0 ||
+    !Number.isFinite(value.height) ||
+    value.height <= 0
+  ) {
+    throw new Error("VNIPlayer viewport width and height must be positive.");
+  }
+  return Object.freeze({
+    width: value.width,
+    height: value.height,
+  });
 }
 
 export type V5GPlayerOptions = VNIPlayerOptions;

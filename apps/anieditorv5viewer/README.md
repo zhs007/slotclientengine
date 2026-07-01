@@ -4,6 +4,8 @@
 
 The animation runtime comes from `@slotclientengine/vnicore`. This app owns bundled JSON/assets, the project selector, controls, styles, and browser assembly. Validation, sampling, Pixi.js v8 rendering, texture-size checks, particles, playback ranges, segmented playback, particle-draining, and diagnostics live in `packages/vnicore`.
 
+The viewer owns the browser Pixi `Application` and canvas. It passes `app.stage` to `VNIPlayer`, then uses `viewport` / `setViewportSize(...)` and `requestRender` to keep the player aligned with the viewer mount. `VNIPlayer` itself does not create a canvas.
+
 ## Bundled Projects
 
 The app bundles the legacy V5G full-size exports:
@@ -26,6 +28,12 @@ It also keeps the older VNI export2 bundle as a non-regression fixture:
 - `docs/anieditor5/export2/manifest.json`
 - `docs/anieditor5/export2/edit_full/project.json`
 - `docs/anieditor5/export2/runtime_50/project.json`
+
+For game-specific animation review, the viewer also registers the original
+`game003-s1` L1 win animation without copying or rewriting its assets:
+
+- `assets/game003-s1/L1-wins.json`
+- `assets/game003-s1/assets/*`
 
 The copied runtime files live under `src/assets`:
 
@@ -51,6 +59,8 @@ The copied runtime files live under `src/assets`:
 The UI project selector can switch between all bundled projects. JSON `asset.path` values are resolved through a Vite URL manifest and must match copied files exactly.
 
 `roundreel` is a `VNI_0.020` single-project runtime export stored in the same JSON + `assets/` resource pool as the other `docs/anieditor5/export` projects. Its profile id, purpose, and scale come from JSON `exportProfile`, not from the directory name. `runtime_50` stores 50% file pixels, but the player restores each image layer to its original logical design size with sprite-level compensation. Legacy exports and VNI single-project 100% exports may omit `fileWidth`, `fileHeight`, `fileScale`, and `exportProfile`; those are treated as full-size original-image profiles.
+
+`game003-l1-wins` is registered as a direct source project from `assets/game003-s1`; it is intended for visual comparison of the raw VNI animation in this viewer, not as a copied docs fixture.
 
 ## Runtime Boundary
 
@@ -101,9 +111,6 @@ The stage mount receives runtime diagnostics from `VNIPlayer`:
 - `data-vni-profile-id`
 - `data-vni-asset-scale`
 - `data-vni-profile-purpose`
-- `data-vni-pixel-samples`
-- `data-vni-non-background-samples`
-- `data-vni-max-pixel-delta`
 
 Legacy `data-v5g-*` aliases are still written for old browser checks and are cleared together with the VNI fields when a project switches or the player is destroyed.
 

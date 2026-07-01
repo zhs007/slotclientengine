@@ -23,6 +23,7 @@ const playerMock = vi.hoisted(() => {
     readonly setLoop = vi.fn();
     readonly getLoop = vi.fn(() => true);
     readonly getTime = vi.fn(() => 0);
+    readonly setViewportSize = vi.fn();
     readonly seek = vi.fn();
     readonly requestSegmentedPlaybackEnd = vi.fn();
     readonly getLayerGroupSlots = vi.fn(() => this.layerGroupSlots);
@@ -56,14 +57,44 @@ const playerMock = vi.hoisted(() => {
   return { instances, MockVNIPlayer };
 });
 
+const pixiMock = vi.hoisted(() => {
+  const instances: MockApplication[] = [];
+
+  class MockApplication {
+    stage = {};
+    canvas: HTMLCanvasElement = null as unknown as HTMLCanvasElement;
+    renderer = {
+      resize: vi.fn(),
+    };
+    render = vi.fn();
+    destroy = vi.fn((options?: { removeView?: boolean }) => {
+      if (options?.removeView) {
+        this.canvas.remove();
+      }
+    });
+
+    async init(): Promise<void> {
+      this.canvas = document.createElement("canvas");
+      instances.push(this);
+    }
+  }
+
+  return { instances, MockApplication };
+});
+
 vi.mock("@slotclientengine/vnicore/pixi", () => ({
   VNIPlayer: playerMock.MockVNIPlayer,
+}));
+
+vi.mock("pixi.js", () => ({
+  Application: pixiMock.MockApplication,
 }));
 
 afterEach(() => {
   vi.resetModules();
   document.body.innerHTML = "";
   playerMock.instances.length = 0;
+  pixiMock.instances.length = 0;
 });
 
 describe("anieditorv5viewer main", () => {
@@ -91,7 +122,18 @@ describe("anieditorv5viewer main", () => {
     expect(playerMock.instances).toHaveLength(2);
     expect(playerMock.instances[0].destroy).toHaveBeenCalledTimes(1);
     expect(playerMock.instances[1].init).toHaveBeenCalledTimes(1);
-    expect(document.querySelectorAll("canvas")).toHaveLength(0);
+    expect(pixiMock.instances[0].destroy).toHaveBeenCalledWith({
+      removeView: true,
+    });
+    expect(document.querySelectorAll("canvas")).toHaveLength(1);
+    const nextPlayerOptions = playerMock.instances[1].options as {
+      readonly parent: unknown;
+      readonly diagnosticsElement?: unknown;
+    };
+    expect(nextPlayerOptions).toMatchObject({
+      parent: pixiMock.instances[1].stage,
+      diagnosticsElement: expect.any(HTMLElement),
+    });
   });
 
   it("loads roundreel as a runtime_100 export-style project", async () => {
@@ -124,6 +166,38 @@ describe("anieditorv5viewer main", () => {
     expect(summary?.textContent).toContain("schema VNI_0.020");
     expect(summary?.textContent).toContain("profile runtime_100");
     expect(summary?.textContent).toContain("safe_glow");
+  });
+
+  it("loads game003 L1 wins as a runtime source project", async () => {
+    document.body.innerHTML = '<div id="app"></div>';
+
+    await import("../src/main");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const select = document.querySelector<HTMLSelectElement>(
+      'select[aria-label="V5G project"]',
+    );
+    if (!select) throw new Error("Missing project select.");
+
+    select.value = "game003-l1-wins";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const player = playerMock.instances.at(-1);
+    const summary = document.querySelector(".viewer-summary");
+
+    expect(player?.options).toMatchObject({
+      projectId: "game003-l1-wins",
+      bundleId: "game003-s1",
+      profileId: "game003-s1",
+      profilePurpose: "runtime",
+      assetScale: 1,
+    });
+    expect(summary?.textContent).toContain("SCATTER1");
+    expect(summary?.textContent).toContain("assets/game003-s1/L1-wins.json");
+    expect(summary?.textContent).toContain("schema VNI_0.022");
   });
 
   it("wires segmented playback controls to VNIPlayer", async () => {

@@ -18,11 +18,12 @@ workspace 内部应用使用：
 
 宿主需要准备三样东西：
 
-- `container`: 一个真实 `HTMLElement`。
+- `parent`: 一个由宿主 Pixi app 或游戏 renderer 持有的 `PIXI.Container`。
 - `project`: 已通过 `assertVNIProject` / `validateVNIProject` 的导出 JSON。
 - `assetUrls`: `AssetUrlManifest`，key 必须是导出 JSON 里的 `asset.path`。
 
 ```ts
+import { Application } from "pixi.js";
 import {
   assertVNIProject,
   resolveProjectAssetUrls,
@@ -30,11 +31,18 @@ import {
 } from "@slotclientengine/vnicore/core";
 import { VNIPlayer } from "@slotclientengine/vnicore/pixi";
 
+const app = new Application();
+await app.init({ backgroundAlpha: 0, autoStart: false });
+document.querySelector("#stage")?.appendChild(app.canvas);
+
 const project = assertVNIProject(projectJson);
 validateVNIProject(project);
 
 const player = new VNIPlayer({
-  container,
+  parent: app.stage,
+  diagnosticsElement: document.querySelector("#stage") ?? undefined,
+  viewport: { width: app.renderer.width, height: app.renderer.height },
+  requestRender: () => app.render(),
   projectId: "roundreel",
   bundleId: "legacy",
   profileId: "runtime_100",
@@ -48,15 +56,19 @@ await player.init();
 player.play();
 ```
 
+`VNIPlayer` 不创建自己的 `PIXI.Application`、renderer、canvas 或 DOM 节点；viewer、game runtime 或测试宿主必须自己持有这些外层对象。游戏内嵌场景通常传 `autoTick: false`，由主 ticker 调用 `update(deltaSeconds)`，并把 player 的 display tree 直接挂进同一个 Pixi renderer。
+
+运行时不会绘制导出 JSON 的 `stage.backgroundColor`。如果黑底 JPG 光效图的所有 image layer 用法都属于 `add` / `screen` / `lighten`，`VNIPlayer` 会在加载时派生一张透明 matte texture，避免透明宿主 canvas 上出现黑框；这不是播放 canvas，也不会改写原始资源文件。被 normal layer 复用的 JPG 不会走 matte 派生。
+
 ## 生命周期
 
-- `init()`: 加载贴图、校验真实 texture size、创建 Pixi app、初始化 layer 和 particle 容器。
+- `init()`: 加载贴图、校验真实 texture size，把 VNI display tree 挂到宿主 `parent`，初始化 layer 和 particle 容器。
 - `play()`: 使用 RAF 自动推进普通时间轴；无参数旧行为保持不变。
 - `pause()`: 暂停用户播放，冻结主时间轴和 live 粒子年龄，不清空 range、marker 或 complete listener。
 - `restart()`: 清空 active range、segmented 状态和 live 粒子，回到 0 秒。
 - `seek(time)`: 退出 range/segmented live playback，清空 live 粒子状态，并按指定时间做确定性预览；不会触发 marker。
 - `setLoop(loop)` / `getLoop()`: 控制普通播放和未显式传 `loop` 的 range 播放。
-- `destroy()`: 停止 RAF、断开 `ResizeObserver`、清理 mounted nodes、safe glow overlays、render effects、particles、diagnostics、marker 和 complete listener，并销毁 Pixi app。
+- `destroy()`: 停止 RAF、清理 mounted nodes、safe glow overlays、render effects、particles、diagnostics、marker 和 complete listener，并从宿主 parent 移除和销毁 VNI 自己的 display tree；不会销毁宿主 Pixi app、renderer 或 canvas。
 
 播放到终点和视觉完全结束不是同一件事。非循环 timeline、非循环 range 和 segmented end 段到达终点后会停止发射器并进入 `particle-draining`；已有 live 粒子继续衰减，排空后才进入 `complete` 并触发 `onPlaybackComplete(...)`。`isPlaying()` 在主时间轴停止推进后会是 `false`，但内部 RAF 可能仍会继续驱动粒子排空；使用 `getPlaybackState().isDrainingParticles` 判断排空状态。
 
@@ -147,7 +159,7 @@ disposeExternal();
 
 ## Diagnostics
 
-播放器会在 `container.dataset` 写入：
+如果传入 `diagnosticsElement`，播放器会在它的 `dataset` 写入：
 
 - `data-vni-project-id`
 - `data-vni-time`
@@ -166,10 +178,6 @@ disposeExternal();
 - `data-vni-profile-id`
 - `data-vni-asset-scale`
 - `data-vni-profile-purpose`
-- `data-vni-pixel-samples`
-- `data-vni-non-background-samples`
-- `data-vni-max-pixel-delta`
-- `data-vni-pixel-sample-error`
 
 `data-vni-safe-glow-sprites` 只统计 `safe_glow` 的同图副本；副本继承当前 layer 的 `blendMode`，但仍不进入旧 render effect 统计。`data-vni-render-effect-sprites` 只统计旧 `shatter` / `glow` render effect，两者不会混计。
 

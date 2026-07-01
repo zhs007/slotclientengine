@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
 const pixiMock = vi.hoisted(() => {
-  const sourceUpdates: ReturnType<typeof vi.fn>[] = [];
-
   class MockPoint {
     x = 0;
     y = 0;
@@ -20,6 +18,7 @@ const pixiMock = vi.hoisted(() => {
     alpha = 1;
     rotation = 0;
     position = new MockPoint();
+    pivot = new MockPoint();
     scale = new MockPoint();
     anchor = new MockPoint();
     mask: MockContainer | null = null;
@@ -71,7 +70,6 @@ const pixiMock = vi.hoisted(() => {
 
     constructor(readonly options?: unknown) {
       const update = vi.fn();
-      sourceUpdates.push(update);
       this.source = { update };
     }
   }
@@ -82,27 +80,27 @@ const pixiMock = vi.hoisted(() => {
     }
   }
 
-  class MockRectangle {
-    constructor(
-      readonly x: number,
-      readonly y: number,
-      readonly width: number,
-      readonly height: number,
-    ) {}
+  class MockGraphics extends MockContainer {
+    rect(): this {
+      return this;
+    }
+
+    fill(): this {
+      return this;
+    }
   }
 
   return {
     MockContainer,
-    MockRectangle,
+    MockGraphics,
     MockSprite,
     MockTexture,
-    sourceUpdates,
   };
 });
 
 vi.mock("pixi.js", () => ({
   Container: pixiMock.MockContainer,
-  Rectangle: pixiMock.MockRectangle,
+  Graphics: pixiMock.MockGraphics,
   Sprite: pixiMock.MockSprite,
   Texture: pixiMock.MockTexture,
 }));
@@ -183,47 +181,14 @@ function createResource(): SymbolVniAnimationResource {
   };
 }
 
-function createDocument() {
-  const bodyChildren: unknown[] = [];
-  const body = {
-    appendChild: vi.fn((child: unknown) => {
-      bodyChildren.push(child);
-      return child;
-    }),
-  };
-  return {
-    body,
-    bodyChildren,
-    createElement: vi.fn(() => {
-      const children: unknown[] = [];
-      const element = {
-        style: {} as Record<string, string>,
-        dataset: {} as Record<string, string>,
-        appendChild: vi.fn((child: unknown) => {
-          children.push(child);
-          return child;
-        }),
-        remove: vi.fn(() => {
-          const index = bodyChildren.indexOf(element);
-          if (index >= 0) {
-            bodyChildren.splice(index, 1);
-          }
-        }),
-        querySelectorAll: vi.fn((selector: string) =>
-          selector === "canvas" ? children : [],
-        ),
-      };
-      return element;
-    }),
-  } as unknown as Document & { readonly bodyChildren: unknown[] };
-}
-
 function createPlayerFactory() {
   let complete: (() => void) | null = null;
+  const root = new pixiMock.MockContainer();
   const calls = {
-    init: vi.fn(async function init(this: { readonly container: HTMLElement }) {
-      this.container.appendChild({ nodeName: "CANVAS" } as HTMLCanvasElement);
+    init: vi.fn(async function init(this: { readonly parent: Container }) {
+      this.parent.addChild(root as unknown as Container);
     }),
+    getDisplayObject: vi.fn(() => root as unknown as Container),
     playRange: vi.fn(),
     update: vi.fn((deltaSeconds: number) => {
       if (deltaSeconds >= 1) {
@@ -241,7 +206,8 @@ function createPlayerFactory() {
   };
   const factory = vi.fn((options) => {
     const player: VniSymbolAniPlayer = {
-      init: calls.init.bind({ container: options.container }),
+      init: calls.init.bind({ parent: options.parent }),
+      getDisplayObject: calls.getDisplayObject,
       playRange: calls.playRange,
       update: calls.update,
       destroy: calls.destroy,
@@ -250,19 +216,17 @@ function createPlayerFactory() {
     };
     return player;
   });
-  return { factory, calls };
+  return { factory, calls, root };
 }
 
 describe("VniSymbolAni", () => {
-  it("waits for async init, refreshes the canvas texture and reports completion once", async () => {
+  it("waits for async init, mounts the VNI display tree and reports completion once", async () => {
     const context = createContext();
-    const document = createDocument();
-    const { factory, calls } = createPlayerFactory();
+    const { factory, calls, root } = createPlayerFactory();
     const ani = new VniSymbolAni({
       context,
       resource: createResource(),
       playerFactory: factory,
-      documentFactory: () => document,
     });
 
     ani.reset();
@@ -272,33 +236,38 @@ describe("VniSymbolAni", () => {
     await Promise.resolve();
     expect(context.baseLayer.visible).toBe(false);
     expect(context.overlayLayer.children).toHaveLength(1);
+    expect(factory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parent: expect.any(pixiMock.MockContainer),
+        autoTick: false,
+      }),
+    );
+    expect(root.parent).toBe(factory.mock.calls[0]?.[0].parent);
+    expect(root.pivot).toMatchObject({ x: 20, y: 21 });
+    expect(root.position).toMatchObject({ x: 0, y: 0 });
     expect(calls.playRange).toHaveBeenCalledWith({
       range: { unit: "time", start: 0, end: 2 },
       loop: false,
     });
 
     expect(ani.update(0.4).onceCompleted).toBe(false);
-    expect(pixiMock.sourceUpdates.at(-1)).toHaveBeenCalled();
     const completed = ani.update(1);
     expect(completed.onceCompleted).toBe(true);
     expect(ani.update(1).onceCompleted).toBe(false);
   });
 
-  it("destroys player, hidden container and overlay sprite idempotently", async () => {
+  it("destroys player and mounted VNI viewport idempotently", async () => {
     const context = createContext();
-    const document = createDocument();
     const { factory, calls } = createPlayerFactory();
     const ani = new VniSymbolAni({
       context,
       resource: createResource(),
       playerFactory: factory,
-      documentFactory: () => document,
     });
 
     ani.reset();
     await Promise.resolve();
     await Promise.resolve();
-    expect(document.bodyChildren).toHaveLength(1);
     expect(context.overlayLayer.children).toHaveLength(1);
 
     ani.destroy();
@@ -306,7 +275,6 @@ describe("VniSymbolAni", () => {
 
     expect(calls.pause).toHaveBeenCalledTimes(1);
     expect(calls.destroy).toHaveBeenCalledTimes(1);
-    expect(document.bodyChildren).toHaveLength(0);
     expect(context.overlayLayer.children).toHaveLength(0);
   });
 
@@ -321,7 +289,6 @@ describe("VniSymbolAni", () => {
       resources: { L1: { win: createResource() } },
       fallback,
       playerFactory: createPlayerFactory().factory,
-      documentFactory: () => createDocument(),
     });
 
     expect(resolver(createContext())).toBeInstanceOf(VniSymbolAni);
