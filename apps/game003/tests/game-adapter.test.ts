@@ -247,7 +247,11 @@ describe("game003 adapter", () => {
 
     const spinPromise = Promise.resolve(
       adapter.playSpin(
-        createLogic(GAME003_SPIN_SCENE, { betAmountRaw: 5, winAmountRaw: 25 }),
+        createLogic(GAME003_SPIN_SCENE, {
+          betAmountRaw: 10,
+          lines: 10,
+          winAmountRaw: 25,
+        }),
       ),
     );
     let resolved = false;
@@ -259,7 +263,7 @@ describe("game003 adapter", () => {
     fakeApp.tick(16);
     await Promise.resolve();
     expect(resolved).toBe(false);
-    expect(winAmount.starts).toEqual([{ betAmountRaw: 5, winAmountRaw: 25 }]);
+    expect(winAmount.starts).toEqual([{ betAmountRaw: 100, winAmountRaw: 25 }]);
     expect(winAmount.updateDeltas).toEqual([]);
 
     winAmount.completeNextUpdate = true;
@@ -295,11 +299,52 @@ describe("game003 adapter", () => {
     expect(resolved).toBe(false);
     expect(runtime.winRequests).toHaveLength(2);
     expect(winAmount.starts[0]).toMatchObject({
-      betAmountRaw: 5,
+      betAmountRaw: 50,
       winAmountRaw: GAME003_SAMPLE_WIN_SPIN_RESULT.totalwin,
     });
 
     winAmount.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await spinPromise;
+    expect(resolved).toBe(true);
+  });
+
+  it("forwards canvas clicks to dismiss the current win amount animation", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const winAmount = new FakeWinAmountPlayer({ completeOnFirstUpdate: false });
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createWinAmountPlayer: () => winAmount.asPlayer(),
+    });
+    await adapter.mount(createMountContext());
+
+    const spinPromise = Promise.resolve(
+      adapter.playSpin(
+        createLogic(GAME003_SPIN_SCENE, {
+          betAmountRaw: 10,
+          lines: 10,
+          winAmountRaw: 250,
+        }),
+      ),
+    );
+    let resolved = false;
+    void spinPromise.then(() => {
+      resolved = true;
+    });
+
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    fakeApp.canvas.dispatchEvent(new Event("pointerdown"));
+    expect(winAmount.dismissRequests).toBe(1);
+    expect(resolved).toBe(false);
+
     fakeApp.tick(16);
     await spinPromise;
     expect(resolved).toBe(true);
@@ -357,7 +402,10 @@ describe("game003 adapter", () => {
     destroyAdapter.destroy?.();
     await expect(destroyPending).rejects.toThrow(/destroyed/);
     expect(destroyContext.gameLayer.children).toHaveLength(0);
-    expect(fakeWinAmountPlayers.at(-1)?.destroyed).toBe(true);
+    const destroyedWinAmount = fakeWinAmountPlayers.at(-1);
+    expect(destroyedWinAmount?.destroyed).toBe(true);
+    destroyApp.canvas.dispatchEvent(new Event("pointerdown"));
+    expect(destroyedWinAmount?.dismissRequests).toBe(0);
     const resizeCount = destroyApp.resizeCalls.length;
     destroyContext.emitViewport({ width: 1600, height: 1000 });
     expect(destroyApp.resizeCalls).toHaveLength(resizeCount);
@@ -560,6 +608,7 @@ function createLogic(
   scene: SceneMatrix,
   amounts: {
     readonly betAmountRaw?: number;
+    readonly lines?: number;
     readonly winAmountRaw?: number;
   } = {},
 ): GameLogic {
@@ -571,6 +620,7 @@ function createLogic(
   return {
     getStep: () => step,
     getBet: () => amounts.betAmountRaw ?? 5,
+    getLines: () => amounts.lines ?? 10,
     getTotalWin: () => amounts.winAmountRaw ?? 0,
   } as unknown as GameLogic;
 }
@@ -735,6 +785,7 @@ class FakeWinAmountPlayer {
   }> = [];
   readonly updateDeltas: number[] = [];
   readonly layoutCalls: unknown[] = [];
+  dismissRequests = 0;
   playing = false;
   destroyed = false;
   completeNextUpdate: boolean;
@@ -767,6 +818,10 @@ class FakeWinAmountPlayer {
       },
       applyLayout: (layout) => {
         this.layoutCalls.push(layout);
+      },
+      requestDismiss: () => {
+        this.dismissRequests += 1;
+        this.playing = false;
       },
       isPlaying: () => this.playing,
       destroy: () => {

@@ -405,6 +405,20 @@ describe("buildgamestatic YAML loader", () => {
             tiers: [
               {
                 ...createWinAmountObject().animations.tiers[0],
+                durationSeconds: 4,
+              },
+            ],
+          },
+        },
+        /至少为 5 秒/,
+      ],
+      [
+        {
+          animations: {
+            ...createWinAmountObject().animations,
+            tiers: [
+              {
+                ...createWinAmountObject().animations.tiers[0],
                 durationSeconds: 6,
               },
             ],

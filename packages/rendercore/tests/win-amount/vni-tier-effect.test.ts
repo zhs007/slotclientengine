@@ -66,6 +66,52 @@ describe("win amount VNI tier resources", () => {
         tierConfigs: [
           {
             ...createTierConfig("bigwin", 15, "./bigwin.json"),
+            loopStartTime: -1,
+          },
+        ],
+        projectModules: {
+          "/assets/game003-s1/win-amount/bigwin.json": bigwinProject,
+        },
+        assetModules,
+      }),
+    ).toThrow(/finite non-negative/);
+
+    expect(() =>
+      createWinAmountAnimationTiersFromModules({
+        tierConfigs: [
+          {
+            ...createTierConfig("bigwin", 15, "./bigwin.json"),
+            loopStartTime: 4,
+            loopEndTime: 3,
+          },
+        ],
+        projectModules: {
+          "/assets/game003-s1/win-amount/bigwin.json": bigwinProject,
+        },
+        assetModules,
+      }),
+    ).toThrow(/loopStartTime <= loopEndTime/);
+
+    expect(() =>
+      createWinAmountAnimationTiersFromModules({
+        tierConfigs: [
+          {
+            ...createTierConfig("bigwin", 15, "./bigwin.json"),
+            durationSeconds: 4,
+          },
+        ],
+        projectModules: {
+          "/assets/game003-s1/win-amount/bigwin.json": bigwinProject,
+        },
+        assetModules,
+      }),
+    ).toThrow(/at least 5 seconds/);
+
+    expect(() =>
+      createWinAmountAnimationTiersFromModules({
+        tierConfigs: [
+          {
+            ...createTierConfig("bigwin", 15, "./bigwin.json"),
             durationSeconds: 6,
           },
         ],

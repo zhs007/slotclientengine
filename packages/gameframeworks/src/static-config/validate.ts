@@ -20,6 +20,8 @@ import type {
   SlotGameStaticWinAmountTier,
 } from "./types.js";
 
+const MIN_WIN_AMOUNT_TIER_DURATION_SECONDS = 5;
+
 export function assertSlotGameStaticConfig(
   config: unknown,
 ): asserts config is SlotGameStaticConfig {
@@ -569,6 +571,11 @@ function assertWinAmountTier(
     record.durationSeconds,
     `${label}.durationSeconds`,
   );
+  if (durationSeconds < MIN_WIN_AMOUNT_TIER_DURATION_SECONDS) {
+    throw new Error(
+      `${label}.durationSeconds must be at least ${MIN_WIN_AMOUNT_TIER_DURATION_SECONDS} seconds.`,
+    );
+  }
   const loopStartTime = assertNonNegativeFiniteNumber(
     record.loopStartTime,
     `${label}.loopStartTime`,

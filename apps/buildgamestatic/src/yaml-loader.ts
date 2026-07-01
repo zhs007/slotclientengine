@@ -33,6 +33,8 @@ import type {
   GameStaticYamlWinAmountTier,
 } from "./types.js";
 
+const MIN_WIN_AMOUNT_TIER_DURATION_SECONDS = 5;
+
 export function loadGameStaticYamlConfig(options: {
   readonly rootDir: string;
   readonly inputPath: string;
@@ -591,6 +593,11 @@ function parseWinAmountTier(
     record.durationSeconds,
     `${label}.durationSeconds`,
   );
+  if (durationSeconds < MIN_WIN_AMOUNT_TIER_DURATION_SECONDS) {
+    throw new Error(
+      `${label}.durationSeconds 必须至少为 ${MIN_WIN_AMOUNT_TIER_DURATION_SECONDS} 秒。`,
+    );
+  }
   const loopStartTime = assertNonNegativeNumber(
     record.loopStartTime,
     `${label}.loopStartTime`,

@@ -248,6 +248,28 @@ describe("slot game static config", () => {
         },
       }),
     ).toThrow(/projectModules must not be empty/);
+    expect(() =>
+      assertSlotGameStaticConfig({
+        ...withWinAmount,
+        skins: {
+          "1": {
+            ...withWinAmount.skins["1"],
+            winAmount: {
+              ...createValidWinAmountConfig(),
+              animations: {
+                ...createValidWinAmountConfig().animations,
+                tiers: [
+                  {
+                    ...createValidWinAmountConfig().animations.tiers[0],
+                    durationSeconds: 4,
+                  },
+                ],
+              },
+            },
+          },
+        },
+      }),
+    ).toThrow(/at least 5 seconds/);
   });
 });
 
