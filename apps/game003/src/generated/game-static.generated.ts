@@ -34,6 +34,21 @@ const game003Skin1VniAssetModules = import.meta.glob(
     query: "?url",
   },
 ) as Record<string, string>;
+const game003Skin1WinAmountProjectModules = import.meta.glob(
+  "../../../../assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json",
+  {
+    eager: true,
+    import: "default",
+  },
+) as Record<string, unknown>;
+const game003Skin1WinAmountAssetModules = import.meta.glob(
+  "../../../../assets/game003-s1/win-amount/assets/*.{png,jpg,jpeg,webp}",
+  {
+    eager: true,
+    import: "default",
+    query: "?url",
+  },
+) as Record<string, string>;
 
 export const GAME003_STATIC_SKIN_MODULES = Object.freeze({
   "1": game003Skin1SymbolModules,
@@ -148,6 +163,65 @@ export const GAME003_STATIC_CONFIG = Object.freeze({
           cellWidth: 165,
           cellHeight: 130,
         } as const),
+      }),
+      winAmount: Object.freeze({
+        amountScale: 100,
+        currency: "USD",
+        locale: "en-US",
+        minorCountDurationSeconds: 1.5,
+        majorCountDurationSeconds: 3,
+        thresholds: Object.freeze({
+          minorMultiplier: 1,
+          bigMultiplier: 15,
+          superMultiplier: 30,
+          megaMultiplier: 50,
+        } as const),
+        text: Object.freeze({
+          minorFontSize: 54,
+          majorFontSize: 118,
+          fill: "#fff7d6",
+          stroke: "#5a2500",
+          strokeWidth: 8,
+        } as const),
+        layout: Object.freeze({
+          minorAnchor: "reel-area-bottom-center",
+          majorAnchor: "reel-area-center",
+          minorOffset: Object.freeze({ x: 0, y: -28 } as const),
+          majorOffset: Object.freeze({ x: 0, y: 0 } as const),
+        }),
+        animations: Object.freeze({
+          projectModules: game003Skin1WinAmountProjectModules,
+          assetModules: game003Skin1WinAmountAssetModules,
+          tiers: Object.freeze([
+            {
+              id: "bigwin",
+              thresholdMultiplier: 15,
+              project: "./bigwin.json",
+              durationSeconds: 5,
+              loopStartTime: 1,
+              loopEndTime: 4,
+              keepParticlesAlive: true,
+            },
+            {
+              id: "superwin",
+              thresholdMultiplier: 30,
+              project: "./superwin.json",
+              durationSeconds: 5,
+              loopStartTime: 1,
+              loopEndTime: 4,
+              keepParticlesAlive: true,
+            },
+            {
+              id: "megawin",
+              thresholdMultiplier: 50,
+              project: "./megawin.json",
+              durationSeconds: 5,
+              loopStartTime: 1,
+              loopEndTime: 4,
+              keepParticlesAlive: true,
+            },
+          ] as const),
+        }),
       }),
     }),
   }),

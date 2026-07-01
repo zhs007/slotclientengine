@@ -198,6 +198,57 @@ describe("slot game static config", () => {
       }),
     ).toThrow(/unknown field "placement"/);
   });
+
+  it("validates optional win amount animation config", () => {
+    const config = createValidConfig();
+    const withWinAmount = {
+      ...config,
+      skins: {
+        "1": {
+          ...config.skins["1"],
+          winAmount: createValidWinAmountConfig(),
+        },
+      },
+    };
+
+    expect(() => assertSlotGameStaticConfig(withWinAmount)).not.toThrow();
+    expect(() =>
+      assertSlotGameStaticConfig({
+        ...withWinAmount,
+        skins: {
+          "1": {
+            ...withWinAmount.skins["1"],
+            winAmount: {
+              ...createValidWinAmountConfig(),
+              thresholds: {
+                minorMultiplier: 1,
+                bigMultiplier: 15,
+                superMultiplier: 10,
+                megaMultiplier: 50,
+              },
+            },
+          },
+        },
+      }),
+    ).toThrow(/strictly increasing/);
+    expect(() =>
+      assertSlotGameStaticConfig({
+        ...withWinAmount,
+        skins: {
+          "1": {
+            ...withWinAmount.skins["1"],
+            winAmount: {
+              ...createValidWinAmountConfig(),
+              animations: {
+                ...createValidWinAmountConfig().animations,
+                projectModules: {},
+              },
+            },
+          },
+        },
+      }),
+    ).toThrow(/projectModules must not be empty/);
+  });
 });
 
 function createValidConfig(): SlotGameStaticConfig {
@@ -304,6 +355,50 @@ function createValidConfig(): SlotGameStaticConfig {
           }),
         }),
       }),
+    }),
+  });
+}
+
+function createValidWinAmountConfig() {
+  return Object.freeze({
+    amountScale: 100,
+    currency: "USD",
+    locale: "en-US",
+    minorCountDurationSeconds: 1.5,
+    majorCountDurationSeconds: 3,
+    thresholds: Object.freeze({
+      minorMultiplier: 1,
+      bigMultiplier: 15,
+      superMultiplier: 30,
+      megaMultiplier: 50,
+    }),
+    text: Object.freeze({
+      minorFontSize: 54,
+      majorFontSize: 118,
+      fill: "#fff7d6",
+      stroke: "#5a2500",
+      strokeWidth: 8,
+    }),
+    layout: Object.freeze({
+      minorAnchor: "reel-area-bottom-center",
+      majorAnchor: "reel-area-center",
+      minorOffset: Object.freeze({ x: 0, y: -28 }),
+      majorOffset: Object.freeze({ x: 0, y: 0 }),
+    }),
+    animations: Object.freeze({
+      projectModules: Object.freeze({ "/bigwin.json": Object.freeze({}) }),
+      assetModules: Object.freeze({ "/asset.png": "/asset.png" }),
+      tiers: Object.freeze([
+        Object.freeze({
+          id: "bigwin",
+          thresholdMultiplier: 15,
+          project: "./bigwin.json",
+          durationSeconds: 5,
+          loopStartTime: 1,
+          loopEndTime: 4,
+          keepParticlesAlive: true,
+        }),
+      ]),
     }),
   });
 }

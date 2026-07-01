@@ -6,6 +6,7 @@ import {
   type SceneMatrix,
 } from "@slotclientengine/gameframeworks";
 import type { SymbolAssetMap } from "@slotclientengine/rendercore";
+import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import {
   GAME003_DEFAULT_SCENE,
   GAME003_SAMPLE_WIN_SPIN_RESULT,
@@ -95,6 +96,7 @@ describe("game003 adapter", () => {
       x: GAME003_SKIN1_LANDSCAPE_SCENE_PARTS.reelArea.x,
       y: GAME003_SKIN1_LANDSCAPE_SCENE_PARTS.reelArea.y,
     });
+    expect(fakeWinAmountPlayers.at(-1)?.layoutCalls).toHaveLength(2);
     expect(fakeApp.stage.children).toHaveLength(1);
   });
 
@@ -230,6 +232,79 @@ describe("game003 adapter", () => {
     expect(resolved).toBe(true);
   });
 
+  it("waits for amount animation when there is win amount without symbol queue", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const winAmount = new FakeWinAmountPlayer({ completeOnFirstUpdate: false });
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createWinAmountPlayer: () => winAmount.asPlayer(),
+    });
+    await adapter.mount(createMountContext());
+
+    const spinPromise = Promise.resolve(
+      adapter.playSpin(
+        createLogic(GAME003_SPIN_SCENE, { betAmountRaw: 5, winAmountRaw: 25 }),
+      ),
+    );
+    let resolved = false;
+    void spinPromise.then(() => {
+      resolved = true;
+    });
+
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    expect(winAmount.starts).toEqual([{ betAmountRaw: 5, winAmountRaw: 25 }]);
+    expect(winAmount.updateDeltas).toEqual([]);
+
+    winAmount.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await spinPromise;
+    expect(resolved).toBe(true);
+  });
+
+  it("waits for both symbol win sequence and amount animation", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const winAmount = new FakeWinAmountPlayer({ completeOnFirstUpdate: false });
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createWinAmountPlayer: () => winAmount.asPlayer(),
+    });
+    await adapter.mount(createMountContext());
+
+    const spinPromise = Promise.resolve(adapter.playSpin(createWinLogic()));
+    let resolved = false;
+    void spinPromise.then(() => {
+      resolved = true;
+    });
+
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    fakeApp.tick(16);
+    fakeApp.tick(16);
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    expect(runtime.winRequests).toHaveLength(2);
+    expect(winAmount.starts[0]).toMatchObject({
+      betAmountRaw: 5,
+      winAmountRaw: GAME003_SAMPLE_WIN_SPIN_RESULT.totalwin,
+    });
+
+    winAmount.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await spinPromise;
+    expect(resolved).toBe(true);
+  });
+
   it("rejects playSpin errors, visual mismatches, and destroy removes listeners", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();
@@ -282,15 +357,25 @@ describe("game003 adapter", () => {
     destroyAdapter.destroy?.();
     await expect(destroyPending).rejects.toThrow(/destroyed/);
     expect(destroyContext.gameLayer.children).toHaveLength(0);
+    expect(fakeWinAmountPlayers.at(-1)?.destroyed).toBe(true);
     const resizeCount = destroyApp.resizeCalls.length;
     destroyContext.emitViewport({ width: 1600, height: 1000 });
     expect(destroyApp.resizeCalls).toHaveLength(resizeCount);
   });
 });
 
+const fakeWinAmountPlayers: FakeWinAmountPlayer[] = [];
+
 function createTestAdapter(options: Omit<Game003AdapterOptions, "skin">) {
   return createGame003Adapter({
     skin: getGame003SkinConfig("1"),
+    createWinAmountPlayer:
+      options.createWinAmountPlayer ??
+      (() => {
+        const player = new FakeWinAmountPlayer();
+        fakeWinAmountPlayers.push(player);
+        return player.asPlayer();
+      }),
     ...options,
   });
 }
@@ -471,7 +556,13 @@ function createSizedTexture(width: number, height: number): Texture {
   return texture;
 }
 
-function createLogic(scene: SceneMatrix): GameLogic {
+function createLogic(
+  scene: SceneMatrix,
+  amounts: {
+    readonly betAmountRaw?: number;
+    readonly winAmountRaw?: number;
+  } = {},
+): GameLogic {
   const step = {
     getScene: () => scene,
     hasComponent: () => false,
@@ -479,6 +570,8 @@ function createLogic(scene: SceneMatrix): GameLogic {
   };
   return {
     getStep: () => step,
+    getBet: () => amounts.betAmountRaw ?? 5,
+    getTotalWin: () => amounts.winAmountRaw ?? 0,
   } as unknown as GameLogic;
 }
 
@@ -630,6 +723,56 @@ class FakeRuntime {
       getTargetScene: () => this.targetScene,
       getFinalYs: () => [0, 0, 0, 0, 0],
       createSpinPlan: () => ({}) as any,
+    };
+  }
+}
+
+class FakeWinAmountPlayer {
+  readonly container = new Container();
+  readonly starts: Array<{
+    readonly betAmountRaw: number;
+    readonly winAmountRaw: number;
+  }> = [];
+  readonly updateDeltas: number[] = [];
+  readonly layoutCalls: unknown[] = [];
+  playing = false;
+  destroyed = false;
+  completeNextUpdate: boolean;
+
+  constructor(
+    options: { readonly completeOnFirstUpdate?: boolean } = {
+      completeOnFirstUpdate: true,
+    },
+  ) {
+    this.completeNextUpdate = options.completeOnFirstUpdate ?? true;
+  }
+
+  asPlayer(): WinAmountAnimationPlayer {
+    return {
+      container: this.container,
+      start: (input) => {
+        this.starts.push(input);
+        this.playing = input.winAmountRaw > 0;
+      },
+      update: (deltaSeconds) => {
+        this.updateDeltas.push(deltaSeconds);
+        if (this.completeNextUpdate) {
+          this.playing = false;
+        }
+        return {
+          completed: !this.playing,
+          phase: this.playing ? "major-counting" : "complete",
+          displayedAmountRaw: this.starts.at(-1)?.winAmountRaw ?? 0,
+        };
+      },
+      applyLayout: (layout) => {
+        this.layoutCalls.push(layout);
+      },
+      isPlaying: () => this.playing,
+      destroy: () => {
+        this.destroyed = true;
+        this.playing = false;
+      },
     };
   }
 }

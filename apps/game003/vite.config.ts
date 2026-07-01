@@ -30,6 +30,13 @@ export default defineConfig({
         ),
       },
       {
+        find: "@slotclientengine/rendercore/win-amount",
+        replacement: resolve(
+          __dirname,
+          "../../packages/rendercore/src/win-amount/index.ts",
+        ),
+      },
+      {
         find: "@slotclientengine/rendercore",
         replacement: resolve(
           __dirname,

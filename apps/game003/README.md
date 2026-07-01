@@ -17,6 +17,8 @@
 - 竖版传送带：`assets/game003-s1/conveyor2.png`
 - `L1`-`L5` 中奖 VNI project：`assets/game003-s1/L1-wins.json` 到 `assets/game003-s1/L5-wins.json`
 - `L1`-`L5` 中奖 VNI assets：`assets/game003-s1/assets/*.{png,jpg,jpeg,webp}`
+- big/super/mega 金额动画 VNI project：`assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json`
+- big/super/mega 金额动画 VNI assets：`assets/game003-s1/win-amount/assets/*.{png,jpg,jpeg,webp}`
 
 生成 `gameconfig.json`：
 
@@ -50,6 +52,8 @@ CI=true pnpm --filter game003 check:static-config
 `gameConfig` 字段只引用 `assets/gamecfg003/gameconfig.json`；Excel 到 JSON 仍由 `apps/gengameconfig` 负责。symbol scale 仍由 `assets/game003-s1/symbol-state-textures.manifest.json` 负责，不在 YAML 或 app 内维护第二份 scale 表。
 
 `symbols.vniProjectGlob` 和 `symbols.vniAssetGlob` 只用于把 manifest 声明的 VNI symbol 动画资源纳入 Vite 静态模块。`loading.resources` 只承载随游戏包发布的静态资源 path/glob 和权重，不承载 token、cookie、serverUrl、服务器真实轮带或玩家本次下注。glob 必须是明确资源组，不能用 `assets/game003-s1/*.png` 这类宽泛写法把主转轮框、传送带和 symbol 混在一起。
+
+`skins."1".winAmount` 配置中奖金额动画的显示规则、layout anchor、阈值和 VNI tier 资源。金额输入仍来自 live/GMI 的服务器整数；当前显示 formatter 与 framework HUD 共用 `formatServerUsdAmount(...)`，所以 `100` 显示为 `$1.00`。big/super/mega 的 project 和 assets 只属于 `assets/game003-s1/win-amount`，不要混入 symbol VNI manifest 或 `assets/game003-s1/assets`。
 
 ## Symbol VNI 动画
 
@@ -134,6 +138,8 @@ http://127.0.0.1:5208/?skin=1&token=TOKEN&businessid=guest&clienttype=web&jurisd
 live spin 停到服务器目标 scene 并完成可见窗口校验后，`apps/game003/src/win-sequence.ts` 读取第 0 step 的 `bg-wins.basicComponentData.usedResults`。每个索引指向同 step 的 `clientData.results[]`，并保留 `usedResults` 顺序生成中奖播放队列。
 
 `result.pos` 是 `[x, y]` 成对坐标，坐标基准是当前 5 列 x 5 行主转轮可见窗口：`x` 为列索引，`y` 为列内可见行索引。一个 result 内的所有 `pos` 同时请求 symbol `win` 状态；多个 result 按 `usedResults` 顺序依次播放。全部中奖组的 once 动画回到 `normal` 后，`playSpin()` 才 resolve，framework 才进入后续 collect 流程。
+
+如果本轮 `logic.getTotalWin() > 0`，`game-adapter.ts` 会在 spin 落停并完成 target scene 校验后启动 Pixi 中奖金额动画。动画使用 `logic.getBet()` 和 `logic.getTotalWin()` 的 raw amount，先在主转轮区底部递增小额数字，超过 1x 后切到主转轮区中心，并在到达 15x / 30x / 50x 时由 rendercore 切换 bigwin / superwin / megawin segmented VNI tier。symbol win sequence 和金额动画都会纳入 `playSpin()` 完成条件，二者都完成后 framework 才进入 collect / idle。
 
 当前 `game003` 不对 `result.symbol` 和 `targetScene[x][y]` 做默认一致性校验，因为 Ways 游戏里的 wild / 替代 symbol 规则可能随游戏变化，且同一游戏也可能存在多个 wild。`logiccore` / `gameframeworks` 只提供可选的 per-position validator 接口；不传 validator 时不做 symbol 语义校验。`game003` 仍会校验 `pos` 非成对、空坐标、重复坐标、越界和 win 金额汇总不一致，并且不会因为缺少 `bg-wins` 就自动遍历全部 results 作为隐藏兜底。`symbolNums` / `symbolNum` 在 Ways 中奖里不等同于可见坐标数量，不作为 `pos` 数量校验依据。
 

@@ -163,6 +163,9 @@ describe("game003 generated static config", () => {
         "game003-symbol-vni-projects:L3-wins.json",
         "game003-symbol-vni-projects:L4-wins.json",
         "game003-symbol-vni-projects:L5-wins.json",
+        "game003-win-amount-vni-projects:bigwin.json",
+        "game003-win-amount-vni-projects:superwin.json",
+        "game003-win-amount-vni-projects:megawin.json",
       ]),
     );
     for (const assetPrefix of [
@@ -183,5 +186,10 @@ describe("game003 generated static config", () => {
         resource.id.startsWith("game003-symbol-normal-pngs:mainreelbg"),
       ),
     ).toBe(false);
+    expect(
+      GAME003_LOADING_RESOURCE_URLS.some((resource) =>
+        resource.id.startsWith("game003-win-amount-vni-assets:mega_asset"),
+      ),
+    ).toBe(true);
   });
 });

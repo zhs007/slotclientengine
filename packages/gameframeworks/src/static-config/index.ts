@@ -19,6 +19,13 @@ export type {
   SlotGameStaticSize,
   SlotGameStaticSkinConfig,
   SlotGameStaticSymbolsConfig,
+  SlotGameStaticWinAmountAnchor,
+  SlotGameStaticWinAmountAnimations,
+  SlotGameStaticWinAmountConfig,
+  SlotGameStaticWinAmountLayout,
+  SlotGameStaticWinAmountText,
+  SlotGameStaticWinAmountThresholds,
+  SlotGameStaticWinAmountTier,
 } from "./types.js";
 export { createSlotGameFramePolicyFromStaticConfig } from "./frame-policy.js";
 export { assertSlotGameStaticConfig } from "./validate.js";
