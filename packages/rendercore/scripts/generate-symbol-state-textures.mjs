@@ -489,24 +489,38 @@ function validatePreservedAnimations(symbol, value) {
         `Existing manifest symbol "${symbol}" declares animation for unknown state "${state}".`,
       );
     }
-    preserved[state] = validatePreservedVniAnimation(symbol, state, animation);
+    preserved[state] = validatePreservedAnimation(symbol, state, animation);
   }
   return preserved;
 }
 
-function validatePreservedVniAnimation(symbol, state, value) {
+function validatePreservedAnimation(symbol, state, value) {
   const animation = assertRecord(
     value,
     `existing manifest symbol "${symbol}" ${state} animation`,
   );
+  if (animation.kind === "builtin" || animation.kind === "static") {
+    assertOnlyKnownKeys(
+      animation,
+      `existing manifest symbol "${symbol}" ${state} animation`,
+      ["kind", "durationSeconds"],
+    );
+    return Object.freeze({
+      kind: animation.kind,
+      durationSeconds: assertFinitePositiveNumber(
+        animation.durationSeconds,
+        `${symbol}.${state}.durationSeconds`,
+      ),
+    });
+  }
   assertOnlyKnownKeys(
     animation,
     `existing manifest symbol "${symbol}" ${state} animation`,
-    ["kind", "project", "stageRect", "playback"],
+    ["kind", "project", "playback"],
   );
   if (animation.kind !== "vni") {
     throw new Error(
-      `Existing manifest symbol "${symbol}" ${state} animation kind must be "vni".`,
+      `Existing manifest symbol "${symbol}" ${state} animation kind must be "builtin", "static" or "vni".`,
     );
   }
   return Object.freeze({
@@ -517,32 +531,7 @@ function validatePreservedVniAnimation(symbol, state, value) {
         `existing manifest symbol "${symbol}" ${state} project`,
       ),
     ),
-    stageRect: validatePreservedStageRect(symbol, state, animation.stageRect),
     playback: validatePreservedPlayback(symbol, state, animation.playback),
-  });
-}
-
-function validatePreservedStageRect(symbol, state, value) {
-  const rect = assertRecord(
-    value,
-    `existing manifest symbol "${symbol}" ${state} stageRect`,
-  );
-  assertOnlyKnownKeys(
-    rect,
-    `existing manifest symbol "${symbol}" ${state} stageRect`,
-    ["x", "y", "width", "height"],
-  );
-  return Object.freeze({
-    x: assertFiniteNonNegativeNumber(rect.x, `${symbol}.${state}.stageRect.x`),
-    y: assertFiniteNonNegativeNumber(rect.y, `${symbol}.${state}.stageRect.y`),
-    width: assertFinitePositiveNumber(
-      rect.width,
-      `${symbol}.${state}.stageRect.width`,
-    ),
-    height: assertFinitePositiveNumber(
-      rect.height,
-      `${symbol}.${state}.stageRect.height`,
-    ),
   });
 }
 

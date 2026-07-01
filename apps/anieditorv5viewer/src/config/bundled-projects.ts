@@ -14,6 +14,10 @@ import scatter2Data from "../assets/projects/scatter2.json";
 import superwinData from "../assets/projects/superwin.json";
 import roundreelData from "../assets/projects/roundreel.json";
 import game003L1WinsData from "../../../../assets/game003-s1/L1-wins.json";
+import game003L2WinsData from "../../../../assets/game003-s1/L2-wins.json";
+import game003L3WinsData from "../../../../assets/game003-s1/L3-wins.json";
+import game003L4WinsData from "../../../../assets/game003-s1/L4-wins.json";
+import game003L5WinsData from "../../../../assets/game003-s1/L5-wins.json";
 import export2ManifestData from "../assets/export2/manifest.json";
 import export2EditFullProjectData from "../assets/export2/edit_full/project.json";
 import export2Runtime50ProjectData from "../assets/export2/runtime_50/project.json";
@@ -21,7 +25,7 @@ import {
   bundledAssetUrlManifest,
   export2EditFullAssetUrlManifest,
   export2Runtime50AssetUrlManifest,
-  game003S1L1WinsAssetUrlManifest,
+  game003S1AssetUrlManifest,
   resolveProjectAssetUrls,
   type AssetUrlManifest,
 } from "../runtime/asset-manifest";
@@ -53,6 +57,10 @@ export type BundledProjectId =
   | "3reel-multipay-01"
   | "3reel-multipay-02"
   | "game003-l1-wins"
+  | "game003-l2-wins"
+  | "game003-l3-wins"
+  | "game003-l4-wins"
+  | "game003-l5-wins"
   | "bigwin-edit-full"
   | "bigwin-runtime-50";
 
@@ -280,7 +288,51 @@ const bundledProjectDefinitions: readonly BundledProjectDefinition[] = [
     purpose: "runtime",
     assetScale: 1,
     data: game003L1WinsData,
-    assetUrlManifest: game003S1L1WinsAssetUrlManifest,
+    assetUrlManifest: game003S1AssetUrlManifest,
+  },
+  {
+    id: "game003-l2-wins",
+    filename: "L2-wins.json",
+    sourcePath: "assets/game003-s1/L2-wins.json",
+    bundleId: "game003-s1",
+    profileId: "game003-s1",
+    purpose: "runtime",
+    assetScale: 1,
+    data: game003L2WinsData,
+    assetUrlManifest: game003S1AssetUrlManifest,
+  },
+  {
+    id: "game003-l3-wins",
+    filename: "L3-wins.json",
+    sourcePath: "assets/game003-s1/L3-wins.json",
+    bundleId: "game003-s1",
+    profileId: "game003-s1",
+    purpose: "runtime",
+    assetScale: 1,
+    data: game003L3WinsData,
+    assetUrlManifest: game003S1AssetUrlManifest,
+  },
+  {
+    id: "game003-l4-wins",
+    filename: "L4-wins.json",
+    sourcePath: "assets/game003-s1/L4-wins.json",
+    bundleId: "game003-s1",
+    profileId: "game003-s1",
+    purpose: "runtime",
+    assetScale: 1,
+    data: game003L4WinsData,
+    assetUrlManifest: game003S1AssetUrlManifest,
+  },
+  {
+    id: "game003-l5-wins",
+    filename: "L5-wins.json",
+    sourcePath: "assets/game003-s1/L5-wins.json",
+    bundleId: "game003-s1",
+    profileId: "game003-s1",
+    purpose: "runtime",
+    assetScale: 1,
+    data: game003L5WinsData,
+    assetUrlManifest: game003S1AssetUrlManifest,
   },
   {
     id: "bigwin-edit-full",

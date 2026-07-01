@@ -1,12 +1,14 @@
 import { Sprite, Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import {
+  createAppearSymbolAni,
   ManualSymbolAni,
   RenderSymbol,
   SymbolAnimationError,
   createDefaultSymbolAnimationResolver,
   createDefaultSymbolStatePreset,
   createSymbolDefinitionFromPreset,
+  createWinSymbolAni,
 } from "../../src/symbol/index.js";
 import type { SymbolAnimationResolver } from "../../src/symbol/index.js";
 
@@ -17,6 +19,17 @@ const createDefinition = () =>
     pays: [0, 2, 4],
     preset: createDefaultSymbolStatePreset(),
   });
+
+const createTestDefaultSymbolAnimationResolver = () =>
+  ((context) => {
+    if (context.resolvedState === "appear") {
+      return createAppearSymbolAni(context, { durationSeconds: 0.42 });
+    }
+    if (context.resolvedState === "win") {
+      return createWinSymbolAni(context, { durationSeconds: 0.58 });
+    }
+    return createDefaultSymbolAnimationResolver()(context);
+  }) satisfies SymbolAnimationResolver;
 
 const createDistinctTexture = () =>
   new Texture({ source: Texture.WHITE.source });
@@ -39,7 +52,7 @@ describe("RenderSymbol", () => {
     const renderSymbol = new RenderSymbol({
       definition: createDefinition(),
       texture: Texture.WHITE,
-      animationResolver: createDefaultSymbolAnimationResolver(),
+      animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
     const sprite = renderSymbol.getMainSprite();
@@ -70,7 +83,7 @@ describe("RenderSymbol", () => {
     const renderSymbol = new RenderSymbol({
       definition: createDefinition(),
       texture: Texture.WHITE,
-      animationResolver: createDefaultSymbolAnimationResolver(),
+      animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
     renderSymbol.requestState("appear");
@@ -96,7 +109,7 @@ describe("RenderSymbol", () => {
         disabled: disabledTexture,
       },
       requiredStateTextures: ["spinBlur", "disabled"],
-      animationResolver: createDefaultSymbolAnimationResolver(),
+      animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
     renderSymbol.requestState("spinBlur");
@@ -133,7 +146,7 @@ describe("RenderSymbol", () => {
       stateTextures: {
         spinBlur: spinBlurTexture,
       },
-      animationResolver: createDefaultSymbolAnimationResolver(),
+      animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
     expect(renderSymbol.texture).toBe(bottom);
@@ -173,7 +186,7 @@ describe("RenderSymbol", () => {
           },
         ],
       },
-      animationResolver: createDefaultSymbolAnimationResolver(),
+      animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
     const [, topLayer] = renderSymbol.getLayerSprites();
     renderSymbol.underlayLayer.addChild(new Sprite(Texture.WHITE));
@@ -207,7 +220,7 @@ describe("RenderSymbol", () => {
         spinBlur: spinBlurTexture,
         disabled: disabledTexture,
       },
-      animationResolver: createDefaultSymbolAnimationResolver(),
+      animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
     renderSymbol.setDefaultState("spinBlur");
@@ -295,7 +308,7 @@ describe("RenderSymbol", () => {
     const renderSymbol = new RenderSymbol({
       definition: createDefinition(),
       texture: Texture.WHITE,
-      animationResolver: createDefaultSymbolAnimationResolver(),
+      animationResolver: createTestDefaultSymbolAnimationResolver(),
     });
 
     renderSymbol.requestState("appear");

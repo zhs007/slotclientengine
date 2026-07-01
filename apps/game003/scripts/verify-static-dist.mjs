@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -21,6 +22,7 @@ const SOURCE_MANIFEST = join(
   REPO_ROOT,
   "assets/game003-s1/symbol-state-textures.manifest.json",
 );
+const SOURCE_SYMBOL_ASSET_ROOT = join(REPO_ROOT, "assets/game003-s1");
 
 const DISPLAY_SYMBOLS = Object.freeze([
   "WL",
@@ -193,6 +195,7 @@ function verifyIndexHtml(indexHtml) {
 function verifyAssets(assetNames) {
   assertAsset(assetNames, /^index-[A-Za-z0-9_-]+\.js$/, "index-*.js");
   assertAsset(assetNames, /^index-[A-Za-z0-9_-]+\.css$/, "index-*.css");
+  const distAssetHashes = createDistAssetHashMap(assetNames);
   const jsAssets = assetNames.filter((name) => /\.js$/.test(name));
   if (jsAssets.length < 2) {
     failures.push("dist/assets must contain multiple JS chunks.");
@@ -209,20 +212,20 @@ function verifyAssets(assetNames) {
   }
 
   for (const symbol of DISPLAY_SYMBOLS) {
-    assertAsset(
-      assetNames,
-      new RegExp(`^${escapeRegExp(symbol)}-[A-Za-z0-9_-]+\\.png$`),
-      `${symbol}-*.png`,
+    assertSourceAssetBundled(
+      distAssetHashes,
+      join(SOURCE_SYMBOL_ASSET_ROOT, `${symbol}.png`),
+      `${symbol}.png`,
     );
-    assertAsset(
-      assetNames,
-      new RegExp(`^${escapeRegExp(symbol)}\\.spinBlur-[A-Za-z0-9_-]+\\.png$`),
-      `${symbol}.spinBlur-*.png`,
+    assertSourceAssetBundled(
+      distAssetHashes,
+      join(SOURCE_SYMBOL_ASSET_ROOT, `${symbol}.spinBlur.png`),
+      `${symbol}.spinBlur.png`,
     );
-    assertAsset(
-      assetNames,
-      new RegExp(`^${escapeRegExp(symbol)}\\.disabled-[A-Za-z0-9_-]+\\.png$`),
-      `${symbol}.disabled-*.png`,
+    assertSourceAssetBundled(
+      distAssetHashes,
+      join(SOURCE_SYMBOL_ASSET_ROOT, `${symbol}.disabled.png`),
+      `${symbol}.disabled.png`,
     );
   }
 }
@@ -322,6 +325,37 @@ function assertAsset(assetNames, pattern, label) {
   }
 }
 
+function createDistAssetHashMap(assetNames) {
+  const hashes = new Map();
+  for (const name of assetNames) {
+    if (!/\.(?:png|jpg|jpeg|webp|json)$/.test(name)) {
+      continue;
+    }
+    const path = join(ASSETS_ROOT, name);
+    const hash = hashFile(path);
+    const names = hashes.get(hash) ?? [];
+    names.push(name);
+    hashes.set(hash, names);
+  }
+  return hashes;
+}
+
+function assertSourceAssetBundled(distAssetHashes, sourcePath, label) {
+  if (!existsSync(sourcePath) || !statSync(sourcePath).isFile()) {
+    failures.push(`missing source symbol asset ${label}.`);
+    return;
+  }
+
+  const hash = hashFile(sourcePath);
+  if (!distAssetHashes.has(hash)) {
+    failures.push(`dist/assets is missing bundled content for ${label}.`);
+  }
+}
+
+function hashFile(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
 function listFiles(root) {
   const files = [];
   for (const entry of readdirSync(root, { withFileTypes: true })) {
@@ -335,8 +369,4 @@ function listFiles(root) {
     }
   }
   return files;
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

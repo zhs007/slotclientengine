@@ -1,9 +1,6 @@
 {
   "version": 1,
-  "states": [
-    "spinBlur",
-    "disabled"
-  ],
+  "states": ["spinBlur", "disabled"],
   "settings": {
     "spinBlur": {
       "kind": "verticalBoxBlur",
@@ -19,37 +16,97 @@
       "normal": "./WL.png",
       "spinBlur": "./WL.spinBlur.png",
       "disabled": "./WL.disabled.png",
-      "scale": 1
+      "scale": 1,
+      "animations": {
+        "appear": {
+          "kind": "builtin",
+          "durationSeconds": 0.42
+        },
+        "win": {
+          "kind": "builtin",
+          "durationSeconds": 0.58
+        }
+      }
     },
     "H1": {
       "normal": "./H1.png",
       "spinBlur": "./H1.spinBlur.png",
       "disabled": "./H1.disabled.png",
-      "scale": 1
+      "scale": 1,
+      "animations": {
+        "appear": {
+          "kind": "builtin",
+          "durationSeconds": 0.42
+        },
+        "win": {
+          "kind": "builtin",
+          "durationSeconds": 0.58
+        }
+      }
     },
     "H2": {
       "normal": "./H2.png",
       "spinBlur": "./H2.spinBlur.png",
       "disabled": "./H2.disabled.png",
-      "scale": 1
+      "scale": 1,
+      "animations": {
+        "appear": {
+          "kind": "builtin",
+          "durationSeconds": 0.42
+        },
+        "win": {
+          "kind": "builtin",
+          "durationSeconds": 0.58
+        }
+      }
     },
     "H3": {
       "normal": "./H3.png",
       "spinBlur": "./H3.spinBlur.png",
       "disabled": "./H3.disabled.png",
-      "scale": 1
+      "scale": 1,
+      "animations": {
+        "appear": {
+          "kind": "builtin",
+          "durationSeconds": 0.42
+        },
+        "win": {
+          "kind": "builtin",
+          "durationSeconds": 0.58
+        }
+      }
     },
     "H4": {
       "normal": "./H4.png",
       "spinBlur": "./H4.spinBlur.png",
       "disabled": "./H4.disabled.png",
-      "scale": 1
+      "scale": 1,
+      "animations": {
+        "appear": {
+          "kind": "builtin",
+          "durationSeconds": 0.42
+        },
+        "win": {
+          "kind": "builtin",
+          "durationSeconds": 0.58
+        }
+      }
     },
     "H5": {
       "normal": "./H5.png",
       "spinBlur": "./H5.spinBlur.png",
       "disabled": "./H5.disabled.png",
-      "scale": 1
+      "scale": 1,
+      "animations": {
+        "appear": {
+          "kind": "builtin",
+          "durationSeconds": 0.42
+        },
+        "win": {
+          "kind": "builtin",
+          "durationSeconds": 0.58
+        }
+      }
     },
     "L1": {
       "normal": "./L1.png",
@@ -60,18 +117,16 @@
         "win": {
           "kind": "vni",
           "project": "./L1-wins.json",
-          "stageRect": {
-            "x": 744,
-            "y": 744,
-            "width": 512,
-            "height": 512
-          },
           "playback": {
             "mode": "range",
             "startTime": 0,
-            "endTime": 2,
+            "endTime": 1,
             "loop": false
           }
+        },
+        "appear": {
+          "kind": "static",
+          "durationSeconds": 0.016666666666666666
         }
       }
     },
@@ -79,43 +134,137 @@
       "normal": "./L2.png",
       "spinBlur": "./L2.spinBlur.png",
       "disabled": "./L2.disabled.png",
-      "scale": 1
+      "scale": 1,
+      "animations": {
+        "win": {
+          "kind": "vni",
+          "project": "./L2-wins.json",
+          "playback": {
+            "mode": "range",
+            "startTime": 0,
+            "endTime": 1,
+            "loop": false
+          }
+        },
+        "appear": {
+          "kind": "static",
+          "durationSeconds": 0.016666666666666666
+        }
+      }
     },
     "L3": {
       "normal": "./L3.png",
       "spinBlur": "./L3.spinBlur.png",
       "disabled": "./L3.disabled.png",
-      "scale": 1
+      "scale": 1,
+      "animations": {
+        "win": {
+          "kind": "vni",
+          "project": "./L3-wins.json",
+          "playback": {
+            "mode": "range",
+            "startTime": 0,
+            "endTime": 1,
+            "loop": false
+          }
+        },
+        "appear": {
+          "kind": "static",
+          "durationSeconds": 0.016666666666666666
+        }
+      }
     },
     "L4": {
       "normal": "./L4.png",
       "spinBlur": "./L4.spinBlur.png",
       "disabled": "./L4.disabled.png",
-      "scale": 1
+      "scale": 1,
+      "animations": {
+        "win": {
+          "kind": "vni",
+          "project": "./L4-wins.json",
+          "playback": {
+            "mode": "range",
+            "startTime": 0,
+            "endTime": 1,
+            "loop": false
+          }
+        },
+        "appear": {
+          "kind": "static",
+          "durationSeconds": 0.016666666666666666
+        }
+      }
     },
     "L5": {
       "normal": "./L5.png",
       "spinBlur": "./L5.spinBlur.png",
       "disabled": "./L5.disabled.png",
-      "scale": 1
+      "scale": 1,
+      "animations": {
+        "win": {
+          "kind": "vni",
+          "project": "./L5-wins.json",
+          "playback": {
+            "mode": "range",
+            "startTime": 0,
+            "endTime": 1,
+            "loop": false
+          }
+        },
+        "appear": {
+          "kind": "static",
+          "durationSeconds": 0.016666666666666666
+        }
+      }
     },
     "CO": {
       "normal": "./CO.png",
       "spinBlur": "./CO.spinBlur.png",
       "disabled": "./CO.disabled.png",
-      "scale": 1
+      "scale": 1,
+      "animations": {
+        "appear": {
+          "kind": "builtin",
+          "durationSeconds": 0.42
+        },
+        "win": {
+          "kind": "builtin",
+          "durationSeconds": 0.58
+        }
+      }
     },
     "CL": {
       "normal": "./CL.png",
       "spinBlur": "./CL.spinBlur.png",
       "disabled": "./CL.disabled.png",
-      "scale": 1
+      "scale": 1,
+      "animations": {
+        "appear": {
+          "kind": "builtin",
+          "durationSeconds": 0.42
+        },
+        "win": {
+          "kind": "builtin",
+          "durationSeconds": 0.58
+        }
+      }
     },
     "SC": {
       "normal": "./SC.png",
       "spinBlur": "./SC.spinBlur.png",
       "disabled": "./SC.disabled.png",
-      "scale": 1
+      "scale": 1,
+      "animations": {
+        "appear": {
+          "kind": "builtin",
+          "durationSeconds": 0.42
+        },
+        "win": {
+          "kind": "builtin",
+          "durationSeconds": 0.58
+        }
+      }
     }
   }
 }

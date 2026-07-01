@@ -1,14 +1,21 @@
-import { Container, Graphics } from "pixi.js";
+import { Container } from "pixi.js";
 import {
   VNIPlayer,
   type VNIPlayerOptions,
 } from "@slotclientengine/vnicore/pixi";
-import { assertValidDeltaSeconds, resetBaseDisplay } from "./ani.js";
+import {
+  assertValidDeltaSeconds,
+  createAppearSymbolAni,
+  createWinSymbolAni,
+  ManualSymbolAni,
+  resetBaseDisplay,
+} from "./ani.js";
 import { SymbolAnimationError } from "./errors.js";
 import {
   createSymbolVniAnimationResourcesFromManifest,
+  parseSymbolStateTextureManifest,
   type CreateSymbolVniAnimationResourcesOptions,
-  type SymbolManifestStageRect,
+  type SymbolManifestAnimationSpec,
   type SymbolVniAnimationResource,
   type SymbolVniAnimationResourceMap,
 } from "./manifest.js";
@@ -65,7 +72,6 @@ export class VniSymbolAni implements SymbolAni {
   readonly #playerFactory: VniSymbolAniPlayerFactory;
   #player: VniSymbolAniPlayer | null = null;
   #disposePlaybackComplete: (() => void) | null = null;
-  #viewport: Container | null = null;
   #initError: unknown = null;
   #initialized = false;
   #completed = false;
@@ -146,12 +152,8 @@ export class VniSymbolAni implements SymbolAni {
     if (this.#initialized) {
       return;
     }
-    const { viewport, content } = createVniViewport(
-      this.#resource.spec.stageRect,
-    );
-    this.#context.overlayLayer.addChild(viewport);
     const player = this.#playerFactory({
-      parent: content,
+      parent: this.#context.overlayLayer,
       projectId: `${this.#context.symbol}-${this.#context.resolvedState}`,
       bundleId: "symbol-manifest",
       profileId: "symbol-vni",
@@ -162,15 +164,14 @@ export class VniSymbolAni implements SymbolAni {
       autoTick: false,
       fitPadding: 0,
     });
-    this.#viewport = viewport;
     this.#player = player;
     await player.init();
     if (this.#destroyed) {
       return;
     }
-    alignVniRootToStageRect(
+    alignVniRootToProjectStage(
       player.getDisplayObject(),
-      this.#resource.spec.stageRect,
+      this.#resource.project,
     );
     this.#disposePlaybackComplete = player.onPlaybackComplete(() => {
       this.#completed = true;
@@ -184,18 +185,7 @@ export class VniSymbolAni implements SymbolAni {
     this.#player?.pause?.();
     this.#player?.destroy();
     this.#player = null;
-    this.detachViewport();
     this.#initialized = false;
-  }
-
-  private detachViewport(): void {
-    const viewport = this.#viewport;
-    this.#viewport = null;
-    if (!viewport) {
-      return;
-    }
-    viewport.parent?.removeChild(viewport);
-    viewport.destroy({ children: true });
   }
 
   private assertNotDestroyed(): void {
@@ -211,8 +201,10 @@ export function createSymbolManifestAnimationResolver(
   options: CreateSymbolManifestAnimationResolverOptions,
 ): SymbolAnimationResolver {
   const resources = createSymbolVniAnimationResourcesFromManifest(options);
+  const manifestAnimationSpecs = createManifestAnimationSpecMap(options);
   return createSymbolVniAnimationResolver({
     resources,
+    manifestAnimationSpecs,
     fallback: options.fallback,
     playerFactory: options.playerFactory,
   });
@@ -220,6 +212,7 @@ export function createSymbolManifestAnimationResolver(
 
 export function createSymbolVniAnimationResolver(options: {
   readonly resources: SymbolVniAnimationResourceMap;
+  readonly manifestAnimationSpecs?: SymbolManifestAnimationSpecMap;
   readonly fallback?: SymbolAnimationResolver;
   readonly playerFactory?: VniSymbolAniPlayerFactory;
 }): SymbolAnimationResolver {
@@ -232,6 +225,11 @@ export function createSymbolVniAnimationResolver(options: {
         playerFactory: options.playerFactory,
       });
     }
+    const spec =
+      options.manifestAnimationSpecs?.[context.symbol]?.[context.resolvedState];
+    if (spec) {
+      return createManifestSymbolAni(context, spec);
+    }
     if (options.fallback) {
       return options.fallback(context);
     }
@@ -241,26 +239,65 @@ export function createSymbolVniAnimationResolver(options: {
   };
 }
 
-function createVniViewport(rect: SymbolManifestStageRect): {
-  readonly viewport: Container;
-  readonly content: Container;
-} {
-  const viewport = new Container();
-  const content = new Container();
-  const mask = new Graphics();
-  mask
-    .rect(-rect.width / 2, -rect.height / 2, rect.width, rect.height)
-    .fill(0xffffff);
-  content.mask = mask;
-  viewport.addChild(content, mask);
-  return { viewport, content };
+type SymbolManifestAnimationSpecMap = Readonly<
+  Record<string, Readonly<Partial<Record<string, SymbolManifestAnimationSpec>>>>
+>;
+
+function createManifestAnimationSpecMap(
+  options: CreateSymbolManifestAnimationResolverOptions,
+): SymbolManifestAnimationSpecMap {
+  const manifest = parseSymbolStateTextureManifest(options.manifest, options);
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(manifest.symbols)
+        .filter(([, symbol]) => Object.keys(symbol.animations).length > 0)
+        .map(([symbol, manifestSymbol]) => [
+          symbol,
+          Object.freeze({ ...manifestSymbol.animations }),
+        ]),
+    ),
+  );
 }
 
-function alignVniRootToStageRect(
+function createManifestSymbolAni(
+  context: SymbolAnimationContext,
+  spec: SymbolManifestAnimationSpec,
+): SymbolAni {
+  if (spec.kind === "builtin") {
+    if (context.resolvedState === "appear") {
+      return createAppearSymbolAni(context, {
+        durationSeconds: spec.durationSeconds,
+      });
+    }
+    if (context.resolvedState === "win") {
+      return createWinSymbolAni(context, {
+        durationSeconds: spec.durationSeconds,
+      });
+    }
+    throw new SymbolAnimationError(
+      `No builtin manifest animation implementation for "${context.resolvedState}".`,
+    );
+  }
+  if (spec.kind === "static") {
+    return new ManualSymbolAni({
+      stateId: context.resolvedState,
+      playback: context.state.playback,
+      durationSeconds: spec.durationSeconds,
+      onReset: () => {
+        resetBaseDisplay(context);
+      },
+    });
+  }
+  throw new SymbolAnimationError(
+    `No VNI resource was registered for "${context.symbol}" state "${context.resolvedState}".`,
+  );
+}
+
+function alignVniRootToProjectStage(
   root: Container,
-  rect: SymbolManifestStageRect,
+  project: SymbolVniAnimationResource["project"],
 ): void {
-  root.pivot.set(rect.x + rect.width / 2, rect.y + rect.height / 2);
+  root.pivot.set(project.stage.width / 2, project.stage.height / 2);
   root.position.set(0, 0);
   root.scale.set(1);
 }

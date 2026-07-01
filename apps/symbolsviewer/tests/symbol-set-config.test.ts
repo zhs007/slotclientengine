@@ -1,4 +1,5 @@
 import { createGameConfig } from "@slotclientengine/logiccore";
+import { Container, Sprite, Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import {
   createStatefulSymbolAssetMapFromModules,
@@ -8,74 +9,8 @@ import {
   getSymbolSetConfig,
   SYMBOL_SET_CONFIGS,
 } from "../src/symbol-set-config.js";
+import type { SymbolAnimationContext } from "@slotclientengine/rendercore";
 
-const SYMBOLS002_PAYTABLE_SYMBOLS = [
-  "WL",
-  "H1",
-  "H2",
-  "L1",
-  "L2",
-  "L3",
-  "L4",
-  "WM",
-  "CN",
-  "CM",
-  "CO",
-  "AF",
-  "BN",
-] as const;
-
-const SYMBOLS002_DISPLAYABLE_SYMBOLS = SYMBOLS002_PAYTABLE_SYMBOLS.filter(
-  (symbol) => symbol !== "BN",
-);
-const SYMBOLS_DISPLAYABLE_SYMBOLS = [
-  "S00",
-  "S0",
-  "S1",
-  "S5",
-  "S10",
-  "SC",
-  "RS",
-  "X2",
-  "X5",
-  "X10",
-] as const;
-const SYMBOLS001_DISPLAYABLE_SYMBOLS = [
-  "WL",
-  "H1",
-  "H2",
-  "L1",
-  "L2",
-  "L3",
-  "L4",
-  "CN",
-  "BN",
-] as const;
-const SYMBOLS003_DISPLAYABLE_SYMBOLS = [
-  "WL",
-  "H1",
-  "H2",
-  "L1",
-  "L2",
-  "L3",
-  "L4",
-  "CN",
-  "CO",
-] as const;
-const SYMBOLS003_MISSING_PAYTABLE_SYMBOLS = ["WM", "CM", "AF", "BN"] as const;
-const GAME002_S2_DISPLAYABLE_SYMBOLS = [
-  "WL",
-  "H1",
-  "H2",
-  "L1",
-  "L2",
-  "L3",
-  "L4",
-  "CN",
-  "CO",
-] as const;
-const GAME002_S2_MISSING_PAYTABLE_SYMBOLS = ["WM", "CM", "AF", "BN"] as const;
-const GAME002_S3_DISPLAYABLE_SYMBOLS = SYMBOLS002_DISPLAYABLE_SYMBOLS;
 const GAME003_S1_DISPLAYABLE_SYMBOLS = [
   "WL",
   "H1",
@@ -92,6 +27,7 @@ const GAME003_S1_DISPLAYABLE_SYMBOLS = [
   "CL",
   "SC",
 ] as const;
+
 const GAME003_S1_MISSING_PAYTABLE_SYMBOLS = [
   "BN",
   "MT",
@@ -109,264 +45,24 @@ const GAME003_S1_MISSING_PAYTABLE_SYMBOLS = [
 ] as const;
 
 describe("symbolsviewer symbol set config", () => {
-  it("declares explicit selectable symbol sets and rejects unknown ids", () => {
+  it("only exposes the game003-s1 symbol set", () => {
     expect(SYMBOL_SET_CONFIGS.map((config) => config.id)).toEqual([
-      "symbols",
-      "symbols001",
-      "symbols002",
-      "symbols003",
-      "game002-s2",
-      "game002-s3",
       "game003-s1",
     ]);
-    expect(getSymbolSetConfig("symbols").label).toBe("symbols");
-    expect(getSymbolSetConfig("symbols").symbolScales).toEqual(
-      Object.fromEntries(
-        SYMBOLS_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 1]),
-      ),
-    );
-    expect(getSymbolSetConfig("symbols001").label).toBe("symbols001");
-    expect(getSymbolSetConfig("symbols001").symbolScales).toEqual(
-      Object.fromEntries(
-        SYMBOLS001_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 0.8]),
-      ),
-    );
-    expect(getSymbolSetConfig("symbols002").label).toBe("symbols002");
-    expect(getSymbolSetConfig("symbols002").symbolScales).toEqual(
-      Object.fromEntries(
-        SYMBOLS002_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 1]),
-      ),
-    );
-    expect(getSymbolSetConfig("symbols003").label).toBe("symbols003");
-    expect(getSymbolSetConfig("symbols003").symbolScales).toEqual(
-      Object.fromEntries(
-        SYMBOLS003_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 1]),
-      ),
-    );
-    expect(getSymbolSetConfig("game002-s2").label).toBe("game002-s2");
-    expect(getSymbolSetConfig("game002-s2").symbolScales).toEqual(
-      Object.fromEntries(
-        GAME002_S2_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 1]),
-      ),
-    );
-    expect(getSymbolSetConfig("game002-s3").label).toBe("game002-s3");
-    expect(getSymbolSetConfig("game002-s3").symbolScales).toEqual(
-      Object.fromEntries(
-        GAME002_S3_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 1]),
-      ),
-    );
     expect(getSymbolSetConfig("game003-s1").label).toBe("game003-s1");
     expect(getSymbolSetConfig("game003-s1").symbolScales).toEqual(
       Object.fromEntries(
         GAME003_S1_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 1]),
       ),
     );
-    expect(() => getSymbolSetConfig("missing")).toThrow(
+    expect(() => getSymbolSetConfig("symbols")).toThrow(
       /Unknown symbolsviewer symbol set/,
     );
   });
 
-  it.each([
-    "symbols001",
-    "symbols002",
-    "symbols003",
-    "game002-s2",
-    "game002-s3",
-  ] as const)(
-    "parses %s generated gameconfig through logiccore",
-    (symbolSetId) => {
-      const config = getSymbolSetConfig(symbolSetId);
-      const gameConfig = createGameConfig(config.rawGameConfig);
-      const reels = gameConfig.getReels("reels-001");
-
-      expect(
-        SYMBOLS002_PAYTABLE_SYMBOLS.map((symbol) =>
-          gameConfig.getSymbolCode(symbol),
-        ),
-      ).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-      expect(gameConfig.getSymbolCode("BN")).toBe(12);
-      expect(gameConfig.getReelNames()).toEqual(["reels-001"]);
-      expect(reels.getReelCount()).toBeGreaterThan(0);
-      for (
-        let reelIndex = 0;
-        reelIndex < reels.getReelCount();
-        reelIndex += 1
-      ) {
-        expect(reels.getLength(reelIndex)).toBeGreaterThan(0);
-      }
-    },
-  );
-
-  it("builds symbols001 catalog from its own PNG glob, manifest and explicit transparent BN", () => {
-    const config = getSymbolSetConfig("symbols001");
-    const assets = createStatefulSymbolAssetMapFromModules({
-      modules: config.modules,
-      manifest: config.manifest,
-      requiredStates: config.requiredStates,
-    });
-    const catalog = createSymbolsViewerCatalog(
-      config.rawGameConfig,
-      assets,
-      config.requiredStates,
-    );
-
-    expect(catalog.getValidation()).toEqual({
-      displayableSymbols: SYMBOLS001_DISPLAYABLE_SYMBOLS,
-      ignoredPaytableSymbolsWithoutAssets: ["WM", "CM", "CO", "AF"],
-      ignoredAssetsWithoutPaytable: [],
-    });
-    expect(catalog.getTextureSet("BN")).toMatchObject({
-      normal: {
-        kind: "single",
-        texture: expect.stringContaining("BN.png"),
-      },
-      states: {
-        spinBlur: expect.stringContaining("BN.spinBlur.png"),
-        disabled: expect.stringContaining("BN.disabled.png"),
-      },
-    });
-    expect(catalog.getTextureSet("BN").states?.spinBlur).not.toContain(
-      "symbols002",
-    );
-  });
-
-  it("builds symbols002 catalog from its own PNG glob and state manifest", () => {
-    const config = getSymbolSetConfig("symbols002");
-    const assets = createStatefulSymbolAssetMapFromModules({
-      modules: config.modules,
-      manifest: config.manifest,
-      requiredStates: config.requiredStates,
-    });
-    const catalog = createSymbolsViewerCatalog(
-      config.rawGameConfig,
-      assets,
-      config.requiredStates,
-    );
-
-    expect(catalog.getValidation()).toEqual({
-      displayableSymbols: SYMBOLS002_DISPLAYABLE_SYMBOLS,
-      ignoredPaytableSymbolsWithoutAssets: ["BN"],
-      ignoredAssetsWithoutPaytable: [],
-    });
-    expect(catalog.getTextureSet("WL")).toMatchObject({
-      normal: {
-        kind: "single",
-        texture: expect.stringContaining("WL.png"),
-      },
-      states: {
-        spinBlur: expect.stringContaining("WL.spinBlur.png"),
-        disabled: expect.stringContaining("WL.disabled.png"),
-      },
-    });
-    expect(Object.keys(assets)).not.toContain("BN");
-  });
-
-  it("builds symbols003 catalog from its own PNG glob and state manifest", () => {
-    const config = getSymbolSetConfig("symbols003");
-    const assets = createStatefulSymbolAssetMapFromModules({
-      modules: config.modules,
-      manifest: config.manifest,
-      requiredStates: config.requiredStates,
-    });
-    const catalog = createSymbolsViewerCatalog(
-      config.rawGameConfig,
-      assets,
-      config.requiredStates,
-    );
-
-    expect(catalog.getValidation()).toEqual({
-      displayableSymbols: SYMBOLS003_DISPLAYABLE_SYMBOLS,
-      ignoredPaytableSymbolsWithoutAssets: SYMBOLS003_MISSING_PAYTABLE_SYMBOLS,
-      ignoredAssetsWithoutPaytable: [],
-    });
-    expect(catalog.getTextureSet("WL")).toMatchObject({
-      normal: {
-        kind: "single",
-        texture: expect.stringContaining("WL.png"),
-      },
-      states: {
-        spinBlur: expect.stringContaining("WL.spinBlur.png"),
-        disabled: expect.stringContaining("WL.disabled.png"),
-      },
-    });
-    expect(catalog.getTextureSet("WL").states?.spinBlur).not.toContain(
-      "symbols002",
-    );
-    expect(Object.keys(assets)).not.toEqual(
-      expect.arrayContaining([...SYMBOLS003_MISSING_PAYTABLE_SYMBOLS]),
-    );
-  });
-
-  it("builds game002-s2 catalog without treating bg.png as a symbol", () => {
-    const config = getSymbolSetConfig("game002-s2");
-    const assets = createStatefulSymbolAssetMapFromModules({
-      modules: config.modules,
-      manifest: config.manifest,
-      requiredStates: config.requiredStates,
-    });
-    const catalog = createSymbolsViewerCatalog(
-      config.rawGameConfig,
-      assets,
-      config.requiredStates,
-    );
-
-    expect(catalog.getValidation()).toEqual({
-      displayableSymbols: GAME002_S2_DISPLAYABLE_SYMBOLS,
-      ignoredPaytableSymbolsWithoutAssets: GAME002_S2_MISSING_PAYTABLE_SYMBOLS,
-      ignoredAssetsWithoutPaytable: [],
-    });
-    expect(Object.keys(assets)).not.toContain("bg");
-    expect(catalog.getTextureSet("WL")).toMatchObject({
-      normal: {
-        kind: "single",
-        texture: expect.stringContaining("WL.png"),
-      },
-      states: {
-        spinBlur: expect.stringContaining("WL.spinBlur.png"),
-        disabled: expect.stringContaining("WL.disabled.png"),
-      },
-    });
-    expect(Object.keys(assets)).not.toEqual(
-      expect.arrayContaining([...GAME002_S2_MISSING_PAYTABLE_SYMBOLS, "bg"]),
-    );
-  });
-
-  it("builds game002-s3 catalog from its own PNG glob and state manifest", () => {
-    const config = getSymbolSetConfig("game002-s3");
-    const assets = createStatefulSymbolAssetMapFromModules({
-      modules: config.modules,
-      manifest: config.manifest,
-      requiredStates: config.requiredStates,
-    });
-    const catalog = createSymbolsViewerCatalog(
-      config.rawGameConfig,
-      assets,
-      config.requiredStates,
-    );
-
-    expect(catalog.getValidation()).toEqual({
-      displayableSymbols: GAME002_S3_DISPLAYABLE_SYMBOLS,
-      ignoredPaytableSymbolsWithoutAssets: ["BN"],
-      ignoredAssetsWithoutPaytable: [],
-    });
-    expect(catalog.getTextureSet("WL")).toMatchObject({
-      normal: {
-        kind: "single",
-        texture: expect.stringContaining("WL.png"),
-      },
-      states: {
-        spinBlur: expect.stringContaining("WL.spinBlur.png"),
-        disabled: expect.stringContaining("WL.disabled.png"),
-      },
-    });
-    expect(catalog.getTextureSet("WL").states?.spinBlur).not.toContain(
-      "symbols003",
-    );
-    expect(Object.keys(assets)).not.toContain("BN");
-  });
-
-  it("builds game003-s1 catalog and exposes manifest-driven VNI resources", () => {
+  it("builds the game003-s1 catalog and exposes manifest-driven VNI resources", () => {
     const config = getSymbolSetConfig("game003-s1");
+    const gameConfig = createGameConfig(config.rawGameConfig);
     const assets = createStatefulSymbolAssetMapFromModules({
       modules: config.modules,
       manifest: config.manifest,
@@ -378,6 +74,7 @@ describe("symbolsviewer symbol set config", () => {
       config.requiredStates,
     );
 
+    expect(gameConfig.getReelNames()).toContain("bg-reel01");
     expect(catalog.getValidation()).toEqual({
       displayableSymbols: GAME003_S1_DISPLAYABLE_SYMBOLS,
       ignoredPaytableSymbolsWithoutAssets: GAME003_S1_MISSING_PAYTABLE_SYMBOLS,
@@ -394,10 +91,88 @@ describe("symbolsviewer symbol set config", () => {
       ]),
     );
     expect(Object.keys(config.vniProjectModules ?? {})).toEqual(
-      expect.arrayContaining([expect.stringContaining("L1-wins.json")]),
+      expect.arrayContaining(
+        ["L1", "L2", "L3", "L4", "L5"].map((symbol) =>
+          expect.stringContaining(`${symbol}-wins.json`),
+        ),
+      ),
     );
     expect(Object.keys(config.vniAssetModules ?? {})).toEqual(
-      expect.arrayContaining([expect.stringContaining("assets/l1_asset")]),
+      expect.arrayContaining(
+        [
+          "assets/j1_asset",
+          "assets/k_asset",
+          "assets/q_asset",
+          "assets/j_asset",
+          "assets/10_asset",
+        ].map((asset) => expect.stringContaining(asset)),
+      ),
     );
   });
+
+  it("keeps L1-L5 appear static while other game003 symbols use manifest builtin appear", () => {
+    const config = getSymbolSetConfig("game003-s1");
+
+    for (const symbol of ["L1", "L2", "L3", "L4", "L5"]) {
+      const context = createAppearContext(symbol);
+      const ani = config.animationResolver(context);
+
+      ani.reset();
+      ani.update(0.01);
+
+      expect(ani.playback).toBe("once");
+      expect(context.sprite.scale).toMatchObject({ x: 1, y: 1 });
+      expect(context.underlayLayer.children).toEqual([]);
+      expect(context.overlayLayer.children).toEqual([]);
+      expect(context.baseLayer.visible).toBe(true);
+      expect(context.stateSprite.visible).toBe(false);
+    }
+
+    const builtinContext = createAppearContext("H1");
+    const builtinAni = config.animationResolver(builtinContext);
+    builtinAni.reset();
+    builtinAni.update(0.2);
+
+    expect(builtinContext.sprite.scale.x).toBeGreaterThan(1);
+  });
 });
+
+function createAppearContext(symbol: string): SymbolAnimationContext {
+  const root = new Container();
+  const sprite = new Sprite(Texture.WHITE);
+  const underlayLayer = new Container();
+  const baseLayer = new Container();
+  const stateSprite = new Sprite(Texture.WHITE);
+  const overlayLayer = new Container();
+  baseLayer.addChild(sprite);
+  root.addChild(underlayLayer, baseLayer, stateSprite, overlayLayer);
+  return {
+    code: 1,
+    symbol,
+    pays: [0],
+    requestedState: "appear",
+    resolvedState: "appear",
+    state: {
+      id: "appear",
+      phase: "once",
+      playback: "once",
+    },
+    texture: Texture.WHITE,
+    stateTextures: {},
+    requiredStateTextures: [],
+    root,
+    underlayLayer,
+    baseLayer,
+    sprite,
+    layers: [
+      {
+        index: 0,
+        texture: Texture.WHITE,
+        keyframes: [],
+        sprite,
+      },
+    ],
+    stateSprite,
+    overlayLayer,
+  };
+}

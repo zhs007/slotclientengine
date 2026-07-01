@@ -10,7 +10,13 @@ import {
   type ReelLayout,
   type ReelSymbolRegistry,
 } from "../../src/reel/index.js";
-import type { SymbolAssetMap } from "../../src/symbol/index.js";
+import {
+  createAppearSymbolAni,
+  createDefaultSymbolAnimationResolver,
+  createWinSymbolAni,
+  type SymbolAnimationResolver,
+  type SymbolAssetMap,
+} from "../../src/symbol/index.js";
 
 export const basicGameConfig = Object.freeze({
   paytable: Object.freeze({
@@ -105,8 +111,22 @@ export function createBasicRegistry(): ReelSymbolRegistry {
     gameConfig: createGameConfig(basicGameConfig),
     assets: createBasicAssets(),
     emptySymbols: ["BN"],
+    animationResolver: createTestSymbolAnimationResolver(),
     texturePolicy: {
       requiredStateTextures: ["spinBlur"],
     },
   });
+}
+
+export function createTestSymbolAnimationResolver(): SymbolAnimationResolver {
+  const normalResolver = createDefaultSymbolAnimationResolver();
+  return (context) => {
+    if (context.resolvedState === "appear") {
+      return createAppearSymbolAni(context, { durationSeconds: 0.42 });
+    }
+    if (context.resolvedState === "win") {
+      return createWinSymbolAni(context, { durationSeconds: 0.58 });
+    }
+    return normalResolver(context);
+  };
 }

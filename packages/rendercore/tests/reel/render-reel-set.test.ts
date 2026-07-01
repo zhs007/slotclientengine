@@ -8,7 +8,10 @@ import {
   createReelSpinPlan,
   createReelSymbolRegistry,
 } from "../../src/reel/index.js";
-import { createTextureSet } from "./helpers.js";
+import {
+  createTestSymbolAnimationResolver,
+  createTextureSet,
+} from "./helpers.js";
 
 describe("RenderReelSet", () => {
   it("starts and stops axes in order, rejects reentry, and lands on the GMI scene", () => {
@@ -85,6 +88,7 @@ describe("RenderReelSet", () => {
         ),
       ),
       emptySymbols: ["BN"],
+      animationResolver: createTestSymbolAnimationResolver(),
     });
     const reelSet = new RenderReelSet({
       reels,
@@ -120,6 +124,7 @@ describe("RenderReelSet", () => {
         ),
       ),
       emptySymbols: ["BN"],
+      animationResolver: createTestSymbolAnimationResolver(),
     });
     const reelSet = new RenderReelSet({
       reels,
@@ -208,6 +213,7 @@ describe("RenderReelSet", () => {
         ),
       ),
       emptySymbols: ["BN"],
+      animationResolver: createTestSymbolAnimationResolver(),
     });
     const reelSet = new RenderReelSet({
       reels,
@@ -257,6 +263,7 @@ describe("RenderReelSet", () => {
         ),
       ),
       emptySymbols: ["BN"],
+      animationResolver: createTestSymbolAnimationResolver(),
     });
     const reelSet = new RenderReelSet({
       reels,

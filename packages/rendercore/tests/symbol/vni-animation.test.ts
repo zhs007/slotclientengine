@@ -157,7 +157,6 @@ function createResource(): SymbolVniAnimationResource {
     spec: {
       kind: "vni",
       project: "./L1-wins.json",
-      stageRect: { x: 4, y: 5, width: 32, height: 32 },
       playback: { mode: "range", startTime: 0, endTime: 2, loop: false },
     },
     project: {
@@ -195,7 +194,9 @@ function createPlayerFactory() {
         complete?.();
       }
     }),
-    destroy: vi.fn(),
+    destroy: vi.fn(() => {
+      root.parent?.removeChild(root);
+    }),
     pause: vi.fn(),
     onPlaybackComplete: vi.fn((listener: () => void) => {
       complete = listener;
@@ -243,7 +244,7 @@ describe("VniSymbolAni", () => {
       }),
     );
     expect(root.parent).toBe(factory.mock.calls[0]?.[0].parent);
-    expect(root.pivot).toMatchObject({ x: 20, y: 21 });
+    expect(root.pivot).toMatchObject({ x: 50, y: 50 });
     expect(root.position).toMatchObject({ x: 0, y: 0 });
     expect(calls.playRange).toHaveBeenCalledWith({
       range: { unit: "time", start: 0, end: 2 },

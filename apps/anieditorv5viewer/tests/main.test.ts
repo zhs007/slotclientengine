@@ -168,7 +168,7 @@ describe("anieditorv5viewer main", () => {
     expect(summary?.textContent).toContain("safe_glow");
   });
 
-  it("loads game003 L1 wins as a runtime source project", async () => {
+  it("loads game003 L1-L5 wins as runtime source projects", async () => {
     document.body.innerHTML = '<div id="app"></div>';
 
     await import("../src/main");
@@ -180,24 +180,28 @@ describe("anieditorv5viewer main", () => {
     );
     if (!select) throw new Error("Missing project select.");
 
-    select.value = "game003-l1-wins";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-    await Promise.resolve();
-    await Promise.resolve();
+    for (const symbol of ["L1", "L2", "L3", "L4", "L5"]) {
+      select.value = `game003-${symbol.toLowerCase()}-wins`;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
 
-    const player = playerMock.instances.at(-1);
-    const summary = document.querySelector(".viewer-summary");
+      const player = playerMock.instances.at(-1);
+      const summary = document.querySelector(".viewer-summary");
 
-    expect(player?.options).toMatchObject({
-      projectId: "game003-l1-wins",
-      bundleId: "game003-s1",
-      profileId: "game003-s1",
-      profilePurpose: "runtime",
-      assetScale: 1,
-    });
-    expect(summary?.textContent).toContain("SCATTER1");
-    expect(summary?.textContent).toContain("assets/game003-s1/L1-wins.json");
-    expect(summary?.textContent).toContain("schema VNI_0.022");
+      expect(player?.options).toMatchObject({
+        projectId: `game003-${symbol.toLowerCase()}-wins`,
+        bundleId: "game003-s1",
+        profileId: "game003-s1",
+        profilePurpose: "runtime",
+        assetScale: 1,
+      });
+      expect(summary?.textContent).toContain(symbol);
+      expect(summary?.textContent).toContain(
+        `assets/game003-s1/${symbol}-wins.json`,
+      );
+      expect(summary?.textContent).toContain("schema VNI_0.022");
+    }
   });
 
   it("wires segmented playback controls to VNIPlayer", async () => {

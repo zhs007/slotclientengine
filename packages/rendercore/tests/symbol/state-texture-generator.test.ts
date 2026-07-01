@@ -245,6 +245,87 @@ describe("generate-symbol-state-textures script", () => {
     }
   });
 
+  it("preserves manifest animation specs while regenerating state textures", async () => {
+    const generator = await loadGeneratorModule();
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "rendercore-symbol-generator-"),
+    );
+    try {
+      await writePng(join(tempDir, "L1.png"), 4, 4, "#ff0000");
+      await writePng(join(tempDir, "H1.png"), 4, 4, "#00ff00");
+      const manifestPath = join(tempDir, "symbol-state-textures.manifest.json");
+      await writeFile(
+        manifestPath,
+        JSON.stringify(
+          {
+            version: 1,
+            states: ["spinBlur", "disabled"],
+            settings: {
+              spinBlur: { kind: "verticalBoxBlur", kernelHeight: 21 },
+              disabled: { kind: "grayscale", brightness: 0.72 },
+            },
+            symbols: {
+              L1: {
+                normal: "./L1.png",
+                spinBlur: "./L1.spinBlur.png",
+                disabled: "./L1.disabled.png",
+                scale: 1,
+                animations: {
+                  appear: { kind: "static", durationSeconds: 1 / 60 },
+                  win: {
+                    kind: "vni",
+                    project: "./L1-wins.json",
+                    playback: {
+                      mode: "range",
+                      startTime: 0,
+                      endTime: 1,
+                      loop: false,
+                    },
+                  },
+                },
+              },
+              H1: {
+                normal: "./H1.png",
+                spinBlur: "./H1.spinBlur.png",
+                disabled: "./H1.disabled.png",
+                scale: 1,
+                animations: {
+                  appear: { kind: "builtin", durationSeconds: 0.42 },
+                  win: { kind: "builtin", durationSeconds: 0.58 },
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      const result = await generator.generateSymbolStateTextures({
+        inputDir: tempDir,
+        outputDir: tempDir,
+        symbols: ["L1", "H1"],
+      });
+      const manifest = JSON.parse(await readFile(result.manifestPath, "utf8"));
+
+      expect(manifest.symbols.L1.animations).toEqual({
+        appear: { kind: "static", durationSeconds: 1 / 60 },
+        win: {
+          kind: "vni",
+          project: "./L1-wins.json",
+          playback: { mode: "range", startTime: 0, endTime: 1, loop: false },
+        },
+      });
+      expect(manifest.symbols.H1.animations).toEqual({
+        appear: { kind: "builtin", durationSeconds: 0.42 },
+        win: { kind: "builtin", durationSeconds: 0.58 },
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("fails when composite layer dimensions differ", async () => {
     const generator = await loadGeneratorModule();
     const tempDir = await mkdtemp(

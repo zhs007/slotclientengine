@@ -81,28 +81,59 @@ describe("game003 generated static config", () => {
   it("uses manifest symbols and does not carry a second scale table in YAML output", () => {
     const skin = getGame003SkinConfig("1");
     const staticSymbols = GAME003_STATIC_CONFIG.skins["1"].symbols;
+    const expectedVniWinSymbols = ["L1", "L2", "L3", "L4", "L5"] as const;
+    const expectedVniAssetPrefixes = [
+      "assets/j1_asset",
+      "assets/k_asset",
+      "assets/q_asset",
+      "assets/j_asset",
+      "assets/10_asset",
+    ] as const;
 
     expect(skin.displaySymbols).toContain("H1");
     expect(skin.displaySymbols).toContain("SC");
     expect(skin.emptySymbols).toEqual([]);
     expect(staticSymbols).not.toHaveProperty("scale");
     expect(Object.keys(staticSymbols.vniProjectModules ?? {})).toEqual(
-      expect.arrayContaining([expect.stringContaining("L1-wins.json")]),
+      expect.arrayContaining(
+        expectedVniWinSymbols.map((symbol) =>
+          expect.stringContaining(`${symbol}-wins.json`),
+        ),
+      ),
     );
     expect(Object.keys(staticSymbols.vniAssetModules ?? {})).toEqual(
-      expect.arrayContaining([expect.stringContaining("assets/l1_asset")]),
+      expect.arrayContaining(
+        expectedVniAssetPrefixes.map((prefix) =>
+          expect.stringContaining(prefix),
+        ),
+      ),
     );
-    expect(
-      (staticSymbols.manifest as { symbols: Record<string, unknown> }).symbols
-        .L1,
-    ).toMatchObject({
-      animations: {
-        win: {
-          kind: "vni",
-          project: "./L1-wins.json",
-          stageRect: { x: 744, y: 744, width: 512, height: 512 },
-          playback: { mode: "range", startTime: 0, endTime: 2, loop: false },
+    const manifestSymbols = (
+      staticSymbols.manifest as { symbols: Record<string, unknown> }
+    ).symbols;
+    for (const symbol of expectedVniWinSymbols) {
+      expect(manifestSymbols[symbol]).toMatchObject({
+        animations: {
+          win: {
+            kind: "vni",
+            project: `./${symbol}-wins.json`,
+            playback: { mode: "range", startTime: 0, endTime: 1, loop: false },
+          },
+          appear: { kind: "static", durationSeconds: 1 / 60 },
         },
+      });
+      expect(
+        (
+          manifestSymbols[symbol] as {
+            animations?: { win?: Record<string, unknown> };
+          }
+        ).animations?.win,
+      ).not.toHaveProperty("stageRect");
+    }
+    expect(manifestSymbols.H1).toMatchObject({
+      animations: {
+        appear: { kind: "builtin", durationSeconds: 0.42 },
+        win: { kind: "builtin", durationSeconds: 0.58 },
       },
     });
     expect(skin.symbolScales.H1).toBe(1);
@@ -128,13 +159,25 @@ describe("game003 generated static config", () => {
         "game003-symbol-spin-blur-pngs:H1.spinBlur.png",
         "game003-symbol-disabled-pngs:H1.disabled.png",
         "game003-symbol-vni-projects:L1-wins.json",
+        "game003-symbol-vni-projects:L2-wins.json",
+        "game003-symbol-vni-projects:L3-wins.json",
+        "game003-symbol-vni-projects:L4-wins.json",
+        "game003-symbol-vni-projects:L5-wins.json",
       ]),
     );
-    expect(
-      GAME003_LOADING_RESOURCE_URLS.some((resource) =>
-        resource.id.startsWith("game003-symbol-vni-assets:l1_asset"),
-      ),
-    ).toBe(true);
+    for (const assetPrefix of [
+      "j1_asset",
+      "k_asset",
+      "q_asset",
+      "j_asset",
+      "10_asset",
+    ]) {
+      expect(
+        GAME003_LOADING_RESOURCE_URLS.some((resource) =>
+          resource.id.startsWith(`game003-symbol-vni-assets:${assetPrefix}`),
+        ),
+      ).toBe(true);
+    }
     expect(
       GAME003_LOADING_RESOURCE_URLS.some((resource) =>
         resource.id.startsWith("game003-symbol-normal-pngs:mainreelbg"),
