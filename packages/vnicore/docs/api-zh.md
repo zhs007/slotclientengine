@@ -24,6 +24,11 @@
 
 `V5G*` 类型仍作为 legacy schema alias 导出；新代码使用 `VNI*`。
 
+`VNIPlayerOptions` 还支持嵌入相关选项：
+
+- `autoTick?: boolean`：默认 `true`，由 player 自己使用 RAF 推进；设为 `false` 时宿主必须显式调用 `update(deltaSeconds)`。
+- `fitPadding?: number`：默认保持既有响应式 padding；设为 `0` 时 VNI stage 坐标与内部 canvas 像素坐标一一对应，适合宿主使用显式 crop rect。
+
 ## core 函数
 
 - `assertVNIProject(value)`: 结构断言并返回 `VNIProjectConfig`。
@@ -80,7 +85,7 @@
 
 `play()` 无参数时仍是普通时间轴播放。`play({ mode: "range", range, loop })` 等价于 `playRange(...)`。`play({ mode: "segmented", loopStart, loopEnd, keepParticlesAlive })` 会按 start / loop / end 三段播放；`loopStart === loopEnd` 是停帧 loop，`loopStart < loopEnd` 是区间 loop。`keepParticlesAlive` 开启时，loop phase 的发射器配置跟随 loop 点或 loop 段，但 live 粒子按运行时 delta 继续老化、移动和发射，不会随播放时间停住或回绕。`requestSegmentedPlaybackEnd()` 只允许在 active segmented playback 中调用，否则显式抛错。
 
-`update(deltaSeconds)` 主要用于测试或宿主手动推进；默认 `play()` 仍然使用 RAF 自动推进。`onPlaybackComplete(...)` 在视觉完全结束后触发，也就是时间轴到终点并且 live 粒子排空后触发；如果终点没有可排空粒子，则可以立即触发。
+`update(deltaSeconds)` 主要用于测试或宿主手动推进；默认 `play()` 仍然使用 RAF 自动推进。需要接入外部游戏 ticker 时，构造 `VNIPlayer` 时传入 `autoTick: false`，再由宿主每帧调用 `update(deltaSeconds)`。`onPlaybackComplete(...)` 在视觉完全结束后触发，也就是时间轴到终点并且 live 粒子排空后触发；如果终点没有可排空粒子，则可以立即触发。
 
 Layer group 合同：
 

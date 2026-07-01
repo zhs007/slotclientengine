@@ -97,6 +97,8 @@ export interface VNIPlayerOptions {
   assetScale: number;
   project: VNIProjectConfig;
   assetUrls: AssetUrlManifest;
+  autoTick?: boolean;
+  fitPadding?: number;
   onTimeChange?: (time: number) => void;
   onPlayingChange?: (isPlaying: boolean) => void;
 }
@@ -209,6 +211,8 @@ export class VNIPlayer {
   private readonly assetScale: number;
   private readonly project: VNIProjectConfig;
   private readonly assetUrls: AssetUrlManifest;
+  private readonly autoTick: boolean;
+  private readonly fitPadding: number | undefined;
   private readonly assetsById: ReadonlyMap<string, V5GAssetConfig>;
   private readonly layerGroups: readonly VNIRenderGroupInfo[];
   private readonly layerGroupSlots: readonly VNILayerGroupSlot[];
@@ -252,6 +256,8 @@ export class VNIPlayer {
     this.assetScale = options.assetScale;
     this.project = options.project;
     this.assetUrls = options.assetUrls;
+    this.autoTick = options.autoTick ?? true;
+    this.fitPadding = normalizeFitPadding(options.fitPadding);
     this.assetsById = new Map(
       options.project.assets.map((asset) => [asset.id, asset] as const),
     );
@@ -1004,6 +1010,7 @@ export class VNIPlayer {
   }
 
   private ensureTicker(): void {
+    if (!this.autoTick) return;
     if (this.rafId !== null) return;
     this.lastTickMs = performance.now();
     this.rafId = requestAnimationFrame(this.tick);
@@ -1032,7 +1039,7 @@ export class VNIPlayer {
     const height = this.container.clientHeight || 1;
     this.app.renderer.resize(width, height);
 
-    const padding = width < 720 ? 16 : 32;
+    const padding = this.fitPadding ?? (width < 720 ? 16 : 32);
     const fitScale = Math.max(
       0.05,
       Math.min(
@@ -1520,6 +1527,9 @@ export class VNIPlayer {
     this.container.dataset.vniProfileId = this.profileId;
     this.container.dataset.vniAssetScale = String(this.assetScale);
     this.container.dataset.vniProfilePurpose = this.profilePurpose;
+    if (!this.autoTick) {
+      return;
+    }
     if (this.pixelDiagnosticsRafId !== null) {
       cancelAnimationFrame(this.pixelDiagnosticsRafId);
     }
@@ -1613,6 +1623,18 @@ export class VNIPlayer {
     delete this.container.dataset.vniAssetScale;
     delete this.container.dataset.vniProfilePurpose;
   }
+}
+
+function normalizeFitPadding(value: number | undefined): number | undefined {
+  if (value === undefined) {
+    return value;
+  }
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(
+      "VNIPlayer fitPadding must be a finite non-negative number.",
+    );
+  }
+  return value;
 }
 
 export type V5GPlayerOptions = VNIPlayerOptions;

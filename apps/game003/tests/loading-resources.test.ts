@@ -31,8 +31,12 @@ describe("game003 loading resources", () => {
         "game003-symbol-normal-pngs:SC.png",
         "game003-symbol-spin-blur-pngs:SC.spinBlur.png",
         "game003-symbol-disabled-pngs:SC.disabled.png",
+        "game003-symbol-vni-projects:L1-wins.json",
       ]),
     );
+    expect(
+      ids.some((id) => id.startsWith("game003-symbol-vni-assets:l1_asset")),
+    ).toBe(true);
     expect(ids).not.toContain("game003-symbol-normal-pngs:mainreelbg.png");
   });
 

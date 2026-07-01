@@ -259,6 +259,38 @@ describe("RenderSymbol", () => {
     expect(calls).toContain("S10:win");
   });
 
+  it("destroys old animation instances when state changes and symbol is destroyed", () => {
+    const destroyed: string[] = [];
+    const resolver: SymbolAnimationResolver = (context) =>
+      new ManualSymbolAni({
+        stateId: context.resolvedState,
+        playback: context.state.playback,
+        durationSeconds: 0.1,
+        onReset: () => {
+          return undefined;
+        },
+      }) as ManualSymbolAni & { destroy(): void };
+    const trackedResolver: SymbolAnimationResolver = (context) => {
+      const ani = resolver(context) as ManualSymbolAni & { destroy(): void };
+      ani.destroy = () => destroyed.push(context.resolvedState);
+      return ani;
+    };
+    const renderSymbol = new RenderSymbol({
+      definition: createDefinition(),
+      texture: Texture.WHITE,
+      animationResolver: trackedResolver,
+    });
+
+    renderSymbol.requestState("win");
+    expect(destroyed).toEqual(["normal"]);
+    renderSymbol.update(1);
+    expect(destroyed).toEqual(["normal", "win"]);
+
+    renderSymbol.destroy();
+
+    expect(destroyed).toEqual(["normal", "win", "normal"]);
+  });
+
   it("cleans appear scale, win overlay and pending state on reset", () => {
     const renderSymbol = new RenderSymbol({
       definition: createDefinition(),

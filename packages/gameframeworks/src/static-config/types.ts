@@ -59,6 +59,8 @@ export type SlotGameStaticReelConfig =
 export interface SlotGameStaticSymbolsConfig {
   readonly manifest: unknown;
   readonly pngModules: Readonly<Record<string, string>>;
+  readonly vniProjectModules?: Readonly<Record<string, unknown>>;
+  readonly vniAssetModules?: Readonly<Record<string, string>>;
   readonly emptySymbols: readonly string[];
   readonly requireExplicitScale: boolean;
   readonly requiredStates: readonly string[];

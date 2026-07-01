@@ -213,6 +213,35 @@ export async function generateGameStaticConfigModule(options: {
       '  query: "?url"',
       "}) as Record<string, string>;",
     );
+    if (skin.symbols.vniProjectGlob && names.vniProjectModules) {
+      lines.push(
+        `const ${names.vniProjectModules} = import.meta.glob(${quote(
+          toImportSpecifierFromRoot(
+            options.rootDir,
+            options.outPath,
+            skin.symbols.vniProjectGlob,
+          ),
+        )}, {`,
+        "  eager: true,",
+        '  import: "default"',
+        "}) as Record<string, unknown>;",
+      );
+    }
+    if (skin.symbols.vniAssetGlob && names.vniAssetModules) {
+      lines.push(
+        `const ${names.vniAssetModules} = import.meta.glob(${quote(
+          toImportSpecifierFromRoot(
+            options.rootDir,
+            options.outPath,
+            skin.symbols.vniAssetGlob,
+          ),
+        )}, {`,
+        "  eager: true,",
+        '  import: "default",',
+        '  query: "?url"',
+        "}) as Record<string, string>;",
+      );
+    }
   }
 
   lines.push(
@@ -411,6 +440,12 @@ function renderSkinConfig(options: {
     "      symbols: Object.freeze({",
     `        manifest: ${names.manifest},`,
     `        pngModules: ${options.modulesName}[${quote(options.skinId)}],`,
+    ...(skin.symbols.vniProjectGlob && names.vniProjectModules
+      ? [`        vniProjectModules: ${names.vniProjectModules},`]
+      : []),
+    ...(skin.symbols.vniAssetGlob && names.vniAssetModules
+      ? [`        vniAssetModules: ${names.vniAssetModules},`]
+      : []),
     `        emptySymbols: Object.freeze(${json(skin.symbols.emptySymbols)} as const),`,
     `        requireExplicitScale: ${String(skin.symbols.requireExplicitScale)},`,
     `        requiredStates: Object.freeze(${json(skin.symbols.requiredStates)} as const)`,
@@ -539,6 +574,8 @@ function renderConveyorWithUrl(
 interface ImportNames {
   readonly manifest: string;
   readonly symbolModules: string;
+  readonly vniProjectModules?: string;
+  readonly vniAssetModules?: string;
   readonly landscapeBackground: string;
   readonly portraitBackground: string;
   readonly mainReelBackground: string;
@@ -552,11 +589,18 @@ function createImportNames(
   return Object.fromEntries(
     config.supportedSkins.map((skinId) => {
       const prefix = `${toCamelName(config.gameId)}Skin${toIdentifierPart(skinId)}`;
+      const skin = config.skins[skinId];
       return [
         skinId,
         {
           manifest: `${prefix}SymbolManifest`,
           symbolModules: `${prefix}SymbolModules`,
+          vniProjectModules: skin.symbols.vniProjectGlob
+            ? `${prefix}VniProjectModules`
+            : undefined,
+          vniAssetModules: skin.symbols.vniAssetGlob
+            ? `${prefix}VniAssetModules`
+            : undefined,
           landscapeBackground: `${prefix}LandscapeBackgroundUrl`,
           portraitBackground: `${prefix}PortraitBackgroundUrl`,
           mainReelBackground: `${prefix}MainReelBackgroundUrl`,

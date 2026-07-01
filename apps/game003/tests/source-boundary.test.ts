@@ -62,6 +62,18 @@ describe("game003 source boundary", () => {
     expect(source).not.toMatch(/rect\.x - visibleRect\.x/);
     expect(source).not.toMatch(/rect\.y - visibleRect\.y/);
   });
+
+  it("keeps L1 VNI animation selection out of win playback business code", () => {
+    const businessSource = [
+      readFileSync(join(APP_ROOT, "src/game-adapter.ts"), "utf8"),
+      readFileSync(join(APP_ROOT, "src/game-demo.ts"), "utf8"),
+    ].join("\n");
+
+    expect(businessSource).not.toMatch(/L1-wins/);
+    expect(businessSource).not.toMatch(/stageRect/);
+    expect(businessSource).not.toMatch(/kind:\s*["']vni["']/);
+    expect(businessSource).not.toMatch(/\bL1\b/);
+  });
 });
 
 function readSourceTree(root: string): string {

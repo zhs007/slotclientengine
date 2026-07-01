@@ -16,6 +16,14 @@ export default defineConfig({
         find: "@slotclientengine/logiccore",
         replacement: resolve(__dirname, "../logiccore/src/index.ts"),
       },
+      {
+        find: "@slotclientengine/vnicore/core",
+        replacement: resolve(__dirname, "../vnicore/src/core/index.ts"),
+      },
+      {
+        find: "@slotclientengine/vnicore/pixi",
+        replacement: resolve(__dirname, "../vnicore/src/pixi/index.ts"),
+      },
     ],
   },
   test: {

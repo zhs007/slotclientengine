@@ -248,13 +248,22 @@ function parseSymbols(
   label: string,
 ): GameStaticYamlSymbolsConfig {
   const record = assertRecord(value, label);
-  assertKeys(record, label, [
-    "manifest",
-    "pngGlob",
-    "emptySymbols",
-    "requireExplicitScale",
-    "requiredStates",
-  ]);
+  assertKeys(
+    record,
+    label,
+    [
+      "manifest",
+      "pngGlob",
+      "vniProjectGlob",
+      "vniAssetGlob",
+      "emptySymbols",
+      "requireExplicitScale",
+      "requiredStates",
+    ],
+    {
+      optional: ["vniProjectGlob", "vniAssetGlob"],
+    },
+  );
   if (typeof record.requireExplicitScale !== "boolean") {
     throw new Error(`${label}.requireExplicitScale 必须是 boolean。`);
   }
@@ -269,6 +278,22 @@ function parseSymbols(
   return Object.freeze({
     manifest: assertPath(record.manifest, `${label}.manifest`),
     pngGlob: assertPath(record.pngGlob, `${label}.pngGlob`),
+    ...(record.vniProjectGlob !== undefined
+      ? {
+          vniProjectGlob: assertPath(
+            record.vniProjectGlob,
+            `${label}.vniProjectGlob`,
+          ),
+        }
+      : {}),
+    ...(record.vniAssetGlob !== undefined
+      ? {
+          vniAssetGlob: assertPath(
+            record.vniAssetGlob,
+            `${label}.vniAssetGlob`,
+          ),
+        }
+      : {}),
     emptySymbols: assertStringArray(
       record.emptySymbols,
       `${label}.emptySymbols`,
@@ -507,6 +532,12 @@ function validateSkins(config: GameStaticYamlConfig, rootDir: string): void {
       `skins.${skinId}.symbols.pngGlob`,
     );
     assertExistingDirectory(rootDir, getGlobDirectory(skin.symbols.pngGlob));
+    if (skin.symbols.vniProjectGlob !== undefined) {
+      validateVniProjectGlob(rootDir, skin.symbols.vniProjectGlob, skinId);
+    }
+    if (skin.symbols.vniAssetGlob !== undefined) {
+      validateVniAssetGlob(rootDir, skin.symbols.vniAssetGlob, skinId);
+    }
     validateArtPaths(rootDir, skinId, skin);
     validateRectFits(
       skin.art.reelAreaInMainReelBackground,
@@ -515,6 +546,63 @@ function validateSkins(config: GameStaticYamlConfig, rootDir: string): void {
       `skins.${skinId}.art.mainReelBackground`,
     );
     validateReelArea(config, skinId, skin);
+  }
+}
+
+function validateVniProjectGlob(
+  rootDir: string,
+  glob: string,
+  skinId: string,
+): void {
+  if (glob.includes("**")) {
+    throw new Error(
+      `skins.${skinId}.symbols.vniProjectGlob 不能使用递归 glob：${glob}`,
+    );
+  }
+  const directory = getStrictGlobDirectory(glob);
+  assertSpecificGlobDirectory(
+    directory,
+    `skins.${skinId}.symbols.vniProjectGlob`,
+  );
+  assertExistingDirectory(rootDir, directory);
+  if (!/\/\*[-A-Za-z0-9_]*\.json$/u.test(glob)) {
+    throw new Error(
+      `skins.${skinId}.symbols.vniProjectGlob 必须是当前资源目录下的 JSON glob，例如 assets/game003-s1/*-wins.json。`,
+    );
+  }
+}
+
+function validateVniAssetGlob(
+  rootDir: string,
+  glob: string,
+  skinId: string,
+): void {
+  if (glob.includes("**")) {
+    throw new Error(
+      `skins.${skinId}.symbols.vniAssetGlob 不能使用递归 glob：${glob}`,
+    );
+  }
+  const directory = getStrictGlobDirectory(glob);
+  assertSpecificGlobDirectory(
+    directory,
+    `skins.${skinId}.symbols.vniAssetGlob`,
+  );
+  assertExistingDirectory(rootDir, directory);
+  if (
+    !(
+      /\/\*\.(png|jpg|jpeg|webp)$/iu.test(glob) ||
+      /\/\*\.\{png,jpg,jpeg,webp\}$/iu.test(glob)
+    )
+  ) {
+    throw new Error(
+      `skins.${skinId}.symbols.vniAssetGlob 只能匹配 png/jpg/jpeg/webp 图片资源。`,
+    );
+  }
+}
+
+function assertSpecificGlobDirectory(directory: string, label: string): void {
+  if (!directory.includes("/")) {
+    throw new Error(`${label} 不能宽泛到仓库根级目录：${directory}`);
   }
 }
 
@@ -537,14 +625,18 @@ function validateLoading(
 }
 
 function getLoadingGlobDirectory(glob: string): string {
+  return getStrictGlobDirectory(glob);
+}
+
+function getStrictGlobDirectory(glob: string): string {
   const firstGlobIndex = glob.search(/[*{[]/);
   if (firstGlobIndex === -1) {
-    throw new Error(`loading glob 必须包含 glob 表达式：${glob}`);
+    throw new Error(`glob 必须包含 glob 表达式：${glob}`);
   }
   const prefix = glob.slice(0, firstGlobIndex);
   const slashIndex = prefix.lastIndexOf("/");
   if (slashIndex <= 0) {
-    throw new Error(`loading glob 必须包含可验证目录：${glob}`);
+    throw new Error(`glob 必须包含可验证目录：${glob}`);
   }
   return prefix.slice(0, slashIndex);
 }

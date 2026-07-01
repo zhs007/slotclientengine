@@ -16,6 +16,7 @@ import {
 } from "@slotclientengine/rendercore/reel";
 import type {
   ReelSymbolScaleMap,
+  SymbolAnimationResolver,
   SymbolAssetMap,
 } from "@slotclientengine/rendercore";
 import { GAME003_REQUIRED_STATE_TEXTURES } from "./assets.js";
@@ -44,6 +45,7 @@ export interface Game003ReelConfig {
   readonly texturedSymbols: readonly string[];
   readonly missingAssetLabel: string;
   readonly symbolScales: ReelSymbolScaleMap;
+  readonly animationResolver: SymbolAnimationResolver;
   readonly direction: ReelSpinDirection;
   readonly minimumSpinCycles: number;
   readonly baseDurationMs: number;
@@ -62,6 +64,7 @@ export const DEFAULT_GAME003_REEL_CONFIG: Game003ReelConfig = Object.freeze({
   texturedSymbols: GAME003_DEFAULT_SKIN_CONFIG.displaySymbols,
   missingAssetLabel: GAME003_DEFAULT_SKIN_CONFIG.label,
   symbolScales: GAME003_SYMBOL_SCALES,
+  animationResolver: GAME003_DEFAULT_SKIN_CONFIG.symbolAnimationResolver,
   direction: GAME003_STATIC_REEL_CONFIG.direction,
   minimumSpinCycles: GAME003_STATIC_REEL_CONFIG.minimumSpinCycles,
   baseDurationMs: GAME003_STATIC_REEL_CONFIG.baseDurationMs,
@@ -132,6 +135,7 @@ export function createGame003ReelRuntime(
     assets: options.symbolAssets,
     emptySymbols: config.emptySymbols,
     symbolScales: config.symbolScales,
+    animationResolver: config.animationResolver,
     texturePolicy: {
       requiredStateTextures: GAME003_REQUIRED_STATE_TEXTURES,
     },

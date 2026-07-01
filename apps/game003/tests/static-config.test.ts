@@ -80,13 +80,31 @@ describe("game003 generated static config", () => {
 
   it("uses manifest symbols and does not carry a second scale table in YAML output", () => {
     const skin = getGame003SkinConfig("1");
+    const staticSymbols = GAME003_STATIC_CONFIG.skins["1"].symbols;
 
     expect(skin.displaySymbols).toContain("H1");
     expect(skin.displaySymbols).toContain("SC");
     expect(skin.emptySymbols).toEqual([]);
-    expect(GAME003_STATIC_CONFIG.skins["1"].symbols).not.toHaveProperty(
-      "scale",
+    expect(staticSymbols).not.toHaveProperty("scale");
+    expect(Object.keys(staticSymbols.vniProjectModules ?? {})).toEqual(
+      expect.arrayContaining([expect.stringContaining("L1-wins.json")]),
     );
+    expect(Object.keys(staticSymbols.vniAssetModules ?? {})).toEqual(
+      expect.arrayContaining([expect.stringContaining("assets/l1_asset")]),
+    );
+    expect(
+      (staticSymbols.manifest as { symbols: Record<string, unknown> }).symbols
+        .L1,
+    ).toMatchObject({
+      animations: {
+        win: {
+          kind: "vni",
+          project: "./L1-wins.json",
+          stageRect: { x: 744, y: 744, width: 512, height: 512 },
+          playback: { mode: "range", startTime: 0, endTime: 2, loop: false },
+        },
+      },
+    });
     expect(skin.symbolScales.H1).toBe(1);
     expect(skin.symbolScales.SC).toBe(1);
   });
@@ -109,8 +127,14 @@ describe("game003 generated static config", () => {
         "game003-symbol-normal-pngs:H1.png",
         "game003-symbol-spin-blur-pngs:H1.spinBlur.png",
         "game003-symbol-disabled-pngs:H1.disabled.png",
+        "game003-symbol-vni-projects:L1-wins.json",
       ]),
     );
+    expect(
+      GAME003_LOADING_RESOURCE_URLS.some((resource) =>
+        resource.id.startsWith("game003-symbol-vni-assets:l1_asset"),
+      ),
+    ).toBe(true);
     expect(
       GAME003_LOADING_RESOURCE_URLS.some((resource) =>
         resource.id.startsWith("game003-symbol-normal-pngs:mainreelbg"),

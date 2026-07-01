@@ -56,15 +56,24 @@ loading:
     - id: game003-symbol-disabled-pngs
       glob: assets/game003-s1/{WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC}.disabled.png
       weight: 6
+    - id: game003-symbol-vni-projects
+      glob: assets/game003-s1/*-wins.json
+      weight: 2
+    - id: game003-symbol-vni-assets
+      glob: assets/game003-s1/assets/*.{png,jpg,jpeg,webp}
+      weight: 4
 
 # 每套皮肤的资源和布局配置。这里适合美术或发布配置人员改静态路径和坐标。
 skins:
   "1":
     label: skin 1
     # symbol 集合和缩放以 manifest 为准，YAML 不维护第二份 scale 表。
+    # VNI project/assets 只用于 manifest 驱动的 symbol 中奖动画；这里不承载 token、cookie、服务器真实轮带或玩家本次下注。
     symbols:
       manifest: assets/game003-s1/symbol-state-textures.manifest.json
       pngGlob: assets/game003-s1/*.png
+      vniProjectGlob: assets/game003-s1/*-wins.json
+      vniAssetGlob: assets/game003-s1/assets/*.{png,jpg,jpeg,webp}
       emptySymbols: []
       requireExplicitScale: true
       requiredStates:

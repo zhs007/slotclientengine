@@ -94,6 +94,11 @@ export async function generateSymbolStateTextures(options = {}) {
     composites,
     options.symbols,
   );
+  const manifestPath = join(outputDir, MANIFEST_FILE_NAME);
+  const preservedAnimations = await loadPreservedManifestAnimations(
+    manifestPath,
+    selectedSymbols,
+  );
 
   await mkdir(outputDir, { recursive: true });
   await cleanupGeneratedFiles(outputDir);
@@ -115,8 +120,12 @@ export async function generateSymbolStateTextures(options = {}) {
     generatedFiles.push(spinBlurFile, disabledFile);
   }
 
-  const manifest = createManifest(selectedSymbols, composites, scale);
-  const manifestPath = join(outputDir, MANIFEST_FILE_NAME);
+  const manifest = createManifest(
+    selectedSymbols,
+    composites,
+    scale,
+    preservedAnimations,
+  );
   await writeFile(
     manifestPath,
     `${JSON.stringify(manifest, null, 2)}\n`,
@@ -391,7 +400,194 @@ async function generateDisabledPng(inputFile, outputFile) {
     .toFile(outputFile);
 }
 
-function createManifest(symbols, composites, scale) {
+async function loadPreservedManifestAnimations(manifestPath, selectedSymbols) {
+  let raw;
+  try {
+    raw = await readFile(manifestPath, "utf8");
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return new Map();
+    }
+    throw error;
+  }
+
+  const manifest = assertRecord(
+    JSON.parse(raw),
+    "existing symbol state texture manifest",
+  );
+  assertOnlyKnownKeys(manifest, "existing symbol state texture manifest", [
+    "version",
+    "states",
+    "settings",
+    "symbols",
+  ]);
+  if (manifest.version !== 1) {
+    throw new Error(
+      "Existing symbol state texture manifest version must be 1.",
+    );
+  }
+  if (!Array.isArray(manifest.states)) {
+    throw new Error(
+      "Existing symbol state texture manifest states must be an array.",
+    );
+  }
+  const stateSet = new Set(
+    manifest.states.map((state) =>
+      assertNonEmptyString(state, "existing manifest state"),
+    ),
+  );
+  for (const state of REQUIRED_STATES) {
+    if (!stateSet.has(state)) {
+      throw new Error(
+        `Existing symbol state texture manifest is missing required state "${state}".`,
+      );
+    }
+  }
+
+  const symbols = assertRecord(
+    manifest.symbols,
+    "existing symbol state texture manifest symbols",
+  );
+  const selectedSymbolSet = new Set(selectedSymbols);
+  const preserved = new Map();
+  for (const [symbol, rawSymbol] of Object.entries(symbols)) {
+    const symbolRecord = assertRecord(
+      rawSymbol,
+      `existing manifest symbol "${symbol}"`,
+    );
+    assertOnlyKnownKeys(symbolRecord, `existing manifest symbol "${symbol}"`, [
+      "normal",
+      "scale",
+      "animations",
+      ...REQUIRED_STATES,
+    ]);
+    if (
+      !selectedSymbolSet.has(symbol) ||
+      symbolRecord.animations === undefined
+    ) {
+      continue;
+    }
+    preserved.set(
+      symbol,
+      Object.freeze(
+        validatePreservedAnimations(symbol, symbolRecord.animations),
+      ),
+    );
+  }
+  return preserved;
+}
+
+function validatePreservedAnimations(symbol, value) {
+  const animations = assertRecord(
+    value,
+    `existing manifest symbol "${symbol}" animations`,
+  );
+  const preserved = {};
+  for (const [state, animation] of Object.entries(animations)) {
+    if (state !== "win" && state !== "appear" && state !== "normal") {
+      throw new Error(
+        `Existing manifest symbol "${symbol}" declares animation for unknown state "${state}".`,
+      );
+    }
+    preserved[state] = validatePreservedVniAnimation(symbol, state, animation);
+  }
+  return preserved;
+}
+
+function validatePreservedVniAnimation(symbol, state, value) {
+  const animation = assertRecord(
+    value,
+    `existing manifest symbol "${symbol}" ${state} animation`,
+  );
+  assertOnlyKnownKeys(
+    animation,
+    `existing manifest symbol "${symbol}" ${state} animation`,
+    ["kind", "project", "stageRect", "playback"],
+  );
+  if (animation.kind !== "vni") {
+    throw new Error(
+      `Existing manifest symbol "${symbol}" ${state} animation kind must be "vni".`,
+    );
+  }
+  return Object.freeze({
+    kind: "vni",
+    project: normalizeManifestPath(
+      assertNonEmptyString(
+        animation.project,
+        `existing manifest symbol "${symbol}" ${state} project`,
+      ),
+    ),
+    stageRect: validatePreservedStageRect(symbol, state, animation.stageRect),
+    playback: validatePreservedPlayback(symbol, state, animation.playback),
+  });
+}
+
+function validatePreservedStageRect(symbol, state, value) {
+  const rect = assertRecord(
+    value,
+    `existing manifest symbol "${symbol}" ${state} stageRect`,
+  );
+  assertOnlyKnownKeys(
+    rect,
+    `existing manifest symbol "${symbol}" ${state} stageRect`,
+    ["x", "y", "width", "height"],
+  );
+  return Object.freeze({
+    x: assertFiniteNonNegativeNumber(rect.x, `${symbol}.${state}.stageRect.x`),
+    y: assertFiniteNonNegativeNumber(rect.y, `${symbol}.${state}.stageRect.y`),
+    width: assertFinitePositiveNumber(
+      rect.width,
+      `${symbol}.${state}.stageRect.width`,
+    ),
+    height: assertFinitePositiveNumber(
+      rect.height,
+      `${symbol}.${state}.stageRect.height`,
+    ),
+  });
+}
+
+function validatePreservedPlayback(symbol, state, value) {
+  const playback = assertRecord(
+    value,
+    `existing manifest symbol "${symbol}" ${state} playback`,
+  );
+  assertOnlyKnownKeys(
+    playback,
+    `existing manifest symbol "${symbol}" ${state} playback`,
+    ["mode", "startTime", "endTime", "loop"],
+  );
+  if (playback.mode !== "range") {
+    throw new Error(
+      `Existing manifest symbol "${symbol}" ${state} playback mode must be "range".`,
+    );
+  }
+  const startTime = assertFiniteNonNegativeNumber(
+    playback.startTime,
+    `${symbol}.${state}.playback.startTime`,
+  );
+  const endTime = assertFinitePositiveNumber(
+    playback.endTime,
+    `${symbol}.${state}.playback.endTime`,
+  );
+  if (endTime <= startTime) {
+    throw new Error(
+      `Existing manifest symbol "${symbol}" ${state} playback endTime must be greater than startTime.`,
+    );
+  }
+  if (playback.loop !== false) {
+    throw new Error(
+      `Existing manifest symbol "${symbol}" ${state} playback loop must be false.`,
+    );
+  }
+  return Object.freeze({
+    mode: "range",
+    startTime,
+    endTime,
+    loop: false,
+  });
+}
+
+function createManifest(symbols, composites, scale, preservedAnimations) {
   return Object.freeze({
     version: 1,
     states: REQUIRED_STATES,
@@ -423,6 +619,9 @@ function createManifest(symbols, composites, scale) {
             [SPIN_BLUR_STATE]: `./${symbol}.${SPIN_BLUR_STATE}.png`,
             [DISABLED_STATE]: `./${symbol}.${DISABLED_STATE}.png`,
             scale,
+            ...(preservedAnimations.has(symbol)
+              ? { animations: preservedAnimations.get(symbol) }
+              : {}),
           }),
         ]),
       ),
@@ -501,6 +700,29 @@ function readOptionValue(args, index) {
 function assertNonEmptyString(value, label) {
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(`${label} must be a non-empty string.`);
+  }
+  return value;
+}
+
+function assertOnlyKnownKeys(record, label, allowed) {
+  const allowedSet = new Set(allowed);
+  for (const key of Object.keys(record)) {
+    if (!allowedSet.has(key)) {
+      throw new Error(`${label} contains unknown field "${key}".`);
+    }
+  }
+}
+
+function assertFiniteNonNegativeNumber(value, label) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error(`${label} must be a finite non-negative number.`);
+  }
+  return value;
+}
+
+function assertFinitePositiveNumber(value, label) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new Error(`${label} must be a finite positive number.`);
   }
   return value;
 }

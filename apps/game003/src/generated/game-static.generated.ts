@@ -19,6 +19,21 @@ const game003Skin1SymbolModules = import.meta.glob(
     query: "?url",
   },
 ) as Record<string, string>;
+const game003Skin1VniProjectModules = import.meta.glob(
+  "../../../../assets/game003-s1/*-wins.json",
+  {
+    eager: true,
+    import: "default",
+  },
+) as Record<string, unknown>;
+const game003Skin1VniAssetModules = import.meta.glob(
+  "../../../../assets/game003-s1/assets/*.{png,jpg,jpeg,webp}",
+  {
+    eager: true,
+    import: "default",
+    query: "?url",
+  },
+) as Record<string, string>;
 
 export const GAME003_STATIC_SKIN_MODULES = Object.freeze({
   "1": game003Skin1SymbolModules,
@@ -53,6 +68,8 @@ export const GAME003_STATIC_CONFIG = Object.freeze({
       symbols: Object.freeze({
         manifest: game003Skin1SymbolManifest,
         pngModules: GAME003_STATIC_SKIN_MODULES["1"],
+        vniProjectModules: game003Skin1VniProjectModules,
+        vniAssetModules: game003Skin1VniAssetModules,
         emptySymbols: Object.freeze([] as const),
         requireExplicitScale: true,
         requiredStates: Object.freeze(["spinBlur", "disabled"] as const),

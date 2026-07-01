@@ -103,6 +103,8 @@ export interface GameStaticYamlSkinConfig {
 export interface GameStaticYamlSymbolsConfig {
   readonly manifest: string;
   readonly pngGlob: string;
+  readonly vniProjectGlob?: string;
+  readonly vniAssetGlob?: string;
   readonly emptySymbols: readonly string[];
   readonly requireExplicitScale: boolean;
   readonly requiredStates: readonly string[];

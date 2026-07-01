@@ -55,7 +55,25 @@
       "normal": "./L1.png",
       "spinBlur": "./L1.spinBlur.png",
       "disabled": "./L1.disabled.png",
-      "scale": 1
+      "scale": 1,
+      "animations": {
+        "win": {
+          "kind": "vni",
+          "project": "./L1-wins.json",
+          "stageRect": {
+            "x": 744,
+            "y": 744,
+            "width": 512,
+            "height": 512
+          },
+          "playback": {
+            "mode": "range",
+            "startTime": 0,
+            "endTime": 2,
+            "loop": false
+          }
+        }
+      }
     },
     "L2": {
       "normal": "./L2.png",
