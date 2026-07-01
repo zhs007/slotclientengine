@@ -26,7 +26,7 @@ describe("win amount animation player", () => {
     expect(FakeVniPlayer.instances).toHaveLength(0);
   });
 
-  it("counts minor wins at the reel bottom and completes without VNI tiers", () => {
+  it("counts minor wins at the reel bottom and waits for player dismissal", () => {
     const player = createTestPlayer();
 
     player.start({ betAmountRaw: 10, winAmountRaw: 8 });
@@ -36,6 +36,12 @@ describe("win amount animation player", () => {
       displayedAmountRaw: 4,
     });
     expect(player.update(0.75)).toMatchObject({
+      completed: false,
+      phase: "awaiting-dismiss",
+      displayedAmountRaw: 8,
+    });
+    player.requestDismiss();
+    expect(player.update(0)).toMatchObject({
       completed: true,
       phase: "complete",
       displayedAmountRaw: 8,
@@ -43,7 +49,7 @@ describe("win amount animation player", () => {
     expect(FakeVniPlayer.instances).toHaveLength(0);
   });
 
-  it("counts major wins after the minor phase before completing", () => {
+  it("counts major wins after the minor phase before waiting for dismissal", () => {
     const player = createTestPlayer();
 
     player.start({ betAmountRaw: 10, winAmountRaw: 50 });
@@ -54,6 +60,12 @@ describe("win amount animation player", () => {
     });
     expect(player.update(1.5).displayedAmountRaw).toBe(30);
     expect(player.update(1.5)).toMatchObject({
+      completed: false,
+      phase: "awaiting-dismiss",
+      displayedAmountRaw: 50,
+    });
+    player.requestDismiss();
+    expect(player.update(0)).toMatchObject({
       completed: true,
       phase: "complete",
       displayedAmountRaw: 50,
@@ -61,19 +73,50 @@ describe("win amount animation player", () => {
     expect(FakeVniPlayer.instances).toHaveLength(0);
   });
 
-  it("switches big, super, and mega tiers at reached thresholds", async () => {
+  it("overlaps tier end with the next tier start and renders newer tiers above older tiers", async () => {
     const player = createTestPlayer();
 
     player.start({ betAmountRaw: 10, winAmountRaw: 500 });
     player.update(1.5);
     expect(player.update(3)).toMatchObject({
       completed: false,
-      phase: "tier-ending",
+      phase: "tier-counting",
+      activeTierId: "bigwin",
+      displayedAmountRaw: 150,
+    });
+    await flushMicrotasks();
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.projectId),
+    ).toEqual(["win-amount-bigwin"]);
+
+    expect(player.update(2.5).displayedAmountRaw).toBe(225);
+    expect(player.update(2.5)).toMatchObject({
+      completed: false,
+      phase: "tier-counting",
+      activeTierId: "superwin",
+      displayedAmountRaw: 300,
+    });
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.endRequests),
+    ).toEqual([1, 0]);
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.projectId),
+    ).toEqual(["win-amount-bigwin", "win-amount-superwin"]);
+    expect(getEffectLayer(player).children).toEqual([
+      FakeVniPlayer.instances[0].parent,
+      FakeVniPlayer.instances[1].parent,
+    ]);
+    await flushMicrotasks();
+
+    expect(player.update(5)).toMatchObject({
+      completed: false,
+      phase: "tier-counting",
       activeTierId: "megawin",
       displayedAmountRaw: 500,
     });
-    await flushMicrotasks();
-
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.endRequests),
+    ).toEqual([1, 1, 0]);
     expect(
       FakeVniPlayer.instances.map((instance) => instance.projectId),
     ).toEqual([
@@ -81,6 +124,11 @@ describe("win amount animation player", () => {
       "win-amount-superwin",
       "win-amount-megawin",
     ]);
+    expect(getEffectLayer(player).children).toEqual([
+      FakeVniPlayer.instances[1].parent,
+      FakeVniPlayer.instances[2].parent,
+    ]);
+    await flushMicrotasks();
     expect(
       FakeVniPlayer.instances.map((instance) => instance.playOptions),
     ).toEqual([
@@ -88,6 +136,17 @@ describe("win amount animation player", () => {
       { loopStart: 1, loopEnd: 4, keepParticlesAlive: true },
       { loopStart: 1, loopEnd: 4, keepParticlesAlive: true },
     ]);
+
+    expect(player.update(5)).toMatchObject({
+      completed: false,
+      phase: "awaiting-dismiss",
+      activeTierId: "megawin",
+      displayedAmountRaw: 500,
+    });
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.endRequests),
+    ).toEqual([1, 1, 0]);
+    player.requestDismiss();
     expect(
       FakeVniPlayer.instances.map((instance) => instance.endRequests),
     ).toEqual([1, 1, 1]);
@@ -99,7 +158,55 @@ describe("win amount animation player", () => {
     });
   });
 
-  it("fails fast for invalid input, delta, and formatter output", () => {
+  it("dismisses the current tier before starting later tiers when the player clicks early", async () => {
+    const player = createTestPlayer();
+
+    player.start({ betAmountRaw: 10, winAmountRaw: 500 });
+    player.update(1.5);
+    player.update(3);
+    await flushMicrotasks();
+    player.update(1);
+
+    player.requestDismiss();
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.endRequests),
+    ).toEqual([1]);
+    expect(player.update(0.1)).toMatchObject({
+      completed: true,
+      phase: "complete",
+    });
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.projectId),
+    ).toEqual(["win-amount-bigwin"]);
+  });
+
+  it("dismisses the top tier when the player clicks during an overlapped transition", async () => {
+    const player = createTestPlayer();
+
+    player.start({ betAmountRaw: 10, winAmountRaw: 500 });
+    player.update(1.5);
+    player.update(3);
+    await flushMicrotasks();
+    player.update(5);
+    await flushMicrotasks();
+
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.projectId),
+    ).toEqual(["win-amount-bigwin", "win-amount-superwin"]);
+    player.requestDismiss();
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.endRequests),
+    ).toEqual([1, 1]);
+    expect(player.update(0.1)).toMatchObject({
+      completed: true,
+      phase: "complete",
+    });
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.projectId),
+    ).toEqual(["win-amount-bigwin", "win-amount-superwin"]);
+  });
+
+  it("fails fast for invalid input, delta, formatter output, and config", () => {
     const player = createTestPlayer();
 
     expect(() => player.start({ betAmountRaw: 0, winAmountRaw: 1 })).toThrow(
@@ -112,6 +219,48 @@ describe("win amount animation player", () => {
     expect(() =>
       badFormatter.start({ betAmountRaw: 10, winAmountRaw: 1 }),
     ).toThrow(/formatter/);
+
+    const validConfig = createTestConfig();
+    expect(() =>
+      createWinAmountAnimationPlayer({
+        config: {
+          ...validConfig,
+          tiers: [],
+        },
+      }),
+    ).toThrow(/tiers/);
+    expect(() =>
+      createWinAmountAnimationPlayer({
+        config: {
+          ...validConfig,
+          thresholdMultipliers: {
+            minor: 1,
+            big: 15,
+            super: 10,
+            mega: 50,
+          },
+        },
+      }),
+    ).toThrow(/strictly increasing/);
+    expect(() =>
+      createWinAmountAnimationPlayer({
+        config: {
+          ...validConfig,
+          tiers: [{ ...validConfig.tiers[0], durationSeconds: 4 }],
+        },
+      }),
+    ).toThrow(/at least 5 seconds/);
+    expect(() =>
+      createWinAmountAnimationPlayer({
+        config: {
+          ...validConfig,
+          layout: {
+            ...validConfig.layout,
+            tierStageRect: { x: 0, y: 0, width: 0, height: 2000 },
+          },
+        },
+      }),
+    ).toThrow(/tierStageRect size/);
   });
 });
 
@@ -119,48 +268,62 @@ function createTestPlayer(
   formatter = (amount: number) => `$${amount.toFixed(2)}`,
 ) {
   return createWinAmountAnimationPlayer({
-    config: {
-      formatter,
-      minorCountDurationSeconds: 1.5,
-      majorCountDurationSeconds: 3,
-      thresholdMultipliers: {
-        minor: 1,
-        big: 15,
-        super: 30,
-        mega: 50,
-      },
-      layout: {
-        minorTextPosition: { x: 100, y: 200 },
-        majorTextPosition: { x: 100, y: 100 },
-        tierStageRect: { x: 0, y: 0, width: 2000, height: 2000 },
-      },
-      textStyle: {
-        minorFontSize: 54,
-        majorFontSize: 118,
-        fill: "#fff7d6",
-        stroke: "#5a2500",
-        strokeWidth: 8,
-      },
-      tiers: createWinAmountAnimationTiersFromModules({
-        tierConfigs: [
-          createTierConfig("bigwin", 15, "./bigwin.json"),
-          createTierConfig("superwin", 30, "./superwin.json"),
-          createTierConfig("megawin", 50, "./megawin.json"),
-        ],
-        projectModules: {
-          "/assets/game003-s1/win-amount/bigwin.json": bigwinProject,
-          "/assets/game003-s1/win-amount/superwin.json": superwinProject,
-          "/assets/game003-s1/win-amount/megawin.json": megawinProject,
-        },
-        assetModules: createAssetModules([
-          bigwinProject,
-          superwinProject,
-          megawinProject,
-        ]),
-      }),
-    },
+    config: createTestConfig(formatter),
     playerFactory: (options) => new FakeVniPlayer(options),
   });
+}
+
+function createTestConfig(
+  formatter = (amount: number) => `$${amount.toFixed(2)}`,
+) {
+  return {
+    formatter,
+    minorCountDurationSeconds: 1.5,
+    majorCountDurationSeconds: 3,
+    thresholdMultipliers: {
+      minor: 1,
+      big: 15,
+      super: 30,
+      mega: 50,
+    },
+    layout: {
+      minorTextPosition: { x: 100, y: 200 },
+      majorTextPosition: { x: 100, y: 100 },
+      tierStageRect: { x: 0, y: 0, width: 2000, height: 2000 },
+    },
+    textStyle: {
+      minorFontSize: 54,
+      majorFontSize: 118,
+      fill: "#fff7d6",
+      stroke: "#5a2500",
+      strokeWidth: 8,
+    },
+    tiers: createWinAmountAnimationTiersFromModules({
+      tierConfigs: [
+        createTierConfig("bigwin", 15, "./bigwin.json"),
+        createTierConfig("superwin", 30, "./superwin.json"),
+        createTierConfig("megawin", 50, "./megawin.json"),
+      ],
+      projectModules: {
+        "/assets/game003-s1/win-amount/bigwin.json": bigwinProject,
+        "/assets/game003-s1/win-amount/superwin.json": superwinProject,
+        "/assets/game003-s1/win-amount/megawin.json": megawinProject,
+      },
+      assetModules: createAssetModules([
+        bigwinProject,
+        superwinProject,
+        megawinProject,
+      ]),
+    }),
+  };
+}
+
+function getEffectLayer(player: { readonly container: Container }): Container {
+  const effectLayer = player.container.children[0];
+  if (!(effectLayer instanceof Container)) {
+    throw new Error("expected win amount effect layer.");
+  }
+  return effectLayer;
 }
 
 function createTierConfig(
@@ -206,6 +369,7 @@ async function flushMicrotasks(): Promise<void> {
 class FakeVniPlayer implements WinAmountVniPlayer {
   static readonly instances: FakeVniPlayer[] = [];
   readonly display = new Container();
+  readonly parent: Container;
   readonly projectId: string;
   readonly completeListeners = new Set<() => void>();
   playOptions: unknown = null;
@@ -214,6 +378,7 @@ class FakeVniPlayer implements WinAmountVniPlayer {
 
   constructor(options: VNIPlayerOptions) {
     this.projectId = options.projectId;
+    this.parent = options.parent;
     FakeVniPlayer.instances.push(this);
   }
 

@@ -14,12 +14,16 @@ import {
 import { WinAmountStage } from "./win-amount-stage.js";
 
 interface CountSegment {
-  readonly phase: "minor-counting" | "major-counting";
+  readonly phase: "minor-counting" | "major-counting" | "tier-counting";
+  readonly textMode: "minor" | "major";
   readonly fromAmountRaw: number;
   readonly toAmountRaw: number;
   readonly durationSeconds: number;
+  readonly tier?: WinAmountAnimationTier;
   elapsedSeconds: number;
 }
+
+type PlaybackStage = Omit<CountSegment, "elapsedSeconds">;
 
 export interface CreateWinAmountAnimationPlayerOptions {
   readonly config: WinAmountAnimationConfig;
@@ -32,13 +36,12 @@ export class DefaultWinAmountAnimationPlayer implements WinAmountAnimationPlayer
   readonly #playerFactory?: WinAmountVniPlayerFactory;
   readonly #tiers: readonly WinAmountAnimationTier[];
   #phase: WinAmountAnimationPhase = "idle";
-  #input: WinAmountAnimationInput | null = null;
+  #stages: readonly PlaybackStage[] = [];
+  #stageIndex = -1;
   #segment: CountSegment | null = null;
   #displayedAmountRaw = 0;
   #activeTier: WinAmountTierEffect | null = null;
   #endingTiers: WinAmountTierEffect[] = [];
-  #nextTierIndex = 0;
-  #finalTierEndRequested = false;
   #destroyed = false;
 
   constructor(options: CreateWinAmountAnimationPlayerOptions) {
@@ -67,7 +70,6 @@ export class DefaultWinAmountAnimationPlayer implements WinAmountAnimationPlayer
     }
     validateInput(input);
     this.clearPlayback();
-    this.#input = input;
     this.#displayedAmountRaw = 0;
     if (input.winAmountRaw === 0) {
       this.#phase = "complete";
@@ -75,19 +77,8 @@ export class DefaultWinAmountAnimationPlayer implements WinAmountAnimationPlayer
       return;
     }
 
-    const minorTarget = Math.min(
-      input.winAmountRaw,
-      input.betAmountRaw * this.#config.thresholdMultipliers.minor,
-    );
-    this.#segment = {
-      phase: "minor-counting",
-      fromAmountRaw: 0,
-      toAmountRaw: minorTarget,
-      durationSeconds: this.#config.minorCountDurationSeconds,
-      elapsedSeconds: 0,
-    };
-    this.#phase = "minor-counting";
-    this.renderText("minor");
+    this.#stages = this.createPlaybackStages(input);
+    this.startNextStage();
   }
 
   update(deltaSeconds: number): WinAmountAnimationUpdateResult {
@@ -98,19 +89,27 @@ export class DefaultWinAmountAnimationPlayer implements WinAmountAnimationPlayer
     }
 
     this.updateEffects(deltaSeconds);
-    if (this.#segment) {
-      this.advanceCountSegment(deltaSeconds);
-    } else if (this.#activeTier && !this.#finalTierEndRequested) {
-      this.#activeTier.requestEnd();
-      this.#finalTierEndRequested = true;
-      this.#phase = "tier-ending";
-    }
-
     this.pruneCompletedEndingTiers();
-    if (this.canComplete()) {
-      this.complete();
+    if (this.#phase === "dismissing") {
+      this.finishDismissIfComplete();
+    } else if (this.#segment) {
+      this.advanceCountSegment(deltaSeconds);
     }
     return this.createUpdateResult();
+  }
+
+  requestDismiss(): void {
+    this.assertNotDestroyed();
+    if (!this.isPlaying()) {
+      return;
+    }
+    this.#segment = null;
+    if (this.#activeTier) {
+      this.#activeTier.requestEnd();
+      this.#phase = "dismissing";
+      return;
+    }
+    this.completeAndHide();
   }
 
   applyLayout(layout: WinAmountAnimationLayout): void {
@@ -123,11 +122,7 @@ export class DefaultWinAmountAnimationPlayer implements WinAmountAnimationPlayer
   }
 
   isPlaying(): boolean {
-    return (
-      this.#phase === "minor-counting" ||
-      this.#phase === "major-counting" ||
-      this.#phase === "tier-ending"
-    );
+    return this.#phase !== "idle" && this.#phase !== "complete";
   }
 
   destroy(): void {
@@ -139,9 +134,81 @@ export class DefaultWinAmountAnimationPlayer implements WinAmountAnimationPlayer
     this.#stage.destroy();
   }
 
+  private createPlaybackStages(
+    input: WinAmountAnimationInput,
+  ): readonly PlaybackStage[] {
+    const stages: PlaybackStage[] = [];
+    const minorThreshold =
+      input.betAmountRaw * this.#config.thresholdMultipliers.minor;
+    const firstTier = this.#tiers[0];
+    const majorThreshold =
+      input.betAmountRaw *
+      (firstTier?.thresholdMultiplier ?? this.#config.thresholdMultipliers.big);
+    const minorTarget = Math.min(input.winAmountRaw, minorThreshold);
+    stages.push({
+      phase: "minor-counting",
+      textMode: "minor",
+      fromAmountRaw: 0,
+      toAmountRaw: minorTarget,
+      durationSeconds: this.#config.minorCountDurationSeconds,
+    });
+    if (input.winAmountRaw <= minorThreshold) {
+      return Object.freeze(stages);
+    }
+
+    const majorTarget = Math.min(input.winAmountRaw, majorThreshold);
+    if (majorTarget > minorThreshold) {
+      stages.push({
+        phase: "major-counting",
+        textMode: "major",
+        fromAmountRaw: minorThreshold,
+        toAmountRaw: majorTarget,
+        durationSeconds: this.#config.majorCountDurationSeconds,
+      });
+    }
+
+    for (let index = 0; index < this.#tiers.length; index += 1) {
+      const tier = this.#tiers[index];
+      const thresholdAmount = tier.thresholdMultiplier * input.betAmountRaw;
+      if (input.winAmountRaw < thresholdAmount) {
+        continue;
+      }
+      const nextTier = this.#tiers[index + 1];
+      const nextThresholdAmount = nextTier
+        ? nextTier.thresholdMultiplier * input.betAmountRaw
+        : input.winAmountRaw;
+      stages.push({
+        phase: "tier-counting",
+        textMode: "major",
+        fromAmountRaw: thresholdAmount,
+        toAmountRaw: Math.min(input.winAmountRaw, nextThresholdAmount),
+        durationSeconds: tier.durationSeconds,
+        tier,
+      });
+    }
+
+    return Object.freeze(stages);
+  }
+
+  private startNextStage(): void {
+    this.#stageIndex += 1;
+    const stage = this.#stages[this.#stageIndex];
+    if (!stage) {
+      this.awaitDismiss();
+      return;
+    }
+    this.#segment = { ...stage, elapsedSeconds: 0 };
+    this.#phase = stage.phase;
+    this.#displayedAmountRaw = stage.fromAmountRaw;
+    if (stage.tier) {
+      this.startTier(stage.tier);
+    }
+    this.renderText(stage.textMode);
+  }
+
   private advanceCountSegment(deltaSeconds: number): void {
     const segment = this.#segment;
-    if (!segment || !this.#input) {
+    if (!segment) {
       return;
     }
     segment.elapsedSeconds = Math.min(
@@ -155,56 +222,67 @@ export class DefaultWinAmountAnimationPlayer implements WinAmountAnimationPlayer
     this.#displayedAmountRaw =
       segment.fromAmountRaw +
       (segment.toAmountRaw - segment.fromAmountRaw) * progress;
-    this.renderText(segment.phase === "minor-counting" ? "minor" : "major");
-    this.triggerReachedTiers();
+    this.renderText(segment.textMode);
     if (progress < 1) {
       return;
     }
-    if (
-      segment.phase === "minor-counting" &&
-      this.#input.winAmountRaw > segment.toAmountRaw
-    ) {
-      this.#segment = {
-        phase: "major-counting",
-        fromAmountRaw: segment.toAmountRaw,
-        toAmountRaw: this.#input.winAmountRaw,
-        durationSeconds: this.#config.majorCountDurationSeconds,
-        elapsedSeconds: 0,
-      };
-      this.#phase = "major-counting";
-      this.renderText("major");
-      return;
-    }
-    this.#segment = null;
-    if (this.#activeTier) {
-      this.#activeTier.requestEnd();
-      this.#finalTierEndRequested = true;
-      this.#phase = "tier-ending";
-      return;
-    }
-    this.complete();
+    this.finishCurrentSegment(segment);
   }
 
-  private triggerReachedTiers(): void {
-    if (!this.#input) {
-      return;
-    }
-    while (this.#nextTierIndex < this.#tiers.length) {
-      const tier = this.#tiers[this.#nextTierIndex];
-      const thresholdAmount =
-        tier.thresholdMultiplier * this.#input.betAmountRaw;
-      if (this.#displayedAmountRaw < thresholdAmount) {
+  private finishCurrentSegment(segment: CountSegment): void {
+    this.#segment = null;
+    if (segment.tier) {
+      if (this.hasNextStage()) {
+        this.endActiveTierBehindNextStage();
+        this.startNextStage();
         return;
       }
-      this.startTier(tier);
-      this.#nextTierIndex += 1;
+      this.awaitDismiss();
+      return;
     }
+    if (this.hasNextStage()) {
+      this.startNextStage();
+      return;
+    }
+    this.awaitDismiss();
+  }
+
+  private hasNextStage(): boolean {
+    return this.#stageIndex + 1 < this.#stages.length;
+  }
+
+  private awaitDismiss(): void {
+    this.#segment = null;
+    this.#phase = "awaiting-dismiss";
+  }
+
+  private finishDismissIfComplete(): void {
+    if (!this.#activeTier) {
+      this.completeAndHide();
+      return;
+    }
+    if (!this.#activeTier.isComplete()) {
+      return;
+    }
+    this.#activeTier.destroy();
+    this.#activeTier = null;
+    this.completeAndHide();
+  }
+
+  private endActiveTierBehindNextStage(): void {
+    if (!this.#activeTier) {
+      return;
+    }
+    this.#activeTier.requestEnd();
+    this.#endingTiers.push(this.#activeTier);
+    this.#activeTier = null;
   }
 
   private startTier(tier: WinAmountAnimationTier): void {
     if (this.#activeTier) {
-      this.#activeTier.requestEnd();
-      this.#endingTiers.push(this.#activeTier);
+      throw new Error(
+        `win amount tier "${tier.id}" cannot start before "${this.#activeTier.id}" completed.`,
+      );
     }
     const effect = new WinAmountTierEffect({
       tier,
@@ -214,7 +292,6 @@ export class DefaultWinAmountAnimationPlayer implements WinAmountAnimationPlayer
     });
     effect.start();
     this.#activeTier = effect;
-    this.#finalTierEndRequested = false;
   }
 
   private updateEffects(deltaSeconds: number): void {
@@ -236,15 +313,7 @@ export class DefaultWinAmountAnimationPlayer implements WinAmountAnimationPlayer
     this.#endingTiers = remaining;
   }
 
-  private canComplete(): boolean {
-    return (
-      !this.#segment &&
-      this.#endingTiers.length === 0 &&
-      (!this.#activeTier || this.#activeTier.isComplete())
-    );
-  }
-
-  private complete(): void {
+  private completeAndHide(): void {
     this.#activeTier?.destroy();
     this.#activeTier = null;
     for (const tier of this.#endingTiers) {
@@ -252,16 +321,10 @@ export class DefaultWinAmountAnimationPlayer implements WinAmountAnimationPlayer
     }
     this.#endingTiers = [];
     this.#segment = null;
+    this.#stages = [];
+    this.#stageIndex = -1;
+    this.#stage.clear();
     this.#phase = "complete";
-    if (this.#input) {
-      this.#displayedAmountRaw = this.#input.winAmountRaw;
-      this.renderText(
-        this.#input.winAmountRaw >
-          this.#input.betAmountRaw * this.#config.thresholdMultipliers.minor
-          ? "major"
-          : "minor",
-      );
-    }
   }
 
   private clearPlayback(): void {
@@ -272,9 +335,8 @@ export class DefaultWinAmountAnimationPlayer implements WinAmountAnimationPlayer
     }
     this.#endingTiers = [];
     this.#segment = null;
-    this.#input = null;
-    this.#nextTierIndex = 0;
-    this.#finalTierEndRequested = false;
+    this.#stages = [];
+    this.#stageIndex = -1;
     this.#displayedAmountRaw = 0;
     this.#stage.clear();
     this.#phase = "idle";
@@ -345,6 +407,13 @@ function validateConfig(config: WinAmountAnimationConfig): void {
   }
   if (config.tiers.length === 0) {
     throw new Error("win amount animation tiers must not be empty.");
+  }
+  for (const tier of config.tiers) {
+    if (tier.durationSeconds < 5) {
+      throw new Error(
+        `win amount tier "${tier.id}" durationSeconds must be at least 5 seconds.`,
+      );
+    }
   }
 }
 

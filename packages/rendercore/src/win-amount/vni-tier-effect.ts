@@ -266,6 +266,11 @@ function assertTierTiming(
       `win amount tier "${config.id}" durationSeconds must be positive.`,
     );
   }
+  if (config.durationSeconds < 5) {
+    throw new Error(
+      `win amount tier "${config.id}" durationSeconds must be at least 5 seconds.`,
+    );
+  }
   if (
     !(
       config.loopStartTime <= config.loopEndTime &&

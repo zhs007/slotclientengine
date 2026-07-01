@@ -94,7 +94,9 @@ export type WinAmountAnimationPhase =
   | "idle"
   | "minor-counting"
   | "major-counting"
-  | "tier-ending"
+  | "tier-counting"
+  | "awaiting-dismiss"
+  | "dismissing"
   | "complete";
 
 export interface WinAmountAnimationUpdateResult {
@@ -108,6 +110,7 @@ export interface WinAmountAnimationPlayer {
   readonly container: Container;
   start(input: WinAmountAnimationInput): void;
   update(deltaSeconds: number): WinAmountAnimationUpdateResult;
+  requestDismiss(): void;
   applyLayout(layout: WinAmountAnimationLayout): void;
   isPlaying(): boolean;
   destroy(): void;
