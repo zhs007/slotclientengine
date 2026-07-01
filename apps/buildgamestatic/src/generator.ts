@@ -242,6 +242,35 @@ export async function generateGameStaticConfigModule(options: {
         "}) as Record<string, string>;",
       );
     }
+    if (skin.winAmount && names.winAmountProjectModules) {
+      lines.push(
+        `const ${names.winAmountProjectModules} = import.meta.glob(${quote(
+          toImportSpecifierFromRoot(
+            options.rootDir,
+            options.outPath,
+            skin.winAmount.animations.projectGlob,
+          ),
+        )}, {`,
+        "  eager: true,",
+        '  import: "default"',
+        "}) as Record<string, unknown>;",
+      );
+    }
+    if (skin.winAmount && names.winAmountAssetModules) {
+      lines.push(
+        `const ${names.winAmountAssetModules} = import.meta.glob(${quote(
+          toImportSpecifierFromRoot(
+            options.rootDir,
+            options.outPath,
+            skin.winAmount.animations.assetGlob,
+          ),
+        )}, {`,
+        "  eager: true,",
+        '  import: "default",',
+        '  query: "?url"',
+        "}) as Record<string, string>;",
+      );
+    }
   }
 
   lines.push(
@@ -469,8 +498,48 @@ function renderSkinConfig(options: {
     `        reelAreaInMainReelBackground: Object.freeze(${json(
       skin.art.reelAreaInMainReelBackground,
     )} as const)`,
-    "      })",
+    `      })${skin.winAmount ? "," : ""}`,
+    ...(skin.winAmount ? renderWinAmountConfig(skin.winAmount, names) : []),
     "    }),",
+  ];
+}
+
+function renderWinAmountConfig(
+  winAmount: NonNullable<GameStaticYamlSkinConfig["winAmount"]>,
+  names: ImportNames,
+): readonly string[] {
+  if (!names.winAmountProjectModules || !names.winAmountAssetModules) {
+    throw new Error("winAmount module names are required.");
+  }
+  return [
+    "      winAmount: Object.freeze({",
+    `        amountScale: ${numberLiteral(winAmount.amountScale)},`,
+    `        currency: ${quote(winAmount.currency)},`,
+    `        locale: ${quote(winAmount.locale)},`,
+    `        minorCountDurationSeconds: ${numberLiteral(
+      winAmount.minorCountDurationSeconds,
+    )},`,
+    `        majorCountDurationSeconds: ${numberLiteral(
+      winAmount.majorCountDurationSeconds,
+    )},`,
+    `        thresholds: Object.freeze(${json(winAmount.thresholds)} as const),`,
+    `        text: Object.freeze(${json(winAmount.text)} as const),`,
+    "        layout: Object.freeze({",
+    `          minorAnchor: ${quote(winAmount.layout.minorAnchor)},`,
+    `          majorAnchor: ${quote(winAmount.layout.majorAnchor)},`,
+    `          minorOffset: Object.freeze(${json(
+      winAmount.layout.minorOffset,
+    )} as const),`,
+    `          majorOffset: Object.freeze(${json(
+      winAmount.layout.majorOffset,
+    )} as const)`,
+    "        }),",
+    "        animations: Object.freeze({",
+    `          projectModules: ${names.winAmountProjectModules},`,
+    `          assetModules: ${names.winAmountAssetModules},`,
+    `          tiers: Object.freeze(${json(winAmount.animations.tiers)} as const)`,
+    "        })",
+    "      })",
   ];
 }
 
@@ -576,6 +645,8 @@ interface ImportNames {
   readonly symbolModules: string;
   readonly vniProjectModules?: string;
   readonly vniAssetModules?: string;
+  readonly winAmountProjectModules?: string;
+  readonly winAmountAssetModules?: string;
   readonly landscapeBackground: string;
   readonly portraitBackground: string;
   readonly mainReelBackground: string;
@@ -600,6 +671,12 @@ function createImportNames(
             : undefined,
           vniAssetModules: skin.symbols.vniAssetGlob
             ? `${prefix}VniAssetModules`
+            : undefined,
+          winAmountProjectModules: skin.winAmount
+            ? `${prefix}WinAmountProjectModules`
+            : undefined,
+          winAmountAssetModules: skin.winAmount
+            ? `${prefix}WinAmountAssetModules`
             : undefined,
           landscapeBackground: `${prefix}LandscapeBackgroundUrl`,
           portraitBackground: `${prefix}PortraitBackgroundUrl`,

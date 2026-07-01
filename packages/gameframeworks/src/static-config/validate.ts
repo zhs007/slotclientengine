@@ -12,6 +12,12 @@ import type {
   SlotGameStaticRect,
   SlotGameStaticSkinConfig,
   SlotGameStaticSymbolsConfig,
+  SlotGameStaticWinAmountAnimations,
+  SlotGameStaticWinAmountConfig,
+  SlotGameStaticWinAmountLayout,
+  SlotGameStaticWinAmountText,
+  SlotGameStaticWinAmountThresholds,
+  SlotGameStaticWinAmountTier,
 } from "./types.js";
 
 export function assertSlotGameStaticConfig(
@@ -109,10 +115,15 @@ function assertSkinConfig(
   label: string,
 ): asserts value is SlotGameStaticSkinConfig {
   const record = assertRecord(value, label);
-  assertKeys(record, label, ["label", "symbols", "art"]);
+  assertKeys(record, label, ["label", "symbols", "art", "winAmount"], {
+    optional: ["winAmount"],
+  });
   assertNonEmptyString(record.label, `${label}.label`);
   assertSymbolsConfig(record.symbols, `${label}.symbols`);
   assertArtConfig(record.art, `${label}.art`);
+  if (record.winAmount !== undefined) {
+    assertWinAmountConfig(record.winAmount, `${label}.winAmount`);
+  }
 }
 
 function assertSymbolsConfig(
@@ -392,6 +403,191 @@ function assertReelArea(
   return record as unknown as SlotGameStaticReelAreaConfig;
 }
 
+function assertWinAmountConfig(
+  value: unknown,
+  label: string,
+): asserts value is SlotGameStaticWinAmountConfig {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "amountScale",
+    "currency",
+    "locale",
+    "minorCountDurationSeconds",
+    "majorCountDurationSeconds",
+    "thresholds",
+    "text",
+    "layout",
+    "animations",
+  ]);
+  assertPositiveFiniteNumber(record.amountScale, `${label}.amountScale`);
+  assertNonEmptyString(record.currency, `${label}.currency`);
+  assertNonEmptyString(record.locale, `${label}.locale`);
+  assertPositiveFiniteNumber(
+    record.minorCountDurationSeconds,
+    `${label}.minorCountDurationSeconds`,
+  );
+  assertPositiveFiniteNumber(
+    record.majorCountDurationSeconds,
+    `${label}.majorCountDurationSeconds`,
+  );
+  assertWinAmountThresholds(record.thresholds, `${label}.thresholds`);
+  assertWinAmountText(record.text, `${label}.text`);
+  assertWinAmountLayout(record.layout, `${label}.layout`);
+  assertWinAmountAnimations(record.animations, `${label}.animations`);
+}
+
+function assertWinAmountThresholds(
+  value: unknown,
+  label: string,
+): SlotGameStaticWinAmountThresholds {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "minorMultiplier",
+    "bigMultiplier",
+    "superMultiplier",
+    "megaMultiplier",
+  ]);
+  const thresholds = {
+    minorMultiplier: assertPositiveFiniteNumber(
+      record.minorMultiplier,
+      `${label}.minorMultiplier`,
+    ),
+    bigMultiplier: assertPositiveFiniteNumber(
+      record.bigMultiplier,
+      `${label}.bigMultiplier`,
+    ),
+    superMultiplier: assertPositiveFiniteNumber(
+      record.superMultiplier,
+      `${label}.superMultiplier`,
+    ),
+    megaMultiplier: assertPositiveFiniteNumber(
+      record.megaMultiplier,
+      `${label}.megaMultiplier`,
+    ),
+  };
+  if (
+    !(
+      thresholds.bigMultiplier > thresholds.minorMultiplier &&
+      thresholds.superMultiplier > thresholds.bigMultiplier &&
+      thresholds.megaMultiplier > thresholds.superMultiplier
+    )
+  ) {
+    throw new Error(`${label} must be strictly increasing.`);
+  }
+  return thresholds;
+}
+
+function assertWinAmountText(
+  value: unknown,
+  label: string,
+): SlotGameStaticWinAmountText {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "minorFontSize",
+    "majorFontSize",
+    "fill",
+    "stroke",
+    "strokeWidth",
+  ]);
+  assertPositiveFiniteNumber(record.minorFontSize, `${label}.minorFontSize`);
+  assertPositiveFiniteNumber(record.majorFontSize, `${label}.majorFontSize`);
+  assertCssHexColor(record.fill, `${label}.fill`);
+  assertCssHexColor(record.stroke, `${label}.stroke`);
+  assertNonNegativeFiniteNumber(record.strokeWidth, `${label}.strokeWidth`);
+  return record as unknown as SlotGameStaticWinAmountText;
+}
+
+function assertWinAmountLayout(
+  value: unknown,
+  label: string,
+): SlotGameStaticWinAmountLayout {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "minorAnchor",
+    "majorAnchor",
+    "minorOffset",
+    "majorOffset",
+  ]);
+  assertWinAmountAnchor(record.minorAnchor, `${label}.minorAnchor`);
+  assertWinAmountAnchor(record.majorAnchor, `${label}.majorAnchor`);
+  assertPoint(record.minorOffset, `${label}.minorOffset`);
+  assertPoint(record.majorOffset, `${label}.majorOffset`);
+  return record as unknown as SlotGameStaticWinAmountLayout;
+}
+
+function assertWinAmountAnimations(
+  value: unknown,
+  label: string,
+): SlotGameStaticWinAmountAnimations {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, ["projectModules", "assetModules", "tiers"]);
+  assertNonEmptyRecord(record.projectModules, `${label}.projectModules`);
+  assertNonEmptyStringRecord(record.assetModules, `${label}.assetModules`);
+  if (!Array.isArray(record.tiers) || record.tiers.length === 0) {
+    throw new Error(`${label}.tiers must be a non-empty array.`);
+  }
+  const tiers = record.tiers.map((tier, index) =>
+    assertWinAmountTier(tier, `${label}.tiers[${index}]`),
+  );
+  assertUniqueStrings(
+    tiers.map((tier) => tier.id),
+    `${label}.tiers.id`,
+  );
+  for (let index = 1; index < tiers.length; index += 1) {
+    if (
+      tiers[index].thresholdMultiplier <= tiers[index - 1].thresholdMultiplier
+    ) {
+      throw new Error(
+        `${label}.tiers thresholdMultiplier must be strictly increasing.`,
+      );
+    }
+  }
+  return record as unknown as SlotGameStaticWinAmountAnimations;
+}
+
+function assertWinAmountTier(
+  value: unknown,
+  label: string,
+): SlotGameStaticWinAmountTier {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "id",
+    "thresholdMultiplier",
+    "project",
+    "durationSeconds",
+    "loopStartTime",
+    "loopEndTime",
+    "keepParticlesAlive",
+  ]);
+  assertNonEmptyString(record.id, `${label}.id`);
+  assertPositiveFiniteNumber(
+    record.thresholdMultiplier,
+    `${label}.thresholdMultiplier`,
+  );
+  assertTierProject(record.project, `${label}.project`);
+  const durationSeconds = assertPositiveFiniteNumber(
+    record.durationSeconds,
+    `${label}.durationSeconds`,
+  );
+  const loopStartTime = assertNonNegativeFiniteNumber(
+    record.loopStartTime,
+    `${label}.loopStartTime`,
+  );
+  const loopEndTime = assertNonNegativeFiniteNumber(
+    record.loopEndTime,
+    `${label}.loopEndTime`,
+  );
+  if (!(loopStartTime <= loopEndTime && loopEndTime <= durationSeconds)) {
+    throw new Error(
+      `${label} must satisfy loopStartTime <= loopEndTime <= durationSeconds.`,
+    );
+  }
+  if (typeof record.keepParticlesAlive !== "boolean") {
+    throw new Error(`${label}.keepParticlesAlive must be a boolean.`);
+  }
+  return record as unknown as SlotGameStaticWinAmountTier;
+}
+
 function assertPoint(value: unknown, label: string): SlotGameStaticPoint {
   const record = assertRecord(value, label);
   assertKeys(record, label, ["x", "y"]);
@@ -489,6 +685,60 @@ function assertStringRecord(
     }
   }
   return record as Record<string, string>;
+}
+
+function assertNonEmptyRecord(
+  value: unknown,
+  label: string,
+): Record<string, unknown> {
+  const record = assertRecord(value, label);
+  if (Object.keys(record).length === 0) {
+    throw new Error(`${label} must not be empty.`);
+  }
+  return record;
+}
+
+function assertNonEmptyStringRecord(
+  value: unknown,
+  label: string,
+): Record<string, string> {
+  const record = assertStringRecord(value, label);
+  if (Object.keys(record).length === 0) {
+    throw new Error(`${label} must not be empty.`);
+  }
+  return record;
+}
+
+function assertTierProject(value: unknown, label: string): string {
+  const project = assertNonEmptyString(value, label);
+  if (
+    !/^\.\/[-A-Za-z0-9_]+\.json$/u.test(project) ||
+    project.includes("..") ||
+    project.includes("\\")
+  ) {
+    throw new Error(`${label} must be ./filename.json.`);
+  }
+  return project;
+}
+
+function assertWinAmountAnchor(
+  value: unknown,
+  label: string,
+): "reel-area-bottom-center" | "reel-area-center" {
+  if (value === "reel-area-bottom-center" || value === "reel-area-center") {
+    return value;
+  }
+  throw new Error(
+    `${label} must be reel-area-bottom-center or reel-area-center.`,
+  );
+}
+
+function assertCssHexColor(value: unknown, label: string): string {
+  const color = assertNonEmptyString(value, label);
+  if (!/^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/u.test(color)) {
+    throw new Error(`${label} must be #RRGGBB or #RRGGBBAA.`);
+  }
+  return color;
 }
 
 function assertKeys(

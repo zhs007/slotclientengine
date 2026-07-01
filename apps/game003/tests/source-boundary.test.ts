@@ -20,12 +20,13 @@ describe("game003 source boundary", () => {
     expect(pkg.dependencies).not.toHaveProperty("@slotclientengine/logiccore");
   });
 
-  it("does not import netcore, uiframeworks, or logiccore directly from source", () => {
+  it("does not import netcore, uiframeworks, logiccore, or vnicore directly from source", () => {
     const source = readSourceTree(join(APP_ROOT, "src"));
 
     expect(source).not.toMatch(/@slotclientengine\/netcore/);
     expect(source).not.toMatch(/@slotclientengine\/uiframeworks/);
     expect(source).not.toMatch(/@slotclientengine\/logiccore/);
+    expect(source).not.toMatch(/@slotclientengine\/vnicore/);
   });
 
   it("keeps live runtime parameters out of import.meta.env", () => {

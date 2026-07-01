@@ -8,6 +8,7 @@ import type {
   SlotGameViewportSnapshot,
 } from "@slotclientengine/gameframeworks";
 import type { SymbolAssetMap } from "@slotclientengine/rendercore";
+import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import {
   createGame003SymbolAssetMapFromModules,
   loadGame003SymbolTextures,
@@ -31,6 +32,10 @@ import {
   createGame003WinSymbolSequence,
   type Game003WinSymbolGroup,
 } from "./win-sequence.js";
+import {
+  createGame003WinAmountLayout,
+  createGame003WinAmountPlayer,
+} from "./win-amount-config.js";
 
 export type Game003TickerSnapshot = { readonly deltaMS: number };
 export type Game003TickerListener = (ticker: Game003TickerSnapshot) => void;
@@ -70,6 +75,9 @@ export interface Game003AdapterOptions {
   readonly loadStaticTextures?: () => Promise<Game003StaticTextures>;
   readonly loadSymbolTextures?: () => Promise<SymbolAssetMap>;
   readonly createRuntime?: (symbolAssets: SymbolAssetMap) => Game003ReelRuntime;
+  readonly createWinAmountPlayer?: (
+    layout: Game003Layout,
+  ) => WinAmountAnimationPlayer;
 }
 
 interface PendingAnimation {
@@ -79,6 +87,10 @@ interface PendingAnimation {
   winIndex: number;
   winGroupStarted: boolean;
   winGroupAdvanced: boolean;
+  winSequenceComplete: boolean;
+  winAmountExpected: boolean;
+  betAmountRaw: number;
+  winAmountRaw: number;
   resolve(): void;
   reject(error: Error): void;
 }
@@ -103,11 +115,15 @@ class Game003PixiAdapter implements SlotGameAdapter {
   readonly #loadStaticTextures: () => Promise<Game003StaticTextures>;
   readonly #loadSymbolTextures: () => Promise<SymbolAssetMap>;
   readonly #createRuntime: (symbolAssets: SymbolAssetMap) => Game003ReelRuntime;
+  readonly #createWinAmountPlayer: (
+    layout: Game003Layout,
+  ) => WinAmountAnimationPlayer;
   #app: Game003PixiApplication | null = null;
   #staticTextures: Game003StaticTextures | null = null;
   #worldLayer: Container | null = null;
   #worldSprites: Game003WorldSprites | null = null;
   #runtime: Game003ReelRuntime | null = null;
+  #winAmountPlayer: WinAmountAnimationPlayer | null = null;
   #pendingAnimation: PendingAnimation | null = null;
   #unsubscribeViewport: (() => void) | null = null;
 
@@ -135,6 +151,8 @@ class Game003PixiAdapter implements SlotGameAdapter {
             animationResolver: this.#skin.symbolAnimationResolver,
           },
         }));
+    this.#createWinAmountPlayer =
+      options.createWinAmountPlayer ?? createGame003WinAmountPlayer;
   }
 
   async mount(context: SlotGameMountContext): Promise<void> {
@@ -162,6 +180,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     ]);
     const runtime = this.#createRuntime(symbolTextures);
     runtime.applyLayout(createGame003ReelLayerLayout(runtime.layout, layout));
+    const winAmountPlayer = this.#createWinAmountPlayer(layout);
 
     const worldLayer = new Container();
     const worldSprites = createWorldSprites(staticTextures, layout);
@@ -170,6 +189,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
       worldSprites.conveyor,
       worldSprites.mainReelBackground,
       runtime.mainReelsLayer,
+      winAmountPlayer.container,
     );
     app.stage.addChild(worldLayer);
 
@@ -179,6 +199,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#worldLayer = worldLayer;
     this.#worldSprites = worldSprites;
     this.#runtime = runtime;
+    this.#winAmountPlayer = winAmountPlayer;
     this.#applyViewport(initialViewport);
     this.#unsubscribeViewport = context.onViewportChange((viewport) => {
       this.#applyViewport(viewport);
@@ -216,6 +237,10 @@ class Game003PixiAdapter implements SlotGameAdapter {
         winIndex: 0,
         winGroupStarted: false,
         winGroupAdvanced: false,
+        winSequenceComplete: winQueue.length === 0,
+        winAmountExpected: logic.getTotalWin() > 0,
+        betAmountRaw: logic.getBet(),
+        winAmountRaw: logic.getTotalWin(),
         resolve,
         reject,
       };
@@ -232,6 +257,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#unsubscribeViewport = null;
     this.#app?.ticker.remove(this.#onTick);
     this.#app?.ticker.stop();
+    this.#winAmountPlayer?.destroy();
     this.#app?.canvas.remove();
     this.#app?.destroy();
     this.#app = null;
@@ -239,6 +265,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#worldLayer = null;
     this.#worldSprites = null;
     this.#runtime = null;
+    this.#winAmountPlayer = null;
   }
 
   readonly #onTick: Game003TickerListener = (ticker) => {
@@ -277,14 +304,22 @@ class Game003PixiAdapter implements SlotGameAdapter {
       pending.targetScene,
       "completed game003 adapter spin",
     );
-    if (pending.winQueue.length === 0) {
+    if (pending.winAmountExpected) {
+      this.#requireWinAmountPlayer().start({
+        betAmountRaw: pending.betAmountRaw,
+        winAmountRaw: pending.winAmountRaw,
+      });
+    }
+    if (pending.winSequenceComplete && !pending.winAmountExpected) {
       this.#completePending(pending);
       return;
     }
 
     pending.phase = "win-sequence";
     pending.winIndex = 0;
-    this.#startCurrentWinGroup(pending);
+    if (!pending.winSequenceComplete) {
+      this.#startCurrentWinGroup(pending);
+    }
   }
 
   #tickWinSequencePhase(deltaSeconds: number): void {
@@ -294,18 +329,29 @@ class Game003PixiAdapter implements SlotGameAdapter {
       return;
     }
 
-    runtime.update(deltaSeconds);
-    pending.winGroupAdvanced = true;
-    if (!this.#isCurrentWinGroupComplete(pending)) {
-      return;
+    if (!pending.winSequenceComplete) {
+      runtime.update(deltaSeconds);
+      pending.winGroupAdvanced = true;
+      if (this.#isCurrentWinGroupComplete(pending)) {
+        pending.winIndex += 1;
+        if (pending.winIndex >= pending.winQueue.length) {
+          pending.winSequenceComplete = true;
+        } else {
+          this.#startCurrentWinGroup(pending);
+        }
+      }
     }
 
-    pending.winIndex += 1;
-    if (pending.winIndex >= pending.winQueue.length) {
-      this.#completePending(pending);
-      return;
+    if (pending.winAmountExpected) {
+      this.#requireWinAmountPlayer().update(deltaSeconds);
     }
-    this.#startCurrentWinGroup(pending);
+    if (
+      pending.winSequenceComplete &&
+      (!pending.winAmountExpected ||
+        !this.#requireWinAmountPlayer().isPlaying())
+    ) {
+      this.#completePending(pending);
+    }
   }
 
   #startCurrentWinGroup(pending: PendingAnimation): void {
@@ -351,6 +397,13 @@ class Game003PixiAdapter implements SlotGameAdapter {
     return this.#runtime;
   }
 
+  #requireWinAmountPlayer(): WinAmountAnimationPlayer {
+    if (!this.#winAmountPlayer) {
+      throw new Error("game003 adapter is not mounted.");
+    }
+    return this.#winAmountPlayer;
+  }
+
   #applyViewport(viewport: SlotGameViewportSnapshot): void {
     if (
       !this.#app ||
@@ -373,6 +426,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#runtime.applyLayout(
       createGame003ReelLayerLayout(this.#runtime.layout, layout),
     );
+    this.#winAmountPlayer?.applyLayout(createGame003WinAmountLayout(layout));
   }
 
   #rejectPending(error: Error): void {

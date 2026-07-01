@@ -166,6 +166,28 @@ const resolver = createNamedSymbolAnimationResolver({
 
 `layerTextureSequence` 引用不存在的 layer、目标 layer 未声明至少两帧 keyframes、参数类型错误、`durationRatio` 超出 `(0, 1]` 或未知参数都会抛 `SymbolAnimationError`。其他 named animation 遇到未知动画名、未知参数、错误参数类型、非法范围或引用不存在的 layer 也会抛 `SymbolAnimationError`。
 
+## Win Amount Animation
+
+中奖金额动画从 `@slotclientengine/rendercore/win-amount` 子路径导出。它只处理通用 raw amount、formatter、阈值倍率、Pixi layout 和 VNI tier 资源，不硬编码 USD、game003、GMI 字段名、中奖组件名或 Ways 规则。
+
+```ts
+import {
+  createWinAmountAnimationPlayer,
+  createWinAmountAnimationTiersFromModules,
+} from "@slotclientengine/rendercore/win-amount";
+```
+
+调用方必须传入服务器整数金额和当前下注整数金额：
+
+- `betAmountRaw` 必须是 finite positive number。
+- `winAmountRaw` 必须是 finite non-negative number。
+- 阈值比较使用 `winAmountRaw / betAmountRaw`，不要先格式化或除显示 scale。
+- formatter 由 app 显式注入，返回空字符串或抛错会显式失败。
+
+播放器只暴露一个 Pixi `container`，不创建 `PIXI.Application`、canvas、DOM overlay、RAF 或独立 renderer。游戏主 ticker 负责调用 `update(deltaSeconds)`，viewport 变化时调用 `applyLayout(...)`。
+
+big/super/mega tier 使用 VNI segmented playback：`durationSeconds`、`loopStartTime`、`loopEndTime` 和 `keepParticlesAlive` 全部来自配置。`createWinAmountAnimationTiersFromModules(...)` 会校验 project modules、asset modules、asset basename 重复、缺 project、缺 asset，以及 `0 <= loopStartTime <= loopEndTime <= durationSeconds <= project.stage.duration`。当配置的 `durationSeconds` 小于源 project 时，会 clone runtime project 并截断 `stage.duration`，不会 mutate import 进来的 JSON。
+
 ## Catalog
 
 `createSymbolCatalog` 用 `LogicGameConfig` 和资源 map 建立 paytable 与图片的精确匹配关系：

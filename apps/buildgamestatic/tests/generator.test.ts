@@ -133,6 +133,28 @@ describe("buildgamestatic generator", () => {
     );
   });
 
+  it("generates optional win amount module maps and config", async () => {
+    const root = createFixtureRoot();
+    appendWinAmountBlock(root);
+
+    const result = await generateGameStaticConfigFile({
+      rootDir: root,
+      inputPath: "apps/game003/config/game-static.yaml",
+      outPath: "apps/game003/src/generated/game-static.generated.ts",
+      gameId: "game003",
+      check: false,
+    });
+
+    expect(result.generated).toContain("game003Skin1WinAmountProjectModules");
+    expect(result.generated).toContain("game003Skin1WinAmountAssetModules");
+    expect(result.generated).toContain("winAmount: Object.freeze");
+    expect(result.generated).toMatch(
+      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/game003-s1\/win-amount\/\{bigwin,superwin,megawin\}\.json"/,
+    );
+    expect(result.generated).toContain('project: "./megawin.json"');
+    expect(result.generated).toContain("durationSeconds: 5");
+  });
+
   it("requires --loading-out exactly when YAML loading resources are present", async () => {
     const root = createFixtureRoot();
     appendLoadingBlock(root);
@@ -170,6 +192,8 @@ function createFixtureRoot(): string {
     "assets/gamecfg003",
     "assets/game003-s1",
     "assets/game003-s1/assets",
+    "assets/game003-s1/win-amount",
+    "assets/game003-s1/win-amount/assets",
   ]) {
     mkdirSync(join(root, dir), { recursive: true });
   }
@@ -262,6 +286,74 @@ function appendVniSymbolGlobs(root: string): void {
         "",
       ].join("\n"),
     ),
+    "utf8",
+  );
+}
+
+function writeWinAmountFixtureFiles(root: string): void {
+  for (const file of ["bigwin.json", "superwin.json", "megawin.json"]) {
+    writeFileSync(
+      join(root, `assets/game003-s1/win-amount/${file}`),
+      JSON.stringify({ stage: { duration: file === "megawin.json" ? 10 : 5 } }),
+      "utf8",
+    );
+  }
+}
+
+function appendWinAmountBlock(root: string): void {
+  writeWinAmountFixtureFiles(root);
+  const yamlPath = join(root, "apps/game003/config/game-static.yaml");
+  writeFileSync(
+    yamlPath,
+    `${readFileSync(yamlPath, "utf8")}
+    winAmount:
+      amountScale: 100
+      currency: USD
+      locale: en-US
+      minorCountDurationSeconds: 1.5
+      majorCountDurationSeconds: 3
+      thresholds:
+        minorMultiplier: 1
+        bigMultiplier: 15
+        superMultiplier: 30
+        megaMultiplier: 50
+      text:
+        minorFontSize: 54
+        majorFontSize: 118
+        fill: "#fff7d6"
+        stroke: "#5a2500"
+        strokeWidth: 8
+      layout:
+        minorAnchor: reel-area-bottom-center
+        majorAnchor: reel-area-center
+        minorOffset: { x: 0, y: -28 }
+        majorOffset: { x: 0, y: 0 }
+      animations:
+        projectGlob: assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json
+        assetGlob: assets/game003-s1/win-amount/assets/*.{png,jpg,jpeg,webp}
+        tiers:
+          - id: bigwin
+            thresholdMultiplier: 15
+            project: ./bigwin.json
+            durationSeconds: 5
+            loopStartTime: 1
+            loopEndTime: 4
+            keepParticlesAlive: true
+          - id: superwin
+            thresholdMultiplier: 30
+            project: ./superwin.json
+            durationSeconds: 5
+            loopStartTime: 1
+            loopEndTime: 4
+            keepParticlesAlive: true
+          - id: megawin
+            thresholdMultiplier: 50
+            project: ./megawin.json
+            durationSeconds: 5
+            loopStartTime: 1
+            loopEndTime: 4
+            keepParticlesAlive: true
+`,
     "utf8",
   );
 }

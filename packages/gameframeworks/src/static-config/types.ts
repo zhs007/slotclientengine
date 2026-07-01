@@ -101,10 +101,65 @@ export interface SlotGameStaticOrientationFocusArtConfig {
 
 export type SlotGameStaticArtConfig = SlotGameStaticOrientationFocusArtConfig;
 
+export type SlotGameStaticWinAmountAnchor =
+  | "reel-area-bottom-center"
+  | "reel-area-center";
+
+export interface SlotGameStaticWinAmountThresholds {
+  readonly minorMultiplier: number;
+  readonly bigMultiplier: number;
+  readonly superMultiplier: number;
+  readonly megaMultiplier: number;
+}
+
+export interface SlotGameStaticWinAmountText {
+  readonly minorFontSize: number;
+  readonly majorFontSize: number;
+  readonly fill: string;
+  readonly stroke: string;
+  readonly strokeWidth: number;
+}
+
+export interface SlotGameStaticWinAmountLayout {
+  readonly minorAnchor: SlotGameStaticWinAmountAnchor;
+  readonly majorAnchor: SlotGameStaticWinAmountAnchor;
+  readonly minorOffset: SlotGameStaticPoint;
+  readonly majorOffset: SlotGameStaticPoint;
+}
+
+export interface SlotGameStaticWinAmountTier {
+  readonly id: string;
+  readonly thresholdMultiplier: number;
+  readonly project: string;
+  readonly durationSeconds: number;
+  readonly loopStartTime: number;
+  readonly loopEndTime: number;
+  readonly keepParticlesAlive: boolean;
+}
+
+export interface SlotGameStaticWinAmountAnimations {
+  readonly projectModules: Readonly<Record<string, unknown>>;
+  readonly assetModules: Readonly<Record<string, string>>;
+  readonly tiers: readonly SlotGameStaticWinAmountTier[];
+}
+
+export interface SlotGameStaticWinAmountConfig {
+  readonly amountScale: number;
+  readonly currency: string;
+  readonly locale: string;
+  readonly minorCountDurationSeconds: number;
+  readonly majorCountDurationSeconds: number;
+  readonly thresholds: SlotGameStaticWinAmountThresholds;
+  readonly text: SlotGameStaticWinAmountText;
+  readonly layout: SlotGameStaticWinAmountLayout;
+  readonly animations: SlotGameStaticWinAmountAnimations;
+}
+
 export interface SlotGameStaticSkinConfig {
   readonly label: string;
   readonly symbols: SlotGameStaticSymbolsConfig;
   readonly art: SlotGameStaticArtConfig;
+  readonly winAmount?: SlotGameStaticWinAmountConfig;
 }
 
 export interface SlotGameStaticConfig {

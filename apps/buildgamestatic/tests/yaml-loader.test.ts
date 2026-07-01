@@ -368,6 +368,82 @@ describe("buildgamestatic YAML loader", () => {
       ).toThrow(pattern);
     }
   });
+
+  it("validates win amount animation config and project duration", () => {
+    const root = createFixtureRoot();
+    writeWinAmountFixtureFiles(root);
+    const valid = parseGameStaticYamlValue(withWinAmount(createYamlObject()), {
+      rootDir: root,
+      inputPath: "game.yaml",
+    });
+
+    expect(valid.skins["1"].winAmount).toMatchObject({
+      amountScale: 100,
+      minorCountDurationSeconds: 1.5,
+      animations: {
+        projectGlob:
+          "assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json",
+      },
+    });
+
+    for (const [patch, pattern] of [
+      [
+        {
+          thresholds: {
+            minorMultiplier: 1,
+            bigMultiplier: 15,
+            superMultiplier: 10,
+            megaMultiplier: 50,
+          },
+        },
+        /严格递增/,
+      ],
+      [
+        {
+          animations: {
+            ...createWinAmountObject().animations,
+            tiers: [
+              {
+                ...createWinAmountObject().animations.tiers[0],
+                durationSeconds: 6,
+              },
+            ],
+          },
+        },
+        /project\.stage\.duration/,
+      ],
+      [
+        {
+          animations: {
+            ...createWinAmountObject().animations,
+            projectGlob: "assets/game003-s1/win-amount/**/*.json",
+          },
+        },
+        /递归 glob/,
+      ],
+      [
+        {
+          animations: {
+            ...createWinAmountObject().animations,
+            tiers: [
+              {
+                ...createWinAmountObject().animations.tiers[0],
+                project: "../bigwin.json",
+              },
+            ],
+          },
+        },
+        /filename\.json/,
+      ],
+    ] as const) {
+      expect(() =>
+        parseGameStaticYamlValue(withWinAmount(createYamlObject(), patch), {
+          rootDir: root,
+          inputPath: "game.yaml",
+        }),
+      ).toThrow(pattern);
+    }
+  });
 });
 
 function createFixtureRoot(): string {
@@ -378,6 +454,8 @@ function createFixtureRoot(): string {
     "assets/gamecfg003",
     "assets/game003-s1",
     "assets/game003-s1/assets",
+    "assets/game003-s1/win-amount",
+    "assets/game003-s1/win-amount/assets",
   ]) {
     mkdirSync(join(root, dir), { recursive: true });
   }
@@ -393,6 +471,16 @@ function createFixtureRoot(): string {
     writeFileSync(join(root, file), "{}", "utf8");
   }
   return root;
+}
+
+function writeWinAmountFixtureFiles(root: string): void {
+  for (const file of ["bigwin.json", "superwin.json", "megawin.json"]) {
+    writeFileSync(
+      join(root, `assets/game003-s1/win-amount/${file}`),
+      JSON.stringify({ stage: { duration: file === "megawin.json" ? 10 : 5 } }),
+      "utf8",
+    );
+  }
 }
 
 function createYamlObject() {
@@ -481,6 +569,87 @@ function createYamlObject() {
           },
         },
       },
+    },
+  };
+}
+
+function withWinAmount(
+  value: ReturnType<typeof createYamlObject>,
+  patch: Partial<ReturnType<typeof createWinAmountObject>> = {},
+) {
+  return {
+    ...value,
+    skins: {
+      "1": {
+        ...value.skins["1"],
+        winAmount: {
+          ...createWinAmountObject(),
+          ...patch,
+        },
+      },
+    },
+  };
+}
+
+function createWinAmountObject() {
+  return {
+    amountScale: 100,
+    currency: "USD",
+    locale: "en-US",
+    minorCountDurationSeconds: 1.5,
+    majorCountDurationSeconds: 3,
+    thresholds: {
+      minorMultiplier: 1,
+      bigMultiplier: 15,
+      superMultiplier: 30,
+      megaMultiplier: 50,
+    },
+    text: {
+      minorFontSize: 54,
+      majorFontSize: 118,
+      fill: "#fff7d6",
+      stroke: "#5a2500",
+      strokeWidth: 8,
+    },
+    layout: {
+      minorAnchor: "reel-area-bottom-center",
+      majorAnchor: "reel-area-center",
+      minorOffset: { x: 0, y: -28 },
+      majorOffset: { x: 0, y: 0 },
+    },
+    animations: {
+      projectGlob:
+        "assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json",
+      assetGlob: "assets/game003-s1/win-amount/assets/*.{png,jpg,jpeg,webp}",
+      tiers: [
+        {
+          id: "bigwin",
+          thresholdMultiplier: 15,
+          project: "./bigwin.json",
+          durationSeconds: 5,
+          loopStartTime: 1,
+          loopEndTime: 4,
+          keepParticlesAlive: true,
+        },
+        {
+          id: "superwin",
+          thresholdMultiplier: 30,
+          project: "./superwin.json",
+          durationSeconds: 5,
+          loopStartTime: 1,
+          loopEndTime: 4,
+          keepParticlesAlive: true,
+        },
+        {
+          id: "megawin",
+          thresholdMultiplier: 50,
+          project: "./megawin.json",
+          durationSeconds: 5,
+          loopStartTime: 1,
+          loopEndTime: 4,
+          keepParticlesAlive: true,
+        },
+      ],
     },
   };
 }

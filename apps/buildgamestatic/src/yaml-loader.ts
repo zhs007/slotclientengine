@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { parseDocument } from "yaml";
 import {
   assertExistingDirectory,
@@ -24,6 +25,12 @@ import type {
   GameStaticYamlSize,
   GameStaticYamlSkinConfig,
   GameStaticYamlSymbolsConfig,
+  GameStaticYamlWinAmountAnimations,
+  GameStaticYamlWinAmountConfig,
+  GameStaticYamlWinAmountLayout,
+  GameStaticYamlWinAmountText,
+  GameStaticYamlWinAmountThresholds,
+  GameStaticYamlWinAmountTier,
 } from "./types.js";
 
 export function loadGameStaticYamlConfig(options: {
@@ -235,11 +242,16 @@ function parseSkin(
   visibleRows: number,
 ): GameStaticYamlSkinConfig {
   const record = assertRecord(value, label);
-  assertKeys(record, label, ["label", "symbols", "art"]);
+  assertKeys(record, label, ["label", "symbols", "art", "winAmount"], {
+    optional: ["winAmount"],
+  });
   return Object.freeze({
     label: assertNonEmptyString(record.label, `${label}.label`),
     symbols: parseSymbols(record.symbols, `${label}.symbols`),
     art: parseArt(record.art, `${label}.art`, visibleRows),
+    ...(record.winAmount !== undefined
+      ? { winAmount: parseWinAmount(record.winAmount, `${label}.winAmount`) }
+      : {}),
   });
 }
 
@@ -386,6 +398,226 @@ function parseArtVariant(
     ...(record.conveyor !== undefined
       ? { conveyor: parseConveyor(record.conveyor, `${label}.conveyor`) }
       : {}),
+  });
+}
+
+function parseWinAmount(
+  value: unknown,
+  label: string,
+): GameStaticYamlWinAmountConfig {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "amountScale",
+    "currency",
+    "locale",
+    "minorCountDurationSeconds",
+    "majorCountDurationSeconds",
+    "thresholds",
+    "text",
+    "layout",
+    "animations",
+  ]);
+  return Object.freeze({
+    amountScale: assertPositiveNumber(
+      record.amountScale,
+      `${label}.amountScale`,
+    ),
+    currency: assertNonEmptyString(record.currency, `${label}.currency`),
+    locale: assertNonEmptyString(record.locale, `${label}.locale`),
+    minorCountDurationSeconds: assertPositiveNumber(
+      record.minorCountDurationSeconds,
+      `${label}.minorCountDurationSeconds`,
+    ),
+    majorCountDurationSeconds: assertPositiveNumber(
+      record.majorCountDurationSeconds,
+      `${label}.majorCountDurationSeconds`,
+    ),
+    thresholds: parseWinAmountThresholds(
+      record.thresholds,
+      `${label}.thresholds`,
+    ),
+    text: parseWinAmountText(record.text, `${label}.text`),
+    layout: parseWinAmountLayout(record.layout, `${label}.layout`),
+    animations: parseWinAmountAnimations(
+      record.animations,
+      `${label}.animations`,
+    ),
+  });
+}
+
+function parseWinAmountThresholds(
+  value: unknown,
+  label: string,
+): GameStaticYamlWinAmountThresholds {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "minorMultiplier",
+    "bigMultiplier",
+    "superMultiplier",
+    "megaMultiplier",
+  ]);
+  const thresholds = Object.freeze({
+    minorMultiplier: assertPositiveNumber(
+      record.minorMultiplier,
+      `${label}.minorMultiplier`,
+    ),
+    bigMultiplier: assertPositiveNumber(
+      record.bigMultiplier,
+      `${label}.bigMultiplier`,
+    ),
+    superMultiplier: assertPositiveNumber(
+      record.superMultiplier,
+      `${label}.superMultiplier`,
+    ),
+    megaMultiplier: assertPositiveNumber(
+      record.megaMultiplier,
+      `${label}.megaMultiplier`,
+    ),
+  });
+  if (
+    !(
+      thresholds.bigMultiplier > thresholds.minorMultiplier &&
+      thresholds.superMultiplier > thresholds.bigMultiplier &&
+      thresholds.megaMultiplier > thresholds.superMultiplier
+    )
+  ) {
+    throw new Error(`${label} 必须严格递增。`);
+  }
+  return thresholds;
+}
+
+function parseWinAmountText(
+  value: unknown,
+  label: string,
+): GameStaticYamlWinAmountText {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "minorFontSize",
+    "majorFontSize",
+    "fill",
+    "stroke",
+    "strokeWidth",
+  ]);
+  return Object.freeze({
+    minorFontSize: assertPositiveNumber(
+      record.minorFontSize,
+      `${label}.minorFontSize`,
+    ),
+    majorFontSize: assertPositiveNumber(
+      record.majorFontSize,
+      `${label}.majorFontSize`,
+    ),
+    fill: assertCssHexColor(record.fill, `${label}.fill`),
+    stroke: assertCssHexColor(record.stroke, `${label}.stroke`),
+    strokeWidth: assertNonNegativeNumber(
+      record.strokeWidth,
+      `${label}.strokeWidth`,
+    ),
+  });
+}
+
+function parseWinAmountLayout(
+  value: unknown,
+  label: string,
+): GameStaticYamlWinAmountLayout {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "minorAnchor",
+    "majorAnchor",
+    "minorOffset",
+    "majorOffset",
+  ]);
+  return Object.freeze({
+    minorAnchor: assertWinAmountAnchor(
+      record.minorAnchor,
+      `${label}.minorAnchor`,
+    ),
+    majorAnchor: assertWinAmountAnchor(
+      record.majorAnchor,
+      `${label}.majorAnchor`,
+    ),
+    minorOffset: parsePoint(record.minorOffset, `${label}.minorOffset`),
+    majorOffset: parsePoint(record.majorOffset, `${label}.majorOffset`),
+  });
+}
+
+function parseWinAmountAnimations(
+  value: unknown,
+  label: string,
+): GameStaticYamlWinAmountAnimations {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, ["projectGlob", "assetGlob", "tiers"]);
+  if (!Array.isArray(record.tiers) || record.tiers.length === 0) {
+    throw new Error(`${label}.tiers 必须是非空数组。`);
+  }
+  const tiers = Object.freeze(
+    record.tiers.map((tier, index) =>
+      parseWinAmountTier(tier, `${label}.tiers[${index}]`),
+    ),
+  );
+  assertUnique(
+    tiers.map((tier) => tier.id),
+    `${label}.tiers.id`,
+  );
+  for (let index = 1; index < tiers.length; index += 1) {
+    if (
+      tiers[index].thresholdMultiplier <= tiers[index - 1].thresholdMultiplier
+    ) {
+      throw new Error(`${label}.tiers thresholdMultiplier 必须严格递增。`);
+    }
+  }
+  return Object.freeze({
+    projectGlob: assertPath(record.projectGlob, `${label}.projectGlob`),
+    assetGlob: assertPath(record.assetGlob, `${label}.assetGlob`),
+    tiers,
+  });
+}
+
+function parseWinAmountTier(
+  value: unknown,
+  label: string,
+): GameStaticYamlWinAmountTier {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "id",
+    "thresholdMultiplier",
+    "project",
+    "durationSeconds",
+    "loopStartTime",
+    "loopEndTime",
+    "keepParticlesAlive",
+  ]);
+  const durationSeconds = assertPositiveNumber(
+    record.durationSeconds,
+    `${label}.durationSeconds`,
+  );
+  const loopStartTime = assertNonNegativeNumber(
+    record.loopStartTime,
+    `${label}.loopStartTime`,
+  );
+  const loopEndTime = assertNonNegativeNumber(
+    record.loopEndTime,
+    `${label}.loopEndTime`,
+  );
+  if (!(loopStartTime <= loopEndTime && loopEndTime <= durationSeconds)) {
+    throw new Error(
+      `${label} 必须满足 loopStartTime <= loopEndTime <= durationSeconds。`,
+    );
+  }
+  if (typeof record.keepParticlesAlive !== "boolean") {
+    throw new Error(`${label}.keepParticlesAlive 必须是 boolean。`);
+  }
+  return Object.freeze({
+    id: assertNonEmptyString(record.id, `${label}.id`),
+    thresholdMultiplier: assertPositiveNumber(
+      record.thresholdMultiplier,
+      `${label}.thresholdMultiplier`,
+    ),
+    project: assertTierProject(record.project, `${label}.project`),
+    durationSeconds,
+    loopStartTime,
+    loopEndTime,
+    keepParticlesAlive: record.keepParticlesAlive,
   });
 }
 
@@ -538,6 +770,9 @@ function validateSkins(config: GameStaticYamlConfig, rootDir: string): void {
     if (skin.symbols.vniAssetGlob !== undefined) {
       validateVniAssetGlob(rootDir, skin.symbols.vniAssetGlob, skinId);
     }
+    if (skin.winAmount !== undefined) {
+      validateWinAmount(rootDir, skinId, skin.winAmount);
+    }
     validateArtPaths(rootDir, skinId, skin);
     validateRectFits(
       skin.art.reelAreaInMainReelBackground,
@@ -598,6 +833,103 @@ function validateVniAssetGlob(
       `skins.${skinId}.symbols.vniAssetGlob 只能匹配 png/jpg/jpeg/webp 图片资源。`,
     );
   }
+}
+
+function validateWinAmount(
+  rootDir: string,
+  skinId: string,
+  winAmount: GameStaticYamlWinAmountConfig,
+): void {
+  validateWinAmountProjectGlob(
+    rootDir,
+    winAmount.animations.projectGlob,
+    skinId,
+  );
+  validateWinAmountAssetGlob(rootDir, winAmount.animations.assetGlob, skinId);
+  const projectDirectory = getStrictGlobDirectory(
+    winAmount.animations.projectGlob,
+  );
+  for (const tier of winAmount.animations.tiers) {
+    const projectPath = join(projectDirectory, tier.project.slice(2));
+    assertExistingFile(rootDir, projectPath);
+    assertExtension(
+      projectPath,
+      [".json"],
+      `skins.${skinId}.winAmount.animations.tiers.${tier.id}.project`,
+    );
+    const duration = readProjectStageDuration(
+      rootDir,
+      projectPath,
+      `skins.${skinId}.winAmount.animations.tiers.${tier.id}.project`,
+    );
+    if (tier.durationSeconds > duration) {
+      throw new Error(
+        `skins.${skinId}.winAmount.animations.tiers.${tier.id}.durationSeconds 不能大于 project.stage.duration ${duration}。`,
+      );
+    }
+  }
+}
+
+function validateWinAmountProjectGlob(
+  rootDir: string,
+  glob: string,
+  skinId: string,
+): void {
+  if (glob.includes("**")) {
+    throw new Error(
+      `skins.${skinId}.winAmount.animations.projectGlob 不能使用递归 glob：${glob}`,
+    );
+  }
+  const directory = getStrictGlobDirectory(glob);
+  assertSpecificGlobDirectory(
+    directory,
+    `skins.${skinId}.winAmount.animations.projectGlob`,
+  );
+  assertExistingDirectory(rootDir, directory);
+  if (!/(\/\*[-A-Za-z0-9_]*\.json|\/\{[-A-Za-z0-9_,]+\}\.json)$/u.test(glob)) {
+    throw new Error(
+      `skins.${skinId}.winAmount.animations.projectGlob 必须是当前资源目录下的 JSON glob。`,
+    );
+  }
+}
+
+function validateWinAmountAssetGlob(
+  rootDir: string,
+  glob: string,
+  skinId: string,
+): void {
+  if (glob.includes("**")) {
+    throw new Error(
+      `skins.${skinId}.winAmount.animations.assetGlob 不能使用递归 glob：${glob}`,
+    );
+  }
+  const directory = getStrictGlobDirectory(glob);
+  assertSpecificGlobDirectory(
+    directory,
+    `skins.${skinId}.winAmount.animations.assetGlob`,
+  );
+  assertExistingDirectory(rootDir, directory);
+  if (
+    !(
+      /\/\*\.(png|jpg|jpeg|webp)$/iu.test(glob) ||
+      /\/\*\.\{png,jpg,jpeg,webp\}$/iu.test(glob)
+    )
+  ) {
+    throw new Error(
+      `skins.${skinId}.winAmount.animations.assetGlob 只能匹配 png/jpg/jpeg/webp 图片资源。`,
+    );
+  }
+}
+
+function readProjectStageDuration(
+  rootDir: string,
+  projectPath: string,
+  label: string,
+): number {
+  const raw = JSON.parse(readFileSync(join(rootDir, projectPath), "utf8")) as {
+    readonly stage?: { readonly duration?: unknown };
+  };
+  return assertPositiveNumber(raw.stage?.duration, `${label}.stage.duration`);
 }
 
 function assertSpecificGlobDirectory(directory: string, label: string): void {
@@ -796,6 +1128,38 @@ function assertPath(value: unknown, label: string): string {
   const path = assertNonEmptyString(value, label);
   assertRepoRelativePath(path, label);
   return path;
+}
+
+function assertTierProject(value: unknown, label: string): string {
+  const project = assertNonEmptyString(value, label);
+  if (
+    !/^\.\/[-A-Za-z0-9_]+\.json$/u.test(project) ||
+    project.includes("..") ||
+    project.includes("\\")
+  ) {
+    throw new Error(`${label} 必须是 ./filename.json 形式。`);
+  }
+  return project;
+}
+
+function assertWinAmountAnchor(
+  value: unknown,
+  label: string,
+): "reel-area-bottom-center" | "reel-area-center" {
+  if (value === "reel-area-bottom-center" || value === "reel-area-center") {
+    return value;
+  }
+  throw new Error(
+    `${label} 必须是 reel-area-bottom-center 或 reel-area-center。`,
+  );
+}
+
+function assertCssHexColor(value: unknown, label: string): string {
+  const color = assertNonEmptyString(value, label);
+  if (!/^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$/u.test(color)) {
+    throw new Error(`${label} 必须是 #RRGGBB 或 #RRGGBBAA 颜色。`);
+  }
+  return color;
 }
 
 function assertStringArray(

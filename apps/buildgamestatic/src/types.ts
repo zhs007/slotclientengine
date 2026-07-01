@@ -98,6 +98,7 @@ export interface GameStaticYamlSkinConfig {
   readonly label: string;
   readonly symbols: GameStaticYamlSymbolsConfig;
   readonly art: GameStaticYamlArtConfig;
+  readonly winAmount?: GameStaticYamlWinAmountConfig;
 }
 
 export interface GameStaticYamlSymbolsConfig {
@@ -126,6 +127,60 @@ export interface GameStaticYamlArtConfig {
   >;
   readonly mainReelBackground: GameStaticYamlImage;
   readonly reelAreaInMainReelBackground: GameStaticYamlReelArea;
+}
+
+export type GameStaticYamlWinAmountAnchor =
+  | "reel-area-bottom-center"
+  | "reel-area-center";
+
+export interface GameStaticYamlWinAmountThresholds {
+  readonly minorMultiplier: number;
+  readonly bigMultiplier: number;
+  readonly superMultiplier: number;
+  readonly megaMultiplier: number;
+}
+
+export interface GameStaticYamlWinAmountText {
+  readonly minorFontSize: number;
+  readonly majorFontSize: number;
+  readonly fill: string;
+  readonly stroke: string;
+  readonly strokeWidth: number;
+}
+
+export interface GameStaticYamlWinAmountLayout {
+  readonly minorAnchor: GameStaticYamlWinAmountAnchor;
+  readonly majorAnchor: GameStaticYamlWinAmountAnchor;
+  readonly minorOffset: GameStaticYamlPoint;
+  readonly majorOffset: GameStaticYamlPoint;
+}
+
+export interface GameStaticYamlWinAmountTier {
+  readonly id: string;
+  readonly thresholdMultiplier: number;
+  readonly project: string;
+  readonly durationSeconds: number;
+  readonly loopStartTime: number;
+  readonly loopEndTime: number;
+  readonly keepParticlesAlive: boolean;
+}
+
+export interface GameStaticYamlWinAmountAnimations {
+  readonly projectGlob: string;
+  readonly assetGlob: string;
+  readonly tiers: readonly GameStaticYamlWinAmountTier[];
+}
+
+export interface GameStaticYamlWinAmountConfig {
+  readonly amountScale: number;
+  readonly currency: string;
+  readonly locale: string;
+  readonly minorCountDurationSeconds: number;
+  readonly majorCountDurationSeconds: number;
+  readonly thresholds: GameStaticYamlWinAmountThresholds;
+  readonly text: GameStaticYamlWinAmountText;
+  readonly layout: GameStaticYamlWinAmountLayout;
+  readonly animations: GameStaticYamlWinAmountAnimations;
 }
 
 export interface GameStaticYamlLoadingConfig {

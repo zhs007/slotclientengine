@@ -50,6 +50,22 @@ const game003LoadingGame003_symbol_vni_assets7Modules = import.meta.glob(
     query: "?url",
   },
 ) as Record<string, string>;
+const game003LoadingGame003_win_amount_vni_projects8Modules = import.meta.glob(
+  "../../../../assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json",
+  {
+    eager: true,
+    import: "default",
+    query: "?url",
+  },
+) as Record<string, string>;
+const game003LoadingGame003_win_amount_vni_assets9Modules = import.meta.glob(
+  "../../../../assets/game003-s1/win-amount/assets/*.{png,jpg,jpeg,webp}",
+  {
+    eager: true,
+    import: "default",
+    query: "?url",
+  },
+) as Record<string, string>;
 
 export interface game003GeneratedLoadingResourceUrl {
   readonly id: string;
@@ -108,6 +124,16 @@ const game003LoadingGlobGroups = Object.freeze([
     id: "game003-symbol-vni-assets",
     modules: game003LoadingGame003_symbol_vni_assets7Modules,
     weight: 4,
+  }),
+  Object.freeze({
+    id: "game003-win-amount-vni-projects",
+    modules: game003LoadingGame003_win_amount_vni_projects8Modules,
+    weight: 3,
+  }),
+  Object.freeze({
+    id: "game003-win-amount-vni-assets",
+    modules: game003LoadingGame003_win_amount_vni_assets9Modules,
+    weight: 8,
   }),
 ] as const satisfies readonly game003GeneratedLoadingGlobGroup[]);
 
