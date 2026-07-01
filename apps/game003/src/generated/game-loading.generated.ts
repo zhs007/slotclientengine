@@ -159,10 +159,10 @@ export function game003ExpandGeneratedLoadingResourceUrls(
     if (seenIds.has(resource.id)) {
       throw new Error(`Duplicate loading resource id "${resource.id}".`);
     }
-    if (seenUrls.has(resource.url)) {
-      throw new Error(`Duplicate loading resource URL "${resource.url}".`);
-    }
     seenIds.add(resource.id);
+    if (seenUrls.has(resource.url)) {
+      return;
+    }
     seenUrls.add(resource.url);
     resources.push(Object.freeze(resource));
   };

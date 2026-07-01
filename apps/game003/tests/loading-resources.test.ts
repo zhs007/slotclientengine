@@ -87,12 +87,12 @@ describe("game003 loading resources", () => {
         [{ id: "dup", modules: { "/asset.png": "/b.png" } }],
       ),
     ).toThrow(/Duplicate loading resource id/);
-    expect(() =>
+    expect(
       game003ExpandGeneratedLoadingResourceUrls(
         [{ id: "a", url: "/dup.png" }],
         [{ id: "b", modules: { "/b.png": "/dup.png" } }],
       ),
-    ).toThrow(/Duplicate loading resource URL/);
+    ).toEqual([{ id: "a", url: "/dup.png" }]);
     expect(() =>
       game003ExpandGeneratedLoadingResourceUrls(
         [],
