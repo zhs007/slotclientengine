@@ -1,8 +1,31 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Container as PixiContainer } from "pixi.js";
+import type {
+  Container as PixiContainer,
+  Texture as PixiTexture,
+} from "pixi.js";
 
 const pixiMock = vi.hoisted(() => {
-  const textureByUrl = new Map<string, { width: number; height: number }>();
+  interface MockTextureSource {
+    resource?: unknown;
+    width?: number;
+    height?: number;
+    label?: string;
+    alphaMode?: string;
+    transparent?: boolean;
+    destroyed?: boolean;
+    destroy?: () => void;
+  }
+
+  interface MockTextureData {
+    width: number;
+    height: number;
+    source?: MockTextureSource;
+    label?: string;
+    destroyed?: boolean;
+    destroy?: (destroySource?: boolean) => void;
+  }
+
+  const textureByUrl = new Map<string, MockTextureData>();
 
   class MockPoint {
     x = 0;
@@ -26,7 +49,17 @@ const pixiMock = vi.hoisted(() => {
     rotation = 0;
     alpha = 1;
     visible = true;
-    blendMode = "normal";
+    localBlendMode = "inherit";
+    groupBlendMode = "normal";
+
+    get blendMode(): string {
+      return this.localBlendMode;
+    }
+
+    set blendMode(value: string) {
+      this.localBlendMode = value;
+      this.groupBlendMode = value === "inherit" ? "normal" : value;
+    }
 
     addChild(...children: MockContainer[]): MockContainer | undefined {
       for (const child of children) {
@@ -89,6 +122,64 @@ const pixiMock = vi.hoisted(() => {
     }
   }
 
+  class MockCanvasSource {
+    readonly resource: unknown;
+    readonly width: number;
+    readonly height: number;
+    readonly label: string;
+    readonly alphaMode: string | undefined;
+    readonly transparent: boolean | undefined;
+    destroyed = false;
+
+    constructor(options: {
+      resource?: unknown;
+      width?: number;
+      height?: number;
+      label?: string;
+      alphaMode?: string;
+      transparent?: boolean;
+    }) {
+      this.resource = options.resource;
+      this.width = options.width ?? 0;
+      this.height = options.height ?? 0;
+      this.label = options.label ?? "";
+      this.alphaMode = options.alphaMode;
+      this.transparent = options.transparent;
+    }
+
+    destroy(): void {
+      this.destroyed = true;
+    }
+  }
+
+  class MockTexture {
+    readonly source: MockTextureSource;
+    readonly width: number;
+    readonly height: number;
+    readonly label: string;
+    destroyed = false;
+
+    constructor(options: {
+      source?: MockTextureSource;
+      width?: number;
+      height?: number;
+      label?: string;
+    }) {
+      this.source = options.source ?? {};
+      this.width = options.width ?? this.source.width ?? 0;
+      this.height = options.height ?? this.source.height ?? 0;
+      this.label = options.label ?? "";
+    }
+
+    destroy(destroySource = false): void {
+      this.destroyed = true;
+      if (destroySource) {
+        this.source.destroy?.();
+        this.source.destroyed = true;
+      }
+    }
+  }
+
   class MockApplication {
     stage = new MockContainer();
     renderer = {
@@ -97,12 +188,17 @@ const pixiMock = vi.hoisted(() => {
     canvas = {
       getContext: vi.fn(() => null),
     };
+    initOptions: unknown = null;
+    destroyCalls: unknown[][] = [];
+    render = vi.fn();
 
-    async init(): Promise<void> {
+    async init(options?: unknown): Promise<void> {
+      this.initOptions = options;
       return Promise.resolve();
     }
 
-    destroy(): void {
+    destroy(...args: unknown[]): void {
+      this.destroyCalls.push(args);
       this.stage.destroy();
     }
   }
@@ -110,10 +206,12 @@ const pixiMock = vi.hoisted(() => {
   return {
     textureByUrl,
     MockApplication,
+    MockCanvasSource,
     MockContainer,
     MockGraphics,
     MockSprite,
     MockText,
+    MockTexture,
   };
 });
 
@@ -122,14 +220,19 @@ vi.mock("pixi.js", () => ({
   Assets: {
     load: vi.fn(async (url: string) => pixiMock.textureByUrl.get(url)),
   },
+  CanvasSource: pixiMock.MockCanvasSource,
   Container: pixiMock.MockContainer,
   Graphics: pixiMock.MockGraphics,
   Sprite: pixiMock.MockSprite,
   Text: pixiMock.MockText,
+  Texture: pixiMock.MockTexture,
 }));
 
 import { VNIPlayer } from "../../src/pixi/vni-player";
-import { createLayerInstance } from "../../src/pixi/layer-instance";
+import {
+  applySampledLayerState,
+  createLayerInstance,
+} from "../../src/pixi/layer-instance";
 import type { V5GLayerConfig, V5GProjectConfig } from "../../src/core/types";
 
 class MockResizeObserver {
@@ -377,6 +480,7 @@ async function createInitializedPlayer(
   options: {
     onPlayingChange?: (isPlaying: boolean) => void;
     project?: V5GProjectConfig;
+    autoTick?: boolean;
   } = {},
 ): Promise<VNIPlayer> {
   vi.stubGlobal("window", { devicePixelRatio: 1 });
@@ -390,7 +494,9 @@ async function createInitializedPlayer(
   pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
 
   const player = new VNIPlayer({
-    container: createContainer(),
+    parent: createMockPixiContainer(),
+    diagnosticsElement: createContainer(),
+    viewport: { width: 800, height: 600 },
     projectId: "player-test",
     bundleId: "legacy",
     profileId: "legacy_full",
@@ -401,6 +507,7 @@ async function createInitializedPlayer(
       "assets/a.png": "/a.png",
       "assets/b.png": "/b.png",
     },
+    autoTick: options.autoTick,
     onPlayingChange: options.onPlayingChange,
   });
   await player.init();
@@ -408,6 +515,29 @@ async function createInitializedPlayer(
 }
 
 describe("VNIPlayer", () => {
+  it("mounts only runtime content and never renders exported stage background", async () => {
+    const player = await createInitializedPlayer();
+    const internals = player as unknown as {
+      stageRoot: InstanceType<typeof pixiMock.MockContainer>;
+      contentRoot: InstanceType<typeof pixiMock.MockContainer>;
+    };
+
+    expect(internals.stageRoot.children).toEqual([internals.contentRoot]);
+  });
+
+  it("destroys only its own display tree and leaves the external Pixi host alive", async () => {
+    const player = await createInitializedPlayer();
+    const internals = player as unknown as {
+      stageRoot: InstanceType<typeof pixiMock.MockContainer>;
+    };
+    const parent = internals.stageRoot.parent;
+
+    player.destroy();
+
+    expect(parent?.children).not.toContain(internals.stageRoot);
+    expect(internals.stageRoot.parent).toBeNull();
+  });
+
   it("creates text layer instances and fails fast for invalid image layers", () => {
     const project = createProject();
     const imageLayer = project.layers[0];
@@ -421,7 +551,8 @@ describe("VNIPlayer", () => {
     };
 
     const textInstance = createLayerInstance(textLayer, new Map(), new Map());
-    expect(textInstance.display.children).toHaveLength(1);
+    expect(textInstance.display).toBeInstanceOf(pixiMock.MockText);
+    expect(textInstance.display.children).toHaveLength(0);
     expect(textInstance.texture).toBeNull();
 
     expect(() =>
@@ -443,6 +574,214 @@ describe("VNIPlayer", () => {
     ).toThrow("Unsupported V5G layer type");
   });
 
+  it("uses the renderable sprite as the layer display and applies blend mode directly", () => {
+    const project = createProject();
+    const imageLayer = project.layers[0];
+    const asset = project.assets[0];
+    const texture = { width: 100, height: 100 } as unknown as PixiTexture;
+    const instance = createLayerInstance(
+      imageLayer,
+      new Map([[asset.id, texture]]),
+      new Map([[asset.id, asset]]),
+    );
+
+    applySampledLayerState(
+      instance,
+      {
+        layerId: imageLayer.id,
+        transform: { ...imageLayer.transform },
+        baseOpacity: 1,
+        opacity: 1,
+        visible: true,
+        renderImageDisplay: true,
+        hasActiveParticleAnimation: false,
+        hasActiveRenderEffect: false,
+        hasActiveSafeGlowAnimation: false,
+        blendMode: "add",
+      },
+      project.stage,
+    );
+
+    expect(instance.display).toBeInstanceOf(pixiMock.MockSprite);
+    expect(instance.display.children).toHaveLength(0);
+    expect(instance.display.blendMode).toBe("add");
+    expect(instance.display.groupBlendMode).toBe("add");
+  });
+
+  it("derives transparent matte textures for additive JPEG layers", async () => {
+    const project = createProject();
+    project.assets[0] = {
+      ...project.assets[0],
+      path: "assets/a.jpg",
+      originalName: "a.jpg",
+      width: 2,
+      height: 1,
+    };
+    project.layers[0] = {
+      ...project.layers[0],
+      blendMode: "add",
+    };
+
+    const pixels = new Uint8ClampedArray([0, 0, 0, 255, 64, 128, 0, 255]);
+    const imageData = { data: pixels } as ImageData;
+    const context = {
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+      getImageData: vi.fn(() => imageData),
+      putImageData: vi.fn(),
+    };
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => context),
+    };
+    vi.stubGlobal("document", {
+      createElement: vi.fn(() => canvas),
+    });
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    pixiMock.textureByUrl.set("/a.jpg", {
+      width: 2,
+      height: 1,
+      source: { resource: {} },
+    });
+    pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
+
+    const player = new VNIPlayer({
+      parent: createMockPixiContainer(),
+      diagnosticsElement: createContainer(),
+      viewport: { width: 800, height: 600 },
+      projectId: "player-test",
+      bundleId: "legacy",
+      profileId: "legacy_full",
+      profilePurpose: "legacy",
+      assetScale: 1,
+      project,
+      assetUrls: {
+        "assets/a.jpg": "/a.jpg",
+        "assets/b.png": "/b.png",
+      },
+      autoTick: false,
+    });
+
+    await player.init();
+
+    const internals = player as unknown as {
+      layerInstances: Map<
+        string,
+        {
+          display: InstanceType<typeof pixiMock.MockSprite>;
+          texture: InstanceType<typeof pixiMock.MockTexture>;
+        }
+      >;
+      ownedTextures: Set<InstanceType<typeof pixiMock.MockTexture>>;
+    };
+    const layerA = internals.layerInstances.get("layer-a");
+    const derivedTexture = layerA?.texture;
+
+    expect(derivedTexture).toBeInstanceOf(pixiMock.MockTexture);
+    expect(derivedTexture?.source).toBeInstanceOf(pixiMock.MockCanvasSource);
+    expect(layerA?.display.texture).toBe(derivedTexture);
+    expect(canvas.width).toBe(2);
+    expect(canvas.height).toBe(1);
+    expect(context.drawImage).toHaveBeenCalledWith({}, 0, 0, 2, 1);
+    expect([...pixels]).toEqual([0, 0, 0, 0, 128, 255, 0, 128]);
+    expect(context.putImageData).toHaveBeenCalledWith(imageData, 0, 0);
+
+    player.destroy();
+
+    expect(derivedTexture?.destroyed).toBe(true);
+    expect([...internals.ownedTextures]).toEqual([]);
+  });
+
+  it("keeps shared JPEG textures opaque when any layer uses normal blending", async () => {
+    const project = createProject();
+    project.assets[0] = {
+      ...project.assets[0],
+      path: "assets/a.jpg",
+      originalName: "a.jpg",
+      width: 2,
+      height: 1,
+    };
+    project.layers[0] = {
+      ...project.layers[0],
+      blendMode: "add",
+    };
+    project.layers[1] = {
+      ...project.layers[1],
+      assetId: "asset-a",
+      blendMode: "normal",
+    };
+
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(),
+    };
+    vi.stubGlobal("document", {
+      createElement: vi.fn(() => canvas),
+    });
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const originalTexture = {
+      width: 2,
+      height: 1,
+      source: { resource: {} },
+    };
+    pixiMock.textureByUrl.set("/a.jpg", originalTexture);
+    pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
+
+    const player = new VNIPlayer({
+      parent: createMockPixiContainer(),
+      diagnosticsElement: createContainer(),
+      viewport: { width: 800, height: 600 },
+      projectId: "player-test",
+      bundleId: "legacy",
+      profileId: "legacy_full",
+      profilePurpose: "legacy",
+      assetScale: 1,
+      project,
+      assetUrls: {
+        "assets/a.jpg": "/a.jpg",
+        "assets/b.png": "/b.png",
+      },
+      autoTick: false,
+    });
+
+    await player.init();
+
+    const internals = player as unknown as {
+      layerInstances: Map<
+        string,
+        {
+          texture: unknown;
+        }
+      >;
+      ownedTextures: Set<InstanceType<typeof pixiMock.MockTexture>>;
+    };
+
+    expect(internals.layerInstances.get("layer-a")?.texture).toBe(
+      originalTexture,
+    );
+    expect(internals.layerInstances.get("layer-b")?.texture).toBe(
+      originalTexture,
+    );
+    expect(internals.ownedTextures.size).toBe(0);
+    expect(canvas.getContext).not.toHaveBeenCalled();
+
+    player.destroy();
+  });
+
   it("draws particles in per-layer containers and updates diagnostics", async () => {
     vi.stubGlobal("window", { devicePixelRatio: 1 });
     vi.stubGlobal("ResizeObserver", MockResizeObserver);
@@ -456,7 +795,9 @@ describe("VNIPlayer", () => {
 
     const container = createContainer();
     const player = new VNIPlayer({
-      container,
+      parent: createMockPixiContainer(),
+      diagnosticsElement: container,
+      viewport: { width: 800, height: 600 },
       projectId: "player-test",
       bundleId: "legacy",
       profileId: "legacy_full",
@@ -536,7 +877,7 @@ describe("VNIPlayer", () => {
     pixiMock.textureByUrl.set("/wrong.png", { width: 64, height: 64 });
 
     const missingUrlPlayer = new VNIPlayer({
-      container: createContainer(),
+      parent: createMockPixiContainer(),
       projectId: "player-test",
       bundleId: "legacy",
       profileId: "legacy_full",
@@ -550,7 +891,7 @@ describe("VNIPlayer", () => {
     );
 
     const wrongSizePlayer = new VNIPlayer({
-      container: createContainer(),
+      parent: createMockPixiContainer(),
       projectId: "player-test",
       bundleId: "legacy",
       profileId: "legacy_full",
@@ -569,7 +910,7 @@ describe("VNIPlayer", () => {
 
   it("requires init before playRange", () => {
     const player = new VNIPlayer({
-      container: createContainer(),
+      parent: createMockPixiContainer(),
       projectId: "player-test",
       bundleId: "legacy",
       profileId: "legacy_full",
@@ -626,7 +967,9 @@ describe("VNIPlayer", () => {
     pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
 
     const player = new VNIPlayer({
-      container,
+      parent: createMockPixiContainer(),
+      diagnosticsElement: container,
+      viewport: { width: 800, height: 600 },
       projectId: "player-test",
       bundleId: "legacy",
       profileId: "legacy_full",
@@ -741,7 +1084,9 @@ describe("VNIPlayer", () => {
     pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
 
     const player = new VNIPlayer({
-      container,
+      parent: createMockPixiContainer(),
+      diagnosticsElement: container,
+      viewport: { width: 800, height: 600 },
       projectId: "player-test",
       bundleId: "legacy",
       profileId: "legacy_full",
@@ -903,7 +1248,9 @@ describe("VNIPlayer", () => {
     pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
 
     const player = new VNIPlayer({
-      container,
+      parent: createMockPixiContainer(),
+      diagnosticsElement: container,
+      viewport: { width: 800, height: 600 },
       projectId: "player-test",
       bundleId: "legacy",
       profileId: "legacy_full",
@@ -932,71 +1279,6 @@ describe("VNIPlayer", () => {
     expect(container.dataset.vniLayerGroups).toBeUndefined();
     expect(container.dataset.vniLayerGroupSlots).toBeUndefined();
     expect(container.dataset.vniMountedNodes).toBeUndefined();
-  });
-
-  it("writes pixel diagnostics when a WebGL context is readable", async () => {
-    vi.stubGlobal("window", { devicePixelRatio: 1 });
-    vi.stubGlobal("ResizeObserver", MockResizeObserver);
-    vi.stubGlobal(
-      "requestAnimationFrame",
-      vi.fn((callback: FrameRequestCallback) => {
-        callback(16);
-        return 1;
-      }),
-    );
-    vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    pixiMock.textureByUrl.set("/a.png", { width: 100, height: 100 });
-    pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
-
-    const container = createContainer();
-    const player = new VNIPlayer({
-      container,
-      projectId: "player-test",
-      bundleId: "legacy",
-      profileId: "legacy_full",
-      profilePurpose: "legacy",
-      assetScale: 1,
-      project: createProject(),
-      assetUrls: {
-        "assets/a.png": "/a.png",
-        "assets/b.png": "/b.png",
-      },
-    });
-    const gl = {
-      drawingBufferWidth: 100,
-      drawingBufferHeight: 100,
-      RGBA: 0x1908,
-      UNSIGNED_BYTE: 0x1401,
-      readPixels: vi.fn(
-        (
-          _x: number,
-          _y: number,
-          _width: number,
-          _height: number,
-          _format: number,
-          _type: number,
-          pixel: Uint8Array,
-        ) => {
-          pixel[0] = 255;
-          pixel[1] = 255;
-          pixel[2] = 255;
-          pixel[3] = 255;
-        },
-      ),
-    };
-    const internals = player as unknown as {
-      app: { canvas: { getContext: ReturnType<typeof vi.fn> } };
-    };
-    internals.app.canvas.getContext = vi.fn(() => gl);
-
-    await player.init();
-    player.seek(0.1);
-
-    expect(container.dataset.vniPixelSamples).toBe("49");
-    expect(Number(container.dataset.vniNonBackgroundSamples)).toBeGreaterThan(
-      0,
-    );
-    expect(container.dataset.vniPixelSampleError).toBeUndefined();
   });
 
   it("plays a non-looping time range, fires markers before complete, and stops", async () => {
@@ -1047,9 +1329,12 @@ describe("VNIPlayer", () => {
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
     pixiMock.textureByUrl.set("/a.png", { width: 100, height: 100 });
     pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
+    const requestRender = vi.fn();
 
     const player = new VNIPlayer({
-      container: createContainer(),
+      parent: createMockPixiContainer(),
+      viewport: { width: 800, height: 600 },
+      requestRender,
       projectId: "player-test",
       bundleId: "legacy",
       profileId: "legacy_full",
@@ -1063,6 +1348,8 @@ describe("VNIPlayer", () => {
       autoTick: false,
     });
     await player.init();
+    expect(requestRender).toHaveBeenCalledTimes(1);
+    requestRender.mockClear();
     requestAnimationFrame.mockClear();
     const events: string[] = [];
     player.onPlaybackComplete(() => events.push("complete"));
@@ -1074,8 +1361,11 @@ describe("VNIPlayer", () => {
 
     expect(requestAnimationFrame).not.toHaveBeenCalled();
     player.update(0.6);
+    expect(requestRender).toHaveBeenCalled();
     expect(events).toEqual([]);
+    requestRender.mockClear();
     player.update(1.6);
+    expect(requestRender).toHaveBeenCalled();
     expect(events).toEqual(["complete"]);
   });
 
@@ -1094,7 +1384,8 @@ describe("VNIPlayer", () => {
     pixiMock.textureByUrl.set("/a.png", { width: 100, height: 100 });
     pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
     const noPaddingPlayer = new VNIPlayer({
-      container: createContainer(),
+      parent: createMockPixiContainer(),
+      viewport: { width: 800, height: 600 },
       projectId: "player-test",
       bundleId: "legacy",
       profileId: "legacy_full",
@@ -1114,7 +1405,7 @@ describe("VNIPlayer", () => {
     expect(noPaddingInternals.stageRoot.scale.x).toBeCloseTo(2);
     expect(() => {
       new VNIPlayer({
-        container: createContainer(),
+        parent: createMockPixiContainer(),
         projectId: "player-test",
         bundleId: "legacy",
         profileId: "legacy_full",
@@ -1166,7 +1457,8 @@ describe("VNIPlayer", () => {
     pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
 
     const player = new VNIPlayer({
-      container: createContainer(),
+      parent: createMockPixiContainer(),
+      viewport: { width: 800, height: 600 },
       projectId: "player-test",
       bundleId: "legacy",
       profileId: "legacy_full",
@@ -1361,41 +1653,6 @@ describe("VNIPlayer", () => {
     player.update(0.5);
 
     expect(events).toEqual([]);
-  });
-
-  it("records missing WebGL pixel diagnostics without failing playback", async () => {
-    vi.stubGlobal("window", { devicePixelRatio: 1 });
-    vi.stubGlobal("ResizeObserver", MockResizeObserver);
-    vi.stubGlobal(
-      "requestAnimationFrame",
-      vi.fn((callback: FrameRequestCallback) => {
-        callback(16);
-        return 1;
-      }),
-    );
-    vi.stubGlobal("cancelAnimationFrame", vi.fn());
-    pixiMock.textureByUrl.set("/a.png", { width: 100, height: 100 });
-    pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
-
-    const container = createContainer();
-    const player = new VNIPlayer({
-      container,
-      projectId: "player-test",
-      bundleId: "legacy",
-      profileId: "legacy_full",
-      profilePurpose: "legacy",
-      assetScale: 1,
-      project: createProject(),
-      assetUrls: {
-        "assets/a.png": "/a.png",
-        "assets/b.png": "/b.png",
-      },
-    });
-
-    await player.init();
-
-    expect(container.dataset.vniPixelSampleError).toBe("missing-webgl-context");
-    expect(container.dataset.v5gPixelSampleError).toBe("missing-webgl-context");
   });
 
   it("propagates marker and complete listener errors", async () => {

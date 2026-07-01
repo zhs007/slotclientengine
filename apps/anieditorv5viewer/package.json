@@ -15,7 +15,8 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@slotclientengine/vnicore": "workspace:*"
+    "@slotclientengine/vnicore": "workspace:*",
+    "pixi.js": "^8.1.6"
   },
   "devDependencies": {
     "@eslint/js": "^9.34.0",

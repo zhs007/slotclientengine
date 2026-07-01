@@ -7,6 +7,7 @@ import {
 import {
   export2EditFullAssetUrlManifest,
   export2Runtime50AssetUrlManifest,
+  game003S1L1WinsAssetUrlManifest,
   legacyAssetUrlManifest,
   resolveProjectAssetUrls,
 } from "../src/runtime/asset-manifest";
@@ -29,6 +30,7 @@ describe("bundled projects", () => {
       "multipay",
       "3reel-multipay-01",
       "3reel-multipay-02",
+      "game003-l1-wins",
       "bigwin-edit-full",
       "bigwin-runtime-50",
     ]);
@@ -139,6 +141,33 @@ describe("bundled projects", () => {
     expect(Object.keys(roundreel.assetUrls).sort()).toEqual(
       roundreel.project.assets.map((asset) => asset.path).sort(),
     );
+  });
+
+  it("registers game003 L1 wins against the original game003-s1 asset pool", () => {
+    const l1Wins = getBundledProject("game003-l1-wins");
+    const resolved = resolveProjectAssetUrls(
+      l1Wins.project,
+      game003S1L1WinsAssetUrlManifest,
+    );
+
+    expect(l1Wins.sourcePath).toBe("assets/game003-s1/L1-wins.json");
+    expect(l1Wins.bundleId).toBe("game003-s1");
+    expect(l1Wins.profileId).toBe("game003-s1");
+    expect(l1Wins.purpose).toBe("runtime");
+    expect(l1Wins.project.schemaVersion).toBe("VNI_0.022");
+    expect(l1Wins.project.name).toBe("SCATTER1");
+    expect(l1Wins.label).toContain("game003-s1/L1-wins.json");
+    expect(Object.keys(l1Wins.assetUrls).sort()).toEqual(
+      l1Wins.project.assets.map((asset) => asset.path).sort(),
+    );
+    expect(l1Wins.assetUrls).toEqual(resolved);
+    expect(Object.keys(l1Wins.assetUrls).sort()).toEqual([
+      "assets/01_asset_image_mql7nr09_l.jpg",
+      "assets/02_asset_image_mqkuxzs8_5.jpg",
+      "assets/05_asset_image_mql7lnt5_h.jpg",
+      "assets/image_asset_image_mqksg37p_9.jpg",
+      "assets/l1_asset_image_mr075krb_3.png",
+    ]);
   });
 
   it("keeps export2 edit_full and runtime_50 asset URLs profile scoped", () => {

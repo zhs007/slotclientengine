@@ -94,6 +94,9 @@ importers:
       '@slotclientengine/vnicore':
         specifier: workspace:*
         version: link:../../packages/vnicore
+      pixi.js:
+        specifier: ^8.1.6
+        version: 8.17.1
     devDependencies:
       '@eslint/js':
         specifier: ^9.34.0

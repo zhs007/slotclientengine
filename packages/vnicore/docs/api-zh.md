@@ -26,8 +26,12 @@
 
 `VNIPlayerOptions` 还支持嵌入相关选项：
 
+- `parent: PIXI.Container`：必填，由宿主提供的 Pixi 父节点。`VNIPlayer` 不创建 `PIXI.Application`、renderer 或 canvas。
+- `diagnosticsElement?: HTMLElement`：可选，写入 `data-vni-*` / `data-v5g-*` diagnostics 的宿主 DOM 节点。
+- `viewport?: { width: number; height: number }`：可选，用于 standalone viewer 这类需要 player 适配宿主可视区域的场景。
+- `requestRender?: () => void`：可选，宿主手动渲染时由 player 在画面变化后请求外部 renderer render。
 - `autoTick?: boolean`：默认 `true`，由 player 自己使用 RAF 推进；设为 `false` 时宿主必须显式调用 `update(deltaSeconds)`。
-- `fitPadding?: number`：默认保持既有响应式 padding；设为 `0` 时 VNI stage 坐标与内部 canvas 像素坐标一一对应，适合宿主使用显式 crop rect。
+- `fitPadding?: number`：默认保持既有响应式 padding；设为 `0` 时 VNI stage 坐标不再额外留边，适合宿主用自己的 Pixi viewport 或 mask 做精确裁切。
 
 ## core 函数
 
@@ -67,6 +71,8 @@
 - `getTime(): number`
 - `isPlaying(): boolean`
 - `update(deltaSeconds: number): void`
+- `getDisplayObject(): PIXI.Container`
+- `setViewportSize(width: number, height: number): void`
 - `playRange(options: VNIPlayRangeOptions): void`
 - `requestSegmentedPlaybackEnd(): void`
 - `getPlaybackState(): VNIPlaybackState`
@@ -86,6 +92,10 @@
 `play()` 无参数时仍是普通时间轴播放。`play({ mode: "range", range, loop })` 等价于 `playRange(...)`。`play({ mode: "segmented", loopStart, loopEnd, keepParticlesAlive })` 会按 start / loop / end 三段播放；`loopStart === loopEnd` 是停帧 loop，`loopStart < loopEnd` 是区间 loop。`keepParticlesAlive` 开启时，loop phase 的发射器配置跟随 loop 点或 loop 段，但 live 粒子按运行时 delta 继续老化、移动和发射，不会随播放时间停住或回绕。`requestSegmentedPlaybackEnd()` 只允许在 active segmented playback 中调用，否则显式抛错。
 
 `update(deltaSeconds)` 主要用于测试或宿主手动推进；默认 `play()` 仍然使用 RAF 自动推进。需要接入外部游戏 ticker 时，构造 `VNIPlayer` 时传入 `autoTick: false`，再由宿主每帧调用 `update(deltaSeconds)`。`onPlaybackComplete(...)` 在视觉完全结束后触发，也就是时间轴到终点并且 live 粒子排空后触发；如果终点没有可排空粒子，则可以立即触发。
+
+`project.stage.backgroundColor` 是导出 schema 中保留的背景元数据；`VNIPlayer` 是 runtime-only，不读取、不绘制、不提供开关，画面始终保持透明，只渲染 layer/effect/particle/mounted node。
+
+所有 image layer 用法都属于 `add` / `screen` / `lighten` 的 JPG 黑底光效图，会在加载阶段派生为带透明 alpha 的 matte texture。这个处理不修改原始美术资源，只避免 Pixi v8 在透明宿主 canvas 上把 JPG 黑色背景写成不透明黑框；普通 PNG、normal layer、被 normal layer 复用的 JPG 和未被叠加 blend 引用的 JPG 不受影响。派生过程只使用一次性纹理预处理 canvas，不是 `VNIPlayer` 自己的播放 canvas。
 
 Layer group 合同：
 
@@ -107,4 +117,4 @@ Layer group 合同：
 
 ## 内部 helper 边界
 
-`blend-mode`、`layer-instance` 等 Pixi helper 是实现支撑和测试辅助，不承诺像 `VNIPlayer`、core validation/sampler、asset manifest 函数一样稳定。不要从应用层绕开 `VNIPlayer` 直接装配内部 layer instance 或直接操作 group/slot container。
+`blend-mode`、`layer-instance` 等 Pixi helper 是实现支撑和测试辅助，不承诺像 `VNIPlayer`、core validation/sampler、asset manifest 函数一样稳定。不要从应用层绕开 `VNIPlayer` 直接装配内部 layer instance 或直接操作 group/slot container；宿主只负责提供外部 Pixi parent、ticker/render 调度和 DOM diagnostics 节点。

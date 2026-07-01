@@ -3,6 +3,7 @@ import type {
   VNIProjectConfig,
 } from "@slotclientengine/vnicore/core";
 import { VNIPlayer } from "@slotclientengine/vnicore/pixi";
+import { Application } from "pixi.js";
 
 export interface BasicPlayerArgs {
   container: HTMLElement;
@@ -10,11 +11,33 @@ export interface BasicPlayerArgs {
   assetUrls: AssetUrlManifest;
 }
 
+export interface BasicPlayerHandle {
+  readonly app: Application;
+  readonly player: VNIPlayer;
+}
+
 export async function createBasicPlayer(
   args: BasicPlayerArgs,
-): Promise<VNIPlayer> {
+): Promise<BasicPlayerHandle> {
+  const app = new Application();
+  await app.init({
+    backgroundAlpha: 0,
+    antialias: true,
+    autoStart: false,
+    autoDensity: true,
+    resolution: window.devicePixelRatio || 1,
+  });
+  args.container.replaceChildren(app.canvas);
+  const viewport = {
+    width: args.container.clientWidth || 1,
+    height: args.container.clientHeight || 1,
+  };
+  app.renderer.resize(viewport.width, viewport.height);
   const player = new VNIPlayer({
-    container: args.container,
+    parent: app.stage,
+    diagnosticsElement: args.container,
+    viewport,
+    requestRender: () => app.render(),
     projectId: args.project.name,
     bundleId: "example",
     profileId: args.project.exportProfile?.id ?? "full",
@@ -27,10 +50,11 @@ export async function createBasicPlayer(
   await player.init();
   player.play();
   player.seek(0);
-  return player;
+  return { app, player };
 }
 
-export function destroyBasicPlayer(player: VNIPlayer): void {
-  player.pause();
-  player.destroy();
+export function destroyBasicPlayer(handle: BasicPlayerHandle): void {
+  handle.player.pause();
+  handle.player.destroy();
+  handle.app.destroy({ removeView: true });
 }

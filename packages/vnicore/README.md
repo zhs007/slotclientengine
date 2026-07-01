@@ -30,8 +30,11 @@ The root import re-exports both `./core` and `./pixi`. The `V5G*` names are lega
 - `play()`, `play({ mode: "segmented", ... })`, `pause()`, `restart()`, `seek()`, `setLoop()`, `playRange(...)`, playback markers, particle-draining, and complete listeners
 - `project.layerGroups + layer.groupId` layer group schema, with render order derived from `project.layers`
 - adjacent layer-group slot APIs for mounting host Pixi nodes, project asset images, or explicit external image URLs between two neighboring groups
+- direct Pixi host embedding through `VNIPlayerOptions.parent`; the host owns `PIXI.Application`, canvas, renderer resize, and browser DOM
 - host-driven playback embedding through `VNIPlayerOptions.autoTick: false`
 - explicit fit padding override through `VNIPlayerOptions.fitPadding`
+- transparent runtime display tree; `VNIPlayer` never renders exported stage backgrounds
+- additive matte derivation for black-backed JPEG light textures referenced by `add` / `screen` / `lighten` image layers
 
 Invalid data fails fast. Missing assets, bad numeric params, unknown animation/easing/blend modes, texture size mismatches, unsupported group/parent/keyframe structures, and manifest/profile mismatches throw instead of rendering placeholders.
 
@@ -39,7 +42,13 @@ Runtime profile metadata comes from JSON `exportProfile` values and manifest ent
 
 Layer group slots are exposed through `VNIPlayer.getLayerGroupSlots()`. The slot order follows the actual `project.layers` render order, not `layerGroups.order`. `attachNodeBetweenLayerGroups(...)`, `attachImageBetweenLayerGroups(...)`, and `attachExternalImageBetweenLayerGroups(...)` require the two group ids to be an adjacent slot; reversed, unknown, or non-adjacent ids throw. Project images keep the project texture-size validation path; external image URLs are for host-owned assets that are not listed in `project.assets`.
 
-`VNIPlayer` uses RAF by default. Embedders that already have a game ticker can pass `autoTick: false` and call `update(deltaSeconds)` themselves; this is the path used by `rendercore` symbol animations to keep VNI playback synchronized with Pixi slot updates. `fitPadding` defaults to the existing responsive padding, and can be set to `0` when the host needs VNI stage coordinates to map directly to offscreen canvas pixels for an explicit crop rectangle.
+`VNIPlayer` does not create its own Pixi application or canvas. Hosts pass an existing Pixi `parent` container; browser tools such as `apps/anieditorv5viewer` create the canvas themselves, while in-game callers such as `rendercore` mount the VNI display tree directly into the game renderer. Hosts that need diagnostics pass `diagnosticsElement`, hosts that resize a standalone viewer pass `viewport` / `setViewportSize(...)`, and manually rendered hosts pass `requestRender`.
+
+`VNIPlayer` uses RAF by default. Embedders that already have a game ticker can pass `autoTick: false` and call `update(deltaSeconds)` themselves; this is the path used by `rendercore` symbol animations to keep VNI playback synchronized with Pixi slot updates. `fitPadding` defaults to the existing responsive padding, and can be set to `0` when the host needs VNI stage coordinates to map directly to a host-controlled viewport or mask.
+
+`VNIPlayer` is runtime-only and never draws the exported stage background. `project.stage.backgroundColor` remains validated schema metadata, but it is not read by the Pixi player; VNI rendering stays transparent and contains only layers, effects, particles, and mounted nodes.
+
+Black-backed JPEG light assets whose image-layer usages are all `add` / `screen` / `lighten` are converted to transparent matte textures during load. This keeps the exported art files unchanged while preventing Pixi v8 additive blending from writing an opaque black rectangle into transparent host canvases. The conversion uses a transient decode canvas only for texture preprocessing; it is not a `VNIPlayer` render surface and is not appended to the DOM.
 
 Supported animation types include transform/opacity animations, live particles, segmented particle draining, deterministic render effects such as `shatter` and `glow`, and the cross-engine-safe `safe_glow` overlay. `idle` is a coverage-only no-op; `shatter` and `glow` are sampled as render effects, while `safe_glow` is a duplicate-image overlay that inherits the layer blend mode and is counted separately from render effects.
 

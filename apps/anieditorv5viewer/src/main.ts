@@ -1,6 +1,7 @@
 import "./styles.css";
 import { bundledProjects, getBundledProject } from "./config/bundled-projects";
 import { VNIPlayer } from "@slotclientengine/vnicore/pixi";
+import { Application } from "pixi.js";
 import { createViewerControls } from "./ui/controls";
 
 const VIEWER_INSERTED_NODE_ID = "viewer-group-slot-image";
@@ -26,6 +27,8 @@ async function bootstrap(): Promise<void> {
   appRoot.appendChild(shell);
 
   let player: VNIPlayer | null = null;
+  let pixiApp: Application | null = null;
+  let disposeResize: (() => void) | null = null;
   let loadToken = 0;
   let activeProject = getBundledProject("project");
   const controls = createViewerControls({
@@ -149,13 +152,31 @@ async function bootstrap(): Promise<void> {
 
     player?.destroy();
     player = null;
+    disposeResize?.();
+    disposeResize = null;
+    pixiApp?.destroy({ removeView: true });
+    pixiApp = null;
     stageMount.replaceChildren();
     controls.setProject(selectedProject);
     controls.setPlaying(false);
     controls.setTime(0);
 
+    const nextApp = new Application();
+    await nextApp.init({
+      backgroundAlpha: 0,
+      antialias: true,
+      autoStart: false,
+      autoDensity: true,
+      resolution: window.devicePixelRatio || 1,
+    });
+    stageMount.appendChild(nextApp.canvas);
+    resizePixiAppToMount(nextApp, stageMount);
+
     const nextPlayer = new VNIPlayer({
-      container: stageMount,
+      parent: nextApp.stage,
+      diagnosticsElement: stageMount,
+      viewport: getMountViewport(stageMount),
+      requestRender: () => nextApp.render(),
       projectId: selectedProject.id,
       bundleId: selectedProject.bundleId,
       profileId: selectedProject.profileId,
@@ -175,9 +196,12 @@ async function bootstrap(): Promise<void> {
     await nextPlayer.init();
     if (token !== loadToken) {
       nextPlayer.destroy();
+      nextApp.destroy({ removeView: true });
       return;
     }
     player = nextPlayer;
+    pixiApp = nextApp;
+    disposeResize = observeStageMount(stageMount, nextApp, nextPlayer);
     controls.setLayerGroupSlots(player.getLayerGroupSlots());
     controls.setInsertedNodeActive(false);
     controls.setLoop(player.getLoop());
@@ -186,6 +210,39 @@ async function bootstrap(): Promise<void> {
   }
 
   await loadProject("project");
+}
+
+function observeStageMount(
+  stageMount: HTMLElement,
+  app: Application,
+  player: VNIPlayer,
+): () => void {
+  const resize = (): void => {
+    resizePixiAppToMount(app, stageMount);
+    const viewport = getMountViewport(stageMount);
+    player.setViewportSize(viewport.width, viewport.height);
+  };
+  if (typeof ResizeObserver === "undefined") {
+    return () => undefined;
+  }
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(stageMount);
+  return () => resizeObserver.disconnect();
+}
+
+function resizePixiAppToMount(app: Application, stageMount: HTMLElement): void {
+  const viewport = getMountViewport(stageMount);
+  app.renderer.resize(viewport.width, viewport.height);
+}
+
+function getMountViewport(stageMount: HTMLElement): {
+  readonly width: number;
+  readonly height: number;
+} {
+  return {
+    width: stageMount.clientWidth || 1,
+    height: stageMount.clientHeight || 1,
+  };
 }
 
 function showFatalError(error: unknown): void {

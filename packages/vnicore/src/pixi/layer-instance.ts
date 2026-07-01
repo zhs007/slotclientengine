@@ -16,6 +16,7 @@ export interface V5GLayerInstance {
   particleDisplay: PIXI.Container;
   texture: PIXI.Texture | null;
   textureSize: { width: number; height: number } | null;
+  displayScaleCompensation: { x: number; y: number };
 }
 
 export interface TextureSize {
@@ -28,16 +29,16 @@ export function createLayerInstance(
   texturesByAssetId: ReadonlyMap<string, PIXI.Texture>,
   assetsById: ReadonlyMap<string, V5GAssetConfig>,
 ): V5GLayerInstance {
-  const display = new PIXI.Container();
-  display.label = layer.name;
   const safeGlowDisplay = new PIXI.Container();
   safeGlowDisplay.label = `${layer.name} safe glow`;
   const effectDisplay = new PIXI.Container();
   effectDisplay.label = `${layer.name} effects`;
   const particleDisplay = new PIXI.Container();
   particleDisplay.label = `${layer.name} particles`;
+  let display: PIXI.Container;
   let instanceTexture: PIXI.Texture | null = null;
   let textureSize: { width: number; height: number } | null = null;
+  let displayScaleCompensation = { x: 1, y: 1 };
 
   if (layer.type === "image") {
     if (!layer.assetId) {
@@ -59,10 +60,10 @@ export function createLayerInstance(
       height: Math.round(texture.height),
     };
     const sprite = new PIXI.Sprite(texture);
+    sprite.label = layer.name;
     sprite.anchor.set(layer.transform.anchorX, layer.transform.anchorY);
-    const compensation = getAssetDisplayCompensation(asset, textureSize);
-    sprite.scale.set(compensation.x, compensation.y);
-    display.addChild(sprite);
+    displayScaleCompensation = getAssetDisplayCompensation(asset, textureSize);
+    display = sprite;
   } else if (layer.type === "text") {
     const text = new PIXI.Text({
       text: layer.text ?? layer.name,
@@ -80,8 +81,9 @@ export function createLayerInstance(
         },
       },
     });
+    text.label = layer.name;
     text.anchor.set(layer.transform.anchorX, layer.transform.anchorY);
-    display.addChild(text);
+    display = text;
   } else {
     throw new Error(`Unsupported V5G layer type: ${layer.type}`);
   }
@@ -94,6 +96,7 @@ export function createLayerInstance(
     particleDisplay,
     texture: instanceTexture,
     textureSize,
+    displayScaleCompensation,
   };
 }
 
@@ -110,8 +113,8 @@ export function applySampledLayerState(
   );
   instance.display.position.set(position.x, position.y);
   instance.display.scale.set(
-    sampled.transform.scaleX,
-    sampled.transform.scaleY,
+    sampled.transform.scaleX * instance.displayScaleCompensation.x,
+    sampled.transform.scaleY * instance.displayScaleCompensation.y,
   );
   instance.display.rotation = (sampled.transform.rotation * Math.PI) / 180;
   instance.display.alpha = sampled.opacity;

@@ -1,4 +1,4 @@
-import { Rectangle, Sprite, Texture } from "pixi.js";
+import { Container, Graphics } from "pixi.js";
 import {
   VNIPlayer,
   type VNIPlayerOptions,
@@ -22,6 +22,7 @@ import type {
 
 export interface VniSymbolAniPlayer {
   init(): Promise<void>;
+  getDisplayObject(): Container;
   playRange(options: {
     readonly range: {
       readonly unit: "time";
@@ -44,13 +45,11 @@ export interface VniSymbolAniOptions {
   readonly context: SymbolAnimationContext;
   readonly resource: SymbolVniAnimationResource;
   readonly playerFactory?: VniSymbolAniPlayerFactory;
-  readonly documentFactory?: () => Document;
 }
 
 export interface CreateSymbolManifestAnimationResolverOptions extends CreateSymbolVniAnimationResourcesOptions {
   readonly fallback?: SymbolAnimationResolver;
   readonly playerFactory?: VniSymbolAniPlayerFactory;
-  readonly documentFactory?: () => Document;
 }
 
 const EMPTY_UPDATE_RESULT: SymbolAniUpdateResult = Object.freeze({
@@ -64,12 +63,9 @@ export class VniSymbolAni implements SymbolAni {
   readonly #context: SymbolAnimationContext;
   readonly #resource: SymbolVniAnimationResource;
   readonly #playerFactory: VniSymbolAniPlayerFactory;
-  readonly #documentFactory: () => Document;
-  #container: HTMLElement | null = null;
   #player: VniSymbolAniPlayer | null = null;
   #disposePlaybackComplete: (() => void) | null = null;
-  #texture: Texture | null = null;
-  #sprite: Sprite | null = null;
+  #viewport: Container | null = null;
   #initError: unknown = null;
   #initialized = false;
   #completed = false;
@@ -83,11 +79,11 @@ export class VniSymbolAni implements SymbolAni {
     this.#playerFactory =
       options.playerFactory ??
       ((playerOptions) => new VNIPlayer(playerOptions));
-    this.#documentFactory = options.documentFactory ?? getGlobalDocument;
   }
 
   reset(): void {
     this.assertNotDestroyed();
+    this.disposePlayer();
     resetBaseDisplay(this.#context);
     this.#context.baseLayer.visible = false;
     this.#context.stateSprite.visible = false;
@@ -108,7 +104,6 @@ export class VniSymbolAni implements SymbolAni {
       return EMPTY_UPDATE_RESULT;
     }
     this.#player?.update(deltaSeconds);
-    this.refreshTexture();
     if (this.#completed && !this.#reportedComplete) {
       this.#reportedComplete = true;
       return Object.freeze({
@@ -124,21 +119,7 @@ export class VniSymbolAni implements SymbolAni {
       return;
     }
     this.#destroyed = true;
-    this.#disposePlaybackComplete?.();
-    this.#disposePlaybackComplete = null;
-    this.#player?.pause?.();
-    this.#player?.destroy();
-    this.#player = null;
-    if (this.#sprite) {
-      this.#sprite.texture = Texture.EMPTY;
-      this.#context.overlayLayer.removeChild(this.#sprite);
-      this.#sprite.destroy();
-      this.#sprite = null;
-    }
-    this.#texture?.destroy(false);
-    this.#texture = null;
-    this.#container?.remove();
-    this.#container = null;
+    this.disposePlayer();
   }
 
   private async initializeAndPlay(): Promise<void> {
@@ -155,8 +136,8 @@ export class VniSymbolAni implements SymbolAni {
         },
         loop: false,
       });
-      this.refreshTexture();
     } catch (error) {
+      this.disposePlayer();
       this.#initError = error;
     }
   }
@@ -165,16 +146,12 @@ export class VniSymbolAni implements SymbolAni {
     if (this.#initialized) {
       return;
     }
-    const document = this.#documentFactory();
-    if (!document.body) {
-      throw new SymbolAnimationError(
-        "VNI symbol animation requires document.body.",
-      );
-    }
-    const container = createHiddenVniContainer(document, this.#resource);
-    document.body.appendChild(container);
+    const { viewport, content } = createVniViewport(
+      this.#resource.spec.stageRect,
+    );
+    this.#context.overlayLayer.addChild(viewport);
     const player = this.#playerFactory({
-      container,
+      parent: content,
       projectId: `${this.#context.symbol}-${this.#context.resolvedState}`,
       bundleId: "symbol-manifest",
       profileId: "symbol-vni",
@@ -185,32 +162,40 @@ export class VniSymbolAni implements SymbolAni {
       autoTick: false,
       fitPadding: 0,
     });
-    this.#container = container;
+    this.#viewport = viewport;
     this.#player = player;
     await player.init();
     if (this.#destroyed) {
       return;
     }
+    alignVniRootToStageRect(
+      player.getDisplayObject(),
+      this.#resource.spec.stageRect,
+    );
     this.#disposePlaybackComplete = player.onPlaybackComplete(() => {
       this.#completed = true;
     });
-    const canvas = getOnlyCanvas(container);
-    this.#texture = createCroppedCanvasTexture(
-      canvas,
-      this.#resource.spec.stageRect,
-    );
-    this.#sprite = new Sprite(this.#texture);
-    this.#sprite.anchor.set(0.5);
-    this.#context.overlayLayer.addChild(this.#sprite);
     this.#initialized = true;
   }
 
-  private refreshTexture(): void {
-    if (!this.#texture) {
+  private disposePlayer(): void {
+    this.#disposePlaybackComplete?.();
+    this.#disposePlaybackComplete = null;
+    this.#player?.pause?.();
+    this.#player?.destroy();
+    this.#player = null;
+    this.detachViewport();
+    this.#initialized = false;
+  }
+
+  private detachViewport(): void {
+    const viewport = this.#viewport;
+    this.#viewport = null;
+    if (!viewport) {
       return;
     }
-    this.#texture.source.update();
-    this.#texture.update();
+    viewport.parent?.removeChild(viewport);
+    viewport.destroy({ children: true });
   }
 
   private assertNotDestroyed(): void {
@@ -230,7 +215,6 @@ export function createSymbolManifestAnimationResolver(
     resources,
     fallback: options.fallback,
     playerFactory: options.playerFactory,
-    documentFactory: options.documentFactory,
   });
 }
 
@@ -238,7 +222,6 @@ export function createSymbolVniAnimationResolver(options: {
   readonly resources: SymbolVniAnimationResourceMap;
   readonly fallback?: SymbolAnimationResolver;
   readonly playerFactory?: VniSymbolAniPlayerFactory;
-  readonly documentFactory?: () => Document;
 }): SymbolAnimationResolver {
   return (context) => {
     const resource = options.resources[context.symbol]?.[context.resolvedState];
@@ -247,7 +230,6 @@ export function createSymbolVniAnimationResolver(options: {
         context,
         resource,
         playerFactory: options.playerFactory,
-        documentFactory: options.documentFactory,
       });
     }
     if (options.fallback) {
@@ -259,53 +241,26 @@ export function createSymbolVniAnimationResolver(options: {
   };
 }
 
-function createHiddenVniContainer(
-  document: Document,
-  resource: SymbolVniAnimationResource,
-): HTMLElement {
-  const container = document.createElement("div");
-  const { width, height } = resource.project.stage;
-  container.style.position = "fixed";
-  container.style.left = "-10000px";
-  container.style.top = "-10000px";
-  container.style.width = `${width}px`;
-  container.style.height = `${height}px`;
-  container.style.overflow = "hidden";
-  container.style.pointerEvents = "none";
-  container.style.opacity = "0";
-  container.dataset.rendercoreVniSymbol = resource.symbol;
-  container.dataset.rendercoreVniState = resource.state;
-  return container;
+function createVniViewport(rect: SymbolManifestStageRect): {
+  readonly viewport: Container;
+  readonly content: Container;
+} {
+  const viewport = new Container();
+  const content = new Container();
+  const mask = new Graphics();
+  mask
+    .rect(-rect.width / 2, -rect.height / 2, rect.width, rect.height)
+    .fill(0xffffff);
+  content.mask = mask;
+  viewport.addChild(content, mask);
+  return { viewport, content };
 }
 
-function createCroppedCanvasTexture(
-  canvas: HTMLCanvasElement,
+function alignVniRootToStageRect(
+  root: Container,
   rect: SymbolManifestStageRect,
-): Texture {
-  const baseTexture = Texture.from(canvas, true);
-  return new Texture({
-    source: baseTexture.source,
-    frame: new Rectangle(rect.x, rect.y, rect.width, rect.height),
-    orig: new Rectangle(0, 0, rect.width, rect.height),
-    dynamic: true,
-  });
-}
-
-function getOnlyCanvas(container: HTMLElement): HTMLCanvasElement {
-  const canvases = container.querySelectorAll("canvas");
-  if (canvases.length !== 1) {
-    throw new SymbolAnimationError(
-      `VNI symbol animation expected exactly one canvas, got ${canvases.length}.`,
-    );
-  }
-  return canvases[0] as HTMLCanvasElement;
-}
-
-function getGlobalDocument(): Document {
-  if (typeof document === "undefined") {
-    throw new SymbolAnimationError(
-      "VNI symbol animation requires a DOM document.",
-    );
-  }
-  return document;
+): void {
+  root.pivot.set(rect.x + rect.width / 2, rect.y + rect.height / 2);
+  root.position.set(0, 0);
+  root.scale.set(1);
 }

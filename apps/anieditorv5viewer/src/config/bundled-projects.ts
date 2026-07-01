@@ -13,6 +13,7 @@ import scatter1Data from "../assets/projects/scatter1.json";
 import scatter2Data from "../assets/projects/scatter2.json";
 import superwinData from "../assets/projects/superwin.json";
 import roundreelData from "../assets/projects/roundreel.json";
+import game003L1WinsData from "../../../../assets/game003-s1/L1-wins.json";
 import export2ManifestData from "../assets/export2/manifest.json";
 import export2EditFullProjectData from "../assets/export2/edit_full/project.json";
 import export2Runtime50ProjectData from "../assets/export2/runtime_50/project.json";
@@ -20,6 +21,7 @@ import {
   bundledAssetUrlManifest,
   export2EditFullAssetUrlManifest,
   export2Runtime50AssetUrlManifest,
+  game003S1L1WinsAssetUrlManifest,
   resolveProjectAssetUrls,
   type AssetUrlManifest,
 } from "../runtime/asset-manifest";
@@ -50,6 +52,7 @@ export type BundledProjectId =
   | "multipay"
   | "3reel-multipay-01"
   | "3reel-multipay-02"
+  | "game003-l1-wins"
   | "bigwin-edit-full"
   | "bigwin-runtime-50";
 
@@ -269,6 +272,17 @@ const bundledProjectDefinitions: readonly BundledProjectDefinition[] = [
     assetUrlManifest: bundledAssetUrlManifest,
   },
   {
+    id: "game003-l1-wins",
+    filename: "L1-wins.json",
+    sourcePath: "assets/game003-s1/L1-wins.json",
+    bundleId: "game003-s1",
+    profileId: "game003-s1",
+    purpose: "runtime",
+    assetScale: 1,
+    data: game003L1WinsData,
+    assetUrlManifest: game003S1L1WinsAssetUrlManifest,
+  },
+  {
     id: "bigwin-edit-full",
     filename: "export2/edit_full/project.json",
     sourcePath: "docs/anieditor5/export2/edit_full/project.json",
@@ -385,6 +399,9 @@ function createBundledProjectLabel(
     const percent = Math.round(definition.assetScale * 100);
     const suffix = definition.purpose === "runtime" ? "运行资源" : "原图";
     return `${project.name} (export/${definition.filename}, ${definition.profileId}, ${percent}% ${suffix})`;
+  }
+  if (definition.bundleId === "game003-s1") {
+    return `${project.name} (game003-s1/${definition.filename}, runtime source)`;
   }
   const percent = Math.round(definition.assetScale * 100);
   const suffix = definition.purpose === "runtime" ? "运行资源" : "原图";
