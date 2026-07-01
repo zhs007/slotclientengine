@@ -1039,6 +1039,97 @@ describe("VNIPlayer", () => {
     expect(playingChanges).toEqual([true, false]);
   });
 
+  it("supports host-driven playback without starting RAF when autoTick is false", async () => {
+    const requestAnimationFrame = vi.fn(() => 1);
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+    vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    pixiMock.textureByUrl.set("/a.png", { width: 100, height: 100 });
+    pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
+
+    const player = new VNIPlayer({
+      container: createContainer(),
+      projectId: "player-test",
+      bundleId: "legacy",
+      profileId: "legacy_full",
+      profilePurpose: "legacy",
+      assetScale: 1,
+      project: createProject(),
+      assetUrls: {
+        "assets/a.png": "/a.png",
+        "assets/b.png": "/b.png",
+      },
+      autoTick: false,
+    });
+    await player.init();
+    requestAnimationFrame.mockClear();
+    const events: string[] = [];
+    player.onPlaybackComplete(() => events.push("complete"));
+
+    player.playRange({
+      range: { unit: "time", start: 0, end: 0.6 },
+      loop: false,
+    });
+
+    expect(requestAnimationFrame).not.toHaveBeenCalled();
+    player.update(0.6);
+    expect(events).toEqual([]);
+    player.update(1.6);
+    expect(events).toEqual(["complete"]);
+  });
+
+  it("accepts fitPadding 0 for one-to-one stage fitting", async () => {
+    const player = await createInitializedPlayer();
+    const defaultInternals = player as unknown as {
+      stageRoot: InstanceType<typeof pixiMock.MockContainer>;
+    };
+    expect(defaultInternals.stageRoot.scale.x).toBeCloseTo(536 / 300);
+
+    const paddedRequestAnimationFrame = vi.fn(() => 1);
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+    vi.stubGlobal("requestAnimationFrame", paddedRequestAnimationFrame);
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    pixiMock.textureByUrl.set("/a.png", { width: 100, height: 100 });
+    pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
+    const noPaddingPlayer = new VNIPlayer({
+      container: createContainer(),
+      projectId: "player-test",
+      bundleId: "legacy",
+      profileId: "legacy_full",
+      profilePurpose: "legacy",
+      assetScale: 1,
+      project: createProject(),
+      assetUrls: {
+        "assets/a.png": "/a.png",
+        "assets/b.png": "/b.png",
+      },
+      fitPadding: 0,
+    });
+    await noPaddingPlayer.init();
+    const noPaddingInternals = noPaddingPlayer as unknown as {
+      stageRoot: InstanceType<typeof pixiMock.MockContainer>;
+    };
+    expect(noPaddingInternals.stageRoot.scale.x).toBeCloseTo(2);
+    expect(() => {
+      new VNIPlayer({
+        container: createContainer(),
+        projectId: "player-test",
+        bundleId: "legacy",
+        profileId: "legacy_full",
+        profilePurpose: "legacy",
+        assetScale: 1,
+        project: createProject(),
+        assetUrls: {
+          "assets/a.png": "/a.png",
+          "assets/b.png": "/b.png",
+        },
+        fitPadding: -1,
+      });
+    }).toThrow("fitPadding");
+  });
+
   it("inherits loop state for ranges and supports frame playback markers", async () => {
     const player = await createInitializedPlayer();
     const events: string[] = [];

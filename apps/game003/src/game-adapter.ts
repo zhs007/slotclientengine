@@ -132,6 +132,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
             texturedSymbols: this.#skin.displaySymbols,
             missingAssetLabel: this.#skin.label,
             symbolScales: this.#skin.symbolScales,
+            animationResolver: this.#skin.symbolAnimationResolver,
           },
         }));
   }

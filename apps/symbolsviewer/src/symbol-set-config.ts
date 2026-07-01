@@ -1,13 +1,17 @@
 import rawSymbolsGameConfig from "../../../assets/gamecfg/game2.json";
 import rawSymbols002GameConfig from "../../../assets/gamecfg002/gameconfig.json";
+import rawGame003GameConfig from "../../../assets/gamecfg003/gameconfig.json";
 import symbolsStateTextureManifest from "../../../assets/symbols/symbol-state-textures.manifest.json";
 import symbols001StateTextureManifest from "../../../assets/symbols001/symbol-state-textures.manifest.json";
 import symbols002StateTextureManifest from "../../../assets/symbols002/symbol-state-textures.manifest.json";
 import symbols003StateTextureManifest from "../../../assets/symbols003/symbol-state-textures.manifest.json";
 import game002S2StateTextureManifest from "../../../assets/game002-s2/symbol-state-textures.manifest.json";
 import game002S3StateTextureManifest from "../../../assets/game002-s3/symbol-state-textures.manifest.json";
+import game003S1StateTextureManifest from "../../../assets/game003-s1/symbol-state-textures.manifest.json";
 import {
   createDefaultSymbolAnimationResolver,
+  createSymbolManifestAnimationResolver,
+  getSymbolDisplaySymbolsFromManifest,
   createNamedSymbolAnimationResolver,
   type ReelSymbolScaleMap,
   type SymbolAnimationResolver,
@@ -31,7 +35,8 @@ export type SymbolSetId =
   | "symbols002"
   | "symbols003"
   | "game002-s2"
-  | "game002-s3";
+  | "game002-s3"
+  | "game003-s1";
 
 export interface SymbolSetConfig {
   readonly id: SymbolSetId;
@@ -40,6 +45,8 @@ export interface SymbolSetConfig {
   readonly rawGameConfig: unknown;
   readonly modules: Record<string, string>;
   readonly manifest: unknown;
+  readonly vniProjectModules?: Record<string, unknown>;
+  readonly vniAssetModules?: Record<string, string>;
   readonly requiredStates: readonly string[];
   readonly animationResolver: SymbolAnimationResolver;
 }
@@ -79,6 +86,29 @@ const game002S3Modules = import.meta.glob("../../../assets/game002-s3/*.png", {
   import: "default",
   query: "?url",
 }) as Record<string, string>;
+
+const game003S1Modules = import.meta.glob("../../../assets/game003-s1/*.png", {
+  eager: true,
+  import: "default",
+  query: "?url",
+}) as Record<string, string>;
+
+const game003S1VniProjectModules = import.meta.glob(
+  "../../../assets/game003-s1/*-wins.json",
+  {
+    eager: true,
+    import: "default",
+  },
+) as Record<string, unknown>;
+
+const game003S1VniAssetModules = import.meta.glob(
+  "../../../assets/game003-s1/assets/*.{png,jpg,jpeg,webp}",
+  {
+    eager: true,
+    import: "default",
+    query: "?url",
+  },
+) as Record<string, string>;
 
 const defaultAnimationResolver = createDefaultSymbolAnimationResolver();
 
@@ -155,6 +185,12 @@ const GAME002_S3_DISPLAYABLE_SYMBOLS = Object.freeze([
   "CO",
   "AF",
 ]);
+const GAME003_S1_DISPLAYABLE_SYMBOLS = getSymbolDisplaySymbolsFromManifest(
+  game003S1StateTextureManifest,
+  {
+    requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+  },
+);
 
 const createRequiredScaleMap = (
   manifest: unknown,
@@ -261,6 +297,27 @@ export const SYMBOL_SET_CONFIGS = Object.freeze([
     requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
     animationResolver: createNamedSymbolAnimationResolver({
       profiles: GAME002_S3_ANIMATION_PROFILES,
+      fallback: defaultAnimationResolver,
+    }),
+  }),
+  Object.freeze({
+    id: "game003-s1",
+    label: "game003-s1",
+    symbolScales: createRequiredScaleMap(
+      game003S1StateTextureManifest,
+      GAME003_S1_DISPLAYABLE_SYMBOLS,
+    ),
+    rawGameConfig: rawGame003GameConfig,
+    modules: game003S1Modules,
+    manifest: game003S1StateTextureManifest,
+    vniProjectModules: game003S1VniProjectModules,
+    vniAssetModules: game003S1VniAssetModules,
+    requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+    animationResolver: createSymbolManifestAnimationResolver({
+      manifest: game003S1StateTextureManifest,
+      requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+      vniProjectModules: game003S1VniProjectModules,
+      vniAssetModules: game003S1VniAssetModules,
       fallback: defaultAnimationResolver,
     }),
   }),

@@ -1,5 +1,10 @@
 import { getSlotGameStaticSkin } from "@slotclientengine/gameframeworks/static-config";
-import type { ReelSymbolScaleMap } from "@slotclientengine/rendercore";
+import {
+  createDefaultSymbolAnimationResolver,
+  createSymbolManifestAnimationResolver,
+  type ReelSymbolScaleMap,
+  type SymbolAnimationResolver,
+} from "@slotclientengine/rendercore";
 import {
   createGame003SymbolScaleMapFromManifest,
   getGame003DisplaySymbolsFromManifest,
@@ -20,13 +25,17 @@ export interface Game003SkinConfig {
   readonly landscapeConveyorUrl: string;
   readonly portraitConveyorUrl: string;
   readonly symbolModules: Record<string, string>;
+  readonly vniProjectModules?: Record<string, unknown>;
+  readonly vniAssetModules?: Record<string, string>;
   readonly stateTextureManifest: unknown;
   readonly displaySymbols: readonly string[];
   readonly emptySymbols: readonly string[];
   readonly symbolScales: ReelSymbolScaleMap;
+  readonly symbolAnimationResolver: SymbolAnimationResolver;
 }
 
 const game003StaticSkin1 = getSlotGameStaticSkin(GAME003_STATIC_CONFIG, "1");
+const game003DefaultAnimationResolver = createDefaultSymbolAnimationResolver();
 const game003Skin1DisplaySymbols = getGame003DisplaySymbolsFromManifest(
   game003StaticSkin1.symbols.manifest,
   game003StaticSkin1.symbols.requiredStates,
@@ -51,6 +60,8 @@ const GAME003_SKIN_CONFIGS: Readonly<Record<Game003SkinId, Game003SkinConfig>> =
         "portrait",
       ),
       symbolModules: game003StaticSkin1.symbols.pngModules,
+      vniProjectModules: game003StaticSkin1.symbols.vniProjectModules,
+      vniAssetModules: game003StaticSkin1.symbols.vniAssetModules,
       stateTextureManifest: game003StaticSkin1.symbols.manifest,
       displaySymbols: game003Skin1DisplaySymbols,
       emptySymbols: game003StaticSkin1.symbols.emptySymbols,
@@ -59,6 +70,13 @@ const GAME003_SKIN_CONFIGS: Readonly<Record<Game003SkinId, Game003SkinConfig>> =
         displaySymbols: game003Skin1DisplaySymbols,
         requiredStates: game003StaticSkin1.symbols.requiredStates,
         requireExplicitScale: game003StaticSkin1.symbols.requireExplicitScale,
+      }),
+      symbolAnimationResolver: createSymbolManifestAnimationResolver({
+        manifest: game003StaticSkin1.symbols.manifest,
+        requiredStates: game003StaticSkin1.symbols.requiredStates,
+        vniProjectModules: game003StaticSkin1.symbols.vniProjectModules ?? {},
+        vniAssetModules: game003StaticSkin1.symbols.vniAssetModules ?? {},
+        fallback: game003DefaultAnimationResolver,
       }),
     }),
   });

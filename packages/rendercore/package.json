@@ -31,7 +31,7 @@
     "README.md"
   ],
   "scripts": {
-    "prepare:deps": "pnpm --filter @slotclientengine/logiccore build && pnpm --filter @slotclientengine/pixiani build",
+    "prepare:deps": "pnpm --filter @slotclientengine/logiccore build && pnpm --filter @slotclientengine/pixiani build && pnpm --filter @slotclientengine/vnicore build",
     "build": "pnpm run prepare:deps && tsc -p tsconfig.build.json",
     "generate:symbol-state-textures": "node ./scripts/generate-symbol-state-textures.mjs",
     "lint": "eslint .",
@@ -43,6 +43,7 @@
   "dependencies": {
     "@slotclientengine/logiccore": "workspace:*",
     "@slotclientengine/pixiani": "workspace:*",
+    "@slotclientengine/vnicore": "workspace:*",
     "pixi.js": "^8.1.6"
   },
   "devDependencies": {

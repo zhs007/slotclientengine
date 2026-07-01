@@ -312,6 +312,62 @@ describe("buildgamestatic YAML loader", () => {
       ),
     ).toThrow(/宽泛 \*\.png glob/);
   });
+
+  it("validates optional VNI symbol animation globs", () => {
+    const root = createFixtureRoot();
+    const valid = parseGameStaticYamlValue(
+      {
+        ...createYamlObject(),
+        skins: {
+          "1": {
+            ...createYamlObject().skins["1"],
+            symbols: {
+              ...createYamlObject().skins["1"].symbols,
+              vniProjectGlob: "assets/game003-s1/*-wins.json",
+              vniAssetGlob: "assets/game003-s1/assets/*.{png,jpg,jpeg,webp}",
+            },
+          },
+        },
+      },
+      { rootDir: root, inputPath: "game.yaml" },
+    );
+
+    expect(valid.skins["1"].symbols).toMatchObject({
+      vniProjectGlob: "assets/game003-s1/*-wins.json",
+      vniAssetGlob: "assets/game003-s1/assets/*.{png,jpg,jpeg,webp}",
+    });
+
+    for (const [field, value, pattern] of [
+      ["vniProjectGlob", "assets/**/*.json", /递归 glob/],
+      ["vniProjectGlob", "assets/game003-s1/*.txt", /JSON glob/],
+      ["vniProjectGlob", "assets/*-wins.json", /仓库根级目录/],
+      ["vniAssetGlob", "assets/game003-s1/assets/*.{png,gif}", /图片资源/],
+      [
+        "vniAssetGlob",
+        "assets/game003-s1/assets/**/*.{png,jpg,jpeg,webp}",
+        /递归 glob/,
+      ],
+      ["vniAssetGlob", "assets/*.{png,jpg,jpeg,webp}", /仓库根级目录/],
+    ] as const) {
+      expect(() =>
+        parseGameStaticYamlValue(
+          {
+            ...createYamlObject(),
+            skins: {
+              "1": {
+                ...createYamlObject().skins["1"],
+                symbols: {
+                  ...createYamlObject().skins["1"].symbols,
+                  [field]: value,
+                },
+              },
+            },
+          },
+          { rootDir: root, inputPath: "game.yaml" },
+        ),
+      ).toThrow(pattern);
+    }
+  });
 });
 
 function createFixtureRoot(): string {
@@ -321,6 +377,7 @@ function createFixtureRoot(): string {
     "apps/game003/config",
     "assets/gamecfg003",
     "assets/game003-s1",
+    "assets/game003-s1/assets",
   ]) {
     mkdirSync(join(root, dir), { recursive: true });
   }

@@ -76,6 +76,7 @@ export interface SymbolAni {
   readonly playback: SymbolPlaybackKind;
   reset(): void;
   update(deltaSeconds: number): SymbolAniUpdateResult;
+  destroy?(): void;
 }
 
 export interface SymbolAnimationContext {

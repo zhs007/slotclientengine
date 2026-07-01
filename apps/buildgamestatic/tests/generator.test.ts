@@ -105,6 +105,34 @@ describe("buildgamestatic generator", () => {
     ).rejects.toThrow(/game-loading\.generated\.ts/);
   });
 
+  it("generates optional VNI symbol module maps only when configured", async () => {
+    const root = createFixtureRoot();
+    appendVniSymbolGlobs(root);
+
+    const result = await generateGameStaticConfigFile({
+      rootDir: root,
+      inputPath: "apps/game003/config/game-static.yaml",
+      outPath: "apps/game003/src/generated/game-static.generated.ts",
+      gameId: "game003",
+      check: false,
+    });
+
+    expect(result.generated).toContain("game003Skin1VniProjectModules");
+    expect(result.generated).toContain("game003Skin1VniAssetModules");
+    expect(result.generated).toMatch(
+      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/game003-s1\/\*-wins\.json"/,
+    );
+    expect(result.generated).toMatch(
+      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/game003-s1\/assets\/\*\.{png,jpg,jpeg,webp}"/,
+    );
+    expect(result.generated).toContain(
+      "vniProjectModules: game003Skin1VniProjectModules",
+    );
+    expect(result.generated).toContain(
+      "vniAssetModules: game003Skin1VniAssetModules",
+    );
+  });
+
   it("requires --loading-out exactly when YAML loading resources are present", async () => {
     const root = createFixtureRoot();
     appendLoadingBlock(root);
@@ -141,6 +169,7 @@ function createFixtureRoot(): string {
     "apps/game003/src/generated",
     "assets/gamecfg003",
     "assets/game003-s1",
+    "assets/game003-s1/assets",
   ]) {
     mkdirSync(join(root, dir), { recursive: true });
   }
@@ -218,6 +247,23 @@ skins:
     "utf8",
   );
   return root;
+}
+
+function appendVniSymbolGlobs(root: string): void {
+  const yamlPath = join(root, "apps/game003/config/game-static.yaml");
+  writeFileSync(
+    yamlPath,
+    readFileSync(yamlPath, "utf8").replace(
+      "      pngGlob: assets/game003-s1/*.png\n",
+      [
+        "      pngGlob: assets/game003-s1/*.png",
+        "      vniProjectGlob: assets/game003-s1/*-wins.json",
+        "      vniAssetGlob: assets/game003-s1/assets/*.{png,jpg,jpeg,webp}",
+        "",
+      ].join("\n"),
+    ),
+    "utf8",
+  );
 }
 
 function appendLoadingBlock(root: string): void {

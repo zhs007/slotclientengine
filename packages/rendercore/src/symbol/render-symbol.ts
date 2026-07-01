@@ -145,6 +145,11 @@ export class RenderSymbol extends VisualEntity<void> {
     this.syncAniIfNeeded(before);
   }
 
+  override destroy(options?: Parameters<Container["destroy"]>[0]): void {
+    this.#currentAni.destroy?.();
+    super.destroy(options);
+  }
+
   private syncAniIfNeeded(previousKey: string): boolean {
     const snapshot = this.#stateMachine.getSnapshot();
     const nextKey = this.createAniKey(snapshot);
@@ -152,8 +157,10 @@ export class RenderSymbol extends VisualEntity<void> {
       return false;
     }
 
+    const nextAni = this.createCurrentAni();
+    this.#currentAni.destroy?.();
     this.#lastAniKey = nextKey;
-    this.#currentAni = this.createCurrentAni();
+    this.#currentAni = nextAni;
     this.#currentAni.reset();
     return true;
   }

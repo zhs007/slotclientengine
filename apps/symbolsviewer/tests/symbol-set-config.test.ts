@@ -76,6 +76,37 @@ const GAME002_S2_DISPLAYABLE_SYMBOLS = [
 ] as const;
 const GAME002_S2_MISSING_PAYTABLE_SYMBOLS = ["WM", "CM", "AF", "BN"] as const;
 const GAME002_S3_DISPLAYABLE_SYMBOLS = SYMBOLS002_DISPLAYABLE_SYMBOLS;
+const GAME003_S1_DISPLAYABLE_SYMBOLS = [
+  "WL",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "L1",
+  "L2",
+  "L3",
+  "L4",
+  "L5",
+  "CO",
+  "CL",
+  "SC",
+] as const;
+const GAME003_S1_MISSING_PAYTABLE_SYMBOLS = [
+  "BN",
+  "MT",
+  "JP1",
+  "JP2",
+  "JP3",
+  "JP4",
+  "CO1",
+  "CO2",
+  "CO3",
+  "MT2",
+  "MT3",
+  "MT5",
+  "BO",
+] as const;
 
 describe("symbolsviewer symbol set config", () => {
   it("declares explicit selectable symbol sets and rejects unknown ids", () => {
@@ -86,6 +117,7 @@ describe("symbolsviewer symbol set config", () => {
       "symbols003",
       "game002-s2",
       "game002-s3",
+      "game003-s1",
     ]);
     expect(getSymbolSetConfig("symbols").label).toBe("symbols");
     expect(getSymbolSetConfig("symbols").symbolScales).toEqual(
@@ -121,6 +153,12 @@ describe("symbolsviewer symbol set config", () => {
     expect(getSymbolSetConfig("game002-s3").symbolScales).toEqual(
       Object.fromEntries(
         GAME002_S3_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 1]),
+      ),
+    );
+    expect(getSymbolSetConfig("game003-s1").label).toBe("game003-s1");
+    expect(getSymbolSetConfig("game003-s1").symbolScales).toEqual(
+      Object.fromEntries(
+        GAME003_S1_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 1]),
       ),
     );
     expect(() => getSymbolSetConfig("missing")).toThrow(
@@ -325,5 +363,41 @@ describe("symbolsviewer symbol set config", () => {
       "symbols003",
     );
     expect(Object.keys(assets)).not.toContain("BN");
+  });
+
+  it("builds game003-s1 catalog and exposes manifest-driven VNI resources", () => {
+    const config = getSymbolSetConfig("game003-s1");
+    const assets = createStatefulSymbolAssetMapFromModules({
+      modules: config.modules,
+      manifest: config.manifest,
+      requiredStates: config.requiredStates,
+    });
+    const catalog = createSymbolsViewerCatalog(
+      config.rawGameConfig,
+      assets,
+      config.requiredStates,
+    );
+
+    expect(catalog.getValidation()).toEqual({
+      displayableSymbols: GAME003_S1_DISPLAYABLE_SYMBOLS,
+      ignoredPaytableSymbolsWithoutAssets: GAME003_S1_MISSING_PAYTABLE_SYMBOLS,
+      ignoredAssetsWithoutPaytable: [],
+    });
+    expect(Object.keys(assets)).toEqual([...GAME003_S1_DISPLAYABLE_SYMBOLS]);
+    expect(Object.keys(assets)).not.toEqual(
+      expect.arrayContaining([
+        "bg1",
+        "bg2",
+        "mainreelbg",
+        "conveyor1",
+        "conveyor2",
+      ]),
+    );
+    expect(Object.keys(config.vniProjectModules ?? {})).toEqual(
+      expect.arrayContaining([expect.stringContaining("L1-wins.json")]),
+    );
+    expect(Object.keys(config.vniAssetModules ?? {})).toEqual(
+      expect.arrayContaining([expect.stringContaining("assets/l1_asset")]),
+    );
   });
 });

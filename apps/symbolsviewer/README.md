@@ -4,7 +4,7 @@
 
 ## 资产
 
-viewer 支持六套显式 symbol set。每套都绑定自己的 runtime game config、PNG glob 和状态贴图 manifest；缺少 manifest、缺少必需状态图、manifest 引用不存在的 PNG、未知 manifest 字段或非法 `scale` 会直接报错。每个可展示 symbol 的显示缩放系数从 `symbol-state-textures.manifest.json` 的 `scale` 字段读取，仓库内生成物必须显式写出 `scale`，不要在 viewer 里维护第二份手写 scale 表。
+viewer 支持七套显式 symbol set。每套都绑定自己的 runtime game config、PNG glob 和状态贴图 manifest；缺少 manifest、缺少必需状态图、manifest 引用不存在的 PNG、未知 manifest 字段或非法 `scale` 会直接报错。每个可展示 symbol 的显示缩放系数从 `symbol-state-textures.manifest.json` 的 `scale` 字段读取，仓库内生成物必须显式写出 `scale`，不要在 viewer 里维护第二份手写 scale 表。
 
 第一套 `symbols` 使用仓库根目录资产：
 
@@ -76,6 +76,18 @@ pnpm --filter gengameconfig dev -- \
 
 第六套可展示 symbol 是 `WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`WM`、`CN`、`CM`、`CO`、`AF`。paytable 中缺图的 `BN` 不会进入展示列表。第六套 PNG 保留美术原始 `200 x 200` 文件，`spinBlur` / `disabled` 派生图与普通图尺寸一致；manifest scale 全部为 `1`，按 100% 逻辑尺寸展示。
 
+第七套 `game003-s1` 使用 `game003` 的 runtime game config 和第一版皮肤资源：
+
+- `assets/gamecfg003/gameconfig.json`
+- `assets/game003-s1/*.png`
+- `assets/game003-s1/*.spinBlur.png`
+- `assets/game003-s1/*.disabled.png`
+- `assets/game003-s1/symbol-state-textures.manifest.json`
+- `assets/game003-s1/*-wins.json`
+- `assets/game003-s1/assets/*.{png,jpg,jpeg,webp}`
+
+第七套可展示 symbol 是 `WL`、`H1`、`H2`、`H3`、`H4`、`H5`、`L1`、`L2`、`L3`、`L4`、`L5`、`CO`、`CL`、`SC`。背景、主转轮框、传送带和 VNI 内部 asset 不会被当成 symbol 展示。`game003-s1` 的 manifest scale 全部为 `1`，并由同一个 manifest 声明 `L1.win` 的 VNI 动画；viewer 只把 manifest、VNI project modules 和 VNI asset modules 传给 `rendercore`，不在 app 内硬编码 `L1` 或 VNI 播放细节。
+
 `SC`、`RS`、`X2`、`X5`、`X10` 使用拆层资源作为普通态来源：
 
 - `SC`: `SC-0.png`、`SC-1-0.png`、`SC-2.png`；其中 layer `1` 还有 `SC-1-0.png` 到 `SC-1-4.png` 五帧 keyframes
@@ -141,12 +153,12 @@ pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --i
 - `appear`: layer `0` 不动，layer `1` 缩放到约 `1.2` 并扫光。
 - `win`: layer `0` 不动，layer `1` 扫光并缩放到约 `1.2`。
 
-`symbols001`、`symbols002`、`symbols003`、`game002-s2` 和 `game002-s3` 的所有可展示 symbol：
+`symbols001`、`symbols002`、`symbols003`、`game002-s2`、`game002-s3` 和 `game003-s1` 的所有可展示 symbol：
 
 - `appear`: 主普通图保持原始 scale，普通图后方额外出现一张半透明普通图副本，副本放大到约 `1.6` 后消退。
-- `win`: 使用默认单图扫光效果。
+- `win`: 默认使用单图扫光效果；`game003-s1` 的 `L1.win` 由 manifest 驱动播放 `assets/game003-s1/L1-wins.json` 对应的 VNI 动画。
 
-动画配置位于 `src/symbol-animation-config.ts`，执行和参数校验由 `@slotclientengine/rendercore` 的 named animation resolver 完成。
+动画配置位于 `src/symbol-animation-config.ts`，执行和参数校验由 `@slotclientengine/rendercore` 的 resolver 完成。manifest 解析、scale map、stateful asset map 和 VNI animation resource 组装也来自 `@slotclientengine/rendercore`，viewer 只负责选择资源集合和展示状态。
 
 ## 运行
 
@@ -159,7 +171,7 @@ pnpm --filter symbolsviewer dev -- --host 0.0.0.0
 第一屏就是状态展示工具：
 
 - 顶部工具栏可播放、暂停、进入下一状态、重置和切换默认 stable 状态。
-- 顶部 `Set` selector 可在 `symbols`、`symbols001`、`symbols002`、`symbols003`、`game002-s2` 和 `game002-s3` 之间切换；切换时会重建 catalog、Pixi symbol 和状态序列。
+- 顶部 `Set` selector 可在 `symbols`、`symbols001`、`symbols002`、`symbols003`、`game002-s2`、`game002-s3` 和 `game003-s1` 之间切换；切换时会重建 catalog、Pixi symbol 和状态序列。
 - 右侧序列区可增加、移除、上移、下移状态。
 - `stable` 状态可设置停留秒数。
 - `appear` 和 `win` 是单次状态，等待全部图标播放完成后进入下一步。
@@ -202,4 +214,8 @@ PC 横屏建议使用 `1280x720` 或更大视口确认：
 - 切换到 `game002-s3` 后，`WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`WM`、`CN`、`CM`、`CO`、`AF` 全部可见，`BN` 不显示。
 - `game002-s3` 的 12 个图标使用 manifest 中的 `1` 缩放系数展示，并按当前舞台宽度自动换行，图标和 label 不重叠。
 - `game002-s3.appear` 中主图不缩放，图后半透明副本放大消退；`win` 使用默认单图扫光效果，`spinBlur` 显示纵向模糊图，`disabled` 显示灰色图。
-- 连续执行 `symbols -> symbols001 -> symbols002 -> symbols003 -> game002-s2 -> game002-s3 -> symbols` 至少 3 次，旧 symbol、旧状态面板和旧 Pixi 对象不残留，浏览器 console 无错误。
+- 切换到 `game003-s1` 后，`WL`、`H1`、`H2`、`H3`、`H4`、`H5`、`L1`、`L2`、`L3`、`L4`、`L5`、`CO`、`CL`、`SC` 全部可见。
+- `game003-s1` 的 14 个图标使用 manifest 中的 `1` 缩放系数展示，并按当前舞台宽度自动换行，图标和 label 不重叠。
+- `game003-s1.L1.win` 播放 VNI 动画，其它 symbol 的 `win` 继续使用默认单图扫光效果。
+- `game003-s1.spinBlur` 显示纵向模糊图，`game003-s1.disabled` 显示灰色图。
+- 连续执行 `symbols -> symbols001 -> symbols002 -> symbols003 -> game002-s2 -> game002-s3 -> game003-s1 -> symbols` 至少 3 次，旧 symbol、旧状态面板和旧 Pixi 对象不残留，浏览器 console 无错误。

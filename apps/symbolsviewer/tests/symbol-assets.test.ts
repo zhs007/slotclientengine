@@ -56,7 +56,7 @@ describe("symbolsviewer assets", () => {
       requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
     });
 
-    expect(Object.keys(assets)).toEqual(["S00", "SX"]);
+    expect(Object.keys(assets)).toEqual(["S00"]);
     expect(Object.keys(assets)).not.toContain("S00.spinBlur");
     expect(assets).toEqual({
       S00: {
@@ -65,10 +65,6 @@ describe("symbolsviewer assets", () => {
           spinBlur: "/assets/S00.spinBlur.png",
           disabled: "/assets/S00.disabled.png",
         },
-      },
-      SX: {
-        normal: "/assets/SX.png",
-        states: {},
       },
     });
   });
@@ -295,7 +291,7 @@ describe("symbolsviewer assets", () => {
         "X10",
       ],
       ignoredPaytableSymbolsWithoutAssets: ["BN"],
-      ignoredAssetsWithoutPaytable: ["CO", "SX"],
+      ignoredAssetsWithoutPaytable: [],
     });
     expect(catalog.getTextureSet("SC").normal).toMatchObject({
       kind: "layered",

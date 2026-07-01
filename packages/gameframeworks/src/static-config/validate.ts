@@ -120,15 +120,30 @@ function assertSymbolsConfig(
   label: string,
 ): asserts value is SlotGameStaticSymbolsConfig {
   const record = assertRecord(value, label);
-  assertKeys(record, label, [
-    "manifest",
-    "pngModules",
-    "emptySymbols",
-    "requireExplicitScale",
-    "requiredStates",
-  ]);
+  assertKeys(
+    record,
+    label,
+    [
+      "manifest",
+      "pngModules",
+      "vniProjectModules",
+      "vniAssetModules",
+      "emptySymbols",
+      "requireExplicitScale",
+      "requiredStates",
+    ],
+    {
+      optional: ["vniProjectModules", "vniAssetModules"],
+    },
+  );
   assertRecord(record.manifest, `${label}.manifest`);
   assertStringRecord(record.pngModules, `${label}.pngModules`);
+  if (record.vniProjectModules !== undefined) {
+    assertRecord(record.vniProjectModules, `${label}.vniProjectModules`);
+  }
+  if (record.vniAssetModules !== undefined) {
+    assertStringRecord(record.vniAssetModules, `${label}.vniAssetModules`);
+  }
   assertUniqueStrings(
     assertStringArray(record.emptySymbols, `${label}.emptySymbols`, {
       nonEmpty: false,

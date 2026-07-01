@@ -692,6 +692,9 @@ importers:
       '@slotclientengine/pixiani':
         specifier: workspace:*
         version: link:../pixiani
+      '@slotclientengine/vnicore':
+        specifier: workspace:*
+        version: link:../vnicore
       pixi.js:
         specifier: ^8.1.6
         version: 8.17.1
