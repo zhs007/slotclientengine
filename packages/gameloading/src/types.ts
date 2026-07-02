@@ -20,6 +20,7 @@ export type GameLoadingResourceKind =
 export interface GameLoadingOptions<TPrepareResult = unknown> {
   readonly root: HTMLElement;
   readonly resources: readonly GameLoadingResource[];
+  readonly maxConcurrentResources?: number;
   readonly onBeforeComplete: (
     context: GameLoadingCompleteContext,
   ) => Promise<TPrepareResult> | TPrepareResult;

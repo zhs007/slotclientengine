@@ -8,6 +8,8 @@ import {
 } from "./loading-resources.js";
 import "./styles.css";
 
+const GAME003_LOADING_MAX_CONCURRENT_RESOURCES = 4;
+
 const root = document.getElementById("app");
 if (!root) {
   throw new Error("Missing #app root.");
@@ -27,6 +29,7 @@ const loading = createGameLoading<{
   readonly prepared: Game003PreparedLoadingSessionLike;
 }>({
   root: loadingHost,
+  maxConcurrentResources: GAME003_LOADING_MAX_CONCURRENT_RESOURCES,
   resources: createGame003LoadingResources(),
   onBeforeComplete: async ({ loadedResources }) => {
     const runtimeModule = readGame003RuntimeModule(loadedResources);
