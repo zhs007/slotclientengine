@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const APP_ROOT = process.cwd();
+const REPO_ROOT = resolve(APP_ROOT, "../..");
 
 describe("game003 source boundary", () => {
   it("depends on gameframeworks and rendercore without direct live/UI/logic packages", () => {
@@ -74,6 +75,18 @@ describe("game003 source boundary", () => {
     expect(bgBarSource).toMatch(/slotRectsInConveyor/);
     expect(bgBarSource).not.toMatch(/height\s*\/\s*5/);
     expect(bgBarSource).not.toMatch(/width\s*\/\s*5/);
+  });
+
+  it("keeps minecart interaction semantics out of shared packages", () => {
+    const sharedSource = [
+      readSourceTree(join(REPO_ROOT, "packages/rendercore/src")),
+      readSourceTree(join(REPO_ROOT, "packages/logiccore/src")),
+      readSourceTree(join(REPO_ROOT, "packages/gameframeworks/src")),
+    ].join("\n");
+
+    expect(sharedSource).not.toMatch(
+      /minecart|Minecart|game003MinecartInteraction|game003-minecart/,
+    );
   });
 
   it("keeps L1-L5 VNI animation selection out of win playback business code", () => {

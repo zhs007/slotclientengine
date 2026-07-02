@@ -50,6 +50,7 @@ const REQUIRED_SCENE_ASSETS = Object.freeze([
   },
   { pattern: /^conveyor1-[A-Za-z0-9_-]+\.png$/, label: "conveyor1-*.png" },
   { pattern: /^conveyor2-[A-Za-z0-9_-]+\.png$/, label: "conveyor2-*.png" },
+  { pattern: /^minecart-[A-Za-z0-9_-]+\.png$/, label: "minecart-*.png" },
 ]);
 
 const SENSITIVE_PATTERNS = Object.freeze([
@@ -228,6 +229,11 @@ function verifyAssets(assetNames) {
       `${symbol}.disabled.png`,
     );
   }
+  assertSourceAssetBundled(
+    distAssetHashes,
+    join(SOURCE_SYMBOL_ASSET_ROOT, "minecart.png"),
+    "minecart.png",
+  );
 }
 
 function verifyEntryChunkIsLight(entryChunkPath) {

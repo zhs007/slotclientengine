@@ -5,6 +5,7 @@ import { createGame003BgBarLayout } from "../src/bg-bar-layout.js";
 import {
   createGame003BgBarRuntime,
   GAME003_BG_BAR_SHIFT_DURATION_SECONDS,
+  GAME003_BG_BAR_TERMINAL_WIN_DURATION_SECONDS,
 } from "../src/bg-bar-runtime.js";
 import type { Game003BgBarSpinPlan } from "../src/bg-bar-sequence.js";
 import { createGame003Layout } from "../src/game-layout.js";
@@ -61,7 +62,12 @@ describe("game003 bg-bar runtime", () => {
     expectSymbolPosition(runtime, 3, 142, 270);
     expectSymbolPosition(runtime, 4, 142, 138);
 
-    expect(runtime.update(0.58)).toEqual({ completed: true });
+    expect(
+      runtime.update(GAME003_BG_BAR_TERMINAL_WIN_DURATION_SECONDS),
+    ).toEqual({
+      completed: true,
+      terminalFeatureCompleted: "normal",
+    });
     expect(runtime.isPlaying()).toBe(false);
     expect(runtime.getSnapshot()).toMatchObject({
       phase: "idle",
@@ -80,7 +86,13 @@ describe("game003 bg-bar runtime", () => {
     const runtime = createRuntime();
     runtime.startSpin(createPlan(["normal", "wild", "wild", "wild", "up"]));
     runtime.update(GAME003_BG_BAR_SHIFT_DURATION_SECONDS);
-    runtime.update(0.58);
+    expect(
+      runtime.update(GAME003_BG_BAR_TERMINAL_WIN_DURATION_SECONDS),
+    ).toEqual({
+      completed: true,
+      terminalFeatureCompleted: "normal",
+    });
+    expect(runtime.update(0)).toEqual({ completed: true });
 
     runtime.startSpin(createPlan(["normal", "wild", "wild", "wild", "up"]));
     expect(runtime.getSnapshot()).toMatchObject({
@@ -94,7 +106,12 @@ describe("game003 bg-bar runtime", () => {
       ],
     });
     runtime.update(GAME003_BG_BAR_SHIFT_DURATION_SECONDS);
-    runtime.update(0.58);
+    expect(
+      runtime.update(GAME003_BG_BAR_TERMINAL_WIN_DURATION_SECONDS),
+    ).toEqual({
+      completed: true,
+      terminalFeatureCompleted: "normal",
+    });
 
     expect(() => runtime.update(Number.NaN)).toThrow(/finite non-negative/);
     runtime.startSpin(createPlan(["wild", "wild", "wild", "up", "normal"]));

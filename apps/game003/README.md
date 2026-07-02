@@ -15,6 +15,7 @@
 - 主转轮框：`assets/game003-s1/mainreelbg.png`
 - 横版传送带：`assets/game003-s1/conveyor1.png`
 - 竖版传送带：`assets/game003-s1/conveyor2.png`
+- 矿车互动资源：`assets/game003-s1/minecart.png`
 - `bg-bar` 独立 symbol manifest：`assets/game003-s1/bg-bar-symbol-state-textures.manifest.json`
 - `bg-bar` symbol 资源：`assets/game003-s1/wild.png`、`assets/game003-s1/up.png`；`normal` 是 manifest 声明的透明 symbol，不使用透明 PNG。
 - `L1`-`L5` 中奖 VNI project：`assets/game003-s1/L1-wins.json` 到 `assets/game003-s1/L5-wins.json`
@@ -58,6 +59,10 @@ CI=true pnpm --filter game003 check:static-config
 `skins."1".winAmount` 配置中奖金额动画的显示规则、layout anchor、阈值和 VNI tier 资源。金额输入仍来自 live/GMI 的服务器整数；当前显示 formatter 与 framework HUD 共用 `formatServerUsdAmount(...)`，所以 `100` 显示为 `$1.00`。big/super/mega 的 project 和 assets 只属于 `assets/game003-s1/win-amount`，不要混入 symbol VNI manifest 或 `assets/game003-s1/assets`。
 
 `skins."1".featureBars.bgBar` 配置 `bg-bar` 传送带展示。它只属于 `game003` app 层：组件名固定为 `bg-bar`，feature 只允许 `normal`、`wild`、`up`，队列长度固定 5，可见数量固定 4，终点格固定 `slot 4`。`symbols.manifest` 指向独立的 `bg-bar-symbol-state-textures.manifest.json`，`requiredStates` 为空，`normal` 通过 manifest 的 `{ kind: "transparent", width: 172, height: 158 }` 声明稳定空图标，`wild.png` 为 `172 x 158`，`up.png` 为 `172 x 130`。这些尺寸漂移时运行时会显式失败。
+
+`skins."1".appExtensions.game003MinecartInteraction` 配置 `bg-bar` 终点后的矿车互动。`appExtensions` 是 shared 静态配置层的通用透传对象，`gameframeworks` 和 `buildgamestatic` 不理解 `minecart` 语义；所有矿车字段都在 `apps/game003` app 层严格解析。`loadingResourceId` 固定为 `game003-minecart`，必须能在 `game-loading.generated.ts` 中找到 `assets/game003-s1/minecart.png` 的 URL；`imageSize` 当前为 `369 x 252`，加载后的 Pixi texture 尺寸不一致会显式失败。
+
+矿车 layout 坐标基准是当前 art 像素：`stopOffsetFromReelAreaBottomCenter` 相对主转轮可见区底部中心，`cartPivotInImage` 和 `payloadAnchorInImage` 相对 `minecart.png` 左上角。横屏和竖屏各自配置停点和图片内 anchor，运行时从当前 `visibleRect` 推导屏幕外起点，不写死 viewport 坐标。当前时间预算为 `bg-bar shift 0.28s + terminal win 0.24s + cart rush 0.38s + payload fly 0.36s = 1.26s`，必须小于主转轮基础落停时间；不能通过延长 `baseDurationMs`、`speedSymbolsPerSecond`、`minimumSpinCycles`、`startDelayMs` 或 `stopDelayMs` 来掩盖节奏问题。
 
 ## Symbol VNI 动画
 
@@ -159,7 +164,7 @@ http://127.0.0.1:5208/?skin=1&token=TOKEN&businessid=guest&clienttype=web&jurisd
 
 本轮 `features` 的 5 个值在 spin 开始时立即交给 `apps/game003/src/bg-bar-runtime.ts`。shift 映射固定为：`features[0]` 从 `slot 3` 移到 `slot 4` 并播放终点 `win` 后消失；`features[1]`、`features[2]`、`features[3]` 分别从 `slot 2/1/0` 移到 `slot 3/2/1`；`features[4]` 从传送带外进入 `slot 0` 并播放 `appear`。完成后静止队列为 `[features[1], features[2], features[3], features[4]]`，仅作为当前视觉状态；下一次 spin 以服务端新下发的本轮 `features` 为权威，客户端会重建传送带动画，不因两轮 feature 队列不同而失败。
 
-`game-adapter.ts` 在 `playSpin()` 启动主转轮的同时启动 `bg-bar`，不会等主转轮落停。`playSpin()` 的 resolve 条件包含主转轮落停与 target scene 校验、`bg-bar` 终点 win、`bg-wins` symbol sequence 和中奖金额动画；只要其中任一仍在播放，framework 就不会进入后续 collect / idle。
+`game-adapter.ts` 在 `playSpin()` 启动主转轮的同时启动 `bg-bar`，不会等主转轮落停。`features[0]` 到达终点、终点 `win` 播完并隐藏后，只有 `features[0]` 为 `wild` 或 `up` 时才触发矿车从屏幕外冲入，停在主转轮区下方轨道并做 overshoot / 倾翻 / 回正，随后车厢内的同一个 feature symbol 垂直飞向主转轮中心并淡出。`normal` 只播放并完成 `bg-bar` 终点流程，不启动矿车、不播放透明空载矿车。`playSpin()` 的 resolve 条件包含主转轮落停与 target scene 校验、`bg-bar` 终点 win、非 normal 时的矿车互动、`bg-wins` symbol sequence 和中奖金额动画；只要其中任一仍在播放，framework 就不会进入后续 collect / idle。
 
 ## 中奖播放
 

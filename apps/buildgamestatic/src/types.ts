@@ -102,6 +102,7 @@ export interface GameStaticYamlSkinConfig {
     Record<string, GameStaticYamlFeatureBarConfig>
   >;
   readonly winAmount?: GameStaticYamlWinAmountConfig;
+  readonly appExtensions?: Readonly<Record<string, unknown>>;
 }
 
 export interface GameStaticYamlSymbolsConfig {

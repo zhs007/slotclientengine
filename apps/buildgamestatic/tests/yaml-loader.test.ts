@@ -240,6 +240,77 @@ describe("buildgamestatic YAML loader", () => {
     });
   });
 
+  it("allows skin-level appExtensions while preserving skin field validation", () => {
+    const root = createFixtureRoot();
+    const config = parseGameStaticYamlValue(
+      {
+        ...createYamlObject(),
+        skins: {
+          "1": {
+            ...createYamlObject().skins["1"],
+            appExtensions: {
+              customFeature: {
+                enabled: true,
+                offset: { x: 12, y: 24 },
+              },
+            },
+          },
+        },
+      },
+      { rootDir: root, inputPath: "game.yaml" },
+    );
+
+    expect(config.skins["1"].appExtensions).toEqual({
+      customFeature: {
+        enabled: true,
+        offset: { x: 12, y: 24 },
+      },
+    });
+    expect(() =>
+      parseGameStaticYamlValue(
+        {
+          ...createYamlObject(),
+          skins: {
+            "1": {
+              ...createYamlObject().skins["1"],
+              appExtensions: null,
+            },
+          },
+        },
+        { rootDir: root, inputPath: "game.yaml" },
+      ),
+    ).toThrow(/appExtensions 必须是对象/);
+    expect(() =>
+      parseGameStaticYamlValue(
+        {
+          ...createYamlObject(),
+          skins: {
+            "1": {
+              ...createYamlObject().skins["1"],
+              appExtensions: [],
+            },
+          },
+        },
+        { rootDir: root, inputPath: "game.yaml" },
+      ),
+    ).toThrow(/appExtensions 必须是对象/);
+    expect(() =>
+      parseGameStaticYamlValue(
+        {
+          ...createYamlObject(),
+          skins: {
+            "1": {
+              ...createYamlObject().skins["1"],
+              appExtensions: {},
+              extra: true,
+            },
+          },
+        },
+        { rootDir: root, inputPath: "game.yaml" },
+      ),
+    ).toThrow(/未知字段 "extra"/);
+  });
+
   it("validates loading resources when present", () => {
     const root = createFixtureRoot();
     const config = parseGameStaticYamlValue(
@@ -558,6 +629,7 @@ function createFixtureRoot(): string {
     "assets/game003-s1/mainreelbg.png",
     "assets/game003-s1/conveyor1.png",
     "assets/game003-s1/conveyor2.png",
+    "assets/game003-s1/minecart.png",
   ]) {
     writeFileSync(join(root, file), "{}", "utf8");
   }

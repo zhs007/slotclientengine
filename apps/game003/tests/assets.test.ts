@@ -12,6 +12,7 @@ import {
   loadGame003BgBarSymbolTextures,
   loadGame003SymbolTextures,
 } from "../src/assets.js";
+import { getGame003GeneratedLoadingResourceUrl } from "../src/generated-loading-url.js";
 import { createTestTexture } from "../../../packages/rendercore/tests/reel/helpers.js";
 
 describe("game003 symbol assets", () => {
@@ -238,6 +239,15 @@ describe("game003 symbol assets", () => {
         },
       }),
     ).rejects.toThrow(/wild size must be 172 x 158/);
+  });
+
+  it("looks up the generated minecart loading URL without fallback", () => {
+    expect(getGame003GeneratedLoadingResourceUrl("game003-minecart")).toMatch(
+      /minecart/,
+    );
+    expect(() =>
+      getGame003GeneratedLoadingResourceUrl("game003-missing"),
+    ).toThrow(/was not generated/);
   });
 });
 

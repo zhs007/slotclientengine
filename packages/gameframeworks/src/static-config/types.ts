@@ -163,6 +163,7 @@ export interface SlotGameStaticSkinConfig {
     Record<string, SlotGameStaticFeatureBarConfig>
   >;
   readonly winAmount?: SlotGameStaticWinAmountConfig;
+  readonly appExtensions?: Readonly<Record<string, unknown>>;
 }
 
 export type SlotGameStaticFeatureBarMovement = "down" | "right";

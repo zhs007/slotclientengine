@@ -123,9 +123,9 @@ function assertSkinConfig(
   assertKeys(
     record,
     label,
-    ["label", "symbols", "art", "featureBars", "winAmount"],
+    ["label", "symbols", "art", "featureBars", "winAmount", "appExtensions"],
     {
-      optional: ["featureBars", "winAmount"],
+      optional: ["featureBars", "winAmount", "appExtensions"],
     },
   );
   assertNonEmptyString(record.label, `${label}.label`);
@@ -136,6 +136,9 @@ function assertSkinConfig(
   }
   if (record.winAmount !== undefined) {
     assertWinAmountConfig(record.winAmount, `${label}.winAmount`);
+  }
+  if (record.appExtensions !== undefined) {
+    assertRecord(record.appExtensions, `${label}.appExtensions`);
   }
 }
 

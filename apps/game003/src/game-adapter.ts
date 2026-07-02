@@ -28,6 +28,12 @@ import {
   createGame003ReelLayerLayout,
   type Game003Layout,
 } from "./game-layout.js";
+import { getGame003GeneratedLoadingResourceUrl } from "./generated-loading-url.js";
+import { createGame003MinecartInteractionLayout } from "./minecart-interaction-layout.js";
+import {
+  createGame003MinecartInteractionRuntime,
+  type Game003MinecartInteractionRuntime,
+} from "./minecart-interaction-runtime.js";
 import {
   DEFAULT_GAME003_REEL_CONFIG,
   assertGame003ReelVisualMatchesTarget,
@@ -75,6 +81,7 @@ export interface Game003StaticTextures {
   readonly mainReelBackground: Texture;
   readonly landscapeConveyor: Texture;
   readonly portraitConveyor: Texture;
+  readonly minecart: Texture;
 }
 
 export interface Game003AdapterOptions {
@@ -87,6 +94,10 @@ export interface Game003AdapterOptions {
   readonly createBgBarRuntime?: (
     symbolAssets: SymbolAssetMap,
   ) => Game003BgBarRuntime;
+  readonly createMinecartInteractionRuntime?: (
+    minecartTexture: Texture,
+    symbolAssets: SymbolAssetMap,
+  ) => Game003MinecartInteractionRuntime;
   readonly createWinAmountPlayer?: (
     layout: Game003Layout,
   ) => WinAmountAnimationPlayer;
@@ -102,6 +113,8 @@ interface PendingAnimation {
   winSequenceComplete: boolean;
   winAmountExpected: boolean;
   bgBarExpected: boolean;
+  minecartExpected: boolean;
+  minecartStarted: boolean;
   betAmountRaw: number;
   winAmountRaw: number;
   resolve(): void;
@@ -132,6 +145,10 @@ class Game003PixiAdapter implements SlotGameAdapter {
   readonly #createBgBarRuntime: (
     symbolAssets: SymbolAssetMap,
   ) => Game003BgBarRuntime;
+  readonly #createMinecartInteractionRuntime: (
+    minecartTexture: Texture,
+    symbolAssets: SymbolAssetMap,
+  ) => Game003MinecartInteractionRuntime;
   readonly #createWinAmountPlayer: (
     layout: Game003Layout,
   ) => WinAmountAnimationPlayer;
@@ -141,6 +158,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
   #worldSprites: Game003WorldSprites | null = null;
   #runtime: Game003ReelRuntime | null = null;
   #bgBarRuntime: Game003BgBarRuntime | null = null;
+  #minecartRuntime: Game003MinecartInteractionRuntime | null = null;
   #winAmountPlayer: WinAmountAnimationPlayer | null = null;
   #pendingAnimation: PendingAnimation | null = null;
   #unsubscribeViewport: (() => void) | null = null;
@@ -180,6 +198,15 @@ class Game003PixiAdapter implements SlotGameAdapter {
           config: this.#skin.bgBar,
           symbolAssets,
         }));
+    this.#createMinecartInteractionRuntime =
+      options.createMinecartInteractionRuntime ??
+      ((minecartTexture, symbolAssets) =>
+        createGame003MinecartInteractionRuntime({
+          config: this.#skin.minecartInteraction,
+          bgBarConfig: this.#skin.bgBar,
+          minecartTexture,
+          symbolAssets,
+        }));
     this.#createWinAmountPlayer =
       options.createWinAmountPlayer ?? createGame003WinAmountPlayer;
   }
@@ -215,6 +242,16 @@ class Game003PixiAdapter implements SlotGameAdapter {
     bgBarRuntime.applyLayout(
       createGame003BgBarLayout({ layout, config: this.#skin.bgBar }),
     );
+    const minecartRuntime = this.#createMinecartInteractionRuntime(
+      staticTextures.minecart,
+      bgBarSymbolTextures,
+    );
+    minecartRuntime.applyLayout(
+      createGame003MinecartInteractionLayout({
+        layout,
+        config: this.#skin.minecartInteraction,
+      }),
+    );
     const winAmountPlayer = this.#createWinAmountPlayer(layout);
 
     const worldLayer = new Container();
@@ -225,6 +262,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
       bgBarRuntime.container,
       worldSprites.mainReelBackground,
       runtime.mainReelsLayer,
+      minecartRuntime.container,
       winAmountPlayer.container,
     );
     app.stage.addChild(worldLayer);
@@ -236,6 +274,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#worldSprites = worldSprites;
     this.#runtime = runtime;
     this.#bgBarRuntime = bgBarRuntime;
+    this.#minecartRuntime = minecartRuntime;
     this.#winAmountPlayer = winAmountPlayer;
     const requestWinAmountDismiss = () => {
       this.#winAmountPlayer?.requestDismiss();
@@ -272,7 +311,10 @@ class Game003PixiAdapter implements SlotGameAdapter {
     );
     const winQueue = createGame003WinSymbolSequence(logic, targetScene);
     const bgBarPlan = createGame003BgBarSpinPlan(logic);
+    const minecartExpected =
+      bgBarPlan !== null && bgBarPlan.features[0] !== "normal";
     runtime.spinToScene(targetScene, "spin main scene");
+    this.#requireMinecartRuntime().reset();
     if (bgBarPlan) {
       this.#requireBgBarRuntime().startSpin(bgBarPlan);
     }
@@ -289,6 +331,8 @@ class Game003PixiAdapter implements SlotGameAdapter {
         winSequenceComplete: winQueue.length === 0,
         winAmountExpected: logic.getTotalWin() > 0,
         bgBarExpected: bgBarPlan !== null,
+        minecartExpected,
+        minecartStarted: false,
         betAmountRaw,
         winAmountRaw: logic.getTotalWin(),
         resolve,
@@ -310,6 +354,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#app?.ticker.remove(this.#onTick);
     this.#app?.ticker.stop();
     this.#winAmountPlayer?.destroy();
+    this.#minecartRuntime?.destroy();
     this.#bgBarRuntime?.destroy();
     this.#app?.canvas.remove();
     this.#app?.destroy();
@@ -319,6 +364,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#worldSprites = null;
     this.#runtime = null;
     this.#bgBarRuntime = null;
+    this.#minecartRuntime = null;
     this.#winAmountPlayer = null;
   }
 
@@ -350,7 +396,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     }
     const result = runtime.update(deltaSeconds);
     if (pending.bgBarExpected) {
-      this.#requireBgBarRuntime().update(deltaSeconds);
+      this.#tickBgBarAndMinecart(deltaSeconds, pending);
     }
     if (!result.completed) {
       return;
@@ -400,9 +446,33 @@ class Game003PixiAdapter implements SlotGameAdapter {
       this.#requireWinAmountPlayer().update(deltaSeconds);
     }
     if (pending.bgBarExpected) {
-      this.#requireBgBarRuntime().update(deltaSeconds);
+      this.#tickBgBarAndMinecart(deltaSeconds, pending);
     }
     this.#completePendingIfReady(pending);
+  }
+
+  #tickBgBarAndMinecart(deltaSeconds: number, pending: PendingAnimation): void {
+    const bgBarResult = this.#requireBgBarRuntime().update(deltaSeconds);
+    if (bgBarResult.terminalFeatureCompleted !== undefined) {
+      if (bgBarResult.terminalFeatureCompleted !== "normal") {
+        this.#requireMinecartRuntime().start(
+          bgBarResult.terminalFeatureCompleted,
+        );
+        pending.minecartStarted = true;
+      }
+    }
+    if (
+      pending.minecartExpected &&
+      bgBarResult.completed &&
+      !pending.minecartStarted
+    ) {
+      throw new Error(
+        "game003 bg-bar completed without a terminal minecart feature event.",
+      );
+    }
+    if (pending.minecartStarted) {
+      this.#requireMinecartRuntime().update(deltaSeconds);
+    }
   }
 
   #startCurrentWinGroup(pending: PendingAnimation): void {
@@ -454,6 +524,12 @@ class Game003PixiAdapter implements SlotGameAdapter {
     if (pending.bgBarExpected && this.#requireBgBarRuntime().isPlaying()) {
       return;
     }
+    if (
+      pending.minecartExpected &&
+      (!pending.minecartStarted || this.#requireMinecartRuntime().isPlaying())
+    ) {
+      return;
+    }
     this.#completePending(pending);
   }
 
@@ -478,6 +554,13 @@ class Game003PixiAdapter implements SlotGameAdapter {
     return this.#bgBarRuntime;
   }
 
+  #requireMinecartRuntime(): Game003MinecartInteractionRuntime {
+    if (!this.#minecartRuntime) {
+      throw new Error("game003 adapter is not mounted.");
+    }
+    return this.#minecartRuntime;
+  }
+
   #applyViewport(viewport: SlotGameViewportSnapshot): void {
     if (
       !this.#app ||
@@ -485,7 +568,8 @@ class Game003PixiAdapter implements SlotGameAdapter {
       !this.#worldLayer ||
       !this.#worldSprites ||
       !this.#runtime ||
-      !this.#bgBarRuntime
+      !this.#bgBarRuntime ||
+      !this.#minecartRuntime
     ) {
       throw new Error("game003 adapter is not mounted.");
     }
@@ -503,6 +587,12 @@ class Game003PixiAdapter implements SlotGameAdapter {
     );
     this.#bgBarRuntime.applyLayout(
       createGame003BgBarLayout({ layout, config: this.#skin.bgBar }),
+    );
+    this.#minecartRuntime.applyLayout(
+      createGame003MinecartInteractionLayout({
+        layout,
+        config: this.#skin.minecartInteraction,
+      }),
     );
     this.#winAmountPlayer?.applyLayout(createGame003WinAmountLayout(layout));
   }
@@ -540,6 +630,7 @@ async function loadStaticTextures(
     mainReelBackground,
     landscapeConveyor,
     portraitConveyor,
+    minecart,
   ] = await Promise.all([
     loadTextureWithSize(
       "game003 skin 1 bg1.jpg",
@@ -566,6 +657,13 @@ async function loadStaticTextures(
       skin.portraitConveyorUrl,
       GAME003_ASSET_SIZE.portraitConveyor,
     ),
+    loadTextureWithSize(
+      "game003 skin 1 minecart.png",
+      getGame003GeneratedLoadingResourceUrl(
+        skin.minecartInteraction.loadingResourceId,
+      ),
+      skin.minecartInteraction.imageSize,
+    ),
   ]);
   return Object.freeze({
     landscapeBackground,
@@ -573,6 +671,7 @@ async function loadStaticTextures(
     mainReelBackground,
     landscapeConveyor,
     portraitConveyor,
+    minecart,
   });
 }
 

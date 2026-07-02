@@ -39,6 +39,7 @@ describe("game003 loading resources", () => {
         "game003-bg-bar-symbol-pngs:up.png",
         "game003-bg-bar-symbol-pngs:wild.png",
         "game003-bg-bar-symbol-manifest",
+        "game003-minecart",
         "game003-win-amount-vni-projects:bigwin.json",
         "game003-win-amount-vni-projects:superwin.json",
         "game003-win-amount-vni-projects:megawin.json",

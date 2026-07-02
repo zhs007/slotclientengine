@@ -94,6 +94,8 @@ describe("buildgamestatic generator", () => {
     expect(result.loadingGenerated).toContain(
       "assets/game003-s1/{conveyor1,conveyor2,mainreelbg}.png",
     );
+    expect(result.loadingGenerated).toContain("game003-minecart");
+    expect(result.loadingGenerated).toContain("assets/game003-s1/minecart.png");
     expect(result.loadingGenerated).not.toContain("rawGameConfig");
     await expect(
       generateGameStaticConfigFile({ ...options, check: true }),
@@ -181,6 +183,24 @@ describe("buildgamestatic generator", () => {
     );
   });
 
+  it("generates optional appExtensions without app-specific generator logic", async () => {
+    const root = createFixtureRoot();
+    appendAppExtensionsBlock(root);
+
+    const result = await generateGameStaticConfigFile({
+      rootDir: root,
+      inputPath: "apps/game003/config/game-static.yaml",
+      outPath: "apps/game003/src/generated/game-static.generated.ts",
+      gameId: "game003",
+      check: false,
+    });
+
+    expect(result.generated).toContain("appExtensions: Object.freeze");
+    expect(result.generated).toContain("customFeature");
+    expect(result.generated).toContain("offset");
+    expect(result.generated).not.toContain("minecart");
+  });
+
   it("requires --loading-out exactly when YAML loading resources are present", async () => {
     const root = createFixtureRoot();
     appendLoadingBlock(root);
@@ -236,6 +256,7 @@ function createFixtureRoot(): string {
     "assets/game003-s1/mainreelbg.png",
     "assets/game003-s1/conveyor1.png",
     "assets/game003-s1/conveyor2.png",
+    "assets/game003-s1/minecart.png",
   ]) {
     writeFileSync(join(root, file), "{}", "utf8");
   }
@@ -300,6 +321,22 @@ skins:
     "utf8",
   );
   return root;
+}
+
+function appendAppExtensionsBlock(root: string): void {
+  const yamlPath = join(root, "apps/game003/config/game-static.yaml");
+  writeFileSync(
+    yamlPath,
+    readFileSync(yamlPath, "utf8").replace(
+      "    art:\n",
+      `    appExtensions:
+      customFeature:
+        enabled: true
+        offset: { x: 12, y: 24 }
+    art:\n`,
+    ),
+    "utf8",
+  );
 }
 
 function appendFeatureBarsBlock(root: string): void {
@@ -442,6 +479,9 @@ loading:
     - id: game003-scene-parts
       glob: assets/game003-s1/{conveyor1,conveyor2,mainreelbg}.png
       weight: 6
+    - id: game003-minecart
+      path: assets/game003-s1/minecart.png
+      weight: 1
 `,
     "utf8",
   );

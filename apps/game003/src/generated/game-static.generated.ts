@@ -270,6 +270,39 @@ export const GAME003_STATIC_CONFIG = Object.freeze({
           ] as const),
         }),
       }),
+      appExtensions: Object.freeze({
+        game003MinecartInteraction: {
+          loadingResourceId: "game003-minecart",
+          imageSize: { width: 369, height: 252 },
+          timing: {
+            cartRushDurationSeconds: 0.38,
+            symbolFlyDurationSeconds: 0.36,
+            maxTotalBeforeReelStopSeconds: 1.3,
+          },
+          motion: {
+            overshootPixels: 34,
+            brakeTiltDegrees: 14,
+            reboundTiltDegrees: -8,
+          },
+          payload: { symbolScale: 0.72, fadeStartAlpha: 1, fadeEndAlpha: 0 },
+          layout: {
+            landscape: {
+              entrySide: "left",
+              offscreenMargin: 120,
+              stopOffsetFromReelAreaBottomCenter: { x: 0, y: 85 },
+              cartPivotInImage: { x: 184.5, y: 220 },
+              payloadAnchorInImage: { x: 184.5, y: 92 },
+            },
+            portrait: {
+              entrySide: "left",
+              offscreenMargin: 120,
+              stopOffsetFromReelAreaBottomCenter: { x: 0, y: 145 },
+              cartPivotInImage: { x: 184.5, y: 220 },
+              payloadAnchorInImage: { x: 184.5, y: 92 },
+            },
+          },
+        },
+      } as const),
     }),
   }),
 } as const satisfies SlotGameStaticConfig);

@@ -68,6 +68,9 @@ loading:
     - id: game003-bg-bar-symbol-manifest
       path: assets/game003-s1/bg-bar-symbol-state-textures.manifest.json
       weight: 1
+    - id: game003-minecart
+      path: assets/game003-s1/minecart.png
+      weight: 1
     - id: game003-win-amount-vni-projects
       glob: assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json
       weight: 3
@@ -131,6 +134,44 @@ skins:
               - { x: 390, y: 55, width: 153, height: 115 }
               - { x: 548, y: 55, width: 153, height: 115 }
               - { x: 706, y: 55, width: 153, height: 115 }
+    # appExtensions 是 app 层专属静态扩展。shared 包只透传对象，不理解 game003MinecartInteraction 语义。
+    # 这里只放美术、配置人员和发布流程可改的静态坐标与时间，不放 token、cookie、服务器真实轮带或玩家本次下注。
+    appExtensions:
+      game003MinecartInteraction:
+        loadingResourceId: game003-minecart
+        imageSize:
+          width: 369
+          height: 252
+        timing:
+          # 总互动 = bg-bar shift + 终点 win + 矿车冲入刹车 + payload 飞入淡出，必须早于主转轮停轴。
+          cartRushDurationSeconds: 0.38
+          symbolFlyDurationSeconds: 0.36
+          maxTotalBeforeReelStopSeconds: 1.3
+        motion:
+          overshootPixels: 34
+          brakeTiltDegrees: 14
+          reboundTiltDegrees: -8
+        payload:
+          symbolScale: 0.72
+          fadeStartAlpha: 1
+          fadeEndAlpha: 0
+        layout:
+          landscape:
+            entrySide: left
+            offscreenMargin: 120
+            # 停点坐标相对当前横屏主转轮可见区底部中心，单位是横屏 art 像素。
+            stopOffsetFromReelAreaBottomCenter: { x: 0, y: 85 }
+            # cartPivotInImage 是 minecart.png 图片内 pivot，按车轮落轨点校准；不是 CSS/viewport 坐标。
+            cartPivotInImage: { x: 184.5, y: 220 }
+            # payloadAnchorInImage 是车厢装载区中心，payload 起飞前会对齐到该图片内点。
+            payloadAnchorInImage: { x: 184.5, y: 92 }
+          portrait:
+            entrySide: left
+            offscreenMargin: 120
+            # 停点坐标相对当前竖屏主转轮可见区底部中心，按前景轨道校准。
+            stopOffsetFromReelAreaBottomCenter: { x: 0, y: 145 }
+            cartPivotInImage: { x: 184.5, y: 220 }
+            payloadAnchorInImage: { x: 184.5, y: 92 }
     # 横竖屏 art 适配。focusRect 坐标相对于对应完整背景 art。
     # focusRect 既是背景图上的重点区域，也是 game003 主转轴框和传送带的相对定位 anchor。
     # 坐标基准是完整背景 art，不是 CSS 像素、viewport 像素或裁切后的 visible rect。

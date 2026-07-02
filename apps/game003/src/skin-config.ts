@@ -13,6 +13,10 @@ import {
 } from "./assets.js";
 import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
 import {
+  getGame003MinecartInteractionConfig,
+  type Game003MinecartInteractionConfig,
+} from "./minecart-interaction-config.js";
+import {
   GAME003_SUPPORTED_SKINS,
   parseGame003SkinId,
   type Game003SkinId,
@@ -35,6 +39,7 @@ export interface Game003SkinConfig {
   readonly symbolScales: ReelSymbolScaleMap;
   readonly symbolAnimationResolver: SymbolAnimationResolver;
   readonly bgBar: Game003BgBarSkinConfig;
+  readonly minecartInteraction: Game003MinecartInteractionConfig;
 }
 
 export interface Game003BgBarSkinConfig {
@@ -124,6 +129,9 @@ const GAME003_SKIN_CONFIGS: Readonly<Record<Game003SkinId, Game003SkinConfig>> =
         }),
         layout: game003StaticSkin1BgBar.layout,
       }),
+      minecartInteraction: getGame003MinecartInteractionConfig(
+        game003StaticSkin1.appExtensions,
+      ),
     }),
   });
 

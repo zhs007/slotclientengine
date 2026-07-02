@@ -496,6 +496,15 @@ function renderSkinConfig(options: {
   readonly modulesName: string;
 }): readonly string[] {
   const { skin, names } = options;
+  const optionalBlocks = [
+    ...(skin.featureBars
+      ? [renderFeatureBarsConfig(skin.featureBars, names)]
+      : []),
+    ...(skin.winAmount ? [renderWinAmountConfig(skin.winAmount, names)] : []),
+    ...(skin.appExtensions
+      ? [renderAppExtensionsConfig(skin.appExtensions)]
+      : []),
+  ];
   return [
     `    ${quote(options.skinId)}: Object.freeze({`,
     `      label: ${quote(skin.label)},`,
@@ -531,12 +540,11 @@ function renderSkinConfig(options: {
     `        reelAreaInMainReelBackground: Object.freeze(${json(
       skin.art.reelAreaInMainReelBackground,
     )} as const)`,
-    `      })${skin.featureBars || skin.winAmount ? "," : ""}`,
-    ...(skin.featureBars
-      ? renderFeatureBarsConfig(skin.featureBars, names)
-      : []),
-    ...(skin.featureBars && skin.winAmount ? [","] : []),
-    ...(skin.winAmount ? renderWinAmountConfig(skin.winAmount, names) : []),
+    `      })${optionalBlocks.length > 0 ? "," : ""}`,
+    ...optionalBlocks.flatMap((block, index) => [
+      ...block,
+      ...(index < optionalBlocks.length - 1 ? [","] : []),
+    ]),
     "    }),",
   ];
 }
@@ -633,6 +641,14 @@ function renderWinAmountConfig(
     `          tiers: Object.freeze(${json(winAmount.animations.tiers)} as const)`,
     "        })",
     "      })",
+  ];
+}
+
+function renderAppExtensionsConfig(
+  appExtensions: NonNullable<GameStaticYamlSkinConfig["appExtensions"]>,
+): readonly string[] {
+  return [
+    `      appExtensions: Object.freeze(${json(appExtensions)} as const)`,
   ];
 }
 

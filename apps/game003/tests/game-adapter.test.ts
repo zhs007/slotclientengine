@@ -21,7 +21,10 @@ import type {
   Game003BgBarRuntime,
   Game003BgBarRuntimeSnapshot,
 } from "../src/bg-bar-runtime.js";
-import type { Game003BgBarSpinPlan } from "../src/bg-bar-sequence.js";
+import type {
+  Game003BgBarFeature,
+  Game003BgBarSpinPlan,
+} from "../src/bg-bar-sequence.js";
 import {
   createGame003Adapter,
   type Game003AdapterOptions,
@@ -33,6 +36,8 @@ import {
   GAME003_SKIN1_PORTRAIT_SCENE_PARTS,
   createGame003ReelLayout,
 } from "../src/game-layout.js";
+import type { Game003MinecartInteractionLayout } from "../src/minecart-interaction-layout.js";
+import type { Game003MinecartInteractionRuntime } from "../src/minecart-interaction-runtime.js";
 import { getGame003SkinConfig } from "../src/skin-config.js";
 
 describe("game003 adapter", () => {
@@ -66,6 +71,7 @@ describe("game003 adapter", () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();
     const bgBar = new FakeBgBarRuntime();
+    const minecart = new FakeMinecartRuntime();
     const context = createMountContext({ width: 1174, height: 2000 });
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
@@ -73,6 +79,7 @@ describe("game003 adapter", () => {
       loadSymbolTextures: async () => ({}),
       createRuntime: () => runtime.asRuntime(),
       createBgBarRuntime: () => bgBar.asRuntime(),
+      createMinecartInteractionRuntime: () => minecart.asRuntime(),
     });
 
     await adapter.mount(context);
@@ -95,6 +102,9 @@ describe("game003 adapter", () => {
       orientation: "portrait",
       movement: "right",
     });
+    expect(minecart.layoutCalls.at(-1)).toMatchObject({
+      orientation: "portrait",
+    });
 
     adapter.applyInitialState?.({ userInfo: {}, balance: 100 });
     expect(runtime.appliedScenes).toEqual([]);
@@ -114,6 +124,9 @@ describe("game003 adapter", () => {
     expect(bgBar.layoutCalls.at(-1)).toMatchObject({
       orientation: "landscape",
       movement: "down",
+    });
+    expect(minecart.layoutCalls.at(-1)).toMatchObject({
+      orientation: "landscape",
     });
     expect(fakeWinAmountPlayers.at(-1)?.layoutCalls).toHaveLength(2);
     expect(fakeApp.stage.children).toHaveLength(1);
@@ -197,10 +210,13 @@ describe("game003 adapter", () => {
     expect(runtime.currentScene).toEqual(GAME003_SPIN_SCENE);
   });
 
-  it("starts bg-bar immediately when spin GMI includes the bg-bar component", async () => {
+  it("skips minecart when terminal bg-bar feature is normal", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();
     const bgBar = new FakeBgBarRuntime();
+    const minecart = new FakeMinecartRuntime({
+      completeOnFirstUpdate: false,
+    });
     bgBar.completeNextUpdate = false;
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
@@ -208,6 +224,7 @@ describe("game003 adapter", () => {
       loadSymbolTextures: async () => ({}),
       createRuntime: () => runtime.asRuntime(),
       createBgBarRuntime: () => bgBar.asRuntime(),
+      createMinecartInteractionRuntime: () => minecart.asRuntime(),
     });
     await adapter.mount(createMountContext());
 
@@ -221,6 +238,8 @@ describe("game003 adapter", () => {
     expect(bgBar.startPlans).toHaveLength(1);
     expect(bgBar.startPlans[0]?.features).toEqual(GAME003_BG_BAR_FEATURES);
     expect(bgBar.playing).toBe(true);
+    expect(minecart.resetCount).toBe(1);
+    expect(minecart.startFeatures).toEqual([]);
     expect(resolved).toBe(false);
 
     runtime.completeNextUpdate = true;
@@ -229,6 +248,94 @@ describe("game003 adapter", () => {
     expect(resolved).toBe(false);
 
     bgBar.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await spinPromise;
+    expect(minecart.startFeatures).toEqual([]);
+    expect(resolved).toBe(true);
+  });
+
+  it("starts minecart after terminal win when terminal bg-bar feature is not normal", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const bgBar = new FakeBgBarRuntime();
+    const minecart = new FakeMinecartRuntime({
+      completeOnFirstUpdate: false,
+    });
+    const features = ["wild", "normal", "wild", "wild", "up"] as const;
+    bgBar.completeNextUpdate = false;
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createBgBarRuntime: () => bgBar.asRuntime(),
+      createMinecartInteractionRuntime: () => minecart.asRuntime(),
+    });
+    await adapter.mount(createMountContext());
+
+    const spinPromise = Promise.resolve(
+      adapter.playSpin(createBgBarLogicWithFeatures(features)),
+    );
+    let resolved = false;
+    void spinPromise.then(() => {
+      resolved = true;
+    });
+
+    await Promise.resolve();
+    expect(bgBar.startPlans).toHaveLength(1);
+    expect(bgBar.startPlans[0]?.features).toEqual(features);
+    expect(minecart.startFeatures).toEqual([]);
+    expect(resolved).toBe(false);
+
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    bgBar.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await Promise.resolve();
+    expect(minecart.startFeatures).toEqual(["wild"]);
+    expect(resolved).toBe(false);
+
+    minecart.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await spinPromise;
+    expect(resolved).toBe(true);
+  });
+
+  it("does not resolve when minecart completes before the main reels stop", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const bgBar = new FakeBgBarRuntime();
+    const minecart = new FakeMinecartRuntime();
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createBgBarRuntime: () => bgBar.asRuntime(),
+      createMinecartInteractionRuntime: () => minecart.asRuntime(),
+    });
+    await adapter.mount(createMountContext());
+
+    const spinPromise = Promise.resolve(
+      adapter.playSpin(
+        createBgBarLogicWithFeatures(["wild", "normal", "wild", "wild", "up"]),
+      ),
+    );
+    let resolved = false;
+    void spinPromise.then(() => {
+      resolved = true;
+    });
+
+    fakeApp.tick(16);
+    await Promise.resolve();
+    expect(minecart.startFeatures).toEqual(["wild"]);
+    expect(minecart.playing).toBe(false);
+    expect(resolved).toBe(false);
+
+    runtime.completeNextUpdate = true;
     fakeApp.tick(16);
     await spinPromise;
     expect(resolved).toBe(true);
@@ -490,6 +597,7 @@ describe("game003 adapter", () => {
 
     const destroyRuntime = new FakeRuntime();
     const destroyBgBar = new FakeBgBarRuntime();
+    const destroyMinecart = new FakeMinecartRuntime();
     const destroyApp = createFakeApplication();
     const destroyContext = createMountContext();
     const destroyAdapter = createTestAdapter({
@@ -498,6 +606,7 @@ describe("game003 adapter", () => {
       loadSymbolTextures: async () => ({}),
       createRuntime: () => destroyRuntime.asRuntime(),
       createBgBarRuntime: () => destroyBgBar.asRuntime(),
+      createMinecartInteractionRuntime: () => destroyMinecart.asRuntime(),
     });
     await destroyAdapter.mount(destroyContext);
     const destroyPending = destroyAdapter.playSpin(
@@ -509,6 +618,7 @@ describe("game003 adapter", () => {
     const destroyedWinAmount = fakeWinAmountPlayers.at(-1);
     expect(destroyedWinAmount?.destroyed).toBe(true);
     expect(destroyBgBar.destroyed).toBe(true);
+    expect(destroyMinecart.destroyed).toBe(true);
     destroyApp.canvas.dispatchEvent(new Event("pointerdown"));
     expect(destroyedWinAmount?.dismissRequests).toBe(0);
     const resizeCount = destroyApp.resizeCalls.length;
@@ -519,6 +629,7 @@ describe("game003 adapter", () => {
 
 const fakeWinAmountPlayers: FakeWinAmountPlayer[] = [];
 const fakeBgBarRuntimes: FakeBgBarRuntime[] = [];
+const fakeMinecartRuntimes: FakeMinecartRuntime[] = [];
 
 function createTestAdapter(options: Omit<Game003AdapterOptions, "skin">) {
   return createGame003Adapter({
@@ -530,6 +641,13 @@ function createTestAdapter(options: Omit<Game003AdapterOptions, "skin">) {
       (() => {
         const runtime = new FakeBgBarRuntime();
         fakeBgBarRuntimes.push(runtime);
+        return runtime.asRuntime();
+      }),
+    createMinecartInteractionRuntime:
+      options.createMinecartInteractionRuntime ??
+      (() => {
+        const runtime = new FakeMinecartRuntime();
+        fakeMinecartRuntimes.push(runtime);
         return runtime.asRuntime();
       }),
     createWinAmountPlayer:
@@ -684,6 +802,7 @@ async function loadFakeStaticTextures(): Promise<Game003StaticTextures> {
     mainReelBackground: Texture.EMPTY,
     landscapeConveyor: Texture.EMPTY,
     portraitConveyor: Texture.EMPTY,
+    minecart: createSizedTexture(369, 252),
   };
 }
 
@@ -702,6 +821,9 @@ function createTextureForUrl(url: string): Texture {
   }
   if (url.includes("conveyor2")) {
     return createSizedTexture(934, 227);
+  }
+  if (/minecart(?:-[A-Za-z0-9_-]+)?\.png(?:$|\?)/.test(url)) {
+    return createSizedTexture(369, 252);
   }
   if (url.includes("wild")) {
     return createSizedTexture(172, 158);
@@ -758,6 +880,47 @@ function createBgBarLogic(): GameLogic {
     bet: { bet: 5, lines: 10, times: 1 },
     userInfo: { balance: 1000, gameid: 69003 },
   }).logic;
+}
+
+function createBgBarLogicWithFeatures(
+  features: Game003BgBarSpinPlan["features"],
+): GameLogic {
+  const component = {
+    hasBasicComponentData: true,
+    raw: Object.freeze({
+      "@type": "type.googleapis.com/sgc7pb.FeatureBar2Data",
+      features,
+      usedFeatures: Object.freeze([]),
+      cacheFeatures: Object.freeze([]),
+      curFeature: "normal",
+      basicComponentData: Object.freeze({
+        usedScenes: Object.freeze([]),
+        usedOtherScenes: Object.freeze([]),
+        usedResults: Object.freeze([]),
+        usedPrizeScenes: Object.freeze([]),
+        srcScenes: Object.freeze([]),
+        pos: Object.freeze([]),
+        mapUsedSPGrid: Object.freeze({}),
+        coinWin: 0,
+        cashWin: 0,
+        targetScene: 0,
+        runIndex: 0,
+        output: 0,
+        strOutput: "",
+      }),
+    }),
+  };
+  const step = {
+    getScene: () => GAME003_SPIN_SCENE,
+    hasComponent: (name: string) => name === "bg-bar",
+    getComponent: (name: string) => (name === "bg-bar" ? component : null),
+  };
+  return {
+    getStep: () => step,
+    getBet: () => 5,
+    getLines: () => 10,
+    getTotalWin: () => 0,
+  } as unknown as GameLogic;
 }
 
 function createBgBarWinLogic(): GameLogic {
@@ -920,6 +1083,7 @@ class FakeBgBarRuntime {
   completeNextUpdate = true;
   playing = false;
   destroyed = false;
+  terminalEventEmitted = false;
 
   asRuntime(): Game003BgBarRuntime {
     return {
@@ -936,6 +1100,74 @@ class FakeBgBarRuntime {
         }
         this.startPlans.push(plan);
         this.playing = true;
+        this.terminalEventEmitted = false;
+      },
+      update: (deltaSeconds) => {
+        this.updateDeltas.push(deltaSeconds);
+        if (this.completeNextUpdate) {
+          this.playing = false;
+          if (!this.terminalEventEmitted) {
+            this.terminalEventEmitted = true;
+            return {
+              completed: true,
+              terminalFeatureCompleted:
+                this.startPlans.at(-1)?.features[0] ?? "normal",
+            };
+          }
+        }
+        return { completed: !this.playing };
+      },
+      isPlaying: () => this.playing,
+      getSnapshot: (): Game003BgBarRuntimeSnapshot => ({
+        phase: this.playing ? "shifting" : "idle",
+        idleQueue: null,
+        items: [],
+      }),
+      destroy: () => {
+        this.destroyed = true;
+        this.playing = false;
+      },
+    };
+  }
+}
+
+class FakeMinecartRuntime {
+  readonly container = new Container();
+  readonly startFeatures: Game003BgBarFeature[] = [];
+  readonly updateDeltas: number[] = [];
+  readonly layoutCalls: Game003MinecartInteractionLayout[] = [];
+  completeNextUpdate: boolean;
+  resetCount = 0;
+  playing = false;
+  destroyed = false;
+
+  constructor(
+    options: { readonly completeOnFirstUpdate?: boolean } = {
+      completeOnFirstUpdate: true,
+    },
+  ) {
+    this.completeNextUpdate = options.completeOnFirstUpdate ?? true;
+  }
+
+  asRuntime(): Game003MinecartInteractionRuntime {
+    return {
+      container: this.container,
+      applyLayout: (layout) => {
+        this.layoutCalls.push(layout);
+      },
+      reset: () => {
+        this.resetCount += 1;
+        this.playing = false;
+      },
+      start: (feature) => {
+        if (feature === "normal") {
+          throw new Error("fake minecart should not play normal.");
+        }
+        if (this.playing) {
+          throw new Error("fake minecart already playing.");
+        }
+        this.startFeatures.push(feature);
+        this.playing = true;
       },
       update: (deltaSeconds) => {
         this.updateDeltas.push(deltaSeconds);
@@ -945,10 +1177,15 @@ class FakeBgBarRuntime {
         return { completed: !this.playing };
       },
       isPlaying: () => this.playing,
-      getSnapshot: (): Game003BgBarRuntimeSnapshot => ({
-        phase: this.playing ? "shifting" : "idle",
-        idleQueue: null,
-        items: [],
+      getSnapshot: () => ({
+        phase: this.playing ? "cart-rush" : "idle",
+        feature: this.startFeatures.at(-1) ?? null,
+        cartPosition: { x: 0, y: 0 },
+        cartRotation: 0,
+        cartVisible: this.playing,
+        payloadPosition: this.playing ? { x: 0, y: 0 } : null,
+        payloadAlpha: this.playing ? 1 : null,
+        payloadVisible: this.playing,
       }),
       destroy: () => {
         this.destroyed = true;
