@@ -119,6 +119,19 @@ declare module "cc" {
     getMaterialInstance(index: number): MaterialInstance | null;
   }
 
+  export class Label {
+    string: string;
+    color: Color;
+  }
+
+  export class Mask {
+    static readonly Type: {
+      IMAGE_STENCIL: number;
+    };
+    type: number;
+    inverted: boolean;
+  }
+
   export class Graphics {
     fillColor: Color;
     rect(x: number, y: number, width: number, height: number): void;

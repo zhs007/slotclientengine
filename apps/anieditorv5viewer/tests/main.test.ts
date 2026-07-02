@@ -374,7 +374,7 @@ describe("anieditorv5viewer main", () => {
     expect(player.seek).toHaveBeenCalledWith(1.25);
   });
 
-  it("scales the Pixi canvas layer from the stage center", async () => {
+  it("zooms by resizing the Pixi viewport from the stage center", async () => {
     document.body.innerHTML = '<div id="app"></div>';
 
     await import("../src/main");
@@ -400,33 +400,45 @@ describe("anieditorv5viewer main", () => {
     if (!stageMount || !canvasLayer || !zoomOut || !zoomIn || !zoomReset) {
       throw new Error("Missing stage zoom controls.");
     }
+    const app = pixiMock.instances[0];
+    const player = playerMock.instances[0];
 
-    expect(stageMount.style.getPropertyValue("--stage-canvas-scale")).toBe("1");
+    expect(canvasLayer.contains(app.canvas)).toBe(true);
+    expect(canvasLayer.style.width).toBe("1px");
+    expect(canvasLayer.style.height).toBe("1px");
+    expect(app.renderer.resize).toHaveBeenLastCalledWith(1, 1);
+    expect(player.options).toMatchObject({
+      viewport: { width: 1, height: 1 },
+    });
     expect(stageMount.dataset.viewerCanvasScale).toBe("1.00");
     expect(zoomReadout?.textContent).toBe("100%");
     expect(zoomReset.disabled).toBe(true);
-    expect(canvasLayer.contains(pixiMock.instances[0].canvas)).toBe(true);
 
     zoomIn.click();
-    expect(stageMount.style.getPropertyValue("--stage-canvas-scale")).toBe(
-      "1.25",
-    );
+    expect(canvasLayer.style.width).toBe("1.25px");
+    expect(canvasLayer.style.height).toBe("1.25px");
+    expect(app.renderer.resize).toHaveBeenLastCalledWith(1.25, 1.25);
+    expect(player.setViewportSize).toHaveBeenLastCalledWith(1.25, 1.25);
     expect(stageMount.dataset.viewerCanvasScale).toBe("1.25");
     expect(zoomReadout?.textContent).toBe("125%");
     expect(zoomReset.disabled).toBe(false);
 
     zoomOut.click();
-    expect(stageMount.style.getPropertyValue("--stage-canvas-scale")).toBe("1");
+    expect(canvasLayer.style.width).toBe("1px");
+    expect(app.renderer.resize).toHaveBeenLastCalledWith(1, 1);
+    expect(player.setViewportSize).toHaveBeenLastCalledWith(1, 1);
     expect(zoomReadout?.textContent).toBe("100%");
 
     zoomOut.click();
-    expect(stageMount.style.getPropertyValue("--stage-canvas-scale")).toBe(
-      "0.75",
-    );
+    expect(canvasLayer.style.width).toBe("0.75px");
+    expect(app.renderer.resize).toHaveBeenLastCalledWith(0.75, 0.75);
+    expect(player.setViewportSize).toHaveBeenLastCalledWith(0.75, 0.75);
     expect(zoomReadout?.textContent).toBe("75%");
 
     zoomReset.click();
-    expect(stageMount.style.getPropertyValue("--stage-canvas-scale")).toBe("1");
+    expect(canvasLayer.style.width).toBe("1px");
+    expect(app.renderer.resize).toHaveBeenLastCalledWith(1, 1);
+    expect(player.setViewportSize).toHaveBeenLastCalledWith(1, 1);
     expect(stageMount.dataset.viewerCanvasScale).toBe("1.00");
     expect(zoomReset.disabled).toBe(true);
   });

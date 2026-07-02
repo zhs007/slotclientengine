@@ -1,5 +1,6 @@
 import { clampNumber, roundTo } from "./coordinates.js";
 import { sampleLayerAnimationsAtTime } from "./animation-sampler.js";
+import { hasActiveChaserLightAnimation } from "./chaser-light-sampler.js";
 import { hasActiveParticleAnimation } from "./particle-sampler.js";
 import { hasActiveSafeGlowAnimation } from "./safe-glow-sampler.js";
 import type {
@@ -20,6 +21,7 @@ export interface SampledLayerState {
   visible: boolean;
   renderImageDisplay: boolean;
   hasActiveParticleAnimation: boolean;
+  hasActiveChaserLightAnimation: boolean;
   hasActiveSafeGlowAnimation: boolean;
   blendMode: V5GBlendMode;
 }
@@ -84,9 +86,15 @@ export function sampleLayerAtTime(
   const baseOpacity = roundTo(clampNumber(layer.opacity, 0, 1), 4);
   const activeParticleAnimation =
     layer.visible && baseOpacity > 0 && hasActiveParticleAnimation(layer, time);
+  const activeChaserLight =
+    layer.visible &&
+    baseOpacity > 0 &&
+    hasActiveChaserLightAnimation(layer, time);
   const activeSafeGlowAnimation =
     layer.visible && baseOpacity > 0 && hasActiveSafeGlowAnimation(layer, time);
-  const visible = layer.visible && (opacity > 0 || activeSafeGlowAnimation);
+  const visible =
+    layer.visible &&
+    (opacity > 0 || activeChaserLight || activeSafeGlowAnimation);
 
   return {
     layerId: layer.id,
@@ -96,6 +104,7 @@ export function sampleLayerAtTime(
     visible,
     renderImageDisplay: layer.visible && opacity > 0,
     hasActiveParticleAnimation: activeParticleAnimation,
+    hasActiveChaserLightAnimation: activeChaserLight,
     hasActiveSafeGlowAnimation: activeSafeGlowAnimation,
     blendMode: layer.blendMode,
   };

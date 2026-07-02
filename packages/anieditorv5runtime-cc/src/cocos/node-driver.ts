@@ -32,6 +32,19 @@ export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
   setOpacity(node: TNode, opacity: number): void;
   setActive(node: TNode, active: boolean): void;
   createImageNode(name: string, spriteFrame: TSpriteFrame): TNode;
+  createTextNode(name: string, text: string): TNode;
+  setText(node: TNode, text: string): void;
   getSpriteFrameSize(spriteFrame: TSpriteFrame): V5GSize | null;
   applyBlendMode(node: TNode, config: CocosBlendModeConfig): void;
+  createAlphaMaskNode?(
+    name: string,
+    sourceNode: TNode,
+    targetNode: TNode,
+  ): TNode;
+  updateAlphaMaskNode?(
+    maskNode: TNode,
+    sourceNode: TNode,
+    targetNode: TNode,
+  ): void;
+  clearAlphaMask?(targetNode: TNode, maskNode: TNode): void;
 }

@@ -40,6 +40,9 @@ class FakeNode {
   rotation = 0;
   opacity = 255;
   spriteFrame: FakeSpriteFrame | null = null;
+  text = "";
+  maskSource: FakeNode | null = null;
+  maskTarget: FakeNode | null = null;
   blendMode: CocosBlendModeConfig | null = null;
 
   constructor(readonly name: string) {}
@@ -157,6 +160,16 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
     return node;
   }
 
+  createTextNode(name: string, text: string): FakeNode {
+    const node = new FakeNode(name);
+    node.text = text;
+    return node;
+  }
+
+  setText(node: FakeNode, text: string): void {
+    node.text = text;
+  }
+
   getSpriteFrameSize(spriteFrame: FakeSpriteFrame): V5GSize | null {
     return {
       width: spriteFrame.width,
@@ -166,6 +179,32 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
 
   applyBlendMode(node: FakeNode, config: CocosBlendModeConfig): void {
     node.blendMode = config;
+  }
+
+  createAlphaMaskNode(
+    name: string,
+    sourceNode: FakeNode,
+    targetNode: FakeNode,
+  ): FakeNode {
+    const node = new FakeNode(name);
+    node.maskSource = sourceNode;
+    node.maskTarget = targetNode;
+    return node;
+  }
+
+  updateAlphaMaskNode(
+    maskNode: FakeNode,
+    sourceNode: FakeNode,
+    targetNode: FakeNode,
+  ): void {
+    maskNode.maskSource = sourceNode;
+    maskNode.maskTarget = targetNode;
+  }
+
+  clearAlphaMask(targetNode: FakeNode, maskNode: FakeNode): void {
+    if (maskNode.maskTarget === targetNode) {
+      maskNode.maskTarget = null;
+    }
   }
 }
 
@@ -393,6 +432,36 @@ function safeGlowAnimation(
   };
 }
 
+function chaserLightAnimation(
+  overrides: Partial<V5GAnimationConfig> = {},
+): V5GAnimationConfig {
+  return {
+    id: "chaser-light",
+    type: "chaser_light",
+    startTime: 0,
+    duration: 1,
+    enabled: true,
+    seed: 11,
+    params: {
+      totalCount: 4,
+      spacing: 12,
+      lightDuration: 0.2,
+      interval: 0.05,
+      trajectory: 1,
+      radius: 40,
+      centerX: 0,
+      centerY: 0,
+      endX: 100,
+      endY: 0,
+      curve: 0,
+      lightSize: 16,
+      dimAlpha: 0.2,
+      keepOriginal: false,
+    },
+    ...overrides,
+  };
+}
+
 function framesFor(project: V5GProjectConfig): Map<string, FakeSpriteFrame> {
   return new Map(
     project.assets.map((asset) => [
@@ -452,8 +521,12 @@ function getFirstSafeGlowContainer(root: FakeNode): FakeNode {
   return getFirstGroup(root).children[1];
 }
 
-function getFirstParticleContainer(root: FakeNode): FakeNode {
+function getFirstChaserLightContainer(root: FakeNode): FakeNode {
   return getFirstGroup(root).children[2];
+}
+
+function getFirstParticleContainer(root: FakeNode): FakeNode {
+  return getFirstGroup(root).children[3];
 }
 
 describe("V5GCocosPlayer", () => {
@@ -478,6 +551,7 @@ describe("V5GCocosPlayer", () => {
       project.layers.flatMap((layer) => [
         layer.name,
         `${layer.name} Safe Glow`,
+        `${layer.name} Chaser Light`,
         `${layer.name} Particles`,
       ]),
     );
@@ -495,10 +569,20 @@ describe("V5GCocosPlayer", () => {
     ]);
     expect(
       getContent(root).children[0].children.map((node) => node.name),
-    ).toEqual(["Layer 1", "Layer 1 Safe Glow", "Layer 1 Particles"]);
+    ).toEqual([
+      "Layer 1",
+      "Layer 1 Safe Glow",
+      "Layer 1 Chaser Light",
+      "Layer 1 Particles",
+    ]);
     expect(
       getContent(root).children[2].children.map((node) => node.name),
-    ).toEqual(["Layer 2", "Layer 2 Safe Glow", "Layer 2 Particles"]);
+    ).toEqual([
+      "Layer 2",
+      "Layer 2 Safe Glow",
+      "Layer 2 Chaser Light",
+      "Layer 2 Particles",
+    ]);
     expect(player.getLayerGroups().map((group) => group.id)).toEqual([
       "lower",
       "upper",
@@ -794,6 +878,7 @@ describe("V5GCocosPlayer", () => {
     expect(getFirstGroup(root).children.map((node) => node.name)).toEqual([
       "Layer 1",
       "Layer 1 Safe Glow",
+      "Layer 1 Chaser Light",
       "Layer 1 Particles",
     ]);
     expect(safeGlowContainer.name).toBe("Layer 1 Safe Glow");
@@ -823,6 +908,126 @@ describe("V5GCocosPlayer", () => {
     expect(safeGlowNode.destroyed).toBe(true);
   });
 
+  it("binds host text to text layers through the public API", () => {
+    const project = tinyProject({
+      type: "text",
+      assetId: null,
+      text: "Base",
+      opacity: 1,
+      blendMode: "normal",
+      animations: [],
+    });
+    const { root, player } = makePlayer(project);
+    player.init();
+
+    const textNode = getFirstLayerNode(root);
+    const textBindingContainer = getFirstGroup(root).children[1];
+    expect(textNode.text).toBe("Base");
+    expect(textNode.active).toBe(true);
+    expect(textBindingContainer.name).toBe("Layer 1 Text Binding");
+    expect(player.getRuntimeDiagnostics()).toMatchObject({
+      textLayerBindingCount: 0,
+      mountedNodeCount: 0,
+    });
+
+    const binding = player.attachTextToTextLayer({
+      id: "score",
+      layerId: " layer-1 ",
+      text: "42",
+    });
+    const bindingNode = textBindingContainer.children[0];
+    expect(textNode.active).toBe(false);
+    expect(bindingNode.name).toBe("V5G Text Binding score");
+    expect(bindingNode.text).toBe("42");
+    expect(player.getRuntimeDiagnostics()).toMatchObject({
+      textLayerBindingCount: 1,
+      mountedNodeCount: 1,
+    });
+
+    binding.setText("99");
+    expect(bindingNode.text).toBe("99");
+    binding.dispose();
+    expect(bindingNode.destroyed).toBe(true);
+    expect(textNode.active).toBe(true);
+    expect(player.getRuntimeDiagnostics()).toMatchObject({
+      textLayerBindingCount: 0,
+      mountedNodeCount: 0,
+    });
+  });
+
+  it("renders chaser_light nodes and reports diagnostics", () => {
+    const project = tinyProject({
+      animations: [chaserLightAnimation()],
+    });
+    const { root, frames, player } = makePlayer(project);
+    player.init();
+
+    const layerNode = getFirstLayerNode(root);
+    const chaserContainer = getFirstChaserLightContainer(root);
+    expect(layerNode.active).toBe(false);
+    expect(chaserContainer.name).toBe("Layer 1 Chaser Light");
+    expect(chaserContainer.children).toHaveLength(4);
+    expect(player.getRuntimeDiagnostics()).toMatchObject({
+      chaserLightSpriteCount: 4,
+      particleSpriteCount: 0,
+      safeGlowSpriteCount: 0,
+    });
+
+    const chaserNode = chaserContainer.children[0];
+    expect(chaserNode.name).toBe("V5G Chaser Light layer-1");
+    expect(chaserNode.spriteFrame).toBe(frames.get("asset-1"));
+    expect(chaserNode.blendMode).toEqual(getCocosBlendModeConfig("add"));
+    expect(Number.isFinite(chaserNode.x)).toBe(true);
+    expect(Number.isFinite(chaserNode.y)).toBe(true);
+    expect(chaserNode.opacity).toBeGreaterThan(0);
+
+    player.seek(1);
+    expect(chaserContainer.children).toHaveLength(0);
+    expect(chaserNode.destroyed).toBe(true);
+    expect(player.getRuntimeDiagnostics().chaserLightSpriteCount).toBe(0);
+  });
+
+  it("creates legacy alpha masks and hides source layers when configured", () => {
+    const project = tinyProject();
+    project.layers.push({
+      ...structuredClone(project.layers[0]),
+      id: "layer-2",
+      name: "Layer 2",
+      mask: {
+        enabled: true,
+        sourceLayerId: "layer-1",
+        mode: "alpha",
+        compositeMode: "legacy_alpha",
+        showSourceLayer: false,
+      },
+    });
+    const { root, player } = makePlayer(project);
+    player.init();
+
+    const group = getFirstGroup(root);
+    const sourceNode = group.children.find((node) => node.name === "Layer 1");
+    const targetNode = group.children.find((node) => node.name === "Layer 2");
+    const maskNode = group.children.find(
+      (node) => node.name === "V5G Mask layer-2",
+    );
+    if (!sourceNode || !targetNode || !maskNode) {
+      throw new Error("missing mask test nodes");
+    }
+    expect(sourceNode.active).toBe(false);
+    expect(targetNode.active).toBe(true);
+    expect(maskNode.maskSource).toBe(sourceNode);
+    expect(maskNode.maskTarget).toBe(targetNode);
+    expect(player.getRuntimeDiagnostics().maskNodeCount).toBe(1);
+
+    player.seek(0.25);
+    expect(maskNode.maskSource).toBe(sourceNode);
+    expect(maskNode.maskTarget).toBe(targetNode);
+
+    player.destroy();
+    expect(maskNode.maskTarget).toBeNull();
+    expect(maskNode.destroyed).toBe(true);
+  });
+
   it("initializes the lock_01 safe_glow export without creating layer slots", () => {
     const project = assertV5GProject(lock01Data);
     const { player } = makePlayer(project);
@@ -839,19 +1044,29 @@ describe("V5GCocosPlayer", () => {
     const project = assertV5GProject(roundreelData);
     const { root, player } = makePlayer(project);
 
-    expect(project.schemaVersion).toBe("VNI_0.020");
+    expect(project.schemaVersion).toBe("VNI_0.022");
     expect(project.exportProfile).toMatchObject({
       id: "runtime_100",
       purpose: "runtime",
       assetScale: 1,
     });
     player.init();
-    expect(player.getLayerGroups()).toHaveLength(1);
+    expect(player.getLayerGroups()).toHaveLength(3);
 
     player.seek(1.175);
 
-    const layerNode = getFirstLayerNode(root);
-    const safeGlowContainer = getFirstSafeGlowContainer(root);
+    const activeGroup = getContent(root).children.find((group) =>
+      group.children.some(
+        (child) =>
+          child.name.endsWith(" Safe Glow") && child.children.length === 1,
+      ),
+    );
+    if (!activeGroup) throw new Error("missing active safe_glow group");
+    const layerNode = activeGroup.children[0];
+    const safeGlowContainer = activeGroup.children.find((child) =>
+      child.name.endsWith(" Safe Glow"),
+    );
+    if (!safeGlowContainer) throw new Error("missing safe_glow container");
     expect(layerNode.blendMode).toEqual(getCocosBlendModeConfig("add"));
     expect(safeGlowContainer.children).toHaveLength(1);
     const safeGlowNode = safeGlowContainer.children[0];

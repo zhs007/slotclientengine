@@ -132,6 +132,12 @@ export class V5GPreview extends Component {
     return this.player?.getPlaybackState() ?? null;
   }
 
+  getRuntimeDiagnostics(): ReturnType<
+    V5GCocosPlayer["getRuntimeDiagnostics"]
+  > | null {
+    return this.player?.getRuntimeDiagnostics() ?? null;
+  }
+
   onDestroy(): void {
     this.slotProbeDispose?.();
     this.slotProbeDispose = null;

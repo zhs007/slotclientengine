@@ -1,5 +1,7 @@
 import {
   Color,
+  Label,
+  Mask,
   Node,
   Quat,
   Sprite,
@@ -192,11 +194,58 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
       sprite.color = new Color(255, 255, 255, 255);
       return node;
     },
+    createTextNode(name, text) {
+      const node = new Node(name);
+      const label = node.addComponent(Label);
+      label.string = text;
+      label.color = new Color(255, 255, 255, 255);
+      return node;
+    },
+    setText(node, text) {
+      requireLabel(node).string = text;
+    },
     getSpriteFrameSize(spriteFrame) {
       return readSpriteFrameSize(spriteFrame);
     },
     applyBlendMode(node, config) {
       applySpriteBlendMode(node.name, requireSprite(node), config);
+    },
+    createAlphaMaskNode(name, sourceNode, targetNode) {
+      const maskNode = new Node(name);
+      const mask = maskNode.addComponent(Mask);
+      const maskLike = mask as Mask & {
+        type?: number;
+        inverted?: boolean;
+      };
+      const maskType = (
+        Mask as unknown as { Type?: { IMAGE_STENCIL?: number } }
+      ).Type?.IMAGE_STENCIL;
+      if (maskType === undefined) {
+        throw new Error(
+          `Cocos Mask.Type.IMAGE_STENCIL is required for VNI legacy_alpha mask "${name}".`,
+        );
+      }
+      maskLike.type = maskType;
+      maskLike.inverted = false;
+      const sourceSprite = requireSprite(sourceNode);
+      const maskSprite = maskNode.addComponent(Sprite);
+      maskSprite.spriteFrame = sourceSprite.spriteFrame;
+      maskSprite.color = new Color(255, 255, 255, 255);
+      maskNode.addChild(targetNode);
+      return maskNode;
+    },
+    updateAlphaMaskNode(maskNode, sourceNode, targetNode) {
+      const sourceSprite = requireSprite(sourceNode);
+      const maskSprite = requireSprite(maskNode);
+      maskSprite.spriteFrame = sourceSprite.spriteFrame;
+      if (targetNode.parent !== maskNode) {
+        maskNode.addChild(targetNode);
+      }
+    },
+    clearAlphaMask(targetNode, maskNode) {
+      if (targetNode.parent === maskNode) {
+        targetNode.removeFromParent();
+      }
     },
   };
 }
@@ -237,6 +286,16 @@ function requireSprite(node: Node): Sprite {
     );
   }
   return sprite;
+}
+
+function requireLabel(node: Node): Label {
+  const label = node.getComponent(Label);
+  if (!label) {
+    throw new Error(
+      `Cocos node "${node.name}" does not have a Label component.`,
+    );
+  }
+  return label;
 }
 
 function applySpriteBlendMode(

@@ -61,6 +61,7 @@
 - `apps/anieditorv5viewer` 验证文字层替换必须走 `VNIPlayer` public API；不要在 viewer 内把 text layer 当私有 Pixi container 操作。`precompose_light_alpha` 的 dirty/cache、`particle_stream` segmented hold 和 drain duration 都属于 `packages/vnicore` runtime 边界。
 - 新增或更新 VNI export 样例时，必须同步 `docs/anieditor5/export`、`packages/vnicore/tests/fixtures/export`、`apps/anieditorv5viewer/src/assets/projects` 和 `apps/anieditorv5viewer/src/assets/assets`；这些导出 fixture 要保持与 docs source 字节一致，不要被 Prettier 或测试手改。
 - 更新 `packages/anieditorv5runtime-cc` 的 public runtime 行为时，必须同步模块化源码、`standalone/anieditorv5runtime-cc.ts`、`scripts/check-standalone.mjs`、standalone 测试和 `standalone.zip`，避免 Cocos 主要交付面与 workspace package 漂移。
+- `packages/anieditorv5runtime-cc` 支持的 VNI 能力必须通过 Cocos public driver / public player API 落地：text layer 替换走 `attach*ToTextLayer`，`legacy_alpha` mask 走 Cocos mask adapter，`precompose_light_alpha` 在 Cocos runtime 显式失败；不要在 standalone 或 Cocos runtime 中复制 `vnicore` 私有 Pixi display tree、precompose cache 或隐藏 renderer。
 - Prettier 校验不应覆盖 `dist/`、`coverage/` 等生成物；如果 package 脚本在子目录内执行 `prettier --check .`，需要在对应 package 放置 `.prettierignore` 保持一致。
 - 若依赖安装失败，可先执行：
   `export http_proxy=http://127.0.0.1:1087;export https_proxy=http://127.0.0.1:1087;`

@@ -1,5 +1,7 @@
 import {
   Color,
+  Label,
+  Mask,
   Node,
   Quat,
   Sprite,
@@ -13,6 +15,7 @@ export type V5GCoordinateMode = "center";
 export type V5GLayerType = "image" | "text" | "group";
 export type V5GAssetType = "image";
 export type V5GBlendMode = "normal" | "add" | "screen" | "multiply" | "lighten";
+export type V5GMaskCompositeMode = "legacy_alpha" | "precompose_light_alpha";
 
 export interface V5GStageConfig {
   width: number;
@@ -73,6 +76,8 @@ export type V5GAnimationType =
   | "particle_twinkle"
   | "particle_wall"
   | "particle_combo"
+  | "particle_stream"
+  | "chaser_light"
   | "shatter"
   | "glow"
   | "safe_glow"
@@ -99,6 +104,14 @@ export interface V5GLayerKeyframeConfig {
   easing: "linear";
 }
 
+export interface V5GLayerMaskConfig {
+  enabled: boolean;
+  sourceLayerId: string | null;
+  mode: "alpha";
+  compositeMode: V5GMaskCompositeMode;
+  showSourceLayer: boolean;
+}
+
 export interface V5GLayerConfig {
   id: string;
   name: string;
@@ -112,6 +125,7 @@ export interface V5GLayerConfig {
   opacity: number;
   blendMode: V5GBlendMode;
   text?: string;
+  mask?: V5GLayerMaskConfig;
   animations: V5GAnimationConfig[];
   keyframes?: V5GLayerKeyframeConfig[];
 }
@@ -359,6 +373,139 @@ export interface V5GSize {
   height: number;
 }
 
+export type SupportedCocosBlendMode = V5GBlendMode;
+
+export type CocosBlendModeStrategy = "sprite-blend-state";
+
+export type CocosBlendFactorName =
+  | "ZERO"
+  | "ONE"
+  | "SRC_ALPHA"
+  | "ONE_MINUS_SRC_ALPHA"
+  | "SRC_COLOR"
+  | "DST_COLOR"
+  | "ONE_MINUS_SRC_COLOR";
+
+export type CocosBlendOperationName = "ADD" | "MAX";
+
+export interface CocosBlendChannelConfig {
+  operation: CocosBlendOperationName;
+  sourceFactor: CocosBlendFactorName;
+  destinationFactor: CocosBlendFactorName;
+}
+
+export interface CocosBlendModeConfig {
+  mode: SupportedCocosBlendMode;
+  strategy: CocosBlendModeStrategy;
+  color: CocosBlendChannelConfig;
+  alpha: CocosBlendChannelConfig;
+}
+
+const NORMAL_ALPHA_BLEND: CocosBlendChannelConfig = {
+  operation: "ADD",
+  sourceFactor: "SRC_ALPHA",
+  destinationFactor: "ONE_MINUS_SRC_ALPHA",
+};
+
+const BLEND_MODE_CONFIGS: Record<V5GBlendMode, CocosBlendModeConfig> = {
+  normal: {
+    mode: "normal",
+    strategy: "sprite-blend-state",
+    color: NORMAL_ALPHA_BLEND,
+    alpha: NORMAL_ALPHA_BLEND,
+  },
+  add: {
+    mode: "add",
+    strategy: "sprite-blend-state",
+    color: {
+      operation: "ADD",
+      sourceFactor: "SRC_ALPHA",
+      destinationFactor: "ONE",
+    },
+    alpha: NORMAL_ALPHA_BLEND,
+  },
+  screen: {
+    mode: "screen",
+    strategy: "sprite-blend-state",
+    color: {
+      operation: "ADD",
+      sourceFactor: "SRC_ALPHA",
+      destinationFactor: "ONE_MINUS_SRC_COLOR",
+    },
+    alpha: NORMAL_ALPHA_BLEND,
+  },
+  multiply: {
+    mode: "multiply",
+    strategy: "sprite-blend-state",
+    color: {
+      operation: "ADD",
+      sourceFactor: "DST_COLOR",
+      destinationFactor: "ONE_MINUS_SRC_ALPHA",
+    },
+    alpha: NORMAL_ALPHA_BLEND,
+  },
+  lighten: {
+    mode: "lighten",
+    strategy: "sprite-blend-state",
+    color: {
+      operation: "MAX",
+      sourceFactor: "SRC_ALPHA",
+      destinationFactor: "ONE",
+    },
+    alpha: NORMAL_ALPHA_BLEND,
+  },
+};
+
+export function getCocosBlendModeConfig(
+  blendMode: V5GBlendMode,
+): CocosBlendModeConfig {
+  return BLEND_MODE_CONFIGS[blendMode];
+}
+
+export type V5GCocosNodeTransformSnapshot = unknown;
+
+export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
+  createNode(name: string): TNode;
+  appendChild(parent: TNode, child: TNode): void;
+  removeChild(parent: TNode, child: TNode): void;
+  isValidNode?(node: TNode): boolean;
+  getParent(node: TNode): TNode | null;
+  captureLocalTransform(node: TNode): V5GCocosNodeTransformSnapshot;
+  restoreLocalTransform(
+    node: TNode,
+    snapshot: V5GCocosNodeTransformSnapshot,
+  ): void;
+  captureWorldTransform(node: TNode): V5GCocosNodeTransformSnapshot;
+  restoreWorldTransform(
+    node: TNode,
+    snapshot: V5GCocosNodeTransformSnapshot,
+  ): void;
+  destroyNode(node: TNode): void;
+  setContentSize(node: TNode, width: number, height: number): void;
+  setAnchorPoint(node: TNode, x: number, y: number): void;
+  setPosition(node: TNode, x: number, y: number): void;
+  setScale(node: TNode, x: number, y: number): void;
+  setRotationDegrees(node: TNode, degrees: number): void;
+  setOpacity(node: TNode, opacity: number): void;
+  setActive(node: TNode, active: boolean): void;
+  createImageNode(name: string, spriteFrame: TSpriteFrame): TNode;
+  createTextNode(name: string, text: string): TNode;
+  setText(node: TNode, text: string): void;
+  getSpriteFrameSize(spriteFrame: TSpriteFrame): V5GSize | null;
+  applyBlendMode(node: TNode, config: CocosBlendModeConfig): void;
+  createAlphaMaskNode?(
+    name: string,
+    sourceNode: TNode,
+    targetNode: TNode,
+  ): TNode;
+  updateAlphaMaskNode?(
+    maskNode: TNode,
+    sourceNode: TNode,
+    targetNode: TNode,
+  ): void;
+  clearAlphaMask?(targetNode: TNode, maskNode: TNode): void;
+}
+
 export function clampNumber(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
@@ -409,6 +556,7 @@ export const SUPPORTED_EASINGS: readonly V5GEasingName[] = [
 
 export const PARTICLE_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "particles",
+  "particle_stream",
   "particle_twinkle",
   "particle_wall",
   "particle_combo",
@@ -433,9 +581,11 @@ export const SUPPORTED_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "float",
   "swing",
   "particles",
+  "particle_stream",
   "particle_twinkle",
   "particle_wall",
   "particle_combo",
+  "chaser_light",
   "shatter",
   "glow",
   "safe_glow",
@@ -463,9 +613,11 @@ const DEFAULT_EASING_BY_TYPE: Readonly<
   float: "linear",
   swing: "linear",
   particles: "linear",
+  particle_stream: "linear",
   particle_twinkle: "linear",
   particle_wall: "linear",
   particle_combo: "easeInOutQuad",
+  chaser_light: "linear",
   shatter: "easeOutQuad",
   glow: "linear",
   safe_glow: "linear",
@@ -498,7 +650,7 @@ export function sampleLayerAnimationsAtTime(
     else if (animation.type === "fade")
       sampleFade(result, animation, easedProgress);
     else if (animation.type === "bounce_in")
-      sampleBounceIn(result, animation, progress, base);
+      sampleBounceIn(result, animation, easedProgress, base);
     else if (animation.type === "scale_up" || animation.type === "scale_down")
       sampleScale(result, animation, easedProgress, base.transform);
     else if (animation.type === "scale_in" || animation.type === "scale_out")
@@ -524,6 +676,8 @@ export function sampleLayerAnimationsAtTime(
       sampleShatterSource(result, animation, base);
     else if (animation.type === "glow" || animation.type === "safe_glow")
       sampleGlowSource(result, animation);
+    else if (animation.type === "chaser_light")
+      sampleChaserLightSource(result, animation);
     else if (isParticleAnimationType(animation.type)) {
       // Particle animations are sampled by sampleParticleSpritesForLayer().
     } else if (animation.type === "idle") {
@@ -839,6 +993,14 @@ function sampleGlowSource(
   result.opacity = 0;
 }
 
+function sampleChaserLightSource(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+): void {
+  if (getOptionalBooleanParam(animation, "keepOriginal", true)) return;
+  result.opacity = 0;
+}
+
 function sampleSquashStretch(
   result: V5GAnimationSampleResult,
   animation: V5GAnimationConfig,
@@ -1067,6 +1229,259 @@ function clampSafeGlowNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+const MAX_CHASER_LIGHT_SPRITES = 200;
+
+export interface VNIChaserLightLayerSampleState {
+  layerId: string;
+  transform: V5GTransformConfig;
+  baseOpacity: number;
+  blendMode: V5GBlendMode;
+}
+
+export interface VNIChaserLightTextureSize {
+  width: number;
+  height: number;
+}
+
+export interface VNIChaserLightSpriteSample {
+  type: "chaser_light";
+  layerId: string;
+  animationId: string;
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  alpha: number;
+  blendMode: V5GBlendMode;
+  isLit: boolean;
+}
+
+export function getChaserLightProgress(
+  animation: V5GAnimationConfig,
+  time: number,
+): number | null {
+  if (animation.type !== "chaser_light") return null;
+  const start = animation.startTime;
+  const end = animation.startTime + animation.duration;
+  if (time < start || time >= end) return null;
+  return clampNumber(
+    (time - start) / Math.max(animation.duration, 0.0001),
+    0,
+    1,
+  );
+}
+
+export function hasActiveChaserLightAnimation(
+  layer: V5GLayerConfig,
+  time: number,
+): boolean {
+  if (layer.type !== "image") return false;
+  return layer.animations.some(
+    (animation) =>
+      animation.enabled && getChaserLightProgress(animation, time) !== null,
+  );
+}
+
+export function sampleChaserLightSpritesForLayer(
+  layer: V5GLayerConfig,
+  sampledLayer: VNIChaserLightLayerSampleState,
+  textureSize: VNIChaserLightTextureSize,
+  time: number,
+): VNIChaserLightSpriteSample[] {
+  if (
+    layer.type !== "image" ||
+    !layer.visible ||
+    sampledLayer.baseOpacity <= 0
+  ) {
+    return [];
+  }
+
+  const sprites: VNIChaserLightSpriteSample[] = [];
+  for (const animation of layer.animations) {
+    if (!animation.enabled) continue;
+    const progress = getChaserLightProgress(animation, time);
+    if (progress === null) continue;
+    sprites.push(
+      ...sampleChaserLightSprites(animation, sampledLayer, textureSize, time),
+    );
+  }
+  return sprites;
+}
+
+function sampleChaserLightSprites(
+  animation: V5GAnimationConfig,
+  sampledLayer: VNIChaserLightLayerSampleState,
+  textureSize: VNIChaserLightTextureSize,
+  time: number,
+): VNIChaserLightSpriteSample[] {
+  const totalCount = Math.round(
+    clampChaserNumber(
+      getNumberParam(animation, "totalCount"),
+      1,
+      MAX_CHASER_LIGHT_SPRITES,
+    ),
+  );
+  const spacing = clampChaserNumber(
+    getNumberParam(animation, "spacing"),
+    0,
+    5000,
+  );
+  const lightDuration = clampChaserNumber(
+    getNumberParam(animation, "lightDuration"),
+    0.001,
+    Math.max(animation.duration, 0.001),
+  );
+  const interval = clampChaserNumber(
+    getNumberParam(animation, "interval"),
+    0.001,
+    10,
+  );
+  const trajectory = Math.round(
+    clampChaserNumber(getNumberParam(animation, "trajectory"), 0, 2),
+  );
+  const radius = clampChaserNumber(
+    getNumberParam(animation, "radius"),
+    0,
+    5000,
+  );
+  const centerX = getNumberParam(animation, "centerX");
+  const centerY = -getNumberParam(animation, "centerY");
+  const endX = getNumberParam(animation, "endX");
+  const endY = -getNumberParam(animation, "endY");
+  const curve = getNumberParam(animation, "curve");
+  const lightSize = clampChaserNumber(
+    getNumberParam(animation, "lightSize"),
+    1,
+    2000,
+  );
+  const dimAlpha = clampChaserNumber(
+    getNumberParam(animation, "dimAlpha"),
+    0,
+    1,
+  );
+  const elapsed = Math.max(0, time - animation.startTime);
+  const cycleDuration = Math.max(interval * totalCount + lightDuration, 0.001);
+  const textureEdge = Math.max(1, textureSize.width, textureSize.height);
+  const baseScale = lightSize / textureEdge;
+  const sprites: VNIChaserLightSpriteSample[] = [];
+
+  for (let index = 0; index < totalCount; index += 1) {
+    const point = sampleTrajectoryPoint(
+      index,
+      totalCount,
+      elapsed,
+      trajectory,
+      spacing,
+      radius,
+      centerX,
+      centerY,
+      endX,
+      endY,
+      curve,
+    );
+    const cycleTime =
+      (((elapsed - index * interval) % cycleDuration) + cycleDuration) %
+      cycleDuration;
+    const isLit = cycleTime <= lightDuration;
+    const wave = isLit
+      ? Math.sin((cycleTime / Math.max(lightDuration, 0.001)) * Math.PI)
+      : 0;
+    const alpha =
+      sampledLayer.baseOpacity * (isLit ? 0.72 + wave * 0.28 : dimAlpha);
+    if (alpha <= 0.002) continue;
+    sprites.push({
+      type: "chaser_light",
+      layerId: sampledLayer.layerId,
+      animationId: animation.id,
+      x: roundTo(point.x, 4),
+      y: roundTo(point.y, 4),
+      scale: roundTo(baseScale * (isLit ? 1 + wave * 0.35 : 0.65), 4),
+      rotation: roundTo(point.rotation, 4),
+      alpha: roundTo(clampNumber(alpha, 0, 1), 4),
+      blendMode: isLit ? "add" : sampledLayer.blendMode,
+      isLit,
+    });
+  }
+
+  return sprites;
+}
+
+function sampleTrajectoryPoint(
+  index: number,
+  totalCount: number,
+  elapsed: number,
+  trajectory: number,
+  spacing: number,
+  radius: number,
+  centerX: number,
+  centerY: number,
+  endX: number,
+  endY: number,
+  curve: number,
+): { x: number; y: number; rotation: number } {
+  const ratio = totalCount <= 1 ? 0 : index / (totalCount - 1);
+  if (trajectory === 0) {
+    const circumferenceRadius = Math.max(radius, spacing / (Math.PI * 2));
+    const angle =
+      (index / Math.max(totalCount, 1)) * Math.PI * 2 + elapsed * Math.PI * 2;
+    return {
+      x: centerX + Math.cos(angle) * circumferenceRadius,
+      y: centerY + Math.sin(angle) * circumferenceRadius,
+      rotation: angle + Math.PI / 2,
+    };
+  }
+  if (trajectory === 2) {
+    const point = quadraticPoint(centerX, centerY, endX, endY, curve, ratio);
+    const next = quadraticPoint(
+      centerX,
+      centerY,
+      endX,
+      endY,
+      curve,
+      clampNumber(ratio + 0.01, 0, 1),
+    );
+    return {
+      ...point,
+      rotation: Math.atan2(next.y - point.y, next.x - point.x),
+    };
+  }
+  const x = centerX + (endX - centerX) * ratio;
+  const y = centerY + (endY - centerY) * ratio;
+  return {
+    x,
+    y,
+    rotation: Math.atan2(endY - centerY, endX - centerX),
+  };
+}
+
+function quadraticPoint(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  curve: number,
+  progress: number,
+): { x: number; y: number } {
+  const t = clampNumber(progress, 0, 1);
+  const midX = (fromX + toX) / 2;
+  const midY = (fromY + toY) / 2;
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const length = Math.hypot(dx, dy) || 1;
+  const controlX = midX + (-dy / length) * curve;
+  const controlY = midY + (dx / length) * curve;
+  const inv = 1 - t;
+  return {
+    x: inv * inv * fromX + 2 * inv * t * controlX + t * t * toX,
+    y: inv * inv * fromY + 2 * inv * t * controlY + t * t * toY,
+  };
+}
+
+function clampChaserNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, value));
+}
+
 export interface TextureSize {
   width: number;
   height: number;
@@ -1096,6 +1511,9 @@ export interface ParticleAnimationRuntimeState {
   animationId: string;
   elapsed: number;
 }
+
+const MAX_BURST_PARTICLE_SPRITES = 320;
+const MAX_STREAM_PARTICLE_SPRITES = 360;
 
 export function hasActiveParticleAnimation(
   layer: V5GLayerConfig,
@@ -1158,6 +1576,15 @@ export function sampleParticleSpritesForLayer(
       sprites.push(
         ...sampleParticleBurst(animation, particleLayer, textureSize, progress),
       );
+    } else if (animation.type === "particle_stream") {
+      sprites.push(
+        ...sampleParticleStreamFromElapsed(
+          animation,
+          particleLayer,
+          textureSize,
+          progress * Math.max(animation.duration, 0.0001),
+        ),
+      );
     } else if (animation.type === "particle_twinkle") {
       sprites.push(
         ...sampleParticleTwinkle(
@@ -1218,6 +1645,15 @@ export function sampleParticleSpritesForLayerRuntime(
       sprites.push(
         ...sampleParticleBurst(animation, particleLayer, textureSize, progress),
       );
+    } else if (animation.type === "particle_stream") {
+      sprites.push(
+        ...sampleParticleStreamFromElapsed(
+          animation,
+          particleLayer,
+          textureSize,
+          runtimeState.elapsed,
+        ),
+      );
     } else if (animation.type === "particle_twinkle") {
       sprites.push(
         ...sampleParticleTwinkle(
@@ -1264,7 +1700,7 @@ function sampleParticleBurst(
   progress: number,
 ): ParticleSpriteSample[] {
   const count = Math.round(
-    clampParticleNumber(getNumberParam(animation, "count"), 1, 200),
+    clampParticleNumber(getNumberParam(animation, "count"), 1, 320),
   );
   const spread = clampParticleNumber(
     getNumberParam(animation, "spread"),
@@ -1283,8 +1719,50 @@ function sampleParticleBurst(
     2000,
   );
   const fadeOut = getOptionalBooleanParam(animation, "fadeOut", true);
+  const emissionAngle = getOptionalNumberParam(
+    animation,
+    "emissionAngle",
+    Number.NaN,
+  );
+  const emissionSpreadAngle = getOptionalNumberParam(
+    animation,
+    "emissionSpreadAngle",
+    360,
+  );
+  const trailCount = Math.round(
+    clampParticleNumber(
+      getOptionalNumberParam(animation, "trailCount", 0),
+      0,
+      16,
+    ),
+  );
+  const trailSpacing = clampParticleNumber(
+    getOptionalNumberParam(animation, "trailSpacing", 0.035),
+    0.001,
+    0.25,
+  );
+  const trailFade = clampParticleNumber(
+    getOptionalNumberParam(animation, "trailFade", 0.5),
+    0.01,
+    0.99,
+  );
+  const rotateParticles = getOptionalBooleanParam(
+    animation,
+    "rotateParticles",
+    true,
+  );
+  const randomRotation = getOptionalBooleanParam(
+    animation,
+    "randomRotation",
+    true,
+  );
+  const randomRotationDegrees = getOptionalNumberParam(
+    animation,
+    "randomRotationDegrees",
+    135,
+  );
+  const spinSpeed = getOptionalNumberParam(animation, "spinSpeed", 1);
   const duration = Math.max(animation.duration, 0.0001);
-  const age = progress * duration;
   const alphaBase =
     sampledLayer.opacity * (fadeOut ? Math.pow(1 - progress, 1.35) : 1);
   if (alphaBase <= 0.002) return [];
@@ -1299,31 +1777,188 @@ function sampleParticleBurst(
     const randomC = seededRandom(animation.seed, index, 3);
     const randomD = seededRandom(animation.seed, index, 4);
     const randomE = seededRandom(animation.seed, index, 5);
-    const angle = randomA * Math.PI * 2;
-    const burstPower = 0.55 + randomB * 0.85;
-    const startRadius = spread * 0.22 * randomC;
-    const travel = spread * progress + speed * age * burstPower;
-    const offsetX = Math.cos(angle) * (startRadius + travel);
-    const offsetY =
-      Math.sin(angle) * (startRadius + travel) + 0.5 * gravity * age * age;
-    const scale = Math.max(
-      0.01,
-      baseTextureScale * (0.55 + randomD * 0.9) * (1 - progress * 0.25),
+    const angle = getEmissionAngleRadians(
+      randomA,
+      emissionAngle,
+      emissionSpreadAngle,
     );
-    const alpha = alphaBase * (0.55 + randomC * 0.45);
-    sprites.push({
-      layerId: sampledLayer.layerId,
-      animationId: animation.id,
-      offsetX: roundTo(offsetX, 4),
-      offsetY: roundTo(offsetY, 4),
-      scale: roundTo(scale, 4),
-      rotation: roundTo(
-        (randomE - 0.5) * Math.PI * 0.75 + progress * Math.PI * (0.5 + randomB),
-        4,
-      ),
-      alpha: roundTo(clampNumber(alpha, 0, 1), 4),
-      blendMode: sampledLayer.blendMode,
-    });
+    for (let trailIndex = 0; trailIndex <= trailCount; trailIndex += 1) {
+      const localProgress = progress - trailIndex * trailSpacing;
+      if (localProgress <= 0 || localProgress > 1) continue;
+      const age = localProgress * duration;
+      const burstPower = 0.55 + randomB * 0.85;
+      const startRadius = spread * 0.22 * randomC;
+      const travel = spread * localProgress + speed * age * burstPower;
+      const offsetX = Math.cos(angle) * (startRadius + travel);
+      const offsetY =
+        Math.sin(angle) * (startRadius + travel) + 0.5 * gravity * age * age;
+      const scale = Math.max(
+        0.01,
+        baseTextureScale * (0.55 + randomD * 0.9) * (1 - localProgress * 0.25),
+      );
+      const alpha =
+        alphaBase * (0.55 + randomC * 0.45) * Math.pow(trailFade, trailIndex);
+      sprites.push({
+        layerId: sampledLayer.layerId,
+        animationId: animation.id,
+        offsetX: roundTo(offsetX, 4),
+        offsetY: roundTo(offsetY, 4),
+        scale: roundTo(scale, 4),
+        rotation: roundTo(
+          getParticleRotation(
+            randomE,
+            localProgress,
+            randomB,
+            rotateParticles,
+            randomRotation,
+            randomRotationDegrees,
+            spinSpeed,
+          ),
+          4,
+        ),
+        alpha: roundTo(clampNumber(alpha, 0, 1), 4),
+        blendMode: sampledLayer.blendMode,
+      });
+      if (sprites.length >= MAX_BURST_PARTICLE_SPRITES) return sprites;
+    }
+  }
+
+  return sprites;
+}
+
+function sampleParticleStreamFromElapsed(
+  animation: V5GAnimationConfig,
+  sampledLayer: ParticleLayerSampleState,
+  textureSize: TextureSize,
+  elapsed: number,
+): ParticleSpriteSample[] {
+  const spawnRate = clampParticleNumber(
+    getNumberParam(animation, "spawnRate"),
+    1,
+    2000,
+  );
+  const lifetime = clampParticleNumber(
+    getNumberParam(animation, "lifetime"),
+    0.05,
+    30,
+  );
+  const spread = clampParticleNumber(
+    getNumberParam(animation, "spread"),
+    0,
+    5000,
+  );
+  const speed = clampParticleNumber(
+    getNumberParam(animation, "speed"),
+    0,
+    5000,
+  );
+  const emissionAngle = getNumberParam(animation, "emissionAngle");
+  const emissionSpreadAngle = clampParticleNumber(
+    getNumberParam(animation, "emissionSpreadAngle"),
+    0,
+    360,
+  );
+  const size = clampParticleNumber(getNumberParam(animation, "size"), 1, 400);
+  const gravity = clampParticleNumber(
+    getNumberParam(animation, "gravity"),
+    -5000,
+    5000,
+  );
+  const fadeOut = getOptionalBooleanParam(animation, "fadeOut", true);
+  const trailCount = Math.round(
+    clampParticleNumber(getNumberParam(animation, "trailCount"), 0, 16),
+  );
+  const trailSpacing = clampParticleNumber(
+    getNumberParam(animation, "trailSpacing"),
+    0.001,
+    0.25,
+  );
+  const trailFade = clampParticleNumber(
+    getNumberParam(animation, "trailFade"),
+    0.01,
+    0.99,
+  );
+  const rotateParticles = getOptionalBooleanParam(
+    animation,
+    "rotateParticles",
+    true,
+  );
+  const randomRotation = getOptionalBooleanParam(
+    animation,
+    "randomRotation",
+    true,
+  );
+  const randomRotationDegrees = getNumberParam(
+    animation,
+    "randomRotationDegrees",
+  );
+  const spinSpeed = getNumberParam(animation, "spinSpeed");
+  const textureEdge = getTextureLongestEdge(textureSize);
+  const baseTextureScale = size / textureEdge;
+  const totalSpawnCount = Math.floor(Math.max(0, elapsed) * spawnRate);
+  const liveWindowCount = Math.ceil(spawnRate * lifetime) + 2;
+  const firstIndex = Math.max(0, totalSpawnCount - liveWindowCount);
+  const sprites: ParticleSpriteSample[] = [];
+
+  for (let index = firstIndex; index <= totalSpawnCount; index += 1) {
+    const spawnTime = index / spawnRate;
+    const localAgeSeconds = elapsed - spawnTime;
+    if (localAgeSeconds < 0 || localAgeSeconds > lifetime) continue;
+    const progress = clampNumber(localAgeSeconds / lifetime, 0, 1);
+    const randomA = seededRandom(animation.seed, index, 501);
+    const randomB = seededRandom(animation.seed, index, 502);
+    const randomC = seededRandom(animation.seed, index, 503);
+    const randomD = seededRandom(animation.seed, index, 504);
+    const randomE = seededRandom(animation.seed, index, 505);
+    const angle = getEmissionAngleRadians(
+      randomA,
+      emissionAngle,
+      emissionSpreadAngle,
+    );
+    for (let trailIndex = 0; trailIndex <= trailCount; trailIndex += 1) {
+      const trailAgeSeconds = localAgeSeconds - trailIndex * trailSpacing;
+      if (trailAgeSeconds < 0 || trailAgeSeconds > lifetime) continue;
+      const trailProgress = clampNumber(trailAgeSeconds / lifetime, 0, 1);
+      const startRadius = spread * 0.2 * randomB;
+      const travel = speed * trailAgeSeconds * (0.65 + randomC * 0.7);
+      const alphaBase =
+        sampledLayer.opacity * (fadeOut ? 1 - trailProgress : 1);
+      const alpha =
+        alphaBase * (0.55 + randomD * 0.45) * Math.pow(trailFade, trailIndex);
+      if (alpha <= 0.002) continue;
+      sprites.push({
+        layerId: sampledLayer.layerId,
+        animationId: animation.id,
+        offsetX: roundTo(Math.cos(angle) * (startRadius + travel), 4),
+        offsetY: roundTo(
+          Math.sin(angle) * (startRadius + travel) +
+            0.5 * gravity * trailAgeSeconds * trailAgeSeconds,
+          4,
+        ),
+        scale: roundTo(
+          Math.max(
+            0.01,
+            baseTextureScale * (0.65 + randomB * 0.7) * (1 - progress * 0.15),
+          ),
+          4,
+        ),
+        rotation: roundTo(
+          getParticleRotation(
+            randomE,
+            trailProgress,
+            randomC,
+            rotateParticles,
+            randomRotation,
+            randomRotationDegrees,
+            spinSpeed,
+          ),
+          4,
+        ),
+        alpha: roundTo(clampNumber(alpha, 0, 1), 4),
+        blendMode: sampledLayer.blendMode,
+      });
+      if (sprites.length >= MAX_STREAM_PARTICLE_SPRITES) return sprites;
+    }
   }
 
   return sprites;
@@ -1823,29 +2458,6 @@ function sampleParticleComboPoint(
   return { x, y, alpha: Math.max(0, alpha), scale, rotation };
 }
 
-function quadraticPoint(
-  fromX: number,
-  fromY: number,
-  toX: number,
-  toY: number,
-  curve: number,
-  progress: number,
-): { x: number; y: number } {
-  const t = clampNumber(progress, 0, 1);
-  const midX = (fromX + toX) / 2;
-  const midY = (fromY + toY) / 2;
-  const dx = toX - fromX;
-  const dy = toY - fromY;
-  const length = Math.hypot(dx, dy) || 1;
-  const controlX = midX + (-dy / length) * curve;
-  const controlY = midY + (dx / length) * curve;
-  const inv = 1 - t;
-  return {
-    x: inv * inv * fromX + 2 * inv * t * controlX + t * t * toX,
-    y: inv * inv * fromY + 2 * inv * t * controlY + t * t * toY,
-  };
-}
-
 function easeOutQuad(progress: number): number {
   const t = clampNumber(progress, 0, 1);
   return 1 - (1 - t) * (1 - t);
@@ -1873,6 +2485,34 @@ function clampParticleNumber(value: number, min: number, max: number): number {
   return clampNumber(Number.isFinite(value) ? value : min, min, max);
 }
 
+function getEmissionAngleRadians(
+  random: number,
+  emissionAngle: number,
+  emissionSpreadAngle: number,
+): number {
+  if (!Number.isFinite(emissionAngle)) {
+    return random * Math.PI * 2;
+  }
+  const spread = clampParticleNumber(emissionSpreadAngle, 0, 360);
+  return ((emissionAngle + (random - 0.5) * spread) * Math.PI) / 180;
+}
+
+function getParticleRotation(
+  random: number,
+  progress: number,
+  spinSalt: number,
+  rotateParticles: boolean,
+  randomRotation: boolean,
+  randomRotationDegrees: number,
+  spinSpeed: number,
+): number {
+  if (!rotateParticles) return 0;
+  const randomBase = randomRotation
+    ? ((random - 0.5) * randomRotationDegrees * Math.PI) / 180
+    : 0;
+  return randomBase + progress * Math.PI * 2 * spinSpeed * (0.5 + spinSalt);
+}
+
 function getTextureLongestEdge(textureSize: TextureSize): number {
   const width = Number(textureSize.width);
   const height = Number(textureSize.height);
@@ -1880,149 +2520,7 @@ function getTextureLongestEdge(textureSize: TextureSize): number {
   return Number.isFinite(longestEdge) && longestEdge > 0 ? longestEdge : 1;
 }
 
-const VISUAL_ENTRY_SCALE_THRESHOLD = 0.011;
-
-export interface SampledLayerState {
-  layerId: string;
-  transform: V5GTransformConfig;
-  baseOpacity: number;
-  opacity: number;
-  visible: boolean;
-  renderImageDisplay: boolean;
-  hasActiveParticleAnimation: boolean;
-  hasActiveSafeGlowAnimation: boolean;
-  blendMode: V5GBlendMode;
-}
-
-export interface SampledProjectState {
-  time: number;
-  layers: SampledLayerState[];
-}
-
-export function sampleProjectAtTime(
-  project: V5GProjectConfig,
-  time: number,
-): SampledProjectState {
-  const clampedTime = roundTo(clampNumber(time, 0, project.stage.duration), 4);
-  return {
-    time: clampedTime,
-    layers: project.layers.map((layer) =>
-      sampleLayerAtTime(layer, clampedTime),
-    ),
-  };
-}
-
-export function sampleLayerAtTime(
-  layer: V5GLayerConfig,
-  time: number,
-): SampledLayerState {
-  const sampled = sampleLayerAnimationsAtTime(
-    {
-      transform: { ...layer.transform },
-      opacity: layer.opacity,
-    },
-    layer.animations,
-    time,
-  );
-  const hasAnyEnabled = layer.animations.some((animation) => animation.enabled);
-  const hasPendingOpacityEntry = layer.animations.some(
-    (animation) =>
-      animation.enabled &&
-      isOpacityEntryAnimation(animation) &&
-      time < animation.startTime,
-  );
-  const hasPendingScaleEntry = layer.animations.some(
-    (animation) =>
-      animation.enabled &&
-      isScaleEntryAnimation(animation) &&
-      time <= animation.startTime,
-  );
-  const hasActiveCoverage = hasAnyEnabled
-    ? layer.animations.some(
-        (animation) =>
-          animation.enabled &&
-          time >= animation.startTime &&
-          time <= animation.startTime + animation.duration,
-      )
-    : true;
-  const opacity =
-    hasPendingOpacityEntry ||
-    hasPendingScaleEntry ||
-    (hasAnyEnabled && !hasActiveCoverage)
-      ? 0
-      : roundTo(clampNumber(sampled.opacity, 0, 1), 4);
-  const baseOpacity = roundTo(clampNumber(layer.opacity, 0, 1), 4);
-  const activeParticleAnimation =
-    layer.visible && baseOpacity > 0 && hasActiveParticleAnimation(layer, time);
-  const activeSafeGlowAnimation =
-    layer.visible && baseOpacity > 0 && hasActiveSafeGlowAnimation(layer, time);
-  const visible = layer.visible && (opacity > 0 || activeSafeGlowAnimation);
-
-  return {
-    layerId: layer.id,
-    transform: sampled.transform,
-    baseOpacity,
-    opacity,
-    visible,
-    renderImageDisplay: layer.visible && opacity > 0,
-    hasActiveParticleAnimation: activeParticleAnimation,
-    hasActiveSafeGlowAnimation: activeSafeGlowAnimation,
-    blendMode: layer.blendMode,
-  };
-}
-
-function isOpacityEntryAnimation(animation: V5GAnimationConfig): boolean {
-  if (animation.type === "fade") {
-    return getProjectNumberParam(animation, "fromOpacity") === 0;
-  }
-  if (animation.type === "slide_in") {
-    return getProjectBooleanParam(animation, "fadeIn", true);
-  }
-  if (animation.type === "bounce_in") {
-    return getProjectBooleanParam(animation, "fadeIn", true);
-  }
-  if (animation.type === "scale_in") {
-    return getProjectBooleanParam(animation, "fadeIn", true);
-  }
-  return false;
-}
-
-function isScaleEntryAnimation(animation: V5GAnimationConfig): boolean {
-  if (animation.type === "scale_up") {
-    return (
-      getProjectNumberParam(animation, "fromScaleX") <=
-        VISUAL_ENTRY_SCALE_THRESHOLD ||
-      getProjectNumberParam(animation, "fromScaleY") <=
-        VISUAL_ENTRY_SCALE_THRESHOLD
-    );
-  }
-  if (animation.type === "scale_in" || animation.type === "bounce_in") {
-    return (
-      getProjectNumberParam(animation, "fromScale") <=
-      VISUAL_ENTRY_SCALE_THRESHOLD
-    );
-  }
-  return false;
-}
-
-function getProjectNumberParam(
-  animation: V5GAnimationConfig,
-  key: string,
-): number {
-  const value = animation.params[key];
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  return Number.NaN;
-}
-
-function getProjectBooleanParam(
-  animation: V5GAnimationConfig,
-  key: string,
-  fallback: boolean,
-): boolean {
-  const value = animation.params[key];
-  if (value === undefined) return fallback;
-  return value === true;
-}
+const SUPPORTED_EDITOR_NAMES = ["victory_editor_v5_g", "VNI"] as const;
 
 const SUPPORTED_BLEND_MODES: readonly V5GBlendMode[] = [
   "normal",
@@ -2101,6 +2599,36 @@ const REQUIRED_NUMERIC_PARAMS: Readonly<
     "flashScale",
     "flashIntensity",
   ],
+  particle_stream: [
+    "spawnRate",
+    "lifetime",
+    "spread",
+    "speed",
+    "emissionAngle",
+    "emissionSpreadAngle",
+    "size",
+    "gravity",
+    "trailCount",
+    "trailSpacing",
+    "trailFade",
+    "randomRotationDegrees",
+    "spinSpeed",
+  ],
+  chaser_light: [
+    "totalCount",
+    "spacing",
+    "lightDuration",
+    "interval",
+    "trajectory",
+    "radius",
+    "centerX",
+    "centerY",
+    "endX",
+    "endY",
+    "curve",
+    "lightSize",
+    "dimAlpha",
+  ],
   shatter: [
     "count",
     "pieceSize",
@@ -2134,13 +2662,27 @@ const OPTIONAL_BOOLEAN_PARAMS: Readonly<
   scale_out: ["fadeOut"],
   shake: ["decay"],
   particles: ["fadeOut"],
+  particle_stream: ["fadeOut", "rotateParticles", "randomRotation"],
+  chaser_light: ["keepOriginal"],
   particle_wall: ["fadeOut"],
   shatter: ["fadeOut"],
   glow: ["keepOriginal"],
   safe_glow: ["keepOriginal"],
 };
 
-const SUPPORTED_EDITOR_NAMES = ["victory_editor_v5_g", "VNI"] as const;
+const OPTIONAL_NUMERIC_PARAMS: Readonly<
+  Partial<Record<V5GAnimationType, readonly string[]>>
+> = {
+  particles: [
+    "emissionAngle",
+    "emissionSpreadAngle",
+    "trailCount",
+    "trailSpacing",
+    "trailFade",
+    "randomRotationDegrees",
+    "spinSpeed",
+  ],
+};
 
 export interface ValidateCocosV5GProjectOptions {
   engineVersion?: "3.8.6";
@@ -2296,6 +2838,7 @@ export function validateV5GProject(project: V5GProjectConfig): void {
       assertSupportedAnimation(animation, layer.id, project.stage.duration);
     }
   }
+  validateLayerMasks(project, layerIds);
   getVNIProjectRenderGroupOrder(project);
 }
 
@@ -2312,8 +2855,16 @@ export function validateCocosV5GProject(
   }
 
   for (const layer of project.layers) {
-    if (layer.type !== "image") {
+    if (layer.type !== "image" && layer.type !== "text") {
       throw new Error(`Unsupported Cocos V5G layer type: ${layer.type}.`);
+    }
+    if (
+      layer.mask?.enabled &&
+      layer.mask.compositeMode === "precompose_light_alpha"
+    ) {
+      throw new Error(
+        `Cocos runtime cannot support VNI mask compositeMode "precompose_light_alpha" for layer "${layer.id}" with sourceLayerId "${layer.mask.sourceLayerId}" through the copyable standalone runtime. Use "legacy_alpha" or provide a dedicated Cocos mask adapter.`,
+      );
     }
     for (const animation of layer.animations) {
       if (
@@ -2374,6 +2925,45 @@ export function assertSupportedLayer(
   assertFiniteRange(layer.opacity, 0, 1, `layer "${layer.id}" opacity`);
   if (!hasStringValue(SUPPORTED_BLEND_MODES, layer.blendMode)) {
     throw new Error(`Unsupported V5G blendMode: ${layer.blendMode}.`);
+  }
+}
+
+function validateLayerMasks(
+  project: V5GProjectConfig,
+  layerIds: ReadonlySet<string>,
+): void {
+  for (const layer of project.layers) {
+    const mask = layer.mask;
+    if (!mask) continue;
+    if (mask.mode !== "alpha") {
+      throw new Error(
+        `Unsupported VNI mask mode on layer "${layer.id}": ${mask.mode}.`,
+      );
+    }
+    if (
+      mask.compositeMode !== "legacy_alpha" &&
+      mask.compositeMode !== "precompose_light_alpha"
+    ) {
+      throw new Error(
+        `Unsupported VNI mask compositeMode on layer "${layer.id}": ${mask.compositeMode}.`,
+      );
+    }
+    if (!mask.enabled) continue;
+    if (!mask.sourceLayerId) {
+      throw new Error(
+        `VNI mask on layer "${layer.id}" requires sourceLayerId when enabled.`,
+      );
+    }
+    if (mask.sourceLayerId === layer.id) {
+      throw new Error(
+        `VNI mask on layer "${layer.id}" must not reference itself.`,
+      );
+    }
+    if (!layerIds.has(mask.sourceLayerId)) {
+      throw new Error(
+        `VNI mask on layer "${layer.id}" references missing source layer "${mask.sourceLayerId}".`,
+      );
+    }
   }
 }
 
@@ -2452,8 +3042,23 @@ export function assertSupportedAnimation(
   }
   assertOptionalNumber(animation, "baseX");
   assertOptionalNumber(animation, "baseY");
+  for (const paramKey of OPTIONAL_NUMERIC_PARAMS[animation.type] ?? []) {
+    assertOptionalNumber(animation, paramKey);
+  }
   for (const paramKey of OPTIONAL_BOOLEAN_PARAMS[animation.type] ?? []) {
     assertOptionalBoolean(animation, paramKey);
+  }
+  validateAnimationParamRanges(animation);
+}
+
+function validateAnimationParamRanges(animation: V5GAnimationConfig): void {
+  if (animation.type === "chaser_light") {
+    assertFiniteRange(
+      getNumericParamForValidation(animation, "totalCount"),
+      1,
+      200,
+      `animation "${animation.id}" chaser_light totalCount`,
+    );
   }
 }
 
@@ -2542,6 +3147,10 @@ function assertLayer(value: unknown, index: number): V5GLayerConfig {
       layer.text === undefined
         ? undefined
         : assertString(layer.text, `project.layers[${index}].text`),
+    mask:
+      layer.mask === undefined
+        ? undefined
+        : assertLayerMask(layer.mask, `project.layers[${index}].mask`),
     animations: assertArray(
       layer.animations,
       `project.layers[${index}].animations`,
@@ -2552,6 +3161,26 @@ function assertLayer(value: unknown, index: number): V5GLayerConfig {
       layer.keyframes ?? [],
       `project.layers[${index}].keyframes`,
     ) as V5GLayerConfig["keyframes"],
+  };
+}
+
+function assertLayerMask(value: unknown, path: string): V5GLayerMaskConfig {
+  const mask = assertRecord(value, path);
+  return {
+    enabled: assertBoolean(mask.enabled, `${path}.enabled`),
+    sourceLayerId:
+      mask.sourceLayerId === null
+        ? null
+        : assertString(mask.sourceLayerId, `${path}.sourceLayerId`),
+    mode: assertString(mask.mode, `${path}.mode`) as V5GLayerMaskConfig["mode"],
+    compositeMode: assertString(
+      mask.compositeMode,
+      `${path}.compositeMode`,
+    ) as V5GLayerMaskConfig["compositeMode"],
+    showSourceLayer: assertBoolean(
+      mask.showSourceLayer,
+      `${path}.showSourceLayer`,
+    ),
   };
 }
 
@@ -2670,6 +3299,15 @@ function assertOptionalBoolean(
   }
 }
 
+function getNumericParamForValidation(
+  animation: V5GAnimationConfig,
+  key: string,
+): number {
+  const value = animation.params[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return Number.NaN;
+}
+
 function assertRecord(value: unknown, path: string): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`${path} must be an object.`);
@@ -2713,10 +3351,11 @@ function assertBoolean(value: unknown, path: string): boolean {
   return value;
 }
 
-function assertPositiveFinite(value: number, path: string): void {
+function assertPositiveFinite(value: number, path: string): number {
   if (!Number.isFinite(value) || value <= 0) {
     throw new Error(`${path} must be a positive finite number.`);
   }
+  return value;
 }
 
 function assertFinite(value: number, path: string): void {
@@ -2734,6 +3373,16 @@ function assertFiniteRange(
   if (!Number.isFinite(value) || value < min || value > max) {
     throw new Error(`${path} must be in range ${min}..${max}.`);
   }
+}
+
+function hasStringValue<T extends string>(
+  values: readonly T[],
+  value: string,
+): value is T {
+  for (let index = 0; index < values.length; index += 1) {
+    if (values[index] === value) return true;
+  }
+  return false;
 }
 
 function isSupportedProjectSchemaVersion(value: string): boolean {
@@ -2836,823 +3485,156 @@ function assertPositiveInteger(value: number | undefined, path: string): void {
   }
 }
 
-function hasStringValue<T extends string>(
-  values: readonly T[],
-  value: string,
-): value is T {
-  for (let index = 0; index < values.length; index += 1) {
-    if (values[index] === value) return true;
+const VISUAL_ENTRY_SCALE_THRESHOLD = 0.011;
+
+export interface SampledLayerState {
+  layerId: string;
+  transform: V5GTransformConfig;
+  baseOpacity: number;
+  opacity: number;
+  visible: boolean;
+  renderImageDisplay: boolean;
+  hasActiveParticleAnimation: boolean;
+  hasActiveChaserLightAnimation: boolean;
+  hasActiveSafeGlowAnimation: boolean;
+  blendMode: V5GBlendMode;
+}
+
+export interface SampledProjectState {
+  time: number;
+  layers: SampledLayerState[];
+}
+
+export function sampleProjectAtTime(
+  project: V5GProjectConfig,
+  time: number,
+): SampledProjectState {
+  const clampedTime = roundTo(clampNumber(time, 0, project.stage.duration), 4);
+  return {
+    time: clampedTime,
+    layers: project.layers.map((layer) =>
+      sampleLayerAtTime(layer, clampedTime),
+    ),
+  };
+}
+
+export function sampleLayerAtTime(
+  layer: V5GLayerConfig,
+  time: number,
+): SampledLayerState {
+  const sampled = sampleLayerAnimationsAtTime(
+    {
+      transform: { ...layer.transform },
+      opacity: layer.opacity,
+    },
+    layer.animations,
+    time,
+  );
+  const hasAnyEnabled = layer.animations.some((animation) => animation.enabled);
+  const hasPendingOpacityEntry = layer.animations.some(
+    (animation) =>
+      animation.enabled &&
+      isOpacityEntryAnimation(animation) &&
+      time < animation.startTime,
+  );
+  const hasPendingScaleEntry = layer.animations.some(
+    (animation) =>
+      animation.enabled &&
+      isScaleEntryAnimation(animation) &&
+      time <= animation.startTime,
+  );
+  const hasActiveCoverage = hasAnyEnabled
+    ? layer.animations.some(
+        (animation) =>
+          animation.enabled &&
+          time >= animation.startTime &&
+          time <= animation.startTime + animation.duration,
+      )
+    : true;
+  const opacity =
+    hasPendingOpacityEntry ||
+    hasPendingScaleEntry ||
+    (hasAnyEnabled && !hasActiveCoverage)
+      ? 0
+      : roundTo(clampNumber(sampled.opacity, 0, 1), 4);
+  const baseOpacity = roundTo(clampNumber(layer.opacity, 0, 1), 4);
+  const activeParticleAnimation =
+    layer.visible && baseOpacity > 0 && hasActiveParticleAnimation(layer, time);
+  const activeChaserLight =
+    layer.visible &&
+    baseOpacity > 0 &&
+    hasActiveChaserLightAnimation(layer, time);
+  const activeSafeGlowAnimation =
+    layer.visible && baseOpacity > 0 && hasActiveSafeGlowAnimation(layer, time);
+  const visible =
+    layer.visible &&
+    (opacity > 0 || activeChaserLight || activeSafeGlowAnimation);
+
+  return {
+    layerId: layer.id,
+    transform: sampled.transform,
+    baseOpacity,
+    opacity,
+    visible,
+    renderImageDisplay: layer.visible && opacity > 0,
+    hasActiveParticleAnimation: activeParticleAnimation,
+    hasActiveChaserLightAnimation: activeChaserLight,
+    hasActiveSafeGlowAnimation: activeSafeGlowAnimation,
+    blendMode: layer.blendMode,
+  };
+}
+
+function isOpacityEntryAnimation(animation: V5GAnimationConfig): boolean {
+  if (animation.type === "fade") {
+    return getProjectNumberParam(animation, "fromOpacity") === 0;
+  }
+  if (animation.type === "slide_in") {
+    return getProjectBooleanParam(animation, "fadeIn", true);
+  }
+  if (animation.type === "bounce_in") {
+    return getProjectBooleanParam(animation, "fadeIn", true);
+  }
+  if (animation.type === "scale_in") {
+    return getProjectBooleanParam(animation, "fadeIn", true);
   }
   return false;
 }
 
-export type SupportedCocosBlendMode = V5GBlendMode;
-
-export type CocosBlendModeStrategy = "sprite-blend-state";
-
-export type CocosBlendFactorName =
-  | "ZERO"
-  | "ONE"
-  | "SRC_ALPHA"
-  | "ONE_MINUS_SRC_ALPHA"
-  | "SRC_COLOR"
-  | "DST_COLOR"
-  | "ONE_MINUS_SRC_COLOR";
-
-export type CocosBlendOperationName = "ADD" | "MAX";
-
-export interface CocosBlendChannelConfig {
-  operation: CocosBlendOperationName;
-  sourceFactor: CocosBlendFactorName;
-  destinationFactor: CocosBlendFactorName;
-}
-
-export interface CocosBlendModeConfig {
-  mode: SupportedCocosBlendMode;
-  strategy: CocosBlendModeStrategy;
-  color: CocosBlendChannelConfig;
-  alpha: CocosBlendChannelConfig;
-}
-
-const NORMAL_ALPHA_BLEND: CocosBlendChannelConfig = {
-  operation: "ADD",
-  sourceFactor: "SRC_ALPHA",
-  destinationFactor: "ONE_MINUS_SRC_ALPHA",
-};
-
-const BLEND_MODE_CONFIGS: Record<V5GBlendMode, CocosBlendModeConfig> = {
-  normal: {
-    mode: "normal",
-    strategy: "sprite-blend-state",
-    color: NORMAL_ALPHA_BLEND,
-    alpha: NORMAL_ALPHA_BLEND,
-  },
-  add: {
-    mode: "add",
-    strategy: "sprite-blend-state",
-    color: {
-      operation: "ADD",
-      sourceFactor: "SRC_ALPHA",
-      destinationFactor: "ONE",
-    },
-    alpha: NORMAL_ALPHA_BLEND,
-  },
-  screen: {
-    mode: "screen",
-    strategy: "sprite-blend-state",
-    color: {
-      operation: "ADD",
-      sourceFactor: "SRC_ALPHA",
-      destinationFactor: "ONE_MINUS_SRC_COLOR",
-    },
-    alpha: NORMAL_ALPHA_BLEND,
-  },
-  multiply: {
-    mode: "multiply",
-    strategy: "sprite-blend-state",
-    color: {
-      operation: "ADD",
-      sourceFactor: "DST_COLOR",
-      destinationFactor: "ONE_MINUS_SRC_ALPHA",
-    },
-    alpha: NORMAL_ALPHA_BLEND,
-  },
-  lighten: {
-    mode: "lighten",
-    strategy: "sprite-blend-state",
-    color: {
-      operation: "MAX",
-      sourceFactor: "SRC_ALPHA",
-      destinationFactor: "ONE",
-    },
-    alpha: NORMAL_ALPHA_BLEND,
-  },
-};
-
-export function getCocosBlendModeConfig(
-  blendMode: V5GBlendMode,
-): CocosBlendModeConfig {
-  return BLEND_MODE_CONFIGS[blendMode];
-}
-
-export type V5GCocosNodeTransformSnapshot = unknown;
-
-export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
-  createNode(name: string): TNode;
-  appendChild(parent: TNode, child: TNode): void;
-  removeChild(parent: TNode, child: TNode): void;
-  isValidNode?(node: TNode): boolean;
-  getParent(node: TNode): TNode | null;
-  captureLocalTransform(node: TNode): V5GCocosNodeTransformSnapshot;
-  restoreLocalTransform(
-    node: TNode,
-    snapshot: V5GCocosNodeTransformSnapshot,
-  ): void;
-  captureWorldTransform(node: TNode): V5GCocosNodeTransformSnapshot;
-  restoreWorldTransform(
-    node: TNode,
-    snapshot: V5GCocosNodeTransformSnapshot,
-  ): void;
-  destroyNode(node: TNode): void;
-  setContentSize(node: TNode, width: number, height: number): void;
-  setAnchorPoint(node: TNode, x: number, y: number): void;
-  setPosition(node: TNode, x: number, y: number): void;
-  setScale(node: TNode, x: number, y: number): void;
-  setRotationDegrees(node: TNode, degrees: number): void;
-  setOpacity(node: TNode, opacity: number): void;
-  setActive(node: TNode, active: boolean): void;
-  createImageNode(name: string, spriteFrame: TSpriteFrame): TNode;
-  getSpriteFrameSize(spriteFrame: TSpriteFrame): V5GSize | null;
-  applyBlendMode(node: TNode, config: CocosBlendModeConfig): void;
-}
-
-interface ReadableSpriteFrameSize {
-  width: number;
-  height: number;
-}
-
-interface ReadableSpriteFrame {
-  originalSize?: ReadableSpriteFrameSize;
-  rect?: ReadableSpriteFrameSize;
-  width?: number;
-  height?: number;
-  getOriginalSize?: () => ReadableSpriteFrameSize;
-  getRect?: () => ReadableSpriteFrameSize;
-}
-
-interface CocosBlendTargetLike {
-  blend: boolean;
-  blendEq: number;
-  blendAlphaEq: number;
-  blendSrc: number;
-  blendDst: number;
-  blendSrcAlpha: number;
-  blendDstAlpha: number;
-}
-
-interface CocosBlendStateLike {
-  targets: CocosBlendTargetLike[];
-  setTarget(index: number, target: CocosBlendTargetLike): void;
-}
-
-interface CocosPassLike {
-  blendState: CocosBlendStateLike;
-  _updatePassHash(): void;
-}
-
-interface CocosMaterialInstanceLike {
-  passes: CocosPassLike[];
-}
-
-interface BlendableSprite {
-  srcBlendFactor: number;
-  dstBlendFactor: number;
-  _srcBlendFactor?: number;
-  _dstBlendFactor?: number;
-  updateMaterial?: () => void;
-  _updateBlendFunc?: () => void;
-  getRenderMaterial?: (index: number) => CocosMaterialInstanceLike | null;
-  getMaterialInstance?: (index: number) => CocosMaterialInstanceLike | null;
-}
-
-interface CocosLocalTransformSnapshot {
-  position: Vec3;
-  scale: Vec3;
-  eulerAngles: Vec3;
-}
-
-interface CocosWorldTransformSnapshot {
-  position: Vec3;
-  scale: Vec3;
-  rotation: Quat;
-}
-
-// Cocos Creator 3.8.6 exposes these enum values internally, but not all builds
-// re-export BlendFactor / BlendOp from "cc".
-const COCOS_BLEND_FACTORS: Record<CocosBlendFactorName, number> = {
-  ZERO: 0,
-  ONE: 1,
-  SRC_ALPHA: 2,
-  ONE_MINUS_SRC_ALPHA: 4,
-  SRC_COLOR: 6,
-  DST_COLOR: 7,
-  ONE_MINUS_SRC_COLOR: 8,
-};
-
-const COCOS_BLEND_OPERATIONS: Record<CocosBlendOperationName, number> = {
-  ADD: 0,
-  MAX: 4,
-};
-
-export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
-  return {
-    createNode(name) {
-      return new Node(name);
-    },
-    isValidNode(node) {
-      return isValidCocosNode(node);
-    },
-    appendChild(parent, child) {
-      parent.addChild(child);
-    },
-    removeChild(parent, child) {
-      if (child.parent === parent) {
-        child.removeFromParent();
-      }
-    },
-    getParent(node) {
-      if (!isValidCocosNode(node)) return null;
-      return node.parent;
-    },
-    captureLocalTransform(node) {
-      return {
-        position: copyVec3(node.position),
-        scale: copyVec3(node.scale),
-        eulerAngles: copyVec3(node.eulerAngles),
-      };
-    },
-    restoreLocalTransform(node, snapshot) {
-      const transform = requireLocalTransformSnapshot(snapshot);
-      node.setPosition(
-        transform.position.x,
-        transform.position.y,
-        transform.position.z,
-      );
-      node.setScale(transform.scale.x, transform.scale.y, transform.scale.z);
-      node.setRotationFromEuler(
-        transform.eulerAngles.x,
-        transform.eulerAngles.y,
-        transform.eulerAngles.z,
-      );
-    },
-    captureWorldTransform(node) {
-      return {
-        position: node.getWorldPosition(new Vec3()),
-        scale: node.getWorldScale(new Vec3()),
-        rotation: node.getWorldRotation(new Quat()),
-      };
-    },
-    restoreWorldTransform(node, snapshot) {
-      const transform = requireWorldTransformSnapshot(snapshot);
-      node.setWorldPosition(
-        transform.position.x,
-        transform.position.y,
-        transform.position.z,
-      );
-      node.setWorldScale(
-        transform.scale.x,
-        transform.scale.y,
-        transform.scale.z,
-      );
-      node.setWorldRotation(transform.rotation);
-    },
-    destroyNode(node) {
-      if (!isValidCocosNode(node)) return;
-      node.removeFromParent();
-      node.destroy();
-    },
-    setContentSize(node, width, height) {
-      requireUITransform(node).setContentSize(width, height);
-    },
-    setAnchorPoint(node, x, y) {
-      requireUITransform(node).setAnchorPoint(x, y);
-    },
-    setPosition(node, x, y) {
-      node.setPosition(x, y, 0);
-    },
-    setScale(node, x, y) {
-      node.setScale(x, y, 1);
-    },
-    setRotationDegrees(node, degrees) {
-      node.setRotationFromEuler(0, 0, degrees);
-    },
-    setOpacity(node, opacity) {
-      requireUIOpacity(node).opacity = opacity;
-    },
-    setActive(node, active) {
-      node.active = active;
-    },
-    createImageNode(name, spriteFrame) {
-      const node = new Node(name);
-      const sprite = node.addComponent(Sprite);
-      sprite.spriteFrame = spriteFrame;
-      sprite.color = new Color(255, 255, 255, 255);
-      return node;
-    },
-    getSpriteFrameSize(spriteFrame) {
-      return readSpriteFrameSize(spriteFrame);
-    },
-    applyBlendMode(node, config) {
-      applySpriteBlendMode(node.name, requireSprite(node), config);
-    },
-  };
-}
-
-function isValidCocosNode(node: Node | null | undefined): node is Node {
-  return node !== null && node !== undefined && node.isValid !== false;
-}
-
-function copyVec3(source: Vec3): Vec3 {
-  return new Vec3(source.x, source.y, source.z);
-}
-
-function requireLocalTransformSnapshot(
-  snapshot: V5GCocosNodeTransformSnapshot,
-): CocosLocalTransformSnapshot {
-  return snapshot as CocosLocalTransformSnapshot;
-}
-
-function requireWorldTransformSnapshot(
-  snapshot: V5GCocosNodeTransformSnapshot,
-): CocosWorldTransformSnapshot {
-  return snapshot as CocosWorldTransformSnapshot;
-}
-
-function requireUITransform(node: Node): UITransform {
-  return node.getComponent(UITransform) ?? node.addComponent(UITransform);
-}
-
-function requireUIOpacity(node: Node): UIOpacity {
-  return node.getComponent(UIOpacity) ?? node.addComponent(UIOpacity);
-}
-
-function requireSprite(node: Node): Sprite {
-  const sprite = node.getComponent(Sprite);
-  if (!sprite) {
-    throw new Error(
-      `Cocos node "${node.name}" does not have a Sprite component.`,
+function isScaleEntryAnimation(animation: V5GAnimationConfig): boolean {
+  if (animation.type === "scale_up") {
+    return (
+      getProjectNumberParam(animation, "fromScaleX") <=
+        VISUAL_ENTRY_SCALE_THRESHOLD ||
+      getProjectNumberParam(animation, "fromScaleY") <=
+        VISUAL_ENTRY_SCALE_THRESHOLD
     );
   }
-  return sprite;
+  if (animation.type === "scale_in" || animation.type === "bounce_in") {
+    return (
+      getProjectNumberParam(animation, "fromScale") <=
+      VISUAL_ENTRY_SCALE_THRESHOLD
+    );
+  }
+  return false;
 }
 
-function applySpriteBlendMode(
-  nodeName: string,
-  sprite: Sprite,
-  config: CocosBlendModeConfig,
-): void {
-  if (config.strategy !== "sprite-blend-state") {
-    throw new Error(
-      `Unsupported Cocos blend strategy "${config.strategy}" for V5G blend mode "${config.mode}" on node "${nodeName}".`,
-    );
-  }
-
-  if (config.mode === "normal") {
-    return;
-  }
-
-  const blendable = sprite as Sprite & Partial<BlendableSprite>;
-  setSpriteBlendFactors(
-    nodeName,
-    blendable,
-    getCocosBlendFactor(config.color.sourceFactor, config.mode),
-    getCocosBlendFactor(config.color.destinationFactor, config.mode),
-    config.mode,
-  );
-
-  if (typeof blendable.updateMaterial === "function") {
-    blendable.updateMaterial();
-  } else if (typeof blendable._updateBlendFunc === "function") {
-    blendable._updateBlendFunc();
-  } else {
-    throw new Error(
-      `Cocos Sprite on node "${nodeName}" cannot update material blend state for V5G blend mode "${config.mode}".`,
-    );
-  }
-
-  const pass = getCocosSpriteBlendPass(nodeName, blendable, config.mode);
-  const target = pass.blendState.targets[0];
-  if (!target) {
-    throw new Error(
-      `Cocos Sprite on node "${nodeName}" has no blend target for V5G blend mode "${config.mode}".`,
-    );
-  }
-
-  target.blend = true;
-  target.blendEq = getCocosBlendOperation(config.color.operation, config.mode);
-  target.blendAlphaEq = getCocosBlendOperation(
-    config.alpha.operation,
-    config.mode,
-  );
-  target.blendSrc = getCocosBlendFactor(config.color.sourceFactor, config.mode);
-  target.blendDst = getCocosBlendFactor(
-    config.color.destinationFactor,
-    config.mode,
-  );
-  target.blendSrcAlpha = getCocosBlendFactor(
-    config.alpha.sourceFactor,
-    config.mode,
-  );
-  target.blendDstAlpha = getCocosBlendFactor(
-    config.alpha.destinationFactor,
-    config.mode,
-  );
-  pass.blendState.setTarget(0, target);
-  pass._updatePassHash();
-}
-
-function setSpriteBlendFactors(
-  nodeName: string,
-  sprite: Partial<BlendableSprite>,
-  sourceFactor: number,
-  destinationFactor: number,
-  blendMode: string,
-): void {
-  if ("srcBlendFactor" in sprite && "dstBlendFactor" in sprite) {
-    sprite.srcBlendFactor = sourceFactor;
-    sprite.dstBlendFactor = destinationFactor;
-    return;
-  }
-  if ("_srcBlendFactor" in sprite && "_dstBlendFactor" in sprite) {
-    sprite._srcBlendFactor = sourceFactor;
-    sprite._dstBlendFactor = destinationFactor;
-    return;
-  }
-  throw new Error(
-    `Cocos Sprite on node "${nodeName}" does not expose blend factor fields required for V5G blend mode "${blendMode}".`,
-  );
-}
-
-function getCocosSpriteBlendPass(
-  nodeName: string,
-  sprite: Partial<BlendableSprite>,
-  blendMode: string,
-): CocosPassLike {
-  if (
-    typeof sprite.getMaterialInstance !== "function" &&
-    typeof sprite.getRenderMaterial !== "function"
-  ) {
-    throw new Error(
-      `Cocos Sprite on node "${nodeName}" cannot provide a material instance for V5G blend mode "${blendMode}".`,
-    );
-  }
-  const material =
-    sprite.getMaterialInstance?.(0) ?? sprite.getRenderMaterial?.(0);
-  const pass = material?.passes[0];
-  if (!pass) {
-    throw new Error(
-      `Cocos Sprite on node "${nodeName}" has no material pass for V5G blend mode "${blendMode}".`,
-    );
-  }
-  if (
-    !pass.blendState ||
-    !Array.isArray(pass.blendState.targets) ||
-    typeof pass.blendState.setTarget !== "function"
-  ) {
-    throw new Error(
-      `Cocos Sprite material on node "${nodeName}" has no mutable blend state for V5G blend mode "${blendMode}".`,
-    );
-  }
-  if (typeof pass._updatePassHash !== "function") {
-    throw new Error(
-      `Cocos Sprite material on node "${nodeName}" cannot refresh pass hash for V5G blend mode "${blendMode}".`,
-    );
-  }
-  return pass;
-}
-
-function getCocosBlendFactor(
-  factor: CocosBlendFactorName,
-  blendMode: string,
+function getProjectNumberParam(
+  animation: V5GAnimationConfig,
+  key: string,
 ): number {
-  const cocosFactor = COCOS_BLEND_FACTORS[factor];
-  if (cocosFactor === undefined) {
-    throw new Error(
-      `Unsupported Cocos blend factor "${factor}" for V5G blend mode "${blendMode}".`,
-    );
-  }
-  return cocosFactor;
+  const value = animation.params[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return Number.NaN;
 }
 
-function getCocosBlendOperation(
-  operation: CocosBlendOperationName,
-  blendMode: string,
-): number {
-  const cocosOperation = COCOS_BLEND_OPERATIONS[operation];
-  if (cocosOperation === undefined) {
-    throw new Error(
-      `Unsupported Cocos blend operation "${operation}" for V5G blend mode "${blendMode}".`,
-    );
-  }
-  return cocosOperation;
-}
-
-function readSpriteFrameSize(spriteFrame: SpriteFrame): V5GSize | null {
-  const readable = spriteFrame as ReadableSpriteFrame;
-  const fromMethod = readable.getOriginalSize?.() ?? readable.getRect?.();
-  if (isReadableSize(fromMethod)) return fromMethod;
-  if (isReadableSize(readable.originalSize)) return readable.originalSize;
-  if (isReadableSize(readable.rect)) return readable.rect;
-  if (
-    typeof readable.width === "number" &&
-    Number.isFinite(readable.width) &&
-    typeof readable.height === "number" &&
-    Number.isFinite(readable.height)
-  ) {
-    return {
-      width: readable.width,
-      height: readable.height,
-    };
-  }
-  return null;
-}
-
-function isReadableSize(value: unknown): value is ReadableSpriteFrameSize {
-  if (typeof value !== "object" || value === null) return false;
-  const size = value as Partial<ReadableSpriteFrameSize>;
-  return (
-    typeof size.width === "number" &&
-    Number.isFinite(size.width) &&
-    typeof size.height === "number" &&
-    Number.isFinite(size.height)
-  );
-}
-
-export type V5GPlaybackRange =
-  | { unit: "time"; start: number; end?: number }
-  | { unit: "frame"; start: number; end?: number; fps: number };
-
-export type V5GPlaybackPoint =
-  | { unit: "time"; at: number }
-  | { unit: "frame"; at: number; fps: number };
-
-export interface V5GPlayRangeOptions {
-  range: V5GPlaybackRange;
-  loop?: boolean;
-}
-
-export interface V5GTimelinePlayOptions {
-  mode?: "timeline";
-}
-
-export interface V5GRangePlayOptions extends V5GPlayRangeOptions {
-  mode: "range";
-}
-
-export interface V5GSegmentedPlaybackOptions {
-  mode: "segmented";
-  loopStart: V5GPlaybackPoint;
-  loopEnd: V5GPlaybackPoint;
-  keepParticlesAlive?: boolean;
-}
-
-export type V5GPlayOptions =
-  | V5GTimelinePlayOptions
-  | V5GRangePlayOptions
-  | V5GSegmentedPlaybackOptions;
-
-export type V5GPlaybackMode = "timeline" | "range" | "segmented";
-
-export type V5GSegmentedPlaybackPhase =
-  | "idle"
-  | "start"
-  | "loop"
-  | "ending"
-  | "particle-draining"
-  | "complete";
-
-export interface V5GPlaybackState {
-  mode: V5GPlaybackMode;
-  phase: V5GSegmentedPlaybackPhase;
-  currentTime: number;
-  isPlaying: boolean;
-  isDrainingParticles: boolean;
-  liveParticleCount: number;
-  loopIndex: number;
-  keepParticlesAlive: boolean;
-}
-
-export interface V5GNormalizedPlaybackRange {
-  startTime: number;
-  endTime: number;
-}
-
-export interface V5GNormalizedSegmentedPlayback {
-  loopStartTime: number;
-  loopEndTime: number;
-  duration: number;
-  keepParticlesAlive: boolean;
-}
-
-export interface V5GSegmentedAdvanceResult {
-  previousTime: number;
-  currentTime: number;
-  phase: V5GSegmentedPlaybackPhase;
-  loopIndex: number;
-  timelineEnded: boolean;
-}
-
-export class V5GSegmentedPlaybackSequence {
-  private readonly loopStartTime: number;
-  private readonly loopEndTime: number;
-  private readonly duration: number;
-  readonly keepParticlesAlive: boolean;
-  private phase: V5GSegmentedPlaybackPhase = "start";
-  private currentTime = 0;
-  private loopIndex = 0;
-  private endRequested = false;
-  private loopElapsedTime = 0;
-
-  constructor(config: V5GNormalizedSegmentedPlayback) {
-    this.loopStartTime = config.loopStartTime;
-    this.loopEndTime = config.loopEndTime;
-    this.duration = config.duration;
-    this.keepParticlesAlive = config.keepParticlesAlive;
-  }
-
-  getCurrentTime(): number {
-    return this.currentTime;
-  }
-
-  getPhase(): V5GSegmentedPlaybackPhase {
-    return this.phase;
-  }
-
-  getLoopIndex(): number {
-    return this.loopIndex;
-  }
-
-  getLoopStartTime(): number {
-    return this.loopStartTime;
-  }
-
-  getLoopEndTime(): number {
-    return this.loopEndTime;
-  }
-
-  getLoopElapsedTime(): number {
-    return this.loopElapsedTime;
-  }
-
-  requestEnd(): void {
-    if (this.phase !== "start" && this.phase !== "loop") {
-      throw new Error(
-        `Cannot request segmented playback end while phase is "${this.phase}".`,
-      );
-    }
-    this.endRequested = true;
-    if (this.phase === "loop") {
-      this.phase = "ending";
-      this.currentTime = this.loopEndTime;
-    }
-  }
-
-  advance(deltaSeconds: number): V5GSegmentedAdvanceResult {
-    assertPlaybackPositiveFinite(
-      deltaSeconds,
-      "segmented playback deltaSeconds",
-    );
-    const previousTime = this.currentTime;
-    let remaining = deltaSeconds;
-    let timelineEnded = false;
-
-    while (remaining > 0 && !timelineEnded) {
-      if (this.phase === "start") {
-        const timeToLoopStart = this.loopStartTime - this.currentTime;
-        if (remaining < timeToLoopStart) {
-          this.currentTime += remaining;
-          remaining = 0;
-        } else {
-          remaining -= Math.max(timeToLoopStart, 0);
-          this.currentTime = this.loopStartTime;
-          if (this.endRequested) {
-            this.phase = "ending";
-            this.currentTime = this.loopEndTime;
-          } else {
-            this.phase = "loop";
-          }
-        }
-      } else if (this.phase === "loop") {
-        if (this.endRequested) {
-          this.phase = "ending";
-          this.currentTime = this.loopEndTime;
-          continue;
-        }
-        this.loopElapsedTime += remaining;
-        if (this.loopStartTime === this.loopEndTime) {
-          this.currentTime = this.loopStartTime;
-          remaining = 0;
-        } else {
-          const span = this.loopEndTime - this.loopStartTime;
-          const advanced = this.currentTime + remaining;
-          if (advanced < this.loopEndTime) {
-            this.currentTime = advanced;
-            remaining = 0;
-          } else {
-            const overflow = advanced - this.loopEndTime;
-            this.loopIndex += 1 + Math.floor(overflow / span);
-            this.currentTime = this.loopStartTime + (overflow % span);
-            remaining = 0;
-          }
-        }
-      } else if (this.phase === "ending") {
-        const timeToEnd = this.duration - this.currentTime;
-        if (remaining < timeToEnd) {
-          this.currentTime += remaining;
-          remaining = 0;
-        } else {
-          this.currentTime = this.duration;
-          this.phase = "particle-draining";
-          timelineEnded = true;
-          remaining = 0;
-        }
-      } else {
-        remaining = 0;
-      }
-    }
-
-    return {
-      previousTime,
-      currentTime: this.currentTime,
-      phase: this.phase,
-      loopIndex: this.loopIndex,
-      timelineEnded,
-    };
-  }
-
-  markParticleDrainComplete(): void {
-    if (this.phase === "particle-draining") {
-      this.phase = "complete";
-    }
-  }
-}
-
-export function normalizePlaybackRange(
-  range: V5GPlaybackRange,
-  duration: number,
-): V5GNormalizedPlaybackRange {
-  if (range.unit === "time") {
-    const startTime = assertFiniteNumber(range.start, "playback range start");
-    const endTime = normalizeOptionalEnd(
-      range.end,
-      duration,
-      "playback range end",
-    );
-    assertNormalizedRange(startTime, endTime, duration);
-    return { startTime, endTime };
-  }
-  const fps = assertPlaybackPositiveFinite(range.fps, "playback range fps");
-  const startFrame = assertNonNegativeInteger(
-    range.start,
-    "playback range start frame",
-  );
-  const endTime =
-    range.end === undefined || range.end === -1
-      ? duration
-      : assertNonNegativeInteger(range.end, "playback range end frame") / fps;
-  const startTime = startFrame / fps;
-  assertNormalizedRange(startTime, endTime, duration);
-  return { startTime, endTime };
-}
-
-export function normalizePlaybackPoint(
-  point: V5GPlaybackPoint,
-  duration: number,
-  path: string,
-): number {
-  const time =
-    point.unit === "time"
-      ? assertFiniteNumber(point.at, `${path} time`)
-      : assertNonNegativeInteger(point.at, `${path} frame`) /
-        assertPlaybackPositiveFinite(point.fps, `${path} fps`);
-  if (time < 0 || time > duration) {
-    throw new Error(`${path} must be within project duration.`);
-  }
-  return time;
-}
-
-export function normalizeSegmentedPlaybackOptions(
-  options: V5GSegmentedPlaybackOptions,
-  duration: number,
-): V5GNormalizedSegmentedPlayback {
-  const loopStartTime = normalizePlaybackPoint(
-    options.loopStart,
-    duration,
-    "segmented loopStart",
-  );
-  const loopEndTime = normalizePlaybackPoint(
-    options.loopEnd,
-    duration,
-    "segmented loopEnd",
-  );
-  if (loopStartTime > loopEndTime) {
-    throw new Error(
-      `Invalid V5G segmented playback: expected 0 <= loopStart <= loopEnd <= ${duration}, got ${loopStartTime}..${loopEndTime}.`,
-    );
-  }
-  return {
-    loopStartTime,
-    loopEndTime,
-    duration,
-    keepParticlesAlive: options.keepParticlesAlive ?? true,
-  };
-}
-
-function assertPlaybackPositiveFinite(value: number, path: string): number {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`${path} must be a positive finite number.`);
-  }
-  return value;
+function getProjectBooleanParam(
+  animation: V5GAnimationConfig,
+  key: string,
+  fallback: boolean,
+): boolean {
+  const value = animation.params[key];
+  if (value === undefined) return fallback;
+  return value === true;
 }
 
 export interface V5GParticleRuntimeLayer {
@@ -3944,6 +3926,9 @@ function getParticleDrainDuration(animation: V5GAnimationConfig): number {
   if (animation.type === "particle_wall") {
     return getNumberParam(animation, "lifetimeMax");
   }
+  if (animation.type === "particle_stream") {
+    return getNumberParam(animation, "lifetime");
+  }
   if (animation.type === "particle_twinkle") {
     return getNumberParam(animation, "twinkleDuration");
   }
@@ -3951,6 +3936,283 @@ function getParticleDrainDuration(animation: V5GAnimationConfig): number {
     return Math.max(animation.duration, 0);
   }
   return Math.max(animation.duration, 0);
+}
+
+export type V5GPlaybackRange =
+  | { unit: "time"; start: number; end?: number }
+  | { unit: "frame"; start: number; end?: number; fps: number };
+
+export type V5GPlaybackPoint =
+  | { unit: "time"; at: number }
+  | { unit: "frame"; at: number; fps: number };
+
+export interface V5GPlayRangeOptions {
+  range: V5GPlaybackRange;
+  loop?: boolean;
+}
+
+export interface V5GTimelinePlayOptions {
+  mode?: "timeline";
+}
+
+export interface V5GRangePlayOptions extends V5GPlayRangeOptions {
+  mode: "range";
+}
+
+export interface V5GSegmentedPlaybackOptions {
+  mode: "segmented";
+  loopStart: V5GPlaybackPoint;
+  loopEnd: V5GPlaybackPoint;
+  keepParticlesAlive?: boolean;
+}
+
+export type V5GPlayOptions =
+  | V5GTimelinePlayOptions
+  | V5GRangePlayOptions
+  | V5GSegmentedPlaybackOptions;
+
+export type V5GPlaybackMode = "timeline" | "range" | "segmented";
+
+export type V5GSegmentedPlaybackPhase =
+  | "idle"
+  | "start"
+  | "loop"
+  | "ending"
+  | "particle-draining"
+  | "complete";
+
+export interface V5GPlaybackState {
+  mode: V5GPlaybackMode;
+  phase: V5GSegmentedPlaybackPhase;
+  currentTime: number;
+  isPlaying: boolean;
+  isDrainingParticles: boolean;
+  liveParticleCount: number;
+  loopIndex: number;
+  keepParticlesAlive: boolean;
+}
+
+export interface V5GNormalizedPlaybackRange {
+  startTime: number;
+  endTime: number;
+}
+
+export interface V5GNormalizedSegmentedPlayback {
+  loopStartTime: number;
+  loopEndTime: number;
+  duration: number;
+  keepParticlesAlive: boolean;
+}
+
+export interface V5GSegmentedAdvanceResult {
+  previousTime: number;
+  currentTime: number;
+  phase: V5GSegmentedPlaybackPhase;
+  loopIndex: number;
+  timelineEnded: boolean;
+}
+
+export class V5GSegmentedPlaybackSequence {
+  private readonly loopStartTime: number;
+  private readonly loopEndTime: number;
+  private readonly duration: number;
+  readonly keepParticlesAlive: boolean;
+  private phase: V5GSegmentedPlaybackPhase = "start";
+  private currentTime = 0;
+  private loopIndex = 0;
+  private endRequested = false;
+  private loopElapsedTime = 0;
+
+  constructor(config: V5GNormalizedSegmentedPlayback) {
+    this.loopStartTime = config.loopStartTime;
+    this.loopEndTime = config.loopEndTime;
+    this.duration = config.duration;
+    this.keepParticlesAlive = config.keepParticlesAlive;
+  }
+
+  getCurrentTime(): number {
+    return this.currentTime;
+  }
+
+  getPhase(): V5GSegmentedPlaybackPhase {
+    return this.phase;
+  }
+
+  getLoopIndex(): number {
+    return this.loopIndex;
+  }
+
+  getLoopStartTime(): number {
+    return this.loopStartTime;
+  }
+
+  getLoopEndTime(): number {
+    return this.loopEndTime;
+  }
+
+  getLoopElapsedTime(): number {
+    return this.loopElapsedTime;
+  }
+
+  requestEnd(): void {
+    if (this.phase !== "start" && this.phase !== "loop") {
+      throw new Error(
+        `Cannot request segmented playback end while phase is "${this.phase}".`,
+      );
+    }
+    this.endRequested = true;
+    if (this.phase === "loop") {
+      this.phase = "ending";
+      this.currentTime = this.loopEndTime;
+    }
+  }
+
+  advance(deltaSeconds: number): V5GSegmentedAdvanceResult {
+    assertPositiveFinite(deltaSeconds, "segmented playback deltaSeconds");
+    const previousTime = this.currentTime;
+    let remaining = deltaSeconds;
+    let timelineEnded = false;
+
+    while (remaining > 0 && !timelineEnded) {
+      if (this.phase === "start") {
+        const timeToLoopStart = this.loopStartTime - this.currentTime;
+        if (remaining < timeToLoopStart) {
+          this.currentTime += remaining;
+          remaining = 0;
+        } else {
+          remaining -= Math.max(timeToLoopStart, 0);
+          this.currentTime = this.loopStartTime;
+          if (this.endRequested) {
+            this.phase = "ending";
+            this.currentTime = this.loopEndTime;
+          } else {
+            this.phase = "loop";
+          }
+        }
+      } else if (this.phase === "loop") {
+        if (this.endRequested) {
+          this.phase = "ending";
+          this.currentTime = this.loopEndTime;
+          continue;
+        }
+        this.loopElapsedTime += remaining;
+        if (this.loopStartTime === this.loopEndTime) {
+          this.currentTime = this.loopStartTime;
+          remaining = 0;
+        } else {
+          const span = this.loopEndTime - this.loopStartTime;
+          const advanced = this.currentTime + remaining;
+          if (advanced < this.loopEndTime) {
+            this.currentTime = advanced;
+            remaining = 0;
+          } else {
+            const overflow = advanced - this.loopEndTime;
+            this.loopIndex += 1 + Math.floor(overflow / span);
+            this.currentTime = this.loopStartTime + (overflow % span);
+            remaining = 0;
+          }
+        }
+      } else if (this.phase === "ending") {
+        const timeToEnd = this.duration - this.currentTime;
+        if (remaining < timeToEnd) {
+          this.currentTime += remaining;
+          remaining = 0;
+        } else {
+          this.currentTime = this.duration;
+          this.phase = "particle-draining";
+          timelineEnded = true;
+          remaining = 0;
+        }
+      } else {
+        remaining = 0;
+      }
+    }
+
+    return {
+      previousTime,
+      currentTime: this.currentTime,
+      phase: this.phase,
+      loopIndex: this.loopIndex,
+      timelineEnded,
+    };
+  }
+
+  markParticleDrainComplete(): void {
+    if (this.phase === "particle-draining") {
+      this.phase = "complete";
+    }
+  }
+}
+
+export function normalizePlaybackRange(
+  range: V5GPlaybackRange,
+  duration: number,
+): V5GNormalizedPlaybackRange {
+  if (range.unit === "time") {
+    const startTime = assertFiniteNumber(range.start, "playback range start");
+    const endTime = normalizeOptionalEnd(
+      range.end,
+      duration,
+      "playback range end",
+    );
+    assertNormalizedRange(startTime, endTime, duration);
+    return { startTime, endTime };
+  }
+  const fps = assertPositiveFinite(range.fps, "playback range fps");
+  const startFrame = assertNonNegativeInteger(
+    range.start,
+    "playback range start frame",
+  );
+  const endTime =
+    range.end === undefined || range.end === -1
+      ? duration
+      : assertNonNegativeInteger(range.end, "playback range end frame") / fps;
+  const startTime = startFrame / fps;
+  assertNormalizedRange(startTime, endTime, duration);
+  return { startTime, endTime };
+}
+
+export function normalizePlaybackPoint(
+  point: V5GPlaybackPoint,
+  duration: number,
+  path: string,
+): number {
+  const time =
+    point.unit === "time"
+      ? assertFiniteNumber(point.at, `${path} time`)
+      : assertNonNegativeInteger(point.at, `${path} frame`) /
+        assertPositiveFinite(point.fps, `${path} fps`);
+  if (time < 0 || time > duration) {
+    throw new Error(`${path} must be within project duration.`);
+  }
+  return time;
+}
+
+export function normalizeSegmentedPlaybackOptions(
+  options: V5GSegmentedPlaybackOptions,
+  duration: number,
+): V5GNormalizedSegmentedPlayback {
+  const loopStartTime = normalizePlaybackPoint(
+    options.loopStart,
+    duration,
+    "segmented loopStart",
+  );
+  const loopEndTime = normalizePlaybackPoint(
+    options.loopEnd,
+    duration,
+    "segmented loopEnd",
+  );
+  if (loopStartTime > loopEndTime) {
+    throw new Error(
+      `Invalid V5G segmented playback: expected 0 <= loopStart <= loopEnd <= ${duration}, got ${loopStartTime}..${loopEndTime}.`,
+    );
+  }
+  return {
+    loopStartTime,
+    loopEndTime,
+    duration,
+    keepParticlesAlive: options.keepParticlesAlive ?? true,
+  };
 }
 
 export interface V5GCocosAssetResolver<TSpriteFrame = SpriteFrame> {
@@ -4062,6 +4324,54 @@ export interface V5GCocosAttachSpriteFrameBetweenLayerGroupsOptions<
   destroyOnDetach?: boolean;
 }
 
+export interface V5GCocosAttachNodeToTextLayerOptions<TNode = Node> {
+  id: string;
+  layerId: string;
+  node: TNode;
+  hideOriginal?: boolean;
+  destroyOnDetach?: boolean;
+}
+
+export interface V5GCocosAttachTextToTextLayerOptions {
+  id: string;
+  layerId: string;
+  text: string;
+  hideOriginal?: boolean;
+}
+
+export interface V5GCocosTextLayerTextBinding {
+  dispose(): void;
+  setText(text: string): void;
+}
+
+export interface V5GCocosAttachProjectAssetToTextLayerOptions {
+  id: string;
+  layerId: string;
+  assetId: string;
+  hideOriginal?: boolean;
+}
+
+export interface V5GCocosAttachSpriteFrameToTextLayerOptions<
+  TSpriteFrame = SpriteFrame,
+> {
+  id: string;
+  layerId: string;
+  spriteFrame: TSpriteFrame;
+  width: number;
+  height: number;
+  hideOriginal?: boolean;
+}
+
+export interface V5GCocosRuntimeDiagnostics {
+  particleSpriteCount: number;
+  chaserLightSpriteCount: number;
+  maskNodeCount: number;
+  textLayerBindingCount: number;
+  mountedNodeCount: number;
+  safeGlowSpriteCount: number;
+  liveParticleCount: number;
+}
+
 export interface V5GCocosPlaybackEventContext {
   id: string;
   time: number;
@@ -4086,13 +4396,18 @@ export interface V5GCocosPlaybackCompleteContext {
 
 interface ManagedLayer<TNode, TSpriteFrame> {
   layer: V5GLayerConfig;
-  asset: V5GAssetConfig;
+  asset: V5GAssetConfig | null;
   node: TNode;
+  textBindingContainer: TNode | null;
+  textBindings: TextLayerBindingRecord<TNode>[];
   safeGlowContainer: TNode;
   safeGlowNodes: TNode[];
+  chaserLightContainer: TNode;
+  chaserLightNodes: TNode[];
   particleContainer: TNode;
   particleNodes: TNode[];
-  spriteFrame: TSpriteFrame;
+  maskNode: TNode | null;
+  spriteFrame: TSpriteFrame | null;
 }
 
 interface PlaybackBoundary {
@@ -4129,6 +4444,16 @@ interface MountedNodeRecord<TNode> {
   version: number;
 }
 
+interface TextLayerBindingRecord<TNode> {
+  id: string;
+  node: TNode;
+  originalParent: TNode | null;
+  originalLocalTransform: V5GCocosNodeTransformSnapshot;
+  destroyOnDetach: boolean;
+  hideOriginal: boolean;
+  version: number;
+}
+
 interface NormalizedMountedNode<TNode> {
   id: string | null;
   node: TNode;
@@ -4143,7 +4468,7 @@ interface MountedImageNodeOptions {
   anchorX?: number;
   anchorY?: number;
   opacity?: number;
-  blendMode?: V5GBlendMode;
+  blendMode?: V5GLayerConfig["blendMode"];
 }
 
 const SIZE_EPSILON = 0.01;
@@ -4177,7 +4502,12 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     TNode,
     MountedNodeRecord<TNode>
   >();
+  private readonly textBindingsById = new Map<
+    string,
+    TextLayerBindingRecord<TNode>
+  >();
   private readonly particleRuntime: V5GParticleRuntime;
+  private readonly hiddenMaskSourceLayerIds = new Set<string>();
   private stageNode: TNode | null = null;
   private contentNode: TNode | null = null;
   private particleRootNode: TNode | null = null;
@@ -4196,6 +4526,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   > = [];
   private loopIndex = 0;
   private nextPlaybackEventOrder = 0;
+  private nextTextBindingVersion = 0;
 
   constructor(options: V5GCocosPlayerOptions<TNode, TSpriteFrame>) {
     this.options = options;
@@ -4264,22 +4595,37 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
           if (!layer) {
             throw new Error(`Missing V5G layer for render group: ${layerId}.`);
           }
-          const asset = this.requireImageAsset(layer, assetsById);
-          const resolvedSpriteFrame = this.resolveSpriteFrame(asset);
-          const spriteFrame = resolvedSpriteFrame.spriteFrame;
-          if (resolvedSpriteFrame.shouldValidateSize) {
-            this.assertSpriteFrameSize(asset, spriteFrame);
-          }
-
-          const node = driver.createImageNode(layer.name, spriteFrame);
-          driver.setContentSize(node, asset.width, asset.height);
+          const imageRuntime = this.createLayerRuntimeNode(layer, assetsById);
+          const { asset, spriteFrame, node } = imageRuntime;
+          const contentWidth = asset?.width ?? project.stage.width;
+          const contentHeight = asset?.height ?? project.stage.height;
+          driver.setContentSize(node, contentWidth, contentHeight);
           driver.setAnchorPoint(
             node,
             layer.transform.anchorX,
             layer.transform.anchorY,
           );
-          driver.applyBlendMode(node, getCocosBlendModeConfig(layer.blendMode));
+          if (layer.type === "image") {
+            driver.applyBlendMode(
+              node,
+              getCocosBlendModeConfig(layer.blendMode),
+            );
+          }
           driver.appendChild(groupNode, node);
+
+          const textBindingContainer =
+            layer.type === "text"
+              ? driver.createNode(`${layer.name} Text Binding`)
+              : null;
+          if (textBindingContainer) {
+            driver.setContentSize(
+              textBindingContainer,
+              project.stage.width,
+              project.stage.height,
+            );
+            driver.setAnchorPoint(textBindingContainer, 0.5, 0.5);
+            driver.appendChild(groupNode, textBindingContainer);
+          }
 
           const safeGlowContainer = driver.createNode(
             `${layer.name} Safe Glow`,
@@ -4291,6 +4637,17 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
           );
           driver.setAnchorPoint(safeGlowContainer, 0.5, 0.5);
           driver.appendChild(groupNode, safeGlowContainer);
+
+          const chaserLightContainer = driver.createNode(
+            `${layer.name} Chaser Light`,
+          );
+          driver.setContentSize(
+            chaserLightContainer,
+            project.stage.width,
+            project.stage.height,
+          );
+          driver.setAnchorPoint(chaserLightContainer, 0.5, 0.5);
+          driver.appendChild(groupNode, chaserLightContainer);
 
           const particleContainer = driver.createNode(
             `${layer.name} Particles`,
@@ -4307,10 +4664,15 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
             layer,
             asset,
             node,
+            textBindingContainer,
+            textBindings: [],
             safeGlowContainer,
             safeGlowNodes: [],
+            chaserLightContainer,
+            chaserLightNodes: [],
             particleContainer,
             particleNodes: [],
+            maskNode: null,
             spriteFrame,
           });
         }
@@ -4333,6 +4695,8 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
         }
       }
 
+      this.initializeLayerMasks();
+
       driver.appendChild(this.options.root, stage);
       this.stageNode = stage;
       this.renderDeterministicFrame(this.currentTime);
@@ -4346,6 +4710,8 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       this.slotNodesByKey.clear();
       this.mountedNodesById.clear();
       this.mountedNodesByNode.clear();
+      this.textBindingsById.clear();
+      this.hiddenMaskSourceLayerIds.clear();
       this.layerGroups = [];
       this.layerGroupSlots = [];
       throw error;
@@ -4529,6 +4895,148 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     );
   }
 
+  attachNodeToTextLayer(
+    options: V5GCocosAttachNodeToTextLayerOptions<TNode>,
+  ): () => void {
+    this.assertInitialized("attachNodeToTextLayer");
+    const id = normalizeTextLayerBindingId(options.id);
+    if (this.textBindingsById.has(id)) {
+      throw new Error(`Duplicate V5G Cocos text layer binding id: ${id}.`);
+    }
+    if (options.node === null || options.node === undefined) {
+      throw new Error(
+        "V5GCocosPlayer.attachNodeToTextLayer node must be non-null.",
+      );
+    }
+    const managed = this.requireTextManagedLayer(
+      options.layerId,
+      "attachNodeToTextLayer",
+    );
+    const container = managed.textBindingContainer;
+    if (!container) {
+      throw new Error(
+        `V5G Cocos text layer "${options.layerId}" has no binding container.`,
+      );
+    }
+    const record = this.attachTextBindingRecord(
+      managed,
+      id,
+      options.node,
+      container,
+      options.destroyOnDetach === true,
+      options.hideOriginal !== false,
+    );
+    this.applyTextLayerOriginalVisibility(managed);
+    this.renderDeterministicFrame(this.currentTime);
+
+    let disposed = false;
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      const current = this.textBindingsById.get(id);
+      if (current?.version === record.version) {
+        this.detachTextBindingRecord(managed, current);
+      }
+    };
+  }
+
+  attachTextToTextLayer(
+    options: V5GCocosAttachTextToTextLayerOptions,
+  ): V5GCocosTextLayerTextBinding {
+    this.assertInitialized("attachTextToTextLayer");
+    const node = this.options.driver.createTextNode(
+      `V5G Text Binding ${options.id}`,
+      options.text,
+    );
+    try {
+      const disposeNode = this.attachNodeToTextLayer({
+        id: options.id,
+        layerId: options.layerId,
+        node,
+        hideOriginal: options.hideOriginal,
+        destroyOnDetach: true,
+      });
+      return {
+        dispose: disposeNode,
+        setText: (text: string) => {
+          this.options.driver.setText(node, text);
+        },
+      };
+    } catch (error) {
+      this.options.driver.destroyNode(node);
+      throw error;
+    }
+  }
+
+  attachProjectAssetToTextLayer(
+    options: V5GCocosAttachProjectAssetToTextLayerOptions,
+  ): () => void {
+    this.assertInitialized("attachProjectAssetToTextLayer");
+    const asset = this.options.project.assets.find(
+      (candidate) => candidate.id === options.assetId,
+    );
+    if (!asset) {
+      throw new Error(`Unknown V5G asset id: ${options.assetId}.`);
+    }
+    const resolvedSpriteFrame = this.resolveSpriteFrame(asset);
+    if (resolvedSpriteFrame.shouldValidateSize) {
+      this.assertSpriteFrameSize(asset, resolvedSpriteFrame.spriteFrame);
+    }
+    const node = this.options.driver.createImageNode(
+      `V5G Text Image ${asset.id}`,
+      resolvedSpriteFrame.spriteFrame,
+    );
+    try {
+      this.configureTextBindingImageNode(node, asset.width, asset.height);
+      return this.attachNodeToTextLayer({
+        id: options.id,
+        layerId: options.layerId,
+        node,
+        hideOriginal: options.hideOriginal,
+        destroyOnDetach: true,
+      });
+    } catch (error) {
+      this.options.driver.destroyNode(node);
+      throw error;
+    }
+  }
+
+  attachSpriteFrameToTextLayer(
+    options: V5GCocosAttachSpriteFrameToTextLayerOptions<TSpriteFrame>,
+  ): () => void {
+    this.assertInitialized("attachSpriteFrameToTextLayer");
+    const node = this.options.driver.createImageNode(
+      "V5G Text SpriteFrame",
+      options.spriteFrame,
+    );
+    try {
+      this.configureTextBindingImageNode(node, options.width, options.height);
+      return this.attachNodeToTextLayer({
+        id: options.id,
+        layerId: options.layerId,
+        node,
+        hideOriginal: options.hideOriginal,
+        destroyOnDetach: true,
+      });
+    } catch (error) {
+      this.options.driver.destroyNode(node);
+      throw error;
+    }
+  }
+
+  getRuntimeDiagnostics(): V5GCocosRuntimeDiagnostics {
+    return {
+      particleSpriteCount: this.getRenderedParticleCount(),
+      chaserLightSpriteCount: this.getRenderedChaserLightCount(),
+      maskNodeCount: this.getRenderedMaskNodeCount(),
+      textLayerBindingCount: this.textBindingsById.size,
+      mountedNodeCount:
+        this.mountedNodesByNode.size + this.textBindingsById.size,
+      safeGlowSpriteCount: this.getRenderedSafeGlowCount(),
+      liveParticleCount: this.particleRuntime.getLiveParticleCount(),
+    };
+  }
+
   detachMountedNode(target: string | TNode): void {
     this.detachMountedNodeRecordAndUnregister(
       this.requireMountedNodeRecord(target),
@@ -4552,6 +5060,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     for (const mounted of [...this.mountedNodesByNode.values()]) {
       this.detachMountedNodeRecordAndUnregister(mounted);
     }
+    this.clearTextBindings();
   }
 
   addPlaybackEvent(options: V5GCocosPlaybackEventOptions): () => void {
@@ -4972,11 +5481,41 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
         managed.node,
         opacityToCocosOpacity(sampledLayer.opacity),
       );
+      const hideAsMaskSource = this.hiddenMaskSourceLayerIds.has(
+        sampledLayer.layerId,
+      );
       this.options.driver.setActive(
         managed.node,
-        sampledLayer.renderImageDisplay,
+        sampledLayer.renderImageDisplay && !hideAsMaskSource,
       );
+      this.applyTextLayerOriginalVisibility(managed);
+      if (managed.textBindingContainer) {
+        this.options.driver.setPosition(
+          managed.textBindingContainer,
+          position.x,
+          position.y,
+        );
+        this.options.driver.setScale(
+          managed.textBindingContainer,
+          sampledLayer.transform.scaleX,
+          sampledLayer.transform.scaleY,
+        );
+        this.options.driver.setRotationDegrees(
+          managed.textBindingContainer,
+          sampledLayer.transform.rotation,
+        );
+        this.options.driver.setOpacity(
+          managed.textBindingContainer,
+          opacityToCocosOpacity(sampledLayer.opacity),
+        );
+        this.options.driver.setActive(
+          managed.textBindingContainer,
+          sampledLayer.visible,
+        );
+      }
+      this.updateMaskSample(managed);
       this.renderSafeGlowSamples(managed, sampledLayer, sampledProject.time);
+      this.renderChaserLightSamples(managed, sampledLayer, sampledProject.time);
     }
 
     return sampledProject;
@@ -4987,6 +5526,10 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     sampledLayer: SampledLayerState,
     time: number,
   ): void {
+    if (!managed.asset || !managed.spriteFrame) {
+      this.clearSafeGlowNodesForLayer(managed);
+      return;
+    }
     const safeGlows = sampleSafeGlowSpritesForLayer(
       managed.layer,
       sampledLayer,
@@ -5034,6 +5577,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     sampledLayer: SampledLayerState,
     safeGlow: VNISafeGlowSpriteSample,
   ): void {
+    if (!managed.asset) return;
     const position = v5gTransformToCocosPosition(sampledLayer.transform);
     this.options.driver.setContentSize(
       node,
@@ -5063,6 +5607,80 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.options.driver.setActive(node, true);
   }
 
+  private renderChaserLightSamples(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+    sampledLayer: SampledLayerState,
+    time: number,
+  ): void {
+    if (!managed.asset || !managed.spriteFrame) {
+      this.clearChaserLightNodesForLayer(managed);
+      return;
+    }
+    const chasers = sampleChaserLightSpritesForLayer(
+      managed.layer,
+      sampledLayer,
+      {
+        width: managed.asset.width,
+        height: managed.asset.height,
+      },
+      time,
+    );
+
+    while (managed.chaserLightNodes.length < chasers.length) {
+      const node = this.options.driver.createImageNode(
+        `V5G Chaser Light ${managed.layer.id}`,
+        managed.spriteFrame,
+      );
+      this.options.driver.setContentSize(
+        node,
+        managed.asset.width,
+        managed.asset.height,
+      );
+      this.options.driver.setAnchorPoint(node, 0.5, 0.5);
+      this.options.driver.applyBlendMode(
+        node,
+        getCocosBlendModeConfig(managed.layer.blendMode),
+      );
+      this.options.driver.appendChild(managed.chaserLightContainer, node);
+      managed.chaserLightNodes.push(node);
+    }
+
+    for (let index = 0; index < chasers.length; index += 1) {
+      const chaser = chasers[index];
+      const node = managed.chaserLightNodes[index];
+      this.applyChaserLightSample(node, sampledLayer, chaser);
+    }
+
+    while (managed.chaserLightNodes.length > chasers.length) {
+      const node = managed.chaserLightNodes.pop();
+      if (node !== undefined) this.options.driver.destroyNode(node);
+    }
+  }
+
+  private applyChaserLightSample(
+    node: TNode,
+    sampledLayer: SampledLayerState,
+    chaser: VNIChaserLightSpriteSample,
+  ): void {
+    const position = v5gTransformToCocosPosition(sampledLayer.transform);
+    this.options.driver.setPosition(
+      node,
+      position.x + chaser.x,
+      position.y + chaser.y,
+    );
+    this.options.driver.setScale(node, chaser.scale, chaser.scale);
+    this.options.driver.setRotationDegrees(
+      node,
+      (chaser.rotation * 180) / Math.PI,
+    );
+    this.options.driver.setOpacity(node, opacityToCocosOpacity(chaser.alpha));
+    this.options.driver.applyBlendMode(
+      node,
+      getCocosBlendModeConfig(chaser.blendMode),
+    );
+    this.options.driver.setActive(node, true);
+  }
+
   private getParticleRuntimeLayers(
     sampledLayers: readonly SampledLayerState[],
   ): V5GParticleRuntimeLayer[] {
@@ -5073,6 +5691,11 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       if (!managed) {
         throw new Error(
           `Missing runtime node for V5G particle layer "${sampledLayer.layerId}".`,
+        );
+      }
+      if (!managed.asset) {
+        throw new Error(
+          `V5G particle layer "${sampledLayer.layerId}" requires an image asset.`,
         );
       }
       layers.push({
@@ -5098,6 +5721,13 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     }
 
     for (const managed of this.layers.values()) {
+      if (!managed.asset || !managed.spriteFrame) {
+        while (managed.particleNodes.length > 0) {
+          const node = managed.particleNodes.pop();
+          if (node !== undefined) this.options.driver.destroyNode(node);
+        }
+        continue;
+      }
       const layerParticles = particlesByLayer.get(managed.layer.id) ?? [];
       while (managed.particleNodes.length < layerParticles.length) {
         const node = this.options.driver.createImageNode(
@@ -5142,6 +5772,195 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
         const node = managed.particleNodes.pop();
         if (node !== undefined) this.options.driver.destroyNode(node);
       }
+    }
+  }
+
+  private createLayerRuntimeNode(
+    layer: V5GLayerConfig,
+    assetsById: ReadonlyMap<string, V5GAssetConfig>,
+  ): {
+    asset: V5GAssetConfig | null;
+    spriteFrame: TSpriteFrame | null;
+    node: TNode;
+  } {
+    if (layer.type === "text") {
+      return {
+        asset: null,
+        spriteFrame: null,
+        node: this.options.driver.createTextNode(layer.name, layer.text ?? ""),
+      };
+    }
+    const asset = this.requireImageAsset(layer, assetsById);
+    const resolvedSpriteFrame = this.resolveSpriteFrame(asset);
+    const spriteFrame = resolvedSpriteFrame.spriteFrame;
+    if (resolvedSpriteFrame.shouldValidateSize) {
+      this.assertSpriteFrameSize(asset, spriteFrame);
+    }
+    return {
+      asset,
+      spriteFrame,
+      node: this.options.driver.createImageNode(layer.name, spriteFrame),
+    };
+  }
+
+  private initializeLayerMasks(): void {
+    this.hiddenMaskSourceLayerIds.clear();
+    for (const managed of this.layers.values()) {
+      const mask = managed.layer.mask;
+      if (!mask?.enabled) continue;
+      if (mask.compositeMode === "precompose_light_alpha") {
+        throw new Error(
+          `Cocos runtime cannot support VNI mask compositeMode "precompose_light_alpha" for layer "${managed.layer.id}" with sourceLayerId "${mask.sourceLayerId}" through the copyable standalone runtime. Use "legacy_alpha" or provide a dedicated Cocos mask adapter.`,
+        );
+      }
+      if (!mask.sourceLayerId) {
+        throw new Error(
+          `VNI mask on layer "${managed.layer.id}" requires sourceLayerId when enabled.`,
+        );
+      }
+      const source = this.layers.get(mask.sourceLayerId);
+      if (!source) {
+        throw new Error(
+          `VNI mask on layer "${managed.layer.id}" references missing source layer "${mask.sourceLayerId}".`,
+        );
+      }
+      const createMask = this.options.driver.createAlphaMaskNode;
+      if (!createMask) {
+        throw new Error(
+          `Cocos node driver does not support VNI legacy_alpha mask for layer "${managed.layer.id}" with sourceLayerId "${mask.sourceLayerId}".`,
+        );
+      }
+      const maskNode = createMask(
+        `V5G Mask ${managed.layer.id}`,
+        source.node,
+        managed.node,
+      );
+      const groupNode = this.groupNodesById.get(managed.layer.groupId ?? "");
+      if (!groupNode) {
+        throw new Error(
+          `Missing V5G group node for masked layer "${managed.layer.id}".`,
+        );
+      }
+      this.options.driver.appendChild(groupNode, maskNode);
+      managed.maskNode = maskNode;
+      if (!mask.showSourceLayer) {
+        this.hiddenMaskSourceLayerIds.add(mask.sourceLayerId);
+      }
+    }
+  }
+
+  private updateMaskSample(managed: ManagedLayer<TNode, TSpriteFrame>): void {
+    if (!managed.maskNode || !managed.layer.mask?.sourceLayerId) return;
+    const source = this.layers.get(managed.layer.mask.sourceLayerId);
+    if (!source) {
+      throw new Error(
+        `Missing VNI mask source layer "${managed.layer.mask.sourceLayerId}" for "${managed.layer.id}".`,
+      );
+    }
+    this.options.driver.updateAlphaMaskNode?.(
+      managed.maskNode,
+      source.node,
+      managed.node,
+    );
+  }
+
+  private configureTextBindingImageNode(
+    node: TNode,
+    width: number,
+    height: number,
+  ): void {
+    this.assertPositiveFiniteNumber(width, "text layer image width");
+    this.assertPositiveFiniteNumber(height, "text layer image height");
+    this.options.driver.setContentSize(node, width, height);
+    this.options.driver.setAnchorPoint(node, 0.5, 0.5);
+    this.options.driver.setPosition(node, 0, 0);
+    this.options.driver.setScale(node, 1, 1);
+    this.options.driver.setRotationDegrees(node, 0);
+    this.options.driver.setOpacity(node, 255);
+    this.options.driver.setActive(node, true);
+    this.options.driver.applyBlendMode(node, getCocosBlendModeConfig("normal"));
+  }
+
+  private attachTextBindingRecord(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+    id: string,
+    node: TNode,
+    container: TNode,
+    destroyOnDetach: boolean,
+    hideOriginal: boolean,
+  ): TextLayerBindingRecord<TNode> {
+    const originalParent = this.options.driver.getParent(node);
+    const record: TextLayerBindingRecord<TNode> = {
+      id,
+      node,
+      originalParent,
+      originalLocalTransform: this.options.driver.captureLocalTransform(node),
+      destroyOnDetach,
+      hideOriginal,
+      version: this.nextTextBindingVersion,
+    };
+    this.nextTextBindingVersion += 1;
+    this.options.driver.appendChild(container, node);
+    this.options.driver.setPosition(node, 0, 0);
+    this.options.driver.setScale(node, 1, 1);
+    this.options.driver.setRotationDegrees(node, 0);
+    this.options.driver.setOpacity(node, 255);
+    this.options.driver.setActive(node, true);
+    managed.textBindings.push(record);
+    this.textBindingsById.set(id, record);
+    return record;
+  }
+
+  private detachTextBindingRecord(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+    record: TextLayerBindingRecord<TNode>,
+  ): void {
+    managed.textBindings = managed.textBindings.filter(
+      (candidate) => candidate !== record,
+    );
+    this.textBindingsById.delete(record.id);
+    if (record.destroyOnDetach) {
+      this.options.driver.destroyNode(record.node);
+    } else {
+      const parent = this.options.driver.getParent(record.node);
+      if (parent) {
+        this.options.driver.removeChild(parent, record.node);
+      }
+      if (
+        record.originalParent !== null &&
+        this.isDriverNodeValid(record.originalParent)
+      ) {
+        this.options.driver.appendChild(record.originalParent, record.node);
+      }
+      this.options.driver.restoreLocalTransform(
+        record.node,
+        record.originalLocalTransform,
+      );
+    }
+    this.applyTextLayerOriginalVisibility(managed);
+    if (this.stageNode !== null) {
+      this.renderDeterministicFrame(this.currentTime);
+    }
+  }
+
+  private clearTextBindings(): void {
+    for (const managed of this.layers.values()) {
+      for (const binding of [...managed.textBindings]) {
+        this.detachTextBindingRecord(managed, binding);
+      }
+    }
+    this.textBindingsById.clear();
+  }
+
+  private applyTextLayerOriginalVisibility(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+  ): void {
+    if (managed.layer.type !== "text") return;
+    const shouldHideOriginal = managed.textBindings.some(
+      (binding) => binding.hideOriginal,
+    );
+    if (shouldHideOriginal) {
+      this.options.driver.setActive(managed.node, false);
     }
   }
 
@@ -5511,7 +6330,9 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   private destroyManagedNodes(): void {
     this.clearMountedNodes();
     this.clearSafeGlowNodes();
+    this.clearChaserLightNodes();
     this.clearParticles();
+    this.clearMaskNodes();
     if (this.stageNode !== null) {
       this.options.driver.destroyNode(this.stageNode);
     }
@@ -5523,6 +6344,8 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.slotNodesByKey.clear();
     this.mountedNodesById.clear();
     this.mountedNodesByNode.clear();
+    this.textBindingsById.clear();
+    this.hiddenMaskSourceLayerIds.clear();
     this.layerGroups = [];
     this.layerGroupSlots = [];
   }
@@ -5547,6 +6370,23 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       );
     }
     return asset;
+  }
+
+  private requireTextManagedLayer(
+    layerId: string,
+    apiName: string,
+  ): ManagedLayer<TNode, TSpriteFrame> {
+    const normalizedLayerId = normalizeLayerId(layerId, apiName);
+    const managed = this.layers.get(normalizedLayerId);
+    if (!managed) {
+      throw new Error(`Unknown V5G text layer id: ${normalizedLayerId}.`);
+    }
+    if (managed.layer.type !== "text") {
+      throw new Error(
+        `V5GCocosPlayer.${apiName} requires a text layer, got "${managed.layer.type}" for "${normalizedLayerId}".`,
+      );
+    }
+    return managed;
   }
 
   private assertSpriteFrameSize(
@@ -5610,9 +6450,40 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
 
   private clearSafeGlowNodes(): void {
     for (const managed of this.layers.values()) {
-      while (managed.safeGlowNodes.length > 0) {
-        const node = managed.safeGlowNodes.pop();
-        if (node !== undefined) this.options.driver.destroyNode(node);
+      this.clearSafeGlowNodesForLayer(managed);
+    }
+  }
+
+  private clearSafeGlowNodesForLayer(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+  ): void {
+    while (managed.safeGlowNodes.length > 0) {
+      const node = managed.safeGlowNodes.pop();
+      if (node !== undefined) this.options.driver.destroyNode(node);
+    }
+  }
+
+  private clearChaserLightNodes(): void {
+    for (const managed of this.layers.values()) {
+      this.clearChaserLightNodesForLayer(managed);
+    }
+  }
+
+  private clearChaserLightNodesForLayer(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+  ): void {
+    while (managed.chaserLightNodes.length > 0) {
+      const node = managed.chaserLightNodes.pop();
+      if (node !== undefined) this.options.driver.destroyNode(node);
+    }
+  }
+
+  private clearMaskNodes(): void {
+    for (const managed of this.layers.values()) {
+      if (managed.maskNode) {
+        this.options.driver.clearAlphaMask?.(managed.node, managed.maskNode);
+        this.options.driver.destroyNode(managed.maskNode);
+        managed.maskNode = null;
       }
     }
   }
@@ -5621,6 +6492,30 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     let count = 0;
     for (const managed of this.layers.values()) {
       count += managed.particleNodes.length;
+    }
+    return count;
+  }
+
+  private getRenderedSafeGlowCount(): number {
+    let count = 0;
+    for (const managed of this.layers.values()) {
+      count += managed.safeGlowNodes.length;
+    }
+    return count;
+  }
+
+  private getRenderedChaserLightCount(): number {
+    let count = 0;
+    for (const managed of this.layers.values()) {
+      count += managed.chaserLightNodes.length;
+    }
+    return count;
+  }
+
+  private getRenderedMaskNodeCount(): number {
+    let count = 0;
+    for (const managed of this.layers.values()) {
+      if (managed.maskNode) count += 1;
     }
     return count;
   }
@@ -5735,6 +6630,487 @@ function normalizeMountedNodeId(id: string): string {
     throw new Error("V5G Cocos mounted node id must be non-empty.");
   }
   return normalized;
+}
+
+function normalizeTextLayerBindingId(id: string): string {
+  if (typeof id !== "string") {
+    throw new Error("V5G Cocos text layer binding id must be a string.");
+  }
+  const normalized = id.trim();
+  if (normalized.length === 0) {
+    throw new Error("V5G Cocos text layer binding id must be non-empty.");
+  }
+  return normalized;
+}
+
+function normalizeLayerId(layerId: string, apiName: string): string {
+  if (typeof layerId !== "string") {
+    throw new Error(`V5GCocosPlayer.${apiName} layerId must be a string.`);
+  }
+  const normalized = layerId.trim();
+  if (normalized.length === 0) {
+    throw new Error(`V5GCocosPlayer.${apiName} layerId must be non-empty.`);
+  }
+  return normalized;
+}
+
+interface ReadableSpriteFrameSize {
+  width: number;
+  height: number;
+}
+
+interface ReadableSpriteFrame {
+  originalSize?: ReadableSpriteFrameSize;
+  rect?: ReadableSpriteFrameSize;
+  width?: number;
+  height?: number;
+  getOriginalSize?: () => ReadableSpriteFrameSize;
+  getRect?: () => ReadableSpriteFrameSize;
+}
+
+interface CocosBlendTargetLike {
+  blend: boolean;
+  blendEq: number;
+  blendAlphaEq: number;
+  blendSrc: number;
+  blendDst: number;
+  blendSrcAlpha: number;
+  blendDstAlpha: number;
+}
+
+interface CocosBlendStateLike {
+  targets: CocosBlendTargetLike[];
+  setTarget(index: number, target: CocosBlendTargetLike): void;
+}
+
+interface CocosPassLike {
+  blendState: CocosBlendStateLike;
+  _updatePassHash(): void;
+}
+
+interface CocosMaterialInstanceLike {
+  passes: CocosPassLike[];
+}
+
+interface BlendableSprite {
+  srcBlendFactor: number;
+  dstBlendFactor: number;
+  _srcBlendFactor?: number;
+  _dstBlendFactor?: number;
+  updateMaterial?: () => void;
+  _updateBlendFunc?: () => void;
+  getRenderMaterial?: (index: number) => CocosMaterialInstanceLike | null;
+  getMaterialInstance?: (index: number) => CocosMaterialInstanceLike | null;
+}
+
+interface CocosLocalTransformSnapshot {
+  position: Vec3;
+  scale: Vec3;
+  eulerAngles: Vec3;
+}
+
+interface CocosWorldTransformSnapshot {
+  position: Vec3;
+  scale: Vec3;
+  rotation: Quat;
+}
+
+// Cocos Creator 3.8.6 exposes these enum values internally, but not all builds
+// re-export BlendFactor / BlendOp from "cc".
+const COCOS_BLEND_FACTORS: Record<CocosBlendFactorName, number> = {
+  ZERO: 0,
+  ONE: 1,
+  SRC_ALPHA: 2,
+  ONE_MINUS_SRC_ALPHA: 4,
+  SRC_COLOR: 6,
+  DST_COLOR: 7,
+  ONE_MINUS_SRC_COLOR: 8,
+};
+
+const COCOS_BLEND_OPERATIONS: Record<CocosBlendOperationName, number> = {
+  ADD: 0,
+  MAX: 4,
+};
+
+export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
+  return {
+    createNode(name) {
+      return new Node(name);
+    },
+    isValidNode(node) {
+      return isValidCocosNode(node);
+    },
+    appendChild(parent, child) {
+      parent.addChild(child);
+    },
+    removeChild(parent, child) {
+      if (child.parent === parent) {
+        child.removeFromParent();
+      }
+    },
+    getParent(node) {
+      if (!isValidCocosNode(node)) return null;
+      return node.parent;
+    },
+    captureLocalTransform(node) {
+      return {
+        position: copyVec3(node.position),
+        scale: copyVec3(node.scale),
+        eulerAngles: copyVec3(node.eulerAngles),
+      };
+    },
+    restoreLocalTransform(node, snapshot) {
+      const transform = requireLocalTransformSnapshot(snapshot);
+      node.setPosition(
+        transform.position.x,
+        transform.position.y,
+        transform.position.z,
+      );
+      node.setScale(transform.scale.x, transform.scale.y, transform.scale.z);
+      node.setRotationFromEuler(
+        transform.eulerAngles.x,
+        transform.eulerAngles.y,
+        transform.eulerAngles.z,
+      );
+    },
+    captureWorldTransform(node) {
+      return {
+        position: node.getWorldPosition(new Vec3()),
+        scale: node.getWorldScale(new Vec3()),
+        rotation: node.getWorldRotation(new Quat()),
+      };
+    },
+    restoreWorldTransform(node, snapshot) {
+      const transform = requireWorldTransformSnapshot(snapshot);
+      node.setWorldPosition(
+        transform.position.x,
+        transform.position.y,
+        transform.position.z,
+      );
+      node.setWorldScale(
+        transform.scale.x,
+        transform.scale.y,
+        transform.scale.z,
+      );
+      node.setWorldRotation(transform.rotation);
+    },
+    destroyNode(node) {
+      if (!isValidCocosNode(node)) return;
+      node.removeFromParent();
+      node.destroy();
+    },
+    setContentSize(node, width, height) {
+      requireUITransform(node).setContentSize(width, height);
+    },
+    setAnchorPoint(node, x, y) {
+      requireUITransform(node).setAnchorPoint(x, y);
+    },
+    setPosition(node, x, y) {
+      node.setPosition(x, y, 0);
+    },
+    setScale(node, x, y) {
+      node.setScale(x, y, 1);
+    },
+    setRotationDegrees(node, degrees) {
+      node.setRotationFromEuler(0, 0, degrees);
+    },
+    setOpacity(node, opacity) {
+      requireUIOpacity(node).opacity = opacity;
+    },
+    setActive(node, active) {
+      node.active = active;
+    },
+    createImageNode(name, spriteFrame) {
+      const node = new Node(name);
+      const sprite = node.addComponent(Sprite);
+      sprite.spriteFrame = spriteFrame;
+      sprite.color = new Color(255, 255, 255, 255);
+      return node;
+    },
+    createTextNode(name, text) {
+      const node = new Node(name);
+      const label = node.addComponent(Label);
+      label.string = text;
+      label.color = new Color(255, 255, 255, 255);
+      return node;
+    },
+    setText(node, text) {
+      requireLabel(node).string = text;
+    },
+    getSpriteFrameSize(spriteFrame) {
+      return readSpriteFrameSize(spriteFrame);
+    },
+    applyBlendMode(node, config) {
+      applySpriteBlendMode(node.name, requireSprite(node), config);
+    },
+    createAlphaMaskNode(name, sourceNode, targetNode) {
+      const maskNode = new Node(name);
+      const mask = maskNode.addComponent(Mask);
+      const maskLike = mask as Mask & {
+        type?: number;
+        inverted?: boolean;
+      };
+      const maskType = (
+        Mask as unknown as { Type?: { IMAGE_STENCIL?: number } }
+      ).Type?.IMAGE_STENCIL;
+      if (maskType === undefined) {
+        throw new Error(
+          `Cocos Mask.Type.IMAGE_STENCIL is required for VNI legacy_alpha mask "${name}".`,
+        );
+      }
+      maskLike.type = maskType;
+      maskLike.inverted = false;
+      const sourceSprite = requireSprite(sourceNode);
+      const maskSprite = maskNode.addComponent(Sprite);
+      maskSprite.spriteFrame = sourceSprite.spriteFrame;
+      maskSprite.color = new Color(255, 255, 255, 255);
+      maskNode.addChild(targetNode);
+      return maskNode;
+    },
+    updateAlphaMaskNode(maskNode, sourceNode, targetNode) {
+      const sourceSprite = requireSprite(sourceNode);
+      const maskSprite = requireSprite(maskNode);
+      maskSprite.spriteFrame = sourceSprite.spriteFrame;
+      if (targetNode.parent !== maskNode) {
+        maskNode.addChild(targetNode);
+      }
+    },
+    clearAlphaMask(targetNode, maskNode) {
+      if (targetNode.parent === maskNode) {
+        targetNode.removeFromParent();
+      }
+    },
+  };
+}
+
+function isValidCocosNode(node: Node | null | undefined): node is Node {
+  return node !== null && node !== undefined && node.isValid !== false;
+}
+
+function copyVec3(source: Vec3): Vec3 {
+  return new Vec3(source.x, source.y, source.z);
+}
+
+function requireLocalTransformSnapshot(
+  snapshot: V5GCocosNodeTransformSnapshot,
+): CocosLocalTransformSnapshot {
+  return snapshot as CocosLocalTransformSnapshot;
+}
+
+function requireWorldTransformSnapshot(
+  snapshot: V5GCocosNodeTransformSnapshot,
+): CocosWorldTransformSnapshot {
+  return snapshot as CocosWorldTransformSnapshot;
+}
+
+function requireUITransform(node: Node): UITransform {
+  return node.getComponent(UITransform) ?? node.addComponent(UITransform);
+}
+
+function requireUIOpacity(node: Node): UIOpacity {
+  return node.getComponent(UIOpacity) ?? node.addComponent(UIOpacity);
+}
+
+function requireSprite(node: Node): Sprite {
+  const sprite = node.getComponent(Sprite);
+  if (!sprite) {
+    throw new Error(
+      `Cocos node "${node.name}" does not have a Sprite component.`,
+    );
+  }
+  return sprite;
+}
+
+function requireLabel(node: Node): Label {
+  const label = node.getComponent(Label);
+  if (!label) {
+    throw new Error(
+      `Cocos node "${node.name}" does not have a Label component.`,
+    );
+  }
+  return label;
+}
+
+function applySpriteBlendMode(
+  nodeName: string,
+  sprite: Sprite,
+  config: CocosBlendModeConfig,
+): void {
+  if (config.strategy !== "sprite-blend-state") {
+    throw new Error(
+      `Unsupported Cocos blend strategy "${config.strategy}" for V5G blend mode "${config.mode}" on node "${nodeName}".`,
+    );
+  }
+
+  if (config.mode === "normal") {
+    return;
+  }
+
+  const blendable = sprite as Sprite & Partial<BlendableSprite>;
+  setSpriteBlendFactors(
+    nodeName,
+    blendable,
+    getCocosBlendFactor(config.color.sourceFactor, config.mode),
+    getCocosBlendFactor(config.color.destinationFactor, config.mode),
+    config.mode,
+  );
+
+  if (typeof blendable.updateMaterial === "function") {
+    blendable.updateMaterial();
+  } else if (typeof blendable._updateBlendFunc === "function") {
+    blendable._updateBlendFunc();
+  } else {
+    throw new Error(
+      `Cocos Sprite on node "${nodeName}" cannot update material blend state for V5G blend mode "${config.mode}".`,
+    );
+  }
+
+  const pass = getCocosSpriteBlendPass(nodeName, blendable, config.mode);
+  const target = pass.blendState.targets[0];
+  if (!target) {
+    throw new Error(
+      `Cocos Sprite on node "${nodeName}" has no blend target for V5G blend mode "${config.mode}".`,
+    );
+  }
+
+  target.blend = true;
+  target.blendEq = getCocosBlendOperation(config.color.operation, config.mode);
+  target.blendAlphaEq = getCocosBlendOperation(
+    config.alpha.operation,
+    config.mode,
+  );
+  target.blendSrc = getCocosBlendFactor(config.color.sourceFactor, config.mode);
+  target.blendDst = getCocosBlendFactor(
+    config.color.destinationFactor,
+    config.mode,
+  );
+  target.blendSrcAlpha = getCocosBlendFactor(
+    config.alpha.sourceFactor,
+    config.mode,
+  );
+  target.blendDstAlpha = getCocosBlendFactor(
+    config.alpha.destinationFactor,
+    config.mode,
+  );
+  pass.blendState.setTarget(0, target);
+  pass._updatePassHash();
+}
+
+function setSpriteBlendFactors(
+  nodeName: string,
+  sprite: Partial<BlendableSprite>,
+  sourceFactor: number,
+  destinationFactor: number,
+  blendMode: string,
+): void {
+  if ("srcBlendFactor" in sprite && "dstBlendFactor" in sprite) {
+    sprite.srcBlendFactor = sourceFactor;
+    sprite.dstBlendFactor = destinationFactor;
+    return;
+  }
+  if ("_srcBlendFactor" in sprite && "_dstBlendFactor" in sprite) {
+    sprite._srcBlendFactor = sourceFactor;
+    sprite._dstBlendFactor = destinationFactor;
+    return;
+  }
+  throw new Error(
+    `Cocos Sprite on node "${nodeName}" does not expose blend factor fields required for V5G blend mode "${blendMode}".`,
+  );
+}
+
+function getCocosSpriteBlendPass(
+  nodeName: string,
+  sprite: Partial<BlendableSprite>,
+  blendMode: string,
+): CocosPassLike {
+  if (
+    typeof sprite.getMaterialInstance !== "function" &&
+    typeof sprite.getRenderMaterial !== "function"
+  ) {
+    throw new Error(
+      `Cocos Sprite on node "${nodeName}" cannot provide a material instance for V5G blend mode "${blendMode}".`,
+    );
+  }
+  const material =
+    sprite.getMaterialInstance?.(0) ?? sprite.getRenderMaterial?.(0);
+  const pass = material?.passes[0];
+  if (!pass) {
+    throw new Error(
+      `Cocos Sprite on node "${nodeName}" has no material pass for V5G blend mode "${blendMode}".`,
+    );
+  }
+  if (
+    !pass.blendState ||
+    !Array.isArray(pass.blendState.targets) ||
+    typeof pass.blendState.setTarget !== "function"
+  ) {
+    throw new Error(
+      `Cocos Sprite material on node "${nodeName}" has no mutable blend state for V5G blend mode "${blendMode}".`,
+    );
+  }
+  if (typeof pass._updatePassHash !== "function") {
+    throw new Error(
+      `Cocos Sprite material on node "${nodeName}" cannot refresh pass hash for V5G blend mode "${blendMode}".`,
+    );
+  }
+  return pass;
+}
+
+function getCocosBlendFactor(
+  factor: CocosBlendFactorName,
+  blendMode: string,
+): number {
+  const cocosFactor = COCOS_BLEND_FACTORS[factor];
+  if (cocosFactor === undefined) {
+    throw new Error(
+      `Unsupported Cocos blend factor "${factor}" for V5G blend mode "${blendMode}".`,
+    );
+  }
+  return cocosFactor;
+}
+
+function getCocosBlendOperation(
+  operation: CocosBlendOperationName,
+  blendMode: string,
+): number {
+  const cocosOperation = COCOS_BLEND_OPERATIONS[operation];
+  if (cocosOperation === undefined) {
+    throw new Error(
+      `Unsupported Cocos blend operation "${operation}" for V5G blend mode "${blendMode}".`,
+    );
+  }
+  return cocosOperation;
+}
+
+function readSpriteFrameSize(spriteFrame: SpriteFrame): V5GSize | null {
+  const readable = spriteFrame as ReadableSpriteFrame;
+  const fromMethod = readable.getOriginalSize?.() ?? readable.getRect?.();
+  if (isReadableSize(fromMethod)) return fromMethod;
+  if (isReadableSize(readable.originalSize)) return readable.originalSize;
+  if (isReadableSize(readable.rect)) return readable.rect;
+  if (
+    typeof readable.width === "number" &&
+    Number.isFinite(readable.width) &&
+    typeof readable.height === "number" &&
+    Number.isFinite(readable.height)
+  ) {
+    return {
+      width: readable.width,
+      height: readable.height,
+    };
+  }
+  return null;
+}
+
+function isReadableSize(value: unknown): value is ReadableSpriteFrameSize {
+  if (typeof value !== "object" || value === null) return false;
+  const size = value as Partial<ReadableSpriteFrameSize>;
+  return (
+    typeof size.width === "number" &&
+    Number.isFinite(size.width) &&
+    typeof size.height === "number" &&
+    Number.isFinite(size.height)
+  );
 }
 
 export function createV5GCocosPlayer(

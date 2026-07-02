@@ -111,6 +111,7 @@ describe("standalone runtime import", () => {
     );
     expect(runtime.PARTICLE_ANIMATION_TYPES).toEqual([
       "particles",
+      "particle_stream",
       "particle_twinkle",
       "particle_wall",
       "particle_combo",
@@ -155,6 +156,15 @@ describe("standalone runtime import", () => {
     expect(
       runtime.V5GCocosPlayer.prototype.attachSpriteFrameBetweenLayerGroups,
     ).toBeTypeOf("function");
+    expect(runtime.V5GCocosPlayer.prototype.attachTextToTextLayer).toBeTypeOf(
+      "function",
+    );
+    expect(runtime.V5GCocosPlayer.prototype.attachNodeToTextLayer).toBeTypeOf(
+      "function",
+    );
+    expect(runtime.V5GCocosPlayer.prototype.getRuntimeDiagnostics).toBeTypeOf(
+      "function",
+    );
     expect(runtime.V5GCocosPlayer.prototype.detachMountedNode).toBeTypeOf(
       "function",
     );

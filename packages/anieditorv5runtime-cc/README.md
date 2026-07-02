@@ -16,6 +16,7 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - `fileWidth`、`fileHeight`、`fileScale` 压缩资源 metadata
 - `project.layerGroups + layer.groupId`：runtime 按 `project.layers` 中连续的 group run 决定渲染顺序，不使用 `layerGroups.order` 重排画面
 - `image` 图层
+- `text` 图层：runtime 创建 Cocos `Label` 作为原始文本节点；宿主可通过 public API 绑定自有 `Node`、文本节点或 SpriteFrame/项目资产到文本层
 - 中心坐标：Cocos 节点位置直接使用 `transform.x/y`，不做 Pixi 的左上角坐标转换
 - 负 `scaleX/scaleY` 镜像
 - `opacity`、`visible`、`rotation`、锚点
@@ -25,21 +26,23 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - `scale_in`、`scale_out`、`pop`、`shake`、`blink`
 - `idle`：作为 timeline coverage marker，不改变 transform 或 opacity
 - `safe_glow`：使用当前图层同一张 `SpriteFrame` 创建副本，继承图层 `blendMode`，通过缩放和透明度呼吸模拟高亮，不需要 shader、Effect、滤镜或模糊
-- `particle_wall`、`particle_combo`、`squash_stretch`
-- 图层动画 `particles`、`particle_twinkle`、`particle_wall`、`particle_combo`：复用当前图层的 `SpriteFrame` 创建粒子 Sprite；真实粒子节点挂在对应图层后面的 `<layer name> Particles` 容器下，全局 `V5G Particles` 节点只保留为空占位
+- `chaser_light`：使用当前图层同一张 `SpriteFrame` 采样走马灯节点；`keepOriginal=false` 会隐藏源图像，走马灯副本仍在 `<layer name> Chaser Light` 容器中渲染
+- `particle_wall`、`particle_combo`、`particle_stream`、`squash_stretch`
+- 图层动画 `particles`、`particle_twinkle`、`particle_wall`、`particle_combo`、`particle_stream`：复用当前图层的 `SpriteFrame` 创建粒子 Sprite；真实粒子节点挂在对应图层后面的 `<layer name> Particles` 容器下，全局 `V5G Particles` 节点只保留为空占位
 - 粒子参数仍按 VNI/Pixi 导出语义解释：`direction: 270` 表示向上，`gravity` 正数表示向下；Cocos 渲染时会把粒子 Y offset 转成 Cocos UI 坐标系，避免上下方向反转
 - `particle_combo.params.sourceOpacity` 只影响源图像显示，不会把同层粒子透明度一起清零；粒子透明度使用图层原始 `opacity`
 - `safe_glow.params.keepOriginal=false` 只隐藏源图像节点；safe glow 副本仍会在 `<layer name> Safe Glow` 容器中渲染
+- `mask.mode === "alpha"` 且 `mask.compositeMode === "legacy_alpha"`：通过 Cocos `Mask.Type.IMAGE_STENCIL` adapter 创建 alpha mask；`showSourceLayer=false` 会隐藏 source layer
 - 粒子动画在 `progress <= 0` 时不发射粒子；接近 0 缩放的入场首帧会保持隐藏，避免首帧漏图
 - 由宿主 Cocos Component 在 `update(deltaTime)` 中显式驱动播放
 
 明确不支持：
 
-- `text` 图层
 - 顶层 `project.particles`
 - 非空 `keyframes`
 - `group` 图层
 - 嵌套 `parentId`
+- `mask.compositeMode === "precompose_light_alpha"`：Cocos standalone/runtime 当前没有 vnicore 的 precompose alpha 缓存链路，会在 `validateCocosV5GProject(...)` / `init()` 阶段显式失败
 - Cocos deterministic render effect：enabled `shatter` / `glow` 会在 `validateCocosV5GProject(...)` / `init()` 阶段显式失败；通用 `assertV5GProject(...)` 和 `validateV5GProject(...)` 仍会解析并校验其导出参数，便于诊断导出合同
 - 未知资源、未知动画、未知 easing、未知 blend mode 的静默兜底
 
@@ -54,18 +57,22 @@ V5G Stage
   V5G Content
     V5G Group <lower group id>
       <layer image node>
+      <layer text binding container, only for text layers>
       <layer safe glow container>
+      <layer chaser light container>
       <layer particles node>
     V5G Slot <lower group id> -> <upper group id>
       <mounted external nodes>
     V5G Group <upper group id>
       <layer image node>
+      <layer text binding container, only for text layers>
       <layer safe glow container>
+      <layer chaser light container>
       <layer particles node>
   V5G Particles
 ```
 
-`V5G Particles` 仍保留为空占位；真实 layer particle 节点挂在对应 group 内的 `<layer name> Particles` 容器。`safe_glow` 副本节点挂在同一图层的 `<layer name> Safe Glow` 容器中，位于源图像节点之后、粒子容器之前。group container 和 slot container 都使用 stage center 坐标体系，外部 `Node` 挂接时不会被 runtime 重置 transform。
+`V5G Particles` 仍保留为空占位；真实 layer particle 节点挂在对应 group 内的 `<layer name> Particles` 容器。`safe_glow` 副本节点挂在同一图层的 `<layer name> Safe Glow` 容器中，`chaser_light` 节点挂在 `<layer name> Chaser Light` 容器中。容器顺序固定为源图层节点、可选 text binding 容器、safe glow、chaser light、particles。group container 和 slot container 都使用 stage center 坐标体系，外部 `Node` 挂接时不会被 runtime 重置 transform。
 
 查询合法 slot 并插入宿主节点：
 
@@ -119,6 +126,50 @@ player.attachSpriteFrameBetweenLayerGroups({
 ```
 
 这两个 helper 创建的节点默认 `destroyOnDetach: true`，并复用 runtime 的 SpriteFrame resolver、逻辑尺寸、anchor、opacity 和 blend mode 规则。runtime 不提供 URL loader，也不会调用 `resources.load()`。
+
+## Text layer binding 和 diagnostics
+
+`text` 图层会先创建一个 Cocos `Label` 节点作为导出文本的原始显示。宿主如果需要使用字体组件、BitmapFont、富文本、动态数字牌或业务 UI 节点，可以通过 public API 挂到对应 text layer 的 binding 容器。binding 容器跟随 text layer 的 transform、opacity 和可见性；默认会隐藏原始 `Label`，dispose 后恢复当前帧的原始文本显示。
+
+```ts
+const binding = player.attachTextToTextLayer({
+  id: "win-amount",
+  layerId: "layer_text_amount",
+  text: "$12.34",
+});
+
+binding.setText("$56.78");
+binding.dispose();
+```
+
+宿主也可以挂自己的 Cocos `Node`，或让 runtime 用项目资产 / 外部 SpriteFrame 创建 runtime-owned image node：
+
+```ts
+player.attachNodeToTextLayer({
+  id: "custom-amount-node",
+  layerId: "layer_text_amount",
+  node: amountNode,
+  hideOriginal: true,
+});
+
+player.attachProjectAssetToTextLayer({
+  id: "amount-image",
+  layerId: "layer_text_amount",
+  assetId: "asset_image_amount",
+});
+
+player.attachSpriteFrameToTextLayer({
+  id: "amount-frame",
+  layerId: "layer_text_amount",
+  spriteFrame,
+  width: 128,
+  height: 48,
+});
+```
+
+这些 API 只接受真实存在的 `text` layer。未知 layer、非 text layer、重复 binding id、空 id 或空节点都会显式失败。runtime 不把 text layer 当私有 Cocos display tree 暴露给宿主直接改；替换文字和业务节点都应走这些 public API。
+
+`getRuntimeDiagnostics()` 可用于宿主调试和自动化验收，返回当前已渲染的 `particleSpriteCount`、`chaserLightSpriteCount`、`safeGlowSpriteCount`、`maskNodeCount`、`textLayerBindingCount`、`mountedNodeCount` 和 `liveParticleCount`。这些计数只描述 runtime 当前管理的节点，不替代业务侧自己的节点统计。
 
 ## 单文件复制导入
 
@@ -329,7 +380,7 @@ import {
 
 ## 背景和 blend mode
 
-runtime 不再创建 `V5G Background`，也不使用 Cocos `Graphics` 绘制 `project.stage.backgroundColor`。stage 背景属于编辑器预览或宿主场景职责；宿主可以在 Canvas、父节点、UI 层或业务场景中自行放置背景。runtime stage 下只创建 `V5G Content` 和 `V5G Particles`，其中 `V5G Particles` 当前保留为空占位，真实粒子节点挂在对应图层后面的 `<layer name> Particles` 容器下。
+runtime 不再创建 `V5G Background`，也不使用 Cocos `Graphics` 绘制 `project.stage.backgroundColor`。stage 背景属于编辑器预览或宿主场景职责；宿主可以在 Canvas、父节点、UI 层或业务场景中自行放置背景。runtime stage 下只创建 `V5G Content` 和 `V5G Particles`，其中 `V5G Particles` 当前保留为空占位，真实粒子节点挂在对应图层后面的 `<layer name> Particles` 容器下；safe glow、chaser light 和 text binding 分别挂在对应图层的专用容器下。
 
 runtime 当前使用 Cocos Creator 3.8.6 原生 `Sprite.srcBlendFactor` / `dstBlendFactor` 和 material pass `blendState` 应用 V5G blend mode，不需要额外 shader / Effect 资产：
 
@@ -348,7 +399,7 @@ standalone/anieditorv5runtime-cc.ts
 standalone/V5GPreview.example.ts
 ```
 
-宿主不需要为 `safe_glow` 或其它当前支持能力绑定额外 Material / Effect；`safe_glow` 使用同图 `SpriteFrame` 副本、继承图层 `blendMode`、scale 和 opacity。若运行环境里的 Sprite 不暴露 blend factor、material instance、pass blend target 或 pass hash 刷新能力，runtime 会直接抛出包含节点名和 blend mode 的错误；这类错误需要回到 Cocos 版本/API 兼容性排查，不能用静默兜底掩盖。
+宿主不需要为 `safe_glow`、`chaser_light` 或其它当前支持能力绑定额外 Material / Effect；`safe_glow` 和 `chaser_light` 使用同图 `SpriteFrame` 副本、继承图层 `blendMode`、scale 和 opacity。若运行环境里的 Sprite 不暴露 blend factor、material instance、pass blend target 或 pass hash 刷新能力，runtime 会直接抛出包含节点名和 blend mode 的错误；这类错误需要回到 Cocos 版本/API 兼容性排查，不能用静默兜底掩盖。
 
 ## `cc` 类型 shim
 

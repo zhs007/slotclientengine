@@ -4,10 +4,15 @@ import {
   type V5GLiveParticleSpriteSample,
   type V5GParticleRuntimeLayer,
 } from "../core/particle-runtime.js";
+import type { Node, SpriteFrame } from "cc";
 import {
   sampleProjectAtTime,
   type SampledLayerState,
 } from "../core/project-sampler.js";
+import {
+  sampleChaserLightSpritesForLayer,
+  type VNIChaserLightSpriteSample,
+} from "../core/chaser-light-sampler.js";
 import {
   sampleSafeGlowSpritesForLayer,
   type VNISafeGlowSpriteSample,
@@ -42,11 +47,17 @@ import type {
   V5GCocosAssetResolver,
   V5GCocosAssetSource,
   V5GCocosAttachNodeBetweenLayerGroupsOptions,
+  V5GCocosAttachNodeToTextLayerOptions,
   V5GCocosAttachProjectAssetBetweenLayerGroupsOptions,
+  V5GCocosAttachProjectAssetToTextLayerOptions,
   V5GCocosAttachSpriteFrameBetweenLayerGroupsOptions,
+  V5GCocosAttachSpriteFrameToTextLayerOptions,
+  V5GCocosAttachTextToTextLayerOptions,
   V5GCocosLayerGroupInfo,
   V5GCocosLayerGroupSlot,
+  V5GCocosRuntimeDiagnostics,
   V5GCocosSpriteAtlasAssetSource,
+  V5GCocosTextLayerTextBinding,
   V5GCocosPlayerOptions,
   V5GCocosPlayOptions,
   V5GCocosPlayRangeOptions,
@@ -55,13 +66,18 @@ import type {
 
 interface ManagedLayer<TNode, TSpriteFrame> {
   layer: V5GLayerConfig;
-  asset: V5GAssetConfig;
+  asset: V5GAssetConfig | null;
   node: TNode;
+  textBindingContainer: TNode | null;
+  textBindings: TextLayerBindingRecord<TNode>[];
   safeGlowContainer: TNode;
   safeGlowNodes: TNode[];
+  chaserLightContainer: TNode;
+  chaserLightNodes: TNode[];
   particleContainer: TNode;
   particleNodes: TNode[];
-  spriteFrame: TSpriteFrame;
+  maskNode: TNode | null;
+  spriteFrame: TSpriteFrame | null;
 }
 
 interface PlaybackBoundary {
@@ -98,6 +114,16 @@ interface MountedNodeRecord<TNode> {
   version: number;
 }
 
+interface TextLayerBindingRecord<TNode> {
+  id: string;
+  node: TNode;
+  originalParent: TNode | null;
+  originalLocalTransform: V5GCocosNodeTransformSnapshot;
+  destroyOnDetach: boolean;
+  hideOriginal: boolean;
+  version: number;
+}
+
 interface NormalizedMountedNode<TNode> {
   id: string | null;
   node: TNode;
@@ -128,7 +154,7 @@ function getExpectedSpriteFrameSize(asset: V5GAssetConfig): {
   };
 }
 
-export class V5GCocosPlayer<TNode, TSpriteFrame> {
+export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   private readonly options: V5GCocosPlayerOptions<TNode, TSpriteFrame>;
   private readonly layers = new Map<
     string,
@@ -146,7 +172,12 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     TNode,
     MountedNodeRecord<TNode>
   >();
+  private readonly textBindingsById = new Map<
+    string,
+    TextLayerBindingRecord<TNode>
+  >();
   private readonly particleRuntime: V5GParticleRuntime;
+  private readonly hiddenMaskSourceLayerIds = new Set<string>();
   private stageNode: TNode | null = null;
   private contentNode: TNode | null = null;
   private particleRootNode: TNode | null = null;
@@ -165,6 +196,7 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
   > = [];
   private loopIndex = 0;
   private nextPlaybackEventOrder = 0;
+  private nextTextBindingVersion = 0;
 
   constructor(options: V5GCocosPlayerOptions<TNode, TSpriteFrame>) {
     this.options = options;
@@ -233,22 +265,37 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
           if (!layer) {
             throw new Error(`Missing V5G layer for render group: ${layerId}.`);
           }
-          const asset = this.requireImageAsset(layer, assetsById);
-          const resolvedSpriteFrame = this.resolveSpriteFrame(asset);
-          const spriteFrame = resolvedSpriteFrame.spriteFrame;
-          if (resolvedSpriteFrame.shouldValidateSize) {
-            this.assertSpriteFrameSize(asset, spriteFrame);
-          }
-
-          const node = driver.createImageNode(layer.name, spriteFrame);
-          driver.setContentSize(node, asset.width, asset.height);
+          const imageRuntime = this.createLayerRuntimeNode(layer, assetsById);
+          const { asset, spriteFrame, node } = imageRuntime;
+          const contentWidth = asset?.width ?? project.stage.width;
+          const contentHeight = asset?.height ?? project.stage.height;
+          driver.setContentSize(node, contentWidth, contentHeight);
           driver.setAnchorPoint(
             node,
             layer.transform.anchorX,
             layer.transform.anchorY,
           );
-          driver.applyBlendMode(node, getCocosBlendModeConfig(layer.blendMode));
+          if (layer.type === "image") {
+            driver.applyBlendMode(
+              node,
+              getCocosBlendModeConfig(layer.blendMode),
+            );
+          }
           driver.appendChild(groupNode, node);
+
+          const textBindingContainer =
+            layer.type === "text"
+              ? driver.createNode(`${layer.name} Text Binding`)
+              : null;
+          if (textBindingContainer) {
+            driver.setContentSize(
+              textBindingContainer,
+              project.stage.width,
+              project.stage.height,
+            );
+            driver.setAnchorPoint(textBindingContainer, 0.5, 0.5);
+            driver.appendChild(groupNode, textBindingContainer);
+          }
 
           const safeGlowContainer = driver.createNode(
             `${layer.name} Safe Glow`,
@@ -260,6 +307,17 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
           );
           driver.setAnchorPoint(safeGlowContainer, 0.5, 0.5);
           driver.appendChild(groupNode, safeGlowContainer);
+
+          const chaserLightContainer = driver.createNode(
+            `${layer.name} Chaser Light`,
+          );
+          driver.setContentSize(
+            chaserLightContainer,
+            project.stage.width,
+            project.stage.height,
+          );
+          driver.setAnchorPoint(chaserLightContainer, 0.5, 0.5);
+          driver.appendChild(groupNode, chaserLightContainer);
 
           const particleContainer = driver.createNode(
             `${layer.name} Particles`,
@@ -276,10 +334,15 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
             layer,
             asset,
             node,
+            textBindingContainer,
+            textBindings: [],
             safeGlowContainer,
             safeGlowNodes: [],
+            chaserLightContainer,
+            chaserLightNodes: [],
             particleContainer,
             particleNodes: [],
+            maskNode: null,
             spriteFrame,
           });
         }
@@ -302,6 +365,8 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
         }
       }
 
+      this.initializeLayerMasks();
+
       driver.appendChild(this.options.root, stage);
       this.stageNode = stage;
       this.renderDeterministicFrame(this.currentTime);
@@ -315,6 +380,8 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
       this.slotNodesByKey.clear();
       this.mountedNodesById.clear();
       this.mountedNodesByNode.clear();
+      this.textBindingsById.clear();
+      this.hiddenMaskSourceLayerIds.clear();
       this.layerGroups = [];
       this.layerGroupSlots = [];
       throw error;
@@ -498,6 +565,148 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     );
   }
 
+  attachNodeToTextLayer(
+    options: V5GCocosAttachNodeToTextLayerOptions<TNode>,
+  ): () => void {
+    this.assertInitialized("attachNodeToTextLayer");
+    const id = normalizeTextLayerBindingId(options.id);
+    if (this.textBindingsById.has(id)) {
+      throw new Error(`Duplicate V5G Cocos text layer binding id: ${id}.`);
+    }
+    if (options.node === null || options.node === undefined) {
+      throw new Error(
+        "V5GCocosPlayer.attachNodeToTextLayer node must be non-null.",
+      );
+    }
+    const managed = this.requireTextManagedLayer(
+      options.layerId,
+      "attachNodeToTextLayer",
+    );
+    const container = managed.textBindingContainer;
+    if (!container) {
+      throw new Error(
+        `V5G Cocos text layer "${options.layerId}" has no binding container.`,
+      );
+    }
+    const record = this.attachTextBindingRecord(
+      managed,
+      id,
+      options.node,
+      container,
+      options.destroyOnDetach === true,
+      options.hideOriginal !== false,
+    );
+    this.applyTextLayerOriginalVisibility(managed);
+    this.renderDeterministicFrame(this.currentTime);
+
+    let disposed = false;
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      const current = this.textBindingsById.get(id);
+      if (current?.version === record.version) {
+        this.detachTextBindingRecord(managed, current);
+      }
+    };
+  }
+
+  attachTextToTextLayer(
+    options: V5GCocosAttachTextToTextLayerOptions,
+  ): V5GCocosTextLayerTextBinding {
+    this.assertInitialized("attachTextToTextLayer");
+    const node = this.options.driver.createTextNode(
+      `V5G Text Binding ${options.id}`,
+      options.text,
+    );
+    try {
+      const disposeNode = this.attachNodeToTextLayer({
+        id: options.id,
+        layerId: options.layerId,
+        node,
+        hideOriginal: options.hideOriginal,
+        destroyOnDetach: true,
+      });
+      return {
+        dispose: disposeNode,
+        setText: (text: string) => {
+          this.options.driver.setText(node, text);
+        },
+      };
+    } catch (error) {
+      this.options.driver.destroyNode(node);
+      throw error;
+    }
+  }
+
+  attachProjectAssetToTextLayer(
+    options: V5GCocosAttachProjectAssetToTextLayerOptions,
+  ): () => void {
+    this.assertInitialized("attachProjectAssetToTextLayer");
+    const asset = this.options.project.assets.find(
+      (candidate) => candidate.id === options.assetId,
+    );
+    if (!asset) {
+      throw new Error(`Unknown V5G asset id: ${options.assetId}.`);
+    }
+    const resolvedSpriteFrame = this.resolveSpriteFrame(asset);
+    if (resolvedSpriteFrame.shouldValidateSize) {
+      this.assertSpriteFrameSize(asset, resolvedSpriteFrame.spriteFrame);
+    }
+    const node = this.options.driver.createImageNode(
+      `V5G Text Image ${asset.id}`,
+      resolvedSpriteFrame.spriteFrame,
+    );
+    try {
+      this.configureTextBindingImageNode(node, asset.width, asset.height);
+      return this.attachNodeToTextLayer({
+        id: options.id,
+        layerId: options.layerId,
+        node,
+        hideOriginal: options.hideOriginal,
+        destroyOnDetach: true,
+      });
+    } catch (error) {
+      this.options.driver.destroyNode(node);
+      throw error;
+    }
+  }
+
+  attachSpriteFrameToTextLayer(
+    options: V5GCocosAttachSpriteFrameToTextLayerOptions<TSpriteFrame>,
+  ): () => void {
+    this.assertInitialized("attachSpriteFrameToTextLayer");
+    const node = this.options.driver.createImageNode(
+      "V5G Text SpriteFrame",
+      options.spriteFrame,
+    );
+    try {
+      this.configureTextBindingImageNode(node, options.width, options.height);
+      return this.attachNodeToTextLayer({
+        id: options.id,
+        layerId: options.layerId,
+        node,
+        hideOriginal: options.hideOriginal,
+        destroyOnDetach: true,
+      });
+    } catch (error) {
+      this.options.driver.destroyNode(node);
+      throw error;
+    }
+  }
+
+  getRuntimeDiagnostics(): V5GCocosRuntimeDiagnostics {
+    return {
+      particleSpriteCount: this.getRenderedParticleCount(),
+      chaserLightSpriteCount: this.getRenderedChaserLightCount(),
+      maskNodeCount: this.getRenderedMaskNodeCount(),
+      textLayerBindingCount: this.textBindingsById.size,
+      mountedNodeCount:
+        this.mountedNodesByNode.size + this.textBindingsById.size,
+      safeGlowSpriteCount: this.getRenderedSafeGlowCount(),
+      liveParticleCount: this.particleRuntime.getLiveParticleCount(),
+    };
+  }
+
   detachMountedNode(target: string | TNode): void {
     this.detachMountedNodeRecordAndUnregister(
       this.requireMountedNodeRecord(target),
@@ -521,6 +730,7 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     for (const mounted of [...this.mountedNodesByNode.values()]) {
       this.detachMountedNodeRecordAndUnregister(mounted);
     }
+    this.clearTextBindings();
   }
 
   addPlaybackEvent(options: V5GCocosPlaybackEventOptions): () => void {
@@ -941,11 +1151,41 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
         managed.node,
         opacityToCocosOpacity(sampledLayer.opacity),
       );
+      const hideAsMaskSource = this.hiddenMaskSourceLayerIds.has(
+        sampledLayer.layerId,
+      );
       this.options.driver.setActive(
         managed.node,
-        sampledLayer.renderImageDisplay,
+        sampledLayer.renderImageDisplay && !hideAsMaskSource,
       );
+      this.applyTextLayerOriginalVisibility(managed);
+      if (managed.textBindingContainer) {
+        this.options.driver.setPosition(
+          managed.textBindingContainer,
+          position.x,
+          position.y,
+        );
+        this.options.driver.setScale(
+          managed.textBindingContainer,
+          sampledLayer.transform.scaleX,
+          sampledLayer.transform.scaleY,
+        );
+        this.options.driver.setRotationDegrees(
+          managed.textBindingContainer,
+          sampledLayer.transform.rotation,
+        );
+        this.options.driver.setOpacity(
+          managed.textBindingContainer,
+          opacityToCocosOpacity(sampledLayer.opacity),
+        );
+        this.options.driver.setActive(
+          managed.textBindingContainer,
+          sampledLayer.visible,
+        );
+      }
+      this.updateMaskSample(managed);
       this.renderSafeGlowSamples(managed, sampledLayer, sampledProject.time);
+      this.renderChaserLightSamples(managed, sampledLayer, sampledProject.time);
     }
 
     return sampledProject;
@@ -956,6 +1196,10 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     sampledLayer: SampledLayerState,
     time: number,
   ): void {
+    if (!managed.asset || !managed.spriteFrame) {
+      this.clearSafeGlowNodesForLayer(managed);
+      return;
+    }
     const safeGlows = sampleSafeGlowSpritesForLayer(
       managed.layer,
       sampledLayer,
@@ -1003,6 +1247,7 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     sampledLayer: SampledLayerState,
     safeGlow: VNISafeGlowSpriteSample,
   ): void {
+    if (!managed.asset) return;
     const position = v5gTransformToCocosPosition(sampledLayer.transform);
     this.options.driver.setContentSize(
       node,
@@ -1032,6 +1277,80 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     this.options.driver.setActive(node, true);
   }
 
+  private renderChaserLightSamples(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+    sampledLayer: SampledLayerState,
+    time: number,
+  ): void {
+    if (!managed.asset || !managed.spriteFrame) {
+      this.clearChaserLightNodesForLayer(managed);
+      return;
+    }
+    const chasers = sampleChaserLightSpritesForLayer(
+      managed.layer,
+      sampledLayer,
+      {
+        width: managed.asset.width,
+        height: managed.asset.height,
+      },
+      time,
+    );
+
+    while (managed.chaserLightNodes.length < chasers.length) {
+      const node = this.options.driver.createImageNode(
+        `V5G Chaser Light ${managed.layer.id}`,
+        managed.spriteFrame,
+      );
+      this.options.driver.setContentSize(
+        node,
+        managed.asset.width,
+        managed.asset.height,
+      );
+      this.options.driver.setAnchorPoint(node, 0.5, 0.5);
+      this.options.driver.applyBlendMode(
+        node,
+        getCocosBlendModeConfig(managed.layer.blendMode),
+      );
+      this.options.driver.appendChild(managed.chaserLightContainer, node);
+      managed.chaserLightNodes.push(node);
+    }
+
+    for (let index = 0; index < chasers.length; index += 1) {
+      const chaser = chasers[index];
+      const node = managed.chaserLightNodes[index];
+      this.applyChaserLightSample(node, sampledLayer, chaser);
+    }
+
+    while (managed.chaserLightNodes.length > chasers.length) {
+      const node = managed.chaserLightNodes.pop();
+      if (node !== undefined) this.options.driver.destroyNode(node);
+    }
+  }
+
+  private applyChaserLightSample(
+    node: TNode,
+    sampledLayer: SampledLayerState,
+    chaser: VNIChaserLightSpriteSample,
+  ): void {
+    const position = v5gTransformToCocosPosition(sampledLayer.transform);
+    this.options.driver.setPosition(
+      node,
+      position.x + chaser.x,
+      position.y + chaser.y,
+    );
+    this.options.driver.setScale(node, chaser.scale, chaser.scale);
+    this.options.driver.setRotationDegrees(
+      node,
+      (chaser.rotation * 180) / Math.PI,
+    );
+    this.options.driver.setOpacity(node, opacityToCocosOpacity(chaser.alpha));
+    this.options.driver.applyBlendMode(
+      node,
+      getCocosBlendModeConfig(chaser.blendMode),
+    );
+    this.options.driver.setActive(node, true);
+  }
+
   private getParticleRuntimeLayers(
     sampledLayers: readonly SampledLayerState[],
   ): V5GParticleRuntimeLayer[] {
@@ -1042,6 +1361,11 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
       if (!managed) {
         throw new Error(
           `Missing runtime node for V5G particle layer "${sampledLayer.layerId}".`,
+        );
+      }
+      if (!managed.asset) {
+        throw new Error(
+          `V5G particle layer "${sampledLayer.layerId}" requires an image asset.`,
         );
       }
       layers.push({
@@ -1067,6 +1391,13 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     }
 
     for (const managed of this.layers.values()) {
+      if (!managed.asset || !managed.spriteFrame) {
+        while (managed.particleNodes.length > 0) {
+          const node = managed.particleNodes.pop();
+          if (node !== undefined) this.options.driver.destroyNode(node);
+        }
+        continue;
+      }
       const layerParticles = particlesByLayer.get(managed.layer.id) ?? [];
       while (managed.particleNodes.length < layerParticles.length) {
         const node = this.options.driver.createImageNode(
@@ -1111,6 +1442,195 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
         const node = managed.particleNodes.pop();
         if (node !== undefined) this.options.driver.destroyNode(node);
       }
+    }
+  }
+
+  private createLayerRuntimeNode(
+    layer: V5GLayerConfig,
+    assetsById: ReadonlyMap<string, V5GAssetConfig>,
+  ): {
+    asset: V5GAssetConfig | null;
+    spriteFrame: TSpriteFrame | null;
+    node: TNode;
+  } {
+    if (layer.type === "text") {
+      return {
+        asset: null,
+        spriteFrame: null,
+        node: this.options.driver.createTextNode(layer.name, layer.text ?? ""),
+      };
+    }
+    const asset = this.requireImageAsset(layer, assetsById);
+    const resolvedSpriteFrame = this.resolveSpriteFrame(asset);
+    const spriteFrame = resolvedSpriteFrame.spriteFrame;
+    if (resolvedSpriteFrame.shouldValidateSize) {
+      this.assertSpriteFrameSize(asset, spriteFrame);
+    }
+    return {
+      asset,
+      spriteFrame,
+      node: this.options.driver.createImageNode(layer.name, spriteFrame),
+    };
+  }
+
+  private initializeLayerMasks(): void {
+    this.hiddenMaskSourceLayerIds.clear();
+    for (const managed of this.layers.values()) {
+      const mask = managed.layer.mask;
+      if (!mask?.enabled) continue;
+      if (mask.compositeMode === "precompose_light_alpha") {
+        throw new Error(
+          `Cocos runtime cannot support VNI mask compositeMode "precompose_light_alpha" for layer "${managed.layer.id}" with sourceLayerId "${mask.sourceLayerId}" through the copyable standalone runtime. Use "legacy_alpha" or provide a dedicated Cocos mask adapter.`,
+        );
+      }
+      if (!mask.sourceLayerId) {
+        throw new Error(
+          `VNI mask on layer "${managed.layer.id}" requires sourceLayerId when enabled.`,
+        );
+      }
+      const source = this.layers.get(mask.sourceLayerId);
+      if (!source) {
+        throw new Error(
+          `VNI mask on layer "${managed.layer.id}" references missing source layer "${mask.sourceLayerId}".`,
+        );
+      }
+      const createMask = this.options.driver.createAlphaMaskNode;
+      if (!createMask) {
+        throw new Error(
+          `Cocos node driver does not support VNI legacy_alpha mask for layer "${managed.layer.id}" with sourceLayerId "${mask.sourceLayerId}".`,
+        );
+      }
+      const maskNode = createMask(
+        `V5G Mask ${managed.layer.id}`,
+        source.node,
+        managed.node,
+      );
+      const groupNode = this.groupNodesById.get(managed.layer.groupId ?? "");
+      if (!groupNode) {
+        throw new Error(
+          `Missing V5G group node for masked layer "${managed.layer.id}".`,
+        );
+      }
+      this.options.driver.appendChild(groupNode, maskNode);
+      managed.maskNode = maskNode;
+      if (!mask.showSourceLayer) {
+        this.hiddenMaskSourceLayerIds.add(mask.sourceLayerId);
+      }
+    }
+  }
+
+  private updateMaskSample(managed: ManagedLayer<TNode, TSpriteFrame>): void {
+    if (!managed.maskNode || !managed.layer.mask?.sourceLayerId) return;
+    const source = this.layers.get(managed.layer.mask.sourceLayerId);
+    if (!source) {
+      throw new Error(
+        `Missing VNI mask source layer "${managed.layer.mask.sourceLayerId}" for "${managed.layer.id}".`,
+      );
+    }
+    this.options.driver.updateAlphaMaskNode?.(
+      managed.maskNode,
+      source.node,
+      managed.node,
+    );
+  }
+
+  private configureTextBindingImageNode(
+    node: TNode,
+    width: number,
+    height: number,
+  ): void {
+    this.assertPositiveFiniteNumber(width, "text layer image width");
+    this.assertPositiveFiniteNumber(height, "text layer image height");
+    this.options.driver.setContentSize(node, width, height);
+    this.options.driver.setAnchorPoint(node, 0.5, 0.5);
+    this.options.driver.setPosition(node, 0, 0);
+    this.options.driver.setScale(node, 1, 1);
+    this.options.driver.setRotationDegrees(node, 0);
+    this.options.driver.setOpacity(node, 255);
+    this.options.driver.setActive(node, true);
+    this.options.driver.applyBlendMode(node, getCocosBlendModeConfig("normal"));
+  }
+
+  private attachTextBindingRecord(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+    id: string,
+    node: TNode,
+    container: TNode,
+    destroyOnDetach: boolean,
+    hideOriginal: boolean,
+  ): TextLayerBindingRecord<TNode> {
+    const originalParent = this.options.driver.getParent(node);
+    const record: TextLayerBindingRecord<TNode> = {
+      id,
+      node,
+      originalParent,
+      originalLocalTransform: this.options.driver.captureLocalTransform(node),
+      destroyOnDetach,
+      hideOriginal,
+      version: this.nextTextBindingVersion,
+    };
+    this.nextTextBindingVersion += 1;
+    this.options.driver.appendChild(container, node);
+    this.options.driver.setPosition(node, 0, 0);
+    this.options.driver.setScale(node, 1, 1);
+    this.options.driver.setRotationDegrees(node, 0);
+    this.options.driver.setOpacity(node, 255);
+    this.options.driver.setActive(node, true);
+    managed.textBindings.push(record);
+    this.textBindingsById.set(id, record);
+    return record;
+  }
+
+  private detachTextBindingRecord(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+    record: TextLayerBindingRecord<TNode>,
+  ): void {
+    managed.textBindings = managed.textBindings.filter(
+      (candidate) => candidate !== record,
+    );
+    this.textBindingsById.delete(record.id);
+    if (record.destroyOnDetach) {
+      this.options.driver.destroyNode(record.node);
+    } else {
+      const parent = this.options.driver.getParent(record.node);
+      if (parent) {
+        this.options.driver.removeChild(parent, record.node);
+      }
+      if (
+        record.originalParent !== null &&
+        this.isDriverNodeValid(record.originalParent)
+      ) {
+        this.options.driver.appendChild(record.originalParent, record.node);
+      }
+      this.options.driver.restoreLocalTransform(
+        record.node,
+        record.originalLocalTransform,
+      );
+    }
+    this.applyTextLayerOriginalVisibility(managed);
+    if (this.stageNode !== null) {
+      this.renderDeterministicFrame(this.currentTime);
+    }
+  }
+
+  private clearTextBindings(): void {
+    for (const managed of this.layers.values()) {
+      for (const binding of [...managed.textBindings]) {
+        this.detachTextBindingRecord(managed, binding);
+      }
+    }
+    this.textBindingsById.clear();
+  }
+
+  private applyTextLayerOriginalVisibility(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+  ): void {
+    if (managed.layer.type !== "text") return;
+    const shouldHideOriginal = managed.textBindings.some(
+      (binding) => binding.hideOriginal,
+    );
+    if (shouldHideOriginal) {
+      this.options.driver.setActive(managed.node, false);
     }
   }
 
@@ -1480,7 +2000,9 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
   private destroyManagedNodes(): void {
     this.clearMountedNodes();
     this.clearSafeGlowNodes();
+    this.clearChaserLightNodes();
     this.clearParticles();
+    this.clearMaskNodes();
     if (this.stageNode !== null) {
       this.options.driver.destroyNode(this.stageNode);
     }
@@ -1492,6 +2014,8 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     this.slotNodesByKey.clear();
     this.mountedNodesById.clear();
     this.mountedNodesByNode.clear();
+    this.textBindingsById.clear();
+    this.hiddenMaskSourceLayerIds.clear();
     this.layerGroups = [];
     this.layerGroupSlots = [];
   }
@@ -1516,6 +2040,23 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
       );
     }
     return asset;
+  }
+
+  private requireTextManagedLayer(
+    layerId: string,
+    apiName: string,
+  ): ManagedLayer<TNode, TSpriteFrame> {
+    const normalizedLayerId = normalizeLayerId(layerId, apiName);
+    const managed = this.layers.get(normalizedLayerId);
+    if (!managed) {
+      throw new Error(`Unknown V5G text layer id: ${normalizedLayerId}.`);
+    }
+    if (managed.layer.type !== "text") {
+      throw new Error(
+        `V5GCocosPlayer.${apiName} requires a text layer, got "${managed.layer.type}" for "${normalizedLayerId}".`,
+      );
+    }
+    return managed;
   }
 
   private assertSpriteFrameSize(
@@ -1579,9 +2120,40 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
 
   private clearSafeGlowNodes(): void {
     for (const managed of this.layers.values()) {
-      while (managed.safeGlowNodes.length > 0) {
-        const node = managed.safeGlowNodes.pop();
-        if (node !== undefined) this.options.driver.destroyNode(node);
+      this.clearSafeGlowNodesForLayer(managed);
+    }
+  }
+
+  private clearSafeGlowNodesForLayer(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+  ): void {
+    while (managed.safeGlowNodes.length > 0) {
+      const node = managed.safeGlowNodes.pop();
+      if (node !== undefined) this.options.driver.destroyNode(node);
+    }
+  }
+
+  private clearChaserLightNodes(): void {
+    for (const managed of this.layers.values()) {
+      this.clearChaserLightNodesForLayer(managed);
+    }
+  }
+
+  private clearChaserLightNodesForLayer(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+  ): void {
+    while (managed.chaserLightNodes.length > 0) {
+      const node = managed.chaserLightNodes.pop();
+      if (node !== undefined) this.options.driver.destroyNode(node);
+    }
+  }
+
+  private clearMaskNodes(): void {
+    for (const managed of this.layers.values()) {
+      if (managed.maskNode) {
+        this.options.driver.clearAlphaMask?.(managed.node, managed.maskNode);
+        this.options.driver.destroyNode(managed.maskNode);
+        managed.maskNode = null;
       }
     }
   }
@@ -1590,6 +2162,30 @@ export class V5GCocosPlayer<TNode, TSpriteFrame> {
     let count = 0;
     for (const managed of this.layers.values()) {
       count += managed.particleNodes.length;
+    }
+    return count;
+  }
+
+  private getRenderedSafeGlowCount(): number {
+    let count = 0;
+    for (const managed of this.layers.values()) {
+      count += managed.safeGlowNodes.length;
+    }
+    return count;
+  }
+
+  private getRenderedChaserLightCount(): number {
+    let count = 0;
+    for (const managed of this.layers.values()) {
+      count += managed.chaserLightNodes.length;
+    }
+    return count;
+  }
+
+  private getRenderedMaskNodeCount(): number {
+    let count = 0;
+    for (const managed of this.layers.values()) {
+      if (managed.maskNode) count += 1;
     }
     return count;
   }
@@ -1702,6 +2298,28 @@ function normalizeMountedNodeId(id: string): string {
   const normalized = id.trim();
   if (normalized.length === 0) {
     throw new Error("V5G Cocos mounted node id must be non-empty.");
+  }
+  return normalized;
+}
+
+function normalizeTextLayerBindingId(id: string): string {
+  if (typeof id !== "string") {
+    throw new Error("V5G Cocos text layer binding id must be a string.");
+  }
+  const normalized = id.trim();
+  if (normalized.length === 0) {
+    throw new Error("V5G Cocos text layer binding id must be non-empty.");
+  }
+  return normalized;
+}
+
+function normalizeLayerId(layerId: string, apiName: string): string {
+  if (typeof layerId !== "string") {
+    throw new Error(`V5GCocosPlayer.${apiName} layerId must be a string.`);
+  }
+  const normalized = layerId.trim();
+  if (normalized.length === 0) {
+    throw new Error(`V5GCocosPlayer.${apiName} layerId must be non-empty.`);
   }
   return normalized;
 }

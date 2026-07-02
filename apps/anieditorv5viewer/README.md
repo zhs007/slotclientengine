@@ -131,7 +131,7 @@ The viewer has a separate advanced playback section for segmented playback. It p
 
 ## Canvas Zoom
 
-The Pixi preview uses a two-layer stage layout: the outer stage mount remains the fixed viewport passed to `VNIPlayer`, and the inner canvas layer is scaled with CSS from its center point. The zoom buttons only change this preview scale; they do not change runtime sampling, renderer viewport size, or `VNIPlayer` adaptation rules.
+The Pixi preview uses a two-layer stage layout: the outer stage mount remains the fixed clipped viewer area, and the inner canvas layer is resized from its center point. The zoom buttons update the Pixi renderer size and the `VNIPlayer` viewport, so Pixi redraws at the zoomed canvas size instead of browser-scaling an already-rendered bitmap.
 
 ## Text Replacement UI
 

@@ -16,6 +16,7 @@ import type {
   V5GExportProfileConfig,
   V5GLayerConfig,
   V5GLayerGroupConfig,
+  V5GLayerMaskConfig,
   V5GProjectConfig,
   V5GTransformConfig,
 } from "./types.js";
@@ -99,6 +100,36 @@ const REQUIRED_NUMERIC_PARAMS: Readonly<
     "flashScale",
     "flashIntensity",
   ],
+  particle_stream: [
+    "spawnRate",
+    "lifetime",
+    "spread",
+    "speed",
+    "emissionAngle",
+    "emissionSpreadAngle",
+    "size",
+    "gravity",
+    "trailCount",
+    "trailSpacing",
+    "trailFade",
+    "randomRotationDegrees",
+    "spinSpeed",
+  ],
+  chaser_light: [
+    "totalCount",
+    "spacing",
+    "lightDuration",
+    "interval",
+    "trajectory",
+    "radius",
+    "centerX",
+    "centerY",
+    "endX",
+    "endY",
+    "curve",
+    "lightSize",
+    "dimAlpha",
+  ],
   shatter: [
     "count",
     "pieceSize",
@@ -132,10 +163,26 @@ const OPTIONAL_BOOLEAN_PARAMS: Readonly<
   scale_out: ["fadeOut"],
   shake: ["decay"],
   particles: ["fadeOut"],
+  particle_stream: ["fadeOut", "rotateParticles", "randomRotation"],
+  chaser_light: ["keepOriginal"],
   particle_wall: ["fadeOut"],
   shatter: ["fadeOut"],
   glow: ["keepOriginal"],
   safe_glow: ["keepOriginal"],
+};
+
+const OPTIONAL_NUMERIC_PARAMS: Readonly<
+  Partial<Record<V5GAnimationType, readonly string[]>>
+> = {
+  particles: [
+    "emissionAngle",
+    "emissionSpreadAngle",
+    "trailCount",
+    "trailSpacing",
+    "trailFade",
+    "randomRotationDegrees",
+    "spinSpeed",
+  ],
 };
 
 export interface ValidateCocosV5GProjectOptions {
@@ -292,6 +339,7 @@ export function validateV5GProject(project: V5GProjectConfig): void {
       assertSupportedAnimation(animation, layer.id, project.stage.duration);
     }
   }
+  validateLayerMasks(project, layerIds);
   getVNIProjectRenderGroupOrder(project);
 }
 
@@ -308,8 +356,16 @@ export function validateCocosV5GProject(
   }
 
   for (const layer of project.layers) {
-    if (layer.type !== "image") {
+    if (layer.type !== "image" && layer.type !== "text") {
       throw new Error(`Unsupported Cocos V5G layer type: ${layer.type}.`);
+    }
+    if (
+      layer.mask?.enabled &&
+      layer.mask.compositeMode === "precompose_light_alpha"
+    ) {
+      throw new Error(
+        `Cocos runtime cannot support VNI mask compositeMode "precompose_light_alpha" for layer "${layer.id}" with sourceLayerId "${layer.mask.sourceLayerId}" through the copyable standalone runtime. Use "legacy_alpha" or provide a dedicated Cocos mask adapter.`,
+      );
     }
     for (const animation of layer.animations) {
       if (
@@ -370,6 +426,45 @@ export function assertSupportedLayer(
   assertFiniteRange(layer.opacity, 0, 1, `layer "${layer.id}" opacity`);
   if (!hasStringValue(SUPPORTED_BLEND_MODES, layer.blendMode)) {
     throw new Error(`Unsupported V5G blendMode: ${layer.blendMode}.`);
+  }
+}
+
+function validateLayerMasks(
+  project: V5GProjectConfig,
+  layerIds: ReadonlySet<string>,
+): void {
+  for (const layer of project.layers) {
+    const mask = layer.mask;
+    if (!mask) continue;
+    if (mask.mode !== "alpha") {
+      throw new Error(
+        `Unsupported VNI mask mode on layer "${layer.id}": ${mask.mode}.`,
+      );
+    }
+    if (
+      mask.compositeMode !== "legacy_alpha" &&
+      mask.compositeMode !== "precompose_light_alpha"
+    ) {
+      throw new Error(
+        `Unsupported VNI mask compositeMode on layer "${layer.id}": ${mask.compositeMode}.`,
+      );
+    }
+    if (!mask.enabled) continue;
+    if (!mask.sourceLayerId) {
+      throw new Error(
+        `VNI mask on layer "${layer.id}" requires sourceLayerId when enabled.`,
+      );
+    }
+    if (mask.sourceLayerId === layer.id) {
+      throw new Error(
+        `VNI mask on layer "${layer.id}" must not reference itself.`,
+      );
+    }
+    if (!layerIds.has(mask.sourceLayerId)) {
+      throw new Error(
+        `VNI mask on layer "${layer.id}" references missing source layer "${mask.sourceLayerId}".`,
+      );
+    }
   }
 }
 
@@ -448,8 +543,23 @@ export function assertSupportedAnimation(
   }
   assertOptionalNumber(animation, "baseX");
   assertOptionalNumber(animation, "baseY");
+  for (const paramKey of OPTIONAL_NUMERIC_PARAMS[animation.type] ?? []) {
+    assertOptionalNumber(animation, paramKey);
+  }
   for (const paramKey of OPTIONAL_BOOLEAN_PARAMS[animation.type] ?? []) {
     assertOptionalBoolean(animation, paramKey);
+  }
+  validateAnimationParamRanges(animation);
+}
+
+function validateAnimationParamRanges(animation: V5GAnimationConfig): void {
+  if (animation.type === "chaser_light") {
+    assertFiniteRange(
+      getNumericParamForValidation(animation, "totalCount"),
+      1,
+      200,
+      `animation "${animation.id}" chaser_light totalCount`,
+    );
   }
 }
 
@@ -538,6 +648,10 @@ function assertLayer(value: unknown, index: number): V5GLayerConfig {
       layer.text === undefined
         ? undefined
         : assertString(layer.text, `project.layers[${index}].text`),
+    mask:
+      layer.mask === undefined
+        ? undefined
+        : assertLayerMask(layer.mask, `project.layers[${index}].mask`),
     animations: assertArray(
       layer.animations,
       `project.layers[${index}].animations`,
@@ -548,6 +662,26 @@ function assertLayer(value: unknown, index: number): V5GLayerConfig {
       layer.keyframes ?? [],
       `project.layers[${index}].keyframes`,
     ) as V5GLayerConfig["keyframes"],
+  };
+}
+
+function assertLayerMask(value: unknown, path: string): V5GLayerMaskConfig {
+  const mask = assertRecord(value, path);
+  return {
+    enabled: assertBoolean(mask.enabled, `${path}.enabled`),
+    sourceLayerId:
+      mask.sourceLayerId === null
+        ? null
+        : assertString(mask.sourceLayerId, `${path}.sourceLayerId`),
+    mode: assertString(mask.mode, `${path}.mode`) as V5GLayerMaskConfig["mode"],
+    compositeMode: assertString(
+      mask.compositeMode,
+      `${path}.compositeMode`,
+    ) as V5GLayerMaskConfig["compositeMode"],
+    showSourceLayer: assertBoolean(
+      mask.showSourceLayer,
+      `${path}.showSourceLayer`,
+    ),
   };
 }
 
@@ -664,6 +798,15 @@ function assertOptionalBoolean(
       `V5G animation "${animation.id}" ${animation.type} param "${key}" must be a boolean.`,
     );
   }
+}
+
+function getNumericParamForValidation(
+  animation: V5GAnimationConfig,
+  key: string,
+): number {
+  const value = animation.params[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return Number.NaN;
 }
 
 function assertRecord(value: unknown, path: string): Record<string, unknown> {

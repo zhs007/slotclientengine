@@ -222,7 +222,7 @@ function getFirstSafeGlowContainer(root: Node): Node {
 }
 
 function getFirstParticleContainer(root: Node): Node {
-  return getFirstGroup(root).children[2];
+  return getFirstGroup(root).children[3];
 }
 
 describe("standalone V5GCocosPlayer", () => {
@@ -257,6 +257,7 @@ describe("standalone V5GCocosPlayer", () => {
     expect(getFirstGroup(root).children.map((node) => node.name)).toEqual([
       "Layer 1",
       "Layer 1 Safe Glow",
+      "Layer 1 Chaser Light",
       "Layer 1 Particles",
     ]);
   });
@@ -500,6 +501,7 @@ describe("standalone V5GCocosPlayer", () => {
     expect(getFirstGroup(root).children.map((node) => node.name)).toEqual([
       "Layer 1",
       "Layer 1 Safe Glow",
+      "Layer 1 Chaser Light",
       "Layer 1 Particles",
     ]);
     expect(particleContainer.name).toBe("Layer 1 Particles");
@@ -549,7 +551,7 @@ describe("standalone V5GCocosPlayer", () => {
     const project = assertV5GProject(roundreelData);
     const { root, frames, player } = makePlayer(project);
 
-    expect(project.schemaVersion).toBe("VNI_0.020");
+    expect(project.schemaVersion).toBe("VNI_0.022");
     expect(project.exportProfile).toMatchObject({
       id: "runtime_100",
       purpose: "runtime",
