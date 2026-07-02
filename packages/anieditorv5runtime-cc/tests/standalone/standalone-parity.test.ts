@@ -438,6 +438,7 @@ function comparableSample(sample: SampledProjectState): SampledProjectState {
       visible: layer.visible,
       renderImageDisplay: layer.renderImageDisplay,
       hasActiveParticleAnimation: layer.hasActiveParticleAnimation,
+      hasActiveChaserLightAnimation: layer.hasActiveChaserLightAnimation,
       hasActiveSafeGlowAnimation: layer.hasActiveSafeGlowAnimation,
       blendMode: layer.blendMode,
     })),
@@ -485,6 +486,7 @@ class FakeNode {
   scaleX = 1;
   scaleY = 1;
   rotation = 0;
+  text = "";
 
   constructor(readonly name: string) {}
 }
@@ -575,6 +577,16 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
 
   createImageNode(name: string): FakeNode {
     return new FakeNode(name);
+  }
+
+  createTextNode(name: string, text: string): FakeNode {
+    const node = new FakeNode(name);
+    node.text = text;
+    return node;
+  }
+
+  setText(node: FakeNode, text: string): void {
+    node.text = text;
   }
 
   getSpriteFrameSize(spriteFrame: FakeSpriteFrame): V5GSize | null {

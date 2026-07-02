@@ -12,6 +12,8 @@ import export2Runtime50Data from "../fixtures/export2-runtime-50.json";
 import lock01Data from "../fixtures/lock_01.json";
 import megawinData from "../fixtures/megawin.json";
 import multipayData from "../fixtures/multipay.json";
+import number2Data from "../fixtures/number2.json";
+import number3Data from "../fixtures/number3.json";
 import projectData from "../fixtures/project.json";
 import respinData from "../fixtures/respin.json";
 import roundreelData from "../fixtures/roundreel.json";
@@ -42,6 +44,7 @@ const newExportFixtures = [
   scatter2Data,
   multipayData,
   threeReelMultipay02Data,
+  number2Data,
   roundreelData,
 ] as const;
 const exportRootDir = fileURLToPath(
@@ -138,7 +141,7 @@ describe("validation", () => {
     expect(() => validateCocosV5GProject(project)).not.toThrow();
   });
 
-  it("accepts the VNI_0.020 roundreel runtime_100 safe_glow fixture", () => {
+  it("accepts the VNI_0.022 roundreel runtime_100 safe_glow fixture", () => {
     const docsRoundreel = JSON.parse(
       readFileSync(join(exportRootDir, "roundreel.json"), "utf8"),
     ) as unknown;
@@ -152,7 +155,7 @@ describe("validation", () => {
     );
     const blendModes = new Set(project.layers.map((layer) => layer.blendMode));
 
-    expect(project.schemaVersion).toBe("VNI_0.020");
+    expect(project.schemaVersion).toBe("VNI_0.022");
     expect(project.editor.name).toBe("VNI");
     expect(project.engineTarget).toEqual({
       name: "cocos_creator",
@@ -166,6 +169,7 @@ describe("validation", () => {
       label: undefined,
     });
     expect(animationTypes.has("safe_glow")).toBe(true);
+    expect(animationTypes.has("chaser_light")).toBe(true);
     expect(blendModes.has("add")).toBe(true);
     for (const asset of project.assets) {
       expect(asset.fileWidth).toBe(asset.width);
@@ -175,6 +179,25 @@ describe("validation", () => {
     }
     expect(() => validateV5GProject(project)).not.toThrow();
     expect(() => validateCocosV5GProject(project)).not.toThrow();
+  });
+
+  it("accepts number3 generically but fails fast for Cocos precompose masks", () => {
+    const docsNumber3 = JSON.parse(
+      readFileSync(join(exportRootDir, "number3.json"), "utf8"),
+    ) as unknown;
+    expect(number3Data).toEqual(docsNumber3);
+
+    const project = assertV5GProject(number3Data);
+    expect(project.schemaVersion).toBe("VNI_0.036");
+    expect(
+      project.layers.some(
+        (layer) => layer.mask?.compositeMode === "precompose_light_alpha",
+      ),
+    ).toBe(true);
+    expect(() => validateV5GProject(project)).not.toThrow();
+    expect(() => validateCocosV5GProject(project)).toThrow(
+      'Cocos runtime cannot support VNI mask compositeMode "precompose_light_alpha"',
+    );
   });
 
   it("accepts render-effect exports generically but fails fast for Cocos runtime", () => {
@@ -295,6 +318,40 @@ describe("validation", () => {
           vanishRatio: 0.2,
           flashScale: 1.8,
           flashIntensity: 1.2,
+        },
+        particle_stream: {
+          spawnRate: 20,
+          lifetime: 0.8,
+          spread: 12,
+          speed: 40,
+          emissionAngle: 90,
+          emissionSpreadAngle: 30,
+          size: 12,
+          gravity: 0,
+          trailCount: 1,
+          trailSpacing: 0.03,
+          trailFade: 0.6,
+          randomRotationDegrees: 90,
+          spinSpeed: 1,
+          fadeOut: true,
+          rotateParticles: true,
+          randomRotation: true,
+        },
+        chaser_light: {
+          totalCount: 8,
+          spacing: 12,
+          lightDuration: 0.12,
+          interval: 0.05,
+          trajectory: 1,
+          radius: 40,
+          centerX: 0,
+          centerY: 0,
+          endX: 100,
+          endY: 0,
+          curve: 0,
+          lightSize: 16,
+          dimAlpha: 0.2,
+          keepOriginal: false,
         },
         shatter: {
           count: 8,
@@ -630,15 +687,16 @@ describe("validation", () => {
     );
   });
 
-  it("rejects text layers for Cocos", () => {
-    expectInvalidCocos((project) => {
-      project.layers[0] = {
-        ...project.layers[0],
-        type: "text",
-        assetId: null,
-        text: "hello",
-      };
-    }, "Unsupported Cocos V5G layer type: text");
+  it("accepts text layers for Cocos text binding", () => {
+    const project = validProject();
+    project.layers[0] = {
+      ...project.layers[0],
+      type: "text",
+      assetId: null,
+      text: "hello",
+    };
+
+    expect(() => validateCocosV5GProject(project)).not.toThrow();
   });
 
   it("accepts exported special blend modes at the Cocos runtime layer", () => {

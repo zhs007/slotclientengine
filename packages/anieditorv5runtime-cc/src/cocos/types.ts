@@ -122,6 +122,54 @@ export interface V5GCocosAttachSpriteFrameBetweenLayerGroupsOptions<
   destroyOnDetach?: boolean;
 }
 
+export interface V5GCocosAttachNodeToTextLayerOptions<TNode = Node> {
+  id: string;
+  layerId: string;
+  node: TNode;
+  hideOriginal?: boolean;
+  destroyOnDetach?: boolean;
+}
+
+export interface V5GCocosAttachTextToTextLayerOptions {
+  id: string;
+  layerId: string;
+  text: string;
+  hideOriginal?: boolean;
+}
+
+export interface V5GCocosTextLayerTextBinding {
+  dispose(): void;
+  setText(text: string): void;
+}
+
+export interface V5GCocosAttachProjectAssetToTextLayerOptions {
+  id: string;
+  layerId: string;
+  assetId: string;
+  hideOriginal?: boolean;
+}
+
+export interface V5GCocosAttachSpriteFrameToTextLayerOptions<
+  TSpriteFrame = SpriteFrame,
+> {
+  id: string;
+  layerId: string;
+  spriteFrame: TSpriteFrame;
+  width: number;
+  height: number;
+  hideOriginal?: boolean;
+}
+
+export interface V5GCocosRuntimeDiagnostics {
+  particleSpriteCount: number;
+  chaserLightSpriteCount: number;
+  maskNodeCount: number;
+  textLayerBindingCount: number;
+  mountedNodeCount: number;
+  safeGlowSpriteCount: number;
+  liveParticleCount: number;
+}
+
 export interface V5GCocosPlaybackEventContext {
   id: string;
   time: number;

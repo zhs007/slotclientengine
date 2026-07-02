@@ -260,12 +260,12 @@ async function bootstrap(): Promise<void> {
       resolution: window.devicePixelRatio || 1,
     });
     stageCanvasLayer.appendChild(nextApp.canvas);
-    resizePixiAppToMount(nextApp, stageMount);
+    const nextViewport = applyStageCanvasViewport(nextApp, null);
 
     const nextPlayer = new VNIPlayer({
       parent: nextApp.stage,
       diagnosticsElement: stageMount,
-      viewport: getMountViewport(stageMount),
+      viewport: nextViewport,
       requestRender: () => nextApp.render(),
       projectId: selectedProject.id,
       bundleId: selectedProject.bundleId,
@@ -291,7 +291,9 @@ async function bootstrap(): Promise<void> {
     }
     player = nextPlayer;
     pixiApp = nextApp;
-    disposeResize = observeStageMount(stageMount, nextApp, nextPlayer);
+    disposeResize = observeStageMount(stageMount, () => {
+      applyStageCanvasViewport(nextApp, nextPlayer);
+    });
     controls.setLayerGroupSlots(player.getLayerGroupSlots());
     controls.setInsertedNodeActive(false);
     controls.setTextReplacementActive(false);
@@ -330,10 +332,28 @@ async function bootstrap(): Promise<void> {
       stageCanvasScaleIndex === STAGE_CANVAS_SCALES.length - 1;
     zoomResetButton.disabled =
       stageCanvasScaleIndex === DEFAULT_STAGE_CANVAS_SCALE_INDEX;
+    if (pixiApp) {
+      applyStageCanvasViewport(pixiApp, player);
+    }
   }
 
   setStageCanvasScaleIndex(stageCanvasScaleIndex);
   await loadProject("project");
+
+  function applyStageCanvasViewport(
+    app: Application,
+    viewportPlayer: VNIPlayer | null,
+  ): { readonly width: number; readonly height: number } {
+    const viewport = getScaledMountViewport(
+      stageMount,
+      getStageCanvasScale(stageCanvasScaleIndex),
+    );
+    stageCanvasLayer.style.width = `${viewport.width}px`;
+    stageCanvasLayer.style.height = `${viewport.height}px`;
+    app.renderer.resize(viewport.width, viewport.height);
+    viewportPlayer?.setViewportSize(viewport.width, viewport.height);
+    return viewport;
+  }
 }
 
 function createStageZoomButton(
@@ -355,25 +375,14 @@ function getStageCanvasScale(index: number): number {
 
 function observeStageMount(
   stageMount: HTMLElement,
-  app: Application,
-  player: VNIPlayer,
+  resize: () => void,
 ): () => void {
-  const resize = (): void => {
-    resizePixiAppToMount(app, stageMount);
-    const viewport = getMountViewport(stageMount);
-    player.setViewportSize(viewport.width, viewport.height);
-  };
   if (typeof ResizeObserver === "undefined") {
     return () => undefined;
   }
   const resizeObserver = new ResizeObserver(resize);
   resizeObserver.observe(stageMount);
   return () => resizeObserver.disconnect();
-}
-
-function resizePixiAppToMount(app: Application, stageMount: HTMLElement): void {
-  const viewport = getMountViewport(stageMount);
-  app.renderer.resize(viewport.width, viewport.height);
 }
 
 function getMountViewport(stageMount: HTMLElement): {
@@ -383,6 +392,17 @@ function getMountViewport(stageMount: HTMLElement): {
   return {
     width: stageMount.clientWidth || 1,
     height: stageMount.clientHeight || 1,
+  };
+}
+
+function getScaledMountViewport(
+  stageMount: HTMLElement,
+  scale: number,
+): { readonly width: number; readonly height: number } {
+  const viewport = getMountViewport(stageMount);
+  return {
+    width: viewport.width * scale,
+    height: viewport.height * scale,
   };
 }
 

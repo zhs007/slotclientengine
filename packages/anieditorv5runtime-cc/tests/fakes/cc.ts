@@ -364,6 +364,20 @@ export class Sprite {
   }
 }
 
+export class Label {
+  string = "";
+  color = Color.WHITE;
+}
+
+export class Mask {
+  static readonly Type = {
+    IMAGE_STENCIL: 0,
+  } as const;
+
+  type = Mask.Type.IMAGE_STENCIL;
+  inverted = false;
+}
+
 export class Graphics {
   fillColor = Color.WHITE;
   rects: Array<{ x: number; y: number; width: number; height: number }> = [];
