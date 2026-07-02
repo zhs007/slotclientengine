@@ -63,6 +63,44 @@ describe("slot game static config", () => {
         skins: {
           "1": {
             ...createValidConfig().skins["1"],
+            appExtensions: Object.freeze({
+              customFeature: Object.freeze({
+                enabled: true,
+                offset: Object.freeze({ x: 12, y: 24 }),
+              }),
+            }),
+          },
+        },
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertSlotGameStaticConfig({
+        ...createValidConfig(),
+        skins: {
+          "1": {
+            ...createValidConfig().skins["1"],
+            appExtensions: null,
+          },
+        },
+      }),
+    ).toThrow(/appExtensions must be an object/);
+    expect(() =>
+      assertSlotGameStaticConfig({
+        ...createValidConfig(),
+        skins: {
+          "1": {
+            ...createValidConfig().skins["1"],
+            appExtensions: [],
+          },
+        },
+      }),
+    ).toThrow(/appExtensions must be an object/);
+    expect(() =>
+      assertSlotGameStaticConfig({
+        ...createValidConfig(),
+        skins: {
+          "1": {
+            ...createValidConfig().skins["1"],
             art: {
               ...createValidConfig().skins["1"].art,
               variants: {

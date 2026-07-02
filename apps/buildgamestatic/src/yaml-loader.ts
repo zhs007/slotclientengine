@@ -250,9 +250,9 @@ function parseSkin(
   assertKeys(
     record,
     label,
-    ["label", "symbols", "art", "featureBars", "winAmount"],
+    ["label", "symbols", "art", "featureBars", "winAmount", "appExtensions"],
     {
-      optional: ["featureBars", "winAmount"],
+      optional: ["featureBars", "winAmount", "appExtensions"],
     },
   );
   return Object.freeze({
@@ -269,6 +269,13 @@ function parseSkin(
       : {}),
     ...(record.winAmount !== undefined
       ? { winAmount: parseWinAmount(record.winAmount, `${label}.winAmount`) }
+      : {}),
+    ...(record.appExtensions !== undefined
+      ? {
+          appExtensions: Object.freeze({
+            ...assertRecord(record.appExtensions, `${label}.appExtensions`),
+          }),
+        }
       : {}),
   });
 }

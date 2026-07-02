@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { GAME003_LOADING_RESOURCE_URLS } from "../src/generated/game-loading.generated.js";
 import { GAME003_STATIC_CONFIG } from "../src/generated/game-static.generated.js";
+import { DEFAULT_GAME003_REEL_CONFIG } from "../src/game-demo.js";
+import { getGame003MinecartTotalDurationSeconds } from "../src/minecart-interaction-config.js";
 import { getGame003SkinConfig } from "../src/skin-config.js";
 
 describe("game003 generated static config", () => {
@@ -166,6 +168,48 @@ describe("game003 generated static config", () => {
     expect(skin.bgBar.symbolScales).toEqual({ normal: 1, wild: 1, up: 1 });
     expect(skin.bgBar.layout.landscape.slotRectsInConveyor).toHaveLength(5);
     expect(skin.bgBar.layout.portrait.slotRectsInConveyor).toHaveLength(5);
+    const bgBarManifest = featureBar?.symbols.manifest as {
+      symbols: Record<
+        string,
+        { animations: { win: { durationSeconds: number } } }
+      >;
+    };
+    expect(bgBarManifest.symbols.normal.animations.win.durationSeconds).toBe(
+      0.24,
+    );
+    expect(bgBarManifest.symbols.wild.animations.win.durationSeconds).toBe(
+      0.24,
+    );
+    expect(bgBarManifest.symbols.up.animations.win.durationSeconds).toBe(0.24);
+  });
+
+  it("generates app-owned minecart config from appExtensions", () => {
+    const skin = getGame003SkinConfig("1");
+    const totalDuration = getGame003MinecartTotalDurationSeconds(
+      skin.minecartInteraction,
+    );
+
+    expect(GAME003_STATIC_CONFIG.skins["1"].appExtensions).toHaveProperty(
+      "game003MinecartInteraction",
+    );
+    expect(skin.minecartInteraction).toMatchObject({
+      loadingResourceId: "game003-minecart",
+      imageSize: { width: 369, height: 252 },
+      layout: {
+        landscape: {
+          stopOffsetFromReelAreaBottomCenter: { x: 0, y: 85 },
+        },
+        portrait: {
+          stopOffsetFromReelAreaBottomCenter: { x: 0, y: 145 },
+        },
+      },
+    });
+    expect(totalDuration).toBeLessThanOrEqual(
+      skin.minecartInteraction.timing.maxTotalBeforeReelStopSeconds,
+    );
+    expect(totalDuration).toBeLessThan(
+      DEFAULT_GAME003_REEL_CONFIG.baseDurationMs / 1000,
+    );
   });
 
   it("fails fast for skin ids outside the generated supported list", () => {
@@ -194,6 +238,7 @@ describe("game003 generated static config", () => {
         "game003-bg-bar-symbol-pngs:up.png",
         "game003-bg-bar-symbol-pngs:wild.png",
         "game003-bg-bar-symbol-manifest",
+        "game003-minecart",
         "game003-win-amount-vni-projects:bigwin.json",
         "game003-win-amount-vni-projects:superwin.json",
         "game003-win-amount-vni-projects:megawin.json",

@@ -14,7 +14,8 @@ import type {
 } from "./bg-bar-sequence.js";
 import type { Game003BgBarSkinConfig } from "./skin-config.js";
 
-export const GAME003_BG_BAR_SHIFT_DURATION_SECONDS = 0.45;
+export const GAME003_BG_BAR_SHIFT_DURATION_SECONDS = 0.28;
+export const GAME003_BG_BAR_TERMINAL_WIN_DURATION_SECONDS = 0.24;
 
 export interface Game003BgBarRuntimeOptions {
   readonly config: Game003BgBarSkinConfig;
@@ -32,6 +33,11 @@ export interface Game003BgBarRuntimeSnapshot {
   }[];
 }
 
+export interface Game003BgBarRuntimeUpdateResult {
+  readonly completed: boolean;
+  readonly terminalFeatureCompleted?: Game003BgBarFeature;
+}
+
 interface RuntimeItem {
   readonly feature: Game003BgBarFeature;
   readonly symbol: RenderSymbol;
@@ -44,7 +50,7 @@ export interface Game003BgBarRuntime {
   applyLayout(layout: Game003BgBarLayout): void;
   reset(): void;
   startSpin(plan: Game003BgBarSpinPlan): void;
-  update(deltaSeconds: number): { readonly completed: boolean };
+  update(deltaSeconds: number): Game003BgBarRuntimeUpdateResult;
   isPlaying(): boolean;
   getSnapshot(): Game003BgBarRuntimeSnapshot;
   destroy(): void;
@@ -117,7 +123,7 @@ class Game003BgBarRuntimeModel implements Game003BgBarRuntime {
     this.syncItemPositions();
   }
 
-  update(deltaSeconds: number): { readonly completed: boolean } {
+  update(deltaSeconds: number): Game003BgBarRuntimeUpdateResult {
     this.assertNotDestroyed();
     assertDeltaSeconds(deltaSeconds);
     if (this.#phase === "idle") {
@@ -164,9 +170,13 @@ class Game003BgBarRuntimeModel implements Game003BgBarRuntime {
     if (!result.onceCompleted) {
       return Object.freeze({ completed: false });
     }
+    const terminalFeature = terminal.feature;
     terminal.symbol.visible = false;
     this.settleItems(terminal);
-    return Object.freeze({ completed: true });
+    return Object.freeze({
+      completed: true,
+      terminalFeatureCompleted: terminalFeature,
+    });
   }
 
   isPlaying(): boolean {
