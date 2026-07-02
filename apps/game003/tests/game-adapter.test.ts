@@ -8,11 +8,20 @@ import {
 import type { SymbolAssetMap } from "@slotclientengine/rendercore";
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import {
+  GAME003_BG_BAR_FEATURES,
   GAME003_DEFAULT_SCENE,
+  GAME003_SAMPLE_BG_BAR_SPIN_RESULT,
+  GAME003_SAMPLE_BG_BAR_WIN_SPIN_RESULT,
   GAME003_SAMPLE_WIN_SPIN_RESULT,
   GAME003_SPIN_SCENE,
   GAME003_WIN_SPIN_SCENE,
 } from "./fixtures/game003-gmi.js";
+import type { Game003BgBarLayout } from "../src/bg-bar-layout.js";
+import type {
+  Game003BgBarRuntime,
+  Game003BgBarRuntimeSnapshot,
+} from "../src/bg-bar-runtime.js";
+import type { Game003BgBarSpinPlan } from "../src/bg-bar-sequence.js";
 import {
   createGame003Adapter,
   type Game003AdapterOptions,
@@ -56,12 +65,14 @@ describe("game003 adapter", () => {
   it("mounts Pixi canvas, applies default scene, and keeps live untouched on resize", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();
+    const bgBar = new FakeBgBarRuntime();
     const context = createMountContext({ width: 1174, height: 2000 });
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
       loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
       createRuntime: () => runtime.asRuntime(),
+      createBgBarRuntime: () => bgBar.asRuntime(),
     });
 
     await adapter.mount(context);
@@ -80,6 +91,10 @@ describe("game003 adapter", () => {
       x: GAME003_SKIN1_PORTRAIT_SCENE_PARTS.reelArea.x,
       y: GAME003_SKIN1_PORTRAIT_SCENE_PARTS.reelArea.y,
     });
+    expect(bgBar.layoutCalls.at(-1)).toMatchObject({
+      orientation: "portrait",
+      movement: "right",
+    });
 
     adapter.applyInitialState?.({ userInfo: {}, balance: 100 });
     expect(runtime.appliedScenes).toEqual([]);
@@ -95,6 +110,10 @@ describe("game003 adapter", () => {
     expect(runtime.layoutCalls.at(-1)).toMatchObject({
       x: GAME003_SKIN1_LANDSCAPE_SCENE_PARTS.reelArea.x,
       y: GAME003_SKIN1_LANDSCAPE_SCENE_PARTS.reelArea.y,
+    });
+    expect(bgBar.layoutCalls.at(-1)).toMatchObject({
+      orientation: "landscape",
+      movement: "down",
     });
     expect(fakeWinAmountPlayers.at(-1)?.layoutCalls).toHaveLength(2);
     expect(fakeApp.stage.children).toHaveLength(1);
@@ -176,6 +195,43 @@ describe("game003 adapter", () => {
     await spinPromise;
     expect(resolved).toBe(true);
     expect(runtime.currentScene).toEqual(GAME003_SPIN_SCENE);
+  });
+
+  it("starts bg-bar immediately when spin GMI includes the bg-bar component", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const bgBar = new FakeBgBarRuntime();
+    bgBar.completeNextUpdate = false;
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createBgBarRuntime: () => bgBar.asRuntime(),
+    });
+    await adapter.mount(createMountContext());
+
+    const spinPromise = Promise.resolve(adapter.playSpin(createBgBarLogic()));
+    let resolved = false;
+    void spinPromise.then(() => {
+      resolved = true;
+    });
+
+    await Promise.resolve();
+    expect(bgBar.startPlans).toHaveLength(1);
+    expect(bgBar.startPlans[0]?.features).toEqual(GAME003_BG_BAR_FEATURES);
+    expect(bgBar.playing).toBe(true);
+    expect(resolved).toBe(false);
+
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    bgBar.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await spinPromise;
+    expect(resolved).toBe(true);
   });
 
   it("plays bg-wins groups in order before resolving playSpin", async () => {
@@ -309,6 +365,52 @@ describe("game003 adapter", () => {
     expect(resolved).toBe(true);
   });
 
+  it("waits for bg-bar, bg-wins groups and amount animation together", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const bgBar = new FakeBgBarRuntime();
+    const winAmount = new FakeWinAmountPlayer({ completeOnFirstUpdate: false });
+    bgBar.completeNextUpdate = false;
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createBgBarRuntime: () => bgBar.asRuntime(),
+      createWinAmountPlayer: () => winAmount.asPlayer(),
+    });
+    await adapter.mount(createMountContext());
+
+    const spinPromise = Promise.resolve(
+      adapter.playSpin(createBgBarWinLogic()),
+    );
+    let resolved = false;
+    void spinPromise.then(() => {
+      resolved = true;
+    });
+
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    fakeApp.tick(16);
+    fakeApp.tick(16);
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    expect(bgBar.startPlans).toHaveLength(1);
+    expect(bgBar.updateDeltas.length).toBeGreaterThanOrEqual(3);
+    expect(runtime.winRequests).toHaveLength(2);
+    expect(winAmount.starts).toHaveLength(1);
+
+    winAmount.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    bgBar.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await spinPromise;
+    expect(resolved).toBe(true);
+  });
+
   it("forwards canvas clicks to dismiss the current win amount animation", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();
@@ -387,6 +489,7 @@ describe("game003 adapter", () => {
     await expect(pending).rejects.toThrow(/does not match/);
 
     const destroyRuntime = new FakeRuntime();
+    const destroyBgBar = new FakeBgBarRuntime();
     const destroyApp = createFakeApplication();
     const destroyContext = createMountContext();
     const destroyAdapter = createTestAdapter({
@@ -394,6 +497,7 @@ describe("game003 adapter", () => {
       loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
       createRuntime: () => destroyRuntime.asRuntime(),
+      createBgBarRuntime: () => destroyBgBar.asRuntime(),
     });
     await destroyAdapter.mount(destroyContext);
     const destroyPending = destroyAdapter.playSpin(
@@ -404,6 +508,7 @@ describe("game003 adapter", () => {
     expect(destroyContext.gameLayer.children).toHaveLength(0);
     const destroyedWinAmount = fakeWinAmountPlayers.at(-1);
     expect(destroyedWinAmount?.destroyed).toBe(true);
+    expect(destroyBgBar.destroyed).toBe(true);
     destroyApp.canvas.dispatchEvent(new Event("pointerdown"));
     expect(destroyedWinAmount?.dismissRequests).toBe(0);
     const resizeCount = destroyApp.resizeCalls.length;
@@ -413,10 +518,20 @@ describe("game003 adapter", () => {
 });
 
 const fakeWinAmountPlayers: FakeWinAmountPlayer[] = [];
+const fakeBgBarRuntimes: FakeBgBarRuntime[] = [];
 
 function createTestAdapter(options: Omit<Game003AdapterOptions, "skin">) {
   return createGame003Adapter({
     skin: getGame003SkinConfig("1"),
+    loadBgBarSymbolTextures:
+      options.loadBgBarSymbolTextures ?? (async () => ({})),
+    createBgBarRuntime:
+      options.createBgBarRuntime ??
+      (() => {
+        const runtime = new FakeBgBarRuntime();
+        fakeBgBarRuntimes.push(runtime);
+        return runtime.asRuntime();
+      }),
     createWinAmountPlayer:
       options.createWinAmountPlayer ??
       (() => {
@@ -588,6 +703,12 @@ function createTextureForUrl(url: string): Texture {
   if (url.includes("conveyor2")) {
     return createSizedTexture(934, 227);
   }
+  if (url.includes("wild")) {
+    return createSizedTexture(172, 158);
+  }
+  if (url.includes("up")) {
+    return createSizedTexture(172, 130);
+  }
   return createSizedTexture(172, 130);
 }
 
@@ -627,6 +748,20 @@ function createLogic(
 
 function createWinLogic(): GameLogic {
   return createSlotGameLogicResult(GAME003_SAMPLE_WIN_SPIN_RESULT, {
+    bet: { bet: 5, lines: 10, times: 1 },
+    userInfo: { balance: 1000, gameid: 69003 },
+  }).logic;
+}
+
+function createBgBarLogic(): GameLogic {
+  return createSlotGameLogicResult(GAME003_SAMPLE_BG_BAR_SPIN_RESULT, {
+    bet: { bet: 5, lines: 10, times: 1 },
+    userInfo: { balance: 1000, gameid: 69003 },
+  }).logic;
+}
+
+function createBgBarWinLogic(): GameLogic {
+  return createSlotGameLogicResult(GAME003_SAMPLE_BG_BAR_WIN_SPIN_RESULT, {
     bet: { bet: 5, lines: 10, times: 1 },
     userInfo: { balance: 1000, gameid: 69003 },
   }).logic;
@@ -773,6 +908,52 @@ class FakeRuntime {
       getTargetScene: () => this.targetScene,
       getFinalYs: () => [0, 0, 0, 0, 0],
       createSpinPlan: () => ({}) as any,
+    };
+  }
+}
+
+class FakeBgBarRuntime {
+  readonly container = new Container();
+  readonly startPlans: Game003BgBarSpinPlan[] = [];
+  readonly updateDeltas: number[] = [];
+  readonly layoutCalls: Game003BgBarLayout[] = [];
+  completeNextUpdate = true;
+  playing = false;
+  destroyed = false;
+
+  asRuntime(): Game003BgBarRuntime {
+    return {
+      container: this.container,
+      applyLayout: (layout) => {
+        this.layoutCalls.push(layout);
+      },
+      reset: () => {
+        this.playing = false;
+      },
+      startSpin: (plan) => {
+        if (this.playing) {
+          throw new Error("fake bg-bar already playing.");
+        }
+        this.startPlans.push(plan);
+        this.playing = true;
+      },
+      update: (deltaSeconds) => {
+        this.updateDeltas.push(deltaSeconds);
+        if (this.completeNextUpdate) {
+          this.playing = false;
+        }
+        return { completed: !this.playing };
+      },
+      isPlaying: () => this.playing,
+      getSnapshot: (): Game003BgBarRuntimeSnapshot => ({
+        phase: this.playing ? "shifting" : "idle",
+        idleQueue: null,
+        items: [],
+      }),
+      destroy: () => {
+        this.destroyed = true;
+        this.playing = false;
+      },
     };
   }
 }

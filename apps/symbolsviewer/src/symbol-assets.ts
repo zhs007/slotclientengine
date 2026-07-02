@@ -1,12 +1,15 @@
 import { createGameConfig } from "@slotclientengine/logiccore";
 import {
   createDefaultSymbolStatePreset,
+  createStandaloneSymbolCatalog,
   createSymbolAssetMapFromManifestModules,
   createSymbolCatalog,
   createSymbolScaleMapFromManifest as createRendercoreSymbolScaleMapFromManifest,
   type ReelSymbolScaleMap,
+  type SymbolAnimationResolver,
   type SymbolAssetMap,
   type SymbolCatalogModel,
+  type StandaloneSymbolCatalog,
 } from "@slotclientengine/rendercore";
 
 export const SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES = [
@@ -74,6 +77,25 @@ export function createSymbolsViewerCatalog(
     statePreset: createDefaultSymbolStatePreset(),
     texturePolicy: {
       requiredStateTextures,
+    },
+  });
+}
+
+export function createSymbolsViewerStandaloneCatalog(options: {
+  readonly symbolAssets: SymbolAssetMap;
+  readonly displaySymbols: readonly string[];
+  readonly symbolScales?: ReelSymbolScaleMap;
+  readonly requiredStateTextures?: readonly string[];
+  readonly animationResolver?: SymbolAnimationResolver;
+}): StandaloneSymbolCatalog {
+  return createStandaloneSymbolCatalog({
+    assets: options.symbolAssets,
+    displaySymbols: options.displaySymbols,
+    symbolScales: options.symbolScales,
+    statePreset: createDefaultSymbolStatePreset(),
+    animationResolver: options.animationResolver,
+    texturePolicy: {
+      requiredStateTextures: options.requiredStateTextures ?? [],
     },
   });
 }

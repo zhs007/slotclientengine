@@ -12,6 +12,7 @@ import {
   createSymbolScaleMapFromManifest,
   createStatefulSymbolAssetMapFromModules,
   createSymbolsViewerCatalog,
+  createSymbolsViewerStandaloneCatalog,
   getSymbolNameFromPath,
 } from "../src/symbol-assets.js";
 import {
@@ -346,6 +347,43 @@ describe("symbolsviewer assets", () => {
       "X5",
       "X10",
     ]);
+  });
+
+  it("creates a standalone viewer catalog for paytable-free transparent symbols", () => {
+    const catalog = createSymbolsViewerStandaloneCatalog({
+      symbolAssets: {
+        normal: {
+          normal: { kind: "transparent", width: 172, height: 158 },
+          states: {},
+        },
+        wild: {
+          normal: "/assets/game003-s1/wild.png",
+          states: {},
+        },
+        up: {
+          normal: "/assets/game003-s1/up.png",
+          states: {},
+        },
+      },
+      displaySymbols: ["normal", "wild", "up"],
+      symbolScales: { normal: 1, wild: 1, up: 1 },
+      requiredStateTextures: [],
+    });
+
+    expect(catalog.getValidation()).toEqual({
+      displayableSymbols: ["normal", "wild", "up"],
+      ignoredPaytableSymbolsWithoutAssets: [],
+      ignoredAssetsWithoutPaytable: [],
+    });
+    const transparentSymbol = catalog.createRenderSymbol("normal");
+    const transparentLayer = transparentSymbol.getLayerSprites()[0];
+    expect(transparentLayer).toMatchObject({
+      transparent: true,
+      width: 172,
+      height: 158,
+    });
+    expect(transparentLayer?.sprite.alpha).toBe(0);
+    transparentSymbol.destroy({ children: true });
   });
 });
 

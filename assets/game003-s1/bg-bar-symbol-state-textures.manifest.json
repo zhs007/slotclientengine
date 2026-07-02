@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "states": [],
+  "symbols": {
+    "normal": {
+      "normal": { "kind": "transparent", "width": 172, "height": 158 },
+      "scale": 1,
+      "animations": {
+        "appear": { "kind": "static", "durationSeconds": 0.016666666666666666 },
+        "win": { "kind": "builtin", "durationSeconds": 0.58 }
+      }
+    },
+    "wild": {
+      "normal": "./wild.png",
+      "scale": 1,
+      "animations": {
+        "appear": { "kind": "static", "durationSeconds": 0.016666666666666666 },
+        "win": { "kind": "builtin", "durationSeconds": 0.58 }
+      }
+    },
+    "up": {
+      "normal": "./up.png",
+      "scale": 1,
+      "animations": {
+        "appear": { "kind": "static", "durationSeconds": 0.016666666666666666 },
+        "win": { "kind": "builtin", "durationSeconds": 0.58 }
+      }
+    }
+  }
+}

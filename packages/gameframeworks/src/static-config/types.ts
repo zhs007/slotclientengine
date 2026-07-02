@@ -159,7 +159,37 @@ export interface SlotGameStaticSkinConfig {
   readonly label: string;
   readonly symbols: SlotGameStaticSymbolsConfig;
   readonly art: SlotGameStaticArtConfig;
+  readonly featureBars?: Readonly<
+    Record<string, SlotGameStaticFeatureBarConfig>
+  >;
   readonly winAmount?: SlotGameStaticWinAmountConfig;
+}
+
+export type SlotGameStaticFeatureBarMovement = "down" | "right";
+
+export interface SlotGameStaticFeatureBarSymbolsConfig {
+  readonly manifest: unknown;
+  readonly pngModules: Readonly<Record<string, string>>;
+  readonly requireExplicitScale: boolean;
+  readonly requiredStates: readonly string[];
+}
+
+export interface SlotGameStaticFeatureBarLayoutVariant {
+  readonly movement: SlotGameStaticFeatureBarMovement;
+  readonly slotRectsInConveyor: readonly SlotGameStaticRect[];
+}
+
+export interface SlotGameStaticFeatureBarConfig {
+  readonly componentName: string;
+  readonly queueLength: number;
+  readonly visibleCount: number;
+  readonly terminalSlotIndex: number;
+  readonly emptyFeature: string;
+  readonly allowedFeatures: readonly string[];
+  readonly symbols: SlotGameStaticFeatureBarSymbolsConfig;
+  readonly layout: Readonly<
+    Record<SlotGameStaticArtVariantId, SlotGameStaticFeatureBarLayoutVariant>
+  >;
 }
 
 export interface SlotGameStaticConfig {

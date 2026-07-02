@@ -170,6 +170,36 @@ describe("RenderSymbol", () => {
     expect(renderSymbol.getLayerSprites()[1].sprite.texture).toBe(top);
   });
 
+  it("creates transparent symbols with stable dimensions and no visible base pixels", () => {
+    const renderSymbol = new RenderSymbol({
+      definition: { ...createDefinition(), symbol: "normal" },
+      texture: { kind: "transparent", width: 172, height: 158 },
+      animationResolver: createTestDefaultSymbolAnimationResolver(),
+    });
+
+    expect(renderSymbol.texture).toBe(Texture.EMPTY);
+    expect(renderSymbol.normalSource).toEqual({
+      kind: "transparent",
+      width: 172,
+      height: 158,
+    });
+    expect(renderSymbol.sprite.alpha).toBe(0);
+    expect(renderSymbol.sprite.width).toBe(172);
+    expect(renderSymbol.sprite.height).toBe(158);
+
+    renderSymbol.requestState("win");
+    renderSymbol.update(0.3);
+    renderSymbol.update(1);
+
+    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+      requestedState: "normal",
+      resolvedState: "normal",
+    });
+    expect(renderSymbol.sprite.alpha).toBe(0);
+    expect(renderSymbol.sprite.width).toBe(172);
+    expect(renderSymbol.sprite.height).toBe(158);
+  });
+
   it("resets all layered sprite transforms and masks", () => {
     const staticTexture = createSizedTexture(24, 24);
     const keyframeTexture = createSizedTexture(24, 24);

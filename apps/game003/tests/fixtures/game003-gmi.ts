@@ -42,6 +42,36 @@ export const GAME003_WIN_RESULTS = Object.freeze([
 ]);
 
 export const GAME003_SAMPLE_RANDOM_NUMBERS = Object.freeze([0, 0, 0, 0, 0]);
+export const GAME003_BG_BAR_FEATURES = Object.freeze([
+  "normal",
+  "wild",
+  "wild",
+  "wild",
+  "up",
+] as const);
+
+const GAME003_BG_BAR_COMPONENT = Object.freeze({
+  "@type": "type.googleapis.com/sgc7pb.FeatureBar2Data",
+  features: GAME003_BG_BAR_FEATURES,
+  usedFeatures: Object.freeze([]),
+  cacheFeatures: Object.freeze([]),
+  curFeature: "normal",
+  basicComponentData: Object.freeze({
+    usedScenes: Object.freeze([]),
+    usedOtherScenes: Object.freeze([]),
+    usedResults: Object.freeze([]),
+    usedPrizeScenes: Object.freeze([]),
+    srcScenes: Object.freeze([]),
+    pos: Object.freeze([]),
+    mapUsedSPGrid: Object.freeze({}),
+    coinWin: 0,
+    cashWin: 0,
+    targetScene: 0,
+    runIndex: 0,
+    output: 0,
+    strOutput: "",
+  }),
+});
 
 export const GAME003_SAMPLE_SPIN_RESULT = Object.freeze({
   gmi: Object.freeze({
@@ -187,6 +217,73 @@ export const GAME003_SAMPLE_WIN_SPIN_RESULT = Object.freeze({
   }),
   totalwin: 250,
   results: 1,
+});
+
+export const GAME003_SAMPLE_BG_BAR_SPIN_RESULT = Object.freeze({
+  ...GAME003_SAMPLE_SPIN_RESULT,
+  gmi: Object.freeze({
+    ...GAME003_SAMPLE_SPIN_RESULT.gmi,
+    replyPlay: Object.freeze({
+      ...GAME003_SAMPLE_SPIN_RESULT.gmi.replyPlay,
+      results: Object.freeze([
+        Object.freeze({
+          ...GAME003_SAMPLE_SPIN_RESULT.gmi.replyPlay.results[0],
+          clientData: Object.freeze({
+            ...GAME003_SAMPLE_SPIN_RESULT.gmi.replyPlay.results[0].clientData,
+            curGameModParam: Object.freeze({
+              ...GAME003_SAMPLE_SPIN_RESULT.gmi.replyPlay.results[0].clientData
+                .curGameModParam,
+              historyComponents: Object.freeze(["bg-bar", "bg-spin"]),
+              historyComponentsEx: Object.freeze(["bg-bar", "bg-spin"]),
+              mapComponents: Object.freeze({
+                "bg-bar": GAME003_BG_BAR_COMPONENT,
+                ...GAME003_SAMPLE_SPIN_RESULT.gmi.replyPlay.results[0]
+                  .clientData.curGameModParam.mapComponents,
+              }),
+            }),
+          }),
+        }),
+      ]),
+    }),
+  }),
+});
+
+export const GAME003_SAMPLE_BG_BAR_WIN_SPIN_RESULT = Object.freeze({
+  ...GAME003_SAMPLE_WIN_SPIN_RESULT,
+  gmi: Object.freeze({
+    ...GAME003_SAMPLE_WIN_SPIN_RESULT.gmi,
+    replyPlay: Object.freeze({
+      ...GAME003_SAMPLE_WIN_SPIN_RESULT.gmi.replyPlay,
+      results: Object.freeze([
+        Object.freeze({
+          ...GAME003_SAMPLE_WIN_SPIN_RESULT.gmi.replyPlay.results[0],
+          clientData: Object.freeze({
+            ...GAME003_SAMPLE_WIN_SPIN_RESULT.gmi.replyPlay.results[0]
+              .clientData,
+            curGameModParam: Object.freeze({
+              ...GAME003_SAMPLE_WIN_SPIN_RESULT.gmi.replyPlay.results[0]
+                .clientData.curGameModParam,
+              historyComponents: Object.freeze([
+                "bg-bar",
+                "bg-spin",
+                "bg-wins",
+              ]),
+              historyComponentsEx: Object.freeze([
+                "bg-bar",
+                "bg-spin",
+                "bg-wins",
+              ]),
+              mapComponents: Object.freeze({
+                "bg-bar": GAME003_BG_BAR_COMPONENT,
+                ...GAME003_SAMPLE_WIN_SPIN_RESULT.gmi.replyPlay.results[0]
+                  .clientData.curGameModParam.mapComponents,
+              }),
+            }),
+          }),
+        }),
+      ]),
+    }),
+  }),
 });
 
 export function toSgc7Scene(scene: readonly (readonly number[])[]) {

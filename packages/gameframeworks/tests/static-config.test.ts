@@ -271,6 +271,81 @@ describe("slot game static config", () => {
       }),
     ).toThrow(/at least 5 seconds/);
   });
+
+  it("validates optional feature bar config with explicit conveyor rects", () => {
+    const config = createValidConfig();
+    const withFeatureBars = {
+      ...config,
+      skins: {
+        "1": {
+          ...config.skins["1"],
+          featureBars: createValidFeatureBarsConfig(),
+        },
+      },
+    };
+
+    expect(() => assertSlotGameStaticConfig(withFeatureBars)).not.toThrow();
+    expect(
+      withFeatureBars.skins["1"].featureBars.featureTrack.symbols
+        .requiredStates,
+    ).toEqual([]);
+
+    expect(() =>
+      assertSlotGameStaticConfig({
+        ...withFeatureBars,
+        skins: {
+          "1": {
+            ...withFeatureBars.skins["1"],
+            featureBars: {
+              featureTrack: {
+                ...createValidFeatureBarsConfig().featureTrack,
+                layout: {
+                  ...createValidFeatureBarsConfig().featureTrack.layout,
+                  landscape: {
+                    ...createValidFeatureBarsConfig().featureTrack.layout
+                      .landscape,
+                    slotRectsInConveyor: [
+                      { x: 56, y: 72, width: 172, height: 158 },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    ).toThrow(/slotRectsInConveyor length/);
+
+    expect(() =>
+      assertSlotGameStaticConfig({
+        ...withFeatureBars,
+        skins: {
+          "1": {
+            ...withFeatureBars.skins["1"],
+            featureBars: {
+              featureTrack: {
+                ...createValidFeatureBarsConfig().featureTrack,
+                layout: {
+                  ...createValidFeatureBarsConfig().featureTrack.layout,
+                  portrait: {
+                    ...createValidFeatureBarsConfig().featureTrack.layout
+                      .portrait,
+                    slotRectsInConveyor: [
+                      { x: 49, y: 35, width: 172, height: 158 },
+                      { x: 207, y: 35, width: 172, height: 158 },
+                      { x: 365, y: 35, width: 172, height: 158 },
+                      { x: 523, y: 35, width: 172, height: 158 },
+                      { x: 800, y: 35, width: 172, height: 158 },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    ).toThrow(/slotRectsInConveyor\[4\]/);
+  });
 });
 
 function createValidConfig(): SlotGameStaticConfig {
@@ -328,7 +403,7 @@ function createValidConfig(): SlotGameStaticConfig {
                 y: -10,
               }),
               conveyor: Object.freeze({
-                url: "/assets/conveyor1.png",
+                url: "/assets/track-landscape.png",
                 width: 284,
                 height: 775,
                 positionInFocusRect: Object.freeze({ x: 0, y: 14.5 }),
@@ -353,7 +428,7 @@ function createValidConfig(): SlotGameStaticConfig {
                 y: 147,
               }),
               conveyor: Object.freeze({
-                url: "/assets/conveyor2.png",
+                url: "/assets/track-portrait.png",
                 width: 934,
                 height: 227,
                 positionInFocusRect: Object.freeze({ x: 98, y: -80 }),
@@ -361,7 +436,7 @@ function createValidConfig(): SlotGameStaticConfig {
             }),
           }),
           mainReelBackground: Object.freeze({
-            url: "/assets/mainreelbg.png",
+            url: "/assets/reel-frame.png",
             width: 1130,
             height: 824,
           }),
@@ -421,6 +496,47 @@ function createValidWinAmountConfig() {
           keepParticlesAlive: true,
         }),
       ]),
+    }),
+  });
+}
+
+function createValidFeatureBarsConfig() {
+  return Object.freeze({
+    featureTrack: Object.freeze({
+      componentName: "feature-track",
+      queueLength: 5,
+      visibleCount: 4,
+      terminalSlotIndex: 4,
+      emptyFeature: "empty",
+      allowedFeatures: Object.freeze(["empty", "bonus", "boost"]),
+      symbols: Object.freeze({
+        manifest: Object.freeze({ version: 1 }),
+        pngModules: Object.freeze({ "/bonus.png": "/bonus.png" }),
+        requireExplicitScale: true,
+        requiredStates: Object.freeze([]),
+      }),
+      layout: Object.freeze({
+        landscape: Object.freeze({
+          movement: "down",
+          slotRectsInConveyor: Object.freeze([
+            Object.freeze({ x: 56, y: 72, width: 172, height: 158 }),
+            Object.freeze({ x: 56, y: 204, width: 172, height: 158 }),
+            Object.freeze({ x: 56, y: 336, width: 172, height: 158 }),
+            Object.freeze({ x: 56, y: 468, width: 172, height: 158 }),
+            Object.freeze({ x: 56, y: 601, width: 172, height: 158 }),
+          ]),
+        }),
+        portrait: Object.freeze({
+          movement: "right",
+          slotRectsInConveyor: Object.freeze([
+            Object.freeze({ x: 49, y: 35, width: 172, height: 158 }),
+            Object.freeze({ x: 207, y: 35, width: 172, height: 158 }),
+            Object.freeze({ x: 365, y: 35, width: 172, height: 158 }),
+            Object.freeze({ x: 523, y: 35, width: 172, height: 158 }),
+            Object.freeze({ x: 681, y: 35, width: 172, height: 158 }),
+          ]),
+        }),
+      }),
     }),
   });
 }

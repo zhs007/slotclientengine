@@ -14,7 +14,10 @@ import {
   type SymbolTextureSet,
 } from "@slotclientengine/rendercore";
 import { createGameConfig } from "@slotclientengine/logiccore";
-import { createStatefulSymbolAssetMapFromModules } from "./symbol-assets.js";
+import {
+  createStatefulSymbolAssetMapFromModules,
+  createSymbolsViewerStandaloneCatalog,
+} from "./symbol-assets.js";
 import {
   getSymbolSetConfig,
   SYMBOL_SET_CONFIGS,
@@ -420,6 +423,9 @@ async function loadNormalTextureSource(
         texture: await loadTexture(normal.texture),
       });
     }
+    if (normal.kind === "transparent") {
+      return normal;
+    }
     const layers = await Promise.all(
       normal.layers.map(async (layer) => {
         const keyframes = await Promise.all(
@@ -463,7 +469,9 @@ function isSymbolNormalTextureSource(
     typeof normal === "object" &&
     normal !== null &&
     "kind" in normal &&
-    (normal.kind === "single" || normal.kind === "layered")
+    (normal.kind === "single" ||
+      normal.kind === "layered" ||
+      normal.kind === "transparent")
   );
 }
 
@@ -645,8 +653,25 @@ async function createCatalogForSymbolSet(
     modules: config.modules,
     manifest: config.manifest,
     requiredStates: config.requiredStates,
+    displaySymbols: config.displaySymbols,
   });
   const textures = await loadSymbolTextures(symbolAssetUrls);
+  if (config.catalogKind === "standalone") {
+    const catalog = createSymbolsViewerStandaloneCatalog({
+      symbolAssets: textures,
+      displaySymbols: config.displaySymbols ?? Object.keys(textures),
+      symbolScales: config.symbolScales,
+      requiredStateTextures: config.requiredStates,
+      animationResolver: config.animationResolver,
+    });
+    return Object.freeze({
+      catalog,
+      validation: catalog.getValidation(),
+    });
+  }
+  if (config.rawGameConfig === undefined) {
+    throw new Error(`Symbol set "${config.id}" is missing rawGameConfig.`);
+  }
   const catalog = createSymbolCatalog({
     gameConfig: createGameConfig(config.rawGameConfig),
     assets: textures,

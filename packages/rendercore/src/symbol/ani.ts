@@ -231,12 +231,20 @@ export function resolveSymbolTextureForState(
 export function resetBaseDisplay(context: SymbolAnimationContext): void {
   for (const layer of context.layers) {
     layer.sprite.texture = layer.texture;
-    layer.sprite.alpha = 1;
+    layer.sprite.alpha = layer.transparent ? 0 : 1;
     layer.sprite.rotation = 0;
     layer.sprite.position.set(0);
     layer.sprite.scale.set(1);
     layer.sprite.visible = true;
     layer.sprite.mask = null;
+    if (
+      layer.transparent &&
+      layer.width !== undefined &&
+      layer.height !== undefined
+    ) {
+      layer.sprite.width = layer.width;
+      layer.sprite.height = layer.height;
+    }
   }
   context.baseLayer.visible = true;
   context.baseLayer.alpha = 1;

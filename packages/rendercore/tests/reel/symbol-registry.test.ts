@@ -119,6 +119,33 @@ describe("ReelSymbolRegistry", () => {
     ]);
   });
 
+  it("accepts explicit transparent normal sources as real textured symbols", () => {
+    const registry = createReelSymbolRegistry({
+      gameConfig: createGameConfig(basicGameConfig),
+      assets: createBasicAssets({
+        A: {
+          normal: { kind: "transparent", width: 17, height: 19 },
+          states: {
+            spinBlur: createTextureSet(17, 19).states.spinBlur,
+          },
+        },
+      }),
+      emptySymbols: ["BN"],
+      texturePolicy: {
+        requiredStateTextures: ["spinBlur"],
+      },
+    });
+
+    expect(registry.getCellSize()).toEqual({ width: 17, height: 19 });
+    const renderSymbol = registry.createRenderSymbolByCode(1);
+    expect(renderSymbol?.symbol).toBe("A");
+    expect(renderSymbol?.normalSource).toEqual({
+      kind: "transparent",
+      width: 17,
+      height: 19,
+    });
+  });
+
   it("rejects layered normal sources with inconsistent layer dimensions", () => {
     expect(() =>
       createReelSymbolRegistry({

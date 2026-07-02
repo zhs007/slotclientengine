@@ -10,6 +10,7 @@ import game003Skin1PortraitBackgroundUrl from "../../../../assets/game003-s1/bg2
 import game003Skin1MainReelBackgroundUrl from "../../../../assets/game003-s1/mainreelbg.png?url";
 import game003Skin1LandscapeConveyorUrl from "../../../../assets/game003-s1/conveyor1.png?url";
 import game003Skin1PortraitConveyorUrl from "../../../../assets/game003-s1/conveyor2.png?url";
+import game003Skin1BgBarFeatureBarSymbolManifest from "../../../../assets/game003-s1/bg-bar-symbol-state-textures.manifest.json";
 
 const game003Skin1SymbolModules = import.meta.glob(
   "../../../../assets/game003-s1/*.png",
@@ -28,6 +29,14 @@ const game003Skin1VniProjectModules = import.meta.glob(
 ) as Record<string, unknown>;
 const game003Skin1VniAssetModules = import.meta.glob(
   "../../../../assets/game003-s1/assets/*.{png,jpg,jpeg,webp}",
+  {
+    eager: true,
+    import: "default",
+    query: "?url",
+  },
+) as Record<string, string>;
+const game003Skin1BgBarFeatureBarSymbolModules = import.meta.glob(
+  "../../../../assets/game003-s1/{wild,up}.png",
   {
     eager: true,
     import: "default",
@@ -163,6 +172,44 @@ export const GAME003_STATIC_CONFIG = Object.freeze({
           cellWidth: 165,
           cellHeight: 130,
         } as const),
+      }),
+      featureBars: Object.freeze({
+        bgBar: Object.freeze({
+          componentName: "bg-bar",
+          queueLength: 5,
+          visibleCount: 4,
+          terminalSlotIndex: 4,
+          emptyFeature: "normal",
+          allowedFeatures: Object.freeze(["normal", "wild", "up"] as const),
+          symbols: Object.freeze({
+            manifest: game003Skin1BgBarFeatureBarSymbolManifest,
+            pngModules: game003Skin1BgBarFeatureBarSymbolModules,
+            requireExplicitScale: true,
+            requiredStates: Object.freeze([] as const),
+          }),
+          layout: Object.freeze({
+            landscape: Object.freeze({
+              movement: "down",
+              slotRectsInConveyor: Object.freeze([
+                { x: 55, y: 75, width: 174, height: 126 },
+                { x: 55, y: 204, width: 174, height: 132 },
+                { x: 55, y: 339, width: 174, height: 132 },
+                { x: 55, y: 474, width: 174, height: 132 },
+                { x: 55, y: 609, width: 174, height: 132 },
+              ] as const),
+            } as const),
+            portrait: Object.freeze({
+              movement: "right",
+              slotRectsInConveyor: Object.freeze([
+                { x: 74, y: 55, width: 153, height: 115 },
+                { x: 232, y: 55, width: 153, height: 115 },
+                { x: 390, y: 55, width: 153, height: 115 },
+                { x: 548, y: 55, width: 153, height: 115 },
+                { x: 706, y: 55, width: 153, height: 115 },
+              ] as const),
+            } as const),
+          }),
+        }),
       }),
       winAmount: Object.freeze({
         amountScale: 100,

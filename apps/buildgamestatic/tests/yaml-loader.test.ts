@@ -313,6 +313,80 @@ describe("buildgamestatic YAML loader", () => {
     ).toThrow(/宽泛 \*\.png glob/);
   });
 
+  it("validates optional feature bars with explicit conveyor slot rects", () => {
+    const root = createFixtureRoot();
+    const valid = parseGameStaticYamlValue(
+      withFeatureBars(createYamlObject()),
+      {
+        rootDir: root,
+        inputPath: "game.yaml",
+      },
+    );
+
+    expect(valid.skins["1"].featureBars?.featureTrack).toMatchObject({
+      componentName: "feature-track",
+      queueLength: 5,
+      visibleCount: 4,
+      terminalSlotIndex: 4,
+      emptyFeature: "empty",
+      symbols: {
+        manifest: "assets/game003-s1/feature-bar-symbols.manifest.json",
+        pngGlob: "assets/game003-s1/{bonus,boost}.png",
+        requiredStates: [],
+      },
+      layout: {
+        landscape: {
+          movement: "down",
+          slotRectsInConveyor: expect.arrayContaining([
+            { x: 56, y: 601, width: 172, height: 158 },
+          ]),
+        },
+        portrait: {
+          movement: "right",
+          slotRectsInConveyor: expect.arrayContaining([
+            { x: 681, y: 35, width: 172, height: 158 },
+          ]),
+        },
+      },
+    });
+
+    expect(() =>
+      parseGameStaticYamlValue(
+        withFeatureBars(createYamlObject(), {
+          layout: {
+            ...createFeatureBarObject().layout,
+            landscape: {
+              ...createFeatureBarObject().layout.landscape,
+              slotRectsInConveyor: [{ x: 56, y: 72, width: 172, height: 158 }],
+            },
+          },
+        }),
+        { rootDir: root, inputPath: "game.yaml" },
+      ),
+    ).toThrow(/slotRectsInConveyor 长度/);
+
+    expect(() =>
+      parseGameStaticYamlValue(
+        withFeatureBars(createYamlObject(), {
+          layout: {
+            ...createFeatureBarObject().layout,
+            portrait: {
+              ...createFeatureBarObject().layout.portrait,
+              slotRectsInConveyor: [
+                { x: 49, y: 35, width: 172, height: 158 },
+                { x: 207, y: 35, width: 172, height: 158 },
+                { x: 365, y: 35, width: 172, height: 158 },
+                { x: 523, y: 35, width: 172, height: 158 },
+                { x: 800, y: 35, width: 172, height: 158 },
+              ],
+            },
+          },
+        }),
+        { rootDir: root, inputPath: "game.yaml" },
+      ),
+    ).toThrow(/slotRectsInConveyor\[4\]/);
+  });
+
   it("validates optional VNI symbol animation globs", () => {
     const root = createFixtureRoot();
     const valid = parseGameStaticYamlValue(
@@ -476,6 +550,9 @@ function createFixtureRoot(): string {
   for (const file of [
     "assets/gamecfg003/gameconfig.json",
     "assets/game003-s1/symbol-state-textures.manifest.json",
+    "assets/game003-s1/feature-bar-symbols.manifest.json",
+    "assets/game003-s1/bonus.png",
+    "assets/game003-s1/boost.png",
     "assets/game003-s1/bg1.jpg",
     "assets/game003-s1/bg2.jpg",
     "assets/game003-s1/mainreelbg.png",
@@ -485,6 +562,65 @@ function createFixtureRoot(): string {
     writeFileSync(join(root, file), "{}", "utf8");
   }
   return root;
+}
+
+function withFeatureBars(
+  value: ReturnType<typeof createYamlObject>,
+  patch: Partial<ReturnType<typeof createFeatureBarObject>> = {},
+) {
+  return {
+    ...value,
+    skins: {
+      "1": {
+        ...value.skins["1"],
+        featureBars: {
+          featureTrack: {
+            ...createFeatureBarObject(),
+            ...patch,
+          },
+        },
+      },
+    },
+  };
+}
+
+function createFeatureBarObject() {
+  return {
+    componentName: "feature-track",
+    queueLength: 5,
+    visibleCount: 4,
+    terminalSlotIndex: 4,
+    emptyFeature: "empty",
+    allowedFeatures: ["empty", "bonus", "boost"],
+    symbols: {
+      manifest: "assets/game003-s1/feature-bar-symbols.manifest.json",
+      pngGlob: "assets/game003-s1/{bonus,boost}.png",
+      requireExplicitScale: true,
+      requiredStates: [],
+    },
+    layout: {
+      landscape: {
+        movement: "down",
+        slotRectsInConveyor: [
+          { x: 56, y: 72, width: 172, height: 158 },
+          { x: 56, y: 204, width: 172, height: 158 },
+          { x: 56, y: 336, width: 172, height: 158 },
+          { x: 56, y: 468, width: 172, height: 158 },
+          { x: 56, y: 601, width: 172, height: 158 },
+        ],
+      },
+      portrait: {
+        movement: "right",
+        slotRectsInConveyor: [
+          { x: 49, y: 35, width: 172, height: 158 },
+          { x: 207, y: 35, width: 172, height: 158 },
+          { x: 365, y: 35, width: 172, height: 158 },
+          { x: 523, y: 35, width: 172, height: 158 },
+          { x: 681, y: 35, width: 172, height: 158 },
+        ],
+      },
+    },
+  };
 }
 
 function writeWinAmountFixtureFiles(root: string): void {

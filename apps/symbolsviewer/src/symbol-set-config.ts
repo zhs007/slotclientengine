@@ -4,6 +4,7 @@ import game003S1L2WinsProject from "../../../assets/game003-s1/L2-wins.json";
 import game003S1L3WinsProject from "../../../assets/game003-s1/L3-wins.json";
 import game003S1L4WinsProject from "../../../assets/game003-s1/L4-wins.json";
 import game003S1L5WinsProject from "../../../assets/game003-s1/L5-wins.json";
+import game003BgBarStateTextureManifest from "../../../assets/game003-s1/bg-bar-symbol-state-textures.manifest.json";
 import game003S1StateTextureManifest from "../../../assets/game003-s1/symbol-state-textures.manifest.json";
 import {
   createDefaultSymbolAnimationResolver,
@@ -17,13 +18,15 @@ import {
   createSymbolScaleMapFromManifest,
 } from "./symbol-assets.js";
 
-export type SymbolSetId = "game003-s1";
+export type SymbolSetId = "game003-s1" | "game003-bg-bar";
 
 export interface SymbolSetConfig {
   readonly id: SymbolSetId;
   readonly label: string;
+  readonly catalogKind: "paytable" | "standalone";
   readonly symbolScales: ReelSymbolScaleMap;
-  readonly rawGameConfig: unknown;
+  readonly rawGameConfig?: unknown;
+  readonly displaySymbols?: readonly string[];
   readonly modules: Record<string, string>;
   readonly manifest: unknown;
   readonly vniProjectModules?: Record<string, unknown>;
@@ -37,6 +40,15 @@ const game003S1Modules = import.meta.glob("../../../assets/game003-s1/*.png", {
   import: "default",
   query: "?url",
 }) as Record<string, string>;
+
+const game003BgBarModules = import.meta.glob(
+  "../../../assets/game003-s1/{wild,up}.png",
+  {
+    eager: true,
+    import: "default",
+    query: "?url",
+  },
+) as Record<string, string>;
 
 const game003S1VniProjectGlobModules = import.meta.glob(
   "../../../assets/game003-s1/*-wins.json",
@@ -74,10 +86,18 @@ const GAME003_S1_DISPLAYABLE_SYMBOLS = getSymbolDisplaySymbolsFromManifest(
   },
 );
 
+const GAME003_BG_BAR_DISPLAYABLE_SYMBOLS = getSymbolDisplaySymbolsFromManifest(
+  game003BgBarStateTextureManifest,
+  {
+    requiredStates: [],
+  },
+);
+
 export const SYMBOL_SET_CONFIGS = Object.freeze([
   Object.freeze({
     id: "game003-s1",
     label: "game003-s1",
+    catalogKind: "paytable",
     symbolScales: createSymbolScaleMapFromManifest({
       manifest: game003S1StateTextureManifest,
       displaySymbols: GAME003_S1_DISPLAYABLE_SYMBOLS,
@@ -95,6 +115,28 @@ export const SYMBOL_SET_CONFIGS = Object.freeze([
       requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
       vniProjectModules: game003S1VniProjectModules,
       vniAssetModules: game003S1VniAssetModules,
+      fallback: manifestFallbackAnimationResolver,
+    }),
+  }),
+  Object.freeze({
+    id: "game003-bg-bar",
+    label: "game003-bg-bar",
+    catalogKind: "standalone",
+    symbolScales: createSymbolScaleMapFromManifest({
+      manifest: game003BgBarStateTextureManifest,
+      displaySymbols: GAME003_BG_BAR_DISPLAYABLE_SYMBOLS,
+      requiredStates: [],
+      requireExplicitScale: true,
+    }),
+    displaySymbols: GAME003_BG_BAR_DISPLAYABLE_SYMBOLS,
+    modules: game003BgBarModules,
+    manifest: game003BgBarStateTextureManifest,
+    requiredStates: [],
+    animationResolver: createSymbolManifestAnimationResolver({
+      manifest: game003BgBarStateTextureManifest,
+      requiredStates: [],
+      vniProjectModules: {},
+      vniAssetModules: {},
       fallback: manifestFallbackAnimationResolver,
     }),
   }),

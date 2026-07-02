@@ -135,15 +135,25 @@ export interface LayeredSymbolTextureSource<TTexture = Texture | string> {
   readonly layers: readonly SymbolLayerTextureSource<TTexture>[];
 }
 
+export interface TransparentSymbolTextureSource {
+  readonly kind: "transparent";
+  readonly width: number;
+  readonly height: number;
+}
+
 export type SymbolNormalTextureSource<TTexture = Texture | string> =
   | SingleSymbolTextureSource<TTexture>
-  | LayeredSymbolTextureSource<TTexture>;
+  | LayeredSymbolTextureSource<TTexture>
+  | TransparentSymbolTextureSource;
 
 export interface SymbolVisualLayer {
   readonly index: number;
   readonly texture: Texture;
   readonly keyframes: readonly Texture[];
   readonly sprite: Sprite;
+  readonly transparent?: boolean;
+  readonly width?: number;
+  readonly height?: number;
 }
 
 export interface SymbolTextureSet<TTexture = Texture | string> {
@@ -170,6 +180,15 @@ export interface SymbolCatalogValidation {
 export interface CreateSymbolCatalogOptions {
   readonly gameConfig: LogicGameConfig;
   readonly assets: SymbolAssetMap;
+  readonly statePreset?: SymbolStatePreset;
+  readonly animationResolver?: SymbolAnimationResolver;
+  readonly texturePolicy?: SymbolTexturePolicy;
+}
+
+export interface CreateStandaloneSymbolCatalogOptions {
+  readonly assets: SymbolAssetMap;
+  readonly displaySymbols: readonly string[];
+  readonly symbolScales?: Readonly<Record<string, number>>;
   readonly statePreset?: SymbolStatePreset;
   readonly animationResolver?: SymbolAnimationResolver;
   readonly texturePolicy?: SymbolTexturePolicy;
@@ -228,3 +247,5 @@ export interface SymbolCatalog {
     options?: CreateCatalogRenderSymbolOptions,
   ): RenderSymbol;
 }
+
+export interface StandaloneSymbolCatalog extends SymbolCatalog {}

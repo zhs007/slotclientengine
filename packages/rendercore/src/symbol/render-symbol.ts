@@ -43,7 +43,9 @@ export class RenderSymbol extends VisualEntity<void> {
     this.texture =
       this.normalSource.kind === "single"
         ? this.normalSource.texture
-        : this.normalSource.layers[0].texture;
+        : this.normalSource.kind === "transparent"
+          ? Texture.EMPTY
+          : this.normalSource.layers[0].texture;
     this.stateTextures = Object.freeze({ ...(options.stateTextures ?? {}) });
     this.requiredStateTextures = Object.freeze([
       ...(options.requiredStateTextures ?? []),
@@ -214,6 +216,13 @@ function normalizeRenderSymbolNormalSource(
         texture: assertTexture(texture.texture, "single normal"),
       });
     }
+    if (texture.kind === "transparent") {
+      return Object.freeze({
+        kind: "transparent",
+        width: assertPositiveDimension(texture.width, "transparent width"),
+        height: assertPositiveDimension(texture.height, "transparent height"),
+      });
+    }
     if (texture.layers.length === 0) {
       throw new SymbolAnimationError(
         "Layered symbol normal texture must include at least one layer.",
@@ -258,6 +267,25 @@ function normalizeRenderSymbolNormalSource(
 function createVisualLayers(
   normalSource: SymbolNormalTextureSource<Texture>,
 ): SymbolVisualLayer[] {
+  if (normalSource.kind === "transparent") {
+    const sprite = new Sprite(Texture.EMPTY);
+    sprite.anchor.set(0.5);
+    sprite.alpha = 0;
+    sprite.width = normalSource.width;
+    sprite.height = normalSource.height;
+    return [
+      Object.freeze({
+        index: 0,
+        texture: Texture.EMPTY,
+        keyframes: Object.freeze([]),
+        sprite,
+        transparent: true,
+        width: normalSource.width,
+        height: normalSource.height,
+      }),
+    ];
+  }
+
   const layerSources =
     normalSource.kind === "single"
       ? [
@@ -322,7 +350,9 @@ function isNormalSource(
     typeof texture === "object" &&
     texture !== null &&
     "kind" in texture &&
-    (texture.kind === "single" || texture.kind === "layered")
+    (texture.kind === "single" ||
+      texture.kind === "layered" ||
+      texture.kind === "transparent")
   );
 }
 
@@ -345,4 +375,11 @@ function getTextureHeight(texture: Texture): number {
     0,
     texture.height || texture.source?.height || texture.orig?.height || 0,
   );
+}
+
+function assertPositiveDimension(value: number, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new SymbolAnimationError(`Symbol ${label} must be positive.`);
+  }
+  return value;
 }

@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { Texture } from "pixi.js";
+import bgBarManifest from "../../../assets/game003-s1/bg-bar-symbol-state-textures.manifest.json";
 import manifest from "../../../assets/game003-s1/symbol-state-textures.manifest.json";
 import {
+  GAME003_BG_BAR_DISPLAY_SYMBOLS,
   GAME003_DISPLAY_SYMBOLS,
+  createGame003BgBarSymbolAssetMapFromModules,
+  createGame003BgBarSymbolScaleMapFromManifest,
   createGame003SymbolAssetMapFromModules,
   createGame003SymbolScaleMapFromManifest,
+  loadGame003BgBarSymbolTextures,
   loadGame003SymbolTextures,
 } from "../src/assets.js";
 import { createTestTexture } from "../../../packages/rendercore/tests/reel/helpers.js";
@@ -157,6 +162,82 @@ describe("game003 symbol assets", () => {
     expect(loaded.H1).toBeInstanceOf(Texture);
     expect(loaded.H2).toMatchObject({ normal: { kind: "single" } });
     expect(loaded.H3).toMatchObject({ normal: { kind: "layered" } });
+  });
+
+  it("builds bg-bar assets from transparent normal plus wild/up PNGs", () => {
+    const assets = createGame003BgBarSymbolAssetMapFromModules({
+      modules: {
+        "../../../assets/game003-s1/wild.png": "/assets/game003-s1/wild.png",
+        "../../../assets/game003-s1/up.png": "/assets/game003-s1/up.png",
+      },
+      stateTextureManifest: bgBarManifest,
+    });
+
+    expect(Object.keys(assets).sort()).toEqual(
+      [...GAME003_BG_BAR_DISPLAY_SYMBOLS].sort(),
+    );
+    expect(assets.normal).toEqual({
+      normal: { kind: "transparent", width: 172, height: 158 },
+      states: {},
+    });
+    expect(assets.wild).toMatchObject({
+      normal: "/assets/game003-s1/wild.png",
+      states: {},
+    });
+    expect(assets.up).toMatchObject({
+      normal: "/assets/game003-s1/up.png",
+      states: {},
+    });
+    expect(JSON.stringify(assets)).not.toMatch(/normal\.png/);
+  });
+
+  it("requires explicit bg-bar symbol scale and validates real texture sizes", async () => {
+    expect(
+      createGame003BgBarSymbolScaleMapFromManifest({
+        stateTextureManifest: bgBarManifest,
+        requireExplicitScale: true,
+      }),
+    ).toEqual({
+      normal: 1,
+      wild: 1,
+      up: 1,
+    });
+
+    await expect(
+      loadGame003BgBarSymbolTextures({
+        normal: {
+          normal: { kind: "transparent", width: 172, height: 158 },
+          states: {},
+        },
+        wild: {
+          normal: createTestTexture(172, 158),
+          states: {},
+        },
+        up: {
+          normal: createTestTexture(172, 130),
+          states: {},
+        },
+      }),
+    ).resolves.toMatchObject({
+      normal: { normal: { kind: "transparent", width: 172, height: 158 } },
+    });
+
+    await expect(
+      loadGame003BgBarSymbolTextures({
+        normal: {
+          normal: { kind: "transparent", width: 172, height: 158 },
+          states: {},
+        },
+        wild: {
+          normal: createTestTexture(172, 130),
+          states: {},
+        },
+        up: {
+          normal: createTestTexture(172, 130),
+          states: {},
+        },
+      }),
+    ).rejects.toThrow(/wild size must be 172 x 158/);
   });
 });
 

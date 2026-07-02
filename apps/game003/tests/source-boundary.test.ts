@@ -64,6 +64,18 @@ describe("game003 source boundary", () => {
     expect(source).not.toMatch(/rect\.y - visibleRect\.y/);
   });
 
+  it("keeps bg-bar slot placement explicit instead of deriving from conveyor size", () => {
+    const bgBarSource = [
+      readFileSync(join(APP_ROOT, "src/bg-bar-layout.ts"), "utf8"),
+      readFileSync(join(APP_ROOT, "src/bg-bar-runtime.ts"), "utf8"),
+      readFileSync(join(APP_ROOT, "config/game-static.yaml"), "utf8"),
+    ].join("\n");
+
+    expect(bgBarSource).toMatch(/slotRectsInConveyor/);
+    expect(bgBarSource).not.toMatch(/height\s*\/\s*5/);
+    expect(bgBarSource).not.toMatch(/width\s*\/\s*5/);
+  });
+
   it("keeps L1-L5 VNI animation selection out of win playback business code", () => {
     const businessSource = [
       readFileSync(join(APP_ROOT, "src/game-adapter.ts"), "utf8"),
