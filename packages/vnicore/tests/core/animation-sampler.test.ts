@@ -124,6 +124,25 @@ describe("animation-sampler", () => {
     expect(scaleOut.opacity).toBe(0.5);
   });
 
+  it("samples bounce_in from eased progress", () => {
+    const sampled = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [
+        animation("bounce_in", {
+          fromScale: 0.2,
+          toScale: 1,
+          overshoot: 1.7,
+          fadeIn: true,
+          easing: "easeOutQuad",
+        }),
+      ],
+      0.5,
+    );
+
+    expect(sampled.transform.scaleX).toBe(1);
+    expect(sampled.opacity).toBe(0.9375);
+  });
+
   it("samples pop before and after peakAt", () => {
     const beforePeak = sampleLayerAnimationsAtTime(
       { transform: baseTransform, opacity: 1 },

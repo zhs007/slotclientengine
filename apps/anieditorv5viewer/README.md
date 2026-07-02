@@ -22,6 +22,8 @@ The app bundles the legacy V5G full-size exports:
 - `docs/anieditor5/export/scatter2.json`
 - `docs/anieditor5/export/multipay.json`
 - `docs/anieditor5/export/roundreel.json`
+- `docs/anieditor5/export/number2.json`
+- `docs/anieditor5/export/number3.json`
 
 It also keeps the older VNI export2 bundle as a non-regression fixture:
 
@@ -49,6 +51,8 @@ The copied runtime files live under `src/assets`:
 - `src/assets/projects/scatter2.json`
 - `src/assets/projects/multipay.json`
 - `src/assets/projects/roundreel.json`
+- `src/assets/projects/number2.json`
+- `src/assets/projects/number3.json`
 - `src/assets/assets/*`
 - `src/assets/export2/manifest.json`
 - `src/assets/export2/edit_full/project.json`
@@ -58,7 +62,7 @@ The copied runtime files live under `src/assets`:
 
 The UI project selector can switch between all bundled projects. JSON `asset.path` values are resolved through a Vite URL manifest and must match copied files exactly.
 
-`roundreel` is a `VNI_0.020` single-project runtime export stored in the same JSON + `assets/` resource pool as the other `docs/anieditor5/export` projects. Its profile id, purpose, and scale come from JSON `exportProfile`, not from the directory name. `runtime_50` stores 50% file pixels, but the player restores each image layer to its original logical design size with sprite-level compensation. Legacy exports and VNI single-project 100% exports may omit `fileWidth`, `fileHeight`, `fileScale`, and `exportProfile`; those are treated as full-size original-image profiles.
+`roundreel` is a `VNI_0.022` single-project runtime export stored in the same JSON + `assets/` resource pool as the other `docs/anieditor5/export` projects. Its profile id, purpose, and scale come from JSON `exportProfile`, not from the directory name. `number2` validates text layer replacement, and `number3` validates mask/precompose-light-alpha source handling. `runtime_50` stores 50% file pixels, but the player restores each image layer to its original logical design size with sprite-level compensation. Legacy exports and VNI single-project 100% exports may omit `fileWidth`, `fileHeight`, `fileScale`, and `exportProfile`; those are treated as full-size original-image profiles.
 
 `game003-l1-wins` to `game003-l5-wins` are registered as direct source projects from `assets/game003-s1`; they are intended for visual comparison of the raw VNI animations in this viewer, not as copied docs fixtures.
 
@@ -72,10 +76,14 @@ Supported by `@slotclientengine/vnicore`:
 - VNI bundle manifest entries whose project `exportProfile` matches `id`, `purpose`, and `assetScale`
 - center-coordinate stage rendering
 - image layers and basic text layers
+- text layer replacement through `VNIPlayer` public APIs for dynamic text and image binding
+- layer masks with explicit `sourceLayerId` validation and `legacy_alpha` / `precompose_light_alpha` composite modes
 - `normal`, `add`, `screen`, `multiply`, `lighten` blend modes
 - `move`, `fade`, `scale_up`, `scale_down`, `scale_in`, `scale_out`, `pop`, `shake`, `blink`, `rotate`, `slide_in`, `slide_out`, `bounce_in`, `pulse`, `float`, `swing`
 - `squash_stretch` elastic displacement and squash/stretch sampling
 - layer animation particles: `particles`, `particle_twinkle`, `particle_wall`, `particle_combo`
+- continuous layer particles: `particle_stream`
+- runtime chaser lights: `chaser_light`
 - `particle_combo.sourceOpacity` controls only the source image layer opacity; combo particles continue to render from the layer base opacity when `sourceOpacity` is `0`
 - deterministic `seek()` sampling for play, restart, loop, timeline drag, project switching, and particle redraws
 - playback ranges, segmented advanced playback, playback markers, particle-draining, and complete listeners
@@ -103,6 +111,9 @@ The stage mount receives runtime diagnostics from `VNIPlayer`:
 - `data-vni-time`
 - `data-vni-visible-layers`
 - `data-vni-particle-sprites`
+- `data-vni-chaser-light-sprites`
+- `data-vni-mask-sprites`
+- `data-vni-text-layer-bindings`
 - `data-vni-playback-mode`
 - `data-vni-playback-phase`
 - `data-vni-particle-draining`
@@ -117,6 +128,14 @@ Legacy `data-v5g-*` aliases are still written for old browser checks and are cle
 ## Advanced Playback UI
 
 The viewer has a separate advanced playback section for segmented playback. It passes `loopStart`, `loopEnd`, and `维持粒子活动` directly to `VNIPlayer.play({ mode: "segmented", ... })`, and calls `requestSegmentedPlaybackEnd()` for the end button. The viewer does not own the segmented state machine; it only validates form input, displays the current phase, and mirrors runtime errors.
+
+## Canvas Zoom
+
+The Pixi preview uses a two-layer stage layout: the outer stage mount remains the fixed viewport passed to `VNIPlayer`, and the inner canvas layer is scaled with CSS from its center point. The zoom buttons only change this preview scale; they do not change runtime sampling, renderer viewport size, or `VNIPlayer` adaptation rules.
+
+## Text Replacement UI
+
+The viewer exposes a text layer replacement panel for projects such as `number2`. It lists text layers from the current project, supports dynamic text and image replacement, and uses only `VNIPlayer.attachTextToTextLayer(...)` / `attachImageToTextLayer(...)` plus the returned dispose or `setText()` handles. It does not inspect or mutate private Pixi layer containers.
 
 ## Commands
 

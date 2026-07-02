@@ -7,11 +7,7 @@ import type {
 } from "./types";
 
 export type V5GEasingName =
-  | "linear"
-  | "easeInQuad"
-  | "easeOutQuad"
-  | "easeInOutQuad"
-  | "backOut";
+  "linear" | "easeInQuad" | "easeOutQuad" | "easeInOutQuad" | "backOut";
 
 export interface V5GAnimationParamSpec {
   key: string;
@@ -33,6 +29,8 @@ export interface V5GAnimationPresetSpec {
   defaultEasing: V5GEasingName;
   params: V5GAnimationParamSpec[];
 }
+
+export type V5GAnimationCategory = "animation" | "particle";
 
 export interface V5GAnimationSampleBase {
   transform: V5GTransformConfig;
@@ -677,6 +675,24 @@ export const V5G_ANIMATION_PRESETS: V5GAnimationPresetSpec[] = [
         "speed：粒子向外飞散的速度",
       ),
       numberParam(
+        "emissionAngle",
+        "发射角度°",
+        270,
+        0,
+        360,
+        1,
+        "emissionAngle：粒子主要发射方向，0=右 90=下 180=左 270=上；做烟花建议 270",
+      ),
+      numberParam(
+        "emissionSpreadAngle",
+        "扩散角度°",
+        360,
+        0,
+        360,
+        1,
+        "emissionSpreadAngle：围绕发射角度随机扩散的角度范围，360=全方向爆发，烟花建议 20~60",
+      ),
+      numberParam(
         "size",
         "粒子大小",
         48,
@@ -695,6 +711,204 @@ export const V5G_ANIMATION_PRESETS: V5GAnimationPresetSpec[] = [
         "gravity：正数向下坠落，负数向上漂浮",
       ),
       checkboxParam("fadeOut", "逐渐消失", true, "开启后粒子会随时间淡出"),
+      numberParam(
+        "trailCount",
+        "拖尾层数",
+        2,
+        0,
+        8,
+        1,
+        "trailCount：每颗粒子最多绘制多少层拖尾；手机保护会把实际总绘制量限制在约 320 个 sprite",
+      ),
+      numberParam(
+        "trailSpacing",
+        "拖尾间距",
+        0.035,
+        0.005,
+        0.2,
+        0.005,
+        "trailSpacing：拖尾每层回退的时间间隔，越大拖尾拉得越开",
+      ),
+      numberParam(
+        "trailFade",
+        "拖尾衰减",
+        0.5,
+        0.05,
+        0.95,
+        0.05,
+        "trailFade：拖尾透明度衰减，越大拖尾越明显",
+      ),
+      checkboxParam(
+        "rotateParticles",
+        "粒子旋转",
+        true,
+        "关闭后粒子保持不旋转，适合需要方向统一的图片",
+      ),
+      checkboxParam(
+        "randomRotation",
+        "随机初始角度",
+        true,
+        "开启后每颗粒子会有随机初始角度",
+      ),
+      numberParam(
+        "randomRotationDegrees",
+        "随机角度范围°",
+        135,
+        0,
+        360,
+        1,
+        "randomRotationDegrees：随机初始角度总范围，0=不随机，360=全角度随机",
+      ),
+      numberParam(
+        "spinSpeed",
+        "旋转速度",
+        1,
+        0,
+        10,
+        0.1,
+        "spinSpeed：飞散过程的旋转速度倍率，0=不随时间旋转",
+      ),
+    ],
+  },
+  {
+    type: "particle_stream",
+    label: "Particle Stream 持续发射",
+    description:
+      "使用当前图片图层作为粒子纹理，在动画持续时间内按固定频率连续发射；整体发射窗口由时间轴的开始秒/持续秒控制，不额外设置重复的持续时间。",
+    defaultDuration: 3,
+    recommendedDuration: "tips：1 ~ 10s；持续时间直接改动画模块的持续秒",
+    defaultEasing: "linear",
+    params: [
+      numberParam(
+        "spawnRate",
+        "每秒发射数",
+        24,
+        1,
+        300,
+        1,
+        "spawnRate：每秒生成多少颗粒子，数值越大越密集也越耗性能",
+      ),
+      numberParam(
+        "lifetime",
+        "单颗存活秒",
+        1.2,
+        0.05,
+        10,
+        0.01,
+        "lifetime：每颗粒子从出生到消失的时间；整体持续时间请改动画模块持续秒",
+      ),
+      numberParam(
+        "spread",
+        "初始扩散半径",
+        12,
+        0,
+        1000,
+        1,
+        "spread：粒子出生点在图层中心附近的随机扩散范围",
+      ),
+      numberParam(
+        "speed",
+        "发射速度",
+        220,
+        0,
+        2000,
+        1,
+        "speed：粒子沿发射方向飞行的速度",
+      ),
+      numberParam(
+        "emissionAngle",
+        "发射角度°",
+        270,
+        0,
+        360,
+        1,
+        "emissionAngle：粒子主要发射方向，0=右 90=下 180=左 270=上",
+      ),
+      numberParam(
+        "emissionSpreadAngle",
+        "扩散角度°",
+        30,
+        0,
+        360,
+        1,
+        "emissionSpreadAngle：围绕发射角度随机扩散的角度范围，喷射建议 10~60，360=全方向",
+      ),
+      numberParam(
+        "size",
+        "粒子大小",
+        48,
+        1,
+        400,
+        1,
+        "size：图片粒子的目标最长边像素",
+      ),
+      numberParam(
+        "gravity",
+        "下落重力",
+        180,
+        -2000,
+        2000,
+        1,
+        "gravity：正数向下坠落，负数向上漂浮",
+      ),
+      checkboxParam("fadeOut", "逐渐消失", true, "开启后粒子会随寿命淡出"),
+      numberParam(
+        "trailCount",
+        "拖尾层数",
+        2,
+        0,
+        8,
+        1,
+        "trailCount：每颗粒子最多绘制多少层拖尾；手机保护会限制实际总绘制量",
+      ),
+      numberParam(
+        "trailSpacing",
+        "拖尾间距秒",
+        0.035,
+        0.005,
+        0.2,
+        0.005,
+        "trailSpacing：拖尾每层回退的秒数，越大拖尾拉得越开",
+      ),
+      numberParam(
+        "trailFade",
+        "拖尾衰减",
+        0.5,
+        0.05,
+        0.95,
+        0.05,
+        "trailFade：拖尾透明度衰减，越大拖尾越明显",
+      ),
+      checkboxParam(
+        "rotateParticles",
+        "粒子旋转",
+        true,
+        "关闭后粒子保持不旋转，适合方向统一的图片",
+      ),
+      checkboxParam(
+        "randomRotation",
+        "随机初始角度",
+        true,
+        "开启后每颗粒子会有随机初始角度",
+      ),
+      numberParam(
+        "randomRotationDegrees",
+        "随机角度范围°",
+        135,
+        0,
+        360,
+        1,
+        "randomRotationDegrees：随机初始角度总范围，0=不随机，360=全角度随机",
+      ),
+      numberParam(
+        "spinSpeed",
+        "旋转速度",
+        1,
+        0,
+        10,
+        0.1,
+        "spinSpeed：飞行过程的旋转速度倍率，0=不随时间旋转",
+      ),
     ],
   },
   {
@@ -1420,6 +1634,141 @@ export const V5G_ANIMATION_PRESETS: V5GAnimationPresetSpec[] = [
       ),
     ],
   },
+  {
+    type: "chaser_light",
+    label: "ChaserLight 走马灯",
+    description:
+      "使用当前图片图层自身作为灯片纹理，按轨迹（圆形/直线/曲线）等距复制并依次亮灭，形成走马灯效果。",
+    defaultDuration: 4,
+    recommendedDuration:
+      "tips：2 ~ 10s；适合单个图标、灯泡、星星、金币等循环追光",
+    defaultEasing: "linear",
+    params: [
+      numberParam(
+        "totalCount",
+        "灯片总数",
+        12,
+        2,
+        200,
+        1,
+        "totalCount：沿轨迹排布的灯片总数",
+      ),
+      numberParam(
+        "spacing",
+        "灯片间距",
+        40,
+        4,
+        500,
+        1,
+        "spacing：相邻灯片沿轨迹的弧长/直线距离",
+      ),
+      numberParam(
+        "lightDuration",
+        "亮灯持续秒",
+        0.3,
+        0.03,
+        5,
+        0.01,
+        "lightDuration：每盏灯亮多久；实际亮灯窗口 = lightDuration / (lightDuration + interval)",
+      ),
+      numberParam(
+        "interval",
+        "灭灯间隔秒",
+        0.1,
+        0.01,
+        5,
+        0.01,
+        "interval：灭灯间隔；配合 lightDuration 控制走马速度",
+      ),
+      numberParam(
+        "trajectory",
+        "轨迹 0/1/2",
+        0,
+        0,
+        2,
+        1,
+        "trajectory：0=圆形 1=直线 2=曲线",
+      ),
+      numberParam(
+        "radius",
+        "圆形半径",
+        200,
+        10,
+        3000,
+        1,
+        "radius：trajectory=0 时的圆形半径",
+      ),
+      numberParam(
+        "centerX",
+        "圆心/起点 X",
+        0,
+        -5000,
+        5000,
+        1,
+        "centerX：相对图层中心的 X 偏移，trajectory=0 为圆心，=1/2 为起点",
+      ),
+      numberParam(
+        "centerY",
+        "圆心/起点 Y",
+        0,
+        -5000,
+        5000,
+        1,
+        "centerY：相对图层中心的 Y 偏移",
+      ),
+      numberParam(
+        "endX",
+        "终点 X",
+        320,
+        -5000,
+        5000,
+        1,
+        "endX：trajectory=1/2 时终点的 X 偏移",
+      ),
+      numberParam(
+        "endY",
+        "终点 Y",
+        0,
+        -5000,
+        5000,
+        1,
+        "endY：trajectory=1/2 时终点的 Y 偏移",
+      ),
+      numberParam(
+        "curve",
+        "曲线弯曲",
+        120,
+        -3000,
+        3000,
+        1,
+        "curve：trajectory=2 时的弯曲偏移",
+      ),
+      numberParam(
+        "lightSize",
+        "灯片大小",
+        48,
+        4,
+        400,
+        1,
+        "lightSize：灯片贴图最长边像素",
+      ),
+      numberParam(
+        "dimAlpha",
+        "暗灯透明度",
+        0.15,
+        0,
+        1,
+        0.05,
+        "dimAlpha：不亮时的灯片透明度，0=完全不可见",
+      ),
+      checkboxParam(
+        "keepOriginal",
+        "保留原图",
+        true,
+        "开启后原图层图片正常显示，关闭后隐藏原图只显示走马灯",
+      ),
+    ],
+  },
 ];
 
 export function getAnimationPreset(
@@ -1492,9 +1841,38 @@ export function createDefaultAnimationParams(
       count: 32,
       spread: 70,
       speed: 180,
+      emissionAngle: 270,
+      emissionSpreadAngle: 360,
       size: 48,
       gravity: 90,
       fadeOut: true,
+      trailCount: 2,
+      trailSpacing: 0.035,
+      trailFade: 0.5,
+      rotateParticles: true,
+      randomRotation: true,
+      randomRotationDegrees: 135,
+      spinSpeed: 1,
+    };
+  }
+  if (type === "particle_stream") {
+    return {
+      spawnRate: 24,
+      lifetime: 1.2,
+      spread: 12,
+      speed: 220,
+      emissionAngle: 270,
+      emissionSpreadAngle: 30,
+      size: 48,
+      gravity: 180,
+      fadeOut: true,
+      trailCount: 2,
+      trailSpacing: 0.035,
+      trailFade: 0.5,
+      rotateParticles: true,
+      randomRotation: true,
+      randomRotationDegrees: 135,
+      spinSpeed: 1,
     };
   }
   if (type === "particle_twinkle") {
@@ -1602,6 +1980,24 @@ export function createDefaultAnimationParams(
       fadeOut: true,
     };
   }
+  if (type === "chaser_light") {
+    return {
+      totalCount: 12,
+      spacing: 40,
+      lightDuration: 0.3,
+      interval: 0.1,
+      trajectory: 0,
+      radius: 200,
+      centerX: 0,
+      centerY: 0,
+      endX: 320,
+      endY: 0,
+      curve: 120,
+      lightSize: 48,
+      dimAlpha: 0.15,
+      keepOriginal: true,
+    };
+  }
   return {};
 }
 
@@ -1634,7 +2030,7 @@ export function sampleLayerAnimationsAtTime(
     else if (animation.type === "fade")
       sampleFade(result, animation, easedProgress);
     else if (animation.type === "bounce_in")
-      sampleBounceIn(result, animation, progress, base);
+      sampleBounceIn(result, animation, easedProgress, base);
     else if (animation.type === "scale_up" || animation.type === "scale_down")
       sampleScale(result, animation, easedProgress, base.transform);
     else if (animation.type === "scale_in" || animation.type === "scale_out")
@@ -1660,6 +2056,8 @@ export function sampleLayerAnimationsAtTime(
       sampleShatterSource(result, animation, base);
     else if (animation.type === "glow" || animation.type === "safe_glow")
       sampleGlowSource(result, animation);
+    else if (animation.type === "chaser_light")
+      sampleChaserLightSource(result, animation);
   }
   result.transform.x = roundTo(result.transform.x, 4);
   result.transform.y = roundTo(result.transform.y, 4);
@@ -1680,6 +2078,29 @@ export function easeProgress(progress: number, easing: string): number {
   return t;
 }
 
+const V5G_PARTICLE_ANIMATION_TYPES = new Set<V5GAnimationType>([
+  "particles",
+  "particle_stream",
+  "particle_twinkle",
+  "particle_wall",
+  "particle_combo",
+  "shatter",
+]);
+
+export function getAnimationCategory(
+  type: V5GAnimationType,
+): V5GAnimationCategory {
+  return V5G_PARTICLE_ANIMATION_TYPES.has(type) ? "particle" : "animation";
+}
+
+export function getAnimationPresetsByCategory(
+  category: V5GAnimationCategory,
+): V5GAnimationPresetSpec[] {
+  return V5G_ANIMATION_PRESETS.filter(
+    (preset) => getAnimationCategory(preset.type) === category,
+  );
+}
+
 export function isV5GAnimationType(value: string): value is V5GAnimationType {
   return V5G_ANIMATION_PRESETS.some((preset) => preset.type === value);
 }
@@ -1694,9 +2115,11 @@ function sampleMove(
   const originX = getNumberParam(animation, "baseX", fromX);
   const originY = getNumberParam(animation, "baseY", fromY);
   result.transform.x +=
-    lerp(fromX, getNumberParam(animation, "toX", fromX), progress) - originX;
+    lerpOvershoot(fromX, getNumberParam(animation, "toX", fromX), progress) -
+    originX;
   result.transform.y +=
-    lerp(fromY, getNumberParam(animation, "toY", fromY), progress) - originY;
+    lerpOvershoot(fromY, getNumberParam(animation, "toY", fromY), progress) -
+    originY;
 }
 
 function sampleSlide(
@@ -1705,12 +2128,12 @@ function sampleSlide(
   progress: number,
   base: V5GAnimationSampleBase,
 ): void {
-  result.transform.x += lerp(
+  result.transform.x += lerpOvershoot(
     getNumberParam(animation, "fromX", 0),
     getNumberParam(animation, "toX", 0),
     progress,
   );
-  result.transform.y += lerp(
+  result.transform.y += lerpOvershoot(
     getNumberParam(animation, "fromY", 0),
     getNumberParam(animation, "toY", 0),
     progress,
@@ -1744,20 +2167,38 @@ function sampleFade(
 function sampleBounceIn(
   result: V5GAnimationSampleResult,
   animation: V5GAnimationConfig,
-  progress: number,
+  easedProgress: number,
   base: V5GAnimationSampleBase,
 ): void {
-  const ratio = backOutProgress(
-    progress,
-    getNumberParam(animation, "overshoot", 1.7),
+  // If the user chose backOut easing use per-animation overshoot;
+  // otherwise respect the already-eased progress from easeProgress().
+  const easing = String(
+    animation.params.easing ??
+      getAnimationPreset(animation.type)?.defaultEasing ??
+      "backOut",
   );
+  let ratio: number;
+  if (easing === "backOut") {
+    // Recompute with per-animation overshoot so the bounce is visible.
+    ratio = backOutProgress(
+      easedProgress,
+      getNumberParam(animation, "overshoot", 1.7),
+    );
+  } else {
+    ratio = easedProgress;
+  }
   const fromScale = getNumberParam(animation, "fromScale", 0.2);
   const toScale = getNumberParam(animation, "toScale", 1);
-  const scaleRatio = Math.max(0, lerp(fromScale, toScale, ratio));
+  // backOut may yield values > 1 during overshoot; do not clamp via lerp.
+  const scaleRatio = Math.max(0, fromScale + (toScale - fromScale) * ratio);
   result.transform.scaleX *= scaleRatio;
   result.transform.scaleY *= scaleRatio;
   if (getBooleanParam(animation, "fadeIn", true)) {
-    result.opacity = lerp(0, base.opacity, clampNumber(progress * 1.25, 0, 1));
+    result.opacity = lerp(
+      0,
+      base.opacity,
+      clampNumber(easedProgress * 1.25, 0, 1),
+    );
   }
 }
 
@@ -1773,8 +2214,10 @@ function sampleScale(
   const fromScaleY = getNumberParam(animation, "fromScaleY", baseScaleY);
   const toScaleX = getNumberParam(animation, "toScaleX", baseScaleX);
   const toScaleY = getNumberParam(animation, "toScaleY", baseScaleY);
-  const scaleRatioX = lerp(fromScaleX, toScaleX, progress) / baseScaleX;
-  const scaleRatioY = lerp(fromScaleY, toScaleY, progress) / baseScaleY;
+  const scaleRatioX =
+    lerpOvershoot(fromScaleX, toScaleX, progress) / baseScaleX;
+  const scaleRatioY =
+    lerpOvershoot(fromScaleY, toScaleY, progress) / baseScaleY;
   result.transform.scaleX *= Math.abs(scaleRatioX);
   result.transform.scaleY *= Math.abs(scaleRatioY);
 }
@@ -1787,7 +2230,7 @@ function sampleScaleEntryExit(
 ): void {
   const fromScale = getNumberParam(animation, "fromScale", 1);
   const toScale = getNumberParam(animation, "toScale", 1);
-  const scaleRatio = Math.max(0, lerp(fromScale, toScale, progress));
+  const scaleRatio = Math.max(0, lerpOvershoot(fromScale, toScale, progress));
   result.transform.scaleX *= scaleRatio;
   result.transform.scaleY *= scaleRatio;
   if (
@@ -1897,7 +2340,7 @@ function sampleRotate(
   animation: V5GAnimationConfig,
   progress: number,
 ): void {
-  result.transform.rotation += lerp(
+  result.transform.rotation += lerpOvershoot(
     getNumberParam(animation, "fromRotation", 0),
     getNumberParam(animation, "toRotation", 0),
     progress,
@@ -1928,6 +2371,14 @@ function sampleGlowSource(
   result.opacity = 0;
 }
 
+function sampleChaserLightSource(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+): void {
+  if (getBooleanParam(animation, "keepOriginal", true)) return;
+  result.opacity = 0;
+}
+
 function sampleSquashStretch(
   result: V5GAnimationSampleResult,
   animation: V5GAnimationConfig,
@@ -1946,8 +2397,8 @@ function sampleSquashStretch(
   const toY = getNumberParam(animation, "toY", 0);
 
   // Displacement: interpolate from/to in world space (relative to base).
-  result.transform.x += lerp(fromX, toX, easedProgress);
-  result.transform.y += lerp(fromY, toY, easedProgress);
+  result.transform.x += lerpOvershoot(fromX, toX, easedProgress);
+  result.transform.y += lerpOvershoot(fromY, toY, easedProgress);
 
   if (squashAmount <= 0.001) return;
 
@@ -2073,4 +2524,9 @@ function backOutProgress(progress: number, overshoot: number): number {
 
 function lerp(from: number, to: number, ratio: number): number {
   return from + (to - from) * clampNumber(ratio, 0, 1);
+}
+
+/** Like lerp but does not clamp ratio above 1, so backOut overshoot is visible. */
+function lerpOvershoot(from: number, to: number, ratio: number): number {
+  return from + (to - from) * ratio;
 }

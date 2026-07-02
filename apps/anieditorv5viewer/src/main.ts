@@ -1,10 +1,16 @@
 import "./styles.css";
 import { bundledProjects, getBundledProject } from "./config/bundled-projects";
-import { VNIPlayer } from "@slotclientengine/vnicore/pixi";
+import {
+  VNIPlayer,
+  type VNITextLayerTextBinding,
+} from "@slotclientengine/vnicore/pixi";
 import { Application } from "pixi.js";
 import { createViewerControls } from "./ui/controls";
 
 const VIEWER_INSERTED_NODE_ID = "viewer-group-slot-image";
+const VIEWER_TEXT_LAYER_REPLACEMENT_ID = "viewer-text-layer-replacement";
+const STAGE_CANVAS_SCALES = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4] as const;
+const DEFAULT_STAGE_CANVAS_SCALE_INDEX = 2;
 
 async function bootstrap(): Promise<void> {
   const appRoot = document.querySelector<HTMLDivElement>("#app");
@@ -17,18 +23,41 @@ async function bootstrap(): Promise<void> {
   shell.className = "viewer-shell";
   const stage = document.createElement("section");
   stage.className = "stage-panel";
+  const stageToolbar = document.createElement("div");
+  stageToolbar.className = "stage-toolbar";
+  const zoomControls = document.createElement("div");
+  zoomControls.className = "stage-zoom-controls";
+  const zoomOutButton = createStageZoomButton("-", "缩小画布");
+  const zoomResetButton = createStageZoomButton("1:1", "重置画布缩放");
+  const zoomInButton = createStageZoomButton("+", "放大画布");
+  const zoomReadout = document.createElement("span");
+  zoomReadout.className = "stage-zoom-readout";
+  zoomControls.append(
+    zoomOutButton,
+    zoomReadout,
+    zoomInButton,
+    zoomResetButton,
+  );
+  stageToolbar.appendChild(zoomControls);
   const stageMount = document.createElement("div");
   stageMount.className = "stage-mount";
+  const stageCanvasLayer = document.createElement("div");
+  stageCanvasLayer.className = "stage-canvas-layer";
+  stageMount.appendChild(stageCanvasLayer);
   const controlsMount = document.createElement("section");
   controlsMount.className = "controls-panel";
 
-  stage.appendChild(stageMount);
+  stage.append(stageToolbar, stageMount);
   shell.append(stage, controlsMount);
   appRoot.appendChild(shell);
 
   let player: VNIPlayer | null = null;
   let pixiApp: Application | null = null;
   let disposeResize: (() => void) | null = null;
+  let disposeInsertedNode: (() => void) | null = null;
+  let disposeTextReplacement: (() => void) | null = null;
+  let activeTextBinding: VNITextLayerTextBinding | null = null;
+  let stageCanvasScaleIndex = DEFAULT_STAGE_CANVAS_SCALE_INDEX;
   let loadToken = 0;
   let activeProject = getBundledProject("project");
   const controls = createViewerControls({
@@ -117,6 +146,8 @@ async function bootstrap(): Promise<void> {
           dispose();
           return;
         }
+        disposeInsertedNode?.();
+        disposeInsertedNode = dispose;
         controls.setInsertedNodeActive(true);
         controls.setInsertionError(null);
       })().catch((error: unknown) => {
@@ -127,13 +158,69 @@ async function bootstrap(): Promise<void> {
       });
     },
     onClearInsertedNodes: () => {
-      if (!player) return;
       try {
-        player.clearMountedNodes();
+        disposeInsertedNode?.();
+        disposeInsertedNode = null;
         controls.setInsertedNodeActive(false);
         controls.setInsertionError(null);
       } catch (error) {
         controls.setInsertionError(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    },
+    onApplyTextLayerReplacement: (replacement) => {
+      const currentPlayer = player;
+      if (!currentPlayer) return;
+      void (async () => {
+        clearTextReplacement();
+        if (replacement.mode === "text") {
+          const binding = currentPlayer.attachTextToTextLayer({
+            id: VIEWER_TEXT_LAYER_REPLACEMENT_ID,
+            layerId: replacement.layerId,
+            text: replacement.text ?? "",
+          });
+          activeTextBinding = binding;
+          disposeTextReplacement = binding.dispose;
+        } else if (replacement.projectAssetId) {
+          disposeTextReplacement = await currentPlayer.attachImageToTextLayer({
+            id: VIEWER_TEXT_LAYER_REPLACEMENT_ID,
+            layerId: replacement.layerId,
+            assetId: replacement.projectAssetId,
+            label: replacement.assetPath,
+          });
+        } else {
+          disposeTextReplacement = await currentPlayer.attachImageToTextLayer({
+            id: VIEWER_TEXT_LAYER_REPLACEMENT_ID,
+            layerId: replacement.layerId,
+            imageUrl: replacement.assetUrl,
+            label: replacement.assetPath,
+          });
+        }
+        if (currentPlayer !== player) {
+          clearTextReplacement();
+          return;
+        }
+        controls.setTextReplacementActive(true);
+        controls.setTextReplacementError(null);
+      })().catch((error: unknown) => {
+        if (currentPlayer !== player) return;
+        controls.setTextReplacementError(
+          error instanceof Error ? error.message : String(error),
+        );
+        controls.setTextReplacementActive(false);
+      });
+    },
+    onTextLayerReplacementTextInput: (text) => {
+      activeTextBinding?.setText(text);
+    },
+    onClearTextLayerReplacement: () => {
+      try {
+        clearTextReplacement();
+        controls.setTextReplacementActive(false);
+        controls.setTextReplacementError(null);
+      } catch (error) {
+        controls.setTextReplacementError(
           error instanceof Error ? error.message : String(error),
         );
       }
@@ -150,13 +237,16 @@ async function bootstrap(): Promise<void> {
     const token = (loadToken += 1);
     activeProject = selectedProject;
 
+    disposeInsertedNode?.();
+    disposeInsertedNode = null;
+    clearTextReplacement();
     player?.destroy();
     player = null;
     disposeResize?.();
     disposeResize = null;
     pixiApp?.destroy({ removeView: true });
     pixiApp = null;
-    stageMount.replaceChildren();
+    stageCanvasLayer.replaceChildren();
     controls.setProject(selectedProject);
     controls.setPlaying(false);
     controls.setTime(0);
@@ -169,7 +259,7 @@ async function bootstrap(): Promise<void> {
       autoDensity: true,
       resolution: window.devicePixelRatio || 1,
     });
-    stageMount.appendChild(nextApp.canvas);
+    stageCanvasLayer.appendChild(nextApp.canvas);
     resizePixiAppToMount(nextApp, stageMount);
 
     const nextPlayer = new VNIPlayer({
@@ -204,12 +294,63 @@ async function bootstrap(): Promise<void> {
     disposeResize = observeStageMount(stageMount, nextApp, nextPlayer);
     controls.setLayerGroupSlots(player.getLayerGroupSlots());
     controls.setInsertedNodeActive(false);
+    controls.setTextReplacementActive(false);
     controls.setLoop(player.getLoop());
     controls.setTime(player.getTime());
     syncPlaybackState();
   }
 
+  function clearTextReplacement(): void {
+    disposeTextReplacement?.();
+    disposeTextReplacement = null;
+    activeTextBinding = null;
+  }
+
+  zoomOutButton.addEventListener("click", () => {
+    setStageCanvasScaleIndex(stageCanvasScaleIndex - 1);
+  });
+  zoomInButton.addEventListener("click", () => {
+    setStageCanvasScaleIndex(stageCanvasScaleIndex + 1);
+  });
+  zoomResetButton.addEventListener("click", () => {
+    setStageCanvasScaleIndex(DEFAULT_STAGE_CANVAS_SCALE_INDEX);
+  });
+
+  function setStageCanvasScaleIndex(index: number): void {
+    stageCanvasScaleIndex = Math.min(
+      STAGE_CANVAS_SCALES.length - 1,
+      Math.max(0, index),
+    );
+    const scale = getStageCanvasScale(stageCanvasScaleIndex);
+    stageMount.style.setProperty("--stage-canvas-scale", String(scale));
+    stageMount.dataset.viewerCanvasScale = scale.toFixed(2);
+    zoomReadout.textContent = `${Math.round(scale * 100)}%`;
+    zoomOutButton.disabled = stageCanvasScaleIndex === 0;
+    zoomInButton.disabled =
+      stageCanvasScaleIndex === STAGE_CANVAS_SCALES.length - 1;
+    zoomResetButton.disabled =
+      stageCanvasScaleIndex === DEFAULT_STAGE_CANVAS_SCALE_INDEX;
+  }
+
+  setStageCanvasScaleIndex(stageCanvasScaleIndex);
   await loadProject("project");
+}
+
+function createStageZoomButton(
+  label: string,
+  ariaLabel: string,
+): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "stage-zoom-button";
+  button.textContent = label;
+  button.title = ariaLabel;
+  button.setAttribute("aria-label", ariaLabel);
+  return button;
+}
+
+function getStageCanvasScale(index: number): number {
+  return STAGE_CANVAS_SCALES[index] ?? 1;
 }
 
 function observeStageMount(

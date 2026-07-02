@@ -96,6 +96,35 @@ const disposeComplete = player.onPlaybackComplete((event) => {
 
 `end` 省略、`undefined` 或 `-1` 都表示播放到 `project.stage.duration`。marker 只在播放推进跨过时间点时触发；`seek()`、`init()`、`restart()` 不触发 marker。marker 与终点同一时刻时，marker 先于 complete。
 
+## 文字层替换
+
+text layer 是 runtime placeholder。宿主可以把它替换成 Pixi 节点、动态文本或图片；替换节点作为 text layer wrapper 的 child，会继承该层 transform、scale、rotation、opacity、visible、blendMode、render order 和播放生命周期。
+
+```ts
+const binding = player.attachTextToTextLayer({
+  id: "score-text",
+  layerId: "layer_text_score",
+  text: "$1,234.00",
+});
+
+binding.setText("$2,468.00");
+binding.dispose();
+```
+
+图片替换可以使用当前 project asset，也可以使用宿主显式 URL：
+
+```ts
+const disposeImage = await player.attachImageToTextLayer({
+  id: "score-image",
+  layerId: "layer_text_score",
+  assetId: "asset_number_sprite",
+});
+
+disposeImage();
+```
+
+`layerId` 不是 text layer、重复 mounted id、project asset 不存在或外部 URL 加载失败都会显式失败。默认会隐藏原始文字；需要保留原文字时传 `hideOriginal: false`。`clearMountedNodes()` 和 `destroy()` 会清理文字层替换节点。
+
 ## Segmented 高级播放
 
 三段式播放把动画拆成 `0 -> loopStart`、`loopStart -> loopEnd`、`loopEnd -> duration`。`loopStart` 和 `loopEnd` 必须是合法秒数或帧点，满足 `0 <= loopStart <= loopEnd <= duration`，非法输入会显式失败，不会被 clamp。
@@ -167,6 +196,9 @@ disposeExternal();
 - `data-vni-particle-sprites`
 - `data-vni-render-effect-sprites`
 - `data-vni-safe-glow-sprites`
+- `data-vni-chaser-light-sprites`
+- `data-vni-mask-sprites`
+- `data-vni-text-layer-bindings`
 - `data-vni-playback-mode`
 - `data-vni-playback-phase`
 - `data-vni-particle-draining`
@@ -194,6 +226,7 @@ disposeExternal();
 - manifest entry 与 project `exportProfile` 不一致。
 - 未知 animation/easing/blend mode。
 - 必需 numeric param 缺失、`NaN`、`Infinity` 或被写成字符串。
+- 非法 mask source、mask source 指向自身、未知 mask mode/compositeMode。
 - 非法 `layerGroups`、未知 `groupId`、非连续 group run、反向或非相邻 group slot。
 - group layer、非空 `parentId`、非空 keyframes、非空 top-level `project.particles`。
 
@@ -203,5 +236,11 @@ disposeExternal();
 - `shatter`: deterministic render effect。`sourceOpacity` 控制原图透明度，碎片在 `progress <= 0` 不渲染。
 - `glow`: deterministic render effect。`keepOriginal === false` 会隐藏原图但保留 glow effect；`blendMode` 使用 `0=add`、`1=screen`、`2=lighten`。
 - `safe_glow`: 跨引擎安全发光方案。它不是 render effect，也不使用滤镜或模糊；runtime 用同一张图片的副本，通过 `spread` 放大、`minOpacity/maxOpacity/pulses` 透明度呼吸来模拟高亮，副本继承当前 layer 的 `blendMode`。`keepOriginal === false` 会隐藏原图，但 safe glow 副本仍会渲染；起始帧即可采样出副本。
+- `particle_stream`: 持续发射粒子。runtime 会按 `lifetime` 决定排空时间，segmented hold 下 `keepParticlesAlive=true` 时 emitter 配置停在 hold 点但 live elapsed 继续推进，粒子不会冻结。
+- `chaser_light`: 走马灯 runtime effect。它由 `vnicore` sampler/Pixi renderer 负责，viewer 只显示结果；`keepOriginal === false` 会隐藏源图但走马灯继续渲染。
+
+## Mask
+
+`layer.mask` 支持 `legacy_alpha` 和 `precompose_light_alpha`。启用时必须声明合法 `sourceLayerId`，不能指向自身，不能缺 source。`showSourceLayer=false` 只隐藏普通 source layer，不会让 mask source 失效。`precompose_light_alpha` 维护 target/source transform、opacity、blendMode 和 stage 尺寸组成的 dirty/cache key，不能每帧重建预合成资源；如果 source/target 不是可用 image texture，会显式失败。
 
 `glow` 和 `safe_glow` 的关键区别：`glow` 是旧 deterministic render effect，使用自己的 effect 采样和统计；`safe_glow` 是普通 sprite overlay，继承 layer blendMode，适合跨 Pixi 和 Cocos 等运行时复现。

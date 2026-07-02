@@ -14,6 +14,8 @@ import scatter1Data from "../fixtures/export/scatter1.json";
 import scatter2Data from "../fixtures/export/scatter2.json";
 import superwinData from "../fixtures/export/superwin.json";
 import roundreelData from "../fixtures/export/roundreel.json";
+import number2Data from "../fixtures/export/number2.json";
+import number3Data from "../fixtures/export/number3.json";
 import export2ManifestData from "../fixtures/export2/manifest.json";
 import export2EditFullData from "../fixtures/export2/edit_full/project.json";
 import export2Runtime50Data from "../fixtures/export2/runtime_50/project.json";
@@ -56,6 +58,8 @@ const bundledProjectData = [
   threeReelMultipay01Data,
   threeReelMultipay02Data,
   roundreelData,
+  number2Data,
+  number3Data,
   export2EditFullData,
   export2Runtime50Data,
 ] as const;
@@ -136,6 +140,40 @@ const newAnimationParams: Readonly<
     vanishRatio: 0.18,
     flashScale: 1.6,
     flashIntensity: 1.4,
+  },
+  particle_stream: {
+    spawnRate: 60,
+    lifetime: 1.2,
+    spread: 40,
+    speed: 160,
+    emissionAngle: 270,
+    emissionSpreadAngle: 60,
+    size: 32,
+    gravity: 40,
+    fadeOut: true,
+    trailCount: 2,
+    trailSpacing: 0.04,
+    trailFade: 0.5,
+    rotateParticles: true,
+    randomRotation: true,
+    randomRotationDegrees: 90,
+    spinSpeed: 1,
+  },
+  chaser_light: {
+    totalCount: 12,
+    spacing: 105,
+    lightDuration: 0.06,
+    interval: 0.04,
+    trajectory: 0,
+    radius: 200,
+    centerX: 0,
+    centerY: 0,
+    endX: 320,
+    endY: 0,
+    curve: 120,
+    lightSize: 48,
+    dimAlpha: 0.15,
+    keepOriginal: true,
   },
   shatter: {
     count: 64,
@@ -356,7 +394,7 @@ describe("validation", () => {
     ).not.toThrow();
 
     const runtime100 = assertV5GProject(roundreelData);
-    expect(runtime100.schemaVersion).toBe("VNI_0.020");
+    expect(runtime100.schemaVersion).toBe("VNI_0.022");
     expect(runtime100.name).toBe("roundreel");
     expect(runtime100.exportProfile).toMatchObject({
       id: "runtime_100",
@@ -400,6 +438,20 @@ describe("validation", () => {
     expect(() =>
       validateManifestProjectProfile(manifest.exports[0], project),
     ).not.toThrow();
+  });
+
+  it("accepts number2 text and number3 mask exports", () => {
+    const number2 = assertV5GProject(number2Data);
+    const number3 = assertV5GProject(number3Data);
+
+    expect(number2.layers.some((layer) => layer.type === "text")).toBe(true);
+    expect(
+      number3.layers.some(
+        (layer) => layer.mask?.compositeMode === "precompose_light_alpha",
+      ),
+    ).toBe(true);
+    expect(() => validateV5GProject(number2)).not.toThrow();
+    expect(() => validateV5GProject(number3)).not.toThrow();
   });
 
   it("rejects unsafe VNI bundle manifest paths without inferring profile from directories", () => {
@@ -548,6 +600,18 @@ describe("validation", () => {
     }, 'requires numeric param "targetY"');
 
     expectInvalid((project) => {
+      const params = { ...newAnimationParams.particle_stream };
+      delete params.lifetime;
+      project.layers[0].animations = [animation("particle_stream", params)];
+    }, 'requires numeric param "lifetime"');
+
+    expectInvalid((project) => {
+      const params = { ...newAnimationParams.chaser_light };
+      delete params.totalCount;
+      project.layers[0].animations = [animation("chaser_light", params)];
+    }, 'requires numeric param "totalCount"');
+
+    expectInvalid((project) => {
       const params = { ...newAnimationParams.squash_stretch };
       delete params.squashAmount;
       project.layers[0].animations = [animation("squash_stretch", params)];
@@ -600,6 +664,24 @@ describe("validation", () => {
         }),
       ];
     }, 'requires numeric param "spread"');
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("particle_stream", {
+          ...newAnimationParams.particle_stream,
+          lifetime: "1",
+        }),
+      ];
+    }, 'requires numeric param "lifetime"');
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("chaser_light", {
+          ...newAnimationParams.chaser_light,
+          totalCount: "12",
+        }),
+      ];
+    }, 'requires numeric param "totalCount"');
   });
 
   it("rejects non-boolean optional flags", () => {
@@ -653,6 +735,57 @@ describe("validation", () => {
         }),
       ];
     }, 'param "keepOriginal" must be a boolean');
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("chaser_light", {
+          ...newAnimationParams.chaser_light,
+          keepOriginal: "false",
+        }),
+      ];
+    }, 'param "keepOriginal" must be a boolean');
+  });
+
+  it("rejects invalid layer masks", () => {
+    expectInvalid((project) => {
+      project.layers[0].mask = {
+        enabled: true,
+        sourceLayerId: null,
+        mode: "alpha",
+        compositeMode: "legacy_alpha",
+        showSourceLayer: true,
+      };
+    }, "requires sourceLayerId");
+
+    expectInvalid((project) => {
+      project.layers[0].mask = {
+        enabled: true,
+        sourceLayerId: project.layers[0].id,
+        mode: "alpha",
+        compositeMode: "legacy_alpha",
+        showSourceLayer: true,
+      };
+    }, "must not reference itself");
+
+    expectInvalid((project) => {
+      project.layers[0].mask = {
+        enabled: true,
+        sourceLayerId: "missing",
+        mode: "alpha",
+        compositeMode: "legacy_alpha",
+        showSourceLayer: true,
+      };
+    }, 'references missing source layer "missing"');
+
+    expectInvalid((project) => {
+      project.layers[0].mask = {
+        enabled: true,
+        sourceLayerId: project.layers[1].id,
+        mode: "alpha",
+        compositeMode: "unknown" as "legacy_alpha",
+        showSourceLayer: true,
+      };
+    }, "Unsupported VNI mask compositeMode");
   });
 
   it("rejects group layers and nested layers", () => {

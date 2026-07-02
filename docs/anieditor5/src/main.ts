@@ -1,10 +1,12 @@
 import {
-  V5G_ANIMATION_PRESETS,
   V5G_EASINGS,
   createDefaultAnimationParams,
+  getAnimationCategory,
   getAnimationPreset,
+  getAnimationPresetsByCategory,
   isV5GAnimationType,
   sampleLayerAnimationsAtTime,
+  type V5GAnimationCategory,
 } from "./animation_presets";
 import { VNI_VERSION } from "./constants";
 import { clampNumber, roundTo } from "./coordinates";
@@ -26,6 +28,7 @@ import {
   getSelectedLayer,
   isLayerEffectivelyVisible,
   normalizeProjectLayerGroups,
+  normalizeProjectMasks,
 } from "./project_state";
 import type {
   V5GAnimationConfig,
@@ -109,7 +112,31 @@ let pendingAnimationPaste:
 let autoSaveTimer = 0;
 let saveRunId = 0;
 let isWorkspaceOperationRunning = false;
+
 let assetsDirty = false;
+
+let pendingAnimationDraft: {
+  layerId: string;
+
+  category: V5GAnimationCategory;
+
+  memoryKey: string;
+} | null = null;
+
+interface V5GAnimationTypeDraft {
+  startTime: number;
+
+  duration: number;
+
+  easing: string;
+
+  params: Record<string, V5GAnimationParamValue>;
+}
+
+const animationTypeDrafts = new Map<
+  string,
+  Map<V5GAnimationType, V5GAnimationTypeDraft>
+>();
 
 const MIN_STAGE_SIZE = 100;
 const MAX_STAGE_SIZE = 5000;
@@ -139,21 +166,22 @@ const els = {
   btnStop: getButton("btn-stop"),
   btnSwitchProject: getButton("btn-switch-project"),
   btnResetView: getButton("btn-reset-view"),
+  cbLoopPlay: getInput("cb-loop-play"),
   btnAddText: getButton("btn-add-text"),
   btnAddGroup: getButton("btn-add-group"),
   fileReplaceImage: getInput("file-replace-image"),
   btnReplaceImage: getButton("btn-replace-image"),
-  btnSaveMoveAnim: getButton("btn-save-move-anim"),
+
   animToolbar: getElement("anim-toolbar"),
   btnPasteCopiedAnim: getButton("btn-paste-copied-anim"),
   btnConfirmPasteCopiedAnim: getButton("btn-confirm-paste-copied-anim"),
   btnCancelPasteCopiedAnim: getButton("btn-cancel-paste-copied-anim"),
   btnExportZip: getButton("btn-export-zip"),
   exportAssetScale: getSelect("select-export-asset-scale"),
-  animType: getSelect("anim-type"),
-  animDescription: getElement("anim-description"),
-  animDurationHint: getElement("anim-duration-hint"),
-  animParamFields: getElement("anim-param-fields"),
+  btnAnimCategoryAnimation: getButton("btn-anim-category-animation"),
+
+  btnAnimCategoryParticle: getButton("btn-anim-category-particle"),
+
   btnApplyStage: getButton("btn-apply-stage"),
   btnNewProject: getButton("btn-new-project"),
   btnDuplicateProject: getButton("btn-duplicate-project"),
@@ -205,12 +233,15 @@ const els = {
   propRotation: getInput("prop-rotation"),
   propOpacity: getInput("prop-opacity"),
   propBlendMode: getSelect("prop-blend-mode"),
+  propMaskEnabled: getInput("prop-mask-enabled"),
+  propMaskSource: getSelect("prop-mask-source"),
+  propMaskShowSource: getInput("prop-mask-show-source"),
+  maskWarning: getElement("mask-warning"),
   propLayerGroup: getSelect("prop-layer-group"),
   animCountLabel: getElement("anim-count-label"),
-  animStart: getInput("anim-start"),
-  animDuration: getInput("anim-duration"),
-  animEasing: getSelect("anim-easing"),
+
   animList: getElement("anim-list"),
+
   appMain: getElement("app-main"),
   leftResizer: getElement("left-resizer"),
   rightResizer: getElement("right-resizer"),
@@ -379,12 +410,14 @@ function bindEvents(): void {
     createLayerGroupFromButton();
   });
 
-  els.animType.addEventListener("change", () => {
-    applyAnimationTypeDefaults();
+  els.btnAnimCategoryAnimation.addEventListener("click", () => {
+    showAnimationDraftModule("animation");
   });
-  els.btnSaveMoveAnim.addEventListener("click", () =>
-    saveConfiguredAnimation(),
-  );
+
+  els.btnAnimCategoryParticle.addEventListener("click", () => {
+    showAnimationDraftModule("particle");
+  });
+
   els.btnPasteCopiedAnim.addEventListener("click", () =>
     requestPasteAnimationsToSelectedLayer("animation-toolbar"),
   );
@@ -537,6 +570,15 @@ function bindEvents(): void {
   });
   els.propBlendMode.addEventListener("change", () =>
     updateSelectedLayerFromProperties(),
+  );
+  els.propMaskEnabled.addEventListener("change", () =>
+    updateSelectedLayerMaskFromProperties(),
+  );
+  els.propMaskSource.addEventListener("change", () =>
+    updateSelectedLayerMaskFromProperties(),
+  );
+  els.propMaskShowSource.addEventListener("change", () =>
+    updateSelectedLayerMaskFromProperties(),
   );
   els.propLayerGroup.addEventListener("change", () =>
     updateSelectedLayerGroupFromProperties(),
@@ -1027,6 +1069,7 @@ async function renderAllAsync(): Promise<void> {
 
 function renderStaticUi(): void {
   normalizeProjectLayerGroups(state.project);
+  normalizeProjectMasks(state.project);
   const timelineScrollBackup = els.timelineTrack.scrollTop;
   els.layerList.innerHTML = "";
   els.timelineItems.innerHTML = "";
@@ -1247,6 +1290,73 @@ function syncLayerGroupSelect(layer: V5GLayerConfig | null): void {
   }
   els.propLayerGroup.value =
     layer?.groupId ?? state.project.layerGroups[0]?.id ?? "";
+}
+
+function syncLayerMaskControls(layer: V5GLayerConfig): void {
+  normalizeProjectMasks(state.project);
+  const candidates = state.project.layers.filter(
+    (item) => item.id !== layer.id,
+  );
+  els.propMaskSource.innerHTML = "";
+
+  const noneOption = document.createElement("option");
+  noneOption.value = "";
+  noneOption.textContent =
+    candidates.length === 0 ? "无可用遮罩图层" : "不使用遮罩";
+  noneOption.style.backgroundColor = "#050505";
+  noneOption.style.color = "#f4f4f5";
+  els.propMaskSource.appendChild(noneOption);
+
+  for (const candidate of candidates) {
+    const option = document.createElement("option");
+    option.value = candidate.id;
+    option.textContent = `${candidate.name}${candidate.visible ? "" : "（隐藏）"}`;
+    option.style.backgroundColor = "#050505";
+    option.style.color = "#f4f4f5";
+    els.propMaskSource.appendChild(option);
+  }
+
+  const sourceLayerId = layer.mask?.sourceLayerId ?? "";
+  const hasSource = candidates.some(
+    (candidate) => candidate.id === sourceLayerId,
+  );
+  els.propMaskEnabled.checked = layer.mask?.enabled === true && hasSource;
+  els.propMaskEnabled.disabled = candidates.length === 0;
+  els.propMaskSource.disabled = candidates.length === 0;
+  els.propMaskSource.value = hasSource ? sourceLayerId : "";
+  els.propMaskShowSource.checked = layer.mask?.showSourceLayer !== false;
+  els.propMaskShowSource.disabled = candidates.length === 0;
+  els.maskWarning.classList.toggle("hidden", !els.propMaskEnabled.checked);
+}
+
+function updateSelectedLayerMaskFromProperties(): void {
+  const layer = getSelectedLayer(state);
+  if (!layer) return;
+  const sourceLayerId = els.propMaskSource.value || null;
+  const hasValidSource =
+    sourceLayerId !== null &&
+    sourceLayerId !== layer.id &&
+    state.project.layers.some((candidate) => candidate.id === sourceLayerId);
+  const enabled = els.propMaskEnabled.checked && hasValidSource;
+
+  pushUndoSnapshot();
+  layer.mask = {
+    enabled,
+    sourceLayerId: hasValidSource ? sourceLayerId : null,
+    mode: "alpha",
+    compositeMode: "precompose_light_alpha",
+    showSourceLayer: els.propMaskShowSource.checked,
+  };
+  normalizeProjectMasks(state.project);
+  clearLayerPreview(layer.id);
+  renderAll();
+  scheduleAutoSave(0);
+  showStatus(
+    enabled
+      ? `已为「${layer.name}」启用高级光效遮罩：光效图层会先去黑预合成，再按遮罩源 alpha 裁剪。`
+      : `已关闭「${layer.name}」的图层遮罩。`,
+    "success",
+  );
 }
 
 function updateSelectedLayerGroupFromProperties(): void {
@@ -1559,6 +1669,7 @@ function duplicateLayerAt(index: number): void {
       id: createId("keyframe"),
       transform: cloneTransform(keyframe.transform),
     })),
+    mask: sourceLayer.mask ? { ...sourceLayer.mask } : undefined,
   };
   if (copiedLayer.type === "text") copiedLayer.text = sourceLayer.text;
 
@@ -1596,6 +1707,18 @@ function deleteLayerAt(index: number): void {
   const [deletedLayer] = state.project.layers.splice(index, 1);
   if (!deletedLayer) return;
   clearLayerPreview(deletedLayer.id);
+  for (const layer of state.project.layers) {
+    if (layer.mask?.sourceLayerId === deletedLayer.id) {
+      layer.mask = {
+        enabled: false,
+        sourceLayerId: null,
+        mode: "alpha",
+        compositeMode: layer.mask.compositeMode ?? "precompose_light_alpha",
+        showSourceLayer: layer.mask.showSourceLayer !== false,
+      };
+    }
+  }
+  normalizeProjectMasks(state.project);
   removeUnusedAssetForDeletedLayer(deletedLayer);
   if (state.selectedLayerId === deletedLayer.id) {
     state.selectedLayerId =
@@ -1786,7 +1909,7 @@ function appendTimelinePlayhead(content: HTMLElement): void {
   const playhead = document.createElement("div");
   playhead.dataset.timelinePlayhead = "true";
   playhead.className =
-    "pointer-events-auto absolute bottom-0 top-0 z-30 w-1.5 -translate-x-1/2 cursor-ew-resize bg-amber-300 shadow shadow-amber-300/60 before:absolute before:-top-1 before:left-1/2 before:h-0 before:w-0 before:-translate-x-1/2 before:border-x-[4px] before:border-t-[5px] before:border-x-transparent before:border-t-amber-300 after:absolute after:-bottom-1 after:left-1/2 after:h-0 after:w-0 after:-translate-x-1/2 after:border-x-[4px] after:border-b-[5px] after:border-x-transparent after:border-b-amber-300";
+    "pointer-events-auto absolute bottom-0 top-0 z-30 w-[7px] -translate-x-1/2 cursor-ew-resize bg-amber-300 shadow shadow-amber-300/60 before:absolute before:-top-1 before:left-1/2 before:h-0 before:w-0 before:-translate-x-1/2 before:border-x-[4px] before:border-t-[5px] before:border-x-transparent before:border-t-amber-300 after:absolute after:-bottom-1 after:left-1/2 after:h-0 after:w-0 after:-translate-x-1/2 after:border-x-[4px] after:border-b-[5px] after:border-x-transparent after:border-b-amber-300";
   playhead.style.left = `${timeToTimelineX(state.playheadSeconds)}px`;
   playhead.title = `拖动黄色刻度线预览 ${state.playheadSeconds.toFixed(2)}s`;
   content.appendChild(playhead);
@@ -1906,7 +2029,7 @@ function renderTimelineRuler(duration: number, contentWidth: number): void {
     const rulerPlayhead = document.createElement("div");
     rulerPlayhead.dataset.timelinePlayhead = "true";
     rulerPlayhead.className =
-      "pointer-events-auto absolute bottom-0 top-0 z-30 w-1.5 -translate-x-1/2 cursor-ew-resize bg-amber-300 shadow shadow-amber-300/60 before:absolute before:-top-1 before:left-1/2 before:h-0 before:w-0 before:-translate-x-1/2 before:border-x-[4px] before:border-t-[5px] before:border-x-transparent before:border-t-amber-300 after:absolute after:-bottom-1 after:left-1/2 after:h-0 after:w-0 after:-translate-x-1/2 after:border-x-[4px] after:border-b-[5px] after:border-x-transparent after:border-b-amber-300";
+      "pointer-events-auto absolute bottom-0 top-0 z-30 w-[7px] -translate-x-1/2 cursor-ew-resize bg-amber-300 shadow shadow-amber-300/60 before:absolute before:-top-1 before:left-1/2 before:h-0 before:w-0 before:-translate-x-1/2 before:border-x-[4px] before:border-t-[5px] before:border-x-transparent before:border-t-amber-300 after:absolute after:-bottom-1 after:left-1/2 after:h-0 after:w-0 after:-translate-x-1/2 after:border-x-[4px] after:border-b-[5px] after:border-x-transparent after:border-b-amber-300";
     rulerPlayhead.style.left = `${timeToTimelineX(state.playheadSeconds)}px`;
     rulerPlayhead.title = `拖动黄色刻度线预览 ${state.playheadSeconds.toFixed(2)}s`;
     rulerContent.appendChild(rulerPlayhead);
@@ -1994,6 +2117,7 @@ function renderProperties(): void {
   els.propOpacity.value = String(layer.opacity);
   els.propBlendMode.value = normalizeBlendMode(layer.blendMode);
   syncLayerGroupSelect(layer);
+  syncLayerMaskControls(layer);
   els.btnReplaceImage.classList.toggle("hidden", layer.type !== "image");
   syncLayerAnimationClipboardButtons(layer);
   syncAnimationPanel(layer);
@@ -2229,6 +2353,7 @@ function updateSelectedLayerFromProperties(): void {
     1,
   );
   layer.blendMode = normalizeBlendMode(els.propBlendMode.value);
+  normalizeProjectMasks(state.project);
   clearLayerPreview(layer.id);
   renderStaticUi();
   void pixiStage.render(state);
@@ -2267,56 +2392,131 @@ function flipSelectedLayer(axis: "x" | "y"): void {
   );
 }
 
-function saveConfiguredAnimation(): void {
-  const layer = getSelectedLayer(state);
+function createAnimationFromDraft(layerId: string, module: HTMLElement): void {
+  const layer = findLayer(layerId);
+
   if (!layer) {
-    showStatus("请先选择一个图层再添加动画。", "error");
+    showStatus("目标图层不存在，无法创建动画模块。", "error");
+
     return;
   }
 
-  const selectedAnimationType = els.animType.value;
-  if (!isV5GAnimationType(selectedAnimationType)) {
-    showStatus("请选择有效的动画类型。", "error");
-    return;
-  }
-
-  pushUndoSnapshot();
-  const animationType = selectedAnimationType;
-  const preset = getAnimationPreset(animationType);
-  const startTime = readAnimationStart(els.animStart, state.playheadSeconds);
-  const duration = readAnimationDuration(
-    els.animDuration,
-    preset?.defaultDuration ?? 1,
+  const typeSelect = module.querySelector<HTMLSelectElement>(
+    "[data-animation-type]",
   );
+
+  const easingSelect = module.querySelector<HTMLSelectElement>(
+    "[data-animation-easing]",
+  );
+
+  const startInput = module.querySelector<HTMLInputElement>(
+    "[data-animation-start]",
+  );
+
+  const durationInput = module.querySelector<HTMLInputElement>(
+    "[data-animation-duration]",
+  );
+
+  const paramContainer = module.querySelector<HTMLElement>(
+    "[data-animation-param-fields]",
+  );
+
+  if (
+    !typeSelect ||
+    !easingSelect ||
+    !startInput ||
+    !durationInput ||
+    !paramContainer ||
+    !isV5GAnimationType(typeSelect.value)
+  ) {
+    showStatus("请先在空模块内选择有效的动画或粒子类型。", "error");
+
+    return;
+  }
+
+  const animationType = typeSelect.value;
+
+  const preset = getAnimationPreset(animationType);
+
+  const startTime = startInput.value.trim()
+    ? readAnimationStart(startInput, state.playheadSeconds)
+    : snapTimelineSeconds(state.playheadSeconds);
+
+  const duration = durationInput.value.trim()
+    ? readAnimationDuration(durationInput, preset?.defaultDuration ?? 1)
+    : snapTimelineSeconds(preset?.defaultDuration ?? 1);
+
   const params = readAnimationParamsFromContainer(
     animationType,
-    els.animParamFields,
+
+    paramContainer,
   );
-  params.easing = els.animEasing.value || preset?.defaultEasing || "linear";
+
+  params.easing = easingSelect.value || preset?.defaultEasing || "linear";
+
+  const draftMemoryKey = module.dataset.animationMemoryKey;
+
+  rememberAnimationTypeDraft(draftMemoryKey, animationType, module);
 
   const nextAnimation: V5GAnimationConfig = {
     id: createId("anim_module"),
+
     type: animationType,
+
     name: getAnimationTypeDisplayName(animationType),
+
     startTime,
+
     duration,
+
     enabled: true,
+
     seed: Date.now() % 100000,
+
     params,
   };
+
+  if (draftMemoryKey) {
+    const savedDrafts = animationTypeDrafts.get(draftMemoryKey);
+
+    if (savedDrafts) {
+      animationTypeDrafts.set(
+        getAnimationModuleMemoryKey(layer.id, nextAnimation.id),
+
+        savedDrafts,
+      );
+    }
+
+    animationTypeDrafts.delete(draftMemoryKey);
+  }
+
+  pushUndoSnapshot();
+
+  pendingAnimationDraft = null;
+
   selectedAnimationId = nextAnimation.id;
+
   expandedTimelineLayerIds.add(layer.id);
 
   layer.animations.push(nextAnimation);
+
   layer.animations.sort((a, b) => a.startTime - b.startTime);
+
   collapsedAnimationIds.delete(nextAnimation.id);
+
   normalizeProjectDurationToAnimationEnd({ silent: true });
+
   clearLayerPreview(layer.id);
+
   renderAll();
+
   scrollSelectedAnimationModuleIntoView();
+
   scheduleAutoSave(0);
+
   showStatus(
-    `已为「${layer.name}」添加动画模块：${nextAnimation.name}。`,
+    `已为「${layer.name}」创建${getAnimationCategoryLabel(getAnimationCategory(animationType))}模块：${nextAnimation.name}。`,
+
     "success",
   );
 }
@@ -2360,37 +2560,250 @@ function readAnimationDuration(
 
 function readAnimationParamsFromContainer(
   type: V5GAnimationType,
+
   container: HTMLElement,
 ): Record<string, V5GAnimationParamValue> {
   const preset = getAnimationPreset(type);
+
   const params: Record<string, V5GAnimationParamValue> = {};
+
   if (!preset) return params;
+
   for (const param of preset.params) {
     const input = container.querySelector<HTMLInputElement>(
       `[data-anim-param="${param.key}"]`,
     );
+
     if (!input) {
       params[param.key] = param.defaultValue;
+
       continue;
     }
+
     if (param.inputType === "checkbox") {
       params[param.key] = input.checked;
+
       continue;
     }
+
     const fallback =
       typeof param.defaultValue === "number" ? param.defaultValue : 0;
+
     const value = clampNumber(
       readNumberInput(input, fallback),
+
       param.min ?? Number.NEGATIVE_INFINITY,
+
       param.max ?? Number.POSITIVE_INFINITY,
     );
+
     params[param.key] = roundTo(value, 4);
   }
+
   if (type === "move") {
     params.baseX = 0;
+
     params.baseY = 0;
   }
+
   return params;
+}
+
+function getAnimationModuleMemoryKey(
+  layerId: string,
+
+  animationId: string,
+): string {
+  return `${layerId}:${animationId}`;
+}
+
+function getAnimationTypeDraftMap(
+  memoryKey: string,
+): Map<V5GAnimationType, V5GAnimationTypeDraft> {
+  let drafts = animationTypeDrafts.get(memoryKey);
+
+  if (!drafts) {
+    drafts = new Map<V5GAnimationType, V5GAnimationTypeDraft>();
+
+    animationTypeDrafts.set(memoryKey, drafts);
+  }
+
+  return drafts;
+}
+
+function getModuleCurrentAnimationType(
+  module: HTMLElement,
+): V5GAnimationType | null {
+  const currentType = module.dataset.currentAnimationType;
+
+  return currentType && isV5GAnimationType(currentType) ? currentType : null;
+}
+
+function rememberAnimationTypeDraft(
+  memoryKey: string | undefined,
+
+  type: V5GAnimationType,
+
+  module: HTMLElement,
+): void {
+  if (!memoryKey) return;
+
+  const startInput = module.querySelector<HTMLInputElement>(
+    "[data-animation-start]",
+  );
+
+  const durationInput = module.querySelector<HTMLInputElement>(
+    "[data-animation-duration]",
+  );
+
+  const easingSelect = module.querySelector<HTMLSelectElement>(
+    "[data-animation-easing]",
+  );
+
+  const paramContainer = module.querySelector<HTMLElement>(
+    "[data-animation-param-fields]",
+  );
+
+  if (!startInput || !durationInput || !easingSelect || !paramContainer) {
+    return;
+  }
+
+  const preset = getAnimationPreset(type);
+
+  getAnimationTypeDraftMap(memoryKey).set(type, {
+    startTime: startInput.value.trim()
+      ? readAnimationStart(startInput, state.playheadSeconds)
+      : snapTimelineSeconds(state.playheadSeconds),
+
+    duration: durationInput.value.trim()
+      ? readAnimationDuration(durationInput, preset?.defaultDuration ?? 1)
+      : snapTimelineSeconds(preset?.defaultDuration ?? 1),
+
+    easing: easingSelect.value || preset?.defaultEasing || "linear",
+
+    params: readAnimationParamsFromContainer(type, paramContainer),
+  });
+}
+
+function rememberCurrentAnimationTypeDraft(
+  memoryKey: string | undefined,
+
+  module: HTMLElement,
+): void {
+  const currentType = getModuleCurrentAnimationType(module);
+
+  if (!currentType) return;
+
+  rememberAnimationTypeDraft(memoryKey, currentType, module);
+}
+
+function buildDraftAnimationConfig(
+  type: V5GAnimationType,
+
+  draft: V5GAnimationTypeDraft,
+): V5GAnimationConfig {
+  return {
+    id: "draft_memory",
+
+    type,
+
+    name: getAnimationTypeDisplayName(type),
+
+    startTime: draft.startTime,
+
+    duration: draft.duration,
+
+    enabled: true,
+
+    seed: 0,
+
+    params: { ...draft.params },
+  };
+}
+
+function rememberCommittedAnimationTypeDraft(
+  memoryKey: string,
+
+  animation: V5GAnimationConfig,
+): void {
+  getAnimationTypeDraftMap(memoryKey).set(animation.type, {
+    startTime: animation.startTime,
+
+    duration: animation.duration,
+
+    easing: String(animation.params.easing ?? "linear"),
+
+    params: { ...animation.params },
+  });
+}
+
+function restoreAnimationTypeDraft(
+  memoryKey: string | undefined,
+
+  layer: V5GLayerConfig,
+
+  type: V5GAnimationType,
+
+  module: HTMLElement,
+
+  options: { updatePresetInfo?: HTMLElement | null } = {},
+): void {
+  const easingSelect = module.querySelector<HTMLSelectElement>(
+    "[data-animation-easing]",
+  );
+
+  const startInput = module.querySelector<HTMLInputElement>(
+    "[data-animation-start]",
+  );
+
+  const durationInput = module.querySelector<HTMLInputElement>(
+    "[data-animation-duration]",
+  );
+
+  const paramContainer = module.querySelector<HTMLElement>(
+    "[data-animation-param-fields]",
+  );
+
+  if (!easingSelect || !startInput || !durationInput || !paramContainer) {
+    return;
+  }
+
+  const draft = memoryKey
+    ? animationTypeDrafts.get(memoryKey)?.get(type)
+    : null;
+
+  const preset = getAnimationPreset(type);
+
+  easingSelect.disabled = false;
+
+  populateEasingSelect(
+    easingSelect,
+
+    draft?.easing ?? preset?.defaultEasing ?? "linear",
+  );
+
+  if (draft) {
+    startInput.value = String(draft.startTime);
+
+    durationInput.value = String(draft.duration);
+  }
+
+  appendAnimationParamFields(
+    paramContainer,
+
+    layer,
+
+    type,
+
+    draft ? buildDraftAnimationConfig(type, draft) : undefined,
+  );
+
+  if (options.updatePresetInfo) {
+    options.updatePresetInfo.textContent =
+      `${preset?.description ?? ""} ${preset?.recommendedDuration ?? ""}`.trim();
+  }
+
+  module.dataset.currentAnimationType = type;
 }
 
 function applyProjectDurationFromInput(
@@ -2851,92 +3264,278 @@ function setPlayheadSeconds(seconds: number): void {
 }
 
 function syncAnimationPanel(layer: V5GLayerConfig): void {
-  populateAnimationOptions();
+  if (pendingAnimationDraft && pendingAnimationDraft.layerId !== layer.id) {
+    animationTypeDrafts.delete(pendingAnimationDraft.memoryKey);
+
+    pendingAnimationDraft = null;
+  }
+
   els.animCountLabel.textContent = String(layer.animations.length);
-  const currentType = isV5GAnimationType(els.animType.value)
-    ? els.animType.value
-    : "idle";
-  els.animType.value = currentType;
-  const preset = getAnimationPreset(currentType);
-  els.animStart.value = String(state.playheadSeconds);
-  els.animDuration.value = String(preset?.defaultDuration ?? 1);
-  const easing = String(preset?.defaultEasing ?? "linear");
-  els.animEasing.value = V5G_EASINGS.some((item) => item.value === easing)
-    ? easing
-    : "linear";
-  renderAnimationParamFields(layer, currentType, undefined);
+
   syncAnimationToolbarButtons(layer);
+
   renderAnimationList(layer);
 }
 
 function syncAnimationToolbarButtons(layer: V5GLayerConfig): void {
   const hasSingleAnimationClipboard = animationClipboard?.kind === "single";
+
   const showingConfirm = isPendingAnimationPasteFor(
     layer.id,
+
     "animation-toolbar",
   );
-  els.animToolbar.classList.toggle(
-    "grid-cols-2",
-    hasSingleAnimationClipboard && !showingConfirm,
-  );
-  els.animToolbar.classList.toggle(
-    "grid-cols-1",
-    !hasSingleAnimationClipboard || showingConfirm,
-  );
+
+  els.animToolbar.classList.remove("grid-cols-1");
+
+  els.animToolbar.classList.add("grid-cols-2");
+
+  els.btnAnimCategoryAnimation.classList.toggle("hidden", showingConfirm);
+
+  els.btnAnimCategoryParticle.classList.toggle("hidden", showingConfirm);
+
   els.btnPasteCopiedAnim.classList.toggle(
     "hidden",
+
     !hasSingleAnimationClipboard || showingConfirm,
   );
+
   els.btnConfirmPasteCopiedAnim.classList.toggle("hidden", !showingConfirm);
+
   els.btnCancelPasteCopiedAnim.classList.toggle("hidden", !showingConfirm);
 }
 
-function populateAnimationOptions(): void {
-  if (els.animType.options.length !== V5G_ANIMATION_PRESETS.length) {
-    els.animType.innerHTML = "";
-    for (const preset of V5G_ANIMATION_PRESETS) {
-      const option = document.createElement("option");
-      option.value = preset.type;
-      option.textContent = preset.label;
-      option.style.backgroundColor = "#050505";
-      option.style.color = "#f4f4f5";
-      els.animType.appendChild(option);
-    }
-  }
-  if (els.animEasing.options.length !== V5G_EASINGS.length) {
-    els.animEasing.innerHTML = "";
-    for (const easing of V5G_EASINGS) {
-      const option = document.createElement("option");
-      option.value = easing.value;
-      option.textContent = easing.label;
-      option.style.backgroundColor = "#050505";
-      option.style.color = "#f4f4f5";
-      els.animEasing.appendChild(option);
-    }
-  }
-}
-
-function applyAnimationTypeDefaults(): void {
+function showAnimationDraftModule(category: V5GAnimationCategory): void {
   const layer = getSelectedLayer(state);
-  if (!layer || !isV5GAnimationType(els.animType.value)) return;
-  const preset = getAnimationPreset(els.animType.value);
-  els.animStart.value = String(state.playheadSeconds);
-  els.animDuration.value = String(preset?.defaultDuration ?? 1);
-  els.animEasing.value = String(preset?.defaultEasing ?? "linear");
-  renderAnimationParamFields(layer, els.animType.value, undefined);
+
+  if (!layer) {
+    showStatus("请先选择一个图层再添加动画或粒子。", "error");
+
+    return;
+  }
+
+  pendingAnimationPaste = null;
+
+  pendingAnimationDraft = {
+    layerId: layer.id,
+
+    category,
+
+    memoryKey: createId("anim_draft"),
+  };
+
+  selectedAnimationId = null;
+
+  renderAll();
+
+  window.requestAnimationFrame(() => {
+    els.animList
+
+      .querySelector<HTMLElement>("[data-animation-draft]")
+
+      ?.scrollIntoView({ block: "center", inline: "nearest" });
+  });
+
+  showStatus(
+    category === "particle"
+      ? "已创建空粒子模块，请在模块内选择粒子类型并填写参数。"
+      : "已创建空动画模块，请在模块内选择动画类型并填写参数。",
+
+    "info",
+  );
 }
 
-function renderAnimationParamFields(
-  layer: V5GLayerConfig,
-  type: V5GAnimationType,
-  animation: V5GAnimationConfig | undefined,
-): void {
-  const preset = getAnimationPreset(type);
-  if (!preset) return;
-  els.animDescription.textContent = preset.description;
-  els.animDurationHint.textContent = `tips：${preset.recommendedDuration}`;
-  els.animParamFields.innerHTML = "";
-  appendAnimationParamFields(els.animParamFields, layer, type, animation);
+function cancelAnimationDraftModule(): void {
+  if (!pendingAnimationDraft) return;
+
+  animationTypeDrafts.delete(pendingAnimationDraft.memoryKey);
+
+  pendingAnimationDraft = null;
+
+  renderAll();
+
+  showStatus("已取消新建动画模块。", "info");
+}
+
+function appendAnimationDraftModule(layer: V5GLayerConfig): void {
+  if (!pendingAnimationDraft || pendingAnimationDraft.layerId !== layer.id) {
+    return;
+  }
+
+  const category = pendingAnimationDraft.category;
+
+  const details = document.createElement("details");
+
+  details.open = true;
+
+  details.dataset.animationDraft = category;
+
+  details.dataset.animationMemoryKey = pendingAnimationDraft.memoryKey;
+
+  details.className =
+    category === "particle"
+      ? "rounded-lg border-2 border-sky-300 bg-zinc-700/60 p-2 text-slate-300 shadow-inner shadow-sky-300/20"
+      : "rounded-lg border-2 border-amber-300 bg-zinc-700/60 p-2 text-slate-300 shadow-inner shadow-amber-300/20";
+
+  details.innerHTML = `
+
+    <summary class="flex cursor-pointer list-none items-center justify-between gap-2">
+
+      <div class="min-w-0">
+
+        <div class="flex min-w-0 items-center gap-1.5">
+
+          <i class="fa-solid fa-chevron-right text-[9px] text-slate-500 transition details-open:rotate-90"></i>
+
+          <span class="truncate text-[11px] font-semibold text-zinc-100">新建${getAnimationCategoryLabel(category)}模块</span>
+
+          <span class="rounded bg-zinc-900 px-1 py-0.5 text-[9px] ${getAnimationCategoryLabelClass(category)}">未保存</span>
+
+        </div>
+
+        <div class="mt-0.5 text-[9px] text-zinc-500">先选择类型，再填写时间和参数。</div>
+
+      </div>
+
+      <button type="button" data-draft-action="cancel" class="rounded bg-zinc-900 px-1.5 py-1 text-[10px] text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-950" title="取消新建">
+
+        <i class="fa-solid fa-xmark"></i>
+
+      </button>
+
+    </summary>
+
+    <div class="mt-2 space-y-1.5 border-t border-white/10 pt-2">
+
+      <label class="block text-[10px] ${getAnimationCategoryLabelClass(category)}" data-animation-type-label>${getAnimationCategoryLabel(category)}<select data-animation-type class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400"></select></label>
+
+      <div data-animation-preset-info class="rounded bg-zinc-900/80 px-2 py-1 text-[10px] leading-4 text-zinc-500">请选择一个${getAnimationCategoryLabel(category)}类型。</div>
+
+      <div class="grid grid-cols-2 gap-1.5">
+
+        <label class="text-[10px] text-zinc-400">开始秒<input data-animation-start type="number" min="0" step="0.1" placeholder="${state.playheadSeconds.toFixed(1)}" class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400" /></label>
+
+        <label class="text-[10px] text-zinc-400">持续秒<input data-animation-duration type="number" min="0.1" step="0.1" placeholder="默认" class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400" /></label>
+
+      </div>
+
+      <label class="block text-[10px] text-zinc-400">缓动<select data-animation-easing disabled class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400 disabled:opacity-50"></select></label>
+
+      <div data-animation-param-fields class="grid grid-cols-2 gap-1.5"></div>
+
+      <button type="button" data-draft-action="create" class="w-full rounded-md bg-zinc-100 px-2 py-1.5 text-xs font-semibold text-zinc-950 transition hover:bg-white">
+
+        <i class="fa-solid fa-check mr-1"></i>创建此${getAnimationCategoryLabel(category)}模块
+
+      </button>
+
+    </div>
+
+  `;
+
+  const typeSelect = details.querySelector<HTMLSelectElement>(
+    "[data-animation-type]",
+  );
+
+  const easingSelect = details.querySelector<HTMLSelectElement>(
+    "[data-animation-easing]",
+  );
+
+  const startInput = details.querySelector<HTMLInputElement>(
+    "[data-animation-start]",
+  );
+
+  const durationInput = details.querySelector<HTMLInputElement>(
+    "[data-animation-duration]",
+  );
+
+  const paramContainer = details.querySelector<HTMLElement>(
+    "[data-animation-param-fields]",
+  );
+
+  const presetInfo = details.querySelector<HTMLElement>(
+    "[data-animation-preset-info]",
+  );
+
+  if (!typeSelect || !easingSelect || !paramContainer) return;
+
+  populateAnimationSelect(typeSelect, null, category, {
+    includePlaceholder: true,
+  });
+
+  populateEasingSelect(easingSelect, "linear", { includePlaceholder: true });
+
+  typeSelect.addEventListener("click", (event) => event.stopPropagation());
+
+  typeSelect.addEventListener("change", () => {
+    rememberCurrentAnimationTypeDraft(
+      details.dataset.animationMemoryKey,
+
+      details,
+    );
+
+    if (!isV5GAnimationType(typeSelect.value)) {
+      easingSelect.disabled = true;
+
+      populateEasingSelect(easingSelect, "linear", {
+        includePlaceholder: true,
+      });
+
+      paramContainer.innerHTML = "";
+
+      delete details.dataset.currentAnimationType;
+
+      if (presetInfo) {
+        presetInfo.textContent = `请选择一个${getAnimationCategoryLabel(category)}类型。`;
+      }
+
+      return;
+    }
+
+    restoreAnimationTypeDraft(
+      details.dataset.animationMemoryKey,
+
+      layer,
+
+      typeSelect.value,
+
+      details,
+
+      { updatePresetInfo: presetInfo },
+    );
+  });
+
+  easingSelect.addEventListener("click", (event) => event.stopPropagation());
+
+  for (const input of [startInput, durationInput]) {
+    input?.addEventListener("click", (event) => event.stopPropagation());
+
+    input?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+
+      event.preventDefault();
+
+      createAnimationFromDraft(layer.id, details);
+    });
+  }
+
+  for (const button of details.querySelectorAll<HTMLButtonElement>(
+    "[data-draft-action]",
+  )) {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+
+      event.stopPropagation();
+
+      if (button.dataset.draftAction === "cancel") {
+        cancelAnimationDraftModule();
+      } else {
+        createAnimationFromDraft(layer.id, details);
+      }
+    });
+  }
+
+  els.animList.appendChild(details);
 }
 
 function appendAnimationParamFields(
@@ -2992,29 +3591,112 @@ function appendAnimationParamFields(
 
 function scrollSelectedAnimationModuleIntoView(): void {
   if (!selectedAnimationId) return;
+
   window.requestAnimationFrame(() => {
     const selectedModule = Array.from(
       els.animList.querySelectorAll<HTMLElement>("[data-animation-id]"),
     ).find((module) => module.dataset.animationId === selectedAnimationId);
+
     selectedModule?.scrollIntoView({
       block: "center",
+
       inline: "nearest",
+
       behavior: "smooth",
     });
   });
+}
+
+function getAnimationCategoryLabel(category: V5GAnimationCategory): string {
+  return category === "particle" ? "粒子" : "动画";
+}
+
+function getAnimationCategoryLabelClass(
+  category: V5GAnimationCategory,
+): string {
+  return category === "particle" ? "text-sky-300" : "text-amber-300";
+}
+
+function getAnimationCategoryButtonClass(
+  buttonCategory: V5GAnimationCategory,
+
+  activeCategory: V5GAnimationCategory,
+): string {
+  if (buttonCategory === activeCategory) {
+    return buttonCategory === "particle"
+      ? "rounded-md bg-sky-300 px-2 py-1 text-[10px] font-semibold text-sky-950 transition hover:bg-sky-200"
+      : "rounded-md bg-amber-300 px-2 py-1 text-[10px] font-semibold text-amber-950 transition hover:bg-amber-200";
+  }
+
+  return "rounded-md bg-zinc-950 px-2 py-1 text-[10px] font-semibold text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100";
+}
+
+function syncAnimationModuleCategoryUi(
+  module: HTMLElement,
+
+  category: V5GAnimationCategory,
+): void {
+  for (const button of module.querySelectorAll<HTMLButtonElement>(
+    "[data-animation-category]",
+  )) {
+    const buttonCategory = button.dataset.animationCategory;
+
+    if (buttonCategory !== "animation" && buttonCategory !== "particle") {
+      continue;
+    }
+
+    button.className = getAnimationCategoryButtonClass(
+      buttonCategory,
+
+      category,
+    );
+  }
+
+  const label = module.querySelector<HTMLElement>(
+    "[data-animation-type-label]",
+  );
+
+  if (!label) return;
+
+  label.className = `block text-[10px] ${getAnimationCategoryLabelClass(
+    category,
+  )}`;
+
+  const select = label.querySelector("select");
+
+  const firstNode = label.firstChild;
+
+  if (firstNode) {
+    firstNode.textContent = getAnimationCategoryLabel(category);
+  } else {
+    label.prepend(document.createTextNode(getAnimationCategoryLabel(category)));
+  }
+
+  if (select && select.parentElement !== label) label.appendChild(select);
 }
 
 function renderAnimationList(layer: V5GLayerConfig): void {
   const layerHasSelectedAnimation =
     selectedAnimationId !== null &&
     layer.animations.some((animation) => animation.id === selectedAnimationId);
+
   if (selectedAnimationId && !layerHasSelectedAnimation) {
     selectedAnimationId = null;
   }
+
   els.animList.innerHTML = "";
+
+  appendAnimationDraftModule(layer);
+
   if (layer.animations.length === 0) {
-    els.animList.innerHTML =
-      '<div class="rounded-lg bg-zinc-800/80 p-2 text-zinc-500">当前图层还没有动画。点击上方“添加动画”创建模块。</div>';
+    if (!pendingAnimationDraft || pendingAnimationDraft.layerId !== layer.id) {
+      els.animList.insertAdjacentHTML(
+        "beforeend",
+
+        '<div class="rounded-lg bg-zinc-800/80 p-2 text-zinc-500">当前图层还没有动画。点击上方“添加动画”或“添加粒子”创建空模块。</div>',
+      );
+    }
+
     return;
   }
 
@@ -3025,10 +3707,34 @@ function renderAnimationList(layer: V5GLayerConfig): void {
     const details = document.createElement("details");
     const selected = animation.id === selectedAnimationId;
     details.dataset.animationId = animation.id;
+
+    details.dataset.animationMemoryKey = getAnimationModuleMemoryKey(
+      layer.id,
+
+      animation.id,
+    );
+
+    details.dataset.currentAnimationType = animation.type;
+
+    rememberCommittedAnimationTypeDraft(
+      details.dataset.animationMemoryKey,
+
+      animation,
+    );
+
     details.open = selected || !collapsedAnimationIds.has(animation.id);
+
     details.className = selected
-      ? "rounded-lg border border-amber-300 bg-zinc-700/60 p-2 text-slate-300 shadow-inner shadow-amber-300/20"
+      ? "rounded-lg border-2 border-amber-300 bg-zinc-700/60 p-2 text-slate-300 shadow-inner shadow-amber-300/20"
       : "rounded-lg border border-white/10 bg-zinc-700/60 p-2 text-slate-300 shadow-inner shadow-black/10";
+
+    const animationCategory = getAnimationCategory(animation.type);
+
+    const categoryLabel = getAnimationCategoryLabel(animationCategory);
+
+    const categoryLabelClass =
+      getAnimationCategoryLabelClass(animationCategory);
+
     details.innerHTML = `
       <summary class="flex cursor-pointer list-none items-center justify-between gap-2">
         <div class="min-w-0">
@@ -3053,7 +3759,17 @@ function renderAnimationList(layer: V5GLayerConfig): void {
         </div>
       </summary>
       <div class="mt-2 space-y-1.5 border-t border-white/10 pt-2">
-        <label class="block text-[10px] text-zinc-400">类型<select data-animation-type class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400"></select></label>
+
+        <div class="grid grid-cols-2 gap-1.5" data-animation-category-tabs>
+
+          <button type="button" data-animation-category="animation" class="rounded-md px-2 py-1 text-[10px] font-semibold transition">动画</button>
+
+          <button type="button" data-animation-category="particle" class="rounded-md px-2 py-1 text-[10px] font-semibold transition">粒子</button>
+
+        </div>
+
+        <label class="block text-[10px] ${categoryLabelClass}" data-animation-type-label>${categoryLabel}<select data-animation-type class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400"></select></label>
+
         <div class="grid grid-cols-2 gap-1.5">
           <label class="text-[10px] text-zinc-400">开始秒<input data-animation-start type="number" min="0" step="0.1" value="${animation.startTime}" class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400" /></label>
           <label class="text-[10px] text-zinc-400">持续秒<input data-animation-duration type="number" min="0.1" step="0.1" value="${animation.duration}" class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400" /></label>
@@ -3094,36 +3810,117 @@ function renderAnimationList(layer: V5GLayerConfig): void {
     const paramContainer = details.querySelector<HTMLElement>(
       "[data-animation-param-fields]",
     );
+
     if (typeSelect && easingSelect && paramContainer) {
-      populateAnimationSelect(typeSelect, animation.type);
+      populateAnimationSelect(typeSelect, animation.type, animationCategory);
+
       populateEasingSelect(
         easingSelect,
+
         String(animation.params.easing ?? "linear"),
       );
+
       appendAnimationParamFields(
         paramContainer,
+
         layer,
+
         animation.type,
+
         animation,
       );
+
       updateAnimationModuleHeader(animation, title);
+
+      syncAnimationModuleCategoryUi(details, animationCategory);
+
+      typeSelect.addEventListener("click", (event) => event.stopPropagation());
+
       typeSelect.addEventListener("change", () => {
         if (!isV5GAnimationType(typeSelect.value)) return;
-        const nextPreset = getAnimationPreset(typeSelect.value);
-        populateEasingSelect(
-          easingSelect,
-          nextPreset?.defaultEasing ?? "linear",
+
+        rememberCurrentAnimationTypeDraft(
+          details.dataset.animationMemoryKey,
+
+          details,
         );
-        appendAnimationParamFields(
-          paramContainer,
+
+        restoreAnimationTypeDraft(
+          details.dataset.animationMemoryKey,
+
           layer,
+
           typeSelect.value,
-          undefined,
+
+          details,
         );
-        animation.name = getAnimationTypeDisplayName(typeSelect.value);
-        updateAnimationModuleHeader(animation, title);
+
+        syncAnimationModuleCategoryUi(
+          details,
+
+          getAnimationCategory(typeSelect.value),
+        );
+
+        bindAnimationModuleAutoApply(details, layer.id, animation.id);
+
+        updateAnimationFromModule(layer.id, animation.id, details);
       });
+
+      easingSelect.addEventListener("click", (event) =>
+        event.stopPropagation(),
+      );
+
+      easingSelect.addEventListener("change", () => {
+        updateAnimationFromModule(layer.id, animation.id, details);
+      });
+
+      for (const categoryButton of details.querySelectorAll<HTMLButtonElement>(
+        "[data-animation-category]",
+      )) {
+        categoryButton.addEventListener("click", (event) => {
+          event.preventDefault();
+
+          event.stopPropagation();
+
+          const nextCategory = categoryButton.dataset.animationCategory;
+
+          if (nextCategory !== "animation" && nextCategory !== "particle") {
+            return;
+          }
+
+          const firstPreset = getAnimationPresetsByCategory(nextCategory)[0];
+
+          if (!firstPreset) return;
+
+          rememberCurrentAnimationTypeDraft(
+            details.dataset.animationMemoryKey,
+
+            details,
+          );
+
+          populateAnimationSelect(typeSelect, firstPreset.type, nextCategory);
+
+          restoreAnimationTypeDraft(
+            details.dataset.animationMemoryKey,
+
+            layer,
+
+            firstPreset.type,
+
+            details,
+          );
+
+          syncAnimationModuleCategoryUi(details, nextCategory);
+
+          bindAnimationModuleAutoApply(details, layer.id, animation.id);
+
+          updateAnimationFromModule(layer.id, animation.id, details);
+        });
+      }
+
+      bindAnimationModuleAutoApply(details, layer.id, animation.id);
     }
+
     enabledInput?.addEventListener("click", (event) => {
       event.stopPropagation();
     });
@@ -3160,20 +3957,96 @@ function renderAnimationList(layer: V5GLayerConfig): void {
   }
 }
 
+function bindAnimationModuleAutoApply(
+  module: HTMLElement,
+
+  layerId: string,
+
+  animationId: string,
+): void {
+  const applyFromModule = () => {
+    updateAnimationFromModule(layerId, animationId, module, {
+      silentIfUnchanged: true,
+    });
+  };
+
+  for (const input of module.querySelectorAll<HTMLInputElement>(
+    "[data-animation-start], [data-animation-duration], [data-anim-param]",
+  )) {
+    input.addEventListener("click", (event) => event.stopPropagation());
+
+    if (input.type === "checkbox") {
+      input.addEventListener("change", applyFromModule);
+
+      continue;
+    }
+
+    input.addEventListener("blur", applyFromModule);
+
+    input.addEventListener("change", applyFromModule);
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+
+      event.preventDefault();
+
+      input.blur();
+    });
+  }
+}
+
 function populateAnimationSelect(
   select: HTMLSelectElement,
-  selectedType: V5GAnimationType,
+
+  selectedType: V5GAnimationType | null,
+
+  category: V5GAnimationCategory = selectedType
+    ? getAnimationCategory(selectedType)
+    : "animation",
+
+  options: { includePlaceholder?: boolean } = {},
 ): void {
   select.innerHTML = "";
-  for (const preset of V5G_ANIMATION_PRESETS) {
+
+  const presets = getAnimationPresetsByCategory(category);
+
+  if (options.includePlaceholder) {
     const option = document.createElement("option");
-    option.value = preset.type;
-    option.textContent = preset.label;
+
+    option.value = "";
+
+    option.textContent = `选择${getAnimationCategoryLabel(category)}类型`;
+
     option.style.backgroundColor = "#050505";
-    option.style.color = "#f4f4f5";
+
+    option.style.color = "#a1a1aa";
+
     select.appendChild(option);
   }
-  select.value = selectedType;
+
+  for (const preset of presets) {
+    const option = document.createElement("option");
+
+    option.value = preset.type;
+
+    option.textContent = preset.label;
+
+    option.style.backgroundColor = "#050505";
+
+    option.style.color = "#f4f4f5";
+
+    select.appendChild(option);
+  }
+
+  const selectedPresetInCategory =
+    selectedType !== null &&
+    presets.some((preset) => preset.type === selectedType);
+
+  select.value = selectedPresetInCategory
+    ? selectedType
+    : options.includePlaceholder
+      ? ""
+      : (presets[0]?.type ?? "idle");
 }
 
 function updateAnimationModuleHeader(
@@ -3187,20 +4060,46 @@ function updateAnimationModuleHeader(
 
 function populateEasingSelect(
   select: HTMLSelectElement,
+
   selectedEasing: string,
+
+  options: { includePlaceholder?: boolean } = {},
 ): void {
   select.innerHTML = "";
-  for (const easing of V5G_EASINGS) {
+
+  if (options.includePlaceholder) {
     const option = document.createElement("option");
-    option.value = easing.value;
-    option.textContent = easing.label;
+
+    option.value = "";
+
+    option.textContent = "选择类型后自动填入";
+
     option.style.backgroundColor = "#050505";
-    option.style.color = "#f4f4f5";
+
+    option.style.color = "#a1a1aa";
+
     select.appendChild(option);
   }
+
+  for (const easing of V5G_EASINGS) {
+    const option = document.createElement("option");
+
+    option.value = easing.value;
+
+    option.textContent = easing.label;
+
+    option.style.backgroundColor = "#050505";
+
+    option.style.color = "#f4f4f5";
+
+    select.appendChild(option);
+  }
+
   select.value = V5G_EASINGS.some((item) => item.value === selectedEasing)
     ? selectedEasing
-    : "linear";
+    : options.includePlaceholder
+      ? ""
+      : "linear";
 }
 
 function updateAnimationEnabledFromHeader(
@@ -3229,34 +4128,49 @@ function updateAnimationEnabledFromHeader(
 
 function updateAnimationFromModule(
   layerId: string,
+
   animationId: string,
+
   module: HTMLElement,
+
+  options: { silentIfUnchanged?: boolean } = {},
 ): void {
   const layer = findLayer(layerId);
+
   if (!layer) return;
+
   const animationIndex = layer.animations.findIndex(
     (animation) => animation.id === animationId,
   );
+
   const currentAnimation = layer.animations[animationIndex];
+
   if (!currentAnimation) return;
+
   const typeSelect = module.querySelector<HTMLSelectElement>(
     "[data-animation-type]",
   );
+
   const easingSelect = module.querySelector<HTMLSelectElement>(
     "[data-animation-easing]",
   );
+
   const startInput = module.querySelector<HTMLInputElement>(
     "[data-animation-start]",
   );
+
   const durationInput = module.querySelector<HTMLInputElement>(
     "[data-animation-duration]",
   );
+
   const enabledInput = module.querySelector<HTMLInputElement>(
     "[data-animation-enabled]",
   );
+
   const paramContainer = module.querySelector<HTMLElement>(
     "[data-animation-param-fields]",
   );
+
   if (
     !typeSelect ||
     !easingSelect ||
@@ -3267,45 +4181,114 @@ function updateAnimationFromModule(
     !isV5GAnimationType(typeSelect.value)
   ) {
     showStatus("动画模块字段不完整，无法应用修改。", "error");
+
+    return;
+  }
+
+  const animationType = typeSelect.value;
+
+  const params = readAnimationParamsFromContainer(
+    animationType,
+
+    paramContainer,
+  );
+
+  params.easing = easingSelect.value;
+
+  const nextAnimation: V5GAnimationConfig = {
+    ...currentAnimation,
+
+    type: animationType,
+
+    name: getAnimationTypeDisplayName(animationType),
+
+    startTime: snapTimelineSeconds(
+      readAnimationStart(startInput, currentAnimation.startTime),
+    ),
+
+    duration: snapTimelineSeconds(
+      readAnimationDuration(durationInput, currentAnimation.duration),
+    ),
+
+    enabled: enabledInput.checked,
+
+    params,
+  };
+
+  rememberCommittedAnimationTypeDraft(
+    getAnimationModuleMemoryKey(layer.id, nextAnimation.id),
+
+    nextAnimation,
+  );
+
+  if (areAnimationConfigsEquivalent(currentAnimation, nextAnimation)) {
+    if (!options.silentIfUnchanged) {
+      showStatus("动画模块没有变化。", "info");
+    }
+
     return;
   }
 
   pushUndoSnapshot();
-  const animationType = typeSelect.value;
-  const params = readAnimationParamsFromContainer(
-    animationType,
-    paramContainer,
-  );
-  params.easing = easingSelect.value;
-  const nextAnimation: V5GAnimationConfig = {
-    ...currentAnimation,
-    type: animationType,
-    name: getAnimationTypeDisplayName(animationType),
-    startTime: snapTimelineSeconds(
-      readAnimationStart(startInput, currentAnimation.startTime),
-    ),
-    duration: snapTimelineSeconds(
-      readAnimationDuration(durationInput, currentAnimation.duration),
-    ),
-    enabled: enabledInput.checked,
-    params,
-  };
+
   layer.animations[animationIndex] = nextAnimation;
+
   layer.animations.sort((a, b) => a.startTime - b.startTime);
+
+  selectedAnimationId = nextAnimation.id;
+
+  expandedTimelineLayerIds.add(layer.id);
+
+  collapsedAnimationIds.delete(nextAnimation.id);
+
   normalizeProjectDurationToAnimationEnd({ silent: true });
+
   clearPreviewBaseCache();
+
   setPlayheadSeconds(nextAnimation.startTime);
+
   renderAll();
+
   scheduleAutoSave(0);
+
   showStatus(
-    `已更新「${layer.name}」的 ${animationType} 动画模块。`,
+    `已更新「${layer.name}」的 ${getAnimationDisplayName(nextAnimation)} 动画模块。`,
+
     "success",
   );
 }
 
+function areAnimationConfigsEquivalent(
+  left: V5GAnimationConfig,
+
+  right: V5GAnimationConfig,
+): boolean {
+  if (
+    left.id !== right.id ||
+    left.type !== right.type ||
+    left.name !== right.name ||
+    left.startTime !== right.startTime ||
+    left.duration !== right.duration ||
+    left.enabled !== right.enabled ||
+    left.seed !== right.seed
+  ) {
+    return false;
+  }
+
+  const leftKeys = Object.keys(left.params);
+
+  const rightKeys = Object.keys(right.params);
+
+  if (leftKeys.length !== rightKeys.length) return false;
+
+  return leftKeys.every((key) => left.params[key] === right.params[key]);
+}
+
 function reverseOffsetAnimationAxis(
   layerId: string,
+
   animationId: string,
+
   axis: "x" | "y",
 ): void {
   const layer = findLayer(layerId);
@@ -3363,8 +4346,15 @@ function deleteAnimationFromLayer(layerId: string, animationId: string): void {
   if (!animation) return;
 
   pushUndoSnapshot();
+
   layer.animations.splice(animationIndex, 1);
+
+  animationTypeDrafts.delete(
+    getAnimationModuleMemoryKey(layer.id, animationId),
+  );
+
   collapsedAnimationIds.delete(animationId);
+
   if (selectedAnimationId === animationId) selectedAnimationId = null;
   clearLayerPreview(layer.id);
   renderAll();
@@ -3570,6 +4560,7 @@ function createEditorState(
   runtimeAssets: V5GEditorState["runtimeAssets"],
 ): V5GEditorState {
   normalizeProjectLayerGroups(project);
+  normalizeProjectMasks(project);
   normalizeProjectBlendModes(project);
   return {
     project,
@@ -3626,6 +4617,13 @@ function tickPlayhead(): void {
     if (!state.isPlaying) return;
     setPlayheadSeconds((performance.now() - playStartedAt) / 1000);
     if (state.playheadSeconds >= state.project.stage.duration) {
+      if (els.cbLoopPlay.checked) {
+        state.playheadSeconds = 0;
+        playStartedAt = performance.now();
+        setPlayheadSeconds(0);
+        animationFrame = requestAnimationFrame(run);
+        return;
+      }
       state.isPlaying = false;
       setPlaybackButtonState(false);
       showStatus("代码驱动动画播放完成。", "success");

@@ -11,6 +11,7 @@ import type {
 export interface V5GLayerInstance {
   layer: V5GLayerConfig;
   display: PIXI.Container;
+  originalTextDisplay: PIXI.Text | null;
   texture: PIXI.Texture | null;
   textureSize: { width: number; height: number } | null;
   displayScaleCompensation: { x: number; y: number };
@@ -56,6 +57,8 @@ export function createLayerInstance(
     displayScaleCompensation = getAssetDisplayCompensation(asset, textureSize);
     display = sprite;
   } else if (layer.type === "text") {
+    const wrapper = new PIXI.Container();
+    wrapper.label = layer.name;
     const text = new PIXI.Text({
       text: layer.text ?? layer.name,
       style: {
@@ -74,7 +77,16 @@ export function createLayerInstance(
     });
     text.label = layer.name;
     text.anchor.set(layer.transform.anchorX, layer.transform.anchorY);
-    display = text;
+    wrapper.addChild(text);
+    display = wrapper;
+    return {
+      layer,
+      display,
+      originalTextDisplay: text,
+      texture: null,
+      textureSize: null,
+      displayScaleCompensation,
+    };
   } else {
     throw new Error(`Unsupported V5G layer type: ${layer.type}`);
   }
@@ -82,6 +94,7 @@ export function createLayerInstance(
   return {
     layer,
     display,
+    originalTextDisplay: null,
     texture: instanceTexture,
     textureSize,
     displayScaleCompensation,

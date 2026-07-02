@@ -2,6 +2,7 @@ export type V5GCoordinateMode = "center";
 export type V5GLayerType = "image" | "text" | "group";
 export type V5GAssetType = "image";
 export type V5GBlendMode = "normal" | "add" | "screen" | "multiply" | "lighten";
+export type V5GMaskCompositeMode = "legacy_alpha" | "precompose_light_alpha";
 
 export interface V5GStageConfig {
   width: number;
@@ -62,6 +63,8 @@ export type V5GAnimationType =
   | "particle_twinkle"
   | "particle_wall"
   | "particle_combo"
+  | "particle_stream"
+  | "chaser_light"
   | "shatter"
   | "glow"
   | "safe_glow"
@@ -88,6 +91,14 @@ export interface V5GLayerKeyframeConfig {
   easing: "linear";
 }
 
+export interface V5GLayerMaskConfig {
+  enabled: boolean;
+  sourceLayerId: string | null;
+  mode: "alpha";
+  compositeMode: V5GMaskCompositeMode;
+  showSourceLayer: boolean;
+}
+
 export interface V5GLayerConfig {
   id: string;
   name: string;
@@ -101,6 +112,7 @@ export interface V5GLayerConfig {
   opacity: number;
   blendMode: V5GBlendMode;
   text?: string;
+  mask?: V5GLayerMaskConfig;
   animations: V5GAnimationConfig[];
   keyframes?: V5GLayerKeyframeConfig[];
 }
@@ -175,6 +187,8 @@ export type VNIAnimationType = V5GAnimationType;
 export type VNIAnimationParamValue = V5GAnimationParamValue;
 export type VNIAnimationConfig = V5GAnimationConfig;
 export type VNILayerKeyframeConfig = V5GLayerKeyframeConfig;
+export type VNILayerMaskConfig = V5GLayerMaskConfig;
+export type VNIMaskCompositeMode = V5GMaskCompositeMode;
 export type VNILayerConfig = V5GLayerConfig;
 export type VNILayerGroupConfig = V5GLayerGroupConfig;
 export type VNIParticleConfig = V5GParticleConfig;

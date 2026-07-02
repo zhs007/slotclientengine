@@ -57,7 +57,9 @@
 - `game003` 的 symbol scale 仍以 `assets/game003-s1/symbol-state-textures.manifest.json` 为准，不在 YAML 或 app 内维护第二份 scale 表。
 - `packages/rendercore` 只能提供通用 anchor/focus rect 映射能力，不承载 `game003` 的 mainreelbg、conveyor 或其它专属部件语义。
 - `packages/uiframeworks` 拥有页面 DOM frame、canvas 逻辑尺寸上限、黑边居中和 viewport resize 适配；游戏 app 不要直接用 CSS/DOM 私有逻辑绕过 framework 的 frame policy。
-- `packages/vnicore` 拥有 VNI 播放状态机、segmented 高级播放、live 粒子排空、layer group render order 和 group slot 挂接语义；viewer 只能做 UI 配置、输入校验、状态展示和调用，不要在 `apps/anieditorv5viewer` 里复制播放状态机、group adjacency 算法或直接操作 runtime 私有 Pixi display tree。
+- `packages/vnicore` 拥有 VNI 播放状态机、segmented 高级播放、live 粒子排空、layer group render order、group slot 挂接、mask、文字层绑定/动态文本替换、`particle_stream`、`chaser_light` 和 runtime sprite/texture 性能上限语义；viewer 只能做 UI 配置、输入校验、状态展示和调用，不要在 `apps/anieditorv5viewer` 里复制播放状态机、group adjacency、mask、粒子、走马灯、文字层替换算法或直接操作 runtime 私有 Pixi display tree。
+- `apps/anieditorv5viewer` 验证文字层替换必须走 `VNIPlayer` public API；不要在 viewer 内把 text layer 当私有 Pixi container 操作。`precompose_light_alpha` 的 dirty/cache、`particle_stream` segmented hold 和 drain duration 都属于 `packages/vnicore` runtime 边界。
+- 新增或更新 VNI export 样例时，必须同步 `docs/anieditor5/export`、`packages/vnicore/tests/fixtures/export`、`apps/anieditorv5viewer/src/assets/projects` 和 `apps/anieditorv5viewer/src/assets/assets`；这些导出 fixture 要保持与 docs source 字节一致，不要被 Prettier 或测试手改。
 - 更新 `packages/anieditorv5runtime-cc` 的 public runtime 行为时，必须同步模块化源码、`standalone/anieditorv5runtime-cc.ts`、`scripts/check-standalone.mjs`、standalone 测试和 `standalone.zip`，避免 Cocos 主要交付面与 workspace package 漂移。
 - Prettier 校验不应覆盖 `dist/`、`coverage/` 等生成物；如果 package 脚本在子目录内执行 `prettier --check .`，需要在对应 package 放置 `.prettierignore` 保持一致。
 - 若依赖安装失败，可先执行：

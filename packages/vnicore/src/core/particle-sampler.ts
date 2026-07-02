@@ -37,6 +37,9 @@ export interface ParticleAnimationRuntimeState {
   elapsed: number;
 }
 
+const MAX_BURST_PARTICLE_SPRITES = 320;
+const MAX_STREAM_PARTICLE_SPRITES = 360;
+
 export function hasActiveParticleAnimation(
   layer: V5GLayerConfig,
   time: number,
@@ -98,6 +101,15 @@ export function sampleParticleSpritesForLayer(
       sprites.push(
         ...sampleParticleBurst(animation, particleLayer, textureSize, progress),
       );
+    } else if (animation.type === "particle_stream") {
+      sprites.push(
+        ...sampleParticleStreamFromElapsed(
+          animation,
+          particleLayer,
+          textureSize,
+          progress * Math.max(animation.duration, 0.0001),
+        ),
+      );
     } else if (animation.type === "particle_twinkle") {
       sprites.push(
         ...sampleParticleTwinkle(
@@ -158,6 +170,15 @@ export function sampleParticleSpritesForLayerRuntime(
       sprites.push(
         ...sampleParticleBurst(animation, particleLayer, textureSize, progress),
       );
+    } else if (animation.type === "particle_stream") {
+      sprites.push(
+        ...sampleParticleStreamFromElapsed(
+          animation,
+          particleLayer,
+          textureSize,
+          runtimeState.elapsed,
+        ),
+      );
     } else if (animation.type === "particle_twinkle") {
       sprites.push(
         ...sampleParticleTwinkle(
@@ -204,7 +225,7 @@ function sampleParticleBurst(
   progress: number,
 ): ParticleSpriteSample[] {
   const count = Math.round(
-    clampParticleNumber(getNumberParam(animation, "count"), 1, 200),
+    clampParticleNumber(getNumberParam(animation, "count"), 1, 320),
   );
   const spread = clampParticleNumber(
     getNumberParam(animation, "spread"),
@@ -223,8 +244,50 @@ function sampleParticleBurst(
     2000,
   );
   const fadeOut = getOptionalBooleanParam(animation, "fadeOut", true);
+  const emissionAngle = getOptionalNumberParam(
+    animation,
+    "emissionAngle",
+    Number.NaN,
+  );
+  const emissionSpreadAngle = getOptionalNumberParam(
+    animation,
+    "emissionSpreadAngle",
+    360,
+  );
+  const trailCount = Math.round(
+    clampParticleNumber(
+      getOptionalNumberParam(animation, "trailCount", 0),
+      0,
+      16,
+    ),
+  );
+  const trailSpacing = clampParticleNumber(
+    getOptionalNumberParam(animation, "trailSpacing", 0.035),
+    0.001,
+    0.25,
+  );
+  const trailFade = clampParticleNumber(
+    getOptionalNumberParam(animation, "trailFade", 0.5),
+    0.01,
+    0.99,
+  );
+  const rotateParticles = getOptionalBooleanParam(
+    animation,
+    "rotateParticles",
+    true,
+  );
+  const randomRotation = getOptionalBooleanParam(
+    animation,
+    "randomRotation",
+    true,
+  );
+  const randomRotationDegrees = getOptionalNumberParam(
+    animation,
+    "randomRotationDegrees",
+    135,
+  );
+  const spinSpeed = getOptionalNumberParam(animation, "spinSpeed", 1);
   const duration = Math.max(animation.duration, 0.0001);
-  const age = progress * duration;
   const alphaBase =
     sampledLayer.opacity * (fadeOut ? Math.pow(1 - progress, 1.35) : 1);
   if (alphaBase <= 0.002) return [];
@@ -239,31 +302,188 @@ function sampleParticleBurst(
     const randomC = seededRandom(animation.seed, index, 3);
     const randomD = seededRandom(animation.seed, index, 4);
     const randomE = seededRandom(animation.seed, index, 5);
-    const angle = randomA * Math.PI * 2;
-    const burstPower = 0.55 + randomB * 0.85;
-    const startRadius = spread * 0.22 * randomC;
-    const travel = spread * progress + speed * age * burstPower;
-    const offsetX = Math.cos(angle) * (startRadius + travel);
-    const offsetY =
-      Math.sin(angle) * (startRadius + travel) + 0.5 * gravity * age * age;
-    const scale = Math.max(
-      0.01,
-      baseTextureScale * (0.55 + randomD * 0.9) * (1 - progress * 0.25),
+    const angle = getEmissionAngleRadians(
+      randomA,
+      emissionAngle,
+      emissionSpreadAngle,
     );
-    const alpha = alphaBase * (0.55 + randomC * 0.45);
-    sprites.push({
-      layerId: sampledLayer.layerId,
-      animationId: animation.id,
-      offsetX: roundTo(offsetX, 4),
-      offsetY: roundTo(offsetY, 4),
-      scale: roundTo(scale, 4),
-      rotation: roundTo(
-        (randomE - 0.5) * Math.PI * 0.75 + progress * Math.PI * (0.5 + randomB),
-        4,
-      ),
-      alpha: roundTo(clampNumber(alpha, 0, 1), 4),
-      blendMode: sampledLayer.blendMode,
-    });
+    for (let trailIndex = 0; trailIndex <= trailCount; trailIndex += 1) {
+      const localProgress = progress - trailIndex * trailSpacing;
+      if (localProgress <= 0 || localProgress > 1) continue;
+      const age = localProgress * duration;
+      const burstPower = 0.55 + randomB * 0.85;
+      const startRadius = spread * 0.22 * randomC;
+      const travel = spread * localProgress + speed * age * burstPower;
+      const offsetX = Math.cos(angle) * (startRadius + travel);
+      const offsetY =
+        Math.sin(angle) * (startRadius + travel) + 0.5 * gravity * age * age;
+      const scale = Math.max(
+        0.01,
+        baseTextureScale * (0.55 + randomD * 0.9) * (1 - localProgress * 0.25),
+      );
+      const alpha =
+        alphaBase * (0.55 + randomC * 0.45) * Math.pow(trailFade, trailIndex);
+      sprites.push({
+        layerId: sampledLayer.layerId,
+        animationId: animation.id,
+        offsetX: roundTo(offsetX, 4),
+        offsetY: roundTo(offsetY, 4),
+        scale: roundTo(scale, 4),
+        rotation: roundTo(
+          getParticleRotation(
+            randomE,
+            localProgress,
+            randomB,
+            rotateParticles,
+            randomRotation,
+            randomRotationDegrees,
+            spinSpeed,
+          ),
+          4,
+        ),
+        alpha: roundTo(clampNumber(alpha, 0, 1), 4),
+        blendMode: sampledLayer.blendMode,
+      });
+      if (sprites.length >= MAX_BURST_PARTICLE_SPRITES) return sprites;
+    }
+  }
+
+  return sprites;
+}
+
+function sampleParticleStreamFromElapsed(
+  animation: V5GAnimationConfig,
+  sampledLayer: ParticleLayerSampleState,
+  textureSize: TextureSize,
+  elapsed: number,
+): ParticleSpriteSample[] {
+  const spawnRate = clampParticleNumber(
+    getNumberParam(animation, "spawnRate"),
+    1,
+    2000,
+  );
+  const lifetime = clampParticleNumber(
+    getNumberParam(animation, "lifetime"),
+    0.05,
+    30,
+  );
+  const spread = clampParticleNumber(
+    getNumberParam(animation, "spread"),
+    0,
+    5000,
+  );
+  const speed = clampParticleNumber(
+    getNumberParam(animation, "speed"),
+    0,
+    5000,
+  );
+  const emissionAngle = getNumberParam(animation, "emissionAngle");
+  const emissionSpreadAngle = clampParticleNumber(
+    getNumberParam(animation, "emissionSpreadAngle"),
+    0,
+    360,
+  );
+  const size = clampParticleNumber(getNumberParam(animation, "size"), 1, 400);
+  const gravity = clampParticleNumber(
+    getNumberParam(animation, "gravity"),
+    -5000,
+    5000,
+  );
+  const fadeOut = getOptionalBooleanParam(animation, "fadeOut", true);
+  const trailCount = Math.round(
+    clampParticleNumber(getNumberParam(animation, "trailCount"), 0, 16),
+  );
+  const trailSpacing = clampParticleNumber(
+    getNumberParam(animation, "trailSpacing"),
+    0.001,
+    0.25,
+  );
+  const trailFade = clampParticleNumber(
+    getNumberParam(animation, "trailFade"),
+    0.01,
+    0.99,
+  );
+  const rotateParticles = getOptionalBooleanParam(
+    animation,
+    "rotateParticles",
+    true,
+  );
+  const randomRotation = getOptionalBooleanParam(
+    animation,
+    "randomRotation",
+    true,
+  );
+  const randomRotationDegrees = getNumberParam(
+    animation,
+    "randomRotationDegrees",
+  );
+  const spinSpeed = getNumberParam(animation, "spinSpeed");
+  const textureEdge = getTextureLongestEdge(textureSize);
+  const baseTextureScale = size / textureEdge;
+  const totalSpawnCount = Math.floor(Math.max(0, elapsed) * spawnRate);
+  const liveWindowCount = Math.ceil(spawnRate * lifetime) + 2;
+  const firstIndex = Math.max(0, totalSpawnCount - liveWindowCount);
+  const sprites: ParticleSpriteSample[] = [];
+
+  for (let index = firstIndex; index <= totalSpawnCount; index += 1) {
+    const spawnTime = index / spawnRate;
+    const localAgeSeconds = elapsed - spawnTime;
+    if (localAgeSeconds < 0 || localAgeSeconds > lifetime) continue;
+    const progress = clampNumber(localAgeSeconds / lifetime, 0, 1);
+    const randomA = seededRandom(animation.seed, index, 501);
+    const randomB = seededRandom(animation.seed, index, 502);
+    const randomC = seededRandom(animation.seed, index, 503);
+    const randomD = seededRandom(animation.seed, index, 504);
+    const randomE = seededRandom(animation.seed, index, 505);
+    const angle = getEmissionAngleRadians(
+      randomA,
+      emissionAngle,
+      emissionSpreadAngle,
+    );
+    for (let trailIndex = 0; trailIndex <= trailCount; trailIndex += 1) {
+      const trailAgeSeconds = localAgeSeconds - trailIndex * trailSpacing;
+      if (trailAgeSeconds < 0 || trailAgeSeconds > lifetime) continue;
+      const trailProgress = clampNumber(trailAgeSeconds / lifetime, 0, 1);
+      const startRadius = spread * 0.2 * randomB;
+      const travel = speed * trailAgeSeconds * (0.65 + randomC * 0.7);
+      const alphaBase =
+        sampledLayer.opacity * (fadeOut ? 1 - trailProgress : 1);
+      const alpha =
+        alphaBase * (0.55 + randomD * 0.45) * Math.pow(trailFade, trailIndex);
+      if (alpha <= 0.002) continue;
+      sprites.push({
+        layerId: sampledLayer.layerId,
+        animationId: animation.id,
+        offsetX: roundTo(Math.cos(angle) * (startRadius + travel), 4),
+        offsetY: roundTo(
+          Math.sin(angle) * (startRadius + travel) +
+            0.5 * gravity * trailAgeSeconds * trailAgeSeconds,
+          4,
+        ),
+        scale: roundTo(
+          Math.max(
+            0.01,
+            baseTextureScale * (0.65 + randomB * 0.7) * (1 - progress * 0.15),
+          ),
+          4,
+        ),
+        rotation: roundTo(
+          getParticleRotation(
+            randomE,
+            trailProgress,
+            randomC,
+            rotateParticles,
+            randomRotation,
+            randomRotationDegrees,
+            spinSpeed,
+          ),
+          4,
+        ),
+        alpha: roundTo(clampNumber(alpha, 0, 1), 4),
+        blendMode: sampledLayer.blendMode,
+      });
+      if (sprites.length >= MAX_STREAM_PARTICLE_SPRITES) return sprites;
+    }
   }
 
   return sprites;
@@ -817,6 +1037,19 @@ function getNumberParam(animation: V5GAnimationConfig, key: string): number {
   );
 }
 
+function getOptionalNumberParam(
+  animation: V5GAnimationConfig,
+  key: string,
+  fallback: number,
+): number {
+  const value = animation.params[key];
+  if (value === undefined) return fallback;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  throw new Error(
+    `V5G animation "${animation.id}" ${animation.type} param "${key}" must be a finite number.`,
+  );
+}
+
 function getOptionalBooleanParam(
   animation: V5GAnimationConfig,
   key: string,
@@ -832,6 +1065,34 @@ function getOptionalBooleanParam(
 
 function clampParticleNumber(value: number, min: number, max: number): number {
   return clampNumber(Number.isFinite(value) ? value : min, min, max);
+}
+
+function getEmissionAngleRadians(
+  random: number,
+  emissionAngle: number,
+  emissionSpreadAngle: number,
+): number {
+  if (!Number.isFinite(emissionAngle)) {
+    return random * Math.PI * 2;
+  }
+  const spread = clampParticleNumber(emissionSpreadAngle, 0, 360);
+  return ((emissionAngle + (random - 0.5) * spread) * Math.PI) / 180;
+}
+
+function getParticleRotation(
+  random: number,
+  progress: number,
+  spinSalt: number,
+  rotateParticles: boolean,
+  randomRotation: boolean,
+  randomRotationDegrees: number,
+  spinSpeed: number,
+): number {
+  if (!rotateParticles) return 0;
+  const randomBase = randomRotation
+    ? ((random - 0.5) * randomRotationDegrees * Math.PI) / 180
+    : 0;
+  return randomBase + progress * Math.PI * 2 * spinSpeed * (0.5 + spinSalt);
 }
 
 function getTextureLongestEdge(textureSize: TextureSize): number {

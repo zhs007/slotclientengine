@@ -232,9 +232,63 @@ export function getLayerGroup(
 export function isLayerEffectivelyVisible(
   project: V5GProjectConfig,
   layer: V5GLayerConfig,
+  options: { ignoreMaskSourcePreference?: boolean } = {},
 ): boolean {
   const group = getLayerGroup(project, layer.groupId);
-  return layer.visible && group?.visible !== false;
+  if (!layer.visible || group?.visible === false) return false;
+  if (options.ignoreMaskSourcePreference) return true;
+  return !isLayerHiddenByMaskSourcePreference(project, layer.id);
+}
+
+export function normalizeProjectMasks(project: V5GProjectConfig): void {
+  const layerIds = new Set(project.layers.map((layer) => layer.id));
+  for (const layer of project.layers) {
+    const mask = layer.mask;
+    if (!mask) continue;
+    const sourceLayerId =
+      typeof mask.sourceLayerId === "string" ? mask.sourceLayerId : null;
+    const hasValidSource =
+      sourceLayerId !== null &&
+      sourceLayerId !== layer.id &&
+      layerIds.has(sourceLayerId);
+    layer.mask = {
+      enabled: mask.enabled === true && hasValidSource,
+      sourceLayerId: hasValidSource ? sourceLayerId : null,
+      mode: "alpha",
+      compositeMode:
+        mask.compositeMode === "legacy_alpha"
+          ? "legacy_alpha"
+          : "precompose_light_alpha",
+      showSourceLayer: mask.showSourceLayer !== false,
+    };
+  }
+}
+
+export function getLayerMaskSource(
+  project: V5GProjectConfig,
+  layer: V5GLayerConfig,
+): V5GLayerConfig | null {
+  const sourceLayerId = layer.mask?.enabled ? layer.mask.sourceLayerId : null;
+  if (!sourceLayerId || sourceLayerId === layer.id) return null;
+  return (
+    project.layers.find((candidate) => candidate.id === sourceLayerId) ?? null
+  );
+}
+
+export function isLayerHiddenByMaskSourcePreference(
+  project: V5GProjectConfig,
+  layerId: string,
+): boolean {
+  return project.layers.some((layer) => {
+    if (layer.id === layerId) return false;
+    if (!layer.mask?.enabled || layer.mask.sourceLayerId !== layerId) {
+      return false;
+    }
+    if (layer.mask.showSourceLayer !== false) return false;
+    return isLayerEffectivelyVisible(project, layer, {
+      ignoreMaskSourcePreference: true,
+    });
+  });
 }
 
 export type V5GExportProjectPurpose = "editing" | "runtime";
@@ -245,14 +299,30 @@ export function toExportProject(
 ): V5GProjectConfig {
   const cloned = JSON.parse(JSON.stringify(project)) as V5GProjectConfig;
   normalizeProjectLayerGroups(cloned);
+  normalizeProjectMasks(cloned);
 
   if (purpose === "editing") {
     return cloned;
   }
 
-  const visibleLayers = cloned.layers.filter((layer) =>
+  const initiallyVisibleLayers = cloned.layers.filter((layer) =>
     isLayerEffectivelyVisible(cloned, layer),
   );
+  const runtimeLayerIds = new Set(
+    initiallyVisibleLayers.map((layer) => layer.id),
+  );
+  for (const layer of initiallyVisibleLayers) {
+    const source = getLayerMaskSource(cloned, layer);
+    if (source) runtimeLayerIds.add(source.id);
+  }
+  const visibleLayers = cloned.layers.filter((layer) =>
+    runtimeLayerIds.has(layer.id),
+  );
+  for (const layer of visibleLayers) {
+    if (isLayerHiddenByMaskSourcePreference(cloned, layer.id)) {
+      layer.visible = false;
+    }
+  }
   const exportedGroupIds = new Set(
     visibleLayers.map((layer) => layer.groupId ?? DEFAULT_LAYER_GROUP_ID),
   );

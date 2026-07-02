@@ -27,8 +27,15 @@ const playerMock = vi.hoisted(() => {
     readonly seek = vi.fn();
     readonly requestSegmentedPlaybackEnd = vi.fn();
     readonly getLayerGroupSlots = vi.fn(() => this.layerGroupSlots);
-    readonly attachImageBetweenLayerGroups = vi.fn();
+    readonly insertedDispose = vi.fn();
+    readonly attachImageBetweenLayerGroups = vi.fn(() => this.insertedDispose);
     readonly attachExternalImageBetweenLayerGroups = vi.fn(async () => vi.fn());
+    readonly textBinding = {
+      dispose: vi.fn(),
+      setText: vi.fn(),
+    };
+    readonly attachTextToTextLayer = vi.fn(() => this.textBinding);
+    readonly attachImageToTextLayer = vi.fn(async () => vi.fn());
     readonly clearMountedNodes = vi.fn();
     readonly getPlaybackState = vi.fn(() => ({
       mode: "timeline",
@@ -163,9 +170,82 @@ describe("anieditorv5viewer main", () => {
       profilePurpose: "runtime",
       assetScale: 1,
     });
-    expect(summary?.textContent).toContain("schema VNI_0.020");
+    expect(summary?.textContent).toContain("schema VNI_0.022");
     expect(summary?.textContent).toContain("profile runtime_100");
-    expect(summary?.textContent).toContain("safe_glow");
+    expect(summary?.textContent).toContain("chaser_light");
+  });
+
+  it("loads number2 and wires text-layer replacement through VNIPlayer public APIs", async () => {
+    document.body.innerHTML = '<div id="app"></div>';
+
+    await import("../src/main");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const select = document.querySelector<HTMLSelectElement>(
+      'select[aria-label="V5G project"]',
+    );
+    if (!select) throw new Error("Missing project select.");
+
+    select.value = "number2";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const player = playerMock.instances.at(-1);
+    const textLayerSelect = document.querySelector<HTMLSelectElement>(
+      'select[aria-label="文字层"]',
+    );
+    const modeSelect = document.querySelector<HTMLSelectElement>(
+      'select[aria-label="文字层替换模式"]',
+    );
+    const textInput = document.querySelector<HTMLInputElement>(
+      'input[aria-label="动态文字内容"]',
+    );
+    const applyButton = [...document.querySelectorAll("button")].find(
+      (button) => button.textContent === "应用",
+    );
+    const clearButton = [
+      ...document.querySelectorAll(".text-replacement-panel button"),
+    ].find((button) => button.textContent === "移除") as
+      | HTMLButtonElement
+      | undefined;
+    if (
+      !player ||
+      !textLayerSelect ||
+      !modeSelect ||
+      !textInput ||
+      !applyButton ||
+      !clearButton
+    ) {
+      throw new Error("Missing text replacement controls.");
+    }
+    expect(player.options).toMatchObject({ projectId: "number2" });
+
+    expect(textLayerSelect.options.length).toBeGreaterThan(0);
+    modeSelect.value = "text";
+    modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(applyButton.disabled).toBe(false);
+    textInput.value = "888";
+    applyButton.click();
+    await Promise.resolve();
+
+    expect(player.attachTextToTextLayer).toHaveBeenCalledWith({
+      id: "viewer-text-layer-replacement",
+      layerId: textLayerSelect.value,
+      text: "888",
+    });
+    expect(clearButton.disabled).toBe(false);
+
+    textInput.value = "999";
+    textInput.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(player.textBinding.setText).toHaveBeenCalledWith("999");
+
+    clearButton.click();
+    expect(player.textBinding.dispose).toHaveBeenCalledTimes(1);
   });
 
   it("loads game003 L1-L5 wins as runtime source projects", async () => {
@@ -294,6 +374,63 @@ describe("anieditorv5viewer main", () => {
     expect(player.seek).toHaveBeenCalledWith(1.25);
   });
 
+  it("scales the Pixi canvas layer from the stage center", async () => {
+    document.body.innerHTML = '<div id="app"></div>';
+
+    await import("../src/main");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const stageMount = document.querySelector<HTMLElement>(".stage-mount");
+    const canvasLayer = document.querySelector<HTMLElement>(
+      ".stage-canvas-layer",
+    );
+    const zoomOut = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="缩小画布"]',
+    );
+    const zoomIn = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="放大画布"]',
+    );
+    const zoomReset = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="重置画布缩放"]',
+    );
+    const zoomReadout = document.querySelector<HTMLElement>(
+      ".stage-zoom-readout",
+    );
+    if (!stageMount || !canvasLayer || !zoomOut || !zoomIn || !zoomReset) {
+      throw new Error("Missing stage zoom controls.");
+    }
+
+    expect(stageMount.style.getPropertyValue("--stage-canvas-scale")).toBe("1");
+    expect(stageMount.dataset.viewerCanvasScale).toBe("1.00");
+    expect(zoomReadout?.textContent).toBe("100%");
+    expect(zoomReset.disabled).toBe(true);
+    expect(canvasLayer.contains(pixiMock.instances[0].canvas)).toBe(true);
+
+    zoomIn.click();
+    expect(stageMount.style.getPropertyValue("--stage-canvas-scale")).toBe(
+      "1.25",
+    );
+    expect(stageMount.dataset.viewerCanvasScale).toBe("1.25");
+    expect(zoomReadout?.textContent).toBe("125%");
+    expect(zoomReset.disabled).toBe(false);
+
+    zoomOut.click();
+    expect(stageMount.style.getPropertyValue("--stage-canvas-scale")).toBe("1");
+    expect(zoomReadout?.textContent).toBe("100%");
+
+    zoomOut.click();
+    expect(stageMount.style.getPropertyValue("--stage-canvas-scale")).toBe(
+      "0.75",
+    );
+    expect(zoomReadout?.textContent).toBe("75%");
+
+    zoomReset.click();
+    expect(stageMount.style.getPropertyValue("--stage-canvas-scale")).toBe("1");
+    expect(stageMount.dataset.viewerCanvasScale).toBe("1.00");
+    expect(zoomReset.disabled).toBe(true);
+  });
+
   it("wires group insertion controls to VNIPlayer layer group slots", async () => {
     document.body.innerHTML = '<div id="app"></div>';
 
@@ -355,7 +492,7 @@ describe("anieditorv5viewer main", () => {
     expect(clearButton.disabled).toBe(false);
 
     clearButton.click();
-    expect(player.clearMountedNodes).toHaveBeenCalledTimes(1);
+    expect(player.insertedDispose).toHaveBeenCalledTimes(1);
     expect(clearButton.disabled).toBe(true);
 
     const projectAssetPaths = new Set([

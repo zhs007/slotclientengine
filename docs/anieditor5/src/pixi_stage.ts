@@ -7,8 +7,10 @@ import {
   roundTo,
 } from "./coordinates";
 import {
+  getLayerMaskSource,
   isLayerEffectivelyVisible,
   normalizeProjectLayerGroups,
+  normalizeProjectMasks,
 } from "./project_state";
 import type {
   V5GAnimationConfig,
@@ -28,6 +30,17 @@ interface RenderCallbacks {
   onViewportChange: (viewport: V5GViewportState) => void;
 }
 
+interface PrecomposedLayerState {
+  key: string;
+  sprite: PIXI.Sprite;
+  texture: PIXI.Texture;
+}
+
+interface CachedImageElement {
+  objectUrl: string;
+  image: HTMLImageElement;
+}
+
 const MIN_VIEW_SCALE = 0.05;
 const MAX_VIEW_SCALE = 8;
 const WHEEL_ZOOM_STEP = 1.12;
@@ -40,7 +53,15 @@ export class V5GPixiStage {
   private readonly guideGraphics = new PIXI.Graphics();
   private readonly selectionGraphics = new PIXI.Graphics();
   private readonly layerDisplayMap = new Map<string, PIXI.Container>();
+  private readonly layerWrapperMap = new Map<string, PIXI.Container>();
   private readonly layerParticleMap = new Map<string, PIXI.Container>();
+  private readonly layerMaskMap = new Map<string, PIXI.Container>();
+  private readonly layerMaskKeyMap = new Map<string, string>();
+  private readonly precomposedLayerMap = new Map<
+    string,
+    PrecomposedLayerState
+  >();
+  private readonly imageElementCache = new Map<string, CachedImageElement>();
   private readonly layerAssetIdMap = new Map<string, string | null>();
   private readonly callbacks: RenderCallbacks;
   private state: V5GEditorState;
@@ -101,6 +122,7 @@ export class V5GPixiStage {
   async render(nextState: V5GEditorState): Promise<void> {
     this.state = nextState;
     normalizeProjectLayerGroups(this.state.project);
+    normalizeProjectMasks(this.state.project);
     await this.syncLayers();
     this.drawGuides();
     this.drawParticles();
@@ -168,8 +190,10 @@ export class V5GPixiStage {
       if (!isLayerEffectivelyVisible(this.state.project, layer)) continue;
       const display = this.layerDisplayMap.get(layer.id);
       if (!display) continue;
+      const wrapper = this.layerWrapperMap.get(layer.id);
+      const target = wrapper ?? display;
       this.playTimeline.fromTo(
-        display.scale,
+        target.scale,
         { x: layer.transform.scaleX * 0.2, y: layer.transform.scaleY * 0.2 },
         {
           x: layer.transform.scaleX,
@@ -180,7 +204,7 @@ export class V5GPixiStage {
         0,
       );
       this.playTimeline.fromTo(
-        display,
+        target,
         { alpha: 0 },
         { alpha: layer.opacity, duration: 0.45 },
         0,
@@ -202,6 +226,12 @@ export class V5GPixiStage {
     this.stopDemo();
     this.resizeObserver?.disconnect();
     this.container.removeEventListener("wheel", this.handleWheel);
+    for (const wrapper of this.layerWrapperMap.values()) {
+      wrapper.destroy({ children: false });
+    }
+    this.layerWrapperMap.clear();
+    this.clearAllPrecomposedLayers();
+    this.imageElementCache.clear();
     this.app.destroy(true);
   }
 
@@ -242,11 +272,25 @@ export class V5GPixiStage {
     );
     for (const [layerId, display] of this.layerDisplayMap) {
       if (!liveLayerIds.has(layerId)) {
+        this.detachLayerMaskTargets(layerId);
+        const wrapper = this.layerWrapperMap.get(layerId);
+        if (wrapper) {
+          if (display.parent === wrapper) {
+            wrapper.removeChild(display);
+          }
+          wrapper.destroy({ children: false });
+          this.layerWrapperMap.delete(layerId);
+        }
         display.destroy({ children: true });
         this.layerDisplayMap.delete(layerId);
         const particleGroup = this.layerParticleMap.get(layerId);
         particleGroup?.destroy({ children: true });
         this.layerParticleMap.delete(layerId);
+        const mask = this.layerMaskMap.get(layerId);
+        mask?.destroy({ children: true });
+        this.layerMaskMap.delete(layerId);
+        this.layerMaskKeyMap.delete(layerId);
+        this.clearPrecomposedLayer(layerId);
         this.layerAssetIdMap.delete(layerId);
       }
     }
@@ -258,11 +302,25 @@ export class V5GPixiStage {
         display !== undefined &&
         this.layerAssetIdMap.get(layer.id) !== layer.assetId;
       if (shouldRecreateImageDisplay && display) {
+        this.detachLayerMaskTargets(layer.id);
+        const wrapper = this.layerWrapperMap.get(layer.id);
+        if (wrapper) {
+          if (display.parent === wrapper) {
+            wrapper.removeChild(display);
+          }
+          wrapper.destroy({ children: false });
+          this.layerWrapperMap.delete(layer.id);
+        }
         display.destroy({ children: true });
         this.layerDisplayMap.delete(layer.id);
         const particleGroup = this.layerParticleMap.get(layer.id);
         particleGroup?.destroy({ children: true });
         this.layerParticleMap.delete(layer.id);
+        const mask = this.layerMaskMap.get(layer.id);
+        mask?.destroy({ children: true });
+        this.layerMaskMap.delete(layer.id);
+        this.layerMaskKeyMap.delete(layer.id);
+        this.clearPrecomposedLayer(layer.id);
         this.layerAssetIdMap.delete(layer.id);
         display = undefined;
       }
@@ -277,20 +335,433 @@ export class V5GPixiStage {
           textNode.text = layer.text ?? layer.name;
         }
       }
+      const maskSource = getLayerMaskSource(this.state.project, layer);
+      const displayAfterMask = this.layerDisplayMap.get(layer.id);
+      const usesPrecomposedMask = this.shouldUsePrecomposedLightMask(
+        layer,
+        maskSource,
+      );
+      if (maskSource && displayAfterMask && !usesPrecomposedMask) {
+        let wrapper = this.layerWrapperMap.get(layer.id);
+        if (!wrapper || wrapper.destroyed) {
+          if (wrapper) this.layerWrapperMap.delete(layer.id);
+          wrapper = new PIXI.Container();
+          wrapper.eventMode = "static";
+          this.layerWrapperMap.set(layer.id, wrapper);
+        }
+        if (displayAfterMask.parent !== wrapper) {
+          if (displayAfterMask.parent) {
+            displayAfterMask.parent.removeChild(displayAfterMask);
+          }
+          wrapper.addChild(displayAfterMask);
+        }
+        if (wrapper.parent !== this.contentContainer) {
+          this.contentContainer.addChild(wrapper);
+        }
+      } else {
+        const staleWrapper = this.layerWrapperMap.get(layer.id);
+        if (staleWrapper) {
+          staleWrapper.mask = null;
+          const displayInWrapper = this.layerDisplayMap.get(layer.id);
+          if (
+            displayInWrapper &&
+            staleWrapper.children.includes(displayInWrapper)
+          ) {
+            staleWrapper.removeChild(displayInWrapper);
+            displayInWrapper.mask = null;
+            this.contentContainer.addChild(displayInWrapper);
+          }
+          staleWrapper.destroy({ children: false });
+          this.layerWrapperMap.delete(layer.id);
+        }
+      }
+
       this.applyLayerTransform(layer);
       if (layer.type === "image") {
         this.ensureParticleGroup(layer.id);
       }
+      await this.syncLayerMask(layer);
     }
 
     for (const layer of this.state.project.layers) {
       const display = this.layerDisplayMap.get(layer.id);
-      if (display) {
-        this.contentContainer.addChild(display);
+      const wrapper = this.layerWrapperMap.get(layer.id);
+      const target = wrapper ?? display;
+      if (target) {
+        this.contentContainer.addChild(target);
+        const precomposed = this.precomposedLayerMap.get(layer.id);
+        if (precomposed) this.contentContainer.addChild(precomposed.sprite);
         const particleGroup = this.layerParticleMap.get(layer.id);
         if (particleGroup) this.contentContainer.addChild(particleGroup);
+        const mask = this.layerMaskMap.get(layer.id);
+        if (mask && mask.parent !== this.contentContainer) {
+          this.contentContainer.addChild(mask);
+        }
       }
     }
+  }
+
+  private async syncLayerMask(layer: V5GLayerConfig): Promise<void> {
+    const display = this.layerDisplayMap.get(layer.id);
+    const particleGroup = this.layerParticleMap.get(layer.id);
+    const sourceLayer = getLayerMaskSource(this.state.project, layer);
+    if (!display || !sourceLayer) {
+      this.clearLayerMask(layer.id);
+      if (display) display.mask = null;
+      if (particleGroup) particleGroup.mask = null;
+      this.clearPrecomposedLayer(layer.id);
+      return;
+    }
+
+    if (this.shouldUsePrecomposedLightMask(layer, sourceLayer)) {
+      await this.syncPrecomposedLightMask(layer, sourceLayer);
+      this.clearLayerMaskOnly(layer.id);
+      display.mask = null;
+      if (particleGroup) particleGroup.mask = null;
+      return;
+    }
+
+    this.clearPrecomposedLayer(layer.id);
+
+    const maskKey = getLayerMaskRenderKey(sourceLayer);
+    let maskContainer = this.layerMaskMap.get(layer.id);
+    if (!maskContainer || this.layerMaskKeyMap.get(layer.id) !== maskKey) {
+      this.detachLayerMaskTargets(layer.id);
+      maskContainer?.destroy({ children: true });
+      maskContainer = await this.createLayerMaskDisplay(sourceLayer);
+      this.layerMaskMap.set(layer.id, maskContainer);
+      this.layerMaskKeyMap.set(layer.id, maskKey);
+      // 把 mask container 加到 contentContainer 保持 transform 参照系正确
+      this.contentContainer.addChild(maskContainer);
+    } else if (sourceLayer.type === "text") {
+      const textNode = maskContainer.children[0];
+      if (textNode instanceof PIXI.Text) {
+        textNode.text = sourceLayer.text ?? sourceLayer.name;
+      }
+    }
+
+    this.applyMaskTransform(maskContainer, sourceLayer);
+    const maskSource = maskContainer.children[0] ?? null;
+    const wrapper = this.layerWrapperMap.get(layer.id);
+    // 使用源图内部 Sprite/Text 作为 alpha mask，才能按 PNG 有效像素裁剪；
+    // 外层 Container 仅承载 transform，不能直接作为 mask，否则 Pixi 会退化成矩形/普通管线。
+    if (wrapper) {
+      display.mask = null;
+      wrapper.mask = maskSource;
+    } else {
+      display.mask = maskSource;
+    }
+    // 暂不把同一个 mask 对象复用到粒子层；共享 mask display object 会触发 Pixi v8 filter/bounds 异常。
+    if (particleGroup) particleGroup.mask = null;
+    // 外层容器不作为普通内容渲染，避免显示遮罩副本；maskSource 自身保持 renderable=true 供 mask pass 使用。
+    maskContainer.renderable = false;
+  }
+
+  private clearLayerMask(layerId: string): void {
+    this.detachLayerMaskTargets(layerId);
+    const mask = this.layerMaskMap.get(layerId);
+    mask?.destroy({ children: true });
+    this.layerMaskMap.delete(layerId);
+    this.layerMaskKeyMap.delete(layerId);
+    const wrapper = this.layerWrapperMap.get(layerId);
+    if (wrapper) {
+      const display = this.layerDisplayMap.get(layerId);
+      if (display && display.parent === wrapper) {
+        wrapper.removeChild(display);
+        this.contentContainer.addChild(display);
+      }
+      wrapper.destroy({ children: false });
+      this.layerWrapperMap.delete(layerId);
+    }
+  }
+
+  private detachLayerMaskTargets(layerId: string): void {
+    const display = this.layerDisplayMap.get(layerId);
+    if (display) display.mask = null;
+    const wrapper = this.layerWrapperMap.get(layerId);
+    if (wrapper) wrapper.mask = null;
+    const particleGroup = this.layerParticleMap.get(layerId);
+    if (particleGroup) particleGroup.mask = null;
+  }
+
+  private async createLayerMaskDisplay(
+    sourceLayer: V5GLayerConfig,
+  ): Promise<PIXI.Container> {
+    const mask = new PIXI.Container();
+    mask.eventMode = "none";
+    mask.cursor = "default";
+
+    if (sourceLayer.type === "image") {
+      const runtimeAsset = this.findRuntimeAsset(sourceLayer.assetId);
+      const asset = this.findProjectAsset(sourceLayer.assetId);
+      if (runtimeAsset) {
+        const texture = await this.loadImageTexture(runtimeAsset);
+        const sprite = new PIXI.Sprite(texture);
+        sprite.renderable = true;
+        sprite.anchor.set(
+          sourceLayer.transform.anchorX,
+          sourceLayer.transform.anchorY,
+        );
+        const compensation = getAssetDisplayCompensation(asset, texture);
+        sprite.scale.set(compensation.x, compensation.y);
+        mask.addChild(sprite);
+      } else {
+        mask.addChild(this.createMissingAssetBox(sourceLayer.name));
+      }
+    } else if (sourceLayer.type === "text") {
+      const text = new PIXI.Text({
+        text: sourceLayer.text ?? sourceLayer.name,
+        style: {
+          fill: 0xffffff,
+          fontFamily: "Arial, sans-serif",
+          fontSize: 64,
+          fontWeight: "700",
+        },
+      });
+      text.anchor.set(
+        sourceLayer.transform.anchorX,
+        sourceLayer.transform.anchorY,
+      );
+      text.renderable = true;
+      mask.addChild(text);
+    } else {
+      mask.addChild(this.createMissingAssetBox(sourceLayer.name));
+    }
+
+    return mask;
+  }
+
+  private applyMaskTransform(
+    mask: PIXI.Container,
+    sourceLayer: V5GLayerConfig,
+  ): void {
+    const stage = this.state.project.stage;
+    const previewLayer = this.state.previewLayers?.[sourceLayer.id];
+    const transform = previewLayer?.transform ?? sourceLayer.transform;
+    const opacity = previewLayer?.opacity ?? sourceLayer.opacity;
+    const position = editorToPixi(
+      transform.x,
+      transform.y,
+      stage.width,
+      stage.height,
+    );
+    mask.position.set(position.x, position.y);
+    mask.scale.set(transform.scaleX, transform.scaleY);
+    mask.rotation = (transform.rotation * Math.PI) / 180;
+    mask.alpha = opacity;
+    mask.blendMode = "normal";
+    mask.visible = true;
+    // 外层容器只负责 transform，不作为普通内容渲染；内部 Sprite/Text 作为 alpha mask。
+    mask.renderable = false;
+    mask.eventMode = "none";
+  }
+
+  private shouldUsePrecomposedLightMask(
+    layer: V5GLayerConfig,
+    sourceLayer: V5GLayerConfig | null,
+  ): boolean {
+    return (
+      layer.mask?.enabled === true &&
+      layer.mask.compositeMode === "precompose_light_alpha" &&
+      layer.type === "image" &&
+      sourceLayer?.type === "image" &&
+      isLightMaskBlendMode(layer.blendMode) &&
+      this.findRuntimeAsset(layer.assetId) !== null &&
+      this.findRuntimeAsset(sourceLayer.assetId) !== null
+    );
+  }
+
+  private async syncPrecomposedLightMask(
+    layer: V5GLayerConfig,
+    sourceLayer: V5GLayerConfig,
+  ): Promise<void> {
+    const display = this.layerDisplayMap.get(layer.id);
+    if (!display) return;
+
+    const layerRuntimeAsset = this.findRuntimeAsset(layer.assetId);
+    const maskRuntimeAsset = this.findRuntimeAsset(sourceLayer.assetId);
+    const layerAsset = this.findProjectAsset(layer.assetId);
+    const maskAsset = this.findProjectAsset(sourceLayer.assetId);
+    if (!layerRuntimeAsset || !maskRuntimeAsset) {
+      this.clearPrecomposedLayer(layer.id);
+      display.renderable = true;
+      return;
+    }
+
+    const stage = this.state.project.stage;
+    const layerPreview = this.state.previewLayers?.[layer.id];
+    const maskPreview = this.state.previewLayers?.[sourceLayer.id];
+    const layerTransform = layerPreview?.transform ?? layer.transform;
+    const maskTransform = maskPreview?.transform ?? sourceLayer.transform;
+    const layerOpacity = layerPreview?.opacity ?? layer.opacity;
+    const maskOpacity = maskPreview?.opacity ?? sourceLayer.opacity;
+    const layerImage = await this.loadImageElement(layerRuntimeAsset);
+    const maskImage = await this.loadImageElement(maskRuntimeAsset);
+    const key = [
+      "precompose_light_alpha",
+      stage.width,
+      stage.height,
+      layer.id,
+      layerRuntimeAsset.objectUrl,
+      maskRuntimeAsset.objectUrl,
+      layerAsset?.width ?? layerImage.naturalWidth,
+      layerAsset?.height ?? layerImage.naturalHeight,
+      maskAsset?.width ?? maskImage.naturalWidth,
+      maskAsset?.height ?? maskImage.naturalHeight,
+      serializeTransformForKey(layerTransform),
+      roundTo(layerOpacity, 4),
+      serializeTransformForKey(maskTransform),
+      roundTo(maskOpacity, 4),
+      layer.blendMode,
+    ].join("|");
+
+    let entry = this.precomposedLayerMap.get(layer.id);
+    if (!entry || entry.key !== key) {
+      const canvas = this.createPrecomposedLightMaskCanvas({
+        layerImage,
+        maskImage,
+        layerAsset,
+        maskAsset,
+        layerTransform,
+        maskTransform,
+        maskOpacity,
+      });
+      const texture = PIXI.Texture.from(canvas);
+      const sprite = new PIXI.Sprite(texture);
+      sprite.position.set(0, 0);
+      sprite.alpha = clampNumber(layerOpacity, 0, 1);
+      sprite.blendMode = toPixiBlendMode(layer.blendMode);
+      sprite.eventMode = "none";
+      sprite.cursor = "default";
+      entry?.sprite.destroy({ children: true });
+      entry?.texture.destroy(true);
+      entry = { key, sprite, texture };
+      this.precomposedLayerMap.set(layer.id, entry);
+      this.contentContainer.addChild(sprite);
+    } else {
+      entry.sprite.alpha = clampNumber(layerOpacity, 0, 1);
+      entry.sprite.blendMode = toPixiBlendMode(layer.blendMode);
+    }
+
+    entry.sprite.visible = isLayerEffectivelyVisible(this.state.project, layer);
+    entry.sprite.renderable = true;
+    // 保留原 display 作为透明交互层，避免预合成 Sprite 覆盖全舞台后导致图层无法点选/拖动。
+    display.renderable = true;
+    display.alpha = 0;
+  }
+
+  private createPrecomposedLightMaskCanvas(options: {
+    layerImage: HTMLImageElement;
+    maskImage: HTMLImageElement;
+    layerAsset: V5GEditorState["project"]["assets"][number] | null;
+    maskAsset: V5GEditorState["project"]["assets"][number] | null;
+    layerTransform: V5GLayerConfig["transform"];
+    maskTransform: V5GLayerConfig["transform"];
+    maskOpacity: number;
+  }): HTMLCanvasElement {
+    const stage = this.state.project.stage;
+    const width = Math.max(1, Math.round(stage.width));
+    const height = Math.max(1, Math.round(stage.height));
+    const layerCanvas = document.createElement("canvas");
+    layerCanvas.width = width;
+    layerCanvas.height = height;
+    const layerCtx = layerCanvas.getContext("2d", { willReadFrequently: true });
+    if (!layerCtx) throw new Error("浏览器不支持 Canvas 光效遮罩预合成");
+    drawImageLayerToContext(layerCtx, {
+      image: options.layerImage,
+      asset: options.layerAsset,
+      transform: options.layerTransform,
+      stageWidth: width,
+      stageHeight: height,
+    });
+
+    const maskCanvas = document.createElement("canvas");
+    maskCanvas.width = width;
+    maskCanvas.height = height;
+    const maskCtx = maskCanvas.getContext("2d", { willReadFrequently: true });
+    if (!maskCtx) throw new Error("浏览器不支持 Canvas alpha 遮罩预合成");
+    drawImageLayerToContext(maskCtx, {
+      image: options.maskImage,
+      asset: options.maskAsset,
+      transform: options.maskTransform,
+      stageWidth: width,
+      stageHeight: height,
+    });
+
+    const layerData = layerCtx.getImageData(0, 0, width, height);
+    const maskData = maskCtx.getImageData(0, 0, width, height);
+    const layerPixels = layerData.data;
+    const maskPixels = maskData.data;
+    const maskOpacity = clampNumber(options.maskOpacity, 0, 1);
+    for (let index = 0; index < layerPixels.length; index += 4) {
+      const r = layerPixels[index] ?? 0;
+      const g = layerPixels[index + 1] ?? 0;
+      const b = layerPixels[index + 2] ?? 0;
+      const sourceAlpha = (layerPixels[index + 3] ?? 0) / 255;
+      const lightAlpha = (Math.max(r, g, b) / 255) * sourceAlpha;
+      const maskAlpha = ((maskPixels[index + 3] ?? 0) / 255) * maskOpacity;
+      const outputAlpha = clampNumber(lightAlpha * maskAlpha, 0, 1);
+      layerPixels[index + 3] = Math.round(outputAlpha * 255);
+    }
+    layerCtx.putImageData(layerData, 0, 0);
+    return layerCanvas;
+  }
+
+  private loadImageElement(
+    runtimeAsset: V5GRuntimeAsset,
+  ): Promise<HTMLImageElement> {
+    const cached = this.imageElementCache.get(runtimeAsset.id);
+    if (cached?.objectUrl === runtimeAsset.objectUrl) {
+      return Promise.resolve(cached.image);
+    }
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        this.imageElementCache.set(runtimeAsset.id, {
+          objectUrl: runtimeAsset.objectUrl,
+          image,
+        });
+        resolve(image);
+      };
+      image.onerror = () => reject(new Error("图片像素读取失败"));
+      image.src = runtimeAsset.objectUrl;
+    });
+  }
+
+  private clearLayerMaskOnly(layerId: string): void {
+    this.detachLayerMaskTargets(layerId);
+    const mask = this.layerMaskMap.get(layerId);
+    mask?.destroy({ children: true });
+    this.layerMaskMap.delete(layerId);
+    this.layerMaskKeyMap.delete(layerId);
+  }
+
+  private clearPrecomposedLayer(layerId: string): void {
+    const entry = this.precomposedLayerMap.get(layerId);
+    if (!entry) return;
+    entry.sprite.destroy({ children: true });
+    entry.texture.destroy(true);
+    this.precomposedLayerMap.delete(layerId);
+    const display = this.layerDisplayMap.get(layerId);
+    if (display && !display.destroyed) {
+      display.renderable = true;
+      display.alpha = this.layerWrapperMap.has(layerId)
+        ? 1
+        : this.getCurrentLayerOpacity(layerId);
+    }
+  }
+
+  private clearAllPrecomposedLayers(): void {
+    for (const layerId of this.precomposedLayerMap.keys()) {
+      this.clearPrecomposedLayer(layerId);
+    }
+  }
+
+  private getCurrentLayerOpacity(layerId: string): number {
+    const layer = this.state.project.layers.find((item) => item.id === layerId);
+    const opacity =
+      this.state.previewLayers?.[layerId]?.opacity ?? layer?.opacity ?? 1;
+    return clampNumber(opacity, 0, 1);
   }
 
   private ensureParticleGroup(layerId: string): PIXI.Container {
@@ -382,6 +853,8 @@ export class V5GPixiStage {
   private applyLayerTransform(layer: V5GLayerConfig): void {
     const display = this.layerDisplayMap.get(layer.id);
     if (!display) return;
+    const wrapper = this.layerWrapperMap.get(layer.id);
+    const target = wrapper ?? display;
     const stage = this.state.project.stage;
     const previewLayer = this.state.previewLayers?.[layer.id];
     const transform = previewLayer?.transform ?? layer.transform;
@@ -392,23 +865,40 @@ export class V5GPixiStage {
       stage.width,
       stage.height,
     );
-    display.position.set(position.x, position.y);
-    display.scale.set(transform.scaleX, transform.scaleY);
-    display.rotation = (transform.rotation * Math.PI) / 180;
-    display.alpha = opacity;
-    display.blendMode = toPixiBlendMode(layer.blendMode);
+    target.position.set(position.x, position.y);
+    target.scale.set(transform.scaleX, transform.scaleY);
+    target.rotation = (transform.rotation * Math.PI) / 180;
+    target.alpha = opacity;
+    target.blendMode = wrapper ? "normal" : toPixiBlendMode(layer.blendMode);
+    if (wrapper) {
+      display.position.set(0, 0);
+      display.scale.set(1, 1);
+      display.rotation = 0;
+      display.alpha = 1;
+      // Pixi v8 在 wrapper+mask 管线中可能忽略 Container blendMode；
+      // 将 ADD/screen 等混合模式下沉到实际图像 display，避免黑底光效退回 normal 显示。
+      display.blendMode = toPixiBlendMode(layer.blendMode);
+    }
     const effectivelyVisible = isLayerEffectivelyVisible(
       this.state.project,
       layer,
     );
-    display.visible = effectivelyVisible;
-    display.eventMode = layer.locked || !effectivelyVisible ? "none" : "static";
-    display.cursor =
+    target.visible = effectivelyVisible;
+    target.eventMode = layer.locked || !effectivelyVisible ? "none" : "static";
+    target.cursor =
       this.draggingLayerId === layer.id
         ? "grabbing"
         : layer.locked
           ? "default"
           : "pointer";
+    const precomposed = this.precomposedLayerMap.get(layer.id);
+    if (precomposed) {
+      precomposed.sprite.visible = effectivelyVisible;
+      precomposed.sprite.alpha = opacity;
+      precomposed.sprite.blendMode = toPixiBlendMode(layer.blendMode);
+      // 预合成视觉由全舞台 Sprite 承担；原 display 仅保留透明命中区域。
+      display.alpha = 0;
+    }
   }
 
   private drawGuides(): void {
@@ -463,10 +953,12 @@ export class V5GPixiStage {
       const hasActiveRenderEffect = layer.animations.some(
         (animation) =>
           animation.enabled &&
-          (animation.type === "particle_combo" ||
+          (animation.type === "particle_stream" ||
+            animation.type === "particle_combo" ||
             animation.type === "shatter" ||
             animation.type === "glow" ||
-            animation.type === "safe_glow") &&
+            animation.type === "safe_glow" ||
+            animation.type === "chaser_light") &&
           getAnimationProgress(animation, playheadSeconds) !== null,
       );
       if (layerOpacity <= 0 && !hasActiveRenderEffect) continue;
@@ -482,6 +974,17 @@ export class V5GPixiStage {
         if (progress === null) continue;
         if (animation.type === "particles") {
           this.drawParticleBurst(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layerOpacity,
+            layer.blendMode,
+            particleGroup,
+          );
+        } else if (animation.type === "particle_stream") {
+          this.drawParticleStream(
             animation,
             texture,
             emitter.x,
@@ -559,6 +1062,17 @@ export class V5GPixiStage {
             layer.blendMode,
             particleGroup,
           );
+        } else if (animation.type === "chaser_light") {
+          this.drawChaserLight(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layer.opacity,
+            layer.blendMode,
+            particleGroup,
+          );
         }
       }
     }
@@ -595,6 +1109,14 @@ export class V5GPixiStage {
       0,
       2000,
     );
+    const emissionAngle = getParticleParam(animation, "emissionAngle", 270);
+    const emissionSpreadAngle = clampParticleNumber(
+      getParticleParam(animation, "emissionSpreadAngle", 360),
+      0,
+      360,
+    );
+    const baseEmissionAngleRad = (emissionAngle * Math.PI) / 180;
+    const emissionSpreadRad = (emissionSpreadAngle * Math.PI) / 180;
     const size = clampParticleNumber(
       getParticleParam(animation, "size", 48),
       1,
@@ -606,11 +1128,39 @@ export class V5GPixiStage {
       2000,
     );
     const fadeOut = animation.params.fadeOut !== false;
+    const requestedTrailCount = Math.round(
+      clampParticleNumber(getParticleParam(animation, "trailCount", 2), 0, 8),
+    );
+    // Mobile-friendly guard: keep burst particles below a predictable draw budget.
+    // Actual sprites = count * (effectiveTrailCount + 1).
+    const maxBurstSprites = 320;
+    const trailCount = Math.min(
+      requestedTrailCount,
+      Math.max(0, Math.floor(maxBurstSprites / Math.max(1, count)) - 1),
+    );
+    const trailSpacing = clampParticleNumber(
+      getParticleParam(animation, "trailSpacing", 0.035),
+      0.005,
+      0.2,
+    );
+    const trailFade = clampParticleNumber(
+      getParticleParam(animation, "trailFade", 0.5),
+      0.05,
+      0.95,
+    );
+    const rotateParticles = animation.params.rotateParticles !== false;
+    const randomRotation = animation.params.randomRotation !== false;
+    const randomRotationRange = clampParticleNumber(
+      getParticleParam(animation, "randomRotationDegrees", 135),
+      0,
+      360,
+    );
+    const spinSpeed = clampParticleNumber(
+      getParticleParam(animation, "spinSpeed", 1),
+      0,
+      10,
+    );
     const duration = Math.max(animation.duration, 0.0001);
-    const age = progress * duration;
-    const alphaBase =
-      layerOpacity * (fadeOut ? Math.pow(1 - progress, 1.35) : 1);
-    if (alphaBase <= 0.002) return;
 
     const textureEdge = getTextureLongestEdge(texture);
     const baseTextureScale = size / textureEdge;
@@ -621,29 +1171,217 @@ export class V5GPixiStage {
       const randomC = seededRandom(animation.seed, index, 3);
       const randomD = seededRandom(animation.seed, index, 4);
       const randomE = seededRandom(animation.seed, index, 5);
-      const angle = randomA * Math.PI * 2;
+      const angle = baseEmissionAngleRad + (randomA - 0.5) * emissionSpreadRad;
       const burstPower = 0.55 + randomB * 0.85;
       const startRadius = spread * 0.22 * randomC;
-      const travel = spread * progress + speed * age * burstPower;
-      const x = emitterX + Math.cos(angle) * (startRadius + travel);
-      const y =
-        emitterY +
-        Math.sin(angle) * (startRadius + travel) +
-        0.5 * gravity * age * age;
-      const scale = Math.max(
-        0.01,
-        baseTextureScale * (0.55 + randomD * 0.9) * (1 - progress * 0.25),
-      );
-      const alpha = alphaBase * (0.55 + randomC * 0.45);
-      const sprite = new PIXI.Sprite(texture);
-      sprite.anchor.set(0.5);
-      sprite.position.set(x, y);
-      sprite.scale.set(scale);
-      sprite.rotation =
-        (randomE - 0.5) * Math.PI * 0.75 + progress * Math.PI * (0.5 + randomB);
-      sprite.alpha = alpha;
-      sprite.blendMode = toPixiBlendMode(blendMode);
-      target.addChild(sprite);
+      for (let trailIndex = trailCount; trailIndex >= 0; trailIndex -= 1) {
+        const trailProgress = progress - trailIndex * trailSpacing;
+        if (trailProgress < 0 || trailProgress > 1) continue;
+        const trailAge = trailProgress * duration;
+        const alphaBase =
+          layerOpacity *
+          (fadeOut ? Math.pow(1 - trailProgress, 1.35) : 1) *
+          Math.pow(trailFade, trailIndex);
+        if (alphaBase <= 0.002) continue;
+        const travel = spread * trailProgress + speed * trailAge * burstPower;
+        const x = emitterX + Math.cos(angle) * (startRadius + travel);
+        const y =
+          emitterY +
+          Math.sin(angle) * (startRadius + travel) +
+          0.5 * gravity * trailAge * trailAge;
+        const scale = Math.max(
+          0.01,
+          baseTextureScale *
+            (0.55 + randomD * 0.9) *
+            (1 - trailProgress * 0.25),
+        );
+        const alpha = alphaBase * (0.55 + randomC * 0.45);
+        const sprite = new PIXI.Sprite(texture);
+        sprite.anchor.set(0.5);
+        sprite.position.set(x, y);
+        sprite.scale.set(scale);
+        if (rotateParticles) {
+          const randomRotationOffset = randomRotation
+            ? (randomE - 0.5) * ((randomRotationRange * Math.PI) / 180)
+            : 0;
+          sprite.rotation =
+            randomRotationOffset +
+            trailProgress * Math.PI * (0.5 + randomB) * spinSpeed;
+        } else {
+          sprite.rotation = 0;
+        }
+        sprite.alpha = alpha;
+        sprite.blendMode = toPixiBlendMode(blendMode);
+        target.addChild(sprite);
+      }
+    }
+  }
+
+  private drawParticleStream(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    blendMode: V5GBlendMode,
+    target: PIXI.Container,
+  ): void {
+    const spawnRate = clampParticleNumber(
+      getParticleParam(animation, "spawnRate", 24),
+      1,
+      300,
+    );
+    const lifetime = clampParticleNumber(
+      getParticleParam(animation, "lifetime", 1.2),
+      0.05,
+      10,
+    );
+    const spread = clampParticleNumber(
+      getParticleParam(animation, "spread", 12),
+      0,
+      1000,
+    );
+    const speed = clampParticleNumber(
+      getParticleParam(animation, "speed", 220),
+      0,
+      2000,
+    );
+    const emissionAngle = getParticleParam(animation, "emissionAngle", 270);
+    const emissionSpreadAngle = clampParticleNumber(
+      getParticleParam(animation, "emissionSpreadAngle", 30),
+      0,
+      360,
+    );
+    const baseEmissionAngleRad = (emissionAngle * Math.PI) / 180;
+    const emissionSpreadRad = (emissionSpreadAngle * Math.PI) / 180;
+    const size = clampParticleNumber(
+      getParticleParam(animation, "size", 48),
+      1,
+      400,
+    );
+    const gravity = clampParticleNumber(
+      getParticleParam(animation, "gravity", 180),
+      -2000,
+      2000,
+    );
+    const fadeOut = animation.params.fadeOut !== false;
+    const requestedTrailCount = Math.round(
+      clampParticleNumber(getParticleParam(animation, "trailCount", 2), 0, 8),
+    );
+    const trailSpacing = clampParticleNumber(
+      getParticleParam(animation, "trailSpacing", 0.035),
+      0.005,
+      0.2,
+    );
+    const trailFade = clampParticleNumber(
+      getParticleParam(animation, "trailFade", 0.5),
+      0.05,
+      0.95,
+    );
+    const rotateParticles = animation.params.rotateParticles !== false;
+    const randomRotation = animation.params.randomRotation !== false;
+    const randomRotationRange = clampParticleNumber(
+      getParticleParam(animation, "randomRotationDegrees", 135),
+      0,
+      360,
+    );
+    const spinSpeed = clampParticleNumber(
+      getParticleParam(animation, "spinSpeed", 1),
+      0,
+      10,
+    );
+    const duration = Math.max(animation.duration, 0.0001);
+    const elapsed = progress * duration;
+    const textureEdge = getTextureLongestEdge(texture);
+    const baseTextureScale = size / textureEdge;
+
+    // Mobile-friendly guard: draw only currently alive particles and cap total sprites.
+    // Actual sprites = aliveParticles * (effectiveTrailCount + 1).
+    const maxStreamSprites = 360;
+    const estimatedAliveCount = Math.max(
+      1,
+      Math.ceil(Math.min(elapsed, lifetime) * spawnRate) + 2,
+    );
+    const trailCount = Math.min(
+      requestedTrailCount,
+      Math.max(
+        0,
+        Math.floor(maxStreamSprites / Math.max(1, estimatedAliveCount)) - 1,
+      ),
+    );
+    const maxActiveParticles = Math.max(
+      1,
+      Math.floor(maxStreamSprites / Math.max(1, trailCount + 1)),
+    );
+    const totalSpawnCount = Math.min(
+      Math.ceil(duration * spawnRate),
+      Math.floor(elapsed * spawnRate) + 1,
+    );
+    const firstAliveIndex = Math.max(
+      0,
+      Math.floor((elapsed - lifetime) * spawnRate) - 1,
+      totalSpawnCount - maxActiveParticles,
+    );
+
+    for (let index = firstAliveIndex; index < totalSpawnCount; index += 1) {
+      const spawnTime = index / spawnRate;
+      const particleAge = elapsed - spawnTime;
+      if (particleAge < 0 || particleAge > lifetime) continue;
+
+      const randomA = seededRandom(animation.seed, index, 51);
+      const randomB = seededRandom(animation.seed, index, 52);
+      const randomC = seededRandom(animation.seed, index, 53);
+      const randomD = seededRandom(animation.seed, index, 54);
+      const randomE = seededRandom(animation.seed, index, 55);
+      const randomF = seededRandom(animation.seed, index, 56);
+      const angle = baseEmissionAngleRad + (randomA - 0.5) * emissionSpreadRad;
+      const velocity = speed * (0.6 + randomB * 0.8);
+      const startRadius = spread * Math.sqrt(randomC);
+      const startOffsetAngle = randomD * Math.PI * 2;
+      const startX = emitterX + Math.cos(startOffsetAngle) * startRadius;
+      const startY = emitterY + Math.sin(startOffsetAngle) * startRadius;
+
+      for (let trailIndex = trailCount; trailIndex >= 0; trailIndex -= 1) {
+        const trailAge = particleAge - trailIndex * trailSpacing;
+        if (trailAge < 0 || trailAge > lifetime) continue;
+        const localProgress = clampNumber(trailAge / lifetime, 0, 1);
+        const x = startX + Math.cos(angle) * velocity * trailAge;
+        const y =
+          startY +
+          Math.sin(angle) * velocity * trailAge +
+          0.5 * gravity * trailAge * trailAge;
+        const scale = Math.max(
+          0.01,
+          baseTextureScale *
+            (0.55 + randomE * 0.9) *
+            (1 - localProgress * 0.25),
+        );
+        const alpha =
+          layerOpacity *
+          (fadeOut ? Math.pow(1 - localProgress, 1.25) : 1) *
+          Math.pow(trailFade, trailIndex) *
+          (0.55 + randomC * 0.45);
+        if (alpha <= 0.002) continue;
+
+        const sprite = new PIXI.Sprite(texture);
+        sprite.anchor.set(0.5);
+        sprite.position.set(x, y);
+        sprite.scale.set(scale);
+        if (rotateParticles) {
+          const randomRotationOffset = randomRotation
+            ? (randomF - 0.5) * ((randomRotationRange * Math.PI) / 180)
+            : 0;
+          sprite.rotation =
+            randomRotationOffset +
+            localProgress * Math.PI * (0.5 + randomB) * spinSpeed;
+        } else {
+          sprite.rotation = 0;
+        }
+        sprite.alpha = alpha;
+        sprite.blendMode = toPixiBlendMode(blendMode);
+        target.addChild(sprite);
+      }
     }
   }
 
@@ -1255,15 +1993,113 @@ export class V5GPixiStage {
     target.addChild(sprite);
   }
 
+  private drawChaserLight(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    blendMode: V5GBlendMode,
+    target: PIXI.Container,
+  ): void {
+    const totalCount = Math.round(
+      clampParticleNumber(
+        getParticleParam(animation, "totalCount", 12),
+        2,
+        200,
+      ),
+    );
+    const spacing = clampParticleNumber(
+      getParticleParam(animation, "spacing", 40),
+      4,
+      500,
+    );
+    const lightDuration = clampParticleNumber(
+      getParticleParam(animation, "lightDuration", 0.3),
+      0.03,
+      5,
+    );
+    const interval = clampParticleNumber(
+      getParticleParam(animation, "interval", 0.1),
+      0.01,
+      5,
+    );
+    const trajectory = Math.round(
+      clampParticleNumber(getParticleParam(animation, "trajectory", 0), 0, 2),
+    );
+    const radius = clampParticleNumber(
+      getParticleParam(animation, "radius", 200),
+      10,
+      3000,
+    );
+    const centerX = getParticleParam(animation, "centerX", 0);
+    const centerY = -getParticleParam(animation, "centerY", 0);
+    const endX = getParticleParam(animation, "endX", 320);
+    const endY = -getParticleParam(animation, "endY", 0);
+    const curve = getParticleParam(animation, "curve", 120);
+    const lightSize = clampParticleNumber(
+      getParticleParam(animation, "lightSize", 48),
+      4,
+      400,
+    );
+    const dimAlpha = clampParticleNumber(
+      getParticleParam(animation, "dimAlpha", 0.15),
+      0,
+      1,
+    );
+    const elapsed = progress * Math.max(animation.duration, 0.0001);
+    const chasePeriod = Math.max(0.0001, lightDuration + interval);
+    const loopPeriod = chasePeriod * totalCount;
+
+    for (let index = 0; index < totalCount; index += 1) {
+      const point = sampleChaserLightPoint(
+        trajectory,
+        index,
+        totalCount,
+        spacing,
+        radius,
+        centerX,
+        centerY,
+        endX,
+        endY,
+        curve,
+      );
+      const localTime = positiveModulo(
+        elapsed - index * chasePeriod,
+        loopPeriod,
+      );
+      const isLit = localTime < lightDuration;
+      const lightWave = isLit
+        ? 0.7 + 0.3 * Math.sin((localTime / lightDuration) * Math.PI)
+        : 0;
+      const alpha = layerOpacity * (isLit ? 1 : dimAlpha);
+      if (alpha <= 0.002) continue;
+      const textureEdge = getTextureLongestEdge(texture);
+      const scale =
+        (lightSize / textureEdge) * (isLit ? 1 + lightWave * 0.18 : 1);
+      const sprite = new PIXI.Sprite(texture);
+      sprite.anchor.set(0.5);
+      sprite.position.set(emitterX + point.x, emitterY + point.y);
+      sprite.scale.set(Math.max(0.01, scale));
+      sprite.rotation = point.rotation;
+      sprite.alpha = alpha;
+      sprite.blendMode = isLit ? "add" : toPixiBlendMode(blendMode);
+      target.addChild(sprite);
+    }
+  }
+
   private drawSelection(): void {
     this.selectionGraphics.clear();
     const layer = this.state.project.layers.find(
       (item) => item.id === this.state.selectedLayerId,
     );
     if (!layer || !isLayerEffectivelyVisible(this.state.project, layer)) return;
+    const wrapper = this.layerWrapperMap.get(layer.id);
     const display = this.layerDisplayMap.get(layer.id);
-    if (!display) return;
-    const bounds = display.getBounds();
+    const target = wrapper ?? display;
+    if (!target) return;
+    const bounds = target.getBounds();
     const topLeft = this.stageContainer.toLocal({ x: bounds.x, y: bounds.y });
     const bottomRight = this.stageContainer.toLocal({
       x: bounds.x + bounds.width,
@@ -1279,7 +2115,9 @@ export class V5GPixiStage {
       )
       .stroke({
         color: selectionColor,
-        width: 2 / this.viewScale,
+
+        width: 3 / this.viewScale,
+
         alpha: 0.95,
       });
   }
@@ -1336,7 +2174,7 @@ export class V5GPixiStage {
 
   private handlePanStart(event: PIXI.FederatedPointerEvent): void {
     if (event.target !== this.app.stage) return;
-    this.callbacks.onClearSelection();
+
     const startGlobal = event.global.clone();
     const startOffsetX = this.viewOffsetX;
     const startOffsetY = this.viewOffsetY;
@@ -1451,6 +2289,55 @@ function getParticleParam(
     if (Number.isFinite(parsed)) return parsed;
   }
   return fallback;
+}
+
+function sampleChaserLightPoint(
+  trajectory: number,
+  index: number,
+  totalCount: number,
+  spacing: number,
+  radius: number,
+  centerX: number,
+  centerY: number,
+  endX: number,
+  endY: number,
+  curve: number,
+): { x: number; y: number; rotation: number } {
+  if (trajectory === 0) {
+    const angle = (index * spacing) / Math.max(radius, 1) - Math.PI / 2;
+    return {
+      x: centerX + Math.cos(angle) * radius,
+      y: centerY + Math.sin(angle) * radius,
+      rotation: angle + Math.PI / 2,
+    };
+  }
+
+  const t = totalCount <= 1 ? 0 : index / Math.max(totalCount - 1, 1);
+  if (trajectory === 2) {
+    const point = quadraticPoint(centerX, centerY, endX, endY, curve, t);
+    const nextT = clampNumber(t + 0.01, 0, 1);
+    const nextPoint = quadraticPoint(
+      centerX,
+      centerY,
+      endX,
+      endY,
+      curve,
+      nextT,
+    );
+    return {
+      ...point,
+      rotation: Math.atan2(nextPoint.y - point.y, nextPoint.x - point.x),
+    };
+  }
+
+  const x = lerpNumber(centerX, endX, t);
+  const y = lerpNumber(centerY, endY, t);
+  return { x, y, rotation: Math.atan2(endY - centerY, endX - centerX) };
+}
+
+function positiveModulo(value: number, divisor: number): number {
+  if (!Number.isFinite(divisor) || divisor <= 0) return 0;
+  return ((value % divisor) + divisor) % divisor;
 }
 
 function clampParticleNumber(value: number, min: number, max: number): number {
@@ -1631,6 +2518,81 @@ function seededRandom(seed: number, index: number, salt: number): number {
   const raw =
     Math.sin(seed * 12.9898 + index * 78.233 + salt * 37.719) * 43758.5453123;
   return raw - Math.floor(raw);
+}
+
+function getLayerMaskRenderKey(layer: V5GLayerConfig): string {
+  return [layer.type, layer.assetId ?? "", layer.text ?? "", layer.name].join(
+    "|",
+  );
+}
+
+function isLightMaskBlendMode(blendMode: V5GBlendMode): boolean {
+  return (
+    blendMode === "add" || blendMode === "screen" || blendMode === "lighten"
+  );
+}
+
+function serializeTransformForKey(
+  transform: V5GLayerConfig["transform"],
+): string {
+  return [
+    roundTo(transform.x, 3),
+    roundTo(transform.y, 3),
+    roundTo(transform.scaleX, 4),
+    roundTo(transform.scaleY, 4),
+    roundTo(transform.rotation, 4),
+    roundTo(transform.anchorX, 4),
+    roundTo(transform.anchorY, 4),
+  ].join(",");
+}
+
+function drawImageLayerToContext(
+  ctx: CanvasRenderingContext2D,
+  options: {
+    image: HTMLImageElement;
+    asset: V5GEditorState["project"]["assets"][number] | null;
+    transform: V5GLayerConfig["transform"];
+    stageWidth: number;
+    stageHeight: number;
+  },
+): void {
+  const logicalWidth = getLogicalAssetDimension(
+    options.asset?.width,
+    options.image.naturalWidth,
+  );
+  const logicalHeight = getLogicalAssetDimension(
+    options.asset?.height,
+    options.image.naturalHeight,
+  );
+  const position = editorToPixi(
+    options.transform.x,
+    options.transform.y,
+    options.stageWidth,
+    options.stageHeight,
+  );
+  ctx.save();
+  ctx.translate(position.x, position.y);
+  ctx.rotate((options.transform.rotation * Math.PI) / 180);
+  ctx.scale(options.transform.scaleX, options.transform.scaleY);
+  ctx.drawImage(
+    options.image,
+    -options.transform.anchorX * logicalWidth,
+    -options.transform.anchorY * logicalHeight,
+    logicalWidth,
+    logicalHeight,
+  );
+  ctx.restore();
+}
+
+function getLogicalAssetDimension(
+  configured: number | undefined,
+  fallback: number,
+): number {
+  return Number.isFinite(configured) &&
+    configured !== undefined &&
+    configured > 0
+    ? configured
+    : Math.max(1, fallback);
 }
 
 function getTextureLongestEdge(texture: PIXI.Texture): number {

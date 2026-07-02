@@ -1,0 +1,358 @@
+{
+  "schemaVersion": "VNI_0.036",
+  "editor": {
+    "name": "VNI",
+    "version": "VNI_0.036"
+  },
+  "engineTarget": {
+    "name": "cocos_creator",
+    "version": "3.8.6"
+  },
+  "name": "number3",
+  "stage": {
+    "width": 2000,
+    "height": 2000,
+    "coordinate": "center",
+    "duration": 2,
+    "backgroundColor": "#0a0a0a"
+  },
+  "assets": [
+    {
+      "id": "asset_image_mqz5pzh7_p",
+      "type": "image",
+      "path": "assets/1_asset_image_mqz5pzh7_p.png",
+      "originalName": "1.png",
+      "width": 104,
+      "height": 140,
+      "fileWidth": 104,
+      "fileHeight": 140,
+      "fileScale": 1
+    },
+    {
+      "id": "asset_image_mqz76b37_19",
+      "type": "image",
+      "path": "assets/2_asset_image_mqz76b37_19.png",
+      "originalName": "光点2.png",
+      "width": 50,
+      "height": 50,
+      "fileWidth": 50,
+      "fileHeight": 50,
+      "fileScale": 1
+    },
+    {
+      "id": "asset_image_mr1utn0b_g",
+      "type": "image",
+      "path": "assets/big_asset_image_mr1utn0b_g.png",
+      "originalName": "big流光.png",
+      "width": 255,
+      "height": 255,
+      "fileWidth": 255,
+      "fileHeight": 255,
+      "fileScale": 1
+    },
+    {
+      "id": "asset_image_mr1uxa3i_j",
+      "type": "image",
+      "path": "assets/gx5_asset_image_mr1uxa3i_j.png",
+      "originalName": "gx5.png",
+      "width": 432,
+      "height": 215,
+      "fileWidth": 432,
+      "fileHeight": 215,
+      "fileScale": 1
+    }
+  ],
+  "layerGroups": [
+    {
+      "id": "group_default",
+      "name": "默认组",
+      "visible": true,
+      "collapsed": false,
+      "order": 0
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer_image_mqz5pzh7_q",
+      "name": "1.png",
+      "type": "image",
+      "assetId": "asset_image_mqz5pzh7_p",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": false,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mqz65gfo_v",
+          "type": "pop",
+          "name": "Pop 弹一下",
+          "startTime": 0,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 99284,
+          "params": {
+            "peakScale": 1.25,
+            "settleScale": 1,
+            "peakAt": 0.38,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqz6ezyr_x",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 44499,
+          "params": {
+            "fromScaleX": 0.01,
+            "fromScaleY": 0.01,
+            "toScaleX": 1.2,
+            "toScaleY": 1.2,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mqz69pnn_w",
+          "type": "idle",
+          "name": "Idle 待机",
+          "startTime": 0.3,
+          "duration": 1.7,
+          "enabled": true,
+          "seed": 97859,
+          "params": {
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mqz6giyk_y",
+          "type": "scale_out",
+          "name": "Scale Out 缩放退出",
+          "startTime": 1.5,
+          "duration": 0.5,
+          "enabled": true,
+          "seed": 15772,
+          "params": {
+            "fromScale": 1,
+            "toScale": 0.5,
+            "fadeOut": true,
+            "easing": "easeInQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mr1uxa3i_k",
+      "name": "gx5.png",
+      "type": "image",
+      "assetId": "asset_image_mr1uxa3i_j",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": false,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 0.8,
+        "scaleY": 0.8,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "screen",
+      "animations": [
+        {
+          "id": "anim_module_mr1uxq7e_l",
+          "type": "bounce_in",
+          "name": "Bounce In 回弹进入",
+          "startTime": 0,
+          "duration": 0.5,
+          "enabled": true,
+          "seed": 61450,
+          "params": {
+            "fromScale": 0.2,
+            "toScale": 1,
+            "overshoot": 1.7,
+            "fadeIn": true,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mr1v482y_m",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0,
+          "duration": 2,
+          "enabled": true,
+          "seed": 64554,
+          "params": {
+            "fromScaleX": 0.7,
+            "fromScaleY": 0.7,
+            "toScaleX": 1,
+            "toScaleY": 1,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mr1vq6w2_o",
+          "type": "safe_glow",
+          "name": "Safe Glow Cocos发光",
+          "startTime": 0,
+          "duration": 2,
+          "enabled": true,
+          "seed": 89442,
+          "params": {
+            "spread": 0.2,
+            "minOpacity": 0.12,
+            "maxOpacity": 1,
+            "pulses": 1,
+            "keepOriginal": true,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mr1vrz0a_p",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 1.4,
+          "duration": 0.6,
+          "enabled": true,
+          "seed": 72538,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": [],
+      "mask": {
+        "enabled": false,
+        "sourceLayerId": null,
+        "mode": "alpha",
+        "compositeMode": "precompose_light_alpha",
+        "showSourceLayer": true
+      }
+    },
+    {
+      "id": "layer_image_mqz642ku_t",
+      "name": "光点3.png",
+      "type": "image",
+      "assetId": "asset_image_mqz76b37_19",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": false,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mqz646de_u",
+          "type": "particles",
+          "name": "Particles 粒子爆发",
+          "startTime": 0,
+          "duration": 2,
+          "enabled": true,
+          "seed": 39586,
+          "params": {
+            "count": 10,
+            "spread": 50,
+            "speed": 25,
+            "emissionAngle": 270,
+            "emissionSpreadAngle": 360,
+            "size": 35,
+            "gravity": 0,
+            "fadeOut": true,
+            "trailCount": 1,
+            "trailSpacing": 0.035,
+            "trailFade": 0.5,
+            "rotateParticles": true,
+            "randomRotation": true,
+            "randomRotationDegrees": 135,
+            "spinSpeed": 1,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mr1utn0b_h",
+      "name": "big流光.png",
+      "type": "image",
+      "assetId": "asset_image_mr1utn0b_g",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": false,
+      "transform": {
+        "x": -44.5,
+        "y": 18,
+        "scaleX": 0.5,
+        "scaleY": 1,
+        "rotation": 10,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 0.5,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mr1uty9m_i",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0,
+          "duration": 2,
+          "enabled": true,
+          "seed": 85274,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 100,
+            "toY": 0,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": [],
+      "mask": {
+        "enabled": true,
+        "sourceLayerId": "layer_image_mqz5pzh7_q",
+        "mode": "alpha",
+        "compositeMode": "precompose_light_alpha",
+        "showSourceLayer": true
+      }
+    }
+  ],
+  "particles": [],
+  "exportProfile": {
+    "id": "runtime_100",
+    "purpose": "runtime",
+    "assetScale": 1
+  }
+}
