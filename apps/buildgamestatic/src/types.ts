@@ -98,6 +98,9 @@ export interface GameStaticYamlSkinConfig {
   readonly label: string;
   readonly symbols: GameStaticYamlSymbolsConfig;
   readonly art: GameStaticYamlArtConfig;
+  readonly featureBars?: Readonly<
+    Record<string, GameStaticYamlFeatureBarConfig>
+  >;
   readonly winAmount?: GameStaticYamlWinAmountConfig;
 }
 
@@ -127,6 +130,33 @@ export interface GameStaticYamlArtConfig {
   >;
   readonly mainReelBackground: GameStaticYamlImage;
   readonly reelAreaInMainReelBackground: GameStaticYamlReelArea;
+}
+
+export type GameStaticYamlFeatureBarMovement = "down" | "right";
+
+export interface GameStaticYamlFeatureBarSymbolsConfig {
+  readonly manifest: string;
+  readonly pngGlob: string;
+  readonly requireExplicitScale: boolean;
+  readonly requiredStates: readonly string[];
+}
+
+export interface GameStaticYamlFeatureBarLayoutVariant {
+  readonly movement: GameStaticYamlFeatureBarMovement;
+  readonly slotRectsInConveyor: readonly GameStaticYamlRect[];
+}
+
+export interface GameStaticYamlFeatureBarConfig {
+  readonly componentName: string;
+  readonly queueLength: number;
+  readonly visibleCount: number;
+  readonly terminalSlotIndex: number;
+  readonly emptyFeature: string;
+  readonly allowedFeatures: readonly string[];
+  readonly symbols: GameStaticYamlFeatureBarSymbolsConfig;
+  readonly layout: Readonly<
+    Record<"landscape" | "portrait", GameStaticYamlFeatureBarLayoutVariant>
+  >;
 }
 
 export type GameStaticYamlWinAmountAnchor =

@@ -146,9 +146,9 @@ export class SymbolCatalogModel implements SymbolCatalog {
 
   getAsset(symbol: string): Texture | string {
     const normal = this.getNormalTextureSource(symbol);
-    if (normal.kind === "layered") {
+    if (normal.kind !== "single") {
       throw new SymbolAssetError(
-        `Symbol "${symbol}" is layered; use getTextureSet() or getNormalTextureSource() instead of getAsset().`,
+        `Symbol "${symbol}" is ${normal.kind}; use getTextureSet() or getNormalTextureSource() instead of getAsset().`,
       );
     }
     return normal.texture;
@@ -255,6 +255,19 @@ function normalizeNormalTextureSource(
       return Object.freeze({
         kind: "single",
         texture: normal.texture,
+      });
+    }
+    if (normal.kind === "transparent") {
+      return Object.freeze({
+        kind: "transparent",
+        width: assertPositiveDimension(
+          normal.width,
+          `Symbol "${symbol}" transparent normal width`,
+        ),
+        height: assertPositiveDimension(
+          normal.height,
+          `Symbol "${symbol}" transparent normal height`,
+        ),
       });
     }
     return normalizeLayeredTextureSource(symbol, normal.layers);
@@ -475,6 +488,13 @@ function assertLoadedNormalSource(
       texture: normalized.texture,
     });
   }
+  if (normalized.kind === "transparent") {
+    return Object.freeze({
+      kind: "transparent",
+      width: normalized.width,
+      height: normalized.height,
+    });
+  }
 
   return Object.freeze({
     kind: "layered",
@@ -522,6 +542,13 @@ function cloneNormalTextureSource(
       texture: normalized.texture,
     });
   }
+  if (normalized.kind === "transparent") {
+    return Object.freeze({
+      kind: "transparent",
+      width: normalized.width,
+      height: normalized.height,
+    });
+  }
   return Object.freeze({
     kind: "layered",
     layers: Object.freeze(
@@ -551,7 +578,9 @@ function isSymbolNormalTextureSource(
     typeof normal === "object" &&
     normal !== null &&
     "kind" in normal &&
-    (normal.kind === "single" || normal.kind === "layered")
+    (normal.kind === "single" ||
+      normal.kind === "layered" ||
+      normal.kind === "transparent")
   );
 }
 
@@ -604,4 +633,11 @@ function assertRecord(value: unknown, label: string): Record<string, unknown> {
     throw new SymbolAssetError(`${label} must be an object.`);
   }
   return value as Record<string, unknown>;
+}
+
+function assertPositiveDimension(value: number, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new SymbolAssetError(`${label} must be a finite positive number.`);
+  }
+  return value;
 }

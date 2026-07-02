@@ -155,6 +155,32 @@ describe("buildgamestatic generator", () => {
     expect(result.generated).toContain("durationSeconds: 5");
   });
 
+  it("generates optional feature bar manifest, module map and config", async () => {
+    const root = createFixtureRoot();
+    appendFeatureBarsBlock(root);
+
+    const result = await generateGameStaticConfigFile({
+      rootDir: root,
+      inputPath: "apps/game003/config/game-static.yaml",
+      outPath: "apps/game003/src/generated/game-static.generated.ts",
+      gameId: "game003",
+      check: false,
+    });
+
+    expect(result.generated).toContain(
+      "game003Skin1FeatureTrackFeatureBarSymbolManifest",
+    );
+    expect(result.generated).toContain(
+      "game003Skin1FeatureTrackFeatureBarSymbolModules",
+    );
+    expect(result.generated).toContain("featureBars: Object.freeze");
+    expect(result.generated).toContain('componentName: "feature-track"');
+    expect(result.generated).toContain("requiredStates: Object.freeze([]");
+    expect(result.generated).toMatch(
+      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/game003-s1\/\{bonus,boost\}\.png"/,
+    );
+  });
+
   it("requires --loading-out exactly when YAML loading resources are present", async () => {
     const root = createFixtureRoot();
     appendLoadingBlock(root);
@@ -202,6 +228,9 @@ function createFixtureRoot(): string {
   for (const file of [
     "assets/gamecfg003/gameconfig.json",
     "assets/game003-s1/symbol-state-textures.manifest.json",
+    "assets/game003-s1/feature-bar-symbols.manifest.json",
+    "assets/game003-s1/bonus.png",
+    "assets/game003-s1/boost.png",
     "assets/game003-s1/bg1.jpg",
     "assets/game003-s1/bg2.jpg",
     "assets/game003-s1/mainreelbg.png",
@@ -271,6 +300,48 @@ skins:
     "utf8",
   );
   return root;
+}
+
+function appendFeatureBarsBlock(root: string): void {
+  const yamlPath = join(root, "apps/game003/config/game-static.yaml");
+  writeFileSync(
+    yamlPath,
+    readFileSync(yamlPath, "utf8").replace(
+      "    art:\n",
+      `    featureBars:
+      featureTrack:
+        componentName: feature-track
+        queueLength: 5
+        visibleCount: 4
+        terminalSlotIndex: 4
+        emptyFeature: empty
+        allowedFeatures: [empty, bonus, boost]
+        symbols:
+          manifest: assets/game003-s1/feature-bar-symbols.manifest.json
+          pngGlob: assets/game003-s1/{bonus,boost}.png
+          requireExplicitScale: true
+          requiredStates: []
+        layout:
+          landscape:
+            movement: down
+            slotRectsInConveyor:
+              - { x: 56, y: 72, width: 172, height: 158 }
+              - { x: 56, y: 204, width: 172, height: 158 }
+              - { x: 56, y: 336, width: 172, height: 158 }
+              - { x: 56, y: 468, width: 172, height: 158 }
+              - { x: 56, y: 601, width: 172, height: 158 }
+          portrait:
+            movement: right
+            slotRectsInConveyor:
+              - { x: 49, y: 35, width: 172, height: 158 }
+              - { x: 207, y: 35, width: 172, height: 158 }
+              - { x: 365, y: 35, width: 172, height: 158 }
+              - { x: 523, y: 35, width: 172, height: 158 }
+              - { x: 681, y: 35, width: 172, height: 158 }
+    art:\n`,
+    ),
+    "utf8",
+  );
 }
 
 function appendVniSymbolGlobs(root: string): void {

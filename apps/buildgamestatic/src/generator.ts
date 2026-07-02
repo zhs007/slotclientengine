@@ -12,6 +12,7 @@ import type {
   BuildGameStaticResult,
   GameStaticYamlArtVariant,
   GameStaticYamlConfig,
+  GameStaticYamlFeatureBarConfig,
   GameStaticYamlLoadingResource,
   GameStaticYamlSkinConfig,
 } from "./types.js";
@@ -194,6 +195,20 @@ export async function generateGameStaticConfigModule(options: {
         )};`,
       );
     }
+    for (const [featureBarId, featureBar] of Object.entries(
+      skin.featureBars ?? {},
+    )) {
+      const featureBarNames = names.featureBars[featureBarId];
+      lines.push(
+        `import ${featureBarNames.manifest} from ${quote(
+          toImportSpecifierFromRoot(
+            options.rootDir,
+            options.outPath,
+            featureBar.symbols.manifest,
+          ),
+        )};`,
+      );
+    }
   }
 
   lines.push("");
@@ -234,6 +249,24 @@ export async function generateGameStaticConfigModule(options: {
             options.rootDir,
             options.outPath,
             skin.symbols.vniAssetGlob,
+          ),
+        )}, {`,
+        "  eager: true,",
+        '  import: "default",',
+        '  query: "?url"',
+        "}) as Record<string, string>;",
+      );
+    }
+    for (const [featureBarId, featureBar] of Object.entries(
+      skin.featureBars ?? {},
+    )) {
+      const featureBarNames = names.featureBars[featureBarId];
+      lines.push(
+        `const ${featureBarNames.symbolModules} = import.meta.glob(${quote(
+          toImportSpecifierFromRoot(
+            options.rootDir,
+            options.outPath,
+            featureBar.symbols.pngGlob,
           ),
         )}, {`,
         "  eager: true,",
@@ -498,10 +531,70 @@ function renderSkinConfig(options: {
     `        reelAreaInMainReelBackground: Object.freeze(${json(
       skin.art.reelAreaInMainReelBackground,
     )} as const)`,
-    `      })${skin.winAmount ? "," : ""}`,
+    `      })${skin.featureBars || skin.winAmount ? "," : ""}`,
+    ...(skin.featureBars
+      ? renderFeatureBarsConfig(skin.featureBars, names)
+      : []),
+    ...(skin.featureBars && skin.winAmount ? [","] : []),
     ...(skin.winAmount ? renderWinAmountConfig(skin.winAmount, names) : []),
     "    }),",
   ];
+}
+
+function renderFeatureBarsConfig(
+  featureBars: NonNullable<GameStaticYamlSkinConfig["featureBars"]>,
+  names: ImportNames,
+): readonly string[] {
+  return [
+    "      featureBars: Object.freeze({",
+    ...Object.entries(featureBars).flatMap(([featureBarId, featureBar]) =>
+      renderFeatureBarConfig(
+        featureBarId,
+        featureBar,
+        names.featureBars[featureBarId],
+      ),
+    ),
+    "      })",
+  ];
+}
+
+function renderFeatureBarConfig(
+  featureBarId: string,
+  featureBar: GameStaticYamlFeatureBarConfig,
+  names: FeatureBarImportNames,
+): readonly string[] {
+  return [
+    `        ${quote(featureBarId)}: Object.freeze({`,
+    `          componentName: ${quote(featureBar.componentName)},`,
+    `          queueLength: ${numberLiteral(featureBar.queueLength)},`,
+    `          visibleCount: ${numberLiteral(featureBar.visibleCount)},`,
+    `          terminalSlotIndex: ${numberLiteral(featureBar.terminalSlotIndex)},`,
+    `          emptyFeature: ${quote(featureBar.emptyFeature)},`,
+    `          allowedFeatures: Object.freeze(${json(featureBar.allowedFeatures)} as const),`,
+    "          symbols: Object.freeze({",
+    `            manifest: ${names.manifest},`,
+    `            pngModules: ${names.symbolModules},`,
+    `            requireExplicitScale: ${String(featureBar.symbols.requireExplicitScale)},`,
+    `            requiredStates: Object.freeze(${json(featureBar.symbols.requiredStates)} as const)`,
+    "          }),",
+    "          layout: Object.freeze({",
+    `            landscape: Object.freeze(${renderFeatureBarLayoutVariant(
+      featureBar.layout.landscape,
+    )}),`,
+    `            portrait: Object.freeze(${renderFeatureBarLayoutVariant(
+      featureBar.layout.portrait,
+    )})`,
+    "          })",
+    "        }),",
+  ];
+}
+
+function renderFeatureBarLayoutVariant(
+  variant: GameStaticYamlFeatureBarConfig["layout"]["landscape"],
+): string {
+  return `{ movement: ${quote(variant.movement)}, slotRectsInConveyor: Object.freeze(${json(
+    variant.slotRectsInConveyor,
+  )} as const) } as const`;
 }
 
 function renderWinAmountConfig(
@@ -652,6 +745,12 @@ interface ImportNames {
   readonly mainReelBackground: string;
   readonly landscapeConveyor?: string;
   readonly portraitConveyor?: string;
+  readonly featureBars: Readonly<Record<string, FeatureBarImportNames>>;
+}
+
+interface FeatureBarImportNames {
+  readonly manifest: string;
+  readonly symbolModules: string;
 }
 
 function createImportNames(
@@ -683,6 +782,18 @@ function createImportNames(
           mainReelBackground: `${prefix}MainReelBackgroundUrl`,
           landscapeConveyor: `${prefix}LandscapeConveyorUrl`,
           portraitConveyor: `${prefix}PortraitConveyorUrl`,
+          featureBars: Object.fromEntries(
+            Object.keys(skin.featureBars ?? {}).map((featureBarId) => {
+              const featurePrefix = `${prefix}${toIdentifierPart(featureBarId)}FeatureBar`;
+              return [
+                featureBarId,
+                {
+                  manifest: `${featurePrefix}SymbolManifest`,
+                  symbolModules: `${featurePrefix}SymbolModules`,
+                },
+              ];
+            }),
+          ),
         },
       ];
     }),

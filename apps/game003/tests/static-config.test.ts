@@ -140,6 +140,34 @@ describe("game003 generated static config", () => {
     expect(skin.symbolScales.SC).toBe(1);
   });
 
+  it("generates the app-owned bg-bar static config from its standalone manifest", () => {
+    const featureBar = GAME003_STATIC_CONFIG.skins["1"].featureBars?.bgBar;
+    const skin = getGame003SkinConfig("1");
+
+    expect(featureBar).toMatchObject({
+      componentName: "bg-bar",
+      queueLength: 5,
+      visibleCount: 4,
+      terminalSlotIndex: 4,
+      emptyFeature: "normal",
+      allowedFeatures: ["normal", "wild", "up"],
+      symbols: {
+        requiredStates: [],
+        requireExplicitScale: true,
+      },
+      layout: {
+        landscape: { movement: "down" },
+        portrait: { movement: "right" },
+      },
+    });
+    expect(Object.keys(featureBar?.symbols.pngModules ?? {})).not.toEqual(
+      expect.arrayContaining([expect.stringContaining("normal.png")]),
+    );
+    expect(skin.bgBar.symbolScales).toEqual({ normal: 1, wild: 1, up: 1 });
+    expect(skin.bgBar.layout.landscape.slotRectsInConveyor).toHaveLength(5);
+    expect(skin.bgBar.layout.portrait.slotRectsInConveyor).toHaveLength(5);
+  });
+
   it("fails fast for skin ids outside the generated supported list", () => {
     expect(() => getGame003SkinConfig("2" as never)).toThrow(
       /Unknown game003 skin/,
@@ -163,6 +191,9 @@ describe("game003 generated static config", () => {
         "game003-symbol-vni-projects:L3-wins.json",
         "game003-symbol-vni-projects:L4-wins.json",
         "game003-symbol-vni-projects:L5-wins.json",
+        "game003-bg-bar-symbol-pngs:up.png",
+        "game003-bg-bar-symbol-pngs:wild.png",
+        "game003-bg-bar-symbol-manifest",
         "game003-win-amount-vni-projects:bigwin.json",
         "game003-win-amount-vni-projects:superwin.json",
         "game003-win-amount-vni-projects:megawin.json",

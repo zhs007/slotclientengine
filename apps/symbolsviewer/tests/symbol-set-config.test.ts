@@ -3,6 +3,7 @@ import { Container, Sprite, Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import {
   createStatefulSymbolAssetMapFromModules,
+  createSymbolsViewerStandaloneCatalog,
   createSymbolsViewerCatalog,
 } from "../src/symbol-assets.js";
 import {
@@ -45,15 +46,26 @@ const GAME003_S1_MISSING_PAYTABLE_SYMBOLS = [
 ] as const;
 
 describe("symbolsviewer symbol set config", () => {
-  it("only exposes the game003-s1 symbol set", () => {
+  it("exposes game003-s1 and its standalone bg-bar companion set", () => {
     expect(SYMBOL_SET_CONFIGS.map((config) => config.id)).toEqual([
       "game003-s1",
+      "game003-bg-bar",
     ]);
     expect(getSymbolSetConfig("game003-s1").label).toBe("game003-s1");
     expect(getSymbolSetConfig("game003-s1").symbolScales).toEqual(
       Object.fromEntries(
         GAME003_S1_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 1]),
       ),
+    );
+    expect(getSymbolSetConfig("game003-bg-bar")).toMatchObject({
+      label: "game003-bg-bar",
+      catalogKind: "standalone",
+      displaySymbols: ["normal", "wild", "up"],
+      requiredStates: [],
+      symbolScales: { normal: 1, wild: 1, up: 1 },
+    });
+    expect(getSymbolSetConfig("game003-bg-bar")).not.toHaveProperty(
+      "rawGameConfig",
     );
     expect(() => getSymbolSetConfig("symbols")).toThrow(
       /Unknown symbolsviewer symbol set/,
@@ -108,6 +120,42 @@ describe("symbolsviewer symbol set config", () => {
         ].map((asset) => expect.stringContaining(asset)),
       ),
     );
+  });
+
+  it("builds the standalone bg-bar catalog without gameconfig or normal PNG", () => {
+    const config = getSymbolSetConfig("game003-bg-bar");
+    const assets = createStatefulSymbolAssetMapFromModules({
+      modules: config.modules,
+      manifest: config.manifest,
+      requiredStates: config.requiredStates,
+      displaySymbols: config.displaySymbols,
+    });
+    const catalog = createSymbolsViewerStandaloneCatalog({
+      symbolAssets: assets,
+      displaySymbols: config.displaySymbols ?? [],
+      symbolScales: config.symbolScales,
+      requiredStateTextures: config.requiredStates,
+      animationResolver: config.animationResolver,
+    });
+
+    expect(Object.keys(config.modules)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("wild.png"),
+        expect.stringContaining("up.png"),
+      ]),
+    );
+    expect(Object.keys(config.modules)).not.toEqual(
+      expect.arrayContaining([expect.stringContaining("normal.png")]),
+    );
+    expect(assets.normal).toEqual({
+      normal: { kind: "transparent", width: 172, height: 158 },
+      states: {},
+    });
+    expect(catalog.getValidation()).toEqual({
+      displayableSymbols: ["normal", "wild", "up"],
+      ignoredPaytableSymbolsWithoutAssets: [],
+      ignoredAssetsWithoutPaytable: [],
+    });
   });
 
   it("keeps L1-L5 appear static while other game003 symbols use manifest builtin appear", () => {

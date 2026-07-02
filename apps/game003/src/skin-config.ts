@@ -6,6 +6,8 @@ import {
   type SymbolAnimationResolver,
 } from "@slotclientengine/rendercore";
 import {
+  GAME003_BG_BAR_DISPLAY_SYMBOLS,
+  createGame003BgBarSymbolScaleMapFromManifest,
   createGame003SymbolScaleMapFromManifest,
   getGame003DisplaySymbolsFromManifest,
 } from "./assets.js";
@@ -32,10 +34,29 @@ export interface Game003SkinConfig {
   readonly emptySymbols: readonly string[];
   readonly symbolScales: ReelSymbolScaleMap;
   readonly symbolAnimationResolver: SymbolAnimationResolver;
+  readonly bgBar: Game003BgBarSkinConfig;
+}
+
+export interface Game003BgBarSkinConfig {
+  readonly componentName: "bg-bar";
+  readonly queueLength: 5;
+  readonly visibleCount: 4;
+  readonly terminalSlotIndex: 4;
+  readonly emptyFeature: "normal";
+  readonly allowedFeatures: readonly ["normal", "wild", "up"];
+  readonly symbolModules: Record<string, string>;
+  readonly stateTextureManifest: unknown;
+  readonly displaySymbols: readonly ["normal", "wild", "up"];
+  readonly symbolScales: ReelSymbolScaleMap;
+  readonly symbolAnimationResolver: SymbolAnimationResolver;
+  readonly layout: NonNullable<
+    typeof game003StaticSkin1.featureBars
+  >["bgBar"]["layout"];
 }
 
 const game003StaticSkin1 = getSlotGameStaticSkin(GAME003_STATIC_CONFIG, "1");
 const game003DefaultAnimationResolver = createDefaultSymbolAnimationResolver();
+const game003StaticSkin1BgBar = requireGame003BgBar(game003StaticSkin1);
 const game003Skin1DisplaySymbols = getGame003DisplaySymbolsFromManifest(
   game003StaticSkin1.symbols.manifest,
   game003StaticSkin1.symbols.requiredStates,
@@ -78,6 +99,31 @@ const GAME003_SKIN_CONFIGS: Readonly<Record<Game003SkinId, Game003SkinConfig>> =
         vniAssetModules: game003StaticSkin1.symbols.vniAssetModules ?? {},
         fallback: game003DefaultAnimationResolver,
       }),
+      bgBar: Object.freeze({
+        componentName: "bg-bar" as const,
+        queueLength: 5 as const,
+        visibleCount: 4 as const,
+        terminalSlotIndex: 4 as const,
+        emptyFeature: "normal" as const,
+        allowedFeatures: GAME003_BG_BAR_DISPLAY_SYMBOLS,
+        symbolModules: game003StaticSkin1BgBar.symbols.pngModules,
+        stateTextureManifest: game003StaticSkin1BgBar.symbols.manifest,
+        displaySymbols: GAME003_BG_BAR_DISPLAY_SYMBOLS,
+        symbolScales: createGame003BgBarSymbolScaleMapFromManifest({
+          stateTextureManifest: game003StaticSkin1BgBar.symbols.manifest,
+          displaySymbols: GAME003_BG_BAR_DISPLAY_SYMBOLS,
+          requireExplicitScale:
+            game003StaticSkin1BgBar.symbols.requireExplicitScale,
+        }),
+        symbolAnimationResolver: createSymbolManifestAnimationResolver({
+          manifest: game003StaticSkin1BgBar.symbols.manifest,
+          requiredStates: game003StaticSkin1BgBar.symbols.requiredStates,
+          vniProjectModules: {},
+          vniAssetModules: {},
+          fallback: game003DefaultAnimationResolver,
+        }),
+        layout: game003StaticSkin1BgBar.layout,
+      }),
     }),
   });
 
@@ -97,6 +143,29 @@ function getGame003ConveyorUrl(
     throw new Error(`game003 ${orientation} conveyor config is required.`);
   }
   return conveyor.url;
+}
+
+function requireGame003BgBar(skin: typeof game003StaticSkin1) {
+  const bgBar = skin.featureBars?.bgBar;
+  if (!bgBar) {
+    throw new Error("game003 bg-bar static config is required.");
+  }
+  if (
+    bgBar.componentName !== "bg-bar" ||
+    bgBar.queueLength !== 5 ||
+    bgBar.visibleCount !== 4 ||
+    bgBar.terminalSlotIndex !== 4 ||
+    bgBar.emptyFeature !== "normal"
+  ) {
+    throw new Error(
+      "game003 bg-bar static config does not match app contract.",
+    );
+  }
+  const allowed = [...bgBar.allowedFeatures].join(",");
+  if (allowed !== "normal,wild,up") {
+    throw new Error("game003 bg-bar allowed features are invalid.");
+  }
+  return bgBar;
 }
 
 export { GAME003_SUPPORTED_SKINS, parseGame003SkinId, type Game003SkinId };

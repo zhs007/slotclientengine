@@ -10,9 +10,17 @@ import type {
 import type { SymbolAssetMap } from "@slotclientengine/rendercore";
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import {
+  createGame003BgBarSymbolAssetMapFromModules,
   createGame003SymbolAssetMapFromModules,
+  loadGame003BgBarSymbolTextures,
   loadGame003SymbolTextures,
 } from "./assets.js";
+import { createGame003BgBarLayout } from "./bg-bar-layout.js";
+import {
+  createGame003BgBarRuntime,
+  type Game003BgBarRuntime,
+} from "./bg-bar-runtime.js";
+import { createGame003BgBarSpinPlan } from "./bg-bar-sequence.js";
 import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
 import {
   GAME003_ASSET_SIZE,
@@ -74,7 +82,11 @@ export interface Game003AdapterOptions {
   readonly createApplication?: () => Game003PixiApplication;
   readonly loadStaticTextures?: () => Promise<Game003StaticTextures>;
   readonly loadSymbolTextures?: () => Promise<SymbolAssetMap>;
+  readonly loadBgBarSymbolTextures?: () => Promise<SymbolAssetMap>;
   readonly createRuntime?: (symbolAssets: SymbolAssetMap) => Game003ReelRuntime;
+  readonly createBgBarRuntime?: (
+    symbolAssets: SymbolAssetMap,
+  ) => Game003BgBarRuntime;
   readonly createWinAmountPlayer?: (
     layout: Game003Layout,
   ) => WinAmountAnimationPlayer;
@@ -89,6 +101,7 @@ interface PendingAnimation {
   winGroupAdvanced: boolean;
   winSequenceComplete: boolean;
   winAmountExpected: boolean;
+  bgBarExpected: boolean;
   betAmountRaw: number;
   winAmountRaw: number;
   resolve(): void;
@@ -114,7 +127,11 @@ class Game003PixiAdapter implements SlotGameAdapter {
   readonly #createApplication: () => Game003PixiApplication;
   readonly #loadStaticTextures: () => Promise<Game003StaticTextures>;
   readonly #loadSymbolTextures: () => Promise<SymbolAssetMap>;
+  readonly #loadBgBarSymbolTextures: () => Promise<SymbolAssetMap>;
   readonly #createRuntime: (symbolAssets: SymbolAssetMap) => Game003ReelRuntime;
+  readonly #createBgBarRuntime: (
+    symbolAssets: SymbolAssetMap,
+  ) => Game003BgBarRuntime;
   readonly #createWinAmountPlayer: (
     layout: Game003Layout,
   ) => WinAmountAnimationPlayer;
@@ -123,6 +140,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
   #worldLayer: Container | null = null;
   #worldSprites: Game003WorldSprites | null = null;
   #runtime: Game003ReelRuntime | null = null;
+  #bgBarRuntime: Game003BgBarRuntime | null = null;
   #winAmountPlayer: WinAmountAnimationPlayer | null = null;
   #pendingAnimation: PendingAnimation | null = null;
   #unsubscribeViewport: (() => void) | null = null;
@@ -136,6 +154,9 @@ class Game003PixiAdapter implements SlotGameAdapter {
       options.loadStaticTextures ?? (() => loadStaticTextures(this.#skin));
     this.#loadSymbolTextures =
       options.loadSymbolTextures ?? (() => loadSymbolTextures(this.#skin));
+    this.#loadBgBarSymbolTextures =
+      options.loadBgBarSymbolTextures ??
+      (() => loadBgBarSymbolTextures(this.#skin));
     this.#createRuntime =
       options.createRuntime ??
       ((symbolAssets) =>
@@ -151,6 +172,13 @@ class Game003PixiAdapter implements SlotGameAdapter {
             symbolScales: this.#skin.symbolScales,
             animationResolver: this.#skin.symbolAnimationResolver,
           },
+        }));
+    this.#createBgBarRuntime =
+      options.createBgBarRuntime ??
+      ((symbolAssets) =>
+        createGame003BgBarRuntime({
+          config: this.#skin.bgBar,
+          symbolAssets,
         }));
     this.#createWinAmountPlayer =
       options.createWinAmountPlayer ?? createGame003WinAmountPlayer;
@@ -175,12 +203,18 @@ class Game003PixiAdapter implements SlotGameAdapter {
     const layout = createGame003Layout({
       viewportSize: initialViewport.frameDesignSize,
     });
-    const [staticTextures, symbolTextures] = await Promise.all([
-      this.#loadStaticTextures(),
-      this.#loadSymbolTextures(),
-    ]);
+    const [staticTextures, symbolTextures, bgBarSymbolTextures] =
+      await Promise.all([
+        this.#loadStaticTextures(),
+        this.#loadSymbolTextures(),
+        this.#loadBgBarSymbolTextures(),
+      ]);
     const runtime = this.#createRuntime(symbolTextures);
     runtime.applyLayout(createGame003ReelLayerLayout(runtime.layout, layout));
+    const bgBarRuntime = this.#createBgBarRuntime(bgBarSymbolTextures);
+    bgBarRuntime.applyLayout(
+      createGame003BgBarLayout({ layout, config: this.#skin.bgBar }),
+    );
     const winAmountPlayer = this.#createWinAmountPlayer(layout);
 
     const worldLayer = new Container();
@@ -188,6 +222,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     worldLayer.addChild(
       worldSprites.background,
       worldSprites.conveyor,
+      bgBarRuntime.container,
       worldSprites.mainReelBackground,
       runtime.mainReelsLayer,
       winAmountPlayer.container,
@@ -200,6 +235,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#worldLayer = worldLayer;
     this.#worldSprites = worldSprites;
     this.#runtime = runtime;
+    this.#bgBarRuntime = bgBarRuntime;
     this.#winAmountPlayer = winAmountPlayer;
     const requestWinAmountDismiss = () => {
       this.#winAmountPlayer?.requestDismiss();
@@ -235,7 +271,11 @@ class Game003PixiAdapter implements SlotGameAdapter {
       "spin main scene",
     );
     const winQueue = createGame003WinSymbolSequence(logic, targetScene);
+    const bgBarPlan = createGame003BgBarSpinPlan(logic);
     runtime.spinToScene(targetScene, "spin main scene");
+    if (bgBarPlan) {
+      this.#requireBgBarRuntime().startSpin(bgBarPlan);
+    }
     const betAmountRaw = logic.getBet() * logic.getLines();
 
     return new Promise((resolve, reject) => {
@@ -248,6 +288,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
         winGroupAdvanced: false,
         winSequenceComplete: winQueue.length === 0,
         winAmountExpected: logic.getTotalWin() > 0,
+        bgBarExpected: bgBarPlan !== null,
         betAmountRaw,
         winAmountRaw: logic.getTotalWin(),
         resolve,
@@ -269,6 +310,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#app?.ticker.remove(this.#onTick);
     this.#app?.ticker.stop();
     this.#winAmountPlayer?.destroy();
+    this.#bgBarRuntime?.destroy();
     this.#app?.canvas.remove();
     this.#app?.destroy();
     this.#app = null;
@@ -276,6 +318,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#worldLayer = null;
     this.#worldSprites = null;
     this.#runtime = null;
+    this.#bgBarRuntime = null;
     this.#winAmountPlayer = null;
   }
 
@@ -301,15 +344,18 @@ class Game003PixiAdapter implements SlotGameAdapter {
 
   #tickSpinPhase(deltaSeconds: number): void {
     const runtime = this.#requireRuntime();
-    const result = runtime.update(deltaSeconds);
-    if (!result.completed) {
-      return;
-    }
-
     const pending = this.#pendingAnimation;
     if (!pending) {
       return;
     }
+    const result = runtime.update(deltaSeconds);
+    if (pending.bgBarExpected) {
+      this.#requireBgBarRuntime().update(deltaSeconds);
+    }
+    if (!result.completed) {
+      return;
+    }
+
     assertGame003ReelVisualMatchesTarget(
       runtime.getVisualSnapshot(),
       pending.targetScene,
@@ -321,16 +367,13 @@ class Game003PixiAdapter implements SlotGameAdapter {
         winAmountRaw: pending.winAmountRaw,
       });
     }
-    if (pending.winSequenceComplete && !pending.winAmountExpected) {
-      this.#completePending(pending);
-      return;
-    }
 
     pending.phase = "win-sequence";
     pending.winIndex = 0;
     if (!pending.winSequenceComplete) {
       this.#startCurrentWinGroup(pending);
     }
+    this.#completePendingIfReady(pending);
   }
 
   #tickWinSequencePhase(deltaSeconds: number): void {
@@ -356,13 +399,10 @@ class Game003PixiAdapter implements SlotGameAdapter {
     if (pending.winAmountExpected) {
       this.#requireWinAmountPlayer().update(deltaSeconds);
     }
-    if (
-      pending.winSequenceComplete &&
-      (!pending.winAmountExpected ||
-        !this.#requireWinAmountPlayer().isPlaying())
-    ) {
-      this.#completePending(pending);
+    if (pending.bgBarExpected) {
+      this.#requireBgBarRuntime().update(deltaSeconds);
     }
+    this.#completePendingIfReady(pending);
   }
 
   #startCurrentWinGroup(pending: PendingAnimation): void {
@@ -401,6 +441,22 @@ class Game003PixiAdapter implements SlotGameAdapter {
     pending.resolve();
   }
 
+  #completePendingIfReady(pending: PendingAnimation): void {
+    if (!pending.winSequenceComplete) {
+      return;
+    }
+    if (
+      pending.winAmountExpected &&
+      this.#requireWinAmountPlayer().isPlaying()
+    ) {
+      return;
+    }
+    if (pending.bgBarExpected && this.#requireBgBarRuntime().isPlaying()) {
+      return;
+    }
+    this.#completePending(pending);
+  }
+
   #requireRuntime(): Game003ReelRuntime {
     if (!this.#runtime) {
       throw new Error("game003 adapter is not mounted.");
@@ -415,13 +471,21 @@ class Game003PixiAdapter implements SlotGameAdapter {
     return this.#winAmountPlayer;
   }
 
+  #requireBgBarRuntime(): Game003BgBarRuntime {
+    if (!this.#bgBarRuntime) {
+      throw new Error("game003 adapter is not mounted.");
+    }
+    return this.#bgBarRuntime;
+  }
+
   #applyViewport(viewport: SlotGameViewportSnapshot): void {
     if (
       !this.#app ||
       !this.#staticTextures ||
       !this.#worldLayer ||
       !this.#worldSprites ||
-      !this.#runtime
+      !this.#runtime ||
+      !this.#bgBarRuntime
     ) {
       throw new Error("game003 adapter is not mounted.");
     }
@@ -436,6 +500,9 @@ class Game003PixiAdapter implements SlotGameAdapter {
     applyWorldSpriteLayout(this.#worldSprites, this.#staticTextures, layout);
     this.#runtime.applyLayout(
       createGame003ReelLayerLayout(this.#runtime.layout, layout),
+    );
+    this.#bgBarRuntime.applyLayout(
+      createGame003BgBarLayout({ layout, config: this.#skin.bgBar }),
     );
     this.#winAmountPlayer?.applyLayout(createGame003WinAmountLayout(layout));
   }
@@ -518,6 +585,17 @@ async function loadSymbolTextures(
     displaySymbols: skin.displaySymbols,
   });
   return loadGame003SymbolTextures(assetUrls);
+}
+
+async function loadBgBarSymbolTextures(
+  skin: Game003SkinConfig,
+): Promise<SymbolAssetMap> {
+  const assetUrls = createGame003BgBarSymbolAssetMapFromModules({
+    modules: skin.bgBar.symbolModules,
+    stateTextureManifest: skin.bgBar.stateTextureManifest,
+    displaySymbols: skin.bgBar.displaySymbols,
+  });
+  return loadGame003BgBarSymbolTextures(assetUrls);
 }
 
 async function loadTextureWithSize(

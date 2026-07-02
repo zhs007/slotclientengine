@@ -15,6 +15,8 @@
 - 主转轮框：`assets/game003-s1/mainreelbg.png`
 - 横版传送带：`assets/game003-s1/conveyor1.png`
 - 竖版传送带：`assets/game003-s1/conveyor2.png`
+- `bg-bar` 独立 symbol manifest：`assets/game003-s1/bg-bar-symbol-state-textures.manifest.json`
+- `bg-bar` symbol 资源：`assets/game003-s1/wild.png`、`assets/game003-s1/up.png`；`normal` 是 manifest 声明的透明 symbol，不使用透明 PNG。
 - `L1`-`L5` 中奖 VNI project：`assets/game003-s1/L1-wins.json` 到 `assets/game003-s1/L5-wins.json`
 - `L1`-`L5` 中奖 VNI assets：`assets/game003-s1/assets/*.{png,jpg,jpeg,webp}`
 - big/super/mega 金额动画 VNI project：`assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json`
@@ -55,6 +57,8 @@ CI=true pnpm --filter game003 check:static-config
 
 `skins."1".winAmount` 配置中奖金额动画的显示规则、layout anchor、阈值和 VNI tier 资源。金额输入仍来自 live/GMI 的服务器整数；当前显示 formatter 与 framework HUD 共用 `formatServerUsdAmount(...)`，所以 `100` 显示为 `$1.00`。big/super/mega 的 project 和 assets 只属于 `assets/game003-s1/win-amount`，不要混入 symbol VNI manifest 或 `assets/game003-s1/assets`。
 
+`skins."1".featureBars.bgBar` 配置 `bg-bar` 传送带展示。它只属于 `game003` app 层：组件名固定为 `bg-bar`，feature 只允许 `normal`、`wild`、`up`，队列长度固定 5，可见数量固定 4，终点格固定 `slot 4`。`symbols.manifest` 指向独立的 `bg-bar-symbol-state-textures.manifest.json`，`requiredStates` 为空，`normal` 通过 manifest 的 `{ kind: "transparent", width: 172, height: 158 }` 声明稳定空图标，`wild.png` 为 `172 x 158`，`up.png` 为 `172 x 130`。这些尺寸漂移时运行时会显式失败。
+
 ## Symbol VNI 动画
 
 `game003` 的 symbol 动画 resolver 来自 `@slotclientengine/rendercore`：
@@ -91,6 +95,24 @@ DOM frame 使用 `gameframeworks` / `uiframeworks` 的 `orientation-focus` polic
 `mainreelbg`、`conveyor1`、`conveyor2` 的组合、视觉间隔、层级和校准属于 game003 app 专属实现，位于 `apps/game003/src/game-layout.ts` 和 `apps/game003/src/game-adapter.ts`，不要上移到 `rendercore`。间隔已经体现在 `positionInFocusRect` 数值中，运行时代码不再通过 conveyor 尺寸、gap 或 placement 枚举推导位置。
 
 第一版转轮区独立配置为 `mainreelbg.png` 内 `{ x: 124, y: 130, reelCount: 5, reelGap: 15, cellWidth: 165, cellHeight: 130 }`，它不是主转轮背景框本身；单轴宽度和单格高度由 YAML 显式给出，内容区 `width=885`、`height=650` 由 buildgamestatic 派生。转动中按单轴裁切，停止后彻底取消裁切，允许偏大的 symbol 超出格子外框。
+
+`bg-bar` 的 slot 位置同样只从 `config/game-static.yaml` 的显式 `slotRectsInConveyor` 读取，不从 conveyor 宽高除 5 推导。每个 rect 表示传送带的视觉格子，不表示 symbol 尺寸；symbol 可以比格子大，运行时只把 symbol 中心对齐到 rect 中心。横屏使用 `conveyor1.png`，movement 为 `down`，`slot 0` 在上方、`slot 4` 在底部火焰终点格；竖屏使用 `conveyor2.png`，movement 为 `right`，`slot 0` 在左侧、`slot 4` 在右侧火焰终点格。当前配置为：
+
+```text
+landscape slotRectsInConveyor:
+0 { x: 55, y: 75,  width: 174, height: 126 }
+1 { x: 55, y: 204, width: 174, height: 132 }
+2 { x: 55, y: 339, width: 174, height: 132 }
+3 { x: 55, y: 474, width: 174, height: 132 }
+4 { x: 55, y: 609, width: 174, height: 132 }
+
+portrait slotRectsInConveyor:
+0 { x: 74,  y: 55, width: 153, height: 115 }
+1 { x: 232, y: 55, width: 153, height: 115 }
+2 { x: 390, y: 55, width: 153, height: 115 }
+3 { x: 548, y: 55, width: 153, height: 115 }
+4 { x: 706, y: 55, width: 153, height: 115 }
+```
 
 修改 `config/game-static.yaml` 后必须同步执行：
 
@@ -130,6 +152,14 @@ http://127.0.0.1:5208/?skin=1&token=TOKEN&businessid=guest&clienttype=web&jurisd
 ## Reel 边界
 
 `game003` 使用 `assets/gamecfg003/gameconfig.json` 中的本地公开轮带 `bg-reel01` 进行普通 reel 滚动。服务器返回的 scene 只作为本轮目标可见窗口叠加进临时 strip；如果目标窗口无法在本地公开轮带反查 stop y，不作为 live spin 失败条件。未知 symbol code 或当前资源缺失的 paytable symbol 仍然显式失败。
+
+## bg-bar 播放
+
+`apps/game003/src/bg-bar-sequence.ts` 只从本轮 step 0 读取 `logic.getStep(0).getComponent("bg-bar")`。如果本轮没有触发 `bg-bar`，返回 `null`，空传送带不参与完成条件；如果组件触发但 `mapComponents` 缺失、`features` 不是长度 5 的数组、出现未知 feature、`@type` 不是 `type.googleapis.com/sgc7pb.FeatureBar2Data`、`basicComponentData` 不符合第一版空结果合同，都会显式失败。
+
+本轮 `features` 的 5 个值在 spin 开始时立即交给 `apps/game003/src/bg-bar-runtime.ts`。shift 映射固定为：`features[0]` 从 `slot 3` 移到 `slot 4` 并播放终点 `win` 后消失；`features[1]`、`features[2]`、`features[3]` 分别从 `slot 2/1/0` 移到 `slot 3/2/1`；`features[4]` 从传送带外进入 `slot 0` 并播放 `appear`。完成后静止队列为 `[features[1], features[2], features[3], features[4]]`，仅作为当前视觉状态；下一次 spin 以服务端新下发的本轮 `features` 为权威，客户端会重建传送带动画，不因两轮 feature 队列不同而失败。
+
+`game-adapter.ts` 在 `playSpin()` 启动主转轮的同时启动 `bg-bar`，不会等主转轮落停。`playSpin()` 的 resolve 条件包含主转轮落停与 target scene 校验、`bg-bar` 终点 win、`bg-wins` symbol sequence 和中奖金额动画；只要其中任一仍在播放，framework 就不会进入后续 collect / idle。
 
 ## 中奖播放
 

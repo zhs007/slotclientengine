@@ -45,11 +45,20 @@ export type SymbolManifestAnimationSpec =
   | SymbolManifestStaticAnimationSpec
   | SymbolManifestVniAnimationSpec;
 
-export type SymbolManifestNormal = string | SymbolManifestLayeredNormal;
+export type SymbolManifestNormal =
+  | string
+  | SymbolManifestLayeredNormal
+  | SymbolManifestTransparentNormal;
 
 export interface SymbolManifestLayeredNormal {
   readonly kind: "layered";
   readonly layers: readonly SymbolManifestLayer[];
+}
+
+export interface SymbolManifestTransparentNormal {
+  readonly kind: "transparent";
+  readonly width: number;
+  readonly height: number;
 }
 
 export interface SymbolManifestLayer {
@@ -465,6 +474,10 @@ function createNormalAssetFromManifest(
     return asset;
   }
 
+  if (normal.kind === "transparent") {
+    return normal;
+  }
+
   return Object.freeze({
     kind: "layered",
     layers: Object.freeze(
@@ -516,13 +529,32 @@ function parseManifestNormal(
     return normal;
   }
   const record = assertRecord(normal, `symbol "${symbol}" normal texture`);
+  if (record.kind === "transparent") {
+    assertOnlyKnownKeys(record, `symbol "${symbol}" transparent normal`, [
+      "kind",
+      "width",
+      "height",
+    ]);
+    return Object.freeze({
+      kind: "transparent",
+      width: assertFinitePositiveNumber(
+        record.width,
+        `symbol "${symbol}" transparent normal.width`,
+      ),
+      height: assertFinitePositiveNumber(
+        record.height,
+        `symbol "${symbol}" transparent normal.height`,
+      ),
+    });
+  }
+
   assertOnlyKnownKeys(record, `symbol "${symbol}" layered normal`, [
     "kind",
     "layers",
   ]);
   if (record.kind !== "layered") {
     throw new SymbolAssetError(
-      `Symbol "${symbol}" manifest normal texture must be a string or layered normal.`,
+      `Symbol "${symbol}" manifest normal texture must be a string, layered normal or transparent normal.`,
     );
   }
   if (!Array.isArray(record.layers) || record.layers.length === 0) {

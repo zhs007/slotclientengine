@@ -62,6 +62,12 @@ loading:
     - id: game003-symbol-vni-assets
       glob: assets/game003-s1/assets/*.{png,jpg,jpeg,webp}
       weight: 4
+    - id: game003-bg-bar-symbol-pngs
+      glob: assets/game003-s1/{wild,up}.png
+      weight: 2
+    - id: game003-bg-bar-symbol-manifest
+      path: assets/game003-s1/bg-bar-symbol-state-textures.manifest.json
+      weight: 1
     - id: game003-win-amount-vni-projects
       glob: assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json
       weight: 3
@@ -85,6 +91,46 @@ skins:
       requiredStates:
         - spinBlur
         - disabled
+    # bg-bar 是 game003 传送带玩法的 feature 轨道。componentName 来自 live GMI；
+    # symbols 使用独立 manifest，不复用主转轮 symbol manifest；normal 是显式透明 symbol，不对应 PNG。
+    featureBars:
+      bgBar:
+        componentName: bg-bar
+        queueLength: 5
+        visibleCount: 4
+        terminalSlotIndex: 4
+        emptyFeature: normal
+        allowedFeatures:
+          - normal
+          - wild
+          - up
+        symbols:
+          manifest: assets/game003-s1/bg-bar-symbol-state-textures.manifest.json
+          pngGlob: assets/game003-s1/{wild,up}.png
+          requireExplicitScale: true
+          requiredStates: []
+        layout:
+          landscape:
+            movement: down
+            # slotRectsInConveyor 坐标相对于 conveyor1.png 左上角，按运动方向从入口到终点排列。
+            # 每个 rect 是传送带视觉格子，不是 symbol 尺寸；运行时以 rect 中心对齐 symbol 中心。
+            # 不允许运行时按 conveyor 高度等分推导。
+            slotRectsInConveyor:
+              - { x: 55, y: 75, width: 174, height: 126 }
+              - { x: 55, y: 204, width: 174, height: 132 }
+              - { x: 55, y: 339, width: 174, height: 132 }
+              - { x: 55, y: 474, width: 174, height: 132 }
+              - { x: 55, y: 609, width: 174, height: 132 }
+          portrait:
+            movement: right
+            # slotRectsInConveyor 坐标相对于 conveyor2.png 左上角，按运动方向从入口到终点排列。
+            # 每个 rect 是传送带视觉格子，不是 symbol 尺寸；运行时以 rect 中心对齐 symbol 中心。
+            slotRectsInConveyor:
+              - { x: 74, y: 55, width: 153, height: 115 }
+              - { x: 232, y: 55, width: 153, height: 115 }
+              - { x: 390, y: 55, width: 153, height: 115 }
+              - { x: 548, y: 55, width: 153, height: 115 }
+              - { x: 706, y: 55, width: 153, height: 115 }
     # 横竖屏 art 适配。focusRect 坐标相对于对应完整背景 art。
     # focusRect 既是背景图上的重点区域，也是 game003 主转轴框和传送带的相对定位 anchor。
     # 坐标基准是完整背景 art，不是 CSS 像素、viewport 像素或裁切后的 visible rect。

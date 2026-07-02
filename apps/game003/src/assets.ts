@@ -34,6 +34,17 @@ export const GAME003_DISPLAY_SYMBOLS = Object.freeze([
 ]);
 
 export const GAME003_EMPTY_SYMBOLS = Object.freeze([] as const);
+export const GAME003_BG_BAR_DISPLAY_SYMBOLS = Object.freeze([
+  "normal",
+  "wild",
+  "up",
+] as const);
+
+const GAME003_BG_BAR_SYMBOL_SIZES = Object.freeze({
+  normal: Object.freeze({ width: 172, height: 158 }),
+  wild: Object.freeze({ width: 172, height: 158 }),
+  up: Object.freeze({ width: 172, height: 130 }),
+});
 
 export function getGame003DisplaySymbolsFromManifest(
   stateTextureManifest: unknown,
@@ -72,6 +83,32 @@ export function createGame003SymbolScaleMapFromManifest(options: {
   });
 }
 
+export function createGame003BgBarSymbolAssetMapFromModules(options: {
+  readonly modules: Record<string, string>;
+  readonly stateTextureManifest: unknown;
+  readonly displaySymbols?: readonly string[];
+}): SymbolAssetMap {
+  return createSymbolAssetMapFromManifestModules({
+    modules: options.modules,
+    manifest: options.stateTextureManifest,
+    requiredStates: [],
+    displaySymbols: options.displaySymbols ?? GAME003_BG_BAR_DISPLAY_SYMBOLS,
+  });
+}
+
+export function createGame003BgBarSymbolScaleMapFromManifest(options: {
+  readonly stateTextureManifest: unknown;
+  readonly displaySymbols?: readonly string[];
+  readonly requireExplicitScale?: boolean;
+}): ReelSymbolScaleMap {
+  return createSymbolScaleMapFromManifest({
+    manifest: options.stateTextureManifest,
+    displaySymbols: options.displaySymbols ?? GAME003_BG_BAR_DISPLAY_SYMBOLS,
+    requiredStates: [],
+    requireExplicitScale: options.requireExplicitScale,
+  });
+}
+
 export async function loadGame003SymbolTextures(
   assetUrls: SymbolAssetMap,
 ): Promise<SymbolAssetMap> {
@@ -83,6 +120,14 @@ export async function loadGame003SymbolTextures(
   );
 
   return Object.freeze(Object.fromEntries(entries));
+}
+
+export async function loadGame003BgBarSymbolTextures(
+  assetUrls: SymbolAssetMap,
+): Promise<SymbolAssetMap> {
+  const assets = await loadGame003SymbolTextures(assetUrls);
+  validateGame003BgBarSymbolTextureSizes(assets);
+  return assets;
 }
 
 async function loadSymbolAssetInput(
@@ -125,6 +170,9 @@ async function loadNormalTextureSource(
             ? await loadTexture(normal.texture)
             : normal.texture,
       });
+    }
+    if (normal.kind === "transparent") {
+      return normal;
     }
     const layers = await Promise.all(
       normal.layers.map(async (layer) => loadLayerTextureSource(layer)),
@@ -186,10 +234,93 @@ function isSymbolNormalTextureSource(
     typeof normal === "object" &&
     normal !== null &&
     "kind" in normal &&
-    (normal.kind === "single" || normal.kind === "layered")
+    (normal.kind === "single" ||
+      normal.kind === "layered" ||
+      normal.kind === "transparent")
   );
 }
 
 async function loadTexture(url: string): Promise<Texture> {
   return Assets.load<Texture>(url);
+}
+
+function validateGame003BgBarSymbolTextureSizes(assets: SymbolAssetMap): void {
+  for (const symbol of GAME003_BG_BAR_DISPLAY_SYMBOLS) {
+    const asset = assets[symbol];
+    if (!isSymbolTextureSet(asset)) {
+      throw new Error(
+        `game003 bg-bar symbol "${symbol}" must use a texture set.`,
+      );
+    }
+    const normal = normalizeGame003BgBarNormalSource(symbol, asset.normal);
+    const expected = GAME003_BG_BAR_SYMBOL_SIZES[symbol];
+    const actual = getGame003BgBarNormalSize(symbol, normal);
+    if (actual.width !== expected.width || actual.height !== expected.height) {
+      throw new Error(
+        `game003 bg-bar ${symbol} size must be ${expected.width} x ${expected.height}, got ${actual.width} x ${actual.height}.`,
+      );
+    }
+  }
+}
+
+function normalizeGame003BgBarNormalSource(
+  symbol: string,
+  normal: SymbolTextureSet["normal"],
+): Texture | SymbolNormalTextureSource<Texture> {
+  if (typeof normal === "string") {
+    throw new Error(`game003 bg-bar ${symbol} normal texture is not loaded.`);
+  }
+  if (isSymbolNormalTextureSource(normal)) {
+    if (normal.kind === "single" && typeof normal.texture === "string") {
+      throw new Error(`game003 bg-bar ${symbol} normal texture is not loaded.`);
+    }
+    if (normal.kind === "layered") {
+      for (const layer of normal.layers) {
+        if (
+          typeof layer.texture === "string" ||
+          (layer.keyframes ?? []).some(
+            (keyframe) => typeof keyframe === "string",
+          )
+        ) {
+          throw new Error(
+            `game003 bg-bar ${symbol} layered texture is not loaded.`,
+          );
+        }
+      }
+    }
+    return normal as SymbolNormalTextureSource<Texture>;
+  }
+  return normal;
+}
+
+function getGame003BgBarNormalSize(
+  symbol: string,
+  normal: Texture | SymbolNormalTextureSource<Texture>,
+): { readonly width: number; readonly height: number } {
+  if (isSymbolNormalTextureSource(normal)) {
+    if (normal.kind === "transparent") {
+      return { width: normal.width, height: normal.height };
+    }
+    if (normal.kind === "single") {
+      return getTextureSize(symbol, normal.texture);
+    }
+    return getTextureSize(symbol, normal.layers[0].texture);
+  }
+  return getTextureSize(symbol, normal);
+}
+
+function getTextureSize(
+  symbol: string,
+  texture: Texture,
+): { readonly width: number; readonly height: number } {
+  const width =
+    texture.width || texture.source?.width || texture.orig?.width || 0;
+  const height =
+    texture.height || texture.source?.height || texture.orig?.height || 0;
+  if (width <= 0 || height <= 0) {
+    throw new Error(
+      `game003 bg-bar ${symbol} texture must have positive size.`,
+    );
+  }
+  return { width, height };
 }

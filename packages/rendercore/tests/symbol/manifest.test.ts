@@ -168,6 +168,77 @@ describe("symbol state texture manifest helpers", () => {
     });
   });
 
+  it("accepts explicit transparent normal sources without requiring a PNG module", () => {
+    const manifest = {
+      version: 1,
+      states: [],
+      symbols: {
+        normal: {
+          normal: { kind: "transparent", width: 172, height: 158 },
+          scale: 1,
+          animations: {
+            appear: { kind: "static", durationSeconds: 1 / 60 },
+            win: { kind: "builtin", durationSeconds: 0.58 },
+          },
+        },
+        bonus: {
+          normal: "./bonus.png",
+          scale: 1,
+        },
+      },
+    };
+
+    expect(
+      parseSymbolStateTextureManifest(manifest).symbols.normal,
+    ).toMatchObject({
+      normal: { kind: "transparent", width: 172, height: 158 },
+      scale: 1,
+    });
+    expect(
+      createSymbolAssetMapFromManifestModules({
+        manifest,
+        modules: {
+          "../../../assets/sample/bonus.png": "/bonus.png",
+        },
+        displaySymbols: ["normal", "bonus"],
+        requiredStates: [],
+      }),
+    ).toEqual({
+      normal: {
+        normal: { kind: "transparent", width: 172, height: 158 },
+        states: {},
+      },
+      bonus: {
+        normal: "/bonus.png",
+        states: {},
+      },
+    });
+  });
+
+  it("rejects invalid transparent normal dimensions", () => {
+    for (const normal of [
+      { kind: "transparent", height: 158 },
+      { kind: "transparent", width: 172 },
+      { kind: "transparent", width: 0, height: 158 },
+      { kind: "transparent", width: -1, height: 158 },
+      { kind: "transparent", width: Number.NaN, height: 158 },
+      { kind: "transparent", width: "172", height: 158 },
+    ]) {
+      expect(() =>
+        parseSymbolStateTextureManifest({
+          version: 1,
+          states: [],
+          symbols: {
+            normal: {
+              normal,
+              scale: 1,
+            },
+          },
+        }),
+      ).toThrow(/transparent normal/);
+    }
+  });
+
   it("builds VNI animation resources from manifest modules", () => {
     const resources = createSymbolVniAnimationResourcesFromManifest({
       manifest: createManifest(),

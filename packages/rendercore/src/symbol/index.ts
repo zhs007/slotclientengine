@@ -8,4 +8,5 @@ export * from "./manifest.js";
 export * from "./vni-animation.js";
 export * from "./sequence.js";
 export * from "./catalog.js";
+export * from "./standalone-catalog.js";
 export * from "./render-symbol.js";

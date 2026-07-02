@@ -13,6 +13,9 @@ import type {
   GameStaticYamlArtVariant,
   GameStaticYamlConfig,
   GameStaticYamlConveyor,
+  GameStaticYamlFeatureBarConfig,
+  GameStaticYamlFeatureBarLayoutVariant,
+  GameStaticYamlFeatureBarSymbolsConfig,
   GameStaticYamlImage,
   GameStaticYamlLoadingConfig,
   GameStaticYamlLoadingResource,
@@ -244,13 +247,26 @@ function parseSkin(
   visibleRows: number,
 ): GameStaticYamlSkinConfig {
   const record = assertRecord(value, label);
-  assertKeys(record, label, ["label", "symbols", "art", "winAmount"], {
-    optional: ["winAmount"],
-  });
+  assertKeys(
+    record,
+    label,
+    ["label", "symbols", "art", "featureBars", "winAmount"],
+    {
+      optional: ["featureBars", "winAmount"],
+    },
+  );
   return Object.freeze({
     label: assertNonEmptyString(record.label, `${label}.label`),
     symbols: parseSymbols(record.symbols, `${label}.symbols`),
     art: parseArt(record.art, `${label}.art`, visibleRows),
+    ...(record.featureBars !== undefined
+      ? {
+          featureBars: parseFeatureBars(
+            record.featureBars,
+            `${label}.featureBars`,
+          ),
+        }
+      : {}),
     ...(record.winAmount !== undefined
       ? { winAmount: parseWinAmount(record.winAmount, `${label}.winAmount`) }
       : {}),
@@ -357,6 +373,171 @@ function parseArt(
       record.reelAreaInMainReelBackground,
       `${label}.reelAreaInMainReelBackground`,
       visibleRows,
+    ),
+  });
+}
+
+function parseFeatureBars(
+  value: unknown,
+  label: string,
+): Readonly<Record<string, GameStaticYamlFeatureBarConfig>> {
+  const record = assertRecord(value, label);
+  const featureBars: Record<string, GameStaticYamlFeatureBarConfig> = {};
+  for (const [featureBarId, featureBarValue] of Object.entries(record)) {
+    if (featureBarId.trim().length === 0) {
+      throw new Error(`${label} 不能包含空 feature bar id。`);
+    }
+    featureBars[featureBarId] = parseFeatureBar(
+      featureBarValue,
+      `${label}.${featureBarId}`,
+    );
+  }
+  if (Object.keys(featureBars).length === 0) {
+    throw new Error(`${label} 不能为空。`);
+  }
+  return Object.freeze(featureBars);
+}
+
+function parseFeatureBar(
+  value: unknown,
+  label: string,
+): GameStaticYamlFeatureBarConfig {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "componentName",
+    "queueLength",
+    "visibleCount",
+    "terminalSlotIndex",
+    "emptyFeature",
+    "allowedFeatures",
+    "symbols",
+    "layout",
+  ]);
+  const queueLength = assertPositiveInteger(
+    record.queueLength,
+    `${label}.queueLength`,
+  );
+  const visibleCount = assertPositiveInteger(
+    record.visibleCount,
+    `${label}.visibleCount`,
+  );
+  if (visibleCount >= queueLength) {
+    throw new Error(`${label}.visibleCount 必须小于 queueLength。`);
+  }
+  const terminalSlotIndex = assertNonNegativeInteger(
+    record.terminalSlotIndex,
+    `${label}.terminalSlotIndex`,
+  );
+  if (terminalSlotIndex >= queueLength) {
+    throw new Error(`${label}.terminalSlotIndex 必须小于 queueLength。`);
+  }
+  const allowedFeatures = assertStringArray(
+    record.allowedFeatures,
+    `${label}.allowedFeatures`,
+    { nonEmpty: true },
+  );
+  assertUnique(allowedFeatures, `${label}.allowedFeatures`);
+  const emptyFeature = assertNonEmptyString(
+    record.emptyFeature,
+    `${label}.emptyFeature`,
+  );
+  if (!allowedFeatures.includes(emptyFeature)) {
+    throw new Error(`${label}.emptyFeature 必须出现在 allowedFeatures 中。`);
+  }
+  return Object.freeze({
+    componentName: assertNonEmptyString(
+      record.componentName,
+      `${label}.componentName`,
+    ),
+    queueLength,
+    visibleCount,
+    terminalSlotIndex,
+    emptyFeature,
+    allowedFeatures,
+    symbols: parseFeatureBarSymbols(record.symbols, `${label}.symbols`),
+    layout: parseFeatureBarLayout(
+      record.layout,
+      `${label}.layout`,
+      queueLength,
+    ),
+  });
+}
+
+function parseFeatureBarSymbols(
+  value: unknown,
+  label: string,
+): GameStaticYamlFeatureBarSymbolsConfig {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "manifest",
+    "pngGlob",
+    "requireExplicitScale",
+    "requiredStates",
+  ]);
+  if (typeof record.requireExplicitScale !== "boolean") {
+    throw new Error(`${label}.requireExplicitScale 必须是 boolean。`);
+  }
+  const requiredStates = assertStringArray(
+    record.requiredStates,
+    `${label}.requiredStates`,
+    { nonEmpty: false },
+  );
+  assertUnique(requiredStates, `${label}.requiredStates`);
+  return Object.freeze({
+    manifest: assertPath(record.manifest, `${label}.manifest`),
+    pngGlob: assertPath(record.pngGlob, `${label}.pngGlob`),
+    requireExplicitScale: record.requireExplicitScale,
+    requiredStates,
+  });
+}
+
+function parseFeatureBarLayout(
+  value: unknown,
+  label: string,
+  queueLength: number,
+): Readonly<
+  Record<"landscape" | "portrait", GameStaticYamlFeatureBarLayoutVariant>
+> {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, ["landscape", "portrait"]);
+  return Object.freeze({
+    landscape: parseFeatureBarLayoutVariant(
+      record.landscape,
+      `${label}.landscape`,
+      queueLength,
+    ),
+    portrait: parseFeatureBarLayoutVariant(
+      record.portrait,
+      `${label}.portrait`,
+      queueLength,
+    ),
+  });
+}
+
+function parseFeatureBarLayoutVariant(
+  value: unknown,
+  label: string,
+  queueLength: number,
+): GameStaticYamlFeatureBarLayoutVariant {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, ["movement", "slotRectsInConveyor"]);
+  if (record.movement !== "down" && record.movement !== "right") {
+    throw new Error(`${label}.movement 必须是 down 或 right。`);
+  }
+  if (!Array.isArray(record.slotRectsInConveyor)) {
+    throw new Error(`${label}.slotRectsInConveyor 必须是数组。`);
+  }
+  if (record.slotRectsInConveyor.length !== queueLength) {
+    throw new Error(
+      `${label}.slotRectsInConveyor 长度必须等于 queueLength ${queueLength}。`,
+    );
+  }
+  return Object.freeze({
+    movement: record.movement,
+    slotRectsInConveyor: Object.freeze(
+      record.slotRectsInConveyor.map((rect, index) =>
+        parseRect(rect, `${label}.slotRectsInConveyor[${index}]`),
+      ),
     ),
   });
 }
@@ -780,6 +961,9 @@ function validateSkins(config: GameStaticYamlConfig, rootDir: string): void {
     if (skin.winAmount !== undefined) {
       validateWinAmount(rootDir, skinId, skin.winAmount);
     }
+    if (skin.featureBars !== undefined) {
+      validateFeatureBars(rootDir, skinId, skin);
+    }
     validateArtPaths(rootDir, skinId, skin);
     validateRectFits(
       skin.art.reelAreaInMainReelBackground,
@@ -788,6 +972,64 @@ function validateSkins(config: GameStaticYamlConfig, rootDir: string): void {
       `skins.${skinId}.art.mainReelBackground`,
     );
     validateReelArea(config, skinId, skin);
+  }
+}
+
+function validateFeatureBars(
+  rootDir: string,
+  skinId: string,
+  skin: GameStaticYamlSkinConfig,
+): void {
+  for (const [featureBarId, featureBar] of Object.entries(
+    skin.featureBars ?? {},
+  )) {
+    assertExistingFile(rootDir, featureBar.symbols.manifest);
+    assertExtension(
+      featureBar.symbols.manifest,
+      [".json"],
+      `skins.${skinId}.featureBars.${featureBarId}.symbols.manifest`,
+    );
+    assertExtension(
+      featureBar.symbols.pngGlob,
+      [".png"],
+      `skins.${skinId}.featureBars.${featureBarId}.symbols.pngGlob`,
+    );
+    assertExistingDirectory(
+      rootDir,
+      getStrictGlobDirectory(featureBar.symbols.pngGlob),
+    );
+    validateFeatureBarLayoutFitsConveyors(
+      skinId,
+      featureBarId,
+      skin,
+      featureBar,
+    );
+  }
+}
+
+function validateFeatureBarLayoutFitsConveyors(
+  skinId: string,
+  featureBarId: string,
+  skin: GameStaticYamlSkinConfig,
+  featureBar: GameStaticYamlFeatureBarConfig,
+): void {
+  for (const variantId of ["landscape", "portrait"] as const) {
+    const conveyor = skin.art.variants[variantId].conveyor;
+    if (!conveyor) {
+      throw new Error(
+        `skins.${skinId}.featureBars.${featureBarId}.layout.${variantId} 需要 art.variants.${variantId}.conveyor。`,
+      );
+    }
+    for (const [index, rect] of featureBar.layout[
+      variantId
+    ].slotRectsInConveyor.entries()) {
+      validateRectFits(
+        rect,
+        conveyor,
+        `skins.${skinId}.featureBars.${featureBarId}.layout.${variantId}.slotRectsInConveyor[${index}]`,
+        `skins.${skinId}.art.variants.${variantId}.conveyor`,
+      );
+    }
   }
 }
 

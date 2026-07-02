@@ -273,6 +273,19 @@ function normalizeNormalTextureSource(
         texture: assertLoadedTexture(symbol, "normal", normal.texture),
       });
     }
+    if (normal.kind === "transparent") {
+      return Object.freeze({
+        kind: "transparent",
+        width: assertPositiveDimension(
+          normal.width,
+          `Symbol "${symbol}" transparent normal width`,
+        ),
+        height: assertPositiveDimension(
+          normal.height,
+          `Symbol "${symbol}" transparent normal height`,
+        ),
+      });
+    }
     return normalizeLayeredTextureSource(symbol, normal.layers);
   }
 
@@ -459,6 +472,12 @@ function calculateCellSize(
 function getNormalTextureSize(
   normal: SymbolNormalTextureSource<Texture>,
 ): ReelCellSize {
+  if (normal.kind === "transparent") {
+    return Object.freeze({
+      width: normal.width,
+      height: normal.height,
+    });
+  }
   const texture =
     normal.kind === "single" ? normal.texture : normal.layers[0].texture;
   return Object.freeze({
@@ -515,7 +534,9 @@ function isSymbolNormalTextureSource(
     typeof normal === "object" &&
     normal !== null &&
     "kind" in normal &&
-    (normal.kind === "single" || normal.kind === "layered")
+    (normal.kind === "single" ||
+      normal.kind === "layered" ||
+      normal.kind === "transparent")
   );
 }
 
@@ -572,4 +593,11 @@ function assertRecord(value: unknown, label: string): Record<string, unknown> {
     throw new ReelAssetError(`${label} must be an object.`);
   }
   return value as Record<string, unknown>;
+}
+
+function assertPositiveDimension(value: number, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new ReelAssetError(`${label} must be a finite positive number.`);
+  }
+  return value;
 }

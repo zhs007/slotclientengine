@@ -3,6 +3,9 @@ import type {
   SlotGameStaticArtVariant,
   SlotGameStaticConfig,
   SlotGameStaticConveyorConfig,
+  SlotGameStaticFeatureBarConfig,
+  SlotGameStaticFeatureBarLayoutVariant,
+  SlotGameStaticFeatureBarSymbolsConfig,
   SlotGameStaticImageResource,
   SlotGameStaticLiveConfig,
   SlotGameStaticMargin,
@@ -117,12 +120,20 @@ function assertSkinConfig(
   label: string,
 ): asserts value is SlotGameStaticSkinConfig {
   const record = assertRecord(value, label);
-  assertKeys(record, label, ["label", "symbols", "art", "winAmount"], {
-    optional: ["winAmount"],
-  });
+  assertKeys(
+    record,
+    label,
+    ["label", "symbols", "art", "featureBars", "winAmount"],
+    {
+      optional: ["featureBars", "winAmount"],
+    },
+  );
   assertNonEmptyString(record.label, `${label}.label`);
   assertSymbolsConfig(record.symbols, `${label}.symbols`);
-  assertArtConfig(record.art, `${label}.art`);
+  const art = assertArtConfig(record.art, `${label}.art`);
+  if (record.featureBars !== undefined) {
+    assertFeatureBarsConfig(record.featureBars, `${label}.featureBars`, art);
+  }
   if (record.winAmount !== undefined) {
     assertWinAmountConfig(record.winAmount, `${label}.winAmount`);
   }
@@ -177,7 +188,7 @@ function assertSymbolsConfig(
 function assertArtConfig(
   value: unknown,
   label: string,
-): asserts value is SlotGameStaticArtConfig {
+): SlotGameStaticArtConfig {
   const record = assertRecord(value, label);
   assertKeys(record, label, [
     "mode",
@@ -214,6 +225,166 @@ function assertArtConfig(
     `${label}.reelAreaInMainReelBackground`,
     `${label}.mainReelBackground`,
   );
+  return record as unknown as SlotGameStaticArtConfig;
+}
+
+function assertFeatureBarsConfig(
+  value: unknown,
+  label: string,
+  art: SlotGameStaticArtConfig,
+): asserts value is Readonly<Record<string, SlotGameStaticFeatureBarConfig>> {
+  const record = assertRecord(value, label);
+  if (Object.keys(record).length === 0) {
+    throw new Error(`${label} must not be empty.`);
+  }
+  for (const [featureBarId, featureBar] of Object.entries(record)) {
+    if (featureBarId.trim().length === 0) {
+      throw new Error(`${label} must not contain an empty feature bar id.`);
+    }
+    assertFeatureBarConfig(featureBar, `${label}.${featureBarId}`, art);
+  }
+}
+
+function assertFeatureBarConfig(
+  value: unknown,
+  label: string,
+  art: SlotGameStaticArtConfig,
+): SlotGameStaticFeatureBarConfig {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "componentName",
+    "queueLength",
+    "visibleCount",
+    "terminalSlotIndex",
+    "emptyFeature",
+    "allowedFeatures",
+    "symbols",
+    "layout",
+  ]);
+  assertNonEmptyString(record.componentName, `${label}.componentName`);
+  const queueLength = assertPositiveInteger(
+    record.queueLength,
+    `${label}.queueLength`,
+  );
+  const visibleCount = assertPositiveInteger(
+    record.visibleCount,
+    `${label}.visibleCount`,
+  );
+  if (visibleCount >= queueLength) {
+    throw new Error(`${label}.visibleCount must be less than queueLength.`);
+  }
+  const terminalSlotIndex = assertNonNegativeInteger(
+    record.terminalSlotIndex,
+    `${label}.terminalSlotIndex`,
+  );
+  if (terminalSlotIndex >= queueLength) {
+    throw new Error(
+      `${label}.terminalSlotIndex must be less than queueLength.`,
+    );
+  }
+  const allowedFeatures = assertStringArray(
+    record.allowedFeatures,
+    `${label}.allowedFeatures`,
+    { nonEmpty: true },
+  );
+  assertUniqueStrings(allowedFeatures, `${label}.allowedFeatures`);
+  const emptyFeature = assertNonEmptyString(
+    record.emptyFeature,
+    `${label}.emptyFeature`,
+  );
+  if (!allowedFeatures.includes(emptyFeature)) {
+    throw new Error(`${label}.emptyFeature must exist in allowedFeatures.`);
+  }
+  assertFeatureBarSymbolsConfig(record.symbols, `${label}.symbols`);
+  assertFeatureBarLayoutConfig(
+    record.layout,
+    `${label}.layout`,
+    queueLength,
+    art,
+  );
+  return record as unknown as SlotGameStaticFeatureBarConfig;
+}
+
+function assertFeatureBarSymbolsConfig(
+  value: unknown,
+  label: string,
+): asserts value is SlotGameStaticFeatureBarSymbolsConfig {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "manifest",
+    "pngModules",
+    "requireExplicitScale",
+    "requiredStates",
+  ]);
+  assertRecord(record.manifest, `${label}.manifest`);
+  assertStringRecord(record.pngModules, `${label}.pngModules`);
+  if (typeof record.requireExplicitScale !== "boolean") {
+    throw new Error(`${label}.requireExplicitScale must be a boolean.`);
+  }
+  assertUniqueStrings(
+    assertStringArray(record.requiredStates, `${label}.requiredStates`, {
+      nonEmpty: false,
+    }),
+    `${label}.requiredStates`,
+  );
+}
+
+function assertFeatureBarLayoutConfig(
+  value: unknown,
+  label: string,
+  queueLength: number,
+  art: SlotGameStaticArtConfig,
+): void {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, ["landscape", "portrait"]);
+  assertFeatureBarLayoutVariant(
+    record.landscape,
+    `${label}.landscape`,
+    queueLength,
+    art.variants.landscape.conveyor,
+  );
+  assertFeatureBarLayoutVariant(
+    record.portrait,
+    `${label}.portrait`,
+    queueLength,
+    art.variants.portrait.conveyor,
+  );
+}
+
+function assertFeatureBarLayoutVariant(
+  value: unknown,
+  label: string,
+  queueLength: number,
+  conveyor: SlotGameStaticConveyorConfig | undefined,
+): asserts value is SlotGameStaticFeatureBarLayoutVariant {
+  if (!conveyor) {
+    throw new Error(`${label} requires a matching art conveyor config.`);
+  }
+  const record = assertRecord(value, label);
+  assertKeys(record, label, ["movement", "slotRectsInConveyor"]);
+  if (record.movement !== "down" && record.movement !== "right") {
+    throw new Error(`${label}.movement must be down or right.`);
+  }
+  if (!Array.isArray(record.slotRectsInConveyor)) {
+    throw new Error(`${label}.slotRectsInConveyor must be an array.`);
+  }
+  if (record.slotRectsInConveyor.length !== queueLength) {
+    throw new Error(
+      `${label}.slotRectsInConveyor length must equal queueLength.`,
+    );
+  }
+  record.slotRectsInConveyor.forEach((rect, index) => {
+    const parsedRect = assertRect(
+      rect,
+      `${label}.slotRectsInConveyor[${index}]`,
+    );
+    assertRectFitsSize(
+      parsedRect,
+      conveyor,
+      `${label}.slotRectsInConveyor[${index}]`,
+      `${label}.conveyor`,
+    );
+  });
 }
 
 function assertArtVariant(
