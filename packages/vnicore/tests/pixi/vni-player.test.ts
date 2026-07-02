@@ -125,8 +125,17 @@ const pixiMock = vi.hoisted(() => {
   }
 
   class MockText extends MockContainer {
+    text = "";
+
     constructor(readonly options: unknown) {
       super();
+      if (
+        typeof options === "object" &&
+        options !== null &&
+        "text" in options
+      ) {
+        this.text = String((options as { text: unknown }).text);
+      }
     }
   }
 
@@ -492,6 +501,78 @@ function createSafeGlowProject(): V5GProjectConfig {
   return project;
 }
 
+function createTextLayerProject(): V5GProjectConfig {
+  const project = createStaticProject();
+  project.layers[1] = {
+    ...project.layers[1],
+    id: "text-layer",
+    name: "Text Layer",
+    type: "text",
+    assetId: null,
+    text: "Original",
+    animations: [
+      {
+        id: "text-scale",
+        type: "scale_up",
+        startTime: 0,
+        duration: 1,
+        enabled: true,
+        seed: 1,
+        params: {
+          fromScaleX: 1,
+          fromScaleY: 1,
+          toScaleX: 2,
+          toScaleY: 2,
+        },
+      },
+    ],
+  };
+  return project;
+}
+
+function createChaserLightProject(): V5GProjectConfig {
+  const project = createStaticProject();
+  project.layers[0].animations = [
+    {
+      id: "chaser",
+      type: "chaser_light",
+      startTime: 0,
+      duration: 1,
+      enabled: true,
+      seed: 1,
+      params: {
+        totalCount: 6,
+        spacing: 80,
+        lightDuration: 0.08,
+        interval: 0.04,
+        trajectory: 0,
+        radius: 100,
+        centerX: 0,
+        centerY: 0,
+        endX: 200,
+        endY: 0,
+        curve: 80,
+        lightSize: 40,
+        dimAlpha: 0.1,
+        keepOriginal: false,
+      },
+    },
+  ];
+  return project;
+}
+
+function createMaskedProject(showSourceLayer: boolean): V5GProjectConfig {
+  const project = createStaticProject();
+  project.layers[1].mask = {
+    enabled: true,
+    sourceLayerId: "layer-a",
+    mode: "alpha",
+    compositeMode: "precompose_light_alpha",
+    showSourceLayer,
+  };
+  return project;
+}
+
 async function createInitializedPlayer(
   options: {
     onPlayingChange?: (isPlaying: boolean) => void;
@@ -586,8 +667,11 @@ describe("VNIPlayer", () => {
     };
 
     const textInstance = createLayerInstance(textLayer, new Map(), new Map());
-    expect(textInstance.display).toBeInstanceOf(pixiMock.MockText);
-    expect(textInstance.display.children).toHaveLength(0);
+    expect(textInstance.display).toBeInstanceOf(pixiMock.MockContainer);
+    expect(textInstance.originalTextDisplay).toBeInstanceOf(pixiMock.MockText);
+    expect(textInstance.display.children).toEqual([
+      textInstance.originalTextDisplay,
+    ]);
     expect(textInstance.texture).toBeNull();
 
     expect(() =>
@@ -630,6 +714,7 @@ describe("VNIPlayer", () => {
         visible: true,
         renderImageDisplay: true,
         hasActiveParticleAnimation: false,
+        hasActiveChaserLightAnimation: false,
         hasActiveRenderEffect: false,
         hasActiveSafeGlowAnimation: false,
         blendMode: "add",
@@ -1071,6 +1156,93 @@ describe("VNIPlayer", () => {
     expect(destroySpy).toHaveBeenCalledTimes(1);
   });
 
+  it("binds dynamic text to text layers and restores the original text on dispose", async () => {
+    const container = createContainer();
+    const player = await createInitializedPlayer({
+      project: createTextLayerProject(),
+    });
+    (
+      player as unknown as { diagnosticsElement?: HTMLElement }
+    ).diagnosticsElement = container;
+    const internals = player as unknown as {
+      layerInstances: Map<
+        string,
+        {
+          display: InstanceType<typeof pixiMock.MockContainer>;
+          originalTextDisplay: InstanceType<typeof pixiMock.MockText> | null;
+        }
+      >;
+    };
+    const textLayer = internals.layerInstances.get("text-layer");
+    if (!textLayer?.originalTextDisplay) {
+      throw new Error("Missing text layer instance.");
+    }
+
+    const binding = player.attachTextToTextLayer({
+      id: "score",
+      layerId: "text-layer",
+      text: "100",
+    });
+
+    expect(textLayer.originalTextDisplay.visible).toBe(false);
+    expect(textLayer.display.children).toHaveLength(2);
+    expect(container.dataset.vniTextLayerBindings).toBe("1");
+    binding.setText("200");
+    expect(
+      (textLayer.display.children[1] as InstanceType<typeof pixiMock.MockText>)
+        .text,
+    ).toBe("200");
+    expect(() =>
+      player.attachTextToTextLayer({
+        id: "score",
+        layerId: "text-layer",
+        text: "duplicate",
+      }),
+    ).toThrow("Duplicate VNI mounted node id");
+    expect(() =>
+      player.attachNodeToTextLayer({
+        id: "bad",
+        layerId: "layer-a",
+        node: createMockPixiContainer(),
+      }),
+    ).toThrow("is not a text layer");
+
+    binding.dispose();
+
+    expect(textLayer.originalTextDisplay.visible).toBe(true);
+    expect(textLayer.display.children).toHaveLength(1);
+    expect(container.dataset.vniTextLayerBindings).toBe("0");
+  });
+
+  it("attaches project images to text layers through the public API", async () => {
+    const player = await createInitializedPlayer({
+      project: createTextLayerProject(),
+    });
+    const dispose = await player.attachImageToTextLayer({
+      id: "text-image",
+      layerId: "text-layer",
+      assetId: "asset-a",
+    });
+    const internals = player as unknown as {
+      layerInstances: Map<
+        string,
+        {
+          display: InstanceType<typeof pixiMock.MockContainer>;
+          originalTextDisplay: InstanceType<typeof pixiMock.MockText> | null;
+        }
+      >;
+    };
+    const textLayer = internals.layerInstances.get("text-layer");
+
+    expect(textLayer?.display.children).toHaveLength(2);
+    expect(textLayer?.originalTextDisplay?.visible).toBe(false);
+
+    dispose();
+
+    expect(textLayer?.display.children).toHaveLength(1);
+    expect(textLayer?.originalTextDisplay?.visible).toBe(true);
+  });
+
   it("renders deterministic render effects and clears start-frame leakage", async () => {
     const player = await createInitializedPlayer({
       project: createRenderEffectProject(),
@@ -1181,6 +1353,85 @@ describe("VNIPlayer", () => {
     player.destroy();
 
     expect(container.dataset.vniSafeGlowSprites).toBeUndefined();
+  });
+
+  it("renders chaser_light with pooled sprites and diagnostics", async () => {
+    const container = createContainer();
+    const player = await createInitializedPlayer({
+      project: createChaserLightProject(),
+    });
+    (
+      player as unknown as { diagnosticsElement?: HTMLElement }
+    ).diagnosticsElement = container;
+
+    player.seek(0.5);
+
+    const internals = player as unknown as {
+      chaserLightSpritesByLayer: Map<
+        string,
+        InstanceType<typeof pixiMock.MockSprite>[]
+      >;
+      layerInstances: Map<
+        string,
+        {
+          display: InstanceType<typeof pixiMock.MockContainer>;
+        }
+      >;
+    };
+    const firstSprites =
+      internals.chaserLightSpritesByLayer.get("layer-a") ?? [];
+    expect(firstSprites).toHaveLength(6);
+    expect(internals.layerInstances.get("layer-a")?.display.visible).toBe(
+      false,
+    );
+    expect(container.dataset.vniChaserLightSprites).toBe("6");
+
+    player.seek(0.6);
+
+    expect(internals.chaserLightSpritesByLayer.get("layer-a")).toBe(
+      firstSprites,
+    );
+  });
+
+  it("applies masks without rendering hidden source layers", async () => {
+    const container = createContainer();
+    const player = await createInitializedPlayer({
+      project: createMaskedProject(false),
+    });
+    (
+      player as unknown as { diagnosticsElement?: HTMLElement }
+    ).diagnosticsElement = container;
+
+    player.seek(0.5);
+
+    const internals = player as unknown as {
+      maskSpritesByTargetLayer: Map<
+        string,
+        InstanceType<typeof pixiMock.MockSprite>
+      >;
+      layerInstances: Map<
+        string,
+        {
+          display: InstanceType<typeof pixiMock.MockContainer>;
+        }
+      >;
+      maskCacheKeysByTargetLayer: Map<string, string>;
+    };
+    const source = internals.layerInstances.get("layer-a");
+    const target = internals.layerInstances.get("layer-b");
+
+    expect(source?.display.visible).toBe(false);
+    expect(target?.display.mask).toBe(
+      internals.maskSpritesByTargetLayer.get("layer-b"),
+    );
+    expect(internals.maskCacheKeysByTargetLayer.get("layer-b")).toContain(
+      "targetTransform",
+    );
+    expect(container.dataset.vniMaskSprites).toBe("1");
+
+    player.destroy();
+
+    expect(container.dataset.vniMaskSprites).toBeUndefined();
   });
 
   it("fails fast for reversed, unknown, and non-adjacent group slots", async () => {

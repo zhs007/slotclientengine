@@ -13,6 +13,8 @@ import scatter1Data from "../assets/projects/scatter1.json";
 import scatter2Data from "../assets/projects/scatter2.json";
 import superwinData from "../assets/projects/superwin.json";
 import roundreelData from "../assets/projects/roundreel.json";
+import number2Data from "../assets/projects/number2.json";
+import number3Data from "../assets/projects/number3.json";
 import game003L1WinsData from "../../../../assets/game003-s1/L1-wins.json";
 import game003L2WinsData from "../../../../assets/game003-s1/L2-wins.json";
 import game003L3WinsData from "../../../../assets/game003-s1/L3-wins.json";
@@ -44,6 +46,8 @@ export type BundledProjectId =
   | "project"
   | "lock-01"
   | "roundreel"
+  | "number2"
+  | "number3"
   | "bigwin"
   | "megawin"
   | "superwin"
@@ -112,6 +116,8 @@ const roundreelProfile = requireBundledExportProfile(
   roundreelData,
   "roundreel",
 );
+const number2Profile = requireBundledExportProfile(number2Data, "number2");
+const number3Profile = requireBundledExportProfile(number3Data, "number3");
 
 const bundledProjectDefinitions: readonly BundledProjectDefinition[] = [
   {
@@ -145,6 +151,28 @@ const bundledProjectDefinitions: readonly BundledProjectDefinition[] = [
     purpose: roundreelProfile.purpose,
     assetScale: roundreelProfile.assetScale,
     data: roundreelData,
+    assetUrlManifest: bundledAssetUrlManifest,
+  },
+  {
+    id: "number2",
+    filename: "number2.json",
+    sourcePath: "docs/anieditor5/export/number2.json",
+    bundleId: "export",
+    profileId: number2Profile.id,
+    purpose: number2Profile.purpose,
+    assetScale: number2Profile.assetScale,
+    data: number2Data,
+    assetUrlManifest: bundledAssetUrlManifest,
+  },
+  {
+    id: "number3",
+    filename: "number3.json",
+    sourcePath: "docs/anieditor5/export/number3.json",
+    bundleId: "export",
+    profileId: number3Profile.id,
+    purpose: number3Profile.purpose,
+    assetScale: number3Profile.assetScale,
+    data: number3Data,
     assetUrlManifest: bundledAssetUrlManifest,
   },
   {

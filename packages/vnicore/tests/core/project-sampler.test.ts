@@ -124,6 +124,43 @@ describe("project-sampler", () => {
     expect(sampled.visible).toBe(false);
   });
 
+  it("keeps chaser_light active after keepOriginal hides the source image", () => {
+    const sampled = sampleLayerAtTime(
+      layer({}, [
+        {
+          id: "chaser",
+          type: "chaser_light",
+          startTime: 0,
+          duration: 1,
+          enabled: true,
+          seed: 1,
+          params: {
+            totalCount: 8,
+            spacing: 80,
+            lightDuration: 0.08,
+            interval: 0.04,
+            trajectory: 0,
+            radius: 120,
+            centerX: 0,
+            centerY: 0,
+            endX: 240,
+            endY: 0,
+            curve: 120,
+            lightSize: 40,
+            dimAlpha: 0.12,
+            keepOriginal: false,
+          },
+        },
+      ]),
+      0.5,
+    );
+
+    expect(sampled.opacity).toBe(0);
+    expect(sampled.renderImageDisplay).toBe(false);
+    expect(sampled.hasActiveChaserLightAnimation).toBe(true);
+    expect(sampled.visible).toBe(true);
+  });
+
   it("hides layers before a delayed opacity entry even when other animations are active", () => {
     const sampled = sampleLayerAtTime(
       layer({}, [

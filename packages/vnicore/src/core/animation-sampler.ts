@@ -32,6 +32,7 @@ export const SUPPORTED_EASINGS: readonly V5GEasingName[] = [
 
 export const PARTICLE_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "particles",
+  "particle_stream",
   "particle_twinkle",
   "particle_wall",
   "particle_combo",
@@ -56,9 +57,11 @@ export const SUPPORTED_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "float",
   "swing",
   "particles",
+  "particle_stream",
   "particle_twinkle",
   "particle_wall",
   "particle_combo",
+  "chaser_light",
   "shatter",
   "glow",
   "safe_glow",
@@ -86,9 +89,11 @@ const DEFAULT_EASING_BY_TYPE: Readonly<
   float: "linear",
   swing: "linear",
   particles: "linear",
+  particle_stream: "linear",
   particle_twinkle: "linear",
   particle_wall: "linear",
   particle_combo: "easeInOutQuad",
+  chaser_light: "linear",
   shatter: "easeOutQuad",
   glow: "linear",
   safe_glow: "linear",
@@ -121,7 +126,7 @@ export function sampleLayerAnimationsAtTime(
     else if (animation.type === "fade")
       sampleFade(result, animation, easedProgress);
     else if (animation.type === "bounce_in")
-      sampleBounceIn(result, animation, progress, base);
+      sampleBounceIn(result, animation, easedProgress, base);
     else if (animation.type === "scale_up" || animation.type === "scale_down")
       sampleScale(result, animation, easedProgress, base.transform);
     else if (animation.type === "scale_in" || animation.type === "scale_out")
@@ -147,6 +152,8 @@ export function sampleLayerAnimationsAtTime(
       sampleShatterSource(result, animation, base);
     else if (animation.type === "glow" || animation.type === "safe_glow")
       sampleGlowSource(result, animation);
+    else if (animation.type === "chaser_light")
+      sampleChaserLightSource(result, animation);
     else if (isParticleAnimationType(animation.type)) {
       // Particle animations are sampled by particle-sampler. They do not alter
       // the base layer transform or opacity here.
@@ -456,6 +463,14 @@ function sampleShatterSource(
 }
 
 function sampleGlowSource(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+): void {
+  if (getOptionalBooleanParam(animation, "keepOriginal", true)) return;
+  result.opacity = 0;
+}
+
+function sampleChaserLightSource(
   result: V5GAnimationSampleResult,
   animation: V5GAnimationConfig,
 ): void {

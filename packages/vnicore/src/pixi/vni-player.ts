@@ -10,6 +10,10 @@ import {
   type VNIRenderGroupInfo,
 } from "../core/layer-groups.js";
 import {
+  sampleChaserLightSpritesForLayer,
+  type VNIChaserLightSpriteSample,
+} from "../core/chaser-light-sampler.js";
+import {
   VNIParticleRuntime,
   sampleLiveParticleSprites,
   type VNILiveParticleSpriteSample,
@@ -165,6 +169,38 @@ export interface VNIAttachExternalImageBetweenLayerGroupsOptions {
   destroyOnDetach?: boolean;
 }
 
+export interface VNIAttachNodeToTextLayerOptions {
+  id: string;
+  layerId: string;
+  node: PIXI.Container;
+  destroyOnDetach?: boolean;
+  hideOriginal?: boolean;
+}
+
+export interface VNIAttachTextToTextLayerOptions {
+  id: string;
+  layerId: string;
+  text: string;
+  style?: Partial<PIXI.TextStyle>;
+  destroyOnDetach?: boolean;
+  hideOriginal?: boolean;
+}
+
+export interface VNITextLayerTextBinding {
+  dispose(): void;
+  setText(text: string): void;
+}
+
+export interface VNIAttachImageToTextLayerOptions {
+  id: string;
+  layerId: string;
+  assetId?: string;
+  imageUrl?: string;
+  label?: string;
+  destroyOnDetach?: boolean;
+  hideOriginal?: boolean;
+}
+
 interface ActivePlaybackRange {
   startTime: number;
   endTime: number;
@@ -189,6 +225,8 @@ interface VNIMountedNode {
   node: PIXI.Container;
   slotContainer: PIXI.Container;
   destroyOnDetach: boolean;
+  textLayerId?: string;
+  hideOriginal?: boolean;
 }
 
 interface VNIMountedImageSpriteOptions {
@@ -235,6 +273,9 @@ export class VNIPlayer {
   private texturesByAssetId: ReadonlyMap<string, PIXI.Texture> = new Map();
   private readonly ownedTextures = new Set<PIXI.Texture>();
   private readonly safeGlowSpritesByLayer = new Map<string, PIXI.Container[]>();
+  private readonly chaserLightSpritesByLayer = new Map<string, PIXI.Sprite[]>();
+  private readonly maskSpritesByTargetLayer = new Map<string, PIXI.Sprite>();
+  private readonly maskCacheKeysByTargetLayer = new Map<string, string>();
   private readonly renderEffectDisplaysByLayer = new Map<
     string,
     PIXI.Container[]
@@ -426,6 +467,118 @@ export class VNIPlayer {
     );
   }
 
+  attachNodeToTextLayer(options: VNIAttachNodeToTextLayerOptions): () => void {
+    this.assertInitialized("attachNodeToTextLayer");
+    const id = normalizeMountedNodeId(options.id);
+    if (this.mountedNodesById.has(id)) {
+      throw new Error(`Duplicate VNI mounted node id: ${id}.`);
+    }
+    const instance = this.getTextLayerInstance(options.layerId);
+    instance.display.addChild(options.node);
+    this.mountedNodesById.set(id, {
+      id,
+      node: options.node,
+      slotContainer: instance.display,
+      destroyOnDetach: options.destroyOnDetach === true,
+      textLayerId: instance.layer.id,
+      hideOriginal: options.hideOriginal ?? true,
+    });
+    this.updateTextLayerOriginalVisibility(instance.layer.id);
+    this.updateMountedNodeDiagnostics();
+    let disposed = false;
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      this.detachMountedNode(id);
+    };
+  }
+
+  attachTextToTextLayer(
+    options: VNIAttachTextToTextLayerOptions,
+  ): VNITextLayerTextBinding {
+    const textNode = new PIXI.Text({
+      text: options.text,
+      style: {
+        fill: 0xffffff,
+        fontFamily: "Arial, sans-serif",
+        fontSize: 72,
+        fontWeight: "700",
+        stroke: { color: 0x111827, width: 4 },
+        ...(options.style ?? {}),
+      },
+    });
+    textNode.label = `VNI text layer replacement ${options.layerId}`;
+    textNode.anchor.set(0.5);
+    const dispose = this.attachNodeToTextLayer({
+      ...options,
+      node: textNode,
+      destroyOnDetach: options.destroyOnDetach ?? true,
+    });
+    return {
+      dispose,
+      setText(text: string): void {
+        textNode.text = text;
+      },
+    };
+  }
+
+  async attachImageToTextLayer(
+    options: VNIAttachImageToTextLayerOptions,
+  ): Promise<() => void> {
+    const hasAssetId = typeof options.assetId === "string";
+    const hasImageUrl = typeof options.imageUrl === "string";
+    if (hasAssetId === hasImageUrl) {
+      throw new Error(
+        "VNI text layer image replacement requires exactly one of assetId or imageUrl.",
+      );
+    }
+    let texture: PIXI.Texture;
+    let compensation = { x: 1, y: 1 };
+    let label = options.label ?? options.imageUrl ?? options.assetId ?? "";
+    if (hasAssetId) {
+      const asset = this.assetsById.get(options.assetId ?? "");
+      if (!asset) {
+        throw new Error(`Unknown VNI asset id: ${options.assetId}.`);
+      }
+      const loadedTexture = this.texturesByAssetId.get(asset.id);
+      if (!loadedTexture) {
+        throw new Error(`VNI asset "${asset.id}" is not loaded.`);
+      }
+      texture = loadedTexture;
+      compensation = getAssetDisplayCompensation(asset, {
+        width: Math.round(texture.width),
+        height: Math.round(texture.height),
+      });
+      label = options.label ?? asset.path;
+    } else {
+      const imageUrl = options.imageUrl?.trim() ?? "";
+      if (!imageUrl) {
+        throw new Error(
+          "VNI text layer image replacement url must be non-empty.",
+        );
+      }
+      texture = (await PIXI.Assets.load(imageUrl)) as PIXI.Texture;
+      assertLoadedTexture(
+        texture,
+        `VNI text layer image replacement: ${imageUrl}`,
+      );
+    }
+    const sprite = new PIXI.Sprite(texture);
+    sprite.label = `VNI text layer image ${label}`;
+    sprite.anchor.set(0.5);
+    sprite.scale.set(compensation.x, compensation.y);
+    try {
+      return this.attachNodeToTextLayer({
+        ...options,
+        node: sprite,
+        destroyOnDetach: options.destroyOnDetach ?? true,
+      });
+    } catch (error) {
+      sprite.destroy({ children: true });
+      throw error;
+    }
+  }
+
   private attachMountedImageSprite(
     texture: PIXI.Texture,
     label: string,
@@ -470,6 +623,9 @@ export class VNIPlayer {
       mounted.node.destroy({ children: true });
     }
     this.mountedNodesById.delete(normalizedId);
+    if (mounted.textLayerId) {
+      this.updateTextLayerOriginalVisibility(mounted.textLayerId);
+    }
     this.updateMountedNodeDiagnostics();
   }
 
@@ -739,6 +895,8 @@ export class VNIPlayer {
     this.clearMountedNodes();
     this.clearSafeGlow();
     this.clearRenderEffects();
+    this.clearChaserLights();
+    this.clearMasks();
     this.clearParticles();
     this.clearDiagnostics();
     this.stageRoot.parent?.removeChild(this.stageRoot);
@@ -913,6 +1071,10 @@ export class VNIPlayer {
       sampled.layers,
       endTime,
     );
+    const chaserLightSpriteCount = this.renderChaserLightSamples(
+      sampled.layers,
+      endTime,
+    );
     const particleLayers = this.getParticleRuntimeLayers(sampled.layers);
     if (particleLayers.length > 0) {
       const endParticles = sampleLiveParticleSprites(
@@ -931,6 +1093,7 @@ export class VNIPlayer {
       particleSpriteCount,
       renderEffectSpriteCount,
       safeGlowSpriteCount,
+      chaserLightSpriteCount,
     );
     this.onTimeChange?.(this.currentTime);
     this.renderIfHostDriven();
@@ -950,11 +1113,16 @@ export class VNIPlayer {
       sampled.layers,
       this.currentTime,
     );
+    const chaserLightSpriteCount = this.renderChaserLightSamples(
+      sampled.layers,
+      this.currentTime,
+    );
     this.updateDiagnostics(
       sampled.layers.filter((layer) => layer.visible).length,
       particleSpriteCount,
       this.getRenderedRenderEffectCount(),
       safeGlowSpriteCount,
+      chaserLightSpriteCount,
     );
     if (frame.isComplete) {
       this.finishParticleDrain();
@@ -974,6 +1142,7 @@ export class VNIPlayer {
       0,
       this.getRenderedRenderEffectCount(),
       this.getRenderedSafeGlowCount(),
+      this.getRenderedChaserLightCount(),
     );
     this.renderIfHostDriven();
     const event = this.pendingComplete;
@@ -1112,6 +1281,10 @@ export class VNIPlayer {
       sampled.layers,
       this.currentTime,
     );
+    const chaserLightSpriteCount = this.renderChaserLightSamples(
+      sampled.layers,
+      this.currentTime,
+    );
     const particles = sampleLiveParticleSprites(
       this.getParticleRuntimeLayers(sampled.layers),
       this.project.stage,
@@ -1123,6 +1296,7 @@ export class VNIPlayer {
       particleSpriteCount,
       renderEffectSpriteCount,
       safeGlowSpriteCount,
+      chaserLightSpriteCount,
     );
     this.onTimeChange?.(this.currentTime);
     this.renderIfHostDriven();
@@ -1139,6 +1313,10 @@ export class VNIPlayer {
       nonParticleTime,
     );
     const renderEffectSpriteCount = this.renderRenderEffectSamples(
+      sampled.layers,
+      nonParticleTime,
+    );
+    const chaserLightSpriteCount = this.renderChaserLightSamples(
       sampled.layers,
       nonParticleTime,
     );
@@ -1161,6 +1339,7 @@ export class VNIPlayer {
       particleSpriteCount,
       renderEffectSpriteCount,
       safeGlowSpriteCount,
+      chaserLightSpriteCount,
     );
     this.onTimeChange?.(this.currentTime);
     this.renderIfHostDriven();
@@ -1179,6 +1358,7 @@ export class VNIPlayer {
       }
       applySampledLayerState(instance, sampledLayer, this.project.stage);
     }
+    this.applyLayerMasks(sampled.layers);
     return sampled;
   }
 
@@ -1190,6 +1370,153 @@ export class VNIPlayer {
     if (this.initialized) {
       this.requestRenderCallback?.();
     }
+  }
+
+  private getTextLayerInstance(layerId: string): V5GLayerInstance {
+    const instance = this.layerInstances.get(layerId);
+    if (!instance) {
+      throw new Error(`Unknown VNI text layer id: ${layerId}.`);
+    }
+    if (instance.layer.type !== "text" || !instance.originalTextDisplay) {
+      throw new Error(`VNI layer "${layerId}" is not a text layer.`);
+    }
+    return instance;
+  }
+
+  private updateTextLayerOriginalVisibility(layerId: string): void {
+    const instance = this.layerInstances.get(layerId);
+    if (!instance?.originalTextDisplay) return;
+    const shouldHide = [...this.mountedNodesById.values()].some(
+      (mounted) => mounted.textLayerId === layerId && mounted.hideOriginal,
+    );
+    instance.originalTextDisplay.visible = !shouldHide;
+  }
+
+  private applyLayerMasks(sampledLayers: readonly SampledLayerState[]): void {
+    const sampledByLayerId = new Map(
+      sampledLayers.map((layer) => [layer.layerId, layer] as const),
+    );
+    const activeTargetLayerIds = new Set<string>();
+
+    for (const layer of this.project.layers) {
+      const mask = layer.mask;
+      const targetInstance = this.layerInstances.get(layer.id);
+      if (!targetInstance) continue;
+      if (!mask?.enabled) {
+        targetInstance.display.mask = null;
+        continue;
+      }
+      if (!mask.sourceLayerId) {
+        throw new Error(
+          `VNI mask on layer "${layer.id}" requires sourceLayerId when enabled.`,
+        );
+      }
+      const sourceInstance = this.layerInstances.get(mask.sourceLayerId);
+      const sourceSample = sampledByLayerId.get(mask.sourceLayerId);
+      const targetSample = sampledByLayerId.get(layer.id);
+      if (!sourceInstance || !sourceSample || !targetSample) {
+        throw new Error(
+          `VNI mask on layer "${layer.id}" references missing source layer "${mask.sourceLayerId}".`,
+        );
+      }
+      if (mask.compositeMode === "precompose_light_alpha") {
+        if (!targetInstance.texture || !sourceInstance.texture) {
+          throw new Error(
+            `VNI precompose_light_alpha mask on layer "${layer.id}" requires image source and target textures.`,
+          );
+        }
+      }
+      if (!sourceInstance.texture || !sourceInstance.textureSize) {
+        throw new Error(
+          `VNI mask source layer "${sourceInstance.layer.id}" is missing image texture.`,
+        );
+      }
+      const maskSprite = this.getOrCreateMaskSprite(
+        targetInstance,
+        sourceInstance,
+      );
+      this.applyMaskSpriteState(maskSprite, sourceInstance, sourceSample);
+      targetInstance.display.mask = maskSprite;
+      activeTargetLayerIds.add(layer.id);
+      if (!mask.showSourceLayer) {
+        sourceInstance.display.visible = false;
+      }
+      if (mask.compositeMode === "precompose_light_alpha") {
+        this.maskCacheKeysByTargetLayer.set(
+          layer.id,
+          createMaskCacheKey(
+            targetInstance,
+            sourceInstance,
+            targetSample,
+            sourceSample,
+            this.project.stage.width,
+            this.project.stage.height,
+          ),
+        );
+      }
+    }
+
+    for (const [layerId, sprite] of [...this.maskSpritesByTargetLayer]) {
+      if (activeTargetLayerIds.has(layerId)) continue;
+      sprite.parent?.removeChild(sprite);
+      sprite.destroy({ children: true });
+      this.maskSpritesByTargetLayer.delete(layerId);
+      this.maskCacheKeysByTargetLayer.delete(layerId);
+    }
+  }
+
+  private getOrCreateMaskSprite(
+    targetInstance: V5GLayerInstance,
+    sourceInstance: V5GLayerInstance,
+  ): PIXI.Sprite {
+    const existing = this.maskSpritesByTargetLayer.get(targetInstance.layer.id);
+    if (existing) return existing;
+    if (!sourceInstance.texture) {
+      throw new Error(
+        `VNI mask source layer "${sourceInstance.layer.id}" is missing image texture.`,
+      );
+    }
+    const sprite = new PIXI.Sprite(sourceInstance.texture);
+    sprite.label = `VNI mask ${sourceInstance.layer.id} -> ${targetInstance.layer.id}`;
+    sprite.anchor.set(
+      sourceInstance.layer.transform.anchorX,
+      sourceInstance.layer.transform.anchorY,
+    );
+    (sprite as unknown as { renderable: boolean }).renderable = false;
+    this.stageRoot.addChild(sprite);
+    this.maskSpritesByTargetLayer.set(targetInstance.layer.id, sprite);
+    return sprite;
+  }
+
+  private applyMaskSpriteState(
+    sprite: PIXI.Sprite,
+    sourceInstance: V5GLayerInstance,
+    sourceSample: SampledLayerState,
+  ): void {
+    const position = editorToPixi(
+      sourceSample.transform.x,
+      sourceSample.transform.y,
+      this.project.stage.width,
+      this.project.stage.height,
+    );
+    const asset = getLayerAsset(sourceInstance.layer, this.assetsById);
+    if (!asset || !sourceInstance.textureSize) {
+      throw new Error(
+        `VNI mask source layer "${sourceInstance.layer.id}" is missing image asset.`,
+      );
+    }
+    const compensation = getAssetDisplayCompensation(
+      asset,
+      sourceInstance.textureSize,
+    );
+    sprite.position.set(position.x, position.y);
+    sprite.scale.set(
+      sourceSample.transform.scaleX * compensation.x,
+      sourceSample.transform.scaleY * compensation.y,
+    );
+    sprite.rotation = (sourceSample.transform.rotation * Math.PI) / 180;
+    sprite.alpha = sourceSample.opacity;
+    sprite.visible = true;
   }
 
   private getParticleRuntimeLayers(
@@ -1255,6 +1582,7 @@ export class VNIPlayer {
       instance.display,
       ...(this.safeGlowSpritesByLayer.get(instance.layer.id) ?? []),
       ...(this.renderEffectDisplaysByLayer.get(instance.layer.id) ?? []),
+      ...(this.chaserLightSpritesByLayer.get(instance.layer.id) ?? []),
       ...(this.liveParticleSpritesByLayer.get(instance.layer.id) ?? []),
     ];
   }
@@ -1425,6 +1753,112 @@ export class VNIPlayer {
     return spriteCount;
   }
 
+  private renderChaserLightSamples(
+    sampledLayers: readonly SampledLayerState[],
+    time: number,
+  ): number {
+    const samplesByLayer = new Map<string, VNIChaserLightSpriteSample[]>();
+    let sampleCount = 0;
+    for (const sampledLayer of sampledLayers) {
+      if (!sampledLayer.hasActiveChaserLightAnimation) continue;
+      const instance = this.layerInstances.get(sampledLayer.layerId);
+      if (!instance) {
+        throw new Error(`Missing V5G layer instance: ${sampledLayer.layerId}`);
+      }
+      if (!instance.texture || !instance.textureSize) {
+        throw new Error(
+          `V5G chaser_light layer "${sampledLayer.layerId}" is missing image texture.`,
+        );
+      }
+      const samples = sampleChaserLightSpritesForLayer(
+        instance.layer,
+        sampledLayer,
+        instance.textureSize,
+        time,
+      );
+      samplesByLayer.set(sampledLayer.layerId, samples);
+      sampleCount += samples.length;
+    }
+
+    for (const instance of this.layerInstances.values()) {
+      const samples = samplesByLayer.get(instance.layer.id) ?? [];
+      if (samples.length === 0) {
+        const sprites = this.chaserLightSpritesByLayer.get(instance.layer.id);
+        if (sprites) {
+          for (const sprite of sprites) {
+            this.destroyRuntimeDisplay(sprite);
+          }
+          this.chaserLightSpritesByLayer.delete(instance.layer.id);
+        }
+        continue;
+      }
+      let sprites = this.chaserLightSpritesByLayer.get(instance.layer.id);
+      if (!sprites) {
+        sprites = [];
+        this.chaserLightSpritesByLayer.set(instance.layer.id, sprites);
+      }
+      while (sprites.length < samples.length) {
+        if (!instance.texture) {
+          throw new Error(
+            `V5G chaser_light layer "${instance.layer.id}" is missing image texture.`,
+          );
+        }
+        const sprite = new PIXI.Sprite(instance.texture);
+        sprite.anchor.set(
+          instance.layer.transform.anchorX,
+          instance.layer.transform.anchorY,
+        );
+        sprites.push(sprite);
+        this.insertLayerRuntimeDisplay(instance, sprite);
+      }
+      const asset = getLayerAsset(instance.layer, this.assetsById);
+      if (!asset || !instance.textureSize) {
+        throw new Error(
+          `V5G chaser_light layer "${instance.layer.id}" is missing image asset.`,
+        );
+      }
+      const compensation = getAssetDisplayCompensation(
+        asset,
+        instance.textureSize,
+      );
+      const sampledLayer = sampledLayers.find(
+        (candidate) => candidate.layerId === instance.layer.id,
+      );
+      if (!sampledLayer) {
+        throw new Error(
+          `Missing V5G chaser_light sampled layer: ${instance.layer.id}`,
+        );
+      }
+      const emitter = editorToPixi(
+        sampledLayer.transform.x,
+        sampledLayer.transform.y,
+        this.project.stage.width,
+        this.project.stage.height,
+      );
+      for (let index = 0; index < samples.length; index += 1) {
+        const sample = samples[index];
+        const sprite = sprites[index];
+        sprite.position.set(emitter.x + sample.x, emitter.y + sample.y);
+        sprite.scale.set(
+          sample.scale * compensation.x,
+          sample.scale * compensation.y,
+        );
+        sprite.rotation = sample.rotation;
+        sprite.alpha = sample.alpha;
+        sprite.blendMode = toPixiBlendMode(sample.blendMode);
+        sprite.visible = true;
+      }
+      while (sprites.length > samples.length) {
+        const sprite = sprites.pop();
+        if (sprite) {
+          this.destroyRuntimeDisplay(sprite);
+        }
+      }
+    }
+
+    return sampleCount;
+  }
+
   private renderRenderEffectSprite(
     instance: V5GLayerInstance,
     effect: VNIRenderEffectSpriteSample,
@@ -1556,6 +1990,22 @@ export class VNIPlayer {
     this.clearTrackedRuntimeDisplays(this.renderEffectDisplaysByLayer);
   }
 
+  private clearChaserLights(): void {
+    this.clearTrackedRuntimeDisplays(this.chaserLightSpritesByLayer);
+  }
+
+  private clearMasks(): void {
+    for (const instance of this.layerInstances.values()) {
+      instance.display.mask = null;
+    }
+    for (const sprite of this.maskSpritesByTargetLayer.values()) {
+      sprite.parent?.removeChild(sprite);
+      sprite.destroy({ children: true });
+    }
+    this.maskSpritesByTargetLayer.clear();
+    this.maskCacheKeysByTargetLayer.clear();
+  }
+
   private clearSafeGlow(): void {
     this.clearTrackedRuntimeDisplays(this.safeGlowSpritesByLayer);
   }
@@ -1576,6 +2026,18 @@ export class VNIPlayer {
     return count;
   }
 
+  private getRenderedChaserLightCount(): number {
+    let count = 0;
+    for (const sprites of this.chaserLightSpritesByLayer.values()) {
+      count += sprites.length;
+    }
+    return count;
+  }
+
+  private getRenderedMaskCount(): number {
+    return this.maskSpritesByTargetLayer.size;
+  }
+
   private getRenderedParticleCount(): number {
     let count = 0;
     for (const sprites of this.liveParticleSpritesByLayer.values()) {
@@ -1591,6 +2053,11 @@ export class VNIPlayer {
     this.diagnosticsElement.dataset.vniMountedNodes = String(
       this.mountedNodesById.size,
     );
+    this.diagnosticsElement.dataset.vniTextLayerBindings = String(
+      [...this.mountedNodesById.values()].filter(
+        (mounted) => mounted.textLayerId,
+      ).length,
+    );
   }
 
   private updateDiagnostics(
@@ -1598,6 +2065,7 @@ export class VNIPlayer {
     particleSpriteCount: number,
     renderEffectSpriteCount: number,
     safeGlowSpriteCount: number,
+    chaserLightSpriteCount: number,
   ): void {
     const diagnostics = this.diagnosticsElement;
     if (!diagnostics) {
@@ -1611,6 +2079,8 @@ export class VNIPlayer {
       renderEffectSpriteCount,
     );
     diagnostics.dataset.vniSafeGlowSprites = String(safeGlowSpriteCount);
+    diagnostics.dataset.vniChaserLightSprites = String(chaserLightSpriteCount);
+    diagnostics.dataset.vniMaskSprites = String(this.getRenderedMaskCount());
     diagnostics.dataset.vniPlaybackMode = this.playbackMode;
     diagnostics.dataset.vniPlaybackPhase = this.getEffectivePlaybackPhase();
     diagnostics.dataset.vniParticleDraining = String(
@@ -1643,6 +2113,8 @@ export class VNIPlayer {
     delete diagnostics.dataset.vniParticleSprites;
     delete diagnostics.dataset.vniRenderEffectSprites;
     delete diagnostics.dataset.vniSafeGlowSprites;
+    delete diagnostics.dataset.vniChaserLightSprites;
+    delete diagnostics.dataset.vniMaskSprites;
     delete diagnostics.dataset.vniPlaybackMode;
     delete diagnostics.dataset.vniPlaybackPhase;
     delete diagnostics.dataset.vniParticleDraining;
@@ -1650,6 +2122,7 @@ export class VNIPlayer {
     delete diagnostics.dataset.vniLayerGroups;
     delete diagnostics.dataset.vniLayerGroupSlots;
     delete diagnostics.dataset.vniMountedNodes;
+    delete diagnostics.dataset.vniTextLayerBindings;
     delete diagnostics.dataset.v5gProjectId;
     delete diagnostics.dataset.v5gTime;
     delete diagnostics.dataset.v5gVisibleLayers;
@@ -1720,4 +2193,31 @@ function assertLoadedTexture(
   ) {
     throw new Error(`${context} failed to load a valid Pixi texture.`);
   }
+}
+
+function createMaskCacheKey(
+  targetInstance: V5GLayerInstance,
+  sourceInstance: V5GLayerInstance,
+  targetSample: SampledLayerState,
+  sourceSample: SampledLayerState,
+  stageWidth: number,
+  stageHeight: number,
+): string {
+  return JSON.stringify({
+    targetTexture: getTextureCacheLabel(targetInstance.texture),
+    sourceTexture: getTextureCacheLabel(sourceInstance.texture),
+    targetTransform: targetSample.transform,
+    sourceTransform: sourceSample.transform,
+    targetOpacity: targetSample.opacity,
+    sourceOpacity: sourceSample.opacity,
+    blendMode: targetSample.blendMode,
+    stageWidth,
+    stageHeight,
+  });
+}
+
+function getTextureCacheLabel(texture: PIXI.Texture | null): string {
+  if (!texture) return "none";
+  const source = texture.source as { label?: string } | undefined;
+  return `${texture.label ?? ""}:${source?.label ?? ""}:${texture.width}x${texture.height}`;
 }

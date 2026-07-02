@@ -47,6 +47,16 @@ export interface ViewerControlsOptions {
     beforeGroupId: string;
   }) => void;
   onClearInsertedNodes: () => void;
+  onApplyTextLayerReplacement: (options: {
+    layerId: string;
+    mode: "text" | "image";
+    text?: string;
+    assetPath?: string;
+    assetUrl?: string;
+    projectAssetId?: string;
+  }) => void;
+  onTextLayerReplacementTextInput: (text: string) => void;
+  onClearTextLayerReplacement: () => void;
 }
 
 export interface ViewerControls {
@@ -59,6 +69,8 @@ export interface ViewerControls {
   setLayerGroupSlots(slots: readonly VNILayerGroupSlot[]): void;
   setInsertionError(message: string | null): void;
   setInsertedNodeActive(active: boolean): void;
+  setTextReplacementError(message: string | null): void;
+  setTextReplacementActive(active: boolean): void;
 }
 
 export function createViewerControls(
@@ -75,6 +87,7 @@ export function createViewerControls(
   let currentProject: ViewerControlsProject = selectedProject;
   let currentLayerGroupSlots: readonly VNILayerGroupSlot[] = [];
   let insertedNodeActive = false;
+  let textReplacementActive = false;
 
   const root = document.createElement("div");
   root.className = "viewer-controls";
@@ -269,6 +282,89 @@ export function createViewerControls(
   );
   insertionPanel.append(insertionHeader, insertionControls, insertionError);
 
+  const textPanel = document.createElement("section");
+  textPanel.className = "text-replacement-panel";
+  textPanel.setAttribute("aria-label", "文字层替换");
+
+  const textHeader = document.createElement("div");
+  textHeader.className = "text-replacement-header";
+  const textTitle = document.createElement("strong");
+  textTitle.textContent = "文字层替换";
+  const textStatus = document.createElement("span");
+  textStatus.className = "text-replacement-status";
+  textHeader.append(textTitle, textStatus);
+
+  const textControls = document.createElement("div");
+  textControls.className = "text-replacement-row";
+
+  const textLayerLabel = document.createElement("label");
+  textLayerLabel.className = "text-replacement-select";
+  const textLayerText = document.createElement("span");
+  textLayerText.textContent = "layer";
+  const textLayerSelect = document.createElement("select");
+  textLayerSelect.setAttribute("aria-label", "文字层");
+  textLayerLabel.append(textLayerText, textLayerSelect);
+
+  const textModeLabel = document.createElement("label");
+  textModeLabel.className = "text-replacement-select";
+  const textModeText = document.createElement("span");
+  textModeText.textContent = "mode";
+  const textModeSelect = document.createElement("select");
+  textModeSelect.setAttribute("aria-label", "文字层替换模式");
+  for (const [value, label] of [
+    ["text", "文本"],
+    ["image", "图片"],
+  ] as const) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    textModeSelect.appendChild(option);
+  }
+  textModeLabel.append(textModeText, textModeSelect);
+
+  const textValueLabel = document.createElement("label");
+  textValueLabel.className = "text-replacement-input";
+  const textValueText = document.createElement("span");
+  textValueText.textContent = "text";
+  const textValueInput = document.createElement("input");
+  textValueInput.type = "text";
+  textValueInput.value = "12345";
+  textValueInput.setAttribute("aria-label", "动态文字内容");
+  textValueLabel.append(textValueText, textValueInput);
+
+  const textAssetLabel = document.createElement("label");
+  textAssetLabel.className = "text-replacement-select";
+  const textAssetText = document.createElement("span");
+  textAssetText.textContent = "asset";
+  const textAssetSelect = document.createElement("select");
+  textAssetSelect.setAttribute("aria-label", "文字层图片 asset");
+  textAssetLabel.append(textAssetText, textAssetSelect);
+
+  const applyTextButton = document.createElement("button");
+  applyTextButton.type = "button";
+  applyTextButton.className = "control-button primary";
+  applyTextButton.textContent = "应用";
+
+  const clearTextButton = document.createElement("button");
+  clearTextButton.type = "button";
+  clearTextButton.className = "control-button";
+  clearTextButton.textContent = "移除";
+  clearTextButton.disabled = true;
+
+  const textError = document.createElement("div");
+  textError.className = "text-replacement-error";
+  textError.setAttribute("role", "status");
+
+  textControls.append(
+    textLayerLabel,
+    textModeLabel,
+    textValueLabel,
+    textAssetLabel,
+    applyTextButton,
+    clearTextButton,
+  );
+  textPanel.append(textHeader, textControls, textError);
+
   loopStartInput.addEventListener("input", updateAdvancedValidation);
   loopEndInput.addEventListener("input", updateAdvancedValidation);
   segmentedStartButton.addEventListener("click", () => {
@@ -300,9 +396,37 @@ export function createViewerControls(
     setInsertionError(null);
     options.onClearInsertedNodes();
   });
+  textLayerSelect.addEventListener("change", updateTextReplacementControls);
+  textModeSelect.addEventListener("change", updateTextReplacementControls);
+  textAssetSelect.addEventListener("change", updateTextReplacementControls);
+  textValueInput.addEventListener("input", () => {
+    if (textModeSelect.value === "text") {
+      options.onTextLayerReplacementTextInput(textValueInput.value);
+    }
+  });
+  applyTextButton.addEventListener("click", () => {
+    const parsed = parseTextReplacementInputs();
+    if (!parsed.ok) {
+      setTextReplacementError(parsed.message);
+      return;
+    }
+    setTextReplacementError(null);
+    options.onApplyTextLayerReplacement(parsed);
+  });
+  clearTextButton.addEventListener("click", () => {
+    setTextReplacementError(null);
+    options.onClearTextLayerReplacement();
+  });
 
   controls.append(playButton, restartButton, loopLabel, timeText, range);
-  root.append(projectRow, summary, controls, advancedPanel, insertionPanel);
+  root.append(
+    projectRow,
+    summary,
+    controls,
+    advancedPanel,
+    insertionPanel,
+    textPanel,
+  );
   options.container.appendChild(root);
 
   function renderProject(project: ViewerControlsProject): void {
@@ -326,6 +450,7 @@ export function createViewerControls(
     range.value = "0.00";
     resetAdvancedDefaults(project);
     resetInsertionDefaults(project);
+    resetTextReplacementDefaults(project);
     timeText.textContent = `0.00 / ${formatTime(project.project.stage.duration)}`;
     playButton.textContent = "Play";
     playButton.classList.remove("is-playing");
@@ -373,6 +498,14 @@ export function createViewerControls(
       insertedNodeActive = active;
       clearInsertionButton.disabled = !insertedNodeActive;
       updateInsertionControls();
+    },
+    setTextReplacementError(message: string | null): void {
+      setTextReplacementError(message);
+    },
+    setTextReplacementActive(active: boolean): void {
+      textReplacementActive = active;
+      clearTextButton.disabled = !textReplacementActive;
+      updateTextReplacementControls();
     },
   };
 
@@ -504,6 +637,89 @@ export function createViewerControls(
   function setInsertionError(message: string | null): void {
     insertionError.textContent = message ?? "";
     insertionError.classList.toggle("is-visible", Boolean(message));
+  }
+
+  function resetTextReplacementDefaults(project: ViewerControlsProject): void {
+    textReplacementActive = false;
+    textLayerSelect.replaceChildren();
+    for (const layer of project.project.layers.filter(
+      (candidate) => candidate.type === "text",
+    )) {
+      const option = document.createElement("option");
+      option.value = layer.id;
+      option.textContent = `${layer.name} (${layer.id})`;
+      textLayerSelect.appendChild(option);
+    }
+    textAssetSelect.replaceChildren();
+    for (const asset of project.insertionAssets) {
+      const option = document.createElement("option");
+      option.value = asset.path;
+      option.textContent = asset.label;
+      textAssetSelect.appendChild(option);
+    }
+    textModeSelect.value = "text";
+    textValueInput.value = "12345";
+    setTextReplacementError(null);
+    clearTextButton.disabled = true;
+    updateTextReplacementControls();
+  }
+
+  function updateTextReplacementControls(): void {
+    const hasTextLayer = textLayerSelect.options.length > 0;
+    const imageMode = textModeSelect.value === "image";
+    const hasAsset = textAssetSelect.options.length > 0;
+    textLayerSelect.disabled = !hasTextLayer;
+    textModeSelect.disabled = !hasTextLayer;
+    textValueInput.disabled = !hasTextLayer || imageMode;
+    textAssetSelect.disabled = !hasTextLayer || !imageMode || !hasAsset;
+    applyTextButton.disabled = !hasTextLayer || (imageMode && !hasAsset);
+    clearTextButton.disabled = !textReplacementActive;
+    textStatus.textContent = hasTextLayer
+      ? textReplacementActive
+        ? "已替换"
+        : `${textLayerSelect.options.length} layer`
+      : "无文字层";
+  }
+
+  function parseTextReplacementInputs():
+    | {
+        ok: true;
+        layerId: string;
+        mode: "text" | "image";
+        text?: string;
+        assetPath?: string;
+        assetUrl?: string;
+        projectAssetId?: string;
+      }
+    | { ok: false; message: string } {
+    if (!textLayerSelect.value) return { ok: false, message: "请选择文字层" };
+    if (textModeSelect.value === "text") {
+      return {
+        ok: true,
+        layerId: textLayerSelect.value,
+        mode: "text",
+        text: textValueInput.value,
+      };
+    }
+    const asset = currentProject.insertionAssets.find(
+      (candidate) => candidate.path === textAssetSelect.value,
+    );
+    if (!asset) return { ok: false, message: "请选择图片 asset" };
+    const parsed = {
+      ok: true as const,
+      layerId: textLayerSelect.value,
+      mode: "image" as const,
+      assetPath: asset.path,
+      assetUrl: asset.url,
+    };
+    return asset.projectAssetId
+      ? { ...parsed, projectAssetId: asset.projectAssetId }
+      : parsed;
+  }
+
+  function setTextReplacementError(message: string | null): void {
+    textError.textContent = message ?? "";
+    textError.classList.toggle("is-visible", Boolean(message));
   }
 }
 

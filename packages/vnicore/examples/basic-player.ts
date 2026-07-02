@@ -9,11 +9,16 @@ export interface BasicPlayerArgs {
   container: HTMLElement;
   project: VNIProjectConfig;
   assetUrls: AssetUrlManifest;
+  textReplacement?: {
+    layerId: string;
+    text: string;
+  };
 }
 
 export interface BasicPlayerHandle {
   readonly app: Application;
   readonly player: VNIPlayer;
+  readonly disposeTextReplacement?: () => void;
 }
 
 export async function createBasicPlayer(
@@ -48,12 +53,20 @@ export async function createBasicPlayer(
   });
 
   await player.init();
+  const textBinding = args.textReplacement
+    ? player.attachTextToTextLayer({
+        id: "basic-player-text-replacement",
+        layerId: args.textReplacement.layerId,
+        text: args.textReplacement.text,
+      })
+    : null;
   player.play();
   player.seek(0);
-  return { app, player };
+  return { app, player, disposeTextReplacement: textBinding?.dispose };
 }
 
 export function destroyBasicPlayer(handle: BasicPlayerHandle): void {
+  handle.disposeTextReplacement?.();
   handle.player.pause();
   handle.player.destroy();
   handle.app.destroy({ removeView: true });

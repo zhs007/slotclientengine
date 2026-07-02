@@ -2,6 +2,7 @@ export type V5GCoordinateMode = "center";
 export type V5GLayerType = "image" | "text" | "group";
 export type V5GAssetType = "image";
 export type V5GBlendMode = "normal" | "add" | "screen" | "multiply" | "lighten";
+export type V5GMaskCompositeMode = "legacy_alpha" | "precompose_light_alpha";
 
 export interface V5GStageConfig {
   width: number;
@@ -57,13 +58,15 @@ export type V5GAnimationType =
   | "float"
   | "swing"
   | "particles"
+  | "particle_stream"
   | "particle_twinkle"
   | "particle_wall"
   | "particle_combo"
   | "shatter"
   | "glow"
   | "safe_glow"
-  | "squash_stretch";
+  | "squash_stretch"
+  | "chaser_light";
 export type V5GAnimationParamValue = string | number | boolean;
 
 export interface V5GAnimationConfig {
@@ -85,6 +88,21 @@ export interface V5GLayerKeyframeConfig {
   easing: "linear";
 }
 
+export interface V5GLayerMaskConfig {
+  enabled: boolean;
+  /** Layer id used as alpha-mask source. The source layer gets a separate hidden mask clone in preview/runtime. */
+  sourceLayerId: string | null;
+  mode: "alpha";
+  /**
+   * Cross-engine mask composition semantics.
+   * - legacy_alpha: native engine alpha mask fallback.
+   * - precompose_light_alpha: B-scheme light mask; remove black by luminance, then multiply by source alpha.
+   */
+  compositeMode: V5GMaskCompositeMode;
+  /** Convenience visibility flag for the source layer itself when it is used as this layer's mask. */
+  showSourceLayer: boolean;
+}
+
 export interface V5GLayerConfig {
   id: string;
   name: string;
@@ -98,6 +116,7 @@ export interface V5GLayerConfig {
   transform: V5GTransformConfig;
   opacity: number;
   blendMode: V5GBlendMode;
+  mask?: V5GLayerMaskConfig;
   text?: string;
   animations: V5GAnimationConfig[];
   keyframes?: V5GLayerKeyframeConfig[];

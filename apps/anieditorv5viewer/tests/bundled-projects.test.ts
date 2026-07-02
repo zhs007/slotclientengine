@@ -51,6 +51,8 @@ describe("bundled projects", () => {
       "project",
       "lock-01",
       "roundreel",
+      "number2",
+      "number3",
       "bigwin",
       "megawin",
       "superwin",
@@ -144,7 +146,7 @@ describe("bundled projects", () => {
     );
   });
 
-  it("registers roundreel as a VNI_0.020 runtime_100 export-style project", () => {
+  it("registers roundreel as a VNI_0.022 runtime_100 export-style project", () => {
     const roundreel = getBundledProject("roundreel");
     const animationTypes = [
       ...new Set(
@@ -155,7 +157,7 @@ describe("bundled projects", () => {
     ];
 
     expect(roundreel.sourcePath).toBe("docs/anieditor5/export/roundreel.json");
-    expect(roundreel.project.schemaVersion).toBe("VNI_0.020");
+    expect(roundreel.project.schemaVersion).toBe("VNI_0.022");
     expect(roundreel.project.exportProfile).toMatchObject({
       id: "runtime_100",
       purpose: "runtime",
@@ -173,10 +175,42 @@ describe("bundled projects", () => {
       "add",
     );
     expect(animationTypes).toEqual(
-      expect.arrayContaining(["rotate", "safe_glow", "blink", "scale_out"]),
+      expect.arrayContaining([
+        "chaser_light",
+        "safe_glow",
+        "blink",
+        "scale_out",
+      ]),
     );
     expect(Object.keys(roundreel.assetUrls).sort()).toEqual(
       roundreel.project.assets.map((asset) => asset.path).sort(),
+    );
+  });
+
+  it("registers number2 text and number3 mask exports", () => {
+    const number2 = getBundledProject("number2");
+    const number3 = getBundledProject("number3");
+
+    expect(number2.sourcePath).toBe("docs/anieditor5/export/number2.json");
+    expect(number2.project.schemaVersion).toBe("VNI_0.022");
+    expect(number2.project.layers.some((layer) => layer.type === "text")).toBe(
+      true,
+    );
+    expect(number2.profileId).toBe("runtime_100");
+    expect(Object.keys(number2.assetUrls).sort()).toEqual(
+      number2.project.assets.map((asset) => asset.path).sort(),
+    );
+
+    expect(number3.sourcePath).toBe("docs/anieditor5/export/number3.json");
+    expect(number3.project.schemaVersion).toBe("VNI_0.036");
+    expect(
+      number3.project.layers.some(
+        (layer) => layer.mask?.compositeMode === "precompose_light_alpha",
+      ),
+    ).toBe(true);
+    expect(number3.profileId).toBe("runtime_100");
+    expect(Object.keys(number3.assetUrls).sort()).toEqual(
+      number3.project.assets.map((asset) => asset.path).sort(),
     );
   });
 

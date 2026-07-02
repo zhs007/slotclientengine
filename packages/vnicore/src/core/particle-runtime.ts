@@ -285,6 +285,9 @@ function getParticleDrainDuration(animation: V5GAnimationConfig): number {
   if (animation.type === "particle_wall") {
     return getNumberParam(animation, "lifetimeMax");
   }
+  if (animation.type === "particle_stream") {
+    return getNumberParam(animation, "lifetime");
+  }
   if (animation.type === "particle_twinkle") {
     return getNumberParam(animation, "twinkleDuration");
   }

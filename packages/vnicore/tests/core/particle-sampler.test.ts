@@ -161,6 +161,38 @@ function particleCombo(
   };
 }
 
+function particleStream(
+  overrides: Partial<V5GAnimationConfig> = {},
+): V5GAnimationConfig {
+  return {
+    id: "stream",
+    type: "particle_stream",
+    startTime: 0,
+    duration: 2,
+    enabled: true,
+    seed: 17,
+    params: {
+      spawnRate: 120,
+      lifetime: 1,
+      spread: 40,
+      speed: 180,
+      emissionAngle: 270,
+      emissionSpreadAngle: 45,
+      size: 20,
+      gravity: 90,
+      fadeOut: true,
+      trailCount: 3,
+      trailSpacing: 0.03,
+      trailFade: 0.55,
+      rotateParticles: true,
+      randomRotation: true,
+      randomRotationDegrees: 120,
+      spinSpeed: 1,
+    },
+    ...overrides,
+  };
+}
+
 describe("particle-sampler", () => {
   it("returns stable seeded random values", () => {
     expect(seededRandom(1, 2, 3)).toBe(seededRandom(1, 2, 3));
@@ -191,10 +223,36 @@ describe("particle-sampler", () => {
       0.5,
     );
 
-    expect(first).toHaveLength(200);
+    expect(first).toHaveLength(320);
     expect(first).toEqual(second);
     expect(first[0].alpha).toBeGreaterThan(0);
     expect(first[0].blendMode).toBe("add");
+  });
+
+  it("samples particle_stream deterministically with a hard sprite cap", () => {
+    const animation = particleStream({
+      params: {
+        ...particleStream().params,
+        spawnRate: 5000,
+        trailCount: 8,
+      },
+    });
+    const first = sampleParticleSpritesForLayer(
+      layer(animation),
+      sampledLayer,
+      { width: 100, height: 100 },
+      1,
+    );
+    const second = sampleParticleSpritesForLayer(
+      layer(animation),
+      sampledLayer,
+      { width: 100, height: 100 },
+      1,
+    );
+
+    expect(first).toEqual(second);
+    expect(first.length).toBeGreaterThan(0);
+    expect(first.length).toBeLessThanOrEqual(360);
   });
 
   it("keeps particle sampling deterministic for scaled runtime textures", () => {

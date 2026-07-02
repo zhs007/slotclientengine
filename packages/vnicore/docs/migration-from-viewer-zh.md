@@ -22,6 +22,7 @@
 - 页面 controls、styles、fatal error UI。
 - 高级播放 UI 的输入校验、按钮状态和 phase 展示。
 - 组间插入 UI 的当前 assets 目录全集 asset 下拉、slot 下拉、按钮状态和错误展示。
+- 文字层替换 UI 的 layer/模式/文本/asset 输入、按钮状态和错误展示。
 - 把 Vite modules 转成 `AssetUrlManifest`。
 - 浏览器验收时读取 diagnostics。
 
@@ -31,13 +32,14 @@
 - export JSON 和 bundle manifest 校验。
 - profile-scoped asset URL resolver。
 - center-coordinate 到 Pixi coordinate 的转换。
-- animation、particle、project sampler，以及独立的 `safe_glow` 同图副本高亮 sampler。
+- animation、particle、`particle_stream`、`chaser_light`、mask、project sampler，以及独立的 `safe_glow` 同图副本高亮 sampler。
 - layer group schema 规范化、连续 group run 判断和相邻 slot 计算。
 - Pixi texture 加载、真实尺寸校验和 `runtime_50` 显示补偿。
-- `VNIPlayer` 的 RAF 播放、range、segmented 三段式状态机、live 粒子排空、safe glow overlay 渲染、marker、complete listener、group slot 挂接、destroy 清理和 diagnostics。
+- `VNIPlayer` 的 RAF 播放、range、segmented 三段式状态机、live 粒子排空、safe glow overlay 渲染、mask、文字层绑定、走马灯、marker、complete listener、group slot 挂接、destroy 清理和 diagnostics。
 
 viewer 不能维护自己的 segmented playback 状态机；它只能调用 `play({ mode: "segmented", ... })` 和 `requestSegmentedPlaybackEnd()`。
 viewer 也不能直接操作 `VNIPlayer` 内部 Pixi tree、layer instance、group container 或 slot container；组间插入只能调用 `getLayerGroupSlots()`、`attachNodeBetweenLayerGroups(...)`、`attachImageBetweenLayerGroups(...)`、`attachExternalImageBetweenLayerGroups(...)`、`detachMountedNode(...)` 或 `clearMountedNodes()`。
+文字层替换只能调用 `attachNodeToTextLayer(...)`、`attachTextToTextLayer(...)`、`attachImageToTextLayer(...)` 和返回的 dispose/setText 句柄；viewer 不应直接读取或修改 text layer wrapper、原始 Text child 或其它 runtime 私有 display object。
 
 ## Cocos runtime 边界
 

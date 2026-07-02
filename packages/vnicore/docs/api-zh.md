@@ -21,6 +21,8 @@
 - `VNILayerGroupConfig`: `project.layerGroups[]` 的 group 元数据。它不是 `type: "group"` layer。
 - `VNILayerGroupSlot`: 两个相邻 render group 之间的可挂接 slot。
 - `VNIAttachNodeBetweenLayerGroupsOptions` / `VNIAttachImageBetweenLayerGroupsOptions` / `VNIAttachExternalImageBetweenLayerGroupsOptions`: 组间挂接 Pixi node、project asset image 或显式外部图片 URL 的参数。
+- `VNIAttachNodeToTextLayerOptions` / `VNIAttachTextToTextLayerOptions` / `VNIAttachImageToTextLayerOptions`: 文字层 placeholder 绑定自定义 Pixi 节点、动态文本或图片的参数。
+- `VNITextLayerTextBinding`: 动态文字绑定句柄，提供 `dispose()` 和 `setText(text)`。
 
 `V5G*` 类型仍作为 legacy schema alias 导出；新代码使用 `VNI*`。
 
@@ -44,10 +46,12 @@
 - `sampleLayerAtTime(layer, time)`: 采样单 layer。
 - `sampleLayerAnimationsAtTime(base, animations, time)`: 采样 animation 栈。
 - `sampleParticleSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样粒子 sprite。
+- `sampleChaserLightSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样 `chaser_light` sprite。
 - `sampleRenderEffectSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样 `shatter` / `glow` render effect sprite。
 - `sampleSafeGlowSpritesForLayer(layer, sampledLayer, time)`: 采样 `safe_glow` 同图副本高亮 sprite；它不是 `render-effect-sampler` 的 effect。
 - `sampleLiveParticleSprites(layers, stage, time)`: 生成带 Pixi 坐标的 live 粒子 sample。
 - `VNIParticleRuntime`: 保存 live 粒子状态，支持停止发射后的排空。
+- `hasActiveChaserLightAnimation(layer, time)`: 判断 layer 是否有活跃走马灯 runtime effect。
 - `VNISegmentedPlaybackSequence`: 三段式播放纯状态机。
 - `hasActiveParticleAnimation(layer, time)`: 判断 layer 是否有活跃粒子动画。
 - `DEFAULT_VNI_LAYER_GROUP_ID`: legacy 无 group 导出规范化后的默认 group id。
@@ -85,6 +89,9 @@
 - `attachNodeBetweenLayerGroups(options): () => void`
 - `attachImageBetweenLayerGroups(options): () => void`
 - `attachExternalImageBetweenLayerGroups(options): Promise<() => void>`
+- `attachNodeToTextLayer(options): () => void`
+- `attachTextToTextLayer(options): VNITextLayerTextBinding`
+- `attachImageToTextLayer(options): Promise<() => void>`
 - `detachMountedNode(id: string): void`
 - `clearMountedNodes(): void`
 - `destroy(): void`
@@ -94,6 +101,8 @@
 `update(deltaSeconds)` 主要用于测试或宿主手动推进；默认 `play()` 仍然使用 RAF 自动推进。需要接入外部游戏 ticker 时，构造 `VNIPlayer` 时传入 `autoTick: false`，再由宿主每帧调用 `update(deltaSeconds)`。`onPlaybackComplete(...)` 在视觉完全结束后触发，也就是时间轴到终点并且 live 粒子排空后触发；如果终点没有可排空粒子，则可以立即触发。
 
 `project.stage.backgroundColor` 是导出 schema 中保留的背景元数据；`VNIPlayer` 是 runtime-only，不读取、不绘制、不提供开关，画面始终保持透明，只渲染 layer/effect/particle/mounted node。
+
+文字层是 runtime placeholder。`attachNodeToTextLayer(...)` 要求 `layerId` 指向 `type === "text"` 的 layer，同一个 mounted id 不能重复；默认隐藏原始文字，传 `hideOriginal: false` 才保留。`attachTextToTextLayer(...)` 创建 Pixi `Text` 并返回 `setText()`，更新文本时不会重建 player 或 layer tree。`attachImageToTextLayer(...)` 支持当前 project asset 或显式 `imageUrl`，project asset 继续走 texture size 校验和 logical/file size compensation。返回的 dispose、`clearMountedNodes()`、`destroy()` 都会清理绑定节点并恢复原始文字。
 
 所有 image layer 用法都属于 `add` / `screen` / `lighten` 的 JPG 黑底光效图，会在加载阶段派生为带透明 alpha 的 matte texture。这个处理不修改原始美术资源，只避免 Pixi v8 在透明宿主 canvas 上把 JPG 黑色背景写成不透明黑框；普通 PNG、normal layer、被 normal layer 复用的 JPG 和未被叠加 blend 引用的 JPG 不受影响。派生过程只使用一次性纹理预处理 canvas，不是 `VNIPlayer` 自己的播放 canvas。
 
@@ -114,6 +123,15 @@ Layer group 合同：
 - `shatter`: deterministic render effect，要求 `count/pieceSize/force/impactAngle/spreadAngle/gravity/spin/sourceOpacity`，`fadeOut` 可选 boolean。
 - `glow`: deterministic render effect，要求 `intensity/spread/minAlpha/maxAlpha/pulses/blendMode`，`keepOriginal` 可选 boolean；`blendMode` 数值为 `0=add`、`1=screen`、`2=lighten`。
 - `safe_glow`: 普通同图副本高亮，要求 `spread/minOpacity/maxOpacity/pulses`，`keepOriginal` 可选 boolean；副本继承当前 layer `blendMode`，不进入 `VNIRenderEffectType`。
+- `particle_stream`: 持续发射的 layer 粒子，要求 `spawnRate/lifetime/spread/speed/emissionAngle/emissionSpreadAngle/size/gravity/trailCount/trailSpacing/trailFade/randomRotationDegrees/spinSpeed`，`fadeOut/rotateParticles/randomRotation` 可选 boolean；segmented hold 中 live elapsed 继续推进，drain duration 以 `lifetime` 为主。
+- `chaser_light`: 走马灯 runtime effect，要求 `totalCount/spacing/lightDuration/interval/trajectory/radius/centerX/centerY/endX/endY/curve/lightSize/dimAlpha`，`keepOriginal` 可选 boolean；`totalCount` 校验上限为 200。
+
+Mask 合同：
+
+- `layer.mask.enabled=true` 时必须有合法 `sourceLayerId`，不能指向自身，不能指向不存在的 layer。
+- 当前只支持 `mode: "alpha"`，`compositeMode` 只支持 `legacy_alpha` 和 `precompose_light_alpha`。
+- `showSourceLayer=false` 会隐藏普通 source layer，但 mask source 仍用于目标层。
+- `precompose_light_alpha` 要求 source 和 target 都是 image texture；无法满足时显式失败，不退化为普通渲染。
 
 ## 内部 helper 边界
 
