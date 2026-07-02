@@ -11,6 +11,8 @@ interface NormalizedResource {
   readonly weight: number;
 }
 
+const DEFAULT_MAX_CONCURRENT_RESOURCES = 6;
+
 export function createGameLoading<TPrepareResult = unknown>(
   options: GameLoadingOptions<TPrepareResult>,
 ): GameLoadingHandle {
@@ -22,6 +24,7 @@ class GameLoadingController<
 > implements GameLoadingHandle {
   readonly #options: GameLoadingOptions<TPrepareResult>;
   readonly #resources: readonly NormalizedResource[];
+  readonly #maxConcurrentResources: number;
   readonly #dom: GameLoadingDom;
   readonly #loadedResources = new Map<string, unknown>();
   #destroyed = false;
@@ -31,6 +34,10 @@ class GameLoadingController<
     validateOptions(options);
     this.#options = options;
     this.#resources = normalizeResources(options.resources);
+    this.#maxConcurrentResources = normalizeMaxConcurrentResources(
+      options.maxConcurrentResources,
+      this.#resources.length,
+    );
     this.#dom = createGameLoadingDom(options.root);
   }
 
@@ -58,8 +65,10 @@ class GameLoadingController<
         0,
       );
       let completedWeight = 0;
-      await Promise.all(
-        this.#resources.map(async ({ resource, weight }) => {
+      await runConcurrent(
+        this.#resources,
+        this.#maxConcurrentResources,
+        async ({ resource, weight }) => {
           const value = await loadGameLoadingResource(resource, {
             resource,
             loadedResources: this.#loadedResources,
@@ -70,7 +79,8 @@ class GameLoadingController<
           this.#loadedResources.set(resource.id, value);
           completedWeight += weight;
           this.#dom.setProgress((completedWeight / totalWeight) * 99);
-        }),
+        },
+        () => this.#destroyed,
       );
       if (this.#destroyed) {
         return;
@@ -96,6 +106,68 @@ class GameLoadingController<
       this.#options.onError?.(normalized);
     }
   }
+}
+
+function normalizeMaxConcurrentResources(
+  value: number | undefined,
+  resourceCount: number,
+): number {
+  const maxConcurrentResources = value ?? DEFAULT_MAX_CONCURRENT_RESOURCES;
+  if (
+    !Number.isInteger(maxConcurrentResources) ||
+    maxConcurrentResources <= 0
+  ) {
+    throw new Error(
+      "Game loading maxConcurrentResources must be a positive integer.",
+    );
+  }
+  return Math.min(maxConcurrentResources, resourceCount);
+}
+
+function runConcurrent<T>(
+  items: readonly T[],
+  maxConcurrent: number,
+  task: (item: T) => Promise<void>,
+  shouldStop: () => boolean = () => false,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let nextIndex = 0;
+    let activeCount = 0;
+    let settled = false;
+
+    const schedule = () => {
+      if (settled) {
+        return;
+      }
+      if (shouldStop()) {
+        settled = true;
+        resolve();
+        return;
+      }
+      if (nextIndex >= items.length && activeCount === 0) {
+        settled = true;
+        resolve();
+        return;
+      }
+      while (activeCount < maxConcurrent && nextIndex < items.length) {
+        const item = items[nextIndex];
+        nextIndex += 1;
+        activeCount += 1;
+        void task(item).then(
+          () => {
+            activeCount -= 1;
+            schedule();
+          },
+          (error) => {
+            settled = true;
+            reject(error);
+          },
+        );
+      }
+    };
+
+    schedule();
+  });
 }
 
 function validateOptions<TPrepareResult>(

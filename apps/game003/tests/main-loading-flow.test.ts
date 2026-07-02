@@ -7,6 +7,7 @@ const mainMocks = vi.hoisted(() => ({
 }));
 
 interface CapturedLoadingOptions {
+  readonly maxConcurrentResources?: number;
   onBeforeComplete(options: {
     readonly loadedResources: ReadonlyMap<string, unknown>;
   }): Promise<unknown>;
@@ -55,6 +56,7 @@ describe("game003 main loading host flow", () => {
     ) as HTMLElement | null;
     expect(loadingHost).not.toBeNull();
     expect(gameHost?.hidden).toBe(true);
+    expect(capturedLoadingOptions.maxConcurrentResources).toBe(4);
     expect(loadingHandle.start).toHaveBeenCalled();
 
     const prepareResult = await capturedLoadingOptions.onBeforeComplete({

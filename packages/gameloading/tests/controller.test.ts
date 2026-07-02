@@ -38,6 +38,68 @@ describe("game loading controller", () => {
     expect(loading.loadedResources.get("b")).toBe("b");
   });
 
+  it("limits how many resources are started at the same time", async () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const first = createDeferred("a");
+    const second = createDeferred("b");
+    const third = createDeferred("c");
+    const events: string[] = [];
+    const loading = createGameLoading({
+      root,
+      maxConcurrentResources: 2,
+      resources: [
+        {
+          id: "a",
+          load: () => {
+            events.push("start:a");
+            return first.promise;
+          },
+        },
+        {
+          id: "b",
+          load: () => {
+            events.push("start:b");
+            return second.promise;
+          },
+        },
+        {
+          id: "c",
+          load: () => {
+            events.push("start:c");
+            return third.promise;
+          },
+        },
+      ],
+      onBeforeComplete: () => {
+        events.push(`before:${progressText(root)}`);
+      },
+      onEnterGame: () => {
+        events.push(`enter:${progressText(root)}`);
+      },
+    });
+
+    const start = loading.start();
+    await waitFor(() => events.length === 2);
+    expect(events).toEqual(["start:a", "start:b"]);
+
+    first.resolve();
+    await waitFor(() => events.includes("start:c"));
+    expect(events).toEqual(["start:a", "start:b", "start:c"]);
+
+    second.resolve();
+    third.resolve();
+    await start;
+
+    expect(events).toEqual([
+      "start:a",
+      "start:b",
+      "start:c",
+      "before:99%",
+      "enter:100%",
+    ]);
+  });
+
   it("stops before callbacks when a resource or 99 percent callback fails", async () => {
     const resourceRoot = document.createElement("div");
     const resourceEvents: string[] = [];
@@ -111,6 +173,46 @@ describe("game loading controller", () => {
     expect(root.childElementCount).toBe(0);
   });
 
+  it("does not schedule more resources after destroy", async () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const first = createDeferred("a");
+    const events: string[] = [];
+    const loading = createGameLoading({
+      root,
+      maxConcurrentResources: 1,
+      resources: [
+        {
+          id: "a",
+          load: () => {
+            events.push("start:a");
+            return first.promise;
+          },
+        },
+        {
+          id: "b",
+          load: () => {
+            events.push("start:b");
+          },
+        },
+      ],
+      onBeforeComplete: () => {
+        events.push("before");
+      },
+      onEnterGame: () => {
+        events.push("enter");
+      },
+    });
+    const start = loading.start();
+    await waitFor(() => events.includes("start:a"));
+
+    loading.destroy();
+    first.resolve();
+    await start;
+
+    expect(events).toEqual(["start:a"]);
+  });
+
   it("validates root, ids, duplicate ids, URL contracts and weights", () => {
     const root = document.createElement("div");
     const base = {
@@ -169,6 +271,20 @@ describe("game loading controller", () => {
         resources: [{ id: "", load: () => undefined }],
       }),
     ).toThrow(/needs an id/);
+    expect(() =>
+      createGameLoading({
+        ...base,
+        maxConcurrentResources: 0,
+        resources: [{ id: "a", load: () => undefined }],
+      }),
+    ).toThrow(/maxConcurrentResources/);
+    expect(() =>
+      createGameLoading({
+        ...base,
+        maxConcurrentResources: 1.5,
+        resources: [{ id: "a", load: () => undefined }],
+      }),
+    ).toThrow(/maxConcurrentResources/);
   });
 });
 
@@ -183,12 +299,17 @@ async function waitForProgress(
   root: HTMLElement,
   expected: string,
 ): Promise<void> {
+  await waitFor(() => progressText(root) === expected);
+}
+
+async function waitFor(condition: () => boolean): Promise<void> {
   for (let index = 0; index < 20; index += 1) {
     await Promise.resolve();
-    if (progressText(root) === expected) {
+    if (condition()) {
       return;
     }
   }
+  expect(condition()).toBe(true);
 }
 
 function createDeferred(value: string): {
