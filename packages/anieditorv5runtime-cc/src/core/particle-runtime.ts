@@ -53,6 +53,15 @@ export class V5GParticleRuntime {
     this.drainDuration = 0;
   }
 
+  forceStopAll(): V5GParticleRuntimeFrame {
+    this.reset();
+    return {
+      particles: [],
+      isDraining: false,
+      isComplete: true,
+    };
+  }
+
   emit(
     layers: readonly V5GParticleRuntimeLayer[],
     time: number,

@@ -6,7 +6,11 @@ import type {
   V5GAssetConfig,
   V5GExportProfileConfig,
   V5GCocosAssetSource,
+  V5GCocosForceStopParticlesOptions,
+  V5GCocosSegmentedPlaybackEndOptions,
   V5GCocosSpriteAtlasAssetSource,
+  V5GForceStopParticlesOptions,
+  V5GSegmentedPlaybackEndOptions,
   VNISafeGlowLayerSampleState,
   VNISafeGlowSpriteSample,
 } from "../../standalone/anieditorv5runtime-cc";
@@ -44,6 +48,22 @@ describe("standalone runtime import", () => {
     const assetSource: V5GCocosAssetSource<string> = atlasSource;
 
     expect(assetSource.atlas.getSpriteFrame("asset")).toBe("frame");
+  });
+
+  it("exports particle force-stop option types", () => {
+    const forceStopOptions: V5GForceStopParticlesOptions = {
+      suppressUntilNextPlayback: true,
+    };
+    const cocosForceStopOptions: V5GCocosForceStopParticlesOptions =
+      forceStopOptions;
+    const segmentedEndOptions: V5GSegmentedPlaybackEndOptions = {
+      forceStopParticles: true,
+    };
+    const cocosSegmentedEndOptions: V5GCocosSegmentedPlaybackEndOptions =
+      segmentedEndOptions;
+
+    expect(cocosForceStopOptions.suppressUntilNextPlayback).toBe(true);
+    expect(cocosSegmentedEndOptions.forceStopParticles).toBe(true);
   });
 
   it("exports safe_glow sample types with inherited blend modes", () => {
@@ -138,6 +158,9 @@ describe("standalone runtime import", () => {
     expect(
       runtime.V5GCocosPlayer.prototype.requestSegmentedPlaybackEnd,
     ).toBeTypeOf("function");
+    expect(runtime.V5GCocosPlayer.prototype.forceStopAllParticles).toBeTypeOf(
+      "function",
+    );
     expect(runtime.V5GCocosPlayer.prototype.getPlaybackState).toBeTypeOf(
       "function",
     );

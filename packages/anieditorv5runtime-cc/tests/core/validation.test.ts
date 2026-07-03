@@ -160,7 +160,7 @@ describe("validation", () => {
     expect(() => validateCocosV5GProject(project)).not.toThrow();
   });
 
-  it("accepts the VNI_0.022 roundreel runtime_100 safe_glow fixture", () => {
+  it("accepts the VNI_0.042 roundreel runtime_100 safe_glow fixture", () => {
     const docsRoundreel = JSON.parse(
       readFileSync(join(exportRootDir, "roundreel.json"), "utf8"),
     ) as unknown;
@@ -174,7 +174,7 @@ describe("validation", () => {
     );
     const blendModes = new Set(project.layers.map((layer) => layer.blendMode));
 
-    expect(project.schemaVersion).toBe("VNI_0.022");
+    expect(project.schemaVersion).toBe("VNI_0.042");
     expect(project.editor.name).toBe("VNI");
     expect(project.engineTarget).toEqual({
       name: "cocos_creator",

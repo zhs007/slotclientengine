@@ -128,6 +128,14 @@ export class V5GPreview extends Component {
     this.player?.requestSegmentedPlaybackEnd();
   }
 
+  requestSegmentedPlaybackEndAndForceStopParticles(): void {
+    this.player?.requestSegmentedPlaybackEnd({ forceStopParticles: true });
+  }
+
+  forceStopAllParticles(): void {
+    this.player?.forceStopAllParticles();
+  }
+
   getPlaybackState(): V5GCocosPlaybackState | null {
     return this.player?.getPlaybackState() ?? null;
   }

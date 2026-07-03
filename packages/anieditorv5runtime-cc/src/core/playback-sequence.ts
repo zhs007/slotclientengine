@@ -26,6 +26,14 @@ export interface V5GSegmentedPlaybackOptions {
   keepParticlesAlive?: boolean;
 }
 
+export interface V5GForceStopParticlesOptions {
+  suppressUntilNextPlayback?: boolean;
+}
+
+export interface V5GSegmentedPlaybackEndOptions {
+  forceStopParticles?: boolean;
+}
+
 export type V5GPlayOptions =
   | V5GTimelinePlayOptions
   | V5GRangePlayOptions

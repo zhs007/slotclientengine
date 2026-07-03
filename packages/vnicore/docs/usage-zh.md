@@ -237,7 +237,7 @@ disposeExternal();
 - `glow`: deterministic render effect。`keepOriginal === false` 会隐藏原图但保留 glow effect；`blendMode` 使用 `0=add`、`1=screen`、`2=lighten`。
 - `safe_glow`: 跨引擎安全发光方案。它不是 render effect，也不使用滤镜或模糊；runtime 用同一张图片的副本，通过 `spread` 放大、`minOpacity/maxOpacity/pulses` 透明度呼吸来模拟高亮，副本继承当前 layer 的 `blendMode`。`keepOriginal === false` 会隐藏原图，但 safe glow 副本仍会渲染；起始帧即可采样出副本。
 - `particle_stream`: 持续发射粒子。runtime 会按 `lifetime` 决定排空时间，segmented hold 下 `keepParticlesAlive=true` 时 emitter 配置停在 hold 点但 live elapsed 继续推进，粒子不会冻结。
-- `chaser_light`: 走马灯 runtime effect。它由 `vnicore` sampler/Pixi renderer 负责，viewer 只显示结果；`keepOriginal === false` 会隐藏源图但走马灯继续渲染。
+- `chaser_light`: 走马灯 runtime effect。灯位固定在圆形、直线或曲线轨迹采样点上，动画只推进亮灯/暗灯窗口，不让 sprite 沿轨迹移动或整体旋转。圆形轨迹中 `spacing` 按弧长换算角度；每盏灯的亮灭错位由 `lightDuration + interval` 共同决定。它由 `vnicore` sampler/Pixi renderer 负责，viewer 只显示结果；`keepOriginal === false` 会隐藏源图但走马灯继续渲染。
 
 ## Mask
 

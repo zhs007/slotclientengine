@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "VNI_0.022",
+  "schemaVersion": "VNI_0.042",
   "editor": {
     "name": "VNI",
-    "version": "VNI_0.022"
+    "version": "VNI_0.042"
   },
   "engineTarget": {
     "name": "cocos_creator",
@@ -13,10 +13,21 @@
     "width": 2000,
     "height": 2000,
     "coordinate": "center",
-    "duration": 5,
+    "duration": 3.4,
     "backgroundColor": "#0a0a0a"
   },
   "assets": [
+    {
+      "id": "asset_image_mqtariy1_a",
+      "type": "image",
+      "path": "assets/image_asset_image_mqtariy1_a.png",
+      "originalName": "蓝宝石.png",
+      "width": 514,
+      "height": 514,
+      "fileWidth": 514,
+      "fileHeight": 514,
+      "fileScale": 1
+    },
     {
       "id": "asset_image_mqthi919_1e",
       "type": "image",
@@ -49,17 +60,6 @@
       "fileWidth": 50,
       "fileHeight": 50,
       "fileScale": 1
-    },
-    {
-      "id": "asset_image_mqz4fdt8_c",
-      "type": "image",
-      "path": "assets/qq_202606291adsa71906_asset_image_mqz4fdt8_c.png",
-      "originalName": "QQ图片202606291adsa71906.png",
-      "width": 520,
-      "height": 520,
-      "fileWidth": 520,
-      "fileHeight": 520,
-      "fileScale": 1
     }
   ],
   "layerGroups": [
@@ -71,18 +71,11 @@
       "order": 0
     },
     {
-      "id": "layer_group_mqz57pys_m",
-      "name": "UI",
-      "visible": true,
-      "collapsed": false,
-      "order": 1
-    },
-    {
       "id": "layer_group_mqz5f93v_n",
       "name": "光效底层",
       "visible": true,
       "collapsed": false,
-      "order": 2
+      "order": 1
     }
   ],
   "layers": [
@@ -125,71 +118,14 @@
           }
         }
       ],
-      "keyframes": []
-    },
-    {
-      "id": "layer_image_mqz4fdt8_d",
-      "name": "黑遮罩",
-      "type": "image",
-      "assetId": "asset_image_mqz4fdt8_c",
-      "parentId": null,
-      "groupId": "layer_group_mqz57pys_m",
-      "visible": true,
-      "locked": false,
-      "transform": {
-        "x": 0,
-        "y": 0,
-        "scaleX": 1,
-        "scaleY": 1,
-        "rotation": 0,
-        "anchorX": 0.5,
-        "anchorY": 0.5
-      },
-      "opacity": 1,
-      "blendMode": "normal",
-      "animations": [],
-      "keyframes": []
-    },
-    {
-      "id": "layer_image_mqthsnuw_1l",
-      "name": "光圈.jpg",
-      "type": "image",
-      "assetId": "asset_image_mqtjdi3v_3",
-      "parentId": null,
-      "groupId": "group_default",
-      "visible": true,
-      "locked": false,
-      "transform": {
-        "x": 0,
-        "y": 0,
-        "scaleX": 2.5,
-        "scaleY": 2.5,
-        "rotation": 0,
-        "anchorX": 0.5,
-        "anchorY": 0.5
-      },
-      "opacity": 0.7,
-      "blendMode": "add",
-      "animations": [
-        {
-          "id": "anim_module_mqtj7x8s_6",
-          "type": "safe_glow",
-          "name": "Safe Glow Cocos发光",
-          "startTime": 0.5,
-          "duration": 0.4,
-          "enabled": true,
-          "seed": 2549,
-          "params": {
-            "spread": 0.25,
-            "minOpacity": 0,
-            "maxOpacity": 1,
-            "pulses": 1,
-            "keepOriginal": true,
-            "easing": "linear"
-          }
-        }
-      ],
-      "keyframes": []
+      "keyframes": [],
+      "mask": {
+        "enabled": false,
+        "sourceLayerId": null,
+        "mode": "alpha",
+        "compositeMode": "precompose_light_alpha",
+        "showSourceLayer": false
+      }
     },
     {
       "id": "layer_image_mqtasf6r_d",
@@ -260,7 +196,14 @@
           }
         }
       ],
-      "keyframes": []
+      "keyframes": [],
+      "mask": {
+        "enabled": false,
+        "sourceLayerId": null,
+        "mode": "alpha",
+        "compositeMode": "precompose_light_alpha",
+        "showSourceLayer": false
+      }
     },
     {
       "id": "layer_image_mqthm2nv_1h",
@@ -331,7 +274,14 @@
           }
         }
       ],
-      "keyframes": []
+      "keyframes": [],
+      "mask": {
+        "enabled": false,
+        "sourceLayerId": null,
+        "mode": "alpha",
+        "compositeMode": "precompose_light_alpha",
+        "showSourceLayer": false
+      }
     },
     {
       "id": "layer_image_mquxm61y_4",
@@ -407,7 +357,92 @@
           }
         }
       ],
-      "keyframes": []
+      "keyframes": [],
+      "mask": {
+        "enabled": false,
+        "sourceLayerId": null,
+        "mode": "alpha",
+        "compositeMode": "precompose_light_alpha",
+        "showSourceLayer": false
+      }
+    },
+    {
+      "id": "layer_image_mqthsnuw_1l",
+      "name": "光圈.jpg",
+      "type": "image",
+      "assetId": "asset_image_mqtjdi3v_3",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": false,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 2.5,
+        "scaleY": 2.5,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 0.5,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mqtj7x8s_6",
+          "type": "safe_glow",
+          "name": "Safe Glow Cocos发光",
+          "startTime": 0.5,
+          "duration": 0.4,
+          "enabled": true,
+          "seed": 2549,
+          "params": {
+            "spread": 0.4,
+            "minOpacity": 0,
+            "maxOpacity": 0.5,
+            "pulses": 1,
+            "keepOriginal": true,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": [],
+      "mask": {
+        "enabled": false,
+        "sourceLayerId": "layer_image_mqtaq85j_9",
+        "mode": "alpha",
+        "compositeMode": "precompose_light_alpha",
+        "showSourceLayer": false
+      }
+    },
+    {
+      "id": "layer_image_mqtariy3_b",
+      "name": "蓝宝石.png",
+      "type": "image",
+      "assetId": "asset_image_mqtariy1_a",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [],
+      "keyframes": [],
+      "mask": {
+        "enabled": false,
+        "sourceLayerId": null,
+        "mode": "alpha",
+        "compositeMode": "precompose_light_alpha",
+        "showSourceLayer": false
+      }
     }
   ],
   "particles": [],

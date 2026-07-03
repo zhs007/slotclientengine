@@ -1384,6 +1384,7 @@ describe("VNIPlayer", () => {
     expect(internals.layerInstances.get("layer-a")?.display.visible).toBe(
       false,
     );
+    expect(firstSprites.every((sprite) => sprite.visible)).toBe(true);
     expect(container.dataset.vniChaserLightSprites).toBe("6");
 
     player.seek(0.6);
@@ -1391,6 +1392,21 @@ describe("VNIPlayer", () => {
     expect(internals.chaserLightSpritesByLayer.get("layer-a")).toBe(
       firstSprites,
     );
+    expect(internals.chaserLightSpritesByLayer.get("layer-a")).toEqual(
+      firstSprites,
+    );
+    expect(container.dataset.vniChaserLightSprites).toBe("6");
+
+    player.seek(1.1);
+
+    expect(internals.chaserLightSpritesByLayer.get("layer-a")).toBeUndefined();
+    expect(firstSprites.every((sprite) => sprite.parent === null)).toBe(true);
+    expect(container.dataset.vniChaserLightSprites).toBe("0");
+
+    player.destroy();
+
+    expect(internals.chaserLightSpritesByLayer.size).toBe(0);
+    expect(container.dataset.vniChaserLightSprites).toBeUndefined();
   });
 
   it("applies masks without rendering hidden source layers", async () => {

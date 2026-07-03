@@ -4,6 +4,7 @@ import {
   bundledProjects,
   getBundledProject,
 } from "../src/config/bundled-projects";
+import { assertVNIProject } from "@slotclientengine/vnicore/core";
 import {
   game003S1AssetUrlManifest,
   legacyAssetUrlManifest,
@@ -84,6 +85,16 @@ describe("bundled projects", () => {
     }
   });
 
+  it("keeps bundled project sourcePath JSON aligned with registered data", () => {
+    for (const bundledProject of bundledProjects) {
+      const sourceJson = JSON.parse(
+        readFileSync(`../../${bundledProject.sourcePath}`, "utf8"),
+      ) as unknown;
+
+      expect(assertVNIProject(sourceJson)).toEqual(bundledProject.project);
+    }
+  });
+
   it("offers every asset from the current asset manifest for group insertion", () => {
     const threeReel = getBundledProject("3reel-multipay-01");
     const projectAssetPaths = new Set(
@@ -137,7 +148,7 @@ describe("bundled projects", () => {
     );
   });
 
-  it("registers roundreel as a VNI_0.022 runtime_100 export-style project", () => {
+  it("registers roundreel as a VNI_0.042 runtime_100 export-style project", () => {
     const roundreel = getBundledProject("roundreel");
     const animationTypes = [
       ...new Set(
@@ -148,7 +159,7 @@ describe("bundled projects", () => {
     ];
 
     expect(roundreel.sourcePath).toBe("docs/anieditor5/export/roundreel.json");
-    expect(roundreel.project.schemaVersion).toBe("VNI_0.022");
+    expect(roundreel.project.schemaVersion).toBe("VNI_0.042");
     expect(roundreel.project.exportProfile).toMatchObject({
       id: "runtime_100",
       purpose: "runtime",
@@ -193,7 +204,6 @@ describe("bundled projects", () => {
       });
     }
   });
-
 
   it("registers number2 text and number3 mask exports", () => {
     const number2 = getBundledProject("number2");

@@ -166,6 +166,36 @@ function safeGlowAnimation(
   };
 }
 
+function chaserLightAnimation(
+  overrides: Partial<V5GAnimationConfig> = {},
+): V5GAnimationConfig {
+  return {
+    id: "chaser-light",
+    type: "chaser_light",
+    startTime: 0,
+    duration: 1,
+    enabled: true,
+    seed: 11,
+    params: {
+      totalCount: 4,
+      spacing: 12,
+      lightDuration: 0.2,
+      interval: 0.05,
+      trajectory: 1,
+      radius: 40,
+      centerX: 0,
+      centerY: 0,
+      endX: 100,
+      endY: 0,
+      curve: 0,
+      lightSize: 16,
+      dimAlpha: 0.2,
+      keepOriginal: false,
+    },
+    ...overrides,
+  };
+}
+
 function framesFor(project: V5GProjectConfig): Map<string, SpriteFrame> {
   return new Map(
     project.assets.map((asset) => [
@@ -219,6 +249,10 @@ function getFirstLayerNode(root: Node): Node {
 
 function getFirstSafeGlowContainer(root: Node): Node {
   return getFirstGroup(root).children[1];
+}
+
+function getFirstChaserLightContainer(root: Node): Node {
+  return getFirstGroup(root).children[2];
 }
 
 function getFirstParticleContainer(root: Node): Node {
@@ -547,11 +581,40 @@ describe("standalone V5GCocosPlayer", () => {
     expect(inspectNode(safeGlowNode).destroyed).toBe(true);
   });
 
+  it("maps circular chaser_light samples to Cocos clockwise visual motion", () => {
+    const project = tinyProject({
+      animations: [
+        chaserLightAnimation({
+          params: {
+            ...chaserLightAnimation().params,
+            totalCount: 1,
+            trajectory: 0,
+            radius: 40,
+            spacing: 0,
+            centerX: 0,
+            centerY: 0,
+            lightDuration: 0.2,
+            interval: 0.05,
+          },
+        }),
+      ],
+    });
+    const { root, player } = makePlayer(project);
+    player.init();
+    player.seek(0.125);
+
+    const chaserNode = getFirstChaserLightContainer(root).children[0];
+    const offset = Math.cos(Math.PI / 4) * 40;
+    expect(inspectNode(chaserNode).position.x).toBeCloseTo(100 + offset, 3);
+    expect(inspectNode(chaserNode).position.y).toBeCloseTo(50 - offset, 3);
+    expect(inspectNode(chaserNode).rotation.z).toBeCloseTo(-135, 3);
+  });
+
   it("renders the roundreel runtime_100 safe_glow node with inherited add blend", () => {
     const project = assertV5GProject(roundreelData);
     const { root, frames, player } = makePlayer(project);
 
-    expect(project.schemaVersion).toBe("VNI_0.022");
+    expect(project.schemaVersion).toBe("VNI_0.042");
     expect(project.exportProfile).toMatchObject({
       id: "runtime_100",
       purpose: "runtime",
@@ -560,8 +623,19 @@ describe("standalone V5GCocosPlayer", () => {
     player.init();
     player.seek(1.175);
 
-    const layerSprite = requireSprite(getFirstLayerNode(root));
-    const safeGlowContainer = getFirstSafeGlowContainer(root);
+    const activeGroup = getContent(root).children.find((group) =>
+      group.children.some(
+        (child) =>
+          child.name.endsWith(" Safe Glow") && child.children.length === 1,
+      ),
+    );
+    if (!activeGroup) throw new Error("missing active safe_glow group");
+    const layerNode = activeGroup.children[0];
+    const safeGlowContainer = activeGroup.children.find((child) =>
+      child.name.endsWith(" Safe Glow"),
+    );
+    if (!safeGlowContainer) throw new Error("missing safe_glow container");
+    const layerSprite = requireSprite(layerNode);
     expect(layerSprite.srcBlendFactor).toBe(COCOS_BLEND_FACTOR.SRC_ALPHA);
     expect(layerSprite.dstBlendFactor).toBe(COCOS_BLEND_FACTOR.ONE);
     expect(safeGlowContainer.children).toHaveLength(1);
@@ -1025,6 +1099,91 @@ describe("standalone V5GCocosPlayer", () => {
     player.play();
     player.update(1);
     expect(player.getPlaybackState().phase).toBe("complete");
+    expect(complete).toEqual([
+      { startTime: 0, endTime: 2, currentTime: 2, loopIndex: 0 },
+    ]);
+  });
+
+  it("force stops particles and suppresses same-playback re-emission in standalone", () => {
+    const project = tinyProject({
+      animations: [particleWallAnimation({ duration: 1 })],
+    });
+    project.stage.duration = 2;
+    const { root, player } = makePlayer(project);
+
+    expect(() => player.forceStopAllParticles()).toThrow(
+      "V5GCocosPlayer must be initialized before forceStopAllParticles.",
+    );
+
+    player.init();
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.5 },
+      loopEnd: { unit: "time", at: 0.5 },
+    });
+    player.update(0.6);
+
+    const particleContainer = getFirstParticleContainer(root);
+    const firstParticle = particleContainer.children[0];
+    expect(player.getRuntimeDiagnostics().particleSpriteCount).toBeGreaterThan(
+      0,
+    );
+
+    player.forceStopAllParticles();
+    expect(inspectNode(firstParticle).destroyed).toBe(true);
+    expect(particleContainer.children).toHaveLength(0);
+    expect(player.getRuntimeDiagnostics()).toMatchObject({
+      particleSpriteCount: 0,
+      liveParticleCount: 0,
+    });
+
+    player.update(0.25);
+    expect(particleContainer.children).toHaveLength(0);
+
+    player.forceStopAllParticles({ suppressUntilNextPlayback: false });
+    player.update(0.1);
+    expect(particleContainer.children.length).toBeGreaterThan(0);
+    expect(() =>
+      player.forceStopAllParticles({
+        suppressUntilNextPlayback: "yes" as never,
+      }),
+    ).toThrow(
+      "V5GCocosPlayer.forceStopAllParticles suppressUntilNextPlayback must be a boolean.",
+    );
+  });
+
+  it("delays segmented force-stop particles until ending completes in standalone", () => {
+    const project = tinyProject({
+      animations: [particleWallAnimation({ duration: 2 })],
+    });
+    project.stage.duration = 2;
+    const { root, player } = makePlayer(project);
+    const complete: unknown[] = [];
+    player.init();
+    player.onPlaybackComplete((event) => complete.push(event));
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.5 },
+      loopEnd: { unit: "time", at: 0.5 },
+    });
+    player.update(0.6);
+
+    const particleContainer = getFirstParticleContainer(root);
+    expect(particleContainer.children.length).toBeGreaterThan(0);
+
+    player.requestSegmentedPlaybackEnd({ forceStopParticles: true });
+    expect(particleContainer.children.length).toBeGreaterThan(0);
+    player.update(0.25);
+    expect(player.getPlaybackState().phase).toBe("ending");
+    expect(particleContainer.children.length).toBeGreaterThan(0);
+
+    player.update(2);
+    expect(player.getPlaybackState()).toMatchObject({
+      phase: "complete",
+      isDrainingParticles: false,
+      liveParticleCount: 0,
+    });
+    expect(particleContainer.children).toHaveLength(0);
     expect(complete).toEqual([
       { startTime: 0, endTime: 2, currentTime: 2, loopIndex: 0 },
     ]);

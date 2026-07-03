@@ -116,6 +116,48 @@ describe("particle-runtime", () => {
     expect(runtime.getLiveParticleCount()).toBe(0);
   });
 
+  it("force stops live particles and remains stable on repeated calls", () => {
+    const layer = imageLayer(particleWall());
+    const runtime = new V5GParticleRuntime([layer]);
+    const live = runtime.emit([runtimeLayer(layer)], 1);
+
+    expect(live.particles.length).toBeGreaterThan(0);
+    expect(runtime.getLiveParticleCount()).toBe(live.particles.length);
+
+    expect(runtime.forceStopAll()).toEqual({
+      particles: [],
+      isDraining: false,
+      isComplete: true,
+    });
+    expect(runtime.getLiveParticleCount()).toBe(0);
+    expect(runtime.isDraining()).toBe(false);
+    expect(runtime.forceStopAll()).toEqual({
+      particles: [],
+      isDraining: false,
+      isComplete: true,
+    });
+  });
+
+  it("force stops particle drain and clears old drain state", () => {
+    const layer = imageLayer(particleWall());
+    const runtime = new V5GParticleRuntime([layer]);
+    runtime.emit([runtimeLayer(layer)], 1);
+    expect(runtime.beginDrain().isDraining).toBe(true);
+
+    const stopped = runtime.forceStopAll();
+    expect(stopped).toEqual({
+      particles: [],
+      isDraining: false,
+      isComplete: true,
+    });
+    expect(runtime.isDraining()).toBe(false);
+    expect(runtime.advanceDrain(0.25)).toEqual({
+      particles: [],
+      isDraining: false,
+      isComplete: true,
+    });
+  });
+
   it("continues wall emission from a held active emitter config", () => {
     const animation = { ...particleWall(), duration: 1 };
     const layer = imageLayer(animation);

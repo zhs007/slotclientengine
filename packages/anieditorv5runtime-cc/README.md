@@ -290,6 +290,24 @@ player.play({
 player.requestSegmentedPlaybackEnd();
 ```
 
+如果宿主希望 segmented ending 完成后直接清空粒子并跳过 drain，可传入：
+
+```ts
+player.requestSegmentedPlaybackEnd({ forceStopParticles: true });
+```
+
+这个参数不会在调用瞬间清掉当前可见粒子；runtime 仍会继续播放 ending 段，到 `project.stage.duration` 后才清空所有 runtime-managed 粒子节点、跳过 particle drain，并同步触发 `onPlaybackComplete(...)`。不传参数或传 `{ forceStopParticles: false }` 时，仍保持原有 drain 行为。
+
+当前 runtime 没有 public `stop()`；不要把 `pause()`、`restart()` 或 `destroy()` 当成普通停止播放接口。`pause()` 仍是可恢复暂停，`restart()` 会回到 0 秒并清空播放上下文，`destroy()` 是 Component 生命周期销毁。
+
+需要立即彻底清空当前 player 管理的所有粒子时，调用：
+
+```ts
+player.forceStopAllParticles();
+```
+
+默认情况下，`forceStopAllParticles()` 会清空粒子 runtime 状态和 `<layer name> Particles` 容器内的粒子节点，并阻止同一段播放生命周期在后续 `update(deltaTime)` 中重新发射粒子；新的 `play(...)`、`playRange(...)`、`seek(...)`、`restart()` 或重新 `init()` 会解除这个抑制。高级调试场景可传 `{ suppressUntilNextPlayback: false }`，表示只清当前帧粒子，后续 `update(deltaTime)` 仍可按当前播放时间重新采样粒子。
+
 `getPlaybackState()` 会返回当前 `mode`、`phase`、`currentTime`、`loopIndex`、`liveParticleCount` 和粒子排空状态。segmented 或非循环播放到结尾后，如果仍有 live 粒子，会进入 `particle-draining`，继续由 `update(deltaTime)` 推进；排空完成后才触发 `onPlaybackComplete(...)`。
 
 播放 0 到 4 秒，结束后停止：

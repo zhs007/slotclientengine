@@ -170,7 +170,7 @@ describe("anieditorv5viewer main", () => {
       profilePurpose: "runtime",
       assetScale: 1,
     });
-    expect(summary?.textContent).toContain("schema VNI_0.022");
+    expect(summary?.textContent).toContain("schema VNI_0.042");
     expect(summary?.textContent).toContain("profile runtime_100");
     expect(summary?.textContent).toContain("chaser_light");
   });
