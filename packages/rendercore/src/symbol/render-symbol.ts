@@ -160,10 +160,11 @@ export class RenderSymbol extends VisualEntity<void> {
     }
 
     const nextAni = this.createCurrentAni();
-    this.#currentAni.destroy?.();
+    const previousAni = this.#currentAni;
     this.#lastAniKey = nextKey;
     this.#currentAni = nextAni;
     this.#currentAni.reset();
+    previousAni.destroy?.();
     return true;
   }
 

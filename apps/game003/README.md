@@ -74,6 +74,7 @@ CI=true pnpm --filter game003 check:static-config
 
 - app 层从生成配置读取 symbol manifest、VNI project modules、VNI asset modules、Spine skeleton modules、Spine atlas raw modules 和 Spine texture URL modules。
 - `rendercore` 解析 manifest，并优先使用 manifest 声明的 `builtin` / `static` / `vni` / `spine` animation。
+- 同一个 `RenderSymbol` 上共享同一 skeleton / atlas / texture 的 Spine 状态会复用同一个 Spine player，状态切换只调用 Spine animation 切换；只有 symbol code 真实变化、旧 `RenderSymbol` 销毁时才释放该 player，避免 `Idle -> Win -> Idle` 切换闪烁。
 - 未声明 animation 的 symbol 状态才会走 fallback；fallback 不承载 game003 的 `appear` / `win` 秒数。
 - app 的中奖逻辑仍只按可见窗口坐标请求 symbol 状态为 `win`，不在 `game-adapter.ts`、`game-demo.ts` 或 `win-sequence.ts` 中写 `L1-wins.json` 到 `L5-wins.json`、Spine JSON/atlas 路径、VNI/Spine 播放细节或动画秒数。
 

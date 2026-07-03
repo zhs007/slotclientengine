@@ -67,3 +67,12 @@
 - 已修正 manifest：`WL/H1/H2/H3/H4/H5.win` 改为 `kind: "spine"`，`animationName: "Win"`，`loop: false`，继续由 rendercore manifest resolver 驱动，不在 game003 app 层写 symbol 分支。
 - 已更新 `apps/game003/tests/symbol-animation-config.test.ts`、`apps/game003/tests/static-config.test.ts` 和 `packages/rendercore/tests/symbol/manifest.test.ts`，覆盖 game003 resolver 和 rendercore manifest 资源解析都必须把高级图标 win 解析为 Spine。
 - 复验命令：`env CI=true pnpm --filter game003 test` 通过，25 files / 114 tests；`env CI=true pnpm --filter game003 typecheck` 通过；`env CI=true pnpm --filter @slotclientengine/rendercore test` 通过，28 files / 171 tests；`env CI=true pnpm --filter @slotclientengine/rendercore typecheck` 通过；`env CI=true pnpm --filter game003 check:static-config` 通过；`env CI=true pnpm --filter game003 release:check` 通过，仅保留 Vite chunk size warning；`git diff --check` 通过。
+
+## 复验反馈修正 3
+
+- 用户复验发现 `game003` 高级图标 `H1-H5` 进入 win 前、win 播完回 idle 时仍会闪一下。进一步判断后采用用户指出的正确模型：同一个 symbol 的 Spine 动画都在同一份 skeleton / atlas / texture 中，`Idle -> Win -> Idle` 不应销毁重建 Spine 对象，只应复用 player 并切换 animation。
+- 已修正 `packages/rendercore/src/symbol/spine-animation.ts`：按 `RenderSymbol root + symbol + skeleton + atlas + texture + atlasPage` 缓存 Spine player；同一 symbol 状态切换时引用计数保持 player 不被销毁，只调用 `play(animationName)`；最后一个 owner 销毁时才释放 player。
+- 已修正 `packages/rendercore/src/symbol/render-symbol.ts`：状态切换顺序改为先 reset/acquire 新动画，再 destroy/release 旧动画，确保同一 cache key 切换时引用计数不会短暂归零。
+- 已修正 `packages/rendercore/src/reel/render-reel.ts`：slot symbol code 真实变化时先销毁旧 `RenderSymbol`，再创建新 symbol，使 Spine cache 的释放边界和“symbol 真的发生变化”一致。
+- 已更新 `packages/rendercore/tests/symbol/spine-animation.test.ts`：覆盖同一 root 上 `normal -> win` 只创建一个 Spine player，销毁旧 state wrapper 不销毁 player，最后一个 owner 销毁才清理。
+- 复验命令：`env CI=true pnpm --filter @slotclientengine/rendercore test` 通过，28 files / 171 tests；`env CI=true pnpm --filter @slotclientengine/rendercore typecheck` 通过；`env CI=true pnpm --filter game003 test` 通过，25 files / 114 tests；`env CI=true pnpm --filter game003 typecheck` 通过；`env CI=true pnpm --filter game003 check:static-config` 通过；`env CI=true pnpm --filter game003 release:check` 通过，仅保留 Vite chunk size warning；`git diff --check` 通过。

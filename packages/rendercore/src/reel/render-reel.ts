@@ -367,6 +367,7 @@ export class RenderReel extends Container {
       return;
     }
 
+    slot.symbol?.destroy({ children: true });
     slot.container.removeChildren();
     slot.code = code;
     const entry = this.#registry.getEntryByCode(code);
