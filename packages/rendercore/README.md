@@ -184,7 +184,7 @@ import {
 - 阈值比较使用 `winAmountRaw / betAmountRaw`，不要先格式化或除显示 scale。
 - formatter 由 app 显式注入，返回空字符串或抛错会显式失败。
 
-播放器只暴露一个 Pixi `container`，不创建 `PIXI.Application`、canvas、DOM overlay、RAF 或独立 renderer。游戏主 ticker 负责调用 `update(deltaSeconds)`，viewport 变化时调用 `applyLayout(...)`。
+播放器只暴露一个 Pixi `container`，不创建 `PIXI.Application`、canvas、DOM overlay、RAF 或独立 renderer。游戏主 ticker 负责调用 `update(deltaSeconds)`，viewport 变化时调用 `applyLayout(...)`。big/super/mega 等 VNI tier 会按 `tierStageRect` 做等比 cover 缩放，不能对 x/y 分别缩放导致竖屏或宽屏下压扁。
 
 `requestDismiss()` 保留用户点击后的渐隐/结束语义；如果当前 tier effect 仍在播放，它会请求 segmented VNI 结束并等待 effect 排空。`dismissImmediately()` 用于调用方在开始下一轮前同步清理上一轮展示，对 `idle` / `complete` 幂等，对 counting、tier-counting、awaiting-dismiss 或 dismissing 阶段都会立即清空文字和 tier effect。
 

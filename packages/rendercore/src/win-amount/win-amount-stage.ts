@@ -85,11 +85,12 @@ export function applyTierContainerLayout(
   projectStage: { readonly width: number; readonly height: number },
 ): void {
   const rect = layout.tierStageRect;
-  container.position.set(0, 0);
-  container.scale.set(
+  const scale = Math.max(
     rect.width / projectStage.width,
     rect.height / projectStage.height,
   );
+  container.position.set(0, 0);
+  container.scale.set(scale);
 }
 
 export function alignWinAmountVniRoot(
