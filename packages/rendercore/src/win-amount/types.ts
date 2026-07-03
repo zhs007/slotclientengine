@@ -110,6 +110,7 @@ export interface WinAmountAnimationPlayer {
   readonly container: Container;
   start(input: WinAmountAnimationInput): void;
   update(deltaSeconds: number): WinAmountAnimationUpdateResult;
+  requestAdvance(): void;
   requestDismiss(): void;
   dismissImmediately(): void;
   applyLayout(layout: WinAmountAnimationLayout): void;

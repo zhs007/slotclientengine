@@ -98,6 +98,28 @@ export class DefaultWinAmountAnimationPlayer implements WinAmountAnimationPlayer
     return this.createUpdateResult();
   }
 
+  requestAdvance(): void {
+    this.assertNotDestroyed();
+    if (!this.isPlaying() || !this.#segment) {
+      return;
+    }
+    const segment = this.#segment;
+    if (segment.phase === "tier-counting") {
+      this.completeCurrentSegmentImmediately(segment);
+      return;
+    }
+
+    const nextTierStageIndex = this.findNextTierStageIndex();
+    if (nextTierStageIndex >= 0) {
+      this.#segment = null;
+      this.#stageIndex = nextTierStageIndex - 1;
+      this.startNextStage();
+      return;
+    }
+
+    this.jumpToFinalAmountAndAwaitDismiss();
+  }
+
   requestDismiss(): void {
     this.assertNotDestroyed();
     if (!this.isPlaying()) {
@@ -252,6 +274,32 @@ export class DefaultWinAmountAnimationPlayer implements WinAmountAnimationPlayer
       this.startNextStage();
       return;
     }
+    this.awaitDismiss();
+  }
+
+  private completeCurrentSegmentImmediately(segment: CountSegment): void {
+    this.#displayedAmountRaw = segment.toAmountRaw;
+    this.renderText(segment.textMode);
+    this.finishCurrentSegment(segment);
+  }
+
+  private findNextTierStageIndex(): number {
+    return this.#stages.findIndex(
+      (stage, index) =>
+        index > this.#stageIndex && stage.phase === "tier-counting",
+    );
+  }
+
+  private jumpToFinalAmountAndAwaitDismiss(): void {
+    const finalStage = this.#stages.at(-1);
+    if (!finalStage) {
+      this.awaitDismiss();
+      return;
+    }
+    this.#segment = null;
+    this.#stageIndex = this.#stages.length - 1;
+    this.#displayedAmountRaw = finalStage.toAmountRaw;
+    this.renderText(finalStage.textMode);
     this.awaitDismiss();
   }
 

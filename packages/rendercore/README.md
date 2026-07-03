@@ -186,7 +186,7 @@ import {
 
 播放器只暴露一个 Pixi `container`，不创建 `PIXI.Application`、canvas、DOM overlay、RAF 或独立 renderer。游戏主 ticker 负责调用 `update(deltaSeconds)`，viewport 变化时调用 `applyLayout(...)`。big/super/mega 等 VNI tier 会按 `tierStageRect` 做等比 cover 缩放，不能对 x/y 分别缩放导致竖屏或宽屏下压扁。
 
-`requestDismiss()` 保留用户点击后的渐隐/结束语义；如果当前 tier effect 仍在播放，它会请求 segmented VNI 结束并等待 effect 排空。`dismissImmediately()` 用于调用方在开始下一轮前同步清理上一轮展示，对 `idle` / `complete` 幂等，对 counting、tier-counting、awaiting-dismiss 或 dismissing 阶段都会立即清空文字和 tier effect。
+`requestAdvance()` 是玩家点击加速语义：普通数字阶段如果本轮不到 bigwin，会直接跳到最终金额并停在 `awaiting-dismiss`；如果本轮会到 bigwin 以上，会一次点击跳一档，依次进入 big/super/mega 等 tier，最后仍停在 `awaiting-dismiss`，不会隐藏文字或 tier effect。`requestDismiss()` 仅保留给调用方显式请求渐隐关闭；如果当前 tier effect 仍在播放，它会请求 segmented VNI 结束并等待 effect 排空。`dismissImmediately()` 用于调用方在开始下一轮前同步清理上一轮展示，对 `idle` / `complete` 幂等，对 counting、tier-counting、awaiting-dismiss 或 dismissing 阶段都会立即清空文字和 tier effect。
 
 big/super/mega tier 使用 VNI segmented playback：`durationSeconds`、`loopStartTime`、`loopEndTime` 和 `keepParticlesAlive` 全部来自配置。`createWinAmountAnimationTiersFromModules(...)` 会校验 project modules、asset modules、asset basename 重复、缺 project、缺 asset，以及 `0 <= loopStartTime <= loopEndTime <= durationSeconds <= project.stage.duration`。当配置的 `durationSeconds` 小于源 project 时，会 clone runtime project 并截断 `stage.duration`，不会 mutate import 进来的 JSON。
 

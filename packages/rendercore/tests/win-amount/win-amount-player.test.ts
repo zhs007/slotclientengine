@@ -98,6 +98,87 @@ describe("win amount animation player", () => {
     expect(FakeVniPlayer.instances).toHaveLength(0);
   });
 
+  it("advances non-tier wins to the final amount without hiding", () => {
+    const player = createTestPlayer();
+
+    player.start({ betAmountRaw: 10, winAmountRaw: 50 });
+    player.update(0.25);
+    player.requestAdvance();
+
+    expect(player.update(0)).toMatchObject({
+      completed: false,
+      phase: "awaiting-dismiss",
+      displayedAmountRaw: 50,
+    });
+    expect(player.isPlaying()).toBe(true);
+
+    player.requestAdvance();
+    expect(player.update(0)).toMatchObject({
+      completed: false,
+      phase: "awaiting-dismiss",
+      displayedAmountRaw: 50,
+    });
+    expect(FakeVniPlayer.instances).toHaveLength(0);
+  });
+
+  it("advances one win tier at a time and leaves the final tier visible", async () => {
+    const player = createTestPlayer();
+
+    player.start({ betAmountRaw: 10, winAmountRaw: 500 });
+    player.update(0.25);
+
+    player.requestAdvance();
+    expect(player.update(0)).toMatchObject({
+      completed: false,
+      phase: "tier-counting",
+      activeTierId: "bigwin",
+      displayedAmountRaw: 150,
+    });
+    await flushMicrotasks();
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.projectId),
+    ).toEqual(["win-amount-bigwin"]);
+
+    player.requestAdvance();
+    expect(player.update(0)).toMatchObject({
+      completed: false,
+      phase: "tier-counting",
+      activeTierId: "superwin",
+      displayedAmountRaw: 300,
+    });
+    await flushMicrotasks();
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.endRequests),
+    ).toEqual([1, 0]);
+
+    player.requestAdvance();
+    expect(player.update(0)).toMatchObject({
+      completed: false,
+      phase: "tier-counting",
+      activeTierId: "megawin",
+      displayedAmountRaw: 500,
+    });
+    await flushMicrotasks();
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.endRequests),
+    ).toEqual([1, 1, 0]);
+
+    player.requestAdvance();
+    expect(player.update(0)).toMatchObject({
+      completed: false,
+      phase: "awaiting-dismiss",
+      activeTierId: "megawin",
+      displayedAmountRaw: 500,
+    });
+    player.requestAdvance();
+    expect(player.update(0)).toMatchObject({
+      completed: false,
+      phase: "awaiting-dismiss",
+      activeTierId: "megawin",
+      displayedAmountRaw: 500,
+    });
+  });
+
   it("overlaps tier end with the next tier start and renders newer tiers above older tiers", async () => {
     const player = createTestPlayer();
 
@@ -183,7 +264,7 @@ describe("win amount animation player", () => {
     });
   });
 
-  it("dismisses the current tier before starting later tiers when the player clicks early", async () => {
+  it("explicitly dismisses the current tier before starting later tiers", async () => {
     const player = createTestPlayer();
 
     player.start({ betAmountRaw: 10, winAmountRaw: 500 });
@@ -205,7 +286,7 @@ describe("win amount animation player", () => {
     ).toEqual(["win-amount-bigwin"]);
   });
 
-  it("dismisses the top tier when the player clicks during an overlapped transition", async () => {
+  it("explicitly dismisses the top tier during an overlapped transition", async () => {
     const player = createTestPlayer();
 
     player.start({ betAmountRaw: 10, winAmountRaw: 500 });

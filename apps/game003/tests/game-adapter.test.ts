@@ -632,7 +632,7 @@ describe("game003 adapter", () => {
     expect(resolved).toBe(true);
   });
 
-  it("forwards canvas clicks to dismiss the current win amount animation", async () => {
+  it("forwards canvas clicks to advance the current win amount animation", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();
     const winAmount = new FakeWinAmountPlayer({ completeOnFirstUpdate: false });
@@ -665,7 +665,8 @@ describe("game003 adapter", () => {
     expect(resolved).toBe(false);
 
     fakeApp.canvas.dispatchEvent(new Event("pointerdown"));
-    expect(winAmount.dismissRequests).toBe(1);
+    expect(winAmount.advanceRequests).toBe(1);
+    expect(winAmount.phase).toBe("awaiting-dismiss");
     expect(resolved).toBe(false);
 
     fakeApp.tick(16);
@@ -734,7 +735,7 @@ describe("game003 adapter", () => {
     expect(destroyBgBar.destroyed).toBe(true);
     expect(destroyMinecart.destroyed).toBe(true);
     destroyApp.canvas.dispatchEvent(new Event("pointerdown"));
-    expect(destroyedWinAmount?.dismissRequests).toBe(0);
+    expect(destroyedWinAmount?.advanceRequests).toBe(0);
     const resizeCount = destroyApp.resizeCalls.length;
     destroyContext.emitViewport({ width: 1600, height: 1000 });
     expect(destroyApp.resizeCalls).toHaveLength(resizeCount);
@@ -1374,6 +1375,7 @@ class FakeWinAmountPlayer {
   }> = [];
   readonly updateDeltas: number[] = [];
   readonly layoutCalls: unknown[] = [];
+  advanceRequests = 0;
   dismissRequests = 0;
   immediateDismissRequests = 0;
   phase:
@@ -1415,6 +1417,16 @@ class FakeWinAmountPlayer {
       },
       applyLayout: (layout) => {
         this.layoutCalls.push(layout);
+      },
+      requestAdvance: () => {
+        this.advanceRequests += 1;
+        if (
+          this.phase === "minor-counting" ||
+          this.phase === "major-counting" ||
+          this.phase === "tier-counting"
+        ) {
+          this.phase = "awaiting-dismiss";
+        }
       },
       requestDismiss: () => {
         this.dismissRequests += 1;

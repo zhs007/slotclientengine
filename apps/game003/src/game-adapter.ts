@@ -168,7 +168,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
   #winAmountPlayer: WinAmountAnimationPlayer | null = null;
   #pendingAnimation: PendingAnimation | null = null;
   #unsubscribeViewport: (() => void) | null = null;
-  #disposeWinAmountDismissListener: (() => void) | null = null;
+  #disposeWinAmountAdvanceListener: (() => void) | null = null;
 
   constructor(options: Game003AdapterOptions) {
     this.#skin = options.skin;
@@ -282,12 +282,12 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#bgBarRuntime = bgBarRuntime;
     this.#minecartRuntime = minecartRuntime;
     this.#winAmountPlayer = winAmountPlayer;
-    const requestWinAmountDismiss = () => {
-      this.#winAmountPlayer?.requestDismiss();
+    const requestWinAmountAdvance = () => {
+      this.#winAmountPlayer?.requestAdvance();
     };
-    app.canvas.addEventListener("pointerdown", requestWinAmountDismiss);
-    this.#disposeWinAmountDismissListener = () => {
-      app.canvas.removeEventListener("pointerdown", requestWinAmountDismiss);
+    app.canvas.addEventListener("pointerdown", requestWinAmountAdvance);
+    this.#disposeWinAmountAdvanceListener = () => {
+      app.canvas.removeEventListener("pointerdown", requestWinAmountAdvance);
     };
     this.#applyViewport(initialViewport);
     this.#unsubscribeViewport = context.onViewportChange((viewport) => {
@@ -360,8 +360,8 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#rejectPending(new Error("game003 adapter was destroyed."));
     this.#unsubscribeViewport?.();
     this.#unsubscribeViewport = null;
-    this.#disposeWinAmountDismissListener?.();
-    this.#disposeWinAmountDismissListener = null;
+    this.#disposeWinAmountAdvanceListener?.();
+    this.#disposeWinAmountAdvanceListener = null;
     this.#app?.ticker.remove(this.#onTick);
     this.#app?.ticker.stop();
     this.#winAmountPlayer?.destroy();
