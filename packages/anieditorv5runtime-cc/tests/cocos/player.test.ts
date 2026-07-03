@@ -981,13 +981,17 @@ describe("V5GCocosPlayer", () => {
     expect(Number.isFinite(chaserNode.y)).toBe(true);
     expect(chaserNode.opacity).toBeGreaterThan(0);
 
+    player.seek(0.125);
+    expect(chaserContainer.children[0]).toBe(chaserNode);
+    expect(player.getRuntimeDiagnostics().chaserLightSpriteCount).toBe(4);
+
     player.seek(1);
     expect(chaserContainer.children).toHaveLength(0);
     expect(chaserNode.destroyed).toBe(true);
     expect(player.getRuntimeDiagnostics().chaserLightSpriteCount).toBe(0);
   });
 
-  it("maps circular chaser_light samples to Cocos clockwise visual motion", () => {
+  it("maps fixed circular chaser_light samples to Cocos coordinates", () => {
     const project = tinyProject({
       animations: [
         chaserLightAnimation({
@@ -1007,13 +1011,19 @@ describe("V5GCocosPlayer", () => {
     });
     const { root, player } = makePlayer(project);
     player.init();
+    const chaserNode = getFirstChaserLightContainer(root).children[0];
+
+    expect(chaserNode.x).toBeCloseTo(100, 3);
+    expect(chaserNode.y).toBeCloseTo(90, 3);
+    expect(chaserNode.rotation).toBeCloseTo(0, 3);
+    expect(chaserNode.opacity).toBe(128);
+
     player.seek(0.125);
 
-    const chaserNode = getFirstChaserLightContainer(root).children[0];
-    const offset = Math.cos(Math.PI / 4) * 40;
-    expect(chaserNode.x).toBeCloseTo(100 + offset, 3);
-    expect(chaserNode.y).toBeCloseTo(50 - offset, 3);
-    expect(chaserNode.rotation).toBeCloseTo(-135, 3);
+    expect(getFirstChaserLightContainer(root).children[0]).toBe(chaserNode);
+    expect(chaserNode.x).toBeCloseTo(100, 3);
+    expect(chaserNode.y).toBeCloseTo(90, 3);
+    expect(chaserNode.rotation).toBeCloseTo(0, 3);
   });
 
   it("creates legacy alpha masks and hides source layers when configured", () => {

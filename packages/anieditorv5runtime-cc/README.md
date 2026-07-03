@@ -26,7 +26,7 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - `scale_in`、`scale_out`、`pop`、`shake`、`blink`
 - `idle`：作为 timeline coverage marker，不改变 transform 或 opacity
 - `safe_glow`：使用当前图层同一张 `SpriteFrame` 创建副本，继承图层 `blendMode`，通过缩放和透明度呼吸模拟高亮，不需要 shader、Effect、滤镜或模糊
-- `chaser_light`：使用当前图层同一张 `SpriteFrame` 采样走马灯节点；`keepOriginal=false` 会隐藏源图像，走马灯副本仍在 `<layer name> Chaser Light` 容器中渲染
+- `chaser_light`：使用当前图层同一张 `SpriteFrame` 采样走马灯节点；灯位固定在轨迹采样点上，动画只推进亮灯/暗灯窗口；圆形轨迹的 `spacing` 按弧长换算角度；`keepOriginal=false` 会隐藏源图像，走马灯副本仍在 `<layer name> Chaser Light` 容器中渲染
 - `particle_wall`、`particle_combo`、`particle_stream`、`squash_stretch`
 - 图层动画 `particles`、`particle_twinkle`、`particle_wall`、`particle_combo`、`particle_stream`：复用当前图层的 `SpriteFrame` 创建粒子 Sprite；真实粒子节点挂在对应图层后面的 `<layer name> Particles` 容器下，全局 `V5G Particles` 节点只保留为空占位
 - 粒子参数仍按 VNI/Pixi 导出语义解释：`direction: 270` 表示向上，`gravity` 正数表示向下；Cocos 渲染时会把粒子 Y offset 转成 Cocos UI 坐标系，避免上下方向反转
@@ -415,7 +415,7 @@ standalone/anieditorv5runtime-cc.ts
 standalone/V5GPreview.example.ts
 ```
 
-宿主不需要为 `safe_glow`、`chaser_light` 或其它当前支持能力绑定额外 Material / Effect；`safe_glow` 和 `chaser_light` 使用同图 `SpriteFrame` 副本、继承图层 `blendMode`、scale 和 opacity。若运行环境里的 Sprite 不暴露 blend factor、material instance、pass blend target 或 pass hash 刷新能力，runtime 会直接抛出包含节点名和 blend mode 的错误；这类错误需要回到 Cocos 版本/API 兼容性排查，不能用静默兜底掩盖。
+宿主不需要为 `safe_glow`、`chaser_light` 或其它当前支持能力绑定额外 Material / Effect；`safe_glow` 和 `chaser_light` 使用同图 `SpriteFrame` 副本，`chaser_light` 的亮灯窗口会临时使用 `add` blend mode，暗灯继续使用图层 `blendMode`、原始 scale 和 `dimAlpha`。standalone 单文件与模块化包使用同一套固定灯位采样语义，普通 Cocos 项目优先复制 standalone 文件接入。若运行环境里的 Sprite 不暴露 blend factor、material instance、pass blend target 或 pass hash 刷新能力，runtime 会直接抛出包含节点名和 blend mode 的错误；这类错误需要回到 Cocos 版本/API 兼容性排查，不能用静默兜底掩盖。
 
 ## `cc` 类型 shim
 
