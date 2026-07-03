@@ -104,6 +104,36 @@ describe("RenderReel", () => {
         .filter((slot) => slot.symbol)
         .every((slot) => slot.symbol?.getMainSprite().anchor.y === 0.5),
     ).toBe(true);
+    expect(reel.getVisibleSymbolGeometrySnapshot(2)).toEqual({
+      x: 0,
+      y: 2,
+      code: 2,
+      kind: "textured",
+      centerX: 7.5,
+      centerY: 30,
+      cellWidth: 15,
+      cellHeight: 12,
+    });
+  });
+
+  it("reports visible symbol geometry relative to the reel parent", () => {
+    const reel = new RenderReel({
+      reels: createBasicReels(),
+      x: 1,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+
+    expect(reel.getVisibleSymbolGeometrySnapshot(0)).toEqual({
+      x: 1,
+      y: 0,
+      code: 2,
+      kind: "textured",
+      centerX: 24.5,
+      centerY: 6,
+      cellWidth: 15,
+      cellHeight: 12,
+    });
   });
 
   it("rejects mismatched axis plans and reentry while spinning", () => {
@@ -215,6 +245,7 @@ describe("RenderReel", () => {
 
     reel.start(axisPlan);
     expect(() => reel.requestVisibleSymbolState(0, "win")).toThrow(/phase/);
+    expect(() => reel.getVisibleSymbolGeometrySnapshot(0)).toThrow(/phase/);
   });
 });
 

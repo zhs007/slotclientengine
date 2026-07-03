@@ -201,13 +201,13 @@ import {
 beforeEach(() => {
   vi.clearAllMocks();
   pixiMock.assetsLoad.mockResolvedValue(pixiMock.MockTexture.WHITE);
-  spineRuntimeMock.animationNames = ["Idle", "Start"];
+  spineRuntimeMock.animationNames = ["Idle", "Start", "Win"];
   spineRuntimeMock.atlasPageName = "Symbol.png";
 });
 
 function createContext(options: {
   readonly symbol?: string;
-  readonly state?: "normal" | "appear";
+  readonly state?: "normal" | "appear" | "win";
 }): SymbolAnimationContext {
   const stateId = options.state ?? "appear";
   const root = new Container();
@@ -250,7 +250,7 @@ function createContext(options: {
 }
 
 function createResource(
-  state: "normal" | "appear",
+  state: "normal" | "appear" | "win",
 ): SymbolSpineAnimationResource {
   return {
     symbol: "H1",
@@ -267,7 +267,8 @@ function createResource(
       texture: "./Symbol.png",
       playback: {
         mode: "animation",
-        animationName: state === "normal" ? "Idle" : "Start",
+        animationName:
+          state === "normal" ? "Idle" : state === "win" ? "Win" : "Start",
         loop: state === "normal",
       },
       transform: {
@@ -331,8 +332,7 @@ describe("SpineSymbolAni", () => {
     ani.reset();
 
     expect(ani.update(0.2).onceCompleted).toBe(false);
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushSpineInit();
     expect(context.baseLayer.visible).toBe(false);
     expect(context.stateSprite.visible).toBe(false);
     expect(context.overlayLayer.children).toEqual([view]);
@@ -358,8 +358,7 @@ describe("SpineSymbolAni", () => {
     });
 
     ani.reset();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushSpineInit();
 
     expect(ani.playback).toBe("static");
     expect(calls.play).toHaveBeenCalledWith({
@@ -379,8 +378,7 @@ describe("SpineSymbolAni", () => {
     });
 
     ani.reset();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushSpineInit();
     expect(context.overlayLayer.children).toHaveLength(1);
 
     ani.destroy();
@@ -390,55 +388,56 @@ describe("SpineSymbolAni", () => {
     expect(context.overlayLayer.children).toHaveLength(0);
   });
 
-  it("rejects calls after destroy and ignores stale async init results after reset", async () => {
-    const context = createContext({ state: "appear" });
-    const firstInit = createDeferred<void>();
-    const secondInit = createDeferred<void>();
-    const firstView = new Container();
-    const secondView = new Container();
-    const factory: SpineSymbolAniPlayerFactory = vi
-      .fn()
-      .mockReturnValueOnce({
-        view: firstView,
-        init: vi.fn(() => firstInit.promise),
-        play: vi.fn(),
-        update: vi.fn(() => ({ completed: false })),
-        reset: vi.fn(),
-        destroy: vi.fn(() => {
-          firstView.parent?.removeChild(firstView);
-        }),
-      } satisfies RendercoreSpineSymbolPlayer)
-      .mockReturnValueOnce({
-        view: secondView,
-        init: vi.fn(() => secondInit.promise),
-        play: vi.fn(),
-        update: vi.fn(() => ({ completed: false })),
-        reset: vi.fn(),
-        destroy: vi.fn(() => {
-          secondView.parent?.removeChild(secondView);
-        }),
-      } satisfies RendercoreSpineSymbolPlayer);
-    const ani = new SpineSymbolAni({
-      context,
-      resource: createResource("appear"),
+  it("reuses one cached Spine player across states until the last owner is destroyed", async () => {
+    const normalContext = createContext({ state: "normal" });
+    const winContext: SymbolAnimationContext = {
+      ...normalContext,
+      requestedState: "win",
+      resolvedState: "win",
+      state: {
+        id: "win",
+        phase: "once",
+        playback: "once",
+      },
+    };
+    const { factory, calls, view } = createPlayerFactory();
+    const normalAni = new SpineSymbolAni({
+      context: normalContext,
+      resource: createResource("normal"),
+      playerFactory: factory,
+    });
+    const winAni = new SpineSymbolAni({
+      context: winContext,
+      resource: createResource("win"),
       playerFactory: factory,
     });
 
-    ani.reset();
-    ani.reset();
-    firstInit.resolve(undefined);
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(context.overlayLayer.children).toHaveLength(0);
+    normalAni.reset();
+    await flushSpineInit();
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(calls.play).toHaveBeenLastCalledWith({
+      animationName: "Idle",
+      loop: true,
+    });
+    expect(normalContext.overlayLayer.children).toEqual([view]);
 
-    secondInit.resolve(undefined);
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(context.overlayLayer.children).toEqual([secondView]);
+    winAni.reset();
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(calls.play).toHaveBeenLastCalledWith({
+      animationName: "Win",
+      loop: false,
+    });
+    expect(normalContext.overlayLayer.children).toEqual([view]);
 
-    ani.destroy();
-    expect(() => ani.update(0)).toThrow(/was destroyed/);
-    expect(() => ani.reset()).toThrow(/was destroyed/);
+    normalAni.destroy();
+    expect(calls.destroy).not.toHaveBeenCalled();
+    expect(normalContext.overlayLayer.children).toEqual([view]);
+
+    winAni.destroy();
+    expect(calls.destroy).toHaveBeenCalledTimes(1);
+    expect(normalContext.overlayLayer.children).toHaveLength(0);
+    expect(() => winAni.update(0)).toThrow(/was destroyed/);
+    expect(() => winAni.reset()).toThrow(/was destroyed/);
   });
 
   it("surfaces async initialization errors on update", async () => {
@@ -451,8 +450,7 @@ describe("SpineSymbolAni", () => {
     });
 
     ani.reset();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushSpineInit();
 
     expect(() => ani.update(0.2)).toThrow(/init failed/);
     expect(context.overlayLayer.children).toHaveLength(0);
@@ -466,8 +464,7 @@ describe("SpineSymbolAni", () => {
     });
 
     ani.reset();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushSpineInit();
 
     expect(pixiMock.assetsLoad).toHaveBeenCalledWith("/assets/Symbol.png");
     expect(spineRuntimeMock.spineTextureFrom).toHaveBeenCalledWith(
@@ -494,8 +491,7 @@ describe("SpineSymbolAni", () => {
     ani.reset();
     ani.destroy();
     load.resolve(pixiMock.MockTexture.WHITE);
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushSpineInit();
 
     expect(context.overlayLayer.children).toHaveLength(0);
   });
@@ -518,8 +514,7 @@ describe("SpineSymbolAni", () => {
     });
 
     missingAnimationAni.reset();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushSpineInit();
     expect(() => missingAnimationAni.update(0)).toThrow(/was not found/);
 
     spineRuntimeMock.atlasPageName = "Other.png";
@@ -530,8 +525,7 @@ describe("SpineSymbolAni", () => {
     });
 
     atlasAni.reset();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushSpineInit();
     expect(() => atlasAni.update(0)).toThrow(/atlas page contract changed/);
   });
 
@@ -577,4 +571,11 @@ function createDeferred<T>() {
     resolve = innerResolve;
   });
   return { promise, resolve };
+}
+
+async function flushSpineInit(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 }

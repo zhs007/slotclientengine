@@ -272,6 +272,7 @@ describe("RenderReelSet", () => {
         visibleRows: 5,
         cellWidth: 20,
         cellHeight: 20,
+        columnGap: 3,
       }),
       registry,
     });
@@ -300,6 +301,33 @@ describe("RenderReelSet", () => {
         ])
         .map((snapshot) => snapshot.requestedState),
     ).toEqual(["win", "win"]);
+    expect(
+      reelSet.getVisibleSymbolGeometrySnapshots([
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ]),
+    ).toEqual([
+      {
+        x: 0,
+        y: 0,
+        code: 2,
+        kind: "textured",
+        centerX: 10,
+        centerY: 10,
+        cellWidth: 20,
+        cellHeight: 20,
+      },
+      {
+        x: 1,
+        y: 1,
+        code: 2,
+        kind: "textured",
+        centerX: 33,
+        centerY: 30,
+        cellWidth: 20,
+        cellHeight: 20,
+      },
+    ]);
 
     reelSet.update(0);
     expect(reelSet.getVisibleSymbolStateSnapshot(0, 0).requestedState).toBe(
@@ -322,6 +350,12 @@ describe("RenderReelSet", () => {
     expect(() => reelSet.requestVisibleSymbolState(5, 0, "win")).toThrow(
       /out of range/,
     );
+    expect(() => reelSet.getVisibleSymbolGeometrySnapshot(5, 0)).toThrow(
+      /out of range/,
+    );
+    expect(() => reelSet.getVisibleSymbolGeometrySnapshot(0, 5)).toThrow(
+      /out of range/,
+    );
 
     const plan = createReelSpinPlan({
       reels,
@@ -335,6 +369,9 @@ describe("RenderReelSet", () => {
     });
     reelSet.spin(plan);
     expect(() => reelSet.requestVisibleSymbolState(0, 0, "win")).toThrow(
+      /spinning/,
+    );
+    expect(() => reelSet.getVisibleSymbolGeometrySnapshot(0, 0)).toThrow(
       /spinning/,
     );
   });

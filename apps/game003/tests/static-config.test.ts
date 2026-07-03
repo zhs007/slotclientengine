@@ -170,7 +170,17 @@ describe("game003 generated static config", () => {
             loop: false,
           },
         },
-        win: { kind: "builtin", durationSeconds: 0.58 },
+        win: {
+          kind: "spine",
+          skeleton: "./H1.json",
+          atlas: "./Symbol.atlas",
+          texture: "./Symbol.png",
+          playback: {
+            mode: "animation",
+            animationName: "Win",
+            loop: false,
+          },
+        },
       },
     });
     expect(manifestSymbols.WL).toMatchObject({
@@ -178,6 +188,10 @@ describe("game003 generated static config", () => {
         appear: {
           kind: "spine",
           playback: { animationName: "start", loop: false },
+        },
+        win: {
+          kind: "spine",
+          playback: { animationName: "Win", loop: false },
         },
       },
     });
@@ -188,6 +202,10 @@ describe("game003 generated static config", () => {
           playback: { animationName: "Idle", loop: true },
         },
         appear: { kind: "static", durationSeconds: 1 / 60 },
+        win: {
+          kind: "spine",
+          playback: { animationName: "Win", loop: false },
+        },
       },
     });
     expect(skin.symbolScales.H1).toBe(1);
@@ -246,9 +264,20 @@ describe("game003 generated static config", () => {
     expect(GAME003_STATIC_CONFIG.skins["1"].appExtensions).toHaveProperty(
       "game003MinecartInteraction",
     );
+    expect(
+      GAME003_STATIC_CONFIG.skins["1"].appExtensions
+        ?.game003MinecartInteraction,
+    ).toMatchObject({
+      payload: {
+        symbolScale: 1,
+      },
+    });
     expect(skin.minecartInteraction).toMatchObject({
       loadingResourceId: "game003-minecart",
       imageSize: { width: 369, height: 252 },
+      payload: {
+        symbolScale: 1,
+      },
       layout: {
         landscape: {
           exitSide: "right",
@@ -276,6 +305,24 @@ describe("game003 generated static config", () => {
     expect(totalDuration).toBeLessThan(
       DEFAULT_GAME003_REEL_CONFIG.baseDurationMs / 1000,
     );
+  });
+
+  it("generates app-owned win symbol loop config from appExtensions", () => {
+    const skin = getGame003SkinConfig("1");
+
+    expect(GAME003_STATIC_CONFIG.skins["1"].appExtensions).toHaveProperty(
+      "game003WinSymbolLoop",
+    );
+    expect(skin.winSymbolLoop).toEqual({
+      cyclePauseSeconds: 1,
+      resultAmount: {
+        yOffsetRatioFromCellCenter: 0.22,
+        fontSize: 38,
+        fill: "#fff7d6",
+        stroke: "#5a2500",
+        strokeWidth: 5,
+      },
+    });
   });
 
   it("fails fast for skin ids outside the generated supported list", () => {

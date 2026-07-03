@@ -50,9 +50,14 @@ import {
   type Game003WinSymbolGroup,
 } from "./win-sequence.js";
 import {
+  createGame003WinSymbolLoopRuntime,
+  type Game003WinSymbolLoopRuntime,
+} from "./win-symbol-loop.js";
+import {
   createGame003WinAmountLayout,
   createGame003WinAmountPlayer,
 } from "./win-amount-config.js";
+import { formatServerUsdAmount } from "./money.js";
 
 export type Game003TickerSnapshot = { readonly deltaMS: number };
 export type Game003TickerListener = (ticker: Game003TickerSnapshot) => void;
@@ -110,9 +115,6 @@ interface PendingAnimation {
   readonly targetScene: ReturnType<typeof validateGame003Scene>;
   phase: "spinning" | "win-sequence";
   winQueue: readonly Game003WinSymbolGroup[];
-  winIndex: number;
-  winGroupStarted: boolean;
-  winGroupAdvanced: boolean;
   winSequenceComplete: boolean;
   winAmountExpected: boolean;
   winAmountPlaybackComplete: boolean;
@@ -166,6 +168,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
   #bgBarRuntime: Game003BgBarRuntime | null = null;
   #minecartRuntime: Game003MinecartInteractionRuntime | null = null;
   #winAmountPlayer: WinAmountAnimationPlayer | null = null;
+  #winSymbolLoopRuntime: Game003WinSymbolLoopRuntime | null = null;
   #pendingAnimation: PendingAnimation | null = null;
   #unsubscribeViewport: (() => void) | null = null;
   #disposeWinAmountAdvanceListener: (() => void) | null = null;
@@ -259,6 +262,11 @@ class Game003PixiAdapter implements SlotGameAdapter {
       }),
     );
     const winAmountPlayer = this.#createWinAmountPlayer(layout);
+    const winSymbolLoopRuntime = createGame003WinSymbolLoopRuntime({
+      reelRuntime: runtime,
+      config: this.#skin.winSymbolLoop,
+      formatter: formatServerUsdAmount,
+    });
 
     const worldLayer = new Container();
     const worldSprites = createWorldSprites(staticTextures, layout);
@@ -268,6 +276,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
       bgBarRuntime.container,
       worldSprites.mainReelBackground,
       runtime.mainReelsLayer,
+      winSymbolLoopRuntime.container,
       minecartRuntime.container,
       winAmountPlayer.container,
     );
@@ -282,6 +291,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#bgBarRuntime = bgBarRuntime;
     this.#minecartRuntime = minecartRuntime;
     this.#winAmountPlayer = winAmountPlayer;
+    this.#winSymbolLoopRuntime = winSymbolLoopRuntime;
     const requestWinAmountAdvance = () => {
       this.#winAmountPlayer?.requestAdvance();
     };
@@ -321,6 +331,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
       bgBarPlan !== null && bgBarPlan.features[0] !== "normal";
     const betAmountRaw = logic.getBet() * logic.getLines();
     const winAmountRaw = logic.getTotalWin();
+    this.#winSymbolLoopRuntime?.clear();
     this.#requireWinAmountPlayer().dismissImmediately();
     const minecartExitStarted =
       this.#requireMinecartRuntime().startExitIfParked();
@@ -334,9 +345,6 @@ class Game003PixiAdapter implements SlotGameAdapter {
         targetScene,
         phase: "spinning",
         winQueue,
-        winIndex: 0,
-        winGroupStarted: false,
-        winGroupAdvanced: false,
         winSequenceComplete: winQueue.length === 0,
         winAmountExpected: winAmountRaw > 0,
         winAmountPlaybackComplete: winAmountRaw <= 0,
@@ -364,6 +372,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#disposeWinAmountAdvanceListener = null;
     this.#app?.ticker.remove(this.#onTick);
     this.#app?.ticker.stop();
+    this.#winSymbolLoopRuntime?.destroy();
     this.#winAmountPlayer?.destroy();
     this.#minecartRuntime?.destroy();
     this.#bgBarRuntime?.destroy();
@@ -377,6 +386,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#bgBarRuntime = null;
     this.#minecartRuntime = null;
     this.#winAmountPlayer = null;
+    this.#winSymbolLoopRuntime = null;
   }
 
   readonly #onTick: Game003TickerListener = (ticker) => {
@@ -388,7 +398,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
       const deltaSeconds = normalizeTickerDeltaSeconds(ticker);
       const pending = this.#pendingAnimation;
       if (!pending) {
-        this.#tickLingeringWinAmount(deltaSeconds);
+        this.#tickLingeringAnimations(deltaSeconds);
       } else if (pending.phase === "spinning") {
         this.#tickSpinPhase(deltaSeconds);
       } else {
@@ -406,12 +416,15 @@ class Game003PixiAdapter implements SlotGameAdapter {
     }
   };
 
-  #tickLingeringWinAmount(deltaSeconds: number): void {
+  #tickLingeringAnimations(deltaSeconds: number): void {
     const player = this.#winAmountPlayer;
-    if (!player?.isPlaying()) {
-      return;
+    if (player?.isPlaying()) {
+      player.update(deltaSeconds);
     }
-    player.update(deltaSeconds);
+    const winSymbolLoop = this.#winSymbolLoopRuntime;
+    if (winSymbolLoop && winSymbolLoop.getSnapshot().phase !== "idle") {
+      winSymbolLoop.update(deltaSeconds);
+    }
   }
 
   #tickSpinPhase(deltaSeconds: number): void {
@@ -446,30 +459,23 @@ class Game003PixiAdapter implements SlotGameAdapter {
     }
 
     pending.phase = "win-sequence";
-    pending.winIndex = 0;
     if (!pending.winSequenceComplete) {
-      this.#startCurrentWinGroup(pending);
+      this.#requireWinSymbolLoopRuntime().start(pending.winQueue);
     }
     this.#completePendingIfReady(pending);
   }
 
   #tickWinSequencePhase(deltaSeconds: number): void {
-    const runtime = this.#requireRuntime();
     const pending = this.#pendingAnimation;
     if (!pending) {
       return;
     }
 
-    if (!pending.winSequenceComplete) {
-      runtime.update(deltaSeconds);
-      pending.winGroupAdvanced = true;
-      if (this.#isCurrentWinGroupComplete(pending)) {
-        pending.winIndex += 1;
-        if (pending.winIndex >= pending.winQueue.length) {
-          pending.winSequenceComplete = true;
-        } else {
-          this.#startCurrentWinGroup(pending);
-        }
+    const winSymbolLoop = this.#requireWinSymbolLoopRuntime();
+    if (winSymbolLoop.getSnapshot().phase !== "idle") {
+      const result = winSymbolLoop.update(deltaSeconds);
+      if (result.firstCycleComplete) {
+        pending.winSequenceComplete = true;
       }
     }
 
@@ -522,34 +528,6 @@ class Game003PixiAdapter implements SlotGameAdapter {
         "game003 bg-bar completed without a terminal minecart feature event.",
       );
     }
-  }
-
-  #startCurrentWinGroup(pending: PendingAnimation): void {
-    const group = pending.winQueue[pending.winIndex];
-    if (!group) {
-      this.#completePending(pending);
-      return;
-    }
-    this.#requireRuntime().requestVisibleSymbolStates(group.positions, "win");
-    pending.winGroupStarted = true;
-    pending.winGroupAdvanced = false;
-  }
-
-  #isCurrentWinGroupComplete(pending: PendingAnimation): boolean {
-    if (!pending.winGroupStarted || !pending.winGroupAdvanced) {
-      return false;
-    }
-    const group = pending.winQueue[pending.winIndex];
-    if (!group) {
-      return true;
-    }
-    return this.#requireRuntime()
-      .getVisibleSymbolStateSnapshots(group.positions)
-      .every(
-        (snapshot) =>
-          snapshot.requestedState === "normal" &&
-          snapshot.resolvedState === "normal",
-      );
   }
 
   #completePending(pending: PendingAnimation): void {
@@ -614,6 +592,13 @@ class Game003PixiAdapter implements SlotGameAdapter {
     return this.#minecartRuntime;
   }
 
+  #requireWinSymbolLoopRuntime(): Game003WinSymbolLoopRuntime {
+    if (!this.#winSymbolLoopRuntime) {
+      throw new Error("game003 adapter is not mounted.");
+    }
+    return this.#winSymbolLoopRuntime;
+  }
+
   #applyViewport(viewport: SlotGameViewportSnapshot): void {
     if (
       !this.#app ||
@@ -622,7 +607,8 @@ class Game003PixiAdapter implements SlotGameAdapter {
       !this.#worldSprites ||
       !this.#runtime ||
       !this.#bgBarRuntime ||
-      !this.#minecartRuntime
+      !this.#minecartRuntime ||
+      !this.#winSymbolLoopRuntime
     ) {
       throw new Error("game003 adapter is not mounted.");
     }
@@ -637,6 +623,10 @@ class Game003PixiAdapter implements SlotGameAdapter {
     applyWorldSpriteLayout(this.#worldSprites, this.#staticTextures, layout);
     this.#runtime.applyLayout(
       createGame003ReelLayerLayout(this.#runtime.layout, layout),
+    );
+    this.#winSymbolLoopRuntime.container.position.set(
+      this.#runtime.layerLayout.x,
+      this.#runtime.layerLayout.y,
     );
     this.#bgBarRuntime.applyLayout(
       createGame003BgBarLayout({ layout, config: this.#skin.bgBar }),

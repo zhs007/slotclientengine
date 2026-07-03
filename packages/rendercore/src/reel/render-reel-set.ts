@@ -9,6 +9,7 @@ import type {
   RenderReelSetSpinOptions,
   RenderReelSetSnapshot,
   RenderReelSetUpdateResult,
+  RenderVisibleSymbolGeometrySnapshot,
   RenderVisibleSymbolStateSnapshot,
 } from "./types.js";
 import type { SymbolStateId } from "../symbol/index.js";
@@ -174,6 +175,28 @@ export class RenderReelSet extends Container {
     return Object.freeze(
       positions.map((position) =>
         this.getVisibleSymbolStateSnapshot(position.x, position.y),
+      ),
+    );
+  }
+
+  getVisibleSymbolGeometrySnapshot(
+    x: number,
+    y: number,
+  ): RenderVisibleSymbolGeometrySnapshot {
+    if (this.#spinPlan) {
+      throw new ReelError(
+        "Cannot read visible symbol geometry while reel set is spinning.",
+      );
+    }
+    return this.getReelAt(x).getVisibleSymbolGeometrySnapshot(y);
+  }
+
+  getVisibleSymbolGeometrySnapshots(
+    positions: readonly { readonly x: number; readonly y: number }[],
+  ): readonly RenderVisibleSymbolGeometrySnapshot[] {
+    return Object.freeze(
+      positions.map((position) =>
+        this.getVisibleSymbolGeometrySnapshot(position.x, position.y),
       ),
     );
   }

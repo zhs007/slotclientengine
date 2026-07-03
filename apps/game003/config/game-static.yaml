@@ -150,6 +150,16 @@ skins:
     # appExtensions 是 app 层专属静态扩展。shared 包只透传对象，不理解 game003MinecartInteraction 语义。
     # 这里只放美术、配置人员和发布流程可改的静态坐标与时间，不放 token、cookie、服务器真实轮带或玩家本次下注。
     appExtensions:
+      game003WinSymbolLoop:
+        # 一轮 bg-wins result 全部播放完后，暂停多久再从第一个 result 继续循环。
+        cyclePauseSeconds: 1
+        resultAmount:
+          # 金额锚点相对中奖 symbol cell 中心向下偏移；坐标基准是主转轮本地 cell。
+          yOffsetRatioFromCellCenter: 0.22
+          fontSize: 38
+          fill: "#fff7d6"
+          stroke: "#5a2500"
+          strokeWidth: 5
       game003MinecartInteraction:
         loadingResourceId: game003-minecart
         imageSize:
@@ -168,7 +178,8 @@ skins:
           brakeTiltDegrees: 14
           reboundTiltDegrees: -8
         payload:
-          symbolScale: 0.72
+          # symbolScale 是在 bg-bar manifest / catalog scale 之上的额外缩放；1 表示保持原始显示尺寸。
+          symbolScale: 1
           fadeStartAlpha: 1
           fadeEndAlpha: 0
         layout:

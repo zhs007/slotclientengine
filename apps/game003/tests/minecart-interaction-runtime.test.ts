@@ -21,6 +21,7 @@ describe("game003 minecart interaction runtime", () => {
       cartVisible: true,
       payloadVisible: true,
       payloadAlpha: 1,
+      payloadScale: { x: 1, y: 1 },
     });
     expect(runtime.getSnapshot().cartPosition).toEqual(layout.cartStartCenter);
 
@@ -54,6 +55,7 @@ describe("game003 minecart interaction runtime", () => {
       payloadVisible: true,
       payloadAlpha: 0.95,
       payloadPosition: layout.payloadTargetCenter,
+      payloadScale: { x: 1, y: 1 },
       cartRotation: 0,
     });
 

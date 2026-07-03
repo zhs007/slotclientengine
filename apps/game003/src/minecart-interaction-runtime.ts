@@ -34,6 +34,7 @@ export interface Game003MinecartInteractionSnapshot {
   readonly cartRotation: number;
   readonly cartVisible: boolean;
   readonly payloadPosition: Point | null;
+  readonly payloadScale: Point | null;
   readonly payloadAlpha: number | null;
   readonly payloadVisible: boolean;
 }
@@ -235,6 +236,12 @@ class Game003MinecartInteractionRuntimeModel implements Game003MinecartInteracti
         ? Object.freeze({
             x: this.#payload.position.x,
             y: this.#payload.position.y,
+          })
+        : null,
+      payloadScale: this.#payload
+        ? Object.freeze({
+            x: this.#payload.scale.x,
+            y: this.#payload.scale.y,
           })
         : null,
       payloadAlpha: this.#payload ? this.#payload.alpha : null,

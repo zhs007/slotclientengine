@@ -227,6 +227,17 @@ export interface RenderVisibleSymbolStateSnapshot {
   readonly isOnce: boolean;
 }
 
+export interface RenderVisibleSymbolGeometrySnapshot {
+  readonly x: number;
+  readonly y: number;
+  readonly code: number;
+  readonly kind: ReelSymbolKind;
+  readonly centerX: number;
+  readonly centerY: number;
+  readonly cellWidth: number;
+  readonly cellHeight: number;
+}
+
 export interface RenderReelSetOptions {
   readonly reels: LogicReels;
   readonly layout: ReelLayout;

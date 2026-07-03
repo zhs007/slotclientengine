@@ -580,6 +580,21 @@ describe("game003 adapter", () => {
       winAmountRaw: GAME003_SAMPLE_WIN_SPIN_RESULT.totalwin,
     });
 
+    for (let index = 0; index < 31; index += 1) {
+      fakeApp.tick(33);
+    }
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    expect(runtime.winRequests.length).toBeGreaterThan(2);
+    expect(runtime.winRequests.at(-1)).toEqual({
+      state: "win",
+      positions: [
+        { x: 0, y: 4 },
+        { x: 1, y: 2 },
+        { x: 2, y: 0 },
+      ],
+    });
+
     winAmount.completeNextUpdate = true;
     fakeApp.tick(16);
     await spinPromise;
@@ -1067,6 +1082,7 @@ class FakeRuntime {
   winUpdateCount = 0;
 
   asRuntime(): Game003ReelRuntime {
+    const fake = this;
     return {
       mainReelsLayer: this.mainReelsLayer,
       applyScene: (scene: SceneMatrix) => {
@@ -1154,6 +1170,19 @@ class FakeRuntime {
             isOnce: requestedState === "win",
           };
         }),
+      getVisibleSymbolGeometrySnapshots: (
+        positions: readonly { readonly x: number; readonly y: number }[],
+      ) =>
+        positions.map((position) => ({
+          x: position.x,
+          y: position.y,
+          code: 1,
+          kind: "textured" as const,
+          centerX: position.x * 100 + 50,
+          centerY: position.y * 100 + 50,
+          cellWidth: 100,
+          cellHeight: 100,
+        })),
       getVisualSnapshot: () => {
         const scene = this.forceVisualScene ?? this.currentScene;
         if (!scene) {
@@ -1181,7 +1210,14 @@ class FakeRuntime {
       config: {} as any,
       gameConfig: {} as any,
       layout: createGame003ReelLayout(),
-      layerLayout: {} as any,
+      get layerLayout(): any {
+        return (
+          (fake.layoutCalls.at(-1) as {
+            readonly x: number;
+            readonly y: number;
+          }) ?? { x: 0, y: 0 }
+        );
+      },
       getCurrentScene: () => this.currentScene,
       getTargetScene: () => this.targetScene,
       getFinalYs: () => [0, 0, 0, 0, 0],
@@ -1347,6 +1383,7 @@ class FakeMinecartRuntime {
         cartRotation: 0,
         cartVisible: this.phase !== "idle" && this.phase !== "destroyed",
         payloadPosition: this.isPlaying() ? { x: 0, y: 0 } : null,
+        payloadScale: this.isPlaying() ? { x: 1, y: 1 } : null,
         payloadAlpha: this.isPlaying() ? 1 : null,
         payloadVisible: this.isPlaying(),
       }),

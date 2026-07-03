@@ -47,17 +47,31 @@ const EMPTY_UPDATE_RESULT: SymbolAniUpdateResult = Object.freeze({
   onceCompleted: false,
 });
 
+interface CachedSpineSymbolPlayer {
+  readonly key: string;
+  readonly player: RendercoreSpineSymbolPlayer;
+  initPromise: Promise<void>;
+  initialized: boolean;
+  owners: number;
+}
+
+const cachedSpineSymbolPlayers = new WeakMap<
+  Container,
+  Map<string, CachedSpineSymbolPlayer>
+>();
+
 export class SpineSymbolAni implements SymbolAni {
   readonly stateId: string;
   readonly playback: SymbolPlaybackKind;
   readonly #context: SymbolAnimationContext;
   readonly #resource: SymbolSpineAnimationResource;
   readonly #playerFactory: SpineSymbolAniPlayerFactory;
-  #player: RendercoreSpineSymbolPlayer | null = null;
+  #cacheEntry: CachedSpineSymbolPlayer | null = null;
   #initError: unknown = null;
   #initialized = false;
   #reportedComplete = false;
   #destroyed = false;
+  #playRequestId = 0;
 
   constructor(options: SpineSymbolAniOptions) {
     this.#context = options.context;
@@ -71,16 +85,25 @@ export class SpineSymbolAni implements SymbolAni {
 
   reset(): void {
     this.assertNotDestroyed();
-    this.disposePlayer();
-    resetBaseDisplay(this.#context);
-    this.#context.baseLayer.visible = false;
-    this.#context.stateSprite.visible = false;
-    this.#context.overlayLayer.removeChildren();
     this.#reportedComplete = false;
     this.#initError = null;
-    const player = this.#playerFactory({ resource: this.#resource });
-    this.#player = player;
-    void this.initializeAndPlay(player);
+    this.#initialized = false;
+    const entry = getOrCreateCachedSpineSymbolPlayer({
+      context: this.#context,
+      resource: this.#resource,
+      playerFactory: this.#playerFactory,
+    });
+    if (this.#cacheEntry !== entry) {
+      this.releaseCacheEntry();
+      entry.owners += 1;
+      this.#cacheEntry = entry;
+    }
+    const requestId = (this.#playRequestId += 1);
+    if (entry.initialized) {
+      this.playCachedPlayer(entry, requestId);
+      return;
+    }
+    void this.initializeAndPlay(entry, requestId).catch(() => undefined);
   }
 
   update(deltaSeconds: number): SymbolAniUpdateResult {
@@ -89,10 +112,10 @@ export class SpineSymbolAni implements SymbolAni {
     if (this.#initError) {
       throw this.#initError;
     }
-    if (!this.#initialized || !this.#player) {
+    if (!this.#initialized || !this.#cacheEntry) {
       return EMPTY_UPDATE_RESULT;
     }
-    const result = this.#player.update(deltaSeconds);
+    const result = this.#cacheEntry.player.update(deltaSeconds);
     if (
       this.playback === "once" &&
       result.completed &&
@@ -112,37 +135,76 @@ export class SpineSymbolAni implements SymbolAni {
       return;
     }
     this.#destroyed = true;
-    this.disposePlayer();
+    this.releaseCacheEntry();
   }
 
   private async initializeAndPlay(
-    player: RendercoreSpineSymbolPlayer,
+    entry: CachedSpineSymbolPlayer,
+    requestId: number,
   ): Promise<void> {
     try {
-      await player.init();
-      if (this.#destroyed || this.#player !== player) {
-        return;
-      }
-      applySpineTransform(player.view, this.#resource);
-      this.#context.overlayLayer.addChild(player.view);
-      player.play({
-        animationName: this.#resource.spec.playback.animationName,
-        loop: this.#resource.spec.playback.loop,
-      });
-      this.#initialized = true;
+      await entry.initPromise;
+      this.playCachedPlayer(entry, requestId);
     } catch (error) {
-      if (this.#player === player) {
-        this.disposePlayer();
+      if (this.#cacheEntry === entry && this.#playRequestId === requestId) {
         this.#initError = error;
       }
     }
   }
 
-  private disposePlayer(): void {
-    this.#player?.view.parent?.removeChild(this.#player.view);
-    this.#player?.destroy();
-    this.#player = null;
+  private playCachedPlayer(
+    entry: CachedSpineSymbolPlayer,
+    requestId: number,
+  ): void {
+    try {
+      if (
+        this.#destroyed ||
+        this.#cacheEntry !== entry ||
+        this.#playRequestId !== requestId
+      ) {
+        return;
+      }
+      const player = entry.player;
+      applySpineTransform(player.view, this.#resource);
+      player.play({
+        animationName: this.#resource.spec.playback.animationName,
+        loop: this.#resource.spec.playback.loop,
+      });
+      if (player.view.parent !== this.#context.overlayLayer) {
+        resetBaseDisplay(this.#context);
+        this.#context.baseLayer.visible = false;
+        this.#context.stateSprite.visible = false;
+        this.#context.overlayLayer.removeChildren();
+        this.#context.overlayLayer.addChild(player.view);
+      } else {
+        this.#context.baseLayer.visible = false;
+        this.#context.stateSprite.visible = false;
+      }
+      this.#initialized = true;
+    } catch (error) {
+      if (this.#cacheEntry === entry && this.#playRequestId === requestId) {
+        this.#initError = error;
+      }
+    }
+  }
+
+  private releaseCacheEntry(): void {
+    const entry = this.#cacheEntry;
+    if (!entry) {
+      return;
+    }
+    this.#cacheEntry = null;
     this.#initialized = false;
+    entry.owners = Math.max(0, entry.owners - 1);
+    if (entry.owners > 0) {
+      return;
+    }
+    const rootCache = cachedSpineSymbolPlayers.get(this.#context.root);
+    if (rootCache?.get(entry.key) === entry) {
+      rootCache.delete(entry.key);
+    }
+    entry.player.view.parent?.removeChild(entry.player.view);
+    entry.player.destroy();
   }
 
   private assertNotDestroyed(): void {
@@ -152,6 +214,50 @@ export class SpineSymbolAni implements SymbolAni {
       );
     }
   }
+}
+
+function getOrCreateCachedSpineSymbolPlayer(options: {
+  readonly context: SymbolAnimationContext;
+  readonly resource: SymbolSpineAnimationResource;
+  readonly playerFactory: SpineSymbolAniPlayerFactory;
+}): CachedSpineSymbolPlayer {
+  const key = createSpineSymbolPlayerCacheKey(options.resource);
+  let rootCache = cachedSpineSymbolPlayers.get(options.context.root);
+  if (!rootCache) {
+    rootCache = new Map();
+    cachedSpineSymbolPlayers.set(options.context.root, rootCache);
+  }
+  const existing = rootCache.get(key);
+  if (existing) {
+    return existing;
+  }
+  const player = options.playerFactory({ resource: options.resource });
+  const entry: CachedSpineSymbolPlayer = {
+    key,
+    player,
+    initPromise: Promise.resolve(),
+    initialized: false,
+    owners: 0,
+  };
+  entry.initPromise = Promise.resolve()
+    .then(() => player.init())
+    .then(() => {
+      entry.initialized = true;
+    });
+  rootCache.set(key, entry);
+  return entry;
+}
+
+function createSpineSymbolPlayerCacheKey(
+  resource: SymbolSpineAnimationResource,
+): string {
+  return [
+    resource.symbol,
+    resource.spec.skeleton,
+    resource.spec.atlas,
+    resource.spec.texture,
+    resource.atlasPage,
+  ].join("\u0000");
 }
 
 export function createSymbolSpineAnimationResolver(options: {

@@ -98,7 +98,7 @@ describe("win amount animation player", () => {
     expect(FakeVniPlayer.instances).toHaveLength(0);
   });
 
-  it("advances non-tier wins to the final amount without hiding", () => {
+  it("advances non-tier wins to the final amount, then hides on the next click", () => {
     const player = createTestPlayer();
 
     player.start({ betAmountRaw: 10, winAmountRaw: 50 });
@@ -114,14 +114,14 @@ describe("win amount animation player", () => {
 
     player.requestAdvance();
     expect(player.update(0)).toMatchObject({
-      completed: false,
-      phase: "awaiting-dismiss",
+      completed: true,
+      phase: "complete",
       displayedAmountRaw: 50,
     });
     expect(FakeVniPlayer.instances).toHaveLength(0);
   });
 
-  it("advances one win tier at a time and leaves the final tier visible", async () => {
+  it("advances one win tier at a time and dismisses the final tier on the last click", async () => {
     const player = createTestPlayer();
 
     player.start({ betAmountRaw: 10, winAmountRaw: 500 });
@@ -171,10 +171,21 @@ describe("win amount animation player", () => {
       displayedAmountRaw: 500,
     });
     player.requestAdvance();
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.endRequests),
+    ).toEqual([1, 1, 1]);
+    player.requestAdvance();
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.endRequests),
+    ).toEqual([1, 1, 1]);
     expect(player.update(0)).toMatchObject({
-      completed: false,
-      phase: "awaiting-dismiss",
-      activeTierId: "megawin",
+      completed: true,
+      phase: "complete",
+      displayedAmountRaw: 500,
+    });
+    expect(player.update(0.1)).toMatchObject({
+      completed: true,
+      phase: "complete",
       displayedAmountRaw: 500,
     });
   });

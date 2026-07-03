@@ -17,6 +17,10 @@ import {
   type Game003MinecartInteractionConfig,
 } from "./minecart-interaction-config.js";
 import {
+  getGame003WinSymbolLoopConfig,
+  type Game003WinSymbolLoopConfig,
+} from "./win-symbol-loop-config.js";
+import {
   GAME003_SUPPORTED_SKINS,
   parseGame003SkinId,
   type Game003SkinId,
@@ -43,6 +47,7 @@ export interface Game003SkinConfig {
   readonly symbolAnimationResolver: SymbolAnimationResolver;
   readonly bgBar: Game003BgBarSkinConfig;
   readonly minecartInteraction: Game003MinecartInteractionConfig;
+  readonly winSymbolLoop: Game003WinSymbolLoopConfig;
 }
 
 export interface Game003BgBarSkinConfig {
@@ -144,6 +149,9 @@ const GAME003_SKIN_CONFIGS: Readonly<Record<Game003SkinId, Game003SkinConfig>> =
         layout: game003StaticSkin1BgBar.layout,
       }),
       minecartInteraction: getGame003MinecartInteractionConfig(
+        game003StaticSkin1.appExtensions,
+      ),
+      winSymbolLoop: getGame003WinSymbolLoopConfig(
         game003StaticSkin1.appExtensions,
       ),
     }),

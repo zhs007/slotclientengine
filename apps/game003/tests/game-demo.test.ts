@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createTextureSet } from "../../../packages/rendercore/tests/reel/helpers.js";
-import type { SymbolAssetMap } from "@slotclientengine/rendercore";
+import {
+  createWinSymbolAni,
+  type SymbolAssetMap,
+} from "@slotclientengine/rendercore";
 import {
   GAME003_DEFAULT_SCENE,
   GAME003_SPIN_SCENE,
@@ -115,7 +118,13 @@ describe("game003 reel runtime", () => {
   });
 
   it("requests win state on visible positions and lets once animation return to normal", () => {
-    const runtime = createRuntime(GAME003_WIN_SPIN_SCENE);
+    const runtime = createRuntime(GAME003_WIN_SPIN_SCENE, {
+      ...DEFAULT_GAME003_REEL_CONFIG,
+      animationResolver: (context) =>
+        context.resolvedState === "win"
+          ? createWinSymbolAni(context, { durationSeconds: 0.58 })
+          : GAME003_SKIN.symbolAnimationResolver(context),
+    });
     const positions = [
       { x: 0, y: 4 },
       { x: 1, y: 2 },
@@ -134,6 +143,41 @@ describe("game003 reel runtime", () => {
       { x: 0, y: 4, requestedState: "win" },
       { x: 1, y: 2, requestedState: "win" },
       { x: 2, y: 0, requestedState: "win" },
+    ]);
+    expect(
+      runtime.getVisibleSymbolGeometrySnapshots(positions).map((snapshot) => ({
+        x: snapshot.x,
+        y: snapshot.y,
+        centerX: snapshot.centerX,
+        centerY: snapshot.centerY,
+        cellWidth: snapshot.cellWidth,
+        cellHeight: snapshot.cellHeight,
+      })),
+    ).toEqual([
+      {
+        x: 0,
+        y: 4,
+        centerX: 82.5,
+        centerY: 585,
+        cellWidth: 165,
+        cellHeight: 130,
+      },
+      {
+        x: 1,
+        y: 2,
+        centerX: 262.5,
+        centerY: 325,
+        cellWidth: 165,
+        cellHeight: 130,
+      },
+      {
+        x: 2,
+        y: 0,
+        centerX: 442.5,
+        centerY: 65,
+        cellWidth: 165,
+        cellHeight: 130,
+      },
     ]);
     expect(runtime.getVisualSnapshot().requestedStates[0][4]).toBe("win");
 
@@ -183,11 +227,15 @@ describe("game003 reel runtime", () => {
   });
 });
 
-function createRuntime(initialScene?: typeof GAME003_DEFAULT_SCENE) {
+function createRuntime(
+  initialScene?: typeof GAME003_DEFAULT_SCENE,
+  config = DEFAULT_GAME003_REEL_CONFIG,
+) {
   return createGame003ReelRuntime({
     rawGameConfig: GAME003_STATIC_CONFIG.gameConfig,
     symbolAssets: createSymbolTextures(GAME003_SKIN.displaySymbols),
     initialScene,
+    config,
   });
 }
 

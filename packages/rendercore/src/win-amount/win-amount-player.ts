@@ -100,7 +100,13 @@ export class DefaultWinAmountAnimationPlayer implements WinAmountAnimationPlayer
 
   requestAdvance(): void {
     this.assertNotDestroyed();
-    if (!this.isPlaying() || !this.#segment) {
+    if (!this.isPlaying()) {
+      return;
+    }
+    if (!this.#segment) {
+      if (this.#phase === "awaiting-dismiss") {
+        this.requestDismiss();
+      }
       return;
     }
     const segment = this.#segment;
