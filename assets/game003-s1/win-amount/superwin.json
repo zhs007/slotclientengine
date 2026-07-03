@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "V5G_0.0051",
+  "schemaVersion": "VNI_0.003",
   "editor": {
     "name": "victory_editor_v5_g",
-    "version": "V5G_0.0051"
+    "version": "VNI_0.003"
   },
   "engineTarget": {
     "name": "cocos_creator",
@@ -23,7 +23,10 @@
       "path": "assets/super_asset_image_mqgmihl5_7.png",
       "originalName": "super.png",
       "width": 966,
-      "height": 251
+      "height": 251,
+      "fileWidth": 483,
+      "fileHeight": 126,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgmin3j_9",
@@ -31,7 +34,10 @@
       "path": "assets/super_win_asset_image_mqgmin3j_9.png",
       "originalName": "super win.png",
       "width": 438,
-      "height": 207
+      "height": 207,
+      "fileWidth": 219,
+      "fileHeight": 104,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgmiqo0_b",
@@ -39,7 +45,10 @@
       "path": "assets/superwin_asset_image_mqgmiqo0_b.png",
       "originalName": "superwin线光.png",
       "width": 730,
-      "height": 735
+      "height": 735,
+      "fileWidth": 365,
+      "fileHeight": 368,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgmjujq_d",
@@ -47,7 +56,10 @@
       "path": "assets/effect4_asset_image_mqgmjujq_d.png",
       "originalName": "effect4.png",
       "width": 320,
-      "height": 277
+      "height": 277,
+      "fileWidth": 160,
+      "fileHeight": 139,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgmk7jx_f",
@@ -55,7 +67,10 @@
       "path": "assets/2_asset_image_mqgmk7jx_f.png",
       "originalName": "光点2.png",
       "width": 50,
-      "height": 50
+      "height": 50,
+      "fileWidth": 25,
+      "fileHeight": 25,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgmko6a_h",
@@ -63,7 +78,10 @@
       "path": "assets/image_asset_image_mqgmko6a_h.png",
       "originalName": "右车.png",
       "width": 477,
-      "height": 190
+      "height": 190,
+      "fileWidth": 239,
+      "fileHeight": 95,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgmkqkl_j",
@@ -71,7 +89,10 @@
       "path": "assets/image_asset_image_mqgmkqkl_j.png",
       "originalName": "左车.png",
       "width": 545,
-      "height": 221
+      "height": 221,
+      "fileWidth": 273,
+      "fileHeight": 111,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgmksgb_l",
@@ -79,7 +100,10 @@
       "path": "assets/image_asset_image_mqgmksgb_l.png",
       "originalName": "中车.png",
       "width": 346,
-      "height": 267
+      "height": 267,
+      "fileWidth": 173,
+      "fileHeight": 134,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgn4aqi_1q",
@@ -87,7 +111,10 @@
       "path": "assets/image_asset_image_mqgn4aqi_1q.png",
       "originalName": "钱.png",
       "width": 241,
-      "height": 161
+      "height": 161,
+      "fileWidth": 121,
+      "fileHeight": 81,
+      "fileScale": 0.5
     }
   ],
   "layers": [
@@ -810,5 +837,10 @@
       "keyframes": []
     }
   ],
-  "particles": []
+  "particles": [],
+  "exportProfile": {
+    "id": "runtime_50",
+    "purpose": "runtime",
+    "assetScale": 0.5
+  }
 }

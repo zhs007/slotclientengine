@@ -8,7 +8,7 @@ The viewer owns the browser Pixi `Application` and canvas. It passes `app.stage`
 
 ## Bundled Projects
 
-The app bundles the legacy V5G full-size exports:
+The app bundles the V5G/VNI exports:
 
 - `docs/anieditor5/export/project.json`
 - `docs/anieditor5/export/bigwin.json`
@@ -24,12 +24,6 @@ The app bundles the legacy V5G full-size exports:
 - `docs/anieditor5/export/roundreel.json`
 - `docs/anieditor5/export/number2.json`
 - `docs/anieditor5/export/number3.json`
-
-It also keeps the older VNI export2 bundle as a non-regression fixture:
-
-- `docs/anieditor5/export2/manifest.json`
-- `docs/anieditor5/export2/edit_full/project.json`
-- `docs/anieditor5/export2/runtime_50/project.json`
 
 For game-specific animation review, the viewer also registers the original
 `game003-s1` L1-L5 win animations without copying or rewriting their assets:
@@ -54,11 +48,6 @@ The copied runtime files live under `src/assets`:
 - `src/assets/projects/number2.json`
 - `src/assets/projects/number3.json`
 - `src/assets/assets/*`
-- `src/assets/export2/manifest.json`
-- `src/assets/export2/edit_full/project.json`
-- `src/assets/export2/edit_full/assets/*`
-- `src/assets/export2/runtime_50/project.json`
-- `src/assets/export2/runtime_50/assets/*`
 
 The UI project selector can switch between all bundled projects. JSON `asset.path` values are resolved through a Vite URL manifest and must match copied files exactly.
 

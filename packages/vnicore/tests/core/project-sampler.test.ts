@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import export2Runtime50Data from "../fixtures/export2/runtime_50/project.json";
+import bigwinData from "../fixtures/export/bigwin.json";
 import {
   sampleLayerAtTime,
   sampleProjectAtTime,
@@ -62,7 +62,7 @@ function layer(
 
 describe("project-sampler", () => {
   it("does not auto-hide source images just because particles are active", () => {
-    const project = assertV5GProject(export2Runtime50Data);
+    const project = assertV5GProject(bigwinData);
     const sampled = sampleProjectAtTime(project, 0);
     const renderedImageLayers = sampled.layers.filter(
       (layer) => layer.renderImageDisplay,

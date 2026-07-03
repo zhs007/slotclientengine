@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "V5G_0.0014",
+  "schemaVersion": "VNI_0.003",
   "editor": {
     "name": "victory_editor_v5_g",
-    "version": "V5G_0.0014"
+    "version": "VNI_0.003"
   },
   "engineTarget": {
     "name": "cocos_creator",
@@ -13,7 +13,7 @@
     "width": 2000,
     "height": 2000,
     "coordinate": "center",
-    "duration": 10,
+    "duration": 5,
     "backgroundColor": "#101827"
   },
   "assets": [
@@ -23,7 +23,10 @@
       "path": "assets/effect2_asset_image_mq6j09f0_k.png",
       "originalName": "effect2.png",
       "width": 320,
-      "height": 277
+      "height": 277,
+      "fileWidth": 160,
+      "fileHeight": 139,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mq6m8cly_4",
@@ -31,7 +34,10 @@
       "path": "assets/effect1_asset_image_mq6m8cly_4.png",
       "originalName": "effect1.png",
       "width": 583,
-      "height": 587
+      "height": 587,
+      "fileWidth": 292,
+      "fileHeight": 294,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqasjj80_3",
@@ -39,7 +45,10 @@
       "path": "assets/image_asset_image_mqasjj80_3.png",
       "originalName": "飞机右.png",
       "width": 671,
-      "height": 490
+      "height": 490,
+      "fileWidth": 336,
+      "fileHeight": 245,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgi7fip_h",
@@ -47,7 +56,10 @@
       "path": "assets/image_asset_image_mqgi7fip_h.png",
       "originalName": "飞机右.png",
       "width": 671,
-      "height": 490
+      "height": 490,
+      "fileWidth": 336,
+      "fileHeight": 245,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgn7a26_1t",
@@ -55,7 +67,10 @@
       "path": "assets/mega_asset_image_mqgn7a26_1t.png",
       "originalName": "MEGA.png",
       "width": 839,
-      "height": 284
+      "height": 284,
+      "fileWidth": 420,
+      "fileHeight": 142,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgn7cd4_1v",
@@ -63,7 +78,10 @@
       "path": "assets/win_asset_image_mqgn7cd4_1v.png",
       "originalName": "win.png",
       "width": 438,
-      "height": 207
+      "height": 207,
+      "fileWidth": 219,
+      "fileHeight": 104,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgn8wz3_27",
@@ -71,7 +89,10 @@
       "path": "assets/2_asset_image_mqgn8wz3_27.png",
       "originalName": "光点2.png",
       "width": 50,
-      "height": 50
+      "height": 50,
+      "fileWidth": 25,
+      "fileHeight": 25,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgnayb6_2a",
@@ -79,7 +100,10 @@
       "path": "assets/image_asset_image_mqgnayb6_2a.png",
       "originalName": "钱.png",
       "width": 241,
-      "height": 161
+      "height": 161,
+      "fileWidth": 121,
+      "fileHeight": 81,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgng0kv_2j",
@@ -87,7 +111,10 @@
       "path": "assets/image_asset_image_mqgng0kv_2j.png",
       "originalName": "游艇.png",
       "width": 477,
-      "height": 246
+      "height": 246,
+      "fileWidth": 239,
+      "fileHeight": 123,
+      "fileScale": 0.5
     }
   ],
   "layers": [
@@ -955,5 +982,10 @@
       "keyframes": []
     }
   ],
-  "particles": []
+  "particles": [],
+  "exportProfile": {
+    "id": "runtime_50",
+    "purpose": "runtime",
+    "assetScale": 0.5
+  }
 }

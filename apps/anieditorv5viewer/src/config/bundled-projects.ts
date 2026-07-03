@@ -20,24 +20,15 @@ import game003L2WinsData from "../../../../assets/game003-s1/L2-wins.json";
 import game003L3WinsData from "../../../../assets/game003-s1/L3-wins.json";
 import game003L4WinsData from "../../../../assets/game003-s1/L4-wins.json";
 import game003L5WinsData from "../../../../assets/game003-s1/L5-wins.json";
-import export2ManifestData from "../assets/export2/manifest.json";
-import export2EditFullProjectData from "../assets/export2/edit_full/project.json";
-import export2Runtime50ProjectData from "../assets/export2/runtime_50/project.json";
 import {
   bundledAssetUrlManifest,
-  export2EditFullAssetUrlManifest,
-  export2Runtime50AssetUrlManifest,
   game003S1AssetUrlManifest,
   resolveProjectAssetUrls,
   type AssetUrlManifest,
 } from "../runtime/asset-manifest";
 import {
-  assertVNIBundleManifest,
   assertVNIProject,
-  validateManifestProjectProfile,
-  validateVNIBundleManifest,
   validateVNIProject,
-  type VNIBundleManifestEntry,
   type VNIExportProfileConfig,
   type VNIProjectConfig,
 } from "@slotclientengine/vnicore/core";
@@ -64,9 +55,7 @@ export type BundledProjectId =
   | "game003-l2-wins"
   | "game003-l3-wins"
   | "game003-l4-wins"
-  | "game003-l5-wins"
-  | "bigwin-edit-full"
-  | "bigwin-runtime-50";
+  | "game003-l5-wins";
 
 export interface BundledV5GProject {
   id: BundledProjectId;
@@ -98,20 +87,11 @@ interface BundledProjectDefinition {
   assetScale: number;
   data: unknown;
   assetUrlManifest: AssetUrlManifest;
-  manifestEntry?: VNIBundleManifestEntry;
 }
 
-const export2Manifest = assertVNIBundleManifest(export2ManifestData);
-validateVNIBundleManifest(export2Manifest);
-validateExport2ManifestPaths(export2Manifest.exports);
-const export2EditFullEntry = requireExport2ManifestEntry(
-  "edit_full",
-  "edit_full/project.json",
-);
-const export2Runtime50Entry = requireExport2ManifestEntry(
-  "runtime_50",
-  "runtime_50/project.json",
-);
+const bigwinProfile = requireBundledExportProfile(bigwinData, "bigwin");
+const megawinProfile = requireBundledExportProfile(megawinData, "megawin");
+const superwinProfile = requireBundledExportProfile(superwinData, "superwin");
 const roundreelProfile = requireBundledExportProfile(
   roundreelData,
   "roundreel",
@@ -179,10 +159,10 @@ const bundledProjectDefinitions: readonly BundledProjectDefinition[] = [
     id: "bigwin",
     filename: "bigwin.json",
     sourcePath: "docs/anieditor5/export/bigwin.json",
-    bundleId: "legacy",
-    profileId: "legacy_full",
-    purpose: "legacy",
-    assetScale: 1,
+    bundleId: "export",
+    profileId: bigwinProfile.id,
+    purpose: bigwinProfile.purpose,
+    assetScale: bigwinProfile.assetScale,
     data: bigwinData,
     assetUrlManifest: bundledAssetUrlManifest,
   },
@@ -190,10 +170,10 @@ const bundledProjectDefinitions: readonly BundledProjectDefinition[] = [
     id: "megawin",
     filename: "megawin.json",
     sourcePath: "docs/anieditor5/export/megawin.json",
-    bundleId: "legacy",
-    profileId: "legacy_full",
-    purpose: "legacy",
-    assetScale: 1,
+    bundleId: "export",
+    profileId: megawinProfile.id,
+    purpose: megawinProfile.purpose,
+    assetScale: megawinProfile.assetScale,
     data: megawinData,
     assetUrlManifest: bundledAssetUrlManifest,
   },
@@ -201,10 +181,10 @@ const bundledProjectDefinitions: readonly BundledProjectDefinition[] = [
     id: "superwin",
     filename: "superwin.json",
     sourcePath: "docs/anieditor5/export/superwin.json",
-    bundleId: "legacy",
-    profileId: "legacy_full",
-    purpose: "legacy",
-    assetScale: 1,
+    bundleId: "export",
+    profileId: superwinProfile.id,
+    purpose: superwinProfile.purpose,
+    assetScale: superwinProfile.assetScale,
     data: superwinData,
     assetUrlManifest: bundledAssetUrlManifest,
   },
@@ -362,39 +342,12 @@ const bundledProjectDefinitions: readonly BundledProjectDefinition[] = [
     data: game003L5WinsData,
     assetUrlManifest: game003S1AssetUrlManifest,
   },
-  {
-    id: "bigwin-edit-full",
-    filename: "export2/edit_full/project.json",
-    sourcePath: "docs/anieditor5/export2/edit_full/project.json",
-    bundleId: "export2",
-    profileId: export2EditFullEntry.id,
-    purpose: export2EditFullEntry.purpose,
-    assetScale: export2EditFullEntry.assetScale,
-    data: export2EditFullProjectData,
-    assetUrlManifest: export2EditFullAssetUrlManifest,
-    manifestEntry: export2EditFullEntry,
-  },
-  {
-    id: "bigwin-runtime-50",
-    filename: "export2/runtime_50/project.json",
-    sourcePath: "docs/anieditor5/export2/runtime_50/project.json",
-    bundleId: "export2",
-    profileId: export2Runtime50Entry.id,
-    purpose: export2Runtime50Entry.purpose,
-    assetScale: export2Runtime50Entry.assetScale,
-    data: export2Runtime50ProjectData,
-    assetUrlManifest: export2Runtime50AssetUrlManifest,
-    manifestEntry: export2Runtime50Entry,
-  },
 ];
 
 export const bundledProjects: readonly BundledV5GProject[] = Object.freeze(
   bundledProjectDefinitions.map((definition) => {
     const project = assertVNIProject(definition.data);
     validateVNIProject(project);
-    if (definition.manifestEntry) {
-      validateManifestProjectProfile(definition.manifestEntry, project);
-    }
     const assetUrls = resolveProjectAssetUrls(
       project,
       definition.assetUrlManifest,
@@ -436,38 +389,6 @@ function requireBundledExportProfile(
   return project.exportProfile;
 }
 
-function requireExport2ManifestEntry(
-  id: string,
-  expectedPath: string,
-): VNIBundleManifestEntry {
-  const entry = export2Manifest.exports.find((item) => item.id === id);
-  if (!entry) {
-    throw new Error(`VNI bundle manifest is missing export "${id}".`);
-  }
-  if (entry.path !== expectedPath) {
-    throw new Error(
-      `VNI bundle export "${id}" path mismatch: expected ${expectedPath}, got ${entry.path}.`,
-    );
-  }
-  return entry;
-}
-
-function validateExport2ManifestPaths(
-  entries: readonly VNIBundleManifestEntry[],
-): void {
-  const knownPaths = new Set([
-    "edit_full/project.json",
-    "runtime_50/project.json",
-  ]);
-  for (const entry of entries) {
-    if (!knownPaths.has(entry.path)) {
-      throw new Error(
-        `VNI bundle export "${entry.id}" path is not registered in anieditorv5viewer assets: ${entry.path}.`,
-      );
-    }
-  }
-}
-
 function createBundledProjectLabel(
   definition: BundledProjectDefinition,
   project: VNIProjectConfig,
@@ -483,9 +404,7 @@ function createBundledProjectLabel(
   if (definition.bundleId === "game003-s1") {
     return `${project.name} (game003-s1/${definition.filename}, runtime source)`;
   }
-  const percent = Math.round(definition.assetScale * 100);
-  const suffix = definition.purpose === "runtime" ? "运行资源" : "原图";
-  return `${project.name} (export2/${definition.profileId}, ${percent}% ${suffix})`;
+  return `${project.name} (${definition.bundleId}/${definition.filename}, ${definition.profileId})`;
 }
 
 function createBundledInsertionAssets(

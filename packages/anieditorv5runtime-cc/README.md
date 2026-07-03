@@ -198,8 +198,6 @@ import {
 样例数据来源：
 
 ```text
-docs/anieditor5/export2/runtime_50/project.json
-docs/anieditor5/export2/runtime_50/assets/*
 docs/anieditor5/export/project.json
 docs/anieditor5/export/bigwin.json
 docs/anieditor5/export/megawin.json
@@ -209,7 +207,7 @@ docs/anieditor5/export/roundreel.json
 docs/anieditor5/export/assets/*
 ```
 
-发布环境推荐使用 `docs/anieditor5/export2/runtime_50/project.json` 和同目录 `assets/*` 下的压缩 SpriteFrame。`edit_full` 是编辑用 100% 资源，不要把它当作发布资源路径，也不要因为 `asset.path` 文件名相同而把 `edit_full` 原图 SpriteFrame 绑定给 `runtime_50` project。
+发布环境推荐使用带 `exportProfile.purpose = "runtime"` 的单项目 JSON，例如 `docs/anieditor5/export/bigwin.json`，并绑定 `docs/anieditor5/export/assets/*` 下对应的压缩 SpriteFrame。不要因为历史编辑包里曾存在同名 `asset.path`，就把 100% 编辑原图 SpriteFrame 绑定给 `runtime_50` project。
 
 runtime 只接收已经得到的 `V5GProjectConfig` 对象，不读取、导入、加载或解析 `project.json`，不解析 bundle manifest，也不负责选择 profile。JSON 绑定、`JsonAsset` 读取、资源导入、Canvas/root 缩放、场景背景和屏幕适配都属于宿主 Cocos 项目职责。runtime 只创建 `project.stage.width x project.stage.height` 的中心坐标动画内容。
 

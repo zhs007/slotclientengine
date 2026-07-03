@@ -16,9 +16,6 @@ import superwinData from "../fixtures/export/superwin.json";
 import roundreelData from "../fixtures/export/roundreel.json";
 import number2Data from "../fixtures/export/number2.json";
 import number3Data from "../fixtures/export/number3.json";
-import export2ManifestData from "../fixtures/export2/manifest.json";
-import export2EditFullData from "../fixtures/export2/edit_full/project.json";
-import export2Runtime50Data from "../fixtures/export2/runtime_50/project.json";
 import {
   assertV5GBundleManifest,
   assertV5GProject,
@@ -60,9 +57,28 @@ const bundledProjectData = [
   roundreelData,
   number2Data,
   number3Data,
-  export2EditFullData,
-  export2Runtime50Data,
 ] as const;
+
+const bundledManifestData = {
+  type: "vni_export_bundle",
+  version: "VNI_0.020",
+  exports: [
+    {
+      id: "runtime_50",
+      purpose: "runtime",
+      assetScale: 0.5,
+      path: "bigwin.json",
+      label: "50% runtime",
+    },
+    {
+      id: "runtime_100",
+      purpose: "runtime",
+      assetScale: 1,
+      path: "roundreel.json",
+      label: "100% runtime",
+    },
+  ],
+} as const;
 
 const newAnimationParams: Readonly<
   Record<V5GAnimationType, V5GAnimationConfig["params"]>
@@ -237,7 +253,7 @@ describe("validation", () => {
   it("keeps VNI public validation aliases semantically identical", () => {
     const project = assertVNIProject(projectData);
     const legacyProject = assertV5GProject(projectData);
-    const manifest = assertVNIBundleManifest(export2ManifestData);
+    const manifest = assertVNIBundleManifest(bundledManifestData);
 
     expect(project).toEqual(legacyProject);
     expect(() => validateVNIProject(project)).not.toThrow();
@@ -328,14 +344,14 @@ describe("validation", () => {
   });
 
   it("accepts VNI single-project 100% exports without exportProfile", () => {
-    const project = structuredClone(assertV5GProject(export2EditFullData));
+    const project = structuredClone(assertV5GProject(roundreelData));
     delete project.exportProfile;
 
     expect(() => validateV5GProject(project)).not.toThrow();
   });
 
   it("accepts runtime_50 file metadata and rejects partial metadata", () => {
-    const project = structuredClone(assertV5GProject(export2Runtime50Data));
+    const project = structuredClone(assertV5GProject(bigwinData));
     const asset = project.assets.find(
       (item) => item.path === "assets/bigwin_asset_image_mqgf7e6h_g.png",
     );
@@ -381,16 +397,16 @@ describe("validation", () => {
   });
 
   it("validates VNI bundle manifests and project profile consistency", () => {
-    const manifest = assertV5GBundleManifest(export2ManifestData);
+    const manifest = assertV5GBundleManifest(bundledManifestData);
     expect(() => validateV5GBundleManifest(manifest)).not.toThrow();
     expect(manifest.exports.map((entry) => entry.id)).toEqual([
-      "edit_full",
       "runtime_50",
+      "runtime_100",
     ]);
 
-    const editFull = assertV5GProject(export2EditFullData);
+    const runtime50 = assertV5GProject(bigwinData);
     expect(() =>
-      validateManifestProjectProfile(manifest.exports[0], editFull),
+      validateManifestProjectProfile(manifest.exports[0], runtime50),
     ).not.toThrow();
 
     const runtime100 = assertV5GProject(roundreelData);
@@ -407,11 +423,11 @@ describe("validation", () => {
       ),
     ).toContain("safe_glow");
 
-    const mismatched = structuredClone(editFull);
+    const mismatched = structuredClone(runtime50);
     mismatched.exportProfile = {
-      id: "runtime_50",
+      id: "runtime_100",
       purpose: "runtime",
-      assetScale: 0.5,
+      assetScale: 1,
     };
     expect(() =>
       validateManifestProjectProfile(manifest.exports[0], mismatched),

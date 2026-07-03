@@ -3,10 +3,9 @@ import { Node, SpriteFrame } from "cc";
 import threeReelMultipay01Data from "../fixtures/3reel_multipay_01.json";
 import threeReelMultipay02Data from "../fixtures/3reel_multipay_02.json";
 import export10xData from "../fixtures/10x.json";
-import export2xData from "../fixtures/2x.json";
+import twoXData from "../fixtures/2x.json";
 import export5xData from "../fixtures/5x.json";
 import bigwinData from "../fixtures/bigwin.json";
-import export2Runtime50Data from "../fixtures/export2-runtime-50.json";
 import lock01Data from "../fixtures/lock_01.json";
 import megawinData from "../fixtures/megawin.json";
 import multipayData from "../fixtures/multipay.json";
@@ -55,8 +54,7 @@ const fixtures = [
   ["bigwin", bigwinData],
   ["megawin", megawinData],
   ["superwin", superwinData],
-  ["export2-runtime-50", export2Runtime50Data],
-  ["2x", export2xData],
+  ["2x", twoXData],
   ["5x", export5xData],
   ["10x", export10xData],
   ["respin", respinData],
@@ -229,7 +227,7 @@ describe("standalone runtime parity", () => {
   });
 
   it("matches modular runtime compressed metadata rejection", () => {
-    const project = assertV5GProject(export2Runtime50Data);
+    const project = assertV5GProject(bigwinData);
     project.assets[0].fileScale = 0.25;
     project.assets[0].fileWidth = 183;
     project.assets[0].fileHeight = 184;

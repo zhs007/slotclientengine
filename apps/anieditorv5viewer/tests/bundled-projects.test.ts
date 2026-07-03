@@ -5,8 +5,6 @@ import {
   getBundledProject,
 } from "../src/config/bundled-projects";
 import {
-  export2EditFullAssetUrlManifest,
-  export2Runtime50AssetUrlManifest,
   game003S1AssetUrlManifest,
   legacyAssetUrlManifest,
   resolveProjectAssetUrls,
@@ -70,8 +68,6 @@ describe("bundled projects", () => {
       "game003-l3-wins",
       "game003-l4-wins",
       "game003-l5-wins",
-      "bigwin-edit-full",
-      "bigwin-runtime-50",
     ]);
   });
 
@@ -111,11 +107,6 @@ describe("bundled projects", () => {
     );
     expect(externalAsset).toBeDefined();
     expect(externalAsset).not.toHaveProperty("projectAssetId");
-
-    const editFull = getBundledProject("bigwin-edit-full");
-    expect(editFull.insertionAssets.map((asset) => asset.path).sort()).toEqual(
-      Object.keys(export2EditFullAssetUrlManifest).sort(),
-    );
   });
 
   it("registers lock_01 with safe_glow and all bundled insertion assets", () => {
@@ -187,6 +178,23 @@ describe("bundled projects", () => {
     );
   });
 
+  it("registers big/super/mega wins as runtime_50 single-project exports", () => {
+    for (const id of ["bigwin", "superwin", "megawin"] as const) {
+      const project = getBundledProject(id);
+
+      expect(project.bundleId).toBe("export");
+      expect(project.profileId).toBe("runtime_50");
+      expect(project.purpose).toBe("runtime");
+      expect(project.assetScale).toBe(0.5);
+      expect(project.project.exportProfile).toMatchObject({
+        id: "runtime_50",
+        purpose: "runtime",
+        assetScale: 0.5,
+      });
+    }
+  });
+
+
   it("registers number2 text and number3 mask exports", () => {
     const number2 = getBundledProject("number2");
     const number3 = getBundledProject("number3");
@@ -239,22 +247,6 @@ describe("bundled projects", () => {
         expected.assetPath,
       ]);
     }
-  });
-
-  it("keeps export2 edit_full and runtime_50 asset URLs profile scoped", () => {
-    const editFull = getBundledProject("bigwin-edit-full");
-    const runtime50 = getBundledProject("bigwin-runtime-50");
-    const sharedPath = "assets/bigwin_asset_image_mqgf7e6h_g.png";
-
-    expect(editFull.assetUrls[sharedPath]).toBe(
-      export2EditFullAssetUrlManifest[sharedPath],
-    );
-    expect(runtime50.assetUrls[sharedPath]).toBe(
-      export2Runtime50AssetUrlManifest[sharedPath],
-    );
-    expect(editFull.assetUrls[sharedPath]).not.toBe(
-      runtime50.assetUrls[sharedPath],
-    );
   });
 
   it("keeps asset and JSON import configuration covering nested bundled assets", () => {

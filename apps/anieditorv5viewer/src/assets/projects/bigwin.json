@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "V5G_0.0043",
+  "schemaVersion": "VNI_0.002",
   "editor": {
     "name": "victory_editor_v5_g",
-    "version": "V5G_0.0043"
+    "version": "VNI_0.002"
   },
   "engineTarget": {
     "name": "cocos_creator",
@@ -23,7 +23,10 @@
       "path": "assets/bigwin_asset_image_mqgf7e6h_g.png",
       "originalName": "bigwin线光.png",
       "width": 730,
-      "height": 735
+      "height": 735,
+      "fileWidth": 365,
+      "fileHeight": 368,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgg2jz6_a",
@@ -31,7 +34,10 @@
       "path": "assets/image_asset_image_mqgg2jz6_a.png",
       "originalName": "表右.png",
       "width": 295,
-      "height": 212
+      "height": 212,
+      "fileWidth": 148,
+      "fileHeight": 106,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgihw37_p",
@@ -39,7 +45,10 @@
       "path": "assets/effect3_asset_image_mqgihw37_p.png",
       "originalName": "effect3.png",
       "width": 320,
-      "height": 277
+      "height": 277,
+      "fileWidth": 160,
+      "fileHeight": 139,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgir7t1_u",
@@ -47,7 +56,10 @@
       "path": "assets/big_asset_image_mqgir7t1_u.png",
       "originalName": "big.png",
       "width": 482,
-      "height": 257
+      "height": 257,
+      "fileWidth": 241,
+      "fileHeight": 129,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgix37g_13",
@@ -55,7 +67,10 @@
       "path": "assets/bigwin_asset_image_mqgix37g_13.png",
       "originalName": "bigwin.png",
       "width": 438,
-      "height": 207
+      "height": 207,
+      "fileWidth": 219,
+      "fileHeight": 104,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgl9o49_3",
@@ -63,7 +78,10 @@
       "path": "assets/2_asset_image_mqgl9o49_3.png",
       "originalName": "光点2.png",
       "width": 50,
-      "height": 50
+      "height": 50,
+      "fileWidth": 25,
+      "fileHeight": 25,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgmcogx_3",
@@ -71,7 +89,10 @@
       "path": "assets/image_asset_image_mqgmcogx_3.png",
       "originalName": "钱.png",
       "width": 241,
-      "height": 161
+      "height": 161,
+      "fileWidth": 121,
+      "fileHeight": 81,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgmd9ai_4",
@@ -79,7 +100,10 @@
       "path": "assets/2_asset_image_mqgmd9ai_4.png",
       "originalName": "钱2.png",
       "width": 455,
-      "height": 320
+      "height": 320,
+      "fileWidth": 228,
+      "fileHeight": 160,
+      "fileScale": 0.5
     },
     {
       "id": "asset_image_mqgmdln6_5",
@@ -87,7 +111,10 @@
       "path": "assets/2_asset_image_mqgmdln6_5.png",
       "originalName": "钱2.png",
       "width": 455,
-      "height": 320
+      "height": 320,
+      "fileWidth": 228,
+      "fileHeight": 160,
+      "fileScale": 0.5
     }
   ],
   "layers": [
@@ -801,5 +828,10 @@
       "keyframes": []
     }
   ],
-  "particles": []
+  "particles": [],
+  "exportProfile": {
+    "id": "runtime_50",
+    "purpose": "runtime",
+    "assetScale": 0.5
+  }
 }

@@ -9,7 +9,7 @@
 ## 主要类型
 
 - `VNIProjectConfig`: VNI/V5G export JSON 的项目结构。
-- `VNIBundleManifest`: VNI bundle manifest 结构；旧 `export2` fixture 仍可用于 profile/project 一致性非回归。
+- `VNIBundleManifest`: VNI bundle manifest 结构；profile/project 一致性通过 schema 与测试中的 manifest 数据校验。
 - `AssetUrlManifest`: `Readonly<Record<string, string>>`，key 是 `asset.path`。
 - `VNIPlayerOptions`: `VNIPlayer` 构造参数。
 - `VNIPlaybackRange`: time 或 frame range。

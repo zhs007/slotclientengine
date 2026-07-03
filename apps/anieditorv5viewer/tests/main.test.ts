@@ -121,7 +121,7 @@ describe("anieditorv5viewer main", () => {
     expect(select).not.toBeNull();
     if (!select) throw new Error("Missing project select.");
 
-    select.value = "bigwin-runtime-50";
+    select.value = "bigwin";
     select.dispatchEvent(new Event("change", { bubbles: true }));
     await Promise.resolve();
     await Promise.resolve();

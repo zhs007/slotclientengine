@@ -8,7 +8,6 @@ import threeReelMultipay02Data from "../fixtures/3reel_multipay_02.json";
 import twoXData from "../fixtures/2x.json";
 import fiveXData from "../fixtures/5x.json";
 import bigwinData from "../fixtures/bigwin.json";
-import export2Runtime50Data from "../fixtures/export2-runtime-50.json";
 import lock01Data from "../fixtures/lock_01.json";
 import megawinData from "../fixtures/megawin.json";
 import multipayData from "../fixtures/multipay.json";
@@ -34,7 +33,12 @@ import type {
   V5GProjectConfig,
 } from "../../src/core/types";
 
-const fixtures = [projectData, bigwinData, megawinData, superwinData] as const;
+const legacyV5GFixtures = [projectData] as const;
+const runtime50Fixtures = [bigwinData, megawinData, superwinData] as const;
+const copiedAssetFixtures = [
+  ...legacyV5GFixtures,
+  ...runtime50Fixtures,
+] as const;
 const newExportFixtures = [
   twoXData,
   fiveXData,
@@ -50,16 +54,13 @@ const newExportFixtures = [
 const exportRootDir = fileURLToPath(
   new URL("../../../../docs/anieditor5/export/", import.meta.url),
 );
-const runtime50ExportRootDir = fileURLToPath(
-  new URL("../../../../docs/anieditor5/export2/runtime_50/", import.meta.url),
-);
 
 function validProject(): V5GProjectConfig {
   return structuredClone(assertV5GProject(projectData));
 }
 
 function validRuntime50Project(): V5GProjectConfig {
-  return structuredClone(assertV5GProject(export2Runtime50Data));
+  return structuredClone(assertV5GProject(bigwinData));
 }
 
 function validRoundreelProject(): V5GProjectConfig {
@@ -91,8 +92,8 @@ describe("validation", () => {
     expect(() => validateCocosV5GProject(project)).not.toThrow();
   });
 
-  it("accepts all current exported fixtures at the generic V5G layer", () => {
-    for (const fixture of fixtures) {
+  it("accepts current legacy V5G fixtures at the generic layer", () => {
+    for (const fixture of legacyV5GFixtures) {
       const project = assertV5GProject(fixture);
       expect(project.schemaVersion).toMatch(/^V5G_0\.\d+$/u);
       expect(project.editor.name).toBe("victory_editor_v5_g");
@@ -102,6 +103,24 @@ describe("validation", () => {
       });
       expect(project.stage.coordinate).toBe("center");
       expect(() => validateV5GProject(project)).not.toThrow();
+    }
+  });
+
+  it("accepts current runtime_50 VNI export fixtures", () => {
+    for (const fixture of runtime50Fixtures) {
+      const project = assertV5GProject(fixture);
+      expect(project.schemaVersion).toMatch(/^VNI_0\.\d+$/u);
+      expect(project.exportProfile).toMatchObject({
+        id: "runtime_50",
+        purpose: "runtime",
+        assetScale: 0.5,
+      });
+      expect(project.engineTarget).toEqual({
+        name: "cocos_creator",
+        version: "3.8.6",
+      });
+      expect(() => validateV5GProject(project)).not.toThrow();
+      expect(() => validateCocosV5GProject(project)).not.toThrow();
     }
   });
 
@@ -232,7 +251,7 @@ describe("validation", () => {
 
   it("keeps copied fixture asset paths aligned with docs export assets", () => {
     const uniqueAssetPaths = new Set<string>();
-    for (const fixture of fixtures) {
+    for (const fixture of copiedAssetFixtures) {
       const project = assertV5GProject(fixture);
       for (const asset of project.assets) {
         uniqueAssetPaths.add(asset.path);
@@ -242,10 +261,10 @@ describe("validation", () => {
     expect(uniqueAssetPaths.size).toBe(28);
   });
 
-  it("keeps runtime_50 fixture asset paths aligned with docs export2 runtime assets", () => {
+  it("keeps runtime_50 fixture asset paths aligned with docs export assets", () => {
     const project = validRuntime50Project();
     for (const asset of project.assets) {
-      expect(existsSync(join(runtime50ExportRootDir, asset.path))).toBe(true);
+      expect(existsSync(join(exportRootDir, asset.path))).toBe(true);
     }
   });
 
@@ -447,7 +466,7 @@ describe("validation", () => {
       "fileWidth/fileHeight/fileScale must be provided together",
     );
 
-    const nonNumeric = structuredClone(export2Runtime50Data);
+    const nonNumeric = structuredClone(bigwinData);
     nonNumeric.assets[0].fileWidth = "365" as unknown as number;
     expect(() => assertV5GProject(nonNumeric)).toThrow(
       "project.assets[0].fileWidth must be a finite number",
