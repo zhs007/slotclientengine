@@ -16,10 +16,20 @@ describe("game003 symbol animation config", () => {
     );
   });
 
-  it("keeps L1-L5 appear static, maps H2-H5 appear to builtin, and maps configured Spine states through rendercore", () => {
+  it("keeps non-Spine appear static and maps configured Spine states through rendercore", () => {
     const skin = getGame003SkinConfig("1");
 
-    for (const symbol of ["L1", "L2", "L3", "L4", "L5"]) {
+    for (const symbol of [
+      "H2",
+      "H3",
+      "H4",
+      "H5",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "L5",
+    ]) {
       const context = createSymbolContext(symbol, "appear");
       const ani = skin.symbolAnimationResolver(context);
 
@@ -33,13 +43,6 @@ describe("game003 symbol animation config", () => {
       expect(context.baseLayer.visible).toBe(true);
       expect(context.stateSprite.visible).toBe(false);
     }
-
-    const builtinContext = createSymbolContext("H2", "appear");
-    const builtinAni = skin.symbolAnimationResolver(builtinContext);
-    builtinAni.reset();
-    builtinAni.update(0.2);
-
-    expect(builtinContext.sprite.scale.x).toBeGreaterThan(1);
 
     for (const symbol of ["WL", "H1"]) {
       const context = createSymbolContext(symbol, "appear");
@@ -56,13 +59,26 @@ describe("game003 symbol animation config", () => {
       expect(ani).toBeInstanceOf(SpineSymbolAni);
       expect(ani.playback).toBe("static");
     }
+
+    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5"]) {
+      const context = createSymbolContext(symbol, "spinBlur");
+      const ani = skin.symbolAnimationResolver(context);
+
+      ani.reset();
+
+      expect(ani).not.toBeInstanceOf(SpineSymbolAni);
+      expect(ani.playback).toBe("static");
+      expect(context.baseLayer.visible).toBe(false);
+      expect(context.stateSprite.visible).toBe(true);
+    }
   });
 });
 
 function createSymbolContext(
   symbol: string,
-  stateId: "normal" | "appear",
+  stateId: "normal" | "appear" | "spinBlur",
 ): SymbolAnimationContext {
+  const resolvedState = stateId === "spinBlur" ? "normal" : stateId;
   const root = new Container();
   const sprite = new Sprite(Texture.WHITE);
   const underlayLayer = new Container();
@@ -76,15 +92,15 @@ function createSymbolContext(
     symbol,
     pays: [0],
     requestedState: stateId,
-    resolvedState: stateId,
+    resolvedState,
     state: {
-      id: stateId,
-      phase: stateId === "normal" ? "stable" : "once",
-      playback: stateId === "normal" ? "static" : "once",
+      id: resolvedState,
+      phase: resolvedState === "normal" ? "stable" : "once",
+      playback: resolvedState === "normal" ? "static" : "once",
     },
     texture: Texture.WHITE,
-    stateTextures: {},
-    requiredStateTextures: [],
+    stateTextures: stateId === "spinBlur" ? { spinBlur: Texture.WHITE } : {},
+    requiredStateTextures: stateId === "spinBlur" ? ["spinBlur"] : [],
     root,
     underlayLayer,
     baseLayer,

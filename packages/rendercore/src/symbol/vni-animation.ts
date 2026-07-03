@@ -6,6 +6,7 @@ import {
 import {
   assertValidDeltaSeconds,
   createAppearSymbolAni,
+  createStaticSymbolAni,
   createWinSymbolAni,
   ManualSymbolAni,
   resetBaseDisplay,
@@ -244,6 +245,9 @@ export function createSymbolVniAnimationResolver(options: {
   readonly spinePlayerFactory?: SpineSymbolAniPlayerFactory;
 }): SymbolAnimationResolver {
   return (context) => {
+    if (shouldUseRequestedStateTexture(context)) {
+      return createStaticSymbolAni(context);
+    }
     const spineResource =
       options.spineResources?.[context.symbol]?.[context.resolvedState];
     if (spineResource) {
@@ -273,6 +277,16 @@ export function createSymbolVniAnimationResolver(options: {
       `No manifest symbol animation is registered for "${context.symbol}" state "${context.resolvedState}".`,
     );
   };
+}
+
+function shouldUseRequestedStateTexture(
+  context: SymbolAnimationContext,
+): boolean {
+  return (
+    context.requestedState !== context.resolvedState &&
+    (context.stateTextures[context.requestedState] !== undefined ||
+      context.requiredStateTextures.includes(context.requestedState))
+  );
 }
 
 type SymbolManifestAnimationSpecMap = Readonly<

@@ -72,8 +72,8 @@ describe("game003 symbol assets", () => {
       playback: { mode: "animation", animationName: "Start", loop: false },
     });
     expect(symbols.H2.animations.appear).toMatchObject({
-      kind: "builtin",
-      durationSeconds: 0.42,
+      kind: "static",
+      durationSeconds: 1 / 60,
     });
   });
 

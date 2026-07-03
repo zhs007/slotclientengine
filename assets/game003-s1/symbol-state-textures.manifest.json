@@ -98,8 +98,8 @@
           }
         },
         "appear": {
-          "kind": "builtin",
-          "durationSeconds": 0.42
+          "kind": "static",
+          "durationSeconds": 0.016666666666666666
         },
         "win": {
           "kind": "builtin",
@@ -125,8 +125,8 @@
           }
         },
         "appear": {
-          "kind": "builtin",
-          "durationSeconds": 0.42
+          "kind": "static",
+          "durationSeconds": 0.016666666666666666
         },
         "win": {
           "kind": "builtin",
@@ -152,8 +152,8 @@
           }
         },
         "appear": {
-          "kind": "builtin",
-          "durationSeconds": 0.42
+          "kind": "static",
+          "durationSeconds": 0.016666666666666666
         },
         "win": {
           "kind": "builtin",
@@ -179,8 +179,8 @@
           }
         },
         "appear": {
-          "kind": "builtin",
-          "durationSeconds": 0.42
+          "kind": "static",
+          "durationSeconds": 0.016666666666666666
         },
         "win": {
           "kind": "builtin",

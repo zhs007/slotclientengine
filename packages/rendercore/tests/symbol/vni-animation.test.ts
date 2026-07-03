@@ -110,6 +110,7 @@ import {
   VniSymbolAni,
   createSymbolVniAnimationResolver,
   type SymbolAnimationContext,
+  type SymbolSpineAnimationResource,
   type SymbolVniAnimationResource,
   type VniSymbolAniPlayer,
 } from "../../src/symbol/index.js";
@@ -177,6 +178,43 @@ function createResource(): SymbolVniAnimationResource {
       particles: [],
     },
     assetUrls: {},
+  };
+}
+
+function createSpineResource(): SymbolSpineAnimationResource {
+  return {
+    symbol: "H1",
+    state: "normal",
+    skeleton: {},
+    atlasText:
+      "Symbol.png\nsize: 1,1\nformat: RGBA8888\nfilter: Linear,Linear\n",
+    textureUrl: "/assets/Symbol.png",
+    atlasPage: "Symbol.png",
+    spec: {
+      kind: "spine",
+      skeleton: "./H1.json",
+      atlas: "./Symbol.atlas",
+      texture: "./Symbol.png",
+      playback: {
+        mode: "animation",
+        animationName: "Idle",
+        loop: true,
+      },
+    },
+  };
+}
+
+function createSpinBlurEquivalentContext(
+  spinBlurTexture: Texture,
+): SymbolAnimationContext {
+  return {
+    ...createContext(),
+    symbol: "H1",
+    requestedState: "spinBlur",
+    resolvedState: "normal",
+    state: { id: "normal", phase: "stable", playback: "static" },
+    stateTextures: { spinBlur: spinBlurTexture },
+    requiredStateTextures: ["spinBlur"],
   };
 }
 
@@ -300,5 +338,26 @@ describe("VniSymbolAni", () => {
       }).stateId,
     ).toBe("win");
     expect(fallback).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps requested state texture when an equivalent state has a normal Spine resource", () => {
+    const spinBlurTexture = new pixiMock.MockTexture() as unknown as Texture;
+    const context = createSpinBlurEquivalentContext(spinBlurTexture);
+    const spinePlayerFactory = vi.fn();
+    const resolver = createSymbolVniAnimationResolver({
+      resources: {},
+      spineResources: { H1: { normal: createSpineResource() } },
+      spinePlayerFactory,
+    });
+
+    const ani = resolver(context);
+    ani.reset();
+
+    expect(ani.stateId).toBe("normal");
+    expect(ani.playback).toBe("static");
+    expect(spinePlayerFactory).not.toHaveBeenCalled();
+    expect(context.baseLayer.visible).toBe(false);
+    expect(context.stateSprite.visible).toBe(true);
+    expect(context.stateSprite.texture).toBe(spinBlurTexture);
   });
 });

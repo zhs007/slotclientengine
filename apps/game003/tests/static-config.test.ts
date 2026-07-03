@@ -187,7 +187,7 @@ describe("game003 generated static config", () => {
           kind: "spine",
           playback: { animationName: "Idle", loop: true },
         },
-        appear: { kind: "builtin", durationSeconds: 0.42 },
+        appear: { kind: "static", durationSeconds: 1 / 60 },
       },
     });
     expect(skin.symbolScales.H1).toBe(1);
