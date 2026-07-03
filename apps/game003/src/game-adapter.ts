@@ -471,8 +471,9 @@ class Game003PixiAdapter implements SlotGameAdapter {
       return;
     }
 
-    if (!pending.winSequenceComplete) {
-      const result = this.#requireWinSymbolLoopRuntime().update(deltaSeconds);
+    const winSymbolLoop = this.#requireWinSymbolLoopRuntime();
+    if (winSymbolLoop.getSnapshot().phase !== "idle") {
+      const result = winSymbolLoop.update(deltaSeconds);
       if (result.firstCycleComplete) {
         pending.winSequenceComplete = true;
       }

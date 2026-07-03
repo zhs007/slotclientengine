@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createTextureSet } from "../../../packages/rendercore/tests/reel/helpers.js";
-import type { SymbolAssetMap } from "@slotclientengine/rendercore";
+import {
+  createWinSymbolAni,
+  type SymbolAssetMap,
+} from "@slotclientengine/rendercore";
 import {
   GAME003_DEFAULT_SCENE,
   GAME003_SPIN_SCENE,
@@ -115,7 +118,13 @@ describe("game003 reel runtime", () => {
   });
 
   it("requests win state on visible positions and lets once animation return to normal", () => {
-    const runtime = createRuntime(GAME003_WIN_SPIN_SCENE);
+    const runtime = createRuntime(GAME003_WIN_SPIN_SCENE, {
+      ...DEFAULT_GAME003_REEL_CONFIG,
+      animationResolver: (context) =>
+        context.resolvedState === "win"
+          ? createWinSymbolAni(context, { durationSeconds: 0.58 })
+          : GAME003_SKIN.symbolAnimationResolver(context),
+    });
     const positions = [
       { x: 0, y: 4 },
       { x: 1, y: 2 },
@@ -218,11 +227,15 @@ describe("game003 reel runtime", () => {
   });
 });
 
-function createRuntime(initialScene?: typeof GAME003_DEFAULT_SCENE) {
+function createRuntime(
+  initialScene?: typeof GAME003_DEFAULT_SCENE,
+  config = DEFAULT_GAME003_REEL_CONFIG,
+) {
   return createGame003ReelRuntime({
     rawGameConfig: GAME003_STATIC_CONFIG.gameConfig,
     symbolAssets: createSymbolTextures(GAME003_SKIN.displaySymbols),
     initialScene,
+    config,
   });
 }
 

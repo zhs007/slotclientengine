@@ -580,6 +580,21 @@ describe("game003 adapter", () => {
       winAmountRaw: GAME003_SAMPLE_WIN_SPIN_RESULT.totalwin,
     });
 
+    for (let index = 0; index < 31; index += 1) {
+      fakeApp.tick(33);
+    }
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    expect(runtime.winRequests.length).toBeGreaterThan(2);
+    expect(runtime.winRequests.at(-1)).toEqual({
+      state: "win",
+      positions: [
+        { x: 0, y: 4 },
+        { x: 1, y: 2 },
+        { x: 2, y: 0 },
+      ],
+    });
+
     winAmount.completeNextUpdate = true;
     fakeApp.tick(16);
     await spinPromise;

@@ -41,8 +41,15 @@
           }
         },
         "win": {
-          "kind": "builtin",
-          "durationSeconds": 0.58
+          "kind": "spine",
+          "skeleton": "./WL.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Win",
+            "loop": false
+          }
         }
       }
     },
@@ -75,8 +82,15 @@
           }
         },
         "win": {
-          "kind": "builtin",
-          "durationSeconds": 0.58
+          "kind": "spine",
+          "skeleton": "./H1.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Win",
+            "loop": false
+          }
         }
       }
     },
@@ -102,8 +116,15 @@
           "durationSeconds": 0.016666666666666666
         },
         "win": {
-          "kind": "builtin",
-          "durationSeconds": 0.58
+          "kind": "spine",
+          "skeleton": "./H2.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Win",
+            "loop": false
+          }
         }
       }
     },
@@ -129,8 +150,15 @@
           "durationSeconds": 0.016666666666666666
         },
         "win": {
-          "kind": "builtin",
-          "durationSeconds": 0.58
+          "kind": "spine",
+          "skeleton": "./H3.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Win",
+            "loop": false
+          }
         }
       }
     },
@@ -156,8 +184,15 @@
           "durationSeconds": 0.016666666666666666
         },
         "win": {
-          "kind": "builtin",
-          "durationSeconds": 0.58
+          "kind": "spine",
+          "skeleton": "./H4.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Win",
+            "loop": false
+          }
         }
       }
     },
@@ -183,8 +218,15 @@
           "durationSeconds": 0.016666666666666666
         },
         "win": {
-          "kind": "builtin",
-          "durationSeconds": 0.58
+          "kind": "spine",
+          "skeleton": "./H5.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Win",
+            "loop": false
+          }
         }
       }
     },

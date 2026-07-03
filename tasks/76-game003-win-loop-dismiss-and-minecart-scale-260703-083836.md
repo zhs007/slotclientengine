@@ -53,3 +53,17 @@
 - `env CI=true pnpm typecheck`：失败在未改动的 `apps/uiframeworksviewer/tests/demo-game.test.ts`，测试假 mount context 缺少 `getViewport` / `onViewportChange`；后续并发任务被 turbo 终止。该失败不来自本任务改动，game003 和 rendercore typecheck 均已单独通过。
 - `env CI=true pnpm format:check`：失败在未改动包的历史格式问题，首个失败为 `apps/reelsviewer`，另有 `victoryani-demo`、`spine2victoryani-demo` 等提示；未对无关包做批量格式化。本任务涉及的 game003 包 format check 通过，rendercore 触及文件 direct prettier check 通过；rendercore 包级 format check 仍因未改动的 `packages/rendercore/scripts/generate-symbol-state-textures.mjs` 失败。
 - 浏览器验收待人工确认。
+
+## 复验反馈修正
+
+- 用户复验发现 bigwin 播放期间背后的 symbol 中奖流程没有继续走。原因是 adapter 把“首轮完成后不再阻塞 `playSpin()`”误实现成了“pending 期间首轮完成后不再 tick `winSymbolLoop`”。
+- 已修正 `apps/game003/src/game-adapter.ts`：pending 仍未 resolve 时，只要 `winSymbolLoop` 不是 `idle` 就继续 update；`winSequenceComplete` 只作为 resolve 条件，不再控制 loop 是否播放。
+- 已更新 `apps/game003/tests/game-adapter.test.ts`：覆盖金额动画仍 blocking 时，首轮 symbol 展示完成后继续 tick 足够久，必须重新进入下一轮 symbol win 请求。
+- 复验命令：`env CI=true pnpm --filter game003 test` 通过，25 files / 114 tests；`env CI=true pnpm --filter game003 typecheck` 通过。
+
+## 复验反馈修正 2
+
+- 用户复验发现 `game003` 高级图标 `H1-H5` 的 symbol win 动画不像 Spine，而像旧默认 win。原因是 `assets/game003-s1/symbol-state-textures.manifest.json` 中 `WL/H1/H2/H3/H4/H5.win` 仍声明为 `builtin`，而这些 skeleton 实际都存在 Spine `Win` 动画。
+- 已修正 manifest：`WL/H1/H2/H3/H4/H5.win` 改为 `kind: "spine"`，`animationName: "Win"`，`loop: false`，继续由 rendercore manifest resolver 驱动，不在 game003 app 层写 symbol 分支。
+- 已更新 `apps/game003/tests/symbol-animation-config.test.ts`、`apps/game003/tests/static-config.test.ts` 和 `packages/rendercore/tests/symbol/manifest.test.ts`，覆盖 game003 resolver 和 rendercore manifest 资源解析都必须把高级图标 win 解析为 Spine。
+- 复验命令：`env CI=true pnpm --filter game003 test` 通过，25 files / 114 tests；`env CI=true pnpm --filter game003 typecheck` 通过；`env CI=true pnpm --filter @slotclientengine/rendercore test` 通过，28 files / 171 tests；`env CI=true pnpm --filter @slotclientengine/rendercore typecheck` 通过；`env CI=true pnpm --filter game003 check:static-config` 通过；`env CI=true pnpm --filter game003 release:check` 通过，仅保留 Vite chunk size warning；`git diff --check` 通过。

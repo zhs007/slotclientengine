@@ -61,6 +61,14 @@ describe("game003 symbol animation config", () => {
     }
 
     for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5"]) {
+      const context = createSymbolContext(symbol, "win");
+      const ani = skin.symbolAnimationResolver(context);
+
+      expect(ani).toBeInstanceOf(SpineSymbolAni);
+      expect(ani.playback).toBe("once");
+    }
+
+    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5"]) {
       const context = createSymbolContext(symbol, "spinBlur");
       const ani = skin.symbolAnimationResolver(context);
 
@@ -76,7 +84,7 @@ describe("game003 symbol animation config", () => {
 
 function createSymbolContext(
   symbol: string,
-  stateId: "normal" | "appear" | "spinBlur",
+  stateId: "normal" | "appear" | "spinBlur" | "win",
 ): SymbolAnimationContext {
   const resolvedState = stateId === "spinBlur" ? "normal" : stateId;
   const root = new Container();

@@ -375,7 +375,13 @@ describe("symbol state texture manifest helpers", () => {
         animationName: "Idle",
         loop: true,
       });
+      expect(resources[symbol]?.win?.spec.playback).toEqual({
+        mode: "animation",
+        animationName: "Win",
+        loop: false,
+      });
       expect(resources[symbol]?.normal?.atlasPage).toBe("Symbol.png");
+      expect(resources[symbol]?.win?.atlasPage).toBe("Symbol.png");
     }
   });
 

@@ -39,7 +39,7 @@ CI=true pnpm --filter gengameconfig dev -- --paytable assets/gamecfg003/paytable
 CI=true pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --input-dir assets/game003-s1 --output-dir assets/game003-s1 --symbols WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC --scale 1
 ```
 
-`symbol-state-textures.manifest.json` 只能包含 `WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC`，每个 symbol 必须显式 `scale: 1`。背景、主转轮框、传送带和 `Symbol.png` atlas texture 不是可展示 symbol。`normal` / `appear` / `win` 的动画类型、Spine `animationName` 和 `durationSeconds` 由这个 manifest 声明：`WL,H1,H2,H3,H4,H5` 的 `normal` 是 Spine `Idle`；`WL.appear` 是 Spine `start`，`H1.appear` 是 Spine `Start`；`H2` 到 `H5` 当前资源没有 Start 动画，`appear` 仍使用 manifest 里的 `builtin` animation 秒数；`L1.appear` 到 `L5.appear` 是静态普通态，`L1.win` 到 `L5.win` 是 VNI animation。Spine animation name 区分大小写，manifest 必须写 skeleton 中真实存在的名字。重新生成状态贴图时，生成器会保留仍然有效的 `animations` 元数据，不能手动丢掉。
+`symbol-state-textures.manifest.json` 只能包含 `WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC`，每个 symbol 必须显式 `scale: 1`。背景、主转轮框、传送带和 `Symbol.png` atlas texture 不是可展示 symbol。`normal` / `appear` / `win` 的动画类型、Spine `animationName` 和 `durationSeconds` 由这个 manifest 声明：`WL,H1,H2,H3,H4,H5` 的 `normal` 是 Spine `Idle`，`win` 是 Spine `Win`；`WL.appear` 是 Spine `start`，`H1.appear` 是 Spine `Start`；`H2` 到 `H5` 当前资源没有 Start 动画，`appear` 仍使用 manifest 里的静态普通态；`L1.appear` 到 `L5.appear` 是静态普通态，`L1.win` 到 `L5.win` 是 VNI animation。Spine animation name 区分大小写，manifest 必须写 skeleton 中真实存在的名字。重新生成状态贴图时，生成器会保留仍然有效的 `animations` 元数据，不能手动丢掉。
 
 ## 静态配置
 

@@ -170,7 +170,17 @@ describe("game003 generated static config", () => {
             loop: false,
           },
         },
-        win: { kind: "builtin", durationSeconds: 0.58 },
+        win: {
+          kind: "spine",
+          skeleton: "./H1.json",
+          atlas: "./Symbol.atlas",
+          texture: "./Symbol.png",
+          playback: {
+            mode: "animation",
+            animationName: "Win",
+            loop: false,
+          },
+        },
       },
     });
     expect(manifestSymbols.WL).toMatchObject({
@@ -178,6 +188,10 @@ describe("game003 generated static config", () => {
         appear: {
           kind: "spine",
           playback: { animationName: "start", loop: false },
+        },
+        win: {
+          kind: "spine",
+          playback: { animationName: "Win", loop: false },
         },
       },
     });
@@ -188,6 +202,10 @@ describe("game003 generated static config", () => {
           playback: { animationName: "Idle", loop: true },
         },
         appear: { kind: "static", durationSeconds: 1 / 60 },
+        win: {
+          kind: "spine",
+          playback: { animationName: "Win", loop: false },
+        },
       },
     });
     expect(skin.symbolScales.H1).toBe(1);
