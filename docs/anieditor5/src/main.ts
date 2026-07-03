@@ -61,6 +61,7 @@ let state: V5GEditorState = createInitialEditorState();
 let pixiStage: V5GPixiStage;
 let animationFrame = 0;
 let playStartedAt = 0;
+let activePlaybackRange: { start: number; end: number } | null = null;
 let workspaceIndex: V5GWorkspaceIndex | null = null;
 let currentProjectId = "";
 let isDeleteConfirmVisible = false;
@@ -154,7 +155,8 @@ const MIN_TIMELINE_PX_PER_SECOND = 32;
 const MAX_TIMELINE_PX_PER_SECOND = 640;
 const DEFAULT_TIMELINE_PX_PER_SECOND = 120;
 const TIMELINE_ZOOM_STEP = 1.12;
-const TIMELINE_MINOR_TICK_SECONDS = 0.1;
+const TIMELINE_MINOR_TICK_SECONDS = 0.05;
+const TIMELINE_TIME_DECIMALS = 2;
 const MIN_PROJECT_DURATION_SECONDS = 0.5;
 const MAX_PROJECT_DURATION_SECONDS = 3600;
 const TIMELINE_PAN_THRESHOLD_PX = 4;
@@ -166,7 +168,11 @@ const els = {
   btnStop: getButton("btn-stop"),
   btnSwitchProject: getButton("btn-switch-project"),
   btnResetView: getButton("btn-reset-view"),
+  cbShowSelectionOutline: getInput("cb-show-selection-outline"),
   cbLoopPlay: getInput("cb-loop-play"),
+  cbPlaySegment: getInput("cb-play-segment"),
+  playStartSeconds: getInput("input-play-start-seconds"),
+  playEndSeconds: getInput("input-play-end-seconds"),
   btnAddText: getButton("btn-add-text"),
   btnAddGroup: getButton("btn-add-group"),
   fileReplaceImage: getInput("file-replace-image"),
@@ -317,11 +323,33 @@ async function bootstrap(): Promise<void> {
 
 function bindEvents(): void {
   els.btnRun.addEventListener("click", () => togglePlayback());
+  els.cbPlaySegment.addEventListener("change", () => syncPlaybackRangeInputs());
+  for (const input of [els.playStartSeconds, els.playEndSeconds]) {
+    input.addEventListener("input", () => renderTimelineAnimations());
+    input.addEventListener("change", () => syncPlaybackRangeInputs());
+    input.addEventListener("blur", () => syncPlaybackRangeInputs());
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      syncPlaybackRangeInputs();
+      input.blur();
+    });
+  }
 
   els.btnStop.addEventListener("click", () => stopPlayback());
   els.btnResetView.addEventListener("click", () => {
     pixiStage.resetView();
     showStatus("画布已重新居中。", "info");
+  });
+  els.cbShowSelectionOutline.addEventListener("change", () => {
+    state.showSelectionOutline = els.cbShowSelectionOutline.checked;
+    renderAll();
+    showStatus(
+      state.showSelectionOutline
+        ? "已显示选中图层边框。"
+        : "已隐藏选中图层边框。",
+      "info",
+    );
   });
 
   els.projectSelect.addEventListener("change", () => {
@@ -635,7 +663,7 @@ function initResizableLayout(): void {
         "--timeline-panel-height",
         `${nextHeight}px`,
       );
-      const trackHeight = Math.max(40, nextHeight - 78);
+      const trackHeight = Math.max(40, nextHeight - 108);
       els.timelineTrack.style.height = `${trackHeight}px`;
       clampTimelineScrollLeft();
       renderTimelineAnimations();
@@ -1097,7 +1125,9 @@ function renderStaticUi(): void {
   const normalizedDuration = normalizeProjectDurationToAnimationEnd({
     silent: true,
   });
-  els.durationSeconds.value = normalizedDuration.toFixed(1);
+  els.durationSeconds.value = formatTimelineSeconds(normalizedDuration);
+  els.cbShowSelectionOutline.checked = state.showSelectionOutline;
+  syncPlaybackRangeInputs({ silent: true });
   els.timeLabel.textContent = `${state.playheadSeconds.toFixed(2)}s / ${normalizedDuration.toFixed(2)}s`;
   renderTimelineAnimations({ scrollTop: timelineScrollBackup });
 }
@@ -1853,7 +1883,7 @@ function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
       const hint = document.createElement("div");
       hint.className = "px-1 pb-0.5 text-[9px] text-slate-500";
       hint.textContent =
-        "拖动动画块修改开始秒；拖右侧把手修改持续秒；全部按 0.1s 吸附。";
+        "拖动动画块修改开始秒；拖右侧把手修改持续秒；全部按 0.05s 吸附。";
       laneStack.appendChild(hint);
       for (const animation of enabledAnimations) {
         const animationLane = createTimelineLane(contentWidth, "h-6");
@@ -1938,8 +1968,8 @@ function appendTimelineAnimationBlock(
   ].join(" ");
   item.style.left = `${timeToTimelineX(animation.startTime)}px`;
   item.style.width = `${Math.max(8, animation.duration * timelinePixelsPerSecond)}px`;
-  item.title = `${layer.name} · ${animation.type} · ${animation.startTime.toFixed(1)}s - ${endTime.toFixed(1)}s`;
-  item.textContent = `${getAnimationDisplayName(animation)} ${animation.startTime.toFixed(1)}-${endTime.toFixed(1)}s`;
+  item.title = `${layer.name} · ${animation.type} · ${formatTimelineSeconds(animation.startTime)}s - ${formatTimelineSeconds(endTime)}s`;
+  item.textContent = `${getAnimationDisplayName(animation)} ${formatTimelineSeconds(animation.startTime)}-${formatTimelineSeconds(endTime)}s`;
   item.addEventListener("click", (event) => {
     event.stopPropagation();
     selectAnimationFromTimeline(layer.id, animation.id);
@@ -1998,6 +2028,7 @@ function renderTimelineRuler(duration: number, contentWidth: number): void {
   rulerContent.style.transform = `translateX(${-timelineScrollLeft}px)`;
   rulerContent.style.transformOrigin = "left center";
   els.timelineRulerTrack.appendChild(rulerContent);
+  appendTimelineSegmentMarker(rulerContent, duration);
 
   const minorStep = TIMELINE_MINOR_TICK_SECONDS;
   const viewportWidth = getTimelineViewportWidth();
@@ -2012,8 +2043,16 @@ function renderTimelineRuler(duration: number, contentWidth: number): void {
   const firstTickIndex = Math.floor(timelineXToTime(visibleStart) / minorStep);
   const lastTickIndex = Math.ceil(timelineXToTime(visibleEnd) / minorStep);
   const labelStep = getTimelineLabelStepSeconds();
+  const rulerPlayhead = document.createElement("div");
+  rulerPlayhead.dataset.timelinePlayhead = "true";
+  rulerPlayhead.className =
+    "pointer-events-auto absolute bottom-0 top-0 z-30 w-[7px] -translate-x-1/2 cursor-ew-resize bg-amber-300 shadow shadow-amber-300/60 before:absolute before:-top-1 before:left-1/2 before:h-0 before:w-0 before:-translate-x-1/2 before:border-x-[4px] before:border-t-[5px] before:border-x-transparent before:border-t-amber-300 after:absolute after:-bottom-1 after:left-1/2 after:h-0 after:w-0 after:-translate-x-1/2 after:border-x-[4px] after:border-b-[5px] after:border-x-transparent after:border-b-amber-300";
+  rulerPlayhead.style.left = `${timeToTimelineX(state.playheadSeconds)}px`;
+  rulerPlayhead.title = `拖动黄色刻度线预览 ${state.playheadSeconds.toFixed(2)}s`;
+  rulerContent.appendChild(rulerPlayhead);
+
   for (let index = firstTickIndex; index <= lastTickIndex; index += 1) {
-    const seconds = roundTo(index * minorStep, 1);
+    const seconds = roundTo(index * minorStep, TIMELINE_TIME_DECIMALS);
     if (seconds < 0 || seconds > duration + 0.0001) continue;
     const isWholeSecond = Math.abs(seconds - Math.round(seconds)) < 0.0001;
     const isHalfSecond =
@@ -2025,14 +2064,6 @@ function renderTimelineRuler(duration: number, contentWidth: number): void {
     ].join(" ");
     tick.style.left = `${timeToTimelineX(seconds)}px`;
     rulerContent.appendChild(tick);
-
-    const rulerPlayhead = document.createElement("div");
-    rulerPlayhead.dataset.timelinePlayhead = "true";
-    rulerPlayhead.className =
-      "pointer-events-auto absolute bottom-0 top-0 z-30 w-[7px] -translate-x-1/2 cursor-ew-resize bg-amber-300 shadow shadow-amber-300/60 before:absolute before:-top-1 before:left-1/2 before:h-0 before:w-0 before:-translate-x-1/2 before:border-x-[4px] before:border-t-[5px] before:border-x-transparent before:border-t-amber-300 after:absolute after:-bottom-1 after:left-1/2 after:h-0 after:w-0 after:-translate-x-1/2 after:border-x-[4px] after:border-b-[5px] after:border-x-transparent after:border-b-amber-300";
-    rulerPlayhead.style.left = `${timeToTimelineX(state.playheadSeconds)}px`;
-    rulerPlayhead.title = `拖动黄色刻度线预览 ${state.playheadSeconds.toFixed(2)}s`;
-    rulerContent.appendChild(rulerPlayhead);
 
     const remainder = seconds % labelStep;
     const shouldLabel =
@@ -2047,6 +2078,37 @@ function renderTimelineRuler(duration: number, contentWidth: number): void {
     label.textContent = `${seconds.toFixed(seconds % 1 === 0 ? 0 : 1)}s`;
     rulerContent.appendChild(label);
   }
+}
+
+function appendTimelineSegmentMarker(
+  content: HTMLElement,
+  duration: number,
+  options: { force?: boolean } = {},
+): void {
+  if (!options.force && !els.cbPlaySegment.checked) return;
+
+  const start = snapTimelineSeconds(
+    clampNumber(readNumberInput(els.playStartSeconds, 0), 0, duration),
+  );
+  let end = snapTimelineSeconds(
+    clampNumber(readNumberInput(els.playEndSeconds, duration), 0, duration),
+  );
+  const minEnd = snapTimelineSeconds(
+    clampNumber(start + TIMELINE_MINOR_TICK_SECONDS, 0, duration),
+  );
+  if (end <= start) end = minEnd > start ? minEnd : duration;
+  if (end <= start) return;
+
+  const startX = timeToTimelineX(start);
+  const endX = timeToTimelineX(end);
+  const width = Math.max(8, endX - startX);
+  const marker = document.createElement("div");
+  marker.className =
+    "pointer-events-none absolute bottom-0 z-20 h-3 border-x-2 border-b-2 border-amber-300/90 bg-amber-300/10 shadow-[0_0_10px_rgba(252,211,77,0.35)]";
+  marker.style.left = `${startX}px`;
+  marker.style.width = `${width}px`;
+  marker.title = `时间段播放范围：${formatTimelineSeconds(start)}s - ${formatTimelineSeconds(end)}s`;
+  content.appendChild(marker);
 }
 
 function getTimelineLabelStepSeconds(): number {
@@ -2551,7 +2613,7 @@ function readAnimationDuration(
   return roundTo(
     clampNumber(
       readNumberInput(input, fallback),
-      0.1,
+      TIMELINE_MINOR_TICK_SECONDS,
       state.project.stage.duration,
     ),
     2,
@@ -2816,7 +2878,7 @@ function applyProjectDurationFromInput(
       MIN_PROJECT_DURATION_SECONDS,
       MAX_PROJECT_DURATION_SECONDS,
     ),
-    1,
+    TIMELINE_TIME_DECIMALS,
   );
   const longestAnimationEnd = getLongestAnimationEndTime();
   const nextDuration = roundTo(
@@ -2829,12 +2891,15 @@ function applyProjectDurationFromInput(
       MIN_PROJECT_DURATION_SECONDS,
       MAX_PROJECT_DURATION_SECONDS,
     ),
-    1,
+    TIMELINE_TIME_DECIMALS,
   );
-  els.durationSeconds.value = nextDuration.toFixed(1);
+  els.durationSeconds.value = formatTimelineSeconds(nextDuration);
   if (nextDuration === previousDuration) {
     if (!options.silentIfUnchanged) {
-      showStatus(`总时长仍为 ${nextDuration.toFixed(1)}s。`, "info");
+      showStatus(
+        `总时长仍为 ${formatTimelineSeconds(nextDuration)}s。`,
+        "info",
+      );
     }
     return;
   }
@@ -2847,11 +2912,14 @@ function applyProjectDurationFromInput(
   scheduleAutoSave(0);
   if (nextDuration > requestedDuration) {
     showStatus(
-      `总时长已自动扩展到 ${nextDuration.toFixed(1)}s，以容纳现有动画。`,
+      `总时长已自动扩展到 ${formatTimelineSeconds(nextDuration)}s，以容纳现有动画。`,
       "success",
     );
   } else {
-    showStatus(`总时长已更新为 ${nextDuration.toFixed(1)}s。`, "success");
+    showStatus(
+      `总时长已更新为 ${formatTimelineSeconds(nextDuration)}s。`,
+      "success",
+    );
   }
 }
 
@@ -2869,7 +2937,7 @@ function normalizeProjectDurationToAnimationEnd(
       MIN_PROJECT_DURATION_SECONDS,
       MAX_PROJECT_DURATION_SECONDS,
     ),
-    1,
+    TIMELINE_TIME_DECIMALS,
   );
   if (nextDuration !== state.project.stage.duration) {
     state.project.stage.duration = nextDuration;
@@ -2877,7 +2945,7 @@ function normalizeProjectDurationToAnimationEnd(
       state.playheadSeconds = nextDuration;
     if (!options.silent) {
       showStatus(
-        `总时长已自动扩展到 ${nextDuration.toFixed(1)}s，以容纳现有动画。`,
+        `总时长已自动扩展到 ${formatTimelineSeconds(nextDuration)}s，以容纳现有动画。`,
         "success",
       );
     }
@@ -2900,7 +2968,7 @@ function ceilToTimelineStep(seconds: number): number {
   return roundTo(
     Math.ceil((seconds - Number.EPSILON) / TIMELINE_MINOR_TICK_SECONDS) *
       TIMELINE_MINOR_TICK_SECONDS,
-    1,
+    TIMELINE_TIME_DECIMALS,
   );
 }
 
@@ -2987,8 +3055,8 @@ function startTimelineAnimationDrag(
   scrollSelectedAnimationModuleIntoView();
   showStatus(
     mode === "move"
-      ? "拖动动画块：开始秒按 0.1s 吸附。"
-      : "拖动右侧把手：持续秒按 0.1s 吸附。",
+      ? "拖动动画块：开始秒按 0.05s 吸附。"
+      : "拖动右侧把手：持续秒按 0.05s 吸附。",
     "info",
   );
 }
@@ -3045,7 +3113,7 @@ function updateTimelineAnimationDrag(event: PointerEvent): void {
   setPlayheadSeconds(animation.startTime);
   renderTimelineAnimations();
   showStatus(
-    `动画时间已吸附到 ${animation.startTime.toFixed(1)}s，持续 ${animation.duration.toFixed(1)}s。`,
+    `动画时间已吸附到 ${formatTimelineSeconds(animation.startTime)}s，持续 ${formatTimelineSeconds(animation.duration)}s。`,
     "info",
   );
 }
@@ -3068,7 +3136,7 @@ function finishTimelineAnimationDrag(event: PointerEvent): void {
   clearLayerPreview(layerId);
   renderAll();
   scheduleAutoSave(0);
-  showStatus("动画时间已更新并按 0.1s 对齐。", "success");
+  showStatus("动画时间已更新并按 0.05s 对齐。", "success");
 }
 
 function cancelTimelineAnimationDrag(event: PointerEvent): void {
@@ -3227,8 +3295,13 @@ function snapTimelineSeconds(seconds: number): number {
   return roundTo(
     Math.round(seconds / TIMELINE_MINOR_TICK_SECONDS) *
       TIMELINE_MINOR_TICK_SECONDS,
-    1,
+    TIMELINE_TIME_DECIMALS,
   );
+}
+
+function formatTimelineSeconds(seconds: number): string {
+  const snapped = snapTimelineSeconds(seconds);
+  return snapped.toFixed(snapped % 1 === 0 ? 1 : TIMELINE_TIME_DECIMALS);
 }
 
 function isTimelineControlTarget(target: EventTarget | null): boolean {
@@ -3413,9 +3486,9 @@ function appendAnimationDraftModule(layer: V5GLayerConfig): void {
 
       <div class="grid grid-cols-2 gap-1.5">
 
-        <label class="text-[10px] text-zinc-400">开始秒<input data-animation-start type="number" min="0" step="0.1" placeholder="${state.playheadSeconds.toFixed(1)}" class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400" /></label>
+        <label class="text-[10px] text-zinc-400">开始秒<input data-animation-start type="number" min="0" step="0.05" placeholder="${formatTimelineSeconds(state.playheadSeconds)}" class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400" /></label>
 
-        <label class="text-[10px] text-zinc-400">持续秒<input data-animation-duration type="number" min="0.1" step="0.1" placeholder="默认" class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400" /></label>
+        <label class="text-[10px] text-zinc-400">持续秒<input data-animation-duration type="number" min="0.05" step="0.05" placeholder="默认" class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400" /></label>
 
       </div>
 
@@ -3771,15 +3844,12 @@ function renderAnimationList(layer: V5GLayerConfig): void {
         <label class="block text-[10px] ${categoryLabelClass}" data-animation-type-label>${categoryLabel}<select data-animation-type class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400"></select></label>
 
         <div class="grid grid-cols-2 gap-1.5">
-          <label class="text-[10px] text-zinc-400">开始秒<input data-animation-start type="number" min="0" step="0.1" value="${animation.startTime}" class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400" /></label>
-          <label class="text-[10px] text-zinc-400">持续秒<input data-animation-duration type="number" min="0.1" step="0.1" value="${animation.duration}" class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400" /></label>
+          <label class="text-[10px] text-zinc-400">开始秒<input data-animation-start type="number" min="0" step="0.05" value="${formatTimelineSeconds(animation.startTime)}" class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400" /></label>
+          <label class="text-[10px] text-zinc-400">持续秒<input data-animation-duration type="number" min="0.05" step="0.05" value="${formatTimelineSeconds(animation.duration)}" class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400" /></label>
         </div>
         <label class="block text-[10px] text-zinc-400">缓动<select data-animation-easing class="mt-1 h-7 w-full rounded-md border border-white/10 bg-[#050505] px-2 text-xs text-zinc-100 outline-none focus:border-zinc-400"></select></label>
         <div data-animation-param-fields class="grid grid-cols-2 gap-1.5"></div>
         ${isOffsetReversibleAnimation(animation.type) ? '<div class="grid grid-cols-2 gap-1.5"><button type="button" data-animation-action="reverse-offset-x" class="rounded-md border border-white/10 bg-zinc-900 px-2 py-1.5 text-[10px] font-semibold text-zinc-300 transition hover:border-amber-300/70 hover:bg-amber-300 hover:text-amber-950" title="把此位移动画的 X 偏移整体取反，例如 0→10 变成 0→-10"><i class="fa-solid fa-left-right mr-1"></i>反转 X</button><button type="button" data-animation-action="reverse-offset-y" class="rounded-md border border-white/10 bg-zinc-900 px-2 py-1.5 text-[10px] font-semibold text-zinc-300 transition hover:border-amber-300/70 hover:bg-amber-300 hover:text-amber-950" title="把此位移动画的 Y 偏移整体取反，例如 0→10 变成 0→-10"><i class="fa-solid fa-up-down mr-1"></i>反转 Y</button></div>' : ""}
-        <button type="button" data-animation-action="apply" class="w-full rounded-md bg-zinc-100 px-2 py-1.5 text-xs font-semibold text-zinc-950 transition hover:bg-white">
-          <i class="fa-solid fa-check mr-1"></i>应用此动画修改
-        </button>
       </div>
     `;
 
@@ -3943,8 +4013,6 @@ function renderAnimationList(layer: V5GLayerConfig): void {
           deleteAnimationFromLayer(layer.id, animation.id);
         } else if (action === "copy") {
           copySingleAnimation(layer.id, animation.id);
-        } else if (action === "apply") {
-          updateAnimationFromModule(layer.id, animation.id, details);
         } else if (action === "reverse-offset-x") {
           reverseOffsetAnimationAxis(layer.id, animation.id, "x");
         } else if (action === "reverse-offset-y") {
@@ -4568,6 +4636,7 @@ function createEditorState(
     selectedLayerId: project.layers[0]?.id ?? null,
     isPlaying: false,
     playheadSeconds: 0,
+    showSelectionOutline: true,
     previewLayers: {},
   };
 }
@@ -4596,37 +4665,141 @@ function revokeRuntimeAssetUrls(): void {
   }
 }
 
-function togglePlayback(): void {
-  if (state.isPlaying) {
-    stopPlayback();
+function getPlaybackRangeFromInputs(): { start: number; end: number } | null {
+  const duration = normalizeProjectDurationToAnimationEnd({ silent: true });
+  if (!els.cbPlaySegment.checked) {
+    return { start: 0, end: duration };
+  }
+
+  const fallbackStart = clampNumber(state.playheadSeconds, 0, duration);
+  let start = readNumberInput(els.playStartSeconds, fallbackStart);
+  let end = readNumberInput(els.playEndSeconds, duration);
+
+  start = snapTimelineSeconds(clampNumber(start, 0, duration));
+  end = snapTimelineSeconds(clampNumber(end, 0, duration));
+
+  if (els.cbPlaySegment.checked && end <= start) {
+    end = snapTimelineSeconds(
+      clampNumber(start + TIMELINE_MINOR_TICK_SECONDS, 0, duration),
+    );
+    if (end <= start) {
+      showStatus("时间段结束时间必须大于开始时间。", "error");
+      syncPlaybackRangeInputs({ silent: true });
+      return null;
+    }
+    showStatus("时间段结束时间已自动调整到开始时间之后。", "info");
+  }
+
+  els.playStartSeconds.value = formatTimelineSeconds(start);
+  els.playEndSeconds.value = formatTimelineSeconds(end);
+  return { start, end };
+}
+
+function syncPlaybackRangeInputs(options: { silent?: boolean } = {}): void {
+  const isSegmentEnabled = els.cbPlaySegment.checked;
+  els.playStartSeconds.disabled = !isSegmentEnabled;
+  els.playEndSeconds.disabled = !isSegmentEnabled;
+  els.playStartSeconds.classList.toggle("opacity-45", !isSegmentEnabled);
+  els.playEndSeconds.classList.toggle("opacity-45", !isSegmentEnabled);
+
+  if (!isSegmentEnabled) {
+    renderTimelineAnimations();
     return;
   }
 
+  const duration = normalizeProjectDurationToAnimationEnd({ silent: true });
+  const start = snapTimelineSeconds(
+    clampNumber(readNumberInput(els.playStartSeconds, 0), 0, duration),
+  );
+  let end = snapTimelineSeconds(
+    clampNumber(readNumberInput(els.playEndSeconds, duration), 0, duration),
+  );
+  const minEnd = snapTimelineSeconds(
+    clampNumber(start + TIMELINE_MINOR_TICK_SECONDS, 0, duration),
+  );
+  if (end <= start) end = minEnd > start ? minEnd : duration;
+  els.playStartSeconds.value = formatTimelineSeconds(start);
+  els.playEndSeconds.value = formatTimelineSeconds(end);
+  renderTimelineAnimations();
+  if (!options.silent) {
+    showStatus(
+      `已设置播放时间段：${formatTimelineSeconds(start)}s - ${formatTimelineSeconds(end)}s。`,
+      "info",
+    );
+  }
+}
+
+function togglePlayback(): void {
+  if (state.isPlaying) {
+    pausePlayback();
+    return;
+  }
+
+  startPlaybackFromCurrentPosition();
+}
+
+function startPlaybackFromCurrentPosition(): void {
+  const range = getPlaybackRangeFromInputs();
+  if (!range) return;
+
+  activePlaybackRange = range;
   state.isPlaying = true;
-  state.playheadSeconds = 0;
-  playStartedAt = performance.now();
+  const isAtRangeEnd = state.playheadSeconds >= range.end - 0.0001;
+  const startTime = isAtRangeEnd
+    ? range.start
+    : clampNumber(state.playheadSeconds, range.start, range.end);
+  setPlayheadSeconds(startTime);
+  playStartedAt = performance.now() - startTime * 1000;
   pixiStage.stopDemo();
   setPlaybackButtonState(true);
   tickPlayhead();
-  showStatus("正在播放代码驱动动画。", "info");
+  showStatus(
+    els.cbPlaySegment.checked
+      ? `正在播放 ${formatTimelineSeconds(range.start)}s - ${formatTimelineSeconds(range.end)}s 时间段。`
+      : "正在播放代码驱动动画。",
+    "info",
+  );
+}
+
+function pausePlayback(options: { silent?: boolean } = {}): void {
+  state.isPlaying = false;
+  activePlaybackRange = null;
+  cancelAnimationFrame(animationFrame);
+  pixiStage.stopDemo();
+  setPlaybackButtonState(false);
+  renderAll();
+  if (!options.silent) {
+    showStatus(`已暂停在 ${state.playheadSeconds.toFixed(2)}s。`, "info");
+  }
 }
 
 function tickPlayhead(): void {
   cancelAnimationFrame(animationFrame);
   const run = () => {
     if (!state.isPlaying) return;
-    setPlayheadSeconds((performance.now() - playStartedAt) / 1000);
-    if (state.playheadSeconds >= state.project.stage.duration) {
+    const range = activePlaybackRange ?? {
+      start: 0,
+      end: state.project.stage.duration,
+    };
+    const nextTime = (performance.now() - playStartedAt) / 1000;
+    setPlayheadSeconds(nextTime);
+    if (state.playheadSeconds >= range.end) {
       if (els.cbLoopPlay.checked) {
-        state.playheadSeconds = 0;
-        playStartedAt = performance.now();
-        setPlayheadSeconds(0);
+        playStartedAt = performance.now() - range.start * 1000;
+        setPlayheadSeconds(range.start);
         animationFrame = requestAnimationFrame(run);
         return;
       }
       state.isPlaying = false;
+      setPlayheadSeconds(range.end);
+      activePlaybackRange = null;
       setPlaybackButtonState(false);
-      showStatus("代码驱动动画播放完成。", "success");
+      showStatus(
+        els.cbPlaySegment.checked
+          ? "时间段播放完成。"
+          : "代码驱动动画播放完成。",
+        "success",
+      );
       return;
     }
     animationFrame = requestAnimationFrame(run);
@@ -4638,6 +4811,7 @@ function stopPlayback(
   options: { silent?: boolean; keepPlayhead?: boolean } = {},
 ): void {
   state.isPlaying = false;
+  activePlaybackRange = null;
   if (!options.keepPlayhead) {
     state.playheadSeconds = 0;
     clearPreviewLayers();
@@ -4714,6 +4888,17 @@ function applyZoomPercentFromInput(): void {
 
 function handleGlobalShortcut(event: KeyboardEvent): void {
   if (isEditableShortcutTarget(event.target)) return;
+
+  if (
+    event.code === "Space" &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey
+  ) {
+    event.preventDefault();
+    togglePlayback();
+    return;
+  }
 
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
     event.preventDefault();
@@ -4825,7 +5010,7 @@ function setPlaybackButtonState(isPlaying: boolean): void {
   els.btnRun.disabled = false;
   els.btnRun.classList.remove("opacity-70", "cursor-wait");
   if (isPlaying) {
-    els.btnRun.innerHTML = '<i class="fa-solid fa-stop mr-1"></i>停止';
+    els.btnRun.innerHTML = '<i class="fa-solid fa-pause mr-1"></i>暂停';
     els.btnRun.classList.remove(
       "bg-zinc-100",
       "text-zinc-950",

@@ -166,6 +166,36 @@ function safeGlowAnimation(
   };
 }
 
+function chaserLightAnimation(
+  overrides: Partial<V5GAnimationConfig> = {},
+): V5GAnimationConfig {
+  return {
+    id: "chaser-light",
+    type: "chaser_light",
+    startTime: 0,
+    duration: 1,
+    enabled: true,
+    seed: 11,
+    params: {
+      totalCount: 4,
+      spacing: 12,
+      lightDuration: 0.2,
+      interval: 0.05,
+      trajectory: 1,
+      radius: 40,
+      centerX: 0,
+      centerY: 0,
+      endX: 100,
+      endY: 0,
+      curve: 0,
+      lightSize: 16,
+      dimAlpha: 0.2,
+      keepOriginal: false,
+    },
+    ...overrides,
+  };
+}
+
 function framesFor(project: V5GProjectConfig): Map<string, SpriteFrame> {
   return new Map(
     project.assets.map((asset) => [
@@ -219,6 +249,10 @@ function getFirstLayerNode(root: Node): Node {
 
 function getFirstSafeGlowContainer(root: Node): Node {
   return getFirstGroup(root).children[1];
+}
+
+function getFirstChaserLightContainer(root: Node): Node {
+  return getFirstGroup(root).children[2];
 }
 
 function getFirstParticleContainer(root: Node): Node {
@@ -545,6 +579,35 @@ describe("standalone V5GCocosPlayer", () => {
     player.seek(1);
     expect(safeGlowContainer.children).toHaveLength(0);
     expect(inspectNode(safeGlowNode).destroyed).toBe(true);
+  });
+
+  it("maps circular chaser_light samples to Cocos clockwise visual motion", () => {
+    const project = tinyProject({
+      animations: [
+        chaserLightAnimation({
+          params: {
+            ...chaserLightAnimation().params,
+            totalCount: 1,
+            trajectory: 0,
+            radius: 40,
+            spacing: 0,
+            centerX: 0,
+            centerY: 0,
+            lightDuration: 0.2,
+            interval: 0.05,
+          },
+        }),
+      ],
+    });
+    const { root, player } = makePlayer(project);
+    player.init();
+    player.seek(0.125);
+
+    const chaserNode = getFirstChaserLightContainer(root).children[0];
+    const offset = Math.cos(Math.PI / 4) * 40;
+    expect(inspectNode(chaserNode).position.x).toBeCloseTo(100 + offset, 3);
+    expect(inspectNode(chaserNode).position.y).toBeCloseTo(50 - offset, 3);
+    expect(inspectNode(chaserNode).rotation.z).toBeCloseTo(-135, 3);
   });
 
   it("renders the roundreel runtime_100 safe_glow node with inherited add blend", () => {

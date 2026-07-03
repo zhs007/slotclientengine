@@ -5787,12 +5787,12 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.options.driver.setPosition(
       node,
       position.x + chaser.x,
-      position.y + chaser.y,
+      position.y - chaser.y,
     );
     this.options.driver.setScale(node, chaser.scale, chaser.scale);
     this.options.driver.setRotationDegrees(
       node,
-      (chaser.rotation * 180) / Math.PI,
+      (-chaser.rotation * 180) / Math.PI,
     );
     this.options.driver.setOpacity(node, opacityToCocosOpacity(chaser.alpha));
     this.options.driver.applyBlendMode(

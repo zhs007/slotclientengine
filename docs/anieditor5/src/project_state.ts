@@ -78,6 +78,7 @@ export function createInitialEditorState(): V5GEditorState {
     selectedLayerId: project.layers[0]?.id ?? null,
     isPlaying: false,
     playheadSeconds: 0,
+    showSelectionOutline: true,
     previewLayers: {},
   };
 }

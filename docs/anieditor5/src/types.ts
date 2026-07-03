@@ -213,5 +213,6 @@ export interface V5GEditorState {
   selectedLayerId: string | null;
   isPlaying: boolean;
   playheadSeconds: number;
+  showSelectionOutline: boolean;
   previewLayers?: Record<string, V5GPreviewLayerState>;
 }

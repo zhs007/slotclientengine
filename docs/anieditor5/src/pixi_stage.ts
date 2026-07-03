@@ -2091,6 +2091,7 @@ export class V5GPixiStage {
 
   private drawSelection(): void {
     this.selectionGraphics.clear();
+    if (!this.state.showSelectionOutline) return;
     const layer = this.state.project.layers.find(
       (item) => item.id === this.state.selectedLayerId,
     );
