@@ -7,6 +7,7 @@ export * from "./grid-cell-order.js";
 export * from "./grid-cell-reel-offsets.js";
 export * from "./grid-cell-spin-plan.js";
 export * from "./reel-window.js";
+export * from "./render-symbol-pool.js";
 export * from "./render-reel.js";
 export * from "./render-reel-set.js";
 export * from "./render-grid-cell-reel-set.js";

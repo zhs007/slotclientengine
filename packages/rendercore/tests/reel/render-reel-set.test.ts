@@ -1,5 +1,5 @@
 import { createGameConfig, createGameLogic } from "@slotclientengine/logiccore";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import game2Config from "../../../../assets/gamecfg/game2.json";
 import basicMessage from "../../../logiccore/tests/fixtures/gamemoduleinfo-basic.json";
 import {
@@ -11,6 +11,11 @@ import {
 import {
   createTestSymbolAnimationResolver,
   createTextureSet,
+} from "./helpers.js";
+import {
+  createBasicLayout,
+  createBasicRegistry,
+  createBasicReels,
 } from "./helpers.js";
 
 describe("RenderReelSet", () => {
@@ -375,4 +380,93 @@ describe("RenderReelSet", () => {
       /spinning/,
     );
   });
+
+  it("shares one symbol pool across reels and drains idle plus active symbols on destroy", () => {
+    const reelSet = new RenderReelSet({
+      reels: createBasicReels(),
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+      symbolPool: {
+        enabled: true,
+        targetIdlePerCode: 5,
+        maxIdlePerCode: 10,
+        maxIdleTotal: 80,
+      },
+    });
+
+    reelSet.resetToVisibleScene(
+      [
+        [1, 1, 1],
+        [2, 2, 2],
+      ],
+      [0, 0],
+    );
+    const firstA = getVisibleSlotSymbol(reelSet, 0, 0);
+    const firstB = getVisibleSlotSymbol(reelSet, 1, 0);
+    const firstADestroy = vi.spyOn(firstA, "destroy");
+    const firstBDestroy = vi.spyOn(firstB, "destroy");
+
+    reelSet.resetToVisibleScene(
+      [
+        [2, 2, 2],
+        [1, 1, 1],
+      ],
+      [0, 0],
+    );
+
+    expect(
+      reelSet.reels[1]
+        .getSlotSnapshots()
+        .some((slot) => slot.symbol === firstA),
+    ).toBe(true);
+    expect(reelSet.getSymbolPoolStats()).toMatchObject({
+      totalIdle: expect.any(Number),
+      idlePerCode: { 2: expect.any(Number) },
+    });
+
+    reelSet.destroy({ children: true });
+
+    expect(firstADestroy).toHaveBeenCalledTimes(1);
+    expect(firstBDestroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not create or pool empty symbols", () => {
+    const reelSet = new RenderReelSet({
+      reels: createBasicReels(),
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+      symbolPool: {
+        enabled: true,
+        targetIdlePerCode: 5,
+        maxIdlePerCode: 10,
+        maxIdleTotal: 80,
+      },
+    });
+
+    reelSet.resetToVisibleScene(
+      [
+        [0, 0, 0],
+        [0, 0, 0],
+      ],
+      [0, 0],
+    );
+
+    expect(reelSet.getSymbolPoolStats()?.idlePerCode[0]).toBeUndefined();
+    expect(
+      reelSet.reels
+        .flatMap((reel) => reel.getSlotSnapshots())
+        .filter((slot) => slot.windowY >= 0 && slot.windowY < 3)
+        .every((slot) => slot.symbol === null),
+    ).toBe(true);
+  });
 });
+
+function getVisibleSlotSymbol(reelSet: RenderReelSet, x: number, y: number) {
+  const symbol = reelSet.reels[x]
+    .getSlotSnapshots()
+    .find((slot) => slot.windowY === y)?.symbol;
+  if (!symbol) {
+    throw new Error(`Missing visible symbol at ${x},${y}.`);
+  }
+  return symbol;
+}

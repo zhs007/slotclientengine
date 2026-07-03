@@ -4,6 +4,7 @@ import { assertValidDeltaSeconds, resetBaseDisplay } from "./ani.js";
 import { assertResolvedSymbolAni } from "./animation-resolver.js";
 import { SymbolAnimationError } from "./errors.js";
 import { SymbolStateMachine } from "./state-machine.js";
+import { destroyVniSymbolAnimationCache } from "./vni-animation.js";
 import type {
   RenderSymbolOptions,
   RenderSymbolUpdateResult,
@@ -33,6 +34,9 @@ export class RenderSymbol extends VisualEntity<void> {
   readonly #animationResolver: RenderSymbolOptions["animationResolver"];
   #currentAni: SymbolAni;
   #lastAniKey: string;
+  #defaultScaleX = 1;
+  #defaultScaleY = 1;
+  #destroyed = false;
 
   constructor(options: RenderSymbolOptions) {
     super();
@@ -76,6 +80,8 @@ export class RenderSymbol extends VisualEntity<void> {
 
   init(): void {
     this.beginLifecycle();
+    this.#defaultScaleX = this.scale.x;
+    this.#defaultScaleY = this.scale.y;
     this.reset();
   }
 
@@ -140,6 +146,7 @@ export class RenderSymbol extends VisualEntity<void> {
   }
 
   reset(): void {
+    this.assertNotDestroyed();
     this.#stateMachine.reset();
     resetBaseDisplay(this.createAnimationContext());
     const before = this.#lastAniKey;
@@ -147,8 +154,32 @@ export class RenderSymbol extends VisualEntity<void> {
     this.syncAniIfNeeded(before);
   }
 
-  override destroy(options?: Parameters<Container["destroy"]>[0]): void {
+  resetForPoolRelease(): void {
+    this.assertNotDestroyed();
     this.#currentAni.destroy?.();
+    this.#stateMachine.reset();
+    this.#lastAniKey = "";
+    this.#currentAni = createReleasedSymbolAni();
+    resetBaseDisplay(this.createAnimationContext());
+    this.visible = true;
+    this.renderable = true;
+    this.alpha = 1;
+    this.position.set(0);
+    this.scale.set(this.#defaultScaleX, this.#defaultScaleY);
+    this.rotation = 0;
+    this.pivot.set(0);
+    this.mask = null;
+    this.filters = null;
+    this.zIndex = 0;
+  }
+
+  override destroy(options?: Parameters<Container["destroy"]>[0]): void {
+    if (this.#destroyed) {
+      return;
+    }
+    this.#destroyed = true;
+    this.#currentAni.destroy?.();
+    destroyVniSymbolAnimationCache(this);
     super.destroy(options);
   }
 
@@ -205,6 +236,27 @@ export class RenderSymbol extends VisualEntity<void> {
   private createAniKey(snapshot: SymbolStateSnapshot): string {
     return `${snapshot.requestedState}->${snapshot.resolvedState}`;
   }
+
+  private assertNotDestroyed(): void {
+    if (this.#destroyed) {
+      throw new SymbolAnimationError(
+        `Render symbol "${this.symbol}" was destroyed.`,
+      );
+    }
+  }
+}
+
+function createReleasedSymbolAni(): SymbolAni {
+  return Object.freeze({
+    stateId: "__released__",
+    playback: "static",
+    reset: () => undefined,
+    update: () =>
+      Object.freeze({
+        loopCompleted: false,
+        onceCompleted: false,
+      }),
+  });
 }
 
 function normalizeRenderSymbolNormalSource(

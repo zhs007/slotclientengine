@@ -3,19 +3,23 @@ import { assertValidDeltaSeconds } from "../symbol/ani.js";
 import { ReelError } from "./errors.js";
 import { assertLayoutMatchesReels } from "./layout.js";
 import { RenderReel } from "./render-reel.js";
+import { createRenderSymbolPool } from "./render-symbol-pool.js";
 import type {
   ReelSpinPlan,
   RenderReelSetOptions,
   RenderReelSetSpinOptions,
   RenderReelSetSnapshot,
   RenderReelSetUpdateResult,
+  RenderSymbolPoolStats,
   RenderVisibleSymbolGeometrySnapshot,
   RenderVisibleSymbolStateSnapshot,
+  RenderSymbolPool,
 } from "./types.js";
 import type { SymbolStateId } from "../symbol/index.js";
 
 export class RenderReelSet extends Container {
   readonly reels: readonly RenderReel[];
+  readonly #symbolPool: RenderSymbolPool | null;
   #spinPlan: ReelSpinPlan | null = null;
   #spinOptions: RenderReelSetSpinOptions | null = null;
   #elapsedMs = 0;
@@ -24,6 +28,7 @@ export class RenderReelSet extends Container {
   constructor(options: RenderReelSetOptions) {
     super();
     assertLayoutMatchesReels(options.layout, options.reels.getReelCount());
+    this.#symbolPool = createRenderSymbolPool(options.symbolPool);
 
     this.reels = Object.freeze(
       Array.from({ length: options.reels.getReelCount() }, (_, x) => {
@@ -32,11 +37,17 @@ export class RenderReelSet extends Container {
           x,
           layout: options.layout,
           registry: options.registry,
+          symbolPool: this.#symbolPool ?? undefined,
         });
         this.addChild(reel);
         return reel;
       }),
     );
+  }
+
+  override destroy(options?: Parameters<Container["destroy"]>[0]): void {
+    this.#symbolPool?.destroy();
+    super.destroy(options);
   }
 
   spin(plan: ReelSpinPlan, options: RenderReelSetSpinOptions = {}): void {
@@ -208,6 +219,10 @@ export class RenderReelSet extends Container {
       visibleScene: this.getVisibleScene(),
       reels: Object.freeze(this.reels.map((reel) => reel.getSnapshot())),
     });
+  }
+
+  getSymbolPoolStats(): RenderSymbolPoolStats | null {
+    return this.#symbolPool?.getStats() ?? null;
   }
 
   private getReelAt(x: number): RenderReel {

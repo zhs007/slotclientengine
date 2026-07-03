@@ -9,6 +9,7 @@ import {
   createReelSpinPlan,
   createReelSymbolRegistry,
   type ReelLayout,
+  type RenderSymbolPoolOptions,
   type ReelSpinDirection,
   type ReelSpinPlan,
   type RenderVisibleSymbolGeometrySnapshot,
@@ -73,6 +74,14 @@ export const DEFAULT_GAME003_REEL_CONFIG: Game003ReelConfig = Object.freeze({
   startDelayMs: GAME003_STATIC_REEL_CONFIG.startDelayMs,
   stopDelayMs: GAME003_STATIC_REEL_CONFIG.stopDelayMs,
 });
+
+export const GAME003_RENDER_SYMBOL_POOL_CONFIG: RenderSymbolPoolOptions =
+  Object.freeze({
+    enabled: true,
+    targetIdlePerCode: 5,
+    maxIdlePerCode: 10,
+    maxIdleTotal: 80,
+  });
 
 export interface Game003ReelRuntimeOptions {
   readonly rawGameConfig: unknown;
@@ -151,6 +160,7 @@ export function createGame003ReelRuntime(
     reels,
     layout,
     registry,
+    symbolPool: GAME003_RENDER_SYMBOL_POOL_CONFIG,
   });
   reelSet.x = layerLayout.x;
   reelSet.y = layerLayout.y;

@@ -109,6 +109,7 @@ import { Container, Sprite, Texture } from "pixi.js";
 import {
   VniSymbolAni,
   createSymbolVniAnimationResolver,
+  destroyVniSymbolAnimationCache,
   type SymbolAnimationContext,
   type SymbolSpineAnimationResource,
   type SymbolVniAnimationResource,
@@ -295,7 +296,7 @@ describe("VniSymbolAni", () => {
     expect(ani.update(1).onceCompleted).toBe(false);
   });
 
-  it("destroys player and mounted VNI viewport idempotently", async () => {
+  it("detaches the cached player on ani destroy and releases it with the render symbol cache", async () => {
     const context = createContext();
     const { factory, calls } = createPlayerFactory();
     const ani = new VniSymbolAni({
@@ -312,9 +313,91 @@ describe("VniSymbolAni", () => {
     ani.destroy();
     ani.destroy();
 
-    expect(calls.pause).toHaveBeenCalledTimes(1);
-    expect(calls.destroy).toHaveBeenCalledTimes(1);
+    expect(calls.pause).toHaveBeenCalledTimes(2);
+    expect(calls.destroy).not.toHaveBeenCalled();
     expect(context.overlayLayer.children).toHaveLength(0);
+
+    destroyVniSymbolAnimationCache(context.root);
+
+    expect(calls.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses one cached VNI player for repeated same-resource playback", async () => {
+    const context = createContext();
+    const { factory, calls } = createPlayerFactory();
+    const firstAni = new VniSymbolAni({
+      context,
+      resource: createResource(),
+      playerFactory: factory,
+    });
+    const secondAni = new VniSymbolAni({
+      context,
+      resource: createResource(),
+      playerFactory: factory,
+    });
+
+    firstAni.reset();
+    await Promise.resolve();
+    await Promise.resolve();
+    firstAni.destroy();
+    secondAni.reset();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(calls.playRange).toHaveBeenCalledTimes(2);
+    expect(calls.onPlaybackComplete).toHaveBeenCalledTimes(2);
+    expect(context.overlayLayer.children).toHaveLength(1);
+    expect(secondAni.update(1).onceCompleted).toBe(true);
+    expect(secondAni.update(1).onceCompleted).toBe(false);
+
+    secondAni.destroy();
+    destroyVniSymbolAnimationCache(context.root);
+  });
+
+  it("does not attach stale async init results after destroy", async () => {
+    const context = createContext();
+    const init = createDeferred<void>();
+    const root = new pixiMock.MockContainer();
+    const calls = {
+      playRange: vi.fn(),
+      destroy: vi.fn(() => {
+        root.parent?.removeChild(root);
+      }),
+      pause: vi.fn(),
+    };
+    const factory = vi.fn((options) => {
+      const player: VniSymbolAniPlayer = {
+        init: async () => {
+          await init.promise;
+          options.parent.addChild(root as unknown as Container);
+        },
+        getDisplayObject: () => root as unknown as Container,
+        playRange: calls.playRange,
+        update: vi.fn(),
+        destroy: calls.destroy,
+        pause: calls.pause,
+        onPlaybackComplete: vi.fn(() => vi.fn()),
+      };
+      return player;
+    });
+    const ani = new VniSymbolAni({
+      context,
+      resource: createResource(),
+      playerFactory: factory,
+    });
+
+    ani.reset();
+    ani.destroy();
+    init.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(calls.playRange).not.toHaveBeenCalled();
+    expect(context.overlayLayer.children).toHaveLength(0);
+    destroyVniSymbolAnimationCache(context.root);
   });
 
   it("uses fallback resolver for symbols without manifest VNI resources", () => {
@@ -361,3 +444,11 @@ describe("VniSymbolAni", () => {
     expect(context.stateSprite.texture).toBe(spinBlurTexture);
   });
 });
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
+}

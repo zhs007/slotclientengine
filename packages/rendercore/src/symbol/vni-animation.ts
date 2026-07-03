@@ -78,19 +78,32 @@ const EMPTY_UPDATE_RESULT: SymbolAniUpdateResult = Object.freeze({
   onceCompleted: false,
 });
 
+interface CachedVniSymbolPlayer {
+  readonly key: string;
+  readonly player: VniSymbolAniPlayer;
+  initPromise: Promise<void>;
+  initialized: boolean;
+}
+
+const cachedVniSymbolPlayers = new WeakMap<
+  Container,
+  Map<string, CachedVniSymbolPlayer>
+>();
+
 export class VniSymbolAni implements SymbolAni {
   readonly stateId: string;
   readonly playback: SymbolPlaybackKind = "once";
   readonly #context: SymbolAnimationContext;
   readonly #resource: SymbolVniAnimationResource;
   readonly #playerFactory: VniSymbolAniPlayerFactory;
-  #player: VniSymbolAniPlayer | null = null;
+  #cacheEntry: CachedVniSymbolPlayer | null = null;
   #disposePlaybackComplete: (() => void) | null = null;
   #initError: unknown = null;
   #initialized = false;
   #completed = false;
   #reportedComplete = false;
   #destroyed = false;
+  #playRequestId = 0;
 
   constructor(options: VniSymbolAniOptions) {
     this.#context = options.context;
@@ -103,7 +116,7 @@ export class VniSymbolAni implements SymbolAni {
 
   reset(): void {
     this.assertNotDestroyed();
-    this.disposePlayer();
+    this.detachCacheEntry();
     resetBaseDisplay(this.#context);
     this.#context.baseLayer.visible = false;
     this.#context.stateSprite.visible = false;
@@ -111,7 +124,19 @@ export class VniSymbolAni implements SymbolAni {
     this.#completed = false;
     this.#reportedComplete = false;
     this.#initError = null;
-    void this.initializeAndPlay();
+    this.#initialized = false;
+    const entry = getOrCreateCachedVniSymbolPlayer({
+      context: this.#context,
+      resource: this.#resource,
+      playerFactory: this.#playerFactory,
+    });
+    this.#cacheEntry = entry;
+    const requestId = (this.#playRequestId += 1);
+    if (entry.initialized) {
+      this.playCachedPlayer(entry, requestId);
+      return;
+    }
+    void this.initializeAndPlay(entry, requestId).catch(() => undefined);
   }
 
   update(deltaSeconds: number): SymbolAniUpdateResult {
@@ -123,7 +148,7 @@ export class VniSymbolAni implements SymbolAni {
     if (!this.#initialized) {
       return EMPTY_UPDATE_RESULT;
     }
-    this.#player?.update(deltaSeconds);
+    this.#cacheEntry?.player.update(deltaSeconds);
     if (this.#completed && !this.#reportedComplete) {
       this.#reportedComplete = true;
       return Object.freeze({
@@ -139,16 +164,59 @@ export class VniSymbolAni implements SymbolAni {
       return;
     }
     this.#destroyed = true;
-    this.disposePlayer();
+    this.detachCacheEntry();
   }
 
-  private async initializeAndPlay(): Promise<void> {
+  private async initializeAndPlay(
+    entry: CachedVniSymbolPlayer,
+    requestId: number,
+  ): Promise<void> {
     try {
-      await this.ensureInitialized();
-      if (this.#destroyed) {
+      await entry.initPromise;
+      this.playCachedPlayer(entry, requestId);
+    } catch (error) {
+      if (this.#cacheEntry === entry && this.#playRequestId === requestId) {
+        dropCachedVniSymbolPlayer(this.#context.root, entry);
+        this.#cacheEntry = null;
+        this.#initError = error;
+      }
+    }
+  }
+
+  private playCachedPlayer(
+    entry: CachedVniSymbolPlayer,
+    requestId: number,
+  ): void {
+    try {
+      if (
+        this.#destroyed ||
+        this.#cacheEntry !== entry ||
+        this.#playRequestId !== requestId
+      ) {
+        entry.player
+          .getDisplayObject()
+          .parent?.removeChild(entry.player.getDisplayObject());
         return;
       }
-      this.#player?.playRange({
+      const player = entry.player;
+      const view = player.getDisplayObject();
+      player.pause?.();
+      alignVniRootToProjectStage(view, this.#resource.project);
+      this.#disposePlaybackComplete?.();
+      this.#disposePlaybackComplete = player.onPlaybackComplete(() => {
+        this.#completed = true;
+      });
+      if (view.parent !== this.#context.overlayLayer) {
+        resetBaseDisplay(this.#context);
+        this.#context.baseLayer.visible = false;
+        this.#context.stateSprite.visible = false;
+        this.#context.overlayLayer.removeChildren();
+        this.#context.overlayLayer.addChild(view);
+      } else {
+        this.#context.baseLayer.visible = false;
+        this.#context.stateSprite.visible = false;
+      }
+      player.playRange({
         range: {
           unit: "time",
           start: this.#resource.spec.playback.startTime,
@@ -156,49 +224,22 @@ export class VniSymbolAni implements SymbolAni {
         },
         loop: false,
       });
+      this.#initialized = true;
     } catch (error) {
-      this.disposePlayer();
-      this.#initError = error;
+      if (this.#cacheEntry === entry && this.#playRequestId === requestId) {
+        this.#initError = error;
+      }
     }
   }
 
-  private async ensureInitialized(): Promise<void> {
-    if (this.#initialized) {
-      return;
-    }
-    const player = this.#playerFactory({
-      parent: this.#context.overlayLayer,
-      projectId: `${this.#context.symbol}-${this.#context.resolvedState}`,
-      bundleId: "symbol-manifest",
-      profileId: "symbol-vni",
-      profilePurpose: "symbol-animation",
-      assetScale: 1,
-      project: this.#resource.project,
-      assetUrls: this.#resource.assetUrls,
-      autoTick: false,
-      fitPadding: 0,
-    });
-    this.#player = player;
-    await player.init();
-    if (this.#destroyed) {
-      return;
-    }
-    alignVniRootToProjectStage(
-      player.getDisplayObject(),
-      this.#resource.project,
-    );
-    this.#disposePlaybackComplete = player.onPlaybackComplete(() => {
-      this.#completed = true;
-    });
-    this.#initialized = true;
-  }
-
-  private disposePlayer(): void {
+  private detachCacheEntry(): void {
     this.#disposePlaybackComplete?.();
     this.#disposePlaybackComplete = null;
-    this.#player?.pause?.();
-    this.#player?.destroy();
-    this.#player = null;
+    this.#cacheEntry?.player.pause?.();
+    this.#cacheEntry?.player
+      .getDisplayObject()
+      .parent?.removeChild(this.#cacheEntry.player.getDisplayObject());
+    this.#cacheEntry = null;
     this.#initialized = false;
   }
 
@@ -209,6 +250,104 @@ export class VniSymbolAni implements SymbolAni {
       );
     }
   }
+}
+
+export function destroyVniSymbolAnimationCache(root: Container): void {
+  const rootCache = cachedVniSymbolPlayers.get(root);
+  if (!rootCache) {
+    return;
+  }
+  cachedVniSymbolPlayers.delete(root);
+  for (const entry of rootCache.values()) {
+    entry.player
+      .getDisplayObject()
+      .parent?.removeChild(entry.player.getDisplayObject());
+    entry.player.destroy();
+  }
+  rootCache.clear();
+}
+
+function getOrCreateCachedVniSymbolPlayer(options: {
+  readonly context: SymbolAnimationContext;
+  readonly resource: SymbolVniAnimationResource;
+  readonly playerFactory: VniSymbolAniPlayerFactory;
+}): CachedVniSymbolPlayer {
+  const key = createVniSymbolPlayerCacheKey(options.resource);
+  let rootCache = cachedVniSymbolPlayers.get(options.context.root);
+  if (!rootCache) {
+    rootCache = new Map();
+    cachedVniSymbolPlayers.set(options.context.root, rootCache);
+  }
+  const existing = rootCache.get(key);
+  if (existing) {
+    return existing;
+  }
+
+  const player = options.playerFactory({
+    parent: options.context.overlayLayer,
+    projectId: `${options.context.symbol}-${options.context.resolvedState}`,
+    bundleId: "symbol-manifest",
+    profileId: "symbol-vni",
+    profilePurpose: "symbol-animation",
+    assetScale: 1,
+    project: options.resource.project,
+    assetUrls: options.resource.assetUrls,
+    autoTick: false,
+    fitPadding: 0,
+  });
+  const entry: CachedVniSymbolPlayer = {
+    key,
+    player,
+    initPromise: Promise.resolve(),
+    initialized: false,
+  };
+  entry.initPromise = Promise.resolve(player.init()).then(() => {
+    entry.initialized = true;
+  });
+  rootCache.set(key, entry);
+  return entry;
+}
+
+function dropCachedVniSymbolPlayer(
+  root: Container,
+  entry: CachedVniSymbolPlayer,
+): void {
+  const rootCache = cachedVniSymbolPlayers.get(root);
+  if (rootCache?.get(entry.key) === entry) {
+    rootCache.delete(entry.key);
+  }
+  entry.player
+    .getDisplayObject()
+    .parent?.removeChild(entry.player.getDisplayObject());
+  entry.player.destroy();
+}
+
+function createVniSymbolPlayerCacheKey(
+  resource: SymbolVniAnimationResource,
+): string {
+  return [
+    resource.symbol,
+    resource.state,
+    resource.spec.project,
+    resource.spec.playback.startTime,
+    resource.spec.playback.endTime,
+    resource.spec.playback.loop,
+    resource.project.name,
+    resource.project.stage.width,
+    resource.project.stage.height,
+    resource.project.stage.duration,
+    stableAssetUrlKey(resource.assetUrls),
+  ].join("\u0000");
+}
+
+function stableAssetUrlKey(assetUrls: SymbolVniAnimationResource["assetUrls"]) {
+  return JSON.stringify(
+    Object.fromEntries(
+      Object.entries(assetUrls).sort(([left], [right]) =>
+        left.localeCompare(right),
+      ),
+    ),
+  );
 }
 
 export function createSymbolManifestAnimationResolver(

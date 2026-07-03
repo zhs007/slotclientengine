@@ -4,6 +4,7 @@ import {
   createWinSymbolAni,
   type SymbolAssetMap,
 } from "@slotclientengine/rendercore";
+import { RenderReelSet } from "@slotclientengine/rendercore/reel";
 import {
   GAME003_DEFAULT_SCENE,
   GAME003_SPIN_SCENE,
@@ -12,6 +13,7 @@ import {
 import { GAME003_STATIC_CONFIG } from "../src/generated/game-static.generated.js";
 import {
   DEFAULT_GAME003_REEL_CONFIG,
+  GAME003_RENDER_SYMBOL_POOL_CONFIG,
   assertGame003ReelVisualMatchesTarget,
   createGame003ReelRuntime,
 } from "../src/game-demo.js";
@@ -35,6 +37,16 @@ describe("game003 reel runtime", () => {
     expect(runtime.layout.visibleRows).toBe(GAME003_VISIBLE_ROWS);
     expect(runtime.layout.reelCount).toBe(GAME003_REEL_COUNT);
     expect(runtime.layout.columnGap).toBe(15);
+    expect(GAME003_RENDER_SYMBOL_POOL_CONFIG).toEqual({
+      enabled: true,
+      targetIdlePerCode: 5,
+      maxIdlePerCode: 10,
+      maxIdleTotal: 80,
+    });
+    expect(runtime.mainReelsLayer).toBeInstanceOf(RenderReelSet);
+    expect(
+      (runtime.mainReelsLayer as RenderReelSet).getSymbolPoolStats(),
+    ).not.toBeNull();
   });
 
   it("keeps reels hidden until a live scene is applied", () => {

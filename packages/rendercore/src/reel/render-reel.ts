@@ -37,6 +37,7 @@ export class RenderReel extends Container {
   readonly layout: ReelLayout;
   readonly #reels: LogicReels;
   readonly #registry: ReelSymbolRegistry;
+  readonly #symbolPool: RenderReelOptions["symbolPool"];
   readonly #slots: readonly ReelSlot[];
   readonly #clipMask: Graphics;
   #phase: RenderReelPhase = "idle";
@@ -55,6 +56,7 @@ export class RenderReel extends Container {
     this.xIndex = options.x;
     this.layout = options.layout;
     this.#registry = options.registry;
+    this.#symbolPool = options.symbolPool;
     this.#clipMask = new Graphics()
       .rect(
         0,
@@ -367,16 +369,37 @@ export class RenderReel extends Container {
       return;
     }
 
-    slot.symbol?.destroy({ children: true });
+    if (slot.symbol && slot.code !== null && slot.kind !== "empty") {
+      if (this.#symbolPool) {
+        this.#symbolPool.release(slot.code, slot.symbol);
+      } else {
+        slot.symbol.destroy({ children: true });
+      }
+    } else {
+      slot.symbol?.destroy({ children: true });
+    }
     slot.container.removeChildren();
     slot.code = code;
     const entry = this.#registry.getEntryByCode(code);
     slot.kind = entry.kind;
-    slot.symbol = this.#registry.createRenderSymbolByCode(code);
+    slot.symbol =
+      entry.kind === "empty" ? null : this.acquireTexturedSymbol(code);
     if (slot.symbol) {
       slot.container.addChild(slot.symbol);
       slot.symbol.init();
     }
+  }
+
+  private acquireTexturedSymbol(code: number): RenderSymbol {
+    const symbol = this.#symbolPool
+      ? this.#symbolPool.acquire(code, () =>
+          this.#registry.createRenderSymbolByCode(code),
+        )
+      : this.#registry.createRenderSymbolByCode(code);
+    if (!symbol) {
+      throw new ReelError(`Textured symbol code ${code} created no symbol.`);
+    }
+    return symbol;
   }
 
   private updateVisibleSymbols(deltaSeconds: number): void {

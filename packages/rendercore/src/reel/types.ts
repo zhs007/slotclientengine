@@ -195,6 +195,7 @@ export interface RenderReelOptions {
   readonly x: number;
   readonly layout: ReelLayout;
   readonly registry: ReelSymbolRegistry;
+  readonly symbolPool?: RenderSymbolPool;
 }
 
 export interface RenderReelSpinOptions {
@@ -242,6 +243,28 @@ export interface RenderReelSetOptions {
   readonly reels: LogicReels;
   readonly layout: ReelLayout;
   readonly registry: ReelSymbolRegistry;
+  readonly symbolPool?: RenderSymbolPoolOptions;
+}
+
+export interface RenderSymbolPoolOptions {
+  readonly enabled?: boolean;
+  readonly targetIdlePerCode?: number;
+  readonly maxIdlePerCode?: number;
+  readonly maxIdleTotal?: number;
+}
+
+export interface RenderSymbolPoolStats {
+  readonly totalIdle: number;
+  readonly idlePerCode: Readonly<Record<number, number>>;
+}
+
+export interface RenderSymbolPool {
+  acquire(code: number, create: () => RenderSymbol | null): RenderSymbol | null;
+  release(code: number, symbol: RenderSymbol): void;
+  trimCode(code: number): void;
+  trimTotal(): void;
+  destroy(): void;
+  getStats(): RenderSymbolPoolStats;
 }
 
 export interface RenderReelSetSpinOptions {

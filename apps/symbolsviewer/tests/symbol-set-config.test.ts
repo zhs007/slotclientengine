@@ -174,10 +174,20 @@ describe("symbolsviewer symbol set config", () => {
     });
   });
 
-  it("keeps L1-L5 appear static, maps H2-H5 appear to builtin, and maps configured Spine states through rendercore", () => {
+  it("keeps non-Spine appear static and maps configured Spine states through rendercore", () => {
     const config = getSymbolSetConfig("game003-s1");
 
-    for (const symbol of ["L1", "L2", "L3", "L4", "L5"]) {
+    for (const symbol of [
+      "H2",
+      "H3",
+      "H4",
+      "H5",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "L5",
+    ]) {
       const context = createSymbolContext(symbol, "appear");
       const ani = config.animationResolver(context);
 
@@ -191,13 +201,6 @@ describe("symbolsviewer symbol set config", () => {
       expect(context.baseLayer.visible).toBe(true);
       expect(context.stateSprite.visible).toBe(false);
     }
-
-    const builtinContext = createSymbolContext("H2", "appear");
-    const builtinAni = config.animationResolver(builtinContext);
-    builtinAni.reset();
-    builtinAni.update(0.2);
-
-    expect(builtinContext.sprite.scale.x).toBeGreaterThan(1);
 
     for (const symbol of ["WL", "H1"]) {
       const context = createSymbolContext(symbol, "appear");
