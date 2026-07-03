@@ -57,11 +57,10 @@ export function createGame003WinSymbolSequence(
           group.result.coinWin,
           `bg-wins result[${group.resultIndex}].coinWin`,
         ) ?? 0,
-      cashWin:
-        getOptionalFiniteNumber(
-          group.result.cashWin,
-          `bg-wins result[${group.resultIndex}].cashWin`,
-        ) ?? 0,
+      cashWin: getRequiredPositiveFiniteNumber(
+        group.result.cashWin,
+        `bg-wins result[${group.resultIndex}].cashWin`,
+      ),
     }),
   );
 
@@ -135,6 +134,20 @@ function getOptionalFiniteNumber(
     throw new Error(`${label} must be a finite number.`);
   }
   return value;
+}
+
+function getRequiredPositiveFiniteNumber(
+  value: unknown,
+  label: string,
+): number {
+  if (value === undefined) {
+    throw new Error(`${label} is required.`);
+  }
+  const number = getOptionalFiniteNumber(value, label)!;
+  if (number <= 0) {
+    throw new Error(`${label} must be a finite positive number.`);
+  }
+  return number;
 }
 
 function getOptionalNonNegativeInteger(

@@ -291,6 +291,16 @@ export const GAME003_STATIC_CONFIG = Object.freeze({
         }),
       }),
       appExtensions: Object.freeze({
+        game003WinSymbolLoop: {
+          cyclePauseSeconds: 1,
+          resultAmount: {
+            yOffsetRatioFromCellCenter: 0.22,
+            fontSize: 38,
+            fill: "#fff7d6",
+            stroke: "#5a2500",
+            strokeWidth: 5,
+          },
+        },
         game003MinecartInteraction: {
           loadingResourceId: "game003-minecart",
           imageSize: { width: 369, height: 252 },
@@ -306,7 +316,7 @@ export const GAME003_STATIC_CONFIG = Object.freeze({
             brakeTiltDegrees: 14,
             reboundTiltDegrees: -8,
           },
-          payload: { symbolScale: 0.72, fadeStartAlpha: 1, fadeEndAlpha: 0 },
+          payload: { symbolScale: 1, fadeStartAlpha: 1, fadeEndAlpha: 0 },
           layout: {
             landscape: {
               entrySide: "left",

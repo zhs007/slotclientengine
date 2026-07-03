@@ -25,7 +25,7 @@ describe("game003 minecart interaction config", () => {
         reboundTiltDegrees: -8,
       },
       payload: {
-        symbolScale: 0.72,
+        symbolScale: 1,
         fadeStartAlpha: 1,
         fadeEndAlpha: 0,
       },
@@ -86,6 +86,17 @@ describe("game003 minecart interaction config", () => {
         },
       }),
     ).toThrow(/exceeds/);
+    expect(() =>
+      getGame003MinecartInteractionConfig({
+        game003MinecartInteraction: {
+          ...valid.game003MinecartInteraction,
+          payload: {
+            ...valid.game003MinecartInteraction.payload,
+            symbolScale: 0,
+          },
+        },
+      }),
+    ).toThrow(/symbolScale.*positive/);
     expect(() =>
       getGame003MinecartInteractionConfig({
         game003MinecartInteraction: {

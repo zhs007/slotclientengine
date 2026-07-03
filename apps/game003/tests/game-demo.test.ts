@@ -135,6 +135,41 @@ describe("game003 reel runtime", () => {
       { x: 1, y: 2, requestedState: "win" },
       { x: 2, y: 0, requestedState: "win" },
     ]);
+    expect(
+      runtime.getVisibleSymbolGeometrySnapshots(positions).map((snapshot) => ({
+        x: snapshot.x,
+        y: snapshot.y,
+        centerX: snapshot.centerX,
+        centerY: snapshot.centerY,
+        cellWidth: snapshot.cellWidth,
+        cellHeight: snapshot.cellHeight,
+      })),
+    ).toEqual([
+      {
+        x: 0,
+        y: 4,
+        centerX: 82.5,
+        centerY: 585,
+        cellWidth: 165,
+        cellHeight: 130,
+      },
+      {
+        x: 1,
+        y: 2,
+        centerX: 262.5,
+        centerY: 325,
+        cellWidth: 165,
+        cellHeight: 130,
+      },
+      {
+        x: 2,
+        y: 0,
+        centerX: 442.5,
+        centerY: 65,
+        cellWidth: 165,
+        cellHeight: 130,
+      },
+    ]);
     expect(runtime.getVisualSnapshot().requestedStates[0][4]).toBe("win");
 
     runtime.update(0);

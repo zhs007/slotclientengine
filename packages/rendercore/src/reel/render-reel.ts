@@ -15,6 +15,7 @@ import type {
   RenderReelPhase,
   RenderReelSpinOptions,
   RenderReelSlotSnapshot,
+  RenderVisibleSymbolGeometrySnapshot,
   RenderVisibleSymbolStateSnapshot,
   ReelWindowSnapshot,
   RenderReelSnapshot,
@@ -220,6 +221,24 @@ export class RenderReel extends Container {
       requestedState: snapshot.requestedState,
       resolvedState: snapshot.resolvedState,
       isOnce: snapshot.isOnce,
+    });
+  }
+
+  getVisibleSymbolGeometrySnapshot(
+    windowY: number,
+  ): RenderVisibleSymbolGeometrySnapshot {
+    const slot = this.getVisibleSlot(windowY);
+    const snapshot = this.createSlotSnapshot(slot);
+    return Object.freeze({
+      x: this.xIndex,
+      y: windowY,
+      code: snapshot.code,
+      kind: snapshot.kind,
+      centerX: this.x + this.layout.cellWidth / 2,
+      centerY:
+        this.y + this.layout.getCellY(windowY) + this.layout.cellHeight / 2,
+      cellWidth: this.layout.cellWidth,
+      cellHeight: this.layout.cellHeight,
     });
   }
 

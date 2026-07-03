@@ -82,7 +82,7 @@ describe("game003 win symbol sequence", () => {
     ).toThrow(/coinWin/);
   });
 
-  it("keeps optional result fields optional but validates them when present", () => {
+  it("keeps optional symbol and coinWin fields optional but validates them when present", () => {
     const noSymbol = clone(GAME003_SAMPLE_WIN_SPIN_RESULT);
     delete getClientResults(noSymbol)[0].symbol;
     expect(
@@ -109,6 +109,26 @@ describe("game003 win symbol sequence", () => {
         GAME003_WIN_SPIN_SCENE,
       ),
     ).toThrow(/coinWin/);
+  });
+
+  it("requires each displayed result to carry a positive cashWin", () => {
+    const missingCashWin = clone(GAME003_SAMPLE_WIN_SPIN_RESULT);
+    delete getClientResults(missingCashWin)[0].cashWin;
+    expect(() =>
+      createGame003WinSymbolSequence(
+        createLogic(missingCashWin),
+        GAME003_WIN_SPIN_SCENE,
+      ),
+    ).toThrow(/cashWin.*required/);
+
+    const zeroCashWin = clone(GAME003_SAMPLE_WIN_SPIN_RESULT);
+    getClientResults(zeroCashWin)[0].cashWin = 0;
+    expect(() =>
+      createGame003WinSymbolSequence(
+        createLogic(zeroCashWin),
+        GAME003_WIN_SPIN_SCENE,
+      ),
+    ).toThrow(/cashWin.*positive/);
   });
 
   it("fails when triggered bg-wins omits basicComponentData", () => {
