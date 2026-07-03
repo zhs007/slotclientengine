@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   SymbolAssetError,
   createSymbolAssetMapFromManifestModules,
   createSymbolScaleMapFromManifest,
+  createSymbolSpineAnimationResourcesFromManifest,
   createSymbolVniAnimationResourcesFromManifest,
   getSymbolDisplaySymbolsFromManifest,
   parseSymbolStateTextureManifest,
@@ -52,6 +54,41 @@ function createManifest() {
           appear: {
             kind: "static",
             durationSeconds: 1 / 60,
+          },
+        },
+      },
+      H1: {
+        normal: "./H1.png",
+        spinBlur: "./H1.spinBlur.png",
+        disabled: "./H1.disabled.png",
+        scale: 1,
+        animations: {
+          normal: {
+            kind: "spine",
+            skeleton: "./H1.json",
+            atlas: "./Symbol.atlas",
+            texture: "./Symbol.png",
+            playback: {
+              mode: "animation",
+              animationName: "Idle",
+              loop: true,
+            },
+            transform: {
+              x: 1,
+              y: -2,
+              scale: 0.5,
+            },
+          },
+          appear: {
+            kind: "spine",
+            skeleton: "./H1.json",
+            atlas: "./Symbol.atlas",
+            texture: "./Symbol.png",
+            playback: {
+              mode: "animation",
+              animationName: "Start",
+              loop: false,
+            },
           },
         },
       },
@@ -126,14 +163,14 @@ describe("symbol state texture manifest helpers", () => {
 
     expect(
       getSymbolDisplaySymbolsFromManifest(manifest, { requiredStates }),
-    ).toEqual(["L1", "SC"]);
+    ).toEqual(["L1", "SC", "H1"]);
     expect(
       createSymbolScaleMapFromManifest({
         manifest,
         requiredStates,
         requireExplicitScale: true,
       }),
-    ).toEqual({ L1: 1, SC: 0.8 });
+    ).toEqual({ L1: 1, SC: 0.8, H1: 1 });
     expect(
       createSymbolAssetMapFromManifestModules({
         manifest,
@@ -146,6 +183,9 @@ describe("symbol state texture manifest helpers", () => {
           "../../../assets/game003-s1/SC-1.png": "/SC-1.png",
           "../../../assets/game003-s1/SC.spinBlur.png": "/SC.spinBlur.png",
           "../../../assets/game003-s1/SC.disabled.png": "/SC.disabled.png",
+          "../../../assets/game003-s1/H1.png": "/H1.png",
+          "../../../assets/game003-s1/H1.spinBlur.png": "/H1.spinBlur.png",
+          "../../../assets/game003-s1/H1.disabled.png": "/H1.disabled.png",
         },
       }),
     ).toMatchObject({
@@ -164,6 +204,9 @@ describe("symbol state texture manifest helpers", () => {
             { index: 1, texture: "/SC-1.png" },
           ],
         },
+      },
+      H1: {
+        normal: "/H1.png",
       },
     });
   });
@@ -258,6 +301,84 @@ describe("symbol state texture manifest helpers", () => {
     expect(resources.L1?.win?.spec.playback.endTime).toBe(2);
   });
 
+  it("builds Spine animation resources from manifest modules and validates exact animation names", () => {
+    const skeleton = readJsonAsset("H1.json");
+    const atlas = readTextAsset("Symbol.atlas");
+    const resources = createSymbolSpineAnimationResourcesFromManifest({
+      manifest: createManifest(),
+      requiredStates,
+      spineSkeletonModules: {
+        "../../../assets/game003-s1/H1.json": skeleton,
+      },
+      spineAtlasModules: {
+        "../../../assets/game003-s1/Symbol.atlas": atlas,
+      },
+      spineTextureModules: {
+        "../../../assets/game003-s1/Symbol.png": "/assets/Symbol.png",
+      },
+    });
+
+    expect(resources.H1?.normal).toMatchObject({
+      symbol: "H1",
+      state: "normal",
+      skeleton,
+      atlasText: atlas,
+      textureUrl: "/assets/Symbol.png",
+      atlasPage: "Symbol.png",
+      spec: {
+        kind: "spine",
+        playback: { animationName: "Idle", loop: true },
+        transform: { x: 1, y: -2, scale: 0.5 },
+      },
+    });
+    expect(resources.H1?.appear?.spec.playback).toEqual({
+      mode: "animation",
+      animationName: "Start",
+      loop: false,
+    });
+  });
+
+  it("validates the current game003 Spine resource set without copied fixtures", () => {
+    const manifest = readJsonAsset("symbol-state-textures.manifest.json");
+    const spineSkeletonModules = Object.fromEntries(
+      ["WL", "H1", "H2", "H3", "H4", "H5"].map((symbol) => [
+        `../../../assets/game003-s1/${symbol}.json`,
+        readJsonAsset(`${symbol}.json`),
+      ]),
+    );
+    const resources = createSymbolSpineAnimationResourcesFromManifest({
+      manifest,
+      requiredStates,
+      spineSkeletonModules,
+      spineAtlasModules: {
+        "../../../assets/game003-s1/Symbol.atlas":
+          readTextAsset("Symbol.atlas"),
+      },
+      spineTextureModules: {
+        "../../../assets/game003-s1/Symbol.png": "/assets/Symbol.png",
+      },
+    });
+
+    expect(Object.keys(resources).sort()).toEqual([
+      "H1",
+      "H2",
+      "H3",
+      "H4",
+      "H5",
+      "WL",
+    ]);
+    expect(resources.WL?.appear?.spec.playback.animationName).toBe("start");
+    expect(resources.H1?.appear?.spec.playback.animationName).toBe("Start");
+    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5"]) {
+      expect(resources[symbol]?.normal?.spec.playback).toEqual({
+        mode: "animation",
+        animationName: "Idle",
+        loop: true,
+      });
+      expect(resources[symbol]?.normal?.atlasPage).toBe("Symbol.png");
+    }
+  });
+
   it("fails fast for invalid schema and missing VNI resources", () => {
     const manifest = createManifest();
 
@@ -348,4 +469,126 @@ describe("symbol state texture manifest helpers", () => {
       }),
     ).toThrow(/missing from manifest/);
   });
+
+  it("fails fast for malformed Spine specs and missing Spine modules", () => {
+    const manifest = createManifest();
+    const skeleton = readJsonAsset("H1.json");
+    const atlas = readTextAsset("Symbol.atlas");
+
+    expect(() =>
+      createSymbolSpineAnimationResourcesFromManifest({
+        manifest,
+        requiredStates,
+        spineSkeletonModules: {},
+        spineAtlasModules: {
+          "../../../assets/game003-s1/Symbol.atlas": atlas,
+        },
+        spineTextureModules: {
+          "../../../assets/game003-s1/Symbol.png": "/assets/Symbol.png",
+        },
+      }),
+    ).toThrow(/Spine skeleton is missing/);
+    expect(() =>
+      createSymbolSpineAnimationResourcesFromManifest({
+        manifest: {
+          ...manifest,
+          symbols: {
+            H1: {
+              ...manifest.symbols.H1,
+              animations: {
+                normal: {
+                  ...manifest.symbols.H1.animations.normal,
+                  playback: {
+                    ...manifest.symbols.H1.animations.normal.playback,
+                    animationName: "idle",
+                  },
+                },
+              },
+            },
+          },
+        },
+        requiredStates,
+        spineSkeletonModules: {
+          "../../../assets/game003-s1/H1.json": skeleton,
+        },
+        spineAtlasModules: {
+          "../../../assets/game003-s1/Symbol.atlas": atlas,
+        },
+        spineTextureModules: {
+          "../../../assets/game003-s1/Symbol.png": "/assets/Symbol.png",
+        },
+      }),
+    ).toThrow(/missing animation "idle"/);
+    expect(() =>
+      parseSymbolStateTextureManifest(
+        {
+          ...manifest,
+          symbols: {
+            H1: {
+              ...manifest.symbols.H1,
+              animations: {
+                appear: {
+                  ...manifest.symbols.H1.animations.appear,
+                  playback: {
+                    ...manifest.symbols.H1.animations.appear.playback,
+                    loop: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        { requiredStates },
+      ),
+    ).toThrow(/loop must be false/);
+    expect(() =>
+      parseSymbolStateTextureManifest(
+        {
+          ...manifest,
+          symbols: {
+            H1: {
+              ...manifest.symbols.H1,
+              animations: {
+                normal: {
+                  ...manifest.symbols.H1.animations.normal,
+                  skeleton: "../H1.json",
+                },
+              },
+            },
+          },
+        },
+        { requiredStates },
+      ),
+    ).toThrow(/must be a local/);
+    expect(() =>
+      parseSymbolStateTextureManifest(
+        {
+          ...manifest,
+          symbols: {
+            H1: {
+              ...manifest.symbols.H1,
+              animations: {
+                normal: {
+                  ...manifest.symbols.H1.animations.normal,
+                  transform: { scale: 0 },
+                },
+              },
+            },
+          },
+        },
+        { requiredStates },
+      ),
+    ).toThrow(/transform.scale/);
+  });
 });
+
+function readTextAsset(fileName: string): string {
+  return readFileSync(
+    new URL(`../../../../assets/game003-s1/${fileName}`, import.meta.url),
+    "utf8",
+  );
+}
+
+function readJsonAsset(fileName: string): unknown {
+  return JSON.parse(readTextAsset(fileName)) as unknown;
+}

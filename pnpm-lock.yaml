@@ -633,6 +633,9 @@ importers:
 
   packages/rendercore:
     dependencies:
+      '@esotericsoftware/spine-pixi-v8':
+        specifier: ^4.3.9
+        version: 4.3.9(pixi.js@8.17.1)
       '@slotclientengine/logiccore':
         specifier: workspace:*
         version: link:../logiccore
@@ -952,6 +955,17 @@ packages:
   '@eslint/plugin-kit@0.6.1':
     resolution: {integrity: sha512-iH1B076HoAshH1mLpHMgwdGeTs0CYwL0SPMkGuSebZrwBp16v415e9NZXg2jtrqPVQjf6IANe2Vtlr5KswtcZQ==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
+
+  '@esotericsoftware/spine-canvas@4.3.9':
+    resolution: {integrity: sha512-7ameOj68Qf3Rz19tNXSNzTeEBX5ta8toqDS/J90X/gvWvpRKUGkFS6PWlXXNGmL2jQwMf+2LKvy4a0r8sScLYw==}
+
+  '@esotericsoftware/spine-core@4.3.9':
+    resolution: {integrity: sha512-6Vb3DVM8ci2JoDdfpk191IkAMSvVm3YugfA6k27OcvO7f7DmZLrRKHQIICw+XbUVkGa/41VWG2dKZebpdmnvsg==}
+
+  '@esotericsoftware/spine-pixi-v8@4.3.9':
+    resolution: {integrity: sha512-5CF+qcsBeKw7LSANH3qalNM8WJjn+rKxyCb3n84xMDvJY2LHcOip6+WVmF4VnrE5nUDJOW6cfQv0qihxsIwbfQ==}
+    peerDependencies:
+      pixi.js: ^8.16.0
 
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
@@ -2397,6 +2411,17 @@ snapshots:
     dependencies:
       '@eslint/core': 1.1.1
       levn: 0.4.1
+
+  '@esotericsoftware/spine-canvas@4.3.9':
+    dependencies:
+      '@esotericsoftware/spine-core': 4.3.9
+
+  '@esotericsoftware/spine-core@4.3.9': {}
+
+  '@esotericsoftware/spine-pixi-v8@4.3.9(pixi.js@8.17.1)':
+    dependencies:
+      '@esotericsoftware/spine-canvas': 4.3.9
+      pixi.js: 8.17.1
 
   '@humanfs/core@0.19.1': {}
 

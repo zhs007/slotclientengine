@@ -13,12 +13,18 @@ import {
 import { SymbolAnimationError } from "./errors.js";
 import {
   createSymbolVniAnimationResourcesFromManifest,
+  createSymbolSpineAnimationResourcesFromManifest,
   parseSymbolStateTextureManifest,
-  type CreateSymbolVniAnimationResourcesOptions,
+  type ParseSymbolStateTextureManifestOptions,
   type SymbolManifestAnimationSpec,
+  type SymbolSpineAnimationResourceMap,
   type SymbolVniAnimationResource,
   type SymbolVniAnimationResourceMap,
 } from "./manifest.js";
+import {
+  SpineSymbolAni,
+  type SpineSymbolAniPlayerFactory,
+} from "./spine-animation.js";
 import type {
   SymbolAni,
   SymbolAniUpdateResult,
@@ -54,9 +60,16 @@ export interface VniSymbolAniOptions {
   readonly playerFactory?: VniSymbolAniPlayerFactory;
 }
 
-export interface CreateSymbolManifestAnimationResolverOptions extends CreateSymbolVniAnimationResourcesOptions {
+export interface CreateSymbolManifestAnimationResolverOptions extends ParseSymbolStateTextureManifestOptions {
+  readonly manifest: unknown;
+  readonly vniProjectModules?: Readonly<Record<string, unknown>>;
+  readonly vniAssetModules?: Readonly<Record<string, string>>;
+  readonly spineSkeletonModules?: Readonly<Record<string, unknown>>;
+  readonly spineAtlasModules?: Readonly<Record<string, string>>;
+  readonly spineTextureModules?: Readonly<Record<string, string>>;
   readonly fallback?: SymbolAnimationResolver;
   readonly playerFactory?: VniSymbolAniPlayerFactory;
+  readonly spinePlayerFactory?: SpineSymbolAniPlayerFactory;
 }
 
 const EMPTY_UPDATE_RESULT: SymbolAniUpdateResult = Object.freeze({
@@ -200,23 +213,46 @@ export class VniSymbolAni implements SymbolAni {
 export function createSymbolManifestAnimationResolver(
   options: CreateSymbolManifestAnimationResolverOptions,
 ): SymbolAnimationResolver {
-  const resources = createSymbolVniAnimationResourcesFromManifest(options);
+  const resources = createSymbolVniAnimationResourcesFromManifest({
+    ...options,
+    vniProjectModules: options.vniProjectModules ?? {},
+    vniAssetModules: options.vniAssetModules ?? {},
+  });
+  const spineResources = createSymbolSpineAnimationResourcesFromManifest({
+    ...options,
+    spineSkeletonModules: options.spineSkeletonModules ?? {},
+    spineAtlasModules: options.spineAtlasModules ?? {},
+    spineTextureModules: options.spineTextureModules ?? {},
+  });
   const manifestAnimationSpecs = createManifestAnimationSpecMap(options);
   return createSymbolVniAnimationResolver({
     resources,
+    spineResources,
     manifestAnimationSpecs,
     fallback: options.fallback,
     playerFactory: options.playerFactory,
+    spinePlayerFactory: options.spinePlayerFactory,
   });
 }
 
 export function createSymbolVniAnimationResolver(options: {
   readonly resources: SymbolVniAnimationResourceMap;
+  readonly spineResources?: SymbolSpineAnimationResourceMap;
   readonly manifestAnimationSpecs?: SymbolManifestAnimationSpecMap;
   readonly fallback?: SymbolAnimationResolver;
   readonly playerFactory?: VniSymbolAniPlayerFactory;
+  readonly spinePlayerFactory?: SpineSymbolAniPlayerFactory;
 }): SymbolAnimationResolver {
   return (context) => {
+    const spineResource =
+      options.spineResources?.[context.symbol]?.[context.resolvedState];
+    if (spineResource) {
+      return new SpineSymbolAni({
+        context,
+        resource: spineResource,
+        playerFactory: options.spinePlayerFactory,
+      });
+    }
     const resource = options.resources[context.symbol]?.[context.resolvedState];
     if (resource) {
       return new VniSymbolAni({
@@ -287,6 +323,11 @@ function createManifestSymbolAni(
         resetBaseDisplay(context);
       },
     });
+  }
+  if (spec.kind === "spine") {
+    throw new SymbolAnimationError(
+      `No Spine resource was registered for "${context.symbol}" state "${context.resolvedState}".`,
+    );
   }
   throw new SymbolAnimationError(
     `No VNI resource was registered for "${context.symbol}" state "${context.resolvedState}".`,

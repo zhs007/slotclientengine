@@ -111,6 +111,19 @@ describe("game003 generated static config", () => {
         ),
       ),
     );
+    expect(Object.keys(staticSymbols.spineSkeletonModules ?? {})).toEqual(
+      expect.arrayContaining(
+        ["WL", "H1", "H2", "H3", "H4", "H5"].map((symbol) =>
+          expect.stringContaining(`${symbol}.json`),
+        ),
+      ),
+    );
+    expect(Object.keys(staticSymbols.spineAtlasModules ?? {})).toEqual([
+      "../../../../assets/game003-s1/Symbol.atlas",
+    ]);
+    expect(Object.keys(staticSymbols.spineTextureModules ?? {})).toEqual([
+      "../../../../assets/game003-s1/Symbol.png",
+    ]);
     const manifestSymbols = (
       staticSymbols.manifest as { symbols: Record<string, unknown> }
     ).symbols;
@@ -135,8 +148,46 @@ describe("game003 generated static config", () => {
     }
     expect(manifestSymbols.H1).toMatchObject({
       animations: {
-        appear: { kind: "builtin", durationSeconds: 0.42 },
+        normal: {
+          kind: "spine",
+          skeleton: "./H1.json",
+          atlas: "./Symbol.atlas",
+          texture: "./Symbol.png",
+          playback: {
+            mode: "animation",
+            animationName: "Idle",
+            loop: true,
+          },
+        },
+        appear: {
+          kind: "spine",
+          skeleton: "./H1.json",
+          atlas: "./Symbol.atlas",
+          texture: "./Symbol.png",
+          playback: {
+            mode: "animation",
+            animationName: "Start",
+            loop: false,
+          },
+        },
         win: { kind: "builtin", durationSeconds: 0.58 },
+      },
+    });
+    expect(manifestSymbols.WL).toMatchObject({
+      animations: {
+        appear: {
+          kind: "spine",
+          playback: { animationName: "start", loop: false },
+        },
+      },
+    });
+    expect(manifestSymbols.H2).toMatchObject({
+      animations: {
+        normal: {
+          kind: "spine",
+          playback: { animationName: "Idle", loop: true },
+        },
+        appear: { kind: "builtin", durationSeconds: 0.42 },
       },
     });
     expect(skin.symbolScales.H1).toBe(1);
@@ -250,6 +301,10 @@ describe("game003 generated static config", () => {
         "game003-symbol-vni-projects:L3-wins.json",
         "game003-symbol-vni-projects:L4-wins.json",
         "game003-symbol-vni-projects:L5-wins.json",
+        "game003-symbol-spine-skeletons:H1.json",
+        "game003-symbol-spine-skeletons:H5.json",
+        "game003-symbol-spine-atlas",
+        "game003-symbol-spine-texture",
         "game003-bg-bar-symbol-pngs:up.png",
         "game003-bg-bar-symbol-pngs:wild.png",
         "game003-bg-bar-symbol-manifest",

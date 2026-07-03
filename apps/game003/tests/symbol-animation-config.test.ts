@@ -2,7 +2,10 @@ import { Container, Sprite, Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import { GAME003_SYMBOL_SCALES } from "../src/symbol-animation-config.js";
 import { getGame003SkinConfig } from "../src/skin-config.js";
-import type { SymbolAnimationContext } from "@slotclientengine/rendercore";
+import {
+  SpineSymbolAni,
+  type SymbolAnimationContext,
+} from "@slotclientengine/rendercore";
 
 describe("game003 symbol animation config", () => {
   it("derives all symbol scales from the manifest", () => {
@@ -13,11 +16,11 @@ describe("game003 symbol animation config", () => {
     );
   });
 
-  it("keeps L1-L5 appear static while other symbols use manifest builtin appear", () => {
+  it("keeps L1-L5 appear static, maps H2-H5 appear to builtin, and maps configured Spine states through rendercore", () => {
     const skin = getGame003SkinConfig("1");
 
     for (const symbol of ["L1", "L2", "L3", "L4", "L5"]) {
-      const context = createAppearContext(symbol);
+      const context = createSymbolContext(symbol, "appear");
       const ani = skin.symbolAnimationResolver(context);
 
       ani.reset();
@@ -31,16 +34,35 @@ describe("game003 symbol animation config", () => {
       expect(context.stateSprite.visible).toBe(false);
     }
 
-    const builtinContext = createAppearContext("H1");
+    const builtinContext = createSymbolContext("H2", "appear");
     const builtinAni = skin.symbolAnimationResolver(builtinContext);
     builtinAni.reset();
     builtinAni.update(0.2);
 
     expect(builtinContext.sprite.scale.x).toBeGreaterThan(1);
+
+    for (const symbol of ["WL", "H1"]) {
+      const context = createSymbolContext(symbol, "appear");
+      const ani = skin.symbolAnimationResolver(context);
+
+      expect(ani).toBeInstanceOf(SpineSymbolAni);
+      expect(ani.playback).toBe("once");
+    }
+
+    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5"]) {
+      const context = createSymbolContext(symbol, "normal");
+      const ani = skin.symbolAnimationResolver(context);
+
+      expect(ani).toBeInstanceOf(SpineSymbolAni);
+      expect(ani.playback).toBe("static");
+    }
   });
 });
 
-function createAppearContext(symbol: string): SymbolAnimationContext {
+function createSymbolContext(
+  symbol: string,
+  stateId: "normal" | "appear",
+): SymbolAnimationContext {
   const root = new Container();
   const sprite = new Sprite(Texture.WHITE);
   const underlayLayer = new Container();
@@ -53,12 +75,12 @@ function createAppearContext(symbol: string): SymbolAnimationContext {
     code: 1,
     symbol,
     pays: [0],
-    requestedState: "appear",
-    resolvedState: "appear",
+    requestedState: stateId,
+    resolvedState: stateId,
     state: {
-      id: "appear",
-      phase: "once",
-      playback: "once",
+      id: stateId,
+      phase: stateId === "normal" ? "stable" : "once",
+      playback: stateId === "normal" ? "static" : "once",
     },
     texture: Texture.WHITE,
     stateTextures: {},

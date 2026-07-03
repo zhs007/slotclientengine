@@ -61,6 +61,9 @@ export interface SlotGameStaticSymbolsConfig {
   readonly pngModules: Readonly<Record<string, string>>;
   readonly vniProjectModules?: Readonly<Record<string, unknown>>;
   readonly vniAssetModules?: Readonly<Record<string, string>>;
+  readonly spineSkeletonModules?: Readonly<Record<string, unknown>>;
+  readonly spineAtlasModules?: Readonly<Record<string, string>>;
+  readonly spineTextureModules?: Readonly<Record<string, string>>;
   readonly emptySymbols: readonly string[];
   readonly requireExplicitScale: boolean;
   readonly requiredStates: readonly string[];

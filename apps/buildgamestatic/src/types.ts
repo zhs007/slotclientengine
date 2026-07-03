@@ -110,6 +110,9 @@ export interface GameStaticYamlSymbolsConfig {
   readonly pngGlob: string;
   readonly vniProjectGlob?: string;
   readonly vniAssetGlob?: string;
+  readonly spineSkeletonGlob?: string;
+  readonly spineAtlasGlob?: string;
+  readonly spineTextureGlob?: string;
   readonly emptySymbols: readonly string[];
   readonly requireExplicitScale: boolean;
   readonly requiredStates: readonly string[];

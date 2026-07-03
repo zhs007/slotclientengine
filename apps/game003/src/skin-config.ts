@@ -33,6 +33,9 @@ export interface Game003SkinConfig {
   readonly symbolModules: Record<string, string>;
   readonly vniProjectModules?: Record<string, unknown>;
   readonly vniAssetModules?: Record<string, string>;
+  readonly spineSkeletonModules?: Record<string, unknown>;
+  readonly spineAtlasModules?: Record<string, string>;
+  readonly spineTextureModules?: Record<string, string>;
   readonly stateTextureManifest: unknown;
   readonly displaySymbols: readonly string[];
   readonly emptySymbols: readonly string[];
@@ -88,6 +91,9 @@ const GAME003_SKIN_CONFIGS: Readonly<Record<Game003SkinId, Game003SkinConfig>> =
       symbolModules: game003StaticSkin1.symbols.pngModules,
       vniProjectModules: game003StaticSkin1.symbols.vniProjectModules,
       vniAssetModules: game003StaticSkin1.symbols.vniAssetModules,
+      spineSkeletonModules: game003StaticSkin1.symbols.spineSkeletonModules,
+      spineAtlasModules: game003StaticSkin1.symbols.spineAtlasModules,
+      spineTextureModules: game003StaticSkin1.symbols.spineTextureModules,
       stateTextureManifest: game003StaticSkin1.symbols.manifest,
       displaySymbols: game003Skin1DisplaySymbols,
       emptySymbols: game003StaticSkin1.symbols.emptySymbols,
@@ -102,6 +108,11 @@ const GAME003_SKIN_CONFIGS: Readonly<Record<Game003SkinId, Game003SkinConfig>> =
         requiredStates: game003StaticSkin1.symbols.requiredStates,
         vniProjectModules: game003StaticSkin1.symbols.vniProjectModules ?? {},
         vniAssetModules: game003StaticSkin1.symbols.vniAssetModules ?? {},
+        spineSkeletonModules:
+          game003StaticSkin1.symbols.spineSkeletonModules ?? {},
+        spineAtlasModules: game003StaticSkin1.symbols.spineAtlasModules ?? {},
+        spineTextureModules:
+          game003StaticSkin1.symbols.spineTextureModules ?? {},
         fallback: game003DefaultAnimationResolver,
       }),
       bgBar: Object.freeze({
@@ -125,6 +136,9 @@ const GAME003_SKIN_CONFIGS: Readonly<Record<Game003SkinId, Game003SkinConfig>> =
           requiredStates: game003StaticSkin1BgBar.symbols.requiredStates,
           vniProjectModules: {},
           vniAssetModules: {},
+          spineSkeletonModules: {},
+          spineAtlasModules: {},
+          spineTextureModules: {},
           fallback: game003DefaultAnimationResolver,
         }),
         layout: game003StaticSkin1BgBar.layout,

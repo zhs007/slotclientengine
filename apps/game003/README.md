@@ -20,6 +20,8 @@
 - `bg-bar` symbol 资源：`assets/game003-s1/wild.png`、`assets/game003-s1/up.png`；`normal` 是 manifest 声明的透明 symbol，不使用透明 PNG。
 - `L1`-`L5` 中奖 VNI project：`assets/game003-s1/L1-wins.json` 到 `assets/game003-s1/L5-wins.json`
 - `L1`-`L5` 中奖 VNI assets：`assets/game003-s1/assets/*.{png,jpg,jpeg,webp}`
+- Spine skeleton：`assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json`
+- Spine atlas / texture：`assets/game003-s1/Symbol.atlas`、`assets/game003-s1/Symbol.png`
 - big/super/mega 金额动画 VNI project：`assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json`
 - big/super/mega 金额动画 VNI assets：`assets/game003-s1/win-amount/assets/*.{png,jpg,jpeg,webp}`
 
@@ -37,7 +39,7 @@ CI=true pnpm --filter gengameconfig dev -- --paytable assets/gamecfg003/paytable
 CI=true pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --input-dir assets/game003-s1 --output-dir assets/game003-s1 --symbols WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC --scale 1
 ```
 
-`symbol-state-textures.manifest.json` 只能包含 `WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC`，每个 symbol 必须显式 `scale: 1`。背景、主转轮框和传送带不是 symbol。`appear` / `win` 的动画类型和 `durationSeconds` 由这个 manifest 声明：`L1.appear` 到 `L5.appear` 是静态普通态，`L1.win` 到 `L5.win` 是 VNI animation，其它 symbol 的 `appear` / `win` 使用 manifest 里的 `builtin` animation 秒数。重新生成状态贴图时，生成器会保留仍然有效的 `animations` 元数据，不能手动丢掉。
+`symbol-state-textures.manifest.json` 只能包含 `WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC`，每个 symbol 必须显式 `scale: 1`。背景、主转轮框、传送带和 `Symbol.png` atlas texture 不是可展示 symbol。`normal` / `appear` / `win` 的动画类型、Spine `animationName` 和 `durationSeconds` 由这个 manifest 声明：`WL,H1,H2,H3,H4,H5` 的 `normal` 是 Spine `Idle`；`WL.appear` 是 Spine `start`，`H1.appear` 是 Spine `Start`；`H2` 到 `H5` 当前资源没有 Start 动画，`appear` 仍使用 manifest 里的 `builtin` animation 秒数；`L1.appear` 到 `L5.appear` 是静态普通态，`L1.win` 到 `L5.win` 是 VNI animation。Spine animation name 区分大小写，manifest 必须写 skeleton 中真实存在的名字。重新生成状态贴图时，生成器会保留仍然有效的 `animations` 元数据，不能手动丢掉。
 
 ## 静态配置
 
@@ -54,7 +56,7 @@ CI=true pnpm --filter game003 check:static-config
 
 `gameConfig` 字段只引用 `assets/gamecfg003/gameconfig.json`；Excel 到 JSON 仍由 `apps/gengameconfig` 负责。symbol scale 仍由 `assets/game003-s1/symbol-state-textures.manifest.json` 负责，不在 YAML 或 app 内维护第二份 scale 表。
 
-`symbols.vniProjectGlob` 和 `symbols.vniAssetGlob` 只用于把 manifest 声明的 VNI symbol 动画资源纳入 Vite 静态模块。`loading.resources` 只承载随游戏包发布的静态资源 path/glob 和权重，不承载 token、cookie、serverUrl、服务器真实轮带或玩家本次下注。glob 必须是明确资源组，不能用 `assets/game003-s1/*.png` 这类宽泛写法把主转轮框、传送带和 symbol 混在一起。
+`symbols.vniProjectGlob` 和 `symbols.vniAssetGlob` 只用于把 manifest 声明的 VNI symbol 动画资源纳入 Vite 静态模块。`symbols.spineSkeletonGlob`、`symbols.spineAtlasGlob` 和 `symbols.spineTextureGlob` 必须三者同时配置，用于把 manifest 声明的 Spine skeleton、atlas raw text 和 texture URL 纳入静态模块；修改 Spine 资源时必须同步 YAML、loading 资源、generated TS、symbolsviewer 和 runtime resolver。`loading.resources` 只承载随游戏包发布的静态资源 path/glob 和权重，不承载 token、cookie、serverUrl、服务器真实轮带或玩家本次下注。glob 必须是明确资源组，不能用 `assets/game003-s1/*.png` 这类宽泛写法把主转轮框、传送带和 symbol 混在一起。
 
 `skins."1".winAmount` 配置中奖金额动画的显示规则、layout anchor、阈值和 VNI tier 资源。金额输入仍来自 live/GMI 的服务器整数；当前显示 formatter 与 framework HUD 共用 `formatServerUsdAmount(...)`，所以 `100` 显示为 `$1.00`。big/super/mega 的 project 和 assets 只属于 `assets/game003-s1/win-amount`，不要混入 symbol VNI manifest 或 `assets/game003-s1/assets`。
 
@@ -64,16 +66,16 @@ CI=true pnpm --filter game003 check:static-config
 
 矿车 layout 坐标基准是当前 art 像素：`stopOffsetFromReelAreaBottomCenter` 相对主转轮可见区底部中心，`cartPivotInImage` 和 `payloadAnchorInImage` 相对 `minecart.png` 左上角。横屏和竖屏各自配置停点、`exitSide` 和图片内 anchor，运行时从当前 `visibleRect` 推导屏幕外起点和右侧出屏点，不写死 viewport 坐标。当前 `payloadAnchorInImage` 为 `{ x: 184.5, y: 126 }`，对应矿车图片内车厢中部。当前入场时间预算为 `bg-bar shift 0.28s + terminal win 0.20s + cart rush 0.26s + payload fly 0.43s + payload hold 0.12s = 1.29s`，必须小于主转轮基础落停时间；`cartExitDurationSeconds` 当前为 `0.18s`，只用于下一轮 spin 开始时的右侧出屏，不计入上一轮入场预算。不能通过延长 `baseDurationMs`、`speedSymbolsPerSecond`、`minimumSpinCycles`、`startDelayMs` 或 `stopDelayMs` 来掩盖节奏问题。
 
-## Symbol VNI 动画
+## Symbol Manifest 动画
 
 `game003` 的 symbol 动画 resolver 来自 `@slotclientengine/rendercore`：
 
-- app 层从生成配置读取 symbol manifest、VNI project modules 和 VNI asset modules。
-- `rendercore` 解析 manifest，并优先使用 manifest 声明的 `builtin` / `static` / `vni` animation。
+- app 层从生成配置读取 symbol manifest、VNI project modules、VNI asset modules、Spine skeleton modules、Spine atlas raw modules 和 Spine texture URL modules。
+- `rendercore` 解析 manifest，并优先使用 manifest 声明的 `builtin` / `static` / `vni` / `spine` animation。
 - 未声明 animation 的 symbol 状态才会走 fallback；fallback 不承载 game003 的 `appear` / `win` 秒数。
-- app 的中奖逻辑仍只按可见窗口坐标请求 symbol 状态为 `win`，不在 `game-adapter.ts`、`game-demo.ts` 或 `win-sequence.ts` 中写 `L1-wins.json` 到 `L5-wins.json`、VNI 播放细节或动画秒数。
+- app 的中奖逻辑仍只按可见窗口坐标请求 symbol 状态为 `win`，不在 `game-adapter.ts`、`game-demo.ts` 或 `win-sequence.ts` 中写 `L1-wins.json` 到 `L5-wins.json`、Spine JSON/atlas 路径、VNI/Spine 播放细节或动画秒数。
 
-runtime 不读取 VNI `stageRect`，VNI 动画按 project 自己的 stage 在目标 symbol 位置播放；如果 manifest 里写入 `stageRect`，会作为未知字段显式失败。缺 animation `durationSeconds`、缺 VNI project、缺 VNI asset、非法 manifest 字段或 VNI 初始化失败都会显式失败，避免中奖动画悄悄退回普通扫光后难以排查。
+runtime 不读取 VNI `stageRect`，VNI 动画按 project 自己的 stage 在目标 symbol 位置播放；如果 manifest 里写入 `stageRect`，会作为未知字段显式失败。Spine 动画由 rendercore 的官方 Spine Pixi adapter 初始化，app 不直接 import `@esotericsoftware/spine-pixi-v8`、不解析 atlas/skeleton、不复制播放状态机。缺 animation `durationSeconds`、缺 VNI project、缺 VNI asset、缺 Spine skeleton/atlas/texture、Spine animation name 大小写不匹配、非法 manifest 字段或动画初始化失败都会显式失败，避免 symbol 动画悄悄退回普通表现后难以排查。
 
 ## Loading 启动顺序
 

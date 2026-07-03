@@ -11,6 +11,8 @@ import game003Skin1MainReelBackgroundUrl from "../../../../assets/game003-s1/mai
 import game003Skin1LandscapeConveyorUrl from "../../../../assets/game003-s1/conveyor1.png?url";
 import game003Skin1PortraitConveyorUrl from "../../../../assets/game003-s1/conveyor2.png?url";
 import game003Skin1BgBarFeatureBarSymbolManifest from "../../../../assets/game003-s1/bg-bar-symbol-state-textures.manifest.json";
+import game003Skin1SpineAtlasModulesRaw0 from "../../../../assets/game003-s1/Symbol.atlas?raw";
+import game003Skin1SpineTextureModulesUrl0 from "../../../../assets/game003-s1/Symbol.png?url";
 
 const game003Skin1SymbolModules = import.meta.glob(
   "../../../../assets/game003-s1/*.png",
@@ -35,6 +37,21 @@ const game003Skin1VniAssetModules = import.meta.glob(
     query: "?url",
   },
 ) as Record<string, string>;
+const game003Skin1SpineSkeletonModules = import.meta.glob(
+  "../../../../assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json",
+  {
+    eager: true,
+    import: "default",
+  },
+) as Record<string, unknown>;
+const game003Skin1SpineAtlasModules = Object.freeze({
+  "../../../../assets/game003-s1/Symbol.atlas":
+    game003Skin1SpineAtlasModulesRaw0,
+} as const satisfies Record<string, string>);
+const game003Skin1SpineTextureModules = Object.freeze({
+  "../../../../assets/game003-s1/Symbol.png":
+    game003Skin1SpineTextureModulesUrl0,
+} as const satisfies Record<string, string>);
 const game003Skin1BgBarFeatureBarSymbolModules = import.meta.glob(
   "../../../../assets/game003-s1/{wild,up}.png",
   {
@@ -94,6 +111,9 @@ export const GAME003_STATIC_CONFIG = Object.freeze({
         pngModules: GAME003_STATIC_SKIN_MODULES["1"],
         vniProjectModules: game003Skin1VniProjectModules,
         vniAssetModules: game003Skin1VniAssetModules,
+        spineSkeletonModules: game003Skin1SpineSkeletonModules,
+        spineAtlasModules: game003Skin1SpineAtlasModules,
+        spineTextureModules: game003Skin1SpineTextureModules,
         emptySymbols: Object.freeze([] as const),
         requireExplicitScale: true,
         requiredStates: Object.freeze(["spinBlur", "disabled"] as const),

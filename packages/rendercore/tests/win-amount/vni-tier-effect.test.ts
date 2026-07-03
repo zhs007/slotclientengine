@@ -6,6 +6,11 @@ import { createWinAmountAnimationTiersFromModules } from "../../src/win-amount/i
 
 describe("win amount VNI tier resources", () => {
   it("resolves tier projects and clones stage duration without mutating imports", () => {
+    const bigwinProjectInput = structuredClone(bigwinProject);
+    const superwinProjectInput = structuredClone(superwinProject);
+    const megawinProjectInput = structuredClone(megawinProject);
+    megawinProjectInput.stage.duration = 10;
+
     const tiers = createWinAmountAnimationTiersFromModules({
       tierConfigs: [
         createTierConfig("bigwin", 15, "./bigwin.json"),
@@ -13,14 +18,14 @@ describe("win amount VNI tier resources", () => {
         createTierConfig("megawin", 50, "./megawin.json"),
       ],
       projectModules: {
-        "/assets/game003-s1/win-amount/bigwin.json": bigwinProject,
-        "/assets/game003-s1/win-amount/superwin.json": superwinProject,
-        "/assets/game003-s1/win-amount/megawin.json": megawinProject,
+        "/assets/game003-s1/win-amount/bigwin.json": bigwinProjectInput,
+        "/assets/game003-s1/win-amount/superwin.json": superwinProjectInput,
+        "/assets/game003-s1/win-amount/megawin.json": megawinProjectInput,
       },
       assetModules: createAssetModules([
-        bigwinProject,
-        superwinProject,
-        megawinProject,
+        bigwinProjectInput,
+        superwinProjectInput,
+        megawinProjectInput,
       ]),
     });
 
@@ -31,9 +36,9 @@ describe("win amount VNI tier resources", () => {
     ]);
     expect(tiers[0].vniProject.stage.duration).toBe(5);
     expect(tiers[2].vniProject.stage.duration).toBe(5);
-    expect(megawinProject.stage.duration).toBe(10);
+    expect(megawinProjectInput.stage.duration).toBe(10);
     expect(Object.keys(tiers[2].assetUrls)).toHaveLength(
-      megawinProject.assets.length,
+      megawinProjectInput.assets.length,
     );
   });
 

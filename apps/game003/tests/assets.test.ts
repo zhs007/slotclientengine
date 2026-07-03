@@ -34,6 +34,7 @@ describe("game003 symbol assets", () => {
     });
     expect(assets).not.toHaveProperty("bg1");
     expect(assets).not.toHaveProperty("mainreelbg");
+    expect(assets).not.toHaveProperty("Symbol");
   });
 
   it("requires explicit scale 1 from the manifest and PNG normals for H symbols", () => {
@@ -48,13 +49,32 @@ describe("game003 symbol assets", () => {
 
     const symbols = manifest.symbols as Record<
       string,
-      { normal: string; scale: number }
+      {
+        normal: string;
+        scale: number;
+        animations: Record<string, unknown>;
+      }
     >;
     for (const symbol of ["H1", "H2", "H3", "H4", "H5"]) {
       expect(symbols[symbol].normal).toBe(`./${symbol}.png`);
       expect(symbols[symbol].normal).not.toMatch(/\.jpg$/);
       expect(symbols[symbol].scale).toBe(1);
     }
+    expect(symbols.H1.animations.normal).toMatchObject({
+      kind: "spine",
+      skeleton: "./H1.json",
+      atlas: "./Symbol.atlas",
+      texture: "./Symbol.png",
+      playback: { mode: "animation", animationName: "Idle", loop: true },
+    });
+    expect(symbols.H1.animations.appear).toMatchObject({
+      kind: "spine",
+      playback: { mode: "animation", animationName: "Start", loop: false },
+    });
+    expect(symbols.H2.animations.appear).toMatchObject({
+      kind: "builtin",
+      durationSeconds: 0.42,
+    });
   });
 
   it("fails when required state textures are missing or manifest fields drift", () => {

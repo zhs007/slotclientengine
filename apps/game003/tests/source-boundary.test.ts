@@ -28,6 +28,7 @@ describe("game003 source boundary", () => {
     expect(source).not.toMatch(/@slotclientengine\/uiframeworks/);
     expect(source).not.toMatch(/@slotclientengine\/logiccore/);
     expect(source).not.toMatch(/@slotclientengine\/vnicore/);
+    expect(source).not.toMatch(/@esotericsoftware\/spine-pixi-v8/);
   });
 
   it("keeps live runtime parameters out of import.meta.env", () => {

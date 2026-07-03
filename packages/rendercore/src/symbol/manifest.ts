@@ -5,6 +5,11 @@ import {
   type AssetUrlManifest,
   type VNIProjectConfig,
 } from "@slotclientengine/vnicore/core";
+import {
+  AtlasAttachmentLoader,
+  SkeletonJson,
+  TextureAtlas,
+} from "@esotericsoftware/spine-pixi-v8";
 import type { ReelSymbolScaleMap } from "../reel/types.js";
 import { SymbolAssetError } from "./errors.js";
 import { createDefaultSymbolStatePreset } from "./state-machine.js";
@@ -40,10 +45,32 @@ export interface SymbolManifestVniAnimationSpec {
   readonly playback: SymbolManifestRangePlaybackSpec;
 }
 
+export interface SymbolManifestAnimationPlaybackSpec {
+  readonly mode: "animation";
+  readonly animationName: string;
+  readonly loop: boolean;
+}
+
+export interface SymbolManifestSpineAnimationTransform {
+  readonly x?: number;
+  readonly y?: number;
+  readonly scale?: number;
+}
+
+export interface SymbolManifestSpineAnimationSpec {
+  readonly kind: "spine";
+  readonly skeleton: string;
+  readonly atlas: string;
+  readonly texture: string;
+  readonly playback: SymbolManifestAnimationPlaybackSpec;
+  readonly transform?: SymbolManifestSpineAnimationTransform;
+}
+
 export type SymbolManifestAnimationSpec =
   | SymbolManifestBuiltinAnimationSpec
   | SymbolManifestStaticAnimationSpec
-  | SymbolManifestVniAnimationSpec;
+  | SymbolManifestVniAnimationSpec
+  | SymbolManifestSpineAnimationSpec;
 
 export type SymbolManifestNormal =
   | string
@@ -107,6 +134,13 @@ export interface CreateSymbolVniAnimationResourcesOptions extends ParseSymbolSta
   readonly vniAssetModules: Readonly<Record<string, string>>;
 }
 
+export interface CreateSymbolSpineAnimationResourcesOptions extends ParseSymbolStateTextureManifestOptions {
+  readonly manifest: unknown;
+  readonly spineSkeletonModules: Readonly<Record<string, unknown>>;
+  readonly spineAtlasModules: Readonly<Record<string, string>>;
+  readonly spineTextureModules: Readonly<Record<string, string>>;
+}
+
 export interface SymbolVniAnimationResource {
   readonly symbol: string;
   readonly state: SymbolStateId;
@@ -119,6 +153,23 @@ export type SymbolVniAnimationResourceMap = Readonly<
   Record<
     string,
     Readonly<Partial<Record<SymbolStateId, SymbolVniAnimationResource>>>
+  >
+>;
+
+export interface SymbolSpineAnimationResource {
+  readonly symbol: string;
+  readonly state: SymbolStateId;
+  readonly spec: SymbolManifestSpineAnimationSpec;
+  readonly skeleton: unknown;
+  readonly atlasText: string;
+  readonly textureUrl: string;
+  readonly atlasPage: string;
+}
+
+export type SymbolSpineAnimationResourceMap = Readonly<
+  Record<
+    string,
+    Readonly<Partial<Record<SymbolStateId, SymbolSpineAnimationResource>>>
   >
 >;
 
@@ -373,6 +424,88 @@ export function createSymbolVniAnimationResourcesFromManifest(
         spec: animation,
         project,
         assetUrls,
+      });
+    }
+  }
+
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(resources).map(([symbol, states]) => [
+        symbol,
+        Object.freeze({ ...states }),
+      ]),
+    ),
+  );
+}
+
+export function createSymbolSpineAnimationResourcesFromManifest(
+  options: CreateSymbolSpineAnimationResourcesOptions,
+): SymbolSpineAnimationResourceMap {
+  const manifest = parseSymbolStateTextureManifest(options.manifest, options);
+  const skeletonModules = createManifestPathModuleMap(
+    options.spineSkeletonModules,
+    "Spine skeleton",
+  );
+  const atlasModules = createManifestPathModuleMap(
+    options.spineAtlasModules,
+    "Spine atlas",
+  );
+  const textureModules = createManifestPathModuleMap(
+    options.spineTextureModules,
+    "Spine texture",
+  );
+  const resources: Record<
+    string,
+    Partial<Record<SymbolStateId, SymbolSpineAnimationResource>>
+  > = {};
+
+  for (const [symbol, manifestSymbol] of Object.entries(manifest.symbols)) {
+    for (const [state, animation] of Object.entries(
+      manifestSymbol.animations,
+    )) {
+      if (!animation || animation.kind !== "spine") {
+        continue;
+      }
+      const skeleton = skeletonModules.get(animation.skeleton);
+      if (skeleton === undefined) {
+        throw new SymbolAssetError(
+          `Symbol "${symbol}" ${state} Spine skeleton is missing from modules: ${animation.skeleton}.`,
+        );
+      }
+      const atlas = atlasModules.get(animation.atlas);
+      if (atlas === undefined) {
+        throw new SymbolAssetError(
+          `Symbol "${symbol}" ${state} Spine atlas is missing from modules: ${animation.atlas}.`,
+        );
+      }
+      if (typeof atlas !== "string" || atlas.trim().length === 0) {
+        throw new SymbolAssetError(
+          `Symbol "${symbol}" ${state} Spine atlas module must be raw text.`,
+        );
+      }
+      const texture = textureModules.get(animation.texture);
+      if (typeof texture !== "string" || texture.trim().length === 0) {
+        throw new SymbolAssetError(
+          `Symbol "${symbol}" ${state} Spine texture is missing from modules: ${animation.texture}.`,
+        );
+      }
+
+      const atlasPage = validateSpineAtlasAndSkeleton({
+        symbol,
+        state,
+        spec: animation,
+        skeleton,
+        atlasText: atlas,
+      });
+      resources[symbol] = resources[symbol] ?? {};
+      resources[symbol][state] = Object.freeze({
+        symbol,
+        state,
+        spec: animation,
+        skeleton,
+        atlasText: atlas,
+        textureUrl: texture,
+        atlasPage,
       });
     }
   }
@@ -700,9 +833,49 @@ function parseManifestAnimationSpec(
       ),
     });
   }
+  if (record.kind === "spine") {
+    assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} animation`, [
+      "kind",
+      "skeleton",
+      "atlas",
+      "texture",
+      "playback",
+      "transform",
+    ]);
+    const playback = parseAnimationPlayback(record.playback, symbol, state);
+    if (getDefaultSymbolPlaybackKind(state) === "once" && playback.loop) {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" ${state} Spine playback.loop must be false for once state "${state}".`,
+      );
+    }
+    return Object.freeze({
+      kind: "spine",
+      skeleton: assertManifestLocalFilePath(
+        record.skeleton,
+        `symbol "${symbol}" ${state} Spine skeleton`,
+        [".json"],
+      ),
+      atlas: assertManifestLocalFilePath(
+        record.atlas,
+        `symbol "${symbol}" ${state} Spine atlas`,
+        [".atlas"],
+      ),
+      texture: assertManifestLocalFilePath(
+        record.texture,
+        `symbol "${symbol}" ${state} Spine texture`,
+        [".png"],
+      ),
+      playback,
+      ...(record.transform !== undefined
+        ? {
+            transform: parseSpineTransform(record.transform, symbol, state),
+          }
+        : {}),
+    });
+  }
   if (record.kind !== "vni") {
     throw new SymbolAssetError(
-      `Symbol "${symbol}" ${state} animation kind must be "builtin", "static" or "vni".`,
+      `Symbol "${symbol}" ${state} animation kind must be "builtin", "static", "vni" or "spine".`,
     );
   }
   assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} animation`, [
@@ -763,6 +936,133 @@ function parseRangePlayback(
   });
 }
 
+function parseAnimationPlayback(
+  value: unknown,
+  symbol: string,
+  state: string,
+): SymbolManifestAnimationPlaybackSpec {
+  const record = assertRecord(value, `symbol "${symbol}" ${state} playback`);
+  assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} playback`, [
+    "mode",
+    "animationName",
+    "loop",
+  ]);
+  if (record.mode !== "animation") {
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" ${state} Spine playback mode must be "animation".`,
+    );
+  }
+  if (typeof record.loop !== "boolean") {
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" ${state} Spine playback.loop must be a boolean.`,
+    );
+  }
+  return Object.freeze({
+    mode: "animation",
+    animationName: assertString(
+      record.animationName,
+      `symbol "${symbol}" ${state} Spine playback.animationName`,
+    ),
+    loop: record.loop,
+  });
+}
+
+function parseSpineTransform(
+  value: unknown,
+  symbol: string,
+  state: string,
+): SymbolManifestSpineAnimationTransform {
+  const record = assertRecord(
+    value,
+    `symbol "${symbol}" ${state} Spine transform`,
+  );
+  assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} Spine transform`, [
+    "x",
+    "y",
+    "scale",
+  ]);
+  return Object.freeze({
+    ...(record.x !== undefined
+      ? {
+          x: assertFiniteNumber(
+            record.x,
+            `symbol "${symbol}" ${state} Spine transform.x`,
+          ),
+        }
+      : {}),
+    ...(record.y !== undefined
+      ? {
+          y: assertFiniteNumber(
+            record.y,
+            `symbol "${symbol}" ${state} Spine transform.y`,
+          ),
+        }
+      : {}),
+    ...(record.scale !== undefined
+      ? {
+          scale: assertFinitePositiveNumber(
+            record.scale,
+            `symbol "${symbol}" ${state} Spine transform.scale`,
+          ),
+        }
+      : {}),
+  });
+}
+
+function validateSpineAtlasAndSkeleton(options: {
+  readonly symbol: string;
+  readonly state: string;
+  readonly spec: SymbolManifestSpineAnimationSpec;
+  readonly skeleton: unknown;
+  readonly atlasText: string;
+}): string {
+  let atlas: TextureAtlas;
+  try {
+    atlas = new TextureAtlas(options.atlasText);
+  } catch (error) {
+    throw new SymbolAssetError(
+      `Symbol "${options.symbol}" ${options.state} Spine atlas failed to parse: ${formatUnknownError(error)}.`,
+    );
+  }
+  if (atlas.pages.length !== 1) {
+    throw new SymbolAssetError(
+      `Symbol "${options.symbol}" ${options.state} Spine atlas must contain exactly one page.`,
+    );
+  }
+  const atlasPage = atlas.pages[0]?.name;
+  const textureFileName = getFileNameFromManifestPath(options.spec.texture);
+  if (atlasPage !== textureFileName) {
+    throw new SymbolAssetError(
+      `Symbol "${options.symbol}" ${options.state} Spine atlas page "${atlasPage}" must match texture "${textureFileName}".`,
+    );
+  }
+
+  try {
+    const skeletonData = new SkeletonJson(
+      new AtlasAttachmentLoader(atlas),
+    ).readSkeletonData(options.skeleton);
+    if (
+      !skeletonData.findAnimation(options.spec.playback.animationName) ||
+      !skeletonData.animations.some(
+        (animation) => animation.name === options.spec.playback.animationName,
+      )
+    ) {
+      throw new SymbolAssetError(
+        `Symbol "${options.symbol}" ${options.state} Spine skeleton is missing animation "${options.spec.playback.animationName}".`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof SymbolAssetError) {
+      throw error;
+    }
+    throw new SymbolAssetError(
+      `Symbol "${options.symbol}" ${options.state} Spine skeleton failed to parse: ${formatUnknownError(error)}.`,
+    );
+  }
+
+  return atlasPage;
+}
+
 function createManifestPathModuleMap(
   modules: Readonly<Record<string, unknown>>,
   label: string,
@@ -782,6 +1082,13 @@ function getDefaultSymbolStateIds(): readonly SymbolStateId[] {
   return createDefaultSymbolStatePreset().states.map((state) => state.id);
 }
 
+function getDefaultSymbolPlaybackKind(stateId: string): SymbolPlaybackKind {
+  const state = createDefaultSymbolStatePreset().states.find(
+    (candidate) => candidate.id === stateId,
+  );
+  return state?.playback ?? "once";
+}
+
 function getFileNameFromPath(path: string): string {
   const fileName = path.split(/[\\/]/u).at(-1);
   if (!fileName) {
@@ -797,6 +1104,27 @@ function getFileNameFromManifestPath(path: string): string {
     );
   }
   return getFileNameFromPath(path);
+}
+
+function assertManifestLocalFilePath(
+  value: unknown,
+  label: string,
+  extensions: readonly string[],
+): string {
+  const path = assertString(value, label);
+  if (!path.startsWith("./") || path.includes("\\") || path.includes("../")) {
+    throw new SymbolAssetError(`${label} must be a local ./ path: ${path}.`);
+  }
+  const suffix = path.slice("./".length);
+  if (suffix.includes("/") || suffix.length === 0) {
+    throw new SymbolAssetError(`${label} must be a ./basename path: ${path}.`);
+  }
+  if (!extensions.some((extension) => suffix.endsWith(extension))) {
+    throw new SymbolAssetError(
+      `${label} must end with ${extensions.join(" or ")}: ${path}.`,
+    );
+  }
+  return path;
 }
 
 function isLayerFileStem(stem: string): boolean {
@@ -860,11 +1188,22 @@ function assertFiniteNonNegativeNumber(value: unknown, label: string): number {
   return value;
 }
 
+function assertFiniteNumber(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new SymbolAssetError(`${label} must be a finite number.`);
+  }
+  return value;
+}
+
 function assertFinitePositiveNumber(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new SymbolAssetError(`${label} must be a finite positive number.`);
   }
   return value;
+}
+
+function formatUnknownError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function escapeRegExp(value: string): string {
@@ -877,7 +1216,8 @@ export function getSymbolPlaybackKindForManifestAnimation(
   if (
     spec.kind === "builtin" ||
     spec.kind === "static" ||
-    spec.kind === "vni"
+    spec.kind === "vni" ||
+    spec.kind === "spine"
   ) {
     return "once";
   }

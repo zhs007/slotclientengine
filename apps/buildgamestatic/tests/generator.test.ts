@@ -135,6 +135,47 @@ describe("buildgamestatic generator", () => {
     );
   });
 
+  it("generates optional Spine symbol module maps only when configured", async () => {
+    const root = createFixtureRoot();
+    appendSpineSymbolGlobs(root);
+
+    const result = await generateGameStaticConfigFile({
+      rootDir: root,
+      inputPath: "apps/game003/config/game-static.yaml",
+      outPath: "apps/game003/src/generated/game-static.generated.ts",
+      gameId: "game003",
+      check: false,
+    });
+
+    expect(result.generated).toContain("game003Skin1SpineSkeletonModules");
+    expect(result.generated).toContain("game003Skin1SpineAtlasModules");
+    expect(result.generated).toContain("game003Skin1SpineTextureModules");
+    expect(result.generated).toMatch(
+      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/game003-s1\/\{WL,H1,H2,H3,H4,H5\}\.json"/,
+    );
+    expect(result.generated).toContain(
+      'import game003Skin1SpineAtlasModulesRaw0 from "../../../../assets/game003-s1/Symbol.atlas?raw";',
+    );
+    expect(result.generated).toMatch(
+      /"..\/..\/..\/..\/assets\/game003-s1\/Symbol\.atlas":\s+game003Skin1SpineAtlasModulesRaw0/,
+    );
+    expect(result.generated).toContain(
+      'import game003Skin1SpineTextureModulesUrl0 from "../../../../assets/game003-s1/Symbol.png?url";',
+    );
+    expect(result.generated).toMatch(
+      /"..\/..\/..\/..\/assets\/game003-s1\/Symbol\.png":\s+game003Skin1SpineTextureModulesUrl0/,
+    );
+    expect(result.generated).toContain(
+      "spineSkeletonModules: game003Skin1SpineSkeletonModules",
+    );
+    expect(result.generated).toContain(
+      "spineAtlasModules: game003Skin1SpineAtlasModules",
+    );
+    expect(result.generated).toContain(
+      "spineTextureModules: game003Skin1SpineTextureModules",
+    );
+  });
+
   it("generates optional win amount module maps and config", async () => {
     const root = createFixtureRoot();
     appendWinAmountBlock(root);
@@ -257,6 +298,8 @@ function createFixtureRoot(): string {
     "assets/game003-s1/conveyor1.png",
     "assets/game003-s1/conveyor2.png",
     "assets/game003-s1/minecart.png",
+    "assets/game003-s1/Symbol.atlas",
+    "assets/game003-s1/Symbol.png",
   ]) {
     writeFileSync(join(root, file), "{}", "utf8");
   }
@@ -391,6 +434,24 @@ function appendVniSymbolGlobs(root: string): void {
         "      pngGlob: assets/game003-s1/*.png",
         "      vniProjectGlob: assets/game003-s1/*-wins.json",
         "      vniAssetGlob: assets/game003-s1/assets/*.{png,jpg,jpeg,webp}",
+        "",
+      ].join("\n"),
+    ),
+    "utf8",
+  );
+}
+
+function appendSpineSymbolGlobs(root: string): void {
+  const yamlPath = join(root, "apps/game003/config/game-static.yaml");
+  writeFileSync(
+    yamlPath,
+    readFileSync(yamlPath, "utf8").replace(
+      "      pngGlob: assets/game003-s1/*.png\n",
+      [
+        "      pngGlob: assets/game003-s1/*.png",
+        "      spineSkeletonGlob: assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json",
+        "      spineAtlasGlob: assets/game003-s1/{Symbol}.atlas",
+        "      spineTextureGlob: assets/game003-s1/{Symbol}.png",
         "",
       ].join("\n"),
     ),

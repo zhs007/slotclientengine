@@ -62,6 +62,15 @@ loading:
     - id: game003-symbol-vni-assets
       glob: assets/game003-s1/assets/*.{png,jpg,jpeg,webp}
       weight: 4
+    - id: game003-symbol-spine-skeletons
+      glob: assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json
+      weight: 2
+    - id: game003-symbol-spine-atlas
+      path: assets/game003-s1/Symbol.atlas
+      weight: 1
+    - id: game003-symbol-spine-texture
+      path: assets/game003-s1/Symbol.png
+      weight: 3
     - id: game003-bg-bar-symbol-pngs
       glob: assets/game003-s1/{wild,up}.png
       weight: 2
@@ -89,6 +98,10 @@ skins:
       pngGlob: assets/game003-s1/*.png
       vniProjectGlob: assets/game003-s1/*-wins.json
       vniAssetGlob: assets/game003-s1/assets/*.{png,jpg,jpeg,webp}
+      # Spine 资源只用于 manifest 声明的高级 symbol 动画；skeleton 必须用 brace JSON，不能写宽泛 *.json 混入 VNI / win-amount。
+      spineSkeletonGlob: assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json
+      spineAtlasGlob: assets/game003-s1/{Symbol}.atlas
+      spineTextureGlob: assets/game003-s1/{Symbol}.png
       emptySymbols: []
       requireExplicitScale: true
       requiredStates:

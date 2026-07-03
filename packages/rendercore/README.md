@@ -97,14 +97,16 @@ layer index 必须从 `0` 开始连续，不能重复、缺层或为负数；已
 - `createSymbolScaleMapFromManifest(...)`：从 manifest 读取每个 symbol 的显示 scale。
 - `getSymbolDisplaySymbolsFromManifest(...)`：得到 manifest 声明且可展示的 symbol 顺序。
 - `createSymbolVniAnimationResourcesFromManifest(...)`：从 manifest animations、VNI project modules 和 VNI asset modules 解析 VNI 动画资源。
+- `createSymbolSpineAnimationResourcesFromManifest(...)`：从 manifest animations、Spine skeleton modules、atlas raw modules 和 texture URL modules 解析 Spine 动画资源。
 
 manifest 允许每个 symbol 通过 `animations` 声明状态动画。当前支持：
 
 - `kind: "builtin"`：使用 rendercore 的内置 once 表现，但 `durationSeconds` 必须由 manifest 显式声明。
 - `kind: "static"`：播放一次静态普通态，可用于把某个 once 状态显式配置成无额外动画；`durationSeconds` 必须由 manifest 显式声明。
 - `kind: "vni"`：显式声明 project 路径和 playback，VNI project 会通过 `@slotclientengine/vnicore` 校验，project 引用的所有 assets 必须能从 Vite asset modules 中解析到 URL。
+- `kind: "spine"`：显式声明 `skeleton`、`atlas`、`texture` 和 `playback`。`skeleton` 必须是 `./*.json`，`atlas` 必须是 `./*.atlas` raw text，`texture` 必须是 `./*.png` URL，`playback.mode` 固定为 `animation`，`animationName` 区分大小写并且必须存在于 skeleton，`loop` 必须符合 state playback 合同；`transform.x/y/scale` 只做显式位置和等比缩放，不做 app 侧推导。
 
-`stageRect` 是 editor/export 侧概念，不属于 runtime symbol manifest；manifest 中出现 `stageRect` 会作为未知字段显式失败。缺 manifest、未知 manifest 字段、未知 state、缺贴图、非法 scale、缺 animation `durationSeconds`、缺 VNI project 或缺 VNI asset 都会显式失败。app 和 viewer 不应复制 manifest parser，也不应在运行时代码里写 `if symbol === "L1"` 这类专属 VNI 逻辑。
+`stageRect` 是 editor/export 侧概念，不属于 runtime symbol manifest；manifest 中出现 `stageRect` 会作为未知字段显式失败。缺 manifest、未知 manifest 字段、未知 state、缺贴图、非法 scale、缺 animation `durationSeconds`、缺 VNI project、缺 VNI asset、缺 Spine skeleton/atlas/texture、atlas page 与 texture 文件名不一致或 Spine animation name 不匹配都会显式失败。app 和 viewer 不应复制 manifest parser，也不应在运行时代码里写 `if symbol === "L1"` 这类专属 VNI/Spine 逻辑。
 
 ## 动画解耦
 
@@ -124,13 +126,13 @@ const resolver = (context) => {
 
 resolver context 同时包含 `requestedState` 和 `resolvedState`，所以调用方可以区分 `spinBlur -> normal` 这类等价请求。resolver 找不到动画时必须抛错，不能静默退回 `normal`。
 
-默认 resolver 只提供 `normal` 静态表现，不提供全局默认 `appear` / `win`。需要 once 动画时，调用方必须通过 manifest `kind: "builtin" | "static" | "vni"` 或 named animation profile 显式声明：
+默认 resolver 只提供 `normal` 静态表现，不提供全局默认 `appear` / `win`。需要 once 动画时，调用方必须通过 manifest `kind: "builtin" | "static" | "vni" | "spine"` 或 named animation profile 显式声明：
 
 - `normal`：静态单帧 ani。
 - manifest `kind: "builtin"` 的 `appear`：单次放大弹回，结束后 scale 复位；需要显式正数 `durationSeconds`。
 - manifest `kind: "builtin"` 的 `win`：单次扫光 overlay，结束后清理 overlay；需要显式正数 `durationSeconds`。
 
-`createSymbolManifestAnimationResolver()` 会优先使用 manifest 声明的 animation，再回落到调用方传入的 fallback resolver。VNI animation 直接把 `VNIPlayer` 的 Pixi display tree 挂到当前 symbol 的 `overlayLayer` 中；runtime 不创建隐藏 canvas、canvas-to-texture、额外 renderer、`stageRect` viewport 或 mask。VNI root 按 project stage 中心对齐，project 的 stage background 不会作为 symbol 动画背景绘制。动画生命周期由 `RenderSymbol.update(deltaSeconds)` 推进。`SymbolAni.destroy()` 会在状态切换和 symbol 销毁时释放 VNI player 和已挂载的 Pixi 节点。
+`createSymbolManifestAnimationResolver()` 会优先使用 manifest 声明的 animation，再回落到调用方传入的 fallback resolver。VNI animation 直接把 `VNIPlayer` 的 Pixi display tree 挂到当前 symbol 的 `overlayLayer` 中；runtime 不创建隐藏 canvas、canvas-to-texture、额外 renderer、`stageRect` viewport 或 mask。VNI root 按 project stage 中心对齐，project 的 stage background 不会作为 symbol 动画背景绘制。Spine animation 使用官方 Pixi v8 Spine runtime 解析 atlas/skeleton/texture，并把 Spine display tree 挂到同一个 `overlayLayer`，不由 app 侧直接 import Spine parser 或播放状态机。动画生命周期由 `RenderSymbol.update(deltaSeconds)` 推进。`SymbolAni.destroy()` 会在状态切换和 symbol 销毁时释放 VNI/Spine player 和已挂载的 Pixi 节点。
 
 `createNamedSymbolAnimationResolver()` 支持用“名字 + 参数”绑定动画 profile：
 

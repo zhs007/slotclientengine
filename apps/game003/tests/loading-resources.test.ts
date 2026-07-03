@@ -36,6 +36,11 @@ describe("game003 loading resources", () => {
         "game003-symbol-vni-projects:L3-wins.json",
         "game003-symbol-vni-projects:L4-wins.json",
         "game003-symbol-vni-projects:L5-wins.json",
+        "game003-symbol-spine-skeletons:WL.json",
+        "game003-symbol-spine-skeletons:H1.json",
+        "game003-symbol-spine-skeletons:H5.json",
+        "game003-symbol-spine-atlas",
+        "game003-symbol-spine-texture",
         "game003-bg-bar-symbol-pngs:up.png",
         "game003-bg-bar-symbol-pngs:wild.png",
         "game003-bg-bar-symbol-manifest",
@@ -63,6 +68,12 @@ describe("game003 loading resources", () => {
         id.startsWith("game003-win-amount-vni-assets:mega_asset"),
       ),
     ).toBe(true);
+    expect(
+      ids.some((id) => id.startsWith("game003-symbol-spine-skeletons:L1")),
+    ).toBe(false);
+    expect(
+      ids.some((id) => id.startsWith("game003-symbol-spine-skeletons:bg")),
+    ).toBe(false);
     expect(ids).not.toContain("game003-symbol-normal-pngs:mainreelbg.png");
   });
 

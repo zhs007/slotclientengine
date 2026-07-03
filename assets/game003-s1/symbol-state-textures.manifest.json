@@ -18,9 +18,27 @@
       "disabled": "./WL.disabled.png",
       "scale": 1,
       "animations": {
+        "normal": {
+          "kind": "spine",
+          "skeleton": "./WL.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
+          }
+        },
         "appear": {
-          "kind": "builtin",
-          "durationSeconds": 0.42
+          "kind": "spine",
+          "skeleton": "./WL.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "start",
+            "loop": false
+          }
         },
         "win": {
           "kind": "builtin",
@@ -34,9 +52,27 @@
       "disabled": "./H1.disabled.png",
       "scale": 1,
       "animations": {
+        "normal": {
+          "kind": "spine",
+          "skeleton": "./H1.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
+          }
+        },
         "appear": {
-          "kind": "builtin",
-          "durationSeconds": 0.42
+          "kind": "spine",
+          "skeleton": "./H1.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Start",
+            "loop": false
+          }
         },
         "win": {
           "kind": "builtin",
@@ -50,6 +86,17 @@
       "disabled": "./H2.disabled.png",
       "scale": 1,
       "animations": {
+        "normal": {
+          "kind": "spine",
+          "skeleton": "./H2.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
+          }
+        },
         "appear": {
           "kind": "builtin",
           "durationSeconds": 0.42
@@ -66,6 +113,17 @@
       "disabled": "./H3.disabled.png",
       "scale": 1,
       "animations": {
+        "normal": {
+          "kind": "spine",
+          "skeleton": "./H3.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
+          }
+        },
         "appear": {
           "kind": "builtin",
           "durationSeconds": 0.42
@@ -82,6 +140,17 @@
       "disabled": "./H4.disabled.png",
       "scale": 1,
       "animations": {
+        "normal": {
+          "kind": "spine",
+          "skeleton": "./H4.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
+          }
+        },
         "appear": {
           "kind": "builtin",
           "durationSeconds": 0.42
@@ -98,6 +167,17 @@
       "disabled": "./H5.disabled.png",
       "scale": 1,
       "animations": {
+        "normal": {
+          "kind": "spine",
+          "skeleton": "./H5.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
+          }
+        },
         "appear": {
           "kind": "builtin",
           "durationSeconds": 0.42

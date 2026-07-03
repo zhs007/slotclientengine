@@ -155,12 +155,21 @@ function assertSymbolsConfig(
       "pngModules",
       "vniProjectModules",
       "vniAssetModules",
+      "spineSkeletonModules",
+      "spineAtlasModules",
+      "spineTextureModules",
       "emptySymbols",
       "requireExplicitScale",
       "requiredStates",
     ],
     {
-      optional: ["vniProjectModules", "vniAssetModules"],
+      optional: [
+        "vniProjectModules",
+        "vniAssetModules",
+        "spineSkeletonModules",
+        "spineAtlasModules",
+        "spineTextureModules",
+      ],
     },
   );
   assertRecord(record.manifest, `${label}.manifest`);
@@ -170,6 +179,18 @@ function assertSymbolsConfig(
   }
   if (record.vniAssetModules !== undefined) {
     assertStringRecord(record.vniAssetModules, `${label}.vniAssetModules`);
+  }
+  if (record.spineSkeletonModules !== undefined) {
+    assertRecord(record.spineSkeletonModules, `${label}.spineSkeletonModules`);
+  }
+  if (record.spineAtlasModules !== undefined) {
+    assertStringRecord(record.spineAtlasModules, `${label}.spineAtlasModules`);
+  }
+  if (record.spineTextureModules !== undefined) {
+    assertStringRecord(
+      record.spineTextureModules,
+      `${label}.spineTextureModules`,
+    );
   }
   assertUniqueStrings(
     assertStringArray(record.emptySymbols, `${label}.emptySymbols`, {

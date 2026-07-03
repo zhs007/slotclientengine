@@ -513,6 +513,45 @@ function validatePreservedAnimation(symbol, state, value) {
       ),
     });
   }
+  if (animation.kind === "spine") {
+    assertOnlyKnownKeys(
+      animation,
+      `existing manifest symbol "${symbol}" ${state} animation`,
+      ["kind", "skeleton", "atlas", "texture", "playback", "transform"],
+    );
+    return Object.freeze({
+      kind: "spine",
+      skeleton: validateLocalManifestFilePath(
+        animation.skeleton,
+        `${symbol}.${state}.skeleton`,
+        [".json"],
+      ),
+      atlas: validateLocalManifestFilePath(
+        animation.atlas,
+        `${symbol}.${state}.atlas`,
+        [".atlas"],
+      ),
+      texture: validateLocalManifestFilePath(
+        animation.texture,
+        `${symbol}.${state}.texture`,
+        [".png"],
+      ),
+      playback: validatePreservedAnimationPlayback(
+        symbol,
+        state,
+        animation.playback,
+      ),
+      ...(animation.transform !== undefined
+        ? {
+            transform: validatePreservedSpineTransform(
+              symbol,
+              state,
+              animation.transform,
+            ),
+          }
+        : {}),
+    });
+  }
   assertOnlyKnownKeys(
     animation,
     `existing manifest symbol "${symbol}" ${state} animation`,
@@ -520,7 +559,7 @@ function validatePreservedAnimation(symbol, state, value) {
   );
   if (animation.kind !== "vni") {
     throw new Error(
-      `Existing manifest symbol "${symbol}" ${state} animation kind must be "builtin", "static" or "vni".`,
+      `Existing manifest symbol "${symbol}" ${state} animation kind must be "builtin", "static", "vni" or "spine".`,
     );
   }
   return Object.freeze({
@@ -532,6 +571,79 @@ function validatePreservedAnimation(symbol, state, value) {
       ),
     ),
     playback: validatePreservedPlayback(symbol, state, animation.playback),
+  });
+}
+
+function validatePreservedAnimationPlayback(symbol, state, value) {
+  const playback = assertRecord(
+    value,
+    `existing manifest symbol "${symbol}" ${state} playback`,
+  );
+  assertOnlyKnownKeys(
+    playback,
+    `existing manifest symbol "${symbol}" ${state} playback`,
+    ["mode", "animationName", "loop"],
+  );
+  if (playback.mode !== "animation") {
+    throw new Error(
+      `Existing manifest symbol "${symbol}" ${state} Spine playback mode must be "animation".`,
+    );
+  }
+  if (typeof playback.loop !== "boolean") {
+    throw new Error(
+      `Existing manifest symbol "${symbol}" ${state} Spine playback loop must be boolean.`,
+    );
+  }
+  if ((state === "appear" || state === "win") && playback.loop) {
+    throw new Error(
+      `Existing manifest symbol "${symbol}" ${state} Spine playback loop must be false for once states.`,
+    );
+  }
+  return Object.freeze({
+    mode: "animation",
+    animationName: assertNonEmptyString(
+      playback.animationName,
+      `existing manifest symbol "${symbol}" ${state} animationName`,
+    ),
+    loop: playback.loop,
+  });
+}
+
+function validatePreservedSpineTransform(symbol, state, value) {
+  const transform = assertRecord(
+    value,
+    `existing manifest symbol "${symbol}" ${state} transform`,
+  );
+  assertOnlyKnownKeys(
+    transform,
+    `existing manifest symbol "${symbol}" ${state} transform`,
+    ["x", "y", "scale"],
+  );
+  return Object.freeze({
+    ...(transform.x !== undefined
+      ? {
+          x: assertFiniteNumber(
+            transform.x,
+            `${symbol}.${state}.transform.x`,
+          ),
+        }
+      : {}),
+    ...(transform.y !== undefined
+      ? {
+          y: assertFiniteNumber(
+            transform.y,
+            `${symbol}.${state}.transform.y`,
+          ),
+        }
+      : {}),
+    ...(transform.scale !== undefined
+      ? {
+          scale: assertFinitePositiveNumber(
+            transform.scale,
+            `${symbol}.${state}.transform.scale`,
+          ),
+        }
+      : {}),
   });
 }
 
@@ -709,6 +821,13 @@ function assertFiniteNonNegativeNumber(value, label) {
   return value;
 }
 
+function assertFiniteNumber(value, label) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${label} must be a finite number.`);
+  }
+  return value;
+}
+
 function assertFinitePositiveNumber(value, label) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new Error(`${label} must be a finite positive number.`);
@@ -718,6 +837,27 @@ function assertFinitePositiveNumber(value, label) {
 
 function normalizeManifestPath(value) {
   return value.startsWith("./") ? value : `./${basename(value)}`;
+}
+
+function validateLocalManifestFilePath(value, label, extensions) {
+  const path = assertNonEmptyString(value, label);
+  if (
+    !path.startsWith("./") ||
+    path.includes("\\") ||
+    path.includes("../")
+  ) {
+    throw new Error(`${label} must be a local ./ path: ${path}.`);
+  }
+  const suffix = path.slice("./".length);
+  if (suffix.length === 0 || suffix.includes("/")) {
+    throw new Error(`${label} must be a ./basename path: ${path}.`);
+  }
+  if (!extensions.some((extension) => suffix.endsWith(extension))) {
+    throw new Error(
+      `${label} must end with ${extensions.join(" or ")}: ${path}.`,
+    );
+  }
+  return path;
 }
 
 function isNormalPngFile(fileName) {

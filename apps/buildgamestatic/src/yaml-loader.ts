@@ -293,12 +293,21 @@ function parseSymbols(
       "pngGlob",
       "vniProjectGlob",
       "vniAssetGlob",
+      "spineSkeletonGlob",
+      "spineAtlasGlob",
+      "spineTextureGlob",
       "emptySymbols",
       "requireExplicitScale",
       "requiredStates",
     ],
     {
-      optional: ["vniProjectGlob", "vniAssetGlob"],
+      optional: [
+        "vniProjectGlob",
+        "vniAssetGlob",
+        "spineSkeletonGlob",
+        "spineAtlasGlob",
+        "spineTextureGlob",
+      ],
     },
   );
   if (typeof record.requireExplicitScale !== "boolean") {
@@ -328,6 +337,30 @@ function parseSymbols(
           vniAssetGlob: assertPath(
             record.vniAssetGlob,
             `${label}.vniAssetGlob`,
+          ),
+        }
+      : {}),
+    ...(record.spineSkeletonGlob !== undefined
+      ? {
+          spineSkeletonGlob: assertPath(
+            record.spineSkeletonGlob,
+            `${label}.spineSkeletonGlob`,
+          ),
+        }
+      : {}),
+    ...(record.spineAtlasGlob !== undefined
+      ? {
+          spineAtlasGlob: assertPath(
+            record.spineAtlasGlob,
+            `${label}.spineAtlasGlob`,
+          ),
+        }
+      : {}),
+    ...(record.spineTextureGlob !== undefined
+      ? {
+          spineTextureGlob: assertPath(
+            record.spineTextureGlob,
+            `${label}.spineTextureGlob`,
           ),
         }
       : {}),
@@ -965,6 +998,7 @@ function validateSkins(config: GameStaticYamlConfig, rootDir: string): void {
     if (skin.symbols.vniAssetGlob !== undefined) {
       validateVniAssetGlob(rootDir, skin.symbols.vniAssetGlob, skinId);
     }
+    validateSpineSymbolGlobs(rootDir, skin.symbols, skinId);
     if (skin.winAmount !== undefined) {
       validateWinAmount(rootDir, skinId, skin.winAmount);
     }
@@ -980,6 +1014,38 @@ function validateSkins(config: GameStaticYamlConfig, rootDir: string): void {
     );
     validateReelArea(config, skinId, skin);
   }
+}
+
+function validateSpineSymbolGlobs(
+  rootDir: string,
+  symbols: GameStaticYamlSymbolsConfig,
+  skinId: string,
+): void {
+  const globs = [
+    symbols.spineSkeletonGlob,
+    symbols.spineAtlasGlob,
+    symbols.spineTextureGlob,
+  ];
+  const configuredCount = globs.filter((glob) => glob !== undefined).length;
+  if (configuredCount !== 0 && configuredCount !== 3) {
+    throw new Error(
+      `skins.${skinId}.symbols Spine 资源必须同时配置 spineSkeletonGlob、spineAtlasGlob 和 spineTextureGlob。`,
+    );
+  }
+  if (!symbols.spineSkeletonGlob) {
+    return;
+  }
+  validateSpineSkeletonGlob(rootDir, symbols.spineSkeletonGlob, skinId);
+  validateSpineAtlasGlob(
+    rootDir,
+    symbols.spineAtlasGlob as string,
+    skinId,
+  );
+  validateSpineTextureGlob(
+    rootDir,
+    symbols.spineTextureGlob as string,
+    skinId,
+  );
 }
 
 function validateFeatureBars(
@@ -1037,6 +1103,75 @@ function validateFeatureBarLayoutFitsConveyors(
         `skins.${skinId}.art.variants.${variantId}.conveyor`,
       );
     }
+  }
+}
+
+function validateSpineSkeletonGlob(
+  rootDir: string,
+  glob: string,
+  skinId: string,
+): void {
+  if (glob.includes("**")) {
+    throw new Error(
+      `skins.${skinId}.symbols.spineSkeletonGlob 不能使用递归 glob：${glob}`,
+    );
+  }
+  const directory = getStrictGlobDirectory(glob);
+  assertSpecificGlobDirectory(
+    directory,
+    `skins.${skinId}.symbols.spineSkeletonGlob`,
+  );
+  assertExistingDirectory(rootDir, directory);
+  if (!/\/\{[-A-Za-z0-9_,]+\}\.json$/u.test(glob)) {
+    throw new Error(
+      `skins.${skinId}.symbols.spineSkeletonGlob 必须是当前资源目录下的 brace JSON glob，例如 assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json。`,
+    );
+  }
+}
+
+function validateSpineAtlasGlob(
+  rootDir: string,
+  glob: string,
+  skinId: string,
+): void {
+  if (glob.includes("**")) {
+    throw new Error(
+      `skins.${skinId}.symbols.spineAtlasGlob 不能使用递归 glob：${glob}`,
+    );
+  }
+  const directory = getStrictGlobDirectory(glob);
+  assertSpecificGlobDirectory(
+    directory,
+    `skins.${skinId}.symbols.spineAtlasGlob`,
+  );
+  assertExistingDirectory(rootDir, directory);
+  if (!/\/\{[-A-Za-z0-9_,]+\}\.atlas$/u.test(glob)) {
+    throw new Error(
+      `skins.${skinId}.symbols.spineAtlasGlob 必须是当前资源目录下的 brace atlas glob，例如 assets/game003-s1/{Symbol}.atlas。`,
+    );
+  }
+}
+
+function validateSpineTextureGlob(
+  rootDir: string,
+  glob: string,
+  skinId: string,
+): void {
+  if (glob.includes("**")) {
+    throw new Error(
+      `skins.${skinId}.symbols.spineTextureGlob 不能使用递归 glob：${glob}`,
+    );
+  }
+  const directory = getStrictGlobDirectory(glob);
+  assertSpecificGlobDirectory(
+    directory,
+    `skins.${skinId}.symbols.spineTextureGlob`,
+  );
+  assertExistingDirectory(rootDir, directory);
+  if (!/\/\{[-A-Za-z0-9_,]+\}\.png$/u.test(glob)) {
+    throw new Error(
+      `skins.${skinId}.symbols.spineTextureGlob 必须是当前资源目录下的 brace PNG glob，例如 assets/game003-s1/{Symbol}.png。`,
+    );
   }
 }
 

@@ -416,6 +416,13 @@ function createValidConfig(): SlotGameStaticConfig {
         symbols: Object.freeze({
           manifest: Object.freeze({ version: 1 }),
           pngModules: Object.freeze({ H1: "/assets/H1.png" }),
+          spineSkeletonModules: Object.freeze({ H1: Object.freeze({}) }),
+          spineAtlasModules: Object.freeze({
+            Symbol: "Symbol.png\nsize: 1,1",
+          }),
+          spineTextureModules: Object.freeze({
+            Symbol: "/assets/Symbol.png",
+          }),
           emptySymbols: Object.freeze([]),
           requireExplicitScale: true,
           requiredStates: Object.freeze(["spinBlur", "disabled"]),

@@ -139,6 +139,18 @@ export async function generateGameStaticConfigModule(options: {
     )};`,
   ];
   const importNames = createImportNames(options.config);
+  const spineAtlasRawImports = createSpineAtlasRawImports({
+    rootDir: options.rootDir,
+    outPath: options.outPath,
+    config: options.config,
+    importNames,
+  });
+  const spineTextureUrlImports = createSpineTextureUrlImports({
+    rootDir: options.rootDir,
+    outPath: options.outPath,
+    config: options.config,
+    importNames,
+  });
 
   for (const skinId of options.config.supportedSkins) {
     const skin = options.config.skins[skinId];
@@ -210,6 +222,20 @@ export async function generateGameStaticConfigModule(options: {
       );
     }
   }
+  for (const entries of Object.values(spineAtlasRawImports)) {
+    for (const entry of entries) {
+      lines.push(
+        `import ${entry.importName} from ${quote(`${entry.modulePath}?raw`)};`,
+      );
+    }
+  }
+  for (const entries of Object.values(spineTextureUrlImports)) {
+    for (const entry of entries) {
+      lines.push(
+        `import ${entry.importName} from ${quote(`${entry.modulePath}?url`)};`,
+      );
+    }
+  }
 
   lines.push("");
   for (const skinId of options.config.supportedSkins) {
@@ -255,6 +281,36 @@ export async function generateGameStaticConfigModule(options: {
         '  import: "default",',
         '  query: "?url"',
         "}) as Record<string, string>;",
+      );
+    }
+    if (skin.symbols.spineSkeletonGlob && names.spineSkeletonModules) {
+      lines.push(
+        `const ${names.spineSkeletonModules} = import.meta.glob(${quote(
+          toImportSpecifierFromRoot(
+            options.rootDir,
+            options.outPath,
+            skin.symbols.spineSkeletonGlob,
+          ),
+        )}, {`,
+        "  eager: true,",
+        '  import: "default"',
+        "}) as Record<string, unknown>;",
+      );
+    }
+    if (skin.symbols.spineAtlasGlob && names.spineAtlasModules) {
+      lines.push(
+        ...renderStaticStringModuleMap(
+          names.spineAtlasModules,
+          spineAtlasRawImports[skinId] ?? [],
+        ),
+      );
+    }
+    if (skin.symbols.spineTextureGlob && names.spineTextureModules) {
+      lines.push(
+        ...renderStaticStringModuleMap(
+          names.spineTextureModules,
+          spineTextureUrlImports[skinId] ?? [],
+        ),
       );
     }
     for (const [featureBarId, featureBar] of Object.entries(
@@ -517,6 +573,15 @@ function renderSkinConfig(options: {
     ...(skin.symbols.vniAssetGlob && names.vniAssetModules
       ? [`        vniAssetModules: ${names.vniAssetModules},`]
       : []),
+    ...(skin.symbols.spineSkeletonGlob && names.spineSkeletonModules
+      ? [`        spineSkeletonModules: ${names.spineSkeletonModules},`]
+      : []),
+    ...(skin.symbols.spineAtlasGlob && names.spineAtlasModules
+      ? [`        spineAtlasModules: ${names.spineAtlasModules},`]
+      : []),
+    ...(skin.symbols.spineTextureGlob && names.spineTextureModules
+      ? [`        spineTextureModules: ${names.spineTextureModules},`]
+      : []),
     `        emptySymbols: Object.freeze(${json(skin.symbols.emptySymbols)} as const),`,
     `        requireExplicitScale: ${String(skin.symbols.requireExplicitScale)},`,
     `        requiredStates: Object.freeze(${json(skin.symbols.requiredStates)} as const)`,
@@ -754,6 +819,9 @@ interface ImportNames {
   readonly symbolModules: string;
   readonly vniProjectModules?: string;
   readonly vniAssetModules?: string;
+  readonly spineSkeletonModules?: string;
+  readonly spineAtlasModules?: string;
+  readonly spineTextureModules?: string;
   readonly winAmountProjectModules?: string;
   readonly winAmountAssetModules?: string;
   readonly landscapeBackground: string;
@@ -762,6 +830,11 @@ interface ImportNames {
   readonly landscapeConveyor?: string;
   readonly portraitConveyor?: string;
   readonly featureBars: Readonly<Record<string, FeatureBarImportNames>>;
+}
+
+interface StaticStringModuleImport {
+  readonly modulePath: string;
+  readonly importName: string;
 }
 
 interface FeatureBarImportNames {
@@ -786,6 +859,15 @@ function createImportNames(
             : undefined,
           vniAssetModules: skin.symbols.vniAssetGlob
             ? `${prefix}VniAssetModules`
+            : undefined,
+          spineSkeletonModules: skin.symbols.spineSkeletonGlob
+            ? `${prefix}SpineSkeletonModules`
+            : undefined,
+          spineAtlasModules: skin.symbols.spineAtlasGlob
+            ? `${prefix}SpineAtlasModules`
+            : undefined,
+          spineTextureModules: skin.symbols.spineTextureGlob
+            ? `${prefix}SpineTextureModules`
             : undefined,
           winAmountProjectModules: skin.winAmount
             ? `${prefix}WinAmountProjectModules`
@@ -814,6 +896,110 @@ function createImportNames(
       ];
     }),
   );
+}
+
+function createSpineAtlasRawImports(options: {
+  readonly rootDir: string;
+  readonly outPath: string;
+  readonly config: GameStaticYamlConfig;
+  readonly importNames: Record<string, ImportNames>;
+}): Record<string, readonly StaticStringModuleImport[]> {
+  return Object.fromEntries(
+    options.config.supportedSkins.map((skinId) => {
+      const skin = options.config.skins[skinId];
+      const names = options.importNames[skinId];
+      if (!skin.symbols.spineAtlasGlob || !names.spineAtlasModules) {
+        return [skinId, []];
+      }
+      const atlasPaths = expandBraceFileGlob(
+        options.rootDir,
+        skin.symbols.spineAtlasGlob,
+        `skins.${skinId}.symbols.spineAtlasGlob`,
+      );
+      return [
+        skinId,
+        atlasPaths.map((atlasPath, index) => ({
+          modulePath: toImportSpecifierFromRoot(
+            options.rootDir,
+            options.outPath,
+            atlasPath,
+          ),
+          importName: `${names.spineAtlasModules}Raw${index}`,
+        })),
+      ];
+    }),
+  );
+}
+
+function createSpineTextureUrlImports(options: {
+  readonly rootDir: string;
+  readonly outPath: string;
+  readonly config: GameStaticYamlConfig;
+  readonly importNames: Record<string, ImportNames>;
+}): Record<string, readonly StaticStringModuleImport[]> {
+  return Object.fromEntries(
+    options.config.supportedSkins.map((skinId) => {
+      const skin = options.config.skins[skinId];
+      const names = options.importNames[skinId];
+      if (!skin.symbols.spineTextureGlob || !names.spineTextureModules) {
+        return [skinId, []];
+      }
+      const texturePaths = expandBraceFileGlob(
+        options.rootDir,
+        skin.symbols.spineTextureGlob,
+        `skins.${skinId}.symbols.spineTextureGlob`,
+      );
+      return [
+        skinId,
+        texturePaths.map((texturePath, index) => ({
+          modulePath: toImportSpecifierFromRoot(
+            options.rootDir,
+            options.outPath,
+            texturePath,
+          ),
+          importName: `${names.spineTextureModules}Url${index}`,
+        })),
+      ];
+    }),
+  );
+}
+
+function renderStaticStringModuleMap(
+  name: string,
+  entries: readonly StaticStringModuleImport[],
+): readonly string[] {
+  if (entries.length === 0) {
+    throw new Error(`${name} must include at least one static module import.`);
+  }
+  return [
+    `const ${name} = Object.freeze({`,
+    ...entries.map(
+      (entry) => `  ${quote(entry.modulePath)}: ${entry.importName},`,
+    ),
+    "} as const satisfies Record<string, string>);",
+  ];
+}
+
+function expandBraceFileGlob(
+  rootDir: string,
+  glob: string,
+  label: string,
+): readonly string[] {
+  const match = /^(.*\/)\{([^}]+)\}(\.[^./]+)$/u.exec(glob);
+  if (!match) {
+    throw new Error(`${label} must be a brace file glob: ${glob}`);
+  }
+  const [, directory, names, extension] = match;
+  const files = names
+    .split(",")
+    .map((name) => `${directory}${name}${extension}`)
+    .sort((left, right) => left.localeCompare(right));
+  for (const file of files) {
+    if (!existsSync(resolve(rootDir, file))) {
+      throw new Error(`${label} matched missing file: ${file}`);
+    }
+  }
+  return Object.freeze(files);
 }
 
 function createLoadingImportNames(

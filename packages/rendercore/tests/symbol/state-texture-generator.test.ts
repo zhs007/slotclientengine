@@ -290,7 +290,29 @@ describe("generate-symbol-state-textures script", () => {
                 disabled: "./H1.disabled.png",
                 scale: 1,
                 animations: {
-                  appear: { kind: "builtin", durationSeconds: 0.42 },
+                  normal: {
+                    kind: "spine",
+                    skeleton: "./H1.json",
+                    atlas: "./Symbol.atlas",
+                    texture: "./Symbol.png",
+                    playback: {
+                      mode: "animation",
+                      animationName: "Idle",
+                      loop: true,
+                    },
+                    transform: { x: 3, y: -4, scale: 0.75 },
+                  },
+                  appear: {
+                    kind: "spine",
+                    skeleton: "./H1.json",
+                    atlas: "./Symbol.atlas",
+                    texture: "./Symbol.png",
+                    playback: {
+                      mode: "animation",
+                      animationName: "Start",
+                      loop: false,
+                    },
+                  },
                   win: { kind: "builtin", durationSeconds: 0.58 },
                 },
               },
@@ -318,7 +340,29 @@ describe("generate-symbol-state-textures script", () => {
         },
       });
       expect(manifest.symbols.H1.animations).toEqual({
-        appear: { kind: "builtin", durationSeconds: 0.42 },
+        normal: {
+          kind: "spine",
+          skeleton: "./H1.json",
+          atlas: "./Symbol.atlas",
+          texture: "./Symbol.png",
+          playback: {
+            mode: "animation",
+            animationName: "Idle",
+            loop: true,
+          },
+          transform: { x: 3, y: -4, scale: 0.75 },
+        },
+        appear: {
+          kind: "spine",
+          skeleton: "./H1.json",
+          atlas: "./Symbol.atlas",
+          texture: "./Symbol.png",
+          playback: {
+            mode: "animation",
+            animationName: "Start",
+            loop: false,
+          },
+        },
         win: { kind: "builtin", durationSeconds: 0.58 },
       });
     } finally {
