@@ -11,6 +11,7 @@ const VIEWER_INSERTED_NODE_ID = "viewer-group-slot-image";
 const VIEWER_TEXT_LAYER_REPLACEMENT_ID = "viewer-text-layer-replacement";
 const STAGE_CANVAS_SCALES = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4] as const;
 const DEFAULT_STAGE_CANVAS_SCALE_INDEX = 2;
+const DEFAULT_PROJECT_ID = "roundreel";
 
 async function bootstrap(): Promise<void> {
   const appRoot = document.querySelector<HTMLDivElement>("#app");
@@ -59,10 +60,10 @@ async function bootstrap(): Promise<void> {
   let activeTextBinding: VNITextLayerTextBinding | null = null;
   let stageCanvasScaleIndex = DEFAULT_STAGE_CANVAS_SCALE_INDEX;
   let loadToken = 0;
-  let activeProject = getBundledProject("project");
+  let activeProject = getBundledProject(DEFAULT_PROJECT_ID);
   const controls = createViewerControls({
     projects: bundledProjects,
-    selectedProjectId: "project",
+    selectedProjectId: DEFAULT_PROJECT_ID,
     container: controlsMount,
     onProjectChange: (projectId) => {
       void loadProject(projectId).catch(showFatalError);
@@ -338,7 +339,7 @@ async function bootstrap(): Promise<void> {
   }
 
   setStageCanvasScaleIndex(stageCanvasScaleIndex);
-  await loadProject("project");
+  await loadProject(DEFAULT_PROJECT_ID);
 
   function applyStageCanvasViewport(
     app: Application,

@@ -69,6 +69,8 @@ const requiredExports = [
   "export interface ParticleAnimationRuntimeState",
   "export interface V5GPlayRangeOptions",
   "export interface V5GSegmentedPlaybackOptions",
+  "export interface V5GForceStopParticlesOptions",
+  "export interface V5GSegmentedPlaybackEndOptions",
   "export type V5GPlaybackMode",
   "export type V5GSegmentedPlaybackPhase",
   "export interface V5GPlaybackState",
@@ -85,6 +87,8 @@ const requiredExports = [
   "export type V5GCocosSegmentedPlaybackPhase",
   "export type V5GCocosSegmentedPlaybackOptions",
   "export type V5GCocosPlayOptions",
+  "export type V5GCocosForceStopParticlesOptions",
+  "export type V5GCocosSegmentedPlaybackEndOptions",
   "export type V5GCocosPlaybackState",
   "export interface V5GCocosLayerGroupInfo",
   "export type V5GCocosLayerGroupSlot",
@@ -138,6 +142,10 @@ const requiredSnippets = [
   "blendMode: V5GBlendMode;",
   "blendMode: sampledLayer.blendMode",
   "getCocosBlendModeConfig(safeGlow.blendMode)",
+  "forceStopAllParticles(options?: V5GCocosForceStopParticlesOptions): void",
+  "forceStopParticlesAfterSegmentEnd",
+  "suppressParticleEmission",
+  "forceStopParticles",
 ];
 
 for (const expected of requiredSnippets) {

@@ -1044,14 +1044,14 @@ describe("V5GCocosPlayer", () => {
     const project = assertV5GProject(roundreelData);
     const { root, player } = makePlayer(project);
 
-    expect(project.schemaVersion).toBe("VNI_0.022");
+    expect(project.schemaVersion).toBe("VNI_0.042");
     expect(project.exportProfile).toMatchObject({
       id: "runtime_100",
       purpose: "runtime",
       assetScale: 1,
     });
     player.init();
-    expect(player.getLayerGroups()).toHaveLength(3);
+    expect(player.getLayerGroups()).toHaveLength(2);
 
     player.seek(1.175);
 
@@ -1796,6 +1796,224 @@ describe("V5GCocosPlayer", () => {
     expect(complete).toEqual([
       { startTime: 0, endTime: 2, currentTime: 2, loopIndex: 0 },
     ]);
+  });
+
+  it("force stops all particles and controls same-playback re-emission", () => {
+    const project = tinyProject({
+      animations: [particleWallAnimation({ duration: 1 })],
+    });
+    project.stage.duration = 2;
+    const { root, player } = makePlayer(project);
+    const complete: unknown[] = [];
+    player.onPlaybackComplete((event) => complete.push(event));
+
+    expect(() => player.forceStopAllParticles()).toThrow(
+      "V5GCocosPlayer must be initialized before forceStopAllParticles.",
+    );
+
+    player.init();
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.5 },
+      loopEnd: { unit: "time", at: 0.5 },
+    });
+    player.update(0.6);
+
+    const particleContainer = getFirstParticleContainer(root);
+    const firstParticle = particleContainer.children[0];
+    expect(player.getRuntimeDiagnostics().particleSpriteCount).toBeGreaterThan(
+      0,
+    );
+    expect(player.getPlaybackState().liveParticleCount).toBeGreaterThan(0);
+
+    player.forceStopAllParticles();
+    expect(firstParticle.destroyed).toBe(true);
+    expect(particleContainer.children).toHaveLength(0);
+    expect(player.getRuntimeDiagnostics()).toMatchObject({
+      particleSpriteCount: 0,
+      liveParticleCount: 0,
+    });
+    expect(player.getPlaybackState().liveParticleCount).toBe(0);
+
+    player.update(0.25);
+    expect(particleContainer.children).toHaveLength(0);
+    expect(complete).toEqual([]);
+
+    player.seek(0.5);
+    expect(particleContainer.children.length).toBeGreaterThan(0);
+
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.5 },
+      loopEnd: { unit: "time", at: 0.5 },
+    });
+    player.update(0.6);
+    expect(particleContainer.children.length).toBeGreaterThan(0);
+
+    player.forceStopAllParticles({ suppressUntilNextPlayback: false });
+    expect(particleContainer.children).toHaveLength(0);
+    player.update(0.1);
+    expect(particleContainer.children.length).toBeGreaterThan(0);
+    expect(() =>
+      player.forceStopAllParticles({
+        suppressUntilNextPlayback: "yes" as never,
+      }),
+    ).toThrow(
+      "V5GCocosPlayer.forceStopAllParticles suppressUntilNextPlayback must be a boolean.",
+    );
+  });
+
+  it("force stops particle drain and emits pending complete once", () => {
+    const project = tinyProject({
+      animations: [particleWallAnimation({ duration: 1 })],
+    });
+    project.stage.duration = 2;
+    const { root, player } = makePlayer(project);
+    const complete: unknown[] = [];
+    player.init();
+    player.setLoop(false);
+    player.onPlaybackComplete((event) => complete.push(event));
+
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.5 },
+      loopEnd: { unit: "time", at: 0.5 },
+    });
+    player.update(0.6);
+    player.requestSegmentedPlaybackEnd();
+    player.update(2);
+
+    expect(player.getPlaybackState().phase).toBe("particle-draining");
+    expect(complete).toEqual([]);
+
+    player.forceStopAllParticles();
+    expect(player.getPlaybackState()).toMatchObject({
+      phase: "complete",
+      liveParticleCount: 0,
+      isDrainingParticles: false,
+    });
+    expect(getFirstParticleContainer(root).children).toHaveLength(0);
+    expect(complete).toEqual([
+      { startTime: 0, endTime: 2, currentTime: 2, loopIndex: 0 },
+    ]);
+
+    player.forceStopAllParticles();
+    expect(complete).toHaveLength(1);
+  });
+
+  it("delays segmented force-stop particles until ending completes", () => {
+    const project = tinyProject({
+      animations: [particleWallAnimation({ duration: 2 })],
+    });
+    project.stage.duration = 2;
+    const { root, player } = makePlayer(project);
+    const complete: unknown[] = [];
+    player.init();
+    player.setLoop(false);
+    player.onPlaybackComplete((event) => complete.push(event));
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.5 },
+      loopEnd: { unit: "time", at: 0.5 },
+    });
+    player.update(0.6);
+
+    const particleContainer = getFirstParticleContainer(root);
+    const visibleDuringLoop = particleContainer.children.length;
+    expect(visibleDuringLoop).toBeGreaterThan(0);
+
+    player.requestSegmentedPlaybackEnd({ forceStopParticles: true });
+    expect(particleContainer.children).toHaveLength(visibleDuringLoop);
+    expect(player.getPlaybackState().phase).toBe("ending");
+    player.update(0.25);
+    expect(player.getPlaybackState().phase).toBe("ending");
+    expect(particleContainer.children.length).toBeGreaterThan(0);
+    expect(complete).toEqual([]);
+
+    player.update(2);
+    expect(player.getPlaybackState()).toMatchObject({
+      phase: "complete",
+      isDrainingParticles: false,
+      liveParticleCount: 0,
+    });
+    expect(particleContainer.children).toHaveLength(0);
+    expect(complete).toEqual([
+      { startTime: 0, endTime: 2, currentTime: 2, loopIndex: 0 },
+    ]);
+
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.5 },
+      loopEnd: { unit: "time", at: 0.5 },
+    });
+    player.update(0.6);
+    player.requestSegmentedPlaybackEnd();
+    player.update(2);
+    expect(player.getPlaybackState().phase).toBe("particle-draining");
+  });
+
+  it("supports segmented force-stop requests from the start phase", () => {
+    const project = tinyProject({
+      animations: [particleWallAnimation({ duration: 2 })],
+    });
+    project.stage.duration = 2;
+    const { root, player } = makePlayer(project);
+    const complete: unknown[] = [];
+    player.init();
+    player.onPlaybackComplete((event) => complete.push(event));
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.7 },
+      loopEnd: { unit: "time", at: 0.7 },
+    });
+    player.update(0.2);
+
+    const particleContainer = getFirstParticleContainer(root);
+    expect(player.getPlaybackState().phase).toBe("start");
+    expect(particleContainer.children.length).toBeGreaterThan(0);
+
+    player.requestSegmentedPlaybackEnd({ forceStopParticles: true });
+    expect(player.getPlaybackState().phase).toBe("start");
+    expect(particleContainer.children.length).toBeGreaterThan(0);
+
+    player.update(0.55);
+    expect(player.getPlaybackState().phase).toBe("ending");
+    expect(particleContainer.children.length).toBeGreaterThan(0);
+    player.update(2);
+    expect(player.getPlaybackState()).toMatchObject({
+      phase: "complete",
+      liveParticleCount: 0,
+      isDrainingParticles: false,
+    });
+    expect(particleContainer.children).toHaveLength(0);
+    expect(complete).toEqual([
+      { startTime: 0, endTime: 2, currentTime: 2, loopIndex: 0 },
+    ]);
+  });
+
+  it("keeps segmented end parameter validation fail-fast", () => {
+    const project = tinyProject();
+    const { player } = makePlayer(project);
+    player.init();
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.5 },
+      loopEnd: { unit: "time", at: 0.5 },
+    });
+    player.update(0.6);
+
+    expect(() =>
+      player.requestSegmentedPlaybackEnd({
+        forceStopParticles: "yes" as never,
+      }),
+    ).toThrow(
+      "V5GCocosPlayer.requestSegmentedPlaybackEnd forceStopParticles must be a boolean.",
+    );
+
+    player.requestSegmentedPlaybackEnd({ forceStopParticles: false });
+    expect(() => player.requestSegmentedPlaybackEnd()).toThrow(
+      'Cannot request segmented playback end while phase is "ending".',
+    );
   });
 
   it("supports segmented range loops", () => {

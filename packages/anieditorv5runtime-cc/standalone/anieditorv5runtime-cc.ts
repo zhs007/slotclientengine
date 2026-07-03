@@ -3680,6 +3680,15 @@ export class V5GParticleRuntime {
     this.drainDuration = 0;
   }
 
+  forceStopAll(): V5GParticleRuntimeFrame {
+    this.reset();
+    return {
+      particles: [],
+      isDraining: false,
+      isComplete: true,
+    };
+  }
+
   emit(
     layers: readonly V5GParticleRuntimeLayer[],
     time: number,
@@ -3964,6 +3973,14 @@ export interface V5GSegmentedPlaybackOptions {
   loopStart: V5GPlaybackPoint;
   loopEnd: V5GPlaybackPoint;
   keepParticlesAlive?: boolean;
+}
+
+export interface V5GForceStopParticlesOptions {
+  suppressUntilNextPlayback?: boolean;
+}
+
+export interface V5GSegmentedPlaybackEndOptions {
+  forceStopParticles?: boolean;
 }
 
 export type V5GPlayOptions =
@@ -4263,6 +4280,11 @@ export type V5GCocosSegmentedPlaybackOptions = V5GSegmentedPlaybackOptions;
 
 export type V5GCocosPlayOptions = V5GPlayOptions;
 
+export type V5GCocosForceStopParticlesOptions = V5GForceStopParticlesOptions;
+
+export type V5GCocosSegmentedPlaybackEndOptions =
+  V5GSegmentedPlaybackEndOptions;
+
 export type V5GCocosPlaybackState = V5GPlaybackState;
 
 export interface V5GCocosLayerGroupInfo {
@@ -4520,6 +4542,8 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   private segmentedPlayback: V5GSegmentedPlaybackSequence | null = null;
   private pendingComplete: V5GCocosPlaybackCompleteContext | null = null;
   private drainPaused = false;
+  private suppressParticleEmission = false;
+  private forceStopParticlesAfterSegmentEnd = false;
   private readonly playbackEvents = new Map<string, NormalizedPlaybackEvent>();
   private readonly completeListeners: Array<
     (event: V5GCocosPlaybackCompleteContext) => void
@@ -4726,6 +4750,8 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.playbackMode = "timeline";
     this.playbackPhase = "idle";
     this.drainPaused = false;
+    this.suppressParticleEmission = false;
+    this.forceStopParticlesAfterSegmentEnd = false;
     this.loopIndex = 0;
     this.particleRuntime.reset();
     this.renderDeterministicFrame(time);
@@ -4770,16 +4796,42 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.startRangePlayback(options);
   }
 
-  requestSegmentedPlaybackEnd(): void {
+  requestSegmentedPlaybackEnd(
+    options?: V5GCocosSegmentedPlaybackEndOptions,
+  ): void {
+    assertOptionsObject(options, "V5GCocosPlayer.requestSegmentedPlaybackEnd");
+    const forceStopParticles = getOptionalBooleanOption(
+      options?.forceStopParticles,
+      "V5GCocosPlayer.requestSegmentedPlaybackEnd forceStopParticles",
+    );
     if (!this.segmentedPlayback) {
       throw new Error("No active V5G segmented playback.");
     }
     this.segmentedPlayback.requestEnd();
+    if (forceStopParticles) {
+      this.forceStopParticlesAfterSegmentEnd = true;
+    }
     this.playbackPhase = this.segmentedPlayback.getPhase();
     if (!this.isPlaying) {
       this.setPlaying(true);
     }
     this.drainPaused = false;
+  }
+
+  forceStopAllParticles(options?: V5GCocosForceStopParticlesOptions): void {
+    this.assertInitialized("forceStopAllParticles");
+    assertOptionsObject(options, "V5GCocosPlayer.forceStopAllParticles");
+    const suppressUntilNextPlayback =
+      options?.suppressUntilNextPlayback === undefined
+        ? true
+        : getOptionalBooleanOption(
+            options.suppressUntilNextPlayback,
+            "V5GCocosPlayer.forceStopAllParticles suppressUntilNextPlayback",
+          );
+    this.forceStopAllParticlesInternal({
+      suppressUntilNextPlayback,
+      finishPendingDrain: true,
+    });
   }
 
   getPlaybackState(): V5GCocosPlaybackState {
@@ -5138,6 +5190,8 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.playbackMode = "timeline";
     this.playbackPhase = "idle";
     this.drainPaused = false;
+    this.suppressParticleEmission = false;
+    this.forceStopParticlesAfterSegmentEnd = false;
     this.loopIndex = 0;
     this.particleRuntime.reset();
     this.renderDeterministicFrame(0);
@@ -5156,6 +5210,8 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.completeListeners.length = 0;
     this.loopIndex = 0;
     this.drainPaused = false;
+    this.suppressParticleEmission = false;
+    this.forceStopParticlesAfterSegmentEnd = false;
     this.particleRuntime.reset();
     this.setPlaying(false);
     this.currentTime = 0;
@@ -5175,6 +5231,8 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.playbackMode = "timeline";
     this.playbackPhase = "start";
     this.loopIndex = 0;
+    this.suppressParticleEmission = false;
+    this.forceStopParticlesAfterSegmentEnd = false;
     this.particleRuntime.reset();
     if (this.currentTime >= this.options.project.stage.duration) {
       this.renderPlaybackFrame(0, 0);
@@ -5198,6 +5256,8 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.playbackPhase = "start";
     this.drainPaused = false;
     this.loopIndex = 0;
+    this.suppressParticleEmission = false;
+    this.forceStopParticlesAfterSegmentEnd = false;
     this.particleRuntime.reset();
     this.renderPlaybackFrame(range.startTime, range.startTime);
     this.setPlaying(true);
@@ -5217,6 +5277,8 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.playbackPhase = "start";
     this.drainPaused = false;
     this.loopIndex = 0;
+    this.suppressParticleEmission = false;
+    this.forceStopParticlesAfterSegmentEnd = false;
     this.particleRuntime.reset();
     this.segmentedPlayback = new V5GSegmentedPlaybackSequence(normalized);
     this.renderPlaybackFrame(0, 0);
@@ -5314,6 +5376,31 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.playbackPhase = result.phase;
     this.triggerSegmentedPlaybackEvents(segmented, result);
     if (result.timelineEnded) {
+      if (this.forceStopParticlesAfterSegmentEnd) {
+        const duration = this.options.project.stage.duration;
+        this.setPlaying(false);
+        this.pendingComplete = {
+          startTime: 0,
+          endTime: duration,
+          currentTime: duration,
+          loopIndex: result.loopIndex,
+        };
+        this.applyProjectSample(duration);
+        this.options.onTimeChange?.(this.currentTime);
+        this.forceStopAllParticlesInternal({
+          suppressUntilNextPlayback: false,
+          finishPendingDrain: false,
+        });
+        this.playbackPhase = "complete";
+        this.segmentedPlayback?.markParticleDrainComplete();
+        this.forceStopParticlesAfterSegmentEnd = false;
+        const event = this.pendingComplete;
+        this.pendingComplete = null;
+        if (event) {
+          this.emitPlaybackComplete(event);
+        }
+        return;
+      }
       this.startParticleDrain(this.options.project.stage.duration, {
         startTime: 0,
         endTime: this.options.project.stage.duration,
@@ -5388,6 +5475,13 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.pendingComplete = completeContext;
     this.playbackPhase = "particle-draining";
     const sampled = this.applyProjectSample(endTime);
+    if (this.suppressParticleEmission) {
+      const frame = this.particleRuntime.forceStopAll();
+      this.renderParticleSamples(frame.particles);
+      this.options.onTimeChange?.(this.currentTime);
+      this.finishParticleDrain();
+      return;
+    }
     const particleLayers = this.getParticleRuntimeLayers(sampled.layers);
     if (particleLayers.length > 0) {
       const endParticles = sampleLiveParticleSprites(particleLayers, endTime);
@@ -5413,9 +5507,32 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     }
   }
 
+  private forceStopAllParticlesInternal(options: {
+    suppressUntilNextPlayback: boolean;
+    finishPendingDrain: boolean;
+  }): void {
+    const wasDraining = this.particleRuntime.isDraining();
+    const frame = this.particleRuntime.forceStopAll();
+    this.renderParticleSamples(frame.particles);
+    this.clearParticles();
+    this.suppressParticleEmission = options.suppressUntilNextPlayback;
+    if (options.finishPendingDrain && wasDraining) {
+      this.playbackPhase = "complete";
+      this.segmentedPlayback?.markParticleDrainComplete();
+      this.forceStopParticlesAfterSegmentEnd = false;
+      this.drainPaused = false;
+      const event = this.pendingComplete;
+      this.pendingComplete = null;
+      if (event) {
+        this.emitPlaybackComplete(event);
+      }
+    }
+  }
+
   private finishParticleDrain(): void {
     this.playbackPhase = "complete";
     this.segmentedPlayback?.markParticleDrainComplete();
+    this.forceStopParticlesAfterSegmentEnd = false;
     this.clearParticles();
     const event = this.pendingComplete;
     this.pendingComplete = null;
@@ -5426,10 +5543,12 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
 
   private renderDeterministicFrame(time: number): void {
     const sampled = this.applyProjectSample(time);
-    const frame = this.particleRuntime.emit(
-      this.getParticleRuntimeLayers(sampled.layers),
-      this.currentTime,
-    );
+    const frame = this.suppressParticleEmission
+      ? this.particleRuntime.forceStopAll()
+      : this.particleRuntime.emit(
+          this.getParticleRuntimeLayers(sampled.layers),
+          this.currentTime,
+        );
     this.renderParticleSamples(frame.particles);
     this.options.onTimeChange?.(this.currentTime);
   }
@@ -5441,13 +5560,15 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   ): void {
     const sampled = this.applyProjectSample(nonParticleTime);
     const particleLayers = this.getParticleRuntimeLayers(sampled.layers);
-    const frame = options.liveParticles
-      ? this.particleRuntime.emitLive(
-          particleLayers,
-          particleTime,
-          options.liveParticleDeltaSeconds ?? 0,
-        )
-      : this.particleRuntime.emit(particleLayers, particleTime);
+    const frame = this.suppressParticleEmission
+      ? this.particleRuntime.forceStopAll()
+      : options.liveParticles
+        ? this.particleRuntime.emitLive(
+            particleLayers,
+            particleTime,
+            options.liveParticleDeltaSeconds ?? 0,
+          )
+        : this.particleRuntime.emit(particleLayers, particleTime);
     this.renderParticleSamples(frame.particles);
     this.options.onTimeChange?.(this.currentTime);
   }
@@ -6323,6 +6444,8 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.playbackPhase = "idle";
     this.loopIndex = 0;
     this.drainPaused = false;
+    this.suppressParticleEmission = false;
+    this.forceStopParticlesAfterSegmentEnd = false;
     this.particleRuntime.reset();
     this.setPlaying(false);
   }
@@ -6536,6 +6659,23 @@ function isAssetResolver<TSpriteFrame>(
     typeof (source as Partial<V5GCocosAssetResolver<TSpriteFrame>>)
       .getSpriteFrame === "function"
   );
+}
+
+function assertOptionsObject(options: unknown, apiName: string): void {
+  if (
+    options !== undefined &&
+    (options === null || typeof options !== "object" || Array.isArray(options))
+  ) {
+    throw new Error(`${apiName} options must be an object.`);
+  }
+}
+
+function getOptionalBooleanOption(value: unknown, field: string): boolean {
+  if (value === undefined) return false;
+  if (typeof value !== "boolean") {
+    throw new Error(`${field} must be a boolean.`);
+  }
+  return value;
 }
 
 function getAssetFrameNameFromPath(assetPath: string): string {

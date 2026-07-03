@@ -423,6 +423,65 @@ describe("standalone runtime parity", () => {
     );
     expect(standaloneEvents).toEqual(modularEvents);
   });
+
+  it("matches modular force-stop particle controls", () => {
+    const project = tinyProject({
+      animations: [particleWallAnimation({ duration: 2 })],
+    });
+    project.stage.duration = 2;
+    const modular = makeModularPlayer(project);
+    const single = makeStandalonePlayer(project);
+    const modularEvents: unknown[] = [];
+    const standaloneEvents: unknown[] = [];
+    modular.init();
+    single.init();
+    modular.onPlaybackComplete((event) => modularEvents.push(event));
+    single.onPlaybackComplete((event) => standaloneEvents.push(event));
+
+    const playOptions = {
+      mode: "segmented" as const,
+      loopStart: { unit: "time" as const, at: 0.5 },
+      loopEnd: { unit: "time" as const, at: 0.5 },
+    };
+    modular.play(playOptions);
+    single.play(playOptions);
+    modular.update(0.6);
+    single.update(0.6);
+    modular.forceStopAllParticles();
+    single.forceStopAllParticles();
+
+    expect(single.getRuntimeDiagnostics().particleSpriteCount).toBe(0);
+    expect(single.getRuntimeDiagnostics().liveParticleCount).toBe(0);
+    expect(comparablePlaybackState(single.getPlaybackState())).toEqual(
+      comparablePlaybackState(modular.getPlaybackState()),
+    );
+    single.update(0.2);
+    modular.update(0.2);
+    expect(comparablePlaybackState(single.getPlaybackState())).toEqual(
+      comparablePlaybackState(modular.getPlaybackState()),
+    );
+
+    modular.play(playOptions);
+    single.play(playOptions);
+    modular.update(0.6);
+    single.update(0.6);
+    modular.requestSegmentedPlaybackEnd({ forceStopParticles: true });
+    single.requestSegmentedPlaybackEnd({ forceStopParticles: true });
+    modular.update(0.25);
+    single.update(0.25);
+    expect(comparablePlaybackState(single.getPlaybackState())).toEqual(
+      comparablePlaybackState(modular.getPlaybackState()),
+    );
+    modular.update(2);
+    single.update(2);
+
+    expect(comparablePlaybackState(single.getPlaybackState())).toEqual(
+      comparablePlaybackState(modular.getPlaybackState()),
+    );
+    expect(single.getRuntimeDiagnostics().particleSpriteCount).toBe(0);
+    expect(single.getRuntimeDiagnostics().liveParticleCount).toBe(0);
+    expect(standaloneEvents).toEqual(modularEvents);
+  });
 });
 
 function comparableSample(sample: SampledProjectState): SampledProjectState {

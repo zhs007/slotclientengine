@@ -137,7 +137,7 @@ describe("bundled projects", () => {
     );
   });
 
-  it("registers roundreel as a VNI_0.022 runtime_100 export-style project", () => {
+  it("registers roundreel as a VNI_0.042 runtime_100 export-style project", () => {
     const roundreel = getBundledProject("roundreel");
     const animationTypes = [
       ...new Set(
@@ -148,7 +148,7 @@ describe("bundled projects", () => {
     ];
 
     expect(roundreel.sourcePath).toBe("docs/anieditor5/export/roundreel.json");
-    expect(roundreel.project.schemaVersion).toBe("VNI_0.022");
+    expect(roundreel.project.schemaVersion).toBe("VNI_0.042");
     expect(roundreel.project.exportProfile).toMatchObject({
       id: "runtime_100",
       purpose: "runtime",

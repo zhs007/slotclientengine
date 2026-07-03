@@ -8,6 +8,8 @@ import type {
   V5GPlaybackState,
   V5GPlayOptions,
   V5GPlayRangeOptions,
+  V5GForceStopParticlesOptions,
+  V5GSegmentedPlaybackEndOptions,
   V5GSegmentedPlaybackOptions,
   V5GSegmentedPlaybackPhase,
 } from "../core/playback-sequence.js";
@@ -60,6 +62,11 @@ export type V5GCocosSegmentedPlaybackPhase = V5GSegmentedPlaybackPhase;
 export type V5GCocosSegmentedPlaybackOptions = V5GSegmentedPlaybackOptions;
 
 export type V5GCocosPlayOptions = V5GPlayOptions;
+
+export type V5GCocosForceStopParticlesOptions = V5GForceStopParticlesOptions;
+
+export type V5GCocosSegmentedPlaybackEndOptions =
+  V5GSegmentedPlaybackEndOptions;
 
 export type V5GCocosPlaybackState = V5GPlaybackState;
 
