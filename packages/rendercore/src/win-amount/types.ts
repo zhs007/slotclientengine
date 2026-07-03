@@ -111,6 +111,7 @@ export interface WinAmountAnimationPlayer {
   start(input: WinAmountAnimationInput): void;
   update(deltaSeconds: number): WinAmountAnimationUpdateResult;
   requestDismiss(): void;
+  dismissImmediately(): void;
   applyLayout(layout: WinAmountAnimationLayout): void;
   isPlaying(): boolean;
   destroy(): void;

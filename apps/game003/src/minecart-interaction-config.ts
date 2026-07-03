@@ -9,8 +9,10 @@ export interface Game003MinecartInteractionConfig {
   readonly loadingResourceId: typeof GAME003_MINECART_LOADING_RESOURCE_ID;
   readonly imageSize: Game003MinecartSize;
   readonly timing: {
+    readonly cartExitDurationSeconds: number;
     readonly cartRushDurationSeconds: number;
     readonly symbolFlyDurationSeconds: number;
+    readonly symbolHoldDurationSeconds: number;
     readonly maxTotalBeforeReelStopSeconds: number;
   };
   readonly motion: {
@@ -40,6 +42,7 @@ export interface Game003MinecartPoint {
 
 export interface Game003MinecartLayoutConfig {
   readonly entrySide: "left" | "right";
+  readonly exitSide: "right";
   readonly offscreenMargin: number;
   readonly stopOffsetFromReelAreaBottomCenter: Game003MinecartPoint;
   readonly cartPivotInImage: Game003MinecartPoint;
@@ -101,7 +104,8 @@ export function getGame003MinecartTotalDurationSeconds(
     GAME003_BG_BAR_SHIFT_DURATION_SECONDS +
     GAME003_BG_BAR_TERMINAL_WIN_DURATION_SECONDS +
     config.timing.cartRushDurationSeconds +
-    config.timing.symbolFlyDurationSeconds
+    config.timing.symbolFlyDurationSeconds +
+    config.timing.symbolHoldDurationSeconds
   );
 }
 
@@ -110,11 +114,17 @@ function parseTiming(
 ): Game003MinecartInteractionConfig["timing"] {
   const record = assertRecord(value, "game003MinecartInteraction.timing");
   assertKeys(record, "game003MinecartInteraction.timing", [
+    "cartExitDurationSeconds",
     "cartRushDurationSeconds",
     "symbolFlyDurationSeconds",
+    "symbolHoldDurationSeconds",
     "maxTotalBeforeReelStopSeconds",
   ]);
   const timing = Object.freeze({
+    cartExitDurationSeconds: assertPositiveNumber(
+      record.cartExitDurationSeconds,
+      "game003MinecartInteraction.timing.cartExitDurationSeconds",
+    ),
     cartRushDurationSeconds: assertPositiveNumber(
       record.cartRushDurationSeconds,
       "game003MinecartInteraction.timing.cartRushDurationSeconds",
@@ -122,6 +132,10 @@ function parseTiming(
     symbolFlyDurationSeconds: assertPositiveNumber(
       record.symbolFlyDurationSeconds,
       "game003MinecartInteraction.timing.symbolFlyDurationSeconds",
+    ),
+    symbolHoldDurationSeconds: assertPositiveNumber(
+      record.symbolHoldDurationSeconds,
+      "game003MinecartInteraction.timing.symbolHoldDurationSeconds",
     ),
     maxTotalBeforeReelStopSeconds: assertPositiveNumber(
       record.maxTotalBeforeReelStopSeconds,
@@ -131,6 +145,11 @@ function parseTiming(
   if (timing.maxTotalBeforeReelStopSeconds > 1.3) {
     throw new Error(
       "game003MinecartInteraction.timing.maxTotalBeforeReelStopSeconds must be <= 1.3.",
+    );
+  }
+  if (timing.cartExitDurationSeconds > 0.25) {
+    throw new Error(
+      "game003MinecartInteraction.timing.cartExitDurationSeconds must be <= 0.25.",
     );
   }
   return timing;
@@ -206,6 +225,7 @@ function parseLayoutConfig(
   const record = assertRecord(layouts[orientation], label);
   assertKeys(record, label, [
     "entrySide",
+    "exitSide",
     "offscreenMargin",
     "stopOffsetFromReelAreaBottomCenter",
     "cartPivotInImage",
@@ -214,8 +234,12 @@ function parseLayoutConfig(
   if (record.entrySide !== "left" && record.entrySide !== "right") {
     throw new Error(`${label}.entrySide must be left or right.`);
   }
+  if (record.exitSide !== "right") {
+    throw new Error(`${label}.exitSide must be right.`);
+  }
   const config = Object.freeze({
     entrySide: record.entrySide,
+    exitSide: record.exitSide,
     offscreenMargin: assertNonNegativeNumber(
       record.offscreenMargin,
       `${label}.offscreenMargin`,

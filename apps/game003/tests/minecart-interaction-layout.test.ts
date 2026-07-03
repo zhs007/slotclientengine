@@ -33,6 +33,19 @@ describe("game003 minecart interaction layout", () => {
     expect(layout.payloadStartCenter.x).toBeCloseTo(
       layout.payloadTargetCenter.x,
     );
+    expect(layout.payloadStartCenter.y).toBeCloseTo(
+      layout.cartStopCenter.y - 94,
+    );
+    expect(layout.payloadStartCenter.y).toBeGreaterThan(
+      layout.cartStopCenter.y - 128,
+    );
+    expect(
+      layout.cartExitCenter.x - layout.cartPivotInImage.x,
+    ).toBeGreaterThanOrEqual(
+      gameLayout.visibleRect.x +
+        gameLayout.visibleRect.width +
+        config.layout.landscape.offscreenMargin,
+    );
     expect(layout.payloadTargetCenter).toEqual({
       x: reelArea.x + reelArea.width / 2,
       y: reelArea.y + reelArea.height / 2,
@@ -67,6 +80,16 @@ describe("game003 minecart interaction layout", () => {
     );
     expect(layout.payloadStartCenter.x).toBeCloseTo(
       layout.payloadTargetCenter.x,
+    );
+    expect(layout.payloadStartCenter.y).toBeCloseTo(
+      layout.cartStopCenter.y - 94,
+    );
+    expect(
+      layout.cartExitCenter.x - layout.cartPivotInImage.x,
+    ).toBeGreaterThanOrEqual(
+      gameLayout.visibleRect.x +
+        gameLayout.visibleRect.width +
+        config.layout.portrait.offscreenMargin,
     );
   });
 });

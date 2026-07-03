@@ -49,6 +49,31 @@ describe("win amount animation player", () => {
     expect(FakeVniPlayer.instances).toHaveLength(0);
   });
 
+  it("dismisses counting playback immediately and keeps idle or complete phases idempotent", () => {
+    const player = createTestPlayer();
+
+    player.dismissImmediately();
+    expect(player.update(0)).toMatchObject({
+      completed: true,
+      phase: "idle",
+    });
+
+    player.start({ betAmountRaw: 10, winAmountRaw: 8 });
+    player.update(0.25);
+    player.dismissImmediately();
+    expect(player.isPlaying()).toBe(false);
+    expect(player.update(0)).toMatchObject({
+      completed: true,
+      phase: "complete",
+    });
+
+    player.dismissImmediately();
+    expect(player.update(0)).toMatchObject({
+      completed: true,
+      phase: "complete",
+    });
+  });
+
   it("counts major wins after the minor phase before waiting for dismissal", () => {
     const player = createTestPlayer();
 
@@ -204,6 +229,36 @@ describe("win amount animation player", () => {
     expect(
       FakeVniPlayer.instances.map((instance) => instance.projectId),
     ).toEqual(["win-amount-bigwin", "win-amount-superwin"]);
+  });
+
+  it("destroys active and ending tiers when dismissed immediately", async () => {
+    const player = createTestPlayer();
+
+    player.start({ betAmountRaw: 10, winAmountRaw: 500 });
+    player.update(1.5);
+    player.update(3);
+    await flushMicrotasks();
+    player.update(5);
+    await flushMicrotasks();
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.projectId),
+    ).toEqual(["win-amount-bigwin", "win-amount-superwin"]);
+
+    player.dismissImmediately();
+
+    expect(player.isPlaying()).toBe(false);
+    expect(player.update(0)).toMatchObject({
+      completed: true,
+      phase: "complete",
+    });
+    expect(
+      FakeVniPlayer.instances.map((instance) => instance.endRequests),
+    ).toEqual([1, 0]);
+    expect(
+      FakeVniPlayer.instances.map(
+        (instance) => instance.completeListeners.size,
+      ),
+    ).toEqual([0, 0]);
   });
 
   it("fails fast for invalid input, delta, formatter output, and config", () => {

@@ -238,7 +238,8 @@ describe("game003 adapter", () => {
     expect(bgBar.startPlans).toHaveLength(1);
     expect(bgBar.startPlans[0]?.features).toEqual(GAME003_BG_BAR_FEATURES);
     expect(bgBar.playing).toBe(true);
-    expect(minecart.resetCount).toBe(1);
+    expect(minecart.resetCount).toBe(0);
+    expect(minecart.exitRequests).toEqual([false]);
     expect(minecart.startFeatures).toEqual([]);
     expect(resolved).toBe(false);
 
@@ -252,6 +253,74 @@ describe("game003 adapter", () => {
     await spinPromise;
     expect(minecart.startFeatures).toEqual([]);
     expect(resolved).toBe(true);
+  });
+
+  it("moves a parked minecart out on the next spin and waits for exit completion", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const bgBar = new FakeBgBarRuntime();
+    const minecart = new FakeMinecartRuntime({
+      completeOnFirstUpdate: false,
+      initialPhase: "parked",
+    });
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createBgBarRuntime: () => bgBar.asRuntime(),
+      createMinecartInteractionRuntime: () => minecart.asRuntime(),
+    });
+    await adapter.mount(createMountContext());
+
+    const spinPromise = Promise.resolve(adapter.playSpin(createBgBarLogic()));
+    let resolved = false;
+    void spinPromise.then(() => {
+      resolved = true;
+    });
+
+    await Promise.resolve();
+    expect(minecart.exitRequests).toEqual([true]);
+    expect(minecart.phase).toBe("cart-exit");
+
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    expect(minecart.phase).toBe("cart-exit");
+
+    minecart.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await spinPromise;
+    expect(resolved).toBe(true);
+    expect(minecart.phase).toBe("idle");
+    expect(minecart.startFeatures).toEqual([]);
+  });
+
+  it("fails if a new terminal minecart feature arrives before the parked cart exits", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const bgBar = new FakeBgBarRuntime();
+    const minecart = new FakeMinecartRuntime({
+      completeOnFirstUpdate: false,
+      initialPhase: "parked",
+    });
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createBgBarRuntime: () => bgBar.asRuntime(),
+      createMinecartInteractionRuntime: () => minecart.asRuntime(),
+    });
+    await adapter.mount(createMountContext());
+
+    const spinPromise = adapter.playSpin(
+      createBgBarLogicWithFeatures(["wild", "normal", "wild", "wild", "up"]),
+    );
+
+    fakeApp.tick(16);
+    await expect(spinPromise).rejects.toThrow(/exit must complete/);
   });
 
   it("starts minecart after terminal win when terminal bg-bar feature is not normal", async () => {
@@ -332,7 +401,7 @@ describe("game003 adapter", () => {
     fakeApp.tick(16);
     await Promise.resolve();
     expect(minecart.startFeatures).toEqual(["wild"]);
-    expect(minecart.playing).toBe(false);
+    expect(minecart.phase).toBe("parked");
     expect(resolved).toBe(false);
 
     runtime.completeNextUpdate = true;
@@ -395,7 +464,7 @@ describe("game003 adapter", () => {
     expect(resolved).toBe(true);
   });
 
-  it("waits for amount animation when there is win amount without symbol queue", async () => {
+  it("resolves after amount animation reaches awaiting-dismiss without requiring a click", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();
     const winAmount = new FakeWinAmountPlayer({ completeOnFirstUpdate: false });
@@ -433,6 +502,51 @@ describe("game003 adapter", () => {
     fakeApp.tick(16);
     await spinPromise;
     expect(resolved).toBe(true);
+    expect(winAmount.phase).toBe("awaiting-dismiss");
+  });
+
+  it("keeps ticking an awaiting win amount after resolve and dismisses it on the next spin", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const winAmount = new FakeWinAmountPlayer({ completeOnFirstUpdate: true });
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createWinAmountPlayer: () => winAmount.asPlayer(),
+    });
+    await adapter.mount(createMountContext());
+
+    const firstSpin = Promise.resolve(
+      adapter.playSpin(
+        createLogic(GAME003_SPIN_SCENE, {
+          betAmountRaw: 10,
+          lines: 10,
+          winAmountRaw: 25,
+        }),
+      ),
+    );
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    fakeApp.tick(16);
+    await firstSpin;
+    expect(winAmount.phase).toBe("awaiting-dismiss");
+    const updateCountAfterResolve = winAmount.updateDeltas.length;
+
+    fakeApp.tick(16);
+    expect(winAmount.updateDeltas).toHaveLength(updateCountAfterResolve + 1);
+    expect(winAmount.phase).toBe("awaiting-dismiss");
+
+    const secondSpin = Promise.resolve(
+      adapter.playSpin(createLogic(GAME003_SPIN_SCENE)),
+    );
+    expect(winAmount.immediateDismissRequests).toBe(2);
+    expect(winAmount.phase).toBe("complete");
+
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await secondSpin;
   });
 
   it("waits for both symbol win sequence and amount animation", async () => {
@@ -1134,19 +1248,38 @@ class FakeBgBarRuntime {
 class FakeMinecartRuntime {
   readonly container = new Container();
   readonly startFeatures: Game003BgBarFeature[] = [];
+  readonly exitRequests: boolean[] = [];
   readonly updateDeltas: number[] = [];
   readonly layoutCalls: Game003MinecartInteractionLayout[] = [];
   completeNextUpdate: boolean;
   resetCount = 0;
-  playing = false;
+  phase:
+    | "idle"
+    | "cart-rush"
+    | "symbol-fly"
+    | "symbol-hold"
+    | "parked"
+    | "cart-exit"
+    | "destroyed";
   destroyed = false;
 
   constructor(
-    options: { readonly completeOnFirstUpdate?: boolean } = {
+    options: {
+      readonly completeOnFirstUpdate?: boolean;
+      readonly initialPhase?:
+        | "idle"
+        | "cart-rush"
+        | "symbol-fly"
+        | "symbol-hold"
+        | "parked"
+        | "cart-exit";
+    } = {
       completeOnFirstUpdate: true,
+      initialPhase: "idle",
     },
   ) {
     this.completeNextUpdate = options.completeOnFirstUpdate ?? true;
+    this.phase = options.initialPhase ?? "idle";
   }
 
   asRuntime(): Game003MinecartInteractionRuntime {
@@ -1157,41 +1290,79 @@ class FakeMinecartRuntime {
       },
       reset: () => {
         this.resetCount += 1;
-        this.playing = false;
+        this.phase = "idle";
       },
       start: (feature) => {
         if (feature === "normal") {
           throw new Error("fake minecart should not play normal.");
         }
-        if (this.playing) {
-          throw new Error("fake minecart already playing.");
+        if (this.phase !== "idle") {
+          throw new Error(`fake minecart cannot start from ${this.phase}.`);
         }
         this.startFeatures.push(feature);
-        this.playing = true;
+        this.phase = "cart-rush";
+      },
+      startExitIfParked: () => {
+        const started = this.phase === "parked";
+        this.exitRequests.push(started);
+        if (
+          this.phase === "cart-rush" ||
+          this.phase === "symbol-fly" ||
+          this.phase === "symbol-hold" ||
+          this.phase === "cart-exit"
+        ) {
+          throw new Error(`fake minecart cannot exit from ${this.phase}.`);
+        }
+        if (started) {
+          this.phase = "cart-exit";
+        }
+        return started;
+      },
+      clearParkedCart: () => {
+        if (this.phase === "parked") {
+          this.phase = "idle";
+        }
       },
       update: (deltaSeconds) => {
         this.updateDeltas.push(deltaSeconds);
         if (this.completeNextUpdate) {
-          this.playing = false;
+          if (this.phase === "cart-exit") {
+            this.phase = "idle";
+          } else if (
+            this.phase === "cart-rush" ||
+            this.phase === "symbol-fly" ||
+            this.phase === "symbol-hold"
+          ) {
+            this.phase = "parked";
+          }
         }
-        return { completed: !this.playing };
+        return { completed: !this.isPlaying() };
       },
-      isPlaying: () => this.playing,
+      isPlaying: () => this.isPlaying(),
       getSnapshot: () => ({
-        phase: this.playing ? "cart-rush" : "idle",
+        phase: this.phase,
         feature: this.startFeatures.at(-1) ?? null,
         cartPosition: { x: 0, y: 0 },
         cartRotation: 0,
-        cartVisible: this.playing,
-        payloadPosition: this.playing ? { x: 0, y: 0 } : null,
-        payloadAlpha: this.playing ? 1 : null,
-        payloadVisible: this.playing,
+        cartVisible: this.phase !== "idle" && this.phase !== "destroyed",
+        payloadPosition: this.isPlaying() ? { x: 0, y: 0 } : null,
+        payloadAlpha: this.isPlaying() ? 1 : null,
+        payloadVisible: this.isPlaying(),
       }),
       destroy: () => {
         this.destroyed = true;
-        this.playing = false;
+        this.phase = "destroyed";
       },
     };
+  }
+
+  isPlaying(): boolean {
+    return (
+      this.phase === "cart-rush" ||
+      this.phase === "symbol-fly" ||
+      this.phase === "symbol-hold" ||
+      this.phase === "cart-exit"
+    );
   }
 }
 
@@ -1204,7 +1375,15 @@ class FakeWinAmountPlayer {
   readonly updateDeltas: number[] = [];
   readonly layoutCalls: unknown[] = [];
   dismissRequests = 0;
-  playing = false;
+  immediateDismissRequests = 0;
+  phase:
+    | "idle"
+    | "minor-counting"
+    | "major-counting"
+    | "tier-counting"
+    | "awaiting-dismiss"
+    | "dismissing"
+    | "complete" = "idle";
   destroyed = false;
   completeNextUpdate: boolean;
 
@@ -1221,16 +1400,16 @@ class FakeWinAmountPlayer {
       container: this.container,
       start: (input) => {
         this.starts.push(input);
-        this.playing = input.winAmountRaw > 0;
+        this.phase = input.winAmountRaw > 0 ? "major-counting" : "complete";
       },
       update: (deltaSeconds) => {
         this.updateDeltas.push(deltaSeconds);
-        if (this.completeNextUpdate) {
-          this.playing = false;
+        if (this.completeNextUpdate && this.phase === "major-counting") {
+          this.phase = "awaiting-dismiss";
         }
         return {
-          completed: !this.playing,
-          phase: this.playing ? "major-counting" : "complete",
+          completed: this.phase === "idle" || this.phase === "complete",
+          phase: this.phase,
           displayedAmountRaw: this.starts.at(-1)?.winAmountRaw ?? 0,
         };
       },
@@ -1239,12 +1418,16 @@ class FakeWinAmountPlayer {
       },
       requestDismiss: () => {
         this.dismissRequests += 1;
-        this.playing = false;
+        this.phase = "complete";
       },
-      isPlaying: () => this.playing,
+      dismissImmediately: () => {
+        this.immediateDismissRequests += 1;
+        this.phase = "complete";
+      },
+      isPlaying: () => this.phase !== "idle" && this.phase !== "complete",
       destroy: () => {
         this.destroyed = true;
-        this.playing = false;
+        this.phase = "complete";
       },
     };
   }

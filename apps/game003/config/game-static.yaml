@@ -143,9 +143,12 @@ skins:
           width: 369
           height: 252
         timing:
-          # 总互动 = bg-bar shift + 终点 win + 矿车冲入刹车 + payload 飞入淡出，必须早于主转轮停轴。
-          cartRushDurationSeconds: 0.38
-          symbolFlyDurationSeconds: 0.36
+          # 总入场互动 = bg-bar shift + 终点 win + 矿车冲入刹车 + payload 飞入 + payload 停留，必须早于主转轮停轴。
+          # cartExitDurationSeconds 用于下一轮 spin 开始时的右侧出屏，不计入上一轮入场预算。
+          cartExitDurationSeconds: 0.18
+          cartRushDurationSeconds: 0.26
+          symbolFlyDurationSeconds: 0.43
+          symbolHoldDurationSeconds: 0.12
           maxTotalBeforeReelStopSeconds: 1.3
         motion:
           overshootPixels: 34
@@ -158,20 +161,22 @@ skins:
         layout:
           landscape:
             entrySide: left
+            exitSide: right
             offscreenMargin: 120
             # 停点坐标相对当前横屏主转轮可见区底部中心，单位是横屏 art 像素。
             stopOffsetFromReelAreaBottomCenter: { x: 0, y: 85 }
             # cartPivotInImage 是 minecart.png 图片内 pivot，按车轮落轨点校准；不是 CSS/viewport 坐标。
             cartPivotInImage: { x: 184.5, y: 220 }
             # payloadAnchorInImage 是车厢装载区中心，payload 起飞前会对齐到该图片内点。
-            payloadAnchorInImage: { x: 184.5, y: 92 }
+            payloadAnchorInImage: { x: 184.5, y: 126 }
           portrait:
             entrySide: left
+            exitSide: right
             offscreenMargin: 120
             # 停点坐标相对当前竖屏主转轮可见区底部中心，按前景轨道校准。
             stopOffsetFromReelAreaBottomCenter: { x: 0, y: 145 }
             cartPivotInImage: { x: 184.5, y: 220 }
-            payloadAnchorInImage: { x: 184.5, y: 92 }
+            payloadAnchorInImage: { x: 184.5, y: 126 }
     # 横竖屏 art 适配。focusRect 坐标相对于对应完整背景 art。
     # focusRect 既是背景图上的重点区域，也是 game003 主转轴框和传送带的相对定位 anchor。
     # 坐标基准是完整背景 art，不是 CSS 像素、viewport 像素或裁切后的 visible rect。

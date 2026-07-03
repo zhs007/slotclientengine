@@ -8,7 +8,10 @@ import type {
   SlotGameViewportSnapshot,
 } from "@slotclientengine/gameframeworks";
 import type { SymbolAssetMap } from "@slotclientengine/rendercore";
-import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
+import type {
+  WinAmountAnimationPhase,
+  WinAmountAnimationPlayer,
+} from "@slotclientengine/rendercore/win-amount";
 import {
   createGame003BgBarSymbolAssetMapFromModules,
   createGame003SymbolAssetMapFromModules,
@@ -112,9 +115,12 @@ interface PendingAnimation {
   winGroupAdvanced: boolean;
   winSequenceComplete: boolean;
   winAmountExpected: boolean;
+  winAmountPlaybackComplete: boolean;
+  lastWinAmountPhase?: WinAmountAnimationPhase;
   bgBarExpected: boolean;
-  minecartExpected: boolean;
-  minecartStarted: boolean;
+  minecartExitStarted: boolean;
+  minecartReturnExpected: boolean;
+  minecartReturnStarted: boolean;
   betAmountRaw: number;
   winAmountRaw: number;
   resolve(): void;
@@ -311,14 +317,17 @@ class Game003PixiAdapter implements SlotGameAdapter {
     );
     const winQueue = createGame003WinSymbolSequence(logic, targetScene);
     const bgBarPlan = createGame003BgBarSpinPlan(logic);
-    const minecartExpected =
+    const minecartReturnExpected =
       bgBarPlan !== null && bgBarPlan.features[0] !== "normal";
+    const betAmountRaw = logic.getBet() * logic.getLines();
+    const winAmountRaw = logic.getTotalWin();
+    this.#requireWinAmountPlayer().dismissImmediately();
+    const minecartExitStarted =
+      this.#requireMinecartRuntime().startExitIfParked();
     runtime.spinToScene(targetScene, "spin main scene");
-    this.#requireMinecartRuntime().reset();
     if (bgBarPlan) {
       this.#requireBgBarRuntime().startSpin(bgBarPlan);
     }
-    const betAmountRaw = logic.getBet() * logic.getLines();
 
     return new Promise((resolve, reject) => {
       this.#pendingAnimation = {
@@ -329,12 +338,14 @@ class Game003PixiAdapter implements SlotGameAdapter {
         winGroupStarted: false,
         winGroupAdvanced: false,
         winSequenceComplete: winQueue.length === 0,
-        winAmountExpected: logic.getTotalWin() > 0,
+        winAmountExpected: winAmountRaw > 0,
+        winAmountPlaybackComplete: winAmountRaw <= 0,
         bgBarExpected: bgBarPlan !== null,
-        minecartExpected,
-        minecartStarted: false,
+        minecartExitStarted,
+        minecartReturnExpected,
+        minecartReturnStarted: false,
         betAmountRaw,
-        winAmountRaw: logic.getTotalWin(),
+        winAmountRaw,
         resolve,
         reject,
       };
@@ -369,24 +380,39 @@ class Game003PixiAdapter implements SlotGameAdapter {
   }
 
   readonly #onTick: Game003TickerListener = (ticker) => {
-    if (!this.#runtime || !this.#pendingAnimation) {
+    if (!this.#runtime) {
       return;
     }
 
     try {
       const deltaSeconds = normalizeTickerDeltaSeconds(ticker);
-      if (this.#pendingAnimation.phase === "spinning") {
+      const pending = this.#pendingAnimation;
+      if (!pending) {
+        this.#tickLingeringWinAmount(deltaSeconds);
+      } else if (pending.phase === "spinning") {
         this.#tickSpinPhase(deltaSeconds);
       } else {
         this.#tickWinSequencePhase(deltaSeconds);
       }
     } catch (error) {
+      const normalizedError =
+        error instanceof Error ? error : new Error(String(error));
       this.#app?.ticker.stop();
-      this.#rejectPending(
-        error instanceof Error ? error : new Error(String(error)),
-      );
+      if (this.#pendingAnimation) {
+        this.#rejectPending(normalizedError);
+      } else {
+        throw normalizedError;
+      }
     }
   };
+
+  #tickLingeringWinAmount(deltaSeconds: number): void {
+    const player = this.#winAmountPlayer;
+    if (!player?.isPlaying()) {
+      return;
+    }
+    player.update(deltaSeconds);
+  }
 
   #tickSpinPhase(deltaSeconds: number): void {
     const runtime = this.#requireRuntime();
@@ -395,7 +421,11 @@ class Game003PixiAdapter implements SlotGameAdapter {
       return;
     }
     const result = runtime.update(deltaSeconds);
-    if (pending.bgBarExpected) {
+    if (
+      pending.bgBarExpected ||
+      pending.minecartExitStarted ||
+      pending.minecartReturnStarted
+    ) {
       this.#tickBgBarAndMinecart(deltaSeconds, pending);
     }
     if (!result.completed) {
@@ -412,6 +442,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
         betAmountRaw: pending.betAmountRaw,
         winAmountRaw: pending.winAmountRaw,
       });
+      pending.winAmountPlaybackComplete = false;
     }
 
     pending.phase = "win-sequence";
@@ -442,36 +473,54 @@ class Game003PixiAdapter implements SlotGameAdapter {
       }
     }
 
-    if (pending.winAmountExpected) {
-      this.#requireWinAmountPlayer().update(deltaSeconds);
+    if (pending.winAmountExpected && !pending.winAmountPlaybackComplete) {
+      const result = this.#requireWinAmountPlayer().update(deltaSeconds);
+      pending.lastWinAmountPhase = result.phase;
+      pending.winAmountPlaybackComplete = !isWinAmountBlockingSpin(
+        result.phase,
+      );
     }
-    if (pending.bgBarExpected) {
+    if (
+      pending.bgBarExpected ||
+      pending.minecartExitStarted ||
+      pending.minecartReturnStarted
+    ) {
       this.#tickBgBarAndMinecart(deltaSeconds, pending);
     }
     this.#completePendingIfReady(pending);
   }
 
   #tickBgBarAndMinecart(deltaSeconds: number, pending: PendingAnimation): void {
+    const minecartRuntime = this.#requireMinecartRuntime();
+    const minecartWasPlaying =
+      pending.minecartExitStarted || pending.minecartReturnStarted;
+    if (minecartWasPlaying) {
+      minecartRuntime.update(deltaSeconds);
+    }
+    if (!pending.bgBarExpected) {
+      return;
+    }
+
     const bgBarResult = this.#requireBgBarRuntime().update(deltaSeconds);
-    if (bgBarResult.terminalFeatureCompleted !== undefined) {
-      if (bgBarResult.terminalFeatureCompleted !== "normal") {
-        this.#requireMinecartRuntime().start(
-          bgBarResult.terminalFeatureCompleted,
+    const terminalFeature = bgBarResult.terminalFeatureCompleted;
+    if (terminalFeature !== undefined && terminalFeature !== "normal") {
+      if (minecartRuntime.isPlaying()) {
+        throw new Error(
+          "game003 minecart exit must complete before starting the next terminal feature.",
         );
-        pending.minecartStarted = true;
       }
+      minecartRuntime.start(terminalFeature);
+      pending.minecartReturnStarted = true;
+      minecartRuntime.update(deltaSeconds);
     }
     if (
-      pending.minecartExpected &&
+      pending.minecartReturnExpected &&
       bgBarResult.completed &&
-      !pending.minecartStarted
+      !pending.minecartReturnStarted
     ) {
       throw new Error(
         "game003 bg-bar completed without a terminal minecart feature event.",
       );
-    }
-    if (pending.minecartStarted) {
-      this.#requireMinecartRuntime().update(deltaSeconds);
     }
   }
 
@@ -515,18 +564,22 @@ class Game003PixiAdapter implements SlotGameAdapter {
     if (!pending.winSequenceComplete) {
       return;
     }
-    if (
-      pending.winAmountExpected &&
-      this.#requireWinAmountPlayer().isPlaying()
-    ) {
+    if (pending.winAmountExpected && !pending.winAmountPlaybackComplete) {
       return;
     }
     if (pending.bgBarExpected && this.#requireBgBarRuntime().isPlaying()) {
       return;
     }
     if (
-      pending.minecartExpected &&
-      (!pending.minecartStarted || this.#requireMinecartRuntime().isPlaying())
+      pending.minecartExitStarted &&
+      this.#requireMinecartRuntime().isPlaying()
+    ) {
+      return;
+    }
+    if (
+      pending.minecartReturnExpected &&
+      (!pending.minecartReturnStarted ||
+        this.#requireMinecartRuntime().isPlaying())
     ) {
       return;
     }
@@ -615,6 +668,14 @@ function normalizeTickerDeltaSeconds(ticker: Game003TickerSnapshot): number {
     );
   }
   return Math.min(deltaSeconds, GAME003_MAX_TICK_DELTA_SECONDS);
+}
+
+function isWinAmountBlockingSpin(phase: WinAmountAnimationPhase): boolean {
+  return (
+    phase === "minor-counting" ||
+    phase === "major-counting" ||
+    phase === "tier-counting"
+  );
 }
 
 function createPixiApplication(): Game003PixiApplication {

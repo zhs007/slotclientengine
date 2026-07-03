@@ -10,7 +10,7 @@ import {
 import { getGame003SkinConfig } from "../src/skin-config.js";
 
 describe("game003 minecart interaction runtime", () => {
-  it("rushes, brakes, flies the payload, and completes with payload faded out", () => {
+  it("rushes, brakes, holds the payload, parks, and exits on the next spin", () => {
     const runtime = createRuntime();
     const layout = createLayout();
 
@@ -24,34 +24,61 @@ describe("game003 minecart interaction runtime", () => {
     });
     expect(runtime.getSnapshot().cartPosition).toEqual(layout.cartStartCenter);
 
-    runtime.update(0.29);
+    runtime.update(0.2);
     const braking = runtime.getSnapshot();
     expect(braking.phase).toBe("cart-rush");
     expect(braking.cartPosition.x).toBeGreaterThan(layout.cartStopCenter.x);
     expect(Math.abs(braking.cartRotation)).toBeGreaterThan(0);
 
-    runtime.update(0.09);
+    runtime.update(0.06);
     expect(runtime.getSnapshot()).toMatchObject({
       phase: "symbol-fly",
       cartRotation: 0,
     });
-    runtime.update(0.18);
+    runtime.update(0.215);
     const flying = runtime.getSnapshot();
     expect(flying.phase).toBe("symbol-fly");
     expect(flying.payloadVisible).toBe(true);
-    expect(flying.payloadAlpha ?? 0).toBeLessThan(1);
+    expect(flying.payloadAlpha ?? 0).toBeGreaterThan(0.9);
     expect(flying.payloadPosition?.x).toBeCloseTo(layout.payloadTargetCenter.x);
     expect(flying.payloadPosition?.y ?? 0).toBeLessThan(
       layout.payloadStartCenter.y,
     );
+    expect(flying.payloadPosition?.y ?? 0).toBeGreaterThan(
+      layout.payloadTargetCenter.y,
+    );
 
-    expect(runtime.update(0.18)).toEqual({ completed: true });
+    expect(runtime.update(0.215)).toEqual({ completed: false });
+    expect(runtime.getSnapshot()).toMatchObject({
+      phase: "symbol-hold",
+      payloadVisible: true,
+      payloadAlpha: 0.95,
+      payloadPosition: layout.payloadTargetCenter,
+      cartRotation: 0,
+    });
+
+    expect(runtime.update(0.12)).toEqual({ completed: true });
     expect(runtime.isPlaying()).toBe(false);
     expect(runtime.getSnapshot()).toMatchObject({
-      phase: "idle",
-      cartRotation: 0,
+      phase: "parked",
+      cartVisible: true,
       payloadAlpha: 0,
       payloadVisible: false,
+    });
+
+    expect(runtime.startExitIfParked()).toBe(true);
+    expect(runtime.getSnapshot()).toMatchObject({
+      phase: "cart-exit",
+      cartVisible: true,
+    });
+    runtime.update(0.09);
+    expect(runtime.getSnapshot().cartPosition.x).toBeGreaterThan(
+      layout.cartStopCenter.x,
+    );
+    expect(runtime.update(0.09)).toEqual({ completed: true });
+    expect(runtime.getSnapshot()).toMatchObject({
+      phase: "idle",
+      cartVisible: false,
     });
   });
 
@@ -60,8 +87,18 @@ describe("game003 minecart interaction runtime", () => {
 
     expect(() => runtime.start("normal")).toThrow(/normal bg-bar/);
     runtime.start("wild");
-    expect(() => runtime.start("wild")).toThrow(/already in progress/);
+    expect(() => runtime.start("wild")).toThrow(/must be idle/);
+    expect(() => runtime.startExitIfParked()).toThrow(/cannot start exit/);
     expect(() => runtime.update(Number.NaN)).toThrow(/finite non-negative/);
+
+    runtime.reset();
+    expect(runtime.startExitIfParked()).toBe(false);
+    runtime.start("up");
+    runtime.update(1);
+    expect(runtime.getSnapshot().phase).toBe("parked");
+    expect(() => runtime.start("wild")).toThrow(/must be idle/);
+    runtime.clearParkedCart();
+    expect(runtime.getSnapshot().phase).toBe("idle");
 
     runtime.destroy();
     runtime.destroy();

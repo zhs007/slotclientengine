@@ -13,8 +13,10 @@ describe("game003 minecart interaction config", () => {
       loadingResourceId: "game003-minecart",
       imageSize: { width: 369, height: 252 },
       timing: {
-        cartRushDurationSeconds: 0.38,
-        symbolFlyDurationSeconds: 0.36,
+        cartExitDurationSeconds: 0.18,
+        cartRushDurationSeconds: 0.26,
+        symbolFlyDurationSeconds: 0.43,
+        symbolHoldDurationSeconds: 0.12,
         maxTotalBeforeReelStopSeconds: 1.3,
       },
       motion: {
@@ -28,7 +30,14 @@ describe("game003 minecart interaction config", () => {
         fadeEndAlpha: 0,
       },
     });
-    expect(getGame003MinecartTotalDurationSeconds(config)).toBeCloseTo(1.26);
+    expect(config.layout.landscape.exitSide).toBe("right");
+    expect(config.layout.portrait.exitSide).toBe("right");
+    expect(config.layout.landscape.payloadAnchorInImage).toEqual({
+      x: 184.5,
+      y: 126,
+    });
+    expect(config.timing.cartExitDurationSeconds).toBeLessThanOrEqual(0.25);
+    expect(getGame003MinecartTotalDurationSeconds(config)).toBeCloseTo(1.29);
   });
 
   it("fails fast for missing, malformed, or over-budget app extension data", () => {
@@ -61,6 +70,17 @@ describe("game003 minecart interaction config", () => {
           ...valid.game003MinecartInteraction,
           timing: {
             ...valid.game003MinecartInteraction.timing,
+            cartExitDurationSeconds: 0.3,
+          },
+        },
+      }),
+    ).toThrow(/cartExitDurationSeconds.*<= 0\.25/);
+    expect(() =>
+      getGame003MinecartInteractionConfig({
+        game003MinecartInteraction: {
+          ...valid.game003MinecartInteraction,
+          timing: {
+            ...valid.game003MinecartInteraction.timing,
             cartRushDurationSeconds: 0.7,
           },
         },
@@ -77,6 +97,20 @@ describe("game003 minecart interaction config", () => {
         },
       }),
     ).toThrow(/fadeEndAlpha.*between 0 and 1/);
+    expect(() =>
+      getGame003MinecartInteractionConfig({
+        game003MinecartInteraction: {
+          ...valid.game003MinecartInteraction,
+          layout: {
+            ...valid.game003MinecartInteraction.layout,
+            landscape: {
+              ...valid.game003MinecartInteraction.layout.landscape,
+              exitSide: "left",
+            },
+          },
+        },
+      }),
+    ).toThrow(/exitSide.*right/);
     expect(() =>
       getGame003MinecartInteractionConfig({
         game003MinecartInteraction: {

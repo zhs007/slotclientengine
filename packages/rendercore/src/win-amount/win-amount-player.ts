@@ -112,6 +112,14 @@ export class DefaultWinAmountAnimationPlayer implements WinAmountAnimationPlayer
     this.completeAndHide();
   }
 
+  dismissImmediately(): void {
+    this.assertNotDestroyed();
+    if (!this.isPlaying()) {
+      return;
+    }
+    this.completeAndHide();
+  }
+
   applyLayout(layout: WinAmountAnimationLayout): void {
     this.assertNotDestroyed();
     this.#stage.applyLayout(layout);

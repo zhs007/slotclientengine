@@ -7,7 +7,7 @@
       "scale": 1,
       "animations": {
         "appear": { "kind": "static", "durationSeconds": 0.016666666666666666 },
-        "win": { "kind": "builtin", "durationSeconds": 0.24 }
+        "win": { "kind": "builtin", "durationSeconds": 0.2 }
       }
     },
     "wild": {
@@ -15,7 +15,7 @@
       "scale": 1,
       "animations": {
         "appear": { "kind": "static", "durationSeconds": 0.016666666666666666 },
-        "win": { "kind": "builtin", "durationSeconds": 0.24 }
+        "win": { "kind": "builtin", "durationSeconds": 0.2 }
       }
     },
     "up": {
@@ -23,7 +23,7 @@
       "scale": 1,
       "animations": {
         "appear": { "kind": "static", "durationSeconds": 0.016666666666666666 },
-        "win": { "kind": "builtin", "durationSeconds": 0.24 }
+        "win": { "kind": "builtin", "durationSeconds": 0.2 }
       }
     }
   }

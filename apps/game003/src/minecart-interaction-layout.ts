@@ -8,6 +8,7 @@ export interface Game003MinecartInteractionLayout {
   readonly orientation: "landscape" | "portrait";
   readonly cartStartCenter: Point;
   readonly cartStopCenter: Point;
+  readonly cartExitCenter: Point;
   readonly payloadStartCenter: Point;
   readonly payloadTargetCenter: Point;
   readonly cartPivotInImage: Point;
@@ -33,12 +34,20 @@ export function createGame003MinecartInteractionLayout(options: {
     reelAreaBottomCenter,
     variant.stopOffsetFromReelAreaBottomCenter,
   );
-  const cartStartCenter = createOffscreenCartStartCenter({
+  const cartStartCenter = createOffscreenCartCenter({
     visibleRect: options.layout.visibleRect,
     imageSize: options.config.imageSize,
     cartPivotInImage: variant.cartPivotInImage,
     offscreenMargin: variant.offscreenMargin,
-    entrySide: variant.entrySide,
+    side: variant.entrySide,
+    y: cartStopCenter.y,
+  });
+  const cartExitCenter = createOffscreenCartCenter({
+    visibleRect: options.layout.visibleRect,
+    imageSize: options.config.imageSize,
+    cartPivotInImage: variant.cartPivotInImage,
+    offscreenMargin: variant.offscreenMargin,
+    side: variant.exitSide,
     y: cartStopCenter.y,
   });
   const payloadStartCenter = Object.freeze({
@@ -60,6 +69,7 @@ export function createGame003MinecartInteractionLayout(options: {
     orientation: options.layout.orientation,
     cartStartCenter,
     cartStopCenter,
+    cartExitCenter,
     payloadStartCenter,
     payloadTargetCenter,
     cartPivotInImage: freezePoint(variant.cartPivotInImage),
@@ -67,22 +77,22 @@ export function createGame003MinecartInteractionLayout(options: {
   });
 }
 
-function createOffscreenCartStartCenter(options: {
+function createOffscreenCartCenter(options: {
   readonly visibleRect: Game003Layout["visibleRect"];
   readonly imageSize: { readonly width: number; readonly height: number };
   readonly cartPivotInImage: Game003MinecartPoint;
   readonly offscreenMargin: number;
-  readonly entrySide: "left" | "right";
+  readonly side: "left" | "right";
   readonly y: number;
 }): Point {
   const x =
-    options.entrySide === "left"
+    options.side === "left"
       ? options.visibleRect.x -
-        options.cartPivotInImage.x -
+        (options.imageSize.width - options.cartPivotInImage.x) -
         options.offscreenMargin
       : options.visibleRect.x +
         options.visibleRect.width +
-        (options.imageSize.width - options.cartPivotInImage.x) +
+        options.cartPivotInImage.x +
         options.offscreenMargin;
   return Object.freeze({ x, y: options.y });
 }

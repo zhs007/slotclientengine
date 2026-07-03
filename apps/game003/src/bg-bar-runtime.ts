@@ -15,7 +15,7 @@ import type {
 import type { Game003BgBarSkinConfig } from "./skin-config.js";
 
 export const GAME003_BG_BAR_SHIFT_DURATION_SECONDS = 0.28;
-export const GAME003_BG_BAR_TERMINAL_WIN_DURATION_SECONDS = 0.24;
+export const GAME003_BG_BAR_TERMINAL_WIN_DURATION_SECONDS = 0.2;
 
 export interface Game003BgBarRuntimeOptions {
   readonly config: Game003BgBarSkinConfig;

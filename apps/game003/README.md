@@ -62,7 +62,7 @@ CI=true pnpm --filter game003 check:static-config
 
 `skins."1".appExtensions.game003MinecartInteraction` 配置 `bg-bar` 终点后的矿车互动。`appExtensions` 是 shared 静态配置层的通用透传对象，`gameframeworks` 和 `buildgamestatic` 不理解 `minecart` 语义；所有矿车字段都在 `apps/game003` app 层严格解析。`loadingResourceId` 固定为 `game003-minecart`，必须能在 `game-loading.generated.ts` 中找到 `assets/game003-s1/minecart.png` 的 URL；`imageSize` 当前为 `369 x 252`，加载后的 Pixi texture 尺寸不一致会显式失败。
 
-矿车 layout 坐标基准是当前 art 像素：`stopOffsetFromReelAreaBottomCenter` 相对主转轮可见区底部中心，`cartPivotInImage` 和 `payloadAnchorInImage` 相对 `minecart.png` 左上角。横屏和竖屏各自配置停点和图片内 anchor，运行时从当前 `visibleRect` 推导屏幕外起点，不写死 viewport 坐标。当前时间预算为 `bg-bar shift 0.28s + terminal win 0.24s + cart rush 0.38s + payload fly 0.36s = 1.26s`，必须小于主转轮基础落停时间；不能通过延长 `baseDurationMs`、`speedSymbolsPerSecond`、`minimumSpinCycles`、`startDelayMs` 或 `stopDelayMs` 来掩盖节奏问题。
+矿车 layout 坐标基准是当前 art 像素：`stopOffsetFromReelAreaBottomCenter` 相对主转轮可见区底部中心，`cartPivotInImage` 和 `payloadAnchorInImage` 相对 `minecart.png` 左上角。横屏和竖屏各自配置停点、`exitSide` 和图片内 anchor，运行时从当前 `visibleRect` 推导屏幕外起点和右侧出屏点，不写死 viewport 坐标。当前 `payloadAnchorInImage` 为 `{ x: 184.5, y: 126 }`，对应矿车图片内车厢中部。当前入场时间预算为 `bg-bar shift 0.28s + terminal win 0.20s + cart rush 0.26s + payload fly 0.43s + payload hold 0.12s = 1.29s`，必须小于主转轮基础落停时间；`cartExitDurationSeconds` 当前为 `0.18s`，只用于下一轮 spin 开始时的右侧出屏，不计入上一轮入场预算。不能通过延长 `baseDurationMs`、`speedSymbolsPerSecond`、`minimumSpinCycles`、`startDelayMs` 或 `stopDelayMs` 来掩盖节奏问题。
 
 ## Symbol VNI 动画
 
@@ -164,7 +164,7 @@ http://127.0.0.1:5208/?skin=1&token=TOKEN&businessid=guest&clienttype=web&jurisd
 
 本轮 `features` 的 5 个值在 spin 开始时立即交给 `apps/game003/src/bg-bar-runtime.ts`。shift 映射固定为：`features[0]` 从 `slot 3` 移到 `slot 4` 并播放终点 `win` 后消失；`features[1]`、`features[2]`、`features[3]` 分别从 `slot 2/1/0` 移到 `slot 3/2/1`；`features[4]` 从传送带外进入 `slot 0` 并播放 `appear`。完成后静止队列为 `[features[1], features[2], features[3], features[4]]`，仅作为当前视觉状态；下一次 spin 以服务端新下发的本轮 `features` 为权威，客户端会重建传送带动画，不因两轮 feature 队列不同而失败。
 
-`game-adapter.ts` 在 `playSpin()` 启动主转轮的同时启动 `bg-bar`，不会等主转轮落停。`features[0]` 到达终点、终点 `win` 播完并隐藏后，只有 `features[0]` 为 `wild` 或 `up` 时才触发矿车从屏幕外冲入，停在主转轮区下方轨道并做 overshoot / 倾翻 / 回正，随后车厢内的同一个 feature symbol 垂直飞向主转轮中心并淡出。`normal` 只播放并完成 `bg-bar` 终点流程，不启动矿车、不播放透明空载矿车。`playSpin()` 的 resolve 条件包含主转轮落停与 target scene 校验、`bg-bar` 终点 win、非 normal 时的矿车互动、`bg-wins` symbol sequence 和中奖金额动画；只要其中任一仍在播放，framework 就不会进入后续 collect / idle。
+`game-adapter.ts` 在 `playSpin()` 启动主转轮的同时启动 `bg-bar`，不会等主转轮落停。`features[0]` 到达终点、终点 `win` 播完并隐藏后，只有 `features[0]` 为 `wild` 或 `up` 时才触发矿车从屏幕外冲入，停在主转轮区下方轨道并做 overshoot / 倾翻 / 回正；随后车厢内的同一个 feature symbol 垂直飞向主转轮中心，并在 `symbol-hold` 阶段短暂停留后隐藏。矿车完成互动后进入 `parked`，保留在主转轮下方中间；下一次 spin 开始时如果仍有 parked 矿车，必须先用 `cart-exit` 向右快速冲出屏幕，不能 reset 原地隐藏。`normal` 只播放并完成 `bg-bar` 终点流程，不启动矿车、不播放透明空载矿车。`playSpin()` 的 resolve 条件包含主转轮落停与 target scene 校验、`bg-bar` 终点 win、上一辆矿车出屏、非 normal 时的新矿车入场/飞行/停留、`bg-wins` symbol sequence 和中奖金额主要播放；只要其中任一仍在阻塞阶段，framework 就不会进入后续 collect / idle。
 
 ## 中奖播放
 
@@ -174,7 +174,7 @@ live spin 停到服务器目标 scene 并完成可见窗口校验后，`apps/gam
 
 `result.pos` 是 `[x, y]` 成对坐标，坐标基准是当前 5 列 x 5 行主转轮可见窗口：`x` 为列索引，`y` 为列内可见行索引。一个 result 内的所有 `pos` 同时请求 symbol `win` 状态；多个 result 按 `usedResults` 顺序依次播放。全部中奖组的 once 动画回到 `normal` 后，`playSpin()` 才 resolve，framework 才进入后续 collect 流程。
 
-如果本轮 `logic.getTotalWin() > 0`，`game-adapter.ts` 会在 spin 落停并完成 target scene 校验后启动 Pixi 中奖金额动画。动画使用 `logic.getBet()` 和 `logic.getTotalWin()` 的 raw amount，先在主转轮区底部递增小额数字，超过 1x 后切到主转轮区中心，并在到达 15x / 30x / 50x 时由 rendercore 切换 bigwin / superwin / megawin segmented VNI tier。symbol win sequence 和金额动画都会纳入 `playSpin()` 完成条件，二者都完成后 framework 才进入 collect / idle。
+如果本轮 `logic.getTotalWin() > 0`，`game-adapter.ts` 会在 spin 落停并完成 target scene 校验后启动 Pixi 中奖金额动画。动画使用 `logic.getBet()` 和 `logic.getTotalWin()` 的 raw amount，先在主转轮区底部递增小额数字，超过 1x 后切到主转轮区中心，并在到达 15x / 30x / 50x 时由 rendercore 切换 bigwin / superwin / megawin segmented VNI tier。symbol win sequence 和金额动画的 counting/tier-counting 阶段都会纳入 `playSpin()` 完成条件；金额动画进入 `awaiting-dismiss` 后可以留在屏幕上，不再要求玩家点击关闭，下一次 spin 开始时会通过 rendercore 的 `dismissImmediately()` 自动关闭上一轮金额展示。
 
 当前 `game003` 不对 `result.symbol` 和 `targetScene[x][y]` 做默认一致性校验，因为 Ways 游戏里的 wild / 替代 symbol 规则可能随游戏变化，且同一游戏也可能存在多个 wild。`logiccore` / `gameframeworks` 只提供可选的 per-position validator 接口；不传 validator 时不做 symbol 语义校验。`game003` 仍会校验 `pos` 非成对、空坐标、重复坐标、越界和 win 金额汇总不一致，并且不会因为缺少 `bg-wins` 就自动遍历全部 results 作为隐藏兜底。`symbolNums` / `symbolNum` 在 Ways 中奖里不等同于可见坐标数量，不作为 `pos` 数量校验依据。
 

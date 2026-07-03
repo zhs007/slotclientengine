@@ -21,7 +21,14 @@ export interface Game003MinecartInteractionRuntimeOptions {
 }
 
 export interface Game003MinecartInteractionSnapshot {
-  readonly phase: "idle" | "cart-rush" | "symbol-fly" | "destroyed";
+  readonly phase:
+    | "idle"
+    | "cart-rush"
+    | "symbol-fly"
+    | "symbol-hold"
+    | "parked"
+    | "cart-exit"
+    | "destroyed";
   readonly feature: Game003BgBarFeature | null;
   readonly cartPosition: Point;
   readonly cartRotation: number;
@@ -36,6 +43,8 @@ export interface Game003MinecartInteractionRuntime {
   applyLayout(layout: Game003MinecartInteractionLayout): void;
   reset(): void;
   start(feature: Game003BgBarFeature): void;
+  startExitIfParked(): boolean;
+  clearParkedCart(): void;
   update(deltaSeconds: number): { readonly completed: boolean };
   isPlaying(): boolean;
   getSnapshot(): Game003MinecartInteractionSnapshot;
@@ -120,8 +129,10 @@ class Game003MinecartInteractionRuntimeModel implements Game003MinecartInteracti
     if (!this.#layout) {
       throw new Error("game003 minecart layout must be applied before start.");
     }
-    if (this.isPlaying()) {
-      throw new Error("game003 minecart animation is already in progress.");
+    if (this.#phase !== "idle") {
+      throw new Error(
+        `game003 minecart animation must be idle before start, got "${this.#phase}".`,
+      );
     }
     this.clearPayload();
     this.#feature = feature;
@@ -137,6 +148,46 @@ class Game003MinecartInteractionRuntimeModel implements Game003MinecartInteracti
     this.#phase = "cart-rush";
     this.#phaseElapsedSeconds = 0;
     this.renderCurrentFrame();
+  }
+
+  startExitIfParked(): boolean {
+    this.assertNotDestroyed();
+    if (this.isPlaying()) {
+      throw new Error(
+        `game003 minecart cannot start exit while "${this.#phase}" is in progress.`,
+      );
+    }
+    if (this.#phase !== "parked") {
+      return false;
+    }
+    if (!this.#layout) {
+      throw new Error("game003 minecart layout must be applied before exit.");
+    }
+    this.clearPayload();
+    this.#feature = null;
+    this.#phase = "cart-exit";
+    this.#phaseElapsedSeconds = 0;
+    this.#cart.visible = true;
+    this.renderCurrentFrame();
+    return true;
+  }
+
+  clearParkedCart(): void {
+    this.assertNotDestroyed();
+    if (this.isPlaying()) {
+      throw new Error(
+        `game003 minecart cannot clear parked cart while "${this.#phase}" is in progress.`,
+      );
+    }
+    if (this.#phase !== "parked") {
+      return;
+    }
+    this.clearPayload();
+    this.#feature = null;
+    this.#phase = "idle";
+    this.#phaseElapsedSeconds = 0;
+    this.#cart.visible = false;
+    this.#cart.rotation = 0;
   }
 
   update(deltaSeconds: number): { readonly completed: boolean } {
@@ -162,7 +213,12 @@ class Game003MinecartInteractionRuntimeModel implements Game003MinecartInteracti
   }
 
   isPlaying(): boolean {
-    return this.#phase === "cart-rush" || this.#phase === "symbol-fly";
+    return (
+      this.#phase === "cart-rush" ||
+      this.#phase === "symbol-fly" ||
+      this.#phase === "symbol-hold" ||
+      this.#phase === "cart-exit"
+    );
   }
 
   getSnapshot(): Game003MinecartInteractionSnapshot {
@@ -204,22 +260,44 @@ class Game003MinecartInteractionRuntimeModel implements Game003MinecartInteracti
       return;
     }
     if (this.#phase === "symbol-fly") {
-      this.#phase = "idle";
+      this.#phase = "symbol-hold";
+      this.#phaseElapsedSeconds = 0;
+      this.renderCurrentFrame();
+      return;
+    }
+    if (this.#phase === "symbol-hold") {
+      this.#phase = "parked";
       this.#phaseElapsedSeconds = 0;
       if (this.#payload) {
         this.#payload.alpha = this.#config.payload.fadeEndAlpha;
         this.#payload.visible = false;
       }
       this.renderCurrentFrame();
+      return;
+    }
+    if (this.#phase === "cart-exit") {
+      this.clearPayload();
+      this.#feature = null;
+      this.#phase = "idle";
+      this.#phaseElapsedSeconds = 0;
+      this.#cart.visible = false;
+      this.#cart.rotation = 0;
+      this.renderCurrentFrame();
     }
   }
 
   private getPhaseDurationSeconds(): number {
+    if (this.#phase === "cart-exit") {
+      return this.#config.timing.cartExitDurationSeconds;
+    }
     if (this.#phase === "cart-rush") {
       return this.#config.timing.cartRushDurationSeconds;
     }
     if (this.#phase === "symbol-fly") {
       return this.#config.timing.symbolFlyDurationSeconds;
+    }
+    if (this.#phase === "symbol-hold") {
+      return this.#config.timing.symbolHoldDurationSeconds;
     }
     throw new Error(`game003 minecart phase "${this.#phase}" is not playing.`);
   }
@@ -259,11 +337,33 @@ class Game003MinecartInteractionRuntimeModel implements Game003MinecartInteracti
       }
       return;
     }
+    if (this.#phase === "cart-exit") {
+      const progress = clamp01(
+        this.#phaseElapsedSeconds / this.#config.timing.cartExitDurationSeconds,
+      );
+      const cartPosition = lerpPoint(
+        this.#layout.cartStopCenter,
+        this.#layout.cartExitCenter,
+        easeInCubic(progress),
+      );
+      this.#cart.position.set(cartPosition.x, cartPosition.y);
+      this.#cart.rotation = 0;
+      this.#cart.visible = true;
+      if (this.#payload) {
+        this.#payload.visible = false;
+        this.#payload.alpha = this.#config.payload.fadeEndAlpha;
+      }
+      return;
+    }
     this.#cart.position.set(
       this.#layout.cartStopCenter.x,
       this.#layout.cartStopCenter.y,
     );
     this.#cart.rotation = 0;
+    this.#cart.visible =
+      this.#phase === "symbol-fly" ||
+      this.#phase === "symbol-hold" ||
+      this.#phase === "parked";
     if (this.#phase === "symbol-fly" && this.#payload) {
       const progress = clamp01(
         this.#phaseElapsedSeconds /
@@ -278,10 +378,31 @@ class Game003MinecartInteractionRuntimeModel implements Game003MinecartInteracti
       this.#payload.position.set(payloadPosition.x, payloadPosition.y);
       this.#payload.alpha = lerp(
         this.#config.payload.fadeStartAlpha,
-        this.#config.payload.fadeEndAlpha,
+        getPayloadFlightEndAlpha(this.#config.payload.fadeStartAlpha),
         progress,
       );
-      this.#payload.visible = progress < 1;
+      this.#payload.visible = true;
+      return;
+    }
+    if (this.#phase === "symbol-hold" && this.#payload) {
+      this.#payload.position.set(
+        this.#layout.payloadTargetCenter.x,
+        this.#layout.payloadTargetCenter.y,
+      );
+      this.#payload.alpha = Math.max(
+        this.#config.payload.fadeStartAlpha * 0.9,
+        getPayloadFlightEndAlpha(this.#config.payload.fadeStartAlpha),
+      );
+      this.#payload.visible = true;
+      return;
+    }
+    if (this.#phase === "parked" && this.#payload) {
+      this.#payload.position.set(
+        this.#layout.payloadTargetCenter.x,
+        this.#layout.payloadTargetCenter.y,
+      );
+      this.#payload.alpha = this.#config.payload.fadeEndAlpha;
+      this.#payload.visible = false;
     }
   }
 
@@ -379,6 +500,15 @@ function lerp(from: number, to: number, progress: number): number {
 function easeOutCubic(progress: number): number {
   const normalized = clamp01(progress);
   return 1 - (1 - normalized) ** 3;
+}
+
+function easeInCubic(progress: number): number {
+  const normalized = clamp01(progress);
+  return normalized ** 3;
+}
+
+function getPayloadFlightEndAlpha(fadeStartAlpha: number): number {
+  return fadeStartAlpha * 0.95;
 }
 
 function clamp01(value: number): number {

@@ -275,8 +275,10 @@ export const GAME003_STATIC_CONFIG = Object.freeze({
           loadingResourceId: "game003-minecart",
           imageSize: { width: 369, height: 252 },
           timing: {
-            cartRushDurationSeconds: 0.38,
-            symbolFlyDurationSeconds: 0.36,
+            cartExitDurationSeconds: 0.18,
+            cartRushDurationSeconds: 0.26,
+            symbolFlyDurationSeconds: 0.43,
+            symbolHoldDurationSeconds: 0.12,
             maxTotalBeforeReelStopSeconds: 1.3,
           },
           motion: {
@@ -288,17 +290,19 @@ export const GAME003_STATIC_CONFIG = Object.freeze({
           layout: {
             landscape: {
               entrySide: "left",
+              exitSide: "right",
               offscreenMargin: 120,
               stopOffsetFromReelAreaBottomCenter: { x: 0, y: 85 },
               cartPivotInImage: { x: 184.5, y: 220 },
-              payloadAnchorInImage: { x: 184.5, y: 92 },
+              payloadAnchorInImage: { x: 184.5, y: 126 },
             },
             portrait: {
               entrySide: "left",
+              exitSide: "right",
               offscreenMargin: 120,
               stopOffsetFromReelAreaBottomCenter: { x: 0, y: 145 },
               cartPivotInImage: { x: 184.5, y: 220 },
-              payloadAnchorInImage: { x: 184.5, y: 92 },
+              payloadAnchorInImage: { x: 184.5, y: 126 },
             },
           },
         },

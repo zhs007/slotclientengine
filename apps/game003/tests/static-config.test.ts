@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GAME003_LOADING_RESOURCE_URLS } from "../src/generated/game-loading.generated.js";
 import { GAME003_STATIC_CONFIG } from "../src/generated/game-static.generated.js";
+import { GAME003_BG_BAR_TERMINAL_WIN_DURATION_SECONDS } from "../src/bg-bar-runtime.js";
 import { DEFAULT_GAME003_REEL_CONFIG } from "../src/game-demo.js";
 import { getGame003MinecartTotalDurationSeconds } from "../src/minecart-interaction-config.js";
 import { getGame003SkinConfig } from "../src/skin-config.js";
@@ -175,12 +176,14 @@ describe("game003 generated static config", () => {
       >;
     };
     expect(bgBarManifest.symbols.normal.animations.win.durationSeconds).toBe(
-      0.24,
+      GAME003_BG_BAR_TERMINAL_WIN_DURATION_SECONDS,
     );
     expect(bgBarManifest.symbols.wild.animations.win.durationSeconds).toBe(
-      0.24,
+      GAME003_BG_BAR_TERMINAL_WIN_DURATION_SECONDS,
     );
-    expect(bgBarManifest.symbols.up.animations.win.durationSeconds).toBe(0.24);
+    expect(bgBarManifest.symbols.up.animations.win.durationSeconds).toBe(
+      GAME003_BG_BAR_TERMINAL_WIN_DURATION_SECONDS,
+    );
   });
 
   it("generates app-owned minecart config from appExtensions", () => {
@@ -197,13 +200,25 @@ describe("game003 generated static config", () => {
       imageSize: { width: 369, height: 252 },
       layout: {
         landscape: {
+          exitSide: "right",
           stopOffsetFromReelAreaBottomCenter: { x: 0, y: 85 },
+          payloadAnchorInImage: { x: 184.5, y: 126 },
         },
         portrait: {
+          exitSide: "right",
           stopOffsetFromReelAreaBottomCenter: { x: 0, y: 145 },
+          payloadAnchorInImage: { x: 184.5, y: 126 },
         },
       },
+      timing: {
+        cartExitDurationSeconds: 0.18,
+        cartRushDurationSeconds: 0.26,
+        symbolFlyDurationSeconds: 0.43,
+        symbolHoldDurationSeconds: 0.12,
+        maxTotalBeforeReelStopSeconds: 1.3,
+      },
     });
+    expect(totalDuration).toBeCloseTo(1.29);
     expect(totalDuration).toBeLessThanOrEqual(
       skin.minecartInteraction.timing.maxTotalBeforeReelStopSeconds,
     );
