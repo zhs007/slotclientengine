@@ -40,6 +40,7 @@ import {
 } from "../../src/core/validation";
 import { sampleProjectAtTime } from "../../src/core/project-sampler";
 import { sampleSafeGlowSpritesForLayer } from "../../src/core/safe-glow-sampler";
+import { sampleChaserLightSpritesForLayer } from "../../src/core/chaser-light-sampler";
 import * as standalone from "../../standalone/anieditorv5runtime-cc";
 import type { SampledProjectState } from "../../src/core/project-sampler";
 import type {
@@ -47,6 +48,7 @@ import type {
   V5GAssetConfig,
   V5GLayerConfig,
   V5GProjectConfig,
+  V5GTransformConfig,
 } from "../../src/core/types";
 
 const fixtures = [
@@ -195,6 +197,82 @@ describe("standalone runtime parity", () => {
         sampleSafeGlowSpritesForLayer(layer, sampled, item.time),
       );
       expect(singleSprites[0]?.blendMode).toBe(item.expectedBlendMode);
+    }
+  });
+
+  it("matches modular chaser_light sampler output", () => {
+    const transform: V5GTransformConfig = {
+      x: 0,
+      y: 0,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      anchorX: 0.5,
+      anchorY: 0.5,
+    };
+    const animation: V5GAnimationConfig = {
+      id: "chaser",
+      type: "chaser_light",
+      startTime: 0,
+      duration: 1,
+      enabled: true,
+      seed: 1,
+      params: {
+        totalCount: 4,
+        spacing: 80,
+        lightDuration: 0.08,
+        interval: 0.04,
+        trajectory: 0,
+        radius: 120,
+        centerX: 0,
+        centerY: 0,
+        endX: 240,
+        endY: 0,
+        curve: 120,
+        lightSize: 40,
+        dimAlpha: 0.12,
+        keepOriginal: true,
+      },
+    };
+    const layer: V5GLayerConfig = {
+      id: "layer",
+      name: "Layer",
+      type: "image",
+      assetId: "asset",
+      parentId: null,
+      groupId: "group_default",
+      visible: true,
+      locked: false,
+      transform,
+      opacity: 1,
+      blendMode: "normal",
+      animations: [animation],
+      keyframes: [],
+    };
+    const sampledLayer = {
+      layerId: layer.id,
+      transform,
+      baseOpacity: 1,
+      blendMode: layer.blendMode,
+    } as const;
+    const textureSize = { width: 100, height: 100 };
+
+    for (const time of [0, 0.04, 0.12, 0.64]) {
+      expect(
+        standalone.sampleChaserLightSpritesForLayer(
+          layer,
+          sampledLayer,
+          textureSize,
+          time,
+        ),
+      ).toEqual(
+        sampleChaserLightSpritesForLayer(
+          layer,
+          sampledLayer,
+          textureSize,
+          time,
+        ),
+      );
     }
   });
 

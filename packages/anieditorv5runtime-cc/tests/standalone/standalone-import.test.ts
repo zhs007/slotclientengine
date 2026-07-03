@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import * as runtime from "../../standalone/anieditorv5runtime-cc";
 import type {
+  V5GAnimationConfig,
   V5GAssetConfig,
   V5GExportProfileConfig,
   V5GCocosAssetSource,
@@ -10,7 +11,12 @@ import type {
   V5GCocosSegmentedPlaybackEndOptions,
   V5GCocosSpriteAtlasAssetSource,
   V5GForceStopParticlesOptions,
+  V5GLayerConfig,
   V5GSegmentedPlaybackEndOptions,
+  V5GTransformConfig,
+  VNIChaserLightLayerSampleState,
+  VNIChaserLightSpriteSample,
+  VNIChaserLightTextureSize,
   VNISafeGlowLayerSampleState,
   VNISafeGlowSpriteSample,
 } from "../../standalone/anieditorv5runtime-cc";
@@ -97,6 +103,99 @@ describe("standalone runtime import", () => {
     expect(sprite.blendMode).toBe("add");
   });
 
+  it("exports chaser_light sample types and fixed-position sampler APIs", () => {
+    const transform: V5GTransformConfig = {
+      x: 0,
+      y: 0,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      anchorX: 0.5,
+      anchorY: 0.5,
+    };
+    const animation: V5GAnimationConfig = {
+      id: "chaser",
+      type: "chaser_light",
+      startTime: 0,
+      duration: 1,
+      enabled: true,
+      seed: 1,
+      params: {
+        totalCount: 2,
+        spacing: 80,
+        lightDuration: 0.08,
+        interval: 0.04,
+        trajectory: 0,
+        radius: 120,
+        centerX: 0,
+        centerY: 0,
+        endX: 240,
+        endY: 0,
+        curve: 120,
+        lightSize: 40,
+        dimAlpha: 0.12,
+        keepOriginal: true,
+      },
+    };
+    const layer: V5GLayerConfig = {
+      id: "layer",
+      name: "Layer",
+      type: "image",
+      assetId: "asset",
+      parentId: null,
+      groupId: "group_default",
+      visible: true,
+      locked: false,
+      transform,
+      opacity: 1,
+      blendMode: "normal",
+      animations: [animation],
+      keyframes: [],
+    };
+    const sampledLayer: VNIChaserLightLayerSampleState = {
+      layerId: layer.id,
+      transform,
+      baseOpacity: 1,
+      blendMode: layer.blendMode,
+    };
+    const textureSize: VNIChaserLightTextureSize = {
+      width: 100,
+      height: 100,
+    };
+
+    expect(runtime.getChaserLightProgress(animation, 0.5)).toBe(0.5);
+    expect(runtime.hasActiveChaserLightAnimation(layer, 0.5)).toBe(true);
+
+    const start = runtime.sampleChaserLightSpritesForLayer(
+      layer,
+      sampledLayer,
+      textureSize,
+      0,
+    );
+    const later = runtime.sampleChaserLightSpritesForLayer(
+      layer,
+      sampledLayer,
+      textureSize,
+      0.12,
+    );
+    const sprite: VNIChaserLightSpriteSample = start[0];
+
+    expect(later.map(({ x, y, rotation }) => ({ x, y, rotation }))).toEqual(
+      start.map(({ x, y, rotation }) => ({ x, y, rotation })),
+    );
+    expect(sprite).toMatchObject({
+      type: "chaser_light",
+      x: 0,
+      y: -120,
+      rotation: 0,
+      alpha: 1,
+      scale: 0.4504,
+      blendMode: "add",
+      isLit: true,
+    });
+    expect(later.filter((item) => item.isLit)[0].x).toBe(start[1].x);
+  });
+
   it("keeps the preview example on atlas filename binding", () => {
     const examplePath = fileURLToPath(
       new URL("../../standalone/V5GPreview.example.ts", import.meta.url),
@@ -123,6 +222,7 @@ describe("standalone runtime import", () => {
         "particle_twinkle",
         "particle_wall",
         "particle_combo",
+        "chaser_light",
         "shatter",
         "glow",
         "safe_glow",
@@ -208,6 +308,9 @@ describe("standalone runtime import", () => {
     expect(runtime.getSafeGlowProgress).toBeTypeOf("function");
     expect(runtime.hasActiveSafeGlowAnimation).toBeTypeOf("function");
     expect(runtime.sampleSafeGlowSpritesForLayer).toBeTypeOf("function");
+    expect(runtime.getChaserLightProgress).toBeTypeOf("function");
+    expect(runtime.hasActiveChaserLightAnimation).toBeTypeOf("function");
+    expect(runtime.sampleChaserLightSpritesForLayer).toBeTypeOf("function");
     expect(runtime.sampleParticleSpritesForLayer).toBeTypeOf("function");
     expect(runtime.sampleParticleSpritesForLayerRuntime).toBeTypeOf("function");
     expect(runtime.sampleLiveParticleSprites).toBeTypeOf("function");

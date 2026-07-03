@@ -581,7 +581,48 @@ describe("standalone V5GCocosPlayer", () => {
     expect(inspectNode(safeGlowNode).destroyed).toBe(true);
   });
 
-  it("maps circular chaser_light samples to Cocos clockwise visual motion", () => {
+  it("renders chaser_light nodes and reports diagnostics", () => {
+    const project = tinyProject({
+      animations: [chaserLightAnimation()],
+    });
+    const { root, frames, player } = makePlayer(project);
+    player.init();
+
+    const layerNode = getFirstLayerNode(root);
+    const chaserContainer = getFirstChaserLightContainer(root);
+    expect(layerNode.active).toBe(false);
+    expect(chaserContainer.name).toBe("Layer 1 Chaser Light");
+    expect(chaserContainer.children).toHaveLength(4);
+    expect(player.getRuntimeDiagnostics()).toMatchObject({
+      chaserLightSpriteCount: 4,
+      particleSpriteCount: 0,
+      safeGlowSpriteCount: 0,
+    });
+
+    const chaserNode = chaserContainer.children[0];
+    expect(chaserNode.name).toBe("V5G Chaser Light layer-1");
+    expect(requireSprite(chaserNode).spriteFrame).toBe(frames.get("asset-1"));
+    expect(requireSprite(chaserNode).srcBlendFactor).toBe(
+      COCOS_BLEND_FACTOR.SRC_ALPHA,
+    );
+    expect(requireSprite(chaserNode).dstBlendFactor).toBe(
+      COCOS_BLEND_FACTOR.ONE,
+    );
+    expect(Number.isFinite(inspectNode(chaserNode).position.x)).toBe(true);
+    expect(Number.isFinite(inspectNode(chaserNode).position.y)).toBe(true);
+    expect(requireOpacity(chaserNode).opacity).toBeGreaterThan(0);
+
+    player.seek(0.125);
+    expect(chaserContainer.children[0]).toBe(chaserNode);
+    expect(player.getRuntimeDiagnostics().chaserLightSpriteCount).toBe(4);
+
+    player.seek(1);
+    expect(chaserContainer.children).toHaveLength(0);
+    expect(inspectNode(chaserNode).destroyed).toBe(true);
+    expect(player.getRuntimeDiagnostics().chaserLightSpriteCount).toBe(0);
+  });
+
+  it("maps fixed circular chaser_light samples to Cocos coordinates", () => {
     const project = tinyProject({
       animations: [
         chaserLightAnimation({
@@ -601,13 +642,19 @@ describe("standalone V5GCocosPlayer", () => {
     });
     const { root, player } = makePlayer(project);
     player.init();
+    const chaserNode = getFirstChaserLightContainer(root).children[0];
+
+    expect(inspectNode(chaserNode).position.x).toBeCloseTo(100, 3);
+    expect(inspectNode(chaserNode).position.y).toBeCloseTo(90, 3);
+    expect(inspectNode(chaserNode).rotation.z).toBeCloseTo(0, 3);
+    expect(requireOpacity(chaserNode).opacity).toBe(128);
+
     player.seek(0.125);
 
-    const chaserNode = getFirstChaserLightContainer(root).children[0];
-    const offset = Math.cos(Math.PI / 4) * 40;
-    expect(inspectNode(chaserNode).position.x).toBeCloseTo(100 + offset, 3);
-    expect(inspectNode(chaserNode).position.y).toBeCloseTo(50 - offset, 3);
-    expect(inspectNode(chaserNode).rotation.z).toBeCloseTo(-135, 3);
+    expect(getFirstChaserLightContainer(root).children[0]).toBe(chaserNode);
+    expect(inspectNode(chaserNode).position.x).toBeCloseTo(100, 3);
+    expect(inspectNode(chaserNode).position.y).toBeCloseTo(90, 3);
+    expect(inspectNode(chaserNode).rotation.z).toBeCloseTo(0, 3);
   });
 
   it("renders the roundreel runtime_100 safe_glow node with inherited add blend", () => {
