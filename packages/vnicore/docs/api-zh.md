@@ -124,7 +124,7 @@ Layer group 合同：
 - `glow`: deterministic render effect，要求 `intensity/spread/minAlpha/maxAlpha/pulses/blendMode`，`keepOriginal` 可选 boolean；`blendMode` 数值为 `0=add`、`1=screen`、`2=lighten`。
 - `safe_glow`: 普通同图副本高亮，要求 `spread/minOpacity/maxOpacity/pulses`，`keepOriginal` 可选 boolean；副本继承当前 layer `blendMode`，不进入 `VNIRenderEffectType`。
 - `particle_stream`: 持续发射的 layer 粒子，要求 `spawnRate/lifetime/spread/speed/emissionAngle/emissionSpreadAngle/size/gravity/trailCount/trailSpacing/trailFade/randomRotationDegrees/spinSpeed`，`fadeOut/rotateParticles/randomRotation` 可选 boolean；segmented hold 中 live elapsed 继续推进，drain duration 以 `lifetime` 为主。
-- `chaser_light`: 走马灯 runtime effect，要求 `totalCount/spacing/lightDuration/interval/trajectory/radius/centerX/centerY/endX/endY/curve/lightSize/dimAlpha`，`keepOriginal` 可选 boolean；`totalCount` 校验上限为 200。
+- `chaser_light`: 走马灯 runtime effect，要求 `totalCount/spacing/lightDuration/interval/trajectory/radius/centerX/centerY/endX/endY/curve/lightSize/dimAlpha`，`keepOriginal` 可选 boolean；`totalCount` 校验上限为 200。灯位固定在轨迹采样点上，只推进亮灭窗口；圆形轨迹按 `index * spacing / max(radius, 1) - PI / 2` 把 `spacing` 当弧长换算角度，直线/曲线按 `index / (totalCount - 1)` 静态分布；每盏灯的错位周期是 `lightDuration + interval`，不是单独的 `interval`。
 
 Mask 合同：
 

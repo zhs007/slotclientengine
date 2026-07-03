@@ -137,7 +137,8 @@ function sampleChaserLightSprites(
     1,
   );
   const elapsed = Math.max(0, time - animation.startTime);
-  const cycleDuration = Math.max(interval * totalCount + lightDuration, 0.001);
+  const chasePeriod = Math.max(lightDuration + interval, 0.001);
+  const cycleDuration = chasePeriod * totalCount;
   const textureEdge = Math.max(1, textureSize.width, textureSize.height);
   const baseScale = lightSize / textureEdge;
   const sprites: VNIChaserLightSpriteSample[] = [];
@@ -146,7 +147,6 @@ function sampleChaserLightSprites(
     const point = sampleTrajectoryPoint(
       index,
       totalCount,
-      elapsed,
       trajectory,
       spacing,
       radius,
@@ -156,15 +156,16 @@ function sampleChaserLightSprites(
       endY,
       curve,
     );
-    const cycleTime =
-      (((elapsed - index * interval) % cycleDuration) + cycleDuration) %
-      cycleDuration;
-    const isLit = cycleTime <= lightDuration;
+    const cycleTime = positiveModulo(
+      elapsed - index * chasePeriod,
+      cycleDuration,
+    );
+    const isLit = cycleTime < lightDuration;
     const wave = isLit
-      ? Math.sin((cycleTime / Math.max(lightDuration, 0.001)) * Math.PI)
+      ? 0.7 +
+        0.3 * Math.sin((cycleTime / Math.max(lightDuration, 0.001)) * Math.PI)
       : 0;
-    const alpha =
-      sampledLayer.baseOpacity * (isLit ? 0.72 + wave * 0.28 : dimAlpha);
+    const alpha = sampledLayer.baseOpacity * (isLit ? 1 : dimAlpha);
     if (alpha <= 0.002) continue;
     sprites.push({
       type: "chaser_light",
@@ -172,7 +173,7 @@ function sampleChaserLightSprites(
       animationId: animation.id,
       x: roundTo(point.x, 4),
       y: roundTo(point.y, 4),
-      scale: roundTo(baseScale * (isLit ? 1 + wave * 0.35 : 0.65), 4),
+      scale: roundTo(baseScale * (isLit ? 1 + wave * 0.18 : 1), 4),
       rotation: roundTo(point.rotation, 4),
       alpha: roundTo(clampNumber(alpha, 0, 1), 4),
       blendMode: isLit ? "add" : sampledLayer.blendMode,
@@ -186,7 +187,6 @@ function sampleChaserLightSprites(
 function sampleTrajectoryPoint(
   index: number,
   totalCount: number,
-  elapsed: number,
   trajectory: number,
   spacing: number,
   radius: number,
@@ -198,12 +198,10 @@ function sampleTrajectoryPoint(
 ): { x: number; y: number; rotation: number } {
   const ratio = totalCount <= 1 ? 0 : index / (totalCount - 1);
   if (trajectory === 0) {
-    const circumferenceRadius = Math.max(radius, spacing / (Math.PI * 2));
-    const angle =
-      (index / Math.max(totalCount, 1)) * Math.PI * 2 + elapsed * Math.PI * 2;
+    const angle = (index * spacing) / Math.max(radius, 1) - Math.PI / 2;
     return {
-      x: centerX + Math.cos(angle) * circumferenceRadius,
-      y: centerY + Math.sin(angle) * circumferenceRadius,
+      x: centerX + Math.cos(angle) * radius,
+      y: centerY + Math.sin(angle) * radius,
       rotation: angle + Math.PI / 2,
     };
   }
@@ -229,6 +227,11 @@ function sampleTrajectoryPoint(
     y,
     rotation: Math.atan2(endY - centerY, endX - centerX),
   };
+}
+
+function positiveModulo(value: number, divisor: number): number {
+  if (!Number.isFinite(divisor) || divisor <= 0) return 0;
+  return ((value % divisor) + divisor) % divisor;
 }
 
 function quadraticPoint(

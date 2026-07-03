@@ -410,7 +410,7 @@ describe("validation", () => {
     ).not.toThrow();
 
     const runtime100 = assertV5GProject(roundreelData);
-    expect(runtime100.schemaVersion).toBe("VNI_0.022");
+    expect(runtime100.schemaVersion).toBe("VNI_0.042");
     expect(runtime100.name).toBe("roundreel");
     expect(runtime100.exportProfile).toMatchObject({
       id: "runtime_100",

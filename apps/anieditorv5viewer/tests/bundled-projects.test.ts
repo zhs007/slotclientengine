@@ -4,6 +4,7 @@ import {
   bundledProjects,
   getBundledProject,
 } from "../src/config/bundled-projects";
+import { assertVNIProject } from "@slotclientengine/vnicore/core";
 import {
   game003S1AssetUrlManifest,
   legacyAssetUrlManifest,
@@ -81,6 +82,16 @@ describe("bundled projects", () => {
       expect(Object.keys(resolved).sort()).toEqual(
         bundledProject.project.assets.map((asset) => asset.path).sort(),
       );
+    }
+  });
+
+  it("keeps bundled project sourcePath JSON aligned with registered data", () => {
+    for (const bundledProject of bundledProjects) {
+      const sourceJson = JSON.parse(
+        readFileSync(`../../${bundledProject.sourcePath}`, "utf8"),
+      ) as unknown;
+
+      expect(assertVNIProject(sourceJson)).toEqual(bundledProject.project);
     }
   });
 
@@ -193,7 +204,6 @@ describe("bundled projects", () => {
       });
     }
   });
-
 
   it("registers number2 text and number3 mask exports", () => {
     const number2 = getBundledProject("number2");
