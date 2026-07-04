@@ -4,9 +4,23 @@ import type {
   VNIProjectConfig,
 } from "@slotclientengine/vnicore/core";
 
-export interface ViewerControlsProject {
+export interface ViewerControlsProfile {
   id: string;
   label: string;
+  purpose: string;
+  assetScale: number;
+  projectPath: string;
+}
+
+export interface ViewerUploadedBundleInfo {
+  fileName: string;
+  bundleId: string;
+  profiles: readonly ViewerControlsProfile[];
+  selectedProfileId: string | null;
+}
+
+export interface ViewerControlsProject {
+  projectId: string;
   sourcePath: string;
   bundleId: string;
   profileId: string;
@@ -24,10 +38,9 @@ export interface ViewerInsertionAsset {
 }
 
 export interface ViewerControlsOptions {
-  projects: readonly ViewerControlsProject[];
-  selectedProjectId: string;
   container: HTMLElement;
-  onProjectChange: (projectId: string) => void;
+  onZipUpload: (file: File) => void;
+  onProfileChange: (profileId: string) => void;
   onTogglePlay: () => void;
   onRestart: () => void;
   onLoopChange: (loop: boolean) => void;
@@ -60,7 +73,11 @@ export interface ViewerControlsOptions {
 }
 
 export interface ViewerControls {
+  setUploadedBundle(info: ViewerUploadedBundleInfo): void;
+  clearUploadedBundle(): void;
+  setUploadError(message: string | null): void;
   setProject(project: ViewerControlsProject): void;
+  clearProject(): void;
   setPlaying(isPlaying: boolean): void;
   setTime(time: number): void;
   setLoop(loop: boolean): void;
@@ -76,15 +93,8 @@ export interface ViewerControls {
 export function createViewerControls(
   options: ViewerControlsOptions,
 ): ViewerControls {
-  const selectedProject = options.projects.find(
-    (project) => project.id === options.selectedProjectId,
-  );
-  if (!selectedProject) {
-    throw new Error(
-      `Unknown selected V5G project: ${options.selectedProjectId}`,
-    );
-  }
-  let currentProject: ViewerControlsProject = selectedProject;
+  let currentProject: ViewerControlsProject | null = null;
+  let currentBundle: ViewerUploadedBundleInfo | null = null;
   let currentLayerGroupSlots: readonly VNILayerGroupSlot[] = [];
   let insertedNodeActive = false;
   let textReplacementActive = false;
@@ -92,26 +102,32 @@ export function createViewerControls(
   const root = document.createElement("div");
   root.className = "viewer-controls";
 
-  const projectRow = document.createElement("div");
-  projectRow.className = "project-row";
-  const projectLabel = document.createElement("label");
-  projectLabel.className = "project-picker";
-  const projectText = document.createElement("span");
-  projectText.textContent = "Project";
-  const projectSelect = document.createElement("select");
-  projectSelect.setAttribute("aria-label", "V5G project");
-  for (const project of options.projects) {
-    const option = document.createElement("option");
-    option.value = project.id;
-    option.textContent = project.label;
-    projectSelect.appendChild(option);
-  }
-  projectSelect.value = currentProject.id;
-  projectSelect.addEventListener("change", () => {
-    options.onProjectChange(projectSelect.value);
-  });
-  projectLabel.append(projectText, projectSelect);
-  projectRow.appendChild(projectLabel);
+  const uploadRow = document.createElement("div");
+  uploadRow.className = "project-row";
+
+  const uploadLabel = document.createElement("label");
+  uploadLabel.className = "project-picker";
+  const uploadText = document.createElement("span");
+  uploadText.textContent = "Zip";
+  const uploadInput = document.createElement("input");
+  uploadInput.type = "file";
+  uploadInput.accept = ".zip,application/zip,application/x-zip-compressed";
+  uploadInput.setAttribute("aria-label", "上传 VNI zip");
+  uploadLabel.append(uploadText, uploadInput);
+
+  const profileLabel = document.createElement("label");
+  profileLabel.className = "project-picker";
+  const profileText = document.createElement("span");
+  profileText.textContent = "Profile";
+  const profileSelect = document.createElement("select");
+  profileSelect.setAttribute("aria-label", "VNI profile");
+  profileLabel.append(profileText, profileSelect);
+
+  uploadRow.append(uploadLabel, profileLabel);
+
+  const uploadError = document.createElement("div");
+  uploadError.className = "upload-error";
+  uploadError.setAttribute("role", "status");
 
   const summary = document.createElement("div");
   summary.className = "viewer-summary";
@@ -365,6 +381,17 @@ export function createViewerControls(
   );
   textPanel.append(textHeader, textControls, textError);
 
+  uploadInput.addEventListener("change", () => {
+    const file = uploadInput.files?.item(0);
+    if (!file) return;
+    options.onZipUpload(file);
+    uploadInput.value = "";
+  });
+  profileSelect.addEventListener("change", () => {
+    if (profileSelect.value) {
+      options.onProfileChange(profileSelect.value);
+    }
+  });
   loopStartInput.addEventListener("input", updateAdvancedValidation);
   loopEndInput.addEventListener("input", updateAdvancedValidation);
   segmentedStartButton.addEventListener("click", () => {
@@ -420,7 +447,8 @@ export function createViewerControls(
 
   controls.append(playButton, restartButton, loopLabel, timeText, range);
   root.append(
-    projectRow,
+    uploadRow,
+    uploadError,
     summary,
     controls,
     advancedPanel,
@@ -429,44 +457,35 @@ export function createViewerControls(
   );
   options.container.appendChild(root);
 
-  function renderProject(project: ViewerControlsProject): void {
-    currentProject = project;
-    projectSelect.value = project.id;
-    summary.replaceChildren(
-      createSummaryStrong(project.project.name),
-      createSummaryItem(project.sourcePath),
-      createSummaryItem(`schema ${project.project.schemaVersion}`),
-      createSummaryItem(`profile ${project.profileId}`),
-      createSummaryItem(`purpose ${project.purpose}`),
-      createSummaryItem(`assetScale ${formatScale(project.assetScale)}`),
-      createSummaryItem(`${project.project.layers.length} layers`),
-      createSummaryItem(`${project.project.assets.length} assets`),
-      createSummaryItem(
-        `${formatTime(project.project.stage.duration)}s duration`,
-      ),
-      createSummaryItem(getAnimationTypeSummary(project.project)),
-    );
-    range.max = String(project.project.stage.duration);
-    range.value = "0.00";
-    resetAdvancedDefaults(project);
-    resetInsertionDefaults(project);
-    resetTextReplacementDefaults(project);
-    timeText.textContent = `0.00 / ${formatTime(project.project.stage.duration)}`;
-    playButton.textContent = "Play";
-    playButton.classList.remove("is-playing");
-  }
-
-  renderProject(currentProject);
+  renderProfileSelect();
+  renderNoProject();
 
   return {
+    setUploadedBundle(info: ViewerUploadedBundleInfo): void {
+      currentBundle = info;
+      renderProfileSelect();
+      renderSummary();
+    },
+    clearUploadedBundle(): void {
+      currentBundle = null;
+      renderProfileSelect();
+      renderSummary();
+    },
+    setUploadError(message: string | null): void {
+      setUploadError(message);
+    },
     setProject(project: ViewerControlsProject): void {
       renderProject(project);
+    },
+    clearProject(): void {
+      renderNoProject();
     },
     setPlaying(isPlaying: boolean): void {
       playButton.textContent = isPlaying ? "Pause" : "Play";
       playButton.classList.toggle("is-playing", isPlaying);
     },
     setTime(time: number): void {
+      if (!currentProject) return;
       const formatted = formatTime(time);
       range.value = formatted;
       timeText.textContent = `${formatted} / ${formatTime(
@@ -479,6 +498,7 @@ export function createViewerControls(
     setPlaybackState(state: VNIPlaybackState): void {
       advancedPhase.textContent = state.phase;
       segmentedEndButton.disabled = !(
+        currentProject &&
         state.mode === "segmented" &&
         (state.phase === "start" || state.phase === "loop")
       );
@@ -509,15 +529,140 @@ export function createViewerControls(
     },
   };
 
-  function resetAdvancedDefaults(project: ViewerControlsProject): void {
+  function renderNoProject(): void {
+    currentProject = null;
+    currentLayerGroupSlots = [];
+    insertedNodeActive = false;
+    textReplacementActive = false;
+    range.max = "0";
+    range.value = "0";
+    timeText.textContent = "0.00 / 0.00";
+    playButton.textContent = "Play";
+    playButton.classList.remove("is-playing");
+    loopInput.checked = true;
+    resetAdvancedDefaults(null);
+    resetInsertionDefaults(null);
+    resetTextReplacementDefaults(null);
+    renderSummary();
+    updateLoadedControlAvailability();
+  }
+
+  function renderProject(project: ViewerControlsProject): void {
+    currentProject = project;
+    range.max = String(project.project.stage.duration);
+    range.value = "0.00";
+    resetAdvancedDefaults(project);
+    resetInsertionDefaults(project);
+    resetTextReplacementDefaults(project);
+    timeText.textContent = `0.00 / ${formatTime(project.project.stage.duration)}`;
+    playButton.textContent = "Play";
+    playButton.classList.remove("is-playing");
+    renderSummary();
+    updateLoadedControlAvailability();
+  }
+
+  function renderSummary(): void {
+    if (currentProject) {
+      summary.replaceChildren(
+        createSummaryStrong(currentProject.project.name),
+        createSummaryItem(currentProject.sourcePath),
+        createSummaryItem(`schema ${currentProject.project.schemaVersion}`),
+        createSummaryItem(`profile ${currentProject.profileId}`),
+        createSummaryItem(`purpose ${currentProject.purpose}`),
+        createSummaryItem(
+          `assetScale ${formatScale(currentProject.assetScale)}`,
+        ),
+        createSummaryItem(`${currentProject.project.layers.length} layers`),
+        createSummaryItem(`${currentProject.project.assets.length} assets`),
+        createSummaryItem(
+          `${formatTime(currentProject.project.stage.duration)}s duration`,
+        ),
+        createSummaryItem(getAnimationTypeSummary(currentProject.project)),
+      );
+      return;
+    }
+
+    if (currentBundle) {
+      summary.replaceChildren(
+        createSummaryStrong(currentBundle.fileName),
+        createSummaryItem(currentBundle.bundleId),
+        createSummaryItem(`${currentBundle.profiles.length} profiles`),
+        createSummaryItem(
+          currentBundle.selectedProfileId
+            ? `profile ${currentBundle.selectedProfileId}`
+            : "profile not selected",
+        ),
+      );
+      return;
+    }
+
+    summary.replaceChildren(
+      createSummaryStrong("No project loaded"),
+      createSummaryItem("Upload a VNI zip to start"),
+    );
+  }
+
+  function renderProfileSelect(): void {
+    const profiles = currentBundle?.profiles ?? [];
+    const selectedProfileId = currentBundle?.selectedProfileId ?? "";
+    profileSelect.replaceChildren();
+    if (profiles.length === 0) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "未上传";
+      profileSelect.appendChild(option);
+      profileSelect.value = "";
+      profileSelect.disabled = true;
+      return;
+    }
+    if (!selectedProfileId) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "选择 profile";
+      profileSelect.appendChild(option);
+    }
+    for (const profile of profiles) {
+      const option = document.createElement("option");
+      option.value = profile.id;
+      option.textContent = `${profile.label} / ${profile.purpose} / ${formatScale(profile.assetScale)}`;
+      profileSelect.appendChild(option);
+    }
+    profileSelect.value = selectedProfileId;
+    profileSelect.disabled = profiles.length <= 1;
+  }
+
+  function updateLoadedControlAvailability(): void {
+    const hasProject = currentProject !== null;
+    playButton.disabled = !hasProject;
+    restartButton.disabled = !hasProject;
+    loopInput.disabled = !hasProject;
+    range.disabled = !hasProject;
+    loopStartInput.disabled = !hasProject;
+    loopEndInput.disabled = !hasProject;
+    keepParticlesInput.disabled = !hasProject;
+    updateAdvancedValidation();
+    updateInsertionControls();
+    updateTextReplacementControls();
+  }
+
+  function resetAdvancedDefaults(project: ViewerControlsProject | null): void {
+    if (!project) {
+      loopStartInput.max = "0";
+      loopEndInput.max = "0";
+      loopStartInput.value = "0.00";
+      loopEndInput.value = "0.00";
+      keepParticlesInput.checked = true;
+      advancedPhase.textContent = "idle";
+      segmentedEndButton.disabled = true;
+      setAdvancedError(null);
+      return;
+    }
     const duration = project.project.stage.duration;
     const defaultTime = Math.min(3, duration);
-    const loopTime =
-      project.id === "multipay" ? Math.min(3, duration) : defaultTime;
     loopStartInput.max = String(duration);
     loopEndInput.max = String(duration);
-    loopStartInput.value = formatTime(loopTime);
-    loopEndInput.value = formatTime(loopTime);
+    loopStartInput.value = formatTime(defaultTime);
+    loopEndInput.value = formatTime(defaultTime);
     keepParticlesInput.checked = true;
     advancedPhase.textContent = "idle";
     segmentedEndButton.disabled = true;
@@ -526,6 +671,12 @@ export function createViewerControls(
   }
 
   function updateAdvancedValidation(): void {
+    if (!currentProject) {
+      segmentedStartButton.disabled = true;
+      segmentedEndButton.disabled = true;
+      setAdvancedError(null);
+      return;
+    }
     const parsed = parseAdvancedInputs();
     segmentedStartButton.disabled = !parsed.ok;
     if (parsed.ok) {
@@ -538,6 +689,9 @@ export function createViewerControls(
   function parseAdvancedInputs():
     | { ok: true; loopStart: number; loopEnd: number }
     | { ok: false; message: string } {
+    if (!currentProject) {
+      return { ok: false, message: "请先加载项目" };
+    }
     const loopStart = Number(loopStartInput.value);
     const loopEnd = Number(loopEndInput.value);
     const duration = currentProject.project.stage.duration;
@@ -561,15 +715,17 @@ export function createViewerControls(
     advancedError.classList.toggle("is-visible", Boolean(message));
   }
 
-  function resetInsertionDefaults(project: ViewerControlsProject): void {
+  function resetInsertionDefaults(project: ViewerControlsProject | null): void {
     currentLayerGroupSlots = [];
     insertedNodeActive = false;
     insertionAssetSelect.replaceChildren();
-    for (const asset of project.insertionAssets) {
-      const option = document.createElement("option");
-      option.value = asset.path;
-      option.textContent = asset.label;
-      insertionAssetSelect.appendChild(option);
+    if (project) {
+      for (const asset of project.insertionAssets) {
+        const option = document.createElement("option");
+        option.value = asset.path;
+        option.textContent = asset.label;
+        insertionAssetSelect.appendChild(option);
+      }
     }
     renderInsertionSlots();
     setInsertionError(null);
@@ -588,13 +744,16 @@ export function createViewerControls(
   }
 
   function updateInsertionControls(): void {
+    const hasProject = currentProject !== null;
     const hasAsset = insertionAssetSelect.options.length > 0;
     const hasSlot = insertionSlotSelect.options.length > 0;
-    insertionAssetSelect.disabled = !hasAsset;
-    insertionSlotSelect.disabled = !hasSlot;
-    insertionButton.disabled = !hasAsset || !hasSlot;
-    clearInsertionButton.disabled = !insertedNodeActive;
-    if (!hasSlot) {
+    insertionAssetSelect.disabled = !hasProject || !hasAsset;
+    insertionSlotSelect.disabled = !hasProject || !hasSlot;
+    insertionButton.disabled = !hasProject || !hasAsset || !hasSlot;
+    clearInsertionButton.disabled = !hasProject || !insertedNodeActive;
+    if (!hasProject) {
+      insertionStatus.textContent = "未加载";
+    } else if (!hasSlot) {
       insertionStatus.textContent = "无合法 slot";
     } else if (insertedNodeActive) {
       insertionStatus.textContent = "已插入";
@@ -613,6 +772,7 @@ export function createViewerControls(
         beforeGroupId: string;
       }
     | { ok: false; message: string } {
+    if (!currentProject) return { ok: false, message: "请先加载项目" };
     const assetPath = insertionAssetSelect.value;
     const asset = currentProject.insertionAssets.find(
       (candidate) => candidate.path === assetPath,
@@ -639,23 +799,27 @@ export function createViewerControls(
     insertionError.classList.toggle("is-visible", Boolean(message));
   }
 
-  function resetTextReplacementDefaults(project: ViewerControlsProject): void {
+  function resetTextReplacementDefaults(
+    project: ViewerControlsProject | null,
+  ): void {
     textReplacementActive = false;
     textLayerSelect.replaceChildren();
-    for (const layer of project.project.layers.filter(
-      (candidate) => candidate.type === "text",
-    )) {
-      const option = document.createElement("option");
-      option.value = layer.id;
-      option.textContent = `${layer.name} (${layer.id})`;
-      textLayerSelect.appendChild(option);
-    }
     textAssetSelect.replaceChildren();
-    for (const asset of project.insertionAssets) {
-      const option = document.createElement("option");
-      option.value = asset.path;
-      option.textContent = asset.label;
-      textAssetSelect.appendChild(option);
+    if (project) {
+      for (const layer of project.project.layers.filter(
+        (candidate) => candidate.type === "text",
+      )) {
+        const option = document.createElement("option");
+        option.value = layer.id;
+        option.textContent = `${layer.name} (${layer.id})`;
+        textLayerSelect.appendChild(option);
+      }
+      for (const asset of project.insertionAssets) {
+        const option = document.createElement("option");
+        option.value = asset.path;
+        option.textContent = asset.label;
+        textAssetSelect.appendChild(option);
+      }
     }
     textModeSelect.value = "text";
     textValueInput.value = "12345";
@@ -665,20 +829,25 @@ export function createViewerControls(
   }
 
   function updateTextReplacementControls(): void {
+    const hasProject = currentProject !== null;
     const hasTextLayer = textLayerSelect.options.length > 0;
     const imageMode = textModeSelect.value === "image";
     const hasAsset = textAssetSelect.options.length > 0;
-    textLayerSelect.disabled = !hasTextLayer;
-    textModeSelect.disabled = !hasTextLayer;
-    textValueInput.disabled = !hasTextLayer || imageMode;
-    textAssetSelect.disabled = !hasTextLayer || !imageMode || !hasAsset;
-    applyTextButton.disabled = !hasTextLayer || (imageMode && !hasAsset);
-    clearTextButton.disabled = !textReplacementActive;
-    textStatus.textContent = hasTextLayer
-      ? textReplacementActive
-        ? "已替换"
-        : `${textLayerSelect.options.length} layer`
-      : "无文字层";
+    textLayerSelect.disabled = !hasProject || !hasTextLayer;
+    textModeSelect.disabled = !hasProject || !hasTextLayer;
+    textValueInput.disabled = !hasProject || !hasTextLayer || imageMode;
+    textAssetSelect.disabled =
+      !hasProject || !hasTextLayer || !imageMode || !hasAsset;
+    applyTextButton.disabled =
+      !hasProject || !hasTextLayer || (imageMode && !hasAsset);
+    clearTextButton.disabled = !hasProject || !textReplacementActive;
+    textStatus.textContent = !hasProject
+      ? "未加载"
+      : hasTextLayer
+        ? textReplacementActive
+          ? "已替换"
+          : `${textLayerSelect.options.length} layer`
+        : "无文字层";
   }
 
   function parseTextReplacementInputs():
@@ -692,6 +861,7 @@ export function createViewerControls(
         projectAssetId?: string;
       }
     | { ok: false; message: string } {
+    if (!currentProject) return { ok: false, message: "请先加载项目" };
     if (!textLayerSelect.value) return { ok: false, message: "请选择文字层" };
     if (textModeSelect.value === "text") {
       return {
@@ -720,6 +890,11 @@ export function createViewerControls(
   function setTextReplacementError(message: string | null): void {
     textError.textContent = message ?? "";
     textError.classList.toggle("is-visible", Boolean(message));
+  }
+
+  function setUploadError(message: string | null): void {
+    uploadError.textContent = message ?? "";
+    uploadError.classList.toggle("is-visible", Boolean(message));
   }
 }
 

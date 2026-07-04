@@ -138,6 +138,9 @@ select {
 }
 
 .project-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
+  gap: 10px;
   min-width: 0;
 }
 
@@ -151,7 +154,8 @@ select {
   font-size: 13px;
 }
 
-.project-picker select {
+.project-picker select,
+.project-picker input[type="file"] {
   width: 100%;
   min-width: 0;
   height: 36px;
@@ -160,6 +164,17 @@ select {
   background: #202622;
   border: 1px solid rgba(216, 224, 216, 0.24);
   border-radius: 6px;
+}
+
+.upload-error {
+  display: none;
+  min-height: 18px;
+  color: #ffc9c9;
+  font-size: 12px;
+}
+
+.upload-error.is-visible {
+  display: block;
 }
 
 .viewer-summary {
@@ -511,6 +526,10 @@ select {
   }
 
   .project-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .project-row {
     grid-template-columns: 1fr;
   }
 

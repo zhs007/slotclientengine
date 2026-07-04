@@ -39,7 +39,6 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "html", "json"],
       exclude: [
-        "src/assets/**",
         "src/main.ts",
         "src/styles.css",
         "src/vite-env.d.ts",

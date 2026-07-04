@@ -1,5 +1,9 @@
 import "./styles.css";
-import { bundledProjects, getBundledProject } from "./config/bundled-projects";
+import {
+  openUploadedVNIProjectBundle,
+  type LoadedUploadedVNIProject,
+  type UploadedVNIProjectBundle,
+} from "./runtime/uploaded-zip-project";
 import {
   VNIPlayer,
   type VNITextLayerTextBinding,
@@ -11,7 +15,6 @@ const VIEWER_INSERTED_NODE_ID = "viewer-group-slot-image";
 const VIEWER_TEXT_LAYER_REPLACEMENT_ID = "viewer-text-layer-replacement";
 const STAGE_CANVAS_SCALES = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4] as const;
 const DEFAULT_STAGE_CANVAS_SCALE_INDEX = 2;
-const DEFAULT_PROJECT_ID = "roundreel";
 
 async function bootstrap(): Promise<void> {
   const appRoot = document.querySelector<HTMLDivElement>("#app");
@@ -58,15 +61,18 @@ async function bootstrap(): Promise<void> {
   let disposeInsertedNode: (() => void) | null = null;
   let disposeTextReplacement: (() => void) | null = null;
   let activeTextBinding: VNITextLayerTextBinding | null = null;
+  let activeBundle: UploadedVNIProjectBundle | null = null;
+  let activeProject: LoadedUploadedVNIProject | null = null;
   let stageCanvasScaleIndex = DEFAULT_STAGE_CANVAS_SCALE_INDEX;
   let loadToken = 0;
-  let activeProject = getBundledProject(DEFAULT_PROJECT_ID);
+
   const controls = createViewerControls({
-    projects: bundledProjects,
-    selectedProjectId: DEFAULT_PROJECT_ID,
     container: controlsMount,
-    onProjectChange: (projectId) => {
-      void loadProject(projectId).catch(showFatalError);
+    onZipUpload: (file) => {
+      void loadUploadedZip(file).catch(showFatalError);
+    },
+    onProfileChange: (profileId) => {
+      void loadUploadedProfile(profileId).catch(showFatalError);
     },
     onTogglePlay: () => {
       if (!player) return;
@@ -102,9 +108,7 @@ async function bootstrap(): Promise<void> {
         controls.setAdvancedError(null);
         syncPlaybackState();
       } catch (error) {
-        controls.setAdvancedError(
-          error instanceof Error ? error.message : String(error),
-        );
+        controls.setAdvancedError(getErrorMessage(error));
       }
     },
     onSegmentedEnd: () => {
@@ -114,21 +118,20 @@ async function bootstrap(): Promise<void> {
         controls.setAdvancedError(null);
         syncPlaybackState();
       } catch (error) {
-        controls.setAdvancedError(
-          error instanceof Error ? error.message : String(error),
-        );
+        controls.setAdvancedError(getErrorMessage(error));
       }
     },
     onInsertBetweenGroups: (insertion) => {
       const currentPlayer = player;
-      if (!currentPlayer) return;
+      const currentProject = activeProject;
+      if (!currentPlayer || !currentProject) return;
       void (async () => {
         const attachOptions = {
           id: VIEWER_INSERTED_NODE_ID,
           afterGroupId: insertion.afterGroupId,
           beforeGroupId: insertion.beforeGroupId,
-          x: activeProject.project.stage.width / 2,
-          y: activeProject.project.stage.height / 2,
+          x: currentProject.project.stage.width / 2,
+          y: currentProject.project.stage.height / 2,
           anchorX: 0.5,
           anchorY: 0.5,
           opacity: 1,
@@ -153,9 +156,7 @@ async function bootstrap(): Promise<void> {
         controls.setInsertionError(null);
       })().catch((error: unknown) => {
         if (currentPlayer !== player) return;
-        controls.setInsertionError(
-          error instanceof Error ? error.message : String(error),
-        );
+        controls.setInsertionError(getErrorMessage(error));
       });
     },
     onClearInsertedNodes: () => {
@@ -165,9 +166,7 @@ async function bootstrap(): Promise<void> {
         controls.setInsertedNodeActive(false);
         controls.setInsertionError(null);
       } catch (error) {
-        controls.setInsertionError(
-          error instanceof Error ? error.message : String(error),
-        );
+        controls.setInsertionError(getErrorMessage(error));
       }
     },
     onApplyTextLayerReplacement: (replacement) => {
@@ -206,9 +205,7 @@ async function bootstrap(): Promise<void> {
         controls.setTextReplacementError(null);
       })().catch((error: unknown) => {
         if (currentPlayer !== player) return;
-        controls.setTextReplacementError(
-          error instanceof Error ? error.message : String(error),
-        );
+        controls.setTextReplacementError(getErrorMessage(error));
         controls.setTextReplacementActive(false);
       });
     },
@@ -221,9 +218,7 @@ async function bootstrap(): Promise<void> {
         controls.setTextReplacementActive(false);
         controls.setTextReplacementError(null);
       } catch (error) {
-        controls.setTextReplacementError(
-          error instanceof Error ? error.message : String(error),
-        );
+        controls.setTextReplacementError(getErrorMessage(error));
       }
     },
   });
@@ -233,11 +228,148 @@ async function bootstrap(): Promise<void> {
     controls.setPlaybackState(player.getPlaybackState());
   }
 
-  async function loadProject(projectId: string): Promise<void> {
-    const selectedProject = getBundledProject(projectId);
-    const token = (loadToken += 1);
-    activeProject = selectedProject;
+  async function loadUploadedZip(file: File): Promise<void> {
+    const token = beginLoad();
+    disposeActivePlayback();
+    activeBundle = null;
+    controls.clearUploadedBundle();
+    controls.clearProject();
+    controls.setUploadError(null);
 
+    try {
+      const bundle = await openUploadedVNIProjectBundle(file, {
+        fileName: file.name,
+      });
+      if (token !== loadToken) return;
+      activeBundle = bundle;
+      controls.setUploadedBundle({
+        fileName: bundle.fileName,
+        bundleId: bundle.bundleId,
+        profiles: bundle.profiles,
+        selectedProfileId: bundle.defaultProfileId,
+      });
+      if (bundle.defaultProfileId) {
+        await loadUploadedProfile(bundle.defaultProfileId, token);
+      }
+    } catch (error) {
+      if (token !== loadToken) return;
+      activeBundle = null;
+      controls.clearUploadedBundle();
+      controls.clearProject();
+      controls.setUploadError(getErrorMessage(error));
+    }
+  }
+
+  async function loadUploadedProfile(
+    profileId: string,
+    existingToken?: number,
+  ): Promise<void> {
+    const bundle = activeBundle;
+    if (!bundle) return;
+    const token = existingToken ?? beginLoad();
+    disposeActivePlayback();
+    controls.clearProject();
+    controls.setUploadError(null);
+    controls.setUploadedBundle({
+      fileName: bundle.fileName,
+      bundleId: bundle.bundleId,
+      profiles: bundle.profiles,
+      selectedProfileId: profileId,
+    });
+
+    let loadedProject: LoadedUploadedVNIProject | null = null;
+    try {
+      loadedProject = bundle.loadProfile(profileId);
+      await mountLoadedProject(loadedProject, token);
+    } catch (error) {
+      loadedProject?.dispose();
+      if (token !== loadToken) return;
+      controls.clearProject();
+      controls.setUploadError(getErrorMessage(error));
+    }
+  }
+
+  async function mountLoadedProject(
+    loadedProject: LoadedUploadedVNIProject,
+    token: number,
+  ): Promise<void> {
+    const nextApp = new Application();
+    let nextPlayer: VNIPlayer | null = null;
+    try {
+      await nextApp.init({
+        backgroundAlpha: 0,
+        antialias: true,
+        autoStart: false,
+        autoDensity: true,
+        resolution: window.devicePixelRatio || 1,
+      });
+      stageCanvasLayer.appendChild(nextApp.canvas);
+      const nextViewport = applyStageCanvasViewport(nextApp, null);
+
+      nextPlayer = new VNIPlayer({
+        parent: nextApp.stage,
+        diagnosticsElement: stageMount,
+        viewport: nextViewport,
+        requestRender: () => nextApp.render(),
+        projectId: loadedProject.projectId,
+        bundleId: loadedProject.bundleId,
+        profileId: loadedProject.profileId,
+        profilePurpose: loadedProject.profilePurpose,
+        assetScale: loadedProject.assetScale,
+        project: loadedProject.project,
+        assetUrls: loadedProject.assetUrls,
+        onTimeChange: (time) => {
+          controls.setTime(time);
+          syncPlaybackState();
+        },
+        onPlayingChange: (isPlaying) => {
+          controls.setPlaying(isPlaying);
+          syncPlaybackState();
+        },
+      });
+      await nextPlayer.init();
+      if (token !== loadToken) {
+        nextPlayer.destroy();
+        nextApp.destroy({ removeView: true });
+        loadedProject.dispose();
+        return;
+      }
+      player = nextPlayer;
+      pixiApp = nextApp;
+      activeProject = loadedProject;
+      disposeResize = observeStageMount(stageMount, () => {
+        applyStageCanvasViewport(nextApp, nextPlayer);
+      });
+      controls.setProject({
+        projectId: loadedProject.projectId,
+        sourcePath: loadedProject.sourcePath,
+        bundleId: loadedProject.bundleId,
+        profileId: loadedProject.profileId,
+        purpose: loadedProject.profilePurpose,
+        assetScale: loadedProject.assetScale,
+        project: loadedProject.project,
+        insertionAssets: loadedProject.insertionAssets,
+      });
+      controls.setLayerGroupSlots(player.getLayerGroupSlots());
+      controls.setInsertedNodeActive(false);
+      controls.setTextReplacementActive(false);
+      controls.setLoop(player.getLoop());
+      controls.setTime(player.getTime());
+      syncPlaybackState();
+    } catch (error) {
+      nextPlayer?.destroy();
+      nextApp.destroy({ removeView: true });
+      loadedProject.dispose();
+      throw error;
+    }
+  }
+
+  function beginLoad(): number {
+    loadToken += 1;
+    return loadToken;
+  }
+
+  function disposeActivePlayback(): void {
     disposeInsertedNode?.();
     disposeInsertedNode = null;
     clearTextReplacement();
@@ -248,59 +380,13 @@ async function bootstrap(): Promise<void> {
     pixiApp?.destroy({ removeView: true });
     pixiApp = null;
     stageCanvasLayer.replaceChildren();
-    controls.setProject(selectedProject);
+    activeProject?.dispose();
+    activeProject = null;
     controls.setPlaying(false);
     controls.setTime(0);
-
-    const nextApp = new Application();
-    await nextApp.init({
-      backgroundAlpha: 0,
-      antialias: true,
-      autoStart: false,
-      autoDensity: true,
-      resolution: window.devicePixelRatio || 1,
-    });
-    stageCanvasLayer.appendChild(nextApp.canvas);
-    const nextViewport = applyStageCanvasViewport(nextApp, null);
-
-    const nextPlayer = new VNIPlayer({
-      parent: nextApp.stage,
-      diagnosticsElement: stageMount,
-      viewport: nextViewport,
-      requestRender: () => nextApp.render(),
-      projectId: selectedProject.id,
-      bundleId: selectedProject.bundleId,
-      profileId: selectedProject.profileId,
-      profilePurpose: selectedProject.purpose,
-      assetScale: selectedProject.assetScale,
-      project: selectedProject.project,
-      assetUrls: selectedProject.assetUrls,
-      onTimeChange: (time) => {
-        controls.setTime(time);
-        syncPlaybackState();
-      },
-      onPlayingChange: (isPlaying) => {
-        controls.setPlaying(isPlaying);
-        syncPlaybackState();
-      },
-    });
-    await nextPlayer.init();
-    if (token !== loadToken) {
-      nextPlayer.destroy();
-      nextApp.destroy({ removeView: true });
-      return;
-    }
-    player = nextPlayer;
-    pixiApp = nextApp;
-    disposeResize = observeStageMount(stageMount, () => {
-      applyStageCanvasViewport(nextApp, nextPlayer);
-    });
-    controls.setLayerGroupSlots(player.getLayerGroupSlots());
+    controls.setLayerGroupSlots([]);
     controls.setInsertedNodeActive(false);
     controls.setTextReplacementActive(false);
-    controls.setLoop(player.getLoop());
-    controls.setTime(player.getTime());
-    syncPlaybackState();
   }
 
   function clearTextReplacement(): void {
@@ -339,7 +425,6 @@ async function bootstrap(): Promise<void> {
   }
 
   setStageCanvasScaleIndex(stageCanvasScaleIndex);
-  await loadProject(DEFAULT_PROJECT_ID);
 
   function applyStageCanvasViewport(
     app: Application,
@@ -407,10 +492,14 @@ function getScaledMountViewport(
   };
 }
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function showFatalError(error: unknown): void {
   console.error(error);
   const appRoot = document.querySelector<HTMLDivElement>("#app");
-  const message = error instanceof Error ? error.message : String(error);
+  const message = getErrorMessage(error);
   if (appRoot) {
     appRoot.replaceChildren();
     const shell = document.createElement("main");
