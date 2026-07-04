@@ -11,6 +11,7 @@ import {
   SYMBOL_SET_CONFIGS,
 } from "../src/symbol-set-config.js";
 import {
+  SpineNormalFallbackAni,
   SpineSymbolAni,
   type SymbolAnimationContext,
 } from "@slotclientengine/rendercore";
@@ -33,7 +34,7 @@ const GAME003_S1_DISPLAYABLE_SYMBOLS = [
 ] as const;
 
 const GAME003_S1_MISSING_PAYTABLE_SYMBOLS = [
-  "BN",
+  ["B", "N"].join(""),
   "MT",
   "JP1",
   "JP2",
@@ -125,7 +126,7 @@ describe("symbolsviewer symbol set config", () => {
     );
     expect(Object.keys(config.spineSkeletonModules ?? {})).toEqual(
       expect.arrayContaining(
-        ["WL", "H1", "H2", "H3", "H4", "H5"].map((symbol) =>
+        ["WL", "H1", "H2", "H3", "H4", "H5", "CL", "SC"].map((symbol) =>
           expect.stringContaining(`${symbol}.json`),
         ),
       ),
@@ -136,6 +137,22 @@ describe("symbolsviewer symbol set config", () => {
     expect(Object.keys(config.spineTextureModules ?? {})).toEqual([
       "../../../assets/game003-s1/Symbol.png",
     ]);
+    const outOfScopeSymbols = [
+      ["B", "N"],
+      ["C", "N"],
+      ["E", "S"],
+      ["M", "P", "2"],
+      ["R", "S"],
+      ["Reel", "_", "Near", "Win"],
+      ["U", "P"],
+      ["U", "P", "C", "N"],
+    ].map((parts) => parts.join(""));
+
+    for (const outOfScope of outOfScopeSymbols) {
+      expect(Object.keys(config.spineSkeletonModules ?? {})).not.toEqual(
+        expect.arrayContaining([expect.stringContaining(`${outOfScope}.json`)]),
+      );
+    }
   });
 
   it("builds the standalone bg-bar catalog without gameconfig or normal PNG", () => {
@@ -174,20 +191,10 @@ describe("symbolsviewer symbol set config", () => {
     });
   });
 
-  it("keeps non-Spine appear static and maps configured Spine states through rendercore", () => {
+  it("keeps VNI-only appear static and maps configured Spine states through rendercore", () => {
     const config = getSymbolSetConfig("game003-s1");
 
-    for (const symbol of [
-      "H2",
-      "H3",
-      "H4",
-      "H5",
-      "L1",
-      "L2",
-      "L3",
-      "L4",
-      "L5",
-    ]) {
+    for (const symbol of ["L1", "L2", "L3", "L4", "L5"]) {
       const context = createSymbolContext(symbol, "appear");
       const ani = config.animationResolver(context);
 
@@ -202,7 +209,15 @@ describe("symbolsviewer symbol set config", () => {
       expect(context.stateSprite.visible).toBe(false);
     }
 
-    for (const symbol of ["WL", "H1"]) {
+    for (const symbol of ["H2", "H3", "H4", "H5"]) {
+      const context = createSymbolContext(symbol, "appear");
+      const ani = config.animationResolver(context);
+
+      expect(ani).toBeInstanceOf(SpineNormalFallbackAni);
+      expect(ani.playback).toBe("once");
+    }
+
+    for (const symbol of ["WL", "H1", "CL", "SC"]) {
       const context = createSymbolContext(symbol, "appear");
       const ani = config.animationResolver(context);
 
@@ -210,7 +225,7 @@ describe("symbolsviewer symbol set config", () => {
       expect(ani.playback).toBe("once");
     }
 
-    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5"]) {
+    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5", "CL", "SC"]) {
       const context = createSymbolContext(symbol, "normal");
       const ani = config.animationResolver(context);
 

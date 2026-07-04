@@ -17,6 +17,10 @@ const pixiMock = vi.hoisted(() => {
     visible = true;
     alpha = 1;
     rotation = 0;
+    zIndex = 0;
+    sortableChildren = false;
+    tint = 0xffffff;
+    blendMode = "normal";
     position = new MockPoint();
     pivot = new MockPoint();
     scale = new MockPoint();
@@ -56,6 +60,10 @@ const pixiMock = vi.hoisted(() => {
       this.removeChildren();
       this.parent = null;
     }
+
+    setFromMatrix(matrix: { readonly tx: number; readonly ty: number }): void {
+      this.position.set(matrix.tx, matrix.ty);
+    }
   }
 
   class MockTexture {
@@ -90,26 +98,63 @@ const pixiMock = vi.hoisted(() => {
     }
   }
 
+  class MockMatrix {
+    a = 1;
+    b = 0;
+    c = 0;
+    d = 1;
+    tx = 0;
+    ty = 0;
+
+    set(a: number, b: number, c: number, d: number, tx: number, ty: number) {
+      this.a = a;
+      this.b = b;
+      this.c = c;
+      this.d = d;
+      this.tx = tx;
+      this.ty = ty;
+    }
+  }
+
+  class MockRectangle {
+    constructor(
+      readonly x: number,
+      readonly y: number,
+      readonly width: number,
+      readonly height: number,
+    ) {}
+  }
+
   return {
+    assetsLoad: vi.fn(async () => MockTexture.WHITE),
     MockContainer,
     MockGraphics,
+    MockMatrix,
+    MockRectangle,
     MockSprite,
     MockTexture,
   };
 });
 
 vi.mock("pixi.js", () => ({
+  Assets: {
+    load: pixiMock.assetsLoad,
+  },
   Container: pixiMock.MockContainer,
   Graphics: pixiMock.MockGraphics,
+  Matrix: pixiMock.MockMatrix,
+  Rectangle: pixiMock.MockRectangle,
   Sprite: pixiMock.MockSprite,
   Texture: pixiMock.MockTexture,
 }));
 
 import { Container, Sprite, Texture } from "pixi.js";
 import {
+  SpineNormalFallbackAni,
   VniSymbolAni,
   createSymbolVniAnimationResolver,
   destroyVniSymbolAnimationCache,
+  type RendercoreSpineSymbolPlayer,
   type SymbolAnimationContext,
   type SymbolSpineAnimationResource,
   type SymbolVniAnimationResource,
@@ -443,6 +488,52 @@ describe("VniSymbolAni", () => {
     expect(context.stateSprite.visible).toBe(true);
     expect(context.stateSprite.texture).toBe(spinBlurTexture);
   });
+
+  it("falls back to normal Spine for missing once states on Spine symbols", async () => {
+    const context: SymbolAnimationContext = {
+      ...createContext(),
+      symbol: "H2",
+      requestedState: "appear",
+      resolvedState: "appear",
+      state: { id: "appear", phase: "once", playback: "once" },
+    };
+    const view = new pixiMock.MockContainer();
+    const playerFactory = vi.fn((): RendercoreSpineSymbolPlayer => {
+      let completed = false;
+      return {
+        view: view as unknown as Container,
+        init: vi.fn(),
+        play: vi.fn(() => {
+          completed = false;
+        }),
+        update: vi.fn(() => ({ completed })),
+        reset: vi.fn(),
+        destroy: vi.fn(() => {
+          view.parent?.removeChild(view);
+        }),
+      };
+    });
+    const fallback = vi.fn();
+    const resolver = createSymbolVniAnimationResolver({
+      resources: {},
+      spineResources: { H2: { normal: createSpineResource() } },
+      fallback,
+      spinePlayerFactory: playerFactory,
+    });
+
+    const ani = resolver(context);
+
+    expect(ani).toBeInstanceOf(SpineNormalFallbackAni);
+    expect(ani.playback).toBe("once");
+    ani.reset();
+    await flushSpineFallbackInit();
+    expect(playerFactory).toHaveBeenCalledTimes(1);
+    expect(view.parent).toBe(context.overlayLayer);
+    expect(fallback).not.toHaveBeenCalled();
+    expect(ani.update(1 / 120).onceCompleted).toBe(false);
+    expect(ani.update(1 / 60).onceCompleted).toBe(true);
+    expect(ani.update(1).onceCompleted).toBe(false);
+  });
 });
 
 function createDeferred<T>() {
@@ -451,4 +542,11 @@ function createDeferred<T>() {
     resolve = innerResolve;
   });
   return { promise, resolve };
+}
+
+async function flushSpineFallbackInit(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 }

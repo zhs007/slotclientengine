@@ -341,7 +341,7 @@ describe("symbol state texture manifest helpers", () => {
   it("validates the current game003 Spine resource set without copied fixtures", () => {
     const manifest = readJsonAsset("symbol-state-textures.manifest.json");
     const spineSkeletonModules = Object.fromEntries(
-      ["WL", "H1", "H2", "H3", "H4", "H5"].map((symbol) => [
+      ["WL", "H1", "H2", "H3", "H4", "H5", "CL", "SC"].map((symbol) => [
         `../../../assets/game003-s1/${symbol}.json`,
         readJsonAsset(`${symbol}.json`),
       ]),
@@ -360,16 +360,23 @@ describe("symbol state texture manifest helpers", () => {
     });
 
     expect(Object.keys(resources).sort()).toEqual([
+      "CL",
       "H1",
       "H2",
       "H3",
       "H4",
       "H5",
+      "SC",
       "WL",
     ]);
     expect(resources.WL?.appear?.spec.playback.animationName).toBe("start");
     expect(resources.H1?.appear?.spec.playback.animationName).toBe("Start");
-    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5"]) {
+    expect(resources.CL?.appear?.spec.playback.animationName).toBe("Start");
+    expect(resources.SC?.appear?.spec.playback.animationName).toBe("Start");
+    for (const symbol of ["H2", "H3", "H4", "H5"]) {
+      expect(resources[symbol]?.appear).toBeUndefined();
+    }
+    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5", "CL", "SC"]) {
       expect(resources[symbol]?.normal?.spec.playback).toEqual({
         mode: "animation",
         animationName: "Idle",

@@ -20,7 +20,7 @@
 - `bg-bar` symbol 资源：`assets/game003-s1/wild.png`、`assets/game003-s1/up.png`；`normal` 是 manifest 声明的透明 symbol，不使用透明 PNG。
 - `L1`-`L5` 中奖 VNI project：`assets/game003-s1/L1-wins.json` 到 `assets/game003-s1/L5-wins.json`
 - `L1`-`L5` 中奖 VNI assets：`assets/game003-s1/assets/*.{png,jpg,jpeg,webp}`
-- Spine skeleton：`assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json`
+- Spine skeleton：`assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json`
 - Spine atlas / texture：`assets/game003-s1/Symbol.atlas`、`assets/game003-s1/Symbol.png`
 - big/super/mega 金额动画 VNI project：`assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json`
 - big/super/mega 金额动画 VNI assets：`assets/game003-s1/win-amount/assets/*.{png,jpg,jpeg,webp}`
@@ -39,7 +39,8 @@ CI=true pnpm --filter gengameconfig dev -- --paytable assets/gamecfg003/paytable
 CI=true pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --input-dir assets/game003-s1 --output-dir assets/game003-s1 --symbols WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC --scale 1
 ```
 
-`symbol-state-textures.manifest.json` 只能包含 `WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC`，每个 symbol 必须显式 `scale: 1`。背景、主转轮框、传送带和 `Symbol.png` atlas texture 不是可展示 symbol。`normal` / `appear` / `win` 的动画类型、Spine `animationName` 和 `durationSeconds` 由这个 manifest 声明：`WL,H1,H2,H3,H4,H5` 的 `normal` 是 Spine `Idle`，`win` 是 Spine `Win`；`WL.appear` 是 Spine `start`，`H1.appear` 是 Spine `Start`；`H2` 到 `H5` 当前资源没有 Start 动画，`appear` 仍使用 manifest 里的静态普通态；`L1.appear` 到 `L5.appear` 是静态普通态，`L1.win` 到 `L5.win` 是 VNI animation。Spine animation name 区分大小写，manifest 必须写 skeleton 中真实存在的名字。重新生成状态贴图时，生成器会保留仍然有效的 `animations` 元数据，不能手动丢掉。
+`symbol-state-textures.manifest.json` 只能包含 `WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC`，每个 symbol 必须显式 `scale: 1`。背景、主转轮框、传送带和 `Symbol.png` atlas texture 不是可展示 symbol。`normal` / `appear` / `win` 的动画类型、Spine `animationName` 和 `durationSeconds` 由这个 manifest 声明：`WL,H1,H2,H3,H4,H5,CL,SC` 的 `normal` 是 Spine `Idle`，`win` 是 Spine `Win`；`WL.appear` 是 Spine `start`，`H1/CL/SC.appear` 是 Spine `Start`。
+高标 2 到高标 5 当前资源没有 Start 动画；这些缺少 Start 的 Spine symbol 不在 manifest 里写伪 `static` / `builtin` appear，运行时由 rendercore 退回该 symbol 自身 normal Spine 展示并按 once 状态完成。`L1.appear` 到 `L5.appear` 是静态普通态，`L1.win` 到 `L5.win` 是 VNI animation。Spine animation name 区分大小写，manifest 必须写 skeleton 中真实存在的名字。重新生成状态贴图时，生成器会保留仍然有效的 `animations` 元数据，不能手动丢掉。
 
 ## 静态配置
 
@@ -75,10 +76,11 @@ CI=true pnpm --filter game003 check:static-config
 - app 层从生成配置读取 symbol manifest、VNI project modules、VNI asset modules、Spine skeleton modules、Spine atlas raw modules 和 Spine texture URL modules。
 - `rendercore` 解析 manifest，并优先使用 manifest 声明的 `builtin` / `static` / `vni` / `spine` animation。
 - 同一个 `RenderSymbol` 上共享同一 skeleton / atlas / texture 的 Spine 状态会复用同一个 Spine player，状态切换只调用 Spine animation 切换；只有 symbol code 真实变化、旧 `RenderSymbol` 销毁时才释放该 player，避免 `Idle -> Win -> Idle` 切换闪烁。
+- 对 manifest `normal.kind: "spine"` 的 symbol，如果 `appear` / `win` 未声明，rendercore 只退回该 symbol 自身的 normal Spine 展示，不退回通用 builtin/default 动画；显式声明的 Spine animation 仍必须存在。
 - 未声明 animation 的 symbol 状态才会走 fallback；fallback 不承载 game003 的 `appear` / `win` 秒数。
 - app 的中奖逻辑仍只按可见窗口坐标请求 symbol 状态为 `win`，不在 `game-adapter.ts`、`game-demo.ts` 或 `win-sequence.ts` 中写 `L1-wins.json` 到 `L5-wins.json`、Spine JSON/atlas 路径、VNI/Spine 播放细节或动画秒数。
 
-runtime 不读取 VNI `stageRect`，VNI 动画按 project 自己的 stage 在目标 symbol 位置播放；如果 manifest 里写入 `stageRect`，会作为未知字段显式失败。Spine 动画由 rendercore 的官方 Spine Pixi adapter 初始化，app 不直接 import `@esotericsoftware/spine-pixi-v8`、不解析 atlas/skeleton、不复制播放状态机。缺 animation `durationSeconds`、缺 VNI project、缺 VNI asset、缺 Spine skeleton/atlas/texture、Spine animation name 大小写不匹配、非法 manifest 字段或动画初始化失败都会显式失败，避免 symbol 动画悄悄退回普通表现后难以排查。
+runtime 不读取 VNI `stageRect`，VNI 动画按 project 自己的 stage 在目标 symbol 位置播放；如果 manifest 里写入 `stageRect`，会作为未知字段显式失败。Spine 动画由 rendercore 的 Spine adapter 初始化；当前 `spine=3.8.99` 资源走 rendercore 内部受限 adapter，Spine 4.x 资源仍可走官方 Pixi v8 runtime。app 不直接 import `@esotericsoftware/spine-pixi-v8`、不解析 atlas/skeleton、不复制播放状态机。缺 animation `durationSeconds`、缺 VNI project、缺 VNI asset、缺 Spine skeleton/atlas/texture、atlas page/region 不匹配、Spine animation name 大小写不匹配、非法 manifest 字段或动画初始化失败都会显式失败，避免 symbol 动画悄悄退回普通表现后难以排查。
 
 ## Loading 启动顺序
 

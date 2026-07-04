@@ -111,10 +111,6 @@
             "loop": true
           }
         },
-        "appear": {
-          "kind": "static",
-          "durationSeconds": 0.016666666666666666
-        },
         "win": {
           "kind": "spine",
           "skeleton": "./H2.json",
@@ -144,10 +140,6 @@
             "animationName": "Idle",
             "loop": true
           }
-        },
-        "appear": {
-          "kind": "static",
-          "durationSeconds": 0.016666666666666666
         },
         "win": {
           "kind": "spine",
@@ -179,10 +171,6 @@
             "loop": true
           }
         },
-        "appear": {
-          "kind": "static",
-          "durationSeconds": 0.016666666666666666
-        },
         "win": {
           "kind": "spine",
           "skeleton": "./H4.json",
@@ -212,10 +200,6 @@
             "animationName": "Idle",
             "loop": true
           }
-        },
-        "appear": {
-          "kind": "static",
-          "durationSeconds": 0.016666666666666666
         },
         "win": {
           "kind": "spine",
@@ -362,13 +346,38 @@
       "disabled": "./CL.disabled.png",
       "scale": 1,
       "animations": {
+        "normal": {
+          "kind": "spine",
+          "skeleton": "./CL.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
+          }
+        },
         "appear": {
-          "kind": "builtin",
-          "durationSeconds": 0.42
+          "kind": "spine",
+          "skeleton": "./CL.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Start",
+            "loop": false
+          }
         },
         "win": {
-          "kind": "builtin",
-          "durationSeconds": 0.58
+          "kind": "spine",
+          "skeleton": "./CL.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Win",
+            "loop": false
+          }
         }
       }
     },
@@ -378,13 +387,38 @@
       "disabled": "./SC.disabled.png",
       "scale": 1,
       "animations": {
+        "normal": {
+          "kind": "spine",
+          "skeleton": "./SC.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
+          }
+        },
         "appear": {
-          "kind": "builtin",
-          "durationSeconds": 0.42
+          "kind": "spine",
+          "skeleton": "./SC.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Start",
+            "loop": false
+          }
         },
         "win": {
-          "kind": "builtin",
-          "durationSeconds": 0.58
+          "kind": "spine",
+          "skeleton": "./SC.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Win",
+            "loop": false
+          }
         }
       }
     }

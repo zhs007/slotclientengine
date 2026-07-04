@@ -17,6 +17,10 @@ const pixiMock = vi.hoisted(() => {
     visible = true;
     alpha = 1;
     rotation = 0;
+    zIndex = 0;
+    sortableChildren = false;
+    tint = 0xffffff;
+    blendMode = "normal";
     position = new MockPoint();
     pivot = new MockPoint();
     scale = new MockPoint();
@@ -56,11 +60,18 @@ const pixiMock = vi.hoisted(() => {
       this.removeChildren();
       this.parent = null;
     }
+
+    setFromMatrix(matrix: { readonly tx: number; readonly ty: number }): void {
+      this.position.set(matrix.tx, matrix.ty);
+    }
   }
 
   class MockTexture {
+    static EMPTY = new MockTexture();
     static WHITE = new MockTexture();
     source = {};
+
+    constructor(readonly options?: unknown) {}
   }
 
   class MockSprite extends MockContainer {
@@ -69,9 +80,38 @@ const pixiMock = vi.hoisted(() => {
     }
   }
 
+  class MockMatrix {
+    a = 1;
+    b = 0;
+    c = 0;
+    d = 1;
+    tx = 0;
+    ty = 0;
+
+    set(a: number, b: number, c: number, d: number, tx: number, ty: number) {
+      this.a = a;
+      this.b = b;
+      this.c = c;
+      this.d = d;
+      this.tx = tx;
+      this.ty = ty;
+    }
+  }
+
+  class MockRectangle {
+    constructor(
+      readonly x: number,
+      readonly y: number,
+      readonly width: number,
+      readonly height: number,
+    ) {}
+  }
+
   return {
     assetsLoad: vi.fn(async () => MockTexture.WHITE),
     MockContainer,
+    MockMatrix,
+    MockRectangle,
     MockSprite,
     MockTexture,
   };
@@ -90,6 +130,8 @@ vi.mock("pixi.js", () => ({
     load: pixiMock.assetsLoad,
   },
   Container: pixiMock.MockContainer,
+  Matrix: pixiMock.MockMatrix,
+  Rectangle: pixiMock.MockRectangle,
   Sprite: pixiMock.MockSprite,
   Texture: pixiMock.MockTexture,
 }));

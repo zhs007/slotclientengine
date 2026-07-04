@@ -55,7 +55,7 @@ const game003LoadingGame003_symbol_vni_assets7Modules = import.meta.glob(
   },
 ) as Record<string, string>;
 const game003LoadingGame003_symbol_spine_skeletons8Modules = import.meta.glob(
-  "../../../../assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json",
+  "../../../../assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
   {
     eager: true,
     import: "default",

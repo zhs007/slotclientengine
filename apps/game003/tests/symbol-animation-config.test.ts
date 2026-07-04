@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { GAME003_SYMBOL_SCALES } from "../src/symbol-animation-config.js";
 import { getGame003SkinConfig } from "../src/skin-config.js";
 import {
+  SpineNormalFallbackAni,
   SpineSymbolAni,
   type SymbolAnimationContext,
 } from "@slotclientengine/rendercore";
@@ -16,20 +17,10 @@ describe("game003 symbol animation config", () => {
     );
   });
 
-  it("keeps non-Spine appear static and maps configured Spine states through rendercore", () => {
+  it("keeps VNI-only appear static and maps configured Spine states through rendercore", () => {
     const skin = getGame003SkinConfig("1");
 
-    for (const symbol of [
-      "H2",
-      "H3",
-      "H4",
-      "H5",
-      "L1",
-      "L2",
-      "L3",
-      "L4",
-      "L5",
-    ]) {
+    for (const symbol of ["L1", "L2", "L3", "L4", "L5"]) {
       const context = createSymbolContext(symbol, "appear");
       const ani = skin.symbolAnimationResolver(context);
 
@@ -44,7 +35,15 @@ describe("game003 symbol animation config", () => {
       expect(context.stateSprite.visible).toBe(false);
     }
 
-    for (const symbol of ["WL", "H1"]) {
+    for (const symbol of ["H2", "H3", "H4", "H5"]) {
+      const context = createSymbolContext(symbol, "appear");
+      const ani = skin.symbolAnimationResolver(context);
+
+      expect(ani).toBeInstanceOf(SpineNormalFallbackAni);
+      expect(ani.playback).toBe("once");
+    }
+
+    for (const symbol of ["WL", "H1", "CL", "SC"]) {
       const context = createSymbolContext(symbol, "appear");
       const ani = skin.symbolAnimationResolver(context);
 
@@ -52,7 +51,7 @@ describe("game003 symbol animation config", () => {
       expect(ani.playback).toBe("once");
     }
 
-    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5"]) {
+    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5", "CL", "SC"]) {
       const context = createSymbolContext(symbol, "normal");
       const ani = skin.symbolAnimationResolver(context);
 
@@ -60,7 +59,7 @@ describe("game003 symbol animation config", () => {
       expect(ani.playback).toBe("static");
     }
 
-    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5"]) {
+    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5", "CL", "SC"]) {
       const context = createSymbolContext(symbol, "win");
       const ani = skin.symbolAnimationResolver(context);
 
@@ -68,7 +67,7 @@ describe("game003 symbol animation config", () => {
       expect(ani.playback).toBe("once");
     }
 
-    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5"]) {
+    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5", "CL", "SC"]) {
       const context = createSymbolContext(symbol, "spinBlur");
       const ani = skin.symbolAnimationResolver(context);
 

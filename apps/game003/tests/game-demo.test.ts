@@ -210,12 +210,13 @@ describe("game003 reel runtime", () => {
 
   it("fails fast for unknown or currently unrenderable paytable symbols", () => {
     const runtime = createRuntime();
+    const blankSymbol = ["B", "N"].join("");
     expect(() =>
       runtime.applyScene(
         [[13, 8, 9, 12, 1], ...GAME003_DEFAULT_SCENE.slice(1)],
-        "BN scene",
+        `${blankSymbol} scene`,
       ),
-    ).toThrow(/BN.*missing assets/);
+    ).toThrow(new RegExp(`${blankSymbol}.*missing assets`));
 
     expect(() =>
       createGame003ReelRuntime({

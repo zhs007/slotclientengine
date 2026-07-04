@@ -1036,16 +1036,8 @@ function validateSpineSymbolGlobs(
     return;
   }
   validateSpineSkeletonGlob(rootDir, symbols.spineSkeletonGlob, skinId);
-  validateSpineAtlasGlob(
-    rootDir,
-    symbols.spineAtlasGlob as string,
-    skinId,
-  );
-  validateSpineTextureGlob(
-    rootDir,
-    symbols.spineTextureGlob as string,
-    skinId,
-  );
+  validateSpineAtlasGlob(rootDir, symbols.spineAtlasGlob as string, skinId);
+  validateSpineTextureGlob(rootDir, symbols.spineTextureGlob as string, skinId);
 }
 
 function validateFeatureBars(
@@ -1124,7 +1116,7 @@ function validateSpineSkeletonGlob(
   assertExistingDirectory(rootDir, directory);
   if (!/\/\{[-A-Za-z0-9_,]+\}\.json$/u.test(glob)) {
     throw new Error(
-      `skins.${skinId}.symbols.spineSkeletonGlob 必须是当前资源目录下的 brace JSON glob，例如 assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json。`,
+      `skins.${skinId}.symbols.spineSkeletonGlob 必须是当前资源目录下的 brace JSON glob，例如 assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json。`,
     );
   }
 }

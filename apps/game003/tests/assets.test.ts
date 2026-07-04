@@ -71,10 +71,24 @@ describe("game003 symbol assets", () => {
       kind: "spine",
       playback: { mode: "animation", animationName: "Start", loop: false },
     });
-    expect(symbols.H2.animations.appear).toMatchObject({
-      kind: "static",
-      durationSeconds: 1 / 60,
-    });
+    expect(symbols.H2.animations).not.toHaveProperty("appear");
+    for (const symbol of ["CL", "SC"]) {
+      expect(symbols[symbol].animations.normal).toMatchObject({
+        kind: "spine",
+        skeleton: `./${symbol}.json`,
+        playback: { mode: "animation", animationName: "Idle", loop: true },
+      });
+      expect(symbols[symbol].animations.appear).toMatchObject({
+        kind: "spine",
+        skeleton: `./${symbol}.json`,
+        playback: { mode: "animation", animationName: "Start", loop: false },
+      });
+      expect(symbols[symbol].animations.win).toMatchObject({
+        kind: "spine",
+        skeleton: `./${symbol}.json`,
+        playback: { mode: "animation", animationName: "Win", loop: false },
+      });
+    }
   });
 
   it("fails when required state textures are missing or manifest fields drift", () => {

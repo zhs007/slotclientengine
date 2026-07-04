@@ -113,7 +113,7 @@ describe("game003 generated static config", () => {
     );
     expect(Object.keys(staticSymbols.spineSkeletonModules ?? {})).toEqual(
       expect.arrayContaining(
-        ["WL", "H1", "H2", "H3", "H4", "H5"].map((symbol) =>
+        ["WL", "H1", "H2", "H3", "H4", "H5", "CL", "SC"].map((symbol) =>
           expect.stringContaining(`${symbol}.json`),
         ),
       ),
@@ -201,13 +201,40 @@ describe("game003 generated static config", () => {
           kind: "spine",
           playback: { animationName: "Idle", loop: true },
         },
-        appear: { kind: "static", durationSeconds: 1 / 60 },
         win: {
           kind: "spine",
           playback: { animationName: "Win", loop: false },
         },
       },
     });
+    expect(
+      (
+        manifestSymbols.H2 as {
+          animations?: Record<string, unknown>;
+        }
+      ).animations,
+    ).not.toHaveProperty("appear");
+    for (const symbol of ["CL", "SC"]) {
+      expect(manifestSymbols[symbol]).toMatchObject({
+        animations: {
+          normal: {
+            kind: "spine",
+            skeleton: `./${symbol}.json`,
+            playback: { animationName: "Idle", loop: true },
+          },
+          appear: {
+            kind: "spine",
+            skeleton: `./${symbol}.json`,
+            playback: { animationName: "Start", loop: false },
+          },
+          win: {
+            kind: "spine",
+            skeleton: `./${symbol}.json`,
+            playback: { animationName: "Win", loop: false },
+          },
+        },
+      });
+    }
     expect(skin.symbolScales.H1).toBe(1);
     expect(skin.symbolScales.SC).toBe(1);
   });
@@ -350,6 +377,8 @@ describe("game003 generated static config", () => {
         "game003-symbol-vni-projects:L5-wins.json",
         "game003-symbol-spine-skeletons:H1.json",
         "game003-symbol-spine-skeletons:H5.json",
+        "game003-symbol-spine-skeletons:CL.json",
+        "game003-symbol-spine-skeletons:SC.json",
         "game003-symbol-spine-atlas",
         "game003-symbol-spine-texture",
         "game003-bg-bar-symbol-pngs:up.png",

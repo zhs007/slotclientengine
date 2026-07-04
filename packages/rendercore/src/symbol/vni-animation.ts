@@ -23,6 +23,7 @@ import {
   type SymbolVniAnimationResourceMap,
 } from "./manifest.js";
 import {
+  SpineNormalFallbackAni,
   SpineSymbolAni,
   type SpineSymbolAniPlayerFactory,
 } from "./spine-animation.js";
@@ -408,6 +409,19 @@ export function createSymbolVniAnimationResolver(options: {
       options.manifestAnimationSpecs?.[context.symbol]?.[context.resolvedState];
     if (spec) {
       return createManifestSymbolAni(context, spec);
+    }
+    const normalSpineResource =
+      options.spineResources?.[context.symbol]?.normal;
+    if (
+      normalSpineResource &&
+      context.resolvedState !== "normal" &&
+      context.state.playback === "once"
+    ) {
+      return new SpineNormalFallbackAni({
+        context,
+        resource: normalSpineResource,
+        playerFactory: options.spinePlayerFactory,
+      });
     }
     if (options.fallback) {
       return options.fallback(context);

@@ -622,18 +622,12 @@ function validatePreservedSpineTransform(symbol, state, value) {
   return Object.freeze({
     ...(transform.x !== undefined
       ? {
-          x: assertFiniteNumber(
-            transform.x,
-            `${symbol}.${state}.transform.x`,
-          ),
+          x: assertFiniteNumber(transform.x, `${symbol}.${state}.transform.x`),
         }
       : {}),
     ...(transform.y !== undefined
       ? {
-          y: assertFiniteNumber(
-            transform.y,
-            `${symbol}.${state}.transform.y`,
-          ),
+          y: assertFiniteNumber(transform.y, `${symbol}.${state}.transform.y`),
         }
       : {}),
     ...(transform.scale !== undefined
@@ -841,11 +835,7 @@ function normalizeManifestPath(value) {
 
 function validateLocalManifestFilePath(value, label, extensions) {
   const path = assertNonEmptyString(value, label);
-  if (
-    !path.startsWith("./") ||
-    path.includes("\\") ||
-    path.includes("../")
-  ) {
+  if (!path.startsWith("./") || path.includes("\\") || path.includes("../")) {
     throw new Error(`${label} must be a local ./ path: ${path}.`);
   }
   const suffix = path.slice("./".length);

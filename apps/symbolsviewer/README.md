@@ -13,24 +13,24 @@ viewer 只绑定 `game003-s1`：
 - `assets/game003-s1/symbol-state-textures.manifest.json`
 - `assets/game003-s1/*-wins.json`
 - `assets/game003-s1/assets/*.{png,jpg,jpeg,webp}`
-- `assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json`
+- `assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json`
 - `assets/game003-s1/Symbol.atlas`
 - `assets/game003-s1/Symbol.png`
 
 可展示 symbol 是 `WL`、`H1`、`H2`、`H3`、`H4`、`H5`、`L1`、`L2`、`L3`、`L4`、`L5`、`CO`、`CL`、`SC`。背景、主转轮框、传送带和 VNI 内部 asset 不会被当成 symbol 展示。
 
-每个可展示 symbol 的 `scale`、`normal` / `appear` / `win` 动画类型、Spine `animationName` 和 `durationSeconds` 都来自 `symbol-state-textures.manifest.json`。viewer 只把 manifest、VNI project modules、VNI asset modules、Spine skeleton modules、Spine atlas raw modules 和 Spine texture URL modules 传给 `@slotclientengine/rendercore`，不在 app 内维护第二份 scale 表，也不硬编码 `L1`-`L5` 或 `WL/H1/H2/H3/H4/H5` 的播放逻辑。
+每个可展示 symbol 的 `scale`、`normal` / `appear` / `win` 动画类型、Spine `animationName` 和 `durationSeconds` 都来自 `symbol-state-textures.manifest.json`。viewer 只把 manifest、VNI project modules、VNI asset modules、Spine skeleton modules、Spine atlas raw modules 和 Spine texture URL modules 传给 `@slotclientengine/rendercore`，不在 app 内维护第二份 scale 表，也不硬编码 `L1`-`L5` 或 `WL/H1/H2/H3/H4/H5/CL/SC` 的播放逻辑。
 
 `game003-s1` 的动画规则：
 
 - `L1.appear` 到 `L5.appear`：manifest `kind: "static"`，直接保持普通状态静态图。
 - `L1.win` 到 `L5.win`：manifest `kind: "vni"`，播放对应 `assets/game003-s1/L*-wins.json`。
-- `WL,H1,H2,H3,H4,H5` 的 `normal`：manifest `kind: "spine"`，播放 `Idle`。
-- `WL.appear`：manifest `kind: "spine"`，播放 `start`；`H1.appear`：manifest `kind: "spine"`，播放 `Start`。Spine animation name 区分大小写。
-- `H2` 到 `H5` 当前没有 Start 动画，`appear` 仍是 manifest `kind: "builtin"`。
-- 其它可展示 symbol 的 `appear` / `win`：manifest `kind: "builtin"`，使用 manifest 中声明的 `durationSeconds` 调用 rendercore 内置效果。
+- `WL,H1,H2,H3,H4,H5,CL,SC` 的 `normal`：manifest `kind: "spine"`，播放 `Idle`。
+- `WL.appear`：manifest `kind: "spine"`，播放 `start`；`H1/CL/SC.appear`：manifest `kind: "spine"`，播放 `Start`。Spine animation name 区分大小写。
+- `H2` 到 `H5` 当前没有 Start 动画，manifest 不写 `appear`，rendercore 会退回该 symbol 自身 normal Spine 展示并按 once 状态完成。
+- `CO.appear` / `CO.win`：manifest `kind: "builtin"`，使用 manifest 中声明的 `durationSeconds` 调用 rendercore 内置效果。
 
-`stageRect` 不属于 runtime manifest；如果 manifest 中写入 `stageRect`，rendercore 会作为未知字段显式失败。缺 VNI project/asset、缺 Spine skeleton/atlas/texture 或 Spine animation name 不存在都会显式失败，viewer 不做静默 fallback。
+`stageRect` 不属于 runtime manifest；如果 manifest 中写入 `stageRect`，rendercore 会作为未知字段显式失败。缺 VNI project/asset、缺 Spine skeleton/atlas/texture、atlas page/region 不匹配或 Spine animation name 不存在都会显式失败，viewer 不做静默 fallback。新增但尚未列入 game003-s1 display set 的 JSON 资源不能通过宽泛 glob 悄悄进入 display set。
 
 生成 symbol 状态贴图和 manifest：
 

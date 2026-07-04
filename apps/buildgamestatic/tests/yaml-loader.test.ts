@@ -524,7 +524,8 @@ describe("buildgamestatic YAML loader", () => {
             ...createYamlObject().skins["1"],
             symbols: {
               ...createYamlObject().skins["1"].symbols,
-              spineSkeletonGlob: "assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json",
+              spineSkeletonGlob:
+                "assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
               spineAtlasGlob: "assets/game003-s1/{Symbol}.atlas",
               spineTextureGlob: "assets/game003-s1/{Symbol}.png",
             },
@@ -535,7 +536,7 @@ describe("buildgamestatic YAML loader", () => {
     );
 
     expect(valid.skins["1"].symbols).toMatchObject({
-      spineSkeletonGlob: "assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json",
+      spineSkeletonGlob: "assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
       spineAtlasGlob: "assets/game003-s1/{Symbol}.atlas",
       spineTextureGlob: "assets/game003-s1/{Symbol}.png",
     });
@@ -549,7 +550,8 @@ describe("buildgamestatic YAML loader", () => {
               ...createYamlObject().skins["1"],
               symbols: {
                 ...createYamlObject().skins["1"].symbols,
-                spineSkeletonGlob: "assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json",
+                spineSkeletonGlob:
+                  "assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
               },
             },
           },
@@ -560,7 +562,11 @@ describe("buildgamestatic YAML loader", () => {
 
     for (const [field, value, pattern] of [
       ["spineSkeletonGlob", "assets/**/*.json", /递归 glob/],
-      ["spineSkeletonGlob", "assets/game003-s1/*.json", /brace JSON glob/],
+      [
+        "spineSkeletonGlob",
+        ["assets/game003-s1/", "*.json"].join(""),
+        /brace JSON glob/,
+      ],
       ["spineSkeletonGlob", "assets/*.{json}", /仓库根级目录/],
       ["spineAtlasGlob", "assets/game003-s1/*.atlas", /brace atlas glob/],
       ["spineAtlasGlob", "assets/game003-s1/{Symbol}.json", /brace atlas glob/],
@@ -577,7 +583,7 @@ describe("buildgamestatic YAML loader", () => {
                 symbols: {
                   ...createYamlObject().skins["1"].symbols,
                   spineSkeletonGlob:
-                    "assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json",
+                    "assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
                   spineAtlasGlob: "assets/game003-s1/{Symbol}.atlas",
                   spineTextureGlob: "assets/game003-s1/{Symbol}.png",
                   [field]: value,

@@ -113,6 +113,34 @@ describe("game003 source boundary", () => {
     expect(businessSource).not.toMatch(/kind:\s*["']vni["']/);
     expect(businessSource).not.toMatch(/\bL[1-5]\b/);
   });
+
+  it("keeps Spine skeleton globs explicit and out-of-scope JSON resources out of runtime config", () => {
+    const runtimeConfigSource = [
+      readSourceTree(join(APP_ROOT, "src")),
+      readFileSync(join(APP_ROOT, "config/game-static.yaml"), "utf8"),
+    ].join("\n");
+
+    expect(runtimeConfigSource).not.toContain(
+      ["assets/game003-s1/", "*.json"].join(""),
+    );
+    expect(runtimeConfigSource).toMatch(/\{WL,H1,H2,H3,H4,H5,CL,SC\}\.json/);
+    const outOfScopeSymbols = [
+      ["B", "N"],
+      ["C", "N"],
+      ["E", "S"],
+      ["M", "P", "2"],
+      ["R", "S"],
+      ["Reel", "_", "Near", "Win"],
+      ["U", "P"],
+      ["U", "P", "C", "N"],
+    ].map((parts) => parts.join(""));
+
+    for (const outOfScope of outOfScopeSymbols) {
+      expect(runtimeConfigSource).not.toMatch(
+        new RegExp(`\\b${outOfScope}\\b`),
+      );
+    }
+  });
 });
 
 function readSourceTree(root: string): string {

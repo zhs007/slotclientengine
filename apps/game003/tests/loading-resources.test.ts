@@ -39,6 +39,8 @@ describe("game003 loading resources", () => {
         "game003-symbol-spine-skeletons:WL.json",
         "game003-symbol-spine-skeletons:H1.json",
         "game003-symbol-spine-skeletons:H5.json",
+        "game003-symbol-spine-skeletons:CL.json",
+        "game003-symbol-spine-skeletons:SC.json",
         "game003-symbol-spine-atlas",
         "game003-symbol-spine-texture",
         "game003-bg-bar-symbol-pngs:up.png",

@@ -8,6 +8,7 @@ import {
 import { Assets, Container, type Texture } from "pixi.js";
 import { assertValidDeltaSeconds, resetBaseDisplay } from "./ani.js";
 import { SymbolAnimationError } from "./errors.js";
+import { Spine38SymbolPlayer, isSpine38Skeleton } from "./spine38-runtime.js";
 import type {
   SymbolSpineAnimationResource,
   SymbolSpineAnimationResourceMap,
@@ -79,8 +80,7 @@ export class SpineSymbolAni implements SymbolAni {
     this.stateId = options.context.resolvedState;
     this.playback = options.context.state.playback;
     this.#playerFactory =
-      options.playerFactory ??
-      ((playerOptions) => new OfficialSpineSymbolPlayer(playerOptions));
+      options.playerFactory ?? createDefaultSpineSymbolPlayer;
   }
 
   reset(): void {
@@ -216,6 +216,73 @@ export class SpineSymbolAni implements SymbolAni {
   }
 }
 
+export class SpineNormalFallbackAni implements SymbolAni {
+  readonly stateId: string;
+  readonly playback: SymbolPlaybackKind;
+  readonly #context: SymbolAnimationContext;
+  readonly #inner: SpineSymbolAni;
+  readonly #durationSeconds: number;
+  #elapsedSeconds = 0;
+  #reportedComplete = false;
+  #destroyed = false;
+
+  constructor(options: SpineSymbolAniOptions) {
+    this.#context = options.context;
+    this.stateId = options.context.resolvedState;
+    this.playback = options.context.state.playback;
+    this.#inner = new SpineSymbolAni(options);
+    this.#durationSeconds =
+      options.context.state.frameDurationSeconds ?? 1 / 60;
+  }
+
+  reset(): void {
+    this.assertNotDestroyed();
+    this.#elapsedSeconds = 0;
+    this.#reportedComplete = false;
+    this.#inner.reset();
+  }
+
+  update(deltaSeconds: number): SymbolAniUpdateResult {
+    assertValidDeltaSeconds(deltaSeconds);
+    this.assertNotDestroyed();
+    const innerResult = this.#inner.update(deltaSeconds);
+    if (this.playback !== "once") {
+      return innerResult;
+    }
+    if (
+      this.#reportedComplete ||
+      this.#context.overlayLayer.children.length === 0
+    ) {
+      return EMPTY_UPDATE_RESULT;
+    }
+    this.#elapsedSeconds += deltaSeconds;
+    if (this.#elapsedSeconds < this.#durationSeconds) {
+      return EMPTY_UPDATE_RESULT;
+    }
+    this.#reportedComplete = true;
+    return Object.freeze({
+      loopCompleted: false,
+      onceCompleted: true,
+    });
+  }
+
+  destroy(): void {
+    if (this.#destroyed) {
+      return;
+    }
+    this.#destroyed = true;
+    this.#inner.destroy();
+  }
+
+  private assertNotDestroyed(): void {
+    if (this.#destroyed) {
+      throw new SymbolAnimationError(
+        `Spine normal fallback animation for "${this.#context.symbol}" was destroyed.`,
+      );
+    }
+  }
+}
+
 function getOrCreateCachedSpineSymbolPlayer(options: {
   readonly context: SymbolAnimationContext;
   readonly resource: SymbolSpineAnimationResource;
@@ -258,6 +325,25 @@ function createSpineSymbolPlayerCacheKey(
     resource.spec.texture,
     resource.atlasPage,
   ].join("\u0000");
+}
+
+function createDefaultSpineSymbolPlayer(options: {
+  readonly resource: SymbolSpineAnimationResource;
+}): RendercoreSpineSymbolPlayer {
+  if (shouldUseSpine38Player(options.resource)) {
+    return new Spine38SymbolPlayer(options);
+  }
+  return new OfficialSpineSymbolPlayer(options);
+}
+
+function shouldUseSpine38Player(
+  resource: SymbolSpineAnimationResource,
+): boolean {
+  try {
+    return isSpine38Skeleton(resource.skeleton);
+  } catch {
+    return false;
+  }
 }
 
 export function createSymbolSpineAnimationResolver(options: {

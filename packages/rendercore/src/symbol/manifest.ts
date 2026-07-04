@@ -5,14 +5,13 @@ import {
   type AssetUrlManifest,
   type VNIProjectConfig,
 } from "@slotclientengine/vnicore/core";
-import {
-  AtlasAttachmentLoader,
-  SkeletonJson,
-  TextureAtlas,
-} from "@esotericsoftware/spine-pixi-v8";
 import type { ReelSymbolScaleMap } from "../reel/types.js";
 import { SymbolAssetError } from "./errors.js";
 import { createDefaultSymbolStatePreset } from "./state-machine.js";
+import {
+  parseSpineAtlasText,
+  validateSpine38SkeletonContract,
+} from "./spine38-runtime.js";
 import type {
   SymbolAssetInput,
   SymbolAssetMap,
@@ -1016,20 +1015,15 @@ function validateSpineAtlasAndSkeleton(options: {
   readonly skeleton: unknown;
   readonly atlasText: string;
 }): string {
-  let atlas: TextureAtlas;
+  let atlas: ReturnType<typeof parseSpineAtlasText>;
   try {
-    atlas = new TextureAtlas(options.atlasText);
+    atlas = parseSpineAtlasText(options.atlasText);
   } catch (error) {
     throw new SymbolAssetError(
       `Symbol "${options.symbol}" ${options.state} Spine atlas failed to parse: ${formatUnknownError(error)}.`,
     );
   }
-  if (atlas.pages.length !== 1) {
-    throw new SymbolAssetError(
-      `Symbol "${options.symbol}" ${options.state} Spine atlas must contain exactly one page.`,
-    );
-  }
-  const atlasPage = atlas.pages[0]?.name;
+  const atlasPage = atlas.pageName;
   const textureFileName = getFileNameFromManifestPath(options.spec.texture);
   if (atlasPage !== textureFileName) {
     throw new SymbolAssetError(
@@ -1038,25 +1032,20 @@ function validateSpineAtlasAndSkeleton(options: {
   }
 
   try {
-    const skeletonData = new SkeletonJson(
-      new AtlasAttachmentLoader(atlas),
-    ).readSkeletonData(options.skeleton);
-    if (
-      !skeletonData.findAnimation(options.spec.playback.animationName) ||
-      !skeletonData.animations.some(
-        (animation) => animation.name === options.spec.playback.animationName,
-      )
-    ) {
+    validateSpine38SkeletonContract({
+      skeleton: options.skeleton,
+      animationName: options.spec.playback.animationName,
+      atlas,
+    });
+  } catch (error) {
+    const message = formatUnknownError(error);
+    if (message.includes(`missing animation "`)) {
       throw new SymbolAssetError(
-        `Symbol "${options.symbol}" ${options.state} Spine skeleton is missing animation "${options.spec.playback.animationName}".`,
+        `Symbol "${options.symbol}" ${options.state} Spine skeleton is ${message}.`,
       );
     }
-  } catch (error) {
-    if (error instanceof SymbolAssetError) {
-      throw error;
-    }
     throw new SymbolAssetError(
-      `Symbol "${options.symbol}" ${options.state} Spine skeleton failed to parse: ${formatUnknownError(error)}.`,
+      `Symbol "${options.symbol}" ${options.state} Spine skeleton failed to parse: ${message}.`,
     );
   }
 

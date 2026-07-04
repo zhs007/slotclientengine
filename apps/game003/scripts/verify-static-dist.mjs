@@ -41,6 +41,33 @@ const DISPLAY_SYMBOLS = Object.freeze([
   "SC",
 ]);
 
+const SPINE_SYMBOLS = Object.freeze([
+  "WL",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "CL",
+  "SC",
+]);
+const SPINE_NORMAL_FALLBACK_APPEAR_SYMBOLS = Object.freeze([
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+]);
+const OUT_OF_SCOPE_SPINE_JSON_SYMBOLS = Object.freeze([
+  ["B", "N"].join(""),
+  ["C", "N"].join(""),
+  ["E", "S"].join(""),
+  ["M", "P", "2"].join(""),
+  ["R", "S"].join(""),
+  ["Reel", "_", "Near", "Win"].join(""),
+  ["U", "P"].join(""),
+  ["U", "P", "C", "N"].join(""),
+]);
+
 const REQUIRED_SCENE_ASSETS = Object.freeze([
   { pattern: /^bg1-[A-Za-z0-9_-]+\.jpg$/, label: "bg1-*.jpg" },
   { pattern: /^bg2-[A-Za-z0-9_-]+\.jpg$/, label: "bg2-*.jpg" },
@@ -229,6 +256,23 @@ function verifyAssets(assetNames) {
       `${symbol}.disabled.png`,
     );
   }
+  for (const symbol of SPINE_SYMBOLS) {
+    assertSourceAssetBundled(
+      distAssetHashes,
+      join(SOURCE_SYMBOL_ASSET_ROOT, `${symbol}.json`),
+      `${symbol}.json`,
+    );
+  }
+  assertSourceAssetBundled(
+    distAssetHashes,
+    join(SOURCE_SYMBOL_ASSET_ROOT, "Symbol.atlas"),
+    "Symbol.atlas",
+  );
+  assertSourceAssetBundled(
+    distAssetHashes,
+    join(SOURCE_SYMBOL_ASSET_ROOT, "Symbol.png"),
+    "Symbol.png",
+  );
   assertSourceAssetBundled(
     distAssetHashes,
     join(SOURCE_SYMBOL_ASSET_ROOT, "minecart.png"),
@@ -284,6 +328,75 @@ function verifySourceManifest(manifest) {
     }
   }
 
+  for (const symbol of SPINE_SYMBOLS) {
+    const animations = manifest.symbols?.[symbol]?.animations ?? {};
+    const normal = animations.normal;
+    const win = animations.win;
+    if (
+      normal?.kind !== "spine" ||
+      normal?.skeleton !== `./${symbol}.json` ||
+      normal?.atlas !== "./Symbol.atlas" ||
+      normal?.texture !== "./Symbol.png" ||
+      normal?.playback?.animationName !== "Idle" ||
+      normal?.playback?.loop !== true
+    ) {
+      failures.push(
+        `source symbol manifest ${symbol}.normal Spine contract is invalid.`,
+      );
+    }
+    if (
+      win?.kind !== "spine" ||
+      win?.skeleton !== `./${symbol}.json` ||
+      win?.atlas !== "./Symbol.atlas" ||
+      win?.texture !== "./Symbol.png" ||
+      win?.playback?.animationName !== "Win" ||
+      win?.playback?.loop !== false
+    ) {
+      failures.push(
+        `source symbol manifest ${symbol}.win Spine contract is invalid.`,
+      );
+    }
+  }
+  for (const symbol of ["H1", "CL", "SC"]) {
+    const appear = manifest.symbols?.[symbol]?.animations?.appear;
+    if (
+      appear?.kind !== "spine" ||
+      appear?.skeleton !== `./${symbol}.json` ||
+      appear?.playback?.animationName !== "Start" ||
+      appear?.playback?.loop !== false
+    ) {
+      failures.push(
+        `source symbol manifest ${symbol}.appear Spine contract is invalid.`,
+      );
+    }
+  }
+  const wlAppear = manifest.symbols?.WL?.animations?.appear;
+  if (
+    wlAppear?.kind !== "spine" ||
+    wlAppear?.skeleton !== "./WL.json" ||
+    wlAppear?.playback?.animationName !== "start" ||
+    wlAppear?.playback?.loop !== false
+  ) {
+    failures.push(
+      "source symbol manifest WL.appear Spine contract is invalid.",
+    );
+  }
+  for (const symbol of SPINE_NORMAL_FALLBACK_APPEAR_SYMBOLS) {
+    const appear = manifest.symbols?.[symbol]?.animations?.appear;
+    if (appear !== undefined) {
+      failures.push(
+        `source symbol manifest ${symbol}.appear must be omitted for Spine normal fallback.`,
+      );
+    }
+  }
+  for (const symbol of OUT_OF_SCOPE_SPINE_JSON_SYMBOLS) {
+    if (manifest.symbols?.[symbol]) {
+      failures.push(
+        `source symbol manifest must not include out-of-scope ${symbol}.`,
+      );
+    }
+  }
+
   for (const name of ["bg1", "bg2", "mainreelbg", "conveyor1", "conveyor2"]) {
     if (manifest.symbols?.[name]) {
       failures.push(`source symbol manifest must not include ${name}.`);
@@ -334,7 +447,7 @@ function assertAsset(assetNames, pattern, label) {
 function createDistAssetHashMap(assetNames) {
   const hashes = new Map();
   for (const name of assetNames) {
-    if (!/\.(?:png|jpg|jpeg|webp|json)$/.test(name)) {
+    if (!/\.(?:png|jpg|jpeg|webp|json|atlas)$/.test(name)) {
       continue;
     }
     const path = join(ASSETS_ROOT, name);

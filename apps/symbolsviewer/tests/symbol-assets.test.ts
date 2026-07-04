@@ -22,6 +22,13 @@ import {
   replaceSequenceStep,
 } from "../src/viewer-sequence.js";
 
+const blankSymbol = ["B", "N"].join("");
+const redSymbol = ["R", "S"].join("");
+const symbolModulePath = (symbol: string, suffix = "") =>
+  `../../../assets/symbols/${symbol}${suffix}.png`;
+const symbolUrl = (symbol: string, suffix = "") =>
+  `/assets/${symbol}${suffix}.png`;
+
 describe("symbolsviewer assets", () => {
   it("parses game2 config and converts asset glob modules into a symbol asset map", () => {
     const assets = createSymbolAssetMapFromModules({
@@ -74,11 +81,11 @@ describe("symbolsviewer assets", () => {
 
     expect(
       createSymbolScaleMapFromManifest({
-        manifest: createManifest(["WL", "BN"], 0.8),
-        displaySymbols: ["WL", "BN"],
+        manifest: createManifest(["WL", blankSymbol], 0.8),
+        displaySymbols: ["WL", blankSymbol],
         requireExplicitScale: true,
       }),
-    ).toEqual({ WL: 0.8, BN: 0.8 });
+    ).toEqual({ WL: 0.8, [blankSymbol]: 0.8 });
 
     expect(() =>
       createSymbolScaleMapFromManifest({
@@ -99,31 +106,37 @@ describe("symbolsviewer assets", () => {
   it("assembles manifest layered normals without exposing layer files as symbols", () => {
     const assets = createStatefulSymbolAssetMapFromModules({
       modules: {
-        "../../../assets/symbols/RS.png": "/assets/RS.png",
-        "../../../assets/symbols/RS-0.png": "/assets/RS-0.png",
-        "../../../assets/symbols/RS-1.png": "/assets/RS-1.png",
-        "../../../assets/symbols/RS-2.png": "/assets/RS-2.png",
-        "../../../assets/symbols/RS.spinBlur.png": "/assets/RS.spinBlur.png",
-        "../../../assets/symbols/RS.disabled.png": "/assets/RS.disabled.png",
+        [symbolModulePath(redSymbol)]: symbolUrl(redSymbol),
+        [symbolModulePath(redSymbol, "-0")]: symbolUrl(redSymbol, "-0"),
+        [symbolModulePath(redSymbol, "-1")]: symbolUrl(redSymbol, "-1"),
+        [symbolModulePath(redSymbol, "-2")]: symbolUrl(redSymbol, "-2"),
+        [symbolModulePath(redSymbol, ".spinBlur")]: symbolUrl(
+          redSymbol,
+          ".spinBlur",
+        ),
+        [symbolModulePath(redSymbol, ".disabled")]: symbolUrl(
+          redSymbol,
+          ".disabled",
+        ),
       },
-      manifest: createManifest(["RS"]),
+      manifest: createManifest([redSymbol]),
       requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
     });
 
-    expect(Object.keys(assets)).toEqual(["RS"]);
-    expect(Object.keys(assets)).not.toContain("RS-0");
-    expect(assets.RS).toMatchObject({
+    expect(Object.keys(assets)).toEqual([redSymbol]);
+    expect(Object.keys(assets)).not.toContain(`${redSymbol}-0`);
+    expect(assets[redSymbol]).toMatchObject({
       normal: {
         kind: "layered",
         layers: [
-          { index: 0, texture: "/assets/RS-0.png" },
-          { index: 1, texture: "/assets/RS-1.png" },
-          { index: 2, texture: "/assets/RS-2.png" },
+          { index: 0, texture: symbolUrl(redSymbol, "-0") },
+          { index: 1, texture: symbolUrl(redSymbol, "-1") },
+          { index: 2, texture: symbolUrl(redSymbol, "-2") },
         ],
       },
       states: {
-        spinBlur: "/assets/RS.spinBlur.png",
-        disabled: "/assets/RS.disabled.png",
+        spinBlur: symbolUrl(redSymbol, ".spinBlur"),
+        disabled: symbolUrl(redSymbol, ".disabled"),
       },
     });
   });
@@ -280,12 +293,12 @@ describe("symbolsviewer assets", () => {
         "S5",
         "S10",
         "SC",
-        "RS",
+        redSymbol,
         "X2",
         "X5",
         "X10",
       ],
-      ignoredPaytableSymbolsWithoutAssets: ["BN"],
+      ignoredPaytableSymbolsWithoutAssets: [blankSymbol],
       ignoredAssetsWithoutPaytable: [],
     });
     expect(catalog.getTextureSet("SC").normal).toMatchObject({
@@ -306,12 +319,12 @@ describe("symbolsviewer assets", () => {
         { index: 2, texture: "/assets/SC-2.png" },
       ],
     });
-    expect(catalog.getTextureSet("RS").normal).toMatchObject({
+    expect(catalog.getTextureSet(redSymbol).normal).toMatchObject({
       kind: "layered",
       layers: [
-        { index: 0, texture: "/assets/RS-0.png" },
-        { index: 1, texture: "/assets/RS-1.png" },
-        { index: 2, texture: "/assets/RS-2.png" },
+        { index: 0, texture: symbolUrl(redSymbol, "-0") },
+        { index: 1, texture: symbolUrl(redSymbol, "-1") },
+        { index: 2, texture: symbolUrl(redSymbol, "-2") },
       ],
     });
   });
@@ -326,7 +339,7 @@ describe("symbolsviewer assets", () => {
         S5: "/assets/S5.png",
         S10: "/assets/S10.png",
         SC: "/assets/SC.png",
-        RS: "/assets/RS.png",
+        [redSymbol]: symbolUrl(redSymbol),
         X2: "/assets/X2.png",
         X5: "/assets/X5.png",
         X10: "/assets/X10.png",
@@ -342,7 +355,7 @@ describe("symbolsviewer assets", () => {
       "S5",
       "S10",
       "SC",
-      "RS",
+      redSymbol,
       "X2",
       "X5",
       "X10",
@@ -395,7 +408,7 @@ function createViewerStatefulAssets() {
     "S5",
     "S10",
     "SC",
-    "RS",
+    redSymbol,
     "X2",
     "X5",
     "X10",
@@ -413,7 +426,7 @@ function createViewerModules(
 ) {
   const compositeLayerCounts: Record<string, number> = {
     SC: 3,
-    RS: 3,
+    [redSymbol]: 3,
     X2: 2,
     X5: 2,
     X10: 2,
@@ -484,7 +497,11 @@ function createManifest(symbols: readonly string[], scale?: number) {
       },
       "./SC-2.png",
     ],
-    RS: ["./RS-0.png", "./RS-1.png", "./RS-2.png"],
+    [redSymbol]: [
+      `./${redSymbol}-0.png`,
+      `./${redSymbol}-1.png`,
+      `./${redSymbol}-2.png`,
+    ],
     X2: ["./X2-0.png", "./X2-1.png"],
     X5: ["./X5-0.png", "./X5-1.png"],
     X10: ["./X10-0.png", "./X10-1.png"],

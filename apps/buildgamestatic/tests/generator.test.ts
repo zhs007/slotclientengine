@@ -151,7 +151,7 @@ describe("buildgamestatic generator", () => {
     expect(result.generated).toContain("game003Skin1SpineAtlasModules");
     expect(result.generated).toContain("game003Skin1SpineTextureModules");
     expect(result.generated).toMatch(
-      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/game003-s1\/\{WL,H1,H2,H3,H4,H5\}\.json"/,
+      /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/game003-s1\/\{WL,H1,H2,H3,H4,H5,CL,SC\}\.json"/,
     );
     expect(result.generated).toContain(
       'import game003Skin1SpineAtlasModulesRaw0 from "../../../../assets/game003-s1/Symbol.atlas?raw";',
@@ -449,7 +449,7 @@ function appendSpineSymbolGlobs(root: string): void {
       "      pngGlob: assets/game003-s1/*.png\n",
       [
         "      pngGlob: assets/game003-s1/*.png",
-        "      spineSkeletonGlob: assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json",
+        "      spineSkeletonGlob: assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json",
         "      spineAtlasGlob: assets/game003-s1/{Symbol}.atlas",
         "      spineTextureGlob: assets/game003-s1/{Symbol}.png",
         "",

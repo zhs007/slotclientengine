@@ -63,7 +63,8 @@ loading:
       glob: assets/game003-s1/assets/*.{png,jpg,jpeg,webp}
       weight: 4
     - id: game003-symbol-spine-skeletons
-      glob: assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json
+      # 只纳入当前主转轮已存在且本次 Spine 化的 symbol；新增 JSON 资源不要用宽泛 *.json 接入。
+      glob: assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json
       weight: 2
     - id: game003-symbol-spine-atlas
       path: assets/game003-s1/Symbol.atlas
@@ -98,8 +99,8 @@ skins:
       pngGlob: assets/game003-s1/*.png
       vniProjectGlob: assets/game003-s1/*-wins.json
       vniAssetGlob: assets/game003-s1/assets/*.{png,jpg,jpeg,webp}
-      # Spine 资源只用于 manifest 声明的高级 symbol 动画；skeleton 必须用 brace JSON，不能写宽泛 *.json 混入 VNI / win-amount。
-      spineSkeletonGlob: assets/game003-s1/{WL,H1,H2,H3,H4,H5}.json
+      # Spine 资源只用于 manifest 声明的高级 symbol 动画；skeleton 必须用 brace JSON，不能写宽泛 *.json 混入 VNI / win-amount / 暂不处理的新资源。
+      spineSkeletonGlob: assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json
       spineAtlasGlob: assets/game003-s1/{Symbol}.atlas
       spineTextureGlob: assets/game003-s1/{Symbol}.png
       emptySymbols: []
