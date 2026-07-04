@@ -455,8 +455,10 @@ export class VNIPlayer {
     if (!imageUrl) {
       throw new Error("VNI external mounted image url must be non-empty.");
     }
-    const texture = (await PIXI.Assets.load(imageUrl)) as PIXI.Texture;
-    assertLoadedTexture(texture, `VNI external mounted image: ${imageUrl}`);
+    const texture = await loadPixiTextureFromUrl(
+      imageUrl,
+      `VNI external mounted image: ${imageUrl}`,
+    );
     return this.attachMountedImageSprite(
       texture,
       `VNI mounted external image ${options.label ?? imageUrl}`,
@@ -557,9 +559,8 @@ export class VNIPlayer {
           "VNI text layer image replacement url must be non-empty.",
         );
       }
-      texture = (await PIXI.Assets.load(imageUrl)) as PIXI.Texture;
-      assertLoadedTexture(
-        texture,
+      texture = await loadPixiTextureFromUrl(
+        imageUrl,
         `VNI text layer image replacement: ${imageUrl}`,
       );
     }
@@ -1254,7 +1255,10 @@ export class VNIPlayer {
     if (!url) {
       throw new Error(`V5G asset path is missing from manifest: ${asset.path}`);
     }
-    const texture = (await PIXI.Assets.load(url)) as PIXI.Texture;
+    const texture = await loadPixiTextureFromUrl(
+      url,
+      `VNI project asset: ${asset.path}`,
+    );
     const width = Math.round(texture.width);
     const height = Math.round(texture.height);
     const expected = getAssetTextureSize(asset);
@@ -2193,6 +2197,18 @@ function assertLoadedTexture(
   ) {
     throw new Error(`${context} failed to load a valid Pixi texture.`);
   }
+}
+
+async function loadPixiTextureFromUrl(
+  url: string,
+  context: string,
+): Promise<PIXI.Texture> {
+  const texture = (await PIXI.Assets.load({
+    src: url,
+    loadParser: "loadTextures",
+  })) as PIXI.Texture | null | undefined;
+  assertLoadedTexture(texture, context);
+  return texture;
 }
 
 function createMaskCacheKey(

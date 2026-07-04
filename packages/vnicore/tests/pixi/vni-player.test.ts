@@ -26,6 +26,10 @@ const pixiMock = vi.hoisted(() => {
   }
 
   const textureByUrl = new Map<string, MockTextureData>();
+  const assetsLoad = vi.fn(
+    async (input: string | { src: string }) =>
+      textureByUrl.get(typeof input === "string" ? input : input.src),
+  );
 
   class MockPoint {
     x = 0;
@@ -222,6 +226,7 @@ const pixiMock = vi.hoisted(() => {
 
   return {
     textureByUrl,
+    assetsLoad,
     MockApplication,
     MockCanvasSource,
     MockContainer,
@@ -235,7 +240,7 @@ const pixiMock = vi.hoisted(() => {
 vi.mock("pixi.js", () => ({
   Application: pixiMock.MockApplication,
   Assets: {
-    load: vi.fn(async (url: string) => pixiMock.textureByUrl.get(url)),
+    load: pixiMock.assetsLoad,
   },
   CanvasSource: pixiMock.MockCanvasSource,
   Container: pixiMock.MockContainer,
@@ -612,6 +617,23 @@ async function createInitializedPlayer(
 }
 
 describe("VNIPlayer", () => {
+  it("loads project textures through Pixi texture parser even when URLs lack extensions", async () => {
+    pixiMock.assetsLoad.mockClear();
+
+    await createInitializedPlayer({
+      project: createStaticProject(),
+    });
+
+    expect(pixiMock.assetsLoad).toHaveBeenCalledWith({
+      src: "/a.png",
+      loadParser: "loadTextures",
+    });
+    expect(pixiMock.assetsLoad).toHaveBeenCalledWith({
+      src: "/b.png",
+      loadParser: "loadTextures",
+    });
+  });
+
   it("mounts only runtime content and never renders exported stage background", async () => {
     const player = await createInitializedPlayer({
       project: createStaticProject(),

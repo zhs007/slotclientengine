@@ -1,59 +1,54 @@
 # anieditorv5viewer
 
-`apps/anieditorv5viewer` is a Vite + TypeScript viewer shell for V5G/VNI exports from `docs/anieditor5/export`.
+`apps/anieditorv5viewer` is a Vite + TypeScript viewer shell for uploaded VNI zip exports. It no longer bundles local animation JSON or copied image assets; playback starts only after the user selects a `.zip` file in the browser.
 
-The animation runtime comes from `@slotclientengine/vnicore`. This app owns bundled JSON/assets, the project selector, controls, styles, and browser assembly. Validation, sampling, Pixi.js v8 rendering, texture-size checks, particles, playback ranges, segmented playback, particle-draining, and diagnostics live in `packages/vnicore`.
+The animation runtime comes from `@slotclientengine/vnicore`. This app owns upload handling, zip parsing, profile selection, controls, styles, Blob URL lifecycle, and browser assembly. Validation, sampling, Pixi.js v8 rendering, texture-size checks, particles, playback ranges, segmented playback, particle-draining, and diagnostics live in `packages/vnicore`.
 
 The viewer owns the browser Pixi `Application` and canvas. It passes `app.stage` to `VNIPlayer`, then uses `viewport` / `setViewportSize(...)` and `requestRender` to keep the player aligned with the viewer mount. `VNIPlayer` itself does not create a canvas.
 
-## Bundled Projects
+## Uploaded Zip Formats
 
-The app bundles the V5G/VNI exports:
+The upload path supports two strict zip shapes.
 
-- `docs/anieditor5/export/project.json`
-- `docs/anieditor5/export/bigwin.json`
-- `docs/anieditor5/export/megawin.json`
-- `docs/anieditor5/export/superwin.json`
-- `docs/anieditor5/export/2x.json`
-- `docs/anieditor5/export/5x.json`
-- `docs/anieditor5/export/10x.json`
-- `docs/anieditor5/export/respin.json`
-- `docs/anieditor5/export/scatter1.json`
-- `docs/anieditor5/export/scatter2.json`
-- `docs/anieditor5/export/multipay.json`
-- `docs/anieditor5/export/roundreel.json`
-- `docs/anieditor5/export/number2.json`
-- `docs/anieditor5/export/number3.json`
+### Bundle manifest zip
 
-For game-specific animation review, the viewer also registers the original
-`game003-s1` L1-L5 win animations without copying or rewriting their assets:
+Example: `docs/anieditor5/roundreel.zip`.
 
-- `assets/game003-s1/L1-wins.json` to `assets/game003-s1/L5-wins.json`
-- `assets/game003-s1/assets/*`
+```text
+manifest.json
+edit_full/roundreel.json
+edit_full/assets/*
+runtime_100/roundreel.json
+runtime_100/assets/*
+```
 
-The copied runtime files live under `src/assets`:
+`manifest.json` must be a `vni_export_bundle`. Each export entry supplies `id`, `purpose`, `assetScale`, `path`, and optional `label`. The viewer validates the manifest with `assertVNIBundleManifest(...)` / `validateVNIBundleManifest(...)`, then validates each selected project with `assertVNIProject(...)` / `validateVNIProject(...)` and `validateManifestProjectProfile(...)`.
 
-- `src/assets/project.json`
-- `src/assets/projects/bigwin.json`
-- `src/assets/projects/megawin.json`
-- `src/assets/projects/superwin.json`
-- `src/assets/projects/2x.json`
-- `src/assets/projects/5x.json`
-- `src/assets/projects/10x.json`
-- `src/assets/projects/respin.json`
-- `src/assets/projects/scatter1.json`
-- `src/assets/projects/scatter2.json`
-- `src/assets/projects/multipay.json`
-- `src/assets/projects/roundreel.json`
-- `src/assets/projects/number2.json`
-- `src/assets/projects/number3.json`
-- `src/assets/assets/*`
+Profile identity comes from the manifest entry and the project JSON `exportProfile`; directory names only locate files inside the zip. If exactly one profile has `purpose: "runtime"`, upload loads it automatically. If the manifest has zero or multiple runtime profiles, the viewer waits for an explicit profile selection.
 
-The UI project selector can switch between all bundled projects. JSON `asset.path` values are resolved through a Vite URL manifest and must match copied files exactly.
+Project `asset.path` values are resolved relative to the selected profile project directory. For example, `runtime_100/roundreel.json` plus `assets/a.png` resolves to `runtime_100/assets/a.png`.
 
-`roundreel` is a `VNI_0.042` single-project runtime export stored in the same JSON + `assets/` resource pool as the other `docs/anieditor5/export` projects. Its profile id, purpose, scale, and `chaser_light` timing semantics come from JSON `exportProfile` and layer data, not from the directory name. `number2` validates text layer replacement, and `number3` validates mask/precompose-light-alpha source handling. `runtime_50` stores 50% file pixels, but the player restores each image layer to its original logical design size with sprite-level compensation. Legacy exports and VNI single-project 100% exports may omit `fileWidth`, `fileHeight`, `fileScale`, and `exportProfile`; those are treated as full-size original-image profiles.
+### Single-project zip
 
-`game003-l1-wins` to `game003-l5-wins` are registered as direct source projects from `assets/game003-s1`; they are intended for visual comparison of the raw VNI animations in this viewer, not as copied docs fixtures.
+Example: `docs/anieditor5/megawin.zip`.
+
+```text
+project.json
+assets/*
+__MACOSX/*
+```
+
+Without `manifest.json`, the zip must contain exactly one root `project.json`. The profile comes only from `project.exportProfile`; uploaded single-project zips without `exportProfile` fail fast. macOS metadata entries such as `__MACOSX/**`, `.DS_Store`, and `._*` are ignored.
+
+Project `asset.path` values are resolved from the zip root. For example, `project.json` plus `assets/effect.png` resolves to `assets/effect.png`.
+
+## Zip Safety
+
+Zip entry paths must be relative POSIX paths. Empty paths, absolute paths, `.` / `..` segments, backslashes, and duplicate normalized paths fail before playback. JSON files are decoded as UTF-8 with fatal decoding. Project image assets must exist exactly in the selected profile and use `.png`, `.jpg`, `.jpeg`, or `.webp`; matching is case-sensitive.
+
+The viewer creates `URL.createObjectURL(...)` entries only for the selected profile and revokes them when the profile changes, a new zip is uploaded, loading fails, or the player is destroyed. Uploaded files are not written to the repo and are not persisted to localStorage or IndexedDB.
+
+Unsupported or invalid data fails fast instead of rendering placeholders, guessing zip layouts, or silently falling back.
 
 ## Runtime Boundary
 
@@ -68,14 +63,7 @@ Supported by `@slotclientengine/vnicore`:
 - text layer replacement through `VNIPlayer` public APIs for dynamic text and image binding
 - layer masks with explicit `sourceLayerId` validation and `legacy_alpha` / `precompose_light_alpha` composite modes
 - `normal`, `add`, `screen`, `multiply`, `lighten` blend modes
-- `move`, `fade`, `scale_up`, `scale_down`, `scale_in`, `scale_out`, `pop`, `shake`, `blink`, `rotate`, `slide_in`, `slide_out`, `bounce_in`, `pulse`, `float`, `swing`
-- `squash_stretch` elastic displacement and squash/stretch sampling
-- layer animation particles: `particles`, `particle_twinkle`, `particle_wall`, `particle_combo`
-- continuous layer particles: `particle_stream`
-- runtime chaser lights: `chaser_light`
-- `particle_combo.sourceOpacity` controls only the source image layer opacity; combo particles continue to render from the layer base opacity when `sourceOpacity` is `0`
-- deterministic `seek()` sampling for play, restart, loop, timeline drag, project switching, and particle redraws
-- playback ranges, segmented advanced playback, playback markers, particle-draining, and complete listeners
+- timeline playback, restart, loop, seek, playback ranges, segmented advanced playback, playback markers, particle-draining, and complete listeners
 
 Explicitly unsupported:
 
@@ -89,8 +77,6 @@ Explicitly unsupported:
 - partial or inconsistent asset file metadata
 - image texture dimensions that do not match `fileWidth` / `fileHeight` when scaled metadata is present
 - bundle profile projects whose `exportProfile` does not match the manifest entry
-
-Unsupported or invalid data fails fast instead of rendering placeholders or silently falling back.
 
 ## Browser Diagnostics
 
@@ -124,7 +110,7 @@ The Pixi preview uses a two-layer stage layout: the outer stage mount remains th
 
 ## Text Replacement UI
 
-The viewer exposes a text layer replacement panel for projects such as `number2`. It lists text layers from the current project, supports dynamic text and image replacement, and uses only `VNIPlayer.attachTextToTextLayer(...)` / `attachImageToTextLayer(...)` plus the returned dispose or `setText()` handles. It does not inspect or mutate private Pixi layer containers.
+The viewer exposes a text layer replacement panel for uploaded projects with text layers. It lists text layers from the current project, supports dynamic text and image replacement, and uses only `VNIPlayer.attachTextToTextLayer(...)` / `attachImageToTextLayer(...)` plus the returned dispose or `setText()` handles. It does not inspect or mutate private Pixi layer containers.
 
 ## Commands
 
