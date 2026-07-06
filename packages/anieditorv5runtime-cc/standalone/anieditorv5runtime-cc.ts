@@ -4441,13 +4441,19 @@ interface PlaybackBoundary {
   loop: boolean;
 }
 
-interface NormalizedPlaybackEvent {
-  id: string;
-  time: number;
-  once: boolean;
-  order: number;
-  listener: (event: V5GCocosPlaybackEventContext) => void;
-}
+type NormalizedPlaybackEvent = readonly [
+  id: string,
+  time: number,
+  once: boolean,
+  order: number,
+  listener: (event: V5GCocosPlaybackEventContext) => void,
+];
+
+const PLAYBACK_EVENT_ID = 0;
+const PLAYBACK_EVENT_TIME = 1;
+const PLAYBACK_EVENT_ONCE = 2;
+const PLAYBACK_EVENT_ORDER = 3;
+const PLAYBACK_EVENT_LISTENER = 4;
 
 interface PlaybackFrameOptions {
   liveParticles?: boolean;
@@ -4547,7 +4553,13 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   private drainPaused = false;
   private suppressParticleEmission = false;
   private forceStopParticlesAfterSegmentEnd = false;
-  private readonly playbackEvents = new Map<string, NormalizedPlaybackEvent>();
+  private readonly playbackEventIds: string[] = [];
+  private readonly playbackEventTimes: number[] = [];
+  private readonly playbackEventOnceFlags: boolean[] = [];
+  private readonly playbackEventOrders: number[] = [];
+  private readonly playbackEventListeners: Array<
+    (event: V5GCocosPlaybackEventContext) => void
+  > = [];
   private readonly completeListeners: Array<
     (event: V5GCocosPlaybackCompleteContext) => void
   > = [];
@@ -5122,7 +5134,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     if (typeof options.id !== "string" || options.id.length === 0) {
       throw new Error("V5GCocosPlayer.addPlaybackEvent id must be non-empty.");
     }
-    if (this.playbackEvents.has(options.id)) {
+    if (this.getPlaybackEventIndex(options.id) >= 0) {
       throw new Error(
         `V5GCocosPlayer.addPlaybackEvent id must be unique: ${options.id}.`,
       );
@@ -5133,31 +5145,75 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       );
     }
 
-    this.playbackEvents.set(options.id, {
-      id: options.id,
-      time: this.normalizePlaybackPoint(
-        options.at,
-        "V5GCocosPlayer.addPlaybackEvent",
-      ),
-      once: options.once ?? false,
-      order: this.nextPlaybackEventOrder,
-      listener: options.listener,
-    });
+    const time = this.normalizePlaybackPoint(
+      options.at,
+      "V5GCocosPlayer.addPlaybackEvent",
+    );
+    this.playbackEventIds.push(options.id);
+    this.playbackEventTimes.push(time);
+    this.playbackEventOnceFlags.push(options.once ?? false);
+    this.playbackEventOrders.push(this.nextPlaybackEventOrder);
+    this.playbackEventListeners.push(options.listener);
     this.nextPlaybackEventOrder += 1;
 
     return () => {
-      this.playbackEvents.delete(options.id);
+      this.removePlaybackEvent(options.id);
     };
   }
 
   clearPlaybackEvent(id: string): void {
-    if (!this.playbackEvents.delete(id)) {
+    if (!this.removePlaybackEvent(id)) {
       throw new Error(`V5GCocosPlayer.clearPlaybackEvent unknown id: ${id}.`);
     }
   }
 
   clearPlaybackEvents(): void {
-    this.playbackEvents.clear();
+    this.clearPlaybackEventRecords();
+  }
+
+  private getPlaybackEventIndex(id: string): number {
+    return this.playbackEventIds.indexOf(id);
+  }
+
+  private removePlaybackEvent(id: string): boolean {
+    const index = this.getPlaybackEventIndex(id);
+    if (index < 0) return false;
+    this.playbackEventIds.splice(index, 1);
+    this.playbackEventTimes.splice(index, 1);
+    this.playbackEventOnceFlags.splice(index, 1);
+    this.playbackEventOrders.splice(index, 1);
+    this.playbackEventListeners.splice(index, 1);
+    return true;
+  }
+
+  private clearPlaybackEventRecords(): void {
+    this.playbackEventIds.length = 0;
+    this.playbackEventTimes.length = 0;
+    this.playbackEventOnceFlags.length = 0;
+    this.playbackEventOrders.length = 0;
+    this.playbackEventListeners.length = 0;
+  }
+
+  private getPlaybackEventSnapshots(): NormalizedPlaybackEvent[] {
+    const snapshots: NormalizedPlaybackEvent[] = [];
+    for (let index = 0; index < this.playbackEventIds.length; index += 1) {
+      const id = this.playbackEventIds[index];
+      const time = this.playbackEventTimes[index];
+      const once = this.playbackEventOnceFlags[index];
+      const order = this.playbackEventOrders[index];
+      const listener = this.playbackEventListeners[index];
+      if (
+        typeof id !== "string" ||
+        !Number.isFinite(time) ||
+        typeof once !== "boolean" ||
+        !Number.isFinite(order) ||
+        typeof listener !== "function"
+      ) {
+        throw new Error("V5GCocosPlayer playback event storage is corrupted.");
+      }
+      snapshots.push([id, time, once, order, listener]);
+    }
+    return snapshots;
   }
 
   onPlaybackComplete(
@@ -5209,7 +5265,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
-    this.playbackEvents.clear();
+    this.clearPlaybackEventRecords();
     this.completeListeners.length = 0;
     this.loopIndex = 0;
     this.drainPaused = false;
@@ -6424,15 +6480,19 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     loopIndex: number,
     boundary: PlaybackBoundary,
   ): void {
-    const events = [...this.playbackEvents.values()]
+    const events = this.getPlaybackEventSnapshots()
       .filter(
         (event) =>
-          event.time >= boundary.startTime &&
-          event.time <= boundary.endTime + PLAYBACK_EPSILON &&
-          event.time > previousTime &&
-          event.time <= currentTime + PLAYBACK_EPSILON,
+          event[PLAYBACK_EVENT_TIME] >= boundary.startTime &&
+          event[PLAYBACK_EVENT_TIME] <= boundary.endTime + PLAYBACK_EPSILON &&
+          event[PLAYBACK_EVENT_TIME] > previousTime &&
+          event[PLAYBACK_EVENT_TIME] <= currentTime + PLAYBACK_EPSILON,
       )
-      .sort((a, b) => a.time - b.time || a.order - b.order);
+      .sort(
+        (a, b) =>
+          a[PLAYBACK_EVENT_TIME] - b[PLAYBACK_EVENT_TIME] ||
+          a[PLAYBACK_EVENT_ORDER] - b[PLAYBACK_EVENT_ORDER],
+      );
 
     this.dispatchPlaybackEvents(events, previousTime, currentTime, loopIndex);
   }
@@ -6442,14 +6502,18 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     loopIndex: number,
     boundary: PlaybackBoundary,
   ): void {
-    const events = [...this.playbackEvents.values()]
+    const events = this.getPlaybackEventSnapshots()
       .filter(
         (event) =>
-          event.time >= boundary.startTime &&
-          event.time <= boundary.endTime + PLAYBACK_EPSILON &&
-          event.time === time,
+          event[PLAYBACK_EVENT_TIME] >= boundary.startTime &&
+          event[PLAYBACK_EVENT_TIME] <= boundary.endTime + PLAYBACK_EPSILON &&
+          event[PLAYBACK_EVENT_TIME] === time,
       )
-      .sort((a, b) => a.time - b.time || a.order - b.order);
+      .sort(
+        (a, b) =>
+          a[PLAYBACK_EVENT_TIME] - b[PLAYBACK_EVENT_TIME] ||
+          a[PLAYBACK_EVENT_ORDER] - b[PLAYBACK_EVENT_ORDER],
+      );
 
     this.dispatchPlaybackEvents(events, time, time, loopIndex);
   }
@@ -6461,12 +6525,15 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     loopIndex: number,
   ): void {
     for (const event of events) {
-      if (event.once) {
-        this.playbackEvents.delete(event.id);
+      const id = event[PLAYBACK_EVENT_ID];
+      const time = event[PLAYBACK_EVENT_TIME];
+      const once = event[PLAYBACK_EVENT_ONCE];
+      if (once) {
+        this.removePlaybackEvent(id);
       }
-      event.listener({
-        id: event.id,
-        time: event.time,
+      event[PLAYBACK_EVENT_LISTENER]({
+        id,
+        time,
         previousTime,
         currentTime,
         loopIndex,
