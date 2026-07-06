@@ -1582,6 +1582,83 @@ describe("V5GCocosPlayer", () => {
     expect(events).toEqual(["time:0.5", "frame:0.5"]);
   });
 
+  it("fires markers placed exactly on playback start and loop restart boundaries", () => {
+    const { player } = makePlayer(tinyProject());
+    const events: string[] = [];
+    player.init();
+
+    player.addPlaybackEvent({
+      id: "timeline-start",
+      at: { unit: "time", at: 0 },
+      listener: (event) =>
+        events.push(`timeline:${event.currentTime}:${event.loopIndex}`),
+    });
+    player.play();
+    expect(events).toEqual(["timeline:0:0"]);
+
+    player.pause();
+    player.clearPlaybackEvents();
+    events.length = 0;
+
+    player.addPlaybackEvent({
+      id: "range-start",
+      at: { unit: "time", at: 0.2 },
+      listener: (event) =>
+        events.push(`range:${event.currentTime}:${event.loopIndex}`),
+    });
+    player.playRange({
+      range: { unit: "time", start: 0.2, end: 0.4 },
+      loop: true,
+    });
+    expect(events).toEqual(["range:0.2:0"]);
+
+    player.update(0.45);
+    expect(events).toEqual(["range:0.2:0", "range:0.2:1", "range:0.2:2"]);
+
+    player.pause();
+    player.clearPlaybackEvents();
+    events.length = 0;
+
+    player.addPlaybackEvent({
+      id: "segmented-start",
+      at: { unit: "time", at: 0 },
+      once: true,
+      listener: (event) =>
+        events.push(`segmented:${event.currentTime}:${event.loopIndex}`),
+    });
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.2 },
+      loopEnd: { unit: "time", at: 0.4 },
+      keepParticlesAlive: true,
+    });
+
+    expect(events).toEqual(["segmented:0:0"]);
+  });
+
+  it("keeps range end markers registered immediately after playRange active", () => {
+    const { player } = makePlayer(tinyProject());
+    const events: string[] = [];
+    player.init();
+
+    player.playRange({
+      range: { unit: "time", start: 0, end: 1 },
+      loop: false,
+    });
+    player.clearPlaybackEvents();
+    player.addPlaybackEvent({
+      id: "BigWinAni_PlayStartAni",
+      at: { unit: "time", at: 1 },
+      once: true,
+      listener: (event) =>
+        events.push(`${event.id}:${event.currentTime}:${event.loopIndex}`),
+    });
+
+    player.update(1);
+
+    expect(events).toEqual(["BigWinAni_PlayStartAni:1:0"]);
+  });
+
   it("fires looping markers once per crossed cycle and removes once markers before callbacks", () => {
     const { player } = makePlayer(tinyProject());
     const repeated: number[] = [];

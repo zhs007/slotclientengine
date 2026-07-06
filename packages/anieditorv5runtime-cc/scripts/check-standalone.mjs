@@ -157,6 +157,8 @@ const requiredSnippets = [
   "forceStopParticlesAfterSegmentEnd",
   "suppressParticleEmission",
   "forceStopParticles",
+  "emitPlaybackEventsAtBoundary",
+  "dispatchPlaybackEvents",
 ];
 
 for (const expected of requiredSnippets) {
