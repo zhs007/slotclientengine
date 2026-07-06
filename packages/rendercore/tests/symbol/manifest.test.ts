@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   SymbolAssetError,
   createSymbolAssetMapFromManifestModules,
+  createSymbolRenderPriorityMapFromManifest,
   createSymbolScaleMapFromManifest,
   createSymbolSpineAnimationResourcesFromManifest,
   createSymbolVniAnimationResourcesFromManifest,
@@ -258,6 +259,39 @@ describe("symbol state texture manifest helpers", () => {
     });
   });
 
+  it("parses optional render priorities and defaults missing values to zero", () => {
+    const manifest = {
+      ...createManifest(),
+      symbols: {
+        ...createManifest().symbols,
+        SC: {
+          ...createManifest().symbols.SC,
+          renderPriority: 3,
+        },
+      },
+    };
+
+    const parsed = parseSymbolStateTextureManifest(manifest, {
+      requiredStates,
+    });
+    expect(parsed.symbols.L1.renderPriority).toBe(0);
+    expect(parsed.symbols.SC.renderPriority).toBe(3);
+    expect(
+      createSymbolRenderPriorityMapFromManifest({
+        manifest,
+        requiredStates,
+        displaySymbols: ["L1", "SC"],
+      }),
+    ).toEqual({ L1: 0, SC: 3 });
+    expect(() =>
+      createSymbolRenderPriorityMapFromManifest({
+        manifest,
+        requiredStates,
+        displaySymbols: ["NOPE"],
+      }),
+    ).toThrow(/NOPE/);
+  });
+
   it("rejects invalid transparent normal dimensions", () => {
     for (const normal of [
       { kind: "transparent", height: 158 },
@@ -395,6 +429,29 @@ describe("symbol state texture manifest helpers", () => {
   it("fails fast for invalid schema and missing VNI resources", () => {
     const manifest = createManifest();
 
+    for (const renderPriority of [
+      -1,
+      1.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      "1",
+      null,
+    ]) {
+      expect(() =>
+        parseSymbolStateTextureManifest(
+          {
+            ...manifest,
+            symbols: {
+              L1: {
+                ...manifest.symbols.L1,
+                renderPriority,
+              },
+            },
+          },
+          { requiredStates },
+        ),
+      ).toThrow(/L1.*renderPriority/);
+    }
     expect(() =>
       parseSymbolStateTextureManifest(
         {

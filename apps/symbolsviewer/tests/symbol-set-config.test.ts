@@ -61,12 +61,21 @@ describe("symbolsviewer symbol set config", () => {
         GAME003_S1_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 1]),
       ),
     );
+    expect(getSymbolSetConfig("game003-s1").symbolRenderPriorities).toEqual({
+      ...Object.fromEntries(
+        GAME003_S1_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 0]),
+      ),
+      WL: 1,
+      CL: 1,
+      SC: 1,
+    });
     expect(getSymbolSetConfig("game003-bg-bar")).toMatchObject({
       label: "game003-bg-bar",
       catalogKind: "standalone",
       displaySymbols: ["normal", "wild", "up"],
       requiredStates: [],
       symbolScales: { normal: 1, wild: 1, up: 1 },
+      symbolRenderPriorities: { normal: 0, wild: 0, up: 0 },
     });
     expect(getSymbolSetConfig("game003-bg-bar")).not.toHaveProperty(
       "rawGameConfig",
@@ -189,6 +198,7 @@ describe("symbolsviewer symbol set config", () => {
       ignoredPaytableSymbolsWithoutAssets: [],
       ignoredAssetsWithoutPaytable: [],
     });
+    expect(config.symbolRenderPriorities.wild).toBe(0);
   });
 
   it("keeps VNI-only appear static and maps configured Spine states through rendercore", () => {

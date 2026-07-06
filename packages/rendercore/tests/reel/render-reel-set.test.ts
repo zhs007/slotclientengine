@@ -152,6 +152,103 @@ describe("RenderReelSet", () => {
     expect(reelSet.getSnapshot().spinning).toBe(false);
   });
 
+  it("sorts visible slot containers across reels by render priority", () => {
+    const prioritizedReelSet = new RenderReelSet({
+      reels: createBasicReels(),
+      layout: createBasicLayout(),
+      registry: createBasicRegistry({
+        symbolRenderPriorities: {
+          A: 2,
+        },
+      }),
+    });
+
+    prioritizedReelSet.resetToVisibleScene(
+      [
+        [1, 2, 2],
+        [2, 2, 2],
+      ],
+      [0, 0],
+    );
+    const leftHigh = getVisibleSlotSnapshot(prioritizedReelSet, 0, 0);
+    const rightLow = getVisibleSlotSnapshot(prioritizedReelSet, 1, 2);
+    expect(leftHigh.container.parent).toBe(rightLow.container.parent);
+    expect(leftHigh.container.parent?.sortableChildren).toBe(true);
+    expect(leftHigh.symbol?.renderPriority).toBe(2);
+    expect(leftHigh.container.zIndex).toBeGreaterThan(
+      rightLow.container.zIndex,
+    );
+
+    const defaultReelSet = new RenderReelSet({
+      reels: createBasicReels(),
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    defaultReelSet.resetToVisibleScene(
+      [
+        [1, 1, 1],
+        [2, 2, 2],
+      ],
+      [0, 0],
+    );
+    expect(
+      getVisibleSlotSnapshot(defaultReelSet, 0, 2).container.zIndex,
+    ).toBeGreaterThan(
+      getVisibleSlotSnapshot(defaultReelSet, 0, 0).container.zIndex,
+    );
+    expect(
+      getVisibleSlotSnapshot(defaultReelSet, 1, 0).container.zIndex,
+    ).toBeGreaterThan(
+      getVisibleSlotSnapshot(defaultReelSet, 0, 2).container.zIndex,
+    );
+  });
+
+  it("keeps priority sorting and slot clip masks while spinning", () => {
+    const reels = createBasicReels();
+    const reelSet = new RenderReelSet({
+      reels,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry({
+        symbolRenderPriorities: {
+          A: 2,
+        },
+      }),
+    });
+    const plan = createReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      visibleRows: 3,
+      minimumSpinCycles: 2,
+      baseDurationMs: 300,
+      speedSymbolsPerSecond: 30,
+      startDelayMs: 0,
+      stopDelayMs: 0,
+    });
+
+    reelSet.spin(plan, {
+      targetVisibleScene: [
+        [1, 1, 1],
+        [2, 2, 2],
+      ],
+    });
+    reelSet.update(0);
+    expect(getVisibleSlotSnapshot(reelSet, 0, 0).container.mask).not.toBeNull();
+
+    let result = reelSet.update(0.05);
+    for (let index = 0; index < 20 && !result.completed; index += 1) {
+      result = reelSet.update(0.05);
+    }
+
+    expect(result.completed).toBe(true);
+    const leftHigh = getVisibleSlotSnapshot(reelSet, 0, 0);
+    const rightLow = getVisibleSlotSnapshot(reelSet, 1, 2);
+    expect(leftHigh.container.mask ?? null).toBeNull();
+    expect(rightLow.container.mask ?? null).toBeNull();
+    expect(leftHigh.container.zIndex).toBeGreaterThan(
+      rightLow.container.zIndex,
+    );
+  });
+
   it("injects target visible symbols without requiring the target window to exist on the public reel strip", () => {
     const gameConfig = createGameConfig(game2Config);
     const reels = gameConfig.getReels("reels01");
@@ -469,4 +566,14 @@ function getVisibleSlotSymbol(reelSet: RenderReelSet, x: number, y: number) {
     throw new Error(`Missing visible symbol at ${x},${y}.`);
   }
   return symbol;
+}
+
+function getVisibleSlotSnapshot(reelSet: RenderReelSet, x: number, y: number) {
+  const slot = reelSet.reels[x]
+    .getSlotSnapshots()
+    .find((candidate) => candidate.windowY === y);
+  if (!slot) {
+    throw new Error(`Missing visible slot at ${x},${y}.`);
+  }
+  return slot;
 }

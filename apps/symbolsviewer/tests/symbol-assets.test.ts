@@ -13,6 +13,7 @@ import {
   createStatefulSymbolAssetMapFromModules,
   createSymbolsViewerCatalog,
   createSymbolsViewerStandaloneCatalog,
+  createSymbolRenderPriorityMapFromManifest,
   getSymbolNameFromPath,
 } from "../src/symbol-assets.js";
 import {
@@ -101,6 +102,45 @@ describe("symbolsviewer assets", () => {
         displaySymbols: ["S00"],
       }),
     ).toThrow(/S00.*scale/);
+  });
+
+  it("creates symbol render priority maps from manifest data", () => {
+    const baseManifest = createManifest(["S00", "SC"], 1);
+    const baseSymbols = baseManifest.symbols as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const manifest = {
+      ...baseManifest,
+      symbols: {
+        ...baseSymbols,
+        SC: {
+          ...baseSymbols.SC,
+          renderPriority: 3,
+        },
+      },
+    };
+
+    expect(
+      createSymbolRenderPriorityMapFromManifest({
+        manifest,
+        displaySymbols: ["S00", "SC"],
+      }),
+    ).toEqual({ S00: 0, SC: 3 });
+    expect(() =>
+      createSymbolRenderPriorityMapFromManifest({
+        manifest: {
+          ...manifest,
+          symbols: {
+            S00: {
+              ...baseSymbols.S00,
+              renderPriority: -1,
+            },
+          },
+        },
+        displaySymbols: ["S00"],
+      }),
+    ).toThrow(/S00.*renderPriority/);
   });
 
   it("assembles manifest layered normals without exposing layer files as symbols", () => {

@@ -270,6 +270,7 @@ describe("generate-symbol-state-textures script", () => {
                 spinBlur: "./L1.spinBlur.png",
                 disabled: "./L1.disabled.png",
                 scale: 1,
+                renderPriority: 2,
                 animations: {
                   appear: { kind: "static", durationSeconds: 1 / 60 },
                   win: {
@@ -289,6 +290,7 @@ describe("generate-symbol-state-textures script", () => {
                 spinBlur: "./H1.spinBlur.png",
                 disabled: "./H1.disabled.png",
                 scale: 1,
+                renderPriority: 0,
                 animations: {
                   normal: {
                     kind: "spine",
@@ -339,6 +341,7 @@ describe("generate-symbol-state-textures script", () => {
           playback: { mode: "range", startTime: 0, endTime: 1, loop: false },
         },
       });
+      expect(manifest.symbols.L1.renderPriority).toBe(2);
       expect(manifest.symbols.H1.animations).toEqual({
         normal: {
           kind: "spine",
@@ -365,6 +368,48 @@ describe("generate-symbol-state-textures script", () => {
         },
         win: { kind: "builtin", durationSeconds: 0.58 },
       });
+      expect(manifest.symbols.H1.renderPriority).toBe(0);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails when an existing manifest contains an invalid renderPriority", async () => {
+    const generator = await loadGeneratorModule();
+    const tempDir = await mkdtemp(
+      join(tmpdir(), "rendercore-symbol-generator-"),
+    );
+    try {
+      await writePng(join(tempDir, "L1.png"), 4, 4, "#ff0000");
+      await writeFile(
+        join(tempDir, "symbol-state-textures.manifest.json"),
+        JSON.stringify(
+          {
+            version: 1,
+            states: ["spinBlur", "disabled"],
+            symbols: {
+              L1: {
+                normal: "./L1.png",
+                spinBlur: "./L1.spinBlur.png",
+                disabled: "./L1.disabled.png",
+                scale: 1,
+                renderPriority: -1,
+              },
+            },
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+
+      await expect(
+        generator.generateSymbolStateTextures({
+          inputDir: tempDir,
+          outputDir: tempDir,
+          symbols: ["L1"],
+        }),
+      ).rejects.toThrow(/L1.*renderPriority/);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

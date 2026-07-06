@@ -182,6 +182,37 @@ describe("RenderGridCellReelSet", () => {
     ).toBe(true);
   });
 
+  it("sorts cell roots by visible symbol render priority", () => {
+    const reelSet = createGridReelSet({
+      symbolRenderPriorities: {
+        A: 2,
+      },
+    });
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+
+    expect(reelSet.sortableChildren).toBe(true);
+    expect(getCellRoot(reelSet, 0).zIndex).toBeGreaterThan(
+      getCellRoot(reelSet, 5).zIndex,
+    );
+
+    const defaultReelSet = createGridReelSet();
+    defaultReelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    expect(getCellRoot(defaultReelSet, 5).zIndex).toBeGreaterThan(
+      getCellRoot(defaultReelSet, 0).zIndex,
+    );
+
+    reelSet.spin(createPlan());
+    let result = reelSet.update(0.05);
+    for (let index = 0; index < 12 && !result.completed; index += 1) {
+      result = reelSet.update(0.05);
+    }
+
+    expect(result.completed).toBe(true);
+    expect(getCellRoot(reelSet, 2).zIndex).toBeGreaterThan(
+      getCellRoot(reelSet, 0).zIndex,
+    );
+  });
+
   it("scrolls the dimming strip with the micro reel instead of using a fixed overlay", () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
@@ -252,10 +283,7 @@ function getCellClipMask(
   reelSet: RenderGridCellReelSet,
   orderIndex: number,
 ): Graphics {
-  const root = reelSet.children[orderIndex];
-  if (!(root instanceof Container)) {
-    throw new Error(`Missing grid cell root ${orderIndex}.`);
-  }
+  const root = getCellRoot(reelSet, orderIndex);
   const clipMask = root.children.find(
     (child): child is Graphics => child instanceof Graphics,
   );
@@ -265,10 +293,23 @@ function getCellClipMask(
   return clipMask;
 }
 
-function createGridReelSet(): RenderGridCellReelSet {
+function getCellRoot(
+  reelSet: RenderGridCellReelSet,
+  orderIndex: number,
+): Container {
+  const root = reelSet.children[orderIndex];
+  if (!(root instanceof Container)) {
+    throw new Error(`Missing grid cell root ${orderIndex}.`);
+  }
+  return root;
+}
+
+function createGridReelSet(
+  registryOptions: Parameters<typeof createBasicRegistry>[0] = {},
+): RenderGridCellReelSet {
   return new RenderGridCellReelSet({
     reels: createBasicReels(),
-    registry: createBasicRegistry(),
+    registry: createBasicRegistry(registryOptions),
     columns: 2,
     rows: 3,
     cellWidth: 15,

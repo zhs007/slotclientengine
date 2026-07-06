@@ -1,6 +1,9 @@
 import { Container, Sprite, Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
-import { GAME003_SYMBOL_SCALES } from "../src/symbol-animation-config.js";
+import {
+  GAME003_SYMBOL_RENDER_PRIORITIES,
+  GAME003_SYMBOL_SCALES,
+} from "../src/symbol-animation-config.js";
 import { getGame003SkinConfig } from "../src/skin-config.js";
 import {
   SpineNormalFallbackAni,
@@ -15,6 +18,20 @@ describe("game003 symbol animation config", () => {
     expect(GAME003_SYMBOL_SCALES).toEqual(
       Object.fromEntries(skin.displaySymbols.map((symbol) => [symbol, 1])),
     );
+  });
+
+  it("derives render priorities from the manifest", () => {
+    const skin = getGame003SkinConfig("1");
+
+    expect(GAME003_SYMBOL_RENDER_PRIORITIES).toEqual(
+      skin.symbolRenderPriorities,
+    );
+    expect(GAME003_SYMBOL_RENDER_PRIORITIES).toMatchObject({
+      WL: 1,
+      CL: 1,
+      SC: 1,
+      H1: 0,
+    });
   });
 
   it("keeps VNI-only appear static and maps configured Spine states through rendercore", () => {

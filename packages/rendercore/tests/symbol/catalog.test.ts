@@ -117,6 +117,47 @@ describe("createSymbolCatalog", () => {
     ]);
   });
 
+  it("applies catalog render priorities and supports single-symbol overrides", () => {
+    const catalog = createSymbolCatalog({
+      gameConfig: createGameConfig(game2Config),
+      assets: {
+        S00: Texture.WHITE,
+      },
+      symbolRenderPriorities: {
+        S00: 4,
+      },
+    });
+
+    expect(catalog.createRenderSymbol("S00").renderPriority).toBe(4);
+    expect(
+      catalog.createRenderSymbol("S00", { renderPriority: 7 }).renderPriority,
+    ).toBe(7);
+    expect(() =>
+      createSymbolCatalog({
+        gameConfig: createGameConfig(game2Config),
+        assets: {
+          S00: Texture.WHITE,
+        },
+        symbolRenderPriorities: {
+          SX: 1,
+        },
+      }),
+    ).toThrow(/SX.*paytable/);
+    for (const renderPriority of [-1, 1.5, "1" as never]) {
+      expect(() =>
+        createSymbolCatalog({
+          gameConfig: createGameConfig(game2Config),
+          assets: {
+            S00: Texture.WHITE,
+          },
+          symbolRenderPriorities: {
+            S00: renderPriority,
+          },
+        }),
+      ).toThrow(/S00.*renderPriority/);
+    }
+  });
+
   it("accepts layered normal texture sources without treating layer 0 as a legacy asset", () => {
     const bottom = createTestTexture(20, 24);
     const top = createTestTexture(20, 24);

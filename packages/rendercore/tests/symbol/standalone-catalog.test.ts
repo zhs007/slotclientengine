@@ -19,6 +19,7 @@ describe("standalone symbol catalog", () => {
         unused: { normal: createTexture(8, 8) },
       },
       symbolScales: { boost: 0.5 },
+      symbolRenderPriorities: { boost: 3 },
       animationResolver: createTestResolver(),
     });
 
@@ -42,6 +43,10 @@ describe("standalone symbol catalog", () => {
     const boost = catalog.createRenderSymbol("boost");
     expect(boost.scale.x).toBe(0.5);
     expect(boost.scale.y).toBe(0.5);
+    expect(boost.renderPriority).toBe(3);
+    expect(
+      catalog.createRenderSymbol("boost", { renderPriority: 5 }).renderPriority,
+    ).toBe(5);
 
     const empty = catalog.createRenderSymbol("empty");
     empty.requestState("win");
@@ -69,6 +74,24 @@ describe("standalone symbol catalog", () => {
         symbolScales: { bonus: 1 },
       }),
     ).toThrow(SymbolAssetError);
+    expect(() =>
+      createStandaloneSymbolCatalog({
+        displaySymbols: ["empty"],
+        assets: {
+          empty: { normal: { kind: "transparent", width: 1, height: 1 } },
+        },
+        symbolRenderPriorities: { bonus: 1 },
+      }),
+    ).toThrow(/bonus.*displaySymbols/);
+    expect(() =>
+      createStandaloneSymbolCatalog({
+        displaySymbols: ["empty"],
+        assets: {
+          empty: { normal: { kind: "transparent", width: 1, height: 1 } },
+        },
+        symbolRenderPriorities: { empty: -1 },
+      }),
+    ).toThrow(/empty.*renderPriority/);
   });
 });
 

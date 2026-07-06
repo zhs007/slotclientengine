@@ -32,6 +32,7 @@ interface NormalizedTextureSet {
   readonly normal: SymbolNormalTextureSource<Texture>;
   readonly states?: Readonly<Partial<Record<SymbolStateId, Texture>>>;
   readonly scale: number;
+  readonly renderPriority: number;
 }
 
 export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
@@ -60,6 +61,10 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
     );
     const symbolScales = normalizeSymbolScales(
       options.symbolScales,
+      paytableSymbolSet,
+    );
+    const symbolRenderPriorities = normalizeSymbolRenderPriorities(
+      options.symbolRenderPriorities,
       paytableSymbolSet,
     );
     const assetSymbols = Object.keys(options.assets).sort();
@@ -100,6 +105,7 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
         entry.symbol,
         options.assets[entry.symbol],
         symbolScales.get(entry.symbol) ?? 1,
+        symbolRenderPriorities.get(entry.symbol) ?? 0,
       );
       assertRequiredStateTextures(
         entry.symbol,
@@ -209,6 +215,7 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
       stateTextures: textureSet.states,
       requiredStateTextures: this.#requiredStateTextures,
       animationResolver: this.#animationResolver,
+      renderPriority: textureSet.renderPriority,
     });
     renderSymbol.scale.set(textureSet.scale);
     return renderSymbol;
@@ -240,6 +247,7 @@ function normalizeTextureSet(
   symbol: string,
   asset: SymbolAssetMap[string],
   scale: number,
+  renderPriority: number,
 ): NormalizedTextureSet {
   if (asset === undefined || asset === null) {
     throw new ReelAssetError(
@@ -252,6 +260,7 @@ function normalizeTextureSet(
       normal: normalizeNormalTextureSource(symbol, asset.normal),
       states: normalizeTextureStates(symbol, asset.states ?? {}),
       scale,
+      renderPriority,
     });
   }
 
@@ -259,6 +268,7 @@ function normalizeTextureSet(
     normal: normalizeNormalTextureSource(symbol, asset),
     states: Object.freeze({}),
     scale,
+    renderPriority,
   });
 }
 
@@ -517,6 +527,33 @@ function normalizeSymbolScales(
       );
     }
     normalized.set(symbol, scale);
+  }
+  return normalized;
+}
+
+function normalizeSymbolRenderPriorities(
+  symbolRenderPriorities: Readonly<Record<string, number>> | undefined,
+  paytableSymbolSet: ReadonlySet<string>,
+): ReadonlyMap<string, number> {
+  const normalized = new Map<string, number>();
+  for (const [symbol, renderPriority] of Object.entries(
+    symbolRenderPriorities ?? {},
+  )) {
+    if (!paytableSymbolSet.has(symbol)) {
+      throw new ReelAssetError(
+        `Symbol renderPriority for "${symbol}" does not exist in paytable.`,
+      );
+    }
+    if (
+      typeof renderPriority !== "number" ||
+      !Number.isSafeInteger(renderPriority) ||
+      renderPriority < 0
+    ) {
+      throw new ReelAssetError(
+        `Symbol "${symbol}" renderPriority must be a non-negative safe integer.`,
+      );
+    }
+    normalized.set(symbol, renderPriority);
   }
   return normalized;
 }

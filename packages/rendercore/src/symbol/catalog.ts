@@ -35,6 +35,7 @@ export class SymbolCatalogModel implements SymbolCatalog {
   readonly #validation: SymbolCatalogValidation;
   readonly #animationResolver: SymbolAnimationResolver;
   readonly #requiredStateTextures: readonly SymbolStateId[];
+  readonly #symbolRenderPriorities: ReadonlyMap<string, number>;
 
   constructor(options: CreateSymbolCatalogOptions) {
     const statePreset = options.statePreset ?? createDefaultSymbolStatePreset();
@@ -52,6 +53,10 @@ export class SymbolCatalogModel implements SymbolCatalog {
     const assetSymbolSet = new Set(assetSymbols);
     const paytableSymbolSet = new Set(
       paytableEntries.map((entry) => entry.symbol),
+    );
+    const symbolRenderPriorities = normalizeSymbolRenderPriorities(
+      options.symbolRenderPriorities ?? {},
+      paytableSymbolSet,
     );
     const displayableEntries = paytableEntries.filter((entry) =>
       assetSymbolSet.has(entry.symbol),
@@ -81,6 +86,7 @@ export class SymbolCatalogModel implements SymbolCatalog {
     this.#animationResolver =
       options.animationResolver ?? createDefaultSymbolAnimationResolver();
     this.#requiredStateTextures = requiredStateTextures;
+    this.#symbolRenderPriorities = symbolRenderPriorities;
     this.#validation = Object.freeze({
       displayableSymbols: Object.freeze(
         displayableEntries.map((entry) => entry.symbol),
@@ -186,6 +192,10 @@ export class SymbolCatalogModel implements SymbolCatalog {
       stateTextures: loadedStateTextures,
       requiredStateTextures: this.#requiredStateTextures,
       animationResolver: options.animationResolver ?? this.#animationResolver,
+      renderPriority: normalizeSymbolRenderPriority(
+        options.renderPriority ?? this.#symbolRenderPriorities.get(symbol) ?? 0,
+        symbol,
+      ),
     });
   }
 }
@@ -521,6 +531,43 @@ function assertLoadedNormalSource(
       }),
     ),
   });
+}
+
+function normalizeSymbolRenderPriorities(
+  symbolRenderPriorities: Readonly<Record<string, number>>,
+  paytableSymbolSet: ReadonlySet<string>,
+): ReadonlyMap<string, number> {
+  const normalized = new Map<string, number>();
+  for (const [symbol, renderPriority] of Object.entries(
+    symbolRenderPriorities,
+  )) {
+    if (!paytableSymbolSet.has(symbol)) {
+      throw new SymbolAssetError(
+        `Symbol renderPriority for "${symbol}" does not exist in paytable.`,
+      );
+    }
+    normalized.set(
+      symbol,
+      normalizeSymbolRenderPriority(renderPriority, symbol),
+    );
+  }
+  return normalized;
+}
+
+function normalizeSymbolRenderPriority(
+  renderPriority: number,
+  symbol: string,
+): number {
+  if (
+    typeof renderPriority !== "number" ||
+    !Number.isSafeInteger(renderPriority) ||
+    renderPriority < 0
+  ) {
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" renderPriority must be a non-negative safe integer.`,
+    );
+  }
+  return renderPriority;
 }
 
 function cloneTextureSet(textureSet: NormalizedTextureSet): SymbolTextureSet {

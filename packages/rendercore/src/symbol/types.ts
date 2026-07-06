@@ -117,6 +117,7 @@ export interface RenderSymbolOptions {
   readonly stateTextures?: Readonly<Partial<Record<SymbolStateId, Texture>>>;
   readonly requiredStateTextures?: readonly SymbolStateId[];
   readonly animationResolver: SymbolAnimationResolver;
+  readonly renderPriority?: number;
 }
 
 export interface SymbolLayerTextureSource<TTexture = Texture | string> {
@@ -180,6 +181,7 @@ export interface SymbolCatalogValidation {
 export interface CreateSymbolCatalogOptions {
   readonly gameConfig: LogicGameConfig;
   readonly assets: SymbolAssetMap;
+  readonly symbolRenderPriorities?: Readonly<Record<string, number>>;
   readonly statePreset?: SymbolStatePreset;
   readonly animationResolver?: SymbolAnimationResolver;
   readonly texturePolicy?: SymbolTexturePolicy;
@@ -189,6 +191,7 @@ export interface CreateStandaloneSymbolCatalogOptions {
   readonly assets: SymbolAssetMap;
   readonly displaySymbols: readonly string[];
   readonly symbolScales?: Readonly<Record<string, number>>;
+  readonly symbolRenderPriorities?: Readonly<Record<string, number>>;
   readonly statePreset?: SymbolStatePreset;
   readonly animationResolver?: SymbolAnimationResolver;
   readonly texturePolicy?: SymbolTexturePolicy;
@@ -198,6 +201,7 @@ export interface CreateCatalogRenderSymbolOptions {
   readonly texture?: Texture | SymbolNormalTextureSource<Texture>;
   readonly stateTextures?: Readonly<Partial<Record<SymbolStateId, Texture>>>;
   readonly animationResolver?: SymbolAnimationResolver;
+  readonly renderPriority?: number;
 }
 
 export interface SymbolNamedAnimationSpec {

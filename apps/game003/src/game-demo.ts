@@ -17,6 +17,7 @@ import {
   type RenderReelSetUpdateResult,
 } from "@slotclientengine/rendercore/reel";
 import type {
+  ReelSymbolRenderPriorityMap,
   ReelSymbolScaleMap,
   SymbolAnimationResolver,
   SymbolAssetMap,
@@ -32,7 +33,10 @@ import {
   createGame003ReelLayout,
   type Game003ReelLayerLayout,
 } from "./game-layout.js";
-import { GAME003_SYMBOL_SCALES } from "./symbol-animation-config.js";
+import {
+  GAME003_SYMBOL_RENDER_PRIORITIES,
+  GAME003_SYMBOL_SCALES,
+} from "./symbol-animation-config.js";
 import { getGame003SkinConfig } from "./skin-config.js";
 import {
   assertScenesEqual,
@@ -47,6 +51,7 @@ export interface Game003ReelConfig {
   readonly texturedSymbols: readonly string[];
   readonly missingAssetLabel: string;
   readonly symbolScales: ReelSymbolScaleMap;
+  readonly symbolRenderPriorities: ReelSymbolRenderPriorityMap;
   readonly animationResolver: SymbolAnimationResolver;
   readonly direction: ReelSpinDirection;
   readonly minimumSpinCycles: number;
@@ -66,6 +71,7 @@ export const DEFAULT_GAME003_REEL_CONFIG: Game003ReelConfig = Object.freeze({
   texturedSymbols: GAME003_DEFAULT_SKIN_CONFIG.displaySymbols,
   missingAssetLabel: GAME003_DEFAULT_SKIN_CONFIG.label,
   symbolScales: GAME003_SYMBOL_SCALES,
+  symbolRenderPriorities: GAME003_SYMBOL_RENDER_PRIORITIES,
   animationResolver: GAME003_DEFAULT_SKIN_CONFIG.symbolAnimationResolver,
   direction: GAME003_STATIC_REEL_CONFIG.direction,
   minimumSpinCycles: GAME003_STATIC_REEL_CONFIG.minimumSpinCycles,
@@ -148,6 +154,7 @@ export function createGame003ReelRuntime(
     assets: options.symbolAssets,
     emptySymbols: config.emptySymbols,
     symbolScales: config.symbolScales,
+    symbolRenderPriorities: config.symbolRenderPriorities,
     animationResolver: config.animationResolver,
     texturePolicy: {
       requiredStateTextures: GAME003_REQUIRED_STATE_TEXTURES,

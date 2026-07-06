@@ -116,6 +116,43 @@ describe("RenderReel", () => {
     });
   });
 
+  it("orders slot containers by render priority while preserving default row order", () => {
+    const reel = new RenderReel({
+      reels: createBasicReels(),
+      x: 0,
+      layout: createBasicLayout(),
+      registry: createBasicRegistry({
+        symbolRenderPriorities: {
+          A: 2,
+        },
+      }),
+    });
+
+    reel.resetToVisibleSymbols([1, 2, 2]);
+    const highPriorityTop = reel
+      .getSlotSnapshots()
+      .find((slot) => slot.windowY === 0);
+    const lowPriorityBottom = reel
+      .getSlotSnapshots()
+      .find((slot) => slot.windowY === 2);
+    expect(highPriorityTop?.symbol?.renderPriority).toBe(2);
+    expect(lowPriorityBottom?.symbol?.renderPriority).toBe(0);
+    expect(highPriorityTop?.container.zIndex).toBeGreaterThan(
+      lowPriorityBottom?.container.zIndex ?? Number.POSITIVE_INFINITY,
+    );
+
+    reel.resetToVisibleSymbols([2, 2, 2]);
+    const samePriorityTop = reel
+      .getSlotSnapshots()
+      .find((slot) => slot.windowY === 0);
+    const samePriorityBottom = reel
+      .getSlotSnapshots()
+      .find((slot) => slot.windowY === 2);
+    expect(samePriorityBottom?.container.zIndex).toBeGreaterThan(
+      samePriorityTop?.container.zIndex ?? Number.POSITIVE_INFINITY,
+    );
+  });
+
   it("reports visible symbol geometry relative to the reel parent", () => {
     const reel = new RenderReel({
       reels: createBasicReels(),

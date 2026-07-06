@@ -39,8 +39,8 @@ CI=true pnpm --filter gengameconfig dev -- --paytable assets/gamecfg003/paytable
 CI=true pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --input-dir assets/game003-s1 --output-dir assets/game003-s1 --symbols WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC --scale 1
 ```
 
-`symbol-state-textures.manifest.json` 只能包含 `WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC`，每个 symbol 必须显式 `scale: 1`。背景、主转轮框、传送带和 `Symbol.png` atlas texture 不是可展示 symbol。`normal` / `appear` / `win` 的动画类型、Spine `animationName` 和 `durationSeconds` 由这个 manifest 声明：`WL,H1,H2,H3,H4,H5,CL,SC` 的 `normal` 是 Spine `Idle`，`win` 是 Spine `Win`；`WL.appear` 是 Spine `start`，`H1/CL/SC.appear` 是 Spine `Start`。
-高标 2 到高标 5 当前资源没有 Start 动画；这些缺少 Start 的 Spine symbol 不在 manifest 里写伪 `static` / `builtin` appear，运行时由 rendercore 退回该 symbol 自身 normal Spine 展示并按 once 状态完成。`L1.appear` 到 `L5.appear` 是静态普通态，`L1.win` 到 `L5.win` 是 VNI animation。Spine animation name 区分大小写，manifest 必须写 skeleton 中真实存在的名字。重新生成状态贴图时，生成器会保留仍然有效的 `animations` 元数据，不能手动丢掉。
+`symbol-state-textures.manifest.json` 只能包含 `WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC`，每个 symbol 必须显式 `scale: 1`。`WL`、`CL`、`SC` 在 manifest 中显式声明 `renderPriority: 1`，当前为最高主转轮叠放优先级；其它 symbol 缺省为 `0`。背景、主转轮框、传送带和 `Symbol.png` atlas texture 不是可展示 symbol。`normal` / `appear` / `win` 的动画类型、Spine `animationName` 和 `durationSeconds` 由这个 manifest 声明：`WL,H1,H2,H3,H4,H5,CL,SC` 的 `normal` 是 Spine `Idle`，`win` 是 Spine `Win`；`WL.appear` 是 Spine `start`，`H1/CL/SC.appear` 是 Spine `Start`。
+高标 2 到高标 5 当前资源没有 Start 动画；这些缺少 Start 的 Spine symbol 不在 manifest 里写伪 `static` / `builtin` appear，运行时由 rendercore 退回该 symbol 自身 normal Spine 展示并按 once 状态完成。`L1.appear` 到 `L5.appear` 是静态普通态，`L1.win` 到 `L5.win` 是 VNI animation。Spine animation name 区分大小写，manifest 必须写 skeleton 中真实存在的名字。重新生成状态贴图时，生成器会保留仍然有效的 `animations` 和显式 `renderPriority` 元数据，不能手动丢掉。
 
 ## 静态配置
 
@@ -55,7 +55,7 @@ CI=true pnpm --filter game003 generate:static-config
 CI=true pnpm --filter game003 check:static-config
 ```
 
-`gameConfig` 字段只引用 `assets/gamecfg003/gameconfig.json`；Excel 到 JSON 仍由 `apps/gengameconfig` 负责。symbol scale 仍由 `assets/game003-s1/symbol-state-textures.manifest.json` 负责，不在 YAML 或 app 内维护第二份 scale 表。
+`gameConfig` 字段只引用 `assets/gamecfg003/gameconfig.json`；Excel 到 JSON 仍由 `apps/gengameconfig` 负责。symbol scale 和 render priority 仍由 `assets/game003-s1/symbol-state-textures.manifest.json` 负责，不在 YAML 或 app 内维护第二份 scale / priority 表。
 
 `symbols.vniProjectGlob` 和 `symbols.vniAssetGlob` 只用于把 manifest 声明的 VNI symbol 动画资源纳入 Vite 静态模块。`symbols.spineSkeletonGlob`、`symbols.spineAtlasGlob` 和 `symbols.spineTextureGlob` 必须三者同时配置，用于把 manifest 声明的 Spine skeleton、atlas raw text 和 texture URL 纳入静态模块；修改 Spine 资源时必须同步 YAML、loading 资源、generated TS、symbolsviewer 和 runtime resolver。`loading.resources` 只承载随游戏包发布的静态资源 path/glob 和权重，不承载 token、cookie、serverUrl、服务器真实轮带或玩家本次下注。glob 必须是明确资源组，不能用 `assets/game003-s1/*.png` 这类宽泛写法把主转轮框、传送带和 symbol 混在一起。
 
@@ -75,6 +75,7 @@ CI=true pnpm --filter game003 check:static-config
 
 - app 层从生成配置读取 symbol manifest、VNI project modules、VNI asset modules、Spine skeleton modules、Spine atlas raw modules 和 Spine texture URL modules。
 - `rendercore` 解析 manifest，并优先使用 manifest 声明的 `builtin` / `static` / `vni` / `spine` animation。
+- app 层通过 `createSymbolRenderPriorityMapFromManifest(...)` 把 manifest 中的 `renderPriority` 传给主转轮 registry；运行时代码不写 `SC` / `CL` / `WL` 专属 `zIndex` 分支，也不改变 scene、stop、result、overlay 或点击逻辑。
 - 同一个 `RenderSymbol` 上共享同一 skeleton / atlas / texture 的 Spine 状态会复用同一个 Spine player，状态切换只调用 Spine animation 切换；只有 symbol code 真实变化、旧 `RenderSymbol` 销毁时才释放该 player，避免 `Idle -> Win -> Idle` 切换闪烁。
 - 对 manifest `normal.kind: "spine"` 的 symbol，如果 `appear` / `win` 未声明，rendercore 只退回该 symbol 自身的 normal Spine 展示，不退回通用 builtin/default 动画；显式声明的 Spine animation 仍必须存在。
 - 未声明 animation 的 symbol 状态才会走 fallback；fallback 不承载 game003 的 `appear` / `win` 秒数。

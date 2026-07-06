@@ -114,6 +114,20 @@ describe("game003 source boundary", () => {
     expect(businessSource).not.toMatch(/\bL[1-5]\b/);
   });
 
+  it("keeps symbol render priority as manifest data instead of runtime branches", () => {
+    const runtimeSource = [
+      readFileSync(join(APP_ROOT, "src/game-adapter.ts"), "utf8"),
+      readFileSync(join(APP_ROOT, "src/game-demo.ts"), "utf8"),
+      readFileSync(join(APP_ROOT, "src/skin-config.ts"), "utf8"),
+    ].join("\n");
+
+    expect(runtimeSource).toMatch(/SymbolRenderPriorityMapFromManifest/);
+    expect(runtimeSource).not.toMatch(/zIndex[\s\S]{0,120}\b(?:SC|CL|WL)\b/);
+    expect(runtimeSource).not.toMatch(
+      /\b(?:SC|CL|WL)\b[\s\S]{0,120}renderPriority/,
+    );
+  });
+
   it("keeps Spine skeleton globs explicit and out-of-scope JSON resources out of runtime config", () => {
     const runtimeConfigSource = [
       readSourceTree(join(APP_ROOT, "src")),

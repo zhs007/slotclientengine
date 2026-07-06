@@ -28,12 +28,14 @@ export interface ReelCellSize {
 }
 
 export type ReelSymbolScaleMap = Readonly<Record<string, number>>;
+export type ReelSymbolRenderPriorityMap = Readonly<Record<string, number>>;
 
 export interface ReelSymbolRegistryOptions {
   readonly gameConfig: LogicGameConfig;
   readonly assets: SymbolAssetMap;
   readonly emptySymbols?: readonly string[];
   readonly symbolScales?: ReelSymbolScaleMap;
+  readonly symbolRenderPriorities?: ReelSymbolRenderPriorityMap;
   readonly statePreset?: SymbolStatePreset;
   readonly animationResolver?: SymbolAnimationResolver;
   readonly texturePolicy?: SymbolTexturePolicy;
@@ -196,6 +198,9 @@ export interface RenderReelOptions {
   readonly layout: ReelLayout;
   readonly registry: ReelSymbolRegistry;
   readonly symbolPool?: RenderSymbolPool;
+  readonly slotParent?: Container;
+  readonly slotRenderOrderOffset?: number;
+  readonly slotRenderOrderStride?: number;
 }
 
 export interface RenderReelSpinOptions {

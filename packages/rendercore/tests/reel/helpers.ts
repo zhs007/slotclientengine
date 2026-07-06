@@ -9,6 +9,7 @@ import {
   createReelSymbolRegistry,
   type ReelLayout,
   type ReelSymbolRegistry,
+  type ReelSymbolRegistryOptions,
 } from "../../src/reel/index.js";
 import {
   createAppearSymbolAni,
@@ -106,11 +107,16 @@ export function createBasicLayout(): ReelLayout {
   });
 }
 
-export function createBasicRegistry(): ReelSymbolRegistry {
+export function createBasicRegistry(
+  options: Partial<
+    Pick<ReelSymbolRegistryOptions, "symbolRenderPriorities" | "symbolScales">
+  > = {},
+): ReelSymbolRegistry {
   return createReelSymbolRegistry({
     gameConfig: createGameConfig(basicGameConfig),
     assets: createBasicAssets(),
     emptySymbols: ["BN"],
+    ...options,
     animationResolver: createTestSymbolAnimationResolver(),
     texturePolicy: {
       requiredStateTextures: ["spinBlur"],

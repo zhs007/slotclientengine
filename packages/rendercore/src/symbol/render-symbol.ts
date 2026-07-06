@@ -30,6 +30,7 @@ export class RenderSymbol extends VisualEntity<void> {
   readonly stateSprite: Sprite;
   readonly overlayLayer: Container;
   readonly normalSource: SymbolNormalTextureSource<Texture>;
+  readonly renderPriority: number;
   readonly #stateMachine: SymbolStateMachine;
   readonly #animationResolver: RenderSymbolOptions["animationResolver"];
   #currentAni: SymbolAni;
@@ -54,6 +55,10 @@ export class RenderSymbol extends VisualEntity<void> {
     this.requiredStateTextures = Object.freeze([
       ...(options.requiredStateTextures ?? []),
     ]);
+    this.renderPriority = normalizeRenderPriority(
+      options.renderPriority ?? 0,
+      this.symbol,
+    );
     this.underlayLayer = new Container();
     this.baseLayer = new Container();
     this.layers = Object.freeze(createVisualLayers(this.normalSource));
@@ -433,6 +438,15 @@ function getTextureHeight(texture: Texture): number {
 function assertPositiveDimension(value: number, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new SymbolAnimationError(`Symbol ${label} must be positive.`);
+  }
+  return value;
+}
+
+function normalizeRenderPriority(value: number, symbol: string): number {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new SymbolAnimationError(
+      `Render symbol "${symbol}" renderPriority must be a non-negative safe integer.`,
+    );
   }
   return value;
 }

@@ -26,6 +26,7 @@ import type { RenderSymbol, SymbolStateId } from "../symbol/index.js";
 
 interface ReelSlot {
   readonly windowY: number;
+  readonly renderOrder: number;
   readonly container: Container;
   code: number | null;
   kind: ReelSymbolKind | null;
@@ -38,6 +39,10 @@ export class RenderReel extends Container {
   readonly #reels: LogicReels;
   readonly #registry: ReelSymbolRegistry;
   readonly #symbolPool: RenderReelOptions["symbolPool"];
+  readonly #slotParent: Container;
+  readonly #usesExternalSlotParent: boolean;
+  readonly #slotRenderOrderOffset: number;
+  readonly #slotRenderOrderStride: number;
   readonly #slots: readonly ReelSlot[];
   readonly #clipMask: Graphics;
   #phase: RenderReelPhase = "idle";
@@ -57,6 +62,18 @@ export class RenderReel extends Container {
     this.layout = options.layout;
     this.#registry = options.registry;
     this.#symbolPool = options.symbolPool;
+    this.x = options.layout.getReelX(options.x);
+    this.#slotParent = options.slotParent ?? this;
+    this.#usesExternalSlotParent = this.#slotParent !== this;
+    this.#slotParent.sortableChildren = true;
+    this.#slotRenderOrderOffset = normalizeNonNegativeSafeInteger(
+      options.slotRenderOrderOffset ?? 0,
+      "slotRenderOrderOffset",
+    );
+    this.#slotRenderOrderStride = normalizePositiveSafeInteger(
+      options.slotRenderOrderStride ?? calculateSlotCount(options.layout) + 1,
+      "slotRenderOrderStride",
+    );
     this.#clipMask = new Graphics()
       .rect(
         0,
@@ -68,7 +85,6 @@ export class RenderReel extends Container {
     this.#clipMask.visible = false;
     this.#clipMask.renderable = false;
     this.#slots = Object.freeze(this.createSlots());
-    this.x = options.layout.getReelX(options.x);
     this.addChild(this.#clipMask);
     this.resetToY(0);
   }
@@ -298,22 +314,27 @@ export class RenderReel extends Container {
 
   private createSlots(): ReelSlot[] {
     const slots: ReelSlot[] = [];
+    let orderIndex = 0;
     for (
       let windowY = -this.layout.bufferRowsBefore;
       windowY < this.layout.visibleRows + this.layout.bufferRowsAfter;
       windowY += 1
     ) {
       const container = new Container();
-      container.x = this.layout.cellWidth / 2;
-      container.y = this.layout.getCellY(windowY) + this.layout.cellHeight / 2;
-      this.addChild(container);
+      const renderOrder = this.#slotRenderOrderOffset + orderIndex;
+      container.x = this.getSlotContainerX();
+      container.y = this.getSlotContainerY(windowY, 0);
+      container.zIndex = renderOrder;
+      this.#slotParent.addChild(container);
       slots.push({
         windowY,
+        renderOrder,
         container,
         code: null,
         kind: null,
         symbol: null,
       });
+      orderIndex += 1;
     }
     return slots;
   }
@@ -330,10 +351,11 @@ export class RenderReel extends Container {
           `Missing reel slot for windowY ${slotData.windowY}.`,
         );
       }
-      slot.container.y =
-        this.layout.getCellY(slotData.windowY) +
-        this.layout.cellHeight / 2 +
-        snapshot.pixelOffsetY;
+      slot.container.x = this.getSlotContainerX();
+      slot.container.y = this.getSlotContainerY(
+        slotData.windowY,
+        snapshot.pixelOffsetY,
+      );
       slot.container.visible = this.shouldShowSlot(slotData.windowY);
       this.syncSlot(slot, slotData.code);
       slot.symbol?.requestState(state);
@@ -366,6 +388,7 @@ export class RenderReel extends Container {
 
   private syncSlot(slot: ReelSlot, code: number): void {
     if (slot.code === code) {
+      this.syncSlotRenderOrder(slot);
       return;
     }
 
@@ -388,6 +411,13 @@ export class RenderReel extends Container {
       slot.container.addChild(slot.symbol);
       slot.symbol.init();
     }
+    this.syncSlotRenderOrder(slot);
+  }
+
+  private syncSlotRenderOrder(slot: ReelSlot): void {
+    const renderPriority = slot.symbol?.renderPriority ?? 0;
+    slot.container.zIndex =
+      renderPriority * this.#slotRenderOrderStride + slot.renderOrder;
   }
 
   private acquireTexturedSymbol(code: number): RenderSymbol {
@@ -442,6 +472,7 @@ export class RenderReel extends Container {
   private syncClippingForPhase(): void {
     if (this.#phase === "stopped") {
       this.mask = null;
+      this.syncSlotClipMasks(false);
       this.#clipMask.visible = false;
       this.#clipMask.renderable = false;
       this.#clipMask.includeInBuild = false;
@@ -450,10 +481,32 @@ export class RenderReel extends Container {
     }
 
     this.mask = this.#clipMask;
+    this.syncSlotClipMasks(this.#usesExternalSlotParent);
     this.#clipMask.visible = true;
     this.#clipMask.renderable = true;
     this.#clipMask.includeInBuild = false;
     this.#clipMask.measurable = false;
+  }
+
+  private syncSlotClipMasks(enabled: boolean): void {
+    for (const slot of this.#slots) {
+      slot.container.mask = enabled ? this.#clipMask : null;
+    }
+  }
+
+  private getSlotContainerX(): number {
+    return (
+      (this.#usesExternalSlotParent ? this.x : 0) + this.layout.cellWidth / 2
+    );
+  }
+
+  private getSlotContainerY(windowY: number, pixelOffsetY: number): number {
+    return (
+      (this.#usesExternalSlotParent ? this.y : 0) +
+      this.layout.getCellY(windowY) +
+      this.layout.cellHeight / 2 +
+      pixelOffsetY
+    );
   }
 
   private shouldShowSlot(windowY: number): boolean {
@@ -516,4 +569,22 @@ function calculateBounceOffset(progress: number, cellHeight: number): number {
     return Math.sin(Math.PI * ((progress - 0.9) / 0.1)) * cellHeight * 0.1;
   }
   return 0;
+}
+
+function calculateSlotCount(layout: ReelLayout): number {
+  return layout.visibleRows + layout.bufferRowsBefore + layout.bufferRowsAfter;
+}
+
+function normalizeNonNegativeSafeInteger(value: number, label: string): number {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new ReelError(`${label} must be a non-negative safe integer.`);
+  }
+  return value;
+}
+
+function normalizePositiveSafeInteger(value: number, label: string): number {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new ReelError(`${label} must be a positive safe integer.`);
+  }
+  return value;
 }
