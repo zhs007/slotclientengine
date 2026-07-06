@@ -328,7 +328,11 @@ async function bootstrap(): Promise<void> {
     const currentStep = sequenceController.getCurrentStep();
     const lines = renderedSymbols.map((item) => {
       const snapshot = item.renderSymbol.getStateSnapshot();
-      return `${item.renderSymbol.symbol}: ${snapshot.requestedState} -> ${snapshot.resolvedState} / ${snapshot.defaultState}${snapshot.pendingState ? ` / ${snapshot.pendingState}` : ""}`;
+      const renderPriority = getSymbolRenderPriority(
+        activeSymbolSet,
+        item.renderSymbol.symbol,
+      );
+      return `${item.renderSymbol.symbol}: ${snapshot.requestedState} -> ${snapshot.resolvedState} / ${snapshot.defaultState}${snapshot.pendingState ? ` / ${snapshot.pendingState}` : ""} / priority ${renderPriority}`;
     });
     statusPanel.replaceChildren(
       createStatusLine(`Set ${activeSymbolSet.label}`),
@@ -545,6 +549,24 @@ function getSymbolScale(config: SymbolSetConfig, symbol: string): number {
   return scale;
 }
 
+function getSymbolRenderPriority(
+  config: SymbolSetConfig,
+  symbol: string,
+): number {
+  const renderPriority = config.symbolRenderPriorities[symbol];
+  if (renderPriority === undefined) {
+    throw new Error(
+      `Symbol set "${config.id}" is missing manifest renderPriority for "${symbol}".`,
+    );
+  }
+  if (!Number.isSafeInteger(renderPriority) || renderPriority < 0) {
+    throw new Error(
+      `Symbol set "${config.id}" renderPriority for "${symbol}" must be a non-negative safe integer.`,
+    );
+  }
+  return renderPriority;
+}
+
 function getSymbolColumnCount(
   symbolCount: number,
   maxScaledTextureSize: number,
@@ -661,6 +683,7 @@ async function createCatalogForSymbolSet(
       symbolAssets: textures,
       displaySymbols: config.displaySymbols ?? Object.keys(textures),
       symbolScales: config.symbolScales,
+      symbolRenderPriorities: config.symbolRenderPriorities,
       requiredStateTextures: config.requiredStates,
       animationResolver: config.animationResolver,
     });
@@ -675,6 +698,7 @@ async function createCatalogForSymbolSet(
   const catalog = createSymbolCatalog({
     gameConfig: createGameConfig(config.rawGameConfig),
     assets: textures,
+    symbolRenderPriorities: config.symbolRenderPriorities,
     statePreset,
     animationResolver: config.animationResolver,
     texturePolicy: {

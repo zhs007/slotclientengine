@@ -1,6 +1,9 @@
 {
   "version": 1,
-  "states": ["spinBlur", "disabled"],
+  "states": [
+    "spinBlur",
+    "disabled"
+  ],
   "settings": {
     "spinBlur": {
       "kind": "verticalBoxBlur",
@@ -17,6 +20,7 @@
       "spinBlur": "./WL.spinBlur.png",
       "disabled": "./WL.disabled.png",
       "scale": 1,
+      "renderPriority": 1,
       "animations": {
         "normal": {
           "kind": "spine",
@@ -345,6 +349,7 @@
       "spinBlur": "./CL.spinBlur.png",
       "disabled": "./CL.disabled.png",
       "scale": 1,
+      "renderPriority": 1,
       "animations": {
         "normal": {
           "kind": "spine",
@@ -386,6 +391,7 @@
       "spinBlur": "./SC.spinBlur.png",
       "disabled": "./SC.disabled.png",
       "scale": 1,
+      "renderPriority": 1,
       "animations": {
         "normal": {
           "kind": "spine",

@@ -4,7 +4,9 @@ import {
   createStandaloneSymbolCatalog,
   createSymbolAssetMapFromManifestModules,
   createSymbolCatalog,
+  createSymbolRenderPriorityMapFromManifest as createRendercoreSymbolRenderPriorityMapFromManifest,
   createSymbolScaleMapFromManifest as createRendercoreSymbolScaleMapFromManifest,
+  type ReelSymbolRenderPriorityMap,
   type ReelSymbolScaleMap,
   type SymbolAnimationResolver,
   type SymbolAssetMap,
@@ -66,14 +68,29 @@ export function createSymbolScaleMapFromManifest(options: {
   });
 }
 
+export function createSymbolRenderPriorityMapFromManifest(options: {
+  readonly manifest: unknown;
+  readonly displaySymbols: readonly string[];
+  readonly requiredStates?: readonly string[];
+}): ReelSymbolRenderPriorityMap {
+  return createRendercoreSymbolRenderPriorityMapFromManifest({
+    manifest: options.manifest,
+    displaySymbols: options.displaySymbols,
+    requiredStates:
+      options.requiredStates ?? SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+  });
+}
+
 export function createSymbolsViewerCatalog(
   rawGameConfig: unknown,
   symbolAssets: SymbolAssetMap,
   requiredStateTextures: readonly string[] = SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+  symbolRenderPriorities?: ReelSymbolRenderPriorityMap,
 ): SymbolCatalogModel {
   return createSymbolCatalog({
     gameConfig: createGameConfig(rawGameConfig),
     assets: symbolAssets,
+    symbolRenderPriorities,
     statePreset: createDefaultSymbolStatePreset(),
     texturePolicy: {
       requiredStateTextures,
@@ -85,6 +102,7 @@ export function createSymbolsViewerStandaloneCatalog(options: {
   readonly symbolAssets: SymbolAssetMap;
   readonly displaySymbols: readonly string[];
   readonly symbolScales?: ReelSymbolScaleMap;
+  readonly symbolRenderPriorities?: ReelSymbolRenderPriorityMap;
   readonly requiredStateTextures?: readonly string[];
   readonly animationResolver?: SymbolAnimationResolver;
 }): StandaloneSymbolCatalog {
@@ -92,6 +110,7 @@ export function createSymbolsViewerStandaloneCatalog(options: {
     assets: options.symbolAssets,
     displaySymbols: options.displaySymbols,
     symbolScales: options.symbolScales,
+    symbolRenderPriorities: options.symbolRenderPriorities,
     statePreset: createDefaultSymbolStatePreset(),
     animationResolver: options.animationResolver,
     texturePolicy: {

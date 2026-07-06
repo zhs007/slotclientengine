@@ -90,6 +90,7 @@ class Game003MinecartInteractionRuntimeModel implements Game003MinecartInteracti
       assets: options.symbolAssets,
       displaySymbols: options.bgBarConfig.displaySymbols,
       symbolScales: options.bgBarConfig.symbolScales,
+      symbolRenderPriorities: options.bgBarConfig.symbolRenderPriorities,
       animationResolver: options.bgBarConfig.symbolAnimationResolver,
       texturePolicy: {
         requiredStateTextures: [],

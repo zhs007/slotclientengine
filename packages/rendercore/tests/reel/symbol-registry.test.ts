@@ -79,6 +79,24 @@ describe("ReelSymbolRegistry", () => {
     expect(registry.createRenderSymbolByCode(2)?.scale.x).toBe(1);
   });
 
+  it("passes configured render priorities into render symbols", () => {
+    const registry = createReelSymbolRegistry({
+      gameConfig: createGameConfig(basicGameConfig),
+      assets: createBasicAssets(),
+      emptySymbols: ["BN"],
+      symbolRenderPriorities: {
+        A: 2,
+      },
+      texturePolicy: {
+        requiredStateTextures: ["spinBlur"],
+      },
+    });
+
+    expect(registry.createRenderSymbolByCode(1)?.renderPriority).toBe(2);
+    expect(registry.createRenderSymbolByCode(2)?.renderPriority).toBe(0);
+    expect(registry.createRenderSymbolByCode(0)).toBeNull();
+  });
+
   it("accepts layered normal sources and keeps layered render symbols", () => {
     const layerOne = createTextureSet(18, 22).normal;
     const layerOneOpen = createTextureSet(18, 22).normal;
@@ -226,6 +244,30 @@ describe("ReelSymbolRegistry", () => {
         },
       }),
     ).toThrow(/NOPE.*paytable/);
+
+    expect(() =>
+      createReelSymbolRegistry({
+        gameConfig: createGameConfig(basicGameConfig),
+        assets: createBasicAssets(),
+        emptySymbols: ["BN"],
+        symbolRenderPriorities: {
+          NOPE: 1,
+        },
+      }),
+    ).toThrow(/NOPE.*paytable/);
+
+    for (const renderPriority of [-1, 1.5, "1" as never]) {
+      expect(() =>
+        createReelSymbolRegistry({
+          gameConfig: createGameConfig(basicGameConfig),
+          assets: createBasicAssets(),
+          emptySymbols: ["BN"],
+          symbolRenderPriorities: {
+            A: renderPriority,
+          },
+        }),
+      ).toThrow(/A.*renderPriority/);
+    }
   });
 
   it("fails for URL assets, invalid texture states and unknown lookups", () => {

@@ -92,12 +92,15 @@ layer index 必须从 `0` 开始连续，不能重复、缺层或为负数；已
 
 `rendercore` 提供共享 manifest helper，供游戏 app、viewer 和构建链路复用同一套解析规则：
 
-- `parseSymbolStateTextureManifest(...)`：校验 `symbol-state-textures.manifest.json`，读取 normal、states、scale 和可选 animations。
+- `parseSymbolStateTextureManifest(...)`：校验 `symbol-state-textures.manifest.json`，读取 normal、states、scale、renderPriority 和可选 animations。
 - `createSymbolAssetMapFromManifestModules(...)`：把 Vite glob module 转成 `createSymbolCatalog(...)` 可消费的 stateful asset map。
 - `createSymbolScaleMapFromManifest(...)`：从 manifest 读取每个 symbol 的显示 scale。
+- `createSymbolRenderPriorityMapFromManifest(...)`：从 manifest 读取每个 symbol 的 Pixi 渲染叠放优先级。
 - `getSymbolDisplaySymbolsFromManifest(...)`：得到 manifest 声明且可展示的 symbol 顺序。
 - `createSymbolVniAnimationResourcesFromManifest(...)`：从 manifest animations、VNI project modules 和 VNI asset modules 解析 VNI 动画资源。
 - `createSymbolSpineAnimationResourcesFromManifest(...)`：从 manifest animations、Spine skeleton modules、atlas raw modules 和 texture URL modules 解析 Spine 动画资源。
+
+manifest 允许每个 symbol 声明可选 `renderPriority`。缺省值为 `0`，显式值必须是非负安全整数；负数、小数、`NaN`、`Infinity`、字符串或 `null` 都会显式失败。优先级只影响 Pixi slot symbol 的叠放顺序：数值越大越靠上；数值相同继续保持默认顺序，即下面压住上面、右边压住左边。它不改变服务器 scene、reel stop、win result 顺序、symbol state、中奖金额 overlay 或点击逻辑。
 
 manifest 允许每个 symbol 通过 `animations` 声明状态动画。当前支持：
 
@@ -280,7 +283,7 @@ import {
 
 空图标会占据 cell 和 reel 位置，但 `createRenderSymbolByCode()` 返回 `null`，状态请求是 no-op。有普通图的 symbol 如果缺少 `texturePolicy.requiredStateTextures` 声明的状态贴图会直接抛错，不会静默回退到普通图。
 
-cell 尺寸由当前参与 reels 渲染的非空普通图动态计算：单图使用普通 texture 尺寸，多层 symbol 使用 layer 共同尺寸；若配置了 `symbolScales`，则使用 `texture width/height * scale` 后的尺寸参与最大宽高计算。显式空图标、缺图空图标、孤儿图片和状态贴图都不参与尺寸计算。`RenderReel` 会把每个非空 symbol 放在 cell 中心，并在创建 `RenderSymbol` 时把对应 `scale` 应用到根容器。`symbolScales` 只能配置 paytable 中存在的 symbol，缩放系数必须是正数。
+cell 尺寸由当前参与 reels 渲染的非空普通图动态计算：单图使用普通 texture 尺寸，多层 symbol 使用 layer 共同尺寸；若配置了 `symbolScales`，则使用 `texture width/height * scale` 后的尺寸参与最大宽高计算。显式空图标、缺图空图标、孤儿图片和状态贴图都不参与尺寸计算。`RenderReel` 会把每个非空 symbol 放在 cell 中心，并在创建 `RenderSymbol` 时把对应 `scale` 应用到根容器。`symbolScales` 只能配置 paytable 中存在的 symbol，缩放系数必须是正数。`symbolRenderPriorities` 同样只能配置 paytable 中存在的 symbol，值必须是非负安全整数；普通 reel、reel set 和 grid-cell reel 都只用它调整 Pixi render order，所有值为 `0` 时保留默认层级。
 
 `createReelLayout()` 支持 `columnGap` 控制轴间距；`RenderReel` 只在 starting / spinning / settling 等非静止态裁切单轴内容，停止态会取消裁切，允许偏大的 symbol 自然超出格子外框。
 
@@ -409,7 +412,7 @@ grid-cell API 会 fail-fast 校验 scene 尺寸、final y 长度、order 重复/
 
 ## 命令
 
-状态贴图生成脚本只在 Node 侧使用 `sharp`，不会进入浏览器运行时代码或发布 bundle。`assets/symbols/symbol-composites.json` 可声明多层资源；旧字符串 layer 继续用文件名推导 index，对象 layer 使用显式 `index`、`texture` 和可选 `keyframes`。复合 symbol 会先按 layer 静态 `texture` 顺序合成完整图标，再从合成结果生成 `spinBlur` 和 `disabled`，manifest 的 `normal` 会写为 layered object 并保留对象 layer 的 keyframes。生成器会为每个 symbol 写入显示缩放系数 `scale`，默认值为 `1`，也可以通过 `--scale` 指定；`scale` 必须是有限正数。仓库内生成物应显式写出 `scale`，consumer 应从 manifest 读取，不要维护第二份手写 scale 表。当前 viewer/reels 资源可用下面命令生成：
+状态贴图生成脚本只在 Node 侧使用 `sharp`，不会进入浏览器运行时代码或发布 bundle。`assets/symbols/symbol-composites.json` 可声明多层资源；旧字符串 layer 继续用文件名推导 index，对象 layer 使用显式 `index`、`texture` 和可选 `keyframes`。复合 symbol 会先按 layer 静态 `texture` 顺序合成完整图标，再从合成结果生成 `spinBlur` 和 `disabled`，manifest 的 `normal` 会写为 layered object 并保留对象 layer 的 keyframes。生成器会为每个 symbol 写入显示缩放系数 `scale`，默认值为 `1`，也可以通过 `--scale` 指定；`scale` 必须是有限正数。仓库内生成物应显式写出 `scale`，consumer 应从 manifest 读取，不要维护第二份手写 scale 表。重新生成 manifest 时，生成器会保留旧 manifest 中仍然有效的 `animations` 和显式 `renderPriority`，非法 `renderPriority` 会让生成失败，避免叠放规则被悄悄删掉。当前 viewer/reels 资源可用下面命令生成：
 
 ```bash
 pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --symbols S00,S0,S1,S5,S10,SC,RS,X2,X5,X10 --composites assets/symbols/symbol-composites.json --scale 1

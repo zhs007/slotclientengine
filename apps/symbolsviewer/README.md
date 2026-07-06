@@ -19,7 +19,7 @@ viewer 只绑定 `game003-s1`：
 
 可展示 symbol 是 `WL`、`H1`、`H2`、`H3`、`H4`、`H5`、`L1`、`L2`、`L3`、`L4`、`L5`、`CO`、`CL`、`SC`。背景、主转轮框、传送带和 VNI 内部 asset 不会被当成 symbol 展示。
 
-每个可展示 symbol 的 `scale`、`normal` / `appear` / `win` 动画类型、Spine `animationName` 和 `durationSeconds` 都来自 `symbol-state-textures.manifest.json`。viewer 只把 manifest、VNI project modules、VNI asset modules、Spine skeleton modules、Spine atlas raw modules 和 Spine texture URL modules 传给 `@slotclientengine/rendercore`，不在 app 内维护第二份 scale 表，也不硬编码 `L1`-`L5` 或 `WL/H1/H2/H3/H4/H5/CL/SC` 的播放逻辑。
+每个可展示 symbol 的 `scale`、`renderPriority`、`normal` / `appear` / `win` 动画类型、Spine `animationName` 和 `durationSeconds` 都来自 `symbol-state-textures.manifest.json`。viewer 只把 manifest、VNI project modules、VNI asset modules、Spine skeleton modules、Spine atlas raw modules、Spine texture URL modules 和 manifest 派生的 priority map 传给 `@slotclientengine/rendercore`，不在 app 内维护第二份 scale / priority 表，也不硬编码 `L1`-`L5` 或 `WL/H1/H2/H3/H4/H5/CL/SC` 的播放逻辑。
 
 `game003-s1` 的动画规则：
 
@@ -38,7 +38,7 @@ viewer 只绑定 `game003-s1`：
 pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --input-dir assets/game003-s1 --output-dir assets/game003-s1 --symbols WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC --scale 1
 ```
 
-重新生成状态贴图时，生成器会保留仍然有效的 `animations` 元数据，不能手动丢掉 manifest animation。
+重新生成状态贴图时，生成器会保留仍然有效的 `animations` 和显式 `renderPriority` 元数据，不能手动丢掉 manifest animation 或 priority。
 
 ## 运行
 
@@ -53,4 +53,4 @@ pnpm --filter symbolsviewer dev -- --host 0.0.0.0
 - 顶部工具栏可播放、暂停、进入下一状态、重置和切换默认 stable 状态。
 - 顶部 `Set` selector 只包含 `game003-s1`。
 - 右侧序列区可增加、移除、上移、下移状态。
-- 下方状态面板展示当前 symbol set、可展示 symbol、paytable 缺图和孤儿图片检查结果。
+- 下方状态面板展示当前 symbol set、可展示 symbol、manifest priority、paytable 缺图和孤儿图片检查结果。

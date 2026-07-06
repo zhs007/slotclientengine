@@ -79,6 +79,7 @@ class Game003BgBarRuntimeModel implements Game003BgBarRuntime {
       assets: options.symbolAssets,
       displaySymbols: this.#config.displaySymbols,
       symbolScales: this.#config.symbolScales,
+      symbolRenderPriorities: this.#config.symbolRenderPriorities,
       animationResolver: this.#config.symbolAnimationResolver,
       texturePolicy: {
         requiredStateTextures: [],

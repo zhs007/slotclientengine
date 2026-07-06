@@ -95,7 +95,7 @@ export async function generateSymbolStateTextures(options = {}) {
     options.symbols,
   );
   const manifestPath = join(outputDir, MANIFEST_FILE_NAME);
-  const preservedAnimations = await loadPreservedManifestAnimations(
+  const preservedMetadata = await loadPreservedManifestMetadata(
     manifestPath,
     selectedSymbols,
   );
@@ -124,7 +124,7 @@ export async function generateSymbolStateTextures(options = {}) {
     selectedSymbols,
     composites,
     scale,
-    preservedAnimations,
+    preservedMetadata,
   );
   await writeFile(
     manifestPath,
@@ -400,7 +400,7 @@ async function generateDisabledPng(inputFile, outputFile) {
     .toFile(outputFile);
 }
 
-async function loadPreservedManifestAnimations(manifestPath, selectedSymbols) {
+async function loadPreservedManifestMetadata(manifestPath, selectedSymbols) {
   let raw;
   try {
     raw = await readFile(manifestPath, "utf8");
@@ -458,23 +458,46 @@ async function loadPreservedManifestAnimations(manifestPath, selectedSymbols) {
     assertOnlyKnownKeys(symbolRecord, `existing manifest symbol "${symbol}"`, [
       "normal",
       "scale",
+      "renderPriority",
       "animations",
       ...REQUIRED_STATES,
     ]);
-    if (
-      !selectedSymbolSet.has(symbol) ||
-      symbolRecord.animations === undefined
-    ) {
+    const hasRenderPriority = Object.prototype.hasOwnProperty.call(
+      symbolRecord,
+      "renderPriority",
+    );
+    const renderPriority = hasRenderPriority
+      ? validatePreservedRenderPriority(symbol, symbolRecord.renderPriority)
+      : undefined;
+    if (!selectedSymbolSet.has(symbol)) {
       continue;
     }
-    preserved.set(
-      symbol,
-      Object.freeze(
+    const metadata = {};
+    if (symbolRecord.animations !== undefined) {
+      metadata.animations = Object.freeze(
         validatePreservedAnimations(symbol, symbolRecord.animations),
-      ),
-    );
+      );
+    }
+    if (hasRenderPriority) {
+      metadata.renderPriority = renderPriority;
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(metadata, "animations") ||
+      Object.prototype.hasOwnProperty.call(metadata, "renderPriority")
+    ) {
+      preserved.set(symbol, Object.freeze(metadata));
+    }
   }
   return preserved;
+}
+
+function validatePreservedRenderPriority(symbol, value) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(
+      `Existing manifest symbol "${symbol}" renderPriority must be a non-negative safe integer.`,
+    );
+  }
+  return value;
 }
 
 function validatePreservedAnimations(symbol, value) {
@@ -682,7 +705,7 @@ function validatePreservedPlayback(symbol, state, value) {
   });
 }
 
-function createManifest(symbols, composites, scale, preservedAnimations) {
+function createManifest(symbols, composites, scale, preservedMetadata) {
   return Object.freeze({
     version: 1,
     states: REQUIRED_STATES,
@@ -714,8 +737,13 @@ function createManifest(symbols, composites, scale, preservedAnimations) {
             [SPIN_BLUR_STATE]: `./${symbol}.${SPIN_BLUR_STATE}.png`,
             [DISABLED_STATE]: `./${symbol}.${DISABLED_STATE}.png`,
             scale,
-            ...(preservedAnimations.has(symbol)
-              ? { animations: preservedAnimations.get(symbol) }
+            ...(preservedMetadata.get(symbol)?.renderPriority !== undefined
+              ? {
+                  renderPriority: preservedMetadata.get(symbol).renderPriority,
+                }
+              : {}),
+            ...(preservedMetadata.get(symbol)?.animations !== undefined
+              ? { animations: preservedMetadata.get(symbol).animations }
               : {}),
           }),
         ]),

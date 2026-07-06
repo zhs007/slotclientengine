@@ -5,7 +5,10 @@ import {
   type AssetUrlManifest,
   type VNIProjectConfig,
 } from "@slotclientengine/vnicore/core";
-import type { ReelSymbolScaleMap } from "../reel/types.js";
+import type {
+  ReelSymbolRenderPriorityMap,
+  ReelSymbolScaleMap,
+} from "../reel/types.js";
 import { SymbolAssetError } from "./errors.js";
 import { createDefaultSymbolStatePreset } from "./state-machine.js";
 import {
@@ -98,6 +101,7 @@ export interface ParsedSymbolManifestSymbol {
   readonly states: Readonly<Record<SymbolStateId, string>>;
   readonly scale: number;
   readonly hasExplicitScale: boolean;
+  readonly renderPriority: number;
   readonly animations: Readonly<
     Partial<Record<SymbolStateId, SymbolManifestAnimationSpec>>
   >;
@@ -125,6 +129,11 @@ export interface CreateSymbolScaleMapFromManifestOptions extends ParseSymbolStat
   readonly manifest: unknown;
   readonly displaySymbols?: readonly string[];
   readonly requireExplicitScale?: boolean;
+}
+
+export interface CreateSymbolRenderPriorityMapFromManifestOptions extends ParseSymbolStateTextureManifestOptions {
+  readonly manifest: unknown;
+  readonly displaySymbols?: readonly string[];
 }
 
 export interface CreateSymbolVniAnimationResourcesOptions extends ParseSymbolStateTextureManifestOptions {
@@ -244,7 +253,13 @@ export function parseSymbolStateTextureManifest(
       rawSymbol,
       `symbol state texture manifest symbol "${symbol}"`,
     );
-    const allowedKeys = ["normal", "scale", "animations", ...states];
+    const allowedKeys = [
+      "normal",
+      "scale",
+      "renderPriority",
+      "animations",
+      ...states,
+    ];
     assertOnlyKnownKeys(
       rawSymbolRecord,
       `symbol "${symbol}" manifest`,
@@ -266,6 +281,10 @@ export function parseSymbolStateTextureManifest(
       states: Object.freeze(parsedStates),
       scale: parseManifestScale(rawSymbolRecord.scale, symbol),
       hasExplicitScale,
+      renderPriority: parseManifestRenderPriority(
+        rawSymbolRecord.renderPriority,
+        symbol,
+      ),
       animations: parseManifestAnimations(
         rawSymbolRecord.animations,
         symbol,
@@ -383,6 +402,27 @@ export function createSymbolScaleMapFromManifest(
   return Object.freeze(
     Object.fromEntries(entries),
   ) satisfies ReelSymbolScaleMap;
+}
+
+export function createSymbolRenderPriorityMapFromManifest(
+  options: CreateSymbolRenderPriorityMapFromManifestOptions,
+): ReelSymbolRenderPriorityMap {
+  const manifest = parseSymbolStateTextureManifest(options.manifest, options);
+  const displaySymbols = Object.freeze([
+    ...(options.displaySymbols ?? Object.keys(manifest.symbols)),
+  ]);
+  const entries = displaySymbols.map((symbol) => {
+    const manifestSymbol = manifest.symbols[symbol];
+    if (!manifestSymbol) {
+      throw new SymbolAssetError(
+        `Symbol state texture manifest is missing "${symbol}".`,
+      );
+    }
+    return [symbol, manifestSymbol.renderPriority] as const;
+  });
+  return Object.freeze(
+    Object.fromEntries(entries),
+  ) satisfies ReelSymbolRenderPriorityMap;
 }
 
 export function createSymbolVniAnimationResourcesFromManifest(
@@ -776,6 +816,25 @@ function parseManifestScale(scale: unknown, symbol: string): number {
     );
   }
   return scale;
+}
+
+function parseManifestRenderPriority(
+  renderPriority: unknown,
+  symbol: string,
+): number {
+  if (renderPriority === undefined) {
+    return 0;
+  }
+  if (
+    typeof renderPriority !== "number" ||
+    !Number.isSafeInteger(renderPriority) ||
+    renderPriority < 0
+  ) {
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" renderPriority must be a non-negative safe integer.`,
+    );
+  }
+  return renderPriority;
 }
 
 function parseManifestAnimations(

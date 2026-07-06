@@ -237,6 +237,14 @@ describe("game003 generated static config", () => {
     }
     expect(skin.symbolScales.H1).toBe(1);
     expect(skin.symbolScales.SC).toBe(1);
+    expect(skin.symbolRenderPriorities.WL).toBe(1);
+    expect(skin.symbolRenderPriorities.CL).toBe(1);
+    expect(skin.symbolRenderPriorities.SC).toBe(1);
+    expect(skin.symbolRenderPriorities.H1).toBe(0);
+    expect(skin.symbolRenderPriorities.L1).toBe(0);
+    expect(
+      JSON.stringify(GAME003_STATIC_CONFIG.skins["1"].symbols),
+    ).not.toMatch(/symbolRenderPriorities/);
   });
 
   it("generates the app-owned bg-bar static config from its standalone manifest", () => {
@@ -263,6 +271,11 @@ describe("game003 generated static config", () => {
       expect.arrayContaining([expect.stringContaining("normal.png")]),
     );
     expect(skin.bgBar.symbolScales).toEqual({ normal: 1, wild: 1, up: 1 });
+    expect(skin.bgBar.symbolRenderPriorities).toEqual({
+      normal: 0,
+      wild: 0,
+      up: 0,
+    });
     expect(skin.bgBar.layout.landscape.slotRectsInConveyor).toHaveLength(5);
     expect(skin.bgBar.layout.portrait.slotRectsInConveyor).toHaveLength(5);
     const bgBarManifest = featureBar?.symbols.manifest as {

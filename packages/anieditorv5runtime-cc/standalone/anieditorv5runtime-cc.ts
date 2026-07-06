@@ -5241,6 +5241,13 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       this.renderPlaybackFrame(0, 0);
     }
     this.setPlaying(true);
+    if (this.currentTime <= PLAYBACK_EPSILON) {
+      this.emitPlaybackEventsAtBoundary(0, 0, {
+        startTime: 0,
+        endTime: this.options.project.stage.duration,
+        loop: this.loop,
+      });
+    }
   }
 
   private startRangePlayback(options: V5GCocosPlayRangeOptions): void {
@@ -5249,9 +5256,10 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       options.range,
       "V5GCocosPlayer.playRange",
     );
+    const loop = options.loop ?? this.loop;
     this.activeRange = {
       ...range,
-      loop: options.loop ?? this.loop,
+      loop,
     };
     this.segmentedPlayback = null;
     this.pendingComplete = null;
@@ -5264,6 +5272,10 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.particleRuntime.reset();
     this.renderPlaybackFrame(range.startTime, range.startTime);
     this.setPlaying(true);
+    this.emitPlaybackEventsAtBoundary(range.startTime, this.loopIndex, {
+      ...range,
+      loop,
+    });
   }
 
   private startSegmentedPlayback(
@@ -5286,6 +5298,11 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.segmentedPlayback = new V5GSegmentedPlaybackSequence(normalized);
     this.renderPlaybackFrame(0, 0);
     this.setPlaying(true);
+    this.emitPlaybackEventsAtBoundary(0, 0, {
+      startTime: 0,
+      endTime: this.options.project.stage.duration,
+      loop: false,
+    });
   }
 
   private advanceFullTimeline(deltaSeconds: number): void {
@@ -5306,6 +5323,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
           remaining -= Math.max(timeToEnd, 0);
           this.renderPlaybackFrame(duration, duration);
           this.renderPlaybackFrame(0, 0);
+          this.emitPlaybackEventsAtBoundary(0, 0, boundary);
           if (timeToEnd <= PLAYBACK_EPSILON) break;
           continue;
         }
@@ -5346,6 +5364,11 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
           this.renderPlaybackFrame(range.endTime, range.endTime);
           this.loopIndex += 1;
           this.renderPlaybackFrame(range.startTime, range.startTime);
+          this.emitPlaybackEventsAtBoundary(
+            range.startTime,
+            this.loopIndex,
+            range,
+          );
           if (timeToEnd <= PLAYBACK_EPSILON) break;
           continue;
         }
@@ -5438,6 +5461,15 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
         result.previousTime,
         segmented.getLoopEndTime(),
         Math.max(0, result.loopIndex - 1),
+        {
+          startTime: segmented.getLoopStartTime(),
+          endTime: segmented.getLoopEndTime(),
+          loop: true,
+        },
+      );
+      this.emitPlaybackEventsAtBoundary(
+        segmented.getLoopStartTime(),
+        result.loopIndex,
         {
           startTime: segmented.getLoopStartTime(),
           endTime: segmented.getLoopEndTime(),
@@ -6392,6 +6424,32 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       )
       .sort((a, b) => a.time - b.time || a.order - b.order);
 
+    this.dispatchPlaybackEvents(events, previousTime, currentTime, loopIndex);
+  }
+
+  private emitPlaybackEventsAtBoundary(
+    time: number,
+    loopIndex: number,
+    boundary: PlaybackBoundary,
+  ): void {
+    const events = [...this.playbackEvents.values()]
+      .filter(
+        (event) =>
+          event.time >= boundary.startTime &&
+          event.time <= boundary.endTime + PLAYBACK_EPSILON &&
+          Math.abs(event.time - time) <= PLAYBACK_EPSILON,
+      )
+      .sort((a, b) => a.time - b.time || a.order - b.order);
+
+    this.dispatchPlaybackEvents(events, time, time, loopIndex);
+  }
+
+  private dispatchPlaybackEvents(
+    events: readonly NormalizedPlaybackEvent[],
+    previousTime: number,
+    currentTime: number,
+    loopIndex: number,
+  ): void {
     for (const event of events) {
       if (event.once) {
         this.playbackEvents.delete(event.id);

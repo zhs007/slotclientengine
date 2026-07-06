@@ -1,6 +1,10 @@
 import { getSlotGameStaticSkin } from "@slotclientengine/gameframeworks/static-config";
-import type { ReelSymbolScaleMap } from "@slotclientengine/rendercore";
+import type {
+  ReelSymbolRenderPriorityMap,
+  ReelSymbolScaleMap,
+} from "@slotclientengine/rendercore";
 import {
+  createGame003SymbolRenderPriorityMapFromManifest,
   createGame003SymbolScaleMapFromManifest,
   getGame003DisplaySymbolsFromManifest,
 } from "./assets.js";
@@ -20,3 +24,11 @@ export const GAME003_SYMBOL_SCALES = Object.freeze(
     requireExplicitScale: game003StaticSkin1.symbols.requireExplicitScale,
   }),
 ) satisfies ReelSymbolScaleMap;
+
+export const GAME003_SYMBOL_RENDER_PRIORITIES = Object.freeze(
+  createGame003SymbolRenderPriorityMapFromManifest({
+    stateTextureManifest: game003StaticSkin1.symbols.manifest,
+    displaySymbols: game003DisplaySymbols,
+    requiredStates: game003StaticSkin1.symbols.requiredStates,
+  }),
+) satisfies ReelSymbolRenderPriorityMap;

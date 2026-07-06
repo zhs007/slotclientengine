@@ -26,9 +26,14 @@ export function createStandaloneSymbolCatalog(
     options.symbolScales ?? {},
     new Set(displaySymbols),
   );
+  const symbolRenderPriorities = normalizeSymbolRenderPriorities(
+    options.symbolRenderPriorities ?? {},
+    new Set(displaySymbols),
+  );
   const base = new SymbolCatalogModel({
     gameConfig: createStandaloneGameConfig(displaySymbols),
     assets: options.assets,
+    symbolRenderPriorities: options.symbolRenderPriorities,
     statePreset: options.statePreset,
     animationResolver: options.animationResolver,
     texturePolicy: options.texturePolicy,
@@ -50,7 +55,13 @@ export function createStandaloneSymbolCatalog(
       symbol: string,
       renderOptions: CreateCatalogRenderSymbolOptions = {},
     ) => {
-      const renderSymbol = base.createRenderSymbol(symbol, renderOptions);
+      const renderSymbol = base.createRenderSymbol(symbol, {
+        ...renderOptions,
+        renderPriority:
+          renderOptions.renderPriority ??
+          symbolRenderPriorities.get(symbol) ??
+          0,
+      });
       renderSymbol.scale.set(symbolScales.get(symbol) ?? 1);
       return renderSymbol;
     },
@@ -101,6 +112,33 @@ function normalizeSymbolScales(
       );
     }
     normalized.set(symbol, scale);
+  }
+  return normalized;
+}
+
+function normalizeSymbolRenderPriorities(
+  symbolRenderPriorities: Readonly<Record<string, number>>,
+  displaySymbolSet: ReadonlySet<string>,
+): ReadonlyMap<string, number> {
+  const normalized = new Map<string, number>();
+  for (const [symbol, renderPriority] of Object.entries(
+    symbolRenderPriorities,
+  )) {
+    if (!displaySymbolSet.has(symbol)) {
+      throw new SymbolAssetError(
+        `Standalone symbol renderPriority for "${symbol}" does not exist in displaySymbols.`,
+      );
+    }
+    if (
+      typeof renderPriority !== "number" ||
+      !Number.isSafeInteger(renderPriority) ||
+      renderPriority < 0
+    ) {
+      throw new SymbolAssetError(
+        `Standalone symbol "${symbol}" renderPriority must be a non-negative safe integer.`,
+      );
+    }
+    normalized.set(symbol, renderPriority);
   }
   return normalized;
 }

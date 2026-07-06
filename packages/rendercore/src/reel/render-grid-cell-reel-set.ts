@@ -53,6 +53,7 @@ export class RenderGridCellReelSet extends Container {
 
   constructor(options: RenderGridCellReelSetOptions) {
     super();
+    this.sortableChildren = true;
     this.#columns = assertPositiveInteger(options.columns, "columns");
     this.#rows = assertPositiveInteger(options.rows, "rows");
     this.#cellWidth = assertPositiveNumber(options.cellWidth, "cellWidth");
@@ -108,6 +109,7 @@ export class RenderGridCellReelSet extends Container {
       cell.dimOverlay.alpha = 0;
       cell.dimOverlay.y = 0;
       this.setCellClipMask(cell, false);
+      this.syncCellRenderOrder(cell);
     }
   }
 
@@ -132,6 +134,7 @@ export class RenderGridCellReelSet extends Container {
       cell.dimOverlay.alpha = 0;
       cell.dimOverlay.y = 0;
       this.setCellClipMask(cell, false);
+      this.syncCellRenderOrder(cell);
     }
   }
 
@@ -238,6 +241,7 @@ export class RenderGridCellReelSet extends Container {
     clipContent.addChild(reel);
     root.addChild(clipMask, clipContent);
     this.addChild(root);
+    root.zIndex = coordinate.orderIndex;
 
     return {
       coordinate,
@@ -282,6 +286,7 @@ export class RenderGridCellReelSet extends Container {
       const activeEndMs = Math.min(elapsedMs, planCell.stopAtMs);
       const activeDeltaMs = Math.max(0, activeEndMs - activeStartMs);
       const result = cell.reel.update(activeDeltaMs / 1000);
+      this.syncCellRenderOrder(cell);
       if (result.landed) {
         cell.reel.resetToVisibleSymbols(
           planCell.targetVisibleSymbols,
@@ -290,6 +295,7 @@ export class RenderGridCellReelSet extends Container {
         resetReelSlotSymbols(cell);
         this.syncLandedDimming(cell, planCell);
         this.setCellClipMask(cell, false);
+        this.syncCellRenderOrder(cell);
         cell.phase = "landed";
         cell.hasLandedThisSpin = true;
         cell.fadeOutElapsedMs = 0;
@@ -455,6 +461,15 @@ export class RenderGridCellReelSet extends Container {
   private setCellClipMask(cell: RuntimeCell, enabled: boolean): void {
     cell.clipContent.mask = enabled ? cell.clipMask : null;
     cell.clipMask.visible = enabled;
+  }
+
+  private syncCellRenderOrder(cell: RuntimeCell): void {
+    const visibleSlot = cell.reel
+      .getSlotSnapshots()
+      .find((slot) => slot.container.visible);
+    const renderPriority = visibleSlot?.symbol?.renderPriority ?? 0;
+    cell.root.zIndex =
+      renderPriority * (this.#order.length + 1) + cell.coordinate.orderIndex;
   }
 
   private getVisibleDimmingAlpha(cell: RuntimeCell): number {

@@ -12,11 +12,13 @@ import {
   createDefaultSymbolAnimationResolver,
   createSymbolManifestAnimationResolver,
   getSymbolDisplaySymbolsFromManifest,
+  type ReelSymbolRenderPriorityMap,
   type ReelSymbolScaleMap,
   type SymbolAnimationResolver,
 } from "@slotclientengine/rendercore";
 import {
   SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+  createSymbolRenderPriorityMapFromManifest,
   createSymbolScaleMapFromManifest,
 } from "./symbol-assets.js";
 
@@ -27,6 +29,7 @@ export interface SymbolSetConfig {
   readonly label: string;
   readonly catalogKind: "paytable" | "standalone";
   readonly symbolScales: ReelSymbolScaleMap;
+  readonly symbolRenderPriorities: ReelSymbolRenderPriorityMap;
   readonly rawGameConfig?: unknown;
   readonly displaySymbols?: readonly string[];
   readonly modules: Record<string, string>;
@@ -125,6 +128,11 @@ export const SYMBOL_SET_CONFIGS = Object.freeze([
       requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
       requireExplicitScale: true,
     }),
+    symbolRenderPriorities: createSymbolRenderPriorityMapFromManifest({
+      manifest: game003S1StateTextureManifest,
+      displaySymbols: GAME003_S1_DISPLAYABLE_SYMBOLS,
+      requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+    }),
     rawGameConfig: rawGame003GameConfig,
     modules: game003S1Modules,
     manifest: game003S1StateTextureManifest,
@@ -154,6 +162,11 @@ export const SYMBOL_SET_CONFIGS = Object.freeze([
       displaySymbols: GAME003_BG_BAR_DISPLAYABLE_SYMBOLS,
       requiredStates: [],
       requireExplicitScale: true,
+    }),
+    symbolRenderPriorities: createSymbolRenderPriorityMapFromManifest({
+      manifest: game003BgBarStateTextureManifest,
+      displaySymbols: GAME003_BG_BAR_DISPLAYABLE_SYMBOLS,
+      requiredStates: [],
     }),
     displaySymbols: GAME003_BG_BAR_DISPLAYABLE_SYMBOLS,
     modules: game003BgBarModules,

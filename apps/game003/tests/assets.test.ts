@@ -6,8 +6,10 @@ import {
   GAME003_BG_BAR_DISPLAY_SYMBOLS,
   GAME003_DISPLAY_SYMBOLS,
   createGame003BgBarSymbolAssetMapFromModules,
+  createGame003BgBarSymbolRenderPriorityMapFromManifest,
   createGame003BgBarSymbolScaleMapFromManifest,
   createGame003SymbolAssetMapFromModules,
+  createGame003SymbolRenderPriorityMapFromManifest,
   createGame003SymbolScaleMapFromManifest,
   loadGame003BgBarSymbolTextures,
   loadGame003SymbolTextures,
@@ -89,6 +91,47 @@ describe("game003 symbol assets", () => {
         playback: { mode: "animation", animationName: "Win", loop: false },
       });
     }
+  });
+
+  it("reads render priorities from manifests and defaults missing values to zero", () => {
+    expect(
+      createGame003SymbolRenderPriorityMapFromManifest({
+        stateTextureManifest: manifest,
+      }),
+    ).toMatchObject({
+      WL: 1,
+      CL: 1,
+      SC: 1,
+      H1: 0,
+      L1: 0,
+    });
+    expect(
+      createGame003BgBarSymbolRenderPriorityMapFromManifest({
+        stateTextureManifest: bgBarManifest,
+      }),
+    ).toEqual({
+      normal: 0,
+      wild: 0,
+      up: 0,
+    });
+    expect(() =>
+      createGame003SymbolRenderPriorityMapFromManifest({
+        stateTextureManifest: {
+          version: 1,
+          states: ["spinBlur", "disabled"],
+          symbols: {
+            H1: {
+              normal: "./H1.png",
+              spinBlur: "./H1.spinBlur.png",
+              disabled: "./H1.disabled.png",
+              scale: 1,
+              renderPriority: -1,
+            },
+          },
+        },
+        displaySymbols: ["H1"],
+      }),
+    ).toThrow(/H1.*renderPriority/);
   });
 
   it("fails when required state textures are missing or manifest fields drift", () => {

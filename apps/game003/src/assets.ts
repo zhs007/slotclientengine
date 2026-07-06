@@ -1,8 +1,10 @@
 import { Assets, type Texture } from "pixi.js";
 import {
   createSymbolAssetMapFromManifestModules,
+  createSymbolRenderPriorityMapFromManifest,
   createSymbolScaleMapFromManifest,
   getSymbolDisplaySymbolsFromManifest,
+  type ReelSymbolRenderPriorityMap,
   type ReelSymbolScaleMap,
   type SymbolAssetInput,
   type SymbolAssetMap,
@@ -83,6 +85,18 @@ export function createGame003SymbolScaleMapFromManifest(options: {
   });
 }
 
+export function createGame003SymbolRenderPriorityMapFromManifest(options: {
+  readonly stateTextureManifest: unknown;
+  readonly displaySymbols?: readonly string[];
+  readonly requiredStates?: readonly string[];
+}): ReelSymbolRenderPriorityMap {
+  return createSymbolRenderPriorityMapFromManifest({
+    manifest: options.stateTextureManifest,
+    displaySymbols: options.displaySymbols ?? GAME003_DISPLAY_SYMBOLS,
+    requiredStates: options.requiredStates ?? GAME003_REQUIRED_STATE_TEXTURES,
+  });
+}
+
 export function createGame003BgBarSymbolAssetMapFromModules(options: {
   readonly modules: Record<string, string>;
   readonly stateTextureManifest: unknown;
@@ -106,6 +120,17 @@ export function createGame003BgBarSymbolScaleMapFromManifest(options: {
     displaySymbols: options.displaySymbols ?? GAME003_BG_BAR_DISPLAY_SYMBOLS,
     requiredStates: [],
     requireExplicitScale: options.requireExplicitScale,
+  });
+}
+
+export function createGame003BgBarSymbolRenderPriorityMapFromManifest(options: {
+  readonly stateTextureManifest: unknown;
+  readonly displaySymbols?: readonly string[];
+}): ReelSymbolRenderPriorityMap {
+  return createSymbolRenderPriorityMapFromManifest({
+    manifest: options.stateTextureManifest,
+    displaySymbols: options.displaySymbols ?? GAME003_BG_BAR_DISPLAY_SYMBOLS,
+    requiredStates: [],
   });
 }
 

@@ -20,6 +20,7 @@ import type { SymbolStateId } from "../symbol/index.js";
 export class RenderReelSet extends Container {
   readonly reels: readonly RenderReel[];
   readonly #symbolPool: RenderSymbolPool | null;
+  readonly #slotLayer: Container;
   #spinPlan: ReelSpinPlan | null = null;
   #spinOptions: RenderReelSetSpinOptions | null = null;
   #elapsedMs = 0;
@@ -29,7 +30,11 @@ export class RenderReelSet extends Container {
     super();
     assertLayoutMatchesReels(options.layout, options.reels.getReelCount());
     this.#symbolPool = createRenderSymbolPool(options.symbolPool);
+    this.#slotLayer = new Container();
+    this.#slotLayer.sortableChildren = true;
 
+    const slotCount = calculateSlotCount(options.layout);
+    const slotRenderOrderStride = options.reels.getReelCount() * slotCount + 1;
     this.reels = Object.freeze(
       Array.from({ length: options.reels.getReelCount() }, (_, x) => {
         const reel = new RenderReel({
@@ -38,11 +43,15 @@ export class RenderReelSet extends Container {
           layout: options.layout,
           registry: options.registry,
           symbolPool: this.#symbolPool ?? undefined,
+          slotParent: this.#slotLayer,
+          slotRenderOrderOffset: x * slotCount,
+          slotRenderOrderStride,
         });
         this.addChild(reel);
         return reel;
       }),
     );
+    this.addChild(this.#slotLayer);
   }
 
   override destroy(options?: Parameters<Container["destroy"]>[0]): void {
@@ -274,4 +283,8 @@ export class RenderReelSet extends Container {
       }
     }
   }
+}
+
+function calculateSlotCount(layout: RenderReelSetOptions["layout"]): number {
+  return layout.visibleRows + layout.bufferRowsBefore + layout.bufferRowsAfter;
 }

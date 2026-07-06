@@ -47,6 +47,30 @@ describe("game003 reel runtime", () => {
     expect(
       (runtime.mainReelsLayer as RenderReelSet).getSymbolPoolStats(),
     ).not.toBeNull();
+    expect(runtime.config.symbolRenderPriorities).toMatchObject({
+      WL: 1,
+      CL: 1,
+      SC: 1,
+      H1: 0,
+    });
+  });
+
+  it("passes manifest render priorities into visible reel symbols", () => {
+    const runtime = createRuntime([
+      [0, 1, 2, 3, 4],
+      ...GAME003_DEFAULT_SCENE.slice(1),
+    ]);
+    const reelSet = runtime.mainReelsLayer as RenderReelSet;
+    const wildSlot = reelSet.reels[0]
+      .getSlotSnapshots()
+      .find((slot) => slot.windowY === 0);
+    const normalSlot = reelSet.reels[0]
+      .getSlotSnapshots()
+      .find((slot) => slot.windowY === 1);
+
+    expect(wildSlot?.symbol?.symbol).toBe("WL");
+    expect(wildSlot?.symbol?.renderPriority).toBe(1);
+    expect(normalSlot?.symbol?.renderPriority).toBe(0);
   });
 
   it("keeps reels hidden until a live scene is applied", () => {

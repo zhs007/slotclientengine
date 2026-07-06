@@ -2,12 +2,15 @@ import { getSlotGameStaticSkin } from "@slotclientengine/gameframeworks/static-c
 import {
   createDefaultSymbolAnimationResolver,
   createSymbolManifestAnimationResolver,
+  type ReelSymbolRenderPriorityMap,
   type ReelSymbolScaleMap,
   type SymbolAnimationResolver,
 } from "@slotclientengine/rendercore";
 import {
   GAME003_BG_BAR_DISPLAY_SYMBOLS,
+  createGame003BgBarSymbolRenderPriorityMapFromManifest,
   createGame003BgBarSymbolScaleMapFromManifest,
+  createGame003SymbolRenderPriorityMapFromManifest,
   createGame003SymbolScaleMapFromManifest,
   getGame003DisplaySymbolsFromManifest,
 } from "./assets.js";
@@ -48,6 +51,7 @@ export interface Game003SkinConfig {
   readonly displaySymbols: readonly string[];
   readonly emptySymbols: readonly string[];
   readonly symbolScales: ReelSymbolScaleMap;
+  readonly symbolRenderPriorities: ReelSymbolRenderPriorityMap;
   readonly symbolAnimationResolver: SymbolAnimationResolver;
   readonly bgBar: Game003BgBarSkinConfig;
   readonly minecartInteraction: Game003MinecartInteractionConfig;
@@ -66,6 +70,7 @@ export interface Game003BgBarSkinConfig {
   readonly stateTextureManifest: unknown;
   readonly displaySymbols: readonly ["normal", "wild", "up"];
   readonly symbolScales: ReelSymbolScaleMap;
+  readonly symbolRenderPriorities: ReelSymbolRenderPriorityMap;
   readonly symbolAnimationResolver: SymbolAnimationResolver;
   readonly layout: NonNullable<
     typeof game003StaticSkin1.featureBars
@@ -113,6 +118,11 @@ const GAME003_SKIN_CONFIGS: Readonly<Record<Game003SkinId, Game003SkinConfig>> =
         requiredStates: game003StaticSkin1.symbols.requiredStates,
         requireExplicitScale: game003StaticSkin1.symbols.requireExplicitScale,
       }),
+      symbolRenderPriorities: createGame003SymbolRenderPriorityMapFromManifest({
+        stateTextureManifest: game003StaticSkin1.symbols.manifest,
+        displaySymbols: game003Skin1DisplaySymbols,
+        requiredStates: game003StaticSkin1.symbols.requiredStates,
+      }),
       symbolAnimationResolver: createSymbolManifestAnimationResolver({
         manifest: game003StaticSkin1.symbols.manifest,
         requiredStates: game003StaticSkin1.symbols.requiredStates,
@@ -141,6 +151,11 @@ const GAME003_SKIN_CONFIGS: Readonly<Record<Game003SkinId, Game003SkinConfig>> =
           requireExplicitScale:
             game003StaticSkin1BgBar.symbols.requireExplicitScale,
         }),
+        symbolRenderPriorities:
+          createGame003BgBarSymbolRenderPriorityMapFromManifest({
+            stateTextureManifest: game003StaticSkin1BgBar.symbols.manifest,
+            displaySymbols: GAME003_BG_BAR_DISPLAY_SYMBOLS,
+          }),
         symbolAnimationResolver: createSymbolManifestAnimationResolver({
           manifest: game003StaticSkin1BgBar.symbols.manifest,
           requiredStates: game003StaticSkin1BgBar.symbols.requiredStates,
