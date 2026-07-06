@@ -25,7 +25,12 @@ describe("message formatter", () => {
 
     expect(message.join("\n")).toContain("#3 bet=2 lines=20 times=2");
     expect(message.join("\n")).toContain("totalwin=15");
-    expect(message.join("\n")).toContain("component lineWin: steps=0");
+    expect(message.join("\n")).toContain(
+      "step[0] cashWin=15 coinWin=15 scenes=1 otherScenes=0 results=1",
+    );
+    expect(message.join("\n")).toContain(
+      "component lineWin: steps=0 scenes=1 otherScenes=0 results=1",
+    );
     expect(message.join("\n")).toContain("component bonus: steps=none");
   });
 });

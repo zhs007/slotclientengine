@@ -67,6 +67,9 @@ export function createMockGameLogic(totalwin = 0): GameLogic {
     getSceneCount: () => 1,
     getScene: () => [[1, 2, 3]],
     getScenes: () => [[[1, 2, 3]]],
+    getOtherSceneCount: () => 1,
+    getOtherScene: () => [[0, totalwin, 0]],
+    getOtherScenes: () => [[[0, totalwin, 0]]],
     getResultCount: () => (totalwin > 0 ? 1 : 0),
     getResult: () => ({ pos: [0, 0], coinWin: totalwin, cashWin: totalwin }),
     getResults: () =>
@@ -81,11 +84,14 @@ export function createMockGameLogic(totalwin = 0): GameLogic {
             raw: {},
             hasBasicComponentData: true,
             usedSceneIndexes: [0],
+            usedOtherSceneIndexes: [0],
             usedResultIndexes: totalwin > 0 ? [0] : [],
           }
         : undefined,
     getComponentScenes: (name: string) =>
       name === "lineWin" ? [[[1, 2, 3]]] : [],
+    getComponentOtherScenes: (name: string) =>
+      name === "lineWin" ? [[[0, totalwin, 0]]] : [],
     getComponentResults: (name: string) =>
       name === "lineWin" && totalwin > 0
         ? [{ pos: [0, 0], coinWin: totalwin, cashWin: totalwin }]
@@ -106,10 +112,13 @@ export function createMockGameLogic(totalwin = 0): GameLogic {
     getStep: () => step,
     getSteps: () => [step],
     getScene: () => [[1, 2, 3]],
+    getOtherScene: () => [[0, totalwin, 0]],
     getResult: () => ({ pos: [0, 0], coinWin: totalwin, cashWin: totalwin }),
     hasComponent: (_stepIndex, name) => name === "lineWin",
     getComponent: (_stepIndex, name) => step.getComponent(name),
     getComponentScenes: (_stepIndex, name) => step.getComponentScenes(name),
+    getComponentOtherScenes: (_stepIndex, name) =>
+      step.getComponentOtherScenes(name),
     getComponentResults: (_stepIndex, name) => step.getComponentResults(name),
   };
 }
@@ -235,6 +244,7 @@ function createStep(
     cashWin: totalwin,
     clientData: {
       scenes: [createScene(index + 1)],
+      otherScenes: [createOtherScene(index + totalwin)],
       results:
         totalwin > 0
           ? [{ pos: [0, index], coinWin: totalwin, cashWin: totalwin }]
@@ -248,7 +258,7 @@ function createStep(
             basicComponentData: {
               usedScenes: [0],
               usedResults: totalwin > 0 ? [0] : [],
-              usedOtherScenes: [],
+              usedOtherScenes: [0],
               usedPrizeScenes: [],
               srcScenes: [],
               pos: [],
@@ -273,6 +283,18 @@ function createScene(seed: number): Record<string, unknown> {
       { values: [seed + 1, 2, 3] },
       { values: [4, seed + 5, 6] },
       { values: [7, 8, seed + 9] },
+    ],
+    indexes: [],
+    validRow: [],
+  };
+}
+
+function createOtherScene(seed: number): Record<string, unknown> {
+  return {
+    values: [
+      { values: [0, seed, 0] },
+      { values: [0, 0, 0] },
+      { values: [0, 0, 0] },
     ],
     indexes: [],
     validRow: [],

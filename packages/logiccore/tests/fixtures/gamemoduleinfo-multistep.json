@@ -22,6 +22,7 @@
                 "validRow": []
               }
             ],
+            "otherScenes": [],
             "results": [
               {
                 "pos": [0, 0],
@@ -73,6 +74,7 @@
                 "validRow": []
               }
             ],
+            "otherScenes": [],
             "results": [
               {
                 "pos": [1, 0],

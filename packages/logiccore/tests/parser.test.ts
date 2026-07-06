@@ -21,6 +21,7 @@ describe("parser", () => {
 
     expect(fromMessage.defaultScene).toEqual(fromGmi.defaultScene);
     expect(fromMessage.randomNumbers).toEqual(fromGmi.randomNumbers);
+    expect(fromMessage.steps[0].otherScenes[0][1][3]).toBe(150);
     expect(fromMessage.steps[0].results[1].cashWin).toBe(275);
     expect(fromGmi.meta.gameid).toBe(69002);
   });
@@ -123,6 +124,32 @@ describe("parser", () => {
       invalidResultPos.gmi.replyPlay.results[0].clientData.results[0] as any
     ).pos = ["0"];
     expect(() => parseGameModuleInfoMessage(invalidResultPos)).toThrow(
+      LogicParseError,
+    );
+  });
+
+  it("throws for missing or invalid otherScenes", () => {
+    const missingOtherScenes = cloneFixture(basicMessage);
+    delete (missingOtherScenes.gmi.replyPlay.results[0].clientData as any)
+      .otherScenes;
+    expect(() => parseGameModuleInfoMessage(missingOtherScenes)).toThrow(
+      LogicParseError,
+    );
+
+    const nonArrayOtherScenes = cloneFixture(basicMessage);
+    (
+      nonArrayOtherScenes.gmi.replyPlay.results[0].clientData as any
+    ).otherScenes = {};
+    expect(() => parseGameModuleInfoMessage(nonArrayOtherScenes)).toThrow(
+      LogicParseError,
+    );
+
+    const invalidOtherSceneMatrix = cloneFixture(basicMessage);
+    (
+      invalidOtherSceneMatrix.gmi.replyPlay.results[0].clientData.otherScenes[0]
+        .values[1].values as any
+    )[3] = 1.5;
+    expect(() => parseGameModuleInfoMessage(invalidOtherSceneMatrix)).toThrow(
       LogicParseError,
     );
   });

@@ -1,4 +1,5 @@
 export type SceneMatrix = readonly (readonly number[])[];
+export type OtherSceneMatrix = SceneMatrix;
 
 export interface GameConfigPaytableEntry {
   readonly code: number;
@@ -100,6 +101,7 @@ export interface WinResult extends Readonly<Record<string, unknown>> {
 
 export interface BasicComponentData extends Readonly<Record<string, unknown>> {
   readonly usedScenes: readonly number[];
+  readonly usedOtherScenes: readonly number[];
   readonly usedResults: readonly number[];
 }
 
@@ -109,6 +111,7 @@ export interface LogicComponent {
   readonly hasBasicComponentData: boolean;
   readonly basicComponentData?: BasicComponentData;
   readonly usedSceneIndexes: readonly number[];
+  readonly usedOtherSceneIndexes: readonly number[];
   readonly usedResultIndexes: readonly number[];
 }
 
@@ -127,10 +130,15 @@ export interface GameLogic {
   getStep(index: number): GameLogicStep;
   getSteps(): readonly GameLogicStep[];
   getScene(stepIndex: number, sceneIndex: number): SceneMatrix;
+  getOtherScene(stepIndex: number, otherSceneIndex: number): OtherSceneMatrix;
   getResult(stepIndex: number, resultIndex: number): WinResult;
   hasComponent(stepIndex: number, name: string): boolean;
   getComponent(stepIndex: number, name: string): LogicComponent | undefined;
   getComponentScenes(stepIndex: number, name: string): readonly SceneMatrix[];
+  getComponentOtherScenes(
+    stepIndex: number,
+    name: string,
+  ): readonly OtherSceneMatrix[];
   getComponentResults(stepIndex: number, name: string): readonly WinResult[];
 }
 
@@ -145,12 +153,16 @@ export interface GameLogicStep {
   getSceneCount(): number;
   getScene(index: number): SceneMatrix;
   getScenes(): readonly SceneMatrix[];
+  getOtherSceneCount(): number;
+  getOtherScene(index: number): OtherSceneMatrix;
+  getOtherScenes(): readonly OtherSceneMatrix[];
   getResultCount(): number;
   getResult(index: number): WinResult;
   getResults(): readonly WinResult[];
   hasComponent(name: string): boolean;
   getComponent(name: string): LogicComponent | undefined;
   getComponentScenes(name: string): readonly SceneMatrix[];
+  getComponentOtherScenes(name: string): readonly OtherSceneMatrix[];
   getComponentResults(name: string): readonly WinResult[];
 }
 
@@ -172,6 +184,7 @@ export interface ParsedGameLogicStepData {
   readonly curGameMod?: string;
   readonly curGameModParam: unknown;
   readonly scenes: readonly SceneMatrix[];
+  readonly otherScenes: readonly OtherSceneMatrix[];
   readonly results: readonly WinResult[];
   readonly historyComponents: readonly string[];
   readonly mapComponents: Readonly<Record<string, unknown>>;

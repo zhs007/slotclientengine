@@ -11,6 +11,7 @@ export interface TestStepConfig {
   cashWin?: number;
   results?: TestWinResult[];
   scenes?: unknown[];
+  otherScenes?: unknown[];
   curGameMod?: string;
   omitCurGameMod?: boolean;
   historyComponents?: string[];
@@ -52,11 +53,12 @@ export function createSpinResultFixture(config: {
 export function createBasicComponent(
   usedScenes: number[] = [],
   usedResults: number[] = [],
+  usedOtherScenes: number[] = [],
 ): Record<string, unknown> {
   return {
     basicComponentData: {
       usedScenes,
-      usedOtherScenes: [],
+      usedOtherScenes,
       usedResults,
       usedPrizeScenes: [],
       srcScenes: [],
@@ -106,7 +108,12 @@ function createGmiFixture(config: {
       cashWin: config.totalwin,
       results:
         config.totalwin > 0
-          ? [createWinResult({ coinWin: config.totalwin, cashWin: config.totalwin })]
+          ? [
+              createWinResult({
+                coinWin: config.totalwin,
+                cashWin: config.totalwin,
+              }),
+            ]
           : [],
       curGameMod: "base",
       historyComponents: [],
@@ -126,11 +133,15 @@ function createGmiFixture(config: {
   };
 }
 
-function createStep(step: TestStepConfig, index: number): Record<string, unknown> {
+function createStep(
+  step: TestStepConfig,
+  index: number,
+): Record<string, unknown> {
   const historyComponents = step.historyComponents ?? [];
   const mapComponents = step.mapComponents ?? {};
   const clientData: Record<string, unknown> = {
     scenes: step.scenes ?? [createScene(index + 1)],
+    otherScenes: step.otherScenes ?? [],
     results: step.results ?? [],
     curGameModParam: {
       historyComponents,

@@ -352,6 +352,35 @@ describe("game003 generated static config", () => {
     });
   });
 
+  it("generates app-owned CO coin overlay config from appExtensions only", () => {
+    const skin = getGame003SkinConfig("1");
+    const staticSkin = GAME003_STATIC_CONFIG.skins["1"];
+
+    expect(staticSkin.appExtensions).toHaveProperty("game003CoinOverlay");
+    expect(staticSkin.appExtensions?.game003CoinOverlay).toEqual({
+      componentName: "bg-gencoins",
+      coinSymbol: "CO",
+      text: {
+        yOffsetRatioFromCellCenter: 0.08,
+        fontSize: 32,
+        fill: "#fff7d6",
+        stroke: "#5a2500",
+        strokeWidth: 4,
+      },
+    });
+    expect(skin.coinOverlay).toEqual(
+      staticSkin.appExtensions?.game003CoinOverlay,
+    );
+    expect(staticSkin).not.toHaveProperty("game003CoinOverlay");
+    expect(staticSkin.featureBars?.bgBar).not.toHaveProperty(
+      "game003CoinOverlay",
+    );
+    expect(staticSkin.winAmount).not.toHaveProperty("game003CoinOverlay");
+    expect(staticSkin.symbols.manifest).not.toHaveProperty(
+      "game003CoinOverlay",
+    );
+  });
+
   it("fails fast for skin ids outside the generated supported list", () => {
     expect(() => getGame003SkinConfig("2" as never)).toThrow(
       /Unknown game003 skin/,

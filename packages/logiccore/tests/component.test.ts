@@ -16,8 +16,23 @@ describe("component mapping", () => {
 
     const spin = step.getComponent("bg-spin");
     expect(spin?.usedSceneIndexes).toEqual([0]);
+    expect(spin?.usedOtherSceneIndexes).toEqual([]);
     expect(step.getComponentScenes("bg-spin")[0]).toEqual(step.getScene(0));
     expect(logic.getComponentScenes(0, "bg-spin")[0]).toEqual(step.getScene(0));
+  });
+
+  it("maps usedOtherScenes within the current step", () => {
+    const logic = createGameLogic(basicMessage);
+    const step = logic.getStep(0);
+    const genCoins = step.getComponent("bg-gencoins");
+
+    expect(genCoins?.usedOtherSceneIndexes).toEqual([0]);
+    expect(step.getComponentOtherScenes("bg-gencoins")[0]).toEqual(
+      step.getOtherScene(0),
+    );
+    expect(logic.getComponentOtherScenes(0, "bg-gencoins")[0]).toEqual(
+      step.getOtherScene(0),
+    );
   });
 
   it("maps usedResults and keeps all win result fields", () => {
@@ -36,6 +51,7 @@ describe("component mapping", () => {
 
     expect(pay?.hasBasicComponentData).toBe(false);
     expect(pay?.usedSceneIndexes).toEqual([]);
+    expect(pay?.usedOtherSceneIndexes).toEqual([]);
     expect(pay?.usedResultIndexes).toEqual([]);
     expect((pay?.raw as any).type_url).toBe(
       "type.googleapis.com/sgc7pb.MoneyTriggerData",
@@ -49,6 +65,7 @@ describe("component mapping", () => {
 
     expect(step.getComponent("not-exists")).toBeUndefined();
     expect(step.getComponentScenes("not-exists")).toEqual([]);
+    expect(step.getComponentOtherScenes("not-exists")).toEqual([]);
     expect(step.getComponentResults("not-exists")).toEqual([]);
   });
 
@@ -87,6 +104,17 @@ describe("component mapping", () => {
         .getComponentResults("bg-trigger-x5"),
     ).toThrow(LogicParseError);
 
+    const invalidUsedOtherScenes = cloneFixture(basicMessage);
+    (
+      invalidUsedOtherScenes.gmi.replyPlay.results[0].clientData.curGameModParam
+        .mapComponents["bg-gencoins"].basicComponentData as any
+    ).usedOtherScenes = [99];
+    expect(() =>
+      createGameLogic(invalidUsedOtherScenes)
+        .getStep(0)
+        .getComponentOtherScenes("bg-gencoins"),
+    ).toThrow(LogicParseError);
+
     const nonArrayIndexes = cloneFixture(basicMessage);
     (
       nonArrayIndexes.gmi.replyPlay.results[0].clientData.curGameModParam
@@ -94,6 +122,17 @@ describe("component mapping", () => {
     ).usedScenes = "bad";
     expect(() =>
       createGameLogic(nonArrayIndexes).getStep(0).getComponent("bg-spin"),
+    ).toThrow(LogicParseError);
+
+    const missingUsedOtherScenes = cloneFixture(basicMessage);
+    delete (
+      missingUsedOtherScenes.gmi.replyPlay.results[0].clientData.curGameModParam
+        .mapComponents["bg-gencoins"].basicComponentData as any
+    ).usedOtherScenes;
+    expect(() =>
+      createGameLogic(missingUsedOtherScenes)
+        .getStep(0)
+        .getComponent("bg-gencoins"),
     ).toThrow(LogicParseError);
   });
 });

@@ -1,6 +1,7 @@
 import { createGameLogicFromGmi } from "@slotclientengine/logiccore";
 import {
   findComponentSteps,
+  getComponentOtherScenesByName,
   getComponentResultsByName,
   getComponentScenesByName,
   getComponentWinResultGroupsByName,
@@ -19,11 +20,22 @@ describe("component helpers", () => {
     expect(
       getComponentScenesByName(logic, "lineWin", { stepIndex: 1 }),
     ).toHaveLength(1);
+    expect(getComponentOtherScenesByName(logic, "lineWin")).toHaveLength(2);
+    expect(
+      getComponentOtherScenesByName(logic, "lineWin", { stepIndex: 1 }),
+    ).toEqual([logic.getOtherScene(1, 0)]);
     expect(getComponentResultsByName(logic, "lineWin")).toHaveLength(2);
+    expect(getComponentOtherScenesByName(logic, "missing")).toEqual([]);
     expect(getComponentResultsByName(logic, "missing")).toEqual([]);
     expect(() => findComponentSteps(logic, "")).toThrow(/component name/);
+    expect(() => getComponentOtherScenesByName(logic, "")).toThrow(
+      /component name/,
+    );
     expect(() =>
       getComponentScenesByName(logic, "lineWin", { stepIndex: 99 }),
+    ).toThrow(/stepIndex/);
+    expect(() =>
+      getComponentOtherScenesByName(logic, "lineWin", { stepIndex: 99 }),
     ).toThrow(/stepIndex/);
   });
 

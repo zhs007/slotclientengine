@@ -6,6 +6,7 @@ import {
   createGameLogicFromGmi,
   GameLogic,
   LogicParseError,
+  OtherSceneMatrix,
   SceneMatrix,
 } from "../src";
 
@@ -42,6 +43,16 @@ describe("GameLogicModel", () => {
     ]);
     expect(step.getScenes()[0]).toEqual(step.getScene(0));
     expect(logic.getScene(0, 0)).toEqual(step.getScene(0));
+    expect(step.getOtherSceneCount()).toBe(1);
+    expect(step.getOtherScene(0)).toEqual([
+      [0, 0, 0, 0, 0],
+      [2, 1, 1, 150, 0],
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+    ]);
+    expect(step.getOtherScenes()[0]).toEqual(step.getOtherScene(0));
+    expect(logic.getOtherScene(0, 0)).toEqual(step.getOtherScene(0));
     expect(step.getResult(0).pos).toEqual([4, 0]);
     expect(step.getResult(1).cashWin).toBe(275);
     expect(step.getResults()[1].symbol).toBe(-1);
@@ -87,14 +98,18 @@ describe("GameLogicModel", () => {
     expect(() => logic.getStep(-1)).toThrow(RangeError);
     expect(() => logic.getStep(999)).toThrow(RangeError);
     expect(() => step.getScene(999)).toThrow(RangeError);
+    expect(() => step.getOtherScene(999)).toThrow(RangeError);
     expect(() => step.getResult(999)).toThrow(RangeError);
     expect(() => logic.getScene(999, 0)).toThrow(RangeError);
+    expect(() => logic.getOtherScene(0, 999)).toThrow(RangeError);
     expect(() => logic.getResult(0, 999)).toThrow(RangeError);
   });
 
   it("does not let returned scenes, arrays, raw data, or component raw mutate internal state", () => {
     const logic = createGameLogic(basicMessage);
     tryMutate(() => ((logic.getDefaultScene() as number[][])[0][0] = 999));
+    tryMutate(() => ((logic.getOtherScene(0, 0) as number[][])[1][3] = 999));
+    tryMutate(() => ((logic.getStep(0).getOtherScenes() as any[])[0] = [[]]));
     tryMutate(() => ((logic.getRandomNumbers() as number[])[0] = 999));
     tryMutate(
       () => ((logic.getStep(0).getResults() as any[])[0] = { pos: [] }),
@@ -104,14 +119,17 @@ describe("GameLogicModel", () => {
     const rawGmi = logic.getRawGmi() as any;
     const rawStep = logic.getStep(0).getRawStep() as any;
     const rawClientData = logic.getStep(0).getRawClientData() as any;
+    const genCoins = logic.getStep(0).getComponent("bg-gencoins")!;
     const payRaw = logic.getStep(0).getComponent("bg-pay")?.raw as any;
     tryMutate(() => (rawMessage.bet = 999));
     tryMutate(() => (rawGmi.defaultScene.values[0].values[0] = 999));
     tryMutate(() => (rawStep.coinWin = 999));
     tryMutate(() => (rawClientData.nextGameMod = "changed"));
+    tryMutate(() => ((genCoins.usedOtherSceneIndexes as number[])[0] = 999));
     tryMutate(() => (payRaw.type_url = "changed"));
 
     expect(logic.getDefaultScene()[0][0]).toBe(0);
+    expect(logic.getOtherScene(0, 0)[1][3]).toBe(150);
     expect(logic.getRandomNumbers()[0]).toBe(1);
     expect(logic.getStep(0).getResult(0).pos).toEqual([4, 0]);
     expect((logic.getRawMessage() as any).bet).toBe(5);
@@ -122,6 +140,9 @@ describe("GameLogicModel", () => {
     expect((logic.getStep(0).getRawClientData() as any).nextGameMod).toBe(
       "basic",
     );
+    expect(
+      logic.getStep(0).getComponent("bg-gencoins")?.usedOtherSceneIndexes,
+    ).toEqual([0]);
     expect((logic.getStep(0).getComponent("bg-pay")?.raw as any).type_url).toBe(
       "type.googleapis.com/sgc7pb.MoneyTriggerData",
     );
@@ -146,6 +167,7 @@ describe("GameLogicModel", () => {
     expect(logic.getStepCount()).toBe(2);
     expect(logic.getStep(1).getCoinWin()).toBe(33);
     expect(logic.getStep(0).getComponentScenes("shared")[0][0][0]).toBe(10);
+    expect(logic.getStep(0).getComponentOtherScenes("shared")).toEqual([]);
     expect(logic.getStep(0).getComponentResults("shared")[0].extraStep).toBe(
       "first",
     );
@@ -180,6 +202,7 @@ function tryMutate(mutator: () => void): void {
 
 expectTypeOnly<GameLogic>();
 expectTypeOnly<SceneMatrix>();
+expectTypeOnly<OtherSceneMatrix>();
 
 function expectTypeOnly<T>(): void {
   return undefined as T extends unknown ? void : never;

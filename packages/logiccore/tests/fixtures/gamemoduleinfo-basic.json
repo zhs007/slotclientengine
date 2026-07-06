@@ -34,7 +34,19 @@
                 "validRow": []
               }
             ],
-            "otherScenes": [],
+            "otherScenes": [
+              {
+                "values": [
+                  { "values": [0, 0, 0, 0, 0] },
+                  { "values": [2, 1, 1, 150, 0] },
+                  { "values": [0, 0, 0, 0, 0] },
+                  { "values": [0, 0, 0, 0, 0] },
+                  { "values": [0, 0, 0, 0, 0] }
+                ],
+                "indexes": [],
+                "validRow": []
+              }
+            ],
             "results": [
               {
                 "pos": [4, 0],
@@ -65,7 +77,12 @@
             ],
             "curGameMod": "basic",
             "curGameModParam": {
-              "historyComponents": ["bg-spin", "bg-trigger-x5", "bg-pay"],
+              "historyComponents": [
+                "bg-spin",
+                "bg-trigger-x5",
+                "bg-gencoins",
+                "bg-pay"
+              ],
               "respinComponents": [],
               "historyComponentsEx": [
                 "bg-spin",
@@ -119,6 +136,23 @@
                   "wins": 0,
                   "winMulti": 1,
                   "@type": "type.googleapis.com/sgc7pb.ScatterTriggerData"
+                },
+                "bg-gencoins": {
+                  "basicComponentData": {
+                    "usedScenes": [],
+                    "usedOtherScenes": [0],
+                    "usedResults": [],
+                    "usedPrizeScenes": [],
+                    "srcScenes": [],
+                    "pos": [],
+                    "mapUsedSPGrid": {},
+                    "coinWin": 0,
+                    "cashWin": 0,
+                    "targetScene": 0,
+                    "runIndex": 0,
+                    "output": 0,
+                    "strOutput": ""
+                  }
                 },
                 "bg-pay": {
                   "type_url": "type.googleapis.com/sgc7pb.MoneyTriggerData",

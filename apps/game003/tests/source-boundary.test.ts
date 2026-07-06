@@ -102,6 +102,18 @@ describe("game003 source boundary", () => {
     );
   });
 
+  it("keeps bg-gencoins and CO coin overlay semantics out of shared packages", () => {
+    const sharedSource = [
+      readSourceTree(join(REPO_ROOT, "packages/rendercore/src")),
+      readSourceTree(join(REPO_ROOT, "packages/logiccore/src")),
+      readSourceTree(join(REPO_ROOT, "packages/gameframeworks/src")),
+    ].join("\n");
+
+    expect(sharedSource).not.toMatch(
+      /bg-gencoins|game003CoinOverlay|COIN_OVERLAY|GAME003_COIN/,
+    );
+  });
+
   it("keeps L1-L5 VNI animation selection out of win playback business code", () => {
     const businessSource = [
       readFileSync(join(APP_ROOT, "src/game-adapter.ts"), "utf8"),

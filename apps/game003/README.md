@@ -63,6 +63,8 @@ CI=true pnpm --filter game003 check:static-config
 
 `skins."1".appExtensions.game003WinSymbolLoop` 配置 `bg-wins` result symbol 循环和每组 result 金额 overlay。`cyclePauseSeconds` 是一轮 `usedResults` 全部播放完后再从第一个 result 循环的暂停时间；`resultAmount` 配置金额文本相对选中 symbol cell 中心的 y 偏移、字号、填充和描边。该对象只由 `apps/game003` 严格解析，shared 静态配置层只透传，不理解 `bg-wins`、result 循环或金额 overlay 语义。
 
+`skins."1".appExtensions.game003CoinOverlay` 配置 `bg-gencoins` / `CO` 金额显示。`componentName` 第一版固定为 `bg-gencoins`，`coinSymbol` 固定为 `CO`，并且必须能在 `assets/gamecfg003/gameconfig.json` 的 symbol code 映射中查到；运行时不会硬编码 `CO=11`。`text` 配置 raw coin amount 文本相对 CO symbol cell 中心的 y 偏移、字号、填充和描边。该对象只由 `apps/game003` app 层严格解析，shared 包只透传通用 `appExtensions` 和通用 `otherScenes` 查询能力，不理解 `bg-gencoins`、`CO` 或 coin overlay 语义。
+
 `skins."1".featureBars.bgBar` 配置 `bg-bar` 传送带展示。它只属于 `game003` app 层：组件名固定为 `bg-bar`，feature 只允许 `normal`、`wild`、`up`，队列长度固定 5，可见数量固定 4，终点格固定 `slot 4`。`symbols.manifest` 指向独立的 `bg-bar-symbol-state-textures.manifest.json`，`requiredStates` 为空，`normal` 通过 manifest 的 `{ kind: "transparent", width: 172, height: 158 }` 声明稳定空图标，`wild.png` 为 `172 x 158`，`up.png` 为 `172 x 130`。这些尺寸漂移时运行时会显式失败。
 
 `skins."1".appExtensions.game003MinecartInteraction` 配置 `bg-bar` 终点后的矿车互动。`appExtensions` 是 shared 静态配置层的通用透传对象，`gameframeworks` 和 `buildgamestatic` 不理解 `minecart` 语义；所有矿车字段都在 `apps/game003` app 层严格解析。`loadingResourceId` 固定为 `game003-minecart`，必须能在 `game-loading.generated.ts` 中找到 `assets/game003-s1/minecart.png` 的 URL；`imageSize` 当前为 `369 x 252`，加载后的 Pixi texture 尺寸不一致会显式失败。
@@ -164,6 +166,16 @@ http://127.0.0.1:5208/?skin=1&token=TOKEN&businessid=guest&clienttype=web&jurisd
 ## Reel 边界
 
 `game003` 使用 `assets/gamecfg003/gameconfig.json` 中的本地公开轮带 `bg-reel01` 进行普通 reel 滚动。服务器返回的 scene 只作为本轮目标可见窗口叠加进临时 strip；如果目标窗口无法在本地公开轮带反查 stop y，不作为 live spin 失败条件。未知 symbol code 或当前资源缺失的 paytable symbol 仍然显式失败。
+
+## bg-gencoins / CO 金额显示
+
+`bg-gencoins` 是 `game003` 当前用于提供 CO coin amount 的组件名，只在 app 层配置和识别。`logiccore` 只解析通用 `clientData.otherScenes[]`，`gameframeworks` 只暴露通用 `getComponentOtherScenesByName(...)` facade，shared 包不硬编码 `bg-gencoins`、`CO` 或 coin amount 规则。
+
+live spin 第 0 step 如果触发 `bg-gencoins`，`bg-gencoins.basicComponentData.usedOtherScenes` 第一版必须刚好指向当前 step 的一个 `otherScene`。该矩阵和目标 scene 一样是 x 优先结构：`otherScene[x][y]` 对应 `targetScene[x][y]` 同一格。
+
+目标 scene 中每个 `CO` cell 都必须在同坐标 `otherScene[x][y]` 上有 positive integer amount，显示文本为 raw 数字，例如 `150` 显示为 `150`，不走 `formatServerUsdAmount(...)`，不会显示 `$1.50`。非 `CO` cell 的 `otherScene[x][y]` 第一版必须为 `0`；如果未来服务端定义其它语义，需要先改合同和测试，不能提前静默兼容。
+
+`game-adapter.ts` 会在主转轮开始前解析 coin overlay 数据；缺少 `otherScenes`、缺少 `usedOtherScenes`、索引越界、矩阵尺寸不匹配、CO 缺金额、非 CO 带非零金额、文字配置缺失或可见 symbol geometry 缺失都会显式失败。spin 落停并通过 target scene 校验后才显示 CO 金额；下一次 spin 开始、重新应用 default scene 或销毁 adapter 时会清理旧文本；viewport resize 后会按当前可见 symbol geometry 重新定位。
 
 ## bg-bar 播放
 

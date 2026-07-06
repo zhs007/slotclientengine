@@ -26,6 +26,7 @@ export {
 export { shouldCollectFinalResult } from "./collect.js";
 export {
   findComponentSteps,
+  getComponentOtherScenesByName,
   getComponentResultsByName,
   getComponentScenesByName,
   getComponentWinResultGroupsByName,
@@ -41,6 +42,7 @@ export type {
   LogicGameConfig,
   LogicComponent,
   LogicReels,
+  OtherSceneMatrix,
   ReelStopYOptions,
   SceneMatrix,
   SlotGameAdapter,

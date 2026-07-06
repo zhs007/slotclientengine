@@ -28,6 +28,15 @@ describe("logic list game", () => {
       gameLayer,
       overlay,
       getState: () => state,
+      getViewport: () => ({
+        pageSize: { width: 1000, height: 1000 },
+        frameDesignSize: { width: 1000, height: 1000 },
+        scale: 1,
+        cssSize: { width: 1000, height: 1000 },
+        offsetX: 0,
+        offsetY: 0,
+      }),
+      onViewportChange: () => () => undefined,
     });
     adapter.applyInitialState({ userInfo: {}, balance: 100 });
     adapter.playSpin(

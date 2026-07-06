@@ -1,6 +1,6 @@
 import type {
   SlotcraftClientLike,
-  SlotUiLiveConfig
+  SlotUiLiveConfig,
 } from "@slotclientengine/uiframeworks";
 import type { ViewerScenario } from "./scenarios.js";
 
@@ -48,7 +48,9 @@ export class ViewerMockClient implements SlotcraftClientLike {
     if (!this.#connected) {
       throw new Error("mock client must connect before enterGame.");
     }
-    return Object.freeze({ gamecode: gamecode ?? this.#live.gamecode ?? "mock-game" });
+    return Object.freeze({
+      gamecode: gamecode ?? this.#live.gamecode ?? "mock-game",
+    });
   }
 
   async spin(params: SpinParams): Promise<unknown> {
@@ -59,7 +61,7 @@ export class ViewerMockClient implements SlotcraftClientLike {
     return createViewerMockSpinResult({
       totalwin: this.#scenario.mockTotalWin,
       bet: Number.isFinite(params.bet) ? Number(params.bet) : 1,
-      lines: Number.isFinite(params.lines) ? Number(params.lines) : 10
+      lines: Number.isFinite(params.lines) ? Number(params.lines) : 10,
     });
   }
 
@@ -69,7 +71,11 @@ export class ViewerMockClient implements SlotcraftClientLike {
 
   disconnect(): void {
     this.#connected = false;
-    this.emit("disconnect", { code: 1000, reason: "mock disconnect", wasClean: true });
+    this.emit("disconnect", {
+      code: 1000,
+      reason: "mock disconnect",
+      wasClean: true,
+    });
   }
 
   on(event: string, callback: Listener): void {
@@ -101,13 +107,15 @@ export class ViewerMockClient implements SlotcraftClientLike {
       defaultScene: [
         [1, 2, 3],
         [4, 5, 6],
-        [7, 8, 9]
-      ]
+        [7, 8, 9],
+      ],
     });
   }
 }
 
-export function createViewerMockClient(options: ViewerMockClientOptions): ViewerMockClient {
+export function createViewerMockClient(
+  options: ViewerMockClientOptions,
+): ViewerMockClient {
   return new ViewerMockClient(options);
 }
 
@@ -122,7 +130,7 @@ export function createViewerMockSpinResult(options: {
     totalwin: options.totalwin,
     results: stepCount,
     bet: options.bet,
-    lines: options.lines
+    lines: options.lines,
   });
 }
 
@@ -137,17 +145,21 @@ export function createViewerMockGmi(
       results: Array.from({ length: stepCount }, (_item, index) =>
         createStep(index, totalwin),
       ),
-      finished: true
-    }
+      finished: true,
+    },
   });
 }
 
-function createStep(index: number, totalwin: number): Readonly<Record<string, unknown>> {
+function createStep(
+  index: number,
+  totalwin: number,
+): Readonly<Record<string, unknown>> {
   return Object.freeze({
     coinWin: totalwin,
     cashWin: totalwin,
     clientData: {
       scenes: [createScene(index + 1)],
+      otherScenes: [],
       results:
         totalwin > 0
           ? [
@@ -156,16 +168,16 @@ function createStep(index: number, totalwin: number): Readonly<Record<string, un
                 coinWin: totalwin,
                 cashWin: totalwin,
                 type: "line",
-                symbol: 7
-              }
+                symbol: 7,
+              },
             ]
           : [],
       curGameMod: "base",
       curGameModParam: {
         historyComponents: [],
-        mapComponents: {}
-      }
-    }
+        mapComponents: {},
+      },
+    },
   });
 }
 
@@ -174,9 +186,9 @@ function createScene(seed: number): Readonly<Record<string, unknown>> {
     values: [
       { values: [seed + 1, 2, 3] },
       { values: [4, seed + 5, 6] },
-      { values: [7, 8, seed + 9] }
+      { values: [7, 8, seed + 9] },
     ],
     indexes: [],
-    validRow: []
+    validRow: [],
   });
 }

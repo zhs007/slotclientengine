@@ -2,6 +2,7 @@ import { LogicParseError } from "./errors";
 import {
   BasicComponentData,
   LogicComponent,
+  OtherSceneMatrix,
   ParsedGameLogicStepData,
   SceneMatrix,
   WinResult,
@@ -45,6 +46,7 @@ export function buildLogicComponent(
       raw,
       hasBasicComponentData: false,
       usedSceneIndexes: [],
+      usedOtherSceneIndexes: [],
       usedResultIndexes: [],
     });
   }
@@ -57,6 +59,10 @@ export function buildLogicComponent(
     basicComponentData.usedScenes,
     `step[${step.index}].mapComponents.${name}.basicComponentData.usedScenes`,
   );
+  const usedOtherSceneIndexes = assertNonNegativeIntegerArray(
+    basicComponentData.usedOtherScenes,
+    `step[${step.index}].mapComponents.${name}.basicComponentData.usedOtherScenes`,
+  );
   const usedResultIndexes = assertNonNegativeIntegerArray(
     basicComponentData.usedResults,
     `step[${step.index}].mapComponents.${name}.basicComponentData.usedResults`,
@@ -66,6 +72,13 @@ export function buildLogicComponent(
     usedSceneIndexes,
     step.scenes.length,
     "scene",
+    step.index,
+    name,
+  );
+  assertIndexesInRange(
+    usedOtherSceneIndexes,
+    step.otherScenes.length,
+    "otherScene",
     step.index,
     name,
   );
@@ -83,6 +96,7 @@ export function buildLogicComponent(
     hasBasicComponentData: true,
     basicComponentData,
     usedSceneIndexes,
+    usedOtherSceneIndexes,
     usedResultIndexes,
   });
 }
@@ -99,6 +113,21 @@ export function getComponentScenesForStep(
 
   return freezeArray(
     component.usedSceneIndexes.map((index) => step.scenes[index]),
+  );
+}
+
+export function getComponentOtherScenesForStep(
+  step: ParsedGameLogicStepData,
+  name: string,
+): readonly OtherSceneMatrix[] {
+  const component = buildLogicComponent(step, name);
+
+  if (component === undefined || !component.hasBasicComponentData) {
+    return freezeArray([]);
+  }
+
+  return freezeArray(
+    component.usedOtherSceneIndexes.map((index) => step.otherScenes[index]),
   );
 }
 
@@ -120,7 +149,7 @@ export function getComponentResultsForStep(
 function assertIndexesInRange(
   indexes: readonly number[],
   length: number,
-  target: "scene" | "result",
+  target: "scene" | "otherScene" | "result",
   stepIndex: number,
   componentName: string,
 ): void {
@@ -137,6 +166,7 @@ function freezeComponent(component: LogicComponent): LogicComponent {
   return Object.freeze({
     ...component,
     usedSceneIndexes: freezeArray(component.usedSceneIndexes),
+    usedOtherSceneIndexes: freezeArray(component.usedOtherSceneIndexes),
     usedResultIndexes: freezeArray(component.usedResultIndexes),
   });
 }

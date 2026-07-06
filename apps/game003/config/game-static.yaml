@@ -161,6 +161,18 @@ skins:
           fill: "#fff7d6"
           stroke: "#5a2500"
           strokeWidth: 5
+      game003CoinOverlay:
+        # bg-gencoins 是服务端当前用于提供 CO 金额矩阵的组件名；只允许 app 层识别该语义。
+        componentName: bg-gencoins
+        # coinSymbol 必须能在 assets/gamecfg003/gameconfig.json 的 symbolCodes 中找到。
+        coinSymbol: CO
+        text:
+          # 金额文本锚到 CO symbol cell 中心，按 cellHeight 做 y 偏移。
+          yOffsetRatioFromCellCenter: 0.08
+          fontSize: 32
+          fill: "#fff7d6"
+          stroke: "#5a2500"
+          strokeWidth: 4
       game003MinecartInteraction:
         loadingResourceId: game003-minecart
         imageSize:

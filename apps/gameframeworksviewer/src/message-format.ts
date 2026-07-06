@@ -1,5 +1,6 @@
 import {
   findComponentSteps,
+  getComponentOtherScenesByName,
   getComponentResultsByName,
   getComponentScenesByName,
   type GameLogic,
@@ -23,16 +24,20 @@ export function formatLogicMessage(
 
   for (const step of options.logic.getSteps()) {
     lines.push(
-      `step[${step.getIndex()}] cashWin=${step.getCashWin()} coinWin=${step.getCoinWin()} scenes=${step.getSceneCount()} results=${step.getResultCount()}`,
+      `step[${step.getIndex()}] cashWin=${step.getCashWin()} coinWin=${step.getCoinWin()} scenes=${step.getSceneCount()} otherScenes=${step.getOtherSceneCount()} results=${step.getResultCount()}`,
     );
   }
 
   for (const name of options.componentNames) {
     const steps = findComponentSteps(options.logic, name);
     const sceneCount = getComponentScenesByName(options.logic, name).length;
+    const otherSceneCount = getComponentOtherScenesByName(
+      options.logic,
+      name,
+    ).length;
     const resultCount = getComponentResultsByName(options.logic, name).length;
     lines.push(
-      `component ${name}: steps=${steps.length === 0 ? "none" : steps.join(",")} scenes=${sceneCount} results=${resultCount}`,
+      `component ${name}: steps=${steps.length === 0 ? "none" : steps.join(",")} scenes=${sceneCount} otherScenes=${otherSceneCount} results=${resultCount}`,
     );
   }
 

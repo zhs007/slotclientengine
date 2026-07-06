@@ -2,7 +2,7 @@ import { createDemoSlotGameAdapter } from "../src/demo-game.js";
 import type {
   SlotGameMountContext,
   SlotUiSpinResult,
-  SlotUiStateSnapshot
+  SlotUiStateSnapshot,
 } from "@slotclientengine/uiframeworks";
 
 describe("demo game adapter", () => {
@@ -16,8 +16,8 @@ describe("demo game adapter", () => {
       balance: 88,
       defaultScene: [
         [9, 8, 7],
-        [6, 5, 4]
-      ]
+        [6, 5, 4],
+      ],
     });
     expect(root.textContent).toContain("Balance 88.00");
     adapter.applySpinResult(createSpinResult());
@@ -40,7 +40,16 @@ function createContext(): SlotGameMountContext {
     frame,
     gameLayer,
     overlay,
-    getState: () => createState()
+    getState: () => createState(),
+    getViewport: () => ({
+      pageSize: { width: 941, height: 1672 },
+      frameDesignSize: { width: 941, height: 1672 },
+      scale: 1,
+      cssSize: { width: 941, height: 1672 },
+      offsetX: 0,
+      offsetY: 0,
+    }),
+    onViewportChange: () => () => undefined,
   };
 }
 
@@ -59,7 +68,7 @@ function createState(
     fastMode: false,
     autoMode: false,
     error: null,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -73,8 +82,8 @@ function createSpinResult(): SlotUiSpinResult {
     logic: {
       getDefaultScene: () => [
         [1, 1, 1],
-        [2, 2, 2]
-      ]
-    } as unknown as SlotUiSpinResult["logic"]
+        [2, 2, 2],
+      ],
+    } as unknown as SlotUiSpinResult["logic"],
   };
 }

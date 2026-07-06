@@ -48,6 +48,7 @@ export interface ComponentStatsSnapshot {
   withBasicComponentData: number;
   withoutBasicComponentData: number;
   usedSceneCount: number;
+  usedOtherSceneCount: number;
   usedResultCount: number;
 }
 
@@ -110,7 +111,10 @@ export interface GameplayStatsSnapshot {
   coinWinResultCount: number;
   coinWinResultProbability: number;
   components: ComponentStatsSnapshot[];
-  resultFields: Record<ResultDistributionField, ResultFieldDistributionSnapshot>;
+  resultFields: Record<
+    ResultDistributionField,
+    ResultFieldDistributionSnapshot
+  >;
   curGameModDistribution: CurGameModDistributionSnapshot[];
   missingCurGameModSteps: number;
   missingCurGameModStepProbability: number;
@@ -128,6 +132,7 @@ interface ComponentStatsState {
   withBasicComponentData: number;
   withoutBasicComponentData: number;
   usedSceneCount: number;
+  usedOtherSceneCount: number;
   usedResultCount: number;
 }
 
@@ -270,6 +275,8 @@ export class GameplayStatsAccumulator {
       for (const componentName of historyComponents) {
         const component = readComponent(step, componentName);
         const componentScenes = step.getComponentScenes(componentName);
+        const componentOtherScenes =
+          step.getComponentOtherScenes(componentName);
         const componentResults = step.getComponentResults(componentName);
         const componentStats = ensureComponentStats(
           next.components,
@@ -283,6 +290,7 @@ export class GameplayStatsAccumulator {
           componentStats.withoutBasicComponentData += 1;
         }
         componentStats.usedSceneCount += componentScenes.length;
+        componentStats.usedOtherSceneCount += componentOtherScenes.length;
         componentStats.usedResultCount += componentResults.length;
 
         stepComponentCounts.set(
@@ -344,14 +352,18 @@ export function outputGameplayStats(
       snapshot.winningSpinProbability,
     )}`,
   );
-  output(`winningSpinPercent: ${formatPercent(snapshot.winningSpinProbability)}`);
+  output(
+    `winningSpinPercent: ${formatPercent(snapshot.winningSpinProbability)}`,
+  );
   output(`zeroWinSpins: ${snapshot.zeroWinSpins}`);
   output(
     `zeroWinSpinProbability: ${formatProbability(
       snapshot.zeroWinSpinProbability,
     )}`,
   );
-  output(`zeroWinSpinPercent: ${formatPercent(snapshot.zeroWinSpinProbability)}`);
+  output(
+    `zeroWinSpinPercent: ${formatPercent(snapshot.zeroWinSpinProbability)}`,
+  );
   output(`multiStepSpins: ${snapshot.multiStepSpins}`);
   output(
     `multiStepSpinProbability: ${formatProbability(
@@ -375,9 +387,7 @@ export function outputGameplayStats(
     output(
       `${formatWinMultiplierOutputName(bucket.label)}: ${
         bucket.spinCount
-      } ${formatPercent(
-        bucket.spinProbability,
-      )}`,
+      } ${formatPercent(bucket.spinProbability)}`,
     );
   }
 
@@ -385,7 +395,9 @@ export function outputGameplayStats(
   output(`avgStepsPerSpin: ${formatProbability(snapshot.avgStepsPerSpin)}`);
   output(`stepProbabilityDenominator: ${snapshot.totalSteps}`);
   output(`stepWinCount: ${snapshot.stepWinCount}`);
-  output(`stepWinProbability: ${formatProbability(snapshot.stepWinProbability)}`);
+  output(
+    `stepWinProbability: ${formatProbability(snapshot.stepWinProbability)}`,
+  );
   output(`stepWinPercent: ${formatPercent(snapshot.stepWinProbability)}`);
   output(`stepWithResultCount: ${snapshot.stepWithResultCount}`);
   output(
@@ -422,7 +434,7 @@ export function outputGameplayStats(
     output("无组件触发");
   } else {
     output(
-      "name triggeredSpins spinTriggerPercent triggeredSteps stepTriggerPercent totalTriggers duplicateTriggerSteps duplicateTriggers winsWhenTriggered winPercentWhenTriggered avgCashWinWhenTriggered avgCoinWinWhenTriggered withBasicComponentData withoutBasicComponentData usedSceneCount usedResultCount",
+      "name triggeredSpins spinTriggerPercent triggeredSteps stepTriggerPercent totalTriggers duplicateTriggerSteps duplicateTriggers winsWhenTriggered winPercentWhenTriggered avgCashWinWhenTriggered avgCoinWinWhenTriggered withBasicComponentData withoutBasicComponentData usedSceneCount usedOtherSceneCount usedResultCount",
     );
     for (const component of snapshot.components) {
       output(
@@ -442,6 +454,7 @@ export function outputGameplayStats(
           component.withBasicComponentData,
           component.withoutBasicComponentData,
           component.usedSceneCount,
+          component.usedOtherSceneCount,
           component.usedResultCount,
         ].join(" "),
       );
@@ -685,6 +698,7 @@ function ensureComponentStats(
     withBasicComponentData: 0,
     withoutBasicComponentData: 0,
     usedSceneCount: 0,
+    usedOtherSceneCount: 0,
     usedResultCount: 0,
   };
   components.set(name, created);
@@ -815,6 +829,7 @@ function snapshotComponents(
       withBasicComponentData: component.withBasicComponentData,
       withoutBasicComponentData: component.withoutBasicComponentData,
       usedSceneCount: component.usedSceneCount,
+      usedOtherSceneCount: component.usedOtherSceneCount,
       usedResultCount: component.usedResultCount,
     }))
     .sort((left, right) => {
@@ -842,7 +857,10 @@ function snapshotResultFields(
               state.totalResults,
             ),
             spinCount: entry.spinCount,
-            spinProbability: divideOrZero(entry.spinCount, state.completedSpins),
+            spinProbability: divideOrZero(
+              entry.spinCount,
+              state.completedSpins,
+            ),
           }))
           .sort((left, right) => {
             const countDiff = right.resultCount - left.resultCount;

@@ -4,6 +4,7 @@ import type {
   ComponentWinResultGroup,
   ComponentWinResultPositionValidator,
   GameLogic,
+  OtherSceneMatrix,
   SceneMatrix,
   WinResult,
 } from "./types.js";
@@ -46,6 +47,20 @@ export function getComponentResultsByName(
   return Object.freeze(
     steps.flatMap((stepIndex) =>
       Array.from(logic.getComponentResults(stepIndex, componentName)),
+    ),
+  );
+}
+
+export function getComponentOtherScenesByName(
+  logic: GameLogic,
+  name: string,
+  options: { readonly stepIndex?: number } = {},
+): readonly OtherSceneMatrix[] {
+  const componentName = validateComponentName(name);
+  const steps = getTargetStepIndexes(logic, componentName, options.stepIndex);
+  return Object.freeze(
+    steps.flatMap((stepIndex) =>
+      Array.from(logic.getComponentOtherScenes(stepIndex, componentName)),
     ),
   );
 }

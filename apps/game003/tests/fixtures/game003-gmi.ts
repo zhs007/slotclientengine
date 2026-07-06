@@ -134,6 +134,62 @@ export const GAME003_SAMPLE_SPIN_RESULT = Object.freeze({
   results: 1,
 });
 
+export const GAME003_SAMPLE_COIN_OTHER_SCENE = Object.freeze([
+  Object.freeze([0, 0, 0, 0, 0]),
+  Object.freeze([0, 2, 1, 150, 0]),
+  Object.freeze([0, 0, 0, 0, 0]),
+  Object.freeze([0, 0, 0, 0, 0]),
+  Object.freeze([0, 0, 0, 0, 0]),
+]) satisfies SceneMatrix;
+
+export const GAME003_SAMPLE_COIN_SPIN_RESULT = Object.freeze({
+  ...GAME003_SAMPLE_SPIN_RESULT,
+  gmi: Object.freeze({
+    ...GAME003_SAMPLE_SPIN_RESULT.gmi,
+    replyPlay: Object.freeze({
+      ...GAME003_SAMPLE_SPIN_RESULT.gmi.replyPlay,
+      results: Object.freeze([
+        Object.freeze({
+          ...GAME003_SAMPLE_SPIN_RESULT.gmi.replyPlay.results[0],
+          clientData: Object.freeze({
+            ...GAME003_SAMPLE_SPIN_RESULT.gmi.replyPlay.results[0].clientData,
+            otherScenes: Object.freeze([
+              toSgc7Scene(GAME003_SAMPLE_COIN_OTHER_SCENE),
+            ]),
+            curGameModParam: Object.freeze({
+              ...GAME003_SAMPLE_SPIN_RESULT.gmi.replyPlay.results[0].clientData
+                .curGameModParam,
+              historyComponents: Object.freeze(["bg-spin", "bg-gencoins"]),
+              historyComponentsEx: Object.freeze(["bg-spin", "bg-gencoins"]),
+              mapComponents: Object.freeze({
+                ...GAME003_SAMPLE_SPIN_RESULT.gmi.replyPlay.results[0]
+                  .clientData.curGameModParam.mapComponents,
+                "bg-gencoins": Object.freeze({
+                  basicComponentData: Object.freeze({
+                    usedScenes: Object.freeze([]),
+                    usedOtherScenes: Object.freeze([0]),
+                    usedResults: Object.freeze([]),
+                    usedPrizeScenes: Object.freeze([]),
+                    srcScenes: Object.freeze([]),
+                    pos: Object.freeze([]),
+                    mapUsedSPGrid: Object.freeze({}),
+                    coinWin: 0,
+                    cashWin: 0,
+                    targetScene: 0,
+                    runIndex: 0,
+                    output: 0,
+                    strOutput: "",
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      ]),
+    }),
+  }),
+});
+
 export const GAME003_SAMPLE_WIN_SPIN_RESULT = Object.freeze({
   gmi: Object.freeze({
     defaultScene: toSgc7Scene(GAME003_DEFAULT_SCENE),

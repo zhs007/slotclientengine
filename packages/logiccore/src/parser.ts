@@ -138,6 +138,15 @@ function parseStep(step: unknown, index: number): ParsedGameLogicStepData {
       `gmi.replyPlay.results[${index}].clientData.scenes[${sceneIndex}]`,
     ),
   );
+  const otherScenes = assertArray(
+    clientData.otherScenes,
+    `gmi.replyPlay.results[${index}].clientData.otherScenes`,
+  ).map((otherScene, otherSceneIndex) =>
+    parseScene(
+      otherScene,
+      `gmi.replyPlay.results[${index}].clientData.otherScenes[${otherSceneIndex}]`,
+    ),
+  );
   const results = assertArray(
     clientData.results,
     `gmi.replyPlay.results[${index}].clientData.results`,
@@ -167,6 +176,7 @@ function parseStep(step: unknown, index: number): ParsedGameLogicStepData {
     ...(curGameMod === undefined ? {} : { curGameMod }),
     curGameModParam: cloneAndFreeze(curGameModParam),
     scenes: freezeArray(scenes),
+    otherScenes: freezeArray(otherScenes),
     results: freezeArray(results),
     historyComponents: assertStringArray(
       curGameModParam.historyComponents,

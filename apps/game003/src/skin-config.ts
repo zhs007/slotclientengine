@@ -11,6 +11,10 @@ import {
   createGame003SymbolScaleMapFromManifest,
   getGame003DisplaySymbolsFromManifest,
 } from "./assets.js";
+import {
+  getGame003CoinOverlayConfig,
+  type Game003CoinOverlayConfig,
+} from "./coin-overlay-config.js";
 import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
 import {
   getGame003MinecartInteractionConfig,
@@ -48,6 +52,7 @@ export interface Game003SkinConfig {
   readonly bgBar: Game003BgBarSkinConfig;
   readonly minecartInteraction: Game003MinecartInteractionConfig;
   readonly winSymbolLoop: Game003WinSymbolLoopConfig;
+  readonly coinOverlay: Game003CoinOverlayConfig;
 }
 
 export interface Game003BgBarSkinConfig {
@@ -152,6 +157,9 @@ const GAME003_SKIN_CONFIGS: Readonly<Record<Game003SkinId, Game003SkinConfig>> =
         game003StaticSkin1.appExtensions,
       ),
       winSymbolLoop: getGame003WinSymbolLoopConfig(
+        game003StaticSkin1.appExtensions,
+      ),
+      coinOverlay: getGame003CoinOverlayConfig(
         game003StaticSkin1.appExtensions,
       ),
     }),
