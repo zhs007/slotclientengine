@@ -1,5 +1,6 @@
 import {
   buildLogicComponent,
+  getComponentOtherScenesForStep,
   getComponentResultsForStep,
   getComponentScenesForStep,
   hasTriggeredComponent,
@@ -10,6 +11,7 @@ import {
   GameLogicMeta,
   GameLogicStep,
   LogicComponent,
+  OtherSceneMatrix,
   ParsedGameLogicData,
   ParsedGameLogicStepData,
   SceneMatrix,
@@ -97,6 +99,10 @@ export class GameLogicModel implements GameLogic {
     return this.getStep(stepIndex).getScene(sceneIndex);
   }
 
+  getOtherScene(stepIndex: number, otherSceneIndex: number): OtherSceneMatrix {
+    return this.getStep(stepIndex).getOtherScene(otherSceneIndex);
+  }
+
   getResult(stepIndex: number, resultIndex: number): WinResult {
     return this.getStep(stepIndex).getResult(resultIndex);
   }
@@ -111,6 +117,13 @@ export class GameLogicModel implements GameLogic {
 
   getComponentScenes(stepIndex: number, name: string): readonly SceneMatrix[] {
     return this.getStep(stepIndex).getComponentScenes(name);
+  }
+
+  getComponentOtherScenes(
+    stepIndex: number,
+    name: string,
+  ): readonly OtherSceneMatrix[] {
+    return this.getStep(stepIndex).getComponentOtherScenes(name);
   }
 
   getComponentResults(stepIndex: number, name: string): readonly WinResult[] {
@@ -168,6 +181,20 @@ export class GameLogicStepModel implements GameLogicStep {
     return this.#data.scenes;
   }
 
+  getOtherSceneCount(): number {
+    return this.#data.otherScenes.length;
+  }
+
+  getOtherScene(index: number): OtherSceneMatrix {
+    assertIndex(index, this.#data.otherScenes.length, "otherScene");
+
+    return this.#data.otherScenes[index];
+  }
+
+  getOtherScenes(): readonly OtherSceneMatrix[] {
+    return this.#data.otherScenes;
+  }
+
   getResultCount(): number {
     return this.#data.results.length;
   }
@@ -192,6 +219,10 @@ export class GameLogicStepModel implements GameLogicStep {
 
   getComponentScenes(name: string): readonly SceneMatrix[] {
     return getComponentScenesForStep(this.#data, name);
+  }
+
+  getComponentOtherScenes(name: string): readonly OtherSceneMatrix[] {
+    return getComponentOtherScenesForStep(this.#data, name);
   }
 
   getComponentResults(name: string): readonly WinResult[] {

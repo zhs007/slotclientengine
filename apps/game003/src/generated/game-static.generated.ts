@@ -301,6 +301,17 @@ export const GAME003_STATIC_CONFIG = Object.freeze({
             strokeWidth: 5,
           },
         },
+        game003CoinOverlay: {
+          componentName: "bg-gencoins",
+          coinSymbol: "CO",
+          text: {
+            yOffsetRatioFromCellCenter: 0.08,
+            fontSize: 32,
+            fill: "#fff7d6",
+            stroke: "#5a2500",
+            strokeWidth: 4,
+          },
+        },
         game003MinecartInteraction: {
           loadingResourceId: "game003-minecart",
           imageSize: { width: 369, height: 252 },

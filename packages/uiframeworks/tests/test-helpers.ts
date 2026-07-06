@@ -50,10 +50,12 @@ export function createMockGameLogic(): GameLogic {
     },
     getSteps: () => [],
     getScene: () => [[1, 2, 3]],
+    getOtherScene: () => [[0, 0, 0]],
     getResult: () => ({ pos: [0, 0] }),
     hasComponent: () => false,
     getComponent: () => undefined,
     getComponentScenes: () => [],
+    getComponentOtherScenes: () => [],
     getComponentResults: () => [],
   };
 }
@@ -68,6 +70,7 @@ export function createGmiFixture(stepCount = 1): Record<string, unknown> {
         cashWin: 0,
         clientData: {
           scenes: [createScene(index + 1)],
+          otherScenes: [],
           results: [],
           curGameMod: "base",
           curGameModParam: {

@@ -27,12 +27,18 @@ const defaultScene = logic.getDefaultScene();
 const randomNumbers = logic.getRandomNumbers();
 const firstStep = logic.getStep(0);
 const firstScene = firstStep.getScene(0);
+const firstOtherScene = firstStep.getOtherScene(0);
 const firstWinResult = firstStep.getResult(0);
 const sameScene = logic.getScene(0, 0);
+const sameOtherScene = logic.getOtherScene(0, 0);
 const sameWinResult = logic.getResult(0, 0);
 
 if (firstStep.hasComponent("bg-spin")) {
   const scenes = firstStep.getComponentScenes("bg-spin");
+}
+
+if (firstStep.hasComponent("bg-gencoins")) {
+  const otherScenes = firstStep.getComponentOtherScenes("bg-gencoins");
 }
 
 const logicFromGmi = createGameLogicFromGmi(gameModuleInfoMessage.gmi, {
@@ -127,9 +133,10 @@ const startY = reels.calculateSpinStartY({
 
 - `gmi.replyPlay.results` 是 step 数组，一次 spin 可能包含多个 step。
 - `step.clientData.scenes` 是当前 step 内的 scene 数组。
+- `step.clientData.otherScenes` 是当前 step 内的附加整数矩阵数组，结构与 scene 相同，具体语义由游戏 app 决定。
 - `step.clientData.results` 是当前 step 内的中奖结算 result 数组。
 - `historyComponents` 决定当前 step 中哪些 component 实际触发。
-- `mapComponents[name].basicComponentData.usedScenes` 和 `usedResults` 决定 component 使用当前 step 中哪些 scene/result。
+- `mapComponents[name].basicComponentData.usedScenes`、`usedOtherScenes` 和 `usedResults` 决定 component 使用当前 step 中哪些 scene/otherScene/result。
 
 ## scene 结构
 
@@ -152,6 +159,15 @@ const startY = reels.calculateSpinStartY({
 
 第一层 index 是 `x`，第二层 index 是 `y`。`logiccore` 不会把 scene 转置成 y 优先，也不会把无效 scene 静默转换成空数组。
 
+`otherScenes` 复用同样的 x 优先矩阵结构：
+
+```ts
+step.getOtherScene(0)[x][y] ===
+  protocol.clientData.otherScenes[0].values[x].values[y];
+```
+
+`logiccore` 只把它解析和冻结为通用整数矩阵，不解释 coin、prize、feature 或其它游戏专属语义。调用方可通过 `getComponentOtherScenes(name)` 或 `logic.getComponentOtherScenes(stepIndex, name)` 按组件名读取 `basicComponentData.usedOtherScenes` 指向的矩阵。
+
 ## 原始数据保留
 
 标准化查询不会裁掉当前未建模的协议字段。以下接口会返回只读快照，避免后续渲染或调试需要时找不到原始上下文：
@@ -167,17 +183,18 @@ const startY = reels.calculateSpinStartY({
 
 ## 错误策略
 
-本包采用 fail-fast 策略。关键字段缺失、类型错误、scene 结构非法、RNG 非整数、step/clientData 结构非法、组件 usedScenes/usedResults 越界等情况会抛 `LogicParseError`。
+本包采用 fail-fast 策略。关键字段缺失、类型错误、scene/otherScene 结构非法、RNG 非整数、step/clientData 结构非法、组件 usedScenes/usedOtherScenes/usedResults 越界等情况会抛 `LogicParseError`。
 
-索引读取接口使用 `RangeError` 表示调用方传入的 step、scene 或 result index 越界：
+索引读取接口使用 `RangeError` 表示调用方传入的 step、scene、otherScene 或 result index 越界：
 
 ```ts
 logic.getStep(999); // RangeError
 logic.getStep(0).getScene(999); // RangeError
+logic.getStep(0).getOtherScene(999); // RangeError
 logic.getStep(0).getResult(999); // RangeError
 ```
 
-`hasComponent(name)` 只根据 `historyComponents` 判断。若某个 name 已触发但 `mapComponents` 缺少同名数据，读取 `getComponent(name)`、`getComponentScenes(name)` 或 `getComponentResults(name)` 时会抛 `LogicParseError`。
+`hasComponent(name)` 只根据 `historyComponents` 判断。若某个 name 已触发但 `mapComponents` 缺少同名数据，读取 `getComponent(name)`、`getComponentScenes(name)`、`getComponentOtherScenes(name)` 或 `getComponentResults(name)` 时会抛 `LogicParseError`。
 
 ## protobuf Any 组件
 
@@ -198,6 +215,7 @@ logic.getStep(0).getResult(999); // RangeError
 - `hasComponent(name)` 返回 `true`
 - `getComponent(name)` 返回 `hasBasicComponentData: false`
 - `getComponentScenes(name)` 返回空数组
+- `getComponentOtherScenes(name)` 返回空数组
 - `getComponentResults(name)` 返回空数组
 - 原始 component 数据保留在 `raw`
 

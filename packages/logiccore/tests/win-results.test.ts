@@ -189,6 +189,7 @@ function createGmi(
       [COMPONENT_NAME]: Object.freeze({
         basicComponentData: Object.freeze({
           usedScenes: Object.freeze([]),
+          usedOtherScenes: Object.freeze([]),
           usedResults: Object.freeze(options.usedResults ?? [0]),
           usedPrizeScenes: Object.freeze([]),
           pos: Object.freeze([]),
@@ -212,6 +213,7 @@ function createGmi(
           cashWin: 0,
           clientData: {
             scenes: [toSgc7Scene(options.scene ?? TARGET_SCENE)],
+            otherScenes: [],
             results,
             curGameMod: "base",
             curGameModParam: {

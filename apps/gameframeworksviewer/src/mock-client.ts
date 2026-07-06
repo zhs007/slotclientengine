@@ -167,6 +167,7 @@ function createStep(
     cashWin: totalwin,
     clientData: {
       scenes: [createScene(index + 1)],
+      otherScenes: [],
       results:
         totalwin > 0
           ? [

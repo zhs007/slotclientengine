@@ -84,7 +84,7 @@ describe("GameplayStatsAccumulator", () => {
     expect(snapshot.cashWinResultCount).toBe(1);
     expect(snapshot.resultFields.type.values).toMatchObject([
       {
-        value: "\"scatter\"",
+        value: '"scatter"',
         resultCount: 1,
         resultProbability: 1,
         spinCount: 1,
@@ -113,9 +113,10 @@ describe("GameplayStatsAccumulator", () => {
             coinWin: 10,
             cashWin: 100,
             results: [createWinResult({ coinWin: 10, cashWin: 100 })],
+            otherScenes: [createScene(99)],
             historyComponents: ["ComponentA", "ComponentA", "PackedOnly"],
             mapComponents: {
-              ComponentA: createBasicComponent([0], [0]),
+              ComponentA: createBasicComponent([0], [0], [0]),
               PackedOnly: createPackedComponent(),
             },
           },
@@ -142,6 +143,7 @@ describe("GameplayStatsAccumulator", () => {
       withBasicComponentData: 2,
       withoutBasicComponentData: 0,
       usedSceneCount: 2,
+      usedOtherSceneCount: 2,
       usedResultCount: 2,
     });
     expect(packedOnly).toMatchObject({
@@ -149,8 +151,13 @@ describe("GameplayStatsAccumulator", () => {
       withBasicComponentData: 0,
       withoutBasicComponentData: 1,
       usedSceneCount: 0,
+      usedOtherSceneCount: 0,
       usedResultCount: 0,
     });
+
+    const output: string[] = [];
+    outputGameplayStats(snapshot, (line) => output.push(line));
+    expect(output.join("\n")).toContain("usedOtherSceneCount");
   });
 
   it("counts one triggered spin when the same component appears in multiple steps", () => {
@@ -276,3 +283,15 @@ describe("GameplayStatsAccumulator", () => {
     expect(stats.snapshot().completedSpins).toBe(0);
   });
 });
+
+function createScene(seed: number): Record<string, unknown> {
+  return {
+    values: [
+      { values: [seed, 1, 2] },
+      { values: [3, seed, 4] },
+      { values: [5, 6, seed] },
+    ],
+    indexes: [],
+    validRow: [],
+  };
+}

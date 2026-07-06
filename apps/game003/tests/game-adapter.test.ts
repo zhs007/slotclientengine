@@ -12,6 +12,7 @@ import {
   GAME003_DEFAULT_SCENE,
   GAME003_SAMPLE_BG_BAR_SPIN_RESULT,
   GAME003_SAMPLE_BG_BAR_WIN_SPIN_RESULT,
+  GAME003_SAMPLE_COIN_SPIN_RESULT,
   GAME003_SAMPLE_WIN_SPIN_RESULT,
   GAME003_SPIN_SCENE,
   GAME003_WIN_SPIN_SCENE,
@@ -25,6 +26,7 @@ import type {
   Game003BgBarFeature,
   Game003BgBarSpinPlan,
 } from "../src/bg-bar-sequence.js";
+import type { Game003CoinOverlayRuntime } from "../src/coin-overlay-runtime.js";
 import {
   createGame003Adapter,
   type Game003AdapterOptions,
@@ -208,6 +210,89 @@ describe("game003 adapter", () => {
     await spinPromise;
     expect(resolved).toBe(true);
     expect(runtime.currentScene).toEqual(GAME003_SPIN_SCENE);
+  });
+
+  it("shows CO coin overlay after reel stop and clears it before the next spin", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const coinOverlay = new FakeCoinOverlayRuntime();
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createCoinOverlayRuntime: () => coinOverlay.asRuntime(),
+    });
+    await adapter.mount(createMountContext());
+
+    const firstSpin = Promise.resolve(adapter.playSpin(createCoinLogic()));
+    expect(coinOverlay.clearCount).toBe(1);
+    expect(coinOverlay.shows).toEqual([]);
+
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await firstSpin;
+    expect(coinOverlay.shows).toEqual([
+      [
+        { x: 1, y: 1, amount: 2, text: "2" },
+        { x: 1, y: 2, amount: 1, text: "1" },
+        { x: 1, y: 3, amount: 150, text: "150" },
+      ],
+    ]);
+
+    const secondSpin = Promise.resolve(
+      adapter.playSpin(createLogic(GAME003_SPIN_SCENE)),
+    );
+    expect(coinOverlay.clearCount).toBe(2);
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await secondSpin;
+    expect(coinOverlay.shows.at(-1)).toEqual([]);
+  });
+
+  it("clears CO coin overlay when applying initial state", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const coinOverlay = new FakeCoinOverlayRuntime();
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createCoinOverlayRuntime: () => coinOverlay.asRuntime(),
+    });
+    await adapter.mount(createMountContext());
+
+    adapter.applyInitialState?.({
+      userInfo: {},
+      balance: 100,
+      defaultScene: GAME003_DEFAULT_SCENE,
+    });
+
+    expect(coinOverlay.clearCount).toBe(1);
+    expect(runtime.appliedScenes).toEqual([GAME003_DEFAULT_SCENE]);
+  });
+
+  it("fails CO overlay protocol errors before starting the reels", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const coinOverlay = new FakeCoinOverlayRuntime();
+    const invalidResult = cloneCoinSpinResult();
+    invalidResult.gmi.replyPlay.results[0].clientData.otherScenes[0].values[1].values[1] = 0;
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createCoinOverlayRuntime: () => coinOverlay.asRuntime(),
+    });
+    await adapter.mount(createMountContext());
+
+    expect(() => adapter.playSpin(createCoinLogic(invalidResult))).toThrow(
+      /positive coin amount/,
+    );
+    expect(runtime.spinTargets).toEqual([]);
+    expect(coinOverlay.clearCount).toBe(1);
   });
 
   it("skips minecart when terminal bg-bar feature is normal", async () => {
@@ -1005,6 +1090,15 @@ function createWinLogic(): GameLogic {
   }).logic;
 }
 
+function createCoinLogic(
+  spinResult: unknown = GAME003_SAMPLE_COIN_SPIN_RESULT,
+): GameLogic {
+  return createSlotGameLogicResult(spinResult, {
+    bet: { bet: 5, lines: 10, times: 1 },
+    userInfo: { balance: 1000, gameid: 69003 },
+  }).logic;
+}
+
 function createBgBarLogic(): GameLogic {
   return createSlotGameLogicResult(GAME003_SAMPLE_BG_BAR_SPIN_RESULT, {
     bet: { bet: 5, lines: 10, times: 1 },
@@ -1058,6 +1152,10 @@ function createBgBarWinLogic(): GameLogic {
     bet: { bet: 5, lines: 10, times: 1 },
     userInfo: { balance: 1000, gameid: 69003 },
   }).logic;
+}
+
+function cloneCoinSpinResult(): any {
+  return JSON.parse(JSON.stringify(GAME003_SAMPLE_COIN_SPIN_RESULT));
 }
 
 class FakeRuntime {
@@ -1208,7 +1306,9 @@ class FakeRuntime {
         this.layoutCalls.push(layout);
       },
       config: {} as any,
-      gameConfig: {} as any,
+      gameConfig: {
+        getSymbolCode: (symbol: string) => (symbol === "CO" ? 11 : undefined),
+      } as any,
       layout: createGame003ReelLayout(),
       get layerLayout(): any {
         return (
@@ -1401,6 +1501,42 @@ class FakeMinecartRuntime {
       this.phase === "symbol-hold" ||
       this.phase === "cart-exit"
     );
+  }
+}
+
+class FakeCoinOverlayRuntime {
+  readonly container = new Container();
+  readonly shows: {
+    readonly x: number;
+    readonly y: number;
+    readonly amount: number;
+    readonly text: string;
+  }[][] = [];
+  clearCount = 0;
+  refreshCount = 0;
+  destroyed = false;
+
+  asRuntime(): Game003CoinOverlayRuntime {
+    return {
+      container: this.container,
+      show: (items) => {
+        this.shows.push(items.map((item) => ({ ...item })));
+      },
+      clear: () => {
+        this.clearCount += 1;
+      },
+      refresh: () => {
+        this.refreshCount += 1;
+      },
+      getSnapshot: () => ({
+        phase: "idle",
+        items: [],
+        texts: [],
+      }),
+      destroy: () => {
+        this.destroyed = true;
+      },
+    };
   }
 }
 

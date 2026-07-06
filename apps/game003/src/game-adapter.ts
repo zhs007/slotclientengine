@@ -24,6 +24,14 @@ import {
   type Game003BgBarRuntime,
 } from "./bg-bar-runtime.js";
 import { createGame003BgBarSpinPlan } from "./bg-bar-sequence.js";
+import {
+  createGame003CoinOverlayRuntime,
+  type Game003CoinOverlayRuntime,
+} from "./coin-overlay-runtime.js";
+import {
+  createGame003CoinOverlayItems,
+  type Game003CoinOverlayItem,
+} from "./coin-overlay-sequence.js";
 import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
 import {
   GAME003_ASSET_SIZE,
@@ -106,6 +114,9 @@ export interface Game003AdapterOptions {
     minecartTexture: Texture,
     symbolAssets: SymbolAssetMap,
   ) => Game003MinecartInteractionRuntime;
+  readonly createCoinOverlayRuntime?: (
+    reelRuntime: Game003ReelRuntime,
+  ) => Game003CoinOverlayRuntime;
   readonly createWinAmountPlayer?: (
     layout: Game003Layout,
   ) => WinAmountAnimationPlayer;
@@ -113,6 +124,7 @@ export interface Game003AdapterOptions {
 
 interface PendingAnimation {
   readonly targetScene: ReturnType<typeof validateGame003Scene>;
+  readonly coinOverlayItems: readonly Game003CoinOverlayItem[];
   phase: "spinning" | "win-sequence";
   winQueue: readonly Game003WinSymbolGroup[];
   winSequenceComplete: boolean;
@@ -157,6 +169,9 @@ class Game003PixiAdapter implements SlotGameAdapter {
     minecartTexture: Texture,
     symbolAssets: SymbolAssetMap,
   ) => Game003MinecartInteractionRuntime;
+  readonly #createCoinOverlayRuntime: (
+    reelRuntime: Game003ReelRuntime,
+  ) => Game003CoinOverlayRuntime;
   readonly #createWinAmountPlayer: (
     layout: Game003Layout,
   ) => WinAmountAnimationPlayer;
@@ -167,6 +182,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
   #runtime: Game003ReelRuntime | null = null;
   #bgBarRuntime: Game003BgBarRuntime | null = null;
   #minecartRuntime: Game003MinecartInteractionRuntime | null = null;
+  #coinOverlayRuntime: Game003CoinOverlayRuntime | null = null;
   #winAmountPlayer: WinAmountAnimationPlayer | null = null;
   #winSymbolLoopRuntime: Game003WinSymbolLoopRuntime | null = null;
   #pendingAnimation: PendingAnimation | null = null;
@@ -217,6 +233,13 @@ class Game003PixiAdapter implements SlotGameAdapter {
           minecartTexture,
           symbolAssets,
         }));
+    this.#createCoinOverlayRuntime =
+      options.createCoinOverlayRuntime ??
+      ((reelRuntime) =>
+        createGame003CoinOverlayRuntime({
+          reelRuntime,
+          config: this.#skin.coinOverlay,
+        }));
     this.#createWinAmountPlayer =
       options.createWinAmountPlayer ?? createGame003WinAmountPlayer;
   }
@@ -263,6 +286,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
       }),
     );
     const winAmountPlayer = this.#createWinAmountPlayer(layout);
+    const coinOverlayRuntime = this.#createCoinOverlayRuntime(runtime);
     const winSymbolLoopRuntime = createGame003WinSymbolLoopRuntime({
       reelRuntime: runtime,
       config: this.#skin.winSymbolLoop,
@@ -277,6 +301,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
       bgBarRuntime.container,
       worldSprites.mainReelBackground,
       runtime.mainReelsLayer,
+      coinOverlayRuntime.container,
       winSymbolLoopRuntime.container,
       minecartRuntime.container,
       winAmountPlayer.container,
@@ -291,6 +316,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#runtime = runtime;
     this.#bgBarRuntime = bgBarRuntime;
     this.#minecartRuntime = minecartRuntime;
+    this.#coinOverlayRuntime = coinOverlayRuntime;
     this.#winAmountPlayer = winAmountPlayer;
     this.#winSymbolLoopRuntime = winSymbolLoopRuntime;
     const requestWinAmountAdvance = () => {
@@ -308,6 +334,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
 
   applyInitialState(state: SlotGameInitialState): void {
     const runtime = this.#requireRuntime();
+    this.#requireCoinOverlayRuntime().clear();
     if (state.defaultScene === undefined) {
       return;
     }
@@ -322,10 +349,25 @@ class Game003PixiAdapter implements SlotGameAdapter {
     if (this.#pendingAnimation) {
       throw new Error("game003 adapter animation is already in progress.");
     }
+    this.#requireCoinOverlayRuntime().clear();
     const targetScene = validateGame003Scene(
       logic.getStep(0).getScene(0),
       "spin main scene",
     );
+    const coinSymbolCode = runtime.gameConfig.getSymbolCode(
+      this.#skin.coinOverlay.coinSymbol,
+    );
+    if (coinSymbolCode === undefined) {
+      throw new Error(
+        `game003 coin symbol "${this.#skin.coinOverlay.coinSymbol}" is missing from game config.`,
+      );
+    }
+    const coinOverlayItems = createGame003CoinOverlayItems({
+      logic,
+      targetScene,
+      coinSymbolCode,
+      componentName: this.#skin.coinOverlay.componentName,
+    });
     const winQueue = createGame003WinSymbolSequence(logic, targetScene);
     const bgBarPlan = createGame003BgBarSpinPlan(logic);
     const minecartReturnExpected =
@@ -344,6 +386,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     return new Promise((resolve, reject) => {
       this.#pendingAnimation = {
         targetScene,
+        coinOverlayItems,
         phase: "spinning",
         winQueue,
         winSequenceComplete: winQueue.length === 0,
@@ -375,6 +418,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#app?.ticker.stop();
     this.#winSymbolLoopRuntime?.destroy();
     this.#winAmountPlayer?.destroy();
+    this.#coinOverlayRuntime?.destroy();
     this.#minecartRuntime?.destroy();
     this.#bgBarRuntime?.destroy();
     this.#app?.canvas.remove();
@@ -386,6 +430,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     this.#runtime = null;
     this.#bgBarRuntime = null;
     this.#minecartRuntime = null;
+    this.#coinOverlayRuntime = null;
     this.#winAmountPlayer = null;
     this.#winSymbolLoopRuntime = null;
   }
@@ -451,6 +496,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
       pending.targetScene,
       "completed game003 adapter spin",
     );
+    this.#requireCoinOverlayRuntime().show(pending.coinOverlayItems);
     if (pending.winAmountExpected) {
       this.#requireWinAmountPlayer().start({
         betAmountRaw: pending.betAmountRaw,
@@ -593,6 +639,13 @@ class Game003PixiAdapter implements SlotGameAdapter {
     return this.#minecartRuntime;
   }
 
+  #requireCoinOverlayRuntime(): Game003CoinOverlayRuntime {
+    if (!this.#coinOverlayRuntime) {
+      throw new Error("game003 adapter is not mounted.");
+    }
+    return this.#coinOverlayRuntime;
+  }
+
   #requireWinSymbolLoopRuntime(): Game003WinSymbolLoopRuntime {
     if (!this.#winSymbolLoopRuntime) {
       throw new Error("game003 adapter is not mounted.");
@@ -609,6 +662,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
       !this.#runtime ||
       !this.#bgBarRuntime ||
       !this.#minecartRuntime ||
+      !this.#coinOverlayRuntime ||
       !this.#winSymbolLoopRuntime
     ) {
       throw new Error("game003 adapter is not mounted.");
@@ -629,6 +683,11 @@ class Game003PixiAdapter implements SlotGameAdapter {
       this.#runtime.layerLayout.x,
       this.#runtime.layerLayout.y,
     );
+    this.#coinOverlayRuntime.container.position.set(
+      this.#runtime.layerLayout.x,
+      this.#runtime.layerLayout.y,
+    );
+    this.#coinOverlayRuntime.refresh();
     this.#bgBarRuntime.applyLayout(
       createGame003BgBarLayout({ layout, config: this.#skin.bgBar }),
     );
