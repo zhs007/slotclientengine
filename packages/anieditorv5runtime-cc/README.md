@@ -379,23 +379,20 @@ const disposeComplete = player.onPlaybackComplete((event) => {
 
 marker 和 complete 都由宿主继续调用 `player.update(deltaTime)` 同步驱动，不使用 `setTimeout`、Promise、Cocos tween 或异步计时器。手动 `seek(...)`、`init()` 和 `restart()` 不会触发 marker；单次大 `deltaTime` 跨过多个 marker 时，会按时间从小到大同步触发。callback 抛错不会被 runtime 吞掉，会从当前 public method 继续抛出。
 
-marker 若正好落在 `play()` / `playRange()` / segmented 播放的起点，会在启动播放的同步调用内立即触发；循环 range 回到 `range.start` 时，也会按新的 `loopIndex` 触发起点 marker。若 marker 用来等待某段非循环 `playRange` 结束，推荐先清理并注册 marker，再启动播放，避免宿主代码在发布包中先推进播放状态后才补注册：
+marker 若正好落在 `play()` / `playRange()` / segmented 播放的起点，会在启动播放的同步调用内立即触发；循环 range 回到 `range.start` 时，也会按新的 `loopIndex` 触发起点 marker。marker 表示时间轴跨过某个点；若业务要等待某段非循环 `playRange` 完整结束，应使用 `onPlaybackComplete(...)`，因为它会等到终点后的粒子排空完成。完整等待写法：
 
 ```ts
-player.clearPlaybackEvents();
-player.addPlaybackEvent({
-  id: "range-end",
-  at: { unit: "time", at: endTime },
-  once: true,
-  listener() {
-    // resolve Promise 或进入下一段播放。
-  },
+const disposeComplete = player.onPlaybackComplete(() => {
+  disposeComplete();
+  // resolve Promise 或进入下一段播放。
 });
 player.playRange({
   range: { unit: "time", start: startTime, end: endTime },
   loop: false,
 });
 ```
+
+如果业务确实需要“时间轴到达 endTime 的瞬间”而不是“播放任务完整结束”，可以在 `playRange(...)` 前先注册 `addPlaybackEvent(...)`；runtime 会在 marker 与终点同一帧时先触发 marker，再进入 complete 流程。
 
 `destroy()` 会销毁 runtime 创建的节点、停止播放、清空当前 range、清空所有 marker、complete listener 和 mounted node registry，避免宿主 Component 销毁后遗留 callback 或业务节点引用；已被宿主提前销毁的外部 mounted node 会被安全跳过。
 

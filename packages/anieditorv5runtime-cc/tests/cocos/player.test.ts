@@ -1659,6 +1659,34 @@ describe("V5GCocosPlayer", () => {
     expect(events).toEqual(["BigWinAni_PlayStartAni:1:0"]);
   });
 
+  it("fires range end markers when the previous time is already within playback epsilon", () => {
+    const { player } = makePlayer(tinyProject());
+    const events: string[] = [];
+    const complete: unknown[] = [];
+    const epsilon = 1e-9;
+    const startTime = 1 - epsilon / 2;
+    player.init();
+    player.addPlaybackEvent({
+      id: "epsilon-end",
+      at: { unit: "time", at: 1 },
+      once: true,
+      listener: (event) =>
+        events.push(`${event.id}:${event.currentTime}:${event.loopIndex}`),
+    });
+    player.onPlaybackComplete((event) => complete.push(event));
+
+    player.playRange({
+      range: { unit: "time", start: startTime, end: 1 },
+      loop: false,
+    });
+    player.update(epsilon / 2);
+
+    expect(events).toEqual(["epsilon-end:1:0"]);
+    expect(complete).toEqual([
+      { startTime, endTime: 1, currentTime: 1, loopIndex: 0 },
+    ]);
+  });
+
   it("fires looping markers once per crossed cycle and removes once markers before callbacks", () => {
     const { player } = makePlayer(tinyProject());
     const repeated: number[] = [];

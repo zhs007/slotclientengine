@@ -5327,6 +5327,9 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
           if (timeToEnd <= PLAYBACK_EPSILON) break;
           continue;
         }
+        if (previousTime >= duration) {
+          this.emitPlaybackEventsAtBoundary(duration, 0, boundary);
+        }
         this.startParticleDrain(duration, {
           startTime: 0,
           endTime: duration,
@@ -5371,6 +5374,13 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
           );
           if (timeToEnd <= PLAYBACK_EPSILON) break;
           continue;
+        }
+        if (previousTime >= range.endTime) {
+          this.emitPlaybackEventsAtBoundary(
+            range.endTime,
+            this.loopIndex,
+            range,
+          );
         }
         this.activeRange = null;
         this.startParticleDrain(range.endTime, {
@@ -6419,7 +6429,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
         (event) =>
           event.time >= boundary.startTime &&
           event.time <= boundary.endTime + PLAYBACK_EPSILON &&
-          event.time > previousTime + PLAYBACK_EPSILON &&
+          event.time > previousTime &&
           event.time <= currentTime + PLAYBACK_EPSILON,
       )
       .sort((a, b) => a.time - b.time || a.order - b.order);
@@ -6437,7 +6447,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
         (event) =>
           event.time >= boundary.startTime &&
           event.time <= boundary.endTime + PLAYBACK_EPSILON &&
-          Math.abs(event.time - time) <= PLAYBACK_EPSILON,
+          event.time === time,
       )
       .sort((a, b) => a.time - b.time || a.order - b.order);
 

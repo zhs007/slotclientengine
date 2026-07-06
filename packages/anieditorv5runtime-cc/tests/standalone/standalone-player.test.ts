@@ -994,6 +994,34 @@ describe("standalone V5GCocosPlayer", () => {
     expect(events).toEqual(["BigWinAni_PlayStartAni:1:0"]);
   });
 
+  it("fires standalone range end markers when the previous time is already within playback epsilon", () => {
+    const { player } = makePlayer();
+    const events: string[] = [];
+    const complete: unknown[] = [];
+    const epsilon = 1e-9;
+    const startTime = 1 - epsilon / 2;
+    player.init();
+    player.addPlaybackEvent({
+      id: "epsilon-end",
+      at: { unit: "time", at: 1 },
+      once: true,
+      listener: (event) =>
+        events.push(`${event.id}:${event.currentTime}:${event.loopIndex}`),
+    });
+    player.onPlaybackComplete((event) => complete.push(event));
+
+    player.playRange({
+      range: { unit: "time", start: startTime, end: 1 },
+      loop: false,
+    });
+    player.update(epsilon / 2);
+
+    expect(events).toEqual(["epsilon-end:1:0"]);
+    expect(complete).toEqual([
+      { startTime, endTime: 1, currentTime: 1, loopIndex: 0 },
+    ]);
+  });
+
   it("plays frame ranges and loops within the converted time span", () => {
     const { player } = makePlayer();
     const hits: number[] = [];
