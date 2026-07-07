@@ -1723,6 +1723,34 @@ describe("VNIPlayer", () => {
     expect(events).toEqual(["complete"]);
   });
 
+  it("skips zero-duration RAF ticks without weakening host delta validation", async () => {
+    const player = await createInitializedPlayer();
+    const rafCallbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrame = vi.fn(
+      (callback: FrameRequestCallback): number => {
+        rafCallbacks.push(callback);
+        return rafCallbacks.length;
+      },
+    );
+    vi.stubGlobal("requestAnimationFrame", requestAnimationFrame);
+    vi.spyOn(performance, "now").mockReturnValue(1000);
+
+    player.play();
+
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
+    const firstFrame = rafCallbacks.shift();
+    if (!firstFrame) throw new Error("Missing first RAF callback.");
+    expect(() => firstFrame(1000)).not.toThrow();
+    expect(player.getTime()).toBe(0);
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(2);
+
+    const secondFrame = rafCallbacks.shift();
+    if (!secondFrame) throw new Error("Missing second RAF callback.");
+    expect(() => secondFrame(1016)).not.toThrow();
+    expect(player.getTime()).toBeCloseTo(0.016);
+    expect(() => player.update(0)).toThrow("deltaSeconds");
+  });
+
   it("accepts fitPadding 0 for one-to-one stage fitting", async () => {
     const player = await createInitializedPlayer();
     const defaultInternals = player as unknown as {

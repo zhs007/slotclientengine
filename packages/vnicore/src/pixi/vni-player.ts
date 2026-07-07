@@ -914,9 +914,13 @@ export class VNIPlayer {
       this.rafId = null;
       return;
     }
-    const deltaSeconds = Math.max(0, (now - this.lastTickMs) / 1000);
-    this.lastTickMs = now;
-    this.update(deltaSeconds);
+    const deltaSeconds = (now - this.lastTickMs) / 1000;
+    if (Number.isFinite(now)) {
+      this.lastTickMs = now;
+    }
+    if (Number.isFinite(deltaSeconds) && deltaSeconds > 0) {
+      this.update(deltaSeconds);
+    }
     if (this.isTickerNeeded()) {
       this.rafId = requestAnimationFrame(this.tick);
     } else {
