@@ -95,8 +95,8 @@ export interface V5GLayerMaskConfig {
   mode: "alpha";
   /**
    * Cross-engine mask composition semantics.
-   * - legacy_alpha: native engine alpha mask fallback.
-   * - precompose_light_alpha: B-scheme light mask; remove black by luminance, then multiply by source alpha.
+   * - precompose_light_alpha: PIXI light-friendly default; remove black by luminance, then multiply by source alpha.
+   * - legacy_alpha: Cocos-compatible native alpha mask mode.
    */
   compositeMode: V5GMaskCompositeMode;
   /** Convenience visibility flag for the source layer itself when it is used as this layer's mask. */
@@ -168,6 +168,8 @@ export interface V5GProjectConfig {
     version: string;
   };
   name: string;
+  /** Project-level preferred mask composite mode. Missing old projects are inferred from existing masks. */
+  maskCompositeMode?: V5GMaskCompositeMode;
   exportProfile?: V5GExportProfileConfig;
   stage: V5GStageConfig;
   assets: V5GAssetConfig[];

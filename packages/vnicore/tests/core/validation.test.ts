@@ -260,6 +260,68 @@ describe("validation", () => {
     expect(() => validateVNIBundleManifest(manifest)).not.toThrow();
   });
 
+  it("accepts VNI_0.045 project mask metadata without inferring old exports", () => {
+    const nextProjectData = structuredClone(projectData) as {
+      schemaVersion: string;
+      editor: { version: string };
+      maskCompositeMode?: string;
+    };
+    nextProjectData.schemaVersion = "VNI_0.045";
+    nextProjectData.editor.version = "VNI_0.045";
+    nextProjectData.maskCompositeMode = "precompose_light_alpha";
+
+    const nextProject = assertVNIProject(nextProjectData);
+    const oldProject = assertVNIProject(projectData);
+
+    expect(nextProject.maskCompositeMode).toBe("precompose_light_alpha");
+    expect(() => validateVNIProject(nextProject)).not.toThrow();
+    expect(oldProject.maskCompositeMode).toBeUndefined();
+  });
+
+  it("rejects Cocos-compatible legacy_alpha as a vnicore Pixi runtime target", () => {
+    const projectLevel = validProject();
+    projectLevel.maskCompositeMode = "legacy_alpha";
+    expect(() => validateVNIProject(projectLevel)).toThrow(
+      "project.maskCompositeMode legacy_alpha",
+    );
+
+    const layerLevel = validProject();
+    layerLevel.layers[0].mask = {
+      enabled: true,
+      sourceLayerId: layerLevel.layers[1].id,
+      mode: "alpha",
+      compositeMode: "legacy_alpha",
+      showSourceLayer: false,
+    };
+    expect(() => validateVNIProject(layerLevel)).toThrow("legacy_alpha masks");
+  });
+
+  it("does not let project mask metadata fill missing or invalid layer mask modes", () => {
+    const missingMode = structuredClone(projectData) as {
+      maskCompositeMode?: string;
+      layers: Array<{ id: string; mask?: unknown }>;
+    };
+    missingMode.maskCompositeMode = "precompose_light_alpha";
+    missingMode.layers[0].mask = {
+      enabled: true,
+      sourceLayerId: missingMode.layers[1].id,
+      mode: "alpha",
+      showSourceLayer: false,
+    };
+
+    expect(() => assertVNIProject(missingMode)).toThrow(
+      "project.layers[0].mask.compositeMode",
+    );
+
+    const invalidProjectMode = structuredClone(projectData) as {
+      maskCompositeMode?: string;
+    };
+    invalidProjectMode.maskCompositeMode = "unknown";
+    expect(() => assertVNIProject(invalidProjectMode)).toThrow(
+      "project.maskCompositeMode",
+    );
+  });
+
   it("accepts new particle and squash bundled projects", () => {
     const multipay = assertV5GProject(multipayData);
     const scatter1 = assertV5GProject(scatter1Data);
@@ -768,7 +830,7 @@ describe("validation", () => {
         enabled: true,
         sourceLayerId: null,
         mode: "alpha",
-        compositeMode: "legacy_alpha",
+        compositeMode: "precompose_light_alpha",
         showSourceLayer: true,
       };
     }, "requires sourceLayerId");
@@ -778,7 +840,7 @@ describe("validation", () => {
         enabled: true,
         sourceLayerId: project.layers[0].id,
         mode: "alpha",
-        compositeMode: "legacy_alpha",
+        compositeMode: "precompose_light_alpha",
         showSourceLayer: true,
       };
     }, "must not reference itself");
@@ -788,7 +850,7 @@ describe("validation", () => {
         enabled: true,
         sourceLayerId: "missing",
         mode: "alpha",
-        compositeMode: "legacy_alpha",
+        compositeMode: "precompose_light_alpha",
         showSourceLayer: true,
       };
     }, 'references missing source layer "missing"');

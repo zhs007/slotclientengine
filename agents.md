@@ -57,6 +57,7 @@
 - `game003` 的 big/super/mega 金额动画资源属于 `assets/game003-s1/win-amount` 和 YAML/loading 配置，不要混入 symbol VNI manifest 或 `assets/game003-s1/assets`。
 - VNI project 的 `stage.backgroundColor` 是导出 schema 背景元数据，`packages/vnicore` 的 `VNIPlayer` 是 runtime-only，不读取、不绘制、不提供 stage background 开关；slot symbol 动画、animation viewer 和 game runtime 都必须保持透明。
 - `packages/vnicore` 的 `VNIPlayer` 不拥有 `PIXI.Application`、renderer、canvas 或 DOM 容器；viewer/game runtime 必须提供外部 Pixi `parent`，动画节点直接挂进同一个 Pixi 渲染树。不要在 `VNIPlayer`、rendercore symbol animation 或 game runtime 中恢复隐藏 canvas、canvas-to-texture 桥接或独立 renderer。
+- `packages/vnicore` 是 Pixi.js v8 VNI runtime，目标是性能和编辑器 Pixi 预览效果完全一致；vnicore 使用的 VNI 导出不是 Cocos Creator 兼容版本，不为 Cocos-compatible `legacy_alpha` 路径增加隐藏适配。`precompose_light_alpha` 光效遮罩、粒子、走马灯等效果必须以 `docs/anieditor5/src` 的 Pixi 预览语义为准，并用缓存/池化保证 runtime 性能。
 - 游戏静态 YAML 只承载美术、配置人员或发布流程可改的静态配置，不承载 token、cookie、服务器真实轮带或玩家本次下注等运行期输入。
 - 游戏静态 YAML 应保留中文注释，说明字段用途、坐标基准和修改边界；注释只给人看，不作为构建逻辑依据。
 - `game-static.generated.ts` 和 `game-loading.generated.ts` 由 `apps/buildgamestatic` 生成，禁止手改；修改 YAML 后必须同步执行生成和 `--check` 校验。

@@ -59,17 +59,11 @@ export function sampleLayerAtTime(
     time,
   );
   const hasAnyEnabled = layer.animations.some((animation) => animation.enabled);
-  const hasPendingOpacityEntry = layer.animations.some(
-    (animation) =>
-      animation.enabled &&
-      isOpacityEntryAnimation(animation) &&
-      time < animation.startTime,
-  );
-  const hasPendingScaleEntry = layer.animations.some(
+  const hasActiveScaleEntryStart = layer.animations.some(
     (animation) =>
       animation.enabled &&
       isScaleEntryAnimation(animation) &&
-      time <= animation.startTime,
+      isSameSampleTime(time, animation.startTime),
   );
   const hasActiveCoverage = hasAnyEnabled
     ? layer.animations.some(
@@ -80,9 +74,7 @@ export function sampleLayerAtTime(
       )
     : true;
   const opacity =
-    hasPendingOpacityEntry ||
-    hasPendingScaleEntry ||
-    (hasAnyEnabled && !hasActiveCoverage)
+    hasActiveScaleEntryStart || (hasAnyEnabled && !hasActiveCoverage)
       ? 0
       : roundTo(clampNumber(sampled.opacity, 0, 1), 4);
   const baseOpacity = roundTo(clampNumber(layer.opacity, 0, 1), 4);
@@ -117,22 +109,6 @@ export function sampleLayerAtTime(
   };
 }
 
-function isOpacityEntryAnimation(animation: V5GAnimationConfig): boolean {
-  if (animation.type === "fade") {
-    return getNumberParam(animation, "fromOpacity") === 0;
-  }
-  if (animation.type === "slide_in") {
-    return getBooleanParam(animation, "fadeIn", true);
-  }
-  if (animation.type === "bounce_in") {
-    return getBooleanParam(animation, "fadeIn", true);
-  }
-  if (animation.type === "scale_in") {
-    return getBooleanParam(animation, "fadeIn", true);
-  }
-  return false;
-}
-
 function isScaleEntryAnimation(animation: V5GAnimationConfig): boolean {
   if (animation.type === "scale_up") {
     return (
@@ -154,12 +130,6 @@ function getNumberParam(animation: V5GAnimationConfig, key: string): number {
   return Number.NaN;
 }
 
-function getBooleanParam(
-  animation: V5GAnimationConfig,
-  key: string,
-  fallback: boolean,
-): boolean {
-  const value = animation.params[key];
-  if (value === undefined) return fallback;
-  return value === true;
+function isSameSampleTime(left: number, right: number): boolean {
+  return roundTo(left - right, 4) === 0;
 }

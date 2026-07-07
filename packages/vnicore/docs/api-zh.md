@@ -104,7 +104,7 @@
 
 文字层是 runtime placeholder。`attachNodeToTextLayer(...)` 要求 `layerId` 指向 `type === "text"` 的 layer，同一个 mounted id 不能重复；默认隐藏原始文字，传 `hideOriginal: false` 才保留。`attachTextToTextLayer(...)` 创建 Pixi `Text` 并返回 `setText()`，更新文本时不会重建 player 或 layer tree。`attachImageToTextLayer(...)` 支持当前 project asset 或显式 `imageUrl`，project asset 继续走 texture size 校验和 logical/file size compensation。返回的 dispose、`clearMountedNodes()`、`destroy()` 都会清理绑定节点并恢复原始文字。
 
-所有 image layer 用法都属于 `add` / `screen` / `lighten` 的 JPG 黑底光效图，会在加载阶段派生为带透明 alpha 的 matte texture。这个处理不修改原始美术资源，只避免 Pixi v8 在透明宿主 canvas 上把 JPG 黑色背景写成不透明黑框；普通 PNG、normal layer、被 normal layer 复用的 JPG 和未被叠加 blend 引用的 JPG 不受影响。派生过程只使用一次性纹理预处理 canvas，不是 `VNIPlayer` 自己的播放 canvas。
+所有 image layer 用法都属于 `add` / `screen` / `lighten` 的 JPG 或 RGB PNG 黑底光效图，会在加载阶段派生为带透明 alpha 的 matte texture。这个处理不修改原始美术资源，只避免 Pixi v8 在透明宿主 canvas 上把没有有效 alpha 的黑色背景写成不透明黑框；已有透明 alpha 的 PNG、normal layer、被 normal layer 复用的图片和未被叠加 blend 引用的图片不受影响。派生过程只使用一次性纹理预处理 canvas，不是 `VNIPlayer` 自己的播放 canvas。
 
 Layer group 合同：
 
@@ -129,9 +129,9 @@ Layer group 合同：
 Mask 合同：
 
 - `layer.mask.enabled=true` 时必须有合法 `sourceLayerId`，不能指向自身，不能指向不存在的 layer。
-- 当前只支持 `mode: "alpha"`，`compositeMode` 只支持 `legacy_alpha` 和 `precompose_light_alpha`。
+- 当前只支持 `mode: "alpha"`；Pixi runtime 目标只接受 `precompose_light_alpha` 作为可播放导出，Cocos-compatible `legacy_alpha` 项目或启用的 layer mask 会显式失败。
 - `showSourceLayer=false` 会隐藏普通 source layer，但 mask source 仍用于目标层。
-- `precompose_light_alpha` 要求 source 和 target 都是 image texture；无法满足时显式失败，不退化为普通渲染。
+- `precompose_light_alpha` 在 target/source 都是 image 且 target blendMode 为 `add` / `screen` / `lighten` 时，按编辑器 Pixi 预览做 stage-sized 光效预合成：target 光效像素 alpha 来自 `max(r,g,b) * targetAlpha * maskSourceAlpha * maskOpacity`，生成的 texture 会按 stage、asset、texture、transform、opacity 和 blendMode 缓存，输入不变不会每帧重建。非 light blendMode 仍走普通 Pixi alpha mask。
 
 ## 内部 helper 边界
 

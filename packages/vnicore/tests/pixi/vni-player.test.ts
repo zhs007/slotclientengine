@@ -26,9 +26,8 @@ const pixiMock = vi.hoisted(() => {
   }
 
   const textureByUrl = new Map<string, MockTextureData>();
-  const assetsLoad = vi.fn(
-    async (input: string | { src: string }) =>
-      textureByUrl.get(typeof input === "string" ? input : input.src),
+  const assetsLoad = vi.fn(async (input: string | { src: string }) =>
+    textureByUrl.get(typeof input === "string" ? input : input.src),
   );
 
   class MockPoint {
@@ -255,6 +254,10 @@ import {
   applySampledLayerState,
   createLayerInstance,
 } from "../../src/pixi/layer-instance";
+import {
+  applyPrecomposedLightMaskPixels,
+  createPrecomposedLightMaskKey,
+} from "../../src/pixi/precomposed-light-mask";
 import type { V5GLayerConfig, V5GProjectConfig } from "../../src/core/types";
 
 class MockResizeObserver {
@@ -278,6 +281,29 @@ function createContainer(): HTMLElement {
 
 function createMockPixiContainer(): PixiContainer {
   return new pixiMock.MockContainer() as unknown as PixiContainer;
+}
+
+function createMockCanvas(
+  context: ReturnType<typeof createMockCanvasContext>,
+): HTMLCanvasElement {
+  return {
+    width: 0,
+    height: 0,
+    getContext: vi.fn(() => context),
+  } as unknown as HTMLCanvasElement;
+}
+
+function createMockCanvasContext(imageData: ImageData) {
+  return {
+    save: vi.fn(),
+    translate: vi.fn(),
+    rotate: vi.fn(),
+    scale: vi.fn(),
+    drawImage: vi.fn(),
+    restore: vi.fn(),
+    getImageData: vi.fn(() => imageData),
+    putImageData: vi.fn(),
+  };
 }
 
 function createProject(): V5GProjectConfig {
@@ -347,7 +373,7 @@ function createProject(): V5GProjectConfig {
           anchorY: 0.5,
         },
         opacity: 1,
-        blendMode: "add",
+        blendMode: "normal",
         animations: [
           {
             id: "combo",
@@ -485,6 +511,12 @@ function createRenderEffectProject(): V5GProjectConfig {
 
 function createSafeGlowProject(): V5GProjectConfig {
   const project = createProject();
+  project.assets[0] = {
+    ...project.assets[0],
+    path: "assets/a.webp",
+    originalName: "a.webp",
+  };
+  project.layers[0].blendMode = "add";
   project.layers[0].animations = [
     {
       id: "safe-glow",
@@ -575,6 +607,20 @@ function createMaskedProject(showSourceLayer: boolean): V5GProjectConfig {
     compositeMode: "precompose_light_alpha",
     showSourceLayer,
   };
+  return project;
+}
+
+function createPrecomposedMaskProject(): V5GProjectConfig {
+  const project = createMaskedProject(false);
+  project.assets[1] = {
+    ...project.assets[1],
+    path: "assets/b.webp",
+    originalName: "b.webp",
+  };
+  project.layers[1].blendMode = "add";
+  project.layers[1].transform.x = 24;
+  project.layers[1].opacity = 0.75;
+  project.layers[0].opacity = 0.5;
   return project;
 }
 
@@ -750,6 +796,52 @@ describe("VNIPlayer", () => {
     expect(instance.display.groupBlendMode).toBe("add");
   });
 
+  it("matches the editor precompose_light_alpha pixel formula and cache key inputs", () => {
+    const targetPixels = new Uint8ClampedArray([
+      100, 150, 200, 128, 0, 0, 0, 255,
+    ]);
+    const sourcePixels = new Uint8ClampedArray([0, 0, 0, 128, 0, 0, 0, 255]);
+
+    applyPrecomposedLightMaskPixels(targetPixels, sourcePixels, 0.5);
+
+    expect([...targetPixels]).toEqual([100, 150, 200, 25, 0, 0, 0, 0]);
+
+    const project = createPrecomposedMaskProject();
+    const key = createPrecomposedLightMaskKey({
+      stage: project.stage,
+      target: {
+        layerId: project.layers[1].id,
+        asset: project.assets[1],
+        texture: {
+          width: 100,
+          height: 100,
+          label: "target-texture",
+          source: { label: "target-source" },
+        } as PixiTexture,
+        transform: project.layers[1].transform,
+        opacity: project.layers[1].opacity,
+        blendMode: "add",
+      },
+      source: {
+        layerId: project.layers[0].id,
+        asset: project.assets[0],
+        texture: {
+          width: 100,
+          height: 100,
+          label: "source-texture",
+          source: { label: "source-source" },
+        } as PixiTexture,
+        transform: project.layers[0].transform,
+        opacity: project.layers[0].opacity,
+      },
+    });
+
+    expect(key).toContain("precompose_light_alpha");
+    expect(key).toContain("targetTransform");
+    expect(key).toContain("sourceOpacity");
+    expect(key).toContain("add");
+  });
+
   it("derives transparent matte textures for additive JPEG layers", async () => {
     const project = createProject();
     project.assets[0] = {
@@ -839,6 +931,184 @@ describe("VNIPlayer", () => {
 
     expect(derivedTexture?.destroyed).toBe(true);
     expect([...internals.ownedTextures]).toEqual([]);
+  });
+
+  it("derives transparent matte textures for additive RGB PNG layers without alpha", async () => {
+    const project = createProject();
+    project.assets[0] = {
+      ...project.assets[0],
+      path: "assets/a.png",
+      originalName: "a.png",
+      width: 2,
+      height: 1,
+    };
+    project.layers[0] = {
+      ...project.layers[0],
+      blendMode: "add",
+    };
+
+    const pixels = new Uint8ClampedArray([0, 0, 0, 255, 64, 128, 0, 255]);
+    const imageData = { data: pixels } as ImageData;
+    const context = {
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+      getImageData: vi.fn(() => imageData),
+      putImageData: vi.fn(),
+    };
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => context),
+    };
+    vi.stubGlobal("document", {
+      createElement: vi.fn(() => canvas),
+    });
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const pngResource = {};
+    pixiMock.textureByUrl.set("/a.png", {
+      width: 2,
+      height: 1,
+      source: { resource: pngResource },
+    });
+    pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
+
+    const player = new VNIPlayer({
+      parent: createMockPixiContainer(),
+      diagnosticsElement: createContainer(),
+      viewport: { width: 800, height: 600 },
+      projectId: "player-test",
+      bundleId: "legacy",
+      profileId: "legacy_full",
+      profilePurpose: "legacy",
+      assetScale: 1,
+      project,
+      assetUrls: {
+        "assets/a.png": "/a.png",
+        "assets/b.png": "/b.png",
+      },
+      autoTick: false,
+    });
+
+    await player.init();
+
+    const internals = player as unknown as {
+      layerInstances: Map<
+        string,
+        {
+          display: InstanceType<typeof pixiMock.MockSprite>;
+          texture: InstanceType<typeof pixiMock.MockTexture>;
+        }
+      >;
+      ownedTextures: Set<InstanceType<typeof pixiMock.MockTexture>>;
+    };
+    const layerA = internals.layerInstances.get("layer-a");
+    const derivedTexture = layerA?.texture;
+
+    expect(derivedTexture).toBeInstanceOf(pixiMock.MockTexture);
+    expect(derivedTexture?.source).toBeInstanceOf(pixiMock.MockCanvasSource);
+    expect(layerA?.display.texture).toBe(derivedTexture);
+    expect(canvas.width).toBe(2);
+    expect(canvas.height).toBe(1);
+    expect(context.drawImage).toHaveBeenCalledWith(pngResource, 0, 0, 2, 1);
+    expect([...pixels]).toEqual([0, 0, 0, 0, 128, 255, 0, 128]);
+    expect(context.putImageData).toHaveBeenCalledWith(imageData, 0, 0);
+
+    player.destroy();
+
+    expect(derivedTexture?.destroyed).toBe(true);
+    expect([...internals.ownedTextures]).toEqual([]);
+  });
+
+  it("keeps additive PNG textures when decoded pixels already include alpha", async () => {
+    const project = createProject();
+    project.assets[0] = {
+      ...project.assets[0],
+      path: "assets/a.png",
+      originalName: "a.png",
+      width: 2,
+      height: 1,
+    };
+    project.layers[0] = {
+      ...project.layers[0],
+      blendMode: "add",
+    };
+
+    const pixels = new Uint8ClampedArray([0, 0, 0, 255, 64, 128, 0, 80]);
+    const imageData = { data: pixels } as ImageData;
+    const context = {
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+      getImageData: vi.fn(() => imageData),
+      putImageData: vi.fn(),
+    };
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => context),
+    };
+    vi.stubGlobal("document", {
+      createElement: vi.fn(() => canvas),
+    });
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const pngResource = {};
+    const originalTexture = {
+      width: 2,
+      height: 1,
+      source: { resource: pngResource },
+    };
+    pixiMock.textureByUrl.set("/a.png", originalTexture);
+    pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
+
+    const player = new VNIPlayer({
+      parent: createMockPixiContainer(),
+      diagnosticsElement: createContainer(),
+      viewport: { width: 800, height: 600 },
+      projectId: "player-test",
+      bundleId: "legacy",
+      profileId: "legacy_full",
+      profilePurpose: "legacy",
+      assetScale: 1,
+      project,
+      assetUrls: {
+        "assets/a.png": "/a.png",
+        "assets/b.png": "/b.png",
+      },
+      autoTick: false,
+    });
+
+    await player.init();
+
+    const internals = player as unknown as {
+      layerInstances: Map<
+        string,
+        {
+          texture: unknown;
+        }
+      >;
+      ownedTextures: Set<InstanceType<typeof pixiMock.MockTexture>>;
+    };
+
+    expect(internals.layerInstances.get("layer-a")?.texture).toBe(
+      originalTexture,
+    );
+    expect(internals.ownedTextures.size).toBe(0);
+    expect(context.drawImage).toHaveBeenCalledWith(pngResource, 0, 0, 2, 1);
+    expect([...pixels]).toEqual([0, 0, 0, 255, 64, 128, 0, 80]);
+    expect(context.putImageData).not.toHaveBeenCalled();
+
+    player.destroy();
   });
 
   it("keeps shared JPEG textures opaque when any layer uses normal blending", async () => {
@@ -1068,6 +1338,28 @@ describe("VNIPlayer", () => {
         node: createMockPixiContainer(),
       }),
     ).toThrow("requires init");
+  });
+
+  it("rejects project-level legacy_alpha before runtime init", () => {
+    const project = createStaticProject();
+    project.maskCompositeMode = "legacy_alpha";
+
+    expect(
+      () =>
+        new VNIPlayer({
+          parent: createMockPixiContainer(),
+          projectId: "player-test",
+          bundleId: "legacy",
+          profileId: "legacy_full",
+          profilePurpose: "legacy",
+          assetScale: 1,
+          project,
+          assetUrls: {
+            "assets/a.png": "/a.png",
+            "assets/b.png": "/b.png",
+          },
+        }),
+    ).toThrow("project.maskCompositeMode legacy_alpha");
   });
 
   it("exposes render-order layer groups and legal slots", async () => {
@@ -1342,7 +1634,7 @@ describe("VNIPlayer", () => {
       assetScale: 1,
       project: createSafeGlowProject(),
       assetUrls: {
-        "assets/a.png": "/a.png",
+        "assets/a.webp": "/a.png",
         "assets/b.png": "/b.png",
       },
     });
@@ -1462,14 +1754,158 @@ describe("VNIPlayer", () => {
     expect(target?.display.mask).toBe(
       internals.maskSpritesByTargetLayer.get("layer-b"),
     );
-    expect(internals.maskCacheKeysByTargetLayer.get("layer-b")).toContain(
-      "targetTransform",
-    );
+    expect(internals.maskCacheKeysByTargetLayer.has("layer-b")).toBe(false);
     expect(container.dataset.vniMaskSprites).toBe("1");
 
     player.destroy();
 
     expect(container.dataset.vniMaskSprites).toBeUndefined();
+  });
+
+  it("precomposes light masks once, reuses stable cache keys, and destroys stale textures", async () => {
+    const project = createPrecomposedMaskProject();
+    const targetPixels = new Uint8ClampedArray([200, 100, 0, 255]);
+    const sourcePixels = new Uint8ClampedArray([0, 0, 0, 255]);
+    const targetImageData = { data: targetPixels } as ImageData;
+    const sourceImageData = { data: sourcePixels } as ImageData;
+    const targetContext = createMockCanvasContext(targetImageData);
+    const sourceContext = createMockCanvasContext(sourceImageData);
+    const canvases = [
+      createMockCanvas(targetContext),
+      createMockCanvas(sourceContext),
+      createMockCanvas(createMockCanvasContext(targetImageData)),
+      createMockCanvas(createMockCanvasContext(sourceImageData)),
+    ];
+    const createElement = vi.fn(() => {
+      const canvas = canvases.shift();
+      if (!canvas) throw new Error("Unexpected canvas allocation.");
+      return canvas;
+    });
+    vi.stubGlobal("document", { createElement });
+    vi.stubGlobal("window", { devicePixelRatio: 1 });
+    vi.stubGlobal("ResizeObserver", MockResizeObserver);
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    const targetResource = { id: "target-resource" };
+    const sourceResource = { id: "source-resource" };
+    pixiMock.textureByUrl.set("/a.png", {
+      width: 100,
+      height: 100,
+      label: "source-texture",
+      source: { resource: sourceResource, label: "source-source" },
+    });
+    pixiMock.textureByUrl.set("/b.png", {
+      width: 100,
+      height: 100,
+      label: "target-texture",
+      source: { resource: targetResource, label: "target-source" },
+    });
+
+    const player = new VNIPlayer({
+      parent: createMockPixiContainer(),
+      diagnosticsElement: createContainer(),
+      viewport: { width: 800, height: 600 },
+      projectId: "player-test",
+      bundleId: "legacy",
+      profileId: "legacy_full",
+      profilePurpose: "legacy",
+      assetScale: 1,
+      project,
+      assetUrls: {
+        "assets/a.png": "/a.png",
+        "assets/b.webp": "/b.png",
+      },
+      autoTick: false,
+    });
+    await player.init();
+
+    const internals = player as unknown as {
+      stageRoot: InstanceType<typeof pixiMock.MockContainer>;
+      layerInstances: Map<
+        string,
+        {
+          display: InstanceType<typeof pixiMock.MockContainer>;
+        }
+      >;
+      slotContainersByKey: Map<
+        string,
+        InstanceType<typeof pixiMock.MockContainer>
+      >;
+      maskSpritesByTargetLayer: Map<
+        string,
+        InstanceType<typeof pixiMock.MockSprite>
+      >;
+      precomposedLightMasksByTargetLayer: Map<
+        string,
+        {
+          key: string;
+          sprite: InstanceType<typeof pixiMock.MockSprite>;
+          texture: InstanceType<typeof pixiMock.MockTexture>;
+        }
+      >;
+      maskCacheKeysByTargetLayer: Map<string, string>;
+    };
+    const source = internals.layerInstances.get("layer-a");
+    const target = internals.layerInstances.get("layer-b");
+    const [slotContainer] = [...internals.slotContainersByKey.values()];
+    const initialState =
+      internals.precomposedLightMasksByTargetLayer.get("layer-b");
+    if (!initialState) throw new Error("Missing precomposed mask state.");
+
+    expect(createElement).toHaveBeenCalledTimes(2);
+    expect(targetContext.drawImage).toHaveBeenCalledWith(
+      targetResource,
+      -50,
+      -50,
+      100,
+      100,
+    );
+    expect(sourceContext.drawImage).toHaveBeenCalledWith(
+      sourceResource,
+      -50,
+      -50,
+      100,
+      100,
+    );
+    expect([...targetPixels]).toEqual([200, 100, 0, 100]);
+    expect(target?.display.mask).toBeNull();
+    expect(target?.display.alpha).toBe(0);
+    expect(source?.display.visible).toBe(false);
+    expect(internals.maskSpritesByTargetLayer.size).toBe(0);
+    expect(internals.stageRoot.children).toEqual([
+      source?.display,
+      slotContainer,
+      target?.display,
+      initialState.sprite,
+    ]);
+    expect(internals.maskCacheKeysByTargetLayer.get("layer-b")).toContain(
+      "targetTransform",
+    );
+
+    player.seek(0);
+
+    expect(createElement).toHaveBeenCalledTimes(2);
+    expect(internals.precomposedLightMasksByTargetLayer.get("layer-b")).toBe(
+      initialState,
+    );
+
+    project.layers[1].transform.x += 1;
+    player.seek(0);
+
+    const nextState =
+      internals.precomposedLightMasksByTargetLayer.get("layer-b");
+    expect(nextState).toBeDefined();
+    expect(nextState).not.toBe(initialState);
+    expect(initialState.texture.destroyed).toBe(true);
+    expect(createElement).toHaveBeenCalledTimes(4);
+
+    player.destroy();
+
+    expect(nextState?.texture.destroyed).toBe(true);
+    expect(internals.precomposedLightMasksByTargetLayer.size).toBe(0);
   });
 
   it("fails fast for reversed, unknown, and non-adjacent group slots", async () => {

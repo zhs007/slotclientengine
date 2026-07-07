@@ -37,6 +37,7 @@ import type {
   V5GBlendMode,
   V5GEditorState,
   V5GLayerConfig,
+  V5GMaskCompositeMode,
   V5GLayerGroupConfig,
   V5GProjectConfig,
   V5GPreviewLayerState,
@@ -168,6 +169,7 @@ const els = {
   btnStop: getButton("btn-stop"),
   btnSwitchProject: getButton("btn-switch-project"),
   btnResetView: getButton("btn-reset-view"),
+  cbCocosCompatible: getInput("cb-cocos-compatible"),
   cbShowSelectionOutline: getInput("cb-show-selection-outline"),
   cbLoopPlay: getInput("cb-loop-play"),
   cbPlaySegment: getInput("cb-play-segment"),
@@ -340,6 +342,9 @@ function bindEvents(): void {
   els.btnResetView.addEventListener("click", () => {
     pixiStage.resetView();
     showStatus("画布已重新居中。", "info");
+  });
+  els.cbCocosCompatible.addEventListener("change", () => {
+    updateProjectMaskCompatibilityFromCheckbox();
   });
   els.cbShowSelectionOutline.addEventListener("change", () => {
     state.showSelectionOutline = els.cbShowSelectionOutline.checked;
@@ -1374,7 +1379,7 @@ function updateSelectedLayerMaskFromProperties(): void {
     enabled,
     sourceLayerId: hasValidSource ? sourceLayerId : null,
     mode: "alpha",
-    compositeMode: "precompose_light_alpha",
+    compositeMode: getCurrentMaskCompositeMode(),
     showSourceLayer: els.propMaskShowSource.checked,
   };
   normalizeProjectMasks(state.project);
@@ -1383,7 +1388,9 @@ function updateSelectedLayerMaskFromProperties(): void {
   scheduleAutoSave(0);
   showStatus(
     enabled
-      ? `已为「${layer.name}」启用高级光效遮罩：光效图层会先去黑预合成，再按遮罩源 alpha 裁剪。`
+      ? els.cbCocosCompatible.checked
+        ? `已为「${layer.name}」启用 Cocos 兼容 alpha 遮罩：按遮罩源透明度裁剪目标图层。`
+        : `已为「${layer.name}」启用 PIXI 光效兼容遮罩：使用 precompose_light_alpha，便于遮罩与 ADD 光效同时预览。`
       : `已关闭「${layer.name}」的图层遮罩。`,
     "success",
   );
@@ -1743,7 +1750,8 @@ function deleteLayerAt(index: number): void {
         enabled: false,
         sourceLayerId: null,
         mode: "alpha",
-        compositeMode: layer.mask.compositeMode ?? "precompose_light_alpha",
+        compositeMode:
+          layer.mask.compositeMode ?? getCurrentMaskCompositeMode(),
         showSourceLayer: layer.mask.showSourceLayer !== false,
       };
     }
@@ -3325,15 +3333,37 @@ function isTimelineVerticalScrollbarTarget(event: PointerEvent): boolean {
   return insideY && inScrollbarHitArea;
 }
 
-function setPlayheadSeconds(seconds: number): void {
+function setPlayheadSeconds(
+  seconds: number,
+  options: { lightweightUi?: boolean } = {},
+): void {
   state.playheadSeconds = roundTo(
     clampNumber(seconds, 0, state.project.stage.duration),
     3,
   );
   applyAnimatedLayersAtTime(state.playheadSeconds);
-  renderStaticUi();
-  renderProperties();
+  if (options.lightweightUi) {
+    updatePlayheadUiOnly();
+  } else {
+    renderStaticUi();
+    renderProperties();
+  }
   void pixiStage.render(state);
+}
+
+function updatePlayheadUiOnly(): void {
+  const normalizedDuration = normalizeProjectDurationToAnimationEnd({
+    silent: true,
+  });
+  els.timeLabel.textContent = `${state.playheadSeconds.toFixed(2)}s / ${normalizedDuration.toFixed(2)}s`;
+  const left = `${timeToTimelineX(state.playheadSeconds)}px`;
+  const title = `拖动黄色刻度线预览 ${state.playheadSeconds.toFixed(2)}s`;
+  for (const playhead of document.querySelectorAll<HTMLElement>(
+    "[data-timeline-playhead]",
+  )) {
+    playhead.style.left = left;
+    playhead.title = title;
+  }
 }
 
 function syncAnimationPanel(layer: V5GLayerConfig): void {
@@ -4620,6 +4650,7 @@ function syncProjectFields(): void {
   els.zipName.value = state.project.name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_");
+  syncCocosCompatibilityCheckbox();
   syncStageInputs();
 }
 
@@ -4627,6 +4658,7 @@ function createEditorState(
   project: V5GEditorState["project"],
   runtimeAssets: V5GEditorState["runtimeAssets"],
 ): V5GEditorState {
+  project.maskCompositeMode = inferProjectMaskCompositeMode(project);
   normalizeProjectLayerGroups(project);
   normalizeProjectMasks(project);
   normalizeProjectBlendModes(project);
@@ -4639,6 +4671,78 @@ function createEditorState(
     showSelectionOutline: true,
     previewLayers: {},
   };
+}
+
+function inferProjectMaskCompositeMode(
+  project: V5GProjectConfig,
+  options: { ignoreStoredPreference?: boolean } = {},
+): V5GMaskCompositeMode {
+  if (!options.ignoreStoredPreference) {
+    if (project.maskCompositeMode === "legacy_alpha") return "legacy_alpha";
+    if (project.maskCompositeMode === "precompose_light_alpha") {
+      return "precompose_light_alpha";
+    }
+  }
+
+  let legacyCount = 0;
+  let precomposeCount = 0;
+  for (const layer of project.layers) {
+    if (layer.mask?.compositeMode === "legacy_alpha") legacyCount += 1;
+    if (layer.mask?.compositeMode === "precompose_light_alpha") {
+      precomposeCount += 1;
+    }
+  }
+
+  return legacyCount > precomposeCount
+    ? "legacy_alpha"
+    : "precompose_light_alpha";
+}
+
+function syncCocosCompatibilityCheckbox(): void {
+  const mode = getCurrentMaskCompositeMode();
+  els.cbCocosCompatible.checked = mode === "legacy_alpha";
+}
+
+function getCurrentMaskCompositeMode(): V5GMaskCompositeMode {
+  const mode = inferProjectMaskCompositeMode(state.project);
+  state.project.maskCompositeMode = mode;
+  return mode;
+}
+
+function updateProjectMaskCompatibilityFromCheckbox(): void {
+  const nextMode: V5GMaskCompositeMode = els.cbCocosCompatible.checked
+    ? "legacy_alpha"
+    : "precompose_light_alpha";
+  const previousMode = getCurrentMaskCompositeMode();
+  if (previousMode === nextMode) {
+    syncCocosCompatibilityCheckbox();
+    showStatus(
+      nextMode === "legacy_alpha"
+        ? "当前已是 Cocos 兼容模式：遮罩使用 legacy_alpha。"
+        : "当前已是 PIXI 光效模式：遮罩使用 precompose_light_alpha。",
+      "info",
+    );
+    return;
+  }
+
+  pushUndoSnapshot();
+  state.project.maskCompositeMode = nextMode;
+  let changedCount = 0;
+  for (const layer of state.project.layers) {
+    if (!layer.mask) continue;
+    if (layer.mask.compositeMode !== nextMode) changedCount += 1;
+    layer.mask.compositeMode = nextMode;
+  }
+  normalizeProjectMasks(state.project);
+  clearPreviewBaseCache();
+  renderAll();
+  scheduleAutoSave(0);
+  showStatus(
+    nextMode === "legacy_alpha"
+      ? `已切换为 Cocos 兼容，并同步更新 ${changedCount} 个遮罩图层为 legacy_alpha。`
+      : `已切换为 PIXI 光效模式，并同步更新 ${changedCount} 个遮罩图层为 precompose_light_alpha。`,
+    "success",
+  );
 }
 
 function normalizeProjectBlendModes(project: V5GProjectConfig): void {
@@ -4748,7 +4852,7 @@ function startPlaybackFromCurrentPosition(): void {
   const startTime = isAtRangeEnd
     ? range.start
     : clampNumber(state.playheadSeconds, range.start, range.end);
-  setPlayheadSeconds(startTime);
+  setPlayheadSeconds(startTime, { lightweightUi: true });
   playStartedAt = performance.now() - startTime * 1000;
   pixiStage.stopDemo();
   setPlaybackButtonState(true);
@@ -4782,11 +4886,11 @@ function tickPlayhead(): void {
       end: state.project.stage.duration,
     };
     const nextTime = (performance.now() - playStartedAt) / 1000;
-    setPlayheadSeconds(nextTime);
+    setPlayheadSeconds(nextTime, { lightweightUi: true });
     if (state.playheadSeconds >= range.end) {
       if (els.cbLoopPlay.checked) {
         playStartedAt = performance.now() - range.start * 1000;
-        setPlayheadSeconds(range.start);
+        setPlayheadSeconds(range.start, { lightweightUi: true });
         animationFrame = requestAnimationFrame(run);
         return;
       }

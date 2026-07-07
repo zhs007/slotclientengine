@@ -19,6 +19,7 @@ import type {
   V5GLayerConfig,
   V5GLayerGroupConfig,
   V5GLayerMaskConfig,
+  V5GMaskCompositeMode,
   V5GProjectConfig,
   V5GTransformConfig,
 } from "./types.js";
@@ -31,6 +32,11 @@ const SUPPORTED_BLEND_MODES: readonly V5GBlendMode[] = [
   "screen",
   "multiply",
   "lighten",
+];
+
+const SUPPORTED_MASK_COMPOSITE_MODES: readonly V5GMaskCompositeMode[] = [
+  "precompose_light_alpha",
+  "legacy_alpha",
 ];
 
 const REQUIRED_NUMERIC_PARAMS: Readonly<
@@ -211,6 +217,13 @@ export function assertV5GProject(value: unknown): V5GProjectConfig {
   );
 
   const projectName = assertString(project.name, "project.name");
+  const maskCompositeMode =
+    project.maskCompositeMode === undefined
+      ? undefined
+      : assertMaskCompositeMode(
+          project.maskCompositeMode,
+          "project.maskCompositeMode",
+        );
   const exportProfile =
     project.exportProfile === undefined
       ? undefined
@@ -257,6 +270,7 @@ export function assertV5GProject(value: unknown): V5GProjectConfig {
       version: engineTargetVersion,
     },
     name: projectName,
+    maskCompositeMode,
     exportProfile,
     stage: {
       width: stageWidth,
@@ -302,6 +316,17 @@ export function validateV5GProject(project: V5GProjectConfig): void {
   }
   if (project.exportProfile) {
     validateExportProfile(project.exportProfile, "project.exportProfile");
+  }
+  if (project.maskCompositeMode !== undefined) {
+    validateMaskCompositeMode(
+      project.maskCompositeMode,
+      "project.maskCompositeMode",
+    );
+    if (project.maskCompositeMode === "legacy_alpha") {
+      throw new Error(
+        "VNI Pixi runtime does not support Cocos-compatible project.maskCompositeMode legacy_alpha; export a Pixi runtime project with precompose_light_alpha.",
+      );
+    }
   }
   validateLayerGroups(project);
 
@@ -526,15 +551,17 @@ function validateLayerMasks(
         `Unsupported VNI mask mode on layer "${layer.id}": ${mask.mode}.`,
       );
     }
-    if (
-      mask.compositeMode !== "legacy_alpha" &&
-      mask.compositeMode !== "precompose_light_alpha"
-    ) {
+    if (!SUPPORTED_MASK_COMPOSITE_MODES.includes(mask.compositeMode)) {
       throw new Error(
         `Unsupported VNI mask compositeMode on layer "${layer.id}": ${mask.compositeMode}.`,
       );
     }
     if (!mask.enabled) continue;
+    if (mask.compositeMode === "legacy_alpha") {
+      throw new Error(
+        `VNI Pixi runtime does not support Cocos-compatible legacy_alpha masks on layer "${layer.id}"; export a Pixi runtime project with precompose_light_alpha.`,
+      );
+    }
     if (!mask.sourceLayerId) {
       throw new Error(
         `VNI mask on layer "${layer.id}" requires sourceLayerId when enabled.`,
@@ -743,15 +770,33 @@ function assertLayerMask(value: unknown, path: string): V5GLayerMaskConfig {
         ? null
         : assertString(mask.sourceLayerId, `${path}.sourceLayerId`),
     mode: assertString(mask.mode, `${path}.mode`) as V5GLayerMaskConfig["mode"],
-    compositeMode: assertString(
+    compositeMode: assertMaskCompositeMode(
       mask.compositeMode,
       `${path}.compositeMode`,
-    ) as V5GLayerMaskConfig["compositeMode"],
+    ),
     showSourceLayer: assertBoolean(
       mask.showSourceLayer,
       `${path}.showSourceLayer`,
     ),
   };
+}
+
+function assertMaskCompositeMode(
+  value: unknown,
+  path: string,
+): V5GMaskCompositeMode {
+  const mode = assertString(value, path) as V5GMaskCompositeMode;
+  validateMaskCompositeMode(mode, path);
+  return mode;
+}
+
+function validateMaskCompositeMode(
+  mode: V5GMaskCompositeMode,
+  path: string,
+): void {
+  if (!SUPPORTED_MASK_COMPOSITE_MODES.includes(mode)) {
+    throw new Error(`Unsupported VNI mask compositeMode at ${path}: ${mode}.`);
+  }
 }
 
 function assertLayerGroup(value: unknown, index: number): V5GLayerGroupConfig {

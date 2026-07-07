@@ -67,9 +67,11 @@ describe("project-sampler", () => {
     const renderedImageLayers = sampled.layers.filter(
       (layer) => layer.renderImageDisplay,
     );
+    const renderedParticleSourceLayer = renderedImageLayers.find(
+      (layer) => layer.hasActiveParticleAnimation,
+    );
 
-    expect(renderedImageLayers).toHaveLength(1);
-    expect(renderedImageLayers[0].hasActiveParticleAnimation).toBe(true);
+    expect(renderedParticleSourceLayer).toBeDefined();
   });
 
   it("hides animated layers before animation coverage", () => {
@@ -161,7 +163,7 @@ describe("project-sampler", () => {
     expect(sampled.visible).toBe(true);
   });
 
-  it("hides layers before a delayed opacity entry even when other animations are active", () => {
+  it("keeps active layers visible even when a later opacity entry is pending", () => {
     const sampled = sampleLayerAtTime(
       layer({}, [
         {
@@ -186,9 +188,74 @@ describe("project-sampler", () => {
       0.05,
     );
 
-    expect(sampled.opacity).toBe(0);
-    expect(sampled.visible).toBe(false);
-    expect(sampled.renderImageDisplay).toBe(false);
+    expect(sampled.opacity).toBe(1);
+    expect(sampled.visible).toBe(true);
+    expect(sampled.renderImageDisplay).toBe(true);
+  });
+
+  it("keeps repeated scale and fade cycles visible before later entry cycles", () => {
+    const repeatedGlowLayer = layer({ opacity: 0.3 }, [
+      {
+        id: "scale-1",
+        type: "scale_in",
+        startTime: 0.55,
+        duration: 0.3,
+        enabled: true,
+        seed: 1,
+        params: {
+          fromScale: 0.5,
+          toScale: 1.5,
+          fadeIn: true,
+          easing: "easeOutQuad",
+        },
+      },
+      {
+        id: "fade-1",
+        type: "fade",
+        startTime: 0.8,
+        duration: 0.3,
+        enabled: true,
+        seed: 1,
+        params: { fromOpacity: 0.3, toOpacity: 0, easing: "linear" },
+      },
+      {
+        id: "scale-2",
+        type: "scale_in",
+        startTime: 1,
+        duration: 0.3,
+        enabled: true,
+        seed: 1,
+        params: {
+          fromScale: 0.5,
+          toScale: 1,
+          fadeIn: true,
+          easing: "easeOutQuad",
+        },
+      },
+      {
+        id: "fade-2",
+        type: "fade",
+        startTime: 1.25,
+        duration: 0.3,
+        enabled: true,
+        seed: 1,
+        params: { fromOpacity: 0.3, toOpacity: 0, easing: "linear" },
+      },
+    ]);
+
+    const firstScale = sampleLayerAtTime(repeatedGlowLayer, 0.6);
+    const firstFade = sampleLayerAtTime(repeatedGlowLayer, 0.9);
+    const secondScale = sampleLayerAtTime(repeatedGlowLayer, 1.1);
+
+    expect(firstScale.opacity).toBeGreaterThan(0);
+    expect(firstScale.visible).toBe(true);
+    expect(firstScale.renderImageDisplay).toBe(true);
+    expect(firstFade.opacity).toBeGreaterThan(0);
+    expect(firstFade.visible).toBe(true);
+    expect(firstFade.renderImageDisplay).toBe(true);
+    expect(secondScale.opacity).toBeGreaterThan(0);
+    expect(secondScale.visible).toBe(true);
+    expect(secondScale.renderImageDisplay).toBe(true);
   });
 
   it("starts delayed opacity entry at its own start frame", () => {

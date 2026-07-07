@@ -578,6 +578,7 @@ export function createViewerControls(
           `${formatTime(currentProject.project.stage.duration)}s duration`,
         ),
         createSummaryItem(getAnimationTypeSummary(currentProject.project)),
+        createSummaryItem(getMaskSummary(currentProject.project)),
       );
       return;
     }
@@ -921,6 +922,44 @@ function getAnimationTypeSummary(project: VNIProjectConfig): string {
   return animationTypes.length > 0
     ? animationTypes.join(", ")
     : "no animations";
+}
+
+function getMaskSummary(project: VNIProjectConfig): string {
+  const sourceLayersById = new Map(
+    project.layers.map((layer) => [layer.id, layer] as const),
+  );
+  let enabledMasks = 0;
+  let precomposeMasks = 0;
+  let legacyMasks = 0;
+  let pixiLightMasks = 0;
+  for (const layer of project.layers) {
+    const mask = layer.mask;
+    if (!mask?.enabled) continue;
+    enabledMasks += 1;
+    if (mask.compositeMode === "precompose_light_alpha") {
+      precomposeMasks += 1;
+      const sourceLayer = mask.sourceLayerId
+        ? sourceLayersById.get(mask.sourceLayerId)
+        : undefined;
+      if (
+        layer.type === "image" &&
+        sourceLayer?.type === "image" &&
+        isLightMaskBlendMode(layer.blendMode)
+      ) {
+        pixiLightMasks += 1;
+      }
+    } else if (mask.compositeMode === "legacy_alpha") {
+      legacyMasks += 1;
+    }
+  }
+  if (enabledMasks === 0) return "0 masks";
+  return `${enabledMasks} masks, ${precomposeMasks} precompose_light_alpha, ${pixiLightMasks} Pixi light-mask, ${legacyMasks} legacy_alpha`;
+}
+
+function isLightMaskBlendMode(blendMode: string): boolean {
+  return (
+    blendMode === "add" || blendMode === "screen" || blendMode === "lighten"
+  );
 }
 
 function formatTime(time: number): string {

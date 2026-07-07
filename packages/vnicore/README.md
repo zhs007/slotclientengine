@@ -27,7 +27,7 @@ The root import re-exports both `./core` and `./pixi`. The `V5G*` names are lega
 - all-or-none `fileWidth` / `fileHeight` / `fileScale` asset metadata
 - runtime profile exports such as `runtime_50` and `runtime_100`, including logical-size display compensation for scaled file pixels
 - animation and particle sampling used by `apps/anieditorv5viewer`
-- layer masks with explicit source validation, including `legacy_alpha` and cached `precompose_light_alpha` runtime paths
+- layer masks with explicit source validation and cached `precompose_light_alpha` Pixi light-mask precomposition
 - text-layer placeholder binding for host Pixi nodes, dynamic text, and project/external image replacements
 - `particle_stream` continuous layer particles and `chaser_light` fixed-position runtime lights with bounded sprite counts
 - `play()`, `play({ mode: "segmented", ... })`, `pause()`, `restart()`, `seek()`, `setLoop()`, `playRange(...)`, playback markers, particle-draining, and complete listeners
@@ -37,7 +37,7 @@ The root import re-exports both `./core` and `./pixi`. The `V5G*` names are lega
 - host-driven playback embedding through `VNIPlayerOptions.autoTick: false`
 - explicit fit padding override through `VNIPlayerOptions.fitPadding`
 - transparent runtime display tree; `VNIPlayer` never renders exported stage backgrounds
-- additive matte derivation for black-backed JPEG light textures referenced by `add` / `screen` / `lighten` image layers
+- additive matte derivation for black-backed JPG or RGB PNG light textures referenced by `add` / `screen` / `lighten` image layers
 
 Invalid data fails fast. Missing assets, bad numeric params, unknown animation/easing/blend modes, texture size mismatches, unsupported group/parent/keyframe structures, and manifest/profile mismatches throw instead of rendering placeholders.
 
@@ -51,13 +51,13 @@ Layer group slots are exposed through `VNIPlayer.getLayerGroupSlots()`. The slot
 
 `VNIPlayer` is runtime-only and never draws the exported stage background. `project.stage.backgroundColor` remains validated schema metadata, but it is not read by the Pixi player; VNI rendering stays transparent and contains only layers, effects, particles, and mounted nodes.
 
-Black-backed JPEG light assets whose image-layer usages are all `add` / `screen` / `lighten` are converted to transparent matte textures during load. This keeps the exported art files unchanged while preventing Pixi v8 additive blending from writing an opaque black rectangle into transparent host canvases. The conversion uses a transient decode canvas only for texture preprocessing; it is not a `VNIPlayer` render surface and is not appended to the DOM.
+Black-backed JPG or RGB PNG light assets whose image-layer usages are all `add` / `screen` / `lighten` are converted to transparent matte textures during load when decoded pixels have no usable alpha channel. This keeps the exported art files unchanged while preventing Pixi v8 additive blending from writing an opaque black rectangle into transparent host canvases. PNG files that already carry transparent alpha are kept as-is. The conversion uses a transient decode canvas only for texture preprocessing; it is not a `VNIPlayer` render surface and is not appended to the DOM.
 
 Supported animation types include transform/opacity animations, live particles, segmented particle draining, deterministic render effects such as `shatter` and `glow`, continuous `particle_stream`, `chaser_light`, and the cross-engine-safe `safe_glow` overlay. `idle` is a coverage-only no-op; `shatter` and `glow` are sampled as render effects, while `safe_glow` is a duplicate-image overlay that inherits the layer blend mode and is counted separately from render effects. `chaser_light` samples fixed light positions and advances only the lit/dim window; circle spacing is interpreted as arc length, and timing advances per light by `lightDuration + interval`.
 
 Text layers are runtime placeholders. Hosts can bind custom Pixi nodes with `attachNodeToTextLayer(...)`, dynamic text with `attachTextToTextLayer(...)`, or images with `attachImageToTextLayer(...)`; bound nodes inherit the text layer transform, opacity, visibility, blend mode, render order, and lifecycle. `destroy()`, `clearMountedNodes()`, project switches, and each returned dispose handle clean these nodes.
 
-Layer masks fail fast when source layers are missing, self-referential, or use unsupported modes. `precompose_light_alpha` keeps a dirty/cache key so runtime code does not rebuild mask/precompose resources every frame. Top-level `project.particles` remains unsupported; use layer animation particles instead.
+Layer masks fail fast when source layers are missing, self-referential, or use unsupported modes. `vnicore` is the Pixi.js runtime target and rejects Cocos-compatible `legacy_alpha` projects or enabled layer masks instead of emulating that export path. For `precompose_light_alpha` image masks on `add` / `screen` / `lighten` targets, the player matches the editor Pixi preview by drawing the target and mask source into stage-sized canvases, deriving alpha from light luminance multiplied by mask alpha, and caching the resulting texture by stage, asset, texture, transform, opacity, and blend inputs. Non-light blend modes keep the normal Pixi alpha-mask path. Top-level `project.particles` remains unsupported; use layer animation particles instead.
 
 ## Docs And Examples
 

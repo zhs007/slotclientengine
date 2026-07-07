@@ -153,6 +153,7 @@ export interface V5GProjectConfig {
     version: string;
   };
   name: string;
+  maskCompositeMode?: V5GMaskCompositeMode;
   exportProfile?: V5GExportProfileConfig;
   stage: V5GStageConfig;
   assets: V5GAssetConfig[];

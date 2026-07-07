@@ -2,7 +2,7 @@
 
 `apps/anieditorv5viewer` is a Vite + TypeScript viewer shell for uploaded VNI zip exports. It no longer bundles local animation JSON or copied image assets; playback starts only after the user selects a `.zip` file in the browser.
 
-The animation runtime comes from `@slotclientengine/vnicore`. This app owns upload handling, zip parsing, profile selection, controls, styles, Blob URL lifecycle, and browser assembly. Validation, sampling, Pixi.js v8 rendering, texture-size checks, particles, playback ranges, segmented playback, particle-draining, and diagnostics live in `packages/vnicore`.
+The animation runtime comes from `@slotclientengine/vnicore`. This app owns upload handling, zip parsing, profile selection, controls, styles, Blob URL lifecycle, and browser assembly. Validation, sampling, Pixi.js v8 rendering, texture-size checks, masks, particles, playback ranges, segmented playback, particle-draining, and diagnostics live in `packages/vnicore`.
 
 The viewer owns the browser Pixi `Application` and canvas. It passes `app.stage` to `VNIPlayer`, then uses `viewport` / `setViewportSize(...)` and `requestRender` to keep the player aligned with the viewer mount. `VNIPlayer` itself does not create a canvas.
 
@@ -61,7 +61,7 @@ Supported by `@slotclientengine/vnicore`:
 - center-coordinate stage rendering
 - image layers and basic text layers
 - text layer replacement through `VNIPlayer` public APIs for dynamic text and image binding
-- layer masks with explicit `sourceLayerId` validation and `legacy_alpha` / `precompose_light_alpha` composite modes
+- Pixi `precompose_light_alpha` masks with explicit `sourceLayerId` validation and vnicore-owned light-mask precomposition
 - `normal`, `add`, `screen`, `multiply`, `lighten` blend modes
 - timeline playback, restart, loop, seek, playback ranges, segmented advanced playback, playback markers, particle-draining, and complete listeners
 
@@ -77,6 +77,9 @@ Explicitly unsupported:
 - partial or inconsistent asset file metadata
 - image texture dimensions that do not match `fileWidth` / `fileHeight` when scaled metadata is present
 - bundle profile projects whose `exportProfile` does not match the manifest entry
+- Cocos-compatible `legacy_alpha` runtime projects or enabled `legacy_alpha` layer masks
+
+The viewer is a Pixi preview shell for vnicore exports. It does not expose a Cocos-compatible switch and does not implement its own mask/precompose renderer; `precompose_light_alpha` visual parity with the editor Pixi preview is owned by `packages/vnicore`.
 
 ## Browser Diagnostics
 

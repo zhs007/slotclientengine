@@ -7,6 +7,23 @@ import {
   type LoadedUploadedVNIProject,
 } from "../src/runtime/uploaded-zip-project";
 
+type MutableMinimalProject = ReturnType<typeof createMinimalProject> & {
+  schemaVersion: string;
+  maskCompositeMode?: "precompose_light_alpha" | "legacy_alpha";
+  layers: Array<
+    ReturnType<typeof createMinimalProject>["layers"][number] & {
+      blendMode: string;
+      mask?: {
+        enabled: boolean;
+        sourceLayerId: string | null;
+        mode: "alpha";
+        compositeMode: "precompose_light_alpha" | "legacy_alpha";
+        showSourceLayer: boolean;
+      };
+    }
+  >;
+};
+
 describe("uploaded zip VNI project bundle", () => {
   it("loads roundreel.zip profiles and defaults to runtime_100", () => {
     const bundle = createUploadedVNIProjectBundle(
@@ -94,6 +111,55 @@ describe("uploaded zip VNI project bundle", () => {
     } finally {
       loaded.dispose();
     }
+  });
+
+  it("loads VNI_0.045 Pixi precompose_light_alpha projects", () => {
+    const project = createMinimalProject("precompose", undefined, [
+      { id: "asset_a", path: "assets/a.png" },
+      { id: "asset_b", path: "assets/b.png" },
+    ]) as MutableMinimalProject;
+    project.schemaVersion = "VNI_0.045";
+    project.maskCompositeMode = "precompose_light_alpha";
+    project.layers[1].blendMode = "add";
+    project.layers[1].mask = {
+      enabled: true,
+      sourceLayerId: "layer_0",
+      mode: "alpha",
+      compositeMode: "precompose_light_alpha",
+      showSourceLayer: false,
+    };
+
+    const bundle = createUploadedVNIProjectBundle(
+      createProjectZip(project, {
+        "assets/b.png": new Uint8Array([1]),
+      }),
+      "precompose.zip",
+    );
+    const loaded = bundle.loadProfile("runtime_50");
+
+    try {
+      expect(loaded.project.schemaVersion).toBe("VNI_0.045");
+      expect(loaded.project.maskCompositeMode).toBe("precompose_light_alpha");
+      expect(loaded.project.layers[1].mask?.compositeMode).toBe(
+        "precompose_light_alpha",
+      );
+    } finally {
+      loaded.dispose();
+    }
+  });
+
+  it("rejects Cocos-compatible legacy_alpha uploads before playback", () => {
+    const project = createMinimalProject(
+      "legacy-mask",
+    ) as MutableMinimalProject;
+    project.maskCompositeMode = "legacy_alpha";
+
+    expect(() =>
+      createUploadedVNIProjectBundle(
+        createProjectZip(project),
+        "legacy-mask.zip",
+      ),
+    ).toThrow("project.maskCompositeMode legacy_alpha");
   });
 
   it("requires exportProfile for single-project zips", () => {

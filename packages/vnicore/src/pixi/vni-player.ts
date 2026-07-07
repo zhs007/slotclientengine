@@ -55,6 +55,11 @@ import {
   getAdditiveMatteAssetIds,
   shouldDeriveAdditiveMatteTexture,
 } from "./additive-matte-texture.js";
+import {
+  createPrecomposedLightMaskKey,
+  createPrecomposedLightMaskTexture,
+  isPrecomposedLightMaskBlendMode,
+} from "./precomposed-light-mask.js";
 import type { AssetUrlManifest } from "../core/asset-manifest.js";
 import type { SampledLayerState } from "../core/project-sampler.js";
 import type {
@@ -246,6 +251,12 @@ interface VNIMountedImageSpriteOptions {
   compensation: { x: number; y: number };
 }
 
+interface VNIPrecomposedLightMaskState {
+  key: string;
+  sprite: PIXI.Sprite;
+  texture: PIXI.Texture;
+}
+
 export class VNIPlayer {
   private readonly stageRoot = new PIXI.Container();
   private readonly parent: PIXI.Container;
@@ -276,6 +287,10 @@ export class VNIPlayer {
   private readonly chaserLightSpritesByLayer = new Map<string, PIXI.Sprite[]>();
   private readonly maskSpritesByTargetLayer = new Map<string, PIXI.Sprite>();
   private readonly maskCacheKeysByTargetLayer = new Map<string, string>();
+  private readonly precomposedLightMasksByTargetLayer = new Map<
+    string,
+    VNIPrecomposedLightMaskState
+  >();
   private readonly renderEffectDisplaysByLayer = new Map<
     string,
     PIXI.Container[]
@@ -303,6 +318,11 @@ export class VNIPlayer {
   >();
 
   constructor(options: VNIPlayerOptions) {
+    if (options.project.maskCompositeMode === "legacy_alpha") {
+      throw new Error(
+        "VNI Pixi runtime does not support Cocos-compatible project.maskCompositeMode legacy_alpha; export a Pixi runtime project with precompose_light_alpha.",
+      );
+    }
     this.parent = options.parent;
     this.diagnosticsElement = options.diagnosticsElement;
     this.requestRenderCallback = options.requestRender;
@@ -1273,8 +1293,10 @@ export class VNIPlayer {
     }
     if (shouldDeriveAdditiveMatteTexture(asset, this.additiveMatteAssetIds)) {
       const matteTexture = deriveAdditiveMatteTexture(texture, asset);
-      this.ownedTextures.add(matteTexture);
-      return matteTexture;
+      if (matteTexture) {
+        this.ownedTextures.add(matteTexture);
+        return matteTexture;
+      }
     }
     return texture;
   }
@@ -1404,7 +1426,8 @@ export class VNIPlayer {
     const sampledByLayerId = new Map(
       sampledLayers.map((layer) => [layer.layerId, layer] as const),
     );
-    const activeTargetLayerIds = new Set<string>();
+    const activeNativeTargetLayerIds = new Set<string>();
+    const activePrecomposedTargetLayerIds = new Set<string>();
 
     for (const layer of this.project.layers) {
       const mask = layer.mask;
@@ -1412,7 +1435,14 @@ export class VNIPlayer {
       if (!targetInstance) continue;
       if (!mask?.enabled) {
         targetInstance.display.mask = null;
+        this.clearNativeMaskForTarget(layer.id);
+        this.clearPrecomposedLightMask(layer.id);
         continue;
+      }
+      if (mask.compositeMode === "legacy_alpha") {
+        throw new Error(
+          `VNI Pixi runtime does not support Cocos-compatible legacy_alpha masks on layer "${layer.id}"; export a Pixi runtime project with precompose_light_alpha.`,
+        );
       }
       if (!mask.sourceLayerId) {
         throw new Error(
@@ -1427,13 +1457,28 @@ export class VNIPlayer {
           `VNI mask on layer "${layer.id}" references missing source layer "${mask.sourceLayerId}".`,
         );
       }
-      if (mask.compositeMode === "precompose_light_alpha") {
-        if (!targetInstance.texture || !sourceInstance.texture) {
-          throw new Error(
-            `VNI precompose_light_alpha mask on layer "${layer.id}" requires image source and target textures.`,
-          );
+      if (
+        this.shouldUsePrecomposedLightMask(
+          targetInstance,
+          sourceInstance,
+          targetSample,
+        )
+      ) {
+        targetInstance.display.mask = null;
+        this.clearNativeMaskForTarget(layer.id);
+        this.applyPrecomposedLightMask(
+          targetInstance,
+          sourceInstance,
+          targetSample,
+          sourceSample,
+        );
+        activePrecomposedTargetLayerIds.add(layer.id);
+        if (!mask.showSourceLayer) {
+          sourceInstance.display.visible = false;
         }
+        continue;
       }
+      this.clearPrecomposedLightMask(layer.id);
       if (!sourceInstance.texture || !sourceInstance.textureSize) {
         throw new Error(
           `VNI mask source layer "${sourceInstance.layer.id}" is missing image texture.`,
@@ -1445,32 +1490,120 @@ export class VNIPlayer {
       );
       this.applyMaskSpriteState(maskSprite, sourceInstance, sourceSample);
       targetInstance.display.mask = maskSprite;
-      activeTargetLayerIds.add(layer.id);
+      activeNativeTargetLayerIds.add(layer.id);
       if (!mask.showSourceLayer) {
         sourceInstance.display.visible = false;
-      }
-      if (mask.compositeMode === "precompose_light_alpha") {
-        this.maskCacheKeysByTargetLayer.set(
-          layer.id,
-          createMaskCacheKey(
-            targetInstance,
-            sourceInstance,
-            targetSample,
-            sourceSample,
-            this.project.stage.width,
-            this.project.stage.height,
-          ),
-        );
       }
     }
 
     for (const [layerId, sprite] of [...this.maskSpritesByTargetLayer]) {
-      if (activeTargetLayerIds.has(layerId)) continue;
-      sprite.parent?.removeChild(sprite);
-      sprite.destroy({ children: true });
-      this.maskSpritesByTargetLayer.delete(layerId);
-      this.maskCacheKeysByTargetLayer.delete(layerId);
+      if (activeNativeTargetLayerIds.has(layerId)) continue;
+      this.clearNativeMaskForTarget(layerId);
     }
+    for (const layerId of [...this.precomposedLightMasksByTargetLayer.keys()]) {
+      if (activePrecomposedTargetLayerIds.has(layerId)) continue;
+      this.clearPrecomposedLightMask(layerId);
+    }
+  }
+
+  private shouldUsePrecomposedLightMask(
+    targetInstance: V5GLayerInstance,
+    sourceInstance: V5GLayerInstance,
+    targetSample: SampledLayerState,
+  ): boolean {
+    const mask = targetInstance.layer.mask;
+    return (
+      mask?.enabled === true &&
+      mask.compositeMode === "precompose_light_alpha" &&
+      targetInstance.layer.type === "image" &&
+      sourceInstance.layer.type === "image" &&
+      isPrecomposedLightMaskBlendMode(targetSample.blendMode)
+    );
+  }
+
+  private applyPrecomposedLightMask(
+    targetInstance: V5GLayerInstance,
+    sourceInstance: V5GLayerInstance,
+    targetSample: SampledLayerState,
+    sourceSample: SampledLayerState,
+  ): void {
+    if (!targetInstance.texture || !sourceInstance.texture) {
+      throw new Error(
+        `VNI precompose_light_alpha mask on layer "${targetInstance.layer.id}" requires image source and target textures.`,
+      );
+    }
+    const targetAsset = getLayerAsset(targetInstance.layer, this.assetsById);
+    const sourceAsset = getLayerAsset(sourceInstance.layer, this.assetsById);
+    if (!targetAsset || !sourceAsset) {
+      throw new Error(
+        `VNI precompose_light_alpha mask on layer "${targetInstance.layer.id}" requires image source and target assets.`,
+      );
+    }
+    const input = {
+      stage: this.project.stage,
+      target: {
+        layerId: targetInstance.layer.id,
+        asset: targetAsset,
+        texture: targetInstance.texture,
+        transform: targetSample.transform,
+        opacity: targetSample.opacity,
+        blendMode: targetSample.blendMode,
+      },
+      source: {
+        layerId: sourceInstance.layer.id,
+        asset: sourceAsset,
+        texture: sourceInstance.texture,
+        transform: sourceSample.transform,
+        opacity: sourceSample.opacity,
+      },
+    };
+    const key = createPrecomposedLightMaskKey(input);
+    let state = this.precomposedLightMasksByTargetLayer.get(
+      targetInstance.layer.id,
+    );
+    if (!state || state.key !== key) {
+      const texture = createPrecomposedLightMaskTexture(input);
+      const sprite = new PIXI.Sprite(texture);
+      sprite.label = `VNI precomposed light mask ${sourceInstance.layer.id} -> ${targetInstance.layer.id}`;
+      sprite.position.set(0, 0);
+      sprite.alpha = targetSample.opacity;
+      sprite.blendMode = toPixiBlendMode(targetSample.blendMode);
+      sprite.visible = targetSample.visible;
+      state?.sprite.parent?.removeChild(state.sprite);
+      state?.sprite.destroy({ children: true });
+      state?.texture.destroy(true);
+      state = { key, sprite, texture };
+      this.precomposedLightMasksByTargetLayer.set(
+        targetInstance.layer.id,
+        state,
+      );
+      this.insertLayerRuntimeDisplay(targetInstance, sprite);
+    } else {
+      state.sprite.alpha = targetSample.opacity;
+      state.sprite.blendMode = toPixiBlendMode(targetSample.blendMode);
+      state.sprite.visible = targetSample.visible;
+    }
+    targetInstance.display.alpha = 0;
+    this.maskCacheKeysByTargetLayer.set(targetInstance.layer.id, key);
+  }
+
+  private clearNativeMaskForTarget(layerId: string): void {
+    const sprite = this.maskSpritesByTargetLayer.get(layerId);
+    if (!sprite) return;
+    sprite.parent?.removeChild(sprite);
+    sprite.destroy({ children: true });
+    this.maskSpritesByTargetLayer.delete(layerId);
+    this.maskCacheKeysByTargetLayer.delete(layerId);
+  }
+
+  private clearPrecomposedLightMask(layerId: string): void {
+    const state = this.precomposedLightMasksByTargetLayer.get(layerId);
+    if (!state) return;
+    state.sprite.parent?.removeChild(state.sprite);
+    state.sprite.destroy({ children: true });
+    state.texture.destroy(true);
+    this.precomposedLightMasksByTargetLayer.delete(layerId);
+    this.maskCacheKeysByTargetLayer.delete(layerId);
   }
 
   private getOrCreateMaskSprite(
@@ -1586,8 +1719,12 @@ export class VNIPlayer {
   private getLayerRuntimeDisplayOrder(
     instance: V5GLayerInstance,
   ): PIXI.Container[] {
+    const precomposed = this.precomposedLightMasksByTargetLayer.get(
+      instance.layer.id,
+    )?.sprite;
     return [
       instance.display,
+      ...(precomposed ? [precomposed] : []),
       ...(this.safeGlowSpritesByLayer.get(instance.layer.id) ?? []),
       ...(this.renderEffectDisplaysByLayer.get(instance.layer.id) ?? []),
       ...(this.chaserLightSpritesByLayer.get(instance.layer.id) ?? []),
@@ -2006,11 +2143,12 @@ export class VNIPlayer {
     for (const instance of this.layerInstances.values()) {
       instance.display.mask = null;
     }
-    for (const sprite of this.maskSpritesByTargetLayer.values()) {
-      sprite.parent?.removeChild(sprite);
-      sprite.destroy({ children: true });
+    for (const layerId of [...this.maskSpritesByTargetLayer.keys()]) {
+      this.clearNativeMaskForTarget(layerId);
     }
-    this.maskSpritesByTargetLayer.clear();
+    for (const layerId of [...this.precomposedLightMasksByTargetLayer.keys()]) {
+      this.clearPrecomposedLightMask(layerId);
+    }
     this.maskCacheKeysByTargetLayer.clear();
   }
 
@@ -2043,7 +2181,10 @@ export class VNIPlayer {
   }
 
   private getRenderedMaskCount(): number {
-    return this.maskSpritesByTargetLayer.size;
+    return (
+      this.maskSpritesByTargetLayer.size +
+      this.precomposedLightMasksByTargetLayer.size
+    );
   }
 
   private getRenderedParticleCount(): number {
@@ -2213,31 +2354,4 @@ async function loadPixiTextureFromUrl(
   })) as PIXI.Texture | null | undefined;
   assertLoadedTexture(texture, context);
   return texture;
-}
-
-function createMaskCacheKey(
-  targetInstance: V5GLayerInstance,
-  sourceInstance: V5GLayerInstance,
-  targetSample: SampledLayerState,
-  sourceSample: SampledLayerState,
-  stageWidth: number,
-  stageHeight: number,
-): string {
-  return JSON.stringify({
-    targetTexture: getTextureCacheLabel(targetInstance.texture),
-    sourceTexture: getTextureCacheLabel(sourceInstance.texture),
-    targetTransform: targetSample.transform,
-    sourceTransform: sourceSample.transform,
-    targetOpacity: targetSample.opacity,
-    sourceOpacity: sourceSample.opacity,
-    blendMode: targetSample.blendMode,
-    stageWidth,
-    stageHeight,
-  });
-}
-
-function getTextureCacheLabel(texture: PIXI.Texture | null): string {
-  if (!texture) return "none";
-  const source = texture.source as { label?: string } | undefined;
-  return `${texture.label ?? ""}:${source?.label ?? ""}:${texture.width}x${texture.height}`;
 }

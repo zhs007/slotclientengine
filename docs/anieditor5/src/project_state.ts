@@ -56,6 +56,7 @@ export function createDefaultProject(): V5GProjectConfig {
       version: COCOS_TARGET_VERSION,
     },
     name: "VictoryAnimation",
+    maskCompositeMode: "precompose_light_alpha",
     stage: {
       width: DEFAULT_STAGE_WIDTH,
       height: DEFAULT_STAGE_HEIGHT,

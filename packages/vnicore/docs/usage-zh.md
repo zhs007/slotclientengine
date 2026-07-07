@@ -58,7 +58,7 @@ player.play();
 
 `VNIPlayer` 不创建自己的 `PIXI.Application`、renderer、canvas 或 DOM 节点；viewer、game runtime 或测试宿主必须自己持有这些外层对象。游戏内嵌场景通常传 `autoTick: false`，由主 ticker 调用 `update(deltaSeconds)`，并把 player 的 display tree 直接挂进同一个 Pixi renderer。
 
-运行时不会绘制导出 JSON 的 `stage.backgroundColor`。如果黑底 JPG 光效图的所有 image layer 用法都属于 `add` / `screen` / `lighten`，`VNIPlayer` 会在加载时派生一张透明 matte texture，避免透明宿主 canvas 上出现黑框；这不是播放 canvas，也不会改写原始资源文件。被 normal layer 复用的 JPG 不会走 matte 派生。
+运行时不会绘制导出 JSON 的 `stage.backgroundColor`。如果黑底 JPG 或 RGB PNG 光效图的所有 image layer 用法都属于 `add` / `screen` / `lighten`，并且解码后的像素没有有效 alpha，`VNIPlayer` 会在加载时派生一张透明 matte texture，避免透明宿主 canvas 上出现黑框；这不是播放 canvas，也不会改写原始资源文件。已有透明 alpha 的 PNG、被 normal layer 复用的图片不会走 matte 派生。
 
 ## 生命周期
 
@@ -241,6 +241,8 @@ disposeExternal();
 
 ## Mask
 
-`layer.mask` 支持 `legacy_alpha` 和 `precompose_light_alpha`。启用时必须声明合法 `sourceLayerId`，不能指向自身，不能缺 source。`showSourceLayer=false` 只隐藏普通 source layer，不会让 mask source 失效。`precompose_light_alpha` 维护 target/source transform、opacity、blendMode 和 stage 尺寸组成的 dirty/cache key，不能每帧重建预合成资源；如果 source/target 不是可用 image texture，会显式失败。
+`vnicore` 是 Pixi.js runtime 目标，不播放 Cocos-compatible `legacy_alpha` 导出。项目级 `maskCompositeMode: "legacy_alpha"` 或启用的 `legacy_alpha` layer mask 会显式失败，导出给 vnicore/viewer 的项目应使用 `precompose_light_alpha`。
+
+`layer.mask` 启用时必须声明合法 `sourceLayerId`，不能指向自身，不能缺 source。`showSourceLayer=false` 只隐藏普通 source layer，不会让 mask source 失效。`precompose_light_alpha` 在 image source/target 且 target 为 `add` / `screen` / `lighten` 时按编辑器 Pixi 预览做光效预合成：使用 stage 尺寸 canvas，按 layer transform 绘制 target/source，再用 target luminance、target alpha、mask source alpha 和 mask opacity 计算输出 alpha。runtime 会用 stage、asset、texture、transform、opacity 和 blendMode 组成 dirty/cache key，输入不变不会每帧重建 texture；非 light blendMode 仍走普通 Pixi alpha mask。
 
 `glow` 和 `safe_glow` 的关键区别：`glow` 是旧 deterministic render effect，使用自己的 effect 采样和统计；`safe_glow` 是普通 sprite overlay，继承 layer blendMode，适合跨 Pixi 和 Cocos 等运行时复现。

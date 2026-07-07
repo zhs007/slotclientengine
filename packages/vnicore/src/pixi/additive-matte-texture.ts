@@ -10,8 +10,9 @@ const ADDITIVE_MATTE_BLEND_MODES = new Set<V5GBlendMode>([
   "screen",
   "lighten",
 ]);
-const JPEG_PATH_PATTERN = /\.jpe?g(?:[?#].*)?$/i;
+const ADDITIVE_MATTE_IMAGE_PATH_PATTERN = /\.(?:jpe?g|png)(?:[?#].*)?$/i;
 const MATTE_ALPHA_FLOOR = 4;
+const OPAQUE_ALPHA = 255;
 
 type CanvasLike = HTMLCanvasElement | OffscreenCanvas;
 
@@ -49,14 +50,15 @@ export function shouldDeriveAdditiveMatteTexture(
   additiveMatteAssetIds: ReadonlySet<string>,
 ): boolean {
   return (
-    additiveMatteAssetIds.has(asset.id) && JPEG_PATH_PATTERN.test(asset.path)
+    additiveMatteAssetIds.has(asset.id) &&
+    ADDITIVE_MATTE_IMAGE_PATH_PATTERN.test(asset.path)
   );
 }
 
 export function deriveAdditiveMatteTexture(
   texture: PIXI.Texture,
   asset: V5GAssetConfig,
-): PIXI.Texture {
+): PIXI.Texture | null {
   const width = Math.round(texture.width);
   const height = Math.round(texture.height);
   const resource = texture.source?.resource as CanvasImageSource | undefined;
@@ -81,6 +83,12 @@ export function deriveAdditiveMatteTexture(
 
   const imageData = context.getImageData(0, 0, width, height);
   const pixels = imageData.data;
+  for (let index = 3; index < pixels.length; index += 4) {
+    if (pixels[index] < OPAQUE_ALPHA) {
+      return null;
+    }
+  }
+
   for (let index = 0; index < pixels.length; index += 4) {
     const red = pixels[index];
     const green = pixels[index + 1];

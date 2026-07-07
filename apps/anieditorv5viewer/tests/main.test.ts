@@ -141,6 +141,27 @@ describe("anieditorv5viewer main", () => {
     expect(getButton("Play").disabled).toBe(false);
   });
 
+  it("shows Pixi precompose mask summary for uploaded runtime projects", async () => {
+    await mountViewer();
+    await uploadFile(createPrecomposeMaskFile());
+
+    expect(playerMock.instances).toHaveLength(1);
+    expect(document.querySelector(".viewer-summary")?.textContent).toContain(
+      "1 masks, 1 precompose_light_alpha, 1 Pixi light-mask, 0 legacy_alpha",
+    );
+  });
+
+  it("rejects Cocos-compatible legacy_alpha uploads without creating a player", async () => {
+    await mountViewer();
+    await uploadFile(createLegacyMaskFile());
+
+    expect(playerMock.instances).toHaveLength(0);
+    expect(document.querySelector(".upload-error")?.textContent).toContain(
+      "project.maskCompositeMode legacy_alpha",
+    );
+    expect(getButton("Play").disabled).toBe(true);
+  });
+
   it("uploads roundreel.zip, defaults to runtime_100, and switches to edit_full", async () => {
     await mountViewer();
     await uploadZipFile("roundreel.zip");
@@ -570,4 +591,44 @@ function createUiTestProject() {
     ],
     particles: [],
   };
+}
+
+function createPrecomposeMaskFile(): File {
+  const project = createUiTestProject();
+  project.schemaVersion = "VNI_0.045";
+  Object.assign(project, { maskCompositeMode: "precompose_light_alpha" });
+  Object.assign(project.layers[1], {
+    name: "Masked Image",
+    type: "image",
+    assetId: "asset_a",
+    blendMode: "add",
+    mask: {
+      enabled: true,
+      sourceLayerId: "layer_image",
+      mode: "alpha",
+      compositeMode: "precompose_light_alpha",
+      showSourceLayer: false,
+    },
+  });
+  delete (project.layers[1] as { text?: string }).text;
+  return createZipFile("precompose-mask.zip", project);
+}
+
+function createLegacyMaskFile(): File {
+  const project = createUiTestProject();
+  Object.assign(project, { maskCompositeMode: "legacy_alpha" });
+  return createZipFile("legacy-mask.zip", project);
+}
+
+function createZipFile(name: string, project: unknown): File {
+  return new File(
+    [
+      zipSync({
+        "project.json": strToU8(JSON.stringify(project)),
+        "assets/a.png": new Uint8Array([1]),
+      }),
+    ],
+    name,
+    { type: "application/zip" },
+  );
 }
