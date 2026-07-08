@@ -181,7 +181,7 @@ export function sampleParticleSpritesForLayerRuntime(
       );
     } else if (animation.type === "particle_twinkle") {
       sprites.push(
-        ...sampleParticleTwinkle(
+        ...sampleParticleTwinkleLive(
           animation,
           particleLayer,
           textureSize,
@@ -504,6 +504,109 @@ function sampleParticleTwinkle(
   textureSize: TextureSize,
   elapsed: number,
 ): ParticleSpriteSample[] {
+  const params = getParticleTwinkleParams(animation, textureSize);
+  const sprites: ParticleSpriteSample[] = [];
+  let spawnedCount = 0;
+
+  for (let batchIndex = 0; spawnedCount < params.count; batchIndex += 1) {
+    const spawnTime = batchIndex * params.spawnInterval;
+    if (spawnTime > elapsed) break;
+    const batchRandom = seededRandom(animation.seed, batchIndex, 11);
+    const batchCount = Math.min(
+      params.count - spawnedCount,
+      params.batchMin +
+        Math.floor(batchRandom * (params.batchMax - params.batchMin + 1)),
+    );
+    appendParticleTwinkleBatchSprites({
+      animation,
+      sampledLayer,
+      sprites,
+      radius: params.radius,
+      twinkleDuration: params.twinkleDuration,
+      baseTextureScale: params.baseTextureScale,
+      elapsed,
+      spawnTime,
+      particleIndexOffset: spawnedCount,
+      batchCount,
+    });
+    spawnedCount += batchCount;
+  }
+
+  return sprites;
+}
+
+function sampleParticleTwinkleLive(
+  animation: V5GAnimationConfig,
+  sampledLayer: ParticleLayerSampleState,
+  textureSize: TextureSize,
+  elapsed: number,
+): ParticleSpriteSample[] {
+  const params = getParticleTwinkleParams(animation, textureSize);
+  const batches = getParticleTwinkleBatches(animation, params);
+  const lastBatch = batches[batches.length - 1];
+  if (!lastBatch) return [];
+  const cycleDuration = Math.max(
+    params.spawnInterval,
+    lastBatch.spawnTime + params.twinkleDuration,
+  );
+  const firstCycleIndex = Math.max(
+    0,
+    Math.floor((elapsed - params.twinkleDuration) / cycleDuration),
+  );
+  const lastCycleIndex = Math.max(0, Math.floor(elapsed / cycleDuration));
+  const sprites: ParticleSpriteSample[] = [];
+
+  for (
+    let cycleIndex = firstCycleIndex;
+    cycleIndex <= lastCycleIndex;
+    cycleIndex += 1
+  ) {
+    const cycleStartTime = cycleIndex * cycleDuration;
+    const cycleParticleOffset = cycleIndex * params.count;
+    for (const batch of batches) {
+      const spawnTime = cycleStartTime + batch.spawnTime;
+      const localAgeSeconds = elapsed - spawnTime;
+      if (localAgeSeconds < 0 || localAgeSeconds > params.twinkleDuration) {
+        continue;
+      }
+      appendParticleTwinkleBatchSprites({
+        animation,
+        sampledLayer,
+        sprites,
+        radius: params.radius,
+        twinkleDuration: params.twinkleDuration,
+        baseTextureScale: params.baseTextureScale,
+        elapsed,
+        spawnTime,
+        particleIndexOffset: cycleParticleOffset + batch.particleIndexOffset,
+        batchCount: batch.count,
+      });
+    }
+  }
+
+  return sprites;
+}
+
+interface ParticleTwinkleParams {
+  count: number;
+  radius: number;
+  spawnInterval: number;
+  twinkleDuration: number;
+  batchMin: number;
+  batchMax: number;
+  baseTextureScale: number;
+}
+
+interface ParticleTwinkleBatch {
+  spawnTime: number;
+  particleIndexOffset: number;
+  count: number;
+}
+
+function getParticleTwinkleParams(
+  animation: V5GAnimationConfig,
+  textureSize: TextureSize,
+): ParticleTwinkleParams {
   const count = Math.round(
     clampParticleNumber(getNumberParam(animation, "count"), 1, 1000),
   );
@@ -530,51 +633,97 @@ function sampleParticleTwinkle(
   );
   const size = clampParticleNumber(getNumberParam(animation, "size"), 1, 400);
   const textureEdge = getTextureLongestEdge(textureSize);
-  const baseTextureScale = size / textureEdge;
-  const sprites: ParticleSpriteSample[] = [];
+  return {
+    count,
+    radius,
+    spawnInterval,
+    twinkleDuration,
+    batchMin,
+    batchMax,
+    baseTextureScale: size / textureEdge,
+  };
+}
+
+function getParticleTwinkleBatches(
+  animation: V5GAnimationConfig,
+  params: ParticleTwinkleParams,
+): ParticleTwinkleBatch[] {
+  const batches: ParticleTwinkleBatch[] = [];
   let spawnedCount = 0;
 
-  for (let batchIndex = 0; spawnedCount < count; batchIndex += 1) {
-    const spawnTime = batchIndex * spawnInterval;
-    if (spawnTime > elapsed) break;
+  for (let batchIndex = 0; spawnedCount < params.count; batchIndex += 1) {
+    const spawnTime = batchIndex * params.spawnInterval;
     const batchRandom = seededRandom(animation.seed, batchIndex, 11);
     const batchCount = Math.min(
-      count - spawnedCount,
-      batchMin + Math.floor(batchRandom * (batchMax - batchMin + 1)),
+      params.count - spawnedCount,
+      params.batchMin +
+        Math.floor(batchRandom * (params.batchMax - params.batchMin + 1)),
     );
-    for (let itemIndex = 0; itemIndex < batchCount; itemIndex += 1) {
-      const particleIndex = spawnedCount + itemIndex;
-      const localAge = (elapsed - spawnTime) / twinkleDuration;
-      if (localAge < 0 || localAge > 1) continue;
-      const randomA = seededRandom(animation.seed, particleIndex, 21);
-      const randomB = seededRandom(animation.seed, particleIndex, 22);
-      const randomC = seededRandom(animation.seed, particleIndex, 23);
-      const randomD = seededRandom(animation.seed, particleIndex, 24);
-      const angle = randomA * Math.PI * 2;
-      const distance = Math.sqrt(randomB) * radius;
-      const waveAlpha = Math.sin(localAge * Math.PI);
-      const shimmer =
-        0.78 + 0.22 * Math.sin(localAge * Math.PI * 6 + randomC * 6);
-      const alpha = sampledLayer.opacity * Math.max(0, waveAlpha * shimmer);
-      if (alpha <= 0.002) continue;
-      sprites.push({
-        layerId: sampledLayer.layerId,
-        animationId: animation.id,
-        offsetX: roundTo(Math.cos(angle) * distance, 4),
-        offsetY: roundTo(Math.sin(angle) * distance, 4),
-        scale: roundTo(
-          Math.max(0.01, baseTextureScale * (0.65 + randomC * 0.85)),
-          4,
-        ),
-        rotation: roundTo((randomD - 0.5) * Math.PI * 2, 4),
-        alpha: roundTo(clampNumber(alpha, 0, 1), 4),
-        blendMode: sampledLayer.blendMode,
-      });
-    }
+    batches.push({
+      spawnTime,
+      particleIndexOffset: spawnedCount,
+      count: batchCount,
+    });
     spawnedCount += batchCount;
   }
 
-  return sprites;
+  return batches;
+}
+
+function appendParticleTwinkleBatchSprites(options: {
+  animation: V5GAnimationConfig;
+  sampledLayer: ParticleLayerSampleState;
+  sprites: ParticleSpriteSample[];
+  radius: number;
+  twinkleDuration: number;
+  baseTextureScale: number;
+  elapsed: number;
+  spawnTime: number;
+  particleIndexOffset: number;
+  batchCount: number;
+}): void {
+  const {
+    animation,
+    sampledLayer,
+    sprites,
+    radius,
+    twinkleDuration,
+    baseTextureScale,
+    elapsed,
+    spawnTime,
+    particleIndexOffset,
+    batchCount,
+  } = options;
+
+  for (let itemIndex = 0; itemIndex < batchCount; itemIndex += 1) {
+    const particleIndex = particleIndexOffset + itemIndex;
+    const localAge = (elapsed - spawnTime) / twinkleDuration;
+    if (localAge < 0 || localAge > 1) continue;
+    const randomA = seededRandom(animation.seed, particleIndex, 21);
+    const randomB = seededRandom(animation.seed, particleIndex, 22);
+    const randomC = seededRandom(animation.seed, particleIndex, 23);
+    const randomD = seededRandom(animation.seed, particleIndex, 24);
+    const angle = randomA * Math.PI * 2;
+    const distance = Math.sqrt(randomB) * radius;
+    const waveAlpha = Math.sin(localAge * Math.PI);
+    const shimmer =
+      0.78 + 0.22 * Math.sin(localAge * Math.PI * 6 + randomC * 6);
+    const alpha = sampledLayer.opacity * Math.max(0, waveAlpha * shimmer);
+    if (alpha <= 0.002) continue;
+    sprites.push({
+      layerId: sampledLayer.layerId,
+      animationId: animation.id,
+      offsetX: roundTo(Math.cos(angle) * distance, 4),
+      offsetY: roundTo(Math.sin(angle) * distance, 4),
+      scale: roundTo(
+        Math.max(0.01, baseTextureScale * (0.65 + randomC * 0.85)),
+        4,
+      ),
+      rotation: roundTo((randomD - 0.5) * Math.PI * 2, 4),
+      alpha: roundTo(clampNumber(alpha, 0, 1), 4),
+      blendMode: sampledLayer.blendMode,
+    });
+  }
 }
 
 function sampleParticleWall(

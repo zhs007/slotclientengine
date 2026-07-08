@@ -66,7 +66,7 @@ function particleTwinkle(): V5GAnimationConfig {
     seed: 31,
     params: {
       radius: 80,
-      count: 4,
+      count: 100,
       spawnInterval: 0.2,
       twinkleDuration: 0.5,
       batchMin: 2,
@@ -168,11 +168,16 @@ describe("particle-runtime", () => {
     );
   });
 
-  it("keeps twinkle particles alive across long live segmented loops", () => {
+  it("keeps twinkle particles alive without snapping back across long live segmented loops", () => {
     const layer = imageLayer(particleTwinkle());
     const runtime = new VNIParticleRuntime([layer]);
     const configTime = 0.5;
 
+    const deterministicLoopEntry = sampleLiveParticleSprites(
+      [runtimeLayer(layer)],
+      stage,
+      configTime,
+    );
     const first = runtime.emitLive([runtimeLayer(layer)], stage, configTime, 0);
     const afterExhaustingOriginalCount = runtime.emitLive(
       [runtimeLayer(layer)],
@@ -182,8 +187,9 @@ describe("particle-runtime", () => {
     );
 
     expect(first.particles.length).toBeGreaterThan(0);
+    expect(first.particles).toEqual(deterministicLoopEntry);
     expect(afterExhaustingOriginalCount.particles.length).toBeGreaterThan(0);
-    expect(afterExhaustingOriginalCount.particles).toEqual(first.particles);
+    expect(afterExhaustingOriginalCount.particles).not.toEqual(first.particles);
   });
 
   it("resets immediately when there are no live particles to drain", () => {
