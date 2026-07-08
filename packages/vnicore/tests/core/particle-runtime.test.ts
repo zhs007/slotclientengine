@@ -56,6 +56,26 @@ function particleWall(): V5GAnimationConfig {
   };
 }
 
+function particleTwinkle(): V5GAnimationConfig {
+  return {
+    id: "twinkle",
+    type: "particle_twinkle",
+    startTime: 0,
+    duration: 1,
+    enabled: true,
+    seed: 31,
+    params: {
+      radius: 80,
+      count: 4,
+      spawnInterval: 0.2,
+      twinkleDuration: 0.5,
+      batchMin: 2,
+      batchMax: 2,
+      size: 24,
+    },
+  };
+}
+
 function imageLayer(animation: V5GAnimationConfig): V5GLayerConfig {
   return {
     id: "layer",
@@ -146,6 +166,24 @@ describe("particle-runtime", () => {
     expect(runtime.getLiveParticleCount()).toBe(
       afterOriginalDuration.particles.length,
     );
+  });
+
+  it("keeps twinkle particles alive across long live segmented loops", () => {
+    const layer = imageLayer(particleTwinkle());
+    const runtime = new VNIParticleRuntime([layer]);
+    const configTime = 0.5;
+
+    const first = runtime.emitLive([runtimeLayer(layer)], stage, configTime, 0);
+    const afterExhaustingOriginalCount = runtime.emitLive(
+      [runtimeLayer(layer)],
+      stage,
+      configTime,
+      10,
+    );
+
+    expect(first.particles.length).toBeGreaterThan(0);
+    expect(afterExhaustingOriginalCount.particles.length).toBeGreaterThan(0);
+    expect(afterExhaustingOriginalCount.particles).toEqual(first.particles);
   });
 
   it("resets immediately when there are no live particles to drain", () => {

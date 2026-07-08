@@ -430,48 +430,57 @@ function sampleParticleStreamFromElapsed(
     const localAgeSeconds = elapsed - spawnTime;
     if (localAgeSeconds < 0 || localAgeSeconds > lifetime) continue;
     const progress = clampNumber(localAgeSeconds / lifetime, 0, 1);
-    const randomA = seededRandom(animation.seed, index, 501);
-    const randomB = seededRandom(animation.seed, index, 502);
-    const randomC = seededRandom(animation.seed, index, 503);
-    const randomD = seededRandom(animation.seed, index, 504);
-    const randomE = seededRandom(animation.seed, index, 505);
+    const randomA = seededRandom(animation.seed, index, 51);
+    const randomB = seededRandom(animation.seed, index, 52);
+    const randomC = seededRandom(animation.seed, index, 53);
+    const randomD = seededRandom(animation.seed, index, 54);
+    const randomE = seededRandom(animation.seed, index, 55);
+    const randomF = seededRandom(animation.seed, index, 56);
     const angle = getEmissionAngleRadians(
       randomA,
       emissionAngle,
       emissionSpreadAngle,
     );
+    const velocity = speed * (0.6 + randomB * 0.8);
+    const startRadius = spread * Math.sqrt(randomC);
+    const startOffsetAngle = randomD * Math.PI * 2;
+    const startOffsetX = Math.cos(startOffsetAngle) * startRadius;
+    const startOffsetY = Math.sin(startOffsetAngle) * startRadius;
     for (let trailIndex = 0; trailIndex <= trailCount; trailIndex += 1) {
       const trailAgeSeconds = localAgeSeconds - trailIndex * trailSpacing;
       if (trailAgeSeconds < 0 || trailAgeSeconds > lifetime) continue;
       const trailProgress = clampNumber(trailAgeSeconds / lifetime, 0, 1);
-      const startRadius = spread * 0.2 * randomB;
-      const travel = speed * trailAgeSeconds * (0.65 + randomC * 0.7);
+      const travel = velocity * trailAgeSeconds;
       const alphaBase =
-        sampledLayer.opacity * (fadeOut ? 1 - trailProgress : 1);
+        sampledLayer.opacity *
+        (fadeOut ? Math.pow(1 - trailProgress, 1.25) : 1);
       const alpha =
-        alphaBase * (0.55 + randomD * 0.45) * Math.pow(trailFade, trailIndex);
+        alphaBase * (0.55 + randomC * 0.45) * Math.pow(trailFade, trailIndex);
       if (alpha <= 0.002) continue;
       sprites.push({
         layerId: sampledLayer.layerId,
         animationId: animation.id,
-        offsetX: roundTo(Math.cos(angle) * (startRadius + travel), 4),
+        offsetX: roundTo(startOffsetX + Math.cos(angle) * travel, 4),
         offsetY: roundTo(
-          Math.sin(angle) * (startRadius + travel) +
+          startOffsetY +
+            Math.sin(angle) * travel +
             0.5 * gravity * trailAgeSeconds * trailAgeSeconds,
           4,
         ),
         scale: roundTo(
           Math.max(
             0.01,
-            baseTextureScale * (0.65 + randomB * 0.7) * (1 - progress * 0.15),
+            baseTextureScale *
+              (0.55 + randomE * 0.9) *
+              (1 - trailProgress * 0.25),
           ),
           4,
         ),
         rotation: roundTo(
           getParticleRotation(
-            randomE,
+            randomF,
             trailProgress,
-            randomC,
+            randomB,
             rotateParticles,
             randomRotation,
             randomRotationDegrees,
@@ -1092,7 +1101,7 @@ function getParticleRotation(
   const randomBase = randomRotation
     ? ((random - 0.5) * randomRotationDegrees * Math.PI) / 180
     : 0;
-  return randomBase + progress * Math.PI * 2 * spinSpeed * (0.5 + spinSalt);
+  return randomBase + progress * Math.PI * spinSpeed * (0.5 + spinSalt);
 }
 
 function getTextureLongestEdge(textureSize: TextureSize): number {

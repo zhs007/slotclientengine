@@ -255,6 +255,46 @@ describe("particle-sampler", () => {
     expect(first.length).toBeLessThanOrEqual(360);
   });
 
+  it("samples particle_stream spread as a radial spawn offset", () => {
+    const animation = particleStream({
+      duration: 1,
+      seed: 39081,
+      params: {
+        ...particleStream().params,
+        spawnRate: 1,
+        lifetime: 1,
+        spread: 200,
+        speed: 0,
+        gravity: 0,
+        trailCount: 0,
+        emissionAngle: 0,
+        emissionSpreadAngle: 0,
+        rotateParticles: false,
+      },
+    });
+    const sampled = sampleParticleSpritesForLayer(
+      layer(animation),
+      sampledLayer,
+      { width: 100, height: 100 },
+      0.5,
+    );
+    const expectedRadius = 200 * Math.sqrt(seededRandom(39081, 0, 53));
+    const expectedAngle = seededRandom(39081, 0, 54) * Math.PI * 2;
+
+    expect(sampled).toHaveLength(1);
+    expect(sampled[0].offsetX).toBeCloseTo(
+      Math.cos(expectedAngle) * expectedRadius,
+      4,
+    );
+    expect(sampled[0].offsetY).toBeCloseTo(
+      Math.sin(expectedAngle) * expectedRadius,
+      4,
+    );
+    expect(Math.hypot(sampled[0].offsetX, sampled[0].offsetY)).toBeGreaterThan(
+      40,
+    );
+  });
+
   it("keeps particle sampling deterministic for scaled runtime textures", () => {
     const animation = particleBurst();
     const fullTexture = sampleParticleSpritesForLayer(

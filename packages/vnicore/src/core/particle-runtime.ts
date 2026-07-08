@@ -176,13 +176,12 @@ export class VNIParticleRuntime {
         const key = getLiveAnimationKey(entry.layer.id, animation.id);
         const configuredElapsed = Math.max(0, configTime - animation.startTime);
         const previousElapsed = this.liveAnimationElapsedByKey.get(key);
-        const elapsed =
-          previousElapsed === undefined
-            ? configuredElapsed
-            : Math.max(
-                configuredElapsed,
-                previousElapsed + Math.max(0, deltaSeconds),
-              );
+        const elapsed = getLiveParticleElapsed(
+          animation,
+          configuredElapsed,
+          previousElapsed,
+          deltaSeconds,
+        );
         this.liveAnimationElapsedByKey.set(key, elapsed);
         nextActiveKeys.add(key);
         runtimeStates.push({
@@ -264,6 +263,34 @@ function sampleLiveParticleSpritesForRuntime(
 
 function getLiveAnimationKey(layerId: string, animationId: string): string {
   return `${layerId}\u0000${animationId}`;
+}
+
+function getLiveParticleElapsed(
+  animation: V5GAnimationConfig,
+  configuredElapsed: number,
+  previousElapsed: number | undefined,
+  deltaSeconds: number,
+): number {
+  const elapsed =
+    previousElapsed === undefined
+      ? configuredElapsed
+      : Math.max(
+          configuredElapsed,
+          previousElapsed + Math.max(0, deltaSeconds),
+        );
+  if (animation.type === "particle_twinkle") {
+    return wrapLiveTwinkleElapsed(animation, elapsed);
+  }
+  return elapsed;
+}
+
+function wrapLiveTwinkleElapsed(
+  animation: V5GAnimationConfig,
+  elapsed: number,
+): number {
+  const duration = Math.max(animation.duration, 0.0001);
+  if (elapsed < duration) return elapsed;
+  return elapsed % duration;
 }
 
 function getMaxParticleDrainDuration(
