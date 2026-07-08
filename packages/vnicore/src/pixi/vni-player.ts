@@ -1708,7 +1708,7 @@ export class VNIPlayer {
     );
     for (const activeSampledLayer of activeSampledLayers) {
       if (!activeSampledLayer.hasActiveParticleAnimation) continue;
-      const sampledLayer =
+      const transformSampledLayer =
         sampledLayerById.get(activeSampledLayer.layerId) ?? activeSampledLayer;
       const instance = this.layerInstances.get(activeSampledLayer.layerId);
       if (!instance) {
@@ -1724,7 +1724,8 @@ export class VNIPlayer {
       layers.push({
         layer: instance.layer,
         sampledLayer: {
-          ...sampledLayer,
+          ...activeSampledLayer,
+          transform: transformSampledLayer.transform,
           hasActiveParticleAnimation: true,
         },
         textureSize: instance.textureSize,

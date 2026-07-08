@@ -508,6 +508,19 @@ function createMovingParticleProject(): V5GProjectConfig {
         easing: "linear",
       },
     },
+    {
+      id: "fade",
+      type: "fade",
+      startTime: 0.5,
+      duration: 0.1,
+      enabled: true,
+      seed: 33,
+      params: {
+        fromOpacity: 1,
+        toOpacity: 0,
+        easing: "linear",
+      },
+    },
   ];
   project.layers[1].animations = [];
   return project;
