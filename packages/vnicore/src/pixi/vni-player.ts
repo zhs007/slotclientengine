@@ -223,6 +223,8 @@ interface PlaybackMarker {
 interface VNIPlaybackFrameOptions {
   liveParticles?: boolean;
   liveParticleDeltaSeconds?: number;
+  liveParticleSimulationTime?: number;
+  particleLayerTime?: number;
 }
 
 interface VNIMountedNode {
@@ -1032,11 +1034,18 @@ export class VNIPlayer {
       });
       return;
     }
+    const liveParticles =
+      segmented.keepParticlesAlive && segmented.getPhase() === "loop";
     const particleTime = this.getSegmentedParticleSampleTime(segmented);
     this.renderPlaybackFrame(result.currentTime, particleTime, {
-      liveParticles:
-        segmented.keepParticlesAlive && segmented.getPhase() === "loop",
+      liveParticles,
       liveParticleDeltaSeconds: deltaSeconds,
+      liveParticleSimulationTime: liveParticles
+        ? this.getSegmentedLiveParticleSimulationTime(segmented)
+        : undefined,
+      particleLayerTime: liveParticles
+        ? this.getSegmentedLiveParticleLayerSampleTime(segmented)
+        : undefined,
     });
   }
 
@@ -1075,6 +1084,26 @@ export class VNIPlayer {
   private getSegmentedParticleSampleTime(
     segmented: VNISegmentedPlaybackSequence,
   ): number {
+    return segmented.getCurrentTime();
+  }
+
+  private getSegmentedLiveParticleSimulationTime(
+    segmented: VNISegmentedPlaybackSequence,
+  ): number {
+    if (segmented.getPhase() !== "loop") return segmented.getCurrentTime();
+    return segmented.getLoopStartTime() + segmented.getLoopElapsedTime();
+  }
+
+  private getSegmentedLiveParticleLayerSampleTime(
+    segmented: VNISegmentedPlaybackSequence,
+  ): number {
+    if (segmented.getPhase() !== "loop") return segmented.getCurrentTime();
+    if (segmented.getLoopStartTime() === segmented.getLoopEndTime()) {
+      return segmented.getLoopStartTime();
+    }
+    if (segmented.getLoopIndex() > 0) {
+      return segmented.getLoopEndTime();
+    }
     return segmented.getCurrentTime();
   }
 
@@ -1350,13 +1379,22 @@ export class VNIPlayer {
       sampled.layers,
       nonParticleTime,
     );
-    const particleLayers = this.getParticleRuntimeLayers(sampled.layers);
+    const particleSampledLayers =
+      options.particleLayerTime === undefined ||
+      options.particleLayerTime === sampled.time
+        ? sampled.layers
+        : sampleProjectAtTime(this.project, options.particleLayerTime).layers;
+    const particleLayers = this.getParticleRuntimeLayers(
+      particleSampledLayers,
+      sampled.layers,
+    );
     const frame = options.liveParticles
       ? this.particleRuntime.emitLive(
           particleLayers,
           this.project.stage,
           particleTime,
           options.liveParticleDeltaSeconds ?? 0,
+          options.liveParticleSimulationTime,
         )
       : this.particleRuntime.emit(
           particleLayers,
@@ -1662,22 +1700,33 @@ export class VNIPlayer {
 
   private getParticleRuntimeLayers(
     sampledLayers: readonly SampledLayerState[],
+    activeSampledLayers: readonly SampledLayerState[] = sampledLayers,
   ): VNIParticleRuntimeLayer[] {
     const layers: VNIParticleRuntimeLayer[] = [];
-    for (const sampledLayer of sampledLayers) {
-      if (!sampledLayer.hasActiveParticleAnimation) continue;
-      const instance = this.layerInstances.get(sampledLayer.layerId);
+    const sampledLayerById = new Map(
+      sampledLayers.map((sampledLayer) => [sampledLayer.layerId, sampledLayer]),
+    );
+    for (const activeSampledLayer of activeSampledLayers) {
+      if (!activeSampledLayer.hasActiveParticleAnimation) continue;
+      const sampledLayer =
+        sampledLayerById.get(activeSampledLayer.layerId) ?? activeSampledLayer;
+      const instance = this.layerInstances.get(activeSampledLayer.layerId);
       if (!instance) {
-        throw new Error(`Missing V5G layer instance: ${sampledLayer.layerId}`);
+        throw new Error(
+          `Missing V5G layer instance: ${activeSampledLayer.layerId}`,
+        );
       }
       if (!instance.textureSize) {
         throw new Error(
-          `V5G particle layer "${sampledLayer.layerId}" is missing image texture.`,
+          `V5G particle layer "${activeSampledLayer.layerId}" is missing image texture.`,
         );
       }
       layers.push({
         layer: instance.layer,
-        sampledLayer,
+        sampledLayer: {
+          ...sampledLayer,
+          hasActiveParticleAnimation: true,
+        },
         textureSize: instance.textureSize,
       });
     }

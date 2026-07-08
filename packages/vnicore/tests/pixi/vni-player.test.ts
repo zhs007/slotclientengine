@@ -464,6 +464,55 @@ function createThreeGroupProject(): V5GProjectConfig {
   return project;
 }
 
+function createMovingParticleProject(): V5GProjectConfig {
+  const project = createProject();
+  const layer = project.layers[0];
+  layer.transform = {
+    ...layer.transform,
+    x: 0,
+    y: 0,
+  };
+  layer.blendMode = "normal";
+  layer.animations = [
+    {
+      id: "twinkle",
+      type: "particle_twinkle",
+      startTime: 0,
+      duration: 1.5,
+      enabled: true,
+      seed: 31,
+      params: {
+        radius: 0,
+        count: 80,
+        spawnInterval: 0.1,
+        twinkleDuration: 0.8,
+        batchMin: 2,
+        batchMax: 2,
+        size: 24,
+      },
+    },
+    {
+      id: "move",
+      type: "move",
+      startTime: 0,
+      duration: 1,
+      enabled: true,
+      seed: 32,
+      params: {
+        fromX: 0,
+        fromY: 0,
+        toX: 100,
+        toY: 0,
+        baseX: 0,
+        baseY: 0,
+        easing: "linear",
+      },
+    },
+  ];
+  project.layers[1].animations = [];
+  return project;
+}
+
 function createRenderEffectProject(): V5GProjectConfig {
   const project = createProject();
   project.layers[0].animations = [
@@ -2610,5 +2659,40 @@ describe("VNIPlayer", () => {
       isDrainingParticles: false,
     });
     expect(player.getTime()).toBe(0.2);
+  });
+
+  it("keeps moving live particle emitters from snapping back when segmented loops wrap", async () => {
+    const player = await createInitializedPlayer({
+      project: createMovingParticleProject(),
+    });
+    const internals = player as unknown as {
+      liveParticleSpritesByLayer: Map<
+        string,
+        InstanceType<typeof pixiMock.MockContainer>[]
+      >;
+    };
+
+    player.play({
+      mode: "segmented",
+      loopStart: { unit: "time", at: 0.2 },
+      loopEnd: { unit: "time", at: 0.6 },
+    });
+    player.update(0.5);
+    const beforeWrapParticles =
+      internals.liveParticleSpritesByLayer.get("layer-a") ?? [];
+    const beforeWrapX = beforeWrapParticles[0]?.position.x ?? 0;
+
+    player.update(0.2);
+    const afterWrapParticles =
+      internals.liveParticleSpritesByLayer.get("layer-a") ?? [];
+    const afterWrapX = afterWrapParticles[0]?.position.x ?? 0;
+
+    expect(player.getTime()).toBeCloseTo(0.3);
+    expect(player.getPlaybackState().loopIndex).toBe(1);
+    expect(beforeWrapParticles.length).toBeGreaterThan(0);
+    expect(afterWrapParticles.length).toBeGreaterThan(0);
+    expect(beforeWrapX).toBeCloseTo(250);
+    expect(afterWrapX).toBeCloseTo(260);
+    expect(afterWrapX).toBeGreaterThan(beforeWrapX);
   });
 });

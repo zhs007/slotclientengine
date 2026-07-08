@@ -81,6 +81,7 @@ export class VNIParticleRuntime {
     stage: V5GStageConfig,
     configTime: number,
     deltaSeconds: number,
+    simulationTime?: number,
   ): VNIParticleRuntimeFrame {
     this.draining = false;
     this.drainElapsed = 0;
@@ -89,6 +90,7 @@ export class VNIParticleRuntime {
       layers,
       configTime,
       deltaSeconds,
+      simulationTime,
     );
     const particles = sampleLiveParticleSpritesForRuntime(liveLayers, stage);
     this.lastParticles = particles;
@@ -162,6 +164,7 @@ export class VNIParticleRuntime {
     layers: readonly VNIParticleRuntimeLayer[],
     configTime: number,
     deltaSeconds: number,
+    simulationTime?: number,
   ): VNILiveParticleAnimationLayer[] {
     const nextActiveKeys = new Set<string>();
     const liveLayers: VNILiveParticleAnimationLayer[] = [];
@@ -175,9 +178,13 @@ export class VNIParticleRuntime {
         if (configProgress === null || configProgress <= 0) continue;
         const key = getLiveAnimationKey(entry.layer.id, animation.id);
         const configuredElapsed = Math.max(0, configTime - animation.startTime);
+        const simulationElapsed =
+          simulationTime === undefined
+            ? configuredElapsed
+            : Math.max(0, simulationTime - animation.startTime);
         const previousElapsed = this.liveAnimationElapsedByKey.get(key);
         const elapsed = getLiveParticleElapsed(
-          configuredElapsed,
+          simulationElapsed,
           previousElapsed,
           deltaSeconds,
         );
