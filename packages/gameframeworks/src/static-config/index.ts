@@ -25,7 +25,6 @@ export type {
   SlotGameStaticWinAmountLayout,
   SlotGameStaticWinAmountText,
   SlotGameStaticWinAmountThresholds,
-  SlotGameStaticWinAmountTier,
 } from "./types.js";
 export { createSlotGameFramePolicyFromStaticConfig } from "./frame-policy.js";
 export { assertSlotGameStaticConfig } from "./validate.js";

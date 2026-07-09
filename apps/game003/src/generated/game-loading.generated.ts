@@ -5,6 +5,7 @@ import game003LoadingGame003_symbol_spine_atlas9Url from "../../../../assets/gam
 import game003LoadingGame003_symbol_spine_texture10Url from "../../../../assets/game003-s1/Symbol.png?url";
 import game003LoadingGame003_bg_bar_symbol_manifest12Url from "../../../../assets/game003-s1/bg-bar-symbol-state-textures.manifest.json?url";
 import game003LoadingGame003_minecart13Url from "../../../../assets/game003-s1/minecart.png?url";
+import game003LoadingGame003_win_amount_manifest14Url from "../../../../assets/game003-s1/win-amount/win-amount.manifest.json?url";
 
 const game003LoadingGame003_scene_parts2Modules = import.meta.glob(
   "../../../../assets/game003-s1/{mainreelbg,conveyor1,conveyor2}.png",
@@ -70,7 +71,7 @@ const game003LoadingGame003_bg_bar_symbol_pngs11Modules = import.meta.glob(
     query: "?url",
   },
 ) as Record<string, string>;
-const game003LoadingGame003_win_amount_vni_projects14Modules = import.meta.glob(
+const game003LoadingGame003_win_amount_vni_projects15Modules = import.meta.glob(
   "../../../../assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json",
   {
     eager: true,
@@ -78,7 +79,7 @@ const game003LoadingGame003_win_amount_vni_projects14Modules = import.meta.glob(
     query: "?url",
   },
 ) as Record<string, string>;
-const game003LoadingGame003_win_amount_vni_assets15Modules = import.meta.glob(
+const game003LoadingGame003_win_amount_vni_assets16Modules = import.meta.glob(
   "../../../../assets/game003-s1/win-amount/assets/*.{png,jpg,jpeg,webp}",
   {
     eager: true,
@@ -132,6 +133,10 @@ const game003LoadingPathResources = Object.freeze([
     url: game003LoadingGame003_minecart13Url,
     weight: 1,
   }),
+  Object.freeze({
+    id: "game003-win-amount-manifest",
+    url: game003LoadingGame003_win_amount_manifest14Url,
+  }),
 ] as const satisfies readonly game003GeneratedLoadingResourceUrl[]);
 
 const game003LoadingGlobGroups = Object.freeze([
@@ -177,13 +182,11 @@ const game003LoadingGlobGroups = Object.freeze([
   }),
   Object.freeze({
     id: "game003-win-amount-vni-projects",
-    modules: game003LoadingGame003_win_amount_vni_projects14Modules,
-    weight: 3,
+    modules: game003LoadingGame003_win_amount_vni_projects15Modules,
   }),
   Object.freeze({
     id: "game003-win-amount-vni-assets",
-    modules: game003LoadingGame003_win_amount_vni_assets15Modules,
-    weight: 8,
+    modules: game003LoadingGame003_win_amount_vni_assets16Modules,
   }),
 ] as const satisfies readonly game003GeneratedLoadingGlobGroup[]);
 

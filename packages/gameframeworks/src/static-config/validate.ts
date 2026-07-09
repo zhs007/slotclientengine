@@ -20,10 +20,7 @@ import type {
   SlotGameStaticWinAmountLayout,
   SlotGameStaticWinAmountText,
   SlotGameStaticWinAmountThresholds,
-  SlotGameStaticWinAmountTier,
 } from "./types.js";
-
-const MIN_WIN_AMOUNT_TIER_DURATION_SECONDS = 5;
 
 export function assertSlotGameStaticConfig(
   config: unknown,
@@ -717,77 +714,11 @@ function assertWinAmountAnimations(
   label: string,
 ): SlotGameStaticWinAmountAnimations {
   const record = assertRecord(value, label);
-  assertKeys(record, label, ["projectModules", "assetModules", "tiers"]);
+  assertKeys(record, label, ["manifest", "projectModules", "assetModules"]);
+  assertRecord(record.manifest, `${label}.manifest`);
   assertNonEmptyRecord(record.projectModules, `${label}.projectModules`);
   assertNonEmptyStringRecord(record.assetModules, `${label}.assetModules`);
-  if (!Array.isArray(record.tiers) || record.tiers.length === 0) {
-    throw new Error(`${label}.tiers must be a non-empty array.`);
-  }
-  const tiers = record.tiers.map((tier, index) =>
-    assertWinAmountTier(tier, `${label}.tiers[${index}]`),
-  );
-  assertUniqueStrings(
-    tiers.map((tier) => tier.id),
-    `${label}.tiers.id`,
-  );
-  for (let index = 1; index < tiers.length; index += 1) {
-    if (
-      tiers[index].thresholdMultiplier <= tiers[index - 1].thresholdMultiplier
-    ) {
-      throw new Error(
-        `${label}.tiers thresholdMultiplier must be strictly increasing.`,
-      );
-    }
-  }
   return record as unknown as SlotGameStaticWinAmountAnimations;
-}
-
-function assertWinAmountTier(
-  value: unknown,
-  label: string,
-): SlotGameStaticWinAmountTier {
-  const record = assertRecord(value, label);
-  assertKeys(record, label, [
-    "id",
-    "thresholdMultiplier",
-    "project",
-    "durationSeconds",
-    "loopStartTime",
-    "loopEndTime",
-    "keepParticlesAlive",
-  ]);
-  assertNonEmptyString(record.id, `${label}.id`);
-  assertPositiveFiniteNumber(
-    record.thresholdMultiplier,
-    `${label}.thresholdMultiplier`,
-  );
-  assertTierProject(record.project, `${label}.project`);
-  const durationSeconds = assertPositiveFiniteNumber(
-    record.durationSeconds,
-    `${label}.durationSeconds`,
-  );
-  if (durationSeconds < MIN_WIN_AMOUNT_TIER_DURATION_SECONDS) {
-    throw new Error(
-      `${label}.durationSeconds must be at least ${MIN_WIN_AMOUNT_TIER_DURATION_SECONDS} seconds.`,
-    );
-  }
-  const loopStartTime = assertNonNegativeFiniteNumber(
-    record.loopStartTime,
-    `${label}.loopStartTime`,
-  );
-  const loopEndTime = assertNonNegativeFiniteNumber(
-    record.loopEndTime,
-    `${label}.loopEndTime`,
-  );
-  if (!(loopStartTime <= loopEndTime && loopEndTime <= durationSeconds)) {
-    throw new Error(
-      `${label} must satisfy loopStartTime <= loopEndTime <= durationSeconds.`,
-    );
-  }
-  if (typeof record.keepParticlesAlive !== "boolean") {
-    throw new Error(`${label}.keepParticlesAlive must be a boolean.`);
-  }
-  return record as unknown as SlotGameStaticWinAmountTier;
 }
 
 function assertPoint(value: unknown, label: string): SlotGameStaticPoint {
@@ -909,18 +840,6 @@ function assertNonEmptyStringRecord(
     throw new Error(`${label} must not be empty.`);
   }
   return record;
-}
-
-function assertTierProject(value: unknown, label: string): string {
-  const project = assertNonEmptyString(value, label);
-  if (
-    !/^\.\/[-A-Za-z0-9_]+\.json$/u.test(project) ||
-    project.includes("..") ||
-    project.includes("\\")
-  ) {
-    throw new Error(`${label} must be ./filename.json.`);
-  }
-  return project;
 }
 
 function assertWinAmountAnchor(

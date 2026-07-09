@@ -130,20 +130,10 @@ export interface SlotGameStaticWinAmountLayout {
   readonly majorOffset: SlotGameStaticPoint;
 }
 
-export interface SlotGameStaticWinAmountTier {
-  readonly id: string;
-  readonly thresholdMultiplier: number;
-  readonly project: string;
-  readonly durationSeconds: number;
-  readonly loopStartTime: number;
-  readonly loopEndTime: number;
-  readonly keepParticlesAlive: boolean;
-}
-
 export interface SlotGameStaticWinAmountAnimations {
+  readonly manifest: unknown;
   readonly projectModules: Readonly<Record<string, unknown>>;
   readonly assetModules: Readonly<Record<string, string>>;
-  readonly tiers: readonly SlotGameStaticWinAmountTier[];
 }
 
 export interface SlotGameStaticWinAmountConfig {

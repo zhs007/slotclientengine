@@ -59,7 +59,12 @@ describe("game003 win amount config", () => {
       "superwin",
       "megawin",
     ]);
-    expect(config.tiers.map((tier) => tier.durationSeconds)).toEqual([5, 5, 5]);
-    expect(config.tiers[2].vniProject.stage.duration).toBe(5);
+    expect(config.tiers.map((tier) => tier.durationSeconds)).toEqual([
+      2.9, 2.9, 2.9,
+    ]);
+    expect(config.tiers.map((tier) => tier.loopEndTime)).toEqual([
+      2.5, 2.5, 2.5,
+    ]);
+    expect(config.tiers[2].vniProject.stage.duration).toBe(2.9);
   });
 });

@@ -471,9 +471,30 @@ function validateConfig(config: WinAmountAnimationConfig): void {
     throw new Error("win amount animation tiers must not be empty.");
   }
   for (const tier of config.tiers) {
-    if (tier.durationSeconds < 5) {
+    for (const [label, value] of [
+      ["durationSeconds", tier.durationSeconds],
+      ["loopStartTime", tier.loopStartTime],
+      ["loopEndTime", tier.loopEndTime],
+    ] as const) {
+      if (!Number.isFinite(value) || value < 0) {
+        throw new Error(
+          `win amount tier "${tier.id}" ${label} must be a finite non-negative number.`,
+        );
+      }
+    }
+    if (tier.durationSeconds <= 0) {
       throw new Error(
-        `win amount tier "${tier.id}" durationSeconds must be at least 5 seconds.`,
+        `win amount tier "${tier.id}" durationSeconds must be positive.`,
+      );
+    }
+    if (
+      !(
+        tier.loopStartTime <= tier.loopEndTime &&
+        tier.loopEndTime <= tier.durationSeconds
+      )
+    ) {
+      throw new Error(
+        `win amount tier "${tier.id}" must satisfy loopStartTime <= loopEndTime <= durationSeconds.`,
       );
     }
   }

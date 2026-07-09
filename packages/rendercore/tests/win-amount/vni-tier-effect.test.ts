@@ -2,14 +2,19 @@ import { describe, expect, it } from "vitest";
 import bigwinProject from "../../../../assets/game003-s1/win-amount/bigwin.json";
 import megawinProject from "../../../../assets/game003-s1/win-amount/megawin.json";
 import superwinProject from "../../../../assets/game003-s1/win-amount/superwin.json";
-import { createWinAmountAnimationTiersFromModules } from "../../src/win-amount/index.js";
+import winAmountManifest from "../../../../assets/game003-s1/win-amount/win-amount.manifest.json";
+import {
+  createWinAmountAnimationTiersFromManifestModules,
+  createWinAmountAnimationTiersFromModules,
+  parseWinAmountAnimationManifest,
+} from "../../src/win-amount/index.js";
 
 describe("win amount VNI tier resources", () => {
   it("resolves tier projects and clones stage duration without mutating imports", () => {
     const bigwinProjectInput = structuredClone(bigwinProject);
     const superwinProjectInput = structuredClone(superwinProject);
     const megawinProjectInput = structuredClone(megawinProject);
-    megawinProjectInput.stage.duration = 10;
+    megawinProjectInput.stage.duration = 3.5;
 
     const tiers = createWinAmountAnimationTiersFromModules({
       tierConfigs: [
@@ -34,12 +39,76 @@ describe("win amount VNI tier resources", () => {
       "superwin",
       "megawin",
     ]);
-    expect(tiers[0].vniProject.stage.duration).toBe(5);
-    expect(tiers[2].vniProject.stage.duration).toBe(5);
-    expect(megawinProjectInput.stage.duration).toBe(10);
+    expect(tiers[0].vniProject.stage.duration).toBe(2.9);
+    expect(tiers[2].vniProject.stage.duration).toBe(2.9);
+    expect(megawinProjectInput.stage.duration).toBe(3.5);
     expect(Object.keys(tiers[2].assetUrls)).toHaveLength(
       megawinProjectInput.assets.length,
     );
+  });
+
+  it("parses win amount manifests and resolves tiers through manifest modules", () => {
+    const parsed = parseWinAmountAnimationManifest(winAmountManifest);
+
+    expect(parsed).toMatchObject({
+      version: 1,
+      kind: "vni-win-amount-tiers",
+      projectGlob: "./{bigwin,superwin,megawin}.json",
+      assetGlob: "./assets/*.{png,jpg,jpeg,webp}",
+    });
+    expect(parsed.tiers.map((tier) => tier.playback.durationSeconds)).toEqual([
+      2.9, 2.9, 2.9,
+    ]);
+
+    const tiers = createWinAmountAnimationTiersFromManifestModules({
+      manifest: winAmountManifest,
+      projectModules: {
+        "/assets/game003-s1/win-amount/bigwin.json": bigwinProject,
+        "/assets/game003-s1/win-amount/superwin.json": superwinProject,
+        "/assets/game003-s1/win-amount/megawin.json": megawinProject,
+      },
+      assetModules: createAssetModules([
+        bigwinProject,
+        superwinProject,
+        megawinProject,
+      ]),
+    });
+
+    expect(tiers.map((tier) => tier.id)).toEqual([
+      "bigwin",
+      "superwin",
+      "megawin",
+    ]);
+    expect(tiers.map((tier) => tier.loopEndTime)).toEqual([2.5, 2.5, 2.5]);
+  });
+
+  it("fails fast for malformed win amount manifests", () => {
+    expect(() =>
+      parseWinAmountAnimationManifest({
+        ...winAmountManifest,
+        extra: true,
+      }),
+    ).toThrow(/unknown field/);
+    expect(() =>
+      parseWinAmountAnimationManifest({
+        ...winAmountManifest,
+        projectGlob: "./*.json",
+      }),
+    ).toThrow(/brace JSON glob/);
+    expect(() =>
+      parseWinAmountAnimationManifest({
+        ...winAmountManifest,
+        tiers: [
+          {
+            ...winAmountManifest.tiers[0],
+            playback: {
+              ...winAmountManifest.tiers[0].playback,
+              loopEndTime: 3,
+            },
+          },
+        ],
+      }),
+    ).toThrow(/loopStartTime <= loopEndTime <= durationSeconds/);
   });
 
   it("fails fast for missing projects, duplicate basenames, and illegal timing", () => {
@@ -102,7 +171,7 @@ describe("win amount VNI tier resources", () => {
         tierConfigs: [
           {
             ...createTierConfig("bigwin", 15, "./bigwin.json"),
-            durationSeconds: 4,
+            durationSeconds: 0,
           },
         ],
         projectModules: {
@@ -110,14 +179,14 @@ describe("win amount VNI tier resources", () => {
         },
         assetModules,
       }),
-    ).toThrow(/at least 5 seconds/);
+    ).toThrow(/durationSeconds/);
 
     expect(() =>
       createWinAmountAnimationTiersFromModules({
         tierConfigs: [
           {
             ...createTierConfig("bigwin", 15, "./bigwin.json"),
-            durationSeconds: 6,
+            durationSeconds: 3,
           },
         ],
         projectModules: {
@@ -138,9 +207,9 @@ function createTierConfig(
     id,
     thresholdMultiplier,
     project,
-    durationSeconds: 5,
+    durationSeconds: 2.9,
     loopStartTime: 1,
-    loopEndTime: 4,
+    loopEndTime: 2.5,
     keepParticlesAlive: true,
   };
 }

@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import bigwinProject from "../../../assets/game003-s1/win-amount/bigwin.json";
+import megawinProject from "../../../assets/game003-s1/win-amount/megawin.json";
+import superwinProject from "../../../assets/game003-s1/win-amount/superwin.json";
 import {
   GAME003_LOADING_RESOURCE_URLS,
   game003ExpandGeneratedLoadingResourceUrls,
@@ -47,6 +50,7 @@ describe("game003 loading resources", () => {
         "game003-bg-bar-symbol-pngs:wild.png",
         "game003-bg-bar-symbol-manifest",
         "game003-minecart",
+        "game003-win-amount-manifest",
         "game003-win-amount-vni-projects:bigwin.json",
         "game003-win-amount-vni-projects:superwin.json",
         "game003-win-amount-vni-projects:megawin.json",
@@ -66,9 +70,7 @@ describe("game003 loading resources", () => {
       ).toBe(true);
     }
     expect(
-      ids.some((id) =>
-        id.startsWith("game003-win-amount-vni-assets:mega_asset"),
-      ),
+      getReferencedWinAmountLoadingAssetIds().every((id) => ids.includes(id)),
     ).toBe(true);
     expect(
       ids.some((id) => id.startsWith("game003-symbol-spine-skeletons:L1")),
@@ -145,3 +147,15 @@ describe("game003 loading resources", () => {
     expect(serialized).not.toMatch(/gameserv/);
   });
 });
+
+function getReferencedWinAmountLoadingAssetIds(): readonly string[] {
+  return [bigwinProject, superwinProject, megawinProject].flatMap((project) =>
+    project.assets.map((asset) => {
+      const filename = asset.path.split("/").at(-1);
+      if (!filename) {
+        throw new Error(`bad win amount asset path ${asset.path}`);
+      }
+      return `game003-win-amount-vni-assets:${filename}`;
+    }),
+  );
+}

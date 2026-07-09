@@ -10,6 +10,7 @@ import game003Skin1PortraitBackgroundUrl from "../../../../assets/game003-s1/bg2
 import game003Skin1MainReelBackgroundUrl from "../../../../assets/game003-s1/mainreelbg.png?url";
 import game003Skin1LandscapeConveyorUrl from "../../../../assets/game003-s1/conveyor1.png?url";
 import game003Skin1PortraitConveyorUrl from "../../../../assets/game003-s1/conveyor2.png?url";
+import game003Skin1WinAmountManifest from "../../../../assets/game003-s1/win-amount/win-amount.manifest.json";
 import game003Skin1BgBarFeatureBarSymbolManifest from "../../../../assets/game003-s1/bg-bar-symbol-state-textures.manifest.json";
 import game003Skin1SpineAtlasModulesRaw0 from "../../../../assets/game003-s1/Symbol.atlas?raw";
 import game003Skin1SpineTextureModulesUrl0 from "../../../../assets/game003-s1/Symbol.png?url";
@@ -257,37 +258,9 @@ export const GAME003_STATIC_CONFIG = Object.freeze({
           majorOffset: Object.freeze({ x: 0, y: 0 } as const),
         }),
         animations: Object.freeze({
+          manifest: game003Skin1WinAmountManifest,
           projectModules: game003Skin1WinAmountProjectModules,
           assetModules: game003Skin1WinAmountAssetModules,
-          tiers: Object.freeze([
-            {
-              id: "bigwin",
-              thresholdMultiplier: 15,
-              project: "./bigwin.json",
-              durationSeconds: 5,
-              loopStartTime: 1,
-              loopEndTime: 4,
-              keepParticlesAlive: true,
-            },
-            {
-              id: "superwin",
-              thresholdMultiplier: 30,
-              project: "./superwin.json",
-              durationSeconds: 5,
-              loopStartTime: 1,
-              loopEndTime: 4,
-              keepParticlesAlive: true,
-            },
-            {
-              id: "megawin",
-              thresholdMultiplier: 50,
-              project: "./megawin.json",
-              durationSeconds: 5,
-              loopStartTime: 1,
-              loopEndTime: 4,
-              keepParticlesAlive: true,
-            },
-          ] as const),
         }),
       }),
       appExtensions: Object.freeze({

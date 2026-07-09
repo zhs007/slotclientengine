@@ -189,20 +189,8 @@ export interface GameStaticYamlWinAmountLayout {
   readonly majorOffset: GameStaticYamlPoint;
 }
 
-export interface GameStaticYamlWinAmountTier {
-  readonly id: string;
-  readonly thresholdMultiplier: number;
-  readonly project: string;
-  readonly durationSeconds: number;
-  readonly loopStartTime: number;
-  readonly loopEndTime: number;
-  readonly keepParticlesAlive: boolean;
-}
-
 export interface GameStaticYamlWinAmountAnimations {
-  readonly projectGlob: string;
-  readonly assetGlob: string;
-  readonly tiers: readonly GameStaticYamlWinAmountTier[];
+  readonly manifest: string;
 }
 
 export interface GameStaticYamlWinAmountConfig {
