@@ -456,7 +456,7 @@ describe("particle-sampler", () => {
     expect(sampled[0].scale).toBeGreaterThan(1);
   });
 
-  it("samples particle twinkle batches and stops at the end boundary", () => {
+  it("samples particle twinkle batches and keeps the end boundary in coverage", () => {
     const animation = particleTwinkle();
     expect(
       sampleParticleSpritesForLayer(
@@ -476,7 +476,8 @@ describe("particle-sampler", () => {
 
     expect(sampled).toHaveLength(5);
     expect(sampled.every((particle) => particle.alpha > 0)).toBe(true);
-    expect(getParticleProgress(animation, 1)).toBeNull();
+    expect(getParticleProgress(animation, 1)).toBe(1);
+    expect(getParticleProgress(animation, 1.01)).toBeNull();
     expect(
       sampleParticleSpritesForLayer(
         layer(animation),
@@ -487,24 +488,41 @@ describe("particle-sampler", () => {
     ).toHaveLength(0);
   });
 
-  it("suppresses new particle effects at the exact start and end boundaries", () => {
+  it("keeps new particle effects in coverage at the exact start and end boundaries", () => {
     for (const animation of [particleWall(), particleCombo()]) {
+      expect(getParticleProgress(animation, 0)).toBe(0);
+      expect(getParticleProgress(animation, animation.duration)).toBe(1);
+      expect(
+        getParticleProgress(animation, animation.duration + 0.01),
+      ).toBeNull();
+      expect(
+        Array.isArray(
+          sampleParticleSpritesForLayer(
+            layer(animation),
+            sampledLayer,
+            { width: 100, height: 50 },
+            0,
+          ),
+        ),
+      ).toBe(true);
+      expect(
+        Array.isArray(
+          sampleParticleSpritesForLayer(
+            layer(animation),
+            sampledLayer,
+            { width: 100, height: 50 },
+            animation.duration,
+          ),
+        ),
+      ).toBe(true);
       expect(
         sampleParticleSpritesForLayer(
           layer(animation),
           sampledLayer,
           { width: 100, height: 50 },
-          0,
+          animation.duration + 0.01,
         ),
-      ).toHaveLength(0);
-      expect(
-        sampleParticleSpritesForLayer(
-          layer(animation),
-          sampledLayer,
-          { width: 100, height: 50 },
-          animation.duration,
-        ),
-      ).toHaveLength(0);
+      ).toEqual([]);
     }
   });
 
@@ -514,7 +532,8 @@ describe("particle-sampler", () => {
 
     expect(hasActiveParticleAnimation(particleLayer, 0)).toBe(true);
     expect(hasActiveParticleAnimation(particleLayer, 0.5)).toBe(true);
-    expect(hasActiveParticleAnimation(particleLayer, 1)).toBe(false);
+    expect(hasActiveParticleAnimation(particleLayer, 1)).toBe(true);
+    expect(hasActiveParticleAnimation(particleLayer, 1.01)).toBe(false);
     expect(hasActiveParticleAnimation(particleLayer, -0.1)).toBe(false);
     expect(hasActiveParticleAnimation(comboLayer, 0.8)).toBe(true);
   });

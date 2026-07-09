@@ -660,6 +660,52 @@ function createChaserLightProject(): V5GProjectConfig {
   return project;
 }
 
+function createSequenceProject(): V5GProjectConfig {
+  const project = createStaticProject();
+  project.schemaVersion = "VNI_0.070";
+  project.editor.version = "VNI_0.070";
+  project.layers[0] = {
+    ...project.layers[0],
+    type: "sequence",
+    assetId: null,
+    sequence: {
+      frameAssetIds: ["asset-a", "asset-b"],
+      cycleDuration: 1,
+      loop: true,
+    },
+  };
+  return project;
+}
+
+function createDeterministicEffectProject(): V5GProjectConfig {
+  const project = createStaticProject();
+  project.schemaVersion = "VNI_0.070";
+  project.editor.version = "VNI_0.070";
+  project.layers[0].animations = [
+    {
+      id: "energy-ring",
+      type: "energy_ring",
+      startTime: 0,
+      duration: 1,
+      enabled: true,
+      seed: 7,
+      params: {
+        ringCount: 2,
+        startScale: 0.25,
+        endScale: 2.4,
+        sourceOpacity: 0,
+        alpha: 1,
+        stagger: 0.1,
+        rotation: 60,
+        pulse: 0.08,
+        vanishMode: 1,
+        additive: true,
+      },
+    },
+  ];
+  return project;
+}
+
 function createMaskedProject(showSourceLayer: boolean): V5GProjectConfig {
   const project = createStaticProject();
   project.layers[1].mask = {
@@ -846,6 +892,7 @@ describe("VNIPlayer", () => {
         hasActiveParticleAnimation: false,
         hasActiveChaserLightAnimation: false,
         hasActiveRenderEffect: false,
+        hasActiveDeterministicEffect: false,
         hasActiveSafeGlowAnimation: false,
         blendMode: "add",
       },
@@ -1619,7 +1666,7 @@ describe("VNIPlayer", () => {
     expect(textLayer?.originalTextDisplay?.visible).toBe(true);
   });
 
-  it("renders deterministic render effects and clears start-frame leakage", async () => {
+  it("renders deterministic render effects at timeline boundaries and clears after coverage", async () => {
     const player = await createInitializedPlayer({
       project: createRenderEffectProject(),
     });
@@ -1665,12 +1712,82 @@ describe("VNIPlayer", () => {
 
     player.seek(0);
 
+    expect(
+      internals.renderEffectDisplaysByLayer.get("layer-a")?.length ?? 0,
+    ).toBeGreaterThan(0);
+    expect(
+      internals.renderEffectDisplaysByLayer.get("layer-b")?.length ?? 0,
+    ).toBeGreaterThan(0);
+
+    player.seek(1.01);
+
     expect(internals.renderEffectDisplaysByLayer.get("layer-a") ?? []).toEqual(
       [],
     );
     expect(internals.renderEffectDisplaysByLayer.get("layer-b") ?? []).toEqual(
       [],
     );
+  });
+
+  it("switches sequence layer textures during deterministic seeks", async () => {
+    const player = await createInitializedPlayer({
+      project: createSequenceProject(),
+    });
+    const internals = player as unknown as {
+      layerInstances: Map<
+        string,
+        {
+          display: InstanceType<typeof pixiMock.MockSprite>;
+          texture: InstanceType<typeof pixiMock.MockTexture> | null;
+        }
+      >;
+    };
+    const layerA = internals.layerInstances.get("layer-a");
+    if (!layerA?.texture) throw new Error("Missing sequence layer.");
+    const firstTexture = layerA.texture;
+
+    player.seek(0.6);
+
+    expect(layerA.texture).not.toBe(firstTexture);
+    expect(layerA.display.texture).toBe(layerA.texture);
+
+    player.seek(1);
+
+    expect(layerA.texture).toBe(firstTexture);
+    expect(layerA.display.texture).toBe(firstTexture);
+  });
+
+  it("reuses deterministic effect sprites and clears them after coverage", async () => {
+    const player = await createInitializedPlayer({
+      project: createDeterministicEffectProject(),
+    });
+    const internals = player as unknown as {
+      deterministicEffectSpritesByLayer: Map<
+        string,
+        InstanceType<typeof pixiMock.MockSprite>[]
+      >;
+    };
+
+    player.seek(0.5);
+
+    const firstSprites =
+      internals.deterministicEffectSpritesByLayer.get("layer-a") ?? [];
+    expect(firstSprites.length).toBeGreaterThan(0);
+    const firstSprite = firstSprites[0];
+    expect(firstSprite.parent).not.toBeNull();
+
+    player.seek(0.6);
+
+    expect(
+      internals.deterministicEffectSpritesByLayer.get("layer-a")?.[0],
+    ).toBe(firstSprite);
+
+    player.seek(1.01);
+
+    expect(internals.deterministicEffectSpritesByLayer.has("layer-a")).toBe(
+      false,
+    );
+    expect(firstSprite.parent).toBeNull();
   });
 
   it("renders safe glow as an independent inherited-blend overlay", async () => {

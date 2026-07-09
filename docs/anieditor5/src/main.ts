@@ -17,18 +17,23 @@ import {
 } from "./export_project";
 import { V5GPixiStage } from "./pixi_stage";
 import {
+  DEFAULT_LAYER_GROUP_ID,
+  DEFAULT_SEQUENCE_FRAME_SECONDS,
   createDefaultLayerGroup,
   createId,
   createImageAsset,
   createImageLayer,
   createInitialEditorState,
   createRuntimeAsset,
+  createSequenceLayer,
   createTextLayer,
   getLayerGroup,
   getSelectedLayer,
   isLayerEffectivelyVisible,
   normalizeProjectLayerGroups,
   normalizeProjectMasks,
+  normalizeProjectSequences,
+  sanitizeSequenceDuration,
 } from "./project_state";
 import type {
   V5GAnimationConfig,
@@ -90,10 +95,18 @@ let timelinePixelsPerSecond = 120;
 let timelineScrollLeft = 0;
 let draggedLayerId: string | null = null;
 let layerDropTargetId: string | null = null;
-let layerDropPosition: "before" | "after" | null = null;
+let layerDropTargetGroupId: string | null = null;
+let layerDropPosition: "before" | "after" | "inside" | null = null;
+let draggedGroupId: string | null = null;
+let groupDropTargetId: string | null = null;
+let groupDropPosition: "before" | "after" | null = null;
+let pendingLayerDeleteId: string | null = null;
+let pendingGroupDeleteId: string | null = null;
 const undoStack: V5GProjectConfig[] = [];
 const collapsedAnimationIds = new Set<string>();
-const expandedTimelineLayerIds = new Set<string>();
+const forcedExpandedTimelineLayerIds = new Set<string>();
+const forcedCollapsedTimelineLayerIds = new Set<string>();
+let autoExpandedTimelineLayerId: string | null = null;
 let selectedAnimationId: string | null = null;
 let animationClipboard:
   | {
@@ -177,6 +190,7 @@ const els = {
   playEndSeconds: getInput("input-play-end-seconds"),
   btnAddText: getButton("btn-add-text"),
   btnAddGroup: getButton("btn-add-group"),
+  fileSequence: getInput("file-sequence"),
   fileReplaceImage: getInput("file-replace-image"),
   btnReplaceImage: getButton("btn-replace-image"),
 
@@ -215,6 +229,7 @@ const els = {
   layerCountLabel: getElement("layer-count-label"),
   cursorLabel: getElement("cursor-label"),
   timeLabel: getElement("time-label"),
+  btnToggleAllTimelineLayers: getButton("btn-toggle-all-timeline-layers"),
   timelineTrack: getElement("timeline-track"),
   timelineBar: getElement("timeline-bar"),
   timelineRuler: getElement("timeline-ruler"),
@@ -245,6 +260,11 @@ const els = {
   propMaskSource: getSelect("prop-mask-source"),
   propMaskShowSource: getInput("prop-mask-show-source"),
   maskWarning: getElement("mask-warning"),
+  sequenceSettings: getElement("sequence-settings"),
+  sequenceFrameCount: getElement("sequence-frame-count"),
+  propSequenceDuration: getInput("prop-sequence-duration"),
+  propSequenceFrameDuration: getInput("prop-sequence-frame-duration"),
+  propSequenceLoop: getInput("prop-sequence-loop"),
   propLayerGroup: getSelect("prop-layer-group"),
   animCountLabel: getElement("anim-count-label"),
 
@@ -263,6 +283,7 @@ void bootstrap();
 async function bootstrap(): Promise<void> {
   els.versionLabel.textContent = VNI_VERSION;
   initResizableLayout();
+  applyVniControlTheme();
   setAutoSaveLabel("正在加载工作区…", "info");
 
   try {
@@ -323,6 +344,63 @@ async function bootstrap(): Promise<void> {
   );
 }
 
+function applyVniControlTheme(): void {
+  const yellowChevronSvg =
+    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5 10 12.5 15 7.5' stroke='%23fcd34d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")";
+
+  for (const select of document.querySelectorAll<HTMLSelectElement>("select")) {
+    const isProjectPicker = select === els.projectSelect;
+    select.classList.add(
+      "bg-black",
+      "accent-amber-300",
+      "appearance-none",
+      "[color-scheme:dark]",
+      "[&>option]:bg-black",
+      "[&>option]:text-zinc-100",
+    );
+    select.style.backgroundColor = "#000000";
+    select.style.backgroundRepeat = "no-repeat";
+    select.style.accentColor = "#fcd34d";
+
+    if (isProjectPicker) {
+      select.classList.add("text-transparent");
+      select.style.backgroundImage = "none";
+      select.style.backgroundPosition = "center";
+      select.style.backgroundSize = "auto";
+      select.style.color = "transparent";
+    } else {
+      select.classList.add("text-amber-100", "pr-7");
+      select.style.backgroundImage = yellowChevronSvg;
+      select.style.backgroundPosition = "right 0.5rem center";
+      select.style.backgroundSize = "0.85rem 0.85rem";
+      select.style.color = "#fef3c7";
+    }
+  }
+
+  const scrollAreas = new Set<HTMLElement>([
+    els.layerList,
+    els.timelineTrack,
+    els.animList,
+  ]);
+  const propertyScrollArea = els.propertyPanel.closest<HTMLElement>(
+    "section.overflow-auto",
+  );
+  if (propertyScrollArea) scrollAreas.add(propertyScrollArea);
+
+  for (const scrollArea of scrollAreas) {
+    scrollArea.classList.add(
+      "[scrollbar-color:#fcd34d_#050505]",
+      "[scrollbar-width:thin]",
+      "[&::-webkit-scrollbar]:h-2",
+      "[&::-webkit-scrollbar]:w-2",
+      "[&::-webkit-scrollbar-track]:bg-black",
+      "[&::-webkit-scrollbar-thumb]:rounded-full",
+      "[&::-webkit-scrollbar-thumb]:bg-amber-300",
+      "[&::-webkit-scrollbar-thumb:hover]:bg-amber-200",
+    );
+  }
+}
+
 function bindEvents(): void {
   els.btnRun.addEventListener("click", () => togglePlayback());
   els.cbPlaySegment.addEventListener("change", () => syncPlaybackRangeInputs());
@@ -339,6 +417,9 @@ function bindEvents(): void {
   }
 
   els.btnStop.addEventListener("click", () => stopPlayback());
+  els.btnToggleAllTimelineLayers.addEventListener("click", () =>
+    toggleAllTimelineLayersExpanded(),
+  );
   els.btnResetView.addEventListener("click", () => {
     pixiStage.resetView();
     showStatus("画布已重新居中。", "info");
@@ -511,6 +592,13 @@ function bindEvents(): void {
     await importImage(file);
   });
 
+  els.fileSequence.addEventListener("change", async () => {
+    const files = Array.from(els.fileSequence.files ?? []);
+    els.fileSequence.value = "";
+    if (files.length === 0) return;
+    await importSequenceFiles(files);
+  });
+
   els.btnReplaceImage.addEventListener("click", () => {
     const layer = getSelectedLayer(state);
     if (!layer || layer.type !== "image") {
@@ -615,6 +703,15 @@ function bindEvents(): void {
   );
   els.propLayerGroup.addEventListener("change", () =>
     updateSelectedLayerGroupFromProperties(),
+  );
+  els.propSequenceDuration.addEventListener("change", () =>
+    updateSelectedSequenceFromProperties(),
+  );
+  els.propSequenceDuration.addEventListener("blur", () =>
+    updateSelectedSequenceFromProperties({ silentIfUnchanged: true }),
+  );
+  els.propSequenceLoop.addEventListener("change", () =>
+    updateSelectedSequenceFromProperties(),
   );
 
   window.addEventListener("beforeunload", () => {
@@ -736,6 +833,48 @@ async function importImage(file: File): Promise<void> {
     showStatus(`已导入图片：${file.name}`, "success");
   } catch (error) {
     showStatus(`导入图片失败：${getErrorMessage(error)}`, "error");
+  }
+}
+
+async function importSequenceFiles(files: File[]): Promise<void> {
+  const imageFiles = files
+    .filter((file) => file.type.startsWith("image/"))
+    .sort(compareFilesByNaturalName);
+  if (imageFiles.length === 0) {
+    showStatus("请选择至少一张图片作为序列帧。", "error");
+    return;
+  }
+
+  try {
+    const assets = [];
+    const runtimeAssets = [];
+    for (const file of imageFiles) {
+      const size = await readImageSize(file);
+      const asset = createImageAsset(file, size.width, size.height);
+      assets.push(asset);
+      runtimeAssets.push(createRuntimeAsset(asset.id, file));
+    }
+    const layer = createSequenceLayer(
+      buildSequenceLayerName(imageFiles),
+      assets.map((asset) => asset.id),
+      imageFiles.length * DEFAULT_SEQUENCE_FRAME_SECONDS,
+      true,
+    );
+    layer.groupId = getPreferredNewLayerGroupId();
+    pushUndoSnapshot();
+    state.project.assets.push(...assets);
+    state.runtimeAssets.push(...runtimeAssets);
+    state.project.layers.push(layer);
+    state.selectedLayerId = layer.id;
+    assetsDirty = true;
+    await renderAllAsync();
+    scheduleAutoSave(0);
+    showStatus(
+      `已导入序列帧：${imageFiles.length} 帧，已按文件名数字顺序创建「${layer.name}」。`,
+      "success",
+    );
+  } catch (error) {
+    showStatus(`导入序列帧失败：${getErrorMessage(error)}`, "error");
   }
 }
 
@@ -1091,25 +1230,30 @@ function hideDeleteConfirmation(): void {
 function renderAll(): void {
   renderStaticUi();
   renderProperties();
+  applyVniControlTheme();
   void pixiStage.render(state);
 }
 
 async function renderAllAsync(): Promise<void> {
   renderStaticUi();
   renderProperties();
+  applyVniControlTheme();
   await pixiStage.render(state);
 }
 
 function renderStaticUi(): void {
   normalizeProjectLayerGroups(state.project);
   normalizeProjectMasks(state.project);
+  normalizeProjectSequences(state.project);
   const timelineScrollBackup = els.timelineTrack.scrollTop;
   els.layerList.innerHTML = "";
   els.timelineItems.innerHTML = "";
   els.layerCountLabel.textContent = String(state.project.layers.length);
   els.stageSizeLabel.textContent = `${state.project.stage.height}×${state.project.stage.width}`;
 
-  for (const group of getOrderedLayerGroups()) {
+  const orderedGroups = getOrderedLayerGroups();
+  for (const group of orderedGroups) {
+    appendGroupDropIndicator(group.id, "before");
     appendLayerGroupHeader(group);
     if (group.collapsed) continue;
     const orderedLayers = state.project.layers
@@ -1126,6 +1270,8 @@ function renderStaticUi(): void {
       );
     }
   }
+  const lastGroup = orderedGroups[orderedGroups.length - 1];
+  if (lastGroup) appendGroupDropIndicator(lastGroup.id, "after");
 
   const normalizedDuration = normalizeProjectDurationToAnimationEnd({
     silent: true,
@@ -1144,6 +1290,7 @@ function appendLayerCard(layer: V5GLayerConfig): void {
   const layerIndex = state.project.layers.findIndex(
     (item) => item.id === layer.id,
   );
+  const pendingDelete = pendingLayerDeleteId === layer.id;
   card.dataset.layerId = layer.id;
   card.className = [
     "ml-2 w-[calc(100%-0.5rem)] cursor-pointer rounded-lg border p-2 text-left transition",
@@ -1155,21 +1302,21 @@ function appendLayerCard(layer: V5GLayerConfig): void {
   ].join(" ");
   card.innerHTML = `
     <div class="layer-select flex w-full items-center gap-2 text-left">
-      <span class="layer-drag-handle flex h-5 w-5 shrink-0 cursor-pointer touch-none items-center justify-center rounded-full bg-white font-mono text-[10px] font-bold text-black" title="按住拖动调整图层顺序">${layerIndex + 1}</span>
-      <i class="fa-solid ${layer.type === "image" ? "fa-image" : "fa-font"} ${selected ? "text-black" : layer.visible ? "text-zinc-300" : "text-zinc-600"}"></i>
+      <span class="layer-drag-handle flex h-5 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-full bg-white font-mono text-[10px] font-bold text-black active:cursor-grabbing" title="按住拖动：画布会临时只显示此图层，拖到分组标题可换组，拖到图层前后可排序">${layerIndex + 1}</span>
+      <i class="fa-solid ${getLayerIconClass(layer)} ${getLayerIconColorClass(layer, selected, layer.visible)}"></i>
       <input type="text" data-layer-name="${escapeHtml(layer.id)}" value="${escapeHtml(layer.name)}" class="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs ${selected ? "text-black placeholder:text-black" : "text-slate-100"} outline-none transition focus:border-zinc-400 focus:bg-white/10" title="直接修改图层名称" />
       <div class="flex shrink-0 items-center gap-1">
         <button type="button" data-action="visible" class="layer-action rounded px-1.5 py-1 text-[10px] ${selected ? "bg-black/10 text-black hover:bg-black/20" : layer.visible ? "bg-zinc-900 text-zinc-200 hover:bg-zinc-800" : "bg-zinc-900 text-zinc-500 hover:bg-zinc-800"} transition" title="隐藏 / 显示"><i class="fa-solid ${layer.visible ? "fa-eye" : "fa-eye-slash"}"></i></button>
         <button type="button" data-action="lock" class="layer-action rounded px-1.5 py-1 text-[10px] ${layer.locked ? "text-[#ffe28b]" : selected ? "text-black/60" : "text-zinc-500"} ${selected ? "bg-black/10 hover:bg-black/20" : "bg-zinc-900 hover:bg-zinc-800"} transition" title="锁定 / 解锁图层拖动"><i class="fa-solid ${layer.locked ? "fa-lock" : "fa-lock-open"}"></i></button>
         <button type="button" data-action="duplicate" class="layer-action rounded px-1.5 py-1 text-[10px] ${selected ? "bg-black/10 text-black hover:bg-black/20" : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800"} transition" title="复制图层：复用资源，复制基础属性和动画"><i class="fa-solid fa-clone"></i></button>
-        <button type="button" data-action="delete" class="layer-action rounded px-1.5 py-1 text-[10px] ${selected ? "bg-black/10 text-black hover:bg-black/20" : "bg-zinc-900 text-zinc-400 hover:bg-red-950/70 hover:text-red-200"} transition" title="删除图层"><i class="fa-solid fa-trash"></i></button>
+        <button type="button" data-action="delete" class="layer-action rounded px-1.5 py-1 text-[10px] ${pendingDelete ? "bg-red-900 text-red-100" : selected ? "bg-black/10 text-black hover:bg-black/20" : "bg-zinc-900 text-zinc-400 hover:bg-red-950/70 hover:text-red-200"} transition" title="${pendingDelete ? "再次点击确认删除图层" : "删除图层（需确认）"}"><i class="fa-solid ${pendingDelete ? "fa-check" : "fa-trash"}"></i></button>
+        ${pendingDelete ? `<button type="button" data-action="cancel-delete" class="layer-action rounded bg-slate-800 px-1.5 py-1 text-[10px] text-slate-200 transition hover:bg-slate-700" title="取消删除"><i class="fa-solid fa-xmark"></i></button>` : ""}
       </div>
     </div>
   `;
   const selectButton = card.querySelector(".layer-select");
   selectButton?.addEventListener("click", () => {
-    state.selectedLayerId = layer.id;
-    renderAll();
+    selectLayerFromLayerList(layer.id);
   });
   const nameInput = card.querySelector<HTMLInputElement>("[data-layer-name]");
   nameInput?.addEventListener("click", (event) => event.stopPropagation());
@@ -1205,31 +1352,55 @@ function appendLayerGroupHeader(group: V5GLayerGroupConfig): void {
     (layer) => layer.groupId === group.id,
   );
   const header = document.createElement("div");
+  const isDefaultGroup = group.id === DEFAULT_LAYER_GROUP_ID;
+  const pendingDelete = pendingGroupDeleteId === group.id;
   header.dataset.layerGroupId = group.id;
   header.className = [
-    "rounded-md border border-white/10 bg-zinc-950/80 px-2 py-1.5 text-[10px] text-zinc-300",
+    "rounded-md border px-2 py-1.5 text-[10px] text-zinc-300 transition",
+    layerDropTargetGroupId === group.id && layerDropPosition === "inside"
+      ? "border-sky-300 bg-sky-300/15 shadow shadow-sky-300/30"
+      : "border-white/10 bg-zinc-950/80",
     group.visible ? "" : "opacity-55",
+    draggedGroupId === group.id ? "opacity-35" : "",
   ].join(" ");
   header.innerHTML = `
     <div class="flex items-center gap-1.5">
+      <span class="group-drag-handle flex h-5 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded bg-zinc-800 text-[9px] text-zinc-300 active:cursor-grabbing" title="按住拖动调整分组顺序"><i class="fa-solid fa-grip-vertical"></i></span>
       <button type="button" data-group-action="collapse" class="rounded px-1 py-0.5 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-100" title="展开 / 收起分组"><i class="fa-solid ${group.collapsed ? "fa-chevron-right" : "fa-chevron-down"}"></i></button>
       <i class="fa-solid fa-layer-group text-zinc-500"></i>
       <input type="text" data-group-name="${escapeHtml(group.id)}" value="${escapeHtml(group.name)}" class="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-0.5 text-[11px] font-semibold text-zinc-200 outline-none transition focus:border-zinc-500 focus:bg-white/10" title="直接修改分组名称" />
       <span class="font-mono text-[9px] text-zinc-600">${groupLayers.length}</span>
       <button type="button" data-group-action="visible" class="rounded px-1.5 py-1 text-[10px] ${group.visible ? "text-zinc-300" : "text-zinc-600"} transition hover:bg-zinc-800 hover:text-zinc-100" title="整体隐藏 / 显示此分组"><i class="fa-solid ${group.visible ? "fa-eye" : "fa-eye-slash"}"></i></button>
+      ${isDefaultGroup ? "" : `<button type="button" data-group-action="delete" class="rounded px-1.5 py-1 text-[10px] ${pendingDelete ? "bg-red-900 text-red-100" : "text-zinc-500 hover:bg-red-950/70 hover:text-red-200"} transition" title="${pendingDelete ? "再次点击确认删除分组" : "删除分组（需确认）"}"><i class="fa-solid ${pendingDelete ? "fa-check" : "fa-trash"}"></i></button>`}
+      ${pendingDelete ? `<button type="button" data-group-action="cancel-delete" class="rounded bg-slate-800 px-1.5 py-1 text-[10px] text-slate-200 transition hover:bg-slate-700" title="取消删除"><i class="fa-solid fa-xmark"></i></button>` : ""}
     </div>
   `;
   header
     .querySelector<HTMLElement>('[data-group-action="collapse"]')
     ?.addEventListener("click", (event) => {
       event.stopPropagation();
+      clearPendingDeleteState();
       toggleLayerGroupCollapsed(group.id);
     });
   header
     .querySelector<HTMLElement>('[data-group-action="visible"]')
     ?.addEventListener("click", (event) => {
       event.stopPropagation();
+      clearPendingDeleteState();
       toggleLayerGroupVisible(group.id);
+    });
+  header
+    .querySelector<HTMLElement>('[data-group-action="delete"]')
+    ?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      requestOrConfirmDeleteLayerGroup(group.id);
+    });
+  header
+    .querySelector<HTMLElement>('[data-group-action="cancel-delete"]')
+    ?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      clearPendingDeleteState({ render: true });
+      showStatus("已取消删除分组。", "info");
     });
   const nameInput = header.querySelector<HTMLInputElement>("[data-group-name]");
   nameInput?.addEventListener("click", (event) => event.stopPropagation());
@@ -1241,10 +1412,12 @@ function appendLayerGroupHeader(group: V5GLayerGroupConfig): void {
     event.preventDefault();
     nameInput.blur();
   });
+  bindGroupDragEvents(header, group.id);
   els.layerList.appendChild(header);
 }
 
 function createLayerGroupFromButton(): void {
+  clearPendingDeleteState();
   pushUndoSnapshot();
   const nextOrder = state.project.layerGroups.length;
   const group = createDefaultLayerGroup(nextOrder, `分组 ${nextOrder + 1}`);
@@ -1252,7 +1425,7 @@ function createLayerGroupFromButton(): void {
   renderAll();
   scheduleAutoSave(0);
   showStatus(
-    `已新建分组：${group.name}。选中图层后可在右侧基础属性里切换到该分组。`,
+    `已新建分组：${group.name}。可直接把左侧图层拖到分组标题上完成分组。`,
     "success",
   );
 }
@@ -1413,10 +1586,79 @@ function updateSelectedLayerGroupFromProperties(): void {
   showStatus(`已将「${layer.name}」移动到分组「${group.name}」。`, "success");
 }
 
+function syncSequenceControls(layer: V5GLayerConfig): void {
+  const sequence = layer.type === "sequence" ? layer.sequence : undefined;
+  els.sequenceSettings.classList.toggle("hidden", !sequence);
+  if (!sequence) return;
+
+  const frameCount = sequence.frameAssetIds.length;
+  const cycleDuration = sanitizeSequenceDuration(
+    Number(sequence.cycleDuration),
+    frameCount,
+  );
+  sequence.cycleDuration = cycleDuration;
+  els.sequenceFrameCount.textContent = `${frameCount} 帧`;
+  els.propSequenceDuration.value = String(roundTo(cycleDuration, 3));
+  els.propSequenceFrameDuration.value =
+    frameCount > 0 ? `${roundTo(cycleDuration / frameCount, 3)}s / 帧` : "无帧";
+  els.propSequenceLoop.checked = sequence.loop !== false;
+}
+
+function updateSelectedSequenceFromProperties(
+  options: { silentIfUnchanged?: boolean } = {},
+): void {
+  const layer = getSelectedLayer(state);
+  if (!layer || layer.type !== "sequence" || !layer.sequence) {
+    showStatus("请先选择一个序列帧图层。", "error");
+    return;
+  }
+  const frameCount = layer.sequence.frameAssetIds.length;
+  const nextDuration = roundTo(
+    sanitizeSequenceDuration(
+      readNumberInput(els.propSequenceDuration, layer.sequence.cycleDuration),
+      frameCount,
+    ),
+    3,
+  );
+  const nextLoop = els.propSequenceLoop.checked;
+  if (
+    nextDuration === layer.sequence.cycleDuration &&
+    nextLoop === layer.sequence.loop
+  ) {
+    syncSequenceControls(layer);
+    if (!options.silentIfUnchanged) {
+      showStatus("序列帧设置没有变化。", "info");
+    }
+    return;
+  }
+
+  pushUndoSnapshot();
+  layer.sequence.cycleDuration = nextDuration;
+  layer.sequence.loop = nextLoop;
+  clearLayerPreview(layer.id);
+  renderAll();
+  scheduleAutoSave(0);
+  showStatus(
+    `已更新「${layer.name}」序列帧：${frameCount} 帧 / ${nextDuration}s。`,
+    "success",
+  );
+}
+
 function handleLayerAction(layerId: string, action: string): void {
   const index = state.project.layers.findIndex((layer) => layer.id === layerId);
   if (index === -1) return;
   state.selectedLayerId = layerId;
+
+  if (action === "delete") {
+    requestOrConfirmDeleteLayer(layerId);
+    return;
+  }
+  if (action === "cancel-delete") {
+    clearPendingDeleteState({ render: true });
+    showStatus("已取消删除图层。", "info");
+    return;
+  }
+  clearPendingDeleteState();
 
   if (action === "visible") {
     const layer = state.project.layers[index];
@@ -1436,9 +1678,6 @@ function handleLayerAction(layerId: string, action: string): void {
     );
   } else if (action === "duplicate") {
     duplicateLayerAt(index);
-    return;
-  } else if (action === "delete") {
-    deleteLayerAt(index);
     return;
   } else {
     return;
@@ -1464,6 +1703,13 @@ function updateLayerNameFromList(layerId: string, value: string): void {
   scheduleAutoSave();
 }
 
+interface LayerDropTarget {
+  type: "layer" | "group";
+  layerId?: string;
+  groupId?: string;
+  position: "before" | "after" | "inside";
+}
+
 function appendLayerDropIndicator(
   targetLayerId: string,
   position: "before" | "after",
@@ -1478,6 +1724,23 @@ function appendLayerDropIndicator(
     : "h-1";
   indicator.dataset.dropTargetId = targetLayerId;
   indicator.dataset.dropPosition = position;
+  els.layerList.appendChild(indicator);
+}
+
+function appendGroupDropIndicator(
+  targetGroupId: string,
+  position: "before" | "after",
+): void {
+  const indicator = document.createElement("div");
+  const active =
+    draggedGroupId !== null &&
+    groupDropTargetId === targetGroupId &&
+    groupDropPosition === position;
+  indicator.className = active
+    ? "my-1 h-0.5 rounded-full bg-amber-300 shadow shadow-amber-300/70"
+    : "h-1";
+  indicator.dataset.groupDropTargetId = targetGroupId;
+  indicator.dataset.groupDropPosition = position;
   els.layerList.appendChild(indicator);
 }
 
@@ -1496,14 +1759,21 @@ function startLayerPointerDrag(
   layerId: string,
   card: HTMLElement,
 ): void {
+  clearPendingDeleteState();
   draggedLayerId = layerId;
   state.selectedLayerId = layerId;
+  state.temporarySoloLayerId = layerId;
+  void pixiStage.render(state);
   const handle = card.querySelector<HTMLElement>(".layer-drag-handle");
   card.classList.remove("cursor-pointer");
-  handle?.classList.remove("cursor-pointer");
+  handle?.classList.remove("cursor-grab");
   card.classList.add("cursor-grabbing", "opacity-35");
   handle?.classList.add("cursor-grabbing");
   card.setPointerCapture(event.pointerId);
+  showStatus(
+    "临时独显当前图层：拖到分组标题可换组，拖到图层前后可排序；松开恢复预览。",
+    "info",
+  );
 
   const handleMove = (moveEvent: PointerEvent) => {
     moveEvent.preventDefault();
@@ -1512,14 +1782,14 @@ function startLayerPointerDrag(
       moveEvent.clientY,
     );
     if (!target) return;
-    setLayerDropTarget(target.layerId, target.position);
+    setLayerDropTarget(target);
   };
 
   const cleanupPointerDragListeners = () => {
     card.classList.remove("cursor-grabbing");
     card.classList.add("cursor-pointer");
     handle?.classList.remove("cursor-grabbing");
-    handle?.classList.add("cursor-pointer");
+    handle?.classList.add("cursor-grab");
     if (card.hasPointerCapture(event.pointerId)) {
       card.releasePointerCapture(event.pointerId);
     }
@@ -1546,12 +1816,7 @@ function startLayerPointerDrag(
 function getLayerDropTargetFromPoint(
   clientX: number,
   clientY: number,
-): { layerId: string; position: "before" | "after" } | null {
-  const layerCards = Array.from(
-    els.layerList.querySelectorAll<HTMLElement>("[data-layer-id]"),
-  );
-  if (layerCards.length === 0) return null;
-
+): LayerDropTarget | null {
   const pointerOverList = isPointInsideRect(
     clientX,
     clientY,
@@ -1559,12 +1824,29 @@ function getLayerDropTargetFromPoint(
   );
   if (!pointerOverList) return null;
 
+  for (const header of els.layerList.querySelectorAll<HTMLElement>(
+    "[data-layer-group-id]",
+  )) {
+    const groupId = header.dataset.layerGroupId;
+    if (!groupId) continue;
+    const rect = header.getBoundingClientRect();
+    if (clientY >= rect.top && clientY <= rect.bottom) {
+      return { type: "group", groupId, position: "inside" };
+    }
+  }
+
+  const layerCards = Array.from(
+    els.layerList.querySelectorAll<HTMLElement>("[data-layer-id]"),
+  );
+  if (layerCards.length === 0) return null;
+
   for (const card of layerCards) {
     const layerId = card.dataset.layerId;
     if (!layerId || layerId === draggedLayerId) continue;
     const rect = card.getBoundingClientRect();
     if (clientY >= rect.top && clientY <= rect.bottom) {
       return {
+        type: "layer",
         layerId,
         position: clientY < rect.top + rect.height / 2 ? "before" : "after",
       };
@@ -1579,10 +1861,18 @@ function getLayerDropTargetFromPoint(
   const last = candidates[candidates.length - 1];
   if (!first || !last) return null;
   if (clientY < first.rect.top) {
-    return { layerId: first.card.dataset.layerId ?? "", position: "before" };
+    return {
+      type: "layer",
+      layerId: first.card.dataset.layerId ?? "",
+      position: "before",
+    };
   }
   if (clientY > last.rect.bottom) {
-    return { layerId: last.card.dataset.layerId ?? "", position: "after" };
+    return {
+      type: "layer",
+      layerId: last.card.dataset.layerId ?? "",
+      position: "after",
+    };
   }
 
   let nearest = first;
@@ -1598,6 +1888,7 @@ function getLayerDropTargetFromPoint(
     }
   }
   return {
+    type: "layer",
     layerId: nearest.card.dataset.layerId ?? "",
     position:
       clientY < nearest.rect.top + nearest.rect.height / 2 ? "before" : "after",
@@ -1608,16 +1899,20 @@ function isPointInsideRect(x: number, y: number, rect: DOMRect): boolean {
   return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
 }
 
-function setLayerDropTarget(
-  targetLayerId: string,
-  position: "before" | "after",
-): void {
-  if (!draggedLayerId || targetLayerId === draggedLayerId) return;
-  if (layerDropTargetId === targetLayerId && layerDropPosition === position) {
+function setLayerDropTarget(target: LayerDropTarget): void {
+  if (!draggedLayerId) return;
+  const nextLayerId = target.type === "layer" ? (target.layerId ?? null) : null;
+  const nextGroupId = target.type === "group" ? (target.groupId ?? null) : null;
+  if (
+    layerDropTargetId === nextLayerId &&
+    layerDropTargetGroupId === nextGroupId &&
+    layerDropPosition === target.position
+  ) {
     return;
   }
-  layerDropTargetId = targetLayerId;
-  layerDropPosition = position;
+  layerDropTargetId = nextLayerId;
+  layerDropTargetGroupId = nextGroupId;
+  layerDropPosition = target.position;
   refreshLayerDropIndicators();
 }
 
@@ -1633,28 +1928,76 @@ function refreshLayerDropIndicators(): void {
       ? "my-1 h-0.5 rounded-full bg-sky-400 shadow shadow-sky-300/70"
       : "h-1";
   }
+  for (const header of els.layerList.querySelectorAll<HTMLElement>(
+    "[data-layer-group-id]",
+  )) {
+    const active =
+      draggedLayerId !== null &&
+      header.dataset.layerGroupId === layerDropTargetGroupId &&
+      layerDropPosition === "inside";
+    header.classList.toggle("border-sky-300", active);
+    header.classList.toggle("bg-sky-300/15", active);
+  }
 }
 
 function completeLayerDrop(): void {
-  if (!draggedLayerId || !layerDropTargetId || !layerDropPosition) {
+  if (!draggedLayerId || !layerDropPosition) {
     clearLayerDragState();
     return;
   }
   const fromIndex = state.project.layers.findIndex(
     (layer) => layer.id === draggedLayerId,
   );
-  const targetIndex = state.project.layers.findIndex(
-    (layer) => layer.id === layerDropTargetId,
-  );
-  if (fromIndex === -1 || targetIndex === -1 || fromIndex === targetIndex) {
+  if (fromIndex === -1) {
     clearLayerDragState();
     return;
   }
+
+  const movingLayerId = draggedLayerId;
   const targetLayerId = layerDropTargetId;
+  const targetGroupId = layerDropTargetGroupId;
   const targetPosition = layerDropPosition;
-  pushUndoSnapshot();
-  const [movingLayer] = state.project.layers.splice(fromIndex, 1);
+  const movingLayer = state.project.layers[fromIndex];
   if (!movingLayer) {
+    clearLayerDragState();
+    return;
+  }
+
+  if (targetPosition === "inside" && targetGroupId) {
+    const group = getLayerGroup(state.project, targetGroupId);
+    if (!group || movingLayer.groupId === targetGroupId) {
+      clearLayerDragState();
+      return;
+    }
+    pushUndoSnapshot();
+    movingLayer.groupId = targetGroupId;
+    group.collapsed = false;
+    state.selectedLayerId = movingLayer.id;
+    clearLayerDragState({ render: false });
+    renderAll();
+    scheduleAutoSave(0);
+    showStatus(
+      `已将「${movingLayer.name}」拖入分组「${group.name}」。`,
+      "success",
+    );
+    return;
+  }
+
+  if (!targetLayerId || !targetPosition) {
+    clearLayerDragState();
+    return;
+  }
+  const targetIndex = state.project.layers.findIndex(
+    (layer) => layer.id === targetLayerId,
+  );
+  if (targetIndex === -1 || movingLayerId === targetLayerId) {
+    clearLayerDragState();
+    return;
+  }
+
+  pushUndoSnapshot();
+  const [splicedLayer] = state.project.layers.splice(fromIndex, 1);
+  if (!splicedLayer) {
     clearLayerDragState();
     return;
   }
@@ -1662,27 +2005,223 @@ function completeLayerDrop(): void {
     (layer) => layer.id === targetLayerId,
   );
   if (insertIndex === -1) {
-    state.project.layers.splice(fromIndex, 0, movingLayer);
+    state.project.layers.splice(fromIndex, 0, splicedLayer);
     clearLayerDragState();
     return;
   }
   const targetLayer = state.project.layers.find(
     (layer) => layer.id === targetLayerId,
   );
-  if (targetLayer?.groupId) movingLayer.groupId = targetLayer.groupId;
+  if (targetLayer?.groupId) splicedLayer.groupId = targetLayer.groupId;
   if (targetPosition === "before") insertIndex += 1;
-  state.project.layers.splice(insertIndex, 0, movingLayer);
-  state.selectedLayerId = movingLayer.id;
+  state.project.layers.splice(insertIndex, 0, splicedLayer);
+  state.selectedLayerId = splicedLayer.id;
   clearLayerDragState({ render: false });
   renderAll();
   scheduleAutoSave(0);
-  showStatus("图层顺序已通过拖动调整，画布层级已同步。", "success");
+  showStatus("图层顺序/分组已通过拖动调整，画布层级已同步。", "success");
 }
 
 function clearLayerDragState(options: { render?: boolean } = {}): void {
   draggedLayerId = null;
   layerDropTargetId = null;
+  layerDropTargetGroupId = null;
   layerDropPosition = null;
+  state.temporarySoloLayerId = null;
+  if (options.render !== false) renderAll();
+  else void pixiStage.render(state);
+}
+
+function bindGroupDragEvents(header: HTMLElement, groupId: string): void {
+  const handle = header.querySelector<HTMLElement>(".group-drag-handle");
+  handle?.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    startGroupPointerDrag(event, groupId, header);
+  });
+}
+
+function startGroupPointerDrag(
+  event: PointerEvent,
+  groupId: string,
+  header: HTMLElement,
+): void {
+  clearPendingDeleteState();
+  draggedGroupId = groupId;
+  const handle = header.querySelector<HTMLElement>(".group-drag-handle");
+  header.classList.add("cursor-grabbing", "opacity-35");
+  handle?.classList.remove("cursor-grab");
+  handle?.classList.add("cursor-grabbing");
+  header.setPointerCapture(event.pointerId);
+  showStatus("拖动分组：松开后调整分组显示顺序。", "info");
+
+  const handleMove = (moveEvent: PointerEvent) => {
+    moveEvent.preventDefault();
+    const target = getGroupDropTargetFromPoint(
+      moveEvent.clientX,
+      moveEvent.clientY,
+    );
+    if (!target) return;
+    setGroupDropTarget(target.groupId, target.position);
+  };
+
+  const cleanupPointerDragListeners = () => {
+    header.classList.remove("cursor-grabbing");
+    handle?.classList.remove("cursor-grabbing");
+    handle?.classList.add("cursor-grab");
+    if (header.hasPointerCapture(event.pointerId)) {
+      header.releasePointerCapture(event.pointerId);
+    }
+    window.removeEventListener("pointermove", handleMove);
+    window.removeEventListener("pointerup", handleEnd);
+    window.removeEventListener("pointercancel", handleCancel);
+  };
+
+  const handleEnd = () => {
+    cleanupPointerDragListeners();
+    completeGroupDrop();
+  };
+
+  const handleCancel = () => {
+    cleanupPointerDragListeners();
+    clearGroupDragState();
+  };
+
+  window.addEventListener("pointermove", handleMove);
+  window.addEventListener("pointerup", handleEnd);
+  window.addEventListener("pointercancel", handleCancel);
+}
+
+function getGroupDropTargetFromPoint(
+  clientX: number,
+  clientY: number,
+): { groupId: string; position: "before" | "after" } | null {
+  const pointerOverList = isPointInsideRect(
+    clientX,
+    clientY,
+    els.layerList.getBoundingClientRect(),
+  );
+  if (!pointerOverList) return null;
+
+  const groupHeaders = Array.from(
+    els.layerList.querySelectorAll<HTMLElement>("[data-layer-group-id]"),
+  );
+  const candidates = groupHeaders
+    .map((header) => ({ header, rect: header.getBoundingClientRect() }))
+    .filter(({ header }) => header.dataset.layerGroupId !== draggedGroupId)
+    .sort((a, b) => a.rect.top - b.rect.top);
+  if (candidates.length === 0) return null;
+
+  for (const candidate of candidates) {
+    const groupId = candidate.header.dataset.layerGroupId;
+    if (!groupId) continue;
+    const rect = candidate.rect;
+    if (clientY >= rect.top && clientY <= rect.bottom) {
+      return {
+        groupId,
+        position: clientY < rect.top + rect.height / 2 ? "before" : "after",
+      };
+    }
+  }
+
+  const first = candidates[0];
+  const last = candidates[candidates.length - 1];
+  if (!first || !last) return null;
+  if (clientY < first.rect.top) {
+    return {
+      groupId: first.header.dataset.layerGroupId ?? "",
+      position: "before",
+    };
+  }
+  if (clientY > last.rect.bottom) {
+    return {
+      groupId: last.header.dataset.layerGroupId ?? "",
+      position: "after",
+    };
+  }
+  return null;
+}
+
+function setGroupDropTarget(
+  targetGroupId: string,
+  position: "before" | "after",
+): void {
+  if (!draggedGroupId || targetGroupId === draggedGroupId) return;
+  if (groupDropTargetId === targetGroupId && groupDropPosition === position) {
+    return;
+  }
+  groupDropTargetId = targetGroupId;
+  groupDropPosition = position;
+  refreshGroupDropIndicators();
+}
+
+function refreshGroupDropIndicators(): void {
+  for (const indicator of els.layerList.querySelectorAll<HTMLElement>(
+    "[data-group-drop-target-id]",
+  )) {
+    const active =
+      draggedGroupId !== null &&
+      indicator.dataset.groupDropTargetId === groupDropTargetId &&
+      indicator.dataset.groupDropPosition === groupDropPosition;
+    indicator.className = active
+      ? "my-1 h-0.5 rounded-full bg-amber-300 shadow shadow-amber-300/70"
+      : "h-1";
+  }
+}
+
+function completeGroupDrop(): void {
+  if (!draggedGroupId || !groupDropTargetId || !groupDropPosition) {
+    clearGroupDragState();
+    return;
+  }
+  const orderedGroups = getOrderedLayerGroups();
+  const fromIndex = orderedGroups.findIndex(
+    (group) => group.id === draggedGroupId,
+  );
+  const targetIndex = orderedGroups.findIndex(
+    (group) => group.id === groupDropTargetId,
+  );
+  if (fromIndex === -1 || targetIndex === -1 || fromIndex === targetIndex) {
+    clearGroupDragState();
+    return;
+  }
+  const movingGroupId = draggedGroupId;
+  const targetGroupId = groupDropTargetId;
+  const targetPosition = groupDropPosition;
+  const [movingGroup] = orderedGroups.splice(fromIndex, 1);
+  if (!movingGroup) {
+    clearGroupDragState();
+    return;
+  }
+  let insertIndex = orderedGroups.findIndex(
+    (group) => group.id === targetGroupId,
+  );
+  if (insertIndex === -1) {
+    clearGroupDragState();
+    return;
+  }
+  if (targetPosition === "after") insertIndex += 1;
+  orderedGroups.splice(insertIndex, 0, movingGroup);
+  pushUndoSnapshot();
+  orderedGroups.forEach((group, index) => {
+    group.order = index;
+  });
+  state.project.layerGroups = orderedGroups;
+  clearGroupDragState({ render: false });
+  renderAll();
+  scheduleAutoSave(0);
+  const group = getLayerGroup(state.project, movingGroupId);
+  showStatus(
+    group ? `分组「${group.name}」顺序已调整。` : "分组顺序已调整。",
+    "success",
+  );
+}
+
+function clearGroupDragState(options: { render?: boolean } = {}): void {
+  draggedGroupId = null;
+  groupDropTargetId = null;
+  groupDropPosition = null;
   if (options.render !== false) renderAll();
 }
 
@@ -1693,7 +2232,13 @@ function duplicateLayerAt(index: number): void {
   pushUndoSnapshot();
   const copiedLayer: V5GLayerConfig = {
     ...sourceLayer,
-    id: createId(sourceLayer.type === "image" ? "layer_image" : "layer_text"),
+    id: createId(
+      sourceLayer.type === "image"
+        ? "layer_image"
+        : sourceLayer.type === "sequence"
+          ? "layer_sequence"
+          : "layer_text",
+    ),
     name: getDuplicateLayerName(sourceLayer.name),
     transform: cloneTransform(sourceLayer.transform),
     animations: sourceLayer.animations.map((animation) => ({
@@ -1707,6 +2252,12 @@ function duplicateLayerAt(index: number): void {
       transform: cloneTransform(keyframe.transform),
     })),
     mask: sourceLayer.mask ? { ...sourceLayer.mask } : undefined,
+    sequence: sourceLayer.sequence
+      ? {
+          ...sourceLayer.sequence,
+          frameAssetIds: [...sourceLayer.sequence.frameAssetIds],
+        }
+      : undefined,
   };
   if (copiedLayer.type === "text") copiedLayer.text = sourceLayer.text;
 
@@ -1714,7 +2265,7 @@ function duplicateLayerAt(index: number): void {
   state.selectedLayerId = copiedLayer.id;
   selectedAnimationId = copiedLayer.animations[0]?.id ?? null;
   if (copiedLayer.animations.length > 0) {
-    expandedTimelineLayerIds.add(copiedLayer.id);
+    setAutoExpandedTimelineLayer(copiedLayer.id);
   }
   clearLayerPreview(copiedLayer.id);
   renderAll();
@@ -1734,6 +2285,86 @@ function getDuplicateLayerName(sourceName: string): string {
   let index = 2;
   while (existingNames.has(`${baseName} ${index}`)) index += 1;
   return `${baseName} ${index}`;
+}
+
+function requestOrConfirmDeleteLayer(layerId: string): void {
+  const layer = findLayer(layerId);
+  if (!layer) return;
+  if (pendingLayerDeleteId !== layerId) {
+    pendingLayerDeleteId = layerId;
+    pendingGroupDeleteId = null;
+    renderStaticUi();
+    renderProperties();
+    showStatus(
+      `确认删除图层「${layer.name}」？再次点击红色确认按钮删除。`,
+      "error",
+    );
+    return;
+  }
+  const index = state.project.layers.findIndex((item) => item.id === layerId);
+  if (index === -1) {
+    clearPendingDeleteState({ render: true });
+    return;
+  }
+  clearPendingDeleteState();
+  deleteLayerAt(index);
+}
+
+function requestOrConfirmDeleteLayerGroup(groupId: string): void {
+  const group = getLayerGroup(state.project, groupId);
+  if (!group) return;
+  if (group.id === DEFAULT_LAYER_GROUP_ID) {
+    showStatus("默认组不能删除。", "error");
+    return;
+  }
+  const layerCount = state.project.layers.filter(
+    (layer) => layer.groupId === group.id,
+  ).length;
+  if (pendingGroupDeleteId !== groupId) {
+    pendingGroupDeleteId = groupId;
+    pendingLayerDeleteId = null;
+    renderStaticUi();
+    renderProperties();
+    showStatus(
+      `确认删除分组「${group.name}」？组内 ${layerCount} 个图层会移回默认组，再次点击红色确认按钮删除。`,
+      "error",
+    );
+    return;
+  }
+  clearPendingDeleteState();
+  deleteLayerGroup(group.id);
+}
+
+function clearPendingDeleteState(options: { render?: boolean } = {}): void {
+  const hadPending =
+    pendingLayerDeleteId !== null || pendingGroupDeleteId !== null;
+  pendingLayerDeleteId = null;
+  pendingGroupDeleteId = null;
+  if (hadPending && options.render) renderAll();
+}
+
+function deleteLayerGroup(groupId: string): void {
+  const group = getLayerGroup(state.project, groupId);
+  const defaultGroup = getLayerGroup(state.project, DEFAULT_LAYER_GROUP_ID);
+  if (!group || !defaultGroup || group.id === defaultGroup.id) return;
+
+  pushUndoSnapshot();
+  let movedCount = 0;
+  for (const layer of state.project.layers) {
+    if (layer.groupId !== group.id) continue;
+    layer.groupId = defaultGroup.id;
+    movedCount += 1;
+  }
+  state.project.layerGroups = state.project.layerGroups
+    .filter((item) => item.id !== group.id)
+    .map((item, index) => ({ ...item, order: index }));
+  normalizeProjectLayerGroups(state.project);
+  renderAll();
+  scheduleAutoSave(0);
+  showStatus(
+    `已删除分组「${group.name}」，${movedCount} 个图层已移回默认组。`,
+    "success",
+  );
 }
 
 function deleteLayerAt(index: number): void {
@@ -1770,12 +2401,17 @@ function deleteLayerAt(index: number): void {
 
 function removeUnusedAssetForDeletedLayer(deletedLayer: V5GLayerConfig): void {
   removeUnusedAssetById(deletedLayer.assetId);
+  for (const frameAssetId of deletedLayer.sequence?.frameAssetIds ?? []) {
+    removeUnusedAssetById(frameAssetId);
+  }
 }
 
 function removeUnusedAssetById(assetId: string | null): void {
   if (!assetId) return;
   const stillUsed = state.project.layers.some(
-    (layer) => layer.assetId === assetId,
+    (layer) =>
+      layer.assetId === assetId ||
+      (layer.sequence?.frameAssetIds.includes(assetId) ?? false),
   );
   if (stillUsed) return;
 
@@ -1798,6 +2434,7 @@ function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
   renderTimelineRuler(duration, contentWidth);
 
   const orderedLayers = [...state.project.layers].reverse();
+  syncToggleAllTimelineLayersButton();
   if (orderedLayers.length === 0) {
     const empty = document.createElement("div");
     empty.className =
@@ -1815,11 +2452,14 @@ function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
       (item) => item.id === layer.id,
     );
     const selected = layer.id === state.selectedLayerId;
-    const isExpanded = expandedTimelineLayerIds.has(layer.id);
+    const isExpanded = isTimelineLayerExpanded(layer.id);
+    const isForcedExpanded = forcedExpandedTimelineLayerIds.has(layer.id);
     const row = document.createElement("div");
     row.className = [
-      "grid grid-cols-[136px_minmax(0,1fr)] items-start gap-2 rounded border bg-zinc-900/60 px-2 py-1 transition hover:border-amber-300/50",
-      selected ? "border-amber-300/70" : "border-white/10",
+      "grid grid-cols-[136px_minmax(0,1fr)] items-start gap-2 rounded border px-2 py-1 transition hover:border-amber-300/50",
+      selected
+        ? "border-amber-300/70 bg-[#191711]"
+        : "border-white/10 bg-zinc-900/60",
       isLayerEffectivelyVisible(state.project, layer) ? "" : "opacity-55",
     ].join(" ");
     row.dataset.timelineLayerId = layer.id;
@@ -1829,19 +2469,23 @@ function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
     });
 
     const labelWrap = document.createElement("div");
-    labelWrap.className = "flex min-w-0 items-start gap-1";
+    labelWrap.className = "flex min-w-0 items-center gap-1";
 
     const expandButton = document.createElement("button");
     expandButton.type = "button";
     expandButton.className = [
-      "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-zinc-950 text-[10px] text-zinc-400 transition",
+      "flex h-5 w-5 shrink-0 rotate-90 items-center justify-center rounded bg-zinc-950 font-mono text-[10px] font-semibold leading-none text-zinc-400 transition",
       enabledAnimations.length > 0
         ? "hover:bg-zinc-800 hover:text-zinc-100"
         : "cursor-default opacity-40",
     ].join(" ");
     expandButton.disabled = enabledAnimations.length === 0;
-    expandButton.title = isExpanded ? "收起动画轨道" : "展开每个动画的独立轨道";
-    expandButton.innerHTML = `<i class="fa-solid ${isExpanded ? "fa-chevron-down" : "fa-chevron-right"}"></i>`;
+    expandButton.title = isExpanded
+      ? isForcedExpanded
+        ? "关闭此轴"
+        : "关闭自动展开的此轴"
+      : "强制展开此轴；不受普通点击自动切换影响";
+    expandButton.textContent = isExpanded ? "><" : "<>";
     expandButton.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -1854,7 +2498,7 @@ function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
       "min-w-0 flex-1 text-left text-[10px] text-zinc-400 transition hover:text-zinc-200";
     label.innerHTML = `
       <div class="flex min-w-0 items-center gap-1">
-        <i class="fa-solid ${layer.type === "image" ? "fa-image" : "fa-font"} ${isLayerEffectivelyVisible(state.project, layer) ? "text-zinc-300" : "text-slate-600"}"></i>
+        <i class="fa-solid ${getLayerIconClass(layer)} ${getLayerIconColorClass(layer, false, isLayerEffectivelyVisible(state.project, layer))}"></i>
         <span class="truncate ${selected ? "text-zinc-100" : "text-zinc-300"}">${escapeHtml(layer.name)}</span>
       </div>
       <div class="mt-0.5 font-mono text-[9px] text-slate-500">L${layerIndex + 1} · ${enabledAnimations.length} 个动画</div>
@@ -2010,7 +2654,7 @@ function selectAnimationFromTimeline(
 ): void {
   state.selectedLayerId = layerId;
   selectedAnimationId = animationId;
-  expandedTimelineLayerIds.add(layerId);
+  setAutoExpandedTimelineLayer(layerId);
   collapsedAnimationIds.delete(animationId);
   stopPlayback({ silent: true, keepPlayhead: true });
   renderAll();
@@ -2018,13 +2662,82 @@ function selectAnimationFromTimeline(
   showStatus("已选中动画模块，右侧对应模块已展开并高亮。", "info");
 }
 
+function isTimelineLayerExpanded(layerId: string): boolean {
+  if (forcedCollapsedTimelineLayerIds.has(layerId)) return false;
+  return (
+    autoExpandedTimelineLayerId === layerId ||
+    forcedExpandedTimelineLayerIds.has(layerId)
+  );
+}
+
+function setAutoExpandedTimelineLayer(layerId: string): void {
+  autoExpandedTimelineLayerId = layerId;
+  forcedCollapsedTimelineLayerIds.delete(layerId);
+}
+
 function toggleTimelineLayerExpanded(layerId: string): void {
-  if (expandedTimelineLayerIds.has(layerId)) {
-    expandedTimelineLayerIds.delete(layerId);
+  const isExpanded = isTimelineLayerExpanded(layerId);
+  if (isExpanded) {
+    forcedExpandedTimelineLayerIds.delete(layerId);
+    if (autoExpandedTimelineLayerId === layerId) {
+      forcedCollapsedTimelineLayerIds.add(layerId);
+    } else {
+      forcedCollapsedTimelineLayerIds.delete(layerId);
+    }
   } else {
-    expandedTimelineLayerIds.add(layerId);
+    forcedCollapsedTimelineLayerIds.delete(layerId);
+    forcedExpandedTimelineLayerIds.add(layerId);
   }
+  syncToggleAllTimelineLayersButton();
   renderTimelineAnimations();
+}
+
+function toggleAllTimelineLayersExpanded(): void {
+  const expandableLayerIds = getExpandableTimelineLayerIds();
+  const allExpanded =
+    expandableLayerIds.length > 0 &&
+    expandableLayerIds.every((layerId) => isTimelineLayerExpanded(layerId));
+
+  autoExpandedTimelineLayerId = null;
+  forcedExpandedTimelineLayerIds.clear();
+  forcedCollapsedTimelineLayerIds.clear();
+
+  if (!allExpanded) {
+    for (const layerId of expandableLayerIds) {
+      forcedExpandedTimelineLayerIds.add(layerId);
+    }
+  }
+
+  syncToggleAllTimelineLayersButton();
+  renderTimelineAnimations();
+  showStatus(allExpanded ? "已关闭所有时间轴。" : "已展开所有时间轴。", "info");
+}
+
+function syncToggleAllTimelineLayersButton(): void {
+  const expandableLayerIds = getExpandableTimelineLayerIds();
+  const allExpanded =
+    expandableLayerIds.length > 0 &&
+    expandableLayerIds.every((layerId) => isTimelineLayerExpanded(layerId));
+
+  els.btnToggleAllTimelineLayers.disabled = expandableLayerIds.length === 0;
+  els.btnToggleAllTimelineLayers.classList.toggle(
+    "opacity-45",
+    expandableLayerIds.length === 0,
+  );
+  els.btnToggleAllTimelineLayers.classList.toggle(
+    "cursor-not-allowed",
+    expandableLayerIds.length === 0,
+  );
+  els.btnToggleAllTimelineLayers.textContent = allExpanded ? "><" : "<>";
+  els.btnToggleAllTimelineLayers.title = allExpanded
+    ? "关闭所有时间轴"
+    : "展开所有时间轴";
+}
+
+function getExpandableTimelineLayerIds(): string[] {
+  return state.project.layers
+    .filter((layer) => layer.animations.some((animation) => animation.enabled))
+    .map((layer) => layer.id);
 }
 
 function renderTimelineRuler(duration: number, contentWidth: number): void {
@@ -2128,6 +2841,7 @@ function getTimelineLabelStepSeconds(): number {
 
 function selectLayerFromTimeline(layerId: string): void {
   state.selectedLayerId = layerId;
+  setAutoExpandedTimelineLayer(layerId);
   if (
     !findLayer(layerId)?.animations.some(
       (animation) => animation.id === selectedAnimationId,
@@ -2136,6 +2850,84 @@ function selectLayerFromTimeline(layerId: string): void {
     selectedAnimationId = null;
   }
   renderAll();
+}
+
+function selectLayerFromLayerList(layerId: string): void {
+  const layer = findLayer(layerId);
+  if (!layer) return;
+
+  clearPendingDeleteState();
+  if (state.isPlaying) stopPlayback({ silent: true, keepPlayhead: true });
+  state.selectedLayerId = layer.id;
+  setAutoExpandedTimelineLayer(layer.id);
+  if (
+    !layer.animations.some((animation) => animation.id === selectedAnimationId)
+  ) {
+    selectedAnimationId = null;
+  }
+
+  renderAll();
+  requestTimelineScrollToLayerRow(layer.id);
+  showStatus(`已选中「${layer.name}」，时间轴已展开并定位到该图层。`, "info");
+}
+
+function requestTimelineScrollToLayerRow(layerId: string): void {
+  let attempts = 0;
+  const maxAttempts = 8;
+
+  const alignTimelineRow = () => {
+    attempts += 1;
+    const shouldRetry = attempts < maxAttempts;
+    const row = Array.from(
+      els.timelineItems.querySelectorAll<HTMLElement>(
+        "[data-timeline-layer-id]",
+      ),
+    ).find((item) => item.dataset.timelineLayerId === layerId);
+
+    if (!row) {
+      if (shouldRetry) window.requestAnimationFrame(alignTimelineRow);
+      return;
+    }
+
+    scrollTimelineTrackToRow(row);
+
+    if (shouldRetry) window.requestAnimationFrame(alignTimelineRow);
+  };
+
+  window.requestAnimationFrame(alignTimelineRow);
+}
+
+function scrollTimelineTrackToRow(row: HTMLElement): void {
+  const maxScrollTop = Math.max(
+    0,
+    els.timelineTrack.scrollHeight - els.timelineTrack.clientHeight,
+  );
+  if (maxScrollTop <= 0) return;
+
+  const rowTop = getTimelineRowTop(row);
+  const rowCenter = rowTop + row.offsetHeight / 2;
+  const nextScrollTop = clampNumber(
+    rowCenter - els.timelineTrack.clientHeight / 2,
+    0,
+    maxScrollTop,
+  );
+  els.timelineTrack.scrollTo({ top: nextScrollTop, behavior: "auto" });
+  els.timelineTrack.scrollTop = nextScrollTop;
+}
+
+function getTimelineRowTop(row: HTMLElement): number {
+  let top = row.offsetTop;
+  const rowParent = row.offsetParent;
+  const itemsParent = els.timelineItems.offsetParent;
+
+  if (rowParent === itemsParent || rowParent === els.timelineItems) {
+    return top + els.timelineItems.offsetTop;
+  }
+
+  const trackRect = els.timelineTrack.getBoundingClientRect();
+  const rowRect = row.getBoundingClientRect();
+  top = rowRect.top - trackRect.top + els.timelineTrack.scrollTop;
+  return top;
 }
 
 function getTimelineLayerIdFromPointerEvent(
@@ -2188,6 +2980,7 @@ function renderProperties(): void {
   els.propBlendMode.value = normalizeBlendMode(layer.blendMode);
   syncLayerGroupSelect(layer);
   syncLayerMaskControls(layer);
+  syncSequenceControls(layer);
   els.btnReplaceImage.classList.toggle("hidden", layer.type !== "image");
   syncLayerAnimationClipboardButtons(layer);
   syncAnimationPanel(layer);
@@ -2261,6 +3054,34 @@ function copySingleAnimation(layerId: string, animationId: string): void {
   );
 }
 
+function createAnimationSeed(): number {
+  return Math.floor(Date.now() + Math.random() * 1000000000);
+}
+
+function rerollAnimationSeed(layerId: string, animationId: string): void {
+  const layer = findLayer(layerId);
+  const animation = layer?.animations.find((item) => item.id === animationId);
+  if (!layer || !animation) return;
+  if (getAnimationCategory(animation.type) !== "particle") {
+    showStatus("只有粒子模块需要重新随机。", "info");
+    return;
+  }
+
+  pushUndoSnapshot();
+  animation.seed = createAnimationSeed();
+  selectedAnimationId = animation.id;
+  setAutoExpandedTimelineLayer(layer.id);
+  collapsedAnimationIds.delete(animation.id);
+  clearLayerPreview(layer.id);
+  setPlayheadSeconds(state.playheadSeconds);
+  renderAll();
+  scheduleAutoSave(0);
+  showStatus(
+    `已重新随机「${layer.name}」的 ${getAnimationDisplayName(animation)} 粒子分布。`,
+    "success",
+  );
+}
+
 function requestPasteAnimationsToSelectedLayer(
   source: "layer-toolbar" | "animation-toolbar",
 ): void {
@@ -2330,7 +3151,7 @@ function confirmPendingAnimationPaste(): void {
   targetLayer.animations.sort((a, b) => a.startTime - b.startTime);
   state.selectedLayerId = targetLayer.id;
   selectedAnimationId = pastedAnimations[0]?.id ?? null;
-  expandedTimelineLayerIds.add(targetLayer.id);
+  setAutoExpandedTimelineLayer(targetLayer.id);
   for (const animation of pastedAnimations) {
     collapsedAnimationIds.delete(animation.id);
   }
@@ -2541,7 +3362,7 @@ function createAnimationFromDraft(layerId: string, module: HTMLElement): void {
 
     enabled: true,
 
-    seed: Date.now() % 100000,
+    seed: createAnimationSeed(),
 
     params,
   };
@@ -2566,7 +3387,7 @@ function createAnimationFromDraft(layerId: string, module: HTMLElement): void {
 
   selectedAnimationId = nextAnimation.id;
 
-  expandedTimelineLayerIds.add(layer.id);
+  setAutoExpandedTimelineLayer(layer.id);
 
   layer.animations.push(nextAnimation);
 
@@ -2652,6 +3473,15 @@ function readAnimationParamsFromContainer(
 
     if (param.inputType === "checkbox") {
       params[param.key] = input.checked;
+
+      continue;
+    }
+
+    if (param.inputType === "select") {
+      const option = param.options?.find(
+        (item) => String(item.value) === input.value,
+      );
+      params[param.key] = option?.value ?? param.defaultValue;
 
       continue;
     }
@@ -3057,7 +3887,7 @@ function startTimelineAnimationDrag(
   };
   state.selectedLayerId = layerId;
   selectedAnimationId = animationId;
-  expandedTimelineLayerIds.add(layerId);
+  setAutoExpandedTimelineLayer(layerId);
   collapsedAnimationIds.delete(animationId);
   stopPlayback({ silent: true, keepPlayhead: true });
   scrollSelectedAnimationModuleIntoView();
@@ -3225,7 +4055,10 @@ function finishTimelinePointerInteraction(event: PointerEvent): void {
   }
   if (!shouldSeek) return;
   const layerId = getTimelineLayerIdFromPointerEvent(event);
-  if (layerId) state.selectedLayerId = layerId;
+  if (layerId) {
+    state.selectedLayerId = layerId;
+    setAutoExpandedTimelineLayer(layerId);
+  }
   seekTimelineFromPointer(event);
 }
 
@@ -3660,10 +4493,13 @@ function appendAnimationParamFields(
       defaultParams[param.key] ??
       param.defaultValue;
     const label = document.createElement("label");
+    label.dataset.animParamField = param.key;
     label.className =
       param.inputType === "checkbox"
         ? "col-span-2 flex items-center justify-between gap-2 rounded border border-white/10 bg-[#050505] px-2 py-1.5 text-[10px] text-zinc-400"
-        : "text-[10px] text-zinc-400";
+        : param.inputType === "select"
+          ? "col-span-2 text-[10px] text-zinc-400"
+          : "text-[10px] text-zinc-400";
     label.title = param.recommendedRange;
     if (param.inputType === "checkbox") {
       label.innerHTML = `<span>${escapeHtml(param.label)}</span>`;
@@ -3673,7 +4509,28 @@ function appendAnimationParamFields(
       input.checked = value === true;
       input.title = param.recommendedRange;
       input.className = "h-4 w-4 accent-zinc-100";
+      input.addEventListener("change", () =>
+        syncAnimationParamVisibility(container, type),
+      );
       label.appendChild(input);
+    } else if (param.inputType === "select") {
+      label.innerHTML = `<span>${escapeHtml(param.label)}</span>`;
+      const select = document.createElement("select");
+      select.dataset.animParam = param.key;
+      select.title = param.recommendedRange;
+      select.className =
+        "mt-1 h-8 w-full rounded-md border border-sky-400/30 bg-[#050505] px-2 text-xs font-semibold text-sky-100 outline-none focus:border-sky-300";
+      for (const option of param.options ?? []) {
+        const optionEl = document.createElement("option");
+        optionEl.value = String(option.value);
+        optionEl.textContent = option.label;
+        select.appendChild(optionEl);
+      }
+      select.value = String(value);
+      select.addEventListener("change", () =>
+        syncAnimationParamVisibility(container, type),
+      );
+      label.appendChild(select);
     } else {
       label.innerHTML = `<span>${escapeHtml(param.label)}</span>`;
       const input = document.createElement("input");
@@ -3689,6 +4546,44 @@ function appendAnimationParamFields(
       label.appendChild(input);
     }
     container.appendChild(label);
+  }
+  syncAnimationParamVisibility(container, type);
+}
+
+function syncAnimationParamVisibility(
+  container: HTMLElement,
+  type: V5GAnimationType,
+): void {
+  const preset = getAnimationPreset(type);
+  if (!preset) return;
+  const values: Record<string, V5GAnimationParamValue> = {};
+  for (const param of preset.params) {
+    const input = container.querySelector<HTMLInputElement | HTMLSelectElement>(
+      `[data-anim-param="${param.key}"]`,
+    );
+    if (!input) {
+      values[param.key] = param.defaultValue;
+    } else if (param.inputType === "checkbox") {
+      values[param.key] = (input as HTMLInputElement).checked;
+    } else if (param.inputType === "select") {
+      const option = param.options?.find(
+        (item) => String(item.value) === input.value,
+      );
+      values[param.key] = option?.value ?? param.defaultValue;
+    } else {
+      values[param.key] = input.value;
+    }
+  }
+
+  for (const param of preset.params) {
+    const field = container.querySelector<HTMLElement>(
+      `[data-anim-param-field="${param.key}"]`,
+    );
+    if (!field) continue;
+    const rule = param.visibleWhen;
+    const isVisible =
+      !rule || rule.values.some((value) => values[rule.key] === value);
+    field.classList.toggle("hidden", !isVisible);
   }
 }
 
@@ -3856,6 +4751,7 @@ function renderAnimationList(layer: V5GLayerConfig): void {
           <button type="button" data-animation-action="copy" class="rounded bg-zinc-900 px-1.5 py-1 text-[10px] text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-950" title="复制这个动画模块；复制后可用上方“粘贴动画”粘贴到当前选中图层">
             <i class="fa-solid fa-copy"></i>
           </button>
+          ${animationCategory === "particle" ? '<button type="button" data-animation-action="reroll-seed" class="rounded bg-zinc-900 px-1.5 py-1 text-[10px] text-sky-300 transition hover:bg-sky-300 hover:text-sky-950" title="重新随机这个粒子模块：只更换随机种子，保留所有参数"><i class="fa-solid fa-shuffle"></i></button>' : ""}
           <button type="button" data-animation-action="delete" class="rounded bg-zinc-900 px-1.5 py-1 text-[10px] text-zinc-400 transition hover:bg-red-950/70 hover:text-red-200" title="删除动画模块">
             <i class="fa-solid fa-trash"></i>
           </button>
@@ -3892,7 +4788,7 @@ function renderAnimationList(layer: V5GLayerConfig): void {
     });
     details.addEventListener("click", () => {
       selectedAnimationId = animation.id;
-      expandedTimelineLayerIds.add(layer.id);
+      setAutoExpandedTimelineLayer(layer.id);
       collapsedAnimationIds.delete(animation.id);
       renderTimelineAnimations();
     });
@@ -4043,6 +4939,8 @@ function renderAnimationList(layer: V5GLayerConfig): void {
           deleteAnimationFromLayer(layer.id, animation.id);
         } else if (action === "copy") {
           copySingleAnimation(layer.id, animation.id);
+        } else if (action === "reroll-seed") {
+          rerollAnimationSeed(layer.id, animation.id);
         } else if (action === "reverse-offset-x") {
           reverseOffsetAnimationAxis(layer.id, animation.id, "x");
         } else if (action === "reverse-offset-y") {
@@ -4068,12 +4966,12 @@ function bindAnimationModuleAutoApply(
     });
   };
 
-  for (const input of module.querySelectorAll<HTMLInputElement>(
-    "[data-animation-start], [data-animation-duration], [data-anim-param]",
-  )) {
+  for (const input of module.querySelectorAll<
+    HTMLInputElement | HTMLSelectElement
+  >("[data-animation-start], [data-animation-duration], [data-anim-param]")) {
     input.addEventListener("click", (event) => event.stopPropagation());
 
-    if (input.type === "checkbox") {
+    if (input instanceof HTMLSelectElement || input.type === "checkbox") {
       input.addEventListener("change", applyFromModule);
 
       continue;
@@ -4335,7 +5233,7 @@ function updateAnimationFromModule(
 
   selectedAnimationId = nextAnimation.id;
 
-  expandedTimelineLayerIds.add(layer.id);
+  setAutoExpandedTimelineLayer(layer.id);
 
   collapsedAnimationIds.delete(nextAnimation.id);
 
@@ -4407,7 +5305,7 @@ function reverseOffsetAnimationAxis(
   animation.params[fromKey] = roundTo(-fromValue, 4);
   animation.params[toKey] = roundTo(-toValue, 4);
   selectedAnimationId = animation.id;
-  expandedTimelineLayerIds.add(layer.id);
+  setAutoExpandedTimelineLayer(layer.id);
   collapsedAnimationIds.delete(animation.id);
   clearLayerPreview(layer.id);
   setPlayheadSeconds(animation.startTime);
@@ -4661,6 +5559,7 @@ function createEditorState(
   project.maskCompositeMode = inferProjectMaskCompositeMode(project);
   normalizeProjectLayerGroups(project);
   normalizeProjectMasks(project);
+  normalizeProjectSequences(project);
   normalizeProjectBlendModes(project);
   return {
     project,
@@ -4669,6 +5568,7 @@ function createEditorState(
     isPlaying: false,
     playheadSeconds: 0,
     showSelectionOutline: true,
+    temporarySoloLayerId: null,
     previewLayers: {},
   };
 }
@@ -5010,16 +5910,47 @@ function handleGlobalShortcut(event: KeyboardEvent): void {
     return;
   }
 
+  if (handleArrowKeyLayerNudge(event)) return;
+
   if (event.key !== "Delete") return;
   const selectedLayerId = state.selectedLayerId;
   if (!selectedLayerId) return;
-  const index = state.project.layers.findIndex(
-    (layer) => layer.id === selectedLayerId,
-  );
-  if (index === -1) return;
+  if (!state.project.layers.some((layer) => layer.id === selectedLayerId)) {
+    return;
+  }
 
   event.preventDefault();
-  deleteLayerAt(index);
+  requestOrConfirmDeleteLayer(selectedLayerId);
+}
+
+function handleArrowKeyLayerNudge(event: KeyboardEvent): boolean {
+  const deltaByKey: Record<string, { x: number; y: number } | undefined> = {
+    ArrowLeft: { x: -1, y: 0 },
+    ArrowRight: { x: 1, y: 0 },
+    ArrowUp: { x: 0, y: 1 },
+    ArrowDown: { x: 0, y: -1 },
+  };
+  const delta = deltaByKey[event.key];
+  if (!delta || event.ctrlKey || event.metaKey || event.altKey) return false;
+
+  const layer = getSelectedLayer(state);
+  if (!layer) return false;
+
+  event.preventDefault();
+  stopPlayback({ silent: true, keepPlayhead: true });
+  pushUndoSnapshot();
+  layer.transform.x = roundTo(layer.transform.x + delta.x, 1);
+  layer.transform.y = roundTo(layer.transform.y + delta.y, 1);
+  clearLayerPreview(layer.id);
+  renderStaticUi();
+  renderProperties();
+  void pixiStage.render(state);
+  scheduleAutoSave(0);
+  showStatus(
+    `已微调「${layer.name}」基础坐标：x=${layer.transform.x}, y=${layer.transform.y}。动画参数未改变。`,
+    "info",
+  );
+  return true;
 }
 
 function isEditableShortcutTarget(target: EventTarget | null): boolean {
@@ -5070,6 +6001,23 @@ function findLayer(layerId: string): V5GLayerConfig | null {
   return state.project.layers.find((layer) => layer.id === layerId) ?? null;
 }
 
+function getLayerIconClass(layer: V5GLayerConfig): string {
+  if (layer.type === "image") return "fa-image";
+  if (layer.type === "sequence") return "fa-film";
+  return "fa-font";
+}
+
+function getLayerIconColorClass(
+  layer: V5GLayerConfig,
+  selected: boolean,
+  visible: boolean,
+  fallbackSelectedClass = "text-black",
+): string {
+  if (layer.type === "sequence") return "text-[#18ece5]";
+  if (selected) return fallbackSelectedClass;
+  return visible ? "text-zinc-300" : "text-zinc-600";
+}
+
 function sanitizeSelectedAnimation(): void {
   if (!selectedAnimationId) return;
   const exists = state.project.layers.some((layer) =>
@@ -5103,6 +6051,19 @@ function readExportAssetScale(): number {
   const value = Number(els.exportAssetScale.value);
   if (!Number.isFinite(value) || value <= 0) return 1;
   return Math.min(1, Math.max(0.01, value));
+}
+
+function compareFilesByNaturalName(left: File, right: File): number {
+  return left.name.localeCompare(right.name, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
+function buildSequenceLayerName(files: File[]): string {
+  const firstName = files[0]?.name.replace(/\.[^.]+$/, "") || "Sequence";
+  const base = firstName.replace(/[\s_-]*\d+$/u, "").trim() || firstName;
+  return `${base} 序列帧`;
 }
 
 function formatCursorCoordinate(value: number): string {

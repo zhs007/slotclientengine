@@ -1,4 +1,5 @@
 import { clampNumber, roundTo } from "./coordinates.js";
+import { getTimelineAnimationProgress } from "./timeline-progress.js";
 import type {
   V5GAnimationConfig,
   V5GAnimationType,
@@ -38,6 +39,20 @@ export const PARTICLE_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "particle_combo",
 ];
 
+export const DETERMINISTIC_EFFECT_ANIMATION_TYPES: readonly V5GAnimationType[] =
+  [
+    "gather_particles",
+    "smoke_mist",
+    "energy_ring",
+    "slash_light",
+    "flame_flicker",
+    "wave_band",
+    "wave_distort",
+    "speed_lines",
+    "drift_fall",
+    "path_particles",
+  ];
+
 export const SUPPORTED_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "idle",
   "move",
@@ -62,6 +77,16 @@ export const SUPPORTED_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "particle_wall",
   "particle_combo",
   "chaser_light",
+  "gather_particles",
+  "smoke_mist",
+  "energy_ring",
+  "slash_light",
+  "flame_flicker",
+  "wave_band",
+  "wave_distort",
+  "speed_lines",
+  "drift_fall",
+  "path_particles",
   "shatter",
   "glow",
   "safe_glow",
@@ -94,6 +119,16 @@ const DEFAULT_EASING_BY_TYPE: Readonly<
   particle_wall: "linear",
   particle_combo: "easeInOutQuad",
   chaser_light: "linear",
+  gather_particles: "easeInOutQuad",
+  smoke_mist: "easeOutQuad",
+  energy_ring: "easeOutQuad",
+  slash_light: "easeOutQuad",
+  flame_flicker: "linear",
+  wave_band: "linear",
+  wave_distort: "linear",
+  speed_lines: "linear",
+  drift_fall: "linear",
+  path_particles: "linear",
   shatter: "easeOutQuad",
   glow: "linear",
   safe_glow: "linear",
@@ -147,13 +182,17 @@ export function sampleLayerAnimationsAtTime(
     else if (animation.type === "squash_stretch")
       sampleSquashStretch(result, animation, easedProgress);
     else if (animation.type === "particle_combo")
-      sampleParticleComboSource(result, animation, base);
+      sampleSourceOpacity(result, animation, base);
+    else if (isSourceOpacityEffectAnimationType(animation.type))
+      sampleSourceOpacity(result, animation, base);
+    else if (isKeepOriginalEffectAnimationType(animation.type))
+      sampleKeepOriginalSource(result, animation);
     else if (animation.type === "shatter")
-      sampleShatterSource(result, animation, base);
+      sampleSourceOpacity(result, animation, base);
     else if (animation.type === "glow" || animation.type === "safe_glow")
-      sampleGlowSource(result, animation);
+      sampleKeepOriginalSource(result, animation);
     else if (animation.type === "chaser_light")
-      sampleChaserLightSource(result, animation);
+      sampleKeepOriginalSource(result, animation);
     else if (isParticleAnimationType(animation.type)) {
       // Particle animations are sampled by particle-sampler. They do not alter
       // the base layer transform or opacity here.
@@ -193,6 +232,38 @@ export function isParticleAnimationType(
   value: string,
 ): value is V5GAnimationType {
   return PARTICLE_ANIMATION_TYPES.includes(value as V5GAnimationType);
+}
+
+export function isDeterministicEffectAnimationType(
+  value: string,
+): value is V5GAnimationType {
+  return DETERMINISTIC_EFFECT_ANIMATION_TYPES.includes(
+    value as V5GAnimationType,
+  );
+}
+
+function isSourceOpacityEffectAnimationType(
+  value: string,
+): value is V5GAnimationType {
+  return (
+    value === "gather_particles" ||
+    value === "smoke_mist" ||
+    value === "energy_ring" ||
+    value === "slash_light" ||
+    value === "flame_flicker"
+  );
+}
+
+function isKeepOriginalEffectAnimationType(
+  value: string,
+): value is V5GAnimationType {
+  return (
+    value === "wave_band" ||
+    value === "wave_distort" ||
+    value === "speed_lines" ||
+    value === "drift_fall" ||
+    value === "path_particles"
+  );
 }
 
 export function isSupportedEasing(value: string): value is V5GEasingName {
@@ -446,7 +517,7 @@ function sampleRotate(
   );
 }
 
-function sampleParticleComboSource(
+function sampleSourceOpacity(
   result: V5GAnimationSampleResult,
   animation: V5GAnimationConfig,
   base: V5GAnimationSampleBase,
@@ -454,27 +525,18 @@ function sampleParticleComboSource(
   result.opacity = base.opacity * getNumberParam(animation, "sourceOpacity");
 }
 
-function sampleShatterSource(
-  result: V5GAnimationSampleResult,
-  animation: V5GAnimationConfig,
-  base: V5GAnimationSampleBase,
-): void {
-  result.opacity = base.opacity * getNumberParam(animation, "sourceOpacity");
-}
-
-function sampleGlowSource(
+function sampleKeepOriginalSource(
   result: V5GAnimationSampleResult,
   animation: V5GAnimationConfig,
 ): void {
-  if (getOptionalBooleanParam(animation, "keepOriginal", true)) return;
-  result.opacity = 0;
-}
-
-function sampleChaserLightSource(
-  result: V5GAnimationSampleResult,
-  animation: V5GAnimationConfig,
-): void {
-  if (getOptionalBooleanParam(animation, "keepOriginal", true)) return;
+  const keepOriginalFallback =
+    animation.type !== "wave_band" &&
+    animation.type !== "wave_distort" &&
+    animation.type !== "speed_lines" &&
+    animation.type !== "drift_fall" &&
+    animation.type !== "path_particles";
+  if (getOptionalBooleanParam(animation, "keepOriginal", keepOriginalFallback))
+    return;
   result.opacity = 0;
 }
 
@@ -529,15 +591,7 @@ function getAnimationProgress(
   animation: V5GAnimationConfig,
   time: number,
 ): number | null {
-  const start = animation.startTime;
-  const end = animation.startTime + animation.duration;
-  if (time < start) return null;
-  if (time >= end) return 1;
-  return clampNumber(
-    (time - start) / Math.max(animation.duration, 0.0001),
-    0,
-    1,
-  );
+  return getTimelineAnimationProgress(animation, time);
 }
 
 function getAnimationEasing(animation: V5GAnimationConfig): V5GEasingName {

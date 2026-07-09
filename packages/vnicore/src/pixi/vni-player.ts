@@ -14,6 +14,10 @@ import {
   type VNIChaserLightSpriteSample,
 } from "../core/chaser-light-sampler.js";
 import {
+  sampleDeterministicEffectSpritesForLayer,
+  type VNIDeterministicEffectSample,
+} from "../core/effect-sampler.js";
+import {
   VNIParticleRuntime,
   sampleLiveParticleSprites,
   type VNILiveParticleSpriteSample,
@@ -45,11 +49,12 @@ import {
 import {
   applySampledLayerState,
   createLayerInstance,
-  getLayerAsset,
   getAssetDisplayCompensation,
   getAssetTextureSize,
+  updateLayerInstanceDisplayAsset,
   type V5GLayerInstance,
 } from "./layer-instance.js";
+import { getLayerDisplayAsset } from "../core/sequence-layer.js";
 import {
   deriveAdditiveMatteTexture,
   getAdditiveMatteAssetIds,
@@ -297,6 +302,17 @@ export class VNIPlayer {
     string,
     PIXI.Container[]
   >();
+  private readonly deterministicEffectSpritesByLayer = new Map<
+    string,
+    PIXI.Sprite[]
+  >();
+  private readonly deterministicEffectGraphicsByLayer = new Map<
+    string,
+    PIXI.Graphics
+  >();
+  private readonly waveDistortSliceTextures = new Map<string, PIXI.Texture>();
+  private readonly textureCacheIds = new WeakMap<PIXI.Texture, number>();
+  private nextTextureCacheId = 1;
   private readonly liveParticleSpritesByLayer = new Map<
     string,
     PIXI.Sprite[]
@@ -918,6 +934,7 @@ export class VNIPlayer {
     this.clearMountedNodes();
     this.clearSafeGlow();
     this.clearRenderEffects();
+    this.clearDeterministicEffects();
     this.clearChaserLights();
     this.clearMasks();
     this.clearParticles();
@@ -927,6 +944,7 @@ export class VNIPlayer {
     for (const texture of this.ownedTextures) {
       texture.destroy(true);
     }
+    this.clearWaveDistortSliceTextures();
     this.ownedTextures.clear();
     this.initialized = false;
   }
@@ -1125,6 +1143,8 @@ export class VNIPlayer {
       sampled.layers,
       endTime,
     );
+    const deterministicEffectSpriteCount =
+      this.renderDeterministicEffectSamples(sampled.layers, endTime);
     const chaserLightSpriteCount = this.renderChaserLightSamples(
       sampled.layers,
       endTime,
@@ -1146,6 +1166,7 @@ export class VNIPlayer {
       sampled.layers.filter((layer) => layer.visible).length,
       particleSpriteCount,
       renderEffectSpriteCount,
+      deterministicEffectSpriteCount,
       safeGlowSpriteCount,
       chaserLightSpriteCount,
     );
@@ -1167,6 +1188,8 @@ export class VNIPlayer {
       sampled.layers,
       this.currentTime,
     );
+    const deterministicEffectSpriteCount =
+      this.renderDeterministicEffectSamples(sampled.layers, this.currentTime);
     const chaserLightSpriteCount = this.renderChaserLightSamples(
       sampled.layers,
       this.currentTime,
@@ -1175,6 +1198,7 @@ export class VNIPlayer {
       sampled.layers.filter((layer) => layer.visible).length,
       particleSpriteCount,
       this.getRenderedRenderEffectCount(),
+      deterministicEffectSpriteCount,
       safeGlowSpriteCount,
       chaserLightSpriteCount,
     );
@@ -1195,6 +1219,7 @@ export class VNIPlayer {
       ).length,
       0,
       this.getRenderedRenderEffectCount(),
+      this.getRenderedDeterministicEffectCount(),
       this.getRenderedSafeGlowCount(),
       this.getRenderedChaserLightCount(),
     );
@@ -1291,7 +1316,9 @@ export class VNIPlayer {
 
   private async loadTextures(): Promise<ReadonlyMap<string, PIXI.Texture>> {
     for (const layer of this.project.layers) {
-      getLayerAsset(layer, this.assetsById);
+      if (layer.type === "image" || layer.type === "sequence") {
+        getLayerDisplayAsset(layer, 0, this.assetsById);
+      }
     }
 
     const entries = await Promise.all(
@@ -1340,6 +1367,8 @@ export class VNIPlayer {
       sampled.layers,
       this.currentTime,
     );
+    const deterministicEffectSpriteCount =
+      this.renderDeterministicEffectSamples(sampled.layers, this.currentTime);
     const chaserLightSpriteCount = this.renderChaserLightSamples(
       sampled.layers,
       this.currentTime,
@@ -1354,6 +1383,7 @@ export class VNIPlayer {
       sampled.layers.filter((layer) => layer.visible).length,
       particleSpriteCount,
       renderEffectSpriteCount,
+      deterministicEffectSpriteCount,
       safeGlowSpriteCount,
       chaserLightSpriteCount,
     );
@@ -1375,6 +1405,8 @@ export class VNIPlayer {
       sampled.layers,
       nonParticleTime,
     );
+    const deterministicEffectSpriteCount =
+      this.renderDeterministicEffectSamples(sampled.layers, nonParticleTime);
     const chaserLightSpriteCount = this.renderChaserLightSamples(
       sampled.layers,
       nonParticleTime,
@@ -1406,6 +1438,7 @@ export class VNIPlayer {
       sampled.layers.filter((layer) => layer.visible).length,
       particleSpriteCount,
       renderEffectSpriteCount,
+      deterministicEffectSpriteCount,
       safeGlowSpriteCount,
       chaserLightSpriteCount,
     );
@@ -1424,6 +1457,12 @@ export class VNIPlayer {
       if (!instance) {
         throw new Error(`Missing V5G layer instance: ${sampledLayer.layerId}`);
       }
+      updateLayerInstanceDisplayAsset(
+        instance,
+        sampled.time,
+        this.texturesByAssetId,
+        this.assetsById,
+      );
       applySampledLayerState(instance, sampledLayer, this.project.stage);
     }
     this.applyLayerMasks(sampled.layers);
@@ -1570,8 +1609,16 @@ export class VNIPlayer {
         `VNI precompose_light_alpha mask on layer "${targetInstance.layer.id}" requires image source and target textures.`,
       );
     }
-    const targetAsset = getLayerAsset(targetInstance.layer, this.assetsById);
-    const sourceAsset = getLayerAsset(sourceInstance.layer, this.assetsById);
+    const targetAsset = getLayerDisplayAsset(
+      targetInstance.layer,
+      this.currentTime,
+      this.assetsById,
+    );
+    const sourceAsset = getLayerDisplayAsset(
+      sourceInstance.layer,
+      this.currentTime,
+      this.assetsById,
+    );
     if (!targetAsset || !sourceAsset) {
       throw new Error(
         `VNI precompose_light_alpha mask on layer "${targetInstance.layer.id}" requires image source and target assets.`,
@@ -1648,12 +1695,15 @@ export class VNIPlayer {
     targetInstance: V5GLayerInstance,
     sourceInstance: V5GLayerInstance,
   ): PIXI.Sprite {
-    const existing = this.maskSpritesByTargetLayer.get(targetInstance.layer.id);
-    if (existing) return existing;
     if (!sourceInstance.texture) {
       throw new Error(
         `VNI mask source layer "${sourceInstance.layer.id}" is missing image texture.`,
       );
+    }
+    const existing = this.maskSpritesByTargetLayer.get(targetInstance.layer.id);
+    if (existing) {
+      existing.texture = sourceInstance.texture;
+      return existing;
     }
     const sprite = new PIXI.Sprite(sourceInstance.texture);
     sprite.label = `VNI mask ${sourceInstance.layer.id} -> ${targetInstance.layer.id}`;
@@ -1678,20 +1728,15 @@ export class VNIPlayer {
       this.project.stage.width,
       this.project.stage.height,
     );
-    const asset = getLayerAsset(sourceInstance.layer, this.assetsById);
-    if (!asset || !sourceInstance.textureSize) {
+    if (!sourceInstance.textureSize) {
       throw new Error(
         `VNI mask source layer "${sourceInstance.layer.id}" is missing image asset.`,
       );
     }
-    const compensation = getAssetDisplayCompensation(
-      asset,
-      sourceInstance.textureSize,
-    );
     sprite.position.set(position.x, position.y);
     sprite.scale.set(
-      sourceSample.transform.scaleX * compensation.x,
-      sourceSample.transform.scaleY * compensation.y,
+      sourceSample.transform.scaleX * sourceInstance.displayScaleCompensation.x,
+      sourceSample.transform.scaleY * sourceInstance.displayScaleCompensation.y,
     );
     sprite.rotation = (sourceSample.transform.rotation * Math.PI) / 180;
     sprite.alpha = sourceSample.opacity;
@@ -1777,6 +1822,10 @@ export class VNIPlayer {
       ...(precomposed ? [precomposed] : []),
       ...(this.safeGlowSpritesByLayer.get(instance.layer.id) ?? []),
       ...(this.renderEffectDisplaysByLayer.get(instance.layer.id) ?? []),
+      ...(this.deterministicEffectSpritesByLayer.get(instance.layer.id) ?? []),
+      ...(this.deterministicEffectGraphicsByLayer.has(instance.layer.id)
+        ? [this.deterministicEffectGraphicsByLayer.get(instance.layer.id)!]
+        : []),
       ...(this.chaserLightSpritesByLayer.get(instance.layer.id) ?? []),
       ...(this.liveParticleSpritesByLayer.get(instance.layer.id) ?? []),
     ];
@@ -1827,16 +1876,6 @@ export class VNIPlayer {
           `V5G safe glow layer "${sampledLayer.layerId}" is missing image texture.`,
         );
       }
-      const asset = getLayerAsset(instance.layer, this.assetsById);
-      if (!asset) {
-        throw new Error(
-          `V5G safe glow layer "${sampledLayer.layerId}" is missing image asset.`,
-        );
-      }
-      const compensation = getAssetDisplayCompensation(
-        asset,
-        instance.textureSize,
-      );
       const emitter = editorToPixi(
         sampledLayer.transform.x,
         sampledLayer.transform.y,
@@ -1853,7 +1892,7 @@ export class VNIPlayer {
           instance,
           safeGlow,
           emitter,
-          compensation,
+          instance.displayScaleCompensation,
           sampledLayer,
         );
       }
@@ -1912,16 +1951,6 @@ export class VNIPlayer {
           `V5G render effect layer "${sampledLayer.layerId}" is missing image texture.`,
         );
       }
-      const asset = getLayerAsset(instance.layer, this.assetsById);
-      if (!asset) {
-        throw new Error(
-          `V5G render effect layer "${sampledLayer.layerId}" is missing image asset.`,
-        );
-      }
-      const compensation = getAssetDisplayCompensation(
-        asset,
-        instance.textureSize,
-      );
       const emitter = editorToPixi(
         sampledLayer.transform.x,
         sampledLayer.transform.y,
@@ -1939,7 +1968,7 @@ export class VNIPlayer {
           instance,
           effect,
           emitter,
-          compensation,
+          instance.displayScaleCompensation,
           sampledLayer,
         );
       }
@@ -2006,16 +2035,11 @@ export class VNIPlayer {
         sprites.push(sprite);
         this.insertLayerRuntimeDisplay(instance, sprite);
       }
-      const asset = getLayerAsset(instance.layer, this.assetsById);
-      if (!asset || !instance.textureSize) {
+      if (!instance.textureSize) {
         throw new Error(
           `V5G chaser_light layer "${instance.layer.id}" is missing image asset.`,
         );
       }
-      const compensation = getAssetDisplayCompensation(
-        asset,
-        instance.textureSize,
-      );
       const sampledLayer = sampledLayers.find(
         (candidate) => candidate.layerId === instance.layer.id,
       );
@@ -2035,8 +2059,8 @@ export class VNIPlayer {
         const sprite = sprites[index];
         sprite.position.set(emitter.x + sample.x, emitter.y + sample.y);
         sprite.scale.set(
-          sample.scale * compensation.x,
-          sample.scale * compensation.y,
+          sample.scale * instance.displayScaleCompensation.x,
+          sample.scale * instance.displayScaleCompensation.y,
         );
         sprite.rotation = sample.rotation;
         sprite.alpha = sample.alpha;
@@ -2118,6 +2142,257 @@ export class VNIPlayer {
     );
   }
 
+  private renderDeterministicEffectSamples(
+    sampledLayers: readonly SampledLayerState[],
+    time: number,
+  ): number {
+    const samplesByLayer = new Map<string, VNIDeterministicEffectSample[]>();
+    const emitterByLayerId = new Map(
+      sampledLayers.map((sampled) => [
+        sampled.layerId,
+        editorToPixi(
+          sampled.transform.x,
+          sampled.transform.y,
+          this.project.stage.width,
+          this.project.stage.height,
+        ),
+      ]),
+    );
+    let sampleCount = 0;
+    for (const sampledLayer of sampledLayers) {
+      if (!sampledLayer.hasActiveDeterministicEffect) continue;
+      const instance = this.layerInstances.get(sampledLayer.layerId);
+      if (!instance) {
+        throw new Error(`Missing V5G layer instance: ${sampledLayer.layerId}`);
+      }
+      if (!instance.texture || !instance.textureSize) {
+        throw new Error(
+          `V5G deterministic effect layer "${sampledLayer.layerId}" is missing image texture.`,
+        );
+      }
+      const samples = sampleDeterministicEffectSpritesForLayer(
+        instance.layer,
+        sampledLayer,
+        instance.textureSize,
+        time,
+      );
+      samplesByLayer.set(sampledLayer.layerId, samples);
+      sampleCount += samples.length;
+    }
+
+    for (const instance of this.layerInstances.values()) {
+      const samples = samplesByLayer.get(instance.layer.id) ?? [];
+      const spriteSamples = samples.filter(
+        (sample) => sample.kind !== "speed_line",
+      );
+      const lineSamples = samples.filter(
+        (
+          sample,
+        ): sample is Extract<
+          VNIDeterministicEffectSample,
+          { kind: "speed_line" }
+        > => sample.kind === "speed_line",
+      );
+      this.renderDeterministicEffectSpriteLayer(
+        instance,
+        spriteSamples,
+        emitterByLayerId,
+      );
+      this.renderDeterministicEffectLineLayer(
+        instance,
+        lineSamples,
+        emitterByLayerId,
+      );
+    }
+
+    return sampleCount;
+  }
+
+  private renderDeterministicEffectSpriteLayer(
+    instance: V5GLayerInstance,
+    samples: readonly Exclude<
+      VNIDeterministicEffectSample,
+      { kind: "speed_line" }
+    >[],
+    emitterByLayerId: ReadonlyMap<string, { x: number; y: number }>,
+  ): void {
+    if (samples.length === 0) {
+      const sprites = this.deterministicEffectSpritesByLayer.get(
+        instance.layer.id,
+      );
+      if (sprites) {
+        for (const sprite of sprites) {
+          this.destroyRuntimeDisplay(sprite);
+        }
+        this.deterministicEffectSpritesByLayer.delete(instance.layer.id);
+      }
+      return;
+    }
+    if (!instance.texture) {
+      throw new Error(
+        `V5G deterministic effect layer "${instance.layer.id}" is missing image texture.`,
+      );
+    }
+    let sprites = this.deterministicEffectSpritesByLayer.get(instance.layer.id);
+    if (!sprites) {
+      sprites = [];
+      this.deterministicEffectSpritesByLayer.set(instance.layer.id, sprites);
+    }
+    while (sprites.length < samples.length) {
+      const sprite = new PIXI.Sprite(instance.texture);
+      sprites.push(sprite);
+      this.insertLayerRuntimeDisplay(instance, sprite);
+    }
+    const emitter = emitterByLayerId.get(instance.layer.id);
+    if (!emitter) {
+      throw new Error(
+        `Missing V5G deterministic effect sampled layer: ${instance.layer.id}`,
+      );
+    }
+    for (let index = 0; index < samples.length; index += 1) {
+      const sample = samples[index];
+      const sprite = sprites[index];
+      if (sample.kind === "wave_distort_slice") {
+        sprite.texture = this.getWaveDistortSliceTexture(
+          instance.texture,
+          sample,
+        );
+        sprite.anchor.set(0.5);
+        sprite.position.set(emitter.x + sample.x, emitter.y + sample.y);
+        sprite.scale.set(
+          sample.scaleX * instance.displayScaleCompensation.x,
+          sample.scaleY * instance.displayScaleCompensation.y,
+        );
+        sprite.rotation = sample.rotation;
+        sprite.alpha = sample.alpha;
+        sprite.blendMode = toPixiBlendMode(sample.blendMode);
+        sprite.visible = true;
+        continue;
+      }
+      sprite.texture = instance.texture;
+      sprite.anchor.set(sample.anchorX, sample.anchorY);
+      sprite.position.set(emitter.x + sample.x, emitter.y + sample.y);
+      const compensation = usesLayerDisplayCompensation(sample.type)
+        ? instance.displayScaleCompensation
+        : { x: 1, y: 1 };
+      sprite.scale.set(
+        sample.scaleX * compensation.x,
+        sample.scaleY * compensation.y,
+      );
+      sprite.rotation = sample.rotation;
+      sprite.alpha = sample.alpha;
+      sprite.blendMode = toPixiBlendMode(sample.blendMode);
+      sprite.visible = true;
+    }
+    while (sprites.length > samples.length) {
+      const sprite = sprites.pop();
+      if (sprite) {
+        this.destroyRuntimeDisplay(sprite);
+      }
+    }
+  }
+
+  private renderDeterministicEffectLineLayer(
+    instance: V5GLayerInstance,
+    samples: readonly Extract<
+      VNIDeterministicEffectSample,
+      { kind: "speed_line" }
+    >[],
+    emitterByLayerId: ReadonlyMap<string, { x: number; y: number }>,
+  ): void {
+    const existing = this.deterministicEffectGraphicsByLayer.get(
+      instance.layer.id,
+    );
+    if (samples.length === 0) {
+      if (existing) {
+        this.destroyRuntimeDisplay(existing);
+        this.deterministicEffectGraphicsByLayer.delete(instance.layer.id);
+      }
+      return;
+    }
+    let graphics = existing;
+    if (!graphics) {
+      graphics = new PIXI.Graphics();
+      graphics.label = `VNI deterministic effect lines ${instance.layer.id}`;
+      this.deterministicEffectGraphicsByLayer.set(instance.layer.id, graphics);
+      this.insertLayerRuntimeDisplay(instance, graphics);
+    }
+    const emitter = emitterByLayerId.get(instance.layer.id);
+    if (!emitter) {
+      throw new Error(
+        `Missing V5G deterministic line sampled layer: ${instance.layer.id}`,
+      );
+    }
+    graphics.clear();
+    graphics.blendMode = toPixiBlendMode(samples[0]?.blendMode ?? "normal");
+    for (const sample of samples) {
+      graphics
+        .moveTo(emitter.x + sample.x1, emitter.y + sample.y1)
+        .lineTo(emitter.x + sample.x2, emitter.y + sample.y2)
+        .stroke({
+          color: 0xffffff,
+          width: sample.lineWidth,
+          alpha: sample.alpha,
+        });
+    }
+  }
+
+  private getWaveDistortSliceTexture(
+    sourceTexture: PIXI.Texture,
+    sample: Extract<
+      VNIDeterministicEffectSample,
+      { kind: "wave_distort_slice" }
+    >,
+  ): PIXI.Texture {
+    const textureId = this.getTextureCacheId(sourceTexture);
+    const baseFrame = sourceTexture.frame;
+    const textureHeight = Math.max(1, Number(sourceTexture.height) || 1);
+    const baseFrameX = baseFrame?.x ?? 0;
+    const baseFrameY = baseFrame?.y ?? 0;
+    const baseFrameWidth = Math.max(1, baseFrame?.width ?? sourceTexture.width);
+    const baseFrameHeight = Math.max(
+      1,
+      baseFrame?.height ?? sourceTexture.height,
+    );
+    const frameY =
+      baseFrameY + (sample.frameY / textureHeight) * baseFrameHeight;
+    const frameHeight = Math.max(
+      1,
+      (sample.frameHeight / textureHeight) * baseFrameHeight,
+    );
+    const key = [
+      textureId,
+      sample.rows,
+      sample.row,
+      baseFrameX,
+      frameY,
+      baseFrameWidth,
+      frameHeight,
+    ].join("|");
+    const cached = this.waveDistortSliceTextures.get(key);
+    if (cached) return cached;
+    const texture = new PIXI.Texture({
+      source: sourceTexture.source,
+      frame: new PIXI.Rectangle(
+        baseFrameX,
+        frameY,
+        baseFrameWidth,
+        frameHeight,
+      ),
+    });
+    this.waveDistortSliceTextures.set(key, texture);
+    return texture;
+  }
+
+  private getTextureCacheId(texture: PIXI.Texture): number {
+    const existing = this.textureCacheIds.get(texture);
+    if (existing) return existing;
+    const next = this.nextTextureCacheId;
+    this.nextTextureCacheId += 1;
+    this.textureCacheIds.set(texture, next);
+    return next;
+  }
+
   private renderParticleSamples(
     particles: readonly VNILiveParticleSpriteSample[],
   ): number {
@@ -2185,6 +2460,21 @@ export class VNIPlayer {
     this.clearTrackedRuntimeDisplays(this.renderEffectDisplaysByLayer);
   }
 
+  private clearDeterministicEffects(): void {
+    this.clearTrackedRuntimeDisplays(this.deterministicEffectSpritesByLayer);
+    for (const graphics of this.deterministicEffectGraphicsByLayer.values()) {
+      this.destroyRuntimeDisplay(graphics);
+    }
+    this.deterministicEffectGraphicsByLayer.clear();
+  }
+
+  private clearWaveDistortSliceTextures(): void {
+    for (const texture of this.waveDistortSliceTextures.values()) {
+      texture.destroy(false);
+    }
+    this.waveDistortSliceTextures.clear();
+  }
+
   private clearChaserLights(): void {
     this.clearTrackedRuntimeDisplays(this.chaserLightSpritesByLayer);
   }
@@ -2218,6 +2508,17 @@ export class VNIPlayer {
     let count = 0;
     for (const displays of this.renderEffectDisplaysByLayer.values()) {
       count += displays.length;
+    }
+    return count;
+  }
+
+  private getRenderedDeterministicEffectCount(): number {
+    let count = 0;
+    for (const sprites of this.deterministicEffectSpritesByLayer.values()) {
+      count += sprites.length;
+    }
+    for (const graphics of this.deterministicEffectGraphicsByLayer.values()) {
+      count += graphics.parent ? 1 : 0;
     }
     return count;
   }
@@ -2263,6 +2564,7 @@ export class VNIPlayer {
     visibleLayerCount: number,
     particleSpriteCount: number,
     renderEffectSpriteCount: number,
+    deterministicEffectSpriteCount: number,
     safeGlowSpriteCount: number,
     chaserLightSpriteCount: number,
   ): void {
@@ -2276,6 +2578,9 @@ export class VNIPlayer {
     diagnostics.dataset.vniParticleSprites = String(particleSpriteCount);
     diagnostics.dataset.vniRenderEffectSprites = String(
       renderEffectSpriteCount,
+    );
+    diagnostics.dataset.vniDeterministicEffectSprites = String(
+      deterministicEffectSpriteCount,
     );
     diagnostics.dataset.vniSafeGlowSprites = String(safeGlowSpriteCount);
     diagnostics.dataset.vniChaserLightSprites = String(chaserLightSpriteCount);
@@ -2311,6 +2616,7 @@ export class VNIPlayer {
     delete diagnostics.dataset.vniVisibleLayers;
     delete diagnostics.dataset.vniParticleSprites;
     delete diagnostics.dataset.vniRenderEffectSprites;
+    delete diagnostics.dataset.vniDeterministicEffectSprites;
     delete diagnostics.dataset.vniSafeGlowSprites;
     delete diagnostics.dataset.vniChaserLightSprites;
     delete diagnostics.dataset.vniMaskSprites;
@@ -2371,6 +2677,15 @@ function getLayerGroupSlotKey(slot: {
   beforeGroupId: string;
 }): string {
   return `${slot.afterGroupId}\u0000${slot.beforeGroupId}`;
+}
+
+function usesLayerDisplayCompensation(
+  type: Exclude<
+    VNIDeterministicEffectSample,
+    { kind: "speed_line" } | { kind: "wave_distort_slice" }
+  >["type"],
+): boolean {
+  return type === "energy_ring" || type === "slash_light";
 }
 
 function normalizeMountedNodeId(id: string): string {

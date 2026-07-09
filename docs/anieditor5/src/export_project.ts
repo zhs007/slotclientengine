@@ -58,6 +58,11 @@ async function compactDuplicateProjectAssetsForExport(
     if (layer.assetId && assetIdRemap.has(layer.assetId)) {
       layer.assetId = assetIdRemap.get(layer.assetId) ?? layer.assetId;
     }
+    if (layer.sequence) {
+      layer.sequence.frameAssetIds = layer.sequence.frameAssetIds.map(
+        (assetId) => assetIdRemap.get(assetId) ?? assetId,
+      );
+    }
   }
   for (const particle of project.particles) {
     if (particle.assetId && assetIdRemap.has(particle.assetId)) {

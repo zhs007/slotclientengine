@@ -1,6 +1,10 @@
 import * as PIXI from "pixi.js";
 import { toPixiBlendMode } from "./blend-mode.js";
 import { editorToPixi } from "../core/coordinates.js";
+import {
+  getLayerDisplayAsset,
+  getLayerDisplayAssetId,
+} from "../core/sequence-layer.js";
 import type { SampledLayerState } from "../core/project-sampler.js";
 import type {
   V5GLayerConfig,
@@ -32,19 +36,25 @@ export function createLayerInstance(
   let textureSize: { width: number; height: number } | null = null;
   let displayScaleCompensation = { x: 1, y: 1 };
 
-  if (layer.type === "image") {
-    if (!layer.assetId) {
+  if (layer.type === "image" || layer.type === "sequence") {
+    if (layer.type === "image" && !layer.assetId) {
       throw new Error(`V5G image layer "${layer.id}" requires assetId.`);
     }
-    const texture = texturesByAssetId.get(layer.assetId);
+    const assetId = getLayerDisplayAssetId(layer, 0);
+    if (!assetId) {
+      throw new Error(`V5G ${layer.type} layer "${layer.id}" requires asset.`);
+    }
+    const texture = texturesByAssetId.get(assetId);
     if (!texture) {
       throw new Error(
-        `V5G image layer "${layer.id}" is missing texture for asset "${layer.assetId}".`,
+        `V5G ${layer.type} layer "${layer.id}" is missing texture for asset "${assetId}".`,
       );
     }
-    const asset = getLayerAsset(layer, assetsById);
+    const asset = getLayerDisplayAsset(layer, 0, assetsById);
     if (!asset) {
-      throw new Error(`V5G image layer "${layer.id}" is missing asset.`);
+      throw new Error(
+        `V5G ${layer.type} layer "${layer.id}" is missing asset.`,
+      );
     }
     instanceTexture = texture;
     textureSize = {
@@ -101,6 +111,50 @@ export function createLayerInstance(
   };
 }
 
+export function updateLayerInstanceDisplayAsset(
+  instance: V5GLayerInstance,
+  time: number,
+  texturesByAssetId: ReadonlyMap<string, PIXI.Texture>,
+  assetsById: ReadonlyMap<string, V5GAssetConfig>,
+): void {
+  if (instance.layer.type !== "image" && instance.layer.type !== "sequence") {
+    return;
+  }
+  const assetId = getLayerDisplayAssetId(instance.layer, time);
+  if (!assetId) {
+    throw new Error(
+      `V5G ${instance.layer.type} layer "${instance.layer.id}" requires display asset.`,
+    );
+  }
+  const texture = texturesByAssetId.get(assetId);
+  if (!texture) {
+    throw new Error(
+      `V5G ${instance.layer.type} layer "${instance.layer.id}" is missing texture for asset "${assetId}".`,
+    );
+  }
+  const asset = getLayerDisplayAsset(instance.layer, time, assetsById);
+  if (!asset) {
+    throw new Error(
+      `V5G ${instance.layer.type} layer "${instance.layer.id}" is missing asset "${assetId}".`,
+    );
+  }
+  const sprite = getTextureBackedSprite(instance);
+  sprite.texture = texture;
+  sprite.anchor.set(
+    instance.layer.transform.anchorX,
+    instance.layer.transform.anchorY,
+  );
+  instance.texture = texture;
+  instance.textureSize = {
+    width: Math.round(texture.width),
+    height: Math.round(texture.height),
+  };
+  instance.displayScaleCompensation = getAssetDisplayCompensation(
+    asset,
+    instance.textureSize,
+  );
+}
+
 export function applySampledLayerState(
   instance: V5GLayerInstance,
   sampled: SampledLayerState,
@@ -127,7 +181,10 @@ export function getLayerAsset(
   layer: V5GLayerConfig,
   assetsById: ReadonlyMap<string, V5GAssetConfig>,
 ): V5GAssetConfig | null {
-  if (layer.type !== "image") return null;
+  if (layer.type !== "image" && layer.type !== "sequence") return null;
+  if (layer.type === "sequence") {
+    return getLayerDisplayAsset(layer, 0, assetsById);
+  }
   if (!layer.assetId) {
     throw new Error(`V5G image layer "${layer.id}" requires assetId.`);
   }
@@ -138,6 +195,13 @@ export function getLayerAsset(
     );
   }
   return asset;
+}
+
+function getTextureBackedSprite(instance: V5GLayerInstance): PIXI.Sprite {
+  if (instance.display instanceof PIXI.Sprite) return instance.display;
+  throw new Error(
+    `VNI texture-backed layer "${instance.layer.id}" display is not a sprite.`,
+  );
 }
 
 export function getAssetTextureSize(asset: V5GAssetConfig): TextureSize {

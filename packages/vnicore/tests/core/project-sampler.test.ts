@@ -378,7 +378,7 @@ describe("project-sampler", () => {
     expect(active.renderImageDisplay).toBe(true);
 
     const atEnd = sampleLayerAtTime(particleLayer, 1);
-    expect(atEnd.hasActiveParticleAnimation).toBe(false);
+    expect(atEnd.hasActiveParticleAnimation).toBe(true);
     expect(atEnd.renderImageDisplay).toBe(true);
   });
 
@@ -495,13 +495,15 @@ describe("project-sampler", () => {
 
     const atStart = sampleLayerAtTime(glowLayer, 0);
     const active = sampleLayerAtTime(glowLayer, 0.5);
+    const afterEnd = sampleLayerAtTime(glowLayer, 1.01);
 
-    expect(atStart.hasActiveRenderEffect).toBe(false);
+    expect(atStart.hasActiveRenderEffect).toBe(true);
     expect(atStart.renderImageDisplay).toBe(false);
     expect(active.opacity).toBe(0);
     expect(active.visible).toBe(true);
     expect(active.renderImageDisplay).toBe(false);
     expect(active.hasActiveRenderEffect).toBe(true);
+    expect(afterEnd.hasActiveRenderEffect).toBe(false);
   });
 
   it("hides safe_glow source image while preserving active safe glow", () => {
@@ -524,16 +526,19 @@ describe("project-sampler", () => {
     ]);
 
     const atStart = sampleLayerAtTime(safeGlowLayer, 0);
-    const inactiveEnd = sampleLayerAtTime(safeGlowLayer, 1);
+    const atEnd = sampleLayerAtTime(safeGlowLayer, 1);
+    const afterEnd = sampleLayerAtTime(safeGlowLayer, 1.01);
 
     expect(atStart.opacity).toBe(0);
     expect(atStart.visible).toBe(true);
     expect(atStart.renderImageDisplay).toBe(false);
     expect(atStart.hasActiveSafeGlowAnimation).toBe(true);
     expect(atStart.hasActiveRenderEffect).toBe(false);
-    expect(inactiveEnd.visible).toBe(false);
-    expect(inactiveEnd.renderImageDisplay).toBe(false);
-    expect(inactiveEnd.hasActiveSafeGlowAnimation).toBe(false);
+    expect(atEnd.visible).toBe(true);
+    expect(atEnd.renderImageDisplay).toBe(false);
+    expect(atEnd.hasActiveSafeGlowAnimation).toBe(true);
+    expect(afterEnd.visible).toBe(false);
+    expect(afterEnd.hasActiveSafeGlowAnimation).toBe(false);
   });
 
   it("hides shatter source image while preserving active render effect", () => {
@@ -561,12 +566,14 @@ describe("project-sampler", () => {
 
     const atStart = sampleLayerAtTime(shatterLayer, 0);
     const active = sampleLayerAtTime(shatterLayer, 0.5);
+    const afterEnd = sampleLayerAtTime(shatterLayer, 1.01);
 
-    expect(atStart.hasActiveRenderEffect).toBe(false);
+    expect(atStart.hasActiveRenderEffect).toBe(true);
     expect(active.opacity).toBe(0);
     expect(active.visible).toBe(true);
     expect(active.renderImageDisplay).toBe(false);
     expect(active.hasActiveRenderEffect).toBe(true);
+    expect(afterEnd.hasActiveRenderEffect).toBe(false);
   });
 
   it("clamps project time to stage duration", () => {

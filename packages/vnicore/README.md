@@ -22,14 +22,15 @@ The root import re-exports both `./core` and `./pixi`. The `V5G*` names are lega
 - editor names: `victory_editor_v5_g` and `VNI`
 - current export metadata target: `engineTarget.name === "cocos_creator"`
 - image and basic text layers
+- VNI `sequence` layers, resolved from explicit `sequence.frameAssetIds` and rendered as texture-backed Pixi sprites
 - center-coordinate Pixi rendering
 - bundle manifests with profile/project consistency checks
 - all-or-none `fileWidth` / `fileHeight` / `fileScale` asset metadata
 - runtime profile exports such as `runtime_50` and `runtime_100`, including logical-size display compensation for scaled file pixels
-- animation and particle sampling used by `apps/anieditorv5viewer`
+- animation, particle, sequence-frame, and deterministic effect sampling used by `apps/anieditorv5viewer`
 - layer masks with explicit source validation and cached `precompose_light_alpha` Pixi light-mask precomposition
 - text-layer placeholder binding for host Pixi nodes, dynamic text, and project/external image replacements
-- `particle_stream` continuous layer particles and `chaser_light` fixed-position runtime lights with bounded sprite counts
+- `particle_stream` continuous layer particles, `chaser_light` fixed-position runtime lights, and VNI_0.070 deterministic sequence effects with bounded sprite counts
 - `play()`, `play({ mode: "segmented", ... })`, `pause()`, `restart()`, `seek()`, `setLoop()`, `playRange(...)`, playback markers, particle-draining, and complete listeners
 - `project.layerGroups + layer.groupId` layer group schema, with render order derived from `project.layers`
 - adjacent layer-group slot APIs for mounting host Pixi nodes, project asset images, or explicit external image URLs between two neighboring groups
@@ -53,7 +54,7 @@ Layer group slots are exposed through `VNIPlayer.getLayerGroupSlots()`. The slot
 
 Black-backed JPG or RGB PNG light assets whose image-layer usages are all `add` / `screen` / `lighten` are converted to transparent matte textures during load when decoded pixels have no usable alpha channel. This keeps the exported art files unchanged while preventing Pixi v8 additive blending from writing an opaque black rectangle into transparent host canvases. PNG files that already carry transparent alpha are kept as-is. The conversion uses a transient decode canvas only for texture preprocessing; it is not a `VNIPlayer` render surface and is not appended to the DOM.
 
-Supported animation types include transform/opacity animations, live particles, segmented particle draining, deterministic render effects such as `shatter` and `glow`, continuous `particle_stream`, `chaser_light`, and the cross-engine-safe `safe_glow` overlay. `idle` is a coverage-only no-op; `shatter` and `glow` are sampled as render effects, while `safe_glow` is a duplicate-image overlay that inherits the layer blend mode and is counted separately from render effects. `chaser_light` samples fixed light positions and advances only the lit/dim window; circle spacing is interpreted as arc length, and timing advances per light by `lightDuration + interval`.
+Supported animation types include transform/opacity animations, live particles, segmented particle draining, deterministic render effects such as `shatter` and `glow`, continuous `particle_stream`, `chaser_light`, the cross-engine-safe `safe_glow` overlay, and the VNI_0.070 sequence effects `gather_particles`, `smoke_mist`, `energy_ring`, `slash_light`, `flame_flicker`, `wave_band`, `wave_distort`, `speed_lines`, `drift_fall`, and `path_particles`. Timeline coverage is start/end inclusive: `time === startTime` samples progress `0`, `time === startTime + duration` samples progress `1`, and only later times are inactive. `idle` is a coverage-only no-op; `shatter` and `glow` are sampled as render effects, while `safe_glow` is a duplicate-image overlay that inherits the layer blend mode and is counted separately from render effects. `chaser_light` samples fixed light positions and advances only the lit/dim window; circle spacing is interpreted as arc length, and timing advances per light by `lightDuration + interval`.
 
 Text layers are runtime placeholders. Hosts can bind custom Pixi nodes with `attachNodeToTextLayer(...)`, dynamic text with `attachTextToTextLayer(...)`, or images with `attachImageToTextLayer(...)`; bound nodes inherit the text layer transform, opacity, visibility, blend mode, render order, and lifecycle. `destroy()`, `clearMountedNodes()`, project switches, and each returned dispose handle clean these nodes.
 

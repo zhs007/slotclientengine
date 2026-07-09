@@ -2,7 +2,7 @@
 
 `apps/anieditorv5viewer` is a Vite + TypeScript viewer shell for uploaded VNI zip exports. It no longer bundles local animation JSON or copied image assets; playback starts only after the user selects a `.zip` file in the browser.
 
-The animation runtime comes from `@slotclientengine/vnicore`. This app owns upload handling, zip parsing, profile selection, controls, styles, Blob URL lifecycle, and browser assembly. Validation, sampling, Pixi.js v8 rendering, texture-size checks, masks, particles, playback ranges, segmented playback, particle-draining, and diagnostics live in `packages/vnicore`.
+The animation runtime comes from `@slotclientengine/vnicore`. This app owns upload handling, zip parsing, profile selection, controls, styles, Blob URL lifecycle, and browser assembly. Validation, sequence frame selection, sampling, Pixi.js v8 rendering, texture-size checks, masks, particles, VNI_0.070 deterministic effects, playback ranges, segmented playback, particle-draining, and diagnostics live in `packages/vnicore`.
 
 The viewer owns the browser Pixi `Application` and canvas. It passes `app.stage` to `VNIPlayer`, then uses `viewport` / `setViewportSize(...)` and `requestRender` to keep the player aligned with the viewer mount. `VNIPlayer` itself does not create a canvas.
 
@@ -59,10 +59,11 @@ Supported by `@slotclientengine/vnicore`:
 - asset file metadata: `fileWidth`, `fileHeight`, and `fileScale` must be all absent or all present
 - VNI bundle manifest entries whose project `exportProfile` matches `id`, `purpose`, and `assetScale`
 - center-coordinate stage rendering
-- image layers and basic text layers
+- image layers, `sequence` layers, and basic text layers
 - text layer replacement through `VNIPlayer` public APIs for dynamic text and image binding
 - Pixi `precompose_light_alpha` masks with explicit `sourceLayerId` validation and vnicore-owned light-mask precomposition
 - `normal`, `add`, `screen`, `multiply`, `lighten` blend modes
+- VNI_0.070 deterministic effects: `gather_particles`, `smoke_mist`, `energy_ring`, `slash_light`, `flame_flicker`, `wave_band`, `wave_distort`, `speed_lines`, `drift_fall`, and `path_particles`
 - timeline playback, restart, loop, seek, playback ranges, segmented advanced playback, playback markers, particle-draining, and complete listeners
 
 Explicitly unsupported:
@@ -71,6 +72,7 @@ Explicitly unsupported:
 - non-empty layer keyframes
 - group layers
 - nested `parentId`
+- malformed `sequence` layers or sequence frames that are missing from the uploaded zip
 - unknown schema/editor values, resources, layer types, animation types, blend modes, or easing names
 - missing required numeric animation parameters, including particle parameters
 - numeric parameters encoded as strings
@@ -81,6 +83,8 @@ Explicitly unsupported:
 
 The viewer is a Pixi preview shell for vnicore exports. It does not expose a Cocos-compatible switch and does not implement its own mask/precompose renderer; `precompose_light_alpha` visual parity with the editor Pixi preview is owned by `packages/vnicore`.
 
+Sequence frame selection and the VNI_0.070 deterministic effects are also owned by `packages/vnicore`. The viewer must not inspect private Pixi layer instances, duplicate effect formulas, or create placeholder assets when an uploaded project references a missing sequence frame.
+
 ## Browser Diagnostics
 
 The stage mount receives runtime diagnostics from `VNIPlayer`:
@@ -89,6 +93,9 @@ The stage mount receives runtime diagnostics from `VNIPlayer`:
 - `data-vni-time`
 - `data-vni-visible-layers`
 - `data-vni-particle-sprites`
+- `data-vni-render-effect-sprites`
+- `data-vni-deterministic-effect-sprites`
+- `data-vni-safe-glow-sprites`
 - `data-vni-chaser-light-sprites`
 - `data-vni-mask-sprites`
 - `data-vni-text-layer-bindings`

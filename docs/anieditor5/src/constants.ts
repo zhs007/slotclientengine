@@ -1,5 +1,5 @@
 export const TOOL_NAME = "VNI";
-export const VNI_VERSION = "VNI_0.045";
+export const VNI_VERSION = "VNI_0.070";
 
 export const COCOS_TARGET_VERSION = "3.8.6";
 

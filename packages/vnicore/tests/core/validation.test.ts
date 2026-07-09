@@ -191,6 +191,163 @@ const newAnimationParams: Readonly<
     dimAlpha: 0.15,
     keepOriginal: true,
   },
+  gather_particles: {
+    count: 48,
+    size: 42,
+    sourceOpacity: 0,
+    spawnRadius: 360,
+    spawnRatio: 0.2,
+    targetX: 0,
+    targetY: 0,
+    travelMode: 1,
+    curve: 160,
+    spiralTurns: 0.75,
+    staggerRatio: 0.28,
+    trailCount: 3,
+    trailSpacing: 0.04,
+    trailFade: 0.55,
+    vanishMode: 1,
+    vanishRatio: 0.18,
+    flashScale: 1.6,
+    flashIntensity: 1.35,
+  },
+  smoke_mist: {
+    count: 56,
+    size: 96,
+    sourceOpacity: 0,
+    spawnRadius: 80,
+    spread: 320,
+    windX: 80,
+    windY: 40,
+    swirl: 120,
+    startAlpha: 0.62,
+    fadePower: 1.35,
+    grow: 2.1,
+    sizeRandom: 0.55,
+    rotationSpeed: 0.6,
+  },
+  energy_ring: {
+    ringCount: 2,
+    startScale: 0.25,
+    endScale: 2.4,
+    sourceOpacity: 0,
+    alpha: 1,
+    stagger: 0.28,
+    rotation: 60,
+    pulse: 0.08,
+    vanishMode: 1,
+    additive: true,
+  },
+  slash_light: {
+    mode: 0,
+    angle: -25,
+    travel: 180,
+    lengthScale: 2.4,
+    widthScale: 0.55,
+    sourceOpacity: 0,
+    flashAlpha: 1,
+    startScale: 0.18,
+    fadeRatio: 0.45,
+    curve: 90,
+    additive: true,
+  },
+  flame_flicker: {
+    count: 52,
+    emitterWidth: 180,
+    height: 420,
+    direction: 270,
+    spreadAngle: 22,
+    vanishSpread: 120,
+    lengthRandom: 0.35,
+    size: 96,
+    sway: 54,
+    turbulence: 80,
+    grow: 1.65,
+    sourceOpacity: 0,
+    alpha: 0.9,
+    flicker: 0.35,
+    cycles: 1,
+    additive: true,
+  },
+  wave_band: {
+    mode: 0,
+    count: 36,
+    length: 720,
+    amplitude: 70,
+    frequency: 2.5,
+    speed: 1,
+    direction: 0,
+    size: 48,
+    alpha: 1,
+    trailFade: 0.75,
+    keepOriginal: false,
+    rotateToWave: true,
+  },
+  wave_distort: {
+    rows: 36,
+    amplitude: 24,
+    frequency: 2,
+    cycles: 1,
+    speed: 1,
+    phaseOffset: 1,
+    verticalBob: 0,
+    alpha: 1,
+    edgeFeather: 0,
+    keepOriginal: false,
+  },
+  speed_lines: {
+    mode: 0,
+    count: 72,
+    radius: 520,
+    length: 120,
+    speed: 1.4,
+    direction: 0,
+    spreadAngle: 360,
+    lineWidth: 3,
+    alpha: 0.75,
+    keepOriginal: false,
+    fadeOut: true,
+  },
+  drift_fall: {
+    count: 48,
+    areaWidth: 900,
+    areaHeight: 1600,
+    cycles: 1,
+    fallSpeed: 260,
+    wind: 45,
+    swayAmplitude: 42,
+    swayFrequency: 1,
+    size: 48,
+    sizeRandom: 0.45,
+    rotationSpeed: 1,
+    alpha: 1,
+    keepOriginal: false,
+    fadeEdges: true,
+  },
+  path_particles: {
+    pathMode: 1,
+    count: 36,
+    size: 42,
+    endX: 360,
+    endY: 0,
+    curve: 160,
+    amplitude: 70,
+    frequency: 2.5,
+    radiusStart: 240,
+    radiusEnd: 60,
+    turns: 1.5,
+    speed: 1,
+    stagger: 1,
+    oneShotStagger: 0.25,
+    trailCount: 3,
+    trailSpacing: 0.035,
+    trailFade: 0.55,
+    alpha: 1,
+    keepOriginal: false,
+    rotateToPath: true,
+    fadeEnds: true,
+    loop: true,
+  },
   shatter: {
     count: 64,
     pieceSize: 72,
@@ -645,6 +802,84 @@ describe("validation", () => {
     }
   });
 
+  it("accepts VNI_0.070 sequence layers with explicit image frames", () => {
+    const project = validProject();
+    project.schemaVersion = "VNI_0.070";
+    project.editor.version = "VNI_0.070";
+    project.layers[0] = {
+      ...project.layers[0],
+      type: "sequence",
+      assetId: null,
+      sequence: {
+        frameAssetIds: [project.assets[0].id, project.assets[1].id],
+        cycleDuration: 0.2,
+        loop: true,
+      },
+    };
+
+    expect(() => validateV5GProject(project)).not.toThrow();
+    expect(assertVNIProject(project).layers[0].type).toBe("sequence");
+  });
+
+  it("rejects invalid sequence layer contracts explicitly", () => {
+    expectInvalid((project) => {
+      project.layers[0] = {
+        ...project.layers[0],
+        type: "sequence",
+        sequence: {
+          frameAssetIds: [project.assets[0].id],
+          cycleDuration: 0.2,
+          loop: true,
+        },
+      };
+    }, "must not reference assetId");
+
+    expectInvalid((project) => {
+      project.layers[0] = {
+        ...project.layers[0],
+        type: "sequence",
+        assetId: null,
+      };
+    }, "requires sequence config");
+
+    expectInvalid((project) => {
+      project.layers[0] = {
+        ...project.layers[0],
+        type: "sequence",
+        assetId: null,
+        sequence: {
+          frameAssetIds: [],
+          cycleDuration: 0.2,
+          loop: true,
+        },
+      };
+    }, "frameAssetIds must be non-empty");
+
+    expectInvalid((project) => {
+      project.layers[0] = {
+        ...project.layers[0],
+        type: "sequence",
+        assetId: null,
+        sequence: {
+          frameAssetIds: ["missing"],
+          cycleDuration: 0.2,
+          loop: true,
+        },
+      };
+    }, 'references missing frame asset "missing"');
+
+    expectInvalid((project) => {
+      project.layers[0] = {
+        ...project.layers[0],
+        sequence: {
+          frameAssetIds: [project.assets[0].id],
+          cycleDuration: 0.2,
+          loop: true,
+        },
+      };
+    }, "must not include sequence config");
+  });
+
   it("rejects animations that exceed stage duration", () => {
     expectInvalid((project) => {
       project.layers[0].animations[0].startTime = 9.95;
@@ -712,6 +947,24 @@ describe("validation", () => {
       delete params.spread;
       project.layers[0].animations = [animation("safe_glow", params)];
     }, 'requires numeric param "spread"');
+
+    expectInvalid((project) => {
+      const params = { ...newAnimationParams.gather_particles };
+      delete params.targetY;
+      project.layers[0].animations = [animation("gather_particles", params)];
+    }, 'requires numeric param "targetY"');
+
+    expectInvalid((project) => {
+      const params = { ...newAnimationParams.wave_distort };
+      delete params.phaseOffset;
+      project.layers[0].animations = [animation("wave_distort", params)];
+    }, 'requires numeric param "phaseOffset"');
+
+    expectInvalid((project) => {
+      const params = { ...newAnimationParams.path_particles };
+      delete params.endY;
+      project.layers[0].animations = [animation("path_particles", params)];
+    }, 'requires numeric param "endY"');
   });
 
   it("rejects string numeric params", () => {
@@ -760,6 +1013,15 @@ describe("validation", () => {
         }),
       ];
     }, 'requires numeric param "totalCount"');
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("flame_flicker", {
+          ...newAnimationParams.flame_flicker,
+          speed: "fast",
+        }),
+      ];
+    }, 'param "speed" must be a finite number');
   });
 
   it("rejects non-boolean optional flags", () => {
@@ -822,6 +1084,15 @@ describe("validation", () => {
         }),
       ];
     }, 'param "keepOriginal" must be a boolean');
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("speed_lines", {
+          ...newAnimationParams.speed_lines,
+          fadeOut: 1,
+        }),
+      ];
+    }, 'param "fadeOut" must be a boolean');
   });
 
   it("rejects invalid layer masks", () => {

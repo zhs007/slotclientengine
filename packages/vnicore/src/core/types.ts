@@ -1,5 +1,5 @@
 export type V5GCoordinateMode = "center";
-export type V5GLayerType = "image" | "text" | "group";
+export type V5GLayerType = "image" | "text" | "group" | "sequence";
 export type V5GAssetType = "image";
 export type V5GBlendMode = "normal" | "add" | "screen" | "multiply" | "lighten";
 export type V5GMaskCompositeMode = "legacy_alpha" | "precompose_light_alpha";
@@ -65,6 +65,16 @@ export type V5GAnimationType =
   | "particle_combo"
   | "particle_stream"
   | "chaser_light"
+  | "gather_particles"
+  | "smoke_mist"
+  | "energy_ring"
+  | "slash_light"
+  | "flame_flicker"
+  | "wave_band"
+  | "wave_distort"
+  | "speed_lines"
+  | "drift_fall"
+  | "path_particles"
   | "shatter"
   | "glow"
   | "safe_glow"
@@ -99,6 +109,12 @@ export interface V5GLayerMaskConfig {
   showSourceLayer: boolean;
 }
 
+export interface V5GSequenceConfig {
+  frameAssetIds: string[];
+  cycleDuration: number;
+  loop: boolean;
+}
+
 export interface V5GLayerConfig {
   id: string;
   name: string;
@@ -112,6 +128,7 @@ export interface V5GLayerConfig {
   opacity: number;
   blendMode: V5GBlendMode;
   text?: string;
+  sequence?: V5GSequenceConfig;
   mask?: V5GLayerMaskConfig;
   animations: V5GAnimationConfig[];
   keyframes?: V5GLayerKeyframeConfig[];
@@ -190,6 +207,7 @@ export type VNIAnimationConfig = V5GAnimationConfig;
 export type VNILayerKeyframeConfig = V5GLayerKeyframeConfig;
 export type VNILayerMaskConfig = V5GLayerMaskConfig;
 export type VNIMaskCompositeMode = V5GMaskCompositeMode;
+export type VNISequenceConfig = V5GSequenceConfig;
 export type VNILayerConfig = V5GLayerConfig;
 export type VNILayerGroupConfig = V5GLayerGroupConfig;
 export type VNIParticleConfig = V5GParticleConfig;

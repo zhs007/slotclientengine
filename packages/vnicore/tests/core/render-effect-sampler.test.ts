@@ -45,7 +45,7 @@ function sampleState() {
 }
 
 describe("render-effect-sampler", () => {
-  it("identifies render effect animations and suppresses exact start frames", () => {
+  it("identifies render effect animations and keeps exact timeline boundaries active", () => {
     const glow = glowAnimation();
 
     expect(isRenderEffectAnimationType("glow")).toBe(true);
@@ -53,11 +53,14 @@ describe("render-effect-sampler", () => {
     expect(isRenderEffectAnimationType("safe_glow")).toBe(false);
     expect(isRenderEffectAnimationType("particle_combo")).toBe(false);
     expect(getRenderEffectProgress(glow, -0.1)).toBeNull();
-    expect(getRenderEffectProgress(glow, 0)).toBeNull();
+    expect(getRenderEffectProgress(glow, 0)).toBe(0);
     expect(getRenderEffectProgress(glow, 0.5)).toBe(0.5);
-    expect(getRenderEffectProgress(glow, 1)).toBeNull();
-    expect(hasActiveRenderEffectAnimation(imageLayer(glow), 0)).toBe(false);
+    expect(getRenderEffectProgress(glow, 1)).toBe(1);
+    expect(getRenderEffectProgress(glow, 1.01)).toBeNull();
+    expect(hasActiveRenderEffectAnimation(imageLayer(glow), 0)).toBe(true);
     expect(hasActiveRenderEffectAnimation(imageLayer(glow), 0.5)).toBe(true);
+    expect(hasActiveRenderEffectAnimation(imageLayer(glow), 1)).toBe(true);
+    expect(hasActiveRenderEffectAnimation(imageLayer(glow), 1.01)).toBe(false);
   });
 
   it("samples glow sprites with deterministic blend and alpha", () => {

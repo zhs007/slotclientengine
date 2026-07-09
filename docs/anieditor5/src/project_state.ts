@@ -17,6 +17,7 @@ import type {
 } from "./types";
 
 export const DEFAULT_LAYER_GROUP_ID = "group_default";
+export const DEFAULT_SEQUENCE_FRAME_SECONDS = 0.1;
 
 let idCounter = 1;
 
@@ -80,6 +81,7 @@ export function createInitialEditorState(): V5GEditorState {
     isPlaying: false,
     playheadSeconds: 0,
     showSelectionOutline: true,
+    temporarySoloLayerId: null,
     previewLayers: {},
   };
 }
@@ -168,11 +170,96 @@ export function createImageLayer(asset: V5GAssetConfig): V5GLayerConfig {
   };
 }
 
+export function createSequenceLayer(
+  name: string,
+  frameAssetIds: string[],
+  cycleDuration = frameAssetIds.length * DEFAULT_SEQUENCE_FRAME_SECONDS,
+  loop = true,
+): V5GLayerConfig {
+  return {
+    id: createId("layer_sequence"),
+    name,
+    type: "sequence",
+    assetId: null,
+    parentId: null,
+    groupId: DEFAULT_LAYER_GROUP_ID,
+    visible: true,
+    locked: false,
+    transform: {
+      x: 0,
+      y: 0,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      anchorX: 0.5,
+      anchorY: 0.5,
+    },
+    opacity: 1,
+    blendMode: "normal",
+    sequence: {
+      frameAssetIds: [...frameAssetIds],
+      cycleDuration: sanitizeSequenceDuration(
+        cycleDuration,
+        frameAssetIds.length,
+      ),
+      loop,
+    },
+    animations: [],
+    keyframes: [],
+  };
+}
+
 export function getSelectedLayer(state: V5GEditorState): V5GLayerConfig | null {
   return (
     state.project.layers.find((layer) => layer.id === state.selectedLayerId) ??
     null
   );
+}
+
+export function sanitizeSequenceDuration(
+  value: number,
+  frameCount: number,
+  fallback = Math.max(1, frameCount) * DEFAULT_SEQUENCE_FRAME_SECONDS,
+  minFrameSeconds = 0.01,
+  maxDuration = 3600,
+): number {
+  const minDuration = Math.max(
+    minFrameSeconds,
+    Math.max(1, frameCount) * minFrameSeconds,
+  );
+  if (!Number.isFinite(value) || value <= 0) {
+    return Math.min(maxDuration, Math.max(minDuration, fallback));
+  }
+  return Math.min(maxDuration, Math.max(minDuration, value));
+}
+
+export function normalizeProjectSequences(project: V5GProjectConfig): void {
+  const assetIds = new Set(project.assets.map((asset) => asset.id));
+  for (const layer of project.layers) {
+    if (layer.type !== "sequence") {
+      if (layer.sequence) delete layer.sequence;
+      continue;
+    }
+    const rawFrameAssetIds = Array.isArray(layer.sequence?.frameAssetIds)
+      ? layer.sequence.frameAssetIds
+      : layer.assetId
+        ? [layer.assetId]
+        : [];
+    const frameAssetIds = rawFrameAssetIds.filter(
+      (assetId): assetId is string =>
+        typeof assetId === "string" && assetIds.has(assetId),
+    );
+    layer.assetId = null;
+    layer.text = undefined;
+    layer.sequence = {
+      frameAssetIds,
+      cycleDuration: sanitizeSequenceDuration(
+        Number(layer.sequence?.cycleDuration),
+        frameAssetIds.length,
+      ),
+      loop: layer.sequence?.loop !== false,
+    };
+  }
 }
 
 export function normalizeProjectLayerGroups(project: V5GProjectConfig): void {
@@ -302,6 +389,7 @@ export function toExportProject(
   const cloned = JSON.parse(JSON.stringify(project)) as V5GProjectConfig;
   normalizeProjectLayerGroups(cloned);
   normalizeProjectMasks(cloned);
+  normalizeProjectSequences(cloned);
 
   if (purpose === "editing") {
     return cloned;
@@ -334,6 +422,9 @@ export function toExportProject(
   const referencedAssetIds = new Set<string>();
   for (const layer of visibleLayers) {
     if (layer.assetId) referencedAssetIds.add(layer.assetId);
+    for (const frameAssetId of layer.sequence?.frameAssetIds ?? []) {
+      referencedAssetIds.add(frameAssetId);
+    }
   }
   for (const particle of cloned.particles) {
     if (particle.assetId) referencedAssetIds.add(particle.assetId);

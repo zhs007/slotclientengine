@@ -1,5 +1,6 @@
 import { clampNumber, roundTo } from "./coordinates.js";
 import { isParticleAnimationType } from "./animation-sampler.js";
+import { getTimelineAnimationProgress } from "./timeline-progress.js";
 import type {
   V5GAnimationConfig,
   V5GBlendMode,
@@ -44,7 +45,7 @@ export function hasActiveParticleAnimation(
   layer: V5GLayerConfig,
   time: number,
 ): boolean {
-  if (layer.type !== "image") return false;
+  if (!isTextureBackedLayer(layer)) return false;
   return layer.animations.some(
     (animation) =>
       animation.enabled &&
@@ -57,14 +58,7 @@ export function getParticleProgress(
   animation: V5GAnimationConfig,
   time: number,
 ): number | null {
-  const start = animation.startTime;
-  const end = animation.startTime + animation.duration;
-  if (time < start || time >= end) return null;
-  return clampNumber(
-    (time - start) / Math.max(animation.duration, 0.0001),
-    0,
-    1,
-  );
+  return getTimelineAnimationProgress(animation, time);
 }
 
 export function sampleParticleSpritesForLayer(
@@ -74,7 +68,7 @@ export function sampleParticleSpritesForLayer(
   time: number,
 ): ParticleSpriteSample[] {
   if (
-    layer.type !== "image" ||
+    !isTextureBackedLayer(layer) ||
     !layer.visible ||
     sampledLayer.baseOpacity <= 0
   ) {
@@ -88,7 +82,6 @@ export function sampleParticleSpritesForLayer(
     }
     const progress = getParticleProgress(animation, time);
     if (progress === null) continue;
-    if (progress <= 0) continue;
 
     const particleOpacity =
       animation.type === "particle_combo"
@@ -139,7 +132,7 @@ export function sampleParticleSpritesForLayerRuntime(
   runtimeStates: readonly ParticleAnimationRuntimeState[],
 ): ParticleSpriteSample[] {
   if (
-    layer.type !== "image" ||
+    !isTextureBackedLayer(layer) ||
     !layer.visible ||
     sampledLayer.baseOpacity <= 0
   ) {
@@ -1183,8 +1176,13 @@ function getRuntimeProgress(
   elapsed: number,
 ): number | null {
   const duration = Math.max(animation.duration, 0.0001);
-  if (elapsed < 0 || elapsed >= duration) return null;
+  if (elapsed < 0 || elapsed > duration) return null;
+  if (elapsed === duration) return 1;
   return clampNumber(elapsed / duration, 0, 1);
+}
+
+function isTextureBackedLayer(layer: V5GLayerConfig): boolean {
+  return layer.type === "image" || layer.type === "sequence";
 }
 
 function getNumberParam(animation: V5GAnimationConfig, key: string): number {

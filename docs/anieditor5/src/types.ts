@@ -1,5 +1,5 @@
 export type V5GCoordinateMode = "center";
-export type V5GLayerType = "image" | "text" | "group";
+export type V5GLayerType = "image" | "text" | "group" | "sequence";
 export type V5GAssetType = "image";
 export type V5GBlendMode = "normal" | "add" | "screen" | "multiply" | "lighten";
 export type V5GMaskCompositeMode = "legacy_alpha" | "precompose_light_alpha";
@@ -62,6 +62,16 @@ export type V5GAnimationType =
   | "particle_twinkle"
   | "particle_wall"
   | "particle_combo"
+  | "gather_particles"
+  | "smoke_mist"
+  | "energy_ring"
+  | "slash_light"
+  | "flame_flicker"
+  | "wave_band"
+  | "wave_distort"
+  | "speed_lines"
+  | "drift_fall"
+  | "path_particles"
   | "shatter"
   | "glow"
   | "safe_glow"
@@ -103,6 +113,15 @@ export interface V5GLayerMaskConfig {
   showSourceLayer: boolean;
 }
 
+export interface V5GSequenceConfig {
+  /** Ordered frame asset ids. Frames are assets, not independent editable layers. */
+  frameAssetIds: string[];
+  /** Seconds for one full sequence pass. */
+  cycleDuration: number;
+  /** Whether the internal frame playback loops while the layer is visible. */
+  loop: boolean;
+}
+
 export interface V5GLayerConfig {
   id: string;
   name: string;
@@ -118,6 +137,8 @@ export interface V5GLayerConfig {
   blendMode: V5GBlendMode;
   mask?: V5GLayerMaskConfig;
   text?: string;
+  /** Sequence-frame module data. Present only when type === "sequence". */
+  sequence?: V5GSequenceConfig;
   animations: V5GAnimationConfig[];
   keyframes?: V5GLayerKeyframeConfig[];
 }
@@ -216,5 +237,7 @@ export interface V5GEditorState {
   isPlaying: boolean;
   playheadSeconds: number;
   showSelectionOutline: boolean;
+  /** Editor-only temporary preview: while dragging in layer list, show only this layer's base asset/text without changing project data. */
+  temporarySoloLayerId?: string | null;
   previewLayers?: Record<string, V5GPreviewLayerState>;
 }

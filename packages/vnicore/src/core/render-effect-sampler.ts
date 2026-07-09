@@ -1,5 +1,6 @@
 import { clampNumber, roundTo } from "./coordinates.js";
 import { seededRandom } from "./particle-sampler.js";
+import { getTimelineAnimationProgress } from "./timeline-progress.js";
 import type {
   V5GAnimationConfig,
   V5GBlendMode,
@@ -66,22 +67,14 @@ export function getRenderEffectProgress(
   time: number,
 ): number | null {
   if (!isRenderEffectAnimationType(animation.type)) return null;
-  const start = animation.startTime;
-  const end = animation.startTime + animation.duration;
-  if (time < start || time >= end) return null;
-  const progress = clampNumber(
-    (time - start) / Math.max(animation.duration, 0.0001),
-    0,
-    1,
-  );
-  return progress <= 0 ? null : progress;
+  return getTimelineAnimationProgress(animation, time);
 }
 
 export function hasActiveRenderEffectAnimation(
   layer: V5GLayerConfig,
   time: number,
 ): boolean {
-  if (layer.type !== "image") return false;
+  if (!isTextureBackedLayer(layer)) return false;
   return layer.animations.some(
     (animation) =>
       animation.enabled && getRenderEffectProgress(animation, time) !== null,
@@ -95,7 +88,7 @@ export function sampleRenderEffectSpritesForLayer(
   time: number,
 ): VNIRenderEffectSpriteSample[] {
   if (
-    layer.type !== "image" ||
+    !isTextureBackedLayer(layer) ||
     !layer.visible ||
     sampledLayer.baseOpacity <= 0
   ) {
@@ -118,6 +111,10 @@ export function sampleRenderEffectSpritesForLayer(
     }
   }
   return sprites;
+}
+
+function isTextureBackedLayer(layer: V5GLayerConfig): boolean {
+  return layer.type === "image" || layer.type === "sequence";
 }
 
 function sampleShatterSprites(

@@ -9,6 +9,7 @@
 ## 主要类型
 
 - `VNIProjectConfig`: VNI/V5G export JSON 的项目结构。
+- `VNISequenceConfig`: `type: "sequence"` layer 的帧序列配置，包含 `frameAssetIds`、`cycleDuration` 和 `loop`。
 - `VNIBundleManifest`: VNI bundle manifest 结构；profile/project 一致性通过 schema 与测试中的 manifest 数据校验。
 - `AssetUrlManifest`: `Readonly<Record<string, string>>`，key 是 `asset.path`。
 - `VNIPlayerOptions`: `VNIPlayer` 构造参数。
@@ -45,10 +46,14 @@
 - `sampleProjectAtTime(project, time)`: 采样整个 project。
 - `sampleLayerAtTime(layer, time)`: 采样单 layer。
 - `sampleLayerAnimationsAtTime(base, animations, time)`: 采样 animation 栈。
+- `getSequenceFrameAssetId(layer, time)`: 按 sequence 配置和当前时间解析当前帧 asset id；非 loop 序列停在最后一帧。
+- `getLayerDisplayAssetId(layer, time)` / `getLayerDisplayAsset(layer, time, assetsById)`: 获取 image/sequence layer 当前显示资源。
 - `sampleParticleSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样粒子 sprite。
 - `sampleChaserLightSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样 `chaser_light` sprite。
 - `sampleRenderEffectSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样 `shatter` / `glow` render effect sprite。
 - `sampleSafeGlowSpritesForLayer(layer, sampledLayer, time)`: 采样 `safe_glow` 同图副本高亮 sprite；它不是 `render-effect-sampler` 的 effect。
+- `sampleDeterministicEffectSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样 VNI_0.070 新增 sequence effects。返回普通 sprite、`wave_distort` texture slice 或 `speed_lines` line sample。
+- `hasActiveDeterministicEffectAnimation(layer, time)`: 判断 image/sequence layer 是否有活跃 VNI_0.070 deterministic effect。
 - `sampleLiveParticleSprites(layers, stage, time)`: 生成带 Pixi 坐标的 live 粒子 sample。
 - `VNIParticleRuntime`: 保存 live 粒子状态，支持停止发射后的排空。
 - `hasActiveChaserLightAnimation(layer, time)`: 判断 layer 是否有活跃走马灯 runtime effect。
@@ -102,6 +107,10 @@
 
 `project.stage.backgroundColor` 是导出 schema 中保留的背景元数据；`VNIPlayer` 是 runtime-only，不读取、不绘制、不提供开关，画面始终保持透明，只渲染 layer/effect/particle/mounted node。
 
+`type: "sequence"` layer 是 texture-backed layer，`assetId` 必须为 `null`，当前显示帧只来自 `sequence.frameAssetIds`。`VNIPlayer` 会在同一个 Pixi sprite 上按时间切换 texture，mask、粒子、deterministic effect 都使用当前帧的 texture/尺寸；不会把 sequence 展开成多层，也不会在 viewer 里复制切帧逻辑。
+
+`diagnosticsElement` 会写入 `data-vni-deterministic-effect-sprites`，用于统计 VNI_0.070 新增效果生成的 sprite / texture slice / line sample。它和 `data-vni-render-effect-sprites`、`data-vni-safe-glow-sprites` 分开统计；旧 `data-v5g-*` alias 同步保留。
+
 文字层是 runtime placeholder。`attachNodeToTextLayer(...)` 要求 `layerId` 指向 `type === "text"` 的 layer，同一个 mounted id 不能重复；默认隐藏原始文字，传 `hideOriginal: false` 才保留。`attachTextToTextLayer(...)` 创建 Pixi `Text` 并返回 `setText()`，更新文本时不会重建 player 或 layer tree。`attachImageToTextLayer(...)` 支持当前 project asset 或显式 `imageUrl`，project asset 继续走 texture size 校验和 logical/file size compensation。返回的 dispose、`clearMountedNodes()`、`destroy()` 都会清理绑定节点并恢复原始文字。
 
 所有 image layer 用法都属于 `add` / `screen` / `lighten` 的 JPG 或 RGB PNG 黑底光效图，会在加载阶段派生为带透明 alpha 的 matte texture。这个处理不修改原始美术资源，只避免 Pixi v8 在透明宿主 canvas 上把没有有效 alpha 的黑色背景写成不透明黑框；已有透明 alpha 的 PNG、normal layer、被 normal layer 复用的图片和未被叠加 blend 引用的图片不受影响。派生过程只使用一次性纹理预处理 canvas，不是 `VNIPlayer` 自己的播放 canvas。
@@ -125,6 +134,18 @@ Layer group 合同：
 - `safe_glow`: 普通同图副本高亮，要求 `spread/minOpacity/maxOpacity/pulses`，`keepOriginal` 可选 boolean；副本继承当前 layer `blendMode`，不进入 `VNIRenderEffectType`。
 - `particle_stream`: 持续发射的 layer 粒子，要求 `spawnRate/lifetime/spread/speed/emissionAngle/emissionSpreadAngle/size/gravity/trailCount/trailSpacing/trailFade/randomRotationDegrees/spinSpeed`，`fadeOut/rotateParticles/randomRotation` 可选 boolean；segmented hold 中 live elapsed 继续推进，drain duration 以 `lifetime` 为主。
 - `chaser_light`: 走马灯 runtime effect，要求 `totalCount/spacing/lightDuration/interval/trajectory/radius/centerX/centerY/endX/endY/curve/lightSize/dimAlpha`，`keepOriginal` 可选 boolean；`totalCount` 校验上限为 200。灯位固定在轨迹采样点上，只推进亮灭窗口；圆形轨迹按 `index * spacing / max(radius, 1) - PI / 2` 把 `spacing` 当弧长换算角度，直线/曲线按 `index / (totalCount - 1)` 静态分布；每盏灯的错位周期是 `lightDuration + interval`，不是单独的 `interval`。
+- `gather_particles`: VNI_0.070 deterministic effect，要求 `count/size/sourceOpacity/spawnRadius/spawnRatio/targetX/targetY/travelMode/curve/spiralTurns/staggerRatio/trailCount/trailSpacing/trailFade/vanishMode/vanishRatio/flashScale/flashIntensity`。
+- `smoke_mist`: 要求 `count/size/sourceOpacity/spawnRadius/spread/windX/windY/swirl/startAlpha/fadePower/grow/sizeRandom/rotationSpeed`。
+- `energy_ring`: 要求 `ringCount/startScale/endScale/sourceOpacity/alpha/stagger/rotation/pulse/vanishMode`，`additive` 可选 boolean。
+- `slash_light`: 要求 `mode/angle/travel/lengthScale/widthScale/sourceOpacity/flashAlpha/startScale/fadeRatio/curve`，`additive` 可选 boolean。
+- `flame_flicker`: 要求 `count/emitterWidth/height/direction/spreadAngle/vanishSpread/lengthRandom/size/sway/turbulence/grow/sourceOpacity/alpha/flicker`，`cycles` 可选；旧导出里的 `speed` 只在本类型作为显式兼容字段读取。
+- `wave_band`: 要求 `mode/count/length/amplitude/frequency/speed/direction/size/alpha/trailFade`，`keepOriginal/rotateToWave` 可选 boolean。
+- `wave_distort`: 要求 `rows/amplitude/frequency/phaseOffset/verticalBob/alpha/edgeFeather`，`cycles` 可选；旧导出里的 `speed` 只在本类型作为显式兼容字段读取。Pixi runtime 以复用 source texture 的 slice 渲染，不复制全图贴图。
+- `speed_lines`: 要求 `mode/count/radius/length/speed/direction/spreadAngle/lineWidth/alpha`，`keepOriginal/fadeOut` 可选 boolean。
+- `drift_fall`: 要求 `count/areaWidth/areaHeight/wind/swayAmplitude/swayFrequency/size/sizeRandom/rotationSpeed/alpha`，`cycles` 可选；旧导出里的 `fallSpeed` 只在本类型作为显式兼容字段读取。
+- `path_particles`: 要求 `pathMode/count/size/endX/endY/curve/amplitude/frequency/radiusStart/radiusEnd/turns/speed/stagger/oneShotStagger/trailCount/trailSpacing/trailFade/alpha`，`keepOriginal/rotateToPath/fadeEnds/loop` 可选 boolean。
+
+所有 layer animation 的覆盖区间都是首尾帧闭区间：`time === startTime` 有效，`time === startTime + duration` 也有效；只有超过 end 的时间才视为 inactive。新增 deterministic effects 可挂在 image 或 sequence layer 上；text layer 不渲染这些 effect。
 
 Mask 合同：
 

@@ -175,7 +175,7 @@ export class VNIParticleRuntime {
           continue;
         }
         const configProgress = getParticleProgress(animation, configTime);
-        if (configProgress === null || configProgress <= 0) continue;
+        if (configProgress === null) continue;
         const key = getLiveAnimationKey(entry.layer.id, animation.id);
         const configuredElapsed = Math.max(0, configTime - animation.startTime);
         const simulationElapsed =

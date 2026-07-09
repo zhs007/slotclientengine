@@ -73,6 +73,7 @@ export class V5GPixiStage {
   private viewOffsetY = 0;
   private draggingLayerId: string | null = null;
   private playTimeline: gsap.core.Timeline | null = null;
+  private renderRunId = 0;
 
   constructor(
     container: HTMLElement,
@@ -120,10 +121,13 @@ export class V5GPixiStage {
   }
 
   async render(nextState: V5GEditorState): Promise<void> {
+    const runId = this.renderRunId + 1;
+    this.renderRunId = runId;
     this.state = nextState;
     normalizeProjectLayerGroups(this.state.project);
     normalizeProjectMasks(this.state.project);
-    await this.syncLayers();
+    await this.syncLayers(runId);
+    if (!this.isCurrentRender(runId)) return;
     this.drawGuides();
     this.drawParticles();
     this.drawSelection();
@@ -266,7 +270,8 @@ export class V5GPixiStage {
     this.callbacks.onViewportChange(this.getViewportState());
   }
 
-  private async syncLayers(): Promise<void> {
+  private async syncLayers(runId: number): Promise<void> {
+    const temporarySoloLayerId = this.state.temporarySoloLayerId ?? null;
     const liveLayerIds = new Set(
       this.state.project.layers.map((layer) => layer.id),
     );
@@ -297,10 +302,11 @@ export class V5GPixiStage {
 
     for (const layer of this.state.project.layers) {
       let display = this.layerDisplayMap.get(layer.id);
+      const displayAssetId = this.getLayerDisplayAssetId(layer);
       const shouldRecreateImageDisplay =
-        layer.type === "image" &&
+        (layer.type === "image" || layer.type === "sequence") &&
         display !== undefined &&
-        this.layerAssetIdMap.get(layer.id) !== layer.assetId;
+        this.layerAssetIdMap.get(layer.id) !== displayAssetId;
       if (shouldRecreateImageDisplay && display) {
         this.detachLayerMaskTargets(layer.id);
         const wrapper = this.layerWrapperMap.get(layer.id);
@@ -326,8 +332,12 @@ export class V5GPixiStage {
       }
       if (!display) {
         display = await this.createLayerDisplay(layer);
+        if (!this.isCurrentRender(runId)) {
+          display.destroy({ children: true });
+          return;
+        }
         this.layerDisplayMap.set(layer.id, display);
-        this.layerAssetIdMap.set(layer.id, layer.assetId);
+        this.layerAssetIdMap.set(layer.id, displayAssetId);
         this.contentContainer.addChild(display);
       } else if (layer.type === "text") {
         const textNode = display.children[0];
@@ -335,12 +345,14 @@ export class V5GPixiStage {
           textNode.text = layer.text ?? layer.name;
         }
       }
-      const maskSource = getLayerMaskSource(this.state.project, layer);
+      const maskSource =
+        temporarySoloLayerId === null
+          ? getLayerMaskSource(this.state.project, layer)
+          : null;
       const displayAfterMask = this.layerDisplayMap.get(layer.id);
-      const usesPrecomposedMask = this.shouldUsePrecomposedLightMask(
-        layer,
-        maskSource,
-      );
+      const usesPrecomposedMask =
+        temporarySoloLayerId === null &&
+        this.shouldUsePrecomposedLightMask(layer, maskSource);
       if (maskSource && displayAfterMask && !usesPrecomposedMask) {
         let wrapper = this.layerWrapperMap.get(layer.id);
         if (!wrapper || wrapper.destroyed) {
@@ -377,10 +389,16 @@ export class V5GPixiStage {
       }
 
       this.applyLayerTransform(layer);
-      if (layer.type === "image") {
+      if (layer.type === "image" || layer.type === "sequence") {
         this.ensureParticleGroup(layer.id);
       }
-      await this.syncLayerMask(layer);
+      if (temporarySoloLayerId === null) {
+        await this.syncLayerMask(layer, runId);
+      } else {
+        this.clearLayerMask(layer.id);
+        this.clearPrecomposedLayer(layer.id);
+        this.applyLayerTransform(layer);
+      }
     }
 
     for (const layer of this.state.project.layers) {
@@ -401,7 +419,10 @@ export class V5GPixiStage {
     }
   }
 
-  private async syncLayerMask(layer: V5GLayerConfig): Promise<void> {
+  private async syncLayerMask(
+    layer: V5GLayerConfig,
+    runId: number,
+  ): Promise<void> {
     const display = this.layerDisplayMap.get(layer.id);
     const particleGroup = this.layerParticleMap.get(layer.id);
     const sourceLayer = getLayerMaskSource(this.state.project, layer);
@@ -414,7 +435,7 @@ export class V5GPixiStage {
     }
 
     if (this.shouldUsePrecomposedLightMask(layer, sourceLayer)) {
-      await this.syncPrecomposedLightMask(layer, sourceLayer);
+      await this.syncPrecomposedLightMask(layer, sourceLayer, runId);
       this.clearLayerMaskOnly(layer.id);
       display.mask = null;
       if (particleGroup) particleGroup.mask = null;
@@ -429,6 +450,10 @@ export class V5GPixiStage {
       this.detachLayerMaskTargets(layer.id);
       maskContainer?.destroy({ children: true });
       maskContainer = await this.createLayerMaskDisplay(sourceLayer);
+      if (!this.isCurrentRender(runId)) {
+        maskContainer.destroy({ children: true });
+        return;
+      }
       this.layerMaskMap.set(layer.id, maskContainer);
       this.layerMaskKeyMap.set(layer.id, maskKey);
       // 把 mask container 加到 contentContainer 保持 transform 参照系正确
@@ -491,9 +516,10 @@ export class V5GPixiStage {
     mask.eventMode = "none";
     mask.cursor = "default";
 
-    if (sourceLayer.type === "image") {
-      const runtimeAsset = this.findRuntimeAsset(sourceLayer.assetId);
-      const asset = this.findProjectAsset(sourceLayer.assetId);
+    if (sourceLayer.type === "image" || sourceLayer.type === "sequence") {
+      const sourceAssetId = this.getLayerDisplayAssetId(sourceLayer);
+      const runtimeAsset = this.findRuntimeAsset(sourceAssetId);
+      const asset = this.findProjectAsset(sourceAssetId);
       if (runtimeAsset) {
         const texture = await this.loadImageTexture(runtimeAsset);
         const sprite = new PIXI.Sprite(texture);
@@ -574,6 +600,7 @@ export class V5GPixiStage {
   private async syncPrecomposedLightMask(
     layer: V5GLayerConfig,
     sourceLayer: V5GLayerConfig,
+    runId: number,
   ): Promise<void> {
     const display = this.layerDisplayMap.get(layer.id);
     if (!display) return;
@@ -596,7 +623,9 @@ export class V5GPixiStage {
     const layerOpacity = layerPreview?.opacity ?? layer.opacity;
     const maskOpacity = maskPreview?.opacity ?? sourceLayer.opacity;
     const layerImage = await this.loadImageElement(layerRuntimeAsset);
+    if (!this.isCurrentRender(runId)) return;
     const maskImage = await this.loadImageElement(maskRuntimeAsset);
+    if (!this.isCurrentRender(runId)) return;
     const key = [
       "precompose_light_alpha",
       stage.width,
@@ -784,9 +813,10 @@ export class V5GPixiStage {
       this.handleLayerPointerDown(event, layer.id),
     );
 
-    if (layer.type === "image") {
-      const runtimeAsset = this.findRuntimeAsset(layer.assetId);
-      const asset = this.findProjectAsset(layer.assetId);
+    if (layer.type === "image" || layer.type === "sequence") {
+      const layerAssetId = this.getLayerDisplayAssetId(layer);
+      const runtimeAsset = this.findRuntimeAsset(layerAssetId);
+      const asset = this.findProjectAsset(layerAssetId);
       if (runtimeAsset) {
         const texture = await this.loadImageTexture(runtimeAsset);
         const sprite = new PIXI.Sprite(texture);
@@ -856,9 +886,16 @@ export class V5GPixiStage {
     const wrapper = this.layerWrapperMap.get(layer.id);
     const target = wrapper ?? display;
     const stage = this.state.project.stage;
-    const previewLayer = this.state.previewLayers?.[layer.id];
+    const temporarySoloLayerId = this.state.temporarySoloLayerId ?? null;
+    const isTemporarySoloLayer = temporarySoloLayerId === layer.id;
+    const previewLayer =
+      temporarySoloLayerId === null
+        ? this.state.previewLayers?.[layer.id]
+        : undefined;
     const transform = previewLayer?.transform ?? layer.transform;
-    const opacity = previewLayer?.opacity ?? layer.opacity;
+    const opacity = isTemporarySoloLayer
+      ? 1
+      : (previewLayer?.opacity ?? layer.opacity);
     const position = editorToPixi(
       transform.x,
       transform.y,
@@ -879,11 +916,12 @@ export class V5GPixiStage {
       // 将 ADD/screen 等混合模式下沉到实际图像 display，避免黑底光效退回 normal 显示。
       display.blendMode = toPixiBlendMode(layer.blendMode);
     }
-    const effectivelyVisible = isLayerEffectivelyVisible(
-      this.state.project,
-      layer,
-    );
+    const effectivelyVisible =
+      temporarySoloLayerId === null
+        ? isLayerEffectivelyVisible(this.state.project, layer)
+        : isTemporarySoloLayer;
     target.visible = effectivelyVisible;
+    target.renderable = effectivelyVisible;
     target.eventMode = layer.locked || !effectivelyVisible ? "none" : "static";
     target.cursor =
       this.draggingLayerId === layer.id
@@ -893,11 +931,14 @@ export class V5GPixiStage {
           : "pointer";
     const precomposed = this.precomposedLayerMap.get(layer.id);
     if (precomposed) {
-      precomposed.sprite.visible = effectivelyVisible;
+      precomposed.sprite.visible =
+        temporarySoloLayerId === null && effectivelyVisible;
+      precomposed.sprite.renderable =
+        temporarySoloLayerId === null && effectivelyVisible;
       precomposed.sprite.alpha = opacity;
       precomposed.sprite.blendMode = toPixiBlendMode(layer.blendMode);
       // 预合成视觉由全舞台 Sprite 承担；原 display 仅保留透明命中区域。
-      display.alpha = 0;
+      display.alpha = temporarySoloLayerId === null ? 0 : opacity;
     }
   }
 
@@ -933,12 +974,14 @@ export class V5GPixiStage {
       }
     }
 
+    if (this.state.temporarySoloLayerId) return;
+
     const stage = this.state.project.stage;
     const playheadSeconds = this.state.playheadSeconds;
     for (const layer of this.state.project.layers) {
       if (
         !isLayerEffectivelyVisible(this.state.project, layer) ||
-        layer.type !== "image"
+        (layer.type !== "image" && layer.type !== "sequence")
       )
         continue;
       const display = this.layerDisplayMap.get(layer.id);
@@ -955,6 +998,16 @@ export class V5GPixiStage {
           animation.enabled &&
           (animation.type === "particle_stream" ||
             animation.type === "particle_combo" ||
+            animation.type === "gather_particles" ||
+            animation.type === "smoke_mist" ||
+            animation.type === "energy_ring" ||
+            animation.type === "slash_light" ||
+            animation.type === "flame_flicker" ||
+            animation.type === "wave_band" ||
+            animation.type === "wave_distort" ||
+            animation.type === "speed_lines" ||
+            animation.type === "drift_fall" ||
+            animation.type === "path_particles" ||
             animation.type === "shatter" ||
             animation.type === "glow" ||
             animation.type === "safe_glow" ||
@@ -1018,6 +1071,118 @@ export class V5GPixiStage {
           );
         } else if (animation.type === "particle_combo") {
           this.drawParticleCombo(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layer.opacity,
+            layer.blendMode,
+            particleGroup,
+          );
+        } else if (animation.type === "gather_particles") {
+          this.drawGatherParticles(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layer.opacity,
+            layer.blendMode,
+            particleGroup,
+          );
+        } else if (animation.type === "smoke_mist") {
+          this.drawSmokeMist(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layer.opacity,
+            layer.blendMode,
+            particleGroup,
+          );
+        } else if (animation.type === "energy_ring") {
+          this.drawEnergyRing(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layer.opacity,
+            transform,
+            layer.blendMode,
+            particleGroup,
+          );
+        } else if (animation.type === "slash_light") {
+          this.drawSlashLight(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layer.opacity,
+            transform,
+            layer.blendMode,
+            particleGroup,
+          );
+        } else if (animation.type === "flame_flicker") {
+          this.drawFlameFlicker(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layer.opacity,
+            layer.blendMode,
+            particleGroup,
+          );
+        } else if (animation.type === "wave_band") {
+          this.drawWaveBand(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layer.opacity,
+            layer.blendMode,
+            particleGroup,
+          );
+        } else if (animation.type === "wave_distort") {
+          this.drawWaveDistort(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layer.opacity,
+            transform,
+            layer.blendMode,
+            particleGroup,
+          );
+        } else if (animation.type === "speed_lines") {
+          this.drawSpeedLines(
+            animation,
+            emitter.x,
+            emitter.y,
+            progress,
+            layer.opacity,
+            layer.blendMode,
+            particleGroup,
+          );
+        } else if (animation.type === "drift_fall") {
+          this.drawDriftFall(
+            animation,
+            texture,
+            emitter.x,
+            emitter.y,
+            progress,
+            layer.opacity,
+            layer.blendMode,
+            particleGroup,
+          );
+        } else if (animation.type === "path_particles") {
+          this.drawPathParticles(
             animation,
             texture,
             emitter.x,
@@ -1764,6 +1929,1181 @@ export class V5GPixiStage {
     }
   }
 
+  private drawGatherParticles(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    blendMode: V5GBlendMode,
+    target: PIXI.Container,
+  ): void {
+    const count = Math.round(
+      clampParticleNumber(getParticleParam(animation, "count", 48), 1, 220),
+    );
+    const size = clampParticleNumber(
+      getParticleParam(animation, "size", 42),
+      1,
+      400,
+    );
+    const spawnRadius = clampParticleNumber(
+      getParticleParam(animation, "spawnRadius", 360),
+      0,
+      4000,
+    );
+    const spawnRatio = clampParticleNumber(
+      getParticleParam(animation, "spawnRatio", 0.2),
+      0.01,
+      0.8,
+    );
+    const targetOffsetX = getParticleParam(animation, "targetX", 0);
+    const targetOffsetY = -getParticleParam(animation, "targetY", 0);
+    const travelMode = Math.round(
+      clampParticleNumber(getParticleParam(animation, "travelMode", 1), 0, 2),
+    );
+    const curve = getParticleParam(animation, "curve", 160);
+    const spiralTurns = clampParticleNumber(
+      getParticleParam(animation, "spiralTurns", 0.75),
+      -8,
+      8,
+    );
+    const staggerRatio = clampParticleNumber(
+      getParticleParam(animation, "staggerRatio", 0.28),
+      0,
+      0.9,
+    );
+    const requestedTrailCount = Math.round(
+      clampParticleNumber(getParticleParam(animation, "trailCount", 3), 0, 10),
+    );
+    const maxGatherSprites = 360;
+    const trailCount = Math.min(
+      requestedTrailCount,
+      Math.max(0, Math.floor(maxGatherSprites / Math.max(1, count)) - 1),
+    );
+    const trailSpacing = clampParticleNumber(
+      getParticleParam(animation, "trailSpacing", 0.04),
+      0.005,
+      0.25,
+    );
+    const trailFade = clampParticleNumber(
+      getParticleParam(animation, "trailFade", 0.55),
+      0.05,
+      0.95,
+    );
+    const vanishMode = Math.round(
+      clampParticleNumber(getParticleParam(animation, "vanishMode", 1), 0, 2),
+    );
+    const vanishRatio = clampParticleNumber(
+      getParticleParam(animation, "vanishRatio", 0.18),
+      0.01,
+      0.8,
+    );
+    const flashScale = clampParticleNumber(
+      getParticleParam(animation, "flashScale", 1.6),
+      0.1,
+      8,
+    );
+    const flashIntensity = clampParticleNumber(
+      getParticleParam(animation, "flashIntensity", 1.35),
+      0.1,
+      3,
+    );
+    const alphaBase = layerOpacity;
+    if (alphaBase <= 0.002) return;
+    const textureEdge = getTextureLongestEdge(texture);
+    const baseTextureScale = size / textureEdge;
+    const effectiveTravelWindow = Math.max(0.001, 1 - staggerRatio);
+
+    for (let index = 0; index < count; index += 1) {
+      const startOffset =
+        count <= 1 ? 0 : (index / Math.max(1, count - 1)) * staggerRatio;
+      for (let trailIndex = trailCount; trailIndex >= 0; trailIndex -= 1) {
+        const trailProgress = progress - trailIndex * trailSpacing;
+        const localProgress =
+          (trailProgress - startOffset) / effectiveTravelWindow;
+        if (localProgress < 0 || localProgress > 1) continue;
+        const point = sampleGatherParticlePoint(
+          animation,
+          index,
+          localProgress,
+          spawnRadius,
+          spawnRatio,
+          targetOffsetX,
+          targetOffsetY,
+          travelMode,
+          curve,
+          spiralTurns,
+          vanishMode,
+          vanishRatio,
+          flashScale,
+          flashIntensity,
+        );
+        if (point.alpha <= 0.002) continue;
+        const sprite = new PIXI.Sprite(texture);
+        sprite.anchor.set(0.5);
+        sprite.position.set(emitterX + point.x, emitterY + point.y);
+        sprite.scale.set(Math.max(0.01, baseTextureScale * point.scale));
+        sprite.rotation = point.rotation;
+        sprite.alpha =
+          alphaBase * point.alpha * Math.pow(trailFade, trailIndex);
+        sprite.blendMode = toPixiBlendMode(blendMode);
+        target.addChild(sprite);
+      }
+    }
+  }
+
+  private drawSmokeMist(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    blendMode: V5GBlendMode,
+    target: PIXI.Container,
+  ): void {
+    const count = Math.round(
+      clampParticleNumber(getParticleParam(animation, "count", 56), 1, 180),
+    );
+    const size = clampParticleNumber(
+      getParticleParam(animation, "size", 96),
+      1,
+      800,
+    );
+    const spawnRadius = clampParticleNumber(
+      getParticleParam(animation, "spawnRadius", 80),
+      0,
+      3000,
+    );
+    const spread = clampParticleNumber(
+      getParticleParam(animation, "spread", 320),
+      0,
+      5000,
+    );
+    const windX = getParticleParam(animation, "windX", 80);
+    const windY = -getParticleParam(animation, "windY", 40);
+    const swirl = getParticleParam(animation, "swirl", 120);
+    const startAlpha = clampParticleNumber(
+      getParticleParam(animation, "startAlpha", 0.62),
+      0,
+      1,
+    );
+    const fadePower = clampParticleNumber(
+      getParticleParam(animation, "fadePower", 1.35),
+      0.1,
+      5,
+    );
+    const grow = clampParticleNumber(
+      getParticleParam(animation, "grow", 2.1),
+      0.1,
+      8,
+    );
+    const sizeRandom = clampParticleNumber(
+      getParticleParam(animation, "sizeRandom", 0.55),
+      0,
+      2,
+    );
+    const rotationSpeed = clampParticleNumber(
+      getParticleParam(animation, "rotationSpeed", 0.6),
+      -10,
+      10,
+    );
+    const alphaBase = layerOpacity;
+    if (alphaBase <= 0.002) return;
+    const textureEdge = getTextureLongestEdge(texture);
+    const baseTextureScale = size / textureEdge;
+    const duration = Math.max(animation.duration, 0.0001);
+
+    for (let index = 0; index < count; index += 1) {
+      const randomA = seededRandom(animation.seed, index, 1001);
+      const randomB = seededRandom(animation.seed, index, 1002);
+      const randomC = seededRandom(animation.seed, index, 1003);
+      const randomD = seededRandom(animation.seed, index, 1004);
+      const randomE = seededRandom(animation.seed, index, 1005);
+      const randomF = seededRandom(animation.seed, index, 1006);
+      const startAngle = randomA * Math.PI * 2;
+      const startDistance = Math.sqrt(randomB) * spawnRadius;
+      const outwardAngle = startAngle + (randomC - 0.5) * 0.9;
+      const outwardDistance = spread * (0.35 + randomD * 0.85);
+      const eased = easeOutQuad(progress);
+      const drift =
+        Math.sin(progress * Math.PI) * swirl * (randomE < 0.5 ? -1 : 1);
+      const tangentX = -Math.sin(outwardAngle);
+      const tangentY = Math.cos(outwardAngle);
+      const x =
+        Math.cos(startAngle) * startDistance +
+        Math.cos(outwardAngle) * outwardDistance * eased +
+        tangentX * drift +
+        windX * progress * duration * (0.35 + randomF * 0.9);
+      const y =
+        Math.sin(startAngle) * startDistance +
+        Math.sin(outwardAngle) * outwardDistance * eased +
+        tangentY * drift +
+        windY * progress * duration * (0.35 + randomF * 0.9);
+      const edgeFade = Math.pow(Math.max(0, 1 - progress), fadePower);
+      const appear = Math.min(1, progress / 0.12);
+      const alpha =
+        alphaBase * startAlpha * edgeFade * appear * (0.55 + randomC * 0.45);
+      if (alpha <= 0.002) continue;
+      const randomScale = Math.max(0.08, 1 + (randomB - 0.5) * sizeRandom * 2);
+      const scale = baseTextureScale * randomScale * lerpNumber(1, grow, eased);
+      const sprite = new PIXI.Sprite(texture);
+      sprite.anchor.set(0.5);
+      sprite.position.set(emitterX + x, emitterY + y);
+      sprite.scale.set(Math.max(0.01, scale));
+      sprite.rotation =
+        (randomE - 0.5) * Math.PI * 2 +
+        progress * Math.PI * 2 * rotationSpeed * (0.35 + randomA * 0.8);
+      sprite.alpha = alpha;
+      sprite.blendMode = toPixiBlendMode(blendMode);
+      target.addChild(sprite);
+    }
+  }
+
+  private drawEnergyRing(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    transform: V5GLayerConfig["transform"],
+    blendMode: V5GBlendMode,
+    target: PIXI.Container,
+  ): void {
+    const ringCount = Math.round(
+      clampParticleNumber(getParticleParam(animation, "ringCount", 2), 1, 8),
+    );
+    const startScale = clampParticleNumber(
+      getParticleParam(animation, "startScale", 0.25),
+      0.01,
+      20,
+    );
+    const endScale = clampParticleNumber(
+      getParticleParam(animation, "endScale", 2.4),
+      0.01,
+      50,
+    );
+    const alphaBase =
+      layerOpacity *
+      clampParticleNumber(getParticleParam(animation, "alpha", 1), 0, 1);
+    const stagger = clampParticleNumber(
+      getParticleParam(animation, "stagger", 0.28),
+      0,
+      0.95,
+    );
+    const rotationDegrees = getParticleParam(animation, "rotation", 60);
+    const pulse = clampParticleNumber(
+      getParticleParam(animation, "pulse", 0.08),
+      0,
+      1,
+    );
+    const vanishMode = Math.round(
+      clampParticleNumber(getParticleParam(animation, "vanishMode", 1), 0, 2),
+    );
+    const additive = animation.params.additive !== false;
+    if (alphaBase <= 0.002) return;
+    const travelWindow = Math.max(0.001, 1 - stagger);
+
+    for (let index = 0; index < ringCount; index += 1) {
+      const startOffset =
+        ringCount <= 1 ? 0 : (index / Math.max(1, ringCount - 1)) * stagger;
+      const local = (progress - startOffset) / travelWindow;
+      if (local < 0 || local > 1) continue;
+      const eased = easeOutQuad(local);
+      let alphaCurve: number;
+      if (vanishMode === 2) alphaCurve = Math.sin(local * Math.PI);
+      else if (vanishMode === 1) alphaCurve = Math.pow(1 - eased, 1.35);
+      else alphaCurve = 1 - local;
+      const alpha = alphaBase * Math.max(0, alphaCurve);
+      if (alpha <= 0.002) continue;
+      const sprite = new PIXI.Sprite(texture);
+      sprite.anchor.set(transform.anchorX, transform.anchorY);
+      sprite.position.set(emitterX, emitterY);
+      const ringScale =
+        lerpNumber(startScale, endScale, eased) *
+        (1 + Math.sin(local * Math.PI) * pulse);
+      sprite.scale.set(
+        transform.scaleX * ringScale,
+        transform.scaleY * ringScale,
+      );
+      sprite.rotation =
+        (transform.rotation * Math.PI) / 180 +
+        ((rotationDegrees * Math.PI) / 180) * local +
+        index * 0.17;
+      sprite.alpha = alpha;
+      sprite.blendMode = additive ? "add" : toPixiBlendMode(blendMode);
+      target.addChild(sprite);
+    }
+  }
+
+  private drawSlashLight(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    transform: V5GLayerConfig["transform"],
+    blendMode: V5GBlendMode,
+    target: PIXI.Container,
+  ): void {
+    const mode = Math.round(
+      clampParticleNumber(getParticleParam(animation, "mode", 0), 0, 2),
+    );
+    const angleRad =
+      (getParticleParam(animation, "angle", -25) * Math.PI) / 180;
+    const travel = getParticleParam(animation, "travel", 180);
+    const lengthScale = clampParticleNumber(
+      getParticleParam(animation, "lengthScale", 2.4),
+      0.01,
+      50,
+    );
+    const widthScale = clampParticleNumber(
+      getParticleParam(animation, "widthScale", 0.55),
+      0.01,
+      20,
+    );
+    const flashAlpha = clampParticleNumber(
+      getParticleParam(animation, "flashAlpha", 1),
+      0,
+      1,
+    );
+    const startScale = clampParticleNumber(
+      getParticleParam(animation, "startScale", 0.18),
+      0.01,
+      2,
+    );
+    const fadeRatio = clampParticleNumber(
+      getParticleParam(animation, "fadeRatio", 0.45),
+      0.05,
+      0.95,
+    );
+    const curve = getParticleParam(animation, "curve", 90);
+    const additive = animation.params.additive !== false;
+    const alphaBase = layerOpacity * flashAlpha;
+    if (alphaBase <= 0.002) return;
+
+    const slashCount = mode === 2 ? 2 : 1;
+    const appear = clampNumber(progress / 0.22, 0, 1);
+    const fadeStart = Math.max(0.001, 1 - fadeRatio);
+    const fade =
+      progress <= fadeStart
+        ? 1
+        : 1 - clampNumber((progress - fadeStart) / fadeRatio, 0, 1);
+    const flash = Math.sin(clampNumber(progress, 0, 1) * Math.PI);
+    const reveal = lerpNumber(startScale, 1, easeOutQuad(appear));
+    const alpha = alphaBase * Math.max(0, fade) * Math.max(0.25, flash);
+    if (alpha <= 0.002) return;
+
+    for (let index = 0; index < slashCount; index += 1) {
+      const crossAngle = angleRad + (index === 1 ? Math.PI / 2 : 0);
+      const dirX = Math.cos(crossAngle);
+      const dirY = Math.sin(crossAngle);
+      const perpX = -dirY;
+      const perpY = dirX;
+      const localProgress =
+        mode === 2 && index === 1
+          ? clampNumber(progress * 1.12 - 0.08, 0, 1)
+          : progress;
+      const sweep = (localProgress - 0.5) * travel;
+      const curveOffset =
+        mode === 0
+          ? 0
+          : Math.sin(localProgress * Math.PI) *
+            curve *
+            (index === 1 ? -0.75 : 1);
+      const sprite = new PIXI.Sprite(texture);
+      sprite.anchor.set(transform.anchorX, transform.anchorY);
+      sprite.position.set(
+        emitterX + dirX * sweep + perpX * curveOffset,
+        emitterY + dirY * sweep + perpY * curveOffset,
+      );
+      sprite.scale.set(
+        transform.scaleX * lengthScale * reveal,
+        transform.scaleY * widthScale * (1 + flash * 0.18),
+      );
+      sprite.rotation =
+        (transform.rotation * Math.PI) / 180 + crossAngle + flash * 0.08;
+      sprite.alpha = alpha * (index === 1 ? 0.82 : 1);
+      sprite.blendMode = additive ? "add" : toPixiBlendMode(blendMode);
+      target.addChild(sprite);
+    }
+  }
+
+  private drawFlameFlicker(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    blendMode: V5GBlendMode,
+    target: PIXI.Container,
+  ): void {
+    const count = Math.round(
+      clampParticleNumber(getParticleParam(animation, "count", 52), 1, 160),
+    );
+    const emitterWidth = clampParticleNumber(
+      getParticleParam(animation, "emitterWidth", 180),
+      0,
+      3000,
+    );
+    const height = clampParticleNumber(
+      getParticleParam(animation, "height", 420),
+      1,
+      5000,
+    );
+    const direction =
+      (getParticleParam(animation, "direction", 270) * Math.PI) / 180;
+    const spreadAngle =
+      (clampParticleNumber(
+        getParticleParam(animation, "spreadAngle", 22),
+        0,
+        180,
+      ) *
+        Math.PI) /
+      180;
+    const vanishSpread = clampParticleNumber(
+      getParticleParam(animation, "vanishSpread", 120),
+      0,
+      3000,
+    );
+    const lengthRandom = clampParticleNumber(
+      getParticleParam(animation, "lengthRandom", 0.35),
+      0,
+      1,
+    );
+    const size = clampParticleNumber(
+      getParticleParam(animation, "size", 96),
+      1,
+      800,
+    );
+    const sway = clampParticleNumber(
+      getParticleParam(animation, "sway", 54),
+      0,
+      2000,
+    );
+    const turbulence = clampParticleNumber(
+      getParticleParam(animation, "turbulence", 80),
+      0,
+      3000,
+    );
+    const grow = clampParticleNumber(
+      getParticleParam(animation, "grow", 1.65),
+      0.1,
+      8,
+    );
+    const alphaBase =
+      layerOpacity *
+      clampParticleNumber(getParticleParam(animation, "alpha", 0.9), 0, 1);
+    const flicker = clampParticleNumber(
+      getParticleParam(animation, "flicker", 0.35),
+      0,
+      1,
+    );
+    const legacySpeed = getParticleParam(animation, "speed", 1);
+    const cycles = Math.max(
+      1,
+      Math.round(
+        clampParticleNumber(
+          getParticleParam(animation, "cycles", legacySpeed),
+          1,
+          60,
+        ),
+      ),
+    );
+    const additive = animation.params.additive !== false;
+    if (alphaBase <= 0.002) return;
+
+    const textureEdge = getTextureLongestEdge(texture);
+    const baseTextureScale = size / textureEdge;
+    const loopPhase = progress * cycles;
+    const travel = positiveModulo(loopPhase, 1);
+    const dirX = Math.cos(direction);
+    const dirY = Math.sin(direction);
+    const emitterPerpX = -dirY;
+    const emitterPerpY = dirX;
+
+    for (let index = 0; index < count; index += 1) {
+      const randomA = seededRandom(animation.seed, index, 1101);
+      const randomB = seededRandom(animation.seed, index, 1102);
+      const randomC = seededRandom(animation.seed, index, 1103);
+      const randomD = seededRandom(animation.seed, index, 1104);
+      const randomE = seededRandom(animation.seed, index, 1105);
+      const randomF = seededRandom(animation.seed, index, 1106);
+      const randomG = seededRandom(animation.seed, index, 1107);
+      const local = positiveModulo(randomA + travel, 1);
+      const eased = easeOutQuad(local);
+      const edgeAlpha = Math.sin(local * Math.PI);
+      const flickerWave =
+        1 -
+        flicker * 0.5 +
+        flicker * Math.sin(loopPhase * Math.PI * 14 + randomB * 9);
+      const alpha =
+        alphaBase * Math.max(0, edgeAlpha) * clampNumber(flickerWave, 0.1, 1.5);
+      if (alpha <= 0.002) continue;
+
+      const particleAngle = direction + (randomC - 0.5) * spreadAngle;
+      const particleDirX = Math.cos(particleAngle);
+      const particleDirY = Math.sin(particleAngle);
+      const particlePerpX = -particleDirY;
+      const particlePerpY = particleDirX;
+      const startOffset = (randomB - 0.5) * emitterWidth;
+      const distanceScale = 1 - lengthRandom * randomD;
+      const distance = height * distanceScale * eased;
+      const endSpread = (randomF - 0.5) * vanishSpread * Math.pow(local, 1.35);
+      const wave =
+        Math.sin(local * Math.PI * 2 + randomE * Math.PI * 2) *
+        sway *
+        (0.15 + local * 0.85);
+      const jitterAlong = (randomG - 0.5) * turbulence * 0.25 * local;
+      const jitterSide = (randomE - 0.5) * turbulence * local;
+      const x =
+        emitterPerpX * startOffset +
+        particleDirX * (distance + jitterAlong) +
+        particlePerpX * (wave + jitterSide + endSpread);
+      const y =
+        emitterPerpY * startOffset +
+        particleDirY * (distance + jitterAlong) +
+        particlePerpY * (wave + jitterSide + endSpread);
+      const midGrow = 1 + Math.sin(local * Math.PI) * (grow - 1);
+      const taper = lerpNumber(0.65, 0.28, local);
+      const scale = baseTextureScale * (0.55 + randomD * 0.8) * midGrow * taper;
+      const sprite = new PIXI.Sprite(texture);
+      sprite.anchor.set(0.5);
+      sprite.position.set(emitterX + x, emitterY + y);
+      sprite.scale.set(Math.max(0.01, scale * (1 + flicker * 0.18)));
+      sprite.rotation =
+        particleAngle +
+        Math.PI / 2 +
+        (randomA - 0.5) * 0.45 +
+        Math.sin(local * Math.PI * 4 + randomB * Math.PI * 2) * 0.22;
+      sprite.alpha = alpha;
+      sprite.blendMode = additive ? "add" : toPixiBlendMode(blendMode);
+      target.addChild(sprite);
+    }
+  }
+
+  private drawWaveBand(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    blendMode: V5GBlendMode,
+    target: PIXI.Container,
+  ): void {
+    const mode = Math.round(
+      clampParticleNumber(getParticleParam(animation, "mode", 0), 0, 2),
+    );
+    const count = Math.round(
+      clampParticleNumber(getParticleParam(animation, "count", 36), 2, 160),
+    );
+    const length = clampParticleNumber(
+      getParticleParam(animation, "length", 720),
+      1,
+      8000,
+    );
+    const amplitude = clampParticleNumber(
+      getParticleParam(animation, "amplitude", 70),
+      0,
+      3000,
+    );
+    const frequency = clampParticleNumber(
+      getParticleParam(animation, "frequency", 2.5),
+      0,
+      30,
+    );
+    const speed = clampParticleNumber(
+      getParticleParam(animation, "speed", 1),
+      0.05,
+      8,
+    );
+    const direction =
+      (getParticleParam(animation, "direction", 0) * Math.PI) / 180;
+    const size = clampParticleNumber(
+      getParticleParam(animation, "size", 48),
+      1,
+      800,
+    );
+    const alphaBase =
+      layerOpacity *
+      clampParticleNumber(getParticleParam(animation, "alpha", 1), 0, 1);
+    const trailFade = clampParticleNumber(
+      getParticleParam(animation, "trailFade", 0.75),
+      0.05,
+      1,
+    );
+    const rotateToWave = animation.params.rotateToWave !== false;
+    if (alphaBase <= 0.002) return;
+
+    const dirX = Math.cos(direction);
+    const dirY = Math.sin(direction);
+    const perpX = -dirY;
+    const perpY = dirX;
+    const textureEdge = getTextureLongestEdge(texture);
+    const baseTextureScale = size / textureEdge;
+    const flow = positiveModulo(progress * speed, 1);
+
+    for (let index = 0; index < count; index += 1) {
+      const baseT = count <= 1 ? 0 : index / Math.max(1, count - 1);
+      let t = baseT;
+      let visible = 1;
+      if (mode === 0) {
+        t = positiveModulo(baseT + flow, 1);
+        visible = Math.sin(baseT * Math.PI);
+      } else if (mode === 1) {
+        const head = progress * (1 + 1 / count);
+        const local = head - baseT;
+        if (local < 0 || local > 1) continue;
+        t = baseT;
+        visible = Math.sin(clampNumber(local, 0, 1) * Math.PI);
+      } else {
+        const centerDistance = Math.abs(baseT - 0.5) * 2;
+        const local = progress * 1.25 - centerDistance * 0.65;
+        if (local < 0 || local > 1) continue;
+        t = baseT;
+        visible = Math.sin(clampNumber(local, 0, 1) * Math.PI);
+      }
+      const along = (t - 0.5) * length;
+      const wave = Math.sin((t * frequency + flow) * Math.PI * 2);
+      const x = dirX * along + perpX * amplitude * wave;
+      const y = dirY * along + perpY * amplitude * wave;
+      const edge = Math.pow(Math.max(0, Math.sin(baseT * Math.PI)), 1.25);
+      const alpha =
+        alphaBase * Math.max(0, visible) * lerpNumber(trailFade, 1, edge);
+      if (alpha <= 0.002) continue;
+      const sprite = new PIXI.Sprite(texture);
+      sprite.anchor.set(0.5);
+      sprite.position.set(emitterX + x, emitterY + y);
+      const scale = baseTextureScale * (0.75 + edge * 0.35);
+      sprite.scale.set(Math.max(0.01, scale));
+      if (rotateToWave) {
+        const slope =
+          Math.cos((t * frequency + flow) * Math.PI * 2) *
+          Math.PI *
+          2 *
+          frequency *
+          amplitude;
+        sprite.rotation = direction + Math.atan2(slope, length);
+      } else {
+        sprite.rotation = 0;
+      }
+      sprite.alpha = alpha;
+      sprite.blendMode = toPixiBlendMode(blendMode);
+      target.addChild(sprite);
+    }
+  }
+
+  private drawWaveDistort(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    transform: V5GLayerConfig["transform"],
+    blendMode: V5GBlendMode,
+    target: PIXI.Container,
+  ): void {
+    const rows = Math.round(
+      clampParticleNumber(getParticleParam(animation, "rows", 36), 2, 120),
+    );
+    const amplitude = clampParticleNumber(
+      getParticleParam(animation, "amplitude", 24),
+      0,
+      500,
+    );
+    const frequency = clampParticleNumber(
+      getParticleParam(animation, "frequency", 2),
+      0,
+      20,
+    );
+    const legacySpeed = getParticleParam(animation, "speed", 1);
+    const cycles = Math.max(
+      1,
+      Math.round(
+        clampParticleNumber(
+          getParticleParam(animation, "cycles", Math.abs(legacySpeed)),
+          1,
+          60,
+        ),
+      ),
+    );
+    const flowDirection = legacySpeed < 0 ? -1 : 1;
+    const phaseOffset = clampParticleNumber(
+      getParticleParam(animation, "phaseOffset", 1),
+      -10,
+      10,
+    );
+    const verticalBob = clampParticleNumber(
+      getParticleParam(animation, "verticalBob", 0),
+      0,
+      300,
+    );
+    const alphaBase =
+      layerOpacity *
+      clampParticleNumber(getParticleParam(animation, "alpha", 1), 0, 1);
+    const edgeFeather = clampParticleNumber(
+      getParticleParam(animation, "edgeFeather", 0),
+      0,
+      1,
+    );
+    if (alphaBase <= 0.002) return;
+
+    const textureWidth = Math.max(1, Number(texture.width) || 1);
+    const textureHeight = Math.max(1, Number(texture.height) || 1);
+    const safeRows = Math.max(2, rows);
+    const rotationRad = (transform.rotation * Math.PI) / 180;
+    const flow = progress * cycles * flowDirection;
+    const bob = Math.sin(progress * Math.PI * 2 * cycles) * verticalBob;
+    const source = texture.source;
+    const baseFrame = texture.frame;
+    const baseFrameX = baseFrame?.x ?? 0;
+    const baseFrameY = baseFrame?.y ?? 0;
+    const baseFrameWidth = Math.max(1, baseFrame?.width ?? textureWidth);
+    const baseFrameHeight = Math.max(1, baseFrame?.height ?? textureHeight);
+    const anchorOffsetX = (0.5 - transform.anchorX) * textureWidth;
+    const anchorOffsetY = (0.5 - transform.anchorY) * textureHeight;
+
+    for (let row = 0; row < safeRows; row += 1) {
+      const y0 = (row / safeRows) * textureHeight;
+      const y1 = ((row + 1) / safeRows) * textureHeight;
+      const sliceHeight = Math.max(1, y1 - y0);
+      const centerT = (row + 0.5) / safeRows;
+      const wave = Math.sin(
+        (centerT * frequency * phaseOffset + flow) * Math.PI * 2,
+      );
+      const secondWave = Math.sin(
+        (centerT * (frequency * 0.55 + 0.25) - flow) * Math.PI * 2,
+      );
+      const offsetX = amplitude * (wave * 0.78 + secondWave * 0.22);
+      const edge = Math.sin(centerT * Math.PI);
+      const alpha =
+        alphaBase *
+        (edgeFeather > 0
+          ? lerpNumber(Math.max(0, edge), 1, 1 - edgeFeather)
+          : 1);
+      if (alpha <= 0.002) continue;
+
+      const frameY = baseFrameY + (y0 / textureHeight) * baseFrameHeight;
+      const frameHeight = Math.max(
+        1,
+        ((y1 - y0) / textureHeight) * baseFrameHeight,
+      );
+      const sliceTexture = new PIXI.Texture({
+        source,
+        frame: new PIXI.Rectangle(
+          baseFrameX,
+          frameY,
+          baseFrameWidth,
+          frameHeight,
+        ),
+      });
+      const sprite = new PIXI.Sprite(sliceTexture);
+      const localY = y0 + sliceHeight / 2 - textureHeight * 0.5 + anchorOffsetY;
+      sprite.anchor.set(0.5);
+      sprite.position.set(
+        emitterX + offsetX + anchorOffsetX,
+        emitterY + localY + bob,
+      );
+      sprite.scale.set(transform.scaleX, transform.scaleY);
+      sprite.rotation = rotationRad;
+      sprite.alpha = alpha;
+      sprite.blendMode = toPixiBlendMode(blendMode);
+      target.addChild(sprite);
+    }
+  }
+
+  private drawSpeedLines(
+    animation: V5GAnimationConfig,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    blendMode: V5GBlendMode,
+    target: PIXI.Container,
+  ): void {
+    const mode = Math.round(
+      clampParticleNumber(getParticleParam(animation, "mode", 0), 0, 2),
+    );
+    const count = Math.round(
+      clampParticleNumber(getParticleParam(animation, "count", 72), 4, 180),
+    );
+    const radius = clampParticleNumber(
+      getParticleParam(animation, "radius", 520),
+      20,
+      4000,
+    );
+    const length = clampParticleNumber(
+      getParticleParam(animation, "length", 120),
+      4,
+      1000,
+    );
+    const speed = clampParticleNumber(
+      getParticleParam(animation, "speed", 1.4),
+      0.05,
+      8,
+    );
+    const direction =
+      (getParticleParam(animation, "direction", 0) * Math.PI) / 180;
+    const spreadAngle =
+      (clampParticleNumber(
+        getParticleParam(animation, "spreadAngle", 360),
+        1,
+        360,
+      ) *
+        Math.PI) /
+      180;
+    const lineWidth = clampParticleNumber(
+      getParticleParam(animation, "lineWidth", 3),
+      0.5,
+      40,
+    );
+    const alphaBase =
+      layerOpacity *
+      clampParticleNumber(getParticleParam(animation, "alpha", 0.75), 0, 1);
+    if (alphaBase <= 0.002) return;
+
+    const graphics = new PIXI.Graphics();
+    graphics.blendMode = toPixiBlendMode(blendMode);
+    const travel = positiveModulo(progress * speed, 1);
+
+    for (let index = 0; index < count; index += 1) {
+      const randomA = seededRandom(animation.seed, index, 701);
+      const randomB = seededRandom(animation.seed, index, 702);
+      const randomC = seededRandom(animation.seed, index, 703);
+      const randomD = seededRandom(animation.seed, index, 704);
+      const local = positiveModulo(randomA + travel, 1);
+      const fade =
+        animation.params.fadeOut === false ? 1 : Math.sin(local * Math.PI);
+      const alpha = alphaBase * Math.max(0.04, fade) * (0.5 + randomB * 0.5);
+      if (alpha <= 0.002) continue;
+
+      let x1: number;
+      let y1: number;
+      let x2: number;
+      let y2: number;
+      if (mode === 1) {
+        const dirX = Math.cos(direction);
+        const dirY = Math.sin(direction);
+        const perpX = -dirY;
+        const perpY = dirX;
+        const travelDistance = (local - 0.5) * radius * 2;
+        const sideOffset = (randomC - 0.5) * radius * 2;
+        const headX = emitterX + dirX * travelDistance + perpX * sideOffset;
+        const headY = emitterY + dirY * travelDistance + perpY * sideOffset;
+        const segmentLength = length * (0.45 + randomD * 0.9);
+        x1 = headX - dirX * segmentLength;
+        y1 = headY - dirY * segmentLength;
+        x2 = headX;
+        y2 = headY;
+      } else {
+        const angle =
+          direction +
+          (randomB - 0.5) * spreadAngle +
+          (mode === 2 ? progress * 0.35 : 0);
+        const dirX = Math.cos(angle);
+        const dirY = Math.sin(angle);
+        const distance =
+          mode === 2 ? Math.pow(local, 1.7) * radius : local * radius;
+        const segmentLength =
+          length * (0.35 + local * 0.85) * (0.7 + randomC * 0.6);
+        const startDistance = Math.max(0, distance - segmentLength);
+        x1 = emitterX + dirX * startDistance;
+        y1 = emitterY + dirY * startDistance;
+        x2 = emitterX + dirX * distance;
+        y2 = emitterY + dirY * distance;
+      }
+
+      graphics
+        .moveTo(x1, y1)
+        .lineTo(x2, y2)
+        .stroke({
+          color: 0xffffff,
+          width: lineWidth * (0.55 + randomD * 0.7),
+          alpha,
+        });
+    }
+
+    target.addChild(graphics);
+  }
+
+  private drawDriftFall(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    blendMode: V5GBlendMode,
+    target: PIXI.Container,
+  ): void {
+    const count = Math.round(
+      clampParticleNumber(getParticleParam(animation, "count", 48), 1, 180),
+    );
+    const areaWidth = clampParticleNumber(
+      getParticleParam(animation, "areaWidth", 900),
+      20,
+      6000,
+    );
+    const areaHeight = clampParticleNumber(
+      getParticleParam(animation, "areaHeight", 1600),
+      20,
+      6000,
+    );
+    const legacyFallSpeed = getParticleParam(animation, "fallSpeed", 260);
+    const cycles = Math.max(
+      1,
+      Math.round(
+        clampParticleNumber(
+          getParticleParam(
+            animation,
+            "cycles",
+            legacyFallSpeed / Math.max(1, areaHeight),
+          ),
+          1,
+          60,
+        ),
+      ),
+    );
+    const wind = clampParticleNumber(
+      getParticleParam(animation, "wind", 45),
+      -2000,
+      2000,
+    );
+    const swayAmplitude = clampParticleNumber(
+      getParticleParam(animation, "swayAmplitude", 42),
+      0,
+      1000,
+    );
+    const swayFrequency = Math.round(
+      clampParticleNumber(
+        getParticleParam(animation, "swayFrequency", 1),
+        0,
+        20,
+      ),
+    );
+    const size = clampParticleNumber(
+      getParticleParam(animation, "size", 48),
+      1,
+      400,
+    );
+    const sizeRandom = clampParticleNumber(
+      getParticleParam(animation, "sizeRandom", 0.45),
+      0,
+      2,
+    );
+    const rotationSpeed = Math.round(
+      clampParticleNumber(
+        getParticleParam(animation, "rotationSpeed", 1),
+        -20,
+        20,
+      ),
+    );
+    const alphaBase =
+      layerOpacity *
+      clampParticleNumber(getParticleParam(animation, "alpha", 1), 0, 1);
+    if (alphaBase <= 0.002) return;
+
+    const loopPhase = progress * cycles;
+    const textureEdge = getTextureLongestEdge(texture);
+    const baseTextureScale = size / textureEdge;
+    const fadeEdges = animation.params.fadeEdges !== false;
+
+    for (let index = 0; index < count; index += 1) {
+      const randomA = seededRandom(animation.seed, index, 801);
+      const randomB = seededRandom(animation.seed, index, 802);
+      const randomC = seededRandom(animation.seed, index, 803);
+      const randomD = seededRandom(animation.seed, index, 804);
+      const randomE = seededRandom(animation.seed, index, 805);
+      const fallLocal = positiveModulo(randomA + loopPhase, 1);
+      const baseX = (randomC - 0.5) * areaWidth;
+      const baseY = (fallLocal - 0.5) * areaHeight;
+      const sway =
+        Math.sin(
+          loopPhase * Math.PI * 2 * swayFrequency + randomE * Math.PI * 2,
+        ) *
+        swayAmplitude *
+        (0.45 + randomB * 0.75);
+      const windOffset = (fallLocal - 0.5) * wind * 0.35;
+      const edgeAlpha = fadeEdges
+        ? Math.min(1, Math.sin(fallLocal * Math.PI) * 1.35)
+        : 1;
+      const alpha = alphaBase * edgeAlpha * (0.55 + randomD * 0.45);
+      if (alpha <= 0.002) continue;
+
+      const sprite = new PIXI.Sprite(texture);
+      sprite.anchor.set(0.5);
+      sprite.position.set(
+        emitterX + baseX + sway + windOffset,
+        emitterY + baseY,
+      );
+      const scaleRandom = Math.max(0.05, 1 + (randomB - 0.5) * sizeRandom * 2);
+      sprite.scale.set(Math.max(0.01, baseTextureScale * scaleRandom));
+      sprite.rotation =
+        (randomE - 0.5) * Math.PI * 2 + loopPhase * Math.PI * 2 * rotationSpeed;
+      sprite.alpha = alpha;
+      sprite.blendMode = toPixiBlendMode(blendMode);
+      target.addChild(sprite);
+    }
+  }
+
+  private drawPathParticles(
+    animation: V5GAnimationConfig,
+    texture: PIXI.Texture,
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    blendMode: V5GBlendMode,
+    target: PIXI.Container,
+  ): void {
+    const pathMode = Math.round(
+      clampParticleNumber(getParticleParam(animation, "pathMode", 1), 0, 4),
+    );
+    const count = Math.round(
+      clampParticleNumber(getParticleParam(animation, "count", 36), 1, 160),
+    );
+    const size = clampParticleNumber(
+      getParticleParam(animation, "size", 42),
+      1,
+      400,
+    );
+    const endX = getParticleParam(animation, "endX", 360);
+    const endY = -getParticleParam(animation, "endY", 0);
+    const curve = getParticleParam(animation, "curve", 160);
+    const amplitude = clampParticleNumber(
+      getParticleParam(animation, "amplitude", 70),
+      0,
+      2000,
+    );
+    const frequency = clampParticleNumber(
+      getParticleParam(animation, "frequency", 2.5),
+      0,
+      20,
+    );
+    const radiusStart = clampParticleNumber(
+      getParticleParam(animation, "radiusStart", 240),
+      0,
+      3000,
+    );
+    const radiusEnd = clampParticleNumber(
+      getParticleParam(animation, "radiusEnd", 60),
+      0,
+      3000,
+    );
+    const turns = clampParticleNumber(
+      getParticleParam(animation, "turns", 1.5),
+      -10,
+      10,
+    );
+    const speed = clampParticleNumber(
+      getParticleParam(animation, "speed", 1),
+      0.05,
+      8,
+    );
+    const stagger = clampParticleNumber(
+      getParticleParam(animation, "stagger", 1),
+      0,
+      1,
+    );
+    const oneShotStagger = clampParticleNumber(
+      getParticleParam(animation, "oneShotStagger", 0.25),
+      0,
+      0.95,
+    );
+    const requestedTrailCount = Math.round(
+      clampParticleNumber(getParticleParam(animation, "trailCount", 3), 0, 10),
+    );
+    const maxPathSprites = 360;
+    const trailCount = Math.min(
+      requestedTrailCount,
+      Math.max(0, Math.floor(maxPathSprites / Math.max(1, count)) - 1),
+    );
+    const trailSpacing = clampParticleNumber(
+      getParticleParam(animation, "trailSpacing", 0.035),
+      0.005,
+      0.25,
+    );
+    const trailFade = clampParticleNumber(
+      getParticleParam(animation, "trailFade", 0.55),
+      0.05,
+      0.95,
+    );
+    const alphaBase =
+      layerOpacity *
+      clampParticleNumber(getParticleParam(animation, "alpha", 1), 0, 1);
+    if (alphaBase <= 0.002) return;
+
+    const rotateToPath = animation.params.rotateToPath !== false;
+    const fadeEnds = animation.params.fadeEnds !== false;
+    const textureEdge = getTextureLongestEdge(texture);
+    const baseTextureScale = size / textureEdge;
+    const loop = animation.params.loop !== false;
+    const travel = loop ? positiveModulo(progress * speed, 1) : progress;
+    const oneShotStaggerWindow = loop ? 0 : oneShotStagger;
+    const oneShotTravelWindow = Math.max(0.001, 1 - oneShotStaggerWindow);
+
+    for (let index = 0; index < count; index += 1) {
+      const randomA = seededRandom(animation.seed, index, 901);
+      const randomB = seededRandom(animation.seed, index, 902);
+      const randomC = seededRandom(animation.seed, index, 903);
+      const offset =
+        count <= 1 ? 0 : (index / Math.max(1, count - 1)) * stagger;
+      const oneShotStartOffset =
+        count <= 1
+          ? 0
+          : (index / Math.max(1, count - 1)) * oneShotStaggerWindow;
+      for (let trailIndex = trailCount; trailIndex >= 0; trailIndex -= 1) {
+        const local = loop
+          ? positiveModulo(travel + offset - trailIndex * trailSpacing, 1)
+          : (travel - oneShotStartOffset) / oneShotTravelWindow -
+            trailIndex * trailSpacing;
+        if (!loop && (local < 0 || local > 1)) continue;
+        const edgeAlpha = fadeEnds
+          ? Math.min(1, Math.sin(local * Math.PI) * 1.45)
+          : 1;
+        const alpha =
+          alphaBase *
+          edgeAlpha *
+          Math.pow(trailFade, trailIndex) *
+          (0.6 + randomB * 0.4);
+        if (alpha <= 0.002) continue;
+
+        const point = samplePathParticlePoint(
+          pathMode,
+          local,
+          endX,
+          endY,
+          curve,
+          amplitude,
+          frequency,
+          radiusStart,
+          radiusEnd,
+          turns,
+        );
+        const sprite = new PIXI.Sprite(texture);
+        sprite.anchor.set(0.5);
+        sprite.position.set(emitterX + point.x, emitterY + point.y);
+        const scale =
+          baseTextureScale *
+          (0.75 + randomA * 0.55) *
+          (trailIndex === 0 ? 1 : 0.86);
+        sprite.scale.set(Math.max(0.01, scale));
+        sprite.rotation = rotateToPath
+          ? point.rotation
+          : (randomC - 0.5) * Math.PI * 2 + local * Math.PI * 2;
+        sprite.alpha = alpha;
+        sprite.blendMode = toPixiBlendMode(blendMode);
+        target.addChild(sprite);
+      }
+    }
+  }
+
   private drawShatter(
     animation: V5GAnimationConfig,
     texture: PIXI.Texture,
@@ -2095,7 +3435,13 @@ export class V5GPixiStage {
     const layer = this.state.project.layers.find(
       (item) => item.id === this.state.selectedLayerId,
     );
-    if (!layer || !isLayerEffectivelyVisible(this.state.project, layer)) return;
+    const temporarySoloLayerId = this.state.temporarySoloLayerId ?? null;
+    const canDrawSelection =
+      temporarySoloLayerId === null
+        ? layer !== undefined &&
+          isLayerEffectivelyVisible(this.state.project, layer)
+        : layer?.id === temporarySoloLayerId;
+    if (!layer || !canDrawSelection) return;
     const wrapper = this.layerWrapperMap.get(layer.id);
     const display = this.layerDisplayMap.get(layer.id);
     const target = wrapper ?? display;
@@ -2129,11 +3475,12 @@ export class V5GPixiStage {
   ): void {
     const layer = this.state.project.layers.find((item) => item.id === layerId);
     const display = this.layerDisplayMap.get(layerId);
-    if (
-      !layer ||
-      layer.locked ||
-      !isLayerEffectivelyVisible(this.state.project, layer)
-    ) {
+    const temporarySoloLayerId = this.state.temporarySoloLayerId ?? null;
+    const canInteract =
+      temporarySoloLayerId === null &&
+      layer !== undefined &&
+      isLayerEffectivelyVisible(this.state.project, layer);
+    if (!layer || layer.locked || !canInteract) {
       // 锁定或隐藏图层不拦截事件，让点击穿透到下层
       return;
     }
@@ -2238,6 +3585,35 @@ export class V5GPixiStage {
     );
   }
 
+  private isCurrentRender(runId: number): boolean {
+    return runId === this.renderRunId;
+  }
+
+  private getLayerDisplayAssetId(layer: V5GLayerConfig): string | null {
+    if (layer.type === "image") return layer.assetId;
+    if (layer.type === "sequence") return this.getSequenceFrameAssetId(layer);
+    return null;
+  }
+
+  private getSequenceFrameAssetId(layer: V5GLayerConfig): string | null {
+    const frameAssetIds = layer.sequence?.frameAssetIds ?? [];
+    if (frameAssetIds.length === 0) return null;
+    if (frameAssetIds.length === 1) return frameAssetIds[0] ?? null;
+    const cycleDuration = Math.max(0.01, layer.sequence?.cycleDuration ?? 0);
+    const frameDuration = cycleDuration / frameAssetIds.length;
+    const rawTime = Math.max(0, this.state.playheadSeconds);
+    const sequenceTime =
+      layer.sequence?.loop === false
+        ? Math.min(rawTime, Math.max(0, cycleDuration - 0.000001))
+        : positiveModulo(rawTime, cycleDuration);
+    const frameIndex = clampNumber(
+      Math.floor(sequenceTime / Math.max(0.000001, frameDuration)),
+      0,
+      frameAssetIds.length - 1,
+    );
+    return frameAssetIds[Math.floor(frameIndex)] ?? null;
+  }
+
   private findRuntimeAsset(assetId: string | null): V5GRuntimeAsset | null {
     if (!assetId) return null;
     return (
@@ -2270,7 +3646,9 @@ function getAnimationProgress(
 ): number | null {
   const start = animation.startTime;
   const end = animation.startTime + animation.duration;
-  if (time < start || time >= end) return null;
+  if (time < start) return null;
+  if (time > end) return null;
+  if (time === end) return 1;
   return clampNumber(
     (time - start) / Math.max(animation.duration, 0.0001),
     0,
@@ -2290,6 +3668,66 @@ function getParticleParam(
     if (Number.isFinite(parsed)) return parsed;
   }
   return fallback;
+}
+
+function samplePathParticlePoint(
+  pathMode: number,
+  progress: number,
+  endX: number,
+  endY: number,
+  curve: number,
+  amplitude: number,
+  frequency: number,
+  radiusStart: number,
+  radiusEnd: number,
+  turns: number,
+  sampleOffset = 0.002,
+  skipRotation = false,
+): { x: number; y: number; rotation: number } {
+  const t = positiveModulo(progress, 1);
+  let point: { x: number; y: number };
+  if (pathMode === 4) {
+    const angle = -Math.PI / 2 + t * Math.PI * 2 * turns;
+    point = { x: Math.cos(angle) * radiusEnd, y: Math.sin(angle) * radiusEnd };
+  } else if (pathMode === 3) {
+    const angle = -Math.PI / 2 + t * Math.PI * 2 * turns;
+    const radius = lerpNumber(radiusStart, radiusEnd, t);
+    point = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+  } else if (pathMode === 2) {
+    const baseX = lerpNumber(0, endX, t);
+    const baseY = lerpNumber(0, endY, t);
+    const dx = endX;
+    const dy = endY;
+    const length = Math.hypot(dx, dy) || 1;
+    const wave = Math.sin(t * Math.PI * 2 * frequency);
+    point = {
+      x: baseX + (-dy / length) * amplitude * wave,
+      y: baseY + (dx / length) * amplitude * wave,
+    };
+  } else if (pathMode === 1) {
+    point = quadraticPoint(0, 0, endX, endY, curve, t);
+  } else {
+    point = { x: lerpNumber(0, endX, t), y: lerpNumber(0, endY, t) };
+  }
+  if (skipRotation) return { ...point, rotation: 0 };
+  const next = samplePathParticlePoint(
+    pathMode,
+    t + sampleOffset,
+    endX,
+    endY,
+    curve,
+    amplitude,
+    frequency,
+    radiusStart,
+    radiusEnd,
+    turns,
+    sampleOffset,
+    true,
+  );
+  return {
+    ...point,
+    rotation: Math.atan2(next.y - point.y, next.x - point.x),
+  };
 }
 
 function sampleChaserLightPoint(
@@ -2351,6 +3789,113 @@ interface ParticleComboPoint {
   alpha: number;
   scale: number;
   rotation: number;
+}
+
+function sampleGatherParticlePoint(
+  animation: V5GAnimationConfig,
+  index: number,
+  progress: number,
+  spawnRadius: number,
+  spawnRatio: number,
+  targetOffsetX: number,
+  targetOffsetY: number,
+  travelMode: number,
+  curve: number,
+  spiralTurns: number,
+  vanishMode: number,
+  vanishRatio: number,
+  flashScale: number,
+  flashIntensity: number,
+): ParticleComboPoint {
+  const p = clampNumber(progress, 0, 1);
+  const randomA = seededRandom(animation.seed, index, 951);
+  const randomB = seededRandom(animation.seed, index, 952);
+  const randomC = seededRandom(animation.seed, index, 953);
+  const randomD = seededRandom(animation.seed, index, 954);
+  const randomE = seededRandom(animation.seed, index, 955);
+  const randomF = seededRandom(animation.seed, index, 956);
+  const startAngle = randomA * Math.PI * 2;
+  const startDistance = Math.sqrt(randomB) * spawnRadius;
+  const startX = Math.cos(startAngle) * startDistance;
+  const startY = Math.sin(startAngle) * startDistance;
+  const targetX = targetOffsetX;
+  const targetY = targetOffsetY;
+  const travelStart = spawnRatio;
+  const vanishStart = Math.max(travelStart + 0.001, 1 - vanishRatio);
+  const travelDuration = Math.max(0.001, vanishStart - travelStart);
+  const appearPhase = clampNumber(p / Math.max(spawnRatio, 0.001), 0, 1);
+  const travelPhase = clampNumber((p - travelStart) / travelDuration, 0, 1);
+  const vanishPhase = clampNumber(
+    (p - vanishStart) / Math.max(vanishRatio, 0.001),
+    0,
+    1,
+  );
+  const easedAppear = easeOutQuad(appearPhase);
+  const easedTravel = easeInOutQuad(travelPhase);
+  const easedVanish = easeOutQuad(vanishPhase);
+
+  let x = startX;
+  let y = startY;
+  if (p >= travelStart) {
+    if (travelMode === 2) {
+      const dx = startX - targetX;
+      const dy = startY - targetY;
+      const distance = Math.hypot(dx, dy);
+      const baseAngle = Math.atan2(dy, dx);
+      const angle =
+        baseAngle +
+        easedTravel * Math.PI * 2 * spiralTurns +
+        (randomC - 0.5) * 0.55;
+      const radius = distance * (1 - easedTravel);
+      const drift =
+        curve * Math.sin(easedTravel * Math.PI) * (randomD < 0.5 ? -1 : 1);
+      x =
+        targetX +
+        Math.cos(angle) * radius +
+        Math.cos(angle + Math.PI / 2) * drift;
+      y =
+        targetY +
+        Math.sin(angle) * radius +
+        Math.sin(angle + Math.PI / 2) * drift;
+    } else if (travelMode === 1) {
+      const curved = quadraticPoint(
+        startX,
+        startY,
+        targetX,
+        targetY,
+        curve * (randomD < 0.5 ? -1 : 1),
+        easedTravel,
+      );
+      x = curved.x;
+      y = curved.y;
+    } else {
+      x = lerpNumber(startX, targetX, easedTravel);
+      y = lerpNumber(startY, targetY, easedTravel);
+    }
+  }
+
+  let alpha = p < travelStart ? easedAppear : 1;
+  let scale =
+    (0.55 + randomE * 0.9) * (p < travelStart ? 0.25 + easedAppear * 0.75 : 1);
+  if (vanishPhase > 0) {
+    if (vanishMode === 1) {
+      const flash = Math.sin(vanishPhase * Math.PI);
+      alpha *= Math.max(
+        0,
+        1 - easedVanish * 0.85 + flash * (flashIntensity - 1) * 0.4,
+      );
+      scale *= 1 + flash * (flashScale - 1);
+    } else if (vanishMode === 2) {
+      scale *= lerpNumber(1, flashScale, easedVanish);
+      alpha *= Math.max(0, 1 - easedVanish);
+    } else {
+      alpha *= Math.max(0, 1 - easedVanish);
+    }
+  }
+
+  const rotation =
+    (randomF - 0.5) * Math.PI * 2 + p * Math.PI * 2 * (0.25 + randomC);
+  return { x, y, alpha: Math.max(0, alpha), scale, rotation };
 }
 
 function sampleParticleComboPoint(
@@ -2522,9 +4067,15 @@ function seededRandom(seed: number, index: number, salt: number): number {
 }
 
 function getLayerMaskRenderKey(layer: V5GLayerConfig): string {
-  return [layer.type, layer.assetId ?? "", layer.text ?? "", layer.name].join(
-    "|",
-  );
+  return [
+    layer.type,
+    layer.assetId ?? "",
+    layer.sequence?.frameAssetIds.join(",") ?? "",
+    layer.sequence?.cycleDuration ?? "",
+    layer.sequence?.loop ?? "",
+    layer.text ?? "",
+    layer.name,
+  ].join("|");
 }
 
 function isLightMaskBlendMode(blendMode: V5GBlendMode): boolean {

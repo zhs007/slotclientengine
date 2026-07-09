@@ -21,6 +21,7 @@ import type {
   V5GLayerMaskConfig,
   V5GMaskCompositeMode,
   V5GProjectConfig,
+  V5GSequenceConfig,
   V5GTransformConfig,
 } from "./types.js";
 
@@ -138,6 +139,144 @@ const REQUIRED_NUMERIC_PARAMS: Readonly<
     "lightSize",
     "dimAlpha",
   ],
+  gather_particles: [
+    "count",
+    "size",
+    "sourceOpacity",
+    "spawnRadius",
+    "spawnRatio",
+    "targetX",
+    "targetY",
+    "travelMode",
+    "curve",
+    "spiralTurns",
+    "staggerRatio",
+    "trailCount",
+    "trailSpacing",
+    "trailFade",
+    "vanishMode",
+    "vanishRatio",
+    "flashScale",
+    "flashIntensity",
+  ],
+  smoke_mist: [
+    "count",
+    "size",
+    "sourceOpacity",
+    "spawnRadius",
+    "spread",
+    "windX",
+    "windY",
+    "swirl",
+    "startAlpha",
+    "fadePower",
+    "grow",
+    "sizeRandom",
+    "rotationSpeed",
+  ],
+  energy_ring: [
+    "ringCount",
+    "startScale",
+    "endScale",
+    "sourceOpacity",
+    "alpha",
+    "stagger",
+    "rotation",
+    "pulse",
+    "vanishMode",
+  ],
+  slash_light: [
+    "mode",
+    "angle",
+    "travel",
+    "lengthScale",
+    "widthScale",
+    "sourceOpacity",
+    "flashAlpha",
+    "startScale",
+    "fadeRatio",
+    "curve",
+  ],
+  flame_flicker: [
+    "count",
+    "emitterWidth",
+    "height",
+    "direction",
+    "spreadAngle",
+    "vanishSpread",
+    "lengthRandom",
+    "size",
+    "sway",
+    "turbulence",
+    "grow",
+    "sourceOpacity",
+    "alpha",
+    "flicker",
+  ],
+  wave_band: [
+    "mode",
+    "count",
+    "length",
+    "amplitude",
+    "frequency",
+    "speed",
+    "direction",
+    "size",
+    "alpha",
+    "trailFade",
+  ],
+  wave_distort: [
+    "rows",
+    "amplitude",
+    "frequency",
+    "phaseOffset",
+    "verticalBob",
+    "alpha",
+    "edgeFeather",
+  ],
+  speed_lines: [
+    "mode",
+    "count",
+    "radius",
+    "length",
+    "speed",
+    "direction",
+    "spreadAngle",
+    "lineWidth",
+    "alpha",
+  ],
+  drift_fall: [
+    "count",
+    "areaWidth",
+    "areaHeight",
+    "wind",
+    "swayAmplitude",
+    "swayFrequency",
+    "size",
+    "sizeRandom",
+    "rotationSpeed",
+    "alpha",
+  ],
+  path_particles: [
+    "pathMode",
+    "count",
+    "size",
+    "endX",
+    "endY",
+    "curve",
+    "amplitude",
+    "frequency",
+    "radiusStart",
+    "radiusEnd",
+    "turns",
+    "speed",
+    "stagger",
+    "oneShotStagger",
+    "trailCount",
+    "trailSpacing",
+    "trailFade",
+    "alpha",
+  ],
   shatter: [
     "count",
     "pieceSize",
@@ -173,6 +312,14 @@ const OPTIONAL_BOOLEAN_PARAMS: Readonly<
   particles: ["fadeOut"],
   particle_stream: ["fadeOut", "rotateParticles", "randomRotation"],
   chaser_light: ["keepOriginal"],
+  energy_ring: ["additive"],
+  slash_light: ["additive"],
+  flame_flicker: ["additive"],
+  wave_band: ["keepOriginal", "rotateToWave"],
+  wave_distort: ["keepOriginal"],
+  speed_lines: ["keepOriginal", "fadeOut"],
+  drift_fall: ["keepOriginal", "fadeEdges"],
+  path_particles: ["keepOriginal", "rotateToPath", "fadeEnds", "loop"],
   particle_wall: ["fadeOut"],
   shatter: ["fadeOut"],
   glow: ["keepOriginal"],
@@ -191,6 +338,9 @@ const OPTIONAL_NUMERIC_PARAMS: Readonly<
     "randomRotationDegrees",
     "spinSpeed",
   ],
+  flame_flicker: ["speed", "cycles"],
+  wave_distort: ["speed", "cycles"],
+  drift_fall: ["fallSpeed", "cycles"],
 };
 
 export function assertV5GProject(value: unknown): V5GProjectConfig {
@@ -445,10 +595,19 @@ export function assertSupportedLayer(
   if (layer.type === "group") {
     throw new Error("Unsupported V5G layer type: group");
   }
-  if (layer.type !== "image" && layer.type !== "text") {
+  if (
+    layer.type !== "image" &&
+    layer.type !== "text" &&
+    layer.type !== "sequence"
+  ) {
     throw new Error(`Unsupported V5G layer type: ${layer.type}.`);
   }
   if (layer.type === "image") {
+    if (layer.sequence !== undefined) {
+      throw new Error(
+        `V5G image layer "${layer.id}" must not include sequence config.`,
+      );
+    }
     if (!layer.assetId) {
       throw new Error(`V5G image layer "${layer.id}" requires assetId.`);
     }
@@ -464,8 +623,26 @@ export function assertSupportedLayer(
       );
     }
   }
+  if (layer.type === "sequence") {
+    if (layer.assetId !== null) {
+      throw new Error(
+        `V5G sequence layer "${layer.id}" must not reference assetId.`,
+      );
+    }
+    if (!layer.sequence) {
+      throw new Error(
+        `V5G sequence layer "${layer.id}" requires sequence config.`,
+      );
+    }
+    validateSequenceLayerConfig(layer, assetsById);
+  }
   if (layer.type === "text" && layer.assetId !== null) {
     throw new Error(`V5G text layer "${layer.id}" must not reference assetId.`);
+  }
+  if (layer.type === "text" && layer.sequence !== undefined) {
+    throw new Error(
+      `V5G text layer "${layer.id}" must not include sequence config.`,
+    );
   }
   if ((layer.keyframes ?? []).length > 0) {
     throw new Error(`Unsupported V5G keyframes on layer "${layer.id}".`);
@@ -474,6 +651,53 @@ export function assertSupportedLayer(
   assertFiniteRange(layer.opacity, 0, 1, `layer "${layer.id}" opacity`);
   if (!SUPPORTED_BLEND_MODES.includes(layer.blendMode)) {
     throw new Error(`Unsupported V5G blendMode: ${layer.blendMode}.`);
+  }
+}
+
+function validateSequenceLayerConfig(
+  layer: V5GLayerConfig,
+  assetsById: ReadonlyMap<string, V5GAssetConfig>,
+): void {
+  const sequence = layer.sequence;
+  if (!sequence) {
+    throw new Error(
+      `V5G sequence layer "${layer.id}" requires sequence config.`,
+    );
+  }
+  if (!Array.isArray(sequence.frameAssetIds)) {
+    throw new Error(
+      `V5G sequence layer "${layer.id}" frameAssetIds must be an array.`,
+    );
+  }
+  if (sequence.frameAssetIds.length === 0) {
+    throw new Error(
+      `V5G sequence layer "${layer.id}" frameAssetIds must be non-empty.`,
+    );
+  }
+  for (const [index, assetId] of sequence.frameAssetIds.entries()) {
+    if (typeof assetId !== "string" || assetId.length === 0) {
+      throw new Error(
+        `V5G sequence layer "${layer.id}" frameAssetIds[${index}] must be a non-empty string.`,
+      );
+    }
+    const asset = assetsById.get(assetId);
+    if (!asset) {
+      throw new Error(
+        `V5G sequence layer "${layer.id}" references missing frame asset "${assetId}".`,
+      );
+    }
+    if (asset.type !== "image") {
+      throw new Error(
+        `V5G sequence layer "${layer.id}" frame asset "${asset.id}" must be image.`,
+      );
+    }
+  }
+  assertPositiveFinite(
+    sequence.cycleDuration,
+    `sequence layer "${layer.id}" cycleDuration`,
+  );
+  if (typeof sequence.loop !== "boolean") {
+    throw new Error(`V5G sequence layer "${layer.id}" loop must be boolean.`);
   }
 }
 
@@ -744,6 +968,13 @@ function assertLayer(value: unknown, index: number): V5GLayerConfig {
       layer.text === undefined
         ? undefined
         : assertString(layer.text, `project.layers[${index}].text`),
+    sequence:
+      layer.sequence === undefined
+        ? undefined
+        : assertSequenceConfig(
+            layer.sequence,
+            `project.layers[${index}].sequence`,
+          ),
     mask:
       layer.mask === undefined
         ? undefined
@@ -758,6 +989,23 @@ function assertLayer(value: unknown, index: number): V5GLayerConfig {
       layer.keyframes ?? [],
       `project.layers[${index}].keyframes`,
     ) as V5GLayerConfig["keyframes"],
+  };
+}
+
+function assertSequenceConfig(value: unknown, path: string): V5GSequenceConfig {
+  const sequence = assertRecord(value, path);
+  return {
+    frameAssetIds: assertArray(
+      sequence.frameAssetIds,
+      `${path}.frameAssetIds`,
+    ).map((assetId, index) =>
+      assertString(assetId, `${path}.frameAssetIds[${index}]`),
+    ),
+    cycleDuration: assertNumber(
+      sequence.cycleDuration,
+      `${path}.cycleDuration`,
+    ),
+    loop: assertBoolean(sequence.loop, `${path}.loop`),
   };
 }
 

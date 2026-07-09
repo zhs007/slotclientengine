@@ -60,6 +60,8 @@ player.play();
 
 运行时不会绘制导出 JSON 的 `stage.backgroundColor`。如果黑底 JPG 或 RGB PNG 光效图的所有 image layer 用法都属于 `add` / `screen` / `lighten`，并且解码后的像素没有有效 alpha，`VNIPlayer` 会在加载时派生一张透明 matte texture，避免透明宿主 canvas 上出现黑框；这不是播放 canvas，也不会改写原始资源文件。已有透明 alpha 的 PNG、被 normal layer 复用的图片不会走 matte 派生。
 
+`sequence` layer 使用 `sequence.frameAssetIds`、`cycleDuration` 和 `loop` 显式切帧。它和 image layer 一样是 texture-backed layer，runtime 在同一个 Pixi sprite 上切换当前帧 texture；mask、粒子和新增 deterministic effects 都基于当前帧资源计算。`assetId` 必须为 `null`，缺帧、缺资源、非 image frame 或非法 `cycleDuration/loop` 都会显式失败。
+
 ## 生命周期
 
 - `init()`: 加载贴图、校验真实 texture size，把 VNI display tree 挂到宿主 `parent`，初始化 layer 和 particle 容器。
@@ -195,6 +197,7 @@ disposeExternal();
 - `data-vni-visible-layers`
 - `data-vni-particle-sprites`
 - `data-vni-render-effect-sprites`
+- `data-vni-deterministic-effect-sprites`
 - `data-vni-safe-glow-sprites`
 - `data-vni-chaser-light-sprites`
 - `data-vni-mask-sprites`
@@ -211,7 +214,7 @@ disposeExternal();
 - `data-vni-asset-scale`
 - `data-vni-profile-purpose`
 
-`data-vni-safe-glow-sprites` 只统计 `safe_glow` 的同图副本；副本继承当前 layer 的 `blendMode`，但仍不进入旧 render effect 统计。`data-vni-render-effect-sprites` 只统计旧 `shatter` / `glow` render effect，两者不会混计。
+`data-vni-safe-glow-sprites` 只统计 `safe_glow` 的同图副本；副本继承当前 layer 的 `blendMode`，但仍不进入旧 render effect 统计。`data-vni-render-effect-sprites` 只统计旧 `shatter` / `glow` render effect。`data-vni-deterministic-effect-sprites` 统计 VNI_0.070 新增效果生成的 sprite / slice / line sample，三类不会混计。
 
 当前也保留 `data-v5g-*` 的 legacy diagnostics alias，用于旧验收脚本兼容；`destroy()` 会清理新旧字段。
 
@@ -225,6 +228,7 @@ disposeExternal();
 - 贴图真实尺寸与 `fileWidth` / `fileHeight` 不一致。
 - manifest entry 与 project `exportProfile` 不一致。
 - 未知 animation/easing/blend mode。
+- 非法 `sequence` layer：`assetId` 非空、缺 `sequence`、空 `frameAssetIds`、缺 frame asset、frame 不是 image、`cycleDuration` 非正数或 `loop` 非 boolean。
 - 必需 numeric param 缺失、`NaN`、`Infinity` 或被写成字符串。
 - 非法 mask source、mask source 指向自身、未知 mask mode/compositeMode。
 - 非法 `layerGroups`、未知 `groupId`、非连续 group run、反向或非相邻 group slot。
@@ -233,11 +237,14 @@ disposeExternal();
 ## 新动画类型
 
 - `idle`: 只提供 animation coverage，不改变 transform/opacity。
-- `shatter`: deterministic render effect。`sourceOpacity` 控制原图透明度，碎片在 `progress <= 0` 不渲染。
+- 所有 layer animation 的覆盖区间都是首尾帧闭区间：`time === startTime` 有效，`time === startTime + duration` 也有效；只有超过 end 的时间才视为 inactive。
+- `shatter`: deterministic render effect。`sourceOpacity` 控制原图透明度，碎片采样由 timeline progress 决定。
 - `glow`: deterministic render effect。`keepOriginal === false` 会隐藏原图但保留 glow effect；`blendMode` 使用 `0=add`、`1=screen`、`2=lighten`。
 - `safe_glow`: 跨引擎安全发光方案。它不是 render effect，也不使用滤镜或模糊；runtime 用同一张图片的副本，通过 `spread` 放大、`minOpacity/maxOpacity/pulses` 透明度呼吸来模拟高亮，副本继承当前 layer 的 `blendMode`。`keepOriginal === false` 会隐藏原图，但 safe glow 副本仍会渲染；起始帧即可采样出副本。
 - `particle_stream`: 持续发射粒子。runtime 会按 `lifetime` 决定排空时间，segmented hold 下 `keepParticlesAlive=true` 时 emitter 配置停在 hold 点但 live elapsed 继续推进，粒子不会冻结。
 - `chaser_light`: 走马灯 runtime effect。灯位固定在圆形、直线或曲线轨迹采样点上，动画只推进亮灯/暗灯窗口，不让 sprite 沿轨迹移动或整体旋转。圆形轨迹中 `spacing` 按弧长换算角度；每盏灯的亮灭错位由 `lightDuration + interval` 共同决定。它由 `vnicore` sampler/Pixi renderer 负责，viewer 只显示结果；`keepOriginal === false` 会隐藏源图但走马灯继续渲染。
+- `gather_particles` / `smoke_mist` / `energy_ring` / `slash_light` / `flame_flicker` / `wave_band` / `wave_distort` / `speed_lines` / `drift_fall` / `path_particles`: VNI_0.070 新增 deterministic effects，支持 image/sequence layer，不支持 text layer。`sourceOpacity` 或 `keepOriginal` 控制源图是否保留，effect 输出由 `vnicore` sampler/Pixi renderer 统一生成；viewer 不复制公式或直接操作 runtime 私有 display tree。
+- `flame_flicker.speed`、`wave_distort.speed` 和 `drift_fall.fallSpeed` 只作为对应旧导出的显式兼容字段读取；其它缺失或拼错字段不会兜底。
 
 ## Mask
 
