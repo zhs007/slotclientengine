@@ -1,5 +1,8 @@
 import { clampNumber, roundTo } from "./coordinates.js";
-import { sampleLayerAnimationsAtTime } from "./animation-sampler.js";
+import {
+  sampleLayerAnimationsAtTime,
+  shouldHideLayerOutsideActiveAnimation,
+} from "./animation-sampler.js";
 import { hasActiveChaserLightAnimation } from "./chaser-light-sampler.js";
 import { hasActiveDeterministicEffectAnimation } from "./effect-sampler.js";
 import { hasActiveParticleAnimation } from "./particle-sampler.js";
@@ -60,23 +63,15 @@ export function sampleLayerAtTime(
     layer.animations,
     time,
   );
-  const hasAnyEnabled = layer.animations.some((animation) => animation.enabled);
   const hasActiveScaleEntryStart = layer.animations.some(
     (animation) =>
       animation.enabled &&
       isScaleEntryAnimation(animation) &&
       isSameSampleTime(time, animation.startTime),
   );
-  const hasActiveCoverage = hasAnyEnabled
-    ? layer.animations.some(
-        (animation) =>
-          animation.enabled &&
-          time >= animation.startTime &&
-          time <= animation.startTime + animation.duration,
-      )
-    : true;
   const opacity =
-    hasActiveScaleEntryStart || (hasAnyEnabled && !hasActiveCoverage)
+    hasActiveScaleEntryStart ||
+    shouldHideLayerOutsideActiveAnimation(layer.animations, time)
       ? 0
       : roundTo(clampNumber(sampled.opacity, 0, 1), 4);
   const baseOpacity = roundTo(clampNumber(layer.opacity, 0, 1), 4);

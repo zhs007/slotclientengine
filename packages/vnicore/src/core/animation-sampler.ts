@@ -1,7 +1,12 @@
 import { clampNumber, roundTo } from "./coordinates.js";
+import {
+  parseMultiMovePointsJson,
+  type V5GMultiMovePoint,
+} from "./multi-move.js";
 import { getTimelineAnimationProgress } from "./timeline-progress.js";
 import type {
   V5GAnimationConfig,
+  V5GAnimationParamValue,
   V5GAnimationType,
   V5GTransformConfig,
 } from "./types.js";
@@ -56,6 +61,7 @@ export const DETERMINISTIC_EFFECT_ANIMATION_TYPES: readonly V5GAnimationType[] =
 export const SUPPORTED_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "idle",
   "move",
+  "multi_move",
   "fade",
   "scale_up",
   "scale_down",
@@ -98,6 +104,7 @@ const DEFAULT_EASING_BY_TYPE: Readonly<
 > = {
   idle: "linear",
   move: "easeOutQuad",
+  multi_move: "linear",
   fade: "linear",
   scale_up: "easeOutQuad",
   scale_down: "easeOutQuad",
@@ -135,6 +142,17 @@ const DEFAULT_EASING_BY_TYPE: Readonly<
   squash_stretch: "easeOutQuad",
 };
 
+interface MultiMovePointCacheEntry {
+  readonly source: string;
+  readonly duration: number;
+  readonly points: readonly V5GMultiMovePoint[];
+}
+
+const multiMovePointCache = new WeakMap<
+  V5GAnimationConfig,
+  MultiMovePointCacheEntry
+>();
+
 export function sampleLayerAnimationsAtTime(
   base: V5GAnimationSampleBase,
   animations: readonly V5GAnimationConfig[],
@@ -150,12 +168,14 @@ export function sampleLayerAnimationsAtTime(
   )) {
     if (!animation.enabled) continue;
 
-    const progress = getAnimationProgress(animation, time);
+    const progress = getAnimationProgressForSampling(animation, time);
     if (progress === null) continue;
 
     const easedProgress = easeProgress(progress, getAnimationEasing(animation));
 
     if (animation.type === "move") sampleMove(result, animation, easedProgress);
+    else if (animation.type === "multi_move")
+      sampleMultiMove(result, animation, time);
     else if (animation.type === "slide_in" || animation.type === "slide_out")
       sampleSlide(result, animation, easedProgress, base);
     else if (animation.type === "fade")
@@ -270,6 +290,19 @@ export function isSupportedEasing(value: string): value is V5GEasingName {
   return SUPPORTED_EASINGS.includes(value as V5GEasingName);
 }
 
+export function shouldHideLayerOutsideActiveAnimation(
+  animations: readonly V5GAnimationConfig[],
+  time: number,
+): boolean {
+  const enabledAnimations = animations.filter((animation) => animation.enabled);
+  if (enabledAnimations.length === 0) return false;
+  return !enabledAnimations.some((animation) => {
+    const start = animation.startTime;
+    const end = animation.startTime + animation.duration;
+    return time >= start && time <= end;
+  });
+}
+
 export function getDefaultEasing(type: V5GAnimationType): V5GEasingName {
   const easing = DEFAULT_EASING_BY_TYPE[type];
   if (!easing) {
@@ -295,9 +328,50 @@ function sampleMove(
   const originX = getOptionalNumberParam(animation, "baseX", fromX);
   const originY = getOptionalNumberParam(animation, "baseY", fromY);
   result.transform.x +=
-    lerp(fromX, getNumberParam(animation, "toX"), progress) - originX;
+    lerpOvershoot(fromX, getNumberParam(animation, "toX"), progress) - originX;
   result.transform.y +=
-    lerp(fromY, getNumberParam(animation, "toY"), progress) - originY;
+    lerpOvershoot(fromY, getNumberParam(animation, "toY"), progress) - originY;
+}
+
+function sampleMultiMove(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  time: number,
+): void {
+  const points = getMultiMovePoints(animation);
+  const localTime = clampNumber(
+    time - animation.startTime,
+    0,
+    animation.duration,
+  );
+  if (localTime <= points[0].time) {
+    result.transform.x += points[0].x;
+    result.transform.y += points[0].y;
+    return;
+  }
+
+  const lastPoint = points[points.length - 1];
+  if (localTime >= lastPoint.time) {
+    result.transform.x += lastPoint.x;
+    result.transform.y += lastPoint.y;
+    return;
+  }
+
+  for (let index = 1; index < points.length; index += 1) {
+    const fromPoint = points[index - 1];
+    const toPoint = points[index];
+    if (localTime > toPoint.time) continue;
+    const segmentDuration = Math.max(toPoint.time - fromPoint.time, 0.0001);
+    const progress = clampNumber(
+      (localTime - fromPoint.time) / segmentDuration,
+      0,
+      1,
+    );
+    const easedProgress = easeProgress(progress, toPoint.easing);
+    result.transform.x += lerpOvershoot(fromPoint.x, toPoint.x, easedProgress);
+    result.transform.y += lerpOvershoot(fromPoint.y, toPoint.y, easedProgress);
+    return;
+  }
 }
 
 function sampleSlide(
@@ -306,12 +380,12 @@ function sampleSlide(
   progress: number,
   base: V5GAnimationSampleBase,
 ): void {
-  result.transform.x += lerp(
+  result.transform.x += lerpOvershoot(
     getNumberParam(animation, "fromX"),
     getNumberParam(animation, "toX"),
     progress,
   );
-  result.transform.y += lerp(
+  result.transform.y += lerpOvershoot(
     getNumberParam(animation, "fromY"),
     getNumberParam(animation, "toY"),
     progress,
@@ -553,8 +627,8 @@ function sampleSquashStretch(
   const toX = getNumberParam(animation, "toX");
   const toY = getNumberParam(animation, "toY");
 
-  result.transform.x += lerp(fromX, toX, easedProgress);
-  result.transform.y += lerp(fromY, toY, easedProgress);
+  result.transform.x += lerpOvershoot(fromX, toX, easedProgress);
+  result.transform.y += lerpOvershoot(fromY, toY, easedProgress);
 
   if (squashAmount <= 0.001) return;
 
@@ -592,6 +666,53 @@ function getAnimationProgress(
   time: number,
 ): number | null {
   return getTimelineAnimationProgress(animation, time);
+}
+
+function getAnimationProgressForSampling(
+  animation: V5GAnimationConfig,
+  time: number,
+): number | null {
+  const progress = getAnimationProgress(animation, time);
+  if (progress !== null) return progress;
+  if (
+    time > animation.startTime + animation.duration &&
+    shouldPersistEndedTransform(animation.type)
+  ) {
+    return 1;
+  }
+  return null;
+}
+
+function shouldPersistEndedTransform(type: V5GAnimationType): boolean {
+  return (
+    type === "move" ||
+    type === "multi_move" ||
+    type === "slide_in" ||
+    type === "slide_out" ||
+    type === "squash_stretch"
+  );
+}
+
+function getMultiMovePoints(
+  animation: V5GAnimationConfig,
+): readonly V5GMultiMovePoint[] {
+  const source = getStringParam(animation, "pointsJson");
+  const cached = multiMovePointCache.get(animation);
+  if (cached?.source === source && cached.duration === animation.duration) {
+    return cached.points;
+  }
+  const points = parseMultiMovePointsJson(
+    source,
+    animation.duration,
+    `V5G animation "${animation.id}" multi_move pointsJson`,
+    isSupportedEasing,
+  );
+  multiMovePointCache.set(animation, {
+    source,
+    duration: animation.duration,
+    points,
+  });
+  return points;
 }
 
 function getAnimationEasing(animation: V5GAnimationConfig): V5GEasingName {
@@ -635,10 +756,22 @@ function getOptionalBooleanParam(
   );
 }
 
+function getStringParam(animation: V5GAnimationConfig, key: string): string {
+  const value: V5GAnimationParamValue | undefined = animation.params[key];
+  if (typeof value === "string") return value;
+  throw new Error(
+    `V5G animation "${animation.id}" ${animation.type} requires string param "${key}".`,
+  );
+}
+
 function getLoopWave(progress: number, cycles: number): number {
   return (1 - Math.cos(progress * Math.PI * 2 * cycles)) / 2;
 }
 
 function lerp(from: number, to: number, ratio: number): number {
   return from + (to - from) * clampNumber(ratio, 0, 1);
+}
+
+function lerpOvershoot(from: number, to: number, ratio: number): number {
+  return from + (to - from) * ratio;
 }

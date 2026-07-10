@@ -65,6 +65,117 @@ describe("animation-sampler", () => {
     expect(sampled.transform.y).toBe(65);
   });
 
+  it("samples multi_move points by local time and target point easing", () => {
+    const sampled = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [
+        animation(
+          "multi_move",
+          {
+            pointsJson: JSON.stringify([
+              { x: 10, y: 0, time: 0.5, easing: "backOut" },
+              { x: 110, y: 0, time: 1.5, easing: "easeOutQuad" },
+              { x: 110, y: 50, time: 2, easing: "linear" },
+            ]),
+          },
+          { startTime: 1, duration: 3 },
+        ),
+      ],
+      2,
+    );
+
+    expect(sampled.transform.x).toBe(185);
+    expect(sampled.transform.y).toBe(50);
+  });
+
+  it("uses the first and last multi_move points outside point ranges", () => {
+    const path = {
+      pointsJson: JSON.stringify([
+        { x: -25, y: 10, time: 0.5, easing: "linear" },
+        { x: 75, y: -20, time: 1, easing: "linear" },
+      ]),
+    };
+
+    const beforeFirst = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [animation("multi_move", path, { duration: 2 })],
+      0.25,
+    );
+    const afterLast = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [animation("multi_move", path, { duration: 2 })],
+      1.5,
+    );
+
+    expect(beforeFirst.transform).toMatchObject({ x: 75, y: 60 });
+    expect(afterLast.transform).toMatchObject({ x: 175, y: 30 });
+  });
+
+  it("does not clamp overshooting move or multi_move easing", () => {
+    const move = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [
+        animation("move", {
+          fromX: 0,
+          fromY: 0,
+          toX: 100,
+          toY: 0,
+          easing: "backOut",
+        }),
+      ],
+      0.75,
+    );
+    const multiMove = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [
+        animation("multi_move", {
+          pointsJson: JSON.stringify([
+            { x: 0, y: 0, time: 0, easing: "linear" },
+            { x: 100, y: 0, time: 1, easing: "backOut" },
+          ]),
+        }),
+      ],
+      0.75,
+    );
+
+    expect(move.transform.x).toBeGreaterThan(200);
+    expect(multiMove.transform.x).toBeGreaterThan(200);
+  });
+
+  it("keeps ended movement transforms but not ended fade opacity", () => {
+    const movement = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [
+        animation("move", { fromX: 0, fromY: 0, toX: 20, toY: 10 }),
+        animation("slide_in", {
+          fromX: 0,
+          fromY: -30,
+          toX: 5,
+          toY: 0,
+          fadeIn: false,
+        }),
+        animation("squash_stretch", {
+          squashAngle: 90,
+          squashAmount: 0,
+          decayOscillateCount: 0,
+          fromX: -10,
+          fromY: 0,
+          toX: 15,
+          toY: 0,
+        }),
+      ],
+      2,
+    );
+    const fade = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 0.7 },
+      [animation("fade", { fromOpacity: 0, toOpacity: 1 })],
+      2,
+    );
+
+    expect(movement.transform).toMatchObject({ x: 140, y: 60 });
+    expect(fade.opacity).toBe(0.7);
+  });
+
   it("clamps fade opacity to 0..1", () => {
     const sampled = sampleLayerAnimationsAtTime(
       { transform: baseTransform, opacity: 1 },

@@ -92,6 +92,92 @@ describe("project-sampler", () => {
     expect(sampled.visible).toBe(false);
   });
 
+  it("keeps ended displacement for later animation handoff while hiding empty frames", () => {
+    const handoffLayer = layer(
+      {
+        transform: { ...transform, y: 500 },
+      },
+      [
+        {
+          id: "slide-to-origin",
+          type: "slide_in",
+          startTime: 0,
+          duration: 1,
+          enabled: true,
+          seed: 1,
+          params: {
+            fromX: 0,
+            fromY: 0,
+            toX: 0,
+            toY: -500,
+            fadeIn: false,
+            easing: "linear",
+          },
+        },
+        {
+          id: "continue-from-origin",
+          type: "move",
+          startTime: 2,
+          duration: 1,
+          enabled: true,
+          seed: 2,
+          params: {
+            fromX: 0,
+            fromY: 0,
+            toX: 100,
+            toY: 0,
+            baseX: 0,
+            baseY: 0,
+            easing: "linear",
+          },
+        },
+      ],
+    );
+
+    const gap = sampleLayerAtTime(handoffLayer, 1.5);
+    const active = sampleLayerAtTime(handoffLayer, 2.25);
+    const afterLast = sampleLayerAtTime(handoffLayer, 3.01);
+
+    expect(gap.transform).toMatchObject({ x: 0, y: 0 });
+    expect(gap.opacity).toBe(0);
+    expect(gap.visible).toBe(false);
+    expect(active.transform).toMatchObject({ x: 25, y: 0 });
+    expect(active.visible).toBe(true);
+    expect(afterLast.transform).toMatchObject({ x: 100, y: 0 });
+    expect(afterLast.visible).toBe(false);
+  });
+
+  it("keeps ended multi_move final point available for later samples", () => {
+    const sampled = sampleLayerAtTime(
+      layer(
+        {
+          transform: { ...transform, y: 500 },
+        },
+        [
+          {
+            id: "multi-move",
+            type: "multi_move",
+            startTime: 0,
+            duration: 1,
+            enabled: true,
+            seed: 1,
+            params: {
+              pointsJson: JSON.stringify([
+                { x: 0, y: 0, time: 0, easing: "linear" },
+                { x: 0, y: -500, time: 1, easing: "linear" },
+              ]),
+            },
+          },
+        ],
+      ),
+      2,
+    );
+
+    expect(sampled.transform).toMatchObject({ x: 0, y: 0 });
+    expect(sampled.opacity).toBe(0);
+    expect(sampled.visible).toBe(false);
+  });
+
   it("keeps layers with no enabled animations visible by base state", () => {
     const sampled = sampleLayerAtTime(layer({}, []), 8);
     expect(sampled.opacity).toBe(1);

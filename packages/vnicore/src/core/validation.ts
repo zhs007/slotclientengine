@@ -7,6 +7,7 @@ import {
   getVNIProjectRenderGroupOrder,
   normalizeVNIProjectLayerGroups,
 } from "./layer-groups.js";
+import { parseMultiMovePointsJson } from "./multi-move.js";
 import type {
   V5GAnimationConfig,
   V5GAnimationParamValue,
@@ -45,6 +46,7 @@ const REQUIRED_NUMERIC_PARAMS: Readonly<
 > = {
   idle: [],
   move: ["fromX", "fromY", "toX", "toY"],
+  multi_move: [],
   fade: ["fromOpacity", "toOpacity"],
   scale_up: ["fromScaleX", "fromScaleY", "toScaleX", "toScaleY"],
   scale_down: ["fromScaleX", "fromScaleY", "toScaleX", "toScaleY"],
@@ -740,6 +742,14 @@ export function assertSupportedAnimation(
         `V5G animation "${animation.id}" ${animation.type} requires numeric param "${paramKey}".`,
       );
     }
+  }
+  if (animation.type === "multi_move") {
+    parseMultiMovePointsJson(
+      animation.params.pointsJson,
+      animation.duration,
+      `V5G animation "${animation.id}" multi_move pointsJson`,
+      isSupportedEasing,
+    );
   }
   assertOptionalNumber(animation, "baseX");
   assertOptionalNumber(animation, "baseY");

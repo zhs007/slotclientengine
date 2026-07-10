@@ -830,6 +830,54 @@ describe("VNIPlayer", () => {
     expect(internals.stageRoot.parent).toBeNull();
   });
 
+  it("samples multi_move through the player while preserving empty-frame visibility", async () => {
+    const project = createStaticProject();
+    project.schemaVersion = "VNI_0.074";
+    project.editor.version = "VNI_0.074";
+    project.stage.duration = 3;
+    project.layers[0].animations = [
+      {
+        id: "multi-move",
+        type: "multi_move",
+        startTime: 0,
+        duration: 1,
+        enabled: true,
+        seed: 1,
+        params: {
+          pointsJson: JSON.stringify([
+            { x: 0, y: 0, time: 0, easing: "linear" },
+            { x: 100, y: 50, time: 1, easing: "linear" },
+          ]),
+        },
+      },
+    ];
+
+    const player = await createInitializedPlayer({
+      project,
+      autoTick: false,
+    });
+    const internals = player as unknown as {
+      layerInstances: Map<
+        string,
+        {
+          display: InstanceType<typeof pixiMock.MockContainer>;
+        }
+      >;
+    };
+    const layerA = internals.layerInstances.get("layer-a");
+
+    player.seek(1);
+
+    expect(layerA?.display.position).toMatchObject({ x: 300, y: 100 });
+    expect(layerA?.display.visible).toBe(true);
+
+    player.seek(1.5);
+
+    expect(layerA?.display.position).toMatchObject({ x: 300, y: 100 });
+    expect(layerA?.display.alpha).toBe(0);
+    expect(layerA?.display.visible).toBe(false);
+  });
+
   it("creates text layer instances and fails fast for invalid image layers", () => {
     const project = createProject();
     const imageLayer = project.layers[0];

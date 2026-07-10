@@ -1,4 +1,5 @@
 import {
+  DEFAULT_MULTI_MOVE_POINTS_JSON,
   V5G_EASINGS,
   createDefaultAnimationParams,
   getAnimationCategory,
@@ -6,6 +7,7 @@ import {
   getAnimationPresetsByCategory,
   isV5GAnimationType,
   sampleLayerAnimationsAtTime,
+  shouldHideLayerOutsideActiveAnimation,
   type V5GAnimationCategory,
 } from "./animation_presets";
 import { VNI_VERSION } from "./constants";
@@ -3460,8 +3462,19 @@ function readAnimationParamsFromContainer(
 
   if (!preset) return params;
 
-  for (const param of preset.params) {
+  if (type === "multi_move") {
     const input = container.querySelector<HTMLInputElement>(
+      '[data-anim-param="pointsJson"]',
+    );
+    params.pointsJson = serializeMultiMovePointsForEditor(
+      parseMultiMovePointsForEditor(input?.value),
+      getAnimationDurationFromParamContainer(container),
+    );
+    return params;
+  }
+
+  for (const param of preset.params) {
+    const input = container.querySelector<HTMLInputElement | HTMLSelectElement>(
       `[data-anim-param="${param.key}"]`,
     );
 
@@ -3472,7 +3485,7 @@ function readAnimationParamsFromContainer(
     }
 
     if (param.inputType === "checkbox") {
-      params[param.key] = input.checked;
+      params[param.key] = (input as HTMLInputElement).checked;
 
       continue;
     }
@@ -3488,9 +3501,10 @@ function readAnimationParamsFromContainer(
 
     const fallback =
       typeof param.defaultValue === "number" ? param.defaultValue : 0;
+    const numberInput = input as HTMLInputElement;
 
     const value = clampNumber(
-      readNumberInput(input, fallback),
+      readNumberInput(numberInput, fallback),
 
       param.min ?? Number.NEGATIVE_INFINITY,
 
@@ -4487,6 +4501,14 @@ function appendAnimationParamFields(
     transform: layer.transform,
     opacity: layer.opacity,
   });
+  if (type === "multi_move") {
+    appendMultiMoveParamFields(
+      container,
+      animation?.params.pointsJson ?? defaultParams.pointsJson,
+      animation?.duration,
+    );
+    return;
+  }
   for (const param of preset.params) {
     const value =
       animation?.params[param.key] ??
@@ -4548,6 +4570,315 @@ function appendAnimationParamFields(
     container.appendChild(label);
   }
   syncAnimationParamVisibility(container, type);
+}
+
+interface V5GMultiMoveEditorPoint {
+  x: number;
+  y: number;
+  time: number;
+  easing: string;
+}
+
+function appendMultiMoveParamFields(
+  container: HTMLElement,
+  pointsJsonValue: V5GAnimationParamValue | undefined,
+  animationDuration: number | undefined,
+): void {
+  const duration = Math.max(
+    TIMELINE_MINOR_TICK_SECONDS,
+    Number.isFinite(animationDuration) ? Number(animationDuration) : 2,
+  );
+  const hiddenInput = document.createElement("input");
+  hiddenInput.type = "hidden";
+  hiddenInput.dataset.animParam = "pointsJson";
+
+  const editor = document.createElement("div");
+  editor.className =
+    "col-span-2 space-y-2 rounded-lg border border-amber-300/20 bg-zinc-950/80 p-2";
+
+  const header = document.createElement("div");
+  header.className = "flex items-center justify-between gap-2";
+  header.innerHTML = `<div><div class="text-[11px] font-semibold text-amber-200">多段位移点</div><div class="text-[9px] text-zinc-500">时间为动画内部秒数；每个点的曲线控制“上一点 → 当前点”。</div></div>`;
+
+  const addButton = document.createElement("button");
+  addButton.type = "button";
+  addButton.className =
+    "shrink-0 rounded-md bg-amber-300 px-2 py-1 text-[10px] font-semibold text-amber-950 transition hover:bg-amber-200";
+  addButton.innerHTML = '<i class="fa-solid fa-plus mr-1"></i>添加位移点';
+  header.appendChild(addButton);
+
+  const list = document.createElement("div");
+  list.className = "space-y-2";
+
+  const hint = document.createElement("div");
+  hint.className =
+    "rounded bg-zinc-900 px-2 py-1 text-[9px] leading-4 text-zinc-500";
+  hint.textContent =
+    "建议第一个点 time=0。若最后一个点早于持续秒，之后会保持最后位置。";
+
+  editor.append(header, list, hint, hiddenInput);
+  container.appendChild(editor);
+
+  let points = ensureMinimumMultiMovePoints(
+    parseMultiMovePointsForEditor(pointsJsonValue),
+    duration,
+  );
+
+  const syncHiddenInput = () => {
+    points = ensureMinimumMultiMovePoints(
+      points,
+      getAnimationDurationFromParamContainer(container),
+    );
+    hiddenInput.value = serializeMultiMovePointsForEditor(
+      points,
+      getAnimationDurationFromParamContainer(container),
+    );
+    hiddenInput.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
+  const renderPoints = () => {
+    points.sort((a, b) => a.time - b.time);
+    list.innerHTML = "";
+    points.forEach((point, index) => {
+      const row = document.createElement("div");
+      row.className = "rounded-md border border-white/10 bg-[#050505] p-2";
+      row.innerHTML = `
+        <div class="mb-1 flex items-center justify-between gap-2">
+          <div class="text-[10px] font-semibold text-zinc-300">点 ${index + 1}</div>
+          <button type="button" data-point-action="delete" class="rounded bg-zinc-900 px-1.5 py-0.5 text-[10px] text-zinc-500 transition hover:bg-red-950/70 hover:text-red-200 ${points.length <= 2 ? "cursor-not-allowed opacity-40" : ""}" title="删除此位移点" ${points.length <= 2 ? "disabled" : ""}><i class="fa-solid fa-trash"></i></button>
+        </div>
+        <div class="grid grid-cols-3 gap-1.5">
+          <label class="text-[9px] text-zinc-500">X<input data-point-field="x" type="number" step="1" class="mt-1 h-7 w-full rounded-md border border-white/10 bg-black px-2 text-xs text-zinc-100 outline-none focus:border-amber-300" /></label>
+          <label class="text-[9px] text-zinc-500">Y<input data-point-field="y" type="number" step="1" class="mt-1 h-7 w-full rounded-md border border-white/10 bg-black px-2 text-xs text-zinc-100 outline-none focus:border-amber-300" /></label>
+          <label class="text-[9px] text-zinc-500">到达秒<input data-point-field="time" type="number" min="0" step="0.05" class="mt-1 h-7 w-full rounded-md border border-white/10 bg-black px-2 text-xs text-zinc-100 outline-none focus:border-amber-300" /></label>
+        </div>
+      `;
+
+      const xInput = row.querySelector<HTMLInputElement>(
+        '[data-point-field="x"]',
+      );
+      const yInput = row.querySelector<HTMLInputElement>(
+        '[data-point-field="y"]',
+      );
+      const timeInput = row.querySelector<HTMLInputElement>(
+        '[data-point-field="time"]',
+      );
+      xInput!.value = String(point.x);
+      yInput!.value = String(point.y);
+      timeInput!.value = String(point.time);
+
+      const easingLabel = document.createElement("label");
+      easingLabel.className =
+        index === 0
+          ? "mt-1 block text-[9px] text-zinc-600"
+          : "mt-1 block text-[9px] text-zinc-500";
+      easingLabel.textContent = index === 0 ? "首点曲线（不生效）" : "本段曲线";
+      const easingSelect = document.createElement("select");
+      easingSelect.dataset.pointField = "easing";
+      easingSelect.disabled = index === 0;
+      easingSelect.className =
+        "mt-1 h-7 w-full rounded-md border border-white/10 bg-black px-2 text-xs text-zinc-100 outline-none focus:border-amber-300 disabled:opacity-45";
+      for (const easing of V5G_EASINGS) {
+        const option = document.createElement("option");
+        option.value = easing.value;
+        option.textContent = easing.label;
+        option.style.backgroundColor = "#050505";
+        option.style.color = "#f4f4f5";
+        easingSelect.appendChild(option);
+      }
+      easingSelect.value = V5G_EASINGS.some(
+        (item) => item.value === point.easing,
+      )
+        ? point.easing
+        : "linear";
+      easingLabel.appendChild(easingSelect);
+      row.appendChild(easingLabel);
+
+      const updatePoint = () => {
+        points[index] = {
+          x: roundTo(
+            clampNumber(readNumberInput(xInput!, point.x), -5000, 5000),
+            4,
+          ),
+          y: roundTo(
+            clampNumber(readNumberInput(yInput!, point.y), -5000, 5000),
+            4,
+          ),
+          time: roundTo(
+            clampNumber(
+              readNumberInput(timeInput!, point.time),
+              0,
+              getAnimationDurationFromParamContainer(container),
+            ),
+            4,
+          ),
+          easing: easingSelect.value,
+        };
+        syncHiddenInput();
+      };
+
+      for (const input of [xInput, yInput, timeInput]) {
+        input?.addEventListener("click", (event) => event.stopPropagation());
+        input?.addEventListener("change", () => {
+          updatePoint();
+          renderPoints();
+        });
+        input?.addEventListener("blur", () => {
+          updatePoint();
+          renderPoints();
+        });
+        input?.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          input.blur();
+        });
+      }
+      easingSelect.addEventListener("click", (event) =>
+        event.stopPropagation(),
+      );
+      easingSelect.addEventListener("change", updatePoint);
+
+      row
+        .querySelector<HTMLButtonElement>('[data-point-action="delete"]')
+        ?.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (points.length <= 2) return;
+          points.splice(index, 1);
+          syncHiddenInput();
+          renderPoints();
+        });
+
+      list.appendChild(row);
+    });
+    syncHiddenInput();
+  };
+
+  addButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const currentDuration = getAnimationDurationFromParamContainer(container);
+    const lastPoint = points[points.length - 1] ?? {
+      x: 0,
+      y: 0,
+      time: 0,
+      easing: "linear",
+    };
+    points.push({
+      x: roundTo(clampNumber(lastPoint.x + 200, -5000, 5000), 4),
+      y: lastPoint.y,
+      time: roundTo(clampNumber(lastPoint.time + 0.5, 0, currentDuration), 4),
+      easing: "easeOutQuad",
+    });
+    syncHiddenInput();
+    renderPoints();
+  });
+
+  renderPoints();
+}
+
+function parseMultiMovePointsForEditor(
+  value: V5GAnimationParamValue | undefined,
+): V5GMultiMoveEditorPoint[] {
+  const rawText =
+    typeof value === "string" ? value : DEFAULT_MULTI_MOVE_POINTS_JSON;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    parsed = JSON.parse(DEFAULT_MULTI_MOVE_POINTS_JSON);
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .map((item): V5GMultiMoveEditorPoint | null => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const x = Number(record.x);
+      const y = Number(record.y);
+      const time = Number(record.time);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      const easing = String(record.easing ?? "linear");
+      return {
+        x: roundTo(clampNumber(x, -5000, 5000), 4),
+        y: roundTo(clampNumber(y, -5000, 5000), 4),
+        time: roundTo(Number.isFinite(time) ? Math.max(0, time) : 0, 4),
+        easing: V5G_EASINGS.some((item) => item.value === easing)
+          ? easing
+          : "linear",
+      };
+    })
+    .filter((item): item is V5GMultiMoveEditorPoint => item !== null);
+}
+
+function ensureMinimumMultiMovePoints(
+  points: V5GMultiMoveEditorPoint[],
+  duration: number,
+): V5GMultiMoveEditorPoint[] {
+  const sanitized = points
+    .map((point) => ({
+      ...point,
+      time: roundTo(clampNumber(point.time, 0, duration), 4),
+      easing: V5G_EASINGS.some((item) => item.value === point.easing)
+        ? point.easing
+        : "linear",
+    }))
+    .sort((a, b) => a.time - b.time);
+  while (sanitized.length < 2) {
+    const last = sanitized[sanitized.length - 1] ?? {
+      x: 0,
+      y: 0,
+      time: 0,
+      easing: "linear",
+    };
+    sanitized.push({
+      x:
+        sanitized.length === 0
+          ? 0
+          : roundTo(clampNumber(last.x + 200, -5000, 5000), 4),
+      y: last.y,
+      time:
+        sanitized.length === 0
+          ? 0
+          : roundTo(clampNumber(last.time + 1, 0, duration), 4),
+      easing: sanitized.length === 0 ? "linear" : "easeOutQuad",
+    });
+  }
+  sanitized[0].easing = "linear";
+  return sanitized;
+}
+
+function serializeMultiMovePointsForEditor(
+  points: V5GMultiMoveEditorPoint[],
+  duration: number,
+): string {
+  return JSON.stringify(
+    ensureMinimumMultiMovePoints(points, duration).map((point) => ({
+      x: roundTo(point.x, 4),
+      y: roundTo(point.y, 4),
+      time: roundTo(clampNumber(point.time, 0, duration), 4),
+      easing: point.easing,
+    })),
+  );
+}
+
+function getAnimationDurationFromParamContainer(
+  container: HTMLElement,
+): number {
+  const module = container.closest<HTMLElement>(
+    "[data-animation-id], [data-animation-draft]",
+  );
+  const input = module?.querySelector<HTMLInputElement>(
+    "[data-animation-duration]",
+  );
+  const fallback = 2;
+  return roundTo(
+    clampNumber(
+      input ? readNumberInput(input, fallback) : fallback,
+      TIMELINE_MINOR_TICK_SECONDS,
+      state.project.stage.duration,
+    ),
+    4,
+  );
 }
 
 function syncAnimationParamVisibility(
@@ -5374,19 +5705,14 @@ function applyAnimatedLayersAtTime(time: number): void {
       time,
     );
 
-    // 图层有启用的动画、但当前时间不在任何动画覆盖范围内时，隐藏图层。
-    // 避免图层在动画开始前就出现在画布中。
-    const hasAnyEnabled = layer.animations.some((a) => a.enabled);
-    const hasActiveCoverage = hasAnyEnabled
-      ? layer.animations.some(
-          (a) =>
-            a.enabled &&
-            time >= a.startTime &&
-            time <= a.startTime + a.duration,
-        )
-      : true;
-    const effectiveOpacity =
-      hasAnyEnabled && !hasActiveCoverage ? 0 : sampled.opacity;
+    // 位置采样和可见性分开处理：结束的位移动画仍保留终点用于后续接力，
+    // 但当前时间不在任何启用动画块内时仍视为空帧，图层需要隐藏。
+    const effectiveOpacity = shouldHideLayerOutsideActiveAnimation(
+      layer.animations,
+      time,
+    )
+      ? 0
+      : sampled.opacity;
 
     nextPreviewLayers[layer.id] = {
       transform: sampled.transform,

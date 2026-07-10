@@ -44,6 +44,7 @@ export interface V5GTransformConfig {
 export type V5GAnimationType =
   | "idle"
   | "move"
+  | "multi_move"
   | "fade"
   | "scale_up"
   | "scale_down"

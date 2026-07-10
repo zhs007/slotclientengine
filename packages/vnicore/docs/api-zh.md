@@ -45,7 +45,7 @@
 - `parseColorHex(value)`: 解析 `#RRGGBB`。
 - `sampleProjectAtTime(project, time)`: 采样整个 project。
 - `sampleLayerAtTime(layer, time)`: 采样单 layer。
-- `sampleLayerAnimationsAtTime(base, animations, time)`: 采样 animation 栈。
+- `sampleLayerAnimationsAtTime(base, animations, time)`: 采样 animation 栈，包含 VNI_0.074 `multi_move`、结束位移持续采样和不裁掉超调的位移插值。
 - `getSequenceFrameAssetId(layer, time)`: 按 sequence 配置和当前时间解析当前帧 asset id；非 loop 序列停在最后一帧。
 - `getLayerDisplayAssetId(layer, time)` / `getLayerDisplayAsset(layer, time, assetsById)`: 获取 image/sequence layer 当前显示资源。
 - `sampleParticleSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样粒子 sprite。
@@ -129,6 +129,7 @@ Layer group 合同：
 新增动画类型：
 
 - `idle`: coverage-only no-op，不改 transform/opacity。
+- `multi_move`: VNI_0.074 多段位移，要求 `pointsJson` 为 JSON string 数组，每个点声明 `x/y/time/easing`；每段使用到达点 easing，`backOut` 等超调不被 clamp。非法 JSON、非数组、少于两个点、非 finite 数字、坐标越界、time 越过 animation duration 或未知 easing 都显式失败。
 - `shatter`: deterministic render effect，要求 `count/pieceSize/force/impactAngle/spreadAngle/gravity/spin/sourceOpacity`，`fadeOut` 可选 boolean。
 - `glow`: deterministic render effect，要求 `intensity/spread/minAlpha/maxAlpha/pulses/blendMode`，`keepOriginal` 可选 boolean；`blendMode` 数值为 `0=add`、`1=screen`、`2=lighten`。
 - `safe_glow`: 普通同图副本高亮，要求 `spread/minOpacity/maxOpacity/pulses`，`keepOriginal` 可选 boolean；副本继承当前 layer `blendMode`，不进入 `VNIRenderEffectType`。
@@ -145,7 +146,7 @@ Layer group 合同：
 - `drift_fall`: 要求 `count/areaWidth/areaHeight/wind/swayAmplitude/swayFrequency/size/sizeRandom/rotationSpeed/alpha`，`cycles` 可选；旧导出里的 `fallSpeed` 只在本类型作为显式兼容字段读取。
 - `path_particles`: 要求 `pathMode/count/size/endX/endY/curve/amplitude/frequency/radiusStart/radiusEnd/turns/speed/stagger/oneShotStagger/trailCount/trailSpacing/trailFade/alpha`，`keepOriginal/rotateToPath/fadeEnds/loop` 可选 boolean。
 
-所有 layer animation 的覆盖区间都是首尾帧闭区间：`time === startTime` 有效，`time === startTime + duration` 也有效；只有超过 end 的时间才视为 inactive。新增 deterministic effects 可挂在 image 或 sequence layer 上；text layer 不渲染这些 effect。
+所有 layer animation 的覆盖区间都是首尾帧闭区间：`time === startTime` 有效，`time === startTime + duration` 也有效；只有超过 end 的时间才视为 inactive。`move` / `multi_move` / `slide_in` / `slide_out` / `squash_stretch` 结束后仍以 progress 1 参与 transform 累加，用于后续动画接力；visibility 单独判断，当前时间不在任何 enabled animation 覆盖区间内时仍隐藏空帧。新增 deterministic effects 可挂在 image 或 sequence layer 上；text layer 不渲染这些 effect。
 
 Mask 合同：
 

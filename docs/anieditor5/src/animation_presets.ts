@@ -54,6 +54,22 @@ export interface V5GAnimationSampleResult {
   opacity: number;
 }
 
+interface V5GMultiMovePoint {
+  x: number;
+  y: number;
+  time: number;
+  easing: V5GEasingName;
+}
+
+const DEFAULT_MULTI_MOVE_POINTS: V5GMultiMovePoint[] = [
+  { x: 0, y: 0, time: 0, easing: "linear" },
+  { x: 200, y: 0, time: 1, easing: "easeOutQuad" },
+];
+
+export const DEFAULT_MULTI_MOVE_POINTS_JSON = JSON.stringify(
+  DEFAULT_MULTI_MOVE_POINTS,
+);
+
 export const V5G_EASINGS: { value: V5GEasingName; label: string }[] = [
   { value: "linear", label: "linear 匀速" },
   { value: "easeInQuad", label: "easeInQuad 渐快" },
@@ -116,6 +132,24 @@ export const V5G_ANIMATION_PRESETS: V5GAnimationPresetSpec[] = [
         1,
         "toY：相对当前基础 Y 的结束偏移，-5000 ~ 5000",
       ),
+    ],
+  },
+  {
+    type: "multi_move",
+    label: "Multi Move 多段位移",
+    description:
+      "在一个动画模块中配置多个位移点，每个点可填写坐标、到达时间，并为该段单独选择缓动曲线。",
+    defaultDuration: 2,
+    recommendedDuration: "tips：1 ~ 8s；点击添加位移点扩展路径",
+    defaultEasing: "linear",
+    params: [
+      {
+        key: "pointsJson",
+        label: "位移点 JSON",
+        inputType: "select",
+        defaultValue: DEFAULT_MULTI_MOVE_POINTS_JSON,
+        recommendedRange: "由多段位移点编辑器自动维护：[{x,y,time,easing}]",
+      },
     ],
   },
   {
@@ -3096,6 +3130,9 @@ export function createDefaultAnimationParams(
       baseY: 0,
     };
   }
+  if (type === "multi_move") {
+    return { pointsJson: DEFAULT_MULTI_MOVE_POINTS_JSON };
+  }
   if (type === "slide_in") {
     return { fromX: -500, fromY: 0, toX: 0, toY: 0, fadeIn: true };
   }
@@ -3490,11 +3527,12 @@ export function sampleLayerAnimationsAtTime(
     transform: { ...base.transform },
     opacity: base.opacity,
   };
-  for (const animation of [...animations].sort(
+  const orderedAnimations = [...animations].sort(
     (a, b) => a.startTime - b.startTime,
-  )) {
+  );
+  for (const animation of orderedAnimations) {
     if (!animation.enabled) continue;
-    const progress = getAnimationProgress(animation, time);
+    const progress = getAnimationProgressForSampling(animation, time);
     if (progress === null) continue;
     const easedProgress = easeProgress(
       progress,
@@ -3505,6 +3543,8 @@ export function sampleLayerAnimationsAtTime(
       ),
     );
     if (animation.type === "move") sampleMove(result, animation, easedProgress);
+    else if (animation.type === "multi_move")
+      sampleMultiMove(result, animation, time);
     else if (animation.type === "slide_in" || animation.type === "slide_out")
       sampleSlide(result, animation, easedProgress, base);
     else if (animation.type === "fade")
@@ -3608,6 +3648,19 @@ export function isV5GAnimationType(value: string): value is V5GAnimationType {
   return V5G_ANIMATION_PRESETS.some((preset) => preset.type === value);
 }
 
+export function shouldHideLayerOutsideActiveAnimation(
+  animations: V5GAnimationConfig[],
+  time: number,
+): boolean {
+  const enabledAnimations = animations.filter((animation) => animation.enabled);
+  if (enabledAnimations.length === 0) return false;
+  return !enabledAnimations.some((animation) => {
+    const start = animation.startTime;
+    const end = animation.startTime + animation.duration;
+    return time >= start && time <= end;
+  });
+}
+
 function sampleMove(
   result: V5GAnimationSampleResult,
   animation: V5GAnimationConfig,
@@ -3623,6 +3676,49 @@ function sampleMove(
   result.transform.y +=
     lerpOvershoot(fromY, getNumberParam(animation, "toY", fromY), progress) -
     originY;
+}
+
+function sampleMultiMove(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  time: number,
+): void {
+  const points = parseMultiMovePoints(
+    animation.params.pointsJson,
+    animation.duration,
+  );
+  if (points.length === 0) return;
+  const localTime = clampNumber(
+    time - animation.startTime,
+    0,
+    animation.duration,
+  );
+  if (points.length === 1 || localTime <= points[0].time) {
+    result.transform.x += points[0].x;
+    result.transform.y += points[0].y;
+    return;
+  }
+  const lastPoint = points[points.length - 1];
+  if (!lastPoint || localTime >= lastPoint.time) {
+    result.transform.x += lastPoint?.x ?? 0;
+    result.transform.y += lastPoint?.y ?? 0;
+    return;
+  }
+  for (let index = 1; index < points.length; index += 1) {
+    const fromPoint = points[index - 1];
+    const toPoint = points[index];
+    if (!fromPoint || !toPoint || localTime > toPoint.time) continue;
+    const segmentDuration = Math.max(toPoint.time - fromPoint.time, 0.0001);
+    const progress = clampNumber(
+      (localTime - fromPoint.time) / segmentDuration,
+      0,
+      1,
+    );
+    const easedProgress = easeProgress(progress, toPoint.easing);
+    result.transform.x += lerpOvershoot(fromPoint.x, toPoint.x, easedProgress);
+    result.transform.y += lerpOvershoot(fromPoint.y, toPoint.y, easedProgress);
+    return;
+  }
 }
 
 function sampleSlide(
@@ -3953,6 +4049,51 @@ function sampleSquashStretch(
   result.transform.scaleY *= stretchY;
 }
 
+function parseMultiMovePoints(
+  value: V5GAnimationParamValue | undefined,
+  duration: number,
+): V5GMultiMovePoint[] {
+  const rawText =
+    typeof value === "string" ? value : DEFAULT_MULTI_MOVE_POINTS_JSON;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    parsed = DEFAULT_MULTI_MOVE_POINTS;
+  }
+  const parsedItems: unknown[] = Array.isArray(parsed)
+    ? parsed
+    : DEFAULT_MULTI_MOVE_POINTS;
+  const points = parsedItems
+    .map((item: unknown): V5GMultiMovePoint | null => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const x = Number(record.x);
+      const y = Number(record.y);
+      const pointTime = Number(record.time);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      return {
+        x: roundTo(clampNumber(x, -5000, 5000), 4),
+        y: roundTo(clampNumber(y, -5000, 5000), 4),
+        time: roundTo(
+          clampNumber(Number.isFinite(pointTime) ? pointTime : 0, 0, duration),
+          4,
+        ),
+        easing: normalizeEasingName(record.easing),
+      };
+    })
+    .filter((item): item is V5GMultiMovePoint => item !== null)
+    .sort((a, b) => a.time - b.time);
+
+  return points.length > 0 ? points : [...DEFAULT_MULTI_MOVE_POINTS];
+}
+
+function normalizeEasingName(value: unknown): V5GEasingName {
+  return V5G_EASINGS.some((item) => item.value === value)
+    ? (value as V5GEasingName)
+    : "linear";
+}
+
 function getAnimationProgress(
   animation: V5GAnimationConfig,
   time: number,
@@ -3966,6 +4107,27 @@ function getAnimationProgress(
     (time - start) / Math.max(animation.duration, 0.0001),
     0,
     1,
+  );
+}
+
+function getAnimationProgressForSampling(
+  animation: V5GAnimationConfig,
+  time: number,
+): number | null {
+  const progress = getAnimationProgress(animation, time);
+  if (progress !== null) return progress;
+  const end = animation.startTime + animation.duration;
+  if (time > end && shouldPersistEndedTransform(animation.type)) return 1;
+  return null;
+}
+
+function shouldPersistEndedTransform(type: V5GAnimationType): boolean {
+  return (
+    type === "move" ||
+    type === "multi_move" ||
+    type === "slide_in" ||
+    type === "slide_out" ||
+    type === "squash_stretch"
   );
 }
 

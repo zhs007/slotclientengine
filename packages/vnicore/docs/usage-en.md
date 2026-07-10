@@ -96,6 +96,8 @@ README and tests:
 - Timeline playback, ranges, markers, complete listeners, and segmented
   playback.
 - Layer animation particles and live particle draining.
+- VNI_0.074 `multi_move`, including strict `pointsJson`, ended transform handoff,
+  and empty-frame hiding.
 - `shatter`, `glow`, `safe_glow`, `particle_stream`, and `chaser_light`.
 - Layer masks, including Pixi-preview-compatible `precompose_light_alpha` for
   light-mask use cases.
@@ -105,10 +107,10 @@ README and tests:
 - Transparent runtime output. `project.stage.backgroundColor` is schema
   metadata and is not drawn by `VNIPlayer`.
 
-Invalid data fails fast. Missing assets, malformed numeric fields, unknown
-animation/easing/blend modes, unsupported group/parent/keyframe structures,
-texture size mismatches, and manifest/profile mismatches throw instead of
-rendering placeholders.
+Invalid data fails fast. Missing assets, malformed numeric fields, invalid
+`multi_move` `pointsJson`, unknown animation/easing/blend modes, unsupported
+group/parent/keyframe structures, texture size mismatches, and manifest/profile
+mismatches throw instead of rendering placeholders.
 
 ## Runtime Boundaries
 
@@ -435,6 +437,9 @@ Legacy `data-v5g-*` aliases are still written for old acceptance scripts.
 Supported runtime animation/effect types include:
 
 - `idle`: coverage-only no-op.
+- `multi_move`: VNI_0.074 path transform. It consumes a strict `pointsJson` JSON
+  string array of `{ x, y, time, easing }` points. Each segment uses the target
+  point easing, and overshooting easings are not clamped.
 - `shatter`: deterministic render effect.
 - `glow`: deterministic render effect with `0=add`, `1=screen`, `2=lighten`
   blend-mode values.
@@ -448,6 +453,12 @@ Supported runtime animation/effect types include:
 advances the lighting window; it does not move sprites along the path. For
 circle trajectories, `spacing` is interpreted as arc length. Each light's timing
 offset uses `lightDuration + interval`.
+
+Timeline coverage is start/end inclusive. Ended `move`, `multi_move`,
+`slide_in`, `slide_out`, and `squash_stretch` transforms continue contributing at
+progress `1` so later animations can continue from the correct position. Empty
+frames still hide the layer because visibility is sampled separately from
+transform handoff.
 
 Top-level `project.particles` remains unsupported. Use layer animation
 particles.
@@ -488,6 +499,7 @@ manifest entries. They are not inferred from directory names or file names.
 - Real texture dimensions do not match `fileWidth` / `fileHeight`.
 - Manifest entry does not match project `exportProfile`.
 - Unknown animation, easing, or blend mode.
+- Invalid `multi_move` `pointsJson`.
 - Required numeric parameter is missing, `NaN`, `Infinity`, or a string.
 - Invalid mask source, self-referential mask source, or unsupported mask mode.
 - Invalid `layerGroups`, unknown `groupId`, non-contiguous group run, or

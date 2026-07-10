@@ -62,6 +62,8 @@ player.play();
 
 `sequence` layer 使用 `sequence.frameAssetIds`、`cycleDuration` 和 `loop` 显式切帧。它和 image layer 一样是 texture-backed layer，runtime 在同一个 Pixi sprite 上切换当前帧 texture；mask、粒子和新增 deterministic effects 都基于当前帧资源计算。`assetId` 必须为 `null`，缺帧、缺资源、非 image frame 或非法 `cycleDuration/loop` 都会显式失败。
 
+VNI_0.074 `multi_move` 使用 `params.pointsJson` 承载多段位移点。runtime 只接受合法 JSON string 数组，每个点必须有 finite number 的 `x/y/time` 和受支持的 `easing`；每段使用到达点 easing，`backOut` 等超调不会被 clamp。`move` / `multi_move` / `slide_in` / `slide_out` / `squash_stretch` 结束后仍以 progress 1 继续参与 transform 累加，供后续动画接力；visibility 单独判断，所以两个 enabled animation 之间的空帧仍会隐藏。
+
 ## 生命周期
 
 - `init()`: 加载贴图、校验真实 texture size，把 VNI display tree 挂到宿主 `parent`，初始化 layer 和 particle 容器。
@@ -229,6 +231,7 @@ disposeExternal();
 - manifest entry 与 project `exportProfile` 不一致。
 - 未知 animation/easing/blend mode。
 - 非法 `sequence` layer：`assetId` 非空、缺 `sequence`、空 `frameAssetIds`、缺 frame asset、frame 不是 image、`cycleDuration` 非正数或 `loop` 非 boolean。
+- 非法 `multi_move`：缺 `pointsJson`、非法 JSON、非数组、少于两个点、非 finite 数字点、坐标越界、time 越过 animation duration 或未知 easing。
 - 必需 numeric param 缺失、`NaN`、`Infinity` 或被写成字符串。
 - 非法 mask source、mask source 指向自身、未知 mask mode/compositeMode。
 - 非法 `layerGroups`、未知 `groupId`、非连续 group run、反向或非相邻 group slot。
@@ -237,7 +240,8 @@ disposeExternal();
 ## 新动画类型
 
 - `idle`: 只提供 animation coverage，不改变 transform/opacity。
-- 所有 layer animation 的覆盖区间都是首尾帧闭区间：`time === startTime` 有效，`time === startTime + duration` 也有效；只有超过 end 的时间才视为 inactive。
+- `multi_move`: VNI_0.074 多段位移，使用 `pointsJson` 严格声明位移点；每段使用到达点 easing，结束后保持最后点用于后续 transform 接力。
+- 所有 layer animation 的覆盖区间都是首尾帧闭区间：`time === startTime` 有效，`time === startTime + duration` 也有效；只有超过 end 的时间才视为 inactive。结束后的 `move` / `multi_move` / `slide_in` / `slide_out` / `squash_stretch` transform 会继续累加，但空档 visibility 仍按 active coverage 隐藏。
 - `shatter`: deterministic render effect。`sourceOpacity` 控制原图透明度，碎片采样由 timeline progress 决定。
 - `glow`: deterministic render effect。`keepOriginal === false` 会隐藏原图但保留 glow effect；`blendMode` 使用 `0=add`、`1=screen`、`2=lighten`。
 - `safe_glow`: 跨引擎安全发光方案。它不是 render effect，也不使用滤镜或模糊；runtime 用同一张图片的副本，通过 `spread` 放大、`minOpacity/maxOpacity/pulses` 透明度呼吸来模拟高亮，副本继承当前 layer 的 `blendMode`。`keepOriginal === false` 会隐藏原图，但 safe glow 副本仍会渲染；起始帧即可采样出副本。

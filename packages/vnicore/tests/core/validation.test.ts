@@ -85,6 +85,12 @@ const newAnimationParams: Readonly<
 > = {
   idle: {},
   move: { fromX: 0, fromY: 0, toX: 1, toY: 1 },
+  multi_move: {
+    pointsJson: JSON.stringify([
+      { x: 0, y: 0, time: 0, easing: "linear" },
+      { x: 100, y: 0, time: 1, easing: "easeOutQuad" },
+    ]),
+  },
   fade: { fromOpacity: 0, toOpacity: 1 },
   scale_up: { fromScaleX: 1, fromScaleY: 1, toScaleX: 2, toScaleY: 2 },
   scale_down: { fromScaleX: 2, fromScaleY: 2, toScaleX: 1, toScaleY: 1 },
@@ -891,6 +897,78 @@ describe("validation", () => {
     expectInvalid((project) => {
       delete project.layers[0].animations[0].params.toScaleX;
     }, 'requires numeric param "toScaleX"');
+  });
+
+  it("rejects invalid multi_move pointsJson contracts", () => {
+    expectInvalid((project) => {
+      project.layers[0].animations = [animation("multi_move", {})];
+    }, "multi_move pointsJson must be a JSON string");
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("multi_move", { pointsJson: "{not json" }),
+      ];
+    }, "multi_move pointsJson must be valid JSON");
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("multi_move", { pointsJson: JSON.stringify({ x: 0 }) }),
+      ];
+    }, "multi_move pointsJson must be a JSON array");
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("multi_move", {
+          pointsJson: JSON.stringify([
+            { x: 0, y: 0, time: 0, easing: "linear" },
+          ]),
+        }),
+      ];
+    }, "multi_move pointsJson must contain at least two points");
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("multi_move", {
+          pointsJson: JSON.stringify([
+            { x: 0, y: 0, time: 0, easing: "linear" },
+            { x: "100", y: 0, time: 1, easing: "linear" },
+          ]),
+        }),
+      ];
+    }, "pointsJson[1].x must be a finite number");
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("multi_move", {
+          pointsJson: JSON.stringify([
+            { x: 0, y: 0, time: 0, easing: "linear" },
+            { x: 5000.01, y: 0, time: 1, easing: "linear" },
+          ]),
+        }),
+      ];
+    }, "pointsJson[1].x must be within -5000..5000");
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("multi_move", {
+          pointsJson: JSON.stringify([
+            { x: 0, y: 0, time: 0, easing: "linear" },
+            { x: 100, y: 0, time: 9, easing: "linear" },
+          ]),
+        }),
+      ];
+    }, "pointsJson[1].time must be within 0..1");
+
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("multi_move", {
+          pointsJson: JSON.stringify([
+            { x: 0, y: 0, time: 0, easing: "linear" },
+            { x: 100, y: 0, time: 1, easing: "mystery" },
+          ]),
+        }),
+      ];
+    }, "pointsJson[1].easing must be a supported easing");
   });
 
   it("rejects missing new animation numeric params", () => {
