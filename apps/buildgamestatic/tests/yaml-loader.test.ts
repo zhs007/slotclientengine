@@ -609,80 +609,75 @@ describe("buildgamestatic YAML loader", () => {
       amountScale: 100,
       minorCountDurationSeconds: 1.5,
       animations: {
-        projectGlob:
-          "assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json",
+        manifest: "assets/game003-s1/win-amount/win-amount.manifest.json",
       },
     });
 
-    for (const [patch, pattern] of [
-      [
-        {
+    expect(() =>
+      parseGameStaticYamlValue(
+        withWinAmount(createYamlObject(), {
           thresholds: {
             minorMultiplier: 1,
             bigMultiplier: 15,
             superMultiplier: 10,
             megaMultiplier: 50,
           },
+        }),
+        { rootDir: root, inputPath: "game.yaml" },
+      ),
+    ).toThrow(/严格递增/);
+
+    for (const [manifest, pattern] of [
+      [{ ...createWinAmountManifest(), extra: true }, /未知字段/],
+      [
+        {
+          ...createWinAmountManifest(),
+          projectGlob: "./*.json",
         },
-        /严格递增/,
+        /brace JSON glob/,
       ],
       [
         {
-          animations: {
-            ...createWinAmountObject().animations,
-            tiers: [
-              {
-                ...createWinAmountObject().animations.tiers[0],
-                durationSeconds: 4,
-              },
-            ],
-          },
+          ...createWinAmountManifest(),
+          tiers: [
+            {
+              ...createWinAmountManifest().tiers[0],
+              project: "../bigwin.json",
+            },
+          ],
         },
-        /至少为 5 秒/,
+        /必须以 \.\/ 开头/,
       ],
       [
         {
-          animations: {
-            ...createWinAmountObject().animations,
-            tiers: [
-              {
-                ...createWinAmountObject().animations.tiers[0],
-                durationSeconds: 6,
-              },
-            ],
-          },
+          ...createWinAmountManifest(),
+          tiers: createWinAmountManifest().tiers.map((tier, index) =>
+            index === 0
+              ? {
+                  ...tier,
+                  playback: {
+                    ...tier.playback,
+                    durationSeconds: 3,
+                  },
+                }
+              : tier,
+          ),
         },
         /project\.stage\.duration/,
       ],
-      [
-        {
-          animations: {
-            ...createWinAmountObject().animations,
-            projectGlob: "assets/game003-s1/win-amount/**/*.json",
-          },
-        },
-        /递归 glob/,
-      ],
-      [
-        {
-          animations: {
-            ...createWinAmountObject().animations,
-            tiers: [
-              {
-                ...createWinAmountObject().animations.tiers[0],
-                project: "../bigwin.json",
-              },
-            ],
-          },
-        },
-        /filename\.json/,
-      ],
     ] as const) {
+      const manifestPath = "assets/game003-s1/win-amount/bad.manifest.json";
+      writeFileSync(join(root, manifestPath), JSON.stringify(manifest), "utf8");
       expect(() =>
-        parseGameStaticYamlValue(withWinAmount(createYamlObject(), patch), {
-          rootDir: root,
-          inputPath: "game.yaml",
-        }),
+        parseGameStaticYamlValue(
+          withWinAmount(createYamlObject(), {
+            animations: { manifest: manifestPath },
+          }),
+          {
+            rootDir: root,
+            inputPath: "game.yaml",
+          },
+        ),
       ).toThrow(pattern);
     }
   });
@@ -782,10 +777,15 @@ function writeWinAmountFixtureFiles(root: string): void {
   for (const file of ["bigwin.json", "superwin.json", "megawin.json"]) {
     writeFileSync(
       join(root, `assets/game003-s1/win-amount/${file}`),
-      JSON.stringify({ stage: { duration: file === "megawin.json" ? 10 : 5 } }),
+      JSON.stringify({ stage: { duration: 2.9 }, assets: [] }),
       "utf8",
     );
   }
+  writeFileSync(
+    join(root, "assets/game003-s1/win-amount/win-amount.manifest.json"),
+    JSON.stringify(createWinAmountManifest()),
+    "utf8",
+  );
 }
 
 function createYamlObject() {
@@ -923,38 +923,40 @@ function createWinAmountObject() {
       majorOffset: { x: 0, y: 0 },
     },
     animations: {
-      projectGlob:
-        "assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json",
-      assetGlob: "assets/game003-s1/win-amount/assets/*.{png,jpg,jpeg,webp}",
-      tiers: [
-        {
-          id: "bigwin",
-          thresholdMultiplier: 15,
-          project: "./bigwin.json",
-          durationSeconds: 5,
-          loopStartTime: 1,
-          loopEndTime: 4,
-          keepParticlesAlive: true,
-        },
-        {
-          id: "superwin",
-          thresholdMultiplier: 30,
-          project: "./superwin.json",
-          durationSeconds: 5,
-          loopStartTime: 1,
-          loopEndTime: 4,
-          keepParticlesAlive: true,
-        },
-        {
-          id: "megawin",
-          thresholdMultiplier: 50,
-          project: "./megawin.json",
-          durationSeconds: 5,
-          loopStartTime: 1,
-          loopEndTime: 4,
-          keepParticlesAlive: true,
-        },
-      ],
+      manifest: "assets/game003-s1/win-amount/win-amount.manifest.json",
+    },
+  };
+}
+
+function createWinAmountManifest() {
+  return {
+    version: 1,
+    kind: "vni-win-amount-tiers",
+    projectGlob: "./{bigwin,superwin,megawin}.json",
+    assetGlob: "./assets/*.{png,jpg,jpeg,webp}",
+    tiers: [
+      createWinAmountManifestTier("bigwin", 15, "./bigwin.json"),
+      createWinAmountManifestTier("superwin", 30, "./superwin.json"),
+      createWinAmountManifestTier("megawin", 50, "./megawin.json"),
+    ],
+  };
+}
+
+function createWinAmountManifestTier(
+  id: string,
+  thresholdMultiplier: number,
+  project: string,
+) {
+  return {
+    id,
+    thresholdMultiplier,
+    project,
+    playback: {
+      mode: "segmented",
+      durationSeconds: 2.9,
+      loopStartTime: 1,
+      loopEndTime: 2.5,
+      keepParticlesAlive: true,
     },
   };
 }

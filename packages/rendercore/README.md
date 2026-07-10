@@ -178,7 +178,8 @@ const resolver = createNamedSymbolAnimationResolver({
 ```ts
 import {
   createWinAmountAnimationPlayer,
-  createWinAmountAnimationTiersFromModules,
+  createWinAmountAnimationTiersFromManifestModules,
+  parseWinAmountAnimationManifest,
 } from "@slotclientengine/rendercore/win-amount";
 ```
 
@@ -193,7 +194,7 @@ import {
 
 `requestAdvance()` 是玩家点击加速语义：普通数字阶段如果本轮不到 bigwin，会直接跳到最终金额并停在 `awaiting-dismiss`；如果本轮会到 bigwin 以上，会一次点击跳一档，依次进入 big/super/mega 等 tier，最后仍停在 `awaiting-dismiss`，不会隐藏文字或 tier effect。`requestDismiss()` 仅保留给调用方显式请求渐隐关闭；如果当前 tier effect 仍在播放，它会请求 segmented VNI 结束并等待 effect 排空。`dismissImmediately()` 用于调用方在开始下一轮前同步清理上一轮展示，对 `idle` / `complete` 幂等，对 counting、tier-counting、awaiting-dismiss 或 dismissing 阶段都会立即清空文字和 tier effect。
 
-big/super/mega tier 使用 VNI segmented playback：`durationSeconds`、`loopStartTime`、`loopEndTime` 和 `keepParticlesAlive` 全部来自配置。`createWinAmountAnimationTiersFromModules(...)` 会校验 project modules、asset modules、asset basename 重复、缺 project、缺 asset，以及 `0 <= loopStartTime <= loopEndTime <= durationSeconds <= project.stage.duration`。当配置的 `durationSeconds` 小于源 project 时，会 clone runtime project 并截断 `stage.duration`，不会 mutate import 进来的 JSON。
+big/super/mega tier 使用 VNI segmented playback：`durationSeconds`、`loopStartTime`、`loopEndTime` 和 `keepParticlesAlive` 全部来自 win-amount manifest。推荐入口是 `createWinAmountAnimationTiersFromManifestModules(...)`；它先用 `parseWinAmountAnimationManifest(...)` 校验 manifest 的白名单字段、相对 glob、tier 顺序和时间区间，再校验 project modules、asset modules、asset basename 重复、缺 project、缺 asset，以及 `0 <= loopStartTime <= loopEndTime <= durationSeconds <= project.stage.duration`。`durationSeconds` 可以小于 5 秒；当配置的 `durationSeconds` 小于源 project 时，会 clone runtime project 并截断 `stage.duration`，不会 mutate import 进来的 JSON。
 
 ## Catalog
 

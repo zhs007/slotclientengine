@@ -1,10 +1,11 @@
 import { getSlotGameStaticSkin } from "@slotclientengine/gameframeworks/static-config";
 import {
   createWinAmountAnimationPlayer,
-  createWinAmountAnimationTiersFromModules,
+  createWinAmountAnimationTiersFromManifestModules,
   type WinAmountAnimationConfig,
   type WinAmountAnimationLayout,
   type WinAmountAnimationPlayer,
+  type WinAmountAnimationTier,
 } from "@slotclientengine/rendercore/win-amount";
 import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
 import { SERVER_USD_AMOUNT_SCALE, formatServerUsdAmount } from "./money.js";
@@ -47,12 +48,42 @@ export function createGame003WinAmountAnimationConfig(
       strokeWidth: winAmount.text.strokeWidth,
     }),
     layout: createGame003WinAmountLayout(layout),
-    tiers: createWinAmountAnimationTiersFromModules({
-      tierConfigs: winAmount.animations.tiers,
-      projectModules: winAmount.animations.projectModules,
-      assetModules: winAmount.animations.assetModules,
-    }),
+    tiers: assertGame003WinAmountTierThresholds(
+      createWinAmountAnimationTiersFromManifestModules({
+        manifest: winAmount.animations.manifest,
+        projectModules: winAmount.animations.projectModules,
+        assetModules: winAmount.animations.assetModules,
+      }),
+      {
+        bigwin: winAmount.thresholds.bigMultiplier,
+        superwin: winAmount.thresholds.superMultiplier,
+        megawin: winAmount.thresholds.megaMultiplier,
+      },
+    ),
   });
+}
+
+function assertGame003WinAmountTierThresholds(
+  tiers: readonly WinAmountAnimationTier[],
+  expected: Readonly<Record<"bigwin" | "superwin" | "megawin", number>>,
+): readonly WinAmountAnimationTier[] {
+  const thresholdById = new Map(
+    tiers.map((tier) => [tier.id, tier.thresholdMultiplier]),
+  );
+  for (const [id, expectedMultiplier] of Object.entries(expected)) {
+    const actual = thresholdById.get(id);
+    if (actual !== expectedMultiplier) {
+      throw new Error(
+        `game003 win amount tier "${id}" thresholdMultiplier must match YAML thresholds.`,
+      );
+    }
+  }
+  if (thresholdById.size !== Object.keys(expected).length) {
+    throw new Error(
+      "game003 win amount manifest must only define bigwin, superwin and megawin tiers.",
+    );
+  }
+  return tiers;
 }
 
 export function createGame003WinAmountLayout(

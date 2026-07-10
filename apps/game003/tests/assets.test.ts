@@ -152,7 +152,7 @@ describe("game003 symbol assets", () => {
           states: ["spinBlur", "disabled"],
           symbols: {
             H1: {
-              normal: "./H1.jpg",
+              normal: "./H2.png",
               spinBlur: "./H1.spinBlur.png",
               disabled: "./H1.disabled.png",
               scale: 1,

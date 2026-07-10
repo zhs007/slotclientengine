@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { parseDocument } from "yaml";
 import {
   assertExistingDirectory,
@@ -33,10 +32,8 @@ import type {
   GameStaticYamlWinAmountLayout,
   GameStaticYamlWinAmountText,
   GameStaticYamlWinAmountThresholds,
-  GameStaticYamlWinAmountTier,
 } from "./types.js";
-
-const MIN_WIN_AMOUNT_TIER_DURATION_SECONDS = 5;
+import { loadWinAmountManifestForBuild } from "./win-amount-manifest.js";
 
 export function loadGameStaticYamlConfig(options: {
   readonly rootDir: string;
@@ -769,83 +766,9 @@ function parseWinAmountAnimations(
   label: string,
 ): GameStaticYamlWinAmountAnimations {
   const record = assertRecord(value, label);
-  assertKeys(record, label, ["projectGlob", "assetGlob", "tiers"]);
-  if (!Array.isArray(record.tiers) || record.tiers.length === 0) {
-    throw new Error(`${label}.tiers 必须是非空数组。`);
-  }
-  const tiers = Object.freeze(
-    record.tiers.map((tier, index) =>
-      parseWinAmountTier(tier, `${label}.tiers[${index}]`),
-    ),
-  );
-  assertUnique(
-    tiers.map((tier) => tier.id),
-    `${label}.tiers.id`,
-  );
-  for (let index = 1; index < tiers.length; index += 1) {
-    if (
-      tiers[index].thresholdMultiplier <= tiers[index - 1].thresholdMultiplier
-    ) {
-      throw new Error(`${label}.tiers thresholdMultiplier 必须严格递增。`);
-    }
-  }
+  assertKeys(record, label, ["manifest"]);
   return Object.freeze({
-    projectGlob: assertPath(record.projectGlob, `${label}.projectGlob`),
-    assetGlob: assertPath(record.assetGlob, `${label}.assetGlob`),
-    tiers,
-  });
-}
-
-function parseWinAmountTier(
-  value: unknown,
-  label: string,
-): GameStaticYamlWinAmountTier {
-  const record = assertRecord(value, label);
-  assertKeys(record, label, [
-    "id",
-    "thresholdMultiplier",
-    "project",
-    "durationSeconds",
-    "loopStartTime",
-    "loopEndTime",
-    "keepParticlesAlive",
-  ]);
-  const durationSeconds = assertPositiveNumber(
-    record.durationSeconds,
-    `${label}.durationSeconds`,
-  );
-  if (durationSeconds < MIN_WIN_AMOUNT_TIER_DURATION_SECONDS) {
-    throw new Error(
-      `${label}.durationSeconds 必须至少为 ${MIN_WIN_AMOUNT_TIER_DURATION_SECONDS} 秒。`,
-    );
-  }
-  const loopStartTime = assertNonNegativeNumber(
-    record.loopStartTime,
-    `${label}.loopStartTime`,
-  );
-  const loopEndTime = assertNonNegativeNumber(
-    record.loopEndTime,
-    `${label}.loopEndTime`,
-  );
-  if (!(loopStartTime <= loopEndTime && loopEndTime <= durationSeconds)) {
-    throw new Error(
-      `${label} 必须满足 loopStartTime <= loopEndTime <= durationSeconds。`,
-    );
-  }
-  if (typeof record.keepParticlesAlive !== "boolean") {
-    throw new Error(`${label}.keepParticlesAlive 必须是 boolean。`);
-  }
-  return Object.freeze({
-    id: assertNonEmptyString(record.id, `${label}.id`),
-    thresholdMultiplier: assertPositiveNumber(
-      record.thresholdMultiplier,
-      `${label}.thresholdMultiplier`,
-    ),
-    project: assertTierProject(record.project, `${label}.project`),
-    durationSeconds,
-    loopStartTime,
-    loopEndTime,
-    keepParticlesAlive: record.keepParticlesAlive,
+    manifest: assertPath(record.manifest, `${label}.manifest`),
   });
 }
 
@@ -1223,96 +1146,11 @@ function validateWinAmount(
   skinId: string,
   winAmount: GameStaticYamlWinAmountConfig,
 ): void {
-  validateWinAmountProjectGlob(
+  loadWinAmountManifestForBuild({
     rootDir,
-    winAmount.animations.projectGlob,
-    skinId,
-  );
-  validateWinAmountAssetGlob(rootDir, winAmount.animations.assetGlob, skinId);
-  const projectDirectory = getStrictGlobDirectory(
-    winAmount.animations.projectGlob,
-  );
-  for (const tier of winAmount.animations.tiers) {
-    const projectPath = join(projectDirectory, tier.project.slice(2));
-    assertExistingFile(rootDir, projectPath);
-    assertExtension(
-      projectPath,
-      [".json"],
-      `skins.${skinId}.winAmount.animations.tiers.${tier.id}.project`,
-    );
-    const duration = readProjectStageDuration(
-      rootDir,
-      projectPath,
-      `skins.${skinId}.winAmount.animations.tiers.${tier.id}.project`,
-    );
-    if (tier.durationSeconds > duration) {
-      throw new Error(
-        `skins.${skinId}.winAmount.animations.tiers.${tier.id}.durationSeconds 不能大于 project.stage.duration ${duration}。`,
-      );
-    }
-  }
-}
-
-function validateWinAmountProjectGlob(
-  rootDir: string,
-  glob: string,
-  skinId: string,
-): void {
-  if (glob.includes("**")) {
-    throw new Error(
-      `skins.${skinId}.winAmount.animations.projectGlob 不能使用递归 glob：${glob}`,
-    );
-  }
-  const directory = getStrictGlobDirectory(glob);
-  assertSpecificGlobDirectory(
-    directory,
-    `skins.${skinId}.winAmount.animations.projectGlob`,
-  );
-  assertExistingDirectory(rootDir, directory);
-  if (!/(\/\*[-A-Za-z0-9_]*\.json|\/\{[-A-Za-z0-9_,]+\}\.json)$/u.test(glob)) {
-    throw new Error(
-      `skins.${skinId}.winAmount.animations.projectGlob 必须是当前资源目录下的 JSON glob。`,
-    );
-  }
-}
-
-function validateWinAmountAssetGlob(
-  rootDir: string,
-  glob: string,
-  skinId: string,
-): void {
-  if (glob.includes("**")) {
-    throw new Error(
-      `skins.${skinId}.winAmount.animations.assetGlob 不能使用递归 glob：${glob}`,
-    );
-  }
-  const directory = getStrictGlobDirectory(glob);
-  assertSpecificGlobDirectory(
-    directory,
-    `skins.${skinId}.winAmount.animations.assetGlob`,
-  );
-  assertExistingDirectory(rootDir, directory);
-  if (
-    !(
-      /\/\*\.(png|jpg|jpeg|webp)$/iu.test(glob) ||
-      /\/\*\.\{png,jpg,jpeg,webp\}$/iu.test(glob)
-    )
-  ) {
-    throw new Error(
-      `skins.${skinId}.winAmount.animations.assetGlob 只能匹配 png/jpg/jpeg/webp 图片资源。`,
-    );
-  }
-}
-
-function readProjectStageDuration(
-  rootDir: string,
-  projectPath: string,
-  label: string,
-): number {
-  const raw = JSON.parse(readFileSync(join(rootDir, projectPath), "utf8")) as {
-    readonly stage?: { readonly duration?: unknown };
-  };
-  return assertPositiveNumber(raw.stage?.duration, `${label}.stage.duration`);
+    manifestPath: winAmount.animations.manifest,
+    label: `skins.${skinId}.winAmount.animations.manifest`,
+  });
 }
 
 function assertSpecificGlobDirectory(directory: string, label: string): void {
@@ -1511,18 +1349,6 @@ function assertPath(value: unknown, label: string): string {
   const path = assertNonEmptyString(value, label);
   assertRepoRelativePath(path, label);
   return path;
-}
-
-function assertTierProject(value: unknown, label: string): string {
-  const project = assertNonEmptyString(value, label);
-  if (
-    !/^\.\/[-A-Za-z0-9_]+\.json$/u.test(project) ||
-    project.includes("..") ||
-    project.includes("\\")
-  ) {
-    throw new Error(`${label} 必须是 ./filename.json 形式。`);
-  }
-  return project;
 }
 
 function assertWinAmountAnchor(

@@ -22,6 +22,7 @@
 - `L1`-`L5` 中奖 VNI assets：`assets/game003-s1/assets/*.{png,jpg,jpeg,webp}`
 - Spine skeleton：`assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json`
 - Spine atlas / texture：`assets/game003-s1/Symbol.atlas`、`assets/game003-s1/Symbol.png`
+- big/super/mega 金额动画 manifest：`assets/game003-s1/win-amount/win-amount.manifest.json`
 - big/super/mega 金额动画 VNI project：`assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json`
 - big/super/mega 金额动画 VNI assets：`assets/game003-s1/win-amount/assets/*.{png,jpg,jpeg,webp}`
 
@@ -31,7 +32,7 @@
 CI=true pnpm --filter gengameconfig dev -- --paytable assets/gamecfg003/paytable.xlsx --reel assets/gamecfg003/bg-reel01.xlsx --out assets/gamecfg003/gameconfig.json
 ```
 
-`H1.jpg` 到 `H5.jpg` 是原始输入，运行时 symbol 普通态必须使用一次性规范化后的 `H1.png` 到 `H5.png`。不要为了 JPG 输入扩展共享 symbol 生成器或运行时。
+`H1.jpg` 到 `H5.jpg` 已删除，主转轮普通态只使用 `H1.png` 到 `H5.png`。不要为了 JPG 输入扩展共享 symbol 生成器或运行时。
 
 生成 symbol 状态贴图和 manifest：
 
@@ -59,7 +60,7 @@ CI=true pnpm --filter game003 check:static-config
 
 `symbols.vniProjectGlob` 和 `symbols.vniAssetGlob` 只用于把 manifest 声明的 VNI symbol 动画资源纳入 Vite 静态模块。`symbols.spineSkeletonGlob`、`symbols.spineAtlasGlob` 和 `symbols.spineTextureGlob` 必须三者同时配置，用于把 manifest 声明的 Spine skeleton、atlas raw text 和 texture URL 纳入静态模块；修改 Spine 资源时必须同步 YAML、loading 资源、generated TS、symbolsviewer 和 runtime resolver。`loading.resources` 只承载随游戏包发布的静态资源 path/glob 和权重，不承载 token、cookie、serverUrl、服务器真实轮带或玩家本次下注。glob 必须是明确资源组，不能用 `assets/game003-s1/*.png` 这类宽泛写法把主转轮框、传送带和 symbol 混在一起。
 
-`skins."1".winAmount` 配置中奖金额动画的显示规则、layout anchor、阈值和 VNI tier 资源。金额输入仍来自 live/GMI 的服务器整数；当前显示 formatter 与 framework HUD 共用 `formatServerUsdAmount(...)`，所以 `100` 显示为 `$1.00`。big/super/mega 的 project 和 assets 只属于 `assets/game003-s1/win-amount`，不要混入 symbol VNI manifest 或 `assets/game003-s1/assets`。
+`skins."1".winAmount` 配置中奖金额动画的显示规则、layout anchor、阈值和 manifest 入口。金额输入仍来自 live/GMI 的服务器整数；当前显示 formatter 与 framework HUD 共用 `formatServerUsdAmount(...)`，所以 `100` 显示为 `$1.00`。big/super/mega 的 project、assets 和 segmented 播放时间来自 `assets/game003-s1/win-amount/win-amount.manifest.json`，当前为 `durationSeconds=2.9`、`loopStartTime=1`、`loopEndTime=2.5`；YAML、runtime 和测试不要维护第二份 tier 时间表。big/super/mega 资源只属于 `assets/game003-s1/win-amount`，不要混入 symbol VNI manifest 或 `assets/game003-s1/assets`。
 
 `skins."1".appExtensions.game003WinSymbolLoop` 配置 `bg-wins` result symbol 循环和每组 result 金额 overlay。`cyclePauseSeconds` 是一轮 `usedResults` 全部播放完后再从第一个 result 循环的暂停时间；`resultAmount` 配置金额文本相对选中 symbol cell 中心的 y 偏移、字号、填充和描边。该对象只由 `apps/game003` 严格解析，shared 静态配置层只透传，不理解 `bg-wins`、result 循环或金额 overlay 语义。
 

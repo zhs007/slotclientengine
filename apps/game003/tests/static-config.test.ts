@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import bigwinProject from "../../../assets/game003-s1/win-amount/bigwin.json";
+import megawinProject from "../../../assets/game003-s1/win-amount/megawin.json";
+import superwinProject from "../../../assets/game003-s1/win-amount/superwin.json";
+import winAmountManifest from "../../../assets/game003-s1/win-amount/win-amount.manifest.json";
 import { GAME003_LOADING_RESOURCE_URLS } from "../src/generated/game-loading.generated.js";
 import { GAME003_STATIC_CONFIG } from "../src/generated/game-static.generated.js";
 import { GAME003_BG_BAR_TERMINAL_WIN_DURATION_SECONDS } from "../src/bg-bar-runtime.js";
@@ -402,9 +406,8 @@ describe("game003 generated static config", () => {
 
   it("generates a separate lightweight loading resource config", () => {
     expect(GAME003_LOADING_RESOURCE_URLS.length).toBeGreaterThan(40);
-    expect(
-      GAME003_LOADING_RESOURCE_URLS.map((resource) => resource.id),
-    ).toEqual(
+    const ids = GAME003_LOADING_RESOURCE_URLS.map((resource) => resource.id);
+    expect(ids).toEqual(
       expect.arrayContaining([
         "game003-bg-landscape",
         "game003-bg-portrait",
@@ -427,6 +430,7 @@ describe("game003 generated static config", () => {
         "game003-bg-bar-symbol-pngs:wild.png",
         "game003-bg-bar-symbol-manifest",
         "game003-minecart",
+        "game003-win-amount-manifest",
         "game003-win-amount-vni-projects:bigwin.json",
         "game003-win-amount-vni-projects:superwin.json",
         "game003-win-amount-vni-projects:megawin.json",
@@ -450,10 +454,23 @@ describe("game003 generated static config", () => {
         resource.id.startsWith("game003-symbol-normal-pngs:mainreelbg"),
       ),
     ).toBe(false);
-    expect(
-      GAME003_LOADING_RESOURCE_URLS.some((resource) =>
-        resource.id.startsWith("game003-win-amount-vni-assets:mega_asset"),
-      ),
-    ).toBe(true);
+    expect(GAME003_STATIC_CONFIG.skins["1"].winAmount?.animations.manifest).toBe(
+      winAmountManifest,
+    );
+    for (const id of getReferencedWinAmountLoadingAssetIds()) {
+      expect(ids).toContain(id);
+    }
   });
 });
+
+function getReferencedWinAmountLoadingAssetIds(): readonly string[] {
+  return [bigwinProject, superwinProject, megawinProject].flatMap((project) =>
+    project.assets.map((asset) => {
+      const filename = asset.path.split("/").at(-1);
+      if (!filename) {
+        throw new Error(`bad win amount asset path ${asset.path}`);
+      }
+      return `game003-win-amount-vni-assets:${filename}`;
+    }),
+  );
+}

@@ -74,6 +74,7 @@ describe("buildgamestatic generator", () => {
 
   it("generates and checks the lightweight loading resource module", async () => {
     const root = createFixtureRoot();
+    appendWinAmountBlock(root);
     appendLoadingBlock(root);
     const options = {
       rootDir: root,
@@ -96,6 +97,14 @@ describe("buildgamestatic generator", () => {
     );
     expect(result.loadingGenerated).toContain("game003-minecart");
     expect(result.loadingGenerated).toContain("assets/game003-s1/minecart.png");
+    expect(result.loadingGenerated).toContain("game003-win-amount-manifest");
+    expect(result.loadingGenerated).toContain(
+      "assets/game003-s1/win-amount/win-amount.manifest.json",
+    );
+    expect(result.loadingGenerated).toContain(
+      "game003-win-amount-vni-projects",
+    );
+    expect(result.loadingGenerated).toContain("game003-win-amount-vni-assets");
     expect(result.loadingGenerated).not.toContain("rawGameConfig");
     await expect(
       generateGameStaticConfigFile({ ...options, check: true }),
@@ -190,12 +199,17 @@ describe("buildgamestatic generator", () => {
 
     expect(result.generated).toContain("game003Skin1WinAmountProjectModules");
     expect(result.generated).toContain("game003Skin1WinAmountAssetModules");
+    expect(result.generated).toContain("game003Skin1WinAmountManifest");
     expect(result.generated).toContain("winAmount: Object.freeze");
+    expect(result.generated).toContain(
+      'from "../../../../assets/game003-s1/win-amount/win-amount.manifest.json"',
+    );
     expect(result.generated).toMatch(
       /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/game003-s1\/win-amount\/\{bigwin,superwin,megawin\}\.json"/,
     );
-    expect(result.generated).toContain('project: "./megawin.json"');
-    expect(result.generated).toContain("durationSeconds: 5");
+    expect(result.generated).toContain("manifest: game003Skin1WinAmountManifest");
+    expect(result.generated).not.toContain('project: "./megawin.json"');
+    expect(result.generated).not.toContain("durationSeconds: 5");
   });
 
   it("generates optional feature bar manifest, module map and config", async () => {
@@ -463,10 +477,15 @@ function writeWinAmountFixtureFiles(root: string): void {
   for (const file of ["bigwin.json", "superwin.json", "megawin.json"]) {
     writeFileSync(
       join(root, `assets/game003-s1/win-amount/${file}`),
-      JSON.stringify({ stage: { duration: file === "megawin.json" ? 10 : 5 } }),
+      JSON.stringify({ stage: { duration: 2.9 }, assets: [] }),
       "utf8",
     );
   }
+  writeFileSync(
+    join(root, "assets/game003-s1/win-amount/win-amount.manifest.json"),
+    JSON.stringify(createWinAmountManifest()),
+    "utf8",
+  );
 }
 
 function appendWinAmountBlock(root: string): void {
@@ -498,33 +517,43 @@ function appendWinAmountBlock(root: string): void {
         minorOffset: { x: 0, y: -28 }
         majorOffset: { x: 0, y: 0 }
       animations:
-        projectGlob: assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json
-        assetGlob: assets/game003-s1/win-amount/assets/*.{png,jpg,jpeg,webp}
-        tiers:
-          - id: bigwin
-            thresholdMultiplier: 15
-            project: ./bigwin.json
-            durationSeconds: 5
-            loopStartTime: 1
-            loopEndTime: 4
-            keepParticlesAlive: true
-          - id: superwin
-            thresholdMultiplier: 30
-            project: ./superwin.json
-            durationSeconds: 5
-            loopStartTime: 1
-            loopEndTime: 4
-            keepParticlesAlive: true
-          - id: megawin
-            thresholdMultiplier: 50
-            project: ./megawin.json
-            durationSeconds: 5
-            loopStartTime: 1
-            loopEndTime: 4
-            keepParticlesAlive: true
+        manifest: assets/game003-s1/win-amount/win-amount.manifest.json
 `,
     "utf8",
   );
+}
+
+function createWinAmountManifest() {
+  return {
+    version: 1,
+    kind: "vni-win-amount-tiers",
+    projectGlob: "./{bigwin,superwin,megawin}.json",
+    assetGlob: "./assets/*.{png,jpg,jpeg,webp}",
+    tiers: [
+      createWinAmountManifestTier("bigwin", 15, "./bigwin.json"),
+      createWinAmountManifestTier("superwin", 30, "./superwin.json"),
+      createWinAmountManifestTier("megawin", 50, "./megawin.json"),
+    ],
+  };
+}
+
+function createWinAmountManifestTier(
+  id: string,
+  thresholdMultiplier: number,
+  project: string,
+) {
+  return {
+    id,
+    thresholdMultiplier,
+    project,
+    playback: {
+      mode: "segmented",
+      durationSeconds: 2.9,
+      loopStartTime: 1,
+      loopEndTime: 2.5,
+      keepParticlesAlive: true,
+    },
+  };
 }
 
 function appendLoadingBlock(root: string): void {

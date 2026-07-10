@@ -296,18 +296,13 @@ describe("slot game static config", () => {
               ...createValidWinAmountConfig(),
               animations: {
                 ...createValidWinAmountConfig().animations,
-                tiers: [
-                  {
-                    ...createValidWinAmountConfig().animations.tiers[0],
-                    durationSeconds: 4,
-                  },
-                ],
+                tiers: [],
               },
             },
           },
         },
       }),
-    ).toThrow(/at least 5 seconds/);
+    ).toThrow(/unknown field "tiers"/);
   });
 
   it("validates optional feature bar config with explicit conveyor rects", () => {
@@ -528,19 +523,13 @@ function createValidWinAmountConfig() {
       majorOffset: Object.freeze({ x: 0, y: 0 }),
     }),
     animations: Object.freeze({
+      manifest: Object.freeze({
+        version: 1,
+        kind: "vni-win-amount-tiers",
+        tiers: [],
+      }),
       projectModules: Object.freeze({ "/bigwin.json": Object.freeze({}) }),
       assetModules: Object.freeze({ "/asset.png": "/asset.png" }),
-      tiers: Object.freeze([
-        Object.freeze({
-          id: "bigwin",
-          thresholdMultiplier: 15,
-          project: "./bigwin.json",
-          durationSeconds: 5,
-          loopStartTime: 1,
-          loopEndTime: 4,
-          keepParticlesAlive: true,
-        }),
-      ]),
     }),
   });
 }

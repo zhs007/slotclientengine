@@ -10,9 +10,14 @@ import {
   type VNIPlayerOptions,
 } from "@slotclientengine/vnicore/pixi";
 import type {
+  CreateWinAmountAnimationTiersFromManifestModulesOptions,
   CreateWinAmountAnimationTiersOptions,
+  ParsedWinAmountAnimationManifest,
+  WinAmountAnimationManifestPlayback,
+  WinAmountAnimationManifestTier,
   WinAmountAnimationLayout,
   WinAmountAnimationTier,
+  WinAmountAnimationTierConfig,
 } from "./types.js";
 import {
   alignWinAmountVniRoot,
@@ -214,6 +219,104 @@ export function createWinAmountAnimationTiersFromModules(
   return Object.freeze(tiers);
 }
 
+export function parseWinAmountAnimationManifest(
+  manifest: unknown,
+): ParsedWinAmountAnimationManifest {
+  const record = assertRecord(manifest, "win amount animation manifest");
+  assertKeys(record, "win amount animation manifest", [
+    "version",
+    "kind",
+    "projectGlob",
+    "assetGlob",
+    "tiers",
+  ]);
+  if (record.version !== 1) {
+    throw new Error("win amount animation manifest version must be 1.");
+  }
+  if (record.kind !== "vni-win-amount-tiers") {
+    throw new Error(
+      'win amount animation manifest kind must be "vni-win-amount-tiers".',
+    );
+  }
+  const projectGlob = assertManifestProjectGlob(
+    record.projectGlob,
+    "win amount animation manifest.projectGlob",
+  );
+  const assetGlob = assertManifestAssetGlob(
+    record.assetGlob,
+    "win amount animation manifest.assetGlob",
+  );
+  if (!Array.isArray(record.tiers) || record.tiers.length === 0) {
+    throw new Error(
+      "win amount animation manifest.tiers must be a non-empty array.",
+    );
+  }
+  const tiers = Object.freeze(
+    record.tiers.map((tier, index) =>
+      parseManifestTier(
+        tier,
+        `win amount animation manifest.tiers[${index}]`,
+      ),
+    ),
+  );
+  assertUniqueStrings(
+    tiers.map((tier) => tier.id),
+    "win amount animation manifest.tiers.id",
+  );
+  let previousThreshold = 0;
+  for (const tier of tiers) {
+    if (tier.thresholdMultiplier <= previousThreshold) {
+      throw new Error(
+        "win amount animation manifest tier thresholds must be strictly increasing.",
+      );
+    }
+    previousThreshold = tier.thresholdMultiplier;
+  }
+  const globProjects = expandManifestProjectGlob(projectGlob);
+  const tierProjects = new Set(tiers.map((tier) => tier.project));
+  for (const project of tierProjects) {
+    if (!globProjects.has(project)) {
+      throw new Error(
+        `win amount animation manifest projectGlob does not cover ${project}.`,
+      );
+    }
+  }
+  if (globProjects.size !== tierProjects.size) {
+    throw new Error(
+      "win amount animation manifest projectGlob must match exactly the tier projects.",
+    );
+  }
+  return Object.freeze({
+    version: 1,
+    kind: "vni-win-amount-tiers",
+    projectGlob,
+    assetGlob,
+    tiers,
+  });
+}
+
+export function createWinAmountAnimationTiersFromManifestModules(
+  options: CreateWinAmountAnimationTiersFromManifestModulesOptions,
+): readonly WinAmountAnimationTier[] {
+  const manifest = parseWinAmountAnimationManifest(options.manifest);
+  const tierConfigs = manifest.tiers.map(
+    (tier): WinAmountAnimationTierConfig => ({
+      id: tier.id,
+      thresholdMultiplier: tier.thresholdMultiplier,
+      project: tier.project,
+      durationSeconds: tier.playback.durationSeconds,
+      loopStartTime: tier.playback.loopStartTime,
+      loopEndTime: tier.playback.loopEndTime,
+      keepParticlesAlive: tier.playback.keepParticlesAlive,
+    }),
+  );
+  return createWinAmountAnimationTiersFromModules({
+    tierConfigs,
+    projectModules: options.projectModules,
+    assetModules: options.assetModules,
+  });
+}
+
 function createProjectModuleMap(
   modules: Readonly<Record<string, unknown>>,
 ): ReadonlyMap<string, unknown> {
@@ -266,11 +369,6 @@ function assertTierTiming(
       `win amount tier "${config.id}" durationSeconds must be positive.`,
     );
   }
-  if (config.durationSeconds < 5) {
-    throw new Error(
-      `win amount tier "${config.id}" durationSeconds must be at least 5 seconds.`,
-    );
-  }
   if (
     !(
       config.loopStartTime <= config.loopEndTime &&
@@ -300,4 +398,182 @@ function getFilename(path: string): string {
     throw new Error(`Cannot parse win amount module path: ${path}`);
   }
   return filename;
+}
+
+function parseManifestTier(
+  value: unknown,
+  label: string,
+): WinAmountAnimationManifestTier {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "id",
+    "thresholdMultiplier",
+    "project",
+    "playback",
+  ]);
+  return Object.freeze({
+    id: assertNonEmptyString(record.id, `${label}.id`),
+    thresholdMultiplier: assertPositiveFiniteNumber(
+      record.thresholdMultiplier,
+      `${label}.thresholdMultiplier`,
+    ),
+    project: assertManifestProjectPath(record.project, `${label}.project`),
+    playback: parseManifestPlayback(record.playback, `${label}.playback`),
+  });
+}
+
+function parseManifestPlayback(
+  value: unknown,
+  label: string,
+): WinAmountAnimationManifestPlayback {
+  const record = assertRecord(value, label);
+  assertKeys(record, label, [
+    "mode",
+    "durationSeconds",
+    "loopStartTime",
+    "loopEndTime",
+    "keepParticlesAlive",
+  ]);
+  if (record.mode !== "segmented") {
+    throw new Error(`${label}.mode must be "segmented".`);
+  }
+  const durationSeconds = assertPositiveFiniteNumber(
+    record.durationSeconds,
+    `${label}.durationSeconds`,
+  );
+  const loopStartTime = assertNonNegativeFiniteNumber(
+    record.loopStartTime,
+    `${label}.loopStartTime`,
+  );
+  const loopEndTime = assertNonNegativeFiniteNumber(
+    record.loopEndTime,
+    `${label}.loopEndTime`,
+  );
+  if (!(loopStartTime <= loopEndTime && loopEndTime <= durationSeconds)) {
+    throw new Error(
+      `${label} must satisfy loopStartTime <= loopEndTime <= durationSeconds.`,
+    );
+  }
+  if (typeof record.keepParticlesAlive !== "boolean") {
+    throw new Error(`${label}.keepParticlesAlive must be a boolean.`);
+  }
+  return Object.freeze({
+    mode: "segmented",
+    durationSeconds,
+    loopStartTime,
+    loopEndTime,
+    keepParticlesAlive: record.keepParticlesAlive,
+  });
+}
+
+function assertManifestProjectGlob(value: unknown, label: string): string {
+  const glob = assertManifestRelativeString(value, label);
+  if (!/^\.[/]\{[-A-Za-z0-9_,]+\}\.json$/u.test(glob)) {
+    throw new Error(
+      `${label} must be a manifest-relative brace JSON glob such as ./{bigwin,superwin,megawin}.json.`,
+    );
+  }
+  return glob;
+}
+
+function assertManifestAssetGlob(value: unknown, label: string): string {
+  const glob = assertManifestRelativeString(value, label);
+  if (
+    !(
+      /^\.[/]assets[/]\*\.(png|jpg|jpeg|webp)$/iu.test(glob) ||
+      /^\.[/]assets[/]\*\.\{png,jpg,jpeg,webp\}$/iu.test(glob)
+    )
+  ) {
+    throw new Error(
+      `${label} must match manifest-local win amount image assets.`,
+    );
+  }
+  return glob;
+}
+
+function assertManifestProjectPath(value: unknown, label: string): string {
+  const path = assertManifestRelativeString(value, label);
+  if (!/^\.[/][-A-Za-z0-9_]+\.json$/u.test(path)) {
+    throw new Error(`${label} must be a manifest-local ./filename.json path.`);
+  }
+  return path;
+}
+
+function assertManifestRelativeString(value: unknown, label: string): string {
+  const text = assertNonEmptyString(value, label);
+  if (!text.startsWith("./")) {
+    throw new Error(`${label} must start with "./".`);
+  }
+  if (text.includes("..") || text.includes("\\") || text.includes("**")) {
+    throw new Error(`${label} must not contain .., \\, or recursive glob.`);
+  }
+  return text;
+}
+
+function expandManifestProjectGlob(glob: string): ReadonlySet<string> {
+  const match = /^\.[/]\{(?<names>[-A-Za-z0-9_,]+)\}\.json$/u.exec(glob);
+  if (!match?.groups?.names) {
+    throw new Error(`Cannot parse win amount projectGlob: ${glob}.`);
+  }
+  const names = match.groups.names.split(",");
+  return new Set(names.map((name) => `./${name}.json`));
+}
+
+function assertRecord(
+  value: unknown,
+  label: string,
+): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${label} must be an object.`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function assertKeys(
+  record: Record<string, unknown>,
+  label: string,
+  allowed: readonly string[],
+): void {
+  const allowedSet = new Set(allowed);
+  for (const key of Object.keys(record)) {
+    if (!allowedSet.has(key)) {
+      throw new Error(`${label} contains unknown field "${key}".`);
+    }
+  }
+  for (const key of allowed) {
+    if (!Object.prototype.hasOwnProperty.call(record, key)) {
+      throw new Error(`${label} is missing field "${key}".`);
+    }
+  }
+}
+
+function assertUniqueStrings(values: readonly string[], label: string): void {
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (seen.has(value)) {
+      throw new Error(`${label} contains duplicate value "${value}".`);
+    }
+    seen.add(value);
+  }
+}
+
+function assertNonEmptyString(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${label} must be a non-empty string.`);
+  }
+  return value;
+}
+
+function assertPositiveFiniteNumber(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    throw new Error(`${label} must be a finite positive number.`);
+  }
+  return value;
+}
+
+function assertNonNegativeFiniteNumber(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error(`${label} must be a finite non-negative number.`);
+  }
+  return value;
 }

@@ -206,8 +206,8 @@ describe("win amount animation player", () => {
       FakeVniPlayer.instances.map((instance) => instance.projectId),
     ).toEqual(["win-amount-bigwin"]);
 
-    expect(player.update(2.5).displayedAmountRaw).toBe(225);
-    expect(player.update(2.5)).toMatchObject({
+    expect(player.update(1.45).displayedAmountRaw).toBe(225);
+    expect(player.update(1.45)).toMatchObject({
       completed: false,
       phase: "tier-counting",
       activeTierId: "superwin",
@@ -249,9 +249,9 @@ describe("win amount animation player", () => {
     expect(
       FakeVniPlayer.instances.map((instance) => instance.playOptions),
     ).toEqual([
-      { loopStart: 1, loopEnd: 4, keepParticlesAlive: true },
-      { loopStart: 1, loopEnd: 4, keepParticlesAlive: true },
-      { loopStart: 1, loopEnd: 4, keepParticlesAlive: true },
+      { loopStart: 1, loopEnd: 2.5, keepParticlesAlive: true },
+      { loopStart: 1, loopEnd: 2.5, keepParticlesAlive: true },
+      { loopStart: 1, loopEnd: 2.5, keepParticlesAlive: true },
     ]);
 
     expect(player.update(5)).toMatchObject({
@@ -393,10 +393,10 @@ describe("win amount animation player", () => {
       createWinAmountAnimationPlayer({
         config: {
           ...validConfig,
-          tiers: [{ ...validConfig.tiers[0], durationSeconds: 4 }],
+          tiers: [{ ...validConfig.tiers[0], durationSeconds: 0 }],
         },
       }),
-    ).toThrow(/at least 5 seconds/);
+    ).toThrow(/durationSeconds/);
     expect(() =>
       createWinAmountAnimationPlayer({
         config: {
@@ -482,9 +482,9 @@ function createTierConfig(
     id,
     thresholdMultiplier,
     project,
-    durationSeconds: 5,
+    durationSeconds: 2.9,
     loopStartTime: 1,
-    loopEndTime: 4,
+    loopEndTime: 2.5,
     keepParticlesAlive: true,
   };
 }

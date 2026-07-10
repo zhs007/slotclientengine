@@ -80,6 +80,35 @@ export interface CreateWinAmountAnimationTiersOptions {
   readonly assetModules: Readonly<Record<string, string>>;
 }
 
+export interface WinAmountAnimationManifestPlayback {
+  readonly mode: "segmented";
+  readonly durationSeconds: number;
+  readonly loopStartTime: number;
+  readonly loopEndTime: number;
+  readonly keepParticlesAlive: boolean;
+}
+
+export interface WinAmountAnimationManifestTier {
+  readonly id: string;
+  readonly thresholdMultiplier: number;
+  readonly project: string;
+  readonly playback: WinAmountAnimationManifestPlayback;
+}
+
+export interface ParsedWinAmountAnimationManifest {
+  readonly version: 1;
+  readonly kind: "vni-win-amount-tiers";
+  readonly projectGlob: string;
+  readonly assetGlob: string;
+  readonly tiers: readonly WinAmountAnimationManifestTier[];
+}
+
+export interface CreateWinAmountAnimationTiersFromManifestModulesOptions {
+  readonly manifest: unknown;
+  readonly projectModules: Readonly<Record<string, unknown>>;
+  readonly assetModules: Readonly<Record<string, string>>;
+}
+
 export interface WinAmountAnimationConfig {
   readonly formatter: (amountRaw: number) => string;
   readonly minorCountDurationSeconds: number;

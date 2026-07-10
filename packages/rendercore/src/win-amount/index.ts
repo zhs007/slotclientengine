@@ -6,7 +6,9 @@ export {
 } from "./win-amount-player.js";
 export {
   WinAmountTierEffect,
+  createWinAmountAnimationTiersFromManifestModules,
   createWinAmountAnimationTiersFromModules,
+  parseWinAmountAnimationManifest,
   type WinAmountVniPlayer,
   type WinAmountVniPlayerFactory,
 } from "./vni-tier-effect.js";

@@ -23,6 +23,11 @@ const SOURCE_MANIFEST = join(
   "assets/game003-s1/symbol-state-textures.manifest.json",
 );
 const SOURCE_SYMBOL_ASSET_ROOT = join(REPO_ROOT, "assets/game003-s1");
+const SOURCE_WIN_AMOUNT_ROOT = join(REPO_ROOT, "assets/game003-s1/win-amount");
+const SOURCE_WIN_AMOUNT_MANIFEST = join(
+  SOURCE_WIN_AMOUNT_ROOT,
+  "win-amount.manifest.json",
+);
 
 const DISPLAY_SYMBOLS = Object.freeze([
   "WL",
@@ -108,6 +113,7 @@ function verify() {
   assertFile(GENERATED_LOADING_CONFIG);
   assertDirectory(ASSETS_ROOT);
   assertFile(SOURCE_MANIFEST);
+  assertFile(SOURCE_WIN_AMOUNT_MANIFEST);
   verifyGeneratedStaticConfigSync();
   if (existsSync(GENERATED_LOADING_CONFIG)) {
     verifyGeneratedLoadingConfigSource(
@@ -123,6 +129,11 @@ function verify() {
   }
   if (existsSync(SOURCE_MANIFEST)) {
     verifySourceManifest(JSON.parse(readFileSync(SOURCE_MANIFEST, "utf8")));
+  }
+  if (existsSync(SOURCE_WIN_AMOUNT_MANIFEST)) {
+    verifySourceWinAmountManifest(
+      JSON.parse(readFileSync(SOURCE_WIN_AMOUNT_MANIFEST, "utf8")),
+    );
   }
   if (existsSync(DIST_ROOT)) {
     verifyNoSensitiveStrings(listFiles(DIST_ROOT));
@@ -278,6 +289,17 @@ function verifyAssets(assetNames) {
     join(SOURCE_SYMBOL_ASSET_ROOT, "minecart.png"),
     "minecart.png",
   );
+  assertSourceAssetBundled(
+    distAssetHashes,
+    SOURCE_WIN_AMOUNT_MANIFEST,
+    "win-amount.manifest.json",
+  );
+  if (existsSync(SOURCE_WIN_AMOUNT_MANIFEST)) {
+    verifyWinAmountAssetsBundled(
+      distAssetHashes,
+      JSON.parse(readFileSync(SOURCE_WIN_AMOUNT_MANIFEST, "utf8")),
+    );
+  }
 }
 
 function verifyEntryChunkIsLight(entryChunkPath) {
@@ -404,6 +426,72 @@ function verifySourceManifest(manifest) {
   }
 }
 
+function verifySourceWinAmountManifest(manifest) {
+  if (manifest.version !== 1) {
+    failures.push("source win amount manifest version must be 1.");
+  }
+  if (manifest.kind !== "vni-win-amount-tiers") {
+    failures.push("source win amount manifest kind is invalid.");
+  }
+  if (manifest.projectGlob !== "./{bigwin,superwin,megawin}.json") {
+    failures.push("source win amount manifest projectGlob is invalid.");
+  }
+  if (manifest.assetGlob !== "./assets/*.{png,jpg,jpeg,webp}") {
+    failures.push("source win amount manifest assetGlob is invalid.");
+  }
+  const tiers = manifest.tiers ?? [];
+  const expected = [
+    ["bigwin", 15, "./bigwin.json"],
+    ["superwin", 30, "./superwin.json"],
+    ["megawin", 50, "./megawin.json"],
+  ];
+  if (tiers.length !== expected.length) {
+    failures.push("source win amount manifest must contain three tiers.");
+  }
+  for (const [index, [id, thresholdMultiplier, project]] of expected.entries()) {
+    const tier = tiers[index];
+    if (
+      tier?.id !== id ||
+      tier?.thresholdMultiplier !== thresholdMultiplier ||
+      tier?.project !== project ||
+      tier?.playback?.mode !== "segmented" ||
+      tier?.playback?.durationSeconds !== 2.9 ||
+      tier?.playback?.loopStartTime !== 1 ||
+      tier?.playback?.loopEndTime !== 2.5 ||
+      tier?.playback?.keepParticlesAlive !== true
+    ) {
+      failures.push(`source win amount manifest tier ${id} is invalid.`);
+    }
+  }
+}
+
+function verifyWinAmountAssetsBundled(distAssetHashes, manifest) {
+  for (const tier of manifest.tiers ?? []) {
+    if (typeof tier.project !== "string" || !tier.project.startsWith("./")) {
+      failures.push(`invalid win amount tier project ${tier.project}.`);
+      continue;
+    }
+    const projectName = tier.project.slice(2);
+    const projectPath = join(SOURCE_WIN_AMOUNT_ROOT, projectName);
+    assertSourceAssetBundled(distAssetHashes, projectPath, projectName);
+    if (!existsSync(projectPath)) {
+      continue;
+    }
+    const project = JSON.parse(readFileSync(projectPath, "utf8"));
+    for (const asset of project.assets ?? []) {
+      if (typeof asset.path !== "string") {
+        failures.push(`${projectName} contains invalid asset path.`);
+        continue;
+      }
+      assertSourceAssetBundled(
+        distAssetHashes,
+        join(SOURCE_WIN_AMOUNT_ROOT, asset.path),
+        `win-amount/${asset.path}`,
+      );
+    }
+  }
+}
+
 function verifyNoSensitiveStrings(files) {
   for (const file of files) {
     const content = readFileSync(file, "utf8");
@@ -461,7 +549,7 @@ function createDistAssetHashMap(assetNames) {
 
 function assertSourceAssetBundled(distAssetHashes, sourcePath, label) {
   if (!existsSync(sourcePath) || !statSync(sourcePath).isFile()) {
-    failures.push(`missing source symbol asset ${label}.`);
+    failures.push(`missing source asset ${label}.`);
     return;
   }
 

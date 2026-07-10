@@ -81,12 +81,6 @@ loading:
     - id: game003-minecart
       path: assets/game003-s1/minecart.png
       weight: 1
-    - id: game003-win-amount-vni-projects
-      glob: assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json
-      weight: 3
-    - id: game003-win-amount-vni-assets
-      glob: assets/game003-s1/win-amount/assets/*.{png,jpg,jpeg,webp}
-      weight: 8
 
 # 每套皮肤的资源和布局配置。这里适合美术或发布配置人员改静态路径和坐标。
 skins:
@@ -320,28 +314,5 @@ skins:
           x: 0
           y: 0
       animations:
-        projectGlob: assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json
-        assetGlob: assets/game003-s1/win-amount/assets/*.{png,jpg,jpeg,webp}
-        tiers:
-          - id: bigwin
-            thresholdMultiplier: 15
-            project: ./bigwin.json
-            # 每个 tier 独占的金额增长阶段至少 5 秒；切到下一 tier 时当前 tier 同时播放 end，下一 tier 叠在更高层。
-            durationSeconds: 5
-            loopStartTime: 1
-            loopEndTime: 4
-            keepParticlesAlive: true
-          - id: superwin
-            thresholdMultiplier: 30
-            project: ./superwin.json
-            durationSeconds: 5
-            loopStartTime: 1
-            loopEndTime: 4
-            keepParticlesAlive: true
-          - id: megawin
-            thresholdMultiplier: 50
-            project: ./megawin.json
-            durationSeconds: 5
-            loopStartTime: 1
-            loopEndTime: 4
-            keepParticlesAlive: true
+        # big/super/mega 的 VNI project、assets 和三段式时间只维护在 manifest 中，避免 YAML 形成第二份时间表。
+        manifest: assets/game003-s1/win-amount/win-amount.manifest.json
