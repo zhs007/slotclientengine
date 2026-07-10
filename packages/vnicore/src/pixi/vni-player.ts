@@ -277,7 +277,6 @@ export class VNIPlayer {
   private readonly project: VNIProjectConfig;
   private readonly assetUrls: AssetUrlManifest;
   private readonly autoTick: boolean;
-  private readonly fitPadding: number | undefined;
   private readonly assetsById: ReadonlyMap<string, V5GAssetConfig>;
   private readonly layerGroups: readonly VNIRenderGroupInfo[];
   private readonly layerGroupSlots: readonly VNILayerGroupSlot[];
@@ -355,7 +354,7 @@ export class VNIPlayer {
     this.project = options.project;
     this.assetUrls = options.assetUrls;
     this.autoTick = options.autoTick ?? true;
-    this.fitPadding = normalizeFitPadding(options.fitPadding);
+    normalizeFitPadding(options.fitPadding);
     this.assetsById = new Map(
       options.project.assets.map((asset) => [asset.id, asset] as const),
     );
@@ -1298,20 +1297,12 @@ export class VNIPlayer {
       return;
     }
     const { width, height } = viewport;
-    const padding = this.fitPadding ?? (width < 720 ? 16 : 32);
-    const fitScale = Math.max(
-      0.05,
-      Math.min(
-        (width - padding * 2) / this.project.stage.width,
-        (height - padding * 2) / this.project.stage.height,
-      ),
-    );
     this.stageRoot.position.set(width / 2, height / 2);
     this.stageRoot.pivot.set(
       this.project.stage.width / 2,
       this.project.stage.height / 2,
     );
-    this.stageRoot.scale.set(Number.isFinite(fitScale) ? fitScale : 1);
+    this.stageRoot.scale.set(1);
   }
 
   private async loadTextures(): Promise<ReadonlyMap<string, PIXI.Texture>> {

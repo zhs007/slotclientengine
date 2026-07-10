@@ -283,7 +283,7 @@ skins:
         cellWidth: 165
         cellHeight: 130
     # 中奖金额动画。金额输入来自 live/GMI 的服务器整数，amountScale 只用于显示格式。
-    # big/super/mega VNI project 是 2000x2000 stage；运行时 overlay 坐标由当前 art 与 reelArea 映射得到。
+    # big/super/mega VNI project 按资源自身 100% 尺寸渲染；stage 尺寸不作为运行时缩放适配依据。
     # 这里只放静态显示、阈值和资源配置，不放 token、cookie、服务器真实轮带或玩家本次下注。
     winAmount:
       amountScale: 100

@@ -82,15 +82,9 @@ export class WinAmountStage {
 export function applyTierContainerLayout(
   container: Container,
   layout: WinAmountAnimationLayout,
-  projectStage: { readonly width: number; readonly height: number },
 ): void {
-  const rect = layout.tierStageRect;
-  const scale = Math.max(
-    rect.width / projectStage.width,
-    rect.height / projectStage.height,
-  );
   container.position.set(0, 0);
-  container.scale.set(scale);
+  container.scale.set(1);
 }
 
 export function alignWinAmountVniRoot(

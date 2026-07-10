@@ -2414,12 +2414,13 @@ describe("VNIPlayer", () => {
     expect(() => player.update(0)).toThrow("deltaSeconds");
   });
 
-  it("accepts fitPadding 0 for one-to-one stage fitting", async () => {
+  it("keeps VNI viewport rendering at natural 100% scale", async () => {
     const player = await createInitializedPlayer();
     const defaultInternals = player as unknown as {
       stageRoot: InstanceType<typeof pixiMock.MockContainer>;
     };
-    expect(defaultInternals.stageRoot.scale.x).toBeCloseTo(536 / 300);
+    expect(defaultInternals.stageRoot.scale.x).toBeCloseTo(1);
+    expect(defaultInternals.stageRoot.scale.y).toBeCloseTo(1);
 
     const paddedRequestAnimationFrame = vi.fn(() => 1);
     vi.stubGlobal("window", { devicePixelRatio: 1 });
@@ -2447,7 +2448,8 @@ describe("VNIPlayer", () => {
     const noPaddingInternals = noPaddingPlayer as unknown as {
       stageRoot: InstanceType<typeof pixiMock.MockContainer>;
     };
-    expect(noPaddingInternals.stageRoot.scale.x).toBeCloseTo(2);
+    expect(noPaddingInternals.stageRoot.scale.x).toBeCloseTo(1);
+    expect(noPaddingInternals.stageRoot.scale.y).toBeCloseTo(1);
     expect(() => {
       new VNIPlayer({
         parent: createMockPixiContainer(),

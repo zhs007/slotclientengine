@@ -58,6 +58,7 @@
 - 当前 `game003` win-amount 三段式为 `durationSeconds=2.9`、`loopStartTime=1`、`loopEndTime=2.5`，即 `0..1` start、`1..2.5` loop、`2.5..2.9` end。
 - win-amount manifest parser / tier resource resolver 属于 `packages/rendercore`，game app 只传 manifest、Vite modules、formatter 和布局。
 - `game003` 的 big/super/mega 金额动画资源属于 `assets/game003-s1/win-amount` 和 manifest/loading 配置，不要混入 symbol VNI manifest 或 `assets/game003-s1/assets`。
+- VNI 动画运行时按资源自身 100% 尺寸渲染，和普通图片一样；不要用 VNI `stage.width` / `stage.height` 或游戏背景框去做 fit、cover、contain、裁切或缩放适配。VNI stage 只保留为导出元数据和内部坐标参考，不作为显示尺寸合同。
 - `H1-H5.jpg` 已从 `assets/game003-s1` symbol 基础资源中删除；主转轮 normal symbol 只使用 PNG，状态贴图由 rendercore generator 生成。
 - VNI project 的 `stage.backgroundColor` 是导出 schema 背景元数据，`packages/vnicore` 的 `VNIPlayer` 是 runtime-only，不读取、不绘制、不提供 stage background 开关；slot symbol 动画、animation viewer 和 game runtime 都必须保持透明。
 - `packages/vnicore` 的 `VNIPlayer` 不拥有 `PIXI.Application`、renderer、canvas 或 DOM 容器；viewer/game runtime 必须提供外部 Pixi `parent`，动画节点直接挂进同一个 Pixi 渲染树。不要在 `VNIPlayer`、rendercore symbol animation 或 game runtime 中恢复隐藏 canvas、canvas-to-texture 桥接或独立 renderer。

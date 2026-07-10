@@ -75,7 +75,6 @@ export class WinAmountTierEffect {
     applyTierContainerLayout(
       this.container,
       options.layout,
-      options.tier.vniProject.stage,
     );
   }
 
@@ -92,7 +91,6 @@ export class WinAmountTierEffect {
     applyTierContainerLayout(
       this.container,
       layout,
-      this.#tier.vniProject.stage,
     );
   }
 
