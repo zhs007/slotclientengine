@@ -564,6 +564,10 @@ describe("game002 assets", () => {
         },
         states: {},
       },
+      E: {
+        normal: { kind: "transparent", width: 172, height: 158 },
+        states: {},
+      },
     });
 
     expect(textures.A).toBe(loaded);
@@ -588,6 +592,10 @@ describe("game002 assets", () => {
           },
         ],
       },
+    });
+    expect(textures.E).toEqual({
+      normal: { kind: "transparent", width: 172, height: 158 },
+      states: {},
     });
   });
 

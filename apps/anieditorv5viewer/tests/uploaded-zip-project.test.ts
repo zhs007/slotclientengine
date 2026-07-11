@@ -6,6 +6,7 @@ import {
   createUploadedVNIProjectBundle,
   type LoadedUploadedVNIProject,
 } from "../src/runtime/uploaded-zip-project";
+import { createFixtureZip } from "./fixture-zips";
 
 type MutableMinimalProject = ReturnType<typeof createMinimalProject> & {
   schemaVersion: string;
@@ -349,7 +350,7 @@ describe("uploaded zip viewer resource boundary", () => {
 });
 
 function readFixtureZip(name: "roundreel.zip" | "megawin.zip"): Uint8Array {
-  return readFileSync(join("../../docs/anieditor5", name));
+  return createFixtureZip(name);
 }
 
 function createProjectZip(

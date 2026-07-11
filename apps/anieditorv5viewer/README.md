@@ -12,7 +12,7 @@ The upload path supports two strict zip shapes.
 
 ### Bundle manifest zip
 
-Example: `docs/anieditor5/roundreel.zip`.
+The test fixture is built deterministically in memory from `docs/anieditor5/export/roundreel.json` and its referenced assets; the repository does not require a checked-in `roundreel.zip` binary.
 
 ```text
 manifest.json
@@ -30,7 +30,7 @@ Project `asset.path` values are resolved relative to the selected profile projec
 
 ### Single-project zip
 
-Example: `docs/anieditor5/megawin.zip`.
+The test fixture is built deterministically in memory from `docs/anieditor5/export/megawin.json` and its referenced assets; the repository does not require a checked-in `megawin.zip` binary.
 
 ```text
 project.json

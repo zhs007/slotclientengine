@@ -1,9 +1,8 @@
 // @vitest-environment happy-dom
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { strToU8, zipSync } from "fflate";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createFixtureZip } from "./fixture-zips";
 
 const playerMock = vi.hoisted(() => {
   const instances: MockVNIPlayer[] = [];
@@ -421,10 +420,16 @@ async function uploadZipFile(
   name: "megawin.zip" | "roundreel.zip",
 ): Promise<void> {
   await uploadFile(
-    new File([readFileSync(join("../../docs/anieditor5", name))], name, {
+    new File([toArrayBuffer(createFixtureZip(name))], name, {
       type: "application/zip",
     }),
   );
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  return buffer;
 }
 
 async function uploadFile(file: File): Promise<void> {

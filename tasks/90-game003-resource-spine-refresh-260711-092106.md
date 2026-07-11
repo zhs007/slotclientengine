@@ -224,31 +224,23 @@ CI=true pnpm lint   23/23 packages
 CI=true pnpm build  23/23 packages
 ```
 
-存在两个与任务 90 无关的既有 root blocker：
+后续已一并解决最初发现的两个 root blocker：
 
-### 8.1 root typecheck
+- `reelsviewer`、`game001`、`game002` 的 normal texture loader 显式处理 `transparent` 联合类型，并新增对应测试；未将透明资源错误加载为 Pixi texture。
+- `anieditorv5viewer` 测试不再依赖 Git 中从未存在的 `docs/anieditor5/roundreel.zip` / `megawin.zip` 二进制，而是从受版本控制的 export JSON 和真实引用 assets 确定性构造等价 zip fixture。
+- `game001` 旧测试 mount context 已补齐 framework 当前要求的 viewport API。
+- unfinished `appear` 清理测试使用测试专属 animation resolver，不恢复生产默认 resolver 对 `appear` 的隐式兜底。
 
-`CI=true pnpm typecheck` 在 `reelsviewer` 失败：
-
-```text
-apps/reelsviewer/src/assets.ts:345
-Property 'layers' does not exist on type 'TransparentSymbolTextureSource | LayeredSymbolTextureSource<...>'
-```
-
-该文件未被任务 90 修改；rendercore、game003、symbolsviewer 等任务范围 typecheck 均独立通过。
-
-### 8.2 root test
-
-`CI=true pnpm test` 在 `anieditorv5viewer` 失败，因为以下既有 fixture 不存在：
+最终根级验收通过：
 
 ```text
-docs/anieditor5/roundreel.zip
-docs/anieditor5/megawin.zip
+CI=true pnpm typecheck  23/23 packages
+CI=true pnpm test       23/23 packages
 ```
 
-失败为 `ENOENT`，与 game003 Spine/win-amount 资源无关。任务范围测试均独立通过。
+`pnpm test` 中 `netcore` 需要监听本机临时 WebSocket 端口，因此完整测试在允许本机监听的环境中复验通过；沙箱内统一的 server start 超时不是测试断言失败。
 
-### 8.3 包全目录 format 基线
+### 8.1 包全目录 format 基线
 
 以下未修改文件存在既有 Prettier 漂移：
 

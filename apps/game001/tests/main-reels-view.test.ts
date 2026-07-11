@@ -8,8 +8,11 @@ import {
   type SceneMatrix,
 } from "@slotclientengine/gameframeworks";
 import {
+  createDefaultSymbolAnimationResolver,
+  ManualSymbolAni,
   RenderSymbol,
   type SymbolAssetMap,
+  type SymbolAnimationResolver,
 } from "@slotclientengine/rendercore";
 import {
   createReelLayout,
@@ -241,11 +244,21 @@ function createFixture(): {
 } {
   const gameConfig = createGameConfig(rawGameConfig);
   const reels = gameConfig.getReels("reels01");
+  const defaultAnimationResolver = createDefaultSymbolAnimationResolver();
+  const animationResolver: SymbolAnimationResolver = (context) =>
+    context.resolvedState === "appear"
+      ? new ManualSymbolAni({
+          stateId: "appear",
+          playback: "once",
+          durationSeconds: 1,
+        })
+      : defaultAnimationResolver(context);
   const registry = createReelSymbolRegistry({
     gameConfig,
     assets: createGame001Textures(),
     emptySymbols: ["BN"],
     symbolScales: GAME001_SYMBOL_SCALES,
+    animationResolver,
     texturePolicy: {
       requiredStateTextures: GAME001_REQUIRED_STATE_TEXTURES,
     },

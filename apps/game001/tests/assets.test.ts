@@ -238,6 +238,10 @@ describe("game001 assets", () => {
         states: {},
       },
       D: existing,
+      E: {
+        normal: { kind: "transparent", width: 172, height: 158 },
+        states: {},
+      },
     });
 
     expect(textures.A).toBe(loaded);
@@ -252,6 +256,10 @@ describe("game001 assets", () => {
       },
     });
     expect(textures.D).toBe(existing);
+    expect(textures.E).toEqual({
+      normal: { kind: "transparent", width: 172, height: 158 },
+      states: {},
+    });
   });
 
   it("rejects malformed state manifests and filenames", () => {

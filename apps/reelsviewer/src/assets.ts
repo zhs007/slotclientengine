@@ -335,6 +335,13 @@ async function loadNormalTextureSource(
   normal: SymbolTextureSet["normal"]
 ): Promise<Texture | SymbolNormalTextureSource<Texture>> {
   if (isSymbolNormalTextureSource(normal)) {
+    if (normal.kind === "transparent") {
+      return Object.freeze({
+        kind: "transparent",
+        width: normal.width,
+        height: normal.height
+      });
+    }
     if (normal.kind === "single") {
       return Object.freeze({
         kind: "single",

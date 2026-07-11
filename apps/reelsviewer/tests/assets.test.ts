@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import stateTextureManifest from "../../../assets/symbols/symbol-state-textures.manifest.json";
 import {
-  createStatefulReelAssetMapFromModules
+  createStatefulReelAssetMapFromModules,
+  loadReelSymbolTextures
 } from "../src/assets.js";
 import { REELS_VIEWER_REQUIRED_STATE_TEXTURES } from "../src/reels-config.js";
 
@@ -113,6 +114,21 @@ describe("reelsviewer assets", () => {
         requiredStates: REELS_VIEWER_REQUIRED_STATE_TEXTURES
       })
     ).toThrow(/SC-1-3/);
+  });
+
+  it("preserves transparent normal sources without loading a texture", async () => {
+    await expect(
+      loadReelSymbolTextures({
+        EMPTY: {
+          normal: { kind: "transparent", width: 172, height: 158 }
+        }
+      })
+    ).resolves.toEqual({
+      EMPTY: {
+        normal: { kind: "transparent", width: 172, height: 158 },
+        states: {}
+      }
+    });
   });
 });
 

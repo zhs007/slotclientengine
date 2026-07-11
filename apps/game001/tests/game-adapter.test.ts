@@ -109,6 +109,7 @@ function createMountContext() {
   const frame = document.createElement("div");
   const gameLayer = document.createElement("div");
   const overlay = document.createElement("div");
+  const viewport = createViewportSnapshot({ width: 1125, height: 2000 });
   return {
     frame,
     gameLayer,
@@ -125,6 +126,22 @@ function createMountContext() {
       autoMode: false,
       error: null,
     }),
+    getViewport: () => viewport,
+    onViewportChange: () => () => {},
+  };
+}
+
+function createViewportSnapshot(frameDesignSize: {
+  readonly width: number;
+  readonly height: number;
+}) {
+  return {
+    pageSize: frameDesignSize,
+    frameDesignSize,
+    scale: 1,
+    cssSize: frameDesignSize,
+    offsetX: 0,
+    offsetY: 0,
   };
 }
 
