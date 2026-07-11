@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const pixiMock = vi.hoisted(() => {
@@ -200,36 +199,23 @@ beforeEach(() => {
 });
 
 describe("Spine 3.8 symbol runtime", () => {
-  it("validates current game003 Spine 3.8 skeletons and exact animation names", () => {
-    const atlas = parseSpineAtlasText(readTextAsset("Symbol.atlas"));
-    const expectedAnimations = {
-      WL: ["Idle", "start", "Win"],
-      H1: ["Idle", "Start", "Win"],
-      H2: ["Idle", "Win"],
-      H3: ["Idle", "Win"],
-      H4: ["Idle", "Win"],
-      H5: ["Idle", "Win"],
-      CL: ["Idle", "Start", "Win"],
-      SC: ["Idle", "Start", "Win"],
-    } as const;
-
-    for (const [symbol, animationNames] of Object.entries(expectedAnimations)) {
-      const skeleton = readJsonAsset(`${symbol}.json`);
-      expect(isSpine38Skeleton(skeleton)).toBe(true);
-      for (const animationName of animationNames) {
-        expect(() =>
-          validateSpine38SkeletonContract({
-            skeleton,
-            animationName,
-            atlas,
-          }),
-        ).not.toThrow();
-      }
+  it("validates a stable Spine 3.8 fixture and exact animation names", () => {
+    const atlas = parseSpineAtlasText(createAtlasText());
+    const skeleton = createSkeleton();
+    expect(isSpine38Skeleton(skeleton)).toBe(true);
+    for (const animationName of ["Idle", "Win"]) {
+      expect(() =>
+        validateSpine38SkeletonContract({
+          skeleton,
+          animationName,
+          atlas,
+        }),
+      ).not.toThrow();
     }
 
     expect(() =>
       validateSpine38SkeletonContract({
-        skeleton: readJsonAsset("H2.json"),
+        skeleton,
         animationName: "Start",
         atlas,
       }),
@@ -283,12 +269,12 @@ describe("Spine 3.8 symbol runtime", () => {
     expect(() => player.update(0)).toThrow(/destroyed/);
   });
 
-  it("renders weighted mesh attachments from current H1 resources", async () => {
+  it("renders weighted mesh and clipping attachments from a Spine 3.8 fixture", async () => {
     const player = new Spine38SymbolPlayer({
       resource: createResource({
         loop: true,
-        skeleton: readJsonAsset("H1.json"),
-        atlasText: readTextAsset("Symbol.atlas"),
+        skeleton: createWeightedMeshSkeleton(),
+        atlasText: createAtlasText(),
         animationName: "Idle",
       }),
     });
@@ -304,7 +290,7 @@ describe("Spine 3.8 symbol runtime", () => {
     expect(mesh).toBeDefined();
     expect(mesh?.texture.options).toMatchObject({
       rotate: 6,
-      label: "h1",
+      label: "gem",
     });
     const mask = slotLayer.children.find(
       (child) => child instanceof pixiMock.MockGraphics,
@@ -324,11 +310,11 @@ describe("Spine 3.8 symbol runtime", () => {
         typeof child.texture.options === "object" &&
         child.texture.options !== null &&
         "label" in child.texture.options &&
-        child.texture.options.label === "h1_k",
+        child.texture.options.label === "gem",
     ) as InstanceType<typeof pixiMock.MockSprite> | undefined;
     expect(unmaskedSlot?.mask ?? null).toBeNull();
-    expect(mesh?.geometry.uvs).toHaveLength(24);
-    expect(mesh?.geometry.indices).toHaveLength(45);
+    expect(mesh?.geometry.uvs).toHaveLength(8);
+    expect(mesh?.geometry.indices).toHaveLength(6);
     expect([...Array.from(mesh?.geometry.positions ?? [])].some(Boolean)).toBe(
       true,
     );
@@ -625,6 +611,48 @@ function createSkeleton(options: { readonly attachmentPath?: string } = {}) {
   };
 }
 
+function createWeightedMeshSkeleton() {
+  return {
+    skeleton: { spine: "3.8.99", width: 64, height: 64, fps: 24 },
+    bones: [{ name: "root" }],
+    slots: [
+      { name: "clip", bone: "root", attachment: "clip" },
+      { name: "mesh", bone: "root", attachment: "mesh" },
+      { name: "plain", bone: "root", attachment: "gem" },
+    ],
+    skins: [
+      {
+        name: "default",
+        attachments: {
+          clip: {
+            clip: {
+              type: "clipping",
+              end: "mesh",
+              vertexCount: 4,
+              vertices: [-10, -10, 10, -10, 10, 10, -10, 10],
+            },
+          },
+          mesh: {
+            mesh: {
+              type: "mesh",
+              path: "gem",
+              uvs: [0, 0, 1, 0, 1, 1, 0, 1],
+              triangles: [0, 1, 2, 2, 3, 0],
+              vertices: [
+                1, 0, -8, -8, 1, 1, 0, 8, -8, 1, 1, 0, 8, 8, 1, 1, 0, -8, 8, 1,
+              ],
+            },
+          },
+          plain: {
+            gem: { path: "gem", width: 16, height: 18 },
+          },
+        },
+      },
+    ],
+    animations: { Idle: {} },
+  };
+}
+
 function createAtlasText(): string {
   return [
     "Symbol.png",
@@ -641,15 +669,4 @@ function createAtlasText(): string {
     "  index: -1",
     "",
   ].join("\n");
-}
-
-function readTextAsset(fileName: string): string {
-  return readFileSync(
-    new URL(`../../../../assets/game003-s1/${fileName}`, import.meta.url),
-    "utf8",
-  );
-}
-
-function readJsonAsset(fileName: string): unknown {
-  return JSON.parse(readTextAsset(fileName)) as unknown;
 }

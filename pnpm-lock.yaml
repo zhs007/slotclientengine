@@ -637,8 +637,8 @@ importers:
   packages/rendercore:
     dependencies:
       '@esotericsoftware/spine-pixi-v8':
-        specifier: ^4.3.9
-        version: 4.3.9(pixi.js@8.17.1)
+        specifier: ~4.2.0
+        version: 4.2.119(pixi.js@8.17.1)
       '@slotclientengine/logiccore':
         specifier: workspace:*
         version: link:../logiccore
@@ -959,14 +959,14 @@ packages:
     resolution: {integrity: sha512-iH1B076HoAshH1mLpHMgwdGeTs0CYwL0SPMkGuSebZrwBp16v415e9NZXg2jtrqPVQjf6IANe2Vtlr5KswtcZQ==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@esotericsoftware/spine-canvas@4.3.9':
-    resolution: {integrity: sha512-7ameOj68Qf3Rz19tNXSNzTeEBX5ta8toqDS/J90X/gvWvpRKUGkFS6PWlXXNGmL2jQwMf+2LKvy4a0r8sScLYw==}
+  '@esotericsoftware/spine-canvas@4.2.119':
+    resolution: {integrity: sha512-IY8on9/3K9aCiBvQ/W13zu17OFkEDFLceWAsA2DSjy6UhHdK4i/W9iBKcVyKaPhPnXoHM09B7NmZXpRirceq/Q==}
 
-  '@esotericsoftware/spine-core@4.3.9':
-    resolution: {integrity: sha512-6Vb3DVM8ci2JoDdfpk191IkAMSvVm3YugfA6k27OcvO7f7DmZLrRKHQIICw+XbUVkGa/41VWG2dKZebpdmnvsg==}
+  '@esotericsoftware/spine-core@4.2.119':
+    resolution: {integrity: sha512-lvaRECaQDScO758ZSAR1Fj+GWkBKVZxPdgT/gCiKqdkrjZCDu2UzgbZtdPhxnLPcKG/zsaGJkfbN4OS0wHsxZQ==}
 
-  '@esotericsoftware/spine-pixi-v8@4.3.9':
-    resolution: {integrity: sha512-5CF+qcsBeKw7LSANH3qalNM8WJjn+rKxyCb3n84xMDvJY2LHcOip6+WVmF4VnrE5nUDJOW6cfQv0qihxsIwbfQ==}
+  '@esotericsoftware/spine-pixi-v8@4.2.119':
+    resolution: {integrity: sha512-BlXj2avwdTcJEQqbCf8UgOJuLAQtvpUjjt6KbKNnxS2UPnGgoU1sDlo+Wa8ZQ/riTa8ddZgbWNpp16frUaLdVg==}
     peerDependencies:
       pixi.js: ^8.16.0
 
@@ -2418,15 +2418,15 @@ snapshots:
       '@eslint/core': 1.1.1
       levn: 0.4.1
 
-  '@esotericsoftware/spine-canvas@4.3.9':
+  '@esotericsoftware/spine-canvas@4.2.119':
     dependencies:
-      '@esotericsoftware/spine-core': 4.3.9
+      '@esotericsoftware/spine-core': 4.2.119
 
-  '@esotericsoftware/spine-core@4.3.9': {}
+  '@esotericsoftware/spine-core@4.2.119': {}
 
-  '@esotericsoftware/spine-pixi-v8@4.3.9(pixi.js@8.17.1)':
+  '@esotericsoftware/spine-pixi-v8@4.2.119(pixi.js@8.17.1)':
     dependencies:
-      '@esotericsoftware/spine-canvas': 4.3.9
+      '@esotericsoftware/spine-canvas': 4.2.119
       pixi.js: 8.17.1
 
   '@humanfs/core@0.19.1': {}

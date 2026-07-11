@@ -8,7 +8,8 @@ import {
 import { Assets, Container, type Texture } from "pixi.js";
 import { assertValidDeltaSeconds, resetBaseDisplay } from "./ani.js";
 import { SymbolAnimationError } from "./errors.js";
-import { Spine38SymbolPlayer, isSpine38Skeleton } from "./spine38-runtime.js";
+import { Spine38SymbolPlayer } from "./spine38-runtime.js";
+import { readSupportedSpineSkeletonVersion } from "./spine-version.js";
 import type {
   SymbolSpineAnimationResource,
   SymbolSpineAnimationResourceMap,
@@ -330,20 +331,11 @@ function createSpineSymbolPlayerCacheKey(
 function createDefaultSpineSymbolPlayer(options: {
   readonly resource: SymbolSpineAnimationResource;
 }): RendercoreSpineSymbolPlayer {
-  if (shouldUseSpine38Player(options.resource)) {
+  const version = readSupportedSpineSkeletonVersion(options.resource.skeleton);
+  if (version === "3.8") {
     return new Spine38SymbolPlayer(options);
   }
   return new OfficialSpineSymbolPlayer(options);
-}
-
-function shouldUseSpine38Player(
-  resource: SymbolSpineAnimationResource,
-): boolean {
-  try {
-    return isSpine38Skeleton(resource.skeleton);
-  } catch {
-    return false;
-  }
 }
 
 export function createSymbolSpineAnimationResolver(options: {
@@ -410,8 +402,12 @@ class OfficialSpineSymbolPlayer implements RendercoreSpineSymbolPlayer {
     this.#completed = false;
     spine.state.clearTracks();
     spine.state.clearListeners();
-    spine.skeleton.setupPose();
-    const entry = spine.state.setAnimation(0, animation, options.loop);
+    spine.skeleton.setToSetupPose();
+    const entry = spine.state.setAnimation(
+      0,
+      options.animationName,
+      options.loop,
+    );
     entry.listener = {
       complete: (completedEntry) => {
         if (completedEntry === entry && !options.loop) {
@@ -435,7 +431,7 @@ class OfficialSpineSymbolPlayer implements RendercoreSpineSymbolPlayer {
     if (this.#spine) {
       this.#spine.state.clearTracks();
       this.#spine.state.clearListeners();
-      this.#spine.skeleton.setupPose();
+      this.#spine.skeleton.setToSetupPose();
       this.#spine.update(0);
     }
   }

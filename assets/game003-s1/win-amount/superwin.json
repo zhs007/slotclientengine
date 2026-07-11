@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "VNI_0.047",
+  "schemaVersion": "VNI_0.074",
   "editor": {
     "name": "VNI",
-    "version": "VNI_0.047"
+    "version": "VNI_0.074"
   },
   "engineTarget": {
     "name": "cocos_creator",
@@ -66,6 +66,17 @@
       "type": "image",
       "path": "assets/5_asset_image_mra5cnug_3j.png",
       "originalName": "闪光5.png",
+      "width": 217,
+      "height": 217,
+      "fileWidth": 217,
+      "fileHeight": 217,
+      "fileScale": 1
+    },
+    {
+      "id": "asset_image_mrabdwbe_11",
+      "type": "image",
+      "path": "assets/1_asset_image_mrabdwbe_11.png",
+      "originalName": "光晕1.png",
       "width": 217,
       "height": 217,
       "fileWidth": 217,
@@ -260,6 +271,82 @@
           "seed": 74772,
           "params": {
             "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mraap770_n",
+      "name": "光晕1.png",
+      "type": "image",
+      "assetId": "asset_image_mrabdwbe_11",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 5,
+        "scaleY": 5,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mreb4ljc_4",
+          "type": "energy_ring",
+          "name": "EnergyRing 能量环",
+          "startTime": 0.4,
+          "duration": 0.55,
+          "enabled": true,
+          "seed": 1783913463856,
+          "params": {
+            "ringCount": 1,
+            "startScale": 0.25,
+            "endScale": 1.5,
+            "sourceOpacity": 0,
+            "alpha": 1,
+            "stagger": 0.5,
+            "rotation": 30,
+            "pulse": 0,
+            "vanishMode": 1,
+            "additive": true,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mraaphyo_p",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.4,
+          "duration": 0.1,
+          "enabled": false,
+          "seed": 80784,
+          "params": {
+            "fromScaleX": 1,
+            "fromScaleY": 1,
+            "toScaleX": 4,
+            "toScaleY": 4,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mraaut8f_t",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 0.5,
+          "duration": 0.2,
+          "enabled": false,
+          "seed": 28671,
+          "params": {
+            "fromOpacity": 0.8,
             "toOpacity": 0,
             "easing": "linear"
           }

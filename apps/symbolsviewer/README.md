@@ -23,6 +23,8 @@ viewer 只绑定 `game003-s1`：
 
 `game003-s1` 的动画规则：
 
+当前 display Spine skeleton 为 Spine `4.2.43`，由 `@slotclientengine/rendercore` 内锁定在 `4.2.x` 的官方 Pixi v8 runtime 解析；viewer 不直接依赖或调用 Spine runtime。未知/错配版本必须显式失败。
+
 - `L1.appear` 到 `L5.appear`：manifest `kind: "static"`，直接保持普通状态静态图。
 - `L1.win` 到 `L5.win`：manifest `kind: "vni"`，播放对应 `assets/game003-s1/L*-wins.json`。
 - `WL,H1,H2,H3,H4,H5,CL,SC` 的 `normal`：manifest `kind: "spine"`，播放 `Idle`。

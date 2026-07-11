@@ -15,6 +15,12 @@ import {
   parseSpineAtlasText,
   validateSpine38SkeletonContract,
 } from "./spine38-runtime.js";
+import { readSupportedSpineSkeletonVersion } from "./spine-version.js";
+import {
+  AtlasAttachmentLoader,
+  SkeletonJson,
+  TextureAtlas,
+} from "@esotericsoftware/spine-pixi-v8";
 import type {
   SymbolAssetInput,
   SymbolAssetMap,
@@ -1074,6 +1080,18 @@ function validateSpineAtlasAndSkeleton(options: {
   readonly skeleton: unknown;
   readonly atlasText: string;
 }): string {
+  let version: ReturnType<typeof readSupportedSpineSkeletonVersion>;
+  try {
+    version = readSupportedSpineSkeletonVersion(options.skeleton);
+  } catch (error) {
+    throw new SymbolAssetError(
+      `Symbol "${options.symbol}" ${options.state} Spine skeleton version is invalid: ${formatUnknownError(error)}.`,
+    );
+  }
+  if (version === "4.2") {
+    return validateOfficialSpineAtlasAndSkeleton(options);
+  }
+
   let atlas: ReturnType<typeof parseSpineAtlasText>;
   try {
     atlas = parseSpineAtlasText(options.atlasText);
@@ -1096,6 +1114,58 @@ function validateSpineAtlasAndSkeleton(options: {
       animationName: options.spec.playback.animationName,
       atlas,
     });
+  } catch (error) {
+    const message = formatUnknownError(error);
+    if (message.includes(`missing animation "`)) {
+      throw new SymbolAssetError(
+        `Symbol "${options.symbol}" ${options.state} Spine skeleton is ${message}.`,
+      );
+    }
+    throw new SymbolAssetError(
+      `Symbol "${options.symbol}" ${options.state} Spine skeleton failed to parse: ${message}.`,
+    );
+  }
+
+  return atlasPage;
+}
+
+function validateOfficialSpineAtlasAndSkeleton(options: {
+  readonly symbol: string;
+  readonly state: string;
+  readonly spec: SymbolManifestSpineAnimationSpec;
+  readonly skeleton: unknown;
+  readonly atlasText: string;
+}): string {
+  let atlas: TextureAtlas;
+  try {
+    atlas = new TextureAtlas(options.atlasText);
+  } catch (error) {
+    throw new SymbolAssetError(
+      `Symbol "${options.symbol}" ${options.state} Spine atlas failed to parse: ${formatUnknownError(error)}.`,
+    );
+  }
+  if (atlas.pages.length !== 1 || !atlas.pages[0]?.name) {
+    throw new SymbolAssetError(
+      `Symbol "${options.symbol}" ${options.state} Spine atlas must contain exactly one named page.`,
+    );
+  }
+  const atlasPage = atlas.pages[0].name;
+  const textureFileName = getFileNameFromManifestPath(options.spec.texture);
+  if (atlasPage !== textureFileName) {
+    throw new SymbolAssetError(
+      `Symbol "${options.symbol}" ${options.state} Spine atlas page "${atlasPage}" must match texture "${textureFileName}".`,
+    );
+  }
+
+  try {
+    const skeletonData = new SkeletonJson(
+      new AtlasAttachmentLoader(atlas),
+    ).readSkeletonData(options.skeleton);
+    if (!skeletonData.findAnimation(options.spec.playback.animationName)) {
+      throw new Error(
+        `missing animation "${options.spec.playback.animationName}"`,
+      );
+    }
   } catch (error) {
     const message = formatUnknownError(error);
     if (message.includes(`missing animation "`)) {

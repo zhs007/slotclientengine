@@ -454,12 +454,23 @@ describe("game003 generated static config", () => {
         resource.id.startsWith("game003-symbol-normal-pngs:mainreelbg"),
       ),
     ).toBe(false);
-    expect(GAME003_STATIC_CONFIG.skins["1"].winAmount?.animations.manifest).toBe(
-      winAmountManifest,
-    );
+    expect(
+      GAME003_STATIC_CONFIG.skins["1"].winAmount?.animations.manifest,
+    ).toBe(winAmountManifest);
     for (const id of getReferencedWinAmountLoadingAssetIds()) {
       expect(ids).toContain(id);
     }
+    const referencedWinAmountAssetIds = [
+      ...getReferencedWinAmountLoadingAssetIds(),
+    ].sort();
+    expect(new Set(referencedWinAmountAssetIds).size).toBe(
+      referencedWinAmountAssetIds.length,
+    );
+    expect(
+      ids
+        .filter((id) => id.startsWith("game003-win-amount-vni-assets:"))
+        .sort(),
+    ).toEqual(referencedWinAmountAssetIds);
   });
 });
 

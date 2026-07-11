@@ -24,6 +24,7 @@ const SOURCE_MANIFEST = join(
 );
 const SOURCE_SYMBOL_ASSET_ROOT = join(REPO_ROOT, "assets/game003-s1");
 const SOURCE_WIN_AMOUNT_ROOT = join(REPO_ROOT, "assets/game003-s1/win-amount");
+const SOURCE_WIN_AMOUNT_ASSET_ROOT = join(SOURCE_WIN_AMOUNT_ROOT, "assets");
 const SOURCE_WIN_AMOUNT_MANIFEST = join(
   SOURCE_WIN_AMOUNT_ROOT,
   "win-amount.manifest.json",
@@ -129,6 +130,7 @@ function verify() {
   }
   if (existsSync(SOURCE_MANIFEST)) {
     verifySourceManifest(JSON.parse(readFileSync(SOURCE_MANIFEST, "utf8")));
+    verifySourceSpineResources();
   }
   if (existsSync(SOURCE_WIN_AMOUNT_MANIFEST)) {
     verifySourceWinAmountManifest(
@@ -138,6 +140,61 @@ function verify() {
   if (existsSync(DIST_ROOT)) {
     verifyNoSensitiveStrings(listFiles(DIST_ROOT));
     verifyNoJpgSymbolRuntimeReferences(listFiles(DIST_ROOT));
+  }
+}
+
+function verifySourceSpineResources() {
+  const expectedAppearAnimations = new Map([
+    ["WL", "start"],
+    ["H1", "Start"],
+    ["CL", "Start"],
+    ["SC", "Start"],
+  ]);
+  for (const symbol of SPINE_SYMBOLS) {
+    const skeletonPath = join(SOURCE_SYMBOL_ASSET_ROOT, `${symbol}.json`);
+    if (!existsSync(skeletonPath)) {
+      continue;
+    }
+    const skeleton = JSON.parse(readFileSync(skeletonPath, "utf8"));
+    if (skeleton.skeleton?.spine !== "4.2.43") {
+      failures.push(`source Spine skeleton ${symbol} must be version 4.2.43.`);
+    }
+    for (const animationName of ["Idle", "Win"]) {
+      if (!skeleton.animations?.[animationName]) {
+        failures.push(
+          `source Spine skeleton ${symbol} is missing animation ${animationName}.`,
+        );
+      }
+    }
+    const appearAnimation = expectedAppearAnimations.get(symbol);
+    if (appearAnimation && !skeleton.animations?.[appearAnimation]) {
+      failures.push(
+        `source Spine skeleton ${symbol} is missing animation ${appearAnimation}.`,
+      );
+    }
+    if (
+      SPINE_NORMAL_FALLBACK_APPEAR_SYMBOLS.includes(symbol) &&
+      (skeleton.animations?.Start || skeleton.animations?.start)
+    ) {
+      failures.push(
+        `source Spine skeleton ${symbol} unexpectedly contains Start/start.`,
+      );
+    }
+  }
+
+  const atlasPath = join(SOURCE_SYMBOL_ASSET_ROOT, "Symbol.atlas");
+  if (!existsSync(atlasPath)) {
+    return;
+  }
+  const atlasText = readFileSync(atlasPath, "utf8");
+  if (!/^Symbol\.png\s*$/mu.test(atlasText)) {
+    failures.push("source Spine atlas page must be Symbol.png.");
+  }
+  if (!/^bounds:\d+,\d+,\d+,\d+\s*$/mu.test(atlasText)) {
+    failures.push("source Spine 4.2 atlas must contain bounds fields.");
+  }
+  if (!/^rotate:90\s*$/mu.test(atlasText)) {
+    failures.push("source Spine 4.2 atlas must contain rotate:90 fields.");
   }
 }
 
@@ -448,7 +505,10 @@ function verifySourceWinAmountManifest(manifest) {
   if (tiers.length !== expected.length) {
     failures.push("source win amount manifest must contain three tiers.");
   }
-  for (const [index, [id, thresholdMultiplier, project]] of expected.entries()) {
+  for (const [
+    index,
+    [id, thresholdMultiplier, project],
+  ] of expected.entries()) {
     const tier = tiers[index];
     if (
       tier?.id !== id ||
@@ -466,6 +526,7 @@ function verifySourceWinAmountManifest(manifest) {
 }
 
 function verifyWinAmountAssetsBundled(distAssetHashes, manifest) {
+  const referencedAssetNames = new Set();
   for (const tier of manifest.tiers ?? []) {
     if (typeof tier.project !== "string" || !tier.project.startsWith("./")) {
       failures.push(`invalid win amount tier project ${tier.project}.`);
@@ -479,16 +540,46 @@ function verifyWinAmountAssetsBundled(distAssetHashes, manifest) {
     }
     const project = JSON.parse(readFileSync(projectPath, "utf8"));
     for (const asset of project.assets ?? []) {
-      if (typeof asset.path !== "string") {
+      if (
+        typeof asset.path !== "string" ||
+        !/^assets[/][^/]+\.(?:png|jpg|jpeg|webp)$/u.test(asset.path)
+      ) {
         failures.push(`${projectName} contains invalid asset path.`);
         continue;
       }
+      const assetName = asset.path.slice("assets/".length);
+      if (referencedAssetNames.has(assetName)) {
+        failures.push(`duplicate win-amount asset basename ${assetName}.`);
+        continue;
+      }
+      referencedAssetNames.add(assetName);
       assertSourceAssetBundled(
         distAssetHashes,
         join(SOURCE_WIN_AMOUNT_ROOT, asset.path),
         `win-amount/${asset.path}`,
       );
     }
+  }
+  if (!existsSync(SOURCE_WIN_AMOUNT_ASSET_ROOT)) {
+    failures.push(
+      `missing win-amount asset directory ${SOURCE_WIN_AMOUNT_ASSET_ROOT}.`,
+    );
+    return;
+  }
+  const sourceAssetNames = readdirSync(SOURCE_WIN_AMOUNT_ASSET_ROOT)
+    .filter((name) => /\.(?:png|jpg|jpeg|webp)$/u.test(name))
+    .sort();
+  const expectedAssetNames = [...referencedAssetNames].sort();
+  if (sourceAssetNames.join("\n") !== expectedAssetNames.join("\n")) {
+    const orphanNames = sourceAssetNames.filter(
+      (name) => !referencedAssetNames.has(name),
+    );
+    const missingNames = expectedAssetNames.filter(
+      (name) => !sourceAssetNames.includes(name),
+    );
+    failures.push(
+      `win-amount source asset closure is invalid; orphan=${orphanNames.join(",") || "none"}; missing=${missingNames.join(",") || "none"}.`,
+    );
   }
 }
 

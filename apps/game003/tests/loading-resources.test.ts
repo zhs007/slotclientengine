@@ -72,6 +72,17 @@ describe("game003 loading resources", () => {
     expect(
       getReferencedWinAmountLoadingAssetIds().every((id) => ids.includes(id)),
     ).toBe(true);
+    const referencedWinAmountAssetIds = [
+      ...getReferencedWinAmountLoadingAssetIds(),
+    ].sort();
+    expect(new Set(referencedWinAmountAssetIds).size).toBe(
+      referencedWinAmountAssetIds.length,
+    );
+    expect(
+      ids
+        .filter((id) => id.startsWith("game003-win-amount-vni-assets:"))
+        .sort(),
+    ).toEqual(referencedWinAmountAssetIds);
     expect(
       ids.some((id) => id.startsWith("game003-symbol-spine-skeletons:L1")),
     ).toBe(false);

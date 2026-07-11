@@ -160,7 +160,7 @@ vi.mock("@esotericsoftware/spine-pixi-v8", () => {
       data: {
         findAnimation(name: string): { readonly name: string } | null;
       };
-      setupPose: ReturnType<typeof vi.fn>;
+      setToSetupPose: ReturnType<typeof vi.fn>;
     };
     state: {
       clearTracks: ReturnType<typeof vi.fn>;
@@ -180,7 +180,7 @@ vi.mock("@esotericsoftware/spine-pixi-v8", () => {
       super();
       this.skeleton = {
         data: options.skeletonData,
-        setupPose: vi.fn(),
+        setToSetupPose: vi.fn(),
       };
       this.state = {
         clearTracks: vi.fn(() => {
@@ -297,7 +297,13 @@ function createResource(
   return {
     symbol: "H1",
     state,
-    skeleton: {},
+    skeleton: {
+      skeleton: { spine: "4.2.43" },
+      bones: [{ name: "root" }],
+      slots: [],
+      skins: [{ name: "default", attachments: {} }],
+      animations: {},
+    },
     atlasText:
       "Symbol.png\nsize: 1,1\nformat: RGBA8888\nfilter: Linear,Linear\n",
     textureUrl: "/assets/Symbol.png",
@@ -569,6 +575,25 @@ describe("SpineSymbolAni", () => {
     atlasAni.reset();
     await flushSpineInit();
     expect(() => atlasAni.update(0)).toThrow(/atlas page contract changed/);
+  });
+
+  it("fails fast for unsupported or malformed Spine skeleton versions", () => {
+    const unsupported = new SpineSymbolAni({
+      context: createContext({ state: "appear" }),
+      resource: {
+        ...createResource("appear"),
+        skeleton: { skeleton: { spine: "4.3.9" } },
+      },
+    });
+    expect(() => unsupported.reset()).toThrow(
+      /Unsupported Spine skeleton version "4\.3\.9"/,
+    );
+
+    const malformed = new SpineSymbolAni({
+      context: createContext({ state: "appear" }),
+      resource: { ...createResource("appear"), skeleton: {} },
+    });
+    expect(() => malformed.reset()).toThrow(/metadata must be an object/);
   });
 
   it("uses fallback resolver for symbols without manifest Spine resources", () => {
