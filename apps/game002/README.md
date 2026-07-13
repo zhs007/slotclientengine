@@ -1,247 +1,63 @@
-# game002 demo
+# game002
 
-`game002` 是基于 Pixi、`@slotclientengine/gameframeworks` 和 `@slotclientengine/rendercore` 的第二套 live slot app。第一屏就是游戏画面，不包含 landing page。
+`game002` 是基于 Pixi、`@slotclientengine/gameframeworks`、`@slotclientengine/gameloading` 和 `@slotclientengine/rendercore` 的 live slot app。当前项目已收口为单资源集：URL `skin=1` 固定映射 `assets/game002-s3`；`skin=2|3|4|5`、缺失 `skin` 和旧 `serverUrl` query 都会显式失败。
 
-## 运行结构
+## 启动与 live 边界
 
-生产入口由 `createSlotGameFramework()` 创建通用 slot shell、HUD、live 连接、enter game、spin、`GameLogic` 转换、余额/下注/win 状态和最终 `collect()`。`game002` 提供 `SlotGameAdapter`，只负责把 Pixi canvas 挂到 `context.gameLayer`、加载 game002 资源、应用 live `defaultScene`、读取 `GameLogic` 主 scene，并配置 `@slotclientengine/rendercore` 的 `54` 个 grid cell reels 展示。
+首屏由 `packages/gameloading` 承载。资源加载到 99% 时才校验 query 并调用 `prepareSlotGameLiveSession()`；资源到 100% 后才创建 framework、Pixi canvas 并用同一个 prepared session 连接。因此 loading 前不会挂载游戏，也不会创建第二条 WebSocket。
 
-`game002` 不直接创建 live client，不直接调用 `collect()`，也不直接依赖底层 live、UI 或 logic 包。需要读取 game config、reels 或 stop y 时，从 `@slotclientengine/gameframeworks` facade 导入 `createGameConfig`、`LogicGameConfig`、`SceneMatrix` 等 API / type。
+live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`。`gamecode` 和下列运行参数来自 URL，不从环境变量、cookie 或 localStorage 推导；其中 `lines` 是 game002 固定游戏合同，URL 只能显式提供 `30`，其它值会在 loading 99% 阶段失败，不能进入 spin：
 
-## 数据来源
-
-`game002` 是单 app、多皮肤入口，不新增 `apps/game003`，也不新增 `assets/gamecfg003`。页面 URL 的 `skin` query 参数只选择前端背景和 symbol 资源，不改变固定 live 服务器、`gamecode`、token、下注参数、spin request 或 collect 流程。
-
-五套皮肤共用：
-
-- `assets/gamecfg002/gameconfig.json`
-- 固定 live server：`wss://gameserv.rgstest.slammerstudios.com/`
-- 同一个 URL 传入的 `gamecode`
-
-`skin=1` 使用：
-
-- `assets/game002-s1/bg.jpg`
-- `assets/symbols001/*.png`
-- `assets/symbols001/symbol-state-textures.manifest.json`
-- manifest 中每个 symbol 的 `scale` 必须为 `0.8`
-
-`skin=2` 使用：
-
-- `assets/game002/bgfull.jpg`
-- `assets/symbols002/*.png`
-- `assets/symbols002/symbol-state-textures.manifest.json`
-- manifest 中每个 symbol 的 `scale` 必须为 `1`
-
-`skin=3` 使用：
-
-- `assets/game003/bg.jpg`
-- `assets/symbols003/*.png`
-- `assets/symbols003/symbol-state-textures.manifest.json`
-- manifest 中每个 symbol 的 `scale` 必须为 `1`
-
-`skin=4` 使用：
-
-- `assets/game002-s2/bg.png`
-- `assets/game002-s2/*.png`
-- `assets/game002-s2/symbol-state-textures.manifest.json`
-- manifest 中每个 symbol 的 `scale` 必须为 `1`
-
-`skin=5` 使用：
-
-- `assets/game002-s3/bg.jpg`
-- `assets/game002-s3/*.png`
-- `assets/game002-s3/symbol-state-textures.manifest.json`
-- manifest 中每个 symbol 的 `scale` 必须为 `1`
-
-运行时背景尺寸均为 `2000 x 2000`。`assets/game002/bg.jpg` 是旧 `1125 x 2000` portrait 参考图，不再作为运行时背景。
-
-每套皮肤的显示缩放系数从对应 `symbol-state-textures.manifest.json` 的 `scale` 字段读取。`scale` 必须是有限正数；仓库内生成出的 manifest 必须显式写出该字段。新增或重新生成 symbol set 时要使用 `@slotclientengine/rendercore` 生成器的 `--scale` 参数，不要在 `game002` 中维护第二份手写 scale 表。
-
-`skin=1` 当前可贴图 symbol 是 `WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`CN`、`BN`。其中 `BN` 是透明空图标，作为显式贴图参与加载；它不是通用 catalog fallback。`skin=1` 当前缺贴图的 `WM`、`CM`、`CO`、`AF` 仍然显式失败，不会自动映射为 `BN`。
-
-`skin=2` 当前可贴图 symbol 是 `WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`WM`、`CN`、`CM`、`CO`、`AF`。`skin=3` 当前可贴图 symbol 是 `WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`CN`、`CO`。`skin=4` 当前可贴图 symbol 是 `WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`CN`、`CO`。`skin=5` 当前可贴图 symbol 是 `WL`、`H1`、`H2`、`L1`、`L2`、`L3`、`L4`、`WM`、`CN`、`CM`、`CO`、`AF`。`skin=2` / `skin=3` / `skin=4` / `skin=5` 中 `BN` 是 empty symbol，不要求图片。
-
-第三套当前不会收到缺资源的 `WM`、`CM`、`AF`、`BN` 数据；如果未来服务端开始下发这些 symbol，必须先补齐 `assets/symbols003` 普通图、`spinBlur`、`disabled`、manifest、测试和 README，再允许进入运行时。`skin=3` 不会借用 `symbols002` 图片，也不会生成 placeholder 或空纹理兜底；scene 里出现当前皮肤缺贴图的 code 会显式失败。
-
-`skin=4` 当前不会收到缺资源的 `WM`、`CM`、`AF`、`BN` 数据；如果未来服务端开始下发这些 symbol，必须先补齐 `assets/game002-s2` 普通图、`spinBlur`、`disabled`、manifest、测试和 README，再允许进入运行时。`assets/game002-s2/bg.png` 是背景不是 symbol，viewer/runtime 都不能把它当成 symbol catalog fallback。`skin=4` 不会借用 `symbols002`、`symbols003` 或其它 skin 图片，也不会生成 placeholder 或空纹理兜底；scene 里出现当前皮肤缺贴图的 code 会显式失败。
-
-## 布局
-
-Framework 创建：
-
-```text
-.slot-ui-page
-  .slot-ui-frame
-    .slot-ui-game-layer
-    .slot-ui-overlay
-```
-
-Pixi canvas 位于 `.slot-ui-game-layer` 内，backing size 由 `gameframeworks` 透传的 viewport snapshot 决定。`game002` 使用 `framePolicy` 提交最大不超过 `2000 x 2000` 的逻辑尺寸，并在 Pixi stage 内使用完整 `2000 x 2000` art world；resize 时只调用 renderer resize 并移动 world container，不重建 live/framework。`game002` 只补充 canvas 样式，不复制 HUD 布局。
-
-响应式适配使用每套皮肤显式声明的 `focusRegion`，坐标相对于完整 `2000 x 2000` 背景。`focusRegion` 只表示当前皮肤希望保留在 viewport 内的视觉重点区域；`gridLayout.boardFrame` 只表示转轮棋盘和 cell 布局。二者当前可以数值相同，但不能互相推导、不能共享隐式默认值，也不能在 app 内复制 `rendercore` 的 art-to-viewport 映射算法。配置缺失、非法或 focus 加 margin 无法放入当前逻辑 viewport 时会显式失败。
-
-当前五套皮肤继续共享 `preferredPortraitSize=1125 x 2000` 和 `GAME002_FOCUS_MARGIN=60px`，因为 DOM frame policy 仍是同一个 portrait 发布边界；需要换图或重新对齐时，只调整对应 skin 的 `focusRegion` 和 `gridLayout`。
-
-`skin=2` / `skin=3` / `skin=4` / `skin=5` 的 art 坐标和旧坐标映射：
-
-- art/background：`2000 x 2000`，运行时背景文件由当前 skin 的资源映射决定
-- 旧 reference crop：`1125 x 2000`，在 art 中为 `x=437.5`, `y=0`
-- 旧 board frame：`x=200`, `y=330`, `width=720`, `height=1080`
-- art board frame：`x=637.5`, `y=330`, `width=720`, `height=1080`
-- focusRegion：逐 skin 显式配置为 `x=637.5`, `y=330`, `width=720`, `height=1080`
-- cell：`120 x 120`
-- scene：`6 x 9`
-- reels：`reels-001`
-- symbol：`200 x 200` 原图按 `100%` 缩放显示，并以 cell 中心定位
-
-`skin=4` / `skin=5` 的 `gridLayout` 和 `focusRegion` 与 `skin=2` / `skin=3` 数值一致，但在源码中仍逐 skin 显式配置；不能通过默认值或 board frame 推导。`skin=4` 的运行时背景是 `assets/game002-s2/bg.png`，`skin=5` 的运行时背景是 `assets/game002-s3/bg.jpg`。
-
-`skin=1` 使用同一个 `2000 x 2000` art world，但 `assets/game002-s1/bg.jpg` 的棋盘格更大，不能套用 `skin=2` / `skin=3` 的 `120 x 120` 棋盘：
-
-- background：`assets/game002-s1/bg.jpg`
-- board frame：`x=620`, `y=465`, `width=750`, `height=1200`
-- focusRegion：显式配置为 `x=555`, `y=150`, `width=862`, `height=1537`，用于把羊等背景主体纳入适配重点
-- cell：`125 x 133.333333`
-- scene：`6 x 9`
-- reels：`reels-001`
-- `BN`：透明贴图，scene code 为 `BN` 时显示为空，但仍走显式 symbol 资源
-- symbol：`200 x 200` 原图按 manifest `scale=0.8` 缩放显示，并以 cell 中心定位
-
-不同 viewport 的期望：
-
-- `1125 x 2000` portrait：visible art rect 为 `x=437.5,y=0,width=1125,height=2000`，board 回到屏幕内 `x=200,y=330`。
-- `1200 x 1200` square：visible art rect 为 `x=397.5,y=270,width=1200,height=1200`，board 在 viewport 内为 `x=240,y=60`，不会显示完整 `2000 x 2000` 背景。
-- `3000 x 1200` ultra-wide：DOM frame/canvas 逻辑尺寸为 `2000 x 1200` 并水平居中，页面左右多余空间保持黑色。
-
-每个棋盘格在滚动期间都有按当前 skin 配置的裁切窗口：`skin=2` / `skin=3` 是 `120 x 120`，`skin=1` 是 `125 x 133.333333`。格子内是独立 `visibleRows=1` 的垂直微型 reel。深浅交替的暗度 strip 挂在每个转动微型 reel 内部，随 reel 滚动经过裁切窗口，所以每个格子在旋转中会快速明暗变化。单个格子落地后会立即移除外层裁切，最终静态 symbol 不继续依赖 mask；落地暗度折叠在当前格内淡出，不串到邻格。格子启动和停止顺序固定为从上到下、从左到右：`x=0,y=0..8`，然后 `x=1,y=0..8`，直到 `x=5,y=8`。每个 cell 的本地轮带窗口还会使用 `@slotclientengine/rendercore` 的 per-cell reel offset；当前配置为同列每往下一格额外偏移 `16`，加上原本行号偏移后，同列 9 个格子的滚动窗口会更分散，但最终可见 scene 仍严格等于服务器目标 scene。
-
-如果 live `defaultScene` 存在，初始化显示该 scene；如果不存在，idle 初始化阶段 reels 层保持 hidden，不用本地数据顶替；第一次真实 live spin 结果返回后，grid-cell reels 会立即显示并播放到该真实目标 scene。
-
-live spin 的滚动过程使用本地 `reels-001` 公开轮带。服务器真实轮带不会下发到前端；服务器返回的最终 `6 x 9` scene 只作为本轮落点窗口叠加到临时渲染轮带里。因此目标 scene 即使无法在本地 `reels-001` 中反查出连续 stop y，也会继续用本地轮带滚动并在落点窗口显示服务器结果；未知 symbol code 或缺失贴图仍然显式失败。
-
-## Live 配置
-
-静态发布版只从页面 URL query 读取除服务器地址以外的 live 和 spin 参数，不从构建环境、hash、cookie、`localStorage`、远程配置文件或默认值读取运行参数。live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`，URL 中不支持 `serverUrl` 参数。第一屏仍然直接启动游戏画面；参数缺失或非法时初始化显式失败，不进入 mock、replay 或本地默认 scene。
-
-| 参数               | 必需 | 说明                                      |
-| ------------------ | ---- | ----------------------------------------- |
-| `skin`             | 是   | 皮肤 id，只接受 `1`、`2`、`3`、`4` 或 `5` |
-| `gamecode`         | 是   | live game code，非空；不从 skin 推导      |
-| `token`            | 是   | 登录 token，非空                          |
-| `businessid`       | 是   | business id，非空                         |
-| `clienttype`       | 是   | client type，非空                         |
-| `jurisdiction`     | 是   | jurisdiction，非空                        |
-| `language`         | 是   | language，非空                            |
-| `bet`              | 是   | 正数，按服务端整数单位发送                |
-| `lines`            | 是   | 正数                                      |
-| `times`            | 是   | 正数                                      |
-| `autonums`         | 是   | 整数，允许 `-1`                           |
-| `requestTimeoutMs` | 是   | 正数，传给 live request timeout           |
+| 参数                                                                        | 合同                  |
+| --------------------------------------------------------------------------- | --------------------- |
+| `skin`                                                                      | 必须且只能为 `1`      |
+| `gamecode`、`token`、`businessid`、`clienttype`、`jurisdiction`、`language` | 必填非空字符串        |
+| `bet`、`times`、`requestTimeoutMs`                                          | 必填正数              |
+| `lines`                                                                     | 必填且必须精确为 `30` |
+| `autonums`                                                                  | 必填整数，允许 `-1`   |
 
 示例：
 
 ```text
-http://127.0.0.1:5207/?skin=2&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
 http://127.0.0.1:5207/?skin=1&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
-http://127.0.0.1:5207/?skin=3&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
-http://127.0.0.1:5207/?skin=4&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
-http://127.0.0.1:5207/?skin=5&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
 ```
 
-参数值必须先用 `encodeURIComponent()` 编码再拼到 URL，尤其是 token 中可能出现的 `+`、`&`、`=`。如果 URL 中继续携带旧的 `serverUrl` 参数，初始化会显式失败，避免误以为服务器地址仍可由链接覆盖。
+参数值必须 URL encode。URL query 可能进入地址栏、历史记录、access log 和 Referer，发布环境应使用短期或一次性 token。
 
-URL query 会进入浏览器地址栏、历史记录、Caddy/CDN access log、监控日志和可能的 Referer。发布环境应使用短期 token 或一次性启动 token，并按安全策略处理日志。
+## 资源合同
 
-## 静态发布
+- 背景：`assets/game002-s3/bg.jpg`，`2000 x 2000`。
+- 游戏配置：`assets/gamecfg002/gameconfig.json`，继续使用本地公开 `reels-001`。
+- 可展示 symbol 顺序固定为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`。
+- 13 个 symbol 都必须由 manifest 声明 normal、`spinBlur`、`disabled` 和 `scale: 1`；`emptySymbols=[]`，`BN` 是真实贴图，不是透明兜底。
+- `CN_1..CN_4`、`Nearwin1..Nearwin3`、`WM_Fx`、背景和 atlas texture 不属于主 symbol 集，不能被宽泛 glob 接入。
+- scale、render priority 和 animation 都从 `assets/game002-s3/symbol-state-textures.manifest.json` 派生；app 不维护第二份表。
 
-生产构建产物位于：
+Spine 统一由 rendercore 的官方 Pixi runtime 解析，只接受 4.3.x skeleton。当前 12 个主 skeleton 是 4.3.23：`WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN`；`CN` 没有同名 skeleton，因此保持静态贴图。manifest 中 animation name 区分大小写并必须真实存在。
 
-```text
-apps/game002/dist/
-```
+`assets/game003-s1` 仍是已知的 Spine 4.2 非发布资源。本项目不为它提供 4.2 fallback，也不把它打包进 game002。
 
-构建和检查：
+## 布局与 spin
 
-```bash
-pnpm --filter game002 build
-pnpm --filter game002 release:check
-```
+art world 固定为 `2000 x 2000`，portrait reference 为 `1125 x 2000`。主棋盘是 `x=637.5,y=330,width=720,height=1080`、`6 x 9`、cell `120 x 120`；唯一重点区域在棋盘四边各扩 `60`，即 `focusRegion=x=577.5,y=270,width=840,height=1200`。
 
-本地静态预览：
+单背景使用 rendercore 的 `maximized-focus` 适配：先把重点区域完整且最大化地放进页面，再按页面宽高比反推应展示的背景范围。focus 以外只要仍在 `2000 x 2000` 背景内就继续显示，不按横竖屏分类主动裁掉；只有反推范围超过完整背景时才封顶，并允许出现不可避免的黑边。app 只配置 art size 和一个 focus rect；uiframeworks 只消费 rendercore resolver 的结果，不复制算法。game003 的双背景仍独立使用 YAML landscape/portrait variant 和 `orientation-focus`。
 
-```bash
-pnpm --filter game002 exec vite preview --host 127.0.0.1 --port 5207 --strictPort
-```
+framework 负责 live、HUD、spin/collect；adapter 负责 Pixi 画面和 grid-cell reel。spin 使用本地公开轮带滚动，服务器最终 `6 x 9` scene 只叠加到本轮临时可见窗口。客户端不读取、缓存或泄露服务器真实轮带；目标 scene 无法从公开轮带反查 stop y 也不能失败。
 
-发布方只需要复制：
+默认 54 格按从上到下、从左到右启停，使用 `16ms/16ms` step、`6` 个最小循环、`54 symbols/s` 和每行 `16` 的 local reel offset。完成时必须校验可见 scene 与服务端目标一致，之后 `playSpin()` 才能进入金额阶段并最终允许 framework collect。
 
-```text
-apps/game002/dist/index.html
-apps/game002/dist/assets/*
-```
+## 中奖金额
 
-到 Caddy/CDN 静态目录，不需要复制源码、`node_modules`、coverage、`.turbo` 或测试文件，也不需要向 HTML 注入运行配置。
+`assets/game002-s3/win-amount` 当前是从 game003 复制的临时 big/super/mega 美术资源。`win-amount.manifest.json` 是 tier project、asset glob、阈值和 segmented 时间的唯一资源来源；app 只配置金额 formatter 和布局，不复制 rendercore 状态机。
 
-`release:check` 会确认 dist 同时包含 `skin=1`、`skin=2`、`skin=3`、`skin=4` 和 `skin=5` 的背景、普通 symbol、`spinBlur` 和 `disabled` 资源，并审计源 manifest scale：`symbols001` 必须全部为 `0.8`，`symbols002`、`symbols003`、`game002-s2`、`game002-s3` 必须全部为 `1`。因为多套 symbol 有同名文件，检查会按构建产物图片尺寸、必需文件名和 bundle 源目录引用确认资源被打包；`skin=1` 还会检查透明 `BN` 资源。
+服务端整数 `100` 显示为 `$1.00`，但 spin/live 协议仍传原始整数。正中奖在主转轮完成后启动金额动画；`playSpin()` 等到金额进入 `awaiting-dismiss` 即可 resolve，不要求用户点击关闭。点击只调用 `requestAdvance()`：用于跳金额、进下一档或从最终等待态播放 dismiss。下一次 spin 会先清理遗留金额。
 
-Caddy 示例：
-
-```caddyfile
-game002.example.com {
-  root * /srv/game002
-  file_server
-}
-```
-
-子目录部署示例：
-
-```text
-/srv/www/game002/index.html
-/srv/www/game002/assets/*
-https://cdn.example.com/game002/?skin=2&gamecode=GAME_CODE&token=TOKEN&...
-```
-
-由于 Vite `base: "./"` 会让资源从当前目录下的 `./assets/` 加载，子目录访问地址必须带尾斜杠，例如 `https://cdn.example.com/game002/?skin=2&gamecode=GAME_CODE&token=TOKEN&...`。不要使用 `https://cdn.example.com/game002?skin=2&...`；如需兼容无尾斜杠入口，Caddy/CDN 必须配置保留原 query 参数的重定向。
-
-## Spin 时序
-
-```text
-点击 framework HUD Spin
-  -> gameframeworks live spin
-  -> gameframeworks 创建 GameLogic
-  -> game002 adapter.playSpin(logic) 播放 54 个 grid cell reels
-  -> 最后一个格子 landed、目标 symbol 保持 normal、暗度淡出归零
-  -> 校验最终可见 scene 等于目标 scene
-  -> adapter.playSpin resolve
-  -> gameframeworks optional collect
-  -> HUD 回 idle
-```
-
-`adapter.playSpin(logic)` 的 Promise resolve 是 framework 执行 optional `collect()` 的边界。adapter reject 时，framework 进入 error，且本局不会结算最终 `collect()`。
-
-默认 grid-cell 表现参数：
-
-- order：`top-down-left-right`
-- start/stop step：`16ms / 16ms`
-- settle after last start：`180ms`
-- minimum spin cycles：`6`
-- speed：`54` symbols/s
-- per-cell reel offset：`rowOffsetStep=16`
-- dimming：偶数 order index `alpha=0.50`，奇数 order index `alpha=0.35`
-- dim fade：`80ms` 淡入，`160ms` 淡出
-
-旋转中非空 symbol 请求 `spinBlur` 状态；格子落点后直接复位到目标 symbol 的 `normal` 状态，不播放 `appear`，只等待随轮滚动的暗度 strip 淡出后允许本局 spin resolve。
-
-adapter 会对单个 Pixi ticker 帧的 `deltaMS` 做上限保护，resize、切回页面或调试暂停后的超大帧不会一次性跳过 54 个 grid-cell reels 的滚动表现。
-
-## 金额显示
-
-服务端金额单位按整数传输，`100` 对应 `1` 美元。`game002` 保持 spin request、balance、win、bet 的原始整数协议值不变，只在 HUD 展示时格式化为 USD。因此 URL query 中 `bet=5` 会发送 `5`，HUD 显示为 `$0.05`。
-
-## 命令
+## 开发与发布
 
 ```bash
 pnpm --filter game002 dev -- --host 127.0.0.1 --port 5206
+pnpm --filter game002 format
 pnpm --filter game002 lint
 pnpm --filter game002 test
 pnpm --filter game002 typecheck
@@ -249,29 +65,6 @@ pnpm --filter game002 build
 pnpm --filter game002 release:check
 ```
 
-如果依赖安装失败，可先设置代理：
+生产产物在 `apps/game002/dist/`。`release:check` 会检查相对 URL、敏感默认值、唯一的 game002-s3 背景、13 组状态贴图、12 个 Spine JSON、atlas/texture、win-amount manifest/projects/assets，以及 bundle 不引用旧 skin 目录。子目录部署必须保留尾斜杠，例如 `https://cdn.example.com/game002/?skin=1&...`。
 
-```bash
-export http_proxy=http://127.0.0.1:1087;export https_proxy=http://127.0.0.1:1087;
-pnpm install
-```
-
-## 常见失败
-
-- 缺少必需 URL query 参数、参数为空或同一参数重复出现。
-- 缺少 `skin`、`skin` 重复、`skin` 为空，或 `skin` 不是 `1` / `2` / `3` / `4` / `5`。
-- URL 中携带旧的 `serverUrl` 参数；服务器地址已固定在 app 内。
-- `bet`、`lines`、`times`、`requestTimeoutMs` 非正数，或 `autonums` 不是整数。
-- token 等参数没有正确 URL encode，导致 `+`、`&`、`=` 被错误解析。
-- 子目录静态发布入口缺少尾斜杠，导致 `./assets/*` 解析到错误路径。
-- `skin=1` 的 `assets/game002-s1/bg.jpg`、`skin=2` 的 `bgfull.jpg`、`skin=3` 的 `bg.jpg`、`skin=4` 的 `bg.png` 或 `skin=5` 的 `bg.jpg` 尺寸不是 `2000 x 2000`。
-- viewport policy 输出超过 `2000 x 2000`，或 focus 区域加 margin 无法放入当前 canvas 逻辑尺寸。
-- 当前 skin 的 manifest 缺少普通图、`spinBlur`、`disabled` 或出现未知 state。
-- 主 scene 不是完整 `6 x 9`。
-- 主 scene 出现本地 paytable / symbol registry 不认识的 symbol code。
-- 主 scene 出现当前 skin 缺少贴图且不是显式 empty symbol 的 code。
-- grid cell order、timing 或 dimming 参数非法。
-- spin 完成后可见 scene 不等于目标 scene。
-- 断线、鉴权失败、服务端错误消息、logger warn/error 或最终 `collect()` 失败。
-
-以上失败都应进入 error，不切换到 mock、replay 或本地默认 scene。
+常见显式失败包括：query 缺失/重复/非法、旧 skin 或 `serverUrl`、资源或 loading closure 缺项、manifest scale/字段非法、Spine 非 4.3 或 animation/atlas 不匹配、scene 不是 `6 x 9`、未知 symbol、金额输入非法、最终可见 scene 不一致、live/collect 失败。不得切换到 mock、旧 skin、placeholder、BN 兜底或 Spine 4.2/3.8 fallback。

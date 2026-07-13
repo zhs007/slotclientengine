@@ -328,6 +328,7 @@ export type {
   SlotUiDesignSize,
   SlotUiFocusFramePolicy,
   SlotUiFramePolicy,
+  SlotUiMaximizedFocusFramePolicy,
   SlotUiFramework,
   SlotUiFrameworkOptions,
   SlotUiLiveConfig,

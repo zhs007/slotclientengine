@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "kind": "vni-win-amount-tiers",
+  "projectGlob": "./{bigwin,superwin,megawin}.json",
+  "assetGlob": "./assets/*.{png,jpg,jpeg,webp}",
+  "tiers": [
+    {
+      "id": "bigwin",
+      "thresholdMultiplier": 15,
+      "project": "./bigwin.json",
+      "playback": {
+        "mode": "segmented",
+        "durationSeconds": 2.9,
+        "loopStartTime": 1,
+        "loopEndTime": 2.5,
+        "keepParticlesAlive": true
+      }
+    },
+    {
+      "id": "superwin",
+      "thresholdMultiplier": 30,
+      "project": "./superwin.json",
+      "playback": {
+        "mode": "segmented",
+        "durationSeconds": 2.9,
+        "loopStartTime": 1,
+        "loopEndTime": 2.5,
+        "keepParticlesAlive": true
+      }
+    },
+    {
+      "id": "megawin",
+      "thresholdMultiplier": 50,
+      "project": "./megawin.json",
+      "playback": {
+        "mode": "segmented",
+        "durationSeconds": 2.9,
+        "loopStartTime": 1,
+        "loopEndTime": 2.5,
+        "keepParticlesAlive": true
+      }
+    }
+  ]
+}

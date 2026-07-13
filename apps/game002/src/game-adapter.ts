@@ -1,5 +1,4 @@
 import { Application, Assets, Container, Sprite, type Texture } from "pixi.js";
-import rawGameConfig from "../../../assets/gamecfg002/gameconfig.json";
 import type {
   GameLogic,
   SlotGameAdapter,
@@ -9,6 +8,10 @@ import type {
   SlotGameViewportSnapshot,
 } from "@slotclientengine/gameframeworks";
 import type { SymbolAssetMap } from "@slotclientengine/rendercore";
+import type {
+  WinAmountAnimationPhase,
+  WinAmountAnimationPlayer,
+} from "@slotclientengine/rendercore/win-amount";
 import {
   createGame002SymbolAssetMapFromModules,
   loadGame002SymbolTextures,
@@ -22,6 +25,10 @@ import {
 } from "./game-demo.js";
 import { validateGame002Scene } from "./scene.js";
 import type { Game002SkinConfig } from "./skin-config.js";
+import {
+  createGame002WinAmountLayout,
+  createGame002WinAmountPlayer,
+} from "./win-amount-config.js";
 
 export type Game002TickerSnapshot = { readonly deltaMS: number };
 export type Game002TickerListener = (ticker: Game002TickerSnapshot) => void;
@@ -57,10 +64,18 @@ export interface Game002AdapterOptions {
   readonly loadStaticTextures?: () => Promise<Game002StaticTextures>;
   readonly loadSymbolTextures?: () => Promise<SymbolAssetMap>;
   readonly createRuntime?: (symbolAssets: SymbolAssetMap) => Game002ReelRuntime;
+  readonly createWinAmountPlayer?: (
+    layout: ReturnType<typeof createGame002Layout>,
+  ) => WinAmountAnimationPlayer;
 }
 
 interface PendingAnimation {
   readonly targetScene: ReturnType<typeof validateGame002Scene>;
+  readonly betAmountRaw: number;
+  readonly winAmountRaw: number;
+  readonly winAmountExpected: boolean;
+  reelsComplete: boolean;
+  winAmountPlaybackComplete: boolean;
   resolve(): void;
   reject(error: Error): void;
 }
@@ -79,11 +94,16 @@ class Game002PixiAdapter implements SlotGameAdapter {
   readonly #loadStaticTextures: () => Promise<Game002StaticTextures>;
   readonly #loadSymbolTextures: () => Promise<SymbolAssetMap>;
   readonly #createRuntime: (symbolAssets: SymbolAssetMap) => Game002ReelRuntime;
+  readonly #createWinAmountPlayer: (
+    layout: ReturnType<typeof createGame002Layout>,
+  ) => WinAmountAnimationPlayer;
   #app: Game002PixiApplication | null = null;
   #worldLayer: Container | null = null;
   #runtime: Game002ReelRuntime | null = null;
+  #winAmountPlayer: WinAmountAnimationPlayer | null = null;
   #pendingAnimation: PendingAnimation | null = null;
   #unsubscribeViewport: (() => void) | null = null;
+  #disposeWinAmountAdvanceListener: (() => void) | null = null;
 
   constructor(options: Game002AdapterOptions) {
     const skin = options.skin;
@@ -98,7 +118,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       options.createRuntime ??
       ((symbolAssets) =>
         createGame002ReelRuntime({
-          rawGameConfig,
+          rawGameConfig: skin.rawGameConfig,
           symbolAssets,
           config: {
             ...DEFAULT_GAME002_REEL_CONFIG,
@@ -106,10 +126,14 @@ class Game002PixiAdapter implements SlotGameAdapter {
             texturedSymbols: skin.displaySymbols,
             missingAssetLabel: skin.label,
             symbolScales: skin.symbolScales,
+            symbolRenderPriorities: skin.symbolRenderPriorities,
+            animationResolver: skin.symbolAnimationResolver,
             gridLayout: skin.gridLayout,
             focusRegion: skin.focusRegion,
           },
         }));
+    this.#createWinAmountPlayer =
+      options.createWinAmountPlayer ?? createGame002WinAmountPlayer;
   }
 
   async mount(context: SlotGameMountContext): Promise<void> {
@@ -137,18 +161,28 @@ class Game002PixiAdapter implements SlotGameAdapter {
       this.#loadSymbolTextures(),
     ]);
     const runtime = this.#createRuntime(symbolTextures);
+    const winAmountPlayer = this.#createWinAmountPlayer(layout);
 
     const worldLayer = new Container();
     worldLayer.addChild(
       createPositionedSprite(staticTextures.background, layout.background),
     );
     worldLayer.addChild(runtime.mainReelsLayer);
+    worldLayer.addChild(winAmountPlayer.container);
     app.stage.addChild(worldLayer);
 
     app.ticker.add(this.#onTick);
     this.#app = app;
     this.#worldLayer = worldLayer;
     this.#runtime = runtime;
+    this.#winAmountPlayer = winAmountPlayer;
+    const requestWinAmountAdvance = () => {
+      this.#winAmountPlayer?.requestAdvance();
+    };
+    app.canvas.addEventListener("pointerdown", requestWinAmountAdvance);
+    this.#disposeWinAmountAdvanceListener = () => {
+      app.canvas.removeEventListener("pointerdown", requestWinAmountAdvance);
+    };
     this.#applyViewport(initialViewport);
     this.#unsubscribeViewport = context.onViewportChange((viewport) => {
       this.#applyViewport(viewport);
@@ -171,6 +205,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
     if (this.#pendingAnimation) {
       throw new Error("game002 adapter animation is already in progress.");
     }
+    const betAmountRaw = logic.getBet() * logic.getLines();
+    const winAmountRaw = logic.getTotalWin();
+    assertValidWinAmountInput(betAmountRaw, winAmountRaw);
+    this.#requireWinAmountPlayer().dismissImmediately();
     const targetScene = validateGame002Scene(
       logic.getStep(0).getScene(0),
       "spin main scene",
@@ -180,6 +218,11 @@ class Game002PixiAdapter implements SlotGameAdapter {
     return new Promise((resolve, reject) => {
       this.#pendingAnimation = {
         targetScene,
+        betAmountRaw,
+        winAmountRaw,
+        winAmountExpected: winAmountRaw > 0,
+        reelsComplete: false,
+        winAmountPlaybackComplete: winAmountRaw <= 0,
         resolve,
         reject,
       };
@@ -194,38 +237,61 @@ class Game002PixiAdapter implements SlotGameAdapter {
     this.#rejectPending(new Error("game002 adapter was destroyed."));
     this.#unsubscribeViewport?.();
     this.#unsubscribeViewport = null;
+    this.#disposeWinAmountAdvanceListener?.();
+    this.#disposeWinAmountAdvanceListener = null;
     this.#app?.ticker.remove(this.#onTick);
     this.#app?.ticker.stop();
+    this.#winAmountPlayer?.destroy();
     this.#app?.canvas.remove();
     this.#app?.destroy();
     this.#app = null;
     this.#worldLayer = null;
     this.#runtime = null;
+    this.#winAmountPlayer = null;
   }
 
   readonly #onTick: Game002TickerListener = (ticker) => {
-    if (
-      !this.#runtime ||
-      !this.#pendingAnimation ||
-      !this.#runtime.isSpinning()
-    ) {
+    if (!this.#runtime) {
       return;
     }
 
     try {
-      const result = this.#runtime.update(normalizeTickerDeltaSeconds(ticker));
-      if (!result.completed) {
+      const deltaSeconds = normalizeTickerDeltaSeconds(ticker);
+      const pending = this.#pendingAnimation;
+      if (!pending) {
+        if (this.#winAmountPlayer?.isPlaying()) {
+          this.#winAmountPlayer.update(deltaSeconds);
+        }
         return;
       }
-
-      const pending = this.#pendingAnimation;
-      assertGame002ReelVisualMatchesTarget(
-        this.#runtime.getVisualSnapshot(),
-        pending.targetScene,
-        "completed game002 adapter spin",
-      );
-      this.#pendingAnimation = null;
-      pending.resolve();
+      if (!pending.reelsComplete) {
+        const result = this.#runtime.update(deltaSeconds);
+        if (!result.completed) {
+          return;
+        }
+        assertGame002ReelVisualMatchesTarget(
+          this.#runtime.getVisualSnapshot(),
+          pending.targetScene,
+          "completed game002 adapter spin",
+        );
+        pending.reelsComplete = true;
+        if (pending.winAmountExpected) {
+          this.#requireWinAmountPlayer().start({
+            betAmountRaw: pending.betAmountRaw,
+            winAmountRaw: pending.winAmountRaw,
+          });
+        }
+      }
+      if (pending.winAmountExpected && !pending.winAmountPlaybackComplete) {
+        const result = this.#requireWinAmountPlayer().update(deltaSeconds);
+        pending.winAmountPlaybackComplete = !isWinAmountBlockingSpin(
+          result.phase,
+        );
+      }
+      if (pending.reelsComplete && pending.winAmountPlaybackComplete) {
+        this.#pendingAnimation = null;
+        pending.resolve();
+      }
     } catch (error) {
       this.#app?.ticker.stop();
       this.#rejectPending(
@@ -239,6 +305,13 @@ class Game002PixiAdapter implements SlotGameAdapter {
       throw new Error("game002 adapter is not mounted.");
     }
     return this.#runtime;
+  }
+
+  #requireWinAmountPlayer(): WinAmountAnimationPlayer {
+    if (!this.#winAmountPlayer) {
+      throw new Error("game002 adapter is not mounted.");
+    }
+    return this.#winAmountPlayer;
   }
 
   #applyViewport(viewport: SlotGameViewportSnapshot): void {
@@ -255,6 +328,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       layout.viewportSize.height,
     );
     this.#worldLayer.position.set(layout.worldOffset.x, layout.worldOffset.y);
+    this.#winAmountPlayer?.applyLayout(createGame002WinAmountLayout(layout));
   }
 
   #rejectPending(error: Error): void {
@@ -264,6 +338,26 @@ class Game002PixiAdapter implements SlotGameAdapter {
     }
     this.#pendingAnimation = null;
     pending.reject(error);
+  }
+}
+
+function isWinAmountBlockingSpin(phase: WinAmountAnimationPhase): boolean {
+  return (
+    phase === "minor-counting" ||
+    phase === "major-counting" ||
+    phase === "tier-counting"
+  );
+}
+
+function assertValidWinAmountInput(
+  betAmountRaw: number,
+  winAmountRaw: number,
+): void {
+  if (!Number.isFinite(betAmountRaw) || betAmountRaw <= 0) {
+    throw new Error("game002 bet amount must be a finite positive number.");
+  }
+  if (!Number.isFinite(winAmountRaw) || winAmountRaw < 0) {
+    throw new Error("game002 win amount must be a finite non-negative number.");
   }
 }
 
@@ -301,7 +395,6 @@ async function loadSymbolTextures(
     modules: skin.symbolModules,
     stateTextureManifest: skin.stateTextureManifest,
     displaySymbols: skin.displaySymbols,
-    emptySymbols: skin.emptySymbols,
   });
   return loadGame002SymbolTextures(assetUrls);
 }

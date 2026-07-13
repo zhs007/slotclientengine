@@ -10,6 +10,7 @@ import {
 import type { SlotGameFramePolicy } from "@slotclientengine/gameframeworks";
 import {
   calculateFocusedArtViewport,
+  createMaximizedFocusedArtViewportPolicy,
   mapArtRectToViewport,
   mapReferenceRectToArt,
   type FocusedArtViewport,
@@ -43,8 +44,6 @@ export const GAME002_REELS_NAME = "reels-001";
 export const GAME002_REEL_COUNT = 6;
 export const GAME002_VISIBLE_ROWS = 9;
 export const GAME002_CELL_SIZE = 120;
-export const GAME002_SKIN1_CELL_WIDTH = 125;
-export const GAME002_SKIN1_CELL_HEIGHT = 400 / 3;
 export const GAME002_GRID_CELL_REEL_ORDER =
   "top-down-left-right" satisfies GridCellOrderMode;
 export const GAME002_GRID_CELL_REEL_TIMING = Object.freeze({
@@ -81,80 +80,18 @@ export const GAME002_BOARD_FRAME = Object.freeze(
   }),
 );
 
-export const GAME002_SKIN1_BOARD_FRAME = Object.freeze({
-  x: 620,
-  y: 465,
-  width: GAME002_REEL_COUNT * GAME002_SKIN1_CELL_WIDTH,
-  height: GAME002_VISIBLE_ROWS * GAME002_SKIN1_CELL_HEIGHT,
-});
-
-export const GAME002_DEFAULT_GRID_LAYOUT = Object.freeze({
+export const GAME002_GRID_LAYOUT = Object.freeze({
   boardFrame: GAME002_BOARD_FRAME,
   cellWidth: GAME002_CELL_SIZE,
   cellHeight: GAME002_CELL_SIZE,
 }) satisfies Game002GridLayout;
 
-export const GAME002_SKIN1_GRID_LAYOUT = Object.freeze({
-  boardFrame: GAME002_SKIN1_BOARD_FRAME,
-  cellWidth: GAME002_SKIN1_CELL_WIDTH,
-  cellHeight: GAME002_SKIN1_CELL_HEIGHT,
-}) satisfies Game002GridLayout;
-
-export const GAME002_SKIN4_GRID_LAYOUT = Object.freeze({
-  boardFrame: GAME002_BOARD_FRAME,
-  cellWidth: GAME002_CELL_SIZE,
-  cellHeight: GAME002_CELL_SIZE,
-}) satisfies Game002GridLayout;
-
-export const GAME002_SKIN5_GRID_LAYOUT = Object.freeze({
-  boardFrame: GAME002_BOARD_FRAME,
-  cellWidth: GAME002_CELL_SIZE,
-  cellHeight: GAME002_CELL_SIZE,
-}) satisfies Game002GridLayout;
-
-export const GAME002_SKIN1_FOCUS_REGION = Object.freeze({
-  x: 555,
-  y: 150,
-  width: 862,
-  height: 1537,
+export const GAME002_FOCUS_REGION = Object.freeze({
+  x: 577.5,
+  y: 270,
+  width: 840,
+  height: 1200,
 }) satisfies Game002FocusRegion;
-
-export const GAME002_SKIN2_FOCUS_REGION = Object.freeze({
-  x: 637.5,
-  y: 330,
-  width: 720,
-  height: 1080,
-}) satisfies Game002FocusRegion;
-
-export const GAME002_SKIN3_FOCUS_REGION = Object.freeze({
-  x: 637.5,
-  y: 330,
-  width: 720,
-  height: 1080,
-}) satisfies Game002FocusRegion;
-
-export const GAME002_SKIN4_FOCUS_REGION = Object.freeze({
-  x: 637.5,
-  y: 330,
-  width: 720,
-  height: 1080,
-}) satisfies Game002FocusRegion;
-
-export const GAME002_SKIN5_FOCUS_REGION = Object.freeze({
-  x: 637.5,
-  y: 330,
-  width: 720,
-  height: 1080,
-}) satisfies Game002FocusRegion;
-
-export const GAME002_DEFAULT_FOCUS_REGION = GAME002_SKIN2_FOCUS_REGION;
-
-export const GAME002_FOCUS_MARGIN = Object.freeze({
-  left: 60,
-  right: 60,
-  top: 60,
-  bottom: 60,
-});
 
 export interface Point {
   readonly x: number;
@@ -227,18 +164,12 @@ export function calculateGame002FrameScale(
 }
 
 export function createGame002FramePolicy(
-  focusRegion: Game002FocusRegion = GAME002_DEFAULT_FOCUS_REGION,
+  focusRegion: Game002FocusRegion = GAME002_FOCUS_REGION,
 ): SlotGameFramePolicy {
   validateGame002FocusRegion(focusRegion);
-  return Object.freeze({
-    mode: "focus",
-    maxDesignSize: GAME002_ART_SIZE,
-    preferredPortraitSize: GAME002_REFERENCE_SIZE,
-    focusRect: Object.freeze({
-      width: focusRegion.width,
-      height: focusRegion.height,
-    }),
-    minFocusMargin: GAME002_FOCUS_MARGIN,
+  return createMaximizedFocusedArtViewportPolicy({
+    artSize: GAME002_ART_SIZE,
+    focusRect: focusRegion,
   });
 }
 
@@ -253,7 +184,6 @@ export function createGame002Layout(
     artSize: GAME002_ART_SIZE,
     viewportSize,
     focusRect: focusRegion,
-    minMargin: GAME002_FOCUS_MARGIN,
   });
   const boardFrameInViewport = mapArtRectToViewport({
     artSize: GAME002_ART_SIZE,
@@ -281,7 +211,7 @@ export function createGame002Layout(
 }
 
 export function validateGame002GridLayout(
-  gridLayout: Game002GridLayout = GAME002_DEFAULT_GRID_LAYOUT,
+  gridLayout: Game002GridLayout = GAME002_GRID_LAYOUT,
 ): void {
   validateGame002BoardFrame(
     gridLayout.boardFrame,
@@ -357,7 +287,7 @@ export function validateGame002BoardFrame(
 }
 
 export function createGame002ReelLayout(
-  gridLayout: Game002GridLayout = GAME002_DEFAULT_GRID_LAYOUT,
+  gridLayout: Game002GridLayout = GAME002_GRID_LAYOUT,
 ): ReelLayout {
   validateGame002GridLayout(gridLayout);
   return createReelLayout({
@@ -421,8 +351,8 @@ function normalizeGame002LayoutInput(input: Game002LayoutInput): {
   if ("width" in input && "height" in input) {
     return {
       viewportSize: input,
-      gridLayout: GAME002_DEFAULT_GRID_LAYOUT,
-      focusRegion: GAME002_DEFAULT_FOCUS_REGION,
+      gridLayout: GAME002_GRID_LAYOUT,
+      focusRegion: GAME002_FOCUS_REGION,
     };
   }
   if (!input.gridLayout) {

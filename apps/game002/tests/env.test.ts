@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  GAME002_LINES,
   GAME002_LIVE_SERVER_URL,
   parseGame002FrameworkConfigFromQuery,
   parseGame002QueryConfig,
@@ -8,7 +9,7 @@ import {
 describe("game002 runtime query config", () => {
   it("parses a complete query string", () => {
     expect(parseGame002QueryConfig(validQuery())).toEqual({
-      skin: "2",
+      skin: "1",
       token: "TOKEN",
       gamecode: "GAME_CODE",
       businessid: "guest",
@@ -24,8 +25,9 @@ describe("game002 runtime query config", () => {
   });
 
   it("maps query config into the framework live and spin contracts", () => {
+    expect(GAME002_LINES).toBe(30);
     expect(parseGame002FrameworkConfigFromQuery(validQuery())).toEqual({
-      skin: "2",
+      skin: "1",
       live: {
         serverUrl: GAME002_LIVE_SERVER_URL,
         token: "TOKEN",
@@ -38,36 +40,6 @@ describe("game002 runtime query config", () => {
       },
       betOptions: [{ bet: 5, lines: 30, times: 1 }],
       initialBetIndex: 0,
-      spinRequest: { bet: 5, lines: 30, times: 1, autonums: -1 },
-    });
-    expect(
-      parseGame002FrameworkConfigFromQuery(validQuery({ skin: "3" })),
-    ).toMatchObject({
-      skin: "3",
-      live: {
-        gamecode: "GAME_CODE",
-        token: "TOKEN",
-      },
-      spinRequest: { bet: 5, lines: 30, times: 1, autonums: -1 },
-    });
-    expect(
-      parseGame002FrameworkConfigFromQuery(validQuery({ skin: "4" })),
-    ).toMatchObject({
-      skin: "4",
-      live: {
-        gamecode: "GAME_CODE",
-        token: "TOKEN",
-      },
-      spinRequest: { bet: 5, lines: 30, times: 1, autonums: -1 },
-    });
-    expect(
-      parseGame002FrameworkConfigFromQuery(validQuery({ skin: "5" })),
-    ).toMatchObject({
-      skin: "5",
-      live: {
-        gamecode: "GAME_CODE",
-        token: "TOKEN",
-      },
       spinRequest: { bet: 5, lines: 30, times: 1, autonums: -1 },
     });
   });
@@ -111,18 +83,14 @@ describe("game002 runtime query config", () => {
     ).toThrow(/serverUrl query parameter is not supported/);
   });
 
-  it("accepts only explicit skin ids 1, 2, 3, 4 and 5", () => {
+  it("accepts only explicit skin id 1", () => {
     expect(parseGame002QueryConfig(validQuery({ skin: "1" })).skin).toBe("1");
-    expect(parseGame002QueryConfig(validQuery({ skin: "2" })).skin).toBe("2");
-    expect(parseGame002QueryConfig(validQuery({ skin: "3" })).skin).toBe("3");
-    expect(parseGame002QueryConfig(validQuery({ skin: "4" })).skin).toBe("4");
-    expect(parseGame002QueryConfig(validQuery({ skin: "5" })).skin).toBe("5");
 
-    for (const skin of ["01", "02", "game002", "game003", "6"]) {
+    for (const skin of ["01", "2", "3", "4", "5", "game002-s3", "6"]) {
       expect(
         () => parseGame002QueryConfig(validQuery({ skin })),
         `${skin} should be rejected`,
-      ).toThrow(/skin query parameter must be "1", "2", "3", "4" or "5"/);
+      ).toThrow(/skin query parameter must be exactly "1"/);
     }
   });
 
@@ -176,6 +144,15 @@ describe("game002 runtime query config", () => {
       parseGame002QueryConfig(validQuery({ autonums: "1.2" })),
     ).toThrow(/autonums query parameter must be an integer/);
   });
+
+  it("rejects a non-30 lines value instead of sending a wrong spin request", () => {
+    expect(() => parseGame002QueryConfig(validQuery({ lines: "10" }))).toThrow(
+      /lines query parameter must be exactly 30 for game002/,
+    );
+    expect(() =>
+      parseGame002FrameworkConfigFromQuery(validQuery({ lines: "10" })),
+    ).toThrow(/lines query parameter must be exactly 30 for game002/);
+  });
 });
 
 const REQUIRED_PARAMS = Object.freeze([
@@ -199,7 +176,7 @@ function validQuery(overrides: Record<string, string> = {}): string {
 
 function validParams(overrides: Record<string, string> = {}): URLSearchParams {
   const params = new URLSearchParams({
-    skin: "2",
+    skin: "1",
     token: "TOKEN",
     gamecode: "GAME_CODE",
     businessid: "guest",

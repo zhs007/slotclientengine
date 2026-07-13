@@ -30,12 +30,16 @@
 - 后续游戏默认依赖 `@slotclientengine/gameframeworks`，不要直接依赖 `@slotclientengine/uiframeworks`、`@slotclientengine/netcore`、`@slotclientengine/logiccore`，除非是在框架内部或任务明确要求。
 - `packages/rendercore` 拥有通用 Pixi slot 渲染算法，包括 symbol 状态、普通 reel、grid-cell reel 等可复用转轮表现；游戏 app 只能配置和调用，不要在 app 内复制通用转轮调度、裁切、状态机或 grid-cell spin 算法。
 - live slot 前端不能也不应该拿到服务器真实轮带。spin 渲染必须使用本地公开轮子配置滚动；拿到服务器实际停下来的 scene 后，只把本轮目标可见窗口叠加进临时轮带数据。不要因为服务器 scene 无法在本地轮带反查 stop y 就失败，也不要改用、缓存或泄露服务器真实轮带。
-- game002 系列 symbols 中的透明 `BN` 只能作为显式配置的空图标或明确服务器映射边界的兜底入口；不要在通用 symbol catalog 中静默吞掉缺图、缺 manifest 或缺配置错误。
-- game002 系列 symbol manifest 的每个 symbol 必须声明显示 `scale`；当前 `skin=1` / `assets/symbols001` 为 `0.8`，`assets/symbols`、`assets/symbols002`、`assets/symbols003`、`assets/game002-s2`、`assets/game002-s3` 为 `1`。`symbolsviewer` 和 `game002` 应从 manifest 读取 scale，不要在 app 内维护第二份手写 scale 表。
+- `game002` 当前只支持 `skin=1`，并固定映射 `assets/game002-s3/bg.jpg`、`assets/game002-s3` symbols 和 `assets/gamecfg002/gameconfig.json`；旧 `skin=2|3|4|5` 必须显式失败，不能保留 alias、默认值或打包入口。
+- `game002-s3` 的可展示 symbol 固定为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`，全部由 manifest 显式声明 `scale: 1`；`BN` 是真实贴图且 `emptySymbols` 为空，不得作为缺图兜底。`CN_1..CN_4`、`Nearwin1..Nearwin3` 和 `WM_Fx` 暂不属于主 display set，不能被宽泛 glob 接入。
 - `packages/rendercore` 拥有 Pixi 游戏内部的 art-size、focus-rect、visible-viewport 适配算法；游戏 app 只能配置 art 尺寸、focus 区域和资源，不要在 app 内复制通用裁切、居中或可见区域策略。
 - `game002` 的响应式适配重点区域必须由每套 skin 显式配置，坐标相对于完整 `2000 x 2000` 背景；不要把转轮 board frame 当作隐式适配 focus，也不要在 app 内复制 `rendercore` 的 art-viewport 映射算法。
-- `game002` 当前支持 `skin=1|2|3|4|5`；`skin=4` 映射 `assets/game002-s2/bg.png` 和 `assets/game002-s2` symbols，`skin=5` 映射 `assets/game002-s3/bg.jpg` 和 `assets/game002-s3` symbols。`assets/game002-s2/bg.png` 是背景不是 symbol，不要让 viewer/runtime 把它当成 symbol catalog fallback；新 skin 仍复用 `assets/gamecfg002/gameconfig.json` 和本地公开轮带，不改变 live 参数、`gamecode` 或服务器协议。
+- `game002` 单背景只配置一个相对于完整 art 的 `focusRegion`，当前为 `6 x 9` 转轮区四边各扩大 `60`；使用 rendercore 的 `maximized-focus` 通用算法，先以 contain 语义完整且最大化 focus，再按页面宽高比反推背景 viewport。focus 外仍在 art 范围内的背景必须继续显示，只有反推范围超过完整 art 时才允许封顶并产生不可避免的黑边。不要在 app 中增加第二个 DOM `frameFocusRect`、按横竖屏强制锁 focus 宽高或复制适配算法。`game003` 双背景继续使用 YAML landscape/portrait variant 和 `orientation-focus` policy，两套配置保持分开。
+- `game002` 首屏必须先走 `packages/gameloading`：99% 回调校验 query 并准备 live session，100% 后才创建 framework/Pixi 画面，并复用同一个 prepared session，避免 loading 前挂载或双 WebSocket。
+- rendercore 的 Spine Pixi runtime 只支持官方 `4.3.x`，不得恢复 4.2/3.8 runtime 或手写 adapter；`game002-s3` 主 skeleton 为 4.3.23。`game003-s1` 现有 4.2 资源是明确的非发布例外，本任务不迁移它，也不增加 fallback。
+- `assets/game002-s3/win-amount` 是当前临时 big/super/mega 资源，manifest 是 tier project、asset glob 和 segmented timing 的唯一来源；game002 只能配置 rendercore 通用 win-amount player。金额动画进入 `awaiting-dismiss` 后不再阻塞 `playSpin()`，点击只调用 `requestAdvance()`，下一次 spin 必须清理遗留展示。
 - `game002` / `game003` 的 live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`；URL query 中不要提供 `serverUrl`，旧链接继续携带 `serverUrl` 时应显式失败而不是静默覆盖或忽略。
+- `game002` 的 spin `lines` 固定为 `30`；URL 必须显式提供 `lines=30`，其它值应在 loading 99% 配置解析阶段失败，不能静默覆盖，也不能沿用 game003 的 `lines=10`。
 - `game003` 使用 `apps/game003`、`assets/gamecfg003/gameconfig.json` 和 `assets/game003-s1`；第一版只支持 `skin=1`，并固定 live `gamecode=EfedJuHEaydXNghnmO9KI`，不要把 `game003-s1` 做成 `game002` 的新皮肤。
 - `game003-s1` 横版使用 `bg1.jpg`，竖版使用 `bg2.jpg`；横竖屏 art variant 和 focus-rect 选择属于 `packages/rendercore` 的通用适配能力，game app 只能配置 art 尺寸、focus 区域和资源。
 - `game003` 的 DOM frame 使用 `packages/uiframeworks` / `packages/gameframeworks` 的 `orientation-focus` policy 提交横竖屏不同 canvas 逻辑上限；不要在 app 内用私有 CSS/DOM resize 绕过 framework，也不要让横版 focus 宽度撑爆竖版 art。

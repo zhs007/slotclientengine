@@ -45,10 +45,10 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@esotericsoftware/spine-pixi-v8": "~4.3.10",
     "@slotclientengine/logiccore": "workspace:*",
     "@slotclientengine/pixiani": "workspace:*",
     "@slotclientengine/vnicore": "workspace:*",
-    "@esotericsoftware/spine-pixi-v8": "~4.2.0",
     "pixi.js": "^8.1.6"
   },
   "devDependencies": {

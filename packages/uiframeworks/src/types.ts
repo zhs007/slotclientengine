@@ -51,10 +51,16 @@ export interface SlotUiOrientationFocusFramePolicy {
   };
 }
 
+export interface SlotUiMaximizedFocusFramePolicy {
+  readonly mode: "maximized-focus";
+  resolveViewportSize(pageSize: SlotUiDesignSize): SlotUiDesignSize;
+}
+
 export type SlotUiFramePolicy =
   | { readonly mode: "fixed" }
   | SlotUiFocusFramePolicy
-  | SlotUiOrientationFocusFramePolicy;
+  | SlotUiOrientationFocusFramePolicy
+  | SlotUiMaximizedFocusFramePolicy;
 
 export interface SlotUiViewportSnapshot {
   readonly pageSize: SlotUiDesignSize;

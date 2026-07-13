@@ -24,6 +24,17 @@ export interface FocusedArtViewportOptions {
   readonly minMargin?: RenderViewportMargin;
 }
 
+export interface MaximizedFocusedArtViewportOptions {
+  readonly artSize: RenderViewportSize;
+  readonly pageSize: RenderViewportSize;
+  readonly focusRect: RenderViewportRect;
+}
+
+export interface MaximizedFocusedArtViewportPolicy {
+  readonly mode: "maximized-focus";
+  resolveViewportSize(pageSize: RenderViewportSize): RenderViewportSize;
+}
+
 export interface FocusedArtViewport {
   readonly artSize: RenderViewportSize;
   readonly viewportSize: RenderViewportSize;
@@ -114,6 +125,56 @@ export function calculateFocusedArtViewport(
       y: -visibleRect.y,
     }),
     focusRectInViewport,
+  });
+}
+
+/**
+ * Maximizes one art-space focus rect inside the current page.
+ * The focus rect is scaled with contain semantics, then the page aspect ratio
+ * is projected back into art space so all available background remains visible.
+ * An axis is capped only when the requested viewport exceeds artSize.
+ */
+export function calculateMaximizedFocusedArtViewport(
+  options: MaximizedFocusedArtViewportOptions,
+): FocusedArtViewport {
+  const artSize = validateSize(options.artSize, "artSize");
+  const pageSize = validateSize(options.pageSize, "pageSize");
+  const focusRect = validateRect(options.focusRect, "focusRect");
+  assertRectFitsSize(focusRect, artSize, "focusRect", "artSize");
+
+  const focusScale = Math.min(
+    pageSize.width / focusRect.width,
+    pageSize.height / focusRect.height,
+  );
+  const viewportSize = freezeSize({
+    width: Math.min(artSize.width, pageSize.width / focusScale),
+    height: Math.min(artSize.height, pageSize.height / focusScale),
+  });
+
+  return calculateFocusedArtViewport({
+    artSize,
+    viewportSize,
+    focusRect,
+  });
+}
+
+export function createMaximizedFocusedArtViewportPolicy(options: {
+  readonly artSize: RenderViewportSize;
+  readonly focusRect: RenderViewportRect;
+}): MaximizedFocusedArtViewportPolicy {
+  const artSize = validateSize(options.artSize, "artSize");
+  const focusRect = validateRect(options.focusRect, "focusRect");
+  assertRectFitsSize(focusRect, artSize, "focusRect", "artSize");
+
+  return Object.freeze({
+    mode: "maximized-focus" as const,
+    resolveViewportSize(pageSize: RenderViewportSize): RenderViewportSize {
+      return calculateMaximizedFocusedArtViewport({
+        artSize,
+        pageSize,
+        focusRect,
+      }).viewportSize;
+    },
   });
 }
 
@@ -231,6 +292,21 @@ function validateSize(
   assertPositiveFinite(size.width, `${label}.width`);
   assertPositiveFinite(size.height, `${label}.height`);
   return Object.freeze({ width: size.width, height: size.height });
+}
+
+function freezeSize(size: RenderViewportSize): RenderViewportSize {
+  return Object.freeze({ width: size.width, height: size.height });
+}
+
+function assertRectFitsSize(
+  rect: RenderViewportRect,
+  size: RenderViewportSize,
+  rectLabel: string,
+  sizeLabel: string,
+): void {
+  if (rect.x + rect.width > size.width || rect.y + rect.height > size.height) {
+    throw new Error(`${rectLabel} must fit inside ${sizeLabel}.`);
+  }
 }
 
 function validateRect(

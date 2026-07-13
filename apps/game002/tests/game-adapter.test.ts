@@ -5,6 +5,7 @@ import {
   RenderSymbol,
   type SymbolAssetMap,
 } from "@slotclientengine/rendercore";
+import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import { createTextureSet } from "../../../packages/rendercore/tests/reel/helpers.js";
 import {
   GAME002_SAMPLE_DEFAULT_SCENE,
@@ -15,10 +16,7 @@ import {
   type Game002AdapterOptions,
 } from "../src/game-adapter.js";
 import type { Game002ReelRuntime } from "../src/game-demo.js";
-import {
-  GAME002_SKIN1_DISPLAY_SYMBOLS,
-  getGame002SkinConfig,
-} from "../src/skin-config.js";
+import { getGame002SkinConfig } from "../src/skin-config.js";
 
 describe("game002 adapter", () => {
   it("fails clearly before mount and when mounting twice", async () => {
@@ -92,7 +90,7 @@ describe("game002 adapter", () => {
       createApplication: () => fakeApp.app,
       loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () =>
-        createSymbolTextures(GAME002_SKIN1_DISPLAY_SYMBOLS),
+        createSymbolTextures(getGame002SkinConfig("1").displaySymbols),
     });
 
     await adapter.mount(createMountContext());
@@ -105,10 +103,10 @@ describe("game002 adapter", () => {
     const renderSymbols = collectRenderSymbols(fakeApp.stage);
     expect(renderSymbols.length).toBeGreaterThan(0);
     expect(new Set(renderSymbols.map((symbol) => symbol.scale.x))).toEqual(
-      new Set([0.8]),
+      new Set([1]),
     );
     expect(new Set(renderSymbols.map((symbol) => symbol.scale.y))).toEqual(
-      new Set([0.8]),
+      new Set([1]),
     );
   });
 
@@ -145,7 +143,7 @@ describe("game002 adapter", () => {
     const fakeApp = createFakeApplication();
     const context = createMountContext();
     const skin = {
-      ...getGame002SkinConfig("2"),
+      ...getGame002SkinConfig("1"),
       focusRegion: Object.freeze({
         x: 760,
         y: 210,
@@ -203,6 +201,90 @@ describe("game002 adapter", () => {
     await spinPromise;
     expect(resolved).toBe(true);
     expect(runtime.currentScene).toEqual(GAME002_SAMPLE_SPIN_SCENE);
+  });
+
+  it("starts win amount after reels, waits for awaiting-dismiss and forwards clicks", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const winAmount = new FakeWinAmountPlayer({ completeOnFirstUpdate: false });
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createWinAmountPlayer: () => winAmount.asPlayer(),
+    });
+    const context = createMountContext();
+    await adapter.mount(context);
+
+    const pending = adapter.playSpin(
+      createLogic(GAME002_SAMPLE_SPIN_SCENE, { totalWin: 2_250 }),
+    );
+    expect(winAmount.immediateDismissRequests).toBe(1);
+    expect(winAmount.starts).toEqual([]);
+
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    expect(winAmount.starts).toEqual([
+      { betAmountRaw: 150, winAmountRaw: 2_250 },
+    ]);
+    expect(winAmount.phase).toBe("major-counting");
+
+    fakeApp.canvas.dispatchEvent(new Event("pointerdown"));
+    expect(winAmount.advanceRequests).toBe(1);
+    expect(winAmount.phase).toBe("awaiting-dismiss");
+    fakeApp.tick(16);
+    await pending;
+
+    const updateCount = winAmount.updateDeltas.length;
+    fakeApp.tick(16);
+    expect(winAmount.updateDeltas).toHaveLength(updateCount + 1);
+    context.emitViewport({ width: 1200, height: 1200 });
+    expect(winAmount.layoutCalls.length).toBeGreaterThan(1);
+
+    fakeApp.canvas.dispatchEvent(new Event("pointerdown"));
+    expect(winAmount.phase).toBe("complete");
+    adapter.destroy?.();
+    expect(winAmount.destroyed).toBe(true);
+    const advanceCount = winAmount.advanceRequests;
+    fakeApp.canvas.dispatchEvent(new Event("pointerdown"));
+    expect(winAmount.advanceRequests).toBe(advanceCount);
+  });
+
+  it("skips win playback for zero and rejects invalid monetary inputs", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const winAmount = new FakeWinAmountPlayer();
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadStaticTextures: loadFakeStaticTextures,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createWinAmountPlayer: () => winAmount.asPlayer(),
+    });
+    await adapter.mount(createMountContext());
+
+    const zeroWin = adapter.playSpin(createLogic(GAME002_SAMPLE_SPIN_SCENE));
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await zeroWin;
+    expect(winAmount.starts).toEqual([]);
+
+    expect(() =>
+      adapter.playSpin(
+        createLogic(GAME002_SAMPLE_SPIN_SCENE, { bet: 0, totalWin: 1 }),
+      ),
+    ).toThrow(/bet amount must be a finite positive number/);
+    expect(() =>
+      adapter.playSpin(
+        createLogic(GAME002_SAMPLE_SPIN_SCENE, { totalWin: -1 }),
+      ),
+    ).toThrow(/win amount must be a finite non-negative number/);
+    expect(() =>
+      adapter.playSpin(
+        createLogic(GAME002_SAMPLE_SPIN_SCENE, { totalWin: Number.NaN }),
+      ),
+    ).toThrow(/win amount must be a finite non-negative number/);
   });
 
   it("caps oversized ticker deltas so grid-cell spin stays visible after resize", async () => {
@@ -307,7 +389,7 @@ describe("game002 adapter", () => {
 
 function createTestAdapter(options: Omit<Game002AdapterOptions, "skin">) {
   return createGame002Adapter({
-    skin: getGame002SkinConfig("2"),
+    skin: getGame002SkinConfig("1"),
     ...options,
   });
 }
@@ -474,12 +556,96 @@ function collectRenderSymbols(root: unknown): RenderSymbol[] {
   return found;
 }
 
-function createLogic(scene: SceneMatrix): GameLogic {
+function createLogic(
+  scene: SceneMatrix,
+  options: {
+    readonly bet?: number;
+    readonly lines?: number;
+    readonly totalWin?: number;
+  } = {},
+): GameLogic {
   return {
+    getBet: () => options.bet ?? 5,
+    getLines: () => options.lines ?? 30,
+    getTotalWin: () => options.totalWin ?? 0,
     getStep: () => ({
       getScene: () => scene,
     }),
   } as unknown as GameLogic;
+}
+
+class FakeWinAmountPlayer {
+  readonly container = new Container();
+  readonly starts: Array<{
+    readonly betAmountRaw: number;
+    readonly winAmountRaw: number;
+  }> = [];
+  readonly updateDeltas: number[] = [];
+  readonly layoutCalls: unknown[] = [];
+  advanceRequests = 0;
+  immediateDismissRequests = 0;
+  phase:
+    | "idle"
+    | "minor-counting"
+    | "major-counting"
+    | "tier-counting"
+    | "awaiting-dismiss"
+    | "dismissing"
+    | "complete" = "idle";
+  destroyed = false;
+  completeNextUpdate: boolean;
+
+  constructor(options: { readonly completeOnFirstUpdate?: boolean } = {}) {
+    this.completeNextUpdate = options.completeOnFirstUpdate ?? true;
+  }
+
+  asPlayer(): WinAmountAnimationPlayer {
+    return {
+      container: this.container,
+      start: (input) => {
+        this.starts.push(input);
+        this.phase = "major-counting";
+      },
+      update: (deltaSeconds) => {
+        this.updateDeltas.push(deltaSeconds);
+        if (this.completeNextUpdate && this.phase === "major-counting") {
+          this.phase = "awaiting-dismiss";
+        }
+        return {
+          completed: this.phase === "idle" || this.phase === "complete",
+          phase: this.phase,
+          displayedAmountRaw: this.starts.at(-1)?.winAmountRaw ?? 0,
+        };
+      },
+      requestAdvance: () => {
+        this.advanceRequests += 1;
+        if (this.phase === "awaiting-dismiss") {
+          this.phase = "complete";
+        } else if (
+          this.phase === "minor-counting" ||
+          this.phase === "major-counting" ||
+          this.phase === "tier-counting"
+        ) {
+          this.phase = "awaiting-dismiss";
+        }
+      },
+      requestDismiss: () => {
+        this.phase = "complete";
+      },
+      dismissImmediately: () => {
+        this.immediateDismissRequests += 1;
+        this.phase = "complete";
+      },
+      applyLayout: (layout) => {
+        this.layoutCalls.push(layout);
+      },
+      isPlaying: () => this.phase !== "idle" && this.phase !== "complete",
+      destroy: () => {
+        this.destroyed = true;
+        this.phase = "complete";
+      },
+    };
+  }
 }
 
 class FakeRuntime {

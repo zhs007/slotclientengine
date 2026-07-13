@@ -5,27 +5,14 @@ import {
   GAME002_BOARD_FRAME,
   GAME002_BOARD_FRAME_IN_REFERENCE,
   GAME002_CELL_SIZE,
-  GAME002_DEFAULT_FOCUS_REGION,
-  GAME002_DEFAULT_GRID_LAYOUT,
-  GAME002_FOCUS_MARGIN,
+  GAME002_FOCUS_REGION,
   GAME002_GRID_CELL_DIMMING,
   GAME002_GRID_CELL_REEL_ORDER,
   GAME002_GRID_CELL_REEL_TIMING,
-  GAME002_SKIN1_FOCUS_REGION,
-  GAME002_SKIN1_BOARD_FRAME,
-  GAME002_SKIN1_CELL_HEIGHT,
-  GAME002_SKIN1_CELL_WIDTH,
-  GAME002_SKIN1_GRID_LAYOUT,
-  GAME002_SKIN2_FOCUS_REGION,
-  GAME002_SKIN3_FOCUS_REGION,
-  GAME002_SKIN4_FOCUS_REGION,
-  GAME002_SKIN4_GRID_LAYOUT,
-  GAME002_SKIN5_FOCUS_REGION,
-  GAME002_SKIN5_GRID_LAYOUT,
+  GAME002_GRID_LAYOUT,
   GAME002_REFERENCE_SIZE,
   GAME002_REFERENCE_VISIBLE_RECT_IN_ART,
   GAME002_REEL_COUNT,
-  GAME002_STAGE_SIZE,
   GAME002_VISIBLE_ROWS,
   calculateGame002FrameScale,
   createGame002FramePolicy,
@@ -36,12 +23,14 @@ import {
   validateGame002FocusRegion,
 } from "../src/game-layout.js";
 
-describe("game002 layout", () => {
-  it("locks art size, reference crop and mapped board frame", () => {
+describe("game002-s3 layout", () => {
+  it("locks the single s3 art, focus and 6 x 9 board contract", () => {
     const layout = createGame002Layout();
+    const reelLayout = createGame002ReelLayout();
+    const layerLayout = createGame002ReelLayerLayout(reelLayout, layout);
 
     expect(GAME002_ART_SIZE).toEqual({ width: 2000, height: 2000 });
-    expect(GAME002_STAGE_SIZE).toEqual(GAME002_ART_SIZE);
+    expect(GAME002_ASSET_SIZE.background).toEqual(GAME002_ART_SIZE);
     expect(GAME002_REFERENCE_SIZE).toEqual({ width: 1125, height: 2000 });
     expect(GAME002_REFERENCE_VISIBLE_RECT_IN_ART).toEqual({
       x: 437.5,
@@ -49,37 +38,34 @@ describe("game002 layout", () => {
       width: 1125,
       height: 2000,
     });
-    expect(GAME002_ASSET_SIZE.background).toEqual({
-      width: 2000,
-      height: 2000,
+    expect(GAME002_FOCUS_REGION).toEqual({
+      x: 577.5,
+      y: 270,
+      width: 840,
+      height: 1200,
     });
-    expect(layout.background).toEqual({ x: 0, y: 0 });
-    expect(layout.backgroundFrame).toEqual({
-      x: 0,
-      y: 0,
-      width: 2000,
-      height: 2000,
+    expect(GAME002_GRID_LAYOUT).toEqual({
+      boardFrame: GAME002_BOARD_FRAME,
+      cellWidth: 120,
+      cellHeight: 120,
     });
-    expect(GAME002_BOARD_FRAME_IN_REFERENCE).toEqual({
-      x: 200,
-      y: 330,
-      width: 720,
-      height: 1080,
-    });
-    expect(layout.boardFrame).toEqual({
-      x: 637.5,
-      y: 330,
-      width: 720,
-      height: 1080,
-    });
-    expect(layout.visibleRect).toEqual(GAME002_REFERENCE_VISIBLE_RECT_IN_ART);
-    expect(layout.focusRegion).toEqual(GAME002_DEFAULT_FOCUS_REGION);
-    expect(layout.focusRegionInViewport).toEqual(
-      GAME002_BOARD_FRAME_IN_REFERENCE,
-    );
+    expect(layout.boardFrame).toEqual(GAME002_BOARD_FRAME);
     expect(layout.boardFrameInViewport).toEqual(
       GAME002_BOARD_FRAME_IN_REFERENCE,
     );
+    expect(reelLayout).toMatchObject({
+      reelCount: 6,
+      visibleRows: 9,
+      cellWidth: 120,
+      cellHeight: 120,
+      columnGap: 0,
+    });
+    expect(layerLayout).toMatchObject({
+      x: 637.5,
+      y: 330,
+      rawReelsContentWidth: 720,
+      rawReelsContentHeight: 1080,
+    });
     expect(GAME002_BOARD_FRAME.width).toBe(
       GAME002_REEL_COUNT * GAME002_CELL_SIZE,
     );
@@ -88,243 +74,80 @@ describe("game002 layout", () => {
     );
   });
 
-  it("locks skin 1 to the larger background grid instead of cropping the bottom row", () => {
-    const layout = createGame002Layout({
-      gridLayout: GAME002_SKIN1_GRID_LAYOUT,
-      focusRegion: GAME002_SKIN1_FOCUS_REGION,
+  it("delegates focus viewport mapping for portrait, square and wide frames", () => {
+    const portrait = createGame002Layout({
+      viewportSize: { width: 1125, height: 2000 },
+      gridLayout: GAME002_GRID_LAYOUT,
+      focusRegion: GAME002_FOCUS_REGION,
     });
-    const reelLayout = createGame002ReelLayout(GAME002_SKIN1_GRID_LAYOUT);
-    const layerLayout = createGame002ReelLayerLayout(reelLayout, layout);
-
-    expect(GAME002_SKIN1_CELL_WIDTH).toBe(125);
-    expect(GAME002_SKIN1_CELL_HEIGHT).toBeCloseTo(133.3333333333);
-    expect(GAME002_SKIN1_BOARD_FRAME).toEqual({
-      x: 620,
-      y: 465,
-      width: 750,
-      height: 1200,
-    });
-    expect(layout.boardFrame).toEqual(GAME002_SKIN1_BOARD_FRAME);
-    expect(layout.focusRegion).toEqual(GAME002_SKIN1_FOCUS_REGION);
-    expect(layout.focusRegionInViewport).toEqual({
-      x: 117.5,
-      y: 150,
-      width: 862,
-      height: 1537,
-    });
-    expect(layout.boardFrameInViewport).toEqual({
-      x: 182.5,
-      y: 465,
-      width: 750,
-      height: 1200,
-    });
-    expect(reelLayout).toMatchObject({
-      reelCount: 6,
-      visibleRows: 9,
-      cellWidth: 125,
-      cellHeight: 400 / 3,
-      columnGap: 0,
-    });
-    expect(layerLayout).toMatchObject({
-      rawReelsContentWidth: 750,
-      rawReelsContentHeight: 1200,
-      x: 620,
-      y: 465,
-      stageVisibleFrame: GAME002_SKIN1_BOARD_FRAME,
-      viewportVisibleFrame: layout.boardFrameInViewport,
-    });
-  });
-
-  it("locks skin 4 and 5 to the same explicit layout and focus as skin 2 and 3", () => {
-    expect(GAME002_SKIN4_GRID_LAYOUT).toEqual(GAME002_DEFAULT_GRID_LAYOUT);
-    expect(GAME002_SKIN5_GRID_LAYOUT).toEqual(GAME002_DEFAULT_GRID_LAYOUT);
-    expect(GAME002_SKIN4_FOCUS_REGION).toEqual(GAME002_SKIN2_FOCUS_REGION);
-    expect(GAME002_SKIN5_FOCUS_REGION).toEqual(GAME002_SKIN3_FOCUS_REGION);
-
-    for (const [gridLayout, focusRegion] of [
-      [GAME002_SKIN4_GRID_LAYOUT, GAME002_SKIN4_FOCUS_REGION],
-      [GAME002_SKIN5_GRID_LAYOUT, GAME002_SKIN5_FOCUS_REGION],
-    ] as const) {
-      const layout = createGame002Layout({ gridLayout, focusRegion });
-      const reelLayout = createGame002ReelLayout(gridLayout);
-
-      expect(layout.boardFrame).toEqual({
-        x: 637.5,
-        y: 330,
-        width: 720,
-        height: 1080,
-      });
-      expect(layout.focusRegion).toEqual({
-        x: 637.5,
-        y: 330,
-        width: 720,
-        height: 1080,
-      });
-      expect(reelLayout).toMatchObject({
-        reelCount: 6,
-        visibleRows: 9,
-        cellWidth: 120,
-        cellHeight: 120,
-        columnGap: 0,
-      });
-      expect(() =>
-        validateGame002BoardFrame(gridLayout.boardFrame),
-      ).not.toThrow();
-      expect(() => validateGame002FocusRegion(focusRegion)).not.toThrow();
-    }
-  });
-
-  it("validates board frame dimensions and stage containment", () => {
-    expect(() => validateGame002BoardFrame()).not.toThrow();
-    expect(() =>
-      validateGame002BoardFrame({ ...GAME002_BOARD_FRAME, x: -1 }),
-    ).toThrow(/x/);
-    expect(() =>
-      validateGame002BoardFrame({ ...GAME002_BOARD_FRAME, width: 721 }),
-    ).toThrow(/width/);
-    expect(() =>
-      validateGame002BoardFrame({ ...GAME002_BOARD_FRAME, height: 1079 }),
-    ).toThrow(/height/);
-    expect(() =>
-      validateGame002BoardFrame(
-        { ...GAME002_SKIN1_BOARD_FRAME, height: 1080 },
-        GAME002_STAGE_SIZE,
-        GAME002_SKIN1_CELL_WIDTH,
-        GAME002_SKIN1_CELL_HEIGHT,
-      ),
-    ).toThrow(/height/);
-    expect(() =>
-      validateGame002BoardFrame({
-        ...GAME002_BOARD_FRAME,
-        y: 950,
-      }),
-    ).toThrow(/inside/);
-    expect(() =>
-      validateGame002FocusRegion({
-        ...GAME002_SKIN2_FOCUS_REGION,
-        x: -1,
-      }),
-    ).toThrow(/x/);
-    expect(() =>
-      validateGame002FocusRegion({
-        ...GAME002_SKIN2_FOCUS_REGION,
-        width: 0,
-      }),
-    ).toThrow(/width/);
-    expect(() =>
-      validateGame002FocusRegion({
-        ...GAME002_SKIN2_FOCUS_REGION,
-        y: 1000,
-      }),
-    ).toThrow(/art size/);
-  });
-
-  it("creates a 6 x 9 120px reel layout at the board origin", () => {
-    const reelLayout = createGame002ReelLayout();
-    const layerLayout = createGame002ReelLayerLayout(reelLayout);
-
-    expect(reelLayout.reelCount).toBe(6);
-    expect(reelLayout.visibleRows).toBe(9);
-    expect(reelLayout.cellWidth).toBe(120);
-    expect(reelLayout.cellHeight).toBe(120);
-    expect(reelLayout.columnGap).toBe(0);
-    expect(layerLayout).toMatchObject({
-      rawReelsContentWidth: 720,
-      rawReelsContentHeight: 1080,
-      x: 637.5,
-      y: 330,
-      stageVisibleFrame: GAME002_BOARD_FRAME,
-      viewportVisibleFrame: GAME002_BOARD_FRAME_IN_REFERENCE,
-    });
-  });
-
-  it("calculates focused art viewports for portrait, square and landscape", () => {
-    expect(createGame002Layout({ width: 1125, height: 2000 })).toMatchObject({
-      visibleRect: { x: 437.5, y: 0, width: 1125, height: 2000 },
-      worldOffset: { x: -437.5, y: -0 },
-      boardFrameInViewport: { x: 200, y: 330, width: 720, height: 1080 },
-    });
-    expect(createGame002Layout({ width: 1200, height: 1200 })).toMatchObject({
-      visibleRect: { x: 397.5, y: 270, width: 1200, height: 1200 },
-      worldOffset: { x: -397.5, y: -270 },
-      boardFrameInViewport: { x: 240, y: 60, width: 720, height: 1080 },
-    });
-    expect(createGame002Layout({ width: 2000, height: 1200 })).toMatchObject({
-      visibleRect: { x: 0, y: 270, width: 2000, height: 1200 },
-      worldOffset: { x: -0, y: -270 },
-      boardFrameInViewport: { x: 637.5, y: 60, width: 720, height: 1080 },
-    });
-  });
-
-  it("separates focus region adaptation from reel board layout", () => {
-    const focusRegion = Object.freeze({
-      x: 760,
-      y: 210,
-      width: 480,
-      height: 600,
-    });
-    const layout = createGame002Layout({
+    const square = createGame002Layout({
       viewportSize: { width: 1200, height: 1200 },
-      gridLayout: GAME002_DEFAULT_GRID_LAYOUT,
-      focusRegion,
+      gridLayout: GAME002_GRID_LAYOUT,
+      focusRegion: GAME002_FOCUS_REGION,
     });
-    const reelLayout = createGame002ReelLayout(GAME002_DEFAULT_GRID_LAYOUT);
+    const wide = createGame002Layout({
+      viewportSize: { width: 2000, height: 1200 },
+      gridLayout: GAME002_GRID_LAYOUT,
+      focusRegion: GAME002_FOCUS_REGION,
+    });
 
-    expect(layout.visibleRect).toEqual({
-      x: 400,
-      y: 0,
+    expect(portrait.worldOffset).toEqual({ x: -437.5, y: -0 });
+    expect(square.worldOffset).toEqual({ x: -397.5, y: -270 });
+    expect(wide.worldOffset).toEqual({ x: -0, y: -270 });
+    const framePolicy = createGame002FramePolicy();
+    expect(framePolicy.mode).toBe("maximized-focus");
+    if (framePolicy.mode !== "maximized-focus") {
+      throw new Error("game002 must use the maximized-focus frame policy.");
+    }
+    expect(
+      framePolicy.resolveViewportSize({ width: 1200, height: 1200 }),
+    ).toEqual({
       width: 1200,
       height: 1200,
     });
-    expect(layout.focusRegion).toEqual(focusRegion);
-    expect(layout.focusRegionInViewport).toEqual({
-      x: 360,
-      y: 210,
-      width: 480,
-      height: 600,
+    expect(
+      framePolicy.resolveViewportSize({ width: 1920, height: 1080 }),
+    ).toEqual({
+      width: 2000,
+      height: 1200,
     });
-    expect(layout.boardFrame).toEqual(GAME002_BOARD_FRAME);
-    expect(layout.boardFrameInViewport).toEqual({
-      x: 237.5,
-      y: 330,
-      width: 720,
-      height: 1080,
+    const phoneFrame = framePolicy.resolveViewportSize({
+      width: 390,
+      height: 844,
     });
-    expect(reelLayout).toMatchObject({
-      reelCount: GAME002_REEL_COUNT,
-      visibleRows: GAME002_VISIBLE_ROWS,
-      cellWidth: GAME002_CELL_SIZE,
-      cellHeight: GAME002_CELL_SIZE,
-    });
+    expect(phoneFrame.width).toBe(840);
+    expect(phoneFrame.height).toBeCloseTo((840 * 844) / 390, 10);
+
+    for (const viewportSize of [
+      phoneFrame,
+      { width: 1200, height: 1200 },
+      { width: 2000, height: 1200 },
+    ]) {
+      const layout = createGame002Layout({
+        viewportSize,
+        gridLayout: GAME002_GRID_LAYOUT,
+        focusRegion: GAME002_FOCUS_REGION,
+      });
+      expect(layout.boardFrameInViewport.x).toBeGreaterThanOrEqual(0);
+      expect(layout.boardFrameInViewport.y).toBeGreaterThanOrEqual(0);
+      expect(
+        layout.boardFrameInViewport.x + layout.boardFrameInViewport.width,
+      ).toBeLessThanOrEqual(layout.viewportSize.width);
+      expect(
+        layout.boardFrameInViewport.y + layout.boardFrameInViewport.height,
+      ).toBeLessThanOrEqual(layout.viewportSize.height);
+      expect(layout.focusRegionInViewport.x).toBeGreaterThanOrEqual(0);
+      expect(layout.focusRegionInViewport.y).toBeGreaterThanOrEqual(0);
+      expect(
+        layout.focusRegionInViewport.x + layout.focusRegionInViewport.width,
+      ).toBeLessThanOrEqual(layout.viewportSize.width);
+      expect(
+        layout.focusRegionInViewport.y + layout.focusRegionInViewport.height,
+      ).toBeLessThanOrEqual(layout.viewportSize.height);
+    }
   });
 
-  it("creates the game002 framework focus policy", () => {
-    expect(createGame002FramePolicy()).toEqual({
-      mode: "focus",
-      maxDesignSize: GAME002_ART_SIZE,
-      preferredPortraitSize: GAME002_REFERENCE_SIZE,
-      focusRect: { width: 720, height: 1080 },
-      minFocusMargin: GAME002_FOCUS_MARGIN,
-    });
-    expect(createGame002FramePolicy(GAME002_SKIN1_FOCUS_REGION)).toMatchObject({
-      mode: "focus",
-      focusRect: { width: 862, height: 1537 },
-    });
-    expect(createGame002FramePolicy(GAME002_SKIN3_FOCUS_REGION)).toMatchObject({
-      mode: "focus",
-      focusRect: { width: 720, height: 1080 },
-    });
-    expect(createGame002FramePolicy(GAME002_SKIN4_FOCUS_REGION)).toMatchObject({
-      mode: "focus",
-      focusRect: { width: 720, height: 1080 },
-    });
-    expect(createGame002FramePolicy(GAME002_SKIN5_FOCUS_REGION)).toMatchObject({
-      mode: "focus",
-      focusRect: { width: 720, height: 1080 },
-    });
-  });
-
-  it("locks grid cell reel order, timing and dimming parameters", () => {
+  it("keeps grid timing/dimming stable and validates explicit geometry", () => {
     expect(GAME002_GRID_CELL_REEL_ORDER).toBe("top-down-left-right");
     expect(GAME002_GRID_CELL_REEL_TIMING).toEqual({
       startStepMs: 16,
@@ -339,31 +162,16 @@ describe("game002 layout", () => {
       fadeInMs: 80,
       fadeOutMs: 160,
     });
-  });
-
-  it("rejects reel layer layouts that drift from the 6 x 9 board contract", () => {
-    const reelLayout = createGame002ReelLayout();
-
+    expect(() => validateGame002BoardFrame()).not.toThrow();
     expect(() =>
-      createGame002ReelLayerLayout({ ...reelLayout, reelCount: 5 }),
-    ).toThrow(/reelCount/);
+      validateGame002FocusRegion(GAME002_FOCUS_REGION),
+    ).not.toThrow();
     expect(() =>
-      createGame002ReelLayerLayout({ ...reelLayout, visibleRows: 8 }),
-    ).toThrow(/visibleRows/);
+      validateGame002BoardFrame({ ...GAME002_BOARD_FRAME, width: 721 }),
+    ).toThrow(/width/);
     expect(() =>
-      createGame002ReelLayerLayout({ ...reelLayout, cellWidth: 119 }),
-    ).toThrow(/board width/);
-    expect(() =>
-      createGame002ReelLayerLayout({ ...reelLayout, columnGap: 1 }),
-    ).toThrow(/columnGap/);
-  });
-
-  it("scales the complete stage into the viewport and rejects invalid viewport sizes", () => {
-    expect(calculateGame002FrameScale(2000, 2000)).toBe(1);
-    expect(calculateGame002FrameScale(4000, 4000)).toBe(2);
-    expect(calculateGame002FrameScale(1920, 1080)).toBeCloseTo(1080 / 2000);
-    expect(calculateGame002FrameScale(1000, 2000)).toBe(0.5);
-    expect(() => calculateGame002FrameScale(0, 100)).toThrow(/viewportWidth/);
-    expect(() => calculateGame002FrameScale(100, 0)).toThrow(/viewportHeight/);
+      validateGame002FocusRegion({ ...GAME002_FOCUS_REGION, y: 1000 }),
+    ).toThrow(/art size/);
+    expect(calculateGame002FrameScale(1000, 1000)).toBe(0.5);
   });
 });

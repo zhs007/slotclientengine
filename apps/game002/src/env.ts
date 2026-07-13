@@ -1,4 +1,5 @@
 export {
+  GAME002_LINES,
   GAME002_LIVE_SERVER_URL,
   parseGame002FrameworkConfigFromQuery,
   parseGame002QueryConfig,

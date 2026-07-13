@@ -1,58 +1,26 @@
 # symbolsviewer
 
-`symbolsviewer` 是 `game003-s1` symbol 调试 app，用来一次性展示 `game003` 当前可处理的 slot symbol，并验证 manifest 驱动的状态动画。
+`symbolsviewer` 是 manifest 驱动的 symbol 调试 app。当前 Set selector 包含：
 
-## 资产
+- `game002-s3`：任务 91 的发布目标，13 个主 symbol、12 个 Spine 4.3.23 skeleton。
+- `game003-s1`：现有游戏资源，Spine 4.2.43；当前明确为非发布例外，选择其 Spine 状态会因 rendercore 仅支持 4.3.x 而显式失败。
+- `game003-bg-bar`：独立 `normal|wild|up` 组件资源。
 
-viewer 只绑定 `game003-s1`：
+`game002-s3` 的 display set 固定为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`，所有 scale 为 `1`。viewer 只接入这 13 组 normal/spinBlur/disabled PNG、同名的 12 个 skeleton、`Symbol.atlas` 和 `Symbol.png`；不会通过宽泛 glob 接入 `CN_1..CN_4`、`Nearwin*` 或 `WM_Fx`。
 
-- `assets/gamecfg003/gameconfig.json`
-- `assets/game003-s1/*.png`
-- `assets/game003-s1/*.spinBlur.png`
-- `assets/game003-s1/*.disabled.png`
-- `assets/game003-s1/symbol-state-textures.manifest.json`
-- `assets/game003-s1/*-wins.json`
-- `assets/game003-s1/assets/*.{png,jpg,jpeg,webp}`
-- `assets/game003-s1/{WL,H1,H2,H3,H4,H5,CL,SC}.json`
-- `assets/game003-s1/Symbol.atlas`
-- `assets/game003-s1/Symbol.png`
+scale、renderPriority 和 normal/appear/win animation 都来自各自的 `symbol-state-textures.manifest.json`，解析、Spine/VNI player 和 fallback 生命周期由 `@slotclientengine/rendercore` 提供。viewer 只负责 UI、输入校验、状态展示和 public resolver 调用。
 
-可展示 symbol 是 `WL`、`H1`、`H2`、`H3`、`H4`、`H5`、`L1`、`L2`、`L3`、`L4`、`L5`、`CO`、`CL`、`SC`。背景、主转轮框、传送带和 VNI 内部 asset 不会被当成 symbol 展示。
+对 `game002-s3`，只有 manifest 明确声明的 appear/win 才播放。比如 `WM.win`、`BN.appear`、`CN.appear/win` 不可用时，viewer 跳过该自定义状态并回到 normal；不会伪造 builtin/static 动画，也不会把 normal Spine 播放冒充自定义 win/appear。
 
-每个可展示 symbol 的 `scale`、`renderPriority`、`normal` / `appear` / `win` 动画类型、Spine `animationName` 和 `durationSeconds` 都来自 `symbol-state-textures.manifest.json`。viewer 只把 manifest、VNI project modules、VNI asset modules、Spine skeleton modules、Spine atlas raw modules、Spine texture URL modules 和 manifest 派生的 priority map 传给 `@slotclientengine/rendercore`，不在 app 内维护第二份 scale / priority 表，也不硬编码 `L1`-`L5` 或 `WL/H1/H2/H3/H4/H5/CL/SC` 的播放逻辑。
-
-`game003-s1` 的动画规则：
-
-当前 display Spine skeleton 为 Spine `4.2.43`，由 `@slotclientengine/rendercore` 内锁定在 `4.2.x` 的官方 Pixi v8 runtime 解析；viewer 不直接依赖或调用 Spine runtime。未知/错配版本必须显式失败。
-
-- `L1.appear` 到 `L5.appear`：manifest `kind: "static"`，直接保持普通状态静态图。
-- `L1.win` 到 `L5.win`：manifest `kind: "vni"`，播放对应 `assets/game003-s1/L*-wins.json`。
-- `WL,H1,H2,H3,H4,H5,CL,SC` 的 `normal`：manifest `kind: "spine"`，播放 `Idle`。
-- `WL.appear`：manifest `kind: "spine"`，播放 `start`；`H1/CL/SC.appear`：manifest `kind: "spine"`，播放 `Start`。Spine animation name 区分大小写。
-- `H2` 到 `H5` 当前没有 Start 动画，manifest 不写 `appear`，rendercore 会退回该 symbol 自身 normal Spine 展示并按 once 状态完成。
-- `CO.appear` / `CO.win`：manifest `kind: "builtin"`，使用 manifest 中声明的 `durationSeconds` 调用 rendercore 内置效果。
-
-`stageRect` 不属于 runtime manifest；如果 manifest 中写入 `stageRect`，rendercore 会作为未知字段显式失败。缺 VNI project/asset、缺 Spine skeleton/atlas/texture、atlas page/region 不匹配或 Spine animation name 不存在都会显式失败，viewer 不做静默 fallback。新增但尚未列入 game003-s1 display set 的 JSON 资源不能通过宽泛 glob 悄悄进入 display set。
-
-生成 symbol 状态贴图和 manifest：
+运行与验收：
 
 ```bash
-pnpm --filter @slotclientengine/rendercore generate:symbol-state-textures -- --input-dir assets/game003-s1 --output-dir assets/game003-s1 --symbols WL,H1,H2,H3,H4,H5,L1,L2,L3,L4,L5,CO,CL,SC --scale 1
-```
-
-重新生成状态贴图时，生成器会保留仍然有效的 `animations` 和显式 `renderPriority` 元数据，不能手动丢掉 manifest animation 或 priority。
-
-## 运行
-
-```bash
+pnpm --filter symbolsviewer format
+pnpm --filter symbolsviewer lint
+pnpm --filter symbolsviewer test
+pnpm --filter symbolsviewer typecheck
+pnpm --filter symbolsviewer build
 pnpm --filter symbolsviewer dev -- --host 0.0.0.0
 ```
 
-## 界面
-
-第一屏就是状态展示工具：
-
-- 顶部工具栏可播放、暂停、进入下一状态、重置和切换默认 stable 状态。
-- 顶部 `Set` selector 只包含 `game003-s1`。
-- 右侧序列区可增加、移除、上移、下移状态。
-- 下方状态面板展示当前 symbol set、可展示 symbol、manifest priority、paytable 缺图和孤儿图片检查结果。
+界面支持播放、暂停、下一状态、重置、stable state 和 Set 切换。状态面板展示当前 display set、manifest priority、paytable 缺图和孤儿资源校验结果。缺 manifest、资源、atlas page/region、精确 animation name 或受支持 Spine 版本都必须显式失败。

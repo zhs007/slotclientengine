@@ -57,6 +57,7 @@ export type {
   SlotGameLiveConfig,
   SlotGameLiveSessionLike,
   SlotGameLogicFactory,
+  SlotGameMaximizedFocusFramePolicy,
   SlotGameMountContext,
   SlotGameSpinRequest,
   SlotGameSpinState,

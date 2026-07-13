@@ -103,10 +103,19 @@ export interface SlotGameOrientationFocusFramePolicy {
   };
 }
 
+export interface SlotGameMaximizedFocusFramePolicy {
+  readonly mode: "maximized-focus";
+  resolveViewportSize(pageSize: {
+    readonly width: number;
+    readonly height: number;
+  }): { readonly width: number; readonly height: number };
+}
+
 export type SlotGameFramePolicy =
   | { readonly mode: "fixed" }
   | SlotGameFocusFramePolicy
-  | SlotGameOrientationFocusFramePolicy;
+  | SlotGameOrientationFocusFramePolicy
+  | SlotGameMaximizedFocusFramePolicy;
 
 export interface SlotGameViewportSnapshot {
   readonly pageSize: { readonly width: number; readonly height: number };

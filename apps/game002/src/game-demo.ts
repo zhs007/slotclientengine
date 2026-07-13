@@ -20,12 +20,13 @@ import {
   type RenderGridCellReelSetUpdateResult,
 } from "@slotclientengine/rendercore/reel";
 import type {
+  ReelSymbolRenderPriorityMap,
   ReelSymbolScaleMap,
+  SymbolAnimationResolver,
   SymbolAssetMap,
 } from "@slotclientengine/rendercore";
 import {
   GAME002_EMPTY_SYMBOLS,
-  GAME002_DISPLAY_SYMBOLS,
   GAME002_REQUIRED_STATE_TEXTURES,
 } from "./assets.js";
 import {
@@ -36,8 +37,8 @@ import {
   GAME002_GRID_CELL_REEL_OFFSETS,
   GAME002_GRID_CELL_REEL_ORDER,
   GAME002_GRID_CELL_REEL_TIMING,
-  GAME002_DEFAULT_GRID_LAYOUT,
-  GAME002_DEFAULT_FOCUS_REGION,
+  GAME002_GRID_LAYOUT,
+  GAME002_FOCUS_REGION,
   createGame002Layout,
   createGame002ReelLayerLayout,
   createGame002ReelLayout,
@@ -45,7 +46,11 @@ import {
   type Game002GridLayout,
   type Game002ReelLayerLayout,
 } from "./game-layout.js";
-import { GAME002_SYMBOL_SCALES } from "./symbol-animation-config.js";
+import {
+  GAME002_SYMBOL_RENDER_PRIORITIES,
+  GAME002_SYMBOL_SCALES,
+} from "./symbol-animation-config.js";
+import { getGame002SkinConfig } from "./skin-config.js";
 import {
   assertScenesEqual,
   sceneEquals,
@@ -58,6 +63,8 @@ export interface Game002ReelConfig {
   readonly texturedSymbols: readonly string[];
   readonly missingAssetLabel: string;
   readonly symbolScales: ReelSymbolScaleMap;
+  readonly symbolRenderPriorities: ReelSymbolRenderPriorityMap;
+  readonly animationResolver: SymbolAnimationResolver;
   readonly gridLayout: Game002GridLayout;
   readonly focusRegion: Game002FocusRegion;
   readonly cellReelOffsets: GridCellReelOffsetMatrix;
@@ -67,14 +74,18 @@ export interface Game002ReelConfig {
   readonly dimming: GridCellDimmingPattern;
 }
 
+const GAME002_DEFAULT_SKIN = getGame002SkinConfig("1");
+
 export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   reelsName: GAME002_REELS_NAME,
   emptySymbols: GAME002_EMPTY_SYMBOLS,
-  texturedSymbols: GAME002_DISPLAY_SYMBOLS,
-  missingAssetLabel: "skin 2",
+  texturedSymbols: GAME002_DEFAULT_SKIN.displaySymbols,
+  missingAssetLabel: GAME002_DEFAULT_SKIN.label,
   symbolScales: GAME002_SYMBOL_SCALES,
-  gridLayout: GAME002_DEFAULT_GRID_LAYOUT,
-  focusRegion: GAME002_DEFAULT_FOCUS_REGION,
+  symbolRenderPriorities: GAME002_SYMBOL_RENDER_PRIORITIES,
+  animationResolver: GAME002_DEFAULT_SKIN.symbolAnimationResolver,
+  gridLayout: GAME002_GRID_LAYOUT,
+  focusRegion: GAME002_FOCUS_REGION,
   cellReelOffsets: GAME002_GRID_CELL_REEL_OFFSETS,
   direction: "forward",
   orderMode: GAME002_GRID_CELL_REEL_ORDER,
@@ -134,10 +145,13 @@ export function createGame002ReelRuntime(
     assets: options.symbolAssets,
     emptySymbols: config.emptySymbols,
     symbolScales: config.symbolScales,
+    symbolRenderPriorities: config.symbolRenderPriorities,
+    animationResolver: config.animationResolver,
     texturePolicy: {
       requiredStateTextures: GAME002_REQUIRED_STATE_TEXTURES,
     },
   });
+  assertConfiguredTexturedSymbolsAvailable(registry.getValidation(), config);
   const layout = createGame002ReelLayout(config.gridLayout);
   const layerLayout = createGame002ReelLayerLayout(
     layout,
@@ -378,6 +392,22 @@ function assertRenderableSceneCodes(
           `${label}[${x}][${y}] symbol code ${code} (${entry.symbol}) is missing assets for ${config.missingAssetLabel}.`,
         );
       }
+    }
+  }
+}
+
+function assertConfiguredTexturedSymbolsAvailable(
+  validation: ReturnType<
+    ReturnType<typeof createReelSymbolRegistry>["getValidation"]
+  >,
+  config: Game002ReelConfig,
+): void {
+  const available = new Set(validation.texturedSymbols);
+  for (const symbol of config.texturedSymbols) {
+    if (!available.has(symbol)) {
+      throw new Error(
+        `game002 ${config.missingAssetLabel} is missing assets for configured symbol "${symbol}".`,
+      );
     }
   }
 }

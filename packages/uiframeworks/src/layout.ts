@@ -150,9 +150,22 @@ function calculateFrameDesignSize(options: {
       minFocusMargin: variant.minFocusMargin,
     });
   }
+  if (policy.mode === "maximized-focus") {
+    if (typeof policy.resolveViewportSize !== "function") {
+      throw new SlotUiConfigError(
+        "framePolicy maximized-focus resolveViewportSize must be a function.",
+      );
+    }
+    return validateDesignSize(
+      policy.resolveViewportSize({
+        width: options.viewportWidth,
+        height: options.viewportHeight,
+      }),
+    );
+  }
 
   throw new SlotUiConfigError(
-    "framePolicy.mode must be fixed, focus, or orientation-focus.",
+    "framePolicy.mode must be fixed, focus, orientation-focus, or maximized-focus.",
   );
 }
 

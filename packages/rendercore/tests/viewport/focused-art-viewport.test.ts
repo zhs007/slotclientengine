@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateFocusedArtViewport,
+  calculateMaximizedFocusedArtViewport,
+  createMaximizedFocusedArtViewportPolicy,
   mapAnchorRectToArt,
   mapArtRectToViewport,
   mapReferenceRectToArt,
@@ -23,6 +25,88 @@ const FOCUS_RECT = Object.freeze({
 const MARGIN = Object.freeze({ left: 60, right: 60, top: 60, bottom: 60 });
 
 describe("focused art viewport", () => {
+  it("maximizes one focus rect by page orientation", () => {
+    const focusRect = Object.freeze({
+      x: 577.5,
+      y: 270,
+      width: 840,
+      height: 1200,
+    });
+
+    expect(
+      calculateMaximizedFocusedArtViewport({
+        artSize: ART_SIZE,
+        pageSize: { width: 1200, height: 1200 },
+        focusRect,
+      }),
+    ).toMatchObject({
+      viewportSize: { width: 1200, height: 1200 },
+      focusRectInViewport: { x: 180, y: 0, width: 840, height: 1200 },
+    });
+
+    expect(
+      calculateMaximizedFocusedArtViewport({
+        artSize: ART_SIZE,
+        pageSize: { width: 1920, height: 1080 },
+        focusRect,
+      }),
+    ).toMatchObject({
+      viewportSize: { width: 2000, height: 1200 },
+      focusRectInViewport: { x: 577.5, y: 0, width: 840, height: 1200 },
+    });
+
+    const portrait = calculateMaximizedFocusedArtViewport({
+      artSize: ART_SIZE,
+      pageSize: { width: 390, height: 844 },
+      focusRect,
+    });
+    expect(portrait.viewportSize.width).toBe(840);
+    expect(portrait.viewportSize.height).toBeCloseTo((840 * 844) / 390, 10);
+    expect(portrait.focusRectInViewport.width).toBe(840);
+
+    const nearSquarePortrait = calculateMaximizedFocusedArtViewport({
+      artSize: ART_SIZE,
+      pageSize: { width: 1430, height: 1464 },
+      focusRect,
+    });
+    expect(nearSquarePortrait.viewportSize.width).toBeCloseTo(
+      (1430 * 1200) / 1464,
+      10,
+    );
+    expect(nearSquarePortrait.viewportSize.height).toBe(1200);
+  });
+
+  it("shows extra background instead of locking the viewport to the focus aspect", () => {
+    expect(
+      calculateMaximizedFocusedArtViewport({
+        artSize: ART_SIZE,
+        pageSize: { width: 1200, height: 1600 },
+        focusRect: { x: 577.5, y: 270, width: 840, height: 1200 },
+      }).viewportSize,
+    ).toEqual({ width: 900, height: 1200 });
+  });
+
+  it("creates a reusable maximized-focus policy and rejects invalid input", () => {
+    const policy = createMaximizedFocusedArtViewportPolicy({
+      artSize: ART_SIZE,
+      focusRect: { x: 577.5, y: 270, width: 840, height: 1200 },
+    });
+    expect(policy.mode).toBe("maximized-focus");
+    expect(policy.resolveViewportSize({ width: 1200, height: 1200 })).toEqual({
+      width: 1200,
+      height: 1200,
+    });
+    expect(() =>
+      policy.resolveViewportSize({ width: 0, height: 1200 }),
+    ).toThrow(/pageSize.width/);
+    expect(() =>
+      createMaximizedFocusedArtViewportPolicy({
+        artSize: ART_SIZE,
+        focusRect: { x: 1500, y: 0, width: 600, height: 100 },
+      }),
+    ).toThrow(/focusRect/);
+  });
+
   it("maps a centered reference rect into the larger art coordinate space", () => {
     expect(
       mapReferenceRectToArt({

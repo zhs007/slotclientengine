@@ -372,11 +372,24 @@ describe("symbol state texture manifest helpers", () => {
     });
   });
 
-  it("validates the current game003 Spine resource set without copied fixtures", () => {
+  it("validates the current game002-s3 Spine 4.3 resource set without copied fixtures", () => {
     const manifest = readJsonAsset("symbol-state-textures.manifest.json");
     const spineSkeletonModules = Object.fromEntries(
-      ["WL", "H1", "H2", "H3", "H4", "H5", "CL", "SC"].map((symbol) => [
-        `../../../assets/game003-s1/${symbol}.json`,
+      [
+        "WL",
+        "H1",
+        "H2",
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "WM",
+        "CM",
+        "CO",
+        "AF",
+        "BN",
+      ].map((symbol) => [
+        `../../../assets/game002-s3/${symbol}.json`,
         readJsonAsset(`${symbol}.json`),
       ]),
     );
@@ -385,32 +398,34 @@ describe("symbol state texture manifest helpers", () => {
       requiredStates,
       spineSkeletonModules,
       spineAtlasModules: {
-        "../../../assets/game003-s1/Symbol.atlas":
+        "../../../assets/game002-s3/Symbol.atlas":
           readTextAsset("Symbol.atlas"),
       },
       spineTextureModules: {
-        "../../../assets/game003-s1/Symbol.png": "/assets/Symbol.png",
+        "../../../assets/game002-s3/Symbol.png": "/assets/Symbol.png",
       },
     });
 
     expect(Object.keys(resources).sort()).toEqual([
-      "CL",
+      "AF",
+      "BN",
+      "CM",
+      "CO",
       "H1",
       "H2",
-      "H3",
-      "H4",
-      "H5",
-      "SC",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
       "WL",
+      "WM",
     ]);
-    expect(resources.WL?.appear?.spec.playback.animationName).toBe("start");
+    expect(resources.WL?.appear?.spec.playback.animationName).toBe("Start");
     expect(resources.H1?.appear?.spec.playback.animationName).toBe("Start");
-    expect(resources.CL?.appear?.spec.playback.animationName).toBe("Start");
-    expect(resources.SC?.appear?.spec.playback.animationName).toBe("Start");
-    for (const symbol of ["H2", "H3", "H4", "H5"]) {
+    for (const symbol of ["BN"]) {
       expect(resources[symbol]?.appear).toBeUndefined();
     }
-    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5", "CL", "SC"]) {
+    for (const symbol of ["WL", "H1", "H2", "L1", "L2", "L3", "L4"]) {
       expect(resources[symbol]?.normal?.spec.playback).toEqual({
         mode: "animation",
         animationName: "Idle",
@@ -424,6 +439,16 @@ describe("symbol state texture manifest helpers", () => {
       expect(resources[symbol]?.normal?.atlasPage).toBe("Symbol.png");
       expect(resources[symbol]?.win?.atlasPage).toBe("Symbol.png");
     }
+    for (const symbol of ["WM", "CM", "CO", "AF"]) {
+      expect(resources[symbol]?.normal?.spec.playback.animationName).toBe(
+        "Idle",
+      );
+      expect(resources[symbol]?.appear?.spec.playback.animationName).toBe(
+        "Start",
+      );
+      expect(resources[symbol]?.win).toBeUndefined();
+    }
+    expect(resources.BN?.normal?.spec.playback.animationName).toBe("Idle");
   });
 
   it("fails fast for invalid schema and missing VNI resources", () => {
@@ -654,7 +679,7 @@ describe("symbol state texture manifest helpers", () => {
 
 function readTextAsset(fileName: string): string {
   return readFileSync(
-    new URL(`../../../../assets/game003-s1/${fileName}`, import.meta.url),
+    new URL(`../../../../assets/game002-s3/${fileName}`, import.meta.url),
     "utf8",
   );
 }

@@ -3,168 +3,56 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const REPO_ROOT = resolve(APP_ROOT, "../..");
 const DIST_ROOT = join(APP_ROOT, "dist");
-const ASSETS_ROOT = join(DIST_ROOT, "assets");
+const DIST_ASSETS = join(DIST_ROOT, "assets");
+const SOURCE_ROOT = join(REPO_ROOT, "assets/game002-s3");
 const INDEX_HTML = join(DIST_ROOT, "index.html");
-
-const SENSITIVE_PATTERNS = Object.freeze([
-  {
-    label: "old static build env prefix",
-    value: ["VITE", "GAME002"].join("_"),
-  },
-  {
-    label: "old default token",
-    value: ["7a82f5ca", "45b5aa32", "46b2ad01", "23272295"].join(""),
-  },
-  {
-    label: "old default gamecode",
-    value: ["065P8N", "OEgwd", "SXFTB6uDqX"].join(""),
-  },
+const MANIFEST_PATH = join(SOURCE_ROOT, "symbol-state-textures.manifest.json");
+const SYMBOLS = Object.freeze([
+  "WL",
+  "H1",
+  "H2",
+  "L1",
+  "L2",
+  "L3",
+  "L4",
+  "WM",
+  "CN",
+  "CM",
+  "CO",
+  "AF",
+  "BN",
 ]);
-
-const REQUIRED_SKIN_ASSETS = Object.freeze([
-  {
-    id: "skin 1",
-    symbolDirectory: "symbols001",
-    background: {
-      pattern: /^bg-[A-Za-z0-9_-]+\.jpg$/,
-      label: "bg-*.jpg",
-      width: 2000,
-      height: 2000,
-      minimumMatches: 2,
-    },
-    inlineSymbols: Object.freeze(["BN"]),
-    manifestScale: 0.8,
-    symbolWidth: 200,
-    symbolHeight: 200,
-    symbols: Object.freeze([
-      "WL",
-      "H1",
-      "H2",
-      "L1",
-      "L2",
-      "L3",
-      "L4",
-      "CN",
-      "BN",
-    ]),
-  },
-  {
-    id: "skin 2",
-    symbolDirectory: "symbols002",
-    background: {
-      pattern: /^bgfull-[A-Za-z0-9_-]+\.jpg$/,
-      label: "bgfull-*.jpg",
-      width: 2000,
-      height: 2000,
-    },
-    manifestScale: 1,
-    symbolWidth: 200,
-    symbolHeight: 200,
-    symbols: Object.freeze([
-      "WL",
-      "H1",
-      "H2",
-      "L1",
-      "L2",
-      "L3",
-      "L4",
-      "WM",
-      "CN",
-      "CM",
-      "CO",
-      "AF",
-    ]),
-  },
-  {
-    id: "skin 3",
-    symbolDirectory: "symbols003",
-    background: {
-      pattern: /^bg-[A-Za-z0-9_-]+\.jpg$/,
-      label: "bg-*.jpg",
-      width: 2000,
-      height: 2000,
-      minimumMatches: 2,
-    },
-    manifestScale: 1,
-    symbolWidth: 180,
-    symbolHeight: 180,
-    symbols: Object.freeze([
-      "WL",
-      "H1",
-      "H2",
-      "L1",
-      "L2",
-      "L3",
-      "L4",
-      "CN",
-      "CO",
-    ]),
-  },
-  {
-    id: "skin 4",
-    symbolDirectory: "game002-s2",
-    background: {
-      pattern: /^bg-[A-Za-z0-9_-]+\.png$/,
-      label: "bg-*.png",
-      width: 2000,
-      height: 2000,
-    },
-    manifestScale: 1,
-    symbolWidth: 200,
-    symbolHeight: 200,
-    symbols: Object.freeze([
-      "WL",
-      "H1",
-      "H2",
-      "L1",
-      "L2",
-      "L3",
-      "L4",
-      "CN",
-      "CO",
-    ]),
-  },
-  {
-    id: "skin 5",
-    symbolDirectory: "game002-s3",
-    background: {
-      pattern: /^bg-[A-Za-z0-9_-]+\.jpg$/,
-      label: "bg-*.jpg",
-      width: 2000,
-      height: 2000,
-      minimumMatches: 3,
-    },
-    manifestScale: 1,
-    symbolWidth: 200,
-    symbolHeight: 200,
-    symbols: Object.freeze([
-      "WL",
-      "H1",
-      "H2",
-      "L1",
-      "L2",
-      "L3",
-      "L4",
-      "WM",
-      "CN",
-      "CM",
-      "CO",
-      "AF",
-    ]),
-  },
+const SPINE_SYMBOLS = Object.freeze(
+  SYMBOLS.filter((symbol) => symbol !== "CN"),
+);
+const EXCLUDED_RESOURCE_PREFIXES = Object.freeze([
+  "CN_1",
+  "CN_2",
+  "CN_3",
+  "CN_4",
+  "Nearwin1",
+  "Nearwin2",
+  "Nearwin3",
+  "WM_Fx",
 ]);
-
-const REQUIRED_SYMBOL_STATES = Object.freeze([
-  "normal",
-  "disabled",
-  "spinBlur",
+const OLD_SOURCE_DIRECTORIES = Object.freeze([
+  ["assets", "symbols" + "001", ""].join("/"),
+  ["assets", "symbols" + "002", ""].join("/"),
+  ["assets", "symbols" + "003", ""].join("/"),
+  ["assets", "game002" + "-s1", ""].join("/"),
+  ["assets", "game002" + "-s2", ""].join("/"),
+  ["assets", "game003" + "-s1", ""].join("/"),
 ]);
-
+const SENSITIVE_VALUES = Object.freeze([
+  ["VITE", "GAME002"].join("_"),
+  ["7a82f5ca", "45b5aa32", "46b2ad01", "23272295"].join(""),
+  ["065P8N", "OEgwd", "SXFTB6uDqX"].join(""),
+]);
 const PNG_SIGNATURE = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
-
 const failures = [];
 
 verify();
@@ -180,292 +68,253 @@ if (failures.length > 0) {
 
 function verify() {
   assertFile(INDEX_HTML);
-  assertDirectory(ASSETS_ROOT);
+  assertDirectory(DIST_ASSETS);
+  if (!existsSync(INDEX_HTML) || !existsSync(DIST_ASSETS)) {
+    return;
+  }
 
-  if (existsSync(INDEX_HTML)) {
-    verifyIndexHtml(readFileSync(INDEX_HTML, "utf8"));
-  }
-  if (existsSync(ASSETS_ROOT)) {
-    verifyAssets(readdirSync(ASSETS_ROOT).sort());
-  }
-  if (existsSync(DIST_ROOT)) {
-    verifyNoSensitiveStrings(listFiles(DIST_ROOT));
-  }
+  const assetNames = readdirSync(DIST_ASSETS).sort();
+  const indexHtml = readFileSync(INDEX_HTML, "utf8");
+  const bundledJavaScript = assetNames
+    .filter((name) => name.endsWith(".js"))
+    .map((name) => readFileSync(join(DIST_ASSETS, name), "utf8"))
+    .join("\n");
+
+  verifyIndexHtml(indexHtml);
+  verifySourceContract();
+  verifyDistAssets(assetNames, bundledJavaScript);
+  verifySensitiveValues(listFiles(DIST_ROOT));
 }
 
 function verifyIndexHtml(indexHtml) {
   if (indexHtml.includes("/src/main.ts")) {
     failures.push("dist/index.html still references /src/main.ts.");
   }
-
-  const assetRefs = [...indexHtml.matchAll(/\b(?:src|href)="([^"]+)"/g)].map(
+  const refs = [...indexHtml.matchAll(/\b(?:src|href)="([^"]+)"/g)].map(
     (match) => match[1],
   );
-  const builtAssetRefs = assetRefs.filter((ref) =>
-    /\.(?:js|css|jpg|png)(?:$|\?)/.test(ref),
-  );
-
-  if (builtAssetRefs.length === 0) {
-    failures.push("dist/index.html does not reference built JS/CSS assets.");
-  }
-
-  for (const ref of builtAssetRefs) {
-    if (ref.startsWith("/assets/")) {
-      failures.push(`dist/index.html uses absolute asset URL ${ref}.`);
-      continue;
-    }
-    if (!ref.startsWith("./assets/")) {
-      failures.push(
-        `dist/index.html asset URL must start with ./assets/: ${ref}.`,
-      );
-    }
-  }
-
-  if (!builtAssetRefs.some((ref) => /^\.\/assets\/index-.+\.js$/.test(ref))) {
+  const builtRefs = refs.filter((ref) => /\.(?:js|css)(?:$|\?)/.test(ref));
+  if (!builtRefs.some((ref) => /^\.\/assets\/index-.+\.js$/.test(ref))) {
     failures.push("dist/index.html does not reference ./assets/index-*.js.");
   }
-  if (!builtAssetRefs.some((ref) => /^\.\/assets\/index-.+\.css$/.test(ref))) {
+  if (!builtRefs.some((ref) => /^\.\/assets\/index-.+\.css$/.test(ref))) {
     failures.push("dist/index.html does not reference ./assets/index-*.css.");
   }
+  for (const ref of builtRefs) {
+    if (!ref.startsWith("./assets/")) {
+      failures.push(`dist/index.html asset URL must be relative: ${ref}.`);
+    }
+  }
 }
 
-function verifyAssets(assetNames) {
-  assertAsset(assetNames, /^index-[A-Za-z0-9_-]+\.js$/, "index-*.js");
-  assertAsset(assetNames, /^index-[A-Za-z0-9_-]+\.css$/, "index-*.css");
-
-  const bundledJavaScript = readBundledJavaScript(assetNames);
-  const inlinePngBindings = findInlinePngBindings(bundledJavaScript);
-
-  for (const skin of REQUIRED_SKIN_ASSETS) {
-    assertBundledSkinSourceReferences(skin, bundledJavaScript);
-    assertAssetWithSize(
-      assetNames,
-      skin.background.pattern,
-      `${skin.id} ${skin.background.label}`,
-      skin.background.width,
-      skin.background.height,
-      skin.background.minimumMatches,
+function verifySourceContract() {
+  assertImageSize(join(SOURCE_ROOT, "bg.jpg"), 2000, 2000);
+  assertFile(MANIFEST_PATH);
+  assertFile(join(SOURCE_ROOT, "Symbol.atlas"));
+  assertFile(join(SOURCE_ROOT, "Symbol.png"));
+  if (!existsSync(MANIFEST_PATH)) {
+    return;
+  }
+  const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8"));
+  const manifestSymbols = Object.keys(manifest.symbols ?? {});
+  if (JSON.stringify(manifestSymbols) !== JSON.stringify(SYMBOLS)) {
+    failures.push(
+      `source manifest symbol order must be ${SYMBOLS.join(",")}, got ${manifestSymbols.join(",")}.`,
     );
-    for (const symbol of skin.symbols) {
-      assertSourceManifestScale(skin, symbol);
-      for (const state of REQUIRED_SYMBOL_STATES) {
-        assertSymbolStateAsset(
-          assetNames,
-          skin,
-          symbol,
-          state,
-          bundledJavaScript,
-          inlinePngBindings,
+  }
+  for (const symbol of SYMBOLS) {
+    const entry = manifest.symbols?.[symbol];
+    if (!entry) {
+      failures.push(`source manifest is missing ${symbol}.`);
+      continue;
+    }
+    if (entry.scale !== 1) {
+      failures.push(`source manifest ${symbol} scale must be 1.`);
+    }
+    for (const [state, suffix] of [
+      ["normal", ""],
+      ["spinBlur", ".spinBlur"],
+      ["disabled", ".disabled"],
+    ]) {
+      const configuredPath = entry[state];
+      const expectedPath = `./${symbol}${suffix}.png`;
+      if (configuredPath !== expectedPath) {
+        failures.push(
+          `source manifest ${symbol}.${state} must be ${expectedPath}.`,
         );
       }
+      assertFile(join(SOURCE_ROOT, `${symbol}${suffix}.png`));
     }
   }
-}
-
-function assertBundledSkinSourceReferences(skin, bundledJavaScript) {
-  const sourceDirectory = `../../../assets/${skin.symbolDirectory}/`;
-  if (!bundledJavaScript.includes(sourceDirectory)) {
+  for (const symbol of SPINE_SYMBOLS) {
+    const skeletonPath = join(SOURCE_ROOT, `${symbol}.json`);
+    assertFile(skeletonPath);
+    if (!existsSync(skeletonPath)) {
+      continue;
+    }
+    const skeleton = JSON.parse(readFileSync(skeletonPath, "utf8"));
+    if (!/^4\.3(?:\.|$)/.test(skeleton.skeleton?.spine ?? "")) {
+      failures.push(`${symbol}.json must declare Spine 4.3.x.`);
+    }
+  }
+  const atlasFirstLine = readFileSync(join(SOURCE_ROOT, "Symbol.atlas"), "utf8")
+    .split(/\r?\n/)
+    .find((line) => line.trim() !== "");
+  if (atlasFirstLine !== "Symbol.png") {
     failures.push(
-      `${skin.id} bundle does not reference source directory ${sourceDirectory}.`,
+      `Symbol.atlas page must be Symbol.png, got ${atlasFirstLine}.`,
     );
   }
 }
 
-function assertSourceManifestScale(skin, symbol) {
-  const manifestPath = resolve(
-    APP_ROOT,
-    "..",
-    "..",
-    "assets",
-    skin.symbolDirectory,
-    "symbol-state-textures.manifest.json",
-  );
-  if (!existsSync(manifestPath)) {
-    failures.push(
-      `${skin.id} source manifest ${relative(APP_ROOT, manifestPath)} is missing.`,
-    );
-    return;
-  }
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  const manifestSymbol = manifest.symbols?.[symbol];
-  if (!manifestSymbol) {
-    failures.push(`${skin.id} source manifest is missing ${symbol}.`);
-    return;
-  }
-  if (!Object.prototype.hasOwnProperty.call(manifestSymbol, "scale")) {
-    failures.push(`${skin.id} source manifest ${symbol} is missing scale.`);
-    return;
-  }
-  if (manifestSymbol.scale !== skin.manifestScale) {
-    failures.push(
-      `${skin.id} source manifest ${symbol} scale must be ${skin.manifestScale}, got ${manifestSymbol.scale}.`,
-    );
-  }
-}
-
-function createSymbolAssetPattern(symbol, state) {
-  const prefix = state === "normal" ? symbol : `${symbol}.${state}`;
-  return new RegExp(`^${escapeRegExp(prefix)}-[A-Za-z0-9_-]+\\.png$`);
-}
-
-function createSymbolSourcePath(directory, symbol, state) {
-  const prefix = state === "normal" ? symbol : `${symbol}.${state}`;
-  return `../../../assets/${directory}/${prefix}.png`;
-}
-
-function assertAsset(assetNames, pattern, label) {
-  if (!assetNames.some((name) => pattern.test(name))) {
-    failures.push(`dist/assets is missing ${label}.`);
-  }
-}
-
-function assertSymbolStateAsset(
-  assetNames,
-  skin,
-  symbol,
-  state,
-  bundledJavaScript,
-  inlinePngBindings,
-) {
-  const label = `${skin.id} ${symbol} ${state} PNG`;
-  const matches = countAssetMatchesWithSize(
+function verifyDistAssets(assetNames, bundledJavaScript) {
+  assertOne(assetNames, /^index-[A-Za-z0-9_-]+\.js$/, "index JS");
+  assertOne(assetNames, /^index-[A-Za-z0-9_-]+\.css$/, "index CSS");
+  assertOne(assetNames, /^bg-[A-Za-z0-9_-]+\.jpg$/, "game002-s3 background");
+  assertOne(assetNames, /^Symbol-[A-Za-z0-9_-]+\.atlas$/, "Spine atlas");
+  assertOne(assetNames, /^Symbol-[A-Za-z0-9_-]+\.png$/, "Spine texture");
+  assertOne(
     assetNames,
-    createSymbolAssetPattern(symbol, state),
-    skin.symbolWidth,
-    skin.symbolHeight,
+    /^symbol-state-textures\.manifest-[A-Za-z0-9_-]+\.json$/,
+    "symbol manifest",
   );
-  pushAssetReadErrors(matches);
+  assertOne(
+    assetNames,
+    /^win-amount\.manifest-[A-Za-z0-9_-]+\.json$/,
+    "win-amount manifest",
+  );
 
-  if (matches.names.length > 0) {
-    if (matches.matchingSizeCount === 0) {
+  for (const symbol of SYMBOLS) {
+    assertOne(
+      assetNames,
+      hashedAssetPattern(symbol, "png"),
+      `${symbol} normal PNG`,
+    );
+    assertOne(
+      assetNames,
+      hashedAssetPattern(`${symbol}.spinBlur`, "png"),
+      `${symbol} spinBlur PNG`,
+    );
+    assertOne(
+      assetNames,
+      hashedAssetPattern(`${symbol}.disabled`, "png"),
+      `${symbol} disabled PNG`,
+    );
+  }
+  for (const symbol of SPINE_SYMBOLS) {
+    assertOne(
+      assetNames,
+      hashedAssetPattern(symbol, "json"),
+      `${symbol} skeleton`,
+    );
+  }
+  for (const project of ["bigwin", "superwin", "megawin"]) {
+    assertOne(
+      assetNames,
+      hashedAssetPattern(project, "json"),
+      `${project} project`,
+    );
+  }
+  for (const assetName of readWinAmountAssetNames()) {
+    assertDistContainsSourceAsset(
+      assetNames,
+      join(SOURCE_ROOT, "win-amount/assets", assetName),
+    );
+  }
+
+  if (!bundledJavaScript.includes("../../../assets/game002-s3/")) {
+    failures.push("bundle does not reference assets/game002-s3.");
+  }
+  for (const oldDirectory of OLD_SOURCE_DIRECTORIES) {
+    if (bundledJavaScript.includes(oldDirectory)) {
       failures.push(
-        `dist/assets is missing ${label} with size ${skin.symbolWidth} x ${skin.symbolHeight}.`,
+        `bundle still references old source directory ${oldDirectory}.`,
       );
     }
-    return;
   }
-
-  const allowsInline =
-    skin.inlineSymbols !== undefined && skin.inlineSymbols.includes(symbol);
-  const sourcePath = createSymbolSourcePath(
-    skin.symbolDirectory,
-    symbol,
-    state,
-  );
-  if (
-    allowsInline &&
-    hasInlineAssetBinding(bundledJavaScript, inlinePngBindings, sourcePath)
-  ) {
-    return;
-  }
-
-  if (allowsInline) {
-    failures.push(
-      `dist/assets is missing ${label}, and bundled JS does not inline ${sourcePath}.`,
-    );
-    return;
-  }
-
-  failures.push(`dist/assets is missing ${label}.`);
-}
-
-function assertAssetWithSize(
-  assetNames,
-  pattern,
-  label,
-  width,
-  height,
-  minimumMatches = 1,
-) {
-  const matches = countAssetMatchesWithSize(assetNames, pattern, width, height);
-  pushAssetReadErrors(matches);
-
-  if (matches.names.length === 0) {
-    failures.push(`dist/assets is missing ${label}.`);
-    return;
-  }
-
-  if (matches.matchingSizeCount < minimumMatches) {
-    failures.push(
-      `dist/assets is missing ${label} with size ${width} x ${height}; expected ${minimumMatches}, got ${matches.matchingSizeCount}.`,
-    );
+  for (const excluded of EXCLUDED_RESOURCE_PREFIXES) {
+    if (assetNames.some((name) => name.startsWith(`${excluded}-`))) {
+      failures.push(
+        `dist unexpectedly contains excluded resource ${excluded}.`,
+      );
+    }
   }
 }
 
-function countAssetMatchesWithSize(assetNames, pattern, width, height) {
-  const names = assetNames.filter((name) => pattern.test(name));
-  let matchingSizeCount = 0;
-  const readErrors = [];
-  for (const name of names) {
-    const file = join(ASSETS_ROOT, name);
-    try {
-      const size = readImageSize(file);
-      if (size.width === width && size.height === height) {
-        matchingSizeCount += 1;
+function readWinAmountAssetNames() {
+  const names = new Set();
+  for (const project of ["bigwin", "superwin", "megawin"]) {
+    const data = JSON.parse(
+      readFileSync(join(SOURCE_ROOT, `win-amount/${project}.json`), "utf8"),
+    );
+    for (const asset of data.assets ?? []) {
+      const filename = asset.path?.split("/").at(-1);
+      if (!filename) {
+        failures.push(`${project}.json contains an invalid asset path.`);
+        continue;
       }
-    } catch (error) {
-      readErrors.push(
-        `${relative(APP_ROOT, file)} size could not be read: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
+      names.add(filename);
     }
   }
+  return [...names].sort();
+}
 
-  return Object.freeze({
-    names: Object.freeze(names),
-    matchingSizeCount,
-    readErrors: Object.freeze(readErrors),
+function hashedAssetPattern(stem, extension) {
+  return new RegExp(
+    `^${escapeRegExp(stem)}-[A-Za-z0-9_-]+\\.${escapeRegExp(extension)}$`,
+  );
+}
+
+function assertOne(names, pattern, label) {
+  const matches = names.filter((name) => pattern.test(name));
+  if (matches.length !== 1) {
+    failures.push(
+      `dist/assets must contain exactly one ${label}, got ${matches.length}.`,
+    );
+  }
+}
+
+function assertDistContainsSourceAsset(assetNames, sourceFile) {
+  assertFile(sourceFile);
+  if (!existsSync(sourceFile)) {
+    return;
+  }
+  const sourceBytes = readFileSync(sourceFile);
+  const extension = sourceFile.split(".").at(-1);
+  const matchingContent = assetNames.some((name) => {
+    if (!name.endsWith(`.${extension}`)) {
+      return false;
+    }
+    return readFileSync(join(DIST_ASSETS, name)).equals(sourceBytes);
   });
-}
-
-function pushAssetReadErrors(matches) {
-  for (const error of matches.readErrors) {
-    failures.push(error);
+  if (!matchingContent) {
+    failures.push(
+      `dist/assets is missing win-amount asset content for ${relative(SOURCE_ROOT, sourceFile)}.`,
+    );
   }
 }
 
-function readBundledJavaScript(assetNames) {
-  return assetNames
-    .filter((name) => /\.js$/.test(name))
-    .map((name) => readFileSync(join(ASSETS_ROOT, name), "utf8"))
-    .join("\n");
-}
-
-function findInlinePngBindings(bundledJavaScript) {
-  const bindings = new Set();
-  const pattern = /([A-Za-z_$][\w$]*)=`data:image\/png;base64,[^`]+`/g;
-  for (const match of bundledJavaScript.matchAll(pattern)) {
-    bindings.add(match[1]);
-  }
-  return bindings;
-}
-
-function hasInlineAssetBinding(
-  bundledJavaScript,
-  inlinePngBindings,
-  sourcePath,
-) {
-  for (const binding of inlinePngBindings) {
-    if (
-      bundledJavaScript.includes(`${JSON.stringify(sourcePath)}:${binding}`)
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function verifyNoSensitiveStrings(files) {
+function verifySensitiveValues(files) {
   for (const file of files) {
     const content = readFileSync(file);
-    for (const pattern of SENSITIVE_PATTERNS) {
-      if (content.includes(Buffer.from(pattern.value))) {
+    for (const value of SENSITIVE_VALUES) {
+      if (content.includes(Buffer.from(value))) {
         failures.push(
-          `${relative(APP_ROOT, file)} contains ${pattern.label}; remove it from the static bundle.`,
+          `${relative(APP_ROOT, file)} contains a forbidden default value.`,
         );
       }
     }
+  }
+}
+
+function assertImageSize(file, width, height) {
+  assertFile(file);
+  if (!existsSync(file)) {
+    return;
+  }
+  const size = readImageSize(file);
+  if (size.width !== width || size.height !== height) {
+    failures.push(`${relative(APP_ROOT, file)} must be ${width} x ${height}.`);
   }
 }
 
@@ -485,12 +334,11 @@ function listFiles(directory) {
   const files = [];
   for (const entry of readdirSync(directory)) {
     const file = join(directory, entry);
-    const stat = statSync(file);
-    if (stat.isDirectory()) {
+    if (statSync(file).isDirectory()) {
       files.push(...listFiles(file));
-      continue;
+    } else {
+      files.push(file);
     }
-    files.push(file);
   }
   return files.sort();
 }
@@ -501,34 +349,26 @@ function escapeRegExp(value) {
 
 function readImageSize(file) {
   const bytes = readFileSync(file);
-  if (bytes[0] === 0xff && bytes[1] === 0xd8) {
-    return readJpegSize(file, bytes);
-  }
   if (bytes.subarray(0, 8).equals(PNG_SIGNATURE)) {
-    return Object.freeze({
-      width: bytes.readUInt32BE(16),
-      height: bytes.readUInt32BE(20),
-    });
+    return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
   }
-  throw new Error(`${file} is not a supported JPEG or PNG file.`);
-}
-
-function readJpegSize(file, bytes) {
-  let offset = 2;
-  while (offset < bytes.length) {
-    if (bytes[offset] !== 0xff) {
-      offset += 1;
-      continue;
+  if (bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let offset = 2;
+    while (offset + 8 < bytes.length) {
+      if (bytes[offset] !== 0xff) {
+        offset += 1;
+        continue;
+      }
+      const marker = bytes[offset + 1];
+      const length = bytes.readUInt16BE(offset + 2);
+      if (marker >= 0xc0 && marker <= 0xc3) {
+        return {
+          height: bytes.readUInt16BE(offset + 5),
+          width: bytes.readUInt16BE(offset + 7),
+        };
+      }
+      offset += 2 + length;
     }
-    const marker = bytes[offset + 1];
-    const length = bytes.readUInt16BE(offset + 2);
-    if (marker >= 0xc0 && marker <= 0xc3) {
-      return Object.freeze({
-        height: bytes.readUInt16BE(offset + 5),
-        width: bytes.readUInt16BE(offset + 7),
-      });
-    }
-    offset += 2 + length;
   }
-  throw new Error(`${file} does not contain a JPEG size marker.`);
+  throw new Error(`${relative(APP_ROOT, file)} is not a supported PNG/JPEG.`);
 }

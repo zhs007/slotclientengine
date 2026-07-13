@@ -7,6 +7,7 @@ import { parseGame002SkinId, type Game002SkinId } from "./skin-id.js";
 
 export const GAME002_LIVE_SERVER_URL =
   "wss://gameserv.rgstest.slammerstudios.com/";
+export const GAME002_LINES = 30;
 
 export interface Game002QueryConfig {
   readonly skin: Game002SkinId;
@@ -38,6 +39,12 @@ export function parseGame002QueryConfig(
     search instanceof URLSearchParams ? search : new URLSearchParams(search);
   rejectUnsupportedQueryParameter(params, "serverUrl");
   const skin = parseGame002SkinId(parseRequiredQueryString(params, "skin"));
+  const lines = parsePositiveQueryNumber(params, "lines");
+  if (lines !== GAME002_LINES) {
+    throw new Error(
+      `lines query parameter must be exactly ${GAME002_LINES} for game002.`,
+    );
+  }
 
   return Object.freeze({
     skin,
@@ -48,7 +55,7 @@ export function parseGame002QueryConfig(
     jurisdiction: parseRequiredQueryString(params, "jurisdiction"),
     language: parseRequiredQueryString(params, "language"),
     bet: parsePositiveQueryNumber(params, "bet"),
-    lines: parsePositiveQueryNumber(params, "lines"),
+    lines,
     times: parsePositiveQueryNumber(params, "times"),
     autonums: parseQueryInteger(params, "autonums"),
     requestTimeoutMs: parsePositiveQueryNumber(params, "requestTimeoutMs"),

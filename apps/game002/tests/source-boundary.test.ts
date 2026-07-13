@@ -43,6 +43,7 @@ describe("game002 source boundary", () => {
     ) as { dependencies?: Record<string, string> };
 
     expect(packageJson.dependencies).toEqual({
+      "@slotclientengine/gameloading": "workspace:*",
       "@slotclientengine/gameframeworks": "workspace:*",
       "@slotclientengine/rendercore": "workspace:*",
       "pixi.js": "^8.1.6",
@@ -84,7 +85,7 @@ describe("game002 source boundary", () => {
     expect(mainSource).not.toContain("import.meta.env");
   });
 
-  it("collects runtime skin backgrounds without using the old portrait crop", () => {
+  it("packages only game002-s3 assets and no legacy skin resources", () => {
     const skinConfigSource = readFileSync(
       join(APP_ROOT, "src/skin-config.ts"),
       "utf8",
@@ -94,13 +95,19 @@ describe("game002 source boundary", () => {
       "utf8",
     );
 
-    expect(skinConfigSource).toContain("assets/game002-s1/bg.jpg?url");
-    expect(skinConfigSource).toContain("assets/game002/bgfull.jpg?url");
-    expect(skinConfigSource).toContain("assets/game003/bg.jpg?url");
-    expect(skinConfigSource).toContain("assets/game002-s2/bg.png?url");
     expect(skinConfigSource).toContain("assets/game002-s3/bg.jpg?url");
-    expect(skinConfigSource).not.toContain("assets/game002/bg.jpg?url");
-    expect(adapterSource).not.toContain("assets/game002/bg.jpg?url");
+    for (const legacyPath of [
+      "symbols" + "001",
+      "symbols" + "002",
+      "symbols" + "003",
+      "game002" + "-s1",
+      "game002" + "-s2",
+      ["game002", "bgfull"].join("/"),
+      ["assets", "game003", "bg"].join("/"),
+    ]) {
+      expect(skinConfigSource).not.toContain(legacyPath);
+    }
+    expect(skinConfigSource).not.toMatch(/game002-s3\/\*\.(?:png|json)/);
     expect(adapterSource).toContain("skin.backgroundUrl");
     expect(adapterSource).toContain("skin.symbolModules");
   });
@@ -113,7 +120,10 @@ describe("game002 source boundary", () => {
       join(APP_ROOT, "src/game-layout.ts"),
       "utf8",
     );
-    const mainSource = readFileSync(join(APP_ROOT, "src/main.ts"), "utf8");
+    const gameEntrySource = readFileSync(
+      join(APP_ROOT, "src/game-entry.ts"),
+      "utf8",
+    );
     const skinConfigSource = readFileSync(
       join(APP_ROOT, "src/skin-config.ts"),
       "utf8",
@@ -123,23 +133,13 @@ describe("game002 source boundary", () => {
       ["rect.y", "visibleRect.y"],
     ]);
 
-    expect(skinConfigSource).toContain(
-      "focusRegion: GAME002_SKIN1_FOCUS_REGION",
-    );
-    expect(skinConfigSource).toContain(
-      "focusRegion: GAME002_SKIN2_FOCUS_REGION",
-    );
-    expect(skinConfigSource).toContain(
-      "focusRegion: GAME002_SKIN3_FOCUS_REGION",
-    );
-    expect(skinConfigSource).toContain(
-      "focusRegion: GAME002_SKIN4_FOCUS_REGION",
-    );
-    expect(skinConfigSource).toContain(
-      "focusRegion: GAME002_SKIN5_FOCUS_REGION",
-    );
+    expect(skinConfigSource).toContain("focusRegion: GAME002_FOCUS_REGION");
     expect(layoutSource).toContain("mapArtRectToViewport");
-    expect(mainSource).toContain("createGame002FramePolicy(skin.focusRegion)");
+    expect(layoutSource).toContain("createMaximizedFocusedArtViewportPolicy");
+    expect(gameEntrySource).toContain(
+      "createGame002FramePolicy(options.prepared.skin.focusRegion)",
+    );
+    expect(skinConfigSource).not.toContain("frameFocusRect");
     expect(layoutSource).not.toMatch(/focusRegion\s*\?\?/);
     expect(layoutSource).not.toMatch(/focusRegion\s*\|\|/);
 
@@ -151,6 +151,21 @@ describe("game002 source boundary", () => {
         );
       }
     }
+  });
+
+  it("keeps Spine ownership in rendercore and loading before framework entry", () => {
+    const source = listFiles(join(APP_ROOT, "src"), (file) =>
+      file.endsWith(".ts"),
+    )
+      .map((file) => readFileSync(file, "utf8"))
+      .join("\n");
+
+    expect(source).not.toContain(
+      ["@esotericsoftware", "spine-pixi-v8"].join("/"),
+    );
+    expect(source).toContain("createGameLoading");
+    expect(source).toContain("prepareSlotGameLiveSession");
+    expect(source).toContain("createSymbolManifestAnimationResolver");
   });
 });
 

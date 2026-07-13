@@ -8,10 +8,10 @@ import {
 } from "../src/symbol-assets.js";
 import {
   getSymbolSetConfig,
+  resolveViewerStateForSymbol,
   SYMBOL_SET_CONFIGS,
 } from "../src/symbol-set-config.js";
 import {
-  SpineNormalFallbackAni,
   SpineSymbolAni,
   type SymbolAnimationContext,
 } from "@slotclientengine/rendercore";
@@ -33,6 +33,22 @@ const GAME003_S1_DISPLAYABLE_SYMBOLS = [
   "SC",
 ] as const;
 
+const GAME002_S3_DISPLAYABLE_SYMBOLS = [
+  "WL",
+  "H1",
+  "H2",
+  "L1",
+  "L2",
+  "L3",
+  "L4",
+  "WM",
+  "CN",
+  "CM",
+  "CO",
+  "AF",
+  "BN",
+] as const;
+
 const GAME003_S1_MISSING_PAYTABLE_SYMBOLS = [
   ["B", "N"].join(""),
   "MT",
@@ -50,11 +66,22 @@ const GAME003_S1_MISSING_PAYTABLE_SYMBOLS = [
 ] as const;
 
 describe("symbolsviewer symbol set config", () => {
-  it("exposes game003-s1 and its standalone bg-bar companion set", () => {
+  it("exposes game002-s3 before the known non-release game003 sets", () => {
     expect(SYMBOL_SET_CONFIGS.map((config) => config.id)).toEqual([
+      "game002-s3",
       "game003-s1",
       "game003-bg-bar",
     ]);
+    expect(getSymbolSetConfig("game002-s3")).toMatchObject({
+      label: "game002-s3",
+      catalogKind: "paytable",
+      symbolScales: Object.fromEntries(
+        GAME002_S3_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 1]),
+      ),
+      symbolRenderPriorities: Object.fromEntries(
+        GAME002_S3_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 0]),
+      ),
+    });
     expect(getSymbolSetConfig("game003-s1").label).toBe("game003-s1");
     expect(getSymbolSetConfig("game003-s1").symbolScales).toEqual(
       Object.fromEntries(
@@ -83,6 +110,45 @@ describe("symbolsviewer symbol set config", () => {
     expect(() => getSymbolSetConfig("symbols")).toThrow(
       /Unknown symbolsviewer symbol set/,
     );
+  });
+
+  it("builds the game002-s3 catalog from exactly 13 symbols and 12 skeletons", () => {
+    const config = getSymbolSetConfig("game002-s3");
+    const assets = createStatefulSymbolAssetMapFromModules({
+      modules: config.modules,
+      manifest: config.manifest,
+      requiredStates: config.requiredStates,
+    });
+    const catalog = createSymbolsViewerCatalog(
+      config.rawGameConfig,
+      assets,
+      config.requiredStates,
+    );
+
+    expect(Object.keys(assets)).toEqual([...GAME002_S3_DISPLAYABLE_SYMBOLS]);
+    expect(Object.keys(config.modules)).toHaveLength(39);
+    expect(Object.keys(config.spineSkeletonModules ?? {})).toHaveLength(12);
+    expect(catalog.getValidation()).toMatchObject({
+      displayableSymbols: GAME002_S3_DISPLAYABLE_SYMBOLS,
+      ignoredAssetsWithoutPaytable: [],
+    });
+    for (const excluded of [
+      "CN_1",
+      "CN_2",
+      "CN_3",
+      "CN_4",
+      "Nearwin1",
+      "Nearwin2",
+      "Nearwin3",
+      "WM_Fx",
+    ]) {
+      expect(Object.keys(config.modules)).not.toEqual(
+        expect.arrayContaining([expect.stringContaining(excluded)]),
+      );
+      expect(Object.keys(config.spineSkeletonModules ?? {})).not.toEqual(
+        expect.arrayContaining([expect.stringContaining(`${excluded}.json`)]),
+      );
+    }
   });
 
   it("builds the game003-s1 catalog and exposes manifest-driven VNI resources", () => {
@@ -201,47 +267,26 @@ describe("symbolsviewer symbol set config", () => {
     expect(config.symbolRenderPriorities.wild).toBe(0);
   });
 
-  it("keeps VNI-only appear static and maps configured Spine states through rendercore", () => {
-    const config = getSymbolSetConfig("game003-s1");
+  it("maps configured game002-s3 Spine states and skips unavailable viewer states", () => {
+    const config = getSymbolSetConfig("game002-s3");
 
-    for (const symbol of ["L1", "L2", "L3", "L4", "L5"]) {
+    for (const symbol of ["WL", "H1", "H2", "L1", "L2", "L3", "L4"]) {
       const context = createSymbolContext(symbol, "appear");
-      const ani = config.animationResolver(context);
-
-      ani.reset();
-      ani.update(0.01);
-
-      expect(ani.playback).toBe("once");
-      expect(context.sprite.scale).toMatchObject({ x: 1, y: 1 });
-      expect(context.underlayLayer.children).toEqual([]);
-      expect(context.overlayLayer.children).toEqual([]);
-      expect(context.baseLayer.visible).toBe(true);
-      expect(context.stateSprite.visible).toBe(false);
+      expect(config.animationResolver(context)).toBeInstanceOf(SpineSymbolAni);
+      expect(resolveViewerStateForSymbol(config, symbol, "appear")).toBe(
+        "appear",
+      );
+      expect(resolveViewerStateForSymbol(config, symbol, "win")).toBe("win");
     }
 
-    for (const symbol of ["H2", "H3", "H4", "H5"]) {
-      const context = createSymbolContext(symbol, "appear");
-      const ani = config.animationResolver(context);
+    expect(resolveViewerStateForSymbol(config, "WM", "win")).toBe("normal");
+    expect(resolveViewerStateForSymbol(config, "BN", "appear")).toBe("normal");
+    expect(resolveViewerStateForSymbol(config, "CN", "win")).toBe("normal");
 
-      expect(ani).toBeInstanceOf(SpineNormalFallbackAni);
-      expect(ani.playback).toBe("once");
-    }
-
-    for (const symbol of ["WL", "H1", "CL", "SC"]) {
-      const context = createSymbolContext(symbol, "appear");
-      const ani = config.animationResolver(context);
-
-      expect(ani).toBeInstanceOf(SpineSymbolAni);
-      expect(ani.playback).toBe("once");
-    }
-
-    for (const symbol of ["WL", "H1", "H2", "H3", "H4", "H5", "CL", "SC"]) {
-      const context = createSymbolContext(symbol, "normal");
-      const ani = config.animationResolver(context);
-
-      expect(ani).toBeInstanceOf(SpineSymbolAni);
-      expect(ani.playback).toBe("static");
-    }
+    const game003Config = getSymbolSetConfig("game003-s1");
+    expect(() =>
+      game003Config.animationResolver(createSymbolContext("WL", "normal")),
+    ).toThrow(/Unsupported Spine skeleton version "4\.2\.43"/);
   });
 });
 

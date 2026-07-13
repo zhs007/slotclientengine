@@ -3,6 +3,10 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   base: "./",
+  assetsInclude: ["**/*.atlas"],
+  build: {
+    assetsInlineLimit: 0,
+  },
   resolve: {
     alias: [
       {
@@ -17,6 +21,13 @@ export default defineConfig({
         replacement: resolve(
           __dirname,
           "../../packages/rendercore/src/symbol/index.ts",
+        ),
+      },
+      {
+        find: "@slotclientengine/rendercore/win-amount",
+        replacement: resolve(
+          __dirname,
+          "../../packages/rendercore/src/win-amount/index.ts",
         ),
       },
       {

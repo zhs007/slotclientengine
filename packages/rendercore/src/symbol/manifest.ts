@@ -11,10 +11,6 @@ import type {
 } from "../reel/types.js";
 import { SymbolAssetError } from "./errors.js";
 import { createDefaultSymbolStatePreset } from "./state-machine.js";
-import {
-  parseSpineAtlasText,
-  validateSpine38SkeletonContract,
-} from "./spine38-runtime.js";
 import { readSupportedSpineSkeletonVersion } from "./spine-version.js";
 import {
   AtlasAttachmentLoader,
@@ -1080,53 +1076,14 @@ function validateSpineAtlasAndSkeleton(options: {
   readonly skeleton: unknown;
   readonly atlasText: string;
 }): string {
-  let version: ReturnType<typeof readSupportedSpineSkeletonVersion>;
   try {
-    version = readSupportedSpineSkeletonVersion(options.skeleton);
+    readSupportedSpineSkeletonVersion(options.skeleton);
   } catch (error) {
     throw new SymbolAssetError(
       `Symbol "${options.symbol}" ${options.state} Spine skeleton version is invalid: ${formatUnknownError(error)}.`,
     );
   }
-  if (version === "4.2") {
-    return validateOfficialSpineAtlasAndSkeleton(options);
-  }
-
-  let atlas: ReturnType<typeof parseSpineAtlasText>;
-  try {
-    atlas = parseSpineAtlasText(options.atlasText);
-  } catch (error) {
-    throw new SymbolAssetError(
-      `Symbol "${options.symbol}" ${options.state} Spine atlas failed to parse: ${formatUnknownError(error)}.`,
-    );
-  }
-  const atlasPage = atlas.pageName;
-  const textureFileName = getFileNameFromManifestPath(options.spec.texture);
-  if (atlasPage !== textureFileName) {
-    throw new SymbolAssetError(
-      `Symbol "${options.symbol}" ${options.state} Spine atlas page "${atlasPage}" must match texture "${textureFileName}".`,
-    );
-  }
-
-  try {
-    validateSpine38SkeletonContract({
-      skeleton: options.skeleton,
-      animationName: options.spec.playback.animationName,
-      atlas,
-    });
-  } catch (error) {
-    const message = formatUnknownError(error);
-    if (message.includes(`missing animation "`)) {
-      throw new SymbolAssetError(
-        `Symbol "${options.symbol}" ${options.state} Spine skeleton is ${message}.`,
-      );
-    }
-    throw new SymbolAssetError(
-      `Symbol "${options.symbol}" ${options.state} Spine skeleton failed to parse: ${message}.`,
-    );
-  }
-
-  return atlasPage;
+  return validateOfficialSpineAtlasAndSkeleton(options);
 }
 
 function validateOfficialSpineAtlasAndSkeleton(options: {

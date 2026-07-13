@@ -1,14 +1,15 @@
-import symbols002StateTextureManifest from "../../../assets/symbols002/symbol-state-textures.manifest.json";
-import type { ReelSymbolScaleMap } from "@slotclientengine/rendercore";
-import {
-  GAME002_DISPLAY_SYMBOLS,
-  createGame002SymbolScaleMapFromManifest,
-} from "./assets.js";
+import type {
+  ReelSymbolRenderPriorityMap,
+  ReelSymbolScaleMap,
+} from "@slotclientengine/rendercore";
+import { getGame002SkinConfig } from "./skin-config.js";
+
+const GAME002_SKIN = getGame002SkinConfig("1");
 
 export const GAME002_SYMBOL_SCALES = Object.freeze(
-  createGame002SymbolScaleMapFromManifest({
-    stateTextureManifest: symbols002StateTextureManifest,
-    displaySymbols: GAME002_DISPLAY_SYMBOLS,
-    requireExplicitScale: true,
-  }),
+  GAME002_SKIN.symbolScales,
 ) satisfies ReelSymbolScaleMap;
+
+export const GAME002_SYMBOL_RENDER_PRIORITIES = Object.freeze(
+  GAME002_SKIN.symbolRenderPriorities,
+) satisfies ReelSymbolRenderPriorityMap;

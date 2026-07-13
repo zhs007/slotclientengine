@@ -1,0 +1,1407 @@
+{
+  "schemaVersion": "VNI_0.074",
+  "editor": {
+    "name": "VNI",
+    "version": "VNI_0.074"
+  },
+  "engineTarget": {
+    "name": "cocos_creator",
+    "version": "3.8.6"
+  },
+  "name": "mega_win(0s-1s start,1s-2.5s loop,2.5s-2.9s end)",
+  "maskCompositeMode": "precompose_light_alpha",
+  "stage": {
+    "width": 900,
+    "height": 1600,
+    "coordinate": "center",
+    "duration": 2.9,
+    "backgroundColor": "#0a0a0a"
+  },
+  "assets": [
+    {
+      "id": "asset_image_mrae841s_3r",
+      "type": "image",
+      "path": "assets/mw_stone6_asset_image_mrae841s_3r.png",
+      "originalName": "mw_stone6.png",
+      "width": 86,
+      "height": 80,
+      "fileWidth": 86,
+      "fileHeight": 80,
+      "fileScale": 1
+    },
+    {
+      "id": "asset_image_mraeg23u_46",
+      "type": "image",
+      "path": "assets/1_asset_image_mraeg23u_46.png",
+      "originalName": "光点1.png",
+      "width": 50,
+      "height": 50,
+      "fileWidth": 50,
+      "fileHeight": 50,
+      "fileScale": 1
+    },
+    {
+      "id": "asset_image_mraepcja_4a",
+      "type": "image",
+      "path": "assets/3_asset_image_mraepcja_4a.png",
+      "originalName": "闪光3.png",
+      "width": 200,
+      "height": 200,
+      "fileWidth": 200,
+      "fileHeight": 200,
+      "fileScale": 1
+    },
+    {
+      "id": "asset_image_mrafbzli_4s",
+      "type": "image",
+      "path": "assets/2_asset_image_mrafbzli_4s.png",
+      "originalName": "闪光2.png",
+      "width": 217,
+      "height": 217,
+      "fileWidth": 217,
+      "fileHeight": 217,
+      "fileScale": 1
+    },
+    {
+      "id": "asset_image_mrag7g66_53",
+      "type": "image",
+      "path": "assets/1_asset_image_mrag7g66_53.png",
+      "originalName": "粒子1.png",
+      "width": 31,
+      "height": 28,
+      "fileWidth": 31,
+      "fileHeight": 28,
+      "fileScale": 1
+    },
+    {
+      "id": "asset_image_mragin63_57",
+      "type": "image",
+      "path": "assets/8_asset_image_mragin63_57.png",
+      "originalName": "辉光8.png",
+      "width": 250,
+      "height": 250,
+      "fileWidth": 250,
+      "fileHeight": 250,
+      "fileScale": 1
+    },
+    {
+      "id": "asset_image_mrbuhhpm_2v",
+      "type": "image",
+      "path": "assets/qq_20260708150413_asset_image_mrbuhhpm_2v.png",
+      "originalName": "QQ图片20260708150413.png",
+      "width": 458,
+      "height": 210,
+      "fileWidth": 458,
+      "fileHeight": 210,
+      "fileScale": 1
+    },
+    {
+      "id": "asset_image_mrbuhkdz_2w",
+      "type": "image",
+      "path": "assets/qq_20260708150411_asset_image_mrbuhkdz_2w.png",
+      "originalName": "QQ图片20260708150411.png",
+      "width": 667,
+      "height": 259,
+      "fileWidth": 667,
+      "fileHeight": 259,
+      "fileScale": 1
+    },
+    {
+      "id": "asset_image_mrbuy7x7_3h",
+      "type": "image",
+      "path": "assets/1_asset_image_mrbuy7x7_3h.png",
+      "originalName": "爆炸1.png",
+      "width": 232,
+      "height": 232,
+      "fileWidth": 232,
+      "fileHeight": 232,
+      "fileScale": 1
+    },
+    {
+      "id": "asset_image_mrbv0c6j_3i",
+      "type": "image",
+      "path": "assets/a1_asset_image_mrbv0c6j_3i.png",
+      "originalName": "辉光a1.png",
+      "width": 200,
+      "height": 200,
+      "fileWidth": 200,
+      "fileHeight": 200,
+      "fileScale": 1
+    },
+    {
+      "id": "asset_image_mrebxd3p_a",
+      "type": "image",
+      "path": "assets/sw_stone1_asset_image_mrebxd3p_a.png",
+      "originalName": "sw_stone1.png",
+      "width": 57,
+      "height": 54,
+      "fileWidth": 57,
+      "fileHeight": 54,
+      "fileScale": 1
+    }
+  ],
+  "layerGroups": [
+    {
+      "id": "group_default",
+      "name": "默认组",
+      "visible": true,
+      "collapsed": false,
+      "order": 0
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer_image_mrae0m5e_2g",
+      "name": "辉光2.png",
+      "type": "image",
+      "assetId": "asset_image_mrbv0c6j_3i",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 4,
+        "scaleY": 3,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mrae2t0g_2i",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 0.3,
+          "duration": 0.5,
+          "enabled": true,
+          "seed": 31091,
+          "params": {
+            "fromOpacity": 0,
+            "toOpacity": 1,
+            "easing": "backOut"
+          }
+        },
+        {
+          "id": "anim_module_mrae2t0g_2j",
+          "type": "idle",
+          "name": "Idle 待机",
+          "startTime": 0.55,
+          "duration": 2.05,
+          "enabled": true,
+          "seed": 4675,
+          "params": {
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mrae2t0g_2k",
+          "type": "scale_out",
+          "name": "Scale Out 缩放退出",
+          "startTime": 2.6,
+          "duration": 0.25,
+          "enabled": true,
+          "seed": 53535,
+          "params": {
+            "fromScale": 1,
+            "toScale": 0,
+            "fadeOut": true,
+            "easing": "easeInQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mrae841v_3s",
+      "name": "散落coin",
+      "type": "image",
+      "assetId": "asset_image_mrae841s_3r",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mrae8814_3t",
+          "type": "particle_wall",
+          "name": "Particle Wall 粒子幕墙",
+          "startTime": 0.35,
+          "duration": 2.5,
+          "enabled": true,
+          "seed": 1784099001101,
+          "params": {
+            "emitterWidth": 350,
+            "direction": 0,
+            "spreadAngle": 180,
+            "speed": 600,
+            "lifetimeMin": 0.8,
+            "lifetimeMax": 1.3,
+            "spawnRate": 25,
+            "size": 60,
+            "gravity": 0,
+            "startScaleMin": 1,
+            "startScaleMax": 1.5,
+            "endScaleMin": 1,
+            "endScaleMax": 0.8,
+            "fadeOut": true,
+            "easing": "easeInOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrae8814_3u",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 2.5,
+          "duration": 0.35,
+          "enabled": true,
+          "seed": 74772,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mrebwld4_7",
+      "name": "散落coin Copy",
+      "type": "image",
+      "assetId": "asset_image_mrebxd3p_a",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mrebwld4_8",
+          "type": "particle_wall",
+          "name": "Particle Wall 粒子幕墙",
+          "startTime": 0.35,
+          "duration": 2.5,
+          "enabled": true,
+          "seed": 1784013823116,
+          "params": {
+            "emitterWidth": 300,
+            "direction": 0,
+            "spreadAngle": 180,
+            "speed": 500,
+            "lifetimeMin": 0.8,
+            "lifetimeMax": 1.5,
+            "spawnRate": 25,
+            "size": 45,
+            "gravity": 0,
+            "startScaleMin": 1,
+            "startScaleMax": 1.5,
+            "endScaleMin": 1,
+            "endScaleMax": 0.8,
+            "fadeOut": true,
+            "easing": "easeInOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrebwld4_9",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 2.5,
+          "duration": 0.35,
+          "enabled": true,
+          "seed": 74772,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mrae66wv_38",
+      "name": "mega.png",
+      "type": "image",
+      "assetId": "asset_image_mrbuhkdz_2w",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mrae6o14_39",
+          "type": "scale_in",
+          "name": "Scale In 缩放进入",
+          "startTime": 0,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 61608,
+          "params": {
+            "fromScale": 0,
+            "toScale": 1,
+            "fadeIn": true,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrae6o14_3a",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 74022,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 0,
+            "toY": 150,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrae6o14_3b",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0.2,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 49947,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 0,
+            "toY": -70,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeInQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrae6o14_3c",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0.4,
+          "duration": 0.25,
+          "enabled": true,
+          "seed": 21362,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 0,
+            "toY": 25,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrae6o14_3d",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0.65,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 69995,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 0,
+            "toY": -23,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeInQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrae6o14_3e",
+          "type": "pulse",
+          "name": "Pulse 呼吸",
+          "startTime": 0.95,
+          "duration": 1.55,
+          "enabled": true,
+          "seed": 34896,
+          "params": {
+            "scale": 0.9,
+            "cycles": 2,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mrae6o14_3f",
+          "type": "glow",
+          "name": "Glow 发光高亮",
+          "startTime": 0.95,
+          "duration": 1.55,
+          "enabled": true,
+          "seed": 62026,
+          "params": {
+            "intensity": 0.75,
+            "spread": 0,
+            "minAlpha": 0.1,
+            "maxAlpha": 0.7,
+            "pulses": 2,
+            "blendMode": 0,
+            "keepOriginal": true,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mrae6o14_3g",
+          "type": "scale_out",
+          "name": "Scale Out 缩放退出",
+          "startTime": 2.5,
+          "duration": 0.35,
+          "enabled": true,
+          "seed": 18928,
+          "params": {
+            "fromScale": 1,
+            "toScale": 0,
+            "fadeOut": true,
+            "easing": "easeInQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrae6o14_3h",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 2.55,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 15586,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 0,
+            "toY": -100,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeInQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mrae4kox_2o",
+      "name": "win3.png",
+      "type": "image",
+      "assetId": "asset_image_mrbuhhpm_2v",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "normal",
+      "animations": [
+        {
+          "id": "anim_module_mrae7a6p_3i",
+          "type": "scale_in",
+          "name": "Scale In 缩放进入",
+          "startTime": 0,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 61608,
+          "params": {
+            "fromScale": 0,
+            "toScale": 1,
+            "fadeIn": true,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrae7a6p_3j",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 74022,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 0,
+            "toY": -150,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrae7a6p_3k",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0.2,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 49947,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 0,
+            "toY": 70,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeInQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrd9c26x_4",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0.2,
+          "duration": 0.2,
+          "enabled": false,
+          "seed": 72729,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 0,
+            "toY": 50,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrae7a6p_3l",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0.4,
+          "duration": 0.25,
+          "enabled": true,
+          "seed": 21362,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 0,
+            "toY": -25,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrae7a6p_3m",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 0.65,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 69995,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 0,
+            "toY": 23,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeInQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrae7a6p_3n",
+          "type": "pulse",
+          "name": "Pulse 呼吸",
+          "startTime": 0.95,
+          "duration": 1.55,
+          "enabled": true,
+          "seed": 34896,
+          "params": {
+            "scale": 0.9,
+            "cycles": 2,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mrae7a6p_3o",
+          "type": "glow",
+          "name": "Glow 发光高亮",
+          "startTime": 0.95,
+          "duration": 1.55,
+          "enabled": true,
+          "seed": 62026,
+          "params": {
+            "intensity": 0.75,
+            "spread": 0,
+            "minAlpha": 0.1,
+            "maxAlpha": 0.7,
+            "pulses": 2,
+            "blendMode": 0,
+            "keepOriginal": true,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mrae7a6p_3p",
+          "type": "scale_out",
+          "name": "Scale Out 缩放退出",
+          "startTime": 2.5,
+          "duration": 0.35,
+          "enabled": true,
+          "seed": 18928,
+          "params": {
+            "fromScale": 1,
+            "toScale": 0,
+            "fadeOut": true,
+            "easing": "easeInQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrae7a6p_3q",
+          "type": "move",
+          "name": "Move 位移",
+          "startTime": 2.55,
+          "duration": 0.3,
+          "enabled": true,
+          "seed": 15586,
+          "params": {
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 0,
+            "toY": 100,
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "easeInQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mraeex38_44",
+      "name": "碰撞火花1",
+      "type": "image",
+      "assetId": "asset_image_mraeg23u_46",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": -90,
+        "y": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mraef5c0_45",
+          "type": "particles",
+          "name": "Particles 粒子爆发",
+          "startTime": 0.4,
+          "duration": 0.8,
+          "enabled": true,
+          "seed": 17972,
+          "params": {
+            "count": 15,
+            "spread": 20,
+            "speed": 500,
+            "emissionAngle": 90,
+            "emissionSpreadAngle": 300,
+            "size": 80,
+            "gravity": 300,
+            "fadeOut": true,
+            "trailCount": 1,
+            "trailSpacing": 0.035,
+            "trailFade": 0.5,
+            "rotateParticles": true,
+            "randomRotation": true,
+            "randomRotationDegrees": 135,
+            "spinSpeed": 1,
+            "easing": "easeOutQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mraeibpw_48",
+      "name": "碰撞火花2",
+      "type": "image",
+      "assetId": "asset_image_mraeg23u_46",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 100,
+        "y": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mraej5c0_49",
+          "type": "particles",
+          "name": "Particles 粒子爆发",
+          "startTime": 0.4,
+          "duration": 0.8,
+          "enabled": true,
+          "seed": 17972,
+          "params": {
+            "count": 15,
+            "spread": 20,
+            "speed": 500,
+            "emissionAngle": 20,
+            "emissionSpreadAngle": 254,
+            "size": 70,
+            "gravity": 300,
+            "fadeOut": true,
+            "trailCount": 1,
+            "trailSpacing": 0.035,
+            "trailFade": 0.5,
+            "rotateParticles": true,
+            "randomRotation": true,
+            "randomRotationDegrees": 135,
+            "spinSpeed": 1,
+            "easing": "easeOutQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mraepcjb_4b",
+      "name": "碰撞闪光",
+      "type": "image",
+      "assetId": "asset_image_mraepcja_4a",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 4,
+        "scaleY": 5,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mraeqic9_4d",
+          "type": "idle",
+          "name": "Idle 待机",
+          "startTime": 0.4,
+          "duration": 0.1,
+          "enabled": true,
+          "seed": 96656,
+          "params": {
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mrbujp33_2x",
+      "name": "碰撞爆炸特效",
+      "type": "image",
+      "assetId": "asset_image_mrbuy7x7_3h",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 4.4,
+        "scaleY": 3.5,
+        "rotation": 20,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mrebba0n_6",
+          "type": "energy_ring",
+          "name": "EnergyRing 能量环",
+          "startTime": 0.4,
+          "duration": 0.6,
+          "enabled": true,
+          "seed": 1783850218958,
+          "params": {
+            "ringCount": 1,
+            "startScale": 0.25,
+            "endScale": 1.3,
+            "sourceOpacity": 0,
+            "alpha": 1,
+            "stagger": 0.5,
+            "rotation": 0,
+            "pulse": 0.5,
+            "vanishMode": 0,
+            "additive": true,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrbuld8f_3b",
+          "type": "scale_up",
+          "name": "Scale Up 放大",
+          "startTime": 0.4,
+          "duration": 0.05,
+          "enabled": false,
+          "seed": 46527,
+          "params": {
+            "fromScaleX": 1,
+            "fromScaleY": 1,
+            "toScaleX": 6.5,
+            "toScaleY": 5,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrbuo8zj_3d",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 0.45,
+          "duration": 0.1,
+          "enabled": false,
+          "seed": 80991,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mraeson3_4h",
+      "name": "消失闪光3.png",
+      "type": "image",
+      "assetId": "asset_image_mraepcja_4a",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 2,
+        "scaleY": 1,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mrahvo76_5s",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 2.6,
+          "duration": 0.1,
+          "enabled": true,
+          "seed": 70971,
+          "params": {
+            "fromOpacity": 0,
+            "toOpacity": 1,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mraeva95_4m",
+          "type": "squash_stretch",
+          "name": "SquashStretch 弹性挤压",
+          "startTime": 2.65,
+          "duration": 0.1,
+          "enabled": true,
+          "seed": 69193,
+          "params": {
+            "squashAngle": 90,
+            "squashAmount": 0.3,
+            "decayOscillateCount": 0,
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 0,
+            "toY": 0,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mraeu9x5_4k",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 2.75,
+          "duration": 0.15,
+          "enabled": true,
+          "seed": 22105,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mrafahgn_4o",
+      "name": "大星星闪光",
+      "type": "image",
+      "assetId": "asset_image_mrafbzli_4s",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mrafar0i_4p",
+          "type": "particle_twinkle",
+          "name": "Particle Twinkle 随机闪烁粒子",
+          "startTime": 0.5,
+          "duration": 2,
+          "enabled": true,
+          "seed": 3746,
+          "params": {
+            "radius": 250,
+            "count": 40,
+            "spawnInterval": 0.5,
+            "twinkleDuration": 1,
+            "batchMin": 1,
+            "batchMax": 3,
+            "size": 100,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mrafoaam_4u",
+      "name": "放射光",
+      "type": "image",
+      "assetId": "asset_image_mragin63_57",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 4,
+        "scaleY": 3,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mrafoc2x_4v",
+          "type": "scale_in",
+          "name": "Scale In 缩放进入",
+          "startTime": 0.6,
+          "duration": 0.25,
+          "enabled": true,
+          "seed": 13228,
+          "params": {
+            "fromScale": 0.5,
+            "toScale": 1,
+            "fadeIn": true,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrafoc2x_4w",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 0.75,
+          "duration": 0.25,
+          "enabled": true,
+          "seed": 29918,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mrafoc2x_4x",
+          "type": "scale_in",
+          "name": "Scale In 缩放进入",
+          "startTime": 1,
+          "duration": 0.25,
+          "enabled": true,
+          "seed": 13228,
+          "params": {
+            "fromScale": 0.5,
+            "toScale": 1,
+            "fadeIn": true,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrafoc2x_4y",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 1.15,
+          "duration": 0.25,
+          "enabled": true,
+          "seed": 29918,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mrafoc2x_4z",
+          "type": "scale_in",
+          "name": "Scale In 缩放进入",
+          "startTime": 1.4,
+          "duration": 0.25,
+          "enabled": true,
+          "seed": 13228,
+          "params": {
+            "fromScale": 0.5,
+            "toScale": 1,
+            "fadeIn": true,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrafoc2x_50",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 1.55,
+          "duration": 0.25,
+          "enabled": true,
+          "seed": 29918,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mrafoc2x_51",
+          "type": "scale_in",
+          "name": "Scale In 缩放进入",
+          "startTime": 1.8,
+          "duration": 0.25,
+          "enabled": true,
+          "seed": 13228,
+          "params": {
+            "fromScale": 0.5,
+            "toScale": 1,
+            "fadeIn": true,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrafoc2x_52",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 1.95,
+          "duration": 0.25,
+          "enabled": true,
+          "seed": 29918,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mrbhjmew_6",
+          "type": "scale_in",
+          "name": "Scale In 缩放进入",
+          "startTime": 2.15,
+          "duration": 0.25,
+          "enabled": true,
+          "seed": 13228,
+          "params": {
+            "fromScale": 0.5,
+            "toScale": 1,
+            "fadeIn": true,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrbgy2b0_3",
+          "type": "scale_in",
+          "name": "Scale In 缩放进入",
+          "startTime": 2.2,
+          "duration": 0.25,
+          "enabled": false,
+          "seed": 13228,
+          "params": {
+            "fromScale": 0.5,
+            "toScale": 1,
+            "fadeIn": true,
+            "easing": "easeOutQuad"
+          }
+        },
+        {
+          "id": "anim_module_mrbhjsul_7",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 2.3,
+          "duration": 0.2,
+          "enabled": true,
+          "seed": 29918,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mrbgy95w_4",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 2.35,
+          "duration": 0.25,
+          "enabled": false,
+          "seed": 29918,
+          "params": {
+            "fromOpacity": 1,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mrag7g67_54",
+      "name": "粒子1.png",
+      "type": "image",
+      "assetId": "asset_image_mrag7g66_53",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": -200,
+        "y": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mrag7xpl_56",
+          "type": "particle_stream",
+          "name": "Particle Stream 持续发射",
+          "startTime": 0.6,
+          "duration": 1.9,
+          "enabled": true,
+          "seed": 39081,
+          "params": {
+            "spawnRate": 5,
+            "lifetime": 1.5,
+            "spread": 200,
+            "speed": 100,
+            "emissionAngle": 180,
+            "emissionSpreadAngle": 100,
+            "size": 80,
+            "gravity": 0,
+            "fadeOut": true,
+            "trailCount": 1,
+            "trailSpacing": 0.035,
+            "trailFade": 0.5,
+            "rotateParticles": true,
+            "randomRotation": true,
+            "randomRotationDegrees": 60,
+            "spinSpeed": 0.5,
+            "easing": "easeOutQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mragst36_58",
+      "name": "粒子1.png Copy",
+      "type": "image",
+      "assetId": "asset_image_mrag7g66_53",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 280,
+        "y": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 1,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mragst36_59",
+          "type": "particle_stream",
+          "name": "Particle Stream 持续发射",
+          "startTime": 0.6,
+          "duration": 1.9,
+          "enabled": true,
+          "seed": 39081,
+          "params": {
+            "spawnRate": 5,
+            "lifetime": 1.5,
+            "spread": 200,
+            "speed": 100,
+            "emissionAngle": 0,
+            "emissionSpreadAngle": 100,
+            "size": 80,
+            "gravity": 0,
+            "fadeOut": true,
+            "trailCount": 1,
+            "trailSpacing": 0.035,
+            "trailFade": 0.5,
+            "rotateParticles": true,
+            "randomRotation": true,
+            "randomRotationDegrees": 60,
+            "spinSpeed": 0.5,
+            "easing": "easeOutQuad"
+          }
+        }
+      ],
+      "keyframes": []
+    },
+    {
+      "id": "layer_image_mrahhlpi_5h",
+      "name": "辉光增强",
+      "type": "image",
+      "assetId": "asset_image_mrbv0c6j_3i",
+      "parentId": null,
+      "groupId": "group_default",
+      "visible": true,
+      "locked": true,
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "scaleX": 5,
+        "scaleY": 5,
+        "rotation": 0,
+        "anchorX": 0.5,
+        "anchorY": 0.5
+      },
+      "opacity": 0.5,
+      "blendMode": "add",
+      "animations": [
+        {
+          "id": "anim_module_mrahhxzu_5i",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 0.15,
+          "duration": 0.35,
+          "enabled": false,
+          "seed": 41656,
+          "params": {
+            "fromOpacity": 0.2,
+            "toOpacity": 0.5,
+            "easing": "linear"
+          }
+        },
+        {
+          "id": "anim_module_mrahhxzu_5j",
+          "type": "fade",
+          "name": "Fade 淡入淡出",
+          "startTime": 0.4,
+          "duration": 0.75,
+          "enabled": true,
+          "seed": 37876,
+          "params": {
+            "fromOpacity": 0.5,
+            "toOpacity": 0,
+            "easing": "linear"
+          }
+        }
+      ],
+      "keyframes": []
+    }
+  ],
+  "particles": [],
+  "exportProfile": {
+    "id": "runtime_100",
+    "purpose": "runtime",
+    "assetScale": 1
+  }
+}

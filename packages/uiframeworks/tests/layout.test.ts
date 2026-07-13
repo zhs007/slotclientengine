@@ -33,6 +33,20 @@ const ORIENTATION_FOCUS_POLICY = Object.freeze({
   }),
 });
 
+const MAXIMIZED_FOCUS_POLICY = Object.freeze({
+  mode: "maximized-focus" as const,
+  resolveViewportSize: ({
+    width,
+    height,
+  }: {
+    width: number;
+    height: number;
+  }) =>
+    width >= height
+      ? Object.freeze({ width: 2000, height: 1200 })
+      : Object.freeze({ width: 840, height: 1800 }),
+});
+
 describe("layout", () => {
   it("calculates frame scale for portrait and exact design viewports", () => {
     expect(calculateFrameScale(941, 1672)).toBe(1);
@@ -153,6 +167,25 @@ describe("layout", () => {
     expect(portrait.frameDesignSize).toEqual({ width: 1174, height: 2000 });
   });
 
+  it("uses a maximized-focus viewport resolver without reimplementing its algorithm", () => {
+    const landscape = calculateSlotUiFrameViewport({
+      viewportWidth: 1920,
+      viewportHeight: 1080,
+      policy: MAXIMIZED_FOCUS_POLICY,
+    });
+    expect(landscape.frameDesignSize).toEqual({ width: 2000, height: 1200 });
+    expect(landscape.cssSize).toEqual({ width: 1800, height: 1080 });
+    expect(landscape.offsetX).toBe(60);
+
+    expect(
+      calculateSlotUiFrameViewport({
+        viewportWidth: 390,
+        viewportHeight: 844,
+        policy: MAXIMIZED_FOCUS_POLICY,
+      }).frameDesignSize,
+    ).toEqual({ width: 840, height: 1800 });
+  });
+
   it("rejects invalid focus frame policies", () => {
     expect(() =>
       calculateSlotUiFrameViewport({
@@ -194,6 +227,13 @@ describe("layout", () => {
         } as never,
       }),
     ).toThrow(/include portrait/);
+    expect(() =>
+      calculateSlotUiFrameViewport({
+        viewportWidth: 1000,
+        viewportHeight: 1000,
+        policy: { mode: "maximized-focus" } as never,
+      }),
+    ).toThrow(/resolveViewportSize/);
   });
 
   it("clamps flat HUD control sizes for compact and large designs", () => {

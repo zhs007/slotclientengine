@@ -1,4 +1,4 @@
-export type SupportedSpineSkeletonVersion = "3.8" | "4.2";
+export type SupportedSpineSkeletonVersion = "4.3";
 
 export function readSupportedSpineSkeletonVersion(
   skeleton: unknown,
@@ -14,14 +14,11 @@ export function readSupportedSpineSkeletonVersion(
   if (typeof version !== "string" || version.length === 0) {
     throw new Error("Spine skeleton version must be a non-empty string.");
   }
-  if (/^3\.8(?:\.|$)/u.test(version)) {
-    return "3.8";
-  }
-  if (/^4\.2(?:\.|$)/u.test(version)) {
-    return "4.2";
+  if (/^4\.3(?:\.|$)/u.test(version)) {
+    return "4.3";
   }
   throw new Error(
-    `Unsupported Spine skeleton version "${version}"; supported versions are 3.8.x and 4.2.x.`,
+    `Unsupported Spine skeleton version "${version}"; supported version is 4.3.x.`,
   );
 }
 

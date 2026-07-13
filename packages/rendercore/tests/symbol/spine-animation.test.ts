@@ -160,7 +160,7 @@ vi.mock("@esotericsoftware/spine-pixi-v8", () => {
       data: {
         findAnimation(name: string): { readonly name: string } | null;
       };
-      setToSetupPose: ReturnType<typeof vi.fn>;
+      setupPose: ReturnType<typeof vi.fn>;
     };
     state: {
       clearTracks: ReturnType<typeof vi.fn>;
@@ -180,7 +180,7 @@ vi.mock("@esotericsoftware/spine-pixi-v8", () => {
       super();
       this.skeleton = {
         data: options.skeletonData,
-        setToSetupPose: vi.fn(),
+        setupPose: vi.fn(),
       };
       this.state = {
         clearTracks: vi.fn(() => {
@@ -298,7 +298,7 @@ function createResource(
     symbol: "H1",
     state,
     skeleton: {
-      skeleton: { spine: "4.2.43" },
+      skeleton: { spine: "4.3.23" },
       bones: [{ name: "root" }],
       slots: [],
       skins: [{ name: "default", attachments: {} }],
@@ -582,11 +582,11 @@ describe("SpineSymbolAni", () => {
       context: createContext({ state: "appear" }),
       resource: {
         ...createResource("appear"),
-        skeleton: { skeleton: { spine: "4.3.9" } },
+        skeleton: { skeleton: { spine: "4.2.43" } },
       },
     });
     expect(() => unsupported.reset()).toThrow(
-      /Unsupported Spine skeleton version "4\.3\.9"/,
+      /Unsupported Spine skeleton version "4\.2\.43"/,
     );
 
     const malformed = new SpineSymbolAni({

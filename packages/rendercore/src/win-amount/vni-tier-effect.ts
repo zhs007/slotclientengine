@@ -72,10 +72,7 @@ export class WinAmountTierEffect {
     this.#playerFactory =
       options.playerFactory ??
       ((playerOptions) => new VNIPlayer(playerOptions));
-    applyTierContainerLayout(
-      this.container,
-      options.layout,
-    );
+    applyTierContainerLayout(this.container, options.layout);
   }
 
   start(): void {
@@ -88,10 +85,7 @@ export class WinAmountTierEffect {
   }
 
   applyLayout(layout: WinAmountAnimationLayout): void {
-    applyTierContainerLayout(
-      this.container,
-      layout,
-    );
+    applyTierContainerLayout(this.container, layout);
   }
 
   requestEnd(): void {
@@ -251,10 +245,7 @@ export function parseWinAmountAnimationManifest(
   }
   const tiers = Object.freeze(
     record.tiers.map((tier, index) =>
-      parseManifestTier(
-        tier,
-        `win amount animation manifest.tiers[${index}]`,
-      ),
+      parseManifestTier(tier, `win amount animation manifest.tiers[${index}]`),
     ),
   );
   assertUniqueStrings(
@@ -517,10 +508,7 @@ function expandManifestProjectGlob(glob: string): ReadonlySet<string> {
   return new Set(names.map((name) => `./${name}.json`));
 }
 
-function assertRecord(
-  value: unknown,
-  label: string,
-): Record<string, unknown> {
+function assertRecord(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`${label} must be an object.`);
   }

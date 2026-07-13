@@ -20,6 +20,7 @@ import {
 } from "./symbol-assets.js";
 import {
   getSymbolSetConfig,
+  resolveViewerStateForSymbol,
   SYMBOL_SET_CONFIGS,
   type SymbolSetConfig,
 } from "./symbol-set-config.js";
@@ -131,7 +132,13 @@ async function bootstrap(): Promise<void> {
 
   const broadcastState = (state: SymbolStateId) => {
     for (const item of renderedSymbols) {
-      item.renderSymbol.requestState(state);
+      item.renderSymbol.requestState(
+        resolveViewerStateForSymbol(
+          activeSymbolSet,
+          item.renderSymbol.symbol,
+          state,
+        ),
+      );
     }
   };
 

@@ -6,17 +6,105 @@ import {
   type SlotGameAdapter,
   type SlotGameClientLike,
   type SlotGameInitialState,
+  type SlotGameMountContext,
 } from "@slotclientengine/gameframeworks";
 import { GAME002_SAMPLE_DEFAULT_SCENE } from "./fixtures/game002-gmi.js";
+import {
+  GAME002_GRID_LAYOUT,
+  GAME002_FOCUS_REGION,
+  GAME002_REFERENCE_SIZE,
+  createGame002FramePolicy,
+  createGame002Layout,
+} from "../src/game-layout.js";
 import {
   GAME002_LIVE_SERVER_URL,
   parseGame002FrameworkConfigFromQuery,
 } from "../src/framework-config.js";
 
 describe("game002 framework flow", () => {
+  it("maximizes the expanded reel focus by page orientation", async () => {
+    for (const [pageSize, expectedFrameSize] of [
+      [
+        { width: 390, height: 844 },
+        { width: 840, height: (840 * 844) / 390 },
+      ],
+      [
+        { width: 1200, height: 1200 },
+        { width: 1200, height: 1200 },
+      ],
+      [
+        { width: 1430, height: 1464 },
+        { width: (1430 * 1200) / 1464, height: 1200 },
+      ],
+      [
+        { width: 1920, height: 1080 },
+        { width: 2000, height: 1200 },
+      ],
+    ] as const) {
+      const root = document.createElement("div");
+      setRootSize(root, pageSize.width, pageSize.height);
+      const adapter = new FlowAdapter();
+      const framework = createSlotGameFramework({
+        root,
+        gameAdapter: adapter,
+        live: parseGame002FrameworkConfigFromQuery(validQuery()).live,
+        betOptions: [{ bet: 5, lines: 30 }],
+        designSize: GAME002_REFERENCE_SIZE,
+        framePolicy: createGame002FramePolicy(),
+        buildSpinRequest: () => ({
+          bet: 5,
+          lines: 30,
+          times: 1,
+          autonums: -1,
+        }),
+        clientFactory: () => new FakeClient(),
+        logicFactory: (_gmi, meta) => createFakeLogic(meta),
+      });
+
+      await framework.connect();
+      const frameSize = adapter.mountContext?.getViewport().frameDesignSize;
+      expect(frameSize).toBeDefined();
+      if (!frameSize) {
+        throw new Error("game002 adapter did not receive a frame viewport.");
+      }
+      expect(frameSize.width).toBeCloseTo(expectedFrameSize.width, 10);
+      expect(frameSize.height).toBeCloseTo(expectedFrameSize.height, 10);
+      const layout = createGame002Layout({
+        viewportSize: frameSize,
+        gridLayout: GAME002_GRID_LAYOUT,
+        focusRegion: GAME002_FOCUS_REGION,
+      });
+      const scale = adapter.mountContext?.getViewport().scale;
+      expect(scale).toBeDefined();
+      if (scale === undefined) {
+        throw new Error("game002 adapter did not receive a frame scale.");
+      }
+      const expectedFocusScale = Math.min(
+        pageSize.width / GAME002_FOCUS_REGION.width,
+        pageSize.height / GAME002_FOCUS_REGION.height,
+      );
+      expect(scale).toBeCloseTo(expectedFocusScale, 10);
+      const requestedFrameSize = {
+        width: pageSize.width / expectedFocusScale,
+        height: pageSize.height / expectedFocusScale,
+      };
+      if (
+        requestedFrameSize.width <= 2000 &&
+        requestedFrameSize.height <= 2000
+      ) {
+        expect(adapter.mountContext?.getViewport().offsetX).toBeCloseTo(0, 10);
+        expect(adapter.mountContext?.getViewport().offsetY).toBeCloseTo(0, 10);
+      }
+      expect(
+        layout.boardFrameInViewport.y + layout.boardFrameInViewport.height,
+      ).toBeLessThanOrEqual(layout.viewportSize.height);
+      framework.destroy();
+    }
+  });
+
   it("uses game002 default spin request and collects only after adapter play resolves", async () => {
     const config = parseGame002FrameworkConfigFromQuery(validQuery());
-    expect(config.skin).toBe("2");
+    expect(config.skin).toBe("1");
     expect(config.live.serverUrl).toBe(GAME002_LIVE_SERVER_URL);
     expect(config.live.gamecode).toBe("GAME_CODE");
     const client = new FakeClient();
@@ -62,10 +150,8 @@ describe("game002 framework flow", () => {
   });
 
   it("passes live defaultScene to the adapter without inventing one", async () => {
-    const config = parseGame002FrameworkConfigFromQuery(
-      validQuery({ skin: "3" }),
-    );
-    expect(config.skin).toBe("3");
+    const config = parseGame002FrameworkConfigFromQuery(validQuery());
+    expect(config.skin).toBe("1");
     expect(config.live.gamecode).toBe("GAME_CODE");
     const client = new FakeClient();
     client.userInfo.defaultScene = GAME002_SAMPLE_DEFAULT_SCENE;
@@ -125,7 +211,7 @@ describe("game002 framework flow", () => {
 
 function validQuery(overrides: Record<string, string> = {}): string {
   return `?${new URLSearchParams({
-    skin: "2",
+    skin: "1",
     token: "TOKEN",
     gamecode: "GAME_CODE",
     businessid: "guest",
@@ -179,9 +265,9 @@ class FlowAdapter implements SlotGameAdapter {
   initialState: SlotGameInitialState | null = null;
   lastLogic: GameLogic | null = null;
   playPromise: Promise<void> = Promise.resolve();
-
-  mount(): void {
-    return undefined;
+  mountContext: SlotGameMountContext | null = null;
+  mount(context: SlotGameMountContext): void {
+    this.mountContext = context;
   }
 
   applyInitialState(state: SlotGameInitialState): void {
@@ -192,6 +278,17 @@ class FlowAdapter implements SlotGameAdapter {
     this.lastLogic = logic;
     await this.playPromise;
   }
+}
+
+function setRootSize(root: HTMLElement, width: number, height: number): void {
+  Object.defineProperty(root, "clientWidth", {
+    configurable: true,
+    value: width,
+  });
+  Object.defineProperty(root, "clientHeight", {
+    configurable: true,
+    value: height,
+  });
 }
 
 class FakeClient implements SlotGameClientLike {

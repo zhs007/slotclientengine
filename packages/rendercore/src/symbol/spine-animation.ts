@@ -8,7 +8,6 @@ import {
 import { Assets, Container, type Texture } from "pixi.js";
 import { assertValidDeltaSeconds, resetBaseDisplay } from "./ani.js";
 import { SymbolAnimationError } from "./errors.js";
-import { Spine38SymbolPlayer } from "./spine38-runtime.js";
 import { readSupportedSpineSkeletonVersion } from "./spine-version.js";
 import type {
   SymbolSpineAnimationResource,
@@ -331,10 +330,7 @@ function createSpineSymbolPlayerCacheKey(
 function createDefaultSpineSymbolPlayer(options: {
   readonly resource: SymbolSpineAnimationResource;
 }): RendercoreSpineSymbolPlayer {
-  const version = readSupportedSpineSkeletonVersion(options.resource.skeleton);
-  if (version === "3.8") {
-    return new Spine38SymbolPlayer(options);
-  }
+  readSupportedSpineSkeletonVersion(options.resource.skeleton);
   return new OfficialSpineSymbolPlayer(options);
 }
 
@@ -402,7 +398,7 @@ class OfficialSpineSymbolPlayer implements RendercoreSpineSymbolPlayer {
     this.#completed = false;
     spine.state.clearTracks();
     spine.state.clearListeners();
-    spine.skeleton.setToSetupPose();
+    spine.skeleton.setupPose();
     const entry = spine.state.setAnimation(
       0,
       options.animationName,
@@ -431,7 +427,7 @@ class OfficialSpineSymbolPlayer implements RendercoreSpineSymbolPlayer {
     if (this.#spine) {
       this.#spine.state.clearTracks();
       this.#spine.state.clearListeners();
-      this.#spine.skeleton.setToSetupPose();
+      this.#spine.skeleton.setupPose();
       this.#spine.update(0);
     }
   }
