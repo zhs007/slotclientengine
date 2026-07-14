@@ -258,7 +258,7 @@ class SymbolValuePresenterModel implements SymbolValuePresenter {
       this.#phase = "idle";
       return prepared;
     } catch (error) {
-      for (const entry of entries) entry.player.destroy();
+      this.destroyEntries(entries);
       if (version === this.#prepareVersion) this.#phase = "idle";
       throw error;
     }

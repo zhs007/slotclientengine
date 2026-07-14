@@ -1,4 +1,4 @@
-import { Container, Sprite, Texture } from "pixi.js";
+import { Assets, Container, Sprite, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import type { RendercoreSpineSlotPlayer } from "../../src/spine/runtime-player.js";
 import {
@@ -100,6 +100,9 @@ describe("render symbol value controller", () => {
   });
 
   it("uses an exact value image and fails without a matching image", async () => {
+    const loadTexture = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE);
     const players: FakeSlotPlayer[] = [];
     const resource = Object.freeze({
       ...createResource(),
@@ -148,6 +151,7 @@ describe("render symbol value controller", () => {
     expect(symbol.getPresentationValue()).toBeNull();
     expect(players[1].destroyed).toBe(true);
     symbol.destroy();
+    loadTexture.mockRestore();
   });
 });
 
