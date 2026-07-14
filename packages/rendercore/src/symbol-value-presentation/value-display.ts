@@ -1,11 +1,11 @@
-import { Container, Sprite, Text, Texture } from "pixi.js";
+import { Assets, Container, Sprite, Text, type Texture } from "pixi.js";
 import { SymbolAssetError } from "../symbol/errors.js";
 import type { SymbolValuePresentationResource } from "./types.js";
 
-export function createSymbolValueDisplay(options: {
+export async function createSymbolValueDisplay(options: {
   readonly value: number;
   readonly resource: SymbolValuePresentationResource;
-}): Container {
+}): Promise<Container> {
   const spec = options.resource.text;
   if (spec.type === "image") {
     const url = assertSymbolValueDisplayResource(options);
@@ -14,7 +14,7 @@ export function createSymbolValueDisplay(options: {
         `Symbol "${options.resource.symbol}" image display resource is invalid.`,
       );
     }
-    const sprite = new Sprite(Texture.from(url));
+    const sprite = new Sprite(await Assets.load<Texture>(url));
     sprite.anchor.set(0.5);
     sprite.position.set(spec.x, spec.y);
     return sprite;

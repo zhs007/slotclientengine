@@ -156,6 +156,7 @@ interface PreparedEntry {
   readonly tierIndex: number;
   readonly resource: SymbolValuePresentationTierResource;
   readonly player: SymbolValuePresentationPlayer;
+  readonly label: Container;
 }
 
 interface PreparedInternal {
@@ -221,8 +222,21 @@ class SymbolValuePresenterModel implements SymbolValuePresenter {
           throw new Error(`No valuePresentation tier covers ${item.value}.`);
         }
         const player = this.#playerFactory({ resource });
-        entries.push(Object.freeze({ item, tierIndex, resource, player }));
-        await player.init();
+        let label: Container | null = null;
+        try {
+          await player.init();
+          label = await createSymbolValueDisplay({
+            value: item.value,
+            resource: presentation,
+          });
+        } catch (error) {
+          label?.destroy();
+          player.destroy();
+          throw error;
+        }
+        entries.push(
+          Object.freeze({ item, tierIndex, resource, player, label }),
+        );
         if (version !== this.#prepareVersion) {
           throw new Error("Symbol value presenter prepare was cancelled.");
         }
@@ -299,10 +313,7 @@ class SymbolValuePresenterModel implements SymbolValuePresenter {
         entry.player.view.scale.set(transform?.scale ?? 1);
         const valueResource = this.#resources[entry.item.symbol];
         const textSpec = valueResource.text;
-        const label = createSymbolValueDisplay({
-          value: entry.item.value,
-          resource: valueResource,
-        });
+        const label = entry.label;
         entry.player.attachSlotObject({
           slot: textSpec.slot,
           object: label,
@@ -387,7 +398,10 @@ class SymbolValuePresenterModel implements SymbolValuePresenter {
   }
 
   private destroyEntries(entries: readonly PreparedEntry[]): void {
-    for (const entry of entries) entry.player.destroy();
+    for (const entry of entries) {
+      entry.label.destroy();
+      entry.player.destroy();
+    }
   }
 
   private destroyActiveEntries(entries: readonly ActiveEntry[]): void {

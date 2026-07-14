@@ -418,19 +418,27 @@ class Game002PixiAdapter implements SlotGameAdapter {
       const deltaSeconds = normalizeTickerDeltaSeconds(ticker);
       this.#backgroundPlayer.update(deltaSeconds);
       this.#symbolValuePresenter?.update(deltaSeconds);
-      const reelResult = this.#runtime.update(deltaSeconds);
       const pending = this.#pendingAnimation;
       if (!pending) {
         if (this.#winAmountPlayer?.isPlaying()) {
           this.#winAmountPlayer.update(deltaSeconds);
         }
         const carousel = this.#symbolWinCarousel;
-        if (carousel && carousel.getSnapshot().phase !== "idle") {
+        const carouselPhase = carousel?.getSnapshot().phase ?? "idle";
+        if (carousel && carouselPhase === "playing") {
           carousel.update(deltaSeconds);
+        } else {
+          this.#runtime.update(deltaSeconds);
+          if (carousel && carouselPhase === "cycle-pause") {
+            carousel.update(deltaSeconds);
+          }
         }
         return;
       }
+      let reelsUpdated = false;
       if (pending.phase === "spinning") {
+        const reelResult = this.#runtime.update(deltaSeconds);
+        reelsUpdated = true;
         if (!reelResult.completed) {
           return;
         }
@@ -452,8 +460,12 @@ class Game002PixiAdapter implements SlotGameAdapter {
         }
       }
       if (!pending.winSequenceComplete) {
-        const result = this.#requireSymbolWinCarousel().update(deltaSeconds);
+        const result = this.#requireSymbolWinCarousel().update(
+          reelsUpdated ? 0 : deltaSeconds,
+        );
         pending.winSequenceComplete = result.firstCycleComplete;
+      } else if (!reelsUpdated) {
+        this.#runtime.update(deltaSeconds);
       }
       if (pending.winAmountExpected && !pending.winAmountPlaybackComplete) {
         const result = this.#requireWinAmountPlayer().update(deltaSeconds);

@@ -7,7 +7,10 @@ import type {
 import { createOfficialSpinePlayer } from "../spine/runtime-player.js";
 import type { RendercoreSpineSlotPlayer } from "../spine/runtime-player.js";
 import type { SymbolValuePresentationResource } from "./types.js";
-import { createSymbolValueDisplay } from "./value-display.js";
+import {
+  assertSymbolValueDisplayResource,
+  createSymbolValueDisplay,
+} from "./value-display.js";
 
 export function createRenderSymbolValueController(options: {
   readonly root: RenderSymbol;
@@ -73,16 +76,11 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     if (!tier) {
       throw new Error(`No valuePresentation tier covers ${value}.`);
     }
+    assertSymbolValueDisplayResource({ value, resource: this.#resource });
     let player: RendercoreSpineSlotPlayer | null = null;
-    let label: Container | null = null;
     try {
       player = this.#playerFactory({ tier });
-      label = createSymbolValueDisplay({
-        value,
-        resource: this.#resource,
-      });
     } catch (error) {
-      label?.destroy();
       player?.destroy();
       throw error;
     }
@@ -90,36 +88,50 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     this.#value = value;
     this.#player = player;
     this.#tier = tier;
-    this.#label = label;
+    this.#label = null;
     const transform = tier.spec.transform;
     player.view.position.set(transform?.x ?? 0, transform?.y ?? 0);
     player.view.scale.set(transform?.scale ?? 1);
-    void Promise.resolve(player.init()).then(
-      () => {
-        if (
-          this.#destroyed ||
-          this.#requestId !== requestId ||
-          this.#player !== player ||
-          this.#label !== label
-        ) {
-          return;
-        }
-        this.playCurrentAnimation();
-        player.attachSlotObject({
-          slot: this.#resource.text.slot,
-          object: label,
-          followSlotColor: true,
-        });
-        this.#root.overlayLayer.addChild(player.view);
-        this.#initialized = true;
-        this.syncVisibility();
-      },
-      (error: unknown) => {
-        if (this.#requestId === requestId && this.#player === player) {
-          this.#initializationError = error;
-        }
-      },
-    );
+    void this.initializePlayer({ player, requestId, value });
+  }
+
+  private async initializePlayer(options: {
+    readonly player: RendercoreSpineSlotPlayer;
+    readonly requestId: number;
+    readonly value: number;
+  }): Promise<void> {
+    const { player, requestId, value } = options;
+    let label: Container | null = null;
+    try {
+      await player.init();
+      label = await createSymbolValueDisplay({
+        value,
+        resource: this.#resource,
+      });
+      if (
+        this.#destroyed ||
+        this.#requestId !== requestId ||
+        this.#player !== player
+      ) {
+        label.destroy();
+        return;
+      }
+      this.#label = label;
+      this.playCurrentAnimation();
+      player.attachSlotObject({
+        slot: this.#resource.text.slot,
+        object: label,
+        followSlotColor: true,
+      });
+      this.#root.overlayLayer.addChild(player.view);
+      this.#initialized = true;
+      this.syncVisibility();
+    } catch (error) {
+      label?.destroy();
+      if (this.#requestId === requestId && this.#player === player) {
+        this.#initializationError = error;
+      }
+    }
   }
 
   getValue(): number | null {

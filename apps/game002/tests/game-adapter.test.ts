@@ -333,11 +333,14 @@ describe("game002 adapter", () => {
   it("starts the generic symbol carousel only after reels and waits for its first cycle", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();
-    const carousel = new FakeSymbolWinCarousel(1);
+    const runtimeTarget = runtime.asRuntime();
+    const carousel = new FakeSymbolWinCarousel(1, (deltaSeconds) => {
+      runtimeTarget.update(deltaSeconds);
+    });
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
       loadSymbolTextures: async () => ({}),
-      createRuntime: () => runtime.asRuntime(),
+      createRuntime: () => runtimeTarget,
       createSymbolWinCarousel: () => carousel,
     });
     await adapter.mount(createMountContext());
@@ -355,6 +358,7 @@ describe("game002 adapter", () => {
     runtime.completeNextUpdate = true;
     fakeApp.tick(16);
     expect(carousel.startCount).toBe(1);
+    expect(runtime.updateDeltas).toEqual([0.016, 0]);
     let resolved = false;
     void pending.then(() => {
       resolved = true;
@@ -365,9 +369,11 @@ describe("game002 adapter", () => {
     carousel.complete = true;
     fakeApp.tick(16);
     await pending;
+    expect(runtime.updateDeltas).toEqual([0.016, 0, 0.016]);
     const updateCount = carousel.updateCount;
     fakeApp.tick(16);
     expect(carousel.updateCount).toBe(updateCount + 1);
+    expect(runtime.updateDeltas).toEqual([0.016, 0, 0.016, 0.016]);
 
     adapter.destroy?.();
     expect(carousel.destroyed).toBe(true);
@@ -862,7 +868,10 @@ class FakeSymbolWinCarousel implements SymbolWinCarousel {
   destroyed = false;
   phase: "idle" | "playing" | "destroyed" = "idle";
 
-  constructor(readonly groupCount: number) {}
+  constructor(
+    readonly groupCount: number,
+    readonly updateTarget: (deltaSeconds: number) => void = () => undefined,
+  ) {}
 
   prepare(input: any): any {
     this.prepareCalls.push(input);
@@ -881,8 +890,9 @@ class FakeSymbolWinCarousel implements SymbolWinCarousel {
     this.firstCycleComplete = false;
     this.phase = "idle";
   }
-  update(): { readonly firstCycleComplete: boolean } {
+  update(deltaSeconds: number): { readonly firstCycleComplete: boolean } {
     this.updateCount += 1;
+    this.updateTarget(deltaSeconds);
     this.firstCycleComplete = this.complete;
     return { firstCycleComplete: this.firstCycleComplete };
   }
