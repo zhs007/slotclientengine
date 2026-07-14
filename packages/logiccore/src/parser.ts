@@ -204,6 +204,14 @@ function parseWinResult(result: unknown, path: string): WinResult {
     assertFiniteNumber(resultRecord.cashWin, `${path}.cashWin`);
   }
 
+  if (resultRecord.coinWin64 !== undefined) {
+    assertFiniteNumber(resultRecord.coinWin64, `${path}.coinWin64`);
+  }
+
+  if (resultRecord.cashWin64 !== undefined) {
+    assertFiniteNumber(resultRecord.cashWin64, `${path}.cashWin64`);
+  }
+
   return cloneAndFreeze(resultRecord) as WinResult;
 }
 

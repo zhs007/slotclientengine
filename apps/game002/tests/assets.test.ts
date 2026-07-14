@@ -29,6 +29,7 @@ const EXPECTED_SYMBOLS = [
   "BN",
 ] as const;
 const SPINE_SYMBOLS = EXPECTED_SYMBOLS.filter((symbol) => symbol !== "CN");
+const PAY_SYMBOLS = ["WL", "H1", "H2", "L1", "L2", "L3", "L4"] as const;
 
 describe("game002-s3 assets", () => {
   it("exposes only explicit skin=1 and derives the 13 display symbols", () => {
@@ -179,6 +180,32 @@ describe("game002-s3 assets", () => {
         }),
       ),
     ).toEqual(EXPECTED_SYMBOLS);
+  });
+
+  it("keeps every payable symbol on an explicit exact Spine Win once animation", () => {
+    const manifest = getGame002SkinConfig("1").stateTextureManifest as {
+      readonly symbols: Readonly<
+        Record<
+          string,
+          {
+            readonly animations?: Readonly<Record<string, unknown>>;
+          }
+        >
+      >;
+    };
+    for (const symbol of PAY_SYMBOLS) {
+      expect(manifest.symbols[symbol]?.animations?.win).toMatchObject({
+        kind: "spine",
+        playback: {
+          mode: "animation",
+          animationName: "Win",
+          loop: false,
+        },
+      });
+    }
+    for (const symbol of ["WM", "CN", "CM", "CO", "AF", "BN"] as const) {
+      expect(manifest.symbols[symbol]?.animations?.win).toBeUndefined();
+    }
   });
 
   it("loads string, single, transparent and layered texture inputs", async () => {

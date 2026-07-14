@@ -189,9 +189,9 @@ live spin 第 0 step 如果触发 `bg-gencoins`，`bg-gencoins.basicComponentDat
 
 ## 中奖播放
 
-`bg-wins` 是 `game003` 当前的中奖组件名，只在 app 层配置和识别；`logiccore`、`gameframeworks` 和 `rendercore` 只提供通用组件 result 解析和可见 symbol 状态 API，不硬编码 `bg-wins`。
+`bg-wins` 是 `game003` 当前的中奖组件名，只在 app 层配置和识别。app 把组件名、每个 result 自身的 finite positive `cashWin` resolver、component totals validator、formatter 和 YAML `game003WinSymbolLoop` style/timing 传给 rendercore 通用 carousel；rendercore 不硬编码 `bg-wins` 或 game003。
 
-live spin 停到服务器目标 scene 并完成可见窗口校验后，`apps/game003/src/win-sequence.ts` 读取第 0 step 的 `bg-wins.basicComponentData.usedResults`。每个索引指向同 step 的 `clientData.results[]`，并保留 `usedResults` 顺序生成中奖播放队列。
+live spin 启动前由 rendercore carousel 的 `prepare()` 读取第 0 step 的 `bg-wins.basicComponentData.usedResults`，每个索引指向同 step 的 `clientData.results[]`，并保留 `usedResults` 顺序。`apps/game003/src/win-sequence.ts` 只保留 app-owned 组件名、金额 resolver 和 totals validator，不再拥有第二套 Text、anchor 或轮播状态机。
 
 `result.pos` 是 `[x, y]` 成对坐标，坐标基准是当前 5 列 x 5 行主转轮可见窗口：`x` 为列索引，`y` 为列内可见行索引。一个 result 内的所有 `pos` 同时请求 symbol `win` 状态；多个 result 按 `usedResults` 顺序依次播放。首轮全部中奖组的 once 动画回到 `normal` 后，`playSpin()` 可以 resolve，后续按 `usedResults` 顺序继续 `1 -> 2 -> ... -> pause -> 1` 循环作为 lingering 展示，直到下一次 spin 开始时显式清理。
 

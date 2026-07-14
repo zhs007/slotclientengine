@@ -39,6 +39,7 @@
 - `game002` 首屏必须先走 `packages/gameloading`：99% 回调校验 query 并准备 live session，100% 后才创建 framework/Pixi 画面，并复用同一个 prepared session，避免 loading 前挂载或双 WebSocket。
 - rendercore 的 Spine Pixi runtime 只支持官方 `4.3.x`，不得恢复 4.2/3.8 runtime 或手写 adapter；`game002-s3` 主 skeleton 为 4.3.23。`game003-s1` 现有 4.2 资源是明确的非发布例外，本任务不迁移它，也不增加 fallback。
 - `assets/game002-s3/win-amount` 是当前临时 big/super/mega 资源，manifest 是 tier project、asset glob 和 segmented timing 的唯一来源；game002 只能配置 rendercore 通用 win-amount player。金额动画进入 `awaiting-dismiss` 后不再阻塞 `playSpin()`，点击只调用 `requestAdvance()`，下一次 spin 必须清理遗留展示。
+- `game002` 的中奖组件名是 app-owned `bg-win`。`packages/rendercore` 的通用 symbol win carousel 接收一个或多个组件名，按组件数组顺序和各自 `usedResults` 顺序驱动同组 symbol `win`、真实中奖格金额锚点、首轮阻塞、后续 lingering 和下一 spin 清理；组件名、amount resolver、formatter/style 由 app 传入，shared 包不得硬编码游戏语义。game002 单组金额只按字段存在性选择 `cashWin64 !== undefined ? cashWin64 : cashWin`，不得用 truthy 判断或 component total/totalwin 兜底。carousel 只依赖 `VisibleSymbolPresentationTarget`，不得依赖具体 ReelSet；`RenderReelSet` 继续逐轴 spin，`RenderGridCellReelSet` 继续逐格 spin，grid-cell 停轴后的 symbol animation update 属于 rendercore。
 - `game002` / `game003` 的 live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`；URL query 中不要提供 `serverUrl`，旧链接继续携带 `serverUrl` 时应显式失败而不是静默覆盖或忽略。
 - `game002` 的 spin `lines` 固定为 `30`；URL 必须显式提供 `lines=30`，其它值应在 loading 99% 配置解析阶段失败，不能静默覆盖，也不能沿用 game003 的 `lines=10`。
 - `game003` 使用 `apps/game003`、`assets/gamecfg003/gameconfig.json` 和 `assets/game003-s1`；第一版只支持 `skin=1`，并固定 live `gamecode=EfedJuHEaydXNghnmO9KI`，不要把 `game003-s1` 做成 `game002` 的新皮肤。

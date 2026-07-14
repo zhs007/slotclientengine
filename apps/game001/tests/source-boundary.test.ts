@@ -19,7 +19,6 @@ describe("game001 source boundary", () => {
           file.endsWith(".ts") && basename(file) !== "source-boundary.test.ts",
       ),
       join(APP_ROOT, "package.json"),
-      join(APP_ROOT, "vite.config.ts"),
     ];
 
     for (const file of files) {
@@ -42,6 +41,16 @@ describe("game001 source boundary", () => {
       "@slotclientengine/rendercore": "workspace:*",
       "pixi.js": "^8.1.6",
     });
+  });
+
+  it("resolves rendercore's transitive logiccore runtime through ESM source in Vite dev", () => {
+    const viteConfig = readFileSync(join(APP_ROOT, "vite.config.ts"), "utf8");
+
+    expect(viteConfig).toContain('find: "@slotclientengine/logiccore"');
+    expect(viteConfig).toContain("../../packages/logiccore/src/index.ts");
+    expect(viteConfig.indexOf("@slotclientengine/logiccore")).toBeLessThan(
+      viteConfig.indexOf('find: "@slotclientengine/rendercore"'),
+    );
   });
 });
 

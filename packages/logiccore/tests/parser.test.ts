@@ -128,6 +128,39 @@ describe("parser", () => {
     );
   });
 
+  it("validates and preserves optional 64-bit wire win fields", () => {
+    const message = cloneFixture(basicMessage);
+    const result = message.gmi.replyPlay.results[0].clientData
+      .results[0] as any;
+    result.coinWin64 = 30;
+    result.cashWin64 = 300;
+
+    const parsed = parseGameModuleInfoMessage(message).steps[0].results[0];
+    expect(parsed.coinWin64).toBe(30);
+    expect(parsed.cashWin64).toBe(300);
+    expect(parsed.coinWin).not.toBe(parsed.coinWin64);
+    expect(Object.isFrozen(parsed)).toBe(true);
+
+    for (const [field, value] of [
+      ["coinWin64", Number.NaN],
+      ["coinWin64", Number.POSITIVE_INFINITY],
+      ["cashWin64", "300"],
+      ["cashWin64", null],
+    ] as const) {
+      const invalid = cloneFixture(basicMessage);
+      (invalid.gmi.replyPlay.results[0].clientData.results[0] as any)[field] =
+        value;
+      expect(() => parseGameModuleInfoMessage(invalid)).toThrow(
+        new RegExp(field),
+      );
+    }
+
+    const without64 =
+      parseGameModuleInfoMessage(basicMessage).steps[0].results[0];
+    expect(without64.coinWin64).toBeUndefined();
+    expect(without64.cashWin64).toBeUndefined();
+  });
+
   it("throws for missing or invalid otherScenes", () => {
     const missingOtherScenes = cloneFixture(basicMessage);
     delete (missingOtherScenes.gmi.replyPlay.results[0].clientData as any)

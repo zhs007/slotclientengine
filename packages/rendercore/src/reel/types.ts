@@ -244,6 +244,20 @@ export interface RenderVisibleSymbolGeometrySnapshot {
   readonly cellHeight: number;
 }
 
+export interface VisibleSymbolPresentationTarget {
+  requestVisibleSymbolStates(
+    positions: readonly { readonly x: number; readonly y: number }[],
+    state: SymbolStateId,
+  ): void;
+  getVisibleSymbolStateSnapshots(
+    positions: readonly { readonly x: number; readonly y: number }[],
+  ): readonly RenderVisibleSymbolStateSnapshot[];
+  getVisibleSymbolGeometrySnapshots(
+    positions: readonly { readonly x: number; readonly y: number }[],
+  ): readonly RenderVisibleSymbolGeometrySnapshot[];
+  update(deltaSeconds: number): unknown;
+}
+
 export interface RenderReelSetOptions {
   readonly reels: LogicReels;
   readonly layout: ReelLayout;

@@ -3,6 +3,7 @@ import rawGameConfig from "../../../assets/gamecfg002/gameconfig.json";
 import { createSlotGameLogicResult } from "@slotclientengine/gameframeworks";
 import {
   createDefaultSymbolAnimationResolver,
+  ManualSymbolAni,
   type SymbolAssetMap,
 } from "@slotclientengine/rendercore";
 import { createTextureSet } from "../../../packages/rendercore/tests/reel/helpers.js";
@@ -144,10 +145,51 @@ describe("game002-s3 reel runtime", () => {
     expect(result.completed).toBe(true);
     expect(runtime.getVisualSnapshot().visibleScene[0][0]).toBe(12);
   });
+
+  it("exposes stopped grid symbols through the generic presentation target", () => {
+    const runtime = createRuntime(GAME002_SAMPLE_SPIN_SCENE);
+    const positions = Object.freeze([
+      Object.freeze({ x: 1, y: 3 }),
+      Object.freeze({ x: 2, y: 2 }),
+    ]);
+    const before = runtime.getVisualSnapshot().visibleScene;
+
+    runtime.requestVisibleSymbolStates(positions, "win");
+    expect(runtime.getVisibleSymbolStateSnapshots(positions)).toMatchObject([
+      { x: 1, y: 3, requestedState: "win" },
+      { x: 2, y: 2, requestedState: "win" },
+    ]);
+    expect(runtime.getVisibleSymbolGeometrySnapshots(positions)).toMatchObject([
+      {
+        x: 1,
+        y: 3,
+        centerX: 180,
+        centerY: 420,
+        cellWidth: 120,
+        cellHeight: 120,
+      },
+      {
+        x: 2,
+        y: 2,
+        centerX: 300,
+        centerY: 300,
+        cellWidth: 120,
+        cellHeight: 120,
+      },
+    ]);
+
+    for (let index = 0; index < 40; index += 1) runtime.update(0.05);
+    expect(runtime.getVisibleSymbolStateSnapshots(positions)).toMatchObject([
+      { x: 1, y: 3, requestedState: "normal", resolvedState: "normal" },
+      { x: 2, y: 2, requestedState: "normal", resolvedState: "normal" },
+    ]);
+    expect(runtime.getVisualSnapshot().visibleScene).toEqual(before);
+  });
 });
 
 function createRuntime(initialScene?: readonly (readonly number[])[]) {
   const skin = getGame002SkinConfig("1");
+  const normalResolver = createDefaultSymbolAnimationResolver();
   return createGame002ReelRuntime({
     rawGameConfig,
     symbolAssets: createSymbolAssets(skin.displaySymbols),
@@ -158,7 +200,14 @@ function createRuntime(initialScene?: readonly (readonly number[])[]) {
       emptySymbols: [],
       symbolScales: skin.symbolScales,
       symbolRenderPriorities: skin.symbolRenderPriorities,
-      animationResolver: createDefaultSymbolAnimationResolver(),
+      animationResolver: (context) =>
+        context.resolvedState === "win"
+          ? new ManualSymbolAni({
+              stateId: "win",
+              playback: "once",
+              durationSeconds: 0.1,
+            })
+          : normalResolver(context),
     },
   });
 }

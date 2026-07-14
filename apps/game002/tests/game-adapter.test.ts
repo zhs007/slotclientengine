@@ -4,6 +4,7 @@ import type { GameLogic, SceneMatrix } from "@slotclientengine/gameframeworks";
 import {
   RenderSymbol,
   type SymbolAssetMap,
+  type SymbolWinCarousel,
 } from "@slotclientengine/rendercore";
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import type { SpineBackgroundPlayer } from "@slotclientengine/rendercore/background";
@@ -221,7 +222,9 @@ describe("game002 adapter", () => {
     expect(background.updateDeltas).toEqual([1 / 30]);
     expect(runtime.updateDeltas).toEqual([]);
 
-    const pending = adapter.playSpin(createLogic(GAME002_SAMPLE_SPIN_SCENE));
+    const pending = Promise.resolve(
+      adapter.playSpin(createLogic(GAME002_SAMPLE_SPIN_SCENE)),
+    );
     runtime.completeNextUpdate = true;
     fakeApp.tick(5_000);
     await pending;
@@ -315,6 +318,48 @@ describe("game002 adapter", () => {
     const advanceCount = winAmount.advanceRequests;
     fakeApp.canvas.dispatchEvent(new Event("pointerdown"));
     expect(winAmount.advanceRequests).toBe(advanceCount);
+  });
+
+  it("starts the generic symbol carousel only after reels and waits for its first cycle", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const carousel = new FakeSymbolWinCarousel(1);
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createSymbolWinCarousel: () => carousel,
+    });
+    await adapter.mount(createMountContext());
+
+    expect(fakeApp.stage.children[0]?.children[2]).toBe(carousel.container);
+    expect(carousel.container.position).toMatchObject({ x: 637.5, y: 330 });
+    const pending = Promise.resolve(
+      adapter.playSpin(createLogic(GAME002_SAMPLE_SPIN_SCENE)),
+    );
+    expect(carousel.prepareCalls).toHaveLength(1);
+    expect(carousel.clearCount).toBe(1);
+    expect(carousel.startCount).toBe(0);
+
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    expect(carousel.startCount).toBe(1);
+    let resolved = false;
+    void pending.then(() => {
+      resolved = true;
+    });
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+
+    carousel.complete = true;
+    fakeApp.tick(16);
+    await pending;
+    const updateCount = carousel.updateCount;
+    fakeApp.tick(16);
+    expect(carousel.updateCount).toBe(updateCount + 1);
+
+    adapter.destroy?.();
+    expect(carousel.destroyed).toBe(true);
   });
 
   it("skips win playback for zero and rejects invalid monetary inputs", async () => {
@@ -666,6 +711,8 @@ function createLogic(
     getTotalWin: () => options.totalWin ?? 0,
     getStep: () => ({
       getScene: () => scene,
+      hasComponent: () => false,
+      getComponent: () => undefined,
     }),
   } as unknown as GameLogic;
 }
@@ -744,6 +791,59 @@ class FakeWinAmountPlayer {
   }
 }
 
+class FakeSymbolWinCarousel implements SymbolWinCarousel {
+  readonly container = new Container();
+  readonly prepareCalls: unknown[] = [];
+  firstCycleComplete = false;
+  clearCount = 0;
+  startCount = 0;
+  updateCount = 0;
+  complete = false;
+  destroyed = false;
+  phase: "idle" | "playing" | "destroyed" = "idle";
+
+  constructor(readonly groupCount: number) {}
+
+  prepare(input: any): any {
+    this.prepareCalls.push(input);
+    return Object.freeze({
+      groupCount: this.groupCount,
+      groups: Object.freeze([]),
+    });
+  }
+  start(): { readonly started: boolean } {
+    this.startCount += 1;
+    this.phase = "playing";
+    return { started: this.groupCount > 0 };
+  }
+  clear(): void {
+    this.clearCount += 1;
+    this.firstCycleComplete = false;
+    this.phase = "idle";
+  }
+  update(): { readonly firstCycleComplete: boolean } {
+    this.updateCount += 1;
+    this.firstCycleComplete = this.complete;
+    return { firstCycleComplete: this.firstCycleComplete };
+  }
+  getSnapshot(): any {
+    return {
+      phase: this.phase,
+      firstCycleComplete: this.firstCycleComplete,
+      currentIndex: null,
+      componentName: null,
+      resultIndex: null,
+      amountVisible: false,
+      amountText: "",
+      amountPosition: null,
+    };
+  }
+  destroy(): void {
+    this.destroyed = true;
+    this.phase = "destroyed";
+  }
+}
+
 class FakeRuntime {
   readonly mainReelsLayer = new Container();
   readonly appliedScenes: SceneMatrix[] = [];
@@ -799,6 +899,26 @@ class FakeRuntime {
         };
       },
       isSpinning: () => this.spinning,
+      requestVisibleSymbolStates: () => undefined,
+      getVisibleSymbolStateSnapshots: (positions) =>
+        positions.map((position) => ({
+          ...position,
+          code: 1,
+          kind: "textured",
+          requestedState: "normal",
+          resolvedState: "normal",
+          isOnce: false,
+        })),
+      getVisibleSymbolGeometrySnapshots: (positions) =>
+        positions.map((position) => ({
+          ...position,
+          code: 1,
+          kind: "textured",
+          centerX: position.x * 120 + 60,
+          centerY: position.y * 120 + 60,
+          cellWidth: 120,
+          cellHeight: 120,
+        })),
       getVisualSnapshot: () => {
         const scene = this.forceVisualScene ?? this.currentScene;
         if (!scene) {
@@ -825,7 +945,7 @@ class FakeRuntime {
       config: {} as any,
       gameConfig: {} as any,
       layout: {} as any,
-      layerLayout: {} as any,
+      layerLayout: { x: 637.5, y: 330 } as any,
       getCurrentScene: () => this.currentScene,
       getTargetScene: () => this.targetScene,
       getFinalYs: () => [61, 26, 12, 4, 19, 2],

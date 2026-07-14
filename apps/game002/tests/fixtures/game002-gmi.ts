@@ -58,6 +58,75 @@ export const GAME002_SAMPLE_WIN_RESULTS = Object.freeze([
   }),
 ]);
 
+export const GAME002_REAL_BG_WIN_SCENE = Object.freeze([
+  Object.freeze([1, 1, 3, 3, 2, 2, 1, 5, 5]),
+  Object.freeze([5, 3, 6, 3, 3, 2, 2, 1, 3]),
+  Object.freeze([2, 2, 3, 3, 6, 4, 4, 6, 1]),
+  Object.freeze([2, 4, 3, 3, 2, 2, 8, 8, 6]),
+  Object.freeze([4, 4, 2, 6, 6, 1, 6, 3, 3]),
+  Object.freeze([2, 5, 5, 2, 2, 6, 8, 8, 4]),
+]) satisfies SceneMatrix;
+
+export const GAME002_REAL_BG_WIN_RESULT = Object.freeze({
+  pos: Object.freeze([0, 2, 0, 3, 1, 3, 1, 4, 2, 3, 2, 2, 3, 2, 3, 3]),
+  type: 6,
+  lineIndex: -1,
+  symbol: 3,
+  mul: 30,
+  coinWin: 0,
+  cashWin: 0,
+  otherMul: 1,
+  wilds: 0,
+  symbolNums: 8,
+  value: 0,
+  coinWin64: 30,
+  cashWin64: 300,
+});
+
+export const GAME002_REAL_BG_WIN_SPIN_RESULT = Object.freeze({
+  gmi: Object.freeze({
+    defaultScene: toSgc7Scene(GAME002_SAMPLE_DEFAULT_SCENE),
+    replyPlay: Object.freeze({
+      randomNumbers: GAME002_SAMPLE_RANDOM_NUMBERS,
+      results: Object.freeze([
+        Object.freeze({
+          coinWin: 30,
+          cashWin: 300,
+          clientData: Object.freeze({
+            scenes: Object.freeze([toSgc7Scene(GAME002_REAL_BG_WIN_SCENE)]),
+            otherScenes: Object.freeze([]),
+            results: Object.freeze([GAME002_REAL_BG_WIN_RESULT]),
+            curGameMod: "basic",
+            curGameModParam: Object.freeze({
+              historyComponents: Object.freeze(["bg-spin", "bg-win"]),
+              mapComponents: Object.freeze({
+                "bg-spin": Object.freeze({
+                  basicComponentData: createBasicComponentData({
+                    usedScenes: [0],
+                  }),
+                }),
+                "bg-win": Object.freeze({
+                  basicComponentData: createBasicComponentData({
+                    usedResults: [0],
+                    coinWin: 30,
+                    cashWin: 300,
+                  }),
+                  symbolNum: 8,
+                  wildNum: 0,
+                  wins: 30,
+                  winMulti: 1,
+                }),
+              }),
+            }),
+          }),
+        }),
+      ]),
+    }),
+  }),
+  totalwin: 300,
+  results: 1,
+});
+
 export const GAME002_SAMPLE_SPIN_RESULT = Object.freeze({
   gmi: Object.freeze({
     defaultScene: toSgc7Scene(GAME002_SAMPLE_DEFAULT_SCENE),
@@ -149,5 +218,20 @@ export function toSgc7Scene(scene: readonly (readonly number[])[]) {
     ),
     indexes: Object.freeze([]),
     validRow: Object.freeze([]),
+  });
+}
+
+function createBasicComponentData(options: {
+  readonly usedScenes?: readonly number[];
+  readonly usedResults?: readonly number[];
+  readonly coinWin?: number;
+  readonly cashWin?: number;
+}) {
+  return Object.freeze({
+    usedScenes: Object.freeze([...(options.usedScenes ?? [])]),
+    usedOtherScenes: Object.freeze([]),
+    usedResults: Object.freeze([...(options.usedResults ?? [])]),
+    coinWin: options.coinWin ?? 0,
+    cashWin: options.cashWin ?? 0,
   });
 }

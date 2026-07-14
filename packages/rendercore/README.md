@@ -431,6 +431,39 @@ grid-cell API 会 fail-fast 校验 scene 尺寸、final y 长度、order 重复/
 
 `RenderGridCellReelSet.update(deltaSeconds)` 在 cell landed 后会立刻把目标 symbol 复位到最终 y 的 `normal` 状态，不播放 `appear`；完成边界只等待所有 cell 已 landed 且所有 dim overlay alpha 已归零。snapshot 提供 `phase`、`hasClipMask`、`cellX/cellY`、`reelX/reelY`、当前可见 `dimmingAlpha`、`requestedState` 和 `visibleSymbol`，用于游戏层诊断和测试，不暴露可变内部对象。
 
+停轴后，`RenderReelSet`（逐轴 spin）和 `RenderGridCellReelSet`（逐格 spin）都结构化实现 `VisibleSymbolPresentationTarget`：批量请求可见 symbol state、读取状态/几何快照并推进 animation。这个共同能力不合并两种 spin plan；grid-cell 的几何会把内部单行 reel 坐标转换为完整 grid 本地坐标，且 idle `update()` 会继续推进 `win once -> normal`。
+
+## 通用 symbol win carousel
+
+`createSymbolWinCarousel(...)` 是一个职责收敛的通用效果：按调用方传入的一个或多个组件名解析各自 `usedResults`，同组 `pos` 同时请求 manifest `win`，显示该组 resolver 金额，依次完成首轮后暂停并 lingering。未触发组件跳过，全部未触发时保持 idle；同一 result 被多个组件引用时分别播放并在 snapshot 中保留 `componentName/resultIndex`。
+
+```ts
+const carousel = createSymbolWinCarousel({
+  target: visibleSymbolTarget,
+  resolveAmount: ({ result }) => Number(result.cashWin),
+  formatAmount: (amount) => String(amount),
+  cyclePauseSeconds: 1,
+  amountText: {
+    yOffsetRatioFromCellCenter: 0.22,
+    fontSize: 38,
+    fill: "#ffffff",
+    stroke: "#000000",
+    strokeWidth: 5,
+  },
+});
+
+const prepared = carousel.prepare({
+  logic,
+  stepIndex: 0,
+  scene,
+  componentNames: ["line-win", "scatter-win"],
+});
+// reels 停稳后调用；prepare 已在视觉启动前完成协议校验。
+carousel.start(prepared);
+```
+
+`prepare()` 只解析、校验并冻结 groups，不触碰 target；`start()` 读取 target 本地 geometry，从中奖格中心平均点附近选择一个真实格（等距按 x/y），开始状态与金额展示。`update()` 只根据 symbol 自然回到 normal 判断组完成，不使用固定动画 timer；`clear()` 清理当前组和金额；`destroy()` 释放 Pixi 容器。金额来源、formatter、style 和可选 component validator 都由调用方提供，carousel 不读取 totalwin 或游戏专属字段。manifest 仍是 symbol animation 的唯一来源。未来 ReelSet 只要实现 `VisibleSymbolPresentationTarget` 即可接入；不同中奖效果应新增并列函数，不向本 carousel 堆游戏分支。
+
 ## 全局序列
 
 `SymbolStateSequenceController` 只决定下一步请求哪个状态，不直接操作 Pixi。viewer 或游戏层把返回的状态广播给全部 `RenderSymbol`。`once` 状态需要等全部 symbol 都上报 `onceCompleted` 后再推进。

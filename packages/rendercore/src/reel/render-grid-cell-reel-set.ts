@@ -14,9 +14,12 @@ import type {
   RenderGridCellReelSetOptions,
   RenderGridCellReelSetSnapshot,
   RenderGridCellReelSetUpdateResult,
+  RenderVisibleSymbolGeometrySnapshot,
+  RenderVisibleSymbolStateSnapshot,
   ReelSymbolRegistry,
 } from "./types.js";
 import type { LogicReels, SceneMatrix } from "@slotclientengine/logiccore";
+import type { SymbolStateId } from "../symbol/index.js";
 
 interface RuntimeCell {
   readonly coordinate: GridCellCoordinate;
@@ -146,6 +149,11 @@ export class RenderGridCellReelSet extends Container {
       for (const cell of this.#cells) {
         this.updateCell(cell, previousElapsedMs, this.#elapsedMs);
       }
+    } else {
+      for (const cell of this.#cells) {
+        cell.reel.update(deltaSeconds);
+        this.syncCellRenderOrder(cell);
+      }
     }
 
     const completed = Boolean(
@@ -186,6 +194,65 @@ export class RenderGridCellReelSet extends Container {
             return visibleSymbol;
           }),
         ),
+      ),
+    );
+  }
+
+  requestVisibleSymbolState(x: number, y: number, state: SymbolStateId): void {
+    this.assertStopped("request visible symbol state");
+    this.getCell(x, y).reel.requestVisibleSymbolState(0, state);
+  }
+
+  requestVisibleSymbolStates(
+    positions: readonly { readonly x: number; readonly y: number }[],
+    state: SymbolStateId,
+  ): void {
+    for (const position of positions) {
+      this.requestVisibleSymbolState(position.x, position.y, state);
+    }
+  }
+
+  getVisibleSymbolStateSnapshot(
+    x: number,
+    y: number,
+  ): RenderVisibleSymbolStateSnapshot {
+    const cell = this.getCell(x, y);
+    const snapshot = cell.reel.getVisibleSymbolStateSnapshot(0);
+    return Object.freeze({ ...snapshot, x, y });
+  }
+
+  getVisibleSymbolStateSnapshots(
+    positions: readonly { readonly x: number; readonly y: number }[],
+  ): readonly RenderVisibleSymbolStateSnapshot[] {
+    return Object.freeze(
+      positions.map((position) =>
+        this.getVisibleSymbolStateSnapshot(position.x, position.y),
+      ),
+    );
+  }
+
+  getVisibleSymbolGeometrySnapshot(
+    x: number,
+    y: number,
+  ): RenderVisibleSymbolGeometrySnapshot {
+    this.assertStopped("read visible symbol geometry");
+    const cell = this.getCell(x, y);
+    const snapshot = cell.reel.getVisibleSymbolGeometrySnapshot(0);
+    return Object.freeze({
+      ...snapshot,
+      x,
+      y,
+      centerX: cell.root.x + snapshot.centerX,
+      centerY: cell.root.y + snapshot.centerY,
+    });
+  }
+
+  getVisibleSymbolGeometrySnapshots(
+    positions: readonly { readonly x: number; readonly y: number }[],
+  ): readonly RenderVisibleSymbolGeometrySnapshot[] {
+    return Object.freeze(
+      positions.map((position) =>
+        this.getVisibleSymbolGeometrySnapshot(position.x, position.y),
       ),
     );
   }
@@ -397,11 +464,22 @@ export class RenderGridCellReelSet extends Container {
   }
 
   private getCell(x: number, y: number): RuntimeCell {
+    if (!Number.isInteger(x) || !Number.isInteger(y)) {
+      throw new ReelError("grid cell coordinates must be integers.");
+    }
     const cell = this.#cellsByKey.get(createCellKey(x, y));
     if (!cell) {
       throw new ReelError(`Missing grid cell (${x},${y}).`);
     }
     return cell;
+  }
+
+  private assertStopped(action: string): void {
+    if (this.#spinPlan) {
+      throw new ReelError(
+        `Cannot ${action} while grid cell reel set is spinning.`,
+      );
+    }
   }
 
   private snapshotCell(cell: RuntimeCell): RenderGridCellReelCellSnapshot {

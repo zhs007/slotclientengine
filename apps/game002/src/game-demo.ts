@@ -18,13 +18,17 @@ import {
   type ReelSpinDirection,
   type RenderGridCellReelCellSnapshot,
   type RenderGridCellReelSetUpdateResult,
+  type RenderVisibleSymbolGeometrySnapshot,
+  type RenderVisibleSymbolStateSnapshot,
 } from "@slotclientengine/rendercore/reel";
 import type {
   ReelSymbolRenderPriorityMap,
   ReelSymbolScaleMap,
   SymbolAnimationResolver,
   SymbolAssetMap,
+  SymbolStateId,
 } from "@slotclientengine/rendercore";
+import type { WinResultPosition } from "@slotclientengine/gameframeworks";
 import {
   GAME002_EMPTY_SYMBOLS,
   GAME002_REQUIRED_STATE_TEXTURES,
@@ -125,6 +129,16 @@ export interface Game002ReelRuntime {
   createSpinPlan(scene: SceneMatrix, sceneName?: string): GridCellReelSpinPlan;
   spinToScene(scene: SceneMatrix, sceneName?: string): GridCellReelSpinPlan;
   update(deltaSeconds: number): RenderGridCellReelSetUpdateResult;
+  requestVisibleSymbolStates(
+    positions: readonly WinResultPosition[],
+    state: SymbolStateId,
+  ): void;
+  getVisibleSymbolStateSnapshots(
+    positions: readonly WinResultPosition[],
+  ): readonly RenderVisibleSymbolStateSnapshot[];
+  getVisibleSymbolGeometrySnapshots(
+    positions: readonly WinResultPosition[],
+  ): readonly RenderVisibleSymbolGeometrySnapshot[];
   isSpinning(): boolean;
 }
 
@@ -316,6 +330,22 @@ export function createGame002ReelRuntime(
         reelSet.visible = true;
       }
       return result;
+    },
+    requestVisibleSymbolStates(
+      positions: readonly WinResultPosition[],
+      state: SymbolStateId,
+    ): void {
+      reelSet.requestVisibleSymbolStates(positions, state);
+    },
+    getVisibleSymbolStateSnapshots(
+      positions: readonly WinResultPosition[],
+    ): readonly RenderVisibleSymbolStateSnapshot[] {
+      return reelSet.getVisibleSymbolStateSnapshots(positions);
+    },
+    getVisibleSymbolGeometrySnapshots(
+      positions: readonly WinResultPosition[],
+    ): readonly RenderVisibleSymbolGeometrySnapshot[] {
+      return reelSet.getVisibleSymbolGeometrySnapshots(positions);
     },
     isSpinning(): boolean {
       return reelSet.getSnapshot().spinning;

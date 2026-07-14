@@ -8,6 +8,7 @@ import {
   createReelSpinPlan,
   createReelSymbolRegistry,
 } from "../../src/reel/index.js";
+import type { VisibleSymbolPresentationTarget } from "../../src/reel/index.js";
 import {
   createTestSymbolAnimationResolver,
   createTextureSet,
@@ -50,6 +51,8 @@ describe("RenderReelSet", () => {
       }),
       registry,
     });
+    const presentationTarget: VisibleSymbolPresentationTarget = reelSet;
+    expect(presentationTarget).toBe(reelSet);
     const plan = createReelSpinPlan({
       reels,
       finalYs,

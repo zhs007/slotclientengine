@@ -191,8 +191,8 @@ metadata in `clientData.curGameModParam`.
 `historyComponents` determines whether a component was triggered in the step:
 
 ```ts
-if (step.hasComponent("bg-wins")) {
-  const component = step.getComponent("bg-wins");
+if (step.hasComponent("line-win")) {
+  const component = step.getComponent("line-win");
 }
 ```
 
@@ -202,13 +202,13 @@ the current step:
 ```ts
 const scenes = step.getComponentScenes("bg-spin");
 const otherScenes = step.getComponentOtherScenes("bg-gencoins");
-const results = step.getComponentResults("bg-wins");
+const results = step.getComponentResults("line-win");
 ```
 
 The same methods are available from `GameLogic` with an explicit step index:
 
 ```ts
-const results = logic.getComponentResults(0, "bg-wins");
+const results = logic.getComponentResults(0, "line-win");
 ```
 
 Component index fields are validated strictly:
@@ -268,7 +268,7 @@ a component:
 ```ts
 import { getComponentWinResultGroups } from "@slotclientengine/logiccore";
 
-const groups = getComponentWinResultGroups(step, "bg-wins", {
+const groups = getComponentWinResultGroups(step, "line-win", {
   scene: step.getScene(0),
 });
 ```
@@ -277,7 +277,7 @@ When `scene` is provided, each result coordinate must be inside the scene. A
 caller can also provide `validatePosition` for game-specific symbol validation:
 
 ```ts
-const groups = getComponentWinResultGroups(step, "bg-wins", {
+const groups = getComponentWinResultGroups(step, "line-win", {
   scene,
   validatePosition(context) {
     if (context.sceneSymbol !== expectedSymbolCode) {
@@ -414,7 +414,7 @@ logic.getRawGmi();
 step.getRawStep();
 step.getRawClientData();
 step.getCurGameModParam();
-step.getComponent("bg-wins")?.raw;
+step.getComponent("line-win")?.raw;
 gameConfig.getRawConfig();
 ```
 
@@ -446,7 +446,7 @@ import { LogicParseError } from "@slotclientengine/logiccore";
 try {
   const logic = createGameLogic(message);
   const step = logic.getStep(0);
-  const groups = getComponentWinResultGroups(step, "bg-wins", {
+  const groups = getComponentWinResultGroups(step, "line-win", {
     scene: step.getScene(0),
   });
 } catch (error) {

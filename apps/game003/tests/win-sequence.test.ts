@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { createSlotGameLogicResult } from "@slotclientengine/gameframeworks";
+import { createSymbolWinCarousel } from "@slotclientengine/rendercore";
 import {
   GAME003_SAMPLE_SPIN_RESULT,
   GAME003_SAMPLE_WIN_SPIN_RESULT,
   GAME003_WIN_SPIN_SCENE,
 } from "./fixtures/game003-gmi.js";
-import { createGame003WinSymbolSequence } from "../src/win-sequence.js";
+import {
+  GAME003_WIN_COMPONENT_NAMES,
+  resolveGame003WinResultAmount,
+  validateGame003WinComponent,
+} from "../src/win-sequence.js";
 
 describe("game003 win symbol sequence", () => {
   it("parses bg-wins usedResults into ordered win symbol groups", () => {
@@ -18,9 +23,8 @@ describe("game003 win symbol sequence", () => {
     expect(groups[0]).toMatchObject({
       stepIndex: 0,
       resultIndex: 0,
-      symbol: 4,
-      coinWin: 10,
-      cashWin: 100,
+      componentName: "bg-wins",
+      amount: 100,
       positions: [
         { x: 0, y: 4 },
         { x: 1, y: 2 },
@@ -30,9 +34,8 @@ describe("game003 win symbol sequence", () => {
     expect(groups[1]).toMatchObject({
       stepIndex: 0,
       resultIndex: 1,
-      symbol: 3,
-      coinWin: 15,
-      cashWin: 150,
+      componentName: "bg-wins",
+      amount: 150,
       positions: [
         { x: 0, y: 2 },
         { x: 1, y: 3 },
@@ -82,15 +85,15 @@ describe("game003 win symbol sequence", () => {
     ).toThrow(/coinWin/);
   });
 
-  it("keeps optional symbol and coinWin fields optional but validates them when present", () => {
+  it("keeps symbol optional and preserves its app-owned wire validation", () => {
     const noSymbol = clone(GAME003_SAMPLE_WIN_SPIN_RESULT);
     delete getClientResults(noSymbol)[0].symbol;
     expect(
       createGame003WinSymbolSequence(
         createLogic(noSymbol),
         GAME003_WIN_SPIN_SCENE,
-      )[0].symbol,
-    ).toBeNull();
+      ),
+    ).toHaveLength(2);
 
     const invalidSymbol = clone(GAME003_SAMPLE_WIN_SPIN_RESULT);
     getClientResults(invalidSymbol)[0].symbol = -1;
@@ -99,7 +102,7 @@ describe("game003 win symbol sequence", () => {
         createLogic(invalidSymbol),
         GAME003_WIN_SPIN_SCENE,
       ),
-    ).toThrow(/symbol/);
+    ).toThrow(/symbol.*non-negative integer/);
 
     const invalidCoinWin = clone(GAME003_SAMPLE_WIN_SPIN_RESULT);
     getClientResults(invalidCoinWin)[0].coinWin = "10";
@@ -164,6 +167,37 @@ describe("game003 win symbol sequence", () => {
     ).toThrow(/out of scene bounds/);
   });
 });
+
+function createGame003WinSymbolSequence(
+  logic: ReturnType<typeof createLogic>,
+  scene: typeof GAME003_WIN_SPIN_SCENE,
+) {
+  const carousel = createSymbolWinCarousel({
+    target: {
+      requestVisibleSymbolStates: () => undefined,
+      getVisibleSymbolStateSnapshots: () => [],
+      getVisibleSymbolGeometrySnapshots: () => [],
+      update: () => undefined,
+    },
+    resolveAmount: resolveGame003WinResultAmount,
+    validateComponent: validateGame003WinComponent,
+    formatAmount: String,
+    cyclePauseSeconds: 1,
+    amountText: {
+      yOffsetRatioFromCellCenter: 0.22,
+      fontSize: 38,
+      fill: "#fff",
+      stroke: "#000",
+      strokeWidth: 5,
+    },
+  });
+  return carousel.prepare({
+    logic,
+    stepIndex: 0,
+    scene,
+    componentNames: GAME003_WIN_COMPONENT_NAMES,
+  }).groups;
+}
 
 function createLogic(rawResult: unknown) {
   return createSlotGameLogicResult(rawResult, {

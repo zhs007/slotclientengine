@@ -7,7 +7,13 @@ import type {
   SlotGameStateSnapshot,
   SlotGameViewportSnapshot,
 } from "@slotclientengine/gameframeworks";
-import type { SymbolAssetMap } from "@slotclientengine/rendercore";
+import {
+  createSymbolWinCarousel,
+  type CreateSymbolWinCarouselOptions,
+  type PreparedSymbolWinCarousel,
+  type SymbolAssetMap,
+  type SymbolWinCarousel,
+} from "@slotclientengine/rendercore";
 import {
   createSpineBackgroundPlayer,
   type SpineBackgroundPlayer,
@@ -33,6 +39,13 @@ import {
   createGame002WinAmountLayout,
   createGame002WinAmountPlayer,
 } from "./win-amount-config.js";
+import { formatServerUsdAmount } from "./money.js";
+import {
+  GAME002_SYMBOL_WIN_CAROUSEL_OPTIONS,
+  GAME002_WIN_COMPONENT_NAMES,
+  resolveGame002WinResultAmount,
+  validateGame002WinComponent,
+} from "./win-symbol-carousel-config.js";
 
 export type Game002TickerSnapshot = { readonly deltaMS: number };
 export type Game002TickerListener = (ticker: Game002TickerSnapshot) => void;
@@ -67,15 +80,20 @@ export interface Game002AdapterOptions {
   readonly createWinAmountPlayer?: (
     layout: ReturnType<typeof createGame002Layout>,
   ) => WinAmountAnimationPlayer;
+  readonly createSymbolWinCarousel?: (
+    options: CreateSymbolWinCarouselOptions,
+  ) => SymbolWinCarousel;
   readonly reportFatalError?: (error: Error) => void;
 }
 
 interface PendingAnimation {
+  phase: "spinning" | "win-sequence";
   readonly targetScene: ReturnType<typeof validateGame002Scene>;
   readonly betAmountRaw: number;
   readonly winAmountRaw: number;
   readonly winAmountExpected: boolean;
-  reelsComplete: boolean;
+  readonly preparedWinCarousel: PreparedSymbolWinCarousel;
+  winSequenceComplete: boolean;
   winAmountPlaybackComplete: boolean;
   resolve(): void;
   reject(error: Error): void;
@@ -98,12 +116,16 @@ class Game002PixiAdapter implements SlotGameAdapter {
   readonly #createWinAmountPlayer: (
     layout: ReturnType<typeof createGame002Layout>,
   ) => WinAmountAnimationPlayer;
+  readonly #createSymbolWinCarousel: (
+    options: CreateSymbolWinCarouselOptions,
+  ) => SymbolWinCarousel;
   readonly #reportFatalError: (error: Error) => void;
   #app: Game002PixiApplication | null = null;
   #worldLayer: Container | null = null;
   #backgroundPlayer: SpineBackgroundPlayer | null = null;
   #runtime: Game002ReelRuntime | null = null;
   #winAmountPlayer: WinAmountAnimationPlayer | null = null;
+  #symbolWinCarousel: SymbolWinCarousel | null = null;
   #pendingAnimation: PendingAnimation | null = null;
   #unsubscribeViewport: (() => void) | null = null;
   #disposeWinAmountAdvanceListener: (() => void) | null = null;
@@ -138,6 +160,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
         }));
     this.#createWinAmountPlayer =
       options.createWinAmountPlayer ?? createGame002WinAmountPlayer;
+    this.#createSymbolWinCarousel =
+      options.createSymbolWinCarousel ?? createSymbolWinCarousel;
     this.#reportFatalError = options.reportFatalError ?? reportFatalError;
   }
 
@@ -149,6 +173,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     const app = this.#createApplication();
     let backgroundPlayer: SpineBackgroundPlayer | null = null;
     let winAmountPlayer: WinAmountAnimationPlayer | null = null;
+    let symbolWinCarousel: SymbolWinCarousel | null = null;
     let tickerAdded = false;
     try {
       const initialViewport = context.getViewport();
@@ -172,9 +197,21 @@ class Game002PixiAdapter implements SlotGameAdapter {
       ]);
       const runtime = this.#createRuntime(symbolTextures);
       winAmountPlayer = this.#createWinAmountPlayer(layout);
+      symbolWinCarousel = this.#createSymbolWinCarousel({
+        target: runtime,
+        resolveAmount: resolveGame002WinResultAmount,
+        validateComponent: validateGame002WinComponent,
+        formatAmount: formatServerUsdAmount,
+        ...GAME002_SYMBOL_WIN_CAROUSEL_OPTIONS,
+      });
+      symbolWinCarousel.container.position.set(
+        runtime.layerLayout.x,
+        runtime.layerLayout.y,
+      );
       const worldLayer = new Container();
       worldLayer.addChild(backgroundPlayer.container);
       worldLayer.addChild(runtime.mainReelsLayer);
+      worldLayer.addChild(symbolWinCarousel.container);
       worldLayer.addChild(winAmountPlayer.container);
       app.stage.addChild(worldLayer);
 
@@ -183,6 +220,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       this.#backgroundPlayer = backgroundPlayer;
       this.#runtime = runtime;
       this.#winAmountPlayer = winAmountPlayer;
+      this.#symbolWinCarousel = symbolWinCarousel;
       app.ticker.add(this.#onTick);
       tickerAdded = true;
       const requestWinAmountAdvance = () => {
@@ -206,6 +244,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       }
       app.ticker.stop();
       winAmountPlayer?.destroy();
+      symbolWinCarousel?.destroy();
       backgroundPlayer?.destroy();
       app.canvas.remove();
       app.destroy();
@@ -214,6 +253,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       this.#backgroundPlayer = null;
       this.#runtime = null;
       this.#winAmountPlayer = null;
+      this.#symbolWinCarousel = null;
       throw error;
     }
   }
@@ -234,23 +274,32 @@ class Game002PixiAdapter implements SlotGameAdapter {
     if (this.#pendingAnimation) {
       throw new Error("game002 adapter animation is already in progress.");
     }
-    const betAmountRaw = logic.getBet() * logic.getLines();
-    const winAmountRaw = logic.getTotalWin();
-    assertValidWinAmountInput(betAmountRaw, winAmountRaw);
-    this.#requireWinAmountPlayer().dismissImmediately();
     const targetScene = validateGame002Scene(
       logic.getStep(0).getScene(0),
       "spin main scene",
     );
+    const preparedWinCarousel = this.#requireSymbolWinCarousel().prepare({
+      logic,
+      stepIndex: 0,
+      scene: targetScene,
+      componentNames: GAME002_WIN_COMPONENT_NAMES,
+    });
+    const betAmountRaw = logic.getBet() * logic.getLines();
+    const winAmountRaw = logic.getTotalWin();
+    assertValidWinAmountInput(betAmountRaw, winAmountRaw);
+    this.#requireSymbolWinCarousel().clear();
+    this.#requireWinAmountPlayer().dismissImmediately();
     runtime.spinToScene(targetScene, "spin main scene");
 
     return new Promise((resolve, reject) => {
       this.#pendingAnimation = {
+        phase: "spinning",
         targetScene,
         betAmountRaw,
         winAmountRaw,
         winAmountExpected: winAmountRaw > 0,
-        reelsComplete: false,
+        preparedWinCarousel,
+        winSequenceComplete: preparedWinCarousel.groupCount === 0,
         winAmountPlaybackComplete: winAmountRaw <= 0,
         resolve,
         reject,
@@ -271,6 +320,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     this.#app?.ticker.remove(this.#onTick);
     this.#app?.ticker.stop();
     this.#winAmountPlayer?.destroy();
+    this.#symbolWinCarousel?.destroy();
     this.#backgroundPlayer?.destroy();
     this.#app?.canvas.remove();
     this.#app?.destroy();
@@ -279,6 +329,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     this.#backgroundPlayer = null;
     this.#runtime = null;
     this.#winAmountPlayer = null;
+    this.#symbolWinCarousel = null;
   }
 
   readonly #onTick: Game002TickerListener = (ticker) => {
@@ -294,9 +345,13 @@ class Game002PixiAdapter implements SlotGameAdapter {
         if (this.#winAmountPlayer?.isPlaying()) {
           this.#winAmountPlayer.update(deltaSeconds);
         }
+        const carousel = this.#symbolWinCarousel;
+        if (carousel && carousel.getSnapshot().phase !== "idle") {
+          carousel.update(deltaSeconds);
+        }
         return;
       }
-      if (!pending.reelsComplete) {
+      if (pending.phase === "spinning") {
         const result = this.#runtime.update(deltaSeconds);
         if (!result.completed) {
           return;
@@ -306,7 +361,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
           pending.targetScene,
           "completed game002 adapter spin",
         );
-        pending.reelsComplete = true;
+        pending.phase = "win-sequence";
+        if (!pending.winSequenceComplete) {
+          this.#requireSymbolWinCarousel().start(pending.preparedWinCarousel);
+        }
         if (pending.winAmountExpected) {
           this.#requireWinAmountPlayer().start({
             betAmountRaw: pending.betAmountRaw,
@@ -314,13 +372,21 @@ class Game002PixiAdapter implements SlotGameAdapter {
           });
         }
       }
+      if (!pending.winSequenceComplete) {
+        const result = this.#requireSymbolWinCarousel().update(deltaSeconds);
+        pending.winSequenceComplete = result.firstCycleComplete;
+      }
       if (pending.winAmountExpected && !pending.winAmountPlaybackComplete) {
         const result = this.#requireWinAmountPlayer().update(deltaSeconds);
         pending.winAmountPlaybackComplete = !isWinAmountBlockingSpin(
           result.phase,
         );
       }
-      if (pending.reelsComplete && pending.winAmountPlaybackComplete) {
+      if (
+        pending.phase === "win-sequence" &&
+        pending.winSequenceComplete &&
+        pending.winAmountPlaybackComplete
+      ) {
         this.#pendingAnimation = null;
         pending.resolve();
       }
@@ -349,6 +415,13 @@ class Game002PixiAdapter implements SlotGameAdapter {
     return this.#winAmountPlayer;
   }
 
+  #requireSymbolWinCarousel(): SymbolWinCarousel {
+    if (!this.#symbolWinCarousel) {
+      throw new Error("game002 adapter is not mounted.");
+    }
+    return this.#symbolWinCarousel;
+  }
+
   #applyViewport(viewport: SlotGameViewportSnapshot): void {
     if (!this.#app || !this.#worldLayer) {
       throw new Error("game002 adapter is not mounted.");
@@ -363,6 +436,12 @@ class Game002PixiAdapter implements SlotGameAdapter {
       layout.viewportSize.height,
     );
     this.#worldLayer.position.set(layout.worldOffset.x, layout.worldOffset.y);
+    if (this.#runtime && this.#symbolWinCarousel) {
+      this.#symbolWinCarousel.container.position.set(
+        this.#runtime.layerLayout.x,
+        this.#runtime.layerLayout.y,
+      );
+    }
     this.#winAmountPlayer?.applyLayout(createGame002WinAmountLayout(layout));
   }
 

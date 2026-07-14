@@ -1,110 +1,70 @@
-import {
-  getComponentWinResultGroupsByName,
-  type GameLogic,
-  type SceneMatrix,
-  type WinResult,
-  type WinResultPosition,
-} from "@slotclientengine/gameframeworks";
-import { validateGame003Scene } from "./scene.js";
+import type {
+  SymbolWinAmountResolver,
+  SymbolWinComponentValidator,
+} from "@slotclientengine/rendercore";
 
-export const GAME003_WIN_COMPONENT_NAME = "bg-wins";
+export const GAME003_WIN_COMPONENT_NAMES = Object.freeze(["bg-wins"]);
 
-export interface Game003WinSymbolGroup {
-  readonly stepIndex: number;
-  readonly resultIndex: number;
-  readonly symbol: number | null;
-  readonly positions: readonly WinResultPosition[];
-  readonly coinWin: number;
-  readonly cashWin: number;
-}
+export const resolveGame003WinResultAmount: SymbolWinAmountResolver = ({
+  componentName,
+  resultIndex,
+  result,
+}) =>
+  getRequiredPositiveFiniteNumber(
+    result.cashWin,
+    `${componentName} result[${resultIndex}].cashWin`,
+  );
 
-export function createGame003WinSymbolSequence(
-  logic: GameLogic,
-  targetScene: SceneMatrix,
-): readonly Game003WinSymbolGroup[] {
-  const step = logic.getStep(0);
-  const scene = validateGame003Scene(targetScene, "game003 win target scene");
-  if (!step.hasComponent(GAME003_WIN_COMPONENT_NAME)) {
-    return Object.freeze([]);
-  }
+export const validateGame003WinComponent: SymbolWinComponentValidator = ({
+  componentName,
+  component,
+  groups,
+}) => {
+  const raw = assertRecord(component.raw, `${componentName} component`);
+  const basicComponentData = assertRecord(
+    raw.basicComponentData,
+    `${componentName}.basicComponentData`,
+  );
+  const coinWin = groups.reduce(
+    (sum, group) =>
+      sum +
+      (getOptionalFiniteNumber(
+        group.result.coinWin,
+        `${componentName} result[${group.resultIndex}].coinWin`,
+      ) ?? 0),
+    0,
+  );
+  const cashWin = groups.reduce((sum, group) => sum + group.amount, 0);
 
-  const component = step.getComponent(GAME003_WIN_COMPONENT_NAME);
-  if (!component || !component.hasBasicComponentData) {
-    throw new Error(
-      "game003 bg-wins component must include basicComponentData.",
+  for (const group of groups) {
+    getOptionalNonNegativeInteger(
+      group.result.symbol,
+      `${componentName} result[${group.resultIndex}].symbol`,
     );
   }
 
-  const groups = getComponentWinResultGroupsByName(
-    logic,
-    GAME003_WIN_COMPONENT_NAME,
-    {
-      stepIndex: 0,
-      scene,
-    },
-  ).map((group) =>
-    Object.freeze({
-      stepIndex: group.stepIndex,
-      resultIndex: group.resultIndex,
-      result: group.result,
-      symbol: getOptionalNonNegativeInteger(
-        group.result.symbol,
-        `bg-wins result[${group.resultIndex}].symbol`,
-      ),
-      positions: group.positions,
-      coinWin:
-        getOptionalFiniteNumber(
-          group.result.coinWin,
-          `bg-wins result[${group.resultIndex}].coinWin`,
-        ) ?? 0,
-      cashWin: getRequiredPositiveFiniteNumber(
-        group.result.cashWin,
-        `bg-wins result[${group.resultIndex}].cashWin`,
-      ),
-    }),
-  );
-
-  validateComponentTotals(component.raw, groups);
-
-  return Object.freeze(
-    groups.map(({ result: _result, ...group }) => Object.freeze(group)),
-  );
-}
-
-function validateComponentTotals(
-  rawComponent: unknown,
-  groups: readonly (Game003WinSymbolGroup & { readonly result: WinResult })[],
-): void {
-  const raw = assertRecord(rawComponent, "bg-wins component");
-  const basicComponentData = assertRecord(
-    raw.basicComponentData,
-    "bg-wins.basicComponentData",
-  );
-  const coinWin = groups.reduce((sum, group) => sum + group.coinWin, 0);
-  const cashWin = groups.reduce((sum, group) => sum + group.cashWin, 0);
-
   assertOptionalEquals(
-    getOptionalFiniteNumber(raw.wins, "bg-wins.wins"),
+    getOptionalFiniteNumber(raw.wins, `${componentName}.wins`),
     coinWin,
-    "bg-wins.wins",
+    `${componentName}.wins`,
   );
   assertOptionalEquals(
     getOptionalFiniteNumber(
       basicComponentData.coinWin,
-      "bg-wins.basicComponentData.coinWin",
+      `${componentName}.basicComponentData.coinWin`,
     ),
     coinWin,
-    "bg-wins.basicComponentData.coinWin",
+    `${componentName}.basicComponentData.coinWin`,
   );
   assertOptionalEquals(
     getOptionalFiniteNumber(
       basicComponentData.cashWin,
-      "bg-wins.basicComponentData.cashWin",
+      `${componentName}.basicComponentData.cashWin`,
     ),
     cashWin,
-    "bg-wins.basicComponentData.cashWin",
+    `${componentName}.basicComponentData.cashWin`,
   );
-}
+};
 
 function assertOptionalEquals(
   actual: number | undefined,
@@ -153,9 +113,9 @@ function getRequiredPositiveFiniteNumber(
 function getOptionalNonNegativeInteger(
   value: unknown,
   label: string,
-): number | null {
+): number | undefined {
   if (value === undefined) {
-    return null;
+    return undefined;
   }
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     throw new Error(`${label} must be a non-negative integer.`);

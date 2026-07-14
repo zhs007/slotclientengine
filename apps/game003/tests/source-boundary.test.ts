@@ -21,6 +21,16 @@ describe("game003 source boundary", () => {
     expect(pkg.dependencies).not.toHaveProperty("@slotclientengine/logiccore");
   });
 
+  it("resolves rendercore's transitive logiccore runtime through ESM source in Vite dev", () => {
+    const viteConfig = readFileSync(join(APP_ROOT, "vite.config.ts"), "utf8");
+
+    expect(viteConfig).toContain('find: "@slotclientengine/logiccore"');
+    expect(viteConfig).toContain("../../packages/logiccore/src/index.ts");
+    expect(viteConfig.indexOf("@slotclientengine/logiccore")).toBeLessThan(
+      viteConfig.indexOf('find: "@slotclientengine/rendercore"'),
+    );
+  });
+
   it("does not import netcore, uiframeworks, logiccore, or vnicore directly from source", () => {
     const source = readSourceTree(join(APP_ROOT, "src"));
 
@@ -100,6 +110,17 @@ describe("game003 source boundary", () => {
     expect(sharedSource).not.toMatch(
       /bg-wins|game003WinSymbolLoop|resultAmount/,
     );
+  });
+
+  it("uses the shared carousel without retaining an app-owned loop runtime", () => {
+    const source = readSourceTree(join(APP_ROOT, "src"));
+
+    expect(source).toMatch(/createSymbolWinCarousel/);
+    expect(source).not.toMatch(/createGame003WinSymbolLoopRuntime/);
+    expect(source).not.toMatch(/class\s+Game003WinSymbolLoop/);
+    expect(() =>
+      readFileSync(join(APP_ROOT, "src/win-symbol-loop.ts"), "utf8"),
+    ).toThrow();
   });
 
   it("keeps bg-gencoins and CO coin overlay semantics out of shared packages", () => {

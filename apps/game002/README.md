@@ -55,6 +55,16 @@ framework 负责 live、HUD、spin/collect；adapter 负责 Pixi 画面和 grid-
 
 服务端整数 `100` 显示为 `$1.00`，但 spin/live 协议仍传原始整数。正中奖在主转轮完成后启动金额动画；`playSpin()` 等到金额进入 `awaiting-dismiss` 即可 resolve，不要求用户点击关闭。点击只调用 `requestAdvance()`：用于跳金额、进下一档或从最终等待态播放 dismiss。下一次 spin 会先清理遗留金额。
 
+## bg-win 中奖展示
+
+`bg-win` 是 game002 app 自己配置的中奖组件名。rendercore 通用 carousel 按组件数组顺序读取每个组件的 `basicComponentData.usedResults`，并保持它们指向 `clientData.results[]` 的原始顺序；未触发 `bg-win` 时不会回退为播放全部 results。新增第二个中奖组件只扩展 app 的组件名数组和对应 fixture，不复制轮播状态机。
+
+每个 result 的全部 `pos` 会在主转轮停稳后同时请求 manifest 驱动的 `win`。单组金额严格使用 `cashWin64 !== undefined ? cashWin64 : cashWin`：字段存在性而非 truthy 决定优先级，`cashWin64=0` 会按非正金额显式失败，不能回退到旧字段，也不能用 component total、step total 或 totalwin 兜底。真实样例的 `cashWin=0/cashWin64=300` 经 `formatServerUsdAmount` 显示为 `$3.00`。
+
+金额锚点先计算所有中奖格中心的算术平均点，再从本组实际中奖格中选择最近的一格；等距时按 `x`、再按 `y` 升序。真实八格样例选择 `(1,3)`，文本放在 cell 中心下方 `0.22 * cellHeight`。首轮全部 result 完成前会阻塞 `playSpin()`，之后按 `usedResults -> pause -> usedResults` lingering；下一次 spin 会清理旧 symbol 状态和 result 金额。result overlay 与全局 win-amount 是两套展示，canvas 点击只影响后者。
+
+组件、索引、pos、金额或 geometry 非法时在转轮启动前显式失败。game002 只提供组件名、金额 resolver、formatter/style 和可见 symbol target；组件 result 解析、symbol 状态、Pixi 金额 renderer、确定性 anchor 与轮播生命周期由 rendercore 拥有。
+
 ## 开发与发布
 
 ```bash

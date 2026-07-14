@@ -24,7 +24,6 @@ describe("game002 source boundary", () => {
           file.endsWith(".ts") && basename(file) !== "source-boundary.test.ts",
       ),
       join(APP_ROOT, "package.json"),
-      join(APP_ROOT, "vite.config.ts"),
     ];
 
     for (const file of files) {
@@ -50,9 +49,11 @@ describe("game002 source boundary", () => {
     });
   });
 
-  it("keeps Vite source aliases limited to rendercore entrypoints", () => {
+  it("keeps Vite source aliases aligned across rendercore and its logiccore runtime", () => {
     const viteConfig = readFileSync(join(APP_ROOT, "vite.config.ts"), "utf8");
 
+    expect(viteConfig).toContain('find: "@slotclientengine/logiccore"');
+    expect(viteConfig).toContain("../../packages/logiccore/src/index.ts");
     expect(viteConfig).toContain("@slotclientengine/rendercore");
     expect(viteConfig).toContain("../../packages/rendercore/src/index.ts");
     expect(viteConfig).toContain(
@@ -61,8 +62,11 @@ describe("game002 source boundary", () => {
     expect(viteConfig.indexOf("rendercore/background")).toBeLessThan(
       viteConfig.indexOf('find: "@slotclientengine/rendercore"'),
     );
+    expect(viteConfig.indexOf("@slotclientengine/logiccore")).toBeLessThan(
+      viteConfig.indexOf('find: "@slotclientengine/rendercore"'),
+    );
     expect(viteConfig).not.toMatch(
-      /\.\.\/\.\.\/packages\/(?:logiccore|netcore|uiframeworks)\//,
+      /\.\.\/\.\.\/packages\/(?:netcore|uiframeworks)\//,
     );
   });
 
@@ -193,7 +197,32 @@ describe("game002 source boundary", () => {
       expect(source).not.toContain(gameSpecificAnimation);
     }
   });
+
+  it("keeps game-owned win rules out of the shared carousel and ReelSet internals out of the app", () => {
+    const appSource = readSourceTree(join(APP_ROOT, "src"));
+    const repoRoot = resolve(APP_ROOT, "../..");
+    const carouselRoot = join(
+      repoRoot,
+      "packages/rendercore/src/symbol-win-carousel",
+    );
+    const carouselSource = readSourceTree(carouselRoot);
+
+    expect(carouselSource).not.toMatch(/bg-win|bg-wins|GAME002_|GAME003_/);
+    expect(carouselSource).not.toMatch(
+      /RenderReelSet|RenderGridCellReelSet|instanceof\s+Render/,
+    );
+    expect(appSource).not.toMatch(
+      /getComponentWinResultGroups|parseWinResultPositions/,
+    );
+    expect(appSource).not.toMatch(/\.children[\s\S]{0,80}requestState/);
+  });
 });
+
+function readSourceTree(directory: string): string {
+  return listFiles(directory, (file) => file.endsWith(".ts"))
+    .map((file) => readFileSync(file, "utf8"))
+    .join("\n");
+}
 
 function listFiles(
   directory: string,

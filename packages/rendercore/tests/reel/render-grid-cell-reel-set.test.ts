@@ -7,6 +7,7 @@ import {
   createGridCellReelSpinPlan,
   type GridCellDimmingPattern,
   type GridCellReelSpinTiming,
+  type VisibleSymbolPresentationTarget,
 } from "../../src/reel/index.js";
 import { createBasicRegistry, createBasicReels } from "./helpers.js";
 
@@ -34,6 +35,51 @@ const DIMMING = Object.freeze({
 }) satisfies GridCellDimmingPattern;
 
 describe("RenderGridCellReelSet", () => {
+  it("implements stopped visible-symbol presentation with grid-local geometry", () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const target: VisibleSymbolPresentationTarget = reelSet;
+    const positions = Object.freeze([
+      Object.freeze({ x: 1, y: 1 }),
+      Object.freeze({ x: 0, y: 2 }),
+    ]);
+
+    target.requestVisibleSymbolStates(positions, "win");
+    expect(target.getVisibleSymbolStateSnapshots(positions)).toMatchObject([
+      { x: 1, y: 1, code: INITIAL_SCENE[1][1], requestedState: "win" },
+      { x: 0, y: 2, code: INITIAL_SCENE[0][2], requestedState: "win" },
+    ]);
+    expect(target.getVisibleSymbolGeometrySnapshots(positions)).toMatchObject([
+      { x: 1, y: 1, centerX: 22.5, centerY: 18, cellWidth: 15, cellHeight: 12 },
+      { x: 0, y: 2, centerX: 7.5, centerY: 30, cellWidth: 15, cellHeight: 12 },
+    ]);
+    const idleResult = reelSet.update(0.58);
+    expect(idleResult).toMatchObject({ completed: false, spinning: false });
+    expect(target.getVisibleSymbolStateSnapshots(positions)).toMatchObject([
+      { x: 1, y: 1, requestedState: "normal", resolvedState: "normal" },
+      { x: 0, y: 2, requestedState: "normal", resolvedState: "normal" },
+    ]);
+    expect(reelSet.getVisibleScene()).toEqual(INITIAL_SCENE);
+  });
+
+  it("rejects state requests and geometry reads while a grid spin is active", () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    reelSet.spin(createPlan());
+
+    expect(() => reelSet.requestVisibleSymbolState(0, 0, "win")).toThrow(
+      /spinning/,
+    );
+    expect(() => reelSet.getVisibleSymbolGeometrySnapshot(0, 0)).toThrow(
+      /spinning/,
+    );
+    expect(() => reelSet.getVisibleSymbolStateSnapshot(3, 0)).toThrow(
+      /Missing grid cell/,
+    );
+    expect(() => reelSet.getVisibleSymbolStateSnapshot(0.5, 0)).toThrow(
+      /integers/,
+    );
+  });
   it("keeps clipping content separate from the cell root and applies offsets once", () => {
     const reelSet = createGridReelSet();
     const snapshot = reelSet.getSnapshot();

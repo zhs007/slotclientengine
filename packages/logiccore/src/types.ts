@@ -97,6 +97,8 @@ export interface WinResult extends Readonly<Record<string, unknown>> {
   readonly pos: readonly number[];
   readonly coinWin?: number;
   readonly cashWin?: number;
+  readonly coinWin64?: number;
+  readonly cashWin64?: number;
 }
 
 export interface BasicComponentData extends Readonly<Record<string, unknown>> {

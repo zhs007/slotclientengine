@@ -7,7 +7,13 @@ import type {
   SlotGameStateSnapshot,
   SlotGameViewportSnapshot,
 } from "@slotclientengine/gameframeworks";
-import type { SymbolAssetMap } from "@slotclientengine/rendercore";
+import {
+  createSymbolWinCarousel,
+  type PreparedSymbolWinCarousel,
+  type SymbolAssetMap,
+  type SymbolWinCarousel,
+  type CreateSymbolWinCarouselOptions,
+} from "@slotclientengine/rendercore";
 import type {
   WinAmountAnimationPhase,
   WinAmountAnimationPlayer,
@@ -54,13 +60,10 @@ import {
 import { validateGame003Scene } from "./scene.js";
 import type { Game003SkinConfig } from "./skin-config.js";
 import {
-  createGame003WinSymbolSequence,
-  type Game003WinSymbolGroup,
+  GAME003_WIN_COMPONENT_NAMES,
+  resolveGame003WinResultAmount,
+  validateGame003WinComponent,
 } from "./win-sequence.js";
-import {
-  createGame003WinSymbolLoopRuntime,
-  type Game003WinSymbolLoopRuntime,
-} from "./win-symbol-loop.js";
 import {
   createGame003WinAmountLayout,
   createGame003WinAmountPlayer,
@@ -120,13 +123,16 @@ export interface Game003AdapterOptions {
   readonly createWinAmountPlayer?: (
     layout: Game003Layout,
   ) => WinAmountAnimationPlayer;
+  readonly createSymbolWinCarousel?: (
+    options: CreateSymbolWinCarouselOptions,
+  ) => SymbolWinCarousel;
 }
 
 interface PendingAnimation {
   readonly targetScene: ReturnType<typeof validateGame003Scene>;
   readonly coinOverlayItems: readonly Game003CoinOverlayItem[];
   phase: "spinning" | "win-sequence";
-  winQueue: readonly Game003WinSymbolGroup[];
+  preparedWinCarousel: PreparedSymbolWinCarousel;
   winSequenceComplete: boolean;
   winAmountExpected: boolean;
   winAmountPlaybackComplete: boolean;
@@ -175,6 +181,9 @@ class Game003PixiAdapter implements SlotGameAdapter {
   readonly #createWinAmountPlayer: (
     layout: Game003Layout,
   ) => WinAmountAnimationPlayer;
+  readonly #createSymbolWinCarousel: (
+    options: CreateSymbolWinCarouselOptions,
+  ) => SymbolWinCarousel;
   #app: Game003PixiApplication | null = null;
   #staticTextures: Game003StaticTextures | null = null;
   #worldLayer: Container | null = null;
@@ -184,7 +193,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
   #minecartRuntime: Game003MinecartInteractionRuntime | null = null;
   #coinOverlayRuntime: Game003CoinOverlayRuntime | null = null;
   #winAmountPlayer: WinAmountAnimationPlayer | null = null;
-  #winSymbolLoopRuntime: Game003WinSymbolLoopRuntime | null = null;
+  #winSymbolLoopRuntime: SymbolWinCarousel | null = null;
   #pendingAnimation: PendingAnimation | null = null;
   #unsubscribeViewport: (() => void) | null = null;
   #disposeWinAmountAdvanceListener: (() => void) | null = null;
@@ -242,6 +251,8 @@ class Game003PixiAdapter implements SlotGameAdapter {
         }));
     this.#createWinAmountPlayer =
       options.createWinAmountPlayer ?? createGame003WinAmountPlayer;
+    this.#createSymbolWinCarousel =
+      options.createSymbolWinCarousel ?? createSymbolWinCarousel;
   }
 
   async mount(context: SlotGameMountContext): Promise<void> {
@@ -287,10 +298,13 @@ class Game003PixiAdapter implements SlotGameAdapter {
     );
     const winAmountPlayer = this.#createWinAmountPlayer(layout);
     const coinOverlayRuntime = this.#createCoinOverlayRuntime(runtime);
-    const winSymbolLoopRuntime = createGame003WinSymbolLoopRuntime({
-      reelRuntime: runtime,
-      config: this.#skin.winSymbolLoop,
-      formatter: formatServerUsdAmount,
+    const winSymbolLoopRuntime = this.#createSymbolWinCarousel({
+      target: runtime,
+      resolveAmount: resolveGame003WinResultAmount,
+      validateComponent: validateGame003WinComponent,
+      formatAmount: formatServerUsdAmount,
+      cyclePauseSeconds: this.#skin.winSymbolLoop.cyclePauseSeconds,
+      amountText: this.#skin.winSymbolLoop.resultAmount,
     });
 
     const worldLayer = new Container();
@@ -368,7 +382,12 @@ class Game003PixiAdapter implements SlotGameAdapter {
       coinSymbolCode,
       componentName: this.#skin.coinOverlay.componentName,
     });
-    const winQueue = createGame003WinSymbolSequence(logic, targetScene);
+    const preparedWinCarousel = this.#requireWinSymbolLoopRuntime().prepare({
+      logic,
+      stepIndex: 0,
+      scene: targetScene,
+      componentNames: GAME003_WIN_COMPONENT_NAMES,
+    });
     const bgBarPlan = createGame003BgBarSpinPlan(logic);
     const minecartReturnExpected =
       bgBarPlan !== null && bgBarPlan.features[0] !== "normal";
@@ -388,8 +407,8 @@ class Game003PixiAdapter implements SlotGameAdapter {
         targetScene,
         coinOverlayItems,
         phase: "spinning",
-        winQueue,
-        winSequenceComplete: winQueue.length === 0,
+        preparedWinCarousel,
+        winSequenceComplete: preparedWinCarousel.groupCount === 0,
         winAmountExpected: winAmountRaw > 0,
         winAmountPlaybackComplete: winAmountRaw <= 0,
         bgBarExpected: bgBarPlan !== null,
@@ -507,7 +526,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
 
     pending.phase = "win-sequence";
     if (!pending.winSequenceComplete) {
-      this.#requireWinSymbolLoopRuntime().start(pending.winQueue);
+      this.#requireWinSymbolLoopRuntime().start(pending.preparedWinCarousel);
     }
     this.#completePendingIfReady(pending);
   }
@@ -646,7 +665,7 @@ class Game003PixiAdapter implements SlotGameAdapter {
     return this.#coinOverlayRuntime;
   }
 
-  #requireWinSymbolLoopRuntime(): Game003WinSymbolLoopRuntime {
+  #requireWinSymbolLoopRuntime(): SymbolWinCarousel {
     if (!this.#winSymbolLoopRuntime) {
       throw new Error("game003 adapter is not mounted.");
     }
