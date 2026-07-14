@@ -10,6 +10,7 @@
 - UTC 初始画面数字可见性修正与复验时间：`2026-07-14T10:37:32Z`
 - UTC Pixi 图片加载与 win 单次推进修正时间：`2026-07-14T10:49:35Z`
 - UTC 发布态 loading URL 合并修正时间：`2026-07-14T11:03:27Z`
+- UTC CN Pixi Assets 首屏预热修正时间：`2026-07-14T11:18:13Z`
 - 分支：`main`
 - HEAD：`882711e`
 - 环境：Node.js `v24.14.0`、pnpm `11.7.0`
@@ -58,6 +59,7 @@
 - 浏览器反馈定位到落格前 `RenderSymbol.reset()` 会按通用合同清空 `overlayLayer`，原 CN player/slot object 仍存活但 player view 已离开渲染树。value controller 现在在请求 landing appear 与后续 update 时确保原 player view 重新挂回；不会重新创建 player、不会把图片改成同级 overlay，也不会 remove/rebind `Num` slot。回归测试覆盖 `reset -> Start -> Loop` 全程为同一个图片 Sprite、slot 只绑定一次且停格后持续可见。
 - 后续控制台证据显示旧实现对 `/@fs/.../25.png` 直接 `Texture.from(url)`，而 gameloading 下载不等于 Pixi Cache 注册，导致初始 Sprite 使用空纹理。完整值图片现在先 await Pixi `Assets.load<Texture>(url)`，加载成功后才创建 Sprite 并绑定 `Num`；presenter 在 prepare 阶段预加载，reel-slot controller 在异步初始化阶段加载，加载失败由 prepare 或 idle runtime update 显式抛出。production 已无该 `Texture.from(url)` 路径。
 - 发布浏览器反馈定位到 win-amount 多个逻辑图片在 Vite content-addressed 构建后共享同一产物 URL；开发态 `/@fs` URL 各不相同，因此旧测试未触发。loading 清单现在仍显式拒绝重复 ID 和缺失 URL，但对相同的非空发布 URL 保留首项并只预加载一次，不再在模块初始化时报 `Duplicate or missing game002 loading resource URL`。VNI project 自身的逻辑路径映射未改动。新增生产 URL 合并、重复 ID、缺 URL 回归测试；不修改美术文件，也不把资源 hash 纳入验收合同。
+- 发布首进反馈进一步确认：CN 资源已在 loading URL 闭包，但 gameloading 默认 image loader 只生成/解码 `HTMLImageElement`，不会注册 Pixi Assets；defaultScene 的 value controller 因而在 100% 后才异步 `Assets.load(Symbol.png/数字图)`，透明 CN 占位会短暂为空。game002 loading 现在从 manifest 生成闭包筛出 `texture|state-texture|value-image`，在 0%–99% 阶段通过动态 Pixi `Assets.load()` 完成注册；共享 URL 仍只加载一次，99% 回调和 100% 都等待完成。无关 win-amount 图片不进入该 Pixi 预热集合；这些 CN 纹理本来就是运行期必需集合，只前移驻留时机，不扩大稳态纹理集合，也避免同一 CN 图片先走默认 HTMLImage、再走 Pixi Texture 的双路径。
 
 精确 Vite 资源闭包生成器 `generate-symbol-value-vite-resources.mjs`：
 

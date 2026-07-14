@@ -8,6 +8,8 @@
 
 loading 资源 ID 必须唯一且 URL 不能为空。Vite 发布构建允许把内容相同的多个逻辑图片合并为同一个产物 URL；这种情况下 loading 清单保留第一个资源并只预加载该 URL 一次，不能把生产态 content-addressed URL 合并误判成资源重复。运行时的 VNI project 仍保留各自的逻辑资源路径映射。
 
+manifest 精确引用的 CN valuePresentation Pixi 纹理（共享 `Symbol.png`、`CN.spinBlur.png`、`CN.disabled.png` 和完整数值图片）在 loading 0%–99% 阶段通过动态 Pixi `Assets.load()` 注册；99% 回调和 100% 进入游戏都在这些 Promise 完成之后。这样 defaultScene 创建 value controller 时复用 Pixi Cache，不会先显示透明 CN 占位再补出 Coin。JSON/atlas 和无关 win-amount 图片继续使用 gameloading 默认 loader，不把整套美术提前常驻为 GPU Texture。上述纹理进入游戏本来就必须驻留，因此只前移加载时机，不增加游戏稳态纹理集合。
+
 live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`。`gamecode` 和下列运行参数来自 URL，不从环境变量、cookie 或 localStorage 推导；其中 `lines` 是 game002 固定游戏合同，URL 只能显式提供 `30`，其它值会在 loading 99% 阶段失败，不能进入 spin：
 
 | 参数                                                                        | 合同                  |
