@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import type { Container as PixiContainer } from "pixi.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Assets, Texture, type Container as PixiContainer } from "pixi.js";
 
 vi.mock(
   "../../../packages/rendercore/src/spine/runtime-player.js",
@@ -64,6 +64,14 @@ import {
 } from "../src/game-demo.js";
 import { GAME002_GRID_CELL_REEL_OFFSETS } from "../src/game-layout.js";
 import { getGame002SkinConfig } from "../src/skin-config.js";
+
+beforeEach(() => {
+  vi.spyOn(Assets, "load").mockResolvedValue(Texture.WHITE as never);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("game002-s3 reel runtime", () => {
   it("locks the public reels, all 13 symbol codes and sample stop values", () => {

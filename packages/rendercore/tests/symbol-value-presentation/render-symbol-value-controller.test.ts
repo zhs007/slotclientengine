@@ -102,7 +102,7 @@ describe("render symbol value controller", () => {
   it("uses an exact value image and fails without a matching image", async () => {
     const loadTexture = vi
       .spyOn(Assets, "load")
-      .mockResolvedValue(Texture.WHITE);
+      .mockResolvedValue(Texture.WHITE as never);
     const players: FakeSlotPlayer[] = [];
     const resource = Object.freeze({
       ...createResource(),
@@ -125,6 +125,7 @@ describe("render symbol value controller", () => {
     symbol.setPresentationValue(5);
     await flushPromises();
 
+    expect(loadTexture).toHaveBeenCalledWith("/5.png");
     const image = players[0].attached[0]?.object;
     expect(image).toBeInstanceOf(Sprite);
     expect(image?.position).toMatchObject({ x: 2, y: -3 });
