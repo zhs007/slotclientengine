@@ -149,7 +149,7 @@ describe("render symbol value controller", () => {
       /value 25 has no configured image resource/,
     );
     expect(symbol.getPresentationValue()).toBeNull();
-    expect(players[1].destroyed).toBe(true);
+    expect(players).toHaveLength(1);
     symbol.destroy();
     loadTexture.mockRestore();
   });
