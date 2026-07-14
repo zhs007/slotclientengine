@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { Assets, Texture } from "pixi.js";
+import { describe, expect, it, vi } from "vitest";
 import bigwinProject from "../../../assets/game002-s3/win-amount/bigwin.json";
 import megawinProject from "../../../assets/game002-s3/win-amount/megawin.json";
 import superwinProject from "../../../assets/game002-s3/win-amount/superwin.json";
@@ -175,6 +176,39 @@ describe("game002 loading resources", () => {
         url: "/assets/shared-content-hash.png",
       },
     ]);
+  });
+
+  it("registers symbol value textures in Pixi Assets during loading", async () => {
+    const loadTexture = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const resources = createGame002LoadingResources();
+    const expectedPixiResourceIds = [
+      "game002-symbol-spine-texture",
+      "game002-symbol-value-state-texture:CN.spinBlur.png",
+      "game002-symbol-value-state-texture:CN.disabled.png",
+      "game002-symbol-value-value-image:25.png",
+    ];
+
+    for (const id of expectedPixiResourceIds) {
+      const resource = resources.find((candidate) => candidate.id === id);
+      if (!resource || !resource.load) {
+        throw new Error(`missing Pixi loading resource ${id}`);
+      }
+      await resource.load({
+        resource,
+        loadedResources: new Map(),
+      });
+      expect(loadTexture, id).toHaveBeenCalledWith(resource.url);
+    }
+    expect(
+      resources.find(
+        (resource) =>
+          resource.id ===
+          "game002-win-amount-vni-assets:shine_asset_image_mrbrfpft_1m.png",
+      )?.load,
+    ).toBeUndefined();
+    loadTexture.mockRestore();
   });
 
   it("still rejects duplicate ids and missing URLs", () => {

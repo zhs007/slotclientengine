@@ -41,6 +41,16 @@ const winAmountAssetModules = import.meta.glob(
   "../../../assets/game002-s3/win-amount/assets/*.{png,jpg,jpeg,webp}",
   { eager: true, import: "default", query: "?url" },
 ) as Record<string, string>;
+const symbolValuePixiTextureUrls = new Set(
+  symbolValueLoadingResources
+    .filter(
+      (resource) =>
+        resource.kind === "texture" ||
+        resource.kind === "state-texture" ||
+        resource.kind === "value-image",
+    )
+    .map((resource) => resource.url),
+);
 
 export interface Game002PreparedLoadingSessionLike {
   readonly liveSession: { disconnect(): void };
@@ -208,7 +218,29 @@ function createLoadingResourceUrls(): readonly GameLoadingResource[] {
       });
     }
   }
-  return deduplicateGame002LoadingResourceUrls(candidates);
+  return Object.freeze(
+    deduplicateGame002LoadingResourceUrls(candidates).map(
+      withGame002PixiTextureLoader,
+    ),
+  );
+}
+
+function withGame002PixiTextureLoader(
+  resource: GameLoadingResource,
+): GameLoadingResource {
+  const url = resource.url;
+  if (!url || !symbolValuePixiTextureUrls.has(url)) {
+    return resource;
+  }
+  return Object.freeze({
+    ...resource,
+    load: () => loadGame002PixiTexture(url),
+  });
+}
+
+async function loadGame002PixiTexture(url: string): Promise<unknown> {
+  const { Assets } = await import("pixi.js");
+  return Assets.load(url);
 }
 
 function getBaseName(modulePath: string): string {
