@@ -6,6 +6,8 @@
 
 首屏由 `packages/gameloading` 承载。资源加载到 99% 时才校验 query 并调用 `prepareSlotGameLiveSession()`；资源到 100% 后才创建 framework、Pixi canvas 并用同一个 prepared session 连接。因此 loading 前不会挂载游戏，也不会创建第二条 WebSocket。
 
+loading 资源 ID 必须唯一且 URL 不能为空。Vite 发布构建允许把内容相同的多个逻辑图片合并为同一个产物 URL；这种情况下 loading 清单保留第一个资源并只预加载该 URL 一次，不能把生产态 content-addressed URL 合并误判成资源重复。运行时的 VNI project 仍保留各自的逻辑资源路径映射。
+
 live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`。`gamecode` 和下列运行参数来自 URL，不从环境变量、cookie 或 localStorage 推导；其中 `lines` 是 game002 固定游戏合同，URL 只能显式提供 `30`，其它值会在 loading 99% 阶段失败，不能进入 spin：
 
 | 参数                                                                        | 合同                  |

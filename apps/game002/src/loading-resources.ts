@@ -68,6 +68,33 @@ interface LoadingGlobGroup {
 
 export const GAME002_LOADING_RESOURCE_URLS = createLoadingResourceUrls();
 
+export function deduplicateGame002LoadingResourceUrls(
+  candidates: readonly GameLoadingResource[],
+): readonly GameLoadingResource[] {
+  const resources: GameLoadingResource[] = [];
+  const seenIds = new Set<string>();
+  const seenUrls = new Set<string>();
+  for (const resource of candidates) {
+    if (seenIds.has(resource.id)) {
+      throw new Error(
+        `Duplicate game002 loading resource id "${resource.id}".`,
+      );
+    }
+    seenIds.add(resource.id);
+    if (!resource.url) {
+      throw new Error(
+        `Missing game002 loading resource URL for "${resource.id}".`,
+      );
+    }
+    if (seenUrls.has(resource.url)) {
+      continue;
+    }
+    seenUrls.add(resource.url);
+    resources.push(Object.freeze(resource));
+  }
+  return Object.freeze(resources);
+}
+
 export function createGame002LoadingResources(): readonly GameLoadingResource[] {
   return Object.freeze([
     ...GAME002_LOADING_RESOURCE_URLS,
@@ -151,31 +178,14 @@ function createLoadingResourceUrls(): readonly GameLoadingResource[] {
     },
     { id: "game002-win-amount-vni-assets", modules: winAmountAssetModules },
   ]);
-  const resources: GameLoadingResource[] = [];
-  const seenIds = new Set<string>();
-  const seenUrls = new Set<string>();
+  const candidates: GameLoadingResource[] = [];
   const add = (resource: GameLoadingResource) => {
-    if (seenIds.has(resource.id)) {
-      throw new Error(
-        `Duplicate game002 loading resource id "${resource.id}".`,
-      );
-    }
-    seenIds.add(resource.id);
-    if (!resource.url || seenUrls.has(resource.url)) {
-      throw new Error(
-        `Duplicate or missing game002 loading resource URL for "${resource.id}".`,
-      );
-    }
-    seenUrls.add(resource.url);
-    resources.push(Object.freeze(resource));
+    candidates.push(resource);
   };
   for (const resource of pathResources) {
     add(resource);
   }
   for (const resource of symbolValueLoadingResources) {
-    if (seenUrls.has(resource.url)) {
-      continue;
-    }
     add({
       id: `game002-symbol-value-${resource.kind}:${resource.path.slice(2)}`,
       url: resource.url,
@@ -198,7 +208,7 @@ function createLoadingResourceUrls(): readonly GameLoadingResource[] {
       });
     }
   }
-  return Object.freeze(resources);
+  return deduplicateGame002LoadingResourceUrls(candidates);
 }
 
 function getBaseName(modulePath: string): string {

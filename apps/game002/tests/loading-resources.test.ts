@@ -6,6 +6,7 @@ import {
   GAME002_LOADING_RESOURCE_URLS,
   GAME002_RUNTIME_MODULE_RESOURCE_ID,
   createGame002LoadingResources,
+  deduplicateGame002LoadingResourceUrls,
   readGame002RuntimeModule,
 } from "../src/loading-resources.js";
 import { symbolValueLoadingResources } from "../src/generated/symbol-value-resources.generated.js";
@@ -154,6 +155,38 @@ describe("game002 loading resources", () => {
     expect(serialized).not.toMatch(/cookie/i);
     expect(serialized).not.toMatch(/serverUrl/);
     expect(serialized).not.toMatch(/gameserv/);
+  });
+
+  it("preloads a content-hashed production URL only once", () => {
+    const resources = deduplicateGame002LoadingResourceUrls([
+      {
+        id: "game002-win-amount-vni-assets:first.png",
+        url: "/assets/shared-content-hash.png",
+      },
+      {
+        id: "game002-win-amount-vni-assets:second.png",
+        url: "/assets/shared-content-hash.png",
+      },
+    ]);
+
+    expect(resources).toEqual([
+      {
+        id: "game002-win-amount-vni-assets:first.png",
+        url: "/assets/shared-content-hash.png",
+      },
+    ]);
+  });
+
+  it("still rejects duplicate ids and missing URLs", () => {
+    expect(() =>
+      deduplicateGame002LoadingResourceUrls([
+        { id: "duplicate", url: "/first.png" },
+        { id: "duplicate", url: "/second.png" },
+      ]),
+    ).toThrow('Duplicate game002 loading resource id "duplicate".');
+    expect(() =>
+      deduplicateGame002LoadingResourceUrls([{ id: "missing" }]),
+    ).toThrow('Missing game002 loading resource URL for "missing".');
   });
 });
 
