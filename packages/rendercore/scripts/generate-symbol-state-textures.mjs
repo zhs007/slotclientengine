@@ -507,7 +507,7 @@ function validatePreservedValuePresentation(symbol, value) {
   assertOnlyKnownKeys(
     record,
     `existing manifest symbol "${symbol}" valuePresentation`,
-    ["defaultValues", "reelStates", "tiers", "text"],
+    ["defaultValues", "appearPlayback", "reelStates", "tiers", "text"],
   );
   if (
     !Array.isArray(record.defaultValues) ||
@@ -530,6 +530,25 @@ function validatePreservedValuePresentation(symbol, value) {
   if (new Set(defaultValues).size !== defaultValues.length) {
     throw new Error(
       `${symbol} valuePresentation defaultValues must be unique.`,
+    );
+  }
+  const appearPlayback = assertRecord(
+    record.appearPlayback,
+    `${symbol}.valuePresentation.appearPlayback`,
+  );
+  assertOnlyKnownKeys(
+    appearPlayback,
+    `${symbol}.valuePresentation.appearPlayback`,
+    ["mode", "animationName", "loop"],
+  );
+  if (
+    appearPlayback.mode !== "animation" ||
+    typeof appearPlayback.animationName !== "string" ||
+    appearPlayback.animationName.trim().length === 0 ||
+    appearPlayback.loop !== false
+  ) {
+    throw new Error(
+      `${symbol} valuePresentation appearPlayback must be a named non-looping animation.`,
     );
   }
   const reelStates = assertRecord(
@@ -632,35 +651,74 @@ function validatePreservedValuePresentation(symbol, value) {
     }),
   );
   const text = assertRecord(record.text, `${symbol}.valuePresentation.text`);
-  assertOnlyKnownKeys(text, `${symbol}.valuePresentation.text`, [
-    "slot",
-    "x",
-    "y",
-    "fontFamily",
-    "fontSize",
-    "fontWeight",
-    "fill",
-    "stroke",
-    "strokeWidth",
-  ]);
+  const textType = text.type ?? "font";
+  if (textType !== "font" && textType !== "image") {
+    throw new Error(`${symbol}.valuePresentation.text.type is invalid.`);
+  }
+  assertOnlyKnownKeys(
+    text,
+    `${symbol}.valuePresentation.text`,
+    textType === "image"
+      ? ["type", "slot", "x", "y", "prefix"]
+      : [
+          "type",
+          "slot",
+          "x",
+          "y",
+          "fontFamily",
+          "fontSize",
+          "fontWeight",
+          "fill",
+          "stroke",
+          "strokeWidth",
+        ],
+  );
+  const textBase = {
+    type: textType,
+    slot: assertNonEmptyString(text.slot, `${symbol}.slot`),
+    x: assertFiniteNumber(text.x, `${symbol}.text.x`),
+    y: assertFiniteNumber(text.y, `${symbol}.text.y`),
+  };
+  const preservedText =
+    textType === "image"
+      ? Object.freeze({
+          ...textBase,
+          prefix: assertManifestPathPrefix(
+            text.prefix,
+            `${symbol}.text.prefix`,
+          ),
+        })
+      : Object.freeze({
+          ...textBase,
+          fontFamily: assertNonEmptyString(
+            text.fontFamily,
+            `${symbol}.fontFamily`,
+          ),
+          fontSize: assertFinitePositiveNumber(
+            text.fontSize,
+            `${symbol}.fontSize`,
+          ),
+          fontWeight: assertNonEmptyString(
+            text.fontWeight,
+            `${symbol}.fontWeight`,
+          ),
+          fill: assertNonEmptyString(text.fill, `${symbol}.fill`),
+          stroke: assertNonEmptyString(text.stroke, `${symbol}.stroke`),
+          strokeWidth: assertFinitePositiveNumber(
+            text.strokeWidth,
+            `${symbol}.strokeWidth`,
+          ),
+        });
   return Object.freeze({
     defaultValues,
+    appearPlayback: Object.freeze({
+      mode: "animation",
+      animationName: appearPlayback.animationName,
+      loop: false,
+    }),
     reelStates: Object.freeze(preservedReelStates),
     tiers,
-    text: Object.freeze({
-      slot: assertNonEmptyString(text.slot, `${symbol}.slot`),
-      x: assertFiniteNumber(text.x, `${symbol}.text.x`),
-      y: assertFiniteNumber(text.y, `${symbol}.text.y`),
-      fontFamily: assertNonEmptyString(text.fontFamily, `${symbol}.fontFamily`),
-      fontSize: assertFinitePositiveNumber(text.fontSize, `${symbol}.fontSize`),
-      fontWeight: assertNonEmptyString(text.fontWeight, `${symbol}.fontWeight`),
-      fill: assertNonEmptyString(text.fill, `${symbol}.fill`),
-      stroke: assertNonEmptyString(text.stroke, `${symbol}.stroke`),
-      strokeWidth: assertFinitePositiveNumber(
-        text.strokeWidth,
-        `${symbol}.strokeWidth`,
-      ),
-    }),
+    text: preservedText,
   });
 }
 
@@ -1008,6 +1066,19 @@ function assertNonEmptyString(value, label) {
     throw new Error(`${label} must be a non-empty string.`);
   }
   return value;
+}
+
+function assertManifestPathPrefix(value, label) {
+  const prefix = assertNonEmptyString(value, label);
+  if (
+    !prefix.startsWith("./") ||
+    prefix.includes("\\") ||
+    prefix.includes("../") ||
+    prefix.slice(2).includes("/")
+  ) {
+    throw new Error(`${label} must be a local ./basename prefix.`);
+  }
+  return prefix;
 }
 
 function assertOnlyKnownKeys(record, label, allowed) {

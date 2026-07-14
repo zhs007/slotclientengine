@@ -328,5 +328,59 @@ describe("game002-s3 assets", () => {
     ]);
     expect(Object.keys(symbols.BN.animations ?? {})).toEqual(["normal"]);
     expect(symbols.CN.animations).toBeUndefined();
+    expect(skin.landingAppearSymbols).toEqual([
+      "WL",
+      "H1",
+      "H2",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "WM",
+      "CN",
+      "CM",
+      "CO",
+      "AF",
+    ]);
+    expect(symbols.CO.animations?.normal.playback.animationName).toBe("Loop");
+    const valuePresentation = (
+      skin.stateTextureManifest as {
+        symbols: {
+          CN: {
+            valuePresentation: {
+              appearPlayback: { animationName: string; loop: boolean };
+              tiers: Array<{
+                animation: {
+                  playback: { animationName: string; loop: boolean };
+                };
+              }>;
+            };
+          };
+        };
+      }
+    ).symbols.CN.valuePresentation;
+    expect(valuePresentation.appearPlayback).toMatchObject({
+      animationName: "Start",
+      loop: false,
+    });
+    expect(skin.symbolValuePresentationResources.CN.text).toEqual({
+      type: "image",
+      slot: "Num",
+      x: 0,
+      y: 0,
+      prefix: "./",
+    });
+    expect(
+      Object.keys(skin.symbolValuePresentationResources.CN.textImageUrls),
+    ).toEqual(["1", "2", "5", "10", "25", "50", "100", "250", "500", "1000"]);
+    expect(
+      valuePresentation.tiers.map((tier) => tier.animation.playback),
+    ).toEqual(
+      Array.from({ length: 4 }, () => ({
+        mode: "animation",
+        animationName: "Loop",
+        loop: true,
+      })),
+    );
   });
 });

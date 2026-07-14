@@ -162,6 +162,17 @@ function verifySourceContract() {
           `source manifest ${symbol}.valuePresentation.defaultValues must be unique positive safe integers.`,
         );
       }
+      const appearPlayback = valuePresentation.appearPlayback;
+      if (
+        appearPlayback?.mode !== "animation" ||
+        typeof appearPlayback.animationName !== "string" ||
+        appearPlayback.animationName.length === 0 ||
+        appearPlayback.loop !== false
+      ) {
+        failures.push(
+          `source manifest ${symbol}.valuePresentation.appearPlayback must be a named non-looping animation.`,
+        );
+      }
       const normal = valuePresentation.reelStates?.normal;
       if (
         normal?.kind !== "transparent" ||
@@ -173,6 +184,19 @@ function verifySourceContract() {
         failures.push(
           `source manifest ${symbol}.valuePresentation.reelStates.normal must be transparent.`,
         );
+      }
+      const text = valuePresentation.text;
+      if (
+        text?.type !== "image" ||
+        text.slot !== "Num" ||
+        text.prefix !== "./"
+      ) {
+        failures.push(
+          `source manifest ${symbol}.valuePresentation.text must use image type, Num slot and ./ prefix.`,
+        );
+      }
+      for (const value of defaults ?? []) {
+        assertFile(join(SOURCE_ROOT, `${value}.png`));
       }
     }
     for (const [state, suffix] of [
@@ -214,11 +238,22 @@ function verifySourceContract() {
       if (!/^4\.3(?:\.|$)/.test(skeleton.skeleton?.spine ?? "")) {
         failures.push(`${resource.skeleton} must declare Spine 4.3.x.`);
       }
-      if (!skeleton.animations?.[resource.animationName]) {
-        failures.push(
-          `${resource.skeleton} is missing configured animation ${resource.animationName}.`,
-        );
+      for (const animationName of resource.animationNames) {
+        if (!skeleton.animations?.[animationName]) {
+          failures.push(
+            `${resource.skeleton} is missing configured animation ${animationName}.`,
+          );
+        }
       }
+    }
+  }
+  for (const entry of Object.values(manifest.symbols ?? {})) {
+    const presentation = entry.valuePresentation;
+    if (presentation?.text?.type !== "image") continue;
+    for (const value of presentation.defaultValues ?? []) {
+      assertFile(
+        join(SOURCE_ROOT, `${presentation.text.prefix.slice(2)}${value}.png`),
+      );
     }
   }
   const atlasFirstLine = readFileSync(join(SOURCE_ROOT, "Symbol.atlas"), "utf8")
@@ -434,6 +469,16 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
       );
     }
   }
+  for (const entry of Object.values(manifest.symbols ?? {})) {
+    const presentation = entry.valuePresentation;
+    if (presentation?.text?.type !== "image") continue;
+    for (const value of presentation.defaultValues ?? []) {
+      assertDistContainsSourceAsset(
+        assetNames,
+        join(SOURCE_ROOT, `${presentation.text.prefix.slice(2)}${value}.png`),
+      );
+    }
+  }
   for (const project of ["bigwin", "superwin", "megawin"]) {
     assertOne(
       assetNames,
@@ -472,6 +517,7 @@ function readValuePresentationResources(manifest) {
   const seen = new Set();
   for (const [symbol, entry] of Object.entries(manifest.symbols ?? {})) {
     const slot = entry.valuePresentation?.text?.slot;
+    const appearPlayback = entry.valuePresentation?.appearPlayback;
     if (entry.valuePresentation && (!slot || typeof slot !== "string")) {
       failures.push(
         `${symbol}.valuePresentation.text.slot must be configured.`,
@@ -495,7 +541,10 @@ function readValuePresentationResources(manifest) {
         skeleton: animation.skeleton,
         atlas: animation.atlas,
         texture: animation.texture,
-        animationName: animation.playback.animationName,
+        animationNames: [
+          animation.playback.animationName,
+          appearPlayback?.animationName,
+        ],
         slot,
       };
       const key = JSON.stringify(resource);

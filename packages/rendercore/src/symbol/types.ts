@@ -114,6 +114,8 @@ export interface RenderSymbolUpdateResult {
 export interface RenderSymbolValueController {
   setValue(value: number | null): void;
   getValue(): number | null;
+  requestLandingAppear(): boolean;
+  isLandingAppearActive(): boolean;
   update(deltaSeconds: number): void;
   resetForPoolRelease(): void;
   destroy(): void;
@@ -126,6 +128,7 @@ export interface RenderSymbolOptions {
   readonly requiredStateTextures?: readonly SymbolStateId[];
   readonly animationResolver: SymbolAnimationResolver;
   readonly renderPriority?: number;
+  readonly landingAppearEnabled?: boolean;
   readonly valueControllerFactory?: (
     root: RenderSymbol,
   ) => RenderSymbolValueController;

@@ -101,6 +101,54 @@ describe("symbol value Vite resource generator", () => {
     ).rejects.toThrow(/stale/);
   });
 
+  it("generates exact full-value image resources from the configured prefix", async () => {
+    const generator = await loadGenerator();
+    const root = await mkdtemp(join(tmpdir(), "symbol-value-images-"));
+    const manifestPath = join(root, "manifest.json");
+    const outPath = join(root, "resources.ts");
+    await Promise.all([
+      writeFile(join(root, "bronze.json"), "{}"),
+      writeFile(join(root, "shared.atlas"), "page.png\n"),
+      writeFile(join(root, "page.png"), "png"),
+      writeFile(join(root, "value.spinBlur.png"), "png"),
+      writeFile(join(root, "value.disabled.png"), "png"),
+      ...[1, 10, 100].map((value) =>
+        writeFile(join(root, `art-${value}.png`), "png"),
+      ),
+    ]);
+    const manifest = createManifest(["bronze.json"]);
+    manifest.symbols.GOLD.valuePresentation.text = {
+      type: "image",
+      slot: "ValueSlot",
+      x: 0,
+      y: 0,
+      prefix: "./art-",
+    };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+
+    await expect(
+      generator.generateSymbolValueViteResources({
+        manifest: manifestPath,
+        out: outPath,
+        check: false,
+      }),
+    ).resolves.toMatchObject({ resourceCount: 8 });
+    const source = await readFile(outPath, "utf8");
+    expect(source).toContain("symbolValueTextImageModules");
+    expect(source).toContain('"./art-1.png"');
+    expect(source).toContain('kind: "value-image"');
+
+    manifest.symbols.GOLD.valuePresentation.defaultValues.push(250);
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(
+      generator.generateSymbolValueViteResources({
+        manifest: manifestPath,
+        out: outPath,
+        check: false,
+      }),
+    ).rejects.toThrow(/art-250\.png/);
+  });
+
   it("rejects invalid bounds, unknown fields, non-Spine tiers and path escape", async () => {
     const generator = await loadGenerator();
     const root = await mkdtemp(join(tmpdir(), "symbol-value-invalid-"));
@@ -162,6 +210,11 @@ function createManifest(skeletonNames: readonly string[]): any {
         scale: 1,
         valuePresentation: {
           defaultValues: [1, 10, 100],
+          appearPlayback: {
+            mode: "animation",
+            animationName: "Start",
+            loop: false,
+          },
           reelStates: {
             normal: { kind: "transparent", width: 200, height: 200 },
             spinBlur: "./value.spinBlur.png",

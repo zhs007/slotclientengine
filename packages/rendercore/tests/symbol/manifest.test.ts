@@ -439,7 +439,7 @@ describe("symbol state texture manifest helpers", () => {
       expect(resources[symbol]?.normal?.atlasPage).toBe("Symbol.png");
       expect(resources[symbol]?.win?.atlasPage).toBe("Symbol.png");
     }
-    for (const symbol of ["WM", "CM", "CO", "AF"]) {
+    for (const symbol of ["WM", "CM", "AF"]) {
       expect(resources[symbol]?.normal?.spec.playback.animationName).toBe(
         "Idle",
       );
@@ -448,6 +448,9 @@ describe("symbol state texture manifest helpers", () => {
       );
       expect(resources[symbol]?.win).toBeUndefined();
     }
+    expect(resources.CO?.normal?.spec.playback.animationName).toBe("Loop");
+    expect(resources.CO?.appear?.spec.playback.animationName).toBe("Start");
+    expect(resources.CO?.win).toBeUndefined();
     expect(resources.BN?.normal?.spec.playback.animationName).toBe("Idle");
   });
 

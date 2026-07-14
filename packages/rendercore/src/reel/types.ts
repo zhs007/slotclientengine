@@ -37,6 +37,7 @@ export interface ReelSymbolRegistryOptions {
   readonly emptySymbols?: readonly string[];
   readonly symbolScales?: ReelSymbolScaleMap;
   readonly symbolRenderPriorities?: ReelSymbolRenderPriorityMap;
+  readonly landingAppearSymbols?: readonly string[];
   readonly statePreset?: SymbolStatePreset;
   readonly animationResolver?: SymbolAnimationResolver;
   readonly texturePolicy?: SymbolTexturePolicy;

@@ -21,16 +21,16 @@
 - value-presentation tier 资源不是 paytable symbol，也不加入主 display set；主 display set 仍精确为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`。当前四个新资源只作为 `CN.valuePresentation.tiers[]` 引用的附属 Spine skeleton。
 - tier 数量、每档 `maxExclusive`、skeleton/atlas/texture 路径和文件名全部来自 manifest。通用实现必须支持至少 1 档、任意合法档数和任意合法资源名；不得出现 `if (tierCount === 4)`、`CN_${index}`、固定四元素 tuple 或按命名推导档位。
 - 当前 `game002-s3` manifest 实例的边界是 `1..9 -> ./CN_1.json`、`10..99 -> ./CN_2.json`、`100..999 -> ./CN_3.json`、`>=1000 -> ./CN_4.json`。边界使用 `maxExclusive=10/100/1000`，不得写成 app `if/else` 或第二份阈值表；换成 1 档、3 档、5 档或完全不同文件名时，只改 manifest 和资源文件并重生成资源闭包，不改 production TypeScript。
-- 数字显示为原始 `String(value)`，例如 `2 -> "2"`、`25 -> "25"`、`1000 -> "1000"`；不调用 `formatServerUsdAmount()`，不加 `$`，不做除以 100、千分位或本地化转换。
+- 数字语义始终是服务器原始 positive integer value，不调用 `formatServerUsdAmount()`，不加 `$`，不做除以 100、千分位或本地化转换。font 模式显示 `String(value)`；当前 image 模式使用完整值图片，例如 `2 -> ./2.png`、`25 -> ./25.png`、`1000 -> ./1000.png`。
 - 当前工作区中的新美术资源是本任务的权威输入：`assets/game002-s3/CN_1.json` 到 `CN_4.json`、更新后的 `Symbol.atlas` 和 `Symbol.png` 必须直接进入运行和发布闭包。不得回滚、重新导出、替换成 HEAD 旧字节、旧 CN、静态 PNG、默认 CN 或其它 fallback。
 - 当前工作区还有 `AF.json`、`CM.json`、`CO.json`、`Nearwin1.json`、`WL.json`、`WM.json` 等用户更新的新 Spine 文件；本任务不得覆盖或回滚这些文件。除非实际实现发现资源自身违反 4.3/atlas/animation 硬合同，否则只读取和验证，不做任务外美术修复。
-- 当前配置引用的 `CN_1..CN_4` 都声明 Spine `4.3.23`，并真实包含大小写精确的 `Idle` 动画；当前 manifest 实例均使用 `Idle loop=true`。通用 parser/resolver 不认识这些名字，只校验 manifest 实际引用的每个 tier。未知版本、缺 atlas page/region、缺 skeleton、缺 manifest 指定 animation 或资源错配必须在生成/启动/prepare 阶段显式失败。
+- 当前配置引用的 `CN_1..CN_4` 都声明 Spine `4.3.23`，并真实包含大小写精确的 `Start`、`Loop`、`Idle` 动画；当前 manifest 实例 normal 使用 `Loop loop=true`，落地 appear 使用 `Start loop=false`。通用 parser/resolver 不认识这些名字，只校验 manifest 实际引用的每个 tier。未知版本、缺 atlas page/region、缺 skeleton、缺 manifest 指定 animation 或资源错配必须在生成/启动/prepare 阶段显式失败。
 - defaultScene 没有 otherScene 时，每个 `CN` 从 manifest 的 `valuePresentation.defaultValues` 候选数组随机取值展示；spin 本地临时轮带中的每个 CN occurrence 也从同一数组取值并随该 occurrence 固定，不能滚动时留空。第 0 step 触发 `bg-gencoins` 时必须刚好使用一个 `otherScene`，最终目标 scene 中每个 `CN` 必须使用服务器 positive safe integer，非 `CN` 必须为 `0`；随机值绝不能覆盖最终服务器值。
 - 缺 `basicComponentData`、`usedOtherScenes` 数量不是 1、索引越界、矩阵尺寸不匹配、CN 值为 0/负数/小数/NaN/超过安全整数、非 CN 带非零值、档位缺失、几何 code 不匹配或资源初始化失败，都必须在转轮启动前或展示前显式失败；不能补 0、跳过、钳制或降级为旧 CN。
 - value presentation 是实际 reel symbol occurrence 的视觉数据：defaultScene 与本地临时轮带在滚动前即有候选值，档位 Spine/数字跟随 reel slot；最终停轴窗口切到服务器 otherScene 值。它不参与服务器 scene、reel stop、renderPriority、中奖 result 顺序或金额计算，也不额外阻塞 `playSpin()`；服务器资源/data `prepare` 仍必须在 spin 启动前成功。
 - 下一次 spin 开始前必须清理上一轮 tier 美术和数字；`applyInitialState()`、adapter destroy 和 mount rollback 也必须清理。viewport resize 后仍应和对应 cell 对齐。
 - CN value presentation 属于实际 main-reel symbol slot；world z-order 固定为 background、main reels（含 CN value）、symbol win carousel、global win-amount。它不能盖住中奖金额 overlay 或全局 win-amount。
-- 若后续要让 CN 档位响应 `win/appear/collect`，必须另立合同并在 manifest 显式配置对应动画；本任务只实现持续 `Idle`，不得猜测或偷偷切 `Win/Collect`。
+- CN 档位必须响应 grid-cell 落地 `appear`：`RenderGridCellReelSet` 在对应格落地时切到 manifest `appearPlayback=Start once`，完成后同一 player 回到 tier normal `Loop`；数字持续绑定 `Num` slot。`win/collect` 仍未定义，不得猜测或偷偷切换。
 - 如果是测试导致一些奇怪写法，应修改测试，不要削弱 production 合同、制造隐藏 fallback 或在 app 中复制 rendercore 私有实现。
 
 任务完成后必须新增中文任务报告：
@@ -370,6 +370,11 @@ export function createGame002CnValueItems(options: {
   "scale": 1,
   "valuePresentation": {
     "defaultValues": [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000],
+    "appearPlayback": {
+      "mode": "animation",
+      "animationName": "Start",
+      "loop": false
+    },
     "reelStates": {
       "normal": { "kind": "transparent", "width": 200, "height": 200 },
       "spinBlur": "./CN.spinBlur.png",
@@ -385,7 +390,7 @@ export function createGame002CnValueItems(options: {
           "texture": "./Symbol.png",
           "playback": {
             "mode": "animation",
-            "animationName": "Idle",
+            "animationName": "Loop",
             "loop": true
           }
         }
@@ -399,7 +404,7 @@ export function createGame002CnValueItems(options: {
           "texture": "./Symbol.png",
           "playback": {
             "mode": "animation",
-            "animationName": "Idle",
+            "animationName": "Loop",
             "loop": true
           }
         }
@@ -413,7 +418,7 @@ export function createGame002CnValueItems(options: {
           "texture": "./Symbol.png",
           "playback": {
             "mode": "animation",
-            "animationName": "Idle",
+            "animationName": "Loop",
             "loop": true
           }
         }
@@ -426,22 +431,18 @@ export function createGame002CnValueItems(options: {
           "texture": "./Symbol.png",
           "playback": {
             "mode": "animation",
-            "animationName": "Idle",
+            "animationName": "Loop",
             "loop": true
           }
         }
       }
     ],
     "text": {
+      "type": "image",
       "slot": "Num",
       "x": 0,
       "y": 0,
-      "fontFamily": "Arial",
-      "fontSize": 32,
-      "fontWeight": "900",
-      "fill": "#fff7d6",
-      "stroke": "#5a2500",
-      "strokeWidth": 4
+      "prefix": "./"
     }
   }
 }
@@ -449,7 +450,7 @@ export function createGame002CnValueItems(options: {
 
 上面是当前新美术对应的配置实例，不是 schema 对四档或 `CN_1..CN_4` 命名的限制。合法配置也可以只有一个无上限 tier，或使用例如 `coin-low.json`、`gold.json`、`jackpot-ultra.json` 等任意不冲突文件名；增删 tier、改阈值或改资源路径后，只需重新生成第 5.4 节的精确资源闭包。
 
-每个当前 tier skeleton 都必须真实包含大小写精确的 `Num` slot。数字必须通过 official Spine slot-object API 绑定在该 slot 下，继承 slot/bone 的位移、旋转、缩放、可见性和颜色动画，不能作为 Spine 同级 Pixi overlay。颜色/字号和 slot-local `x/y` 只来自 CN manifest；app 不维护第二份文字表。若人工视觉验收发现文字仅需微调，必须只改 manifest 并同步 parser/test/报告，不得在 app runtime 写覆盖值。
+每个当前 tier skeleton 都必须真实包含大小写精确的 `Num` slot。数字显示对象必须通过 official Spine slot-object API 绑定在该 slot 下，继承 slot/bone 的位移、旋转、缩放、可见性和颜色动画，不能作为 Spine 同级 Pixi overlay。`text.type` 缺省为 `font`；当前 CN 显式使用 `image`，以 `prefix + 完整数值 + .png` 精确读取 `1.png`、`10.png` 等完整美术，不拼单个数字。当前 `defaultValues` 对应的 10 张 PNG 必须全部进入精确资源闭包；服务器返回的完整值没有对应图片时必须在 spin 前 prepare 或展示前显式失败，不能回退字体。slot-local `x/y` 只来自 manifest；app 不维护第二份表。
 
 ### 5.2 parser 硬规则
 
@@ -457,13 +458,13 @@ export function createGame002CnValueItems(options: {
 
 - `ParsedSymbolManifestSymbol` 增加可选只读 `valuePresentation`。
 - symbol allowed keys 增加 `valuePresentation`；未配置的普通 symbol 行为不变。
-- value-managed symbol 顶层禁止 `normal` 和所有 state；`valuePresentation` 只允许 `defaultValues`、`reelStates`、`tiers`、`text` 四个 key，未知 key 失败。`defaultValues` 必须是非空、无重复的 positive safe integer 数组。`reelStates.normal` 必须是显式 transparent normal，所有 manifest state texture（当前 blur/disabled）必须完整放在 `reelStates`。
+- value-managed symbol 顶层禁止 `normal` 和所有 state；`valuePresentation` 只允许 `defaultValues`、`appearPlayback`、`reelStates`、`tiers`、`text` 五个 key，未知 key 失败。`defaultValues` 必须是非空、无重复的 positive safe integer 数组。`appearPlayback` 必须是 named animation、`loop=false`。`reelStates.normal` 必须是显式 transparent normal，所有 manifest state texture（当前 blur/disabled）必须完整放在 `reelStates`。
 - `tiers` 必须是非空数组；通用 parser 允许“只有一个无上限 tier”，也允许任意大于 1 的合法档数。当前 game002-s3 实例是四项，但 app/runtime 不校验必须为四项。第一版每个 `animation.kind` 必须精确为 `spine`。
 - 除最后一项外，每项必须有 positive safe integer `maxExclusive`；最后一项必须没有 `maxExclusive`，表示无上限。
 - 有界阈值必须严格递增，不允许重复、倒序、空洞补丁或 `Infinity`。
 - 第一档自然覆盖正整数 `1..maxExclusive-1`；runtime 的输入值和 `defaultValues` 均必须是 positive safe integer，因此不需要 `minInclusive`。
 - tier animation 使用现有 Spine spec 严格 parser，但本任务只允许 `mode=animation`、`loop=true` 和真实非空 animation name；不接受 range/static/builtin/VNI。skeleton/atlas/texture 只要求合法的 manifest 相对路径和正确资源类型，不允许依靠 `CN_数字` 命名识别 tier。
-- `text` 必须字段齐全且无未知 key。`slot` 为 non-empty string，slot-local `x/y` 为 finite number；`fontSize/strokeWidth` 为 positive finite number；family/weight/fill/stroke 为 non-empty string。
+- `text.type` 只允许 `font|image`，缺省按 `font` 解析；两种类型的 `slot` 都必须为 non-empty string，slot-local `x/y` 为 finite number。font 类型要求 `fontSize/strokeWidth` 为 positive finite number 且 family/weight/fill/stroke 非空；image 类型只允许额外的本地 `./basename` `prefix`，资源路径固定派生为 `${prefix}${value}.png`。
 - parser 返回对象和嵌套数组全部冻结；不能泄露 raw manifest 可变引用。
 
 ### 5.3 generator 保留规则
@@ -496,10 +497,10 @@ CLI 至少接受：
 
 脚本行为：
 
-- 严格读取 manifest 中所有 symbol 的 `valuePresentation.reelStates + tiers[]`，不认识 CN、四档或任何文件名模式。
-- 从 `reelStates` state textures 及每个 tier 的 `animation.skeleton/atlas/texture` 收集并去重精确路径；顺序按 manifest symbol/tier 首次出现顺序稳定输出。
+- 严格读取 manifest 中所有 symbol 的 `valuePresentation.reelStates + tiers[] + text`，不认识 CN、四档或任何文件名模式。
+- 从 `reelStates` state textures、每个 tier 的 `animation.skeleton/atlas/texture` 以及 image 类型按 `defaultValues` 派生的完整数值 PNG 收集并去重精确路径；顺序按 manifest symbol/tier/value 首次出现顺序稳定输出。
 - 路径必须是 manifest 所在资源根内的 `./` 相对路径，normalize 后不得越过根目录；skeleton/atlas/texture 扩展名和实际文件类型必须匹配。
-- 输出静态、可被 Vite 分析的精确 imports：skeleton JSON object + `?url`、atlas `?raw` + `?url`、Spine/reel-state texture `?url`，以及按规范化 manifest path 建立的只读 module maps/loading URL 列表。
+- 输出静态、可被 Vite 分析的精确 imports：skeleton JSON object + `?url`、atlas `?raw` + `?url`、Spine/reel-state/value-image texture `?url`，以及按规范化 manifest path 建立的只读 module maps/loading URL 列表。
 - 生成文件头写明“禁止手改”；`--check` 比较期望内容和磁盘内容，不写文件，漂移时失败。
 - 0 个 valuePresentation 时生成合法空 maps，不扫描目录。
 - 1/3/5 档、资源跨 tier 复用、完全不同文件名和多 symbol valuePresentation 均能生成；重复资源只 import 一次。
@@ -568,7 +569,7 @@ SymbolValuePresentationSnapshot
 要求：
 
 - 复用 `parseSymbolStateTextureManifest(...)` 和现有 module-path 解析策略。
-- 每个 tier 必须在 modules 中精确找到 skeleton/atlas/texture。
+- 每个 tier 必须在 modules 中精确找到 skeleton/atlas/texture；image 模式的每个 default value 必须精确找到完整数值图片。
 - 复用 rendercore 官方 Spine version、atlas/skeleton、animation name 和 configured text slot 校验，不在新目录复制 parser 或手写 adapter；任一 tier 缺 `text.slot` 都要在启动/prepare 前失败。
 - 返回以 symbol 为 key 的只读资源与有序 tiers；档位顺序就是 manifest 顺序。
 - 同一 atlas/texture 可复用解析/cache，但每个同时可见 CN 必须有独立 Spine 实例；不能把一个 display object 同时挂到多个格子。
@@ -617,7 +618,7 @@ export interface SymbolValuePresenter {
 
 - 必须在 `runtime.spinToScene(...)` 前调用。
 - 校验 position 为 non-negative safe integer、position 不重复、symbol 非空、symbolCode non-negative safe integer、value positive safe integer。
-- 按 manifest 阈值选择 tier，并冻结 `tierIndex/maxExclusive/resource/text` 结果。
+- 按 manifest 阈值选择 tier，并冻结 `tierIndex/maxExclusive/resource/text` 结果；image 模式在 player 初始化前确认当前 value 有精确图片。
 - 为本轮需要的每个实例完成官方 Spine 初始化；加载失败时 promise reject，且不得启动 reel。
 - 可以复用 presenter 自己的 idle player pool；pool key 至少包含 symbol、tier skeleton、atlas、texture、animation，不能跨不兼容资源复用。
 - 空 items 返回合法 prepared empty，不显示任何内容。
@@ -633,13 +634,13 @@ export interface SymbolValuePresenter {
 - 读取所有 position 的 geometry，数量和顺序必须一致。
 - geometry 的 `code` 必须与 item `symbolCode` 一致，`kind` 必须是 textured；不一致说明 scene/target 漂移，显式失败。
 - 每个 Spine view 以对应 cell center 为原点，使用 manifest animation 自带 transform（若无则 `x=0,y=0,scale=1`）。
-- Text anchor 固定 `(0.5,0.5)`，内容精确为 `String(value)`；通过 official Spine `addSlotObject()` 绑定到 manifest `text.slot`，位置只使用 slot-local `text.x/y`，必须继承 slot/bone transform、visibility 和 color，不能作为 Spine 同级 overlay。
+- font Text 或完整数值 Sprite 的 anchor 固定 `(0.5,0.5)`；font 内容精确为 `String(value)`，image URL 精确来自 `${prefix}${value}.png`。两者都通过 official Spine `addSlotObject()` 绑定到 manifest `text.slot`，位置只使用 slot-local `text.x/y`，必须继承 slot/bone transform、visibility 和 color，不能作为 Spine 同级 overlay。
 - presenter container 使用 reel-local art 坐标，不做 viewport fit/cover/contain，不读 skeleton width/height 来缩放。
 - 新 tier Spine 是当前 CN 的完整覆盖视觉；基础 CN 仍在 reel 内，但 presentation container 位于其上方。不得另外画旧 CN 或静态底图。
 
 `update(deltaSeconds)`：
 
-- 只推进 active official Spine players 的 `Idle`；delta 必须 finite non-negative。
+- 只推进 active official Spine players 当前由 manifest 选中的 normal/appear animation；delta 必须 finite non-negative。grid-cell 落地 `Start` 完成后必须切回 normal `Loop`，不能额外创建一套 CN player 或丢失 `Num` slot object。
 - 即使 symbol win carousel 为 idle/cycle-pause，也必须持续推进，不把 value animation tick 寄托在 carousel 的 target update 上。
 
 `clear()`：
@@ -680,7 +681,7 @@ snapshot 至少包含：
 - 当前 game002 配置单独回归 `1/9 -> tier 0`、`10/99 -> tier 1`、`100/999 -> tier 2`、`1000/Number.MAX_SAFE_INTEGER -> tier 3`；
 - `0`、负数、小数、NaN、Infinity、超过安全整数失败；
 - tiers 空、last 仍有 max、非 last 缺 max、阈值重复/倒序/非整数失败；单个无上限 tier 作为通用合法边界要有回归；
-- unknown key、非 Spine kind、missing module、4.2/未知 version、缺 Idle、错 atlas page/region 失败；
+- unknown key、非 Spine kind、missing module、4.2/未知 version、缺 manifest 配置的 normal/appear animation、错 atlas page/region 失败；
 - 多个 item 创建独立 player/view，不能只显示最后一个；
 - player prepare 完成前不能 show，伪造/跨 presenter prepared 失败；
 - geometry count/order/code/kind 漂移失败；
@@ -697,13 +698,13 @@ snapshot 至少包含：
 修改 `apps/game002/src/skin-config.ts`：
 
 - 主 `game002S3SpineSkeletonModules` 继续保持 12 个主 skeleton 的精确 glob。
-- 从 `apps/game002/src/generated/symbol-value-resources.generated.ts` 读取 manifest 派生的 skeleton/atlas/texture module maps；不得新增 `{CN_1,CN_2,CN_3,CN_4}` 手写 glob，也不得按 tier index 拼文件名。
+- 从 `apps/game002/src/generated/symbol-value-resources.generated.ts` 读取 manifest 派生的 skeleton/atlas/texture/value-image module maps；不得新增 `{CN_1,CN_2,CN_3,CN_4}` 手写 glob，也不得按 tier index 拼文件名。
 - `Game002SkinConfig` 增加 rendercore parsed value-presentation resources 或创建 presenter 所需的 generated module maps。
 - 调用 rendercore resolver；app 不解析 tiers，不写阈值，不直接依赖 Spine runtime。
 
 修改 `apps/game002/src/loading-resources.ts`：
 
-- 从 generated closure 枚举 manifest 实际引用的 skeleton/atlas/texture URL；resource id 由规范化 manifest path 稳定派生，不能假设 `CN_数字`。
+- 从 generated closure 枚举 manifest 实际引用的 skeleton/atlas/texture/value-image URL；resource id 由规范化 manifest path 稳定派生，不能假设 `CN_数字`。
 - 与主 symbol 已加载的 `Symbol.atlas` / `Symbol.png` 路径相同则按规范化资源 path 去重，只加载一次；未来 tier 使用独立 atlas/texture 时自动进入闭包。
 - 不用 `*.json` 宽泛 glob；未被 manifest 引用的 `Nearwin1..3`、`WM_Fx`、BG skeleton 和其它 JSON 仍不能混入。
 - loading 99%/100% 和 prepared session 合同不变。
@@ -851,9 +852,9 @@ apps/symbolsviewer/README.md
 
 - `game002-s3` 主 symbol selector 仍只有 13 项；任何 tier resource 都不成为独立 symbol 选项。
 - `apps/symbolsviewer/package.json` 新增 generate/check scripts，使用第 5.4 节同一通用 generator 产出 `apps/symbolsviewer/src/generated/game002-symbol-value-resources.generated.ts`；build/dev/test/typecheck 前生成，严格验收先 check。
-- viewer 从 generated closure 加载 manifest 实际引用的任意 skeleton/atlas/texture；不得写 `{CN_1,CN_2,CN_3,CN_4}` glob、固定数组或文件名 switch。
+- viewer 从 generated closure 加载 manifest 实际引用的任意 skeleton/atlas/texture/value-image；不得写 `{CN_1,CN_2,CN_3,CN_4}` glob、固定数组或文件名 switch。
 - 当选择的 symbol manifest 含 `valuePresentation`（当前只有 CN）时显示一个 positive integer `Value` 输入和 Apply/Clear；默认示例值用 `25`，便于看到 CN_2。
-- viewer 只调用 rendercore public presenter/resolver，不能复制 tiers、阈值、Spine player、geometry mapping 或 text style。
+- viewer 只调用 rendercore public presenter/resolver，不能复制 tiers、阈值、Spine player、geometry mapping、text/image display 或 style。
 - 输入 `9/10/99/100/999/1000` 时 viewer snapshot 按当前 manifest 显示正确 tier；另用测试 manifest 验证 1/3/5 档与任意资源名。非法值直接显示错误，不钳制。
 - 切 set、切 symbol、reset、destroy 时清理 value presentation；普通 symbol 不显示/不启用 Value 控件。
 - viewer 的 value presentation 与普通 state controls 分开；本任务只支持 manifest 配置的 tier loop animation，不把 appear/win 按钮映射到资源中未配置的其它动画。
@@ -890,9 +891,9 @@ agents.md
 
 - 它们仍不属于主 display set，也不能被宽泛 glob 当 symbol 接入；
 - 它们现在只是当前 `CN.valuePresentation` manifest 实例精确引用的新 Spine 资源；实现不得固定四档或依赖 `CN_数字` 命名；
-- rendercore 拥有通用 manifest tier/player/text 生命周期；
+- rendercore 拥有通用 manifest tier/player/font-image display 生命周期；
 - game002 app 只拥有 `bg-gencoins` / `CN` otherScene 映射；
-- tier 数量、阈值、资源路径/命名和文字样式不得在 app 建第二份表；
+- tier 数量、阈值、资源路径/命名和 font/image 显示样式不得在 app 建第二份表；
 - manifest 改动后必须重生成 game002/symbolsviewer 的精确 Vite/loading closure，禁止用宽泛 glob 代替；
 - 当前工作区新美术不得被旧资源覆盖。
 
@@ -925,7 +926,7 @@ rg -n '@slotclientengine/logiccore|@esotericsoftware/spine-pixi-v8' apps/game002
 1. 记录 git 状态，遍历当前 manifest 引用验证 Spine version、configured animation、configured slot 和 atlas page；不做资源 SHA/hash 校验。
 2. 在 manifest 定义 `CN.valuePresentation` 当前配置实例，同时用中性 fixture 固定“档数/命名可配置”合同。
 3. 扩展 rendercore strict parser、资源 resolver、manifest metadata preservation 和 Vite resource-closure generator，并先完成 1/3/5 档任意命名单测。
-4. 完成通用 presenter、text、lifecycle 和 fake target 测试；idle player pool 仅在确有性能证据时作为可选优化，未启用时必须逐实例可靠释放。
+4. 完成通用 presenter、font/image display、缺图失败、lifecycle 和 fake target 测试；idle player pool 仅在确有性能证据时作为可选优化，未启用时必须逐实例可靠释放。
 5. 生成并接入 game002/symbolsviewer 精确资源模块，完成 loading/static-dist 闭包；不得新增固定名字 glob。
 6. 完成 game002 `bg-gencoins/CN` sequence 与附件样例 fixture。
 7. 接入 adapter prepare/discard/clear/destroy、target presentation matrix 和 z-order。
@@ -948,7 +949,7 @@ for file in \
   assets/game002-s3/CN_3.json \
   assets/game002-s3/CN_4.json; do
   jq -e '.skeleton.spine | test("^4\\.3(\\.|$)")' "$file"
-  jq -e '.animations.Idle != null' "$file"
+  jq -e '.animations.Start != null and .animations.Loop != null' "$file"
   jq -e '[.slots[].name] | index("Num") != null' "$file"
 done
 
@@ -1050,7 +1051,7 @@ CI=true pnpm --filter game002 dev -- --host 127.0.0.1 --port 5206
 - 数字居中可读，不带 `$`，绑定在当前 tier Spine 的 `Num` slot 下并明显跟随该 slot/bone 动画，不是独立同级 overlay；
 - CN value 位于实际 reel slot 内、bg-win result 金额下，global win-amount 仍在最上层；
 - bg-win 首轮/lingering、win-amount 点击、下一 spin clear 都没有回归；
-- 横窄、横宽、竖屏 resize 后 CN art/text 仍跟随对应 cell；
+- 横窄、横宽、竖屏 resize 后 CN art/完整数值图片仍跟随对应 cell；
 - 非 CN 不显示数字；非法服务端数据显式失败，不静默显示基础 CN。
 
 再启动 symbolsviewer：
@@ -1079,11 +1080,11 @@ CI=true pnpm --filter symbolsviewer dev -- --host 127.0.0.1 --port 5209
 
 ### 13.2 manifest 与新美术
 
-- [ ] CN 顶层无 normal/state；`CN.valuePresentation` 是 defaultValues、reelStates、tier 数量、阈值、Spine 路径/命名、文字 slot/local offset 和样式唯一来源。
+- [ ] CN 顶层无 normal/state；`CN.valuePresentation` 是 defaultValues、appearPlayback、reelStates、tier 数量、阈值、Spine 路径/命名、font/image 类型、图片前缀、slot/local offset 和样式唯一来源。
 - [ ] 通用实现支持任意非空档数；当前实例边界精确为 `<10/<100/<1000/unbounded`。
 - [ ] 当前 CN_1..4 以及未来任意 tier resources 都不是主 display symbols。
 - [ ] 不做资源 SHA/hash 校验；工作区保护确认没有触发资源覆盖流程。
-- [ ] 遍历 manifest 实际资源校验 4.3.x、configured animation、configured `Num` slot、atlas/texture；没有固定四文件循环。
+- [ ] 遍历 manifest 实际资源校验 4.3.x、configured animation、configured `Num` slot、atlas/texture 与完整数值图片；没有固定四文件循环或缺图字体回退。
 - [ ] generator rerun 不丢 valuePresentation、animations、renderPriority。
 - [ ] game002/symbolsviewer generated closure 均通过 `--check`，loading/build/dist 精确包含 manifest 引用资源，不只是 source 文件存在。
 - [ ] 1/3/5 档和任意资源名 fixture 不需要修改 production TypeScript；未引用 JSON 没有因宽泛 glob 入包。
@@ -1095,6 +1096,8 @@ CI=true pnpm --filter symbolsviewer dev -- --host 127.0.0.1 --port 5209
 - [ ] 官方 Spine player/parser/cache 被复用，无第二 renderer/canvas。
 - [ ] 多 CN 独立实例、持续 update、clear/pool/destroy 无串值泄漏。
 - [ ] 无静态/首帧/normal/default tier fallback。
+- [ ] `RenderGridCellReelSet` 逐格落地只对 manifest 显式 appear 的 symbol 播放一次 appear，完成后回 normal；完成边界等待 appear，普通 `RenderReelSet` 不承载本次逐格行为。
+- [ ] game002-s3 当前除 BN 外的主 display symbol 均使用真实 `Start` appear；BN 无 Start 且不兜底。normal 有 `Loop` 时用 `Loop`，否则 `Idle`；当前 CO/CN tiers 用 Loop。
 
 ### 13.4 adapter 与交互
 
@@ -1132,7 +1135,7 @@ tasks/94-game002-other-scenes-tiered-cn-symbol-${utctime}.md
 
 1. UTC 完成时间、分支、HEAD、初始/最终工作区状态；
 2. 工作区资源保护措施及“不做 SHA/hash 验收”的明确结论；
-3. manifest 最终 schema、顶层 normal/state 移除、reelStates、可配置档数/阈值/资源命名、当前四档实例、raw text、configured `Num` slot 和 Spine configured animation；
+3. manifest 最终 schema、顶层 normal/state 移除、reelStates、可配置档数/阈值/资源命名、当前四档实例、font/image 显示类型、完整数值图片前缀、configured `Num` slot 和 Spine configured animation；
 4. rendercore parser/resolver/presenter/pool/lifecycle 实际实现；
 5. game002 otherScene mapping、fixture、adapter z-order/prepare/discard/target-slot/clear；
 6. game002/symbolsviewer generated Vite/loading closure、`--check` 和任意命名/档数测试；
@@ -1151,7 +1154,7 @@ tasks/94-game002-other-scenes-tiered-cn-symbol-${utctime}.md
 - 不把当前 `CN_1..CN_4` 或未来任何 tier resource 加入 paytable、game config symbolCodes、主 display set 或 reels。
 - 不把 tier 数量、阈值或资源 basename 固定在 rendercore/game002/symbolsviewer 手写 production source；当前四档只是一份 manifest 配置。
 - 不接入 `Nearwin1..3`、`WM_Fx` 或其它当前非主资源。
-- 不为 CN tier 猜测 `Win/Start/Collect/Feature` 业务语义。
+- 不为 CN tier 猜测 `Win/Collect/Feature` 业务语义；`Start` 只用于本计划已经明确的 grid-cell 落地 appear。
 - 不支持 Spine 4.2/3.8，不手写 adapter，不增加静态或首帧 fallback。
 - 不改金额 formatter、bg-win result carousel 或 global win-amount 合同。
 - 不重新导出、压缩、格式化或替换用户提供的新美术资源。

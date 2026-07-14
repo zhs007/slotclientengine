@@ -1,4 +1,4 @@
-import { Container, Text } from "pixi.js";
+import { Container } from "pixi.js";
 import {
   createOfficialSpinePlayer,
   validateOfficialSpineResource,
@@ -6,6 +6,7 @@ import {
 } from "../spine/runtime-player.js";
 import { SymbolAssetError } from "../symbol/errors.js";
 import {
+  createSymbolValuePresentationImagePath,
   parseSymbolStateTextureManifest,
   type ParseSymbolStateTextureManifestOptions,
 } from "../symbol/manifest.js";
@@ -18,12 +19,17 @@ import type {
   SymbolValuePresentationTierResource,
   SymbolValuePresenter,
 } from "./types.js";
+import {
+  assertSymbolValueDisplayResource,
+  createSymbolValueDisplay,
+} from "./value-display.js";
 
 export interface CreateSymbolValuePresentationResourcesOptions extends ParseSymbolStateTextureManifestOptions {
   readonly manifest: unknown;
   readonly spineSkeletonModules: Readonly<Record<string, unknown>>;
   readonly spineAtlasModules: Readonly<Record<string, string>>;
   readonly spineTextureModules: Readonly<Record<string, string>>;
+  readonly textImageModules?: Readonly<Record<string, string>>;
 }
 
 export interface SymbolValuePresentationPlayer extends RendercoreSpineSlotPlayer {}
@@ -45,6 +51,10 @@ export function createSymbolValuePresentationResourcesFromManifest(
   const skeletons = createModuleMap(options.spineSkeletonModules, "skeleton");
   const atlases = createModuleMap(options.spineAtlasModules, "atlas");
   const textures = createModuleMap(options.spineTextureModules, "texture");
+  const textImages = createModuleMap(
+    options.textImageModules ?? {},
+    "text image",
+  );
   const resources = Object.entries(manifest.symbols).flatMap(
     ([symbol, manifestSymbol]) => {
       const presentation = manifestSymbol.valuePresentation;
@@ -73,7 +83,10 @@ export function createSymbolValuePresentationResourcesFromManifest(
               atlasText,
               textureUrls: { [atlasPage]: textureUrl },
             },
-            requiredAnimations: [tier.animation.playback.animationName],
+            requiredAnimations: [
+              tier.animation.playback.animationName,
+              presentation.appearPlayback.animationName,
+            ],
             requiredSlots: [presentation.text.slot],
           });
         } catch (error) {
@@ -92,14 +105,38 @@ export function createSymbolValuePresentationResourcesFromManifest(
           atlasPage,
         });
       });
+      const text = presentation.text;
+      const textImageUrls =
+        text.type === "image"
+          ? Object.freeze(
+              Object.fromEntries(
+                presentation.defaultValues.map((value) => {
+                  const path = createSymbolValuePresentationImagePath(
+                    text,
+                    value,
+                  );
+                  return [
+                    value,
+                    requireStringModule(
+                      textImages,
+                      path,
+                      `${symbol} value image ${value}`,
+                    ),
+                  ];
+                }),
+              ),
+            )
+          : Object.freeze({});
       return [
         [
           symbol,
           Object.freeze({
             symbol,
             defaultValues: presentation.defaultValues,
+            appearPlayback: presentation.appearPlayback,
             tiers: Object.freeze(tiers),
-            text: presentation.text,
+            text,
+            textImageUrls,
           }),
         ] as const,
       ];
@@ -128,7 +165,7 @@ interface PreparedInternal {
 
 interface ActiveEntry {
   readonly prepared: PreparedEntry;
-  readonly label: Text;
+  readonly label: Container;
 }
 
 class SymbolValuePresenterModel implements SymbolValuePresenter {
@@ -171,6 +208,10 @@ class SymbolValuePresenterModel implements SymbolValuePresenter {
             `Symbol "${item.symbol}" has no valuePresentation resources.`,
           );
         }
+        assertSymbolValueDisplayResource({
+          value: item.value,
+          resource: presentation,
+        });
         const tierIndex = presentation.tiers.findIndex(
           (tier) =>
             tier.maxExclusive === undefined || item.value < tier.maxExclusive,
@@ -256,20 +297,12 @@ class SymbolValuePresenterModel implements SymbolValuePresenter {
           geometry.centerY + (transform?.y ?? 0),
         );
         entry.player.view.scale.set(transform?.scale ?? 1);
-        const textSpec = this.#resources[entry.item.symbol].text;
-        const label = new Text({
-          text: String(entry.item.value),
-          style: {
-            fontFamily: textSpec.fontFamily,
-            fontSize: textSpec.fontSize,
-            fontWeight: textSpec.fontWeight as never,
-            fill: textSpec.fill,
-            stroke: { color: textSpec.stroke, width: textSpec.strokeWidth },
-            align: "center",
-          },
+        const valueResource = this.#resources[entry.item.symbol];
+        const textSpec = valueResource.text;
+        const label = createSymbolValueDisplay({
+          value: entry.item.value,
+          resource: valueResource,
         });
-        label.anchor.set(0.5);
-        label.position.set(textSpec.x, textSpec.y);
         entry.player.attachSlotObject({
           slot: textSpec.slot,
           object: label,

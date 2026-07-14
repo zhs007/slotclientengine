@@ -1,6 +1,7 @@
 import type { Container } from "pixi.js";
 import type { RenderVisibleSymbolGeometrySnapshot } from "../reel/types.js";
 import type {
+  SymbolManifestAnimationPlaybackSpec,
   SymbolManifestSpineAnimationSpec,
   SymbolValuePresentationTextSpec,
 } from "../symbol/manifest.js";
@@ -25,8 +26,10 @@ export interface SymbolValuePresentationTierResource {
 export interface SymbolValuePresentationResource {
   readonly symbol: string;
   readonly defaultValues: readonly number[];
+  readonly appearPlayback: SymbolManifestAnimationPlaybackSpec;
   readonly tiers: readonly SymbolValuePresentationTierResource[];
   readonly text: SymbolValuePresentationTextSpec;
+  readonly textImageUrls: Readonly<Record<number, string>>;
 }
 
 export type SymbolValuePresentationResourceMap = Readonly<

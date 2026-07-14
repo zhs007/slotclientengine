@@ -47,6 +47,7 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
   readonly #animationResolver: SymbolAnimationResolver;
   readonly #requiredStateTextures: readonly SymbolStateId[];
   readonly #valuePresentationResources: SymbolValuePresentationResourceMap;
+  readonly #landingAppearSymbols: ReadonlySet<string>;
 
   constructor(options: ReelSymbolRegistryOptions) {
     const statePreset = options.statePreset ?? createDefaultSymbolStatePreset();
@@ -72,6 +73,10 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
     );
     const assetSymbols = Object.keys(options.assets).sort();
     const assetSymbolSet = new Set(assetSymbols);
+    const landingAppearSymbols = normalizeLandingAppearSymbols(
+      options.landingAppearSymbols ?? [],
+      paytableSymbolSet,
+    );
 
     const entriesByCode = new Map<number, ReelSymbolRegistryEntry>();
     const entriesBySymbol = new Map<string, ReelSymbolRegistryEntry>();
@@ -134,6 +139,13 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
         "Reel symbol registry requires at least one textured symbol.",
       );
     }
+    for (const symbol of landingAppearSymbols) {
+      if (!texturedSymbols.includes(symbol)) {
+        throw new ReelAssetError(
+          `Landing appear symbol "${symbol}" must be a textured symbol.`,
+        );
+      }
+    }
 
     const ignoredAssetsWithoutPaytable = assetSymbols.filter(
       (symbol) => !paytableSymbolSet.has(symbol),
@@ -146,6 +158,7 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
     this.#requiredStateTextures = requiredStateTextures;
     this.#valuePresentationResources =
       options.valuePresentationResources ?? Object.freeze({});
+    this.#landingAppearSymbols = landingAppearSymbols;
     this.#cellSize = calculateCellSize([...textureSetsByCode.values()]);
     this.#validation = Object.freeze({
       texturedSymbols: Object.freeze(texturedSymbols),
@@ -222,6 +235,7 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
       requiredStateTextures: this.#requiredStateTextures,
       animationResolver: this.#animationResolver,
       renderPriority: textureSet.renderPriority,
+      landingAppearEnabled: this.#landingAppearSymbols.has(entry.symbol),
       ...(valueResource === undefined
         ? {}
         : {
@@ -569,6 +583,33 @@ function normalizeSymbolRenderPriorities(
       );
     }
     normalized.set(symbol, renderPriority);
+  }
+  return normalized;
+}
+
+function normalizeLandingAppearSymbols(
+  symbols: readonly string[],
+  paytableSymbolSet: ReadonlySet<string>,
+): ReadonlySet<string> {
+  if (!Array.isArray(symbols)) {
+    throw new ReelAssetError("landingAppearSymbols must be an array.");
+  }
+  const normalized = new Set<string>();
+  for (const [index, symbol] of symbols.entries()) {
+    if (typeof symbol !== "string" || symbol.trim().length === 0) {
+      throw new ReelAssetError(
+        `landingAppearSymbols[${index}] must be a non-empty string.`,
+      );
+    }
+    if (!paytableSymbolSet.has(symbol)) {
+      throw new ReelAssetError(
+        `Landing appear symbol "${symbol}" does not exist in paytable.`,
+      );
+    }
+    if (normalized.has(symbol)) {
+      throw new ReelAssetError(`Duplicate landing appear symbol "${symbol}".`);
+    }
+    normalized.add(symbol);
   }
   return normalized;
 }

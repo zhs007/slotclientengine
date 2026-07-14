@@ -283,6 +283,11 @@ describe("generate-symbol-state-textures script", () => {
                 },
                 valuePresentation: {
                   defaultValues: [1, 10, 100],
+                  appearPlayback: {
+                    mode: "animation",
+                    animationName: "Start",
+                    loop: false,
+                  },
                   reelStates: {
                     normal: {
                       kind: "transparent",
@@ -382,6 +387,11 @@ describe("generate-symbol-state-textures script", () => {
       expect(manifest.symbols.L1).not.toHaveProperty("disabled");
       expect(manifest.symbols.L1.valuePresentation).toEqual({
         defaultValues: [1, 10, 100],
+        appearPlayback: {
+          mode: "animation",
+          animationName: "Start",
+          loop: false,
+        },
         reelStates: {
           normal: { kind: "transparent", width: 200, height: 200 },
           spinBlur: "./L1.spinBlur.png",
@@ -403,6 +413,7 @@ describe("generate-symbol-state-textures script", () => {
           },
         ],
         text: {
+          type: "font",
           slot: "ValueSlot",
           x: 0,
           y: 0,

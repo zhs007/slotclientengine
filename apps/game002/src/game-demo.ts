@@ -71,6 +71,7 @@ export interface Game002ReelConfig {
   readonly missingAssetLabel: string;
   readonly symbolScales: ReelSymbolScaleMap;
   readonly symbolRenderPriorities: ReelSymbolRenderPriorityMap;
+  readonly landingAppearSymbols: readonly string[];
   readonly animationResolver: SymbolAnimationResolver;
   readonly symbolValuePresentationResources: SymbolValuePresentationResourceMap;
   readonly random: () => number;
@@ -92,6 +93,7 @@ export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   missingAssetLabel: GAME002_DEFAULT_SKIN.label,
   symbolScales: GAME002_SYMBOL_SCALES,
   symbolRenderPriorities: GAME002_SYMBOL_RENDER_PRIORITIES,
+  landingAppearSymbols: GAME002_DEFAULT_SKIN.landingAppearSymbols,
   animationResolver: GAME002_DEFAULT_SKIN.symbolAnimationResolver,
   symbolValuePresentationResources:
     GAME002_DEFAULT_SKIN.symbolValuePresentationResources,
@@ -177,6 +179,7 @@ export function createGame002ReelRuntime(
     emptySymbols: config.emptySymbols,
     symbolScales: config.symbolScales,
     symbolRenderPriorities: config.symbolRenderPriorities,
+    landingAppearSymbols: config.landingAppearSymbols,
     animationResolver: config.animationResolver,
     texturePolicy: {
       requiredStateTextures: GAME002_REQUIRED_STATE_TEXTURES,

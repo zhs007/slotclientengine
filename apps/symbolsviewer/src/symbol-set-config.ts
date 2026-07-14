@@ -33,6 +33,7 @@ import {
   symbolValueReelStateTextureModules,
   symbolValueSpineSkeletonModules,
   symbolValueSpineTextureModules,
+  symbolValueTextImageModules,
 } from "./generated/game002-symbol-value-resources.generated.js";
 
 export type SymbolSetId = "game002-s3" | "game003-s1" | "game003-bg-bar";
@@ -205,6 +206,7 @@ export const SYMBOL_SET_CONFIGS = Object.freeze([
         spineSkeletonModules: symbolValueSpineSkeletonModules,
         spineAtlasModules: symbolValueSpineAtlasModules,
         spineTextureModules: symbolValueSpineTextureModules,
+        textImageModules: symbolValueTextImageModules,
       }),
   }),
   Object.freeze({

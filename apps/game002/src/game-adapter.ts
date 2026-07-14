@@ -418,6 +418,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       const deltaSeconds = normalizeTickerDeltaSeconds(ticker);
       this.#backgroundPlayer.update(deltaSeconds);
       this.#symbolValuePresenter?.update(deltaSeconds);
+      const reelResult = this.#runtime.update(deltaSeconds);
       const pending = this.#pendingAnimation;
       if (!pending) {
         if (this.#winAmountPlayer?.isPlaying()) {
@@ -430,8 +431,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
         return;
       }
       if (pending.phase === "spinning") {
-        const result = this.#runtime.update(deltaSeconds);
-        if (!result.completed) {
+        if (!reelResult.completed) {
           return;
         }
         assertGame002ReelVisualMatchesTarget(

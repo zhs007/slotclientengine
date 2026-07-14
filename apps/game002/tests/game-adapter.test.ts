@@ -214,7 +214,7 @@ describe("game002 adapter", () => {
     expect(runtime.currentScene).toEqual(GAME002_SAMPLE_SPIN_SCENE);
   });
 
-  it("updates the background while idle and uses the same capped delta during spin", async () => {
+  it("updates the background and reels while idle and uses the same capped delta during spin", async () => {
     const fakeApp = createFakeApplication();
     const background = new FakeBackgroundPlayer();
     const runtime = new FakeRuntime();
@@ -228,7 +228,7 @@ describe("game002 adapter", () => {
 
     fakeApp.tick(5_000);
     expect(background.updateDeltas).toEqual([1 / 30]);
-    expect(runtime.updateDeltas).toEqual([]);
+    expect(runtime.updateDeltas).toEqual([1 / 30]);
 
     const pending = Promise.resolve(
       adapter.playSpin(createLogic(GAME002_SAMPLE_SPIN_SCENE)),

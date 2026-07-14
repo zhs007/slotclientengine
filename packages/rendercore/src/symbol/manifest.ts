@@ -70,10 +70,14 @@ export interface SymbolManifestSpineAnimationSpec {
   readonly transform?: SymbolManifestSpineAnimationTransform;
 }
 
-export interface SymbolValuePresentationTextSpec {
+export interface SymbolValuePresentationTextBaseSpec {
   readonly slot: string;
   readonly x: number;
   readonly y: number;
+}
+
+export interface SymbolValuePresentationFontTextSpec extends SymbolValuePresentationTextBaseSpec {
+  readonly type: "font";
   readonly fontFamily: string;
   readonly fontSize: number;
   readonly fontWeight: string;
@@ -81,6 +85,15 @@ export interface SymbolValuePresentationTextSpec {
   readonly stroke: string;
   readonly strokeWidth: number;
 }
+
+export interface SymbolValuePresentationImageTextSpec extends SymbolValuePresentationTextBaseSpec {
+  readonly type: "image";
+  readonly prefix: string;
+}
+
+export type SymbolValuePresentationTextSpec =
+  | SymbolValuePresentationFontTextSpec
+  | SymbolValuePresentationImageTextSpec;
 
 export interface SymbolValuePresentationReelStatesSpec {
   readonly normal: SymbolManifestTransparentNormal;
@@ -94,6 +107,7 @@ export interface SymbolValuePresentationTierSpec {
 
 export interface SymbolValuePresentationSpec {
   readonly defaultValues: readonly number[];
+  readonly appearPlayback: SymbolManifestAnimationPlaybackSpec;
   readonly reelStates: SymbolValuePresentationReelStatesSpec;
   readonly tiers: readonly SymbolValuePresentationTierSpec[];
   readonly text: SymbolValuePresentationTextSpec;
@@ -164,6 +178,11 @@ export interface CreateSymbolScaleMapFromManifestOptions extends ParseSymbolStat
 }
 
 export interface CreateSymbolRenderPriorityMapFromManifestOptions extends ParseSymbolStateTextureManifestOptions {
+  readonly manifest: unknown;
+  readonly displaySymbols?: readonly string[];
+}
+
+export interface CreateSymbolLandingAppearSymbolsFromManifestOptions extends ParseSymbolStateTextureManifestOptions {
   readonly manifest: unknown;
   readonly displaySymbols?: readonly string[];
 }
@@ -370,6 +389,7 @@ function parseValuePresentation(
   const record = assertRecord(value, `symbol "${symbol}" valuePresentation`);
   assertOnlyKnownKeys(record, `symbol "${symbol}" valuePresentation`, [
     "defaultValues",
+    "appearPlayback",
     "reelStates",
     "tiers",
     "text",
@@ -399,6 +419,16 @@ function parseValuePresentation(
   if (new Set(defaultValues).size !== defaultValues.length) {
     throw new SymbolAssetError(
       `Symbol "${symbol}" valuePresentation.defaultValues must not contain duplicates.`,
+    );
+  }
+  const appearPlayback = parseAnimationPlayback(
+    record.appearPlayback,
+    symbol,
+    "valuePresentation.appearPlayback",
+  );
+  if (appearPlayback.mode !== "animation" || appearPlayback.loop !== false) {
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" valuePresentation.appearPlayback must be a named non-looping animation.`,
     );
   }
   const rawReelStates = assertRecord(
@@ -481,28 +511,50 @@ function parseValuePresentation(
     record.text,
     `symbol "${symbol}" valuePresentation.text`,
   );
-  assertOnlyKnownKeys(text, `symbol "${symbol}" valuePresentation.text`, [
-    "slot",
-    "x",
-    "y",
-    "fontFamily",
-    "fontSize",
-    "fontWeight",
-    "fill",
-    "stroke",
-    "strokeWidth",
-  ]);
-  return Object.freeze({
-    defaultValues,
-    reelStates: Object.freeze({
-      normal,
-      states: Object.freeze(reelStateTextures),
-    }),
-    tiers,
-    text: Object.freeze({
-      slot: assertString(text.slot, "valuePresentation text slot"),
-      x: assertFiniteNumber(text.x, "valuePresentation text x"),
-      y: assertFiniteNumber(text.y, "valuePresentation text y"),
+  const textType = text.type ?? "font";
+  if (textType !== "font" && textType !== "image") {
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" valuePresentation.text.type must be "font" or "image".`,
+    );
+  }
+  const textBase = {
+    slot: assertString(text.slot, "valuePresentation text slot"),
+    x: assertFiniteNumber(text.x, "valuePresentation text x"),
+    y: assertFiniteNumber(text.y, "valuePresentation text y"),
+  };
+  let parsedText: SymbolValuePresentationTextSpec;
+  if (textType === "image") {
+    assertOnlyKnownKeys(text, `symbol "${symbol}" valuePresentation.text`, [
+      "type",
+      "slot",
+      "x",
+      "y",
+      "prefix",
+    ]);
+    parsedText = Object.freeze({
+      ...textBase,
+      type: "image",
+      prefix: assertManifestPathPrefix(
+        text.prefix,
+        "valuePresentation image prefix",
+      ),
+    });
+  } else {
+    assertOnlyKnownKeys(text, `symbol "${symbol}" valuePresentation.text`, [
+      "type",
+      "slot",
+      "x",
+      "y",
+      "fontFamily",
+      "fontSize",
+      "fontWeight",
+      "fill",
+      "stroke",
+      "strokeWidth",
+    ]);
+    parsedText = Object.freeze({
+      ...textBase,
+      type: "font",
       fontFamily: assertString(text.fontFamily, "valuePresentation fontFamily"),
       fontSize: assertFinitePositiveNumber(
         text.fontSize,
@@ -515,8 +567,30 @@ function parseValuePresentation(
         text.strokeWidth,
         "valuePresentation strokeWidth",
       ),
+    });
+  }
+  return Object.freeze({
+    defaultValues,
+    appearPlayback,
+    reelStates: Object.freeze({
+      normal,
+      states: Object.freeze(reelStateTextures),
     }),
+    tiers,
+    text: parsedText,
   });
+}
+
+export function createSymbolValuePresentationImagePath(
+  text: SymbolValuePresentationImageTextSpec,
+  value: number,
+): string {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new SymbolAssetError(
+      "Symbol value presentation image value must be a positive safe integer.",
+    );
+  }
+  return `${text.prefix}${value}.png`;
 }
 
 export function getSymbolDisplaySymbolsFromManifest(
@@ -642,6 +716,29 @@ export function createSymbolRenderPriorityMapFromManifest(
   return Object.freeze(
     Object.fromEntries(entries),
   ) satisfies ReelSymbolRenderPriorityMap;
+}
+
+export function createSymbolLandingAppearSymbolsFromManifest(
+  options: CreateSymbolLandingAppearSymbolsFromManifestOptions,
+): readonly string[] {
+  const manifest = parseSymbolStateTextureManifest(options.manifest, options);
+  const displaySymbols = Object.freeze([
+    ...(options.displaySymbols ?? Object.keys(manifest.symbols)),
+  ]);
+  return Object.freeze(
+    displaySymbols.filter((symbol) => {
+      const manifestSymbol = manifest.symbols[symbol];
+      if (!manifestSymbol) {
+        throw new SymbolAssetError(
+          `Symbol state texture manifest is missing "${symbol}".`,
+        );
+      }
+      return (
+        manifestSymbol.animations.appear !== undefined ||
+        manifestSymbol.valuePresentation?.appearPlayback !== undefined
+      );
+    }),
+  );
 }
 
 export function createSymbolVniAnimationResourcesFromManifest(
@@ -1422,6 +1519,21 @@ function assertManifestLocalFilePath(
     );
   }
   return path;
+}
+
+function assertManifestPathPrefix(value: unknown, label: string): string {
+  const prefix = assertString(value, label);
+  if (
+    !prefix.startsWith("./") ||
+    prefix.includes("\\") ||
+    prefix.includes("../") ||
+    prefix.slice(2).includes("/")
+  ) {
+    throw new SymbolAssetError(
+      `${label} must be a local ./basename prefix: ${prefix}.`,
+    );
+  }
+  return prefix;
 }
 
 function isLayerFileStem(stem: string): boolean {

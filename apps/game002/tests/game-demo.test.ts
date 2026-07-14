@@ -1,4 +1,46 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { Container as PixiContainer } from "pixi.js";
+
+vi.mock(
+  "../../../packages/rendercore/src/spine/runtime-player.js",
+  async (importOriginal) => {
+    const actual =
+      await importOriginal<
+        typeof import("../../../packages/rendercore/src/spine/runtime-player.js")
+      >();
+    const { Container } = await import("pixi.js");
+    return {
+      ...actual,
+      createOfficialSpinePlayer: () => {
+        const view = new Container();
+        let loop = true;
+        let onceCompleted = false;
+        return {
+          view,
+          init: () => undefined,
+          play: (options: { readonly loop: boolean }) => {
+            loop = options.loop;
+            onceCompleted = false;
+          },
+          update: () => {
+            if (loop || onceCompleted) return { completed: false };
+            onceCompleted = true;
+            return { completed: true };
+          },
+          reset: () => undefined,
+          destroy: () => view.destroy({ children: true }),
+          attachSlotObject: (options: { readonly object: PixiContainer }) => {
+            view.addChild(options.object);
+          },
+          removeSlotObject: (object: PixiContainer) => {
+            view.removeChild(object);
+          },
+        };
+      },
+    };
+  },
+);
+
 import rawGameConfig from "../../../assets/gamecfg002/gameconfig.json";
 import { createSlotGameLogicResult } from "@slotclientengine/gameframeworks";
 import {
@@ -109,7 +151,7 @@ describe("game002-s3 reel runtime", () => {
     );
   });
 
-  it("keeps server CN values on target endpoints through the final stop", () => {
+  it("keeps server CN values on target endpoints through the final stop", async () => {
     const runtime = createRuntime(GAME002_SAMPLE_DEFAULT_SCENE);
     const cnCode = runtime.gameConfig.getSymbolCode("CN");
     expect(cnCode).toBe(8);
@@ -124,6 +166,7 @@ describe("game002-s3 reel runtime", () => {
     );
     let result = runtime.update(0.05);
     for (let index = 0; index < 80 && !result.completed; index += 1) {
+      await Promise.resolve();
       result = runtime.update(0.05);
     }
     expect(result.completed).toBe(true);
@@ -172,10 +215,22 @@ describe("game002-s3 reel runtime", () => {
     );
 
     let result = runtime.update(0.05);
+    let sawLandingAppear = runtime
+      .getVisualSnapshot()
+      .requestedStates.flat()
+      .includes("appear");
     for (let index = 0; index < 80 && !result.completed; index += 1) {
       result = runtime.update(0.05);
+      sawLandingAppear ||= runtime
+        .getVisualSnapshot()
+        .requestedStates.flat()
+        .includes("appear");
     }
+    expect(sawLandingAppear).toBe(true);
     expect(result.completed).toBe(true);
+    expect(runtime.getVisualSnapshot().requestedStates.flat()).not.toContain(
+      "appear",
+    );
     assertGame002ReelVisualMatchesTarget(
       runtime.getVisualSnapshot(),
       GAME002_SAMPLE_SPIN_SCENE,
@@ -254,13 +309,19 @@ function createRuntime(initialScene?: readonly (readonly number[])[]) {
       symbolScales: skin.symbolScales,
       symbolRenderPriorities: skin.symbolRenderPriorities,
       animationResolver: (context) =>
-        context.resolvedState === "win"
+        context.resolvedState === "appear"
           ? new ManualSymbolAni({
-              stateId: "win",
+              stateId: "appear",
               playback: "once",
               durationSeconds: 0.1,
             })
-          : normalResolver(context),
+          : context.resolvedState === "win"
+            ? new ManualSymbolAni({
+                stateId: "win",
+                playback: "once",
+                durationSeconds: 0.1,
+              })
+            : normalResolver(context),
     },
   });
 }

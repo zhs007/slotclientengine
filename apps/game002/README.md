@@ -34,9 +34,11 @@ http://127.0.0.1:5207/?skin=1&gamecode=GAME_CODE&token=TOKEN&businessid=guest&cl
 
 ## CN otherScene value presentation
 
-第 0 step 触发 `bg-gencoins` 时，app 通过 gameframeworks facade 读取且只读取一个 `usedOtherScenes`。目标 scene 的 `CN` 格必须对应 positive safe integer，非 `CN` 格必须精确为 `0`；缺 basic data、尺寸漂移、非法值或 code 不匹配都会在启动 reel 前或展示前显式失败。文本直接显示 `String(value)`，不走美元 formatter。
+第 0 step 触发 `bg-gencoins` 时，app 通过 gameframeworks facade 读取且只读取一个 `usedOtherScenes`。目标 scene 的 `CN` 格必须对应 positive safe integer，非 `CN` 格必须精确为 `0`；缺 basic data、尺寸漂移、非法值或 code 不匹配都会在启动 reel 前或展示前显式失败。raw value 不走美元 formatter；当前通过完整数值图片显示。
 
-档数、`maxExclusive`、默认候选数组、Spine skeleton/atlas/texture、animation、文字 `slot`/local offset 和样式唯一来自 `assets/game002-s3/symbol-state-textures.manifest.json`。当前默认候选为 `[1,2,5,10,25,50,100,250,500,1000]`，档位为 `<10`、`<100`、`<1000`、无上限四档。defaultScene 没有 otherScene 时，每个 CN 从候选数组取一个随机值；spin 的本地临时轮带也为每个 CN occurrence 固定一个候选值，使档位 Spine/数字跟随 reel slot 滚动而不是空白。目标 endpoint 在启动 spin 前写入服务器 otherScene 值，逐格落地到最终停轴都不回退为随机值或空值；未触发 `bg-gencoins` 时继续使用本地候选值。数字绑定每个 skeleton 真实存在的 `Num` slot，继承 slot/bone 动画；production TypeScript 不固定候选、四档、`CN_数字` 或 slot 名。CN value 属于实际 main-reel symbol，world 顺序仍为 background、main reels、`bg-win` carousel、global win-amount。
+档数、`maxExclusive`、默认候选数组、Spine skeleton/atlas/texture、animation、数字显示类型、图片前缀、`slot`/local offset 唯一来自 `assets/game002-s3/symbol-state-textures.manifest.json`。当前默认候选为 `[1,2,5,10,25,50,100,250,500,1000]`，档位为 `<10`、`<100`、`<1000`、无上限四档；`text.type=image,prefix=./` 把完整值映射为 `./${value}.png`。这 10 张图片进入精确 Vite/loading/dist 闭包；服务器返回其它值而没有对应图片时，prepare 在 spin 前显式失败，不回退 font。defaultScene 没有 otherScene 时，每个 CN 从候选数组取一个随机值；spin 的本地临时轮带也为每个 CN occurrence 固定一个候选值，使档位 Spine/数字图片跟随 reel slot 滚动而不是空白。目标 endpoint 在启动 spin 前写入服务器 otherScene 值，逐格落地到最终停轴都不回退为随机值或空值；未触发 `bg-gencoins` 时继续使用本地候选值。数字图片绑定每个 skeleton 真实存在的 `Num` slot，继承 slot/bone 动画；production TypeScript 不固定候选、四档、`CN_数字` 或 slot 名。CN value 属于实际 main-reel symbol，world 顺序仍为 background、main reels、`bg-win` carousel、global win-amount。
+
+逐格停轴动画由 `RenderGridCellReelSet` 统一调度：每格落地时，manifest 显式配置了 appear 的 symbol 先播放大小写精确的 `Start`，once 完成后回到 normal，整轮完成边界会等待落地 appear 结束。当前除 `BN` 外的主 display symbol 都配置 `Start`；`BN` skeleton 没有 `Start`，因此不触发 appear，也不使用 builtin/default fallback。normal animation 按资源真实能力配置：`CO` 与 `CN_1..CN_4` 使用 `Loop`，其它普通主 symbol 使用 `Idle`。CN 的 `Start -> Loop` 在同一个 Spine player 上切换，数字图片始终挂在 `Num` slot 下并受两段动画影响。
 
 - scale、render priority 和 animation 都从 `assets/game002-s3/symbol-state-textures.manifest.json` 派生；app 不维护第二份表。
 

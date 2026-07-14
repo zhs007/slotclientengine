@@ -4,6 +4,7 @@ import game002S3SpineTextureUrl from "../../../assets/game002-s3/Symbol.png?url"
 import game002S3StateTextureManifest from "../../../assets/game002-s3/symbol-state-textures.manifest.json";
 import {
   createDefaultSymbolAnimationResolver,
+  createSymbolLandingAppearSymbolsFromManifest,
   createSymbolManifestAnimationResolver,
   createSymbolValuePresentationResourcesFromManifest,
   type ReelSymbolRenderPriorityMap,
@@ -34,6 +35,7 @@ import {
   symbolValueReelStateTextureModules,
   symbolValueSpineSkeletonModules,
   symbolValueSpineTextureModules,
+  symbolValueTextImageModules,
 } from "./generated/symbol-value-resources.generated.js";
 
 const game002S3NormalModules = import.meta.glob(
@@ -84,6 +86,7 @@ export interface Game002SkinConfig {
   readonly emptySymbols: readonly string[];
   readonly symbolScales: ReelSymbolScaleMap;
   readonly symbolRenderPriorities: ReelSymbolRenderPriorityMap;
+  readonly landingAppearSymbols: readonly string[];
   readonly symbolAnimationResolver: SymbolAnimationResolver;
   readonly symbolValuePresentationResources: SymbolValuePresentationResourceMap;
   readonly gridLayout: Game002GridLayout;
@@ -113,6 +116,11 @@ const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
         stateTextureManifest: game002S3StateTextureManifest,
         displaySymbols: game002S3DisplaySymbols,
       }),
+      landingAppearSymbols: createSymbolLandingAppearSymbolsFromManifest({
+        manifest: game002S3StateTextureManifest,
+        displaySymbols: game002S3DisplaySymbols,
+        requiredStates: ["spinBlur", "disabled"],
+      }),
       symbolAnimationResolver: createSymbolManifestAnimationResolver({
         manifest: game002S3StateTextureManifest,
         requiredStates: ["spinBlur", "disabled"],
@@ -130,6 +138,7 @@ const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
           spineSkeletonModules: symbolValueSpineSkeletonModules,
           spineAtlasModules: symbolValueSpineAtlasModules,
           spineTextureModules: symbolValueSpineTextureModules,
+          textImageModules: symbolValueTextImageModules,
         }),
       gridLayout: GAME002_GRID_LAYOUT,
       focusRegion: GAME002_BACKGROUND_RESOURCE.manifest.adaptation.focusRect,

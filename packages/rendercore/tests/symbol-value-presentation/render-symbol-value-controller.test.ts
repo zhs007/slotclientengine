@@ -1,4 +1,4 @@
-import { Container, Texture } from "pixi.js";
+import { Container, Sprite, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import type { RendercoreSpineSlotPlayer } from "../../src/spine/runtime-player.js";
 import {
@@ -27,14 +27,28 @@ describe("render symbol value controller", () => {
     await flushPromises();
     expect(players).toHaveLength(1);
     expect(players[0].tierSkeleton).toBe("./low.json");
-    expect(players[0].plays).toEqual([{ animationName: "Idle", loop: true }]);
+    expect(players[0].plays).toEqual([{ animationName: "Loop", loop: true }]);
     expect(players[0].attached[0]).toMatchObject({ slot: "Num" });
     expect((players[0].attached[0]?.object as any).text).toBe("5");
     expect(symbol.overlayLayer.children).toEqual([players[0].view]);
     expect(symbol.baseLayer.visible).toBe(false);
 
+    expect(symbol.requestLandingAppear()).toBe(true);
+    expect(symbol.isLandingAppearActive()).toBe(true);
+    expect(players[0].plays.at(-1)).toEqual({
+      animationName: "Start",
+      loop: false,
+    });
+    players[0].completeNextUpdate = true;
     symbol.update(0.1);
-    expect(players[0].updates).toEqual([0.1]);
+    expect(symbol.isLandingAppearActive()).toBe(false);
+    expect(players[0].plays.at(-1)).toEqual({
+      animationName: "Loop",
+      loop: true,
+    });
+
+    symbol.update(0.1);
+    expect(players[0].updates).toEqual([0.1, 0.1]);
     symbol.setPresentationValue(25);
     expect(players[0].removed).toHaveLength(1);
     expect(players[0].destroyed).toBe(true);
@@ -84,12 +98,64 @@ describe("render symbol value controller", () => {
     expect(symbol.overlayLayer.children).toEqual([]);
     symbol.destroy();
   });
+
+  it("uses an exact value image and fails without a matching image", async () => {
+    const players: FakeSlotPlayer[] = [];
+    const resource = Object.freeze({
+      ...createResource(),
+      textImageUrls: Object.freeze({ 5: "/5.png" }),
+      text: Object.freeze({
+        type: "image" as const,
+        slot: "Num",
+        x: 2,
+        y: -3,
+        prefix: "./",
+      }),
+    });
+    const symbol = createSymbol((tier) => {
+      const player = new FakeSlotPlayer();
+      player.tierSkeleton = tier.spec.skeleton;
+      players.push(player);
+      return player;
+    }, resource);
+    symbol.init();
+    symbol.setPresentationValue(5);
+    await flushPromises();
+
+    const image = players[0].attached[0]?.object;
+    expect(image).toBeInstanceOf(Sprite);
+    expect(image?.position).toMatchObject({ x: 2, y: -3 });
+
+    symbol.reset();
+    expect(symbol.overlayLayer.children).toEqual([]);
+    expect(symbol.requestLandingAppear()).toBe(true);
+    expect(symbol.overlayLayer.children).toEqual([players[0].view]);
+    expect(players[0].attached).toHaveLength(1);
+    expect(players[0].attached[0]).toMatchObject({
+      slot: "Num",
+      object: image,
+    });
+    expect(players[0].removed).toEqual([]);
+    players[0].completeNextUpdate = true;
+    symbol.update(0.1);
+    expect(symbol.overlayLayer.children).toEqual([players[0].view]);
+    expect(players[0].attached).toHaveLength(1);
+    expect(players[0].removed).toEqual([]);
+
+    expect(() => symbol.setPresentationValue(25)).toThrow(
+      /value 25 has no configured image resource/,
+    );
+    expect(symbol.getPresentationValue()).toBeNull();
+    expect(players[1].destroyed).toBe(true);
+    symbol.destroy();
+  });
 });
 
 function createSymbol(
   createPlayer: (
     tier: SymbolValuePresentationResource["tiers"][number],
   ) => RendercoreSpineSlotPlayer,
+  resource: SymbolValuePresentationResource = createResource(),
 ): RenderSymbol {
   let symbol!: RenderSymbol;
   symbol = new RenderSymbol({
@@ -110,10 +176,11 @@ function createSymbol(
     },
     stateTextures: { spinBlur: Texture.WHITE },
     animationResolver: createDefaultSymbolAnimationResolver(),
+    landingAppearEnabled: true,
     valueControllerFactory: (root) =>
       createRenderSymbolValueController({
         root,
-        resource: createResource(),
+        resource,
         playerFactory: ({ tier }) => createPlayer(tier),
       }),
   });
@@ -131,7 +198,7 @@ function createResource(): SymbolValuePresentationResource {
         texture: "./Symbol.png",
         playback: Object.freeze({
           mode: "animation" as const,
-          animationName: "Idle",
+          animationName: "Loop",
           loop: true,
         }),
       }),
@@ -143,11 +210,18 @@ function createResource(): SymbolValuePresentationResource {
   return Object.freeze({
     symbol: "GOLD",
     defaultValues: Object.freeze([1, 5, 25]),
+    appearPlayback: Object.freeze({
+      mode: "animation" as const,
+      animationName: "Start",
+      loop: false,
+    }),
     tiers: Object.freeze([
       createTier("./low.json", 10),
       createTier("./high.json"),
     ]),
+    textImageUrls: Object.freeze({}),
     text: Object.freeze({
+      type: "font",
       slot: "Num",
       x: 2,
       y: -3,
@@ -169,6 +243,7 @@ class FakeSlotPlayer implements RendercoreSpineSlotPlayer {
   readonly updates: number[] = [];
   tierSkeleton = "";
   destroyed = false;
+  completeNextUpdate = false;
   readonly #initResult: Error | Promise<void> | undefined;
 
   constructor(initResult?: Error | Promise<void>) {
@@ -187,7 +262,9 @@ class FakeSlotPlayer implements RendercoreSpineSlotPlayer {
 
   update(deltaSeconds: number): { completed: boolean } {
     this.updates.push(deltaSeconds);
-    return { completed: false };
+    const completed = this.completeNextUpdate;
+    this.completeNextUpdate = false;
+    return { completed };
   }
 
   attachSlotObject(options: { slot: string; object: Container }): void {

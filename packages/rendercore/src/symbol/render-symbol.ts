@@ -35,6 +35,7 @@ export class RenderSymbol extends VisualEntity<void> {
   readonly #stateMachine: SymbolStateMachine;
   readonly #animationResolver: RenderSymbolOptions["animationResolver"];
   readonly #valueController: RenderSymbolValueController | null;
+  readonly #landingAppearEnabled: boolean;
   #currentAni: SymbolAni;
   #lastAniKey: string;
   #defaultScaleX = 1;
@@ -69,6 +70,7 @@ export class RenderSymbol extends VisualEntity<void> {
     this.overlayLayer = new Container();
     this.#stateMachine = new SymbolStateMachine(options.definition);
     this.#animationResolver = options.animationResolver;
+    this.#landingAppearEnabled = options.landingAppearEnabled ?? false;
 
     this.stateSprite.anchor.set(0.5);
     this.stateSprite.visible = false;
@@ -142,6 +144,24 @@ export class RenderSymbol extends VisualEntity<void> {
 
   getPresentationValue(): number | null {
     return this.#valueController?.getValue() ?? null;
+  }
+
+  requestLandingAppear(): boolean {
+    this.assertNotDestroyed();
+    if (!this.#landingAppearEnabled) return false;
+    if (this.#valueController) {
+      return this.#valueController.requestLandingAppear();
+    }
+    this.requestState("appear");
+    return true;
+  }
+
+  isLandingAppearActive(): boolean {
+    if (!this.#landingAppearEnabled) return false;
+    if (this.#valueController) {
+      return this.#valueController.isLandingAppearActive();
+    }
+    return this.#stateMachine.getSnapshot().resolvedState === "appear";
   }
 
   update(deltaSeconds: number): RenderSymbolUpdateResult {

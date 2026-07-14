@@ -1,4 +1,4 @@
-import { Text } from "pixi.js";
+import type { Container } from "pixi.js";
 import { assertValidDeltaSeconds } from "../symbol/ani.js";
 import type {
   RenderSymbol,
@@ -7,6 +7,7 @@ import type {
 import { createOfficialSpinePlayer } from "../spine/runtime-player.js";
 import type { RendercoreSpineSlotPlayer } from "../spine/runtime-player.js";
 import type { SymbolValuePresentationResource } from "./types.js";
+import { createSymbolValueDisplay } from "./value-display.js";
 
 export function createRenderSymbolValueController(options: {
   readonly root: RenderSymbol;
@@ -26,10 +27,12 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
   readonly #playerFactory: RenderSymbolValuePlayerFactory;
   #value: number | null = null;
   #player: ReturnType<typeof createOfficialSpinePlayer> | null = null;
-  #label: Text | null = null;
+  #tier: SymbolValuePresentationResource["tiers"][number] | null = null;
+  #label: Container | null = null;
   #initializationError: unknown = null;
   #requestId = 0;
   #initialized = false;
+  #landingAppearActive = false;
   #destroyed = false;
 
   constructor(options: {
@@ -60,7 +63,7 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     }
     if (value === this.#value) return;
     this.clearActive();
-    this.#value = value;
+    this.#value = null;
     if (value === null) return;
 
     const tier = this.#resource.tiers.find(
@@ -70,10 +73,23 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     if (!tier) {
       throw new Error(`No valuePresentation tier covers ${value}.`);
     }
-    const player = this.#playerFactory({ tier });
-    const label = createValueLabel(String(value), this.#resource);
+    let player: RendercoreSpineSlotPlayer | null = null;
+    let label: Container | null = null;
+    try {
+      player = this.#playerFactory({ tier });
+      label = createSymbolValueDisplay({
+        value,
+        resource: this.#resource,
+      });
+    } catch (error) {
+      label?.destroy();
+      player?.destroy();
+      throw error;
+    }
     const requestId = ++this.#requestId;
+    this.#value = value;
     this.#player = player;
+    this.#tier = tier;
     this.#label = label;
     const transform = tier.spec.transform;
     player.view.position.set(transform?.x ?? 0, transform?.y ?? 0);
@@ -88,10 +104,7 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
         ) {
           return;
         }
-        player.play({
-          animationName: tier.spec.playback.animationName,
-          loop: true,
-        });
+        this.playCurrentAnimation();
         player.attachSlotObject({
           slot: this.#resource.text.slot,
           object: label,
@@ -113,13 +126,32 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     return this.#value;
   }
 
+  requestLandingAppear(): boolean {
+    this.assertNotDestroyed();
+    if (this.#value === null || !this.#tier || !this.#player) return false;
+    this.#landingAppearActive = true;
+    if (this.#initialized) {
+      this.playCurrentAnimation();
+      this.syncPresentationView();
+    }
+    return true;
+  }
+
+  isLandingAppearActive(): boolean {
+    return this.#landingAppearActive;
+  }
+
   update(deltaSeconds: number): void {
     assertValidDeltaSeconds(deltaSeconds);
     this.assertNotDestroyed();
     if (this.#initializationError) throw this.#initializationError;
     if (this.#initialized && this.#player) {
-      this.#player.update(deltaSeconds);
-      this.syncVisibility();
+      const result = this.#player.update(deltaSeconds);
+      if (this.#landingAppearActive && result.completed) {
+        this.#landingAppearActive = false;
+        this.playCurrentAnimation();
+      }
+      this.syncPresentationView();
     }
   }
 
@@ -140,14 +172,38 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     this.#root.stateSprite.visible = false;
   }
 
+  private syncPresentationView(): void {
+    const player = this.#player;
+    if (!this.#initialized || !player) return;
+    if (player.view.parent !== this.#root.overlayLayer) {
+      this.#root.overlayLayer.addChild(player.view);
+    }
+    this.syncVisibility();
+  }
+
+  private playCurrentAnimation(): void {
+    const player = this.#player;
+    const tier = this.#tier;
+    if (!player || !tier) return;
+    const playback = this.#landingAppearActive
+      ? this.#resource.appearPlayback
+      : tier.spec.playback;
+    player.play({
+      animationName: playback.animationName,
+      loop: playback.loop,
+    });
+  }
+
   private clearActive(): void {
     this.#requestId += 1;
     const wasInitialized = this.#initialized;
     this.#initialized = false;
     this.#initializationError = null;
+    this.#landingAppearActive = false;
     const player = this.#player;
     const label = this.#label;
     this.#player = null;
+    this.#tier = null;
     this.#label = null;
     if (wasInitialized && player && label) player.removeSlotObject(label);
     label?.destroy();
@@ -159,25 +215,4 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
       throw new Error("Render symbol value controller was destroyed.");
     }
   }
-}
-
-function createValueLabel(
-  value: string,
-  resource: SymbolValuePresentationResource,
-): Text {
-  const text = resource.text;
-  const label = new Text({
-    text: value,
-    style: {
-      fontFamily: text.fontFamily,
-      fontSize: text.fontSize,
-      fontWeight: text.fontWeight as never,
-      fill: text.fill,
-      stroke: { color: text.stroke, width: text.strokeWidth },
-      align: "center",
-    },
-  });
-  label.anchor.set(0.5);
-  label.position.set(text.x, text.y);
-  return label;
 }

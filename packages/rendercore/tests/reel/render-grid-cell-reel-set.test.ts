@@ -116,8 +116,10 @@ describe("RenderGridCellReelSet", () => {
     expect(clipContent?.mask).toBeUndefined();
   });
 
-  it("resets to a scene, spins by cell order, skips appear and clears dimming", () => {
-    const reelSet = createGridReelSet();
+  it("plays configured appear per landed cell before normal and completion", () => {
+    const reelSet = createGridReelSet({
+      landingAppearSymbols: ["A", "B"],
+    });
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
 
     expect(reelSet.getVisibleScene()).toEqual(INITIAL_SCENE);
@@ -168,14 +170,9 @@ describe("RenderGridCellReelSet", () => {
     snapshot = reelSet.getSnapshot();
     expect(snapshot.cells.map((cell) => cell.phase)).toContain("landed");
     expect(
-      snapshot.cells.every((cell) => cell.requestedState !== "appear"),
-    ).toBe(true);
-    expect(
       snapshot.cells
-        .filter(
-          (cell) => cell.phase === "landed" && cell.requestedState !== null,
-        )
-        .every((cell) => cell.requestedState === "normal"),
+        .filter((cell) => cell.phase === "landed")
+        .some((cell) => cell.requestedState === "appear"),
     ).toBe(true);
     expect(reelSet.getVisibleScene()).toEqual(TARGET_SCENE);
     expect(snapshot.cells.some((cell) => cell.dimmingAlpha > 0)).toBe(true);
@@ -186,13 +183,8 @@ describe("RenderGridCellReelSet", () => {
     ).toBe(true);
     expect(getCellClipMask(reelSet, 0).visible).toBe(false);
 
-    for (let index = 0; index < 12 && !result.completed; index += 1) {
+    for (let index = 0; index < 20 && !result.completed; index += 1) {
       result = reelSet.update(0.05);
-      expect(
-        reelSet
-          .getSnapshot()
-          .cells.every((cell) => cell.requestedState !== "appear"),
-      ).toBe(true);
     }
 
     expect(result.completed).toBe(true);

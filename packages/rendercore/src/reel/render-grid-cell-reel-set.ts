@@ -404,7 +404,7 @@ export class RenderGridCellReelSet extends Container {
           planCell.axisPlan.finalY,
           [cell.targetPresentationValue],
         );
-        resetReelSlotSymbols(cell);
+        resetReelSlotSymbolsAndRequestLandingAppear(cell);
         this.syncLandedDimming(cell, planCell);
         this.setCellClipMask(cell, false);
         this.syncCellRenderOrder(cell);
@@ -448,6 +448,8 @@ export class RenderGridCellReelSet extends Container {
     plan: GridCellReelSpinPlan,
     deltaMs: number,
   ): void {
+    cell.reel.update(deltaMs / 1000);
+    this.syncCellRenderOrder(cell);
     if (cell.planCell) {
       this.syncLandedDimming(cell, cell.planCell);
     }
@@ -463,7 +465,7 @@ export class RenderGridCellReelSet extends Container {
       cell.dimOverlay.alpha = cell.fadeOutStartAlpha * (1 - progress);
     }
 
-    if (cell.dimOverlay.alpha <= 0) {
+    if (cell.dimOverlay.alpha <= 0 && !hasActiveLandingAppear(cell)) {
       cell.dimOverlay.alpha = 0;
       cell.phase = "completed";
     }
@@ -625,10 +627,20 @@ function createDimmingRows(
   );
 }
 
-function resetReelSlotSymbols(cell: RuntimeCell): void {
+function resetReelSlotSymbolsAndRequestLandingAppear(cell: RuntimeCell): void {
   for (const slot of cell.reel.getSlotSnapshots()) {
     slot.symbol?.reset();
+    if (slot.windowY === 0) slot.symbol?.requestLandingAppear();
   }
+}
+
+function hasActiveLandingAppear(cell: RuntimeCell): boolean {
+  return cell.reel
+    .getSlotSnapshots()
+    .some(
+      (slot) =>
+        slot.windowY === 0 && slot.symbol?.isLandingAppearActive() === true,
+    );
 }
 
 function parseScene(

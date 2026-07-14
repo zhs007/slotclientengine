@@ -109,7 +109,10 @@ export function createBasicLayout(): ReelLayout {
 
 export function createBasicRegistry(
   options: Partial<
-    Pick<ReelSymbolRegistryOptions, "symbolRenderPriorities" | "symbolScales">
+    Pick<
+      ReelSymbolRegistryOptions,
+      "landingAppearSymbols" | "symbolRenderPriorities" | "symbolScales"
+    >
   > = {},
 ): ReelSymbolRegistry {
   return createReelSymbolRegistry({

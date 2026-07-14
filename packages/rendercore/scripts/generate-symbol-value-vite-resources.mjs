@@ -107,6 +107,15 @@ export async function generateSymbolValueViteResources(options) {
         );
       }
     }
+    for (const manifestResourcePath of presentation.textImagePaths) {
+      await addResource(
+        resources,
+        seen,
+        manifestRoot,
+        "textImage",
+        manifestResourcePath,
+      );
+    }
   }
   const source = renderGeneratedSource(resources, outPath);
   if (options.check) {
@@ -137,6 +146,7 @@ function validatePresentation(symbol, value, states) {
   const record = assertRecord(value, `${symbol}.valuePresentation`);
   assertOnlyKnownKeys(record, `${symbol}.valuePresentation`, [
     "defaultValues",
+    "appearPlayback",
     "reelStates",
     "tiers",
     "text",
@@ -160,6 +170,25 @@ function validatePresentation(symbol, value, states) {
   if (new Set(defaultValues).size !== defaultValues.length) {
     throw new Error(
       `${symbol}.valuePresentation.defaultValues must be unique.`,
+    );
+  }
+  const appearPlayback = assertRecord(
+    record.appearPlayback,
+    `${symbol}.valuePresentation.appearPlayback`,
+  );
+  assertOnlyKnownKeys(
+    appearPlayback,
+    `${symbol}.valuePresentation.appearPlayback`,
+    ["mode", "animationName", "loop"],
+  );
+  if (
+    appearPlayback.mode !== "animation" ||
+    typeof appearPlayback.animationName !== "string" ||
+    appearPlayback.animationName.trim().length === 0 ||
+    appearPlayback.loop !== false
+  ) {
+    throw new Error(
+      `${symbol}.valuePresentation.appearPlayback must be a named non-looping animation.`,
     );
   }
   const reelStates = assertRecord(
@@ -290,17 +319,28 @@ function validatePresentation(symbol, value, states) {
     return { animation };
   });
   const text = assertRecord(record.text, `${symbol}.valuePresentation.text`);
-  assertOnlyKnownKeys(text, `${symbol}.valuePresentation.text`, [
-    "slot",
-    "x",
-    "y",
-    "fontFamily",
-    "fontSize",
-    "fontWeight",
-    "fill",
-    "stroke",
-    "strokeWidth",
-  ]);
+  const textType = text.type ?? "font";
+  if (textType !== "font" && textType !== "image") {
+    throw new Error(`${symbol} value text type must be font or image.`);
+  }
+  assertOnlyKnownKeys(
+    text,
+    `${symbol}.valuePresentation.text`,
+    textType === "image"
+      ? ["type", "slot", "x", "y", "prefix"]
+      : [
+          "type",
+          "slot",
+          "x",
+          "y",
+          "fontFamily",
+          "fontSize",
+          "fontWeight",
+          "fill",
+          "stroke",
+          "strokeWidth",
+        ],
+  );
   if (typeof text.slot !== "string" || text.slot.trim().length === 0) {
     throw new Error(`${symbol} value text slot must be non-empty.`);
   }
@@ -309,21 +349,30 @@ function validatePresentation(symbol, value, states) {
       throw new Error(`${symbol} value text ${key} must be finite.`);
     }
   }
-  for (const key of ["fontFamily", "fontWeight", "fill", "stroke"]) {
-    if (typeof text[key] !== "string" || text[key].trim().length === 0) {
-      throw new Error(`${symbol} value text ${key} must be non-empty.`);
+  if (textType === "font") {
+    for (const key of ["fontFamily", "fontWeight", "fill", "stroke"]) {
+      if (typeof text[key] !== "string" || text[key].trim().length === 0) {
+        throw new Error(`${symbol} value text ${key} must be non-empty.`);
+      }
+    }
+    for (const key of ["fontSize", "strokeWidth"]) {
+      if (
+        typeof text[key] !== "number" ||
+        !Number.isFinite(text[key]) ||
+        text[key] <= 0
+      ) {
+        throw new Error(`${symbol} value text ${key} must be positive.`);
+      }
     }
   }
-  for (const key of ["fontSize", "strokeWidth"]) {
-    if (
-      typeof text[key] !== "number" ||
-      !Number.isFinite(text[key]) ||
-      text[key] <= 0
-    ) {
-      throw new Error(`${symbol} value text ${key} must be positive.`);
-    }
-  }
-  return { reelStateTextures, tiers };
+  const textImagePaths =
+    textType === "image"
+      ? defaultValues.map(
+          (candidate) =>
+            `${assertManifestPathPrefix(text.prefix, `${symbol} value text prefix`)}${candidate}.png`,
+        )
+      : [];
+  return { reelStateTextures, tiers, textImagePaths };
 }
 
 async function addResource(
@@ -367,6 +416,7 @@ function resolveManifestResource(root, value, kind) {
     atlas: ".atlas",
     texture: ".png",
     stateTexture: ".png",
+    textImage: ".png",
   }[kind];
   if (extname(absolute) !== expected) {
     throw new Error(`${kind} path must end with ${expected}: ${value}.`);
@@ -376,7 +426,13 @@ function resolveManifestResource(root, value, kind) {
 
 function renderGeneratedSource(resources, outPath) {
   const imports = [];
-  const entries = { skeleton: [], atlas: [], texture: [], stateTexture: [] };
+  const entries = {
+    skeleton: [],
+    atlas: [],
+    texture: [],
+    stateTexture: [],
+    textImage: [],
+  };
   const loading = [];
   let index = 0;
   for (const resource of resources) {
@@ -417,14 +473,18 @@ function renderGeneratedSource(resources, outPath) {
       loading.push(
         renderLoadingResource(
           resource.manifestPath,
-          resource.kind === "stateTexture" ? "state-texture" : "texture",
+          resource.kind === "stateTexture"
+            ? "state-texture"
+            : resource.kind === "textImage"
+              ? "value-image"
+              : "texture",
           name,
         ),
       );
     }
     index += 1;
   }
-  return `${imports.join("\n")}${imports.length ? "\n\n" : ""}// 此文件由 generate-symbol-value-vite-resources.mjs 生成，禁止手改。\nexport const symbolValueSpineSkeletonModules = Object.freeze({\n${entries.skeleton.join("\n")}\n});\nexport const symbolValueSpineAtlasModules = Object.freeze({\n${entries.atlas.join("\n")}\n});\nexport const symbolValueSpineTextureModules = Object.freeze({\n${entries.texture.join("\n")}\n});\nexport const symbolValueReelStateTextureModules = Object.freeze({\n${entries.stateTexture.join("\n")}\n});\nexport const symbolValueLoadingResources = Object.freeze([\n${loading.join("\n")}\n]);\n`;
+  return `${imports.join("\n")}${imports.length ? "\n\n" : ""}// 此文件由 generate-symbol-value-vite-resources.mjs 生成，禁止手改。\nexport const symbolValueSpineSkeletonModules = Object.freeze({\n${entries.skeleton.join("\n")}\n});\nexport const symbolValueSpineAtlasModules = Object.freeze({\n${entries.atlas.join("\n")}\n});\nexport const symbolValueSpineTextureModules = Object.freeze({\n${entries.texture.join("\n")}\n});\nexport const symbolValueReelStateTextureModules = Object.freeze({\n${entries.stateTexture.join("\n")}\n});\nexport const symbolValueTextImageModules = Object.freeze({\n${entries.textImage.join("\n")}\n});\nexport const symbolValueLoadingResources = Object.freeze([\n${loading.join("\n")}\n]);\n`;
 }
 
 function renderLoadingResource(path, kind, name) {
@@ -450,6 +510,20 @@ function assertOnlyKnownKeys(record, label, allowed) {
     if (!set.has(key))
       throw new Error(`${label} declares unknown field "${key}".`);
   }
+}
+
+function assertManifestPathPrefix(value, label) {
+  if (
+    typeof value !== "string" ||
+    value.trim().length === 0 ||
+    !value.startsWith("./") ||
+    value.includes("\\") ||
+    value.includes("../") ||
+    value.slice(2).includes("/")
+  ) {
+    throw new Error(`${label} must be a local ./basename prefix.`);
+  }
+  return value;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

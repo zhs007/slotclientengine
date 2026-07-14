@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  createSymbolLandingAppearSymbolsFromManifest,
   createSymbolValuePresentationResourcesFromManifest,
   parseSymbolStateTextureManifest,
 } from "../../src/index.js";
@@ -34,14 +35,44 @@ describe("symbol value presentation manifest resources", () => {
       undefined,
     ]);
     expect(Object.isFrozen(presentation?.tiers)).toBe(true);
+    expect(presentation?.appearPlayback).toEqual({
+      mode: "animation",
+      animationName: "Start",
+      loop: false,
+    });
     expect(Object.isFrozen(presentation?.text)).toBe(true);
-    expect(presentation?.text.slot).toBe("Num");
+    expect(presentation?.text).toEqual({
+      type: "image",
+      slot: "Num",
+      x: 0,
+      y: 0,
+      prefix: "./",
+    });
     expect(Object.isFrozen(presentation?.reelStates)).toBe(true);
     expect(parsed.symbols.CN.normal).toEqual({
       kind: "transparent",
       width: 200,
       height: 200,
     });
+    expect(
+      createSymbolLandingAppearSymbolsFromManifest({
+        manifest,
+        displaySymbols: Object.keys(manifest.symbols),
+      }),
+    ).toEqual([
+      "WL",
+      "H1",
+      "H2",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "WM",
+      "CN",
+      "CM",
+      "CO",
+      "AF",
+    ]);
   });
 
   it("resolves and validates all current official Spine resources", () => {
@@ -59,6 +90,12 @@ describe("symbol value presentation manifest resources", () => {
         "./Symbol.atlas": readFileSync(new URL("Symbol.atlas", root), "utf8"),
       },
       spineTextureModules: { "./Symbol.png": "/Symbol.png" },
+      textImageModules: Object.fromEntries(
+        [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000].map((value) => [
+          `./${value}.png`,
+          `/${value}.png`,
+        ]),
+      ),
     });
     expect(resources.CN.tiers).toHaveLength(4);
     expect(resources.CN.tiers.map((tier) => tier.spec.skeleton)).toEqual([
@@ -67,6 +104,39 @@ describe("symbol value presentation manifest resources", () => {
       "./CN_3.json",
       "./CN_4.json",
     ]);
+    expect(resources.CN.textImageUrls).toEqual({
+      1: "/1.png",
+      2: "/2.png",
+      5: "/5.png",
+      10: "/10.png",
+      25: "/25.png",
+      50: "/50.png",
+      100: "/100.png",
+      250: "/250.png",
+      500: "/500.png",
+      1000: "/1000.png",
+    });
+  });
+
+  it("fails when an image-rendered value has no exact image module", () => {
+    const skeletons = Object.fromEntries(
+      ["CN_1", "CN_2", "CN_3", "CN_4"].map((name) => [
+        `./${name}.json`,
+        JSON.parse(readFileSync(new URL(`${name}.json`, root), "utf8")),
+      ]),
+    );
+    expect(() =>
+      createSymbolValuePresentationResourcesFromManifest({
+        manifest,
+        requiredStates: ["spinBlur", "disabled"],
+        spineSkeletonModules: skeletons,
+        spineAtlasModules: {
+          "./Symbol.atlas": readFileSync(new URL("Symbol.atlas", root), "utf8"),
+        },
+        spineTextureModules: { "./Symbol.png": "/Symbol.png" },
+        textImageModules: { "./1.png": "/1.png" },
+      }),
+    ).toThrow(/value image 2.*missing/i);
   });
 
   it("rejects a configured text slot missing from any tier skeleton", () => {
@@ -128,6 +198,12 @@ describe("symbol value presentation manifest resources", () => {
       (copy: any) => (copy.symbols.CN.valuePresentation.defaultValues = []),
       (copy: any) => (copy.symbols.CN.valuePresentation.defaultValues = [1, 1]),
       (copy: any) => (copy.symbols.CN.valuePresentation.defaultValues = [0, 1]),
+      (copy: any) =>
+        (copy.symbols.CN.valuePresentation.appearPlayback.loop = true),
+      (copy: any) => delete copy.symbols.CN.valuePresentation.appearPlayback,
+      (copy: any) => (copy.symbols.CN.valuePresentation.text.type = "video"),
+      (copy: any) =>
+        (copy.symbols.CN.valuePresentation.text.prefix = "../escape-"),
     ]) {
       const copy = structuredClone(manifest);
       mutate(copy);
@@ -145,6 +221,11 @@ function createGenericManifest(count: number) {
         scale: 1,
         valuePresentation: {
           defaultValues: [1, 10, 100],
+          appearPlayback: {
+            mode: "animation",
+            animationName: "Start",
+            loop: false,
+          },
           reelStates: {
             normal: { kind: "transparent", width: 200, height: 200 },
           },

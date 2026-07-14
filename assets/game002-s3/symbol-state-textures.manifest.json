@@ -333,6 +333,11 @@
       "scale": 1,
       "valuePresentation": {
         "defaultValues": [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000],
+        "appearPlayback": {
+          "mode": "animation",
+          "animationName": "Start",
+          "loop": false
+        },
         "reelStates": {
           "normal": {
             "kind": "transparent",
@@ -352,7 +357,7 @@
               "texture": "./Symbol.png",
               "playback": {
                 "mode": "animation",
-                "animationName": "Idle",
+                "animationName": "Loop",
                 "loop": true
               }
             }
@@ -366,7 +371,7 @@
               "texture": "./Symbol.png",
               "playback": {
                 "mode": "animation",
-                "animationName": "Idle",
+                "animationName": "Loop",
                 "loop": true
               }
             }
@@ -380,7 +385,7 @@
               "texture": "./Symbol.png",
               "playback": {
                 "mode": "animation",
-                "animationName": "Idle",
+                "animationName": "Loop",
                 "loop": true
               }
             }
@@ -393,22 +398,18 @@
               "texture": "./Symbol.png",
               "playback": {
                 "mode": "animation",
-                "animationName": "Idle",
+                "animationName": "Loop",
                 "loop": true
               }
             }
           }
         ],
         "text": {
+          "type": "image",
           "slot": "Num",
           "x": 0,
           "y": 0,
-          "fontFamily": "Arial",
-          "fontSize": 32,
-          "fontWeight": "900",
-          "fill": "#fff7d6",
-          "stroke": "#5a2500",
-          "strokeWidth": 4
+          "prefix": "./"
         }
       }
     },
@@ -455,7 +456,7 @@
           "texture": "./Symbol.png",
           "playback": {
             "mode": "animation",
-            "animationName": "Idle",
+            "animationName": "Loop",
             "loop": true
           }
         },

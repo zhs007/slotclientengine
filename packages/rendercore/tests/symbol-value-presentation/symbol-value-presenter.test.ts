@@ -69,6 +69,36 @@ describe("generic symbol value presenter", () => {
         { x: 0, y: 0, symbol: "GOLD", symbolCode: 7, value: 0 },
       ]),
     ).rejects.toThrow(/positive safe integer/);
+    const fontResources = createResources();
+    const imageResources = Object.freeze({
+      GOLD: Object.freeze({
+        ...fontResources.GOLD,
+        textImageUrls: Object.freeze({ 1: "/1.png" }),
+        text: Object.freeze({
+          type: "image" as const,
+          slot: "ValueSlot",
+          x: 0,
+          y: 0,
+          prefix: "./",
+        }),
+      }),
+    });
+    let imagePlayerCreated = false;
+    const imagePresenter = createSymbolValuePresenter({
+      resources: imageResources,
+      target: createTarget(),
+      playerFactory: () => {
+        imagePlayerCreated = true;
+        return new FakePlayer();
+      },
+    });
+    await expect(
+      imagePresenter.prepare([
+        { x: 0, y: 0, symbol: "GOLD", symbolCode: 7, value: 10 },
+      ]),
+    ).rejects.toThrow(/value 10 has no configured image resource/);
+    expect(imagePlayerCreated).toBe(false);
+    imagePresenter.destroy();
     expect(() => presenter.update(Number.NaN)).toThrow(/finite non-negative/);
     expect(() => presenter.show({ itemCount: 0, items: [] })).toThrow(
       /foreign/,
@@ -175,12 +205,19 @@ function createResources(): SymbolValuePresentationResourceMap {
     GOLD: Object.freeze({
       symbol: "GOLD",
       defaultValues: Object.freeze([1, 10, 100]),
+      appearPlayback: Object.freeze({
+        mode: "animation" as const,
+        animationName: "Start",
+        loop: false,
+      }),
       tiers: Object.freeze([
         createTier("./bronze.json", 10),
         createTier("./ruby.json", 100),
         createTier("./ultra.json"),
       ]),
+      textImageUrls: Object.freeze({}),
       text: Object.freeze({
+        type: "font",
         slot: "ValueSlot",
         x: 0,
         y: 0,
