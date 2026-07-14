@@ -8,6 +8,7 @@ import {
   createGame002LoadingResources,
   readGame002RuntimeModule,
 } from "../src/loading-resources.js";
+import { symbolValueLoadingResources } from "../src/generated/symbol-value-resources.generated.js";
 
 describe("game002 loading resources", () => {
   it("loads the exact s3 symbol, Spine and win-amount closure before runtime", () => {
@@ -30,7 +31,6 @@ describe("game002 loading resources", () => {
       "L3",
       "L4",
       "WM",
-      "CN",
       "CM",
       "CO",
       "AF",
@@ -44,6 +44,9 @@ describe("game002 loading resources", () => {
         `game002-symbol-disabled-pngs:${symbol}.disabled.png`,
       );
     }
+    expect(ids).not.toContain("game002-symbol-normal-pngs:CN.png");
+    expect(ids).toContain("game002-symbol-value-state-texture:CN.spinBlur.png");
+    expect(ids).toContain("game002-symbol-value-state-texture:CN.disabled.png");
     for (const symbol of [
       "WL",
       "H1",
@@ -62,10 +65,19 @@ describe("game002 loading resources", () => {
     }
     expect(
       ids.filter((id) => id.startsWith("game002-symbol-normal-pngs:")),
-    ).toHaveLength(13);
+    ).toHaveLength(12);
     expect(
       ids.filter((id) => id.startsWith("game002-symbol-spine-skeletons:")),
     ).toHaveLength(12);
+    const valueSkeletons = symbolValueLoadingResources.filter(
+      (resource) => resource.kind === "skeleton",
+    );
+    expect(valueSkeletons).toHaveLength(4);
+    for (const resource of valueSkeletons) {
+      expect(ids).toContain(
+        `game002-symbol-value-skeleton:${resource.path.slice(2)}`,
+      );
+    }
     expect(ids).toEqual(
       expect.arrayContaining([
         "game002-background-manifest",
@@ -109,10 +121,6 @@ describe("game002 loading resources", () => {
         .sort(),
     ).toEqual(referencedAssetIds);
     for (const excluded of [
-      "CN_1",
-      "CN_2",
-      "CN_3",
-      "CN_4",
       "Nearwin",
       "WM_Fx",
       "Reel_CO_CM",

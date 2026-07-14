@@ -20,6 +20,15 @@ export interface RendercoreSpinePlayer {
   destroy(): void;
 }
 
+export interface RendercoreSpineSlotPlayer extends RendercoreSpinePlayer {
+  attachSlotObject(options: {
+    readonly slot: string;
+    readonly object: Container;
+    readonly followSlotColor?: boolean;
+  }): void;
+  removeSlotObject(object: Container): void;
+}
+
 export interface OfficialSpinePlayerResource {
   readonly skeleton: unknown;
   readonly atlasText: string;
@@ -29,11 +38,13 @@ export interface OfficialSpinePlayerResource {
 export interface ValidatedSpineResource {
   readonly atlasPages: readonly string[];
   readonly animationNames: readonly string[];
+  readonly slotNames: readonly string[];
 }
 
 export function validateOfficialSpineResource(options: {
   readonly resource: OfficialSpinePlayerResource;
   readonly requiredAnimations: readonly string[];
+  readonly requiredSlots?: readonly string[];
 }): ValidatedSpineResource {
   readSupportedSpineSkeletonVersion(options.resource.skeleton);
   const atlas = createTextureAtlas(options.resource.atlasText);
@@ -58,23 +69,29 @@ export function validateOfficialSpineResource(options: {
       throw new Error(`Spine animation "${animationName}" was not found.`);
     }
   }
+  for (const slotName of options.requiredSlots ?? []) {
+    if (!skeletonData.findSlot(slotName)) {
+      throw new Error(`Spine slot "${slotName}" was not found.`);
+    }
+  }
   return Object.freeze({
     atlasPages,
     animationNames: Object.freeze(
       skeletonData.animations.map((animation) => animation.name),
     ),
+    slotNames: Object.freeze(skeletonData.slots.map((slot) => slot.name)),
   });
 }
 
 export function createOfficialSpinePlayer(options: {
   readonly resource: OfficialSpinePlayerResource;
   readonly createError?: (message: string) => Error;
-}): RendercoreSpinePlayer {
+}): RendercoreSpineSlotPlayer {
   readSupportedSpineSkeletonVersion(options.resource.skeleton);
   return new OfficialSpinePlayer(options);
 }
 
-class OfficialSpinePlayer implements RendercoreSpinePlayer {
+class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
   readonly view = new Container();
   readonly #resource: OfficialSpinePlayerResource;
   readonly #createError: (message: string) => Error;
@@ -182,6 +199,26 @@ class OfficialSpinePlayer implements RendercoreSpinePlayer {
     this.assertNotDestroyed();
     this.getSpine().update(deltaSeconds);
     return Object.freeze({ completed: this.#completed });
+  }
+
+  attachSlotObject(options: {
+    readonly slot: string;
+    readonly object: Container;
+    readonly followSlotColor?: boolean;
+  }): void {
+    this.assertNotDestroyed();
+    if (typeof options.slot !== "string" || options.slot.trim().length === 0) {
+      throw this.#createError("Spine slot name must be non-empty.");
+    }
+    this.getSpine().addSlotObject(options.slot, options.object, {
+      followAttachmentTimeline: false,
+      followSlotColor: options.followSlotColor ?? true,
+    });
+  }
+
+  removeSlotObject(object: Container): void {
+    this.assertNotDestroyed();
+    this.getSpine().removeSlotObject(object);
   }
 
   reset(): void {

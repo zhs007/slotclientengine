@@ -14,6 +14,7 @@ import type {
   SymbolStateId,
   SymbolStateSnapshot,
   SymbolVisualLayer,
+  RenderSymbolValueController,
 } from "./types.js";
 
 export class RenderSymbol extends VisualEntity<void> {
@@ -33,6 +34,7 @@ export class RenderSymbol extends VisualEntity<void> {
   readonly renderPriority: number;
   readonly #stateMachine: SymbolStateMachine;
   readonly #animationResolver: RenderSymbolOptions["animationResolver"];
+  readonly #valueController: RenderSymbolValueController | null;
   #currentAni: SymbolAni;
   #lastAniKey: string;
   #defaultScaleX = 1;
@@ -77,6 +79,7 @@ export class RenderSymbol extends VisualEntity<void> {
       this.stateSprite,
       this.overlayLayer,
     );
+    this.#valueController = options.valueControllerFactory?.(this) ?? null;
 
     this.#lastAniKey = this.createAniKey(this.#stateMachine.getSnapshot());
     this.#currentAni = this.createCurrentAni();
@@ -126,10 +129,26 @@ export class RenderSymbol extends VisualEntity<void> {
     this.syncAniIfNeeded(before);
   }
 
+  setPresentationValue(value: number | null): void {
+    this.assertNotDestroyed();
+    const previous = this.#valueController?.getValue() ?? null;
+    this.#valueController?.setValue(value);
+    if (this.#valueController && previous !== value) {
+      const before = this.#lastAniKey;
+      this.#lastAniKey = "";
+      this.syncAniIfNeeded(before);
+    }
+  }
+
+  getPresentationValue(): number | null {
+    return this.#valueController?.getValue() ?? null;
+  }
+
   update(deltaSeconds: number): RenderSymbolUpdateResult {
     assertValidDeltaSeconds(deltaSeconds);
     const before = this.createAniKey(this.#stateMachine.getSnapshot());
     const aniResult = this.#currentAni.update(deltaSeconds);
+    this.#valueController?.update(deltaSeconds);
 
     if (aniResult.loopCompleted) {
       this.#stateMachine.notifyLoopComplete();
@@ -162,6 +181,7 @@ export class RenderSymbol extends VisualEntity<void> {
   resetForPoolRelease(): void {
     this.assertNotDestroyed();
     this.#currentAni.destroy?.();
+    this.#valueController?.resetForPoolRelease();
     this.#stateMachine.reset();
     this.#lastAniKey = "";
     this.#currentAni = createReleasedSymbolAni();
@@ -184,6 +204,7 @@ export class RenderSymbol extends VisualEntity<void> {
     }
     this.#destroyed = true;
     this.#currentAni.destroy?.();
+    this.#valueController?.destroy();
     destroyVniSymbolAnimationCache(this);
     super.destroy(options);
   }

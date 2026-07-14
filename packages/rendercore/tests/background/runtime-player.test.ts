@@ -44,8 +44,11 @@ vi.mock("@esotericsoftware/spine-pixi-v8", () => {
     readSkeletonData() {
       return {
         animations: [{ name: "BG" }, { name: "BG_FG" }],
+        slots: [{ name: "ValueSlot" }],
         findAnimation: (name: string) =>
           ["BG", "BG_FG"].includes(name) ? { name } : null,
+        findSlot: (name: string) =>
+          name === "ValueSlot" ? { name: "ValueSlot" } : null,
       };
     }
   }
@@ -76,6 +79,12 @@ vi.mock("@esotericsoftware/spine-pixi-v8", () => {
       }
     }
     destroy() {}
+    addSlotObject = vi.fn((_slot: string, object: any) => {
+      object.parent = this;
+    });
+    removeSlotObject = vi.fn((object: any) => {
+      object.parent = null;
+    });
   }
   return {
     AtlasAttachmentLoader,
@@ -106,12 +115,20 @@ describe("shared official Spine player", () => {
         "BG_2.png": "/assets/BG_2.png",
       },
     };
-    expect(
+    const validation = validateOfficialSpineResource({
+      resource,
+      requiredAnimations: ["BG", "BG_FG"],
+      requiredSlots: ["ValueSlot"],
+    });
+    expect(validation.atlasPages).toEqual(["BG.png", "BG_2.png"]);
+    expect(validation.slotNames).toEqual(["ValueSlot"]);
+    expect(() =>
       validateOfficialSpineResource({
         resource,
-        requiredAnimations: ["BG", "BG_FG"],
-      }).atlasPages,
-    ).toEqual(["BG.png", "BG_2.png"]);
+        requiredAnimations: ["BG"],
+        requiredSlots: ["Missing"],
+      }),
+    ).toThrow(/slot "Missing" was not found/);
 
     const player = createOfficialSpinePlayer({ resource });
     await player.init();
@@ -120,6 +137,9 @@ describe("shared official Spine player", () => {
     expect(mocks.load).toHaveBeenCalledWith("/assets/BG.png");
     expect(mocks.load).toHaveBeenCalledWith("/assets/BG_2.png");
     expect(mocks.setTexture).toHaveBeenCalledTimes(2);
+    const slotObject = new (await import("pixi.js")).Container();
+    player.attachSlotObject({ slot: "ValueSlot", object: slotObject });
+    player.removeSlotObject(slotObject);
     player.play({ animationName: "BG_FG", loop: false });
     expect(player.update(0.1)).toEqual({ completed: true });
     player.play({ animationName: "BG", loop: true });

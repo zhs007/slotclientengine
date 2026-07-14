@@ -483,3 +483,13 @@ pnpm --filter @slotclientengine/rendercore typecheck
 pnpm --filter @slotclientengine/rendercore build
 pnpm --filter reelsviewer dev -- --host 0.0.0.0
 ```
+
+# Symbol value presentation
+
+symbol manifest 可为任意 symbol 声明可选 `valuePresentation`：该 symbol 禁止再声明顶层 `normal`/state；`reelStates.normal` 必须是显式透明占位，`spinBlur`/`disabled` 等 reel 状态也归入 `reelStates`。`defaultValues` 必须是非空、无重复的 positive safe integer 数组，供没有业务值的初始 scene 或本地临时轮带 occurrence 取值；`tiers` 必须非空，除最后一档外以严格递增的 positive safe integer `maxExclusive` 结束，最后一档无上限；第一版 tier normal 只接受 named、looping official Spine animation。`text` 必须完整声明 Spine `slot`、slot-local `x/y`、font、fill、stroke 和 width。parser 深冻结配置并拒绝未知字段、非法路径、非 Spine fallback 与错误阈值。
+
+`createSymbolValuePresentationResourcesFromManifest()` 精确解析并校验 manifest 引用的 skeleton/atlas/texture/animation/slot；`createSymbolValuePresenter()` 只依赖 visible geometry target，提供 `prepare/show/update/clear/destroy`。文本通过 official Spine `addSlotObject()` 挂到 manifest 指定 slot，因此继承该 slot/bone 的位移、旋转、缩放、可见性与颜色动画，而不是作为 Spine 的同级 overlay。它不理解 GMI、otherScenes、组件名或游戏名，不依赖具体 ReelSet，也不会创建第二 renderer/canvas。输入 value 为 positive safe integer，显示文本固定为原始 `String(value)`。
+
+reel 可为每个本地 symbol occurrence 携带可选 presentation value。`TemporaryReelStrip` 会把 current endpoint、公开本地轮带中间 occurrence 和 target endpoint 的值与 code 一起冻结；`RenderSymbol` 的通用 value controller 据此直接在实际 reel slot 内播放命中 tier 的 Spine，并把文字绑定到配置 slot。这样滚动中的 value-managed symbol 不依赖透明 normal 或单独的屏幕 overlay，最终 target value 仍可由 consumer 以服务器矩阵显式覆盖。
+
+`scripts/generate-symbol-value-vite-resources.mjs` 为 consumer 生成 tier Spine 与 `reelStates` PNG 的 Vite 可静态分析精确 imports、module maps 和 loading URL；`--check` 检查漂移。状态贴图 generator 会严格保留并验证合法 `valuePresentation`，并确保重生成后不会重新写回 value-managed symbol 的顶层 normal/state。

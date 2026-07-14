@@ -92,8 +92,26 @@ describe("game002-s3 assets", () => {
     });
 
     expect(Object.keys(assets)).toEqual(EXPECTED_SYMBOLS);
-    expect(Object.keys(skin.symbolModules)).toHaveLength(39);
+    expect(Object.keys(skin.symbolModules)).toHaveLength(38);
     expect(Object.keys(skin.spineSkeletonModules)).toHaveLength(12);
+    expect(
+      skin.symbolValuePresentationResources.CN.tiers.map(
+        (tier) => tier.spec.skeleton,
+      ),
+    ).toEqual(["./CN_1.json", "./CN_2.json", "./CN_3.json", "./CN_4.json"]);
+    expect(skin.symbolValuePresentationResources.CN.defaultValues).toEqual([
+      1, 2, 5, 10, 25, 50, 100, 250, 500, 1000,
+    ]);
+    expect(assets.CN).toMatchObject({
+      normal: { kind: "transparent", width: 200, height: 200 },
+      states: {
+        spinBlur: expect.stringContaining("CN.spinBlur.png"),
+        disabled: expect.stringContaining("CN.disabled.png"),
+      },
+    });
+    expect(skin.stateTextureManifest).not.toHaveProperty("symbols.CN.normal");
+    expect(skin.stateTextureManifest).not.toHaveProperty("symbols.CN.spinBlur");
+    expect(skin.stateTextureManifest).not.toHaveProperty("symbols.CN.disabled");
     expect(Object.keys(skin.spineSkeletonModules)).toEqual(
       expect.arrayContaining(
         SPINE_SYMBOLS.map((symbol) =>

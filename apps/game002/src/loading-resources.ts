@@ -6,19 +6,20 @@ import game002SpineTextureUrl from "../../../assets/game002-s3/Symbol.png?url";
 import game002SymbolManifestUrl from "../../../assets/game002-s3/symbol-state-textures.manifest.json?url";
 import game002WinAmountManifestUrl from "../../../assets/game002-s3/win-amount/win-amount.manifest.json?url";
 import type { GameLoadingResource } from "@slotclientengine/gameloading";
+import { symbolValueLoadingResources } from "./generated/symbol-value-resources.generated.js";
 
 export const GAME002_RUNTIME_MODULE_RESOURCE_ID = "game002-runtime-module";
 
 const normalModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN}.png",
+  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.png",
   { eager: true, import: "default", query: "?url" },
 ) as Record<string, string>;
 const spinBlurModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN}.spinBlur.png",
+  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.spinBlur.png",
   { eager: true, import: "default", query: "?url" },
 ) as Record<string, string>;
 const disabledModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN}.disabled.png",
+  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.disabled.png",
   { eager: true, import: "default", query: "?url" },
 ) as Record<string, string>;
 const skeletonModules = import.meta.glob(
@@ -170,6 +171,15 @@ function createLoadingResourceUrls(): readonly GameLoadingResource[] {
   };
   for (const resource of pathResources) {
     add(resource);
+  }
+  for (const resource of symbolValueLoadingResources) {
+    if (seenUrls.has(resource.url)) {
+      continue;
+    }
+    add({
+      id: `game002-symbol-value-${resource.kind}:${resource.path.slice(2)}`,
+      url: resource.url,
+    });
   }
   for (const group of globGroups) {
     const entries = Object.entries(group.modules).sort(([left], [right]) =>

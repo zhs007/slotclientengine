@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { Container, Texture } from "pixi.js";
-import type { GameLogic, SceneMatrix } from "@slotclientengine/gameframeworks";
+import {
+  createSlotGameLogicResult,
+  type GameLogic,
+  type SceneMatrix,
+} from "@slotclientengine/gameframeworks";
 import {
   RenderSymbol,
   type SymbolAssetMap,
   type SymbolWinCarousel,
+  type PreparedSymbolValuePresentation,
+  type SymbolValuePresentationItem,
+  type SymbolValuePresenter,
 } from "@slotclientengine/rendercore";
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
 import type { SpineBackgroundPlayer } from "@slotclientengine/rendercore/background";
@@ -12,6 +19,7 @@ import { createTextureSet } from "../../../packages/rendercore/tests/reel/helper
 import {
   GAME002_SAMPLE_DEFAULT_SCENE,
   GAME002_SAMPLE_SPIN_SCENE,
+  GAME002_CN_VALUE_SPIN_RESULT,
 } from "./fixtures/game002-gmi.js";
 import {
   createGame002Adapter,
@@ -225,6 +233,7 @@ describe("game002 adapter", () => {
     const pending = Promise.resolve(
       adapter.playSpin(createLogic(GAME002_SAMPLE_SPIN_SCENE)),
     );
+    await Promise.resolve();
     runtime.completeNextUpdate = true;
     fakeApp.tick(5_000);
     await pending;
@@ -289,6 +298,7 @@ describe("game002 adapter", () => {
     const pending = adapter.playSpin(
       createLogic(GAME002_SAMPLE_SPIN_SCENE, { totalWin: 2_250 }),
     );
+    await Promise.resolve();
     expect(winAmount.immediateDismissRequests).toBe(1);
     expect(winAmount.starts).toEqual([]);
 
@@ -337,6 +347,7 @@ describe("game002 adapter", () => {
     const pending = Promise.resolve(
       adapter.playSpin(createLogic(GAME002_SAMPLE_SPIN_SCENE)),
     );
+    await Promise.resolve();
     expect(carousel.prepareCalls).toHaveLength(1);
     expect(carousel.clearCount).toBe(1);
     expect(carousel.startCount).toBe(0);
@@ -362,6 +373,50 @@ describe("game002 adapter", () => {
     expect(carousel.destroyed).toBe(true);
   });
 
+  it("prepares CN values before spin and carries server values in target reel slots", async () => {
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime();
+    const presenter = new FakeSymbolValuePresenter();
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+      createSymbolValuePresenter: () => presenter,
+    });
+    await adapter.mount(createMountContext());
+    const logic = createSlotGameLogicResult(GAME002_CN_VALUE_SPIN_RESULT, {
+      bet: { bet: 5, lines: 30, times: 1 },
+      userInfo: { balance: 1000, gameid: 69002 },
+    }).logic;
+
+    const pending = adapter.playSpin(logic);
+    expect(runtime.spinTargets).toEqual([]);
+    await Promise.resolve();
+    expect(presenter.prepareCalls[0]).toEqual([
+      { x: 2, y: 6, symbol: "CN", symbolCode: 8, value: 2 },
+      { x: 2, y: 7, symbol: "CN", symbolCode: 8, value: 25 },
+      { x: 5, y: 3, symbol: "CN", symbolCode: 8, value: 1 },
+      { x: 5, y: 4, symbol: "CN", symbolCode: 8, value: 1 },
+    ]);
+    expect(runtime.spinTargets).toEqual([
+      GAME002_CN_VALUE_SPIN_RESULT.gmi.replyPlay.results[0].clientData.scenes[0].values.map(
+        (column) => column.values,
+      ),
+    ]);
+    expect(runtime.spinTargetPresentationValues[0]?.[2][6]).toBe(2);
+    expect(runtime.spinTargetPresentationValues[0]?.[2][7]).toBe(25);
+    expect(runtime.spinTargetPresentationValues[0]?.[5][3]).toBe(1);
+    expect(runtime.spinTargetPresentationValues[0]?.[5][4]).toBe(1);
+    expect(runtime.spinTargetPresentationValues[0]?.[0][0]).toBeNull();
+    expect(presenter.discardCalls).toBe(0);
+
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(16);
+    await pending;
+    expect(presenter.discardCalls).toBe(1);
+    expect(presenter.updateDeltas.length).toBeGreaterThan(0);
+  });
+
   it("skips win playback for zero and rejects invalid monetary inputs", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();
@@ -375,6 +430,7 @@ describe("game002 adapter", () => {
     await adapter.mount(createMountContext());
 
     const zeroWin = adapter.playSpin(createLogic(GAME002_SAMPLE_SPIN_SCENE));
+    await Promise.resolve();
     runtime.completeNextUpdate = true;
     fakeApp.tick(16);
     await zeroWin;
@@ -410,6 +466,7 @@ describe("game002 adapter", () => {
     const spinPromise = Promise.resolve(
       adapter.playSpin(createLogic(GAME002_SAMPLE_SPIN_SCENE)),
     );
+    await Promise.resolve();
     let resolved = false;
     void spinPromise.then(() => {
       resolved = true;
@@ -444,6 +501,8 @@ describe("game002 adapter", () => {
       adapter.playSpin(createLogic(GAME002_SAMPLE_SPIN_SCENE)),
     ).toThrow(/already in progress/);
 
+    await Promise.resolve();
+
     runtime.updateError = new Error("runtime exploded");
     fakeApp.tick(16);
 
@@ -463,6 +522,7 @@ describe("game002 adapter", () => {
     await adapter.mount(createMountContext());
 
     const pending = adapter.playSpin(createLogic(GAME002_SAMPLE_SPIN_SCENE));
+    await Promise.resolve();
     runtime.completeNextUpdate = true;
     fakeApp.tick(16);
 
@@ -844,10 +904,45 @@ class FakeSymbolWinCarousel implements SymbolWinCarousel {
   }
 }
 
+class FakeSymbolValuePresenter implements SymbolValuePresenter {
+  readonly container = new Container();
+  readonly prepareCalls: Array<readonly SymbolValuePresentationItem[]> = [];
+  readonly updateDeltas: number[] = [];
+  clearCount = 0;
+  discardCalls = 0;
+  destroyed = false;
+
+  async prepare(
+    items: readonly SymbolValuePresentationItem[],
+  ): Promise<PreparedSymbolValuePresentation> {
+    this.prepareCalls.push(items);
+    return Object.freeze({ itemCount: items.length, items });
+  }
+  discard(): void {
+    this.discardCalls += 1;
+  }
+  show(): void {}
+  update(deltaSeconds: number): void {
+    this.updateDeltas.push(deltaSeconds);
+  }
+  clear(): void {
+    this.clearCount += 1;
+  }
+  getSnapshot(): any {
+    return { phase: "idle", activeCount: 0, items: [] };
+  }
+  destroy(): void {
+    this.destroyed = true;
+  }
+}
+
 class FakeRuntime {
   readonly mainReelsLayer = new Container();
   readonly appliedScenes: SceneMatrix[] = [];
   readonly spinTargets: SceneMatrix[] = [];
+  readonly spinTargetPresentationValues: Array<
+    readonly (readonly (number | null)[])[] | undefined
+  > = [];
   currentScene: SceneMatrix | null = null;
   targetScene: SceneMatrix | null = null;
   completeNextUpdate = false;
@@ -865,11 +960,12 @@ class FakeRuntime {
         this.mainReelsLayer.visible = true;
         return [61, 26, 12, 4, 19, 2];
       },
-      spinToScene: (scene: SceneMatrix) => {
+      spinToScene: (scene: SceneMatrix, _sceneName?: string, values?) => {
         if (this.spinning) {
           throw new Error("game002 reels are already spinning.");
         }
         this.spinTargets.push(scene);
+        this.spinTargetPresentationValues.push(values);
         this.targetScene = scene;
         this.spinning = true;
         return {} as any;
@@ -936,6 +1032,9 @@ class FakeRuntime {
             ["normal"],
             ["normal"],
           ],
+          presentationValues: Array.from({ length: 6 }, () =>
+            Array.from({ length: 9 }, () => null),
+          ),
           reelCount: 6,
           gridCellCount: 54,
           layerX: 637.5,
@@ -943,7 +1042,9 @@ class FakeRuntime {
         };
       },
       config: {} as any,
-      gameConfig: {} as any,
+      gameConfig: {
+        getSymbolCode: (symbol: string) => (symbol === "CN" ? 8 : undefined),
+      } as any,
       layout: {} as any,
       layerLayout: { x: 637.5, y: 330 } as any,
       getCurrentScene: () => this.currentScene,

@@ -39,10 +39,6 @@ const SPINE_SYMBOLS = Object.freeze(
   SYMBOLS.filter((symbol) => symbol !== "CN"),
 );
 const EXCLUDED_RESOURCE_PREFIXES = Object.freeze([
-  "CN_1",
-  "CN_2",
-  "CN_3",
-  "CN_4",
   "Nearwin1",
   "Nearwin2",
   "Nearwin3",
@@ -146,12 +142,48 @@ function verifySourceContract() {
     if (entry.scale !== 1) {
       failures.push(`source manifest ${symbol} scale must be 1.`);
     }
+    const valuePresentation = entry.valuePresentation;
+    if (valuePresentation) {
+      for (const field of ["normal", "spinBlur", "disabled"]) {
+        if (Object.prototype.hasOwnProperty.call(entry, field)) {
+          failures.push(
+            `source manifest ${symbol} must not declare top-level ${field}.`,
+          );
+        }
+      }
+      const defaults = valuePresentation.defaultValues;
+      if (
+        !Array.isArray(defaults) ||
+        defaults.length === 0 ||
+        defaults.some((value) => !Number.isSafeInteger(value) || value <= 0) ||
+        new Set(defaults).size !== defaults.length
+      ) {
+        failures.push(
+          `source manifest ${symbol}.valuePresentation.defaultValues must be unique positive safe integers.`,
+        );
+      }
+      const normal = valuePresentation.reelStates?.normal;
+      if (
+        normal?.kind !== "transparent" ||
+        !Number.isFinite(normal.width) ||
+        normal.width <= 0 ||
+        !Number.isFinite(normal.height) ||
+        normal.height <= 0
+      ) {
+        failures.push(
+          `source manifest ${symbol}.valuePresentation.reelStates.normal must be transparent.`,
+        );
+      }
+    }
     for (const [state, suffix] of [
       ["normal", ""],
       ["spinBlur", ".spinBlur"],
       ["disabled", ".disabled"],
     ]) {
-      const configuredPath = entry[state];
+      if (valuePresentation && state === "normal") continue;
+      const configuredPath = valuePresentation
+        ? valuePresentation.reelStates?.[state]
+        : entry[state];
       const expectedPath = `./${symbol}${suffix}.png`;
       if (configuredPath !== expectedPath) {
         failures.push(
@@ -170,6 +202,23 @@ function verifySourceContract() {
     const skeleton = JSON.parse(readFileSync(skeletonPath, "utf8"));
     if (!/^4\.3(?:\.|$)/.test(skeleton.skeleton?.spine ?? "")) {
       failures.push(`${symbol}.json must declare Spine 4.3.x.`);
+    }
+  }
+  for (const resource of readValuePresentationResources(manifest)) {
+    assertFile(join(SOURCE_ROOT, resource.skeleton.slice(2)));
+    assertFile(join(SOURCE_ROOT, resource.atlas.slice(2)));
+    assertFile(join(SOURCE_ROOT, resource.texture.slice(2)));
+    const skeletonPath = join(SOURCE_ROOT, resource.skeleton.slice(2));
+    if (existsSync(skeletonPath)) {
+      const skeleton = JSON.parse(readFileSync(skeletonPath, "utf8"));
+      if (!/^4\.3(?:\.|$)/.test(skeleton.skeleton?.spine ?? "")) {
+        failures.push(`${resource.skeleton} must declare Spine 4.3.x.`);
+      }
+      if (!skeleton.animations?.[resource.animationName]) {
+        failures.push(
+          `${resource.skeleton} is missing configured animation ${resource.animationName}.`,
+        );
+      }
     }
   }
   const atlasFirstLine = readFileSync(join(SOURCE_ROOT, "Symbol.atlas"), "utf8")
@@ -316,12 +365,30 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
     "win-amount manifest",
   );
 
+  const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8"));
   for (const symbol of SYMBOLS) {
-    assertOne(
-      assetNames,
-      hashedAssetPattern(symbol, "png"),
-      `${symbol} normal PNG`,
-    );
+    const valuePresentation = manifest.symbols?.[symbol]?.valuePresentation;
+    if (valuePresentation) {
+      assertNone(
+        assetNames,
+        hashedAssetPattern(symbol, "png"),
+        `${symbol} top-level normal PNG`,
+      );
+      for (const state of ["spinBlur", "disabled"]) {
+        const statePath = valuePresentation.reelStates?.[state];
+        if (statePath !== `./${symbol}.${state}.png`) {
+          failures.push(
+            `${symbol}.valuePresentation.reelStates.${state} must be ./${symbol}.${state}.png.`,
+          );
+        }
+      }
+    } else {
+      assertOne(
+        assetNames,
+        hashedAssetPattern(symbol, "png"),
+        `${symbol} normal PNG`,
+      );
+    }
     assertOne(
       assetNames,
       hashedAssetPattern(`${symbol}.spinBlur`, "png"),
@@ -339,6 +406,33 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
       hashedAssetPattern(symbol, "json"),
       `${symbol} skeleton`,
     );
+  }
+  for (const resource of readValuePresentationResources(manifest)) {
+    assertOne(
+      assetNames,
+      hashedAssetPattern(resource.skeleton.slice(2, -".json".length), "json"),
+      `${resource.skeleton} value-presentation skeleton`,
+    );
+    assertDistContainsSourceAsset(
+      assetNames,
+      join(SOURCE_ROOT, resource.skeleton.slice(2)),
+    );
+    assertDistContainsSourceAsset(
+      assetNames,
+      join(SOURCE_ROOT, resource.atlas.slice(2)),
+    );
+    assertDistContainsSourceAsset(
+      assetNames,
+      join(SOURCE_ROOT, resource.texture.slice(2)),
+    );
+    const skeleton = JSON.parse(
+      readFileSync(join(SOURCE_ROOT, resource.skeleton.slice(2)), "utf8"),
+    );
+    if (!(skeleton.slots ?? []).some((slot) => slot.name === resource.slot)) {
+      failures.push(
+        `${resource.skeleton} is missing configured value text slot ${resource.slot}.`,
+      );
+    }
   }
   for (const project of ["bigwin", "superwin", "megawin"]) {
     assertOne(
@@ -373,6 +467,47 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
   }
 }
 
+function readValuePresentationResources(manifest) {
+  const resources = [];
+  const seen = new Set();
+  for (const [symbol, entry] of Object.entries(manifest.symbols ?? {})) {
+    const slot = entry.valuePresentation?.text?.slot;
+    if (entry.valuePresentation && (!slot || typeof slot !== "string")) {
+      failures.push(
+        `${symbol}.valuePresentation.text.slot must be configured.`,
+      );
+    }
+    for (const [index, tier] of (
+      entry.valuePresentation?.tiers ?? []
+    ).entries()) {
+      const animation = tier.animation;
+      if (
+        animation?.kind !== "spine" ||
+        animation.playback?.mode !== "animation" ||
+        animation.playback?.loop !== true
+      ) {
+        failures.push(
+          `${symbol}.valuePresentation.tiers[${index}] must use a looping Spine animation.`,
+        );
+        continue;
+      }
+      const resource = {
+        skeleton: animation.skeleton,
+        atlas: animation.atlas,
+        texture: animation.texture,
+        animationName: animation.playback.animationName,
+        slot,
+      };
+      const key = JSON.stringify(resource);
+      if (!seen.has(key)) {
+        seen.add(key);
+        resources.push(resource);
+      }
+    }
+  }
+  return resources;
+}
+
 function readWinAmountAssetNames() {
   const names = new Set();
   for (const project of ["bigwin", "superwin", "megawin"]) {
@@ -402,6 +537,15 @@ function assertOne(names, pattern, label) {
   if (matches.length !== 1) {
     failures.push(
       `dist/assets must contain exactly one ${label}, got ${matches.length}.`,
+    );
+  }
+}
+
+function assertNone(names, pattern, label) {
+  const matches = names.filter((name) => pattern.test(name));
+  if (matches.length !== 0) {
+    failures.push(
+      `dist/assets must not contain ${label}, got ${matches.length}.`,
     );
   }
 }

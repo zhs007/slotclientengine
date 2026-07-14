@@ -70,6 +70,35 @@ export interface SymbolManifestSpineAnimationSpec {
   readonly transform?: SymbolManifestSpineAnimationTransform;
 }
 
+export interface SymbolValuePresentationTextSpec {
+  readonly slot: string;
+  readonly x: number;
+  readonly y: number;
+  readonly fontFamily: string;
+  readonly fontSize: number;
+  readonly fontWeight: string;
+  readonly fill: string;
+  readonly stroke: string;
+  readonly strokeWidth: number;
+}
+
+export interface SymbolValuePresentationReelStatesSpec {
+  readonly normal: SymbolManifestTransparentNormal;
+  readonly states: Readonly<Record<SymbolStateId, string>>;
+}
+
+export interface SymbolValuePresentationTierSpec {
+  readonly maxExclusive?: number;
+  readonly animation: SymbolManifestSpineAnimationSpec;
+}
+
+export interface SymbolValuePresentationSpec {
+  readonly defaultValues: readonly number[];
+  readonly reelStates: SymbolValuePresentationReelStatesSpec;
+  readonly tiers: readonly SymbolValuePresentationTierSpec[];
+  readonly text: SymbolValuePresentationTextSpec;
+}
+
 export type SymbolManifestAnimationSpec =
   | SymbolManifestBuiltinAnimationSpec
   | SymbolManifestStaticAnimationSpec
@@ -107,6 +136,7 @@ export interface ParsedSymbolManifestSymbol {
   readonly animations: Readonly<
     Partial<Record<SymbolStateId, SymbolManifestAnimationSpec>>
   >;
+  readonly valuePresentation?: SymbolValuePresentationSpec;
 }
 
 export interface ParsedSymbolStateTextureManifest {
@@ -260,6 +290,7 @@ export function parseSymbolStateTextureManifest(
       "scale",
       "renderPriority",
       "animations",
+      "valuePresentation",
       ...states,
     ];
     assertOnlyKnownKeys(
@@ -271,15 +302,43 @@ export function parseSymbolStateTextureManifest(
       rawSymbolRecord,
       "scale",
     );
-    const parsedStates: Record<SymbolStateId, string> = {};
-    for (const state of states) {
-      parsedStates[state] = assertString(
-        rawSymbolRecord[state],
-        `symbol "${symbol}" ${state} texture`,
-      );
+    const valuePresentation =
+      rawSymbolRecord.valuePresentation === undefined
+        ? undefined
+        : parseValuePresentation(
+            rawSymbolRecord.valuePresentation,
+            symbol,
+            states,
+          );
+    if (valuePresentation) {
+      if (rawSymbolRecord.normal !== undefined) {
+        throw new SymbolAssetError(
+          `Symbol "${symbol}" with valuePresentation must not declare top-level normal.`,
+        );
+      }
+      for (const state of states) {
+        if (rawSymbolRecord[state] !== undefined) {
+          throw new SymbolAssetError(
+            `Symbol "${symbol}" with valuePresentation must not declare top-level state "${state}".`,
+          );
+        }
+      }
+    }
+    const parsedStates: Record<SymbolStateId, string> = valuePresentation
+      ? { ...valuePresentation.reelStates.states }
+      : {};
+    if (!valuePresentation) {
+      for (const state of states) {
+        parsedStates[state] = assertString(
+          rawSymbolRecord[state],
+          `symbol "${symbol}" ${state} texture`,
+        );
+      }
     }
     symbols[symbol] = Object.freeze({
-      normal: parseManifestNormal(rawSymbolRecord.normal, symbol),
+      normal:
+        valuePresentation?.reelStates.normal ??
+        parseManifestNormal(rawSymbolRecord.normal, symbol),
       states: Object.freeze(parsedStates),
       scale: parseManifestScale(rawSymbolRecord.scale, symbol),
       hasExplicitScale,
@@ -292,6 +351,7 @@ export function parseSymbolStateTextureManifest(
         symbol,
         animationStateSet,
       ),
+      ...(valuePresentation !== undefined ? { valuePresentation } : {}),
     });
   }
 
@@ -299,6 +359,163 @@ export function parseSymbolStateTextureManifest(
     version: 1,
     states,
     symbols: Object.freeze(symbols),
+  });
+}
+
+function parseValuePresentation(
+  value: unknown,
+  symbol: string,
+  states: readonly SymbolStateId[],
+): SymbolValuePresentationSpec {
+  const record = assertRecord(value, `symbol "${symbol}" valuePresentation`);
+  assertOnlyKnownKeys(record, `symbol "${symbol}" valuePresentation`, [
+    "defaultValues",
+    "reelStates",
+    "tiers",
+    "text",
+  ]);
+  if (
+    !Array.isArray(record.defaultValues) ||
+    record.defaultValues.length === 0
+  ) {
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" valuePresentation.defaultValues must be a non-empty array.`,
+    );
+  }
+  const defaultValues = Object.freeze(
+    record.defaultValues.map((candidate, index) => {
+      if (
+        typeof candidate !== "number" ||
+        !Number.isSafeInteger(candidate) ||
+        candidate <= 0
+      ) {
+        throw new SymbolAssetError(
+          `Symbol "${symbol}" valuePresentation.defaultValues[${index}] must be a positive safe integer.`,
+        );
+      }
+      return candidate;
+    }),
+  );
+  if (new Set(defaultValues).size !== defaultValues.length) {
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" valuePresentation.defaultValues must not contain duplicates.`,
+    );
+  }
+  const rawReelStates = assertRecord(
+    record.reelStates,
+    `symbol "${symbol}" valuePresentation.reelStates`,
+  );
+  assertOnlyKnownKeys(
+    rawReelStates,
+    `symbol "${symbol}" valuePresentation.reelStates`,
+    ["normal", ...states],
+  );
+  const normal = parseManifestNormal(rawReelStates.normal, symbol);
+  if (typeof normal === "string" || normal.kind !== "transparent") {
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" valuePresentation.reelStates.normal must be transparent because normal art comes from tiers.`,
+    );
+  }
+  const reelStateTextures: Record<SymbolStateId, string> = {};
+  for (const state of states) {
+    reelStateTextures[state] = assertString(
+      rawReelStates[state],
+      `symbol "${symbol}" valuePresentation.reelStates.${state}`,
+    );
+  }
+  if (!Array.isArray(record.tiers) || record.tiers.length === 0) {
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" valuePresentation.tiers must be a non-empty array.`,
+    );
+  }
+  const rawTiers = record.tiers;
+  let previousMax = 0;
+  const tiers = Object.freeze(
+    rawTiers.map((rawTier, index) => {
+      const label = `symbol "${symbol}" valuePresentation tier ${index}`;
+      const tier = assertRecord(rawTier, label);
+      assertOnlyKnownKeys(tier, label, ["maxExclusive", "animation"]);
+      const isLast = index === rawTiers.length - 1;
+      if (isLast && tier.maxExclusive !== undefined) {
+        throw new SymbolAssetError(`${label} must be unbounded.`);
+      }
+      if (!isLast && tier.maxExclusive === undefined) {
+        throw new SymbolAssetError(`${label} must declare maxExclusive.`);
+      }
+      let maxExclusive: number | undefined;
+      if (tier.maxExclusive !== undefined) {
+        if (
+          typeof tier.maxExclusive !== "number" ||
+          !Number.isSafeInteger(tier.maxExclusive) ||
+          tier.maxExclusive <= previousMax
+        ) {
+          throw new SymbolAssetError(
+            `${label} maxExclusive must be a strictly increasing positive safe integer.`,
+          );
+        }
+        maxExclusive = tier.maxExclusive;
+        previousMax = maxExclusive;
+      }
+      const animation = parseManifestAnimationSpec(
+        tier.animation,
+        symbol,
+        `valuePresentation.tiers[${index}]`,
+        true,
+      );
+      if (
+        animation.kind !== "spine" ||
+        animation.playback.mode !== "animation" ||
+        animation.playback.loop !== true
+      ) {
+        throw new SymbolAssetError(
+          `${label} animation must be a looping Spine animation.`,
+        );
+      }
+      return Object.freeze({
+        ...(maxExclusive === undefined ? {} : { maxExclusive }),
+        animation,
+      });
+    }),
+  );
+  const text = assertRecord(
+    record.text,
+    `symbol "${symbol}" valuePresentation.text`,
+  );
+  assertOnlyKnownKeys(text, `symbol "${symbol}" valuePresentation.text`, [
+    "slot",
+    "x",
+    "y",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "fill",
+    "stroke",
+    "strokeWidth",
+  ]);
+  return Object.freeze({
+    defaultValues,
+    reelStates: Object.freeze({
+      normal,
+      states: Object.freeze(reelStateTextures),
+    }),
+    tiers,
+    text: Object.freeze({
+      slot: assertString(text.slot, "valuePresentation text slot"),
+      x: assertFiniteNumber(text.x, "valuePresentation text x"),
+      y: assertFiniteNumber(text.y, "valuePresentation text y"),
+      fontFamily: assertString(text.fontFamily, "valuePresentation fontFamily"),
+      fontSize: assertFinitePositiveNumber(
+        text.fontSize,
+        "valuePresentation fontSize",
+      ),
+      fontWeight: assertString(text.fontWeight, "valuePresentation fontWeight"),
+      fill: assertString(text.fill, "valuePresentation fill"),
+      stroke: assertString(text.stroke, "valuePresentation stroke"),
+      strokeWidth: assertFinitePositiveNumber(
+        text.strokeWidth,
+        "valuePresentation strokeWidth",
+      ),
+    }),
   });
 }
 
@@ -865,6 +1082,7 @@ function parseManifestAnimationSpec(
   value: unknown,
   symbol: string,
   state: string,
+  allowLoopingOnceState = false,
 ): SymbolManifestAnimationSpec {
   const record = assertRecord(value, `symbol "${symbol}" ${state} animation`);
   if (record.kind === "builtin") {
@@ -903,7 +1121,11 @@ function parseManifestAnimationSpec(
       "transform",
     ]);
     const playback = parseAnimationPlayback(record.playback, symbol, state);
-    if (getDefaultSymbolPlaybackKind(state) === "once" && playback.loop) {
+    if (
+      !allowLoopingOnceState &&
+      getDefaultSymbolPlaybackKind(state) === "once" &&
+      playback.loop
+    ) {
       throw new SymbolAssetError(
         `Symbol "${symbol}" ${state} Spine playback.loop must be false for once state "${state}".`,
       );

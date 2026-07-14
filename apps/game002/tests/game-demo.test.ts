@@ -84,6 +84,59 @@ describe("game002-s3 reel runtime", () => {
     );
   });
 
+  it("assigns manifest default values to initial and temporary CN symbols", () => {
+    const runtime = createRuntime();
+    const candidates = new Set(
+      getGame002SkinConfig("1").symbolValuePresentationResources.CN
+        .defaultValues,
+    );
+    const cnCode = runtime.gameConfig.getSymbolCode("CN");
+    expect(cnCode).toBe(8);
+
+    runtime.applyScene(GAME002_SAMPLE_DEFAULT_SCENE, "default");
+    assertCnPresentationValues(
+      runtime.getVisualSnapshot(),
+      cnCode!,
+      candidates,
+    );
+
+    runtime.spinToScene(GAME002_SAMPLE_SPIN_SCENE, "spin");
+    runtime.update(0.5);
+    assertCnPresentationValues(
+      runtime.getVisualSnapshot(),
+      cnCode!,
+      candidates,
+    );
+  });
+
+  it("keeps server CN values on target endpoints through the final stop", () => {
+    const runtime = createRuntime(GAME002_SAMPLE_DEFAULT_SCENE);
+    const cnCode = runtime.gameConfig.getSymbolCode("CN");
+    expect(cnCode).toBe(8);
+    const targetValues = GAME002_SAMPLE_SPIN_SCENE.map((column) =>
+      column.map((code) => (code === cnCode ? 250 : null)),
+    );
+
+    runtime.spinToScene(
+      GAME002_SAMPLE_SPIN_SCENE,
+      "spin with server CN values",
+      targetValues,
+    );
+    let result = runtime.update(0.05);
+    for (let index = 0; index < 80 && !result.completed; index += 1) {
+      result = runtime.update(0.05);
+    }
+    expect(result.completed).toBe(true);
+    const snapshot = runtime.getVisualSnapshot();
+    for (const [x, column] of snapshot.visibleScene.entries()) {
+      for (const [y, code] of column.entries()) {
+        expect(snapshot.presentationValues[x][y]).toBe(
+          code === cnCode ? 250 : null,
+        );
+      }
+    }
+  });
+
   it("preserves the 54-cell order, offsets, dimming and stop timing", () => {
     const runtime = createRuntime(GAME002_SAMPLE_DEFAULT_SCENE);
     const plan = runtime.spinToScene(GAME002_SAMPLE_SPIN_SCENE, "spin");
@@ -218,4 +271,20 @@ function createSymbolAssets(symbols: readonly string[]): SymbolAssetMap {
       symbols.map((symbol) => [symbol, createTextureSet(200, 200)]),
     ),
   );
+}
+
+function assertCnPresentationValues(
+  snapshot: ReturnType<ReturnType<typeof createRuntime>["getVisualSnapshot"]>,
+  cnCode: number,
+  candidates: ReadonlySet<number>,
+): void {
+  let count = 0;
+  for (const [x, column] of snapshot.visibleScene.entries()) {
+    for (const [y, code] of column.entries()) {
+      if (code !== cnCode) continue;
+      count += 1;
+      expect(candidates.has(snapshot.presentationValues[x][y]!)).toBe(true);
+    }
+  }
+  expect(count).toBeGreaterThan(0);
 }

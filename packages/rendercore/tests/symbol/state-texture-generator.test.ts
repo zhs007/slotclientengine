@@ -266,9 +266,6 @@ describe("generate-symbol-state-textures script", () => {
             },
             symbols: {
               L1: {
-                normal: "./L1.png",
-                spinBlur: "./L1.spinBlur.png",
-                disabled: "./L1.disabled.png",
                 scale: 1,
                 renderPriority: 2,
                 animations: {
@@ -282,6 +279,44 @@ describe("generate-symbol-state-textures script", () => {
                       endTime: 1,
                       loop: false,
                     },
+                  },
+                },
+                valuePresentation: {
+                  defaultValues: [1, 10, 100],
+                  reelStates: {
+                    normal: {
+                      kind: "transparent",
+                      width: 200,
+                      height: 200,
+                    },
+                    spinBlur: "./L1.spinBlur.png",
+                    disabled: "./L1.disabled.png",
+                  },
+                  tiers: [
+                    {
+                      animation: {
+                        kind: "spine",
+                        skeleton: "./jackpot-ultra.json",
+                        atlas: "./gold.atlas",
+                        texture: "./gold.png",
+                        playback: {
+                          mode: "animation",
+                          animationName: "Idle",
+                          loop: true,
+                        },
+                      },
+                    },
+                  ],
+                  text: {
+                    slot: "ValueSlot",
+                    x: 0,
+                    y: 0,
+                    fontFamily: "Arial",
+                    fontSize: 32,
+                    fontWeight: "900",
+                    fill: "#fff",
+                    stroke: "#000",
+                    strokeWidth: 4,
                   },
                 },
               },
@@ -342,6 +377,43 @@ describe("generate-symbol-state-textures script", () => {
         },
       });
       expect(manifest.symbols.L1.renderPriority).toBe(2);
+      expect(manifest.symbols.L1).not.toHaveProperty("normal");
+      expect(manifest.symbols.L1).not.toHaveProperty("spinBlur");
+      expect(manifest.symbols.L1).not.toHaveProperty("disabled");
+      expect(manifest.symbols.L1.valuePresentation).toEqual({
+        defaultValues: [1, 10, 100],
+        reelStates: {
+          normal: { kind: "transparent", width: 200, height: 200 },
+          spinBlur: "./L1.spinBlur.png",
+          disabled: "./L1.disabled.png",
+        },
+        tiers: [
+          {
+            animation: {
+              kind: "spine",
+              skeleton: "./jackpot-ultra.json",
+              atlas: "./gold.atlas",
+              texture: "./gold.png",
+              playback: {
+                mode: "animation",
+                animationName: "Idle",
+                loop: true,
+              },
+            },
+          },
+        ],
+        text: {
+          slot: "ValueSlot",
+          x: 0,
+          y: 0,
+          fontFamily: "Arial",
+          fontSize: 32,
+          fontWeight: "900",
+          fill: "#fff",
+          stroke: "#000",
+          strokeWidth: 4,
+        },
+      });
       expect(manifest.symbols.H1.animations).toEqual({
         normal: {
           kind: "spine",

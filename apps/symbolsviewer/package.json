@@ -5,12 +5,14 @@
   "type": "module",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
+    "generate:symbol-value-resources": "node ../../packages/rendercore/scripts/generate-symbol-value-vite-resources.mjs --manifest assets/game002-s3/symbol-state-textures.manifest.json --out apps/symbolsviewer/src/generated/game002-symbol-value-resources.generated.ts",
+    "check:symbol-value-resources": "node ../../packages/rendercore/scripts/generate-symbol-value-vite-resources.mjs --manifest assets/game002-s3/symbol-state-textures.manifest.json --out apps/symbolsviewer/src/generated/game002-symbol-value-resources.generated.ts --check",
     "prepare:deps": "pnpm --filter @slotclientengine/rendercore build",
-    "build": "pnpm run prepare:deps && vite build",
-    "dev": "pnpm run prepare:deps && sh -c 'if [ \"$1\" = \"--\" ]; then shift; fi; exec vite \"$@\"' sh",
+    "build": "pnpm run generate:symbol-value-resources && pnpm run prepare:deps && vite build",
+    "dev": "pnpm run generate:symbol-value-resources && pnpm run prepare:deps && sh -c 'if [ \"$1\" = \"--\" ]; then shift; fi; exec vite \"$@\"' sh",
     "lint": "eslint .",
-    "test": "vitest run --coverage",
-    "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",
+    "test": "pnpm run generate:symbol-value-resources && vitest run --coverage",
+    "typecheck": "pnpm run generate:symbol-value-resources && pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },

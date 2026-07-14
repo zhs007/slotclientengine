@@ -12,11 +12,13 @@ import type {
   GridCellReelSpinPlan,
   RenderGridCellReelCellSnapshot,
   RenderGridCellReelSetOptions,
+  RenderGridCellReelSetSpinOptions,
   RenderGridCellReelSetSnapshot,
   RenderGridCellReelSetUpdateResult,
   RenderVisibleSymbolGeometrySnapshot,
   RenderVisibleSymbolStateSnapshot,
   ReelSymbolRegistry,
+  SymbolPresentationValueMatrix,
 } from "./types.js";
 import type { LogicReels, SceneMatrix } from "@slotclientengine/logiccore";
 import type { SymbolStateId } from "../symbol/index.js";
@@ -35,6 +37,7 @@ interface RuntimeCell {
   hasLandedThisSpin: boolean;
   fadeOutElapsedMs: number;
   fadeOutStartAlpha: number;
+  targetPresentationValue: number | null;
 }
 
 interface DimmingRow {
@@ -70,7 +73,11 @@ export class RenderGridCellReelSet extends Container {
     this.#order = parseOrder(options.order, this.#columns, this.#rows);
 
     const cells = this.#order.map((coordinate) =>
-      this.createRuntimeCell(coordinate, options.registry),
+      this.createRuntimeCell(
+        coordinate,
+        options.registry,
+        options.presentationValueResolver,
+      ),
     );
     this.#cells = Object.freeze(cells);
     this.#cellsByKey = new Map(
@@ -85,11 +92,17 @@ export class RenderGridCellReelSet extends Container {
     scene: SceneMatrix,
     finalYs: readonly number[],
     cellReelOffsets?: GridCellReelOffsetMatrix,
+    presentationValues?: SymbolPresentationValueMatrix,
   ): void {
     const parsedScene = parseScene(scene, this.#columns, this.#rows);
     const parsedFinalYs = parseFinalYs(finalYs, this.#columns);
     const parsedCellReelOffsets = normalizeGridCellReelOffsetMatrix(
       cellReelOffsets,
+      this.#columns,
+      this.#rows,
+    );
+    const parsedPresentationValues = parsePresentationValueMatrix(
+      presentationValues,
       this.#columns,
       this.#rows,
     );
@@ -102,13 +115,20 @@ export class RenderGridCellReelSet extends Container {
         x,
         parsedFinalYs[x] + y + parsedCellReelOffsets[x][y],
       );
-      cell.reel.resetToVisibleSymbols([parsedScene[x][y]], cellFinalY);
+      cell.reel.resetToVisibleSymbols(
+        [parsedScene[x][y]],
+        cellFinalY,
+        parsedPresentationValues === undefined
+          ? undefined
+          : [parsedPresentationValues[x][y]],
+      );
       cell.planCell = null;
       cell.phase = "completed";
       cell.hasStartedThisSpin = false;
       cell.hasLandedThisSpin = false;
       cell.fadeOutElapsedMs = 0;
       cell.fadeOutStartAlpha = 0;
+      cell.targetPresentationValue = null;
       cell.dimOverlay.alpha = 0;
       cell.dimOverlay.y = 0;
       this.setCellClipMask(cell, false);
@@ -116,13 +136,21 @@ export class RenderGridCellReelSet extends Container {
     }
   }
 
-  spin(plan: GridCellReelSpinPlan): void {
+  spin(
+    plan: GridCellReelSpinPlan,
+    options: RenderGridCellReelSetSpinOptions = {},
+  ): void {
     if (this.#spinPlan) {
       throw new ReelError(
         "Cannot start a new grid cell reel spin while another spin is active.",
       );
     }
     this.assertPlanMatchesRuntime(plan);
+    const targetPresentationValues = parsePresentationValueMatrix(
+      options.targetPresentationValues,
+      this.#columns,
+      this.#rows,
+    );
 
     this.#spinPlan = plan;
     this.#elapsedMs = 0;
@@ -134,6 +162,9 @@ export class RenderGridCellReelSet extends Container {
       cell.hasLandedThisSpin = false;
       cell.fadeOutElapsedMs = 0;
       cell.fadeOutStartAlpha = 0;
+      cell.targetPresentationValue =
+        targetPresentationValues?.[cell.coordinate.x][cell.coordinate.y] ??
+        null;
       cell.dimOverlay.alpha = 0;
       cell.dimOverlay.y = 0;
       this.setCellClipMask(cell, false);
@@ -273,6 +304,7 @@ export class RenderGridCellReelSet extends Container {
   private createRuntimeCell(
     coordinate: GridCellCoordinate,
     registry: ReelSymbolRegistry,
+    presentationValueResolver: RenderGridCellReelSetOptions["presentationValueResolver"],
   ): RuntimeCell {
     const root = new Container();
     root.x = coordinate.x * this.#cellWidth;
@@ -295,6 +327,16 @@ export class RenderGridCellReelSet extends Container {
         columnGap: 0,
       }),
       registry,
+      presentationValueResolver:
+        presentationValueResolver === undefined
+          ? undefined
+          : ({ symbolY, code }) =>
+              presentationValueResolver({
+                x: coordinate.x,
+                y: coordinate.y,
+                symbolY,
+                code,
+              }),
     });
     reel.x = 0;
 
@@ -324,6 +366,7 @@ export class RenderGridCellReelSet extends Container {
       hasLandedThisSpin: false,
       fadeOutElapsedMs: 0,
       fadeOutStartAlpha: 0,
+      targetPresentationValue: null,
     };
   }
 
@@ -342,6 +385,7 @@ export class RenderGridCellReelSet extends Container {
       this.setCellClipMask(cell, true);
       cell.reel.start(planCell.axisPlan, {
         targetVisibleSymbols: planCell.targetVisibleSymbols,
+        targetVisiblePresentationValues: [cell.targetPresentationValue],
       });
       cell.phase = "spinning";
       cell.hasStartedThisSpin = true;
@@ -358,6 +402,7 @@ export class RenderGridCellReelSet extends Container {
         cell.reel.resetToVisibleSymbols(
           planCell.targetVisibleSymbols,
           planCell.axisPlan.finalY,
+          [cell.targetPresentationValue],
         );
         resetReelSlotSymbols(cell);
         this.syncLandedDimming(cell, planCell);
@@ -485,7 +530,7 @@ export class RenderGridCellReelSet extends Container {
   private snapshotCell(cell: RuntimeCell): RenderGridCellReelCellSnapshot {
     const slot = cell.reel
       .getSlotSnapshots()
-      .find((candidate) => candidate.container.visible);
+      .find((candidate) => candidate.windowY === 0);
     const visibleSymbol = cell.reel.getVisibleScene()[0];
     if (!Number.isInteger(visibleSymbol)) {
       throw new ReelError(
@@ -507,6 +552,7 @@ export class RenderGridCellReelSet extends Container {
       dimmingAlpha: this.getVisibleDimmingAlpha(cell),
       requestedState: slot?.requestedState ?? null,
       visibleSymbol,
+      presentationValue: slot?.presentationValue ?? null,
     });
   }
 
@@ -544,7 +590,7 @@ export class RenderGridCellReelSet extends Container {
   private syncCellRenderOrder(cell: RuntimeCell): void {
     const visibleSlot = cell.reel
       .getSlotSnapshots()
-      .find((slot) => slot.container.visible);
+      .find((slot) => slot.windowY === 0);
     const renderPriority = visibleSlot?.symbol?.renderPriority ?? 0;
     cell.root.zIndex =
       renderPriority * (this.#order.length + 1) + cell.coordinate.orderIndex;
@@ -606,6 +652,35 @@ function parseScene(
             );
           }
           return code;
+        }),
+      );
+    }),
+  );
+}
+
+function parsePresentationValueMatrix(
+  value: SymbolPresentationValueMatrix | undefined,
+  columns: number,
+  rows: number,
+): SymbolPresentationValueMatrix | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length !== columns) {
+    throw new ReelError(`presentationValues length must be ${columns}.`);
+  }
+  return Object.freeze(
+    value.map((column, x) => {
+      if (!Array.isArray(column) || column.length !== rows) {
+        throw new ReelError(`presentationValues[${x}] length must be ${rows}.`);
+      }
+      return Object.freeze(
+        column.map((candidate, y) => {
+          if (candidate === null) return null;
+          if (!Number.isSafeInteger(candidate) || candidate <= 0) {
+            throw new ReelError(
+              `presentationValues[${x}][${y}] must be a positive safe integer or null.`,
+            );
+          }
+          return candidate;
         }),
       );
     }),

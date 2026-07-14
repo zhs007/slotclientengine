@@ -26,6 +26,69 @@ export const GAME002_SAMPLE_RANDOM_NUMBERS = Object.freeze([
   51, 0, 28, 1, 70, 46,
 ]);
 
+export const GAME002_CN_VALUE_SCENE = Object.freeze([
+  Object.freeze([4, 4, 2, 2, 4, 4, 2, 1, 6]),
+  Object.freeze([2, 2, 6, 6, 5, 5, 6, 2, 2]),
+  Object.freeze([4, 4, 3, 3, 2, 2, 8, 8, 2]),
+  Object.freeze([1, 3, 2, 2, 6, 6, 5, 5, 4]),
+  Object.freeze([2, 2, 6, 6, 2, 4, 3, 3, 5]),
+  Object.freeze([5, 5, 4, 8, 8, 6, 4, 4, 3]),
+]) satisfies SceneMatrix;
+
+export const GAME002_CN_VALUE_OTHER_SCENE = Object.freeze([
+  Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0]),
+  Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0]),
+  Object.freeze([0, 0, 0, 0, 0, 0, 2, 25, 0]),
+  Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0]),
+  Object.freeze([0, 0, 0, 0, 0, 0, 0, 0, 0]),
+  Object.freeze([0, 0, 0, 1, 1, 0, 0, 0, 0]),
+]);
+
+export const GAME002_CN_VALUE_SPIN_RESULT = Object.freeze({
+  gmi: Object.freeze({
+    defaultScene: toSgc7Scene(GAME002_SAMPLE_DEFAULT_SCENE),
+    replyPlay: Object.freeze({
+      randomNumbers: GAME002_SAMPLE_RANDOM_NUMBERS,
+      results: Object.freeze([
+        Object.freeze({
+          coinWin: 0,
+          cashWin: 0,
+          clientData: Object.freeze({
+            scenes: Object.freeze([toSgc7Scene(GAME002_CN_VALUE_SCENE)]),
+            otherScenes: Object.freeze([
+              toSgc7Scene(GAME002_CN_VALUE_OTHER_SCENE),
+            ]),
+            results: Object.freeze([]),
+            curGameMod: "basic",
+            curGameModParam: Object.freeze({
+              historyComponents: Object.freeze(["bg-spin", "bg-gencoins"]),
+              historyComponentsEx: Object.freeze([
+                "bg-spin",
+                "bg-gencoins",
+                "bg-win",
+              ]),
+              mapComponents: Object.freeze({
+                "bg-spin": Object.freeze({
+                  basicComponentData: createBasicComponentData({
+                    usedScenes: [0],
+                  }),
+                }),
+                "bg-gencoins": Object.freeze({
+                  basicComponentData: createBasicComponentData({
+                    usedOtherScenes: [0],
+                  }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      ]),
+    }),
+  }),
+  totalwin: 0,
+  results: 1,
+});
+
 export const GAME002_SAMPLE_WIN_RESULTS = Object.freeze([
   Object.freeze({
     pos: Object.freeze([
@@ -223,13 +286,14 @@ export function toSgc7Scene(scene: readonly (readonly number[])[]) {
 
 function createBasicComponentData(options: {
   readonly usedScenes?: readonly number[];
+  readonly usedOtherScenes?: readonly number[];
   readonly usedResults?: readonly number[];
   readonly coinWin?: number;
   readonly cashWin?: number;
 }) {
   return Object.freeze({
     usedScenes: Object.freeze([...(options.usedScenes ?? [])]),
-    usedOtherScenes: Object.freeze([]),
+    usedOtherScenes: Object.freeze([...(options.usedOtherScenes ?? [])]),
     usedResults: Object.freeze([...(options.usedResults ?? [])]),
     coinWin: options.coinWin ?? 0,
     cashWin: options.cashWin ?? 0,

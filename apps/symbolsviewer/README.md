@@ -6,7 +6,9 @@
 - `game003-s1`：现有游戏资源，Spine 4.2.43；当前明确为非发布例外，选择其 Spine 状态会因 rendercore 仅支持 4.3.x 而显式失败。
 - `game003-bg-bar`：独立 `normal|wild|up` 组件资源。
 
-`game002-s3` 的 display set 固定为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`，所有 scale 为 `1`。viewer 只接入这 13 组 normal/spinBlur/disabled PNG、同名的 12 个 skeleton、`Symbol.atlas` 和 `Symbol.png`；不会通过宽泛 glob 接入 `CN_1..CN_4`、`Nearwin*` 或 `WM_Fx`。
+`game002-s3` 的 display set 固定为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`，所有 scale 为 `1`。viewer 只把这 13 项放进 symbol selector；同名主 skeleton 仍是 12 个。`CN_1..CN_4` 仅作为当前 `CN.valuePresentation` manifest 精确引用的附属 Spine，通过生成闭包和 rendercore public presenter 预览，不成为独立 symbol；`Nearwin*` 与 `WM_Fx` 仍不会被宽泛 glob 接入。
+
+当当前 set 含 `valuePresentation` 时，toolbar 显示 positive integer Value、Apply Value 和 Clear Value。默认值 `25` 可预览当前 CN 第二档；输入 `9/10/99/100/999/1000` 可核对 manifest 边界。数字由 rendercore 绑定到 manifest 配置的 Spine `Num` slot，跟随该 slot/bone 动画。切 set、Reset 或 Clear 会清理展示，普通 set 不显示该控件。viewer 不解析阈值、不创建私有 Spine adapter，也不把 appear/win 控件映射到未配置动画。
 
 scale、renderPriority 和 normal/appear/win animation 都来自各自的 `symbol-state-textures.manifest.json`，解析、Spine/VNI player 和 fallback 生命周期由 `@slotclientengine/rendercore` 提供。viewer 只负责 UI、输入校验、状态展示和 public resolver 调用。
 

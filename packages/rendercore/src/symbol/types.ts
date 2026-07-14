@@ -111,6 +111,14 @@ export interface RenderSymbolUpdateResult {
   readonly stateChanged: boolean;
 }
 
+export interface RenderSymbolValueController {
+  setValue(value: number | null): void;
+  getValue(): number | null;
+  update(deltaSeconds: number): void;
+  resetForPoolRelease(): void;
+  destroy(): void;
+}
+
 export interface RenderSymbolOptions {
   readonly definition: SymbolDefinition;
   readonly texture: Texture | SymbolNormalTextureSource<Texture>;
@@ -118,6 +126,9 @@ export interface RenderSymbolOptions {
   readonly requiredStateTextures?: readonly SymbolStateId[];
   readonly animationResolver: SymbolAnimationResolver;
   readonly renderPriority?: number;
+  readonly valueControllerFactory?: (
+    root: RenderSymbol,
+  ) => RenderSymbolValueController;
 }
 
 export interface SymbolLayerTextureSource<TTexture = Texture | string> {

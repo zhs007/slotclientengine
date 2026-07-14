@@ -15,17 +15,25 @@ import game003S1StateTextureManifest from "../../../assets/game003-s1/symbol-sta
 import {
   createDefaultSymbolAnimationResolver,
   createSymbolManifestAnimationResolver,
+  createSymbolValuePresentationResourcesFromManifest,
   getSymbolDisplaySymbolsFromManifest,
   parseSymbolStateTextureManifest,
   type ReelSymbolRenderPriorityMap,
   type ReelSymbolScaleMap,
   type SymbolAnimationResolver,
+  type SymbolValuePresentationResourceMap,
 } from "@slotclientengine/rendercore";
 import {
   SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
   createSymbolRenderPriorityMapFromManifest,
   createSymbolScaleMapFromManifest,
 } from "./symbol-assets.js";
+import {
+  symbolValueSpineAtlasModules,
+  symbolValueReelStateTextureModules,
+  symbolValueSpineSkeletonModules,
+  symbolValueSpineTextureModules,
+} from "./generated/game002-symbol-value-resources.generated.js";
 
 export type SymbolSetId = "game002-s3" | "game003-s1" | "game003-bg-bar";
 
@@ -46,6 +54,7 @@ export interface SymbolSetConfig {
   readonly spineTextureModules?: Record<string, string>;
   readonly requiredStates: readonly string[];
   readonly animationResolver: SymbolAnimationResolver;
+  readonly symbolValuePresentationResources?: SymbolValuePresentationResourceMap;
 }
 
 const game003S1Modules = import.meta.glob("../../../assets/game003-s1/*.png", {
@@ -55,21 +64,22 @@ const game003S1Modules = import.meta.glob("../../../assets/game003-s1/*.png", {
 }) as Record<string, string>;
 
 const game002S3NormalModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN}.png",
+  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.png",
   { eager: true, import: "default", query: "?url" },
 ) as Record<string, string>;
 const game002S3SpinBlurModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN}.spinBlur.png",
+  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.spinBlur.png",
   { eager: true, import: "default", query: "?url" },
 ) as Record<string, string>;
 const game002S3DisabledModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN}.disabled.png",
+  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.disabled.png",
   { eager: true, import: "default", query: "?url" },
 ) as Record<string, string>;
 const game002S3Modules = Object.freeze({
   ...game002S3NormalModules,
   ...game002S3SpinBlurModules,
   ...game002S3DisabledModules,
+  ...symbolValueReelStateTextureModules,
 });
 const game002S3SpineSkeletonModules = import.meta.glob(
   "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.json",
@@ -188,6 +198,14 @@ export const SYMBOL_SET_CONFIGS = Object.freeze([
       spineTextureModules: game002S3SpineTextureModules,
       fallback: manifestFallbackAnimationResolver,
     }),
+    symbolValuePresentationResources:
+      createSymbolValuePresentationResourcesFromManifest({
+        manifest: game002S3StateTextureManifest,
+        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+        spineSkeletonModules: symbolValueSpineSkeletonModules,
+        spineAtlasModules: symbolValueSpineAtlasModules,
+        spineTextureModules: symbolValueSpineTextureModules,
+      }),
   }),
   Object.freeze({
     id: "game003-s1",

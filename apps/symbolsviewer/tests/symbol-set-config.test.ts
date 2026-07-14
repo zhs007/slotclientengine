@@ -126,8 +126,13 @@ describe("symbolsviewer symbol set config", () => {
     );
 
     expect(Object.keys(assets)).toEqual([...GAME002_S3_DISPLAYABLE_SYMBOLS]);
-    expect(Object.keys(config.modules)).toHaveLength(39);
+    expect(Object.keys(config.modules)).toHaveLength(38);
     expect(Object.keys(config.spineSkeletonModules ?? {})).toHaveLength(12);
+    expect(
+      config.symbolValuePresentationResources?.CN.tiers.map(
+        (tier) => tier.spec.skeleton,
+      ),
+    ).toEqual(["./CN_1.json", "./CN_2.json", "./CN_3.json", "./CN_4.json"]);
     expect(catalog.getValidation()).toMatchObject({
       displayableSymbols: GAME002_S3_DISPLAYABLE_SYMBOLS,
       ignoredAssetsWithoutPaytable: [],

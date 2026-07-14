@@ -106,4 +106,41 @@ describe("createTemporaryReelStrip", () => {
     expect(strip.get(axisPlan.travelSymbols + 1)).toBe(targetVisibleSymbols[1]);
     expect(strip.get(axisPlan.travelSymbols + 2)).toBe(targetVisibleSymbols[2]);
   });
+
+  it("carries stable random presentation values through the temporary strip and preserves explicit endpoints", () => {
+    const reels = createBasicReels();
+    const layout = createBasicLayout();
+    const axisPlan = createReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      visibleRows: layout.visibleRows,
+      minimumSpinCycles: 2,
+      baseDurationMs: 300,
+      speedSymbolsPerSecond: 30,
+      startDelayMs: 0,
+      stopDelayMs: 0,
+    }).axes[0];
+    const strip = createTemporaryReelStrip({
+      reels,
+      x: 0,
+      layout,
+      plan: axisPlan,
+      currentVisibleSymbols: [3, 2, 1],
+      currentVisiblePresentationValues: [5, null, 25],
+      targetVisibleSymbols: [2, 2, 2],
+      targetVisiblePresentationValues: [100, 250, 500],
+      presentationValueResolver: ({ symbolY, code }) =>
+        code === 0 ? null : (symbolY + 100) * 10 + code,
+    });
+
+    expect(strip.getPresentationValue(0)).toBe(5);
+    expect(strip.getPresentationValue(1)).toBeNull();
+    expect(strip.getPresentationValue(2)).toBe(25);
+    expect(strip.getPresentationValue(axisPlan.travelSymbols)).toBe(100);
+    expect(strip.getPresentationValue(axisPlan.travelSymbols + 1)).toBe(250);
+    expect(strip.getPresentationValue(axisPlan.travelSymbols + 2)).toBe(500);
+    expect(strip.getPresentationValue(3)).toBe(
+      strip.presentationValues[3 - strip.minSymbolY],
+    );
+  });
 });

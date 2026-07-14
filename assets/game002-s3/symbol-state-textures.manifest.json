@@ -1,9 +1,6 @@
 {
   "version": 1,
-  "states": [
-    "spinBlur",
-    "disabled"
-  ],
+  "states": ["spinBlur", "disabled"],
   "settings": {
     "spinBlur": {
       "kind": "verticalBoxBlur",
@@ -333,10 +330,87 @@
       }
     },
     "CN": {
-      "normal": "./CN.png",
-      "spinBlur": "./CN.spinBlur.png",
-      "disabled": "./CN.disabled.png",
-      "scale": 1
+      "scale": 1,
+      "valuePresentation": {
+        "defaultValues": [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000],
+        "reelStates": {
+          "normal": {
+            "kind": "transparent",
+            "width": 200,
+            "height": 200
+          },
+          "spinBlur": "./CN.spinBlur.png",
+          "disabled": "./CN.disabled.png"
+        },
+        "tiers": [
+          {
+            "maxExclusive": 10,
+            "animation": {
+              "kind": "spine",
+              "skeleton": "./CN_1.json",
+              "atlas": "./Symbol.atlas",
+              "texture": "./Symbol.png",
+              "playback": {
+                "mode": "animation",
+                "animationName": "Idle",
+                "loop": true
+              }
+            }
+          },
+          {
+            "maxExclusive": 100,
+            "animation": {
+              "kind": "spine",
+              "skeleton": "./CN_2.json",
+              "atlas": "./Symbol.atlas",
+              "texture": "./Symbol.png",
+              "playback": {
+                "mode": "animation",
+                "animationName": "Idle",
+                "loop": true
+              }
+            }
+          },
+          {
+            "maxExclusive": 1000,
+            "animation": {
+              "kind": "spine",
+              "skeleton": "./CN_3.json",
+              "atlas": "./Symbol.atlas",
+              "texture": "./Symbol.png",
+              "playback": {
+                "mode": "animation",
+                "animationName": "Idle",
+                "loop": true
+              }
+            }
+          },
+          {
+            "animation": {
+              "kind": "spine",
+              "skeleton": "./CN_4.json",
+              "atlas": "./Symbol.atlas",
+              "texture": "./Symbol.png",
+              "playback": {
+                "mode": "animation",
+                "animationName": "Idle",
+                "loop": true
+              }
+            }
+          }
+        ],
+        "text": {
+          "slot": "Num",
+          "x": 0,
+          "y": 0,
+          "fontFamily": "Arial",
+          "fontSize": 32,
+          "fontWeight": "900",
+          "fill": "#fff7d6",
+          "stroke": "#5a2500",
+          "strokeWidth": 4
+        }
+      }
     },
     "CM": {
       "normal": "./CM.png",

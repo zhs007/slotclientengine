@@ -4,6 +4,8 @@ import type {
 } from "@slotclientengine/logiccore";
 import type { Texture } from "pixi.js";
 import { RenderSymbol } from "../symbol/render-symbol.js";
+import { createRenderSymbolValueController } from "../symbol-value-presentation/render-symbol-value-controller.js";
+import type { SymbolValuePresentationResourceMap } from "../symbol-value-presentation/types.js";
 import {
   createDefaultSymbolAnimationResolver,
   createDefaultSymbolStatePreset,
@@ -44,6 +46,7 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
   readonly #cellSize: ReelCellSize;
   readonly #animationResolver: SymbolAnimationResolver;
   readonly #requiredStateTextures: readonly SymbolStateId[];
+  readonly #valuePresentationResources: SymbolValuePresentationResourceMap;
 
   constructor(options: ReelSymbolRegistryOptions) {
     const statePreset = options.statePreset ?? createDefaultSymbolStatePreset();
@@ -141,6 +144,8 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
     this.#textureSetsByCode = textureSetsByCode;
     this.#animationResolver = animationResolver;
     this.#requiredStateTextures = requiredStateTextures;
+    this.#valuePresentationResources =
+      options.valuePresentationResources ?? Object.freeze({});
     this.#cellSize = calculateCellSize([...textureSetsByCode.values()]);
     this.#validation = Object.freeze({
       texturedSymbols: Object.freeze(texturedSymbols),
@@ -209,6 +214,7 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
       );
     }
 
+    const valueResource = this.#valuePresentationResources[entry.symbol];
     const renderSymbol = new RenderSymbol({
       definition,
       texture: textureSet.normal,
@@ -216,6 +222,15 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
       requiredStateTextures: this.#requiredStateTextures,
       animationResolver: this.#animationResolver,
       renderPriority: textureSet.renderPriority,
+      ...(valueResource === undefined
+        ? {}
+        : {
+            valueControllerFactory: (root) =>
+              createRenderSymbolValueController({
+                root,
+                resource: valueResource,
+              }),
+          }),
     });
     renderSymbol.scale.set(textureSet.scale);
     return renderSymbol;

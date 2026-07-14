@@ -12,6 +12,7 @@ import type {
   SymbolStatePreset,
   SymbolTexturePolicy,
 } from "../symbol/index.js";
+import type { SymbolValuePresentationResourceMap } from "../symbol-value-presentation/types.js";
 
 export type ReelSymbolKind = "textured" | "empty";
 export type ReelSpinDirection = "forward" | "backward";
@@ -39,6 +40,7 @@ export interface ReelSymbolRegistryOptions {
   readonly statePreset?: SymbolStatePreset;
   readonly animationResolver?: SymbolAnimationResolver;
   readonly texturePolicy?: SymbolTexturePolicy;
+  readonly valuePresentationResources?: SymbolValuePresentationResourceMap;
 }
 
 export interface ReelSymbolRegistryEntry {
@@ -201,11 +203,23 @@ export interface RenderReelOptions {
   readonly slotParent?: Container;
   readonly slotRenderOrderOffset?: number;
   readonly slotRenderOrderStride?: number;
+  readonly presentationValueResolver?: ReelSymbolPresentationValueResolver;
 }
 
 export interface RenderReelSpinOptions {
   readonly targetVisibleSymbols?: readonly number[];
+  readonly targetVisiblePresentationValues?: readonly (number | null)[];
 }
+
+export interface ReelSymbolPresentationValueContext {
+  readonly x: number;
+  readonly symbolY: number;
+  readonly code: number;
+}
+
+export type ReelSymbolPresentationValueResolver = (
+  context: ReelSymbolPresentationValueContext,
+) => number | null;
 
 export interface RenderReelUpdateResult {
   readonly phase: RenderReelPhase;
@@ -313,6 +327,7 @@ export interface RenderReelSlotSnapshot {
   readonly requestedState: SymbolStateId | null;
   readonly resolvedState: SymbolStateId | null;
   readonly isOnce: boolean;
+  readonly presentationValue: number | null;
 }
 
 export interface RenderGridCellReelSetOptions {
@@ -323,6 +338,27 @@ export interface RenderGridCellReelSetOptions {
   readonly cellWidth: number;
   readonly cellHeight: number;
   readonly order: readonly GridCellCoordinate[];
+  readonly presentationValueResolver?: GridCellSymbolPresentationValueResolver;
+}
+
+export interface GridCellSymbolPresentationValueContext {
+  readonly x: number;
+  readonly y: number;
+  readonly symbolY: number;
+  readonly code: number;
+}
+
+export type GridCellSymbolPresentationValueResolver = (
+  context: GridCellSymbolPresentationValueContext,
+) => number | null;
+
+export type SymbolPresentationValueMatrix = readonly (readonly (
+  | number
+  | null
+)[])[];
+
+export interface RenderGridCellReelSetSpinOptions {
+  readonly targetPresentationValues?: SymbolPresentationValueMatrix;
 }
 
 export interface RenderGridCellReelSetUpdateResult {
@@ -346,6 +382,7 @@ export interface RenderGridCellReelCellSnapshot {
   readonly dimmingAlpha: number;
   readonly requestedState: string | null;
   readonly visibleSymbol: number;
+  readonly presentationValue: number | null;
 }
 
 export interface RenderGridCellReelSetSnapshot {

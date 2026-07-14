@@ -460,6 +460,7 @@ async function loadPreservedManifestMetadata(manifestPath, selectedSymbols) {
       "scale",
       "renderPriority",
       "animations",
+      "valuePresentation",
       ...REQUIRED_STATES,
     ]);
     const hasRenderPriority = Object.prototype.hasOwnProperty.call(
@@ -478,17 +479,189 @@ async function loadPreservedManifestMetadata(manifestPath, selectedSymbols) {
         validatePreservedAnimations(symbol, symbolRecord.animations),
       );
     }
+    if (symbolRecord.valuePresentation !== undefined) {
+      metadata.valuePresentation = validatePreservedValuePresentation(
+        symbol,
+        symbolRecord.valuePresentation,
+      );
+    }
     if (hasRenderPriority) {
       metadata.renderPriority = renderPriority;
     }
     if (
       Object.prototype.hasOwnProperty.call(metadata, "animations") ||
-      Object.prototype.hasOwnProperty.call(metadata, "renderPriority")
+      Object.prototype.hasOwnProperty.call(metadata, "renderPriority") ||
+      Object.prototype.hasOwnProperty.call(metadata, "valuePresentation")
     ) {
       preserved.set(symbol, Object.freeze(metadata));
     }
   }
   return preserved;
+}
+
+function validatePreservedValuePresentation(symbol, value) {
+  const record = assertRecord(
+    value,
+    `existing manifest symbol "${symbol}" valuePresentation`,
+  );
+  assertOnlyKnownKeys(
+    record,
+    `existing manifest symbol "${symbol}" valuePresentation`,
+    ["defaultValues", "reelStates", "tiers", "text"],
+  );
+  if (
+    !Array.isArray(record.defaultValues) ||
+    record.defaultValues.length === 0
+  ) {
+    throw new Error(
+      `${symbol} valuePresentation defaultValues must be non-empty.`,
+    );
+  }
+  const defaultValues = Object.freeze(
+    record.defaultValues.map((candidate, index) => {
+      if (!Number.isSafeInteger(candidate) || candidate <= 0) {
+        throw new Error(
+          `${symbol} valuePresentation defaultValues[${index}] must be a positive safe integer.`,
+        );
+      }
+      return candidate;
+    }),
+  );
+  if (new Set(defaultValues).size !== defaultValues.length) {
+    throw new Error(
+      `${symbol} valuePresentation defaultValues must be unique.`,
+    );
+  }
+  const reelStates = assertRecord(
+    record.reelStates,
+    `${symbol}.valuePresentation.reelStates`,
+  );
+  assertOnlyKnownKeys(reelStates, `${symbol}.valuePresentation.reelStates`, [
+    "normal",
+    ...REQUIRED_STATES,
+  ]);
+  const reelNormal = assertRecord(
+    reelStates.normal,
+    `${symbol}.valuePresentation.reelStates.normal`,
+  );
+  assertOnlyKnownKeys(
+    reelNormal,
+    `${symbol}.valuePresentation.reelStates.normal`,
+    ["kind", "width", "height"],
+  );
+  if (reelNormal.kind !== "transparent") {
+    throw new Error(
+      `${symbol} valuePresentation reel normal must be transparent.`,
+    );
+  }
+  const preservedReelStates = {
+    normal: Object.freeze({
+      kind: "transparent",
+      width: assertFinitePositiveNumber(
+        reelNormal.width,
+        `${symbol}.reelStates.normal.width`,
+      ),
+      height: assertFinitePositiveNumber(
+        reelNormal.height,
+        `${symbol}.reelStates.normal.height`,
+      ),
+    }),
+  };
+  for (const state of REQUIRED_STATES) {
+    preservedReelStates[state] = validateLocalManifestFilePath(
+      reelStates[state],
+      `${symbol}.reelStates.${state}`,
+      [".png"],
+    );
+  }
+  if (!Array.isArray(record.tiers) || record.tiers.length === 0) {
+    throw new Error(
+      `Existing manifest symbol "${symbol}" valuePresentation tiers must be non-empty.`,
+    );
+  }
+  let previousMax = 0;
+  const tiers = Object.freeze(
+    record.tiers.map((valueTier, index) => {
+      const tier = assertRecord(
+        valueTier,
+        `existing manifest symbol "${symbol}" valuePresentation tier ${index}`,
+      );
+      assertOnlyKnownKeys(tier, `${symbol}.valuePresentation.tiers[${index}]`, [
+        "maxExclusive",
+        "animation",
+      ]);
+      const isLast = index === record.tiers.length - 1;
+      if (isLast && tier.maxExclusive !== undefined) {
+        throw new Error(
+          `${symbol} final valuePresentation tier must be unbounded.`,
+        );
+      }
+      if (!isLast && tier.maxExclusive === undefined) {
+        throw new Error(
+          `${symbol} bounded valuePresentation tier requires maxExclusive.`,
+        );
+      }
+      if (
+        tier.maxExclusive !== undefined &&
+        (!Number.isSafeInteger(tier.maxExclusive) ||
+          tier.maxExclusive <= previousMax)
+      ) {
+        throw new Error(
+          `${symbol} valuePresentation maxExclusive must strictly increase as positive safe integers.`,
+        );
+      }
+      if (tier.maxExclusive !== undefined) {
+        previousMax = tier.maxExclusive;
+      }
+      const animation = validatePreservedAnimation(
+        symbol,
+        `valuePresentation.tiers[${index}]`,
+        tier.animation,
+      );
+      if (animation.kind !== "spine" || animation.playback.loop !== true) {
+        throw new Error(
+          `${symbol} valuePresentation tier must use looping Spine.`,
+        );
+      }
+      return Object.freeze({
+        ...(tier.maxExclusive === undefined
+          ? {}
+          : { maxExclusive: tier.maxExclusive }),
+        animation,
+      });
+    }),
+  );
+  const text = assertRecord(record.text, `${symbol}.valuePresentation.text`);
+  assertOnlyKnownKeys(text, `${symbol}.valuePresentation.text`, [
+    "slot",
+    "x",
+    "y",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "fill",
+    "stroke",
+    "strokeWidth",
+  ]);
+  return Object.freeze({
+    defaultValues,
+    reelStates: Object.freeze(preservedReelStates),
+    tiers,
+    text: Object.freeze({
+      slot: assertNonEmptyString(text.slot, `${symbol}.slot`),
+      x: assertFiniteNumber(text.x, `${symbol}.text.x`),
+      y: assertFiniteNumber(text.y, `${symbol}.text.y`),
+      fontFamily: assertNonEmptyString(text.fontFamily, `${symbol}.fontFamily`),
+      fontSize: assertFinitePositiveNumber(text.fontSize, `${symbol}.fontSize`),
+      fontWeight: assertNonEmptyString(text.fontWeight, `${symbol}.fontWeight`),
+      fill: assertNonEmptyString(text.fill, `${symbol}.fill`),
+      stroke: assertNonEmptyString(text.stroke, `${symbol}.stroke`),
+      strokeWidth: assertFinitePositiveNumber(
+        text.strokeWidth,
+        `${symbol}.strokeWidth`,
+      ),
+    }),
+  });
 }
 
 function validatePreservedRenderPriority(symbol, value) {
@@ -724,18 +897,22 @@ function createManifest(symbols, composites, scale, preservedMetadata) {
         symbols.map((symbol) => [
           symbol,
           Object.freeze({
-            normal: composites.has(symbol)
-              ? Object.freeze({
-                  kind: "layered",
-                  layers: Object.freeze(
-                    composites
-                      .get(symbol)
-                      .map((layer) => createManifestLayer(layer)),
-                  ),
-                })
-              : `./${symbol}.png`,
-            [SPIN_BLUR_STATE]: `./${symbol}.${SPIN_BLUR_STATE}.png`,
-            [DISABLED_STATE]: `./${symbol}.${DISABLED_STATE}.png`,
+            ...(preservedMetadata.get(symbol)?.valuePresentation === undefined
+              ? {
+                  normal: composites.has(symbol)
+                    ? Object.freeze({
+                        kind: "layered",
+                        layers: Object.freeze(
+                          composites
+                            .get(symbol)
+                            .map((layer) => createManifestLayer(layer)),
+                        ),
+                      })
+                    : `./${symbol}.png`,
+                  [SPIN_BLUR_STATE]: `./${symbol}.${SPIN_BLUR_STATE}.png`,
+                  [DISABLED_STATE]: `./${symbol}.${DISABLED_STATE}.png`,
+                }
+              : {}),
             scale,
             ...(preservedMetadata.get(symbol)?.renderPriority !== undefined
               ? {
@@ -744,6 +921,12 @@ function createManifest(symbols, composites, scale, preservedMetadata) {
               : {}),
             ...(preservedMetadata.get(symbol)?.animations !== undefined
               ? { animations: preservedMetadata.get(symbol).animations }
+              : {}),
+            ...(preservedMetadata.get(symbol)?.valuePresentation !== undefined
+              ? {
+                  valuePresentation:
+                    preservedMetadata.get(symbol).valuePresentation,
+                }
               : {}),
           }),
         ]),

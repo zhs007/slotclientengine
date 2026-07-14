@@ -5,9 +5,11 @@ import game002S3StateTextureManifest from "../../../assets/game002-s3/symbol-sta
 import {
   createDefaultSymbolAnimationResolver,
   createSymbolManifestAnimationResolver,
+  createSymbolValuePresentationResourcesFromManifest,
   type ReelSymbolRenderPriorityMap,
   type ReelSymbolScaleMap,
   type SymbolAnimationResolver,
+  type SymbolValuePresentationResourceMap,
 } from "@slotclientengine/rendercore";
 import type { SpineBackgroundResource } from "@slotclientengine/rendercore/background";
 import {
@@ -27,17 +29,23 @@ import {
   parseGame002SkinId,
   type Game002SkinId,
 } from "./skin-id.js";
+import {
+  symbolValueSpineAtlasModules,
+  symbolValueReelStateTextureModules,
+  symbolValueSpineSkeletonModules,
+  symbolValueSpineTextureModules,
+} from "./generated/symbol-value-resources.generated.js";
 
 const game002S3NormalModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN}.png",
+  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.png",
   { eager: true, import: "default", query: "?url" },
 ) as Record<string, string>;
 const game002S3SpinBlurModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN}.spinBlur.png",
+  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.spinBlur.png",
   { eager: true, import: "default", query: "?url" },
 ) as Record<string, string>;
 const game002S3DisabledModules = import.meta.glob(
-  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN}.disabled.png",
+  "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.disabled.png",
   { eager: true, import: "default", query: "?url" },
 ) as Record<string, string>;
 const game002S3SpineSkeletonModules = import.meta.glob(
@@ -49,6 +57,7 @@ const game002S3SymbolModules = Object.freeze({
   ...game002S3NormalModules,
   ...game002S3SpinBlurModules,
   ...game002S3DisabledModules,
+  ...symbolValueReelStateTextureModules,
 });
 const game002S3SpineAtlasModules = Object.freeze({
   "../../../assets/game002-s3/Symbol.atlas": game002S3SpineAtlasRaw,
@@ -76,6 +85,7 @@ export interface Game002SkinConfig {
   readonly symbolScales: ReelSymbolScaleMap;
   readonly symbolRenderPriorities: ReelSymbolRenderPriorityMap;
   readonly symbolAnimationResolver: SymbolAnimationResolver;
+  readonly symbolValuePresentationResources: SymbolValuePresentationResourceMap;
   readonly gridLayout: Game002GridLayout;
   readonly focusRegion: Game002FocusRegion;
 }
@@ -113,6 +123,14 @@ const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
         spineTextureModules: game002S3SpineTextureModules,
         fallback: defaultAnimationResolver,
       }),
+      symbolValuePresentationResources:
+        createSymbolValuePresentationResourcesFromManifest({
+          manifest: game002S3StateTextureManifest,
+          requiredStates: ["spinBlur", "disabled"],
+          spineSkeletonModules: symbolValueSpineSkeletonModules,
+          spineAtlasModules: symbolValueSpineAtlasModules,
+          spineTextureModules: symbolValueSpineTextureModules,
+        }),
       gridLayout: GAME002_GRID_LAYOUT,
       focusRegion: GAME002_BACKGROUND_RESOURCE.manifest.adaptation.focusRect,
     }),

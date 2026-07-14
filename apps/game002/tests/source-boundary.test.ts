@@ -216,6 +216,25 @@ describe("game002 source boundary", () => {
     );
     expect(appSource).not.toMatch(/\.children[\s\S]{0,80}requestState/);
   });
+
+  it("keeps CN tier selection generic and generated from the manifest", () => {
+    const repoRoot = resolve(APP_ROOT, "../..");
+    const sharedSource = readSourceTree(
+      join(repoRoot, "packages/rendercore/src/symbol-value-presentation"),
+    );
+    const handwrittenAppSource = listFiles(
+      join(APP_ROOT, "src"),
+      (file) =>
+        file.endsWith(".ts") && !file.includes(`${join("src", "generated")}`),
+    )
+      .map((file) => readFileSync(file, "utf8"))
+      .join("\n");
+
+    expect(sharedSource).not.toMatch(/bg-gencoins|GAME002_CN|CN_[0-9]/);
+    expect(sharedSource).not.toMatch(/RenderGridCellReelSet|RenderReelSet/);
+    expect(handwrittenAppSource).not.toMatch(/CN_[1-4]|CN_\$\{/);
+    expect(handwrittenAppSource).not.toMatch(/\[10,\s*100,\s*1000\]/);
+  });
 });
 
 function readSourceTree(directory: string): string {

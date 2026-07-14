@@ -15,11 +15,13 @@ import {
   type GridCellReelSpinPlan,
   type GridCellReelSpinTiming,
   type ReelLayout,
+  type ReelSymbolRegistry,
   type ReelSpinDirection,
   type RenderGridCellReelCellSnapshot,
   type RenderGridCellReelSetUpdateResult,
   type RenderVisibleSymbolGeometrySnapshot,
   type RenderVisibleSymbolStateSnapshot,
+  type SymbolPresentationValueMatrix,
 } from "@slotclientengine/rendercore/reel";
 import type {
   ReelSymbolRenderPriorityMap,
@@ -27,6 +29,7 @@ import type {
   SymbolAnimationResolver,
   SymbolAssetMap,
   SymbolStateId,
+  SymbolValuePresentationResourceMap,
 } from "@slotclientengine/rendercore";
 import type { WinResultPosition } from "@slotclientengine/gameframeworks";
 import {
@@ -69,6 +72,8 @@ export interface Game002ReelConfig {
   readonly symbolScales: ReelSymbolScaleMap;
   readonly symbolRenderPriorities: ReelSymbolRenderPriorityMap;
   readonly animationResolver: SymbolAnimationResolver;
+  readonly symbolValuePresentationResources: SymbolValuePresentationResourceMap;
+  readonly random: () => number;
   readonly gridLayout: Game002GridLayout;
   readonly focusRegion: Game002FocusRegion;
   readonly cellReelOffsets: GridCellReelOffsetMatrix;
@@ -88,6 +93,9 @@ export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   symbolScales: GAME002_SYMBOL_SCALES,
   symbolRenderPriorities: GAME002_SYMBOL_RENDER_PRIORITIES,
   animationResolver: GAME002_DEFAULT_SKIN.symbolAnimationResolver,
+  symbolValuePresentationResources:
+    GAME002_DEFAULT_SKIN.symbolValuePresentationResources,
+  random: Math.random,
   gridLayout: GAME002_GRID_LAYOUT,
   focusRegion: GAME002_FOCUS_REGION,
   cellReelOffsets: GAME002_GRID_CELL_REEL_OFFSETS,
@@ -109,6 +117,7 @@ export interface Game002ReelVisualSnapshot {
   readonly spinning: boolean;
   readonly visibleScene: SceneMatrix;
   readonly requestedStates: readonly (readonly (string | null)[])[];
+  readonly presentationValues: SymbolPresentationValueMatrix;
   readonly reelCount: number;
   readonly gridCellCount: number;
   readonly layerX: number;
@@ -125,9 +134,17 @@ export interface Game002ReelRuntime {
   getTargetScene(): SceneMatrix | null;
   getFinalYs(): readonly number[] | null;
   getVisualSnapshot(): Game002ReelVisualSnapshot;
-  applyScene(scene: SceneMatrix, sceneName?: string): readonly number[];
+  applyScene(
+    scene: SceneMatrix,
+    sceneName?: string,
+    presentationValues?: SymbolPresentationValueMatrix,
+  ): readonly number[];
   createSpinPlan(scene: SceneMatrix, sceneName?: string): GridCellReelSpinPlan;
-  spinToScene(scene: SceneMatrix, sceneName?: string): GridCellReelSpinPlan;
+  spinToScene(
+    scene: SceneMatrix,
+    sceneName?: string,
+    targetPresentationValues?: SymbolPresentationValueMatrix,
+  ): GridCellReelSpinPlan;
   update(deltaSeconds: number): RenderGridCellReelSetUpdateResult;
   requestVisibleSymbolStates(
     positions: readonly WinResultPosition[],
@@ -164,6 +181,7 @@ export function createGame002ReelRuntime(
     texturePolicy: {
       requiredStateTextures: GAME002_REQUIRED_STATE_TEXTURES,
     },
+    valuePresentationResources: config.symbolValuePresentationResources,
   });
   assertConfiguredTexturedSymbolsAvailable(registry.getValidation(), config);
   const layout = createGame002ReelLayout(config.gridLayout);
@@ -187,6 +205,11 @@ export function createGame002ReelRuntime(
     cellWidth: layout.cellWidth,
     cellHeight: layout.cellHeight,
     order,
+    presentationValueResolver: createPresentationValueResolver({
+      registry,
+      resources: config.symbolValuePresentationResources,
+      random: config.random,
+    }),
   });
   reelSet.x = layerLayout.x;
   reelSet.y = layerLayout.y;
@@ -247,6 +270,10 @@ export function createGame002ReelRuntime(
           gridSnapshot.cells,
           (cell) => cell.requestedState,
         ),
+        presentationValues: createGridCellSnapshotMatrix(
+          gridSnapshot.cells,
+          (cell) => cell.presentationValue,
+        ),
         reelCount: GAME002_REEL_COUNT,
         gridCellCount: gridSnapshot.cells.length,
         layerX: reelSet.x,
@@ -256,10 +283,16 @@ export function createGame002ReelRuntime(
     applyScene(
       scene: SceneMatrix,
       sceneName = "game002.initialScene",
+      presentationValues?: SymbolPresentationValueMatrix,
     ): readonly number[] {
       const validScene = validateGame002Scene(scene, sceneName);
       const nextFinalYs = resolveSceneFinalYs(validScene, sceneName);
-      reelSet.resetToScene(validScene, nextFinalYs, config.cellReelOffsets);
+      reelSet.resetToScene(
+        validScene,
+        nextFinalYs,
+        config.cellReelOffsets,
+        presentationValues,
+      );
       const visibleScene = validateGame002Scene(
         reelSet.getVisibleScene(),
         `${sceneName} visible scene`,
@@ -293,6 +326,7 @@ export function createGame002ReelRuntime(
     spinToScene(
       scene: SceneMatrix,
       sceneName = "game002.spinScene",
+      targetPresentationValues?: SymbolPresentationValueMatrix,
     ): GridCellReelSpinPlan {
       if (reelSet.getSnapshot().spinning) {
         throw new Error("game002 reels are already spinning.");
@@ -313,7 +347,7 @@ export function createGame002ReelRuntime(
       });
       finalYs = nextFinalYs;
       targetScene = validScene;
-      reelSet.spin(plan);
+      reelSet.spin(plan, { targetPresentationValues });
       reelSet.visible = true;
       return plan;
     },
@@ -440,4 +474,41 @@ function assertConfiguredTexturedSymbolsAvailable(
       );
     }
   }
+}
+
+function createPresentationValueResolver(options: {
+  readonly registry: ReelSymbolRegistry;
+  readonly resources: SymbolValuePresentationResourceMap;
+  readonly random: () => number;
+}): (context: {
+  readonly x: number;
+  readonly y: number;
+  readonly symbolY: number;
+  readonly code: number;
+}) => number | null {
+  const valuesByOccurrence = new Map<string, number>();
+  return ({ x, y, symbolY, code }) => {
+    const symbol = options.registry.getEntryByCode(code).symbol;
+    const resource = options.resources[symbol];
+    if (!resource) return null;
+    const key = `${x}:${y}:${symbolY}:${code}`;
+    const existing = valuesByOccurrence.get(key);
+    if (existing !== undefined) return existing;
+    const random = options.random();
+    if (!Number.isFinite(random) || random < 0 || random >= 1) {
+      throw new Error("game002 CN presentation random must be in [0, 1).");
+    }
+    const value =
+      resource.defaultValues[
+        Math.min(
+          resource.defaultValues.length - 1,
+          Math.floor(random * resource.defaultValues.length),
+        )
+      ];
+    if (value === undefined) {
+      throw new Error(`Symbol "${symbol}" has no default presentation values.`);
+    }
+    valuesByOccurrence.set(key, value);
+    return value;
+  };
 }

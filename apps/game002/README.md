@@ -29,11 +29,18 @@ http://127.0.0.1:5207/?skin=1&gamecode=GAME_CODE&token=TOKEN&businessid=guest&cl
 - 背景唯一配置源：`assets/game002-s3/background.manifest.json`。资源闭包为 `BG.json`、`BG.atlas` 和 `BG.png,BG_2.png..BG_8.png`；完整 art 仍为 `2000 x 2000`，Spine 原点通过 manifest 的 `{x:1000,y:1000,scale:1}` 映射到 art 中心，并裁切在完整 art 内。
 - 游戏配置：`assets/gamecfg002/gameconfig.json`，继续使用本地公开 `reels-001`。
 - 可展示 symbol 顺序固定为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`。
-- 13 个 symbol 都必须由 manifest 声明 normal、`spinBlur`、`disabled` 和 `scale: 1`；`emptySymbols=[]`，`BN` 是真实贴图，不是透明兜底。
-- `CN_1..CN_4`、`Nearwin1..Nearwin3`、`WM_Fx`、背景和 atlas texture 不属于主 symbol 集，不能被宽泛 glob 接入。
+- 12 个普通 symbol 必须由 manifest 顶层声明 normal、`spinBlur`、`disabled` 和 `scale: 1`；`CN` 顶层只声明 `scale: 1 + valuePresentation`，不允许顶层 normal/state。CN 的无值 reel normal 是 `valuePresentation.reelStates.normal` 显式透明占位，blur/disabled 也只放在 `reelStates`，实际 normal art 只来自命中 tier 的 Spine。`emptySymbols=[]`，`BN` 是真实贴图，不是透明兜底。
+- `CN_1..CN_4` 不属于主 symbol 集，只是当前 `CN.valuePresentation` 精确引用的附属 Spine；`Nearwin1..Nearwin3`、`WM_Fx` 仍未接入。附属资源由 `generate:symbol-value-resources` 从 manifest 生成精确闭包，禁止宽泛 glob。
+
+## CN otherScene value presentation
+
+第 0 step 触发 `bg-gencoins` 时，app 通过 gameframeworks facade 读取且只读取一个 `usedOtherScenes`。目标 scene 的 `CN` 格必须对应 positive safe integer，非 `CN` 格必须精确为 `0`；缺 basic data、尺寸漂移、非法值或 code 不匹配都会在启动 reel 前或展示前显式失败。文本直接显示 `String(value)`，不走美元 formatter。
+
+档数、`maxExclusive`、默认候选数组、Spine skeleton/atlas/texture、animation、文字 `slot`/local offset 和样式唯一来自 `assets/game002-s3/symbol-state-textures.manifest.json`。当前默认候选为 `[1,2,5,10,25,50,100,250,500,1000]`，档位为 `<10`、`<100`、`<1000`、无上限四档。defaultScene 没有 otherScene 时，每个 CN 从候选数组取一个随机值；spin 的本地临时轮带也为每个 CN occurrence 固定一个候选值，使档位 Spine/数字跟随 reel slot 滚动而不是空白。目标 endpoint 在启动 spin 前写入服务器 otherScene 值，逐格落地到最终停轴都不回退为随机值或空值；未触发 `bg-gencoins` 时继续使用本地候选值。数字绑定每个 skeleton 真实存在的 `Num` slot，继承 slot/bone 动画；production TypeScript 不固定候选、四档、`CN_数字` 或 slot 名。CN value 属于实际 main-reel symbol，world 顺序仍为 background、main reels、`bg-win` carousel、global win-amount。
+
 - scale、render priority 和 animation 都从 `assets/game002-s3/symbol-state-textures.manifest.json` 派生；app 不维护第二份表。
 
-Spine 统一由 rendercore 的官方 Pixi runtime 解析，只接受 4.3.x skeleton。当前 12 个主 symbol skeleton 是 4.3.23：`WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN`；`CN` 没有同名 skeleton，因此保持静态贴图。背景 skeleton 也是 4.3.23，并与 symbol 共用 rendercore 的版本、atlas、skeleton 和手动 update 底层，不在 app 内复制 adapter。manifest 中 animation name 区分大小写并必须真实存在。
+Spine 统一由 rendercore 的官方 Pixi runtime 解析，只接受 4.3.x skeleton。当前 12 个普通主 symbol skeleton 是 4.3.23：`WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN`；`CN` 没有同名 skeleton，其 normal 由命中 value tier 的 Spine 提供。背景 skeleton 也是 4.3.23，并与 symbol 共用 rendercore 的版本、atlas、skeleton 和手动 update 底层，不在 app 内复制 adapter。manifest 中 animation name 区分大小写并必须真实存在。
 
 背景状态合同为 `BaseGame=BG loop`、`FreeGame=FG loop`、`BaseGame -> FreeGame=BG_FG once`、`FreeGame -> BaseGame=FG_BG once`。当前 app 只初始化并持续播放 `BaseGame`；FreeGame 的服务端触发语义尚未定义，因此 app 不猜测 GMI 字段，也不提供 query/debug fallback。以后业务合同明确后，只调用 rendercore background player 的 `requestState()`。
 
@@ -77,6 +84,6 @@ pnpm --filter game002 build
 pnpm --filter game002 release:check
 ```
 
-生产产物在 `apps/game002/dist/`。`release:check` 会检查相对 URL、敏感默认值、background manifest/4.3 skeleton/8-page atlas 的 source 与 dist 字节闭包、13 组状态贴图、12 个 symbol Spine JSON、symbol atlas/texture、win-amount manifest/projects/assets，以及 bundle 不引用 `bg.jpg` 或旧 skin 目录。`BG.png` 与 `BG_2.png` 当前源字节相同，Vite 可只输出一份 hashed bytes；两页运行时 URL 仍通过稳定 `spineAtlasPage` query 保持一一对应，parser 禁止两个 page 直接共用同一 URL。所有背景资源都在 loading 99% 前闭合，100% 后才创建 background player/framework/Pixi。子目录部署必须保留尾斜杠，例如 `https://cdn.example.com/game002/?skin=1&...`。
+生产产物在 `apps/game002/dist/`。`release:check` 会检查相对 URL、敏感默认值、background manifest/4.3 skeleton/8-page atlas 的 source 与 dist 字节闭包、12 个普通 normal、13 组 reel state 贴图、12 个普通 symbol Spine JSON、CN tier skeleton/slot、symbol atlas/texture、win-amount manifest/projects/assets，以及 bundle 不引用 `bg.jpg`、CN 顶层 normal 或旧 skin 目录。`BG.png` 与 `BG_2.png` 当前源字节相同，Vite 可只输出一份 hashed bytes；两页运行时 URL 仍通过稳定 `spineAtlasPage` query 保持一一对应，parser 禁止两个 page 直接共用同一 URL。所有背景资源都在 loading 99% 前闭合，100% 后才创建 background player/framework/Pixi。子目录部署必须保留尾斜杠，例如 `https://cdn.example.com/game002/?skin=1&...`。
 
 常见显式失败包括：query 缺失/重复/非法、旧 skin 或 `serverUrl`、资源或 loading closure 缺项、manifest unknown field/路径/尺寸/focus/state/transition 非法、Spine 非 4.3、atlas page/texture/animation 不匹配、并发背景切换、scene 不是 `6 x 9`、未知 symbol、金额输入非法、最终可见 scene 不一致、live/collect 失败。不得切换到静态背景、首帧、mock、旧 skin、placeholder、BN 兜底或 Spine 4.2/3.8 fallback。

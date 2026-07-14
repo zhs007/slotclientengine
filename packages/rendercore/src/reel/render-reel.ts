@@ -43,6 +43,7 @@ export class RenderReel extends Container {
   readonly #usesExternalSlotParent: boolean;
   readonly #slotRenderOrderOffset: number;
   readonly #slotRenderOrderStride: number;
+  readonly #presentationValueResolver: RenderReelOptions["presentationValueResolver"];
   readonly #slots: readonly ReelSlot[];
   readonly #clipMask: Graphics;
   #phase: RenderReelPhase = "idle";
@@ -53,6 +54,8 @@ export class RenderReel extends Container {
   #currentY = 0;
   #staticVisibleSymbols: readonly number[] | null = null;
   #targetVisibleSymbols: readonly number[] | null = null;
+  #staticVisiblePresentationValues: readonly (number | null)[] | null = null;
+  #targetVisiblePresentationValues: readonly (number | null)[] | null = null;
   #landed = false;
 
   constructor(options: RenderReelOptions) {
@@ -62,6 +65,7 @@ export class RenderReel extends Container {
     this.layout = options.layout;
     this.#registry = options.registry;
     this.#symbolPool = options.symbolPool;
+    this.#presentationValueResolver = options.presentationValueResolver;
     this.x = options.layout.getReelX(options.x);
     this.#slotParent = options.slotParent ?? this;
     this.#usesExternalSlotParent = this.#slotParent !== this;
@@ -105,6 +109,11 @@ export class RenderReel extends Container {
       this.layout.visibleRows,
       "targetVisibleSymbols",
     );
+    const targetVisiblePresentationValues = parsePresentationValues(
+      options.targetVisiblePresentationValues,
+      this.layout.visibleRows,
+      "targetVisiblePresentationValues",
+    );
 
     this.#plan = plan;
     this.#spinStrip = createTemporaryReelStrip({
@@ -113,10 +122,16 @@ export class RenderReel extends Container {
       layout: this.layout,
       plan,
       currentVisibleSymbols: this.getVisibleScene(),
+      currentVisiblePresentationValues: this.getVisiblePresentationValues(),
       targetVisibleSymbols,
+      targetVisiblePresentationValues,
+      presentationValueResolver: this.#presentationValueResolver,
     });
     this.#staticVisibleSymbols = null;
+    this.#staticVisiblePresentationValues = null;
     this.#targetVisibleSymbols = targetVisibleSymbols ?? null;
+    this.#targetVisiblePresentationValues =
+      targetVisiblePresentationValues ?? null;
     this.#spinLocalY = 0;
     this.#elapsedMs = 0;
     this.#phase = "starting";
@@ -174,6 +189,8 @@ export class RenderReel extends Container {
     this.#currentY = y;
     this.#staticVisibleSymbols = null;
     this.#targetVisibleSymbols = null;
+    this.#staticVisiblePresentationValues = null;
+    this.#targetVisiblePresentationValues = null;
     this.#phase = "stopped";
     this.#landed = true;
     this.y = 0;
@@ -182,19 +199,36 @@ export class RenderReel extends Container {
     this.updateVisibleSymbols(0);
   }
 
-  resetToVisibleSymbols(visibleSymbols: readonly number[], y = 0): void {
+  resetToVisibleSymbols(
+    visibleSymbols: readonly number[],
+    y = 0,
+    presentationValues?: readonly (number | null)[],
+  ): void {
     const parsedVisibleSymbols = parseVisibleSymbols(
       visibleSymbols,
       this.layout.visibleRows,
       "visibleSymbols",
     )!;
+    const parsedPresentationValues = parsePresentationValues(
+      presentationValues,
+      this.layout.visibleRows,
+      "presentationValues",
+    );
     this.#plan = null;
     this.#spinStrip = null;
     this.#spinLocalY = 0;
     this.#elapsedMs = 0;
     this.#currentY = y;
     this.#staticVisibleSymbols = parsedVisibleSymbols;
+    this.#staticVisiblePresentationValues =
+      parsedPresentationValues ??
+      Object.freeze(
+        parsedVisibleSymbols.map((code, windowY) =>
+          this.resolvePresentationValue(y + windowY, code),
+        ),
+      );
     this.#targetVisibleSymbols = null;
+    this.#targetVisiblePresentationValues = null;
     this.#phase = "stopped";
     this.#landed = true;
     this.y = 0;
@@ -207,6 +241,19 @@ export class RenderReel extends Container {
     return this.createWindowSnapshot(
       this.#spinStrip ? this.#spinLocalY : this.#currentY,
     ).visibleScene;
+  }
+
+  getVisiblePresentationValues(): readonly (number | null)[] {
+    const y = this.#spinStrip ? this.#spinLocalY : this.#currentY;
+    const snapshot = this.createWindowSnapshot(y);
+    const visibleSlots = snapshot.slots.filter(
+      (slot) => slot.windowY >= 0 && slot.windowY < this.layout.visibleRows,
+    );
+    return Object.freeze(
+      visibleSlots.map((slot) =>
+        this.getPresentationValue(slot.symbolY, slot.code, y),
+      ),
+    );
   }
 
   getSlotSnapshots(): readonly RenderReelSlotSnapshot[] {
@@ -283,6 +330,7 @@ export class RenderReel extends Container {
       requestedState: stateSnapshot?.requestedState ?? null,
       resolvedState: stateSnapshot?.resolvedState ?? null,
       isOnce: stateSnapshot?.isOnce ?? false,
+      presentationValue: slot.symbol?.getPresentationValue() ?? null,
     });
   }
 
@@ -357,7 +405,11 @@ export class RenderReel extends Container {
         snapshot.pixelOffsetY,
       );
       slot.container.visible = this.shouldShowSlot(slotData.windowY);
-      this.syncSlot(slot, slotData.code);
+      this.syncSlot(
+        slot,
+        slotData.code,
+        this.getPresentationValue(slotData.symbolY, slotData.code, y),
+      );
       slot.symbol?.requestState(state);
     }
   }
@@ -386,8 +438,13 @@ export class RenderReel extends Container {
     });
   }
 
-  private syncSlot(slot: ReelSlot, code: number): void {
+  private syncSlot(
+    slot: ReelSlot,
+    code: number,
+    presentationValue: number | null,
+  ): void {
     if (slot.code === code) {
+      slot.symbol?.setPresentationValue(presentationValue);
       this.syncSlotRenderOrder(slot);
       return;
     }
@@ -410,6 +467,7 @@ export class RenderReel extends Container {
     if (slot.symbol) {
       slot.container.addChild(slot.symbol);
       slot.symbol.init();
+      slot.symbol.setPresentationValue(presentationValue);
     }
     this.syncSlotRenderOrder(slot);
   }
@@ -447,7 +505,10 @@ export class RenderReel extends Container {
     this.#elapsedMs = plan.durationMs;
     this.#currentY = plan.finalY;
     this.#staticVisibleSymbols = this.#targetVisibleSymbols;
+    this.#staticVisiblePresentationValues =
+      this.#targetVisiblePresentationValues;
     this.#targetVisibleSymbols = null;
+    this.#targetVisiblePresentationValues = null;
     this.#spinStrip = null;
     this.#spinLocalY = 0;
     this.#phase = "stopped";
@@ -515,6 +576,59 @@ export class RenderReel extends Container {
     }
     return windowY >= 0 && windowY < this.layout.visibleRows;
   }
+
+  private getPresentationValue(
+    symbolY: number,
+    code: number,
+    renderedY: number,
+  ): number | null {
+    if (this.#spinStrip) return this.#spinStrip.getPresentationValue(symbolY);
+    if (this.#staticVisibleSymbols && this.#staticVisiblePresentationValues) {
+      const visibleY = symbolY - Math.floor(renderedY);
+      if (visibleY >= 0 && visibleY < this.layout.visibleRows) {
+        return this.#staticVisiblePresentationValues[visibleY] ?? null;
+      }
+    }
+    return this.resolvePresentationValue(symbolY, code);
+  }
+
+  private resolvePresentationValue(
+    symbolY: number,
+    code: number,
+  ): number | null {
+    return normalizePresentationValue(
+      this.#presentationValueResolver?.({ x: this.xIndex, symbolY, code }) ??
+        null,
+      "presentationValueResolver result",
+    );
+  }
+}
+
+function parsePresentationValues(
+  value: readonly (number | null)[] | undefined,
+  expectedLength: number,
+  label: string,
+): readonly (number | null)[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length !== expectedLength) {
+    throw new ReelError(`${label} length must be ${expectedLength}.`);
+  }
+  return Object.freeze(
+    value.map((candidate, index) =>
+      normalizePresentationValue(candidate, `${label}[${index}]`),
+    ),
+  );
+}
+
+function normalizePresentationValue(
+  value: unknown,
+  label: string,
+): number | null {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    throw new ReelError(`${label} must be a positive safe integer or null.`);
+  }
+  return value;
 }
 
 function parseVisibleSymbols(
