@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   GAME002_ART_SIZE,
-  GAME002_ASSET_SIZE,
   GAME002_BOARD_FRAME,
   GAME002_BOARD_FRAME_IN_REFERENCE,
   GAME002_CELL_SIZE,
@@ -22,6 +21,7 @@ import {
   validateGame002BoardFrame,
   validateGame002FocusRegion,
 } from "../src/game-layout.js";
+import { GAME002_BACKGROUND_MANIFEST } from "../src/background-config.js";
 
 describe("game002-s3 layout", () => {
   it("locks the single s3 art, focus and 6 x 9 board contract", () => {
@@ -30,7 +30,10 @@ describe("game002-s3 layout", () => {
     const layerLayout = createGame002ReelLayerLayout(reelLayout, layout);
 
     expect(GAME002_ART_SIZE).toEqual({ width: 2000, height: 2000 });
-    expect(GAME002_ASSET_SIZE.background).toEqual(GAME002_ART_SIZE);
+    expect(GAME002_ART_SIZE).toBe(GAME002_BACKGROUND_MANIFEST.artSize);
+    expect(GAME002_FOCUS_REGION).toBe(
+      GAME002_BACKGROUND_MANIFEST.adaptation.focusRect,
+    );
     expect(GAME002_REFERENCE_SIZE).toEqual({ width: 1125, height: 2000 });
     expect(GAME002_REFERENCE_VISIBLE_RECT_IN_ART).toEqual({
       x: 437.5,

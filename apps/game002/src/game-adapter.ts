@@ -1,4 +1,4 @@
-import { Application, Assets, Container, Sprite, type Texture } from "pixi.js";
+import { Application, Container } from "pixi.js";
 import type {
   GameLogic,
   SlotGameAdapter,
@@ -8,6 +8,10 @@ import type {
   SlotGameViewportSnapshot,
 } from "@slotclientengine/gameframeworks";
 import type { SymbolAssetMap } from "@slotclientengine/rendercore";
+import {
+  createSpineBackgroundPlayer,
+  type SpineBackgroundPlayer,
+} from "@slotclientengine/rendercore/background";
 import type {
   WinAmountAnimationPhase,
   WinAmountAnimationPlayer,
@@ -16,7 +20,7 @@ import {
   createGame002SymbolAssetMapFromModules,
   loadGame002SymbolTextures,
 } from "./assets.js";
-import { GAME002_ASSET_SIZE, createGame002Layout } from "./game-layout.js";
+import { createGame002Layout } from "./game-layout.js";
 import {
   DEFAULT_GAME002_REEL_CONFIG,
   assertGame002ReelVisualMatchesTarget,
@@ -54,19 +58,16 @@ export interface Game002PixiApplication {
   destroy(): void;
 }
 
-export interface Game002StaticTextures {
-  readonly background: Texture;
-}
-
 export interface Game002AdapterOptions {
   readonly skin: Game002SkinConfig;
   readonly createApplication?: () => Game002PixiApplication;
-  readonly loadStaticTextures?: () => Promise<Game002StaticTextures>;
+  readonly createBackgroundPlayer?: () => SpineBackgroundPlayer;
   readonly loadSymbolTextures?: () => Promise<SymbolAssetMap>;
   readonly createRuntime?: (symbolAssets: SymbolAssetMap) => Game002ReelRuntime;
   readonly createWinAmountPlayer?: (
     layout: ReturnType<typeof createGame002Layout>,
   ) => WinAmountAnimationPlayer;
+  readonly reportFatalError?: (error: Error) => void;
 }
 
 interface PendingAnimation {
@@ -91,14 +92,16 @@ export function createGame002Adapter(
 class Game002PixiAdapter implements SlotGameAdapter {
   readonly #skin: Game002SkinConfig;
   readonly #createApplication: () => Game002PixiApplication;
-  readonly #loadStaticTextures: () => Promise<Game002StaticTextures>;
+  readonly #createBackgroundPlayer: () => SpineBackgroundPlayer;
   readonly #loadSymbolTextures: () => Promise<SymbolAssetMap>;
   readonly #createRuntime: (symbolAssets: SymbolAssetMap) => Game002ReelRuntime;
   readonly #createWinAmountPlayer: (
     layout: ReturnType<typeof createGame002Layout>,
   ) => WinAmountAnimationPlayer;
+  readonly #reportFatalError: (error: Error) => void;
   #app: Game002PixiApplication | null = null;
   #worldLayer: Container | null = null;
+  #backgroundPlayer: SpineBackgroundPlayer | null = null;
   #runtime: Game002ReelRuntime | null = null;
   #winAmountPlayer: WinAmountAnimationPlayer | null = null;
   #pendingAnimation: PendingAnimation | null = null;
@@ -110,8 +113,9 @@ class Game002PixiAdapter implements SlotGameAdapter {
     this.#skin = skin;
     this.#createApplication =
       options.createApplication ?? createPixiApplication;
-    this.#loadStaticTextures =
-      options.loadStaticTextures ?? (() => loadStaticTextures(skin));
+    this.#createBackgroundPlayer =
+      options.createBackgroundPlayer ??
+      (() => createSpineBackgroundPlayer({ resource: skin.background }));
     this.#loadSymbolTextures =
       options.loadSymbolTextures ?? (() => loadSymbolTextures(skin));
     this.#createRuntime =
@@ -134,6 +138,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
         }));
     this.#createWinAmountPlayer =
       options.createWinAmountPlayer ?? createGame002WinAmountPlayer;
+    this.#reportFatalError = options.reportFatalError ?? reportFatalError;
   }
 
   async mount(context: SlotGameMountContext): Promise<void> {
@@ -142,51 +147,75 @@ class Game002PixiAdapter implements SlotGameAdapter {
     }
 
     const app = this.#createApplication();
-    const initialViewport = context.getViewport();
-    await app.init({
-      width: initialViewport.frameDesignSize.width,
-      height: initialViewport.frameDesignSize.height,
-      antialias: true,
-      autoDensity: false,
-      resolution: 1,
-    });
-    context.gameLayer.replaceChildren(app.canvas);
+    let backgroundPlayer: SpineBackgroundPlayer | null = null;
+    let winAmountPlayer: WinAmountAnimationPlayer | null = null;
+    let tickerAdded = false;
+    try {
+      const initialViewport = context.getViewport();
+      await app.init({
+        width: initialViewport.frameDesignSize.width,
+        height: initialViewport.frameDesignSize.height,
+        antialias: true,
+        autoDensity: false,
+        resolution: 1,
+      });
+      context.gameLayer.replaceChildren(app.canvas);
 
-    const layout = createGame002Layout({
-      gridLayout: this.#skin.gridLayout,
-      focusRegion: this.#skin.focusRegion,
-    });
-    const [staticTextures, symbolTextures] = await Promise.all([
-      this.#loadStaticTextures(),
-      this.#loadSymbolTextures(),
-    ]);
-    const runtime = this.#createRuntime(symbolTextures);
-    const winAmountPlayer = this.#createWinAmountPlayer(layout);
+      const layout = createGame002Layout({
+        gridLayout: this.#skin.gridLayout,
+        focusRegion: this.#skin.focusRegion,
+      });
+      backgroundPlayer = this.#createBackgroundPlayer();
+      const [, symbolTextures] = await Promise.all([
+        backgroundPlayer.init(),
+        this.#loadSymbolTextures(),
+      ]);
+      const runtime = this.#createRuntime(symbolTextures);
+      winAmountPlayer = this.#createWinAmountPlayer(layout);
+      const worldLayer = new Container();
+      worldLayer.addChild(backgroundPlayer.container);
+      worldLayer.addChild(runtime.mainReelsLayer);
+      worldLayer.addChild(winAmountPlayer.container);
+      app.stage.addChild(worldLayer);
 
-    const worldLayer = new Container();
-    worldLayer.addChild(
-      createPositionedSprite(staticTextures.background, layout.background),
-    );
-    worldLayer.addChild(runtime.mainReelsLayer);
-    worldLayer.addChild(winAmountPlayer.container);
-    app.stage.addChild(worldLayer);
-
-    app.ticker.add(this.#onTick);
-    this.#app = app;
-    this.#worldLayer = worldLayer;
-    this.#runtime = runtime;
-    this.#winAmountPlayer = winAmountPlayer;
-    const requestWinAmountAdvance = () => {
-      this.#winAmountPlayer?.requestAdvance();
-    };
-    app.canvas.addEventListener("pointerdown", requestWinAmountAdvance);
-    this.#disposeWinAmountAdvanceListener = () => {
-      app.canvas.removeEventListener("pointerdown", requestWinAmountAdvance);
-    };
-    this.#applyViewport(initialViewport);
-    this.#unsubscribeViewport = context.onViewportChange((viewport) => {
-      this.#applyViewport(viewport);
-    });
+      this.#app = app;
+      this.#worldLayer = worldLayer;
+      this.#backgroundPlayer = backgroundPlayer;
+      this.#runtime = runtime;
+      this.#winAmountPlayer = winAmountPlayer;
+      app.ticker.add(this.#onTick);
+      tickerAdded = true;
+      const requestWinAmountAdvance = () => {
+        this.#winAmountPlayer?.requestAdvance();
+      };
+      app.canvas.addEventListener("pointerdown", requestWinAmountAdvance);
+      this.#disposeWinAmountAdvanceListener = () => {
+        app.canvas.removeEventListener("pointerdown", requestWinAmountAdvance);
+      };
+      this.#applyViewport(initialViewport);
+      this.#unsubscribeViewport = context.onViewportChange((viewport) => {
+        this.#applyViewport(viewport);
+      });
+    } catch (error) {
+      this.#unsubscribeViewport?.();
+      this.#unsubscribeViewport = null;
+      this.#disposeWinAmountAdvanceListener?.();
+      this.#disposeWinAmountAdvanceListener = null;
+      if (tickerAdded) {
+        app.ticker.remove(this.#onTick);
+      }
+      app.ticker.stop();
+      winAmountPlayer?.destroy();
+      backgroundPlayer?.destroy();
+      app.canvas.remove();
+      app.destroy();
+      this.#app = null;
+      this.#worldLayer = null;
+      this.#backgroundPlayer = null;
+      this.#runtime = null;
+      this.#winAmountPlayer = null;
+      throw error;
+    }
   }
 
   applyInitialState(state: SlotGameInitialState): void {
@@ -242,21 +271,24 @@ class Game002PixiAdapter implements SlotGameAdapter {
     this.#app?.ticker.remove(this.#onTick);
     this.#app?.ticker.stop();
     this.#winAmountPlayer?.destroy();
+    this.#backgroundPlayer?.destroy();
     this.#app?.canvas.remove();
     this.#app?.destroy();
     this.#app = null;
     this.#worldLayer = null;
+    this.#backgroundPlayer = null;
     this.#runtime = null;
     this.#winAmountPlayer = null;
   }
 
   readonly #onTick: Game002TickerListener = (ticker) => {
-    if (!this.#runtime) {
+    if (!this.#runtime || !this.#backgroundPlayer) {
       return;
     }
 
     try {
       const deltaSeconds = normalizeTickerDeltaSeconds(ticker);
+      this.#backgroundPlayer.update(deltaSeconds);
       const pending = this.#pendingAnimation;
       if (!pending) {
         if (this.#winAmountPlayer?.isPlaying()) {
@@ -294,9 +326,12 @@ class Game002PixiAdapter implements SlotGameAdapter {
       }
     } catch (error) {
       this.#app?.ticker.stop();
-      this.#rejectPending(
-        error instanceof Error ? error : new Error(String(error)),
-      );
+      const failure = error instanceof Error ? error : new Error(String(error));
+      const hadPendingAnimation = this.#pendingAnimation !== null;
+      this.#rejectPending(failure);
+      if (!hadPendingAnimation) {
+        this.#reportFatalError(failure);
+      }
     }
   };
 
@@ -375,19 +410,6 @@ function createPixiApplication(): Game002PixiApplication {
   return new Application() as unknown as Game002PixiApplication;
 }
 
-async function loadStaticTextures(
-  skin: Game002SkinConfig,
-): Promise<Game002StaticTextures> {
-  const background = await loadTextureWithSize(
-    skin.backgroundLabel,
-    skin.backgroundUrl,
-    GAME002_ASSET_SIZE.background,
-  );
-  return Object.freeze({
-    background,
-  });
-}
-
 async function loadSymbolTextures(
   skin: Game002SkinConfig,
 ): Promise<SymbolAssetMap> {
@@ -399,30 +421,10 @@ async function loadSymbolTextures(
   return loadGame002SymbolTextures(assetUrls);
 }
 
-async function loadTextureWithSize(
-  label: string,
-  url: string,
-  expected: { readonly width: number; readonly height: number },
-): Promise<Texture> {
-  const texture = await Assets.load<Texture>(url);
-  const width =
-    texture.width || texture.source?.width || texture.orig?.width || 0;
-  const height =
-    texture.height || texture.source?.height || texture.orig?.height || 0;
-  if (width !== expected.width || height !== expected.height) {
-    throw new Error(
-      `${label} size must be ${expected.width} x ${expected.height}, got ${width} x ${height}.`,
-    );
+function reportFatalError(error: Error): void {
+  if (typeof globalThis.reportError === "function") {
+    globalThis.reportError(error);
+    return;
   }
-  return texture;
-}
-
-function createPositionedSprite(
-  texture: Texture,
-  point: { readonly x: number; readonly y: number },
-): Sprite {
-  const sprite = new Sprite(texture);
-  sprite.x = point.x;
-  sprite.y = point.y;
-  return sprite;
+  console.error(error);
 }

@@ -16,6 +16,10 @@
       "types": "./dist/symbol/index.d.ts",
       "import": "./dist/symbol/index.js"
     },
+    "./background": {
+      "types": "./dist/background/index.d.ts",
+      "import": "./dist/background/index.js"
+    },
     "./reel": {
       "types": "./dist/reel/index.d.ts",
       "import": "./dist/reel/index.js"

@@ -9,6 +9,17 @@ const DIST_ASSETS = join(DIST_ROOT, "assets");
 const SOURCE_ROOT = join(REPO_ROOT, "assets/game002-s3");
 const INDEX_HTML = join(DIST_ROOT, "index.html");
 const MANIFEST_PATH = join(SOURCE_ROOT, "symbol-state-textures.manifest.json");
+const BACKGROUND_MANIFEST_PATH = join(SOURCE_ROOT, "background.manifest.json");
+const BACKGROUND_PAGES = Object.freeze([
+  "BG.png",
+  "BG_2.png",
+  "BG_3.png",
+  "BG_4.png",
+  "BG_5.png",
+  "BG_6.png",
+  "BG_7.png",
+  "BG_8.png",
+]);
 const SYMBOLS = Object.freeze([
   "WL",
   "H1",
@@ -49,9 +60,6 @@ const SENSITIVE_VALUES = Object.freeze([
   ["VITE", "GAME002"].join("_"),
   ["7a82f5ca", "45b5aa32", "46b2ad01", "23272295"].join(""),
   ["065P8N", "OEgwd", "SXFTB6uDqX"].join(""),
-]);
-const PNG_SIGNATURE = Buffer.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
 const failures = [];
 
@@ -108,7 +116,14 @@ function verifyIndexHtml(indexHtml) {
 }
 
 function verifySourceContract() {
-  assertImageSize(join(SOURCE_ROOT, "bg.jpg"), 2000, 2000);
+  assertAbsent(join(SOURCE_ROOT, "bg.jpg"));
+  assertFile(BACKGROUND_MANIFEST_PATH);
+  assertFile(join(SOURCE_ROOT, "BG.json"));
+  assertFile(join(SOURCE_ROOT, "BG.atlas"));
+  for (const page of BACKGROUND_PAGES) {
+    assertFile(join(SOURCE_ROOT, page));
+  }
+  verifyBackgroundSourceContract();
   assertFile(MANIFEST_PATH);
   assertFile(join(SOURCE_ROOT, "Symbol.atlas"));
   assertFile(join(SOURCE_ROOT, "Symbol.png"));
@@ -167,10 +182,90 @@ function verifySourceContract() {
   }
 }
 
+function verifyBackgroundSourceContract() {
+  if (!existsSync(BACKGROUND_MANIFEST_PATH)) {
+    return;
+  }
+  const manifest = JSON.parse(readFileSync(BACKGROUND_MANIFEST_PATH, "utf8"));
+  if (manifest.version !== 1 || manifest.kind !== "spine") {
+    failures.push("background manifest must declare version=1 and kind=spine.");
+  }
+  if (
+    manifest.artSize?.width !== 2000 ||
+    manifest.artSize?.height !== 2000 ||
+    JSON.stringify(manifest.adaptation) !==
+      JSON.stringify({
+        mode: "maximized-focus",
+        focusRect: { x: 577.5, y: 270, width: 840, height: 1200 },
+      })
+  ) {
+    failures.push("background manifest art/focus contract changed.");
+  }
+  if (
+    manifest.resource?.skeleton !== "./BG.json" ||
+    manifest.resource?.atlas !== "./BG.atlas" ||
+    JSON.stringify(manifest.resource?.transform) !==
+      JSON.stringify({ x: 1000, y: 1000, scale: 1 })
+  ) {
+    failures.push("background manifest resource/transform contract changed.");
+  }
+  if (
+    JSON.stringify(Object.keys(manifest.resource?.textures ?? {})) !==
+    JSON.stringify(BACKGROUND_PAGES)
+  ) {
+    failures.push("background manifest texture page closure changed.");
+  }
+  for (const page of BACKGROUND_PAGES) {
+    if (manifest.resource?.textures?.[page] !== `./${page}`) {
+      failures.push(`background manifest texture ${page} path is invalid.`);
+    }
+  }
+  if (
+    manifest.initialState !== "BaseGame" ||
+    JSON.stringify(manifest.states) !==
+      JSON.stringify({
+        BaseGame: { animation: "BG" },
+        FreeGame: { animation: "FG" },
+      }) ||
+    JSON.stringify(manifest.transitions) !==
+      JSON.stringify([
+        { from: "BaseGame", to: "FreeGame", animation: "BG_FG" },
+        { from: "FreeGame", to: "BaseGame", animation: "FG_BG" },
+      ])
+  ) {
+    failures.push("background manifest state/transition contract changed.");
+  }
+  const skeleton = JSON.parse(
+    readFileSync(join(SOURCE_ROOT, "BG.json"), "utf8"),
+  );
+  if (!/^4\.3(?:\.|$)/.test(skeleton.skeleton?.spine ?? "")) {
+    failures.push("BG.json must declare Spine 4.3.x.");
+  }
+  for (const animation of ["BG", "FG", "BG_FG", "FG_BG"]) {
+    if (!skeleton.animations?.[animation]) {
+      failures.push(`BG.json is missing animation ${animation}.`);
+    }
+  }
+  const atlasPages = readAtlasPages(
+    readFileSync(join(SOURCE_ROOT, "BG.atlas"), "utf8"),
+  );
+  if (JSON.stringify(atlasPages) !== JSON.stringify(BACKGROUND_PAGES)) {
+    failures.push(
+      `BG.atlas pages must be ${BACKGROUND_PAGES.join(",")}, got ${atlasPages.join(",")}.`,
+    );
+  }
+}
+
 function verifyDistAssets(assetNames, bundledJavaScript) {
   assertOne(assetNames, /^index-[A-Za-z0-9_-]+\.js$/, "index JS");
   assertOne(assetNames, /^index-[A-Za-z0-9_-]+\.css$/, "index CSS");
-  assertOne(assetNames, /^bg-[A-Za-z0-9_-]+\.jpg$/, "game002-s3 background");
+  assertOne(
+    assetNames,
+    /^background\.manifest-[A-Za-z0-9_-]+\.json$/,
+    "background manifest",
+  );
+  assertOne(assetNames, /^BG-[A-Za-z0-9_-]+\.json$/, "background skeleton");
+  assertOne(assetNames, /^BG-[A-Za-z0-9_-]+\.atlas$/, "background atlas");
   assertOne(assetNames, /^Symbol-[A-Za-z0-9_-]+\.atlas$/, "Spine atlas");
   assertOne(assetNames, /^Symbol-[A-Za-z0-9_-]+\.png$/, "Spine texture");
   assertOne(
@@ -178,6 +273,43 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
     /^symbol-state-textures\.manifest-[A-Za-z0-9_-]+\.json$/,
     "symbol manifest",
   );
+
+  const backgroundPageGroups = new Map();
+  for (const page of BACKGROUND_PAGES) {
+    const sourceFile = join(SOURCE_ROOT, page);
+    const contentKey = readFileSync(sourceFile).toString("base64");
+    const pages = backgroundPageGroups.get(contentKey) ?? [];
+    pages.push(page);
+    backgroundPageGroups.set(contentKey, pages);
+  }
+  for (const pages of backgroundPageGroups.values()) {
+    const stems = pages.map((page) => page.slice(0, -".png".length));
+    assertOne(
+      assetNames,
+      new RegExp(
+        `^(?:${stems.map(escapeRegExp).join("|")})-[A-Za-z0-9_-]+\\.png$`,
+      ),
+      `background atlas page content ${pages.join("/")}`,
+    );
+    assertDistContainsSourceAssetExactlyOnce(
+      assetNames,
+      join(SOURCE_ROOT, pages[0]),
+    );
+  }
+  assertDistContainsSourceAsset(assetNames, BACKGROUND_MANIFEST_PATH);
+  assertDistContainsSourceAsset(assetNames, join(SOURCE_ROOT, "BG.json"));
+  assertDistContainsSourceAsset(assetNames, join(SOURCE_ROOT, "BG.atlas"));
+  if (assetNames.some((name) => /^bg-[A-Za-z0-9_-]+\.jpg$/.test(name))) {
+    failures.push("dist must not contain the removed bg.jpg background.");
+  }
+  if (bundledJavaScript.includes("bg.jpg")) {
+    failures.push("bundle must not reference the removed bg.jpg background.");
+  }
+  if (!bundledJavaScript.includes("spineAtlasPage=")) {
+    failures.push(
+      "bundle must disambiguate identical atlas-page bytes with logical page query URLs.",
+    );
+  }
   assertOne(
     assetNames,
     /^win-amount\.manifest-[A-Za-z0-9_-]+\.json$/,
@@ -289,7 +421,26 @@ function assertDistContainsSourceAsset(assetNames, sourceFile) {
   });
   if (!matchingContent) {
     failures.push(
-      `dist/assets is missing win-amount asset content for ${relative(SOURCE_ROOT, sourceFile)}.`,
+      `dist/assets is missing source asset content for ${relative(SOURCE_ROOT, sourceFile)}.`,
+    );
+  }
+}
+
+function assertDistContainsSourceAssetExactlyOnce(assetNames, sourceFile) {
+  assertFile(sourceFile);
+  if (!existsSync(sourceFile)) {
+    return;
+  }
+  const sourceBytes = readFileSync(sourceFile);
+  const extension = sourceFile.split(".").at(-1);
+  const matches = assetNames.filter(
+    (name) =>
+      name.endsWith(`.${extension}`) &&
+      readFileSync(join(DIST_ASSETS, name)).equals(sourceBytes),
+  );
+  if (matches.length !== 1) {
+    failures.push(
+      `dist/assets must contain source asset content exactly once for ${relative(SOURCE_ROOT, sourceFile)}, got ${matches.length}.`,
     );
   }
 }
@@ -307,20 +458,15 @@ function verifySensitiveValues(files) {
   }
 }
 
-function assertImageSize(file, width, height) {
-  assertFile(file);
-  if (!existsSync(file)) {
-    return;
-  }
-  const size = readImageSize(file);
-  if (size.width !== width || size.height !== height) {
-    failures.push(`${relative(APP_ROOT, file)} must be ${width} x ${height}.`);
-  }
-}
-
 function assertFile(file) {
   if (!existsSync(file) || !statSync(file).isFile()) {
     failures.push(`${relative(APP_ROOT, file)} is missing.`);
+  }
+}
+
+function assertAbsent(file) {
+  if (existsSync(file)) {
+    failures.push(`${relative(APP_ROOT, file)} must not exist.`);
   }
 }
 
@@ -347,28 +493,8 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function readImageSize(file) {
-  const bytes = readFileSync(file);
-  if (bytes.subarray(0, 8).equals(PNG_SIGNATURE)) {
-    return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
-  }
-  if (bytes[0] === 0xff && bytes[1] === 0xd8) {
-    let offset = 2;
-    while (offset + 8 < bytes.length) {
-      if (bytes[offset] !== 0xff) {
-        offset += 1;
-        continue;
-      }
-      const marker = bytes[offset + 1];
-      const length = bytes.readUInt16BE(offset + 2);
-      if (marker >= 0xc0 && marker <= 0xc3) {
-        return {
-          height: bytes.readUInt16BE(offset + 5),
-          width: bytes.readUInt16BE(offset + 7),
-        };
-      }
-      offset += 2 + length;
-    }
-  }
-  throw new Error(`${relative(APP_ROOT, file)} is not a supported PNG/JPEG.`);
+function readAtlasPages(atlasText) {
+  return [...atlasText.matchAll(/^([^\s].*\.png)\r?$/gmu)].map(
+    (match) => match[1],
+  );
 }

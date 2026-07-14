@@ -232,7 +232,27 @@ symbol.requestState("appear");
 symbol.requestState("win");
 ```
 
+## Background API
+
+manifest-driven Spine 背景从主入口和 `@slotclientengine/rendercore/background` 导出：
+
+```ts
+import {
+  createSpineBackgroundPlayer,
+  createSpineBackgroundResource,
+  parseSpineBackgroundManifest,
+} from "@slotclientengine/rendercore/background";
+```
+
+`parseSpineBackgroundManifest()` 严格解析 version 1 的 `artSize`、`maximized-focus` focus rect、skeleton/atlas/texture map、art-space transform、逻辑稳态和有向 transition；未知字段、绝对/逃逸/重复路径、非法尺寸、focus 越界、unknown state、self/duplicate transition 都会显式失败。`createSpineBackgroundResource()` 进一步校验 Spine 4.3、exact animation name、多页 atlas 与 texture URL 一一闭合以及 skeleton attachment 可解析。app 只传入 manifest 和精确 Vite modules，不直接 import Spine runtime。
+
+`createSpineBackgroundPlayer()` 创建一个官方 Spine instance，使用 `autoUpdate=false` 并由宿主 ticker 调用 `update(deltaSeconds)`。稳态固定 loop，transition 固定 once；`requestState(target)` 只接受 manifest 中存在的 direct transition，完成事件到达的同一 update 内切到目标 loop。并发请求、destroy 后调用和缺失 transition 都失败，不排队、不猜多跳，也不回落静态图、首帧或默认动画。player 用 manifest art rect 裁切 display tree，并应用 manifest transform；skeleton bounds 不参与 art/focus/viewport 推导。
+
+background 与 symbol animation 复用同一套官方 Spine 4.3 版本、atlas/skeleton、manual update、completion 和 destroy 底层。background 允许显式多页 texture map；symbol manifest 仍保持既有单页合同，不因共享底层而放宽。
+
 ## Viewport API
+
+两种对外背景适配方案的选择、配置、公式、边界和验收要求见 [`docs/background-adaptation.md`](../../docs/background-adaptation.md)。当前只把单背景 `maximized-focus` 与横竖双背景 `responsive-art` 视为完整可复用方案；下列 focus/mapping API 是两套方案共用的几何能力。
 
 viewport 能力从主入口和子路径导出：
 

@@ -10,6 +10,13 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: "@slotclientengine/rendercore/background",
+        replacement: resolve(
+          __dirname,
+          "../../packages/rendercore/src/background/index.ts",
+        ),
+      },
+      {
         find: "@slotclientengine/rendercore/reel",
         replacement: resolve(
           __dirname,

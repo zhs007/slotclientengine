@@ -68,7 +68,9 @@ describe("game002 loading resources", () => {
     ).toHaveLength(12);
     expect(ids).toEqual(
       expect.arrayContaining([
-        "game002-bg",
+        "game002-background-manifest",
+        "game002-background-spine-skeleton",
+        "game002-background-spine-atlas",
         "game002-symbol-manifest",
         "game002-symbol-spine-atlas",
         "game002-symbol-spine-texture",
@@ -78,6 +80,28 @@ describe("game002 loading resources", () => {
         "game002-win-amount-vni-projects:megawin.json",
       ]),
     );
+    expect(
+      ids
+        .filter((id) => id.startsWith("game002-background-spine-textures:"))
+        .sort(),
+    ).toEqual(
+      [
+        "game002-background-spine-textures:BG.png",
+        "game002-background-spine-textures:BG_2.png",
+        "game002-background-spine-textures:BG_3.png",
+        "game002-background-spine-textures:BG_4.png",
+        "game002-background-spine-textures:BG_5.png",
+        "game002-background-spine-textures:BG_6.png",
+        "game002-background-spine-textures:BG_7.png",
+        "game002-background-spine-textures:BG_8.png",
+      ].sort(),
+    );
+    expect(JSON.stringify(resources)).not.toContain("bg.jpg");
+    for (const resource of resources.filter((candidate) =>
+      candidate.id.startsWith("game002-background-spine-textures:"),
+    )) {
+      expect(resource.url).toContain("spineAtlasPage=");
+    }
     const referencedAssetIds = getReferencedWinAmountAssetIds();
     expect(
       ids
@@ -91,6 +115,8 @@ describe("game002 loading resources", () => {
       "CN_4",
       "Nearwin",
       "WM_Fx",
+      "Reel_CO_CM",
+      "Special Feature",
     ]) {
       expect(ids.some((id) => id.includes(excluded))).toBe(false);
     }

@@ -1,4 +1,6 @@
-import game002BackgroundUrl from "../../../assets/game002-s3/bg.jpg?url";
+import game002BackgroundAtlasUrl from "../../../assets/game002-s3/BG.atlas?url";
+import game002BackgroundSkeletonUrl from "../../../assets/game002-s3/BG.json?url";
+import game002BackgroundManifestUrl from "../../../assets/game002-s3/background.manifest.json?url";
 import game002SpineAtlasUrl from "../../../assets/game002-s3/Symbol.atlas?url";
 import game002SpineTextureUrl from "../../../assets/game002-s3/Symbol.png?url";
 import game002SymbolManifestUrl from "../../../assets/game002-s3/symbol-state-textures.manifest.json?url";
@@ -23,6 +25,13 @@ const skeletonModules = import.meta.glob(
   "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.json",
   { eager: true, import: "default", query: "?url" },
 ) as Record<string, string>;
+const rawBackgroundTextureModules = import.meta.glob(
+  "../../../assets/game002-s3/{BG,BG_2,BG_3,BG_4,BG_5,BG_6,BG_7,BG_8}.png",
+  { eager: true, import: "default", query: "?url" },
+) as Record<string, string>;
+const backgroundTextureModules = createAtlasPageUrlModules(
+  rawBackgroundTextureModules,
+);
 const winAmountProjectModules = import.meta.glob(
   "../../../assets/game002-s3/win-amount/{bigwin,superwin,megawin}.json",
   { eager: true, import: "default", query: "?url" },
@@ -87,7 +96,18 @@ export function readGame002RuntimeModule(
 
 function createLoadingResourceUrls(): readonly GameLoadingResource[] {
   const pathResources: readonly GameLoadingResource[] = Object.freeze([
-    Object.freeze({ id: "game002-bg", url: game002BackgroundUrl, weight: 8 }),
+    Object.freeze({
+      id: "game002-background-manifest",
+      url: game002BackgroundManifestUrl,
+    }),
+    Object.freeze({
+      id: "game002-background-spine-skeleton",
+      url: game002BackgroundSkeletonUrl,
+    }),
+    Object.freeze({
+      id: "game002-background-spine-atlas",
+      url: game002BackgroundAtlasUrl,
+    }),
     Object.freeze({
       id: "game002-symbol-manifest",
       url: game002SymbolManifestUrl,
@@ -107,6 +127,11 @@ function createLoadingResourceUrls(): readonly GameLoadingResource[] {
     }),
   ]);
   const globGroups: readonly LoadingGlobGroup[] = Object.freeze([
+    {
+      id: "game002-background-spine-textures",
+      modules: backgroundTextureModules,
+      weight: 8,
+    },
     { id: "game002-symbol-normal-pngs", modules: normalModules, weight: 10 },
     {
       id: "game002-symbol-spin-blur-pngs",
@@ -174,6 +199,23 @@ function getBaseName(modulePath: string): string {
     );
   }
   return name;
+}
+
+function createAtlasPageUrlModules(
+  modules: Readonly<Record<string, string>>,
+): Readonly<Record<string, string>> {
+  return Object.freeze(
+    Object.fromEntries(
+      Object.entries(modules).map(([modulePath, url]) => {
+        const page = getBaseName(modulePath);
+        const separator = url.includes("?") ? "&" : "?";
+        return [
+          modulePath,
+          `${url}${separator}spineAtlasPage=${encodeURIComponent(page)}`,
+        ];
+      }),
+    ),
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -16,11 +16,9 @@ import {
   type FocusedArtViewport,
   type RenderViewportSize,
 } from "@slotclientengine/rendercore";
+import { GAME002_BACKGROUND_MANIFEST } from "./background-config.js";
 
-export const GAME002_ART_SIZE = Object.freeze({
-  width: 2000,
-  height: 2000,
-});
+export const GAME002_ART_SIZE = GAME002_BACKGROUND_MANIFEST.artSize;
 
 export const GAME002_STAGE_SIZE = GAME002_ART_SIZE;
 
@@ -34,10 +32,6 @@ export const GAME002_REFERENCE_VISIBLE_RECT_IN_ART = Object.freeze({
   y: 0,
   width: 1125,
   height: 2000,
-});
-
-export const GAME002_ASSET_SIZE = Object.freeze({
-  background: GAME002_ART_SIZE,
 });
 
 export const GAME002_REELS_NAME = "reels-001";
@@ -86,12 +80,8 @@ export const GAME002_GRID_LAYOUT = Object.freeze({
   cellHeight: GAME002_CELL_SIZE,
 }) satisfies Game002GridLayout;
 
-export const GAME002_FOCUS_REGION = Object.freeze({
-  x: 577.5,
-  y: 270,
-  width: 840,
-  height: 1200,
-}) satisfies Game002FocusRegion;
+export const GAME002_FOCUS_REGION = GAME002_BACKGROUND_MANIFEST.adaptation
+  .focusRect satisfies Game002FocusRegion;
 
 export interface Point {
   readonly x: number;

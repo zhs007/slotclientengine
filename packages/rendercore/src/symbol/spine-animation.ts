@@ -1,11 +1,8 @@
+import { Container } from "pixi.js";
 import {
-  AtlasAttachmentLoader,
-  SkeletonJson,
-  Spine,
-  SpineTexture,
-  TextureAtlas,
-} from "@esotericsoftware/spine-pixi-v8";
-import { Assets, Container, type Texture } from "pixi.js";
+  createOfficialSpinePlayer,
+  type RendercoreSpinePlayer,
+} from "../spine/runtime-player.js";
 import { assertValidDeltaSeconds, resetBaseDisplay } from "./ani.js";
 import { SymbolAnimationError } from "./errors.js";
 import { readSupportedSpineSkeletonVersion } from "./spine-version.js";
@@ -21,16 +18,8 @@ import type {
   SymbolPlaybackKind,
 } from "./types.js";
 
-export interface RendercoreSpineSymbolPlayer {
-  readonly view: Container;
+export interface RendercoreSpineSymbolPlayer extends RendercoreSpinePlayer {
   init(): Promise<void> | void;
-  play(options: {
-    readonly animationName: string;
-    readonly loop: boolean;
-  }): void;
-  update(deltaSeconds: number): { readonly completed: boolean };
-  reset(): void;
-  destroy(): void;
 }
 
 export type SpineSymbolAniPlayerFactory = (options: {
@@ -331,7 +320,16 @@ function createDefaultSpineSymbolPlayer(options: {
   readonly resource: SymbolSpineAnimationResource;
 }): RendercoreSpineSymbolPlayer {
   readSupportedSpineSkeletonVersion(options.resource.skeleton);
-  return new OfficialSpineSymbolPlayer(options);
+  return createOfficialSpinePlayer({
+    resource: {
+      skeleton: options.resource.skeleton,
+      atlasText: options.resource.atlasText,
+      textureUrls: Object.freeze({
+        [options.resource.atlasPage]: options.resource.textureUrl,
+      }),
+    },
+    createError: (message) => new SymbolAnimationError(message),
+  });
 }
 
 export function createSymbolSpineAnimationResolver(options: {
@@ -355,121 +353,6 @@ export function createSymbolSpineAnimationResolver(options: {
       `No Spine symbol animation is registered for "${context.symbol}" state "${context.resolvedState}".`,
     );
   };
-}
-
-class OfficialSpineSymbolPlayer implements RendercoreSpineSymbolPlayer {
-  readonly view = new Container();
-  readonly #resource: SymbolSpineAnimationResource;
-  #spine: Spine | null = null;
-  #completed = false;
-  #destroyed = false;
-
-  constructor(options: { readonly resource: SymbolSpineAnimationResource }) {
-    this.#resource = options.resource;
-  }
-
-  async init(): Promise<void> {
-    this.assertNotDestroyed();
-    const texture = await Assets.load<Texture>(this.#resource.textureUrl);
-    this.assertNotDestroyed();
-    const atlas = createRuntimeTextureAtlas(this.#resource, texture);
-    const skeletonData = new SkeletonJson(
-      new AtlasAttachmentLoader(atlas),
-    ).readSkeletonData(this.#resource.skeleton);
-    const spine = new Spine({
-      skeletonData,
-      autoUpdate: false,
-      darkTint: false,
-    });
-    spine.autoUpdate = false;
-    this.#spine = spine;
-    this.view.addChild(spine);
-  }
-
-  play(options: { readonly animationName: string; readonly loop: boolean }) {
-    this.assertNotDestroyed();
-    const spine = this.getSpine();
-    const animation = spine.skeleton.data.findAnimation(options.animationName);
-    if (!animation) {
-      throw new SymbolAnimationError(
-        `Spine animation "${options.animationName}" was not found.`,
-      );
-    }
-    this.#completed = false;
-    spine.state.clearTracks();
-    spine.state.clearListeners();
-    spine.skeleton.setupPose();
-    const entry = spine.state.setAnimation(
-      0,
-      options.animationName,
-      options.loop,
-    );
-    entry.listener = {
-      complete: (completedEntry) => {
-        if (completedEntry === entry && !options.loop) {
-          this.#completed = true;
-        }
-      },
-    };
-    spine.update(0);
-  }
-
-  update(deltaSeconds: number): { readonly completed: boolean } {
-    assertValidDeltaSeconds(deltaSeconds);
-    this.assertNotDestroyed();
-    this.getSpine().update(deltaSeconds);
-    return Object.freeze({ completed: this.#completed });
-  }
-
-  reset(): void {
-    this.assertNotDestroyed();
-    this.#completed = false;
-    if (this.#spine) {
-      this.#spine.state.clearTracks();
-      this.#spine.state.clearListeners();
-      this.#spine.skeleton.setupPose();
-      this.#spine.update(0);
-    }
-  }
-
-  destroy(): void {
-    if (this.#destroyed) {
-      return;
-    }
-    this.#destroyed = true;
-    this.#spine?.state.clearListeners();
-    this.#spine?.destroy();
-    this.#spine = null;
-    this.view.removeChildren();
-    this.view.parent?.removeChild(this.view);
-  }
-
-  private getSpine(): Spine {
-    if (!this.#spine) {
-      throw new SymbolAnimationError("Spine player has not initialized.");
-    }
-    return this.#spine;
-  }
-
-  private assertNotDestroyed(): void {
-    if (this.#destroyed) {
-      throw new SymbolAnimationError("Spine player was destroyed.");
-    }
-  }
-}
-
-function createRuntimeTextureAtlas(
-  resource: SymbolSpineAnimationResource,
-  texture: Texture,
-): TextureAtlas {
-  const atlas = new TextureAtlas(resource.atlasText);
-  if (atlas.pages.length !== 1 || atlas.pages[0]?.name !== resource.atlasPage) {
-    throw new SymbolAnimationError(
-      `Spine atlas page contract changed for "${resource.symbol}" state "${resource.state}".`,
-    );
-  }
-  atlas.pages[0].setTexture(SpineTexture.from(texture.source));
-  return atlas;
 }
 
 function applySpineTransform(

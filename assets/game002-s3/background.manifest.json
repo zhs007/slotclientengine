@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "kind": "spine",
+  "artSize": { "width": 2000, "height": 2000 },
+  "adaptation": {
+    "mode": "maximized-focus",
+    "focusRect": { "x": 577.5, "y": 270, "width": 840, "height": 1200 }
+  },
+  "resource": {
+    "skeleton": "./BG.json",
+    "atlas": "./BG.atlas",
+    "textures": {
+      "BG.png": "./BG.png",
+      "BG_2.png": "./BG_2.png",
+      "BG_3.png": "./BG_3.png",
+      "BG_4.png": "./BG_4.png",
+      "BG_5.png": "./BG_5.png",
+      "BG_6.png": "./BG_6.png",
+      "BG_7.png": "./BG_7.png",
+      "BG_8.png": "./BG_8.png"
+    },
+    "transform": { "x": 1000, "y": 1000, "scale": 1 }
+  },
+  "initialState": "BaseGame",
+  "states": {
+    "BaseGame": { "animation": "BG" },
+    "FreeGame": { "animation": "FG" }
+  },
+  "transitions": [
+    {
+      "from": "BaseGame",
+      "to": "FreeGame",
+      "animation": "BG_FG"
+    },
+    {
+      "from": "FreeGame",
+      "to": "BaseGame",
+      "animation": "FG_BG"
+    }
+  ]
+}

@@ -55,6 +55,12 @@ describe("game002 source boundary", () => {
 
     expect(viteConfig).toContain("@slotclientengine/rendercore");
     expect(viteConfig).toContain("../../packages/rendercore/src/index.ts");
+    expect(viteConfig).toContain(
+      "../../packages/rendercore/src/background/index.ts",
+    );
+    expect(viteConfig.indexOf("rendercore/background")).toBeLessThan(
+      viteConfig.indexOf('find: "@slotclientengine/rendercore"'),
+    );
     expect(viteConfig).not.toMatch(
       /\.\.\/\.\.\/packages\/(?:logiccore|netcore|uiframeworks)\//,
     );
@@ -95,7 +101,17 @@ describe("game002 source boundary", () => {
       "utf8",
     );
 
-    expect(skinConfigSource).toContain("assets/game002-s3/bg.jpg?url");
+    const backgroundConfigSource = readFileSync(
+      join(APP_ROOT, "src/background-config.ts"),
+      "utf8",
+    );
+    expect(backgroundConfigSource).toContain(
+      "assets/game002-s3/background.manifest.json",
+    );
+    expect(backgroundConfigSource).toContain(
+      "{BG,BG_2,BG_3,BG_4,BG_5,BG_6,BG_7,BG_8}.png",
+    );
+    expect(backgroundConfigSource).toContain("spineAtlasPage=");
     for (const legacyPath of [
       "symbols" + "001",
       "symbols" + "002",
@@ -108,7 +124,10 @@ describe("game002 source boundary", () => {
       expect(skinConfigSource).not.toContain(legacyPath);
     }
     expect(skinConfigSource).not.toMatch(/game002-s3\/\*\.(?:png|json)/);
-    expect(adapterSource).toContain("skin.backgroundUrl");
+    expect(backgroundConfigSource).not.toMatch(/game002-s3\/(?:\*|\*\*)/);
+    expect(adapterSource).toContain("skin.background");
+    expect(adapterSource).not.toContain("backgroundUrl");
+    expect(adapterSource).not.toContain("createPositionedSprite");
     expect(adapterSource).toContain("skin.symbolModules");
   });
 
@@ -133,7 +152,10 @@ describe("game002 source boundary", () => {
       ["rect.y", "visibleRect.y"],
     ]);
 
-    expect(skinConfigSource).toContain("focusRegion: GAME002_FOCUS_REGION");
+    expect(skinConfigSource).toContain(
+      "GAME002_BACKGROUND_RESOURCE.manifest.adaptation.focusRect",
+    );
+    expect(layoutSource).toContain("GAME002_BACKGROUND_MANIFEST.artSize");
     expect(layoutSource).toContain("mapArtRectToViewport");
     expect(layoutSource).toContain("createMaximizedFocusedArtViewportPolicy");
     expect(gameEntrySource).toContain(
@@ -166,6 +188,10 @@ describe("game002 source boundary", () => {
     expect(source).toContain("createGameLoading");
     expect(source).toContain("prepareSlotGameLiveSession");
     expect(source).toContain("createSymbolManifestAnimationResolver");
+    expect(source).toContain("createSpineBackgroundPlayer");
+    for (const gameSpecificAnimation of ["BG_FG", "FG_BG"]) {
+      expect(source).not.toContain(gameSpecificAnimation);
+    }
   });
 });
 

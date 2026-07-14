@@ -6,6 +6,7 @@ import {
   type SymbolAssetMap,
 } from "@slotclientengine/rendercore";
 import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-amount";
+import type { SpineBackgroundPlayer } from "@slotclientengine/rendercore/background";
 import { createTextureSet } from "../../../packages/rendercore/tests/reel/helpers.js";
 import {
   GAME002_SAMPLE_DEFAULT_SCENE,
@@ -23,7 +24,6 @@ describe("game002 adapter", () => {
     const fakeApp = createFakeApplication();
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
-      loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
       createRuntime: () => new FakeRuntime().asRuntime(),
     });
@@ -47,11 +47,12 @@ describe("game002 adapter", () => {
 
   it("mounts Pixi canvas and applies live defaultScene only when present", async () => {
     const fakeApp = createFakeApplication();
+    const background = new FakeBackgroundPlayer();
     const runtime = new FakeRuntime();
     const context = createMountContext();
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
-      loadStaticTextures: loadFakeStaticTextures,
+      createBackgroundPlayer: () => background.asPlayer(),
       loadSymbolTextures: async () => ({}),
       createRuntime: () => runtime.asRuntime(),
     });
@@ -67,6 +68,9 @@ describe("game002 adapter", () => {
     });
     expect([...context.gameLayer.children]).toEqual([fakeApp.canvas]);
     expect(fakeApp.stage.children).toHaveLength(1);
+    expect(background.initialized).toBe(true);
+    expect(fakeApp.stage.children[0]?.children[0]).toBe(background.container);
+    expect(fakeApp.stage.children[0]?.children[1]).toBe(runtime.mainReelsLayer);
     expect(fakeApp.resizeCalls).toEqual([[1125, 2000]]);
     expect(fakeApp.stage.children[0]?.position).toMatchObject({
       x: -437.5,
@@ -88,7 +92,7 @@ describe("game002 adapter", () => {
     const adapter = createGame002Adapter({
       skin: getGame002SkinConfig("1"),
       createApplication: () => fakeApp.app,
-      loadStaticTextures: loadFakeStaticTextures,
+      createBackgroundPlayer: () => new FakeBackgroundPlayer().asPlayer(),
       loadSymbolTextures: async () =>
         createSymbolTextures(getGame002SkinConfig("1").displaySymbols),
     });
@@ -115,7 +119,6 @@ describe("game002 adapter", () => {
     const context = createMountContext();
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
-      loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
       createRuntime: () => new FakeRuntime().asRuntime(),
     });
@@ -154,7 +157,7 @@ describe("game002 adapter", () => {
     const adapter = createGame002Adapter({
       skin,
       createApplication: () => fakeApp.app,
-      loadStaticTextures: loadFakeStaticTextures,
+      createBackgroundPlayer: () => new FakeBackgroundPlayer().asPlayer(),
       loadSymbolTextures: async () => ({}),
       createRuntime: () => new FakeRuntime().asRuntime(),
     });
@@ -174,7 +177,6 @@ describe("game002 adapter", () => {
     const runtime = new FakeRuntime();
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
-      loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
       createRuntime: () => runtime.asRuntime(),
     });
@@ -203,13 +205,77 @@ describe("game002 adapter", () => {
     expect(runtime.currentScene).toEqual(GAME002_SAMPLE_SPIN_SCENE);
   });
 
+  it("updates the background while idle and uses the same capped delta during spin", async () => {
+    const fakeApp = createFakeApplication();
+    const background = new FakeBackgroundPlayer();
+    const runtime = new FakeRuntime();
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      createBackgroundPlayer: () => background.asPlayer(),
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => runtime.asRuntime(),
+    });
+    await adapter.mount(createMountContext());
+
+    fakeApp.tick(5_000);
+    expect(background.updateDeltas).toEqual([1 / 30]);
+    expect(runtime.updateDeltas).toEqual([]);
+
+    const pending = adapter.playSpin(createLogic(GAME002_SAMPLE_SPIN_SCENE));
+    runtime.completeNextUpdate = true;
+    fakeApp.tick(5_000);
+    await pending;
+    expect(background.updateDeltas.at(-1)).toBeCloseTo(1 / 30);
+    expect(runtime.updateDeltas.at(-1)).toBeCloseTo(1 / 30);
+  });
+
+  it("rolls back the Pixi mount when background initialization fails", async () => {
+    const fakeApp = createFakeApplication();
+    const background = new FakeBackgroundPlayer();
+    background.initError = new Error("background init exploded");
+    const context = createMountContext();
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      createBackgroundPlayer: () => background.asPlayer(),
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => new FakeRuntime().asRuntime(),
+    });
+
+    await expect(adapter.mount(context)).rejects.toThrow(
+      /background init exploded/,
+    );
+    expect(context.gameLayer.children).toHaveLength(0);
+    expect(background.destroyed).toBe(true);
+    expect(fakeApp.stopped).toBe(true);
+    expect(fakeApp.destroyed).toBe(true);
+  });
+
+  it("stops and reports background update failures without a pending spin", async () => {
+    const fakeApp = createFakeApplication();
+    const background = new FakeBackgroundPlayer();
+    const reported: Error[] = [];
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      createBackgroundPlayer: () => background.asPlayer(),
+      loadSymbolTextures: async () => ({}),
+      createRuntime: () => new FakeRuntime().asRuntime(),
+      reportFatalError: (error) => reported.push(error),
+    });
+    await adapter.mount(createMountContext());
+    background.updateError = new Error("background update exploded");
+
+    fakeApp.tick(16);
+
+    expect(fakeApp.stopped).toBe(true);
+    expect(reported).toEqual([background.updateError]);
+  });
+
   it("starts win amount after reels, waits for awaiting-dismiss and forwards clicks", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime();
     const winAmount = new FakeWinAmountPlayer({ completeOnFirstUpdate: false });
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
-      loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
       createRuntime: () => runtime.asRuntime(),
       createWinAmountPlayer: () => winAmount.asPlayer(),
@@ -257,7 +323,6 @@ describe("game002 adapter", () => {
     const winAmount = new FakeWinAmountPlayer();
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
-      loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
       createRuntime: () => runtime.asRuntime(),
       createWinAmountPlayer: () => winAmount.asPlayer(),
@@ -292,7 +357,6 @@ describe("game002 adapter", () => {
     const runtime = new FakeRuntime();
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
-      loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
       createRuntime: () => runtime.asRuntime(),
     });
@@ -325,7 +389,6 @@ describe("game002 adapter", () => {
     const runtime = new FakeRuntime();
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
-      loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
       createRuntime: () => runtime.asRuntime(),
     });
@@ -349,7 +412,6 @@ describe("game002 adapter", () => {
     runtime.forceVisualScene = GAME002_SAMPLE_DEFAULT_SCENE;
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
-      loadStaticTextures: loadFakeStaticTextures,
       loadSymbolTextures: async () => ({}),
       createRuntime: () => runtime.asRuntime(),
     });
@@ -365,9 +427,10 @@ describe("game002 adapter", () => {
 
   it("destroy rejects pending animation and removes the canvas", async () => {
     const fakeApp = createFakeApplication();
+    const background = new FakeBackgroundPlayer();
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
-      loadStaticTextures: loadFakeStaticTextures,
+      createBackgroundPlayer: () => background.asPlayer(),
       loadSymbolTextures: async () => ({}),
       createRuntime: () => new FakeRuntime().asRuntime(),
     });
@@ -381,6 +444,7 @@ describe("game002 adapter", () => {
     expect(context.gameLayer.children).toHaveLength(0);
     expect(fakeApp.stopped).toBe(true);
     expect(fakeApp.destroyed).toBe(true);
+    expect(background.destroyed).toBe(true);
     const resizeCount = fakeApp.resizeCalls.length;
     context.emitViewport({ width: 1200, height: 1200 });
     expect(fakeApp.resizeCalls).toHaveLength(resizeCount);
@@ -390,6 +454,7 @@ describe("game002 adapter", () => {
 function createTestAdapter(options: Omit<Game002AdapterOptions, "skin">) {
   return createGame002Adapter({
     skin: getGame002SkinConfig("1"),
+    createBackgroundPlayer: () => new FakeBackgroundPlayer().asPlayer(),
     ...options,
   });
 }
@@ -521,18 +586,49 @@ function createViewportSnapshot(frameDesignSize: {
   };
 }
 
-async function loadFakeStaticTextures() {
-  return {
-    background: Texture.EMPTY,
-  };
-}
-
 function createSymbolTextures(symbols: readonly string[]): SymbolAssetMap {
   return Object.freeze(
     Object.fromEntries(
       symbols.map((symbol) => [symbol, createTextureSet(200, 200)]),
     ),
   );
+}
+
+class FakeBackgroundPlayer {
+  readonly container = new Container();
+  readonly updateDeltas: number[] = [];
+  initialized = false;
+  destroyed = false;
+  initError: Error | null = null;
+  updateError: Error | null = null;
+
+  asPlayer(): SpineBackgroundPlayer {
+    return {
+      container: this.container,
+      init: async () => {
+        if (this.initError) {
+          throw this.initError;
+        }
+        this.initialized = true;
+      },
+      update: (deltaSeconds) => {
+        if (this.updateError) {
+          throw this.updateError;
+        }
+        this.updateDeltas.push(deltaSeconds);
+      },
+      requestState: async () => undefined,
+      getSnapshot: () => ({
+        stableState: "BaseGame",
+        targetState: null,
+        phase: "stable",
+      }),
+      destroy: () => {
+        this.destroyed = true;
+        this.container.parent?.removeChild(this.container);
+      },
+    };
+  }
 }
 
 function collectRenderSymbols(root: unknown): RenderSymbol[] {

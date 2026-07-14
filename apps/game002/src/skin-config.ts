@@ -2,7 +2,6 @@ import rawGame002Config from "../../../assets/gamecfg002/gameconfig.json";
 import game002S3SpineAtlasRaw from "../../../assets/game002-s3/Symbol.atlas?raw";
 import game002S3SpineTextureUrl from "../../../assets/game002-s3/Symbol.png?url";
 import game002S3StateTextureManifest from "../../../assets/game002-s3/symbol-state-textures.manifest.json";
-import game002S3BackgroundUrl from "../../../assets/game002-s3/bg.jpg?url";
 import {
   createDefaultSymbolAnimationResolver,
   createSymbolManifestAnimationResolver,
@@ -10,6 +9,7 @@ import {
   type ReelSymbolScaleMap,
   type SymbolAnimationResolver,
 } from "@slotclientengine/rendercore";
+import type { SpineBackgroundResource } from "@slotclientengine/rendercore/background";
 import {
   GAME002_EMPTY_SYMBOLS,
   createGame002SymbolRenderPriorityMapFromManifest,
@@ -18,10 +18,10 @@ import {
 } from "./assets.js";
 import {
   GAME002_GRID_LAYOUT,
-  GAME002_FOCUS_REGION,
   type Game002FocusRegion,
   type Game002GridLayout,
 } from "./game-layout.js";
+import { GAME002_BACKGROUND_RESOURCE } from "./background-config.js";
 import {
   GAME002_SUPPORTED_SKINS,
   parseGame002SkinId,
@@ -64,8 +64,7 @@ const defaultAnimationResolver = createDefaultSymbolAnimationResolver();
 export interface Game002SkinConfig {
   readonly id: Game002SkinId;
   readonly label: string;
-  readonly backgroundLabel: string;
-  readonly backgroundUrl: string;
+  readonly background: SpineBackgroundResource;
   readonly rawGameConfig: unknown;
   readonly symbolModules: Record<string, string>;
   readonly spineSkeletonModules: Record<string, unknown>;
@@ -86,8 +85,7 @@ const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
     "1": Object.freeze({
       id: parseGame002SkinId("1"),
       label: "game002-s3",
-      backgroundLabel: "game002-s3 bg.jpg",
-      backgroundUrl: game002S3BackgroundUrl,
+      background: GAME002_BACKGROUND_RESOURCE,
       rawGameConfig: rawGame002Config,
       symbolModules: game002S3SymbolModules,
       spineSkeletonModules: game002S3SpineSkeletonModules,
@@ -116,7 +114,7 @@ const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
         fallback: defaultAnimationResolver,
       }),
       gridLayout: GAME002_GRID_LAYOUT,
-      focusRegion: GAME002_FOCUS_REGION,
+      focusRegion: GAME002_BACKGROUND_RESOURCE.manifest.adaptation.focusRect,
     }),
   });
 

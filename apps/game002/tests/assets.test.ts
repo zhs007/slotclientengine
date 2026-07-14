@@ -44,7 +44,36 @@ describe("game002-s3 assets", () => {
     ).toEqual(EXPECTED_SYMBOLS);
     expect(skin.displaySymbols).toEqual(EXPECTED_SYMBOLS);
     expect(skin.emptySymbols).toEqual([]);
-    expect(skin.backgroundUrl).toMatch(/bg\.jpg/);
+    expect(skin.background.manifest).toMatchObject({
+      version: 1,
+      kind: "spine",
+      artSize: { width: 2000, height: 2000 },
+      initialState: "BaseGame",
+      states: {
+        BaseGame: { animation: "BG" },
+        FreeGame: { animation: "FG" },
+      },
+      transitions: [
+        { from: "BaseGame", to: "FreeGame", animation: "BG_FG" },
+        { from: "FreeGame", to: "BaseGame", animation: "FG_BG" },
+      ],
+    });
+    expect(skin.background.atlasPages).toEqual([
+      "BG.png",
+      "BG_2.png",
+      "BG_3.png",
+      "BG_4.png",
+      "BG_5.png",
+      "BG_6.png",
+      "BG_7.png",
+      "BG_8.png",
+    ]);
+    expect(new Set(Object.values(skin.background.textureUrls)).size).toBe(8);
+    for (const page of skin.background.atlasPages) {
+      expect(skin.background.textureUrls[page]).toContain(
+        `spineAtlasPage=${encodeURIComponent(page)}`,
+      );
+    }
     expect(skin.focusRegion).toEqual({
       x: 577.5,
       y: 270,
@@ -81,7 +110,7 @@ describe("game002-s3 assets", () => {
       "Nearwin3",
       "WM_Fx",
       "Symbol.png",
-      "bg.jpg",
+      "BG.png",
     ]) {
       expect(JSON.stringify(Object.keys(skin.symbolModules))).not.toContain(
         banned,
