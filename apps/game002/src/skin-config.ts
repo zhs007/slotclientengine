@@ -1,6 +1,7 @@
 import rawGame002Config from "../../../assets/gamecfg002/gameconfig.json";
 import game002S3SpineAtlasRaw from "../../../assets/game002-s3/Symbol.atlas?raw";
 import game002S3SpineTextureUrl from "../../../assets/game002-s3/Symbol.png?url";
+import game002S3ReelManifest from "../../../assets/game002-s3/reel.manifest.json";
 import game002S3StateTextureManifest from "../../../assets/game002-s3/symbol-state-textures.manifest.json";
 import {
   createDefaultSymbolAnimationResolver,
@@ -8,6 +9,8 @@ import {
   createSymbolLandingAppearSymbolsFromManifest,
   createSymbolManifestAnimationResolver,
   createSymbolValuePresentationResourcesFromManifest,
+  parseReelManifest,
+  type ParsedReelManifest,
   type ReelSymbolRenderPriorityMap,
   type ReelSymbolAnimationCapabilityMap,
   type ReelSymbolScaleMap,
@@ -84,6 +87,7 @@ export interface Game002SkinConfig {
   readonly spineAtlasModules: Record<string, string>;
   readonly spineTextureModules: Record<string, string>;
   readonly stateTextureManifest: unknown;
+  readonly reelManifest: ParsedReelManifest;
   readonly displaySymbols: readonly string[];
   readonly emptySymbols: readonly string[];
   readonly symbolScales: ReelSymbolScaleMap;
@@ -108,6 +112,7 @@ const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
       spineAtlasModules: game002S3SpineAtlasModules,
       spineTextureModules: game002S3SpineTextureModules,
       stateTextureManifest: game002S3StateTextureManifest,
+      reelManifest: parseReelManifest(game002S3ReelManifest),
       displaySymbols: game002S3DisplaySymbols,
       emptySymbols: GAME002_EMPTY_SYMBOLS,
       symbolScales: createGame002SymbolScaleMapFromManifest({

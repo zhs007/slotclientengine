@@ -46,6 +46,9 @@ export class RenderReelSet extends Container {
           slotParent: this.#slotLayer,
           slotRenderOrderOffset: x * slotCount,
           slotRenderOrderStride,
+          ...(options.bounceStrength === undefined
+            ? {}
+            : { bounceStrength: options.bounceStrength }),
         });
         this.addChild(reel);
         return reel;

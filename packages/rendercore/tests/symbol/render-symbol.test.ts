@@ -48,6 +48,50 @@ const createSizedTexture = (width: number, height: number) => {
 };
 
 describe("RenderSymbol", () => {
+  it("keeps an equivalent live animation timeline across semantic state changes", () => {
+    let resets = 0;
+    let destroys = 0;
+    const renderSymbol = new RenderSymbol({
+      definition: createDefinition(),
+      texture: Texture.WHITE,
+      animationResolver: (context) => ({
+        stateId: context.resolvedState,
+        playback: context.state.playback,
+        continuityKey:
+          context.resolvedState === "normal" ||
+          context.resolvedState === "dropdown"
+            ? "same-loop"
+            : context.resolvedState,
+        reset: () => {
+          resets += 1;
+        },
+        update: () => ({ loopCompleted: false, onceCompleted: false }),
+        destroy: () => {
+          destroys += 1;
+        },
+      }),
+    });
+
+    expect(resets).toBe(1);
+    renderSymbol.requestState("dropdown");
+
+    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+      requestedState: "dropdown",
+      resolvedState: "dropdown",
+    });
+    expect(resets).toBe(1);
+    expect(destroys).toBe(1);
+    renderSymbol.returnToDefaultState();
+    expect(renderSymbol.getStateSnapshot()).toMatchObject({
+      requestedState: "normal",
+      resolvedState: "normal",
+    });
+    expect(resets).toBe(1);
+    expect(destroys).toBe(2);
+    renderSymbol.destroy();
+    expect(destroys).toBe(3);
+  });
+
   it("keeps paytable data and reuses one main sprite texture across states", () => {
     const renderSymbol = new RenderSymbol({
       definition: createDefinition(),

@@ -1,5 +1,6 @@
 export * from "./types.js";
 export * from "./errors.js";
+export * from "./manifest.js";
 export * from "./symbol-registry.js";
 export * from "./layout.js";
 export * from "./spin-plan.js";

@@ -132,6 +132,37 @@ describe("game002 cascade sequence", () => {
     ).toBe(true);
   });
 
+  it("carries existing CN values when a refill adds no CN and omits bg-gencoins", () => {
+    const value = structuredClone(GAME002_CASCADE_GMI) as any;
+    const stableX = 4;
+    const stableY = 0;
+    const carriedValue = 5;
+    step(value, 0).scenes[0].values[stableX].values[stableY] = 8;
+    step(value, 0).scenes[1].values[stableX].values[stableY] = 8;
+    step(value, 0).otherScenes[0].values[stableX].values[stableY] =
+      carriedValue;
+    step(value, 0).otherScenes[1].values[stableX].values[stableY] =
+      carriedValue;
+    step(value, 1).scenes[0].values[stableX].values[stableY] = 8;
+    step(value, 1).scenes[1].values[stableX].values[stableY] = 8;
+    step(value, 1).scenes[2].values[stableX].values[stableY] = 8;
+    step(value, 1).otherScenes[1].values[stableX].values[stableY] =
+      carriedValue;
+
+    step(value, 1).scenes[2].values[1].values[0] = 3;
+    removeHistory(value, 1, "bg-gencoins");
+    delete cascade(value).mapComponents["bg-gencoins"];
+
+    const sequence = createGame002CascadeSequence({
+      logic: createLogic(value),
+      cnSymbolCode: 8,
+    });
+    expect(sequence.cascades[0].refillValues[stableX][stableY]).toBe(
+      carriedValue,
+    );
+    expect(sequence.cascades[0].refillValues[1][0]).toBeNull();
+  });
+
   it("rejects every malformed protocol boundary without fallback", () => {
     expect(() =>
       createGame002CascadeSequence({

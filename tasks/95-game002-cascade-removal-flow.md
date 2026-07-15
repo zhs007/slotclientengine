@@ -9,8 +9,13 @@
 - game002 通过 `canRemoveSymbol` / `canDropSymbol` 函数向 rendercore 声明 symbol 特例；当前 `WL` 中奖但永不消除、永不改变逻辑格位。rendercore 不认识 `WL` 或 wild。
 - 固定 WL 不是物理挡板；其它 symbol 可以穿过其格位下落，并依靠 manifest `renderPriority` 从 WL 后方经过。当前 WL 为 `1`，其它 display symbol 为 `0`，禁止 runtime zIndex 特判。
 - dropdown 与 refill 合并为一次 fall；既有 occurrence 和新增 occurrence 同时下落，新 symbol 从棋盘上方创建，不走 grid-cell spin、公开轮带或 appear。
+- fall 期间只在整个 grid-cell reel set 上启用一个完整轮子矩形 mask，活动 symbol 自身不叠加 mask；新 symbol 未进入轮子区前不可见，进入边界后才逐步露出，落地解除 reel-set mask。
 - fall 保留列内下方优先错峰，并增加 x 方向从左到右的列启动延迟。
-- 全部中奖组的金额同时显示，并以较深 alpha 只压暗全部中奖坐标之外的格；约 `2s` 后全部中奖 symbol 聚合播放一次 win，再按组依次 remove。WL 参与高亮和 win，但不进入 removePositions。
+- 全部中奖组的金额同时显示，并以较深 alpha 同时压暗全部中奖坐标之外的格子黑层与 symbol 本体；强调段共 `1.2s`（`0.1s` 渐暗、`1s` 保持、`0.1s` 渐亮），恢复后严格按组执行“本组 win 完成 -> 立即 remove -> 下一组 win”。WL 参与所在组的高亮和 win，但不进入 removePositions。
+- refill 新增 CN 时必须由当前 step `bg-gencoins` 提供服务端 value；没有新增 CN 时服务器可不下发该组件，既有 CN value 直接从 dropdown occurrence 严格携带，禁止随机补值。
+- global win-amount 播放期间仍须逐帧更新 main reel runtime，CN/其它 symbol 的 normal Loop 不能因金额阶段被冻结。
+- spin 不再按格子奇偶显示明暗棋盘格，也不渲染固定 cell 黑层。game002 通过函数声明只有 `WL/CN` 保持全亮，其余实际滚动 occurrence 的 symbol 本体压暗 `0.82`；rendercore 只拥有通用 code resolver、逐帧 slot 跟随和 alpha 渐变恢复，不硬编码游戏 symbol。格底与 symbol 同时压暗只用于停轴后的中奖 emphasis。
+- 普通 spin 回弹力度由独立 `assets/game002-s3/reel.manifest.json` 的 `spin.bounceStrength` 配置；`0` 必须完全关闭回弹，game002 当前固定为 `0`。rendercore parser 与 reel runtime 拥有通用比例算法，未配置的其它调用方保持原默认力度 `1`。
 - 服务端 fixture 以 WL 原格保留后的 remove/dropdown/refill scene 为准；旧的“共享 WL 最后一组 remove”“10 格 selective refill”描述失效。
 
 仓库根目录固定为：

@@ -2,6 +2,7 @@ import { Container, Graphics } from "pixi.js";
 import { assertValidDeltaSeconds } from "../symbol/ani.js";
 import { ReelError } from "./errors.js";
 import { normalizeGridCellReelOffsetMatrix } from "./grid-cell-reel-offsets.js";
+import { resolveGridCellDimmingAlpha } from "./grid-cell-spin-plan.js";
 import { createReelLayout } from "./layout.js";
 import { RenderReel } from "./render-reel.js";
 import type {
@@ -68,9 +69,11 @@ export class RenderGridCellReelSet extends Container {
   readonly #rows: number;
   readonly #cellWidth: number;
   readonly #cellHeight: number;
+  readonly #bounceStrength: number | undefined;
   readonly #order: readonly GridCellCoordinate[];
   readonly #cells: readonly RuntimeCell[];
   readonly #cellsByKey: ReadonlyMap<string, RuntimeCell>;
+  readonly #cascadeMovementMask: Graphics;
   #spinPlan: GridCellReelSpinPlan | null = null;
   #activeDrop: ActiveDrop | null = null;
   #elapsedMs = 0;
@@ -82,6 +85,7 @@ export class RenderGridCellReelSet extends Container {
     this.#rows = assertPositiveInteger(options.rows, "rows");
     this.#cellWidth = assertPositiveNumber(options.cellWidth, "cellWidth");
     this.#cellHeight = assertPositiveNumber(options.cellHeight, "cellHeight");
+    this.#bounceStrength = options.bounceStrength;
     if (options.reels.getReelCount() !== this.#columns) {
       throw new ReelError(
         `grid columns ${this.#columns} do not match reels reel count ${options.reels.getReelCount()}.`,
@@ -104,6 +108,19 @@ export class RenderGridCellReelSet extends Container {
         cell,
       ]),
     );
+    this.#cascadeMovementMask = new Graphics()
+      .rect(
+        0,
+        0,
+        this.#columns * this.#cellWidth,
+        this.#rows * this.#cellHeight,
+      )
+      .fill({ color: 0xffffff, alpha: 1 });
+    this.#cascadeMovementMask.visible = false;
+    this.#cascadeMovementMask.renderable = false;
+    this.#cascadeMovementMask.includeInBuild = false;
+    this.#cascadeMovementMask.measurable = false;
+    this.addChild(this.#cascadeMovementMask);
   }
 
   resetToScene(
@@ -151,6 +168,8 @@ export class RenderGridCellReelSet extends Container {
       cell.occupied = true;
       cell.dimOverlay.alpha = 0;
       cell.dimOverlay.y = 0;
+      cell.dimOverlay.renderable = false;
+      resetReelSlotSymbolDimming(cell);
       this.setCellClipMask(cell, false);
       this.syncCellRenderOrder(cell);
     }
@@ -213,6 +232,8 @@ export class RenderGridCellReelSet extends Container {
         : null;
       cell.dimOverlay.alpha = 0;
       cell.dimOverlay.y = 0;
+      cell.dimOverlay.renderable = false;
+      resetReelSlotSymbolDimming(cell);
       this.setCellClipMask(cell, false);
       this.syncCellRenderOrder(cell);
     }
@@ -349,11 +370,22 @@ export class RenderGridCellReelSet extends Container {
     );
     for (const cell of this.#cells) {
       const key = `${cell.coordinate.x},${cell.coordinate.y}`;
+      const isHighlighted = highlighted.has(key);
       cell.dimOverlay.y = 0;
       cell.dimOverlay.alpha = 1;
+      cell.dimOverlay.renderable = true;
+      const symbol = cell.reel
+        .getSlotSnapshots()
+        .find((slot) => slot.windowY === 0)?.symbol;
+      if (symbol) {
+        symbol.alpha = 1;
+        symbol.tint = createBrightnessTint(
+          isHighlighted ? 1 : 1 - dimmingAlpha,
+        );
+      }
       for (const row of cell.dimRows) {
         row.graphic.alpha =
-          row.windowY === 0 && cell.occupied && !highlighted.has(key)
+          row.windowY === 0 && cell.occupied && !isHighlighted
             ? dimmingAlpha
             : 0;
       }
@@ -364,6 +396,8 @@ export class RenderGridCellReelSet extends Container {
     for (const cell of this.#cells) {
       cell.dimOverlay.alpha = 0;
       cell.dimOverlay.y = 0;
+      cell.dimOverlay.renderable = false;
+      resetReelSlotSymbolDimming(cell);
     }
   }
 
@@ -451,7 +485,11 @@ export class RenderGridCellReelSet extends Container {
       movements: Object.freeze(active),
       elapsedSeconds: 0,
     };
-    if (active.length === 0) this.completeDrop();
+    if (active.length === 0) {
+      this.completeDrop();
+    } else {
+      this.setCascadeMovementMaskActive(true);
+    }
   }
 
   requestVisibleSymbolStates(
@@ -556,6 +594,9 @@ export class RenderGridCellReelSet extends Container {
         columnGap: 0,
       }),
       registry,
+      ...(this.#bounceStrength === undefined
+        ? {}
+        : { bounceStrength: this.#bounceStrength }),
       presentationValueResolver:
         presentationValueResolver === undefined
           ? undefined
@@ -573,6 +614,7 @@ export class RenderGridCellReelSet extends Container {
     const dimRows = createDimmingRows(this.#cellWidth, this.#cellHeight);
     dimOverlay.alpha = 0;
     dimOverlay.y = 0;
+    dimOverlay.renderable = false;
 
     reel.addChild(dimOverlay);
     dimOverlay.addChild(...dimRows.map((row) => row.graphic));
@@ -651,6 +693,11 @@ export class RenderGridCellReelSet extends Container {
         cell.hasLandedThisSpin = true;
         cell.fadeOutElapsedMs = 0;
         cell.fadeOutStartAlpha = cell.dimOverlay.alpha;
+      } else {
+        // RenderReel.update() may recycle or replace visible slot symbols. Apply
+        // dimming after that work so the current rolling symbols keep the
+        // configured tint instead of inheriting a freshly reset white tint.
+        this.syncDimmingStrip(cell, plan);
       }
       if (cell.phase === "landed" && elapsedMs > planCell.stopAtMs) {
         const postLandDeltaMs =
@@ -674,12 +721,10 @@ export class RenderGridCellReelSet extends Container {
     const fadeInMs = plan.dimming.fadeInMs;
     if (fadeInMs === 0) {
       cell.dimOverlay.alpha = 1;
-      this.syncDimmingStrip(cell, plan);
       return;
     }
     const progress = clamp01((elapsedMs - planCell.startAtMs) / fadeInMs);
     cell.dimOverlay.alpha = progress;
-    this.syncDimmingStrip(cell, plan);
   }
 
   private updateLanded(
@@ -689,9 +734,6 @@ export class RenderGridCellReelSet extends Container {
   ): void {
     cell.reel.update(deltaMs / 1000);
     this.syncCellRenderOrder(cell);
-    if (cell.planCell) {
-      this.syncLandedDimming(cell, cell.planCell);
-    }
     const fadeOutMs = plan.dimming.fadeOutMs;
     if (fadeOutMs === 0) {
       cell.dimOverlay.alpha = 0;
@@ -703,9 +745,13 @@ export class RenderGridCellReelSet extends Container {
       const progress = clamp01(cell.fadeOutElapsedMs / fadeOutMs);
       cell.dimOverlay.alpha = cell.fadeOutStartAlpha * (1 - progress);
     }
+    if (cell.planCell) {
+      this.syncLandedDimming(cell, cell.planCell);
+    }
 
     if (cell.dimOverlay.alpha <= 0 && !hasActiveLandingAppear(cell)) {
       cell.dimOverlay.alpha = 0;
+      cell.dimOverlay.renderable = false;
       cell.phase = "completed";
     }
   }
@@ -775,7 +821,9 @@ export class RenderGridCellReelSet extends Container {
         reelX: cell.reel.x,
         reelY: cell.reel.y,
         dimmingOnReel: true,
+        dimmingOverlayRenderable: false,
         dimmingAlpha: 0,
+        symbolDimmingAlpha: 0,
         requestedState: null,
         visibleSymbol: -1,
         presentationValue: null,
@@ -803,7 +851,9 @@ export class RenderGridCellReelSet extends Container {
       reelX: cell.reel.x,
       reelY: cell.reel.y,
       dimmingOnReel: cell.dimOverlay.parent === cell.reel,
+      dimmingOverlayRenderable: cell.dimOverlay.renderable,
       dimmingAlpha: this.getVisibleDimmingAlpha(cell),
+      symbolDimmingAlpha: this.getVisibleSymbolBrightness(cell),
       requestedState: slot?.requestedState ?? null,
       visibleSymbol,
       presentationValue: slot?.presentationValue ?? null,
@@ -858,6 +908,7 @@ export class RenderGridCellReelSet extends Container {
           `Dropdown target (${item.movement.x},${item.movement.targetY}) is occupied.`,
         );
       }
+      item.occurrence.symbol.returnToDefaultState();
       this.removeChild(item.occurrence.symbol);
       target.reel.placeVisibleOccurrence(item.occurrence);
       target.occupied = true;
@@ -865,6 +916,7 @@ export class RenderGridCellReelSet extends Container {
       this.syncCellRenderOrder(target);
     }
     this.#activeDrop = null;
+    this.setCascadeMovementMaskActive(false);
     assertCascadeMatrixEqual(
       this.getVisibleScene(),
       active.plan.targetScene,
@@ -884,6 +936,15 @@ export class RenderGridCellReelSet extends Container {
       cell.reel.releaseDetachedOccurrence(item.occurrence);
     }
     this.#activeDrop = null;
+    this.setCascadeMovementMaskActive(false);
+  }
+
+  private setCascadeMovementMaskActive(active: boolean): void {
+    this.mask = active ? this.#cascadeMovementMask : null;
+    this.#cascadeMovementMask.visible = active;
+    this.#cascadeMovementMask.renderable = active;
+    this.#cascadeMovementMask.includeInBuild = false;
+    this.#cascadeMovementMask.measurable = false;
   }
 
   private syncDimmingStrip(
@@ -891,14 +952,25 @@ export class RenderGridCellReelSet extends Container {
     plan: GridCellReelSpinPlan,
   ): void {
     const reelY = cell.reel.getSnapshot().currentY;
-    const baseY = Math.floor(reelY);
-    const fractionalY = reelY - baseY;
+    cell.dimOverlay.renderable = cell.dimOverlay.alpha > 0;
+    const fractionalY = reelY - Math.floor(reelY);
     cell.dimOverlay.y = -fractionalY * this.#cellHeight;
+    const slotsByWindowY = new Map(
+      cell.reel.getSlotSnapshots().map((slot) => [slot.windowY, slot] as const),
+    );
     for (const row of cell.dimRows) {
-      row.graphic.alpha =
-        (baseY + row.windowY + cell.coordinate.orderIndex) % 2 === 0
-          ? plan.dimming.evenAlpha
-          : plan.dimming.oddAlpha;
+      const slot = slotsByWindowY.get(row.windowY);
+      const dimmingAlpha =
+        slot && slot.kind !== "empty"
+          ? resolveGridCellDimmingAlpha(plan.dimming, slot.code)
+          : 0;
+      row.graphic.alpha = dimmingAlpha;
+      if (slot?.symbol) {
+        slot.symbol.alpha = 1;
+        slot.symbol.tint = createBrightnessTint(
+          1 - cell.dimOverlay.alpha * dimmingAlpha,
+        );
+      }
     }
   }
 
@@ -907,8 +979,19 @@ export class RenderGridCellReelSet extends Container {
     planCell: GridCellReelPlanCell,
   ): void {
     cell.dimOverlay.y = 0;
+    cell.dimOverlay.renderable = cell.dimOverlay.alpha > 0;
     for (const row of cell.dimRows) {
-      row.graphic.alpha = row.windowY === 0 ? planCell.dimmingAlpha : 0;
+      const dimmingAlpha = row.windowY === 0 ? planCell.dimmingAlpha : 0;
+      row.graphic.alpha = dimmingAlpha;
+      const slot = cell.reel
+        .getSlotSnapshots()
+        .find((candidate) => candidate.windowY === row.windowY);
+      if (slot?.symbol) {
+        slot.symbol.alpha = 1;
+        slot.symbol.tint = createBrightnessTint(
+          1 - cell.dimOverlay.alpha * dimmingAlpha,
+        );
+      }
     }
   }
 
@@ -937,6 +1020,22 @@ export class RenderGridCellReelSet extends Container {
     }
     return 0;
   }
+
+  private getVisibleSymbolBrightness(cell: RuntimeCell): number {
+    const centerY = this.#cellHeight / 2;
+    for (const row of cell.dimRows) {
+      const rowTop = cell.dimOverlay.y + row.windowY * this.#cellHeight;
+      const rowBottom = rowTop + this.#cellHeight;
+      if (centerY >= rowTop && centerY < rowBottom) {
+        const symbol = cell.reel
+          .getSlotSnapshots()
+          .find((slot) => slot.windowY === row.windowY)?.symbol;
+        if (!symbol) return 0;
+        return (((symbol.tint as number) >> 16) & 0xff) / 255;
+      }
+    }
+    return 0;
+  }
 }
 
 function createDimmingRows(
@@ -960,6 +1059,20 @@ function resetReelSlotSymbolsAndRequestLandingAppear(cell: RuntimeCell): void {
     slot.symbol?.reset();
     if (slot.windowY === 0) slot.symbol?.requestLandingAppear();
   }
+}
+
+function resetReelSlotSymbolDimming(cell: RuntimeCell): void {
+  for (const slot of cell.reel.getSlotSnapshots()) {
+    if (slot.symbol) {
+      slot.symbol.alpha = 1;
+      slot.symbol.tint = 0xffffff;
+    }
+  }
+}
+
+function createBrightnessTint(brightness: number): number {
+  const channel = Math.round(clamp01(brightness) * 255);
+  return (channel << 16) | (channel << 8) | channel;
 }
 
 function hasActiveLandingAppear(cell: RuntimeCell): boolean {

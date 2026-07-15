@@ -46,6 +46,7 @@ import { createSlotGameLogicResult } from "@slotclientengine/gameframeworks";
 import {
   createDefaultSymbolAnimationResolver,
   ManualSymbolAni,
+  RenderGridCellReelSet,
   type SymbolAssetMap,
 } from "@slotclientengine/rendercore";
 import { createTextureSet } from "../../../packages/rendercore/tests/reel/helpers.js";
@@ -190,6 +191,7 @@ describe("game002-s3 reel runtime", () => {
 
   it("preserves the 54-cell order, offsets, dimming and stop timing", () => {
     const runtime = createRuntime(GAME002_SAMPLE_DEFAULT_SCENE);
+    expect(runtime.config.spinBounceStrength).toBe(0);
     const plan = runtime.spinToScene(GAME002_SAMPLE_SPIN_SCENE, "spin");
 
     expect(plan.cells).toHaveLength(54);
@@ -197,21 +199,31 @@ describe("game002-s3 reel runtime", () => {
       x: 0,
       y: 0,
       orderIndex: 0,
-      dimmingAlpha: 0.5,
+      dimmingAlpha: 0.82,
       reelOffsetY: 0,
     });
     expect(plan.cells[8]).toMatchObject({
       x: 0,
       y: 8,
       orderIndex: 8,
-      dimmingAlpha: 0.5,
+      dimmingAlpha: 0.82,
       reelOffsetY: GAME002_GRID_CELL_REEL_OFFSETS[0][8],
     });
     expect(plan.cells[53]).toMatchObject({
       x: 5,
       y: 8,
       orderIndex: 53,
-      dimmingAlpha: 0.35,
+      dimmingAlpha: 0.82,
+    });
+    expect(plan.cells[9]).toMatchObject({
+      x: 1,
+      y: 0,
+      dimmingAlpha: 0,
+    });
+    expect(plan.cells[10]).toMatchObject({
+      x: 1,
+      y: 1,
+      dimmingAlpha: 0,
     });
     expect(plan.lastStopAtMs).toBe(1876);
     expect(runtime.getVisualSnapshot().requestedStates.flat()).not.toContain(
@@ -221,6 +233,13 @@ describe("game002-s3 reel runtime", () => {
     expect(runtime.getVisualSnapshot().requestedStates.flat()).toContain(
       "spinBlur",
     );
+    const reelSet = runtime.mainReelsLayer as RenderGridCellReelSet;
+    expect(
+      reelSet
+        .getSnapshot()
+        .cells.filter((cell) => cell.phase === "spinning")
+        .every((cell) => cell.reelY === 0),
+    ).toBe(true);
 
     let result = runtime.update(0.05);
     let sawLandingAppear = runtime

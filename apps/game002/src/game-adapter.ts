@@ -180,6 +180,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
             symbolRenderPriorities: skin.symbolRenderPriorities,
             symbolAnimationCapabilities: skin.symbolAnimationCapabilities,
             animationResolver: skin.symbolAnimationResolver,
+            spinBounceStrength: skin.reelManifest.spin.bounceStrength,
             gridLayout: skin.gridLayout,
             focusRegion: skin.focusRegion,
           },
@@ -228,6 +229,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
         formatAmount: formatServerUsdAmount,
         amountText: GAME002_SYMBOL_WIN_CAROUSEL_OPTIONS.amountText,
         emphasisSeconds: GAME002_CASCADE_PRESENTATION.emphasisSeconds,
+        dimmingInSeconds: GAME002_CASCADE_PRESENTATION.dimmingInSeconds,
+        dimmingOutSeconds: GAME002_CASCADE_PRESENTATION.dimmingOutSeconds,
         nonWinningDimmingAlpha:
           GAME002_CASCADE_PRESENTATION.nonWinningDimmingAlpha,
       });
@@ -427,6 +430,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
         return;
       }
       if (pending.phase === "win-amount") {
+        this.#runtime.update(deltaSeconds);
         const result = this.#requireWinAmountPlayer().update(deltaSeconds);
         pending.winAmountPlaybackComplete = !isWinAmountBlockingSpin(
           result.phase,

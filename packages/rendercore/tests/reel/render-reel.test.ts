@@ -8,6 +8,41 @@ import {
 } from "./helpers.js";
 
 describe("RenderReel", () => {
+  it("scales spin bounce strength and disables bounce at zero", () => {
+    const reels = createBasicReels();
+    const createReel = (bounceStrength?: number) =>
+      new RenderReel({
+        reels,
+        x: 0,
+        layout: createBasicLayout(),
+        registry: createBasicRegistry(),
+        ...(bounceStrength === undefined ? {} : { bounceStrength }),
+      });
+    const axisPlan = createReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      visibleRows: 3,
+      minimumSpinCycles: 2,
+      baseDurationMs: 300,
+      speedSymbolsPerSecond: 30,
+      startDelayMs: 0,
+      stopDelayMs: 0,
+    }).axes[0];
+    const defaultBounce = createReel();
+    const noBounce = createReel(0);
+    const doubleBounce = createReel(2);
+
+    for (const reel of [defaultBounce, noBounce, doubleBounce]) {
+      reel.start(axisPlan);
+      reel.update(0.015);
+    }
+
+    expect(defaultBounce.y).toBeCloseTo(-0.96);
+    expect(noBounce.y).toBe(0);
+    expect(doubleBounce.y).toBeCloseTo(defaultBounce.y * 2);
+    expect(() => createReel(-1)).toThrow(/bounceStrength/);
+  });
+
   it("requests spinBlur while spinning and normal after landing", () => {
     const reels = createBasicReels();
     const reel = new RenderReel({

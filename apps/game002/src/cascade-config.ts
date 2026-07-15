@@ -11,17 +11,19 @@ export const GAME002_CASCADE_COMPONENTS = Object.freeze({
 });
 
 export const GAME002_CASCADE_MOTION = Object.freeze({
-  columnStartStaggerSeconds: 0.055,
-  startStaggerSeconds: 0.025,
-  baseFallSeconds: 0.18,
-  perRowFallSeconds: 0.055,
-  maxFallSeconds: 0.48,
-  overshootCellRatio: 0.08,
-  settleSeconds: 0.12,
+  columnStartStaggerSeconds: 0.045,
+  startStaggerSeconds: 0.018,
+  baseFallSeconds: 0.11,
+  perRowFallSeconds: 0.04,
+  maxFallSeconds: 0.36,
+  overshootCellRatio: 0.16,
+  settleSeconds: 0.09,
 }) satisfies GridCellCascadeMotionOptions;
 
 export const GAME002_CASCADE_PRESENTATION = Object.freeze({
-  emphasisSeconds: 2,
+  emphasisSeconds: 1,
+  dimmingInSeconds: 0.1,
+  dimmingOutSeconds: 0.1,
   nonWinningDimmingAlpha: 0.82,
 });
 

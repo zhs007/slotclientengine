@@ -34,6 +34,16 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
         "symbol cascade emphasisSeconds must be finite and non-negative.",
       );
     }
+    for (const [label, value] of [
+      ["dimmingInSeconds", options.dimmingInSeconds],
+      ["dimmingOutSeconds", options.dimmingOutSeconds],
+    ] as const) {
+      if (!Number.isFinite(value) || value < 0) {
+        throw new Error(
+          `symbol cascade ${label} must be finite and non-negative.`,
+        );
+      }
+    }
     if (
       !Number.isFinite(options.nonWinningDimmingAlpha) ||
       options.nonWinningDimmingAlpha < 0 ||
@@ -132,7 +142,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
       return;
     }
     this.startEmphasis();
-    if (this.#options.emphasisSeconds === 0) this.startWin();
+    if (this.getEmphasisTotalSeconds() === 0) this.startWinAt(0);
   }
 
   update(deltaSeconds: number): { readonly completed: boolean } {
@@ -148,16 +158,22 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     this.#options.target.update(deltaSeconds);
     if (this.#phase === "emphasis") {
       this.#emphasisElapsedSeconds += deltaSeconds;
-      if (this.#emphasisElapsedSeconds < this.#options.emphasisSeconds) {
+      const totalSeconds = this.getEmphasisTotalSeconds();
+      if (this.#emphasisElapsedSeconds < totalSeconds) {
+        this.#options.target.setVisibleSymbolDimming(
+          this.getAllWinPositions(),
+          this.resolveCurrentDimmingAlpha(),
+        );
         return Object.freeze({ completed: false });
       }
-      this.startWin();
+      this.#options.target.clearVisibleSymbolDimming();
+      this.startWinAt(0);
       return Object.freeze({ completed: false });
     }
     this.#advanced = true;
     const positions =
       this.#phase === "win"
-        ? this.getAllWinPositions()
+        ? this.currentGroup().positions
         : this.currentGroup().removePositions;
     const complete = this.#options.target
       .getVisibleSymbolStateSnapshots(positions)
@@ -169,12 +185,23 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     if (!this.#advanced || !complete)
       return Object.freeze({ completed: false });
     if (this.#phase === "win") {
-      return this.startRemoveAt(0);
+      const group = this.currentGroup();
+      if (group.removePositions.length > 0) {
+        this.#options.target.requestVisibleSymbolStates(
+          group.removePositions,
+          "remove",
+        );
+        this.#phase = "remove";
+        this.#advanced = false;
+        return Object.freeze({ completed: false });
+      }
+      this.hideAmount(this.#index);
+      return this.startWinAt(this.#index + 1);
     }
     const group = this.currentGroup();
     this.#options.target.releaseVisibleSymbols(group.removePositions);
     this.hideAmount(this.#index);
-    return this.startRemoveAt(this.#index + 1);
+    return this.startWinAt(this.#index + 1);
   }
 
   clear(): void {
@@ -182,7 +209,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     if (this.#phase === "win" || this.#phase === "remove") {
       this.#options.target.requestVisibleSymbolStates(
         this.#phase === "win"
-          ? this.getAllWinPositions()
+          ? this.currentGroup().positions
           : this.currentGroup().removePositions,
         "normal",
       );
@@ -219,10 +246,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
   }
 
   private startEmphasis(): void {
-    this.#options.target.setVisibleSymbolDimming(
-      this.getAllWinPositions(),
-      this.#options.nonWinningDimmingAlpha,
-    );
+    this.#options.target.setVisibleSymbolDimming(this.getAllWinPositions(), 0);
     this.clearAmountTexts();
     const presentations = this.#groups.map((group) => {
       const geometries = this.#options.target.getVisibleSymbolGeometrySnapshots(
@@ -251,37 +275,48 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     this.#advanced = false;
   }
 
-  private startWin(): void {
+  private startWinAt(index: number): { readonly completed: boolean } {
+    if (index >= this.#groups.length) {
+      this.#options.target.clearVisibleSymbolDimming();
+      this.clearAmountTexts();
+      this.#phase = "complete";
+      this.#index = -1;
+      return Object.freeze({ completed: true });
+    }
+    this.#index = index;
     this.#options.target.requestVisibleSymbolStates(
-      this.getAllWinPositions(),
+      this.currentGroup().positions,
       "win",
     );
     this.#phase = "win";
     this.#advanced = false;
+    return Object.freeze({ completed: false });
   }
 
-  private startRemoveAt(index: number): { readonly completed: boolean } {
-    let nextIndex = index;
-    while (nextIndex < this.#groups.length) {
-      const group = this.#groups[nextIndex];
-      if (group.removePositions.length > 0) {
-        this.#index = nextIndex;
-        this.#options.target.requestVisibleSymbolStates(
-          group.removePositions,
-          "remove",
-        );
-        this.#phase = "remove";
-        this.#advanced = false;
-        return Object.freeze({ completed: false });
-      }
-      this.hideAmount(nextIndex);
-      nextIndex += 1;
+  private getEmphasisTotalSeconds(): number {
+    return (
+      this.#options.dimmingInSeconds +
+      this.#options.emphasisSeconds +
+      this.#options.dimmingOutSeconds
+    );
+  }
+
+  private resolveCurrentDimmingAlpha(): number {
+    const elapsed = this.#emphasisElapsedSeconds;
+    const fadeIn = this.#options.dimmingInSeconds;
+    const holdEnd = fadeIn + this.#options.emphasisSeconds;
+    if (fadeIn > 0 && elapsed < fadeIn) {
+      return this.#options.nonWinningDimmingAlpha * (elapsed / fadeIn);
     }
-    this.#options.target.clearVisibleSymbolDimming();
-    this.clearAmountTexts();
-    this.#phase = "complete";
-    this.#index = -1;
-    return Object.freeze({ completed: true });
+    if (elapsed <= holdEnd) return this.#options.nonWinningDimmingAlpha;
+    const fadeOutElapsed = elapsed - holdEnd;
+    if (this.#options.dimmingOutSeconds > 0) {
+      return (
+        this.#options.nonWinningDimmingAlpha *
+        (1 - fadeOutElapsed / this.#options.dimmingOutSeconds)
+      );
+    }
+    return 0;
   }
 
   private currentGroup(): SymbolCascadeGroup {

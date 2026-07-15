@@ -96,8 +96,10 @@ export function createGridCellReelSpinPlan(options: {
         targetVisibleSymbols: Object.freeze([
           targetScene[cell.x][cell.y],
         ]) as readonly [number],
-        dimmingAlpha:
-          sequenceIndex % 2 === 0 ? dimming.evenAlpha : dimming.oddAlpha,
+        dimmingAlpha: resolveGridCellDimmingAlpha(
+          dimming,
+          targetScene[cell.x][cell.y],
+        ),
       });
     },
   );
@@ -267,12 +269,27 @@ function parseTiming(value: GridCellReelSpinTiming): GridCellReelSpinTiming {
 }
 
 function parseDimming(value: GridCellDimmingPattern): GridCellDimmingPattern {
+  if (typeof value.resolveDimmingAlpha !== "function") {
+    throw new ReelError("resolveDimmingAlpha must be a function.");
+  }
   return Object.freeze({
-    evenAlpha: assertAlpha(value.evenAlpha, "evenAlpha"),
-    oddAlpha: assertAlpha(value.oddAlpha, "oddAlpha"),
+    resolveDimmingAlpha: value.resolveDimmingAlpha,
     fadeInMs: assertNonNegativeNumber(value.fadeInMs, "fadeInMs"),
     fadeOutMs: assertNonNegativeNumber(value.fadeOutMs, "fadeOutMs"),
   });
+}
+
+export function resolveGridCellDimmingAlpha(
+  dimming: GridCellDimmingPattern,
+  code: number,
+): number {
+  if (!Number.isSafeInteger(code) || code < 0) {
+    throw new ReelError("grid cell dimming code must be non-negative.");
+  }
+  return assertAlpha(
+    dimming.resolveDimmingAlpha(code),
+    `dimming alpha for symbol code ${code}`,
+  );
 }
 
 function parseDirection(

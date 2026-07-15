@@ -29,6 +29,8 @@ export interface CreateSymbolCascadePlayerOptions {
   readonly formatAmount: (amount: number) => string;
   readonly amountText: SymbolWinAmountTextOptions;
   readonly emphasisSeconds: number;
+  readonly dimmingInSeconds: number;
+  readonly dimmingOutSeconds: number;
   readonly nonWinningDimmingAlpha: number;
 }
 

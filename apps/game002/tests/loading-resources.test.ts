@@ -86,6 +86,7 @@ describe("game002 loading resources", () => {
         "game002-background-spine-skeleton",
         "game002-background-spine-atlas",
         "game002-symbol-manifest",
+        "game002-reel-manifest",
         "game002-symbol-spine-atlas",
         "game002-symbol-spine-texture",
         "game002-win-amount-manifest",

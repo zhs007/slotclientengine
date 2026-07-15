@@ -45,6 +45,7 @@ export class RenderReel extends Container {
   readonly #slotRenderOrderOffset: number;
   readonly #slotRenderOrderStride: number;
   readonly #presentationValueResolver: RenderReelOptions["presentationValueResolver"];
+  readonly #bounceStrength: number;
   readonly #slots: readonly ReelSlot[];
   readonly #clipMask: Graphics;
   #phase: RenderReelPhase = "idle";
@@ -67,6 +68,10 @@ export class RenderReel extends Container {
     this.#registry = options.registry;
     this.#symbolPool = options.symbolPool;
     this.#presentationValueResolver = options.presentationValueResolver;
+    this.#bounceStrength = normalizeNonNegativeFiniteNumber(
+      options.bounceStrength ?? 1,
+      "bounceStrength",
+    );
     this.x = options.layout.getReelX(options.x);
     this.#slotParent = options.slotParent ?? this;
     this.#usesExternalSlotParent = this.#slotParent !== this;
@@ -167,7 +172,11 @@ export class RenderReel extends Container {
               ? "spinning"
               : "settling";
         this.#spinLocalY = this.calculateSpinLocalY(progress);
-        this.y = calculateBounceOffset(progress, this.layout.cellHeight);
+        this.y = calculateBounceOffset(
+          progress,
+          this.layout.cellHeight,
+          this.#bounceStrength,
+        );
         this.syncClippingForPhase();
         this.renderAtY(this.#spinLocalY, "spinBlur");
       }
@@ -783,12 +792,24 @@ function easeOutCubic(progress: number): number {
   return 1 - Math.pow(1 - progress, 3);
 }
 
-function calculateBounceOffset(progress: number, cellHeight: number): number {
+function calculateBounceOffset(
+  progress: number,
+  cellHeight: number,
+  bounceStrength: number,
+): number {
+  if (bounceStrength === 0) return 0;
   if (progress < 0.1) {
-    return -Math.sin(Math.PI * (progress / 0.1)) * cellHeight * 0.08;
+    return (
+      -Math.sin(Math.PI * (progress / 0.1)) * cellHeight * 0.08 * bounceStrength
+    );
   }
   if (progress > 0.9) {
-    return Math.sin(Math.PI * ((progress - 0.9) / 0.1)) * cellHeight * 0.1;
+    return (
+      Math.sin(Math.PI * ((progress - 0.9) / 0.1)) *
+      cellHeight *
+      0.1 *
+      bounceStrength
+    );
   }
   return 0;
 }
@@ -800,6 +821,16 @@ function calculateSlotCount(layout: ReelLayout): number {
 function normalizeNonNegativeSafeInteger(value: number, label: string): number {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new ReelError(`${label} must be a non-negative safe integer.`);
+  }
+  return value;
+}
+
+function normalizeNonNegativeFiniteNumber(
+  value: number,
+  label: string,
+): number {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new ReelError(`${label} must be a non-negative finite number.`);
   }
   return value;
 }

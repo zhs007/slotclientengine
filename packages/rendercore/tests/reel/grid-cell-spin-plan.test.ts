@@ -20,8 +20,7 @@ const TIMING = Object.freeze({
   speedSymbolsPerSecond: 10,
 }) satisfies GridCellReelSpinTiming;
 const DIMMING = Object.freeze({
-  evenAlpha: 0.5,
-  oddAlpha: 0.35,
+  resolveDimmingAlpha: (code: number) => (code === 1 ? 0 : 0.82),
   fadeInMs: 80,
   fadeOutMs: 160,
 }) satisfies GridCellDimmingPattern;
@@ -74,7 +73,7 @@ describe("createGridCellReelSpinPlan", () => {
       [0],
     ]);
     expect(plan.cells.map((cell) => cell.dimmingAlpha)).toEqual([
-      0.5, 0.35, 0.5, 0.35, 0.5, 0.35,
+      0, 0.82, 0.82, 0.82, 0, 0.82,
     ]);
     expect(plan.cells[0].axisPlan).toMatchObject({
       x: 0,
@@ -241,10 +240,19 @@ describe("createGridCellReelSpinPlan", () => {
         ...baseOptions,
         dimming: {
           ...DIMMING,
-          evenAlpha: 1.1,
+          resolveDimmingAlpha: () => 1.1,
         },
       }),
-    ).toThrow(/evenAlpha/);
+    ).toThrow(/dimming alpha/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        dimming: {
+          ...DIMMING,
+          resolveDimmingAlpha: null as never,
+        },
+      }),
+    ).toThrow(/resolveDimmingAlpha/);
     expect(() =>
       createGridCellReelSpinPlan({
         ...baseOptions,

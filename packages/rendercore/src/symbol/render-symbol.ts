@@ -125,12 +125,19 @@ export class RenderSymbol extends VisualEntity<void> {
   setDefaultState(state: string): void {
     const before = this.createAniKey(this.#stateMachine.getSnapshot());
     this.#stateMachine.setDefaultState(state);
-    this.syncAniIfNeeded(before);
+    this.syncAniIfNeeded(before, false);
   }
 
   requestState(state: string): void {
     const before = this.createAniKey(this.#stateMachine.getSnapshot());
     this.#stateMachine.requestState(state);
+    this.syncAniIfNeeded(before);
+  }
+
+  returnToDefaultState(): void {
+    this.assertNotDestroyed();
+    const before = this.createAniKey(this.#stateMachine.getSnapshot());
+    this.#stateMachine.reset();
     this.syncAniIfNeeded(before);
   }
 
@@ -155,7 +162,7 @@ export class RenderSymbol extends VisualEntity<void> {
     if (this.#valueController && previous !== value) {
       const before = this.#lastAniKey;
       this.#lastAniKey = "";
-      this.syncAniIfNeeded(before);
+      this.syncAniIfNeeded(before, false);
     }
   }
 
@@ -204,7 +211,7 @@ export class RenderSymbol extends VisualEntity<void> {
     resetBaseDisplay(this.createAnimationContext());
     const before = this.#lastAniKey;
     this.#lastAniKey = "";
-    this.syncAniIfNeeded(before);
+    this.syncAniIfNeeded(before, false);
   }
 
   resetForPoolRelease(): void {
@@ -238,7 +245,10 @@ export class RenderSymbol extends VisualEntity<void> {
     super.destroy(options);
   }
 
-  private syncAniIfNeeded(previousKey: string): boolean {
+  private syncAniIfNeeded(
+    previousKey: string,
+    preserveEquivalentTimeline = true,
+  ): boolean {
     const snapshot = this.#stateMachine.getSnapshot();
     const nextKey = this.createAniKey(snapshot);
     if (nextKey === previousKey && nextKey === this.#lastAniKey) {
@@ -248,6 +258,17 @@ export class RenderSymbol extends VisualEntity<void> {
     const nextAni = this.createCurrentAni();
     const previousAni = this.#currentAni;
     this.#lastAniKey = nextKey;
+    if (
+      preserveEquivalentTimeline &&
+      previousAni.continuityKey !== undefined &&
+      nextAni.continuityKey === previousAni.continuityKey
+    ) {
+      // The semantic state changed, but both states resolve to the same live
+      // animation. Keep the current player and timeline instead of resetting
+      // an equivalent animation (for example normal Loop -> dropdown Loop).
+      nextAni.destroy?.();
+      return false;
+    }
     this.#currentAni = nextAni;
     this.#currentAni.reset();
     previousAni.destroy?.();

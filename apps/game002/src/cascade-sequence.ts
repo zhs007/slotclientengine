@@ -131,7 +131,6 @@ export function createGame002CascadeSequence(options: {
     requireTriggered(step, GAME002_CASCADE_COMPONENTS.respin);
     requireTriggered(step, GAME002_CASCADE_COMPONENTS.dropdown);
     requireTriggered(step, GAME002_CASCADE_COMPONENTS.refill);
-    requireTriggered(step, GAME002_CASCADE_COMPONENTS.gencoins);
 
     const dropdown = requireBasicComponent(
       step,
@@ -199,7 +198,13 @@ export function createGame002CascadeSequence(options: {
       step,
       scene: refillScene,
       cnSymbolCode,
-      required: true,
+      required: refillPositions.some(
+        ({ x, y }) => refillScene[x][y] === cnSymbolCode,
+      ),
+      fallbackValues: createCarriedRefillValues(
+        dropdownValues,
+        refillPositions,
+      ),
     });
     validateCarriedValues(
       dropdownScene,
@@ -379,6 +384,7 @@ function readFinalValues(options: {
   readonly scene: SceneMatrix;
   readonly cnSymbolCode: number;
   readonly required: boolean;
+  readonly fallbackValues?: SymbolPresentationValueMatrix;
 }): SymbolPresentationValueMatrix {
   if (!options.step.hasComponent(GAME002_CASCADE_COMPONENTS.gencoins)) {
     if (options.required) {
@@ -386,8 +392,11 @@ function readFinalValues(options: {
         `step[${options.step.getIndex()}] must trigger bg-gencoins.`,
       );
     }
-    return Object.freeze(
-      options.scene.map((column) => Object.freeze(column.map(() => null))),
+    return (
+      options.fallbackValues ??
+      Object.freeze(
+        options.scene.map((column) => Object.freeze(column.map(() => null))),
+      )
     );
   }
   return parseFullValues(
@@ -398,6 +407,28 @@ function readFinalValues(options: {
     options.scene,
     options.cnSymbolCode,
     `step[${options.step.getIndex()}] bg-gencoins values`,
+  );
+}
+
+function createCarriedRefillValues(
+  dropdownValues: GridCellCascadeValueMatrix,
+  refillPositions: readonly WinResultPosition[],
+): SymbolPresentationValueMatrix {
+  const refillKeys = new Set(refillPositions.map(positionKey));
+  return Object.freeze(
+    dropdownValues.map((column, x) =>
+      Object.freeze(
+        column.map((value, y) => {
+          if (refillKeys.has(`${x},${y}`)) return null;
+          if (value === -1) {
+            throw new Error(
+              `game002 carried refill value at (${x},${y}) must not be a hole.`,
+            );
+          }
+          return value;
+        }),
+      ),
+    ),
   );
 }
 

@@ -10,6 +10,7 @@ const SOURCE_ROOT = join(REPO_ROOT, "assets/game002-s3");
 const INDEX_HTML = join(DIST_ROOT, "index.html");
 const MANIFEST_PATH = join(SOURCE_ROOT, "symbol-state-textures.manifest.json");
 const BACKGROUND_MANIFEST_PATH = join(SOURCE_ROOT, "background.manifest.json");
+const REEL_MANIFEST_PATH = join(SOURCE_ROOT, "reel.manifest.json");
 const BACKGROUND_PAGES = Object.freeze([
   "BG.png",
   "BG_2.png",
@@ -114,12 +115,14 @@ function verifyIndexHtml(indexHtml) {
 function verifySourceContract() {
   assertAbsent(join(SOURCE_ROOT, "bg.jpg"));
   assertFile(BACKGROUND_MANIFEST_PATH);
+  assertFile(REEL_MANIFEST_PATH);
   assertFile(join(SOURCE_ROOT, "BG.json"));
   assertFile(join(SOURCE_ROOT, "BG.atlas"));
   for (const page of BACKGROUND_PAGES) {
     assertFile(join(SOURCE_ROOT, page));
   }
   verifyBackgroundSourceContract();
+  verifyReelSourceContract();
   assertFile(MANIFEST_PATH);
   assertFile(join(SOURCE_ROOT, "Symbol.atlas"));
   assertFile(join(SOURCE_ROOT, "Symbol.png"));
@@ -269,6 +272,21 @@ function verifySourceContract() {
   }
 }
 
+function verifyReelSourceContract() {
+  if (!existsSync(REEL_MANIFEST_PATH)) {
+    return;
+  }
+  const manifest = JSON.parse(readFileSync(REEL_MANIFEST_PATH, "utf8"));
+  if (
+    manifest.version !== 1 ||
+    JSON.stringify(manifest.spin) !== JSON.stringify({ bounceStrength: 0 })
+  ) {
+    failures.push(
+      "reel manifest must declare version=1 and spin.bounceStrength=0.",
+    );
+  }
+}
+
 function verifyBackgroundSourceContract() {
   if (!existsSync(BACKGROUND_MANIFEST_PATH)) {
     return;
@@ -351,6 +369,11 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
     /^background\.manifest-[A-Za-z0-9_-]+\.json$/,
     "background manifest",
   );
+  assertOne(
+    assetNames,
+    /^reel\.manifest-[A-Za-z0-9_-]+\.json$/,
+    "reel manifest",
+  );
   assertOne(assetNames, /^BG-[A-Za-z0-9_-]+\.json$/, "background skeleton");
   assertOne(assetNames, /^BG-[A-Za-z0-9_-]+\.atlas$/, "background atlas");
   assertOne(assetNames, /^Symbol-[A-Za-z0-9_-]+\.atlas$/, "Spine atlas");
@@ -384,6 +407,7 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
     );
   }
   assertDistContainsSourceAsset(assetNames, BACKGROUND_MANIFEST_PATH);
+  assertDistContainsSourceAsset(assetNames, REEL_MANIFEST_PATH);
   assertDistContainsSourceAsset(assetNames, join(SOURCE_ROOT, "BG.json"));
   assertDistContainsSourceAsset(assetNames, join(SOURCE_ROOT, "BG.atlas"));
   if (assetNames.some((name) => /^bg-[A-Za-z0-9_-]+\.jpg$/.test(name))) {

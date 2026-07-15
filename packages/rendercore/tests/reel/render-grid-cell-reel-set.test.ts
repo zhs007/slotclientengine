@@ -29,8 +29,7 @@ const TIMING = Object.freeze({
   speedSymbolsPerSecond: 100,
 }) satisfies GridCellReelSpinTiming;
 const DIMMING = Object.freeze({
-  evenAlpha: 0.5,
-  oddAlpha: 0.35,
+  resolveDimmingAlpha: (code: number) => (code === 1 ? 0 : 0.82),
   fadeInMs: 20,
   fadeOutMs: 40,
 }) satisfies GridCellDimmingPattern;
@@ -63,15 +62,33 @@ describe("RenderGridCellReelSet", () => {
     expect(reelSet.getVisibleScene()).toEqual(INITIAL_SCENE);
     reelSet.setVisibleSymbolDimming([{ x: 0, y: 0 }], 0.85);
     const dimmed = reelSet.getSnapshot().cells;
+    expect(dimmed.every((cell) => cell.dimmingOverlayRenderable)).toBe(true);
     expect(
       dimmed.find((cell) => cell.x === 0 && cell.y === 0)?.dimmingAlpha,
     ).toBe(0);
     expect(
+      dimmed.find((cell) => cell.x === 0 && cell.y === 0)?.symbolDimmingAlpha,
+    ).toBe(1);
+    expect(
       dimmed.find((cell) => cell.x === 1 && cell.y === 0)?.dimmingAlpha,
     ).toBe(0.85);
+    expect(
+      dimmed.find((cell) => cell.x === 1 && cell.y === 0)?.symbolDimmingAlpha,
+    ).toBeCloseTo(0.15, 2);
     reelSet.clearVisibleSymbolDimming();
     expect(
       reelSet.getSnapshot().cells.every((cell) => cell.dimmingAlpha === 0),
+    ).toBe(true);
+    expect(
+      reelSet
+        .getSnapshot()
+        .cells.every((cell) => !cell.dimmingOverlayRenderable),
+    ).toBe(true);
+    expect(
+      reelSet
+        .getSnapshot()
+        .cells.filter((cell) => cell.visibleSymbol !== 0)
+        .every((cell) => cell.symbolDimmingAlpha === 1),
     ).toBe(true);
     expect(() => reelSet.setVisibleSymbolDimming([], 1.1)).toThrow(
       /between 0 and 1/,
@@ -159,6 +176,7 @@ describe("RenderGridCellReelSet", () => {
       hasClipMask: true,
       requestedState: "spinBlur",
       dimmingAlpha: 0,
+      dimmingOverlayRenderable: false,
     });
     expect(getCellClipMask(reelSet, 0).visible).toBe(true);
     expect(snapshot.cells[1]).toMatchObject({
@@ -173,9 +191,21 @@ describe("RenderGridCellReelSet", () => {
       { x: 0, y: 1, orderIndex: 1 },
     ]);
     snapshot = reelSet.getSnapshot();
-    expect(snapshot.cells[0].dimmingAlpha).toBeCloseTo(0.5);
+    expect([0, 0.82]).toContain(snapshot.cells[0].dimmingAlpha);
+    expect(
+      [0, 0.18, 1].some(
+        (expected) =>
+          Math.abs(snapshot.cells[0].symbolDimmingAlpha - expected) < 0.01,
+      ),
+    ).toBe(true);
     expect(snapshot.cells[1].dimmingAlpha).toBeCloseTo(0);
+    expect(snapshot.cells[1].symbolDimmingAlpha).toBe(0);
     expect(snapshot.cells[0].requestedState).toBe("spinBlur");
+    expect(
+      snapshot.cells
+        .filter((cell) => cell.phase === "spinning")
+        .some((cell) => cell.dimmingOverlayRenderable),
+    ).toBe(true);
     expect(snapshot.cells[0].hasClipMask).toBe(true);
     expect(snapshot.cells[1].hasClipMask).toBe(true);
     expect(snapshot.cells[2].hasClipMask).toBe(false);
@@ -215,6 +245,7 @@ describe("RenderGridCellReelSet", () => {
         (cell) =>
           !cell.hasClipMask &&
           cell.dimmingAlpha === 0 &&
+          (cell.symbolDimmingAlpha === 0 || cell.symbolDimmingAlpha === 1) &&
           cell.requestedState !== "appear",
       ),
     ).toBe(true);
@@ -267,22 +298,32 @@ describe("RenderGridCellReelSet", () => {
     );
   });
 
-  it("scrolls the dimming strip with the micro reel instead of using a fixed overlay", () => {
+  it("dims rolling cells with scrolling black overlays without fading symbol alpha", () => {
     const reelSet = createGridReelSet();
     reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
     reelSet.spin(createPlan());
     reelSet.update(0);
 
     const alphaSamples: number[] = [];
+    const symbolAlphaSamples: number[] = [];
+    const overlaySamples: boolean[] = [];
     for (let index = 0; index < 7; index += 1) {
       reelSet.update(0.02);
-      alphaSamples.push(
-        Number(reelSet.getSnapshot().cells[0].dimmingAlpha.toFixed(2)),
-      );
+      for (const cell of reelSet.getSnapshot().cells) {
+        alphaSamples.push(Number(cell.dimmingAlpha.toFixed(2)));
+        symbolAlphaSamples.push(Number(cell.symbolDimmingAlpha.toFixed(2)));
+        overlaySamples.push(cell.dimmingOverlayRenderable);
+        if (cell.dimmingAlpha > 0) {
+          expect(cell.dimmingOverlayRenderable).toBe(true);
+        }
+      }
     }
 
-    expect(alphaSamples).toContain(0.5);
-    expect(alphaSamples).toContain(0.35);
+    expect(alphaSamples).toContain(0);
+    expect(alphaSamples).toContain(0.82);
+    expect(overlaySamples).toContain(true);
+    expect(symbolAlphaSamples).toContain(1);
+    expect(symbolAlphaSamples).toContain(0.18);
   });
 
   it("accepts per-cell reel offsets for reset and spin without changing the target scene", () => {
@@ -452,12 +493,28 @@ describe("RenderGridCellReelSet", () => {
         overshootCellRatio: 0,
       },
     });
+    const stationaryChildren = new Set(reelSet.children);
     reelSet.startCascadeDrop(plan);
     const fixedWildLayer = reelSet.children[1].zIndex;
-    const movingLayers = reelSet.children.slice(6).map((child) => child.zIndex);
+    const movingSymbols = reelSet.children.filter(
+      (child) => !stationaryChildren.has(child),
+    );
+    const movingLayers = movingSymbols.map((child) => child.zIndex);
     expect(movingLayers).toHaveLength(2);
+    expect(movingSymbols.every((symbol) => symbol.mask == null)).toBe(true);
+    const movementMask = reelSet.mask;
+    expect(movementMask).toBeInstanceOf(Graphics);
+    if (!(movementMask instanceof Graphics)) {
+      throw new Error("Cascade movement mask must be a Graphics instance.");
+    }
+    expect(movementMask.visible).toBe(true);
+    expect(movementMask.renderable).toBe(true);
     expect(movingLayers.every((zIndex) => zIndex < fixedWildLayer)).toBe(true);
     reelSet.update(plan.totalSeconds);
+    expect(movingSymbols.every((symbol) => symbol.parent !== reelSet)).toBe(
+      true,
+    );
+    expect(reelSet.mask == null).toBe(true);
     expect(reelSet.getVisibleScene()).toEqual(plan.targetScene);
   });
 

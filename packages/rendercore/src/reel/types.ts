@@ -149,8 +149,7 @@ export interface GridCellReelSpinTiming {
 }
 
 export interface GridCellDimmingPattern {
-  readonly evenAlpha: number;
-  readonly oddAlpha: number;
+  readonly resolveDimmingAlpha: (code: number) => number;
   readonly fadeInMs: number;
   readonly fadeOutMs: number;
 }
@@ -211,6 +210,7 @@ export interface RenderReelOptions {
   readonly slotRenderOrderOffset?: number;
   readonly slotRenderOrderStride?: number;
   readonly presentationValueResolver?: ReelSymbolPresentationValueResolver;
+  readonly bounceStrength?: number;
 }
 
 export interface RenderReelSpinOptions {
@@ -284,6 +284,7 @@ export interface RenderReelSetOptions {
   readonly layout: ReelLayout;
   readonly registry: ReelSymbolRegistry;
   readonly symbolPool?: RenderSymbolPoolOptions;
+  readonly bounceStrength?: number;
 }
 
 export interface RenderSymbolPoolOptions {
@@ -353,6 +354,7 @@ export interface RenderGridCellReelSetOptions {
   readonly cellHeight: number;
   readonly order: readonly GridCellCoordinate[];
   readonly presentationValueResolver?: GridCellSymbolPresentationValueResolver;
+  readonly bounceStrength?: number;
 }
 
 export interface GridCellSymbolPresentationValueContext {
@@ -447,7 +449,9 @@ export interface RenderGridCellReelCellSnapshot {
   readonly reelX: number;
   readonly reelY: number;
   readonly dimmingOnReel: boolean;
+  readonly dimmingOverlayRenderable: boolean;
   readonly dimmingAlpha: number;
+  readonly symbolDimmingAlpha: number;
   readonly requestedState: string | null;
   readonly visibleSymbol: number;
   readonly presentationValue: number | null;

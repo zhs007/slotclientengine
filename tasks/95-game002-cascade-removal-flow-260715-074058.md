@@ -3,7 +3,7 @@
 ## 1. 执行信息
 
 - 执行开始 UTC：`2026-07-15T06:31:20Z`
-- 执行结束 UTC：`2026-07-15T07:43:23Z`
+- 执行结束 UTC：`2026-07-15T09:44:46Z`
 - 分支：`main`
 - 起始 HEAD：`4bd979b`
 - 结束 HEAD：`4bd979b`（本次未提交）
@@ -56,7 +56,7 @@ rendercore 先按坐标计算最后引用组，再应用 game002 注入的 remov
 
 - group 0 remove 5 个独占格，不包含 `(0,5)`；
 - group 1 remove 4 个格，不包含 `(0,5)`；
-- WL 仍参与聚合高亮和一次 win，但不消除；唯一 hole 共 9 个。
+- WL 仍参与聚合高亮，并在所属组轮到时播放一次 win，但不消除；唯一 hole 共 9 个。
 
 更新后的 `bg-remove.removedNum=9` 仅保留作诊断值，不参与 hole 推导；权威关系仍来自 remove scene 与 removePositions 的一致性校验。
 
@@ -75,7 +75,7 @@ rendercore 先按坐标计算最后引用组，再应用 game002 注入的 remov
 新增通用能力：
 
 - `prepareSymbolWinGroups()`：由原 carousel 与新 cascade player 共用 component/usedResults/amount/geometry 合同。
-- `createSymbolCascadePlayer()`：聚合执行 `emphasis -> win once -> sequential remove`；各组金额同时显示，全部中奖格之外统一压暗，全部中奖 symbol 只请求一次 win，随后才按组 remove；没有 lingering。
+- `createSymbolCascadePlayer()`：先聚合执行 emphasis，各组金额同时显示并统一压暗全部中奖格之外的内容；恢复亮度后按组严格执行 `group win -> immediate group remove -> next group win`，没有 lingering。
 - player prepare 显式拒绝空组、非法/重复坐标、remove 非本组 win 坐标、非法 amount，以及缺 win/remove capability；覆盖 clear、重复 start、invalid delta 和 destroy 生命周期。
 - `createGridCellCascadeDropPlan()`：同时校验 source/settled/refill target，只接受精确 `-1` sentinel，逐列按 occurrence 顺序校验 code/value 和 fixed occurrence。
 - 统一 fall 使用 app 传入的 column/row stagger、fall、overshoot、settle 参数；同一个 RenderSymbol occurrence 连同 CN player/挂件移动，新 symbol 从棋盘上方同时落入。
@@ -101,10 +101,12 @@ initial-spin
 ```text
 spin.start
 spin.complete
-wins.start
-wins.complete
+group0.win.start
+group0.win.complete
 group0.remove.start
 group0.remove.complete
+group1.win.start
+group1.win.complete
 group1.remove.start
 group1.remove.complete
 fall.start
@@ -211,7 +213,7 @@ tasks/95-game002-cascade-removal-flow-260715-074058.md
 | `pnpm --filter @slotclientengine/rendercore build`            | 通过                                      |
 | `pnpm --filter game002 format:check`                          | 通过                                      |
 | `pnpm --filter game002 lint`                                  | 通过                                      |
-| `pnpm --filter game002 test`                                  | 通过，17 files / 79 tests，branch 80.51%  |
+| `pnpm --filter game002 test`                                  | 通过，17 files / 80 tests，branch 81.08%  |
 | `pnpm --filter game002 typecheck`                             | 通过                                      |
 | `pnpm --filter game002 build`                                 | 通过                                      |
 | `pnpm --filter game002 release:check`                         | 通过，`game002 static dist check passed`  |
@@ -251,7 +253,7 @@ CI=true pnpm --filter game002 dev -- --host 127.0.0.1 --port 5206
 http://127.0.0.1:5206/?skin=1&gamecode=<GAME_CODE>&token=<TOKEN>&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
 ```
 
-必须由真实 cascade 局验证：单 live session；全部中奖格之外统一明显压暗；各组金额同时出现；约 2 秒后中奖 symbol 聚合只播一次 Win；随后按组 End/remove；WL 不 End、不消失、不改变格位；其它 symbol 从 WL 后层穿过；9 个新增格与幸存 symbol 同批 fall 且不出现 spin/appear；列从左到右错峰并保留回弹；CN server value carry；末 step 无空 win；最后才播放 `$2.10` global win-amount；点击/下一 spin、resize/focus 以及 console/WebSocket 无错误。
+必须由真实 cascade 局验证：单 live session；普通 spin 不再出现明暗棋盘格或固定黑色矩形断层，实际滚动中的 WL/CN 图标与格底全亮，其余 occurrence 的格底由随 slot 滚动的 `0.82` 黑层压暗、symbol 由同步灰阶 tint 压暗，图标 alpha 保持 `1` 且暗区仍能看清轮廓，落地后两者同步恢复；普通 spin 全程没有额外上下回弹；全部中奖格之外的格子与 symbol 本体用 `0.1s` 统一渐暗；各组金额同时出现；保持 `1s` 后用 `0.1s` 渐亮，完整强调段 `1.2s`；恢复后按组执行 Win 完成即 End/remove，再进入下一组 Win；WL 不 End、不消失、不改变格位；其它 symbol 从 WL 后层穿过；9 个新增格与幸存 symbol 同批有力 fall 且不出现 spin/appear；fall 期间只有整个轮子区的单一总 mask，下落 symbol 本体无额外 mask，棋盘外部分不可见但棋盘内下落内容正常显示；列从左到右错峰并保留明显回弹；normal/dropdown 实际动画相同时 Loop 时间轴连续且落地只恢复 normal 语义；CN server value carry；无新增 CN 的 step 缺失 `bg-gencoins` 时正常继续；末 step 无空 win；最后才播放 `$2.10` global win-amount，金额播放期间 CN 与其它 normal Loop 持续运动；点击/下一 spin、resize/focus 以及 console/WebSocket 无错误。
 
 ### 5.1 用户浏览器反馈修复
 
@@ -269,18 +271,31 @@ http://127.0.0.1:5206/?skin=1&gamecode=<GAME_CODE>&token=<TOKEN>&businessid=gues
 - rendercore 新增通用可注入 remove/drop predicate；game002 传入 WL 不 remove、不 drop 的规则。fixture 已切换到服务器新语义，WL 保持原格，唯一 remove/refill 格均为 9。
 - dropdown/refill 合并为一次 fall，既有与新增 occurrence 同时下落，不再执行 selective spin/appear；新增 symbol 从棋盘上方进入。
 - motion 新增 x 列延迟，形成从左到右启动偏差；列内继续下方优先错峰、下落与回弹。
-- 全部中奖组先同时显示各自金额并只压暗中奖坐标以外的格 `0.82`，强调 `2s` 后全部中奖 symbol 聚合播放一次 win，再按组 remove；全为保护 symbol 的组允许空 removePositions。
+- 全部中奖组先同时显示各自金额，并以 `0.82` 同时压暗中奖坐标以外的格子黑层与 symbol 本体；强调段为 `0.1s` 渐暗、`1s` 保持、`0.1s` 渐亮，恢复后按组严格执行“本组 win 完成 -> 立即 remove -> 下一组 win”；全为保护 symbol 的组允许空 removePositions，win 完成后直接进入下一组。
+- fall motion 调整为更短的 base/per-row/max fall、更大的 `0.16` cell overshoot 和更短 settle，增强落下冲击与回弹力度；fall 期间只给整个 grid-cell reel set 启用一个完整轮子矩形 mask，活动 symbol 自身不再绑定 mask，棋盘上方不可见，进入轮子区才逐步露出，落地后解除 reel-set mask。
 - WL 在 game002-s3 manifest 中声明 `renderPriority: 1`，其它 symbol 为 `0`。falling symbol 直接参与 grid root 的统一 zIndex 排序，可以穿过 WL 格位但显示在 WL 后方；没有 WL 专属 runtime zIndex 分支。
+- 复核确认压暗只修改 alpha，CN 的 active Spine `Win -> Loop` 也会在同一 player 上重新调用 `play(Loop, true)`；实际冻结点是 adapter 的 global win-amount 分支此前只更新金额 player、漏掉 reel runtime update。现已在金额播放每帧继续推进 runtime，并以“win-amount update 前 runtime update 计数必须增加”锁定回归。
+- 服务器新合同下，refill 只有新增 CN 时才必须触发 `bg-gencoins`；没有新增 CN 时允许组件完全缺失，新增普通 symbol value 为 null，既有 CN value 从 dropdown occurrence 严格携带。缺组件但实际新增 CN 仍显式失败。
+- spin dimming 从奇偶棋盘格改为实际 symbol occurrence resolver：game002 把 code 映射回 paytable symbol，仅 `WL/CN` 返回 `0`，其它返回 `0.82`；rendercore 每帧按当前临时 strip slot 修改 symbol 根节点 alpha，并在落地 fade-out 完成时恢复为 `1`。spin 固定 cell 黑层不可渲染，中奖 emphasis 时才重新启用；shared production code 没有 `WL/CN` 名称分支。
 - rendercore 新增固定 symbol 穿越与层级、统一 fall、列延迟、emphasis/dimming 和空 remove 组测试；浏览器验收仍由用户负责。
+
+spin 回弹配置 UTC 为 `2026-07-15T09:40:05Z`：新增独立 `assets/game002-s3/reel.manifest.json`，`spin.bounceStrength=1` 等于 rendercore 原固定力度、正数按比例缩放、`0` 完全关闭。game002 配置为 `0`，manifest 经通用 fail-fast parser 注入每个 grid-cell `RenderReel`，并进入 gameloading 与 release dist 精确闭包；app/runtime 没有第二份 `0`。测试同时覆盖 parser 非法值、默认力度、两倍力度、零回弹，以及 game002 spin 中所有活动 cell 的 `reelY=0`。
+
+最终 spin 暗度与 dropdown 连续性修正 UTC 为 `2026-07-15T10:11:23Z`，覆盖前述两版临时结论：
+
+- spin 不再修改 symbol alpha，也不使用固定 cell overlay。rendercore 在微型 reel 内为当前实际 slot 生成同速滚动的半透明黑色格层，用于压暗格底；同时按同一 fade progress 与 symbol resolver 对 RenderSymbol 根节点应用灰阶 tint，用于压暗图标。普通 symbol 在目标暗度 `0.82` 时有效亮度约 `0.18`、alpha 仍为 `1`；WL/CN 的暗层为 `0`、tint 为白色。落地 fade-out 与 clear 同步恢复格层和 tint。
+- 修复了暗度同步发生在 `reel.update()` 之前、slot recycle 后被重置的问题；当前顺序固定为先更新/recycle reel slot，再把暗层和 tint 应用到本帧实际 occurrence。
+- `SymbolAni` 新增通用 continuity key。manifest Spine、active value Spine 与 VNI 使用真实资源、playback、transform（active value 额外包含 tier generation）构造 key；normal 与 dropdown key 相同时，状态切换不 reset/replay player，CN 不会第二次 `play(Loop)`。落地调用 `returnToDefaultState()`：等价动画只恢复 normal 语义并继续时间轴，不同动画才真正切回 normal，避免 dropdown stable loop 卡住后续 win。
+- 回归覆盖“黑格层随 slot 滚动、symbol tint 而非 alpha、特殊 symbol 保持亮、完成后恢复”、“普通等价 ani 不 reset”和“CN active Spine normal Loop -> dropdown Loop -> normal 全程不增加 play 次数”。
 
 本次调整后的严格自动验收：
 
-- rendercore：format、lint、typecheck、`39 files / 265 tests` 全通过，branch coverage `80.05%` 达标。
-- game002：format、lint、typecheck、`17 files / 79 tests`、build、release:check 全通过，static dist closure 通过。
+- rendercore：format、lint、typecheck、`40 files / 269 tests` 全通过，最终 branch coverage `80.34%` 达标。
+- game002：format、lint、typecheck、`17 files / 80 tests`、build、release:check 全通过，branch coverage `81.05%`，static dist closure 通过。
 - symbolsviewer：同步 WL manifest priority 后，format、lint、typecheck、`2 files / 17 tests`、build 全通过。
 - `git diff --check` 通过；production source 无 `spinSelectiveToScene`、WL 专属 zIndex 或 rendercore 游戏名硬编码残留。
 
-浏览器结果：`进行中（用户负责；上述两个数据预检问题已修复）`。
+浏览器结果：`进行中（用户负责；数据预检问题已修复，最新逐组 win/remove 与单一 reel-set mask 等待真实画面确认）`。
 
 ## 6. 二次遗漏审计
 
@@ -304,4 +319,4 @@ http://127.0.0.1:5206/?skin=1&gamecode=<GAME_CODE>&token=<TOKEN>&businessid=gues
 
 ## 8. 结束工作区状态
 
-结束时仍在 `main` / `4bd979b`，未提交。`git status --short` 包含本报告第 3 节列出的任务改动，以及用户原有的未跟踪计划文件；没有任务外文件被新增或修改。
+结束时仍在 `main` / `4bd979b`，未提交。任务改动保留在现有工作区中，没有执行 stage、commit、stash、reset 或 checkout，也没有触碰 game003 资源。

@@ -159,12 +159,15 @@ describe("game002-s3 layout", () => {
       minimumSpinCycles: 6,
       speedSymbolsPerSecond: 54,
     });
-    expect(GAME002_GRID_CELL_DIMMING).toEqual({
-      evenAlpha: 0.5,
-      oddAlpha: 0.35,
+    expect(GAME002_GRID_CELL_DIMMING).toMatchObject({
       fadeInMs: 80,
       fadeOutMs: 160,
     });
+    expect(GAME002_GRID_CELL_DIMMING.resolveSymbolDimmingAlpha("WL")).toBe(0);
+    expect(GAME002_GRID_CELL_DIMMING.resolveSymbolDimmingAlpha("CN")).toBe(0);
+    expect(GAME002_GRID_CELL_DIMMING.resolveSymbolDimmingAlpha("H1")).toBe(
+      0.82,
+    );
     expect(() => validateGame002BoardFrame()).not.toThrow();
     expect(() =>
       validateGame002FocusRegion(GAME002_FOCUS_REGION),

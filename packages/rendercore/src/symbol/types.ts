@@ -75,6 +75,7 @@ export interface SymbolAniUpdateResult {
 export interface SymbolAni {
   readonly stateId: SymbolStateId;
   readonly playback: SymbolPlaybackKind;
+  readonly continuityKey?: string;
   reset(): void;
   update(deltaSeconds: number): SymbolAniUpdateResult;
   destroy?(): void;

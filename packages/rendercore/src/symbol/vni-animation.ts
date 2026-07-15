@@ -94,6 +94,7 @@ const cachedVniSymbolPlayers = new WeakMap<
 export class VniSymbolAni implements SymbolAni {
   readonly stateId: string;
   readonly playback: SymbolPlaybackKind = "once";
+  readonly continuityKey: string;
   readonly #context: SymbolAnimationContext;
   readonly #resource: SymbolVniAnimationResource;
   readonly #playerFactory: VniSymbolAniPlayerFactory;
@@ -110,6 +111,7 @@ export class VniSymbolAni implements SymbolAni {
     this.#context = options.context;
     this.#resource = options.resource;
     this.stateId = options.context.resolvedState;
+    this.continuityKey = createVniAnimationContinuityKey(options.resource);
     this.#playerFactory =
       options.playerFactory ??
       ((playerOptions) => new VNIPlayer(playerOptions));
@@ -339,6 +341,19 @@ function createVniSymbolPlayerCacheKey(
     resource.project.stage.duration,
     stableAssetUrlKey(resource.assetUrls),
   ].join("\u0000");
+}
+
+function createVniAnimationContinuityKey(
+  resource: SymbolVniAnimationResource,
+): string {
+  return `vni:${JSON.stringify({
+    symbol: resource.symbol,
+    project: resource.spec.project,
+    playback: resource.spec.playback,
+    projectName: resource.project.name,
+    stage: resource.project.stage,
+    assetUrls: stableAssetUrlKey(resource.assetUrls),
+  })}`;
 }
 
 function stableAssetUrlKey(assetUrls: SymbolVniAnimationResource["assetUrls"]) {

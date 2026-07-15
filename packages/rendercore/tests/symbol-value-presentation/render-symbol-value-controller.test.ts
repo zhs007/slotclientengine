@@ -54,6 +54,10 @@ describe("render symbol value controller", () => {
     });
     players[0].completeNextUpdate = true;
     symbol.update(0.1);
+    expect(players[0].plays.at(-1)).toEqual({
+      animationName: "Loop",
+      loop: true,
+    });
     symbol.requestState("remove");
     expect(players[0].plays.at(-1)).toEqual({
       animationName: "End",
@@ -61,11 +65,19 @@ describe("render symbol value controller", () => {
     });
     players[0].completeNextUpdate = true;
     symbol.update(0.1);
+    const playCountBeforeDropdown = players[0].plays.length;
     symbol.requestState("dropdown");
     expect(players[0].plays.at(-1)).toEqual({
       animationName: "Loop",
       loop: true,
     });
+    expect(players[0].plays).toHaveLength(playCountBeforeDropdown);
+    symbol.returnToDefaultState();
+    expect(symbol.getStateSnapshot()).toMatchObject({
+      requestedState: "normal",
+      resolvedState: "normal",
+    });
+    expect(players[0].plays).toHaveLength(playCountBeforeDropdown);
     expect(players).toHaveLength(1);
     expect(players[0].attached).toHaveLength(1);
     symbol.reset();

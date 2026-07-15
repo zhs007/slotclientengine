@@ -56,6 +56,7 @@ import {
   createGame002ReelLayerLayout,
   createGame002ReelLayout,
   type Game002FocusRegion,
+  type Game002GridCellDimming,
   type Game002GridLayout,
   type Game002ReelLayerLayout,
 } from "./game-layout.js";
@@ -88,7 +89,8 @@ export interface Game002ReelConfig {
   readonly direction: ReelSpinDirection;
   readonly orderMode: GridCellOrderMode;
   readonly timing: GridCellReelSpinTiming;
-  readonly dimming: GridCellDimmingPattern;
+  readonly dimming: Game002GridCellDimming;
+  readonly spinBounceStrength: number;
 }
 
 const GAME002_DEFAULT_SKIN = getGame002SkinConfig("1");
@@ -113,6 +115,7 @@ export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   orderMode: GAME002_GRID_CELL_REEL_ORDER,
   timing: GAME002_GRID_CELL_REEL_TIMING,
   dimming: GAME002_GRID_CELL_DIMMING,
+  spinBounceStrength: GAME002_DEFAULT_SKIN.reelManifest.spin.bounceStrength,
 });
 
 export interface Game002ReelRuntimeOptions {
@@ -201,6 +204,19 @@ export function createGame002ReelRuntime(
   const config = options.config ?? DEFAULT_GAME002_REEL_CONFIG;
   const gameConfig = createGameConfig(options.rawGameConfig);
   const reels = gameConfig.getReels(config.reelsName);
+  const spinDimming = Object.freeze({
+    resolveDimmingAlpha: (code: number) => {
+      const entry = gameConfig.getPaytableEntry(code);
+      if (!entry) {
+        throw new Error(
+          `game002 spin dimming symbol code ${code} is missing from the paytable.`,
+        );
+      }
+      return config.dimming.resolveSymbolDimmingAlpha(entry.symbol);
+    },
+    fadeInMs: config.dimming.fadeInMs,
+    fadeOutMs: config.dimming.fadeOutMs,
+  }) satisfies GridCellDimmingPattern;
   if (reels.getReelCount() !== GAME002_REEL_COUNT) {
     throw new Error(
       `game002 reels "${config.reelsName}" must contain 6 reels.`,
@@ -243,6 +259,7 @@ export function createGame002ReelRuntime(
     cellWidth: layout.cellWidth,
     cellHeight: layout.cellHeight,
     order,
+    bounceStrength: config.spinBounceStrength,
     presentationValueResolver: createPresentationValueResolver({
       registry,
       resources: config.symbolValuePresentationResources,
@@ -359,7 +376,7 @@ export function createGame002ReelRuntime(
         cellReelOffsets: config.cellReelOffsets,
         direction: config.direction,
         timing: config.timing,
-        dimming: config.dimming,
+        dimming: spinDimming,
       });
     },
     spinToScene(
@@ -382,7 +399,7 @@ export function createGame002ReelRuntime(
         cellReelOffsets: config.cellReelOffsets,
         direction: config.direction,
         timing: config.timing,
-        dimming: config.dimming,
+        dimming: spinDimming,
       });
       finalYs = nextFinalYs;
       targetScene = validScene;

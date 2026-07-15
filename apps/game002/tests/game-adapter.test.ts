@@ -35,7 +35,10 @@ describe("game002 task 95 adapter", () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime(events);
     const cascade = new FakeCascadePlayer(events, runtime);
-    const winAmount = new FakeWinAmountPlayer(events);
+    const winAmount = new FakeWinAmountPlayer(
+      events,
+      () => runtime.updateCalls,
+    );
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
       createRuntime: () => runtime.asRuntime(),
@@ -81,7 +84,10 @@ describe("game002 task 95 adapter", () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime(events);
     const cascade = new FakeCascadePlayer(events, runtime);
-    const winAmount = new FakeWinAmountPlayer(events);
+    const winAmount = new FakeWinAmountPlayer(
+      events,
+      () => runtime.updateCalls,
+    );
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
       createRuntime: () => runtime.asRuntime(),
@@ -106,7 +112,10 @@ describe("game002 task 95 adapter", () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime(events);
     const cascade = new FakeCascadePlayer(events, runtime);
-    const winAmount = new FakeWinAmountPlayer(events);
+    const winAmount = new FakeWinAmountPlayer(
+      events,
+      () => runtime.updateCalls,
+    );
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
       createRuntime: () => runtime.asRuntime(),
@@ -148,13 +157,18 @@ describe("game002 task 95 adapter", () => {
     expect(winAmount.starts).toEqual([
       { betAmountRaw: 300, winAmountRaw: 210 },
     ]);
+    expect(winAmount.runtimeUpdatesAtUpdate).toEqual([
+      winAmount.runtimeUpdatesAtStart + 1,
+    ]);
     expect(events).toEqual([
       "spin.start",
       "spin.complete",
-      "wins.start",
-      "wins.complete",
+      "group[0].win.start",
+      "group[0].win.complete",
       "group[0].remove.start",
       "group[0].remove.complete",
+      "group[1].win.start",
+      "group[1].win.complete",
       "group[1].remove.start",
       "group[1].remove.complete",
       "fall.start",
@@ -351,6 +365,7 @@ class FakeRuntime {
   refillPositions: readonly { readonly x: number; readonly y: number }[] = [];
   operation: "idle" | "spin" | "fall" = "idle";
   completeOperations = true;
+  updateCalls = 0;
 
   constructor(events: string[]) {
     this.events = events;
@@ -454,6 +469,7 @@ class FakeRuntime {
   }
 
   private update() {
+    this.updateCalls += 1;
     if (this.operation === "idle" || !this.completeOperations) {
       return {
         completed: this.operation === "idle",
@@ -501,11 +517,11 @@ class FakeCascadePlayer implements SymbolCascadePlayer {
     this.groups = prepared.groups;
     this.groupIndex = 0;
     this.phase = this.groups.length === 0 ? "complete" : "win";
-    if (this.phase === "win") this.events.push("wins.start");
+    if (this.phase === "win") this.events.push("group[0].win.start");
   }
   update(): { readonly completed: boolean } {
     if (this.phase === "win") {
-      this.events.push("wins.complete");
+      this.events.push(`group[${this.groupIndex}].win.complete`);
       this.events.push(`group[${this.groupIndex}].remove.start`);
       this.phase = "remove";
       return { completed: false };
@@ -517,8 +533,8 @@ class FakeCascadePlayer implements SymbolCascadePlayer {
       );
       this.groupIndex += 1;
       if (this.groupIndex < this.groups.length) {
-        this.phase = "remove";
-        this.events.push(`group[${this.groupIndex}].remove.start`);
+        this.phase = "win";
+        this.events.push(`group[${this.groupIndex}].win.start`);
         return { completed: false };
       }
       this.phase = "complete";
@@ -551,7 +567,12 @@ class FakeWinAmountPlayer {
   }> = [];
   private phase = "idle";
   advanceRequests = 0;
-  constructor(private readonly events: string[]) {}
+  runtimeUpdatesAtStart = 0;
+  readonly runtimeUpdatesAtUpdate: number[] = [];
+  constructor(
+    private readonly events: string[],
+    private readonly getRuntimeUpdateCalls?: () => number,
+  ) {}
   asPlayer(): WinAmountAnimationPlayer {
     return {
       container: this.container,
@@ -560,10 +581,14 @@ class FakeWinAmountPlayer {
         readonly winAmountRaw: number;
       }) => {
         this.starts.push(input);
+        this.runtimeUpdatesAtStart = this.getRuntimeUpdateCalls?.() ?? 0;
         this.phase = "major-counting";
         this.events.push("win-amount.start");
       },
       update: () => {
+        this.runtimeUpdatesAtUpdate.push(
+          this.getRuntimeUpdateCalls?.() ?? this.runtimeUpdatesAtStart,
+        );
         this.phase = "awaiting-dismiss";
         this.events.push("win-amount.awaiting-dismiss");
         return {

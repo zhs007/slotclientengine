@@ -6,7 +6,7 @@ import {
 } from "../../src/index.js";
 
 describe("symbol cascade player", () => {
-  it("shows all amounts, wins once and then removes groups sequentially", () => {
+  it("shows all amounts, then wins and removes each group sequentially", () => {
     const target = new FakeTarget();
     const player = createSymbolCascadePlayer({
       target,
@@ -19,6 +19,8 @@ describe("symbol cascade player", () => {
         yOffsetRatioFromCellCenter: 0.25,
       },
       emphasisSeconds: 0,
+      dimmingInSeconds: 0,
+      dimmingOutSeconds: 0,
       nonWinningDimmingAlpha: 0.82,
     });
     const groups: readonly SymbolCascadeGroup[] = [
@@ -40,7 +42,7 @@ describe("symbol cascade player", () => {
       amountVisible: true,
       amountText: "$10 | $20",
     });
-    expect(target.dimming[0]).toBe("0,0|0,1:0.82");
+    expect(target.dimming[0]).toBe("0,0|0,1:0");
 
     target.completeRequestedState();
     expect(player.update(0.1).completed).toBe(false);
@@ -55,6 +57,15 @@ describe("symbol cascade player", () => {
     target.completeRequestedState();
     expect(player.update(0.1).completed).toBe(false);
     expect(target.releases).toEqual(["0,0"]);
+    expect(target.requests.at(-1)).toBe("win:0,1");
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "win",
+      currentIndex: 1,
+      amountText: "$20",
+    });
+
+    target.completeRequestedState();
+    expect(player.update(0.1).completed).toBe(false);
     expect(target.requests.at(-1)).toBe("remove:0,1");
     expect(player.getSnapshot()).toMatchObject({
       phase: "remove",
@@ -65,7 +76,7 @@ describe("symbol cascade player", () => {
     expect(player.update(0.1)).toEqual({ completed: true });
     expect(
       target.requests.filter((request) => request.startsWith("win:")),
-    ).toHaveLength(1);
+    ).toEqual(["win:0,0|0,1", "win:0,1"]);
     expect(target.releases).toEqual(["0,0", "0,1"]);
     expect(player.getSnapshot()).toMatchObject({
       phase: "complete",
@@ -87,6 +98,8 @@ describe("symbol cascade player", () => {
         yOffsetRatioFromCellCenter: 0,
       },
       emphasisSeconds: 0,
+      dimmingInSeconds: 0,
+      dimmingOutSeconds: 0,
       nonWinningDimmingAlpha: 0.82,
     });
     expect(() =>
@@ -179,7 +192,7 @@ describe("symbol cascade player", () => {
     ]);
   });
 
-  it("dims non-winners, shows amount for two seconds, then wins once and keeps protected positions", () => {
+  it("fades non-winners over a bounded emphasis, then wins the protected group", () => {
     const target = new FakeTarget();
     const player = createSymbolCascadePlayer({
       target,
@@ -191,7 +204,9 @@ describe("symbol cascade player", () => {
         strokeWidth: 1,
         yOffsetRatioFromCellCenter: 0,
       },
-      emphasisSeconds: 2,
+      emphasisSeconds: 1,
+      dimmingInSeconds: 0.1,
+      dimmingOutSeconds: 0.1,
       nonWinningDimmingAlpha: 0.85,
     });
     player.start(player.prepare([group(0, [{ x: 0, y: 0 }], [], 10)]));
@@ -201,10 +216,16 @@ describe("symbol cascade player", () => {
       amountText: "$10",
     });
     expect(target.requests).toEqual([]);
-    expect(target.dimming).toEqual(["0,0:0.85"]);
-    player.update(1.99);
+    expect(target.dimming).toEqual(["0,0:0"]);
+    player.update(0.05);
+    expect(Number(target.dimming.at(-1)?.split(":")[1])).toBeCloseTo(0.425);
+    player.update(0.05);
+    expect(Number(target.dimming.at(-1)?.split(":")[1])).toBeCloseTo(0.85);
+    player.update(1);
     expect(target.requests).toEqual([]);
-    player.update(0.01);
+    player.update(0.05);
+    expect(Number(target.dimming.at(-1)?.split(":")[1])).toBeCloseTo(0.425);
+    player.update(0.05);
     expect(target.requests).toEqual(["win:0,0"]);
     target.completeRequestedState();
     expect(player.update(0.1)).toEqual({ completed: true });
@@ -242,6 +263,8 @@ function createPlayer(target: FakeTarget) {
       yOffsetRatioFromCellCenter: 0,
     },
     emphasisSeconds: 0,
+    dimmingInSeconds: 0,
+    dimmingOutSeconds: 0,
     nonWinningDimmingAlpha: 0.82,
   });
 }

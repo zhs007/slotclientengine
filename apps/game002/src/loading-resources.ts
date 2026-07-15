@@ -1,6 +1,7 @@
 import game002BackgroundAtlasUrl from "../../../assets/game002-s3/BG.atlas?url";
 import game002BackgroundSkeletonUrl from "../../../assets/game002-s3/BG.json?url";
 import game002BackgroundManifestUrl from "../../../assets/game002-s3/background.manifest.json?url";
+import game002ReelManifestUrl from "../../../assets/game002-s3/reel.manifest.json?url";
 import game002SpineAtlasUrl from "../../../assets/game002-s3/Symbol.atlas?url";
 import game002SpineTextureUrl from "../../../assets/game002-s3/Symbol.png?url";
 import game002SymbolManifestUrl from "../../../assets/game002-s3/symbol-state-textures.manifest.json?url";
@@ -149,6 +150,10 @@ function createLoadingResourceUrls(): readonly GameLoadingResource[] {
     Object.freeze({
       id: "game002-symbol-manifest",
       url: game002SymbolManifestUrl,
+    }),
+    Object.freeze({
+      id: "game002-reel-manifest",
+      url: game002ReelManifestUrl,
     }),
     Object.freeze({
       id: "game002-symbol-spine-atlas",

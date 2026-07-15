@@ -41,6 +41,7 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
   #initialized = false;
   #activeAnimation: ActiveSpineValueAni | null = null;
   #activePlayback: SymbolManifestAnimationPlaybackSpec | null = null;
+  #continuityGeneration = 0;
   #destroyed = false;
 
   constructor(options: {
@@ -70,6 +71,7 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
       );
     }
     if (value === this.#value) return;
+    this.#continuityGeneration += 1;
     this.clearActive();
     this.#value = null;
     if (value === null) return;
@@ -160,6 +162,22 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
       context,
       playback: resolvedPlayback,
     });
+  }
+
+  createActiveAnimationContinuityKey(
+    playback: SymbolManifestAnimationPlaybackSpec,
+  ): string {
+    const tier = this.#tier;
+    if (!tier) {
+      throw new Error("Active Spine continuity requires a selected tier.");
+    }
+    return `active-spine:${this.#continuityGeneration}:${JSON.stringify({
+      skeleton: tier.spec.skeleton,
+      atlas: tier.spec.atlas,
+      texture: tier.spec.texture,
+      playback,
+      transform: tier.spec.transform ?? null,
+    })}`;
   }
 
   resetForPoolRelease(): void {
@@ -259,6 +277,7 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
 class ActiveSpineValueAni implements SymbolAni {
   readonly stateId: string;
   readonly playback: SymbolAni["playback"];
+  readonly continuityKey: string;
   readonly #controller: RenderSymbolValueControllerModel;
   readonly #playbackSpec: SymbolManifestAnimationPlaybackSpec;
   #reportedComplete = false;
@@ -273,6 +292,9 @@ class ActiveSpineValueAni implements SymbolAni {
     this.stateId = options.context.resolvedState;
     this.playback = options.context.state.playback;
     this.#playbackSpec = options.playback;
+    this.continuityKey = this.#controller.createActiveAnimationContinuityKey(
+      options.playback,
+    );
   }
 
   reset(): void {

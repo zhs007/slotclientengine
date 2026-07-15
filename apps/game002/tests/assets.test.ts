@@ -94,6 +94,10 @@ describe("game002-s3 assets", () => {
     expect(Object.keys(assets)).toEqual(EXPECTED_SYMBOLS);
     expect(Object.keys(skin.symbolModules)).toHaveLength(38);
     expect(Object.keys(skin.spineSkeletonModules)).toHaveLength(12);
+    expect(skin.reelManifest).toEqual({
+      version: 1,
+      spin: { bounceStrength: 0 },
+    });
     expect(
       skin.symbolValuePresentationResources.CN.tiers.map(
         (tier) => tier.spec.skeleton,

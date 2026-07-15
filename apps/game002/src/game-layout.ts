@@ -1,7 +1,6 @@
 import {
   createGridCellReelOffsetMatrix,
   createReelLayout,
-  type GridCellDimmingPattern,
   type GridCellOrderMode,
   type GridCellReelOffsetMatrix,
   type GridCellReelSpinTiming,
@@ -17,6 +16,7 @@ import {
   type RenderViewportSize,
 } from "@slotclientengine/rendercore";
 import { GAME002_BACKGROUND_MANIFEST } from "./background-config.js";
+import { GAME002_CASCADE_PRESENTATION } from "./cascade-config.js";
 
 export const GAME002_ART_SIZE = GAME002_BACKGROUND_MANIFEST.artSize;
 
@@ -52,12 +52,22 @@ export const GAME002_GRID_CELL_REEL_OFFSETS = createGridCellReelOffsetMatrix({
   rows: GAME002_VISIBLE_ROWS,
   rowOffsetStep: 16,
 }) satisfies GridCellReelOffsetMatrix;
+const GAME002_BRIGHT_SPIN_SYMBOLS = new Set(["WL", "CN"]);
+
+export interface Game002GridCellDimming {
+  readonly resolveSymbolDimmingAlpha: (symbol: string) => number;
+  readonly fadeInMs: number;
+  readonly fadeOutMs: number;
+}
+
 export const GAME002_GRID_CELL_DIMMING = Object.freeze({
-  evenAlpha: 0.5,
-  oddAlpha: 0.35,
+  resolveSymbolDimmingAlpha: (symbol: string) =>
+    GAME002_BRIGHT_SPIN_SYMBOLS.has(symbol)
+      ? 0
+      : GAME002_CASCADE_PRESENTATION.nonWinningDimmingAlpha,
   fadeInMs: 80,
   fadeOutMs: 160,
-}) satisfies GridCellDimmingPattern;
+}) satisfies Game002GridCellDimming;
 
 export const GAME002_BOARD_FRAME_IN_REFERENCE = Object.freeze({
   x: 200,

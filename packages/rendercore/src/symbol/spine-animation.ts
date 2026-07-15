@@ -53,6 +53,7 @@ const cachedSpineSymbolPlayers = new WeakMap<
 export class SpineSymbolAni implements SymbolAni {
   readonly stateId: string;
   readonly playback: SymbolPlaybackKind;
+  readonly continuityKey: string;
   readonly #context: SymbolAnimationContext;
   readonly #resource: SymbolSpineAnimationResource;
   readonly #playerFactory: SpineSymbolAniPlayerFactory;
@@ -68,6 +69,7 @@ export class SpineSymbolAni implements SymbolAni {
     this.#resource = options.resource;
     this.stateId = options.context.resolvedState;
     this.playback = options.context.state.playback;
+    this.continuityKey = createSpineAnimationContinuityKey(options.resource);
     this.#playerFactory =
       options.playerFactory ?? createDefaultSpineSymbolPlayer;
   }
@@ -314,6 +316,19 @@ function createSpineSymbolPlayerCacheKey(
     resource.spec.texture,
     resource.atlasPage,
   ].join("\u0000");
+}
+
+function createSpineAnimationContinuityKey(
+  resource: SymbolSpineAnimationResource,
+): string {
+  return `spine:${JSON.stringify({
+    symbol: resource.symbol,
+    skeleton: resource.spec.skeleton,
+    atlas: resource.spec.atlas,
+    texture: resource.spec.texture,
+    playback: resource.spec.playback,
+    transform: resource.spec.transform ?? null,
+  })}`;
 }
 
 function createDefaultSpineSymbolPlayer(options: {
