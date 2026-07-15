@@ -280,7 +280,12 @@ export function resolveViewerStateForSymbol(
   symbol: string,
   requestedState: string,
 ): string {
-  if (requestedState !== "appear" && requestedState !== "win") {
+  if (
+    requestedState !== "appear" &&
+    requestedState !== "win" &&
+    requestedState !== "remove" &&
+    requestedState !== "dropdown"
+  ) {
     return requestedState;
   }
   const parsed = parseSymbolStateTextureManifest(config.manifest, {

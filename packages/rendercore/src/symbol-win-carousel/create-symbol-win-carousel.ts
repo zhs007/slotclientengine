@@ -1,5 +1,5 @@
-import { getComponentWinResultGroups } from "@slotclientengine/logiccore";
 import { Container, Text } from "pixi.js";
+import { prepareSymbolWinGroups } from "../symbol-cascade/prepare-symbol-win-groups.js";
 import type { RenderVisibleSymbolGeometrySnapshot } from "../reel/index.js";
 import type {
   CreateSymbolWinCarouselOptions,
@@ -59,51 +59,7 @@ class SymbolWinCarouselModel implements SymbolWinCarousel {
 
   prepare(input: SymbolWinCarouselStartInput): PreparedSymbolWinCarousel {
     this.assertNotDestroyed();
-    const componentNames = parseComponentNames(input.componentNames);
-    const step = input.logic.getStep(input.stepIndex);
-    const groups: SymbolWinCarouselGroup[] = [];
-
-    for (const componentName of componentNames) {
-      if (!step.hasComponent(componentName)) {
-        continue;
-      }
-      const component = step.getComponent(componentName);
-      if (!component || !component.hasBasicComponentData) {
-        throw new Error(
-          `symbol win component "${componentName}" must include basicComponentData.`,
-        );
-      }
-      const componentGroups = getComponentWinResultGroups(step, componentName, {
-        scene: input.scene,
-      }).map((group) => {
-        const amount = this.#options.resolveAmount({
-          componentName,
-          stepIndex: group.stepIndex,
-          resultIndex: group.resultIndex,
-          result: group.result,
-        });
-        assertPositiveFiniteNumber(
-          amount,
-          `symbol win component "${componentName}" result[${group.resultIndex}] amount`,
-        );
-        return Object.freeze({
-          componentName,
-          stepIndex: group.stepIndex,
-          resultIndex: group.resultIndex,
-          result: group.result,
-          positions: group.positions,
-          amount,
-        });
-      });
-      this.#options.validateComponent?.({
-        logic: input.logic,
-        step,
-        componentName,
-        component,
-        groups: componentGroups,
-      });
-      groups.push(...componentGroups);
-    }
+    const groups = prepareSymbolWinGroups(this.#options, input);
 
     const prepared = Object.freeze({
       groupCount: groups.length,
@@ -334,29 +290,6 @@ function squaredDistance(
   point: { readonly x: number; readonly y: number },
 ): number {
   return (geometry.centerX - point.x) ** 2 + (geometry.centerY - point.y) ** 2;
-}
-
-function parseComponentNames(value: readonly string[]): readonly string[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new Error("symbol win carousel componentNames must not be empty.");
-  }
-  const seen = new Set<string>();
-  return Object.freeze(
-    value.map((name, index) => {
-      if (typeof name !== "string" || name.trim().length === 0) {
-        throw new Error(
-          `symbol win carousel componentNames[${index}] must be a non-empty string.`,
-        );
-      }
-      if (seen.has(name)) {
-        throw new Error(
-          `symbol win carousel componentNames contains duplicate "${name}".`,
-        );
-      }
-      seen.add(name);
-      return name;
-    }),
-  );
 }
 
 function validateOptions(options: CreateSymbolWinCarouselOptions): void {

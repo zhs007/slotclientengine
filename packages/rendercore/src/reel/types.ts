@@ -30,6 +30,9 @@ export interface ReelCellSize {
 
 export type ReelSymbolScaleMap = Readonly<Record<string, number>>;
 export type ReelSymbolRenderPriorityMap = Readonly<Record<string, number>>;
+export type ReelSymbolAnimationCapabilityMap = Readonly<
+  Record<string, readonly SymbolStateId[]>
+>;
 
 export interface ReelSymbolRegistryOptions {
   readonly gameConfig: LogicGameConfig;
@@ -37,6 +40,7 @@ export interface ReelSymbolRegistryOptions {
   readonly emptySymbols?: readonly string[];
   readonly symbolScales?: ReelSymbolScaleMap;
   readonly symbolRenderPriorities?: ReelSymbolRenderPriorityMap;
+  readonly symbolAnimationCapabilities?: ReelSymbolAnimationCapabilityMap;
   readonly landingAppearSymbols?: readonly string[];
   readonly statePreset?: SymbolStatePreset;
   readonly animationResolver?: SymbolAnimationResolver;
@@ -162,6 +166,7 @@ export interface GridCellReelPlanCell {
   readonly x: number;
   readonly y: number;
   readonly orderIndex: number;
+  readonly sequenceIndex: number;
   readonly reelOffsetY: number;
   readonly startAtMs: number;
   readonly stopAtMs: number;
@@ -178,6 +183,7 @@ export interface GridCellReelSpinPlan {
   readonly dimming: GridCellDimmingPattern;
   readonly cells: readonly GridCellReelPlanCell[];
   readonly lastStopAtMs: number;
+  readonly selective: boolean;
 }
 
 export interface ReelWindowSlot {
@@ -331,6 +337,13 @@ export interface RenderReelSlotSnapshot {
   readonly presentationValue: number | null;
 }
 
+export interface RenderReelVisibleOccurrence {
+  readonly code: number;
+  readonly kind: Exclude<ReelSymbolKind, "empty">;
+  readonly symbol: RenderSymbol;
+  readonly presentationValue: number | null;
+}
+
 export interface RenderGridCellReelSetOptions {
   readonly reels: LogicReels;
   readonly registry: ReelSymbolRegistry;
@@ -358,6 +371,59 @@ export type SymbolPresentationValueMatrix = readonly (readonly (
   | null
 )[])[];
 
+export const CASCADE_EMPTY_CELL = -1;
+export type GridCellCascadeScene = readonly (readonly number[])[];
+export type GridCellCascadeValue = number | null | typeof CASCADE_EMPTY_CELL;
+export type GridCellCascadeValueMatrix =
+  readonly (readonly GridCellCascadeValue[])[];
+
+export interface GridCellCascadeMotionOptions {
+  readonly columnStartStaggerSeconds: number;
+  readonly startStaggerSeconds: number;
+  readonly baseFallSeconds: number;
+  readonly perRowFallSeconds: number;
+  readonly maxFallSeconds: number;
+  readonly overshootCellRatio: number;
+  readonly settleSeconds: number;
+}
+
+export interface GridCellCascadeDropMovement {
+  readonly kind: "existing" | "refill";
+  readonly x: number;
+  readonly sourceY: number;
+  readonly targetY: number;
+  readonly code: number;
+  readonly presentationValue: number | null;
+  readonly startSeconds: number;
+  readonly fallSeconds: number;
+  readonly settleSeconds: number;
+  readonly overshootPixels: number;
+}
+
+export interface GridCellCascadeDropPlan {
+  readonly columns: number;
+  readonly rows: number;
+  readonly sourceScene: GridCellCascadeScene;
+  readonly sourceValues: GridCellCascadeValueMatrix;
+  readonly settledScene: GridCellCascadeScene;
+  readonly settledValues: GridCellCascadeValueMatrix;
+  readonly targetScene: GridCellCascadeScene;
+  readonly targetValues: GridCellCascadeValueMatrix;
+  readonly refillPositions: readonly {
+    readonly x: number;
+    readonly y: number;
+  }[];
+  readonly movements: readonly GridCellCascadeDropMovement[];
+  readonly totalSeconds: number;
+}
+
+export interface GridCellCascadeDropOccurrenceContext {
+  readonly x: number;
+  readonly sourceY: number;
+  readonly code: number;
+  readonly presentationValue: number | null;
+}
+
 export interface RenderGridCellReelSetSpinOptions {
   readonly targetPresentationValues?: SymbolPresentationValueMatrix;
 }
@@ -365,6 +431,7 @@ export interface RenderGridCellReelSetSpinOptions {
 export interface RenderGridCellReelSetUpdateResult {
   readonly spinning: boolean;
   readonly completed: boolean;
+  readonly activity?: "spin" | "dropdown" | null;
   readonly startedCells: readonly GridCellCoordinate[];
   readonly landedCells: readonly GridCellCoordinate[];
 }
@@ -384,6 +451,7 @@ export interface RenderGridCellReelCellSnapshot {
   readonly requestedState: string | null;
   readonly visibleSymbol: number;
   readonly presentationValue: number | null;
+  readonly occupied: boolean;
 }
 
 export interface RenderGridCellReelSetSnapshot {

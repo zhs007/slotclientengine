@@ -111,7 +111,10 @@ export function createBasicRegistry(
   options: Partial<
     Pick<
       ReelSymbolRegistryOptions,
-      "landingAppearSymbols" | "symbolRenderPriorities" | "symbolScales"
+      | "landingAppearSymbols"
+      | "symbolRenderPriorities"
+      | "symbolScales"
+      | "symbolAnimationCapabilities"
     >
   > = {},
 ): ReelSymbolRegistry {

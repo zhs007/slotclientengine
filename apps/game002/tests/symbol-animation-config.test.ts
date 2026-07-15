@@ -6,7 +6,7 @@ import {
 import { getGame002SkinConfig } from "../src/skin-config.js";
 
 describe("game002 symbol animation config", () => {
-  it("derives 100 percent scale and default priority from game002-s3 manifest", () => {
+  it("derives 100 percent scale and WL-highest priority from game002-s3 manifest", () => {
     const displaySymbols = getGame002SkinConfig("1").displaySymbols;
     expect(Object.keys(GAME002_SYMBOL_SCALES).sort()).toEqual(
       [...displaySymbols].sort(),
@@ -14,7 +14,9 @@ describe("game002 symbol animation config", () => {
 
     for (const symbol of displaySymbols) {
       expect(GAME002_SYMBOL_SCALES[symbol]).toBe(1);
-      expect(GAME002_SYMBOL_RENDER_PRIORITIES[symbol]).toBe(0);
+      expect(GAME002_SYMBOL_RENDER_PRIORITIES[symbol]).toBe(
+        symbol === "WL" ? 1 : 0,
+      );
     }
   });
 });

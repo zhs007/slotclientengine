@@ -466,6 +466,15 @@ function createManifestSymbolAni(
   context: SymbolAnimationContext,
   spec: SymbolManifestAnimationSpec,
 ): SymbolAni {
+  if (spec.kind === "activeSpine") {
+    const active = context.createActiveSpineAnimation?.(spec.playback);
+    if (!active) {
+      throw new SymbolAnimationError(
+        `Symbol "${context.symbol}" state "${context.resolvedState}" has no active Spine provider.`,
+      );
+    }
+    return active;
+  }
   if (spec.kind === "builtin") {
     if (context.resolvedState === "appear") {
       return createAppearSymbolAni(context, {

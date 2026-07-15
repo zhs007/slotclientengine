@@ -5,6 +5,7 @@ import {
   createGridCellOrder,
   createGridCellReelOffsetMatrix,
   createGridCellReelSpinPlan,
+  createGridCellCascadeDropPlan,
   type GridCellDimmingPattern,
   type GridCellReelSpinTiming,
   type VisibleSymbolPresentationTarget,
@@ -60,6 +61,21 @@ describe("RenderGridCellReelSet", () => {
       { x: 0, y: 2, requestedState: "normal", resolvedState: "normal" },
     ]);
     expect(reelSet.getVisibleScene()).toEqual(INITIAL_SCENE);
+    reelSet.setVisibleSymbolDimming([{ x: 0, y: 0 }], 0.85);
+    const dimmed = reelSet.getSnapshot().cells;
+    expect(
+      dimmed.find((cell) => cell.x === 0 && cell.y === 0)?.dimmingAlpha,
+    ).toBe(0);
+    expect(
+      dimmed.find((cell) => cell.x === 1 && cell.y === 0)?.dimmingAlpha,
+    ).toBe(0.85);
+    reelSet.clearVisibleSymbolDimming();
+    expect(
+      reelSet.getSnapshot().cells.every((cell) => cell.dimmingAlpha === 0),
+    ).toBe(true);
+    expect(() => reelSet.setVisibleSymbolDimming([], 1.1)).toThrow(
+      /between 0 and 1/,
+    );
   });
 
   it("rejects state requests and geometry reads while a grid spin is active", () => {
@@ -314,6 +330,182 @@ describe("RenderGridCellReelSet", () => {
         columns: 3,
       }),
     ).toThrow(/columns/);
+  });
+
+  it("releases holes and completes existing plus refill symbols in one fall", () => {
+    const reelSet = createGridReelSet();
+    const cascadeInitial = [
+      [1, 2, 2],
+      [2, 1, 1],
+    ];
+    reelSet.resetToScene(cascadeInitial, FINAL_YS);
+    reelSet.releaseVisibleSymbols([
+      { x: 0, y: 1 },
+      { x: 1, y: 0 },
+    ]);
+    expect(reelSet.getVisibleScene()).toEqual([
+      [1, -1, 2],
+      [-1, 1, 1],
+    ]);
+    expect(reelSet.getCascadeValues()).toEqual([
+      [null, -1, null],
+      [-1, null, null],
+    ]);
+
+    const drop = createGridCellCascadeDropPlan({
+      sourceScene: reelSet.getVisibleScene(),
+      sourceValues: reelSet.getCascadeValues(),
+      settledScene: [
+        [-1, 1, 2],
+        [-1, 1, 1],
+      ],
+      settledValues: [
+        [-1, null, null],
+        [-1, null, null],
+      ],
+      targetScene: [
+        [1, 1, 2],
+        [2, 1, 1],
+      ],
+      targetValues: [
+        [null, null, null],
+        [null, null, null],
+      ],
+      refillPositions: [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+      ],
+      cellHeight: 12,
+      motion: {
+        columnStartStaggerSeconds: 0.03,
+        baseFallSeconds: 0.05,
+        perRowFallSeconds: 0.02,
+        maxFallSeconds: 0.2,
+        startStaggerSeconds: 0.01,
+        settleSeconds: 0.02,
+        overshootCellRatio: 0.1,
+      },
+    });
+    reelSet.startCascadeDrop(drop);
+    expect(reelSet.getSnapshot()).toMatchObject({
+      spinning: true,
+      completed: false,
+    });
+    expect(() => reelSet.releaseVisibleSymbols([{ x: 0, y: 1 }])).toThrow(
+      /spinning/,
+    );
+    let result = reelSet.update(0.04);
+    expect(result.completed).toBe(false);
+    for (let index = 0; index < 10 && !result.completed; index += 1) {
+      result = reelSet.update(0.03);
+    }
+    expect(result.completed).toBe(true);
+    expect(reelSet.getVisibleScene()).toEqual([
+      [1, 1, 2],
+      [2, 1, 1],
+    ]);
+  });
+
+  it("lets a falling symbol pass behind a fixed higher-priority symbol", () => {
+    const reelSet = createGridReelSet({ symbolRenderPriorities: { A: 1 } });
+    reelSet.resetToScene(
+      [
+        [2, 1, 2],
+        [2, 1, 1],
+      ],
+      FINAL_YS,
+    );
+    reelSet.releaseVisibleSymbols([{ x: 0, y: 2 }]);
+    const sourceScene = reelSet.getVisibleScene();
+    const sourceValues = reelSet.getCascadeValues();
+    const settledScene = [
+      [-1, 1, 2],
+      [2, 1, 1],
+    ];
+    const settledValues = [
+      [-1, null, null],
+      [null, null, null],
+    ];
+    const plan = createGridCellCascadeDropPlan({
+      sourceScene,
+      sourceValues,
+      settledScene,
+      settledValues,
+      targetScene: [
+        [2, 1, 2],
+        [2, 1, 1],
+      ],
+      targetValues: [
+        [null, null, null],
+        [null, null, null],
+      ],
+      refillPositions: [{ x: 0, y: 0 }],
+      canDropOccurrence: ({ code }) => code !== 1,
+      cellHeight: 12,
+      motion: {
+        columnStartStaggerSeconds: 0,
+        baseFallSeconds: 0.05,
+        perRowFallSeconds: 0.02,
+        maxFallSeconds: 0.2,
+        startStaggerSeconds: 0,
+        settleSeconds: 0.02,
+        overshootCellRatio: 0,
+      },
+    });
+    reelSet.startCascadeDrop(plan);
+    const fixedWildLayer = reelSet.children[1].zIndex;
+    const movingLayers = reelSet.children.slice(6).map((child) => child.zIndex);
+    expect(movingLayers).toHaveLength(2);
+    expect(movingLayers.every((zIndex) => zIndex < fixedWildLayer)).toBe(true);
+    reelSet.update(plan.totalSeconds);
+    expect(reelSet.getVisibleScene()).toEqual(plan.targetScene);
+  });
+
+  it("rejects cascade release/drop/refill state drift without fallback", () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    expect(() =>
+      reelSet.releaseVisibleSymbols([
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+      ]),
+    ).toThrow(/duplicate/);
+    expect(() => reelSet.releaseVisibleSymbols([{ x: 9, y: 0 }])).toThrow(
+      /out of range/,
+    );
+    reelSet.releaseVisibleSymbols([{ x: 0, y: 0 }]);
+    expect(() => reelSet.releaseVisibleSymbols([{ x: 0, y: 0 }])).toThrow(
+      /empty/,
+    );
+    expect(() => reelSet.getVisibleSymbolStateSnapshot(0, 0)).toThrow(/empty/);
+    expect(reelSet.hasVisibleSymbolStateCapability(0, 0, "remove")).toBe(false);
+    expect(() =>
+      reelSet.startCascadeDrop({
+        ...createGridCellCascadeDropPlan({
+          sourceScene: reelSet.getVisibleScene(),
+          sourceValues: reelSet.getCascadeValues(),
+          settledScene: reelSet.getVisibleScene(),
+          settledValues: reelSet.getCascadeValues(),
+          targetScene: INITIAL_SCENE,
+          targetValues: [
+            [null, null, null],
+            [null, null, null],
+          ],
+          refillPositions: [{ x: 0, y: 0 }],
+          cellHeight: 12,
+          motion: {
+            columnStartStaggerSeconds: 0,
+            baseFallSeconds: 0.05,
+            perRowFallSeconds: 0.02,
+            maxFallSeconds: 0.2,
+            startStaggerSeconds: 0,
+            settleSeconds: 0.01,
+            overshootCellRatio: 0,
+          },
+        }),
+        columns: 3,
+      }),
+    ).toThrow(/dimensions/);
   });
 });
 

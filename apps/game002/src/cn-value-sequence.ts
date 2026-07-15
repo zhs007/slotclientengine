@@ -22,6 +22,7 @@ export function createGame002CnValueItems(options: {
   readonly targetScene: SceneMatrix;
   readonly cnSymbolCode: number;
   readonly componentName: "bg-gencoins";
+  readonly stepIndex: number;
 }): readonly Game002CnValueItem[] {
   if (options.componentName !== GAME002_CN_VALUE_COMPONENT_NAME) {
     throw new Error(
@@ -36,7 +37,11 @@ export function createGame002CnValueItems(options: {
     options.targetScene,
     "game002 CN value target scene",
   );
-  const step = options.logic.getStep(0);
+  const stepIndex = assertNonNegativeSafeInteger(
+    options.stepIndex,
+    "game002 CN stepIndex",
+  );
+  const step = options.logic.getStep(stepIndex);
   if (!step.hasComponent(options.componentName)) {
     return Object.freeze([]);
   }
@@ -49,7 +54,7 @@ export function createGame002CnValueItems(options: {
   const otherScenes = getComponentOtherScenesByName(
     options.logic,
     options.componentName,
-    { stepIndex: 0 },
+    { stepIndex },
   );
   if (otherScenes.length !== 1) {
     throw new Error(
@@ -59,7 +64,7 @@ export function createGame002CnValueItems(options: {
   const otherScene = validateOtherScene(
     otherScenes[0],
     targetScene,
-    "game002 bg-gencoins otherScene[0]",
+    `game002 step[${stepIndex}] bg-gencoins otherScene[0]`,
   );
   const items: Game002CnValueItem[] = [];
   for (const [x, column] of targetScene.entries()) {

@@ -4,10 +4,12 @@ import game002S3SpineTextureUrl from "../../../assets/game002-s3/Symbol.png?url"
 import game002S3StateTextureManifest from "../../../assets/game002-s3/symbol-state-textures.manifest.json";
 import {
   createDefaultSymbolAnimationResolver,
+  createSymbolAnimationCapabilityMapFromManifest,
   createSymbolLandingAppearSymbolsFromManifest,
   createSymbolManifestAnimationResolver,
   createSymbolValuePresentationResourcesFromManifest,
   type ReelSymbolRenderPriorityMap,
+  type ReelSymbolAnimationCapabilityMap,
   type ReelSymbolScaleMap,
   type SymbolAnimationResolver,
   type SymbolValuePresentationResourceMap,
@@ -86,6 +88,7 @@ export interface Game002SkinConfig {
   readonly emptySymbols: readonly string[];
   readonly symbolScales: ReelSymbolScaleMap;
   readonly symbolRenderPriorities: ReelSymbolRenderPriorityMap;
+  readonly symbolAnimationCapabilities: ReelSymbolAnimationCapabilityMap;
   readonly landingAppearSymbols: readonly string[];
   readonly symbolAnimationResolver: SymbolAnimationResolver;
   readonly symbolValuePresentationResources: SymbolValuePresentationResourceMap;
@@ -116,6 +119,12 @@ const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
         stateTextureManifest: game002S3StateTextureManifest,
         displaySymbols: game002S3DisplaySymbols,
       }),
+      symbolAnimationCapabilities:
+        createSymbolAnimationCapabilityMapFromManifest({
+          manifest: game002S3StateTextureManifest,
+          displaySymbols: game002S3DisplaySymbols,
+          requiredStates: ["spinBlur", "disabled"],
+        }),
       landingAppearSymbols: createSymbolLandingAppearSymbolsFromManifest({
         manifest: game002S3StateTextureManifest,
         displaySymbols: game002S3DisplaySymbols,

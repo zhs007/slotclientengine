@@ -4,6 +4,8 @@ export const VIEWER_STATE_ORDER = Object.freeze([
   "normal",
   "appear",
   "win",
+  "remove",
+  "dropdown",
   "spinBlur",
   "disabled",
 ]);
@@ -13,6 +15,8 @@ export const DEFAULT_VIEWER_SEQUENCE: readonly SymbolSequenceStep[] =
     Object.freeze({ state: "normal", holdSeconds: 0.8 }),
     Object.freeze({ state: "appear" }),
     Object.freeze({ state: "win" }),
+    Object.freeze({ state: "remove" }),
+    Object.freeze({ state: "dropdown", holdSeconds: 0.6 }),
     Object.freeze({ state: "spinBlur", holdSeconds: 0.7 }),
     Object.freeze({ state: "disabled", holdSeconds: 0.7 }),
   ]);

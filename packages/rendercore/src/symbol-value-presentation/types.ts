@@ -26,7 +26,9 @@ export interface SymbolValuePresentationTierResource {
 export interface SymbolValuePresentationResource {
   readonly symbol: string;
   readonly defaultValues: readonly number[];
-  readonly appearPlayback: SymbolManifestAnimationPlaybackSpec;
+  readonly activeSpineAnimations: Readonly<
+    Partial<Record<string, SymbolManifestAnimationPlaybackSpec>>
+  >;
   readonly tiers: readonly SymbolValuePresentationTierResource[];
   readonly text: SymbolValuePresentationTextSpec;
   readonly textImageUrls: Readonly<Record<number, string>>;

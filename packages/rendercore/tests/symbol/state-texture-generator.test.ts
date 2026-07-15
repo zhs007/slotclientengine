@@ -269,25 +269,25 @@ describe("generate-symbol-state-textures script", () => {
                 scale: 1,
                 renderPriority: 2,
                 animations: {
-                  appear: { kind: "static", durationSeconds: 1 / 60 },
-                  win: {
-                    kind: "vni",
-                    project: "./L1-wins.json",
+                  appear: {
+                    kind: "activeSpine",
                     playback: {
-                      mode: "range",
-                      startTime: 0,
-                      endTime: 1,
+                      mode: "animation",
+                      animationName: "Start",
+                      loop: false,
+                    },
+                  },
+                  win: {
+                    kind: "activeSpine",
+                    playback: {
+                      mode: "animation",
+                      animationName: "Win",
                       loop: false,
                     },
                   },
                 },
                 valuePresentation: {
                   defaultValues: [1, 10, 100],
-                  appearPlayback: {
-                    mode: "animation",
-                    animationName: "Start",
-                    loop: false,
-                  },
                   reelStates: {
                     normal: {
                       kind: "transparent",
@@ -374,11 +374,13 @@ describe("generate-symbol-state-textures script", () => {
       const manifest = JSON.parse(await readFile(result.manifestPath, "utf8"));
 
       expect(manifest.symbols.L1.animations).toEqual({
-        appear: { kind: "static", durationSeconds: 1 / 60 },
+        appear: {
+          kind: "activeSpine",
+          playback: { mode: "animation", animationName: "Start", loop: false },
+        },
         win: {
-          kind: "vni",
-          project: "./L1-wins.json",
-          playback: { mode: "range", startTime: 0, endTime: 1, loop: false },
+          kind: "activeSpine",
+          playback: { mode: "animation", animationName: "Win", loop: false },
         },
       });
       expect(manifest.symbols.L1.renderPriority).toBe(2);
@@ -387,11 +389,6 @@ describe("generate-symbol-state-textures script", () => {
       expect(manifest.symbols.L1).not.toHaveProperty("disabled");
       expect(manifest.symbols.L1.valuePresentation).toEqual({
         defaultValues: [1, 10, 100],
-        appearPlayback: {
-          mode: "animation",
-          animationName: "Start",
-          loop: false,
-        },
         reelStates: {
           normal: { kind: "transparent", width: 200, height: 200 },
           spinBlur: "./L1.spinBlur.png",

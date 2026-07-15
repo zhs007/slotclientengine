@@ -23,6 +23,7 @@ export function createGridCellReelSpinPlan(options: {
   readonly direction?: ReelSpinDirection;
   readonly timing: GridCellReelSpinTiming;
   readonly dimming: GridCellDimmingPattern;
+  readonly positions?: readonly { readonly x: number; readonly y: number }[];
 }): GridCellReelSpinPlan {
   const columns = assertPositiveInteger(options.columns, "columns");
   const rows = assertPositiveInteger(options.rows, "rows");
@@ -34,6 +35,7 @@ export function createGridCellReelSpinPlan(options: {
   const finalYs = parseFinalYs(options.finalYs, columns);
   const targetScene = parseTargetScene(options.targetScene, columns, rows);
   const order = parseOrder(options.order, columns, rows);
+  const selectedOrder = selectOrder(order, options.positions, columns, rows);
   const cellReelOffsets = normalizeGridCellReelOffsetMatrix(
     options.cellReelOffsets,
     columns,
@@ -42,60 +44,63 @@ export function createGridCellReelSpinPlan(options: {
   const timing = parseTiming(options.timing);
   const dimming = parseDimming(options.dimming);
   const direction = parseDirection(options.direction);
-  const cellCount = columns * rows;
+  const cellCount = selectedOrder.length;
   const firstStopAtMs =
     (cellCount - 1) * timing.startStepMs + timing.settleAfterLastStartMs;
 
-  const cells = order.map((cell): GridCellReelPlanCell => {
-    const startAtMs = cell.orderIndex * timing.startStepMs;
-    const stopAtMs = firstStopAtMs + cell.orderIndex * timing.stopStepMs;
-    const durationMs = stopAtMs - startAtMs;
-    if (durationMs <= 0) {
-      throw new ReelError(
-        `grid cell (${cell.x},${cell.y}) stopAtMs must be greater than startAtMs.`,
+  const cells = selectedOrder.map(
+    (cell, sequenceIndex): GridCellReelPlanCell => {
+      const startAtMs = sequenceIndex * timing.startStepMs;
+      const stopAtMs = firstStopAtMs + sequenceIndex * timing.stopStepMs;
+      const durationMs = stopAtMs - startAtMs;
+      if (durationMs <= 0) {
+        throw new ReelError(
+          `grid cell (${cell.x},${cell.y}) stopAtMs must be greater than startAtMs.`,
+        );
+      }
+
+      const reelOffsetY = cellReelOffsets[cell.x][cell.y];
+      const finalY = options.reels.normalizeY(
+        cell.x,
+        finalYs[cell.x] + cell.y + reelOffsetY,
       );
-    }
+      const durationTravel = Math.ceil(
+        (durationMs / 1000) * timing.speedSymbolsPerSecond,
+      );
+      const travelSymbols = Math.max(timing.minimumSpinCycles, durationTravel);
+      const startY =
+        direction === "forward"
+          ? options.reels.normalizeY(cell.x, finalY - travelSymbols)
+          : options.reels.normalizeY(cell.x, finalY + travelSymbols);
+      const axisPlan: ReelAxisSpinPlan = Object.freeze({
+        x: cell.x,
+        finalY,
+        startY,
+        direction,
+        travelSymbols,
+        startDelayMs: startAtMs,
+        durationMs,
+        stopAtMs,
+      });
 
-    const reelOffsetY = cellReelOffsets[cell.x][cell.y];
-    const finalY = options.reels.normalizeY(
-      cell.x,
-      finalYs[cell.x] + cell.y + reelOffsetY,
-    );
-    const durationTravel = Math.ceil(
-      (durationMs / 1000) * timing.speedSymbolsPerSecond,
-    );
-    const travelSymbols = Math.max(timing.minimumSpinCycles, durationTravel);
-    const startY =
-      direction === "forward"
-        ? options.reels.normalizeY(cell.x, finalY - travelSymbols)
-        : options.reels.normalizeY(cell.x, finalY + travelSymbols);
-    const axisPlan: ReelAxisSpinPlan = Object.freeze({
-      x: cell.x,
-      finalY,
-      startY,
-      direction,
-      travelSymbols,
-      startDelayMs: startAtMs,
-      durationMs,
-      stopAtMs,
-    });
-
-    return Object.freeze({
-      x: cell.x,
-      y: cell.y,
-      orderIndex: cell.orderIndex,
-      reelOffsetY,
-      startAtMs,
-      stopAtMs,
-      durationMs,
-      axisPlan,
-      targetVisibleSymbols: Object.freeze([
-        targetScene[cell.x][cell.y],
-      ]) as readonly [number],
-      dimmingAlpha:
-        cell.orderIndex % 2 === 0 ? dimming.evenAlpha : dimming.oddAlpha,
-    });
-  });
+      return Object.freeze({
+        x: cell.x,
+        y: cell.y,
+        orderIndex: cell.orderIndex,
+        sequenceIndex,
+        reelOffsetY,
+        startAtMs,
+        stopAtMs,
+        durationMs,
+        axisPlan,
+        targetVisibleSymbols: Object.freeze([
+          targetScene[cell.x][cell.y],
+        ]) as readonly [number],
+        dimmingAlpha:
+          sequenceIndex % 2 === 0 ? dimming.evenAlpha : dimming.oddAlpha,
+      });
+    },
+  );
 
   return Object.freeze({
     direction,
@@ -104,7 +109,46 @@ export function createGridCellReelSpinPlan(options: {
     dimming,
     cells: Object.freeze(cells),
     lastStopAtMs: firstStopAtMs + (cellCount - 1) * timing.stopStepMs,
+    selective: options.positions !== undefined,
   });
+}
+
+function selectOrder(
+  order: readonly GridCellCoordinate[],
+  positions: readonly { readonly x: number; readonly y: number }[] | undefined,
+  columns: number,
+  rows: number,
+): readonly GridCellCoordinate[] {
+  if (positions === undefined) return order;
+  if (!Array.isArray(positions) || positions.length === 0) {
+    throw new ReelError("selective grid positions must not be empty.");
+  }
+  const byKey = new Map(order.map((cell) => [`${cell.x}:${cell.y}`, cell]));
+  const seen = new Set<string>();
+  return Object.freeze(
+    positions.map((position, index) => {
+      if (
+        !Number.isInteger(position.x) ||
+        position.x < 0 ||
+        position.x >= columns ||
+        !Number.isInteger(position.y) ||
+        position.y < 0 ||
+        position.y >= rows
+      ) {
+        throw new ReelError(
+          `selective grid positions[${index}] is out of range.`,
+        );
+      }
+      const key = `${position.x}:${position.y}`;
+      if (seen.has(key)) {
+        throw new ReelError(
+          `duplicate selective grid position (${position.x},${position.y}).`,
+        );
+      }
+      seen.add(key);
+      return byKey.get(key)!;
+    }),
+  );
 }
 
 function parseTargetScene(

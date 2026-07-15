@@ -37,6 +37,7 @@ export function createStandaloneSymbolCatalog(
     statePreset: options.statePreset,
     animationResolver: options.animationResolver,
     texturePolicy: options.texturePolicy,
+    symbolAnimationCapabilities: options.symbolAnimationCapabilities,
   });
   for (const symbol of displaySymbols) {
     base.getDefinition(symbol);

@@ -210,11 +210,6 @@ function createManifest(skeletonNames: readonly string[]): any {
         scale: 1,
         valuePresentation: {
           defaultValues: [1, 10, 100],
-          appearPlayback: {
-            mode: "animation",
-            animationName: "Start",
-            loop: false,
-          },
           reelStates: {
             normal: { kind: "transparent", width: 200, height: 200 },
             spinBlur: "./value.spinBlur.png",

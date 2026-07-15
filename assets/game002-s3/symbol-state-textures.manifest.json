@@ -17,6 +17,7 @@
       "spinBlur": "./WL.spinBlur.png",
       "disabled": "./WL.disabled.png",
       "scale": 1,
+      "renderPriority": 1,
       "animations": {
         "normal": {
           "kind": "spine",
@@ -49,6 +50,28 @@
             "mode": "animation",
             "animationName": "Win",
             "loop": false
+          }
+        },
+        "remove": {
+          "kind": "spine",
+          "skeleton": "./WL.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "End",
+            "loop": false
+          }
+        },
+        "dropdown": {
+          "kind": "spine",
+          "skeleton": "./WL.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
           }
         }
       }
@@ -91,6 +114,28 @@
             "animationName": "Win",
             "loop": false
           }
+        },
+        "remove": {
+          "kind": "spine",
+          "skeleton": "./H1.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "End",
+            "loop": false
+          }
+        },
+        "dropdown": {
+          "kind": "spine",
+          "skeleton": "./H1.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
+          }
         }
       }
     },
@@ -131,6 +176,28 @@
             "mode": "animation",
             "animationName": "Win",
             "loop": false
+          }
+        },
+        "remove": {
+          "kind": "spine",
+          "skeleton": "./H2.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "End",
+            "loop": false
+          }
+        },
+        "dropdown": {
+          "kind": "spine",
+          "skeleton": "./H2.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
           }
         }
       }
@@ -173,6 +240,28 @@
             "animationName": "Win",
             "loop": false
           }
+        },
+        "remove": {
+          "kind": "spine",
+          "skeleton": "./L1.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "End",
+            "loop": false
+          }
+        },
+        "dropdown": {
+          "kind": "spine",
+          "skeleton": "./L1.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
+          }
         }
       }
     },
@@ -213,6 +302,28 @@
             "mode": "animation",
             "animationName": "Win",
             "loop": false
+          }
+        },
+        "remove": {
+          "kind": "spine",
+          "skeleton": "./L2.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "End",
+            "loop": false
+          }
+        },
+        "dropdown": {
+          "kind": "spine",
+          "skeleton": "./L2.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
           }
         }
       }
@@ -255,6 +366,28 @@
             "animationName": "Win",
             "loop": false
           }
+        },
+        "remove": {
+          "kind": "spine",
+          "skeleton": "./L3.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "End",
+            "loop": false
+          }
+        },
+        "dropdown": {
+          "kind": "spine",
+          "skeleton": "./L3.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
+          }
         }
       }
     },
@@ -296,6 +429,28 @@
             "animationName": "Win",
             "loop": false
           }
+        },
+        "remove": {
+          "kind": "spine",
+          "skeleton": "./L4.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "End",
+            "loop": false
+          }
+        },
+        "dropdown": {
+          "kind": "spine",
+          "skeleton": "./L4.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
+          }
         }
       }
     },
@@ -326,18 +481,69 @@
             "animationName": "Start",
             "loop": false
           }
+        },
+        "remove": {
+          "kind": "spine",
+          "skeleton": "./WM.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "End",
+            "loop": false
+          }
+        },
+        "dropdown": {
+          "kind": "spine",
+          "skeleton": "./WM.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
+          }
         }
       }
     },
     "CN": {
       "scale": 1,
+      "animations": {
+        "appear": {
+          "kind": "activeSpine",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Start",
+            "loop": false
+          }
+        },
+        "win": {
+          "kind": "activeSpine",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Win",
+            "loop": false
+          }
+        },
+        "remove": {
+          "kind": "activeSpine",
+          "playback": {
+            "mode": "animation",
+            "animationName": "End",
+            "loop": false
+          }
+        },
+        "dropdown": {
+          "kind": "activeSpine",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Loop",
+            "loop": true
+          }
+        }
+      },
       "valuePresentation": {
         "defaultValues": [1, 2, 5, 10, 25, 50, 100, 250, 500, 1000],
-        "appearPlayback": {
-          "mode": "animation",
-          "animationName": "Start",
-          "loop": false
-        },
         "reelStates": {
           "normal": {
             "kind": "transparent",
@@ -440,6 +646,28 @@
             "animationName": "Start",
             "loop": false
           }
+        },
+        "remove": {
+          "kind": "spine",
+          "skeleton": "./CM.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "End",
+            "loop": false
+          }
+        },
+        "dropdown": {
+          "kind": "spine",
+          "skeleton": "./CM.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
+          }
         }
       }
     },
@@ -470,6 +698,28 @@
             "animationName": "Start",
             "loop": false
           }
+        },
+        "remove": {
+          "kind": "spine",
+          "skeleton": "./CO.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "End",
+            "loop": false
+          }
+        },
+        "dropdown": {
+          "kind": "spine",
+          "skeleton": "./CO.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Loop",
+            "loop": true
+          }
         }
       }
     },
@@ -499,6 +749,28 @@
             "mode": "animation",
             "animationName": "Start",
             "loop": false
+          }
+        },
+        "remove": {
+          "kind": "spine",
+          "skeleton": "./AF.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "End",
+            "loop": false
+          }
+        },
+        "dropdown": {
+          "kind": "spine",
+          "skeleton": "./AF.json",
+          "atlas": "./Symbol.atlas",
+          "texture": "./Symbol.png",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Idle",
+            "loop": true
           }
         }
       }

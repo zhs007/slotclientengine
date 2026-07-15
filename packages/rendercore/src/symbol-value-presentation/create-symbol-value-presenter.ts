@@ -9,6 +9,7 @@ import {
   createSymbolValuePresentationImagePath,
   parseSymbolStateTextureManifest,
   type ParseSymbolStateTextureManifestOptions,
+  type SymbolManifestAnimationPlaybackSpec,
 } from "../symbol/manifest.js";
 import type {
   PreparedSymbolValuePresentation,
@@ -85,7 +86,9 @@ export function createSymbolValuePresentationResourcesFromManifest(
             },
             requiredAnimations: [
               tier.animation.playback.animationName,
-              presentation.appearPlayback.animationName,
+              ...Object.values(manifestSymbol.animations)
+                .filter((animation) => animation?.kind === "activeSpine")
+                .map((animation) => animation.playback.animationName),
             ],
             requiredSlots: [presentation.text.slot],
           });
@@ -133,7 +136,23 @@ export function createSymbolValuePresentationResourcesFromManifest(
           Object.freeze({
             symbol,
             defaultValues: presentation.defaultValues,
-            appearPlayback: presentation.appearPlayback,
+            activeSpineAnimations: Object.freeze(
+              Object.fromEntries(
+                Object.entries(manifestSymbol.animations)
+                  .filter(
+                    (
+                      entry,
+                    ): entry is [
+                      string,
+                      {
+                        kind: "activeSpine";
+                        playback: SymbolManifestAnimationPlaybackSpec;
+                      },
+                    ] => entry[1]?.kind === "activeSpine",
+                  )
+                  .map(([state, animation]) => [state, animation.playback]),
+              ),
+            ),
             tiers: Object.freeze(tiers),
             text,
             textImageUrls,

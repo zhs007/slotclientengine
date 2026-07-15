@@ -146,7 +146,6 @@ function validatePresentation(symbol, value, states) {
   const record = assertRecord(value, `${symbol}.valuePresentation`);
   assertOnlyKnownKeys(record, `${symbol}.valuePresentation`, [
     "defaultValues",
-    "appearPlayback",
     "reelStates",
     "tiers",
     "text",
@@ -170,25 +169,6 @@ function validatePresentation(symbol, value, states) {
   if (new Set(defaultValues).size !== defaultValues.length) {
     throw new Error(
       `${symbol}.valuePresentation.defaultValues must be unique.`,
-    );
-  }
-  const appearPlayback = assertRecord(
-    record.appearPlayback,
-    `${symbol}.valuePresentation.appearPlayback`,
-  );
-  assertOnlyKnownKeys(
-    appearPlayback,
-    `${symbol}.valuePresentation.appearPlayback`,
-    ["mode", "animationName", "loop"],
-  );
-  if (
-    appearPlayback.mode !== "animation" ||
-    typeof appearPlayback.animationName !== "string" ||
-    appearPlayback.animationName.trim().length === 0 ||
-    appearPlayback.loop !== false
-  ) {
-    throw new Error(
-      `${symbol}.valuePresentation.appearPlayback must be a named non-looping animation.`,
     );
   }
   const reelStates = assertRecord(

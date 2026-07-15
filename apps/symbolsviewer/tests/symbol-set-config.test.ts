@@ -79,7 +79,10 @@ describe("symbolsviewer symbol set config", () => {
         GAME002_S3_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 1]),
       ),
       symbolRenderPriorities: Object.fromEntries(
-        GAME002_S3_DISPLAYABLE_SYMBOLS.map((symbol) => [symbol, 0]),
+        GAME002_S3_DISPLAYABLE_SYMBOLS.map((symbol) => [
+          symbol,
+          symbol === "WL" ? 1 : 0,
+        ]),
       ),
     });
     expect(getSymbolSetConfig("game003-s1").label).toBe("game003-s1");
@@ -286,7 +289,12 @@ describe("symbolsviewer symbol set config", () => {
 
     expect(resolveViewerStateForSymbol(config, "WM", "win")).toBe("normal");
     expect(resolveViewerStateForSymbol(config, "BN", "appear")).toBe("normal");
-    expect(resolveViewerStateForSymbol(config, "CN", "win")).toBe("normal");
+    expect(resolveViewerStateForSymbol(config, "CN", "win")).toBe("win");
+    expect(resolveViewerStateForSymbol(config, "CN", "remove")).toBe("remove");
+    expect(resolveViewerStateForSymbol(config, "CN", "dropdown")).toBe(
+      "dropdown",
+    );
+    expect(resolveViewerStateForSymbol(config, "BN", "remove")).toBe("normal");
 
     const game003Config = getSymbolSetConfig("game003-s1");
     expect(() =>

@@ -36,6 +36,9 @@ export class SymbolCatalogModel implements SymbolCatalog {
   readonly #animationResolver: SymbolAnimationResolver;
   readonly #requiredStateTextures: readonly SymbolStateId[];
   readonly #symbolRenderPriorities: ReadonlyMap<string, number>;
+  readonly #symbolAnimationCapabilities: Readonly<
+    Record<string, readonly SymbolStateId[]>
+  >;
 
   constructor(options: CreateSymbolCatalogOptions) {
     const statePreset = options.statePreset ?? createDefaultSymbolStatePreset();
@@ -87,6 +90,9 @@ export class SymbolCatalogModel implements SymbolCatalog {
       options.animationResolver ?? createDefaultSymbolAnimationResolver();
     this.#requiredStateTextures = requiredStateTextures;
     this.#symbolRenderPriorities = symbolRenderPriorities;
+    this.#symbolAnimationCapabilities = Object.freeze({
+      ...(options.symbolAnimationCapabilities ?? {}),
+    });
     this.#validation = Object.freeze({
       displayableSymbols: Object.freeze(
         displayableEntries.map((entry) => entry.symbol),
@@ -196,6 +202,8 @@ export class SymbolCatalogModel implements SymbolCatalog {
         options.renderPriority ?? this.#symbolRenderPriorities.get(symbol) ?? 0,
         symbol,
       ),
+      animationCapabilities: this.#symbolAnimationCapabilities[symbol] ?? [],
+      valueControllerFactory: options.valueControllerFactory,
     });
   }
 }

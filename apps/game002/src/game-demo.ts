@@ -8,14 +8,20 @@ import {
   RenderGridCellReelSet,
   createGridCellOrder,
   createGridCellReelSpinPlan,
+  createGridCellCascadeDropPlan,
   createReelSymbolRegistry,
   type GridCellDimmingPattern,
   type GridCellOrderMode,
   type GridCellReelOffsetMatrix,
   type GridCellReelSpinPlan,
   type GridCellReelSpinTiming,
+  type GridCellCascadeDropPlan,
+  type GridCellCascadeScene,
+  type GridCellCascadeValueMatrix,
+  type GridCellCascadeMotionOptions,
   type ReelLayout,
   type ReelSymbolRegistry,
+  type ReelSymbolAnimationCapabilityMap,
   type ReelSpinDirection,
   type RenderGridCellReelCellSnapshot,
   type RenderGridCellReelSetUpdateResult,
@@ -71,6 +77,7 @@ export interface Game002ReelConfig {
   readonly missingAssetLabel: string;
   readonly symbolScales: ReelSymbolScaleMap;
   readonly symbolRenderPriorities: ReelSymbolRenderPriorityMap;
+  readonly symbolAnimationCapabilities: ReelSymbolAnimationCapabilityMap;
   readonly landingAppearSymbols: readonly string[];
   readonly animationResolver: SymbolAnimationResolver;
   readonly symbolValuePresentationResources: SymbolValuePresentationResourceMap;
@@ -93,6 +100,7 @@ export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   missingAssetLabel: GAME002_DEFAULT_SKIN.label,
   symbolScales: GAME002_SYMBOL_SCALES,
   symbolRenderPriorities: GAME002_SYMBOL_RENDER_PRIORITIES,
+  symbolAnimationCapabilities: GAME002_DEFAULT_SKIN.symbolAnimationCapabilities,
   landingAppearSymbols: GAME002_DEFAULT_SKIN.landingAppearSymbols,
   animationResolver: GAME002_DEFAULT_SKIN.symbolAnimationResolver,
   symbolValuePresentationResources:
@@ -158,6 +166,32 @@ export interface Game002ReelRuntime {
   getVisibleSymbolGeometrySnapshots(
     positions: readonly WinResultPosition[],
   ): readonly RenderVisibleSymbolGeometrySnapshot[];
+  hasVisibleSymbolStateCapability(
+    x: number,
+    y: number,
+    state: SymbolStateId,
+  ): boolean;
+  releaseVisibleSymbols(positions: readonly WinResultPosition[]): void;
+  setVisibleSymbolDimming(
+    highlightedPositions: readonly WinResultPosition[],
+    dimmingAlpha: number,
+  ): void;
+  clearVisibleSymbolDimming(): void;
+  getCascadeValues(): GridCellCascadeValueMatrix;
+  createCascadeDropPlan(options: {
+    readonly sourceScene: GridCellCascadeScene;
+    readonly sourceValues: GridCellCascadeValueMatrix;
+    readonly settledScene: GridCellCascadeScene;
+    readonly settledValues: GridCellCascadeValueMatrix;
+    readonly targetScene: GridCellCascadeScene;
+    readonly targetValues: GridCellCascadeValueMatrix;
+    readonly refillPositions: readonly WinResultPosition[];
+    readonly canDropOccurrence: NonNullable<
+      Parameters<typeof createGridCellCascadeDropPlan>[0]["canDropOccurrence"]
+    >;
+    readonly motion: GridCellCascadeMotionOptions;
+  }): GridCellCascadeDropPlan;
+  startCascadeDrop(plan: GridCellCascadeDropPlan): void;
   isSpinning(): boolean;
 }
 
@@ -179,6 +213,7 @@ export function createGame002ReelRuntime(
     emptySymbols: config.emptySymbols,
     symbolScales: config.symbolScales,
     symbolRenderPriorities: config.symbolRenderPriorities,
+    symbolAnimationCapabilities: config.symbolAnimationCapabilities,
     landingAppearSymbols: config.landingAppearSymbols,
     animationResolver: config.animationResolver,
     texturePolicy: {
@@ -221,6 +256,7 @@ export function createGame002ReelRuntime(
   let currentScene: SceneMatrix | null = null;
   let targetScene: SceneMatrix | null = null;
   let finalYs: readonly number[] | null = null;
+  let activeTargetKind: "spin" | "dropdown" | null = null;
 
   const resolveSceneFinalYs = (
     scene: SceneMatrix,
@@ -351,19 +387,28 @@ export function createGame002ReelRuntime(
       finalYs = nextFinalYs;
       targetScene = validScene;
       reelSet.spin(plan, { targetPresentationValues });
+      activeTargetKind = "spin";
       reelSet.visible = true;
       return plan;
     },
     update(deltaSeconds: number): RenderGridCellReelSetUpdateResult {
       const result = reelSet.update(deltaSeconds);
       if (result.completed && targetScene) {
-        const visibleScene = validateGame002Scene(
-          reelSet.getVisibleScene(),
-          "completed game002 reels",
-        );
-        assertScenesEqual(visibleScene, targetScene, "completed game002 reels");
+        const visibleScene = reelSet.getVisibleScene();
+        if (activeTargetKind === "spin") {
+          const fullScene = validateGame002Scene(
+            visibleScene,
+            "completed game002 reels",
+          );
+          assertScenesEqual(fullScene, targetScene, "completed game002 reels");
+        } else if (!sceneEquals(visibleScene, targetScene)) {
+          throw new Error(
+            "completed game002 cascade scene does not match target.",
+          );
+        }
         currentScene = targetScene;
         targetScene = null;
+        activeTargetKind = null;
         reelSet.visible = true;
       }
       return result;
@@ -383,6 +428,59 @@ export function createGame002ReelRuntime(
       positions: readonly WinResultPosition[],
     ): readonly RenderVisibleSymbolGeometrySnapshot[] {
       return reelSet.getVisibleSymbolGeometrySnapshots(positions);
+    },
+    hasVisibleSymbolStateCapability(
+      x: number,
+      y: number,
+      state: SymbolStateId,
+    ): boolean {
+      return reelSet.hasVisibleSymbolStateCapability(x, y, state);
+    },
+    releaseVisibleSymbols(positions: readonly WinResultPosition[]): void {
+      reelSet.releaseVisibleSymbols(positions);
+      currentScene = reelSet.getVisibleScene();
+    },
+    setVisibleSymbolDimming(
+      highlightedPositions: readonly WinResultPosition[],
+      dimmingAlpha: number,
+    ): void {
+      reelSet.setVisibleSymbolDimming(highlightedPositions, dimmingAlpha);
+    },
+    clearVisibleSymbolDimming(): void {
+      reelSet.clearVisibleSymbolDimming();
+    },
+    getCascadeValues(): GridCellCascadeValueMatrix {
+      return reelSet.getCascadeValues();
+    },
+    createCascadeDropPlan(dropOptions: {
+      readonly sourceScene: GridCellCascadeScene;
+      readonly sourceValues: GridCellCascadeValueMatrix;
+      readonly settledScene: GridCellCascadeScene;
+      readonly settledValues: GridCellCascadeValueMatrix;
+      readonly targetScene: GridCellCascadeScene;
+      readonly targetValues: GridCellCascadeValueMatrix;
+      readonly refillPositions: readonly WinResultPosition[];
+      readonly canDropOccurrence: NonNullable<
+        Parameters<typeof createGridCellCascadeDropPlan>[0]["canDropOccurrence"]
+      >;
+      readonly motion: GridCellCascadeMotionOptions;
+    }): GridCellCascadeDropPlan {
+      return createGridCellCascadeDropPlan({
+        ...dropOptions,
+        cellHeight: layout.cellHeight,
+      });
+    },
+    startCascadeDrop(plan: GridCellCascadeDropPlan): void {
+      if (targetScene)
+        throw new Error("game002 runtime already has a target scene.");
+      targetScene = plan.targetScene;
+      activeTargetKind = "dropdown";
+      reelSet.startCascadeDrop(plan);
+      if (plan.totalSeconds === 0) {
+        currentScene = plan.targetScene;
+        targetScene = null;
+        activeTargetKind = null;
+      }
     },
     isSpinning(): boolean {
       return reelSet.getSnapshot().spinning;

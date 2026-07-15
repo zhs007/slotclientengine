@@ -25,6 +25,8 @@
 
 ## 执行约定
 
+- `game002` 的消除级联组件名、step 映射和 symbol 特例属于 `apps/game002`；`packages/rendercore` 拥有通用 manifest-driven emphasis/win/remove、非中奖格压暗、可注入 remove/drop predicate，以及把既有 occurrence 与 refill occurrence 合并的 grid-cell fall。game002 必须通过函数声明 `WL` 不 remove、不 drop；rendercore 不得硬编码 wild。普通 symbol 可穿过固定 WL 下落，叠放只服从 manifest `renderPriority`，当前 game002-s3 仅 WL 为 `1`、其它为 `0`。统一 fall 不走 spin/appear，并同时保留列内错峰和从左到右列延迟。CN 数字仍随 occurrence 下落；新 CN 创建时直接使用当前 step `bg-gencoins` 服务端值。全部 step 结束后才播放 global win-amount；不得在 app 复制 Pixi/Spine/cascade 算法或增加 fallback。
+
 - 新增空目录时请放置 `.keepme` 文件，避免目录丢失。
 - 子项目如需使用根级基础工具链依赖，应与根目录版本保持一致。
 - 后续游戏默认依赖 `@slotclientengine/gameframeworks`，不要直接依赖 `@slotclientengine/uiframeworks`、`@slotclientengine/netcore`、`@slotclientengine/logiccore`，除非是在框架内部或任务明确要求。

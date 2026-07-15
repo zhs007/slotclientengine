@@ -162,16 +162,19 @@ function verifySourceContract() {
           `source manifest ${symbol}.valuePresentation.defaultValues must be unique positive safe integers.`,
         );
       }
-      const appearPlayback = valuePresentation.appearPlayback;
-      if (
-        appearPlayback?.mode !== "animation" ||
-        typeof appearPlayback.animationName !== "string" ||
-        appearPlayback.animationName.length === 0 ||
-        appearPlayback.loop !== false
-      ) {
-        failures.push(
-          `source manifest ${symbol}.valuePresentation.appearPlayback must be a named non-looping animation.`,
-        );
+      for (const state of ["appear", "win", "remove", "dropdown"]) {
+        const animation = entry.animations?.[state];
+        if (
+          animation?.kind !== "activeSpine" ||
+          animation.playback?.mode !== "animation" ||
+          typeof animation.playback.animationName !== "string" ||
+          animation.playback.animationName.length === 0 ||
+          animation.playback.loop !== (state === "dropdown")
+        ) {
+          failures.push(
+            `source manifest ${symbol}.animations.${state} must be a valid activeSpine animation.`,
+          );
+        }
       }
       const normal = valuePresentation.reelStates?.normal;
       if (
@@ -517,7 +520,9 @@ function readValuePresentationResources(manifest) {
   const seen = new Set();
   for (const [symbol, entry] of Object.entries(manifest.symbols ?? {})) {
     const slot = entry.valuePresentation?.text?.slot;
-    const appearPlayback = entry.valuePresentation?.appearPlayback;
+    const activeSpineAnimationNames = Object.values(entry.animations ?? {})
+      .filter((animation) => animation?.kind === "activeSpine")
+      .map((animation) => animation.playback?.animationName);
     if (entry.valuePresentation && (!slot || typeof slot !== "string")) {
       failures.push(
         `${symbol}.valuePresentation.text.slot must be configured.`,
@@ -543,7 +548,7 @@ function readValuePresentationResources(manifest) {
         texture: animation.texture,
         animationNames: [
           animation.playback.animationName,
-          appearPlayback?.animationName,
+          ...activeSpineAnimationNames,
         ],
         slot,
       };

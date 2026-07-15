@@ -6,6 +6,10 @@ import { createReelLayout } from "./layout.js";
 import { RenderReel } from "./render-reel.js";
 import type {
   GridCellCoordinate,
+  GridCellCascadeDropMovement,
+  GridCellCascadeDropPlan,
+  GridCellCascadeScene,
+  GridCellCascadeValueMatrix,
   GridCellReelOffsetMatrix,
   GridCellReelPhase,
   GridCellReelPlanCell,
@@ -19,6 +23,7 @@ import type {
   RenderVisibleSymbolStateSnapshot,
   ReelSymbolRegistry,
   SymbolPresentationValueMatrix,
+  RenderReelVisibleOccurrence,
 } from "./types.js";
 import type { LogicReels, SceneMatrix } from "@slotclientengine/logiccore";
 import type { SymbolStateId } from "../symbol/index.js";
@@ -38,6 +43,18 @@ interface RuntimeCell {
   fadeOutElapsedMs: number;
   fadeOutStartAlpha: number;
   targetPresentationValue: number | null;
+  occupied: boolean;
+}
+
+interface ActiveDropMovement {
+  readonly movement: GridCellCascadeDropMovement;
+  readonly occurrence: RenderReelVisibleOccurrence;
+}
+
+interface ActiveDrop {
+  readonly plan: GridCellCascadeDropPlan;
+  readonly movements: readonly ActiveDropMovement[];
+  elapsedSeconds: number;
 }
 
 interface DimmingRow {
@@ -55,6 +72,7 @@ export class RenderGridCellReelSet extends Container {
   readonly #cells: readonly RuntimeCell[];
   readonly #cellsByKey: ReadonlyMap<string, RuntimeCell>;
   #spinPlan: GridCellReelSpinPlan | null = null;
+  #activeDrop: ActiveDrop | null = null;
   #elapsedMs = 0;
 
   constructor(options: RenderGridCellReelSetOptions) {
@@ -107,6 +125,7 @@ export class RenderGridCellReelSet extends Container {
       this.#rows,
     );
     this.#spinPlan = null;
+    this.clearDropOccurrences();
     this.#elapsedMs = 0;
 
     for (const cell of this.#cells) {
@@ -129,6 +148,7 @@ export class RenderGridCellReelSet extends Container {
       cell.fadeOutElapsedMs = 0;
       cell.fadeOutStartAlpha = 0;
       cell.targetPresentationValue = null;
+      cell.occupied = true;
       cell.dimOverlay.alpha = 0;
       cell.dimOverlay.y = 0;
       this.setCellClipMask(cell, false);
@@ -145,6 +165,9 @@ export class RenderGridCellReelSet extends Container {
         "Cannot start a new grid cell reel spin while another spin is active.",
       );
     }
+    if (this.#activeDrop) {
+      throw new ReelError("Cannot spin while cascade dropdown is active.");
+    }
     this.assertPlanMatchesRuntime(plan);
     const targetPresentationValues = parsePresentationValueMatrix(
       options.targetPresentationValues,
@@ -152,19 +175,42 @@ export class RenderGridCellReelSet extends Container {
       this.#rows,
     );
 
+    const planCellsByKey = new Map(
+      plan.cells.map((planCell) => [
+        createCellKey(planCell.x, planCell.y),
+        planCell,
+      ]),
+    );
+    if (plan.selective) {
+      for (const cell of this.#cells) {
+        const planCell = planCellsByKey.get(
+          createCellKey(cell.coordinate.x, cell.coordinate.y),
+        );
+        if (planCell && cell.occupied) {
+          throw new ReelError(
+            `Selective grid spin position (${cell.coordinate.x},${cell.coordinate.y}) must be empty.`,
+          );
+        }
+      }
+    }
+
     this.#spinPlan = plan;
     this.#elapsedMs = 0;
     for (const cell of this.#cells) {
-      const planCell = plan.cells[cell.coordinate.orderIndex];
+      const planCell =
+        planCellsByKey.get(
+          createCellKey(cell.coordinate.x, cell.coordinate.y),
+        ) ?? null;
       cell.planCell = planCell;
-      cell.phase = "waiting";
+      cell.phase = planCell ? "waiting" : "completed";
       cell.hasStartedThisSpin = false;
       cell.hasLandedThisSpin = false;
       cell.fadeOutElapsedMs = 0;
       cell.fadeOutStartAlpha = 0;
-      cell.targetPresentationValue =
-        targetPresentationValues?.[cell.coordinate.x][cell.coordinate.y] ??
-        null;
+      cell.targetPresentationValue = planCell
+        ? (targetPresentationValues?.[cell.coordinate.x][cell.coordinate.y] ??
+          null)
+        : null;
       cell.dimOverlay.alpha = 0;
       cell.dimOverlay.y = 0;
       this.setCellClipMask(cell, false);
@@ -174,6 +220,16 @@ export class RenderGridCellReelSet extends Container {
 
   update(deltaSeconds: number): RenderGridCellReelSetUpdateResult {
     assertValidDeltaSeconds(deltaSeconds);
+    if (this.#activeDrop) {
+      const completed = this.updateDrop(deltaSeconds);
+      return Object.freeze({
+        spinning: false,
+        completed,
+        activity: completed ? null : "dropdown",
+        startedCells: Object.freeze([]),
+        landedCells: Object.freeze([]),
+      });
+    }
     const previousElapsedMs = this.#elapsedMs;
     if (this.#spinPlan) {
       this.#elapsedMs += deltaSeconds * 1000;
@@ -197,6 +253,7 @@ export class RenderGridCellReelSet extends Container {
     return Object.freeze({
       spinning: this.#spinPlan !== null,
       completed,
+      activity: this.#spinPlan !== null || completed ? "spin" : null,
       startedCells: freezeCoordinates(
         this.#cells
           .filter((cell) => cell.hasStartedThisSpin)
@@ -216,6 +273,7 @@ export class RenderGridCellReelSet extends Container {
         Object.freeze(
           Array.from({ length: this.#rows }, (_, y) => {
             const cell = this.getCell(x, y);
+            if (!cell.occupied) return -1;
             const visibleSymbol = cell.reel.getVisibleScene()[0];
             if (!Number.isInteger(visibleSymbol)) {
               throw new ReelError(
@@ -231,7 +289,169 @@ export class RenderGridCellReelSet extends Container {
 
   requestVisibleSymbolState(x: number, y: number, state: SymbolStateId): void {
     this.assertStopped("request visible symbol state");
-    this.getCell(x, y).reel.requestVisibleSymbolState(0, state);
+    const cell = this.getCell(x, y);
+    if (!cell.occupied) {
+      throw new ReelError(
+        `Cannot request state for empty grid cell (${x},${y}).`,
+      );
+    }
+    cell.reel.requestVisibleSymbolState(0, state);
+  }
+
+  hasVisibleSymbolStateCapability(
+    x: number,
+    y: number,
+    state: SymbolStateId,
+  ): boolean {
+    this.assertStopped("query visible symbol state capability");
+    const cell = this.getCell(x, y);
+    if (!cell.occupied) return false;
+    const slot = cell.reel
+      .getSlotSnapshots()
+      .find((candidate) => candidate.windowY === 0);
+    return slot?.symbol?.hasAnimationCapability(state) ?? false;
+  }
+
+  releaseVisibleSymbols(
+    positions: readonly { readonly x: number; readonly y: number }[],
+  ): void {
+    this.assertStopped("release visible symbols");
+    const normalized = normalizePositions(positions, this.#columns, this.#rows);
+    for (const position of normalized) {
+      const cell = this.getCell(position.x, position.y);
+      if (!cell.occupied) {
+        throw new ReelError(
+          `Cannot release empty grid cell (${position.x},${position.y}).`,
+        );
+      }
+      cell.reel.releaseVisibleOccurrence();
+      cell.occupied = false;
+      cell.phase = "completed";
+    }
+  }
+
+  setVisibleSymbolDimming(
+    highlightedPositions: readonly { readonly x: number; readonly y: number }[],
+    dimmingAlpha: number,
+  ): void {
+    this.assertStopped("set visible symbol dimming");
+    if (
+      !Number.isFinite(dimmingAlpha) ||
+      dimmingAlpha < 0 ||
+      dimmingAlpha > 1
+    ) {
+      throw new ReelError("dimmingAlpha must be finite and between 0 and 1.");
+    }
+    const highlighted = new Set(
+      normalizePositions(highlightedPositions, this.#columns, this.#rows).map(
+        ({ x, y }) => `${x},${y}`,
+      ),
+    );
+    for (const cell of this.#cells) {
+      const key = `${cell.coordinate.x},${cell.coordinate.y}`;
+      cell.dimOverlay.y = 0;
+      cell.dimOverlay.alpha = 1;
+      for (const row of cell.dimRows) {
+        row.graphic.alpha =
+          row.windowY === 0 && cell.occupied && !highlighted.has(key)
+            ? dimmingAlpha
+            : 0;
+      }
+    }
+  }
+
+  clearVisibleSymbolDimming(): void {
+    for (const cell of this.#cells) {
+      cell.dimOverlay.alpha = 0;
+      cell.dimOverlay.y = 0;
+    }
+  }
+
+  getCascadeValues(): GridCellCascadeValueMatrix {
+    return Object.freeze(
+      Array.from({ length: this.#columns }, (_, x) =>
+        Object.freeze(
+          Array.from({ length: this.#rows }, (_, y) => {
+            const cell = this.getCell(x, y);
+            if (!cell.occupied) return -1;
+            const slot = cell.reel
+              .getSlotSnapshots()
+              .find((candidate) => candidate.windowY === 0);
+            return slot?.presentationValue ?? null;
+          }),
+        ),
+      ),
+    );
+  }
+
+  startCascadeDrop(plan: GridCellCascadeDropPlan): void {
+    this.assertStopped("start cascade dropdown");
+    if (this.#activeDrop)
+      throw new ReelError("Cascade dropdown is already active.");
+    if (plan.columns !== this.#columns || plan.rows !== this.#rows) {
+      throw new ReelError(
+        `Cascade dropdown dimensions ${plan.columns}x${plan.rows} do not match runtime ${this.#columns}x${this.#rows}.`,
+      );
+    }
+    assertCascadeMatrixEqual(
+      this.getVisibleScene(),
+      plan.sourceScene,
+      "dropdown source scene",
+    );
+    assertCascadeMatrixEqual(
+      this.getCascadeValues(),
+      plan.sourceValues,
+      "dropdown source values",
+    );
+    const active: ActiveDropMovement[] = [];
+    for (const movement of plan.movements) {
+      const cell =
+        movement.kind === "existing"
+          ? this.getCell(movement.x, movement.sourceY)
+          : this.getCell(movement.x, movement.targetY);
+      if (movement.kind === "existing" && !cell.occupied) {
+        throw new ReelError(
+          `Dropdown source (${movement.x},${movement.sourceY}) is empty.`,
+        );
+      }
+      const occurrence =
+        movement.kind === "existing"
+          ? cell.reel.takeVisibleOccurrence()
+          : cell.reel.createDetachedOccurrence(
+              movement.code,
+              movement.presentationValue,
+            );
+      if (
+        occurrence.code !== movement.code ||
+        occurrence.presentationValue !== movement.presentationValue
+      ) {
+        throw new ReelError(
+          `Dropdown source occurrence changed at (${movement.x},${movement.sourceY}).`,
+        );
+      }
+      if (movement.kind === "existing") cell.occupied = false;
+      if (occurrence.symbol.hasAnimationCapability("dropdown")) {
+        occurrence.symbol.requestState("dropdown");
+      } else {
+        occurrence.symbol.requestState("normal");
+      }
+      occurrence.symbol.position.set(
+        movement.x * this.#cellWidth + this.#cellWidth / 2,
+        movement.sourceY * this.#cellHeight + this.#cellHeight / 2,
+      );
+      const targetCell = this.getCell(movement.x, movement.targetY);
+      occurrence.symbol.zIndex =
+        occurrence.symbol.renderPriority * (this.#cells.length + 1) +
+        targetCell.coordinate.orderIndex;
+      this.addChild(occurrence.symbol);
+      active.push(Object.freeze({ movement, occurrence }));
+    }
+    this.#activeDrop = {
+      plan,
+      movements: Object.freeze(active),
+      elapsedSeconds: 0,
+    };
+    if (active.length === 0) this.completeDrop();
   }
 
   requestVisibleSymbolStates(
@@ -248,6 +468,9 @@ export class RenderGridCellReelSet extends Container {
     y: number,
   ): RenderVisibleSymbolStateSnapshot {
     const cell = this.getCell(x, y);
+    if (!cell.occupied) {
+      throw new ReelError(`Cannot snapshot empty grid cell (${x},${y}).`);
+    }
     const snapshot = cell.reel.getVisibleSymbolStateSnapshot(0);
     return Object.freeze({ ...snapshot, x, y });
   }
@@ -268,6 +491,11 @@ export class RenderGridCellReelSet extends Container {
   ): RenderVisibleSymbolGeometrySnapshot {
     this.assertStopped("read visible symbol geometry");
     const cell = this.getCell(x, y);
+    if (!cell.occupied) {
+      throw new ReelError(
+        `Cannot read geometry for empty grid cell (${x},${y}).`,
+      );
+    }
     const snapshot = cell.reel.getVisibleSymbolGeometrySnapshot(0);
     return Object.freeze({
       ...snapshot,
@@ -290,9 +518,10 @@ export class RenderGridCellReelSet extends Container {
 
   getSnapshot(): RenderGridCellReelSetSnapshot {
     return Object.freeze({
-      spinning: this.#spinPlan !== null,
+      spinning: this.#spinPlan !== null || this.#activeDrop !== null,
       completed:
         this.#spinPlan === null &&
+        this.#activeDrop === null &&
         this.#cells.every(
           (cell) => cell.phase === "completed" || cell.phase === "idle",
         ),
@@ -367,6 +596,7 @@ export class RenderGridCellReelSet extends Container {
       fadeOutElapsedMs: 0,
       fadeOutStartAlpha: 0,
       targetPresentationValue: null,
+      occupied: true,
     };
   }
 
@@ -382,6 +612,15 @@ export class RenderGridCellReelSet extends Container {
     }
 
     if (cell.phase === "waiting" && elapsedMs >= planCell.startAtMs) {
+      if (!cell.occupied) {
+        if (!plan.selective) {
+          throw new ReelError(
+            `Full grid spin cell (${planCell.x},${planCell.y}) is empty.`,
+          );
+        }
+        cell.reel.resetToY(planCell.axisPlan.startY);
+        cell.occupied = true;
+      }
       this.setCellClipMask(cell, true);
       cell.reel.start(planCell.axisPlan, {
         targetVisibleSymbols: planCell.targetVisibleSymbols,
@@ -478,16 +717,14 @@ export class RenderGridCellReelSet extends Container {
     if (plan.rows !== this.#rows) {
       throw new ReelError(`grid plan rows must be ${this.#rows}.`);
     }
-    if (plan.cells.length !== this.#cells.length) {
-      throw new ReelError(
-        `grid plan cells length must be ${this.#cells.length}.`,
-      );
+    if (plan.cells.length === 0 || plan.cells.length > this.#cells.length) {
+      throw new ReelError(`grid plan cells length is invalid.`);
     }
     const seen = new Set<string>();
     for (const [index, planCell] of plan.cells.entries()) {
-      if (planCell.orderIndex !== index) {
+      if (planCell.sequenceIndex !== index) {
         throw new ReelError(
-          `grid plan cells[${index}].orderIndex must match its position.`,
+          `grid plan cells[${index}].sequenceIndex must match its position.`,
         );
       }
       const key = createCellKey(planCell.x, planCell.y);
@@ -497,12 +734,8 @@ export class RenderGridCellReelSet extends Container {
         );
       }
       seen.add(key);
-      const cell = this.#cells[index];
-      if (
-        !cell ||
-        planCell.x !== cell.coordinate.x ||
-        planCell.y !== cell.coordinate.y
-      ) {
+      const cell = this.getCell(planCell.x, planCell.y);
+      if (planCell.orderIndex !== cell.coordinate.orderIndex) {
         throw new ReelError(
           `grid plan cells[${index}] does not match runtime order.`,
         );
@@ -522,7 +755,7 @@ export class RenderGridCellReelSet extends Container {
   }
 
   private assertStopped(action: string): void {
-    if (this.#spinPlan) {
+    if (this.#spinPlan || this.#activeDrop) {
       throw new ReelError(
         `Cannot ${action} while grid cell reel set is spinning.`,
       );
@@ -530,6 +763,25 @@ export class RenderGridCellReelSet extends Container {
   }
 
   private snapshotCell(cell: RuntimeCell): RenderGridCellReelCellSnapshot {
+    if (!cell.occupied) {
+      return Object.freeze({
+        x: cell.coordinate.x,
+        y: cell.coordinate.y,
+        orderIndex: cell.coordinate.orderIndex,
+        phase: cell.phase,
+        hasClipMask: false,
+        cellX: cell.root.x,
+        cellY: cell.root.y,
+        reelX: cell.reel.x,
+        reelY: cell.reel.y,
+        dimmingOnReel: true,
+        dimmingAlpha: 0,
+        requestedState: null,
+        visibleSymbol: -1,
+        presentationValue: null,
+        occupied: false,
+      });
+    }
     const slot = cell.reel
       .getSlotSnapshots()
       .find((candidate) => candidate.windowY === 0);
@@ -555,7 +807,83 @@ export class RenderGridCellReelSet extends Container {
       requestedState: slot?.requestedState ?? null,
       visibleSymbol,
       presentationValue: slot?.presentationValue ?? null,
+      occupied: true,
     });
+  }
+
+  private updateDrop(deltaSeconds: number): boolean {
+    const active = this.#activeDrop;
+    if (!active) return false;
+    active.elapsedSeconds = Math.min(
+      active.elapsedSeconds + deltaSeconds,
+      active.plan.totalSeconds,
+    );
+    for (const cell of this.#cells) {
+      if (cell.occupied) cell.reel.update(deltaSeconds);
+    }
+    for (const item of active.movements) {
+      item.occurrence.symbol.update(deltaSeconds);
+      const { movement } = item;
+      const elapsed = active.elapsedSeconds - movement.startSeconds;
+      const source = movement.sourceY * this.#cellHeight + this.#cellHeight / 2;
+      const target = movement.targetY * this.#cellHeight + this.#cellHeight / 2;
+      if (elapsed <= 0) {
+        item.occurrence.symbol.y = source;
+      } else if (elapsed < movement.fallSeconds) {
+        const progress = elapsed / movement.fallSeconds;
+        item.occurrence.symbol.y =
+          source +
+          (target + movement.overshootPixels - source) * progress * progress;
+      } else {
+        const settle = Math.min(
+          1,
+          (elapsed - movement.fallSeconds) / movement.settleSeconds,
+        );
+        item.occurrence.symbol.y =
+          target + movement.overshootPixels * (1 - easeOutCubic(settle));
+      }
+    }
+    if (active.elapsedSeconds < active.plan.totalSeconds) return false;
+    this.completeDrop();
+    return true;
+  }
+
+  private completeDrop(): void {
+    const active = this.#activeDrop;
+    if (!active) return;
+    for (const item of active.movements) {
+      const target = this.getCell(item.movement.x, item.movement.targetY);
+      if (target.occupied) {
+        throw new ReelError(
+          `Dropdown target (${item.movement.x},${item.movement.targetY}) is occupied.`,
+        );
+      }
+      this.removeChild(item.occurrence.symbol);
+      target.reel.placeVisibleOccurrence(item.occurrence);
+      target.occupied = true;
+      target.phase = "completed";
+      this.syncCellRenderOrder(target);
+    }
+    this.#activeDrop = null;
+    assertCascadeMatrixEqual(
+      this.getVisibleScene(),
+      active.plan.targetScene,
+      "dropdown target scene",
+    );
+    assertCascadeMatrixEqual(
+      this.getCascadeValues(),
+      active.plan.targetValues,
+      "dropdown target values",
+    );
+  }
+
+  private clearDropOccurrences(): void {
+    if (!this.#activeDrop) return;
+    for (const item of this.#activeDrop.movements) {
+      const cell = this.getCell(item.movement.x, item.movement.targetY);
+      cell.reel.releaseDetachedOccurrence(item.occurrence);
+    }
+    this.#activeDrop = null;
   }
 
   private syncDimmingStrip(
@@ -668,6 +996,60 @@ function parseScene(
       );
     }),
   );
+}
+
+function normalizePositions(
+  positions: readonly { readonly x: number; readonly y: number }[],
+  columns: number,
+  rows: number,
+): readonly { readonly x: number; readonly y: number }[] {
+  if (!Array.isArray(positions) || positions.length === 0) {
+    throw new ReelError("grid positions must not be empty.");
+  }
+  const seen = new Set<string>();
+  return Object.freeze(
+    positions.map((position, index) => {
+      if (
+        !Number.isInteger(position.x) ||
+        position.x < 0 ||
+        position.x >= columns ||
+        !Number.isInteger(position.y) ||
+        position.y < 0 ||
+        position.y >= rows
+      ) {
+        throw new ReelError(`grid positions[${index}] is out of range.`);
+      }
+      const key = createCellKey(position.x, position.y);
+      if (seen.has(key)) {
+        throw new ReelError(
+          `duplicate grid position (${position.x},${position.y}).`,
+        );
+      }
+      seen.add(key);
+      return Object.freeze({ x: position.x, y: position.y });
+    }),
+  );
+}
+
+function assertCascadeMatrixEqual(
+  actual: readonly (readonly (number | null)[])[],
+  expected: readonly (readonly (number | null)[])[],
+  label: string,
+): void {
+  if (
+    actual.length !== expected.length ||
+    actual.some(
+      (column, x) =>
+        column.length !== expected[x]?.length ||
+        column.some((value, y) => value !== expected[x]?.[y]),
+    )
+  ) {
+    throw new ReelError(`${label} does not match cascade plan.`);
+  }
+}
+
+function easeOutCubic(progress: number): number {
+  return 1 - (1 - progress) ** 3;
 }
 
 function parsePresentationValueMatrix(

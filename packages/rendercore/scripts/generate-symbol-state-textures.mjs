@@ -507,7 +507,7 @@ function validatePreservedValuePresentation(symbol, value) {
   assertOnlyKnownKeys(
     record,
     `existing manifest symbol "${symbol}" valuePresentation`,
-    ["defaultValues", "appearPlayback", "reelStates", "tiers", "text"],
+    ["defaultValues", "reelStates", "tiers", "text"],
   );
   if (
     !Array.isArray(record.defaultValues) ||
@@ -530,25 +530,6 @@ function validatePreservedValuePresentation(symbol, value) {
   if (new Set(defaultValues).size !== defaultValues.length) {
     throw new Error(
       `${symbol} valuePresentation defaultValues must be unique.`,
-    );
-  }
-  const appearPlayback = assertRecord(
-    record.appearPlayback,
-    `${symbol}.valuePresentation.appearPlayback`,
-  );
-  assertOnlyKnownKeys(
-    appearPlayback,
-    `${symbol}.valuePresentation.appearPlayback`,
-    ["mode", "animationName", "loop"],
-  );
-  if (
-    appearPlayback.mode !== "animation" ||
-    typeof appearPlayback.animationName !== "string" ||
-    appearPlayback.animationName.trim().length === 0 ||
-    appearPlayback.loop !== false
-  ) {
-    throw new Error(
-      `${symbol} valuePresentation appearPlayback must be a named non-looping animation.`,
     );
   }
   const reelStates = assertRecord(
@@ -711,11 +692,6 @@ function validatePreservedValuePresentation(symbol, value) {
         });
   return Object.freeze({
     defaultValues,
-    appearPlayback: Object.freeze({
-      mode: "animation",
-      animationName: appearPlayback.animationName,
-      loop: false,
-    }),
     reelStates: Object.freeze(preservedReelStates),
     tiers,
     text: preservedText,
@@ -738,7 +714,9 @@ function validatePreservedAnimations(symbol, value) {
   );
   const preserved = {};
   for (const [state, animation] of Object.entries(animations)) {
-    if (state !== "win" && state !== "appear" && state !== "normal") {
+    if (
+      !new Set(["normal", "appear", "win", "remove", "dropdown"]).has(state)
+    ) {
       throw new Error(
         `Existing manifest symbol "${symbol}" declares animation for unknown state "${state}".`,
       );
@@ -806,6 +784,21 @@ function validatePreservedAnimation(symbol, state, value) {
         : {}),
     });
   }
+  if (animation.kind === "activeSpine") {
+    assertOnlyKnownKeys(
+      animation,
+      `existing manifest symbol "${symbol}" ${state} animation`,
+      ["kind", "playback"],
+    );
+    return Object.freeze({
+      kind: "activeSpine",
+      playback: validatePreservedAnimationPlayback(
+        symbol,
+        state,
+        animation.playback,
+      ),
+    });
+  }
   assertOnlyKnownKeys(
     animation,
     `existing manifest symbol "${symbol}" ${state} animation`,
@@ -813,7 +806,7 @@ function validatePreservedAnimation(symbol, state, value) {
   );
   if (animation.kind !== "vni") {
     throw new Error(
-      `Existing manifest symbol "${symbol}" ${state} animation kind must be "builtin", "static", "vni" or "spine".`,
+      `Existing manifest symbol "${symbol}" ${state} animation kind must be "builtin", "static", "vni", "spine" or "activeSpine".`,
     );
   }
   return Object.freeze({

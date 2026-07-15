@@ -20,6 +20,7 @@ import type {
   ReelWindowSnapshot,
   RenderReelSnapshot,
   RenderReelUpdateResult,
+  RenderReelVisibleOccurrence,
 } from "./types.js";
 import type { LogicReels } from "@slotclientengine/logiccore";
 import type { RenderSymbol, SymbolStateId } from "../symbol/index.js";
@@ -262,6 +263,92 @@ export class RenderReel extends Container {
     );
   }
 
+  takeVisibleOccurrence(windowY = 0): RenderReelVisibleOccurrence {
+    const slot = this.getVisibleSlot(windowY);
+    if (slot.kind !== "textured" || !slot.symbol || slot.code === null) {
+      throw new ReelError(
+        `Cannot take empty visible occurrence at reel ${this.xIndex}, y ${windowY}.`,
+      );
+    }
+    const occurrence = Object.freeze({
+      code: slot.code,
+      kind: "textured" as const,
+      symbol: slot.symbol,
+      presentationValue: slot.symbol.getPresentationValue(),
+    });
+    slot.container.removeChild(slot.symbol);
+    slot.code = null;
+    slot.kind = null;
+    slot.symbol = null;
+    this.setStaticVisibleSlot(windowY, -1, null);
+    return occurrence;
+  }
+
+  createDetachedOccurrence(
+    code: number,
+    presentationValue: number | null,
+  ): RenderReelVisibleOccurrence {
+    const entry = this.#registry.getEntryByCode(code);
+    if (entry.kind !== "textured") {
+      throw new ReelError(
+        `Cannot create detached occurrence for non-textured symbol code ${code}.`,
+      );
+    }
+    const symbol = this.acquireTexturedSymbol(code);
+    symbol.init();
+    symbol.setPresentationValue(presentationValue);
+    return Object.freeze({
+      code,
+      kind: "textured" as const,
+      symbol,
+      presentationValue,
+    });
+  }
+
+  releaseDetachedOccurrence(occurrence: RenderReelVisibleOccurrence): void {
+    occurrence.symbol.parent?.removeChild(occurrence.symbol);
+    if (this.#symbolPool) {
+      this.#symbolPool.release(occurrence.code, occurrence.symbol);
+    } else {
+      occurrence.symbol.destroy({ children: true });
+    }
+  }
+
+  placeVisibleOccurrence(
+    occurrence: RenderReelVisibleOccurrence,
+    windowY = 0,
+  ): void {
+    const slot = this.getVisibleSlot(windowY);
+    if (slot.symbol || slot.code !== null || slot.kind !== null) {
+      throw new ReelError(
+        `Cannot place occurrence into occupied reel ${this.xIndex}, y ${windowY}.`,
+      );
+    }
+    slot.code = occurrence.code;
+    slot.kind = occurrence.kind;
+    slot.symbol = occurrence.symbol;
+    slot.container.addChild(occurrence.symbol);
+    occurrence.symbol.position.set(0);
+    occurrence.symbol.visible = true;
+    occurrence.symbol.renderable = true;
+    occurrence.symbol.reset();
+    this.setStaticVisibleSlot(
+      windowY,
+      occurrence.code,
+      occurrence.presentationValue,
+    );
+    this.syncSlotRenderOrder(slot);
+  }
+
+  releaseVisibleOccurrence(windowY = 0): void {
+    const occurrence = this.takeVisibleOccurrence(windowY);
+    if (this.#symbolPool) {
+      this.#symbolPool.release(occurrence.code, occurrence.symbol);
+    } else {
+      occurrence.symbol.destroy({ children: true });
+    }
+  }
+
   requestVisibleSymbolState(windowY: number, state: SymbolStateId): void {
     const slot = this.getVisibleSlot(windowY);
     if (slot.kind === "empty" || !slot.symbol) {
@@ -358,6 +445,27 @@ export class RenderReel extends Container {
     }
 
     return slot;
+  }
+
+  private setStaticVisibleSlot(
+    windowY: number,
+    code: number,
+    presentationValue: number | null,
+  ): void {
+    const currentCodes = this.#staticVisibleSymbols ?? this.getVisibleScene();
+    const currentValues =
+      this.#staticVisiblePresentationValues ??
+      this.getVisiblePresentationValues();
+    this.#staticVisibleSymbols = Object.freeze(
+      currentCodes.map((candidate, index) =>
+        index === windowY ? code : candidate,
+      ),
+    );
+    this.#staticVisiblePresentationValues = Object.freeze(
+      currentValues.map((candidate, index) =>
+        index === windowY ? presentationValue : candidate,
+      ),
+    );
   }
 
   private createSlots(): ReelSlot[] {

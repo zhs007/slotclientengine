@@ -35,10 +35,13 @@ describe("symbol value presentation manifest resources", () => {
       undefined,
     ]);
     expect(Object.isFrozen(presentation?.tiers)).toBe(true);
-    expect(presentation?.appearPlayback).toEqual({
-      mode: "animation",
-      animationName: "Start",
-      loop: false,
+    expect(parsed.symbols.CN.animations.appear).toEqual({
+      kind: "activeSpine",
+      playback: {
+        mode: "animation",
+        animationName: "Start",
+        loop: false,
+      },
     });
     expect(Object.isFrozen(presentation?.text)).toBe(true);
     expect(presentation?.text).toEqual({
@@ -186,7 +189,7 @@ describe("symbol value presentation manifest resources", () => {
   });
 
   it("rejects empty/reversed/finally bounded tiers and non-Spine fallback", () => {
-    for (const mutate of [
+    for (const [index, mutate] of [
       (copy: any) => (copy.symbols.CN.valuePresentation.tiers = []),
       (copy: any) =>
         (copy.symbols.CN.valuePresentation.tiers[1].maxExclusive = 9),
@@ -198,16 +201,22 @@ describe("symbol value presentation manifest resources", () => {
       (copy: any) => (copy.symbols.CN.valuePresentation.defaultValues = []),
       (copy: any) => (copy.symbols.CN.valuePresentation.defaultValues = [1, 1]),
       (copy: any) => (copy.symbols.CN.valuePresentation.defaultValues = [0, 1]),
+      (copy: any) => (copy.symbols.CN.animations.appear.playback.loop = true),
       (copy: any) =>
-        (copy.symbols.CN.valuePresentation.appearPlayback.loop = true),
-      (copy: any) => delete copy.symbols.CN.valuePresentation.appearPlayback,
+        (copy.symbols.CN.animations.appear = {
+          kind: "static",
+          durationSeconds: 1,
+        }),
       (copy: any) => (copy.symbols.CN.valuePresentation.text.type = "video"),
       (copy: any) =>
         (copy.symbols.CN.valuePresentation.text.prefix = "../escape-"),
-    ]) {
+    ].entries()) {
       const copy = structuredClone(manifest);
       mutate(copy);
-      expect(() => parseSymbolStateTextureManifest(copy)).toThrow();
+      expect(
+        () => parseSymbolStateTextureManifest(copy),
+        `mutation ${index} must fail`,
+      ).toThrow();
     }
   });
 });
@@ -219,13 +228,18 @@ function createGenericManifest(count: number) {
     symbols: {
       GOLD: {
         scale: 1,
+        animations: {
+          appear: {
+            kind: "activeSpine",
+            playback: {
+              mode: "animation",
+              animationName: "Start",
+              loop: false,
+            },
+          },
+        },
         valuePresentation: {
           defaultValues: [1, 10, 100],
-          appearPlayback: {
-            mode: "animation",
-            animationName: "Start",
-            loop: false,
-          },
           reelStates: {
             normal: { kind: "transparent", width: 200, height: 200 },
           },

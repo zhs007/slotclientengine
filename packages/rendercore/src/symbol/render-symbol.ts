@@ -16,6 +16,7 @@ import type {
   SymbolVisualLayer,
   RenderSymbolValueController,
 } from "./types.js";
+import type { SymbolManifestAnimationPlaybackSpec } from "./manifest.js";
 
 export class RenderSymbol extends VisualEntity<void> {
   readonly code: number;
@@ -36,6 +37,7 @@ export class RenderSymbol extends VisualEntity<void> {
   readonly #animationResolver: RenderSymbolOptions["animationResolver"];
   readonly #valueController: RenderSymbolValueController | null;
   readonly #landingAppearEnabled: boolean;
+  readonly #animationCapabilities: ReadonlySet<SymbolStateId>;
   #currentAni: SymbolAni;
   #lastAniKey: string;
   #defaultScaleX = 1;
@@ -71,6 +73,7 @@ export class RenderSymbol extends VisualEntity<void> {
     this.#stateMachine = new SymbolStateMachine(options.definition);
     this.#animationResolver = options.animationResolver;
     this.#landingAppearEnabled = options.landingAppearEnabled ?? false;
+    this.#animationCapabilities = new Set(options.animationCapabilities ?? []);
 
     this.stateSprite.anchor.set(0.5);
     this.stateSprite.visible = false;
@@ -131,6 +134,20 @@ export class RenderSymbol extends VisualEntity<void> {
     this.syncAniIfNeeded(before);
   }
 
+  hasAnimationCapability(state: SymbolStateId): boolean {
+    return this.#animationCapabilities.has(state);
+  }
+
+  createActiveSpineAnimation(
+    context: SymbolAnimationContext,
+    playback?: SymbolManifestAnimationPlaybackSpec,
+  ): SymbolAni | null {
+    return (
+      this.#valueController?.createActiveSpineAnimation(context, playback) ??
+      null
+    );
+  }
+
   setPresentationValue(value: number | null): void {
     this.assertNotDestroyed();
     const previous = this.#valueController?.getValue() ?? null;
@@ -149,18 +166,12 @@ export class RenderSymbol extends VisualEntity<void> {
   requestLandingAppear(): boolean {
     this.assertNotDestroyed();
     if (!this.#landingAppearEnabled) return false;
-    if (this.#valueController) {
-      return this.#valueController.requestLandingAppear();
-    }
     this.requestState("appear");
     return true;
   }
 
   isLandingAppearActive(): boolean {
     if (!this.#landingAppearEnabled) return false;
-    if (this.#valueController) {
-      return this.#valueController.isLandingAppearActive();
-    }
     return this.#stateMachine.getSnapshot().resolvedState === "appear";
   }
 
@@ -168,8 +179,6 @@ export class RenderSymbol extends VisualEntity<void> {
     assertValidDeltaSeconds(deltaSeconds);
     const before = this.createAniKey(this.#stateMachine.getSnapshot());
     const aniResult = this.#currentAni.update(deltaSeconds);
-    this.#valueController?.update(deltaSeconds);
-
     if (aniResult.loopCompleted) {
       this.#stateMachine.notifyLoopComplete();
     }
@@ -247,6 +256,8 @@ export class RenderSymbol extends VisualEntity<void> {
 
   private createCurrentAni(): SymbolAni {
     const context = this.createAnimationContext();
+    const active = this.#valueController?.createActiveSpineAnimation(context);
+    if (active) return active;
     const ani = this.#animationResolver(context);
     assertResolvedSymbolAni(ani, context.resolvedState);
     if (ani.playback !== context.state.playback) {
@@ -270,6 +281,13 @@ export class RenderSymbol extends VisualEntity<void> {
       stateTextures: this.stateTextures,
       requiredStateTextures: this.requiredStateTextures,
       root: this,
+      createActiveSpineAnimation: (
+        playback?: SymbolManifestAnimationPlaybackSpec,
+      ) =>
+        this.#valueController?.createActiveSpineAnimation(
+          this.createAnimationContextWithoutActiveFactory(),
+          playback,
+        ) ?? null,
       underlayLayer: this.underlayLayer,
       baseLayer: this.baseLayer,
       sprite: this.sprite,
@@ -281,6 +299,28 @@ export class RenderSymbol extends VisualEntity<void> {
 
   private createAniKey(snapshot: SymbolStateSnapshot): string {
     return `${snapshot.requestedState}->${snapshot.resolvedState}`;
+  }
+
+  private createAnimationContextWithoutActiveFactory(): SymbolAnimationContext {
+    const snapshot = this.#stateMachine.getSnapshot();
+    return Object.freeze({
+      code: this.code,
+      symbol: this.symbol,
+      pays: this.pays,
+      requestedState: snapshot.requestedState,
+      resolvedState: snapshot.resolvedState,
+      state: this.#stateMachine.getCurrentStateDefinition(),
+      texture: this.texture,
+      stateTextures: this.stateTextures,
+      requiredStateTextures: this.requiredStateTextures,
+      root: this,
+      underlayLayer: this.underlayLayer,
+      baseLayer: this.baseLayer,
+      sprite: this.sprite,
+      layers: this.layers,
+      stateSprite: this.stateSprite,
+      overlayLayer: this.overlayLayer,
+    });
   }
 
   private assertNotDestroyed(): void {

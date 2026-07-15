@@ -8,15 +8,16 @@ import type {
   SlotGameViewportSnapshot,
 } from "@slotclientengine/gameframeworks";
 import {
-  createSymbolWinCarousel,
-  createSymbolValuePresenter,
+  assertSymbolValueDisplayResource,
+  createSymbolCascadePlayer,
+  type CreateSymbolCascadePlayerOptions,
   type CreateSymbolWinCarouselOptions,
   type CreateSymbolValuePresenterOptions,
-  type PreparedSymbolValuePresentation,
-  type PreparedSymbolWinCarousel,
-  type SymbolAssetMap,
-  type SymbolValuePresenter,
   type SymbolWinCarousel,
+  type SymbolValuePresenter,
+  type PreparedSymbolCascade,
+  type SymbolAssetMap,
+  type SymbolCascadePlayer,
 } from "@slotclientengine/rendercore";
 import {
   createSpineBackgroundPlayer,
@@ -44,18 +45,19 @@ import {
   createGame002WinAmountPlayer,
 } from "./win-amount-config.js";
 import { formatServerUsdAmount } from "./money.js";
+import { GAME002_SYMBOL_WIN_CAROUSEL_OPTIONS } from "./win-symbol-carousel-config.js";
+import { GAME002_CN_VALUE_SYMBOL } from "./cn-value-sequence.js";
 import {
-  GAME002_SYMBOL_WIN_CAROUSEL_OPTIONS,
-  GAME002_WIN_COMPONENT_NAMES,
-  resolveGame002WinResultAmount,
-  validateGame002WinComponent,
-} from "./win-symbol-carousel-config.js";
+  createGame002CascadeSequence,
+  type Game002CascadeSequence,
+  type Game002WinRemoveStage,
+} from "./cascade-sequence.js";
 import {
-  createGame002CnPresentationValues,
-  createGame002CnValueItems,
-  GAME002_CN_VALUE_COMPONENT_NAME,
-  GAME002_CN_VALUE_SYMBOL,
-} from "./cn-value-sequence.js";
+  GAME002_CASCADE_MOTION,
+  GAME002_CASCADE_PRESENTATION,
+  canGame002CascadeDropSymbol,
+  canGame002CascadeRemoveSymbol,
+} from "./cascade-config.js";
 
 export type Game002TickerSnapshot = { readonly deltaMS: number };
 export type Game002TickerListener = (ticker: Game002TickerSnapshot) => void;
@@ -90,9 +92,14 @@ export interface Game002AdapterOptions {
   readonly createWinAmountPlayer?: (
     layout: ReturnType<typeof createGame002Layout>,
   ) => WinAmountAnimationPlayer;
+  readonly createSymbolCascadePlayer?: (
+    options: CreateSymbolCascadePlayerOptions,
+  ) => SymbolCascadePlayer;
+  /** @deprecated task 95 uses createSymbolCascadePlayer. */
   readonly createSymbolWinCarousel?: (
     options: CreateSymbolWinCarouselOptions,
   ) => SymbolWinCarousel;
+  /** @deprecated task 95 no longer creates a detached value presenter. */
   readonly createSymbolValuePresenter?: (
     options: CreateSymbolValuePresenterOptions,
   ) => SymbolValuePresenter;
@@ -100,14 +107,18 @@ export interface Game002AdapterOptions {
 }
 
 interface PendingAnimation {
-  phase: "spinning" | "win-sequence";
-  readonly targetScene: ReturnType<typeof validateGame002Scene>;
+  phase:
+    | "initial-spin"
+    | "step-win-remove"
+    | "cascade-fall"
+    | "finalizing"
+    | "win-amount";
+  readonly sequence: Game002CascadeSequence;
+  cascadeIndex: number;
+  activeWinStage: Game002WinRemoveStage | null;
+  preparedCascade: PreparedSymbolCascade | null;
   readonly betAmountRaw: number;
   readonly winAmountRaw: number;
-  readonly winAmountExpected: boolean;
-  readonly preparedWinCarousel: PreparedSymbolWinCarousel;
-  readonly preparedCnValues: PreparedSymbolValuePresentation;
-  winSequenceComplete: boolean;
   winAmountPlaybackComplete: boolean;
   resolve(): void;
   reject(error: Error): void;
@@ -130,23 +141,17 @@ class Game002PixiAdapter implements SlotGameAdapter {
   readonly #createWinAmountPlayer: (
     layout: ReturnType<typeof createGame002Layout>,
   ) => WinAmountAnimationPlayer;
-  readonly #createSymbolWinCarousel: (
-    options: CreateSymbolWinCarouselOptions,
-  ) => SymbolWinCarousel;
-  readonly #createSymbolValuePresenter: (
-    options: CreateSymbolValuePresenterOptions,
-  ) => SymbolValuePresenter;
+  readonly #createSymbolCascadePlayer: (
+    options: CreateSymbolCascadePlayerOptions,
+  ) => SymbolCascadePlayer;
   readonly #reportFatalError: (error: Error) => void;
   #app: Game002PixiApplication | null = null;
   #worldLayer: Container | null = null;
   #backgroundPlayer: SpineBackgroundPlayer | null = null;
   #runtime: Game002ReelRuntime | null = null;
   #winAmountPlayer: WinAmountAnimationPlayer | null = null;
-  #symbolWinCarousel: SymbolWinCarousel | null = null;
-  #symbolValuePresenter: SymbolValuePresenter | null = null;
+  #symbolCascadePlayer: SymbolCascadePlayer | null = null;
   #pendingAnimation: PendingAnimation | null = null;
-  #preparingSpin = false;
-  #lifecycleVersion = 0;
   #unsubscribeViewport: (() => void) | null = null;
   #disposeWinAmountAdvanceListener: (() => void) | null = null;
 
@@ -173,6 +178,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
             missingAssetLabel: skin.label,
             symbolScales: skin.symbolScales,
             symbolRenderPriorities: skin.symbolRenderPriorities,
+            symbolAnimationCapabilities: skin.symbolAnimationCapabilities,
             animationResolver: skin.symbolAnimationResolver,
             gridLayout: skin.gridLayout,
             focusRegion: skin.focusRegion,
@@ -180,10 +186,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
         }));
     this.#createWinAmountPlayer =
       options.createWinAmountPlayer ?? createGame002WinAmountPlayer;
-    this.#createSymbolWinCarousel =
-      options.createSymbolWinCarousel ?? createSymbolWinCarousel;
-    this.#createSymbolValuePresenter =
-      options.createSymbolValuePresenter ?? createSymbolValuePresenter;
+    this.#createSymbolCascadePlayer =
+      options.createSymbolCascadePlayer ?? createSymbolCascadePlayer;
     this.#reportFatalError = options.reportFatalError ?? reportFatalError;
   }
 
@@ -195,8 +199,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     const app = this.#createApplication();
     let backgroundPlayer: SpineBackgroundPlayer | null = null;
     let winAmountPlayer: WinAmountAnimationPlayer | null = null;
-    let symbolWinCarousel: SymbolWinCarousel | null = null;
-    let symbolValuePresenter: SymbolValuePresenter | null = null;
+    let symbolCascadePlayer: SymbolCascadePlayer | null = null;
     let tickerAdded = false;
     try {
       const initialViewport = context.getViewport();
@@ -220,25 +223,22 @@ class Game002PixiAdapter implements SlotGameAdapter {
       ]);
       const runtime = this.#createRuntime(symbolTextures);
       winAmountPlayer = this.#createWinAmountPlayer(layout);
-      symbolWinCarousel = this.#createSymbolWinCarousel({
+      symbolCascadePlayer = this.#createSymbolCascadePlayer({
         target: runtime,
-        resolveAmount: resolveGame002WinResultAmount,
-        validateComponent: validateGame002WinComponent,
         formatAmount: formatServerUsdAmount,
-        ...GAME002_SYMBOL_WIN_CAROUSEL_OPTIONS,
+        amountText: GAME002_SYMBOL_WIN_CAROUSEL_OPTIONS.amountText,
+        emphasisSeconds: GAME002_CASCADE_PRESENTATION.emphasisSeconds,
+        nonWinningDimmingAlpha:
+          GAME002_CASCADE_PRESENTATION.nonWinningDimmingAlpha,
       });
-      symbolValuePresenter = this.#createSymbolValuePresenter({
-        target: runtime,
-        resources: this.#skin.symbolValuePresentationResources,
-      });
-      symbolWinCarousel.container.position.set(
+      symbolCascadePlayer.container.position.set(
         runtime.layerLayout.x,
         runtime.layerLayout.y,
       );
       const worldLayer = new Container();
       worldLayer.addChild(backgroundPlayer.container);
       worldLayer.addChild(runtime.mainReelsLayer);
-      worldLayer.addChild(symbolWinCarousel.container);
+      worldLayer.addChild(symbolCascadePlayer.container);
       worldLayer.addChild(winAmountPlayer.container);
       app.stage.addChild(worldLayer);
 
@@ -247,8 +247,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       this.#backgroundPlayer = backgroundPlayer;
       this.#runtime = runtime;
       this.#winAmountPlayer = winAmountPlayer;
-      this.#symbolWinCarousel = symbolWinCarousel;
-      this.#symbolValuePresenter = symbolValuePresenter;
+      this.#symbolCascadePlayer = symbolCascadePlayer;
       app.ticker.add(this.#onTick);
       tickerAdded = true;
       const requestWinAmountAdvance = () => {
@@ -272,8 +271,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       }
       app.ticker.stop();
       winAmountPlayer?.destroy();
-      symbolWinCarousel?.destroy();
-      symbolValuePresenter?.destroy();
+      symbolCascadePlayer?.destroy();
       backgroundPlayer?.destroy();
       app.canvas.remove();
       app.destroy();
@@ -282,15 +280,14 @@ class Game002PixiAdapter implements SlotGameAdapter {
       this.#backgroundPlayer = null;
       this.#runtime = null;
       this.#winAmountPlayer = null;
-      this.#symbolWinCarousel = null;
-      this.#symbolValuePresenter = null;
+      this.#symbolCascadePlayer = null;
       throw error;
     }
   }
 
   applyInitialState(state: SlotGameInitialState): void {
     const runtime = this.#requireRuntime();
-    this.#requireSymbolValuePresenter().clear();
+    this.#requireSymbolCascadePlayer().clear();
     if (state.defaultScene === undefined) {
       return;
     }
@@ -302,19 +299,9 @@ class Game002PixiAdapter implements SlotGameAdapter {
 
   playSpin(logic: GameLogic): Promise<void> {
     const runtime = this.#requireRuntime();
-    if (this.#pendingAnimation || this.#preparingSpin) {
+    if (this.#pendingAnimation) {
       throw new Error("game002 adapter animation is already in progress.");
     }
-    const targetScene = validateGame002Scene(
-      logic.getStep(0).getScene(0),
-      "spin main scene",
-    );
-    const preparedWinCarousel = this.#requireSymbolWinCarousel().prepare({
-      logic,
-      stepIndex: 0,
-      scene: targetScene,
-      componentNames: GAME002_WIN_COMPONENT_NAMES,
-    });
     const betAmountRaw = logic.getBet() * logic.getLines();
     const winAmountRaw = logic.getTotalWin();
     assertValidWinAmountInput(betAmountRaw, winAmountRaw);
@@ -324,60 +311,40 @@ class Game002PixiAdapter implements SlotGameAdapter {
     if (cnSymbolCode === undefined) {
       throw new Error("game002 game config is missing CN symbol code.");
     }
-    const cnValueItems = createGame002CnValueItems({
+    const sequence = createGame002CascadeSequence({
       logic,
-      targetScene,
       cnSymbolCode,
-      componentName: GAME002_CN_VALUE_COMPONENT_NAME,
+      canRemoveSymbol: ({ code }) =>
+        canGame002CascadeRemoveSymbol(
+          resolveGame002CascadeSymbol(runtime, code),
+        ),
+      canDropSymbol: ({ code }) =>
+        canGame002CascadeDropSymbol(resolveGame002CascadeSymbol(runtime, code)),
     });
-    const cnTargetPresentationValues =
-      cnValueItems.length === 0
-        ? undefined
-        : createGame002CnPresentationValues({
-            targetScene,
-            items: cnValueItems,
-          });
-    this.#preparingSpin = true;
-    const lifecycleVersion = this.#lifecycleVersion;
-    return this.#requireSymbolValuePresenter()
-      .prepare(cnValueItems)
-      .then(
-        (preparedCnValues) => {
-          if (lifecycleVersion !== this.#lifecycleVersion || !this.#runtime) {
-            throw new Error(
-              "game002 adapter was destroyed during spin prepare.",
-            );
-          }
-          this.#preparingSpin = false;
-          this.#requireSymbolValuePresenter().clear();
-          this.#requireSymbolWinCarousel().clear();
-          this.#requireWinAmountPlayer().dismissImmediately();
-          runtime.spinToScene(
-            targetScene,
-            "spin main scene",
-            cnTargetPresentationValues,
-          );
-          return new Promise<void>((resolve, reject) => {
-            this.#pendingAnimation = {
-              phase: "spinning",
-              targetScene,
-              betAmountRaw,
-              winAmountRaw,
-              winAmountExpected: winAmountRaw > 0,
-              preparedWinCarousel,
-              preparedCnValues,
-              winSequenceComplete: preparedWinCarousel.groupCount === 0,
-              winAmountPlaybackComplete: winAmountRaw <= 0,
-              resolve,
-              reject,
-            };
-          });
-        },
-        (error: unknown) => {
-          this.#preparingSpin = false;
-          throw error;
-        },
-      );
+    assertCascadeResources(sequence, runtime, this.#skin);
+    this.#requireSymbolCascadePlayer().clear();
+    this.#requireWinAmountPlayer().dismissImmediately();
+    runtime.spinToScene(
+      sequence.initial.spinScene,
+      "game002 cascade initial spin scene",
+      sequence.initial.usesServerValues
+        ? sequence.initial.spinValues
+        : undefined,
+    );
+    return new Promise<void>((resolve, reject) => {
+      this.#pendingAnimation = {
+        phase: "initial-spin",
+        sequence,
+        cascadeIndex: -1,
+        activeWinStage: null,
+        preparedCascade: null,
+        betAmountRaw,
+        winAmountRaw,
+        winAmountPlaybackComplete: winAmountRaw <= 0,
+        resolve,
+        reject,
+      };
+    });
   }
 
   setFrameworkState(_state: SlotGameStateSnapshot): void {
@@ -385,8 +352,6 @@ class Game002PixiAdapter implements SlotGameAdapter {
   }
 
   destroy(): void {
-    this.#lifecycleVersion += 1;
-    this.#preparingSpin = false;
     this.#rejectPending(new Error("game002 adapter was destroyed."));
     this.#unsubscribeViewport?.();
     this.#unsubscribeViewport = null;
@@ -395,8 +360,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     this.#app?.ticker.remove(this.#onTick);
     this.#app?.ticker.stop();
     this.#winAmountPlayer?.destroy();
-    this.#symbolWinCarousel?.destroy();
-    this.#symbolValuePresenter?.destroy();
+    this.#symbolCascadePlayer?.destroy();
     this.#backgroundPlayer?.destroy();
     this.#app?.canvas.remove();
     this.#app?.destroy();
@@ -405,8 +369,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     this.#backgroundPlayer = null;
     this.#runtime = null;
     this.#winAmountPlayer = null;
-    this.#symbolWinCarousel = null;
-    this.#symbolValuePresenter = null;
+    this.#symbolCascadePlayer = null;
   }
 
   readonly #onTick: Game002TickerListener = (ticker) => {
@@ -417,69 +380,58 @@ class Game002PixiAdapter implements SlotGameAdapter {
     try {
       const deltaSeconds = normalizeTickerDeltaSeconds(ticker);
       this.#backgroundPlayer.update(deltaSeconds);
-      this.#symbolValuePresenter?.update(deltaSeconds);
       const pending = this.#pendingAnimation;
       if (!pending) {
         if (this.#winAmountPlayer?.isPlaying()) {
           this.#winAmountPlayer.update(deltaSeconds);
         }
-        const carousel = this.#symbolWinCarousel;
-        const carouselPhase = carousel?.getSnapshot().phase ?? "idle";
-        if (carousel && carouselPhase === "playing") {
-          carousel.update(deltaSeconds);
+        this.#runtime.update(deltaSeconds);
+        return;
+      }
+      if (pending.phase === "initial-spin") {
+        const result = this.#runtime.update(deltaSeconds);
+        if (!result.completed) return;
+        assertGame002ReelVisualMatchesTarget(
+          this.#runtime.getVisualSnapshot(),
+          pending.sequence.initial.spinScene,
+          "completed game002 cascade initial spin",
+        );
+        if (pending.sequence.initial.winStage) {
+          this.#startWinStage(pending, pending.sequence.initial.winStage);
         } else {
-          this.#runtime.update(deltaSeconds);
-          if (carousel && carouselPhase === "cycle-pause") {
-            carousel.update(deltaSeconds);
-          }
+          this.#startCascadeStage(pending, 0);
         }
         return;
       }
-      let reelsUpdated = false;
-      if (pending.phase === "spinning") {
-        const reelResult = this.#runtime.update(deltaSeconds);
-        reelsUpdated = true;
-        if (!reelResult.completed) {
-          return;
-        }
+      if (pending.phase === "step-win-remove") {
+        const result = this.#requireSymbolCascadePlayer().update(deltaSeconds);
+        if (!result.completed) return;
+        this.#startCascadeStage(pending, pending.cascadeIndex + 1);
+        return;
+      }
+      if (pending.phase === "cascade-fall") {
+        const result = this.#runtime.update(deltaSeconds);
+        if (!result.completed) return;
+        const stage = pending.sequence.cascades[pending.cascadeIndex];
+        if (!stage) throw new Error("game002 cascade fall stage is missing.");
         assertGame002ReelVisualMatchesTarget(
           this.#runtime.getVisualSnapshot(),
-          pending.targetScene,
-          "completed game002 adapter spin",
+          stage.refillScene,
+          `completed game002 cascade step[${stage.stepIndex}] unified fall`,
         );
-        this.#requireSymbolValuePresenter().discard(pending.preparedCnValues);
-        pending.phase = "win-sequence";
-        if (!pending.winSequenceComplete) {
-          this.#requireSymbolWinCarousel().start(pending.preparedWinCarousel);
+        if (stage.winStage) {
+          this.#startWinStage(pending, stage.winStage);
+        } else {
+          this.#startCascadeStage(pending, pending.cascadeIndex + 1);
         }
-        if (pending.winAmountExpected) {
-          this.#requireWinAmountPlayer().start({
-            betAmountRaw: pending.betAmountRaw,
-            winAmountRaw: pending.winAmountRaw,
-          });
-        }
+        return;
       }
-      if (!pending.winSequenceComplete) {
-        const result = this.#requireSymbolWinCarousel().update(
-          reelsUpdated ? 0 : deltaSeconds,
-        );
-        pending.winSequenceComplete = result.firstCycleComplete;
-      } else if (!reelsUpdated) {
-        this.#runtime.update(deltaSeconds);
-      }
-      if (pending.winAmountExpected && !pending.winAmountPlaybackComplete) {
+      if (pending.phase === "win-amount") {
         const result = this.#requireWinAmountPlayer().update(deltaSeconds);
         pending.winAmountPlaybackComplete = !isWinAmountBlockingSpin(
           result.phase,
         );
-      }
-      if (
-        pending.phase === "win-sequence" &&
-        pending.winSequenceComplete &&
-        pending.winAmountPlaybackComplete
-      ) {
-        this.#pendingAnimation = null;
-        pending.resolve();
+        if (pending.winAmountPlaybackComplete) this.#resolvePending(pending);
       }
     } catch (error) {
       this.#app?.ticker.stop();
@@ -491,6 +443,70 @@ class Game002PixiAdapter implements SlotGameAdapter {
       }
     }
   };
+
+  #startWinStage(
+    pending: PendingAnimation,
+    stage: Game002WinRemoveStage,
+  ): void {
+    const player = this.#requireSymbolCascadePlayer();
+    player.clear();
+    const prepared = player.prepare(stage.groups);
+    pending.activeWinStage = stage;
+    pending.preparedCascade = prepared;
+    pending.phase = "step-win-remove";
+    player.start(prepared);
+  }
+
+  #startCascadeStage(pending: PendingAnimation, index: number): void {
+    pending.activeWinStage = null;
+    pending.preparedCascade = null;
+    if (index >= pending.sequence.cascades.length) {
+      this.#finalizeSpin(pending);
+      return;
+    }
+    const stage = pending.sequence.cascades[index];
+    pending.cascadeIndex = index;
+    const plan = this.#requireRuntime().createCascadeDropPlan({
+      sourceScene: stage.removedSourceScene,
+      sourceValues: stage.removedSourceValues,
+      settledScene: stage.dropdownScene,
+      settledValues: stage.dropdownValues,
+      targetScene: stage.refillScene,
+      targetValues: stage.refillValues,
+      refillPositions: stage.refillPositions,
+      canDropOccurrence: ({ code }) =>
+        canGame002CascadeDropSymbol(
+          resolveGame002CascadeSymbol(this.#requireRuntime(), code),
+        ),
+      motion: GAME002_CASCADE_MOTION,
+    });
+    pending.phase = "cascade-fall";
+    this.#requireRuntime().startCascadeDrop(plan);
+    if (plan.totalSeconds === 0) {
+      if (stage.winStage) this.#startWinStage(pending, stage.winStage);
+      else this.#startCascadeStage(pending, pending.cascadeIndex + 1);
+    }
+  }
+
+  #finalizeSpin(pending: PendingAnimation): void {
+    pending.phase = "finalizing";
+    if (pending.winAmountRaw <= 0) {
+      pending.winAmountPlaybackComplete = true;
+      this.#resolvePending(pending);
+      return;
+    }
+    this.#requireWinAmountPlayer().start({
+      betAmountRaw: pending.betAmountRaw,
+      winAmountRaw: pending.winAmountRaw,
+    });
+    pending.phase = "win-amount";
+  }
+
+  #resolvePending(pending: PendingAnimation): void {
+    if (this.#pendingAnimation !== pending) return;
+    this.#pendingAnimation = null;
+    pending.resolve();
+  }
 
   #requireRuntime(): Game002ReelRuntime {
     if (!this.#runtime) {
@@ -506,18 +522,11 @@ class Game002PixiAdapter implements SlotGameAdapter {
     return this.#winAmountPlayer;
   }
 
-  #requireSymbolWinCarousel(): SymbolWinCarousel {
-    if (!this.#symbolWinCarousel) {
+  #requireSymbolCascadePlayer(): SymbolCascadePlayer {
+    if (!this.#symbolCascadePlayer) {
       throw new Error("game002 adapter is not mounted.");
     }
-    return this.#symbolWinCarousel;
-  }
-
-  #requireSymbolValuePresenter(): SymbolValuePresenter {
-    if (!this.#symbolValuePresenter) {
-      throw new Error("game002 adapter is not mounted.");
-    }
-    return this.#symbolValuePresenter;
+    return this.#symbolCascadePlayer;
   }
 
   #applyViewport(viewport: SlotGameViewportSnapshot): void {
@@ -534,8 +543,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
       layout.viewportSize.height,
     );
     this.#worldLayer.position.set(layout.worldOffset.x, layout.worldOffset.y);
-    if (this.#runtime && this.#symbolWinCarousel) {
-      this.#symbolWinCarousel.container.position.set(
+    if (this.#runtime && this.#symbolCascadePlayer) {
+      this.#symbolCascadePlayer.container.position.set(
         this.#runtime.layerLayout.x,
         this.#runtime.layerLayout.y,
       );
@@ -550,6 +559,75 @@ class Game002PixiAdapter implements SlotGameAdapter {
     }
     this.#pendingAnimation = null;
     pending.reject(error);
+  }
+}
+
+function assertCascadeResources(
+  sequence: Game002CascadeSequence,
+  runtime: Game002ReelRuntime,
+  skin: Game002SkinConfig,
+): void {
+  const checkWinStage = (
+    stage: Game002WinRemoveStage | undefined,
+    scene: readonly (readonly number[])[],
+  ) => {
+    if (!stage) return;
+    for (const [groupIndex, group] of stage.groups.entries()) {
+      for (const position of group.positions) {
+        const code = scene[position.x]?.[position.y];
+        const symbol =
+          code === undefined
+            ? undefined
+            : runtime.gameConfig.getPaytableEntry(code)?.symbol;
+        if (!symbol) {
+          throw new Error(
+            `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) has no symbol.`,
+          );
+        }
+        if (!skin.symbolAnimationCapabilities[symbol]?.includes("win")) {
+          throw new Error(
+            `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) symbol ${symbol} has no win animation.`,
+          );
+        }
+      }
+      for (const position of group.removePositions) {
+        const code = scene[position.x]?.[position.y];
+        const symbol =
+          code === undefined
+            ? undefined
+            : runtime.gameConfig.getPaytableEntry(code)?.symbol;
+        if (
+          !symbol ||
+          !skin.symbolAnimationCapabilities[symbol]?.includes("remove")
+        ) {
+          throw new Error(
+            `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) symbol ${symbol ?? String(code)} has no remove animation.`,
+          );
+        }
+      }
+    }
+  };
+  checkWinStage(sequence.initial.winStage, sequence.initial.spinScene);
+  for (const stage of sequence.cascades) {
+    checkWinStage(stage.winStage, stage.refillScene);
+  }
+
+  const resource =
+    skin.symbolValuePresentationResources[GAME002_CN_VALUE_SYMBOL];
+  if (!resource)
+    throw new Error("game002 CN valuePresentation resource is missing.");
+  const matrices = [
+    sequence.initial.spinValues,
+    ...sequence.cascades.map((stage) => stage.refillValues),
+  ];
+  for (const matrix of matrices) {
+    for (const column of matrix) {
+      for (const value of column) {
+        if (value !== null) {
+          assertSymbolValueDisplayResource({ value, resource });
+        }
+      }
+    }
   }
 }
 
@@ -571,6 +649,17 @@ function assertValidWinAmountInput(
   if (!Number.isFinite(winAmountRaw) || winAmountRaw < 0) {
     throw new Error("game002 win amount must be a finite non-negative number.");
   }
+}
+
+function resolveGame002CascadeSymbol(
+  runtime: Game002ReelRuntime,
+  code: number,
+): string {
+  const symbol = runtime.gameConfig.getPaytableEntry(code)?.symbol;
+  if (!symbol) {
+    throw new Error(`game002 cascade symbol code ${code} is not in paytable.`);
+  }
+  return symbol;
 }
 
 function normalizeTickerDeltaSeconds(ticker: Game002TickerSnapshot): number {

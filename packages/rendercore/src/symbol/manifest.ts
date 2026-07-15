@@ -70,6 +70,11 @@ export interface SymbolManifestSpineAnimationSpec {
   readonly transform?: SymbolManifestSpineAnimationTransform;
 }
 
+export interface SymbolManifestActiveSpineAnimationSpec {
+  readonly kind: "activeSpine";
+  readonly playback: SymbolManifestAnimationPlaybackSpec;
+}
+
 export interface SymbolValuePresentationTextBaseSpec {
   readonly slot: string;
   readonly x: number;
@@ -107,7 +112,6 @@ export interface SymbolValuePresentationTierSpec {
 
 export interface SymbolValuePresentationSpec {
   readonly defaultValues: readonly number[];
-  readonly appearPlayback: SymbolManifestAnimationPlaybackSpec;
   readonly reelStates: SymbolValuePresentationReelStatesSpec;
   readonly tiers: readonly SymbolValuePresentationTierSpec[];
   readonly text: SymbolValuePresentationTextSpec;
@@ -117,7 +121,8 @@ export type SymbolManifestAnimationSpec =
   | SymbolManifestBuiltinAnimationSpec
   | SymbolManifestStaticAnimationSpec
   | SymbolManifestVniAnimationSpec
-  | SymbolManifestSpineAnimationSpec;
+  | SymbolManifestSpineAnimationSpec
+  | SymbolManifestActiveSpineAnimationSpec;
 
 export type SymbolManifestNormal =
   | string
@@ -178,6 +183,11 @@ export interface CreateSymbolScaleMapFromManifestOptions extends ParseSymbolStat
 }
 
 export interface CreateSymbolRenderPriorityMapFromManifestOptions extends ParseSymbolStateTextureManifestOptions {
+  readonly manifest: unknown;
+  readonly displaySymbols?: readonly string[];
+}
+
+export interface CreateSymbolAnimationCapabilityMapFromManifestOptions extends ParseSymbolStateTextureManifestOptions {
   readonly manifest: unknown;
   readonly displaySymbols?: readonly string[];
 }
@@ -354,6 +364,31 @@ export function parseSymbolStateTextureManifest(
         );
       }
     }
+    const animations = parseManifestAnimations(
+      rawSymbolRecord.animations,
+      symbol,
+      animationStateSet,
+    );
+    if (
+      Object.values(animations).some(
+        (animation) => animation?.kind === "activeSpine",
+      ) &&
+      !valuePresentation
+    ) {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" activeSpine animations require valuePresentation.`,
+      );
+    }
+    if (
+      valuePresentation &&
+      Object.values(animations).some(
+        (animation) => animation?.kind !== "activeSpine",
+      )
+    ) {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" valuePresentation animations must use activeSpine.`,
+      );
+    }
     symbols[symbol] = Object.freeze({
       normal:
         valuePresentation?.reelStates.normal ??
@@ -365,11 +400,7 @@ export function parseSymbolStateTextureManifest(
         rawSymbolRecord.renderPriority,
         symbol,
       ),
-      animations: parseManifestAnimations(
-        rawSymbolRecord.animations,
-        symbol,
-        animationStateSet,
-      ),
+      animations,
       ...(valuePresentation !== undefined ? { valuePresentation } : {}),
     });
   }
@@ -389,7 +420,6 @@ function parseValuePresentation(
   const record = assertRecord(value, `symbol "${symbol}" valuePresentation`);
   assertOnlyKnownKeys(record, `symbol "${symbol}" valuePresentation`, [
     "defaultValues",
-    "appearPlayback",
     "reelStates",
     "tiers",
     "text",
@@ -419,16 +449,6 @@ function parseValuePresentation(
   if (new Set(defaultValues).size !== defaultValues.length) {
     throw new SymbolAssetError(
       `Symbol "${symbol}" valuePresentation.defaultValues must not contain duplicates.`,
-    );
-  }
-  const appearPlayback = parseAnimationPlayback(
-    record.appearPlayback,
-    symbol,
-    "valuePresentation.appearPlayback",
-  );
-  if (appearPlayback.mode !== "animation" || appearPlayback.loop !== false) {
-    throw new SymbolAssetError(
-      `Symbol "${symbol}" valuePresentation.appearPlayback must be a named non-looping animation.`,
     );
   }
   const rawReelStates = assertRecord(
@@ -571,7 +591,6 @@ function parseValuePresentation(
   }
   return Object.freeze({
     defaultValues,
-    appearPlayback,
     reelStates: Object.freeze({
       normal,
       states: Object.freeze(reelStateTextures),
@@ -718,6 +737,27 @@ export function createSymbolRenderPriorityMapFromManifest(
   ) satisfies ReelSymbolRenderPriorityMap;
 }
 
+export function createSymbolAnimationCapabilityMapFromManifest(
+  options: CreateSymbolAnimationCapabilityMapFromManifestOptions,
+): Readonly<Record<string, readonly SymbolStateId[]>> {
+  const manifest = parseSymbolStateTextureManifest(options.manifest, options);
+  const displaySymbols =
+    options.displaySymbols ?? Object.keys(manifest.symbols);
+  return Object.freeze(
+    Object.fromEntries(
+      displaySymbols.map((symbol) => {
+        const entry = manifest.symbols[symbol];
+        if (!entry) {
+          throw new SymbolAssetError(
+            `Symbol state texture manifest is missing "${symbol}".`,
+          );
+        }
+        return [symbol, Object.freeze(Object.keys(entry.animations))];
+      }),
+    ),
+  );
+}
+
 export function createSymbolLandingAppearSymbolsFromManifest(
   options: CreateSymbolLandingAppearSymbolsFromManifestOptions,
 ): readonly string[] {
@@ -733,10 +773,7 @@ export function createSymbolLandingAppearSymbolsFromManifest(
           `Symbol state texture manifest is missing "${symbol}".`,
         );
       }
-      return (
-        manifestSymbol.animations.appear !== undefined ||
-        manifestSymbol.valuePresentation?.appearPlayback !== undefined
-      );
+      return manifestSymbol.animations.appear !== undefined;
     }),
   );
 }
@@ -1208,6 +1245,25 @@ function parseManifestAnimationSpec(
       ),
     });
   }
+  if (record.kind === "activeSpine") {
+    assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} animation`, [
+      "kind",
+      "playback",
+    ]);
+    const playback = parseAnimationPlayback(record.playback, symbol, state);
+    const expectedPlayback = getDefaultSymbolPlaybackKind(state);
+    if (expectedPlayback === "once" && playback.loop) {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" ${state} activeSpine playback.loop must be false for once state "${state}".`,
+      );
+    }
+    if (expectedPlayback === "loop" && !playback.loop) {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" ${state} activeSpine playback.loop must be true for loop state "${state}".`,
+      );
+    }
+    return Object.freeze({ kind: "activeSpine", playback });
+  }
   if (record.kind === "spine") {
     assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} animation`, [
       "kind",
@@ -1254,7 +1310,7 @@ function parseManifestAnimationSpec(
   }
   if (record.kind !== "vni") {
     throw new SymbolAssetError(
-      `Symbol "${symbol}" ${state} animation kind must be "builtin", "static", "vni" or "spine".`,
+      `Symbol "${symbol}" ${state} animation kind must be "builtin", "static", "vni", "spine" or "activeSpine".`,
     );
   }
   assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} animation`, [
@@ -1626,9 +1682,10 @@ export function getSymbolPlaybackKindForManifestAnimation(
     spec.kind === "builtin" ||
     spec.kind === "static" ||
     spec.kind === "vni" ||
-    spec.kind === "spine"
+    spec.kind === "spine" ||
+    spec.kind === "activeSpine"
   ) {
-    return "once";
+    return spec.kind === "activeSpine" && spec.playback.loop ? "loop" : "once";
   }
   throw new SymbolAssetError(`Unsupported symbol manifest animation kind.`);
 }

@@ -205,11 +205,7 @@ function createResources(): SymbolValuePresentationResourceMap {
     GOLD: Object.freeze({
       symbol: "GOLD",
       defaultValues: Object.freeze([1, 10, 100]),
-      appearPlayback: Object.freeze({
-        mode: "animation" as const,
-        animationName: "Start",
-        loop: false,
-      }),
+      activeSpineAnimations: Object.freeze({}),
       tiers: Object.freeze([
         createTier("./bronze.json", 10),
         createTier("./ruby.json", 100),

@@ -31,6 +31,7 @@ describe("game002 CN otherScene value sequence", () => {
         targetScene: logic.getStep(0).getScene(0),
         cnSymbolCode: 8,
         componentName: GAME002_CN_VALUE_COMPONENT_NAME,
+        stepIndex: 0,
       }),
     ).toEqual([]);
   });
@@ -88,6 +89,7 @@ describe("game002 CN otherScene value sequence", () => {
         targetScene: GAME002_CN_VALUE_SCENE,
         cnSymbolCode: 8,
         componentName: "other" as "bg-gencoins",
+        stepIndex: 0,
       }),
     ).toThrow(/componentName/);
   });
@@ -125,6 +127,7 @@ function createItems(
     targetScene: logic.getStep(0).getScene(0),
     cnSymbolCode,
     componentName: GAME002_CN_VALUE_COMPONENT_NAME,
+    stepIndex: 0,
   });
 }
 

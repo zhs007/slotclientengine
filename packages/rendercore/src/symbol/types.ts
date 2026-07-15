@@ -4,6 +4,7 @@ import type {
   LogicGameConfig,
 } from "@slotclientengine/logiccore";
 import type { RenderSymbol } from "./render-symbol.js";
+import type { SymbolManifestAnimationPlaybackSpec } from "./manifest.js";
 
 export type SymbolStateId = string;
 export type SymbolStatePhase = "stable" | "once";
@@ -90,6 +91,9 @@ export interface SymbolAnimationContext {
   readonly stateTextures: Readonly<Partial<Record<SymbolStateId, Texture>>>;
   readonly requiredStateTextures: readonly SymbolStateId[];
   readonly root: Container;
+  readonly createActiveSpineAnimation?: (
+    playback?: SymbolManifestAnimationPlaybackSpec,
+  ) => SymbolAni | null;
   readonly underlayLayer: Container;
   readonly baseLayer: Container;
   readonly sprite: Sprite;
@@ -114,9 +118,10 @@ export interface RenderSymbolUpdateResult {
 export interface RenderSymbolValueController {
   setValue(value: number | null): void;
   getValue(): number | null;
-  requestLandingAppear(): boolean;
-  isLandingAppearActive(): boolean;
-  update(deltaSeconds: number): void;
+  createActiveSpineAnimation(
+    context: SymbolAnimationContext,
+    playback?: SymbolManifestAnimationPlaybackSpec,
+  ): SymbolAni | null;
   resetForPoolRelease(): void;
   destroy(): void;
 }
@@ -129,6 +134,7 @@ export interface RenderSymbolOptions {
   readonly animationResolver: SymbolAnimationResolver;
   readonly renderPriority?: number;
   readonly landingAppearEnabled?: boolean;
+  readonly animationCapabilities?: readonly SymbolStateId[];
   readonly valueControllerFactory?: (
     root: RenderSymbol,
   ) => RenderSymbolValueController;
@@ -199,6 +205,9 @@ export interface CreateSymbolCatalogOptions {
   readonly statePreset?: SymbolStatePreset;
   readonly animationResolver?: SymbolAnimationResolver;
   readonly texturePolicy?: SymbolTexturePolicy;
+  readonly symbolAnimationCapabilities?: Readonly<
+    Record<string, readonly SymbolStateId[]>
+  >;
 }
 
 export interface CreateStandaloneSymbolCatalogOptions {
@@ -209,6 +218,9 @@ export interface CreateStandaloneSymbolCatalogOptions {
   readonly statePreset?: SymbolStatePreset;
   readonly animationResolver?: SymbolAnimationResolver;
   readonly texturePolicy?: SymbolTexturePolicy;
+  readonly symbolAnimationCapabilities?: Readonly<
+    Record<string, readonly SymbolStateId[]>
+  >;
 }
 
 export interface CreateCatalogRenderSymbolOptions {
@@ -216,6 +228,9 @@ export interface CreateCatalogRenderSymbolOptions {
   readonly stateTextures?: Readonly<Partial<Record<SymbolStateId, Texture>>>;
   readonly animationResolver?: SymbolAnimationResolver;
   readonly renderPriority?: number;
+  readonly valueControllerFactory?: (
+    root: RenderSymbol,
+  ) => RenderSymbolValueController;
 }
 
 export interface SymbolNamedAnimationSpec {

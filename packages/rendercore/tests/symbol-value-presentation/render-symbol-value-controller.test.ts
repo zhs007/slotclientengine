@@ -47,8 +47,31 @@ describe("render symbol value controller", () => {
       loop: true,
     });
 
+    symbol.requestState("win");
+    expect(players[0].plays.at(-1)).toEqual({
+      animationName: "Win",
+      loop: false,
+    });
+    players[0].completeNextUpdate = true;
     symbol.update(0.1);
-    expect(players[0].updates).toEqual([0.1, 0.1]);
+    symbol.requestState("remove");
+    expect(players[0].plays.at(-1)).toEqual({
+      animationName: "End",
+      loop: false,
+    });
+    players[0].completeNextUpdate = true;
+    symbol.update(0.1);
+    symbol.requestState("dropdown");
+    expect(players[0].plays.at(-1)).toEqual({
+      animationName: "Loop",
+      loop: true,
+    });
+    expect(players).toHaveLength(1);
+    expect(players[0].attached).toHaveLength(1);
+    symbol.reset();
+
+    symbol.update(0.1);
+    expect(players[0].updates).toEqual([0.1, 0.1, 0.1, 0.1]);
     symbol.setPresentationValue(25);
     expect(players[0].removed).toHaveLength(1);
     expect(players[0].destroyed).toBe(true);
@@ -131,7 +154,7 @@ describe("render symbol value controller", () => {
     expect(image?.position).toMatchObject({ x: 2, y: -3 });
 
     symbol.reset();
-    expect(symbol.overlayLayer.children).toEqual([]);
+    expect(symbol.overlayLayer.children).toEqual([players[0].view]);
     expect(symbol.requestLandingAppear()).toBe(true);
     expect(symbol.overlayLayer.children).toEqual([players[0].view]);
     expect(players[0].attached).toHaveLength(1);
@@ -172,6 +195,10 @@ function createSymbol(
       states: [
         { id: "normal", phase: "stable", playback: "static" },
         { id: "spinBlur", phase: "stable", playback: "static" },
+        { id: "appear", phase: "once", playback: "once" },
+        { id: "win", phase: "once", playback: "once" },
+        { id: "remove", phase: "once", playback: "once" },
+        { id: "dropdown", phase: "stable", playback: "loop" },
       ],
     },
     texture: {
@@ -181,6 +208,7 @@ function createSymbol(
     },
     stateTextures: { spinBlur: Texture.WHITE },
     animationResolver: createDefaultSymbolAnimationResolver(),
+    animationCapabilities: ["appear", "win", "remove", "dropdown"],
     landingAppearEnabled: true,
     valueControllerFactory: (root) =>
       createRenderSymbolValueController({
@@ -215,10 +243,27 @@ function createResource(): SymbolValuePresentationResource {
   return Object.freeze({
     symbol: "GOLD",
     defaultValues: Object.freeze([1, 5, 25]),
-    appearPlayback: Object.freeze({
-      mode: "animation" as const,
-      animationName: "Start",
-      loop: false,
+    activeSpineAnimations: Object.freeze({
+      appear: Object.freeze({
+        mode: "animation" as const,
+        animationName: "Start",
+        loop: false,
+      }),
+      win: Object.freeze({
+        mode: "animation" as const,
+        animationName: "Win",
+        loop: false,
+      }),
+      remove: Object.freeze({
+        mode: "animation" as const,
+        animationName: "End",
+        loop: false,
+      }),
+      dropdown: Object.freeze({
+        mode: "animation" as const,
+        animationName: "Loop",
+        loop: true,
+      }),
     }),
     tiers: Object.freeze([
       createTier("./low.json", 10),

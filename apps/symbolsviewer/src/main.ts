@@ -1,8 +1,9 @@
 import { Application, Assets, Container, Text, type Texture } from "pixi.js";
 import {
   createDefaultSymbolStatePreset,
+  createRenderSymbolValueController,
+  createSymbolAnimationCapabilityMapFromManifest,
   createSymbolCatalog,
-  createSymbolValuePresenter,
   SymbolStateSequenceController,
   type RenderSymbol,
   type SymbolAssetInput,
@@ -13,7 +14,6 @@ import {
   type SymbolSequenceStep,
   type SymbolStateId,
   type SymbolTextureSet,
-  type SymbolValuePresenter,
 } from "@slotclientengine/rendercore";
 import { createGameConfig } from "@slotclientengine/logiccore";
 import {
@@ -149,9 +149,7 @@ async function bootstrap(): Promise<void> {
   let renderedSymbols: RenderedViewerSymbol[] = [];
   let activeSymbolSet = getSymbolSetConfig(symbolSetSelect.value);
   let activeValidation: SymbolCatalogValidation | null = null;
-  let activeValuePresenter: SymbolValuePresenter | null = null;
   let activeValueSymbols: readonly string[] = [];
-  let valueApplyVersion = 0;
   let loadVersion = 0;
   let sequenceController = new SymbolStateSequenceController({
     statePreset,
@@ -206,9 +204,6 @@ async function bootstrap(): Promise<void> {
       return;
     }
 
-    valueApplyVersion += 1;
-    activeValuePresenter?.destroy();
-    activeValuePresenter = null;
     destroyRenderedSymbols(renderedSymbols);
     symbolsRoot.removeChildren();
     activeSymbolSet = config;
@@ -231,41 +226,6 @@ async function bootstrap(): Promise<void> {
       }),
     );
     valueControls.hidden = activeValueSymbols.length === 0;
-    if (
-      activeValueSymbols.length > 0 &&
-      config.symbolValuePresentationResources &&
-      config.rawGameConfig
-    ) {
-      const gameConfig = createGameConfig(config.rawGameConfig);
-      activeValuePresenter = createSymbolValuePresenter({
-        resources: config.symbolValuePresentationResources,
-        target: {
-          getVisibleSymbolGeometrySnapshots: (positions) =>
-            positions.map((position) => {
-              const symbol = activeValueSymbols[position.x];
-              const rendered = renderedSymbols.find(
-                (candidate) => candidate.symbol === symbol,
-              );
-              const code = symbol
-                ? gameConfig.getSymbolCode(symbol)
-                : undefined;
-              if (!rendered || code === undefined || position.y !== 0) {
-                throw new Error("symbolsviewer value geometry is invalid.");
-              }
-              return Object.freeze({
-                ...position,
-                code,
-                kind: "textured" as const,
-                centerX: rendered.renderSymbol.x,
-                centerY: rendered.renderSymbol.y,
-                cellWidth: rendered.cellWidth,
-                cellHeight: rendered.cellHeight,
-              });
-            }),
-        },
-      });
-      symbolsRoot.addChild(activeValuePresenter.container);
-    }
     defaultStateSelect.value = statePreset.defaultState;
     sequenceController = new SymbolStateSequenceController({
       statePreset,
@@ -314,20 +274,18 @@ async function bootstrap(): Promise<void> {
     syncSequenceDom();
   });
   resetButton.addEventListener("click", () => {
-    activeValuePresenter?.clear();
     sequenceController.reset();
     for (const item of renderedSymbols) {
+      item.renderSymbol.setPresentationValue(null);
       item.renderSymbol.reset();
     }
     broadcastState(sequenceController.getCurrentStep().state);
     syncSequenceDom();
   });
   applyValueButton.addEventListener("click", () => {
-    const presenter = activeValuePresenter;
     const symbolIndex = activeValueSymbols.indexOf(valueSymbolSelect.value);
     const value = Number(valueInput.value);
     if (
-      !presenter ||
       symbolIndex < 0 ||
       !Number.isSafeInteger(value) ||
       value <= 0 ||
@@ -339,38 +297,20 @@ async function bootstrap(): Promise<void> {
       return;
     }
     const symbol = activeValueSymbols[symbolIndex];
-    const symbolCode = createGameConfig(
-      activeSymbolSet.rawGameConfig,
-    ).getSymbolCode(symbol);
-    if (symbolCode === undefined) {
-      throw new Error(
-        `symbolsviewer cannot resolve symbol code for ${symbol}.`,
-      );
+    const rendered = renderedSymbols.find((item) => item.symbol === symbol);
+    if (!rendered) throw new Error(`symbolsviewer cannot find ${symbol}.`);
+    for (const item of renderedSymbols) {
+      if (item !== rendered && activeValueSymbols.includes(item.symbol)) {
+        item.renderSymbol.setPresentationValue(null);
+      }
     }
-    const version = ++valueApplyVersion;
-    presenter.clear();
-    void presenter
-      .prepare([{ x: symbolIndex, y: 0, symbol, symbolCode, value }])
-      .then((prepared) => {
-        if (
-          version === valueApplyVersion &&
-          presenter === activeValuePresenter
-        ) {
-          presenter.show(prepared);
-          updateStatusPanel();
-        }
-      })
-      .catch((error) => {
-        statusPanel.replaceChildren(
-          createStatusLine(
-            error instanceof Error ? error.message : String(error),
-          ),
-        );
-      });
+    rendered.renderSymbol.setPresentationValue(value);
+    updateStatusPanel();
   });
   clearValueButton.addEventListener("click", () => {
-    valueApplyVersion += 1;
-    activeValuePresenter?.clear();
+    for (const item of renderedSymbols) {
+      item.renderSymbol.setPresentationValue(null);
+    }
     updateStatusPanel();
   });
   defaultStateSelect.addEventListener("change", () => {
@@ -497,7 +437,6 @@ async function bootstrap(): Promise<void> {
     const results = renderedSymbols.map((item) =>
       item.renderSymbol.update(deltaSeconds),
     );
-    activeValuePresenter?.update(deltaSeconds);
     const onceCompleted =
       currentState?.phase === "once" &&
       results.length > 0 &&
@@ -625,7 +564,15 @@ function createRenderedSymbols(
   config: SymbolSetConfig,
 ): RenderedViewerSymbol[] {
   const entries = symbols.map((symbol) => {
-    const renderSymbol = catalog.createRenderSymbol(symbol);
+    const resource = config.symbolValuePresentationResources?.[symbol];
+    const renderSymbol = catalog.createRenderSymbol(symbol, {
+      ...(resource
+        ? {
+            valueControllerFactory: (root) =>
+              createRenderSymbolValueController({ root, resource }),
+          }
+        : {}),
+    });
     const maxTextureSize = getRenderSymbolMaxTextureSize(renderSymbol);
     const scale = getSymbolScale(config, symbol);
     return { symbol, renderSymbol, maxTextureSize, scale };
@@ -789,7 +736,7 @@ function normalizeViewerStep(
   state: string,
   holdSeconds: number,
 ): SymbolSequenceStep {
-  if (state === "appear" || state === "win") {
+  if (state === "appear" || state === "win" || state === "remove") {
     return Object.freeze({ state });
   }
   return Object.freeze({
@@ -817,6 +764,11 @@ async function createCatalogForSymbolSet(
     displaySymbols: config.displaySymbols,
   });
   const textures = await loadSymbolTextures(symbolAssetUrls);
+  const symbolAnimationCapabilities =
+    createSymbolAnimationCapabilityMapFromManifest({
+      manifest: config.manifest,
+      requiredStates: config.requiredStates,
+    });
   if (config.catalogKind === "standalone") {
     const catalog = createSymbolsViewerStandaloneCatalog({
       symbolAssets: textures,
@@ -825,6 +777,7 @@ async function createCatalogForSymbolSet(
       symbolRenderPriorities: config.symbolRenderPriorities,
       requiredStateTextures: config.requiredStates,
       animationResolver: config.animationResolver,
+      symbolAnimationCapabilities,
     });
     return Object.freeze({
       catalog,
@@ -840,6 +793,7 @@ async function createCatalogForSymbolSet(
     symbolRenderPriorities: config.symbolRenderPriorities,
     statePreset,
     animationResolver: config.animationResolver,
+    symbolAnimationCapabilities,
     texturePolicy: {
       requiredStateTextures: config.requiredStates,
     },

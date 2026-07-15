@@ -142,7 +142,9 @@ describe("game002-s3 assets", () => {
       Object.fromEntries(EXPECTED_SYMBOLS.map((symbol) => [symbol, 1])),
     );
     expect(skin.symbolRenderPriorities).toEqual(
-      Object.fromEntries(EXPECTED_SYMBOLS.map((symbol) => [symbol, 0])),
+      Object.fromEntries(
+        EXPECTED_SYMBOLS.map((symbol) => [symbol, symbol === "WL" ? 1 : 0]),
+      ),
     );
   });
 
@@ -190,6 +192,12 @@ describe("game002-s3 assets", () => {
         stateTextureManifest: skin.stateTextureManifest,
       }),
     ).toEqual(skin.symbolRenderPriorities);
+    expect(skin.symbolRenderPriorities).toMatchObject({ WL: 1 });
+    expect(
+      Object.entries(skin.symbolRenderPriorities)
+        .filter(([symbol]) => symbol !== "WL")
+        .every(([, priority]) => priority === 0),
+    ).toBe(true);
     expect(
       Object.keys(
         createGame002SymbolAssetMapFromModules({
@@ -221,7 +229,11 @@ describe("game002-s3 assets", () => {
         },
       });
     }
-    for (const symbol of ["WM", "CN", "CM", "CO", "AF", "BN"] as const) {
+    expect(manifest.symbols.CN?.animations?.win).toMatchObject({
+      kind: "activeSpine",
+      playback: { mode: "animation", animationName: "Win", loop: false },
+    });
+    for (const symbol of ["WM", "CM", "CO", "AF", "BN"] as const) {
       expect(manifest.symbols[symbol]?.animations?.win).toBeUndefined();
     }
   });
@@ -311,6 +323,8 @@ describe("game002-s3 assets", () => {
         "normal",
         "appear",
         "win",
+        "remove",
+        "dropdown",
       ]);
       expect(symbols[symbol].animations?.normal.playback.animationName).toBe(
         "Idle",
@@ -325,9 +339,28 @@ describe("game002-s3 assets", () => {
     expect(Object.keys(symbols.WM.animations ?? {})).toEqual([
       "normal",
       "appear",
+      "remove",
+      "dropdown",
     ]);
     expect(Object.keys(symbols.BN.animations ?? {})).toEqual(["normal"]);
-    expect(symbols.CN.animations).toBeUndefined();
+    expect(symbols.CN.animations).toMatchObject({
+      appear: {
+        kind: "activeSpine",
+        playback: { animationName: "Start", loop: false },
+      },
+      win: {
+        kind: "activeSpine",
+        playback: { animationName: "Win", loop: false },
+      },
+      remove: {
+        kind: "activeSpine",
+        playback: { animationName: "End", loop: false },
+      },
+      dropdown: {
+        kind: "activeSpine",
+        playback: { animationName: "Loop", loop: true },
+      },
+    });
     expect(skin.landingAppearSymbols).toEqual([
       "WL",
       "H1",
@@ -347,8 +380,10 @@ describe("game002-s3 assets", () => {
       skin.stateTextureManifest as {
         symbols: {
           CN: {
+            animations: {
+              appear: { playback: { animationName: string; loop: boolean } };
+            };
             valuePresentation: {
-              appearPlayback: { animationName: string; loop: boolean };
               tiers: Array<{
                 animation: {
                   playback: { animationName: string; loop: boolean };
@@ -358,8 +393,8 @@ describe("game002-s3 assets", () => {
           };
         };
       }
-    ).symbols.CN.valuePresentation;
-    expect(valuePresentation.appearPlayback).toMatchObject({
+    ).symbols.CN;
+    expect(valuePresentation.animations.appear.playback).toMatchObject({
       animationName: "Start",
       loop: false,
     });
@@ -374,7 +409,9 @@ describe("game002-s3 assets", () => {
       Object.keys(skin.symbolValuePresentationResources.CN.textImageUrls),
     ).toEqual(["1", "2", "5", "10", "25", "50", "100", "250", "500", "1000"]);
     expect(
-      valuePresentation.tiers.map((tier) => tier.animation.playback),
+      valuePresentation.valuePresentation.tiers.map(
+        (tier) => tier.animation.playback,
+      ),
     ).toEqual(
       Array.from({ length: 4 }, () => ({
         mode: "animation",

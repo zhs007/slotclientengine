@@ -48,6 +48,9 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
   readonly #requiredStateTextures: readonly SymbolStateId[];
   readonly #valuePresentationResources: SymbolValuePresentationResourceMap;
   readonly #landingAppearSymbols: ReadonlySet<string>;
+  readonly #symbolAnimationCapabilities: Readonly<
+    Record<string, readonly SymbolStateId[]>
+  >;
 
   constructor(options: ReelSymbolRegistryOptions) {
     const statePreset = options.statePreset ?? createDefaultSymbolStatePreset();
@@ -159,6 +162,9 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
     this.#valuePresentationResources =
       options.valuePresentationResources ?? Object.freeze({});
     this.#landingAppearSymbols = landingAppearSymbols;
+    this.#symbolAnimationCapabilities = Object.freeze({
+      ...(options.symbolAnimationCapabilities ?? {}),
+    });
     this.#cellSize = calculateCellSize([...textureSetsByCode.values()]);
     this.#validation = Object.freeze({
       texturedSymbols: Object.freeze(texturedSymbols),
@@ -236,6 +242,8 @@ export class ReelSymbolRegistryModel implements ReelSymbolRegistry {
       animationResolver: this.#animationResolver,
       renderPriority: textureSet.renderPriority,
       landingAppearEnabled: this.#landingAppearSymbols.has(entry.symbol),
+      animationCapabilities:
+        this.#symbolAnimationCapabilities[entry.symbol] ?? [],
       ...(valueResource === undefined
         ? {}
         : {

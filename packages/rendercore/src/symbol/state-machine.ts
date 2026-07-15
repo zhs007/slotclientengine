@@ -181,6 +181,16 @@ export function createDefaultSymbolStatePreset(): SymbolStatePreset {
         phase: "once",
         playback: "once",
       }),
+      Object.freeze({
+        id: "remove",
+        phase: "once",
+        playback: "once",
+      }),
+      Object.freeze({
+        id: "dropdown",
+        phase: "stable",
+        playback: "loop",
+      }),
     ]),
     equivalences: Object.freeze([
       Object.freeze({ from: "spinBlur", to: "normal" }),

@@ -575,6 +575,8 @@ describe("symbolsviewer sequence helpers", () => {
       "normal",
       "appear",
       "win",
+      "remove",
+      "dropdown",
       "spinBlur",
       "disabled",
     ]);
@@ -603,6 +605,8 @@ describe("symbolsviewer sequence helpers", () => {
       "win",
       "appear",
       "normal",
+      "remove",
+      "dropdown",
       "spinBlur",
       "disabled",
     ]);

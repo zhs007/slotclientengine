@@ -105,6 +105,9 @@ export function createSymbolsViewerStandaloneCatalog(options: {
   readonly symbolRenderPriorities?: ReelSymbolRenderPriorityMap;
   readonly requiredStateTextures?: readonly string[];
   readonly animationResolver?: SymbolAnimationResolver;
+  readonly symbolAnimationCapabilities?: Readonly<
+    Record<string, readonly string[]>
+  >;
 }): StandaloneSymbolCatalog {
   return createStandaloneSymbolCatalog({
     assets: options.symbolAssets,
@@ -113,6 +116,7 @@ export function createSymbolsViewerStandaloneCatalog(options: {
     symbolRenderPriorities: options.symbolRenderPriorities,
     statePreset: createDefaultSymbolStatePreset(),
     animationResolver: options.animationResolver,
+    symbolAnimationCapabilities: options.symbolAnimationCapabilities,
     texturePolicy: {
       requiredStateTextures: options.requiredStateTextures ?? [],
     },

@@ -42,7 +42,7 @@ http://127.0.0.1:5207/?skin=1&gamecode=GAME_CODE&token=TOKEN&businessid=guest&cl
 
 档数、`maxExclusive`、默认候选数组、Spine skeleton/atlas/texture、animation、数字显示类型、图片前缀、`slot`/local offset 唯一来自 `assets/game002-s3/symbol-state-textures.manifest.json`。当前默认候选为 `[1,2,5,10,25,50,100,250,500,1000]`，档位为 `<10`、`<100`、`<1000`、无上限四档；`text.type=image,prefix=./` 把完整值映射为 `./${value}.png`。这 10 张图片进入精确 Vite/loading/dist 闭包，并由 rendercore 使用 Pixi `Assets.load<Texture>()` 真正加载后再创建 Sprite，不依赖 `Texture.from(URL)` 的 cache 假设；服务器返回其它值、图片缺失或加载失败时，在 spin 前 prepare 或初始 reel update 显式失败，不回退 font。defaultScene 没有 otherScene 时，每个 CN 从候选数组取一个随机值；spin 的本地临时轮带也为每个 CN occurrence 固定一个候选值，使档位 Spine/数字图片跟随 reel slot 滚动而不是空白。目标 endpoint 在启动 spin 前写入服务器 otherScene 值，逐格落地到最终停轴都不回退为随机值或空值；未触发 `bg-gencoins` 时继续使用本地候选值。数字图片绑定每个 skeleton 真实存在的 `Num` slot，继承 slot/bone 动画；production TypeScript 不固定候选、四档、`CN_数字` 或 slot 名。CN value 属于实际 main-reel symbol，world 顺序仍为 background、main reels、`bg-win` carousel、global win-amount。
 
-逐格停轴动画由 `RenderGridCellReelSet` 统一调度：每格落地时，manifest 显式配置了 appear 的 symbol 先播放大小写精确的 `Start`，once 完成后回到 normal，整轮完成边界会等待落地 appear 结束。当前除 `BN` 外的主 display symbol 都配置 `Start`；`BN` skeleton 没有 `Start`，因此不触发 appear，也不使用 builtin/default fallback。normal animation 按资源真实能力配置：`CO` 与 `CN_1..CN_4` 使用 `Loop`，其它普通主 symbol 使用 `Idle`。CN 的 `Start -> Loop` 在同一个 Spine player 上切换，数字图片始终挂在 `Num` slot 下并受两段动画影响。
+逐格停轴动画由 `RenderGridCellReelSet` 统一调度：每格落地时，manifest 显式配置了 appear 的 symbol 先播放大小写精确的 `Start`，once 完成后回到 normal，整轮完成边界会等待落地 appear 结束。当前除 `BN` 外的主 display symbol 都配置 `Start`；`BN` skeleton 没有 `Start`，因此不触发 appear，也不使用 builtin/default fallback。normal animation 按资源真实能力配置：`CO` 与 `CN_1..CN_4` 使用 `Loop`，其它普通主 symbol 使用 `Idle`。CN 的 `Start/Win/End/Loop` 在同一个 Spine player 上切换，数字图片始终挂在 `Num` slot 下；值不变和 dropdown 搬运都不会二次 set/create/attach。
 
 - scale、render priority 和 animation 都从 `assets/game002-s3/symbol-state-textures.manifest.json` 派生；app 不维护第二份表。
 
@@ -66,15 +66,17 @@ framework 负责 live、HUD、spin/collect；adapter 负责 Pixi 画面和 grid-
 
 `assets/game002-s3/win-amount` 当前是从 game003 复制的临时 big/super/mega 美术资源。`win-amount.manifest.json` 是 tier project、asset glob、阈值和 segmented 时间的唯一资源来源；app 只配置金额 formatter 和布局，不复制 rendercore 状态机。
 
-服务端整数 `100` 显示为 `$1.00`，但 spin/live 协议仍传原始整数。正中奖在主转轮完成后启动金额动画；`playSpin()` 等到金额进入 `awaiting-dismiss` 即可 resolve，不要求用户点击关闭。点击只调用 `requestAdvance()`：用于跳金额、进下一档或从最终等待态播放 dismiss。下一次 spin 会先清理遗留金额。
+服务端整数 `100` 显示为 `$1.00`，但 spin/live 协议仍传原始整数。正中奖只在全部级联 step、remove、统一 fall 和最终 gencoins 完成后启动金额动画；`playSpin()` 等到金额进入 `awaiting-dismiss` 即可 resolve，不要求用户点击关闭。点击只调用 `requestAdvance()`：用于跳金额、进下一档或从最终等待态播放 dismiss。下一次 spin 会先清理遗留金额。
 
-## bg-win 中奖展示
+## bg-win 消除级联
 
-`bg-win` 是 game002 app 自己配置的中奖组件名。rendercore 通用 carousel 按组件数组顺序读取每个组件的 `basicComponentData.usedResults`，并保持它们指向 `clientData.results[]` 的原始顺序；未触发 `bg-win` 时不会回退为播放全部 results。新增第二个中奖组件只扩展 app 的组件名数组和对应 fixture，不复制轮播状态机。
+`bg-spin/bg-gencoins/bg-win/bg-remove/bg-respin/bg-dropdown/bg-refill` 是 game002 app-owned 映射，只有 `historyComponents` 对应的 `step.hasComponent()` 才代表触发；`historyComponentsEx` 和 map 中的空组件不触发。adapter 预解析全部 steps 后，严格执行初始 spin、逐组 emphasis/win/remove、dropdown/refill 统一 fall 和最终 gencoins；任一结构漂移都在启动画面前失败。
 
-每个 result 的全部 `pos` 会在主转轮停稳后同时请求 manifest 驱动的 `win`。单组金额严格使用 `cashWin64 !== undefined ? cashWin64 : cashWin`：字段存在性而非 truthy 决定优先级，`cashWin64=0` 会按非正金额显式失败，不能回退到旧字段，也不能用 component total、step total 或 totalwin 兜底。真实样例的 `cashWin=0/cashWin64=300` 经 `formatServerUsdAmount` 显示为 `$3.00`。
+每个 result 的全部 `pos` 会在主转轮停稳后同时请求 manifest 驱动的 `win`。单组金额严格使用 `cashWin64 !== undefined ? cashWin64 : cashWin`：字段存在性而非 truthy 决定优先级，`cashWin64=0` 会按非正金额显式失败，不能回退到旧字段，也不能用 component total、step total 或 totalwin 兜底。`bg-win.basicComponentData.cashWin` 只作为协议一致性证据：初始 step 必须等于本 step `usedResults` 金额合计，后续 cascade step 必须等于前序累计值加本 step 合计；它不会替代 result 金额用于单组展示。真实样例的 `cashWin=0/cashWin64=300` 经 `formatServerUsdAmount` 显示为 `$3.00`。
 
-金额锚点先计算所有中奖格中心的算术平均点，再从本组实际中奖格中选择最近的一格；等距时按 `x`、再按 `y` 升序。真实八格样例选择 `(1,3)`，文本放在 cell 中心下方 `0.22 * cellHeight`。首轮全部 result 完成前会阻塞 `playSpin()`，之后按 `usedResults -> pause -> usedResults` lingering；下一次 spin 会清理旧 symbol 状态和 result 金额。result overlay 与全局 win-amount 是两套展示，canvas 点击只影响后者。
+金额锚点先计算所有中奖格中心的算术平均点，再从本组实际中奖格中选择最近的一格；等距时按 `x`、再按 `y` 升序。所有组金额立即同时显示，并以 `0.82` 只压暗全部中奖坐标之外的格；约 `2s` 后全部中奖 symbol 聚合播放一次 `win`，随后才按组依次 remove。game002 通过函数向 rendercore 声明 `WL` 既不 remove 也不 drop，rendercore 不硬编码 wild。WL 仍参与中奖高亮与 win；manifest 为 WL 声明最高 `renderPriority: 1`，其它下落 symbol 可从它后面经过。
+
+dropdown 与 refill 合并为一次 rendercore fall：幸存 occurrence 和新增 symbol 同时从上向下移动，不进入 spin/appear 流程；每列仍保持下方优先的轻微错峰，并增加从左到右的列启动延迟。既有 CN value 随 occurrence 搬运，新 CN 创建时直接使用当前 step 服务端 gencoins 值。末 step 没有真实 `bg-win` 时直接结束级联；global win-amount 只能在全部 steps 结束后开始。game003 原有 carousel/lingering 合同不受影响。
 
 组件、索引、pos、金额或 geometry 非法时在转轮启动前显式失败。game002 只提供组件名、金额 resolver、formatter/style 和可见 symbol target；组件 result 解析、symbol 状态、Pixi 金额 renderer、确定性 anchor 与轮播生命周期由 rendercore 拥有。
 
