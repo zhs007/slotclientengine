@@ -263,6 +263,9 @@ describe("generate-symbol-state-textures script", () => {
             settings: {
               spinBlur: { kind: "verticalBoxBlur", kernelHeight: 21 },
               disabled: { kind: "grayscale", brightness: 0.72 },
+              additionalStateDefinitions: [
+                { id: "winStart", phase: "once", playback: "once" },
+              ],
             },
             symbols: {
               L1: {
@@ -282,6 +285,14 @@ describe("generate-symbol-state-textures script", () => {
                     playback: {
                       mode: "animation",
                       animationName: "Win",
+                      loop: false,
+                    },
+                  },
+                  winStart: {
+                    kind: "activeSpine",
+                    playback: {
+                      mode: "animation",
+                      animationName: "Win_Start",
                       loop: false,
                     },
                   },
@@ -331,6 +342,15 @@ describe("generate-symbol-state-textures script", () => {
                 disabled: "./H1.disabled.png",
                 scale: 1,
                 renderPriority: 0,
+                cascadeWinPresentation: {
+                  order: 0,
+                  playback: {
+                    mode: "group",
+                    winState: "win",
+                    removeState: "remove",
+                  },
+                  summary: { mode: "groupAmount" },
+                },
                 animations: {
                   normal: {
                     kind: "spine",
@@ -382,7 +402,18 @@ describe("generate-symbol-state-textures script", () => {
           kind: "activeSpine",
           playback: { mode: "animation", animationName: "Win", loop: false },
         },
+        winStart: {
+          kind: "activeSpine",
+          playback: {
+            mode: "animation",
+            animationName: "Win_Start",
+            loop: false,
+          },
+        },
       });
+      expect(manifest.settings.additionalStateDefinitions).toEqual([
+        { id: "winStart", phase: "once", playback: "once" },
+      ]);
       expect(manifest.symbols.L1.renderPriority).toBe(2);
       expect(manifest.symbols.L1).not.toHaveProperty("normal");
       expect(manifest.symbols.L1).not.toHaveProperty("spinBlur");
@@ -449,6 +480,15 @@ describe("generate-symbol-state-textures script", () => {
         win: { kind: "builtin", durationSeconds: 0.58 },
       });
       expect(manifest.symbols.H1.renderPriority).toBe(0);
+      expect(manifest.symbols.H1.cascadeWinPresentation).toEqual({
+        order: 0,
+        playback: {
+          mode: "group",
+          winState: "win",
+          removeState: "remove",
+        },
+        summary: { mode: "groupAmount" },
+      });
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

@@ -289,12 +289,32 @@ describe("symbolsviewer symbol set config", () => {
 
     expect(resolveViewerStateForSymbol(config, "WM", "win")).toBe("normal");
     expect(resolveViewerStateForSymbol(config, "BN", "appear")).toBe("normal");
-    expect(resolveViewerStateForSymbol(config, "CN", "win")).toBe("win");
+    expect(resolveViewerStateForSymbol(config, "CN", "win")).toBe("normal");
+    expect(resolveViewerStateForSymbol(config, "CN", "winStart")).toBe(
+      "winStart",
+    );
+    expect(resolveViewerStateForSymbol(config, "CN", "winLoop")).toBe(
+      "winLoop",
+    );
+    expect(resolveViewerStateForSymbol(config, "CN", "collect")).toBe(
+      "collect",
+    );
     expect(resolveViewerStateForSymbol(config, "CN", "remove")).toBe("remove");
     expect(resolveViewerStateForSymbol(config, "CN", "dropdown")).toBe(
       "dropdown",
     );
     expect(resolveViewerStateForSymbol(config, "BN", "remove")).toBe("normal");
+    expect(config.statePreset.states.map((state) => state.id)).toEqual(
+      expect.arrayContaining(["winStart", "winLoop", "collect"]),
+    );
+    expect(config.defaultSequence.map((step) => step.state)).toEqual([
+      "normal",
+      "winStart",
+      "winLoop",
+      "collect",
+      "remove",
+      "normal",
+    ]);
 
     const game003Config = getSymbolSetConfig("game003-s1");
     expect(() =>

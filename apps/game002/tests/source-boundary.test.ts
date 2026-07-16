@@ -115,6 +115,7 @@ describe("game002 source boundary", () => {
     expect(skinConfigSource).toContain("assets/game002-s3/reel.manifest.json");
     expect(skinConfigSource).toContain("parseReelManifest");
     expect(skinConfigSource).not.toContain("bounceStrength: 0");
+    expect(skinConfigSource).not.toContain("dimmingAlpha: 0.6");
     expect(backgroundConfigSource).toContain(
       "{BG,BG_2,BG_3,BG_4,BG_5,BG_6,BG_7,BG_8}.png",
     );
@@ -237,6 +238,29 @@ describe("game002 source boundary", () => {
     expect(sharedSource).not.toMatch(/RenderGridCellReelSet|RenderReelSet/);
     expect(handwrittenAppSource).not.toMatch(/CN_[1-4]|CN_\$\{/);
     expect(handwrittenAppSource).not.toMatch(/\[10,\s*100,\s*1000\]/);
+  });
+
+  it("keeps cascade choreography generic in rendercore and Pixi-owned in the app", () => {
+    const repoRoot = resolve(APP_ROOT, "../..");
+    const sharedSource = [
+      readSourceTree(join(repoRoot, "packages/rendercore/src/symbol-cascade")),
+      readSourceTree(join(repoRoot, "packages/rendercore/src/symbol")),
+    ].join("\n");
+    const appSource = readSourceTree(join(APP_ROOT, "src"));
+
+    expect(sharedSource).not.toMatch(
+      /\bCN\b|bg-win|Win_Start|\bCollect\b|GAME002_|coinWin64|cashWin64/,
+    );
+    expect(sharedSource).not.toMatch(/"winStart"|"winLoop"|"collect"/);
+    expect(appSource).not.toMatch(
+      /cashWin64[\s\S]{0,40}coin|cashWin[\s\S]{0,40}coin/,
+    );
+    const summarySource = [
+      readFileSync(join(APP_ROOT, "src/cascade-win-summary-config.ts"), "utf8"),
+      readFileSync(join(APP_ROOT, "src/cascade-sequence.ts"), "utf8"),
+    ].join("\n");
+    expect(summarySource).not.toMatch(/querySelector|document\.|\.children\[/);
+    expect(appSource).not.toContain("@esotericsoftware/spine-pixi-v8");
   });
 });
 

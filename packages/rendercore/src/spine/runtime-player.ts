@@ -15,7 +15,10 @@ export interface RendercoreSpinePlayer {
     readonly animationName: string;
     readonly loop: boolean;
   }): void;
-  update(deltaSeconds: number): { readonly completed: boolean };
+  update(deltaSeconds: number): {
+    readonly completed: boolean;
+    readonly loopCompleted?: boolean;
+  };
   reset(): void;
   destroy(): void;
 }
@@ -97,6 +100,7 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
   readonly #createError: (message: string) => Error;
   #spine: Spine | null = null;
   #completed = false;
+  #loopCompleted = false;
   #destroyed = false;
   #initialized = false;
 
@@ -176,6 +180,7 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
       );
     }
     this.#completed = false;
+    this.#loopCompleted = false;
     spine.state.clearTracks();
     spine.state.clearListeners();
     spine.skeleton.setupPose();
@@ -186,19 +191,28 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
     );
     entry.listener = {
       complete: (completedEntry) => {
-        if (completedEntry === entry && !options.loop) {
-          this.#completed = true;
+        if (completedEntry === entry) {
+          if (options.loop) this.#loopCompleted = true;
+          else this.#completed = true;
         }
       },
     };
     spine.update(0);
   }
 
-  update(deltaSeconds: number): { readonly completed: boolean } {
+  update(deltaSeconds: number): {
+    readonly completed: boolean;
+    readonly loopCompleted?: boolean;
+  } {
     assertValidSpineDeltaSeconds(deltaSeconds);
     this.assertNotDestroyed();
     this.getSpine().update(deltaSeconds);
-    return Object.freeze({ completed: this.#completed });
+    const loopCompleted = this.#loopCompleted;
+    this.#loopCompleted = false;
+    return Object.freeze({
+      completed: this.#completed,
+      ...(loopCompleted ? { loopCompleted: true } : {}),
+    });
   }
 
   attachSlotObject(options: {
@@ -224,6 +238,7 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
   reset(): void {
     this.assertNotDestroyed();
     this.#completed = false;
+    this.#loopCompleted = false;
     if (this.#spine) {
       this.#spine.state.clearTracks();
       this.#spine.state.clearListeners();

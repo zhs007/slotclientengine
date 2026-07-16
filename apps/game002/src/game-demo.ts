@@ -35,6 +35,7 @@ import type {
   SymbolAnimationResolver,
   SymbolAssetMap,
   SymbolStateId,
+  SymbolStatePreset,
   SymbolValuePresentationResourceMap,
 } from "@slotclientengine/rendercore";
 import type { WinResultPosition } from "@slotclientengine/gameframeworks";
@@ -46,12 +47,12 @@ import {
   GAME002_REEL_COUNT,
   GAME002_REELS_NAME,
   GAME002_VISIBLE_ROWS,
-  GAME002_GRID_CELL_DIMMING,
   GAME002_GRID_CELL_REEL_OFFSETS,
   GAME002_GRID_CELL_REEL_ORDER,
   GAME002_GRID_CELL_REEL_TIMING,
   GAME002_GRID_LAYOUT,
   GAME002_FOCUS_REGION,
+  createGame002GridCellDimming,
   createGame002Layout,
   createGame002ReelLayerLayout,
   createGame002ReelLayout,
@@ -79,6 +80,7 @@ export interface Game002ReelConfig {
   readonly symbolScales: ReelSymbolScaleMap;
   readonly symbolRenderPriorities: ReelSymbolRenderPriorityMap;
   readonly symbolAnimationCapabilities: ReelSymbolAnimationCapabilityMap;
+  readonly symbolStatePreset: SymbolStatePreset;
   readonly landingAppearSymbols: readonly string[];
   readonly animationResolver: SymbolAnimationResolver;
   readonly symbolValuePresentationResources: SymbolValuePresentationResourceMap;
@@ -103,6 +105,7 @@ export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   symbolScales: GAME002_SYMBOL_SCALES,
   symbolRenderPriorities: GAME002_SYMBOL_RENDER_PRIORITIES,
   symbolAnimationCapabilities: GAME002_DEFAULT_SKIN.symbolAnimationCapabilities,
+  symbolStatePreset: GAME002_DEFAULT_SKIN.symbolStatePreset,
   landingAppearSymbols: GAME002_DEFAULT_SKIN.landingAppearSymbols,
   animationResolver: GAME002_DEFAULT_SKIN.symbolAnimationResolver,
   symbolValuePresentationResources:
@@ -114,7 +117,9 @@ export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   direction: "forward",
   orderMode: GAME002_GRID_CELL_REEL_ORDER,
   timing: GAME002_GRID_CELL_REEL_TIMING,
-  dimming: GAME002_GRID_CELL_DIMMING,
+  dimming: createGame002GridCellDimming(
+    GAME002_DEFAULT_SKIN.reelManifest.spin.dimmingAlpha,
+  ),
   spinBounceStrength: GAME002_DEFAULT_SKIN.reelManifest.spin.bounceStrength,
 });
 
@@ -230,6 +235,7 @@ export function createGame002ReelRuntime(
     symbolScales: config.symbolScales,
     symbolRenderPriorities: config.symbolRenderPriorities,
     symbolAnimationCapabilities: config.symbolAnimationCapabilities,
+    statePreset: config.symbolStatePreset,
     landingAppearSymbols: config.landingAppearSymbols,
     animationResolver: config.animationResolver,
     texturePolicy: {

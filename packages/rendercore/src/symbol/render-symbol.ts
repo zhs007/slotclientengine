@@ -266,6 +266,7 @@ export class RenderSymbol extends VisualEntity<void> {
       // The semantic state changed, but both states resolve to the same live
       // animation. Keep the current player and timeline instead of resetting
       // an equivalent animation (for example normal Loop -> dropdown Loop).
+      previousAni.adoptContinuation?.(nextAni);
       nextAni.destroy?.();
       return false;
     }

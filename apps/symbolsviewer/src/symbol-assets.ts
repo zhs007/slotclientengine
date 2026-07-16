@@ -11,6 +11,7 @@ import {
   type SymbolAnimationResolver,
   type SymbolAssetMap,
   type SymbolCatalogModel,
+  type SymbolStatePreset,
   type StandaloneSymbolCatalog,
 } from "@slotclientengine/rendercore";
 
@@ -86,12 +87,13 @@ export function createSymbolsViewerCatalog(
   symbolAssets: SymbolAssetMap,
   requiredStateTextures: readonly string[] = SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
   symbolRenderPriorities?: ReelSymbolRenderPriorityMap,
+  statePreset: SymbolStatePreset = createDefaultSymbolStatePreset(),
 ): SymbolCatalogModel {
   return createSymbolCatalog({
     gameConfig: createGameConfig(rawGameConfig),
     assets: symbolAssets,
     symbolRenderPriorities,
-    statePreset: createDefaultSymbolStatePreset(),
+    statePreset,
     texturePolicy: {
       requiredStateTextures,
     },
@@ -108,13 +110,14 @@ export function createSymbolsViewerStandaloneCatalog(options: {
   readonly symbolAnimationCapabilities?: Readonly<
     Record<string, readonly string[]>
   >;
+  readonly statePreset?: SymbolStatePreset;
 }): StandaloneSymbolCatalog {
   return createStandaloneSymbolCatalog({
     assets: options.symbolAssets,
     displaySymbols: options.displaySymbols,
     symbolScales: options.symbolScales,
     symbolRenderPriorities: options.symbolRenderPriorities,
-    statePreset: createDefaultSymbolStatePreset(),
+    statePreset: options.statePreset ?? createDefaultSymbolStatePreset(),
     animationResolver: options.animationResolver,
     symbolAnimationCapabilities: options.symbolAnimationCapabilities,
     texturePolicy: {

@@ -61,6 +61,7 @@ export async function generateSymbolValueViteResources(options) {
       "renderPriority",
       "animations",
       "valuePresentation",
+      "cascadeWinPresentation",
       ...manifest.states,
     ]);
     if (symbolRecord.valuePresentation === undefined) continue;

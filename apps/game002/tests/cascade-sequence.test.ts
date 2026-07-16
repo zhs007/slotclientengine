@@ -5,6 +5,10 @@ import {
 } from "@slotclientengine/gameframeworks";
 import { createGame002CascadeSequence as createRawGame002CascadeSequence } from "../src/cascade-sequence.js";
 import {
+  resolveGame002WinResultCoinAmount,
+  sortGame002CascadeCollectItems,
+} from "../src/cascade-win-summary-config.js";
+import {
   GAME002_CASCADE_DROPDOWN_SCENE,
   GAME002_CASCADE_GMI,
   GAME002_CASCADE_REFILL_POS,
@@ -29,11 +33,50 @@ describe("game002 cascade sequence", () => {
     expect(logic.getSteps()).toHaveLength(2);
     expect(logic.getStep(0).hasComponent("bg-win")).toBe(true);
     expect(logic.getStep(1).hasComponent("bg-win")).toBe(false);
-    expect(logic.getTotalWin()).toBe(210);
+    expect(logic.getTotalWin()).toBe(290);
 
     const sequence = createGame002CascadeSequence({ logic, cnSymbolCode: 8 });
-    expect(sequence.initial.winStage?.groups).toHaveLength(2);
-    expect(sequence.initial.winStage?.removedNum).toBe(9);
+    expect(sequence.initial.winStage?.groups).toHaveLength(3);
+    expect(
+      sequence.initial.winStage?.groups.map((group) => group.resultIndex),
+    ).toEqual([2, 0, 1]);
+    const groups = sequence.initial.winStage!.groups;
+    expect(
+      groups.map((group, groupIndex) =>
+        resolveGame002WinResultCoinAmount({ group, groupIndex }),
+      ),
+    ).toEqual([8, 18, 3]);
+    const collectItems = sortGame002CascadeCollectItems(
+      groups[0].positions.flatMap((position, positionIndex) =>
+        sequence.initial.winStage!.sourceScene[position.x][position.y] === 8
+          ? [
+              {
+                group: groups[0],
+                groupIndex: 0,
+                position,
+                positionIndex,
+              },
+            ]
+          : [],
+      ),
+    );
+    expect(groups[0].positions).toHaveLength(4);
+    expect(groups[0].positions).toContainEqual({ x: 0, y: 5 });
+    expect(collectItems.map(({ position }) => position)).toEqual([
+      { x: 4, y: 0 },
+      { x: 5, y: 0 },
+      { x: 4, y: 1 },
+    ]);
+    expect(
+      collectItems.map(
+        ({ position }) =>
+          sequence.initial.winStage!.sourceValues[position.x][position.y],
+      ),
+    ).toEqual([1, 2, 5]);
+    expect([0, 180, 180 + 30, 210 + 10, 220 + 20, 290]).toEqual([
+      0, 180, 210, 220, 240, 290,
+    ]);
+    expect(sequence.initial.winStage?.removedNum).toBe(12);
     expect(sequence.initial.winStage?.outputScene).toEqual(
       GAME002_CASCADE_REMOVED_SCENE,
     );
@@ -62,17 +105,19 @@ describe("game002 cascade sequence", () => {
       cnSymbolCode: 8,
     });
     const groups = sequence.initial.winStage!.groups;
-    expect(groups[0].removePositions).toHaveLength(5);
+    expect(groups[0].positions).toContainEqual({ x: 0, y: 5 });
+    expect(groups[0].removePositions).toHaveLength(3);
     expect(groups[0].removePositions).not.toContainEqual({ x: 0, y: 5 });
-    expect(groups[1].removePositions).toHaveLength(4);
+    expect(groups[1].removePositions).toHaveLength(5);
     expect(groups[1].removePositions).not.toContainEqual({ x: 0, y: 5 });
+    expect(groups[2].removePositions).toHaveLength(4);
     expect(
       new Set(
         groups.flatMap((group) =>
           group.removePositions.map(({ x, y }) => `${x},${y}`),
         ),
       ).size,
-    ).toBe(9);
+    ).toBe(12);
   });
 
   it("rejects component, remove, dropdown, refill and value drift before playback", () => {
@@ -134,7 +179,7 @@ describe("game002 cascade sequence", () => {
 
   it("carries existing CN values when a refill adds no CN and omits bg-gencoins", () => {
     const value = structuredClone(GAME002_CASCADE_GMI) as any;
-    const stableX = 4;
+    const stableX = 3;
     const stableY = 0;
     const carriedValue = 5;
     step(value, 0).scenes[0].values[stableX].values[stableY] = 8;

@@ -2,6 +2,7 @@ import { ReelError } from "./errors.js";
 
 export interface ReelSpinMotionManifest {
   readonly bounceStrength: number;
+  readonly dimmingAlpha: number;
 }
 
 export interface ParsedReelManifest {
@@ -16,7 +17,10 @@ export function parseReelManifest(value: unknown): ParsedReelManifest {
     throw new ReelError("Reel manifest version must be 1.");
   }
   const spin = assertRecord(record.spin, "reel manifest spin");
-  assertOnlyKnownKeys(spin, "reel manifest spin", ["bounceStrength"]);
+  assertOnlyKnownKeys(spin, "reel manifest spin", [
+    "bounceStrength",
+    "dimmingAlpha",
+  ]);
   if (
     typeof spin.bounceStrength !== "number" ||
     !Number.isFinite(spin.bounceStrength) ||
@@ -26,9 +30,22 @@ export function parseReelManifest(value: unknown): ParsedReelManifest {
       "Reel manifest spin.bounceStrength must be a non-negative finite number.",
     );
   }
+  if (
+    typeof spin.dimmingAlpha !== "number" ||
+    !Number.isFinite(spin.dimmingAlpha) ||
+    spin.dimmingAlpha < 0 ||
+    spin.dimmingAlpha > 1
+  ) {
+    throw new ReelError(
+      "Reel manifest spin.dimmingAlpha must be a finite number between 0 and 1.",
+    );
+  }
   return Object.freeze({
     version: 1,
-    spin: Object.freeze({ bounceStrength: spin.bounceStrength }),
+    spin: Object.freeze({
+      bounceStrength: spin.bounceStrength,
+      dimmingAlpha: spin.dimmingAlpha,
+    }),
   });
 }
 

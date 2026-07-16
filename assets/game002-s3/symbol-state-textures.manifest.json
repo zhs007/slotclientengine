@@ -9,7 +9,12 @@
     "disabled": {
       "kind": "grayscale",
       "brightness": 0.72
-    }
+    },
+    "additionalStateDefinitions": [
+      { "id": "winStart", "phase": "once", "playback": "once" },
+      { "id": "winLoop", "phase": "stable", "playback": "loop" },
+      { "id": "collect", "phase": "once", "playback": "once" }
+    ]
   },
   "symbols": {
     "WL": {
@@ -18,6 +23,15 @@
       "disabled": "./WL.disabled.png",
       "scale": 1,
       "renderPriority": 1,
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "winState": "win",
+          "removeState": "remove"
+        },
+        "summary": { "mode": "groupAmount" }
+      },
       "animations": {
         "normal": {
           "kind": "spine",
@@ -81,6 +95,15 @@
       "spinBlur": "./H1.spinBlur.png",
       "disabled": "./H1.disabled.png",
       "scale": 1,
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "winState": "win",
+          "removeState": "remove"
+        },
+        "summary": { "mode": "groupAmount" }
+      },
       "animations": {
         "normal": {
           "kind": "spine",
@@ -144,6 +167,15 @@
       "spinBlur": "./H2.spinBlur.png",
       "disabled": "./H2.disabled.png",
       "scale": 1,
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "winState": "win",
+          "removeState": "remove"
+        },
+        "summary": { "mode": "groupAmount" }
+      },
       "animations": {
         "normal": {
           "kind": "spine",
@@ -207,6 +239,15 @@
       "spinBlur": "./L1.spinBlur.png",
       "disabled": "./L1.disabled.png",
       "scale": 1,
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "winState": "win",
+          "removeState": "remove"
+        },
+        "summary": { "mode": "groupAmount" }
+      },
       "animations": {
         "normal": {
           "kind": "spine",
@@ -270,6 +311,15 @@
       "spinBlur": "./L2.spinBlur.png",
       "disabled": "./L2.disabled.png",
       "scale": 1,
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "winState": "win",
+          "removeState": "remove"
+        },
+        "summary": { "mode": "groupAmount" }
+      },
       "animations": {
         "normal": {
           "kind": "spine",
@@ -333,6 +383,15 @@
       "spinBlur": "./L3.spinBlur.png",
       "disabled": "./L3.disabled.png",
       "scale": 1,
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "winState": "win",
+          "removeState": "remove"
+        },
+        "summary": { "mode": "groupAmount" }
+      },
       "animations": {
         "normal": {
           "kind": "spine",
@@ -396,6 +455,15 @@
       "spinBlur": "./L4.spinBlur.png",
       "disabled": "./L4.disabled.png",
       "scale": 1,
+      "cascadeWinPresentation": {
+        "order": 0,
+        "playback": {
+          "mode": "group",
+          "winState": "win",
+          "removeState": "remove"
+        },
+        "summary": { "mode": "groupAmount" }
+      },
       "animations": {
         "normal": {
           "kind": "spine",
@@ -508,6 +576,17 @@
     },
     "CN": {
       "scale": 1,
+      "cascadeWinPresentation": {
+        "order": 1,
+        "playback": {
+          "mode": "sequentialCollect",
+          "startState": "winStart",
+          "loopState": "winLoop",
+          "collectState": "collect",
+          "removeState": "remove"
+        },
+        "summary": { "mode": "itemAmount" }
+      },
       "animations": {
         "appear": {
           "kind": "activeSpine",
@@ -517,11 +596,27 @@
             "loop": false
           }
         },
-        "win": {
+        "winStart": {
+          "kind": "activeSpine",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Win_Start",
+            "loop": false
+          }
+        },
+        "winLoop": {
           "kind": "activeSpine",
           "playback": {
             "mode": "animation",
             "animationName": "Win",
+            "loop": true
+          }
+        },
+        "collect": {
+          "kind": "activeSpine",
+          "playback": {
+            "mode": "animation",
+            "animationName": "Collect",
             "loop": false
           }
         },

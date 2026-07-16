@@ -6,8 +6,8 @@ export const GAME002_CASCADE_INITIAL_SCENE = Object.freeze([
   Object.freeze([3, 5, 4, 4, 5, 5, 1, 5, 5]),
   Object.freeze([1, 2, 2, 4, 5, 5, 2, 2, 5]),
   Object.freeze([1, 2, 3, 4, 5, 6, 1, 2, 3]),
-  Object.freeze([2, 3, 4, 5, 6, 1, 2, 3, 4]),
-  Object.freeze([3, 4, 5, 6, 1, 2, 3, 4, 5]),
+  Object.freeze([8, 8, 4, 5, 6, 1, 2, 3, 4]),
+  Object.freeze([8, 4, 5, 6, 1, 2, 3, 4, 5]),
 ]) satisfies SceneMatrix;
 
 export const GAME002_CASCADE_REMOVED_SCENE = Object.freeze([
@@ -15,8 +15,8 @@ export const GAME002_CASCADE_REMOVED_SCENE = Object.freeze([
   Object.freeze([3, 5, -1, -1, -1, -1, 1, 5, 5]),
   Object.freeze([1, 2, 2, -1, -1, -1, 2, 2, 5]),
   GAME002_CASCADE_INITIAL_SCENE[3],
-  GAME002_CASCADE_INITIAL_SCENE[4],
-  GAME002_CASCADE_INITIAL_SCENE[5],
+  Object.freeze([-1, -1, 4, 5, 6, 1, 2, 3, 4]),
+  Object.freeze([-1, 4, 5, 6, 1, 2, 3, 4, 5]),
 ]) satisfies SceneMatrix;
 
 export const GAME002_CASCADE_DROPDOWN_SCENE = Object.freeze([
@@ -24,8 +24,8 @@ export const GAME002_CASCADE_DROPDOWN_SCENE = Object.freeze([
   Object.freeze([-1, -1, -1, -1, 3, 5, 1, 5, 5]),
   Object.freeze([-1, -1, -1, 1, 2, 2, 2, 2, 5]),
   GAME002_CASCADE_INITIAL_SCENE[3],
-  GAME002_CASCADE_INITIAL_SCENE[4],
-  GAME002_CASCADE_INITIAL_SCENE[5],
+  Object.freeze([-1, -1, 4, 5, 6, 1, 2, 3, 4]),
+  Object.freeze([-1, 4, 5, 6, 1, 2, 3, 4, 5]),
 ]) satisfies SceneMatrix;
 
 export const GAME002_CASCADE_REFILL_SCENE = Object.freeze([
@@ -33,15 +33,27 @@ export const GAME002_CASCADE_REFILL_SCENE = Object.freeze([
   Object.freeze([8, 5, 5, 3, 3, 5, 1, 5, 5]),
   Object.freeze([4, 2, 2, 1, 2, 2, 2, 2, 5]),
   GAME002_CASCADE_INITIAL_SCENE[3],
-  GAME002_CASCADE_INITIAL_SCENE[4],
-  GAME002_CASCADE_INITIAL_SCENE[5],
+  Object.freeze([2, 3, 4, 5, 6, 1, 2, 3, 4]),
+  Object.freeze([3, 4, 5, 6, 1, 2, 3, 4, 5]),
 ]) satisfies SceneMatrix;
 
 export const GAME002_CASCADE_REFILL_POS = Object.freeze([
-  0, 1, 0, 0, 1, 3, 1, 2, 1, 1, 1, 0, 2, 2, 2, 1, 2, 0,
+  0, 1, 0, 0, 1, 3, 1, 2, 1, 1, 1, 0, 2, 2, 2, 1, 2, 0, 4, 1, 4, 0, 5, 0,
 ]);
 
-const INITIAL_VALUES = zeros(GAME002_CASCADE_INITIAL_SCENE);
+const INITIAL_VALUES = GAME002_CASCADE_INITIAL_SCENE.map((column, x) =>
+  Object.freeze(
+    column.map((_code, y) =>
+      x === 4 && y === 0
+        ? 1
+        : x === 5 && y === 0
+          ? 2
+          : x === 4 && y === 1
+            ? 5
+            : 0,
+    ),
+  ),
+);
 const REMOVED_VALUES = holesLike(GAME002_CASCADE_REMOVED_SCENE);
 const DROPDOWN_VALUES = holesLike(
   GAME002_CASCADE_DROPDOWN_SCENE,
@@ -59,8 +71,8 @@ export const GAME002_CASCADE_GMI = Object.freeze({
       randomNumbers: Object.freeze([1, 2, 3, 4, 5, 6]),
       results: Object.freeze([
         Object.freeze({
-          coinWin: 21,
-          cashWin: 210,
+          coinWin: 29,
+          cashWin: 290,
           clientData: Object.freeze({
             scenes: Object.freeze([
               toSgc7Scene(GAME002_CASCADE_INITIAL_SCENE),
@@ -76,12 +88,24 @@ export const GAME002_CASCADE_GMI = Object.freeze({
                 symbol: 4,
                 cashWin: 0,
                 cashWin64: 180,
+                coinWin: 0,
+                coinWin64: 18,
               }),
               Object.freeze({
                 pos: Object.freeze([1, 4, 1, 5, 0, 5, 2, 5, 2, 4]),
                 symbol: 5,
                 cashWin: 0,
                 cashWin64: 30,
+                coinWin: 0,
+                coinWin64: 3,
+              }),
+              Object.freeze({
+                pos: Object.freeze([4, 0, 5, 0, 4, 1, 0, 5]),
+                symbol: 8,
+                cashWin: 0,
+                cashWin64: 80,
+                coinWin: 0,
+                coinWin64: 8,
               }),
             ]),
             curGameMod: "basic",
@@ -98,12 +122,13 @@ export const GAME002_CASCADE_GMI = Object.freeze({
                 "bg-gencoins": component({ usedOtherScenes: [0] }),
                 "bg-win": Object.freeze({
                   basicComponentData: basic({
-                    usedResults: [0, 1],
+                    usedResults: [2, 0, 1],
                     pos: [
                       0, 3, 0, 4, 0, 5, 1, 3, 1, 2, 2, 3, 1, 4, 1, 5, 0, 5, 2,
-                      5, 2, 4,
+                      5, 2, 4, 4, 0, 5, 0, 4, 1, 0, 5,
                     ],
-                    cashWin: 210,
+                    cashWin: 290,
+                    coinWin: 29,
                   }),
                   nextComponent: "bg-remove",
                 }),
@@ -112,7 +137,7 @@ export const GAME002_CASCADE_GMI = Object.freeze({
                     usedScenes: [1],
                     usedOtherScenes: [1],
                   }),
-                  removedNum: 9,
+                  removedNum: 12,
                 }),
               }),
               firstComponent: "bg-spin",
@@ -177,7 +202,7 @@ export const GAME002_CASCADE_GMI = Object.freeze({
   }),
   bet: 10,
   lines: 30,
-  totalwin: 210,
+  totalwin: 290,
   results: 2,
 });
 
@@ -192,6 +217,7 @@ function basic(options: {
   readonly srcScenes?: readonly number[];
   readonly pos?: readonly number[];
   readonly cashWin?: number;
+  readonly coinWin?: number;
 }) {
   return Object.freeze({
     usedScenes: Object.freeze([...(options.usedScenes ?? [])]),
@@ -200,6 +226,7 @@ function basic(options: {
     srcScenes: Object.freeze([...(options.srcScenes ?? [])]),
     pos: Object.freeze([...(options.pos ?? [])]),
     cashWin: options.cashWin ?? 0,
+    ...(options.coinWin === undefined ? {} : { coinWin: options.coinWin }),
   });
 }
 

@@ -1,4 +1,8 @@
-import type { SymbolSequenceStep } from "@slotclientengine/rendercore";
+import type {
+  SymbolCascadeWinPresentationMap,
+  SymbolSequenceStep,
+  SymbolStatePreset,
+} from "@slotclientengine/rendercore";
 
 export const VIEWER_STATE_ORDER = Object.freeze([
   "normal",
@@ -20,6 +24,37 @@ export const DEFAULT_VIEWER_SEQUENCE: readonly SymbolSequenceStep[] =
     Object.freeze({ state: "spinBlur", holdSeconds: 0.7 }),
     Object.freeze({ state: "disabled", holdSeconds: 0.7 }),
   ]);
+
+export function createViewerStateOrder(
+  preset: SymbolStatePreset,
+): readonly string[] {
+  const available = new Set(preset.states.map((state) => state.id));
+  return Object.freeze([
+    ...VIEWER_STATE_ORDER.filter((state) => available.has(state)),
+    ...preset.states
+      .map((state) => state.id)
+      .filter((state) => !VIEWER_STATE_ORDER.includes(state)),
+  ]);
+}
+
+export function createViewerSequenceFromCascadePresentations(
+  presentations: SymbolCascadeWinPresentationMap,
+): readonly SymbolSequenceStep[] {
+  const sequential = Object.values(presentations).find(
+    (presentation) => presentation.playback.mode === "sequentialCollect",
+  );
+  if (!sequential || sequential.playback.mode !== "sequentialCollect") {
+    return DEFAULT_VIEWER_SEQUENCE;
+  }
+  return Object.freeze([
+    Object.freeze({ state: "normal", holdSeconds: 0.8 }),
+    Object.freeze({ state: sequential.playback.startState }),
+    Object.freeze({ state: sequential.playback.loopState, holdSeconds: 0.6 }),
+    Object.freeze({ state: sequential.playback.collectState }),
+    Object.freeze({ state: sequential.playback.removeState }),
+    Object.freeze({ state: "normal", holdSeconds: 0.8 }),
+  ]);
+}
 
 export function replaceSequenceStep(
   steps: readonly SymbolSequenceStep[],

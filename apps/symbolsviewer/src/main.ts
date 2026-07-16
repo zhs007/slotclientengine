@@ -1,6 +1,5 @@
 import { Application, Assets, Container, Text, type Texture } from "pixi.js";
 import {
-  createDefaultSymbolStatePreset,
   createRenderSymbolValueController,
   createSymbolAnimationCapabilityMapFromManifest,
   createSymbolCatalog,
@@ -13,6 +12,7 @@ import {
   type SymbolNormalTextureSource,
   type SymbolSequenceStep,
   type SymbolStateId,
+  type SymbolStatePreset,
   type SymbolTextureSet,
 } from "@slotclientengine/rendercore";
 import { createGameConfig } from "@slotclientengine/logiccore";
@@ -26,10 +26,7 @@ import {
   SYMBOL_SET_CONFIGS,
   type SymbolSetConfig,
 } from "./symbol-set-config.js";
-import {
-  DEFAULT_VIEWER_SEQUENCE,
-  VIEWER_STATE_ORDER,
-} from "./viewer-sequence.js";
+import { createViewerStateOrder } from "./viewer-sequence.js";
 import "./styles.css";
 
 const STAGE_WIDTH = 860;
@@ -61,7 +58,8 @@ async function bootstrap(): Promise<void> {
     throw new Error("Missing #app root.");
   }
 
-  const statePreset = createDefaultSymbolStatePreset();
+  let activeSymbolSet = getSymbolSetConfig(SYMBOL_SET_CONFIGS[0].id);
+  let statePreset: SymbolStatePreset = activeSymbolSet.statePreset;
   const shell = document.createElement("main");
   shell.className = "app-shell";
 
@@ -119,7 +117,10 @@ async function bootstrap(): Promise<void> {
   const sidePanel = document.createElement("aside");
   sidePanel.className = "side-panel";
 
-  const sequenceDom = createSequenceDom([...DEFAULT_VIEWER_SEQUENCE]);
+  const sequenceDom = createSequenceDom(
+    activeSymbolSet.defaultSequence,
+    createViewerStateOrder(statePreset),
+  );
   const statusPanel = document.createElement("div");
   statusPanel.className = "status-panel";
   statusPanel.dataset.testid = "status-panel";
@@ -147,13 +148,12 @@ async function bootstrap(): Promise<void> {
   const symbolsRoot = new Container();
   app.stage.addChild(symbolsRoot);
   let renderedSymbols: RenderedViewerSymbol[] = [];
-  let activeSymbolSet = getSymbolSetConfig(symbolSetSelect.value);
   let activeValidation: SymbolCatalogValidation | null = null;
   let activeValueSymbols: readonly string[] = [];
   let loadVersion = 0;
   let sequenceController = new SymbolStateSequenceController({
     statePreset,
-    steps: DEFAULT_VIEWER_SEQUENCE,
+    steps: activeSymbolSet.defaultSequence,
     autoplay: true,
   });
 
@@ -196,10 +196,7 @@ async function bootstrap(): Promise<void> {
     symbolSetSelect.disabled = true;
     statusPanel.replaceChildren(createStatusLine(`Loading ${config.label}`));
 
-    const { catalog, validation } = await createCatalogForSymbolSet(
-      config,
-      statePreset,
-    );
+    const { catalog, validation } = await createCatalogForSymbolSet(config);
     if (version !== loadVersion) {
       return;
     }
@@ -207,6 +204,7 @@ async function bootstrap(): Promise<void> {
     destroyRenderedSymbols(renderedSymbols);
     symbolsRoot.removeChildren();
     activeSymbolSet = config;
+    statePreset = config.statePreset;
     activeValidation = validation;
     renderedSymbols = createRenderedSymbols(
       catalog,
@@ -226,10 +224,28 @@ async function bootstrap(): Promise<void> {
       }),
     );
     valueControls.hidden = activeValueSymbols.length === 0;
+    defaultStateSelect.replaceChildren(
+      ...statePreset.states
+        .filter((state) => state.phase === "stable")
+        .map((state) => {
+          const option = document.createElement("option");
+          option.value = state.id;
+          option.textContent = state.id;
+          return option;
+        }),
+    );
     defaultStateSelect.value = statePreset.defaultState;
+    sequenceDom.addSelect.replaceChildren(
+      ...createViewerStateOrder(statePreset).map((state) => {
+        const option = document.createElement("option");
+        option.value = state;
+        option.textContent = state;
+        return option;
+      }),
+    );
     sequenceController = new SymbolStateSequenceController({
       statePreset,
-      steps: DEFAULT_VIEWER_SEQUENCE,
+      steps: config.defaultSequence,
       autoplay: true,
     });
     playButton.textContent = "Pause";
@@ -330,7 +346,10 @@ async function bootstrap(): Promise<void> {
           ? "sequence-row is-current"
           : "sequence-row";
       row.dataset.testid = `sequence-row-${index}`;
-      const stateSelect = createSelect([...VIEWER_STATE_ORDER], step.state);
+      const stateSelect = createSelect(
+        createViewerStateOrder(statePreset),
+        step.state,
+      );
       stateSelect.dataset.testid = `sequence-state-${index}`;
       const holdInput = document.createElement("input");
       holdInput.type = "number";
@@ -352,6 +371,7 @@ async function bootstrap(): Promise<void> {
         const nextStep = normalizeViewerStep(
           stateSelect.value,
           Number.parseFloat(holdInput.value),
+          statePreset,
         );
         const nextSteps = controller
           .getSteps()
@@ -364,6 +384,7 @@ async function bootstrap(): Promise<void> {
         const nextStep = normalizeViewerStep(
           stateSelect.value,
           Number.parseFloat(holdInput.value),
+          statePreset,
         );
         const nextSteps = controller
           .getSteps()
@@ -682,15 +703,18 @@ function getRenderSymbolMaxTextureSize(renderSymbol: RenderSymbol): number {
   );
 }
 
-function createSequenceDom(steps: readonly SymbolSequenceStep[]): SequenceDom {
+function createSequenceDom(
+  steps: readonly SymbolSequenceStep[],
+  stateOrder: readonly string[],
+): SequenceDom {
   const list = document.createElement("div");
   list.className = "sequence-list";
   list.dataset.testid = "sequence-list";
-  const addSelect = createSelect([...VIEWER_STATE_ORDER]);
+  const addSelect = createSelect(stateOrder);
   addSelect.dataset.testid = "sequence-add-select";
   const addButton = createButton("Add");
   addButton.dataset.testid = "sequence-add";
-  addSelect.value = steps.at(-1)?.state ?? VIEWER_STATE_ORDER[0];
+  addSelect.value = steps.at(-1)?.state ?? stateOrder[0];
   return { list, addSelect, addButton };
 }
 
@@ -735,8 +759,12 @@ function createStatusLine(text: string): HTMLElement {
 function normalizeViewerStep(
   state: string,
   holdSeconds: number,
+  statePreset: SymbolStatePreset,
 ): SymbolSequenceStep {
-  if (state === "appear" || state === "win" || state === "remove") {
+  if (
+    statePreset.states.find((definition) => definition.id === state)?.phase ===
+    "once"
+  ) {
     return Object.freeze({ state });
   }
   return Object.freeze({
@@ -750,10 +778,7 @@ void bootstrap().catch((error) => {
   console.error("symbolsviewer bootstrap failed", error);
 });
 
-async function createCatalogForSymbolSet(
-  config: SymbolSetConfig,
-  statePreset: ReturnType<typeof createDefaultSymbolStatePreset>,
-): Promise<{
+async function createCatalogForSymbolSet(config: SymbolSetConfig): Promise<{
   readonly catalog: SymbolCatalog;
   readonly validation: SymbolCatalogValidation;
 }> {
@@ -778,6 +803,7 @@ async function createCatalogForSymbolSet(
       requiredStateTextures: config.requiredStates,
       animationResolver: config.animationResolver,
       symbolAnimationCapabilities,
+      statePreset: config.statePreset,
     });
     return Object.freeze({
       catalog,
@@ -791,7 +817,7 @@ async function createCatalogForSymbolSet(
     gameConfig: createGameConfig(config.rawGameConfig),
     assets: textures,
     symbolRenderPriorities: config.symbolRenderPriorities,
-    statePreset,
+    statePreset: config.statePreset,
     animationResolver: config.animationResolver,
     symbolAnimationCapabilities,
     texturePolicy: {

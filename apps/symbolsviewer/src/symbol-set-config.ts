@@ -16,12 +16,16 @@ import {
   createDefaultSymbolAnimationResolver,
   createSymbolManifestAnimationResolver,
   createSymbolValuePresentationResourcesFromManifest,
+  createSymbolStatePresetFromManifest,
+  createSymbolCascadeWinPresentationMapFromManifest,
   getSymbolDisplaySymbolsFromManifest,
   parseSymbolStateTextureManifest,
   type ReelSymbolRenderPriorityMap,
   type ReelSymbolScaleMap,
   type SymbolAnimationResolver,
   type SymbolValuePresentationResourceMap,
+  type SymbolStatePreset,
+  type SymbolSequenceStep,
 } from "@slotclientengine/rendercore";
 import {
   SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
@@ -35,6 +39,10 @@ import {
   symbolValueSpineTextureModules,
   symbolValueTextImageModules,
 } from "./generated/game002-symbol-value-resources.generated.js";
+import {
+  createViewerSequenceFromCascadePresentations,
+  DEFAULT_VIEWER_SEQUENCE,
+} from "./viewer-sequence.js";
 
 export type SymbolSetId = "game002-s3" | "game003-s1" | "game003-bg-bar";
 
@@ -48,6 +56,8 @@ export interface SymbolSetConfig {
   readonly displaySymbols?: readonly string[];
   readonly modules: Record<string, string>;
   readonly manifest: unknown;
+  readonly statePreset: SymbolStatePreset;
+  readonly defaultSequence: readonly SymbolSequenceStep[];
   readonly vniProjectModules?: Record<string, unknown>;
   readonly vniAssetModules?: Record<string, string>;
   readonly spineSkeletonModules?: Record<string, unknown>;
@@ -185,6 +195,16 @@ export const SYMBOL_SET_CONFIGS = Object.freeze([
     rawGameConfig: rawGame002GameConfig,
     modules: game002S3Modules,
     manifest: game002S3StateTextureManifest,
+    statePreset: createSymbolStatePresetFromManifest(
+      game002S3StateTextureManifest,
+    ),
+    defaultSequence: createViewerSequenceFromCascadePresentations(
+      createSymbolCascadeWinPresentationMapFromManifest({
+        manifest: game002S3StateTextureManifest,
+        displaySymbols: GAME002_S3_DISPLAYABLE_SYMBOLS,
+        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+      }),
+    ),
     spineSkeletonModules: game002S3SpineSkeletonModules,
     spineAtlasModules: game002S3SpineAtlasModules,
     spineTextureModules: game002S3SpineTextureModules,
@@ -227,6 +247,10 @@ export const SYMBOL_SET_CONFIGS = Object.freeze([
     rawGameConfig: rawGame003GameConfig,
     modules: game003S1Modules,
     manifest: game003S1StateTextureManifest,
+    statePreset: createSymbolStatePresetFromManifest(
+      game003S1StateTextureManifest,
+    ),
+    defaultSequence: DEFAULT_VIEWER_SEQUENCE,
     vniProjectModules: game003S1VniProjectModules,
     vniAssetModules: game003S1VniAssetModules,
     spineSkeletonModules: game003S1SpineSkeletonModules,
@@ -253,6 +277,10 @@ export const SYMBOL_SET_CONFIGS = Object.freeze([
     displaySymbols: GAME003_BG_BAR_DISPLAYABLE_SYMBOLS,
     modules: game003BgBarModules,
     manifest: game003BgBarStateTextureManifest,
+    statePreset: createSymbolStatePresetFromManifest(
+      game003BgBarStateTextureManifest,
+    ),
+    defaultSequence: DEFAULT_VIEWER_SEQUENCE,
     requiredStates: [],
     animationResolver: createSymbolManifestAnimationResolver({
       manifest: game003BgBarStateTextureManifest,
@@ -280,12 +308,7 @@ export function resolveViewerStateForSymbol(
   symbol: string,
   requestedState: string,
 ): string {
-  if (
-    requestedState !== "appear" &&
-    requestedState !== "win" &&
-    requestedState !== "remove" &&
-    requestedState !== "dropdown"
-  ) {
+  if (["normal", ...config.requiredStates].includes(requestedState)) {
     return requestedState;
   }
   const parsed = parseSymbolStateTextureManifest(config.manifest, {

@@ -96,7 +96,7 @@ describe("game002-s3 assets", () => {
     expect(Object.keys(skin.spineSkeletonModules)).toHaveLength(12);
     expect(skin.reelManifest).toEqual({
       version: 1,
-      spin: { bounceStrength: 0 },
+      spin: { bounceStrength: 0, dimmingAlpha: 0.6 },
     });
     expect(
       skin.symbolValuePresentationResources.CN.tiers.map(
@@ -233,9 +233,22 @@ describe("game002-s3 assets", () => {
         },
       });
     }
-    expect(manifest.symbols.CN?.animations?.win).toMatchObject({
+    expect(manifest.symbols.CN?.animations?.win).toBeUndefined();
+    expect(manifest.symbols.CN?.animations?.winStart).toMatchObject({
       kind: "activeSpine",
-      playback: { mode: "animation", animationName: "Win", loop: false },
+      playback: {
+        mode: "animation",
+        animationName: "Win_Start",
+        loop: false,
+      },
+    });
+    expect(manifest.symbols.CN?.animations?.winLoop).toMatchObject({
+      kind: "activeSpine",
+      playback: { mode: "animation", animationName: "Win", loop: true },
+    });
+    expect(manifest.symbols.CN?.animations?.collect).toMatchObject({
+      kind: "activeSpine",
+      playback: { mode: "animation", animationName: "Collect", loop: false },
     });
     for (const symbol of ["WM", "CM", "CO", "AF", "BN"] as const) {
       expect(manifest.symbols[symbol]?.animations?.win).toBeUndefined();
@@ -352,9 +365,17 @@ describe("game002-s3 assets", () => {
         kind: "activeSpine",
         playback: { animationName: "Start", loop: false },
       },
-      win: {
+      winStart: {
         kind: "activeSpine",
-        playback: { animationName: "Win", loop: false },
+        playback: { animationName: "Win_Start", loop: false },
+      },
+      winLoop: {
+        kind: "activeSpine",
+        playback: { animationName: "Win", loop: true },
+      },
+      collect: {
+        kind: "activeSpine",
+        playback: { animationName: "Collect", loop: false },
       },
       remove: {
         kind: "activeSpine",

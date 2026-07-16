@@ -32,7 +32,7 @@ import {
 - 当前状态是 `static` 时，请求切换会立即生效。
 - 显式 `frameDurationSeconds` 不得小于 `1 / 60` 秒。
 
-默认 preset 包含 `normal`、`spinBlur`、`disabled`、`appear`、`win`。其中 `spinBlur -> normal`、`disabled -> normal` 是状态等价配置；等价目标必须存在、phase 必须一致、链路不能有环。
+默认 preset 包含 `normal`、`spinBlur`、`disabled`、`appear`、`win`、`remove`、`dropdown`。其中 `spinBlur -> normal`、`disabled -> normal` 是状态等价配置；等价目标必须存在、phase 必须一致、链路不能有环。skin 可通过 manifest `settings.additionalStateDefinitions` 追加不覆盖默认 id 的 generic `once/once` 或 `stable/loop` state，catalog、resolver、capability map、reel runtime 与 viewer 必须消费同一份派生 preset。
 
 ## 状态贴图
 
@@ -420,7 +420,8 @@ const plan = createGridCellReelSpinPlan({
     speedSymbolsPerSecond: 54,
   },
   dimming: {
-    resolveDimmingAlpha: (code) => (brightSymbolCodes.has(code) ? 0 : 0.82),
+    resolveDimmingAlpha: (code) =>
+      brightSymbolCodes.has(code) ? 0 : reelManifest.spin.dimmingAlpha,
     fadeInMs: 80,
     fadeOutMs: 160,
   },
@@ -432,7 +433,7 @@ gridReels.spin(plan);
 
 grid-cell API 会 fail-fast 校验 scene 尺寸、final y 长度、order 重复/越界/缺失、offset 矩阵尺寸和整数值、timing、alpha 范围和 reel 列数。资源状态缺失仍由 `ReelSymbolRegistry` / `RenderSymbol` 按 `texturePolicy.requiredStateTextures` 显式失败，不会静默回退到普通图。
 
-`parseReelManifest()` 读取独立 reel manifest 的 `spin.bounceStrength`：`1` 等于 rendercore 既有回弹力度，正数按比例缩放，`0` 完全关闭回弹；负数、非有限值、缺字段和未知字段都显式失败。`RenderReel`、`RenderReelSet` 与 `RenderGridCellReelSet` 都接收同一 `bounceStrength`，未传时保持默认 `1`。游戏应从自己的 reel manifest 传入，不在 app runtime 再维护第二份数值。
+`parseReelManifest()` 读取独立 reel manifest 的 `spin.bounceStrength` 和 `spin.dimmingAlpha`。`bounceStrength=1` 等于 rendercore 既有回弹力度，正数按比例缩放，`0` 完全关闭回弹；`dimmingAlpha` 必须位于 `[0,1]`，由游戏作为通用 dimming resolver 的输入。负数、非有限值、缺字段和未知字段都显式失败。`RenderReel`、`RenderReelSet` 与 `RenderGridCellReelSet` 都接收同一 `bounceStrength`，未传时保持默认 `1`；具体哪些 symbol 保持全亮仍由游戏 resolver 决定。游戏应从自己的 reel manifest 传入这两项 spin 表现值，不在 app runtime 再维护第二份数值。
 
 `RenderGridCellReelSet.update(deltaSeconds)` 在每个 cell landed 后先把目标 symbol 复位到最终 y，再只对 registry 显式启用的 symbol 请求一次 `appear`。once appear 完成后 `RenderSymbol` 回到 normal；grid-cell 完成边界会等待所有 cell landed、滚动暗层恢复且所有已请求的 landing appear 完成。没有 manifest appear 的 symbol 不应进入 `landingAppearSymbols`，不能伪造 builtin/default fallback。该逐格调度只属于 `RenderGridCellReelSet`，不改变普通 `RenderReelSet`。snapshot 提供 `phase`、`hasClipMask`、`cellX/cellY`、`reelX/reelY`、当前可见 `dimmingAlpha` / `symbolDimmingAlpha`、`dimmingOverlayRenderable`、`requestedState` 和 `visibleSymbol`，用于游戏层诊断和测试，不暴露可变内部对象。
 
@@ -497,9 +498,15 @@ symbol manifest 可为任意 symbol 声明可选 `valuePresentation`：该 symbo
 
 reel 可为每个本地 symbol occurrence 携带可选 presentation value。`TemporaryReelStrip` 会把 current endpoint、公开本地轮带中间 occurrence 和 target endpoint 的值与 code 一起冻结；`RenderSymbol` 的通用 value controller 据此直接在实际 reel slot 内播放命中 tier 的 Spine，并把文字只创建、attach 一次。normal/appear/win/remove/dropdown 都在同一 tier player 上切 animation，slot object 不重建；只有 value 真正改变、occurrence release 或 destroy 才 detach/destroy。
 
+当 requested state 通过 equivalence 解析到 normal、但 requested state 自身有显式 reel texture（例如 `spinBlur`）时，显式 texture 优先，active Spine 不得在异步 init 完成后把它隐藏。回到真正的 active-Spine state 后才重新显示 tier player。相同 active Spine resource/playback 跨 semantic state 复用时间轴时，animation 必须同步新的 semantic playback；official Spine player 会逐次上报真实 loop completion，以便状态机在 loop boundary 推进 pending once state。
+
 ## 通用 symbol cascade 与 grid-cell 级联
 
-`createSymbolCascadePlayer()` 按冻结的中奖组执行 `aggregate emphasis -> sequential group win/remove`。emphasis 期间同时显示各组金额，并通过 target API 同步压暗全部中奖坐标之外的格子遮罩与 RenderSymbol 本体，因此跨格美术也会完整变暗；fade-in、hold、fade-out 和目标 alpha 均由调用方配置，恢复正常亮度后才从第一组开始。之后每组严格执行该组全部中奖 occurrence 的 win，win 完成立即 remove 该组可消除 occurrence，再进入下一组 win。`createLastUseRemoveGroups()` 支持调用方注入通用 position predicate，因此游戏可声明某些 occurrence 中奖但不 remove；空 remove 组仍播放本组 win，完成后直接进入下一组。remove 完成的同一 update 边界释放 occurrence；它不 lingering，也不认识游戏组件名或 wild。
+`createSymbolCascadePlayer()` 按冻结的中奖组执行 `aggregate emphasis -> ordered group/collect choreography`。emphasis 期间同时显示各组金额，并通过 target API 同步压暗全部中奖坐标之外的格子遮罩与 RenderSymbol 本体，因此跨格美术也会完整变暗；fade-in、hold、fade-out 和目标 alpha 均由调用方配置，恢复正常亮度后才从第一组开始。未配置 `winSummaryCollect` 时保持原有逐组 `win -> remove` 行为。
+
+配置单一 `winSummaryCollect` 后，player 从 manifest 的 `additionalStateDefinitions` 和每个 symbol 的 `cascadeWinPresentation` 派生 state preset、稳定 `order`、group 或 sequential-collect mode 及状态 id。group mode 在 win 请求同一边界把 positive safe integer group amount 累加到 Pixi summary，并等待动画和 `0 -> target` tween 都完成后 remove；sequential mode 执行“全部 primary start once，并行播放调用方批准的 group-mode companion win -> 等全部完成 -> 全部 primary loop -> 按调用方稳定 item 顺序逐枚 collect once + item amount -> remove once -> release”。companion 不进入 item/loop/collect/remove，也不贡献金额；哪些实际 symbol 可作为 companion 完全由调用方 predicate 决定，rendercore 不认识 wild。计数只在 snapshot 的 `resolvedState` 真正进入 collect state后开始，loop pending 不会提前计数。summary 为 0 时隐藏，跨多次 `start()` 保留累计，只有 `clear()`/`destroy()` 重置。rendercore 不解析游戏组件、coin/cash 字段、symbol code 或专属动画名。
+
+manifest 扩展 state 只能声明不覆盖 base preset 的 `once/once` 或 `stable/loop` 定义；presentation 引用必须与 animation capability/playback 一致。generator 根据派生 state 集合保留 animation，不为 phase animation 生成 PNG，也不维护游戏实例 state 白名单。`createLastUseRemoveGroups()` 仍支持调用方注入通用 position predicate；启用 summary/collect 时 player 会在 manifest order 稳定排序后重新计算最后使用者，remove 完成的同一 update 边界释放 occurrence。
 
 grid-cell 级联以 `-1` 作为中间态空洞。`createGridCellCascadeDropPlan()` 同时校验 remove 后 source、服务器 settled/dropdown 和 refill 后完整 target，按列稳定匹配 `(symbol code, presentation value)` occurrence，并把既有 occurrence 与从棋盘上方创建的 refill occurrence 编入同一批 fall movement，不再调用 spin。调用方可注入 `canDropOccurrence` 固定特殊 occurrence；其它 symbol 可从固定 symbol 后面穿过，渲染前后关系统一服从 manifest `renderPriority`。fall 期间只在整个 `RenderGridCellReelSet` 上启用一个完整 grid rect mask，活动 symbol 自身不绑定 mask；从负 sourceY 进入时只有落进轮子区的部分可见，落地后解除 reel-set mask。运动支持从左到右的列延迟、列内下方优先错峰、下落和回弹。非法 hole/value、上移、顺序漂移、refill closure 或 fixed occurrence 漂移均显式失败。
 

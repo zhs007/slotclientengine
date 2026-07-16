@@ -151,6 +151,12 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
   ): SymbolAni | null {
     this.assertNotDestroyed();
     if (this.#value === null || !this.#tier || !this.#player) return null;
+    if (
+      context.requestedState !== context.resolvedState &&
+      context.stateTextures[context.requestedState]
+    ) {
+      return null;
+    }
     const resolvedPlayback =
       playback ??
       (context.resolvedState === "normal"
@@ -193,8 +199,17 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
   }
 
   private syncVisibility(): void {
-    this.#root.baseLayer.visible = false;
-    this.#root.stateSprite.visible = false;
+    const player = this.#player;
+    const showActiveSpine =
+      this.#initialized &&
+      player !== null &&
+      this.#activeAnimation !== null &&
+      this.#activePlayback !== null;
+    if (player) player.view.visible = showActiveSpine;
+    if (showActiveSpine) {
+      this.#root.baseLayer.visible = false;
+      this.#root.stateSprite.visible = false;
+    }
   }
 
   private syncPresentationView(): void {
@@ -217,7 +232,10 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     this.syncPresentationView();
   }
 
-  updateActive(animation: ActiveSpineValueAni, deltaSeconds: number): boolean {
+  updateActive(
+    animation: ActiveSpineValueAni,
+    deltaSeconds: number,
+  ): Readonly<{ completed: boolean; loopCompleted: boolean }> {
     assertValidDeltaSeconds(deltaSeconds);
     this.assertNotDestroyed();
     if (this.#initializationError) throw this.#initializationError;
@@ -226,17 +244,21 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
       !this.#initialized ||
       !this.#player
     ) {
-      return false;
+      return Object.freeze({ completed: false, loopCompleted: false });
     }
     const result = this.#player.update(deltaSeconds);
     this.syncPresentationView();
-    return result.completed;
+    return Object.freeze({
+      completed: result.completed,
+      loopCompleted: result.loopCompleted === true,
+    });
   }
 
   deactivate(animation: ActiveSpineValueAni): void {
     if (this.#activeAnimation !== animation) return;
     this.#activeAnimation = null;
     this.#activePlayback = null;
+    this.syncVisibility();
   }
 
   private playActiveAnimation(): void {
@@ -275,8 +297,8 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
 }
 
 class ActiveSpineValueAni implements SymbolAni {
-  readonly stateId: string;
-  readonly playback: SymbolAni["playback"];
+  stateId: string;
+  playback: SymbolAni["playback"];
   readonly continuityKey: string;
   readonly #controller: RenderSymbolValueControllerModel;
   readonly #playbackSpec: SymbolManifestAnimationPlaybackSpec;
@@ -304,11 +326,29 @@ class ActiveSpineValueAni implements SymbolAni {
     this.#controller.activate(this, this.#playbackSpec);
   }
 
+  adoptContinuation(next: SymbolAni): void {
+    if (!(next instanceof ActiveSpineValueAni)) {
+      throw new Error(
+        "Active Spine continuation requires another active Spine animation.",
+      );
+    }
+    this.stateId = next.stateId;
+    this.playback = next.playback;
+    this.#reportedComplete = false;
+  }
+
   update(deltaSeconds: number): SymbolAniUpdateResult {
     if (this.#destroyed)
       throw new Error("Active Spine animation was destroyed.");
-    const completed = this.#controller.updateActive(this, deltaSeconds);
-    if (this.playback !== "once" || !completed || this.#reportedComplete) {
+    const result = this.#controller.updateActive(this, deltaSeconds);
+    if (this.playback === "loop" && result.loopCompleted) {
+      return Object.freeze({ loopCompleted: true, onceCompleted: false });
+    }
+    if (
+      this.playback !== "once" ||
+      !result.completed ||
+      this.#reportedComplete
+    ) {
       return EMPTY_ANI_UPDATE_RESULT;
     }
     this.#reportedComplete = true;

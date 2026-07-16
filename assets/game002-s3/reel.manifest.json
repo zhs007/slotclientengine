@@ -1,6 +1,7 @@
 {
   "version": 1,
   "spin": {
-    "bounceStrength": 0
+    "bounceStrength": 0,
+    "dimmingAlpha": 0.6
   }
 }

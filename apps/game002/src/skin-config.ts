@@ -8,6 +8,8 @@ import {
   createSymbolAnimationCapabilityMapFromManifest,
   createSymbolLandingAppearSymbolsFromManifest,
   createSymbolManifestAnimationResolver,
+  createSymbolStatePresetFromManifest,
+  createSymbolCascadeWinPresentationMapFromManifest,
   createSymbolValuePresentationResourcesFromManifest,
   parseReelManifest,
   type ParsedReelManifest,
@@ -16,6 +18,8 @@ import {
   type ReelSymbolScaleMap,
   type SymbolAnimationResolver,
   type SymbolValuePresentationResourceMap,
+  type SymbolStatePreset,
+  type SymbolCascadeWinPresentationMap,
 } from "@slotclientengine/rendercore";
 import type { SpineBackgroundResource } from "@slotclientengine/rendercore/background";
 import {
@@ -93,6 +97,8 @@ export interface Game002SkinConfig {
   readonly symbolScales: ReelSymbolScaleMap;
   readonly symbolRenderPriorities: ReelSymbolRenderPriorityMap;
   readonly symbolAnimationCapabilities: ReelSymbolAnimationCapabilityMap;
+  readonly symbolStatePreset: SymbolStatePreset;
+  readonly cascadeWinPresentations: SymbolCascadeWinPresentationMap;
   readonly landingAppearSymbols: readonly string[];
   readonly symbolAnimationResolver: SymbolAnimationResolver;
   readonly symbolValuePresentationResources: SymbolValuePresentationResourceMap;
@@ -126,6 +132,15 @@ const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
       }),
       symbolAnimationCapabilities:
         createSymbolAnimationCapabilityMapFromManifest({
+          manifest: game002S3StateTextureManifest,
+          displaySymbols: game002S3DisplaySymbols,
+          requiredStates: ["spinBlur", "disabled"],
+        }),
+      symbolStatePreset: createSymbolStatePresetFromManifest(
+        game002S3StateTextureManifest,
+      ),
+      cascadeWinPresentations:
+        createSymbolCascadeWinPresentationMapFromManifest({
           manifest: game002S3StateTextureManifest,
           displaySymbols: game002S3DisplaySymbols,
           requiredStates: ["spinBlur", "disabled"],

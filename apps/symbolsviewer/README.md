@@ -10,9 +10,9 @@
 
 当当前 set 含 `valuePresentation` 时，toolbar 显示 positive integer Value、Apply Value 和 Clear Value。默认值 `25` 可预览当前 CN 第二档；输入 `9/10/99/100/999/1000` 可核对 manifest 边界。数字由 rendercore 绑定到 manifest 配置的 Spine `Num` slot，跟随该 slot/bone 动画。切 set、Reset 或 Clear 会清理展示，普通 set 不显示该控件。viewer 不解析阈值、不创建私有 Spine adapter，也不把 appear/win 控件映射到未配置动画。
 
-scale、renderPriority 和 normal/appear/win/remove/dropdown animation 都来自各自的 `symbol-state-textures.manifest.json`，解析和 Spine/VNI player 生命周期由 `@slotclientengine/rendercore` 提供。viewer 只负责 UI、输入校验、状态展示和 public resolver 调用。
+scale、renderPriority、base/扩展 state preset、cascade presentation 和 animation 都来自各自的 `symbol-state-textures.manifest.json`，解析和 Spine/VNI player 生命周期由 `@slotclientengine/rendercore` 提供。viewer 的 state selector 从当前 set 的派生 preset 构建，只负责 UI、输入校验、状态展示和 public resolver 调用。
 
-对 `game002-s3`，只有 manifest 明确声明的 appear/win/remove/dropdown 才播放。`CN` 的全部状态在同一个 tier player 上切换，数字不会二次创建或 attach。`BN` 没有 remove/appear，`WM` 没有 win；viewer 对这类未配置状态显示 normal，不会伪造 builtin/static 动画。dropdown 未配置时同样保持 normal，美术位移仍由实际 grid-cell runtime 负责。
+对 `game002-s3`，只有 manifest 明确声明的状态才播放。默认 sequence 从第一个 sequential-collect presentation 通用派生为 `normal -> start state -> loop state hold -> collect state -> remove state -> normal`；当前 CN 实例对应 `normal -> winStart -> winLoop -> collect -> remove -> normal`。这些状态全部在同一个 tier player 上切换，数字不会二次创建或 attach。CN 已不再响应普通 `win`；`BN` 没有 remove/appear，`WM` 没有 win，viewer 对未配置状态显示 normal，不会伪造 builtin/static 动画。
 
 运行与验收：
 

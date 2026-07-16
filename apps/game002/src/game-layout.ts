@@ -16,7 +16,6 @@ import {
   type RenderViewportSize,
 } from "@slotclientengine/rendercore";
 import { GAME002_BACKGROUND_MANIFEST } from "./background-config.js";
-import { GAME002_CASCADE_PRESENTATION } from "./cascade-config.js";
 
 export const GAME002_ART_SIZE = GAME002_BACKGROUND_MANIFEST.artSize;
 
@@ -60,14 +59,21 @@ export interface Game002GridCellDimming {
   readonly fadeOutMs: number;
 }
 
-export const GAME002_GRID_CELL_DIMMING = Object.freeze({
-  resolveSymbolDimmingAlpha: (symbol: string) =>
-    GAME002_BRIGHT_SPIN_SYMBOLS.has(symbol)
-      ? 0
-      : GAME002_CASCADE_PRESENTATION.nonWinningDimmingAlpha,
-  fadeInMs: 80,
-  fadeOutMs: 160,
-}) satisfies Game002GridCellDimming;
+export function createGame002GridCellDimming(
+  dimmingAlpha: number,
+): Game002GridCellDimming {
+  if (!Number.isFinite(dimmingAlpha) || dimmingAlpha < 0 || dimmingAlpha > 1) {
+    throw new Error(
+      "game002 spin dimmingAlpha must be a finite number between 0 and 1.",
+    );
+  }
+  return Object.freeze({
+    resolveSymbolDimmingAlpha: (symbol: string) =>
+      GAME002_BRIGHT_SPIN_SYMBOLS.has(symbol) ? 0 : dimmingAlpha,
+    fadeInMs: 80,
+    fadeOutMs: 160,
+  });
+}
 
 export const GAME002_BOARD_FRAME_IN_REFERENCE = Object.freeze({
   x: 200,

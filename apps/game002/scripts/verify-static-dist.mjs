@@ -130,6 +130,19 @@ function verifySourceContract() {
     return;
   }
   const manifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8"));
+  const additionalStates = manifest.settings?.additionalStateDefinitions;
+  if (
+    JSON.stringify(additionalStates) !==
+    JSON.stringify([
+      { id: "winStart", phase: "once", playback: "once" },
+      { id: "winLoop", phase: "stable", playback: "loop" },
+      { id: "collect", phase: "once", playback: "once" },
+    ])
+  ) {
+    failures.push(
+      "source manifest additional state definitions must declare the exact task 96 choreography states.",
+    );
+  }
   const manifestSymbols = Object.keys(manifest.symbols ?? {});
   if (JSON.stringify(manifestSymbols) !== JSON.stringify(SYMBOLS)) {
     failures.push(
@@ -144,6 +157,18 @@ function verifySourceContract() {
     }
     if (entry.scale !== 1) {
       failures.push(`source manifest ${symbol} scale must be 1.`);
+    }
+    if (
+      entry.animations?.win &&
+      (entry.cascadeWinPresentation?.order !== 0 ||
+        entry.cascadeWinPresentation?.playback?.mode !== "group" ||
+        entry.cascadeWinPresentation?.playback?.winState !== "win" ||
+        entry.cascadeWinPresentation?.playback?.removeState !== "remove" ||
+        entry.cascadeWinPresentation?.summary?.mode !== "groupAmount")
+    ) {
+      failures.push(
+        `source manifest ${symbol}.cascadeWinPresentation must declare ordinary group playback.`,
+      );
     }
     const valuePresentation = entry.valuePresentation;
     if (valuePresentation) {
@@ -165,19 +190,52 @@ function verifySourceContract() {
           `source manifest ${symbol}.valuePresentation.defaultValues must be unique positive safe integers.`,
         );
       }
-      for (const state of ["appear", "win", "remove", "dropdown"]) {
+      for (const state of [
+        "appear",
+        "winStart",
+        "winLoop",
+        "collect",
+        "remove",
+        "dropdown",
+      ]) {
         const animation = entry.animations?.[state];
+        const expectedNames = {
+          appear: "Start",
+          winStart: "Win_Start",
+          winLoop: "Win",
+          collect: "Collect",
+          remove: "End",
+          dropdown: "Loop",
+        };
         if (
           animation?.kind !== "activeSpine" ||
           animation.playback?.mode !== "animation" ||
-          typeof animation.playback.animationName !== "string" ||
-          animation.playback.animationName.length === 0 ||
-          animation.playback.loop !== (state === "dropdown")
+          animation.playback.animationName !== expectedNames[state] ||
+          animation.playback.loop !==
+            (state === "dropdown" || state === "winLoop")
         ) {
           failures.push(
             `source manifest ${symbol}.animations.${state} must be a valid activeSpine animation.`,
           );
         }
+      }
+      if (entry.animations?.win !== undefined) {
+        failures.push(
+          `source manifest ${symbol} must not retain the old ordinary win animation.`,
+        );
+      }
+      if (
+        entry.cascadeWinPresentation?.order !== 1 ||
+        entry.cascadeWinPresentation?.playback?.mode !== "sequentialCollect" ||
+        entry.cascadeWinPresentation?.playback?.startState !== "winStart" ||
+        entry.cascadeWinPresentation?.playback?.loopState !== "winLoop" ||
+        entry.cascadeWinPresentation?.playback?.collectState !== "collect" ||
+        entry.cascadeWinPresentation?.playback?.removeState !== "remove" ||
+        entry.cascadeWinPresentation?.summary?.mode !== "itemAmount"
+      ) {
+        failures.push(
+          `source manifest ${symbol}.cascadeWinPresentation must declare sequential item collection.`,
+        );
       }
       const normal = valuePresentation.reelStates?.normal;
       if (
@@ -279,10 +337,11 @@ function verifyReelSourceContract() {
   const manifest = JSON.parse(readFileSync(REEL_MANIFEST_PATH, "utf8"));
   if (
     manifest.version !== 1 ||
-    JSON.stringify(manifest.spin) !== JSON.stringify({ bounceStrength: 0 })
+    JSON.stringify(manifest.spin) !==
+      JSON.stringify({ bounceStrength: 0, dimmingAlpha: 0.6 })
   ) {
     failures.push(
-      "reel manifest must declare version=1 and spin.bounceStrength=0.",
+      "reel manifest must declare version=1, spin.bounceStrength=0 and spin.dimmingAlpha=0.6.",
     );
   }
 }

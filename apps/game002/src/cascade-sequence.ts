@@ -25,10 +25,13 @@ import {
   resolveGame002WinResultAmount,
   validateGame002CascadeWinComponent,
 } from "./win-symbol-carousel-config.js";
+import { resolveGame002WinResultCoinAmount } from "./cascade-win-summary-config.js";
 
 export interface Game002WinRemoveStage {
   readonly stepIndex: number;
   readonly groups: readonly SymbolCascadeGroup[];
+  readonly sourceScene: SceneMatrix;
+  readonly sourceValues: SymbolPresentationValueMatrix;
   readonly outputScene: GridCellCascadeScene;
   readonly outputValues: GridCellCascadeValueMatrix;
   readonly removedNum: number | null;
@@ -101,6 +104,7 @@ export function createGame002CascadeSequence(options: {
   let currentScene: GridCellCascadeScene = spinScene;
   let currentValues: GridCellCascadeValueMatrix = spinValues;
   let cumulativeWinAmount = 0;
+  let cumulativeCoinAmount = 0;
   const initialWin = createWinRemoveStage({
     logic: options.logic,
     step: initialStep,
@@ -108,10 +112,12 @@ export function createGame002CascadeSequence(options: {
     sourceValues: spinValues,
     cnSymbolCode,
     previousCumulativeWinAmount: cumulativeWinAmount,
+    previousCumulativeCoinAmount: cumulativeCoinAmount,
     canRemoveSymbol: options.canRemoveSymbol,
   });
   if (initialWin) {
     cumulativeWinAmount += sumGroupAmounts(initialWin.groups);
+    cumulativeCoinAmount += sumGroupCoinAmounts(initialWin.groups);
     currentScene = initialWin.outputScene;
     currentValues = initialWin.outputValues;
     if (steps.length < 2) {
@@ -240,6 +246,7 @@ export function createGame002CascadeSequence(options: {
       sourceValues: refillValues,
       cnSymbolCode,
       previousCumulativeWinAmount: cumulativeWinAmount,
+      previousCumulativeCoinAmount: cumulativeCoinAmount,
       canRemoveSymbol: options.canRemoveSymbol,
     });
     cascades.push(
@@ -257,6 +264,7 @@ export function createGame002CascadeSequence(options: {
     );
     if (winStage) {
       cumulativeWinAmount += sumGroupAmounts(winStage.groups);
+      cumulativeCoinAmount += sumGroupCoinAmounts(winStage.groups);
       if (stepIndex === steps.length - 1) {
         throw new Error(
           `game002 winning step[${stepIndex}] must be followed by another respin step.`,
@@ -299,6 +307,7 @@ function createWinRemoveStage(options: {
   readonly sourceValues: SymbolPresentationValueMatrix;
   readonly cnSymbolCode: number;
   readonly previousCumulativeWinAmount: number;
+  readonly previousCumulativeCoinAmount: number;
   readonly canRemoveSymbol: (context: {
     readonly stepIndex: number;
     readonly x: number;
@@ -344,6 +353,11 @@ function createWinRemoveStage(options: {
       },
     },
   );
+  validateComponentCoinWin(
+    requireBasicComponent(step, GAME002_CASCADE_COMPONENTS.win),
+    groups,
+    options.previousCumulativeCoinAmount,
+  );
   const outputScene = exactlyOneHoleScene(
     step.getComponentScenes(GAME002_CASCADE_COMPONENTS.remove),
     `step[${stepIndex}] bg-remove`,
@@ -373,10 +387,43 @@ function createWinRemoveStage(options: {
   return Object.freeze({
     stepIndex,
     groups,
+    sourceScene: options.sourceScene,
+    sourceValues: options.sourceValues,
     outputScene,
     outputValues,
     removedNum,
   });
+}
+
+function sumGroupCoinAmounts(groups: readonly SymbolCascadeGroup[]): number {
+  let total = 0;
+  for (const [groupIndex, group] of groups.entries()) {
+    total += resolveGame002WinResultCoinAmount({ group, groupIndex });
+    if (!Number.isSafeInteger(total)) {
+      throw new Error("game002 cascade coin total exceeds safe integer range.");
+    }
+  }
+  return total;
+}
+
+function validateComponentCoinWin(
+  component: ReturnType<typeof requireBasicComponent>,
+  groups: readonly SymbolCascadeGroup[],
+  previousCumulativeCoinAmount: number,
+): void {
+  const basic = component.basicComponentData;
+  const selected =
+    basic?.coinWin64 !== undefined ? basic.coinWin64 : basic?.coinWin;
+  if (selected === undefined) return;
+  if (typeof selected !== "number" || !Number.isSafeInteger(selected)) {
+    throw new Error("bg-win component coinWin must be a safe integer.");
+  }
+  const expected = previousCumulativeCoinAmount + sumGroupCoinAmounts(groups);
+  if (selected !== expected) {
+    throw new Error(
+      `bg-win component coinWin ${selected} does not match expected ${expected}.`,
+    );
+  }
 }
 
 function readFinalValues(options: {

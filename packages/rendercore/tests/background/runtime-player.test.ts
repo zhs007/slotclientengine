@@ -74,7 +74,7 @@ vi.mock("@esotericsoftware/spine-pixi-v8", () => {
     }
     update(delta: number) {
       mocks.updates.push(delta);
-      if (!this.#entry?.loop && delta > 0) {
+      if (delta > 0) {
         this.#entry.listener?.complete?.(this.#entry);
       }
     }
@@ -143,7 +143,11 @@ describe("shared official Spine player", () => {
     player.play({ animationName: "BG_FG", loop: false });
     expect(player.update(0.1)).toEqual({ completed: true });
     player.play({ animationName: "BG", loop: true });
-    expect(player.update(0.1)).toEqual({ completed: false });
+    expect(player.update(0.1)).toEqual({
+      completed: false,
+      loopCompleted: true,
+    });
+    expect(player.update(0)).toEqual({ completed: false });
     player.destroy();
   });
 

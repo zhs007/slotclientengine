@@ -5,7 +5,6 @@ import {
   GAME002_BOARD_FRAME_IN_REFERENCE,
   GAME002_CELL_SIZE,
   GAME002_FOCUS_REGION,
-  GAME002_GRID_CELL_DIMMING,
   GAME002_GRID_CELL_REEL_ORDER,
   GAME002_GRID_CELL_REEL_TIMING,
   GAME002_GRID_LAYOUT,
@@ -15,6 +14,7 @@ import {
   GAME002_VISIBLE_ROWS,
   calculateGame002FrameScale,
   createGame002FramePolicy,
+  createGame002GridCellDimming,
   createGame002Layout,
   createGame002ReelLayerLayout,
   createGame002ReelLayout,
@@ -151,6 +151,7 @@ describe("game002-s3 layout", () => {
   });
 
   it("keeps grid timing/dimming stable and validates explicit geometry", () => {
+    const dimming = createGame002GridCellDimming(0.6);
     expect(GAME002_GRID_CELL_REEL_ORDER).toBe("top-down-left-right");
     expect(GAME002_GRID_CELL_REEL_TIMING).toEqual({
       startStepMs: 16,
@@ -159,15 +160,15 @@ describe("game002-s3 layout", () => {
       minimumSpinCycles: 6,
       speedSymbolsPerSecond: 54,
     });
-    expect(GAME002_GRID_CELL_DIMMING).toMatchObject({
+    expect(dimming).toMatchObject({
       fadeInMs: 80,
       fadeOutMs: 160,
     });
-    expect(GAME002_GRID_CELL_DIMMING.resolveSymbolDimmingAlpha("WL")).toBe(0);
-    expect(GAME002_GRID_CELL_DIMMING.resolveSymbolDimmingAlpha("CN")).toBe(0);
-    expect(GAME002_GRID_CELL_DIMMING.resolveSymbolDimmingAlpha("H1")).toBe(
-      0.82,
-    );
+    expect(dimming.resolveSymbolDimmingAlpha("WL")).toBe(0);
+    expect(dimming.resolveSymbolDimmingAlpha("CN")).toBe(0);
+    expect(dimming.resolveSymbolDimmingAlpha("H1")).toBe(0.6);
+    expect(() => createGame002GridCellDimming(-0.1)).toThrow(/dimmingAlpha/);
+    expect(() => createGame002GridCellDimming(1.1)).toThrow(/dimmingAlpha/);
     expect(() => validateGame002BoardFrame()).not.toThrow();
     expect(() =>
       validateGame002FocusRegion(GAME002_FOCUS_REGION),

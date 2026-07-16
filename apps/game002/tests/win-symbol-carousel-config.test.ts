@@ -86,7 +86,7 @@ describe("game002 symbol win carousel config", () => {
     firstStep.results[1].cashWin64 = 30;
     firstStep.curGameModParam.mapComponents[
       "bg-win"
-    ].basicComponentData.cashWin = 750;
+    ].basicComponentData.cashWin = 830;
     const logic = createSlotGameLogicResult(value, {
       bet: { bet: 10, lines: 30, times: 1 },
       userInfo: { gameid: 0 },
@@ -106,7 +106,7 @@ describe("game002 symbol win carousel config", () => {
         },
       );
     expect(() => prepare(600)).not.toThrow();
-    expect(() => prepare(0)).toThrow(/expected 150/);
+    expect(() => prepare(0)).toThrow(/expected 230/);
     expect(() => prepare(-1)).toThrow(/previous cumulative win/);
   });
 });

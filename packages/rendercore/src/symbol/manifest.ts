@@ -24,7 +24,39 @@ import type {
   SymbolNormalTextureSource,
   SymbolPlaybackKind,
   SymbolStateId,
+  SymbolStateDefinition,
+  SymbolStatePreset,
 } from "./types.js";
+
+export interface SymbolCascadeGroupPlaybackPresentation {
+  readonly mode: "group";
+  readonly winState: SymbolStateId;
+  readonly removeState: SymbolStateId;
+}
+
+export interface SymbolCascadeSequentialCollectPlaybackPresentation {
+  readonly mode: "sequentialCollect";
+  readonly startState: SymbolStateId;
+  readonly loopState: SymbolStateId;
+  readonly collectState: SymbolStateId;
+  readonly removeState: SymbolStateId;
+}
+
+export type SymbolCascadePlaybackPresentation =
+  | SymbolCascadeGroupPlaybackPresentation
+  | SymbolCascadeSequentialCollectPlaybackPresentation;
+
+export interface SymbolCascadeWinPresentation {
+  readonly order: number;
+  readonly playback: SymbolCascadePlaybackPresentation;
+  readonly summary: Readonly<{
+    readonly mode: "groupAmount" | "itemAmount";
+  }>;
+}
+
+export type SymbolCascadeWinPresentationMap = Readonly<
+  Record<string, SymbolCascadeWinPresentation>
+>;
 
 export interface SymbolManifestRangePlaybackSpec {
   readonly mode: "range";
@@ -156,11 +188,13 @@ export interface ParsedSymbolManifestSymbol {
     Partial<Record<SymbolStateId, SymbolManifestAnimationSpec>>
   >;
   readonly valuePresentation?: SymbolValuePresentationSpec;
+  readonly cascadeWinPresentation?: SymbolCascadeWinPresentation;
 }
 
 export interface ParsedSymbolStateTextureManifest {
   readonly version: 1;
   readonly states: readonly SymbolStateId[];
+  readonly statePreset: SymbolStatePreset;
   readonly symbols: Readonly<Record<string, ParsedSymbolManifestSymbol>>;
 }
 
@@ -282,6 +316,7 @@ export function parseSymbolStateTextureManifest(
     record.states.map((state) => assertString(state, "manifest state")),
   );
   assertUniqueStrings(states, "symbol state texture manifest states");
+  const statePreset = parseManifestStatePreset(record.settings, states);
   const stateSet = new Set(states);
   for (const state of options.requiredStates ?? []) {
     if (!stateSet.has(state)) {
@@ -302,7 +337,10 @@ export function parseSymbolStateTextureManifest(
   }
 
   const animationStateSet = new Set(
-    options.animationStates ?? getDefaultSymbolStateIds(),
+    options.animationStates ?? statePreset.states.map((state) => state.id),
+  );
+  const stateDefinitions = new Map(
+    statePreset.states.map((state) => [state.id, state] as const),
   );
   const rawSymbols = assertRecord(
     record.symbols,
@@ -320,6 +358,7 @@ export function parseSymbolStateTextureManifest(
       "renderPriority",
       "animations",
       "valuePresentation",
+      "cascadeWinPresentation",
       ...states,
     ];
     assertOnlyKnownKeys(
@@ -368,6 +407,7 @@ export function parseSymbolStateTextureManifest(
       rawSymbolRecord.animations,
       symbol,
       animationStateSet,
+      stateDefinitions,
     );
     if (
       Object.values(animations).some(
@@ -389,6 +429,15 @@ export function parseSymbolStateTextureManifest(
         `Symbol "${symbol}" valuePresentation animations must use activeSpine.`,
       );
     }
+    const cascadeWinPresentation =
+      rawSymbolRecord.cascadeWinPresentation === undefined
+        ? undefined
+        : parseCascadeWinPresentation(
+            rawSymbolRecord.cascadeWinPresentation,
+            symbol,
+            stateDefinitions,
+            animations,
+          );
     symbols[symbol] = Object.freeze({
       normal:
         valuePresentation?.reelStates.normal ??
@@ -402,14 +451,255 @@ export function parseSymbolStateTextureManifest(
       ),
       animations,
       ...(valuePresentation !== undefined ? { valuePresentation } : {}),
+      ...(cascadeWinPresentation !== undefined
+        ? { cascadeWinPresentation }
+        : {}),
     });
   }
 
   return Object.freeze({
     version: 1,
     states,
+    statePreset,
     symbols: Object.freeze(symbols),
   });
+}
+
+function parseManifestStatePreset(
+  settings: unknown,
+  textureStates: readonly SymbolStateId[],
+): SymbolStatePreset {
+  const base = createDefaultSymbolStatePreset();
+  if (settings === undefined) return base;
+  const record = assertRecord(
+    settings,
+    "symbol state texture manifest settings",
+  );
+  assertOnlyKnownKeys(record, "symbol state texture manifest settings", [
+    ...textureStates,
+    "additionalStateDefinitions",
+  ]);
+  if (record.additionalStateDefinitions === undefined) return base;
+  if (!Array.isArray(record.additionalStateDefinitions)) {
+    throw new SymbolAssetError(
+      "Symbol state texture manifest settings.additionalStateDefinitions must be an array.",
+    );
+  }
+  const existingIds = new Set(base.states.map((state) => state.id));
+  const additions = record.additionalStateDefinitions.map((value, index) => {
+    const label = `symbol additional state definition[${index}]`;
+    const definition = assertRecord(value, label);
+    assertOnlyKnownKeys(definition, label, ["id", "phase", "playback"]);
+    const id = assertString(definition.id, `${label}.id`);
+    if (existingIds.has(id)) {
+      throw new SymbolAssetError(
+        `Symbol additional state "${id}" duplicates or overrides an existing state.`,
+      );
+    }
+    const phase = definition.phase;
+    const playback = definition.playback;
+    if (
+      !(
+        (phase === "once" && playback === "once") ||
+        (phase === "stable" && playback === "loop")
+      )
+    ) {
+      throw new SymbolAssetError(
+        `Symbol additional state "${id}" must be once/once or stable/loop.`,
+      );
+    }
+    existingIds.add(id);
+    return Object.freeze({ id, phase, playback }) as SymbolStateDefinition;
+  });
+  return Object.freeze({
+    defaultState: base.defaultState,
+    states: Object.freeze([...base.states, ...additions]),
+    equivalences: base.equivalences,
+  });
+}
+
+function parseCascadeWinPresentation(
+  value: unknown,
+  symbol: string,
+  stateDefinitions: ReadonlyMap<string, SymbolStateDefinition>,
+  animations: Readonly<
+    Partial<Record<SymbolStateId, SymbolManifestAnimationSpec>>
+  >,
+): SymbolCascadeWinPresentation {
+  const label = `symbol "${symbol}" cascadeWinPresentation`;
+  const record = assertRecord(value, label);
+  assertOnlyKnownKeys(record, label, ["order", "playback", "summary"]);
+  if (!Number.isSafeInteger(record.order) || (record.order as number) < 0) {
+    throw new SymbolAssetError(
+      `${label}.order must be a non-negative safe integer.`,
+    );
+  }
+  const playbackRecord = assertRecord(record.playback, `${label}.playback`);
+  const mode = playbackRecord.mode;
+  let playback: SymbolCascadePlaybackPresentation;
+  if (mode === "group") {
+    assertOnlyKnownKeys(playbackRecord, `${label}.playback`, [
+      "mode",
+      "winState",
+      "removeState",
+    ]);
+    const winState = parsePresentationState(
+      playbackRecord.winState,
+      `${label}.playback.winState`,
+      "once",
+      stateDefinitions,
+      animations,
+    );
+    const removeState = parsePresentationState(
+      playbackRecord.removeState,
+      `${label}.playback.removeState`,
+      "once",
+      stateDefinitions,
+      animations,
+    );
+    if (winState === removeState) {
+      throw new SymbolAssetError(`${label} group states must be distinct.`);
+    }
+    playback = Object.freeze({ mode, winState, removeState });
+  } else if (mode === "sequentialCollect") {
+    assertOnlyKnownKeys(playbackRecord, `${label}.playback`, [
+      "mode",
+      "startState",
+      "loopState",
+      "collectState",
+      "removeState",
+    ]);
+    const startState = parsePresentationState(
+      playbackRecord.startState,
+      `${label}.playback.startState`,
+      "once",
+      stateDefinitions,
+      animations,
+    );
+    const loopState = parsePresentationState(
+      playbackRecord.loopState,
+      `${label}.playback.loopState`,
+      "loop",
+      stateDefinitions,
+      animations,
+    );
+    const collectState = parsePresentationState(
+      playbackRecord.collectState,
+      `${label}.playback.collectState`,
+      "once",
+      stateDefinitions,
+      animations,
+    );
+    const removeState = parsePresentationState(
+      playbackRecord.removeState,
+      `${label}.playback.removeState`,
+      "once",
+      stateDefinitions,
+      animations,
+    );
+    if (
+      new Set([startState, loopState, collectState, removeState]).size !== 4
+    ) {
+      throw new SymbolAssetError(
+        `${label} sequential collect states must be distinct.`,
+      );
+    }
+    playback = Object.freeze({
+      mode,
+      startState,
+      loopState,
+      collectState,
+      removeState,
+    });
+  } else {
+    throw new SymbolAssetError(
+      `${label}.playback.mode must be "group" or "sequentialCollect".`,
+    );
+  }
+  const summaryRecord = assertRecord(record.summary, `${label}.summary`);
+  assertOnlyKnownKeys(summaryRecord, `${label}.summary`, ["mode"]);
+  const summaryMode = summaryRecord.mode;
+  if (
+    (mode === "group" && summaryMode !== "groupAmount") ||
+    (mode === "sequentialCollect" && summaryMode !== "itemAmount")
+  ) {
+    throw new SymbolAssetError(
+      `${label}.summary.mode is incompatible with playback mode "${mode}".`,
+    );
+  }
+  return Object.freeze({
+    order: record.order as number,
+    playback,
+    summary: Object.freeze({
+      mode: summaryMode as "groupAmount" | "itemAmount",
+    }),
+  });
+}
+
+function parsePresentationState(
+  value: unknown,
+  label: string,
+  expectedPlayback: "once" | "loop",
+  stateDefinitions: ReadonlyMap<string, SymbolStateDefinition>,
+  animations: Readonly<
+    Partial<Record<SymbolStateId, SymbolManifestAnimationSpec>>
+  >,
+): SymbolStateId {
+  const state = assertString(value, label);
+  const definition = stateDefinitions.get(state);
+  if (!definition) {
+    throw new SymbolAssetError(`${label} references unknown state "${state}".`);
+  }
+  if (definition.playback !== expectedPlayback) {
+    throw new SymbolAssetError(
+      `${label} must reference a ${expectedPlayback} state.`,
+    );
+  }
+  const animation = animations[state];
+  if (!animation) {
+    throw new SymbolAssetError(
+      `${label} requires symbol animation capability "${state}".`,
+    );
+  }
+  if (
+    expectedPlayback === "loop" &&
+    !(
+      (animation.kind === "spine" || animation.kind === "activeSpine") &&
+      animation.playback.loop
+    )
+  ) {
+    throw new SymbolAssetError(
+      `${label} requires a looping Spine or activeSpine animation.`,
+    );
+  }
+  return state;
+}
+
+export function createSymbolStatePresetFromManifest(
+  manifest: unknown,
+): SymbolStatePreset {
+  return parseSymbolStateTextureManifest(manifest).statePreset;
+}
+
+export function createSymbolCascadeWinPresentationMapFromManifest(options: {
+  readonly manifest: unknown;
+  readonly displaySymbols?: readonly string[];
+  readonly requiredStates?: readonly SymbolStateId[];
+}): SymbolCascadeWinPresentationMap {
+  const manifest = parseSymbolStateTextureManifest(options.manifest, options);
+  const symbols = options.displaySymbols ?? Object.keys(manifest.symbols);
+  const entries = symbols.flatMap((symbol) => {
+    const definition = manifest.symbols[symbol];
+    if (!definition) {
+      throw new SymbolAssetError(
+        `Symbol state texture manifest is missing "${symbol}".`,
+      );
+    }
+    return definition.cascadeWinPresentation
+      ? ([[symbol, definition.cascadeWinPresentation]] as const)
+      : [];
+  });
+  return Object.freeze(Object.fromEntries(entries));
 }
 
 function parseValuePresentation(
@@ -1194,6 +1484,7 @@ function parseManifestAnimations(
   animations: unknown,
   symbol: string,
   animationStateSet: ReadonlySet<string>,
+  stateDefinitions: ReadonlyMap<string, SymbolStateDefinition>,
 ): Readonly<Partial<Record<SymbolStateId, SymbolManifestAnimationSpec>>> {
   if (animations === undefined) {
     return Object.freeze({});
@@ -1207,7 +1498,13 @@ function parseManifestAnimations(
         `Symbol "${symbol}" declares animation for unknown state "${state}".`,
       );
     }
-    parsed[state] = parseManifestAnimationSpec(animation, symbol, state);
+    parsed[state] = parseManifestAnimationSpec(
+      animation,
+      symbol,
+      state,
+      false,
+      stateDefinitions.get(state)?.playback,
+    );
   }
   return Object.freeze(parsed);
 }
@@ -1217,6 +1514,7 @@ function parseManifestAnimationSpec(
   symbol: string,
   state: string,
   allowLoopingOnceState = false,
+  expectedPlaybackOverride?: SymbolPlaybackKind,
 ): SymbolManifestAnimationSpec {
   const record = assertRecord(value, `symbol "${symbol}" ${state} animation`);
   if (record.kind === "builtin") {
@@ -1251,7 +1549,8 @@ function parseManifestAnimationSpec(
       "playback",
     ]);
     const playback = parseAnimationPlayback(record.playback, symbol, state);
-    const expectedPlayback = getDefaultSymbolPlaybackKind(state);
+    const expectedPlayback =
+      expectedPlaybackOverride ?? getDefaultSymbolPlaybackKind(state);
     if (expectedPlayback === "once" && playback.loop) {
       throw new SymbolAssetError(
         `Symbol "${symbol}" ${state} activeSpine playback.loop must be false for once state "${state}".`,
@@ -1276,11 +1575,21 @@ function parseManifestAnimationSpec(
     const playback = parseAnimationPlayback(record.playback, symbol, state);
     if (
       !allowLoopingOnceState &&
-      getDefaultSymbolPlaybackKind(state) === "once" &&
+      (expectedPlaybackOverride ?? getDefaultSymbolPlaybackKind(state)) ===
+        "once" &&
       playback.loop
     ) {
       throw new SymbolAssetError(
         `Symbol "${symbol}" ${state} Spine playback.loop must be false for once state "${state}".`,
+      );
+    }
+    if (
+      (expectedPlaybackOverride ?? getDefaultSymbolPlaybackKind(state)) ===
+        "loop" &&
+      !playback.loop
+    ) {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" ${state} Spine playback.loop must be true for loop state "${state}".`,
       );
     }
     return Object.freeze({

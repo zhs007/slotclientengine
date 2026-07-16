@@ -134,6 +134,59 @@ describe("render symbol value controller", () => {
     symbol.destroy();
   });
 
+  it("keeps a requested reel-state texture visible across late value-player initialization", async () => {
+    const player = new FakeSlotPlayer();
+    const symbol = createSymbol(() => player);
+    symbol.init();
+    symbol.setPresentationValue(1);
+    symbol.requestState("spinBlur");
+    expect(symbol.baseLayer.visible).toBe(false);
+    expect(symbol.stateSprite.visible).toBe(true);
+
+    await flushPromises();
+    expect(symbol.baseLayer.visible).toBe(false);
+    expect(symbol.stateSprite.visible).toBe(true);
+    expect(player.view.visible).toBe(false);
+
+    symbol.returnToDefaultState();
+    expect(player.view.visible).toBe(true);
+    expect(symbol.baseLayer.visible).toBe(false);
+    expect(symbol.stateSprite.visible).toBe(false);
+
+    symbol.requestState("spinBlur");
+    expect(player.view.visible).toBe(false);
+    expect(symbol.stateSprite.visible).toBe(true);
+    symbol.destroy();
+  });
+
+  it("reports active Spine loop boundaries so a pending collect can start", async () => {
+    const player = new FakeSlotPlayer();
+    const symbol = createSymbol(() => player);
+    symbol.init();
+    symbol.setPresentationValue(1);
+    await flushPromises();
+
+    symbol.requestState("dropdown");
+    symbol.requestState("collect");
+    expect(symbol.getStateSnapshot()).toMatchObject({
+      requestedState: "dropdown",
+      resolvedState: "dropdown",
+      pendingState: "collect",
+    });
+    player.completeNextUpdate = true;
+    symbol.update(0.1);
+    expect(symbol.getStateSnapshot()).toMatchObject({
+      requestedState: "collect",
+      resolvedState: "collect",
+      pendingState: null,
+    });
+    expect(player.plays.at(-1)).toEqual({
+      animationName: "Collect",
+      loop: false,
+    });
+    symbol.destroy();
+  });
+
   it("uses an exact value image and fails without a matching image", async () => {
     const loadTexture = vi
       .spyOn(Assets, "load")
@@ -210,8 +263,10 @@ function createSymbol(
         { id: "appear", phase: "once", playback: "once" },
         { id: "win", phase: "once", playback: "once" },
         { id: "remove", phase: "once", playback: "once" },
+        { id: "collect", phase: "once", playback: "once" },
         { id: "dropdown", phase: "stable", playback: "loop" },
       ],
+      equivalences: [{ from: "spinBlur", to: "normal" }],
     },
     texture: {
       kind: "transparent",
@@ -220,7 +275,7 @@ function createSymbol(
     },
     stateTextures: { spinBlur: Texture.WHITE },
     animationResolver: createDefaultSymbolAnimationResolver(),
-    animationCapabilities: ["appear", "win", "remove", "dropdown"],
+    animationCapabilities: ["appear", "win", "remove", "collect", "dropdown"],
     landingAppearEnabled: true,
     valueControllerFactory: (root) =>
       createRenderSymbolValueController({
@@ -271,6 +326,11 @@ function createResource(): SymbolValuePresentationResource {
         animationName: "End",
         loop: false,
       }),
+      collect: Object.freeze({
+        mode: "animation" as const,
+        animationName: "Collect",
+        loop: false,
+      }),
       dropdown: Object.freeze({
         mode: "animation" as const,
         animationName: "Loop",
@@ -306,6 +366,7 @@ class FakeSlotPlayer implements RendercoreSpineSlotPlayer {
   tierSkeleton = "";
   destroyed = false;
   completeNextUpdate = false;
+  #currentLoop = false;
   readonly #initResult: Error | Promise<void> | undefined;
 
   constructor(initResult?: Error | Promise<void>) {
@@ -320,13 +381,21 @@ class FakeSlotPlayer implements RendercoreSpineSlotPlayer {
 
   play(options: { animationName: string; loop: boolean }): void {
     this.plays.push(options);
+    this.#currentLoop = options.loop;
   }
 
-  update(deltaSeconds: number): { completed: boolean } {
+  update(deltaSeconds: number): {
+    completed: boolean;
+    loopCompleted?: boolean;
+  } {
     this.updates.push(deltaSeconds);
-    const completed = this.completeNextUpdate;
+    const completed = this.completeNextUpdate && !this.#currentLoop;
+    const loopCompleted = this.completeNextUpdate && this.#currentLoop;
     this.completeNextUpdate = false;
-    return { completed };
+    return {
+      completed,
+      ...(loopCompleted ? { loopCompleted: true } : {}),
+    };
   }
 
   attachSlotObject(options: { slot: string; object: Container }): void {

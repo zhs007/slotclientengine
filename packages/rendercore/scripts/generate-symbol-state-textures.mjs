@@ -443,6 +443,17 @@ async function loadPreservedManifestMetadata(manifestPath, selectedSymbols) {
       );
     }
   }
+  const additionalStateDefinitions = validateAdditionalStateDefinitions(
+    manifest.settings,
+  );
+  const animationStateIds = new Set([
+    "normal",
+    "appear",
+    "win",
+    "remove",
+    "dropdown",
+    ...additionalStateDefinitions.map((definition) => definition.id),
+  ]);
 
   const symbols = assertRecord(
     manifest.symbols,
@@ -461,6 +472,7 @@ async function loadPreservedManifestMetadata(manifestPath, selectedSymbols) {
       "renderPriority",
       "animations",
       "valuePresentation",
+      "cascadeWinPresentation",
       ...REQUIRED_STATES,
     ]);
     const hasRenderPriority = Object.prototype.hasOwnProperty.call(
@@ -476,7 +488,11 @@ async function loadPreservedManifestMetadata(manifestPath, selectedSymbols) {
     const metadata = {};
     if (symbolRecord.animations !== undefined) {
       metadata.animations = Object.freeze(
-        validatePreservedAnimations(symbol, symbolRecord.animations),
+        validatePreservedAnimations(
+          symbol,
+          symbolRecord.animations,
+          animationStateIds,
+        ),
       );
     }
     if (symbolRecord.valuePresentation !== undefined) {
@@ -488,15 +504,79 @@ async function loadPreservedManifestMetadata(manifestPath, selectedSymbols) {
     if (hasRenderPriority) {
       metadata.renderPriority = renderPriority;
     }
+    if (symbolRecord.cascadeWinPresentation !== undefined) {
+      metadata.cascadeWinPresentation = freezeJsonValue(
+        symbolRecord.cascadeWinPresentation,
+        `${symbol}.cascadeWinPresentation`,
+      );
+    }
     if (
       Object.prototype.hasOwnProperty.call(metadata, "animations") ||
       Object.prototype.hasOwnProperty.call(metadata, "renderPriority") ||
-      Object.prototype.hasOwnProperty.call(metadata, "valuePresentation")
+      Object.prototype.hasOwnProperty.call(metadata, "valuePresentation") ||
+      Object.prototype.hasOwnProperty.call(metadata, "cascadeWinPresentation")
     ) {
       preserved.set(symbol, Object.freeze(metadata));
     }
   }
+  preserved.additionalStateDefinitions = additionalStateDefinitions;
   return preserved;
+}
+
+function validateAdditionalStateDefinitions(settingsValue) {
+  if (settingsValue === undefined) return Object.freeze([]);
+  const settings = assertRecord(
+    settingsValue,
+    "existing symbol state texture manifest settings",
+  );
+  const raw = settings.additionalStateDefinitions;
+  if (raw === undefined) return Object.freeze([]);
+  if (!Array.isArray(raw)) {
+    throw new Error("additionalStateDefinitions must be an array.");
+  }
+  const base = new Set([
+    "normal",
+    "spinBlur",
+    "disabled",
+    "appear",
+    "win",
+    "remove",
+    "dropdown",
+  ]);
+  return Object.freeze(
+    raw.map((value, index) => {
+      const record = assertRecord(
+        value,
+        `additionalStateDefinitions[${index}]`,
+      );
+      assertOnlyKnownKeys(record, `additionalStateDefinitions[${index}]`, [
+        "id",
+        "phase",
+        "playback",
+      ]);
+      const id = assertNonEmptyString(
+        record.id,
+        `additionalStateDefinitions[${index}].id`,
+      );
+      if (base.has(id)) throw new Error(`Duplicate symbol state "${id}".`);
+      if (
+        !(
+          (record.phase === "once" && record.playback === "once") ||
+          (record.phase === "stable" && record.playback === "loop")
+        )
+      ) {
+        throw new Error(
+          `Additional symbol state "${id}" must be once/once or stable/loop.`,
+        );
+      }
+      base.add(id);
+      return Object.freeze({
+        id,
+        phase: record.phase,
+        playback: record.playback,
+      });
+    }),
+  );
 }
 
 function validatePreservedValuePresentation(symbol, value) {
@@ -707,16 +787,14 @@ function validatePreservedRenderPriority(symbol, value) {
   return value;
 }
 
-function validatePreservedAnimations(symbol, value) {
+function validatePreservedAnimations(symbol, value, allowedStateIds) {
   const animations = assertRecord(
     value,
     `existing manifest symbol "${symbol}" animations`,
   );
   const preserved = {};
   for (const [state, animation] of Object.entries(animations)) {
-    if (
-      !new Set(["normal", "appear", "win", "remove", "dropdown"]).has(state)
-    ) {
+    if (!allowedStateIds.has(state)) {
       throw new Error(
         `Existing manifest symbol "${symbol}" declares animation for unknown state "${state}".`,
       );
@@ -942,6 +1020,12 @@ function createManifest(symbols, composites, scale, preservedMetadata) {
         kind: "grayscale",
         brightness: DISABLED_BRIGHTNESS,
       }),
+      ...(preservedMetadata.additionalStateDefinitions?.length
+        ? {
+            additionalStateDefinitions:
+              preservedMetadata.additionalStateDefinitions,
+          }
+        : {}),
     }),
     symbols: Object.freeze(
       Object.fromEntries(
@@ -979,11 +1063,34 @@ function createManifest(symbols, composites, scale, preservedMetadata) {
                     preservedMetadata.get(symbol).valuePresentation,
                 }
               : {}),
+            ...(preservedMetadata.get(symbol)?.cascadeWinPresentation !==
+            undefined
+              ? {
+                  cascadeWinPresentation:
+                    preservedMetadata.get(symbol).cascadeWinPresentation,
+                }
+              : {}),
           }),
         ]),
       ),
     ),
   });
+}
+
+function freezeJsonValue(value, label) {
+  try {
+    return deepFreeze(JSON.parse(JSON.stringify(value)));
+  } catch (error) {
+    throw new Error(`${label} must be JSON serializable.`, { cause: error });
+  }
+}
+
+function deepFreeze(value) {
+  if (value && typeof value === "object") {
+    for (const child of Object.values(value)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value;
 }
 
 function createManifestLayer(layer) {

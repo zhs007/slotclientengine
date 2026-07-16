@@ -31,7 +31,10 @@ import {
   createGame002SymbolAssetMapFromModules,
   loadGame002SymbolTextures,
 } from "./assets.js";
-import { createGame002Layout } from "./game-layout.js";
+import {
+  createGame002GridCellDimming,
+  createGame002Layout,
+} from "./game-layout.js";
 import {
   DEFAULT_GAME002_REEL_CONFIG,
   assertGame002ReelVisualMatchesTarget,
@@ -47,6 +50,9 @@ import {
 import { formatServerUsdAmount } from "./money.js";
 import { GAME002_SYMBOL_WIN_CAROUSEL_OPTIONS } from "./win-symbol-carousel-config.js";
 import { GAME002_CN_VALUE_SYMBOL } from "./cn-value-sequence.js";
+import { createGame002WinSummaryCollectOptions } from "./cascade-win-summary-config.js";
+import { resolveGame002WinResultCashAmount } from "./cascade-win-summary-config.js";
+import { resolveGame002WinResultCoinAmount } from "./cascade-win-summary-config.js";
 import {
   createGame002CascadeSequence,
   type Game002CascadeSequence,
@@ -57,6 +63,7 @@ import {
   GAME002_CASCADE_PRESENTATION,
   canGame002CascadeDropSymbol,
   canGame002CascadeRemoveSymbol,
+  isGame002SequentialWinCompanionSymbol,
 } from "./cascade-config.js";
 
 export type Game002TickerSnapshot = { readonly deltaMS: number };
@@ -179,7 +186,11 @@ class Game002PixiAdapter implements SlotGameAdapter {
             symbolScales: skin.symbolScales,
             symbolRenderPriorities: skin.symbolRenderPriorities,
             symbolAnimationCapabilities: skin.symbolAnimationCapabilities,
+            symbolStatePreset: skin.symbolStatePreset,
             animationResolver: skin.symbolAnimationResolver,
+            dimming: createGame002GridCellDimming(
+              skin.reelManifest.spin.dimmingAlpha,
+            ),
             spinBounceStrength: skin.reelManifest.spin.bounceStrength,
             gridLayout: skin.gridLayout,
             focusRegion: skin.focusRegion,
@@ -233,6 +244,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
         dimmingOutSeconds: GAME002_CASCADE_PRESENTATION.dimmingOutSeconds,
         nonWinningDimmingAlpha:
           GAME002_CASCADE_PRESENTATION.nonWinningDimmingAlpha,
+        winSummaryCollect: createGame002WinSummaryCollectOptions({
+          runtime,
+          skin: this.#skin,
+        }),
       });
       symbolCascadePlayer.container.position.set(
         runtime.layerLayout.x,
@@ -453,7 +468,6 @@ class Game002PixiAdapter implements SlotGameAdapter {
     stage: Game002WinRemoveStage,
   ): void {
     const player = this.#requireSymbolCascadePlayer();
-    player.clear();
     const prepared = player.prepare(stage.groups);
     pending.activeWinStage = stage;
     pending.preparedCascade = prepared;
@@ -494,6 +508,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
 
   #finalizeSpin(pending: PendingAnimation): void {
     pending.phase = "finalizing";
+    this.#requireSymbolCascadePlayer().clear();
     if (pending.winAmountRaw <= 0) {
       pending.winAmountPlaybackComplete = true;
       this.#resolvePending(pending);
@@ -561,8 +576,17 @@ class Game002PixiAdapter implements SlotGameAdapter {
     if (!pending) {
       return;
     }
+    let rejection = error;
+    try {
+      this.#symbolCascadePlayer?.clear();
+    } catch (cleanupError) {
+      rejection = new AggregateError(
+        [error, cleanupError],
+        "game002 cascade failed and cleanup also failed.",
+      );
+    }
     this.#pendingAnimation = null;
-    pending.reject(error);
+    pending.reject(rejection);
   }
 }
 
@@ -577,6 +601,33 @@ function assertCascadeResources(
   ) => {
     if (!stage) return;
     for (const [groupIndex, group] of stage.groups.entries()) {
+      const resultCode = group.result.symbol;
+      if (typeof resultCode !== "number" || !Number.isSafeInteger(resultCode)) {
+        throw new Error(
+          `game002 step[${stage.stepIndex}] group[${groupIndex}] result symbol code is invalid.`,
+        );
+      }
+      const resultSymbol =
+        runtime.gameConfig.getPaytableEntry(resultCode)?.symbol;
+      const resultPresentation = resultSymbol
+        ? skin.cascadeWinPresentations[resultSymbol]
+        : undefined;
+      if (!resultSymbol || !resultPresentation) {
+        throw new Error(
+          `game002 step[${stage.stepIndex}] group[${groupIndex}] result symbol has no cascade presentation.`,
+        );
+      }
+      const groupCoinAmount = resolveGame002WinResultCoinAmount({
+        group,
+        groupIndex,
+      });
+      const groupCashAmount = resolveGame002WinResultCashAmount({
+        group,
+        groupIndex,
+      });
+      let itemTotal = 0;
+      let itemCashTotal = 0;
+      const primaryPositionKeys = new Set<string>();
       for (const position of group.positions) {
         const code = scene[position.x]?.[position.y];
         const symbol =
@@ -588,24 +639,125 @@ function assertCascadeResources(
             `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) has no symbol.`,
           );
         }
-        if (!skin.symbolAnimationCapabilities[symbol]?.includes("win")) {
+        const presentation = skin.cascadeWinPresentations[symbol];
+        if (!presentation) {
           throw new Error(
-            `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) symbol ${symbol} has no win animation.`,
+            `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) symbol ${symbol} has no cascade presentation.`,
           );
+        }
+        const isPrimary =
+          JSON.stringify(presentation) === JSON.stringify(resultPresentation);
+        if (!isPrimary) {
+          if (
+            resultPresentation.playback.mode !== "sequentialCollect" ||
+            presentation.playback.mode !== "group" ||
+            !isGame002SequentialWinCompanionSymbol(symbol)
+          ) {
+            throw new Error(
+              `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) symbol ${symbol} has an incompatible cascade presentation.`,
+            );
+          }
+          if (
+            !skin.symbolAnimationCapabilities[symbol]?.includes(
+              presentation.playback.winState,
+            )
+          ) {
+            throw new Error(
+              `game002 step[${stage.stepIndex}] group[${groupIndex}] companion (${position.x},${position.y}) symbol ${symbol} has no ${presentation.playback.winState} animation.`,
+            );
+          }
+          continue;
+        }
+        primaryPositionKeys.add(`${position.x},${position.y}`);
+        const states =
+          presentation.playback.mode === "group"
+            ? [presentation.playback.winState]
+            : [
+                presentation.playback.startState,
+                presentation.playback.loopState,
+                presentation.playback.collectState,
+              ];
+        for (const state of states) {
+          if (!skin.symbolAnimationCapabilities[symbol]?.includes(state)) {
+            throw new Error(
+              `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) symbol ${symbol} has no ${state} animation.`,
+            );
+          }
+        }
+        if (presentation.playback.mode === "sequentialCollect") {
+          const value = stage.sourceValues[position.x]?.[position.y];
+          if (
+            typeof value !== "number" ||
+            !Number.isSafeInteger(value) ||
+            value <= 0
+          ) {
+            throw new Error(
+              `game002 step[${stage.stepIndex}] collect item (${position.x},${position.y}) value must be a positive safe integer.`,
+            );
+          }
+          itemTotal += value;
+          const weightedCashAmount = value * groupCashAmount;
+          if (
+            !Number.isSafeInteger(weightedCashAmount) ||
+            weightedCashAmount % groupCoinAmount !== 0
+          ) {
+            throw new Error(
+              `game002 step[${stage.stepIndex}] collect item (${position.x},${position.y}) cash share must divide the result cash amount exactly.`,
+            );
+          }
+          itemCashTotal += weightedCashAmount / groupCoinAmount;
         }
       }
       for (const position of group.removePositions) {
+        const key = `${position.x},${position.y}`;
+        if (!primaryPositionKeys.has(key)) {
+          throw new Error(
+            `game002 step[${stage.stepIndex}] group[${groupIndex}] remove position (${position.x},${position.y}) is not a primary win position.`,
+          );
+        }
         const code = scene[position.x]?.[position.y];
         const symbol =
           code === undefined
             ? undefined
             : runtime.gameConfig.getPaytableEntry(code)?.symbol;
+        const presentation = symbol
+          ? skin.cascadeWinPresentations[symbol]
+          : undefined;
+        const removeState = presentation?.playback.removeState;
         if (
           !symbol ||
-          !skin.symbolAnimationCapabilities[symbol]?.includes("remove")
+          !removeState ||
+          !skin.symbolAnimationCapabilities[symbol]?.includes(removeState)
         ) {
           throw new Error(
-            `game002 step[${stage.stepIndex}] group[${groupIndex}] position (${position.x},${position.y}) symbol ${symbol ?? String(code)} has no remove animation.`,
+            `game002 step[${stage.stepIndex}] group[${groupIndex}] remove position (${position.x},${position.y}) has no remove animation.`,
+          );
+        }
+      }
+      if (resultPresentation.playback.mode === "sequentialCollect") {
+        const removePositionKeys = new Set(
+          group.removePositions.map(
+            (position) => `${position.x},${position.y}`,
+          ),
+        );
+        if (
+          removePositionKeys.size !== primaryPositionKeys.size ||
+          [...primaryPositionKeys].some(
+            (position) => !removePositionKeys.has(position),
+          )
+        ) {
+          throw new Error(
+            `game002 step[${stage.stepIndex}] sequential collect group must remove every primary item and no companion.`,
+          );
+        }
+        if (itemTotal !== groupCoinAmount) {
+          throw new Error(
+            `game002 step[${stage.stepIndex}] collect item sum ${itemTotal} does not match result coin amount ${groupCoinAmount}.`,
+          );
+        }
+        if (itemCashTotal !== groupCashAmount) {
+          throw new Error(
+            `game002 step[${stage.stepIndex}] collect item cash sum ${itemCashTotal} does not match result cash amount ${groupCashAmount}.`,
           );
         }
       }

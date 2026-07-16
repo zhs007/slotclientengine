@@ -29,6 +29,7 @@ export const GAME002_CASCADE_PRESENTATION = Object.freeze({
 
 const GAME002_NON_REMOVABLE_CASCADE_SYMBOLS = new Set(["WL"]);
 const GAME002_NON_DROPPABLE_CASCADE_SYMBOLS = new Set(["WL"]);
+const GAME002_SEQUENTIAL_WIN_COMPANION_SYMBOLS = new Set(["WL"]);
 
 export function canGame002CascadeRemoveSymbol(symbol: string): boolean {
   return !GAME002_NON_REMOVABLE_CASCADE_SYMBOLS.has(symbol);
@@ -36,4 +37,8 @@ export function canGame002CascadeRemoveSymbol(symbol: string): boolean {
 
 export function canGame002CascadeDropSymbol(symbol: string): boolean {
   return !GAME002_NON_DROPPABLE_CASCADE_SYMBOLS.has(symbol);
+}
+
+export function isGame002SequentialWinCompanionSymbol(symbol: string): boolean {
+  return GAME002_SEQUENTIAL_WIN_COMPANION_SYMBOLS.has(symbol);
 }

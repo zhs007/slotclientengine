@@ -1,4 +1,5 @@
 import type { Container } from "pixi.js";
+import type { SymbolCascadeWinPresentationMap } from "../symbol/index.js";
 import type { VisibleSymbolPresentationTarget } from "../reel/index.js";
 import type {
   SymbolWinAmountTextOptions,
@@ -32,6 +33,52 @@ export interface CreateSymbolCascadePlayerOptions {
   readonly dimmingInSeconds: number;
   readonly dimmingOutSeconds: number;
   readonly nonWinningDimmingAlpha: number;
+  readonly winSummaryCollect?: WinSummaryCollectOptions;
+}
+
+export interface SymbolCascadeGroupContext {
+  readonly group: SymbolCascadeGroup;
+  readonly groupIndex: number;
+}
+
+export interface SymbolCascadeGroupPositionContext extends SymbolCascadeGroupContext {
+  readonly position: Readonly<{ readonly x: number; readonly y: number }>;
+  readonly positionIndex: number;
+}
+
+export interface SymbolCascadeResolvedPositionContext extends SymbolCascadeGroupPositionContext {
+  readonly groupSymbol: string;
+  readonly symbol: string;
+}
+
+export interface SymbolWinSummaryTextStyle {
+  readonly fontSize: number;
+  readonly fontWeight: "900" | 900;
+  readonly fill: string;
+  readonly stroke: string;
+  readonly strokeWidth: number;
+}
+
+export interface WinSummaryCollectOptions {
+  readonly presentations: SymbolCascadeWinPresentationMap;
+  readonly resolveGroupSymbol: (context: SymbolCascadeGroupContext) => string;
+  readonly resolveSymbol: (
+    context: SymbolCascadeGroupPositionContext,
+  ) => string;
+  readonly allowCompanionPosition?: (
+    context: SymbolCascadeResolvedPositionContext,
+  ) => boolean;
+  readonly resolveGroupAmount: (context: SymbolCascadeGroupContext) => number;
+  readonly resolveItemAmount: (
+    context: SymbolCascadeGroupPositionContext,
+  ) => number;
+  readonly sortItems: (
+    items: readonly SymbolCascadeGroupPositionContext[],
+  ) => readonly SymbolCascadeGroupPositionContext[];
+  readonly formatter: (value: number) => string;
+  readonly countDurationSeconds: number;
+  readonly position: Readonly<{ readonly x: number; readonly y: number }>;
+  readonly textStyle: SymbolWinSummaryTextStyle;
 }
 
 export interface PreparedSymbolCascade {
@@ -44,6 +91,10 @@ export type SymbolCascadePhase =
   | "emphasis"
   | "win"
   | "remove"
+  | "collect-start"
+  | "collect-loop"
+  | "collect-item"
+  | "collect-remove"
   | "complete"
   | "destroyed";
 
@@ -54,6 +105,15 @@ export interface SymbolCascadeSnapshot {
   readonly resultIndex: number | null;
   readonly amountVisible: boolean;
   readonly amountText: string;
+  readonly currentItemIndex: number | null;
+  readonly currentItemPosition: Readonly<{
+    readonly x: number;
+    readonly y: number;
+  }> | null;
+  readonly summaryCurrentValue: number;
+  readonly summaryTargetValue: number;
+  readonly summaryVisible: boolean;
+  readonly summaryCounting: boolean;
 }
 
 export interface SymbolCascadePlayer {

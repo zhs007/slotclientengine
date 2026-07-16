@@ -88,10 +88,14 @@ describe("game002 task 95 adapter", () => {
       events,
       () => runtime.updateCalls,
     );
+    let cascadeOptions: CreateSymbolCascadePlayerOptions | undefined;
     const adapter = createTestAdapter({
       createApplication: () => fakeApp.app,
       createRuntime: () => runtime.asRuntime(),
-      createSymbolCascadePlayer: () => cascade,
+      createSymbolCascadePlayer: (options) => {
+        cascadeOptions = options;
+        return cascade;
+      },
       createWinAmountPlayer: () => winAmount.asPlayer(),
     });
 
@@ -104,7 +108,24 @@ describe("game002 task 95 adapter", () => {
       cascade.container,
       winAmount.container,
     ]);
-    expect(cascade.container.position).toMatchObject(runtime.layerLayout);
+    expect(cascade.container.position).toMatchObject({
+      x: runtime.layerLayout.x,
+      y: runtime.layerLayout.y,
+    });
+    expect(cascadeOptions?.winSummaryCollect).toMatchObject({
+      countDurationSeconds: 0.35,
+      position: {
+        x: runtime.layerLayout.rawReelsContentWidth / 2,
+        y: runtime.layerLayout.rawReelsContentHeight + 36,
+      },
+      textStyle: {
+        fontSize: 48,
+        fontWeight: 900,
+        fill: "#fff7d6",
+        stroke: "#5a2500",
+        strokeWidth: 6,
+      },
+    });
   });
 
   it("plays the complete fixture with protected WL and one unified fall", async () => {
@@ -140,13 +161,13 @@ describe("game002 task 95 adapter", () => {
     }
     await pending;
 
-    expect(cascade.preparedGroups).toHaveLength(2);
-    expect(cascade.preparedGroups[0].removePositions).toHaveLength(5);
+    expect(cascade.preparedGroups).toHaveLength(3);
+    expect(cascade.preparedGroups[0].removePositions).toHaveLength(3);
     expect(cascade.preparedGroups[1].removePositions).not.toContainEqual({
       x: 0,
       y: 5,
     });
-    expect(runtime.released.flat()).toHaveLength(9);
+    expect(runtime.released.flat()).toHaveLength(12);
     expect(runtime.dropSource).toEqual(GAME002_CASCADE_REMOVED_SCENE);
     expect(runtime.dropSettled).toEqual(GAME002_CASCADE_DROPDOWN_SCENE);
     expect(runtime.dropTarget).toEqual(GAME002_CASCADE_REFILL_SCENE);
@@ -155,7 +176,7 @@ describe("game002 task 95 adapter", () => {
     );
     expect(runtime.currentScene).toEqual(GAME002_CASCADE_REFILL_SCENE);
     expect(winAmount.starts).toEqual([
-      { betAmountRaw: 300, winAmountRaw: 210 },
+      { betAmountRaw: 300, winAmountRaw: 290 },
     ]);
     expect(winAmount.runtimeUpdatesAtUpdate).toEqual([
       winAmount.runtimeUpdatesAtStart + 1,
@@ -171,6 +192,10 @@ describe("game002 task 95 adapter", () => {
       "group[1].win.complete",
       "group[1].remove.start",
       "group[1].remove.complete",
+      "group[2].win.start",
+      "group[2].win.complete",
+      "group[2].remove.start",
+      "group[2].remove.complete",
       "fall.start",
       "fall.complete",
       "gencoins.values-ready",
@@ -194,6 +219,19 @@ describe("game002 task 95 adapter", () => {
     ].basicComponentData.pos.pop();
 
     expect(() => adapter.playSpin(createCascadeLogic(invalid))).toThrow();
+    expect(runtime.spinTargets).toEqual([]);
+
+    const invalidCashShare = structuredClone(GAME002_CASCADE_GMI) as any;
+    const firstStep = invalidCashShare.gmi.replyPlay.results[0];
+    firstStep.cashWin = 291;
+    firstStep.clientData.results[2].cashWin64 = 81;
+    firstStep.clientData.curGameModParam.mapComponents[
+      "bg-win"
+    ].basicComponentData.cashWin = 291;
+    invalidCashShare.totalwin = 291;
+    expect(() =>
+      adapter.playSpin(createCascadeLogic(invalidCashShare)),
+    ).toThrow(/cash share must divide.*exactly/);
     expect(runtime.spinTargets).toEqual([]);
   });
 
@@ -351,7 +389,12 @@ class FakeBackgroundPlayer {
 
 class FakeRuntime {
   readonly mainReelsLayer = new Container();
-  readonly layerLayout = Object.freeze({ x: 21, y: 34 });
+  readonly layerLayout = Object.freeze({
+    x: 21,
+    y: 34,
+    rawReelsContentWidth: 720,
+    rawReelsContentHeight: 1080,
+  });
   readonly spinTargets: SceneMatrix[] = [];
   readonly spinValues: unknown[] = [];
   readonly released: Array<

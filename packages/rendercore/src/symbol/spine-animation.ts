@@ -107,6 +107,12 @@ export class SpineSymbolAni implements SymbolAni {
       return EMPTY_UPDATE_RESULT;
     }
     const result = this.#cacheEntry.player.update(deltaSeconds);
+    if (this.playback === "loop" && result.loopCompleted) {
+      return Object.freeze({
+        loopCompleted: true,
+        onceCompleted: false,
+      });
+    }
     if (
       this.playback === "once" &&
       result.completed &&

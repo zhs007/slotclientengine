@@ -32,7 +32,7 @@ http://127.0.0.1:5207/?skin=1&gamecode=GAME_CODE&token=TOKEN&businessid=guest&cl
 
 - 背景唯一配置源：`assets/game002-s3/background.manifest.json`。资源闭包为 `BG.json`、`BG.atlas` 和 `BG.png,BG_2.png..BG_8.png`；完整 art 仍为 `2000 x 2000`，Spine 原点通过 manifest 的 `{x:1000,y:1000,scale:1}` 映射到 art 中心，并裁切在完整 art 内。
 - 游戏配置：`assets/gamecfg002/gameconfig.json`，继续使用本地公开 `reels-001`。
-- 转轮表现配置：`assets/game002-s3/reel.manifest.json`。当前 `spin.bounceStrength=0`，因此 game002 普通 spin 完全不做上下回弹；`1` 才等价于 rendercore 原始力度。该 manifest 由 rendercore fail-fast parser 读取并进入 loading/dist 精确闭包，app 不硬编码第二份值。
+- 转轮表现配置：`assets/game002-s3/reel.manifest.json`。当前 `spin.bounceStrength=0`，因此 game002 普通 spin 完全不做上下回弹；`1` 才等价于 rendercore 原始力度。`spin.dimmingAlpha=0.6` 控制普通 spin 中除 `WL/CN` 外实际滚动 occurrence 的格底和 symbol 压暗强度；它与 cascade 强调阶段的 `0.82` 是两个独立配置。该 manifest 由 rendercore fail-fast parser 读取并进入 loading/dist 精确闭包，app 不硬编码第二份值。
 - 可展示 symbol 顺序固定为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`。
 - 12 个普通 symbol 必须由 manifest 顶层声明 normal、`spinBlur`、`disabled` 和 `scale: 1`；`CN` 顶层只声明 `scale: 1 + valuePresentation`，不允许顶层 normal/state。CN 的无值 reel normal 是 `valuePresentation.reelStates.normal` 显式透明占位，blur/disabled 也只放在 `reelStates`，实际 normal art 只来自命中 tier 的 Spine。`emptySymbols=[]`，`BN` 是真实贴图，不是透明兜底。
 - `CN_1..CN_4` 不属于主 symbol 集，只是当前 `CN.valuePresentation` 精确引用的附属 Spine；`Nearwin1..Nearwin3`、`WM_Fx` 仍未接入。附属资源由 `generate:symbol-value-resources` 从 manifest 生成精确闭包，禁止宽泛 glob。
@@ -43,7 +43,7 @@ http://127.0.0.1:5207/?skin=1&gamecode=GAME_CODE&token=TOKEN&businessid=guest&cl
 
 档数、`maxExclusive`、默认候选数组、Spine skeleton/atlas/texture、animation、数字显示类型、图片前缀、`slot`/local offset 唯一来自 `assets/game002-s3/symbol-state-textures.manifest.json`。当前默认候选为 `[1,2,5,10,25,50,100,250,500,1000]`，档位为 `<10`、`<100`、`<1000`、无上限四档；`text.type=image,prefix=./` 把完整值映射为 `./${value}.png`。这 10 张图片进入精确 Vite/loading/dist 闭包，并由 rendercore 使用 Pixi `Assets.load<Texture>()` 真正加载后再创建 Sprite，不依赖 `Texture.from(URL)` 的 cache 假设；服务器返回其它值、图片缺失或加载失败时，在 spin 前 prepare 或初始 reel update 显式失败，不回退 font。defaultScene 没有 otherScene 时，每个 CN 从候选数组取一个随机值；spin 的本地临时轮带也为每个 CN occurrence 固定一个候选值，使档位 Spine/数字图片跟随 reel slot 滚动而不是空白。目标 endpoint 在启动 spin 前写入服务器 otherScene 值，逐格落地到最终停轴都不回退为随机值或空值；未触发 `bg-gencoins` 时继续使用本地候选值。数字图片绑定每个 skeleton 真实存在的 `Num` slot，继承 slot/bone 动画；production TypeScript 不固定候选、四档、`CN_数字` 或 slot 名。CN value 属于实际 main-reel symbol，world 顺序仍为 background、main reels、`bg-win` carousel、global win-amount。
 
-逐格停轴动画由 `RenderGridCellReelSet` 统一调度：每格落地时，manifest 显式配置了 appear 的 symbol 先播放大小写精确的 `Start`，once 完成后回到 normal，整轮完成边界会等待落地 appear 结束。当前除 `BN` 外的主 display symbol 都配置 `Start`；`BN` skeleton 没有 `Start`，因此不触发 appear，也不使用 builtin/default fallback。normal animation 按资源真实能力配置：`CO` 与 `CN_1..CN_4` 使用 `Loop`，其它普通主 symbol 使用 `Idle`。CN 的 `Start/Win/End/Loop` 在同一个 Spine player 上切换，数字图片始终挂在 `Num` slot 下；值不变和 dropdown 搬运都不会二次 set/create/attach。
+逐格停轴动画由 `RenderGridCellReelSet` 统一调度：每格落地时，manifest 显式配置了 appear 的 symbol 先播放大小写精确的 `Start`，once 完成后回到 normal，整轮完成边界会等待落地 appear 结束。当前除 `BN` 外的主 display symbol 都配置 `Start`；`BN` skeleton 没有 `Start`，因此不触发 appear，也不使用 builtin/default fallback。normal animation 按资源真实能力配置：`CO` 与 `CN_1..CN_4` 使用 `Loop`，其它普通主 symbol 使用 `Idle`。CN 的普通中奖 `win once` 已移除；coin collect 由 manifest 扩展 state 驱动同一 tier player 执行 `Win_Start once -> Win loop -> Collect once -> End once`，数字图片始终挂在同一 `Num` slot 下；值不变、状态切换和 dropdown 搬运都不会二次 set/create/attach。
 
 - scale、render priority 和 animation 都从 `assets/game002-s3/symbol-state-textures.manifest.json` 派生；app 不维护第二份表。
 
@@ -73,7 +73,11 @@ framework 负责 live、HUD、spin/collect；adapter 负责 Pixi 画面和 grid-
 
 `bg-spin/bg-gencoins/bg-win/bg-remove/bg-respin/bg-dropdown/bg-refill` 是 game002 app-owned 映射，只有 `historyComponents` 对应的 `step.hasComponent()` 才代表触发；`historyComponentsEx` 和 map 中的空组件不触发。adapter 预解析全部 steps 后，严格执行初始 spin、逐组 emphasis/win/remove、dropdown/refill 统一 fall 和最终 gencoins；任一结构漂移都在启动画面前失败。
 
-每个 result 的全部 `pos` 会在主转轮停稳后同时请求 manifest 驱动的 `win`。单组金额严格使用 `cashWin64 !== undefined ? cashWin64 : cashWin`：字段存在性而非 truthy 决定优先级，`cashWin64=0` 会按非正金额显式失败，不能回退到旧字段，也不能用 component total、step total 或 totalwin 兜底。`bg-win.basicComponentData.cashWin` 只作为协议一致性证据：初始 step 必须等于本 step `usedResults` 金额合计，后续 cascade step 必须等于前序累计值加本 step 合计；它不会替代 result 金额用于单组展示。真实样例的 `cashWin=0/cashWin64=300` 经 `formatServerUsdAmount` 显示为 `$3.00`。
+每个 result 的全部 `pos` 会在主转轮停稳后按 manifest presentation 执行。现有单组现金 overlay 与底部临时汇总都严格使用 `cashWin64 !== undefined ? cashWin64 : cashWin`；汇总要求 result cash 为 positive safe integer cents，并复用 `formatServerUsdAmount` 除以 `100` 显示。不能从 bet、lines、component total 或 `totalwin` 推导。`bg-win.basicComponentData.cashWin/coinWin` 只在字段存在时作为累计协议证据，不能替代 result 权威字段。
+
+普通 symbol 与 WL 在 manifest 配置 `order=0/group/groupAmount`，CN 配置 `order=1/sequentialCollect/itemAmount`；因此服务器 `usedResults` 即使把 CN 放在前面，实际播放仍稳定为全部普通组后再 coin group，同 order 内保持服务器相对顺序。普通组请求 win 的同一边界把该 result cash cents 用 `0.35s` 计数加入 summary，动画和计数都完成后才 remove。coin group 先让全部 CN 同时 `Win_Start`，完成后全部进入 `Win` loop，再按 `y`、后 `x` 的屏幕行优先顺序逐枚 `Collect`；未轮到的 CN 保持 Win loop，当前 CN 只有真实 resolved state 进入 collect 后才按 `itemCoin/groupCoin * groupCash` 把精确 cents 加入 summary，随后等待 `End` 完成并 release 消失。逐格 coin value 总和必须精确等于 result coin amount，cash 份额不能整除时显式失败。参与 coin 判定的 WL 只与 CN start 同播自身 win，之后回 normal，不进入 collect/remove。
+
+summary 是 cascade container 内的 Pixi Text，位置从 reel layer 尺寸派生为 `(boardWidth/2, boardHeight+36)`，样式为 `48/900/#fff7d6/#5a2500/6`。值为 0 时完全隐藏；跨普通组、coin、fall 和后续 step 保留累计，全部 cascade 完成后在 global cash win-amount 启动前清零隐藏。单组 cash overlay、临时 cash summary 与最终 global cash amount 使用相同 cents formatter，但生命周期各自独立。
 
 金额锚点先计算所有中奖格中心的算术平均点，再从本组实际中奖格中选择最近的一格；等距时按 `x`、再按 `y` 升序。所有组金额立即同时显示，并以 `0.82` 同时压暗全部中奖坐标之外的格子黑层与 symbol 本体。完整强调段为 `1.2s`：`0.1s` 渐暗、`1s` 保持、`0.1s` 渐亮；恢复正常亮度后，从第一组开始严格执行“本组全部中奖 symbol 播放一次 `win`，完成后立即 remove 本组可消除 symbol，再进入下一组 win”。game002 通过函数向 rendercore 声明 `WL` 既不 remove 也不 drop，rendercore 不硬编码 wild。WL 仍参与所在组的中奖高亮与 win；manifest 为 WL 声明最高 `renderPriority: 1`，其它下落 symbol 可从它后面经过。
 
