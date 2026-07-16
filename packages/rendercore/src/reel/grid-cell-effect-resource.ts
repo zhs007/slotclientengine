@@ -21,7 +21,7 @@ export interface GridCellEffectResource {
   readonly officialDurationSeconds: number;
   readonly durationSeconds: number;
   readonly completionBoundaryAdjustmentSeconds: number;
-  readonly loopCount: 1;
+  readonly loopCount: number;
   readonly finishBeforeStopMs: number;
   readonly transform: Readonly<{ x: number; y: number; scale: number }>;
 }
@@ -36,10 +36,9 @@ export function createGridCellEffectResourcesFromManifest(options: {
   readonly atlasModules: Readonly<Record<string, string>>;
   readonly textureModules: Readonly<Record<string, string>>;
 }): GridCellEffectResourceMap {
-  const entries = (["normal", "anticipation"] as const).map((id) => [
-    id,
-    resolveEffect(id, options.manifest.spin.cellEffects[id], options),
-  ]);
+  const entries = Object.entries(options.manifest.spin.cellEffects).map(
+    ([id, spec]) => [id, resolveEffect(id, spec, options)],
+  );
   return Object.freeze(Object.fromEntries(entries));
 }
 
@@ -51,32 +50,33 @@ export function deriveGridCellEffectPoolCapacities(options: {
   if (!Number.isSafeInteger(options.cellCount) || options.cellCount <= 0) {
     throw new ReelError("grid cell effect pool cellCount must be positive.");
   }
-  const normal = requireResource(options.resources, "normal");
-  const activated = requireResource(options.resources, "anticipation");
-  return Object.freeze({
-    normal: calculateConcurrentCapacity(
-      normal.durationSeconds * 1000,
-      options.manifest.spin.timing.stopStepMs,
-      options.cellCount,
-    ),
-    anticipation: Math.max(
+  const usages = [
+    {
+      effectId: options.manifest.spin.anticipation.effect,
+      stepMs: options.manifest.spin.anticipation.stopStepMs,
+    },
+    {
+      effectId: options.manifest.cascade.anticipationRefill.sweep.effect,
+      stepMs: options.manifest.cascade.anticipationRefill.sweep.startStepMs,
+    },
+    {
+      effectId: options.manifest.cascade.anticipationRefill.spin.effect,
+      stepMs: options.manifest.cascade.anticipationRefill.spin.stopStepMs,
+    },
+  ];
+  const capacities: Record<string, number> = {};
+  for (const usage of usages) {
+    const resource = requireResource(options.resources, usage.effectId);
+    capacities[usage.effectId] = Math.max(
+      capacities[usage.effectId] ?? 0,
       calculateConcurrentCapacity(
-        activated.durationSeconds * 1000,
-        options.manifest.spin.anticipation.stopStepMs,
+        resource.durationSeconds * resource.loopCount * 1000,
+        usage.stepMs,
         options.cellCount,
       ),
-      calculateConcurrentCapacity(
-        activated.durationSeconds * 1000,
-        options.manifest.cascade.anticipationRefill.sweep.startStepMs,
-        options.cellCount,
-      ),
-      calculateConcurrentCapacity(
-        activated.durationSeconds * 1000,
-        options.manifest.cascade.anticipationRefill.spin.stopStepMs,
-        options.cellCount,
-      ),
-    ),
-  });
+    );
+  }
+  return Object.freeze(capacities);
 }
 
 function resolveEffect(

@@ -79,6 +79,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
   #itemIndex = -1;
   #itemIncrementStarted = false;
   #emphasisElapsedSeconds = 0;
+  readonly #prestartedSequentialLoops = new Set<number>();
 
   constructor(options: CreateSymbolCascadePlayerOptions) {
     validateOptions(options);
@@ -120,6 +121,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     this.#index = -1;
     this.#itemIndex = -1;
     this.#itemIncrementStarted = false;
+    this.#prestartedSequentialLoops.clear();
     this.startEmphasis();
     if (this.getEmphasisTotalSeconds() === 0) this.startPlanAt(0);
   }
@@ -136,6 +138,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     }
     this.#options.target.update(deltaSeconds);
     this.#summary?.update(deltaSeconds);
+    this.advancePrestartedSequentialLoops();
     if (this.#phase === "emphasis") return this.updateEmphasis(deltaSeconds);
     const plan = this.currentPlan();
     if (plan.mode === "legacy" || plan.mode === "group") {
@@ -149,7 +152,8 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     if (
       this.#phase !== "idle" &&
       this.#phase !== "complete" &&
-      this.#phase !== "emphasis"
+      (this.#phase !== "emphasis" ||
+        this.#options.startPresentationsWithEmphasis === true)
     ) {
       const positions = uniquePositions(
         this.#plans.flatMap((plan) => plan.group.positions),
@@ -167,6 +171,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     this.#itemIndex = -1;
     this.#itemIncrementStarted = false;
     this.#emphasisElapsedSeconds = 0;
+    this.#prestartedSequentialLoops.clear();
   }
 
   getSnapshot(): SymbolCascadeSnapshot {
@@ -376,6 +381,24 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     });
     this.#phase = "emphasis";
     this.#emphasisElapsedSeconds = 0;
+    if (this.#options.startPresentationsWithEmphasis === true) {
+      let groupAmount = 0;
+      for (const [index, plan] of this.#plans.entries()) {
+        this.requestPlanOpening(plan);
+        if (plan.mode === "group") {
+          groupAmount += plan.groupAmount;
+          if (!Number.isSafeInteger(groupAmount)) {
+            throw new Error(
+              "symbol cascade prestarted group amount must remain a safe integer.",
+            );
+          }
+        }
+        if (plan.mode === "sequentialCollect") {
+          this.tryStartPrestartedSequentialLoop(plan, index);
+        }
+      }
+      if (groupAmount > 0) this.requireSummary().incrementBy(groupAmount);
+    }
   }
 
   private startPlanAt(index: number): { readonly completed: boolean } {
@@ -391,6 +414,29 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     this.#itemIndex = -1;
     const plan = this.currentPlan();
     if (plan.mode === "sequentialCollect") {
+      if (this.#options.startPresentationsWithEmphasis !== true) {
+        this.requestPlanOpening(plan);
+      }
+      this.#phase = this.#prestartedSequentialLoops.has(index)
+        ? "collect-loop"
+        : "collect-start";
+      return Object.freeze({ completed: false });
+    }
+    if (this.#options.startPresentationsWithEmphasis !== true) {
+      this.requestPlanOpening(plan);
+    }
+    if (
+      plan.mode === "group" &&
+      this.#options.startPresentationsWithEmphasis !== true
+    ) {
+      this.requireSummary().incrementBy(plan.groupAmount);
+    }
+    this.#phase = "win";
+    return Object.freeze({ completed: false });
+  }
+
+  private requestPlanOpening(plan: ExecutionPlan): void {
+    if (plan.mode === "sequentialCollect") {
       this.#options.target.requestVisibleSymbolStates(
         plan.primaryPositions,
         plan.startState,
@@ -401,18 +447,37 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
           companion.winState,
         );
       }
-      this.#phase = "collect-start";
-      return Object.freeze({ completed: false });
+      return;
     }
     this.#options.target.requestVisibleSymbolStates(
       plan.group.positions,
       plan.winState,
     );
-    if (plan.mode === "group") {
-      this.requireSummary().incrementBy(plan.groupAmount);
+  }
+
+  private advancePrestartedSequentialLoops(): void {
+    if (this.#options.startPresentationsWithEmphasis !== true) return;
+    for (const [index, plan] of this.#plans.entries()) {
+      if (plan.mode === "sequentialCollect") {
+        this.tryStartPrestartedSequentialLoop(plan, index);
+      }
     }
-    this.#phase = "win";
-    return Object.freeze({ completed: false });
+  }
+
+  private tryStartPrestartedSequentialLoop(
+    plan: SequentialExecutionPlan,
+    index: number,
+  ): void {
+    if (this.#prestartedSequentialLoops.has(index)) return;
+    if (!statesReturnedToNormal(this.#options, plan.group.positions)) return;
+    this.#options.target.requestVisibleSymbolStates(
+      plan.primaryPositions,
+      plan.loopState,
+    );
+    this.#prestartedSequentialLoops.add(index);
+    if (this.#index === index && this.#phase === "collect-start") {
+      this.#phase = "collect-loop";
+    }
   }
 
   private getEmphasisTotalSeconds(): number {
@@ -881,6 +946,14 @@ function validateOptions(options: CreateSymbolCascadePlayerOptions): void {
   ) {
     throw new Error(
       "symbol cascade emphasisSeconds must be finite and non-negative.",
+    );
+  }
+  if (
+    options.startPresentationsWithEmphasis !== undefined &&
+    typeof options.startPresentationsWithEmphasis !== "boolean"
+  ) {
+    throw new Error(
+      "symbol cascade startPresentationsWithEmphasis must be boolean.",
     );
   }
   for (const [label, value] of [

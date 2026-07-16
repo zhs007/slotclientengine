@@ -160,16 +160,16 @@ describe("createGridCellReelSpinPlan", () => {
         activated: {
           effectId: "slow",
           durationMs: 80,
-          loopCount: 1,
+          loopCount: 3,
           finishBeforeStopMs: 0,
         },
         activationGate: { x: 0, y: 1 },
-        firstFollowingStopDelayMs: 80,
+        firstFollowingStopDelayMs: 240,
         activatedStopStepMs: 100,
       },
     });
     expect(plan.cells.map((cell) => cell.stopAtMs)).toEqual([
-      150, 170, 250, 350, 450, 550,
+      150, 170, 410, 510, 610, 710,
     ]);
     expect(plan.cells.map((cell) => cell.effect?.effectId)).toEqual([
       "base",
@@ -184,7 +184,37 @@ describe("createGridCellReelSpinPlan", () => {
       startAtMs: 170,
       activationGate: { x: 0, y: 1 },
     });
-    expect(plan.lastStopAtMs).toBe(550);
+    expect(plan.lastStopAtMs).toBe(710);
+    expect(plan.cells[2].effect?.loopCount).toBe(3);
+
+    const activatedOnlyPlan = createGridCellReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      targetScene: TARGET_SCENE,
+      columns: 2,
+      rows: 3,
+      order,
+      timing: TIMING,
+      dimming: DIMMING,
+      effects: {
+        activated: {
+          effectId: "slow",
+          durationMs: 80,
+          loopCount: 3,
+          finishBeforeStopMs: 0,
+        },
+        activationGate: { x: 0, y: 1 },
+        firstFollowingStopDelayMs: 240,
+        activatedStopStepMs: 100,
+      },
+    });
+    expect(
+      activatedOnlyPlan.cells.map((cell) => cell.effect?.effectId),
+    ).toEqual([undefined, undefined, "slow", "slow", "slow", "slow"]);
+    expect(activatedOnlyPlan.cells[2]!.effect).toMatchObject({
+      startAtMs: 170,
+      activationGate: { x: 0, y: 1 },
+    });
     expect(() =>
       createGridCellReelSpinPlan({
         reels,
@@ -205,11 +235,11 @@ describe("createGridCellReelSpinPlan", () => {
           activated: {
             effectId: "slow",
             durationMs: 80,
-            loopCount: 1,
+            loopCount: 3,
             finishBeforeStopMs: 0,
           },
           activationGate: { x: 0, y: 1 },
-          firstFollowingStopDelayMs: 79,
+          firstFollowingStopDelayMs: 239,
           activatedStopStepMs: 100,
         },
       }),

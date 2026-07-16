@@ -38,25 +38,27 @@ describe("grid cell effect resources and controller", () => {
         "../../../assets/game002-s3/Symbol.png": "/Symbol.png",
       },
     });
-    expect(resources.normal).toMatchObject({
-      animationName: "Loop",
-      loopCount: 1,
-    });
-    expect(resources.normal.durationSeconds).toBeCloseTo(0.6666667, 6);
-    expect(resources.normal.officialDurationSeconds).toBe(0.6666666865348816);
     expect(resources.anticipation).toMatchObject({
       animationName: "Loop",
+      loopCount: 3,
+    });
+    expect(resources.anticipation!.durationSeconds).toBeCloseTo(0.6666667, 6);
+    expect(resources.anticipation!.officialDurationSeconds).toBe(
+      0.6666666865348816,
+    );
+    expect(resources.refillSweep).toMatchObject({
+      animationName: "Loop",
       loopCount: 1,
     });
-    expect(resources.anticipation.durationSeconds).toBeCloseTo(0.4, 6);
-    expect(resources.anticipation.officialDurationSeconds).toBe(
+    expect(resources.refillSweep!.durationSeconds).toBeCloseTo(0.4, 6);
+    expect(resources.refillSweep!.officialDurationSeconds).toBe(
       0.4000000059604645,
     );
     expect(
-      resources.anticipation.completionBoundaryAdjustmentSeconds,
+      resources.refillSweep!.completionBoundaryAdjustmentSeconds,
     ).toBeGreaterThan(
-      resources.anticipation.officialDurationSeconds -
-        resources.anticipation.durationSeconds,
+      resources.refillSweep!.officialDurationSeconds -
+        resources.refillSweep!.durationSeconds,
     );
     expect(
       deriveGridCellEffectPoolCapacities({
@@ -64,7 +66,7 @@ describe("grid cell effect resources and controller", () => {
         resources,
         cellCount: 54,
       }),
-    ).toEqual({ normal: 42, anticipation: 5 });
+    ).toEqual({ anticipation: 9, refillSweep: 5 });
     expect(() =>
       createGridCellEffectResourcesFromManifest({
         manifest,
@@ -99,8 +101,8 @@ describe("grid cell effect resources and controller", () => {
 
     const players: FakePlayer[] = [];
     const controller = createGridCellEffectController({
-      resources: { anticipation: resources.anticipation },
-      capacities: { anticipation: 1 },
+      resources: { refillSweep: resources.refillSweep! },
+      capacities: { refillSweep: 1 },
       columns: 1,
       rows: 1,
       cellWidth: 10,
@@ -113,15 +115,15 @@ describe("grid cell effect resources and controller", () => {
     });
     controller.prepare();
     controller.startScheduledEffect({
-      effectId: "anticipation",
+      effectId: "refillSweep",
       position: { x: 0, y: 0 },
       loopCount: 1,
     });
-    expect(controller.update(resources.anticipation.durationSeconds)).toEqual({
-      completed: [{ effectId: "anticipation", x: 0, y: 0 }],
+    expect(controller.update(resources.refillSweep!.durationSeconds)).toEqual({
+      completed: [{ effectId: "refillSweep", x: 0, y: 0 }],
     });
     expect(players[0]!.maxElapsed).toBeGreaterThanOrEqual(
-      resources.anticipation.officialDurationSeconds,
+      resources.refillSweep!.officialDurationSeconds,
     );
     controller.destroy();
   });
@@ -193,9 +195,26 @@ describe("grid cell effect resources and controller", () => {
     controller.startScheduledEffect({
       effectId: "anticipation",
       position: { x: 1, y: 1 },
-      loopCount: 1,
+      loopCount: 3,
     });
     expect(controller.isActive("anticipation", { x: 1, y: 1 })).toBe(true);
+    expect(controller.update(0.08).completed).toEqual([]);
+    expect(controller.getSnapshot().active).toEqual([
+      {
+        effectId: "anticipation",
+        x: 1,
+        y: 1,
+        completedLoops: 1,
+      },
+    ]);
+    expect(controller.update(0.16).completed).toEqual([
+      { effectId: "anticipation", x: 1, y: 1 },
+    ]);
+    controller.startScheduledEffect({
+      effectId: "anticipation",
+      position: { x: 1, y: 1 },
+      loopCount: 3,
+    });
     controller.cancelAll();
     controller.cancelAll();
     expect(controller.getSnapshot().activeCount).toBe(0);
@@ -248,7 +267,7 @@ describe("grid cell effect resources and controller", () => {
       controller.startScheduledEffect({
         effectId: "normal",
         position: { x: 0, y: 0 },
-        loopCount: 2 as 1,
+        loopCount: 0,
       }),
     ).toThrow(/loopCount/);
     controller.destroy();
@@ -292,9 +311,11 @@ class FakePlayer implements RendercoreSpinePlayer {
   update(deltaSeconds: number) {
     this.elapsed += deltaSeconds;
     this.maxElapsed = Math.max(this.maxElapsed, this.elapsed);
+    const loopCompleted = this.elapsed >= this.durationSeconds;
+    if (loopCompleted) this.elapsed %= this.durationSeconds;
     return {
       completed: false,
-      ...(this.elapsed >= this.durationSeconds ? { loopCompleted: true } : {}),
+      ...(loopCompleted ? { loopCompleted: true } : {}),
     };
   }
   reset(): void {
@@ -320,7 +341,7 @@ function createFakeResources() {
       officialDurationSeconds: durationSeconds,
       durationSeconds,
       completionBoundaryAdjustmentSeconds: 1e-9,
-      loopCount: 1 as const,
+      loopCount: 1,
       finishBeforeStopMs: 0,
       transform: Object.freeze({ x: 0, y: 0, scale: 1 }),
     }) satisfies GridCellEffectResource;

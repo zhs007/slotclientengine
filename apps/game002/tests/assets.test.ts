@@ -76,8 +76,8 @@ describe("game002-s3 assets", () => {
       );
     }
     expect(skin.focusRegion).toEqual({
-      x: 577.5,
-      y: 270,
+      x: 577,
+      y: 272,
       width: 840,
       height: 1200,
     });
@@ -110,14 +110,14 @@ describe("game002-s3 assets", () => {
       expect.stringContaining("Nearwin2.json"),
     ]);
     expect(Object.values(skin.reelEffectResources)).toMatchObject([
-      { animationName: "Loop", loopCount: 1 },
+      { animationName: "Loop", loopCount: 3 },
       { animationName: "Loop", loopCount: 1 },
     ]);
-    expect(skin.reelEffectResources.normal.durationSeconds).toBeCloseTo(
+    expect(skin.reelEffectResources.anticipation!.durationSeconds).toBeCloseTo(
       0.6666667,
       6,
     );
-    expect(skin.reelEffectResources.anticipation.durationSeconds).toBeCloseTo(
+    expect(skin.reelEffectResources.refillSweep!.durationSeconds).toBeCloseTo(
       0.4,
       6,
     );

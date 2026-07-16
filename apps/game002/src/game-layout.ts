@@ -10,7 +10,6 @@ import {
   calculateFocusedArtViewport,
   createMaximizedFocusedArtViewportPolicy,
   mapArtRectToViewport,
-  mapReferenceRectToArt,
   type FocusedArtViewport,
   type RenderViewportSize,
 } from "@slotclientengine/rendercore";
@@ -67,20 +66,19 @@ export function createGame002GridCellDimming(
   });
 }
 
-export const GAME002_BOARD_FRAME_IN_REFERENCE = Object.freeze({
-  x: 200,
-  y: 330,
+export const GAME002_BOARD_FRAME = Object.freeze({
+  x: 637,
+  y: 332,
   width: 720,
   height: 1080,
 });
 
-export const GAME002_BOARD_FRAME = Object.freeze(
-  mapReferenceRectToArt({
-    artSize: GAME002_ART_SIZE,
-    referenceSize: GAME002_REFERENCE_SIZE,
-    referenceRect: GAME002_BOARD_FRAME_IN_REFERENCE,
-  }),
-);
+export const GAME002_BOARD_FRAME_IN_REFERENCE = Object.freeze({
+  x: GAME002_BOARD_FRAME.x - GAME002_REFERENCE_VISIBLE_RECT_IN_ART.x,
+  y: GAME002_BOARD_FRAME.y - GAME002_REFERENCE_VISIBLE_RECT_IN_ART.y,
+  width: GAME002_BOARD_FRAME.width,
+  height: GAME002_BOARD_FRAME.height,
+});
 
 export const GAME002_GRID_LAYOUT = Object.freeze({
   boardFrame: GAME002_BOARD_FRAME,

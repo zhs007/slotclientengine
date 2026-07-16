@@ -38,7 +38,7 @@ export interface GridCellEffectController {
   startScheduledEffect(options: {
     readonly effectId: string;
     readonly position: Readonly<{ x: number; y: number }>;
-    readonly loopCount: 1;
+    readonly loopCount: number;
   }): void;
   update(deltaSeconds: number): GridCellEffectUpdateResult;
   isActive(
@@ -57,8 +57,8 @@ interface PoolEntry {
   x: number;
   y: number;
   completedLoops: number;
+  requiredLoops: number;
   elapsedSeconds: number;
-  completionBoundaryAdjusted: boolean;
 }
 
 export function createGridCellEffectController(options: {
@@ -131,8 +131,8 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
           x: -1,
           y: -1,
           completedLoops: 0,
+          requiredLoops: 0,
           elapsedSeconds: 0,
-          completionBoundaryAdjusted: false,
         };
         entries.push(entry);
         return entry;
@@ -199,11 +199,14 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
   startScheduledEffect(options: {
     readonly effectId: string;
     readonly position: Readonly<{ x: number; y: number }>;
-    readonly loopCount: 1;
+    readonly loopCount: number;
   }): void {
     this.assertReady();
-    if (options.loopCount !== 1)
-      throw new ReelError("grid cell effect loopCount must be exactly 1.");
+    if (!Number.isSafeInteger(options.loopCount) || options.loopCount <= 0) {
+      throw new ReelError(
+        "grid cell effect loopCount must be a positive safe integer.",
+      );
+    }
     const { x, y } = parsePosition(options.position, this.#columns, this.#rows);
     if (this.isActive(options.effectId, { x, y })) {
       throw new ReelError(
@@ -222,8 +225,8 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
     entry.x = x;
     entry.y = y;
     entry.completedLoops = 0;
+    entry.requiredLoops = options.loopCount;
     entry.elapsedSeconds = 0;
-    entry.completionBoundaryAdjusted = false;
     entry.player.view.position.set(
       x * this.#cellWidth + this.#cellWidth / 2 + entry.resource.transform.x,
       y * this.#cellHeight + this.#cellHeight / 2 + entry.resource.transform.y,
@@ -246,22 +249,46 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
     const completed: Array<{ effectId: string; x: number; y: number }> = [];
     for (const entry of this.#entries) {
       if (!entry.active) continue;
-      entry.elapsedSeconds += deltaSeconds;
-      let playbackDeltaSeconds = deltaSeconds;
-      if (
-        !entry.completionBoundaryAdjusted &&
-        entry.elapsedSeconds + EFFECT_SCHEDULE_BOUNDARY_TOLERANCE_SECONDS >=
-          entry.resource.durationSeconds
-      ) {
-        playbackDeltaSeconds +=
-          entry.resource.completionBoundaryAdjustmentSeconds;
-        entry.completionBoundaryAdjusted = true;
+      let remainingSeconds = deltaSeconds;
+      let firstSlice = true;
+      while (entry.active && (firstSlice || remainingSeconds > 0)) {
+        firstSlice = false;
+        const secondsToBoundary = Math.max(
+          0,
+          entry.resource.durationSeconds - entry.elapsedSeconds,
+        );
+        const sliceSeconds = Math.min(remainingSeconds, secondsToBoundary);
+        entry.elapsedSeconds += sliceSeconds;
+        remainingSeconds -= sliceSeconds;
+        const reachesBoundary =
+          entry.elapsedSeconds + EFFECT_SCHEDULE_BOUNDARY_TOLERANCE_SECONDS >=
+          entry.resource.durationSeconds;
+        const result = entry.player.update(
+          sliceSeconds +
+            (reachesBoundary
+              ? entry.resource.completionBoundaryAdjustmentSeconds
+              : 0),
+        );
+        if (result.loopCompleted) {
+          entry.completedLoops += 1;
+          entry.elapsedSeconds = 0;
+          if (entry.completedLoops === entry.requiredLoops) {
+            completed.push({
+              effectId: entry.resource.id,
+              x: entry.x,
+              y: entry.y,
+            });
+            this.release(entry);
+          }
+          continue;
+        }
+        if (reachesBoundary) {
+          throw new ReelError(
+            `grid cell effect "${entry.resource.id}" did not report a real loop completion at its official boundary.`,
+          );
+        }
+        if (sliceSeconds === 0) break;
       }
-      const result = entry.player.update(playbackDeltaSeconds);
-      if (!result.loopCompleted) continue;
-      entry.completedLoops = 1;
-      completed.push({ effectId: entry.resource.id, x: entry.x, y: entry.y });
-      this.release(entry);
     }
     return Object.freeze({
       completed: Object.freeze(completed.map((item) => Object.freeze(item))),
@@ -324,8 +351,8 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
     entry.active = false;
     entry.x = -1;
     entry.y = -1;
+    entry.requiredLoops = 0;
     entry.elapsedSeconds = 0;
-    entry.completionBoundaryAdjusted = false;
   }
 
   private assertReady(): void {

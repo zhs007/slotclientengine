@@ -9,33 +9,38 @@ describe("parseReelManifest", () => {
       version: 1,
       spin: {
         bounceStrength: 0,
-        dimmingAlpha: 0.6,
+        dimmingAlpha: 0.4,
         timing: { startStepMs: 16, stopStepMs: 16 },
         anticipation: {
+          effect: "anticipation",
           triggerLandedCount: 2,
-          firstFollowingStopDelayMs: 400,
-          stopStepMs: 120,
+          firstFollowingStopDelayMs: 2000.0001,
+          stopStepMs: 240,
         },
         cellEffects: {
-          normal: { skeleton: "./Nearwin1.json", loopCount: 1 },
-          anticipation: { skeleton: "./Nearwin2.json", loopCount: 1 },
+          anticipation: { skeleton: "./Nearwin1.json", loopCount: 3 },
+          refillSweep: { skeleton: "./Nearwin2.json", loopCount: 1 },
         },
       },
       cascade: {
         anticipationRefill: {
           sweep: {
-            effect: "anticipation",
+            effect: "refillSweep",
             startStepMs: 80,
             order: "left-right-bottom-up",
           },
-          spin: { order: "left-right-top-down", stopStepMs: 120 },
+          spin: {
+            effect: "anticipation",
+            order: "left-right-top-down",
+            stopStepMs: 240,
+          },
         },
       },
     });
     expect(Object.isFrozen(manifest)).toBe(true);
-    expect(Object.isFrozen(manifest.spin.cellEffects.normal.transform)).toBe(
-      true,
-    );
+    expect(
+      Object.isFrozen(manifest.spin.cellEffects.anticipation!.transform),
+    ).toBe(true);
   });
 
   it("rejects missing, unknown, invalid path, timing, loop and order values", () => {
@@ -60,17 +65,21 @@ describe("parseReelManifest", () => {
       mutate((copy) => (copy.spin.timing.speedSymbolsPerSecond = 0)),
     ).toThrow(/speedSymbolsPerSecond/);
     expect(
-      mutate((copy) => (copy.spin.cellEffects.normal.loopCount = 2)),
-    ).toThrow(/exactly 1/);
+      mutate((copy) => (copy.spin.cellEffects.anticipation.loopCount = 0)),
+    ).toThrow(/positive safe integer/);
+    expect(
+      mutate((copy) => (copy.spin.cellEffects.anticipation.loopCount = 1.5)),
+    ).toThrow(/positive safe integer/);
     expect(
       mutate(
-        (copy) => (copy.spin.cellEffects.normal.skeleton = "../Nearwin1.json"),
+        (copy) =>
+          (copy.spin.cellEffects.anticipation.skeleton = "../Nearwin1.json"),
       ),
     ).toThrow(/local/);
     expect(
       mutate(
         (copy) =>
-          (copy.spin.cellEffects.normal.skeleton =
+          (copy.spin.cellEffects.anticipation.skeleton =
             "https://example.com/a.json"),
       ),
     ).toThrow(/local/);
@@ -84,5 +93,23 @@ describe("parseReelManifest", () => {
         (copy) => (copy.cascade.anticipationRefill.spin.order = "reverse"),
       ),
     ).toThrow(/order/);
+    expect(
+      mutate((copy) => (copy.spin.anticipation.effect = "missing")),
+    ).toThrow(/missing/);
+    expect(
+      mutate(
+        (copy) => (copy.cascade.anticipationRefill.sweep.effect = "missing"),
+      ),
+    ).toThrow(/missing/);
+    expect(
+      mutate(
+        (copy) => (copy.cascade.anticipationRefill.spin.effect = "missing"),
+      ),
+    ).toThrow(/missing/);
+    expect(
+      mutate((copy) => {
+        copy.spin.cellEffects["bad id"] = copy.spin.cellEffects.anticipation;
+      }),
+    ).toThrow(/effect id/);
   });
 });

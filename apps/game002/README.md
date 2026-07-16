@@ -32,7 +32,7 @@ http://127.0.0.1:5207/?skin=1&gamecode=GAME_CODE&token=TOKEN&businessid=guest&cl
 
 - 背景唯一配置源：`assets/game002-s3/background.manifest.json`。资源闭包为 `BG.json`、`BG.atlas` 和 `BG.png,BG_2.png..BG_8.png`；完整 art 仍为 `2000 x 2000`，Spine 原点通过 manifest 的 `{x:1000,y:1000,scale:1}` 映射到 art 中心，并裁切在完整 art 内。
 - 游戏配置：`assets/gamecfg002/gameconfig.json`，继续使用本地公开 `reels-001`。
-- 转轮表现配置：`assets/game002-s3/reel.manifest.json`。当前 `spin.bounceStrength=0`，因此 game002 普通 spin 完全不做上下回弹；`1` 才等价于 rendercore 原始力度。`spin.dimmingAlpha=0.6` 控制普通 spin 中除 `WL/CN` 外实际滚动 occurrence 的格底和 symbol 压暗强度；它与 cascade 强调阶段的 `0.82` 是两个独立配置。普通逐格 timing、Nearwin effect 资源/transform/loop、2-WL activation timing，以及期待 refill sweep/selective spin 的顺序与 timing 也只来自该 manifest。该 manifest 由 rendercore fail-fast parser 读取并进入 loading/dist 精确闭包，app 不硬编码第二份值。
+- 转轮表现配置：`assets/game002-s3/reel.manifest.json`。当前 `spin.bounceStrength=0`，因此 game002 普通 spin 完全不做上下回弹；`1` 才等价于 rendercore 原始力度。`spin.dimmingAlpha=0.6` 控制普通 spin 中除 `WL/CN` 外实际滚动 occurrence 的格底和 symbol 压暗强度；cascade 强调阶段也使用 `0.6`。普通逐格 timing、Nearwin effect 资源/transform/loop、2-WL activation timing，以及期待 refill sweep/selective spin 的顺序与 timing 也只来自该 manifest。该 manifest 由 rendercore fail-fast parser 读取并进入 loading/dist 精确闭包，app 不硬编码第二份值。
 - 可展示 symbol 顺序固定为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`。
 - 12 个普通 symbol 必须由 manifest 顶层声明 normal、`spinBlur`、`disabled` 和 `scale: 1`；`CN` 顶层只声明 `scale: 1 + valuePresentation`，不允许顶层 normal/state。CN 的无值 reel normal 是 `valuePresentation.reelStates.normal` 显式透明占位，blur/disabled 也只放在 `reelStates`，实际 normal art 只来自命中 tier 的 Spine。`emptySymbols=[]`，`BN` 是真实贴图，不是透明兜底。
 - `CN_1..CN_4` 不属于主 symbol 集，只是当前 `CN.valuePresentation` 精确引用的附属 Spine。`Nearwin1/2` 已作为独立 grid-cell reel effect 精确接入，但仍不属于 symbol manifest、display set、paytable、symbol resolver 或 symbolsviewer；`Nearwin3`、`WM_Fx` 仍未接入。所有附属资源都禁止宽泛 glob。
@@ -55,7 +55,7 @@ Spine 统一由 rendercore 的官方 Pixi runtime 解析，只接受 4.3.x skele
 
 ## 布局与 spin
 
-art world 固定为 `2000 x 2000`，portrait reference 为 `1125 x 2000`。主棋盘是 `x=637.5,y=330,width=720,height=1080`、`6 x 9`、cell `120 x 120`；唯一重点区域在棋盘四边各扩 `60`，即 `focusRegion=x=577.5,y=270,width=840,height=1200`。
+art world 固定为 `2000 x 2000`，portrait reference 为 `1125 x 2000`。主棋盘的唯一坐标源是完整 art 内的整数坐标 `x=637,y=332,width=720,height=1080`，对应 portrait reference 坐标 `x=199.5,y=332`；棋盘为 `6 x 9`、cell `120 x 120`。唯一重点区域在棋盘四边各扩 `60`，即 `focusRegion=x=577,y=272,width=840,height=1200`。
 
 单背景使用 rendercore 的 `maximized-focus` 适配：先把重点区域完整且最大化地放进页面，再按页面宽高比反推应展示的背景范围。focus 以外只要仍在 `2000 x 2000` 背景内就继续显示，不按横竖屏分类主动裁掉；只有反推范围超过完整背景时才封顶，并允许出现不可避免的黑边。art size、focus 和 policy 直接从 background manifest 派生；uiframeworks 只消费 rendercore resolver 的结果，不复制算法。Spine animation 或状态切换不会改变 art/focus/viewport。game003 的双背景仍独立使用 YAML landscape/portrait variant 和 `orientation-focus`。
 
@@ -63,7 +63,7 @@ framework 负责 live、HUD、spin/collect；adapter 负责 Pixi 画面和 grid-
 
 默认 54 格按从上到下、从左到右启停，使用 `16ms/16ms` step、`6` 个最小循环、`54 symbols/s` 和每行 `16` 的 local reel offset；`reel.manifest.json` 把回弹力度配置为 `0`，所以启停过程中微型 reel 不产生额外 y 偏移。spin 暗度按实际滚动 occurrence 的 symbol code 决定，不按格子奇偶生成棋盘格：app 把 code 映射回 paytable symbol 后，仅 `WL`、`CN` 保持全亮；其它 occurrence 的格底使用随当前 reel slot 一起滚动的 `0.6` 半透明黑层，symbol 同步使用等效亮度的灰阶 tint，二者一起变黑且保留图标轮廓，淡入/淡出继续使用 `80ms/160ms`。该效果不通过降低 symbol alpha 制造透明，也不是固定在棋盘坐标上的黑块。通用滚动、resolver 校验和暗层/tint 同步属于 rendercore；`WL/CN` 名单只属于 game002。完成时必须校验可见 scene 与服务端目标一致，之后 `playSpin()` 才能进入金额阶段并最终允许 framework collect。
 
-每个初始 spin 格在落地前于格中心播放一次 `Nearwin1.Loop`（官方时长约 `0.6666667s`），真实 loop completion 后才允许落地。game002 只按真实 landing edge 统计 paytable exact `WL`：第 2 枚 WL 落地的同一边界激活期待状态，该格仍使用 Nearwin1，后续格才使用一次 `Nearwin2.Loop`（`0.4s`）；首个后续格延后 `400ms`，之后以 `120ms` stop step 落地。期待状态跨当前轮 win/remove/cascade/win-amount 保留，只在下一次合法 initial spin 真正开始、apply initial state、fatal cleanup 或 destroy 时清除。rendercore 只接收通用 gate coordinate/effect id，不识别 WL 或资源文件名。
+普通 initial spin 不播放 Nearwin effect。game002 按真实 landing edge 统计 paytable exact `WL`：initial spin 第 2 枚 WL 落地的同一边界激活期待状态，该格也不补播 effect，只有后续格才在落地前播放 `Nearwin1.Loop` 真实 3 次（单次官方时长约 `0.6666667s`）；首个后续格从 activation boundary 起留足 `2000.0001ms`，之后以 `240ms` stop step 落地。若 initial spin 尚未激活，而后续 unified refill 的新增 WL 按 movement 真实完成顺序使当前盘面达到 2 个 WL，则在该 refill 原子提交边界激活期待；本次已完成的 refill 不倒放 effect，下一 cascade 立即走期待 split 路径。期待状态跨当前轮 win/remove/cascade/win-amount 保留，只在下一次合法 initial spin 真正开始、apply initial state、fatal cleanup 或 destroy 时清除。rendercore 只接收通用 gate coordinate/effect id，不识别 WL 或资源文件名。
 
 ## 中奖金额
 
@@ -81,9 +81,9 @@ framework 负责 live、HUD、spin/collect；adapter 负责 Pixi 画面和 grid-
 
 summary 是 cascade container 内的 Pixi Text，位置从 reel layer 尺寸派生为 `(boardWidth/2, boardHeight+36)`，样式为 `48/900/#fff7d6/#5a2500/6`。值为 0 时完全隐藏；跨普通组、coin、fall 和后续 step 保留累计，全部 cascade 完成后在 global cash win-amount 启动前清零隐藏。单组 cash overlay、临时 cash summary 与最终 global cash amount 使用相同 cents formatter，但生命周期各自独立。
 
-金额锚点先计算所有中奖格中心的算术平均点，再从本组实际中奖格中选择最近的一格；等距时按 `x`、再按 `y` 升序。所有组金额立即同时显示，并以 `0.82` 同时压暗全部中奖坐标之外的格子黑层与 symbol 本体。完整强调段为 `1.2s`：`0.1s` 渐暗、`1s` 保持、`0.1s` 渐亮；恢复正常亮度后，从第一组开始严格执行“本组全部中奖 symbol 播放一次 `win`，完成后立即 remove 本组可消除 symbol，再进入下一组 win”。game002 通过函数向 rendercore 声明 `WL` 既不 remove 也不 drop，rendercore 不硬编码 wild。WL 仍参与所在组的中奖高亮与 win；manifest 为 WL 声明最高 `renderPriority: 1`，其它下落 symbol 可从它后面经过。
+金额锚点先计算所有中奖格中心的算术平均点，再从本组实际中奖格中选择最近的一格；等距时按 `x`、再按 `y` 升序。所有组金额立即同时显示，并以 `0.6` 同时压暗全部中奖坐标之外的格子黑层与 symbol 本体。完整强调段为 `1.2s`：`0.1s` 渐暗、`1s` 保持、`0.1s` 渐亮；压暗开始的同一边界即并行启动全部中奖 symbol 的 opening win。普通组直接播放 `win`；CN 组先全部播放 `Win_Start`，完成后进入 `Win` loop，批准的 WL companion 同时播放自身 `win`。强调结束后按稳定组顺序等待已启动的 win 完成并依次 remove，不重播 opening win。game002 通过函数向 rendercore 声明 `WL` 既不 remove 也不 drop，rendercore 不硬编码 wild。WL 仍参与所在组的中奖高亮与 win；manifest 为 WL 声明最高 `renderPriority: 1`，其它下落 symbol 可从它后面经过。
 
-未激活期待时，dropdown 与 refill 仍合并为一次 rendercore fall：幸存 occurrence 和新增 symbol 同时从上向下移动，不进入 spin/appear 流程。已激活期待时，每个 cascade step 先只搬运既有 occurrence 到带 hole 的 dropdown scene；随后按 `y desc/x asc`、`80ms` 起播间隔在 hole 上预扫一次 Nearwin2，等待最后一个真实 loop completion；最后按 `y asc/x asc` 只让 empty hole 使用本地公开轮带 selective spin，以 `120ms` stop step 落到服务端 refill scene，新 symbol 继续走 manifest appear。两条路径都保留整板 mask、WL fixed/renderPriority、CN value/occurrence continuity；期待 selective spin 不重启 survivor player。refill 新增 CN 时必须使用当前 step `bg-gencoins` 的服务端值，不能随机覆盖。
+未激活期待时，dropdown 与 refill 仍合并为一次 rendercore fall：幸存 occurrence 和新增 symbol 同时从上向下移动，不进入 spin/appear 流程。已激活期待时，每个 cascade step 先只搬运既有 occurrence 到带 hole 的 dropdown scene；随后按 `y desc/x asc`、`80ms` 起播间隔在 hole 上预扫一次 Nearwin2，等待最后一个真实 loop completion；最后按 `y asc/x asc` 只让 empty hole 使用本地公开轮带 selective spin，每格在落地前播放 Nearwin1 真实 3 次，以 `240ms` stop step 落到服务端 refill scene，新 symbol 继续走 manifest appear。两条路径都保留整板 mask、WL fixed/renderPriority、CN value/occurrence continuity；期待 selective spin 不重启 survivor player。refill 新增 CN 时必须使用当前 step `bg-gencoins` 的服务端值，不能随机覆盖。
 
 `bg-remove`、`bg-dropdown` 和 `bg-refill` 的 `usedOtherScenes` 都遵守服务端 delta 语义：矩阵没有独立变化时允许省略。remove value holes 从权威 remove scene 与 source occurrence 推导；dropdown value 搬运由 rendercore 通用 occurrence 算法推导；refill intermediate otherScene 只在存在时校验尺寸。服务器若提供任一矩阵，仍必须最多一份并通过完整一致性校验。只有 refill 新增 CN 这种无法从旧 occurrence 推导的新 raw value，才要求 `bg-gencoins` 提供 otherScene。
 

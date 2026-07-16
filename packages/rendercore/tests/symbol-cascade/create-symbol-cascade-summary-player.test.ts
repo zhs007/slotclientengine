@@ -7,6 +7,47 @@ import {
 } from "../../src/index.js";
 
 describe("symbol cascade win summary collect", () => {
+  it("starts every win presentation with emphasis before sequential removal", () => {
+    const target = new StatefulTarget();
+    const player = createPlayer(
+      target,
+      {},
+      {
+        emphasisSeconds: 1,
+        nonWinningDimmingAlpha: 0.4,
+        startPresentationsWithEmphasis: true,
+      },
+    );
+
+    player.start(player.prepare(createGroups()));
+    expect(target.requests).toEqual([
+      "burst:0,0",
+      "burst:1,0",
+      "prepare:4,1|5,0|4,0",
+      "burst:2,0",
+    ]);
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "emphasis",
+      summaryTargetValue: 21,
+    });
+
+    target.completeOnceStates();
+    player.update(0);
+    expect(target.requests.at(-1)).toBe("hover:4,1|5,0|4,0");
+    expect(player.getSnapshot().phase).toBe("emphasis");
+
+    player.update(1);
+    expect(player.getSnapshot().phase).toBe("win");
+    player.update(0);
+    expect(target.requests.at(-1)).toBe("fade:0,0");
+    expect(
+      target.requests.filter((request) => request === "burst:0,0"),
+    ).toHaveLength(1);
+    expect(
+      target.requests.filter((request) => request === "prepare:4,1|5,0|4,0"),
+    ).toHaveLength(1);
+  });
+
   it("stable-sorts groups and performs generic start-loop-item-remove choreography", () => {
     const target = new StatefulTarget();
     const player = createPlayer(target);
@@ -170,6 +211,16 @@ function createPlayer(
   overrides: Partial<
     NonNullable<CreateSymbolCascadePlayerOptions["winSummaryCollect"]>
   > = {},
+  playerOverrides: Partial<
+    Pick<
+      CreateSymbolCascadePlayerOptions,
+      | "emphasisSeconds"
+      | "dimmingInSeconds"
+      | "dimmingOutSeconds"
+      | "nonWinningDimmingAlpha"
+      | "startPresentationsWithEmphasis"
+    >
+  > = {},
 ) {
   const symbols: Record<string, string> = {
     "0,0": "A",
@@ -194,10 +245,12 @@ function createPlayer(
       strokeWidth: 1,
       yOffsetRatioFromCellCenter: 0,
     },
-    emphasisSeconds: 0,
-    dimmingInSeconds: 0,
-    dimmingOutSeconds: 0,
-    nonWinningDimmingAlpha: 0.82,
+    emphasisSeconds: playerOverrides.emphasisSeconds ?? 0,
+    dimmingInSeconds: playerOverrides.dimmingInSeconds ?? 0,
+    dimmingOutSeconds: playerOverrides.dimmingOutSeconds ?? 0,
+    nonWinningDimmingAlpha: playerOverrides.nonWinningDimmingAlpha ?? 0.82,
+    startPresentationsWithEmphasis:
+      playerOverrides.startPresentationsWithEmphasis,
     winSummaryCollect: {
       presentations,
       resolveGroupSymbol: ({ group }) =>

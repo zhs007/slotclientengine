@@ -24,7 +24,8 @@ export const GAME002_CASCADE_PRESENTATION = Object.freeze({
   emphasisSeconds: 1,
   dimmingInSeconds: 0.1,
   dimmingOutSeconds: 0.1,
-  nonWinningDimmingAlpha: 0.82,
+  nonWinningDimmingAlpha: 0.6,
+  startPresentationsWithEmphasis: true,
 });
 
 const GAME002_NON_REMOVABLE_CASCADE_SYMBOLS = new Set(["WL"]);

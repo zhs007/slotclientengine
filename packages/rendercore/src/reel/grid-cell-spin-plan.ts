@@ -8,6 +8,7 @@ import type {
   GridCellReelSpinPlan,
   GridCellReelSpinTiming,
   GridCellReelEffectPlanOptions,
+  GridCellEffectPlanSpec,
   ReelAxisSpinPlan,
   ReelSpinDirection,
 } from "./types.js";
@@ -100,8 +101,10 @@ export function createGridCellReelSpinPlan(options: {
         ? Object.freeze({
             effectId: effectSpec.effectId,
             startAtMs:
-              stopAtMs - effectSpec.durationMs - effectSpec.finishBeforeStopMs,
-            loopCount: 1 as const,
+              stopAtMs -
+              effectSpec.durationMs * effectSpec.loopCount -
+              effectSpec.finishBeforeStopMs,
+            loopCount: effectSpec.loopCount,
             finishBeforeStopMs: effectSpec.finishBeforeStopMs,
             ...(effects?.activated && sequenceIndex > gateIndex
               ? { activationGate: effects.activationGate! }
@@ -153,16 +156,16 @@ function parseEffects(
   selectedOrder: readonly GridCellCoordinate[],
 ):
   | Readonly<{
-      normal: Readonly<{
+      normal?: Readonly<{
         effectId: string;
         durationMs: number;
-        loopCount: 1;
+        loopCount: number;
         finishBeforeStopMs: number;
       }>;
       activated?: Readonly<{
         effectId: string;
         durationMs: number;
-        loopCount: 1;
+        loopCount: number;
         finishBeforeStopMs: number;
       }>;
       activationGate?: Readonly<{ x: number; y: number }>;
@@ -172,7 +175,14 @@ function parseEffects(
     }>
   | undefined {
   if (value === undefined) return undefined;
-  const normal = parseEffectSpec(value.normal, "normal effect");
+  const normal = value.normal
+    ? parseEffectSpec(value.normal, "normal effect")
+    : undefined;
+  if (!normal && !value.activated) {
+    throw new ReelError(
+      "grid cell effects require normal or activated effect.",
+    );
+  }
   if (value.activated === undefined && value.activationGate !== undefined) {
     throw new ReelError(
       "activationGate requires an activated grid cell effect.",
@@ -183,7 +193,7 @@ function parseEffects(
   }
   if (value.activated === undefined) {
     return Object.freeze({
-      normal,
+      normal: normal!,
       gateIndex: -1,
       firstFollowingStopDelayMs: 0,
       activatedStopStepMs: 0,
@@ -210,7 +220,7 @@ function parseEffects(
   if (
     gateIndex < selectedOrder.length - 1 &&
     firstFollowingStopDelayMs <
-      activated.durationMs + activated.finishBeforeStopMs
+      activated.durationMs * activated.loopCount + activated.finishBeforeStopMs
   ) {
     throw new ReelError(
       "firstFollowingStopDelayMs must provide the activated effect's full lead time.",
@@ -226,23 +236,20 @@ function parseEffects(
   });
 }
 
-function parseEffectSpec(
-  value: GridCellReelEffectPlanOptions["normal"],
-  label: string,
-) {
+function parseEffectSpec(value: GridCellEffectPlanSpec, label: string) {
   if (
     typeof value.effectId !== "string" ||
     value.effectId.trim().length === 0
   ) {
     throw new ReelError(`${label} effectId must be non-empty.`);
   }
-  if (value.loopCount !== 1) {
-    throw new ReelError(`${label} loopCount must be exactly 1.`);
+  if (!Number.isSafeInteger(value.loopCount) || value.loopCount <= 0) {
+    throw new ReelError(`${label} loopCount must be a positive safe integer.`);
   }
   return Object.freeze({
     effectId: value.effectId,
     durationMs: assertPositiveNumber(value.durationMs, `${label} durationMs`),
-    loopCount: 1 as const,
+    loopCount: value.loopCount,
     finishBeforeStopMs: assertNonNegativeNumber(
       value.finishBeforeStopMs,
       `${label} finishBeforeStopMs`,

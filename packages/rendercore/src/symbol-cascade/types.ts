@@ -33,6 +33,7 @@ export interface CreateSymbolCascadePlayerOptions {
   readonly dimmingInSeconds: number;
   readonly dimmingOutSeconds: number;
   readonly nonWinningDimmingAlpha: number;
+  readonly startPresentationsWithEmphasis?: boolean;
   readonly winSummaryCollect?: WinSummaryCollectOptions;
 }
 

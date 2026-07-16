@@ -253,6 +253,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
         dimmingOutSeconds: GAME002_CASCADE_PRESENTATION.dimmingOutSeconds,
         nonWinningDimmingAlpha:
           GAME002_CASCADE_PRESENTATION.nonWinningDimmingAlpha,
+        startPresentationsWithEmphasis:
+          GAME002_CASCADE_PRESENTATION.startPresentationsWithEmphasis,
         winSummaryCollect: createGame002WinSummaryCollectOptions({
           runtime,
           skin: this.#skin,

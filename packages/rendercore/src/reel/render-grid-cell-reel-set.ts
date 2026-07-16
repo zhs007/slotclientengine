@@ -868,7 +868,7 @@ export class RenderGridCellReelSet extends Container {
         );
         if (!this.#completedEffects.has(key)) {
           throw new ReelError(
-            `grid cell (${cell.coordinate.x},${cell.coordinate.y}) cannot land before its effect completes a real loop.`,
+            `grid cell (${cell.coordinate.x},${cell.coordinate.y}) cannot land before its effect completes the required real loops.`,
           );
         }
       }
@@ -883,7 +883,7 @@ export class RenderGridCellReelSet extends Container {
           );
           if (!this.#completedEffects.has(key)) {
             throw new ReelError(
-              `grid cell (${cell.coordinate.x},${cell.coordinate.y}) landed before its effect completed a real loop.`,
+              `grid cell (${cell.coordinate.x},${cell.coordinate.y}) landed before its effect completed the required real loops.`,
             );
           }
         }

@@ -11,16 +11,16 @@
       "speedSymbolsPerSecond": 54
     },
     "cellEffects": {
-      "normal": {
+      "anticipation": {
         "skeleton": "./Nearwin1.json",
         "atlas": "./Symbol.atlas",
         "texture": "./Symbol.png",
         "animation": "Loop",
-        "loopCount": 1,
+        "loopCount": 3,
         "finishBeforeStopMs": 0,
         "transform": { "x": 0, "y": 0, "scale": 1 }
       },
-      "anticipation": {
+      "refillSweep": {
         "skeleton": "./Nearwin2.json",
         "atlas": "./Symbol.atlas",
         "texture": "./Symbol.png",
@@ -31,24 +31,26 @@
       }
     },
     "anticipation": {
+      "effect": "anticipation",
       "triggerLandedCount": 2,
-      "firstFollowingStopDelayMs": 400,
-      "stopStepMs": 120
+      "firstFollowingStopDelayMs": 2000.0001,
+      "stopStepMs": 240
     }
   },
   "cascade": {
     "anticipationRefill": {
       "sweep": {
-        "effect": "anticipation",
+        "effect": "refillSweep",
         "loopCount": 1,
         "startStepMs": 80,
         "order": "left-right-bottom-up"
       },
       "spin": {
+        "effect": "anticipation",
         "order": "left-right-top-down",
         "startStepMs": 16,
-        "stopStepMs": 120,
-        "settleAfterLastStartMs": 400,
+        "stopStepMs": 240,
+        "settleAfterLastStartMs": 2000.0001,
         "minimumSpinCycles": 6,
         "speedSymbolsPerSecond": 54
       }

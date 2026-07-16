@@ -41,8 +41,18 @@ const SPINE_SYMBOLS = Object.freeze(
 );
 const EXCLUDED_RESOURCE_PREFIXES = Object.freeze(["Nearwin3", "WM_Fx"]);
 const REEL_EFFECTS = Object.freeze([
-  { id: "normal", skeleton: "Nearwin1.json", duration: 0.6666667 },
-  { id: "anticipation", skeleton: "Nearwin2.json", duration: 0.4 },
+  {
+    id: "anticipation",
+    skeleton: "Nearwin1.json",
+    duration: 0.6666667,
+    loopCount: 3,
+  },
+  {
+    id: "refillSweep",
+    skeleton: "Nearwin2.json",
+    duration: 0.4,
+    loopCount: 1,
+  },
 ]);
 const OLD_SOURCE_DIRECTORIES = Object.freeze([
   ["assets", "symbols" + "001", ""].join("/"),
@@ -350,9 +360,10 @@ function verifyReelSourceContract() {
       }) ||
     JSON.stringify(manifest.spin?.anticipation) !==
       JSON.stringify({
+        effect: "anticipation",
         triggerLandedCount: 2,
-        firstFollowingStopDelayMs: 400,
-        stopStepMs: 120,
+        firstFollowingStopDelayMs: 2000.0001,
+        stopStepMs: 240,
       })
   ) {
     failures.push(
@@ -366,7 +377,7 @@ function verifyReelSourceContract() {
       entry.atlas !== "./Symbol.atlas" ||
       entry.texture !== "./Symbol.png" ||
       entry.animation !== "Loop" ||
-      entry.loopCount !== 1 ||
+      entry.loopCount !== effect.loopCount ||
       entry.finishBeforeStopMs !== 0 ||
       JSON.stringify(entry.transform) !==
         JSON.stringify({ x: 0, y: 0, scale: 1 })
@@ -396,16 +407,17 @@ function verifyReelSourceContract() {
     JSON.stringify(manifest.cascade?.anticipationRefill) !==
     JSON.stringify({
       sweep: {
-        effect: "anticipation",
+        effect: "refillSweep",
         loopCount: 1,
         startStepMs: 80,
         order: "left-right-bottom-up",
       },
       spin: {
+        effect: "anticipation",
         order: "left-right-top-down",
         startStepMs: 16,
-        stopStepMs: 120,
-        settleAfterLastStartMs: 400,
+        stopStepMs: 240,
+        settleAfterLastStartMs: 2000.0001,
         minimumSpinCycles: 6,
         speedSymbolsPerSecond: 54,
       },
@@ -429,7 +441,7 @@ function verifyBackgroundSourceContract() {
     JSON.stringify(manifest.adaptation) !==
       JSON.stringify({
         mode: "maximized-focus",
-        focusRect: { x: 577.5, y: 270, width: 840, height: 1200 },
+        focusRect: { x: 577, y: 272, width: 840, height: 1200 },
       })
   ) {
     failures.push("background manifest art/focus contract changed.");

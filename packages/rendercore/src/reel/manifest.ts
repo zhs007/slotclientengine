@@ -1,7 +1,7 @@
 import { ReelError } from "./errors.js";
 import type { GridCellReelSpinTiming } from "./types.js";
 
-export type GridCellEffectId = "normal" | "anticipation";
+export type GridCellEffectId = string;
 export type GridCellSweepOrder = "left-right-bottom-up";
 export type GridCellSelectiveSpinOrder = "left-right-top-down";
 
@@ -10,7 +10,7 @@ export interface ReelCellEffectManifest {
   readonly atlas: string;
   readonly texture: string;
   readonly animation: string;
-  readonly loopCount: 1;
+  readonly loopCount: number;
   readonly finishBeforeStopMs: number;
   readonly transform: Readonly<{ x: number; y: number; scale: number }>;
 }
@@ -19,10 +19,9 @@ export interface ReelSpinMotionManifest {
   readonly bounceStrength: number;
   readonly dimmingAlpha: number;
   readonly timing: GridCellReelSpinTiming;
-  readonly cellEffects: Readonly<
-    Record<GridCellEffectId, ReelCellEffectManifest>
-  >;
+  readonly cellEffects: Readonly<Record<string, ReelCellEffectManifest>>;
   readonly anticipation: Readonly<{
+    effect: GridCellEffectId;
     triggerLandedCount: number;
     firstFollowingStopDelayMs: number;
     stopStepMs: number;
@@ -41,7 +40,10 @@ export interface ParsedReelManifest {
         order: GridCellSweepOrder;
       }>;
       spin: GridCellReelSpinTiming &
-        Readonly<{ order: GridCellSelectiveSpinOrder }>;
+        Readonly<{
+          effect: GridCellEffectId;
+          order: GridCellSelectiveSpinOrder;
+        }>;
     }>;
   }>;
 }
@@ -78,31 +80,38 @@ export function parseReelManifest(value: unknown): ParsedReelManifest {
     spin.cellEffects,
     "reel manifest spin.cellEffects",
   );
-  assertOnlyKnownKeys(cellEffectsRecord, "reel manifest spin.cellEffects", [
-    "normal",
-    "anticipation",
-  ]);
-  const cellEffects = Object.freeze({
-    normal: parseCellEffect(
-      cellEffectsRecord.normal,
-      "reel manifest spin.cellEffects.normal",
+  const effectEntries = Object.entries(cellEffectsRecord);
+  if (effectEntries.length === 0) {
+    throw new ReelError("reel manifest spin.cellEffects must not be empty.");
+  }
+  const cellEffects = Object.freeze(
+    Object.fromEntries(
+      effectEntries.map(([id, effect]) => {
+        assertEffectId(id, `reel manifest spin.cellEffects key "${id}"`);
+        return [
+          id,
+          parseCellEffect(effect, `reel manifest spin.cellEffects.${id}`),
+        ];
+      }),
     ),
-    anticipation: parseCellEffect(
-      cellEffectsRecord.anticipation,
-      "reel manifest spin.cellEffects.anticipation",
-    ),
-  });
+  );
 
   const anticipationRecord = assertRecord(
     spin.anticipation,
     "reel manifest spin.anticipation",
   );
   assertOnlyKnownKeys(anticipationRecord, "reel manifest spin.anticipation", [
+    "effect",
     "triggerLandedCount",
     "firstFollowingStopDelayMs",
     "stopStepMs",
   ]);
   const anticipation = Object.freeze({
+    effect: parseEffectReference(
+      anticipationRecord.effect,
+      cellEffects,
+      "reel manifest spin.anticipation.effect",
+    ),
     triggerLandedCount: assertPositiveSafeInteger(
       anticipationRecord.triggerLandedCount,
       "reel manifest spin.anticipation.triggerLandedCount",
@@ -136,18 +145,16 @@ export function parseReelManifest(value: unknown): ParsedReelManifest {
     "reel manifest cascade.anticipationRefill.sweep",
     ["effect", "loopCount", "startStepMs", "order"],
   );
-  if (
-    sweepRecord.effect !== "normal" &&
-    sweepRecord.effect !== "anticipation"
-  ) {
+  const sweepEffect = parseEffectReference(
+    sweepRecord.effect,
+    cellEffects,
+    "reel manifest cascade.anticipationRefill.sweep.effect",
+  );
+  if (sweepRecord.loopCount !== 1) {
     throw new ReelError(
-      'reel manifest cascade.anticipationRefill.sweep.effect must reference "normal" or "anticipation".',
+      "reel manifest cascade.anticipationRefill.sweep.loopCount must be exactly 1.",
     );
   }
-  assertLoopCount(
-    sweepRecord.loopCount,
-    "reel manifest cascade.anticipationRefill.sweep.loopCount",
-  );
   if (sweepRecord.order !== "left-right-bottom-up") {
     throw new ReelError(
       'reel manifest cascade.anticipationRefill.sweep.order must be "left-right-bottom-up".',
@@ -162,6 +169,7 @@ export function parseReelManifest(value: unknown): ParsedReelManifest {
     "reel manifest cascade.anticipationRefill.spin",
     [
       "order",
+      "effect",
       "startStepMs",
       "stopStepMs",
       "settleAfterLastStartMs",
@@ -177,7 +185,12 @@ export function parseReelManifest(value: unknown): ParsedReelManifest {
   const refillTiming = parseTiming(
     refillSpinRecord,
     "reel manifest cascade.anticipationRefill.spin",
-    ["order"],
+    ["order", "effect"],
+  );
+  const refillSpinEffect = parseEffectReference(
+    refillSpinRecord.effect,
+    cellEffects,
+    "reel manifest cascade.anticipationRefill.spin.effect",
   );
 
   return Object.freeze({
@@ -192,7 +205,7 @@ export function parseReelManifest(value: unknown): ParsedReelManifest {
     cascade: Object.freeze({
       anticipationRefill: Object.freeze({
         sweep: Object.freeze({
-          effect: sweepRecord.effect,
+          effect: sweepEffect,
           loopCount: 1,
           startStepMs: assertNonNegativeFinite(
             sweepRecord.startStepMs,
@@ -201,12 +214,33 @@ export function parseReelManifest(value: unknown): ParsedReelManifest {
           order: "left-right-bottom-up",
         }),
         spin: Object.freeze({
+          effect: refillSpinEffect,
           order: "left-right-top-down",
           ...refillTiming,
         }),
       }),
     }),
   });
+}
+
+function parseEffectReference(
+  value: unknown,
+  effects: Readonly<Record<string, ReelCellEffectManifest>>,
+  label: string,
+): string {
+  const id = assertEffectId(value, label);
+  if (!effects[id]) {
+    throw new ReelError(`${label} references missing effect "${id}".`);
+  }
+  return id;
+}
+
+function assertEffectId(value: unknown, label: string): string {
+  const id = assertNonEmptyString(value, label);
+  if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(id)) {
+    throw new ReelError(`${label} must be a safe effect id.`);
+  }
+  return id;
 }
 
 function parseCellEffect(
@@ -225,13 +259,16 @@ function parseCellEffect(
   ]);
   const transform = assertRecord(record.transform, `${label}.transform`);
   assertOnlyKnownKeys(transform, `${label}.transform`, ["x", "y", "scale"]);
-  assertLoopCount(record.loopCount, `${label}.loopCount`);
+  const loopCount = assertPositiveSafeInteger(
+    record.loopCount,
+    `${label}.loopCount`,
+  );
   return Object.freeze({
     skeleton: assertLocalResourcePath(record.skeleton, `${label}.skeleton`),
     atlas: assertLocalResourcePath(record.atlas, `${label}.atlas`),
     texture: assertLocalResourcePath(record.texture, `${label}.texture`),
     animation: assertNonEmptyString(record.animation, `${label}.animation`),
-    loopCount: 1,
+    loopCount,
     finishBeforeStopMs: assertNonNegativeFinite(
       record.finishBeforeStopMs,
       `${label}.finishBeforeStopMs`,
@@ -295,10 +332,6 @@ function assertLocalResourcePath(value: unknown, label: string): string {
     );
   }
   return path;
-}
-
-function assertLoopCount(value: unknown, label: string): asserts value is 1 {
-  if (value !== 1) throw new ReelError(`${label} must be exactly 1.`);
 }
 
 function assertRecord(

@@ -183,7 +183,7 @@ export interface GridCellReelPlanCell {
 export interface GridCellScheduledEffect {
   readonly effectId: string;
   readonly startAtMs: number;
-  readonly loopCount: 1;
+  readonly loopCount: number;
   readonly finishBeforeStopMs: number;
   readonly activationGate?: Readonly<{ x: number; y: number }>;
 }
@@ -191,12 +191,12 @@ export interface GridCellScheduledEffect {
 export interface GridCellEffectPlanSpec {
   readonly effectId: string;
   readonly durationMs: number;
-  readonly loopCount: 1;
+  readonly loopCount: number;
   readonly finishBeforeStopMs: number;
 }
 
 export interface GridCellReelEffectPlanOptions {
-  readonly normal: GridCellEffectPlanSpec;
+  readonly normal?: GridCellEffectPlanSpec;
   readonly activated?: GridCellEffectPlanSpec;
   readonly activationGate?: Readonly<{ x: number; y: number }>;
   readonly firstFollowingStopDelayMs?: number;

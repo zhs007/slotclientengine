@@ -42,8 +42,8 @@ describe("game002-s3 layout", () => {
       height: 2000,
     });
     expect(GAME002_FOCUS_REGION).toEqual({
-      x: 577.5,
-      y: 270,
+      x: 577,
+      y: 272,
       width: 840,
       height: 1200,
     });
@@ -64,8 +64,8 @@ describe("game002-s3 layout", () => {
       columnGap: 0,
     });
     expect(layerLayout).toMatchObject({
-      x: 637.5,
-      y: 330,
+      x: 637,
+      y: 332,
       rawReelsContentWidth: 720,
       rawReelsContentHeight: 1080,
     });
@@ -95,8 +95,8 @@ describe("game002-s3 layout", () => {
     });
 
     expect(portrait.worldOffset).toEqual({ x: -437.5, y: -0 });
-    expect(square.worldOffset).toEqual({ x: -397.5, y: -270 });
-    expect(wide.worldOffset).toEqual({ x: -0, y: -270 });
+    expect(square.worldOffset).toEqual({ x: -397, y: -272 });
+    expect(wide.worldOffset).toEqual({ x: -0, y: -272 });
     const framePolicy = createGame002FramePolicy();
     expect(framePolicy.mode).toBe("maximized-focus");
     if (framePolicy.mode !== "maximized-focus") {

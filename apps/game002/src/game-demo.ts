@@ -6,6 +6,7 @@ import {
 } from "@slotclientengine/gameframeworks";
 import {
   RenderGridCellReelSet,
+  CASCADE_EMPTY_CELL,
   createGridCellOrder,
   createGridCellReelSpinPlan,
   createGridCellCascadeDropPlan,
@@ -339,6 +340,8 @@ export function createGame002ReelRuntime(
   let anticipationActive = false;
   let landedTriggerCount = 0;
   let activationCoordinate: Readonly<{ x: number; y: number }> | null = null;
+  let pendingUnifiedRefillAnticipationPlan: GridCellCascadeDropPlan | null =
+    null;
 
   const resolveSceneFinalYs = (
     scene: SceneMatrix,
@@ -363,7 +366,7 @@ export function createGame002ReelRuntime(
     );
   };
 
-  const createEffectPlanSpec = (effectId: "normal" | "anticipation") => {
+  const createEffectPlanSpec = (effectId: string) => {
     const resource = config.reelEffectResources[effectId];
     if (!resource) {
       throw new Error(`game002 reel effect resource "${effectId}" is missing.`);
@@ -398,6 +401,82 @@ export function createGame002ReelRuntime(
     return null;
   };
 
+  const resolveExactWild = (code: number, label: string): boolean => {
+    const entry = gameConfig.getPaytableEntry(code);
+    if (!entry) {
+      throw new Error(
+        `${label} symbol code ${code} is missing from the paytable.`,
+      );
+    }
+    return entry.symbol === "WL";
+  };
+
+  const activateAnticipationFromCompletedUnifiedRefill = (
+    plan: GridCellCascadeDropPlan,
+  ): void => {
+    if (anticipationActive) return;
+    const refillMovements = plan.movements
+      .filter((movement) => movement.kind === "refill")
+      .sort((left, right) => {
+        const completionDifference =
+          left.startSeconds +
+          left.fallSeconds +
+          left.settleSeconds -
+          (right.startSeconds + right.fallSeconds + right.settleSeconds);
+        return (
+          completionDifference ||
+          left.x - right.x ||
+          left.targetY - right.targetY
+        );
+      });
+    if (refillMovements.length === 0) return;
+
+    let matched = 0;
+    for (const [x, column] of plan.settledScene.entries()) {
+      for (const [y, code] of column.entries()) {
+        if (code === CASCADE_EMPTY_CELL) continue;
+        if (
+          resolveExactWild(
+            code,
+            `game002 completed unified refill settled cell (${x},${y})`,
+          )
+        ) {
+          matched += 1;
+        }
+      }
+    }
+    const triggerCount =
+      config.reelManifest.spin.anticipation.triggerLandedCount;
+    if (matched >= triggerCount) {
+      throw new Error(
+        "game002 anticipation should already be active before unified refill.",
+      );
+    }
+
+    let refillActivation: Readonly<{ x: number; y: number }> | null = null;
+    for (const movement of refillMovements) {
+      if (
+        !resolveExactWild(
+          movement.code,
+          `game002 completed unified refill cell (${movement.x},${movement.targetY})`,
+        )
+      ) {
+        continue;
+      }
+      matched += 1;
+      if (matched === triggerCount) {
+        refillActivation = Object.freeze({
+          x: movement.x,
+          y: movement.targetY,
+        });
+      }
+    }
+    landedTriggerCount = matched;
+    if (!refillActivation) return;
+    anticipationActive = true;
+    activationCoordinate = refillActivation;
+  };
+
   const createInitialSpinPlan = (
     validScene: SceneMatrix,
     nextFinalYs: readonly number[],
@@ -414,19 +493,20 @@ export function createGame002ReelRuntime(
       direction: config.direction,
       timing: config.timing,
       dimming: spinDimming,
-      effects: {
-        normal: createEffectPlanSpec("normal"),
-        ...(activationGate
-          ? {
-              activated: createEffectPlanSpec("anticipation"),
+      ...(activationGate
+        ? {
+            effects: {
+              activated: createEffectPlanSpec(
+                config.reelManifest.spin.anticipation.effect,
+              ),
               activationGate,
               firstFollowingStopDelayMs:
                 config.reelManifest.spin.anticipation.firstFollowingStopDelayMs,
               activatedStopStepMs:
                 config.reelManifest.spin.anticipation.stopStepMs,
-            }
-          : {}),
-      },
+            },
+          }
+        : {}),
     });
   };
 
@@ -444,8 +524,13 @@ export function createGame002ReelRuntime(
       anticipationActive = false;
       landedTriggerCount = 0;
       activationCoordinate = null;
+      pendingUnifiedRefillAnticipationPlan = null;
     },
     destroy(): void {
+      anticipationActive = false;
+      landedTriggerCount = 0;
+      activationCoordinate = null;
+      pendingUnifiedRefillAnticipationPlan = null;
       reelSet.destroy({ children: true });
     },
     isAnticipationActive(): boolean {
@@ -515,6 +600,7 @@ export function createGame002ReelRuntime(
       anticipationActive = false;
       landedTriggerCount = 0;
       activationCoordinate = null;
+      pendingUnifiedRefillAnticipationPlan = null;
       return nextFinalYs;
     },
     createSpinPlan(
@@ -542,6 +628,7 @@ export function createGame002ReelRuntime(
       anticipationActive = false;
       landedTriggerCount = 0;
       activationCoordinate = null;
+      pendingUnifiedRefillAnticipationPlan = null;
       activeTargetKind = "initial-spin";
       reelSet.visible = true;
       return plan;
@@ -595,6 +682,8 @@ export function createGame002ReelRuntime(
         }
       }
       if (result.completed && targetScene) {
+        const completedUnifiedRefillAnticipationPlan =
+          pendingUnifiedRefillAnticipationPlan;
         const visibleScene = reelSet.getVisibleScene();
         if (
           activeTargetKind === "initial-spin" ||
@@ -613,6 +702,12 @@ export function createGame002ReelRuntime(
         currentScene = targetScene;
         targetScene = null;
         activeTargetKind = null;
+        pendingUnifiedRefillAnticipationPlan = null;
+        if (completedUnifiedRefillAnticipationPlan) {
+          activateAnticipationFromCompletedUnifiedRefill(
+            completedUnifiedRefillAnticipationPlan,
+          );
+        }
         reelSet.visible = true;
       }
       return result;
@@ -697,11 +792,24 @@ export function createGame002ReelRuntime(
         throw new Error("game002 runtime already has a target scene.");
       targetScene = plan.targetScene;
       activeTargetKind = "dropdown";
+      pendingUnifiedRefillAnticipationPlan =
+        !anticipationActive &&
+        plan.movements.some((movement) => movement.kind === "refill")
+          ? plan
+          : null;
       reelSet.startCascadeDrop(plan);
       if (plan.totalSeconds === 0) {
         currentScene = plan.targetScene;
         targetScene = null;
         activeTargetKind = null;
+        const completedUnifiedRefillAnticipationPlan =
+          pendingUnifiedRefillAnticipationPlan;
+        pendingUnifiedRefillAnticipationPlan = null;
+        if (completedUnifiedRefillAnticipationPlan) {
+          activateAnticipationFromCompletedUnifiedRefill(
+            completedUnifiedRefillAnticipationPlan,
+          );
+        }
       }
     },
     startRefillEffectSweep(positions: readonly WinResultPosition[]): void {
@@ -779,7 +887,7 @@ export function createGame002ReelRuntime(
         direction: config.direction,
         timing: spinConfig,
         dimming: spinDimming,
-        effects: { normal: createEffectPlanSpec("anticipation") },
+        effects: { normal: createEffectPlanSpec(spinConfig.effect) },
       });
       reelSet.spin(plan, {
         targetPresentationValues: refillOptions.targetValues,

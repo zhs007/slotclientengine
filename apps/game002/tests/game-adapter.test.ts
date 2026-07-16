@@ -126,6 +126,13 @@ describe("game002 task 95 adapter", () => {
         strokeWidth: 6,
       },
     });
+    expect(cascadeOptions).toMatchObject({
+      emphasisSeconds: 1,
+      dimmingInSeconds: 0.1,
+      dimmingOutSeconds: 0.1,
+      nonWinningDimmingAlpha: 0.6,
+      startPresentationsWithEmphasis: true,
+    });
   });
 
   it("plays the complete fixture with protected WL and one unified fall", async () => {
