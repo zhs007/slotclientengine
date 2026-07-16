@@ -73,6 +73,11 @@ const OUT_OF_SCOPE_SPINE_JSON_SYMBOLS = Object.freeze([
   ["U", "P"].join(""),
   ["U", "P", "C", "N"].join(""),
 ]);
+const SOURCE_SPINE_SKELETONS = Object.freeze([
+  ...SPINE_SYMBOLS,
+  ...OUT_OF_SCOPE_SPINE_JSON_SYMBOLS,
+]);
+const EXPECTED_SPINE_VERSION = "4.3.23";
 
 const REQUIRED_SCENE_ASSETS = Object.freeze([
   { pattern: /^bg1-[A-Za-z0-9_-]+\.jpg$/, label: "bg1-*.jpg" },
@@ -150,15 +155,25 @@ function verifySourceSpineResources() {
     ["CL", "Start"],
     ["SC", "Start"],
   ]);
+  for (const symbol of SOURCE_SPINE_SKELETONS) {
+    const skeletonPath = join(SOURCE_SYMBOL_ASSET_ROOT, `${symbol}.json`);
+    if (!existsSync(skeletonPath)) {
+      continue;
+    }
+    const skeleton = JSON.parse(readFileSync(skeletonPath, "utf8"));
+    if (skeleton.skeleton?.spine !== EXPECTED_SPINE_VERSION) {
+      failures.push(
+        `source Spine skeleton ${symbol} must be version ${EXPECTED_SPINE_VERSION}.`,
+      );
+    }
+  }
+
   for (const symbol of SPINE_SYMBOLS) {
     const skeletonPath = join(SOURCE_SYMBOL_ASSET_ROOT, `${symbol}.json`);
     if (!existsSync(skeletonPath)) {
       continue;
     }
     const skeleton = JSON.parse(readFileSync(skeletonPath, "utf8"));
-    if (skeleton.skeleton?.spine !== "4.2.43") {
-      failures.push(`source Spine skeleton ${symbol} must be version 4.2.43.`);
-    }
     for (const animationName of ["Idle", "Win"]) {
       if (!skeleton.animations?.[animationName]) {
         failures.push(
@@ -191,10 +206,10 @@ function verifySourceSpineResources() {
     failures.push("source Spine atlas page must be Symbol.png.");
   }
   if (!/^bounds:\d+,\d+,\d+,\d+\s*$/mu.test(atlasText)) {
-    failures.push("source Spine 4.2 atlas must contain bounds fields.");
+    failures.push("source Spine 4.3 atlas must contain bounds fields.");
   }
   if (!/^rotate:90\s*$/mu.test(atlasText)) {
-    failures.push("source Spine 4.2 atlas must contain rotate:90 fields.");
+    failures.push("source Spine 4.3 atlas must contain rotate:90 fields.");
   }
 }
 
