@@ -43,7 +43,10 @@ vi.mock("@esotericsoftware/spine-pixi-v8", () => {
     constructor(readonly loader: unknown) {}
     readSkeletonData() {
       return {
-        animations: [{ name: "BG" }, { name: "BG_FG" }],
+        animations: [
+          { name: "BG", duration: 15 },
+          { name: "BG_FG", duration: 1.6 },
+        ],
         slots: [{ name: "ValueSlot" }],
         findAnimation: (name: string) =>
           ["BG", "BG_FG"].includes(name) ? { name } : null,
@@ -121,6 +124,7 @@ describe("shared official Spine player", () => {
       requiredSlots: ["ValueSlot"],
     });
     expect(validation.atlasPages).toEqual(["BG.png", "BG_2.png"]);
+    expect(validation.animationDurations).toEqual({ BG: 15, BG_FG: 1.6 });
     expect(validation.slotNames).toEqual(["ValueSlot"]);
     expect(() =>
       validateOfficialSpineResource({

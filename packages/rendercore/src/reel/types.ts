@@ -13,6 +13,10 @@ import type {
   SymbolTexturePolicy,
 } from "../symbol/index.js";
 import type { SymbolValuePresentationResourceMap } from "../symbol-value-presentation/types.js";
+import type {
+  GridCellEffectController,
+  GridCellEffectSnapshot,
+} from "./grid-cell-effect-player.js";
 
 export type ReelSymbolKind = "textured" | "empty";
 export type ReelSpinDirection = "forward" | "backward";
@@ -173,6 +177,30 @@ export interface GridCellReelPlanCell {
   readonly axisPlan: ReelAxisSpinPlan;
   readonly targetVisibleSymbols: readonly [number];
   readonly dimmingAlpha: number;
+  readonly effect: GridCellScheduledEffect | null;
+}
+
+export interface GridCellScheduledEffect {
+  readonly effectId: string;
+  readonly startAtMs: number;
+  readonly loopCount: 1;
+  readonly finishBeforeStopMs: number;
+  readonly activationGate?: Readonly<{ x: number; y: number }>;
+}
+
+export interface GridCellEffectPlanSpec {
+  readonly effectId: string;
+  readonly durationMs: number;
+  readonly loopCount: 1;
+  readonly finishBeforeStopMs: number;
+}
+
+export interface GridCellReelEffectPlanOptions {
+  readonly normal: GridCellEffectPlanSpec;
+  readonly activated?: GridCellEffectPlanSpec;
+  readonly activationGate?: Readonly<{ x: number; y: number }>;
+  readonly firstFollowingStopDelayMs?: number;
+  readonly activatedStopStepMs?: number;
 }
 
 export interface GridCellReelSpinPlan {
@@ -183,6 +211,14 @@ export interface GridCellReelSpinPlan {
   readonly cells: readonly GridCellReelPlanCell[];
   readonly lastStopAtMs: number;
   readonly selective: boolean;
+  readonly activationGate: Readonly<{ x: number; y: number }> | null;
+}
+
+export interface GridCellEffectSweepPlan {
+  readonly effectId: string;
+  readonly loopCount: 1;
+  readonly startStepMs: number;
+  readonly positions: readonly Readonly<{ x: number; y: number }>[];
 }
 
 export interface ReelWindowSlot {
@@ -355,6 +391,7 @@ export interface RenderGridCellReelSetOptions {
   readonly order: readonly GridCellCoordinate[];
   readonly presentationValueResolver?: GridCellSymbolPresentationValueResolver;
   readonly bounceStrength?: number;
+  readonly effectController?: GridCellEffectController;
 }
 
 export interface GridCellSymbolPresentationValueContext {
@@ -433,9 +470,10 @@ export interface RenderGridCellReelSetSpinOptions {
 export interface RenderGridCellReelSetUpdateResult {
   readonly spinning: boolean;
   readonly completed: boolean;
-  readonly activity?: "spin" | "dropdown" | null;
+  readonly activity?: "spin" | "dropdown" | "effect-sweep" | null;
   readonly startedCells: readonly GridCellCoordinate[];
   readonly landedCells: readonly GridCellCoordinate[];
+  readonly activationCells: readonly GridCellCoordinate[];
 }
 
 export interface RenderGridCellReelCellSnapshot {
@@ -463,4 +501,5 @@ export interface RenderGridCellReelSetSnapshot {
   readonly completed: boolean;
   readonly visibleScene: SceneMatrix;
   readonly cells: readonly RenderGridCellReelCellSnapshot[];
+  readonly effects: GridCellEffectSnapshot | null;
 }

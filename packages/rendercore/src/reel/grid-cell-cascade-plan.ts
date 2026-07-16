@@ -203,6 +203,36 @@ export function createGridCellCascadeDropPlan(options: {
   });
 }
 
+export function createGridCellCascadeDropdownPlan(
+  options: Parameters<typeof createGridCellCascadeDropPlan>[0],
+): GridCellCascadeDropPlan {
+  const unified = createGridCellCascadeDropPlan(options);
+  const movements = Object.freeze(
+    unified.movements.filter((movement) => movement.kind === "existing"),
+  );
+  const totalSeconds = movements.reduce(
+    (maximum, movement) =>
+      Math.max(
+        maximum,
+        movement.startSeconds + movement.fallSeconds + movement.settleSeconds,
+      ),
+    0,
+  );
+  return Object.freeze({
+    columns: unified.columns,
+    rows: unified.rows,
+    sourceScene: unified.sourceScene,
+    sourceValues: unified.sourceValues,
+    settledScene: unified.settledScene,
+    settledValues: unified.settledValues,
+    targetScene: unified.settledScene,
+    targetValues: unified.settledValues,
+    refillPositions: unified.refillPositions,
+    movements,
+    totalSeconds,
+  });
+}
+
 export function deriveGridCellCascadeSettledValues(options: {
   readonly sourceScene: GridCellCascadeScene;
   readonly sourceValues: GridCellCascadeValueMatrix;

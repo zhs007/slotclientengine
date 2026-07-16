@@ -41,7 +41,7 @@ import {
   createGame002ReelRuntime,
   type Game002ReelRuntime,
 } from "./game-demo.js";
-import { validateGame002Scene } from "./scene.js";
+import { sceneEquals, validateGame002Scene } from "./scene.js";
 import type { Game002SkinConfig } from "./skin-config.js";
 import {
   createGame002WinAmountLayout,
@@ -117,7 +117,10 @@ interface PendingAnimation {
   phase:
     | "initial-spin"
     | "step-win-remove"
-    | "cascade-fall"
+    | "cascade-unified-fall"
+    | "cascade-dropdown"
+    | "refill-sweep"
+    | "refill-spin"
     | "finalizing"
     | "win-amount";
   readonly sequence: Game002CascadeSequence;
@@ -188,6 +191,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
             symbolAnimationCapabilities: skin.symbolAnimationCapabilities,
             symbolStatePreset: skin.symbolStatePreset,
             animationResolver: skin.symbolAnimationResolver,
+            timing: skin.reelManifest.spin.timing,
+            reelManifest: skin.reelManifest,
+            reelEffectResources: skin.reelEffectResources,
+            reelEffectPoolCapacities: skin.reelEffectPoolCapacities,
             dimming: createGame002GridCellDimming(
               skin.reelManifest.spin.dimmingAlpha,
             ),
@@ -210,6 +217,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
 
     const app = this.#createApplication();
     let backgroundPlayer: SpineBackgroundPlayer | null = null;
+    let runtime: Game002ReelRuntime | null = null;
     let winAmountPlayer: WinAmountAnimationPlayer | null = null;
     let symbolCascadePlayer: SymbolCascadePlayer | null = null;
     let tickerAdded = false;
@@ -233,7 +241,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
         backgroundPlayer.init(),
         this.#loadSymbolTextures(),
       ]);
-      const runtime = this.#createRuntime(symbolTextures);
+      runtime = this.#createRuntime(symbolTextures);
+      await runtime.prepare();
       winAmountPlayer = this.#createWinAmountPlayer(layout);
       symbolCascadePlayer = this.#createSymbolCascadePlayer({
         target: runtime,
@@ -290,6 +299,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       app.ticker.stop();
       winAmountPlayer?.destroy();
       symbolCascadePlayer?.destroy();
+      runtime?.destroy();
       backgroundPlayer?.destroy();
       app.canvas.remove();
       app.destroy();
@@ -306,6 +316,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
   applyInitialState(state: SlotGameInitialState): void {
     const runtime = this.#requireRuntime();
     this.#requireSymbolCascadePlayer().clear();
+    runtime.resetPresentationState();
     if (state.defaultScene === undefined) {
       return;
     }
@@ -379,6 +390,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     this.#app?.ticker.stop();
     this.#winAmountPlayer?.destroy();
     this.#symbolCascadePlayer?.destroy();
+    this.#runtime?.destroy();
     this.#backgroundPlayer?.destroy();
     this.#app?.canvas.remove();
     this.#app?.destroy();
@@ -427,7 +439,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
         this.#startCascadeStage(pending, pending.cascadeIndex + 1);
         return;
       }
-      if (pending.phase === "cascade-fall") {
+      if (pending.phase === "cascade-unified-fall") {
         const result = this.#runtime.update(deltaSeconds);
         if (!result.completed) return;
         const stage = pending.sequence.cascades[pending.cascadeIndex];
@@ -442,6 +454,42 @@ class Game002PixiAdapter implements SlotGameAdapter {
         } else {
           this.#startCascadeStage(pending, pending.cascadeIndex + 1);
         }
+        return;
+      }
+      if (pending.phase === "cascade-dropdown") {
+        const result = this.#runtime.update(deltaSeconds);
+        if (!result.completed) return;
+        const stage = pending.sequence.cascades[pending.cascadeIndex];
+        if (!stage)
+          throw new Error("game002 cascade dropdown stage is missing.");
+        const currentScene = this.#runtime.getCurrentScene();
+        if (!currentScene || !sceneEquals(currentScene, stage.dropdownScene)) {
+          throw new Error(
+            `completed game002 cascade step[${stage.stepIndex}] dropdown scene does not match.`,
+          );
+        }
+        this.#startRefillSweep(pending, stage);
+        return;
+      }
+      if (pending.phase === "refill-sweep") {
+        const result = this.#runtime.update(deltaSeconds);
+        if (!result.completed) return;
+        const stage = pending.sequence.cascades[pending.cascadeIndex];
+        if (!stage) throw new Error("game002 refill sweep stage is missing.");
+        this.#startRefillSpin(pending, stage);
+        return;
+      }
+      if (pending.phase === "refill-spin") {
+        const result = this.#runtime.update(deltaSeconds);
+        if (!result.completed) return;
+        const stage = pending.sequence.cascades[pending.cascadeIndex];
+        if (!stage) throw new Error("game002 refill spin stage is missing.");
+        assertGame002ReelVisualMatchesTarget(
+          this.#runtime.getVisualSnapshot(),
+          stage.refillScene,
+          `completed game002 cascade step[${stage.stepIndex}] selective refill`,
+        );
+        this.#completeCascadeStage(pending, stage);
         return;
       }
       if (pending.phase === "win-amount") {
@@ -484,7 +532,9 @@ class Game002PixiAdapter implements SlotGameAdapter {
     }
     const stage = pending.sequence.cascades[index];
     pending.cascadeIndex = index;
-    const plan = this.#requireRuntime().createCascadeDropPlan({
+    const planOptions: Parameters<
+      Game002ReelRuntime["createCascadeDropPlan"]
+    >[0] = {
       sourceScene: stage.removedSourceScene,
       sourceValues: stage.removedSourceValues,
       settledScene: stage.dropdownScene,
@@ -497,13 +547,51 @@ class Game002PixiAdapter implements SlotGameAdapter {
           resolveGame002CascadeSymbol(this.#requireRuntime(), code),
         ),
       motion: GAME002_CASCADE_MOTION,
-    });
-    pending.phase = "cascade-fall";
-    this.#requireRuntime().startCascadeDrop(plan);
+    };
+    const runtime = this.#requireRuntime();
+    const plan = runtime.isAnticipationActive()
+      ? runtime.createCascadeDropdownPlan(planOptions)
+      : runtime.createCascadeDropPlan(planOptions);
+    pending.phase = runtime.isAnticipationActive()
+      ? "cascade-dropdown"
+      : "cascade-unified-fall";
+    runtime.startCascadeDrop(plan);
     if (plan.totalSeconds === 0) {
-      if (stage.winStage) this.#startWinStage(pending, stage.winStage);
-      else this.#startCascadeStage(pending, pending.cascadeIndex + 1);
+      if (runtime.isAnticipationActive())
+        this.#startRefillSweep(pending, stage);
+      else this.#completeCascadeStage(pending, stage);
     }
+  }
+
+  #startRefillSweep(
+    pending: PendingAnimation,
+    stage: Game002CascadeSequence["cascades"][number],
+  ): void {
+    pending.phase = "refill-sweep";
+    this.#requireRuntime().startRefillEffectSweep(stage.refillPositions);
+  }
+
+  #startRefillSpin(
+    pending: PendingAnimation,
+    stage: Game002CascadeSequence["cascades"][number],
+  ): void {
+    pending.phase = "refill-spin";
+    this.#requireRuntime().startSelectiveRefillSpin({
+      dropdownScene: stage.dropdownScene,
+      dropdownValues: stage.dropdownValues,
+      targetScene: stage.refillScene,
+      targetValues: stage.refillValues,
+      refillPositions: stage.refillPositions,
+      sceneName: `game002 cascade step[${stage.stepIndex}] selective refill`,
+    });
+  }
+
+  #completeCascadeStage(
+    pending: PendingAnimation,
+    stage: Game002CascadeSequence["cascades"][number],
+  ): void {
+    if (stage.winStage) this.#startWinStage(pending, stage.winStage);
+    else this.#startCascadeStage(pending, pending.cascadeIndex + 1);
   }
 
   #finalizeSpin(pending: PendingAnimation): void {
@@ -579,6 +667,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     let rejection = error;
     try {
       this.#symbolCascadePlayer?.clear();
+      this.#runtime?.resetPresentationState();
     } catch (cleanupError) {
       rejection = new AggregateError(
         [error, cleanupError],

@@ -94,10 +94,33 @@ describe("game002-s3 assets", () => {
     expect(Object.keys(assets)).toEqual(EXPECTED_SYMBOLS);
     expect(Object.keys(skin.symbolModules)).toHaveLength(38);
     expect(Object.keys(skin.spineSkeletonModules)).toHaveLength(12);
-    expect(skin.reelManifest).toEqual({
-      version: 1,
-      spin: { bounceStrength: 0, dimmingAlpha: 0.6 },
+    expect(skin.reelManifest.spin).toMatchObject({
+      bounceStrength: 0,
+      dimmingAlpha: 0.6,
+      timing: {
+        startStepMs: 16,
+        stopStepMs: 16,
+        settleAfterLastStartMs: 180,
+        minimumSpinCycles: 6,
+        speedSymbolsPerSecond: 54,
+      },
     });
+    expect(Object.keys(skin.reelEffectSkeletonModules).sort()).toEqual([
+      expect.stringContaining("Nearwin1.json"),
+      expect.stringContaining("Nearwin2.json"),
+    ]);
+    expect(Object.values(skin.reelEffectResources)).toMatchObject([
+      { animationName: "Loop", loopCount: 1 },
+      { animationName: "Loop", loopCount: 1 },
+    ]);
+    expect(skin.reelEffectResources.normal.durationSeconds).toBeCloseTo(
+      0.6666667,
+      6,
+    );
+    expect(skin.reelEffectResources.anticipation.durationSeconds).toBeCloseTo(
+      0.4,
+      6,
+    );
     expect(
       skin.symbolValuePresentationResources.CN.tiers.map(
         (tier) => tier.spec.skeleton,

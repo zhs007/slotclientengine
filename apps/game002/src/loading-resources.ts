@@ -27,6 +27,10 @@ const skeletonModules = import.meta.glob(
   "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.json",
   { eager: true, import: "default", query: "?url" },
 ) as Record<string, string>;
+const reelEffectSkeletonModules = import.meta.glob(
+  "../../../assets/game002-s3/{Nearwin1,Nearwin2}.json",
+  { eager: true, import: "default", query: "?url" },
+) as Record<string, string>;
 const rawBackgroundTextureModules = import.meta.glob(
   "../../../assets/game002-s3/{BG,BG_2,BG_3,BG_4,BG_5,BG_6,BG_7,BG_8}.png",
   { eager: true, import: "default", query: "?url" },
@@ -187,6 +191,10 @@ function createLoadingResourceUrls(): readonly GameLoadingResource[] {
       weight: 6,
     },
     { id: "game002-symbol-spine-skeletons", modules: skeletonModules },
+    {
+      id: "game002-reel-effect-spine-skeletons",
+      modules: reelEffectSkeletonModules,
+    },
     {
       id: "game002-win-amount-vni-projects",
       modules: winAmountProjectModules,

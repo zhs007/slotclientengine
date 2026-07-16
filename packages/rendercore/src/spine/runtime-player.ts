@@ -41,6 +41,7 @@ export interface OfficialSpinePlayerResource {
 export interface ValidatedSpineResource {
   readonly atlasPages: readonly string[];
   readonly animationNames: readonly string[];
+  readonly animationDurations: Readonly<Record<string, number>>;
   readonly slotNames: readonly string[];
 }
 
@@ -81,6 +82,14 @@ export function validateOfficialSpineResource(options: {
     atlasPages,
     animationNames: Object.freeze(
       skeletonData.animations.map((animation) => animation.name),
+    ),
+    animationDurations: Object.freeze(
+      Object.fromEntries(
+        skeletonData.animations.map((animation) => [
+          animation.name,
+          animation.duration,
+        ]),
+      ),
     ),
     slotNames: Object.freeze(skeletonData.slots.map((slot) => slot.name)),
   });

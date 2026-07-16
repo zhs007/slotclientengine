@@ -7,6 +7,7 @@ import type {
   GridCellReelOffsetMatrix,
   GridCellReelSpinPlan,
   GridCellReelSpinTiming,
+  GridCellReelEffectPlanOptions,
   ReelAxisSpinPlan,
   ReelSpinDirection,
 } from "./types.js";
@@ -24,6 +25,7 @@ export function createGridCellReelSpinPlan(options: {
   readonly timing: GridCellReelSpinTiming;
   readonly dimming: GridCellDimmingPattern;
   readonly positions?: readonly { readonly x: number; readonly y: number }[];
+  readonly effects?: GridCellReelEffectPlanOptions;
 }): GridCellReelSpinPlan {
   const columns = assertPositiveInteger(options.columns, "columns");
   const rows = assertPositiveInteger(options.rows, "rows");
@@ -42,6 +44,7 @@ export function createGridCellReelSpinPlan(options: {
     rows,
   );
   const timing = parseTiming(options.timing);
+  const effects = parseEffects(options.effects, selectedOrder);
   const dimming = parseDimming(options.dimming);
   const direction = parseDirection(options.direction);
   const cellCount = selectedOrder.length;
@@ -51,7 +54,14 @@ export function createGridCellReelSpinPlan(options: {
   const cells = selectedOrder.map(
     (cell, sequenceIndex): GridCellReelPlanCell => {
       const startAtMs = sequenceIndex * timing.startStepMs;
-      const stopAtMs = firstStopAtMs + sequenceIndex * timing.stopStepMs;
+      const gateIndex = effects?.gateIndex ?? -1;
+      const stopAtMs =
+        effects?.activated && sequenceIndex > gateIndex
+          ? firstStopAtMs +
+            gateIndex * timing.stopStepMs +
+            effects.firstFollowingStopDelayMs +
+            (sequenceIndex - gateIndex - 1) * effects.activatedStopStepMs
+          : firstStopAtMs + sequenceIndex * timing.stopStepMs;
       const durationMs = stopAtMs - startAtMs;
       if (durationMs <= 0) {
         throw new ReelError(
@@ -82,6 +92,27 @@ export function createGridCellReelSpinPlan(options: {
         durationMs,
         stopAtMs,
       });
+      const effectSpec =
+        effects?.activated && sequenceIndex > gateIndex
+          ? effects.activated
+          : effects?.normal;
+      const effect = effectSpec
+        ? Object.freeze({
+            effectId: effectSpec.effectId,
+            startAtMs:
+              stopAtMs - effectSpec.durationMs - effectSpec.finishBeforeStopMs,
+            loopCount: 1 as const,
+            finishBeforeStopMs: effectSpec.finishBeforeStopMs,
+            ...(effects?.activated && sequenceIndex > gateIndex
+              ? { activationGate: effects.activationGate! }
+              : {}),
+          })
+        : null;
+      if (effect && effect.startAtMs < startAtMs) {
+        throw new ReelError(
+          `grid cell (${cell.x},${cell.y}) effect lead exceeds its spin duration.`,
+        );
+      }
 
       return Object.freeze({
         x: cell.x,
@@ -100,6 +131,7 @@ export function createGridCellReelSpinPlan(options: {
           dimming,
           targetScene[cell.x][cell.y],
         ),
+        effect,
       });
     },
   );
@@ -110,8 +142,111 @@ export function createGridCellReelSpinPlan(options: {
     rows,
     dimming,
     cells: Object.freeze(cells),
-    lastStopAtMs: firstStopAtMs + (cellCount - 1) * timing.stopStepMs,
+    lastStopAtMs: cells.at(-1)!.stopAtMs,
     selective: options.positions !== undefined,
+    activationGate: effects?.activationGate ?? null,
+  });
+}
+
+function parseEffects(
+  value: GridCellReelEffectPlanOptions | undefined,
+  selectedOrder: readonly GridCellCoordinate[],
+):
+  | Readonly<{
+      normal: Readonly<{
+        effectId: string;
+        durationMs: number;
+        loopCount: 1;
+        finishBeforeStopMs: number;
+      }>;
+      activated?: Readonly<{
+        effectId: string;
+        durationMs: number;
+        loopCount: 1;
+        finishBeforeStopMs: number;
+      }>;
+      activationGate?: Readonly<{ x: number; y: number }>;
+      gateIndex: number;
+      firstFollowingStopDelayMs: number;
+      activatedStopStepMs: number;
+    }>
+  | undefined {
+  if (value === undefined) return undefined;
+  const normal = parseEffectSpec(value.normal, "normal effect");
+  if (value.activated === undefined && value.activationGate !== undefined) {
+    throw new ReelError(
+      "activationGate requires an activated grid cell effect.",
+    );
+  }
+  if (value.activated !== undefined && value.activationGate === undefined) {
+    throw new ReelError("activated grid cell effect requires activationGate.");
+  }
+  if (value.activated === undefined) {
+    return Object.freeze({
+      normal,
+      gateIndex: -1,
+      firstFollowingStopDelayMs: 0,
+      activatedStopStepMs: 0,
+    });
+  }
+  const activated = parseEffectSpec(value.activated, "activated effect");
+  const gate = value.activationGate!;
+  const gateIndex = selectedOrder.findIndex(
+    (cell) => cell.x === gate.x && cell.y === gate.y,
+  );
+  if (gateIndex < 0) {
+    throw new ReelError(
+      "activationGate must be present in the selected grid order.",
+    );
+  }
+  const firstFollowingStopDelayMs = assertNonNegativeNumber(
+    value.firstFollowingStopDelayMs,
+    "firstFollowingStopDelayMs",
+  );
+  const activatedStopStepMs = assertNonNegativeNumber(
+    value.activatedStopStepMs,
+    "activatedStopStepMs",
+  );
+  if (
+    gateIndex < selectedOrder.length - 1 &&
+    firstFollowingStopDelayMs <
+      activated.durationMs + activated.finishBeforeStopMs
+  ) {
+    throw new ReelError(
+      "firstFollowingStopDelayMs must provide the activated effect's full lead time.",
+    );
+  }
+  return Object.freeze({
+    normal,
+    activated,
+    activationGate: Object.freeze({ x: gate.x, y: gate.y }),
+    gateIndex,
+    firstFollowingStopDelayMs,
+    activatedStopStepMs,
+  });
+}
+
+function parseEffectSpec(
+  value: GridCellReelEffectPlanOptions["normal"],
+  label: string,
+) {
+  if (
+    typeof value.effectId !== "string" ||
+    value.effectId.trim().length === 0
+  ) {
+    throw new ReelError(`${label} effectId must be non-empty.`);
+  }
+  if (value.loopCount !== 1) {
+    throw new ReelError(`${label} loopCount must be exactly 1.`);
+  }
+  return Object.freeze({
+    effectId: value.effectId,
+    durationMs: assertPositiveNumber(value.durationMs, `${label} durationMs`),
+    loopCount: 1 as const,
+    finishBeforeStopMs: assertNonNegativeNumber(
+      value.finishBeforeStopMs,
+      `${label} finishBeforeStopMs`,
+    ),
   });
 }
 

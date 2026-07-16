@@ -9,6 +9,8 @@ import {
   createGridCellOrder,
   createGridCellReelSpinPlan,
   createGridCellCascadeDropPlan,
+  createGridCellCascadeDropdownPlan,
+  createGridCellEffectController,
   createReelSymbolRegistry,
   type GridCellDimmingPattern,
   type GridCellOrderMode,
@@ -19,6 +21,9 @@ import {
   type GridCellCascadeScene,
   type GridCellCascadeValueMatrix,
   type GridCellCascadeMotionOptions,
+  type GridCellEffectResourceMap,
+  type GridCellEffectSweepPlan,
+  type ParsedReelManifest,
   type ReelLayout,
   type ReelSymbolRegistry,
   type ReelSymbolAnimationCapabilityMap,
@@ -49,7 +54,6 @@ import {
   GAME002_VISIBLE_ROWS,
   GAME002_GRID_CELL_REEL_OFFSETS,
   GAME002_GRID_CELL_REEL_ORDER,
-  GAME002_GRID_CELL_REEL_TIMING,
   GAME002_GRID_LAYOUT,
   GAME002_FOCUS_REGION,
   createGame002GridCellDimming,
@@ -91,6 +95,9 @@ export interface Game002ReelConfig {
   readonly direction: ReelSpinDirection;
   readonly orderMode: GridCellOrderMode;
   readonly timing: GridCellReelSpinTiming;
+  readonly reelManifest: ParsedReelManifest;
+  readonly reelEffectResources: GridCellEffectResourceMap;
+  readonly reelEffectPoolCapacities: Readonly<Record<string, number>>;
   readonly dimming: Game002GridCellDimming;
   readonly spinBounceStrength: number;
 }
@@ -116,7 +123,10 @@ export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   cellReelOffsets: GAME002_GRID_CELL_REEL_OFFSETS,
   direction: "forward",
   orderMode: GAME002_GRID_CELL_REEL_ORDER,
-  timing: GAME002_GRID_CELL_REEL_TIMING,
+  timing: GAME002_DEFAULT_SKIN.reelManifest.spin.timing,
+  reelManifest: GAME002_DEFAULT_SKIN.reelManifest,
+  reelEffectResources: GAME002_DEFAULT_SKIN.reelEffectResources,
+  reelEffectPoolCapacities: GAME002_DEFAULT_SKIN.reelEffectPoolCapacities,
   dimming: createGame002GridCellDimming(
     GAME002_DEFAULT_SKIN.reelManifest.spin.dimmingAlpha,
   ),
@@ -140,6 +150,14 @@ export interface Game002ReelVisualSnapshot {
   readonly gridCellCount: number;
   readonly layerX: number;
   readonly layerY: number;
+  readonly anticipation: Game002AnticipationSnapshot;
+  readonly effects: ReturnType<RenderGridCellReelSet["getSnapshot"]>["effects"];
+}
+
+export interface Game002AnticipationSnapshot {
+  readonly active: boolean;
+  readonly landedTriggerCount: number;
+  readonly activationCoordinate: Readonly<{ x: number; y: number }> | null;
 }
 
 export interface Game002ReelRuntime {
@@ -148,6 +166,11 @@ export interface Game002ReelRuntime {
   readonly layout: ReelLayout;
   readonly mainReelsLayer: Container;
   readonly layerLayout: Game002ReelLayerLayout;
+  prepare(): Promise<void> | void;
+  resetPresentationState(): void;
+  destroy(): void;
+  isAnticipationActive(): boolean;
+  getAnticipationSnapshot(): Game002AnticipationSnapshot;
   getCurrentScene(): SceneMatrix | null;
   getTargetScene(): SceneMatrix | null;
   getFinalYs(): readonly number[] | null;
@@ -199,7 +222,29 @@ export interface Game002ReelRuntime {
     >;
     readonly motion: GridCellCascadeMotionOptions;
   }): GridCellCascadeDropPlan;
+  createCascadeDropdownPlan(options: {
+    readonly sourceScene: GridCellCascadeScene;
+    readonly sourceValues: GridCellCascadeValueMatrix;
+    readonly settledScene: GridCellCascadeScene;
+    readonly settledValues: GridCellCascadeValueMatrix;
+    readonly targetScene: GridCellCascadeScene;
+    readonly targetValues: GridCellCascadeValueMatrix;
+    readonly refillPositions: readonly WinResultPosition[];
+    readonly canDropOccurrence: NonNullable<
+      Parameters<typeof createGridCellCascadeDropPlan>[0]["canDropOccurrence"]
+    >;
+    readonly motion: GridCellCascadeMotionOptions;
+  }): GridCellCascadeDropPlan;
   startCascadeDrop(plan: GridCellCascadeDropPlan): void;
+  startRefillEffectSweep(positions: readonly WinResultPosition[]): void;
+  startSelectiveRefillSpin(options: {
+    readonly dropdownScene: GridCellCascadeScene;
+    readonly dropdownValues: GridCellCascadeValueMatrix;
+    readonly targetScene: SceneMatrix;
+    readonly targetValues: SymbolPresentationValueMatrix;
+    readonly refillPositions: readonly WinResultPosition[];
+    readonly sceneName?: string;
+  }): GridCellReelSpinPlan;
   isSpinning(): boolean;
 }
 
@@ -257,6 +302,14 @@ export function createGame002ReelRuntime(
     rows: GAME002_VISIBLE_ROWS,
     mode: config.orderMode,
   });
+  const effectController = createGridCellEffectController({
+    resources: config.reelEffectResources,
+    capacities: config.reelEffectPoolCapacities,
+    columns: GAME002_REEL_COUNT,
+    rows: GAME002_VISIBLE_ROWS,
+    cellWidth: layout.cellWidth,
+    cellHeight: layout.cellHeight,
+  });
   const reelSet = new RenderGridCellReelSet({
     reels,
     registry,
@@ -265,6 +318,7 @@ export function createGame002ReelRuntime(
     cellWidth: layout.cellWidth,
     cellHeight: layout.cellHeight,
     order,
+    effectController,
     bounceStrength: config.spinBounceStrength,
     presentationValueResolver: createPresentationValueResolver({
       registry,
@@ -275,11 +329,16 @@ export function createGame002ReelRuntime(
   reelSet.x = layerLayout.x;
   reelSet.y = layerLayout.y;
   reelSet.visible = false;
+  const effectPreparation = reelSet.prepareEffects();
 
   let currentScene: SceneMatrix | null = null;
   let targetScene: SceneMatrix | null = null;
   let finalYs: readonly number[] | null = null;
-  let activeTargetKind: "spin" | "dropdown" | null = null;
+  let activeTargetKind: "initial-spin" | "dropdown" | "refill-spin" | null =
+    null;
+  let anticipationActive = false;
+  let landedTriggerCount = 0;
+  let activationCoordinate: Readonly<{ x: number; y: number }> | null = null;
 
   const resolveSceneFinalYs = (
     scene: SceneMatrix,
@@ -304,12 +363,101 @@ export function createGame002ReelRuntime(
     );
   };
 
+  const createEffectPlanSpec = (effectId: "normal" | "anticipation") => {
+    const resource = config.reelEffectResources[effectId];
+    if (!resource) {
+      throw new Error(`game002 reel effect resource "${effectId}" is missing.`);
+    }
+    return Object.freeze({
+      effectId,
+      durationMs: resource.durationSeconds * 1000,
+      loopCount: resource.loopCount,
+      finishBeforeStopMs: resource.finishBeforeStopMs,
+    });
+  };
+
+  const findInitialActivationGate = (
+    scene: SceneMatrix,
+  ): Readonly<{ x: number; y: number }> | null => {
+    let matched = 0;
+    for (const cell of order) {
+      const entry = gameConfig.getPaytableEntry(scene[cell.x][cell.y]);
+      if (!entry) {
+        throw new Error(
+          `game002 anticipation target (${cell.x},${cell.y}) is missing from the paytable.`,
+        );
+      }
+      if (entry.symbol !== "WL") continue;
+      matched += 1;
+      if (
+        matched === config.reelManifest.spin.anticipation.triggerLandedCount
+      ) {
+        return Object.freeze({ x: cell.x, y: cell.y });
+      }
+    }
+    return null;
+  };
+
+  const createInitialSpinPlan = (
+    validScene: SceneMatrix,
+    nextFinalYs: readonly number[],
+  ): GridCellReelSpinPlan => {
+    const activationGate = findInitialActivationGate(validScene);
+    return createGridCellReelSpinPlan({
+      reels,
+      finalYs: nextFinalYs,
+      targetScene: validScene,
+      columns: GAME002_REEL_COUNT,
+      rows: GAME002_VISIBLE_ROWS,
+      order,
+      cellReelOffsets: config.cellReelOffsets,
+      direction: config.direction,
+      timing: config.timing,
+      dimming: spinDimming,
+      effects: {
+        normal: createEffectPlanSpec("normal"),
+        ...(activationGate
+          ? {
+              activated: createEffectPlanSpec("anticipation"),
+              activationGate,
+              firstFollowingStopDelayMs:
+                config.reelManifest.spin.anticipation.firstFollowingStopDelayMs,
+              activatedStopStepMs:
+                config.reelManifest.spin.anticipation.stopStepMs,
+            }
+          : {}),
+      },
+    });
+  };
+
   const runtime: Game002ReelRuntime = Object.freeze({
     config,
     gameConfig,
     layout,
     mainReelsLayer: reelSet,
     layerLayout,
+    prepare(): Promise<void> | void {
+      return effectPreparation;
+    },
+    resetPresentationState(): void {
+      reelSet.cancelPresentationEffects();
+      anticipationActive = false;
+      landedTriggerCount = 0;
+      activationCoordinate = null;
+    },
+    destroy(): void {
+      reelSet.destroy({ children: true });
+    },
+    isAnticipationActive(): boolean {
+      return anticipationActive;
+    },
+    getAnticipationSnapshot(): Game002AnticipationSnapshot {
+      return Object.freeze({
+        active: anticipationActive,
+        landedTriggerCount,
+        activationCoordinate,
+      });
+    },
     getCurrentScene(): SceneMatrix | null {
       return currentScene;
     },
@@ -324,10 +472,7 @@ export function createGame002ReelRuntime(
       return Object.freeze({
         visible: reelSet.visible,
         spinning: gridSnapshot.spinning,
-        visibleScene: validateGame002Scene(
-          gridSnapshot.visibleScene,
-          "game002 reel visual snapshot",
-        ),
+        visibleScene: gridSnapshot.visibleScene,
         requestedStates: createGridCellSnapshotMatrix(
           gridSnapshot.cells,
           (cell) => cell.requestedState,
@@ -340,6 +485,8 @@ export function createGame002ReelRuntime(
         gridCellCount: gridSnapshot.cells.length,
         layerX: reelSet.x,
         layerY: reelSet.y,
+        anticipation: runtime.getAnticipationSnapshot(),
+        effects: gridSnapshot.effects,
       });
     },
     applyScene(
@@ -364,6 +511,10 @@ export function createGame002ReelRuntime(
       currentScene = validScene;
       targetScene = null;
       finalYs = nextFinalYs;
+      activeTargetKind = null;
+      anticipationActive = false;
+      landedTriggerCount = 0;
+      activationCoordinate = null;
       return nextFinalYs;
     },
     createSpinPlan(
@@ -372,18 +523,7 @@ export function createGame002ReelRuntime(
     ): GridCellReelSpinPlan {
       const validScene = validateGame002Scene(scene, sceneName);
       const nextFinalYs = resolveSceneFinalYs(validScene, sceneName);
-      return createGridCellReelSpinPlan({
-        reels,
-        finalYs: nextFinalYs,
-        targetScene: validScene,
-        columns: GAME002_REEL_COUNT,
-        rows: GAME002_VISIBLE_ROWS,
-        order,
-        cellReelOffsets: config.cellReelOffsets,
-        direction: config.direction,
-        timing: config.timing,
-        dimming: spinDimming,
-      });
+      return createInitialSpinPlan(validScene, nextFinalYs);
     },
     spinToScene(
       scene: SceneMatrix,
@@ -395,30 +535,71 @@ export function createGame002ReelRuntime(
       }
       const validScene = validateGame002Scene(scene, sceneName);
       const nextFinalYs = resolveSceneFinalYs(validScene, sceneName);
-      const plan = createGridCellReelSpinPlan({
-        reels,
-        finalYs: nextFinalYs,
-        targetScene: validScene,
-        columns: GAME002_REEL_COUNT,
-        rows: GAME002_VISIBLE_ROWS,
-        order,
-        cellReelOffsets: config.cellReelOffsets,
-        direction: config.direction,
-        timing: config.timing,
-        dimming: spinDimming,
-      });
+      const plan = createInitialSpinPlan(validScene, nextFinalYs);
+      reelSet.spin(plan, { targetPresentationValues });
       finalYs = nextFinalYs;
       targetScene = validScene;
-      reelSet.spin(plan, { targetPresentationValues });
-      activeTargetKind = "spin";
+      anticipationActive = false;
+      landedTriggerCount = 0;
+      activationCoordinate = null;
+      activeTargetKind = "initial-spin";
       reelSet.visible = true;
       return plan;
     },
     update(deltaSeconds: number): RenderGridCellReelSetUpdateResult {
       const result = reelSet.update(deltaSeconds);
+      if (activeTargetKind === "initial-spin") {
+        const activationKeys = new Set(
+          result.activationCells.map((cell) => `${cell.x}:${cell.y}`),
+        );
+        for (const cell of result.landedCells) {
+          const code = targetScene?.[cell.x]?.[cell.y];
+          const visibleCode = reelSet.getVisibleScene()[cell.x]?.[cell.y];
+          if (code === undefined || visibleCode !== code) {
+            throw new Error(
+              `game002 landed cell (${cell.x},${cell.y}) does not match its validated target code.`,
+            );
+          }
+          const symbol = gameConfig.getPaytableEntry(code)?.symbol;
+          if (!symbol) {
+            throw new Error(
+              `game002 landed cell (${cell.x},${cell.y}) is missing from the paytable.`,
+            );
+          }
+          if (symbol !== "WL") continue;
+          landedTriggerCount += 1;
+          if (
+            landedTriggerCount ===
+            config.reelManifest.spin.anticipation.triggerLandedCount
+          ) {
+            const key = `${cell.x}:${cell.y}`;
+            if (!activationKeys.has(key)) {
+              throw new Error(
+                "game002 second landed WL did not match the presentation activation gate.",
+              );
+            }
+            anticipationActive = true;
+            activationCoordinate = Object.freeze({ x: cell.x, y: cell.y });
+          }
+        }
+        for (const activation of result.activationCells) {
+          if (
+            !anticipationActive ||
+            activationCoordinate?.x !== activation.x ||
+            activationCoordinate.y !== activation.y
+          ) {
+            throw new Error(
+              "game002 presentation activation edge did not match the second landed WL.",
+            );
+          }
+        }
+      }
       if (result.completed && targetScene) {
         const visibleScene = reelSet.getVisibleScene();
-        if (activeTargetKind === "spin") {
+        if (
+          activeTargetKind === "initial-spin" ||
+          activeTargetKind === "refill-spin"
+        ) {
           const fullScene = validateGame002Scene(
             visibleScene,
             "completed game002 reels",
@@ -493,6 +674,24 @@ export function createGame002ReelRuntime(
         cellHeight: layout.cellHeight,
       });
     },
+    createCascadeDropdownPlan(dropOptions: {
+      readonly sourceScene: GridCellCascadeScene;
+      readonly sourceValues: GridCellCascadeValueMatrix;
+      readonly settledScene: GridCellCascadeScene;
+      readonly settledValues: GridCellCascadeValueMatrix;
+      readonly targetScene: GridCellCascadeScene;
+      readonly targetValues: GridCellCascadeValueMatrix;
+      readonly refillPositions: readonly WinResultPosition[];
+      readonly canDropOccurrence: NonNullable<
+        Parameters<typeof createGridCellCascadeDropPlan>[0]["canDropOccurrence"]
+      >;
+      readonly motion: GridCellCascadeMotionOptions;
+    }): GridCellCascadeDropPlan {
+      return createGridCellCascadeDropdownPlan({
+        ...dropOptions,
+        cellHeight: layout.cellHeight,
+      });
+    },
     startCascadeDrop(plan: GridCellCascadeDropPlan): void {
       if (targetScene)
         throw new Error("game002 runtime already has a target scene.");
@@ -504,6 +703,92 @@ export function createGame002ReelRuntime(
         targetScene = null;
         activeTargetKind = null;
       }
+    },
+    startRefillEffectSweep(positions: readonly WinResultPosition[]): void {
+      if (!anticipationActive) {
+        throw new Error(
+          "game002 refill effect sweep requires active anticipation.",
+        );
+      }
+      const sweep = config.reelManifest.cascade.anticipationRefill.sweep;
+      const sorted = sortRefillPositions(
+        positions,
+        sweep.order,
+        GAME002_REEL_COUNT,
+        GAME002_VISIBLE_ROWS,
+      );
+      const plan = Object.freeze({
+        effectId: sweep.effect,
+        loopCount: sweep.loopCount,
+        startStepMs: sweep.startStepMs,
+        positions: sorted,
+      }) satisfies GridCellEffectSweepPlan;
+      reelSet.startEffectSweep(plan);
+    },
+    startSelectiveRefillSpin(refillOptions: {
+      readonly dropdownScene: GridCellCascadeScene;
+      readonly dropdownValues: GridCellCascadeValueMatrix;
+      readonly targetScene: SceneMatrix;
+      readonly targetValues: SymbolPresentationValueMatrix;
+      readonly refillPositions: readonly WinResultPosition[];
+      readonly sceneName?: string;
+    }): GridCellReelSpinPlan {
+      if (!anticipationActive) {
+        throw new Error(
+          "game002 selective refill spin requires active anticipation.",
+        );
+      }
+      assertCascadeMatrixEqual(
+        reelSet.getVisibleScene(),
+        refillOptions.dropdownScene,
+        "game002 selective refill source scene",
+      );
+      assertCascadeMatrixEqual(
+        reelSet.getCascadeValues(),
+        refillOptions.dropdownValues,
+        "game002 selective refill source values",
+      );
+      const sceneName =
+        refillOptions.sceneName ?? "game002 selective refill scene";
+      const validScene = validateGame002Scene(
+        refillOptions.targetScene,
+        sceneName,
+      );
+      const nextFinalYs = resolveSceneFinalYs(validScene, sceneName);
+      const spinConfig = config.reelManifest.cascade.anticipationRefill.spin;
+      const positions = sortRefillPositions(
+        refillOptions.refillPositions,
+        spinConfig.order,
+        GAME002_REEL_COUNT,
+        GAME002_VISIBLE_ROWS,
+      );
+      assertPositionsMatchHoles(
+        refillOptions.dropdownScene,
+        positions,
+        "game002 selective refill positions",
+      );
+      const plan = createGridCellReelSpinPlan({
+        reels,
+        finalYs: nextFinalYs,
+        targetScene: validScene,
+        columns: GAME002_REEL_COUNT,
+        rows: GAME002_VISIBLE_ROWS,
+        order,
+        positions,
+        cellReelOffsets: config.cellReelOffsets,
+        direction: config.direction,
+        timing: spinConfig,
+        dimming: spinDimming,
+        effects: { normal: createEffectPlanSpec("anticipation") },
+      });
+      reelSet.spin(plan, {
+        targetPresentationValues: refillOptions.targetValues,
+      });
+      finalYs = nextFinalYs;
+      targetScene = validScene;
+      activeTargetKind = "refill-spin";
+      reelSet.visible = true;
+      return plan;
     },
     isSpinning(): boolean {
       return reelSet.getSnapshot().spinning;
@@ -635,4 +920,73 @@ function createPresentationValueResolver(options: {
     valuesByOccurrence.set(key, value);
     return value;
   };
+}
+
+function sortRefillPositions(
+  positions: readonly WinResultPosition[],
+  order: "left-right-bottom-up" | "left-right-top-down",
+  columns: number,
+  rows: number,
+): readonly WinResultPosition[] {
+  if (!Array.isArray(positions) || positions.length === 0) {
+    throw new Error("game002 refill positions must not be empty.");
+  }
+  const seen = new Set<string>();
+  const parsed = positions.map((position, index) => {
+    if (
+      !Number.isSafeInteger(position.x) ||
+      position.x < 0 ||
+      position.x >= columns ||
+      !Number.isSafeInteger(position.y) ||
+      position.y < 0 ||
+      position.y >= rows
+    ) {
+      throw new Error(`game002 refill position[${index}] is out of range.`);
+    }
+    const key = `${position.x}:${position.y}`;
+    if (seen.has(key)) {
+      throw new Error(`game002 refill position (${key}) is duplicated.`);
+    }
+    seen.add(key);
+    return Object.freeze({ x: position.x, y: position.y });
+  });
+  return Object.freeze(
+    [...parsed].sort((left, right) => {
+      const rowDifference =
+        order === "left-right-bottom-up" ? right.y - left.y : left.y - right.y;
+      return rowDifference || left.x - right.x;
+    }),
+  );
+}
+
+function assertPositionsMatchHoles(
+  scene: GridCellCascadeScene,
+  positions: readonly WinResultPosition[],
+  label: string,
+): void {
+  const keys = new Set(positions.map(({ x, y }) => `${x}:${y}`));
+  for (const [x, column] of scene.entries()) {
+    for (const [y, code] of column.entries()) {
+      if ((code === -1) !== keys.has(`${x}:${y}`)) {
+        throw new Error(`${label} must match dropdown holes exactly.`);
+      }
+    }
+  }
+}
+
+function assertCascadeMatrixEqual(
+  actual: readonly (readonly (number | null)[])[],
+  expected: readonly (readonly (number | null)[])[],
+  label: string,
+): void {
+  if (
+    actual.length !== expected.length ||
+    actual.some(
+      (column, x) =>
+        column.length !== expected[x]?.length ||
+        column.some((value, y) => value !== expected[x]?.[y]),
+    )
+  ) {
+    throw new Error(`${label} does not match the validated cascade stage.`);
+  }
 }

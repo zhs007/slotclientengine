@@ -202,6 +202,27 @@ describe("game002 source boundary", () => {
     }
   });
 
+  it("keeps near-win semantics game-owned and shared reel effects generic", () => {
+    const repoRoot = resolve(APP_ROOT, "../..");
+    const reelSource = readSourceTree(
+      join(repoRoot, "packages/rendercore/src/reel"),
+    );
+    const appSource = readSourceTree(join(APP_ROOT, "src"));
+    const skinConfigSource = readFileSync(
+      join(APP_ROOT, "src/skin-config.ts"),
+      "utf8",
+    );
+
+    expect(reelSource).not.toMatch(
+      /\bWL\b|Nearwin1|Nearwin2|bg-refill|game002/,
+    );
+    expect(appSource).not.toMatch(
+      /@esotericsoftware\/spine-pixi-v8|\.children\[|getChildAt|state\.setAnimation|clearTracks/,
+    );
+    expect(skinConfigSource).toContain("{Nearwin1,Nearwin2}.json");
+    expect(skinConfigSource).not.toMatch(/Nearwin3|WM_Fx/);
+  });
+
   it("keeps game-owned win rules out of the shared carousel and ReelSet internals out of the app", () => {
     const appSource = readSourceTree(join(APP_ROOT, "src"));
     const repoRoot = resolve(APP_ROOT, "../..");

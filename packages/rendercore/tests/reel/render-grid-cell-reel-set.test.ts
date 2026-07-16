@@ -186,10 +186,7 @@ describe("RenderGridCellReelSet", () => {
     });
 
     result = reelSet.update(0.02);
-    expect(result.startedCells).toEqual([
-      { x: 0, y: 0, orderIndex: 0 },
-      { x: 0, y: 1, orderIndex: 1 },
-    ]);
+    expect(result.startedCells).toEqual([{ x: 0, y: 1, orderIndex: 1 }]);
     snapshot = reelSet.getSnapshot();
     expect([0, 0.82]).toContain(snapshot.cells[0].dimmingAlpha);
     expect(

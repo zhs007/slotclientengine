@@ -39,11 +39,10 @@ const SYMBOLS = Object.freeze([
 const SPINE_SYMBOLS = Object.freeze(
   SYMBOLS.filter((symbol) => symbol !== "CN"),
 );
-const EXCLUDED_RESOURCE_PREFIXES = Object.freeze([
-  "Nearwin1",
-  "Nearwin2",
-  "Nearwin3",
-  "WM_Fx",
+const EXCLUDED_RESOURCE_PREFIXES = Object.freeze(["Nearwin3", "WM_Fx"]);
+const REEL_EFFECTS = Object.freeze([
+  { id: "normal", skeleton: "Nearwin1.json", duration: 0.6666667 },
+  { id: "anticipation", skeleton: "Nearwin2.json", duration: 0.4 },
 ]);
 const OLD_SOURCE_DIRECTORIES = Object.freeze([
   ["assets", "symbols" + "001", ""].join("/"),
@@ -335,14 +334,84 @@ function verifyReelSourceContract() {
     return;
   }
   const manifest = JSON.parse(readFileSync(REEL_MANIFEST_PATH, "utf8"));
+  if (manifest.version !== 1) {
+    failures.push("reel manifest must declare version=1.");
+  }
   if (
-    manifest.version !== 1 ||
-    JSON.stringify(manifest.spin) !==
-      JSON.stringify({ bounceStrength: 0, dimmingAlpha: 0.6 })
+    manifest.spin?.bounceStrength !== 0 ||
+    manifest.spin?.dimmingAlpha !== 0.6 ||
+    JSON.stringify(manifest.spin?.timing) !==
+      JSON.stringify({
+        startStepMs: 16,
+        stopStepMs: 16,
+        settleAfterLastStartMs: 180,
+        minimumSpinCycles: 6,
+        speedSymbolsPerSecond: 54,
+      }) ||
+    JSON.stringify(manifest.spin?.anticipation) !==
+      JSON.stringify({
+        triggerLandedCount: 2,
+        firstFollowingStopDelayMs: 400,
+        stopStepMs: 120,
+      })
   ) {
     failures.push(
-      "reel manifest must declare version=1, spin.bounceStrength=0 and spin.dimmingAlpha=0.6.",
+      "reel manifest spin motion/timing/activation contract changed.",
     );
+  }
+  for (const effect of REEL_EFFECTS) {
+    const entry = manifest.spin?.cellEffects?.[effect.id];
+    if (
+      entry?.skeleton !== `./${effect.skeleton}` ||
+      entry.atlas !== "./Symbol.atlas" ||
+      entry.texture !== "./Symbol.png" ||
+      entry.animation !== "Loop" ||
+      entry.loopCount !== 1 ||
+      entry.finishBeforeStopMs !== 0 ||
+      JSON.stringify(entry.transform) !==
+        JSON.stringify({ x: 0, y: 0, scale: 1 })
+    ) {
+      failures.push(`reel manifest ${effect.id} effect contract changed.`);
+    }
+    const skeletonPath = join(SOURCE_ROOT, effect.skeleton);
+    assertFile(skeletonPath);
+    if (!existsSync(skeletonPath)) continue;
+    const skeleton = JSON.parse(readFileSync(skeletonPath, "utf8"));
+    if (!/^4\.3(?:\.|$)/.test(skeleton.skeleton?.spine ?? "")) {
+      failures.push(`${effect.skeleton} must declare Spine 4.3.x.`);
+    }
+    if (JSON.stringify(Object.keys(skeleton.animations ?? {})) !== '["Loop"]') {
+      failures.push(
+        `${effect.skeleton} must contain exact Loop animation only.`,
+      );
+    }
+    const duration = readSpineAnimationDuration(skeleton.animations?.Loop);
+    if (Math.abs(duration - effect.duration) > 1e-6) {
+      failures.push(
+        `${effect.skeleton} Loop duration must be ${effect.duration}, got ${duration}.`,
+      );
+    }
+  }
+  if (
+    JSON.stringify(manifest.cascade?.anticipationRefill) !==
+    JSON.stringify({
+      sweep: {
+        effect: "anticipation",
+        loopCount: 1,
+        startStepMs: 80,
+        order: "left-right-bottom-up",
+      },
+      spin: {
+        order: "left-right-top-down",
+        startStepMs: 16,
+        stopStepMs: 120,
+        settleAfterLastStartMs: 400,
+        minimumSpinCycles: 6,
+        speedSymbolsPerSecond: 54,
+      },
+    })
+  ) {
+    failures.push("reel manifest anticipation refill contract changed.");
   }
 }
 
@@ -526,6 +595,18 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
       assetNames,
       hashedAssetPattern(symbol, "json"),
       `${symbol} skeleton`,
+    );
+  }
+  for (const effect of REEL_EFFECTS) {
+    const stem = effect.skeleton.slice(0, -".json".length);
+    assertOne(
+      assetNames,
+      hashedAssetPattern(stem, "json"),
+      `${effect.id} reel-effect skeleton`,
+    );
+    assertDistContainsSourceAssetExactlyOnce(
+      assetNames,
+      join(SOURCE_ROOT, effect.skeleton),
     );
   }
   for (const resource of readValuePresentationResources(manifest)) {
@@ -778,4 +859,21 @@ function readAtlasPages(atlasText) {
   return [...atlasText.matchAll(/^([^\s].*\.png)\r?$/gmu)].map(
     (match) => match[1],
   );
+}
+
+function readSpineAnimationDuration(value) {
+  let maximum = 0;
+  const visit = (candidate) => {
+    if (Array.isArray(candidate)) {
+      for (const child of candidate) visit(child);
+      return;
+    }
+    if (!candidate || typeof candidate !== "object") return;
+    if (typeof candidate.time === "number") {
+      maximum = Math.max(maximum, candidate.time);
+    }
+    for (const child of Object.values(candidate)) visit(child);
+  };
+  visit(value);
+  return maximum;
 }

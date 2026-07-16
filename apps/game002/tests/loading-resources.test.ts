@@ -123,8 +123,14 @@ describe("game002 loading resources", () => {
         .filter((id) => id.startsWith("game002-win-amount-vni-assets:"))
         .sort(),
     ).toEqual(referencedAssetIds);
+    expect(
+      ids.filter((id) => id.startsWith("game002-reel-effect-spine-skeletons:")),
+    ).toEqual([
+      "game002-reel-effect-spine-skeletons:Nearwin1.json",
+      "game002-reel-effect-spine-skeletons:Nearwin2.json",
+    ]);
     for (const excluded of [
-      "Nearwin",
+      "Nearwin3",
       "WM_Fx",
       "Reel_CO_CM",
       "Special Feature",

@@ -15,6 +15,7 @@ import type {
   GridCellReelPhase,
   GridCellReelPlanCell,
   GridCellReelSpinPlan,
+  GridCellEffectSweepPlan,
   RenderGridCellReelCellSnapshot,
   RenderGridCellReelSetOptions,
   RenderGridCellReelSetSpinOptions,
@@ -26,6 +27,7 @@ import type {
   SymbolPresentationValueMatrix,
   RenderReelVisibleOccurrence,
 } from "./types.js";
+import type { GridCellEffectController } from "./grid-cell-effect-player.js";
 import type { LogicReels, SceneMatrix } from "@slotclientengine/logiccore";
 import type { SymbolStateId } from "../symbol/index.js";
 
@@ -58,6 +60,13 @@ interface ActiveDrop {
   elapsedSeconds: number;
 }
 
+interface ActiveEffectSweep {
+  readonly plan: GridCellEffectSweepPlan;
+  readonly started: Set<string>;
+  readonly completed: Set<string>;
+  elapsedMs: number;
+}
+
 interface DimmingRow {
   readonly windowY: number;
   readonly graphic: Graphics;
@@ -74,8 +83,13 @@ export class RenderGridCellReelSet extends Container {
   readonly #cells: readonly RuntimeCell[];
   readonly #cellsByKey: ReadonlyMap<string, RuntimeCell>;
   readonly #cascadeMovementMask: Graphics;
+  readonly #effectController: GridCellEffectController | null;
   #spinPlan: GridCellReelSpinPlan | null = null;
   #activeDrop: ActiveDrop | null = null;
+  #activeEffectSweep: ActiveEffectSweep | null = null;
+  #startedEffects = new Set<string>();
+  #completedEffects = new Set<string>();
+  #activationGateOpen = false;
   #elapsedMs = 0;
 
   constructor(options: RenderGridCellReelSetOptions) {
@@ -121,6 +135,22 @@ export class RenderGridCellReelSet extends Container {
     this.#cascadeMovementMask.includeInBuild = false;
     this.#cascadeMovementMask.measurable = false;
     this.addChild(this.#cascadeMovementMask);
+    this.#effectController = options.effectController ?? null;
+    if (this.#effectController) {
+      this.#effectController.container.zIndex = this.#cells.length * 10_000;
+      this.addChild(this.#effectController.container);
+    }
+  }
+
+  prepareEffects(): Promise<void> | void {
+    return this.#effectController?.prepare();
+  }
+
+  cancelPresentationEffects(): void {
+    this.#activeEffectSweep = null;
+    this.#effectController?.cancelAll();
+    this.#startedEffects.clear();
+    this.#completedEffects.clear();
   }
 
   resetToScene(
@@ -143,6 +173,11 @@ export class RenderGridCellReelSet extends Container {
     );
     this.#spinPlan = null;
     this.clearDropOccurrences();
+    this.#activeEffectSweep = null;
+    this.#effectController?.cancelAll();
+    this.#startedEffects.clear();
+    this.#completedEffects.clear();
+    this.#activationGateOpen = false;
     this.#elapsedMs = 0;
 
     for (const cell of this.#cells) {
@@ -187,7 +222,21 @@ export class RenderGridCellReelSet extends Container {
     if (this.#activeDrop) {
       throw new ReelError("Cannot spin while cascade dropdown is active.");
     }
+    if (this.#activeEffectSweep) {
+      throw new ReelError(
+        "Cannot spin while grid cell effect sweep is active.",
+      );
+    }
     this.assertPlanMatchesRuntime(plan);
+    if (plan.cells.some((cell) => cell.effect) && !this.#effectController) {
+      throw new ReelError("Grid cell spin plan requires an effect controller.");
+    }
+    if (
+      plan.cells.some((cell) => cell.effect) &&
+      this.#effectController?.getSnapshot().prepared !== true
+    ) {
+      throw new ReelError("Grid cell spin effect controller is not prepared.");
+    }
     const targetPresentationValues = parsePresentationValueMatrix(
       options.targetPresentationValues,
       this.#columns,
@@ -215,6 +264,10 @@ export class RenderGridCellReelSet extends Container {
 
     this.#spinPlan = plan;
     this.#elapsedMs = 0;
+    this.#effectController?.cancelAll();
+    this.#startedEffects.clear();
+    this.#completedEffects.clear();
+    this.#activationGateOpen = plan.activationGate === null;
     for (const cell of this.#cells) {
       const planCell =
         planCellsByKey.get(
@@ -249,14 +302,28 @@ export class RenderGridCellReelSet extends Container {
         activity: completed ? null : "dropdown",
         startedCells: Object.freeze([]),
         landedCells: Object.freeze([]),
+        activationCells: Object.freeze([]),
       });
     }
-    const previousElapsedMs = this.#elapsedMs;
+    if (this.#activeEffectSweep) {
+      const completed = this.updateEffectSweep(deltaSeconds);
+      return Object.freeze({
+        spinning: false,
+        completed,
+        activity: completed ? null : "effect-sweep",
+        startedCells: Object.freeze([]),
+        landedCells: Object.freeze([]),
+        activationCells: Object.freeze([]),
+      });
+    }
+    let startedCells: readonly GridCellCoordinate[] = Object.freeze([]);
+    let landedCells: readonly GridCellCoordinate[] = Object.freeze([]);
+    let activationCells: readonly GridCellCoordinate[] = Object.freeze([]);
     if (this.#spinPlan) {
-      this.#elapsedMs += deltaSeconds * 1000;
-      for (const cell of this.#cells) {
-        this.updateCell(cell, previousElapsedMs, this.#elapsedMs);
-      }
+      const edges = this.updateSpinTimeline(deltaSeconds);
+      startedCells = freezeCoordinates(edges.started);
+      landedCells = freezeCoordinates(edges.landed);
+      activationCells = freezeCoordinates(edges.activated);
     } else {
       for (const cell of this.#cells) {
         cell.reel.update(deltaSeconds);
@@ -275,17 +342,54 @@ export class RenderGridCellReelSet extends Container {
       spinning: this.#spinPlan !== null,
       completed,
       activity: this.#spinPlan !== null || completed ? "spin" : null,
-      startedCells: freezeCoordinates(
-        this.#cells
-          .filter((cell) => cell.hasStartedThisSpin)
-          .map((cell) => cell.coordinate),
-      ),
-      landedCells: freezeCoordinates(
-        this.#cells
-          .filter((cell) => cell.hasLandedThisSpin)
-          .map((cell) => cell.coordinate),
-      ),
+      startedCells,
+      landedCells,
+      activationCells,
     });
+  }
+
+  startEffectSweep(plan: GridCellEffectSweepPlan): void {
+    this.assertStopped("start grid cell effect sweep");
+    if (!this.#effectController) {
+      throw new ReelError(
+        "Grid cell effect sweep requires an effect controller.",
+      );
+    }
+    if (plan.loopCount !== 1) {
+      throw new ReelError(
+        "Grid cell effect sweep loopCount must be exactly 1.",
+      );
+    }
+    if (
+      typeof plan.effectId !== "string" ||
+      plan.effectId.trim().length === 0
+    ) {
+      throw new ReelError("Grid cell effect sweep effectId must be non-empty.");
+    }
+    if (!Number.isFinite(plan.startStepMs) || plan.startStepMs < 0) {
+      throw new ReelError(
+        "Grid cell effect sweep startStepMs must be non-negative.",
+      );
+    }
+    const positions = normalizePositions(
+      plan.positions,
+      this.#columns,
+      this.#rows,
+    );
+    for (const position of positions) {
+      if (this.getCell(position.x, position.y).occupied) {
+        throw new ReelError(
+          `Grid cell effect sweep position (${position.x},${position.y}) must be empty.`,
+        );
+      }
+    }
+    this.#effectController.cancelAll();
+    this.#activeEffectSweep = {
+      plan: Object.freeze({ ...plan, positions }),
+      started: new Set(),
+      completed: new Set(),
+      elapsedMs: 0,
+    };
   }
 
   getVisibleScene(): SceneMatrix {
@@ -556,16 +660,26 @@ export class RenderGridCellReelSet extends Container {
 
   getSnapshot(): RenderGridCellReelSetSnapshot {
     return Object.freeze({
-      spinning: this.#spinPlan !== null || this.#activeDrop !== null,
+      spinning:
+        this.#spinPlan !== null ||
+        this.#activeDrop !== null ||
+        this.#activeEffectSweep !== null,
       completed:
         this.#spinPlan === null &&
         this.#activeDrop === null &&
+        this.#activeEffectSweep === null &&
         this.#cells.every(
           (cell) => cell.phase === "completed" || cell.phase === "idle",
         ),
       visibleScene: this.getVisibleScene(),
       cells: Object.freeze(this.#cells.map((cell) => this.snapshotCell(cell))),
+      effects: this.#effectController?.getSnapshot() ?? null,
     });
+  }
+
+  override destroy(options?: Parameters<Container["destroy"]>[0]): void {
+    this.#effectController?.destroy();
+    super.destroy(options);
   }
 
   private createRuntimeCell(
@@ -640,6 +754,214 @@ export class RenderGridCellReelSet extends Container {
       targetPresentationValue: null,
       occupied: true,
     };
+  }
+
+  private updateSpinTimeline(deltaSeconds: number): {
+    readonly started: readonly GridCellCoordinate[];
+    readonly landed: readonly GridCellCoordinate[];
+    readonly activated: readonly GridCellCoordinate[];
+  } {
+    const plan = this.#spinPlan;
+    if (!plan) {
+      return { started: [], landed: [], activated: [] };
+    }
+    const endMs = this.#elapsedMs + deltaSeconds * 1000;
+    const started: GridCellCoordinate[] = [];
+    const landed: GridCellCoordinate[] = [];
+    const activated: GridCellCoordinate[] = [];
+    let cursorMs = this.#elapsedMs;
+    let firstBoundary = true;
+
+    while (firstBoundary || cursorMs < endMs) {
+      firstBoundary = false;
+      this.startEffectsAtBoundary(plan, cursorMs);
+      this.updateCellsAndCollectEdges(
+        plan,
+        cursorMs,
+        cursorMs,
+        started,
+        landed,
+        activated,
+      );
+      if (cursorMs >= endMs) break;
+      const nextMs = this.findNextSpinBoundary(plan, cursorMs, endMs);
+      const effectResult = this.#effectController?.update(
+        (nextMs - cursorMs) / 1000,
+      );
+      for (const completed of effectResult?.completed ?? []) {
+        this.#completedEffects.add(
+          createEffectKey(completed.effectId, completed.x, completed.y),
+        );
+      }
+      this.updateCellsAndCollectEdges(
+        plan,
+        cursorMs,
+        nextMs,
+        started,
+        landed,
+        activated,
+      );
+      cursorMs = nextMs;
+    }
+    this.#elapsedMs = endMs;
+    return { started, landed, activated };
+  }
+
+  private startEffectsAtBoundary(
+    plan: GridCellReelSpinPlan,
+    elapsedMs: number,
+  ): void {
+    for (const planCell of plan.cells) {
+      const effect = planCell.effect;
+      if (!effect || effect.startAtMs > elapsedMs) continue;
+      const key = createEffectKey(effect.effectId, planCell.x, planCell.y);
+      if (this.#startedEffects.has(key)) continue;
+      if (effect.activationGate && !this.#activationGateOpen) continue;
+      this.#effectController!.startScheduledEffect({
+        effectId: effect.effectId,
+        position: planCell,
+        loopCount: effect.loopCount,
+      });
+      this.#startedEffects.add(key);
+    }
+  }
+
+  private findNextSpinBoundary(
+    plan: GridCellReelSpinPlan,
+    cursorMs: number,
+    endMs: number,
+  ): number {
+    let next = endMs;
+    for (const cell of plan.cells) {
+      if (cell.stopAtMs > cursorMs) next = Math.min(next, cell.stopAtMs);
+      if (cell.startAtMs > cursorMs) next = Math.min(next, cell.startAtMs);
+      if (cell.effect && cell.effect.startAtMs > cursorMs) {
+        next = Math.min(next, cell.effect.startAtMs);
+      }
+    }
+    return next;
+  }
+
+  private updateCellsAndCollectEdges(
+    plan: GridCellReelSpinPlan,
+    previousElapsedMs: number,
+    elapsedMs: number,
+    started: GridCellCoordinate[],
+    landed: GridCellCoordinate[],
+    activated: GridCellCoordinate[],
+  ): void {
+    for (const cell of this.#cells) {
+      const hadStarted = cell.hasStartedThisSpin;
+      const hadLanded = cell.hasLandedThisSpin;
+      const effect = cell.planCell?.effect;
+      if (
+        !hadLanded &&
+        cell.phase === "spinning" &&
+        cell.planCell &&
+        elapsedMs >= cell.planCell.stopAtMs &&
+        effect
+      ) {
+        const key = createEffectKey(
+          effect.effectId,
+          cell.coordinate.x,
+          cell.coordinate.y,
+        );
+        if (!this.#completedEffects.has(key)) {
+          throw new ReelError(
+            `grid cell (${cell.coordinate.x},${cell.coordinate.y}) cannot land before its effect completes a real loop.`,
+          );
+        }
+      }
+      this.updateCell(cell, previousElapsedMs, elapsedMs);
+      if (!hadStarted && cell.hasStartedThisSpin) started.push(cell.coordinate);
+      if (!hadLanded && cell.hasLandedThisSpin) {
+        if (effect) {
+          const key = createEffectKey(
+            effect.effectId,
+            cell.coordinate.x,
+            cell.coordinate.y,
+          );
+          if (!this.#completedEffects.has(key)) {
+            throw new ReelError(
+              `grid cell (${cell.coordinate.x},${cell.coordinate.y}) landed before its effect completed a real loop.`,
+            );
+          }
+        }
+        landed.push(cell.coordinate);
+        if (
+          plan.activationGate &&
+          cell.coordinate.x === plan.activationGate.x &&
+          cell.coordinate.y === plan.activationGate.y
+        ) {
+          if (this.#activationGateOpen) {
+            throw new ReelError(
+              "grid cell activation gate fired more than once.",
+            );
+          }
+          this.#activationGateOpen = true;
+          activated.push(cell.coordinate);
+        }
+      }
+    }
+  }
+
+  private updateEffectSweep(deltaSeconds: number): boolean {
+    const active = this.#activeEffectSweep;
+    const controller = this.#effectController;
+    if (!active || !controller) return false;
+    const endMs = active.elapsedMs + deltaSeconds * 1000;
+    let cursorMs = active.elapsedMs;
+    let firstBoundary = true;
+    while (firstBoundary || cursorMs < endMs) {
+      firstBoundary = false;
+      active.plan.positions.forEach((position, index) => {
+        const startAtMs = index * active.plan.startStepMs;
+        const key = createEffectKey(
+          active.plan.effectId,
+          position.x,
+          position.y,
+        );
+        if (startAtMs <= cursorMs && !active.started.has(key)) {
+          controller.startScheduledEffect({
+            effectId: active.plan.effectId,
+            position,
+            loopCount: active.plan.loopCount,
+          });
+          active.started.add(key);
+        }
+      });
+      if (cursorMs >= endMs) break;
+      let nextMs = endMs;
+      active.plan.positions.forEach((_, index) => {
+        const startAtMs = index * active.plan.startStepMs;
+        if (startAtMs > cursorMs) nextMs = Math.min(nextMs, startAtMs);
+      });
+      const sliceSeconds = (nextMs - cursorMs) / 1000;
+      for (const cell of this.#cells) {
+        if (cell.occupied) cell.reel.update(sliceSeconds);
+      }
+      const result = controller.update(sliceSeconds);
+      for (const completed of result.completed) {
+        active.completed.add(
+          createEffectKey(completed.effectId, completed.x, completed.y),
+        );
+      }
+      cursorMs = nextMs;
+    }
+    active.elapsedMs = endMs;
+    if (
+      active.started.size === active.plan.positions.length &&
+      active.completed.size === active.plan.positions.length
+    ) {
+      if (controller.getSnapshot().activeCount !== 0) {
+        throw new ReelError(
+          "grid cell effect sweep completed with active players.",
+        );
+      }
+      this.#activeEffectSweep = null;
+      return true;
+    }
+    return false;
   }
 
   private updateCell(
@@ -801,7 +1123,7 @@ export class RenderGridCellReelSet extends Container {
   }
 
   private assertStopped(action: string): void {
-    if (this.#spinPlan || this.#activeDrop) {
+    if (this.#spinPlan || this.#activeDrop || this.#activeEffectSweep) {
       throw new ReelError(
         `Cannot ${action} while grid cell reel set is spinning.`,
       );
@@ -1283,6 +1605,10 @@ function freezeCoordinates(
 
 function createCellKey(x: number, y: number): string {
   return `${x}:${y}`;
+}
+
+function createEffectKey(effectId: string, x: number, y: number): string {
+  return `${effectId}:${x}:${y}`;
 }
 
 function clamp01(value: number): number {

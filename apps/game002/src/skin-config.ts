@@ -5,6 +5,8 @@ import game002S3ReelManifest from "../../../assets/game002-s3/reel.manifest.json
 import game002S3StateTextureManifest from "../../../assets/game002-s3/symbol-state-textures.manifest.json";
 import {
   createDefaultSymbolAnimationResolver,
+  createGridCellEffectResourcesFromManifest,
+  deriveGridCellEffectPoolCapacities,
   createSymbolAnimationCapabilityMapFromManifest,
   createSymbolLandingAppearSymbolsFromManifest,
   createSymbolManifestAnimationResolver,
@@ -13,6 +15,7 @@ import {
   createSymbolValuePresentationResourcesFromManifest,
   parseReelManifest,
   type ParsedReelManifest,
+  type GridCellEffectResourceMap,
   type ReelSymbolRenderPriorityMap,
   type ReelSymbolAnimationCapabilityMap,
   type ReelSymbolScaleMap,
@@ -63,6 +66,10 @@ const game002S3SpineSkeletonModules = import.meta.glob(
   "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.json",
   { eager: true, import: "default" },
 ) as Record<string, unknown>;
+const game002S3ReelEffectSkeletonModules = import.meta.glob(
+  "../../../assets/game002-s3/{Nearwin1,Nearwin2}.json",
+  { eager: true, import: "default" },
+) as Record<string, unknown>;
 
 const game002S3SymbolModules = Object.freeze({
   ...game002S3NormalModules,
@@ -90,6 +97,9 @@ export interface Game002SkinConfig {
   readonly spineSkeletonModules: Record<string, unknown>;
   readonly spineAtlasModules: Record<string, string>;
   readonly spineTextureModules: Record<string, string>;
+  readonly reelEffectSkeletonModules: Record<string, unknown>;
+  readonly reelEffectResources: GridCellEffectResourceMap;
+  readonly reelEffectPoolCapacities: Readonly<Record<string, number>>;
   readonly stateTextureManifest: unknown;
   readonly reelManifest: ParsedReelManifest;
   readonly displaySymbols: readonly string[];
@@ -108,71 +118,89 @@ export interface Game002SkinConfig {
 
 const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
   Object.freeze({
-    "1": Object.freeze({
-      id: parseGame002SkinId("1"),
-      label: "game002-s3",
-      background: GAME002_BACKGROUND_RESOURCE,
-      rawGameConfig: rawGame002Config,
-      symbolModules: game002S3SymbolModules,
+    "1": createGame002Skin1Config(),
+  });
+
+function createGame002Skin1Config(): Game002SkinConfig {
+  const reelManifest = parseReelManifest(game002S3ReelManifest);
+  const reelEffectResources = createGridCellEffectResourcesFromManifest({
+    manifest: reelManifest,
+    skeletonModules: game002S3ReelEffectSkeletonModules,
+    atlasModules: game002S3SpineAtlasModules,
+    textureModules: game002S3SpineTextureModules,
+  });
+  return Object.freeze({
+    id: parseGame002SkinId("1"),
+    label: "game002-s3",
+    background: GAME002_BACKGROUND_RESOURCE,
+    rawGameConfig: rawGame002Config,
+    symbolModules: game002S3SymbolModules,
+    spineSkeletonModules: game002S3SpineSkeletonModules,
+    spineAtlasModules: game002S3SpineAtlasModules,
+    spineTextureModules: game002S3SpineTextureModules,
+    reelEffectSkeletonModules: game002S3ReelEffectSkeletonModules,
+    reelEffectResources,
+    reelEffectPoolCapacities: deriveGridCellEffectPoolCapacities({
+      manifest: reelManifest,
+      resources: reelEffectResources,
+      cellCount: 6 * 9,
+    }),
+    stateTextureManifest: game002S3StateTextureManifest,
+    reelManifest,
+    displaySymbols: game002S3DisplaySymbols,
+    emptySymbols: GAME002_EMPTY_SYMBOLS,
+    symbolScales: createGame002SymbolScaleMapFromManifest({
+      stateTextureManifest: game002S3StateTextureManifest,
+      displaySymbols: game002S3DisplaySymbols,
+      requireExplicitScale: true,
+    }),
+    symbolRenderPriorities: createGame002SymbolRenderPriorityMapFromManifest({
+      stateTextureManifest: game002S3StateTextureManifest,
+      displaySymbols: game002S3DisplaySymbols,
+    }),
+    symbolAnimationCapabilities: createSymbolAnimationCapabilityMapFromManifest(
+      {
+        manifest: game002S3StateTextureManifest,
+        displaySymbols: game002S3DisplaySymbols,
+        requiredStates: ["spinBlur", "disabled"],
+      },
+    ),
+    symbolStatePreset: createSymbolStatePresetFromManifest(
+      game002S3StateTextureManifest,
+    ),
+    cascadeWinPresentations: createSymbolCascadeWinPresentationMapFromManifest({
+      manifest: game002S3StateTextureManifest,
+      displaySymbols: game002S3DisplaySymbols,
+      requiredStates: ["spinBlur", "disabled"],
+    }),
+    landingAppearSymbols: createSymbolLandingAppearSymbolsFromManifest({
+      manifest: game002S3StateTextureManifest,
+      displaySymbols: game002S3DisplaySymbols,
+      requiredStates: ["spinBlur", "disabled"],
+    }),
+    symbolAnimationResolver: createSymbolManifestAnimationResolver({
+      manifest: game002S3StateTextureManifest,
+      requiredStates: ["spinBlur", "disabled"],
+      vniProjectModules: {},
+      vniAssetModules: {},
       spineSkeletonModules: game002S3SpineSkeletonModules,
       spineAtlasModules: game002S3SpineAtlasModules,
       spineTextureModules: game002S3SpineTextureModules,
-      stateTextureManifest: game002S3StateTextureManifest,
-      reelManifest: parseReelManifest(game002S3ReelManifest),
-      displaySymbols: game002S3DisplaySymbols,
-      emptySymbols: GAME002_EMPTY_SYMBOLS,
-      symbolScales: createGame002SymbolScaleMapFromManifest({
-        stateTextureManifest: game002S3StateTextureManifest,
-        displaySymbols: game002S3DisplaySymbols,
-        requireExplicitScale: true,
-      }),
-      symbolRenderPriorities: createGame002SymbolRenderPriorityMapFromManifest({
-        stateTextureManifest: game002S3StateTextureManifest,
-        displaySymbols: game002S3DisplaySymbols,
-      }),
-      symbolAnimationCapabilities:
-        createSymbolAnimationCapabilityMapFromManifest({
-          manifest: game002S3StateTextureManifest,
-          displaySymbols: game002S3DisplaySymbols,
-          requiredStates: ["spinBlur", "disabled"],
-        }),
-      symbolStatePreset: createSymbolStatePresetFromManifest(
-        game002S3StateTextureManifest,
-      ),
-      cascadeWinPresentations:
-        createSymbolCascadeWinPresentationMapFromManifest({
-          manifest: game002S3StateTextureManifest,
-          displaySymbols: game002S3DisplaySymbols,
-          requiredStates: ["spinBlur", "disabled"],
-        }),
-      landingAppearSymbols: createSymbolLandingAppearSymbolsFromManifest({
-        manifest: game002S3StateTextureManifest,
-        displaySymbols: game002S3DisplaySymbols,
-        requiredStates: ["spinBlur", "disabled"],
-      }),
-      symbolAnimationResolver: createSymbolManifestAnimationResolver({
-        manifest: game002S3StateTextureManifest,
-        requiredStates: ["spinBlur", "disabled"],
-        vniProjectModules: {},
-        vniAssetModules: {},
-        spineSkeletonModules: game002S3SpineSkeletonModules,
-        spineAtlasModules: game002S3SpineAtlasModules,
-        spineTextureModules: game002S3SpineTextureModules,
-        fallback: defaultAnimationResolver,
-      }),
-      symbolValuePresentationResources:
-        createSymbolValuePresentationResourcesFromManifest({
-          manifest: game002S3StateTextureManifest,
-          requiredStates: ["spinBlur", "disabled"],
-          spineSkeletonModules: symbolValueSpineSkeletonModules,
-          spineAtlasModules: symbolValueSpineAtlasModules,
-          spineTextureModules: symbolValueSpineTextureModules,
-          textImageModules: symbolValueTextImageModules,
-        }),
-      gridLayout: GAME002_GRID_LAYOUT,
-      focusRegion: GAME002_BACKGROUND_RESOURCE.manifest.adaptation.focusRect,
+      fallback: defaultAnimationResolver,
     }),
+    symbolValuePresentationResources:
+      createSymbolValuePresentationResourcesFromManifest({
+        manifest: game002S3StateTextureManifest,
+        requiredStates: ["spinBlur", "disabled"],
+        spineSkeletonModules: symbolValueSpineSkeletonModules,
+        spineAtlasModules: symbolValueSpineAtlasModules,
+        spineTextureModules: symbolValueSpineTextureModules,
+        textImageModules: symbolValueTextImageModules,
+      }),
+    gridLayout: GAME002_GRID_LAYOUT,
+    focusRegion: GAME002_BACKGROUND_RESOURCE.manifest.adaptation.focusRect,
   });
+}
 
 export function getGame002SkinConfig(id: Game002SkinId): Game002SkinConfig {
   const config = GAME002_SKIN_CONFIGS[id];

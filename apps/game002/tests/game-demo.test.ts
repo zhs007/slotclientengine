@@ -23,7 +23,8 @@ vi.mock(
             onceCompleted = false;
           },
           update: () => {
-            if (loop || onceCompleted) return { completed: false };
+            if (loop) return { completed: false, loopCompleted: true };
+            if (onceCompleted) return { completed: false };
             onceCompleted = true;
             return { completed: true };
           },
@@ -279,6 +280,104 @@ describe("game002-s3 reel runtime", () => {
     }
     expect(result.completed).toBe(true);
     expect(runtime.getVisualSnapshot().visibleScene[0][0]).toBe(12);
+  });
+
+  it("activates on the second landed WL and splits dropdown, sweep and selective refill", () => {
+    const runtime = createRuntime(GAME002_SAMPLE_DEFAULT_SCENE);
+    const target = GAME002_SAMPLE_SPIN_SCENE.map((column) => [...column]);
+    target[0][0] = 0;
+    target[0][2] = 0;
+    const plan = runtime.spinToScene(target, "two WL anticipation");
+    expect(plan.activationGate).toEqual({ x: 0, y: 2 });
+    expect(plan.cells[2].effect?.effectId).toBe("normal");
+    expect(plan.cells[3].effect).toMatchObject({
+      effectId: "anticipation",
+      startAtMs: plan.cells[2].stopAtMs,
+    });
+    expect(plan.cells[3].stopAtMs - plan.cells[2].stopAtMs).toBe(400);
+    expect(plan.cells[4].stopAtMs - plan.cells[3].stopAtMs).toBe(120);
+
+    let activationEdges = 0;
+    let result = runtime.update(0.05);
+    for (let index = 0; index < 220 && !result.completed; index += 1) {
+      activationEdges += result.activationCells.length;
+      result = runtime.update(0.05);
+    }
+    activationEdges += result.activationCells.length;
+    expect(result.completed).toBe(true);
+    expect(activationEdges).toBe(1);
+    expect(runtime.getAnticipationSnapshot()).toEqual({
+      active: true,
+      landedTriggerCount: 2,
+      activationCoordinate: { x: 0, y: 2 },
+    });
+
+    const holes = [
+      { x: 4, y: 0 },
+      { x: 5, y: 0 },
+    ];
+    runtime.releaseVisibleSymbols(holes);
+    const removedScene = runtime.getCurrentScene()!;
+    const removedValues = runtime.getCascadeValues();
+    const refillScene = removedScene.map((column) => [...column]);
+    refillScene[4][0] = 1;
+    refillScene[5][0] = 1;
+    const refillValues = removedValues.map((column) =>
+      column.map((value) => (value === -1 ? null : value)),
+    );
+    const dropdown = runtime.createCascadeDropdownPlan({
+      sourceScene: removedScene,
+      sourceValues: removedValues,
+      settledScene: removedScene,
+      settledValues: removedValues,
+      targetScene: refillScene,
+      targetValues: refillValues,
+      refillPositions: holes,
+      canDropOccurrence: () => true,
+      motion: {
+        columnStartStaggerSeconds: 0.03,
+        startStaggerSeconds: 0.01,
+        baseFallSeconds: 0.05,
+        perRowFallSeconds: 0.01,
+        maxFallSeconds: 0.2,
+        overshootCellRatio: 0.1,
+        settleSeconds: 0.02,
+      },
+    });
+    expect(dropdown.movements).toEqual([]);
+    runtime.startCascadeDrop(dropdown);
+    expect(runtime.getCurrentScene()).toEqual(removedScene);
+
+    runtime.startRefillEffectSweep(holes);
+    result = runtime.update(0.05);
+    for (let index = 0; index < 20 && !result.completed; index += 1) {
+      result = runtime.update(0.05);
+    }
+    expect(result.completed).toBe(true);
+
+    const refillPlan = runtime.startSelectiveRefillSpin({
+      dropdownScene: removedScene,
+      dropdownValues: removedValues,
+      targetScene: refillScene,
+      targetValues: refillValues,
+      refillPositions: holes,
+    });
+    expect(refillPlan.cells.map(({ x, y }) => ({ x, y }))).toEqual(holes);
+    expect(
+      refillPlan.cells.every(
+        (cell) => cell.effect?.effectId === "anticipation",
+      ),
+    ).toBe(true);
+    result = runtime.update(0.05);
+    for (let index = 0; index < 40 && !result.completed; index += 1) {
+      result = runtime.update(0.05);
+    }
+    expect(result.completed).toBe(true);
+    expect(runtime.getCurrentScene()).toEqual(refillScene);
+    expect(runtime.isAnticipationActive()).toBe(true);
+
+    runtime.spinToScene(GAME002_SAMPLE_SPIN_SCENE, "next legal spin");
+    expect(runtime.isAnticipationActive()).toBe(false);
   });
 
   it("exposes stopped grid symbols through the generic presentation target", () => {

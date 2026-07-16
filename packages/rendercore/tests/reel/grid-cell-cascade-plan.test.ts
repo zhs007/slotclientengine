@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createGridCellCascadeDropPlan,
+  createGridCellCascadeDropdownPlan,
   deriveGridCellCascadeSettledValues,
 } from "../../src/reel/index.js";
 
@@ -162,6 +163,25 @@ describe("grid cell cascade plan", () => {
     expect(plan.movements[3].startSeconds).toBe(0.1);
     expect(plan.totalSeconds).toBeCloseTo(0.38);
     expect(Object.isFrozen(plan)).toBe(true);
+
+    const dropdown = createGridCellCascadeDropdownPlan({
+      sourceScene: plan.sourceScene,
+      sourceValues: plan.sourceValues,
+      settledScene: plan.settledScene,
+      settledValues: plan.settledValues,
+      targetScene: plan.targetScene,
+      targetValues: plan.targetValues,
+      refillPositions: plan.refillPositions,
+      canDropOccurrence: ({ code }) => code !== 0,
+      cellHeight: 100,
+      motion,
+    });
+    expect(
+      dropdown.movements.every((movement) => movement.kind === "existing"),
+    ).toBe(true);
+    expect(dropdown.targetScene).toEqual(plan.settledScene);
+    expect(dropdown.targetValues).toEqual(plan.settledValues);
+    expect(dropdown.totalSeconds).toBeLessThanOrEqual(plan.totalSeconds);
   });
 
   it.each([

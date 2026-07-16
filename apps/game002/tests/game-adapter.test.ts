@@ -205,6 +205,49 @@ describe("game002 task 95 adapter", () => {
     ]);
   });
 
+  it("uses dropdown, effect sweep and selective refill while anticipation persists", async () => {
+    const events: string[] = [];
+    const fakeApp = createFakeApplication();
+    const runtime = new FakeRuntime(events);
+    runtime.anticipationActive = true;
+    const adapter = createTestAdapter({
+      createApplication: () => fakeApp.app,
+      createRuntime: () => runtime.asRuntime(),
+      createSymbolCascadePlayer: () => new FakeCascadePlayer(events, runtime),
+      createWinAmountPlayer: () =>
+        new FakeWinAmountPlayer(events, () => runtime.updateCalls).asPlayer(),
+    });
+    await adapter.mount(createMountContext());
+    let settled = false;
+    const pending = Promise.resolve(
+      adapter.playSpin(createCascadeLogic()),
+    ).then(() => {
+      settled = true;
+    });
+    for (let index = 0; index < 20 && !settled; index += 1) {
+      fakeApp.tick(16);
+      await Promise.resolve();
+    }
+    await pending;
+    expect(events).toEqual(
+      expect.arrayContaining([
+        "dropdown.start",
+        "dropdown.complete",
+        "sweep.start",
+        "sweep.complete",
+        "refill.start",
+        "refill.complete",
+      ]),
+    );
+    expect(events.indexOf("dropdown.start")).toBeLessThan(
+      events.indexOf("sweep.start"),
+    );
+    expect(events.indexOf("sweep.complete")).toBeLessThan(
+      events.indexOf("refill.start"),
+    );
+    expect(runtime.currentScene).toEqual(GAME002_CASCADE_REFILL_SCENE);
+  });
+
   it("prevalidates the whole sequence before mutating the reels", async () => {
     const fakeApp = createFakeApplication();
     const runtime = new FakeRuntime([]);
@@ -406,7 +449,9 @@ class FakeRuntime {
   dropSettled: unknown = null;
   dropTarget: unknown = null;
   refillPositions: readonly { readonly x: number; readonly y: number }[] = [];
-  operation: "idle" | "spin" | "fall" = "idle";
+  operation: "idle" | "spin" | "fall" | "dropdown" | "sweep" | "refill" =
+    "idle";
+  anticipationActive = false;
   completeOperations = true;
   updateCalls = 0;
 
@@ -439,6 +484,15 @@ class FakeRuntime {
     return {
       mainReelsLayer: this.mainReelsLayer,
       layerLayout: this.layerLayout,
+      prepare: () => undefined,
+      resetPresentationState: () => undefined,
+      isAnticipationActive: () => this.anticipationActive,
+      getAnticipationSnapshot: () => ({
+        active: this.anticipationActive,
+        landedTriggerCount: 0,
+        activationCoordinate: null,
+      }),
+      getCurrentScene: () => this.currentScene,
       gameConfig: {
         getSymbolCode: (symbol: string) => symbols.indexOf(symbol),
         getPaytableEntry: (code: number) => ({ symbol: symbols[code] }),
@@ -496,10 +550,36 @@ class FakeRuntime {
           totalSeconds: 0.2,
         };
       },
+      createCascadeDropdownPlan: (options: any) => {
+        this.dropSource = options.sourceScene;
+        this.dropSettled = options.settledScene;
+        this.dropTarget = options.targetScene;
+        this.refillPositions = options.refillPositions;
+        return {
+          ...options,
+          kind: "dropdown",
+          targetScene: options.settledScene,
+          targetValues: options.settledValues,
+          columns: 6,
+          rows: 9,
+          movements: [],
+          totalSeconds: 0.2,
+        };
+      },
+      startRefillEffectSweep: () => {
+        this.operation = "sweep";
+        this.events.push("sweep.start");
+      },
+      startSelectiveRefillSpin: (options: any) => {
+        this.currentScene = options.targetScene;
+        this.operation = "refill";
+        this.events.push("refill.start");
+        return {};
+      },
       startCascadeDrop: (plan: any) => {
         this.currentScene = plan.targetScene as SceneMatrix;
-        this.operation = "fall";
-        this.events.push("fall.start");
+        this.operation = plan.kind === "dropdown" ? "dropdown" : "fall";
+        this.events.push(`${this.operation}.start`);
       },
       getVisualSnapshot: () => ({
         visible: true,

@@ -8,6 +8,8 @@ export * from "./grid-cell-order.js";
 export * from "./grid-cell-reel-offsets.js";
 export * from "./grid-cell-spin-plan.js";
 export * from "./grid-cell-cascade-plan.js";
+export * from "./grid-cell-effect-player.js";
+export * from "./grid-cell-effect-resource.js";
 export * from "./reel-window.js";
 export * from "./render-symbol-pool.js";
 export * from "./render-reel.js";

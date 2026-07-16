@@ -3,7 +3,6 @@ import {
   createReelLayout,
   type GridCellOrderMode,
   type GridCellReelOffsetMatrix,
-  type GridCellReelSpinTiming,
   type ReelLayout,
 } from "@slotclientengine/rendercore/reel";
 import type { SlotGameFramePolicy } from "@slotclientengine/gameframeworks";
@@ -39,13 +38,6 @@ export const GAME002_VISIBLE_ROWS = 9;
 export const GAME002_CELL_SIZE = 120;
 export const GAME002_GRID_CELL_REEL_ORDER =
   "top-down-left-right" satisfies GridCellOrderMode;
-export const GAME002_GRID_CELL_REEL_TIMING = Object.freeze({
-  startStepMs: 16,
-  stopStepMs: 16,
-  settleAfterLastStartMs: 180,
-  minimumSpinCycles: 6,
-  speedSymbolsPerSecond: 54,
-}) satisfies GridCellReelSpinTiming;
 export const GAME002_GRID_CELL_REEL_OFFSETS = createGridCellReelOffsetMatrix({
   columns: GAME002_REEL_COUNT,
   rows: GAME002_VISIBLE_ROWS,

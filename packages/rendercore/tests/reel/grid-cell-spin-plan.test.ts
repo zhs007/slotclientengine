@@ -134,6 +134,124 @@ describe("createGridCellReelSpinPlan", () => {
     ]);
   });
 
+  it("segments stops after a real landing gate and schedules effects before landing", () => {
+    const reels = createBasicReels();
+    const order = createGridCellOrder({
+      columns: 2,
+      rows: 3,
+      mode: "top-down-left-right",
+    });
+    const plan = createGridCellReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      targetScene: TARGET_SCENE,
+      columns: 2,
+      rows: 3,
+      order,
+      timing: TIMING,
+      dimming: DIMMING,
+      effects: {
+        normal: {
+          effectId: "base",
+          durationMs: 50,
+          loopCount: 1,
+          finishBeforeStopMs: 0,
+        },
+        activated: {
+          effectId: "slow",
+          durationMs: 80,
+          loopCount: 1,
+          finishBeforeStopMs: 0,
+        },
+        activationGate: { x: 0, y: 1 },
+        firstFollowingStopDelayMs: 80,
+        activatedStopStepMs: 100,
+      },
+    });
+    expect(plan.cells.map((cell) => cell.stopAtMs)).toEqual([
+      150, 170, 250, 350, 450, 550,
+    ]);
+    expect(plan.cells.map((cell) => cell.effect?.effectId)).toEqual([
+      "base",
+      "base",
+      "slow",
+      "slow",
+      "slow",
+      "slow",
+    ]);
+    expect(plan.cells[1].effect?.activationGate).toBeUndefined();
+    expect(plan.cells[2].effect).toMatchObject({
+      startAtMs: 170,
+      activationGate: { x: 0, y: 1 },
+    });
+    expect(plan.lastStopAtMs).toBe(550);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        reels,
+        finalYs: [2, 1],
+        targetScene: TARGET_SCENE,
+        columns: 2,
+        rows: 3,
+        order,
+        timing: TIMING,
+        dimming: DIMMING,
+        effects: {
+          normal: {
+            effectId: "base",
+            durationMs: 50,
+            loopCount: 1,
+            finishBeforeStopMs: 0,
+          },
+          activated: {
+            effectId: "slow",
+            durationMs: 80,
+            loopCount: 1,
+            finishBeforeStopMs: 0,
+          },
+          activationGate: { x: 0, y: 1 },
+          firstFollowingStopDelayMs: 79,
+          activatedStopStepMs: 100,
+        },
+      }),
+    ).toThrow(/full lead time/);
+    const base = {
+      reels,
+      finalYs: [2, 1],
+      targetScene: TARGET_SCENE,
+      columns: 2,
+      rows: 3,
+      order,
+      timing: TIMING,
+      dimming: DIMMING,
+    };
+    const normal = {
+      effectId: "base",
+      durationMs: 50,
+      loopCount: 1 as const,
+      finishBeforeStopMs: 0,
+    };
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...base,
+        effects: { normal, activationGate: { x: 0, y: 0 } },
+      }),
+    ).toThrow(/requires an activated/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...base,
+        effects: { normal, activated: normal },
+      }),
+    ).toThrow(/requires activationGate/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...base,
+        effects: {
+          normal: { ...normal, durationMs: 1_000 },
+        },
+      }),
+    ).toThrow(/lead exceeds/);
+  });
+
   it("rejects malformed scenes, final y values, order, timing and dimming", () => {
     const reels = createBasicReels();
     const order = createGridCellOrder({

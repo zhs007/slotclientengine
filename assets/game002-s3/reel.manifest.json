@@ -2,6 +2,56 @@
   "version": 1,
   "spin": {
     "bounceStrength": 0,
-    "dimmingAlpha": 0.6
+    "dimmingAlpha": 0.6,
+    "timing": {
+      "startStepMs": 16,
+      "stopStepMs": 16,
+      "settleAfterLastStartMs": 180,
+      "minimumSpinCycles": 6,
+      "speedSymbolsPerSecond": 54
+    },
+    "cellEffects": {
+      "normal": {
+        "skeleton": "./Nearwin1.json",
+        "atlas": "./Symbol.atlas",
+        "texture": "./Symbol.png",
+        "animation": "Loop",
+        "loopCount": 1,
+        "finishBeforeStopMs": 0,
+        "transform": { "x": 0, "y": 0, "scale": 1 }
+      },
+      "anticipation": {
+        "skeleton": "./Nearwin2.json",
+        "atlas": "./Symbol.atlas",
+        "texture": "./Symbol.png",
+        "animation": "Loop",
+        "loopCount": 1,
+        "finishBeforeStopMs": 0,
+        "transform": { "x": 0, "y": 0, "scale": 1 }
+      }
+    },
+    "anticipation": {
+      "triggerLandedCount": 2,
+      "firstFollowingStopDelayMs": 400,
+      "stopStepMs": 120
+    }
+  },
+  "cascade": {
+    "anticipationRefill": {
+      "sweep": {
+        "effect": "anticipation",
+        "loopCount": 1,
+        "startStepMs": 80,
+        "order": "left-right-bottom-up"
+      },
+      "spin": {
+        "order": "left-right-top-down",
+        "startStepMs": 16,
+        "stopStepMs": 120,
+        "settleAfterLastStartMs": 400,
+        "minimumSpinCycles": 6,
+        "speedSymbolsPerSecond": 54
+      }
+    }
   }
 }
