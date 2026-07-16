@@ -173,11 +173,11 @@ http://127.0.0.1:5208/?skin=1&token=TOKEN&businessid=guest&clienttype=web&jurisd
 
 `bg-gencoins` 是 `game003` 当前用于提供 CO coin amount 的组件名，只在 app 层配置和识别。`logiccore` 只解析通用 `clientData.otherScenes[]`，`gameframeworks` 只暴露通用 `getComponentOtherScenesByName(...)` facade，shared 包不硬编码 `bg-gencoins`、`CO` 或 coin amount 规则。
 
-live spin 第 0 step 如果触发 `bg-gencoins`，`bg-gencoins.basicComponentData.usedOtherScenes` 第一版必须刚好指向当前 step 的一个 `otherScene`。该矩阵和目标 scene 一样是 x 优先结构：`otherScene[x][y]` 对应 `targetScene[x][y]` 同一格。
+live spin 第 0 step 如果触发 `bg-gencoins`，`bg-gencoins.basicComponentData.usedOtherScenes` 可以为空或最多指向当前 step 的一个 `otherScene`：为空表示服务端本 step 没有生成 coin amount update；存在时矩阵和目标 scene 一样是 x 优先结构，`otherScene[x][y]` 对应 `targetScene[x][y]` 同一格。
 
 目标 scene 中每个 `CO` cell 都必须在同坐标 `otherScene[x][y]` 上有 positive integer amount，显示文本为 raw 数字，例如 `150` 显示为 `150`，不走 `formatServerUsdAmount(...)`，不会显示 `$1.50`。非 `CO` cell 的 `otherScene[x][y]` 第一版必须为 `0`；如果未来服务端定义其它语义，需要先改合同和测试，不能提前静默兼容。
 
-`game-adapter.ts` 会在主转轮开始前解析 coin overlay 数据；缺少 `otherScenes`、缺少 `usedOtherScenes`、索引越界、矩阵尺寸不匹配、CO 缺金额、非 CO 带非零金额、文字配置缺失或可见 symbol geometry 缺失都会显式失败。spin 落停并通过 target scene 校验后才显示 CO 金额；下一次 spin 开始、重新应用 default scene 或销毁 adapter 时会清理旧文本；viewport resize 后会按当前可见 symbol geometry 重新定位。
+`game-adapter.ts` 会在主转轮开始前解析 coin overlay update；零份 otherScene 返回空 update，不把服务端省略当错误。超过一个引用、索引越界、矩阵尺寸不匹配、已提供矩阵中的 CO 缺金额、非 CO 带非零金额、文字配置缺失或可见 symbol geometry 缺失仍会显式失败。spin 落停并通过 target scene 校验后才显示本次 CO 金额；下一次 spin 开始、重新应用 default scene 或销毁 adapter 时会清理旧文本；viewport resize 后会按当前可见 symbol geometry 重新定位。
 
 ## bg-bar 播放
 

@@ -12,6 +12,7 @@ import {
 } from "@slotclientengine/rendercore";
 import {
   createGridCellCascadeDropPlan,
+  deriveGridCellCascadeSettledValues,
   type GridCellCascadeScene,
   type GridCellCascadeValueMatrix,
   type SymbolPresentationValueMatrix,
@@ -92,15 +93,14 @@ export function createGame002CascadeSequence(options: {
     initialStep.getComponentScenes(GAME002_CASCADE_COMPONENTS.spin),
     "step[0] bg-spin",
   );
-  const spinValues = readFinalValues({
+  const spinValueResult = readFinalValues({
     step: initialStep,
     scene: spinScene,
     cnSymbolCode,
     required: false,
   });
-  const usesServerValues = initialStep.hasComponent(
-    GAME002_CASCADE_COMPONENTS.gencoins,
-  );
+  const spinValues = spinValueResult.values;
+  const usesServerValues = spinValueResult.usesServerValues;
   let currentScene: GridCellCascadeScene = spinScene;
   let currentValues: GridCellCascadeValueMatrix = spinValues;
   let cumulativeWinAmount = 0;
@@ -164,16 +164,32 @@ export function createGame002CascadeSequence(options: {
       step.getComponentScenes(GAME002_CASCADE_COMPONENTS.dropdown),
       `step[${stepIndex}] bg-dropdown`,
     );
-    const dropdownOther = exactlyOneOtherScene(
+    const derivedDropdownValues = deriveGridCellCascadeSettledValues({
+      sourceScene,
+      sourceValues: currentValues,
+      settledScene: dropdownScene,
+      canDropOccurrence: ({ x, sourceY, code, presentationValue }) =>
+        options.canDropSymbol({
+          stepIndex,
+          x,
+          y: sourceY,
+          code,
+          presentationValue,
+        }),
+    });
+    const dropdownOther = optionalOtherScene(
       step.getComponentOtherScenes(GAME002_CASCADE_COMPONENTS.dropdown),
       `step[${stepIndex}] bg-dropdown`,
+      false,
     );
-    const dropdownValues = parseHoleValues(
-      dropdownOther,
-      dropdownScene,
-      cnSymbolCode,
-      `step[${stepIndex}] bg-dropdown values`,
-    );
+    const dropdownValues = dropdownOther
+      ? parseHoleValues(
+          dropdownOther,
+          dropdownScene,
+          cnSymbolCode,
+          `step[${stepIndex}] bg-dropdown values`,
+        )
+      : derivedDropdownValues;
     const refill = requireBasicComponent(
       step,
       GAME002_CASCADE_COMPONENTS.refill,
@@ -192,15 +208,19 @@ export function createGame002CascadeSequence(options: {
       `step[${stepIndex}] bg-refill`,
     );
     validateRefillScene(dropdownScene, refillScene, refillPositions, stepIndex);
-    if (
-      step.getComponentOtherScenes(GAME002_CASCADE_COMPONENTS.refill).length !==
-      1
-    ) {
-      throw new Error(
-        `step[${stepIndex}] bg-refill must use exactly one intermediate otherScene.`,
+    const refillOther = optionalOtherScene(
+      step.getComponentOtherScenes(GAME002_CASCADE_COMPONENTS.refill),
+      `step[${stepIndex}] bg-refill`,
+      false,
+    );
+    if (refillOther) {
+      assertDimensions(
+        refillOther,
+        refillScene,
+        `step[${stepIndex}] bg-refill intermediate values`,
       );
     }
-    const refillValues = readFinalValues({
+    const refillValueResult = readFinalValues({
       step,
       scene: refillScene,
       cnSymbolCode,
@@ -212,6 +232,7 @@ export function createGame002CascadeSequence(options: {
         refillPositions,
       ),
     });
+    const refillValues = refillValueResult.values;
     validateCarriedValues(
       dropdownScene,
       dropdownValues,
@@ -362,15 +383,23 @@ function createWinRemoveStage(options: {
     step.getComponentScenes(GAME002_CASCADE_COMPONENTS.remove),
     `step[${stepIndex}] bg-remove`,
   );
-  const outputValues = parseHoleValues(
-    exactlyOneOtherScene(
-      step.getComponentOtherScenes(GAME002_CASCADE_COMPONENTS.remove),
-      `step[${stepIndex}] bg-remove`,
-    ),
+  const derivedOutputValues = deriveRemovedValues(
+    options.sourceValues,
     outputScene,
-    options.cnSymbolCode,
-    `step[${stepIndex}] bg-remove values`,
   );
+  const removeOther = optionalOtherScene(
+    step.getComponentOtherScenes(GAME002_CASCADE_COMPONENTS.remove),
+    `step[${stepIndex}] bg-remove`,
+    false,
+  );
+  const outputValues = removeOther
+    ? parseHoleValues(
+        removeOther,
+        outputScene,
+        options.cnSymbolCode,
+        `step[${stepIndex}] bg-remove values`,
+      )
+    : derivedOutputValues;
   validateRemoveOutput(
     options.sourceScene,
     options.sourceValues,
@@ -432,28 +461,63 @@ function readFinalValues(options: {
   readonly cnSymbolCode: number;
   readonly required: boolean;
   readonly fallbackValues?: SymbolPresentationValueMatrix;
-}): SymbolPresentationValueMatrix {
+}): Readonly<{
+  values: SymbolPresentationValueMatrix;
+  usesServerValues: boolean;
+}> {
   if (!options.step.hasComponent(GAME002_CASCADE_COMPONENTS.gencoins)) {
     if (options.required) {
       throw new Error(
         `step[${options.step.getIndex()}] must trigger bg-gencoins.`,
       );
     }
-    return (
-      options.fallbackValues ??
-      Object.freeze(
-        options.scene.map((column) => Object.freeze(column.map(() => null))),
-      )
-    );
+    return Object.freeze({
+      values:
+        options.fallbackValues ??
+        Object.freeze(
+          options.scene.map((column) => Object.freeze(column.map(() => null))),
+        ),
+      usesServerValues: false,
+    });
   }
-  return parseFullValues(
-    exactlyOneOtherScene(
-      options.step.getComponentOtherScenes(GAME002_CASCADE_COMPONENTS.gencoins),
-      `step[${options.step.getIndex()}] bg-gencoins`,
+  requireBasicComponent(options.step, GAME002_CASCADE_COMPONENTS.gencoins);
+  const label = `step[${options.step.getIndex()}] bg-gencoins`;
+  const other = optionalOtherScene(
+    options.step.getComponentOtherScenes(GAME002_CASCADE_COMPONENTS.gencoins),
+    label,
+    options.required,
+  );
+  if (!other) {
+    return Object.freeze({
+      values:
+        options.fallbackValues ??
+        Object.freeze(
+          options.scene.map((column) => Object.freeze(column.map(() => null))),
+        ),
+      usesServerValues: false,
+    });
+  }
+  return Object.freeze({
+    values: parseFullValues(
+      other,
+      options.scene,
+      options.cnSymbolCode,
+      `${label} values`,
     ),
-    options.scene,
-    options.cnSymbolCode,
-    `step[${options.step.getIndex()}] bg-gencoins values`,
+    usesServerValues: true,
+  });
+}
+
+function deriveRemovedValues(
+  sourceValues: SymbolPresentationValueMatrix,
+  outputScene: GridCellCascadeScene,
+): GridCellCascadeValueMatrix {
+  return Object.freeze(
+    outputScene.map((column, x) =>
+      Object.freeze(
+        column.map((code, y) => (code === -1 ? -1 : sourceValues[x][y])),
+      ),
+    ),
   );
 }
 
@@ -675,12 +739,18 @@ function parseHoleScene(
   );
 }
 
-function exactlyOneOtherScene(
+function optionalOtherScene(
   scenes: readonly OtherSceneMatrix[],
   label: string,
-): OtherSceneMatrix {
-  if (scenes.length !== 1)
-    throw new Error(`${label} must use exactly one otherScene.`);
+  required: boolean,
+): OtherSceneMatrix | undefined {
+  if (scenes.length > 1)
+    throw new Error(`${label} must use at most one otherScene.`);
+  if (required && scenes.length === 0) {
+    throw new Error(
+      `${label} must provide one otherScene because presentation values changed.`,
+    );
+  }
   return scenes[0];
 }
 

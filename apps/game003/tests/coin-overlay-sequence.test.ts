@@ -30,7 +30,7 @@ describe("game003 coin overlay sequence", () => {
     ).toEqual([]);
   });
 
-  it("allows a triggered bg-gencoins component with no CO cells only when otherScene is all zero", () => {
+  it("allows a triggered bg-gencoins component to omit unchanged data when there are no CO cells", () => {
     const result = cloneCoinSpinResult();
     result.gmi.replyPlay.results[0].clientData.scenes = [
       toSgc7Scene([
@@ -41,15 +41,10 @@ describe("game003 coin overlay sequence", () => {
         [2, 6, 4, 8, 5],
       ]),
     ];
-    result.gmi.replyPlay.results[0].clientData.otherScenes = [
-      toSgc7Scene([
-        [0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0],
-      ]),
-    ];
+    result.gmi.replyPlay.results[0].clientData.otherScenes = [];
+    result.gmi.replyPlay.results[0].clientData.curGameModParam.mapComponents[
+      "bg-gencoins"
+    ].basicComponentData.usedOtherScenes = [];
     const logic = createLogic(result);
 
     expect(
@@ -72,7 +67,7 @@ describe("game003 coin overlay sequence", () => {
     emptyUsed.gmi.replyPlay.results[0].clientData.curGameModParam.mapComponents[
       "bg-gencoins"
     ].basicComponentData.usedOtherScenes = [];
-    expect(() => createItems(emptyUsed)).toThrow(/exactly one otherScene/);
+    expect(createItems(emptyUsed)).toEqual([]);
 
     const multipleUsed = cloneCoinSpinResult();
     multipleUsed.gmi.replyPlay.results[0].clientData.otherScenes.push(
@@ -87,7 +82,7 @@ describe("game003 coin overlay sequence", () => {
     multipleUsed.gmi.replyPlay.results[0].clientData.curGameModParam.mapComponents[
       "bg-gencoins"
     ].basicComponentData.usedOtherScenes = [0, 1];
-    expect(() => createItems(multipleUsed)).toThrow(/exactly one otherScene/);
+    expect(() => createItems(multipleUsed)).toThrow(/at most one otherScene/);
 
     const outOfRange = cloneCoinSpinResult();
     outOfRange.gmi.replyPlay.results[0].clientData.curGameModParam.mapComponents[

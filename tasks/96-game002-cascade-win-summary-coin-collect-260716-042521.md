@@ -98,6 +98,20 @@ hidden -> $1.80 -> $2.10 -> $2.20 -> $2.40 -> $2.90
 
 其中 CN result 的 raw coin `1+2+5=8`，result cash 为 `80 cents`，逐枚精确分配为 `10+20+50 cents`。
 
+### 3.6 后续修正：otherScene delta 省略语义
+
+用户 live 验收发现 `bg-remove must use exactly one otherScene` 偶发报错。根因是客户端把 component 的 `usedOtherScenes` 错当成固定快照数量，而服务端只在 auxiliary matrix 实际发生变化时生成引用。
+
+现已审计所有同类消费面并改为：
+
+- `bg-remove` 无 otherScene 时，从权威 remove scene 与 source occurrence 确定性生成 value holes；提供矩阵时继续与 win removePositions 严格比对。
+- `bg-dropdown` 无 otherScene 时，调用 rendercore 新增的通用 `deriveGridCellCascadeSettledValues()`，按与真实 fall plan 相同的 occurrence 顺序、fixed predicate 搬运既有 CN value；提供矩阵时继续由 drop plan 校验 code/value/fixed occurrence 一致性。
+- `bg-refill` intermediate otherScene 允许省略；提供时最多一份并校验尺寸。
+- `bg-gencoins` 组件触发但没有 update 时允许零份 otherScene；refill 真正新增 CN 这种无法从旧 occurrence 推导的新 raw value仍必须提供一份，否则显式失败。
+- game002 独立 CN value helper 与 game003 CO overlay helper 同步接受零份 update，超过一份、索引/尺寸/数值漂移仍显式失败。
+
+这不是把缺失数据当零的 fallback；remove/dropdown 只做由 scene 和 occurrence 唯一决定的推导，新增金额仍不能推导或伪造。
+
 ## 4. 主要修改面
 
 ### rendercore
@@ -109,6 +123,7 @@ hidden -> $1.80 -> $2.10 -> $2.20 -> $2.40 -> $2.90
 - `packages/rendercore/src/spine/runtime-player.ts`
 - `packages/rendercore/src/symbol-value-presentation/render-symbol-value-controller.ts`
 - `packages/rendercore/src/reel/manifest.ts`
+- `packages/rendercore/src/reel/grid-cell-cascade-plan.ts`
 - `packages/rendercore/src/symbol-cascade/create-symbol-cascade-player.ts`
 - `packages/rendercore/src/symbol-cascade/cumulative-win-summary.ts`
 - `packages/rendercore/src/symbol-cascade/types.ts`
@@ -127,10 +142,12 @@ hidden -> $1.80 -> $2.10 -> $2.20 -> $2.40 -> $2.90
 - `apps/game002/src/skin-config.ts`
 - `apps/game002/scripts/verify-static-dist.mjs`
 - fixture 与相应 game002 测试
+- `apps/game002/src/cn-value-sequence.ts` 及 otherScene 省略回归测试
 
 ### 相邻消费面与文档
 
 - symbolsviewer 的 manifest state/resource/sequence 消费与测试
+- game003 coin overlay 的零份 delta 消费与测试
 - `packages/rendercore/README.md`
 - `apps/game002/README.md`
 - `apps/symbolsviewer/README.md`

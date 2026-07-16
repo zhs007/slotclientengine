@@ -52,10 +52,13 @@ export function createGame003CoinOverlayItems(options: {
     options.componentName,
     { stepIndex: 0 },
   );
-  if (otherScenes.length !== 1) {
+  if (otherScenes.length > 1) {
     throw new Error(
-      `game003 bg-gencoins must use exactly one otherScene, received ${otherScenes.length}.`,
+      `game003 bg-gencoins must use at most one otherScene, received ${otherScenes.length}.`,
     );
+  }
+  if (otherScenes.length === 0) {
+    return Object.freeze([]);
   }
 
   const otherScene = validateCoinOtherScene(

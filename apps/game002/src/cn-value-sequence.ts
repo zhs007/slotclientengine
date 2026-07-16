@@ -56,11 +56,12 @@ export function createGame002CnValueItems(options: {
     options.componentName,
     { stepIndex },
   );
-  if (otherScenes.length !== 1) {
+  if (otherScenes.length > 1) {
     throw new Error(
-      `game002 bg-gencoins must use exactly one otherScene, received ${otherScenes.length}.`,
+      `game002 bg-gencoins must use at most one otherScene, received ${otherScenes.length}.`,
     );
   }
+  if (otherScenes.length === 0) return Object.freeze([]);
   const otherScene = validateOtherScene(
     otherScenes[0],
     targetScene,

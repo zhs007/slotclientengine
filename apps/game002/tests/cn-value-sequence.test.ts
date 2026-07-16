@@ -23,7 +23,7 @@ describe("game002 CN otherScene value sequence", () => {
     expect(Object.isFrozen(createItems()[0])).toBe(true);
   });
 
-  it("returns empty only when the component was not triggered", () => {
+  it("returns empty when the component is absent or its unchanged otherScene is omitted", () => {
     const logic = createLogic(GAME002_SAMPLE_SPIN_RESULT);
     expect(
       createGame002CnValueItems({
@@ -34,6 +34,13 @@ describe("game002 CN otherScene value sequence", () => {
         stepIndex: 0,
       }),
     ).toEqual([]);
+
+    const unchanged = structuredClone(GAME002_CN_VALUE_SPIN_RESULT) as any;
+    unchanged.gmi.replyPlay.results[0].clientData.otherScenes = [];
+    unchanged.gmi.replyPlay.results[0].clientData.curGameModParam.mapComponents[
+      "bg-gencoins"
+    ].basicComponentData.usedOtherScenes = [];
+    expect(createItems(unchanged)).toEqual([]);
   });
 
   it("creates a frozen target matrix with server values only at CN cells", () => {
@@ -55,10 +62,16 @@ describe("game002 CN otherScene value sequence", () => {
       (result) =>
         delete result.gmi.replyPlay.results[0].clientData.curGameModParam
           .mapComponents["bg-gencoins"].basicComponentData,
-      (result) =>
-        (result.gmi.replyPlay.results[0].clientData.curGameModParam.mapComponents[
+      (result) => {
+        result.gmi.replyPlay.results[0].clientData.otherScenes.push(
+          structuredClone(
+            result.gmi.replyPlay.results[0].clientData.otherScenes[0],
+          ),
+        );
+        result.gmi.replyPlay.results[0].clientData.curGameModParam.mapComponents[
           "bg-gencoins"
-        ].basicComponentData.usedOtherScenes = []),
+        ].basicComponentData.usedOtherScenes = [0, 1];
+      },
       (result) =>
         result.gmi.replyPlay.results[0].clientData.otherScenes[0].values.pop(),
       (result) =>

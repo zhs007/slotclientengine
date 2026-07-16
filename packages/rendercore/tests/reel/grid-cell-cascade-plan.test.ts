@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createGridCellCascadeDropPlan } from "../../src/reel/index.js";
+import {
+  createGridCellCascadeDropPlan,
+  deriveGridCellCascadeSettledValues,
+} from "../../src/reel/index.js";
 
 const motion = Object.freeze({
   columnStartStaggerSeconds: 0.1,
@@ -12,6 +15,47 @@ const motion = Object.freeze({
 });
 
 describe("grid cell cascade plan", () => {
+  it("derives carried values when an unchanged auxiliary otherScene is omitted", () => {
+    expect(
+      deriveGridCellCascadeSettledValues({
+        sourceScene: [
+          [8, -1, 0, -1],
+          [2, -1, -1, 3],
+        ],
+        sourceValues: [
+          [25, -1, null, -1],
+          [null, -1, -1, null],
+        ],
+        settledScene: [
+          [-1, -1, 0, 8],
+          [-1, -1, 2, 3],
+        ],
+        canDropOccurrence: ({ code }) => code !== 0,
+      }),
+    ).toEqual([
+      [-1, -1, null, 25],
+      [-1, -1, null, null],
+    ]);
+  });
+
+  it("rejects invalid inferred occurrence movement", () => {
+    expect(() =>
+      deriveGridCellCascadeSettledValues({
+        sourceScene: [[8, -1]],
+        sourceValues: [[25, -1]],
+        settledScene: [[7, -1]],
+      }),
+    ).toThrow(/code changed/);
+    expect(() =>
+      deriveGridCellCascadeSettledValues({
+        sourceScene: [[0, -1]],
+        sourceValues: [[null, -1]],
+        settledScene: [[-1, 0]],
+        canDropOccurrence: () => false,
+      }),
+    ).toThrow(/fixed occurrence changed/);
+  });
+
   it("combines existing and refill falls, keeps fixed symbols in place and staggers columns", () => {
     const plan = createGridCellCascadeDropPlan({
       sourceScene: [

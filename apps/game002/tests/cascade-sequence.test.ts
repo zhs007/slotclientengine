@@ -208,6 +208,51 @@ describe("game002 cascade sequence", () => {
     expect(sequence.cascades[0].refillValues[1][0]).toBeNull();
   });
 
+  it("derives remove, dropdown and refill values when unchanged component otherScenes are omitted", () => {
+    const value = structuredClone(GAME002_CASCADE_GMI) as any;
+    const initialValues = structuredClone(step(value, 0).otherScenes[0]);
+    step(value, 0).otherScenes = [initialValues];
+    spin(value).mapComponents["bg-remove"].basicComponentData.usedOtherScenes =
+      [];
+
+    const finalValues = structuredClone(step(value, 1).otherScenes[3]);
+    step(value, 1).otherScenes = [finalValues];
+    cascade(value).mapComponents[
+      "bg-dropdown"
+    ].basicComponentData.usedOtherScenes = [];
+    cascade(value).mapComponents[
+      "bg-refill"
+    ].basicComponentData.usedOtherScenes = [];
+    cascade(value).mapComponents[
+      "bg-gencoins"
+    ].basicComponentData.usedOtherScenes = [0];
+
+    const sequence = createGame002CascadeSequence({
+      logic: createLogic(value),
+      cnSymbolCode: 8,
+    });
+    expect(sequence.initial.winStage?.outputValues[4][0]).toBe(-1);
+    expect(sequence.initial.winStage?.outputValues[3][0]).toBeNull();
+    expect(sequence.cascades[0].dropdownValues[4][6]).toBeNull();
+    expect(sequence.cascades[0].refillValues[1][0]).toBe(1);
+  });
+
+  it("treats a triggered but empty initial bg-gencoins delta as local values", () => {
+    const value = terminalSpinFixture(true) as any;
+    step(value, 0).otherScenes = [];
+    spin(value).mapComponents[
+      "bg-gencoins"
+    ].basicComponentData.usedOtherScenes = [];
+    const sequence = createGame002CascadeSequence({
+      logic: createLogic(value),
+      cnSymbolCode: 8,
+    });
+    expect(sequence.initial.usesServerValues).toBe(false);
+    expect(
+      sequence.initial.spinValues.flat().every((item) => item === null),
+    ).toBe(true);
+  });
+
   it("rejects every malformed protocol boundary without fallback", () => {
     expect(() =>
       createGame002CascadeSequence({
@@ -234,10 +279,6 @@ describe("game002 cascade sequence", () => {
       (value) =>
         spin(value).mapComponents[
           "bg-gencoins"
-        ].basicComponentData.usedOtherScenes.splice(0),
-      (value) =>
-        spin(value).mapComponents[
-          "bg-gencoins"
         ].basicComponentData.usedOtherScenes.push(0),
       (value) => (step(value, 0).otherScenes[0].values[0].values[0] = -2),
       (value) => (step(value, 0).otherScenes[0].values[0].values[0] = 2),
@@ -249,6 +290,10 @@ describe("game002 cascade sequence", () => {
       (value) => removeHistory(value, 1, "bg-dropdown"),
       (value) => removeHistory(value, 1, "bg-refill"),
       (value) => removeHistory(value, 1, "bg-gencoins"),
+      (value) =>
+        cascade(value).mapComponents[
+          "bg-gencoins"
+        ].basicComponentData.usedOtherScenes.splice(0),
       (value) =>
         (cascade(value).mapComponents[
           "bg-dropdown"
@@ -297,10 +342,6 @@ describe("game002 cascade sequence", () => {
         cascade(value).mapComponents[
           "bg-refill"
         ].basicComponentData.usedScenes.push(2),
-      (value) =>
-        cascade(value).mapComponents[
-          "bg-refill"
-        ].basicComponentData.usedOtherScenes.splice(0),
       (value) =>
         cascade(value).mapComponents[
           "bg-refill"

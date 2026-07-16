@@ -203,6 +203,87 @@ export function createGridCellCascadeDropPlan(options: {
   });
 }
 
+export function deriveGridCellCascadeSettledValues(options: {
+  readonly sourceScene: GridCellCascadeScene;
+  readonly sourceValues: GridCellCascadeValueMatrix;
+  readonly settledScene: GridCellCascadeScene;
+  readonly canDropOccurrence?: (
+    context: GridCellCascadeDropOccurrenceContext,
+  ) => boolean;
+}): GridCellCascadeValueMatrix {
+  const sourceScene = parseHoleScene(options.sourceScene, "sourceScene");
+  const columns = sourceScene.length;
+  const rows = sourceScene[0]?.length ?? 0;
+  const sourceValues = parseHoleValues(
+    options.sourceValues,
+    sourceScene,
+    "sourceValues",
+  );
+  const settledScene = parseHoleScene(
+    options.settledScene,
+    "settledScene",
+    columns,
+    rows,
+  );
+
+  return Object.freeze(
+    sourceScene.map((sourceColumn, x) => {
+      const source = occupiedOccurrences(sourceColumn, sourceValues[x]);
+      const fixed = source.filter(
+        (occurrence) =>
+          options.canDropOccurrence?.({
+            x,
+            sourceY: occurrence.y,
+            code: occurrence.code,
+            presentationValue: occurrence.value,
+          }) === false,
+      );
+      const fixedKeys = new Set(fixed.map((occurrence) => occurrence.y));
+      const derived: Array<number | null | typeof CASCADE_EMPTY_CELL> =
+        settledScene[x].map((code) =>
+          code === CASCADE_EMPTY_CELL ? CASCADE_EMPTY_CELL : null,
+        );
+
+      for (const occurrence of fixed) {
+        if (settledScene[x][occurrence.y] !== occurrence.code) {
+          throw new ReelError(
+            `cascade fixed occurrence changed at (${x},${occurrence.y}).`,
+          );
+        }
+        derived[occurrence.y] = occurrence.value;
+      }
+
+      const droppableSource = source.filter(
+        (occurrence) => !fixedKeys.has(occurrence.y),
+      );
+      const droppableTarget = settledScene[x].flatMap((code, y) =>
+        code === CASCADE_EMPTY_CELL || fixedKeys.has(y) ? [] : [{ code, y }],
+      );
+      if (droppableSource.length !== droppableTarget.length) {
+        throw new ReelError(
+          `cascade column ${x} droppable occurrence count changed.`,
+        );
+      }
+      for (let index = 0; index < droppableSource.length; index += 1) {
+        const from = droppableSource[index];
+        const to = droppableTarget[index];
+        if (from.code !== to.code) {
+          throw new ReelError(
+            `cascade column ${x} occurrence ${index} code changed.`,
+          );
+        }
+        if (to.y < from.y) {
+          throw new ReelError(
+            `cascade column ${x} occurrence ${index} moved upward.`,
+          );
+        }
+        derived[to.y] = from.value;
+      }
+      return Object.freeze(derived);
+    }),
+  );
+}
+
 function parseRefillPositions(
   positions: readonly { readonly x: number; readonly y: number }[],
   settledScene: GridCellCascadeScene,

@@ -32,6 +32,7 @@
 - rendercore 通过一个可选的 `winSummaryCollect` 配置项拥有通用 cumulative summary、整组 win/remove 与 sequential collect/remove 编排、manifest schema/parser、稳定排序、状态快照和生命周期；未配置时保持 task 95 的原行为。shared 包不硬编码 `CN`、`bg-win`、`winStart`、`winLoop`、`collect`、`Win_Start`、`Collect`、`End`、game002、coin/cash 换算或行列尺寸。game002 只传解析后的 manifest presentation map、组件数据、group/item amount resolver 和样式/布局。
 - 继续保留 task 95 的 emphasis：所有组金额同时显示，非中奖格统一渐暗/恢复；恢复后才按本任务重新排列后的组顺序执行普通 win/remove 和 coin collect。已有每组 cash overlay 不因临时汇总而删除。
 - 继续保留 WL 不 remove、不 drop、统一 fall、CN value 随 occurrence 搬运、refill CN 使用当前 step `bg-gencoins`、全部 step 后才播放 global win-amount、win-amount 期间持续 update reel runtime 等现有合同。
+- 服务端 otherScene 使用 delta 语义：component 已触发但 auxiliary matrix 完全未改变时，`usedOtherScenes` 可以为空。`bg-remove` 的 value holes 必须从权威 remove scene/source occurrence 推导，`bg-dropdown` 必须通过 rendercore 通用 occurrence 顺序推导既有 value 搬运，`bg-refill` intermediate matrix 省略不报错；服务器实际提供这些矩阵时仍最多一份并严格验证。只有 refill 新增 CN 等无法从旧 occurrence 推导的新 raw value，才要求 `bg-gencoins` 提供 otherScene，不能把真正缺值静默当 0。
 - 普通 spin 的压暗强度改由 `assets/game002-s3/reel.manifest.json` 的必填 `spin.dimmingAlpha` 唯一配置，当前为 `0.6`；`WL/CN` 仍保持全亮。该值不得与 cascade 强调阶段的 `nonWinningDimmingAlpha=0.82` 合并，也不得在 app 再硬编码第二份。
 - value-presentation symbol 在普通 spin 请求 `spinBlur` 时，显式 reel state texture 必须立即可见并优先于等价 normal active Spine；tier player 的异步 init 晚到不得把它隐藏。normal 与 winLoop 复用同一 active Spine player/时间轴时必须同步 semantic playback，并由 official Spine 真实 loop boundary 推进 pending Collect，不能卡死在循环。
 - 不能在 app 中直接操作 Pixi children、Spine player/track、slot attachment 或 animation duration；CN 继续使用同一个 tier player 和同一个 `Num` slot 数字对象切换动画，collect 不能重建 tier player、丢失 raw value 或 detach/reattach 数字图片。
@@ -780,6 +781,7 @@ CI=true pnpm install
 - [ ] CN `spinBlur` 在 tier player init 前后都不变空；切回 normal 后 active Spine/Num 正常显示。
 - [ ] official active Spine loop completion 可把 pending Collect 推进，且等价 normal/loop 切换不 replay 时间轴。
 - [ ] CN refill/carry/value image/Num slot 合同不变。
+- [ ] `bg-remove/bg-dropdown/bg-refill` 省略未变化 otherScene 时可确定性完成；提供矩阵时仍校验 cardinality、尺寸和 occurrence 一致性；新增 CN 缺 gencoins otherScene 仍显式失败。
 - [ ] 全部 step 完成后才 global cash win-amount，且 runtime 持续 update。
 - [ ] live server、query、lines、loading 99%/100%、公开轮带边界不变。
 - [ ] 没有 hidden fallback、timeout 强制完成或测试专用 production 分支。
