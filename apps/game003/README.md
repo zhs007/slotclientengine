@@ -84,7 +84,7 @@ CI=true pnpm --filter game003 check:static-config
 - 未声明 animation 的 symbol 状态才会走 fallback；fallback 不承载 game003 的 `appear` / `win` 秒数。
 - app 的中奖逻辑仍只按可见窗口坐标请求 symbol 状态为 `win`，不在 `game-adapter.ts`、`game-demo.ts` 或 `win-sequence.ts` 中写 `L1-wins.json` 到 `L5-wins.json`、Spine JSON/atlas 路径、VNI/Spine 播放细节或动画秒数。
 
-runtime 不读取 VNI `stageRect`，VNI 动画按 project 自己的 stage 在目标 symbol 位置播放；如果 manifest 里写入 `stageRect`，会作为未知字段显式失败。Spine 动画由 rendercore 的 Spine adapter 初始化；当前 `game003-s1` skeleton 为 Spine `4.2.43`，由锁定在 `4.2.x` 的官方 Pixi v8 runtime 解析和播放。app 不直接 import `@esotericsoftware/spine-pixi-v8`、不解析 atlas/skeleton、不复制播放状态机。缺 animation `durationSeconds`、缺 VNI project、缺 VNI asset、缺 Spine skeleton/atlas/texture、atlas page/region 不匹配、Spine animation name 大小写不匹配、未知/错配 Spine 版本、非法 manifest 字段或动画初始化失败都会显式失败，避免 symbol 动画悄悄退回普通表现后难以排查。
+runtime 不读取 VNI `stageRect`，VNI 动画按 project 自己的 stage 在目标 symbol 位置播放；如果 manifest 里写入 `stageRect`，会作为未知字段显式失败。Spine 动画由 rendercore 的 Spine adapter 初始化；当前 `game003-s1` skeleton 为 Spine `4.3.23`，由锁定在 `4.3.x` 的官方 Pixi v8 runtime 解析和播放。app 不直接 import `@esotericsoftware/spine-pixi-v8`、不解析 atlas/skeleton、不复制播放状态机。缺 animation `durationSeconds`、缺 VNI project、缺 VNI asset、缺 Spine skeleton/atlas/texture、atlas page/region 不匹配、Spine animation name 大小写不匹配、未知/错配 Spine 版本、非法 manifest 字段或动画初始化失败都会显式失败，避免 symbol 动画悄悄退回普通表现后难以排查。
 
 ## Loading 启动顺序
 

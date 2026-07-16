@@ -66,7 +66,7 @@ const GAME003_S1_MISSING_PAYTABLE_SYMBOLS = [
 ] as const;
 
 describe("symbolsviewer symbol set config", () => {
-  it("exposes game002-s3 before the known non-release game003 sets", () => {
+  it("exposes game002-s3 before the game003 sets", () => {
     expect(SYMBOL_SET_CONFIGS.map((config) => config.id)).toEqual([
       "game002-s3",
       "game003-s1",
@@ -297,9 +297,9 @@ describe("symbolsviewer symbol set config", () => {
     expect(resolveViewerStateForSymbol(config, "BN", "remove")).toBe("normal");
 
     const game003Config = getSymbolSetConfig("game003-s1");
-    expect(() =>
+    expect(
       game003Config.animationResolver(createSymbolContext("WL", "normal")),
-    ).toThrow(/Unsupported Spine skeleton version "4\.2\.43"/);
+    ).toBeInstanceOf(SpineSymbolAni);
   });
 });
 

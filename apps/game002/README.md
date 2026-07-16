@@ -51,7 +51,7 @@ Spine 统一由 rendercore 的官方 Pixi runtime 解析，只接受 4.3.x skele
 
 背景状态合同为 `BaseGame=BG loop`、`FreeGame=FG loop`、`BaseGame -> FreeGame=BG_FG once`、`FreeGame -> BaseGame=FG_BG once`。当前 app 只初始化并持续播放 `BaseGame`；FreeGame 的服务端触发语义尚未定义，因此 app 不猜测 GMI 字段，也不提供 query/debug fallback。以后业务合同明确后，只调用 rendercore background player 的 `requestState()`。
 
-`assets/game003-s1` 仍是已知的 Spine 4.2 非发布资源。本项目不为它提供 4.2 fallback，也不把它打包进 game002。
+`assets/game003-s1` 已升级为 Spine 4.3.23，但仍属于独立游戏资源；game002 不跨 skin 借用或打包它。
 
 ## 布局与 spin
 
