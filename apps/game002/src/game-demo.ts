@@ -12,10 +12,10 @@ import {
   createGridCellCascadeDropPlan,
   createGridCellCascadeDropdownPlan,
   createGridCellEffectController,
+  createShuffledGridCellReelOffsetMatrix,
   createReelSymbolRegistry,
   type GridCellDimmingPattern,
   type GridCellOrderMode,
-  type GridCellReelOffsetMatrix,
   type GridCellReelSpinPlan,
   type GridCellReelSpinTiming,
   type GridCellCascadeDropPlan,
@@ -54,7 +54,6 @@ import {
   GAME002_REEL_COUNT,
   GAME002_REELS_NAME,
   GAME002_VISIBLE_ROWS,
-  GAME002_GRID_CELL_REEL_OFFSETS,
   GAME002_GRID_CELL_REEL_ORDER,
   GAME002_GRID_LAYOUT,
   GAME002_FOCUS_REGION,
@@ -91,9 +90,9 @@ export interface Game002ReelConfig {
   readonly animationResolver: SymbolAnimationResolver;
   readonly symbolValuePresentationResources: SymbolValuePresentationResourceMap;
   readonly random: () => number;
+  readonly spinPhaseRandom: () => number;
   readonly gridLayout: Game002GridLayout;
   readonly focusRegion: Game002FocusRegion;
-  readonly cellReelOffsets: GridCellReelOffsetMatrix;
   readonly direction: ReelSpinDirection;
   readonly orderMode: GridCellOrderMode;
   readonly timing: GridCellReelSpinTiming;
@@ -105,6 +104,19 @@ export interface Game002ReelConfig {
 }
 
 const GAME002_DEFAULT_SKIN = getGame002SkinConfig("1");
+const UINT32_RANGE = 0x1_0000_0000;
+
+function randomGame002SpinPhase(): number {
+  const crypto = globalThis.crypto;
+  if (!crypto || typeof crypto.getRandomValues !== "function") {
+    throw new Error("game002 spin phase random requires Web Crypto.");
+  }
+  const [value] = crypto.getRandomValues(new Uint32Array(1));
+  if (value === undefined) {
+    throw new Error("game002 spin phase random returned no value.");
+  }
+  return value / UINT32_RANGE;
+}
 
 export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   reelsName: GAME002_REELS_NAME,
@@ -120,9 +132,9 @@ export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   symbolValuePresentationResources:
     GAME002_DEFAULT_SKIN.symbolValuePresentationResources,
   random: Math.random,
+  spinPhaseRandom: randomGame002SpinPhase,
   gridLayout: GAME002_GRID_LAYOUT,
   focusRegion: GAME002_FOCUS_REGION,
-  cellReelOffsets: GAME002_GRID_CELL_REEL_OFFSETS,
   direction: "forward",
   orderMode: GAME002_GRID_CELL_REEL_ORDER,
   timing: GAME002_DEFAULT_SKIN.reelManifest.spin.timing,
@@ -345,6 +357,14 @@ export function createGame002ReelRuntime(
   let pendingUnifiedRefillAnticipationPlan: GridCellCascadeDropPlan | null =
     null;
 
+  const createSpinPhaseOffsets = () =>
+    createShuffledGridCellReelOffsetMatrix({
+      reels,
+      columns: GAME002_REEL_COUNT,
+      rows: GAME002_VISIBLE_ROWS,
+      random: config.spinPhaseRandom,
+    });
+
   const resolveSceneFinalYs = (
     scene: SceneMatrix,
     sceneName: string,
@@ -491,7 +511,7 @@ export function createGame002ReelRuntime(
       columns: GAME002_REEL_COUNT,
       rows: GAME002_VISIBLE_ROWS,
       order,
-      cellReelOffsets: config.cellReelOffsets,
+      cellReelOffsets: createSpinPhaseOffsets(),
       direction: config.direction,
       timing: config.timing,
       dimming: spinDimming,
@@ -586,7 +606,7 @@ export function createGame002ReelRuntime(
       reelSet.resetToScene(
         validScene,
         nextFinalYs,
-        config.cellReelOffsets,
+        undefined,
         presentationValues,
       );
       const visibleScene = validateGame002Scene(
@@ -886,7 +906,7 @@ export function createGame002ReelRuntime(
         rows: GAME002_VISIBLE_ROWS,
         order,
         positions,
-        cellReelOffsets: config.cellReelOffsets,
+        cellReelOffsets: createSpinPhaseOffsets(),
         direction: config.direction,
         timing: spinConfig,
         dimming: spinDimming,

@@ -64,7 +64,6 @@ import {
   assertGame002ReelVisualMatchesTarget,
   createGame002ReelRuntime,
 } from "../src/game-demo.js";
-import { GAME002_GRID_CELL_REEL_OFFSETS } from "../src/game-layout.js";
 import { getGame002SkinConfig } from "../src/skin-config.js";
 
 beforeEach(() => {
@@ -76,6 +75,12 @@ afterEach(() => {
 });
 
 describe("game002-s3 reel runtime", () => {
+  it("keeps visual spin phase entropy separate from CN presentation random", () => {
+    expect(DEFAULT_GAME002_REEL_CONFIG.spinPhaseRandom).not.toBe(
+      DEFAULT_GAME002_REEL_CONFIG.random,
+    );
+  });
+
   it("locks the public reels, all 13 symbol codes and sample stop values", () => {
     const runtime = createRuntime();
 
@@ -201,14 +206,12 @@ describe("game002-s3 reel runtime", () => {
       y: 0,
       orderIndex: 0,
       dimmingAlpha: 0.5,
-      reelOffsetY: 0,
     });
     expect(plan.cells[8]).toMatchObject({
       x: 0,
       y: 8,
       orderIndex: 8,
       dimmingAlpha: 0.5,
-      reelOffsetY: GAME002_GRID_CELL_REEL_OFFSETS[0][8],
     });
     expect(plan.cells[53]).toMatchObject({
       x: 5,
@@ -226,6 +229,16 @@ describe("game002-s3 reel runtime", () => {
       y: 1,
       dimmingAlpha: 0.5,
     });
+    for (let x = 0; x < 6; x += 1) {
+      const columnPhases = plan.cells
+        .filter((cell) => cell.x === x)
+        .map((cell) =>
+          runtime.gameConfig
+            .getReels("reels-001")
+            .normalizeY(x, cell.y + cell.reelOffsetY),
+        );
+      expect(new Set(columnPhases).size).toBe(9);
+    }
     expect(plan.lastStopAtMs).toBe(1876);
     expect(runtime.getVisualSnapshot().requestedStates.flat()).not.toContain(
       "disabled",
@@ -264,6 +277,38 @@ describe("game002-s3 reel runtime", () => {
       GAME002_SAMPLE_SPIN_SCENE,
       "completed spin",
     );
+  });
+
+  it("reshuffles visual-only local reel phases for every spin plan", () => {
+    let state = 1;
+    let presentationRandomCalls = 0;
+    let spinPhaseRandomCalls = 0;
+    const runtime = createRuntime(undefined, {
+      presentationRandom: () => {
+        presentationRandomCalls += 1;
+        return 0;
+      },
+      spinPhaseRandom: () => {
+        spinPhaseRandomCalls += 1;
+        state = (state * 48_271) % 2_147_483_647;
+        return (state - 1) / 2_147_483_646;
+      },
+    });
+    const presentationCallsBeforePlans = presentationRandomCalls;
+
+    const first = runtime.createSpinPlan(GAME002_SAMPLE_SPIN_SCENE, "first");
+    const second = runtime.createSpinPlan(GAME002_SAMPLE_SPIN_SCENE, "second");
+    expect(first.cells.map((cell) => cell.reelOffsetY)).not.toEqual(
+      second.cells.map((cell) => cell.reelOffsetY),
+    );
+    expect(first.cells.map((cell) => cell.targetVisibleSymbols)).toEqual(
+      second.cells.map((cell) => cell.targetVisibleSymbols),
+    );
+    expect(
+      first.cells.every((cell) => cell.axisPlan.direction === "forward"),
+    ).toBe(true);
+    expect(spinPhaseRandomCalls).toBe(108);
+    expect(presentationRandomCalls).toBe(presentationCallsBeforePlans);
   });
 
   it("uses a temporary visible strip when server scene is absent from local reels", () => {
@@ -507,7 +552,13 @@ describe("game002-s3 reel runtime", () => {
   });
 });
 
-function createRuntime(initialScene?: readonly (readonly number[])[]) {
+function createRuntime(
+  initialScene?: readonly (readonly number[])[],
+  options: {
+    readonly presentationRandom?: () => number;
+    readonly spinPhaseRandom?: () => number;
+  } = {},
+) {
   const skin = getGame002SkinConfig("1");
   const normalResolver = createDefaultSymbolAnimationResolver();
   return createGame002ReelRuntime({
@@ -516,6 +567,9 @@ function createRuntime(initialScene?: readonly (readonly number[])[]) {
     ...(initialScene === undefined ? {} : { initialScene }),
     config: {
       ...DEFAULT_GAME002_REEL_CONFIG,
+      random: options.presentationRandom ?? DEFAULT_GAME002_REEL_CONFIG.random,
+      spinPhaseRandom:
+        options.spinPhaseRandom ?? DEFAULT_GAME002_REEL_CONFIG.spinPhaseRandom,
       texturedSymbols: skin.displaySymbols,
       emptySymbols: [],
       symbolScales: skin.symbolScales,

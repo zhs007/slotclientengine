@@ -1,8 +1,6 @@
 import {
-  createGridCellReelOffsetMatrix,
   createReelLayout,
   type GridCellOrderMode,
-  type GridCellReelOffsetMatrix,
   type ReelLayout,
 } from "@slotclientengine/rendercore/reel";
 import type { SlotGameFramePolicy } from "@slotclientengine/gameframeworks";
@@ -37,11 +35,6 @@ export const GAME002_VISIBLE_ROWS = 9;
 export const GAME002_CELL_SIZE = 120;
 export const GAME002_GRID_CELL_REEL_ORDER =
   "top-down-left-right" satisfies GridCellOrderMode;
-export const GAME002_GRID_CELL_REEL_OFFSETS = createGridCellReelOffsetMatrix({
-  columns: GAME002_REEL_COUNT,
-  rows: GAME002_VISIBLE_ROWS,
-  rowOffsetStep: 16,
-}) satisfies GridCellReelOffsetMatrix;
 const GAME002_BRIGHT_SPIN_SYMBOLS = new Set(["WL"]);
 
 export interface Game002GridCellDimming {

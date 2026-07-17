@@ -183,6 +183,16 @@ describe("game002 source boundary", () => {
     }
   });
 
+  it("delegates per-spin local reel phase shuffling to rendercore", () => {
+    const source = readFileSync(join(APP_ROOT, "src/game-demo.ts"), "utf8");
+
+    expect(source).toContain("createShuffledGridCellReelOffsetMatrix");
+    expect(source).toContain("random: config.spinPhaseRandom");
+    expect(source).not.toContain("rowOffsetStep");
+    expect(source).not.toContain("selectedIndex");
+    expect(source).not.toContain("sort(() =>");
+  });
+
   it("keeps Spine ownership in rendercore and loading before framework entry", () => {
     const source = listFiles(join(APP_ROOT, "src"), (file) =>
       file.endsWith(".ts"),

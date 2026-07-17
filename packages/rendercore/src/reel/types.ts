@@ -143,6 +143,13 @@ export interface GridCellReelOffsetMatrixOptions {
   readonly originOffset?: number;
 }
 
+export interface ShuffledGridCellReelOffsetMatrixOptions {
+  readonly reels: LogicReels;
+  readonly columns: number;
+  readonly rows: number;
+  readonly random: () => number;
+}
+
 export type GridCellOrderMode = "top-down-left-right";
 
 export interface GridCellReelSpinTiming {

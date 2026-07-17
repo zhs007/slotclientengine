@@ -242,3 +242,11 @@ rendercore 的 cell effect loop contract 已由“只能 1 次”扩为“正安
 spin 全亮名单同步从 `WL/CN` 收紧为仅 `WL`；`CN` 与其它实际滚动 occurrence 一样使用 manifest `spin.dimmingAlpha=0.5`，rendercore 仍只消费通用 code resolver，不含 game002 symbol 分支。
 
 本次补充验收：rendercore targeted 20/20、全量 44 files / 286 tests；game002 targeted 13/13、全量 18 files / 90 tests；两包 typecheck、lint、format 均通过，game002 `release:check` 与 static dist exact closure 通过。最终浏览器节奏和观感验收继续由用户执行。
+
+## 期待 spin 临时轮带相位洗牌补充
+
+用户浏览器反馈：期待阶段持续时间增长且只有 WL 保持全亮后，同列格子里的 WL 会形成稳定的空间传播轨迹，看起来像轮子在停轴前反向滚动。核对确认六列本地公开轮带长度均为 `77` 且每列只有一个 WL；此前固定 `rowOffsetStep=16` 与 cell 自身 `y` 合成固定有效相位 `17*y mod 77`，不是逐格随机起点，因此长时间高亮观察会暴露等差关系。
+
+本次保持本地公开轮带、正向运动、速度、timing 与服务端目标窗口覆盖不变，只把固定相位改成 rendercore 通用的 `createShuffledGridCellReelOffsetMatrix()`：每列使用 partial Fisher-Yates，从完整 reel phase 中为同列 9 格无重复抽取相位；只洗 phase，不洗 symbol 顺序。game002 在 initial spin 和期待 selective refill spin 每次重新生成，并使用独立 `spinPhaseRandom`；production 默认来自 Web Crypto，不消费服务器 randomNumbers、全局 `Math.random` 或 CN presentation random。最终浏览器是否消除反向错觉继续由用户验收。
+
+本次补充验收：rendercore 全量 `45 files / 288 tests`、game002 全量 `18 files / 93 tests`；两包 lint、format、typecheck 均通过，game002 `release:check` 与 static dist exact closure 通过；根级 typecheck `23/23` 通过，`git diff --check` 通过。最终浏览器观感验收继续由用户执行。
