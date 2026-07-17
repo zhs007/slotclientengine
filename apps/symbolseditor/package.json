@@ -1,11 +1,11 @@
 {
-  "name": "gamelayouteditor",
+  "name": "symbolseditor",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
-    "prepare:deps": "pnpm --filter @slotclientengine/rendercore build",
+    "prepare:deps": "pnpm --filter @slotclientengine/browserartifactio build && pnpm --filter @slotclientengine/rendercore build",
     "dev": "pnpm run prepare:deps && sh -c 'if [ \"$1\" = \"--\" ]; then shift; fi; exec vite \"$@\"' sh",
     "build": "pnpm run prepare:deps && vite build",
     "lint": "eslint .",
@@ -25,7 +25,6 @@
     "@typescript-eslint/parser": "^8.0.0",
     "@vitest/coverage-v8": "^4.0.0",
     "eslint-config-prettier": "^9.1.0",
-    "fflate": "^0.8.3",
     "globals": "^15.15.0",
     "happy-dom": "^20.0.10"
   }

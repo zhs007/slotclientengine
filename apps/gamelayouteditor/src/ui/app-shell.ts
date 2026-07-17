@@ -3,6 +3,7 @@ import {
   editorProjectToPreviewManifest,
   cloneEditorProject,
   createNewEditorProject,
+  applySymbolPackageCellSize,
   manifestToEditorProject,
   updateVariantFocusFromReel,
   type EditorProject,
@@ -19,6 +20,7 @@ import {
 } from "../model/validation.js";
 import { exportLayoutZip } from "../io/exported-layout-zip.js";
 import { importLayoutZip } from "../io/imported-layout-zip.js";
+import { importSymbolsZip } from "../io/imported-symbol-package.js";
 import { LayoutPreview } from "../preview/layout-preview.js";
 import { PREVIEW_SIZE_PRESETS } from "../preview/preview-size.js";
 
@@ -29,6 +31,13 @@ export class GameLayoutEditorApp {
   #unsubscribe: (() => void) | null = null;
   #previewRevision = 0;
   #destroyed = false;
+  #symbolPackageMetadata: {
+    readonly id: string;
+    readonly width: number;
+    readonly height: number;
+    readonly count: number;
+  } | null = null;
+  #symbolImportRequest = 0;
 
   constructor(root: HTMLElement) {
     this.#root = root;
@@ -68,6 +77,13 @@ export class GameLayoutEditorApp {
     this.requireElement("[data-export]").addEventListener("click", () => {
       void this.exportZip();
     });
+    this.requireElement("[data-import-symbols]").addEventListener(
+      "click",
+      () => void this.importSymbolsPackage(),
+    );
+    this.requireElement("[data-clear-symbols]").addEventListener("click", () =>
+      this.clearSymbolsPackage(),
+    );
     for (const preset of PREVIEW_SIZE_PRESETS) {
       const button = document.createElement("button");
       button.type = "button";
@@ -376,6 +392,56 @@ export class GameLayoutEditorApp {
     }
   }
 
+  private async importSymbolsPackage(): Promise<void> {
+    const files = await pickFiles(".zip,application/zip", false);
+    if (files.length === 0) return;
+    const request = ++this.#symbolImportRequest;
+    let resource: Awaited<ReturnType<typeof importSymbolsZip>> | null = null;
+    try {
+      resource = await importSymbolsZip(
+        new Uint8Array(await files[0].arrayBuffer()),
+      );
+      if (request !== this.#symbolImportRequest) {
+        resource.destroy();
+        return;
+      }
+      const project = cloneEditorProject(this.#store.getSnapshot().project);
+      applySymbolPackageCellSize(project, resource.packageManifest.cellSize);
+      await this.#preview?.setSymbolPackage(resource);
+      this.#symbolPackageMetadata = {
+        id: resource.packageManifest.id,
+        width: resource.packageManifest.cellSize.width,
+        height: resource.packageManifest.cellSize.height,
+        count: resource.displaySymbols.length,
+      };
+      resource = null;
+      this.#store.replace(project);
+      this.renderSymbolsMetadata();
+    } catch (error) {
+      resource?.destroy();
+      this.#store.setExternalError(error);
+    }
+  }
+
+  private clearSymbolsPackage(): void {
+    this.#symbolImportRequest += 1;
+    this.#symbolPackageMetadata = null;
+    void this.#preview?.setSymbolPackage(null);
+    this.renderSymbolsMetadata();
+  }
+
+  private renderSymbolsMetadata(): void {
+    const target = this.requireElement("[data-symbols-metadata]");
+    const metadata = this.#symbolPackageMetadata;
+    target.textContent = metadata
+      ? `${metadata.id} · cell ${metadata.width}×${metadata.height} · ${metadata.count} display symbols`
+      : "未导入；layout ZIP 不会嵌入 symbol 资源。";
+    this.requireElement("[data-clear-symbols]").toggleAttribute(
+      "disabled",
+      !metadata,
+    );
+  }
+
   private setPreviewSize(width: number, height: number): void {
     try {
       this.#preview?.setPageSize({ width, height });
@@ -467,6 +533,12 @@ function shellMarkup(): string {
           <output class="diagnostics" data-preview-diagnostics></output>
         </section>
       </section>
+      <aside class="symbols-panel">
+        <strong>Symbols 预览包</strong>
+        <button type="button" data-import-symbols>导入 symbols ZIP</button>
+        <button type="button" data-clear-symbols disabled>清除 symbols package</button>
+        <span data-symbols-metadata>未导入；layout ZIP 不会嵌入 symbol 资源。</span>
+      </aside>
       <aside class="error-panel" aria-live="polite" data-errors></aside>
     </main>`;
 }

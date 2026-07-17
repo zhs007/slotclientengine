@@ -5,7 +5,7 @@ import {
   type SceneLayoutManifestV1,
   type SceneLayoutResource,
 } from "@slotclientengine/rendercore/scene-layout";
-import { Unzip, UnzipInflate } from "fflate";
+import { extractBoundedZip as extractSharedBoundedZip } from "@slotclientengine/browserartifactio";
 import { assertCanonicalPackagePath } from "./filename-policy.js";
 import { ObjectUrlRegistry } from "./object-url-registry.js";
 
@@ -149,81 +149,10 @@ export async function validateLayoutAssets(
 export function extractBoundedZip(
   zipBytes: Uint8Array,
 ): Map<string, Uint8Array> {
-  if (!(zipBytes instanceof Uint8Array))
-    throw new Error("zip 数据必须是 Uint8Array。");
-  if (zipBytes.byteLength > LAYOUT_ZIP_LIMITS.maxCompressedBytes) {
-    throw new Error("zip 压缩文件超过 50 MiB 上限。");
-  }
-  const files = new Map<string, Uint8Array>();
-  let entryCount = 0;
-  let totalBytes = 0;
-  let failure: Error | null = null;
-  const unzip = new Unzip((file) => {
-    if (failure) return;
-    try {
-      entryCount += 1;
-      if (entryCount > LAYOUT_ZIP_LIMITS.maxEntries) {
-        throw new Error("zip entry 数超过 256 上限。");
-      }
-      if (file.name.endsWith("/")) {
-        assertDirectoryPath(file.name);
-        file.ondata = (error) => {
-          if (error && !failure) {
-            failure = new Error(
-              `zip 目录 entry 解压失败 ${file.name}：${formatError(error)}`,
-            );
-          }
-        };
-        file.start();
-        return;
-      }
-      assertCanonicalPackagePath(file.name);
-      if (files.has(file.name)) throw new Error(`zip 路径重复：${file.name}`);
-      if (
-        file.originalSize !== undefined &&
-        file.originalSize > LAYOUT_ZIP_LIMITS.maxFileBytes
-      ) {
-        throw new Error(`zip 单文件超过 20 MiB 上限：${file.name}`);
-      }
-      const chunks: Uint8Array[] = [];
-      let fileBytes = 0;
-      file.ondata = (error, chunk, final) => {
-        if (failure) return;
-        if (error) {
-          failure = new Error(
-            `zip 解压失败 ${file.name}：${formatError(error)}`,
-          );
-          return;
-        }
-        fileBytes += chunk.byteLength;
-        totalBytes += chunk.byteLength;
-        if (fileBytes > LAYOUT_ZIP_LIMITS.maxFileBytes) {
-          failure = new Error(`zip 单文件超过 20 MiB 上限：${file.name}`);
-          file.terminate();
-          return;
-        }
-        if (totalBytes > LAYOUT_ZIP_LIMITS.maxTotalBytes) {
-          failure = new Error("zip 总解压尺寸超过 100 MiB 上限。");
-          file.terminate();
-          return;
-        }
-        chunks.push(chunk.slice());
-        if (final) files.set(file.name, joinChunks(chunks, fileBytes));
-      };
-      file.start();
-    } catch (error) {
-      failure = error instanceof Error ? error : new Error(String(error));
-      file.terminate();
-    }
+  return extractSharedBoundedZip(zipBytes, {
+    limits: LAYOUT_ZIP_LIMITS,
+    pathPolicy: { requireLowercase: true },
   });
-  unzip.register(UnzipInflate);
-  try {
-    unzip.push(zipBytes, true);
-  } catch (error) {
-    throw failure ?? new Error(`zip 结构无效：${formatError(error)}`);
-  }
-  if (failure) throw failure;
-  return files;
 }
 
 function classifyPaths(manifest: SceneLayoutManifestV1) {
@@ -252,22 +181,6 @@ function decodeBrowserImage(
     image.onerror = () => reject(new Error(`图片无法解码：${url}`));
     image.src = url;
   });
-}
-
-function assertDirectoryPath(path: string): void {
-  const trimmed = path.slice(0, -1);
-  if (!trimmed) throw new Error("zip 不允许根目录 entry。");
-  assertCanonicalPackagePath(trimmed);
-}
-
-function joinChunks(chunks: readonly Uint8Array[], length: number): Uint8Array {
-  const result = new Uint8Array(length);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return result;
 }
 
 function decodeUtf8(bytes: Uint8Array): string {

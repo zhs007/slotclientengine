@@ -10,6 +10,8 @@
 
 ## Symbol API
 
+`@slotclientengine/rendercore/symbol` 同时提供 strict symbol-package v1 parser、game config/display set 交叉校验、direct/indirect exact resource closure，以及 browser bytes → texture/VNI/official Spine/value resource 的通用组装。editor app 只处理 File/Blob/UI，不复制 manifest 或 player。完整 ZIP 合同见 [`docs/symbol-package.md`](../../docs/symbol-package.md)。
+
 主要入口：
 
 ```ts

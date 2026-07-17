@@ -7,6 +7,13 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: "@slotclientengine/rendercore/symbol",
+        replacement: resolve(
+          __dirname,
+          "../../packages/rendercore/src/symbol/index.ts",
+        ),
+      },
+      {
         find: "@slotclientengine/rendercore/scene-layout",
         replacement: resolve(
           __dirname,
@@ -18,6 +25,13 @@ export default defineConfig({
         replacement: resolve(
           __dirname,
           "../../packages/rendercore/src/index.ts",
+        ),
+      },
+      {
+        find: "@slotclientengine/logiccore",
+        replacement: resolve(
+          __dirname,
+          "../../packages/logiccore/src/index.ts",
         ),
       },
     ],

@@ -1,0 +1,122 @@
+# Symbol package v1
+
+Symbol package 是 symbols 编辑器与布局编辑器之间的独立、可重新导入 artifact。它不是 production spin 数据包，也不包含 scene layout。
+
+## ZIP 结构
+
+```text
+game002-s3-symbols.zip
+├── symbols.package.json
+├── gameconfig.json
+├── symbol-state-textures.manifest.json
+├── WL.png
+├── WL.spinBlur.png
+├── WL.disabled.png
+├── WL.json
+├── Symbol.atlas
+├── Symbol.png
+├── CN_1.json
+├── 1.png
+└── ...
+```
+
+根 manifest schema：
+
+```ts
+interface SymbolPackageManifestV1 {
+  version: 1;
+  kind: "symbol-package";
+  id: string; // lowercase ASCII kebab-case
+  cellSize: { width: number; height: number };
+  entrypoints: {
+    gameConfig: string;
+    symbolManifest: string;
+  };
+  resources: readonly string[];
+}
+```
+
+示例：
+
+```json
+{
+  "version": 1,
+  "kind": "symbol-package",
+  "id": "game002-s3",
+  "cellSize": { "width": 120, "height": 120 },
+  "entrypoints": {
+    "gameConfig": "gameconfig.json",
+    "symbolManifest": "symbol-state-textures.manifest.json"
+  },
+  "resources": ["1.png", "Symbol.atlas", "Symbol.png", "WL.png"]
+}
+```
+
+所有 object 递归拒绝未知字段。两个 entrypoint 必填、不得相同，也不得出现在 `resources`。`resources` 必须非空、唯一并按 canonical path 排序。ZIP 实际文件集合必须与 package manifest、两个 entrypoint 和 `resources` 的并集精确相等。
+
+## 三份配置的职责
+
+- `gameconfig.json`：公开客户端 paytable、symbol code 与本地公开 reels 的唯一权威输入。它不得包含服务器真实轮带、token、cookie、玩家下注或本次 spin 数据。
+- `symbol-state-textures.manifest.json`：display set、normal/state texture、scale、renderPriority、VNI/official Spine animation、valuePresentation 与可选高级 presentation metadata。
+- `cellSize`：reel cell 的唯一逻辑宽高。图片、VNI、Spine 按自身资源尺寸和 manifest transform 渲染，导入不会重编码或 resize 美术。
+
+game config 可以含未进入 package 的辅助 symbol；manifest 中每个 display symbol 则必须存在于 game config，且 symbol/code/paytable 映射一致。UI 与 layout preview 的 display 顺序固定为 numeric code ascending。
+
+## 路径安全与大小限制
+
+只接受 UTF-8、Unicode NFC、POSIX 相对 canonical path。拒绝绝对路径、drive prefix、URL、反斜杠、空 segment、`.`、`..`、NUL、query/hash、percent escape、exact duplicate、Unicode normalization collision 与 ASCII case-fold collision。manifest 资源引用允许一个 `./` 前缀；VNI asset 相对其 project、atlas page 相对其 atlas 解析且不能逃出 ZIP 根。
+
+Symbols ZIP 固定限制：
+
+- entries：1024
+- compressed：100 MiB
+- single expanded file：25 MiB
+- total expanded：250 MiB
+
+解压使用 bounded streaming `Unzip`；header size 可用时先拒绝，chunk 到达时再次累计。任一失败会终止 import 并释放临时 runtime/Object URL，旧项目保持可用。layout ZIP 继续使用更小的 `256 / 50 MiB / 20 MiB / 100 MiB` 限制。
+
+## 精确资源闭包
+
+闭包包含 normal/layer/keyframe、每个 state texture、VNI project 及其 `assets[].path`、Spine skeleton/atlas/texture、value tier Spine 与 image text 的每个 `defaultValues` 完整数值图片。缺资源或多余 orphan 都失败；不扫描目录、不使用 glob、不从文件名猜 display symbol。
+
+Spine 只接受 official 4.3.x，animation name 大小写精确，atlas page 必须匹配 texture。VNI project 通过 vnicore parser 和精确 asset manifest 验证。image value 缺图不回退 font。`cascadeWinPresentation` 等合法高级 metadata 可以 round-trip，但不因此引入 sequence UI。
+
+## 导入、导出与稳定性
+
+导入顺序是 bounded extract → package manifest → 实际 entry closure → game config → symbol manifest → config/display 交叉校验 → indirect closure/图片/VNI/Spine/value 初始化 → 原子替换。
+
+导出 JSON 使用 UTF-8、2 空格和末尾换行；object key 稳定排序，array 顺序不变。ZIP entry 按 canonical path 排序，mtime 固定为 1980 ZIP epoch，未修改资源 bytes 原样保留。因此同一未修改 draft 连续导出 bytes 一致。
+
+## 编辑器与 layout 接入
+
+`apps/symbolseditor` 从 game config 创建 draft，默认 `160x160`、`spinBlur`/`disabled`、scale `1`、priority `0` 和全选 display set。它只做单 symbol/gallery 的单状态预览与 Replay，不提供 sequence、hold、next、spin/cascade timeline。
+
+`apps/gamelayouteditor` 导入同一 ZIP 后，以 package `cellSize` 原子覆盖 `main` grid 的 cell width/height，保留 rows、columns、gap 与 placement，并按现有 focus offsets 重派生 focus。越出 art/focus 时失败，不 auto-fit。preview 从 scene-layout snapshot 取得真实 cell geometry，按 code order / row-major 只显示 `normal`；value symbol 固定使用 `defaultValues[0]`。清除 package 不回滚已经应用的 cellSize。layout ZIP 不嵌入 symbol 文件。
+
+## Production 接入
+
+Production build 不应在每次 spin 解压 ZIP。发布流程先严格验证并解压，再用 rendercore 现有 manifest API 从精确 Vite modules 构造 texture、VNI、Spine、value resources：
+
+```ts
+import {
+  createSymbolAssetMapFromManifestModules,
+  createSymbolManifestAnimationResolver,
+  createSymbolValuePresentationResourcesFromManifest,
+} from "@slotclientengine/rendercore/symbol";
+
+const assets = createSymbolAssetMapFromManifestModules({
+  manifest,
+  modules: exactTextureModules,
+  displaySymbols,
+});
+const animationResolver = createSymbolManifestAnimationResolver({
+  manifest,
+  vniProjectModules,
+  vniAssetModules,
+  spineSkeletonModules,
+  spineAtlasModules,
+  spineTextureModules,
+});
+```
+
+浏览器上传 bytes 使用 `createSymbolPackageResource({ packageManifest, files })`，其 `destroy()` 幂等并拥有 Object URL/临时 texture 生命周期。

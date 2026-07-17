@@ -1,5 +1,6 @@
 const SEGMENT = /^[A-Za-z0-9._-]+$/;
 const NODE_ID = /^[a-z0-9][a-z0-9._-]*$/;
+import { assertCanonicalPackagePath as assertSharedPackagePath } from "@slotclientengine/browserartifactio";
 
 export function canonicalizeUploadFileName(fileName: string): string {
   if (!SEGMENT.test(fileName) || fileName === "." || fileName === "..") {
@@ -25,22 +26,9 @@ export function deriveNodeId(fileName: string): string {
 }
 
 export function assertCanonicalPackagePath(path: string): void {
-  if (path !== path.toLowerCase()) {
-    throw new Error(`zip 路径必须为小写：${path}`);
-  }
-  if (path.includes("\\") || path.startsWith("/") || /^[a-z]:/i.test(path)) {
-    throw new Error(`zip 路径必须是相对 POSIX 路径：${path}`);
-  }
+  assertSharedPackagePath(path, { requireLowercase: true });
   const segments = path.split("/");
-  if (
-    segments.some(
-      (segment) =>
-        segment.length === 0 ||
-        segment === "." ||
-        segment === ".." ||
-        !SEGMENT.test(segment),
-    )
-  ) {
+  if (segments.some((segment) => !SEGMENT.test(segment))) {
     throw new Error(`zip 路径包含非法 segment：${path}`);
   }
 }

@@ -4,8 +4,15 @@ import {
   type SceneLayoutFrameViewport,
   type SceneLayoutManifestV1,
   type SceneLayoutRuntime,
+  type SceneLayoutSnapshot,
 } from "@slotclientengine/rendercore/scene-layout";
-import { Application, Graphics } from "pixi.js";
+import {
+  createSymbolPackageValueControllerFactory,
+  type RenderSymbol,
+  type SymbolCatalogModel,
+  type SymbolPackageResource,
+} from "@slotclientengine/rendercore/symbol";
+import { Application, Container, Graphics } from "pixi.js";
 import {
   validateLayoutAssets,
   type ImportedLayoutPackage,
@@ -22,6 +29,7 @@ export class LayoutPreview {
   readonly #diagnostics: HTMLElement;
   readonly #app = new Application();
   readonly #guides = new Graphics();
+  readonly #symbolOverlay = new Container();
   #package: ImportedLayoutPackage | null = null;
   #runtime: SceneLayoutRuntime | null = null;
   #manifest: SceneLayoutManifestV1 | null = null;
@@ -33,6 +41,11 @@ export class LayoutPreview {
   #ready = false;
   #destroyed = false;
   #layoutRequest = 0;
+  #symbolRequest = 0;
+  #symbolResource: SymbolPackageResource | null = null;
+  #symbolCatalog: SymbolCatalogModel | null = null;
+  #renderSymbols: RenderSymbol[] = [];
+  #symbolDiagnostic = "";
 
   constructor(host: HTMLElement, diagnostics: HTMLElement) {
     this.#host = host;
@@ -50,9 +63,11 @@ export class LayoutPreview {
     });
     this.#app.canvas.setAttribute("aria-label", "布局预览画布");
     this.#host.replaceChildren(this.#app.canvas);
-    this.#app.stage.addChild(this.#guides);
+    this.#app.stage.addChild(this.#symbolOverlay, this.#guides);
     this.#app.ticker.add((ticker) => {
       if (this.#runtime) this.#runtime.update(ticker.deltaMS / 1000);
+      for (const symbol of this.#renderSymbols)
+        symbol.update(ticker.deltaMS / 1000);
     });
     this.#ready = true;
   }
@@ -95,9 +110,37 @@ export class LayoutPreview {
     this.assertReady();
     this.#layoutRequest += 1;
     this.clearRuntime();
+    this.clearRenderSymbols();
     this.#manifest = null;
     this.#guides.clear();
     this.#diagnostics.textContent = "配置未通过严格校验，预览与导出已暂停。";
+  }
+
+  async setSymbolPackage(
+    resource: SymbolPackageResource | null,
+  ): Promise<void> {
+    this.assertReady();
+    const request = ++this.#symbolRequest;
+    if (!resource) {
+      this.clearSymbolPackage();
+      if (this.#runtime) this.applySize();
+      return;
+    }
+    let catalog: SymbolCatalogModel;
+    try {
+      catalog = await resource.createCatalog();
+    } catch (error) {
+      resource.destroy();
+      throw error;
+    }
+    if (request !== this.#symbolRequest || this.#destroyed) {
+      resource.destroy();
+      return;
+    }
+    this.clearSymbolPackage();
+    this.#symbolResource = resource;
+    this.#symbolCatalog = catalog;
+    if (this.#runtime) this.applySize();
   }
 
   setPageSize(size: PreviewSize): void {
@@ -131,7 +174,10 @@ export class LayoutPreview {
     if (this.#destroyed) return;
     this.#destroyed = true;
     this.#layoutRequest += 1;
+    this.#symbolRequest += 1;
     this.clearRuntime();
+    this.clearSymbolPackage();
+    this.#symbolOverlay.destroy({ children: true });
     this.#guides.destroy();
     this.#app.destroy(true, { children: true, texture: true });
     this.#host.replaceChildren();
@@ -151,6 +197,7 @@ export class LayoutPreview {
       frameViewport.frameDesignSize.height,
     );
     const snapshot = runtime.applyViewport(frameViewport.frameDesignSize);
+    this.layoutSymbolOverlay(snapshot);
     drawPreviewGuides({
       graphics: this.#guides,
       snapshot,
@@ -165,6 +212,7 @@ export class LayoutPreview {
       `frameOffset=(${round(frameViewport.offsetX)}, ${round(frameViewport.offsetY)})`,
       `visible=${formatRect(snapshot.visibleRect)}`,
       `world=(${round(snapshot.worldOffset.x)}, ${round(snapshot.worldOffset.y)})`,
+      ...(this.#symbolDiagnostic ? [this.#symbolDiagnostic] : []),
     ].join(" · ");
     this.applyDisplaySize();
   }
@@ -200,6 +248,58 @@ export class LayoutPreview {
     this.#frameViewport = null;
     this.#package?.destroy();
     this.#package = null;
+  }
+
+  private layoutSymbolOverlay(snapshot: SceneLayoutSnapshot): void {
+    this.clearRenderSymbols();
+    this.#symbolDiagnostic = "";
+    const resource = this.#symbolResource;
+    const catalog = this.#symbolCatalog;
+    const reel = snapshot.reels.main;
+    if (!resource || !catalog || !reel) return;
+    const cellCount = reel.columns * reel.rows;
+    const symbols = resource.displaySymbols;
+    for (let index = 0; index < cellCount; index += 1) {
+      const symbol = symbols[index % symbols.length];
+      const renderSymbol = catalog.createRenderSymbol(symbol, {
+        valueControllerFactory: createSymbolPackageValueControllerFactory(
+          resource,
+          symbol,
+        ),
+      });
+      renderSymbol.scale.set(resource.symbolScales[symbol] ?? 1);
+      renderSymbol.init();
+      const x = index % reel.columns;
+      const y = Math.floor(index / reel.columns);
+      renderSymbol.position.set(
+        reel.viewportRect.x + x * reel.stride.width + reel.cellSize.width / 2,
+        reel.viewportRect.y + y * reel.stride.height + reel.cellSize.height / 2,
+      );
+      const presentation =
+        resource.symbolManifest.symbols[symbol]?.valuePresentation;
+      if (presentation)
+        renderSymbol.setPresentationValue(presentation.defaultValues[0]);
+      this.#symbolOverlay.addChild(renderSymbol);
+      this.#renderSymbols.push(renderSymbol);
+    }
+    this.#symbolDiagnostic =
+      cellCount < symbols.length
+        ? `symbols=${resource.packageManifest.id} · ${symbols.length} display · 当前 viewport 未覆盖全部 symbol`
+        : `symbols=${resource.packageManifest.id} · ${symbols.length} display · normal-only row-major`;
+  }
+
+  private clearRenderSymbols(): void {
+    for (const symbol of this.#renderSymbols) symbol.destroy();
+    this.#renderSymbols = [];
+    this.#symbolOverlay.removeChildren();
+  }
+
+  private clearSymbolPackage(): void {
+    this.clearRenderSymbols();
+    this.#symbolCatalog = null;
+    this.#symbolResource?.destroy();
+    this.#symbolResource = null;
+    this.#symbolDiagnostic = "";
   }
 
   private assertReady(): void {

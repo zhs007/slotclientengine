@@ -66,10 +66,26 @@ button.primary {
 
 .editor-shell {
   display: grid;
-  grid-template-rows: 62px minmax(0, 1fr) auto;
+  grid-template-rows: 62px minmax(0, 1fr) auto auto;
   height: 100vh;
   min-height: 100vh;
   overflow: hidden;
+}
+
+.symbols-panel {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 43px;
+  padding: 7px 14px;
+  border-top: 1px solid #243044;
+  background: #0d1420;
+  color: #91a0b5;
+  font-size: 12px;
+}
+
+.symbols-panel strong {
+  color: #e8edf5;
 }
 
 .topbar {

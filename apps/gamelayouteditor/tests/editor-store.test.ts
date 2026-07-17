@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  applySymbolPackageCellSize,
   cloneEditorProject,
   createNewEditorProject,
   editorProjectToPreviewManifest,
@@ -55,6 +56,46 @@ describe("EditorStore", () => {
       width: 920,
       height: 600,
     });
+  });
+
+  it("applies package cellSize while preserving grid topology and rejects art overflow atomically", () => {
+    const store = new EditorStore(createNewEditorProject("maximized-focus"));
+    store.transact((draft) =>
+      applySymbolPackageCellSize(draft, { width: 120, height: 120 }),
+    );
+    expect(store.getSnapshot().project.reel).toMatchObject({
+      columns: 5,
+      rows: 3,
+      cellWidth: 120,
+      cellHeight: 120,
+      gapX: 0,
+      gapY: 0,
+    });
+
+    const fitting = createNewEditorProject("maximized-focus");
+    fitting.variants.default.artSize = { width: 2000, height: 2000 };
+    fitting.reel.placements.default = { x: 600, y: 700 };
+    updateVariantFocusFromReel(fitting, "default");
+    applySymbolPackageCellSize(fitting, { width: 120, height: 120 });
+    expect(fitting.variants.default.focusRect).toEqual({
+      x: 540,
+      y: 640,
+      width: 720,
+      height: 480,
+    });
+
+    const bounded = createNewEditorProject("maximized-focus");
+    bounded.variants.default.artSize = { width: 500, height: 500 };
+    bounded.reel.placements.default = { x: 0, y: 0 };
+    updateVariantFocusFromReel(bounded, "default");
+    const boundedStore = new EditorStore(bounded);
+    expect(() =>
+      boundedStore.transact((draft) =>
+        applySymbolPackageCellSize(draft, { width: 200, height: 120 }),
+      ),
+    ).toThrow(/越出 art/);
+    expect(boundedStore.getSnapshot().project.reel.cellWidth).toBe(160);
+    expect(boundedStore.getSnapshot().project.reel.cellHeight).toBe(160);
   });
 
   it("keeps invalid intermediate values and atomically replaces imports", () => {

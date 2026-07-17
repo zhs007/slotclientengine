@@ -5,6 +5,10 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: "@slotclientengine/browserartifactio",
+        replacement: resolve(__dirname, "../browserartifactio/src/index.ts"),
+      },
+      {
         find: "@slotclientengine/pixiani/core",
         replacement: resolve(__dirname, "../pixiani/src/core/index.ts"),
       },

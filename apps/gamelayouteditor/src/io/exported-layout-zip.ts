@@ -3,7 +3,7 @@ import {
   parseSceneLayoutManifest,
   type SceneLayoutManifestV1,
 } from "@slotclientengine/rendercore/scene-layout";
-import { strToU8, zipSync } from "fflate";
+import { createDeterministicZip } from "@slotclientengine/browserartifactio";
 import { assertCanonicalPackagePath } from "./filename-policy.js";
 import { validateLayoutAssets } from "./imported-layout-zip.js";
 
@@ -30,14 +30,16 @@ export async function exportLayoutZip(options: {
   });
   validated.destroy();
   const entries: Record<string, Uint8Array> = {
-    "layout.manifest.json": strToU8(stableManifestJson(manifest)),
+    "layout.manifest.json": new TextEncoder().encode(
+      stableManifestJson(manifest),
+    ),
   };
   for (const path of [...options.assets.keys()].sort()) {
     entries[path] = options.assets.get(path)!.slice();
   }
-  const bytes = zipSync(entries, {
+  const bytes = createDeterministicZip(entries, {
     level: 6,
-    mtime: new Date("1980-01-01T00:00:00.000Z"),
+    pathPolicy: { requireLowercase: true },
   });
   return Object.freeze({
     fileName: `${manifest.id}-layout.zip`,

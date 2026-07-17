@@ -68,6 +68,15 @@ vi.mock("pixi.js", () => ({
     clear = state.graphicsClear;
     destroy = vi.fn();
   },
+  Container: class {
+    addChild = vi.fn();
+    removeChildren = vi.fn();
+    destroy = vi.fn();
+  },
+}));
+
+vi.mock("@slotclientengine/rendercore/symbol", () => ({
+  createSymbolPackageValueControllerFactory: vi.fn(() => undefined),
 }));
 
 vi.mock("../src/io/imported-layout-zip.js", () => ({
@@ -133,6 +142,34 @@ describe("LayoutPreview", () => {
     );
     expect(state.runtime.destroy).toHaveBeenCalled();
     expect(state.pkg.destroy).toHaveBeenCalled();
+    preview.destroy();
+  });
+
+  it("atomically replaces and clears an independent symbols package", async () => {
+    const host = document.createElement("div");
+    const diagnostics = document.createElement("div");
+    document.body.append(host, diagnostics);
+    const preview = new LayoutPreview(host, diagnostics);
+    await preview.init();
+    const resource = {
+      createCatalog: vi.fn(async () => ({})),
+      destroy: vi.fn(),
+    };
+    await preview.setSymbolPackage(resource as never);
+    expect(resource.createCatalog).toHaveBeenCalledOnce();
+    await preview.setSymbolPackage(null);
+    expect(resource.destroy).toHaveBeenCalledOnce();
+
+    const broken = {
+      createCatalog: vi.fn(async () => {
+        throw new Error("bad symbols");
+      }),
+      destroy: vi.fn(),
+    };
+    await expect(preview.setSymbolPackage(broken as never)).rejects.toThrow(
+      /bad symbols/,
+    );
+    expect(broken.destroy).toHaveBeenCalledOnce();
     preview.destroy();
   });
 

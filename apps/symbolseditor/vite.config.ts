@@ -1,0 +1,32 @@
+import { resolve } from "node:path";
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  base: "./",
+  resolve: {
+    alias: [
+      {
+        find: "@slotclientengine/logiccore",
+        replacement: resolve(
+          __dirname,
+          "../../packages/logiccore/src/index.ts",
+        ),
+      },
+    ],
+  },
+  server: {
+    host: "0.0.0.0",
+    fs: { allow: [resolve(__dirname, "../..")] },
+  },
+  test: {
+    globals: true,
+    environment: "happy-dom",
+    setupFiles: "./tests/setup.ts",
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html"],
+      reportsDirectory: "coverage",
+      include: ["src/**"],
+    },
+  },
+});

@@ -41,3 +41,9 @@ Spine 上传必须一次选择一个 4.3.x skeleton JSON、一个 atlas 和 atla
 构建期可将 zip 解压到 `assets/<layout-id>/`，用 `collectSceneLayoutAssetPaths()` 得到精确 Vite/loading closure，再传给 `createSceneLayoutResource()`。CDN 方式则上传解压目录并调用 `loadSceneLayoutResourceFromUrl({ manifestUrl })`；服务器只需标准静态 GET 与正确 CORS。
 
 Production game 不应在每次 spin 解压 zip。zip 只是编辑器传输容器。
+
+# Symbols 预览包
+
+可独立导入 symbols package v1 ZIP。导入成功后，package `cellSize` 会原子覆盖 layout `main` grid 的 `cellWidth/cellHeight`，保留 rows、columns、gap 和 placement；越出 art/focus 时明确失败，不做 auto-fit。预览按 game config numeric code、row-major 确定性填充，只请求 `normal`，value symbol 固定使用 `defaultValues[0]`。
+
+清除 symbols package 只释放预览/player/Blob URL，不回滚已经应用到 layout 的 cell size。导出的 layout ZIP 合同保持不变，不包含 game config 或 symbol assets。

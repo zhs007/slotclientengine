@@ -11,6 +11,7 @@ export * from "./sequence.js";
 export * from "./catalog.js";
 export * from "./standalone-catalog.js";
 export * from "./render-symbol.js";
+export * from "./package.js";
 export type {
   SymbolValuePresentationSpec,
   SymbolValuePresentationTextSpec,

@@ -185,6 +185,55 @@ export function updateVariantFocusOffsetsFromRect(
   };
 }
 
+export function applySymbolPackageCellSize(
+  project: EditorProject,
+  cellSize: { readonly width: number; readonly height: number },
+): void {
+  if (
+    !Number.isFinite(cellSize.width) ||
+    cellSize.width <= 0 ||
+    !Number.isFinite(cellSize.height) ||
+    cellSize.height <= 0
+  ) {
+    throw new Error("symbols package cellSize 必须是有限正数。");
+  }
+  project.reel.cellWidth = cellSize.width;
+  project.reel.cellHeight = cellSize.height;
+  const variants =
+    project.mode === "maximized-focus"
+      ? (["default"] as const)
+      : (["landscape", "portrait"] as const);
+  for (const variantId of variants) {
+    updateVariantFocusFromReel(project, variantId);
+    const variant = project.variants[variantId];
+    const placement = project.reel.placements[variantId];
+    if (!placement || variant.artSize.width <= 0 || variant.artSize.height <= 0)
+      continue;
+    const size = calculateReelSize(project);
+    if (
+      placement.x < 0 ||
+      placement.y < 0 ||
+      placement.x + size.width > variant.artSize.width ||
+      placement.y + size.height > variant.artSize.height
+    ) {
+      throw new Error(
+        `symbols package cellSize 使 ${variantId} main grid 越出 art；禁止 auto-fit。`,
+      );
+    }
+    const focus = variant.focusRect;
+    if (
+      focus.x > placement.x ||
+      focus.y > placement.y ||
+      focus.x + focus.width < placement.x + size.width ||
+      focus.y + focus.height < placement.y + size.height
+    ) {
+      throw new Error(
+        `symbols package cellSize 使 ${variantId} main grid 越出 focus；禁止 auto-fit。`,
+      );
+    }
+  }
+}
+
 export function editorProjectToPreviewManifest(
   project: EditorProject,
   preferredVariant: SceneLayoutVariantId,
