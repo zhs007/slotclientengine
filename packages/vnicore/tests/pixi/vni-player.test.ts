@@ -878,6 +878,58 @@ describe("VNIPlayer", () => {
     expect(layerA?.display.visible).toBe(false);
   });
 
+  it("clears pressure visual rotation across seek and restart without rebuilding layer roots", async () => {
+    const project = createStaticProject();
+    project.schemaVersion = "VNI_0.087";
+    project.editor.version = "VNI_0.087";
+    project.layers[0].animations = [
+      {
+        id: "pressure-rotate",
+        type: "rotate",
+        startTime: 0,
+        duration: 1,
+        enabled: true,
+        seed: 1,
+        params: {
+          turns: 1,
+          direction: 1,
+          accelRatio: 0,
+          decelRatio: 0,
+          pressure: 0.4,
+          pressureStretch: 0.5,
+        },
+      },
+    ];
+    const player = await createInitializedPlayer({ project, autoTick: false });
+    const internals = player as unknown as {
+      layerInstances: Map<
+        string,
+        {
+          display: InstanceType<typeof pixiMock.MockContainer>;
+          content: InstanceType<typeof pixiMock.MockContainer>;
+          textureDisplay: InstanceType<typeof pixiMock.MockSprite>;
+        }
+      >;
+    };
+    const layer = internals.layerInstances.get("layer-a");
+    if (!layer) throw new Error("Missing pressure layer.");
+    const root = layer.display;
+    const content = layer.content;
+    const sprite = layer.textureDisplay;
+
+    player.seek(0.5);
+    expect(layer.display.scale).toMatchObject({ x: 1.2, y: 0.6 });
+    expect(layer.content.rotation).toBeCloseTo(Math.PI);
+
+    player.seek(1.5);
+    expect(layer.content.rotation).toBe(0);
+    player.restart();
+    expect(layer.content.rotation).toBe(0);
+    expect(layer.display).toBe(root);
+    expect(layer.content).toBe(content);
+    expect(layer.textureDisplay).toBe(sprite);
+  });
+
   it("creates text layer instances and fails fast for invalid image layers", () => {
     const project = createProject();
     const imageLayer = project.layers[0];
@@ -893,7 +945,8 @@ describe("VNIPlayer", () => {
     const textInstance = createLayerInstance(textLayer, new Map(), new Map());
     expect(textInstance.display).toBeInstanceOf(pixiMock.MockContainer);
     expect(textInstance.originalTextDisplay).toBeInstanceOf(pixiMock.MockText);
-    expect(textInstance.display.children).toEqual([
+    expect(textInstance.display.children).toEqual([textInstance.content]);
+    expect(textInstance.content.children).toEqual([
       textInstance.originalTextDisplay,
     ]);
     expect(textInstance.texture).toBeNull();
@@ -917,7 +970,7 @@ describe("VNIPlayer", () => {
     ).toThrow("Unsupported V5G layer type");
   });
 
-  it("uses the renderable sprite as the layer display and applies blend mode directly", () => {
+  it("uses stable outer/content roots and applies blend mode to the outer layer", () => {
     const project = createProject();
     const imageLayer = project.layers[0];
     const asset = project.assets[0];
@@ -933,6 +986,7 @@ describe("VNIPlayer", () => {
       {
         layerId: imageLayer.id,
         transform: { ...imageLayer.transform },
+        visualRotation: 90,
         baseOpacity: 1,
         opacity: 1,
         visible: true,
@@ -947,10 +1001,38 @@ describe("VNIPlayer", () => {
       project.stage,
     );
 
-    expect(instance.display).toBeInstanceOf(pixiMock.MockSprite);
-    expect(instance.display.children).toHaveLength(0);
+    expect(instance.display).toBeInstanceOf(pixiMock.MockContainer);
+    expect(instance.display.children).toEqual([instance.content]);
+    expect(instance.content.children).toEqual([instance.textureDisplay]);
+    expect(instance.textureDisplay).toBeInstanceOf(pixiMock.MockSprite);
     expect(instance.display.blendMode).toBe("add");
     expect(instance.display.groupBlendMode).toBe("add");
+    expect(instance.content.rotation).toBeCloseTo(Math.PI / 2);
+
+    const stableContent = instance.content;
+    const stableTextureDisplay = instance.textureDisplay;
+    applySampledLayerState(
+      instance,
+      {
+        layerId: imageLayer.id,
+        transform: { ...imageLayer.transform },
+        visualRotation: 0,
+        baseOpacity: 1,
+        opacity: 1,
+        visible: true,
+        renderImageDisplay: true,
+        hasActiveParticleAnimation: false,
+        hasActiveChaserLightAnimation: false,
+        hasActiveRenderEffect: false,
+        hasActiveDeterministicEffect: false,
+        hasActiveSafeGlowAnimation: false,
+        blendMode: "normal",
+      },
+      project.stage,
+    );
+    expect(instance.content).toBe(stableContent);
+    expect(instance.textureDisplay).toBe(stableTextureDisplay);
+    expect(instance.content.rotation).toBe(0);
   });
 
   it("matches the editor precompose_light_alpha pixel formula and cache key inputs", () => {
@@ -1066,7 +1148,8 @@ describe("VNIPlayer", () => {
       layerInstances: Map<
         string,
         {
-          display: InstanceType<typeof pixiMock.MockSprite>;
+          display: InstanceType<typeof pixiMock.MockContainer>;
+          textureDisplay: InstanceType<typeof pixiMock.MockSprite> | null;
           texture: InstanceType<typeof pixiMock.MockTexture>;
         }
       >;
@@ -1077,7 +1160,7 @@ describe("VNIPlayer", () => {
 
     expect(derivedTexture).toBeInstanceOf(pixiMock.MockTexture);
     expect(derivedTexture?.source).toBeInstanceOf(pixiMock.MockCanvasSource);
-    expect(layerA?.display.texture).toBe(derivedTexture);
+    expect(layerA?.textureDisplay?.texture).toBe(derivedTexture);
     expect(canvas.width).toBe(2);
     expect(canvas.height).toBe(1);
     expect(context.drawImage).toHaveBeenCalledWith({}, 0, 0, 2, 1);
@@ -1158,7 +1241,8 @@ describe("VNIPlayer", () => {
       layerInstances: Map<
         string,
         {
-          display: InstanceType<typeof pixiMock.MockSprite>;
+          display: InstanceType<typeof pixiMock.MockContainer>;
+          textureDisplay: InstanceType<typeof pixiMock.MockSprite> | null;
           texture: InstanceType<typeof pixiMock.MockTexture>;
         }
       >;
@@ -1169,7 +1253,7 @@ describe("VNIPlayer", () => {
 
     expect(derivedTexture).toBeInstanceOf(pixiMock.MockTexture);
     expect(derivedTexture?.source).toBeInstanceOf(pixiMock.MockCanvasSource);
-    expect(layerA?.display.texture).toBe(derivedTexture);
+    expect(layerA?.textureDisplay?.texture).toBe(derivedTexture);
     expect(canvas.width).toBe(2);
     expect(canvas.height).toBe(1);
     expect(context.drawImage).toHaveBeenCalledWith(pngResource, 0, 0, 2, 1);
@@ -1640,6 +1724,7 @@ describe("VNIPlayer", () => {
         string,
         {
           display: InstanceType<typeof pixiMock.MockContainer>;
+          content: InstanceType<typeof pixiMock.MockContainer>;
           originalTextDisplay: InstanceType<typeof pixiMock.MockText> | null;
         }
       >;
@@ -1656,11 +1741,11 @@ describe("VNIPlayer", () => {
     });
 
     expect(textLayer.originalTextDisplay.visible).toBe(false);
-    expect(textLayer.display.children).toHaveLength(2);
+    expect(textLayer.content.children).toHaveLength(2);
     expect(container.dataset.vniTextLayerBindings).toBe("1");
     binding.setText("200");
     expect(
-      (textLayer.display.children[1] as InstanceType<typeof pixiMock.MockText>)
+      (textLayer.content.children[1] as InstanceType<typeof pixiMock.MockText>)
         .text,
     ).toBe("200");
     expect(() =>
@@ -1681,7 +1766,7 @@ describe("VNIPlayer", () => {
     binding.dispose();
 
     expect(textLayer.originalTextDisplay.visible).toBe(true);
-    expect(textLayer.display.children).toHaveLength(1);
+    expect(textLayer.content.children).toHaveLength(1);
     expect(container.dataset.vniTextLayerBindings).toBe("0");
   });
 
@@ -1699,18 +1784,19 @@ describe("VNIPlayer", () => {
         string,
         {
           display: InstanceType<typeof pixiMock.MockContainer>;
+          content: InstanceType<typeof pixiMock.MockContainer>;
           originalTextDisplay: InstanceType<typeof pixiMock.MockText> | null;
         }
       >;
     };
     const textLayer = internals.layerInstances.get("text-layer");
 
-    expect(textLayer?.display.children).toHaveLength(2);
+    expect(textLayer?.content.children).toHaveLength(2);
     expect(textLayer?.originalTextDisplay?.visible).toBe(false);
 
     dispose();
 
-    expect(textLayer?.display.children).toHaveLength(1);
+    expect(textLayer?.content.children).toHaveLength(1);
     expect(textLayer?.originalTextDisplay?.visible).toBe(true);
   });
 
@@ -1785,7 +1871,8 @@ describe("VNIPlayer", () => {
       layerInstances: Map<
         string,
         {
-          display: InstanceType<typeof pixiMock.MockSprite>;
+          display: InstanceType<typeof pixiMock.MockContainer>;
+          textureDisplay: InstanceType<typeof pixiMock.MockSprite> | null;
           texture: InstanceType<typeof pixiMock.MockTexture> | null;
         }
       >;
@@ -1797,12 +1884,12 @@ describe("VNIPlayer", () => {
     player.seek(0.6);
 
     expect(layerA.texture).not.toBe(firstTexture);
-    expect(layerA.display.texture).toBe(layerA.texture);
+    expect(layerA.textureDisplay?.texture).toBe(layerA.texture);
 
     player.seek(1);
 
     expect(layerA.texture).toBe(firstTexture);
-    expect(layerA.display.texture).toBe(firstTexture);
+    expect(layerA.textureDisplay?.texture).toBe(firstTexture);
   });
 
   it("reuses deterministic effect sprites and clears them after coverage", async () => {

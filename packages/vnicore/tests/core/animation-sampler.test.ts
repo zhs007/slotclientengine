@@ -45,6 +45,182 @@ describe("animation-sampler", () => {
     expect(easeProgress(1, "backOut")).toBe(1);
   });
 
+  it("matches VNI_0.087 bounce_jump golden boundary samples", () => {
+    const bounce = animation("bounce_jump", {
+      height: 300,
+      anticipationRatio: 0.18,
+      squash: 0.28,
+      stretch: 0.18,
+      topSquash: 0.08,
+      bounceCount: 2,
+      bounceDecay: 0.45,
+      landSquash: 0.22,
+    });
+    const anticipation = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [bounce],
+      0.09,
+    );
+    const launchBoundary = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [bounce],
+      0.18,
+    );
+    const end = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [bounce],
+      1,
+    );
+    const after = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [bounce],
+      1.01,
+    );
+
+    expect(anticipation.transform).toMatchObject({
+      y: 32,
+      scaleX: 1.1155,
+      scaleY: 0.79,
+    });
+    expect(launchBoundary.transform).toMatchObject({
+      y: 50,
+      scaleX: 1.058,
+      scaleY: 0.96,
+    });
+    expect(end.transform).toMatchObject({
+      y: 50,
+      scaleX: 1.0245,
+      scaleY: 0.9555,
+    });
+    expect(after.transform).toEqual(baseTransform);
+  });
+
+  it("samples current rotate acceleration and pressure as outer scale plus inner rotation", () => {
+    const rotate = animation("rotate", {
+      turns: 1,
+      direction: 1,
+      accelRatio: 0.2,
+      decelRatio: 0.2,
+      pressure: 0.4,
+      pressureStretch: 0.5,
+    });
+    const accel = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [rotate],
+      0.1,
+    );
+    const linear = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [rotate],
+      0.5,
+    );
+    const decel = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [rotate],
+      0.9,
+    );
+
+    expect(accel.transform).toMatchObject({
+      rotation: 10,
+      scaleX: 1.2,
+      scaleY: 0.6,
+    });
+    expect(accel.visualRotation).toBe(11.25);
+    expect(linear.visualRotation).toBe(180);
+    expect(decel.visualRotation).toBe(348.75);
+  });
+
+  it("keeps legacy rotate and stacks multiple pressure rotations", () => {
+    const legacy = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [animation("rotate", { fromRotation: 0, toRotation: 90 })],
+      0.5,
+    );
+    const pressureParams = {
+      turns: 1,
+      direction: -1,
+      accelRatio: 0,
+      decelRatio: 0,
+      pressure: 0.2,
+      pressureStretch: 0,
+    };
+    const stacked = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [
+        animation("rotate", pressureParams, { id: "rotate-a" }),
+        animation("rotate", pressureParams, { id: "rotate-b" }),
+      ],
+      0.25,
+    );
+
+    expect(legacy.transform.rotation).toBe(55);
+    expect(legacy.visualRotation).toBe(0);
+    expect(stacked.transform.rotation).toBe(10);
+    expect(stacked.visualRotation).toBe(-180);
+  });
+
+  it("keeps bounce_jump height-zero decay parity and invalidates its hot cache", () => {
+    const bounce = animation("bounce_jump", {
+      height: 0,
+      anticipationRatio: 0.18,
+      squash: 0.28,
+      stretch: 0.18,
+      topSquash: 0.08,
+      bounceCount: 2,
+      bounceDecay: 0.45,
+      landSquash: 0.22,
+    });
+    const zeroHeightEnd = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [bounce],
+      1,
+    );
+    bounce.params.height = 300;
+    const changedHeight = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [bounce],
+      0.4,
+    );
+
+    expect(zeroHeightEnd.transform).toMatchObject({
+      y: 50,
+      scaleX: 1.121,
+      scaleY: 0.78,
+    });
+    expect(changedHeight.transform.y).toBeGreaterThan(50);
+  });
+
+  it("normalizes oversized rotate ease spans and honors the pressure threshold", () => {
+    const params = {
+      turns: -1,
+      direction: -1,
+      accelRatio: 0.8,
+      decelRatio: 0.8,
+      pressure: 0.001,
+      pressureStretch: 1,
+    };
+    const belowThreshold = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [animation("rotate", params)],
+      1,
+    );
+    const aboveThreshold = sampleLayerAnimationsAtTime(
+      { transform: baseTransform, opacity: 1 },
+      [
+        animation("rotate", {
+          ...params,
+          pressure: 0.0011,
+        }),
+      ],
+      1,
+    );
+
+    expect(belowThreshold.transform.rotation).toBe(370);
+    expect(belowThreshold.visualRotation).toBe(0);
+    expect(aboveThreshold.transform.rotation).toBe(10);
+    expect(aboveThreshold.visualRotation).toBe(360);
+  });
+
   it("samples move with baseX and baseY offsets", () => {
     const sampled = sampleLayerAnimationsAtTime(
       { transform: baseTransform, opacity: 1 },

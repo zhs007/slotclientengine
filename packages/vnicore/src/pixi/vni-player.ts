@@ -513,11 +513,11 @@ export class VNIPlayer {
       throw new Error(`Duplicate VNI mounted node id: ${id}.`);
     }
     const instance = this.getTextLayerInstance(options.layerId);
-    instance.display.addChild(options.node);
+    instance.content.addChild(options.node);
     this.mountedNodesById.set(id, {
       id,
       node: options.node,
-      slotContainer: instance.display,
+      slotContainer: instance.content,
       destroyOnDetach: options.destroyOnDetach === true,
       textLayerId: instance.layer.id,
       hideOriginal: options.hideOriginal ?? true,

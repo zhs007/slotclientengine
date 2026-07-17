@@ -61,6 +61,72 @@ function layer(
 }
 
 describe("project-sampler", () => {
+  it("samples basic tracks before the preset stack with right-point easing", () => {
+    const sampled = sampleLayerAtTime(
+      layer(
+        {
+          basicAnimation: {
+            opacity: { enabled: false, points: [] },
+            positionX: {
+              enabled: true,
+              points: [
+                { id: "x0", time: 0, value: 20, easing: "linear" },
+                { id: "x1", time: 1, value: 120, easing: "easeOutQuad" },
+              ],
+            },
+            positionY: { enabled: false, points: [] },
+            scaleX: { enabled: false, points: [] },
+            scaleY: { enabled: false, points: [] },
+            rotation: { enabled: false, points: [] },
+          },
+        },
+        [
+          {
+            id: "move-after-basic",
+            type: "move",
+            startTime: 0,
+            duration: 1,
+            enabled: true,
+            seed: 1,
+            params: {
+              fromX: 0,
+              fromY: 0,
+              toX: 40,
+              toY: 0,
+              easing: "linear",
+            },
+          },
+        ],
+      ),
+      0.5,
+    );
+
+    expect(sampled.transform.x).toBe(115);
+  });
+
+  it("holds basic endpoints and preserves backOut overshoot", () => {
+    const basicAnimation = {
+      opacity: { enabled: false, points: [] },
+      positionX: {
+        enabled: true,
+        points: [
+          { id: "x0", time: 1, value: 0, easing: "linear" as const },
+          { id: "x1", time: 2, value: 100, easing: "backOut" as const },
+        ],
+      },
+      positionY: { enabled: false, points: [] },
+      scaleX: { enabled: false, points: [] },
+      scaleY: { enabled: false, points: [] },
+      rotation: { enabled: false, points: [] },
+    };
+    const basicLayer = layer({ basicAnimation }, []);
+
+    expect(sampleLayerAtTime(basicLayer, 0).transform.x).toBe(0);
+    expect(sampleLayerAtTime(basicLayer, 1.75).transform.x).toBeGreaterThan(
+      100,
+    );
+    expect(sampleLayerAtTime(basicLayer, 3).transform.x).toBe(100);
+  });
   it("does not auto-hide source images just because particles are active", () => {
     const project = assertV5GProject(bigwinData);
     const sampled = sampleProjectAtTime(project, 0);

@@ -226,6 +226,25 @@ export class V5GPixiStage {
     }
   }
 
+  resetAnimationRenderState(): void {
+    this.clearAllPrecomposedLayers();
+    for (const particleGroup of this.layerParticleMap.values()) {
+      for (const child of particleGroup.removeChildren()) {
+        child.destroy();
+      }
+      particleGroup.visible = true;
+      particleGroup.renderable = true;
+      particleGroup.alpha = 1;
+      particleGroup.position.set(0, 0);
+      particleGroup.scale.set(1, 1);
+      particleGroup.rotation = 0;
+      particleGroup.mask = null;
+    }
+    for (const layer of this.state.project.layers) {
+      this.applyLayerTransform(layer);
+    }
+  }
+
   destroy(): void {
     this.stopDemo();
     this.resizeObserver?.disconnect();
@@ -345,46 +364,46 @@ export class V5GPixiStage {
           textNode.text = layer.text ?? layer.name;
         }
       }
-      const maskSource =
-        temporarySoloLayerId === null
-          ? getLayerMaskSource(this.state.project, layer)
-          : null;
-      const displayAfterMask = this.layerDisplayMap.get(layer.id);
-      const usesPrecomposedMask =
-        temporarySoloLayerId === null &&
-        this.shouldUsePrecomposedLightMask(layer, maskSource);
-      if (maskSource && displayAfterMask && !usesPrecomposedMask) {
-        let wrapper = this.layerWrapperMap.get(layer.id);
-        if (!wrapper || wrapper.destroyed) {
-          if (wrapper) this.layerWrapperMap.delete(layer.id);
-          wrapper = new PIXI.Container();
-          wrapper.eventMode = "static";
-          this.layerWrapperMap.set(layer.id, wrapper);
-        }
-        if (displayAfterMask.parent !== wrapper) {
-          if (displayAfterMask.parent) {
-            displayAfterMask.parent.removeChild(displayAfterMask);
+      if (temporarySoloLayerId === null) {
+        const maskSource = getLayerMaskSource(this.state.project, layer);
+        const displayAfterMask = this.layerDisplayMap.get(layer.id);
+        const usesPrecomposedMask = this.shouldUsePrecomposedLightMask(
+          layer,
+          maskSource,
+        );
+        if (maskSource && displayAfterMask && !usesPrecomposedMask) {
+          let wrapper = this.layerWrapperMap.get(layer.id);
+          if (!wrapper || wrapper.destroyed) {
+            if (wrapper) this.layerWrapperMap.delete(layer.id);
+            wrapper = new PIXI.Container();
+            wrapper.eventMode = "static";
+            this.layerWrapperMap.set(layer.id, wrapper);
           }
-          wrapper.addChild(displayAfterMask);
-        }
-        if (wrapper.parent !== this.contentContainer) {
-          this.contentContainer.addChild(wrapper);
-        }
-      } else {
-        const staleWrapper = this.layerWrapperMap.get(layer.id);
-        if (staleWrapper) {
-          staleWrapper.mask = null;
-          const displayInWrapper = this.layerDisplayMap.get(layer.id);
-          if (
-            displayInWrapper &&
-            staleWrapper.children.includes(displayInWrapper)
-          ) {
-            staleWrapper.removeChild(displayInWrapper);
-            displayInWrapper.mask = null;
-            this.contentContainer.addChild(displayInWrapper);
+          if (displayAfterMask.parent !== wrapper) {
+            if (displayAfterMask.parent) {
+              displayAfterMask.parent.removeChild(displayAfterMask);
+            }
+            wrapper.addChild(displayAfterMask);
           }
-          staleWrapper.destroy({ children: false });
-          this.layerWrapperMap.delete(layer.id);
+          if (wrapper.parent !== this.contentContainer) {
+            this.contentContainer.addChild(wrapper);
+          }
+        } else {
+          const staleWrapper = this.layerWrapperMap.get(layer.id);
+          if (staleWrapper) {
+            staleWrapper.mask = null;
+            const displayInWrapper = this.layerDisplayMap.get(layer.id);
+            if (
+              displayInWrapper &&
+              staleWrapper.children.includes(displayInWrapper)
+            ) {
+              staleWrapper.removeChild(displayInWrapper);
+              displayInWrapper.mask = null;
+              this.contentContainer.addChild(displayInWrapper);
+            }
+            staleWrapper.destroy({ children: false });
+            this.layerWrapperMap.delete(layer.id);
+          }
         }
       }
 
@@ -394,10 +413,6 @@ export class V5GPixiStage {
       }
       if (temporarySoloLayerId === null) {
         await this.syncLayerMask(layer, runId);
-      } else {
-        this.clearLayerMask(layer.id);
-        this.clearPrecomposedLayer(layer.id);
-        this.applyLayerTransform(layer);
       }
     }
 
@@ -800,6 +815,12 @@ export class V5GPixiStage {
       particleGroup.eventMode = "none";
       this.layerParticleMap.set(layerId, particleGroup);
     }
+    particleGroup.visible = true;
+    particleGroup.renderable = true;
+    particleGroup.alpha = 1;
+    particleGroup.position.set(0, 0);
+    particleGroup.scale.set(1, 1);
+    particleGroup.rotation = 0;
     return particleGroup;
   }
 
@@ -851,6 +872,16 @@ export class V5GPixiStage {
     }
 
     return display;
+  }
+
+  private applyDisplayContentRotation(
+    display: PIXI.Container,
+    rotationDegrees: number,
+  ): void {
+    const rotation = (rotationDegrees * Math.PI) / 180;
+    for (const child of display.children) {
+      child.rotation = rotation;
+    }
   }
 
   private loadImageTexture(
@@ -907,6 +938,8 @@ export class V5GPixiStage {
     target.rotation = (transform.rotation * Math.PI) / 180;
     target.alpha = opacity;
     target.blendMode = wrapper ? "normal" : toPixiBlendMode(layer.blendMode);
+    const visualRotation = previewLayer?.visualRotation ?? 0;
+    this.applyDisplayContentRotation(display, visualRotation);
     if (wrapper) {
       display.position.set(0, 0);
       display.scale.set(1, 1);

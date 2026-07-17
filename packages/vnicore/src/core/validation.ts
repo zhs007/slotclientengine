@@ -13,6 +13,9 @@ import type {
   V5GAnimationParamValue,
   V5GAnimationType,
   V5GAssetConfig,
+  V5GBasicAnimationConfig,
+  V5GBasicAnimationEasing,
+  V5GBasicAnimationTrackConfig,
   V5GBlendMode,
   V5GBundleManifest,
   V5GBundleManifestEntry,
@@ -53,9 +56,19 @@ const REQUIRED_NUMERIC_PARAMS: Readonly<
   scale_in: ["fromScale", "toScale"],
   scale_out: ["fromScale", "toScale"],
   pop: ["peakScale", "settleScale", "peakAt"],
+  bounce_jump: [
+    "height",
+    "anticipationRatio",
+    "squash",
+    "stretch",
+    "topSquash",
+    "bounceCount",
+    "bounceDecay",
+    "landSquash",
+  ],
   shake: ["amplitudeX", "amplitudeY", "cycles"],
   blink: ["minOpacity", "maxOpacity", "blinks", "endOpacity"],
-  rotate: ["fromRotation", "toRotation"],
+  rotate: [],
   slide_in: ["fromX", "fromY", "toX", "toY"],
   slide_out: ["fromX", "fromY", "toX", "toY"],
   bounce_in: ["fromScale", "toScale", "overshoot"],
@@ -508,6 +521,7 @@ export function validateV5GProject(project: V5GProjectConfig): void {
     }
     layerIds.add(layer.id);
     assertSupportedLayer(layer, assetsById);
+    validateBasicAnimation(layer, project.stage.duration);
     for (const animation of layer.animations) {
       assertSupportedAnimation(animation, layer.id, project.stage.duration);
     }
@@ -743,6 +757,7 @@ export function assertSupportedAnimation(
       );
     }
   }
+  if (animation.type === "rotate") validateRotateContract(animation);
   if (animation.type === "multi_move") {
     parseMultiMovePointsJson(
       animation.params.pointsJson,
@@ -763,6 +778,39 @@ export function assertSupportedAnimation(
 }
 
 function validateAnimationParamRanges(animation: V5GAnimationConfig): void {
+  if (animation.type === "bounce_jump") {
+    assertAnimationParamRange(animation, "height", 0, 5000);
+    assertAnimationParamRange(animation, "anticipationRatio", 0.02, 0.6);
+    assertAnimationParamRange(animation, "squash", 0, 0.9);
+    assertAnimationParamRange(animation, "stretch", 0, 0.9);
+    assertAnimationParamRange(animation, "topSquash", 0, 0.6);
+    assertAnimationParamRange(animation, "bounceCount", 0, 8);
+    if (
+      !Number.isInteger(getNumericParamForValidation(animation, "bounceCount"))
+    ) {
+      throw new Error(
+        `animation "${animation.id}" bounce_jump bounceCount must be an integer.`,
+      );
+    }
+    assertAnimationParamRange(animation, "bounceDecay", 0.05, 0.95);
+    assertAnimationParamRange(animation, "landSquash", 0, 0.9);
+  }
+  if (
+    animation.type === "rotate" &&
+    Object.prototype.hasOwnProperty.call(animation.params, "turns")
+  ) {
+    assertAnimationParamRange(animation, "turns", -120, 120);
+    assertAnimationParamRange(animation, "accelRatio", 0, 0.8);
+    assertAnimationParamRange(animation, "decelRatio", 0, 0.8);
+    assertAnimationParamRange(animation, "pressure", 0, 0.8);
+    assertAnimationParamRange(animation, "pressureStretch", 0, 1);
+    const direction = getNumericParamForValidation(animation, "direction");
+    if (direction !== 1 && direction !== -1) {
+      throw new Error(
+        `animation "${animation.id}" rotate direction must be 1 or -1.`,
+      );
+    }
+  }
   if (animation.type === "chaser_light") {
     assertFiniteRange(
       getNumericParamForValidation(animation, "totalCount"),
@@ -771,6 +819,53 @@ function validateAnimationParamRanges(animation: V5GAnimationConfig): void {
       `animation "${animation.id}" chaser_light totalCount`,
     );
   }
+}
+
+function validateRotateContract(animation: V5GAnimationConfig): void {
+  const legacyKeys = ["fromRotation", "toRotation"] as const;
+  const currentKeys = [
+    "turns",
+    "direction",
+    "accelRatio",
+    "decelRatio",
+    "pressure",
+    "pressureStretch",
+  ] as const;
+  const legacyCount = legacyKeys.filter((key) =>
+    Object.prototype.hasOwnProperty.call(animation.params, key),
+  ).length;
+  const currentCount = currentKeys.filter((key) =>
+    Object.prototype.hasOwnProperty.call(animation.params, key),
+  ).length;
+  const validLegacy = legacyCount === legacyKeys.length && currentCount === 0;
+  const validCurrent = currentCount === currentKeys.length && legacyCount === 0;
+  if (!validLegacy && !validCurrent) {
+    throw new Error(
+      `V5G animation "${animation.id}" rotate must use either complete legacy fromRotation/toRotation params or complete VNI_0.087 turns/direction/accelRatio/decelRatio/pressure/pressureStretch params.`,
+    );
+  }
+  for (const key of validCurrent ? currentKeys : legacyKeys) {
+    const value = animation.params[key];
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error(
+        `V5G animation "${animation.id}" rotate requires numeric param "${key}".`,
+      );
+    }
+  }
+}
+
+function assertAnimationParamRange(
+  animation: V5GAnimationConfig,
+  key: string,
+  min: number,
+  max: number,
+): void {
+  assertFiniteRange(
+    getNumericParamForValidation(animation, key),
+    min,
+    max,
+    `animation "${animation.id}" ${animation.type} ${key}`,
+  );
 }
 
 function validateLayerMasks(
@@ -995,11 +1090,125 @@ function assertLayer(value: unknown, index: number): V5GLayerConfig {
     ).map((animation, animationIndex) =>
       assertAnimation(animation, index, animationIndex),
     ),
+    basicAnimation:
+      layer.basicAnimation === undefined
+        ? undefined
+        : assertBasicAnimation(
+            layer.basicAnimation,
+            `project.layers[${index}].basicAnimation`,
+          ),
     keyframes: assertArray(
       layer.keyframes ?? [],
       `project.layers[${index}].keyframes`,
     ) as V5GLayerConfig["keyframes"],
   };
+}
+
+const BASIC_ANIMATION_TRACK_KEYS = [
+  "opacity",
+  "positionX",
+  "positionY",
+  "scaleX",
+  "scaleY",
+  "rotation",
+] as const;
+
+const BASIC_ANIMATION_EASINGS: readonly V5GBasicAnimationEasing[] = [
+  "linear",
+  "easeInQuad",
+  "easeOutQuad",
+  "easeInOutQuad",
+  "backOut",
+];
+
+function assertBasicAnimation(
+  value: unknown,
+  path: string,
+): V5GBasicAnimationConfig {
+  const basic = assertRecord(value, path);
+  const result = {} as V5GBasicAnimationConfig;
+  for (const key of BASIC_ANIMATION_TRACK_KEYS) {
+    result[key] = assertBasicAnimationTrack(basic[key], `${path}.${key}`);
+  }
+  return result;
+}
+
+function assertBasicAnimationTrack(
+  value: unknown,
+  path: string,
+): V5GBasicAnimationTrackConfig {
+  const track = assertRecord(value, path);
+  return {
+    enabled: assertBoolean(track.enabled, `${path}.enabled`),
+    points: assertArray(track.points, `${path}.points`).map((value, index) => {
+      const point = assertRecord(value, `${path}.points[${index}]`);
+      const easing = assertString(
+        point.easing,
+        `${path}.points[${index}].easing`,
+      );
+      if (
+        !BASIC_ANIMATION_EASINGS.includes(easing as V5GBasicAnimationEasing)
+      ) {
+        throw new Error(
+          `${path}.points[${index}].easing is unsupported: ${easing}.`,
+        );
+      }
+      return {
+        id: assertString(point.id, `${path}.points[${index}].id`),
+        time: assertNumber(point.time, `${path}.points[${index}].time`),
+        value: assertNumber(point.value, `${path}.points[${index}].value`),
+        easing: easing as V5GBasicAnimationEasing,
+      };
+    }),
+  };
+}
+
+function validateBasicAnimation(
+  layer: V5GLayerConfig,
+  stageDuration: number,
+): void {
+  const basic = layer.basicAnimation;
+  if (!basic) return;
+  const ranges: Record<
+    keyof V5GBasicAnimationConfig,
+    readonly [number, number]
+  > = {
+    opacity: [0, 1],
+    positionX: [-5000, 5000],
+    positionY: [-5000, 5000],
+    scaleX: [0, 20],
+    scaleY: [0, 20],
+    rotation: [-36000, 36000],
+  };
+  for (const key of BASIC_ANIMATION_TRACK_KEYS) {
+    const track = basic[key];
+    if (track.points.length > 200) {
+      throw new Error(
+        `VNI layer "${layer.id}" basicAnimation.${key} supports at most 200 points.`,
+      );
+    }
+    let previousTime = Number.NEGATIVE_INFINITY;
+    for (const [index, point] of track.points.entries()) {
+      assertFiniteRange(
+        point.time,
+        0,
+        stageDuration,
+        `layer "${layer.id}" basicAnimation.${key}.points[${index}].time`,
+      );
+      assertFiniteRange(
+        point.value,
+        ranges[key][0],
+        ranges[key][1],
+        `layer "${layer.id}" basicAnimation.${key}.points[${index}].value`,
+      );
+      if (point.time < previousTime) {
+        throw new Error(
+          `VNI layer "${layer.id}" basicAnimation.${key} points must be sorted by non-decreasing time.`,
+        );
+      }
+      previousTime = point.time;
+    }
+  }
 }
 
 function assertSequenceConfig(value: unknown, path: string): V5GSequenceConfig {

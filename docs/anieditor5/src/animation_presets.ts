@@ -52,6 +52,8 @@ export interface V5GAnimationSampleBase {
 export interface V5GAnimationSampleResult {
   transform: V5GTransformConfig;
   opacity: number;
+  /** Extra inner-content rotation in degrees for pressure rotation. */
+  visualRotation?: number;
 }
 
 interface V5GMultiMovePoint {
@@ -513,6 +515,89 @@ export const V5G_ANIMATION_PRESETS: V5GAnimationPresetSpec[] = [
         0.95,
         0.05,
         "peakAt：0~1，数值越小弹起越快",
+      ),
+    ],
+  },
+  {
+    type: "bounce_jump",
+    label: "BounceJump 弹跳",
+    description:
+      "图片先向下挤压蓄力，再向上弹起并拉伸；到顶端轻微压缩，下落加速，落地后可按次数衰减反弹。",
+    defaultDuration: 1.4,
+    recommendedDuration: "tips：0.8 ~ 3s；反弹次数 0~5，跳跃高度建议 80~800",
+    defaultEasing: "linear",
+    params: [
+      numberParam(
+        "height",
+        "跳起高度",
+        300,
+        0,
+        5000,
+        1,
+        "height：向上跳起的最大高度，单位像素",
+      ),
+      numberParam(
+        "anticipationRatio",
+        "蓄力占比",
+        0.18,
+        0.02,
+        0.6,
+        0.01,
+        "anticipationRatio：总时长里用于下压蓄力的比例",
+      ),
+      numberParam(
+        "squash",
+        "下压挤压",
+        0.28,
+        0,
+        0.9,
+        0.01,
+        "squash：蓄力/落地时竖向压扁强度，0=不压扁",
+      ),
+      numberParam(
+        "stretch",
+        "上飞拉伸",
+        0.18,
+        0,
+        0.9,
+        0.01,
+        "stretch：向上飞行时竖向拉伸强度，0=不拉伸",
+      ),
+      numberParam(
+        "topSquash",
+        "顶点压缩",
+        0.08,
+        0,
+        0.6,
+        0.01,
+        "topSquash：到达顶端时的轻微压缩强度",
+      ),
+      numberParam(
+        "bounceCount",
+        "反弹次数",
+        2,
+        0,
+        8,
+        1,
+        "bounceCount：落地后的反弹次数，0=只跳一次不反弹",
+      ),
+      numberParam(
+        "bounceDecay",
+        "反弹衰减",
+        0.45,
+        0.05,
+        0.95,
+        0.01,
+        "bounceDecay：每次反弹高度衰减比例，越小越快停",
+      ),
+      numberParam(
+        "landSquash",
+        "落地压缩",
+        0.22,
+        0,
+        0.9,
+        0.01,
+        "landSquash：每次落地瞬间的压缩强度",
       ),
     ],
   },
@@ -2873,28 +2958,67 @@ export const V5G_ANIMATION_PRESETS: V5GAnimationPresetSpec[] = [
   {
     type: "rotate",
     label: "Rotate 旋转",
-    description: "旋转。",
+    description:
+      "图片旋转动画。可按圈数/方向控制速度，支持开头加速、结尾减速；压力参数可让外轮廓保持竖向椭圆，内部图片继续旋转。",
     defaultDuration: 2,
-    recommendedDuration: "tips：0.5 ~ 5s",
+    recommendedDuration:
+      "tips：0.5 ~ 8s；turns 控制圈数，pressure>0 时适合车轮压扁旋转",
     defaultEasing: "linear",
     params: [
       numberParam(
-        "fromRotation",
-        "from 旋转°",
-        0,
-        -3600,
-        3600,
+        "turns",
+        "旋转圈数",
         1,
-        "fromRotation：-3600° ~ 3600°",
+        -120,
+        120,
+        0.25,
+        "turns：持续时间内旋转多少圈；正数顺时针，负数逆时针",
+      ),
+      selectParam(
+        "direction",
+        "旋转方向",
+        1,
+        [
+          { value: 1, label: "顺时针" },
+          { value: -1, label: "逆时针" },
+        ],
+        "direction：旋转方向；会和 turns 的正负共同决定最终方向",
       ),
       numberParam(
-        "toRotation",
-        "to 旋转°",
-        360,
-        -3600,
-        3600,
+        "accelRatio",
+        "加速占比",
+        0.12,
+        0,
+        0.8,
+        0.01,
+        "accelRatio：前段用于从慢到快的时间比例",
+      ),
+      numberParam(
+        "decelRatio",
+        "减速占比",
+        0.12,
+        0,
+        0.8,
+        0.01,
+        "decelRatio：后段用于从快到慢的时间比例",
+      ),
+      numberParam(
+        "pressure",
+        "竖向压力",
+        0,
+        0,
+        0.8,
+        0.01,
+        "pressure：0=普通旋转；>0 时外形竖向压扁为椭圆，但内部图片仍独立旋转",
+      ),
+      numberParam(
+        "pressureStretch",
+        "横向补偿",
+        0.35,
+        0,
         1,
-        "toRotation：-3600° ~ 3600°",
+        0.01,
+        "pressureStretch：压力压扁时横向变宽补偿，模拟体积守恒",
       ),
     ],
   },
@@ -3168,6 +3292,18 @@ export function createDefaultAnimationParams(
   if (type === "scale_in") return { fromScale: 0, toScale: 1, fadeIn: true };
   if (type === "scale_out") return { fromScale: 1, toScale: 0, fadeOut: true };
   if (type === "pop") return { peakScale: 1.25, settleScale: 1, peakAt: 0.38 };
+  if (type === "bounce_jump") {
+    return {
+      height: 300,
+      anticipationRatio: 0.18,
+      squash: 0.28,
+      stretch: 0.18,
+      topSquash: 0.08,
+      bounceCount: 2,
+      bounceDecay: 0.45,
+      landSquash: 0.22,
+    };
+  }
   if (type === "shake") {
     return { amplitudeX: 18, amplitudeY: 0, cycles: 6, decay: true };
   }
@@ -3464,8 +3600,12 @@ export function createDefaultAnimationParams(
   }
   if (type === "rotate") {
     return {
-      fromRotation: 0,
-      toRotation: 360,
+      turns: 1,
+      direction: 1,
+      accelRatio: 0.12,
+      decelRatio: 0.12,
+      pressure: 0,
+      pressureStretch: 0.35,
     };
   }
   if (type === "squash_stretch") {
@@ -3556,6 +3696,8 @@ export function sampleLayerAnimationsAtTime(
     else if (animation.type === "scale_in" || animation.type === "scale_out")
       sampleScaleEntryExit(result, animation, easedProgress, base);
     else if (animation.type === "pop") samplePop(result, animation, progress);
+    else if (animation.type === "bounce_jump")
+      sampleBounceJump(result, animation, progress);
     else if (animation.type === "shake")
       sampleShake(result, animation, progress);
     else if (animation.type === "blink")
@@ -3934,11 +4076,157 @@ function sampleSwing(
     Math.sin(progress * Math.PI * 2 * cycles) * angle;
 }
 
+function sampleBounceJump(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  progress: number,
+): void {
+  const p = clampNumber(progress, 0, 1);
+  const height = Math.max(0, getNumberParam(animation, "height", 300));
+  const anticipationRatio = clampNumber(
+    getNumberParam(animation, "anticipationRatio", 0.18),
+    0.02,
+    0.6,
+  );
+  const squash = clampNumber(getNumberParam(animation, "squash", 0.28), 0, 0.9);
+  const stretch = clampNumber(
+    getNumberParam(animation, "stretch", 0.18),
+    0,
+    0.9,
+  );
+  const topSquash = clampNumber(
+    getNumberParam(animation, "topSquash", 0.08),
+    0,
+    0.6,
+  );
+  const bounceCount = Math.round(
+    clampNumber(getNumberParam(animation, "bounceCount", 2), 0, 8),
+  );
+  const bounceDecay = clampNumber(
+    getNumberParam(animation, "bounceDecay", 0.45),
+    0.05,
+    0.95,
+  );
+  const landSquash = clampNumber(
+    getNumberParam(animation, "landSquash", 0.22),
+    0,
+    0.9,
+  );
+
+  let offsetY = 0;
+  let scaleXRatio = 1;
+  let scaleYRatio = 1;
+
+  if (p < anticipationRatio) {
+    const phase = clampNumber(p / anticipationRatio, 0, 1);
+    const wave = Math.sin(phase * Math.PI);
+    const squashWave = easeProgress(phase, "easeOutQuad");
+    offsetY = -height * 0.06 * wave;
+    scaleXRatio *= 1 + squash * 0.55 * squashWave;
+    scaleYRatio *= Math.max(0.1, 1 - squash * squashWave);
+  } else {
+    const jumpProgress = clampNumber(
+      (p - anticipationRatio) / Math.max(1 - anticipationRatio, 0.0001),
+      0,
+      1,
+    );
+    const lobeCount = Math.max(1, bounceCount + 1);
+    const lobeHeights = Array.from(
+      { length: lobeCount },
+      (_, index) => height * Math.pow(bounceDecay, index),
+    );
+    const totalWeight = lobeHeights.reduce(
+      (sum, value) => sum + Math.sqrt(Math.max(value, 1)),
+      0,
+    );
+    let accumulated = 0;
+    let currentStart = 0;
+    let currentEnd = 1;
+    let currentHeight = lobeHeights[0] ?? height;
+    for (const lobeHeight of lobeHeights) {
+      const span =
+        Math.sqrt(Math.max(lobeHeight, 1)) / Math.max(totalWeight, 0.0001);
+      currentStart = accumulated;
+      currentEnd = accumulated + span;
+      currentHeight = lobeHeight;
+      if (
+        jumpProgress <= currentEnd ||
+        lobeHeight === lobeHeights[lobeHeights.length - 1]
+      ) {
+        break;
+      }
+      accumulated = currentEnd;
+    }
+    const lobeProgress = clampNumber(
+      (jumpProgress - currentStart) /
+        Math.max(currentEnd - currentStart, 0.0001),
+      0,
+      1,
+    );
+    offsetY = 4 * currentHeight * lobeProgress * (1 - lobeProgress);
+
+    const velocity = 1 - 2 * lobeProgress;
+    const flightStretch = Math.max(0, velocity) * stretch;
+    const apex = 1 - clampNumber(Math.abs(lobeProgress - 0.5) / 0.18, 0, 1);
+    const landing =
+      lobeProgress < 0.5
+        ? 1 - clampNumber(lobeProgress / 0.14, 0, 1)
+        : 1 - clampNumber((1 - lobeProgress) / 0.14, 0, 1);
+    const lobeIndex = lobeHeights.findIndex((value) => value === currentHeight);
+    const decayScale = Math.pow(bounceDecay, Math.max(0, lobeIndex));
+    const landingSquash = landSquash * landing * decayScale;
+    const topCompress = topSquash * apex;
+
+    scaleYRatio *= Math.max(
+      0.1,
+      1 + flightStretch - landingSquash - topCompress,
+    );
+    scaleXRatio *= Math.max(
+      0.1,
+      1 - flightStretch * 0.35 + landingSquash * 0.55 + topCompress * 0.35,
+    );
+  }
+
+  result.transform.y += offsetY;
+  result.transform.scaleX *= scaleXRatio;
+  result.transform.scaleY *= scaleYRatio;
+}
+
 function sampleRotate(
   result: V5GAnimationSampleResult,
   animation: V5GAnimationConfig,
   progress: number,
 ): void {
+  const pressure = clampNumber(
+    getNumberParam(animation, "pressure", 0),
+    0,
+    0.8,
+  );
+  if (Object.prototype.hasOwnProperty.call(animation.params, "turns")) {
+    const turns = getNumberParam(animation, "turns", 1);
+    const direction = getNumberParam(animation, "direction", 1) < 0 ? -1 : 1;
+    const motionProgress = easeSpinProgress(
+      progress,
+      getNumberParam(animation, "accelRatio", 0.12),
+      getNumberParam(animation, "decelRatio", 0.12),
+    );
+    const rotation = turns * 360 * direction * motionProgress;
+    if (pressure > 0.001) {
+      const pressureStretch = clampNumber(
+        getNumberParam(animation, "pressureStretch", 0.35),
+        0,
+        1,
+      );
+      result.transform.scaleX *= 1 + pressure * pressureStretch;
+      result.transform.scaleY *= Math.max(0.1, 1 - pressure);
+      result.visualRotation = (result.visualRotation ?? 0) + rotation;
+    } else {
+      result.transform.rotation += rotation;
+    }
+    return;
+  }
+
+  // Legacy projects created before VNI_0.086 used fromRotation/toRotation.
   result.transform.rotation += lerpOvershoot(
     getNumberParam(animation, "fromRotation", 0),
     getNumberParam(animation, "toRotation", 0),
@@ -4210,6 +4498,35 @@ function checkboxParam(
 
 function getLoopWave(progress: number, cycles: number): number {
   return (1 - Math.cos(progress * Math.PI * 2 * cycles)) / 2;
+}
+
+function easeSpinProgress(
+  progress: number,
+  accelRatio: number,
+  decelRatio: number,
+): number {
+  const t = clampNumber(progress, 0, 1);
+  const accel = clampNumber(accelRatio, 0, 0.8);
+  const decel = clampNumber(decelRatio, 0, 0.8);
+  const totalEase = accel + decel;
+  if (totalEase <= 0.0001) return t;
+  const normalizedAccel = totalEase > 0.95 ? (accel / totalEase) * 0.95 : accel;
+  const normalizedDecel = totalEase > 0.95 ? (decel / totalEase) * 0.95 : decel;
+  const linearSpan = Math.max(0, 1 - normalizedAccel - normalizedDecel);
+  const speedArea = linearSpan + normalizedAccel * 0.5 + normalizedDecel * 0.5;
+  if (speedArea <= 0.0001) return t;
+
+  if (t <= normalizedAccel && normalizedAccel > 0) {
+    const phase = t / normalizedAccel;
+    return (normalizedAccel * phase * phase * 0.5) / speedArea;
+  }
+  if (t >= 1 - normalizedDecel && normalizedDecel > 0) {
+    const phase = (t - (1 - normalizedDecel)) / normalizedDecel;
+    const beforeDecel = normalizedAccel * 0.5 + linearSpan;
+    const decelArea = normalizedDecel * (phase - phase * phase * 0.5);
+    return (beforeDecel + decelArea) / speedArea;
+  }
+  return (normalizedAccel * 0.5 + (t - normalizedAccel)) / speedArea;
 }
 
 function backOutProgress(progress: number, overshoot: number): number {

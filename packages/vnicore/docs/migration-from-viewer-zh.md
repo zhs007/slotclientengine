@@ -32,7 +32,7 @@
 - export JSON 和 bundle manifest 校验。
 - profile-scoped asset URL resolver。
 - center-coordinate 到 Pixi coordinate 的转换。
-- animation、VNI_0.074 `multi_move`、结束位移持续采样、空帧隐藏、sequence frame、particle、`particle_stream`、`chaser_light`、VNI_0.070 deterministic effects、mask、project sampler，以及独立的 `safe_glow` 同图副本高亮 sampler。`chaser_light` 的灯位固定、弧长 spacing 和 `lightDuration + interval` 时序都属于 `vnicore` sampler 合同。
+- animation、VNI_0.074 `multi_move`、VNI_0.087 basic tracks / `bounce_jump` / 新旧 rotate / pressure `visualRotation`、结束位移持续采样、空帧隐藏、sequence frame、particle、`particle_stream`、`chaser_light`、VNI_0.070 deterministic effects、mask、project sampler，以及独立的 `safe_glow` 同图副本高亮 sampler。basic tracks 必须先于 preset stack；`chaser_light` 的灯位固定、弧长 spacing 和 `lightDuration + interval` 时序都属于 `vnicore` sampler 合同。
 - layer group schema 规范化、连续 group run 判断和相邻 slot 计算。
 - Pixi texture 加载、真实尺寸校验和 `runtime_50` 显示补偿。
 - `VNIPlayer` 的 RAF 播放、range、segmented 三段式状态机、live 粒子排空、sequence texture 切换、safe glow overlay 渲染、VNI_0.070 deterministic effect sprite/slice/line 池化渲染、mask、文字层绑定、走马灯、marker、complete listener、group slot 挂接、destroy 清理和 diagnostics。
@@ -40,6 +40,7 @@
 viewer 不能维护自己的 segmented playback 状态机；它只能调用 `play({ mode: "segmented", ... })` 和 `requestSegmentedPlaybackEnd()`。
 viewer 不能复制走马灯采样逻辑或用私有 Pixi tree 调整灯位；`chaser_light` 的固定灯位和亮灭推进必须来自 `VNIPlayer`。
 viewer 不能复制 `sequence` 切帧、`multi_move` `pointsJson` 解析、结束位移采样、空帧 visibility 判断或 VNI_0.070 新增 deterministic effect 算法；上传 zip 中缺 sequence frame、非法 `pointsJson` 或 effect 必需参数时必须让 vnicore 校验显式失败。
+viewer 也不能复制 basic track、bounce/rotate 公式或读取 pressure rotation 的内层 Pixi 节点；summary 只能展示已启用轨道和点数。
 viewer 也不能直接操作 `VNIPlayer` 内部 Pixi tree、layer instance、group container 或 slot container；组间插入只能调用 `getLayerGroupSlots()`、`attachNodeBetweenLayerGroups(...)`、`attachImageBetweenLayerGroups(...)`、`attachExternalImageBetweenLayerGroups(...)`、`detachMountedNode(...)` 或 `clearMountedNodes()`。
 文字层替换只能调用 `attachNodeToTextLayer(...)`、`attachTextToTextLayer(...)`、`attachImageToTextLayer(...)` 和返回的 dispose/setText 句柄；viewer 不应直接读取或修改 text layer wrapper、原始 Text child 或其它 runtime 私有 display object。
 
