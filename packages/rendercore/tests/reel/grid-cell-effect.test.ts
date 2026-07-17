@@ -40,7 +40,7 @@ describe("grid cell effect resources and controller", () => {
     });
     expect(resources.anticipation).toMatchObject({
       animationName: "Loop",
-      loopCount: 3,
+      loopCount: 1,
     });
     expect(resources.anticipation!.durationSeconds).toBeCloseTo(0.6666667, 6);
     expect(resources.anticipation!.officialDurationSeconds).toBe(
@@ -66,7 +66,7 @@ describe("grid cell effect resources and controller", () => {
         resources,
         cellCount: 54,
       }),
-    ).toEqual({ anticipation: 9, refillSweep: 5 });
+    ).toEqual({ anticipation: 3, refillSweep: 5 });
     expect(() =>
       createGridCellEffectResourcesFromManifest({
         manifest,

@@ -45,7 +45,7 @@ const REEL_EFFECTS = Object.freeze([
     id: "anticipation",
     skeleton: "Nearwin1.json",
     duration: 0.6666667,
-    loopCount: 3,
+    loopCount: 1,
   },
   {
     id: "refillSweep",
@@ -362,8 +362,8 @@ function verifyReelSourceContract() {
       JSON.stringify({
         effect: "anticipation",
         triggerLandedCount: 2,
-        firstFollowingStopDelayMs: 2000.0001,
-        stopStepMs: 240,
+        firstFollowingStopDelayMs: 800,
+        stopStepMs: 100,
       })
   ) {
     failures.push(
@@ -414,10 +414,10 @@ function verifyReelSourceContract() {
       },
       spin: {
         effect: "anticipation",
-        order: "left-right-top-down",
+        order: "bottom-left-up-right-wave",
         startStepMs: 16,
-        stopStepMs: 240,
-        settleAfterLastStartMs: 2000.0001,
+        stopStepMs: 100,
+        settleAfterLastStartMs: 800,
         minimumSpinCycles: 6,
         speedSymbolsPerSecond: 54,
       },

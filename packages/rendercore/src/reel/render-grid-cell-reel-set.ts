@@ -93,6 +93,7 @@ export class RenderGridCellReelSet extends Container {
   #startedEffects = new Set<string>();
   #completedEffects = new Set<string>();
   #activationGateOpen = false;
+  #dimmingActivated = false;
   #elapsedMs = 0;
 
   constructor(options: RenderGridCellReelSetOptions) {
@@ -181,6 +182,7 @@ export class RenderGridCellReelSet extends Container {
     this.#startedEffects.clear();
     this.#completedEffects.clear();
     this.#activationGateOpen = false;
+    this.#dimmingActivated = false;
     this.#elapsedMs = 0;
 
     for (const cell of this.#cells) {
@@ -271,6 +273,7 @@ export class RenderGridCellReelSet extends Container {
     this.#startedEffects.clear();
     this.#completedEffects.clear();
     this.#activationGateOpen = plan.activationGate === null;
+    this.#dimmingActivated = plan.dimmingActivatedAtStart;
     for (const cell of this.#cells) {
       const planCell =
         planCellsByKey.get(
@@ -913,6 +916,7 @@ export class RenderGridCellReelSet extends Container {
             );
           }
           this.#activationGateOpen = true;
+          this.#dimmingActivated = true;
           activated.push(cell.coordinate);
         }
       }
@@ -1022,7 +1026,7 @@ export class RenderGridCellReelSet extends Container {
           [cell.targetPresentationValue],
         );
         resetReelSlotSymbolsAndRequestLandingAppear(cell);
-        this.syncLandedDimming(cell, planCell);
+        this.syncLandedDimming(cell, planCell, plan);
         this.setCellClipMask(cell, false);
         this.syncCellRenderOrder(cell);
         cell.phase = "landed";
@@ -1082,7 +1086,7 @@ export class RenderGridCellReelSet extends Container {
       cell.dimOverlay.alpha = cell.fadeOutStartAlpha * (1 - progress);
     }
     if (cell.planCell) {
-      this.syncLandedDimming(cell, cell.planCell);
+      this.syncLandedDimming(cell, cell.planCell, plan);
     }
 
     if (cell.dimOverlay.alpha <= 0 && !hasActiveLandingAppear(cell)) {
@@ -1298,7 +1302,11 @@ export class RenderGridCellReelSet extends Container {
       const slot = slotsByWindowY.get(row.windowY);
       const dimmingAlpha =
         slot && slot.kind !== "empty"
-          ? resolveGridCellDimmingAlpha(plan.dimming, slot.code)
+          ? resolveGridCellDimmingAlpha(
+              plan.dimming,
+              slot.code,
+              this.#dimmingActivated,
+            )
           : 0;
       row.graphic.alpha = dimmingAlpha;
       if (slot?.symbol) {
@@ -1313,15 +1321,23 @@ export class RenderGridCellReelSet extends Container {
   private syncLandedDimming(
     cell: RuntimeCell,
     planCell: GridCellReelPlanCell,
+    plan: GridCellReelSpinPlan,
   ): void {
     cell.dimOverlay.y = 0;
     cell.dimOverlay.renderable = cell.dimOverlay.alpha > 0;
     for (const row of cell.dimRows) {
-      const dimmingAlpha = row.windowY === 0 ? planCell.dimmingAlpha : 0;
-      row.graphic.alpha = dimmingAlpha;
       const slot = cell.reel
         .getSlotSnapshots()
         .find((candidate) => candidate.windowY === row.windowY);
+      const dimmingAlpha =
+        row.windowY === 0
+          ? resolveGridCellDimmingAlpha(
+              plan.dimming,
+              planCell.targetVisibleSymbols[0],
+              this.#dimmingActivated,
+            )
+          : 0;
+      row.graphic.alpha = dimmingAlpha;
       if (slot?.symbol) {
         slot.symbol.alpha = 1;
         slot.symbol.tint = createBrightnessTint(

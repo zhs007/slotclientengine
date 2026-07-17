@@ -164,9 +164,12 @@ describe("game002-s3 layout", () => {
       fadeInMs: 80,
       fadeOutMs: 160,
     });
-    expect(dimming.resolveSymbolDimmingAlpha("WL")).toBe(0);
-    expect(dimming.resolveSymbolDimmingAlpha("CN")).toBe(0.5);
-    expect(dimming.resolveSymbolDimmingAlpha("H1")).toBe(0.5);
+    expect(dimming.resolveSymbolDimmingAlpha("WL", false)).toBe(0);
+    expect(dimming.resolveSymbolDimmingAlpha("WL", true)).toBe(0);
+    expect(dimming.resolveSymbolDimmingAlpha("CN", false)).toBe(0);
+    expect(dimming.resolveSymbolDimmingAlpha("CN", true)).toBe(0.5);
+    expect(dimming.resolveSymbolDimmingAlpha("H1", false)).toBe(0.5);
+    expect(dimming.resolveSymbolDimmingAlpha("H1", true)).toBe(0.5);
     expect(() => createGame002GridCellDimming(-0.1)).toThrow(/dimmingAlpha/);
     expect(() => createGame002GridCellDimming(1.1)).toThrow(/dimmingAlpha/);
     expect(() => validateGame002BoardFrame()).not.toThrow();

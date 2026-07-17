@@ -18,7 +18,7 @@ export const GAME002_CASCADE_WIN_SUMMARY_STYLE = Object.freeze({
 });
 
 export const GAME002_CASCADE_WIN_SUMMARY_COUNT_SECONDS = 0.35;
-export const GAME002_CASCADE_COLLECT_START_INTERVAL_SECONDS = 0.5;
+export const GAME002_CASCADE_COLLECT_START_INTERVAL_SECONDS = 0.3;
 
 export function resolveGame002WinResultCoinAmount(
   context: SymbolCascadeGroupContext,

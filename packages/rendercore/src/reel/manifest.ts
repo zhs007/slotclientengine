@@ -3,7 +3,7 @@ import type { GridCellReelSpinTiming } from "./types.js";
 
 export type GridCellEffectId = string;
 export type GridCellSweepOrder = "left-right-bottom-up";
-export type GridCellSelectiveSpinOrder = "left-right-top-down";
+export type GridCellSelectiveSpinOrder = "bottom-left-up-right-wave";
 
 export interface ReelCellEffectManifest {
   readonly skeleton: string;
@@ -177,9 +177,9 @@ export function parseReelManifest(value: unknown): ParsedReelManifest {
       "speedSymbolsPerSecond",
     ],
   );
-  if (refillSpinRecord.order !== "left-right-top-down") {
+  if (refillSpinRecord.order !== "bottom-left-up-right-wave") {
     throw new ReelError(
-      'reel manifest cascade.anticipationRefill.spin.order must be "left-right-top-down".',
+      'reel manifest cascade.anticipationRefill.spin.order must be "bottom-left-up-right-wave".',
     );
   }
   const refillTiming = parseTiming(
@@ -215,7 +215,7 @@ export function parseReelManifest(value: unknown): ParsedReelManifest {
         }),
         spin: Object.freeze({
           effect: refillSpinEffect,
-          order: "left-right-top-down",
+          order: "bottom-left-up-right-wave",
           ...refillTiming,
         }),
       }),

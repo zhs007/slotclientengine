@@ -18,7 +18,7 @@ describe("parseReelManifest", () => {
           stopStepMs: 240,
         },
         cellEffects: {
-          anticipation: { skeleton: "./Nearwin1.json", loopCount: 3 },
+          anticipation: { skeleton: "./Nearwin1.json", loopCount: 1 },
           refillSweep: { skeleton: "./Nearwin2.json", loopCount: 1 },
         },
       },
@@ -31,7 +31,7 @@ describe("parseReelManifest", () => {
           },
           spin: {
             effect: "anticipation",
-            order: "left-right-top-down",
+            order: "bottom-left-up-right-wave",
             stopStepMs: 240,
           },
         },

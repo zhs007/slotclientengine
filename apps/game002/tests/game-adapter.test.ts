@@ -114,7 +114,7 @@ describe("game002 task 95 adapter", () => {
     });
     expect(cascadeOptions?.winSummaryCollect).toMatchObject({
       countDurationSeconds: 0.35,
-      sequentialCollectStartIntervalSeconds: 0.5,
+      sequentialCollectStartIntervalSeconds: 0.3,
       position: {
         x: runtime.layerLayout.rawReelsContentWidth / 2,
         y: runtime.layerLayout.rawReelsContentHeight + 36,

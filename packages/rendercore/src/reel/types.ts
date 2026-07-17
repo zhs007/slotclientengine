@@ -133,6 +133,12 @@ export interface GridCellCoordinate {
   readonly orderIndex: number;
 }
 
+export interface GridCellSpinPosition {
+  readonly x: number;
+  readonly y: number;
+  readonly startGroupIndex?: number;
+}
+
 export type GridCellReelOffsetMatrix = readonly (readonly number[])[];
 
 export interface GridCellReelOffsetMatrixOptions {
@@ -161,7 +167,7 @@ export interface GridCellReelSpinTiming {
 }
 
 export interface GridCellDimmingPattern {
-  readonly resolveDimmingAlpha: (code: number) => number;
+  readonly resolveDimmingAlpha: (code: number, activated: boolean) => number;
   readonly fadeInMs: number;
   readonly fadeOutMs: number;
 }
@@ -178,6 +184,7 @@ export interface GridCellReelPlanCell {
   readonly y: number;
   readonly orderIndex: number;
   readonly sequenceIndex: number;
+  readonly startGroupIndex: number;
   readonly reelOffsetY: number;
   readonly startAtMs: number;
   readonly stopAtMs: number;
@@ -220,6 +227,7 @@ export interface GridCellReelSpinPlan {
   readonly lastStopAtMs: number;
   readonly selective: boolean;
   readonly activationGate: Readonly<{ x: number; y: number }> | null;
+  readonly dimmingActivatedAtStart: boolean;
 }
 
 export interface GridCellEffectSweepPlan {

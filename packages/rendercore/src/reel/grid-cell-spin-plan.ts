@@ -9,6 +9,7 @@ import type {
   GridCellReelSpinTiming,
   GridCellReelEffectPlanOptions,
   GridCellEffectPlanSpec,
+  GridCellSpinPosition,
   ReelAxisSpinPlan,
   ReelSpinDirection,
 } from "./types.js";
@@ -25,7 +26,8 @@ export function createGridCellReelSpinPlan(options: {
   readonly direction?: ReelSpinDirection;
   readonly timing: GridCellReelSpinTiming;
   readonly dimming: GridCellDimmingPattern;
-  readonly positions?: readonly { readonly x: number; readonly y: number }[];
+  readonly dimmingActivatedAtStart?: boolean;
+  readonly positions?: readonly GridCellSpinPosition[];
   readonly effects?: GridCellReelEffectPlanOptions;
 }): GridCellReelSpinPlan {
   const columns = assertPositiveInteger(options.columns, "columns");
@@ -47,6 +49,10 @@ export function createGridCellReelSpinPlan(options: {
   const timing = parseTiming(options.timing);
   const effects = parseEffects(options.effects, selectedOrder);
   const dimming = parseDimming(options.dimming);
+  const dimmingActivatedAtStart = parseOptionalBoolean(
+    options.dimmingActivatedAtStart,
+    "dimmingActivatedAtStart",
+  );
   const direction = parseDirection(options.direction);
   const cellCount = selectedOrder.length;
   const firstStopAtMs =
@@ -54,7 +60,7 @@ export function createGridCellReelSpinPlan(options: {
 
   const cells = selectedOrder.map(
     (cell, sequenceIndex): GridCellReelPlanCell => {
-      const startAtMs = sequenceIndex * timing.startStepMs;
+      const startAtMs = cell.startGroupIndex * timing.startStepMs;
       const gateIndex = effects?.gateIndex ?? -1;
       const stopAtMs =
         effects?.activated && sequenceIndex > gateIndex
@@ -122,6 +128,7 @@ export function createGridCellReelSpinPlan(options: {
         y: cell.y,
         orderIndex: cell.orderIndex,
         sequenceIndex,
+        startGroupIndex: cell.startGroupIndex,
         reelOffsetY,
         startAtMs,
         stopAtMs,
@@ -133,6 +140,7 @@ export function createGridCellReelSpinPlan(options: {
         dimmingAlpha: resolveGridCellDimmingAlpha(
           dimming,
           targetScene[cell.x][cell.y],
+          dimmingActivatedAtStart,
         ),
         effect,
       });
@@ -148,6 +156,7 @@ export function createGridCellReelSpinPlan(options: {
     lastStopAtMs: cells.at(-1)!.stopAtMs,
     selective: options.positions !== undefined,
     activationGate: effects?.activationGate ?? null,
+    dimmingActivatedAtStart,
   });
 }
 
@@ -259,16 +268,34 @@ function parseEffectSpec(value: GridCellEffectPlanSpec, label: string) {
 
 function selectOrder(
   order: readonly GridCellCoordinate[],
-  positions: readonly { readonly x: number; readonly y: number }[] | undefined,
+  positions: readonly GridCellSpinPosition[] | undefined,
   columns: number,
   rows: number,
-): readonly GridCellCoordinate[] {
-  if (positions === undefined) return order;
+): readonly (GridCellCoordinate & { readonly startGroupIndex: number })[] {
+  if (positions === undefined) {
+    return Object.freeze(
+      order.map((cell, startGroupIndex) =>
+        Object.freeze({ ...cell, startGroupIndex }),
+      ),
+    );
+  }
   if (!Array.isArray(positions) || positions.length === 0) {
     throw new ReelError("selective grid positions must not be empty.");
   }
   const byKey = new Map(order.map((cell) => [`${cell.x}:${cell.y}`, cell]));
   const seen = new Set<string>();
+  const hasExplicitStartGroups = positions.some(
+    (position) => position.startGroupIndex !== undefined,
+  );
+  if (
+    hasExplicitStartGroups &&
+    positions.some((position) => position.startGroupIndex === undefined)
+  ) {
+    throw new ReelError(
+      "selective grid positions must either all define startGroupIndex or all omit it.",
+    );
+  }
+  let previousStartGroupIndex = -1;
   return Object.freeze(
     positions.map((position, index) => {
       if (
@@ -290,7 +317,24 @@ function selectOrder(
         );
       }
       seen.add(key);
-      return byKey.get(key)!;
+      const startGroupIndex = hasExplicitStartGroups
+        ? assertNonNegativeSafeInteger(
+            position.startGroupIndex,
+            `selective grid positions[${index}].startGroupIndex`,
+          )
+        : index;
+      if (index === 0 && startGroupIndex !== 0) {
+        throw new ReelError(
+          "selective grid positions first startGroupIndex must be 0.",
+        );
+      }
+      if (startGroupIndex < previousStartGroupIndex) {
+        throw new ReelError(
+          "selective grid positions startGroupIndex must be non-decreasing.",
+        );
+      }
+      previousStartGroupIndex = startGroupIndex;
+      return Object.freeze({ ...byKey.get(key)!, startGroupIndex });
     }),
   );
 }
@@ -424,14 +468,23 @@ function parseDimming(value: GridCellDimmingPattern): GridCellDimmingPattern {
 export function resolveGridCellDimmingAlpha(
   dimming: GridCellDimmingPattern,
   code: number,
+  activated = false,
 ): number {
   if (!Number.isSafeInteger(code) || code < 0) {
     throw new ReelError("grid cell dimming code must be non-negative.");
   }
   return assertAlpha(
-    dimming.resolveDimmingAlpha(code),
+    dimming.resolveDimmingAlpha(code, activated),
     `dimming alpha for symbol code ${code}`,
   );
+}
+
+function parseOptionalBoolean(value: unknown, label: string): boolean {
+  if (value === undefined) return false;
+  if (typeof value !== "boolean") {
+    throw new ReelError(`${label} must be a boolean.`);
+  }
+  return value;
 }
 
 function parseDirection(
@@ -470,6 +523,13 @@ function assertPositiveNumber(value: unknown, label: string): number {
 function assertNonNegativeNumber(value: unknown, label: string): number {
   if (!Number.isFinite(value) || (value as number) < 0) {
     throw new ReelError(`${label} must be a non-negative number.`);
+  }
+  return value as number;
+}
+
+function assertNonNegativeSafeInteger(value: unknown, label: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    throw new ReelError(`${label} must be a non-negative safe integer.`);
   }
   return value as number;
 }

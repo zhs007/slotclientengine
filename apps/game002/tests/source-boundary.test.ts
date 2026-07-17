@@ -224,13 +224,37 @@ describe("game002 source boundary", () => {
     );
 
     expect(reelSource).not.toMatch(
-      /\bWL\b|Nearwin1|Nearwin2|bg-refill|game002/,
+      /\bWL\b|\bCN\b|Nearwin1|Nearwin2|bg-refill|game002/,
     );
+    expect(reelSource).toContain("startGroupIndex");
+    expect(reelSource).not.toContain("columnIndex + rowIndex");
+    expect(appSource).toContain("columnIndex + rowIndex");
     expect(appSource).not.toMatch(
       /@esotericsoftware\/spine-pixi-v8|\.children\[|getChildAt|state\.setAnimation|clearTracks/,
     );
     expect(skinConfigSource).toContain("{Nearwin1,Nearwin2}.json");
     expect(skinConfigSource).not.toMatch(/Nearwin3|WM_Fx/);
+  });
+
+  it("keeps the animation timing guide connected to current game002 contracts", () => {
+    const readme = readFileSync(join(APP_ROOT, "README.md"), "utf8");
+    const guide = readFileSync(
+      join(APP_ROOT, "docs/animation-flow-and-timing.md"),
+      "utf8",
+    );
+    const collectConfig = readFileSync(
+      join(APP_ROOT, "src/cascade-win-summary-config.ts"),
+      "utf8",
+    );
+
+    expect(readme).toContain("docs/animation-flow-and-timing.md");
+    expect(collectConfig).toContain(
+      "GAME002_CASCADE_COLLECT_START_INTERVAL_SECONDS = 0.3",
+    );
+    expect(guide).toMatch(/\|\s*相邻 Collect 起播间隔\s*\|\s*`0\.3s`\s*\|/);
+    expect(guide).toMatch(/\|\s*Collect 资源时长\s*\|\s*`0\.3333333s`\s*\|/);
+    expect(guide).toMatch(/\|\s*Nearwin1\/landing cadence\s*\|\s*`100ms`\s*\|/);
+    expect(guide).toMatch(/\|\s*最后 start 后 settle\s*\|\s*`800ms`\s*\|/);
   });
 
   it("keeps game-owned win rules out of the shared carousel and ReelSet internals out of the app", () => {

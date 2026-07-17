@@ -35,10 +35,14 @@ export const GAME002_VISIBLE_ROWS = 9;
 export const GAME002_CELL_SIZE = 120;
 export const GAME002_GRID_CELL_REEL_ORDER =
   "top-down-left-right" satisfies GridCellOrderMode;
-const GAME002_BRIGHT_SPIN_SYMBOLS = new Set(["WL"]);
+const GAME002_NORMAL_BRIGHT_SPIN_SYMBOLS = new Set(["WL", "CN"]);
+const GAME002_ANTICIPATION_BRIGHT_SPIN_SYMBOLS = new Set(["WL"]);
 
 export interface Game002GridCellDimming {
-  readonly resolveSymbolDimmingAlpha: (symbol: string) => number;
+  readonly resolveSymbolDimmingAlpha: (
+    symbol: string,
+    anticipationActive: boolean,
+  ) => number;
   readonly fadeInMs: number;
   readonly fadeOutMs: number;
 }
@@ -52,8 +56,13 @@ export function createGame002GridCellDimming(
     );
   }
   return Object.freeze({
-    resolveSymbolDimmingAlpha: (symbol: string) =>
-      GAME002_BRIGHT_SPIN_SYMBOLS.has(symbol) ? 0 : dimmingAlpha,
+    resolveSymbolDimmingAlpha: (symbol: string, anticipationActive: boolean) =>
+      (anticipationActive
+        ? GAME002_ANTICIPATION_BRIGHT_SPIN_SYMBOLS
+        : GAME002_NORMAL_BRIGHT_SPIN_SYMBOLS
+      ).has(symbol)
+        ? 0
+        : dimmingAlpha,
     fadeInMs: 80,
     fadeOutMs: 160,
   });

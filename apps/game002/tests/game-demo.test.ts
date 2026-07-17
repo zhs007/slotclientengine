@@ -201,6 +201,7 @@ describe("game002-s3 reel runtime", () => {
     const plan = runtime.spinToScene(GAME002_SAMPLE_SPIN_SCENE, "spin");
 
     expect(plan.cells).toHaveLength(54);
+    expect(plan.dimmingActivatedAtStart).toBe(false);
     expect(plan.cells[0]).toMatchObject({
       x: 0,
       y: 0,
@@ -222,13 +223,28 @@ describe("game002-s3 reel runtime", () => {
     expect(plan.cells[9]).toMatchObject({
       x: 1,
       y: 0,
-      dimmingAlpha: 0.5,
+      dimmingAlpha: 0,
     });
     expect(plan.cells[10]).toMatchObject({
       x: 1,
       y: 1,
-      dimmingAlpha: 0.5,
+      dimmingAlpha: 0,
     });
+    const cnCode = runtime.gameConfig.getSymbolCode("CN");
+    expect(cnCode).toBeDefined();
+    expect(
+      plan.cells
+        .filter((cell) => cell.targetVisibleSymbols[0] === cnCode)
+        .every((cell) => cell.dimmingAlpha === 0),
+    ).toBe(true);
+    for (const cell of plan.cells) {
+      const symbol = runtime.gameConfig.getPaytableEntry(
+        cell.targetVisibleSymbols[0],
+      )!.symbol;
+      expect(cell.dimmingAlpha).toBe(
+        symbol === "WL" || symbol === "CN" ? 0 : 0.5,
+      );
+    }
     for (let x = 0; x < 6; x += 1) {
       const columnPhases = plan.cells
         .filter((cell) => cell.x === x)
@@ -277,6 +293,42 @@ describe("game002-s3 reel runtime", () => {
       GAME002_SAMPLE_SPIN_SCENE,
       "completed spin",
     );
+  });
+
+  it("keeps CN bright before the anticipation gate and dims it after activation", () => {
+    const dimmingCalls: Array<{
+      readonly symbol: string;
+      readonly activated: boolean;
+    }> = [];
+    const baseDimming = DEFAULT_GAME002_REEL_CONFIG.dimming;
+    const runtime = createRuntime(GAME002_SAMPLE_DEFAULT_SCENE, {
+      dimming: {
+        ...baseDimming,
+        resolveSymbolDimmingAlpha: (symbol, activated) => {
+          dimmingCalls.push({ symbol, activated });
+          return baseDimming.resolveSymbolDimmingAlpha(symbol, activated);
+        },
+      },
+    });
+    const target = GAME002_SAMPLE_SPIN_SCENE.map((column) => [...column]);
+    target[0][0] = 0;
+    target[0][2] = 0;
+    const plan = runtime.spinToScene(target, "dynamic CN dimming");
+    const cnCode = runtime.gameConfig.getSymbolCode("CN");
+    expect(cnCode).toBe(8);
+    expect(
+      plan.cells
+        .filter((cell) => cell.targetVisibleSymbols[0] === cnCode)
+        .every((cell) => cell.dimmingAlpha === 0),
+    ).toBe(true);
+
+    let result = runtime.update(0.02);
+    for (let index = 0; index < 900 && !result.completed; index += 1) {
+      result = runtime.update(0.02);
+    }
+    expect(result.completed).toBe(true);
+    expect(dimmingCalls).toContainEqual({ symbol: "CN", activated: false });
+    expect(dimmingCalls).toContainEqual({ symbol: "CN", activated: true });
   });
 
   it("reshuffles visual-only local reel phases for every spin plan", () => {
@@ -339,18 +391,21 @@ describe("game002-s3 reel runtime", () => {
     );
     expect(plan.cells[3].effect).toMatchObject({
       effectId: "anticipation",
-      loopCount: 3,
+      loopCount: 1,
     });
-    expect(plan.cells[3].effect!.startAtMs).toBeCloseTo(
-      plan.cells[2].stopAtMs,
-      8,
-    );
-    expect(plan.cells[3].stopAtMs - plan.cells[2].stopAtMs).toBeCloseTo(
-      2000.0001,
-      4,
-    );
-    expect(plan.cells[3].effect?.loopCount).toBe(3);
-    expect(plan.cells[4].stopAtMs - plan.cells[3].stopAtMs).toBe(240);
+    expect(
+      plan.cells[3].effect!.startAtMs - plan.cells[2].stopAtMs,
+    ).toBeCloseTo(133.3333, 4);
+    expect(
+      plan.cells[3].stopAtMs - plan.cells[3].effect!.startAtMs,
+    ).toBeCloseTo(666.6667, 4);
+    expect(plan.cells[3].effect!.startAtMs > plan.cells[2].stopAtMs).toBe(true);
+    expect(plan.cells[3].stopAtMs - plan.cells[2].stopAtMs).toBeCloseTo(800, 4);
+    expect(plan.cells[3].effect?.loopCount).toBe(1);
+    expect(
+      plan.cells[4].effect!.startAtMs - plan.cells[3].effect!.startAtMs,
+    ).toBe(100);
+    expect(plan.cells[4].stopAtMs - plan.cells[3].stopAtMs).toBe(100);
 
     let activationEdges = 0;
     let result = runtime.update(0.05);
@@ -368,6 +423,7 @@ describe("game002-s3 reel runtime", () => {
     });
 
     const holes = [
+      { x: 4, y: 1 },
       { x: 4, y: 0 },
       { x: 5, y: 0 },
     ];
@@ -375,6 +431,7 @@ describe("game002-s3 reel runtime", () => {
     const removedScene = runtime.getCurrentScene()!;
     const removedValues = runtime.getCascadeValues();
     const refillScene = removedScene.map((column) => [...column]);
+    refillScene[4][1] = 1;
     refillScene[4][0] = 1;
     refillScene[5][0] = 1;
     const refillValues = removedValues.map((column) =>
@@ -417,12 +474,44 @@ describe("game002-s3 reel runtime", () => {
       targetValues: refillValues,
       refillPositions: holes,
     });
-    expect(refillPlan.cells.map(({ x, y }) => ({ x, y }))).toEqual(holes);
+    expect(refillPlan.cells.map(({ x, y }) => ({ x, y }))).toEqual([
+      { x: 4, y: 1 },
+      { x: 4, y: 0 },
+      { x: 5, y: 0 },
+    ]);
+    expect(refillPlan.cells.map((cell) => cell.startGroupIndex)).toEqual([
+      0, 1, 1,
+    ]);
+    expect(refillPlan.cells.map((cell) => cell.startAtMs)).toEqual([0, 16, 16]);
+    expect(refillPlan.dimmingActivatedAtStart).toBe(true);
     expect(
       refillPlan.cells.every(
         (cell) => cell.effect?.effectId === "anticipation",
       ),
     ).toBe(true);
+    expect(refillPlan.cells.every((cell) => cell.effect?.loopCount === 1)).toBe(
+      true,
+    );
+    expect(
+      refillPlan.cells.every(
+        (cell) =>
+          Math.abs(cell.stopAtMs - cell.effect!.startAtMs - 666.6667) < 0.0001,
+      ),
+    ).toBe(true);
+    expect(
+      refillPlan.cells[1]!.stopAtMs - refillPlan.cells[0]!.stopAtMs,
+    ).toBeCloseTo(100, 8);
+    expect(
+      refillPlan.cells[2]!.stopAtMs - refillPlan.cells[1]!.stopAtMs,
+    ).toBeCloseTo(100, 8);
+    expect(
+      refillPlan.cells[1]!.effect!.startAtMs -
+        refillPlan.cells[0]!.effect!.startAtMs,
+    ).toBeCloseTo(100, 8);
+    expect(
+      refillPlan.cells[2]!.effect!.startAtMs -
+        refillPlan.cells[1]!.effect!.startAtMs,
+    ).toBeCloseTo(100, 8);
     result = runtime.update(0.05);
     for (let index = 0; index < 80 && !result.completed; index += 1) {
       result = runtime.update(0.05);
@@ -557,6 +646,7 @@ function createRuntime(
   options: {
     readonly presentationRandom?: () => number;
     readonly spinPhaseRandom?: () => number;
+    readonly dimming?: (typeof DEFAULT_GAME002_REEL_CONFIG)["dimming"];
   } = {},
 ) {
   const skin = getGame002SkinConfig("1");
@@ -570,6 +660,7 @@ function createRuntime(
       random: options.presentationRandom ?? DEFAULT_GAME002_REEL_CONFIG.random,
       spinPhaseRandom:
         options.spinPhaseRandom ?? DEFAULT_GAME002_REEL_CONFIG.spinPhaseRandom,
+      dimming: options.dimming ?? DEFAULT_GAME002_REEL_CONFIG.dimming,
       texturedSymbols: skin.displaySymbols,
       emptySymbols: [],
       symbolScales: skin.symbolScales,

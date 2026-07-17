@@ -110,7 +110,7 @@ describe("game002-s3 assets", () => {
       expect.stringContaining("Nearwin2.json"),
     ]);
     expect(Object.values(skin.reelEffectResources)).toMatchObject([
-      { animationName: "Loop", loopCount: 3 },
+      { animationName: "Loop", loopCount: 1 },
       { animationName: "Loop", loopCount: 1 },
     ]);
     expect(skin.reelEffectResources.anticipation!.durationSeconds).toBeCloseTo(

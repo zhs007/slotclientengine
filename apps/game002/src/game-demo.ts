@@ -18,6 +18,7 @@ import {
   type GridCellOrderMode,
   type GridCellReelSpinPlan,
   type GridCellReelSpinTiming,
+  type GridCellSpinPosition,
   type GridCellCascadeDropPlan,
   type GridCellCascadeScene,
   type GridCellCascadeValueMatrix,
@@ -270,14 +271,14 @@ export function createGame002ReelRuntime(
   const gameConfig = createGameConfig(options.rawGameConfig);
   const reels = gameConfig.getReels(config.reelsName);
   const spinDimming = Object.freeze({
-    resolveDimmingAlpha: (code: number) => {
+    resolveDimmingAlpha: (code: number, activated: boolean) => {
       const entry = gameConfig.getPaytableEntry(code);
       if (!entry) {
         throw new Error(
           `game002 spin dimming symbol code ${code} is missing from the paytable.`,
         );
       }
-      return config.dimming.resolveSymbolDimmingAlpha(entry.symbol);
+      return config.dimming.resolveSymbolDimmingAlpha(entry.symbol, activated);
     },
     fadeInMs: config.dimming.fadeInMs,
     fadeOutMs: config.dimming.fadeOutMs,
@@ -515,6 +516,7 @@ export function createGame002ReelRuntime(
       direction: config.direction,
       timing: config.timing,
       dimming: spinDimming,
+      dimmingActivatedAtStart: false,
       ...(activationGate
         ? {
             effects: {
@@ -910,6 +912,7 @@ export function createGame002ReelRuntime(
         direction: config.direction,
         timing: spinConfig,
         dimming: spinDimming,
+        dimmingActivatedAtStart: true,
         effects: { normal: createEffectPlanSpec(spinConfig.effect) },
       });
       reelSet.spin(plan, {
@@ -1055,10 +1058,10 @@ function createPresentationValueResolver(options: {
 
 function sortRefillPositions(
   positions: readonly WinResultPosition[],
-  order: "left-right-bottom-up" | "left-right-top-down",
+  order: "left-right-bottom-up" | "bottom-left-up-right-wave",
   columns: number,
   rows: number,
-): readonly WinResultPosition[] {
+): readonly GridCellSpinPosition[] {
   if (!Array.isArray(positions) || positions.length === 0) {
     throw new Error("game002 refill positions must not be empty.");
   }
@@ -1081,12 +1084,37 @@ function sortRefillPositions(
     seen.add(key);
     return Object.freeze({ x: position.x, y: position.y });
   });
+  if (order === "left-right-bottom-up") {
+    return Object.freeze(
+      [...parsed].sort((left, right) => right.y - left.y || left.x - right.x),
+    );
+  }
+
+  const positionsByColumn = new Map<number, typeof parsed>();
+  for (const position of parsed) {
+    const column = positionsByColumn.get(position.x) ?? [];
+    column.push(position);
+    positionsByColumn.set(position.x, column);
+  }
+  const scheduled = [...positionsByColumn.entries()]
+    .sort(([leftX], [rightX]) => leftX - rightX)
+    .flatMap(([, column], columnIndex) =>
+      [...column]
+        .sort((left, right) => right.y - left.y)
+        .map((position, rowIndex) =>
+          Object.freeze({
+            ...position,
+            startGroupIndex: columnIndex + rowIndex,
+          }),
+        ),
+    );
   return Object.freeze(
-    [...parsed].sort((left, right) => {
-      const rowDifference =
-        order === "left-right-bottom-up" ? right.y - left.y : left.y - right.y;
-      return rowDifference || left.x - right.x;
-    }),
+    scheduled.sort(
+      (left, right) =>
+        left.startGroupIndex - right.startGroupIndex ||
+        left.x - right.x ||
+        right.y - left.y,
+    ),
   );
 }
 

@@ -46,6 +46,7 @@ describe("createGridCellReelSpinPlan", () => {
 
     expect(plan.cells).toHaveLength(6);
     expect(plan.lastStopAtMs).toBe(250);
+    expect(plan.dimmingActivatedAtStart).toBe(false);
     expect(plan.dimming).toEqual(DIMMING);
     expect(plan.cells.map((cell) => cell.startAtMs)).toEqual([
       0, 10, 20, 30, 40, 50,
@@ -82,6 +83,72 @@ describe("createGridCellReelSpinPlan", () => {
       stopAtMs: 150,
       travelSymbols: 3,
     });
+  });
+
+  it("groups selective starts without changing the sequential stop timeline", () => {
+    const reels = createBasicReels();
+    const order = createGridCellOrder({
+      columns: 2,
+      rows: 3,
+      mode: "top-down-left-right",
+    });
+    const plan = createGridCellReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      targetScene: TARGET_SCENE,
+      columns: 2,
+      rows: 3,
+      order,
+      positions: [
+        { x: 0, y: 2, startGroupIndex: 0 },
+        { x: 0, y: 1, startGroupIndex: 1 },
+        { x: 1, y: 2, startGroupIndex: 1 },
+        { x: 0, y: 0, startGroupIndex: 2 },
+        { x: 1, y: 1, startGroupIndex: 2 },
+        { x: 1, y: 0, startGroupIndex: 3 },
+      ],
+      timing: TIMING,
+      dimming: DIMMING,
+    });
+
+    expect(plan.cells.map((cell) => cell.startGroupIndex)).toEqual([
+      0, 1, 1, 2, 2, 3,
+    ]);
+    expect(plan.cells.map((cell) => cell.startAtMs)).toEqual([
+      0, 10, 10, 20, 20, 30,
+    ]);
+    expect(plan.cells.map((cell) => cell.stopAtMs)).toEqual([
+      150, 170, 190, 210, 230, 250,
+    ]);
+  });
+
+  it("can start a plan with its generic dimming activation state enabled", () => {
+    const reels = createBasicReels();
+    const order = createGridCellOrder({
+      columns: 2,
+      rows: 3,
+      mode: "top-down-left-right",
+    });
+    const plan = createGridCellReelSpinPlan({
+      reels,
+      finalYs: [2, 1],
+      targetScene: TARGET_SCENE,
+      columns: 2,
+      rows: 3,
+      order,
+      timing: TIMING,
+      dimmingActivatedAtStart: true,
+      dimming: {
+        ...DIMMING,
+        resolveDimmingAlpha: (code, activated) =>
+          code === 1 || (!activated && code === 2) ? 0 : 0.82,
+      },
+    });
+
+    expect(plan.dimmingActivatedAtStart).toBe(true);
+    expect(plan.cells.map((cell) => cell.dimmingAlpha)).toEqual([
+      0, 0.82, 0.82, 0.82, 0, 0.82,
+    ]);
   });
 
   it("can add per-cell reel offsets while preserving target symbols", () => {
@@ -363,6 +430,46 @@ describe("createGridCellReelSpinPlan", () => {
         order: [...order.slice(0, 5), { x: 2, y: 0, orderIndex: 5 }],
       }),
     ).toThrow(/out of range/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        positions: [
+          { x: 0, y: 0, startGroupIndex: 0 },
+          { x: 0, y: 1 },
+        ],
+      }),
+    ).toThrow(/all define startGroupIndex/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        positions: [{ x: 0, y: 0, startGroupIndex: 1 }],
+      }),
+    ).toThrow(/first startGroupIndex must be 0/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        positions: [
+          { x: 0, y: 0, startGroupIndex: 0 },
+          { x: 0, y: 1, startGroupIndex: -1 },
+        ],
+      }),
+    ).toThrow(/non-negative safe integer/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        positions: [
+          { x: 0, y: 0, startGroupIndex: 0 },
+          { x: 0, y: 1, startGroupIndex: 2 },
+          { x: 0, y: 2, startGroupIndex: 1 },
+        ],
+      }),
+    ).toThrow(/non-decreasing/);
+    expect(() =>
+      createGridCellReelSpinPlan({
+        ...baseOptions,
+        dimmingActivatedAtStart: "yes" as never,
+      }),
+    ).toThrow(/dimmingActivatedAtStart must be a boolean/);
     expect(() =>
       createGridCellReelSpinPlan({
         ...baseOptions,

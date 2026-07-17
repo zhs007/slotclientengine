@@ -16,7 +16,7 @@
         "atlas": "./Symbol.atlas",
         "texture": "./Symbol.png",
         "animation": "Loop",
-        "loopCount": 3,
+        "loopCount": 1,
         "finishBeforeStopMs": 0,
         "transform": { "x": 0, "y": 0, "scale": 1 }
       },
@@ -33,8 +33,8 @@
     "anticipation": {
       "effect": "anticipation",
       "triggerLandedCount": 2,
-      "firstFollowingStopDelayMs": 2000.0001,
-      "stopStepMs": 240
+      "firstFollowingStopDelayMs": 800,
+      "stopStepMs": 100
     }
   },
   "cascade": {
@@ -47,10 +47,10 @@
       },
       "spin": {
         "effect": "anticipation",
-        "order": "left-right-top-down",
+        "order": "bottom-left-up-right-wave",
         "startStepMs": 16,
-        "stopStepMs": 240,
-        "settleAfterLastStartMs": 2000.0001,
+        "stopStepMs": 100,
+        "settleAfterLastStartMs": 800,
         "minimumSpinCycles": 6,
         "speedSymbolsPerSecond": 54
       }
