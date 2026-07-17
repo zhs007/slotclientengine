@@ -51,6 +51,7 @@ export type V5GAnimationType =
   | "scale_in"
   | "scale_out"
   | "pop"
+  | "bounce_jump"
   | "shake"
   | "blink"
   | "rotate"
@@ -94,6 +95,34 @@ export interface V5GAnimationConfig {
   params: Record<string, V5GAnimationParamValue>;
 }
 
+export type V5GBasicAnimationEasing =
+  | "linear"
+  | "easeInQuad"
+  | "easeOutQuad"
+  | "easeInOutQuad"
+  | "backOut";
+
+export interface V5GBasicAnimationPointConfig {
+  id: string;
+  time: number;
+  value: number;
+  easing: V5GBasicAnimationEasing;
+}
+
+export interface V5GBasicAnimationTrackConfig {
+  enabled: boolean;
+  points: V5GBasicAnimationPointConfig[];
+}
+
+export interface V5GBasicAnimationConfig {
+  opacity: V5GBasicAnimationTrackConfig;
+  positionX: V5GBasicAnimationTrackConfig;
+  positionY: V5GBasicAnimationTrackConfig;
+  scaleX: V5GBasicAnimationTrackConfig;
+  scaleY: V5GBasicAnimationTrackConfig;
+  rotation: V5GBasicAnimationTrackConfig;
+}
+
 export interface V5GLayerKeyframeConfig {
   id: string;
   time: number;
@@ -132,6 +161,7 @@ export interface V5GLayerConfig {
   sequence?: V5GSequenceConfig;
   mask?: V5GLayerMaskConfig;
   animations: V5GAnimationConfig[];
+  basicAnimation?: V5GBasicAnimationConfig;
   keyframes?: V5GLayerKeyframeConfig[];
 }
 
@@ -205,6 +235,10 @@ export type VNITransformConfig = V5GTransformConfig;
 export type VNIAnimationType = V5GAnimationType;
 export type VNIAnimationParamValue = V5GAnimationParamValue;
 export type VNIAnimationConfig = V5GAnimationConfig;
+export type VNIBasicAnimationEasing = V5GBasicAnimationEasing;
+export type VNIBasicAnimationPointConfig = V5GBasicAnimationPointConfig;
+export type VNIBasicAnimationTrackConfig = V5GBasicAnimationTrackConfig;
+export type VNIBasicAnimationConfig = V5GBasicAnimationConfig;
 export type VNILayerKeyframeConfig = V5GLayerKeyframeConfig;
 export type VNILayerMaskConfig = V5GLayerMaskConfig;
 export type VNIMaskCompositeMode = V5GMaskCompositeMode;

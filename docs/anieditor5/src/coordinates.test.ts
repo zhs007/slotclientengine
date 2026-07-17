@@ -115,6 +115,68 @@ describe("VNI animation transform sampling", () => {
       y: 0,
     });
   });
+
+  it("samples bounce_jump with upward travel and squash/stretch", () => {
+    const animations: V5GAnimationConfig[] = [
+      {
+        id: "bounce_jump",
+        type: "bounce_jump",
+        name: "Bounce jump",
+        startTime: 0,
+        duration: 1,
+        enabled: true,
+        seed: 1,
+        params: {
+          height: 300,
+          anticipationRatio: 0.2,
+          squash: 0.3,
+          stretch: 0.2,
+          topSquash: 0.08,
+          bounceCount: 1,
+          bounceDecay: 0.4,
+          landSquash: 0.22,
+          easing: "linear",
+        },
+      },
+    ];
+
+    const anticipation = sampleLayerAnimationsAtTime(base, animations, 0.1);
+    expect(anticipation.transform.scaleY).toBeLessThan(1);
+    expect(anticipation.transform.scaleX).toBeGreaterThan(1);
+
+    const airborne = sampleLayerAnimationsAtTime(base, animations, 0.38);
+    expect(airborne.transform.y).toBeGreaterThan(base.transform.y);
+    expect(airborne.transform.scaleY).toBeGreaterThan(1);
+  });
+
+  it("samples pressure rotate as fixed outer squash plus inner visual rotation", () => {
+    const animations: V5GAnimationConfig[] = [
+      {
+        id: "pressure_rotate",
+        type: "rotate",
+        name: "Pressure rotate",
+        startTime: 0,
+        duration: 2,
+        enabled: true,
+        seed: 1,
+        params: {
+          turns: 2,
+          direction: 1,
+          accelRatio: 0,
+          decelRatio: 0,
+          pressure: 0.25,
+          pressureStretch: 0.5,
+          easing: "linear",
+        },
+      },
+    ];
+
+    const sampled = sampleLayerAnimationsAtTime(base, animations, 1);
+    expect(sampled.transform.rotation).toBe(0);
+    expect(sampled.transform.scaleX).toBe(1.125);
+    expect(sampled.transform.scaleY).toBe(0.75);
+    expect(sampled.visualRotation).toBe(360);
+  });
 });
 
 describe("VNI animation visibility sampling", () => {

@@ -64,6 +64,8 @@ player.play();
 
 VNI_0.074 `multi_move` 使用 `params.pointsJson` 承载多段位移点。runtime 只接受合法 JSON string 数组，每个点必须有 finite number 的 `x/y/time` 和受支持的 `easing`；每段使用到达点 easing，`backOut` 等超调不会被 clamp。`move` / `multi_move` / `slide_in` / `slide_out` / `squash_stretch` 结束后仍以 progress 1 继续参与 transform 累加，供后续动画接力；visibility 单独判断，所以两个 enabled animation 之间的空帧仍会隐藏。
 
+VNI_0.087 `basicAnimation` 提供 opacity、positionX/Y、scaleX/Y、rotation 六条独立轨道。runtime 先采样 basic track，再把结果交给 preset/particle animation stack；每段采用右侧到达点的 easing，首点前和末点后保持端点，`backOut` 超调不会被截断。`bounce_jump` 只在自身闭区间内应用蓄力、主跳、顶点压缩、落地和衰减反弹。新版 `rotate` 使用 `turns/direction/accelRatio/decelRatio/pressure/pressureStretch`，旧版 `fromRotation/toRotation` 仍明确兼容；pressure 大于阈值时外层只压缩，内容在稳定内层容器中旋转。宿主不得操作该内层容器或复制采样器。非空 legacy `keyframes` 继续显式失败。
+
 ## 生命周期
 
 - `init()`: 加载贴图、校验真实 texture size，把 VNI display tree 挂到宿主 `parent`，初始化 layer 和 particle 容器。

@@ -1,6 +1,7 @@
 import {
   assertVNIBundleManifest,
   assertVNIProject,
+  sampleProjectAtTime,
   validateManifestProjectProfile,
   validateVNIBundleManifest,
   validateVNIProject,
@@ -12,6 +13,11 @@ export function loadValidatedProject(data: unknown): VNIProjectConfig {
   const project = assertVNIProject(data);
   validateVNIProject(project);
   return project;
+}
+
+/** Samples a validated VNI_0.087 project through the public basic+preset stack. */
+export function sampleValidatedProject(data: unknown, time: number) {
+  return sampleProjectAtTime(loadValidatedProject(data), time);
 }
 
 export function loadValidatedBundleProject(

@@ -61,6 +61,7 @@ Supported by `@slotclientengine/vnicore`:
 - center-coordinate stage rendering
 - image layers, `sequence` layers, and basic text layers
 - VNI_0.074 `multi_move` path transforms, including ended transform handoff and empty-frame hiding
+- VNI_0.087 strict `basicAnimation` tracks, `bounce_jump`, current and legacy rotate, and pressure-separated outer/inner rotation
 - text layer replacement through `VNIPlayer` public APIs for dynamic text and image binding
 - Pixi `precompose_light_alpha` masks with explicit `sourceLayerId` validation and vnicore-owned light-mask precomposition
 - `normal`, `add`, `screen`, `multiply`, `lighten` blend modes
@@ -70,7 +71,7 @@ Supported by `@slotclientengine/vnicore`:
 Explicitly unsupported:
 
 - top-level `project.particles`
-- non-empty layer keyframes
+- non-empty legacy layer `keyframes` (`basicAnimation` is supported)
 - group layers
 - nested `parentId`
 - malformed `sequence` layers or sequence frames that are missing from the uploaded zip
@@ -86,6 +87,8 @@ Explicitly unsupported:
 The viewer is a Pixi preview shell for vnicore exports. It does not expose a Cocos-compatible switch and does not implement its own mask/precompose renderer; `precompose_light_alpha` visual parity with the editor Pixi preview is owned by `packages/vnicore`.
 
 Sequence frame selection, VNI_0.074 `multi_move`, ended transform handoff, empty-frame hiding, and the VNI_0.070 deterministic effects are also owned by `packages/vnicore`. The viewer must not inspect private Pixi layer instances, parse `pointsJson`, duplicate effect formulas, or create placeholder assets when an uploaded project references a missing sequence frame.
+
+For VNI_0.087, the summary reports enabled basic-track and point counts only. Track parsing/sampling, right-point easing, `bounce_jump`, rotate integration, and pressure `visualRotation` all remain vnicore-owned; the viewer does not inspect the inner Pixi content root. Historical Cocos engine metadata does not enable `legacy_alpha` in this Pixi viewer.
 
 ## Browser Diagnostics
 

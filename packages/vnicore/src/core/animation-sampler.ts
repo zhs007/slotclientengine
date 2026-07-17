@@ -26,6 +26,7 @@ export interface V5GAnimationSampleBase {
 export interface V5GAnimationSampleResult {
   transform: V5GTransformConfig;
   opacity: number;
+  visualRotation: number;
 }
 
 export const SUPPORTED_EASINGS: readonly V5GEasingName[] = [
@@ -68,6 +69,7 @@ export const SUPPORTED_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "scale_in",
   "scale_out",
   "pop",
+  "bounce_jump",
   "shake",
   "blink",
   "rotate",
@@ -111,6 +113,7 @@ const DEFAULT_EASING_BY_TYPE: Readonly<
   scale_in: "easeOutQuad",
   scale_out: "easeInQuad",
   pop: "easeOutQuad",
+  bounce_jump: "linear",
   shake: "linear",
   blink: "linear",
   rotate: "linear",
@@ -153,6 +156,16 @@ const multiMovePointCache = new WeakMap<
   MultiMovePointCacheEntry
 >();
 
+interface BounceJumpCacheEntry {
+  readonly height: number;
+  readonly bounceCount: number;
+  readonly bounceDecay: number;
+  readonly lobeHeights: readonly number[];
+  readonly totalWeight: number;
+}
+
+const bounceJumpCache = new WeakMap<V5GAnimationConfig, BounceJumpCacheEntry>();
+
 export function sampleLayerAnimationsAtTime(
   base: V5GAnimationSampleBase,
   animations: readonly V5GAnimationConfig[],
@@ -161,6 +174,7 @@ export function sampleLayerAnimationsAtTime(
   const result: V5GAnimationSampleResult = {
     transform: { ...base.transform },
     opacity: base.opacity,
+    visualRotation: 0,
   };
 
   for (const animation of [...animations].sort(
@@ -187,6 +201,8 @@ export function sampleLayerAnimationsAtTime(
     else if (animation.type === "scale_in" || animation.type === "scale_out")
       sampleScaleEntryExit(result, animation, easedProgress, base);
     else if (animation.type === "pop") samplePop(result, animation, progress);
+    else if (animation.type === "bounce_jump")
+      sampleBounceJump(result, animation, progress);
     else if (animation.type === "shake")
       sampleShake(result, animation, progress);
     else if (animation.type === "blink")
@@ -228,6 +244,7 @@ export function sampleLayerAnimationsAtTime(
   result.transform.scaleY = roundTo(result.transform.scaleY, 4);
   result.transform.rotation = roundTo(result.transform.rotation, 4);
   result.opacity = roundTo(clampNumber(result.opacity, 0, 1), 4);
+  result.visualRotation = roundTo(result.visualRotation, 4);
   return result;
 }
 
@@ -516,6 +533,145 @@ function samplePop(
   result.transform.scaleY *= ratio;
 }
 
+function sampleBounceJump(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  progress: number,
+): void {
+  const p = clampNumber(progress, 0, 1);
+  const height = Math.max(0, getNumberParam(animation, "height"));
+  const anticipationRatio = clampNumber(
+    getNumberParam(animation, "anticipationRatio"),
+    0.02,
+    0.6,
+  );
+  const squash = clampNumber(getNumberParam(animation, "squash"), 0, 0.9);
+  const stretch = clampNumber(getNumberParam(animation, "stretch"), 0, 0.9);
+  const topSquash = clampNumber(getNumberParam(animation, "topSquash"), 0, 0.6);
+  const bounceCount = Math.round(
+    clampNumber(getNumberParam(animation, "bounceCount"), 0, 8),
+  );
+  const bounceDecay = clampNumber(
+    getNumberParam(animation, "bounceDecay"),
+    0.05,
+    0.95,
+  );
+  const landSquash = clampNumber(
+    getNumberParam(animation, "landSquash"),
+    0,
+    0.9,
+  );
+
+  let offsetY = 0;
+  let scaleXRatio = 1;
+  let scaleYRatio = 1;
+  if (p < anticipationRatio) {
+    const phase = clampNumber(p / anticipationRatio, 0, 1);
+    const wave = Math.sin(phase * Math.PI);
+    const squashWave = easeProgress(phase, "easeOutQuad");
+    offsetY = -height * 0.06 * wave;
+    scaleXRatio *= 1 + squash * 0.55 * squashWave;
+    scaleYRatio *= Math.max(0.1, 1 - squash * squashWave);
+  } else {
+    const jumpProgress = clampNumber(
+      (p - anticipationRatio) / Math.max(1 - anticipationRatio, 0.0001),
+      0,
+      1,
+    );
+    const cache = getBounceJumpCache(
+      animation,
+      height,
+      bounceCount,
+      bounceDecay,
+    );
+    let accumulated = 0;
+    let currentStart = 0;
+    let currentEnd = 1;
+    let currentHeight = cache.lobeHeights[0] ?? height;
+    let currentIndex = 0;
+    for (let index = 0; index < cache.lobeHeights.length; index += 1) {
+      const lobeHeight = cache.lobeHeights[index];
+      const span =
+        Math.sqrt(Math.max(lobeHeight, 1)) /
+        Math.max(cache.totalWeight, 0.0001);
+      currentStart = accumulated;
+      currentEnd = accumulated + span;
+      currentHeight = lobeHeight;
+      currentIndex = index;
+      if (
+        jumpProgress <= currentEnd ||
+        lobeHeight === cache.lobeHeights[cache.lobeHeights.length - 1]
+      ) {
+        break;
+      }
+      accumulated = currentEnd;
+    }
+    const lobeProgress = clampNumber(
+      (jumpProgress - currentStart) /
+        Math.max(currentEnd - currentStart, 0.0001),
+      0,
+      1,
+    );
+    offsetY = 4 * currentHeight * lobeProgress * (1 - lobeProgress);
+
+    const velocity = 1 - 2 * lobeProgress;
+    const flightStretch = Math.max(0, velocity) * stretch;
+    const apex = 1 - clampNumber(Math.abs(lobeProgress - 0.5) / 0.18, 0, 1);
+    const landing =
+      lobeProgress < 0.5
+        ? 1 - clampNumber(lobeProgress / 0.14, 0, 1)
+        : 1 - clampNumber((1 - lobeProgress) / 0.14, 0, 1);
+    const lobeIndex = height === 0 ? 0 : currentIndex;
+    const decayScale = Math.pow(bounceDecay, Math.max(0, lobeIndex));
+    const landingSquash = landSquash * landing * decayScale;
+    const topCompress = topSquash * apex;
+    scaleYRatio *= Math.max(
+      0.1,
+      1 + flightStretch - landingSquash - topCompress,
+    );
+    scaleXRatio *= Math.max(
+      0.1,
+      1 - flightStretch * 0.35 + landingSquash * 0.55 + topCompress * 0.35,
+    );
+  }
+  result.transform.y += offsetY;
+  result.transform.scaleX *= scaleXRatio;
+  result.transform.scaleY *= scaleYRatio;
+}
+
+function getBounceJumpCache(
+  animation: V5GAnimationConfig,
+  height: number,
+  bounceCount: number,
+  bounceDecay: number,
+): BounceJumpCacheEntry {
+  const cached = bounceJumpCache.get(animation);
+  if (
+    cached?.height === height &&
+    cached.bounceCount === bounceCount &&
+    cached.bounceDecay === bounceDecay
+  ) {
+    return cached;
+  }
+  const lobeCount = Math.max(1, bounceCount + 1);
+  const lobeHeights = new Array<number>(lobeCount);
+  let totalWeight = 0;
+  for (let index = 0; index < lobeCount; index += 1) {
+    const lobeHeight = height * Math.pow(bounceDecay, index);
+    lobeHeights[index] = lobeHeight;
+    totalWeight += Math.sqrt(Math.max(lobeHeight, 1));
+  }
+  const entry = {
+    height,
+    bounceCount,
+    bounceDecay,
+    lobeHeights,
+    totalWeight,
+  };
+  bounceJumpCache.set(animation, entry);
+  return entry;
+}
+
 function sampleShake(
   result: V5GAnimationSampleResult,
   animation: V5GAnimationConfig,
@@ -584,11 +740,63 @@ function sampleRotate(
   animation: V5GAnimationConfig,
   progress: number,
 ): void {
-  result.transform.rotation += lerp(
+  if (Object.prototype.hasOwnProperty.call(animation.params, "turns")) {
+    const pressure = clampNumber(getNumberParam(animation, "pressure"), 0, 0.8);
+    const motionProgress = easeSpinProgress(
+      progress,
+      getNumberParam(animation, "accelRatio"),
+      getNumberParam(animation, "decelRatio"),
+    );
+    const rotation =
+      getNumberParam(animation, "turns") *
+      360 *
+      getNumberParam(animation, "direction") *
+      motionProgress;
+    if (pressure > 0.001) {
+      result.transform.scaleX *=
+        1 +
+        pressure *
+          clampNumber(getNumberParam(animation, "pressureStretch"), 0, 1);
+      result.transform.scaleY *= Math.max(0.1, 1 - pressure);
+      result.visualRotation += rotation;
+    } else {
+      result.transform.rotation += rotation;
+    }
+    return;
+  }
+  result.transform.rotation += lerpOvershoot(
     getNumberParam(animation, "fromRotation"),
     getNumberParam(animation, "toRotation"),
     progress,
   );
+}
+
+function easeSpinProgress(
+  progress: number,
+  accelRatio: number,
+  decelRatio: number,
+): number {
+  const t = clampNumber(progress, 0, 1);
+  const accel = clampNumber(accelRatio, 0, 0.8);
+  const decel = clampNumber(decelRatio, 0, 0.8);
+  const totalEase = accel + decel;
+  if (totalEase <= 0.0001) return t;
+  const normalizedAccel = totalEase > 0.95 ? (accel / totalEase) * 0.95 : accel;
+  const normalizedDecel = totalEase > 0.95 ? (decel / totalEase) * 0.95 : decel;
+  const linearSpan = Math.max(0, 1 - normalizedAccel - normalizedDecel);
+  const speedArea = linearSpan + normalizedAccel * 0.5 + normalizedDecel * 0.5;
+  if (speedArea <= 0.0001) return t;
+  if (t <= normalizedAccel && normalizedAccel > 0) {
+    const phase = t / normalizedAccel;
+    return (normalizedAccel * phase * phase * 0.5) / speedArea;
+  }
+  if (t >= 1 - normalizedDecel && normalizedDecel > 0) {
+    const phase = (t - (1 - normalizedDecel)) / normalizedDecel;
+    const beforeDecel = normalizedAccel * 0.5 + linearSpan;
+    const decelArea = normalizedDecel * (phase - phase * phase * 0.5);
+    return (beforeDecel + decelArea) / speedArea;
+  }
+  return (normalizedAccel * 0.5 + (t - normalizedAccel)) / speedArea;
 }
 
 function sampleSourceOpacity(

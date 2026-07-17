@@ -140,6 +140,17 @@ describe("anieditorv5viewer main", () => {
     expect(getButton("Play").disabled).toBe(false);
   });
 
+  it("uploads a synthetic VNI_0.087 contract and summarizes basic/bounce capabilities", async () => {
+    await mountViewer();
+    await uploadFile(createVNI087File());
+
+    expect(playerMock.instances).toHaveLength(1);
+    const summary = document.querySelector(".viewer-summary")?.textContent;
+    expect(summary).toContain("schema VNI_0.087");
+    expect(summary).toContain("bounce_jump");
+    expect(summary).toContain("1 basic tracks, 2 points");
+  });
+
   it("shows Pixi precompose mask summary for uploaded runtime projects", async () => {
     await mountViewer();
     await uploadFile(createPrecomposeMaskFile());
@@ -617,6 +628,49 @@ function createPrecomposeMaskFile(): File {
   });
   delete (project.layers[1] as { text?: string }).text;
   return createZipFile("precompose-mask.zip", project);
+}
+
+function createVNI087File(): File {
+  const project = createUiTestProject();
+  project.schemaVersion = "VNI_0.087";
+  Object.assign(project.layers[0], {
+    basicAnimation: {
+      opacity: { enabled: false, points: [] },
+      positionX: {
+        enabled: true,
+        points: [
+          { id: "x0", time: 0, value: 0, easing: "linear" },
+          { id: "x1", time: 1, value: 100, easing: "easeOutQuad" },
+        ],
+      },
+      positionY: { enabled: false, points: [] },
+      scaleX: { enabled: false, points: [] },
+      scaleY: { enabled: false, points: [] },
+      rotation: { enabled: false, points: [] },
+    },
+    animations: [
+      {
+        id: "bounce",
+        type: "bounce_jump",
+        startTime: 0,
+        duration: 1,
+        enabled: true,
+        seed: 1,
+        params: {
+          height: 100,
+          anticipationRatio: 0.18,
+          squash: 0.28,
+          stretch: 0.18,
+          topSquash: 0.08,
+          bounceCount: 1,
+          bounceDecay: 0.45,
+          landSquash: 0.22,
+          easing: "linear",
+        },
+      },
+    ],
+  });
+  return createZipFile("vni-087.zip", project);
 }
 
 function createLegacyMaskFile(): File {

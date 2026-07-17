@@ -98,6 +98,10 @@ README and tests:
 - Layer animation particles and live particle draining.
 - VNI_0.074 `multi_move`, including strict `pointsJson`, ended transform handoff,
   and empty-frame hiding.
+- VNI_0.087 six-track `basicAnimation`, `bounce_jump`, current/legacy rotate,
+  and pressure-separated outer scale plus inner visual rotation. Basic tracks
+  run before the preset stack; segments use the arriving point's easing and
+  hold both endpoints.
 - `shatter`, `glow`, `safe_glow`, `particle_stream`, and `chaser_light`.
 - Layer masks, including Pixi-preview-compatible `precompose_light_alpha` for
   light-mask use cases.
@@ -111,6 +115,12 @@ Invalid data fails fast. Missing assets, malformed numeric fields, invalid
 `multi_move` `pointsJson`, unknown animation/easing/blend modes, unsupported
 group/parent/keyframe structures, texture size mismatches, and manifest/profile
 mismatches throw instead of rendering placeholders.
+
+The runtime does not migrate non-empty legacy layer `keyframes`. It also does
+not expose the inner pressure-rotation container: hosts use `VNIPlayer` and the
+public samplers, never private Pixi layer nodes. Historical
+`engineTarget.name: "cocos_creator"` metadata does not select a Cocos or
+`legacy_alpha` path in this Pixi runtime.
 
 ## Runtime Boundaries
 

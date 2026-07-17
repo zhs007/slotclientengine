@@ -1,6 +1,7 @@
 export * from "./types.js";
 export * from "./coordinates.js";
 export * from "./animation-sampler.js";
+export * from "./basic-animation.js";
 export * from "./particle-sampler.js";
 export * from "./particle-runtime.js";
 export * from "./chaser-light-sampler.js";

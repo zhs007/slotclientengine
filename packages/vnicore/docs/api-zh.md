@@ -46,6 +46,7 @@
 - `sampleProjectAtTime(project, time)`: 采样整个 project。
 - `sampleLayerAtTime(layer, time)`: 采样单 layer。
 - `sampleLayerAnimationsAtTime(base, animations, time)`: 采样 animation 栈，包含 VNI_0.074 `multi_move`、结束位移持续采样和不裁掉超调的位移插值。
+- `sampleBasicAnimationAtTime(layer, time)` / `sampleBasicAnimationTrack(track, baseValue, time)`: 采样 VNI_0.087 六条基础属性轨道；先于 preset stack，段 easing 属于右点，端点持续。
 - `getSequenceFrameAssetId(layer, time)`: 按 sequence 配置和当前时间解析当前帧 asset id；非 loop 序列停在最后一帧。
 - `getLayerDisplayAssetId(layer, time)` / `getLayerDisplayAsset(layer, time, assetsById)`: 获取 image/sequence layer 当前显示资源。
 - `sampleParticleSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样粒子 sprite。
@@ -130,6 +131,8 @@ Layer group 合同：
 
 - `idle`: coverage-only no-op，不改 transform/opacity。
 - `multi_move`: VNI_0.074 多段位移，要求 `pointsJson` 为 JSON string 数组，每个点声明 `x/y/time/easing`；每段使用到达点 easing，`backOut` 等超调不被 clamp。非法 JSON、非数组、少于两个点、非 finite 数字、坐标越界、time 越过 animation duration 或未知 easing 都显式失败。
+- `bounce_jump`: VNI_0.087 弹跳，严格要求 `height/anticipationRatio/squash/stretch/topSquash/bounceCount/bounceDecay/landSquash`；只在自身闭区间内参与采样。
+- `rotate`: 旧合同严格使用 `fromRotation/toRotation`；VNI_0.087 新合同严格使用 `turns/direction/accelRatio/decelRatio/pressure/pressureStretch`。两组不能混用。pressure 开启时 sampled outer transform 保持不累加该旋转，旋转量进入 runtime 内部 `visualRotation` 并应用到稳定 content root。
 - `shatter`: deterministic render effect，要求 `count/pieceSize/force/impactAngle/spreadAngle/gravity/spin/sourceOpacity`，`fadeOut` 可选 boolean。
 - `glow`: deterministic render effect，要求 `intensity/spread/minAlpha/maxAlpha/pulses/blendMode`，`keepOriginal` 可选 boolean；`blendMode` 数值为 `0=add`、`1=screen`、`2=lighten`。
 - `safe_glow`: 普通同图副本高亮，要求 `spread/minOpacity/maxOpacity/pulses`，`keepOriginal` 可选 boolean；副本继承当前 layer `blendMode`，不进入 `VNIRenderEffectType`。

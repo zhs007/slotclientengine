@@ -2,6 +2,8 @@
 
 `@slotclientengine/vnicore` is the Pixi.js v8 runtime core for VNI animation exports. It owns export JSON typing, validation, deterministic sampling, asset URL resolving, Pixi texture-size checks, rendering, diagnostics, and playback controls.
 
+VNI_0.087 adds strict six-track `basicAnimation` sampling (`opacity`, position, scale, and rotation), `bounce_jump`, and a current rotate contract with acceleration/deceleration plus pressure rotation. Basic tracks are sampled before the preset/particle stack; a segment uses the arriving (right-hand) point's easing and holds its first/last endpoint. Pressure rotate keeps the outer layer ellipse upright while rotating only the stable inner content root. Legacy `fromRotation/toRotation` rotate remains supported, while non-empty legacy layer `keyframes` remain rejected rather than migrated at runtime.
+
 This package is separate from `@slotclientengine/anieditorv5runtime-cc`: `vnicore` targets Pixi.js/browser runtimes, while `anieditorv5runtime-cc` targets Cocos Creator 3.8.6 projects. Do not share Cocos `cc` shims, standalone files, or component examples with this package.
 
 ## Public Imports

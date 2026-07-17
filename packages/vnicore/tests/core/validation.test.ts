@@ -97,6 +97,16 @@ const newAnimationParams: Readonly<
   scale_in: { fromScale: 0, toScale: 1, fadeIn: true },
   scale_out: { fromScale: 1, toScale: 0, fadeOut: true },
   pop: { peakScale: 1.25, settleScale: 1, peakAt: 0.4 },
+  bounce_jump: {
+    height: 300,
+    anticipationRatio: 0.18,
+    squash: 0.28,
+    stretch: 0.18,
+    topSquash: 0.08,
+    bounceCount: 2,
+    bounceDecay: 0.45,
+    landSquash: 0.22,
+  },
   shake: { amplitudeX: 12, amplitudeY: 4, cycles: 3, decay: true },
   blink: { minOpacity: 0.1, maxOpacity: 1, blinks: 2, endOpacity: 1 },
   rotate: { fromRotation: 0, toRotation: 90 },
@@ -406,6 +416,109 @@ function expectInvalid(
 }
 
 describe("validation", () => {
+  it("accepts a strict VNI_0.087 basic animation contract", () => {
+    const project = validProject();
+    project.schemaVersion = "VNI_0.087";
+    project.layers[0].basicAnimation = createBasicAnimation();
+
+    expect(() => validateV5GProject(project)).not.toThrow();
+  });
+
+  it("rejects malformed, unsorted, excessive, and out-of-range basic tracks", () => {
+    expectInvalid((project) => {
+      project.layers[0].basicAnimation = createBasicAnimation();
+      project.layers[0].basicAnimation.positionX.points[0].value = 5001;
+    }, "basicAnimation.positionX.points[0].value");
+    expectInvalid((project) => {
+      project.layers[0].basicAnimation = createBasicAnimation();
+      project.layers[0].basicAnimation.positionX.points[0].time = 1;
+      project.layers[0].basicAnimation.positionX.points[1].time = 0;
+    }, "must be sorted");
+    expectInvalid((project) => {
+      project.layers[0].basicAnimation = createBasicAnimation();
+      project.layers[0].basicAnimation.positionX.points[1].time =
+        project.stage.duration + 0.01;
+    }, "basicAnimation.positionX.points[1].time");
+    expectInvalid((project) => {
+      project.layers[0].basicAnimation = createBasicAnimation();
+      project.layers[0].basicAnimation.opacity.points = Array.from(
+        { length: 201 },
+        (_, index) => ({
+          id: `point-${index}`,
+          time: 0,
+          value: 1,
+          easing: "linear" as const,
+        }),
+      );
+    }, "at most 200 points");
+
+    const malformed = structuredClone(projectData) as unknown as {
+      layers: Array<Record<string, unknown>>;
+    };
+    malformed.layers[0].basicAnimation = {
+      ...createBasicAnimation(),
+      rotation: undefined,
+    };
+    expect(() => assertV5GProject(malformed)).toThrow(
+      "basicAnimation.rotation must be an object",
+    );
+
+    const unknownEasing = structuredClone(projectData) as unknown as {
+      layers: Array<Record<string, unknown>>;
+    };
+    const basic = createBasicAnimation();
+    basic.positionX.points[1].easing = "mystery" as "backOut";
+    unknownEasing.layers[0].basicAnimation = basic;
+    expect(() => assertV5GProject(unknownEasing)).toThrow(
+      "easing is unsupported",
+    );
+  });
+
+  it("validates bounce_jump and the disjoint current/legacy rotate contracts", () => {
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("bounce_jump", {
+          ...newAnimationParams.bounce_jump,
+          bounceCount: 1.5,
+        }),
+      ];
+    }, "bounceCount must be an integer");
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("rotate", {
+          turns: 1,
+          direction: 1,
+          accelRatio: 0.2,
+        }),
+      ];
+    }, "complete VNI_0.087");
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("rotate", {
+          fromRotation: 0,
+          toRotation: 360,
+          turns: 1,
+          direction: 1,
+          accelRatio: 0.2,
+          decelRatio: 0.2,
+          pressure: 0,
+          pressureStretch: 0.35,
+        }),
+      ];
+    }, "either complete legacy");
+    const project = validProject();
+    project.layers[0].animations = [
+      animation("rotate", {
+        turns: -2,
+        direction: -1,
+        accelRatio: 0.2,
+        decelRatio: 0.2,
+        pressure: 0.4,
+        pressureStretch: 0.5,
+      }),
+    ];
+    expect(() => validateV5GProject(project)).not.toThrow();
+  });
   it("accepts all bundled exports", () => {
     for (const data of bundledProjectData) {
       const project = assertV5GProject(data);
@@ -1296,5 +1409,23 @@ function animation(
     enabled: true,
     seed: 1,
     params,
+  };
+}
+
+function createBasicAnimation() {
+  const empty = () => ({ enabled: false, points: [] });
+  return {
+    opacity: empty(),
+    positionX: {
+      enabled: true,
+      points: [
+        { id: "x0", time: 0, value: 0, easing: "linear" as const },
+        { id: "x1", time: 1, value: 100, easing: "backOut" as const },
+      ],
+    },
+    positionY: empty(),
+    scaleX: empty(),
+    scaleY: empty(),
+    rotation: empty(),
   };
 }

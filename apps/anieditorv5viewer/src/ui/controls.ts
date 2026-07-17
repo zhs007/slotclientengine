@@ -578,6 +578,7 @@ export function createViewerControls(
           `${formatTime(currentProject.project.stage.duration)}s duration`,
         ),
         createSummaryItem(getAnimationTypeSummary(currentProject.project)),
+        createSummaryItem(getBasicAnimationSummary(currentProject.project)),
         createSummaryItem(getMaskSummary(currentProject.project)),
       );
       return;
@@ -922,6 +923,21 @@ function getAnimationTypeSummary(project: VNIProjectConfig): string {
   return animationTypes.length > 0
     ? animationTypes.join(", ")
     : "no animations";
+}
+
+function getBasicAnimationSummary(project: VNIProjectConfig): string {
+  let enabledTracks = 0;
+  let points = 0;
+  for (const layer of project.layers) {
+    const basic = layer.basicAnimation;
+    if (!basic) continue;
+    for (const track of Object.values(basic)) {
+      if (!track.enabled) continue;
+      enabledTracks += 1;
+      points += track.points.length;
+    }
+  }
+  return `${enabledTracks} basic tracks, ${points} points`;
 }
 
 function getMaskSummary(project: VNIProjectConfig): string {

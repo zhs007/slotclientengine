@@ -5,6 +5,7 @@ import {
   getAnimationCategory,
   getAnimationPreset,
   getAnimationPresetsByCategory,
+  easeProgress,
   isV5GAnimationType,
   sampleLayerAnimationsAtTime,
   shouldHideLayerOutsideActiveAnimation,
@@ -27,6 +28,8 @@ import {
   createImageLayer,
   createInitialEditorState,
   createRuntimeAsset,
+  normalizeLayerBasicAnimation,
+  normalizeProjectBasicAnimations,
   createSequenceLayer,
   createTextLayer,
   getLayerGroup,
@@ -41,6 +44,9 @@ import type {
   V5GAnimationConfig,
   V5GAnimationParamValue,
   V5GAnimationType,
+  V5GBasicAnimationConfig,
+  V5GBasicAnimationPointConfig,
+  V5GBasicAnimationTrackConfig,
   V5GBlendMode,
   V5GEditorState,
   V5GLayerConfig,
@@ -91,6 +97,24 @@ let timelineAnimationDragState: {
   startClientX: number;
   originalStartTime: number;
   originalDuration: number;
+  groupStartTime: number;
+  groupEndTime: number;
+  selectedAnimations: {
+    layerId: string;
+    animationId: string;
+    originalStartTime: number;
+    duration: number;
+  }[];
+  affectedLayerIds: string[];
+  hasChanged: boolean;
+} | null = null;
+let timelineBasicPointDragState: {
+  pointerId: number;
+  layerId: string;
+  trackKey: V5GBasicTrackKey;
+  pointId: string;
+  startClientX: number;
+  originalTime: number;
   hasChanged: boolean;
 } | null = null;
 let timelinePixelsPerSecond = 120;
@@ -110,6 +134,9 @@ const forcedExpandedTimelineLayerIds = new Set<string>();
 const forcedCollapsedTimelineLayerIds = new Set<string>();
 let autoExpandedTimelineLayerId: string | null = null;
 let selectedAnimationId: string | null = null;
+let selectedBasicPointId: string | null = null;
+const selectedTimelineAnimationIds = new Set<string>();
+let suppressNextTimelineAnimationClickId: string | null = null;
 let animationClipboard:
   | {
       kind: "layer";
@@ -122,6 +149,11 @@ let animationClipboard:
       animation: V5GAnimationConfig;
     }
   | null = null;
+let basicAnimationClipboard: {
+  sourceLayerName: string;
+  basicAnimation: V5GBasicAnimationConfig;
+  activePointCount: number;
+} | null = null;
 let pendingAnimationPaste:
   | { targetLayerId: string; source: "layer-toolbar" }
   | { targetLayerId: string; source: "animation-toolbar" }
@@ -176,6 +208,24 @@ const TIMELINE_TIME_DECIMALS = 2;
 const MIN_PROJECT_DURATION_SECONDS = 0.5;
 const MAX_PROJECT_DURATION_SECONDS = 3600;
 const TIMELINE_PAN_THRESHOLD_PX = 4;
+type V5GBasicTrackKey =
+  "opacity" | "positionX" | "positionY" | "scaleX" | "scaleY" | "rotation";
+const BASIC_TRACK_KEYS: V5GBasicTrackKey[] = [
+  "opacity",
+  "positionX",
+  "positionY",
+  "scaleX",
+  "scaleY",
+  "rotation",
+];
+const BASIC_TRACK_LABELS: Record<V5GBasicTrackKey, string> = {
+  opacity: "透明度",
+  positionX: "位置 X",
+  positionY: "位置 Y",
+  scaleX: "缩放 X",
+  scaleY: "缩放 Y",
+  rotation: "旋转",
+};
 
 const els = {
   pixiContainer: getElement("pixi-container"),
@@ -270,6 +320,7 @@ const els = {
   propLayerGroup: getSelect("prop-layer-group"),
   animCountLabel: getElement("anim-count-label"),
 
+  basicAnimPanel: getElement("basic-anim-panel"),
   animList: getElement("anim-list"),
 
   appMain: getElement("app-main"),
@@ -533,6 +584,15 @@ function bindEvents(): void {
   els.btnAnimCategoryParticle.addEventListener("click", () => {
     showAnimationDraftModule("particle");
   });
+  els.basicAnimPanel.addEventListener("click", (event) => {
+    handleBasicAnimationPanelClick(event);
+  });
+  els.basicAnimPanel.addEventListener("change", (event) => {
+    handleBasicAnimationPanelInput(event);
+  });
+  els.basicAnimPanel.addEventListener("focusin", (event) => {
+    handleBasicAnimationPanelFocus(event);
+  });
 
   els.btnPasteCopiedAnim.addEventListener("click", () =>
     requestPasteAnimationsToSelectedLayer("animation-toolbar"),
@@ -567,22 +627,26 @@ function bindEvents(): void {
         startTimelinePlayheadDrag(event);
         return;
       }
+      if (isTimelineBasicPointTarget(event.target)) return;
       if (isTimelineAnimationTarget(event.target)) return;
       startTimelinePointerInteraction(event);
     });
     timelineSurface.addEventListener("pointermove", (event) => {
       updateTimelinePlayheadDrag(event);
       updateTimelineAnimationDrag(event);
+      updateTimelineBasicPointDrag(event);
       updateTimelinePointerInteraction(event);
     });
     timelineSurface.addEventListener("pointerup", (event) => {
       finishTimelinePlayheadDrag(event);
       finishTimelineAnimationDrag(event);
+      finishTimelineBasicPointDrag(event);
       finishTimelinePointerInteraction(event);
     });
     timelineSurface.addEventListener("pointercancel", (event) => {
       cancelTimelinePlayheadDrag(event);
       cancelTimelineAnimationDrag(event);
+      cancelTimelineBasicPointDrag(event);
       cancelTimelinePointerInteraction(event);
     });
   }
@@ -1247,6 +1311,7 @@ function renderStaticUi(): void {
   normalizeProjectLayerGroups(state.project);
   normalizeProjectMasks(state.project);
   normalizeProjectSequences(state.project);
+  normalizeProjectBasicAnimations(state.project);
   const timelineScrollBackup = els.timelineTrack.scrollTop;
   els.layerList.innerHTML = "";
   els.timelineItems.innerHTML = "";
@@ -2265,7 +2330,7 @@ function duplicateLayerAt(index: number): void {
 
   state.project.layers.splice(index + 1, 0, copiedLayer);
   state.selectedLayerId = copiedLayer.id;
-  selectedAnimationId = copiedLayer.animations[0]?.id ?? null;
+  setSelectedTimelineAnimation(copiedLayer.animations[0]?.id ?? null);
   if (copiedLayer.animations.length > 0) {
     setAutoExpandedTimelineLayer(copiedLayer.id);
   }
@@ -2427,6 +2492,7 @@ function removeUnusedAssetById(assetId: string | null): void {
 }
 
 function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
+  sanitizeSelectedTimelineAnimations();
   const scrollBefore = options.scrollTop ?? els.timelineTrack.scrollTop;
   els.timelineItems.innerHTML = "";
   const duration = normalizeProjectDurationToAnimationEnd({ silent: true });
@@ -2445,11 +2511,15 @@ function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
       "还没有图层。新增图片或文字后，可在这里查看全局动画时间。";
     els.timelineItems.appendChild(empty);
     els.timelineTrack.scrollTop = scrollBefore;
+    renderGlobalTimelinePlayhead();
     return;
   }
 
   for (const layer of orderedLayers) {
     const enabledAnimations = layer.animations.filter((item) => item.enabled);
+    const enabledBasicTracks = getEnabledBasicTimelineTracks(layer);
+    const timelineItemCount =
+      enabledAnimations.length + enabledBasicTracks.length;
     const layerIndex = state.project.layers.findIndex(
       (item) => item.id === layer.id,
     );
@@ -2477,11 +2547,11 @@ function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
     expandButton.type = "button";
     expandButton.className = [
       "flex h-5 w-5 shrink-0 rotate-90 items-center justify-center rounded bg-zinc-950 font-mono text-[10px] font-semibold leading-none text-zinc-400 transition",
-      enabledAnimations.length > 0
+      timelineItemCount > 0
         ? "hover:bg-zinc-800 hover:text-zinc-100"
         : "cursor-default opacity-40",
     ].join(" ");
-    expandButton.disabled = enabledAnimations.length === 0;
+    expandButton.disabled = timelineItemCount === 0;
     expandButton.title = isExpanded
       ? isForcedExpanded
         ? "关闭此轴"
@@ -2503,7 +2573,7 @@ function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
         <i class="fa-solid ${getLayerIconClass(layer)} ${getLayerIconColorClass(layer, false, isLayerEffectivelyVisible(state.project, layer))}"></i>
         <span class="truncate ${selected ? "text-zinc-100" : "text-zinc-300"}">${escapeHtml(layer.name)}</span>
       </div>
-      <div class="mt-0.5 font-mono text-[9px] text-slate-500">L${layerIndex + 1} · ${enabledAnimations.length} 个动画</div>
+      <div class="mt-0.5 font-mono text-[9px] text-slate-500">L${layerIndex + 1} · ${enabledAnimations.length} 模块 · ${enabledBasicTracks.length} 关键帧</div>
     `;
     label.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -2512,11 +2582,10 @@ function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
     labelWrap.append(expandButton, label);
 
     const laneStack = document.createElement("div");
-    laneStack.className = isExpanded ? "space-y-1" : "";
+    laneStack.className = isExpanded ? "space-y-0.5" : "";
     const summaryLane = createTimelineLane(contentWidth, "h-5");
-    appendTimelinePlayhead(summaryLane.content);
 
-    if (enabledAnimations.length === 0) {
+    if (timelineItemCount === 0) {
       const none = document.createElement("div");
       none.className =
         "absolute inset-y-0 left-0 flex items-center px-2 text-[9px] text-slate-600";
@@ -2524,6 +2593,14 @@ function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
       summaryLane.content.appendChild(none);
       laneStack.appendChild(summaryLane.track);
     } else if (!isExpanded) {
+      for (const trackKey of enabledBasicTracks) {
+        appendTimelineBasicPointMarkers(
+          summaryLane.content,
+          layer,
+          trackKey,
+          false,
+        );
+      }
       for (const animation of enabledAnimations) {
         appendTimelineAnimationBlock(
           summaryLane.content,
@@ -2537,11 +2614,26 @@ function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
       const hint = document.createElement("div");
       hint.className = "px-1 pb-0.5 text-[9px] text-slate-500";
       hint.textContent =
-        "拖动动画块修改开始秒；拖右侧把手修改持续秒；全部按 0.05s 吸附。";
+        "拖动动画块/关键帧节点修改时间；拖右侧把手修改持续秒；全部按 0.05s 吸附。";
       laneStack.appendChild(hint);
+      for (const trackKey of enabledBasicTracks) {
+        const basicLane = createTimelineLane(
+          contentWidth,
+          "h-5",
+          BASIC_TRACK_LABELS[trackKey],
+          `${BASIC_TRACK_LABELS[trackKey]} 关键帧动画节点`,
+          "text-zinc-200/80",
+        );
+        appendTimelineBasicPointMarkers(
+          basicLane.content,
+          layer,
+          trackKey,
+          true,
+        );
+        laneStack.appendChild(basicLane.track);
+      }
       for (const animation of enabledAnimations) {
-        const animationLane = createTimelineLane(contentWidth, "h-6");
-        appendTimelinePlayhead(animationLane.content);
+        const animationLane = createTimelineLane(contentWidth, "h-5");
         appendTimelineAnimationBlock(
           animationLane.content,
           layer,
@@ -2557,6 +2649,7 @@ function renderTimelineAnimations(options: { scrollTop?: number } = {}): void {
     els.timelineItems.appendChild(row);
   }
   els.timelineTrack.scrollTop = scrollBefore;
+  renderGlobalTimelinePlayhead();
 }
 
 function createTimelineLane(
@@ -2580,7 +2673,9 @@ function createTimelineLane(
 
   if (label) {
     const laneLabel = document.createElement("div");
-    laneLabel.className = `pointer-events-none absolute inset-y-0 left-0 z-10 flex max-w-[92px] items-center truncate px-1 text-[9px] ${labelClass}`;
+    laneLabel.className = `pointer-events-none absolute inset-y-0 left-3 z-30 flex max-w-[92px] items-center truncate text-[9px] ${labelClass}`;
+    laneLabel.style.textShadow =
+      "1px 1px 1px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000";
     laneLabel.title = labelTitle ?? label;
     laneLabel.textContent = label;
     track.appendChild(laneLabel);
@@ -2589,14 +2684,55 @@ function createTimelineLane(
   return { track, content };
 }
 
-function appendTimelinePlayhead(content: HTMLElement): void {
+function renderGlobalTimelinePlayhead(): void {
+  for (const existing of els.timelinePanel.querySelectorAll<HTMLElement>(
+    "[data-timeline-playhead]",
+  )) {
+    existing.remove();
+  }
+
+  const rulerRect = els.timelineRulerTrack.getBoundingClientRect();
+  const panelRect = els.timelinePanel.getBoundingClientRect();
+  if (rulerRect.width <= 0) return;
+
+  const playheadContentX = timeToTimelineX(state.playheadSeconds);
+  const visibleX = playheadContentX - timelineScrollLeft;
+  const left = rulerRect.left - panelRect.left + visibleX;
+  const minLeft = rulerRect.left - panelRect.left;
+  const maxLeft = minLeft + rulerRect.width;
+  if (left < minLeft - 8 || left > maxLeft + 8) return;
+
+  const top = rulerRect.top - panelRect.top;
+  const trackRect = els.timelineTrack.getBoundingClientRect();
+  const bottom = trackRect.bottom - panelRect.top;
+  const title = `拖动刻度盘黄色标签预览 ${state.playheadSeconds.toFixed(2)}s`;
+
   const playhead = document.createElement("div");
   playhead.dataset.timelinePlayhead = "true";
   playhead.className =
-    "pointer-events-auto absolute bottom-0 top-0 z-30 w-[7px] -translate-x-1/2 cursor-ew-resize bg-amber-300 shadow shadow-amber-300/60 before:absolute before:-top-1 before:left-1/2 before:h-0 before:w-0 before:-translate-x-1/2 before:border-x-[4px] before:border-t-[5px] before:border-x-transparent before:border-t-amber-300 after:absolute after:-bottom-1 after:left-1/2 after:h-0 after:w-0 after:-translate-x-1/2 after:border-x-[4px] after:border-b-[5px] after:border-x-transparent after:border-b-amber-300";
-  playhead.style.left = `${timeToTimelineX(state.playheadSeconds)}px`;
-  playhead.title = `拖动黄色刻度线预览 ${state.playheadSeconds.toFixed(2)}s`;
-  content.appendChild(playhead);
+    "absolute z-40 w-4 -translate-x-1/2 cursor-ew-resize touch-none overflow-visible";
+  playhead.style.left = `${left}px`;
+  playhead.style.top = `${top}px`;
+  playhead.style.height = `${rulerRect.height}px`;
+  playhead.title = title;
+  playhead.addEventListener("pointerdown", (event) => {
+    startTimelinePlayheadDrag(event);
+  });
+
+  const timeLabel = document.createElement("div");
+  timeLabel.dataset.timelinePlayheadLabel = "true";
+  timeLabel.className =
+    "pointer-events-none absolute -top-5 left-1/2 -translate-x-1/2 rounded bg-amber-300 px-1.5 py-0.5 font-mono text-[9px] font-bold text-amber-950 shadow shadow-black/40";
+  timeLabel.textContent = `${state.playheadSeconds.toFixed(2)}s`;
+
+  const line = document.createElement("div");
+  line.className =
+    "pointer-events-none absolute left-1/2 w-px -translate-x-1/2 bg-amber-300 shadow-[0_0_5px_rgba(252,211,77,0.75)]";
+  line.style.top = "0px";
+  line.style.height = `${Math.max(1, bottom - top)}px`;
+
+  playhead.append(timeLabel, line);
+  els.timelinePanel.appendChild(playhead);
 }
 
 function appendTimelineAnimationBlock(
@@ -2607,12 +2743,12 @@ function appendTimelineAnimationBlock(
 ): void {
   const item = document.createElement("div");
   const endTime = animation.startTime + animation.duration;
-  const selected = animation.id === selectedAnimationId;
+  const selected = isTimelineAnimationSelected(animation.id);
   item.dataset.timelineAnimationBlock = "true";
   item.dataset.animationId = animation.id;
   item.dataset.layerId = layer.id;
   item.className = [
-    "absolute top-1/2 h-3 -translate-y-1/2 overflow-hidden rounded-full px-1.5 text-[9px] font-semibold leading-3 text-zinc-950 shadow shadow-black/30",
+    "absolute top-1/2 h-3 -translate-y-1/2 overflow-hidden rounded-none px-1.5 text-[9px] font-semibold leading-3 text-zinc-950 shadow shadow-black/30",
     selected
       ? "bg-amber-300 ring-2 ring-amber-200 shadow-amber-300/40"
       : "bg-zinc-200",
@@ -2626,12 +2762,27 @@ function appendTimelineAnimationBlock(
   item.textContent = `${getAnimationDisplayName(animation)} ${formatTimelineSeconds(animation.startTime)}-${formatTimelineSeconds(endTime)}s`;
   item.addEventListener("click", (event) => {
     event.stopPropagation();
-    selectAnimationFromTimeline(layer.id, animation.id);
+    if (suppressNextTimelineAnimationClickId === animation.id) {
+      suppressNextTimelineAnimationClickId = null;
+      return;
+    }
+    selectAnimationFromTimeline(
+      layer.id,
+      animation.id,
+      event.ctrlKey || event.metaKey,
+    );
   });
   if (editable) {
-    item.addEventListener("pointerdown", (event) =>
-      startTimelineAnimationDrag(event, layer.id, animation.id, "move"),
-    );
+    item.addEventListener("pointerdown", (event) => {
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        suppressNextTimelineAnimationClickId = animation.id;
+        selectAnimationFromTimeline(layer.id, animation.id, true);
+        return;
+      }
+      startTimelineAnimationDrag(event, layer.id, animation.id, "move");
+    });
     const resizeHandle = document.createElement("span");
     resizeHandle.dataset.timelineAnimationResize = "true";
     resizeHandle.className =
@@ -2650,18 +2801,167 @@ function appendTimelineAnimationBlock(
   content.appendChild(item);
 }
 
+function getEnabledBasicTimelineTracks(
+  layer: V5GLayerConfig,
+): V5GBasicTrackKey[] {
+  normalizeLayerBasicAnimation(layer);
+  const basic = layer.basicAnimation;
+  if (!basic) return [];
+  return BASIC_TRACK_KEYS.filter(
+    (trackKey) => basic[trackKey].enabled && basic[trackKey].points.length > 0,
+  );
+}
+
+function appendTimelineBasicPointMarkers(
+  content: HTMLElement,
+  layer: V5GLayerConfig,
+  trackKey: V5GBasicTrackKey,
+  editable: boolean,
+): void {
+  const track = layer.basicAnimation?.[trackKey];
+  if (!track?.enabled || track.points.length === 0) return;
+  const points = [...track.points].sort(
+    (left, right) => left.time - right.time,
+  );
+  if (points.length > 1) {
+    const first = points[0];
+    const last = points[points.length - 1];
+    const startX = timeToTimelineX(first.time);
+    const endX = timeToTimelineX(last.time);
+    const span = document.createElement("div");
+    span.className =
+      "absolute top-1/2 z-10 h-1.5 -translate-y-1/2 rounded-full bg-white/75 shadow shadow-black/30";
+    span.style.left = `${startX}px`;
+    span.style.width = `${Math.max(4, endX - startX)}px`;
+    span.title = `${BASIC_TRACK_LABELS[trackKey]} 关键帧动画范围 ${formatTimelineSeconds(first.time)}-${formatTimelineSeconds(last.time)}s`;
+    content.appendChild(span);
+  }
+  for (const point of points) {
+    const marker = document.createElement("button");
+    marker.type = "button";
+    marker.dataset.timelineBasicPoint = "true";
+    marker.dataset.layerId = layer.id;
+    marker.dataset.basicTrackKey = trackKey;
+    marker.dataset.pointId = point.id;
+    const isSelected = selectedBasicPointId === point.id;
+    marker.className = [
+      "absolute top-1/2 z-20 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[2px] border text-[0px] shadow shadow-black/40 transition-colors",
+      isSelected
+        ? "border-amber-950 bg-amber-300 hover:bg-amber-300"
+        : editable
+          ? "cursor-ew-resize touch-none border-zinc-950 bg-white hover:border-amber-950 hover:bg-amber-300"
+          : "cursor-pointer border-zinc-950/70 bg-white/90 hover:border-amber-950 hover:bg-amber-300",
+    ].join(" ");
+    marker.style.left = `${timeToTimelineX(point.time)}px`;
+    marker.title = `${BASIC_TRACK_LABELS[trackKey]} · ${formatTimelineSeconds(point.time)}s · ${roundTo(point.value, 4)}；${editable ? "拖动修改时间" : "点击选中图层"}`;
+    marker.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.selectedLayerId = layer.id;
+      setAutoExpandedTimelineLayer(layer.id);
+      clearSelectedTimelineAnimations();
+      selectedBasicPointId = point.id;
+      renderAll();
+      scrollSelectedBasicPointIntoView();
+      showStatus(
+        `已选中「${layer.name}」的 ${BASIC_TRACK_LABELS[trackKey]} 关键帧节点：${formatTimelineSeconds(point.time)}s。`,
+        "info",
+      );
+    });
+    if (editable) {
+      marker.addEventListener("pointerdown", (event) =>
+        startTimelineBasicPointDrag(event, layer.id, trackKey, point.id),
+      );
+    }
+    content.appendChild(marker);
+  }
+}
+
 function selectAnimationFromTimeline(
   layerId: string,
   animationId: string,
+  multiSelect = false,
 ): void {
   state.selectedLayerId = layerId;
   selectedAnimationId = animationId;
+  selectedBasicPointId = null;
+  if (multiSelect) {
+    if (selectedTimelineAnimationIds.has(animationId)) {
+      selectedTimelineAnimationIds.delete(animationId);
+      if (selectedTimelineAnimationIds.size === 0) {
+        selectedTimelineAnimationIds.add(animationId);
+      }
+    } else {
+      selectedTimelineAnimationIds.add(animationId);
+    }
+  } else {
+    selectedTimelineAnimationIds.clear();
+    selectedTimelineAnimationIds.add(animationId);
+  }
   setAutoExpandedTimelineLayer(layerId);
-  collapsedAnimationIds.delete(animationId);
+  collapseOtherAnimationModules(animationId);
   stopPlayback({ silent: true, keepPlayhead: true });
   renderAll();
   scrollSelectedAnimationModuleIntoView();
-  showStatus("已选中动画模块，右侧对应模块已展开并高亮。", "info");
+  showStatus(
+    selectedTimelineAnimationIds.size > 1
+      ? `已多选 ${selectedTimelineAnimationIds.size} 个动画块；松开 Ctrl/Cmd 后拖动任意已选块可整体平移。`
+      : "已选中动画模块，右侧对应模块已展开并高亮。",
+    "info",
+  );
+}
+
+function isTimelineAnimationSelected(animationId: string): boolean {
+  return (
+    selectedTimelineAnimationIds.has(animationId) ||
+    (selectedTimelineAnimationIds.size === 0 &&
+      animationId === selectedAnimationId)
+  );
+}
+
+function sanitizeSelectedTimelineAnimations(): void {
+  const existingIds = new Set<string>();
+  for (const layer of state.project.layers) {
+    for (const animation of layer.animations) existingIds.add(animation.id);
+  }
+  for (const animationId of [...selectedTimelineAnimationIds]) {
+    if (!existingIds.has(animationId)) {
+      selectedTimelineAnimationIds.delete(animationId);
+    }
+  }
+  if (selectedAnimationId && existingIds.has(selectedAnimationId)) {
+    if (selectedTimelineAnimationIds.size === 0) {
+      selectedTimelineAnimationIds.add(selectedAnimationId);
+    }
+  } else {
+    selectedAnimationId = null;
+  }
+}
+
+function setSelectedTimelineAnimation(animationId: string | null): void {
+  selectedAnimationId = animationId;
+  selectedBasicPointId = null;
+  selectedTimelineAnimationIds.clear();
+  if (animationId) selectedTimelineAnimationIds.add(animationId);
+  collapseOtherAnimationModules(animationId);
+}
+
+function collapseOtherAnimationModules(animationId: string | null): void {
+  if (!animationId) return;
+  for (const layer of state.project.layers) {
+    for (const animation of layer.animations) {
+      if (animation.id === animationId) {
+        collapsedAnimationIds.delete(animation.id);
+      } else {
+        collapsedAnimationIds.add(animation.id);
+      }
+    }
+  }
+}
+
+function clearSelectedTimelineAnimations(): void {
+  selectedAnimationId = null;
+  selectedTimelineAnimationIds.clear();
+  selectedBasicPointId = null;
 }
 
 function isTimelineLayerExpanded(layerId: string): boolean {
@@ -2738,7 +3038,11 @@ function syncToggleAllTimelineLayersButton(): void {
 
 function getExpandableTimelineLayerIds(): string[] {
   return state.project.layers
-    .filter((layer) => layer.animations.some((animation) => animation.enabled))
+    .filter(
+      (layer) =>
+        layer.animations.some((animation) => animation.enabled) ||
+        getEnabledBasicTimelineTracks(layer).length > 0,
+    )
     .map((layer) => layer.id);
 }
 
@@ -2766,13 +3070,6 @@ function renderTimelineRuler(duration: number, contentWidth: number): void {
   const firstTickIndex = Math.floor(timelineXToTime(visibleStart) / minorStep);
   const lastTickIndex = Math.ceil(timelineXToTime(visibleEnd) / minorStep);
   const labelStep = getTimelineLabelStepSeconds();
-  const rulerPlayhead = document.createElement("div");
-  rulerPlayhead.dataset.timelinePlayhead = "true";
-  rulerPlayhead.className =
-    "pointer-events-auto absolute bottom-0 top-0 z-30 w-[7px] -translate-x-1/2 cursor-ew-resize bg-amber-300 shadow shadow-amber-300/60 before:absolute before:-top-1 before:left-1/2 before:h-0 before:w-0 before:-translate-x-1/2 before:border-x-[4px] before:border-t-[5px] before:border-x-transparent before:border-t-amber-300 after:absolute after:-bottom-1 after:left-1/2 after:h-0 after:w-0 after:-translate-x-1/2 after:border-x-[4px] after:border-b-[5px] after:border-x-transparent after:border-b-amber-300";
-  rulerPlayhead.style.left = `${timeToTimelineX(state.playheadSeconds)}px`;
-  rulerPlayhead.title = `拖动黄色刻度线预览 ${state.playheadSeconds.toFixed(2)}s`;
-  rulerContent.appendChild(rulerPlayhead);
 
   for (let index = firstTickIndex; index <= lastTickIndex; index += 1) {
     const seconds = roundTo(index * minorStep, TIMELINE_TIME_DECIMALS);
@@ -2849,7 +3146,7 @@ function selectLayerFromTimeline(layerId: string): void {
       (animation) => animation.id === selectedAnimationId,
     )
   ) {
-    selectedAnimationId = null;
+    clearSelectedTimelineAnimations();
   }
   renderAll();
 }
@@ -2865,7 +3162,7 @@ function selectLayerFromLayerList(layerId: string): void {
   if (
     !layer.animations.some((animation) => animation.id === selectedAnimationId)
   ) {
-    selectedAnimationId = null;
+    clearSelectedTimelineAnimations();
   }
 
   renderAll();
@@ -2953,6 +3250,13 @@ function isTimelineAnimationTarget(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLElement &&
     target.closest("[data-timeline-animation-block]") !== null
+  );
+}
+
+function isTimelineBasicPointTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    target.closest("[data-timeline-basic-point]") !== null
   );
 }
 
@@ -3071,7 +3375,7 @@ function rerollAnimationSeed(layerId: string, animationId: string): void {
 
   pushUndoSnapshot();
   animation.seed = createAnimationSeed();
-  selectedAnimationId = animation.id;
+  setSelectedTimelineAnimation(animation.id);
   setAutoExpandedTimelineLayer(layer.id);
   collapsedAnimationIds.delete(animation.id);
   clearLayerPreview(layer.id);
@@ -3152,11 +3456,8 @@ function confirmPendingAnimationPaste(): void {
   targetLayer.animations.push(...pastedAnimations);
   targetLayer.animations.sort((a, b) => a.startTime - b.startTime);
   state.selectedLayerId = targetLayer.id;
-  selectedAnimationId = pastedAnimations[0]?.id ?? null;
+  setSelectedTimelineAnimation(pastedAnimations[0]?.id ?? null);
   setAutoExpandedTimelineLayer(targetLayer.id);
-  for (const animation of pastedAnimations) {
-    collapsedAnimationIds.delete(animation.id);
-  }
   pendingAnimationPaste = null;
   normalizeProjectDurationToAnimationEnd({ silent: true });
   clearPreviewBaseCache();
@@ -3387,15 +3688,13 @@ function createAnimationFromDraft(layerId: string, module: HTMLElement): void {
 
   pendingAnimationDraft = null;
 
-  selectedAnimationId = nextAnimation.id;
-
-  setAutoExpandedTimelineLayer(layer.id);
-
   layer.animations.push(nextAnimation);
 
   layer.animations.sort((a, b) => a.startTime - b.startTime);
 
-  collapsedAnimationIds.delete(nextAnimation.id);
+  setSelectedTimelineAnimation(nextAnimation.id);
+
+  setAutoExpandedTimelineLayer(layer.id);
 
   normalizeProjectDurationToAnimationEnd({ silent: true });
 
@@ -3812,6 +4111,16 @@ function getLongestAnimationEndTime(): number {
     for (const animation of layer.animations) {
       longest = Math.max(longest, animation.startTime + animation.duration);
     }
+    normalizeLayerBasicAnimation(layer);
+    const basic = layer.basicAnimation;
+    if (!basic) continue;
+    for (const trackKey of BASIC_TRACK_KEYS) {
+      const track = basic[trackKey];
+      if (!track.enabled) continue;
+      for (const point of track.points) {
+        longest = Math.max(longest, point.time);
+      }
+    }
   }
   return ceilToTimelineStep(longest);
 }
@@ -3888,6 +4197,37 @@ function startTimelineAnimationDrag(
   if (!layer || !animation) return;
   event.preventDefault();
   event.stopPropagation();
+
+  const isGroupMove =
+    mode === "move" &&
+    selectedTimelineAnimationIds.has(animationId) &&
+    selectedTimelineAnimationIds.size > 1;
+  if (!isGroupMove) {
+    selectedTimelineAnimationIds.clear();
+    selectedTimelineAnimationIds.add(animationId);
+  }
+
+  const selectedAnimations =
+    mode === "move"
+      ? collectSelectedTimelineAnimationDragItems(layerId, animation)
+      : [
+          {
+            layerId,
+            animationId,
+            originalStartTime: animation.startTime,
+            duration: animation.duration,
+          },
+        ];
+  const groupStartTime = Math.min(
+    ...selectedAnimations.map((item) => item.originalStartTime),
+  );
+  const groupEndTime = Math.max(
+    ...selectedAnimations.map((item) => item.originalStartTime + item.duration),
+  );
+  const affectedLayerIds = Array.from(
+    new Set(selectedAnimations.map((item) => item.layerId)),
+  );
+
   els.timelineTrack.setPointerCapture(event.pointerId);
   timelineAnimationDragState = {
     pointerId: event.pointerId,
@@ -3897,17 +4237,24 @@ function startTimelineAnimationDrag(
     startClientX: event.clientX,
     originalStartTime: animation.startTime,
     originalDuration: animation.duration,
+    groupStartTime,
+    groupEndTime,
+    selectedAnimations,
+    affectedLayerIds,
     hasChanged: false,
   };
   state.selectedLayerId = layerId;
   selectedAnimationId = animationId;
+  selectedBasicPointId = null;
   setAutoExpandedTimelineLayer(layerId);
-  collapsedAnimationIds.delete(animationId);
+  collapseOtherAnimationModules(animationId);
   stopPlayback({ silent: true, keepPlayhead: true });
   scrollSelectedAnimationModuleIntoView();
   showStatus(
     mode === "move"
-      ? "拖动动画块：开始秒按 0.05s 吸附。"
+      ? selectedAnimations.length > 1
+        ? `拖动 ${selectedAnimations.length} 个已选动画块：整体按 0.05s 吸附。`
+        : "拖动动画块：开始秒按 0.05s 吸附。"
       : "拖动右侧把手：持续秒按 0.05s 吸附。",
     "info",
   );
@@ -3932,16 +4279,27 @@ function updateTimelineAnimationDrag(event: PointerEvent): void {
       timelinePixelsPerSecond,
   );
   if (timelineAnimationDragState.mode === "move") {
-    const nextStart = snapTimelineSeconds(
+    const constrainedDelta = snapTimelineSeconds(
       clampNumber(
-        timelineAnimationDragState.originalStartTime + deltaSeconds,
-        0,
-        Math.max(0, state.project.stage.duration - animation.duration),
+        deltaSeconds,
+        -timelineAnimationDragState.groupStartTime,
+        Math.max(
+          0,
+          state.project.stage.duration -
+            timelineAnimationDragState.groupEndTime,
+        ),
       ),
     );
-    if (nextStart !== animation.startTime) {
-      animation.startTime = nextStart;
-      timelineAnimationDragState.hasChanged = true;
+    for (const item of timelineAnimationDragState.selectedAnimations) {
+      const target = findTimelineAnimation(item.layerId, item.animationId);
+      if (!target) continue;
+      const nextStart = snapTimelineSeconds(
+        item.originalStartTime + constrainedDelta,
+      );
+      if (nextStart !== target.animation.startTime) {
+        target.animation.startTime = nextStart;
+        timelineAnimationDragState.hasChanged = true;
+      }
     }
   } else {
     const nextDuration = snapTimelineSeconds(
@@ -3961,11 +4319,17 @@ function updateTimelineAnimationDrag(event: PointerEvent): void {
   }
 
   if (!timelineAnimationDragState.hasChanged) return;
-  layer.animations.sort((a, b) => a.startTime - b.startTime);
+  for (const affectedLayerId of timelineAnimationDragState.affectedLayerIds) {
+    findLayer(affectedLayerId)?.animations.sort(
+      (left, right) => left.startTime - right.startTime,
+    );
+  }
   setPlayheadSeconds(animation.startTime);
   renderTimelineAnimations();
   showStatus(
-    `动画时间已吸附到 ${formatTimelineSeconds(animation.startTime)}s，持续 ${formatTimelineSeconds(animation.duration)}s。`,
+    timelineAnimationDragState.selectedAnimations.length > 1
+      ? `已整体平移 ${timelineAnimationDragState.selectedAnimations.length} 个动画块，当前参考块在 ${formatTimelineSeconds(animation.startTime)}s。`
+      : `动画时间已吸附到 ${formatTimelineSeconds(animation.startTime)}s，持续 ${formatTimelineSeconds(animation.duration)}s。`,
     "info",
   );
 }
@@ -3978,22 +4342,198 @@ function finishTimelineAnimationDrag(event: PointerEvent): void {
     return;
   }
   const changed = timelineAnimationDragState.hasChanged;
-  const layerId = timelineAnimationDragState.layerId;
+  const affectedLayerIds = timelineAnimationDragState.affectedLayerIds;
+  const movedCount = timelineAnimationDragState.selectedAnimations.length;
+  const animationId = timelineAnimationDragState.animationId;
   timelineAnimationDragState = null;
   if (els.timelineTrack.hasPointerCapture(event.pointerId)) {
     els.timelineTrack.releasePointerCapture(event.pointerId);
   }
   if (!changed) return;
+  suppressNextTimelineAnimationClickId = animationId;
   normalizeProjectDurationToAnimationEnd({ silent: true });
-  clearLayerPreview(layerId);
+  for (const affectedLayerId of affectedLayerIds) {
+    clearLayerPreview(affectedLayerId);
+  }
   renderAll();
   scheduleAutoSave(0);
-  showStatus("动画时间已更新并按 0.05s 对齐。", "success");
+  showStatus(
+    movedCount > 1
+      ? `已整体移动 ${movedCount} 个动画块，并按 0.05s 对齐。`
+      : "动画时间已更新并按 0.05s 对齐。",
+    "success",
+  );
 }
 
 function cancelTimelineAnimationDrag(event: PointerEvent): void {
   if (timelineAnimationDragState?.pointerId === event.pointerId) {
     timelineAnimationDragState = null;
+  }
+  if (els.timelineTrack.hasPointerCapture(event.pointerId)) {
+    els.timelineTrack.releasePointerCapture(event.pointerId);
+  }
+}
+
+function collectSelectedTimelineAnimationDragItems(
+  fallbackLayerId: string,
+  fallbackAnimation: V5GAnimationConfig,
+): {
+  layerId: string;
+  animationId: string;
+  originalStartTime: number;
+  duration: number;
+}[] {
+  const items: {
+    layerId: string;
+    animationId: string;
+    originalStartTime: number;
+    duration: number;
+  }[] = [];
+  for (const layer of state.project.layers) {
+    for (const animation of layer.animations) {
+      if (!selectedTimelineAnimationIds.has(animation.id)) continue;
+      items.push({
+        layerId: layer.id,
+        animationId: animation.id,
+        originalStartTime: animation.startTime,
+        duration: animation.duration,
+      });
+    }
+  }
+  if (items.length > 0) return items;
+  return [
+    {
+      layerId: fallbackLayerId,
+      animationId: fallbackAnimation.id,
+      originalStartTime: fallbackAnimation.startTime,
+      duration: fallbackAnimation.duration,
+    },
+  ];
+}
+
+function findTimelineAnimation(
+  layerId: string,
+  animationId: string,
+): { layer: V5GLayerConfig; animation: V5GAnimationConfig } | null {
+  const layer = findLayer(layerId);
+  const animation = layer?.animations.find((item) => item.id === animationId);
+  return layer && animation ? { layer, animation } : null;
+}
+
+function startTimelineBasicPointDrag(
+  event: PointerEvent,
+  layerId: string,
+  trackKey: V5GBasicTrackKey,
+  pointId: string,
+): void {
+  if (event.button !== 0) return;
+  const layer = findLayer(layerId);
+  if (!layer || !BASIC_TRACK_KEYS.includes(trackKey)) return;
+  normalizeLayerBasicAnimation(layer);
+  const point = layer.basicAnimation?.[trackKey].points.find(
+    (item) => item.id === pointId,
+  );
+  if (!point) return;
+  event.preventDefault();
+  event.stopPropagation();
+  els.timelineTrack.setPointerCapture(event.pointerId);
+  timelineBasicPointDragState = {
+    pointerId: event.pointerId,
+    layerId,
+    trackKey,
+    pointId,
+    startClientX: event.clientX,
+    originalTime: point.time,
+    hasChanged: false,
+  };
+  state.selectedLayerId = layerId;
+  clearSelectedTimelineAnimations();
+  selectedBasicPointId = pointId;
+  setAutoExpandedTimelineLayer(layerId);
+  renderProperties();
+  scrollSelectedBasicPointIntoView();
+  stopPlayback({ silent: true, keepPlayhead: true });
+  showStatus(
+    `拖动「${layer.name}」的 ${BASIC_TRACK_LABELS[trackKey]} 关键帧节点：时间按 0.05s 吸附。`,
+    "info",
+  );
+}
+
+function updateTimelineBasicPointDrag(event: PointerEvent): void {
+  if (
+    !timelineBasicPointDragState ||
+    timelineBasicPointDragState.pointerId !== event.pointerId
+  ) {
+    return;
+  }
+  event.preventDefault();
+  const layer = findLayer(timelineBasicPointDragState.layerId);
+  if (!layer) return;
+  normalizeLayerBasicAnimation(layer);
+  const track = layer.basicAnimation?.[timelineBasicPointDragState.trackKey];
+  const point = track?.points.find(
+    (item) => item.id === timelineBasicPointDragState?.pointId,
+  );
+  if (!track || !point) return;
+  const deltaSeconds = snapTimelineSeconds(
+    (event.clientX - timelineBasicPointDragState.startClientX) /
+      timelinePixelsPerSecond,
+  );
+  const nextTime = snapTimelineSeconds(
+    clampNumber(
+      timelineBasicPointDragState.originalTime + deltaSeconds,
+      0,
+      state.project.stage.duration,
+    ),
+  );
+  if (nextTime === point.time) return;
+  point.time = nextTime;
+  sortBasicTrack(track);
+  timelineBasicPointDragState.hasChanged = true;
+  clearLayerPreview(layer.id);
+  applyAnimatedLayersAtTime(nextTime);
+  state.playheadSeconds = nextTime;
+  renderTimelineAnimations();
+  updatePlayheadUiOnly();
+  void pixiStage.render(state);
+  showStatus(
+    `${BASIC_TRACK_LABELS[timelineBasicPointDragState.trackKey]} 节点已移动到 ${formatTimelineSeconds(nextTime)}s。`,
+    "info",
+  );
+}
+
+function finishTimelineBasicPointDrag(event: PointerEvent): void {
+  if (
+    !timelineBasicPointDragState ||
+    timelineBasicPointDragState.pointerId !== event.pointerId
+  ) {
+    return;
+  }
+  const changed = timelineBasicPointDragState.hasChanged;
+  const layerId = timelineBasicPointDragState.layerId;
+  const trackKey = timelineBasicPointDragState.trackKey;
+  timelineBasicPointDragState = null;
+  if (els.timelineTrack.hasPointerCapture(event.pointerId)) {
+    els.timelineTrack.releasePointerCapture(event.pointerId);
+  }
+  if (!changed) return;
+  const layer = findLayer(layerId);
+  if (layer) {
+    normalizeLayerBasicAnimation(layer);
+    clearLayerPreview(layer.id);
+  }
+  normalizeProjectDurationToAnimationEnd({ silent: true });
+  renderAll();
+  scheduleAutoSave(0);
+  showStatus(
+    `${BASIC_TRACK_LABELS[trackKey]} 关键帧节点时间已更新，并按 0.05s 对齐。`,
+    "success",
+  );
+}
+
+function cancelTimelineBasicPointDrag(event: PointerEvent): void {
+  if (timelineBasicPointDragState?.pointerId === event.pointerId) {
+    timelineBasicPointDragState = null;
   }
   if (els.timelineTrack.hasPointerCapture(event.pointerId)) {
     els.timelineTrack.releasePointerCapture(event.pointerId);
@@ -4106,10 +4646,7 @@ function getTimelineViewportRect(event?: PointerEvent | WheelEvent): DOMRect {
     const viewport = target?.closest<HTMLElement>("[data-timeline-viewport]");
     if (viewport) return viewport.getBoundingClientRect();
   }
-  const lanes = Array.from(
-    els.timelineItems.querySelectorAll<HTMLElement>("[data-timeline-lane]"),
-  );
-  return (lanes[0] ?? els.timelineRulerTrack).getBoundingClientRect();
+  return els.timelineRulerTrack.getBoundingClientRect();
 }
 
 function getTimelineViewportWidth(): number {
@@ -4203,14 +4740,7 @@ function updatePlayheadUiOnly(): void {
     silent: true,
   });
   els.timeLabel.textContent = `${state.playheadSeconds.toFixed(2)}s / ${normalizedDuration.toFixed(2)}s`;
-  const left = `${timeToTimelineX(state.playheadSeconds)}px`;
-  const title = `拖动黄色刻度线预览 ${state.playheadSeconds.toFixed(2)}s`;
-  for (const playhead of document.querySelectorAll<HTMLElement>(
-    "[data-timeline-playhead]",
-  )) {
-    playhead.style.left = left;
-    playhead.title = title;
-  }
+  renderGlobalTimelinePlayhead();
 }
 
 function syncAnimationPanel(layer: V5GLayerConfig): void {
@@ -4224,6 +4754,7 @@ function syncAnimationPanel(layer: V5GLayerConfig): void {
 
   syncAnimationToolbarButtons(layer);
 
+  renderBasicAnimationPanel(layer);
   renderAnimationList(layer);
 }
 
@@ -4274,7 +4805,7 @@ function showAnimationDraftModule(category: V5GAnimationCategory): void {
     memoryKey: createId("anim_draft"),
   };
 
-  selectedAnimationId = null;
+  clearSelectedTimelineAnimations();
 
   renderAll();
 
@@ -4936,6 +5467,11 @@ function scrollSelectedAnimationModuleIntoView(): void {
   });
 }
 
+function getShortEasingLabel(label: string): string {
+  const parts = label.trim().split(/\s+/u);
+  return parts.length > 1 ? parts.slice(1).join(" ") : label;
+}
+
 function getAnimationCategoryLabel(category: V5GAnimationCategory): string {
   return category === "particle" ? "粒子" : "动画";
 }
@@ -5002,6 +5538,427 @@ function syncAnimationModuleCategoryUi(
   }
 
   if (select && select.parentElement !== label) label.appendChild(select);
+}
+
+function handleBasicAnimationPanelClick(event: Event): void {
+  const target = event.target as HTMLElement | null;
+  const selectedLayer = getSelectedLayer(state);
+  if (!target || !selectedLayer) return;
+  const action = target.closest<HTMLElement>("[data-basic-action]")?.dataset
+    .basicAction;
+  if (action === "copy") {
+    event.preventDefault();
+    event.stopPropagation();
+    copySelectedBasicAnimation();
+    return;
+  }
+  if (action === "paste") {
+    event.preventDefault();
+    event.stopPropagation();
+    pasteBasicAnimationToSelectedLayer();
+    return;
+  }
+  const addKey = target.closest<HTMLElement>("[data-basic-point-add]")?.dataset
+    .basicPointAdd as V5GBasicTrackKey | undefined;
+  if (addKey && BASIC_TRACK_KEYS.includes(addKey)) {
+    pushUndoSnapshot();
+    normalizeLayerBasicAnimation(selectedLayer);
+    const track = selectedLayer.basicAnimation?.[addKey];
+    if (!track) return;
+    track.enabled = true;
+    const baseValue = getBasicTrackBaseValue(selectedLayer, addKey);
+    track.points.push({
+      id: createId("basic_point"),
+      time: snapTimelineSeconds(state.playheadSeconds),
+      value: baseValue,
+      easing: "linear",
+    });
+    sortBasicTrack(track);
+    commitBasicAnimationEdit(
+      selectedLayer,
+      `已添加 ${BASIC_TRACK_LABELS[addKey]} 关键帧点。`,
+    );
+    return;
+  }
+  const deleteId = target.closest<HTMLElement>("[data-basic-point-delete]")
+    ?.dataset.basicPointDelete;
+  if (deleteId) {
+    pushUndoSnapshot();
+    for (const key of BASIC_TRACK_KEYS) {
+      const track = selectedLayer.basicAnimation?.[key];
+      if (!track) continue;
+      track.points = track.points.filter((point) => point.id !== deleteId);
+    }
+    commitBasicAnimationEdit(selectedLayer, "已删除关键帧动画控制点。");
+  }
+}
+
+function handleBasicAnimationPanelFocus(event: FocusEvent): void {
+  const target = event.target as HTMLInputElement | HTMLSelectElement | null;
+  if (!target) return;
+  const pointId =
+    target.dataset.basicPointTime ??
+    target.dataset.basicPointValue ??
+    target.dataset.basicPointEasing;
+  if (!pointId || selectedBasicPointId === pointId) return;
+  const layer = getSelectedLayer(state);
+  if (!layer || !findBasicPoint(layer, pointId)) return;
+  selectedBasicPointId = pointId;
+  selectedAnimationId = null;
+  selectedTimelineAnimationIds.clear();
+  setAutoExpandedTimelineLayer(layer.id);
+  refreshSelectedBasicPointInputHighlight();
+  renderTimelineAnimations();
+}
+
+function handleBasicAnimationPanelInput(event: Event): void {
+  const target = event.target as HTMLInputElement | HTMLSelectElement | null;
+  const layer = getSelectedLayer(state);
+  if (!target || !layer) return;
+  normalizeLayerBasicAnimation(layer);
+  const enabledKey = target.dataset.basicTrackEnabled as
+    V5GBasicTrackKey | undefined;
+  if (enabledKey && BASIC_TRACK_KEYS.includes(enabledKey)) {
+    layer.basicAnimation![enabledKey].enabled = (
+      target as HTMLInputElement
+    ).checked;
+    commitBasicAnimationEdit(layer);
+    return;
+  }
+  const pointId =
+    target.dataset.basicPointTime ??
+    target.dataset.basicPointValue ??
+    target.dataset.basicPointEasing;
+  if (!pointId) return;
+  const pointInfo = findBasicPoint(layer, pointId);
+  if (!pointInfo) return;
+  if (target.dataset.basicPointTime) {
+    pointInfo.point.time = snapTimelineSeconds(
+      clampNumber(
+        readNumberInput(target as HTMLInputElement, pointInfo.point.time),
+        0,
+        state.project.stage.duration,
+      ),
+    );
+  } else if (target.dataset.basicPointValue) {
+    const range = getBasicTrackValueRange(pointInfo.trackKey);
+    pointInfo.point.value = roundTo(
+      clampNumber(
+        readNumberInput(target as HTMLInputElement, pointInfo.point.value),
+        range.min,
+        range.max,
+      ),
+      4,
+    );
+  } else if (target.dataset.basicPointEasing) {
+    pointInfo.point.easing = V5G_EASINGS.some(
+      (item) => item.value === target.value,
+    )
+      ? (target.value as V5GBasicAnimationPointConfig["easing"])
+      : "linear";
+  }
+  sortBasicTrack(pointInfo.track);
+  commitBasicAnimationEdit(layer);
+}
+
+function commitBasicAnimationEdit(
+  layer: V5GLayerConfig,
+  message?: string,
+): void {
+  normalizeLayerBasicAnimation(layer);
+  clearLayerPreview(layer.id);
+  applyAnimatedLayersAtTime(state.playheadSeconds);
+  renderStaticUi();
+  renderProperties();
+  void pixiStage.render(state);
+  scheduleAutoSave(0);
+  if (message) showStatus(message, "success");
+}
+
+function copySelectedBasicAnimation(): void {
+  const layer = getSelectedLayer(state);
+  if (!layer) {
+    showStatus("请先选择一个图层再复制关键帧动画。", "error");
+    return;
+  }
+  normalizeLayerBasicAnimation(layer);
+  const basic = layer.basicAnimation;
+  if (!basic) return;
+  const activePointCount = getBasicAnimationActivePointCount(basic);
+  if (activePointCount === 0) {
+    showStatus("当前图层还没有启用的关键帧动画点可复制。", "error");
+    return;
+  }
+  basicAnimationClipboard = {
+    sourceLayerName: layer.name,
+    basicAnimation: cloneBasicAnimationConfig(basic),
+    activePointCount,
+  };
+  renderProperties();
+  showStatus(
+    `已复制「${layer.name}」的 ${activePointCount} 个关键帧动画点。请选择目标图层后点击“粘贴关键帧”。`,
+    "success",
+  );
+}
+
+function pasteBasicAnimationToSelectedLayer(): void {
+  const layer = getSelectedLayer(state);
+  if (!layer) {
+    showStatus("请先选择一个目标图层再粘贴关键帧动画。", "error");
+    return;
+  }
+  if (!basicAnimationClipboard) {
+    showStatus("还没有复制过关键帧动画。", "error");
+    return;
+  }
+  pushUndoSnapshot();
+  layer.basicAnimation = cloneBasicAnimationConfig(
+    basicAnimationClipboard.basicAnimation,
+    { regenerateIds: true },
+  );
+  selectedBasicPointId = null;
+  clearSelectedTimelineAnimations();
+  setAutoExpandedTimelineLayer(layer.id);
+  normalizeProjectDurationToAnimationEnd({ silent: true });
+  commitBasicAnimationEdit(
+    layer,
+    `已把「${basicAnimationClipboard.sourceLayerName}」的 ${basicAnimationClipboard.activePointCount} 个关键帧动画点粘贴到「${layer.name}」。`,
+  );
+}
+
+function renderBasicAnimationPanel(layer: V5GLayerConfig): void {
+  const wasOpen =
+    els.basicAnimPanel.querySelector<HTMLDetailsElement>("details")?.open ??
+    true;
+  normalizeLayerBasicAnimation(layer);
+  const basic = layer.basicAnimation;
+  if (!basic) return;
+  const activePointCount = BASIC_TRACK_KEYS.reduce(
+    (count, key) => count + (basic[key].enabled ? basic[key].points.length : 0),
+    0,
+  );
+  const canCopyBasicAnimation = activePointCount > 0;
+  const canPasteBasicAnimation = basicAnimationClipboard !== null;
+  const html = [
+    `<details class="rounded-md border border-white/10 bg-zinc-900/60 p-2" ${wasOpen ? "open" : ""}>`,
+    `<summary class="flex cursor-pointer list-none items-center justify-between gap-2 text-xs font-semibold text-zinc-300"><span><i class="fa-solid fa-diamond mr-1 text-zinc-400"></i>关键帧动画 <span class="ml-2 text-[10px] text-zinc-500">${activePointCount} 点</span></span><span class="flex shrink-0 items-center gap-1"><button type="button" data-basic-action="copy" class="rounded bg-zinc-950 px-1.5 py-1 text-[10px] font-semibold text-zinc-300 transition hover:bg-zinc-100 hover:text-zinc-950 ${canCopyBasicAnimation ? "" : "cursor-not-allowed opacity-45"}" title="复制当前图层已启用的关键帧动画轨道" ${canCopyBasicAnimation ? "" : "disabled"}><i class="fa-solid fa-copy mr-1"></i>复制关键帧</button><button type="button" data-basic-action="paste" class="rounded bg-zinc-950 px-1.5 py-1 text-[10px] font-semibold text-zinc-300 transition hover:bg-zinc-100 hover:text-zinc-950 ${canPasteBasicAnimation ? "" : "cursor-not-allowed opacity-45"}" title="把已复制的关键帧动画粘贴到当前图层" ${canPasteBasicAnimation ? "" : "disabled"}><i class="fa-solid fa-paste mr-1"></i>粘贴关键帧</button></span></summary>`,
+    `<div class="mt-1 text-[10px] text-zinc-500">透明度/位置/缩放/旋转支持多时间点关键帧，播放时先补间关键帧属性，再叠加下方预设/粒子。</div>`,
+  ];
+  for (const key of BASIC_TRACK_KEYS) {
+    const track = basic[key];
+    html.push(
+      `<div class="mt-2 rounded border border-white/10 bg-black/25 p-2" data-basic-track="${key}">`,
+    );
+    html.push(
+      `<label class="flex items-center justify-between gap-2 text-[10px] text-zinc-300"><span class="font-semibold text-zinc-100">${BASIC_TRACK_LABELS[key]}</span><span class="flex items-center gap-1"><input data-basic-track-enabled="${key}" type="checkbox" class="h-3.5 w-3.5 accent-zinc-100" ${track.enabled ? "checked" : ""}/>启用</span></label>`,
+    );
+    for (const point of track.points) {
+      const isSelectedPoint = selectedBasicPointId === point.id;
+      const selectedPointBorderClass = isSelectedPoint
+        ? "border-amber-300"
+        : "border-white/10";
+      html.push(
+        `<div class="mt-1 grid grid-cols-[3.6rem_3.6rem_4.4rem_1.75rem] gap-1" data-basic-point="${point.id}" data-basic-track-key="${key}">`,
+      );
+      html.push(
+        `<input data-basic-point-time="${point.id}" type="number" min="0" max="${state.project.stage.duration}" step="0.05" value="${roundTo(point.time, 3)}" title="时间(s)" class="h-7 w-full rounded border bg-[#0c0c0d] px-1 text-[10px] text-zinc-100 outline-none focus:border-amber-300 ${selectedPointBorderClass}"/>`,
+      );
+      html.push(
+        `<input data-basic-point-value="${point.id}" type="number" step="${getBasicTrackStep(key)}" value="${roundTo(point.value, 4)}" title="值" class="h-7 w-full rounded border bg-[#0c0c0d] px-1 text-[10px] text-zinc-100 outline-none focus:border-amber-300 ${selectedPointBorderClass}"/>`,
+      );
+      html.push(
+        `<select data-basic-point-easing="${point.id}" class="h-7 w-full rounded border bg-[#0c0c0d] px-1 pr-5 text-[10px] text-zinc-100 outline-none focus:border-amber-300 ${selectedPointBorderClass}">${V5G_EASINGS.map((item) => `<option value="${item.value}" ${item.value === point.easing ? "selected" : ""}>${getShortEasingLabel(item.label)}</option>`).join("")}</select>`,
+      );
+      html.push(
+        `<button type="button" data-basic-point-delete="${point.id}" class="h-7 w-7 rounded bg-zinc-800 px-0 text-[10px] text-zinc-200 hover:bg-red-500 hover:text-white" title="删除控制点"><i class="fa-solid fa-trash"></i></button>`,
+      );
+      html.push(`</div>`);
+    }
+    html.push(
+      `<button type="button" data-basic-point-add="${key}" class="mt-1 h-7 w-full rounded bg-zinc-100 px-2 text-[10px] font-semibold text-zinc-950 hover:bg-white"><i class="fa-solid fa-plus mr-1"></i>添加 ${BASIC_TRACK_LABELS[key]} 点</button>`,
+    );
+    html.push(`</div>`);
+  }
+  html.push(`</details>`);
+  els.basicAnimPanel.innerHTML = html.join("");
+}
+
+function scrollSelectedBasicPointIntoView(): void {
+  if (!selectedBasicPointId) return;
+  window.requestAnimationFrame(() => {
+    const selectedRow = els.basicAnimPanel.querySelector<HTMLElement>(
+      `[data-basic-point="${selectedBasicPointId}"]`,
+    );
+    selectedRow?.scrollIntoView({
+      block: "center",
+      inline: "nearest",
+      behavior: "smooth",
+    });
+    refreshSelectedBasicPointInputHighlight();
+    selectedRow
+      ?.querySelector<HTMLInputElement | HTMLSelectElement>(
+        `[data-basic-point-value="${selectedBasicPointId}"]`,
+      )
+      ?.focus({ preventScroll: true });
+  });
+}
+
+function refreshSelectedBasicPointInputHighlight(): void {
+  const controls = els.basicAnimPanel.querySelectorAll<
+    HTMLInputElement | HTMLSelectElement
+  >(
+    "[data-basic-point-time], [data-basic-point-value], [data-basic-point-easing]",
+  );
+  for (const control of controls) {
+    const pointId =
+      control.dataset.basicPointTime ??
+      control.dataset.basicPointValue ??
+      control.dataset.basicPointEasing ??
+      null;
+    const isSelected = pointId !== null && pointId === selectedBasicPointId;
+    control.classList.toggle("border-amber-300", isSelected);
+    control.classList.toggle("border-white/10", !isSelected);
+  }
+}
+
+function getBasicTrackStep(key: V5GBasicTrackKey): number {
+  if (key === "opacity") return 0.05;
+  if (key === "scaleX" || key === "scaleY") return 0.01;
+  return 1;
+}
+
+function getBasicTrackValueRange(key: V5GBasicTrackKey): {
+  min: number;
+  max: number;
+} {
+  if (key === "opacity") return { min: 0, max: 1 };
+  if (key === "scaleX" || key === "scaleY") return { min: 0, max: 20 };
+  if (key === "positionX" || key === "positionY")
+    return { min: -5000, max: 5000 };
+  return { min: -36000, max: 36000 };
+}
+
+function getBasicTrackBaseValue(
+  layer: V5GLayerConfig,
+  key: V5GBasicTrackKey,
+): number {
+  if (key === "opacity") return layer.opacity;
+  if (key === "positionX") return layer.transform.x;
+  if (key === "positionY") return layer.transform.y;
+  if (key === "scaleX") return layer.transform.scaleX;
+  if (key === "scaleY") return layer.transform.scaleY;
+  return layer.transform.rotation;
+}
+
+function findBasicPoint(
+  layer: V5GLayerConfig,
+  pointId: string,
+): {
+  trackKey: V5GBasicTrackKey;
+  track: V5GBasicAnimationTrackConfig;
+  point: V5GBasicAnimationPointConfig;
+} | null {
+  const basic = layer.basicAnimation;
+  if (!basic) return null;
+  for (const trackKey of BASIC_TRACK_KEYS) {
+    const track = basic[trackKey];
+    const point = track.points.find((item) => item.id === pointId);
+    if (point) return { trackKey, track, point };
+  }
+  return null;
+}
+
+function sortBasicTrack(track: V5GBasicAnimationTrackConfig): void {
+  track.points.sort((left, right) => left.time - right.time);
+}
+
+function getBasicAnimationActivePointCount(
+  basic: V5GBasicAnimationConfig,
+  options: { enabledOnly?: boolean } = { enabledOnly: true },
+): number {
+  return BASIC_TRACK_KEYS.reduce((count, key) => {
+    const track = basic[key];
+    if (options.enabledOnly !== false && !track.enabled) return count;
+    return count + track.points.length;
+  }, 0);
+}
+
+function cloneBasicAnimationConfig(
+  basic: V5GBasicAnimationConfig,
+  options: { regenerateIds?: boolean } = {},
+): V5GBasicAnimationConfig {
+  const cloneTrack = (
+    track: V5GBasicAnimationTrackConfig,
+    key: V5GBasicTrackKey,
+  ): V5GBasicAnimationTrackConfig => ({
+    enabled: track.enabled,
+    points: track.points.map((point) => ({
+      ...point,
+      id: options.regenerateIds ? createId(`basic_${key}`) : point.id,
+    })),
+  });
+  return {
+    opacity: cloneTrack(basic.opacity, "opacity"),
+    positionX: cloneTrack(basic.positionX, "positionX"),
+    positionY: cloneTrack(basic.positionY, "positionY"),
+    scaleX: cloneTrack(basic.scaleX, "scaleX"),
+    scaleY: cloneTrack(basic.scaleY, "scaleY"),
+    rotation: cloneTrack(basic.rotation, "rotation"),
+  };
+}
+
+function sampleBasicTrack(
+  track: V5GBasicAnimationTrackConfig,
+  baseValue: number,
+  time: number,
+): number {
+  if (!track.enabled || track.points.length === 0) return baseValue;
+  const points = [...track.points].sort(
+    (left, right) => left.time - right.time,
+  );
+  if (time <= points[0].time) return points[0].value;
+  const last = points[points.length - 1];
+  if (time >= last.time) return last.value;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const left = points[index];
+    const right = points[index + 1];
+    if (time < left.time || time > right.time) continue;
+    const span = Math.max(0.0001, right.time - left.time);
+    const progress = easeProgress((time - left.time) / span, right.easing);
+    return left.value + (right.value - left.value) * progress;
+  }
+  return baseValue;
+}
+
+function sampleBasicAnimationAtTime(
+  layer: V5GLayerConfig,
+  time: number,
+): V5GPreviewLayerState {
+  normalizeLayerBasicAnimation(layer);
+  const basic = layer.basicAnimation!;
+  return {
+    transform: {
+      ...layer.transform,
+      x: roundTo(sampleBasicTrack(basic.positionX, layer.transform.x, time), 4),
+      y: roundTo(sampleBasicTrack(basic.positionY, layer.transform.y, time), 4),
+      scaleX: roundTo(
+        sampleBasicTrack(basic.scaleX, layer.transform.scaleX, time),
+        4,
+      ),
+      scaleY: roundTo(
+        sampleBasicTrack(basic.scaleY, layer.transform.scaleY, time),
+        4,
+      ),
+      rotation: roundTo(
+        sampleBasicTrack(basic.rotation, layer.transform.rotation, time),
+        4,
+      ),
+    },
+    opacity: roundTo(
+      clampNumber(sampleBasicTrack(basic.opacity, layer.opacity, time), 0, 1),
+      4,
+    ),
+  };
 }
 
 function renderAnimationList(layer: V5GLayerConfig): void {
@@ -5118,10 +6075,10 @@ function renderAnimationList(layer: V5GLayerConfig): void {
       }
     });
     details.addEventListener("click", () => {
-      selectedAnimationId = animation.id;
+      setSelectedTimelineAnimation(animation.id);
       setAutoExpandedTimelineLayer(layer.id);
-      collapsedAnimationIds.delete(animation.id);
-      renderTimelineAnimations();
+      renderAll();
+      scrollSelectedAnimationModuleIntoView();
     });
 
     const typeSelect = details.querySelector<HTMLSelectElement>(
@@ -5562,11 +6519,9 @@ function updateAnimationFromModule(
 
   layer.animations.sort((a, b) => a.startTime - b.startTime);
 
-  selectedAnimationId = nextAnimation.id;
+  setSelectedTimelineAnimation(nextAnimation.id);
 
   setAutoExpandedTimelineLayer(layer.id);
-
-  collapsedAnimationIds.delete(nextAnimation.id);
 
   normalizeProjectDurationToAnimationEnd({ silent: true });
 
@@ -5635,7 +6590,7 @@ function reverseOffsetAnimationAxis(
   pushUndoSnapshot();
   animation.params[fromKey] = roundTo(-fromValue, 4);
   animation.params[toKey] = roundTo(-toValue, 4);
-  selectedAnimationId = animation.id;
+  setSelectedTimelineAnimation(animation.id);
   setAutoExpandedTimelineLayer(layer.id);
   collapsedAnimationIds.delete(animation.id);
   clearLayerPreview(layer.id);
@@ -5681,8 +6636,9 @@ function deleteAnimationFromLayer(layerId: string, animationId: string): void {
   );
 
   collapsedAnimationIds.delete(animationId);
+  selectedTimelineAnimationIds.delete(animationId);
 
-  if (selectedAnimationId === animationId) selectedAnimationId = null;
+  if (selectedAnimationId === animationId) clearSelectedTimelineAnimations();
   clearLayerPreview(layer.id);
   renderAll();
   void pixiStage.render(state);
@@ -5696,10 +6652,11 @@ function deleteAnimationFromLayer(layerId: string, animationId: string): void {
 function applyAnimatedLayersAtTime(time: number): void {
   const nextPreviewLayers: Record<string, V5GPreviewLayerState> = {};
   for (const layer of state.project.layers) {
+    const basicSample = sampleBasicAnimationAtTime(layer, time);
     const sampled = sampleLayerAnimationsAtTime(
       {
-        transform: cloneTransform(layer.transform),
-        opacity: layer.opacity,
+        transform: cloneTransform(basicSample.transform),
+        opacity: basicSample.opacity,
       },
       layer.animations,
       time,
@@ -5717,6 +6674,7 @@ function applyAnimatedLayersAtTime(time: number): void {
     nextPreviewLayers[layer.id] = {
       transform: sampled.transform,
       opacity: effectiveOpacity,
+      visualRotation: sampled.visualRotation,
     };
   }
   state.previewLayers = nextPreviewLayers;
@@ -5886,6 +6844,7 @@ function createEditorState(
   normalizeProjectLayerGroups(project);
   normalizeProjectMasks(project);
   normalizeProjectSequences(project);
+  normalizeProjectBasicAnimations(project);
   normalizeProjectBlendModes(project);
   return {
     project,
@@ -6078,6 +7037,8 @@ function startPlaybackFromCurrentPosition(): void {
   const startTime = isAtRangeEnd
     ? range.start
     : clampNumber(state.playheadSeconds, range.start, range.end);
+  clearPreviewBaseCache();
+  pixiStage.resetAnimationRenderState();
   setPlayheadSeconds(startTime, { lightweightUi: true });
   playStartedAt = performance.now() - startTime * 1000;
   pixiStage.stopDemo();
@@ -6121,7 +7082,7 @@ function tickPlayhead(): void {
         return;
       }
       state.isPlaying = false;
-      setPlayheadSeconds(range.end);
+      setPlayheadSeconds(range.end, { lightweightUi: true });
       activePlaybackRange = null;
       setPlaybackButtonState(false);
       showStatus(
@@ -6345,11 +7306,7 @@ function getLayerIconColorClass(
 }
 
 function sanitizeSelectedAnimation(): void {
-  if (!selectedAnimationId) return;
-  const exists = state.project.layers.some((layer) =>
-    layer.animations.some((animation) => animation.id === selectedAnimationId),
-  );
-  if (!exists) selectedAnimationId = null;
+  sanitizeSelectedTimelineAnimations();
 }
 
 function readImageSize(file: File): Promise<{ width: number; height: number }> {

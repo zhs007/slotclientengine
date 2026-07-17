@@ -3,6 +3,7 @@ import {
   sampleLayerAnimationsAtTime,
   shouldHideLayerOutsideActiveAnimation,
 } from "./animation-sampler.js";
+import { sampleBasicAnimationAtTime } from "./basic-animation.js";
 import { hasActiveChaserLightAnimation } from "./chaser-light-sampler.js";
 import { hasActiveDeterministicEffectAnimation } from "./effect-sampler.js";
 import { hasActiveParticleAnimation } from "./particle-sampler.js";
@@ -21,6 +22,7 @@ const VISUAL_ENTRY_SCALE_THRESHOLD = 0.011;
 export interface SampledLayerState {
   layerId: string;
   transform: V5GTransformConfig;
+  visualRotation: number;
   baseOpacity: number;
   opacity: number;
   visible: boolean;
@@ -55,10 +57,11 @@ export function sampleLayerAtTime(
   layer: V5GLayerConfig,
   time: number,
 ): SampledLayerState {
+  const basic = sampleBasicAnimationAtTime(layer, time);
   const sampled = sampleLayerAnimationsAtTime(
     {
-      transform: { ...layer.transform },
-      opacity: layer.opacity,
+      transform: basic.transform,
+      opacity: basic.opacity,
     },
     layer.animations,
     time,
@@ -102,6 +105,7 @@ export function sampleLayerAtTime(
   return {
     layerId: layer.id,
     transform: sampled.transform,
+    visualRotation: sampled.visualRotation,
     baseOpacity,
     opacity,
     visible,

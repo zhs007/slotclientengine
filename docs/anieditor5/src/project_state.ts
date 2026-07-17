@@ -9,6 +9,10 @@ import {
 } from "./constants";
 import type {
   V5GAssetConfig,
+  V5GBasicAnimationConfig,
+  V5GBasicAnimationEasing,
+  V5GBasicAnimationPointConfig,
+  V5GBasicAnimationTrackConfig,
   V5GEditorState,
   V5GLayerConfig,
   V5GLayerGroupConfig,
@@ -216,6 +220,196 @@ export function getSelectedLayer(state: V5GEditorState): V5GLayerConfig | null {
   );
 }
 
+export function createDefaultBasicAnimation(): V5GBasicAnimationConfig {
+  return {
+    opacity: createBasicAnimationTrack(),
+    positionX: createBasicAnimationTrack(),
+    positionY: createBasicAnimationTrack(),
+    scaleX: createBasicAnimationTrack(),
+    scaleY: createBasicAnimationTrack(),
+    rotation: createBasicAnimationTrack(),
+  };
+}
+
+function createBasicAnimationTrack(): V5GBasicAnimationTrackConfig {
+  return { enabled: false, points: [] };
+}
+
+export function normalizeProjectBasicAnimations(
+  project: V5GProjectConfig,
+): void {
+  for (const layer of project.layers) {
+    normalizeLayerBasicAnimation(layer);
+  }
+}
+
+export function normalizeLayerBasicAnimation(layer: V5GLayerConfig): void {
+  const next = createDefaultBasicAnimation();
+  const raw = layer.basicAnimation as
+    Partial<V5GBasicAnimationConfig> | undefined;
+  next.opacity = normalizeBasicTrack(raw?.opacity, 0, 1);
+  next.positionX = normalizeBasicTrack(raw?.positionX, -5000, 5000);
+  next.positionY = normalizeBasicTrack(raw?.positionY, -5000, 5000);
+  next.scaleX = normalizeBasicTrack(raw?.scaleX, 0, 20);
+  next.scaleY = normalizeBasicTrack(raw?.scaleY, 0, 20);
+  next.rotation = normalizeBasicTrack(raw?.rotation, -36000, 36000);
+
+  if (next.opacity.points.length === 0 && Array.isArray(layer.keyframes)) {
+    for (const keyframe of layer.keyframes) {
+      if (!keyframe || !Number.isFinite(Number(keyframe.time))) continue;
+      const easing = sanitizeBasicEasing(keyframe.easing);
+      const time = Math.max(0, Number(keyframe.time));
+      next.opacity.points.push({
+        id: keyframe.id ? `${keyframe.id}_opacity` : createId("basic_opacity"),
+        time,
+        value: clampBasicNumber(Number(keyframe.opacity), 0, 1, layer.opacity),
+        easing,
+      });
+      next.positionX.points.push({
+        id: keyframe.id ? `${keyframe.id}_x` : createId("basic_x"),
+        time,
+        value: clampBasicNumber(
+          Number(keyframe.transform?.x),
+          -5000,
+          5000,
+          layer.transform.x,
+        ),
+        easing,
+      });
+      next.positionY.points.push({
+        id: keyframe.id ? `${keyframe.id}_y` : createId("basic_y"),
+        time,
+        value: clampBasicNumber(
+          Number(keyframe.transform?.y),
+          -5000,
+          5000,
+          layer.transform.y,
+        ),
+        easing,
+      });
+      next.scaleX.points.push({
+        id: keyframe.id ? `${keyframe.id}_sx` : createId("basic_sx"),
+        time,
+        value: clampBasicNumber(
+          Number(keyframe.transform?.scaleX),
+          0,
+          20,
+          layer.transform.scaleX,
+        ),
+        easing,
+      });
+      next.scaleY.points.push({
+        id: keyframe.id ? `${keyframe.id}_sy` : createId("basic_sy"),
+        time,
+        value: clampBasicNumber(
+          Number(keyframe.transform?.scaleY),
+          0,
+          20,
+          layer.transform.scaleY,
+        ),
+        easing,
+      });
+      next.rotation.points.push({
+        id: keyframe.id ? `${keyframe.id}_rot` : createId("basic_rot"),
+        time,
+        value: clampBasicNumber(
+          Number(keyframe.transform?.rotation),
+          -36000,
+          36000,
+          layer.transform.rotation,
+        ),
+        easing,
+      });
+    }
+    const tracks: V5GBasicAnimationTrackConfig[] = Object.values(next);
+    for (const track of tracks) {
+      track.enabled = track.points.length >= 2;
+      track.points.sort(
+        (
+          left: V5GBasicAnimationPointConfig,
+          right: V5GBasicAnimationPointConfig,
+        ) => left.time - right.time,
+      );
+    }
+  }
+
+  layer.basicAnimation = next;
+}
+
+function normalizeBasicTrack(
+  raw: V5GBasicAnimationTrackConfig | undefined,
+  min: number,
+  max: number,
+  fallback = 0,
+  maxTime = MAX_PROJECT_BASIC_TIME,
+  maxPoints = 200,
+): V5GBasicAnimationTrackConfig {
+  const points = Array.isArray(raw?.points)
+    ? raw.points
+        .map((point, index) => {
+          const time = Math.min(maxTime, Math.max(0, Number(point?.time)));
+          const value = clampBasicNumber(
+            Number(point?.value),
+            min,
+            max,
+            fallback,
+          );
+          if (!Number.isFinite(time) || !Number.isFinite(value)) return null;
+          return {
+            id:
+              typeof point?.id === "string" && point.id
+                ? point.id
+                : createId("basic_point"),
+            time,
+            value,
+            easing: sanitizeBasicEasing(point?.easing),
+            _index: index,
+          };
+        })
+        .filter(
+          (
+            point,
+          ): point is {
+            id: string;
+            time: number;
+            value: number;
+            easing: V5GBasicAnimationEasing;
+            _index: number;
+          } => point !== null,
+        )
+        .sort(
+          (left, right) => left.time - right.time || left._index - right._index,
+        )
+        .slice(0, maxPoints)
+        .map(({ _index: _unused, ...point }) => {
+          void _unused;
+          return point;
+        })
+    : [];
+  return { enabled: raw?.enabled === true, points };
+}
+
+const MAX_PROJECT_BASIC_TIME = 3600;
+
+function sanitizeBasicEasing(value: unknown): V5GBasicAnimationEasing {
+  return value === "easeInQuad" ||
+    value === "easeOutQuad" ||
+    value === "easeInOutQuad" ||
+    value === "backOut"
+    ? value
+    : "linear";
+}
+
+function clampBasicNumber(
+  value: number,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
 export function sanitizeSequenceDuration(
   value: number,
   frameCount: number,
@@ -390,6 +584,7 @@ export function toExportProject(
   normalizeProjectLayerGroups(cloned);
   normalizeProjectMasks(cloned);
   normalizeProjectSequences(cloned);
+  normalizeProjectBasicAnimations(cloned);
 
   if (purpose === "editing") {
     return cloned;

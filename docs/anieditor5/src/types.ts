@@ -49,6 +49,7 @@ export type V5GAnimationType =
   | "scale_in"
   | "scale_out"
   | "pop"
+  | "bounce_jump"
   | "shake"
   | "blink"
   | "rotate"
@@ -89,6 +90,30 @@ export interface V5GAnimationConfig {
   enabled: boolean;
   seed: number;
   params: Record<string, V5GAnimationParamValue>;
+}
+
+export type V5GBasicAnimationEasing =
+  "linear" | "easeInQuad" | "easeOutQuad" | "easeInOutQuad" | "backOut";
+
+export interface V5GBasicAnimationPointConfig {
+  id: string;
+  time: number;
+  value: number;
+  easing: V5GBasicAnimationEasing;
+}
+
+export interface V5GBasicAnimationTrackConfig {
+  enabled: boolean;
+  points: V5GBasicAnimationPointConfig[];
+}
+
+export interface V5GBasicAnimationConfig {
+  opacity: V5GBasicAnimationTrackConfig;
+  positionX: V5GBasicAnimationTrackConfig;
+  positionY: V5GBasicAnimationTrackConfig;
+  scaleX: V5GBasicAnimationTrackConfig;
+  scaleY: V5GBasicAnimationTrackConfig;
+  rotation: V5GBasicAnimationTrackConfig;
 }
 
 export interface V5GLayerKeyframeConfig {
@@ -141,6 +166,9 @@ export interface V5GLayerConfig {
   /** Sequence-frame module data. Present only when type === "sequence". */
   sequence?: V5GSequenceConfig;
   animations: V5GAnimationConfig[];
+  /** Basic property multi-point animation sampled before preset/particle animations. */
+  basicAnimation?: V5GBasicAnimationConfig;
+  /** Legacy whole-layer keyframes; normalized into basicAnimation when present. */
   keyframes?: V5GLayerKeyframeConfig[];
 }
 
@@ -229,6 +257,8 @@ export interface V5GViewportState {
 export interface V5GPreviewLayerState {
   transform: V5GTransformConfig;
   opacity: number;
+  /** Extra inner-content rotation in degrees. Used when the outer layer shape stays squashed/elliptical but the image inside keeps spinning. */
+  visualRotation?: number;
 }
 
 export interface V5GEditorState {

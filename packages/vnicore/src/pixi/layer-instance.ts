@@ -14,7 +14,11 @@ import type {
 
 export interface V5GLayerInstance {
   layer: V5GLayerConfig;
+  /** Stable outer layer root. Owns the sampled layer transform and masks. */
   display: PIXI.Container;
+  /** Stable inner content root. Owns pressure-rotate visualRotation. */
+  content: PIXI.Container;
+  textureDisplay: PIXI.Sprite | null;
   originalTextDisplay: PIXI.Text | null;
   texture: PIXI.Texture | null;
   textureSize: { width: number; height: number } | null;
@@ -31,7 +35,12 @@ export function createLayerInstance(
   texturesByAssetId: ReadonlyMap<string, PIXI.Texture>,
   assetsById: ReadonlyMap<string, V5GAssetConfig>,
 ): V5GLayerInstance {
-  let display: PIXI.Container;
+  const display = new PIXI.Container();
+  display.label = layer.name;
+  const content = new PIXI.Container();
+  content.label = `${layer.name}:content`;
+  display.addChild(content);
+  let textureDisplay: PIXI.Sprite | null = null;
   let instanceTexture: PIXI.Texture | null = null;
   let textureSize: { width: number; height: number } | null = null;
   let displayScaleCompensation = { x: 1, y: 1 };
@@ -65,10 +74,9 @@ export function createLayerInstance(
     sprite.label = layer.name;
     sprite.anchor.set(layer.transform.anchorX, layer.transform.anchorY);
     displayScaleCompensation = getAssetDisplayCompensation(asset, textureSize);
-    display = sprite;
+    textureDisplay = sprite;
+    content.addChild(sprite);
   } else if (layer.type === "text") {
-    const wrapper = new PIXI.Container();
-    wrapper.label = layer.name;
     const text = new PIXI.Text({
       text: layer.text ?? layer.name,
       style: {
@@ -87,11 +95,12 @@ export function createLayerInstance(
     });
     text.label = layer.name;
     text.anchor.set(layer.transform.anchorX, layer.transform.anchorY);
-    wrapper.addChild(text);
-    display = wrapper;
+    content.addChild(text);
     return {
       layer,
       display,
+      content,
+      textureDisplay,
       originalTextDisplay: text,
       texture: null,
       textureSize: null,
@@ -104,6 +113,8 @@ export function createLayerInstance(
   return {
     layer,
     display,
+    content,
+    textureDisplay,
     originalTextDisplay: null,
     texture: instanceTexture,
     textureSize,
@@ -168,10 +179,15 @@ export function applySampledLayerState(
   );
   instance.display.position.set(position.x, position.y);
   instance.display.scale.set(
-    sampled.transform.scaleX * instance.displayScaleCompensation.x,
-    sampled.transform.scaleY * instance.displayScaleCompensation.y,
+    sampled.transform.scaleX,
+    sampled.transform.scaleY,
   );
   instance.display.rotation = (sampled.transform.rotation * Math.PI) / 180;
+  instance.content.scale.set(
+    instance.displayScaleCompensation.x,
+    instance.displayScaleCompensation.y,
+  );
+  instance.content.rotation = (sampled.visualRotation * Math.PI) / 180;
   instance.display.alpha = sampled.opacity;
   instance.display.visible = sampled.renderImageDisplay;
   instance.display.blendMode = toPixiBlendMode(sampled.blendMode);
@@ -198,7 +214,7 @@ export function getLayerAsset(
 }
 
 function getTextureBackedSprite(instance: V5GLayerInstance): PIXI.Sprite {
-  if (instance.display instanceof PIXI.Sprite) return instance.display;
+  if (instance.textureDisplay) return instance.textureDisplay;
   throw new Error(
     `VNI texture-backed layer "${instance.layer.id}" display is not a sprite.`,
   );
