@@ -2,6 +2,7 @@ import {
   collectSymbolManifestResourcePaths,
   parseSymbolPackageGameConfig,
   parseSymbolStateTextureManifest,
+  validateSymbolPackageGameConfig,
   type SymbolManifestAnimationSpec,
   type SymbolPackageGameConfigSymbol,
   type SymbolPackageManifestV1,
@@ -23,6 +24,13 @@ export interface SymbolEditorExportSnapshot {
   readonly rawGameConfig: unknown;
   readonly symbolManifest: unknown;
   readonly assets: ReadonlyMap<string, Uint8Array>;
+}
+
+export interface SymbolResourceStatus {
+  readonly ready: boolean;
+  readonly required: readonly string[];
+  readonly missing: readonly string[];
+  readonly error?: string;
 }
 
 export const DEFAULT_CELL_SIZE = 160;
@@ -329,11 +337,79 @@ export function exportSnapshot(
   });
 }
 
+export function createPreviewSnapshot(
+  project: SymbolEditorProject,
+): SymbolEditorExportSnapshot | null {
+  const readySymbols = getGameConfigSymbols(project)
+    .map(({ symbol }) => symbol)
+    .filter(
+      (symbol) =>
+        project.includedSymbols.has(symbol) &&
+        getSymbolResourceStatus(project, symbol).ready,
+    );
+  if (readySymbols.length === 0) return null;
+  const previewProject = cloneSymbolEditorProject(project);
+  const sourceSymbols = rawSymbols(previewProject);
+  previewProject.manifestDraft.symbols = Object.fromEntries(
+    readySymbols.map((symbol) => [symbol, sourceSymbols[symbol]]),
+  );
+  previewProject.includedSymbols = new Set(readySymbols);
+  const resources = collectSymbolManifestResourcePaths({
+    symbolManifest: previewProject.manifestDraft,
+    files: previewProject.assets,
+  });
+  previewProject.assets = new Map(
+    resources.map((path) => [path, previewProject.assets.get(path)!]),
+  );
+  previewProject.unmappedFiles.clear();
+  return exportSnapshot(previewProject);
+}
+
+export function getSymbolResourceStatus(
+  project: SymbolEditorProject,
+  symbol: string,
+): SymbolResourceStatus {
+  if (!project.includedSymbols.has(symbol)) {
+    return Object.freeze({
+      ready: false,
+      required: Object.freeze([]),
+      missing: Object.freeze([]),
+    });
+  }
+  try {
+    const manifest = cloneValue(project.manifestDraft);
+    const symbols = rawSymbols(project);
+    manifest.symbols = { [symbol]: cloneValue(symbols[symbol]) };
+    const required = collectSymbolManifestResourcePaths({
+      symbolManifest: manifest,
+      files: project.assets,
+    });
+    const missing = required.filter((path) => !project.assets.has(path));
+    return Object.freeze({
+      ready: missing.length === 0,
+      required,
+      missing: Object.freeze(missing),
+    });
+  } catch (error) {
+    return Object.freeze({
+      ready: false,
+      required: Object.freeze([]),
+      missing: Object.freeze([]),
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 export function getProjectDiagnostics(
   project: SymbolEditorProject,
 ): readonly string[] {
   try {
-    exportSnapshot(project);
+    validateProjectBasics(project);
+    parseSymbolStateTextureManifest(project.manifestDraft);
+    validateSymbolPackageGameConfig({
+      rawGameConfig: project.rawGameConfig,
+      symbolManifest: project.manifestDraft,
+    });
     return Object.freeze([]);
   } catch (error) {
     return Object.freeze([

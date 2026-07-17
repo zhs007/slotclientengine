@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   createFromGameConfig,
+  createPreviewSnapshot,
   exportSnapshot,
   getGameConfigSymbols,
+  getProjectDiagnostics,
+  getSymbolResourceStatus,
   replaceUploadedFiles,
   setSymbolNormal,
   setSymbolIncluded,
@@ -47,6 +50,39 @@ describe("symbol editor project", () => {
     ]);
     expect(project.assets.has("A.png")).toBe(true);
     expect(project.unmappedFiles.has("unknown.png")).toBe(true);
+    expect(getProjectDiagnostics(project)).toEqual([]);
+    expect(getSymbolResourceStatus(project, "A")).toMatchObject({
+      ready: false,
+      missing: ["A.disabled.png", "A.spinBlur.png"],
+    });
+    expect(createPreviewSnapshot(project)).toBe(null);
+    expect(() => exportSnapshot(project)).toThrow(/资源闭包/);
+  });
+
+  it("builds a preview snapshot from complete symbols while the project stays incomplete", () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "fixture.json",
+    });
+    replaceUploadedFiles(project, [
+      { name: "A.png", bytes: new Uint8Array([1]) },
+      { name: "A.spinBlur.png", bytes: new Uint8Array([2]) },
+      { name: "A.disabled.png", bytes: new Uint8Array([3]) },
+    ]);
+    expect(getSymbolResourceStatus(project, "A").ready).toBe(true);
+    expect(getSymbolResourceStatus(project, "B").ready).toBe(false);
+    const snapshot = createPreviewSnapshot(project);
+    expect(snapshot?.packageManifest.resources).toEqual([
+      "A.disabled.png",
+      "A.png",
+      "A.spinBlur.png",
+    ]);
+    expect(
+      Object.keys(
+        (snapshot?.symbolManifest as { symbols: Record<string, unknown> })
+          .symbols,
+      ),
+    ).toEqual(["A"]);
     expect(() => exportSnapshot(project)).toThrow(/资源闭包/);
   });
 

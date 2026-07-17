@@ -105,10 +105,19 @@ input[type="checkbox"] {
 }
 .symbol-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding: 5px 8px;
+}
+.symbol-status {
+  flex-basis: 100%;
+  color: #ffbe76;
+  overflow-wrap: anywhere;
+}
+.symbol-status.ready {
+  color: #69dbb4;
 }
 .symbol-row.selected {
   background: #16324c;

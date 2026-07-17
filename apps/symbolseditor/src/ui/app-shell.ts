@@ -1,8 +1,10 @@
 import { createSymbolPackageResource } from "@slotclientengine/rendercore/symbol";
 import {
   createFromGameConfig,
+  createPreviewSnapshot,
   exportSnapshot,
   getGameConfigSymbols,
+  getSymbolResourceStatus,
   removeAnimationSpec,
   replaceUploadedFiles,
   setAnimationSpec,
@@ -95,6 +97,7 @@ export class SymbolsEditorApp {
       panel.innerHTML =
         '<p class="empty">上传公开 gameconfig.json 或导入 symbols ZIP 开始。</p>';
       this.requireElement("[data-errors]").textContent = "";
+      this.#preview?.clearResource();
       return;
     }
     const project = snapshot.project;
@@ -122,6 +125,17 @@ export class SymbolsEditorApp {
         Object.assign(document.createElement("div"), { textContent: message }),
       ),
     );
+    const exportButton = this.requireElement(
+      "[data-export]",
+    ) as HTMLButtonElement;
+    try {
+      exportSnapshot(project);
+      exportButton.disabled = false;
+      exportButton.title = "";
+    } catch (error) {
+      exportButton.disabled = true;
+      exportButton.title = `资源尚未补齐：${error instanceof Error ? error.message : String(error)}`;
+    }
     this.bindProjectControls(panel);
   }
 
@@ -381,9 +395,16 @@ export class SymbolsEditorApp {
     snapshot: SymbolEditorStoreSnapshot,
   ): Promise<void> {
     const request = ++this.#previewRequest;
-    if (!snapshot.project || snapshot.diagnostics.length > 0) return;
+    if (!snapshot.project || snapshot.diagnostics.length > 0) {
+      this.#preview?.clearResource();
+      return;
+    }
     try {
-      const exportData = exportSnapshot(snapshot.project);
+      const exportData = createPreviewSnapshot(snapshot.project);
+      if (!exportData) {
+        this.#preview?.clearResource();
+        return;
+      }
       const resource = await createSymbolPackageResource({
         packageManifest: exportData.packageManifest,
         files: createSnapshotFiles(exportData),
@@ -502,6 +523,10 @@ function projectMarkup(
       ...textureStates,
     ]),
   ];
+  const includedStatuses = symbols
+    .filter(({ symbol }) => project.includedSymbols.has(symbol))
+    .map(({ symbol }) => getSymbolResourceStatus(project, symbol));
+  const readyCount = includedStatuses.filter(({ ready }) => ready).length;
   return `
     <section><h2>项目</h2>
       <label>ID <input data-id value="${escapeHtml(project.id)}"></label>
@@ -510,19 +535,26 @@ function projectMarkup(
       <label>Texture states（逗号分隔） <input data-texture-states value="${escapeHtml(textureStates.join(","))}"></label>
       ${settings.spinBlur?.kind === "verticalBoxBlur" ? `<label>spinBlur kernelHeight <input data-state-setting="spinBlur" data-setting-kind="verticalBoxBlur" data-setting-field="kernelHeight" type="number" min="1" value="${Number(settings.spinBlur.kernelHeight)}"></label>` : ""}
       ${settings.disabled?.kind === "grayscale" ? `<label>disabled brightness <input data-state-setting="disabled" data-setting-kind="grayscale" data-setting-field="brightness" type="number" min="0" step="0.01" value="${Number(settings.disabled.brightness)}"></label>` : ""}
-      <p class="hint">game config: ${escapeHtml(project.gameConfigFileName)} · mapped ${project.assets.size} · unmapped ${project.unmappedFiles.size}</p>
+      <p class="hint">game config: ${escapeHtml(project.gameConfigFileName)} · mapped ${project.assets.size} · unmapped ${project.unmappedFiles.size} · 可预览 ${readyCount}/${includedStatuses.length}</p>
+      <p class="hint">新项目默认全选 game config symbols；不属于 display set 的辅助 symbol 请取消勾选。资源未补齐是正常编辑状态，只在导出时严格阻止。</p>
     </section>
     <section><h2>Display symbols</h2><div class="symbol-list">
       ${symbols
-        .map(
-          ({
-            code,
-            symbol,
-          }) => `<div class="symbol-row ${symbol === selectedSymbol ? "selected" : ""}">
+        .map(({ code, symbol }) => {
+          const status = getSymbolResourceStatus(project, symbol);
+          const statusText = !project.includedSymbols.has(symbol)
+            ? "未打包"
+            : status.ready
+              ? "资源完整"
+              : status.error
+                ? `资源错误：${status.error}`
+                : `缺 ${status.missing.length} 项：${status.missing.join(", ")}`;
+          return `<div class="symbol-row ${symbol === selectedSymbol ? "selected" : ""}">
         <label><input type="checkbox" data-include="${escapeHtml(symbol)}" ${project.includedSymbols.has(symbol) ? "checked" : ""}> ${code} · ${escapeHtml(symbol)}</label>
         <button type="button" data-select-symbol="${escapeHtml(symbol)}" ${project.includedSymbols.has(symbol) ? "" : "disabled"}>编辑</button>
-      </div>`,
-        )
+        <small class="symbol-status ${status.ready ? "ready" : ""}">${escapeHtml(statusText)}</small>
+      </div>`;
+        })
         .join("")}
     </div></section>
     ${

@@ -88,11 +88,16 @@ export class SymbolEditorPreview {
     void this.rebuildCurrentResource();
   }
 
-  destroy(): void {
+  clearResource(): void {
     this.#request += 1;
     this.clearSymbols();
     this.#resource?.destroy();
     this.#resource = null;
+    this.#guides.clear();
+  }
+
+  destroy(): void {
+    this.clearResource();
     this.#guides.destroy();
     this.#content.destroy({ children: true });
     this.#app.destroy(true, { children: true, texture: true });
