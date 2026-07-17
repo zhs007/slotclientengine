@@ -294,6 +294,7 @@ export function createGame002ReelLayout(
     cellWidth: gridLayout.cellWidth,
     cellHeight: gridLayout.cellHeight,
     columnGap: 0,
+    rowGap: 0,
   });
 }
 
@@ -328,12 +329,17 @@ export function createGame002ReelLayerLayout(
   if (layout.columnGap !== 0) {
     throw new Error("game002 reel layout columnGap must be 0.");
   }
+  if (layout.rowGap !== 0) {
+    throw new Error("game002 reel layout rowGap must be 0.");
+  }
 
   return Object.freeze({
     rawReelsContentWidth:
       layout.reelCount * layout.cellWidth +
       (layout.reelCount - 1) * layout.columnGap,
-    rawReelsContentHeight: layout.visibleRows * layout.cellHeight,
+    rawReelsContentHeight:
+      layout.visibleRows * layout.cellHeight +
+      (layout.visibleRows - 1) * layout.rowGap,
     x: gameLayout.boardFrame.x,
     y: gameLayout.boardFrame.y,
     stageVisibleFrame: gameLayout.boardFrame,

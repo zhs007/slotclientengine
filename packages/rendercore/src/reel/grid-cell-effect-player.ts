@@ -68,6 +68,8 @@ export function createGridCellEffectController(options: {
   readonly rows: number;
   readonly cellWidth: number;
   readonly cellHeight: number;
+  readonly columnGap?: number;
+  readonly rowGap?: number;
   readonly createPlayer?: (
     resource: GridCellEffectResource,
   ) => RendercoreSpinePlayer;
@@ -83,6 +85,8 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
   readonly #rows: number;
   readonly #cellWidth: number;
   readonly #cellHeight: number;
+  readonly #columnGap: number;
+  readonly #rowGap: number;
   readonly #mask: Graphics;
   #prepared = false;
   #preparing = false;
@@ -95,6 +99,8 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
     readonly rows: number;
     readonly cellWidth: number;
     readonly cellHeight: number;
+    readonly columnGap?: number;
+    readonly rowGap?: number;
     readonly createPlayer?: (
       resource: GridCellEffectResource,
     ) => RendercoreSpinePlayer;
@@ -103,6 +109,11 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
     this.#rows = assertPositiveSafeInteger(options.rows, "rows");
     this.#cellWidth = assertPositiveFinite(options.cellWidth, "cellWidth");
     this.#cellHeight = assertPositiveFinite(options.cellHeight, "cellHeight");
+    this.#columnGap = assertNonNegativeFinite(
+      options.columnGap ?? 0,
+      "columnGap",
+    );
+    this.#rowGap = assertNonNegativeFinite(options.rowGap ?? 0, "rowGap");
     const createPlayer =
       options.createPlayer ??
       ((resource: GridCellEffectResource) =>
@@ -147,8 +158,8 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
       .rect(
         0,
         0,
-        this.#columns * this.#cellWidth,
-        this.#rows * this.#cellHeight,
+        this.#columns * this.#cellWidth + (this.#columns - 1) * this.#columnGap,
+        this.#rows * this.#cellHeight + (this.#rows - 1) * this.#rowGap,
       )
       .fill({ color: 0xffffff, alpha: 1 });
     this.#mask.visible = true;
@@ -228,8 +239,12 @@ class GridCellEffectControllerImpl implements GridCellEffectController {
     entry.requiredLoops = options.loopCount;
     entry.elapsedSeconds = 0;
     entry.player.view.position.set(
-      x * this.#cellWidth + this.#cellWidth / 2 + entry.resource.transform.x,
-      y * this.#cellHeight + this.#cellHeight / 2 + entry.resource.transform.y,
+      x * (this.#cellWidth + this.#columnGap) +
+        this.#cellWidth / 2 +
+        entry.resource.transform.x,
+      y * (this.#cellHeight + this.#rowGap) +
+        this.#cellHeight / 2 +
+        entry.resource.transform.y,
     );
     entry.player.view.scale.set(entry.resource.transform.scale);
     entry.player.view.renderable = true;
@@ -395,6 +410,13 @@ function assertPositiveSafeInteger(value: unknown, label: string): number {
 function assertPositiveFinite(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     throw new ReelError(`${label} must be a positive finite number.`);
+  }
+  return value;
+}
+
+function assertNonNegativeFinite(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new ReelError(`${label} must be a non-negative finite number.`);
   }
   return value;
 }

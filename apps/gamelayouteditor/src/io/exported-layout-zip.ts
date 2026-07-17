@@ -1,0 +1,64 @@
+import {
+  collectSceneLayoutAssetPaths,
+  parseSceneLayoutManifest,
+  type SceneLayoutManifestV1,
+} from "@slotclientengine/rendercore/scene-layout";
+import { strToU8, zipSync } from "fflate";
+import { assertCanonicalPackagePath } from "./filename-policy.js";
+import { validateLayoutAssets } from "./imported-layout-zip.js";
+
+export async function exportLayoutZip(options: {
+  readonly manifest: SceneLayoutManifestV1;
+  readonly assets: ReadonlyMap<string, Uint8Array>;
+  readonly decodeImage?: (
+    url: string,
+  ) => Promise<{ readonly width: number; readonly height: number }>;
+}): Promise<{
+  readonly fileName: string;
+  readonly bytes: Uint8Array;
+  readonly blob: Blob;
+}> {
+  const manifest = parseSceneLayoutManifest(options.manifest);
+  if (manifest.id !== manifest.id.toLowerCase()) {
+    throw new Error("project id 必须为小写。");
+  }
+  for (const path of collectSceneLayoutAssetPaths(manifest)) {
+    assertCanonicalPackagePath(path);
+  }
+  const validated = await validateLayoutAssets(manifest, options.assets, {
+    ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+  });
+  validated.destroy();
+  const entries: Record<string, Uint8Array> = {
+    "layout.manifest.json": strToU8(stableManifestJson(manifest)),
+  };
+  for (const path of [...options.assets.keys()].sort()) {
+    entries[path] = options.assets.get(path)!.slice();
+  }
+  const bytes = zipSync(entries, {
+    level: 6,
+    mtime: new Date("1980-01-01T00:00:00.000Z"),
+  });
+  return Object.freeze({
+    fileName: `${manifest.id}-layout.zip`,
+    bytes,
+    blob: new Blob([bytes as BlobPart], { type: "application/zip" }),
+  });
+}
+
+export function stableManifestJson(
+  manifestValue: SceneLayoutManifestV1,
+): string {
+  const manifest = parseSceneLayoutManifest(manifestValue);
+  return `${JSON.stringify(sortValue(manifest), null, 2)}\n`;
+}
+
+function sortValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right, "en"))
+      .map(([key, child]) => [key, sortValue(child)]),
+  );
+}

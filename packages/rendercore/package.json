@@ -28,6 +28,10 @@
       "types": "./dist/viewport/index.d.ts",
       "import": "./dist/viewport/index.js"
     },
+    "./scene-layout": {
+      "types": "./dist/scene-layout/index.d.ts",
+      "import": "./dist/scene-layout/index.js"
+    },
     "./win-amount": {
       "types": "./dist/win-amount/index.d.ts",
       "import": "./dist/win-amount/index.js"

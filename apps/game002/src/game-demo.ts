@@ -325,6 +325,8 @@ export function createGame002ReelRuntime(
     rows: GAME002_VISIBLE_ROWS,
     cellWidth: layout.cellWidth,
     cellHeight: layout.cellHeight,
+    columnGap: layout.columnGap,
+    rowGap: layout.rowGap,
   });
   const reelSet = new RenderGridCellReelSet({
     reels,
@@ -333,6 +335,8 @@ export function createGame002ReelRuntime(
     rows: GAME002_VISIBLE_ROWS,
     cellWidth: layout.cellWidth,
     cellHeight: layout.cellHeight,
+    columnGap: layout.columnGap,
+    rowGap: layout.rowGap,
     order,
     effectController,
     bounceStrength: config.spinBounceStrength,
@@ -792,6 +796,7 @@ export function createGame002ReelRuntime(
       return createGridCellCascadeDropPlan({
         ...dropOptions,
         cellHeight: layout.cellHeight,
+        rowGap: layout.rowGap,
       });
     },
     createCascadeDropdownPlan(dropOptions: {
@@ -810,6 +815,7 @@ export function createGame002ReelRuntime(
       return createGridCellCascadeDropdownPlan({
         ...dropOptions,
         cellHeight: layout.cellHeight,
+        rowGap: layout.rowGap,
       });
     },
     startCascadeDrop(plan: GridCellCascadeDropPlan): void {

@@ -24,6 +24,7 @@ export function createGridCellCascadeDropPlan(options: {
     context: GridCellCascadeDropOccurrenceContext,
   ) => boolean;
   readonly cellHeight: number;
+  readonly rowGap?: number;
   readonly motion: GridCellCascadeMotionOptions;
 }): GridCellCascadeDropPlan {
   const sourceScene = parseHoleScene(options.sourceScene, "sourceScene");
@@ -57,6 +58,7 @@ export function createGridCellCascadeDropPlan(options: {
     "targetValues",
   );
   const cellHeight = assertPositiveFinite(options.cellHeight, "cellHeight");
+  const rowGap = assertNonNegativeFinite(options.rowGap ?? 0, "rowGap");
   const motion = parseMotion(options.motion);
   const refillPositions = parseRefillPositions(
     options.refillPositions,
@@ -174,7 +176,7 @@ export function createGridCellCascadeDropPlan(options: {
             staggerIndex * motion.startStaggerSeconds,
           fallSeconds,
           settleSeconds: motion.settleSeconds,
-          overshootPixels: cellHeight * motion.overshootCellRatio,
+          overshootPixels: (cellHeight + rowGap) * motion.overshootCellRatio,
         }),
       );
     });

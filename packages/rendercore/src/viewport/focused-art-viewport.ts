@@ -30,6 +30,14 @@ export interface MaximizedFocusedArtViewportOptions {
   readonly focusRect: RenderViewportRect;
 }
 
+export interface FocusedFrameDesignSizeOptions {
+  readonly pageSize: RenderViewportSize;
+  readonly maxDesignSize: RenderViewportSize;
+  readonly preferredPortraitSize: RenderViewportSize;
+  readonly focusSize: RenderViewportSize;
+  readonly minMargin?: RenderViewportMargin;
+}
+
 export interface MaximizedFocusedArtViewportPolicy {
   readonly mode: "maximized-focus";
   resolveViewportSize(pageSize: RenderViewportSize): RenderViewportSize;
@@ -41,6 +49,66 @@ export interface FocusedArtViewport {
   readonly visibleRect: RenderViewportRect;
   readonly worldOffset: { readonly x: number; readonly y: number };
   readonly focusRectInViewport: RenderViewportRect;
+}
+
+/**
+ * Resolves the logical canvas size used by a focus-aware DOM frame.
+ * The returned size preserves the page aspect while keeping the required
+ * focus and margins visible, capped by the selected art's design bounds.
+ */
+export function calculateFocusedFrameDesignSize(
+  options: FocusedFrameDesignSizeOptions,
+): RenderViewportSize {
+  const pageSize = validateSize(options.pageSize, "pageSize");
+  const maxDesignSize = validateSize(options.maxDesignSize, "maxDesignSize");
+  const preferredPortraitSize = validateSize(
+    options.preferredPortraitSize,
+    "preferredPortraitSize",
+  );
+  const focusSize = validateSize(options.focusSize, "focusSize");
+  const margin = normalizeMargin(options.minMargin);
+  const minimumWidth = focusSize.width + margin.left + margin.right;
+  const minimumHeight = focusSize.height + margin.top + margin.bottom;
+
+  if (
+    preferredPortraitSize.width > maxDesignSize.width ||
+    preferredPortraitSize.height > maxDesignSize.height
+  ) {
+    throw new Error("preferredPortraitSize must not exceed maxDesignSize.");
+  }
+  if (
+    minimumWidth > maxDesignSize.width ||
+    minimumHeight > maxDesignSize.height
+  ) {
+    throw new Error("focusSize and minMargin must fit inside maxDesignSize.");
+  }
+
+  const pageAspect = pageSize.width / pageSize.height;
+  const portraitAspect =
+    preferredPortraitSize.width / preferredPortraitSize.height;
+  const maximumWideAspect = maxDesignSize.width / minimumHeight;
+  let width: number;
+  let height: number;
+
+  if (pageAspect <= portraitAspect) {
+    height = maxDesignSize.height;
+    width = clamp(
+      height * pageAspect,
+      minimumWidth,
+      preferredPortraitSize.width,
+    );
+  } else if (pageAspect >= maximumWideAspect) {
+    width = maxDesignSize.width;
+    height = minimumHeight;
+  } else {
+    height = Math.max(minimumHeight, minimumWidth / pageAspect);
+    width = height * pageAspect;
+  }
+
+  return freezeSize({
+    width: clamp(width, minimumWidth, maxDesignSize.width),
+    height: clamp(height, minimumHeight, maxDesignSize.height),
+  });
 }
 
 export interface MapArtRectToViewportOptions {
@@ -383,6 +451,10 @@ function clampOrigin(
   viewportLength: number,
 ): number {
   return Math.min(Math.max(origin, 0), artLength - viewportLength);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }
 
 function assertFinite(value: number, label: string): void {

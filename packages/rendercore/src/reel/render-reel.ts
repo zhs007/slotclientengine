@@ -88,14 +88,7 @@ export class RenderReel extends Container {
       options.slotRenderOrderStride ?? calculateSlotCount(options.layout) + 1,
       "slotRenderOrderStride",
     );
-    this.#clipMask = new Graphics()
-      .rect(
-        0,
-        0,
-        options.layout.cellWidth,
-        options.layout.visibleRows * options.layout.cellHeight,
-      )
-      .fill({ color: 0xffffff, alpha: 1 });
+    this.#clipMask = createReelClipMask(options.layout);
     this.#clipMask.visible = false;
     this.#clipMask.renderable = false;
     this.#slots = Object.freeze(this.createSlots());
@@ -820,6 +813,19 @@ function calculateBounceOffset(
     );
   }
   return 0;
+}
+
+function createReelClipMask(layout: ReelLayout): Graphics {
+  const mask = new Graphics();
+  for (let visibleY = 0; visibleY < layout.visibleRows; visibleY += 1) {
+    mask.rect(
+      0,
+      layout.getCellY(visibleY),
+      layout.cellWidth,
+      layout.cellHeight,
+    );
+  }
+  return mask.fill({ color: 0xffffff, alpha: 1 });
 }
 
 function calculateSlotCount(layout: ReelLayout): number {

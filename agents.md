@@ -95,3 +95,5 @@
 - 若依赖安装失败，可先执行：
   `export http_proxy=http://127.0.0.1:1087;export https_proxy=http://127.0.0.1:1087;`
 - 当任务影响仓库协作规则、目录规范或基础脚本时，需要同步更新本文件。
+- `packages/rendercore` 拥有通用 scene-layout manifest parsing、精确 asset closure、image/official Spine 4.3 node runtime、named-node lookup/child/before/after attachment、focus/reel geometry 和 variant application；游戏 app 只加载 package、通过 public API 挂业务对象，并把 manifest 派生的 reel geometry 传回 rendercore，不得复制 scene parser、适配公式或 Pixi assembly。scene layout 的 `columnGap/rowGap` 必须同时作用于普通/grid-cell reel、mask、effect、cascade 和 geometry snapshot，缺 variant/resource/animation 必须显式失败且不得 fallback。
+- `apps/gamelayouteditor` 拥有 browser-only editing UI、preview controls、受限 zip import/export、ASCII lowercase filename canonicalization 和 Blob URL lifecycle；它必须保持 `base: "./"`、可部署到任意静态 CDN 子路径且不依赖 server/API/WebSocket/数据库/登录态/持久化存储。预览必须复用 uiframeworks frame viewport 与 rendercore scene runtime，preview zoom 不进入 manifest，canvas 拖动不得修改 layout 配置。

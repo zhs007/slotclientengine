@@ -10,6 +10,7 @@ export function createReelLayout(options: ReelLayoutOptions): ReelLayout {
     options.columnGap ?? 0,
     "columnGap",
   );
+  const rowGap = assertNonNegativeNumber(options.rowGap ?? 0, "rowGap");
   const bufferRowsBefore = assertNonNegativeInteger(
     options.bufferRowsBefore ?? 1,
     "bufferRowsBefore",
@@ -25,6 +26,7 @@ export function createReelLayout(options: ReelLayoutOptions): ReelLayout {
     cellWidth,
     cellHeight,
     columnGap,
+    rowGap,
     bufferRowsBefore,
     bufferRowsAfter,
     getReelX(x: number): number {
@@ -37,7 +39,7 @@ export function createReelLayout(options: ReelLayoutOptions): ReelLayout {
       if (!Number.isInteger(visibleY)) {
         throw new ReelError(`visibleY ${visibleY} must be an integer.`);
       }
-      return visibleY * cellHeight;
+      return visibleY * (cellHeight + rowGap);
     },
   });
 }

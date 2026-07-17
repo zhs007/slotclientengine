@@ -6,3 +6,4 @@ export * from "./win-amount/index.js";
 export * from "./symbol-win-carousel/index.js";
 export * from "./symbol-cascade/index.js";
 export * from "./symbol-value-presentation/index.js";
+export * from "./scene-layout/index.js";

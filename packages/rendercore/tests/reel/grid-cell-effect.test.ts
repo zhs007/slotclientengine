@@ -66,7 +66,7 @@ describe("grid cell effect resources and controller", () => {
         resources,
         cellCount: 54,
       }),
-    ).toEqual({ anticipation: 3, refillSweep: 5 });
+    ).toEqual({ anticipation: 7, refillSweep: 5 });
     expect(() =>
       createGridCellEffectResourcesFromManifest({
         manifest,

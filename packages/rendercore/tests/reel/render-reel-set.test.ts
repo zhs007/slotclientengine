@@ -378,6 +378,7 @@ describe("RenderReelSet", () => {
         cellWidth: 20,
         cellHeight: 20,
         columnGap: 3,
+        rowGap: 4,
       }),
       registry,
     });
@@ -428,7 +429,7 @@ describe("RenderReelSet", () => {
         code: 2,
         kind: "textured",
         centerX: 33,
-        centerY: 30,
+        centerY: 34,
         cellWidth: 20,
         cellHeight: 20,
       },

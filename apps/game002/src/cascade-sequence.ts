@@ -258,6 +258,7 @@ export function createGame002CascadeSequence(options: {
           presentationValue,
         }),
       cellHeight: 1,
+      rowGap: 0,
       motion: GAME002_CASCADE_MOTION,
     });
     const winStage = createWinRemoveStage({

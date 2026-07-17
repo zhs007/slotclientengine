@@ -13,11 +13,13 @@ describe("createReelLayout", () => {
       cellWidth: 100,
       cellHeight: 80,
       columnGap: 12,
+      rowGap: 7,
     });
 
     expect(layout.getReelX(0)).toBe(0);
     expect(layout.getReelX(4)).toBe(448);
-    expect(layout.getCellY(3)).toBe(240);
+    expect(layout.getCellY(3)).toBe(261);
+    expect(layout.rowGap).toBe(7);
     expect(layout.bufferRowsBefore).toBe(1);
     expect(layout.bufferRowsAfter).toBe(1);
     expect(() => layout.getReelX(5)).toThrow(ReelError);
@@ -57,6 +59,15 @@ describe("createReelLayout", () => {
         columnGap: -1,
       }),
     ).toThrow(/columnGap/);
+    expect(() =>
+      createReelLayout({
+        reelCount: 5,
+        visibleRows: 5,
+        cellWidth: 1,
+        cellHeight: 1,
+        rowGap: -1,
+      }),
+    ).toThrow(/rowGap/);
     expect(() =>
       assertLayoutMatchesReels(
         createReelLayout({

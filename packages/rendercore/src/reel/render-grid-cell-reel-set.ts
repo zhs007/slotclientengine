@@ -81,6 +81,8 @@ export class RenderGridCellReelSet extends Container {
   readonly #rows: number;
   readonly #cellWidth: number;
   readonly #cellHeight: number;
+  readonly #columnGap: number;
+  readonly #rowGap: number;
   readonly #bounceStrength: number | undefined;
   readonly #order: readonly GridCellCoordinate[];
   readonly #cells: readonly RuntimeCell[];
@@ -103,6 +105,11 @@ export class RenderGridCellReelSet extends Container {
     this.#rows = assertPositiveInteger(options.rows, "rows");
     this.#cellWidth = assertPositiveNumber(options.cellWidth, "cellWidth");
     this.#cellHeight = assertPositiveNumber(options.cellHeight, "cellHeight");
+    this.#columnGap = assertNonNegativeNumber(
+      options.columnGap ?? 0,
+      "columnGap",
+    );
+    this.#rowGap = assertNonNegativeNumber(options.rowGap ?? 0, "rowGap");
     this.#bounceStrength = options.bounceStrength;
     if (options.reels.getReelCount() !== this.#columns) {
       throw new ReelError(
@@ -130,8 +137,8 @@ export class RenderGridCellReelSet extends Container {
       .rect(
         0,
         0,
-        this.#columns * this.#cellWidth,
-        this.#rows * this.#cellHeight,
+        this.#columns * this.#cellWidth + (this.#columns - 1) * this.#columnGap,
+        this.#rows * this.#cellHeight + (this.#rows - 1) * this.#rowGap,
       )
       .fill({ color: 0xffffff, alpha: 1 });
     this.#cascadeMovementMask.visible = false;
@@ -585,8 +592,9 @@ export class RenderGridCellReelSet extends Container {
         occurrence.symbol.requestState("normal");
       }
       occurrence.symbol.position.set(
-        movement.x * this.#cellWidth + this.#cellWidth / 2,
-        movement.sourceY * this.#cellHeight + this.#cellHeight / 2,
+        movement.x * (this.#cellWidth + this.#columnGap) + this.#cellWidth / 2,
+        movement.sourceY * (this.#cellHeight + this.#rowGap) +
+          this.#cellHeight / 2,
       );
       const targetCell = this.getCell(movement.x, movement.targetY);
       occurrence.symbol.zIndex =
@@ -705,8 +713,8 @@ export class RenderGridCellReelSet extends Container {
     presentationValueResolver: RenderGridCellReelSetOptions["presentationValueResolver"],
   ): RuntimeCell {
     const root = new Container();
-    root.x = coordinate.x * this.#cellWidth;
-    root.y = coordinate.y * this.#cellHeight;
+    root.x = coordinate.x * (this.#cellWidth + this.#columnGap);
+    root.y = coordinate.y * (this.#cellHeight + this.#rowGap);
 
     const clipMask = new Graphics()
       .rect(0, 0, this.#cellWidth, this.#cellHeight)
@@ -1215,8 +1223,12 @@ export class RenderGridCellReelSet extends Container {
       item.occurrence.symbol.update(deltaSeconds);
       const { movement } = item;
       const elapsed = active.elapsedSeconds - movement.startSeconds;
-      const source = movement.sourceY * this.#cellHeight + this.#cellHeight / 2;
-      const target = movement.targetY * this.#cellHeight + this.#cellHeight / 2;
+      const source =
+        movement.sourceY * (this.#cellHeight + this.#rowGap) +
+        this.#cellHeight / 2;
+      const target =
+        movement.targetY * (this.#cellHeight + this.#rowGap) +
+        this.#cellHeight / 2;
       if (elapsed <= 0) {
         item.occurrence.symbol.y = source;
       } else if (elapsed < movement.fallSeconds) {
@@ -1655,6 +1667,13 @@ function assertPositiveInteger(value: unknown, label: string): number {
 function assertPositiveNumber(value: unknown, label: string): number {
   if (!Number.isFinite(value) || (value as number) <= 0) {
     throw new ReelError(`${label} must be a positive number.`);
+  }
+  return value as number;
+}
+
+function assertNonNegativeNumber(value: unknown, label: string): number {
+  if (!Number.isFinite(value) || (value as number) < 0) {
+    throw new ReelError(`${label} must be a non-negative number.`);
   }
   return value as number;
 }

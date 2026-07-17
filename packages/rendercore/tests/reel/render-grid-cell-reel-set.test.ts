@@ -149,6 +149,41 @@ describe("RenderGridCellReelSet", () => {
     expect(clipContent?.mask).toBeUndefined();
   });
 
+  it("applies nonzero column and row gaps to real grid cells and geometry", () => {
+    const reelSet = new RenderGridCellReelSet({
+      reels: createBasicReels(),
+      registry: createBasicRegistry(),
+      columns: 2,
+      rows: 3,
+      cellWidth: 15,
+      cellHeight: 12,
+      columnGap: 4,
+      rowGap: 3,
+      order: createGridCellOrder({
+        columns: 2,
+        rows: 3,
+        mode: "top-down-left-right",
+      }),
+    });
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    expect(
+      reelSet
+        .getSnapshot()
+        .cells.map((cell) => [cell.x, cell.y, cell.cellX, cell.cellY]),
+    ).toEqual([
+      [0, 0, 0, 0],
+      [0, 1, 0, 15],
+      [0, 2, 0, 30],
+      [1, 0, 19, 0],
+      [1, 1, 19, 15],
+      [1, 2, 19, 30],
+    ]);
+    expect(reelSet.getVisibleSymbolGeometrySnapshot(1, 2)).toMatchObject({
+      centerX: 26.5,
+      centerY: 36,
+    });
+  });
+
   it("plays configured appear per landed cell before normal and completion", () => {
     const reelSet = createGridReelSet({
       landingAppearSymbols: ["A", "B"],

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateFocusedArtViewport,
+  calculateFocusedFrameDesignSize,
   calculateMaximizedFocusedArtViewport,
   createMaximizedFocusedArtViewportPolicy,
   mapAnchorRectToArt,
@@ -25,6 +26,27 @@ const FOCUS_RECT = Object.freeze({
 const MARGIN = Object.freeze({ left: 60, right: 60, top: 60, bottom: 60 });
 
 describe("focused art viewport", () => {
+  it("ports focus-aware DOM frame sizing into pure render geometry", () => {
+    expect(
+      calculateFocusedFrameDesignSize({
+        pageSize: { width: 390, height: 844 },
+        maxDesignSize: { width: 1174, height: 2000 },
+        preferredPortraitSize: { width: 1174, height: 2000 },
+        focusSize: { width: 1130, height: 1061 },
+        minMargin: { left: 22, right: 22 },
+      }),
+    ).toEqual({ width: 1174, height: 2000 });
+
+    expect(
+      calculateFocusedFrameDesignSize({
+        pageSize: { width: 3000, height: 1000 },
+        maxDesignSize: { width: 2000, height: 1125 },
+        preferredPortraitSize: { width: 2000, height: 1125 },
+        focusSize: { width: 1424, height: 824 },
+      }),
+    ).toEqual({ width: 2000, height: 824 });
+  });
+
   it("maximizes one focus rect by page orientation", () => {
     const focusRect = Object.freeze({
       x: 577.5,

@@ -2,6 +2,8 @@
 
 本文档规定 `packages/rendercore` 当前可供游戏复用的背景适配方案、配置边界、计算逻辑和验收方法。新增游戏或调整现有游戏背景时，应先按本文选择方案，再配置 art 和 focus；不要在游戏 app 内另写 resize、裁切或横竖屏判断。
 
+通用 scene package 由 `@slotclientengine/rendercore/scene-layout` 统一组合这两种既有适配方案、纯 frame policy 几何、图片/Spine node、named attachment 与 reel geometry。schema 和接入示例见 [`scene-layout-manifest.md`](./scene-layout-manifest.md)。scene-layout 不创建第三套适配公式；`apps/gamelayouteditor` 不依赖 uiframeworks，而是调用 `resolveSceneLayoutFrameViewport()` 复现相同的 `frameDesignSize/cssSize/offset`，再调用同一 art viewport helper。
+
 ## 1. 当前只有两种对外背景适配方案
 
 | 方案                    | 适用资源                       | 对外入口                                                                              | 当前示例       |
@@ -52,7 +54,7 @@ focusRect.x/y        = focus 相对完整背景左上角的位置
 
 ```text
 浏览器 pageSize
-  -> gameframeworks/uiframeworks 计算 frameDesignSize 和 CSS scale
+  -> gameframeworks/uiframeworks，或 rendercore 纯 frame helper，计算 frameDesignSize 和 CSS scale
   -> Pixi adapter 用 frameDesignSize resize renderer
   -> rendercore 根据 artSize、focusRect、viewportSize 计算 visibleRect
   -> Pixi art world 应用 worldOffset

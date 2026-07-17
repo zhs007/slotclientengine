@@ -81,6 +81,7 @@ export interface ReelLayoutOptions {
   readonly cellWidth: number;
   readonly cellHeight: number;
   readonly columnGap?: number;
+  readonly rowGap?: number;
   readonly bufferRowsBefore?: number;
   readonly bufferRowsAfter?: number;
 }
@@ -91,6 +92,7 @@ export interface ReelLayout {
   readonly cellWidth: number;
   readonly cellHeight: number;
   readonly columnGap: number;
+  readonly rowGap: number;
   readonly bufferRowsBefore: number;
   readonly bufferRowsAfter: number;
   getReelX(x: number): number;
@@ -405,6 +407,8 @@ export interface RenderGridCellReelSetOptions {
   readonly rows: number;
   readonly cellWidth: number;
   readonly cellHeight: number;
+  readonly columnGap?: number;
+  readonly rowGap?: number;
   readonly order: readonly GridCellCoordinate[];
   readonly presentationValueResolver?: GridCellSymbolPresentationValueResolver;
   readonly bounceStrength?: number;

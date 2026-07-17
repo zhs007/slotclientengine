@@ -218,6 +218,7 @@ export function createGame003ReelLayout(): ReelLayout {
     cellWidth: GAME003_CELL_WIDTH,
     cellHeight: GAME003_CELL_HEIGHT,
     columnGap: GAME003_REEL_GAP,
+    rowGap: 0,
     bufferRowsBefore: 1,
     bufferRowsAfter: 1,
   });
@@ -231,7 +232,9 @@ export function createGame003ReelLayerLayout(
   const rawReelsContentWidth =
     reelLayout.reelCount * reelLayout.cellWidth +
     (reelLayout.reelCount - 1) * reelLayout.columnGap;
-  const rawReelsContentHeight = reelLayout.visibleRows * reelLayout.cellHeight;
+  const rawReelsContentHeight =
+    reelLayout.visibleRows * reelLayout.cellHeight +
+    (reelLayout.visibleRows - 1) * reelLayout.rowGap;
   if (
     rawReelsContentWidth !== GAME003_REEL_AREA_IN_MAIN_REEL_BG.width ||
     rawReelsContentHeight !== GAME003_REEL_AREA_IN_MAIN_REEL_BG.height

@@ -14,8 +14,8 @@ describe("parseReelManifest", () => {
         anticipation: {
           effect: "anticipation",
           triggerLandedCount: 2,
-          firstFollowingStopDelayMs: 2000.0001,
-          stopStepMs: 240,
+          firstFollowingStopDelayMs: 800,
+          stopStepMs: 100,
         },
         cellEffects: {
           anticipation: { skeleton: "./Nearwin1.json", loopCount: 1 },
@@ -32,7 +32,7 @@ describe("parseReelManifest", () => {
           spin: {
             effect: "anticipation",
             order: "bottom-left-up-right-wave",
-            stopStepMs: 240,
+            stopStepMs: 100,
           },
         },
       },

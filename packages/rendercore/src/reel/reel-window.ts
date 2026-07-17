@@ -34,7 +34,8 @@ export function createReelWindowSnapshot(options: {
     x: options.x,
     y: options.y,
     baseY,
-    pixelOffsetY: -fractionalY * options.layout.cellHeight,
+    pixelOffsetY:
+      -fractionalY * (options.layout.cellHeight + options.layout.rowGap),
     visibleScene: Object.freeze(
       Array.from({ length: options.layout.visibleRows }, (_, visibleY) =>
         codeAt(baseY + visibleY),
