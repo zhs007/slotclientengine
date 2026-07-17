@@ -42,8 +42,8 @@ describe("game002-s3 layout", () => {
       height: 2000,
     });
     expect(GAME002_FOCUS_REGION).toEqual({
-      x: 577,
-      y: 272,
+      x: 580,
+      y: 277,
       width: 840,
       height: 1200,
     });
@@ -64,8 +64,8 @@ describe("game002-s3 layout", () => {
       columnGap: 0,
     });
     expect(layerLayout).toMatchObject({
-      x: 637,
-      y: 332,
+      x: 640,
+      y: 337,
       rawReelsContentWidth: 720,
       rawReelsContentHeight: 1080,
     });
@@ -95,8 +95,8 @@ describe("game002-s3 layout", () => {
     });
 
     expect(portrait.worldOffset).toEqual({ x: -437.5, y: -0 });
-    expect(square.worldOffset).toEqual({ x: -397, y: -272 });
-    expect(wide.worldOffset).toEqual({ x: -0, y: -272 });
+    expect(square.worldOffset).toEqual({ x: -400, y: -277 });
+    expect(wide.worldOffset).toEqual({ x: -0, y: -277 });
     const framePolicy = createGame002FramePolicy();
     expect(framePolicy.mode).toBe("maximized-focus");
     if (framePolicy.mode !== "maximized-focus") {
@@ -151,7 +151,7 @@ describe("game002-s3 layout", () => {
   });
 
   it("keeps grid timing/dimming stable and validates explicit geometry", () => {
-    const dimming = createGame002GridCellDimming(0.6);
+    const dimming = createGame002GridCellDimming(0.5);
     expect(GAME002_GRID_CELL_REEL_ORDER).toBe("top-down-left-right");
     expect(getGame002SkinConfig("1").reelManifest.spin.timing).toEqual({
       startStepMs: 16,
@@ -165,8 +165,8 @@ describe("game002-s3 layout", () => {
       fadeOutMs: 160,
     });
     expect(dimming.resolveSymbolDimmingAlpha("WL")).toBe(0);
-    expect(dimming.resolveSymbolDimmingAlpha("CN")).toBe(0);
-    expect(dimming.resolveSymbolDimmingAlpha("H1")).toBe(0.6);
+    expect(dimming.resolveSymbolDimmingAlpha("CN")).toBe(0.5);
+    expect(dimming.resolveSymbolDimmingAlpha("H1")).toBe(0.5);
     expect(() => createGame002GridCellDimming(-0.1)).toThrow(/dimmingAlpha/);
     expect(() => createGame002GridCellDimming(1.1)).toThrow(/dimmingAlpha/);
     expect(() => validateGame002BoardFrame()).not.toThrow();

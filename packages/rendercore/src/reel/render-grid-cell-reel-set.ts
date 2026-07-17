@@ -29,7 +29,10 @@ import type {
 } from "./types.js";
 import type { GridCellEffectController } from "./grid-cell-effect-player.js";
 import type { LogicReels, SceneMatrix } from "@slotclientengine/logiccore";
-import type { SymbolStateId } from "../symbol/index.js";
+import type {
+  SymbolStateId,
+  SymbolStateTransitionMode,
+} from "../symbol/index.js";
 
 interface RuntimeCell {
   readonly coordinate: GridCellCoordinate;
@@ -412,7 +415,12 @@ export class RenderGridCellReelSet extends Container {
     );
   }
 
-  requestVisibleSymbolState(x: number, y: number, state: SymbolStateId): void {
+  requestVisibleSymbolState(
+    x: number,
+    y: number,
+    state: SymbolStateId,
+    transitionMode: SymbolStateTransitionMode = "boundary",
+  ): void {
     this.assertStopped("request visible symbol state");
     const cell = this.getCell(x, y);
     if (!cell.occupied) {
@@ -420,7 +428,7 @@ export class RenderGridCellReelSet extends Container {
         `Cannot request state for empty grid cell (${x},${y}).`,
       );
     }
-    cell.reel.requestVisibleSymbolState(0, state);
+    cell.reel.requestVisibleSymbolState(0, state, transitionMode);
   }
 
   hasVisibleSymbolStateCapability(
@@ -599,9 +607,15 @@ export class RenderGridCellReelSet extends Container {
   requestVisibleSymbolStates(
     positions: readonly { readonly x: number; readonly y: number }[],
     state: SymbolStateId,
+    transitionMode: SymbolStateTransitionMode = "boundary",
   ): void {
     for (const position of positions) {
-      this.requestVisibleSymbolState(position.x, position.y, state);
+      this.requestVisibleSymbolState(
+        position.x,
+        position.y,
+        state,
+        transitionMode,
+      );
     }
   }
 

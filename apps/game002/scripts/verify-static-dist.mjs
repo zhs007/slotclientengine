@@ -349,7 +349,7 @@ function verifyReelSourceContract() {
   }
   if (
     manifest.spin?.bounceStrength !== 0 ||
-    manifest.spin?.dimmingAlpha !== 0.6 ||
+    manifest.spin?.dimmingAlpha !== 0.5 ||
     JSON.stringify(manifest.spin?.timing) !==
       JSON.stringify({
         startStepMs: 16,
@@ -441,7 +441,7 @@ function verifyBackgroundSourceContract() {
     JSON.stringify(manifest.adaptation) !==
       JSON.stringify({
         mode: "maximized-focus",
-        focusRect: { x: 577, y: 272, width: 840, height: 1200 },
+        focusRect: { x: 580, y: 277, width: 840, height: 1200 },
       })
   ) {
     failures.push("background manifest art/focus contract changed.");

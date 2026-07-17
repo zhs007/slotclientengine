@@ -37,6 +37,14 @@ interface CollectItemPlan {
   readonly amount: number;
 }
 
+interface OverlappingCollectItemRuntime {
+  readonly itemIndex: number;
+  collectResolved: boolean;
+  incrementStarted: boolean;
+  removeRequested: boolean;
+  released: boolean;
+}
+
 interface CompanionExecutionPlan {
   readonly positions: readonly Position[];
   readonly winState: string;
@@ -79,6 +87,8 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
   #itemIndex = -1;
   #itemIncrementStarted = false;
   #emphasisElapsedSeconds = 0;
+  #overlappingCollectItems: OverlappingCollectItemRuntime[] = [];
+  #collectStartElapsedSeconds = 0;
   readonly #prestartedSequentialLoops = new Set<number>();
 
   constructor(options: CreateSymbolCascadePlayerOptions) {
@@ -121,6 +131,8 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     this.#index = -1;
     this.#itemIndex = -1;
     this.#itemIncrementStarted = false;
+    this.#overlappingCollectItems = [];
+    this.#collectStartElapsedSeconds = 0;
     this.#prestartedSequentialLoops.clear();
     this.startEmphasis();
     if (this.getEmphasisTotalSeconds() === 0) this.startPlanAt(0);
@@ -144,7 +156,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     if (plan.mode === "legacy" || plan.mode === "group") {
       return this.updateGroupPlan(plan);
     }
-    return this.updateSequentialPlan(plan);
+    return this.updateSequentialPlan(plan, deltaSeconds);
   }
 
   clear(): void {
@@ -171,6 +183,8 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     this.#itemIndex = -1;
     this.#itemIncrementStarted = false;
     this.#emphasisElapsedSeconds = 0;
+    this.#overlappingCollectItems = [];
+    this.#collectStartElapsedSeconds = 0;
     this.#prestartedSequentialLoops.clear();
   }
 
@@ -213,6 +227,7 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     }
     this.container.destroy({ children: true });
     this.#plans = [];
+    this.#overlappingCollectItems = [];
     this.#phase = "destroyed";
   }
 
@@ -269,7 +284,10 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     return this.startPlanAt(this.#index + 1);
   }
 
-  private updateSequentialPlan(plan: SequentialExecutionPlan): {
+  private updateSequentialPlan(
+    plan: SequentialExecutionPlan,
+    deltaSeconds: number,
+  ): {
     readonly completed: boolean;
   } {
     if (this.#phase === "collect-start") {
@@ -289,7 +307,15 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
       ) {
         return Object.freeze({ completed: false });
       }
+      if (this.getSequentialCollectStartIntervalSeconds() !== null) {
+        this.#overlappingCollectItems = [];
+        this.#collectStartElapsedSeconds = 0;
+        return this.startOverlappingCollectItem(plan, 0);
+      }
       return this.startCollectItem(plan, 0);
+    }
+    if (this.getSequentialCollectStartIntervalSeconds() !== null) {
+      return this.updateOverlappingCollectItems(plan, deltaSeconds);
     }
     const item = plan.items[this.#itemIndex];
     if (!item) throw new Error("symbol cascade collect item is missing.");
@@ -354,6 +380,130 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     return Object.freeze({ completed: false });
   }
 
+  private updateOverlappingCollectItems(
+    plan: SequentialExecutionPlan,
+    deltaSeconds: number,
+  ): { readonly completed: boolean } {
+    const intervalSeconds = this.getSequentialCollectStartIntervalSeconds();
+    if (intervalSeconds === null) {
+      throw new Error(
+        "symbol cascade overlapping collect interval is missing.",
+      );
+    }
+    if (this.#phase !== "collect-item" && this.#phase !== "collect-remove") {
+      throw new Error(
+        `symbol cascade overlapping collect cannot update from ${this.#phase}.`,
+      );
+    }
+
+    this.advanceOverlappingCollectItems(plan);
+    this.#collectStartElapsedSeconds += deltaSeconds;
+    while (
+      this.#itemIndex + 1 < plan.items.length &&
+      this.#collectStartElapsedSeconds >= intervalSeconds
+    ) {
+      this.#collectStartElapsedSeconds -= intervalSeconds;
+      this.startOverlappingCollectItem(plan, this.#itemIndex + 1);
+    }
+
+    if (
+      this.#itemIndex + 1 < plan.items.length ||
+      this.#overlappingCollectItems.length > 0 ||
+      this.requireSummary().getSnapshot().counting
+    ) {
+      return Object.freeze({ completed: false });
+    }
+    this.hideAmount(this.#index);
+    return this.startPlanAt(this.#index + 1);
+  }
+
+  private advanceOverlappingCollectItems(plan: SequentialExecutionPlan): void {
+    const active = this.#overlappingCollectItems.filter(
+      (runtime) => !runtime.released,
+    );
+    const snapshots = this.#options.target.getVisibleSymbolStateSnapshots(
+      active.map((runtime) => plan.items[runtime.itemIndex]!.context.position),
+    );
+    for (const [activeIndex, runtime] of active.entries()) {
+      const item = plan.items[runtime.itemIndex];
+      const snapshot = snapshots[activeIndex];
+      if (!item || !snapshot) {
+        throw new Error(
+          `symbol cascade overlapping collect item[${runtime.itemIndex}] snapshot is missing.`,
+        );
+      }
+      if (snapshot.resolvedState === plan.collectState) {
+        runtime.collectResolved = true;
+      }
+      if (
+        runtime.collectResolved &&
+        !runtime.incrementStarted &&
+        !this.requireSummary().getSnapshot().counting
+      ) {
+        this.requireSummary().incrementBy(item.amount);
+        runtime.incrementStarted = true;
+      }
+      if (
+        runtime.collectResolved &&
+        !runtime.removeRequested &&
+        snapshot.requestedState === "normal" &&
+        snapshot.resolvedState === "normal"
+      ) {
+        this.#options.target.requestVisibleSymbolStates(
+          [item.context.position],
+          plan.removeState,
+        );
+        runtime.removeRequested = true;
+        continue;
+      }
+      if (
+        runtime.removeRequested &&
+        runtime.incrementStarted &&
+        snapshot.requestedState === "normal" &&
+        snapshot.resolvedState === "normal"
+      ) {
+        this.#options.target.releaseVisibleSymbols([item.context.position]);
+        runtime.released = true;
+      }
+    }
+    this.#overlappingCollectItems = this.#overlappingCollectItems.filter(
+      (runtime) => !runtime.released,
+    );
+  }
+
+  private startOverlappingCollectItem(
+    plan: SequentialExecutionPlan,
+    index: number,
+  ): { readonly completed: boolean } {
+    const item = plan.items[index];
+    if (!item) {
+      throw new Error(`symbol cascade collect item[${index}] is missing.`);
+    }
+    this.#itemIndex = index;
+    this.#overlappingCollectItems.push({
+      itemIndex: index,
+      collectResolved: false,
+      incrementStarted: false,
+      removeRequested: false,
+      released: false,
+    });
+    this.#options.target.requestVisibleSymbolStates(
+      [item.context.position],
+      plan.collectState,
+      "immediate",
+    );
+    this.#phase =
+      index + 1 < plan.items.length ? "collect-item" : "collect-remove";
+    return Object.freeze({ completed: false });
+  }
+
+  private getSequentialCollectStartIntervalSeconds(): number | null {
+    return (
+      this.#options.winSummaryCollect?.sequentialCollectStartIntervalSeconds ??
+      null
+    );
+  }
+
   private startEmphasis(): void {
     this.#options.target.setVisibleSymbolDimming(this.getAllWinPositions(), 0);
     this.clearAmountTexts();
@@ -414,6 +564,8 @@ class SymbolCascadePlayerModel implements SymbolCascadePlayer {
     this.#itemIndex = -1;
     const plan = this.currentPlan();
     if (plan.mode === "sequentialCollect") {
+      this.#overlappingCollectItems = [];
+      this.#collectStartElapsedSeconds = 0;
       if (this.#options.startPresentationsWithEmphasis !== true) {
         this.requestPlanOpening(plan);
       }
@@ -973,6 +1125,16 @@ function validateOptions(options: CreateSymbolCascadePlayerOptions): void {
   ) {
     throw new Error(
       "symbol cascade nonWinningDimmingAlpha must be between 0 and 1.",
+    );
+  }
+  const collectInterval =
+    options.winSummaryCollect?.sequentialCollectStartIntervalSeconds;
+  if (
+    collectInterval !== undefined &&
+    (!Number.isFinite(collectInterval) || collectInterval <= 0)
+  ) {
+    throw new Error(
+      "symbol cascade sequentialCollectStartIntervalSeconds must be finite and positive.",
     );
   }
 }

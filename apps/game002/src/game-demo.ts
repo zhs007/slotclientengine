@@ -42,6 +42,7 @@ import type {
   SymbolAssetMap,
   SymbolStateId,
   SymbolStatePreset,
+  SymbolStateTransitionMode,
   SymbolValuePresentationResourceMap,
 } from "@slotclientengine/rendercore";
 import type { WinResultPosition } from "@slotclientengine/gameframeworks";
@@ -191,6 +192,7 @@ export interface Game002ReelRuntime {
   requestVisibleSymbolStates(
     positions: readonly WinResultPosition[],
     state: SymbolStateId,
+    transitionMode?: SymbolStateTransitionMode,
   ): void;
   getVisibleSymbolStateSnapshots(
     positions: readonly WinResultPosition[],
@@ -715,8 +717,9 @@ export function createGame002ReelRuntime(
     requestVisibleSymbolStates(
       positions: readonly WinResultPosition[],
       state: SymbolStateId,
+      transitionMode: SymbolStateTransitionMode = "boundary",
     ): void {
-      reelSet.requestVisibleSymbolStates(positions, state);
+      reelSet.requestVisibleSymbolStates(positions, state, transitionMode);
     },
     getVisibleSymbolStateSnapshots(
       positions: readonly WinResultPosition[],

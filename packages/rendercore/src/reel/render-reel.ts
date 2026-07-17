@@ -23,7 +23,11 @@ import type {
   RenderReelVisibleOccurrence,
 } from "./types.js";
 import type { LogicReels } from "@slotclientengine/logiccore";
-import type { RenderSymbol, SymbolStateId } from "../symbol/index.js";
+import type {
+  RenderSymbol,
+  SymbolStateId,
+  SymbolStateTransitionMode,
+} from "../symbol/index.js";
 
 interface ReelSlot {
   readonly windowY: number;
@@ -358,7 +362,11 @@ export class RenderReel extends Container {
     }
   }
 
-  requestVisibleSymbolState(windowY: number, state: SymbolStateId): void {
+  requestVisibleSymbolState(
+    windowY: number,
+    state: SymbolStateId,
+    transitionMode: SymbolStateTransitionMode = "boundary",
+  ): void {
     const slot = this.getVisibleSlot(windowY);
     if (slot.kind === "empty" || !slot.symbol) {
       throw new ReelError(
@@ -366,7 +374,7 @@ export class RenderReel extends Container {
       );
     }
 
-    slot.symbol.requestState(state);
+    slot.symbol.requestState(state, transitionMode);
   }
 
   getVisibleSymbolStateSnapshot(

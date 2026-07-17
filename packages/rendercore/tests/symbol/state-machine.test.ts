@@ -216,6 +216,32 @@ describe("SymbolStateMachine transitions", () => {
     });
   });
 
+  it("can explicitly interrupt a loop for cadence-driven playback", () => {
+    const machine = new SymbolStateMachine(
+      createDefinition({
+        states: [
+          { id: "normal", phase: "stable", playback: "loop" },
+          { id: "collect", phase: "once", playback: "once" },
+        ],
+        equivalences: [],
+      }),
+    );
+
+    machine.requestState("collect");
+    expect(machine.getSnapshot()).toMatchObject({
+      requestedState: "normal",
+      resolvedState: "normal",
+      pendingState: "collect",
+    });
+
+    machine.requestState("collect", "immediate");
+    expect(machine.getSnapshot()).toMatchObject({
+      requestedState: "collect",
+      resolvedState: "collect",
+      pendingState: null,
+    });
+  });
+
   it("returns once states to the current default state", () => {
     const machine = new SymbolStateMachine(createDefinition());
 

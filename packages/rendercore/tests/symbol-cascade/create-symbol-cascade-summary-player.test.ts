@@ -131,6 +131,78 @@ describe("symbol cascade win summary collect", () => {
     });
   });
 
+  it("starts sequential collect items on cadence without waiting for the previous remove", () => {
+    const target = new StatefulTarget();
+    const player = createPlayer(target, {
+      sequentialCollectStartIntervalSeconds: 0.5,
+    });
+
+    player.start(player.prepare(createGroups()));
+    target.completeOnceStates();
+    player.update(0.35);
+    target.completeOnceStates();
+    player.update(0);
+    target.completeOnceStates();
+    player.update(0.35);
+    target.completeOnceStates();
+    player.update(0);
+    target.completeOnceStates();
+    player.update(0);
+    player.update(0);
+    expect(target.requests.at(-1)).toBe("take:4,0");
+    expect(target.immediateRequests).toEqual(["take:4,0"]);
+
+    target.resolvePending({ x: 4, y: 0 });
+    player.update(0);
+    target.completeOnceStates();
+    player.update(0.35);
+    expect(target.requests.at(-1)).toBe("vanish:4,0");
+    player.update(0.14);
+    expect(target.requests.at(-1)).toBe("vanish:4,0");
+    player.update(0.01);
+    expect(target.requests.at(-1)).toBe("take:5,0");
+    expect(target.immediateRequests).toEqual(["take:4,0", "take:5,0"]);
+    expect(target.releases).not.toContain("4,0");
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "collect-item",
+      currentItemIndex: 1,
+      currentItemPosition: { x: 5, y: 0 },
+    });
+
+    target.resolvePending({ x: 5, y: 0 });
+    player.update(0);
+    target.completeOnceStates();
+    player.update(0.35);
+    expect(target.releases).toContain("4,0");
+    expect(target.requests.at(-1)).toBe("vanish:5,0");
+    player.update(0.15);
+    expect(target.requests.at(-1)).toBe("take:4,1");
+    expect(target.immediateRequests).toEqual([
+      "take:4,0",
+      "take:5,0",
+      "take:4,1",
+    ]);
+
+    target.resolvePending({ x: 4, y: 1 });
+    player.update(0);
+    target.completeOnceStates();
+    player.update(0.35);
+    expect(target.releases).toContain("5,0");
+    expect(target.requests.at(-1)).toBe("vanish:4,1");
+    target.completeOnceStates();
+    player.update(0.15);
+    expect(player.getSnapshot()).toMatchObject({
+      phase: "complete",
+      summaryCurrentValue: 29,
+      summaryTargetValue: 29,
+      summaryCounting: false,
+    });
+    expect(target.releases.slice(-3)).toEqual(["4,0", "5,0", "4,1"]);
+
+    player.clear();
+    player.destroy();
+  });
+
   it("rejects missing presentations, item drift, bad sorting and capabilities", () => {
     const target = new StatefulTarget();
     const groups = createGroups();
@@ -161,6 +233,11 @@ describe("symbol cascade win summary collect", () => {
     expect(() => createPlayer(target).prepare(groups)).toThrow(
       /no hover capability/,
     );
+    expect(() =>
+      createPlayer(target, {
+        sequentialCollectStartIntervalSeconds: 0,
+      }),
+    ).toThrow(/sequentialCollectStartIntervalSeconds/);
   });
 });
 
@@ -328,18 +405,27 @@ interface Position {
 
 class StatefulTarget {
   readonly requests: string[] = [];
+  readonly immediateRequests: string[] = [];
   readonly releases: string[] = [];
   readonly states = new Map<string, { requested: string; resolved: string }>();
   missingCapability: string | null = null;
 
-  requestVisibleSymbolStates(positions: readonly Position[], state: string) {
-    this.requests.push(`${state}:${positions.map(key).join("|")}`);
+  requestVisibleSymbolStates(
+    positions: readonly Position[],
+    state: string,
+    transitionMode: "boundary" | "immediate" = "boundary",
+  ) {
+    const request = `${state}:${positions.map(key).join("|")}`;
+    this.requests.push(request);
+    if (transitionMode === "immediate") this.immediateRequests.push(request);
     for (const position of positions) {
       const current = this.state(position);
       this.states.set(key(position), {
         requested: state,
         resolved:
-          current.resolved === "hover" && state !== "normal"
+          transitionMode !== "immediate" &&
+          current.resolved === "hover" &&
+          state !== "normal"
             ? current.resolved
             : state,
       });

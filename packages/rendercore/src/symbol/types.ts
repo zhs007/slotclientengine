@@ -7,6 +7,7 @@ import type { RenderSymbol } from "./render-symbol.js";
 import type { SymbolManifestAnimationPlaybackSpec } from "./manifest.js";
 
 export type SymbolStateId = string;
+export type SymbolStateTransitionMode = "boundary" | "immediate";
 export type SymbolStatePhase = "stable" | "once";
 export type SymbolPlaybackKind = "loop" | "static" | "once";
 

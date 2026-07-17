@@ -114,6 +114,7 @@ describe("game002 task 95 adapter", () => {
     });
     expect(cascadeOptions?.winSummaryCollect).toMatchObject({
       countDurationSeconds: 0.35,
+      sequentialCollectStartIntervalSeconds: 0.5,
       position: {
         x: runtime.layerLayout.rawReelsContentWidth / 2,
         y: runtime.layerLayout.rawReelsContentHeight + 36,
@@ -130,7 +131,7 @@ describe("game002 task 95 adapter", () => {
       emphasisSeconds: 1,
       dimmingInSeconds: 0.1,
       dimmingOutSeconds: 0.1,
-      nonWinningDimmingAlpha: 0.6,
+      nonWinningDimmingAlpha: 0.5,
       startPresentationsWithEmphasis: true,
     });
   });

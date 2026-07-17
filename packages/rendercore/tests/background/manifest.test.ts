@@ -36,7 +36,7 @@ describe("Spine background manifest", () => {
       artSize: { width: 2000, height: 2000 },
       adaptation: {
         mode: "maximized-focus",
-        focusRect: { x: 577.5, y: 270, width: 840, height: 1200 },
+        focusRect: { x: 580, y: 277, width: 840, height: 1200 },
       },
       resource: {
         skeleton: "./BG.json",

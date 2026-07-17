@@ -15,7 +15,10 @@ import type {
   RenderVisibleSymbolStateSnapshot,
   RenderSymbolPool,
 } from "./types.js";
-import type { SymbolStateId } from "../symbol/index.js";
+import type {
+  SymbolStateId,
+  SymbolStateTransitionMode,
+} from "../symbol/index.js";
 
 export class RenderReelSet extends Container {
   readonly reels: readonly RenderReel[];
@@ -167,21 +170,32 @@ export class RenderReelSet extends Container {
     return Object.freeze(this.reels.map((reel) => reel.getVisibleScene()));
   }
 
-  requestVisibleSymbolState(x: number, y: number, state: SymbolStateId): void {
+  requestVisibleSymbolState(
+    x: number,
+    y: number,
+    state: SymbolStateId,
+    transitionMode: SymbolStateTransitionMode = "boundary",
+  ): void {
     if (this.#spinPlan) {
       throw new ReelError(
         "Cannot request visible symbol state while reel set is spinning.",
       );
     }
-    this.getReelAt(x).requestVisibleSymbolState(y, state);
+    this.getReelAt(x).requestVisibleSymbolState(y, state, transitionMode);
   }
 
   requestVisibleSymbolStates(
     positions: readonly { readonly x: number; readonly y: number }[],
     state: SymbolStateId,
+    transitionMode: SymbolStateTransitionMode = "boundary",
   ): void {
     for (const position of positions) {
-      this.requestVisibleSymbolState(position.x, position.y, state);
+      this.requestVisibleSymbolState(
+        position.x,
+        position.y,
+        state,
+        transitionMode,
+      );
     }
   }
 

@@ -13,6 +13,7 @@ import type {
   SymbolNormalTextureSource,
   SymbolStateId,
   SymbolStateSnapshot,
+  SymbolStateTransitionMode,
   SymbolVisualLayer,
   RenderSymbolValueController,
 } from "./types.js";
@@ -128,9 +129,12 @@ export class RenderSymbol extends VisualEntity<void> {
     this.syncAniIfNeeded(before, false);
   }
 
-  requestState(state: string): void {
+  requestState(
+    state: string,
+    transitionMode: SymbolStateTransitionMode = "boundary",
+  ): void {
     const before = this.createAniKey(this.#stateMachine.getSnapshot());
-    this.#stateMachine.requestState(state);
+    this.#stateMachine.requestState(state, transitionMode);
     this.syncAniIfNeeded(before);
   }
 

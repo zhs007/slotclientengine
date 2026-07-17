@@ -78,6 +78,7 @@ export interface WinSummaryCollectOptions {
   ) => readonly SymbolCascadeGroupPositionContext[];
   readonly formatter: (value: number) => string;
   readonly countDurationSeconds: number;
+  readonly sequentialCollectStartIntervalSeconds?: number;
   readonly position: Readonly<{ readonly x: number; readonly y: number }>;
   readonly textStyle: SymbolWinSummaryTextStyle;
 }

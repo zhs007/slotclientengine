@@ -18,6 +18,7 @@ export const GAME002_CASCADE_WIN_SUMMARY_STYLE = Object.freeze({
 });
 
 export const GAME002_CASCADE_WIN_SUMMARY_COUNT_SECONDS = 0.35;
+export const GAME002_CASCADE_COLLECT_START_INTERVAL_SECONDS = 0.5;
 
 export function resolveGame002WinResultCoinAmount(
   context: SymbolCascadeGroupContext,
@@ -168,6 +169,8 @@ export function createGame002WinSummaryCollectOptions(options: {
     sortItems: sortGame002CascadeCollectItems,
     formatter: formatGame002CashSummary,
     countDurationSeconds: GAME002_CASCADE_WIN_SUMMARY_COUNT_SECONDS,
+    sequentialCollectStartIntervalSeconds:
+      GAME002_CASCADE_COLLECT_START_INTERVAL_SECONDS,
     position: Object.freeze({
       x: runtime.layerLayout.rawReelsContentWidth / 2,
       y: runtime.layerLayout.rawReelsContentHeight + 36,

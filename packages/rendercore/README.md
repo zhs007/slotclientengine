@@ -472,6 +472,8 @@ carousel.start(prepared);
 
 `prepare()` 只解析、校验并冻结 groups，不触碰 target；`start()` 读取 target 本地 geometry，从中奖格中心平均点附近选择一个真实格（等距按 x/y），开始状态与金额展示。`update()` 只根据 symbol 自然回到 normal 判断组完成，不使用固定动画 timer；`clear()` 清理当前组和金额；`destroy()` 释放 Pixi 容器。金额来源、formatter、style 和可选 component validator 都由调用方提供，carousel 不读取 totalwin 或游戏专属字段。manifest 仍是 symbol animation 的唯一来源。未来 ReelSet 只要实现 `VisibleSymbolPresentationTarget` 即可接入；不同中奖效果应新增并列函数，不向本 carousel 堆游戏分支。
 
+symbol cascade 的 `WinSummaryCollectOptions.sequentialCollectStartIntervalSeconds` 可选开启逐格 collect 起播 cadence。未配置时保持严格串行的 `collect -> remove -> 下一格`；配置正有限秒数后，每一格会在自己的 cadence 边界立即从当前 loop 切入 collect，避免多个同步 loop 等到同一 boundary 后成组起播。各格仍独立等待自身 collect 完成再 remove/release，但下一格只按起播间隔启动，不等待上一格 remove 完成。rendercore 同时推进全部 active item，并在全部 item release、summary 计数完成后才结束该组；游戏 symbol、动画名和具体间隔仍由调用方配置。
+
 ## 全局序列
 
 `SymbolStateSequenceController` 只决定下一步请求哪个状态，不直接操作 Pixi。viewer 或游戏层把返回的状态广播给全部 `RenderSymbol`。`once` 状态需要等全部 symbol 都上报 `onceCompleted` 后再推进。

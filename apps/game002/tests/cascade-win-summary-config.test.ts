@@ -87,6 +87,7 @@ describe("game002 cascade win summary config", () => {
       positionIndex: 0,
     };
     expect(options.position).toEqual({ x: 360, y: 1116 });
+    expect(options.sequentialCollectStartIntervalSeconds).toBe(0.5);
     expect(options.resolveGroupSymbol({ group, groupIndex: 0 })).toBe("VALUE");
     expect(options.resolveSymbol(itemContext)).toBe("VALUE");
     expect(

@@ -8,6 +8,7 @@ import type {
   SymbolStatePhase,
   SymbolStatePreset,
   SymbolStateSnapshot,
+  SymbolStateTransitionMode,
 } from "./types.js";
 
 export const MIN_SYMBOL_FRAME_DURATION_SECONDS = 1 / 60;
@@ -72,8 +73,21 @@ export class SymbolStateMachine {
     this.#defaultState = state;
   }
 
-  requestState(state: SymbolStateId): void {
+  requestState(
+    state: SymbolStateId,
+    transitionMode: SymbolStateTransitionMode = "boundary",
+  ): void {
     this.assertKnownState(state);
+    if (transitionMode !== "boundary" && transitionMode !== "immediate") {
+      throw new SymbolStateError(
+        `Unknown symbol state transition mode "${String(transitionMode)}".`,
+      );
+    }
+    if (transitionMode === "immediate") {
+      this.#pendingState = null;
+      this.switchTo(state);
+      return;
+    }
     const current = this.getCurrentStateDefinition();
 
     if (current.playback === "static") {

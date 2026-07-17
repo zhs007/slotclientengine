@@ -10,6 +10,7 @@ import type {
   SymbolAssetMap,
   SymbolStateId,
   SymbolStatePreset,
+  SymbolStateTransitionMode,
   SymbolTexturePolicy,
 } from "../symbol/index.js";
 import type { SymbolValuePresentationResourceMap } from "../symbol-value-presentation/types.js";
@@ -305,6 +306,7 @@ export interface VisibleSymbolPresentationTarget {
   requestVisibleSymbolStates(
     positions: readonly { readonly x: number; readonly y: number }[],
     state: SymbolStateId,
+    transitionMode?: SymbolStateTransitionMode,
   ): void;
   getVisibleSymbolStateSnapshots(
     positions: readonly { readonly x: number; readonly y: number }[],

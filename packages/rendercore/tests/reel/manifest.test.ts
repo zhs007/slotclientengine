@@ -9,7 +9,7 @@ describe("parseReelManifest", () => {
       version: 1,
       spin: {
         bounceStrength: 0,
-        dimmingAlpha: 0.4,
+        dimmingAlpha: 0.5,
         timing: { startStepMs: 16, stopStepMs: 16 },
         anticipation: {
           effect: "anticipation",

@@ -115,7 +115,7 @@ describe("game002 source boundary", () => {
     expect(skinConfigSource).toContain("assets/game002-s3/reel.manifest.json");
     expect(skinConfigSource).toContain("parseReelManifest");
     expect(skinConfigSource).not.toContain("bounceStrength: 0");
-    expect(skinConfigSource).not.toContain("dimmingAlpha: 0.6");
+    expect(skinConfigSource).not.toContain("dimmingAlpha: 0.5");
     expect(backgroundConfigSource).toContain(
       "{BG,BG_2,BG_3,BG_4,BG_5,BG_6,BG_7,BG_8}.png",
     );

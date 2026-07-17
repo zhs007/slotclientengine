@@ -42,7 +42,7 @@ export const GAME002_GRID_CELL_REEL_OFFSETS = createGridCellReelOffsetMatrix({
   rows: GAME002_VISIBLE_ROWS,
   rowOffsetStep: 16,
 }) satisfies GridCellReelOffsetMatrix;
-const GAME002_BRIGHT_SPIN_SYMBOLS = new Set(["WL", "CN"]);
+const GAME002_BRIGHT_SPIN_SYMBOLS = new Set(["WL"]);
 
 export interface Game002GridCellDimming {
   readonly resolveSymbolDimmingAlpha: (symbol: string) => number;
@@ -67,8 +67,8 @@ export function createGame002GridCellDimming(
 }
 
 export const GAME002_BOARD_FRAME = Object.freeze({
-  x: 637,
-  y: 332,
+  x: 640,
+  y: 337,
   width: 720,
   height: 1080,
 });

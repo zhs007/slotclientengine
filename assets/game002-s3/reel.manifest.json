@@ -2,7 +2,7 @@
   "version": 1,
   "spin": {
     "bounceStrength": 0,
-    "dimmingAlpha": 0.6,
+    "dimmingAlpha": 0.5,
     "timing": {
       "startStepMs": 16,
       "stopStepMs": 16,

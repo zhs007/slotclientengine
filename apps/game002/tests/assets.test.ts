@@ -76,8 +76,8 @@ describe("game002-s3 assets", () => {
       );
     }
     expect(skin.focusRegion).toEqual({
-      x: 577,
-      y: 272,
+      x: 580,
+      y: 277,
       width: 840,
       height: 1200,
     });
@@ -96,7 +96,7 @@ describe("game002-s3 assets", () => {
     expect(Object.keys(skin.spineSkeletonModules)).toHaveLength(12);
     expect(skin.reelManifest.spin).toMatchObject({
       bounceStrength: 0,
-      dimmingAlpha: 0.6,
+      dimmingAlpha: 0.5,
       timing: {
         startStepMs: 16,
         stopStepMs: 16,

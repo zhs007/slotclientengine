@@ -56,7 +56,7 @@ lastStopAtMs  = 1028 + (54 - 1) * 16 = 1876
 - selective refill 对副本按 `y asc / x asc` 排序，仅 empty holes 使用本地公开轮带；stop step `240ms`，每格 Nearwin1 真实 3 次后 landing，再走既有 manifest-driven appear。
 - survivor occurrence/player/value 不替换；CN refill 继续使用 sequence 预解析的服务端 raw value，既有 CN 随 occurrence 搬运；WL fixed、renderPriority、完整 board mask 合同未改。
 - win-amount 阶段仍逐帧 update reel runtime。
-- spin 与 cascade 非中奖格压暗均为 `0.6`。cascade 压暗开始的同一边界并行启动全部中奖 symbol opening win：普通组直接请求 win；CN 先 `Win_Start`，完成后进入 `Win` loop；强调结束后才按稳定顺序 remove/collect，opening state 不重播。
+- spin 与 cascade 非中奖格压暗均为 `0.5`。cascade 压暗开始的同一边界并行启动全部中奖 symbol opening win：普通组直接请求 win；CN 先 `Win_Start`，完成后进入 `Win` loop；强调结束后才按稳定顺序 remove/collect，opening state 不重播。
 
 事件级测试证据覆盖了 normal unified path 与 anticipation split path，包括 `initial-spin`、`step-win-remove`、`cascade-unified-fall`、`cascade-dropdown`、`refill-sweep`、`refill-spin`、`finalizing/win-amount`，并覆盖 unified refill 新 WL 达到 2 个后的激活、zero-movement dropdown、稀疏 holes、状态跨阶段保留和 next-spin clear。
 
@@ -109,7 +109,7 @@ packages/rendercore/tests/symbol-cascade/create-symbol-cascade-summary-player.te
 tasks/97-game002-nearwin-anticipation-refill-260716-061103.md（新增）
 ```
 
-`AGENTS.md` 与 `agents.md` 的 inode 均为 `30967274`，协作规则已同步覆盖普通 spin 无 Nearwin、期待 Nearwin1 三循环与 `240ms` stop cadence、refill sweep Nearwin2/selective spin Nearwin1、refill WL 触发、0.6 压暗及压暗同边界启动 win/CN opening 的合同。game002 README 和 rendercore README 同步完成。
+`AGENTS.md` 与 `agents.md` 的 inode 均为 `30967274`，协作规则已同步覆盖普通 spin 无 Nearwin、期待 Nearwin1 三循环与 `240ms` stop cadence、refill sweep Nearwin2/selective spin Nearwin1、refill WL 触发、0.5 压暗及压暗同边界启动 win/CN opening 的合同。game002 README 和 rendercore README 同步完成。
 
 ## 自动验收结果
 
@@ -177,7 +177,7 @@ http://127.0.0.1:5206/?skin=1&gamecode=<GAME_CODE>&token=<TOKEN>&businessid=gues
 2. 期待局：至少 2 个实际落地 WL 且第 2 个不是最后一格；第 2 个 WL 落地时激活但自身无 effect，只有后续格播放 Nearwin1 真实 3 次，之后按 `240ms` stop step 逐格停轴。
 3. 期待 cascade：严格观察 `dropdown -> y desc/x asc Nearwin2 sweep once -> y asc/x asc Nearwin1 x3 selective refill spin`，selective stop step 为 `240ms`；同时检查 sparse holes、CN 数字、survivor continuity 与落地 appear。
 4. refill 触发期待：initial spin 只有 1 个 WL，普通 unified refill 新落下 WL 后盘面达到 2 个；当前 refill 不倒放 effect，若仍有下一 cascade，必须立即改走期待 cascade 路径。
-5. 检查 spin 与 win 压暗均为 `0.6`；压暗开始时全部中奖 symbol 同时开始 win，CN 为 `Win_Start -> Win`，随后才依次 remove/collect；同时检查 effect 居中、scale 1、board 边缘裁切、横竖屏 resize、WL 层级、spinBlur、summary/global amount。
+5. 检查 spin 与 win 压暗均为 `0.5`；压暗开始时全部中奖 symbol 同时开始 win，CN 为 `Win_Start -> Win`，随后才依次 remove/collect；同时检查 effect 居中、scale 1、board 边缘裁切、横竖屏 resize、WL 层级、spinBlur、summary/global amount。
 6. 下一合法 spin 开始后不得残留上一轮 anticipation/effect；console 与 WebSocket 无错误，loading 无二次请求或双连接。
 
 不要提交 token、完整 live URL、截图或录屏。完成后可把普通局/期待局是否覆盖、console/WebSocket 与 resize 结果补写到本报告。
@@ -213,7 +213,8 @@ ReelError: grid cell (5,0) cannot land before its effect completes a real loop.
 
 用户确认 symbol JSON 已在本轮基线提交，本轮没有重写或回退这些美术 JSON。按最新反馈完成：
 
-- spin 与 win/cascade 压暗统一为 `0.6`；
+- spin 与 win/cascade 压暗统一为 `0.5`；
+- CN 四档官方动画均为 `Collect=0.3333333s`、`End=0.5s`；逐格 collect 按 `y/x` 稳定顺序以 `0.5s` 起播 cadence 推进，不等待前一枚 End/release，全部 active item 与 summary 完成后才结束 coin group；
 - 普通 spin 移除 Nearwin；期待 activation 后续格由 Nearwin2 改为 Nearwin1；
 - 期待 refill 的空洞 sweep 继续 Nearwin2，selective refill spin 改为 Nearwin1；
 - reel manifest 改为动态 effect id 与显式使用点引用，避免再把 `normal/anticipation` 名称当资源语义；
@@ -233,3 +234,11 @@ ReelError: grid cell (5,0) cannot land before its effect completes a real loop.
 按用户最新视觉反馈，期待 initial spin activation 后与期待 selective refill 的逐格 stop step 均从 `120ms` 调整为 `240ms`，只改变期待阶段逐格停轴节奏；普通 initial spin 的 `16ms` stop step、Nearwin2 refill-hole sweep 的 `80ms` stagger 和 reel 内部 `54 symbols/s` 滚动速度保持不变。Nearwin1 manifest `loopCount` 从 `1` 改为 `3`，首个后续格 lead 与 selective refill `settleAfterLastStartMs` 同步改为 `2000.0001ms = 666.6667ms x 3`。
 
 rendercore 的 cell effect loop contract 已由“只能 1 次”扩为“正安全整数”。controller 会把大 delta 切到每个官方 Spine loop boundary，逐次收到真实 `loopCompleted` 后计数，达到请求次数才释放 player 和允许 landing；pool capacity 也按总循环时长推导。Nearwin2 sweep 仍由独立合同固定为 1 次。新增 parser、spin plan、controller 与 game002 runtime 回归覆盖三循环总 lead、`240ms` cadence、跨多 loop update 的真实计数以及非法 0/小数 loopCount 显式失败。
+
+## Coin cadence 与 spin 全亮名单补充
+
+用户浏览器反馈 coin collect 呈现为“两枚一组”。根因是全部 CN 同步进入 `Win` loop 后，原有状态请求虽然每 `0.5s` 发出一次 `Collect`，但 loop 状态会把请求挂到下一真实 loop boundary；同一周期内排队的两枚因此在同一 boundary 一起切换。rendercore 现为 cadence collect 增加通用 immediate transition：每枚在自己的 `0.5s` cadence 边界立即从当前 `Win` loop 切入 `Collect`，未配置 cadence 的普通状态请求仍保持 boundary 语义。`Collect=0.3333333s -> End=0.5s -> release` 的单枚生命周期、尾段重叠、summary drain 与 `y/x` 稳定顺序均未改变。
+
+spin 全亮名单同步从 `WL/CN` 收紧为仅 `WL`；`CN` 与其它实际滚动 occurrence 一样使用 manifest `spin.dimmingAlpha=0.5`，rendercore 仍只消费通用 code resolver，不含 game002 symbol 分支。
+
+本次补充验收：rendercore targeted 20/20、全量 44 files / 286 tests；game002 targeted 13/13、全量 18 files / 90 tests；两包 typecheck、lint、format 均通过，game002 `release:check` 与 static dist exact closure 通过。最终浏览器节奏和观感验收继续由用户执行。

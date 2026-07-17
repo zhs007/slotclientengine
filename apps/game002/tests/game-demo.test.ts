@@ -200,31 +200,31 @@ describe("game002-s3 reel runtime", () => {
       x: 0,
       y: 0,
       orderIndex: 0,
-      dimmingAlpha: 0.6,
+      dimmingAlpha: 0.5,
       reelOffsetY: 0,
     });
     expect(plan.cells[8]).toMatchObject({
       x: 0,
       y: 8,
       orderIndex: 8,
-      dimmingAlpha: 0.6,
+      dimmingAlpha: 0.5,
       reelOffsetY: GAME002_GRID_CELL_REEL_OFFSETS[0][8],
     });
     expect(plan.cells[53]).toMatchObject({
       x: 5,
       y: 8,
       orderIndex: 53,
-      dimmingAlpha: 0.6,
+      dimmingAlpha: 0.5,
     });
     expect(plan.cells[9]).toMatchObject({
       x: 1,
       y: 0,
-      dimmingAlpha: 0,
+      dimmingAlpha: 0.5,
     });
     expect(plan.cells[10]).toMatchObject({
       x: 1,
       y: 1,
-      dimmingAlpha: 0,
+      dimmingAlpha: 0.5,
     });
     expect(plan.lastStopAtMs).toBe(1876);
     expect(runtime.getVisualSnapshot().requestedStates.flat()).not.toContain(
