@@ -4,6 +4,18 @@ import {
   type SceneLayoutNode,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout";
+import { deriveNodeId } from "../io/filename-policy.js";
+import {
+  editorResourcePaths,
+  editorResourceSignature,
+  type EditorImageLayoutResource,
+  type EditorLayoutResource,
+  type EditorSpineLayoutResource,
+} from "./editor-resource.js";
+
+type EditorLayoutResourceDraft =
+  | Omit<EditorImageLayoutResource, "id">
+  | Omit<EditorSpineLayoutResource, "id">;
 
 export type EditorMode = "maximized-focus" | "orientation-focus";
 
@@ -31,8 +43,8 @@ export interface EditorVariantDraft {
 export interface EditorNodeDraft {
   id: string;
   order: number;
-  resource: SceneLayoutNode["resource"];
-  animationNames?: string[];
+  resourceId: string;
+  defaultAnimation?: string;
   placements: Partial<
     Record<SceneLayoutVariantId, { x: number; y: number; scale: number }>
   >;
@@ -56,7 +68,16 @@ export interface EditorProject {
     gapY: number;
     placements: Partial<Record<SceneLayoutVariantId, { x: number; y: number }>>;
   };
+  resources: Map<string, EditorLayoutResource>;
   assets: Map<string, Uint8Array>;
+}
+
+export function activeVariantIds(
+  project: Pick<EditorProject, "mode">,
+): readonly SceneLayoutVariantId[] {
+  return project.mode === "maximized-focus"
+    ? ["default"]
+    : ["landscape", "portrait"];
 }
 
 export function createNewEditorProject(mode: EditorMode): EditorProject {
@@ -81,6 +102,7 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
           ? { default: { x: 0, y: 0 } }
           : { landscape: { x: 0, y: 0 }, portrait: { x: 0, y: 0 } },
     },
+    resources: new Map(),
     assets: new Map(),
   };
 }
@@ -119,6 +141,24 @@ export function initializeVariantFromBackground(
     y: Math.round((artSize.height - reelSize.height) / 2),
   };
   updateVariantFocusFromReel(project, variantId);
+}
+
+export function resetVariantGeometry(
+  project: EditorProject,
+  variantId: SceneLayoutVariantId,
+  artSize?: { readonly width: number; readonly height: number },
+): void {
+  const variant = project.variants[variantId];
+  variant.artSize = artSize ? { ...artSize } : { width: 0, height: 0 };
+  variant.focusRect = { x: 0, y: 0, width: 0, height: 0 };
+  variant.frameFocusRect = { width: 0, height: 0 };
+  variant.focusOffsets = {
+    left: -DEFAULT_FOCUS_PADDING,
+    top: -DEFAULT_FOCUS_PADDING,
+    right: DEFAULT_FOCUS_PADDING,
+    bottom: DEFAULT_FOCUS_PADDING,
+  };
+  if (artSize) initializeVariantFromBackground(project, variantId, artSize);
 }
 
 export function updateVariantFocusFromReel(
@@ -199,11 +239,7 @@ export function applySymbolPackageCellSize(
   }
   project.reel.cellWidth = cellSize.width;
   project.reel.cellHeight = cellSize.height;
-  const variants =
-    project.mode === "maximized-focus"
-      ? (["default"] as const)
-      : (["landscape", "portrait"] as const);
-  for (const variantId of variants) {
+  for (const variantId of activeVariantIds(project)) {
     updateVariantFocusFromReel(project, variantId);
     const variant = project.variants[variantId];
     const placement = project.reel.placements[variantId];
@@ -234,6 +270,48 @@ export function applySymbolPackageCellSize(
   }
 }
 
+export function resolveEditorNodeResource(
+  project: Pick<EditorProject, "resources" | "assets">,
+  node: EditorNodeDraft,
+): SceneLayoutNode["resource"] {
+  const resource = project.resources.get(node.resourceId);
+  if (!resource) {
+    throw new Error(`节点 ${node.id} 引用未知资源：${node.resourceId}`);
+  }
+  for (const path of editorResourcePaths(resource)) {
+    if (!project.assets.has(path)) {
+      throw new Error(`资源 ${resource.id} 缺少 bytes：${path}`);
+    }
+  }
+  if (resource.kind === "image") {
+    if (node.defaultAnimation !== undefined) {
+      throw new Error(`图片节点 ${node.id} 不得声明 defaultAnimation。`);
+    }
+    return {
+      kind: "image",
+      path: resource.path,
+      size: resource.size,
+    };
+  }
+  const animation = node.defaultAnimation;
+  if (!animation) {
+    throw new Error(`Spine 节点 ${node.id} 必须明确选择 default animation。`);
+  }
+  if (!resource.animationNames.includes(animation)) {
+    throw new Error(
+      `Spine 节点 ${node.id} 的 animation ${animation} 不存在于资源 ${resource.id}。`,
+    );
+  }
+  return {
+    kind: "spine",
+    skeleton: resource.skeleton,
+    atlas: resource.atlas,
+    textures: resource.textures,
+    defaultAnimation: animation,
+    loop: true,
+  };
+}
+
 export function editorProjectToPreviewManifest(
   project: EditorProject,
   preferredVariant: SceneLayoutVariantId,
@@ -248,20 +326,23 @@ export function editorProjectToPreviewManifest(
     const variant = project.variants[available];
     const placement = project.reel.placements[available];
     if (!placement) return null;
-    const nodes = project.nodes
-      .filter((node) => {
-        if (!node.placements[available]) return false;
-        return (
-          node.resource.kind === "image" ||
-          node.resource.defaultAnimation.length > 0
-        );
-      })
-      .map((node) => ({
-        id: node.id,
-        order: node.order,
-        resource: node.resource,
-        placements: { default: node.placements[available] },
-      }));
+    const nodes = project.nodes.flatMap((node) => {
+      const nodePlacement = node.placements[available];
+      if (!nodePlacement) return [];
+      try {
+        return [
+          {
+            id: node.id,
+            order: node.order,
+            resource: resolveEditorNodeResource(project, node),
+            placements: { default: nodePlacement },
+          },
+        ];
+      } catch {
+        return [];
+      }
+    });
+    if (!nodes.some((node) => node.id === variant.backgroundNode)) return null;
     try {
       return parseSceneLayoutManifest({
         version: 1,
@@ -319,7 +400,7 @@ export function editorProjectToManifest(
     nodes: project.nodes.map((node) => ({
       id: node.id,
       order: node.order,
-      resource: node.resource,
+      resource: resolveEditorNodeResource(project, node),
       placements: node.placements,
     })),
     reels: {
@@ -344,19 +425,55 @@ export function manifestToEditorProject(
   const parsed = parseSceneLayoutManifest(manifest);
   const project = createNewEditorProject(parsed.adaptation.mode);
   project.id = parsed.id;
-  project.nodes = parsed.nodes.map((node) => ({
-    id: node.id,
-    order: node.order,
-    resource: node.resource,
-    ...(node.resource.kind === "spine"
-      ? {
-          animationNames: readAnimationNames(
-            assets.get(node.resource.skeleton),
-          ),
+  const resourceIdsBySignature = new Map<string, string>();
+  const pathsByResource = new Map<string, string>();
+  project.nodes = parsed.nodes.map((node) => {
+    const resourceDraft = manifestResourceToEditorResource(
+      node.resource,
+      assets,
+    );
+    const resourceWithTemporaryId = {
+      ...resourceDraft,
+      id: "imported-resource",
+    } as EditorLayoutResource;
+    const signature = editorResourceSignature(resourceWithTemporaryId);
+    let resourceId = resourceIdsBySignature.get(signature);
+    if (!resourceId) {
+      resourceId = uniqueResourceId(
+        project.resources,
+        deriveNodeId(
+          (resourceDraft.kind === "image"
+            ? resourceDraft.path
+            : resourceDraft.skeleton
+          )
+            .split("/")
+            .at(-1)!,
+        ),
+      );
+      const resource = {
+        ...resourceDraft,
+        id: resourceId,
+      } as EditorLayoutResource;
+      for (const path of editorResourcePaths(resource)) {
+        const owner = pathsByResource.get(path);
+        if (owner && owner !== signature) {
+          throw new Error(`导入资源路径 ${path} 被不同素材签名复用。`);
         }
-      : {}),
-    placements: { ...node.placements },
-  }));
+        pathsByResource.set(path, signature);
+      }
+      project.resources.set(resourceId, resource);
+      resourceIdsBySignature.set(signature, resourceId);
+    }
+    return {
+      id: node.id,
+      order: node.order,
+      resourceId,
+      ...(node.resource.kind === "spine"
+        ? { defaultAnimation: node.resource.defaultAnimation }
+        : {}),
+      placements: structuredClone(node.placements),
+    };
+  });
   const reel = parsed.reels.main;
   if (!reel) throw new Error('导入 manifest 必须包含 reel "main"。');
   project.reel = {
@@ -366,14 +483,17 @@ export function manifestToEditorProject(
     cellHeight: reel.cellSize.height,
     gapX: reel.gap.x,
     gapY: reel.gap.y,
-    placements: { ...reel.placements },
+    placements: structuredClone(reel.placements),
   };
   if (parsed.adaptation.mode === "maximized-focus") {
     project.variants.default = {
       ...createEmptyVariant(),
       artSize: { ...parsed.adaptation.artSize },
       focusRect: { ...parsed.adaptation.focusRect },
-      frameFocusRect: { ...parsed.adaptation.focusRect },
+      frameFocusRect: {
+        width: parsed.adaptation.focusRect.width,
+        height: parsed.adaptation.focusRect.height,
+      },
       backgroundNode: parsed.adaptation.backgroundNode,
     };
     updateVariantFocusOffsetsFromRect(project, "default");
@@ -394,7 +514,31 @@ export function manifestToEditorProject(
 }
 
 export function cloneEditorProject(project: EditorProject): EditorProject {
-  return manifestLikeClone(project);
+  return {
+    ...structuredClone({ ...project, resources: undefined, assets: undefined }),
+    resources: new Map(
+      [...project.resources].map(([id, resource]) => [
+        id,
+        structuredClone(resource),
+      ]),
+    ),
+    assets: new Map(
+      [...project.assets].map(([path, bytes]) => [path, bytes.slice()]),
+    ),
+  } as EditorProject;
+}
+
+export function calculateReelSize(project: EditorProject): {
+  width: number;
+  height: number;
+} {
+  const reel = project.reel;
+  return {
+    width:
+      reel.columns * reel.cellWidth + Math.max(0, reel.columns - 1) * reel.gapX,
+    height:
+      reel.rows * reel.cellHeight + Math.max(0, reel.rows - 1) * reel.gapY,
+  };
 }
 
 function createEmptyVariant(): EditorVariantDraft {
@@ -410,19 +554,6 @@ function createEmptyVariant(): EditorVariantDraft {
     frameFocusRect: { width: 0, height: 0 },
     minFocusMargin: { left: 0, right: 0, top: 0, bottom: 0 },
     backgroundNode: "",
-  };
-}
-
-function calculateReelSize(project: EditorProject): {
-  width: number;
-  height: number;
-} {
-  const reel = project.reel;
-  return {
-    width:
-      reel.columns * reel.cellWidth + Math.max(0, reel.columns - 1) * reel.gapX,
-    height:
-      reel.rows * reel.cellHeight + Math.max(0, reel.rows - 1) * reel.gapY,
   };
 }
 
@@ -485,25 +616,70 @@ function fromOrientationVariant(variant: {
   };
 }
 
-function manifestLikeClone(project: EditorProject): EditorProject {
+function manifestResourceToEditorResource(
+  resource: SceneLayoutNode["resource"],
+  assets: ReadonlyMap<string, Uint8Array>,
+): EditorLayoutResourceDraft {
+  if (resource.kind === "image") {
+    return {
+      kind: "image",
+      path: resource.path,
+      size: { ...resource.size },
+    };
+  }
+  const skeletonBytes = assets.get(resource.skeleton);
+  if (!skeletonBytes)
+    throw new Error(`导入缺少 skeleton：${resource.skeleton}`);
+  const metadata = readSpineMetadata(skeletonBytes);
   return {
-    ...structuredClone({ ...project, assets: undefined }),
-    assets: new Map(
-      [...project.assets].map(([path, bytes]) => [path, bytes.slice()]),
-    ),
-  } as EditorProject;
+    kind: "spine",
+    skeleton: resource.skeleton,
+    atlas: resource.atlas,
+    textures: { ...resource.textures },
+    animationNames: metadata.animationNames,
+    ...(metadata.bounds ? { bounds: metadata.bounds } : {}),
+  };
 }
 
-function readAnimationNames(bytes: Uint8Array | undefined): string[] {
-  if (!bytes) return [];
+function readSpineMetadata(bytes: Uint8Array): {
+  readonly animationNames: readonly string[];
+  readonly bounds?: { readonly width: number; readonly height: number };
+} {
+  let skeleton: {
+    readonly skeleton?: { readonly width?: unknown; readonly height?: unknown };
+    readonly animations?: Readonly<Record<string, unknown>>;
+  };
   try {
-    const skeleton = JSON.parse(
+    skeleton = JSON.parse(
       new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-    ) as {
-      readonly animations?: Readonly<Record<string, unknown>>;
-    };
-    return Object.keys(skeleton.animations ?? {});
-  } catch {
-    return [];
+    ) as typeof skeleton;
+  } catch (error) {
+    throw new Error(
+      `Spine skeleton JSON 无效：${error instanceof Error ? error.message : String(error)}`,
+    );
   }
+  const animationNames = Object.keys(skeleton.animations ?? {});
+  const width = skeleton.skeleton?.width;
+  const height = skeleton.skeleton?.height;
+  const hasBounds =
+    typeof width === "number" &&
+    Number.isFinite(width) &&
+    width > 0 &&
+    typeof height === "number" &&
+    Number.isFinite(height) &&
+    height > 0;
+  return {
+    animationNames,
+    ...(hasBounds ? { bounds: { width, height } } : {}),
+  };
+}
+
+function uniqueResourceId(
+  resources: ReadonlyMap<string, EditorLayoutResource>,
+  base: string,
+): string {
+  if (!resources.has(base)) return base;
+  let suffix = 2;
+  while (resources.has(`${base}-${suffix}`)) suffix += 1;
+  return `${base}-${suffix}`;
 }

@@ -13,9 +13,11 @@ const decodeImage = async () => ({ width: 1, height: 1 });
 
 describe("layout zip IO", () => {
   it("exports deterministic bytes and round-trips the exact closure", async () => {
+    const assetsWithUnused = new Map(assetBytes);
+    assetsWithUnused.set("assets/unused.png", new Uint8Array([9, 9]));
     const first = await exportLayoutZip({
       manifest: imageManifest,
-      assets: assetBytes,
+      assets: assetsWithUnused,
       decodeImage,
     });
     const second = await exportLayoutZip({
@@ -31,6 +33,18 @@ describe("layout zip IO", () => {
       assetBytes.get("assets/bg.png"),
     );
     imported.destroy();
+    expect(extractBoundedZip(first.bytes).has("assets/unused.png")).toBe(false);
+    expect(assetsWithUnused.has("assets/unused.png")).toBe(true);
+  });
+
+  it("fails when a used closure byte is missing but ignores unrelated library bytes", async () => {
+    await expect(
+      exportLayoutZip({
+        manifest: imageManifest,
+        assets: new Map([["assets/unused.png", new Uint8Array([1])]]),
+        decodeImage,
+      }),
+    ).rejects.toThrow(/缺少 bytes/);
   });
 
   it("rejects extra, unsafe and noncanonical entries", async () => {

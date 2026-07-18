@@ -20,68 +20,34 @@ const ioSpies = vi.hoisted(() => ({
   importSymbolsZip: vi.fn(),
 }));
 
-const validationSpies = vi.hoisted(() => ({
-  addImage: vi.fn(async ({ project, variants, backgroundVariant }) => {
-    const node = {
-      id: "uploaded",
-      order: project.nodes.length,
-      resource: {
-        kind: "image",
-        path: "assets/uploaded.png",
-        size: { width: 10, height: 10 },
-      },
-      placements: Object.fromEntries(
-        variants.map((variant: string) => [variant, { x: 0, y: 0, scale: 1 }]),
-      ),
+const commandSpies = vi.hoisted(() => ({
+  uploadImage: vi.fn(async ({ project, file }) => {
+    const id = file.name.replace(/\.[^.]+$/u, "").toLowerCase();
+    const resource = {
+      id,
+      kind: "image" as const,
+      path: `assets/${file.name.toLowerCase()}`,
+      size: { width: 100, height: 80 },
     };
-    project.nodes.push(node);
-    project.assets.set("assets/uploaded.png", new Uint8Array([1]));
-    if (backgroundVariant) {
-      project.variants[backgroundVariant].backgroundNode = node.id;
-      project.variants[backgroundVariant].artSize = { width: 10, height: 10 };
-      project.variants[backgroundVariant].focusRect = {
-        x: 0,
-        y: 0,
-        width: 10,
-        height: 10,
-      };
-      project.variants[backgroundVariant].frameFocusRect = {
-        width: 10,
-        height: 10,
-      };
-      project.reel.cellWidth = 1;
-      project.reel.cellHeight = 1;
-      project.reel.placements[backgroundVariant] = { x: 2, y: 3 };
-    }
-    return node;
+    project.resources.set(id, resource);
+    project.assets.set(resource.path, new Uint8Array([1, 2, 3]));
+    return resource;
   }),
-  addSpine: vi.fn(async ({ project, variants }) => {
-    const node = {
-      id: "spine-layer",
-      order: project.nodes.length,
-      resource: {
-        kind: "spine",
-        skeleton: "assets/spine-layer.json",
-        atlas: "assets/spine-layer.atlas",
-        textures: { "page.png": "assets/page.png" },
-        defaultAnimation: "",
-        loop: true,
-      },
+  uploadSpine: vi.fn(async ({ project }) => {
+    const resource = {
+      id: "hero",
+      kind: "spine" as const,
+      skeleton: "assets/hero.json",
+      atlas: "assets/hero.atlas",
+      textures: { "hero.png": "assets/hero.png" },
       animationNames: ["Idle", "Win"],
-      placements: Object.fromEntries(
-        variants.map((variant: string) => [variant, { x: 0, y: 0, scale: 1 }]),
-      ),
+      bounds: { width: 400, height: 300 },
     };
-    project.nodes.push(node);
-    project.assets.set("assets/spine-layer.json", new Uint8Array([1]));
-    project.assets.set("assets/spine-layer.atlas", new Uint8Array([2]));
-    project.assets.set("assets/page.png", new Uint8Array([3]));
-    return node;
-  }),
-  remove: vi.fn((project, nodeId) => {
-    project.nodes = project.nodes.filter(
-      (node: { id: string }) => node.id !== nodeId,
-    );
+    project.resources.set(resource.id, resource);
+    project.assets.set(resource.skeleton, new Uint8Array([1]));
+    project.assets.set(resource.atlas, new Uint8Array([2]));
+    project.assets.set("assets/hero.png", new Uint8Array([3]));
+    return resource;
   }),
 }));
 
@@ -115,250 +81,352 @@ vi.mock("../src/io/imported-symbol-package.js", () => ({
   importSymbolsZip: ioSpies.importSymbolsZip,
 }));
 
-vi.mock("../src/model/validation.js", () => ({
-  addImageFileToProject: validationSpies.addImage,
-  addSpineFilesToProject: validationSpies.addSpine,
-  removeNodeFromProject: validationSpies.remove,
-}));
+vi.mock("../src/model/resource-commands.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../src/model/resource-commands.js")>();
+  return {
+    ...actual,
+    uploadImageResource: commandSpies.uploadImage,
+    uploadSpineResource: commandSpies.uploadSpine,
+  };
+});
 
 import { GameLayoutEditorApp } from "../src/ui/app-shell.js";
 import { assetBytes, imageManifest } from "./fixtures.js";
 
-describe("GameLayoutEditorApp", () => {
+describe("GameLayoutEditorApp workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     previewSpies.setSymbolPackage.mockResolvedValue(null);
+    window.confirm = vi.fn(() => true);
   });
 
-  it("renders accessible controls, switches modes and keeps invalid form data", async () => {
-    const root = document.createElement("div");
-    document.body.append(root);
-    const app = new GameLayoutEditorApp(root);
-    await app.init();
-    expect(root.querySelector("[data-new-single]")).toBeTruthy();
-    expect(root.querySelector("[data-reel-set]")).toBeTruthy();
-    expect(root.querySelector("[data-randomize-symbols]")).toBeTruthy();
-    expect(root.textContent).toContain("maximized-focus");
+  it("mounts one accessible three-tab workspace and keeps symbols controls in the preview drawer", async () => {
+    const { app, root } = await createApp();
+    const tabs = [...root.querySelectorAll<HTMLElement>('[role="tab"]')];
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "资源",
+      "布局",
+      "项目",
+    ]);
+    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
+    expect(root.querySelector("[data-upload-images]")).toBeTruthy();
+    expect(root.querySelector("[data-number]")).toBeNull();
     expect(
-      (
-        root.querySelector(
-          '[data-number="variants.default.focusOffsets.left"]',
-        ) as HTMLInputElement
-      ).value,
-    ).toBe("-60");
-    (root.querySelector("[data-new-dual]") as HTMLButtonElement).click();
-    expect(root.textContent).toContain("orientation-focus");
-    expect(root.textContent).toContain("landscape 背景");
-    const columns = root.querySelector(
-      '[data-number="reel.columns"]',
-    ) as HTMLInputElement;
-    columns.value = "0";
-    columns.dispatchEvent(new Event("change"));
-    expect(root.querySelector("[data-errors]")?.textContent).toMatch(
-      /positive/,
-    );
-    expect(previewSpies.clear).toHaveBeenCalled();
+      root.querySelector(".symbols-drawer [data-import-symbols]"),
+    ).toBeTruthy();
+    tabs[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+    expect(tabs[1].getAttribute("aria-selected")).toBe("true");
+    expect(root.querySelector("[data-outline-list]")).toBeTruthy();
+    expect(root.querySelectorAll(".inspector-inner")).toHaveLength(1);
     app.destroy();
-    expect(previewSpies.destroy).toHaveBeenCalled();
   });
 
-  it("imports symbols atomically, renders reel metadata and delegates selection and randomization", async () => {
-    const resource = {
-      packageManifest: {
-        id: "symbols-fixture",
-        cellSize: { width: 120, height: 130 },
-      },
-      destroy: vi.fn(),
-    };
-    const pending = {
-      packageId: "symbols-fixture",
-      cellSize: { width: 120, height: 130 },
-      displaySymbolCount: 2,
-      reelSets: [
-        { name: "first", reelCount: 5, compatible: true },
-        { name: "second", reelCount: 5, compatible: true },
-        {
-          name: "six",
-          reelCount: 6,
-          compatible: false,
-          reason: "需要 5 reels，实际为 6",
-        },
-      ],
-      selectedReelSet: null,
-      status: "pending-selection",
-      message: "有 2 个兼容 reel set，请显式选择。",
-      scene: null,
-    } as const;
-    const ready = {
-      ...pending,
-      selectedReelSet: "second",
-      status: "ready",
-      message: "ready",
-      scene: {
-        reelSetName: "second",
-        columns: 5,
-        rows: 3,
-        stopYs: [1, 2, 3, 4, 5],
-        codes: [[0], [0], [0], [0], [0]],
-        symbols: [["A"], ["B"], ["A"], ["B"], ["A"]],
-      },
-    } as const;
-    ioSpies.importSymbolsZip.mockResolvedValueOnce(resource);
-    previewSpies.setSymbolPackage.mockResolvedValueOnce(pending);
-    previewSpies.setSymbolGrid.mockReturnValue(pending);
-    previewSpies.setSelectedReelSet.mockReturnValue(ready);
-    previewSpies.randomizeSymbols.mockReturnValue(ready);
-    const zipFile = new File(["zip"], "symbols.zip");
-    const click = vi
-      .spyOn(HTMLInputElement.prototype, "click")
-      .mockImplementation(function (this: HTMLInputElement) {
-        Object.defineProperty(this, "files", {
-          configurable: true,
-          value: [zipFile],
-        });
-        this.dispatchEvent(new Event("change"));
-      });
-    const root = document.createElement("div");
-    document.body.append(root);
-    const app = new GameLayoutEditorApp(root);
-    await app.init();
-    (root.querySelector("[data-import-symbols]") as HTMLButtonElement).click();
-    await vi.waitFor(() =>
-      expect(previewSpies.setSymbolPackage).toHaveBeenCalledWith(resource, {
-        columns: 5,
-        rows: 3,
-      }),
-    );
-    expect(
-      root.querySelector("[data-symbols-metadata]")?.textContent,
-    ).toContain("symbols-fixture · cell 120×130");
-    const selector = root.querySelector("[data-reel-set]") as HTMLSelectElement;
-    expect(selector.disabled).toBe(false);
-    expect(selector.options[3].disabled).toBe(true);
-    selector.value = "second";
-    selector.dispatchEvent(new Event("change"));
-    expect(previewSpies.setSelectedReelSet).toHaveBeenCalledWith("second");
-    expect(
-      (root.querySelector("[data-randomize-symbols]") as HTMLButtonElement)
-        .disabled,
-    ).toBe(false);
+  it("new projects return to Resources and image upload creates only a resource row", async () => {
+    const { app, root } = await createApp();
     (
-      root.querySelector("[data-randomize-symbols]") as HTMLButtonElement
+      root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
     ).click();
-    expect(previewSpies.randomizeSymbols).toHaveBeenCalledOnce();
-    expect(root.querySelector("[data-symbols-scene]")?.textContent).toContain(
-      "stops=[1, 2, 3, 4, 5]",
-    );
-    (root.querySelector("[data-clear-symbols]") as HTMLButtonElement).click();
-    expect(previewSpies.setSymbolPackage).toHaveBeenLastCalledWith(null);
+    (root.querySelector("[data-new-dual]") as HTMLButtonElement).click();
     expect(
-      root.querySelector("[data-symbols-metadata]")?.textContent,
-    ).toContain("未导入");
+      root
+        .querySelector('[data-workspace-tab="assets"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+    const fileClick = selectFilesOnce([
+      new File(["image"], "uploaded.png", { type: "image/png" }),
+    ]);
+    (root.querySelector("[data-upload-images]") as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(commandSpies.uploadImage).toHaveBeenCalled());
+    expect(root.querySelector('[data-resource-row="uploaded"]')).toBeTruthy();
+    expect(root.textContent).toContain("未创建任何 node");
+    expect(
+      root.querySelector('[data-outline-key="layer:uploaded"]'),
+    ).toBeNull();
+    fileClick.mockRestore();
     app.destroy();
-    click.mockRestore();
   });
 
-  it("keeps the previous symbols metadata when a replacement import fails", async () => {
-    const resource = {
-      packageManifest: {
-        id: "old-symbols",
-        cellSize: { width: 100, height: 100 },
-      },
-      destroy: vi.fn(),
-    };
-    const ready = {
-      packageId: "old-symbols",
-      cellSize: { width: 100, height: 100 },
-      displaySymbolCount: 1,
-      reelSets: [{ name: "main", reelCount: 5, compatible: true }],
-      selectedReelSet: "main",
-      status: "ready",
-      message: "ready",
-      scene: {
-        reelSetName: "main",
-        columns: 5,
-        rows: 3,
-        stopYs: [0, 0, 0, 0, 0],
-        codes: [[0], [0], [0], [0], [0]],
-        symbols: [["A"], ["A"], ["A"], ["A"], ["A"]],
-      },
-    } as const;
-    ioSpies.importSymbolsZip
-      .mockResolvedValueOnce(resource)
-      .mockRejectedValueOnce(new Error("replacement invalid"));
-    previewSpies.setSymbolPackage.mockResolvedValueOnce(ready);
-    previewSpies.setSymbolGrid.mockReturnValue(ready);
-    const zipFile = new File(["zip"], "symbols.zip");
-    const click = vi
-      .spyOn(HTMLInputElement.prototype, "click")
-      .mockImplementation(function (this: HTMLInputElement) {
-        Object.defineProperty(this, "files", {
-          configurable: true,
-          value: [zipFile],
-        });
-        this.dispatchEvent(new Event("change"));
-      });
-    const root = document.createElement("div");
-    document.body.append(root);
-    const app = new GameLayoutEditorApp(root);
-    await app.init();
-    (root.querySelector("[data-import-symbols]") as HTMLButtonElement).click();
+  it("adds a reusable resource through an explicit Picker confirmation and focuses one Inspector", async () => {
+    const { app, root } = await createAppWithUploadedImage();
+    (
+      root.querySelector(
+        '[data-resource-add-layer="uploaded"]',
+      ) as HTMLButtonElement
+    ).click();
+    const dialog = root.querySelector(
+      "[data-resource-picker]",
+    ) as HTMLDialogElement;
+    expect(dialog.open).toBe(true);
+    expect(
+      dialog.querySelector('[aria-selected="true"]')?.textContent,
+    ).toContain("uploaded");
+    expect(root.textContent).toContain("不会按文件名或唯一候选自动绑定");
+    (
+      dialog.querySelector("[data-picker-confirm]") as HTMLButtonElement
+    ).click();
     await vi.waitFor(() =>
       expect(
-        root.querySelector("[data-symbols-metadata]")?.textContent,
-      ).toContain("old-symbols"),
+        root.querySelector('[data-outline-key="layer:uploaded"]'),
+      ).toBeTruthy(),
     );
-    (root.querySelector("[data-import-symbols]") as HTMLButtonElement).click();
+    expect(
+      root
+        .querySelector('[data-workspace-tab="layout"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(
+      root.querySelector("[data-inspector-heading]")?.textContent,
+    ).toContain("uploaded");
+    expect(root.textContent).toContain("资源 uploaded 保持可复用");
+    expect(dialog.open).toBe(false);
+    app.destroy();
+  });
+
+  it("cancels Picker without binding and restores the invoking workflow", async () => {
+    const { app, root } = await createAppWithUploadedImage();
+    const trigger = root.querySelector(
+      '[data-resource-background="default"]',
+    ) as HTMLButtonElement;
+    trigger.click();
+    const dialog = root.querySelector(
+      "[data-resource-picker]",
+    ) as HTMLDialogElement;
+    (dialog.querySelector("[data-picker-cancel]") as HTMLButtonElement).click();
+    expect(dialog.open).toBe(false);
+    (
+      root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector(
+        '[data-outline-key="background:default"]',
+      ) as HTMLButtonElement
+    ).click();
+    expect(root.textContent).toContain("尚未绑定背景资源");
+    expect(
+      root.querySelector('[data-outline-key="layer:uploaded"]'),
+    ).toBeNull();
+    app.destroy();
+  });
+
+  it("assigns and clears a background while preserving its logical resource", async () => {
+    const { app, root } = await createAppWithUploadedImage();
+    (
+      root.querySelector(
+        '[data-resource-background="default"]',
+      ) as HTMLButtonElement
+    ).click();
+    let dialog = root.querySelector(
+      "[data-resource-picker]",
+    ) as HTMLDialogElement;
+    (
+      dialog.querySelector("[data-picker-confirm]") as HTMLButtonElement
+    ).click();
     await vi.waitFor(() =>
-      expect(root.querySelector("[data-errors]")?.textContent).toContain(
-        "replacement invalid",
-      ),
+      expect(
+        root.querySelector("[data-inspector-heading]")?.textContent,
+      ).toContain("背景"),
     );
-    expect(
-      root.querySelector("[data-symbols-metadata]")?.textContent,
-    ).toContain("old-symbols");
+    expect(root.textContent).toContain("uploaded");
+    expect(previewSpies.setLayout).toHaveBeenCalled();
+    (
+      root.querySelector("[data-clear-background]") as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector('[data-workspace-tab="assets"]') as HTMLButtonElement
+    ).click();
+    expect(root.querySelector('[data-resource-row="uploaded"]')).toBeTruthy();
+    (
+      root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector(
+        '[data-outline-key="background:default"]',
+      ) as HTMLButtonElement
+    ).click();
+    expect(root.textContent).toContain("尚未绑定背景资源");
+    dialog = root.querySelector("[data-resource-picker]") as HTMLDialogElement;
+    expect(dialog.open).toBe(false);
     app.destroy();
-    click.mockRestore();
   });
 
-  it("preserves expanded editor sections across field commits", async () => {
-    const root = document.createElement("div");
-    document.body.append(root);
-    const app = new GameLayoutEditorApp(root);
-    await app.init();
-    const reelDetails = root.querySelector(
-      '[data-details-key="reel-main"]',
-    ) as HTMLDetailsElement;
-    const variantDetails = root.querySelector(
-      '[data-details-key="variant-default"]',
-    ) as HTMLDetailsElement;
-    reelDetails.open = true;
-    variantDetails.open = true;
-
-    const cellWidth = root.querySelector(
-      '[data-number="reel.cellWidth"]',
+  it("filters, expands and deletes unused resources without creating nodes", async () => {
+    const fileClick = selectFilesOnce([
+      new File(["a"], "alpha.png"),
+      new File(["b"], "beta.png"),
+    ]);
+    const { app, root } = await createApp();
+    (root.querySelector("[data-upload-images]") as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(root.querySelectorAll("[data-resource-row]")).toHaveLength(2),
+    );
+    (
+      root.querySelector('[data-toggle-resource="alpha"]') as HTMLButtonElement
+    ).click();
+    expect(root.textContent).toContain("未引用，不会导出");
+    const status = root.querySelector(
+      "[data-resource-status]",
+    ) as HTMLSelectElement;
+    status.value = "unused";
+    status.dispatchEvent(new Event("change"));
+    const query = root.querySelector(
+      "[data-resource-query]",
     ) as HTMLInputElement;
-    cellWidth.value = "140";
-    cellWidth.dispatchEvent(new Event("change"));
-
-    expect(
-      (
-        root.querySelector(
-          '[data-details-key="reel-main"]',
-        ) as HTMLDetailsElement
-      ).open,
-    ).toBe(true);
-    expect(
-      (
-        root.querySelector(
-          '[data-details-key="variant-default"]',
-        ) as HTMLDetailsElement
-      ).open,
-    ).toBe(true);
+    query.value = "beta";
+    query.dispatchEvent(new Event("input"));
+    expect(root.querySelector('[data-resource-row="alpha"]')).toBeNull();
+    (
+      root.querySelector('[data-delete-resource="beta"]') as HTMLButtonElement
+    ).click();
+    expect(root.querySelector('[data-resource-row="beta"]')).toBeNull();
+    expect(root.textContent).toContain("已删除资源 beta");
+    fileClick.mockRestore();
     app.destroy();
   });
 
-  it("atomically imports a valid zip and exports the validated project", async () => {
+  it("edits one selected orientation layer, moves, renames, toggles placement and deletes it", async () => {
+    const { app, root } = await createApp();
+    (root.querySelector("[data-new-dual]") as HTMLButtonElement).click();
+    const fileClick = selectFilesOnce([new File(["image"], "uploaded.png")]);
+    (root.querySelector("[data-upload-images]") as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('[data-resource-row="uploaded"]')).toBeTruthy(),
+    );
+    (
+      root.querySelector(
+        '[data-resource-add-layer="uploaded"]',
+      ) as HTMLButtonElement
+    ).click();
+    let dialog = root.querySelector(
+      "[data-resource-picker]",
+    ) as HTMLDialogElement;
+    (
+      dialog.querySelector("[data-picker-confirm]") as HTMLButtonElement
+    ).click();
+    (root.querySelector("[data-open-add-layer]") as HTMLButtonElement).click();
+    dialog = root.querySelector("[data-resource-picker]") as HTMLDialogElement;
+    (
+      dialog.querySelector(
+        '[data-picker-candidate="uploaded"]',
+      ) as HTMLButtonElement
+    ).click();
+    dialog = root.querySelector("[data-resource-picker]") as HTMLDialogElement;
+    (
+      dialog.querySelector("[data-picker-confirm]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector('[data-outline-key="layer:uploaded-2"]'),
+      ).toBeTruthy(),
+    );
+    (root.querySelector('[data-move-layer="-1"]') as HTMLButtonElement).click();
+    const portrait = root.querySelector(
+      '[data-layer-visible="portrait"]',
+    ) as HTMLInputElement;
+    portrait.checked = false;
+    portrait.dispatchEvent(new Event("change"));
+    const restored = root.querySelector(
+      '[data-layer-visible="portrait"]',
+    ) as HTMLInputElement;
+    restored.checked = true;
+    restored.dispatchEvent(new Event("change"));
+    const nodeId = root.querySelector("[data-node-id]") as HTMLInputElement;
+    nodeId.value = "renamed-layer";
+    nodeId.dispatchEvent(new Event("change"));
+    expect(
+      root.querySelector('[data-outline-key="layer:renamed-layer"]'),
+    ).toBeTruthy();
+    (root.querySelector("[data-remove-layer]") as HTMLButtonElement).click();
+    expect(
+      root.querySelector('[data-outline-key="layer:renamed-layer"]'),
+    ).toBeNull();
+    expect(root.textContent).toContain("资源仍保留");
+    fileClick.mockRestore();
+    app.destroy();
+  });
+
+  it("requires explicit Spine animation in Picker and edits exact playback in the Inspector", async () => {
+    const fileClick = selectFilesOnce([
+      new File(["{}"], "hero.json"),
+      new File(["hero.png\n"], "hero.atlas"),
+      new File(["image"], "hero.png"),
+    ]);
+    const { app, root } = await createApp();
+    (root.querySelector("[data-upload-spine]") as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('[data-resource-row="hero"]')).toBeTruthy(),
+    );
+    (
+      root.querySelector(
+        '[data-resource-add-layer="hero"]',
+      ) as HTMLButtonElement
+    ).click();
+    let dialog = root.querySelector(
+      "[data-resource-picker]",
+    ) as HTMLDialogElement;
+    const animation = dialog.querySelector(
+      "[data-picker-animation]",
+    ) as HTMLSelectElement;
+    expect(animation.value).toBe("");
+    animation.value = "Idle";
+    animation.dispatchEvent(new Event("change"));
+    (
+      dialog.querySelector("[data-picker-confirm]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-layer-animation]")).toBeTruthy(),
+    );
+    const inspectorAnimation = root.querySelector(
+      "[data-layer-animation]",
+    ) as HTMLSelectElement;
+    inspectorAnimation.value = "Win";
+    inspectorAnimation.dispatchEvent(new Event("change"));
+    expect(root.textContent).toContain("已设置 animation Win");
+    (root.querySelector("[data-rebind-layer]") as HTMLButtonElement).click();
+    dialog = root.querySelector("[data-resource-picker]") as HTMLDialogElement;
+    dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+    expect(dialog.open).toBe(false);
+    fileClick.mockRestore();
+    app.destroy();
+  });
+
+  it("searches and type-filters Picker candidates without selecting the only result", async () => {
+    const { app, root } = await createAppWithUploadedImage();
+    const spineClick = selectFilesOnce([
+      new File(["{}"], "hero.json"),
+      new File(["hero.png\n"], "hero.atlas"),
+      new File(["image"], "hero.png"),
+    ]);
+    (root.querySelector("[data-upload-spine]") as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(commandSpies.uploadSpine).toHaveBeenCalled());
+    (
+      root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
+    ).click();
+    (root.querySelector("[data-open-add-layer]") as HTMLButtonElement).click();
+    let dialog = root.querySelector(
+      "[data-resource-picker]",
+    ) as HTMLDialogElement;
+    const type = dialog.querySelector(
+      "[data-picker-type]",
+    ) as HTMLSelectElement;
+    type.value = "spine";
+    type.dispatchEvent(new Event("change"));
+    dialog = root.querySelector("[data-resource-picker]") as HTMLDialogElement;
+    expect(dialog.querySelectorAll("[data-picker-candidate]")).toHaveLength(1);
+    expect(dialog.querySelector('[aria-selected="true"]')).toBeNull();
+    const search = dialog.querySelector(
+      "[data-picker-query]",
+    ) as HTMLInputElement;
+    search.value = "missing";
+    search.dispatchEvent(new Event("input"));
+    dialog = root.querySelector("[data-resource-picker]") as HTMLDialogElement;
+    expect(dialog.textContent).toContain("没有匹配资源");
+    (dialog.querySelector("[data-picker-cancel]") as HTMLButtonElement).click();
+    spineClick.mockRestore();
+    app.destroy();
+  });
+
+  it("imports into Layout, exposes outline selection and exports the strict project", async () => {
     const imported = {
       manifest: imageManifest,
       assets: assetBytes,
@@ -370,42 +438,38 @@ describe("GameLayoutEditorApp", () => {
       blob: new Blob(["zip"]),
       bytes: new Uint8Array([1]),
     });
-    const zipFile = new File(["zip"], "fixture-layout.zip", {
-      type: "application/zip",
-    });
-    const click = vi
-      .spyOn(HTMLInputElement.prototype, "click")
-      .mockImplementation(function (this: HTMLInputElement) {
-        Object.defineProperty(this, "files", {
-          configurable: true,
-          value: [zipFile],
-        });
-        this.dispatchEvent(new Event("change"));
-      });
+    const fileClick = selectFilesOnce([
+      new File(["zip"], "fixture-layout.zip"),
+    ]);
     const anchorClick = vi
       .spyOn(HTMLAnchorElement.prototype, "click")
       .mockImplementation(() => undefined);
-    const root = document.createElement("div");
-    document.body.append(root);
-    const app = new GameLayoutEditorApp(root);
-    await app.init();
+    const { app, root } = await createApp();
     (root.querySelector("[data-import]") as HTMLButtonElement).click();
-    await vi.waitFor(() => expect(ioSpies.importZip).toHaveBeenCalled());
-    expect(root.textContent).toContain("已加载 bg");
-    expect(imported.destroy).toHaveBeenCalled();
+    await vi.waitFor(() => expect(imported.destroy).toHaveBeenCalled());
+    expect(
+      root
+        .querySelector('[data-workspace-tab="layout"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(
+      root
+        .querySelector('[data-outline-key="background:default"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(
+      root.querySelector("[data-inspector-heading]")?.textContent,
+    ).toContain("背景");
     (root.querySelector("[data-export]") as HTMLButtonElement).click();
     await vi.waitFor(() => expect(ioSpies.exportZip).toHaveBeenCalled());
     expect(anchorClick).toHaveBeenCalled();
-    app.destroy();
-    click.mockRestore();
+    fileClick.mockRestore();
     anchorClick.mockRestore();
+    app.destroy();
   });
 
-  it("updates preview controls without mutating project fields", async () => {
-    const root = document.createElement("div");
-    document.body.append(root);
-    const app = new GameLayoutEditorApp(root);
-    await app.init();
+  it("keeps preview page, zoom and guide controls independent of project tabs", async () => {
+    const { app, root } = await createApp();
     const width = root.querySelector(
       "[data-preview-width]",
     ) as HTMLInputElement;
@@ -420,9 +484,6 @@ describe("GameLayoutEditorApp", () => {
       height: 600,
     });
     (root.querySelector("[data-zoom-in]") as HTMLButtonElement).click();
-    expect(previewSpies.setZoom).toHaveBeenCalled();
-    (root.querySelector("[data-zoom-out]") as HTMLButtonElement).click();
-    (root.querySelector("[data-zoom-reset]") as HTMLButtonElement).click();
     const focus = root.querySelector("[data-guide-focus]") as HTMLInputElement;
     focus.checked = false;
     focus.dispatchEvent(new Event("change"));
@@ -430,134 +491,121 @@ describe("GameLayoutEditorApp", () => {
       showFocus: false,
       showReels: true,
     });
-    const reel = root.querySelector("[data-guide-reel]") as HTMLInputElement;
-    reel.checked = false;
-    reel.dispatchEvent(new Event("change"));
-    app.destroy();
-  });
-
-  it("handles background/layer uploads, animation selection, visibility and deletion", async () => {
-    const selectedFiles = [
-      [new File(["image"], "uploaded.png")],
-      [new File(["{}"], "layer.json"), new File(["atlas"], "layer.atlas")],
-    ];
-    const click = vi
-      .spyOn(HTMLInputElement.prototype, "click")
-      .mockImplementation(function (this: HTMLInputElement) {
-        Object.defineProperty(this, "files", {
-          configurable: true,
-          value: selectedFiles.shift() ?? [],
-        });
-        this.dispatchEvent(new Event("change"));
-      });
-    const root = document.createElement("div");
-    document.body.append(root);
-    const app = new GameLayoutEditorApp(root);
-    await app.init();
-    (root.querySelector("[data-new-dual]") as HTMLButtonElement).click();
     (
-      root.querySelector('[data-bg-image="landscape"]') as HTMLButtonElement
+      root.querySelector('[data-workspace-tab="project"]') as HTMLButtonElement
     ).click();
-    await vi.waitFor(() => expect(validationSpies.addImage).toHaveBeenCalled());
-    expect(root.textContent).toContain("已加载 uploaded");
-    await vi.waitFor(() => expect(previewSpies.setLayout).toHaveBeenCalled());
-    (root.querySelector("[data-add-spine]") as HTMLButtonElement).click();
-    await vi.waitFor(() => expect(validationSpies.addSpine).toHaveBeenCalled());
-    const select = root.querySelector("[data-animation]") as HTMLSelectElement;
-    select.value = "Idle";
-    select.dispatchEvent(new Event("change"));
-    const portraitVisible = root.querySelector(
-      '[data-visible="portrait"][data-node-index="1"]',
-    ) as HTMLInputElement;
-    portraitVisible.checked = false;
-    portraitVisible.dispatchEvent(new Event("change"));
-    portraitVisible.checked = true;
-    portraitVisible.dispatchEvent(new Event("change"));
-    const moveUp = root.querySelector(
-      '[data-move-node="-1"][data-node-index="1"]',
-    ) as HTMLButtonElement;
-    moveUp.click();
-    expect(root.textContent).toContain("spine-layer");
-    const deleteButton = root.querySelector(
-      '[data-delete-node="spine-layer"]',
-    ) as HTMLButtonElement;
-    deleteButton.click();
-    expect(validationSpies.remove).toHaveBeenCalledWith(
-      expect.anything(),
-      "spine-layer",
-    );
+    expect(root.querySelector("[data-preview-width]")).toBe(width);
     app.destroy();
-    click.mockRestore();
   });
 
-  it("covers empty file selections and the single-mode layer upload branch", async () => {
-    const selections = [[], [new File(["image"], "layer.png")]];
-    const click = vi
-      .spyOn(HTMLInputElement.prototype, "click")
-      .mockImplementation(function (this: HTMLInputElement) {
-        Object.defineProperty(this, "files", {
-          configurable: true,
-          value: selections.shift() ?? [],
-        });
-        this.dispatchEvent(new Event("change"));
-      });
-    const root = document.createElement("div");
-    document.body.append(root);
-    const app = new GameLayoutEditorApp(root);
-    await app.init();
-    (root.querySelector("[data-add-image]") as HTMLButtonElement).click();
-    await Promise.resolve();
-    expect(validationSpies.addImage).not.toHaveBeenCalled();
-    (root.querySelector("[data-add-image]") as HTMLButtonElement).click();
-    await vi.waitFor(() => expect(validationSpies.addImage).toHaveBeenCalled());
-    expect(validationSpies.addImage.mock.calls.at(-1)?.[0]).toMatchObject({
-      variants: ["default"],
+  it("imports, selects, randomizes and clears symbols from the preview drawer", async () => {
+    const resource = {
+      packageManifest: { id: "symbols", cellSize: { width: 120, height: 120 } },
+      destroy: vi.fn(),
+    };
+    const metadata = {
+      packageId: "symbols",
+      cellSize: { width: 120, height: 120 },
+      displaySymbolCount: 2,
+      reelSets: [
+        { name: "first", reelCount: 5, compatible: true },
+        { name: "second", reelCount: 5, compatible: true },
+      ],
+      selectedReelSet: undefined,
+      status: "pending-selection" as const,
+      message: "请选择",
+      scene: null,
+    };
+    ioSpies.importSymbolsZip.mockResolvedValueOnce(resource);
+    previewSpies.setSymbolPackage.mockResolvedValueOnce(metadata);
+    previewSpies.setSelectedReelSet.mockReturnValueOnce({
+      ...metadata,
+      selectedReelSet: "first",
+      status: "ready",
     });
+    previewSpies.randomizeSymbols.mockReturnValueOnce({
+      ...metadata,
+      selectedReelSet: "first",
+      status: "ready",
+    });
+    const fileClick = selectFilesOnce([new File(["zip"], "symbols.zip")]);
+    const { app, root } = await createApp();
+    (root.querySelector("[data-import-symbols]") as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(previewSpies.setSymbolPackage).toHaveBeenCalled(),
+    );
+    const select = root.querySelector("[data-reel-set]") as HTMLSelectElement;
+    select.value = "first";
+    select.dispatchEvent(new Event("change"));
+    (
+      root.querySelector("[data-randomize-symbols]") as HTMLButtonElement
+    ).click();
+    expect(previewSpies.randomizeSymbols).toHaveBeenCalled();
+    (root.querySelector("[data-clear-symbols]") as HTMLButtonElement).click();
+    expect(previewSpies.setSymbolPackage).toHaveBeenLastCalledWith(null);
+    fileClick.mockRestore();
     app.destroy();
-    app.destroy();
-    click.mockRestore();
   });
 
-  it("surfaces import, export and custom preview failures", async () => {
+  it("surfaces failed import without replacing the current workspace and destroys idempotently", async () => {
     ioSpies.importZip.mockRejectedValueOnce(new Error("bad zip"));
-    const zipFile = new File(["bad"], "bad.zip");
-    const click = vi
-      .spyOn(HTMLInputElement.prototype, "click")
-      .mockImplementation(function (this: HTMLInputElement) {
-        Object.defineProperty(this, "files", {
-          configurable: true,
-          value: [zipFile],
-        });
-        this.dispatchEvent(new Event("change"));
-      });
-    const root = document.createElement("div");
-    document.body.append(root);
-    const app = new GameLayoutEditorApp(root);
-    await app.init();
+    const fileClick = selectFilesOnce([new File(["bad"], "bad.zip")]);
+    const { app, root } = await createApp();
     (root.querySelector("[data-import]") as HTMLButtonElement).click();
     await vi.waitFor(() =>
       expect(root.querySelector("[data-errors]")?.textContent).toContain(
         "bad zip",
       ),
     );
-    (root.querySelector("[data-export]") as HTMLButtonElement).click();
-    await vi.waitFor(() =>
-      expect(root.querySelector("[data-errors]")?.textContent).toContain(
-        "禁止导出",
-      ),
-    );
-    const width = root.querySelector(
-      "[data-preview-width]",
-    ) as HTMLInputElement;
-    previewSpies.setPageSize.mockImplementationOnce(() => {
-      throw new Error("preview width must be positive");
-    });
-    width.value = "0";
-    width.dispatchEvent(new Event("change"));
-    expect(root.querySelector("[data-errors]")?.textContent).toContain(
-      "positive",
-    );
+    expect(
+      root
+        .querySelector('[data-workspace-tab="assets"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
     app.destroy();
-    click.mockRestore();
+    app.destroy();
+    expect(previewSpies.destroy).toHaveBeenCalledTimes(1);
+    fileClick.mockRestore();
   });
 });
+
+async function createApp(): Promise<{
+  app: GameLayoutEditorApp;
+  root: HTMLElement;
+}> {
+  const root = document.createElement("div");
+  document.body.append(root);
+  const app = new GameLayoutEditorApp(root);
+  await app.init();
+  return { app, root };
+}
+
+async function createAppWithUploadedImage(): Promise<{
+  app: GameLayoutEditorApp;
+  root: HTMLElement;
+}> {
+  const fileClick = selectFilesOnce([new File(["image"], "uploaded.png")]);
+  const result = await createApp();
+  (
+    result.root.querySelector("[data-upload-images]") as HTMLButtonElement
+  ).click();
+  await vi.waitFor(() =>
+    expect(
+      result.root.querySelector('[data-resource-row="uploaded"]'),
+    ).toBeTruthy(),
+  );
+  fileClick.mockRestore();
+  return result;
+}
+
+function selectFilesOnce(files: readonly File[]) {
+  return vi
+    .spyOn(HTMLInputElement.prototype, "click")
+    .mockImplementationOnce(function (this: HTMLInputElement) {
+      Object.defineProperty(this, "files", {
+        configurable: true,
+        value: files,
+      });
+      this.dispatchEvent(new Event("change"));
+    });
+}

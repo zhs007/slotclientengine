@@ -25,7 +25,13 @@ export async function exportLayoutZip(options: {
   for (const path of collectSceneLayoutAssetPaths(manifest)) {
     assertCanonicalPackagePath(path);
   }
-  const validated = await validateLayoutAssets(manifest, options.assets, {
+  const closureAssets = new Map<string, Uint8Array>();
+  for (const path of collectSceneLayoutAssetPaths(manifest)) {
+    const bytes = options.assets.get(path);
+    if (!bytes) throw new Error(`导出资源闭包缺少 bytes：${path}`);
+    closureAssets.set(path, bytes.slice());
+  }
+  const validated = await validateLayoutAssets(manifest, closureAssets, {
     ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
   });
   validated.destroy();
@@ -34,8 +40,8 @@ export async function exportLayoutZip(options: {
       stableManifestJson(manifest),
     ),
   };
-  for (const path of [...options.assets.keys()].sort()) {
-    entries[path] = options.assets.get(path)!.slice();
+  for (const path of [...closureAssets.keys()].sort()) {
+    entries[path] = closureAssets.get(path)!.slice();
   }
   const bytes = createDeterministicZip(entries, {
     level: 6,

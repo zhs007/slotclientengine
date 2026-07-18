@@ -399,22 +399,45 @@ function validateReferencesAndBounds(
 }
 
 function validatePathClosure(nodes: readonly SceneLayoutNode[]): void {
-  const paths: string[] = [];
+  const owners = new Map<string, string>();
   for (const node of nodes) {
     const resource = node.resource;
-    if (resource.kind === "image") paths.push(resource.path);
-    else
-      paths.push(
-        resource.skeleton,
-        resource.atlas,
-        ...Object.values(resource.textures),
-      );
+    const signature =
+      resource.kind === "image"
+        ? JSON.stringify({
+            kind: resource.kind,
+            path: resource.path,
+            size: resource.size,
+          })
+        : JSON.stringify({
+            kind: resource.kind,
+            skeleton: resource.skeleton,
+            atlas: resource.atlas,
+            textures: Object.fromEntries(
+              Object.entries(resource.textures).sort(([left], [right]) =>
+                left.localeCompare(right, "en"),
+              ),
+            ),
+          });
+    const paths =
+      resource.kind === "image"
+        ? [resource.path]
+        : [
+            resource.skeleton,
+            resource.atlas,
+            ...Object.values(resource.textures),
+          ];
+    for (const path of paths) {
+      const key = path.toLowerCase();
+      const owner = owners.get(key);
+      if (owner !== undefined && owner !== signature) {
+        fail(
+          `lowercase scene layout asset path values must be unique across distinct resource signatures: "${path}".`,
+        );
+      }
+      owners.set(key, signature);
+    }
   }
-  unique(paths, "scene layout asset path");
-  unique(
-    paths.map((path) => path.toLowerCase()),
-    "lowercase scene layout asset path",
-  );
 }
 
 function localPath(

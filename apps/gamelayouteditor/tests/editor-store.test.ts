@@ -177,14 +177,17 @@ describe("EditorStore", () => {
 
   it("builds a strict single-variant draft preview while the other background is missing", () => {
     const project = createNewEditorProject("orientation-focus");
+    project.resources.set("bg", {
+      id: "bg",
+      kind: "image",
+      path: "assets/bg.png",
+      size: { width: 1000, height: 600 },
+    });
+    project.assets.set("assets/bg.png", new Uint8Array([1]));
     project.nodes.push({
       id: "bg",
       order: 0,
-      resource: {
-        kind: "image",
-        path: "assets/bg.png",
-        size: { width: 1000, height: 600 },
-      },
+      resourceId: "bg",
       placements: { landscape: { x: 0, y: 0, scale: 1 } },
     });
     project.variants.landscape = {
@@ -204,5 +207,64 @@ describe("EditorStore", () => {
       y: 0,
       scale: 1,
     });
+  });
+
+  it("deduplicates imported logical resources by full material signature while preserving per-node animation", () => {
+    const skeleton = new TextEncoder().encode(
+      JSON.stringify({
+        skeleton: { spine: "4.3.23", width: 100, height: 100 },
+        animations: { Idle: {}, Win: {} },
+      }),
+    );
+    const manifest = {
+      ...imageManifest,
+      nodes: [
+        {
+          id: "bg",
+          order: 0,
+          resource: {
+            kind: "spine" as const,
+            skeleton: "assets/hero.json",
+            atlas: "assets/hero.atlas",
+            textures: { "hero.png": "assets/hero.png" },
+            defaultAnimation: "Idle",
+            loop: true as const,
+          },
+          placements: { default: { x: 0, y: 0, scale: 1 } },
+        },
+        {
+          id: "fx",
+          order: 1,
+          resource: {
+            kind: "spine" as const,
+            skeleton: "assets/hero.json",
+            atlas: "assets/hero.atlas",
+            textures: { "hero.png": "assets/hero.png" },
+            defaultAnimation: "Win",
+            loop: true as const,
+          },
+          placements: { default: { x: 0, y: 0, scale: 1 } },
+        },
+      ],
+    };
+    const project = manifestToEditorProject(
+      manifest,
+      new Map([
+        ["assets/hero.json", skeleton],
+        ["assets/hero.atlas", new Uint8Array([1])],
+        ["assets/hero.png", new Uint8Array([2])],
+      ]),
+    );
+    expect(project.resources.size).toBe(1);
+    expect(project.nodes[0].resourceId).toBe(project.nodes[1].resourceId);
+    expect(project.nodes.map((node) => node.defaultAnimation)).toEqual([
+      "Idle",
+      "Win",
+    ]);
+    expect(
+      editorProjectToManifest(project).nodes.map((node) =>
+        node.resource.kind === "spine" ? node.resource.defaultAnimation : "",
+      ),
+    ).toEqual(["Idle", "Win"]);
   });
 });
