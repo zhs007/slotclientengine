@@ -134,7 +134,7 @@ describe("game003 symbol assets", () => {
     ).toThrow(/H1.*renderPriority/);
   });
 
-  it("fails when required state textures are missing or manifest fields drift", () => {
+  it("fails when required state textures are missing and resolves normal by the explicit manifest path", () => {
     const modules = createModules(GAME003_DISPLAY_SYMBOLS);
     delete modules["../../../assets/game003-s1/H1.spinBlur.png"];
     expect(() =>
@@ -144,7 +144,7 @@ describe("game003 symbol assets", () => {
       }),
     ).toThrow(/H1.*spinBlur/);
 
-    expect(() =>
+    expect(
       createGame003SymbolAssetMapFromModules({
         modules: createModules(GAME003_DISPLAY_SYMBOLS),
         stateTextureManifest: {
@@ -161,7 +161,7 @@ describe("game003 symbol assets", () => {
         },
         displaySymbols: ["H1"],
       }),
-    ).toThrow(/normal texture must be ".\/H1.png"/);
+    ).toMatchObject({ H1: { normal: "/assets/game003-s1/H2.png" } });
   });
 
   it("rejects malformed manifests and invalid explicit scales", () => {

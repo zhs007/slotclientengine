@@ -52,7 +52,7 @@ interface SymbolPackageManifestV1 {
 }
 ```
 
-所有 object 递归拒绝未知字段。两个 entrypoint 必填、不得相同，也不得出现在 `resources`。`resources` 必须非空、唯一并按 canonical path 排序。ZIP 实际文件集合必须与 package manifest、两个 entrypoint 和 `resources` 的并集精确相等。
+所有 object 递归拒绝未知字段。两个 entrypoint 必填、不得相同，也不得出现在 `resources`。`resources` 必须是数组，允许合法的 `[]`；非空时必须唯一并按 canonical path 排序。ZIP 实际文件集合必须与 package manifest、两个 entrypoint 和 `resources` 的并集精确相等。`resources: []` 只表示 manifest 没有引用外部资源，并不放宽 referenced resource 校验。
 
 ## 三份配置的职责
 
@@ -77,7 +77,33 @@ Symbols ZIP 固定限制：
 
 ## 精确资源闭包
 
-闭包包含 normal/layer/keyframe、每个 state texture、VNI project 及其 `assets[].path`、Spine skeleton/atlas/texture、value tier Spine 与 image text 的每个 `defaultValues` 完整数值图片。缺资源或多余 orphan 都失败；不扫描目录、不使用 glob、不从文件名猜 display symbol。
+闭包包含 normal/layer/keyframe、实际存在的稀疏 state texture、VNI project 及其 `assets[].path`、Spine skeleton/atlas/texture、value tier Spine 与 image text 的每个 `defaultValues` 完整数值图片。资源按 manifest exact path 解析，允许任意合法文件名和子目录；相同 basename 位于不同目录时不会串用。缺资源或多余 orphan 都失败；不扫描目录、不使用 glob、不从文件名猜 display symbol。
+
+顶层 `states[]` 是允许出现的 state texture id 稳定并集，不再表示每个 symbol 必须提供每个 texture。需要全量 state texture 的 production generator/caller 必须显式传 `requiredStates`；普通 package catalog 保持 sparse per-symbol 语义。
+
+空 normal 使用正式 transparent normal：
+
+```json
+{
+  "normal": {
+    "kind": "transparent",
+    "width": 160,
+    "height": 160
+  },
+  "scale": 1
+}
+```
+
+非 normal 的 intentional empty 使用正式 animation spec：
+
+```json
+{
+  "kind": "empty",
+  "durationSeconds": 0.016666666666666666
+}
+```
+
+`empty` reset 时隐藏 base/state/underlay/overlay，并按 state definition 的 static/once/loop 生命周期上报完成边界。它不引用隐藏 PNG，也绝不作为图片、VNI、Spine 或 resolver 错误的 fallback。
 
 Spine 只接受 official 4.3.x，animation name 大小写精确，atlas page 必须匹配 texture。VNI project 通过 vnicore parser 和精确 asset manifest 验证。image value 缺图不回退 font。`cascadeWinPresentation` 等合法高级 metadata 可以 round-trip，但不因此引入 sequence UI。
 
@@ -89,7 +115,9 @@ Spine 只接受 official 4.3.x，animation name 大小写精确，atlas page 必
 
 ## 编辑器与 layout 接入
 
-`apps/symbolseditor` 从 game config 创建 draft，默认 `160x160`、`spinBlur`/`disabled`、scale `1`、priority `0` 和全选 display set。它只做单 symbol/gallery 的单状态预览与 Replay，不提供 sequence、hold、next、spin/cascade timeline。
+`apps/symbolseditor` 从 game config 创建 typed draft，默认 `160x160`、只有 explicit empty normal、scale `1`、priority `0` 和全选 display set。资源先进入持久于当前 draft 的资源库，再通过 image/VNI/Spine/animation/slot 下拉显式绑定；unused 资源不进入导出。每个 symbol 独立拥有 visible state 集合和顺序，custom state、valuePresentation 与 cascadeWinPresentation 使用结构化表单。
+
+右侧固定为 all-symbol、single-state gallery，默认 `normal`，支持 Replay、fit 与 zoom；缺 state、empty state 和错误分别占位。编辑器不提供 sequence、hold、next、spin/cascade timeline、remove/drop/refill 或 Nearwin 预览。
 
 `apps/gamelayouteditor` 导入同一 ZIP 后，以 package `cellSize` 原子覆盖 `main` grid 的 cell width/height，保留 rows、columns、gap 与 placement，并按现有 focus offsets 重派生 focus。越出 art/focus 时失败，不 auto-fit。preview 从 scene-layout snapshot 取得真实 cell geometry，按 code order / row-major 只显示 `normal`；value symbol 固定使用 `defaultValues[0]`。清除 package 不回滚已经应用的 cellSize。layout ZIP 不嵌入 symbol 文件。
 

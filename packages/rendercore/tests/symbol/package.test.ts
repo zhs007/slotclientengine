@@ -7,7 +7,8 @@ import {
   validateSymbolPackageContents,
   validateSymbolPackageGameConfig,
 } from "../../src/symbol/package.js";
-import { describe, expect, it } from "vitest";
+import { Assets, Texture } from "pixi.js";
+import { describe, expect, it, vi } from "vitest";
 
 const encode = (value: unknown) =>
   new TextEncoder().encode(`${JSON.stringify(value)}\n`);
@@ -103,9 +104,13 @@ describe("symbol package manifest", () => {
         },
       }),
     ).toThrow(/must be different/);
+    expect(
+      parseSymbolPackageManifest({ ...packageManifest, resources: [] })
+        .resources,
+    ).toEqual([]);
     expect(() =>
-      parseSymbolPackageManifest({ ...packageManifest, resources: [] }),
-    ).toThrow(/non-empty array/);
+      parseSymbolPackageManifest({ ...packageManifest, resources: null }),
+    ).toThrow(/must be an array/);
     expect(() =>
       parseSymbolPackageManifest({
         ...packageManifest,
@@ -200,5 +205,66 @@ describe("symbol package game config and resources", () => {
         loadTextures: false,
       }),
     ).rejects.toThrow(/orphan/);
+  });
+
+  it("forces Pixi's texture parser for extensionless package blob URLs", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.EMPTY as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const resource = await createSymbolPackageResource({
+        packageManifest,
+        files: files(),
+      });
+      await resource.createCatalog();
+      expect(load).toHaveBeenCalled();
+      for (const [request] of load.mock.calls) {
+        expect(request).toMatchObject({
+          src: expect.stringMatching(/^blob:/u),
+          loadParser: "loadTextures",
+        });
+      }
+      resource.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
+  it("creates a transparent-only resource, catalog and RenderSymbol with no resource entries", async () => {
+    const emptyManifest = {
+      version: 1,
+      states: [],
+      symbols: {
+        A: {
+          normal: { kind: "transparent", width: 160, height: 160 },
+          scale: 1,
+          animations: {
+            appear: { kind: "empty", durationSeconds: 1 / 60 },
+          },
+        },
+      },
+    };
+    const emptyPackage = { ...packageManifest, resources: [] };
+    const emptyFiles = new Map<string, Uint8Array>([
+      ["symbols.package.json", encode(emptyPackage)],
+      ["gameconfig.json", encode(gameConfig)],
+      ["symbol-state-textures.manifest.json", encode(emptyManifest)],
+    ]);
+    const resource = await createSymbolPackageResource({
+      packageManifest: emptyPackage,
+      files: emptyFiles,
+    });
+    const catalog = await resource.createCatalog();
+    const symbol = catalog.createRenderSymbol("A");
+    symbol.init();
+    symbol.requestState("appear", "immediate");
+    expect(symbol.getBaseLayer().visible).toBe(false);
+    expect(symbol.getStateSprite().visible).toBe(false);
+    expect(symbol.update(1 / 60).onceCompleted).toBe(true);
+    expect(symbol.getBaseLayer().visible).toBe(true);
+    symbol.destroy();
+    resource.destroy();
   });
 });

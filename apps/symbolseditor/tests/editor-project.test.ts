@@ -1,16 +1,25 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { parseSymbolStateTextureManifest } from "@slotclientengine/rendercore/symbol";
 import {
+  addCustomStateDefinition,
+  addSymbolState,
+  compileSymbolEditorManifest,
   createFromGameConfig,
-  createPreviewSnapshot,
+  createFromImportedPackage,
+  deleteAsset,
   exportSnapshot,
+  getAssetReferences,
   getGameConfigSymbols,
-  getProjectDiagnostics,
-  getSymbolResourceStatus,
-  replaceUploadedFiles,
-  setSymbolNormal,
+  moveSymbolState,
+  removeSymbolState,
+  replaceAsset,
+  setAllSymbolsIncluded,
+  setCascadeWinPresentation,
+  setStateVisual,
   setSymbolIncluded,
-  setTextureStates,
-  setValuePresentationField,
+  uploadAssetBatch,
 } from "../src/model/editor-project.js";
 import { SymbolEditorStore } from "../src/model/editor-store.js";
 
@@ -22,157 +31,201 @@ const gameConfig = {
   symbolCodes: { B: 2, A: 1 },
   reels: { main: [[1, 2]] },
 };
+const imageBytes = () =>
+  new Uint8Array(
+    readFileSync(resolve(process.cwd(), "../../assets/game003-s1/H1.png")),
+  );
 
-describe("symbol editor project", () => {
-  it("creates code-ordered defaults and supports explicit exclusion", () => {
+describe("symbol editor typed project", () => {
+  it("creates code-ordered symbols with only explicit empty normal and exports no resources", () => {
     const project = createFromGameConfig({
       rawGameConfig: gameConfig,
       fileName: "My Game.json",
     });
     expect(project.id).toBe("my-game");
-    expect(project.cellSize).toEqual({ width: 160, height: 160 });
     expect(getGameConfigSymbols(project).map(({ symbol }) => symbol)).toEqual([
       "A",
       "B",
     ]);
-    setSymbolIncluded(project, "B", false);
-    expect(project.includedSymbols.has("B")).toBe(false);
-  });
-
-  it("keeps unknown uploads unmapped and refuses incomplete export", () => {
-    const project = createFromGameConfig({
-      rawGameConfig: gameConfig,
-      fileName: "fixture.json",
-    });
-    replaceUploadedFiles(project, [
-      { name: "A.png", bytes: new Uint8Array([1]) },
-      { name: "unknown.png", bytes: new Uint8Array([2]) },
-    ]);
-    expect(project.assets.has("A.png")).toBe(true);
-    expect(project.unmappedFiles.has("unknown.png")).toBe(true);
-    expect(getProjectDiagnostics(project)).toEqual([]);
-    expect(getSymbolResourceStatus(project, "A")).toMatchObject({
-      ready: false,
-      missing: ["A.disabled.png", "A.spinBlur.png"],
-    });
-    expect(createPreviewSnapshot(project)).toBe(null);
-    expect(() => exportSnapshot(project)).toThrow(/资源闭包/);
-  });
-
-  it("builds a preview snapshot from complete symbols while the project stays incomplete", () => {
-    const project = createFromGameConfig({
-      rawGameConfig: gameConfig,
-      fileName: "fixture.json",
-    });
-    replaceUploadedFiles(project, [
-      { name: "A.png", bytes: new Uint8Array([1]) },
-      { name: "A.spinBlur.png", bytes: new Uint8Array([2]) },
-      { name: "A.disabled.png", bytes: new Uint8Array([3]) },
-    ]);
-    expect(getSymbolResourceStatus(project, "A").ready).toBe(true);
-    expect(getSymbolResourceStatus(project, "B").ready).toBe(false);
-    const snapshot = createPreviewSnapshot(project);
-    expect(snapshot?.packageManifest.resources).toEqual([
-      "A.disabled.png",
-      "A.png",
-      "A.spinBlur.png",
-    ]);
-    expect(
-      Object.keys(
-        (snapshot?.symbolManifest as { symbols: Record<string, unknown> })
-          .symbols,
-      ),
-    ).toEqual(["A"]);
-    expect(() => exportSnapshot(project)).toThrow(/资源闭包/);
-  });
-
-  it("edits layered normal, texture states and value fields structurally", () => {
-    const project = createFromGameConfig({
-      rawGameConfig: gameConfig,
-      fileName: "fixture.json",
-    });
-    setSymbolNormal(project, "A", {
-      kind: "layered",
-      layers: [
-        {
-          index: 0,
-          texture: "./A-0.png",
-          keyframes: ["./A-0.png", "./A-0-1.png"],
+    for (const symbol of project.symbols.values()) {
+      expect(symbol.stateOrder).toEqual(["normal"]);
+      expect(symbol.states.get("normal")).toEqual({
+        kind: "empty",
+        width: 160,
+        height: 160,
+      });
+    }
+    const snapshot = exportSnapshot(project);
+    expect(snapshot.packageManifest.resources).toEqual([]);
+    expect(snapshot.symbolManifest).toEqual({
+      version: 1,
+      states: [],
+      symbols: {
+        A: {
+          normal: { kind: "transparent", width: 160, height: 160 },
+          scale: 1,
         },
-      ],
-    });
-    setTextureStates(project, ["disabled"]);
-    const symbols = project.manifestDraft.symbols as Record<
-      string,
-      Record<string, unknown>
-    >;
-    expect(symbols.A.normal).toEqual({
-      kind: "layered",
-      layers: [
-        {
-          index: 0,
-          texture: "./A-0.png",
-          keyframes: ["./A-0.png", "./A-0-1.png"],
-        },
-      ],
-    });
-    expect(symbols.A.spinBlur).toBe(undefined);
-
-    symbols.A = {
-      scale: 1,
-      valuePresentation: {
-        defaultValues: [1],
-        reelStates: {
-          normal: { kind: "transparent", width: 10, height: 10 },
-          disabled: "./A.disabled.png",
-        },
-        tiers: [
-          {
-            animation: {
-              kind: "spine",
-              skeleton: "./A.json",
-              atlas: "./A.atlas",
-              texture: "./A.png",
-              playback: {
-                mode: "animation",
-                animationName: "Loop",
-                loop: true,
-              },
-            },
-          },
-        ],
-        text: {
-          type: "image",
-          slot: "Num",
-          x: 0,
-          y: 0,
-          prefix: "./values/",
+        B: {
+          normal: { kind: "transparent", width: 160, height: 160 },
+          scale: 1,
         },
       },
-    };
-    setValuePresentationField(
-      project,
-      "A",
-      "tiers.0.animation.transform.scale",
-      0.8,
-    );
+    });
+  });
+
+  it("supports all/none/invert while retaining excluded symbol drafts", () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "x.json",
+    });
+    setAllSymbolsIncluded(project, "none");
     expect(
-      (
-        (
-          (symbols.A.valuePresentation as Record<string, unknown>)
-            .tiers as Record<string, unknown>[]
-        )[0].animation as Record<string, unknown>
-      ).transform,
-    ).toEqual({ scale: 0.8 });
+      [...project.symbols.values()].every((symbol) => !symbol.included),
+    ).toBe(true);
+    expect(() => exportSnapshot(project)).toThrow(/display set/);
+    setAllSymbolsIncluded(project, "invert");
+    expect(
+      [...project.symbols.values()].every((symbol) => symbol.included),
+    ).toBe(true);
+    setSymbolIncluded(project, "B", false);
+    expect(project.symbols.get("B")?.states.get("normal")).toBeDefined();
+  });
+
+  it("keeps uploads unused until explicit selection and exports only the exact closure", () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "x.json",
+    });
+    uploadAssetBatch(project, [
+      { path: "art/wild-final.webp", bytes: imageBytes() },
+      { path: "unused/approved.png", bytes: imageBytes() },
+    ]);
+    expect(getAssetReferences(project)).toEqual([]);
+    setStateVisual(project, "A", "normal", {
+      kind: "image",
+      imagePath: "art/wild-final.webp",
+    });
+    expect(getAssetReferences(project, "art/wild-final.webp")).toEqual([
+      { path: "art/wild-final.webp", location: "A.normal" },
+    ]);
+    expect(exportSnapshot(project).packageManifest.resources).toEqual([
+      "art/wild-final.webp",
+    ]);
+    expect(() =>
+      uploadAssetBatch(project, [
+        { path: "art/wild-final.webp", bytes: new Uint8Array([3]) },
+        { path: "half-batch.png", bytes: new Uint8Array([4]) },
+      ]),
+    ).toThrow(/冲突/);
+    expect(project.assetLibrary.records.has("half-batch.png")).toBe(false);
+    expect(() => deleteAsset(project, "art/wild-final.webp")).toThrow(
+      /仍被引用/,
+    );
+    replaceAsset(project, "art/wild-final.webp", new Uint8Array([9]));
+    expect(
+      project.assetLibrary.records.get("art/wild-final.webp")?.bytes,
+    ).toEqual(new Uint8Array([9]));
+    deleteAsset(project, "unused/approved.png");
+    expect(project.assetLibrary.records.has("unused/approved.png")).toBe(false);
+  });
+
+  it("adds, orders and protects per-symbol custom states and compiles sparse textures", () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "x.json",
+    });
+    addCustomStateDefinition(project, {
+      id: "collect",
+      phase: "once",
+      playback: "once",
+    });
+    addSymbolState(project, "A", "win");
+    addSymbolState(project, "A", "remove");
+    addSymbolState(project, "A", "collect");
+    addSymbolState(project, "A", "spinBlur");
+    uploadAssetBatch(project, [
+      { path: "passes/blur-v2.png", bytes: imageBytes() },
+    ]);
+    setStateVisual(project, "A", "spinBlur", {
+      kind: "image",
+      imagePath: "passes/blur-v2.png",
+    });
+    setStateVisual(project, "A", "win", {
+      kind: "static",
+      durationSeconds: 0.2,
+    });
+    setStateVisual(project, "A", "remove", {
+      kind: "empty-state",
+      durationSeconds: 0.1,
+    });
+    setStateVisual(project, "A", "collect", {
+      kind: "static",
+      durationSeconds: 0.3,
+    });
+    setCascadeWinPresentation(project, "A", {
+      order: 0,
+      playback: { mode: "group", winState: "win", removeState: "remove" },
+      summary: { mode: "groupAmount" },
+    });
+    expect(() => removeSymbolState(project, "A", "win")).toThrow(/cascade/);
+    moveSymbolState(project, "A", "collect", -1);
+    const raw = compileSymbolEditorManifest(project) as {
+      states: string[];
+      symbols: Record<string, Record<string, unknown>>;
+    };
+    expect(raw.states).toEqual(["spinBlur"]);
+    expect(raw.symbols.A.spinBlur).toBe("./passes/blur-v2.png");
+    expect(raw.symbols.B.spinBlur).toBeUndefined();
+    expect(parseSymbolStateTextureManifest(raw).symbols.B.states).toEqual({});
+  });
+
+  it("round-trips the production game002 and game003 manifests through typed drafts", () => {
+    for (const fixture of [
+      {
+        id: "game002",
+        config: "../../../assets/gamecfg002/gameconfig.json",
+        manifest:
+          "../../../assets/game002-s3/symbol-state-textures.manifest.json",
+      },
+      {
+        id: "game003",
+        config: "../../../assets/gamecfg003/gameconfig.json",
+        manifest:
+          "../../../assets/game003-s1/symbol-state-textures.manifest.json",
+      },
+    ]) {
+      const rawGameConfig = JSON.parse(
+        readFileSync(new URL(fixture.config, import.meta.url), "utf8"),
+      );
+      const rawManifest = JSON.parse(
+        readFileSync(new URL(fixture.manifest, import.meta.url), "utf8"),
+      );
+      const project = createFromImportedPackage({
+        packageManifest: {
+          version: 1,
+          kind: "symbol-package",
+          id: fixture.id,
+          cellSize: { width: 200, height: 200 },
+          entrypoints: {
+            gameConfig: "gameconfig.json",
+            symbolManifest: "symbol-state-textures.manifest.json",
+          },
+          resources: [],
+        },
+        rawGameConfig,
+        rawSymbolManifest: rawManifest,
+        assets: new Map(),
+      });
+      expect(
+        parseSymbolStateTextureManifest(compileSymbolEditorManifest(project)),
+      ).toEqual(parseSymbolStateTextureManifest(rawManifest));
+    }
   });
 
   it("keeps store transactions atomic when an update throws", () => {
     const store = new SymbolEditorStore();
     store.replace(
-      createFromGameConfig({
-        rawGameConfig: gameConfig,
-        fileName: "fixture.json",
-      }),
+      createFromGameConfig({ rawGameConfig: gameConfig, fileName: "x.json" }),
     );
     const before = store.getSnapshot();
     expect(() =>
@@ -181,8 +234,7 @@ describe("symbol editor project", () => {
         throw new Error("stop");
       }),
     ).toThrow("stop");
-    const after = store.getSnapshot();
-    expect(after.revision).toBe(before.revision);
-    expect(after.project?.cellSize.width).toBe(160);
+    expect(store.getSnapshot().revision).toBe(before.revision);
+    expect(store.getSnapshot().project?.cellSize.width).toBe(160);
   });
 });

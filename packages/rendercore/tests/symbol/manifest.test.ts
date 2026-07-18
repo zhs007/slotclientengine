@@ -259,6 +259,59 @@ describe("symbol state texture manifest helpers", () => {
     });
   });
 
+  it("resolves arbitrary nested paths exactly and supports sparse state textures", () => {
+    const manifest = {
+      version: 1,
+      states: ["spinBlur", "disabled"],
+      symbols: {
+        A: {
+          normal: "./art/base-wild-final.webp",
+          spinBlur: "./passes/blur-pass-03.png",
+          scale: 1,
+        },
+        B: {
+          normal: "./other/base-wild-final.webp",
+          disabled: "./passes/disabled-approved.webp",
+          scale: 1,
+        },
+      },
+    };
+    expect(
+      createSymbolAssetMapFromManifestModules({
+        manifest,
+        modules: {
+          "../../../fixture/art/base-wild-final.webp": "/a.webp",
+          "../../../fixture/other/base-wild-final.webp": "/b.webp",
+          "../../../fixture/passes/blur-pass-03.png": "/blur.png",
+          "../../../fixture/passes/disabled-approved.webp": "/disabled.webp",
+        },
+      }),
+    ).toEqual({
+      A: { normal: "/a.webp", states: { spinBlur: "/blur.png" } },
+      B: { normal: "/b.webp", states: { disabled: "/disabled.webp" } },
+    });
+    expect(() =>
+      createSymbolAssetMapFromManifestModules({
+        manifest,
+        modules: {
+          "../../../fixture/art/base-wild-final.webp": "/a.webp",
+        },
+      }),
+    ).toThrow(/passes\/blur-pass-03\.png/);
+    expect(() =>
+      createSymbolAssetMapFromManifestModules({
+        manifest,
+        modules: {
+          "../../../fixture/art/base-wild-final.webp": "/a.webp",
+          "../../../fixture/other/base-wild-final.webp": "/b.webp",
+          "../../../fixture/passes/blur-pass-03.png": "/blur.png",
+          "../../../fixture/passes/disabled-approved.webp": "/disabled.webp",
+        },
+        requiredStates: ["spinBlur", "disabled"],
+      }),
+    ).toThrow(/Symbol "A" manifest is missing state "disabled"/);
+  });
+
   it("parses optional render priorities and defaults missing values to zero", () => {
     const manifest = {
       ...createManifest(),

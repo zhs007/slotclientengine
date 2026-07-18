@@ -75,6 +75,15 @@ export interface SymbolManifestStaticAnimationSpec {
   readonly durationSeconds: number;
 }
 
+/**
+ * An intentional visual absence. Unlike `static`, this hides every symbol art
+ * layer while still participating in the state's lifecycle.
+ */
+export interface SymbolManifestEmptyAnimationSpec {
+  readonly kind: "empty";
+  readonly durationSeconds: number;
+}
+
 export interface SymbolManifestVniAnimationSpec {
   readonly kind: "vni";
   readonly project: string;
@@ -152,6 +161,7 @@ export interface SymbolValuePresentationSpec {
 export type SymbolManifestAnimationSpec =
   | SymbolManifestBuiltinAnimationSpec
   | SymbolManifestStaticAnimationSpec
+  | SymbolManifestEmptyAnimationSpec
   | SymbolManifestVniAnimationSpec
   | SymbolManifestSpineAnimationSpec
   | SymbolManifestActiveSpineAnimationSpec;
@@ -397,10 +407,12 @@ export function parseSymbolStateTextureManifest(
       : {};
     if (!valuePresentation) {
       for (const state of states) {
-        parsedStates[state] = assertString(
-          rawSymbolRecord[state],
-          `symbol "${symbol}" ${state} texture`,
-        );
+        if (rawSymbolRecord[state] !== undefined) {
+          parsedStates[state] = assertString(
+            rawSymbolRecord[state],
+            `symbol "${symbol}" ${state} texture`,
+          );
+        }
       }
     }
     const animations = parseManifestAnimations(
@@ -758,10 +770,12 @@ function parseValuePresentation(
   }
   const reelStateTextures: Record<SymbolStateId, string> = {};
   for (const state of states) {
-    reelStateTextures[state] = assertString(
-      rawReelStates[state],
-      `symbol "${symbol}" valuePresentation.reelStates.${state}`,
-    );
+    if (rawReelStates[state] !== undefined) {
+      reelStateTextures[state] = assertString(
+        rawReelStates[state],
+        `symbol "${symbol}" valuePresentation.reelStates.${state}`,
+      );
+    }
   }
   if (!Array.isArray(record.tiers) || record.tiers.length === 0) {
     throw new SymbolAssetError(
@@ -914,13 +928,10 @@ export function createSymbolAssetMapFromManifestModules(
   options: CreateSymbolAssetMapFromManifestModulesOptions,
 ): SymbolAssetMap {
   const manifest = parseSymbolStateTextureManifest(options.manifest, options);
-  const requiredStates = Object.freeze([
-    ...(options.requiredStates ?? manifest.states),
-  ]);
+  const requiredStates = Object.freeze([...(options.requiredStates ?? [])]);
   const displaySymbols = Object.freeze([
     ...(options.displaySymbols ?? Object.keys(manifest.symbols)),
   ]);
-  const split = splitSymbolPngModules(options.modules, manifest.states);
   const assets: Record<string, SymbolAssetInput> = {};
 
   for (const symbol of displaySymbols) {
@@ -933,12 +944,19 @@ export function createSymbolAssetMapFromManifestModules(
     const normal = createNormalAssetFromManifest(
       symbol,
       manifestSymbol.normal,
-      {
-        normalAssets: split.normalAssets,
-        assetsByFileName: split.assetsByFileName,
-      },
+      options.modules,
     );
     const states: Record<string, string> = {};
+    for (const [state, manifestStatePath] of Object.entries(
+      manifestSymbol.states,
+    )) {
+      const stateAsset = resolveManifestModule(
+        options.modules,
+        manifestStatePath,
+        `Symbol "${symbol}" state "${state}" texture`,
+      );
+      states[state] = stateAsset;
+    }
     for (const state of requiredStates) {
       const manifestStatePath = manifestSymbol.states[state];
       if (!manifestStatePath) {
@@ -946,19 +964,11 @@ export function createSymbolAssetMapFromManifestModules(
           `Symbol "${symbol}" manifest is missing state "${state}".`,
         );
       }
-      const stateFileName = `${symbol}.${state}.png`;
-      if (getFileNameFromManifestPath(manifestStatePath) !== stateFileName) {
-        throw new SymbolAssetError(
-          `Symbol "${symbol}" manifest texture for state "${state}" must be "./${stateFileName}".`,
-        );
-      }
-      const stateAsset = split.stateAssets[symbol]?.[state];
-      if (!stateAsset) {
-        throw new SymbolAssetError(
-          `Symbol "${symbol}" is missing required state texture file "${stateFileName}".`,
-        );
-      }
-      states[state] = stateAsset;
+      states[state] = resolveManifestModule(
+        options.modules,
+        manifestStatePath,
+        `Symbol "${symbol}" required state "${state}" texture`,
+      );
     }
     assets[symbol] = Object.freeze({
       normal,
@@ -967,6 +977,7 @@ export function createSymbolAssetMapFromManifestModules(
   }
 
   if (options.includeUnmanifestedNormalAssets) {
+    const split = splitSymbolPngModules(options.modules, manifest.states);
     for (const [symbol, normal] of Object.entries(split.normalAssets)) {
       if (!manifest.symbols[symbol]) {
         assets[symbol] = Object.freeze({
@@ -1072,10 +1083,6 @@ export function createSymbolVniAnimationResourcesFromManifest(
   options: CreateSymbolVniAnimationResourcesOptions,
 ): SymbolVniAnimationResourceMap {
   const manifest = parseSymbolStateTextureManifest(options.manifest, options);
-  const projectModules = createManifestPathModuleMap(
-    options.vniProjectModules,
-    "VNI project",
-  );
   const assetUrlManifest = createAssetUrlManifest({
     ...options.vniAssetModules,
   });
@@ -1091,12 +1098,11 @@ export function createSymbolVniAnimationResourcesFromManifest(
       if (!animation || animation.kind !== "vni") {
         continue;
       }
-      const rawProject = projectModules.get(animation.project);
-      if (rawProject === undefined) {
-        throw new SymbolAssetError(
-          `Symbol "${symbol}" ${state} VNI project is missing from modules: ${animation.project}.`,
-        );
-      }
+      const rawProject = resolveManifestModule(
+        options.vniProjectModules,
+        animation.project,
+        `Symbol "${symbol}" ${state} VNI project`,
+      );
       const project = assertVNIProject(rawProject);
       const assetUrls = resolveProjectAssetUrls(project, assetUrlManifest);
       resources[symbol] = resources[symbol] ?? {};
@@ -1124,18 +1130,6 @@ export function createSymbolSpineAnimationResourcesFromManifest(
   options: CreateSymbolSpineAnimationResourcesOptions,
 ): SymbolSpineAnimationResourceMap {
   const manifest = parseSymbolStateTextureManifest(options.manifest, options);
-  const skeletonModules = createManifestPathModuleMap(
-    options.spineSkeletonModules,
-    "Spine skeleton",
-  );
-  const atlasModules = createManifestPathModuleMap(
-    options.spineAtlasModules,
-    "Spine atlas",
-  );
-  const textureModules = createManifestPathModuleMap(
-    options.spineTextureModules,
-    "Spine texture",
-  );
   const resources: Record<
     string,
     Partial<Record<SymbolStateId, SymbolSpineAnimationResource>>
@@ -1148,24 +1142,26 @@ export function createSymbolSpineAnimationResourcesFromManifest(
       if (!animation || animation.kind !== "spine") {
         continue;
       }
-      const skeleton = skeletonModules.get(animation.skeleton);
-      if (skeleton === undefined) {
-        throw new SymbolAssetError(
-          `Symbol "${symbol}" ${state} Spine skeleton is missing from modules: ${animation.skeleton}.`,
-        );
-      }
-      const atlas = atlasModules.get(animation.atlas);
-      if (atlas === undefined) {
-        throw new SymbolAssetError(
-          `Symbol "${symbol}" ${state} Spine atlas is missing from modules: ${animation.atlas}.`,
-        );
-      }
+      const skeleton = resolveManifestModule(
+        options.spineSkeletonModules,
+        animation.skeleton,
+        `Symbol "${symbol}" ${state} Spine skeleton`,
+      );
+      const atlas = resolveManifestModule(
+        options.spineAtlasModules,
+        animation.atlas,
+        `Symbol "${symbol}" ${state} Spine atlas`,
+      );
       if (typeof atlas !== "string" || atlas.trim().length === 0) {
         throw new SymbolAssetError(
           `Symbol "${symbol}" ${state} Spine atlas module must be raw text.`,
         );
       }
-      const texture = textureModules.get(animation.texture);
+      const texture = resolveManifestModule(
+        options.spineTextureModules,
+        animation.texture,
+        `Symbol "${symbol}" ${state} Spine texture`,
+      );
       if (typeof texture !== "string" || texture.trim().length === 0) {
         throw new SymbolAssetError(
           `Symbol "${symbol}" ${state} Spine texture is missing from modules: ${animation.texture}.`,
@@ -1268,25 +1264,14 @@ function splitSymbolPngModules(
 function createNormalAssetFromManifest(
   symbol: string,
   normal: SymbolManifestNormal,
-  sources: {
-    readonly normalAssets: Readonly<Record<string, string>>;
-    readonly assetsByFileName: Readonly<Record<string, string>>;
-  },
+  modules: Readonly<Record<string, string>>,
 ): string | SymbolNormalTextureSource<string> {
   if (typeof normal === "string") {
-    const normalFileName = `${symbol}.png`;
-    if (getFileNameFromManifestPath(normal) !== normalFileName) {
-      throw new SymbolAssetError(
-        `Symbol "${symbol}" manifest normal texture must be "./${normalFileName}".`,
-      );
-    }
-    const asset = sources.normalAssets[symbol];
-    if (!asset) {
-      throw new SymbolAssetError(
-        `Symbol state texture manifest references missing normal texture "${symbol}".`,
-      );
-    }
-    return asset;
+    return resolveManifestModule(
+      modules,
+      normal,
+      `Symbol "${symbol}" normal texture`,
+    );
   }
 
   if (normal.kind === "transparent") {
@@ -1297,11 +1282,7 @@ function createNormalAssetFromManifest(
     kind: "layered",
     layers: Object.freeze(
       normal.layers.map((layer) =>
-        createLayerAssetFromManifestLayer(
-          symbol,
-          layer,
-          sources.assetsByFileName,
-        ),
+        createLayerAssetFromManifestLayer(symbol, layer, modules),
       ),
     ),
   });
@@ -1310,24 +1291,19 @@ function createNormalAssetFromManifest(
 function createLayerAssetFromManifestLayer(
   symbol: string,
   layer: SymbolManifestLayer,
-  assetsByFileName: Readonly<Record<string, string>>,
+  modules: Readonly<Record<string, string>>,
 ): SymbolLayerTextureSource<string> {
-  const fileName = getFileNameFromManifestPath(layer.texture);
-  const texture = assetsByFileName[fileName];
-  if (!texture) {
-    throw new SymbolAssetError(
-      `Symbol "${symbol}" is missing layered texture file "${fileName}".`,
-    );
-  }
+  const texture = resolveManifestModule(
+    modules,
+    layer.texture,
+    `Symbol "${symbol}" layer ${layer.index} texture`,
+  );
   const keyframes = layer.keyframes.map((keyframePath) => {
-    const keyframeFileName = getFileNameFromManifestPath(keyframePath);
-    const keyframe = assetsByFileName[keyframeFileName];
-    if (!keyframe) {
-      throw new SymbolAssetError(
-        `Symbol "${symbol}" is missing layer ${layer.index} keyframe file "${keyframeFileName}".`,
-      );
-    }
-    return keyframe;
+    return resolveManifestModule(
+      modules,
+      keyframePath,
+      `Symbol "${symbol}" layer ${layer.index} keyframe`,
+    );
   });
   return Object.freeze({
     index: layer.index,
@@ -1543,6 +1519,19 @@ function parseManifestAnimationSpec(
       ),
     });
   }
+  if (record.kind === "empty") {
+    assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} animation`, [
+      "kind",
+      "durationSeconds",
+    ]);
+    return Object.freeze({
+      kind: "empty",
+      durationSeconds: assertFinitePositiveNumber(
+        record.durationSeconds,
+        `symbol "${symbol}" ${state} animation.durationSeconds`,
+      ),
+    });
+  }
   if (record.kind === "activeSpine") {
     assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} animation`, [
       "kind",
@@ -1619,7 +1608,7 @@ function parseManifestAnimationSpec(
   }
   if (record.kind !== "vni") {
     throw new SymbolAssetError(
-      `Symbol "${symbol}" ${state} animation kind must be "builtin", "static", "vni", "spine" or "activeSpine".`,
+      `Symbol "${symbol}" ${state} animation kind must be "builtin", "static", "empty", "vni", "spine" or "activeSpine".`,
     );
   }
   assertOnlyKnownKeys(record, `symbol "${symbol}" ${state} animation`, [
@@ -1822,19 +1811,26 @@ function validateOfficialSpineAtlasAndSkeleton(options: {
   return atlasPage;
 }
 
-function createManifestPathModuleMap(
-  modules: Readonly<Record<string, unknown>>,
+function resolveManifestModule<T>(
+  modules: Readonly<Record<string, T>>,
+  manifestPath: string,
   label: string,
-): ReadonlyMap<string, unknown> {
-  const entries = new Map<string, unknown>();
-  for (const [modulePath, value] of Object.entries(modules)) {
-    const key = `./${getFileNameFromPath(modulePath)}`;
-    if (entries.has(key)) {
-      throw new SymbolAssetError(`Duplicate ${label} module basename: ${key}.`);
-    }
-    entries.set(key, value);
+): T {
+  getFileNameFromManifestPath(manifestPath);
+  const wanted = manifestPath.slice(2);
+  const matches = Object.entries(modules).filter(([modulePath]) => {
+    const normalized = modulePath.replaceAll("\\", "/").replace(/^\.\//u, "");
+    return normalized === wanted || normalized.endsWith(`/${wanted}`);
+  });
+  if (matches.length === 0) {
+    throw new SymbolAssetError(
+      `${label} is missing from modules: ${manifestPath}.`,
+    );
   }
-  return entries;
+  if (matches.length > 1) {
+    throw new SymbolAssetError(`${label} path is ambiguous: ${manifestPath}.`);
+  }
+  return matches[0]![1];
 }
 
 function getDefaultSymbolStateIds(): readonly SymbolStateId[] {
@@ -1990,6 +1986,7 @@ export function getSymbolPlaybackKindForManifestAnimation(
   if (
     spec.kind === "builtin" ||
     spec.kind === "static" ||
+    spec.kind === "empty" ||
     spec.kind === "vni" ||
     spec.kind === "spine" ||
     spec.kind === "activeSpine"

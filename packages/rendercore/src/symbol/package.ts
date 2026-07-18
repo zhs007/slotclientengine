@@ -29,6 +29,7 @@ import {
   type SymbolManifestNormal,
 } from "./manifest.js";
 import { createSymbolManifestAnimationResolver } from "./vni-animation.js";
+import { createDefaultSymbolAnimationResolver } from "./animation-resolver.js";
 import { createSymbolCatalog, type SymbolCatalogModel } from "./catalog.js";
 import type {
   RenderSymbolValueController,
@@ -140,10 +141,8 @@ export function parseSymbolPackageManifest(
   );
   if (gameConfig === symbolManifest)
     throw new SymbolAssetError("symbol package entrypoints must be different.");
-  if (!Array.isArray(record.resources) || record.resources.length === 0) {
-    throw new SymbolAssetError(
-      "symbol package resources must be a non-empty array.",
-    );
+  if (!Array.isArray(record.resources)) {
+    throw new SymbolAssetError("symbol package resources must be an array.");
   }
   const resources = record.resources.map((path, index) =>
     packagePath(path, `resources[${index}]`),
@@ -241,6 +240,7 @@ export function collectSymbolManifestResourcePaths(options: {
         !animation ||
         animation.kind === "builtin" ||
         animation.kind === "static" ||
+        animation.kind === "empty" ||
         animation.kind === "activeSpine"
       )
         continue;
@@ -340,16 +340,13 @@ export async function createSymbolPackageResource(options: {
     );
     if (options.loadTextures !== false) {
       await Promise.all(
-        Object.values(modules.imageModules).map((url) =>
-          Assets.load<Texture>(url),
-        ),
+        Object.values(modules.imageModules).map(loadPackageTexture),
       );
     }
     const urlAssetMap = createSymbolAssetMapFromManifestModules({
       modules: modules.imageModules,
       manifest: rawSymbolManifest,
       displaySymbols,
-      requiredStates: symbolManifest.states,
     });
     const assetMap =
       options.loadTextures === false
@@ -357,17 +354,16 @@ export async function createSymbolPackageResource(options: {
         : await loadSymbolAssetMap(urlAssetMap);
     const animationResolver = createSymbolManifestAnimationResolver({
       manifest: rawSymbolManifest,
-      requiredStates: symbolManifest.states,
       vniProjectModules: modules.vniProjectModules,
       vniAssetModules: modules.imageModules,
       spineSkeletonModules: modules.skeletonModules,
       spineAtlasModules: modules.atlasModules,
       spineTextureModules: modules.imageModules,
+      fallback: createDefaultSymbolAnimationResolver(),
     });
     const valuePresentationResources =
       createSymbolValuePresentationResourcesFromManifest({
         manifest: rawSymbolManifest,
-        requiredStates: symbolManifest.states,
         spineSkeletonModules: modules.skeletonModules,
         spineAtlasModules: modules.atlasModules,
         spineTextureModules: modules.imageModules,
@@ -420,7 +416,7 @@ export async function createSymbolPackageResource(options: {
           statePreset,
           animationResolver,
           symbolAnimationCapabilities: animationCapabilities,
-          texturePolicy: { requiredStateTextures: symbolManifest.states },
+          texturePolicy: { requiredStateTextures: [] },
         });
       },
       destroy(): void {
@@ -491,7 +487,7 @@ async function loadSymbolAssetMap(
   const entries = await Promise.all(
     Object.entries(assetMap).map(async ([symbol, asset]) => {
       if (typeof asset === "string")
-        return [symbol, await Assets.load<Texture>(asset)] as const;
+        return [symbol, await loadPackageTexture(asset)] as const;
       if (!isSymbolTextureSet(asset)) return [symbol, asset] as const;
       const normal = await loadNormalTexture(asset.normal);
       const states = Object.fromEntries(
@@ -514,7 +510,7 @@ async function loadSymbolAssetMap(
 async function loadNormalTexture(
   value: Texture | string | SymbolNormalTextureSource<Texture | string>,
 ): Promise<Texture | SymbolNormalTextureSource<Texture>> {
-  if (typeof value === "string") return Assets.load<Texture>(value);
+  if (typeof value === "string") return loadPackageTexture(value);
   if (!isSymbolNormalTextureSource(value)) return value;
   if (value.kind === "transparent") return value;
   if (value.kind === "single") {
@@ -558,7 +554,20 @@ function isSymbolTextureSet(
 }
 
 async function loadTexture(value: string | Texture): Promise<Texture> {
-  return typeof value === "string" ? Assets.load<Texture>(value) : value;
+  return typeof value === "string" ? loadPackageTexture(value) : value;
+}
+
+async function loadPackageTexture(url: string): Promise<Texture> {
+  const texture = (await Assets.load({
+    src: url,
+    loadParser: "loadTextures",
+  })) as Texture | null | undefined;
+  if (!texture?.source) {
+    throw new SymbolAssetError(
+      `symbol package image failed to load a valid Pixi texture: ${url}.`,
+    );
+  }
+  return texture;
 }
 
 function collectNormal(

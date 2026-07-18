@@ -213,7 +213,7 @@ describe("symbolsviewer assets", () => {
     });
   });
 
-  it("rejects missing state texture files and unknown state declarations", () => {
+  it("rejects missing referenced states, ignores unreferenced modules, and rejects unknown manifest declarations", () => {
     expect(() =>
       createStatefulSymbolAssetMapFromModules({
         modules: {
@@ -226,7 +226,7 @@ describe("symbolsviewer assets", () => {
       }),
     ).toThrow(/spinBlur/);
 
-    expect(() =>
+    expect(
       createStatefulSymbolAssetMapFromModules({
         modules: {
           "../../../assets/symbols/S00.png": "/assets/S00.png",
@@ -239,7 +239,15 @@ describe("symbolsviewer assets", () => {
         manifest: createManifest(["S00"]),
         requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
       }),
-    ).toThrow(/unknown state "blurred"/);
+    ).toMatchObject({
+      S00: {
+        normal: "/assets/S00.png",
+        states: {
+          spinBlur: "/assets/S00.spinBlur.png",
+          disabled: "/assets/S00.disabled.png",
+        },
+      },
+    });
 
     expect(() =>
       createStatefulSymbolAssetMapFromModules({

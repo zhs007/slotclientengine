@@ -515,6 +515,20 @@ function createManifestSymbolAni(
       },
     });
   }
+  if (spec.kind === "empty") {
+    return new ManualSymbolAni({
+      stateId: context.resolvedState,
+      playback: context.state.playback,
+      durationSeconds: spec.durationSeconds,
+      onReset: () => {
+        resetBaseDisplay(context);
+        context.baseLayer.visible = false;
+        context.stateSprite.visible = false;
+        context.underlayLayer.visible = false;
+        context.overlayLayer.visible = false;
+      },
+    });
+  }
   if (spec.kind === "spine") {
     throw new SymbolAnimationError(
       `No Spine resource was registered for "${context.symbol}" state "${context.resolvedState}".`,

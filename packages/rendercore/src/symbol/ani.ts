@@ -260,6 +260,7 @@ export function resetBaseDisplay(context: SymbolAnimationContext): void {
   context.stateSprite.mask = null;
 
   context.underlayLayer.alpha = 1;
+  context.underlayLayer.visible = true;
   context.underlayLayer.rotation = 0;
   context.underlayLayer.position.set(0);
   context.underlayLayer.scale.set(1);
@@ -281,6 +282,7 @@ export function resetBaseDisplay(context: SymbolAnimationContext): void {
   }
 
   context.overlayLayer.alpha = 1;
+  context.overlayLayer.visible = true;
   context.overlayLayer.rotation = 0;
   context.overlayLayer.position.set(0);
   context.overlayLayer.scale.set(1);

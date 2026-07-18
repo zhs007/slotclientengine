@@ -1,23 +1,41 @@
 import {
   createSymbolPackageValueControllerFactory,
   type RenderSymbol,
-  type SymbolCatalogModel,
   type SymbolPackageResource,
 } from "@slotclientengine/rendercore/symbol";
-import { Application, Container, Graphics, type Ticker } from "pixi.js";
+import { Application, Container, Graphics, Text, type Ticker } from "pixi.js";
+
+export type SymbolPreviewCellStatus =
+  | "configured"
+  | "empty"
+  | "missing"
+  | "error";
+
+export interface SymbolPreviewCell {
+  readonly symbol: string;
+  readonly code: number;
+  readonly status: SymbolPreviewCellStatus;
+  readonly message?: string;
+  readonly value?: number;
+}
+
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 4;
 
 export class SymbolEditorPreview {
   readonly #host: HTMLElement;
   readonly #app = new Application();
-  readonly #content = new Container();
-  readonly #guides = new Graphics();
+  readonly #gallery = new Container();
+  readonly #symbols: RenderSymbol[] = [];
   #resource: SymbolPackageResource | null = null;
-  #symbols: RenderSymbol[] = [];
-  #selectedSymbol = "";
+  #cells: readonly SymbolPreviewCell[] = [];
   #selectedState = "normal";
-  #gallery = false;
   #request = 0;
   #ready = false;
+  #fitZoom = 1;
+  #zoom = 1;
+  #manualZoom = false;
+  #resizeObserver: ResizeObserver | null = null;
 
   constructor(host: HTMLElement) {
     this.#host = host;
@@ -25,153 +43,247 @@ export class SymbolEditorPreview {
 
   async init(): Promise<void> {
     await this.#app.init({
-      width: 900,
-      height: 720,
+      width: Math.max(320, this.#host.clientWidth || 900),
+      height: Math.max(320, this.#host.clientHeight || 720),
       background: "#050914",
       antialias: true,
+      autoDensity: true,
     });
-    this.#app.stage.addChild(this.#content, this.#guides);
+    this.#app.stage.addChild(this.#gallery);
     this.#app.ticker.add((ticker: Ticker) => {
       for (const symbol of this.#symbols) symbol.update(ticker.deltaMS / 1000);
     });
     this.#host.replaceChildren(this.#app.canvas);
+    this.#resizeObserver = new ResizeObserver(() => this.resizeAndFit());
+    this.#resizeObserver.observe(this.#host);
     this.#ready = true;
   }
 
   async setResource(
-    resource: SymbolPackageResource,
-    selectedSymbol?: string,
+    resource: SymbolPackageResource | null,
+    cells: readonly SymbolPreviewCell[],
+    state: string,
   ): Promise<void> {
     if (!this.#ready) throw new Error("preview 尚未初始化。");
     const request = ++this.#request;
-    const catalog = await resource.createCatalog();
+    const catalog = resource ? await resource.createCatalog() : null;
     if (request !== this.#request) {
-      resource.destroy();
+      resource?.destroy();
       return;
     }
-    this.clearSymbols();
+    this.clearGallery();
     this.#resource?.destroy();
     this.#resource = resource;
-    this.#selectedSymbol =
-      selectedSymbol && resource.displaySymbols.includes(selectedSymbol)
-        ? selectedSymbol
-        : resource.displaySymbols[0];
-    this.renderCatalog(catalog);
-  }
-
-  setSelectedSymbol(symbol: string): void {
-    this.#selectedSymbol = symbol;
-    void this.rebuildCurrentResource();
-  }
-
-  setState(state: string): void {
+    this.#cells = Object.freeze([...cells]);
     this.#selectedState = state;
-    for (const symbol of this.#symbols) symbol.requestState(state, "immediate");
+    const available = new Set(resource?.displaySymbols ?? []);
+    const cellWidth = resource?.packageManifest.cellSize.width ?? 160;
+    const cellHeight = resource?.packageManifest.cellSize.height ?? 160;
+    const { columns } = calculateGalleryLayout(
+      cells.length,
+      this.#app.renderer.width,
+      this.#app.renderer.height,
+      cellWidth,
+      cellHeight,
+    );
+    const rows = Math.max(1, Math.ceil(cells.length / columns));
+    cells.forEach((cell, index) => {
+      const root = new Container();
+      const guide = new Graphics()
+        .rect(-cellWidth / 2, -cellHeight / 2, cellWidth, cellHeight)
+        .stroke({
+          color:
+            cell.status === "error"
+              ? 0xff6b6b
+              : cell.status === "missing"
+                ? 0xf4a261
+                : 0x38d9a9,
+          width: 1,
+          alpha: 0.85,
+        });
+      root.addChild(guide);
+      if (
+        catalog &&
+        available.has(cell.symbol) &&
+        cell.status === "configured"
+      ) {
+        const renderSymbol = catalog.createRenderSymbol(cell.symbol, {
+          valueControllerFactory: resource
+            ? createSymbolPackageValueControllerFactory(resource, cell.symbol)
+            : undefined,
+        });
+        renderSymbol.scale.set(resource?.symbolScales[cell.symbol] ?? 1);
+        renderSymbol.init();
+        if (cell.value !== undefined)
+          renderSymbol.setPresentationValue(cell.value);
+        if (state !== "normal") renderSymbol.requestState(state, "immediate");
+        root.addChild(renderSymbol);
+        this.#symbols.push(renderSymbol);
+      } else {
+        root.addChild(
+          new Text({
+            text:
+              cell.status === "empty"
+                ? "空"
+                : cell.status === "missing"
+                  ? "未配置"
+                  : (cell.message ?? "资源错误"),
+            style: {
+              fill: cell.status === "error" ? 0xff8f8f : 0xaab4c8,
+              fontSize: 15,
+              align: "center",
+              wordWrap: true,
+              wordWrapWidth: cellWidth * 0.8,
+            },
+            anchor: 0.5,
+          }),
+        );
+      }
+      const label = new Text({
+        text: `${cell.code} · ${cell.symbol}`,
+        style: { fill: 0xe7eefc, fontSize: 13 },
+        anchor: { x: 0.5, y: 1 },
+      });
+      label.y = cellHeight / 2 - 6;
+      root.addChild(label);
+      const x = index % columns;
+      const y = Math.floor(index / columns);
+      root.position.set(
+        (x - (columns - 1) / 2) * cellWidth,
+        (y - (rows - 1) / 2) * cellHeight,
+      );
+      this.#gallery.addChild(root);
+    });
+    this.applyLayout(cellWidth, cellHeight, columns, rows, !this.#manualZoom);
   }
 
   replay(): void {
     for (const symbol of this.#symbols) {
       symbol.returnToDefaultState();
-      symbol.requestState(this.#selectedState, "immediate");
+      if (this.#selectedState !== "normal") {
+        symbol.requestState(this.#selectedState, "immediate");
+      }
     }
   }
 
-  setPresentationValue(value: number): void {
-    for (const symbol of this.#symbols) {
-      if (symbol.getPresentationValue() !== null)
-        symbol.setPresentationValue(value);
-    }
+  fitAll(): number {
+    this.#manualZoom = false;
+    this.#zoom = this.#fitZoom;
+    this.#gallery.scale.set(this.#zoom);
+    return this.#zoom;
   }
 
-  setGallery(value: boolean): void {
-    this.#gallery = value;
-    void this.rebuildCurrentResource();
+  setZoom(value: number): number {
+    this.#manualZoom = true;
+    this.#zoom = clampZoom(value);
+    this.#gallery.scale.set(this.#zoom);
+    return this.#zoom;
+  }
+
+  getZoom(): number {
+    return this.#zoom;
   }
 
   clearResource(): void {
     this.#request += 1;
-    this.clearSymbols();
+    this.clearGallery();
     this.#resource?.destroy();
     this.#resource = null;
-    this.#guides.clear();
+    this.#cells = [];
   }
 
   destroy(): void {
+    this.#resizeObserver?.disconnect();
+    this.#resizeObserver = null;
     this.clearResource();
-    this.#guides.destroy();
-    this.#content.destroy({ children: true });
+    this.#gallery.destroy({ children: true });
     this.#app.destroy(true, { children: true, texture: true });
   }
 
-  private renderCatalog(catalog: SymbolCatalogModel): void {
+  private resizeAndFit(): void {
+    if (!this.#ready) return;
+    const width = Math.max(320, this.#host.clientWidth || 900);
+    const height = Math.max(320, this.#host.clientHeight || 720);
+    this.#app.renderer.resize(width, height);
+    this.#gallery.position.set(width / 2, height / 2);
+    this.#manualZoom = false;
+    void this.rebuild();
+  }
+
+  private async rebuild(): Promise<void> {
     const resource = this.#resource;
-    if (!resource) return;
-    this.clearSymbols();
-    const display = this.#gallery
-      ? resource.displaySymbols
-      : [this.#selectedSymbol];
-    const columns = this.#gallery
-      ? Math.max(1, Math.ceil(Math.sqrt(display.length)))
-      : 1;
+    if (!resource) {
+      await this.setResource(null, this.#cells, this.#selectedState);
+      return;
+    }
+    // The current resource owns Object URLs and cannot be shared with a second
+    // owner. Re-layout its existing tree directly on resize.
     const cellWidth = resource.packageManifest.cellSize.width;
     const cellHeight = resource.packageManifest.cellSize.height;
-    const scale = Math.min(
-      1.8,
-      560 /
-        Math.max(
-          cellWidth * columns,
-          cellHeight * Math.ceil(display.length / columns),
-        ),
+    const { columns } = calculateGalleryLayout(
+      this.#cells.length,
+      this.#app.renderer.width,
+      this.#app.renderer.height,
+      cellWidth,
+      cellHeight,
     );
-    this.#content.position.set(450, 360);
-    this.#content.scale.set(scale);
-    this.#guides.clear();
-    display.forEach((symbol, index) => {
-      const renderSymbol = catalog.createRenderSymbol(symbol, {
-        valueControllerFactory: createSymbolPackageValueControllerFactory(
-          resource,
-          symbol,
-        ),
-      });
-      renderSymbol.scale.set(resource.symbolScales[symbol] ?? 1);
-      renderSymbol.init();
+    const rows = Math.max(1, Math.ceil(this.#cells.length / columns));
+    this.#gallery.children.forEach((root, index) => {
       const x = index % columns;
       const y = Math.floor(index / columns);
-      renderSymbol.position.set(
+      root.position.set(
         (x - (columns - 1) / 2) * cellWidth,
-        (y - (Math.ceil(display.length / columns) - 1) / 2) * cellHeight,
+        (y - (rows - 1) / 2) * cellHeight,
       );
-      const presentation =
-        resource.symbolManifest.symbols[symbol]?.valuePresentation;
-      if (presentation)
-        renderSymbol.setPresentationValue(presentation.defaultValues[0]);
-      if (this.#selectedState !== "normal")
-        renderSymbol.requestState(this.#selectedState, "immediate");
-      this.#content.addChild(renderSymbol);
-      this.#symbols.push(renderSymbol);
-      this.#guides
-        .rect(
-          450 + scale * (renderSymbol.x - cellWidth / 2),
-          360 + scale * (renderSymbol.y - cellHeight / 2),
-          cellWidth * scale,
-          cellHeight * scale,
-        )
-        .stroke({ color: 0x38d9a9, width: 1, alpha: 0.8 });
     });
+    this.applyLayout(cellWidth, cellHeight, columns, rows, true);
   }
 
-  private async rebuildCurrentResource(): Promise<void> {
-    const resource = this.#resource;
-    if (!resource) return;
-    const request = ++this.#request;
-    const catalog = await resource.createCatalog();
-    if (request !== this.#request || resource !== this.#resource) return;
-    this.renderCatalog(catalog);
+  private applyLayout(
+    cellWidth: number,
+    cellHeight: number,
+    columns: number,
+    rows: number,
+    applyFit: boolean,
+  ): void {
+    this.#gallery.position.set(
+      this.#app.renderer.width / 2,
+      this.#app.renderer.height / 2,
+    );
+    this.#fitZoom = clampZoom(
+      Math.min(
+        (this.#app.renderer.width * 0.94) / Math.max(1, columns * cellWidth),
+        (this.#app.renderer.height * 0.94) / Math.max(1, rows * cellHeight),
+      ),
+    );
+    if (applyFit) this.fitAll();
+    else this.#gallery.scale.set(this.#zoom);
   }
 
-  private clearSymbols(): void {
-    for (const symbol of this.#symbols) symbol.destroy();
-    this.#symbols = [];
-    this.#content.removeChildren();
+  private clearGallery(): void {
+    for (const symbol of this.#symbols.splice(0)) symbol.destroy();
+    for (const child of this.#gallery.removeChildren())
+      child.destroy({ children: true });
   }
+}
+
+export function calculateGalleryLayout(
+  count: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  cellWidth: number,
+  cellHeight: number,
+): Readonly<{ columns: number; rows: number }> {
+  if (count <= 0) return Object.freeze({ columns: 1, rows: 1 });
+  const target = Math.sqrt(
+    (count * viewportWidth * cellHeight) /
+      Math.max(1, viewportHeight * cellWidth),
+  );
+  const columns = Math.max(1, Math.min(count, Math.ceil(target)));
+  return Object.freeze({ columns, rows: Math.ceil(count / columns) });
+}
+
+export function clampZoom(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
 }

@@ -41,6 +41,45 @@ describe("layout editor symbols package import", () => {
     resource.destroy();
   });
 
+  it("imports a transparent-only package with an empty resource closure", async () => {
+    const zip = createDeterministicZip({
+      "symbols.package.json": encode({
+        version: 1,
+        kind: "symbol-package",
+        id: "transparent-layout-fixture",
+        cellSize: { width: 160, height: 160 },
+        entrypoints: {
+          gameConfig: "gameconfig.json",
+          symbolManifest: "symbol-state-textures.manifest.json",
+        },
+        resources: [],
+      }),
+      "gameconfig.json": encode({
+        paytable: { "0": { code: 0, symbol: "A", pays: [1] } },
+        symbolCodes: { A: 0 },
+        reels: { main: [[0]] },
+      }),
+      "symbol-state-textures.manifest.json": encode({
+        version: 1,
+        states: [],
+        symbols: {
+          A: {
+            normal: {
+              kind: "transparent",
+              width: 160,
+              height: 160,
+            },
+            scale: 1,
+          },
+        },
+      }),
+    });
+    const resource = await importSymbolsZip(zip, { loadTextures: false });
+    expect(resource.packageManifest.resources).toEqual([]);
+    expect(resource.displaySymbols).toEqual(["A"]);
+    resource.destroy();
+  });
+
   it("rejects a layout zip without guessing its kind", async () => {
     const zip = createDeterministicZip({
       "layout.manifest.json": encode({ version: 1 }),
