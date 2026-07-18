@@ -75,6 +75,7 @@ button.primary {
 .symbols-panel {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 9px;
   min-height: 43px;
   padding: 7px 14px;
@@ -86,6 +87,23 @@ button.primary {
 
 .symbols-panel strong {
   color: #e8edf5;
+}
+
+.symbols-panel label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.symbols-panel select {
+  min-width: 170px;
+  max-width: 360px;
+}
+
+.symbols-panel output {
+  flex-basis: 100%;
+  color: #7fdda8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .topbar {

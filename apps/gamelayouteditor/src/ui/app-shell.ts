@@ -21,7 +21,10 @@ import {
 import { exportLayoutZip } from "../io/exported-layout-zip.js";
 import { importLayoutZip } from "../io/imported-layout-zip.js";
 import { importSymbolsZip } from "../io/imported-symbol-package.js";
-import { LayoutPreview } from "../preview/layout-preview.js";
+import {
+  LayoutPreview,
+  type SymbolPackagePreviewSnapshot,
+} from "../preview/layout-preview.js";
 import { PREVIEW_SIZE_PRESETS } from "../preview/preview-size.js";
 
 export class GameLayoutEditorApp {
@@ -31,13 +34,9 @@ export class GameLayoutEditorApp {
   #unsubscribe: (() => void) | null = null;
   #previewRevision = 0;
   #destroyed = false;
-  #symbolPackageMetadata: {
-    readonly id: string;
-    readonly width: number;
-    readonly height: number;
-    readonly count: number;
-  } | null = null;
+  #symbolPackageMetadata: SymbolPackagePreviewSnapshot | null = null;
   #symbolImportRequest = 0;
+  #symbolImportBusy = false;
 
   constructor(root: HTMLElement) {
     this.#root = root;
@@ -52,6 +51,7 @@ export class GameLayoutEditorApp {
     this.bindStaticActions();
     this.#unsubscribe = this.#store.subscribe((snapshot) => {
       this.renderConfiguration(snapshot);
+      this.syncSymbolPreviewGrid(snapshot.project);
       void this.refreshPreview(snapshot);
     });
   }
@@ -59,6 +59,8 @@ export class GameLayoutEditorApp {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#symbolImportRequest += 1;
+    this.#symbolImportBusy = false;
     this.#unsubscribe?.();
     this.#preview?.destroy();
     this.#root.replaceChildren();
@@ -83,6 +85,35 @@ export class GameLayoutEditorApp {
     );
     this.requireElement("[data-clear-symbols]").addEventListener("click", () =>
       this.clearSymbolsPackage(),
+    );
+    this.requireSelect("[data-reel-set]").addEventListener(
+      "change",
+      (event) => {
+        try {
+          const name = (event.currentTarget as HTMLSelectElement).value;
+          if (!name) throw new Error("请选择 reel set。");
+          this.#symbolImportRequest += 1;
+          this.#symbolPackageMetadata =
+            this.#preview?.setSelectedReelSet(name) ?? null;
+          this.renderSymbolsMetadata();
+        } catch (error) {
+          this.#store.setExternalError(error);
+          this.renderSymbolsMetadata();
+        }
+      },
+    );
+    this.requireElement("[data-randomize-symbols]").addEventListener(
+      "click",
+      () => {
+        try {
+          this.#symbolImportRequest += 1;
+          this.#symbolPackageMetadata =
+            this.#preview?.randomizeSymbols() ?? null;
+          this.renderSymbolsMetadata();
+        } catch (error) {
+          this.#store.setExternalError(error);
+        }
+      },
     );
     for (const preset of PREVIEW_SIZE_PRESETS) {
       const button = document.createElement("button");
@@ -396,6 +427,8 @@ export class GameLayoutEditorApp {
     const files = await pickFiles(".zip,application/zip", false);
     if (files.length === 0) return;
     const request = ++this.#symbolImportRequest;
+    this.#symbolImportBusy = true;
+    this.renderSymbolsMetadata();
     let resource: Awaited<ReturnType<typeof importSymbolsZip>> | null = null;
     try {
       resource = await importSymbolsZip(
@@ -407,24 +440,31 @@ export class GameLayoutEditorApp {
       }
       const project = cloneEditorProject(this.#store.getSnapshot().project);
       applySymbolPackageCellSize(project, resource.packageManifest.cellSize);
-      await this.#preview?.setSymbolPackage(resource);
-      this.#symbolPackageMetadata = {
-        id: resource.packageManifest.id,
-        width: resource.packageManifest.cellSize.width,
-        height: resource.packageManifest.cellSize.height,
-        count: resource.displaySymbols.length,
-      };
+      const preview = this.#preview;
+      if (!preview) throw new Error("Symbols preview 尚未初始化。");
+      const prepared = await preview.setSymbolPackage(resource, {
+        columns: project.reel.columns,
+        rows: project.reel.rows,
+      });
+      if (request !== this.#symbolImportRequest || !prepared) return;
+      this.#symbolPackageMetadata = prepared;
       resource = null;
       this.#store.replace(project);
       this.renderSymbolsMetadata();
     } catch (error) {
       resource?.destroy();
       this.#store.setExternalError(error);
+    } finally {
+      if (request === this.#symbolImportRequest) {
+        this.#symbolImportBusy = false;
+        this.renderSymbolsMetadata();
+      }
     }
   }
 
   private clearSymbolsPackage(): void {
     this.#symbolImportRequest += 1;
+    this.#symbolImportBusy = false;
     this.#symbolPackageMetadata = null;
     void this.#preview?.setSymbolPackage(null);
     this.renderSymbolsMetadata();
@@ -434,12 +474,64 @@ export class GameLayoutEditorApp {
     const target = this.requireElement("[data-symbols-metadata]");
     const metadata = this.#symbolPackageMetadata;
     target.textContent = metadata
-      ? `${metadata.id} · cell ${metadata.width}×${metadata.height} · ${metadata.count} display symbols`
+      ? `${metadata.packageId} · cell ${metadata.cellSize.width}×${metadata.cellSize.height} · ${metadata.displaySymbolCount} display symbols`
       : "未导入；layout ZIP 不会嵌入 symbol 资源。";
+    const selector = this.requireSelect("[data-reel-set]");
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = metadata
+      ? metadata.status === "pending-selection"
+        ? "请选择 reel set"
+        : "无可用 reel set"
+      : "未导入 package";
+    selector.replaceChildren(placeholder);
+    for (const info of metadata?.reelSets ?? []) {
+      const option = document.createElement("option");
+      option.value = info.name;
+      option.textContent = `${info.name} · ${info.reelCount} reels${info.compatible ? "" : ` · 不可用：${info.reason ?? "不兼容"}`}`;
+      option.disabled = !info.compatible;
+      option.selected = info.name === metadata?.selectedReelSet;
+      selector.append(option);
+    }
+    selector.disabled = !metadata || this.#symbolImportBusy;
+    this.requireElement("[data-randomize-symbols]").toggleAttribute(
+      "disabled",
+      !metadata || metadata.status !== "ready" || this.#symbolImportBusy,
+    );
+    const sceneTarget = this.requireElement("[data-symbols-scene]");
+    sceneTarget.textContent = metadata
+      ? formatSymbolPreviewDiagnostic(metadata)
+      : "等待导入 strict symbol-package v1 ZIP。";
+    this.requireElement("[data-import-symbols]").toggleAttribute(
+      "disabled",
+      this.#symbolImportBusy,
+    );
     this.requireElement("[data-clear-symbols]").toggleAttribute(
       "disabled",
-      !metadata,
+      !metadata || this.#symbolImportBusy,
     );
+  }
+
+  private syncSymbolPreviewGrid(project: EditorProject): void {
+    if (!this.#symbolPackageMetadata || this.#symbolImportBusy) return;
+    if (
+      !Number.isSafeInteger(project.reel.columns) ||
+      project.reel.columns <= 0 ||
+      !Number.isSafeInteger(project.reel.rows) ||
+      project.reel.rows <= 0
+    ) {
+      return;
+    }
+    try {
+      this.#symbolPackageMetadata =
+        this.#preview?.setSymbolGrid({
+          columns: project.reel.columns,
+          rows: project.reel.rows,
+        }) ?? null;
+      this.renderSymbolsMetadata();
+    } catch (error) {
+      this.#store.setExternalError(error);
+    }
   }
 
   private setPreviewSize(width: number, height: number): void {
@@ -497,6 +589,12 @@ export class GameLayoutEditorApp {
     if (!input) throw new Error(`缺少 UI input：${selector}`);
     return input;
   }
+
+  private requireSelect(selector: string): HTMLSelectElement {
+    const select = this.#root.querySelector<HTMLSelectElement>(selector);
+    if (!select) throw new Error(`缺少 UI select：${selector}`);
+    return select;
+  }
 }
 
 function shellMarkup(): string {
@@ -537,7 +635,10 @@ function shellMarkup(): string {
         <strong>Symbols 预览包</strong>
         <button type="button" data-import-symbols>导入 symbols ZIP</button>
         <button type="button" data-clear-symbols disabled>清除 symbols package</button>
+        <label>reel set <select data-reel-set disabled><option value="">未导入 package</option></select></label>
+        <button type="button" data-randomize-symbols disabled>重新随机</button>
         <span data-symbols-metadata>未导入；layout ZIP 不会嵌入 symbol 资源。</span>
+        <output data-symbols-scene>等待导入 strict symbol-package v1 ZIP。</output>
       </aside>
       <aside class="error-panel" aria-live="polite" data-errors></aside>
     </main>`;
@@ -731,4 +832,15 @@ function escapeHtml(value: string): string {
         character
       ]!,
   );
+}
+
+function formatSymbolPreviewDiagnostic(
+  preview: SymbolPackagePreviewSnapshot,
+): string {
+  const scene = preview.scene;
+  if (!scene) return preview.message;
+  const rows = Array.from({ length: scene.rows }, (_, y) =>
+    scene.symbols.map((column) => column[y]).join(" "),
+  );
+  return `${preview.message} stops=[${scene.stopYs.join(", ")}] · ${rows.join(" / ")}`;
 }

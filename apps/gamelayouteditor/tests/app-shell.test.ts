@@ -7,12 +7,17 @@ const previewSpies = vi.hoisted(() => ({
   setPageSize: vi.fn(),
   setZoom: vi.fn(),
   setGuideVisibility: vi.fn(),
+  setSymbolPackage: vi.fn(async (): Promise<unknown> => null),
+  setSelectedReelSet: vi.fn((): unknown => undefined),
+  randomizeSymbols: vi.fn((): unknown => undefined),
+  setSymbolGrid: vi.fn((): unknown => undefined),
   destroy: vi.fn(),
 }));
 
 const ioSpies = vi.hoisted(() => ({
   importZip: vi.fn(),
   exportZip: vi.fn(),
+  importSymbolsZip: vi.fn(),
 }));
 
 const validationSpies = vi.hoisted(() => ({
@@ -90,6 +95,10 @@ vi.mock("../src/preview/layout-preview.js", () => ({
     setPageSize = previewSpies.setPageSize;
     setZoom = previewSpies.setZoom;
     setGuideVisibility = previewSpies.setGuideVisibility;
+    setSymbolPackage = previewSpies.setSymbolPackage;
+    setSelectedReelSet = previewSpies.setSelectedReelSet;
+    randomizeSymbols = previewSpies.randomizeSymbols;
+    setSymbolGrid = previewSpies.setSymbolGrid;
     destroy = previewSpies.destroy;
   },
 }));
@@ -102,6 +111,10 @@ vi.mock("../src/io/exported-layout-zip.js", () => ({
   exportLayoutZip: ioSpies.exportZip,
 }));
 
+vi.mock("../src/io/imported-symbol-package.js", () => ({
+  importSymbolsZip: ioSpies.importSymbolsZip,
+}));
+
 vi.mock("../src/model/validation.js", () => ({
   addImageFileToProject: validationSpies.addImage,
   addSpineFilesToProject: validationSpies.addSpine,
@@ -112,7 +125,10 @@ import { GameLayoutEditorApp } from "../src/ui/app-shell.js";
 import { assetBytes, imageManifest } from "./fixtures.js";
 
 describe("GameLayoutEditorApp", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    previewSpies.setSymbolPackage.mockResolvedValue(null);
+  });
 
   it("renders accessible controls, switches modes and keeps invalid form data", async () => {
     const root = document.createElement("div");
@@ -120,6 +136,8 @@ describe("GameLayoutEditorApp", () => {
     const app = new GameLayoutEditorApp(root);
     await app.init();
     expect(root.querySelector("[data-new-single]")).toBeTruthy();
+    expect(root.querySelector("[data-reel-set]")).toBeTruthy();
+    expect(root.querySelector("[data-randomize-symbols]")).toBeTruthy();
     expect(root.textContent).toContain("maximized-focus");
     expect(
       (
@@ -142,6 +160,165 @@ describe("GameLayoutEditorApp", () => {
     expect(previewSpies.clear).toHaveBeenCalled();
     app.destroy();
     expect(previewSpies.destroy).toHaveBeenCalled();
+  });
+
+  it("imports symbols atomically, renders reel metadata and delegates selection and randomization", async () => {
+    const resource = {
+      packageManifest: {
+        id: "symbols-fixture",
+        cellSize: { width: 120, height: 130 },
+      },
+      destroy: vi.fn(),
+    };
+    const pending = {
+      packageId: "symbols-fixture",
+      cellSize: { width: 120, height: 130 },
+      displaySymbolCount: 2,
+      reelSets: [
+        { name: "first", reelCount: 5, compatible: true },
+        { name: "second", reelCount: 5, compatible: true },
+        {
+          name: "six",
+          reelCount: 6,
+          compatible: false,
+          reason: "需要 5 reels，实际为 6",
+        },
+      ],
+      selectedReelSet: null,
+      status: "pending-selection",
+      message: "有 2 个兼容 reel set，请显式选择。",
+      scene: null,
+    } as const;
+    const ready = {
+      ...pending,
+      selectedReelSet: "second",
+      status: "ready",
+      message: "ready",
+      scene: {
+        reelSetName: "second",
+        columns: 5,
+        rows: 3,
+        stopYs: [1, 2, 3, 4, 5],
+        codes: [[0], [0], [0], [0], [0]],
+        symbols: [["A"], ["B"], ["A"], ["B"], ["A"]],
+      },
+    } as const;
+    ioSpies.importSymbolsZip.mockResolvedValueOnce(resource);
+    previewSpies.setSymbolPackage.mockResolvedValueOnce(pending);
+    previewSpies.setSymbolGrid.mockReturnValue(pending);
+    previewSpies.setSelectedReelSet.mockReturnValue(ready);
+    previewSpies.randomizeSymbols.mockReturnValue(ready);
+    const zipFile = new File(["zip"], "symbols.zip");
+    const click = vi
+      .spyOn(HTMLInputElement.prototype, "click")
+      .mockImplementation(function (this: HTMLInputElement) {
+        Object.defineProperty(this, "files", {
+          configurable: true,
+          value: [zipFile],
+        });
+        this.dispatchEvent(new Event("change"));
+      });
+    const root = document.createElement("div");
+    document.body.append(root);
+    const app = new GameLayoutEditorApp(root);
+    await app.init();
+    (root.querySelector("[data-import-symbols]") as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(previewSpies.setSymbolPackage).toHaveBeenCalledWith(resource, {
+        columns: 5,
+        rows: 3,
+      }),
+    );
+    expect(
+      root.querySelector("[data-symbols-metadata]")?.textContent,
+    ).toContain("symbols-fixture · cell 120×130");
+    const selector = root.querySelector("[data-reel-set]") as HTMLSelectElement;
+    expect(selector.disabled).toBe(false);
+    expect(selector.options[3].disabled).toBe(true);
+    selector.value = "second";
+    selector.dispatchEvent(new Event("change"));
+    expect(previewSpies.setSelectedReelSet).toHaveBeenCalledWith("second");
+    expect(
+      (root.querySelector("[data-randomize-symbols]") as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+    (
+      root.querySelector("[data-randomize-symbols]") as HTMLButtonElement
+    ).click();
+    expect(previewSpies.randomizeSymbols).toHaveBeenCalledOnce();
+    expect(root.querySelector("[data-symbols-scene]")?.textContent).toContain(
+      "stops=[1, 2, 3, 4, 5]",
+    );
+    (root.querySelector("[data-clear-symbols]") as HTMLButtonElement).click();
+    expect(previewSpies.setSymbolPackage).toHaveBeenLastCalledWith(null);
+    expect(
+      root.querySelector("[data-symbols-metadata]")?.textContent,
+    ).toContain("未导入");
+    app.destroy();
+    click.mockRestore();
+  });
+
+  it("keeps the previous symbols metadata when a replacement import fails", async () => {
+    const resource = {
+      packageManifest: {
+        id: "old-symbols",
+        cellSize: { width: 100, height: 100 },
+      },
+      destroy: vi.fn(),
+    };
+    const ready = {
+      packageId: "old-symbols",
+      cellSize: { width: 100, height: 100 },
+      displaySymbolCount: 1,
+      reelSets: [{ name: "main", reelCount: 5, compatible: true }],
+      selectedReelSet: "main",
+      status: "ready",
+      message: "ready",
+      scene: {
+        reelSetName: "main",
+        columns: 5,
+        rows: 3,
+        stopYs: [0, 0, 0, 0, 0],
+        codes: [[0], [0], [0], [0], [0]],
+        symbols: [["A"], ["A"], ["A"], ["A"], ["A"]],
+      },
+    } as const;
+    ioSpies.importSymbolsZip
+      .mockResolvedValueOnce(resource)
+      .mockRejectedValueOnce(new Error("replacement invalid"));
+    previewSpies.setSymbolPackage.mockResolvedValueOnce(ready);
+    previewSpies.setSymbolGrid.mockReturnValue(ready);
+    const zipFile = new File(["zip"], "symbols.zip");
+    const click = vi
+      .spyOn(HTMLInputElement.prototype, "click")
+      .mockImplementation(function (this: HTMLInputElement) {
+        Object.defineProperty(this, "files", {
+          configurable: true,
+          value: [zipFile],
+        });
+        this.dispatchEvent(new Event("change"));
+      });
+    const root = document.createElement("div");
+    document.body.append(root);
+    const app = new GameLayoutEditorApp(root);
+    await app.init();
+    (root.querySelector("[data-import-symbols]") as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector("[data-symbols-metadata]")?.textContent,
+      ).toContain("old-symbols"),
+    );
+    (root.querySelector("[data-import-symbols]") as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-errors]")?.textContent).toContain(
+        "replacement invalid",
+      ),
+    );
+    expect(
+      root.querySelector("[data-symbols-metadata]")?.textContent,
+    ).toContain("old-symbols");
+    app.destroy();
+    click.mockRestore();
   });
 
   it("preserves expanded editor sections across field commits", async () => {

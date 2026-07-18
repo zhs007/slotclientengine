@@ -19,20 +19,47 @@ import {
 } from "../io/imported-layout-zip.js";
 import { drawPreviewGuides } from "./preview-guides.js";
 import {
+  createWebCryptoRandomUint32Source,
+  inspectReelSets,
+  requireCompatibleReelSets,
+  sampleRandomReelScene,
+  type RandomReelSceneSnapshot,
+  type RandomUint32Source,
+  type ReelSetPreviewInfo,
+} from "./random-reel-scene.js";
+import {
   clampPreviewZoom,
   validatePreviewSize,
   type PreviewSize,
 } from "./preview-size.js";
 
+export interface SymbolPreviewGridSize {
+  readonly columns: number;
+  readonly rows: number;
+}
+
+export interface SymbolPackagePreviewSnapshot {
+  readonly packageId: string;
+  readonly cellSize: Readonly<{ width: number; height: number }>;
+  readonly displaySymbolCount: number;
+  readonly reelSets: readonly ReelSetPreviewInfo[];
+  readonly selectedReelSet: string | null;
+  readonly status: "ready" | "pending-selection" | "incompatible";
+  readonly message: string;
+  readonly scene: RandomReelSceneSnapshot | null;
+}
+
 export class LayoutPreview {
   readonly #host: HTMLElement;
   readonly #diagnostics: HTMLElement;
+  #randomSource: RandomUint32Source | null;
   readonly #app = new Application();
   readonly #guides = new Graphics();
   readonly #symbolOverlay = new Container();
   #package: ImportedLayoutPackage | null = null;
   #runtime: SceneLayoutRuntime | null = null;
   #manifest: SceneLayoutManifestV1 | null = null;
+  #lastLayoutSnapshot: SceneLayoutSnapshot | null = null;
   #frameViewport: SceneLayoutFrameViewport | null = null;
   #pageSize: PreviewSize = { width: 1920, height: 1080 };
   #zoom = 1;
@@ -44,12 +71,20 @@ export class LayoutPreview {
   #symbolRequest = 0;
   #symbolResource: SymbolPackageResource | null = null;
   #symbolCatalog: SymbolCatalogModel | null = null;
+  #symbolPreview: SymbolPackagePreviewSnapshot | null = null;
+  #symbolGrid: SymbolPreviewGridSize | null = null;
   #renderSymbols: RenderSymbol[] = [];
   #symbolDiagnostic = "";
 
-  constructor(host: HTMLElement, diagnostics: HTMLElement) {
+  constructor(
+    host: HTMLElement,
+    diagnostics: HTMLElement,
+    options: { readonly randomSource?: RandomUint32Source } = {},
+  ) {
     this.#host = host;
     this.#diagnostics = diagnostics;
+    this.#randomSource = options.randomSource ?? null;
+    this.#symbolOverlay.sortableChildren = true;
   }
 
   async init(): Promise<void> {
@@ -118,29 +153,117 @@ export class LayoutPreview {
 
   async setSymbolPackage(
     resource: SymbolPackageResource | null,
-  ): Promise<void> {
+    grid?: SymbolPreviewGridSize,
+  ): Promise<SymbolPackagePreviewSnapshot | null> {
     this.assertReady();
     const request = ++this.#symbolRequest;
     if (!resource) {
       this.clearSymbolPackage();
       if (this.#runtime) this.applySize();
-      return;
+      return null;
+    }
+    const targetGrid = grid ?? this.#symbolGrid;
+    if (!targetGrid) {
+      resource.destroy();
+      throw new Error("导入 symbols package 前必须存在有效 main grid。");
     }
     let catalog: SymbolCatalogModel;
+    let prepared: SymbolPackagePreviewSnapshot;
     try {
       catalog = await resource.createCatalog();
+      prepared = this.createSymbolPreview(resource, targetGrid, null, true);
     } catch (error) {
       resource.destroy();
       throw error;
     }
     if (request !== this.#symbolRequest || this.#destroyed) {
       resource.destroy();
-      return;
+      return null;
     }
     this.clearSymbolPackage();
     this.#symbolResource = resource;
     this.#symbolCatalog = catalog;
-    if (this.#runtime) this.applySize();
+    this.#symbolGrid = freezeGrid(targetGrid);
+    this.#symbolPreview = prepared;
+    if (this.#lastLayoutSnapshot)
+      this.layoutSymbolOverlay(this.#lastLayoutSnapshot);
+    return prepared;
+  }
+
+  setSymbolGrid(
+    grid: SymbolPreviewGridSize,
+  ): SymbolPackagePreviewSnapshot | null {
+    this.assertReady();
+    const nextGrid = freezeGrid(grid);
+    const previousGrid = this.#symbolGrid;
+    this.#symbolGrid = nextGrid;
+    const resource = this.#symbolResource;
+    if (!resource) return null;
+    if (
+      previousGrid &&
+      previousGrid.columns === nextGrid.columns &&
+      previousGrid.rows === nextGrid.rows
+    ) {
+      return this.#symbolPreview;
+    }
+    const selected = this.#symbolPreview?.selectedReelSet ?? null;
+    this.#symbolPreview = this.createSymbolPreview(
+      resource,
+      nextGrid,
+      selected,
+      false,
+    );
+    if (this.#lastLayoutSnapshot)
+      this.layoutSymbolOverlay(this.#lastLayoutSnapshot);
+    return this.#symbolPreview;
+  }
+
+  setSelectedReelSet(name: string): SymbolPackagePreviewSnapshot {
+    this.assertReady();
+    const resource = this.#symbolResource;
+    const preview = this.#symbolPreview;
+    const grid = this.#symbolGrid;
+    if (!resource || !preview || !grid)
+      throw new Error("尚未导入可用的 symbols package。");
+    const selected = preview.reelSets.find((info) => info.name === name);
+    if (!selected?.compatible) {
+      throw new Error(
+        `reel set "${name}" 不可选择${selected?.reason ? `：${selected.reason}` : "。"}`,
+      );
+    }
+    this.#symbolPreview = this.createReadySymbolPreview(
+      resource,
+      grid,
+      preview.reelSets,
+      name,
+    );
+    if (this.#lastLayoutSnapshot)
+      this.layoutSymbolOverlay(this.#lastLayoutSnapshot);
+    return this.#symbolPreview;
+  }
+
+  randomizeSymbols(): SymbolPackagePreviewSnapshot {
+    this.assertReady();
+    const resource = this.#symbolResource;
+    const preview = this.#symbolPreview;
+    const grid = this.#symbolGrid;
+    if (!resource || !preview || !grid || !preview.selectedReelSet) {
+      throw new Error("请选择兼容 reel set 后再重新随机。");
+    }
+    this.#symbolRequest += 1;
+    this.#symbolPreview = this.createReadySymbolPreview(
+      resource,
+      grid,
+      preview.reelSets,
+      preview.selectedReelSet,
+    );
+    if (this.#lastLayoutSnapshot)
+      this.layoutSymbolOverlay(this.#lastLayoutSnapshot);
+    return this.#symbolPreview;
+  }
+
+  getSymbolPreviewSnapshot(): SymbolPackagePreviewSnapshot | null {
+    return this.#symbolPreview;
   }
 
   setPageSize(size: PreviewSize): void {
@@ -183,6 +306,81 @@ export class LayoutPreview {
     this.#host.replaceChildren();
   }
 
+  private createSymbolPreview(
+    resource: SymbolPackageResource,
+    grid: SymbolPreviewGridSize,
+    preferredSelection: string | null,
+    requireCompatible: boolean,
+  ): SymbolPackagePreviewSnapshot {
+    const reelSets = inspectReelSets({
+      gameConfig: resource.gameConfig,
+      displaySymbols: resource.displaySymbols,
+      columns: grid.columns,
+    });
+    const compatible = requireCompatible
+      ? requireCompatibleReelSets(reelSets, grid.columns)
+      : reelSets.filter((info) => info.compatible);
+    const retained = compatible.some((info) => info.name === preferredSelection)
+      ? preferredSelection
+      : null;
+    const selected =
+      retained ?? (compatible.length === 1 ? compatible[0].name : null);
+    if (selected)
+      return this.createReadySymbolPreview(resource, grid, reelSets, selected);
+    const base = this.createSymbolPreviewBase(resource, reelSets);
+    if (compatible.length > 1) {
+      return Object.freeze({
+        ...base,
+        selectedReelSet: null,
+        status: "pending-selection" as const,
+        message: `有 ${compatible.length} 个兼容 reel set，请显式选择。`,
+        scene: null,
+      });
+    }
+    return Object.freeze({
+      ...base,
+      selectedReelSet: null,
+      status: "incompatible" as const,
+      message: incompatibleMessage(reelSets, grid.columns),
+      scene: null,
+    });
+  }
+
+  private createReadySymbolPreview(
+    resource: SymbolPackageResource,
+    grid: SymbolPreviewGridSize,
+    reelSets: readonly ReelSetPreviewInfo[],
+    selected: string,
+  ): SymbolPackagePreviewSnapshot {
+    const scene = sampleRandomReelScene({
+      gameConfig: resource.gameConfig,
+      displaySymbols: resource.displaySymbols,
+      reelSetName: selected,
+      columns: grid.columns,
+      rows: grid.rows,
+      randomSource: this.getRandomSource(),
+    });
+    return Object.freeze({
+      ...this.createSymbolPreviewBase(resource, reelSets),
+      selectedReelSet: selected,
+      status: "ready" as const,
+      message: `reel set "${selected}" 已生成 ${grid.columns}×${grid.rows} 随机场景。`,
+      scene,
+    });
+  }
+
+  private createSymbolPreviewBase(
+    resource: SymbolPackageResource,
+    reelSets: readonly ReelSetPreviewInfo[],
+  ) {
+    return {
+      packageId: resource.packageManifest.id,
+      cellSize: resource.packageManifest.cellSize,
+      displaySymbolCount: resource.displaySymbols.length,
+      reelSets,
+    };
+  }
+
   private applySize(): void {
     const manifest = this.#manifest;
     const runtime = this.#runtime;
@@ -197,6 +395,9 @@ export class LayoutPreview {
       frameViewport.frameDesignSize.height,
     );
     const snapshot = runtime.applyViewport(frameViewport.frameDesignSize);
+    this.#lastLayoutSnapshot = snapshot;
+    const reel = snapshot.reels.main;
+    if (reel) this.setSymbolGrid({ columns: reel.columns, rows: reel.rows });
     this.layoutSymbolOverlay(snapshot);
     drawPreviewGuides({
       graphics: this.#guides,
@@ -245,6 +446,7 @@ export class LayoutPreview {
   private clearRuntime(): void {
     this.#runtime?.destroy();
     this.#runtime = null;
+    this.#lastLayoutSnapshot = null;
     this.#frameViewport = null;
     this.#package?.destroy();
     this.#package = null;
@@ -255,37 +457,56 @@ export class LayoutPreview {
     this.#symbolDiagnostic = "";
     const resource = this.#symbolResource;
     const catalog = this.#symbolCatalog;
+    const preview = this.#symbolPreview;
+    const scene = preview?.scene;
     const reel = snapshot.reels.main;
-    if (!resource || !catalog || !reel) return;
-    const cellCount = reel.columns * reel.rows;
-    const symbols = resource.displaySymbols;
-    for (let index = 0; index < cellCount; index += 1) {
-      const symbol = symbols[index % symbols.length];
-      const renderSymbol = catalog.createRenderSymbol(symbol, {
-        valueControllerFactory: createSymbolPackageValueControllerFactory(
-          resource,
-          symbol,
-        ),
-      });
-      renderSymbol.scale.set(resource.symbolScales[symbol] ?? 1);
-      renderSymbol.init();
-      const x = index % reel.columns;
-      const y = Math.floor(index / reel.columns);
-      renderSymbol.position.set(
-        reel.viewportRect.x + x * reel.stride.width + reel.cellSize.width / 2,
-        reel.viewportRect.y + y * reel.stride.height + reel.cellSize.height / 2,
-      );
-      const presentation =
-        resource.symbolManifest.symbols[symbol]?.valuePresentation;
-      if (presentation)
-        renderSymbol.setPresentationValue(presentation.defaultValues[0]);
-      this.#symbolOverlay.addChild(renderSymbol);
-      this.#renderSymbols.push(renderSymbol);
+    if (!resource || !catalog || !preview || !reel) return;
+    if (!scene) {
+      this.#symbolDiagnostic = `symbols=${preview.packageId} · ${preview.message}`;
+      return;
     }
-    this.#symbolDiagnostic =
-      cellCount < symbols.length
-        ? `symbols=${resource.packageManifest.id} · ${symbols.length} display · 当前 viewport 未覆盖全部 symbol`
-        : `symbols=${resource.packageManifest.id} · ${symbols.length} display · normal-only row-major`;
+    if (scene.columns !== reel.columns || scene.rows !== reel.rows) {
+      this.#symbolDiagnostic = `symbols=${preview.packageId} · sampled scene ${scene.columns}×${scene.rows} 与 runtime grid ${reel.columns}×${reel.rows} 不匹配`;
+      return;
+    }
+    const cellCount = reel.columns * reel.rows;
+    try {
+      for (let y = 0; y < reel.rows; y += 1) {
+        for (let x = 0; x < reel.columns; x += 1) {
+          const symbol = scene.symbols[x][y];
+          const renderSymbol = catalog.createRenderSymbol(symbol, {
+            valueControllerFactory: createSymbolPackageValueControllerFactory(
+              resource,
+              symbol,
+            ),
+          });
+          const orderIndex = y * reel.columns + x;
+          renderSymbol.scale.set(resource.symbolScales[symbol] ?? 1);
+          renderSymbol.zIndex =
+            (resource.symbolRenderPriorities[symbol] ?? 0) * cellCount +
+            orderIndex;
+          renderSymbol.init();
+          renderSymbol.position.set(
+            reel.viewportRect.x +
+              x * reel.stride.width +
+              reel.cellSize.width / 2,
+            reel.viewportRect.y +
+              y * reel.stride.height +
+              reel.cellSize.height / 2,
+          );
+          const presentation =
+            resource.symbolManifest.symbols[symbol]?.valuePresentation;
+          if (presentation)
+            renderSymbol.setPresentationValue(presentation.defaultValues[0]);
+          this.#symbolOverlay.addChild(renderSymbol);
+          this.#renderSymbols.push(renderSymbol);
+        }
+      }
+    } catch (error) {
+      this.clearRenderSymbols();
+      throw error;
+    }
+    this.#symbolDiagnostic = `symbols=${preview.packageId} · reel=${scene.reelSetName} · stops=[${scene.stopYs.join(",")}] · normal-only`;
   }
 
   private clearRenderSymbols(): void {
@@ -299,13 +520,41 @@ export class LayoutPreview {
     this.#symbolCatalog = null;
     this.#symbolResource?.destroy();
     this.#symbolResource = null;
+    this.#symbolPreview = null;
     this.#symbolDiagnostic = "";
+  }
+
+  private getRandomSource(): RandomUint32Source {
+    this.#randomSource ??= createWebCryptoRandomUint32Source();
+    return this.#randomSource;
   }
 
   private assertReady(): void {
     if (!this.#ready || this.#destroyed)
       throw new Error("Preview 尚未初始化或已销毁。");
   }
+}
+
+function freezeGrid(grid: SymbolPreviewGridSize): SymbolPreviewGridSize {
+  if (!Number.isSafeInteger(grid.columns) || grid.columns <= 0)
+    throw new Error(
+      `layout columns 必须是正安全整数，实际为 ${grid.columns}。`,
+    );
+  if (!Number.isSafeInteger(grid.rows) || grid.rows <= 0)
+    throw new Error(`layout rows 必须是正安全整数，实际为 ${grid.rows}。`);
+  return Object.freeze({ columns: grid.columns, rows: grid.rows });
+}
+
+function incompatibleMessage(
+  infos: readonly ReelSetPreviewInfo[],
+  columns: number,
+): string {
+  return `layout columns=${columns} 没有兼容 reel set：${infos
+    .map(
+      (info) =>
+        `${info.name} (${info.reelCount} reels${info.reason ? `；${info.reason}` : ""})`,
+    )
+    .join("；")}。`;
 }
 
 function round(value: number): string {
