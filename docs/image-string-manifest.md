@@ -1,0 +1,117 @@
+# Image String Manifest v1
+
+`image-string` 用普通透明 PNG/WebP glyph 渲染任意单行 JavaScript 字符串。它不等同于数字类型：数字、`.`、`+`、`-`、`×`、货币符号和其它单 Unicode scalar 都走相同合同。
+
+## ZIP 目录
+
+独立资源包根目录固定如下：
+
+```text
+neutral-glyphs-image-string.zip
+  image-string.manifest.json
+  assets/
+    u002b.png
+    u0030.png
+    u0031.webp
+```
+
+路径必须是 canonical、ASCII lowercase、POSIX 相对路径，并位于 `assets/`。包内容必须精确等于 manifest 与所有 glyph 的闭包；缺文件、orphan、目录 entry、case/NFC collision 或 path escape 都会失败。
+
+## Manifest
+
+```json
+{
+  "version": 1,
+  "kind": "image-string",
+  "id": "neutral-glyphs",
+  "metrics": {
+    "lineHeight": 49,
+    "letterSpacing": 1
+  },
+  "glyphs": {
+    "+": {
+      "path": "assets/u002b.png",
+      "size": { "width": 20, "height": 20 },
+      "offset": { "x": 0, "y": 14 }
+    },
+    "0": {
+      "path": "assets/u0030.png",
+      "size": { "width": 36, "height": 49 },
+      "offset": { "x": 0, "y": 0 }
+    },
+    "1": {
+      "path": "assets/u0031.webp",
+      "size": { "width": 26, "height": 48 },
+      "offset": { "x": 0, "y": 1 }
+    }
+  },
+  "fixedAdvanceGroups": [
+    {
+      "id": "digits",
+      "characters": ["0", "1"],
+      "advanceWidth": 36,
+      "align": "center"
+    }
+  ]
+}
+```
+
+所有对象递归拒绝未知字段。glyph key 和 runtime text 必须是 NFC；key 必须恰好是一个 Unicode scalar。控制字符、未配对 surrogate、多 code-point ligature、换行和缺字均显式失败。
+
+声明尺寸必须与图片真实解码尺寸一致。`offset.y .. offset.y + height` 必须落在 `0..lineHeight`。fixed group 的 advance 必须容纳每个成员的水平 visual rect，一个字符最多属于一组。
+
+## 布局公式
+
+字符串以 `Array.from(text)` 按 code point 从左到右处理：
+
+```text
+cellAdvance = fixedGroup.advanceWidth ?? glyph.size.width
+alignOffset = start  ? 0
+            : center ? (cellAdvance - glyph.size.width) / 2
+            :          cellAdvance - glyph.size.width
+
+spriteX = cursorX + alignOffset + glyph.offset.x
+spriteY = glyph.offset.y
+cursorX += cellAdvance
+非末尾 glyph 再加 letterSpacing
+```
+
+logical bounds 固定从 `(0, 0)` 开始，宽度为全部 advance 与相邻 spacing 之和，高度为 `lineHeight`。visual bounds 是实际 sprite rect 的 union。anchor 通过 `pivot=(logicalWidth * anchor.x, lineHeight * anchor.y)` 应用。空字符串宽度为 `0`、visual bounds 为 `null`。
+
+## API
+
+```ts
+import {
+  createImageStringResourceFromFiles,
+  createRenderImageString,
+  loadImageStringResourceFromUrl,
+  parseImageStringManifest,
+} from "@slotclientengine/rendercore/image-string";
+
+const manifest = parseImageStringManifest(rawManifest);
+const resource = await createImageStringResourceFromFiles({
+  manifest,
+  files,
+});
+
+const display = createRenderImageString({
+  resource,
+  text: "+001",
+  anchor: { x: 0.5, y: 0.5 },
+});
+
+parent.addChild(display.container);
+display.setText("+002");
+console.log(display.getSnapshot());
+
+display.destroy();
+await resource.destroy();
+```
+
+resource 可被多个 renderer 共享；renderer 销毁时不销毁共享 resource。resource 创建完成前会解码并核对全部图片，destroy 后不能创建 renderer 或继续 `setText()`。
+
+Vite 输入必须只包含 glyph closure；CDN loader 只接受 http/https manifest URL，资源必须留在同源 manifest 目录。任何部分失败都会回收已创建 Object URL 和纹理。
+
+## 编辑器
+
+`apps/Imgnumbereditor` 负责显式字符映射、offset/fixed group 表单、静态模板、RAF 计数模板和 standalone ZIP。文件名仅提供候选建议，不会自动成为 manifest 数据；编辑器不裁图、不 resize、不转码，也不把模板写入 ZIP。

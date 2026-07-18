@@ -7,3 +7,4 @@ export * from "./symbol-win-carousel/index.js";
 export * from "./symbol-cascade/index.js";
 export * from "./symbol-value-presentation/index.js";
 export * from "./scene-layout/index.js";
+export * from "./image-string/index.js";
