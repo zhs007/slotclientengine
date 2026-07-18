@@ -176,3 +176,26 @@ Codex bundled pnpm 11 检测到现有 node_modules 的 `enableGlobalVirtualStore
 - 本任务不实现 spin/appear/win/cascade/nearwin，也不随机 valuePresentation value。
 
 `agents.md` 已更新，因为原规则明确要求 numeric-code row-major，与本任务最终合同冲突；不更新会让后续实现再次回退到错误行为。
+
+## 9. 浏览器验收反馈修正（2026-07-18）
+
+用户开始浏览器验收后发现两条 Pixi Assets 警告：Blob 图片仍使用已弃用的 `loadParser`，以及 Assets 管理的 Texture 被直接 `destroy()`。本轮修正如下：
+
+- scene-layout 与 symbol-package 的 extensionless Blob URL 显式 loader 改用 Pixi 当前 `parser: "loadTextures"` 参数。
+- vnicore 的共享 VNI Blob texture loader 同步改用 `parser`，避免预览 VNI symbol 时再次出现相同弃用警告。
+- scene-layout runtime 对默认 Assets loader 记录唯一已加载 URL，在初始化回滚和 runtime destroy 时统一调用 `Assets.unload(url)`；不再直接销毁 Assets 管理的 Texture。
+- 自定义 texture loader 仍默认由调用方持有；如需 runtime 配对释放，可显式提供 `unloadTexture`。尺寸不匹配和重复 destroy 均有回归覆盖。
+
+修正后自动门禁：
+
+```text
+@slotclientengine/rendercore format/lint/typecheck/build  PASS
+@slotclientengine/rendercore test                         PASS (318/318)
+@slotclientengine/vnicore format/lint/typecheck/build     PASS
+@slotclientengine/vnicore test                            PASS (206/206)
+gamelayouteditor format/lint/typecheck/build              PASS
+gamelayouteditor test                                     PASS (55/55)
+git diff --check                                          PASS
+```
+
+浏览器验收状态仍为待用户复验；本修正不替代浏览器控制台的最终确认。

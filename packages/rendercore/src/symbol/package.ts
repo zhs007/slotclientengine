@@ -560,7 +560,7 @@ async function loadTexture(value: string | Texture): Promise<Texture> {
 async function loadPackageTexture(url: string): Promise<Texture> {
   const texture = (await Assets.load({
     src: url,
-    loadParser: "loadTextures",
+    parser: "loadTextures",
   })) as Texture | null | undefined;
   if (!texture?.source) {
     throw new SymbolAssetError(

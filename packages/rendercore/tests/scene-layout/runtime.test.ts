@@ -81,12 +81,17 @@ describe("scene layout runtime", () => {
         ]),
       ),
     });
+    const unloadTexture = vi.fn(async () => undefined);
     const runtime = createSceneLayoutRuntime({
       resource,
       loadTexture: async () => Texture.EMPTY,
+      unloadTexture,
     });
     await expect(runtime.init()).rejects.toThrow(/size mismatch/);
+    expect(unloadTexture).toHaveBeenCalledOnce();
+    expect(unloadTexture).toHaveBeenCalledWith("memory:bg1");
     runtime.destroy();
+    expect(unloadTexture).toHaveBeenCalledOnce();
   });
 
   it("forces the Pixi texture parser for extensionless Blob URLs and rejects null textures", async () => {
@@ -99,9 +104,33 @@ describe("scene layout runtime", () => {
     await expect(runtime.init()).rejects.toThrow(/valid Pixi texture/);
     expect(load).toHaveBeenCalledWith({
       src: "blob:layout-background",
-      loadParser: "loadTextures",
+      parser: "loadTextures",
     });
     runtime.destroy();
     load.mockRestore();
+  });
+
+  it("unloads each Assets-managed texture instead of destroying it directly", async () => {
+    const resource = createSceneLayoutResource({
+      manifest: game002LayoutFixture,
+      imageModules: { "assets/bg.png": "blob:layout-background" },
+    });
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValueOnce(Texture.EMPTY as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValueOnce(undefined);
+    const destroyTexture = vi.spyOn(Texture.EMPTY, "destroy");
+    try {
+      const runtime = createSceneLayoutRuntime({ resource });
+      await runtime.init();
+      runtime.destroy();
+      expect(unload).toHaveBeenCalledOnce();
+      expect(unload).toHaveBeenCalledWith("blob:layout-background");
+      expect(destroyTexture).not.toHaveBeenCalled();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+      destroyTexture.mockRestore();
+    }
   });
 });

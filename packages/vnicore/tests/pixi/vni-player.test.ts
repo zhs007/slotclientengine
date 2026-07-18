@@ -780,11 +780,11 @@ describe("VNIPlayer", () => {
 
     expect(pixiMock.assetsLoad).toHaveBeenCalledWith({
       src: "/a.png",
-      loadParser: "loadTextures",
+      parser: "loadTextures",
     });
     expect(pixiMock.assetsLoad).toHaveBeenCalledWith({
       src: "/b.png",
-      loadParser: "loadTextures",
+      parser: "loadTextures",
     });
   });
 

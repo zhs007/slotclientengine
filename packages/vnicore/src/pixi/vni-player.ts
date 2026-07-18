@@ -2706,7 +2706,7 @@ async function loadPixiTextureFromUrl(
 ): Promise<PIXI.Texture> {
   const texture = (await PIXI.Assets.load({
     src: url,
-    loadParser: "loadTextures",
+    parser: "loadTextures",
   })) as PIXI.Texture | null | undefined;
   assertLoadedTexture(texture, context);
   return texture;

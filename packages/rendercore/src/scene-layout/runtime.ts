@@ -24,6 +24,7 @@ import type {
 export interface CreateSceneLayoutRuntimeOptions {
   readonly resource: SceneLayoutResource;
   readonly loadTexture?: (url: string) => Promise<Texture>;
+  readonly unloadTexture?: (url: string) => Promise<void>;
   readonly createSpinePlayer?: (options: {
     readonly node: SceneLayoutNode;
     readonly resource: SceneLayoutResource["spineResources"][string];
@@ -50,12 +51,14 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly container = new Container();
   readonly #resource: SceneLayoutResource;
   readonly #loadTexture: (url: string) => Promise<Texture>;
+  readonly #unloadTexture: (url: string) => Promise<void>;
   readonly #createSpinePlayer: NonNullable<
     CreateSceneLayoutRuntimeOptions["createSpinePlayer"]
   >;
   readonly #nodes: readonly RuntimeNode[];
   readonly #nodesById: ReadonlyMap<string, RuntimeNode>;
   readonly #artMask = new Graphics();
+  readonly #loadedTextureUrls = new Set<string>();
   #snapshot: SceneLayoutSnapshot | null = null;
   #initializing = false;
   #initialized = false;
@@ -64,6 +67,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   constructor(options: CreateSceneLayoutRuntimeOptions) {
     this.#resource = options.resource;
     this.#loadTexture = options.loadTexture ?? loadSceneLayoutTexture;
+    this.#unloadTexture =
+      options.unloadTexture ??
+      (options.loadTexture ? async () => undefined : unloadSceneLayoutTexture);
     this.#createSpinePlayer =
       options.createSpinePlayer ??
       ((playerOptions) =>
@@ -217,6 +223,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         );
       }
       const texture = await this.#loadTexture(url);
+      this.#loadedTextureUrls.add(url);
       this.assertAlive();
       if (!texture?.source) {
         throw new SceneLayoutError(
@@ -229,7 +236,6 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         width !== node.spec.resource.size.width ||
         height !== node.spec.resource.size.height
       ) {
-        texture.destroy(false);
         throw new SceneLayoutError(
           `Scene layout image "${node.spec.resource.path}" size mismatch: expected ${node.spec.resource.size.width}x${node.spec.resource.size.height}, actual ${width}x${height}.`,
         );
@@ -261,9 +267,17 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     for (const node of this.#nodes) {
       node.player?.destroy();
       node.player = null;
-      node.texture?.destroy(false);
       node.texture = null;
       node.named.removeChildren();
+    }
+    const textureUrls = [...this.#loadedTextureUrls];
+    this.#loadedTextureUrls.clear();
+    for (const url of textureUrls) {
+      try {
+        void this.#unloadTexture(url).catch(() => undefined);
+      } catch {
+        // Resource release is best-effort and must remain idempotent.
+      }
     }
   }
 
@@ -296,7 +310,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
 async function loadSceneLayoutTexture(url: string): Promise<Texture> {
   const texture = (await Assets.load({
     src: url,
-    loadParser: "loadTextures",
+    parser: "loadTextures",
   })) as Texture | null | undefined;
   if (!texture?.source) {
     throw new SceneLayoutError(
@@ -304,6 +318,10 @@ async function loadSceneLayoutTexture(url: string): Promise<Texture> {
     );
   }
   return texture;
+}
+
+async function unloadSceneLayoutTexture(url: string): Promise<void> {
+  await Assets.unload(url);
 }
 
 function assertAttachable(object: Container): void {

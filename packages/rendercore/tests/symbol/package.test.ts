@@ -222,7 +222,7 @@ describe("symbol package game config and resources", () => {
       for (const [request] of load.mock.calls) {
         expect(request).toMatchObject({
           src: expect.stringMatching(/^blob:/u),
-          loadParser: "loadTextures",
+          parser: "loadTextures",
         });
       }
       resource.destroy();
