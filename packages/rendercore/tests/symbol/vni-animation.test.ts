@@ -227,6 +227,27 @@ function createResource(): SymbolVniAnimationResource {
   };
 }
 
+function createLoopContext(): SymbolAnimationContext {
+  return {
+    ...createContext(),
+    requestedState: "dropdown",
+    resolvedState: "dropdown",
+    state: { id: "dropdown", phase: "stable", playback: "loop" },
+  };
+}
+
+function createLoopResource(): SymbolVniAnimationResource {
+  const resource = createResource();
+  return {
+    ...resource,
+    state: "dropdown",
+    spec: {
+      ...resource.spec,
+      playback: { ...resource.spec.playback, loop: true },
+    },
+  };
+}
+
 function createSpineResource(): SymbolSpineAnimationResource {
   return {
     symbol: "H1",
@@ -266,18 +287,26 @@ function createSpinBlurEquivalentContext(
 
 function createPlayerFactory() {
   let complete: (() => void) | null = null;
+  let loop = false;
+  let loopIndex = 0;
   const root = new pixiMock.MockContainer();
   const calls = {
     init: vi.fn(async function init(this: { readonly parent: Container }) {
       this.parent.addChild(root as unknown as Container);
     }),
     getDisplayObject: vi.fn(() => root as unknown as Container),
-    playRange: vi.fn(),
+    playRange: vi.fn((options: { readonly loop: boolean }) => {
+      loop = options.loop;
+      loopIndex = 0;
+    }),
     update: vi.fn((deltaSeconds: number) => {
-      if (deltaSeconds >= 1) {
+      if (loop && deltaSeconds >= 1) {
+        loopIndex += 1;
+      } else if (deltaSeconds >= 1) {
         complete?.();
       }
     }),
+    getPlaybackState: vi.fn(() => ({ loopIndex })),
     destroy: vi.fn(() => {
       root.parent?.removeChild(root);
     }),
@@ -295,6 +324,7 @@ function createPlayerFactory() {
       getDisplayObject: calls.getDisplayObject,
       playRange: calls.playRange,
       update: calls.update,
+      getPlaybackState: calls.getPlaybackState,
       destroy: calls.destroy,
       pause: calls.pause,
       onPlaybackComplete: calls.onPlaybackComplete,
@@ -339,6 +369,38 @@ describe("VniSymbolAni", () => {
     const completed = ani.update(1);
     expect(completed.onceCompleted).toBe(true);
     expect(ani.update(1).onceCompleted).toBe(false);
+  });
+
+  it("uses state lifecycle for loop orchestration and reports real VNI range boundaries", async () => {
+    const context = createLoopContext();
+    const { factory, calls } = createPlayerFactory();
+    const ani = new VniSymbolAni({
+      context,
+      resource: createLoopResource(),
+      playerFactory: factory,
+    });
+
+    expect(ani.playback).toBe("loop");
+    ani.reset();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(calls.playRange).toHaveBeenCalledWith({
+      range: { unit: "time", start: 0, end: 2 },
+      loop: true,
+    });
+    expect(ani.update(0.5)).toEqual({
+      loopCompleted: false,
+      onceCompleted: false,
+    });
+    expect(ani.update(1)).toEqual({
+      loopCompleted: true,
+      onceCompleted: false,
+    });
+    expect(ani.update(0.5)).toEqual({
+      loopCompleted: false,
+      onceCompleted: false,
+    });
   });
 
   it("detaches the cached player on ani destroy and releases it with the render symbol cache", async () => {
@@ -420,6 +482,7 @@ describe("VniSymbolAni", () => {
         getDisplayObject: () => root as unknown as Container,
         playRange: calls.playRange,
         update: vi.fn(),
+        getPlaybackState: vi.fn(() => ({ loopIndex: 0 })),
         destroy: calls.destroy,
         pause: calls.pause,
         onPlaybackComplete: vi.fn(() => vi.fn()),

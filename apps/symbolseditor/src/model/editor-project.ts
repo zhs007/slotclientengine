@@ -1025,9 +1025,6 @@ function compileAnimation(
           : {}),
       };
     case "vni":
-      if (definition.playback !== "once") {
-        throw new Error(`${state} 的 VNI 当前只支持 once lifecycle。`);
-      }
       return {
         kind: "vni",
         project: toLocalRef(visual.projectPath),
@@ -1035,7 +1032,7 @@ function compileAnimation(
           mode: "range",
           startTime: visual.startTime,
           endTime: visual.endTime,
-          loop: false,
+          loop: state === "normal" || definition.playback === "loop",
         },
       };
     case "static":

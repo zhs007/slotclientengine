@@ -7,7 +7,7 @@ import {
   validateSymbolPackageContents,
   validateSymbolPackageGameConfig,
 } from "../../src/symbol/package.js";
-import { Assets, Texture } from "pixi.js";
+import { Assets, Cache, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 
 const encode = (value: unknown) =>
@@ -228,6 +228,44 @@ describe("symbol package game config and resources", () => {
       resource.destroy();
     } finally {
       load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
+  it("does not ask Pixi to unload package blob URLs that were never cached", async () => {
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const resource = await createSymbolPackageResource({
+        packageManifest,
+        files: files(),
+        loadTextures: false,
+      });
+      resource.destroy();
+      expect(unload).not.toHaveBeenCalled();
+    } finally {
+      unload.mockRestore();
+    }
+  });
+
+  it("unloads package blob URLs that are present in Pixi's cache", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.EMPTY as never);
+    const has = vi.spyOn(Cache, "has").mockReturnValue(true);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const resource = await createSymbolPackageResource({
+        packageManifest,
+        files: files(),
+      });
+      resource.destroy();
+      expect(unload).toHaveBeenCalledTimes(packageManifest.resources.length);
+      for (const [url] of unload.mock.calls) {
+        expect(url).toMatch(/^blob:/u);
+      }
+    } finally {
+      load.mockRestore();
+      has.mockRestore();
       unload.mockRestore();
     }
   });

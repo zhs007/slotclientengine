@@ -44,9 +44,10 @@ export interface VniSymbolAniPlayer {
       readonly start: number;
       readonly end: number;
     };
-    readonly loop: false;
+    readonly loop: boolean;
   }): void;
   update(deltaSeconds: number): void;
+  getPlaybackState(): Readonly<{ readonly loopIndex: number }>;
   onPlaybackComplete(listener: () => void): () => void;
   pause?(): void;
   destroy(): void;
@@ -93,7 +94,7 @@ const cachedVniSymbolPlayers = new WeakMap<
 
 export class VniSymbolAni implements SymbolAni {
   readonly stateId: string;
-  readonly playback: SymbolPlaybackKind = "once";
+  readonly playback: SymbolPlaybackKind;
   readonly continuityKey: string;
   readonly #context: SymbolAnimationContext;
   readonly #resource: SymbolVniAnimationResource;
@@ -104,6 +105,7 @@ export class VniSymbolAni implements SymbolAni {
   #initialized = false;
   #completed = false;
   #reportedComplete = false;
+  #loopIndex = 0;
   #destroyed = false;
   #playRequestId = 0;
 
@@ -111,6 +113,7 @@ export class VniSymbolAni implements SymbolAni {
     this.#context = options.context;
     this.#resource = options.resource;
     this.stateId = options.context.resolvedState;
+    this.playback = options.context.state.playback;
     this.continuityKey = createVniAnimationContinuityKey(options.resource);
     this.#playerFactory =
       options.playerFactory ??
@@ -126,6 +129,7 @@ export class VniSymbolAni implements SymbolAni {
     this.#context.overlayLayer.removeChildren();
     this.#completed = false;
     this.#reportedComplete = false;
+    this.#loopIndex = 0;
     this.#initError = null;
     this.#initialized = false;
     const entry = getOrCreateCachedVniSymbolPlayer({
@@ -151,7 +155,19 @@ export class VniSymbolAni implements SymbolAni {
     if (!this.#initialized) {
       return EMPTY_UPDATE_RESULT;
     }
-    this.#cacheEntry?.player.update(deltaSeconds);
+    const player = this.#cacheEntry?.player;
+    player?.update(deltaSeconds);
+    if (this.playback === "loop" && player) {
+      const loopIndex = player.getPlaybackState().loopIndex;
+      const loopCompleted = loopIndex > this.#loopIndex;
+      this.#loopIndex = loopIndex;
+      if (loopCompleted) {
+        return Object.freeze({
+          loopCompleted: true,
+          onceCompleted: false,
+        });
+      }
+    }
     if (this.#completed && !this.#reportedComplete) {
       this.#reportedComplete = true;
       return Object.freeze({
@@ -225,8 +241,9 @@ export class VniSymbolAni implements SymbolAni {
           start: this.#resource.spec.playback.startTime,
           end: this.#resource.spec.playback.endTime,
         },
-        loop: false,
+        loop: this.#resource.spec.playback.loop,
       });
+      this.#loopIndex = player.getPlaybackState().loopIndex;
       this.#initialized = true;
     } catch (error) {
       if (this.#cacheEntry === entry && this.#playRequestId === requestId) {

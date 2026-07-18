@@ -388,6 +388,47 @@ describe("symbol state texture manifest helpers", () => {
     expect(resources.L1?.win?.spec.playback.endTime).toBe(2);
   });
 
+  it("orchestrates VNI loop playback with the same state lifecycle contract as Spine", () => {
+    const manifest = structuredClone(createManifest()) as any;
+    manifest.settings.additionalStateDefinitions = [
+      { id: "hover", phase: "stable", playback: "loop" },
+    ];
+    manifest.symbols.L1.animations.normal = {
+      kind: "vni",
+      project: "./L1-wins.json",
+      playback: { mode: "range", startTime: 0, endTime: 2, loop: true },
+    };
+    manifest.symbols.L1.animations.hover = {
+      kind: "vni",
+      project: "./L1-wins.json",
+      playback: { mode: "range", startTime: 0, endTime: 2, loop: true },
+    };
+
+    const parsed = parseSymbolStateTextureManifest(manifest, {
+      requiredStates,
+    });
+    expect(parsed.symbols.L1?.animations.normal).toMatchObject({
+      kind: "vni",
+      playback: { loop: true },
+    });
+    expect(parsed.symbols.L1?.animations.hover).toMatchObject({
+      kind: "vni",
+      playback: { loop: true },
+    });
+
+    const loopingOnce = structuredClone(manifest);
+    loopingOnce.symbols.L1.animations.win.playback.loop = true;
+    expect(() =>
+      parseSymbolStateTextureManifest(loopingOnce, { requiredStates }),
+    ).toThrow(/VNI playback\.loop must be false for once state/);
+
+    const nonLoopingStable = structuredClone(manifest);
+    nonLoopingStable.symbols.L1.animations.hover.playback.loop = false;
+    expect(() =>
+      parseSymbolStateTextureManifest(nonLoopingStable, { requiredStates }),
+    ).toThrow(/VNI playback\.loop must be true for loop state/);
+  });
+
   it("builds Spine animation resources from manifest modules and validates exact animation names", () => {
     const skeleton = readJsonAsset("H1.json");
     const atlas = readTextAsset("Symbol.atlas");

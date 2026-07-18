@@ -35,6 +35,26 @@ const imageBytes = () =>
   new Uint8Array(
     readFileSync(resolve(process.cwd(), "../../assets/game003-s1/H1.png")),
   );
+const vniProjectBytes = () =>
+  new TextEncoder().encode(
+    JSON.stringify({
+      schemaVersion: "VNI_0.010",
+      editor: { name: "VNI", version: "VNI_0.010" },
+      engineTarget: { name: "cocos_creator", version: "3.8.6" },
+      name: "neutral-symbol-animation",
+      stage: {
+        width: 160,
+        height: 160,
+        coordinate: "center",
+        duration: 2,
+        backgroundColor: "#000000",
+      },
+      assets: [],
+      layerGroups: [],
+      layers: [],
+      particles: [],
+    }),
+  );
 
 describe("symbol editor typed project", () => {
   it("creates code-ordered symbols with only explicit empty normal and exports no resources", () => {
@@ -71,6 +91,38 @@ describe("symbol editor typed project", () => {
         },
       },
     });
+  });
+
+  it("compiles VNI playback from normal, once and loop state lifecycles", () => {
+    const project = createFromGameConfig({
+      rawGameConfig: gameConfig,
+      fileName: "vni.json",
+    });
+    uploadAssetBatch(project, [
+      { path: "animation/neutral.json", bytes: vniProjectBytes() },
+    ]);
+    setStateVisual(project, "A", "normal", {
+      kind: "vni",
+      baseVisual: { kind: "empty", width: 160, height: 160 },
+      projectPath: "animation/neutral.json",
+      startTime: 0,
+      endTime: 2,
+    });
+    for (const state of ["win", "dropdown"] as const) {
+      addSymbolState(project, "A", state);
+      setStateVisual(project, "A", state, {
+        kind: "vni",
+        projectPath: "animation/neutral.json",
+        startTime: 0,
+        endTime: 2,
+      });
+    }
+
+    const manifest = compileSymbolEditorManifest(project) as any;
+    expect(manifest.symbols.A.animations.normal.playback.loop).toBe(true);
+    expect(manifest.symbols.A.animations.win.playback.loop).toBe(false);
+    expect(manifest.symbols.A.animations.dropdown.playback.loop).toBe(true);
+    expect(() => parseSymbolStateTextureManifest(manifest)).not.toThrow();
   });
 
   it("supports all/none/invert while retaining excluded symbol drafts", () => {

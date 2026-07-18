@@ -62,7 +62,7 @@ export interface SymbolManifestRangePlaybackSpec {
   readonly mode: "range";
   readonly startTime: number;
   readonly endTime: number;
-  readonly loop: false;
+  readonly loop: boolean;
 }
 
 export interface SymbolManifestBuiltinAnimationSpec {
@@ -676,12 +676,14 @@ function parsePresentationState(
   if (
     expectedPlayback === "loop" &&
     !(
-      (animation.kind === "spine" || animation.kind === "activeSpine") &&
+      (animation.kind === "vni" ||
+        animation.kind === "spine" ||
+        animation.kind === "activeSpine") &&
       animation.playback.loop
     )
   ) {
     throw new SymbolAssetError(
-      `${label} requires a looping Spine or activeSpine animation.`,
+      `${label} requires a looping VNI, Spine or activeSpine animation.`,
     );
   }
   return state;
@@ -1616,13 +1618,26 @@ function parseManifestAnimationSpec(
     "project",
     "playback",
   ]);
+  const playback = parseRangePlayback(record.playback, symbol, state);
+  const expectedPlayback =
+    expectedPlaybackOverride ?? getDefaultSymbolPlaybackKind(state);
+  if (!allowLoopingOnceState && expectedPlayback === "once" && playback.loop) {
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" ${state} VNI playback.loop must be false for once state "${state}".`,
+    );
+  }
+  if (expectedPlayback === "loop" && !playback.loop) {
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" ${state} VNI playback.loop must be true for loop state "${state}".`,
+    );
+  }
   return Object.freeze({
     kind: "vni",
     project: assertString(
       record.project,
       `symbol "${symbol}" ${state} VNI project`,
     ),
-    playback: parseRangePlayback(record.playback, symbol, state),
+    playback,
   });
 }
 
@@ -1656,16 +1671,16 @@ function parseRangePlayback(
       `Symbol "${symbol}" ${state} VNI playback.endTime must be greater than startTime.`,
     );
   }
-  if (record.loop !== false) {
+  if (typeof record.loop !== "boolean") {
     throw new SymbolAssetError(
-      `Symbol "${symbol}" ${state} VNI playback.loop must be false.`,
+      `Symbol "${symbol}" ${state} VNI playback.loop must be a boolean.`,
     );
   }
   return Object.freeze({
     mode: "range",
     startTime,
     endTime,
-    loop: false,
+    loop: record.loop,
   });
 }
 
@@ -1991,7 +2006,12 @@ export function getSymbolPlaybackKindForManifestAnimation(
     spec.kind === "spine" ||
     spec.kind === "activeSpine"
   ) {
-    return spec.kind === "activeSpine" && spec.playback.loop ? "loop" : "once";
+    return (spec.kind === "vni" ||
+      spec.kind === "spine" ||
+      spec.kind === "activeSpine") &&
+      spec.playback.loop
+      ? "loop"
+      : "once";
   }
   throw new SymbolAssetError(`Unsupported symbol manifest animation kind.`);
 }

@@ -994,16 +994,21 @@ function validatePreservedPlayback(symbol, state, value) {
       `Existing manifest symbol "${symbol}" ${state} playback endTime must be greater than startTime.`,
     );
   }
-  if (playback.loop !== false) {
+  if (typeof playback.loop !== "boolean") {
     throw new Error(
-      `Existing manifest symbol "${symbol}" ${state} playback loop must be false.`,
+      `Existing manifest symbol "${symbol}" ${state} VNI playback loop must be boolean.`,
+    );
+  }
+  if ((state === "appear" || state === "win") && playback.loop) {
+    throw new Error(
+      `Existing manifest symbol "${symbol}" ${state} VNI playback loop must be false for once states.`,
     );
   }
   return Object.freeze({
     mode: "range",
     startTime,
     endTime,
-    loop: false,
+    loop: playback.loop,
   });
 }
 

@@ -8,7 +8,7 @@ import {
   createGameConfig,
   type LogicGameConfig,
 } from "@slotclientengine/logiccore";
-import { Assets, type Texture } from "pixi.js";
+import { Assets, Cache, type Texture } from "pixi.js";
 import { createRenderSymbolValueController } from "../symbol-value-presentation/render-symbol-value-controller.js";
 import { createSymbolValuePresentationResourcesFromManifest } from "../symbol-value-presentation/create-symbol-value-presenter.js";
 import type { SymbolValuePresentationResourceMap } from "../symbol-value-presentation/types.js";
@@ -422,17 +422,22 @@ export async function createSymbolPackageResource(options: {
       destroy(): void {
         if (destroyed) return;
         destroyed = true;
-        for (const url of textureUrls)
-          void Assets.unload(url).catch(() => undefined);
+        unloadCachedPackageTextures(textureUrls);
         urls.destroy();
       },
     };
     return Object.freeze(resource);
   } catch (error) {
-    for (const url of textureUrls)
-      void Assets.unload(url).catch(() => undefined);
+    unloadCachedPackageTextures(textureUrls);
     urls.destroy();
     throw error;
+  }
+}
+
+function unloadCachedPackageTextures(textureUrls: readonly string[]): void {
+  for (const url of textureUrls) {
+    if (!Cache.has(url)) continue;
+    void Assets.unload(url).catch(() => undefined);
   }
 }
 
