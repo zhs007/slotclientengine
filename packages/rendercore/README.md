@@ -2,6 +2,12 @@
 
 `rendercore` 是 slot 前端渲染核心库。它基于 `pixi.js` v8、复用 `@slotclientengine/pixiani` 的基础显示对象生命周期，并复用 `@slotclientengine/logiccore` 的 game config/paytable 契约。`apps/symbolsviewer` 和 `apps/reelsviewer` 是调试 app，业务展示逻辑不放进核心库。
 
+## Image String API
+
+`@slotclientengine/rendercore/image-string` 提供中性的图片字符串 v1 合同：严格 manifest parser、PNG/WebP 精确资源闭包、files/Vite/CDN 资源装配、Unicode code point 布局，以及共享 resource 上的 Pixi `RenderImageString`。自然宽度与 fixed advance group 可以混用；fixed group 只改变逻辑 advance，不拉伸纹理。
+
+renderer 支持原子的 `setText()`、`setAnchor()`、logical/visual snapshot 和 sprite 复用，不创建 `Application`、canvas、DOM、RAF 或字体 fallback。完整 schema、公式、ZIP 与生命周期示例见 [`docs/image-string-manifest.md`](../../docs/image-string-manifest.md)。
+
 ## Scene Layout API
 
 `@slotclientengine/rendercore/scene-layout` 提供严格的 scene-layout v1 parser、精确资源闭包、module/CDN resource loader、game002/game003 对应的纯 frame policy 与 focus viewport 组合、image/official Spine 4.3 node runtime、named-node lookup/relative attachment 与 reel geometry。游戏 app 只加载 package、提交 frame size、通过 public attachment API 挂业务对象，并把 `columnGap/rowGap` 传给普通或 grid-cell reel；不使用 uiframeworks 的工具可通过 `resolveSceneLayoutFrameViewport()` 从物理 page size 得到逻辑 frame、CSS 尺寸和黑边。
