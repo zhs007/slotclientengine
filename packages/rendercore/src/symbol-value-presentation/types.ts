@@ -1,4 +1,5 @@
 import type { Container } from "pixi.js";
+import type { ImageStringResource } from "../image-string/types.js";
 import type { RenderVisibleSymbolGeometrySnapshot } from "../reel/types.js";
 import type {
   SymbolManifestAnimationPlaybackSpec,
@@ -32,6 +33,30 @@ export interface SymbolValuePresentationResource {
   readonly tiers: readonly SymbolValuePresentationTierResource[];
   readonly text: SymbolValuePresentationTextSpec;
   readonly textImageUrls: Readonly<Record<number, string>>;
+  readonly imageStringTierBindings?: readonly SymbolValuePresentationImageStringTierResource[];
+}
+
+export interface SymbolValuePresentationImageStringTierResource {
+  readonly resourcePath: string;
+  readonly resource: ImageStringResource;
+  readonly slot: string;
+  readonly anchor: Readonly<{ x: number; y: number }>;
+  readonly transform: Readonly<{ x: number; y: number; scale: number }>;
+  readonly followSlotColor: boolean;
+}
+
+export interface SymbolValuePresentationResourceBundle {
+  readonly resources: SymbolValuePresentationResourceMap;
+  destroy(): Promise<void>;
+}
+
+export interface SymbolValueDisplayHandle {
+  readonly container: Container;
+  readonly type: "font" | "image" | "image-string";
+  readonly text: string;
+  readonly resourcePath?: string;
+  setText(text: string): void;
+  destroy(): void;
 }
 
 export type SymbolValuePresentationResourceMap = Readonly<
@@ -67,6 +92,9 @@ export interface SymbolValuePresentationSnapshot {
     readonly tierIndex: number;
     readonly skeleton: string;
     readonly text: string;
+    readonly displayType: "font" | "image" | "image-string";
+    readonly displayResource: string | null;
+    readonly displaySlot: string;
   }[];
 }
 

@@ -17,4 +17,6 @@ export type {
   SymbolValuePresentationSpec,
   SymbolValuePresentationTextSpec,
   SymbolValuePresentationTierSpec,
+  SymbolValuePresentationImageStringTextSpec,
+  SymbolValuePresentationImageStringTierBindingSpec,
 } from "./manifest.js";

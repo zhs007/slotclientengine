@@ -77,7 +77,7 @@ Symbols ZIP 固定限制：
 
 ## 精确资源闭包
 
-闭包包含 normal/layer/keyframe、实际存在的稀疏 state texture、VNI project 及其 `assets[].path`、Spine skeleton/atlas/texture、value tier Spine 与 image text 的每个 `defaultValues` 完整数值图片。资源按 manifest exact path 解析，允许任意合法文件名和子目录；相同 basename 位于不同目录时不会串用。缺资源或多余 orphan 都失败；不扫描目录、不使用 glob、不从文件名猜 display symbol。
+闭包包含 normal/layer/keyframe、实际存在的稀疏 state texture、VNI project 及其 `assets[].path`、Spine skeleton/atlas/texture、value tier Spine，以及 text 分支所需资源：image 模式的每个 `defaultValues` 完整数值图片，或 image-string 模式每个 distinct tier dependency 的 nested manifest 与精确 glyph。普通 `imageStringNodes` 和 value-tier binding 共用同一个 canonical resource pool。资源按 manifest exact path 解析；缺资源、decoded size 漂移或多余 orphan 都失败，不扫描目录、不使用 glob、不从文件名猜 display symbol。
 
 顶层 `states[]` 是允许出现的 state texture id 稳定并集，不再表示每个 symbol 必须提供每个 texture。需要全量 state texture 的 production generator/caller 必须显式传 `requiredStates`；普通 package catalog 保持 sparse per-symbol 语义。
 

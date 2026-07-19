@@ -260,16 +260,32 @@ function verifySourceContract() {
       }
       const text = valuePresentation.text;
       if (
-        text?.type !== "image" ||
-        text.slot !== "Num" ||
-        text.prefix !== "./"
+        text?.type !== "image-string" ||
+        !Array.isArray(text.tiers) ||
+        text.tiers.length !== valuePresentation.tiers?.length
       ) {
         failures.push(
-          `source manifest ${symbol}.valuePresentation.text must use image type, Num slot and ./ prefix.`,
+          `source manifest ${symbol}.valuePresentation.text must use one image-string binding per Spine tier.`,
         );
       }
-      for (const value of defaults ?? []) {
-        assertFile(join(SOURCE_ROOT, `${value}.png`));
+      for (const [index, binding] of (text?.tiers ?? []).entries()) {
+        if (
+          typeof binding.resource !== "string" ||
+          !binding.resource.endsWith("/image-string.manifest.json") ||
+          typeof binding.slot !== "string" ||
+          binding.slot.length === 0 ||
+          !Number.isFinite(binding.anchor?.x) ||
+          !Number.isFinite(binding.anchor?.y) ||
+          !Number.isFinite(binding.transform?.x) ||
+          !Number.isFinite(binding.transform?.y) ||
+          !Number.isFinite(binding.transform?.scale) ||
+          binding.transform.scale <= 0 ||
+          typeof binding.followSlotColor !== "boolean"
+        ) {
+          failures.push(
+            `source manifest ${symbol}.valuePresentation.text.tiers[${index}] is invalid.`,
+          );
+        }
       }
     }
     for (const [state, suffix] of [
@@ -328,6 +344,10 @@ function verifySourceContract() {
         join(SOURCE_ROOT, `${presentation.text.prefix.slice(2)}${value}.png`),
       );
     }
+  }
+  for (const dependency of readValueImageStringDependencies(manifest)) {
+    assertFile(dependency.manifestPath);
+    for (const glyphPath of dependency.glyphPaths) assertFile(glyphPath);
   }
   const atlasFirstLine = readFileSync(join(SOURCE_ROOT, "Symbol.atlas"), "utf8")
     .split(/\r?\n/)
@@ -658,6 +678,25 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
       );
     }
   }
+  for (const dependency of readValueImageStringDependencies(manifest)) {
+    assertDistContainsSourceAssetExactlyOnce(
+      assetNames,
+      dependency.manifestPath,
+    );
+    for (const glyphPath of dependency.glyphPaths) {
+      assertDistContainsSourceAssetExactlyOnce(assetNames, glyphPath);
+    }
+  }
+  for (const entry of Object.values(manifest.symbols ?? {})) {
+    const presentation = entry.valuePresentation;
+    if (presentation?.text?.type !== "image-string") continue;
+    for (const value of presentation.defaultValues ?? []) {
+      assertDistExcludesSourceAsset(
+        assetNames,
+        join(SOURCE_ROOT, `${value}.png`),
+      );
+    }
+  }
   for (const project of ["bigwin", "superwin", "megawin"]) {
     assertOne(
       assetNames,
@@ -695,19 +734,21 @@ function readValuePresentationResources(manifest) {
   const resources = [];
   const seen = new Set();
   for (const [symbol, entry] of Object.entries(manifest.symbols ?? {})) {
-    const slot = entry.valuePresentation?.text?.slot;
+    const text = entry.valuePresentation?.text;
     const activeSpineAnimationNames = Object.values(entry.animations ?? {})
       .filter((animation) => animation?.kind === "activeSpine")
       .map((animation) => animation.playback?.animationName);
-    if (entry.valuePresentation && (!slot || typeof slot !== "string")) {
-      failures.push(
-        `${symbol}.valuePresentation.text.slot must be configured.`,
-      );
-    }
     for (const [index, tier] of (
       entry.valuePresentation?.tiers ?? []
     ).entries()) {
       const animation = tier.animation;
+      const slot =
+        text?.type === "image-string" ? text.tiers?.[index]?.slot : text?.slot;
+      if (!slot || typeof slot !== "string") {
+        failures.push(
+          `${symbol}.valuePresentation tier ${index} text slot must be configured.`,
+        );
+      }
       if (
         animation?.kind !== "spine" ||
         animation.playback?.mode !== "animation" ||
@@ -736,6 +777,119 @@ function readValuePresentationResources(manifest) {
     }
   }
   return resources;
+}
+
+function readValueImageStringDependencies(manifest) {
+  const resources = new Map();
+  for (const entry of Object.values(manifest.symbols ?? {})) {
+    if (entry.valuePresentation?.text?.type !== "image-string") continue;
+    for (const binding of entry.valuePresentation.text.tiers ?? []) {
+      if (
+        typeof binding.resource !== "string" ||
+        !binding.resource.startsWith("./")
+      ) {
+        continue;
+      }
+      const manifestPath = join(SOURCE_ROOT, binding.resource.slice(2));
+      if (resources.has(manifestPath) || !existsSync(manifestPath)) continue;
+      const nested = JSON.parse(readFileSync(manifestPath, "utf8"));
+      if (
+        nested.version !== 1 ||
+        nested.kind !== "image-string" ||
+        !isExactKeySet(nested, [
+          "version",
+          "kind",
+          "id",
+          "metrics",
+          "glyphs",
+          "fixedAdvanceGroups",
+        ]) ||
+        typeof nested.glyphs !== "object" ||
+        nested.glyphs === null
+      ) {
+        failures.push(
+          `${binding.resource} must be an image-string v1 manifest.`,
+        );
+        continue;
+      }
+      const dependencyRoot = dirname(manifestPath);
+      const glyphPaths = [];
+      const seenPaths = new Set();
+      for (const [character, glyph] of Object.entries(nested.glyphs)) {
+        if (
+          Array.from(character).length !== 1 ||
+          !isExactKeySet(glyph, ["path", "size", "offset"]) ||
+          typeof glyph?.path !== "string" ||
+          !/^assets\/[a-z0-9][a-z0-9/_.-]*\.png$/u.test(glyph.path) ||
+          seenPaths.has(glyph.path)
+        ) {
+          failures.push(
+            `${binding.resource} glyph ${JSON.stringify(character)} is invalid.`,
+          );
+          continue;
+        }
+        seenPaths.add(glyph.path);
+        const glyphPath = resolve(dependencyRoot, glyph.path);
+        if (!isInside(dependencyRoot, glyphPath)) {
+          failures.push(
+            `${binding.resource} glyph path escapes its dependency.`,
+          );
+          continue;
+        }
+        glyphPaths.push(glyphPath);
+        if (!existsSync(glyphPath)) continue;
+        const size = readPngSize(glyphPath);
+        if (
+          !size ||
+          size.width !== glyph.size?.width ||
+          size.height !== glyph.size?.height
+        ) {
+          failures.push(
+            `${binding.resource} glyph ${glyph.path} decoded size does not match its manifest.`,
+          );
+        }
+      }
+      const expectedFiles = [manifestPath, ...glyphPaths]
+        .map((path) => relative(dependencyRoot, path).split("\\").join("/"))
+        .sort();
+      const actualFiles = listFiles(dependencyRoot)
+        .map((path) => relative(dependencyRoot, path).split("\\").join("/"))
+        .sort();
+      if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) {
+        failures.push(
+          `${binding.resource} dependency closure must be exact: expected ${expectedFiles.join(",")}, got ${actualFiles.join(",")}.`,
+        );
+      }
+      resources.set(manifestPath, { manifestPath, glyphPaths });
+    }
+  }
+  return [...resources.values()];
+}
+
+function isExactKeySet(value, keys) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    JSON.stringify(Object.keys(value).sort()) ===
+      JSON.stringify([...keys].sort())
+  );
+}
+
+function isInside(root, path) {
+  const child = relative(root, path);
+  return child !== "" && !child.startsWith("..") && !child.startsWith("/");
+}
+
+function readPngSize(path) {
+  const bytes = readFileSync(path);
+  if (
+    bytes.length < 24 ||
+    bytes.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a"
+  ) {
+    return null;
+  }
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
 function readWinAmountAssetNames() {
@@ -815,6 +969,22 @@ function assertDistContainsSourceAssetExactlyOnce(assetNames, sourceFile) {
   if (matches.length !== 1) {
     failures.push(
       `dist/assets must contain source asset content exactly once for ${relative(SOURCE_ROOT, sourceFile)}, got ${matches.length}.`,
+    );
+  }
+}
+
+function assertDistExcludesSourceAsset(assetNames, sourceFile) {
+  if (!existsSync(sourceFile)) return;
+  const sourceBytes = readFileSync(sourceFile);
+  const extension = sourceFile.split(".").at(-1);
+  const matches = assetNames.filter(
+    (name) =>
+      name.endsWith(`.${extension}`) &&
+      readFileSync(join(DIST_ASSETS, name)).equals(sourceBytes),
+  );
+  if (matches.length !== 0) {
+    failures.push(
+      `dist/assets must not contain legacy value-image content for ${relative(SOURCE_ROOT, sourceFile)}.`,
     );
   }
 }

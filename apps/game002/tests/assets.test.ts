@@ -1,5 +1,6 @@
 import { Assets, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
+import { assertSymbolValueDisplayResource } from "@slotclientengine/rendercore";
 import {
   createGame002SymbolAssetMapFromModules,
   createGame002SymbolRenderPriorityMapFromManifest,
@@ -9,9 +10,9 @@ import {
 } from "../src/assets.js";
 import {
   GAME002_SUPPORTED_SKINS,
-  getGame002SkinConfig,
   parseGame002SkinId,
 } from "../src/skin-config.js";
+import { getTestGame002SkinConfig } from "./value-resource-fixture.js";
 
 const EXPECTED_SYMBOLS = [
   "WL",
@@ -33,7 +34,7 @@ const PAY_SYMBOLS = ["WL", "H1", "H2", "L1", "L2", "L3", "L4"] as const;
 
 describe("game002-s3 assets", () => {
   it("exposes only explicit skin=1 and derives the 13 display symbols", () => {
-    const skin = getGame002SkinConfig("1");
+    const skin = getTestGame002SkinConfig();
 
     expect(GAME002_SUPPORTED_SKINS).toEqual(["1"]);
     expect(parseGame002SkinId("1")).toBe("1");
@@ -84,7 +85,7 @@ describe("game002-s3 assets", () => {
   });
 
   it("keeps PNG, Spine, scale and priority maps in one manifest-driven closure", () => {
-    const skin = getGame002SkinConfig("1");
+    const skin = getTestGame002SkinConfig();
     const assets = createGame002SymbolAssetMapFromModules({
       modules: skin.symbolModules,
       stateTextureManifest: skin.stateTextureManifest,
@@ -176,7 +177,7 @@ describe("game002-s3 assets", () => {
   });
 
   it("validates the exact display set and explicit manifest values", () => {
-    const skin = getGame002SkinConfig("1");
+    const skin = getTestGame002SkinConfig();
     const manifest = structuredClone(skin.stateTextureManifest) as {
       symbols: Record<string, Record<string, unknown>>;
     };
@@ -236,7 +237,7 @@ describe("game002-s3 assets", () => {
   });
 
   it("keeps every payable symbol on an explicit exact Spine Win once animation", () => {
-    const manifest = getGame002SkinConfig("1").stateTextureManifest as {
+    const manifest = getTestGame002SkinConfig().stateTextureManifest as {
       readonly symbols: Readonly<
         Record<
           string,
@@ -343,7 +344,7 @@ describe("game002-s3 assets", () => {
   });
 
   it("maps only exact Spine animations and leaves CN/effects out", () => {
-    const skin = getGame002SkinConfig("1");
+    const skin = getTestGame002SkinConfig();
     const symbols = (
       skin.stateTextureManifest as {
         symbols: Record<
@@ -446,16 +447,31 @@ describe("game002-s3 assets", () => {
       animationName: "Start",
       loop: false,
     });
-    expect(skin.symbolValuePresentationResources.CN.text).toEqual({
-      type: "image",
-      slot: "Num",
-      x: 0,
-      y: 0,
-      prefix: "./",
-    });
+    expect(skin.symbolValuePresentationResources.CN.text.type).toBe(
+      "image-string",
+    );
+    expect(
+      skin.symbolValuePresentationResources.CN.imageStringTierBindings?.map(
+        (binding) => binding.slot,
+      ),
+    ).toEqual(["Num", "Num", "Num", "Num"]);
     expect(
       Object.keys(skin.symbolValuePresentationResources.CN.textImageUrls),
-    ).toEqual(["1", "2", "5", "10", "25", "50", "100", "250", "500", "1000"]);
+    ).toEqual([]);
+    const cnResource = skin.symbolValuePresentationResources.CN;
+    expect(
+      Object.keys(
+        cnResource.imageStringTierBindings?.[0]?.resource.manifest.glyphs ?? {},
+      ),
+    ).toEqual(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+    for (const candidate of [9, 10, 99, 100, 999, 1000]) {
+      expect(
+        assertSymbolValueDisplayResource({
+          value: candidate,
+          resource: cnResource,
+        }),
+      ).toBeNull();
+    }
     expect(
       valuePresentation.valuePresentation.tiers.map(
         (tier) => tier.animation.playback,

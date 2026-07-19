@@ -15,13 +15,18 @@ import {
   type Game002FrameworkConfig,
 } from "./framework-config.js";
 import { formatServerUsdAmount } from "./money.js";
-import { getGame002SkinConfig, type Game002SkinConfig } from "./skin-config.js";
+import {
+  prepareGame002SkinConfig,
+  type Game002SkinConfig,
+} from "./skin-config.js";
+import type { SymbolValuePresentationResourceBundle } from "@slotclientengine/rendercore";
 import "./styles.css";
 
 export interface Game002PreparedLoadingState {
   readonly config: Game002FrameworkConfig;
   readonly skin: Game002SkinConfig;
   readonly liveSession: SlotGameLiveSessionLike;
+  readonly valuePresentationResourceBundle: SymbolValuePresentationResourceBundle;
 }
 
 export interface Game002EnteredGame {
@@ -33,9 +38,28 @@ export async function prepareGame002At99(options: {
   readonly search: string;
 }): Promise<Game002PreparedLoadingState> {
   const config = parseGame002FrameworkConfigFromQuery(options.search);
-  const skin = getGame002SkinConfig(config.skin);
-  const liveSession = await prepareSlotGameLiveSession({ live: config.live });
-  return Object.freeze({ config, skin, liveSession });
+  const [skinResult, liveResult] = await Promise.allSettled([
+    prepareGame002SkinConfig(config.skin),
+    prepareSlotGameLiveSession({ live: config.live }),
+  ]);
+  if (skinResult.status === "rejected" || liveResult.status === "rejected") {
+    if (skinResult.status === "fulfilled") {
+      await skinResult.value.valuePresentationResourceBundle.destroy();
+    }
+    if (liveResult.status === "fulfilled") liveResult.value.disconnect();
+    throw skinResult.status === "rejected"
+      ? skinResult.reason
+      : liveResult.status === "rejected"
+        ? liveResult.reason
+        : new Error("game002 preparation failed.");
+  }
+  return Object.freeze({
+    config,
+    skin: skinResult.value.skin,
+    liveSession: liveResult.value,
+    valuePresentationResourceBundle:
+      skinResult.value.valuePresentationResourceBundle,
+  });
 }
 
 export async function enterGame002(options: {
@@ -75,6 +99,7 @@ export async function enterGame002(options: {
         removeBeforeUnload = null;
         framework?.destroy();
         framework = null;
+        void options.prepared.valuePresentationResourceBundle.destroy();
       },
     });
   } catch (error) {
@@ -83,6 +108,7 @@ export async function enterGame002(options: {
     } else {
       options.prepared.liveSession.disconnect();
     }
+    await options.prepared.valuePresentationResourceBundle.destroy();
     throw error;
   }
 }

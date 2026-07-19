@@ -1,6 +1,7 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
 interface GeneratorModule {
@@ -147,6 +148,90 @@ describe("symbol value Vite resource generator", () => {
         check: false,
       }),
     ).rejects.toThrow(/art-250\.png/);
+  });
+
+  it("generates deduplicated nested ImgNumber manifests and exact glyph imports", async () => {
+    const generator = await loadGenerator();
+    const root = await mkdtemp(join(tmpdir(), "symbol-value-imgnumber-"));
+    const manifestPath = join(root, "manifest.json");
+    const outPath = join(root, "resources.ts");
+    await Promise.all([
+      writeFile(join(root, "bronze.json"), "{}"),
+      writeFile(join(root, "ruby.json"), "{}"),
+      writeFile(join(root, "shared.atlas"), "page.png\n"),
+      writeFile(join(root, "page.png"), "png"),
+      writeFile(join(root, "value.spinBlur.png"), "png"),
+      writeFile(join(root, "value.disabled.png"), "png"),
+    ]);
+    for (const id of ["small", "large"]) {
+      const directory = join(root, "dependencies", id);
+      await mkdir(join(directory, "assets"), { recursive: true });
+      await Promise.all(
+        ["0", "1"].map((digit) =>
+          sharp({
+            create: {
+              width: 2,
+              height: 3,
+              channels: 4,
+              background: "#ffffff",
+            },
+          })
+            .png()
+            .toFile(join(directory, "assets", `u003${digit}.png`)),
+        ),
+      );
+      await writeFile(
+        join(directory, "image-string.manifest.json"),
+        JSON.stringify({
+          version: 1,
+          kind: "image-string",
+          id,
+          metrics: { lineHeight: 3, letterSpacing: 0 },
+          glyphs: Object.fromEntries(
+            ["0", "1"].map((digit) => [
+              digit,
+              {
+                path: `assets/u003${digit}.png`,
+                size: { width: 2, height: 3 },
+                offset: { x: 0, y: 0 },
+              },
+            ]),
+          ),
+          fixedAdvanceGroups: [
+            {
+              id: "digits",
+              characters: ["0", "1"],
+              advanceWidth: 2,
+              align: "center",
+            },
+          ],
+        }),
+      );
+    }
+    const manifest = createManifest(["bronze.json", "ruby.json"]);
+    manifest.symbols.GOLD.valuePresentation.text = {
+      type: "image-string",
+      tiers: ["small", "large"].map((id) => ({
+        resource: `./dependencies/${id}/image-string.manifest.json`,
+        slot: `Num-${id}`,
+        anchor: { x: 0.5, y: 0.5 },
+        transform: { x: 0, y: 0, scale: 1 },
+        followSlotColor: true,
+      })),
+    };
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await expect(
+      generator.generateSymbolValueViteResources({
+        manifest: manifestPath,
+        out: outPath,
+        check: false,
+      }),
+    ).resolves.toMatchObject({ resourceCount: 12 });
+    const source = await readFile(outPath, "utf8");
+    expect(source).toContain("symbolValueImageStringManifestModules");
+    expect(source).toContain("symbolValueImageStringImageModules");
+    expect(source.match(/u0030\.png\?url/gu)).toHaveLength(2);
+    expect(source).not.toContain("value-image");
   });
 
   it("rejects invalid bounds, unknown fields, non-Spine tiers and path escape", async () => {

@@ -713,69 +713,145 @@ function validatePreservedValuePresentation(symbol, value) {
   );
   const text = assertRecord(record.text, `${symbol}.valuePresentation.text`);
   const textType = text.type ?? "font";
-  if (textType !== "font" && textType !== "image") {
+  if (
+    textType !== "font" &&
+    textType !== "image" &&
+    textType !== "image-string"
+  ) {
     throw new Error(`${symbol}.valuePresentation.text.type is invalid.`);
   }
   assertOnlyKnownKeys(
     text,
     `${symbol}.valuePresentation.text`,
-    textType === "image"
-      ? ["type", "slot", "x", "y", "prefix"]
-      : [
-          "type",
-          "slot",
-          "x",
-          "y",
-          "fontFamily",
-          "fontSize",
-          "fontWeight",
-          "fill",
-          "stroke",
-          "strokeWidth",
-        ],
+    textType === "image-string"
+      ? ["type", "tiers"]
+      : textType === "image"
+        ? ["type", "slot", "x", "y", "prefix"]
+        : [
+            "type",
+            "slot",
+            "x",
+            "y",
+            "fontFamily",
+            "fontSize",
+            "fontWeight",
+            "fill",
+            "stroke",
+            "strokeWidth",
+          ],
   );
-  const textBase = {
-    type: textType,
-    slot: assertNonEmptyString(text.slot, `${symbol}.slot`),
-    x: assertFiniteNumber(text.x, `${symbol}.text.x`),
-    y: assertFiniteNumber(text.y, `${symbol}.text.y`),
-  };
   const preservedText =
-    textType === "image"
+    textType === "image-string"
       ? Object.freeze({
-          ...textBase,
-          prefix: assertManifestPathPrefix(
-            text.prefix,
-            `${symbol}.text.prefix`,
+          type: "image-string",
+          tiers: validatePreservedValueImageStringBindings(
+            symbol,
+            text.tiers,
+            tiers.length,
           ),
         })
-      : Object.freeze({
-          ...textBase,
-          fontFamily: assertNonEmptyString(
-            text.fontFamily,
-            `${symbol}.fontFamily`,
-          ),
-          fontSize: assertFinitePositiveNumber(
-            text.fontSize,
-            `${symbol}.fontSize`,
-          ),
-          fontWeight: assertNonEmptyString(
-            text.fontWeight,
-            `${symbol}.fontWeight`,
-          ),
-          fill: assertNonEmptyString(text.fill, `${symbol}.fill`),
-          stroke: assertNonEmptyString(text.stroke, `${symbol}.stroke`),
-          strokeWidth: assertFinitePositiveNumber(
-            text.strokeWidth,
-            `${symbol}.strokeWidth`,
-          ),
-        });
+      : textType === "image"
+        ? Object.freeze({
+            type: "image",
+            slot: assertNonEmptyString(text.slot, `${symbol}.slot`),
+            x: assertFiniteNumber(text.x, `${symbol}.text.x`),
+            y: assertFiniteNumber(text.y, `${symbol}.text.y`),
+            prefix: assertManifestPathPrefix(
+              text.prefix,
+              `${symbol}.text.prefix`,
+            ),
+          })
+        : Object.freeze({
+            type: "font",
+            slot: assertNonEmptyString(text.slot, `${symbol}.slot`),
+            x: assertFiniteNumber(text.x, `${symbol}.text.x`),
+            y: assertFiniteNumber(text.y, `${symbol}.text.y`),
+            fontFamily: assertNonEmptyString(
+              text.fontFamily,
+              `${symbol}.fontFamily`,
+            ),
+            fontSize: assertFinitePositiveNumber(
+              text.fontSize,
+              `${symbol}.fontSize`,
+            ),
+            fontWeight: assertNonEmptyString(
+              text.fontWeight,
+              `${symbol}.fontWeight`,
+            ),
+            fill: assertNonEmptyString(text.fill, `${symbol}.fill`),
+            stroke: assertNonEmptyString(text.stroke, `${symbol}.stroke`),
+            strokeWidth: assertFinitePositiveNumber(
+              text.strokeWidth,
+              `${symbol}.strokeWidth`,
+            ),
+          });
   return Object.freeze({
     defaultValues,
     reelStates: Object.freeze(preservedReelStates),
     tiers,
     text: preservedText,
   });
+}
+
+function validatePreservedValueImageStringBindings(symbol, value, tierCount) {
+  if (!Array.isArray(value) || value.length !== tierCount) {
+    throw new Error(
+      `${symbol}.valuePresentation.text.tiers length must equal ${tierCount}.`,
+    );
+  }
+  return Object.freeze(
+    value.map((rawBinding, index) => {
+      const label = `${symbol}.valuePresentation.text.tiers[${index}]`;
+      const binding = assertRecord(rawBinding, label);
+      assertOnlyKnownKeys(binding, label, [
+        "resource",
+        "slot",
+        "anchor",
+        "transform",
+        "followSlotColor",
+      ]);
+      const resource = assertNonEmptyString(
+        binding.resource,
+        `${label}.resource`,
+      );
+      if (
+        !resource.startsWith("./") ||
+        resource.includes("\\") ||
+        resource.includes("../") ||
+        !resource.endsWith("/image-string.manifest.json")
+      ) {
+        throw new Error(
+          `${label}.resource must be a contained local image-string manifest path.`,
+        );
+      }
+      const anchor = assertRecord(binding.anchor, `${label}.anchor`);
+      assertOnlyKnownKeys(anchor, `${label}.anchor`, ["x", "y"]);
+      const anchorX = assertFiniteNumber(anchor.x, `${label}.anchor.x`);
+      const anchorY = assertFiniteNumber(anchor.y, `${label}.anchor.y`);
+      if (anchorX < 0 || anchorX > 1 || anchorY < 0 || anchorY > 1) {
+        throw new Error(`${label}.anchor x/y must be within 0..1.`);
+      }
+      const transform = assertRecord(binding.transform, `${label}.transform`);
+      assertOnlyKnownKeys(transform, `${label}.transform`, ["x", "y", "scale"]);
+      if (typeof binding.followSlotColor !== "boolean") {
+        throw new Error(`${label}.followSlotColor must be boolean.`);
+      }
+      return Object.freeze({
+        resource,
+        slot: assertNonEmptyString(binding.slot, `${label}.slot`),
+        anchor: Object.freeze({ x: anchorX, y: anchorY }),
+        transform: Object.freeze({
+          x: assertFiniteNumber(transform.x, `${label}.transform.x`),
+          y: assertFiniteNumber(transform.y, `${label}.transform.y`),
+          scale: assertFinitePositiveNumber(
+            transform.scale,
+            `${label}.transform.scale`,
+          ),
+        }),
+        followSlotColor: binding.followSlotColor,
+      });
+    }),
+  );
 }
 
 function validatePreservedRenderPriority(symbol, value) {

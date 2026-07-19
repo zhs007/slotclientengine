@@ -209,7 +209,9 @@ export function applyResourceBinding(
           playback: { animationName: string };
         };
       }>;
-      text: { slot: string };
+      text:
+        | { type: "font" | "image"; slot: string }
+        | { type: "image-string"; tiers: Array<{ slot: string }> };
     };
     const tier = value.tiers[context.tierIndex];
     if (!tier) throw new Error(`value tier ${context.tierIndex + 1} 不存在。`);
@@ -229,7 +231,12 @@ export function applyResourceBinding(
     }
     if (context.field === "skeleton") {
       tier.animation.playback.animationName = "";
-      value.text.slot = "";
+      if (value.text.type === "image-string") {
+        const binding = value.text.tiers[context.tierIndex];
+        if (binding) binding.slot = "";
+      } else {
+        value.text.slot = "";
+      }
     }
     setValuePresentation(project, context.symbol, value as never);
     return;

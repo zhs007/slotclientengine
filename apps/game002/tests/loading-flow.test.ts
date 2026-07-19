@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Assets } from "pixi.js";
 import {
   GAME002_LIVE_SERVER_URL,
   parseGame002FrameworkConfigFromQuery,
@@ -26,6 +27,30 @@ describe("game002 loading flow", () => {
   });
 
   it("prepares one live session at 99 percent without creating framework", async () => {
+    const sizes = [
+      [36, 49],
+      [26, 48],
+      [37, 48],
+      [36, 49],
+      [35, 48],
+      [33, 49],
+      [34, 49],
+      [35, 48],
+      [35, 49],
+      [34, 48],
+    ] as const;
+    const loadTexture = vi
+      .spyOn(Assets, "load")
+      .mockImplementation(async (source) => {
+        const unresolved = Array.isArray(source) ? source[0] : source;
+        const url =
+          typeof unresolved === "string"
+            ? unresolved
+            : String((unresolved as { src?: unknown } | undefined)?.src ?? "");
+        const digit = Number(/u003([0-9])\.png/u.exec(url)?.[1]);
+        const [width, height] = sizes[digit] ?? [];
+        return { width, height } as never;
+      });
     const liveSession = createLiveSession();
     frameworkMocks.prepareSlotGameLiveSession.mockResolvedValue(liveSession);
     const { prepareGame002At99 } = await import("../src/game-entry.js");
@@ -43,6 +68,8 @@ describe("game002 loading flow", () => {
       }),
     });
     expect(frameworkMocks.createSlotGameFramework).not.toHaveBeenCalled();
+    await prepared.valuePresentationResourceBundle.destroy();
+    loadTexture.mockRestore();
   });
 
   it("rejects legacy serverUrl and old skins before live preparation", async () => {
@@ -67,10 +94,19 @@ describe("game002 loading flow", () => {
     const framework = createFramework();
     frameworkMocks.createSlotGameFramework.mockReturnValue(framework);
     const { enterGame002 } = await import("../src/game-entry.js");
+    const createValueBundle = () => ({
+      resources: {},
+      destroy: vi.fn(async () => undefined),
+    });
 
     const entered = await enterGame002({
       root: document.createElement("div"),
-      prepared: { config, skin, liveSession },
+      prepared: {
+        config,
+        skin,
+        liveSession,
+        valuePresentationResourceBundle: createValueBundle(),
+      },
     });
     expect(frameworkMocks.createSlotGameFramework).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -112,7 +148,12 @@ describe("game002 loading flow", () => {
     await expect(
       enterGame002({
         root: document.createElement("div"),
-        prepared: { config, skin, liveSession },
+        prepared: {
+          config,
+          skin,
+          liveSession,
+          valuePresentationResourceBundle: createValueBundle(),
+        },
       }),
     ).rejects.toThrow(/framework failed/);
     expect(failingFramework.destroy).toHaveBeenCalledOnce();
@@ -124,7 +165,12 @@ describe("game002 loading flow", () => {
     await expect(
       enterGame002({
         root: document.createElement("div"),
-        prepared: { config, skin, liveSession: thrownSession },
+        prepared: {
+          config,
+          skin,
+          liveSession: thrownSession,
+          valuePresentationResourceBundle: createValueBundle(),
+        },
       }),
     ).rejects.toThrow(/create failed/);
     expect(thrownSession.disconnect).toHaveBeenCalledOnce();

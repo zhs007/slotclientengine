@@ -10,7 +10,7 @@
 
 loading 资源 ID 必须唯一且 URL 不能为空。Vite 发布构建允许把内容相同的多个逻辑图片合并为同一个产物 URL；这种情况下 loading 清单保留第一个资源并只预加载该 URL 一次，不能把生产态 content-addressed URL 合并误判成资源重复。运行时的 VNI project 仍保留各自的逻辑资源路径映射。
 
-manifest 精确引用的 CN valuePresentation Pixi 纹理（共享 `Symbol.png`、`CN.spinBlur.png`、`CN.disabled.png` 和完整数值图片）在 loading 0%–99% 阶段通过动态 Pixi `Assets.load()` 注册；99% 回调和 100% 进入游戏都在这些 Promise 完成之后。这样 defaultScene 创建 value controller 时复用 Pixi Cache，不会先显示透明 CN 占位再补出 Coin。JSON/atlas 和无关 win-amount 图片继续使用 gameloading 默认 loader，不把整套美术提前常驻为 GPU Texture。上述纹理进入游戏本来就必须驻留，因此只前移加载时机，不增加游戏稳态纹理集合。
+manifest 精确引用的 CN valuePresentation Pixi 纹理（共享 `Symbol.png`、`CN.spinBlur.png`、`CN.disabled.png` 和 `cn-digits` glyph）在 loading 0%–99% 阶段通过动态 Pixi `Assets.load()` 注册；99% 回调并行准备可销毁 value resource bundle 与唯一 live session，100% 后才创建 framework。这样 defaultScene 创建 value controller 时直接复用 Pixi Cache，不会先显示透明 CN 再补数字；任一准备失败会回滚另一方。
 
 live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`。`gamecode` 和下列运行参数来自 URL，不从环境变量、cookie 或 localStorage 推导；其中 `lines` 是 game002 固定游戏合同，URL 只能显式提供 `30`，其它值会在 loading 99% 阶段失败，不能进入 spin：
 
@@ -41,11 +41,11 @@ http://127.0.0.1:5207/?skin=1&gamecode=GAME_CODE&token=TOKEN&businessid=guest&cl
 
 ## CN otherScene value presentation
 
-第 0 step 触发 `bg-gencoins` 时，app 通过 gameframeworks facade 最多读取一个 `usedOtherScenes`。服务器在 auxiliary matrix 没有变化时可以省略该引用，此时不生成 CN value update；实际提供矩阵时，目标 scene 的 `CN` 格必须对应 positive safe integer，非 `CN` 格必须精确为 `0`。缺 basic data、超过一个引用、尺寸漂移、非法值或 code 不匹配都会在启动 reel 前或展示前显式失败。raw value 不走美元 formatter；当前通过完整数值图片显示。
+第 0 step 触发 `bg-gencoins` 时，app 通过 gameframeworks facade 最多读取一个 `usedOtherScenes`。服务器在 auxiliary matrix 没有变化时可以省略该引用，此时不生成 CN value update；实际提供矩阵时，目标 scene 的 `CN` 格必须对应 positive safe integer，非 `CN` 格必须精确为 `0`。缺 basic data、超过一个引用、尺寸漂移、非法值或 code 不匹配都会在启动 reel 前或展示前显式失败。raw value 不走美元 formatter，直接由 ImgNumber 渲染 `String(value)`。
 
-档数、`maxExclusive`、默认候选数组、Spine skeleton/atlas/texture、animation、数字显示类型、图片前缀、`slot`/local offset 唯一来自 `assets/game002-s3/symbol-state-textures.manifest.json`。当前默认候选为 `[1,2,5,10,25,50,100,250,500,1000]`，档位为 `<10`、`<100`、`<1000`、无上限四档；`text.type=image,prefix=./` 把完整值映射为 `./${value}.png`。这 10 张图片进入精确 Vite/loading/dist 闭包，并由 rendercore 使用 Pixi `Assets.load<Texture>()` 真正加载后再创建 Sprite，不依赖 `Texture.from(URL)` 的 cache 假设；服务器返回其它值、图片缺失或加载失败时，在 spin 前 prepare 或初始 reel update 显式失败，不回退 font。defaultScene 没有 otherScene 时，每个 CN 从候选数组取一个随机值；spin 的本地临时轮带也为每个 CN occurrence 固定一个候选值，使档位 Spine/数字图片跟随 reel slot 滚动而不是空白。目标 endpoint 在服务器实际提供 gencoins otherScene 时写入其值；未提供 value update 时沿用本地/既有 occurrence 语义，不能把省略误判成协议错误。数字图片绑定每个 skeleton 真实存在的 `Num` slot，继承 slot/bone 动画；production TypeScript 不固定候选、四档、`CN_数字` 或 slot 名。CN value 属于实际 main-reel symbol，world 顺序仍为 background、main reels、`bg-win` carousel、global win-amount。
+档数、`maxExclusive`、默认候选数组、Spine skeleton/atlas/texture、animation 和数字 binding 唯一来自 `assets/game002-s3/symbol-state-textures.manifest.json`。当前候选为 `[1,2,5,10,25,50,100,250,500,1000]`，档位为 `<10`、`<100`、`<1000`、无上限；四档都显式引用 `./dependencies/image-strings/cn-digits/image-string.manifest.json` 和各自 skeleton 的 `Num` slot。dependency 使用视觉核对后的真实 `0..9` glyph，lineHeight `49`、fixed advance `37`，因此任意合法十进制 positive safe integer 均具备字符闭包。旧 `1.png..1000.png` 源文件仍保留但已不属于 generated/loading/dist runtime closure。缺 glyph、slot、resource 或尺寸漂移显式失败，不回退完整图片或字体。每个 CN occurrence 拥有独立 renderer，但共享 glyph resource；default/local strip/otherScene 的 occurrence/value 搬运语义不变。
 
-逐格停轴动画由 `RenderGridCellReelSet` 统一调度：每格落地时，manifest 显式配置了 appear 的 symbol 先播放大小写精确的 `Start`，once 完成后回到 normal，整轮完成边界会等待落地 appear 结束。当前除 `BN` 外的主 display symbol 都配置 `Start`；`BN` skeleton 没有 `Start`，因此不触发 appear，也不使用 builtin/default fallback。normal animation 按资源真实能力配置：`CO` 与 `CN_1..CN_4` 使用 `Loop`，其它普通主 symbol 使用 `Idle`。CN 的普通中奖 `win once` 已移除；coin collect 由 manifest 扩展 state 驱动同一 tier player 执行 `Win_Start once -> Win loop -> Collect once -> End once`，数字图片始终挂在同一 `Num` slot 下；值不变、状态切换和 dropdown 搬运都不会二次 set/create/attach。
+逐格停轴动画由 `RenderGridCellReelSet` 统一调度：每格落地时，manifest 显式配置了 appear 的 symbol 先播放大小写精确的 `Start`，once 完成后回到 normal，整轮完成边界会等待落地 appear 结束。当前除 `BN` 外的主 display symbol 都配置 `Start`；`BN` skeleton 没有 `Start`，因此不触发 appear，也不使用 builtin/default fallback。normal animation 按资源真实能力配置：`CO` 与 `CN_1..CN_4` 使用 `Loop`，其它普通主 symbol 使用 `Idle`。CN collect 由 manifest 扩展 state 驱动同一 tier player 执行 `Win_Start once -> Win loop -> Collect once -> End once`；ImgNumber 始终作为 slot object 挂在同一 `Num` slot 下，值不变、状态切换和 dropdown 搬运都不会二次 create/attach 或重播等价 Loop。
 
 - scale、render priority 和 animation 都从 `assets/game002-s3/symbol-state-textures.manifest.json` 派生；app 不维护第二份表。
 
@@ -105,6 +105,6 @@ pnpm --filter game002 build
 pnpm --filter game002 release:check
 ```
 
-生产产物在 `apps/game002/dist/`。`release:check` 会检查相对 URL、敏感默认值、background manifest/4.3 skeleton/8-page atlas 的 source 与 dist 字节闭包、12 个普通 normal、13 组 reel state 贴图、12 个普通 symbol Spine JSON、CN tier skeleton/slot、Nearwin1/2 reel-effect skeleton/duration、symbol atlas/texture、win-amount manifest/projects/assets，并继续排除 Nearwin3/WM_Fx、CN 顶层 normal 和旧 skin 目录。`BG.png` 与 `BG_2.png` 当前源字节相同，Vite 可只输出一份 hashed bytes；两页运行时 URL 仍通过稳定 `spineAtlasPage` query 保持一一对应，parser 禁止两个 page 直接共用同一 URL。所有资源都在 loading 99% 前闭合，100% 后才创建对应 player/framework/Pixi。子目录部署必须保留尾斜杠，例如 `https://cdn.example.com/game002/?skin=1&...`。
+生产产物在 `apps/game002/dist/`。`release:check` 除既有背景、symbol、effect 和 win-amount 合同外，还逐档校验 CN tier skeleton/slot、nested image-string v1 exact source closure、glyph decoded size 与 source/dist 字节；并断言旧完整值图片不进入 dist。所有 glyph texture 在 loading 99% 前闭合，100% 后才创建 player/framework/Pixi。
 
 常见显式失败包括：query 缺失/重复/非法、旧 skin 或 `serverUrl`、资源或 loading closure 缺项、manifest unknown field/路径/尺寸/focus/state/transition 非法、Spine 非 4.3、atlas page/texture/animation 不匹配、并发背景切换、scene 不是 `6 x 9`、未知 symbol、金额输入非法、最终可见 scene 不一致、live/collect 失败。不得切换到静态背景、首帧、mock、旧 skin、placeholder、BN 兜底或 Spine 4.2/3.8 fallback。

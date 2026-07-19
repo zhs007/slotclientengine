@@ -655,11 +655,18 @@ export function removeImageStringDependency(
 ): void {
   const dependency = project.imageStringDependencies.get(id);
   if (!dependency) throw new Error(`image-string dependency 不存在：${id}。`);
-  const usedBy = [...project.symbols.values()].flatMap((symbol) =>
-    symbol.imageStringNodes
+  const usedBy = [...project.symbols.values()].flatMap((symbol) => [
+    ...symbol.imageStringNodes
       .filter((node) => imageStringDependencyId(node.resource) === id)
-      .map((node) => `${symbol.symbol}.${node.name}`),
-  );
+      .map((node) => `${symbol.symbol}.imageStringNodes.${node.name}`),
+    ...(symbol.valuePresentation?.text.type === "image-string"
+      ? symbol.valuePresentation.text.tiers.flatMap((binding, index) =>
+          imageStringDependencyId(binding.resource) === id
+            ? [`${symbol.symbol}.valuePresentation.text.tiers[${index}]`]
+            : [],
+        )
+      : []),
+  ]);
   if (usedBy.length > 0) {
     throw new Error(
       `image-string dependency ${id} 仍被引用：${usedBy.join("、")}。`,
@@ -784,6 +791,14 @@ export function getAssetReferences(
           location: `${symbol.symbol}.valuePresentation`,
         });
       });
+      if (symbol.valuePresentation.text.type === "image-string") {
+        symbol.valuePresentation.text.tiers.forEach((binding, index) => {
+          references.push({
+            path: stripLocalRef(binding.resource),
+            location: `${symbol.symbol}.valuePresentation.text.tiers[${index}]`,
+          });
+        });
+      }
     }
     for (const node of symbol.imageStringNodes) {
       references.push({

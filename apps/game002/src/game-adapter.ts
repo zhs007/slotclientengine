@@ -191,6 +191,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
             symbolAnimationCapabilities: skin.symbolAnimationCapabilities,
             symbolStatePreset: skin.symbolStatePreset,
             animationResolver: skin.symbolAnimationResolver,
+            symbolValuePresentationResources:
+              skin.symbolValuePresentationResources,
             timing: skin.reelManifest.spin.timing,
             reelManifest: skin.reelManifest,
             reelEffectResources: skin.reelEffectResources,

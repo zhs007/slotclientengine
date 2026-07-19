@@ -1,6 +1,8 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, extname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { format } from "prettier";
+import sharp from "sharp";
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 
@@ -117,8 +119,60 @@ export async function generateSymbolValueViteResources(options) {
         manifestResourcePath,
       );
     }
+    const nestedByPath = new Map();
+    for (const binding of presentation.imageStringBindings) {
+      let nested = nestedByPath.get(binding.resource);
+      if (!nested) {
+        const manifestResource = await addResource(
+          resources,
+          seen,
+          manifestRoot,
+          "imageStringManifest",
+          binding.resource,
+        );
+        nested = validateImageStringManifest(
+          JSON.parse(await readFile(manifestResource.absolutePath, "utf8")),
+          binding.resource,
+        );
+        nestedByPath.set(binding.resource, nested);
+        for (const glyph of Object.values(nested.glyphs)) {
+          const glyphManifestPath = resolveNestedManifestPath(
+            binding.resource,
+            glyph.path,
+          );
+          const glyphResource = await addResource(
+            resources,
+            seen,
+            manifestRoot,
+            "imageStringGlyph",
+            glyphManifestPath,
+          );
+          await validateGlyphImageSize(glyphResource.absolutePath, glyph.size);
+        }
+      }
+    }
+    for (const value of presentation.defaultValues) {
+      if (presentation.imageStringBindings.length === 0) break;
+      const tierIndex = presentation.tiers.findIndex(
+        (tier) => tier.maxExclusive === undefined || value < tier.maxExclusive,
+      );
+      const binding = presentation.imageStringBindings[tierIndex];
+      const nested = binding && nestedByPath.get(binding.resource);
+      if (!binding || !nested) {
+        throw new Error(
+          `${symbol} default value ${value} has no ImgNumber tier binding.`,
+        );
+      }
+      validateImageStringText(
+        String(value),
+        nested,
+        `${symbol} default value ${value}`,
+      );
+    }
   }
-  const source = renderGeneratedSource(resources, outPath);
+  const source = await format(renderGeneratedSource(resources, outPath), {
+    parser: "typescript",
+  });
   if (options.check) {
     let current;
     try {
@@ -297,37 +351,52 @@ function validatePresentation(symbol, value, states) {
         throw new Error(`${symbol} tier transform.scale must be positive.`);
       }
     }
-    return { animation };
+    return {
+      ...(tier.maxExclusive === undefined
+        ? {}
+        : { maxExclusive: tier.maxExclusive }),
+      animation,
+    };
   });
   const text = assertRecord(record.text, `${symbol}.valuePresentation.text`);
   const textType = text.type ?? "font";
-  if (textType !== "font" && textType !== "image") {
-    throw new Error(`${symbol} value text type must be font or image.`);
+  if (
+    textType !== "font" &&
+    textType !== "image" &&
+    textType !== "image-string"
+  ) {
+    throw new Error(
+      `${symbol} value text type must be font, image or image-string.`,
+    );
   }
   assertOnlyKnownKeys(
     text,
     `${symbol}.valuePresentation.text`,
-    textType === "image"
-      ? ["type", "slot", "x", "y", "prefix"]
-      : [
-          "type",
-          "slot",
-          "x",
-          "y",
-          "fontFamily",
-          "fontSize",
-          "fontWeight",
-          "fill",
-          "stroke",
-          "strokeWidth",
-        ],
+    textType === "image-string"
+      ? ["type", "tiers"]
+      : textType === "image"
+        ? ["type", "slot", "x", "y", "prefix"]
+        : [
+            "type",
+            "slot",
+            "x",
+            "y",
+            "fontFamily",
+            "fontSize",
+            "fontWeight",
+            "fill",
+            "stroke",
+            "strokeWidth",
+          ],
   );
-  if (typeof text.slot !== "string" || text.slot.trim().length === 0) {
-    throw new Error(`${symbol} value text slot must be non-empty.`);
-  }
-  for (const key of ["x", "y"]) {
-    if (typeof text[key] !== "number" || !Number.isFinite(text[key])) {
-      throw new Error(`${symbol} value text ${key} must be finite.`);
+  if (textType !== "image-string") {
+    if (typeof text.slot !== "string" || text.slot.trim().length === 0) {
+      throw new Error(`${symbol} value text slot must be non-empty.`);
+    }
+    for (const key of ["x", "y"]) {
+      if (typeof text[key] !== "number" || !Number.isFinite(text[key])) {
+        throw new Error(`${symbol} value text ${key} must be finite.`);
+      }
     }
   }
   if (textType === "font") {
@@ -353,7 +422,97 @@ function validatePresentation(symbol, value, states) {
             `${assertManifestPathPrefix(text.prefix, `${symbol} value text prefix`)}${candidate}.png`,
         )
       : [];
-  return { reelStateTextures, tiers, textImagePaths };
+  const imageStringBindings =
+    textType === "image-string"
+      ? validateImageStringBindings(symbol, text.tiers, tiers.length)
+      : [];
+  return {
+    defaultValues,
+    reelStateTextures,
+    tiers,
+    textImagePaths,
+    imageStringBindings,
+  };
+}
+
+function validateImageStringBindings(symbol, value, tierCount) {
+  if (!Array.isArray(value) || value.length !== tierCount) {
+    throw new Error(
+      `${symbol} value text tiers length must equal valuePresentation tiers length (${tierCount}).`,
+    );
+  }
+  return value.map((rawBinding, index) => {
+    const label = `${symbol}.valuePresentation.text.tiers[${index}]`;
+    const binding = assertRecord(rawBinding, label);
+    assertOnlyKnownKeys(binding, label, [
+      "resource",
+      "slot",
+      "anchor",
+      "transform",
+      "followSlotColor",
+    ]);
+    const resource = assertImageStringResourcePath(
+      binding.resource,
+      `${label}.resource`,
+    );
+    if (typeof binding.slot !== "string" || binding.slot.trim().length === 0) {
+      throw new Error(`${label}.slot must be non-empty.`);
+    }
+    const anchor = assertRecord(binding.anchor, `${label}.anchor`);
+    assertOnlyKnownKeys(anchor, `${label}.anchor`, ["x", "y"]);
+    for (const key of ["x", "y"]) {
+      if (
+        typeof anchor[key] !== "number" ||
+        !Number.isFinite(anchor[key]) ||
+        anchor[key] < 0 ||
+        anchor[key] > 1
+      ) {
+        throw new Error(`${label}.anchor.${key} must be within 0..1.`);
+      }
+    }
+    const transform = assertRecord(binding.transform, `${label}.transform`);
+    assertOnlyKnownKeys(transform, `${label}.transform`, ["x", "y", "scale"]);
+    for (const key of ["x", "y"]) {
+      if (
+        typeof transform[key] !== "number" ||
+        !Number.isFinite(transform[key])
+      ) {
+        throw new Error(`${label}.transform.${key} must be finite.`);
+      }
+    }
+    if (
+      typeof transform.scale !== "number" ||
+      !Number.isFinite(transform.scale) ||
+      transform.scale <= 0
+    ) {
+      throw new Error(`${label}.transform.scale must be positive.`);
+    }
+    if (typeof binding.followSlotColor !== "boolean") {
+      throw new Error(`${label}.followSlotColor must be boolean.`);
+    }
+    return {
+      resource,
+      slot: binding.slot,
+      anchor: { x: anchor.x, y: anchor.y },
+      transform: { x: transform.x, y: transform.y, scale: transform.scale },
+      followSlotColor: binding.followSlotColor,
+    };
+  });
+}
+
+function assertImageStringResourcePath(value, label) {
+  if (
+    typeof value !== "string" ||
+    !value.startsWith("./") ||
+    value.includes("\\") ||
+    value.includes("../") ||
+    !value.endsWith("/image-string.manifest.json")
+  ) {
+    throw new Error(
+      `${label} must be a contained local path to image-string.manifest.json.`,
+    );
+  }
+  return value;
 }
 
 async function addResource(
@@ -369,7 +528,17 @@ async function addResource(
       `Manifest resource "${manifestResourcePath}" is used as both ${existingKind} and ${kind}.`,
     );
   }
-  if (existingKind) return;
+  if (existingKind) {
+    return {
+      kind,
+      manifestPath: manifestResourcePath,
+      absolutePath: resolveManifestResource(
+        manifestRoot,
+        manifestResourcePath,
+        kind,
+      ),
+    };
+  }
   const absolutePath = resolveManifestResource(
     manifestRoot,
     manifestResourcePath,
@@ -377,7 +546,9 @@ async function addResource(
   );
   await access(absolutePath);
   seen.set(manifestResourcePath, kind);
-  resources.push({ kind, manifestPath: manifestResourcePath, absolutePath });
+  const resource = { kind, manifestPath: manifestResourcePath, absolutePath };
+  resources.push(resource);
+  return resource;
 }
 
 function resolveManifestResource(root, value, kind) {
@@ -398,8 +569,13 @@ function resolveManifestResource(root, value, kind) {
     texture: ".png",
     stateTexture: ".png",
     textImage: ".png",
+    imageStringManifest: ".json",
   }[kind];
-  if (extname(absolute) !== expected) {
+  if (
+    kind === "imageStringGlyph"
+      ? ![".png", ".webp"].includes(extname(absolute))
+      : extname(absolute) !== expected
+  ) {
     throw new Error(`${kind} path must end with ${expected}: ${value}.`);
   }
   return absolute;
@@ -413,6 +589,8 @@ function renderGeneratedSource(resources, outPath) {
     texture: [],
     stateTexture: [],
     textImage: [],
+    imageStringManifest: [],
+    imageStringGlyph: [],
   };
   const loading = [];
   let index = 0;
@@ -444,6 +622,21 @@ function renderGeneratedSource(resources, outPath) {
         `  ${JSON.stringify(resource.manifestPath)}: ${name}Raw,`,
       );
       loading.push(renderLoadingResource(resource.manifestPath, "atlas", name));
+    } else if (resource.kind === "imageStringManifest") {
+      imports.push(`import ${name}Data from ${JSON.stringify(specifier)};`);
+      imports.push(
+        `import ${name}Url from ${JSON.stringify(`${specifier}?url`)};`,
+      );
+      entries.imageStringManifest.push(
+        `  ${JSON.stringify(resource.manifestPath)}: ${name}Data,`,
+      );
+      loading.push(
+        renderLoadingResource(
+          resource.manifestPath,
+          "image-string-manifest",
+          name,
+        ),
+      );
     } else {
       imports.push(
         `import ${name}Url from ${JSON.stringify(`${specifier}?url`)};`,
@@ -458,18 +651,227 @@ function renderGeneratedSource(resources, outPath) {
             ? "state-texture"
             : resource.kind === "textImage"
               ? "value-image"
-              : "texture",
+              : resource.kind === "imageStringGlyph"
+                ? "image-string-glyph"
+                : "texture",
           name,
         ),
       );
     }
     index += 1;
   }
-  return `${imports.join("\n")}${imports.length ? "\n\n" : ""}// 此文件由 generate-symbol-value-vite-resources.mjs 生成，禁止手改。\nexport const symbolValueSpineSkeletonModules = Object.freeze({\n${entries.skeleton.join("\n")}\n});\nexport const symbolValueSpineAtlasModules = Object.freeze({\n${entries.atlas.join("\n")}\n});\nexport const symbolValueSpineTextureModules = Object.freeze({\n${entries.texture.join("\n")}\n});\nexport const symbolValueReelStateTextureModules = Object.freeze({\n${entries.stateTexture.join("\n")}\n});\nexport const symbolValueTextImageModules = Object.freeze({\n${entries.textImage.join("\n")}\n});\nexport const symbolValueLoadingResources = Object.freeze([\n${loading.join("\n")}\n]);\n`;
+  return `${imports.join("\n")}${imports.length ? "\n\n" : ""}// 此文件由 generate-symbol-value-vite-resources.mjs 生成，禁止手改。\nexport const symbolValueSpineSkeletonModules = Object.freeze({\n${entries.skeleton.join("\n")}\n});\nexport const symbolValueSpineAtlasModules = Object.freeze({\n${entries.atlas.join("\n")}\n});\nexport const symbolValueSpineTextureModules = Object.freeze({\n${entries.texture.join("\n")}\n});\nexport const symbolValueReelStateTextureModules = Object.freeze({\n${entries.stateTexture.join("\n")}\n});\nexport const symbolValueTextImageModules = Object.freeze({\n${entries.textImage.join("\n")}\n});\nexport const symbolValueImageStringManifestModules = Object.freeze({\n${entries.imageStringManifest.join("\n")}\n});\nexport const symbolValueImageStringImageModules = Object.freeze({\n${entries.imageStringGlyph.join("\n")}\n});\nexport const symbolValueLoadingResources = Object.freeze([\n${loading.join("\n")}\n]);\n`;
 }
 
 function renderLoadingResource(path, kind, name) {
   return `  Object.freeze({\n    path: ${JSON.stringify(path)},\n    kind: ${JSON.stringify(kind)},\n    url: ${name}Url,\n  }),`;
+}
+
+function resolveNestedManifestPath(manifestPath, assetPath) {
+  if (
+    typeof assetPath !== "string" ||
+    assetPath.startsWith("/") ||
+    assetPath.includes("\\") ||
+    assetPath.split("/").includes("..")
+  ) {
+    throw new Error(`Invalid nested image-string asset path: ${assetPath}.`);
+  }
+  const base = dirname(manifestPath.slice(2));
+  return `./${base}/${assetPath}`;
+}
+
+function validateImageStringManifest(value, label) {
+  const root = assertRecord(value, `${label} image-string manifest`);
+  assertExactKeys(root, `${label} image-string manifest`, [
+    "version",
+    "kind",
+    "id",
+    "metrics",
+    "glyphs",
+    "fixedAdvanceGroups",
+  ]);
+  if (root.version !== 1 || root.kind !== "image-string") {
+    throw new Error(`${label} must be an image-string v1 manifest.`);
+  }
+  if (
+    typeof root.id !== "string" ||
+    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(root.id)
+  ) {
+    throw new Error(`${label} image-string id must be kebab-case.`);
+  }
+  const metrics = assertRecord(root.metrics, `${label}.metrics`);
+  assertExactKeys(metrics, `${label}.metrics`, ["lineHeight", "letterSpacing"]);
+  if (
+    typeof metrics.lineHeight !== "number" ||
+    !Number.isFinite(metrics.lineHeight) ||
+    metrics.lineHeight <= 0 ||
+    typeof metrics.letterSpacing !== "number" ||
+    !Number.isFinite(metrics.letterSpacing) ||
+    metrics.letterSpacing < 0
+  ) {
+    throw new Error(`${label} image-string metrics are invalid.`);
+  }
+  const rawGlyphs = assertRecord(root.glyphs, `${label}.glyphs`);
+  if (Object.keys(rawGlyphs).length === 0) {
+    throw new Error(`${label} image-string glyphs must be non-empty.`);
+  }
+  const glyphs = {};
+  const assetPaths = new Set();
+  for (const [character, rawGlyph] of Object.entries(rawGlyphs)) {
+    if (
+      Array.from(character).length !== 1 ||
+      character.normalize("NFC") !== character
+    ) {
+      throw new Error(
+        `${label} has invalid glyph character ${JSON.stringify(character)}.`,
+      );
+    }
+    const glyph = assertRecord(
+      rawGlyph,
+      `${label}.glyphs.${JSON.stringify(character)}`,
+    );
+    assertExactKeys(glyph, `${label}.glyphs.${JSON.stringify(character)}`, [
+      "path",
+      "size",
+      "offset",
+    ]);
+    if (
+      typeof glyph.path !== "string" ||
+      !/^assets\/[a-z0-9][a-z0-9/_.-]*\.(?:png|webp)$/u.test(glyph.path) ||
+      glyph.path.includes("..")
+    ) {
+      throw new Error(
+        `${label} glyph ${JSON.stringify(character)} path is invalid.`,
+      );
+    }
+    if (assetPaths.has(glyph.path)) {
+      throw new Error(`${label} image-string glyph paths must be unique.`);
+    }
+    assetPaths.add(glyph.path);
+    const size = assertRecord(glyph.size, `${label} glyph size`);
+    assertExactKeys(size, `${label} glyph size`, ["width", "height"]);
+    if (
+      !Number.isSafeInteger(size.width) ||
+      size.width <= 0 ||
+      !Number.isSafeInteger(size.height) ||
+      size.height <= 0
+    ) {
+      throw new Error(
+        `${label} glyph ${JSON.stringify(character)} size is invalid.`,
+      );
+    }
+    const offset = assertRecord(glyph.offset, `${label} glyph offset`);
+    assertExactKeys(offset, `${label} glyph offset`, ["x", "y"]);
+    if (
+      typeof offset.x !== "number" ||
+      !Number.isFinite(offset.x) ||
+      typeof offset.y !== "number" ||
+      !Number.isFinite(offset.y) ||
+      offset.y < 0 ||
+      offset.y + size.height > metrics.lineHeight
+    ) {
+      throw new Error(
+        `${label} glyph ${JSON.stringify(character)} offset is invalid.`,
+      );
+    }
+    glyphs[character] = {
+      path: glyph.path,
+      size: { width: size.width, height: size.height },
+      offset: { x: offset.x, y: offset.y },
+    };
+  }
+  if (!Array.isArray(root.fixedAdvanceGroups)) {
+    throw new Error(`${label}.fixedAdvanceGroups must be an array.`);
+  }
+  const assigned = new Set();
+  const groupIds = new Set();
+  for (const [index, rawGroup] of root.fixedAdvanceGroups.entries()) {
+    const groupLabel = `${label}.fixedAdvanceGroups[${index}]`;
+    const group = assertRecord(rawGroup, groupLabel);
+    assertExactKeys(group, groupLabel, [
+      "id",
+      "characters",
+      "advanceWidth",
+      "align",
+    ]);
+    if (
+      typeof group.id !== "string" ||
+      !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(group.id) ||
+      groupIds.has(group.id)
+    ) {
+      throw new Error(`${groupLabel}.id is invalid.`);
+    }
+    groupIds.add(group.id);
+    if (!Array.isArray(group.characters) || group.characters.length === 0) {
+      throw new Error(`${groupLabel}.characters must be non-empty.`);
+    }
+    if (
+      typeof group.advanceWidth !== "number" ||
+      !Number.isFinite(group.advanceWidth) ||
+      group.advanceWidth <= 0 ||
+      !["start", "center", "end"].includes(group.align)
+    ) {
+      throw new Error(`${groupLabel} layout is invalid.`);
+    }
+    for (const character of group.characters) {
+      if (
+        typeof character !== "string" ||
+        !glyphs[character] ||
+        assigned.has(character)
+      ) {
+        throw new Error(
+          `${groupLabel} references an invalid or duplicate glyph.`,
+        );
+      }
+      assigned.add(character);
+      const glyph = glyphs[character];
+      const alignOffset =
+        group.align === "start"
+          ? 0
+          : group.align === "center"
+            ? (group.advanceWidth - glyph.size.width) / 2
+            : group.advanceWidth - glyph.size.width;
+      if (
+        alignOffset + glyph.offset.x < 0 ||
+        alignOffset + glyph.offset.x + glyph.size.width > group.advanceWidth
+      ) {
+        throw new Error(
+          `${groupLabel} cannot contain glyph ${JSON.stringify(character)}.`,
+        );
+      }
+    }
+  }
+  return { metrics, glyphs };
+}
+
+function validateImageStringText(text, manifest, label) {
+  for (const character of Array.from(text)) {
+    if (!manifest.glyphs[character]) {
+      throw new Error(
+        `${label} is missing glyph ${JSON.stringify(character)}.`,
+      );
+    }
+  }
+}
+
+async function validateGlyphImageSize(path, expected) {
+  let metadata;
+  try {
+    metadata = await sharp(path).metadata();
+  } catch (error) {
+    throw new Error(
+      `Image-string glyph cannot be decoded ${path}: ${error instanceof Error ? error.message : String(error)}.`,
+    );
+  }
+  const { width, height } = metadata;
+  if (!width || !height) {
+    throw new Error(`Image-string glyph has no decoded dimensions: ${path}.`);
+  }
+  if (width !== expected.width || height !== expected.height) {
+    throw new Error(
+      `Image-string glyph size mismatch ${path}: declared ${expected.width}x${expected.height}, actual ${width}x${height}.`,
+    );
+  }
 }
 
 function toImportSpecifier(fromDir, absolutePath) {
@@ -490,6 +892,14 @@ function assertOnlyKnownKeys(record, label, allowed) {
   for (const key of Object.keys(record)) {
     if (!set.has(key))
       throw new Error(`${label} declares unknown field "${key}".`);
+  }
+}
+
+function assertExactKeys(record, label, allowed) {
+  assertOnlyKnownKeys(record, label, allowed);
+  for (const key of allowed) {
+    if (!(key in record))
+      throw new Error(`${label} is missing field "${key}".`);
   }
 }
 

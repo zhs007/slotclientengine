@@ -489,6 +489,48 @@ describe("generate-symbol-state-textures script", () => {
         },
         summary: { mode: "groupAmount" },
       });
+
+      const imageStringText = {
+        type: "image-string",
+        tiers: [
+          {
+            resource: "./dependencies/digits/image-string.manifest.json",
+            slot: "Num",
+            anchor: { x: 0.5, y: 0.5 },
+            transform: { x: 0, y: 0, scale: 1 },
+            followSlotColor: true,
+          },
+        ],
+      };
+      manifest.symbols.L1.valuePresentation.text = imageStringText;
+      await writeFile(
+        result.manifestPath,
+        JSON.stringify(manifest, null, 2),
+        "utf8",
+      );
+      await generator.generateSymbolStateTextures({
+        inputDir: tempDir,
+        outputDir: tempDir,
+        symbols: ["L1", "H1"],
+      });
+      const preserved = JSON.parse(await readFile(result.manifestPath, "utf8"));
+      expect(preserved.symbols.L1.valuePresentation.text).toEqual(
+        imageStringText,
+      );
+
+      preserved.symbols.L1.valuePresentation.text.prefix = "./";
+      await writeFile(
+        result.manifestPath,
+        JSON.stringify(preserved, null, 2),
+        "utf8",
+      );
+      await expect(
+        generator.generateSymbolStateTextures({
+          inputDir: tempDir,
+          outputDir: tempDir,
+          symbols: ["L1", "H1"],
+        }),
+      ).rejects.toThrow(/unknown field|prefix/i);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

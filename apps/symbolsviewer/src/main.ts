@@ -22,6 +22,7 @@ import {
 } from "./symbol-assets.js";
 import {
   getSymbolSetConfig,
+  prepareSymbolSetConfig,
   resolveViewerStateForSymbol,
   SYMBOL_SET_CONFIGS,
   type SymbolSetConfig,
@@ -151,6 +152,7 @@ async function bootstrap(): Promise<void> {
   let activeValidation: SymbolCatalogValidation | null = null;
   let activeValueSymbols: readonly string[] = [];
   let loadVersion = 0;
+  let destroyActiveSymbolSetResources: (() => Promise<void>) | null = null;
   let sequenceController = new SymbolStateSequenceController({
     statePreset,
     steps: activeSymbolSet.defaultSequence,
@@ -192,16 +194,27 @@ async function bootstrap(): Promise<void> {
 
   const loadSymbolSet = async (id: string) => {
     const version = ++loadVersion;
-    const config = getSymbolSetConfig(id);
+    const preparedConfig = await prepareSymbolSetConfig(id);
+    const config = preparedConfig.config;
     symbolSetSelect.disabled = true;
     statusPanel.replaceChildren(createStatusLine(`Loading ${config.label}`));
 
-    const { catalog, validation } = await createCatalogForSymbolSet(config);
+    let catalogResult;
+    try {
+      catalogResult = await createCatalogForSymbolSet(config);
+    } catch (error) {
+      await preparedConfig.destroy();
+      throw error;
+    }
     if (version !== loadVersion) {
+      await preparedConfig.destroy();
       return;
     }
+    const { catalog, validation } = catalogResult;
 
     destroyRenderedSymbols(renderedSymbols);
+    await destroyActiveSymbolSetResources?.();
+    destroyActiveSymbolSetResources = preparedConfig.destroy;
     symbolsRoot.removeChildren();
     activeSymbolSet = config;
     statePreset = config.statePreset;
@@ -479,6 +492,10 @@ async function bootstrap(): Promise<void> {
       elapsedSincePanelUpdate = 0;
       updateStatusPanel();
     }
+  });
+  window.addEventListener("beforeunload", () => {
+    destroyRenderedSymbols(renderedSymbols);
+    void destroyActiveSymbolSetResources?.();
   });
 }
 

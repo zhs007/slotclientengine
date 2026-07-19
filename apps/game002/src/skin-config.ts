@@ -12,7 +12,7 @@ import {
   createSymbolManifestAnimationResolver,
   createSymbolStatePresetFromManifest,
   createSymbolCascadeWinPresentationMapFromManifest,
-  createSymbolValuePresentationResourcesFromManifest,
+  createSymbolValuePresentationResourceBundleFromManifest,
   parseReelManifest,
   type ParsedReelManifest,
   type GridCellEffectResourceMap,
@@ -21,6 +21,7 @@ import {
   type ReelSymbolScaleMap,
   type SymbolAnimationResolver,
   type SymbolValuePresentationResourceMap,
+  type SymbolValuePresentationResourceBundle,
   type SymbolStatePreset,
   type SymbolCascadeWinPresentationMap,
 } from "@slotclientengine/rendercore";
@@ -48,6 +49,8 @@ import {
   symbolValueSpineSkeletonModules,
   symbolValueSpineTextureModules,
   symbolValueTextImageModules,
+  symbolValueImageStringManifestModules,
+  symbolValueImageStringImageModules,
 } from "./generated/symbol-value-resources.generated.js";
 
 const game002S3NormalModules = import.meta.glob(
@@ -188,17 +191,36 @@ function createGame002Skin1Config(): Game002SkinConfig {
       spineTextureModules: game002S3SpineTextureModules,
       fallback: defaultAnimationResolver,
     }),
-    symbolValuePresentationResources:
-      createSymbolValuePresentationResourcesFromManifest({
-        manifest: game002S3StateTextureManifest,
-        requiredStates: ["spinBlur", "disabled"],
-        spineSkeletonModules: symbolValueSpineSkeletonModules,
-        spineAtlasModules: symbolValueSpineAtlasModules,
-        spineTextureModules: symbolValueSpineTextureModules,
-        textImageModules: symbolValueTextImageModules,
-      }),
+    symbolValuePresentationResources: Object.freeze({}),
     gridLayout: GAME002_GRID_LAYOUT,
     focusRegion: GAME002_BACKGROUND_RESOURCE.manifest.adaptation.focusRect,
+  });
+}
+
+export async function prepareGame002SkinConfig(id: Game002SkinId): Promise<{
+  readonly skin: Game002SkinConfig;
+  readonly valuePresentationResourceBundle: SymbolValuePresentationResourceBundle;
+}> {
+  const staticSkin = getGame002SkinConfig(id);
+  const valuePresentationResourceBundle =
+    await createSymbolValuePresentationResourceBundleFromManifest({
+      manifest: game002S3StateTextureManifest,
+      symbolManifestPath: "symbol-state-textures.manifest.json",
+      requiredStates: ["spinBlur", "disabled"],
+      spineSkeletonModules: symbolValueSpineSkeletonModules,
+      spineAtlasModules: symbolValueSpineAtlasModules,
+      spineTextureModules: symbolValueSpineTextureModules,
+      textImageModules: symbolValueTextImageModules,
+      imageStringManifestModules: symbolValueImageStringManifestModules,
+      imageStringImageModules: symbolValueImageStringImageModules,
+    });
+  return Object.freeze({
+    skin: Object.freeze({
+      ...staticSkin,
+      symbolValuePresentationResources:
+        valuePresentationResourceBundle.resources,
+    }),
+    valuePresentationResourceBundle,
   });
 }
 

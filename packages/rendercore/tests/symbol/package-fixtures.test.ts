@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { readFile, readdir } from "node:fs/promises";
+import { relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   collectSymbolManifestResourcePaths,
@@ -34,31 +34,28 @@ describe("production symbol package fixtures", () => {
       const rawSymbolManifest = JSON.parse(
         await readFile(symbolManifestPath, "utf8"),
       );
-      const files = new Map<string, Uint8Array>();
-      const direct = collectSymbolManifestResourcePaths({
-        symbolManifest: rawSymbolManifest,
-      });
-      for (const path of direct) {
-        files.set(
-          path,
-          new Uint8Array(
-            await readFile(resolve(repository, fixture.assetDirectory, path)),
-          ),
+      const availableFiles = new Map<string, Uint8Array>();
+      const assetRoot = resolve(repository, fixture.assetDirectory);
+      for (const entry of await readdir(assetRoot, {
+        recursive: true,
+        withFileTypes: true,
+      })) {
+        if (!entry.isFile()) continue;
+        const absolute = resolve(entry.parentPath, entry.name);
+        availableFiles.set(
+          relative(assetRoot, absolute).replaceAll("\\", "/"),
+          new Uint8Array(await readFile(absolute)),
         );
       }
+      const files = new Map<string, Uint8Array>();
       const resources = collectSymbolManifestResourcePaths({
         symbolManifest: rawSymbolManifest,
-        files,
+        files: availableFiles,
       });
       for (const path of resources) {
-        if (!files.has(path)) {
-          files.set(
-            path,
-            new Uint8Array(
-              await readFile(resolve(repository, fixture.assetDirectory, path)),
-            ),
-          );
-        }
+        const bytes = availableFiles.get(path);
+        if (!bytes) throw new Error(`Fixture resource is missing: ${path}`);
+        files.set(path, bytes);
       }
       const packageManifest = {
         version: 1,

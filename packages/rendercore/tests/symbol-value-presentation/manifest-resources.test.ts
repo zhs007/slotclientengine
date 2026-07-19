@@ -10,6 +10,35 @@ const root = new URL("../../../../assets/game002-s3/", import.meta.url);
 const manifest = JSON.parse(
   readFileSync(new URL("symbol-state-textures.manifest.json", root), "utf8"),
 );
+const imageStringManifest = JSON.parse(
+  readFileSync(
+    new URL(
+      "dependencies/image-strings/cn-digits/image-string.manifest.json",
+      root,
+    ),
+    "utf8",
+  ),
+);
+
+function createImageStringPool() {
+  const resource = Object.freeze({
+    manifest: imageStringManifest,
+    textures: Object.freeze({}),
+    destroyed: false,
+    assertUsable() {},
+    async destroy() {},
+  });
+  return {
+    resources: new Map([
+      [
+        "dependencies/image-strings/cn-digits/image-string.manifest.json",
+        resource,
+      ],
+    ]),
+    get: () => resource,
+    async destroy() {},
+  } as never;
+}
 
 describe("symbol value presentation manifest resources", () => {
   it("accepts generic one, three and five tier manifests", () => {
@@ -20,6 +49,46 @@ describe("symbol value presentation manifest resources", () => {
           ?.tiers;
       expect(tiers).toHaveLength(count);
       expect(tiers?.at(-1)?.maxExclusive).toBeUndefined();
+    }
+  });
+
+  it("strictly parses per-tier ImgNumber bindings without a second threshold table", () => {
+    const copy = createGenericManifest(3);
+    copy.symbols.GOLD.valuePresentation.text = {
+      type: "image-string",
+      tiers: ["small", "shared", "shared"].map((id, index) => ({
+        resource: `./dependencies/image-strings/${id}/image-string.manifest.json`,
+        slot: `Num${index}`,
+        anchor: { x: 0.5, y: 0.5 },
+        transform: { x: index, y: -index, scale: 1 },
+        followSlotColor: index !== 1,
+      })),
+    };
+    const parsed = parseSymbolStateTextureManifest(copy);
+    const text = parsed.symbols.GOLD.valuePresentation?.text;
+    expect(text?.type).toBe("image-string");
+    if (text?.type !== "image-string") throw new Error("expected ImgNumber");
+    expect(text.tiers.map((binding) => binding.slot)).toEqual([
+      "Num0",
+      "Num1",
+      "Num2",
+    ]);
+    expect(Object.isFrozen(text.tiers[0]?.transform)).toBe(true);
+
+    for (const mutate of [
+      (value: any) => value.text.tiers.pop(),
+      (value: any) =>
+        value.text.tiers.push(structuredClone(value.text.tiers[0])),
+      (value: any) => (value.text.tiers[0].resource = "../escape.json"),
+      (value: any) => (value.text.tiers[0].slot = ""),
+      (value: any) => (value.text.tiers[0].anchor.x = 2),
+      (value: any) => (value.text.tiers[0].transform.scale = 0),
+      (value: any) => (value.text.tiers[0].unknown = true),
+      (value: any) => (value.text.prefix = "./"),
+    ]) {
+      const invalid = structuredClone(copy);
+      mutate(invalid.symbols.GOLD.valuePresentation);
+      expect(() => parseSymbolStateTextureManifest(invalid)).toThrow();
     }
   });
 
@@ -44,13 +113,12 @@ describe("symbol value presentation manifest resources", () => {
       },
     });
     expect(Object.isFrozen(presentation?.text)).toBe(true);
-    expect(presentation?.text).toEqual({
-      type: "image",
-      slot: "Num",
-      x: 0,
-      y: 0,
-      prefix: "./",
-    });
+    expect(presentation?.text.type).toBe("image-string");
+    if (presentation?.text.type !== "image-string") {
+      throw new Error("expected current CN presentation to use ImgNumber");
+    }
+    expect(presentation.text.tiers).toHaveLength(4);
+    expect(Object.isFrozen(presentation.text.tiers)).toBe(true);
     expect(Object.isFrozen(presentation?.reelStates)).toBe(true);
     expect(parsed.symbols.CN.normal).toEqual({
       kind: "transparent",
@@ -99,6 +167,7 @@ describe("symbol value presentation manifest resources", () => {
           `/${value}.png`,
         ]),
       ),
+      imageStringResourcePool: createImageStringPool(),
     });
     expect(resources.CN.tiers).toHaveLength(4);
     expect(resources.CN.tiers.map((tier) => tier.spec.skeleton)).toEqual([
@@ -107,18 +176,11 @@ describe("symbol value presentation manifest resources", () => {
       "./CN_3.json",
       "./CN_4.json",
     ]);
-    expect(resources.CN.textImageUrls).toEqual({
-      1: "/1.png",
-      2: "/2.png",
-      5: "/5.png",
-      10: "/10.png",
-      25: "/25.png",
-      50: "/50.png",
-      100: "/100.png",
-      250: "/250.png",
-      500: "/500.png",
-      1000: "/1000.png",
-    });
+    expect(resources.CN.textImageUrls).toEqual({});
+    expect(resources.CN.imageStringTierBindings).toHaveLength(4);
+    expect(
+      resources.CN.imageStringTierBindings?.map((binding) => binding.slot),
+    ).toEqual(["Num", "Num", "Num", "Num"]);
   });
 
   it("fails when an image-rendered value has no exact image module", () => {
@@ -128,9 +190,17 @@ describe("symbol value presentation manifest resources", () => {
         JSON.parse(readFileSync(new URL(`${name}.json`, root), "utf8")),
       ]),
     );
+    const imageManifest = structuredClone(manifest);
+    imageManifest.symbols.CN.valuePresentation.text = {
+      type: "image",
+      slot: "Num",
+      x: 0,
+      y: 0,
+      prefix: "./",
+    };
     expect(() =>
       createSymbolValuePresentationResourcesFromManifest({
-        manifest,
+        manifest: imageManifest,
         requiredStates: ["spinBlur", "disabled"],
         spineSkeletonModules: skeletons,
         spineAtlasModules: {
@@ -221,7 +291,7 @@ describe("symbol value presentation manifest resources", () => {
   });
 });
 
-function createGenericManifest(count: number) {
+function createGenericManifest(count: number): any {
   return {
     version: 1,
     states: [],

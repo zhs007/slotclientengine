@@ -1,6 +1,6 @@
 import { createGameConfig } from "@slotclientengine/logiccore";
-import { Container, Sprite, Texture } from "pixi.js";
-import { describe, expect, it } from "vitest";
+import { Assets, Container, Sprite, Texture } from "pixi.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createStatefulSymbolAssetMapFromModules,
   createSymbolsViewerStandaloneCatalog,
@@ -8,6 +8,7 @@ import {
 } from "../src/symbol-assets.js";
 import {
   getSymbolSetConfig,
+  prepareSymbolSetConfig,
   resolveViewerStateForSymbol,
   SYMBOL_SET_CONFIGS,
 } from "../src/symbol-set-config.js";
@@ -15,6 +16,10 @@ import {
   SpineSymbolAni,
   type SymbolAnimationContext,
 } from "@slotclientengine/rendercore";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const GAME003_S1_DISPLAYABLE_SYMBOLS = [
   "WL",
@@ -115,8 +120,31 @@ describe("symbolsviewer symbol set config", () => {
     );
   });
 
-  it("builds the game002-s3 catalog from exactly 13 symbols and 12 skeletons", () => {
-    const config = getSymbolSetConfig("game002-s3");
+  it("builds the game002-s3 catalog from exactly 13 symbols and 12 skeletons", async () => {
+    const sizes = [
+      [36, 49],
+      [26, 48],
+      [37, 48],
+      [36, 49],
+      [35, 48],
+      [33, 49],
+      [34, 49],
+      [35, 48],
+      [35, 49],
+      [34, 48],
+    ] as const;
+    vi.spyOn(Assets, "load").mockImplementation(async (source) => {
+      const unresolved = Array.isArray(source) ? source[0] : source;
+      const url =
+        typeof unresolved === "string"
+          ? unresolved
+          : String((unresolved as { src?: unknown } | undefined)?.src ?? "");
+      const digit = Number(/u003([0-9])\.png/u.exec(url)?.[1]);
+      const [width, height] = sizes[digit] ?? [];
+      return { width, height } as never;
+    });
+    const prepared = await prepareSymbolSetConfig("game002-s3");
+    const config = prepared.config;
     const assets = createStatefulSymbolAssetMapFromModules({
       modules: config.modules,
       manifest: config.manifest,
@@ -157,6 +185,7 @@ describe("symbolsviewer symbol set config", () => {
         expect.arrayContaining([expect.stringContaining(`${excluded}.json`)]),
       );
     }
+    await prepared.destroy();
   });
 
   it("builds the game003-s1 catalog and exposes manifest-driven VNI resources", () => {
