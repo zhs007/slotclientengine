@@ -1,9 +1,11 @@
 import {
   createSceneLayoutRuntime,
+  createSceneLayoutPackageRuntime,
   resolveSceneLayoutFrameViewport,
   type SceneLayoutFrameViewport,
   type SceneLayoutManifestV1,
   type SceneLayoutRuntime,
+  type SceneLayoutPackageRuntime,
   type SceneLayoutSnapshot,
 } from "@slotclientengine/rendercore/scene-layout";
 import {
@@ -43,6 +45,14 @@ export interface SymbolPreviewGridSize {
   readonly rows: number;
 }
 
+export interface PreviewSpineNodeState {
+  readonly nodeId: string;
+  readonly states: readonly string[];
+  readonly stableState: string;
+  readonly targetState: string | null;
+  readonly phase: "stable" | "transitioning";
+}
+
 export interface SymbolPackagePreviewSnapshot {
   readonly packageId: string;
   readonly cellSize: Readonly<{ width: number; height: number }>;
@@ -69,6 +79,7 @@ export class LayoutPreview {
   readonly #symbolOverlay = new Container();
   #package: ImportedLayoutPackage | null = null;
   #runtime: SceneLayoutRuntime | null = null;
+  #packageRuntime: SceneLayoutPackageRuntime | null = null;
   #manifest: SceneLayoutManifestV1 | null = null;
   #lastLayoutSnapshot: SceneLayoutSnapshot | null = null;
   #frameViewport: SceneLayoutFrameViewport | null = null;
@@ -127,16 +138,32 @@ export class LayoutPreview {
   ): Promise<void> {
     this.assertReady();
     const request = ++this.#layoutRequest;
+    const packageScene = manifest.symbolPackage
+      ? this.requirePackagePreviewScene(manifest)
+      : null;
     const nextPackage = await validateLayoutAssets(manifest, assets);
     if (request !== this.#layoutRequest || this.#destroyed) {
       nextPackage.destroy();
       return;
     }
-    const nextRuntime = createSceneLayoutRuntime({
-      resource: nextPackage.resource,
-    });
+    const nextRuntime = manifest.symbolPackage
+      ? createSceneLayoutPackageRuntime({
+          resource: nextPackage.packageResource,
+        })
+      : createSceneLayoutRuntime({ resource: nextPackage.resource });
     try {
-      await nextRuntime.init();
+      if (manifest.symbolPackage) {
+        await (nextRuntime as SceneLayoutPackageRuntime).init({
+          reels: {
+            main: {
+              scene: packageScene!.codes,
+              localPhaseYs: packageScene!.stopYs,
+            },
+          },
+        });
+      } else {
+        await nextRuntime.init();
+      }
     } catch (error) {
       nextRuntime.destroy();
       nextPackage.destroy();
@@ -150,6 +177,9 @@ export class LayoutPreview {
     this.clearRuntime();
     this.#package = nextPackage;
     this.#runtime = nextRuntime;
+    this.#packageRuntime = manifest.symbolPackage
+      ? (nextRuntime as SceneLayoutPackageRuntime)
+      : null;
     this.#manifest = manifest;
     this.#app.stage.addChildAt(nextRuntime.container, 0);
     this.applySize();
@@ -263,6 +293,7 @@ export class LayoutPreview {
         preview.reelSets,
         name,
       );
+      this.syncPackageReel();
       if (this.#lastLayoutSnapshot)
         this.layoutSymbolOverlay(this.#lastLayoutSnapshot);
       return this.#symbolPreview;
@@ -288,6 +319,7 @@ export class LayoutPreview {
         preview.reelSets,
         preview.selectedReelSet,
       );
+      this.syncPackageReel();
       if (this.#lastLayoutSnapshot)
         this.layoutSymbolOverlay(this.#lastLayoutSnapshot);
       return this.#symbolPreview;
@@ -323,6 +355,7 @@ export class LayoutPreview {
             bindings: this.#symbolBindings,
             otherScene: null,
           });
+      this.syncPackageReel();
       if (this.#lastLayoutSnapshot)
         this.layoutSymbolOverlay(this.#lastLayoutSnapshot);
       return this.#symbolPreview;
@@ -335,6 +368,40 @@ export class LayoutPreview {
 
   getSymbolPreviewSnapshot(): SymbolPackagePreviewSnapshot | null {
     return this.#symbolPreview;
+  }
+
+  getSpineNodeStates(): readonly PreviewSpineNodeState[] {
+    this.assertReady();
+    const runtime = this.#runtime;
+    const manifest = this.#manifest;
+    const variantId = this.#lastLayoutSnapshot?.variantId;
+    if (!runtime || !manifest || !variantId) return Object.freeze([]);
+    return Object.freeze(
+      manifest.nodes.flatMap((node) => {
+        if (
+          node.resource.kind !== "spine" ||
+          !("stateMachine" in node.resource) ||
+          !node.placements[variantId]
+        )
+          return [];
+        return [
+          Object.freeze({
+            nodeId: node.id,
+            states: Object.freeze(
+              Object.keys(node.resource.stateMachine.states),
+            ),
+            ...runtime.getNodeStateSnapshot(node.id),
+          }),
+        ];
+      }),
+    );
+  }
+
+  async requestNodeState(nodeId: string, state: string): Promise<void> {
+    this.assertReady();
+    const runtime = this.#runtime;
+    if (!runtime) throw new Error("布局 preview 尚未初始化。");
+    await runtime.requestNodeState(nodeId, state);
   }
 
   setPageSize(size: PreviewSize): void {
@@ -562,6 +629,7 @@ export class LayoutPreview {
   private clearRuntime(): void {
     this.#runtime?.destroy();
     this.#runtime = null;
+    this.#packageRuntime = null;
     this.#lastLayoutSnapshot = null;
     this.#frameViewport = null;
     this.#package?.destroy();
@@ -575,6 +643,13 @@ export class LayoutPreview {
     const preview = this.#symbolPreview;
     const scene = preview?.scene;
     const reel = snapshot.reels.main;
+    if (this.#packageRuntime) {
+      this.clearRenderSymbols();
+      this.#symbolDiagnostic = preview?.scene
+        ? `symbols=${preview.packageId} · combined-runtime · reel=${preview.scene.reelSetName} · stops=[${preview.scene.stopYs.join(",")}]`
+        : "symbols=combined-runtime · waiting for an explicit local scene";
+      return;
+    }
     if (!resource || !catalog || !preview || !reel) {
       this.clearRenderSymbols();
       return;
@@ -661,6 +736,33 @@ export class LayoutPreview {
     this.#symbolPreview = null;
     this.#symbolBindings = Object.freeze([]);
     this.#symbolDiagnostic = "";
+  }
+
+  private requirePackagePreviewScene(
+    manifest: SceneLayoutManifestV1,
+  ): RandomReelSceneSnapshot {
+    const binding = manifest.symbolPackage;
+    const scene = this.#symbolPreview?.scene;
+    if (!binding || !scene)
+      throw new Error(
+        "组合 preview 要求先显式选择兼容 reel set 并生成本地场景。",
+      );
+    if (scene.reelSetName !== binding.reelSet)
+      throw new Error(
+        `组合 preview scene reelSet=${scene.reelSetName} 与 binding=${binding.reelSet} 不一致。`,
+      );
+    return scene;
+  }
+
+  private syncPackageReel(): void {
+    const runtime = this.#packageRuntime;
+    const manifest = this.#manifest;
+    if (!runtime || !manifest?.symbolPackage) return;
+    const scene = this.requirePackagePreviewScene(manifest);
+    runtime.resetReelScene("main", {
+      scene: scene.codes,
+      localPhaseYs: scene.stopYs,
+    });
   }
 
   private getRandomSource(): RandomUint32Source {

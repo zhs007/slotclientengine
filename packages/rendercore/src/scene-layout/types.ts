@@ -1,4 +1,6 @@
 import type { Container } from "pixi.js";
+import type { ImageStringResource } from "../image-string/index.js";
+import type { SymbolPackageResource } from "../symbol/package.js";
 import type {
   FocusedArtViewport,
   RenderViewportMargin,
@@ -24,7 +26,17 @@ export interface SceneLayoutImageResourceSpec {
   readonly size: RenderViewportSize;
 }
 
-export interface SceneLayoutSpineResourceSpec {
+export interface SceneLayoutSpineStateMachine {
+  readonly initialState: string;
+  readonly states: Readonly<Record<string, { readonly animation: string }>>;
+  readonly transitions: readonly {
+    readonly from: string;
+    readonly to: string;
+    readonly animation: string;
+  }[];
+}
+
+export interface SceneLayoutSpineLoopResourceSpec {
   readonly kind: "spine";
   readonly skeleton: string;
   readonly atlas: string;
@@ -33,9 +45,29 @@ export interface SceneLayoutSpineResourceSpec {
   readonly loop: true;
 }
 
+export interface SceneLayoutSpineStateMachineResourceSpec {
+  readonly kind: "spine";
+  readonly skeleton: string;
+  readonly atlas: string;
+  readonly textures: Readonly<Record<string, string>>;
+  readonly stateMachine: SceneLayoutSpineStateMachine;
+}
+
+export type SceneLayoutSpineResourceSpec =
+  | SceneLayoutSpineLoopResourceSpec
+  | SceneLayoutSpineStateMachineResourceSpec;
+
+export interface SceneLayoutImageStringResourceSpec {
+  readonly kind: "image-string";
+  readonly manifest: string;
+  readonly text: string;
+  readonly anchor: { readonly x: number; readonly y: number };
+}
+
 export type SceneLayoutNodeResourceSpec =
   | SceneLayoutImageResourceSpec
-  | SceneLayoutSpineResourceSpec;
+  | SceneLayoutSpineResourceSpec
+  | SceneLayoutImageStringResourceSpec;
 
 export interface SceneLayoutNode {
   readonly id: string;
@@ -47,6 +79,7 @@ export interface SceneLayoutNode {
 }
 
 export interface SceneLayoutReelGrid {
+  readonly order?: number;
   readonly columns: number;
   readonly rows: number;
   readonly cellSize: RenderViewportSize;
@@ -56,6 +89,13 @@ export interface SceneLayoutReelGrid {
       Record<SceneLayoutVariantId, { readonly x: number; readonly y: number }>
     >
   >;
+}
+
+export interface SceneLayoutSymbolPackageBinding {
+  readonly manifest: string;
+  readonly reel: "main";
+  readonly reelSet: string;
+  readonly renderMode: "standard" | "grid-cell";
 }
 
 export interface MaximizedFocusSceneLayoutAdaptation {
@@ -91,6 +131,7 @@ export interface SceneLayoutManifestV1 {
   readonly adaptation: SceneLayoutAdaptation;
   readonly nodes: readonly SceneLayoutNode[];
   readonly reels: Readonly<Record<string, SceneLayoutReelGrid>>;
+  readonly symbolPackage?: SceneLayoutSymbolPackageBinding;
 }
 
 export interface SceneLayoutResource {
@@ -106,7 +147,16 @@ export interface SceneLayoutResource {
       }
     >
   >;
+  readonly imageStringResources: Readonly<Record<string, ImageStringResource>>;
   destroy(): void;
+}
+
+export interface SceneLayoutPackageResource {
+  readonly manifest: SceneLayoutManifestV1;
+  readonly layout: SceneLayoutResource;
+  readonly imageStrings: Readonly<Record<string, ImageStringResource>>;
+  readonly symbolPackage: SymbolPackageResource | null;
+  destroy(): Promise<void> | void;
 }
 
 export interface ResolvedSceneLayoutReelGrid {
@@ -179,5 +229,32 @@ export interface SceneLayoutRuntime {
   attachChild(options: AttachChildOptions): () => void;
   attachRelative(options: AttachRelativeOptions): () => void;
   getReelGrid(id: string): ResolvedSceneLayoutReelGrid;
+  getImageStringNodeNames(): readonly string[];
+  setImageStringText(nodeId: string, text: string): void;
+  getImageStringText(nodeId: string): string;
+  requestNodeState(nodeId: string, state: string): Promise<void>;
+  getNodeStateSnapshot(nodeId: string): SceneLayoutNodeStateSnapshot;
   destroy(): void;
+}
+
+export interface SceneLayoutNodeStateSnapshot {
+  readonly stableState: string;
+  readonly targetState: string | null;
+  readonly phase: "stable" | "transitioning";
+}
+
+export interface SceneLayoutInitialReelScene {
+  readonly scene: readonly (readonly number[])[];
+  readonly localPhaseYs: readonly number[];
+  readonly presentationValues?: readonly (readonly (number | null)[])[];
+}
+
+export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
+  init(options?: {
+    readonly reels?: Readonly<
+      Partial<Record<"main", SceneLayoutInitialReelScene>>
+    >;
+  }): Promise<void>;
+  resetReelScene(reelId: "main", input: SceneLayoutInitialReelScene): void;
+  getReelPresentation(reelId: "main"): Container;
 }

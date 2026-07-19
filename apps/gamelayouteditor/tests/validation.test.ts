@@ -1,22 +1,36 @@
 import { describe, expect, it } from "vitest";
+import { strToU8, zipSync } from "fflate";
 import {
   cloneEditorProject,
   createNewEditorProject,
+  editorProjectToManifest,
 } from "../src/model/editor-project.js";
 import {
   addLayerFromResource,
+  addSpineState,
+  addSpineTransition,
   assignBackgroundResource,
   clearBackground,
   deleteLayoutResource,
   getLayoutResourceReferences,
   moveLayer,
+  importImageStringZip,
   rebindLayerResource,
+  renameSpineState,
   renameNode,
   removeLayer,
   replaceImageResource,
+  replaceImageStringResource,
   replaceSpineResource,
   setLayerVariantVisibility,
+  setImageStringLayerAnchor,
+  setImageStringLayerText,
   setNodeDefaultAnimation,
+  setSpinePlaybackKind,
+  setSpineStateAnimation,
+  deleteSpineState,
+  deleteSpineTransition,
+  setSpineInitialState,
   uploadImageResource,
   uploadSpineResource,
 } from "../src/model/resource-commands.js";
@@ -54,7 +68,228 @@ function spineFiles(
   ];
 }
 
+function imageStringZip(
+  options: {
+    readonly glyphs?: readonly string[];
+    readonly id?: string;
+  } = {},
+): Uint8Array {
+  const id = options.id ?? "digits";
+  const glyphs = options.glyphs ?? ["0", "1"];
+  const manifest = {
+    version: 1,
+    kind: "image-string",
+    id,
+    metrics: { lineHeight: 10, letterSpacing: 1 },
+    glyphs: Object.fromEntries(
+      glyphs.map((character) => [
+        character,
+        {
+          path: `assets/${character}.png`,
+          size: { width: 5, height: 10 },
+          offset: { x: 0, y: 0 },
+        },
+      ]),
+    ),
+    fixedAdvanceGroups: [],
+  };
+  return zipSync(
+    Object.fromEntries([
+      ["image-string.manifest.json", strToU8(JSON.stringify(manifest))],
+      ...glyphs.map(
+        (character) =>
+          [
+            `assets/${character}.png`,
+            new Uint8Array([character.charCodeAt(0)]),
+          ] as const,
+      ),
+    ]),
+  );
+}
+
+async function initializeProjectBackground(
+  project: ReturnType<typeof createNewEditorProject>,
+): Promise<void> {
+  await uploadImageResource({
+    project,
+    file: new File([new Uint8Array([1])], "background.png"),
+    decodeImage,
+  });
+  assignBackgroundResource({
+    project,
+    variant: "default",
+    resourceId: "background",
+    nodeId: "background",
+  });
+}
+
 describe("logical layout resource commands", () => {
+  it("imports, reuses and atomically edits a standalone image-string resource", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    await initializeProjectBackground(project);
+    const resource = importImageStringZip({
+      project,
+      zipBytes: imageStringZip(),
+    });
+    expect(resource).toMatchObject({
+      id: "digits",
+      kind: "image-string",
+      manifestPath:
+        "dependencies/image-strings/digits/image-string.manifest.json",
+    });
+    expect(project.assets.has(resource.manifestPath)).toBe(true);
+    addLayerFromResource({
+      project,
+      resourceId: "digits",
+      nodeId: "amount-a",
+      variants: ["default"],
+    });
+    addLayerFromResource({
+      project,
+      resourceId: "digits",
+      nodeId: "amount-b",
+      variants: ["default"],
+    });
+    setImageStringLayerText(project, "amount-a", "001");
+    setImageStringLayerAnchor(project, "amount-a", { x: 0.25, y: 0.75 });
+    expect(
+      project.nodes.find((node) => node.id === "amount-a")?.imageString,
+    ).toEqual({
+      text: "001",
+      anchor: { x: 0.25, y: 0.75 },
+    });
+    expect(
+      project.nodes.find((node) => node.id === "amount-b")?.imageString?.text,
+    ).toBe("");
+    const beforeInvalidText = cloneEditorProject(project);
+    expect(() => setImageStringLayerText(project, "amount-a", "2")).toThrow(
+      /缺少 glyph/,
+    );
+    expect(() =>
+      setImageStringLayerAnchor(project, "amount-a", { x: -0.1, y: 0.5 }),
+    ).toThrow(/0\.\.1/);
+    expect(() => setImageStringLayerText(project, "background", "0")).toThrow(
+      /不是 image-string/,
+    );
+    expect(project).toEqual(beforeInvalidText);
+    const exported = editorProjectToManifest(project);
+    expect(
+      exported.nodes.find((node) => node.id === "amount-a")?.resource,
+    ).toMatchObject({ kind: "image-string", text: "001" });
+    expect(() =>
+      assignBackgroundResource({
+        project,
+        variant: "default",
+        resourceId: "digits",
+      }),
+    ).toThrow(/背景|尺寸/);
+    const beforeReplacement = cloneEditorProject(project);
+    expect(() =>
+      replaceImageStringResource({
+        project,
+        resourceId: "digits",
+        zipBytes: imageStringZip({ glyphs: ["0"] }),
+      }),
+    ).toThrow(/缺少 glyph/);
+    expect(project).toEqual(beforeReplacement);
+  });
+
+  it("edits a Spine state machine atomically and rewrites renamed references", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    await initializeProjectBackground(project);
+    await uploadSpineResource({
+      project,
+      files: spineFiles({
+        animations: ["BG", "FG", "BG_FG", "FG_BG"],
+      }),
+    });
+    addLayerFromResource({
+      project,
+      resourceId: "hero",
+      nodeId: "scene",
+      variants: ["default"],
+      defaultAnimation: "BG",
+    });
+    setSpinePlaybackKind(project, "scene", "state-machine");
+    renameSpineState(project, "scene", "State1", "BG");
+    addSpineState(project, "scene", { id: "FG", animation: "FG" });
+    addSpineTransition(project, "scene", {
+      from: "BG",
+      to: "FG",
+      animation: "BG_FG",
+    });
+    addSpineTransition(project, "scene", {
+      from: "FG",
+      to: "BG",
+      animation: "FG_BG",
+    });
+    renameSpineState(project, "scene", "FG", "FreeGame");
+    expect(
+      project.nodes.find((node) => node.id === "scene")?.playback,
+    ).toMatchObject({
+      kind: "state-machine",
+      initialState: "BG",
+      transitions: [
+        { from: "BG", to: "FreeGame", animation: "BG_FG" },
+        { from: "FreeGame", to: "BG", animation: "FG_BG" },
+      ],
+    });
+    const manifest = editorProjectToManifest(project);
+    expect(
+      manifest.nodes.find((node) => node.id === "scene")?.resource,
+    ).toMatchObject({
+      kind: "spine",
+      stateMachine: {
+        initialState: "BG",
+        states: { BG: { animation: "BG" }, FreeGame: { animation: "FG" } },
+      },
+    });
+    const beforeDuplicate = cloneEditorProject(project);
+    expect(() =>
+      setSpineStateAnimation(project, "scene", "FreeGame", "BG"),
+    ).toThrow(/animation.*全局唯一|重复/);
+    expect(project).toEqual(beforeDuplicate);
+    expect(() => deleteSpineState(project, "scene", "FreeGame")).toThrow(
+      /引用/,
+    );
+    expect(() =>
+      addSpineState(project, "scene", { id: "BG", animation: "FG" }),
+    ).toThrow(/state id 冲突/);
+    expect(() =>
+      addSpineState(project, "scene", { id: "1bad", animation: "FG" }),
+    ).toThrow(/格式无效/);
+    expect(() =>
+      addSpineState(project, "scene", { id: "Other", animation: "missing" }),
+    ).toThrow(/不存在/);
+    expect(() =>
+      addSpineTransition(project, "scene", {
+        from: "BG",
+        to: "BG",
+        animation: "BG_FG",
+      }),
+    ).toThrow(/自循环/);
+    expect(() =>
+      addSpineTransition(project, "scene", {
+        from: "missing",
+        to: "BG",
+        animation: "BG_FG",
+      }),
+    ).toThrow(/已声明/);
+    expect(() =>
+      addSpineTransition(project, "scene", {
+        from: "BG",
+        to: "FreeGame",
+        animation: "FG_BG",
+      }),
+    ).toThrow(/有向边重复/);
+    expect(() => setSpineInitialState(project, "scene", "missing")).toThrow(
+      /未知 state/,
+    );
+    expect(() => deleteSpineTransition(project, "scene", -1)).toThrow(/越界/);
+    setSpinePlaybackKind(project, "scene", "state-machine");
+    expect(project).toEqual(beforeDuplicate);
+  });
+
   it("uploads image metadata and bytes without creating a node", async () => {
     const project = createNewEditorProject("maximized-focus");
     const resource = await uploadImageResource({
@@ -158,10 +393,11 @@ describe("logical layout resource commands", () => {
       variants: ["default"],
       defaultAnimation: "Win",
     });
-    expect(project.nodes.map((node) => node.defaultAnimation)).toEqual([
-      "Idle",
-      "Win",
-    ]);
+    expect(
+      project.nodes.map((node) =>
+        node.playback?.kind === "loop" ? node.playback.animation : "",
+      ),
+    ).toEqual(["Idle", "Win"]);
   });
 
   it("initializes first background geometry, preserves same size and requires explicit reinitialize for size changes", async () => {

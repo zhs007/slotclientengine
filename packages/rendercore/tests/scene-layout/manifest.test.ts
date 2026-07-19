@@ -8,6 +8,195 @@ import {
 import { game002LayoutFixture, game003LayoutFixture } from "./fixtures.js";
 
 describe("scene layout manifest", () => {
+  it("keeps the legacy v1 shape unchanged when optional package fields are absent", () => {
+    const manifest = parseSceneLayoutManifest(game002LayoutFixture);
+    expect(Object.hasOwn(manifest, "symbolPackage")).toBe(false);
+    expect(Object.hasOwn(manifest.reels.main, "order")).toBe(false);
+  });
+
+  it("rejects null instead of treating it as an omitted symbol binding", () => {
+    expect(() =>
+      parseSceneLayoutManifest({
+        ...game002LayoutFixture,
+        symbolPackage: null,
+      }),
+    ).toThrow(/must be an object/);
+  });
+
+  it("parses image-string, stateful Spine and an ordered symbol binding", () => {
+    const manifest = parseSceneLayoutManifest({
+      ...game002LayoutFixture,
+      nodes: [
+        {
+          id: "bg",
+          order: 0,
+          resource: {
+            kind: "spine",
+            skeleton: "assets/bg/bg.json",
+            atlas: "assets/bg/bg.atlas",
+            textures: { "bg.png": "assets/bg/bg.png" },
+            stateMachine: {
+              initialState: "BG",
+              states: {
+                BG: { animation: "BG" },
+                FG: { animation: "FG" },
+              },
+              transitions: [
+                { from: "BG", to: "FG", animation: "BG_FG" },
+                { from: "FG", to: "BG", animation: "FG_BG" },
+              ],
+            },
+          },
+          placements: { default: { x: 0, y: 0, scale: 1 } },
+        },
+        {
+          id: "total-win",
+          order: 20,
+          resource: {
+            kind: "image-string",
+            manifest:
+              "dependencies/image-strings/usd-amount/image-string.manifest.json",
+            text: "$001.25",
+            anchor: { x: 0.5, y: 0.5 },
+          },
+          placements: { default: { x: 1000, y: 1500, scale: 1 } },
+        },
+      ],
+      reels: { main: { ...game002LayoutFixture.reels.main, order: 10 } },
+      symbolPackage: {
+        manifest: "dependencies/symbols/game002-symbols/symbols.package.json",
+        reel: "main",
+        reelSet: "bg-reel01",
+        renderMode: "grid-cell",
+      },
+    });
+    expect(manifest.nodes[0].resource).toMatchObject({
+      kind: "spine",
+      stateMachine: { initialState: "BG" },
+    });
+    expect(manifest.nodes[1].resource).toMatchObject({
+      kind: "image-string",
+      text: "$001.25",
+      anchor: { x: 0.5, y: 0.5 },
+    });
+    expect(manifest.symbolPackage?.renderMode).toBe("grid-cell");
+    expect(Object.isFrozen(manifest.nodes[1].resource)).toBe(true);
+  });
+
+  it("rejects invalid image-string, state-machine and symbol binding contracts", () => {
+    const imageStringNode = {
+      id: "amount",
+      order: 1,
+      resource: {
+        kind: "image-string",
+        manifest:
+          "dependencies/image-strings/amount/image-string.manifest.json",
+        text: "001",
+        anchor: { x: 0.5, y: 0.5 },
+      },
+      placements: { default: { x: 0, y: 0, scale: 1 } },
+    };
+    const withNode = (node: unknown) => ({
+      ...game002LayoutFixture,
+      nodes: [game002LayoutFixture.nodes[0], node],
+    });
+    expect(() =>
+      parseSceneLayoutManifest(
+        withNode({
+          ...imageStringNode,
+          resource: {
+            ...imageStringNode.resource,
+            manifest: "assets/amount.json",
+          },
+        }),
+      ),
+    ).toThrow(/dependencies\/image-strings/);
+    expect(() =>
+      parseSceneLayoutManifest(
+        withNode({
+          ...imageStringNode,
+          resource: {
+            ...imageStringNode.resource,
+            anchor: { x: 1.1, y: 0.5 },
+          },
+        }),
+      ),
+    ).toThrow(/anchor.x/);
+    expect(() =>
+      parseSceneLayoutManifest({
+        ...game002LayoutFixture,
+        nodes: [
+          {
+            id: "bg",
+            order: 0,
+            resource: {
+              kind: "spine",
+              skeleton: "assets/bg/bg.json",
+              atlas: "assets/bg/bg.atlas",
+              textures: { "bg.png": "assets/bg/bg.png" },
+              defaultAnimation: "BG",
+              loop: true,
+              stateMachine: {
+                initialState: "BG",
+                states: { BG: { animation: "BG" } },
+                transitions: [],
+              },
+            },
+            placements: { default: { x: 0, y: 0, scale: 1 } },
+          },
+        ],
+      }),
+    ).toThrow(/unknown key|either/);
+    const stateful = {
+      kind: "spine",
+      skeleton: "assets/bg/bg.json",
+      atlas: "assets/bg/bg.atlas",
+      textures: { "bg.png": "assets/bg/bg.png" },
+      stateMachine: {
+        initialState: "BG",
+        states: {
+          BG: { animation: "same" },
+          FG: { animation: "same" },
+        },
+        transitions: [],
+      },
+    };
+    expect(() =>
+      parseSceneLayoutManifest({
+        ...game002LayoutFixture,
+        nodes: [
+          {
+            ...game002LayoutFixture.nodes[0],
+            resource: stateful,
+          },
+        ],
+      }),
+    ).toThrow(/animation.*unique/);
+    expect(() =>
+      parseSceneLayoutManifest({
+        ...game002LayoutFixture,
+        reels: { main: { ...game002LayoutFixture.reels.main, order: 0 } },
+        symbolPackage: {
+          manifest: "dependencies/symbols/demo/symbols.package.json",
+          reel: "main",
+          reelSet: "main",
+          renderMode: "standard",
+        },
+      }),
+    ).toThrow(/node\/reel order/);
+    expect(() =>
+      parseSceneLayoutManifest({
+        ...game002LayoutFixture,
+        symbolPackage: {
+          manifest: "dependencies/symbols/demo/symbols.package.json",
+          reel: "main",
+          reelSet: "main",
+          renderMode: "standard",
+        },
+      }),
+    ).toThrow(/order is required/);
+  });
+
   it("parses, deeply freezes and resolves game002 geometry", () => {
     const manifest = parseSceneLayoutManifest(game002LayoutFixture);
     expect(Object.isFrozen(manifest)).toBe(true);

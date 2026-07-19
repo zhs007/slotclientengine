@@ -98,7 +98,7 @@ function backgroundInspector(
   const node = project.nodes.find((item) => item.id === variant.backgroundNode);
   const resource = node ? project.resources.get(node.resourceId) : undefined;
   return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>背景 Inspector</span><h2>${variantId}</h2></div>
-    <section class="inspector-section"><h3>资源绑定</h3>${resource && node ? `<p><strong>${escapeHtml(node.id)}</strong> · order ${node.order}</p><p class="path">${escapeHtml(describeResource(resource))}</p>${nodeIdField(node)}` : '<p class="hint">尚未绑定背景资源。</p>'}<div class="button-row"><button type="button" data-choose-background="${variantId}">${resource ? "更换资源" : "选择资源"}</button><button type="button" class="danger" data-clear-background="${variantId}" ${node ? "" : "disabled"}>清除背景</button></div></section>
+    <section class="inspector-section"><h3>资源绑定</h3>${resource && node ? `<p><strong>${escapeHtml(node.id)}</strong> · order ${node.order}</p><p class="path">${escapeHtml(describeResource(resource))}</p>${nodeIdField(node)}${resource.kind === "spine" ? spinePlaybackEditor(resource, node) : ""}` : '<p class="hint">尚未绑定背景资源。</p>'}<div class="button-row"><button type="button" data-choose-background="${variantId}">${resource ? "更换资源" : "选择资源"}</button><button type="button" class="danger" data-clear-background="${variantId}" ${node ? "" : "disabled"}>清除背景</button></div></section>
     <section class="inspector-section"><h3>Art / Focus</h3><div class="field-grid">${numberField("art width", `variants.${variantId}.artSize.width`, variant.artSize.width)}${numberField("art height", `variants.${variantId}.artSize.height`, variant.artSize.height)}</div><p class="derived">focus ${variant.focusRect.x}, ${variant.focusRect.y}, ${variant.focusRect.width} × ${variant.focusRect.height}</p><details><summary>高级 focus 配置</summary><div class="field-grid">${numberField("left", `variants.${variantId}.focusOffsets.left`, variant.focusOffsets.left)}${numberField("top", `variants.${variantId}.focusOffsets.top`, variant.focusOffsets.top)}${numberField("right", `variants.${variantId}.focusOffsets.right`, variant.focusOffsets.right)}${numberField("bottom", `variants.${variantId}.focusOffsets.bottom`, variant.focusOffsets.bottom)}</div>${project.mode === "orientation-focus" ? `<fieldset><legend>frame focus rect</legend><div class="field-grid">${numberField("width", `variants.${variantId}.frameFocusRect.width`, variant.frameFocusRect.width)}${numberField("height", `variants.${variantId}.frameFocusRect.height`, variant.frameFocusRect.height)}</div></fieldset><fieldset><legend>min focus margins</legend><div class="field-grid">${numberField("left", `variants.${variantId}.minFocusMargin.left`, variant.minFocusMargin.left)}${numberField("right", `variants.${variantId}.minFocusMargin.right`, variant.minFocusMargin.right)}${numberField("top", `variants.${variantId}.minFocusMargin.top`, variant.minFocusMargin.top)}${numberField("bottom", `variants.${variantId}.minFocusMargin.bottom`, variant.minFocusMargin.bottom)}</div></fieldset>` : ""}</details></section>
   </div>`;
 }
@@ -106,7 +106,7 @@ function backgroundInspector(
 function reelInspector(project: EditorProject): string {
   const reel = project.reel;
   const size = calculateReelSize(project);
-  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>主转轮 Inspector</span><h2>main</h2></div><section class="inspector-section"><div class="field-grid">${numberField("columns", "reel.columns", reel.columns)}${numberField("rows", "reel.rows", reel.rows)}</div><p class="derived">派生尺寸 ${size.width} × ${size.height}</p><details><summary>高级 cell / gap / placement</summary><div class="field-grid">${numberField("cell width", "reel.cellWidth", reel.cellWidth)}${numberField("cell height", "reel.cellHeight", reel.cellHeight)}${numberField("gap x", "reel.gapX", reel.gapX)}${numberField("gap y", "reel.gapY", reel.gapY)}</div>${activeVariantIds(
+  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>主转轮 Inspector</span><h2>main</h2></div><section class="inspector-section"><div class="field-grid">${numberField("order", "reel.order", reel.order ?? 0)}${numberField("columns", "reel.columns", reel.columns)}${numberField("rows", "reel.rows", reel.rows)}</div><p class="derived">派生尺寸 ${size.width} × ${size.height}</p><details><summary>高级 cell / gap / placement</summary><div class="field-grid">${numberField("cell width", "reel.cellWidth", reel.cellWidth)}${numberField("cell height", "reel.cellHeight", reel.cellHeight)}${numberField("gap x", "reel.gapX", reel.gapX)}${numberField("gap y", "reel.gapY", reel.gapY)}</div>${activeVariantIds(
     project,
   )
     .map((variant) => {
@@ -124,7 +124,7 @@ function layerInspector(
   const resource = project.resources.get(node.resourceId);
   const index = project.nodes.findIndex((item) => item.id === node.id);
   const layerIndex = layers.findIndex((item) => item.id === node.id);
-  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>图层 Inspector</span><h2>${escapeHtml(node.id)}</h2></div><section class="inspector-section"><h3>身份与资源</h3>${nodeIdField(node)}<p>order ${node.order}</p><p class="path">${resource ? escapeHtml(describeResource(resource)) : "未知资源"}</p><div class="button-row"><button type="button" data-rebind-layer="${escapeHtml(node.id)}">更换资源</button><button type="button" data-move-layer="-1" ${layerIndex <= 0 ? "disabled" : ""}>上移</button><button type="button" data-move-layer="1" ${layerIndex < 0 || layerIndex >= layers.length - 1 ? "disabled" : ""}>下移</button></div>${resource?.kind === "spine" ? animationSelect(resource, node) : ""}</section><section class="inspector-section"><h3>方向与 Placement</h3>${activeVariantIds(
+  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>图层 Inspector</span><h2>${escapeHtml(node.id)}</h2></div><section class="inspector-section"><h3>身份与资源</h3>${nodeIdField(node)}<p>order ${node.order}</p><p class="path">${resource ? escapeHtml(describeResource(resource)) : "未知资源"}</p><div class="button-row"><button type="button" data-rebind-layer="${escapeHtml(node.id)}">更换资源</button><button type="button" data-move-layer="-1" ${layerIndex <= 0 ? "disabled" : ""}>上移</button><button type="button" data-move-layer="1" ${layerIndex < 0 || layerIndex >= layers.length - 1 ? "disabled" : ""}>下移</button></div>${resource?.kind === "spine" ? spinePlaybackEditor(resource, node) : resource?.kind === "image-string" ? imageStringEditor(node) : ""}</section><section class="inspector-section"><h3>方向与 Placement</h3>${activeVariantIds(
     project,
   )
     .map((variant) => placementMarkup(node, index, variant, project.mode))
@@ -137,11 +137,44 @@ function nodeIdField(node: EditorNodeDraft): string {
   return `<label>node id<input data-node-id="${escapeHtml(node.id)}" value="${escapeHtml(node.id)}" /></label>`;
 }
 
-function animationSelect(
+function spinePlaybackEditor(
   resource: Extract<EditorLayoutResource, { kind: "spine" }>,
   node: EditorNodeDraft,
 ): string {
-  return `<label>default animation<select data-layer-animation="${escapeHtml(node.id)}"><option value="">请选择（大小写精确）</option>${resource.animationNames.map((name) => `<option value="${escapeHtml(name)}" ${node.defaultAnimation === name ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>`;
+  const playback = node.playback;
+  const selected = playback?.kind === "loop" ? playback.animation : "";
+  const animationOptions = (value: string) =>
+    resource.animationNames
+      .map(
+        (name) =>
+          `<option value="${escapeHtml(name)}" ${value === name ? "selected" : ""}>${escapeHtml(name)}</option>`,
+      )
+      .join("");
+  return `<div class="spine-playback"><label>playback<select data-spine-playback-kind="${escapeHtml(node.id)}"><option value="loop" ${playback?.kind === "loop" ? "selected" : ""}>single loop</option><option value="state-machine" ${playback?.kind === "state-machine" ? "selected" : ""}>state machine</option></select></label>${
+    playback?.kind === "state-machine"
+      ? `<fieldset><legend>稳定状态</legend>${playback.states
+          .map(
+            (state) =>
+              `<div class="field-row"><label><input type="radio" name="initial-${escapeHtml(node.id)}" data-spine-initial="${escapeHtml(node.id)}" value="${escapeHtml(state.id)}" ${playback.initialState === state.id ? "checked" : ""}/> initial</label><input data-spine-state-id="${escapeHtml(node.id)}" data-current-state="${escapeHtml(state.id)}" value="${escapeHtml(state.id)}"/><select data-spine-state-animation="${escapeHtml(node.id)}" data-state-id="${escapeHtml(state.id)}">${animationOptions(state.animation)}</select><button type="button" data-delete-spine-state="${escapeHtml(node.id)}" data-state-id="${escapeHtml(state.id)}">删除</button></div>`,
+          )
+          .join(
+            "",
+          )}<button type="button" data-add-spine-state="${escapeHtml(node.id)}">添加状态</button></fieldset><fieldset><legend>有向 transitions</legend>${playback.transitions
+          .map(
+            (transition, index) =>
+              `<div class="field-row"><span>${escapeHtml(transition.from)} → ${escapeHtml(transition.to)}</span><code>${escapeHtml(transition.animation)}</code><button type="button" data-delete-spine-transition="${escapeHtml(node.id)}" data-transition-index="${index}">删除</button></div>`,
+          )
+          .join(
+            "",
+          )}<button type="button" data-add-spine-transition="${escapeHtml(node.id)}">添加 transition</button></fieldset>`
+      : `<label>loop animation<select data-layer-animation="${escapeHtml(node.id)}"><option value="">请选择（大小写精确）</option>${animationOptions(selected)}</select></label>`
+  }</div>`;
+}
+
+function imageStringEditor(node: EditorNodeDraft): string {
+  const value = node.imageString;
+  if (!value) return '<p class="hint">image-string draft 缺失。</p>';
+  return `<fieldset><legend>图片字符串</legend><label>text<input data-image-string-text="${escapeHtml(node.id)}" value="${escapeHtml(value.text)}"/></label><div class="field-grid"><label>anchor x<input type="number" min="0" max="1" step="0.01" data-image-string-anchor-x="${escapeHtml(node.id)}" value="${value.anchor.x}"/></label><label>anchor y<input type="number" min="0" max="1" step="0.01" data-image-string-anchor-y="${escapeHtml(node.id)}" value="${value.anchor.y}"/></label></div></fieldset>`;
 }
 
 function placementMarkup(

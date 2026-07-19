@@ -116,6 +116,8 @@ Vite 输入必须只包含 glyph closure；CDN loader 只接受 http/https manif
 
 `apps/Imgnumbereditor` 负责显式字符映射、offset/fixed group 表单、静态模板、RAF 计数模板和 standalone ZIP。文件名仅提供候选建议，不会自动成为 manifest 数据；编辑器不裁图、不 resize、不转码，也不把模板写入 ZIP。
 
+`apps/gamelayouteditor` 可把 standalone ZIP 导入为可复用 logical resource。每个 layout node 独立保存 node id、任意合法 string、anchor 与 per-variant placement；替换 resource 会先验证全部引用 text，任一缺 glyph 时整体失败。production layout 只 vendor 被已导出 node 引用的精确闭包到 `dependencies/image-strings/<id>/`，相同 resource 的多个 node 共享一份依赖但保留各自 text；未引用 resource 与 orphan 不进入 ZIP。
+
 ## Symbol 命名节点
 
 symbol manifest 的每个 symbol 可声明稳定有序的 `imageStringNodes`。节点通过唯一 `name` 寻址，`resource` 指向 symbol package 内 vendored 的 `image-string.manifest.json`，并显式绑定一个真实 Spine state 和大小写精确的真实 slot：

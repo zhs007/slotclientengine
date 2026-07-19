@@ -44,9 +44,10 @@ export function resourcesWorkspaceMarkup(options: {
         <div class="toolbar-actions">
           <button type="button" data-upload-images>上传图片</button>
           <button type="button" data-upload-spine>上传 Spine 文件组</button>
+          <button type="button" data-upload-image-string>导入 image-string ZIP</button>
         </div>
         <label class="search-field">搜索 id / path<input type="search" data-resource-query value="${escapeHtml(session.resourceQuery)}" /></label>
-        <label>类型<select data-resource-type><option value="all">全部</option><option value="image" ${session.resourceType === "image" ? "selected" : ""}>Image</option><option value="spine" ${session.resourceType === "spine" ? "selected" : ""}>Spine</option></select></label>
+        <label>类型<select data-resource-type><option value="all">全部</option><option value="image" ${session.resourceType === "image" ? "selected" : ""}>Image</option><option value="spine" ${session.resourceType === "spine" ? "selected" : ""}>Spine</option><option value="image-string" ${session.resourceType === "image-string" ? "selected" : ""}>Image String</option></select></label>
         <label>引用<select data-resource-status><option value="all">全部</option><option value="referenced" ${session.resourceStatus === "referenced" ? "selected" : ""}>已引用</option><option value="unused" ${session.resourceStatus === "unused" ? "selected" : ""}>未使用</option><option value="error" ${session.resourceStatus === "error" ? "selected" : ""}>错误</option></select></label>
       </div>
       <div class="resource-list" data-resource-list>
@@ -79,7 +80,7 @@ function resourceRowMarkup(
   const preview =
     resource.kind === "image" && thumbnailUrl
       ? `<img src="${escapeHtml(thumbnailUrl)}" alt="" />`
-      : `<span aria-hidden="true">${resource.kind === "spine" ? "SP" : "IMG"}</span>`;
+      : `<span aria-hidden="true">${resource.kind === "spine" ? "SP" : resource.kind === "image-string" ? "TXT" : "IMG"}</span>`;
   return `<article class="resource-row" data-resource-row="${escapeHtml(resource.id)}">
     <div class="resource-summary">
       <div class="resource-thumbnail">${preview}</div>
@@ -88,7 +89,7 @@ function resourceRowMarkup(
     </div>
     <div class="resource-actions">
       <button type="button" data-resource-add-layer="${escapeHtml(resource.id)}">添加为图层</button>
-      ${project.mode === "maximized-focus" ? `<button type="button" data-resource-background="default" data-resource-id="${escapeHtml(resource.id)}">设为背景</button>` : `<button type="button" data-resource-background="landscape" data-resource-id="${escapeHtml(resource.id)}">设为横版背景</button><button type="button" data-resource-background="portrait" data-resource-id="${escapeHtml(resource.id)}">设为竖版背景</button>`}
+      ${resource.kind === "image-string" ? "" : project.mode === "maximized-focus" ? `<button type="button" data-resource-background="default" data-resource-id="${escapeHtml(resource.id)}">设为背景</button>` : `<button type="button" data-resource-background="landscape" data-resource-id="${escapeHtml(resource.id)}">设为横版背景</button><button type="button" data-resource-background="portrait" data-resource-id="${escapeHtml(resource.id)}">设为竖版背景</button>`}
       <button type="button" data-replace-resource="${escapeHtml(resource.id)}">替换</button>
       <button type="button" class="danger" data-delete-resource="${escapeHtml(resource.id)}" ${references.length > 0 ? `title="被 ${references.map((reference) => reference.nodeId).join(", ")} 引用"` : ""}>删除</button>
     </div>
@@ -103,14 +104,16 @@ function resourceDetailsMarkup(
   const dependencies =
     resource.kind === "image"
       ? `<li>${escapeHtml(resource.path)}</li>`
-      : `<li>skeleton: ${escapeHtml(resource.skeleton)}</li><li>atlas: ${escapeHtml(resource.atlas)}</li>${Object.entries(
-          resource.textures,
-        )
-          .map(
-            ([page, path]) =>
-              `<li>${escapeHtml(page)} → ${escapeHtml(path)}</li>`,
+      : resource.kind === "spine"
+        ? `<li>skeleton: ${escapeHtml(resource.skeleton)}</li><li>atlas: ${escapeHtml(resource.atlas)}</li>${Object.entries(
+            resource.textures,
           )
-          .join("")}`;
+            .map(
+              ([page, path]) =>
+                `<li>${escapeHtml(page)} → ${escapeHtml(path)}</li>`,
+            )
+            .join("")}`
+        : `<li>manifest: ${escapeHtml(resource.manifestPath)}</li><li>${resource.assetPaths.length} glyph assets</li>`;
   const animations =
     resource.kind === "spine"
       ? `<p><strong>Animations：</strong>${resource.animationNames.map(escapeHtml).join(", ")}</p>`

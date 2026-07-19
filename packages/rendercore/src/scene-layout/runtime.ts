@@ -4,6 +4,11 @@ import {
   createOfficialSpinePlayer,
   type RendercoreSpinePlayer,
 } from "../spine/runtime-player.js";
+import { SpineStateController } from "../spine/state-controller.js";
+import {
+  createRenderImageString,
+  type RenderImageString,
+} from "../image-string/index.js";
 import type { RenderViewportSize } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
 import {
@@ -18,6 +23,7 @@ import type {
   SceneLayoutResource,
   SceneLayoutRuntime,
   SceneLayoutSnapshot,
+  SceneLayoutNodeStateSnapshot,
   SceneLayoutVariantId,
 } from "./types.js";
 
@@ -38,6 +44,8 @@ interface RuntimeNode {
   readonly before: Container;
   readonly after: Container;
   player: RendercoreSpinePlayer | null;
+  stateController: SpineStateController | null;
+  imageString: RenderImageString | null;
   texture: Texture | null;
 }
 
@@ -90,7 +98,17 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       after.label = `scene-layout-after:${spec.id}`;
       slot.addChild(before, named, after);
       this.container.addChild(slot);
-      return { spec, slot, named, before, after, player: null, texture: null };
+      return {
+        spec,
+        slot,
+        named,
+        before,
+        after,
+        player: null,
+        stateController: null,
+        imageString: null,
+        texture: null,
+      };
     });
     this.#nodes = Object.freeze(nodes);
     this.#nodesById = new Map(nodes.map((node) => [node.spec.id, node]));
@@ -155,7 +173,10 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       throw asSceneLayoutError(error);
     }
     for (const node of this.#nodes) {
-      if (node.player && node.slot.renderable) node.player.update(deltaSeconds);
+      if (node.player && node.slot.renderable) {
+        const result = node.player.update(deltaSeconds);
+        node.stateController?.updateCompleted(result.completed);
+      }
     }
   }
 
@@ -193,6 +214,35 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     this.assertReady();
     const variantId = this.#snapshot?.variantId ?? this.defaultVariantId();
     return resolveSceneLayoutReelGrid(this.#resource.manifest, id, variantId);
+  }
+
+  getImageStringNodeNames(): readonly string[] {
+    this.assertReady();
+    return Object.freeze(
+      this.#nodes
+        .filter((node) => node.spec.resource.kind === "image-string")
+        .map((node) => node.spec.id),
+    );
+  }
+
+  setImageStringText(nodeId: string, text: string): void {
+    this.assertReady();
+    this.requireImageStringNode(nodeId).setText(text);
+  }
+
+  getImageStringText(nodeId: string): string {
+    this.assertReady();
+    return this.requireImageStringNode(nodeId).getSnapshot().text;
+  }
+
+  requestNodeState(nodeId: string, state: string): Promise<void> {
+    this.assertReady();
+    return this.requireStateController(nodeId).request(state);
+  }
+
+  getNodeStateSnapshot(nodeId: string): SceneLayoutNodeStateSnapshot {
+    this.assertReady();
+    return this.requireStateController(nodeId).snapshot();
   }
 
   destroy(): void {
@@ -246,6 +296,24 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       node.named.addChild(sprite);
       return;
     }
+    if (node.spec.resource.kind === "image-string") {
+      const resource =
+        this.#resource.imageStringResources[node.spec.resource.manifest];
+      if (!resource) {
+        throw new SceneLayoutError(
+          `Scene layout image-string resource is missing for node "${node.spec.id}".`,
+        );
+      }
+      const view = createRenderImageString({
+        resource,
+        text: node.spec.resource.text,
+        anchor: node.spec.resource.anchor,
+      });
+      node.imageString = view;
+      view.container.label = `scene-layout-image-string:${node.spec.id}`;
+      node.named.addChild(view.container);
+      return;
+    }
     const resource = this.#resource.spineResources[node.spec.id];
     if (!resource) {
       throw new SceneLayoutError(
@@ -256,17 +324,33 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     node.player = player;
     await player.init();
     this.assertAlive();
-    player.play({
-      animationName: node.spec.resource.defaultAnimation,
-      loop: true,
-    });
+    if ("stateMachine" in node.spec.resource) {
+      const controller = new SpineStateController({
+        player,
+        spec: node.spec.resource.stateMachine,
+        createError: (message) => new SceneLayoutError(message),
+      });
+      node.stateController = controller;
+      controller.start();
+    } else {
+      player.play({
+        animationName: node.spec.resource.defaultAnimation,
+        loop: true,
+      });
+    }
     node.named.addChild(player.view);
   }
 
   private releaseNodeResources(): void {
     for (const node of this.#nodes) {
+      node.stateController?.destroy(
+        `Scene layout Spine node "${node.spec.id}" was destroyed.`,
+      );
+      node.stateController = null;
       node.player?.destroy();
       node.player = null;
+      node.imageString?.destroy();
+      node.imageString = null;
       node.texture = null;
       node.named.removeChildren();
     }
@@ -285,6 +369,26 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     const node = this.#nodesById.get(id);
     if (!node) throw new SceneLayoutError(`Unknown scene layout node "${id}".`);
     return node;
+  }
+
+  private requireImageStringNode(id: string): RenderImageString {
+    const node = this.requireNode(id);
+    if (!node.imageString) {
+      throw new SceneLayoutError(
+        `Scene layout node "${id}" is not an image-string node.`,
+      );
+    }
+    return node.imageString;
+  }
+
+  private requireStateController(id: string): SpineStateController {
+    const node = this.requireNode(id);
+    if (!node.stateController) {
+      throw new SceneLayoutError(
+        `Scene layout node "${id}" is not a stateful Spine node.`,
+      );
+    }
+    return node.stateController;
   }
 
   private defaultVariantId(): SceneLayoutVariantId {

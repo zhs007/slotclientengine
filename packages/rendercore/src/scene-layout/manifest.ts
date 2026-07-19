@@ -7,6 +7,8 @@ import type {
   SceneLayoutNodePlacement,
   SceneLayoutNodeResourceSpec,
   SceneLayoutReelGrid,
+  SceneLayoutSpineStateMachine,
+  SceneLayoutSymbolPackageBinding,
   SceneLayoutVariantId,
 } from "./types.js";
 
@@ -20,7 +22,7 @@ export function parseSceneLayoutManifest(
   const record = readRecord(value, "scene layout manifest");
   known(
     record,
-    ["version", "kind", "id", "adaptation", "nodes", "reels"],
+    ["version", "kind", "id", "adaptation", "nodes", "reels", "symbolPackage"],
     "scene layout manifest",
   );
   if (record.version !== 1) fail("scene layout manifest.version must be 1.");
@@ -50,6 +52,20 @@ export function parseSceneLayoutManifest(
     identifier(reelId, "scene layout reel id");
     reels[reelId] = parseReel(raw, reelId, adaptation.mode);
   }
+  const symbolPackage =
+    record.symbolPackage === undefined
+      ? undefined
+      : parseSymbolPackageBinding(record.symbolPackage);
+  if (symbolPackage) {
+    const main = reels.main;
+    if (!main) fail('symbolPackage requires scene layout reel "main".');
+    if (main.order === undefined)
+      fail("scene layout reels.main.order is required with symbolPackage.");
+    unique(
+      [...nodes.map((node) => node.order), main.order],
+      "scene layout node/reel order",
+    );
+  }
   validateReferencesAndBounds(adaptation, nodes, nodeIds, reels);
   validatePathClosure(nodes);
   return deepFreeze({
@@ -59,6 +75,7 @@ export function parseSceneLayoutManifest(
     adaptation,
     nodes,
     reels,
+    ...(symbolPackage ? { symbolPackage } : {}),
   });
 }
 
@@ -70,12 +87,14 @@ export function collectSceneLayoutAssetPaths(
   for (const node of parsed.nodes) {
     const resource = node.resource;
     if (resource.kind === "image") paths.add(resource.path);
+    else if (resource.kind === "image-string") paths.add(resource.manifest);
     else {
       paths.add(resource.skeleton);
       paths.add(resource.atlas);
       for (const path of Object.values(resource.textures)) paths.add(path);
     }
   }
+  if (parsed.symbolPackage) paths.add(parsed.symbolPackage.manifest);
   return Object.freeze(
     [...paths].sort((left, right) => left.localeCompare(right, "en")),
   );
@@ -250,12 +269,14 @@ function parseResource(
     });
   }
   if (record.kind === "spine") {
+    const hasStateMachine = Object.hasOwn(record, "stateMachine");
     known(
       record,
-      ["kind", "skeleton", "atlas", "textures", "defaultAnimation", "loop"],
+      hasStateMachine
+        ? ["kind", "skeleton", "atlas", "textures", "stateMachine"]
+        : ["kind", "skeleton", "atlas", "textures", "defaultAnimation", "loop"],
       label,
     );
-    if (record.loop !== true) fail(`${label}.loop must be true.`);
     const skeleton = localPath(
       record.skeleton,
       `${label}.skeleton`,
@@ -285,6 +306,19 @@ function parseResource(
       textures[page] = path;
     }
     unique([skeleton, atlas, ...Object.values(textures)], `${label} path`);
+    if (hasStateMachine) {
+      return deepFreeze({
+        kind: "spine" as const,
+        skeleton,
+        atlas,
+        textures,
+        stateMachine: parseSpineStateMachine(
+          record.stateMachine,
+          `${label}.stateMachine`,
+        ),
+      });
+    }
+    if (record.loop !== true) fail(`${label}.loop must be true.`);
     return deepFreeze({
       kind: "spine" as const,
       skeleton,
@@ -297,7 +331,77 @@ function parseResource(
       loop: true as const,
     });
   }
-  fail(`${label}.kind must be image or spine.`);
+  if (record.kind === "image-string") {
+    known(record, ["kind", "manifest", "text", "anchor"], label);
+    if (typeof record.text !== "string")
+      fail(`${label}.text must be a string.`);
+    const anchor = readRecord(record.anchor, `${label}.anchor`);
+    known(anchor, ["x", "y"], `${label}.anchor`);
+    return deepFreeze({
+      kind: "image-string" as const,
+      manifest: imageStringDependencyPath(record.manifest, `${label}.manifest`),
+      text: record.text,
+      anchor: {
+        x: unit(anchor.x, `${label}.anchor.x`),
+        y: unit(anchor.y, `${label}.anchor.y`),
+      },
+    });
+  }
+  fail(`${label}.kind must be image, spine, or image-string.`);
+}
+
+function parseSpineStateMachine(
+  value: unknown,
+  label: string,
+): SceneLayoutSpineStateMachine {
+  const record = readRecord(value, label);
+  known(record, ["initialState", "states", "transitions"], label);
+  const statesRecord = readRecord(record.states, `${label}.states`);
+  if (Object.keys(statesRecord).length === 0)
+    fail(`${label}.states must not be empty.`);
+  const states: Record<string, { readonly animation: string }> = {};
+  const animations: string[] = [];
+  for (const [stateId, raw] of Object.entries(statesRecord)) {
+    stateIdentifier(stateId, `${label}.states key`);
+    const state = readRecord(raw, `${label}.states.${stateId}`);
+    known(state, ["animation"], `${label}.states.${stateId}`);
+    const animation = nonEmpty(
+      state.animation,
+      `${label}.states.${stateId}.animation`,
+    );
+    states[stateId] = deepFreeze({ animation });
+    animations.push(animation);
+  }
+  const initialState = stateIdentifier(
+    record.initialState,
+    `${label}.initialState`,
+  );
+  if (!states[initialState])
+    fail(`${label}.initialState must reference a declared state.`);
+  if (!Array.isArray(record.transitions))
+    fail(`${label}.transitions must be an array.`);
+  const pairs = new Set<string>();
+  const transitions = record.transitions.map((raw, index) => {
+    const transitionLabel = `${label}.transitions[${index}]`;
+    const transition = readRecord(raw, transitionLabel);
+    known(transition, ["from", "to", "animation"], transitionLabel);
+    const from = stateIdentifier(transition.from, `${transitionLabel}.from`);
+    const to = stateIdentifier(transition.to, `${transitionLabel}.to`);
+    if (!states[from] || !states[to])
+      fail(`${transitionLabel} must reference declared states.`);
+    if (from === to) fail(`${transitionLabel} must not be a self transition.`);
+    const pair = `${from}\u0000${to}`;
+    if (pairs.has(pair)) fail(`${label} transition pairs must be unique.`);
+    pairs.add(pair);
+    const animation = nonEmpty(
+      transition.animation,
+      `${transitionLabel}.animation`,
+    );
+    animations.push(animation);
+    return deepFreeze({ from, to, animation });
+  });
+  unique(animations, `${label} animation`);
+  return deepFreeze({ initialState, states, transitions });
 }
 
 function parseReel(
@@ -307,7 +411,11 @@ function parseReel(
 ): SceneLayoutReelGrid {
   const label = `scene layout reel "${id}"`;
   const record = readRecord(value, label);
-  known(record, ["columns", "rows", "cellSize", "gap", "placements"], label);
+  known(
+    record,
+    ["order", "columns", "rows", "cellSize", "gap", "placements"],
+    label,
+  );
   const gapRecord = readRecord(record.gap, `${label}.gap`);
   known(gapRecord, ["x", "y"], `${label}.gap`);
   const placementsRecord = readRecord(record.placements, `${label}.placements`);
@@ -334,6 +442,9 @@ function parseReel(
     fail(`${label}.placements must include landscape and portrait.`);
   }
   return deepFreeze({
+    ...(record.order === undefined
+      ? {}
+      : { order: safeInteger(record.order, `${label}.order`) }),
     columns: positiveSafeInteger(record.columns, `${label}.columns`),
     rows: positiveSafeInteger(record.rows, `${label}.rows`),
     cellSize: size(record.cellSize, `${label}.cellSize`),
@@ -364,6 +475,8 @@ function validateReferencesAndBounds(
     if (!nodeIds.has(backgroundNode))
       fail(`backgroundNode "${backgroundNode}" does not exist.`);
     const background = nodes.find((node) => node.id === backgroundNode)!;
+    if (background.resource.kind === "image-string")
+      fail(`backgroundNode "${backgroundNode}" cannot be image-string.`);
     if (!background.placements[variantId])
       fail(
         `backgroundNode "${backgroundNode}" must be visible in ${variantId}.`,
@@ -409,24 +522,28 @@ function validatePathClosure(nodes: readonly SceneLayoutNode[]): void {
             path: resource.path,
             size: resource.size,
           })
-        : JSON.stringify({
-            kind: resource.kind,
-            skeleton: resource.skeleton,
-            atlas: resource.atlas,
-            textures: Object.fromEntries(
-              Object.entries(resource.textures).sort(([left], [right]) =>
-                left.localeCompare(right, "en"),
+        : resource.kind === "image-string"
+          ? JSON.stringify({ kind: resource.kind, manifest: resource.manifest })
+          : JSON.stringify({
+              kind: resource.kind,
+              skeleton: resource.skeleton,
+              atlas: resource.atlas,
+              textures: Object.fromEntries(
+                Object.entries(resource.textures).sort(([left], [right]) =>
+                  left.localeCompare(right, "en"),
+                ),
               ),
-            ),
-          });
+            });
     const paths =
       resource.kind === "image"
         ? [resource.path]
-        : [
-            resource.skeleton,
-            resource.atlas,
-            ...Object.values(resource.textures),
-          ];
+        : resource.kind === "image-string"
+          ? [resource.manifest]
+          : [
+              resource.skeleton,
+              resource.atlas,
+              ...Object.values(resource.textures),
+            ];
     for (const path of paths) {
       const key = path.toLowerCase();
       const owner = owners.get(key);
@@ -438,6 +555,54 @@ function validatePathClosure(nodes: readonly SceneLayoutNode[]): void {
       owners.set(key, signature);
     }
   }
+}
+
+function parseSymbolPackageBinding(
+  value: unknown,
+): SceneLayoutSymbolPackageBinding {
+  const label = "scene layout symbolPackage";
+  const record = readRecord(value, label);
+  known(record, ["manifest", "reel", "reelSet", "renderMode"], label);
+  if (record.reel !== "main") fail(`${label}.reel must be "main".`);
+  if (record.renderMode !== "standard" && record.renderMode !== "grid-cell")
+    fail(`${label}.renderMode must be "standard" or "grid-cell".`);
+  return deepFreeze({
+    manifest: symbolDependencyPath(record.manifest, `${label}.manifest`),
+    reel: "main" as const,
+    reelSet: nonEmpty(record.reelSet, `${label}.reelSet`),
+    renderMode: record.renderMode,
+  });
+}
+
+function imageStringDependencyPath(value: unknown, label: string): string {
+  const path = canonicalLowercasePath(value, label);
+  const match =
+    /^dependencies\/image-strings\/([a-z0-9]+(?:-[a-z0-9]+)*)\/image-string\.manifest\.json$/u.exec(
+      path,
+    );
+  if (!match)
+    fail(
+      `${label} must be dependencies/image-strings/<id>/image-string.manifest.json.`,
+    );
+  return path;
+}
+
+function symbolDependencyPath(value: unknown, label: string): string {
+  const path = canonicalLowercasePath(value, label);
+  const match =
+    /^dependencies\/symbols\/([a-z0-9]+(?:-[a-z0-9]+)*)\/symbols\.package\.json$/u.exec(
+      path,
+    );
+  if (!match)
+    fail(`${label} must be dependencies/symbols/<id>/symbols.package.json.`);
+  return path;
+}
+
+function canonicalLowercasePath(value: unknown, label: string): string {
+  const path = localPath(value, label, new Set([".json"]));
+  if (path !== path.toLowerCase() || path !== path.normalize("NFC"))
+    fail(`${label} must be a canonical lowercase NFC path.`);
+  return path;
 }
 
 function localPath(
@@ -470,6 +635,12 @@ function localPath(
 function identifier(value: unknown, label: string): string {
   const id = nonEmpty(value, label);
   if (!IDENTIFIER.test(id)) fail(`${label} must match ${IDENTIFIER.source}.`);
+  return id;
+}
+function stateIdentifier(value: unknown, label: string): string {
+  const id = nonEmpty(value, label);
+  if (!/^[A-Za-z][A-Za-z0-9_-]*$/u.test(id))
+    fail(`${label} must be an ASCII state identifier.`);
   return id;
 }
 function readRecord(value: unknown, label: string): Record<string, unknown> {
@@ -508,6 +679,11 @@ function positive(value: unknown, label: string): number {
 function nonNegative(value: unknown, label: string): number {
   const result = finite(value, label);
   if (result < 0) fail(`${label} must be non-negative.`);
+  return result;
+}
+function unit(value: unknown, label: string): number {
+  const result = finite(value, label);
+  if (result < 0 || result > 1) fail(`${label} must be between 0 and 1.`);
   return result;
 }
 function safeInteger(value: unknown, label: string): number {

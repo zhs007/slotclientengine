@@ -3,4 +3,6 @@ export * from "./types.js";
 export * from "./manifest.js";
 export * from "./geometry.js";
 export * from "./resource.js";
+export * from "./package-resource.js";
 export * from "./runtime.js";
+export * from "./package-runtime.js";

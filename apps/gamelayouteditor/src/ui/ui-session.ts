@@ -22,7 +22,7 @@ export type LayoutResourceBindingContext =
 export interface ResourcePickerState {
   context: LayoutResourceBindingContext;
   query: string;
-  type: "all" | "image" | "spine";
+  type: "all" | "image" | "spine" | "image-string";
   selectedResourceId: string;
   nodeId: string;
   variants: SceneLayoutVariantId[];
@@ -33,7 +33,7 @@ export interface EditorUiSession {
   activeTab: WorkspaceTab;
   selection: LayoutSelection | null;
   resourceQuery: string;
-  resourceType: "all" | "image" | "spine";
+  resourceType: "all" | "image" | "spine" | "image-string";
   resourceStatus: "all" | "referenced" | "unused" | "error";
   expandedResourceIds: Set<string>;
   picker: ResourcePickerState | null;

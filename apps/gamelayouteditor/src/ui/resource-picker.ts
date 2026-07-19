@@ -14,7 +14,7 @@ import type {
 
 export interface LayoutResourcePickerCandidate {
   readonly resourceId: string;
-  readonly kind: "image" | "spine";
+  readonly kind: "image" | "spine" | "image-string";
   readonly primaryPath: string;
   readonly status: "ready" | "incomplete" | "error";
   readonly referenceCount: number;
@@ -75,11 +75,15 @@ function candidateFromResource(
     resource.id,
   ).length;
   const missingBounds = resource.kind === "spine" && !resource.bounds;
+  const forbidden =
+    context.kind === "assign-background" && resource.kind === "image-string";
   const incomplete = context.kind === "assign-background" && missingBounds;
   const summary =
     resource.kind === "image"
       ? `${resource.size.width}×${resource.size.height}`
-      : `${resource.animationNames.length} animations${resource.bounds ? ` · ${resource.bounds.width}×${resource.bounds.height}` : " · 无 bounds，背景需手填 art size"}`;
+      : resource.kind === "spine"
+        ? `${resource.animationNames.length} animations${resource.bounds ? ` · ${resource.bounds.width}×${resource.bounds.height}` : " · 无 bounds，背景需手填 art size"}`
+        : `${Object.keys(resource.manifest.glyphs).length} glyphs · lineHeight ${resource.manifest.metrics.lineHeight}`;
   return Object.freeze({
     resourceId: resource.id,
     kind: resource.kind,
@@ -87,5 +91,6 @@ function candidateFromResource(
     status: incomplete ? "incomplete" : "ready",
     referenceCount,
     summary,
+    ...(forbidden ? { disabledReason: "image-string 不能设为背景" } : {}),
   });
 }

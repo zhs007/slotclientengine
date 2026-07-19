@@ -73,7 +73,7 @@ Symbols ZIP 固定限制：
 - single expanded file：25 MiB
 - total expanded：250 MiB
 
-解压使用 bounded streaming `Unzip`；header size 可用时先拒绝，chunk 到达时再次累计。任一失败会终止 import 并释放临时 runtime/Object URL，旧项目保持可用。layout ZIP 继续使用更小的 `256 / 50 MiB / 20 MiB / 100 MiB` 限制。
+解压使用 bounded streaming `Unzip`；header size 可用时先拒绝，chunk 到达时再次累计。任一失败会终止 import 并释放临时 runtime/Object URL，旧项目保持可用。包含 nested dependencies 的 layout ZIP 限制为 `4096 / 200 MiB / 50 MiB / 500 MiB`。
 
 ## 精确资源闭包
 
@@ -119,7 +119,9 @@ Spine 只接受 official 4.3.x，animation name 大小写精确，atlas page 必
 
 右侧固定为 all-symbol、single-state gallery，默认 `normal`，支持 Replay、fit 与 zoom；缺 state、empty state 和错误分别占位。编辑器不提供 sequence、hold、next、spin/cascade timeline、remove/drop/refill 或 Nearwin 预览。
 
-`apps/gamelayouteditor` 导入同一 ZIP 后，以 package `cellSize` 原子覆盖 `main` grid 的 cell width/height，保留 rows、columns、gap 与 placement，并按现有 focus offsets 重派生 focus。越出 art/focus 时失败，不 auto-fit。preview 从 scene-layout snapshot 取得真实 cell geometry，按 code order / row-major 只显示 `normal`；value symbol 固定使用 `defaultValues[0]`。清除 package 不回滚已经应用的 cellSize。layout ZIP 不嵌入 symbol 文件。
+`apps/gamelayouteditor` 导入同一 ZIP 后，以 package `cellSize` 原子覆盖 `main` grid 的 cell width/height，保留 rows、columns、gap 与 placement，并按现有 focus offsets 重派生 focus。越出 art/focus 时失败，不 auto-fit。用户必须显式选择 reel set 与 `standard | grid-cell`，并选择“仅预览”或“随布局包导出”；默认仅预览。
+
+选择导出时，原始 validated file map 会原字节 vendor 到 `dependencies/symbols/<package-id>/`，nested manifest 相对路径不重写。layout manifest 只保存 package manifest path、`reels.main`、reel set、render mode 与 reel order；package cell 必须等于 layout cell，reel count 必须等于 columns。ZIP 实际 entry 必须与 layout、image-string、symbols 的传递闭包精确一致。sampled scene、otherScene mapping、服务器真实轮带、token 和玩家输入均不进入 package。
 
 ## Production 接入
 

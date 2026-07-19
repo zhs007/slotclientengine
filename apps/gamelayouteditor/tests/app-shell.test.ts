@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { strToU8, zipSync } from "fflate";
 
 const previewSpies = vi.hoisted(() => ({
   init: vi.fn(async () => undefined),
@@ -14,13 +15,24 @@ const previewSpies = vi.hoisted(() => ({
   setOtherSceneBindings: vi.fn(
     (_bindings: readonly unknown[]): unknown => undefined,
   ),
+  getSpineNodeStates: vi.fn(
+    () =>
+      [] as Array<{
+        nodeId: string;
+        states: string[];
+        stableState: string;
+        targetState: string | null;
+        phase: "stable" | "transitioning";
+      }>,
+  ),
+  requestNodeState: vi.fn(async () => undefined),
   destroy: vi.fn(),
 }));
 
 const ioSpies = vi.hoisted(() => ({
   importZip: vi.fn(),
   exportZip: vi.fn(),
-  importSymbolsZip: vi.fn(),
+  importSymbolsZipWithFiles: vi.fn(),
 }));
 
 const commandSpies = vi.hoisted(() => ({
@@ -43,7 +55,7 @@ const commandSpies = vi.hoisted(() => ({
       skeleton: "assets/hero.json",
       atlas: "assets/hero.atlas",
       textures: { "hero.png": "assets/hero.png" },
-      animationNames: ["Idle", "Win"],
+      animationNames: ["Idle", "Win", "Bridge"],
       bounds: { width: 400, height: 300 },
     };
     project.resources.set(resource.id, resource);
@@ -69,6 +81,8 @@ vi.mock("../src/preview/layout-preview.js", () => ({
     randomizeSymbols = previewSpies.randomizeSymbols;
     setSymbolGrid = previewSpies.setSymbolGrid;
     setOtherSceneBindings = previewSpies.setOtherSceneBindings;
+    getSpineNodeStates = previewSpies.getSpineNodeStates;
+    requestNodeState = previewSpies.requestNodeState;
     destroy = previewSpies.destroy;
   },
 }));
@@ -82,7 +96,7 @@ vi.mock("../src/io/exported-layout-zip.js", () => ({
 }));
 
 vi.mock("../src/io/imported-symbol-package.js", () => ({
-  importSymbolsZip: ioSpies.importSymbolsZip,
+  importSymbolsZipWithFiles: ioSpies.importSymbolsZipWithFiles,
 }));
 
 vi.mock("../src/model/resource-commands.js", async (importOriginal) => {
@@ -103,6 +117,7 @@ describe("GameLayoutEditorApp workspace", () => {
     vi.clearAllMocks();
     previewSpies.setSymbolPackage.mockResolvedValue(null);
     window.confirm = vi.fn(() => true);
+    window.prompt = vi.fn(() => null);
   });
 
   it("mounts one accessible three-tab workspace and keeps symbols controls in the preview drawer", async () => {
@@ -386,10 +401,189 @@ describe("GameLayoutEditorApp workspace", () => {
     inspectorAnimation.value = "Win";
     inspectorAnimation.dispatchEvent(new Event("change"));
     expect(root.textContent).toContain("已设置 animation Win");
+    let playbackKind = root.querySelector(
+      "[data-spine-playback-kind]",
+    ) as HTMLSelectElement;
+    playbackKind.value = "state-machine";
+    playbackKind.dispatchEvent(new Event("change"));
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-add-spine-state]")).toBeTruthy(),
+    );
+    const prompt = vi
+      .spyOn(window, "prompt")
+      .mockReturnValueOnce("FG")
+      .mockReturnValueOnce("Win");
+    (root.querySelector("[data-add-spine-state]") as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(root.querySelectorAll("[data-spine-state-id]")).toHaveLength(2),
+    );
+    prompt
+      .mockReturnValueOnce("State1")
+      .mockReturnValueOnce("FG")
+      .mockReturnValueOnce("Bridge");
+    (
+      root.querySelector("[data-add-spine-transition]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-delete-spine-transition]")).toBeTruthy(),
+    );
+    const stateId = root.querySelector(
+      '[data-current-state="State1"]',
+    ) as HTMLInputElement;
+    stateId.value = "BG";
+    stateId.dispatchEvent(new Event("change"));
+    await vi.waitFor(() => expect(root.textContent).toContain("BG → FG"));
+    (
+      root.querySelector("[data-delete-spine-transition]") as HTMLButtonElement
+    ).click();
+    prompt.mockRestore();
     (root.querySelector("[data-rebind-layer]") as HTMLButtonElement).click();
     dialog = root.querySelector("[data-resource-picker]") as HTMLDialogElement;
     dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
     expect(dialog.open).toBe(false);
+    fileClick.mockRestore();
+    app.destroy();
+  });
+
+  it("imports and edits an image-string layer through the resource and inspector UI", async () => {
+    const manifest = {
+      version: 1,
+      kind: "image-string",
+      id: "digits",
+      metrics: { lineHeight: 10, letterSpacing: 0 },
+      glyphs: {
+        "0": {
+          path: "assets/0.png",
+          size: { width: 5, height: 10 },
+          offset: { x: 0, y: 0 },
+        },
+        "1": {
+          path: "assets/1.png",
+          size: { width: 5, height: 10 },
+          offset: { x: 0, y: 0 },
+        },
+      },
+      fixedAdvanceGroups: [],
+    };
+    const zip = zipSync({
+      "image-string.manifest.json": strToU8(JSON.stringify(manifest)),
+      "assets/0.png": new Uint8Array([0]),
+      "assets/1.png": new Uint8Array([1]),
+    });
+    const fileClick = selectFilesOnce([
+      new File([zip as BlobPart], "digits.zip", { type: "application/zip" }),
+    ]);
+    const { app, root } = await createApp();
+    (
+      root.querySelector("[data-upload-image-string]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('[data-resource-row="digits"]')).toBeTruthy(),
+    );
+    const background = root.querySelector(
+      '[data-resource-row="digits"] [data-resource-background]',
+    ) as HTMLButtonElement;
+    expect(background).toBeNull();
+    (
+      root.querySelector(
+        '[data-resource-add-layer="digits"]',
+      ) as HTMLButtonElement
+    ).click();
+    const dialog = root.querySelector(
+      "[data-resource-picker]",
+    ) as HTMLDialogElement;
+    (
+      dialog.querySelector("[data-picker-confirm]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-image-string-text]")).toBeTruthy(),
+    );
+    let textInput = root.querySelector(
+      "[data-image-string-text]",
+    ) as HTMLInputElement;
+    textInput.value = "001";
+    textInput.dispatchEvent(new Event("change"));
+    const anchorX = root.querySelector(
+      "[data-image-string-anchor-x]",
+    ) as HTMLInputElement;
+    anchorX.value = "0.25";
+    anchorX.dispatchEvent(new Event("change"));
+    textInput = root.querySelector(
+      "[data-image-string-text]",
+    ) as HTMLInputElement;
+    expect(textInput.value).toBe("001");
+    textInput.value = "2";
+    textInput.dispatchEvent(new Event("change"));
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-errors]")?.textContent).toContain(
+        "缺少 glyph",
+      ),
+    );
+    fileClick.mockRestore();
+    app.destroy();
+  });
+
+  it("requests preview Spine states through runtime completion controls", async () => {
+    const manifest = {
+      ...imageManifest,
+      nodes: [
+        imageManifest.nodes[0],
+        {
+          id: "scene",
+          order: 1,
+          resource: {
+            kind: "spine" as const,
+            skeleton: "assets/scene.json",
+            atlas: "assets/scene.atlas",
+            textures: { "scene.png": "assets/scene.png" },
+            stateMachine: {
+              initialState: "BG",
+              states: { BG: { animation: "BG" }, FG: { animation: "FG" } },
+              transitions: [{ from: "BG", to: "FG", animation: "BG_FG" }],
+            },
+          },
+          placements: { default: { x: 0, y: 0, scale: 1 } },
+        },
+      ],
+    };
+    const assets = new Map(assetBytes);
+    assets.set(
+      "assets/scene.json",
+      new TextEncoder().encode(
+        JSON.stringify({
+          skeleton: { spine: "4.3.23" },
+          animations: { BG: {}, FG: {}, BG_FG: {} },
+        }),
+      ),
+    );
+    assets.set("assets/scene.atlas", new Uint8Array([1]));
+    assets.set("assets/scene.png", new Uint8Array([2]));
+    ioSpies.importZip.mockResolvedValueOnce({
+      manifest,
+      assets,
+      destroy: vi.fn(),
+    });
+    previewSpies.getSpineNodeStates.mockReturnValue([
+      {
+        nodeId: "scene",
+        states: ["BG", "FG"],
+        stableState: "BG",
+        targetState: null,
+        phase: "stable",
+      },
+    ]);
+    const fileClick = selectFilesOnce([new File(["zip"], "layout.zip")]);
+    const { app, root } = await createApp();
+    (root.querySelector("[data-import]") as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('[data-preview-state="FG"]')).toBeTruthy(),
+    );
+    (
+      root.querySelector('[data-preview-state="FG"]') as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(previewSpies.requestNodeState).toHaveBeenCalledWith("scene", "FG"),
+    );
     fileClick.mockRestore();
     app.destroy();
   });
@@ -527,7 +721,12 @@ describe("GameLayoutEditorApp workspace", () => {
       bindings: [],
       otherScene: null,
     };
-    ioSpies.importSymbolsZip.mockResolvedValueOnce(resource);
+    ioSpies.importSymbolsZipWithFiles.mockResolvedValueOnce({
+      resource,
+      files: new Map([
+        ["symbols.package.json", new TextEncoder().encode("{}")],
+      ]),
+    });
     previewSpies.setSymbolPackage.mockResolvedValueOnce(metadata);
     previewSpies.setSelectedReelSet.mockReturnValueOnce({
       ...metadata,
@@ -535,6 +734,11 @@ describe("GameLayoutEditorApp workspace", () => {
       status: "ready",
     });
     previewSpies.randomizeSymbols.mockReturnValueOnce({
+      ...metadata,
+      selectedReelSet: "first",
+      status: "ready",
+    });
+    previewSpies.setSymbolGrid.mockReturnValue({
       ...metadata,
       selectedReelSet: "first",
       status: "ready",
@@ -548,6 +752,11 @@ describe("GameLayoutEditorApp workspace", () => {
     (root.querySelector("[data-import-symbols]") as HTMLButtonElement).click();
     await vi.waitFor(() =>
       expect(previewSpies.setSymbolPackage).toHaveBeenCalled(),
+    );
+    await vi.waitFor(() =>
+      expect(
+        (root.querySelector("[data-reel-set]") as HTMLSelectElement).disabled,
+      ).toBe(false),
     );
     const aEnabled = root.querySelector<HTMLInputElement>(
       '[data-other-scene-row="A"] [data-binding-enabled]',
@@ -586,6 +795,12 @@ describe("GameLayoutEditorApp workspace", () => {
     const select = root.querySelector("[data-reel-set]") as HTMLSelectElement;
     select.value = "first";
     select.dispatchEvent(new Event("change"));
+    await vi.waitFor(() =>
+      expect(
+        (root.querySelector("[data-randomize-symbols]") as HTMLButtonElement)
+          .disabled,
+      ).toBe(false),
+    );
     (
       root.querySelector("[data-randomize-symbols]") as HTMLButtonElement
     ).click();

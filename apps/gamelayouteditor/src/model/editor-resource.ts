@@ -1,4 +1,5 @@
 import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout";
+import type { ImageStringManifestV1 } from "@slotclientengine/rendercore/image-string";
 
 export interface EditorImageLayoutResource {
   readonly id: string;
@@ -17,9 +18,18 @@ export interface EditorSpineLayoutResource {
   readonly bounds?: { readonly width: number; readonly height: number };
 }
 
+export interface EditorImageStringLayoutResource {
+  readonly id: string;
+  readonly kind: "image-string";
+  readonly manifestPath: string;
+  readonly manifest: ImageStringManifestV1;
+  readonly assetPaths: readonly string[];
+}
+
 export type EditorLayoutResource =
   | EditorImageLayoutResource
-  | EditorSpineLayoutResource;
+  | EditorSpineLayoutResource
+  | EditorImageStringLayoutResource;
 
 export interface EditorResourceReference {
   readonly nodeId: string;
@@ -30,21 +40,32 @@ export interface EditorResourceReference {
 export function editorResourcePrimaryPath(
   resource: EditorLayoutResource,
 ): string {
-  return resource.kind === "image" ? resource.path : resource.skeleton;
+  if (resource.kind === "image") return resource.path;
+  if (resource.kind === "spine") return resource.skeleton;
+  return resource.manifestPath;
 }
 
 export function editorResourcePaths(
   resource: EditorLayoutResource,
 ): readonly string[] {
-  return resource.kind === "image"
-    ? [resource.path]
-    : [resource.skeleton, resource.atlas, ...Object.values(resource.textures)];
+  if (resource.kind === "image") return [resource.path];
+  if (resource.kind === "spine")
+    return [
+      resource.skeleton,
+      resource.atlas,
+      ...Object.values(resource.textures),
+    ];
+  return [resource.manifestPath, ...resource.assetPaths];
 }
 
 export function editorResourceSize(
   resource: EditorLayoutResource,
 ): { readonly width: number; readonly height: number } | undefined {
-  return resource.kind === "image" ? resource.size : resource.bounds;
+  return resource.kind === "image"
+    ? resource.size
+    : resource.kind === "spine"
+      ? resource.bounds
+      : undefined;
 }
 
 export function editorResourceSignature(
@@ -55,6 +76,14 @@ export function editorResourceSignature(
       kind: resource.kind,
       path: resource.path,
       size: resource.size,
+    });
+  }
+  if (resource.kind === "image-string") {
+    return JSON.stringify({
+      kind: resource.kind,
+      manifestPath: resource.manifestPath,
+      manifest: resource.manifest,
+      assetPaths: resource.assetPaths,
     });
   }
   return JSON.stringify({

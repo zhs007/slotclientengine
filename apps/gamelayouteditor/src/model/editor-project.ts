@@ -4,18 +4,28 @@ import {
   type SceneLayoutNode,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout";
+import {
+  collectImageStringAssetPaths,
+  parseImageStringManifest,
+} from "@slotclientengine/rendercore/image-string";
+import {
+  collectSymbolPackageEntryPaths,
+  parseSymbolPackageManifest,
+} from "@slotclientengine/rendercore/symbol";
 import { deriveNodeId } from "../io/filename-policy.js";
 import {
   editorResourcePaths,
   editorResourceSignature,
   type EditorImageLayoutResource,
+  type EditorImageStringLayoutResource,
   type EditorLayoutResource,
   type EditorSpineLayoutResource,
 } from "./editor-resource.js";
 
 type EditorLayoutResourceDraft =
   | Omit<EditorImageLayoutResource, "id">
-  | Omit<EditorSpineLayoutResource, "id">;
+  | Omit<EditorSpineLayoutResource, "id">
+  | Omit<EditorImageStringLayoutResource, "id">;
 
 export type EditorMode = "maximized-focus" | "orientation-focus";
 
@@ -40,14 +50,35 @@ export interface EditorVariantDraft {
   backgroundNode: string;
 }
 
+export type EditorSpinePlaybackDraft =
+  | { readonly kind: "loop"; animation: string }
+  | {
+      readonly kind: "state-machine";
+      initialState: string;
+      states: Array<{ id: string; animation: string }>;
+      transitions: Array<{ from: string; to: string; animation: string }>;
+    };
+
 export interface EditorNodeDraft {
   id: string;
   order: number;
   resourceId: string;
-  defaultAnimation?: string;
+  playback?: EditorSpinePlaybackDraft;
+  imageString?: {
+    text: string;
+    anchor: { x: number; y: number };
+  };
   placements: Partial<
     Record<SceneLayoutVariantId, { x: number; y: number; scale: number }>
   >;
+}
+
+export interface EditorSymbolPackageDependency {
+  readonly packageId: string;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+  reelSet: string;
+  renderMode: "standard" | "grid-cell";
+  includeInExport: boolean;
 }
 
 export interface EditorProject {
@@ -60,6 +91,7 @@ export interface EditorProject {
   };
   nodes: EditorNodeDraft[];
   reel: {
+    order: number | null;
     columns: number;
     rows: number;
     cellWidth: number;
@@ -70,6 +102,7 @@ export interface EditorProject {
   };
   resources: Map<string, EditorLayoutResource>;
   assets: Map<string, Uint8Array>;
+  symbolDependency: EditorSymbolPackageDependency | null;
 }
 
 export function activeVariantIds(
@@ -91,6 +124,7 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
     },
     nodes: [],
     reel: {
+      order: null,
       columns: DEFAULT_REEL_COLUMNS,
       rows: DEFAULT_REEL_ROWS,
       cellWidth: DEFAULT_REEL_CELL_SIZE,
@@ -104,6 +138,7 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
     },
     resources: new Map(),
     assets: new Map(),
+    symbolDependency: null,
   };
 }
 
@@ -284,40 +319,74 @@ export function resolveEditorNodeResource(
     }
   }
   if (resource.kind === "image") {
-    if (node.defaultAnimation !== undefined) {
-      throw new Error(`图片节点 ${node.id} 不得声明 defaultAnimation。`);
-    }
+    if (node.playback !== undefined || node.imageString !== undefined)
+      throw new Error(`图片节点 ${node.id} 不得声明 playback/imageString。`);
     return {
       kind: "image",
       path: resource.path,
       size: resource.size,
     };
   }
-  const animation = node.defaultAnimation;
-  if (!animation) {
-    throw new Error(`Spine 节点 ${node.id} 必须明确选择 default animation。`);
+  if (resource.kind === "image-string") {
+    if (node.playback !== undefined)
+      throw new Error(`image-string 节点 ${node.id} 不得声明 Spine playback。`);
+    if (!node.imageString)
+      throw new Error(`image-string 节点 ${node.id} 缺少 text/anchor。`);
+    return {
+      kind: "image-string",
+      manifest: resource.manifestPath,
+      text: node.imageString.text,
+      anchor: { ...node.imageString.anchor },
+    };
   }
-  if (!resource.animationNames.includes(animation)) {
-    throw new Error(
-      `Spine 节点 ${node.id} 的 animation ${animation} 不存在于资源 ${resource.id}。`,
-    );
-  }
+  if (node.imageString !== undefined)
+    throw new Error(`Spine 节点 ${node.id} 不得声明 imageString。`);
+  const playback = node.playback;
+  if (!playback)
+    throw new Error(`Spine 节点 ${node.id} 必须明确选择 playback。`);
+  validateEditorSpinePlayback(playback, resource.animationNames, node.id);
+  const playbackSpec =
+    playback.kind === "loop"
+      ? { defaultAnimation: playback.animation, loop: true as const }
+      : {
+          stateMachine: {
+            initialState: playback.initialState,
+            states: Object.fromEntries(
+              playback.states.map((state) => [
+                state.id,
+                { animation: state.animation },
+              ]),
+            ),
+            transitions: playback.transitions.map((transition) => ({
+              ...transition,
+            })),
+          },
+        };
   return {
     kind: "spine",
     skeleton: resource.skeleton,
     atlas: resource.atlas,
     textures: resource.textures,
-    defaultAnimation: animation,
-    loop: true,
+    ...playbackSpec,
   };
 }
 
 export function editorProjectToPreviewManifest(
   project: EditorProject,
   preferredVariant: SceneLayoutVariantId,
+  includeSymbolPackage = false,
 ): SceneLayoutManifestV1 | null {
   try {
-    return editorProjectToManifest(project);
+    const manifest = editorProjectToManifest(project);
+    if (!manifest.symbolPackage || includeSymbolPackage) return manifest;
+    return parseSceneLayoutManifest({
+      version: manifest.version,
+      kind: manifest.kind,
+      id: manifest.id,
+      adaptation: manifest.adaptation,
+      nodes: manifest.nodes,
+      reels: manifest.reels,
+    });
   } catch {
     const available = previewVariantOrder(project.mode, preferredVariant).find(
       (variantId) => project.variants[variantId].backgroundNode,
@@ -357,6 +426,9 @@ export function editorProjectToPreviewManifest(
         nodes,
         reels: {
           main: {
+            ...(project.reel.order === null
+              ? {}
+              : { order: project.reel.order }),
             columns: project.reel.columns,
             rows: project.reel.rows,
             cellSize: {
@@ -405,6 +477,7 @@ export function editorProjectToManifest(
     })),
     reels: {
       main: {
+        ...(project.reel.order === null ? {} : { order: project.reel.order }),
         columns: project.reel.columns,
         rows: project.reel.rows,
         cellSize: {
@@ -415,6 +488,16 @@ export function editorProjectToManifest(
         placements: project.reel.placements,
       },
     },
+    ...(project.symbolDependency?.includeInExport
+      ? {
+          symbolPackage: {
+            manifest: `dependencies/symbols/${project.symbolDependency.packageId}/symbols.package.json`,
+            reel: "main",
+            reelSet: project.symbolDependency.reelSet,
+            renderMode: project.symbolDependency.renderMode,
+          },
+        }
+      : {}),
   });
 }
 
@@ -444,7 +527,9 @@ export function manifestToEditorProject(
         deriveNodeId(
           (resourceDraft.kind === "image"
             ? resourceDraft.path
-            : resourceDraft.skeleton
+            : resourceDraft.kind === "spine"
+              ? resourceDraft.skeleton
+              : resourceDraft.manifest.id
           )
             .split("/")
             .at(-1)!,
@@ -469,14 +554,42 @@ export function manifestToEditorProject(
       order: node.order,
       resourceId,
       ...(node.resource.kind === "spine"
-        ? { defaultAnimation: node.resource.defaultAnimation }
-        : {}),
+        ? {
+            playback:
+              "stateMachine" in node.resource
+                ? {
+                    kind: "state-machine" as const,
+                    initialState: node.resource.stateMachine.initialState,
+                    states: Object.entries(
+                      node.resource.stateMachine.states,
+                    ).map(([id, state]) => ({
+                      id,
+                      animation: state.animation,
+                    })),
+                    transitions: node.resource.stateMachine.transitions.map(
+                      (transition) => ({ ...transition }),
+                    ),
+                  }
+                : {
+                    kind: "loop" as const,
+                    animation: node.resource.defaultAnimation,
+                  },
+          }
+        : node.resource.kind === "image-string"
+          ? {
+              imageString: {
+                text: node.resource.text,
+                anchor: { ...node.resource.anchor },
+              },
+            }
+          : {}),
       placements: structuredClone(node.placements),
     };
   });
   const reel = parsed.reels.main;
   if (!reel) throw new Error('导入 manifest 必须包含 reel "main"。');
   project.reel = {
+    order: reel.order ?? null,
     columns: reel.columns,
     rows: reel.rows,
     cellWidth: reel.cellSize.width,
@@ -510,6 +623,35 @@ export function manifestToEditorProject(
   project.assets = new Map(
     [...assets].map(([path, bytes]) => [path, bytes.slice()]),
   );
+  if (parsed.symbolPackage) {
+    const prefix = `dependencies/symbols/${parsed.symbolPackage.manifest.split("/").at(-2)}/`;
+    const files = new Map(
+      [...assets.entries()]
+        .filter(([path]) => path.startsWith(prefix))
+        .map(
+          ([path, bytes]) =>
+            [path.slice(prefix.length), bytes.slice()] as const,
+        ),
+    );
+    const nested = parseSymbolPackageManifest(
+      parseJsonBytes(files.get("symbols.package.json"), "symbols.package.json"),
+    );
+    const expected = collectSymbolPackageEntryPaths(nested);
+    if (
+      JSON.stringify([...files.keys()].sort()) !==
+      JSON.stringify([...expected].sort())
+    )
+      throw new Error("导入 symbols dependency 闭包不精确。");
+    project.symbolDependency = {
+      packageId: nested.id,
+      files,
+      reelSet: parsed.symbolPackage.reelSet,
+      renderMode: parsed.symbolPackage.renderMode,
+      includeInExport: true,
+    };
+    for (const path of [...project.assets.keys()])
+      if (path.startsWith(prefix)) project.assets.delete(path);
+  }
   return project;
 }
 
@@ -525,6 +667,17 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
     assets: new Map(
       [...project.assets].map(([path, bytes]) => [path, bytes.slice()]),
     ),
+    symbolDependency: project.symbolDependency
+      ? {
+          ...structuredClone({ ...project.symbolDependency, files: undefined }),
+          files: new Map(
+            [...project.symbolDependency.files].map(([path, bytes]) => [
+              path,
+              bytes.slice(),
+            ]),
+          ),
+        }
+      : null,
   } as EditorProject;
 }
 
@@ -627,6 +780,25 @@ function manifestResourceToEditorResource(
       size: { ...resource.size },
     };
   }
+  if (resource.kind === "image-string") {
+    const bytes = assets.get(resource.manifest);
+    const manifest = parseImageStringManifest(
+      parseJsonBytes(bytes, resource.manifest),
+    );
+    const directory = resource.manifest.slice(
+      0,
+      resource.manifest.lastIndexOf("/"),
+    );
+    const assetPaths = collectImageStringAssetPaths(manifest).map(
+      (path) => `${directory}/${path}`,
+    );
+    return {
+      kind: "image-string",
+      manifestPath: resource.manifest,
+      manifest,
+      assetPaths,
+    };
+  }
   const skeletonBytes = assets.get(resource.skeleton);
   if (!skeletonBytes)
     throw new Error(`导入缺少 skeleton：${resource.skeleton}`);
@@ -639,6 +811,65 @@ function manifestResourceToEditorResource(
     animationNames: metadata.animationNames,
     ...(metadata.bounds ? { bounds: metadata.bounds } : {}),
   };
+}
+
+export function validateEditorSpinePlayback(
+  playback: EditorSpinePlaybackDraft,
+  animationNames: readonly string[],
+  nodeId = "node",
+): void {
+  const available = new Set(animationNames);
+  if (playback.kind === "loop") {
+    if (!available.has(playback.animation))
+      throw new Error(
+        `Spine 节点 ${nodeId} 的 animation ${playback.animation} 不存在。`,
+      );
+    return;
+  }
+  const stateIds = new Set(playback.states.map((state) => state.id));
+  if (stateIds.size !== playback.states.length || playback.states.length === 0)
+    throw new Error(`Spine 节点 ${nodeId} 的 state 必须非空且 id 唯一。`);
+  for (const state of playback.states) {
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/u.test(state.id))
+      throw new Error(
+        `Spine 节点 ${nodeId} 的 state id ${state.id} 格式无效。`,
+      );
+  }
+  if (!stateIds.has(playback.initialState))
+    throw new Error(`Spine 节点 ${nodeId} 的 initialState 不存在。`);
+  const pairs = new Set<string>();
+  for (const transition of playback.transitions) {
+    if (!stateIds.has(transition.from) || !stateIds.has(transition.to))
+      throw new Error(`Spine 节点 ${nodeId} 的 transition 引用了未知 state。`);
+    if (transition.from === transition.to)
+      throw new Error(`Spine 节点 ${nodeId} 的 transition 不得自循环。`);
+    const pair = `${transition.from}\u0000${transition.to}`;
+    if (pairs.has(pair))
+      throw new Error(`Spine 节点 ${nodeId} 的 transition 有向边必须唯一。`);
+    pairs.add(pair);
+  }
+  const animations = [
+    ...playback.states.map((state) => state.animation),
+    ...playback.transitions.map((transition) => transition.animation),
+  ];
+  for (const animation of animations)
+    if (!available.has(animation))
+      throw new Error(
+        `Spine 节点 ${nodeId} 的 animation ${animation} 不存在。`,
+      );
+  if (new Set(animations).size !== animations.length)
+    throw new Error(`Spine 节点 ${nodeId} 的 animation 语义槽必须全局唯一。`);
+}
+
+function parseJsonBytes(bytes: Uint8Array | undefined, path: string): unknown {
+  if (!bytes) throw new Error(`导入缺少 JSON：${path}`);
+  try {
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch (error) {
+    throw new Error(
+      `${path} JSON 无效：${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 function readSpineMetadata(bytes: Uint8Array): {

@@ -12,10 +12,15 @@ export const SYMBOL_ZIP_LIMITS = Object.freeze({
   maxTotalBytes: 250 * 1024 * 1024,
 });
 
-export async function importSymbolsZip(
+export interface ImportedSymbolPackage {
+  readonly resource: SymbolPackageResource;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+}
+
+export async function importSymbolsZipWithFiles(
   zipBytes: Uint8Array,
   options: { readonly loadTextures?: boolean } = {},
-): Promise<SymbolPackageResource> {
+): Promise<ImportedSymbolPackage> {
   const files = extractBoundedZip(zipBytes, { limits: SYMBOL_ZIP_LIMITS });
   const manifestBytes = files.get("symbols.package.json");
   if (!manifestBytes) {
@@ -32,9 +37,22 @@ export async function importSymbolsZip(
     );
   }
   const packageManifest = parseSymbolPackageManifest(rawManifest);
-  return createSymbolPackageResource({
+  const resource = await createSymbolPackageResource({
     packageManifest,
     files,
     loadTextures: options.loadTextures,
   });
+  return Object.freeze({
+    resource,
+    files: new Map(
+      [...files].map(([path, bytes]) => [path, bytes.slice()] as const),
+    ),
+  });
+}
+
+export async function importSymbolsZip(
+  zipBytes: Uint8Array,
+  options: { readonly loadTextures?: boolean } = {},
+): Promise<SymbolPackageResource> {
+  return (await importSymbolsZipWithFiles(zipBytes, options)).resource;
 }

@@ -72,7 +72,7 @@ focusRect.x/y        = focus 相对完整背景左上角的位置
 - Spine display tree 必须先按 manifest transform 映射到 art 坐标，再裁切到 manifest art rect；之后与 reel、overlay 一起放入同一个 art world 并统一应用 `worldOffset`。
 - background state/transition 只负责表现切换。rendercore 不认识 game002、FreeGame 的服务端字段或其它游戏业务语义；app 只能在业务合同明确后调用 `requestState()`。
 
-Spine background manifest 还负责 skeleton/atlas/多页 texture 闭包、初始稳态和有向 transition。路径、Spine 版本、animation name、atlas page 或 transition 缺失时必须显式失败，不允许回落静态图、首帧或默认 animation。
+Spine background manifest 还负责 skeleton/atlas/多页 texture 闭包、初始稳态和有向 transition。scene-layout 的任意 Spine node 复用 background 同一个通用 state controller：稳定状态播放 loop，直接有向 transition 播放 once，完成边界进入目标 loop 后才 resolve；app 只显式请求状态，不复制 track completion 或猜业务字段。路径、Spine 版本、animation name、atlas page 或 transition 缺失时必须显式失败，不允许回落静态图、首帧或默认 animation。
 
 ## 3. 方案一：单背景、单 focus 最大化
 

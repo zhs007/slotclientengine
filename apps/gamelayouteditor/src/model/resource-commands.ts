@@ -1,5 +1,12 @@
 import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout";
 import {
+  collectImageStringAssetPaths,
+  parseImageStringManifest,
+  validateImageStringPackageContents,
+  validateImageStringText,
+} from "@slotclientengine/rendercore/image-string";
+import { extractBoundedZip } from "@slotclientengine/browserartifactio";
+import {
   createAssetPath,
   deriveNodeId,
   rewriteAtlasPageNamesToLowercase,
@@ -9,12 +16,15 @@ import {
   resetVariantGeometry,
   type EditorNodeDraft,
   type EditorProject,
+  type EditorSpinePlaybackDraft,
+  validateEditorSpinePlayback,
 } from "./editor-project.js";
 import {
   editorResourcePaths,
   editorResourcePrimaryPath,
   editorResourceSize,
   type EditorLayoutResource,
+  type EditorImageStringLayoutResource,
   type EditorResourceReference,
   type EditorSpineLayoutResource,
 } from "./editor-resource.js";
@@ -22,6 +32,105 @@ import {
 interface PreparedResource {
   readonly resource: EditorLayoutResource;
   readonly assets: ReadonlyMap<string, Uint8Array>;
+}
+
+export const IMAGE_STRING_ZIP_LIMITS = Object.freeze({
+  maxEntries: 512,
+  maxCompressedBytes: 50 * 1024 * 1024,
+  maxFileBytes: 20 * 1024 * 1024,
+  maxTotalBytes: 100 * 1024 * 1024,
+});
+
+export function importImageStringZip(options: {
+  readonly project: EditorProject;
+  readonly zipBytes: Uint8Array;
+}): EditorImageStringLayoutResource {
+  const files = extractBoundedZip(options.zipBytes, {
+    limits: IMAGE_STRING_ZIP_LIMITS,
+    pathPolicy: { requireLowercase: true },
+  });
+  const manifestBytes = files.get("image-string.manifest.json");
+  if (!manifestBytes)
+    throw new Error(
+      "image-string ZIP 根目录必须包含 image-string.manifest.json。",
+    );
+  const manifest = parseImageStringManifest(
+    JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(manifestBytes)),
+  );
+  validateImageStringPackageContents({ manifest, files });
+  const prefix = `dependencies/image-strings/${manifest.id}`;
+  const resource: EditorImageStringLayoutResource = Object.freeze({
+    id: manifest.id,
+    kind: "image-string",
+    manifestPath: `${prefix}/image-string.manifest.json`,
+    manifest,
+    assetPaths: Object.freeze(
+      collectImageStringAssetPaths(manifest).map((path) => `${prefix}/${path}`),
+    ),
+  });
+  const prepared: PreparedResource = {
+    resource,
+    assets: new Map(
+      [...files].map(([path, bytes]) => [`${prefix}/${path}`, bytes] as const),
+    ),
+  };
+  assertNewResourceAvailable(options.project, resource);
+  commitNewResource(options.project, prepared);
+  return resource;
+}
+
+export function replaceImageStringResource(options: {
+  readonly project: EditorProject;
+  readonly resourceId: string;
+  readonly zipBytes: Uint8Array;
+}): EditorImageStringLayoutResource {
+  const candidate = structuredCloneProjectWithoutResource(
+    options.project,
+    options.resourceId,
+  );
+  const imported = importImageStringZip({
+    project: candidate,
+    zipBytes: options.zipBytes,
+  });
+  const replacement: EditorImageStringLayoutResource = Object.freeze({
+    ...imported,
+    id: options.resourceId,
+    manifestPath: `dependencies/image-strings/${options.resourceId}/image-string.manifest.json`,
+    assetPaths: Object.freeze(
+      imported.assetPaths.map((path) =>
+        path.replace(
+          `dependencies/image-strings/${imported.id}/`,
+          `dependencies/image-strings/${options.resourceId}/`,
+        ),
+      ),
+    ),
+  });
+  if (imported.manifest.id !== options.resourceId)
+    throw new Error(
+      "替换 image-string 的 nested manifest id 必须与 resource id 相同。",
+    );
+  const current = requireResource(options.project, options.resourceId);
+  if (current.kind !== "image-string")
+    throw new Error("资源类型必须保持为 image-string。");
+  for (const node of options.project.nodes.filter(
+    (node) => node.resourceId === current.id,
+  )) {
+    validateImageStringText(node.imageString?.text ?? "", imported.manifest);
+  }
+  const assets = new Map<string, Uint8Array>();
+  const sourcePrefix = `dependencies/image-strings/${imported.id}/`;
+  const targetPrefix = `dependencies/image-strings/${options.resourceId}/`;
+  for (const [path, bytes] of candidate.assets) {
+    if (path.startsWith(sourcePrefix))
+      assets.set(path.replace(sourcePrefix, targetPrefix), bytes);
+  }
+  commitResourceReplacement(
+    options.project,
+    current,
+    { resource: replacement, assets },
+    false,
+  );
+  return replacement;
 }
 
 export async function uploadImageResource(options: {
@@ -152,7 +261,11 @@ export function addLayerFromResource(options: {
     id: options.nodeId,
     order: nextOrder(options.project),
     resourceId: resource.id,
-    ...(defaultAnimation ? { defaultAnimation } : {}),
+    ...(resource.kind === "spine"
+      ? { playback: { kind: "loop" as const, animation: defaultAnimation! } }
+      : resource.kind === "image-string"
+        ? { imageString: { text: "", anchor: { x: 0.5, y: 0.5 } } }
+        : {}),
     placements: Object.fromEntries(
       options.variants.map((variant) => [variant, { x: 0, y: 0, scale: 1 }]),
     ),
@@ -174,8 +287,12 @@ export function rebindLayerResource(options: {
     options.defaultAnimation,
   );
   node.resourceId = resource.id;
-  if (defaultAnimation) node.defaultAnimation = defaultAnimation;
-  else delete node.defaultAnimation;
+  delete node.playback;
+  delete node.imageString;
+  if (resource.kind === "spine")
+    node.playback = { kind: "loop", animation: defaultAnimation! };
+  else if (resource.kind === "image-string")
+    node.imageString = { text: "", anchor: { x: 0.5, y: 0.5 } };
 }
 
 export function assignBackgroundResource(options: {
@@ -188,6 +305,8 @@ export function assignBackgroundResource(options: {
 }): EditorNodeDraft {
   assertVariantsAllowed(options.project, [options.variant]);
   const resource = requireResource(options.project, options.resourceId);
+  if (resource.kind === "image-string")
+    throw new Error("image-string 资源不能设为背景。");
   const animation = validateAnimation(resource, options.defaultAnimation);
   const variant = options.project.variants[options.variant];
   let node = variant.backgroundNode
@@ -214,15 +333,19 @@ export function assignBackgroundResource(options: {
       id: nodeId,
       order: nextOrder(options.project),
       resourceId: resource.id,
-      ...(animation ? { defaultAnimation: animation } : {}),
+      ...(resource.kind === "spine"
+        ? { playback: { kind: "loop" as const, animation: animation! } }
+        : {}),
       placements: { [options.variant]: { x: 0, y: 0, scale: 1 } },
     };
     options.project.nodes.push(node);
   } else {
     node.resourceId = resource.id;
     node.placements[options.variant] ??= { x: 0, y: 0, scale: 1 };
-    if (animation) node.defaultAnimation = animation;
-    else delete node.defaultAnimation;
+    delete node.imageString;
+    if (resource.kind === "spine")
+      node.playback = { kind: "loop", animation: animation! };
+    else delete node.playback;
   }
   variant.backgroundNode = node.id;
   if (!nextSize) {
@@ -310,7 +433,211 @@ export function setNodeDefaultAnimation(
   const resource = requireResource(project, node.resourceId);
   const value = validateAnimation(resource, animation);
   if (!value) throw new Error("图片节点没有 animation。");
-  node.defaultAnimation = value;
+  node.playback = { kind: "loop", animation: value };
+}
+
+export function setNodeSpinePlayback(
+  project: EditorProject,
+  nodeId: string,
+  playback: EditorSpinePlaybackDraft,
+): void {
+  const node = project.nodes.find((item) => item.id === nodeId);
+  if (!node) throw new Error(`未知节点：${nodeId}`);
+  const resource = requireResource(project, node.resourceId);
+  if (resource.kind !== "spine") throw new Error(`节点 ${nodeId} 不是 Spine。`);
+  validateEditorSpinePlayback(playback, resource.animationNames, nodeId);
+  node.playback = structuredClone(playback);
+}
+
+export function setSpinePlaybackKind(
+  project: EditorProject,
+  nodeId: string,
+  kind: EditorSpinePlaybackDraft["kind"],
+): void {
+  const node = project.nodes.find((item) => item.id === nodeId);
+  if (!node) throw new Error(`未知节点：${nodeId}`);
+  const resource = requireResource(project, node.resourceId);
+  if (resource.kind !== "spine") throw new Error(`节点 ${nodeId} 不是 Spine。`);
+  if (node.playback?.kind === kind) return;
+  const animation = resource.animationNames[0];
+  if (!animation) throw new Error("Spine resource 没有 animation。");
+  node.playback =
+    kind === "loop"
+      ? { kind: "loop", animation }
+      : {
+          kind: "state-machine",
+          initialState: "State1",
+          states: [{ id: "State1", animation }],
+          transitions: [],
+        };
+}
+
+export function addSpineState(
+  project: EditorProject,
+  nodeId: string,
+  state: { readonly id: string; readonly animation: string },
+): void {
+  const playback = requireStateMachine(project, nodeId);
+  if (!/^[A-Za-z][A-Za-z0-9_-]*$/u.test(state.id))
+    throw new Error("state id 格式无效。");
+  if (playback.states.some((item) => item.id === state.id))
+    throw new Error(`state id 冲突：${state.id}`);
+  const resource = requireSpineNodeResource(project, nodeId);
+  if (!resource.animationNames.includes(state.animation))
+    throw new Error(`animation ${state.animation} 不存在。`);
+  commitStateMachineMutation(project, nodeId, (candidate) => {
+    candidate.states.push({ ...state });
+  });
+}
+
+export function setSpineStateAnimation(
+  project: EditorProject,
+  nodeId: string,
+  stateId: string,
+  animation: string,
+): void {
+  const playback = requireStateMachine(project, nodeId);
+  const state = playback.states.find((item) => item.id === stateId);
+  if (!state) throw new Error(`未知 state：${stateId}`);
+  const resource = requireSpineNodeResource(project, nodeId);
+  if (!resource.animationNames.includes(animation))
+    throw new Error(`animation ${animation} 不存在。`);
+  commitStateMachineMutation(project, nodeId, (candidate) => {
+    candidate.states.find((item) => item.id === stateId)!.animation = animation;
+  });
+}
+
+export function setSpineInitialState(
+  project: EditorProject,
+  nodeId: string,
+  stateId: string,
+): void {
+  const playback = requireStateMachine(project, nodeId);
+  if (!playback.states.some((state) => state.id === stateId))
+    throw new Error(`未知 state：${stateId}`);
+  commitStateMachineMutation(project, nodeId, (candidate) => {
+    candidate.initialState = stateId;
+  });
+}
+
+export function addSpineTransition(
+  project: EditorProject,
+  nodeId: string,
+  transition: {
+    readonly from: string;
+    readonly to: string;
+    readonly animation: string;
+  },
+): void {
+  const playback = requireStateMachine(project, nodeId);
+  if (transition.from === transition.to)
+    throw new Error("transition 不得自循环。");
+  if (
+    !playback.states.some((state) => state.id === transition.from) ||
+    !playback.states.some((state) => state.id === transition.to)
+  )
+    throw new Error("transition 必须引用已声明 state。");
+  if (
+    playback.transitions.some(
+      (item) => item.from === transition.from && item.to === transition.to,
+    )
+  )
+    throw new Error("transition 有向边重复。");
+  const resource = requireSpineNodeResource(project, nodeId);
+  if (!resource.animationNames.includes(transition.animation))
+    throw new Error(`animation ${transition.animation} 不存在。`);
+  commitStateMachineMutation(project, nodeId, (candidate) => {
+    candidate.transitions.push({ ...transition });
+  });
+}
+
+export function deleteSpineTransition(
+  project: EditorProject,
+  nodeId: string,
+  index: number,
+): void {
+  const playback = requireStateMachine(project, nodeId);
+  if (
+    !Number.isSafeInteger(index) ||
+    index < 0 ||
+    index >= playback.transitions.length
+  )
+    throw new Error("transition index 越界。");
+  commitStateMachineMutation(project, nodeId, (candidate) => {
+    candidate.transitions.splice(index, 1);
+  });
+}
+
+export function renameSpineState(
+  project: EditorProject,
+  nodeId: string,
+  currentId: string,
+  nextId: string,
+): void {
+  const playback = requireStateMachine(project, nodeId);
+  if (!/^[A-Za-z][A-Za-z0-9_-]*$/u.test(nextId))
+    throw new Error("state id 格式无效。");
+  if (playback.states.some((state) => state.id === nextId))
+    throw new Error(`state id 冲突：${nextId}`);
+  const state = playback.states.find((item) => item.id === currentId);
+  if (!state) throw new Error(`未知 state：${currentId}`);
+  commitStateMachineMutation(project, nodeId, (candidate) => {
+    candidate.states.find((item) => item.id === currentId)!.id = nextId;
+    if (candidate.initialState === currentId) candidate.initialState = nextId;
+    for (const transition of candidate.transitions) {
+      if (transition.from === currentId) transition.from = nextId;
+      if (transition.to === currentId) transition.to = nextId;
+    }
+  });
+}
+
+export function deleteSpineState(
+  project: EditorProject,
+  nodeId: string,
+  stateId: string,
+): void {
+  const playback = requireStateMachine(project, nodeId);
+  if (
+    playback.initialState === stateId ||
+    playback.transitions.some(
+      (transition) => transition.from === stateId || transition.to === stateId,
+    )
+  )
+    throw new Error(`state ${stateId} 仍被 initial/transition 引用。`);
+  const index = playback.states.findIndex((state) => state.id === stateId);
+  if (index < 0) throw new Error(`未知 state：${stateId}`);
+  commitStateMachineMutation(project, nodeId, (candidate) => {
+    candidate.states.splice(index, 1);
+  });
+}
+
+export function setImageStringLayerText(
+  project: EditorProject,
+  nodeId: string,
+  text: string,
+): void {
+  const { node, resource } = requireImageStringNode(project, nodeId);
+  validateImageStringText(text, resource.manifest);
+  node.imageString!.text = text;
+}
+
+export function setImageStringLayerAnchor(
+  project: EditorProject,
+  nodeId: string,
+  anchor: { readonly x: number; readonly y: number },
+): void {
+  if (
+    !Number.isFinite(anchor.x) ||
+    anchor.x < 0 ||
+    anchor.x > 1 ||
+    !Number.isFinite(anchor.y) ||
+    anchor.y < 0 ||
+    anchor.y > 1
+  )
+    throw new Error("image-string anchor 必须位于 0..1。");
+  requireImageStringNode(project, nodeId).node.imageString!.anchor = {
+    ...anchor,
+  };
 }
 
 export function setLayerVariantVisibility(
@@ -389,7 +716,7 @@ function validateAnimation(
   resource: EditorLayoutResource,
   animation: string | undefined,
 ): string | undefined {
-  if (resource.kind === "image") {
+  if (resource.kind !== "spine") {
     if (animation) throw new Error("图片资源不得选择 Spine animation。");
     return undefined;
   }
@@ -634,8 +961,19 @@ function commitResourceReplacement(
       )
       .filter(
         (node) =>
-          !node.defaultAnimation ||
-          !replacement.animationNames.includes(node.defaultAnimation),
+          !node.playback ||
+          (() => {
+            try {
+              validateEditorSpinePlayback(
+                node.playback,
+                replacement.animationNames,
+                node.id,
+              );
+              return false;
+            } catch {
+              return true;
+            }
+          })(),
       )
       .map((node) => node.id);
     if (invalid.length > 0) {
@@ -702,7 +1040,75 @@ function formatError(error: unknown): string {
 }
 
 export function describeResource(resource: EditorLayoutResource): string {
-  return resource.kind === "image"
-    ? `${editorResourcePrimaryPath(resource)} · ${resource.size.width}×${resource.size.height}`
-    : `${editorResourcePrimaryPath(resource)} · ${resource.animationNames.length} animations${resource.bounds ? ` · ${resource.bounds.width}×${resource.bounds.height}` : " · 无 bounds"}`;
+  if (resource.kind === "image")
+    return `${editorResourcePrimaryPath(resource)} · ${resource.size.width}×${resource.size.height}`;
+  if (resource.kind === "image-string")
+    return `${editorResourcePrimaryPath(resource)} · ${Object.keys(resource.manifest.glyphs).length} glyphs · lineHeight ${resource.manifest.metrics.lineHeight}`;
+  return `${editorResourcePrimaryPath(resource)} · ${resource.animationNames.length} animations${resource.bounds ? ` · ${resource.bounds.width}×${resource.bounds.height}` : " · 无 bounds"}`;
+}
+
+function requireStateMachine(
+  project: EditorProject,
+  nodeId: string,
+): Extract<EditorSpinePlaybackDraft, { kind: "state-machine" }> {
+  const node = project.nodes.find((item) => item.id === nodeId);
+  if (!node?.playback || node.playback.kind !== "state-machine")
+    throw new Error(`节点 ${nodeId} 未使用 Spine state machine。`);
+  return node.playback;
+}
+
+function commitStateMachineMutation(
+  project: EditorProject,
+  nodeId: string,
+  mutate: (
+    playback: Extract<EditorSpinePlaybackDraft, { kind: "state-machine" }>,
+  ) => void,
+): void {
+  const node = project.nodes.find((item) => item.id === nodeId);
+  if (!node?.playback || node.playback.kind !== "state-machine")
+    throw new Error(`节点 ${nodeId} 未使用 Spine state machine。`);
+  const resource = requireSpineNodeResource(project, nodeId);
+  const candidate = structuredClone(node.playback);
+  mutate(candidate);
+  validateEditorSpinePlayback(candidate, resource.animationNames, nodeId);
+  node.playback = candidate;
+}
+
+function requireImageStringNode(project: EditorProject, nodeId: string) {
+  const node = project.nodes.find((item) => item.id === nodeId);
+  if (!node?.imageString) throw new Error(`节点 ${nodeId} 不是 image-string。`);
+  const resource = requireResource(project, node.resourceId);
+  if (resource.kind !== "image-string")
+    throw new Error(`节点 ${nodeId} 的资源不是 image-string。`);
+  return { node, resource };
+}
+
+function requireSpineNodeResource(project: EditorProject, nodeId: string) {
+  const node = project.nodes.find((item) => item.id === nodeId);
+  if (!node) throw new Error(`未知节点：${nodeId}`);
+  const resource = requireResource(project, node.resourceId);
+  if (resource.kind !== "spine") throw new Error(`节点 ${nodeId} 不是 Spine。`);
+  return resource;
+}
+
+function structuredCloneProjectWithoutResource(
+  project: EditorProject,
+  resourceId: string,
+): EditorProject {
+  const clone = {
+    ...structuredClone({
+      ...project,
+      resources: undefined,
+      assets: undefined,
+      symbolDependency: undefined,
+    }),
+    resources: new Map(project.resources),
+    assets: new Map(project.assets),
+    symbolDependency: project.symbolDependency,
+  } as EditorProject;
+  const current = clone.resources.get(resourceId);
+  if (!current) throw new Error(`未知资源：${resourceId}`);
+  clone.resources.delete(resourceId);
+  for (const path of editorResourcePaths(current)) clone.assets.delete(path);
+  return clone;
 }

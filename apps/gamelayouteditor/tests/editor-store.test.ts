@@ -113,6 +113,20 @@ describe("EditorStore", () => {
     expect(listener).toHaveBeenCalled();
   });
 
+  it("deduplicates identical external errors and formats non-Error values", () => {
+    const store = new EditorStore(createNewEditorProject("maximized-focus"));
+    const listener = vi.fn();
+    store.subscribe(listener);
+    listener.mockClear();
+
+    store.setExternalError("offline");
+    expect(store.getSnapshot().errors).toEqual(["offline"]);
+    expect(listener).toHaveBeenCalledOnce();
+
+    store.setExternalError("offline");
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
   it("round-trips an orientation project without sharing asset bytes", () => {
     const dualManifest = {
       ...imageManifest,
@@ -257,13 +271,16 @@ describe("EditorStore", () => {
     );
     expect(project.resources.size).toBe(1);
     expect(project.nodes[0].resourceId).toBe(project.nodes[1].resourceId);
-    expect(project.nodes.map((node) => node.defaultAnimation)).toEqual([
-      "Idle",
-      "Win",
-    ]);
+    expect(
+      project.nodes.map((node) =>
+        node.playback?.kind === "loop" ? node.playback.animation : "",
+      ),
+    ).toEqual(["Idle", "Win"]);
     expect(
       editorProjectToManifest(project).nodes.map((node) =>
-        node.resource.kind === "spine" ? node.resource.defaultAnimation : "",
+        node.resource.kind === "spine" && "defaultAnimation" in node.resource
+          ? node.resource.defaultAnimation
+          : "",
       ),
     ).toEqual(["Idle", "Win"]);
   });

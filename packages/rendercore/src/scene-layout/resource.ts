@@ -1,4 +1,9 @@
 import { validateOfficialSpineResource } from "../spine/runtime-player.js";
+import {
+  loadImageStringResourceFromUrl,
+  validateImageStringText,
+  type ImageStringResource,
+} from "../image-string/index.js";
 import { SceneLayoutError } from "./errors.js";
 import {
   collectSceneLayoutAssetPaths,
@@ -13,6 +18,7 @@ export interface CreateSceneLayoutResourceOptions {
   readonly atlasModules?: Readonly<Record<string, string>>;
   readonly textureModules?: Readonly<Record<string, string>>;
   readonly ownedObjectUrls?: readonly string[];
+  readonly imageStringResources?: Readonly<Record<string, ImageStringResource>>;
 }
 
 export function createSceneLayoutResource(
@@ -27,6 +33,9 @@ export function createSceneLayoutResource(
   const skeletonPaths = new Set<string>();
   const atlasPaths = new Set<string>();
   const texturePaths = new Set<string>();
+  const imageStringResources: Readonly<Record<string, ImageStringResource>> =
+    options.imageStringResources ?? Object.freeze({});
+  const imageStringPaths = new Set<string>();
   const imageUrls: Record<string, string> = {};
   const spineResources: Record<
     string,
@@ -45,6 +54,30 @@ export function createSceneLayoutResource(
         node.resource.path,
         "scene layout image",
       );
+      continue;
+    }
+    if (node.resource.kind === "image-string") {
+      imageStringPaths.add(node.resource.manifest);
+      const nested = imageStringResources[node.resource.manifest];
+      if (!nested) {
+        throw new SceneLayoutError(
+          `Scene layout image-string resource is missing: ${node.resource.manifest}.`,
+        );
+      }
+      nested.assertUsable();
+      const directoryId = node.resource.manifest.split("/").at(-2);
+      if (directoryId !== nested.manifest.id) {
+        throw new SceneLayoutError(
+          `Scene layout image-string dependency id mismatch for "${node.resource.manifest}": expected ${directoryId}, actual ${nested.manifest.id}.`,
+        );
+      }
+      try {
+        validateImageStringText(node.resource.text, nested.manifest);
+      } catch (error) {
+        throw new SceneLayoutError(
+          `Scene layout image-string node "${node.id}" is invalid: ${formatError(error)}`,
+        );
+      }
       continue;
     }
     skeletonPaths.add(node.resource.skeleton);
@@ -71,7 +104,17 @@ export function createSceneLayoutResource(
     try {
       validateOfficialSpineResource({
         resource: { skeleton, atlasText, textureUrls },
-        requiredAnimations: [node.resource.defaultAnimation],
+        requiredAnimations:
+          "stateMachine" in node.resource
+            ? [
+                ...Object.values(node.resource.stateMachine.states).map(
+                  (state) => state.animation,
+                ),
+                ...node.resource.stateMachine.transitions.map(
+                  (transition) => transition.animation,
+                ),
+              ]
+            : [node.resource.defaultAnimation],
       });
     } catch (error) {
       throw new SceneLayoutError(
@@ -93,6 +136,11 @@ export function createSceneLayoutResource(
   );
   assertExactKeys(atlasModules, atlasPaths, "scene layout atlas modules");
   assertExactKeys(textureModules, texturePaths, "scene layout texture modules");
+  assertExactKeys(
+    imageStringResources,
+    imageStringPaths,
+    "scene layout image-string resources",
+  );
 
   let destroyed = false;
   const ownedObjectUrls = [...(options.ownedObjectUrls ?? [])];
@@ -100,10 +148,14 @@ export function createSceneLayoutResource(
     manifest,
     imageUrls: Object.freeze(imageUrls),
     spineResources: Object.freeze(spineResources),
+    imageStringResources: Object.freeze({ ...imageStringResources }),
     destroy(): void {
       if (destroyed) return;
       destroyed = true;
       for (const url of ownedObjectUrls) URL.revokeObjectURL(url);
+      for (const nested of new Set(Object.values(imageStringResources))) {
+        void nested.destroy();
+      }
     },
   });
 }
@@ -143,6 +195,7 @@ export async function loadSceneLayoutResourceFromUrl(options: {
   const atlasModules: Record<string, string> = {};
   const textureModules: Record<string, string> = {};
   const ownedObjectUrls: string[] = [];
+  const imageStringResources: Record<string, ImageStringResource> = {};
   try {
     const resourceByPath = new Map<
       string,
@@ -154,13 +207,32 @@ export async function loadSceneLayoutResourceFromUrl(options: {
         resourceByPath.set(resource.path, "image");
         continue;
       }
+      if (resource.kind === "image-string") continue;
       resourceByPath.set(resource.skeleton, "skeleton");
       resourceByPath.set(resource.atlas, "atlas");
       for (const path of Object.values(resource.textures)) {
         resourceByPath.set(path, "texture");
       }
     }
-    for (const path of collectSceneLayoutAssetPaths(manifest)) {
+    for (const node of manifest.nodes) {
+      if (node.resource.kind !== "image-string") continue;
+      if (imageStringResources[node.resource.manifest]) continue;
+      const dependencyUrl = resolveContainedAssetUrl(
+        node.resource.manifest,
+        manifestUrl,
+      );
+      imageStringResources[node.resource.manifest] =
+        await loadImageStringResourceFromUrl({
+          manifestUrl: dependencyUrl,
+          fetchImpl,
+          ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+        });
+    }
+    for (const path of collectSceneLayoutAssetPaths(manifest).filter(
+      (path) =>
+        !imageStringResources[path] &&
+        path !== manifest.symbolPackage?.manifest,
+    )) {
       const assetUrl = resolveContainedAssetUrl(path, manifestUrl);
       const response = await fetchRequired(fetchImpl, assetUrl);
       const kind = resourceByPath.get(path);
@@ -206,9 +278,13 @@ export async function loadSceneLayoutResourceFromUrl(options: {
       atlasModules,
       textureModules,
       ownedObjectUrls,
+      imageStringResources,
     });
   } catch (error) {
     for (const url of ownedObjectUrls) URL.revokeObjectURL(url);
+    for (const nested of new Set(Object.values(imageStringResources))) {
+      await nested.destroy();
+    }
     throw error instanceof SceneLayoutError
       ? error
       : new SceneLayoutError(formatError(error));
