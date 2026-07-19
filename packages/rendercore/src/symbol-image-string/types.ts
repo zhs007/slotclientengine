@@ -9,3 +9,9 @@ export interface SymbolImageStringNodeResource {
 export type SymbolImageStringResourceMap = Readonly<
   Record<string, readonly SymbolImageStringNodeResource[]>
 >;
+
+export interface SymbolImageStringResourcePool {
+  readonly resources: ReadonlyMap<string, ImageStringResource>;
+  get(resourcePath: string): ImageStringResource;
+  destroy(): Promise<void>;
+}

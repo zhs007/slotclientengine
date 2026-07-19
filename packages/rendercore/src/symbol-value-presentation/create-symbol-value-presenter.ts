@@ -6,6 +6,11 @@ import {
 } from "../spine/runtime-player.js";
 import { SymbolAssetError } from "../symbol/errors.js";
 import {
+  createSymbolImageStringResourcePool,
+  type SymbolImageStringResourcePool,
+} from "../symbol-image-string/index.js";
+import { validateImageStringText } from "../image-string/index.js";
+import {
   createSymbolValuePresentationImagePath,
   parseSymbolStateTextureManifest,
   type ParseSymbolStateTextureManifestOptions,
@@ -17,8 +22,10 @@ import type {
   SymbolValuePresentationItem,
   SymbolValuePresentationResourceMap,
   SymbolValuePresentationSnapshot,
+  SymbolValuePresentationResourceBundle,
   SymbolValuePresentationTierResource,
   SymbolValuePresenter,
+  SymbolValueDisplayHandle,
 } from "./types.js";
 import {
   assertSymbolValueDisplayResource,
@@ -31,6 +38,16 @@ export interface CreateSymbolValuePresentationResourcesOptions extends ParseSymb
   readonly spineAtlasModules: Readonly<Record<string, string>>;
   readonly spineTextureModules: Readonly<Record<string, string>>;
   readonly textImageModules?: Readonly<Record<string, string>>;
+  readonly imageStringResourcePool?: SymbolImageStringResourcePool;
+}
+
+export interface CreateSymbolValuePresentationResourceBundleOptions extends Omit<
+  CreateSymbolValuePresentationResourcesOptions,
+  "imageStringResourcePool"
+> {
+  readonly symbolManifestPath?: string;
+  readonly imageStringManifestModules?: Readonly<Record<string, unknown>>;
+  readonly imageStringImageModules?: Readonly<Record<string, string>>;
 }
 
 export interface SymbolValuePresentationPlayer extends RendercoreSpineSlotPlayer {}
@@ -61,6 +78,10 @@ export function createSymbolValuePresentationResourcesFromManifest(
       const presentation = manifestSymbol.valuePresentation;
       if (!presentation) return [];
       const tiers = presentation.tiers.map((tier, index) => {
+        const imageStringBinding =
+          presentation.text.type === "image-string"
+            ? presentation.text.tiers[index]
+            : undefined;
         const skeleton = requireModule(
           skeletons,
           tier.animation.skeleton,
@@ -90,7 +111,12 @@ export function createSymbolValuePresentationResourcesFromManifest(
                 .filter((animation) => animation?.kind === "activeSpine")
                 .map((animation) => animation.playback.animationName),
             ],
-            requiredSlots: [presentation.text.slot],
+            requiredSlots: [
+              imageStringBinding?.slot ??
+                (presentation.text.type === "image-string"
+                  ? ""
+                  : presentation.text.slot),
+            ].filter(Boolean),
           });
         } catch (error) {
           throw new SymbolAssetError(
@@ -130,6 +156,45 @@ export function createSymbolValuePresentationResourcesFromManifest(
               ),
             )
           : Object.freeze({});
+      const imageStringTierBindings =
+        text.type === "image-string"
+          ? Object.freeze(
+              text.tiers.map((binding, index) => {
+                const pool = options.imageStringResourcePool;
+                if (!pool) {
+                  throw new SymbolAssetError(
+                    `Symbol "${symbol}" valuePresentation image-string resources are not prepared.`,
+                  );
+                }
+                const resource = pool.get(binding.resource);
+                return Object.freeze({
+                  resourcePath: binding.resource,
+                  resource,
+                  slot: binding.slot,
+                  anchor: binding.anchor,
+                  transform: binding.transform,
+                  followSlotColor: binding.followSlotColor,
+                });
+              }),
+            )
+          : Object.freeze([]);
+      for (const value of presentation.defaultValues) {
+        if (text.type !== "image-string") break;
+        const tierIndex = resolveTierIndex(tiers, value);
+        const binding = imageStringTierBindings[tierIndex];
+        if (!binding) {
+          throw new SymbolAssetError(
+            `Symbol "${symbol}" value ${value} has no image-string tier binding.`,
+          );
+        }
+        try {
+          validateImageStringText(String(value), binding.resource.manifest);
+        } catch (error) {
+          throw new SymbolAssetError(
+            `Symbol "${symbol}" default value ${value} is invalid for image-string tier ${tierIndex}: ${formatError(error)}.`,
+          );
+        }
+      }
       return [
         [
           symbol,
@@ -156,12 +221,44 @@ export function createSymbolValuePresentationResourcesFromManifest(
             tiers: Object.freeze(tiers),
             text,
             textImageUrls,
+            imageStringTierBindings,
           }),
         ] as const,
       ];
     },
   );
   return Object.freeze(Object.fromEntries(resources));
+}
+
+export async function createSymbolValuePresentationResourceBundleFromManifest(
+  options: CreateSymbolValuePresentationResourceBundleOptions,
+): Promise<SymbolValuePresentationResourceBundle> {
+  const manifest = parseSymbolStateTextureManifest(options.manifest, options);
+  const resourcePaths = Object.values(manifest.symbols).flatMap((entry) =>
+    entry.valuePresentation?.text.type === "image-string"
+      ? entry.valuePresentation.text.tiers.map((binding) => binding.resource)
+      : [],
+  );
+  const pool = await createSymbolImageStringResourcePool({
+    symbolManifestPath:
+      options.symbolManifestPath ?? "symbol-state-textures.manifest.json",
+    resourcePaths,
+    imageStringManifests: options.imageStringManifestModules ?? {},
+    imageModules: options.imageStringImageModules ?? {},
+  });
+  try {
+    const resources = createSymbolValuePresentationResourcesFromManifest({
+      ...options,
+      imageStringResourcePool: pool,
+    });
+    return Object.freeze({
+      resources,
+      destroy: () => pool.destroy(),
+    });
+  } catch (error) {
+    await pool.destroy();
+    throw error;
+  }
 }
 
 export function createSymbolValuePresenter(
@@ -175,7 +272,7 @@ interface PreparedEntry {
   readonly tierIndex: number;
   readonly resource: SymbolValuePresentationTierResource;
   readonly player: SymbolValuePresentationPlayer;
-  readonly label: Container;
+  readonly display: SymbolValueDisplayHandle;
 }
 
 interface PreparedInternal {
@@ -185,7 +282,7 @@ interface PreparedInternal {
 
 interface ActiveEntry {
   readonly prepared: PreparedEntry;
-  readonly label: Container;
+  readonly display: SymbolValueDisplayHandle;
 }
 
 class SymbolValuePresenterModel implements SymbolValuePresenter {
@@ -228,10 +325,6 @@ class SymbolValuePresenterModel implements SymbolValuePresenter {
             `Symbol "${item.symbol}" has no valuePresentation resources.`,
           );
         }
-        assertSymbolValueDisplayResource({
-          value: item.value,
-          resource: presentation,
-        });
         const tierIndex = presentation.tiers.findIndex(
           (tier) =>
             tier.maxExclusive === undefined || item.value < tier.maxExclusive,
@@ -240,21 +333,27 @@ class SymbolValuePresenterModel implements SymbolValuePresenter {
         if (!resource || tierIndex < 0) {
           throw new Error(`No valuePresentation tier covers ${item.value}.`);
         }
+        assertSymbolValueDisplayResource({
+          value: item.value,
+          tierIndex,
+          resource: presentation,
+        });
         const player = this.#playerFactory({ resource });
-        let label: Container | null = null;
+        let display: SymbolValueDisplayHandle | null = null;
         try {
           await player.init();
-          label = await createSymbolValueDisplay({
+          display = await createSymbolValueDisplay({
             value: item.value,
+            tierIndex,
             resource: presentation,
           });
         } catch (error) {
-          label?.destroy();
+          display?.destroy();
           player.destroy();
           throw error;
         }
         entries.push(
-          Object.freeze({ item, tierIndex, resource, player, label }),
+          Object.freeze({ item, tierIndex, resource, player, display }),
         );
         if (version !== this.#prepareVersion) {
           throw new Error("Symbol value presenter prepare was cancelled.");
@@ -332,20 +431,31 @@ class SymbolValuePresenterModel implements SymbolValuePresenter {
         entry.player.view.scale.set(transform?.scale ?? 1);
         const valueResource = this.#resources[entry.item.symbol];
         const textSpec = valueResource.text;
-        const label = entry.label;
+        const display = entry.display;
+        const binding =
+          textSpec.type === "image-string"
+            ? valueResource.imageStringTierBindings?.[entry.tierIndex]
+            : undefined;
         entry.player.attachSlotObject({
-          slot: textSpec.slot,
-          object: label,
-          followSlotColor: true,
+          slot:
+            binding?.slot ??
+            (textSpec.type === "image-string" ? "" : textSpec.slot),
+          object: display.container,
+          followSlotColor: binding?.followSlotColor ?? true,
         });
         this.container.addChild(entry.player.view);
-        mounted.push({ prepared: entry, label });
+        mounted.push({ prepared: entry, display });
         snapshotItems.push(
           Object.freeze({
             ...entry.item,
             tierIndex: entry.tierIndex,
             skeleton: entry.resource.spec.skeleton,
             text: String(entry.item.value),
+            displayType: display.type,
+            displayResource: display.resourcePath ?? null,
+            displaySlot:
+              binding?.slot ??
+              (textSpec.type === "image-string" ? "" : textSpec.slot),
           }),
         );
       }
@@ -418,15 +528,15 @@ class SymbolValuePresenterModel implements SymbolValuePresenter {
 
   private destroyEntries(entries: readonly PreparedEntry[]): void {
     for (const entry of entries) {
-      entry.label.destroy();
+      entry.display.destroy();
       entry.player.destroy();
     }
   }
 
   private destroyActiveEntries(entries: readonly ActiveEntry[]): void {
     for (const entry of entries) {
-      entry.prepared.player.removeSlotObject(entry.label);
-      entry.label.destroy();
+      entry.prepared.player.removeSlotObject(entry.display.container);
+      entry.display.destroy();
       entry.prepared.player.destroy();
     }
   }
@@ -532,4 +642,16 @@ function getBaseName(path: string): string {
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function resolveTierIndex(
+  tiers: readonly SymbolValuePresentationTierResource[],
+  value: number,
+): number {
+  const index = tiers.findIndex(
+    (tier) => tier.maxExclusive === undefined || value < tier.maxExclusive,
+  );
+  if (index < 0)
+    throw new SymbolAssetError(`No valuePresentation tier covers ${value}.`);
+  return index;
 }

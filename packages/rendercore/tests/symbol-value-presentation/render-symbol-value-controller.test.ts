@@ -242,6 +242,62 @@ describe("render symbol value controller", () => {
     symbol.destroy();
     loadTexture.mockRestore();
   });
+
+  it("uses the selected tier ImgNumber dependency, slot and glyph closure", async () => {
+    const players: FakeSlotPlayer[] = [];
+    const resource = createImageStringResource();
+    const symbol = createSymbol(() => {
+      const player = new FakeSlotPlayer();
+      players.push(player);
+      return player;
+    }, resource);
+    symbol.init();
+    symbol.setPresentationValue(1);
+    await flushPromises();
+    expect(players[0].attached[0]).toMatchObject({
+      slot: "LowNum",
+      followSlotColor: false,
+    });
+    expect(players[0].attached[0]?.object.children).toHaveLength(1);
+
+    symbol.setPresentationValue(25);
+    await flushPromises();
+    expect(players[1].attached[0]).toMatchObject({
+      slot: "HighNum",
+      followSlotColor: true,
+    });
+    expect(players[1].attached[0]?.object.children).toHaveLength(2);
+    expect(players[0].destroyed).toBe(true);
+
+    expect(() => symbol.setPresentationValue(13)).toThrow(/缺少 glyph/);
+    expect(symbol.getPresentationValue()).toBeNull();
+    symbol.destroy();
+  });
+
+  it("keeps two ImgNumber occurrences independent while sharing resources", async () => {
+    const resource = createImageStringResource();
+    const players: FakeSlotPlayer[] = [];
+    const create = () =>
+      createSymbol(() => {
+        const player = new FakeSlotPlayer();
+        players.push(player);
+        return player;
+      }, resource);
+    const first = create();
+    const second = create();
+    first.init();
+    second.init();
+    first.setPresentationValue(1);
+    second.setPresentationValue(11);
+    await flushPromises();
+    expect(players[0].attached[0]?.object.children).toHaveLength(1);
+    expect(players[1].attached[0]?.object.children).toHaveLength(2);
+    expect(resource.imageStringTierBindings?.[0]?.resource).toBe(
+      resource.imageStringTierBindings?.[1]?.resource,
+    );
+    first.destroy();
+    second.destroy();
+  });
 });
 
 function createSymbol(
@@ -357,10 +413,92 @@ function createResource(): SymbolValuePresentationResource {
   });
 }
 
+function createImageStringResource(): SymbolValuePresentationResource {
+  const base = createResource();
+  const digits = Object.freeze({
+    manifest: Object.freeze({
+      version: 1 as const,
+      kind: "image-string" as const,
+      id: "digits",
+      metrics: Object.freeze({ lineHeight: 1, letterSpacing: 0 }),
+      glyphs: Object.freeze({
+        "1": Object.freeze({
+          path: "assets/1.png",
+          size: Object.freeze({ width: 1, height: 1 }),
+          offset: Object.freeze({ x: 0, y: 0 }),
+        }),
+        "2": Object.freeze({
+          path: "assets/2.png",
+          size: Object.freeze({ width: 1, height: 1 }),
+          offset: Object.freeze({ x: 0, y: 0 }),
+        }),
+        "5": Object.freeze({
+          path: "assets/5.png",
+          size: Object.freeze({ width: 1, height: 1 }),
+          offset: Object.freeze({ x: 0, y: 0 }),
+        }),
+      }),
+      fixedAdvanceGroups: Object.freeze([]),
+    }),
+    textures: Object.freeze({
+      "assets/1.png": Texture.WHITE,
+      "assets/2.png": Texture.WHITE,
+      "assets/5.png": Texture.WHITE,
+    }),
+    destroyed: false,
+    assertUsable: () => undefined,
+    destroy: async () => undefined,
+  });
+  return Object.freeze({
+    ...base,
+    text: Object.freeze({
+      type: "image-string" as const,
+      tiers: Object.freeze([
+        Object.freeze({
+          resource: "./low/image-string.manifest.json",
+          slot: "LowNum",
+          anchor: Object.freeze({ x: 0.5, y: 0.5 }),
+          transform: Object.freeze({ x: 2, y: 3, scale: 0.5 }),
+          followSlotColor: false,
+        }),
+        Object.freeze({
+          resource: "./high/image-string.manifest.json",
+          slot: "HighNum",
+          anchor: Object.freeze({ x: 1, y: 1 }),
+          transform: Object.freeze({ x: -2, y: -3, scale: 2 }),
+          followSlotColor: true,
+        }),
+      ]),
+    }),
+    imageStringTierBindings: Object.freeze([
+      Object.freeze({
+        resourcePath: "./low/image-string.manifest.json",
+        resource: digits,
+        slot: "LowNum",
+        anchor: Object.freeze({ x: 0.5, y: 0.5 }),
+        transform: Object.freeze({ x: 2, y: 3, scale: 0.5 }),
+        followSlotColor: false,
+      }),
+      Object.freeze({
+        resourcePath: "./high/image-string.manifest.json",
+        resource: digits,
+        slot: "HighNum",
+        anchor: Object.freeze({ x: 1, y: 1 }),
+        transform: Object.freeze({ x: -2, y: -3, scale: 2 }),
+        followSlotColor: true,
+      }),
+    ]),
+  });
+}
+
 class FakeSlotPlayer implements RendercoreSpineSlotPlayer {
   readonly view = new Container();
   readonly plays: Array<{ animationName: string; loop: boolean }> = [];
-  readonly attached: Array<{ slot: string; object: Container }> = [];
+  readonly attached: Array<{
+    slot: string;
+    object: Container;
+    followSlotColor?: boolean;
+  }> = [];
   readonly removed: Container[] = [];
   readonly updates: number[] = [];
   tierSkeleton = "";
@@ -398,7 +536,11 @@ class FakeSlotPlayer implements RendercoreSpineSlotPlayer {
     };
   }
 
-  attachSlotObject(options: { slot: string; object: Container }): void {
+  attachSlotObject(options: {
+    slot: string;
+    object: Container;
+    followSlotColor?: boolean;
+  }): void {
     this.attached.push(options);
   }
 

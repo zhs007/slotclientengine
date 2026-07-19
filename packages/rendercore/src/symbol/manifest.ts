@@ -139,9 +139,23 @@ export interface SymbolValuePresentationImageTextSpec extends SymbolValuePresent
   readonly prefix: string;
 }
 
+export interface SymbolValuePresentationImageStringTierBindingSpec {
+  readonly resource: string;
+  readonly slot: string;
+  readonly anchor: Readonly<{ x: number; y: number }>;
+  readonly transform: Readonly<{ x: number; y: number; scale: number }>;
+  readonly followSlotColor: boolean;
+}
+
+export interface SymbolValuePresentationImageStringTextSpec {
+  readonly type: "image-string";
+  readonly tiers: readonly SymbolValuePresentationImageStringTierBindingSpec[];
+}
+
 export type SymbolValuePresentationTextSpec =
   | SymbolValuePresentationFontTextSpec
-  | SymbolValuePresentationImageTextSpec;
+  | SymbolValuePresentationImageTextSpec
+  | SymbolValuePresentationImageStringTextSpec;
 
 export interface SymbolValuePresentationReelStatesSpec {
   readonly normal: SymbolManifestTransparentNormal;
@@ -441,13 +455,14 @@ export function parseSymbolStateTextureManifest(
       stateDefinitions,
       animations,
     );
-    if (valuePresentation) {
+    if (valuePresentation && valuePresentation.text.type !== "image-string") {
+      const valueTextSlot = valuePresentation.text.slot;
       const slotConflict = imageStringNodes.find(
-        (node) => node.target.slot === valuePresentation.text.slot,
+        (node) => node.target.slot === valueTextSlot,
       );
       if (slotConflict) {
         throw new SymbolAssetError(
-          `Symbol "${symbol}" image-string node "${slotConflict.name}" conflicts with valuePresentation text slot "${valuePresentation.text.slot}".`,
+          `Symbol "${symbol}" image-string node "${slotConflict.name}" conflicts with valuePresentation text slot "${valueTextSlot}".`,
         );
       }
     }
@@ -1011,18 +1026,95 @@ function parseValuePresentation(
     `symbol "${symbol}" valuePresentation.text`,
   );
   const textType = text.type ?? "font";
-  if (textType !== "font" && textType !== "image") {
+  if (
+    textType !== "font" &&
+    textType !== "image" &&
+    textType !== "image-string"
+  ) {
     throw new SymbolAssetError(
-      `Symbol "${symbol}" valuePresentation.text.type must be "font" or "image".`,
+      `Symbol "${symbol}" valuePresentation.text.type must be "font", "image" or "image-string".`,
     );
   }
-  const textBase = {
-    slot: assertString(text.slot, "valuePresentation text slot"),
-    x: assertFiniteNumber(text.x, "valuePresentation text x"),
-    y: assertFiniteNumber(text.y, "valuePresentation text y"),
-  };
   let parsedText: SymbolValuePresentationTextSpec;
-  if (textType === "image") {
+  if (textType === "image-string") {
+    assertOnlyKnownKeys(text, `symbol "${symbol}" valuePresentation.text`, [
+      "type",
+      "tiers",
+    ]);
+    if (!Array.isArray(text.tiers)) {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" valuePresentation.text.tiers must be an array.`,
+      );
+    }
+    if (text.tiers.length !== tiers.length) {
+      throw new SymbolAssetError(
+        `Symbol "${symbol}" valuePresentation.text.tiers length must equal valuePresentation.tiers length (${tiers.length}).`,
+      );
+    }
+    parsedText = Object.freeze({
+      type: "image-string",
+      tiers: Object.freeze(
+        text.tiers.map((rawBinding, index) => {
+          const label = `symbol "${symbol}" valuePresentation.text.tiers[${index}]`;
+          const binding = assertRecord(rawBinding, label);
+          assertOnlyKnownKeys(binding, label, [
+            "resource",
+            "slot",
+            "anchor",
+            "transform",
+            "followSlotColor",
+          ]);
+          const resource = assertImageStringResourcePath(
+            binding.resource,
+            `${label}.resource`,
+          );
+          const slot = assertString(binding.slot, `${label}.slot`);
+          const anchorRecord = assertRecord(binding.anchor, `${label}.anchor`);
+          assertOnlyKnownKeys(anchorRecord, `${label}.anchor`, ["x", "y"]);
+          let anchor: Readonly<{ x: number; y: number }>;
+          try {
+            anchor = validateImageStringAnchor({
+              x: finiteNumber(anchorRecord.x, `${label}.anchor.x`),
+              y: finiteNumber(anchorRecord.y, `${label}.anchor.y`),
+            });
+          } catch (error) {
+            throw new SymbolAssetError(
+              `${label}.anchor is invalid: ${formatUnknownError(error)}.`,
+            );
+          }
+          const transformRecord = assertRecord(
+            binding.transform,
+            `${label}.transform`,
+          );
+          assertOnlyKnownKeys(transformRecord, `${label}.transform`, [
+            "x",
+            "y",
+            "scale",
+          ]);
+          const transform = Object.freeze({
+            x: finiteNumber(transformRecord.x, `${label}.transform.x`),
+            y: finiteNumber(transformRecord.y, `${label}.transform.y`),
+            scale: finitePositiveNumber(
+              transformRecord.scale,
+              `${label}.transform.scale`,
+            ),
+          });
+          if (typeof binding.followSlotColor !== "boolean") {
+            throw new SymbolAssetError(
+              `${label}.followSlotColor must be a boolean.`,
+            );
+          }
+          return Object.freeze({
+            resource,
+            slot,
+            anchor,
+            transform,
+            followSlotColor: binding.followSlotColor,
+          });
+        }),
+      ),
+    });
+  } else if (textType === "image") {
     assertOnlyKnownKeys(text, `symbol "${symbol}" valuePresentation.text`, [
       "type",
       "slot",
@@ -1031,8 +1123,10 @@ function parseValuePresentation(
       "prefix",
     ]);
     parsedText = Object.freeze({
-      ...textBase,
       type: "image",
+      slot: assertString(text.slot, "valuePresentation text slot"),
+      x: assertFiniteNumber(text.x, "valuePresentation text x"),
+      y: assertFiniteNumber(text.y, "valuePresentation text y"),
       prefix: assertManifestPathPrefix(
         text.prefix,
         "valuePresentation image prefix",
@@ -1052,8 +1146,10 @@ function parseValuePresentation(
       "strokeWidth",
     ]);
     parsedText = Object.freeze({
-      ...textBase,
       type: "font",
+      slot: assertString(text.slot, "valuePresentation text slot"),
+      x: assertFiniteNumber(text.x, "valuePresentation text x"),
+      y: assertFiniteNumber(text.y, "valuePresentation text y"),
       fontFamily: assertString(text.fontFamily, "valuePresentation fontFamily"),
       fontSize: assertFinitePositiveNumber(
         text.fontSize,
@@ -2098,6 +2194,27 @@ function assertManifestPathPrefix(value: unknown, label: string): string {
     );
   }
   return prefix;
+}
+
+function assertImageStringResourcePath(value: unknown, label: string): string {
+  const path = assertString(value, label);
+  if (
+    !path.startsWith("./") ||
+    path.includes("\\") ||
+    !path.endsWith("/image-string.manifest.json")
+  ) {
+    throw new SymbolAssetError(
+      `${label} must be a canonical local path to image-string.manifest.json.`,
+    );
+  }
+  try {
+    resolvePackagePath("symbol-state-textures.manifest.json", path);
+  } catch (error) {
+    throw new SymbolAssetError(
+      `${label} is invalid: ${formatUnknownError(error)}.`,
+    );
+  }
+  return path;
 }
 
 function isLayerFileStem(stem: string): boolean {

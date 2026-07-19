@@ -276,6 +276,33 @@ describe("symbols editor app shell", () => {
     expect(root.textContent).toContain("groupAmount");
   });
 
+  it("keeps ImgNumber bindings aligned with tiers and removes inactive mode fields", async () => {
+    await createProject(root);
+    click(root, '[data-workspace-tab][data-tab-value="symbols"]');
+    click(root, '[data-inspector-tab][data-tab-value="value"]');
+    click(root, "[data-enable-value]");
+    click(
+      root,
+      '[data-value-action="text-type"][data-text-type="image-string"]',
+    );
+    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(1);
+    expect(root.querySelector('[data-value-field="text.prefix"]')).toBeNull();
+    expect(root.textContent).toContain("未完成");
+
+    click(root, '[data-value-action="add-tier"]');
+    expect(root.querySelectorAll("[data-tier-index]")).toHaveLength(2);
+    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(2);
+    click(root, '[data-value-action="remove-tier"][data-value-index="1"]');
+    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(1);
+
+    click(root, '[data-value-action="text-type"][data-text-type="image"]');
+    expect(root.querySelector(".value-number-tier")).toBeNull();
+    expect(
+      root.querySelector('[data-value-field="text.prefix"]'),
+    ).not.toBeNull();
+    expect(root.querySelector('[data-value-field^="text.tiers."]')).toBeNull();
+  });
+
   it("surfaces protected state deletion as an error without fake success", async () => {
     await createProject(root);
     click(root, '[data-workspace-tab][data-tab-value="symbols"]');

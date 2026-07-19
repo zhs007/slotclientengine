@@ -47,8 +47,10 @@ import {
 } from "../image-string/index.js";
 import {
   createSymbolImageStringControllerFactories,
-  createSymbolImageStringResources,
+  createSymbolImageStringResourcePool,
+  createSymbolImageStringResourcesFromPool,
   type SymbolImageStringResourceMap,
+  type SymbolImageStringResourcePool,
 } from "../symbol-image-string/index.js";
 
 export interface SymbolPackageManifestV1 {
@@ -241,8 +243,42 @@ export function collectSymbolManifestResourcePaths(options: {
   assertCanonicalPackagePath(manifestPath);
   const manifest = parseSymbolStateTextureManifest(options.symbolManifest);
   const paths = new Set<string>();
+  const packageFiles = options.files;
   const add = (reference: string) =>
     paths.add(resolvePackagePath(manifestPath, reference));
+  const addImageStringDependency = (options: {
+    readonly resource: string;
+    readonly text: string;
+    readonly label: string;
+  }): void => {
+    const manifestResourcePath = resolvePackagePath(
+      manifestPath,
+      options.resource,
+    );
+    paths.add(manifestResourcePath);
+    if (!packageFiles) {
+      throw new SymbolAssetError(
+        `Image-string dependency ${manifestResourcePath} requires package files to derive its exact glyph closure.`,
+      );
+    }
+    const nested = parseImageStringManifest(
+      parseJsonFile(
+        packageFiles,
+        manifestResourcePath,
+        "image-string manifest",
+      ),
+    );
+    try {
+      validateImageStringText(options.text, nested);
+    } catch (error) {
+      throw new SymbolAssetError(
+        `${options.label} is invalid: ${formatError(error)}.`,
+      );
+    }
+    for (const glyphPath of collectImageStringAssetPaths(nested)) {
+      paths.add(resolvePackagePath(manifestResourcePath, glyphPath));
+    }
+  };
   for (const entry of Object.values(manifest.symbols)) {
     collectNormal(entry.normal, add);
     for (const statePath of Object.values(entry.states)) add(statePath);
@@ -300,36 +336,32 @@ export function collectSymbolManifestResourcePaths(options: {
         for (const value of presentation.defaultValues) {
           add(createSymbolValuePresentationImagePath(presentation.text, value));
         }
+      } else if (presentation.text.type === "image-string") {
+        for (const value of presentation.defaultValues) {
+          const tierIndex = presentation.tiers.findIndex(
+            (tier) =>
+              tier.maxExclusive === undefined || value < tier.maxExclusive,
+          );
+          const binding = presentation.text.tiers[tierIndex];
+          if (!binding) {
+            throw new SymbolAssetError(
+              `Value ${value} has no image-string tier binding.`,
+            );
+          }
+          addImageStringDependency({
+            resource: binding.resource,
+            text: String(value),
+            label: `Value ${value} image-string tier ${tierIndex}`,
+          });
+        }
       }
     }
     for (const node of entry.imageStringNodes) {
-      const manifestResourcePath = resolvePackagePath(
-        manifestPath,
-        node.resource,
-      );
-      paths.add(manifestResourcePath);
-      if (!options.files) {
-        throw new SymbolAssetError(
-          `Image-string dependency ${manifestResourcePath} requires package files to derive its exact glyph closure.`,
-        );
-      }
-      const nested = parseImageStringManifest(
-        parseJsonFile(
-          options.files,
-          manifestResourcePath,
-          "image-string manifest",
-        ),
-      );
-      try {
-        validateImageStringText(node.initialText, nested);
-      } catch (error) {
-        throw new SymbolAssetError(
-          `Image-string node "${node.name}" initialText is invalid: ${formatError(error)}.`,
-        );
-      }
-      for (const glyphPath of collectImageStringAssetPaths(nested)) {
-        paths.add(resolvePackagePath(manifestResourcePath, glyphPath));
-      }
+      addImageStringDependency({
+        resource: node.resource,
+        text: node.initialText,
+        label: `Image-string node "${node.name}" initialText`,
+      });
     }
   }
   const sorted = [...paths].sort(comparePaths);
@@ -371,6 +403,7 @@ export async function createSymbolPackageResource(options: {
   const urls = new ObjectUrlRegistry();
   const textureUrls: string[] = [];
   let destroyed = false;
+  let imageStringPool: SymbolImageStringResourcePool | null = null;
   try {
     const modules = createPackageModules(
       packageManifest,
@@ -401,25 +434,44 @@ export async function createSymbolPackageResource(options: {
       spineTextureModules: modules.imageModules,
       fallback: createDefaultSymbolAnimationResolver(),
     });
-    const valuePresentationResources =
-      createSymbolValuePresentationResourcesFromManifest({
-        manifest: rawSymbolManifest,
-        spineSkeletonModules: modules.skeletonModules,
-        spineAtlasModules: modules.atlasModules,
-        spineTextureModules: modules.imageModules,
-        textImageModules: modules.imageModules,
-      });
-    const imageStringBundle =
+    const imageStringResourcePaths = Object.values(
+      symbolManifest.symbols,
+    ).flatMap((entry) => [
+      ...entry.imageStringNodes.map((node) => node.resource),
+      ...(entry.valuePresentation?.text.type === "image-string"
+        ? entry.valuePresentation.text.tiers.map((binding) => binding.resource)
+        : []),
+    ]);
+    imageStringPool =
       options.loadTextures === false
-        ? Object.freeze({
-            resources: Object.freeze({}),
-            sharedResources: Object.freeze([]),
-          })
-        : await createSymbolImageStringResources({
-            manifest: symbolManifest,
+        ? null
+        : await createSymbolImageStringResourcePool({
             symbolManifestPath: packageManifest.entrypoints.symbolManifest,
+            resourcePaths: imageStringResourcePaths,
             imageStringManifests: modules.imageStringManifestModules,
             imageModules: modules.imageModules,
+          });
+    const imageStringResources = imageStringPool
+      ? createSymbolImageStringResourcesFromPool({
+          manifest: symbolManifest,
+          pool: imageStringPool,
+        })
+      : Object.freeze({});
+    const hasValueImageStrings = Object.values(symbolManifest.symbols).some(
+      (entry) => entry.valuePresentation?.text.type === "image-string",
+    );
+    const valuePresentationResources =
+      options.loadTextures === false && hasValueImageStrings
+        ? Object.freeze({})
+        : createSymbolValuePresentationResourcesFromManifest({
+            manifest: rawSymbolManifest,
+            spineSkeletonModules: modules.skeletonModules,
+            spineAtlasModules: modules.atlasModules,
+            spineTextureModules: modules.imageModules,
+            textImageModules: modules.imageModules,
+            ...(imageStringPool
+              ? { imageStringResourcePool: imageStringPool }
+              : {}),
           });
     const symbolScales = createSymbolScaleMapFromManifest({
       manifest: rawSymbolManifest,
@@ -452,7 +504,7 @@ export async function createSymbolPackageResource(options: {
       statePreset,
       animationResolver,
       valuePresentationResources,
-      imageStringResources: imageStringBundle.resources,
+      imageStringResources,
       assets,
       async createCatalog(): Promise<SymbolCatalogModel> {
         if (destroyed)
@@ -470,9 +522,7 @@ export async function createSymbolPackageResource(options: {
           animationResolver,
           symbolAnimationCapabilities: animationCapabilities,
           symbolImageStringControllerFactories:
-            createSymbolImageStringControllerFactories(
-              imageStringBundle.resources,
-            ),
+            createSymbolImageStringControllerFactories(imageStringResources),
           texturePolicy: { requiredStateTextures: [] },
         });
       },
@@ -480,14 +530,13 @@ export async function createSymbolPackageResource(options: {
         if (destroyed) return;
         destroyed = true;
         unloadCachedPackageTextures(textureUrls);
-        for (const imageStringResource of imageStringBundle.sharedResources) {
-          void imageStringResource.destroy();
-        }
+        void imageStringPool?.destroy();
         urls.destroy();
       },
     };
     return Object.freeze(resource);
   } catch (error) {
+    await imageStringPool?.destroy();
     unloadCachedPackageTextures(textureUrls);
     urls.destroy();
     throw error;

@@ -1,4 +1,3 @@
-import type { Container } from "pixi.js";
 import { assertValidDeltaSeconds } from "../symbol/ani.js";
 import type {
   RenderSymbol,
@@ -10,7 +9,10 @@ import type {
 import type { SymbolManifestAnimationPlaybackSpec } from "../symbol/manifest.js";
 import { createOfficialSpinePlayer } from "../spine/runtime-player.js";
 import type { RendercoreSpineSlotPlayer } from "../spine/runtime-player.js";
-import type { SymbolValuePresentationResource } from "./types.js";
+import type {
+  SymbolValueDisplayHandle,
+  SymbolValuePresentationResource,
+} from "./types.js";
 import {
   assertSymbolValueDisplayResource,
   createSymbolValueDisplay,
@@ -35,7 +37,7 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
   #value: number | null = null;
   #player: ReturnType<typeof createOfficialSpinePlayer> | null = null;
   #tier: SymbolValuePresentationResource["tiers"][number] | null = null;
-  #label: Container | null = null;
+  #display: SymbolValueDisplayHandle | null = null;
   #initializationError: unknown = null;
   #requestId = 0;
   #initialized = false;
@@ -76,14 +78,19 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     this.#value = null;
     if (value === null) return;
 
-    const tier = this.#resource.tiers.find(
+    const tierIndex = this.#resource.tiers.findIndex(
       (candidate) =>
         candidate.maxExclusive === undefined || value < candidate.maxExclusive,
     );
+    const tier = this.#resource.tiers[tierIndex];
     if (!tier) {
       throw new Error(`No valuePresentation tier covers ${value}.`);
     }
-    assertSymbolValueDisplayResource({ value, resource: this.#resource });
+    assertSymbolValueDisplayResource({
+      value,
+      tierIndex,
+      resource: this.#resource,
+    });
     let player: RendercoreSpineSlotPlayer | null = null;
     try {
       player = this.#playerFactory({ tier });
@@ -95,24 +102,26 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     this.#value = value;
     this.#player = player;
     this.#tier = tier;
-    this.#label = null;
+    this.#display = null;
     const transform = tier.spec.transform;
     player.view.position.set(transform?.x ?? 0, transform?.y ?? 0);
     player.view.scale.set(transform?.scale ?? 1);
-    void this.initializePlayer({ player, requestId, value });
+    void this.initializePlayer({ player, requestId, value, tierIndex });
   }
 
   private async initializePlayer(options: {
     readonly player: RendercoreSpineSlotPlayer;
     readonly requestId: number;
     readonly value: number;
+    readonly tierIndex: number;
   }): Promise<void> {
-    const { player, requestId, value } = options;
-    let label: Container | null = null;
+    const { player, requestId, value, tierIndex } = options;
+    let display: SymbolValueDisplayHandle | null = null;
     try {
       await player.init();
-      label = await createSymbolValueDisplay({
+      display = await createSymbolValueDisplay({
         value,
+        tierIndex,
         resource: this.#resource,
       });
       if (
@@ -120,21 +129,26 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
         this.#requestId !== requestId ||
         this.#player !== player
       ) {
-        label.destroy();
+        display.destroy();
         return;
       }
-      this.#label = label;
+      this.#display = display;
+      const text = this.#resource.text;
+      const binding =
+        text.type === "image-string"
+          ? this.#resource.imageStringTierBindings?.[tierIndex]
+          : undefined;
       player.attachSlotObject({
-        slot: this.#resource.text.slot,
-        object: label,
-        followSlotColor: true,
+        slot: binding?.slot ?? (text.type === "image-string" ? "" : text.slot),
+        object: display.container,
+        followSlotColor: binding?.followSlotColor ?? true,
       });
       this.#root.overlayLayer.addChild(player.view);
       this.#initialized = true;
       this.playActiveAnimation();
       this.syncVisibility();
     } catch (error) {
-      label?.destroy();
+      display?.destroy();
       if (this.#requestId === requestId && this.#player === player) {
         this.#initializationError = error;
       }
@@ -279,13 +293,14 @@ class RenderSymbolValueControllerModel implements RenderSymbolValueController {
     this.#activeAnimation = null;
     this.#activePlayback = null;
     const player = this.#player;
-    const label = this.#label;
+    const display = this.#display;
     this.#player = null;
     this.#tier = null;
-    this.#label = null;
+    this.#display = null;
     this.#root.baseLayer.visible = true;
-    if (wasInitialized && player && label) player.removeSlotObject(label);
-    label?.destroy();
+    if (wasInitialized && player && display)
+      player.removeSlotObject(display.container);
+    display?.destroy();
     player?.destroy();
   }
 

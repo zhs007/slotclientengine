@@ -52,7 +52,7 @@ const symbolValuePixiTextureUrls = new Set(
       (resource) =>
         resource.kind === "texture" ||
         resource.kind === "state-texture" ||
-        resource.kind === "value-image",
+        resource.kind === "image-string-glyph",
     )
     .map((resource) => resource.url),
 );

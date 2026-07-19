@@ -10,6 +10,7 @@ import {
   exportSnapshot,
   installImageStringDependency,
   removeImageStringDependency,
+  setValuePresentation,
   setStateVisual,
   setSymbolImageStringNodes,
   uploadAssetBatch,
@@ -79,6 +80,11 @@ describe("image-string logical dependency", () => {
       /仍被引用/,
     );
     setSymbolImageStringNodes(project, "A", []);
+    setValuePresentation(project, "A", createValuePresentation());
+    expect(() => removeImageStringDependency(project, "coin-digits")).toThrow(
+      /A\.valuePresentation\.text\.tiers\[0\]/,
+    );
+    setValuePresentation(project, "A", undefined);
     removeImageStringDependency(project, "coin-digits");
     expect(project.imageStringDependencies.size).toBe(0);
   });
@@ -119,6 +125,8 @@ describe("image-string logical dependency", () => {
         followSlotColor: true,
       },
     ]);
+    setSymbolImageStringNodes(project, "A", []);
+    setValuePresentation(project, "A", createValuePresentation());
 
     const exported = exportSnapshot(project);
     expect(exported.packageManifest.resources).toContain(
@@ -135,6 +143,9 @@ describe("image-string logical dependency", () => {
     });
     expect(imported.symbols.get("A")?.imageStringNodes).toEqual(
       project.symbols.get("A")?.imageStringNodes,
+    );
+    expect(imported.symbols.get("A")?.valuePresentation?.text).toEqual(
+      createValuePresentation().text,
     );
     expect([...imported.imageStringDependencies]).toHaveLength(1);
     expect(exportSnapshot(imported).packageManifest.resources).toEqual(
@@ -173,6 +184,44 @@ function createProject() {
   });
 }
 
+function createValuePresentation() {
+  return {
+    defaultValues: [1],
+    reelStates: {
+      normal: { kind: "transparent" as const, width: 160, height: 160 },
+      states: {},
+    },
+    tiers: [
+      {
+        animation: {
+          kind: "spine" as const,
+          skeleton: "./H1.json",
+          atlas: "./Symbol.atlas",
+          texture: "./Symbol.png",
+          playback: {
+            mode: "animation" as const,
+            animationName: "Idle",
+            loop: true,
+          },
+        },
+      },
+    ],
+    text: {
+      type: "image-string" as const,
+      tiers: [
+        {
+          resource:
+            "./dependencies/image-strings/coin-digits/image-string.manifest.json",
+          slot: "Num",
+          anchor: { x: 0.5, y: 0.5 },
+          transform: { x: 0, y: 0, scale: 1 },
+          followSlotColor: true,
+        },
+      ],
+    },
+  };
+}
+
 function createZip(): Uint8Array {
   return createDeterministicZip(createFiles(), {
     pathPolicy: { requireLowercase: true },
@@ -194,11 +243,17 @@ function createFiles(): Map<string, Uint8Array> {
             size: { width: 172, height: 130 },
             offset: { x: 0, y: 0 },
           },
+          "1": {
+            path: "assets/1.png",
+            size: { width: 172, height: 130 },
+            offset: { x: 0, y: 0 },
+          },
         },
         fixedAdvanceGroups: [],
       }),
     ],
     ["assets/0.png", glyphBytes()],
+    ["assets/1.png", glyphBytes()],
   ]);
 }
 

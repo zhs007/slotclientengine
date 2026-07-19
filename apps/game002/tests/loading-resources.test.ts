@@ -194,7 +194,7 @@ describe("game002 loading resources", () => {
       "game002-symbol-spine-texture",
       "game002-symbol-value-state-texture:CN.spinBlur.png",
       "game002-symbol-value-state-texture:CN.disabled.png",
-      "game002-symbol-value-value-image:25.png",
+      "game002-symbol-value-image-string-glyph:dependencies/image-strings/cn-digits/assets/u0032.png",
     ];
 
     for (const id of expectedPixiResourceIds) {

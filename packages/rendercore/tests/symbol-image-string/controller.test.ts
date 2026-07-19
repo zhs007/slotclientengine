@@ -1,7 +1,8 @@
-import { Container, Texture } from "pixi.js";
-import { describe, expect, it, vi } from "vitest";
+import { Assets, Container, Texture } from "pixi.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SymbolImageStringController,
+  createSymbolImageStringResourcePool,
   createSymbolImageStringResources,
   notifySymbolImageStringSpineActive,
   notifySymbolImageStringSpineInactive,
@@ -29,6 +30,10 @@ const manifest = {
   },
   fixedAdvanceGroups: [],
 };
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("SymbolImageStringController", () => {
   it("preserves strings, validates atomically, attaches by state and resets for pool", () => {
@@ -136,6 +141,108 @@ describe("SymbolImageStringController", () => {
         imageModules: {},
       }),
     ).rejects.toThrow(/manifest is missing/);
+  });
+
+  it("loads one canonical nested resource once and validates glyphs atomically", async () => {
+    const load = vi.spyOn(Assets, "load").mockImplementation(
+      async () =>
+        ({
+          width: 5,
+          height: 10,
+        }) as never,
+    );
+    const path =
+      "./dependencies/image-strings/digits/image-string.manifest.json";
+    const pool = await createSymbolImageStringResourcePool({
+      symbolManifestPath: "symbol-state-textures.manifest.json",
+      resourcePaths: [path, path],
+      imageStringManifests: {
+        "dependencies/image-strings/digits/image-string.manifest.json":
+          manifest,
+      },
+      imageModules: {
+        "dependencies/image-strings/digits/assets/0.png": "/0.png",
+        "dependencies/image-strings/digits/assets/1.png": "/1.png",
+      },
+    });
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(pool.get(path)).toBe(pool.get(path));
+    await pool.destroy();
+    await pool.destroy();
+    expect(() => pool.get(path)).toThrow(/destroyed/);
+    load.mockRestore();
+
+    vi.spyOn(Assets, "load").mockResolvedValue({
+      width: 6,
+      height: 10,
+    } as never);
+    await expect(
+      createSymbolImageStringResourcePool({
+        symbolManifestPath: "symbol-state-textures.manifest.json",
+        resourcePaths: [path],
+        imageStringManifests: {
+          "dependencies/image-strings/digits/image-string.manifest.json":
+            manifest,
+        },
+        imageModules: {
+          "dependencies/image-strings/digits/assets/0.png": "/0.png",
+          "dependencies/image-strings/digits/assets/1.png": "/1.png",
+        },
+      }),
+    ).rejects.toThrow(/size mismatch/);
+  });
+
+  it("fails before use when a nested glyph module or initial glyph is missing", async () => {
+    const path =
+      "./dependencies/image-strings/digits/image-string.manifest.json";
+    await expect(
+      createSymbolImageStringResourcePool({
+        symbolManifestPath: "symbol-state-textures.manifest.json",
+        resourcePaths: [path],
+        imageStringManifests: {
+          "dependencies/image-strings/digits/image-string.manifest.json":
+            manifest,
+        },
+        imageModules: {
+          "dependencies/image-strings/digits/assets/0.png": "/0.png",
+        },
+      }),
+    ).rejects.toThrow(/glyph is missing/);
+
+    vi.spyOn(Assets, "load").mockResolvedValue({
+      width: 5,
+      height: 10,
+    } as never);
+    await expect(
+      createSymbolImageStringResources({
+        manifest: {
+          symbols: {
+            A: {
+              imageStringNodes: [
+                {
+                  name: "bad-value",
+                  resource: path,
+                  target: { state: "normal", slot: "Num" },
+                  initialText: "2",
+                  anchor: { x: 0.5, y: 0.5 },
+                  transform: { x: 0, y: 0, scale: 1 },
+                  followSlotColor: true,
+                },
+              ],
+            },
+          },
+        } as never,
+        symbolManifestPath: "symbol-state-textures.manifest.json",
+        imageStringManifests: {
+          "dependencies/image-strings/digits/image-string.manifest.json":
+            manifest,
+        },
+        imageModules: {
+          "dependencies/image-strings/digits/assets/0.png": "/0.png",
+          "dependencies/image-strings/digits/assets/1.png": "/1.png",
+        },
+      }),
+    ).rejects.toThrow(/initialText is invalid/);
   });
 });
 

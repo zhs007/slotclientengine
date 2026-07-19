@@ -15,7 +15,7 @@ import game003S1StateTextureManifest from "../../../assets/game003-s1/symbol-sta
 import {
   createDefaultSymbolAnimationResolver,
   createSymbolManifestAnimationResolver,
-  createSymbolValuePresentationResourcesFromManifest,
+  createSymbolValuePresentationResourceBundleFromManifest,
   createSymbolStatePresetFromManifest,
   createSymbolCascadeWinPresentationMapFromManifest,
   getSymbolDisplaySymbolsFromManifest,
@@ -38,6 +38,8 @@ import {
   symbolValueSpineSkeletonModules,
   symbolValueSpineTextureModules,
   symbolValueTextImageModules,
+  symbolValueImageStringManifestModules,
+  symbolValueImageStringImageModules,
 } from "./generated/game002-symbol-value-resources.generated.js";
 import {
   createViewerSequenceFromCascadePresentations,
@@ -219,15 +221,7 @@ export const SYMBOL_SET_CONFIGS = Object.freeze([
       spineTextureModules: game002S3SpineTextureModules,
       fallback: manifestFallbackAnimationResolver,
     }),
-    symbolValuePresentationResources:
-      createSymbolValuePresentationResourcesFromManifest({
-        manifest: game002S3StateTextureManifest,
-        requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
-        spineSkeletonModules: symbolValueSpineSkeletonModules,
-        spineAtlasModules: symbolValueSpineAtlasModules,
-        spineTextureModules: symbolValueSpineTextureModules,
-        textImageModules: symbolValueTextImageModules,
-      }),
+    symbolValuePresentationResources: Object.freeze({}),
   }),
   Object.freeze({
     id: "game003-s1",
@@ -301,6 +295,34 @@ export function getSymbolSetConfig(id: string): SymbolSetConfig {
     throw new Error(`Unknown symbolsviewer symbol set "${id}".`);
   }
   return config;
+}
+
+export async function prepareSymbolSetConfig(id: string): Promise<{
+  readonly config: SymbolSetConfig;
+  destroy(): Promise<void>;
+}> {
+  const config = getSymbolSetConfig(id);
+  if (config.id !== "game002-s3") {
+    return Object.freeze({ config, destroy: async () => undefined });
+  }
+  const bundle = await createSymbolValuePresentationResourceBundleFromManifest({
+    manifest: game002S3StateTextureManifest,
+    symbolManifestPath: "symbol-state-textures.manifest.json",
+    requiredStates: SYMBOL_VIEWER_REQUIRED_STATE_TEXTURES,
+    spineSkeletonModules: symbolValueSpineSkeletonModules,
+    spineAtlasModules: symbolValueSpineAtlasModules,
+    spineTextureModules: symbolValueSpineTextureModules,
+    textImageModules: symbolValueTextImageModules,
+    imageStringManifestModules: symbolValueImageStringManifestModules,
+    imageStringImageModules: symbolValueImageStringImageModules,
+  });
+  return Object.freeze({
+    config: Object.freeze({
+      ...config,
+      symbolValuePresentationResources: bundle.resources,
+    }),
+    destroy: () => bundle.destroy(),
+  });
 }
 
 export function resolveViewerStateForSymbol(

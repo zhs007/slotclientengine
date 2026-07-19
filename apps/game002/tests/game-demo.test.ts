@@ -64,7 +64,7 @@ import {
   assertGame002ReelVisualMatchesTarget,
   createGame002ReelRuntime,
 } from "../src/game-demo.js";
-import { getGame002SkinConfig } from "../src/skin-config.js";
+import { getTestGame002SkinConfig } from "./value-resource-fixture.js";
 
 beforeEach(() => {
   vi.spyOn(Assets, "load").mockResolvedValue(Texture.WHITE as never);
@@ -144,7 +144,7 @@ describe("game002-s3 reel runtime", () => {
   it("assigns manifest default values to initial and temporary CN symbols", () => {
     const runtime = createRuntime();
     const candidates = new Set(
-      getGame002SkinConfig("1").symbolValuePresentationResources.CN
+      getTestGame002SkinConfig().symbolValuePresentationResources.CN
         .defaultValues,
     );
     const cnCode = runtime.gameConfig.getSymbolCode("CN");
@@ -649,7 +649,7 @@ function createRuntime(
     readonly dimming?: (typeof DEFAULT_GAME002_REEL_CONFIG)["dimming"];
   } = {},
 ) {
-  const skin = getGame002SkinConfig("1");
+  const skin = getTestGame002SkinConfig();
   const normalResolver = createDefaultSymbolAnimationResolver();
   return createGame002ReelRuntime({
     rawGameConfig,
@@ -665,6 +665,7 @@ function createRuntime(
       emptySymbols: [],
       symbolScales: skin.symbolScales,
       symbolRenderPriorities: skin.symbolRenderPriorities,
+      symbolValuePresentationResources: skin.symbolValuePresentationResources,
       animationResolver: (context) =>
         context.resolvedState === "appear"
           ? new ManualSymbolAni({

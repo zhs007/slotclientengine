@@ -8,7 +8,7 @@
 
 `game002-s3` 的 display set 固定为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`，所有 scale 为 `1`。viewer 只把这 13 项放进 symbol selector；同名主 skeleton 仍是 12 个。`CN_1..CN_4` 仅作为当前 `CN.valuePresentation` manifest 精确引用的附属 Spine，通过生成闭包和 rendercore 的 `RenderSymbol` value controller 预览，不成为独立 symbol；`Nearwin*` 与 `WM_Fx` 仍不会被宽泛 glob 接入。
 
-当当前 set 含 `valuePresentation` 时，toolbar 显示 positive integer Value、Apply Value 和 Clear Value。默认值 `25` 可预览当前 CN 第二档；输入 `9/10/99/100/999/1000` 可核对 manifest 边界。数字由 rendercore 绑定到 manifest 配置的 Spine `Num` slot，跟随该 slot/bone 动画。切 set、Reset 或 Clear 会清理展示，普通 set 不显示该控件。viewer 不解析阈值、不创建私有 Spine adapter，也不把 appear/win 控件映射到未配置动画。
+当当前 set 含 `valuePresentation` 时，toolbar 显示 positive integer Value、Apply Value 和 Clear Value。默认值 `25` 可预览当前 CN 第二档；输入 `9/10/99/100/999/1000` 可核对 manifest 边界和 ImgNumber。viewer 在 async set prepare 边界调用 rendercore 装配共享 nested dependency，数字按 resolved tier binding 挂到该档 exact slot；切 set、Reset、Clear 或销毁会释放 renderer/resource。viewer 不解析阈值、glyph 或 Spine slot lifecycle。
 
 scale、renderPriority、base/扩展 state preset、cascade presentation 和 animation 都来自各自的 `symbol-state-textures.manifest.json`，解析和 Spine/VNI player 生命周期由 `@slotclientengine/rendercore` 提供。viewer 的 state selector 从当前 set 的派生 preset 构建，只负责 UI、输入校验、状态展示和 public resolver 调用。
 

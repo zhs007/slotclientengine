@@ -17,7 +17,7 @@ import {
   type Game002AdapterOptions,
 } from "../src/game-adapter.js";
 import type { Game002ReelRuntime } from "../src/game-demo.js";
-import { getGame002SkinConfig } from "../src/skin-config.js";
+import { getTestGame002SkinConfig } from "./value-resource-fixture.js";
 import {
   GAME002_CASCADE_DROPDOWN_SCENE,
   GAME002_CASCADE_GMI,
@@ -309,7 +309,7 @@ describe("game002 task 95 adapter", () => {
 
 function createTestAdapter(options: Omit<Game002AdapterOptions, "skin">) {
   return createGame002Adapter({
-    skin: getGame002SkinConfig("1"),
+    skin: getTestGame002SkinConfig(),
     createBackgroundPlayer: () => new FakeBackgroundPlayer().asPlayer(),
     loadSymbolTextures: async () => ({}),
     createWinAmountPlayer: () => new FakeWinAmountPlayer([]).asPlayer(),

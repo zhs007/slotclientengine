@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "kind": "image-string",
+  "id": "cn-digits",
+  "metrics": {
+    "lineHeight": 49,
+    "letterSpacing": 0
+  },
+  "glyphs": {
+    "0": {
+      "path": "assets/u0030.png",
+      "size": { "width": 36, "height": 49 },
+      "offset": { "x": 0, "y": 0 }
+    },
+    "1": {
+      "path": "assets/u0031.png",
+      "size": { "width": 26, "height": 48 },
+      "offset": { "x": 0, "y": 1 }
+    },
+    "2": {
+      "path": "assets/u0032.png",
+      "size": { "width": 37, "height": 48 },
+      "offset": { "x": 0, "y": 1 }
+    },
+    "3": {
+      "path": "assets/u0033.png",
+      "size": { "width": 36, "height": 49 },
+      "offset": { "x": 0, "y": 0 }
+    },
+    "4": {
+      "path": "assets/u0034.png",
+      "size": { "width": 35, "height": 48 },
+      "offset": { "x": 0, "y": 1 }
+    },
+    "5": {
+      "path": "assets/u0035.png",
+      "size": { "width": 33, "height": 49 },
+      "offset": { "x": 0, "y": 0 }
+    },
+    "6": {
+      "path": "assets/u0036.png",
+      "size": { "width": 34, "height": 49 },
+      "offset": { "x": 0, "y": 0 }
+    },
+    "7": {
+      "path": "assets/u0037.png",
+      "size": { "width": 35, "height": 48 },
+      "offset": { "x": 0, "y": 1 }
+    },
+    "8": {
+      "path": "assets/u0038.png",
+      "size": { "width": 35, "height": 49 },
+      "offset": { "x": 0, "y": 0 }
+    },
+    "9": {
+      "path": "assets/u0039.png",
+      "size": { "width": 34, "height": 48 },
+      "offset": { "x": 0, "y": 1 }
+    }
+  },
+  "fixedAdvanceGroups": [
+    {
+      "id": "digits",
+      "characters": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+      "advanceWidth": 37,
+      "align": "center"
+    }
+  ]
+}
