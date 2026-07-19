@@ -26,6 +26,8 @@ const previewSpies = vi.hoisted(() => ({
       }>,
   ),
   requestNodeState: vi.fn(async () => undefined),
+  playAwardCelebration: vi.fn(),
+  advanceAwardCelebration: vi.fn(),
   destroy: vi.fn(),
 }));
 
@@ -33,6 +35,7 @@ const ioSpies = vi.hoisted(() => ({
   importZip: vi.fn(),
   exportZip: vi.fn(),
   importSymbolsZipWithFiles: vi.fn(),
+  importPopupPackageZip: vi.fn(),
 }));
 
 const commandSpies = vi.hoisted(() => ({
@@ -83,6 +86,8 @@ vi.mock("../src/preview/layout-preview.js", () => ({
     setOtherSceneBindings = previewSpies.setOtherSceneBindings;
     getSpineNodeStates = previewSpies.getSpineNodeStates;
     requestNodeState = previewSpies.requestNodeState;
+    playAwardCelebration = previewSpies.playAwardCelebration;
+    advanceAwardCelebration = previewSpies.advanceAwardCelebration;
     destroy = previewSpies.destroy;
   },
 }));
@@ -97,6 +102,10 @@ vi.mock("../src/io/exported-layout-zip.js", () => ({
 
 vi.mock("../src/io/imported-symbol-package.js", () => ({
   importSymbolsZipWithFiles: ioSpies.importSymbolsZipWithFiles,
+}));
+
+vi.mock("../src/io/imported-popup-package.js", () => ({
+  importPopupPackageZip: ioSpies.importPopupPackageZip,
 }));
 
 vi.mock("../src/model/resource-commands.js", async (importOriginal) => {
@@ -138,6 +147,53 @@ describe("GameLayoutEditorApp workspace", () => {
     expect(tabs[1].getAttribute("aria-selected")).toBe("true");
     expect(root.querySelector("[data-outline-list]")).toBeTruthy();
     expect(root.querySelectorAll(".inspector-inner")).toHaveLength(1);
+    app.destroy();
+  });
+
+  it("imports, places, previews and clears an award popup dependency", async () => {
+    ioSpies.importPopupPackageZip.mockReturnValue({
+      manifest: { id: "fixture-popup" },
+      files: new Map([["popup.manifest.json", new Uint8Array([1])]]),
+    });
+    const { app, root } = await createApp();
+    (root.querySelector("[data-play-popup]") as HTMLButtonElement).click();
+    const placement = root.querySelector(
+      '[data-popup-placement="default"][data-popup-placement-field="x"]',
+    ) as HTMLInputElement;
+    const fileClick = selectFilesOnce([new File(["zip"], "popup.zip")]);
+    (root.querySelector("[data-import-popup]") as HTMLButtonElement).click();
+    await vi.waitFor(() =>
+      expect(ioSpies.importPopupPackageZip).toHaveBeenCalled(),
+    );
+    placement.value = "12";
+    placement.dispatchEvent(new Event("change"));
+    const inactivePlacement = root.querySelector(
+      '[data-popup-placement="landscape"][data-popup-placement-field="x"]',
+    ) as HTMLInputElement;
+    inactivePlacement.value = "99";
+    inactivePlacement.dispatchEvent(new Event("change"));
+    (root.querySelector("[data-play-popup]") as HTMLButtonElement).click();
+    (root.querySelector("[data-advance-popup]") as HTMLButtonElement).click();
+    expect(previewSpies.playAwardCelebration).toHaveBeenCalledWith(
+      "award-celebration",
+      { betAmountRaw: 100, winAmountRaw: 5000 },
+    );
+    expect(previewSpies.advanceAwardCelebration).toHaveBeenCalled();
+    (root.querySelector("[data-clear-popup]") as HTMLButtonElement).click();
+    (root.querySelector("[data-advance-popup]") as HTMLButtonElement).click();
+    fileClick.mockRestore();
+    app.destroy();
+  });
+
+  it("reports popup import failures without mutating the project", async () => {
+    ioSpies.importPopupPackageZip.mockImplementation(() => {
+      throw new Error("bad popup");
+    });
+    const { app, root } = await createApp();
+    const fileClick = selectFilesOnce([new File(["bad"], "popup.zip")]);
+    (root.querySelector("[data-import-popup]") as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(root.textContent).toContain("bad popup"));
+    fileClick.mockRestore();
     app.destroy();
   });
 

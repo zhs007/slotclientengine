@@ -364,14 +364,17 @@ importers:
         specifier: ^15.15.0
         version: 15.15.0
 
-  apps/reelsviewer:
+  apps/popupeditor:
     dependencies:
-      '@slotclientengine/logiccore':
+      '@slotclientengine/browserartifactio':
         specifier: workspace:*
-        version: link:../../packages/logiccore
+        version: link:../../packages/browserartifactio
       '@slotclientengine/rendercore':
         specifier: workspace:*
         version: link:../../packages/rendercore
+      '@slotclientengine/vnicore':
+        specifier: workspace:*
+        version: link:../../packages/vnicore
       pixi.js:
         specifier: ^8.1.6
         version: 8.17.1
@@ -394,6 +397,9 @@ importers:
       globals:
         specifier: ^15.15.0
         version: 15.15.0
+      happy-dom:
+        specifier: ^20.0.10
+        version: 20.10.2
 
   apps/spine2pixiani-demo:
     dependencies:

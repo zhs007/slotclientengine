@@ -44,6 +44,10 @@
       "types": "./dist/win-amount/index.d.ts",
       "import": "./dist/win-amount/index.js"
     },
+    "./popup": {
+      "types": "./dist/popup/index.d.ts",
+      "import": "./dist/popup/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

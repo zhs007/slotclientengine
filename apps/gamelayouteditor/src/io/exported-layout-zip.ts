@@ -20,6 +20,7 @@ export async function exportLayoutZip(options: {
   readonly manifest: SceneLayoutManifestV1;
   readonly assets: ReadonlyMap<string, Uint8Array>;
   readonly symbolFiles?: ReadonlyMap<string, Uint8Array>;
+  readonly popupFiles?: ReadonlyMap<string, Uint8Array>;
   readonly decodeImage?: (
     url: string,
   ) => Promise<{ readonly width: number; readonly height: number }>;
@@ -41,6 +42,9 @@ export async function exportLayoutZip(options: {
   for (const path of collectSceneLayoutAssetPaths(manifest)) {
     if (
       path === manifest.symbolPackage?.manifest ||
+      Object.values(manifest.popups ?? {}).some(
+        (popup) => popup.manifest === path,
+      ) ||
       manifest.nodes.some(
         (node) =>
           node.resource.kind === "image-string" &&
@@ -88,6 +92,14 @@ export async function exportLayoutZip(options: {
       if (!bytes) throw new Error(`symbols dependency 缺少 bytes：${path}`);
       closure.set(`${directory}/${path}`, bytes.slice());
     }
+  }
+  for (const popup of Object.values(manifest.popups ?? {})) {
+    const files = options.popupFiles;
+    if (!files) throw new Error("manifest 绑定 popup，但未提供 popupFiles。");
+    const packageId = popup.manifest.split("/").at(-2)!;
+    const directory = `dependencies/popups/${packageId}`;
+    for (const [path, bytes] of files)
+      closure.set(`${directory}/${path}`, bytes.slice());
   }
   collectSceneLayoutPackagePaths({ manifest, files: closure });
   const validated = await validateLayoutAssets(manifest, closure, {

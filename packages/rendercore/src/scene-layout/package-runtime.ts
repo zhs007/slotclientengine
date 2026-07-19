@@ -1,6 +1,10 @@
 import type { LogicReels } from "@slotclientengine/logiccore";
 import { Container } from "pixi.js";
 import {
+  createAwardCelebrationPlayer,
+  type AwardCelebrationPlayer,
+} from "../popup/index.js";
+import {
   RenderGridCellReelSet,
   RenderReelSet,
   createGridCellOrder,
@@ -44,6 +48,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #layout;
   #reel: ReelPresentation | null = null;
   #catalog: SymbolCatalogModel | null = null;
+  readonly #popups = new Map<string, AwardCelebrationPlayer>();
   #initialized = false;
   #initializing = false;
   #destroyed = false;
@@ -95,6 +100,15 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           "Scene layout package has no symbol binding and must not receive reels.main input.",
         );
       }
+      for (const [id, resource] of Object.entries(
+        this.#resource.popupPackages,
+      )) {
+        const popup = createAwardCelebrationPlayer({ resource });
+        await popup.init();
+        this.assertAlive();
+        this.#popups.set(id, popup);
+        this.container.addChild(popup.container);
+      }
       this.#initialized = true;
     } catch (error) {
       this.destroy();
@@ -115,6 +129,19 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         );
       this.#reel.position.set(grid.artRect.x, grid.artRect.y);
     }
+    for (const [id, popup] of this.#popups) {
+      const binding = this.#resource.manifest.popups?.[id];
+      const placement = binding?.placements[snapshot.variantId];
+      if (!binding || !placement)
+        throw new SceneLayoutError(
+          `Scene layout popup "${id}" has no ${snapshot.variantId} placement.`,
+        );
+      popup.container.position.set(
+        viewportSize.width / 2 + placement.x,
+        viewportSize.height / 2 + placement.y,
+      );
+      popup.container.scale.set(placement.scale);
+    }
     return snapshot;
   }
 
@@ -122,6 +149,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.assertReady();
     this.#layout.update(deltaSeconds);
     this.#reel?.update(deltaSeconds);
+    for (const popup of this.#popups.values())
+      if (popup.isPlaying()) popup.update(deltaSeconds);
   }
 
   resetReelScene(reelId: "main", input: SceneLayoutInitialReelScene): void {
@@ -161,6 +190,16 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   getReelPresentation(reelId: "main"): Container {
     this.assertReady();
     return this.requireReel(reelId);
+  }
+
+  getAwardCelebrationPopup(id: string): AwardCelebrationPlayer {
+    this.assertReady();
+    const popup = this.#popups.get(id);
+    if (!popup)
+      throw new SceneLayoutError(
+        `Scene layout award celebration popup "${id}" is unavailable.`,
+      );
+    return popup;
   }
 
   getSnapshot(): SceneLayoutSnapshot {
@@ -219,6 +258,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#reel?.destroy({ children: true });
     this.#reel = null;
     this.#catalog = null;
+    for (const popup of this.#popups.values()) popup.destroy();
+    this.#popups.clear();
     this.#layout.destroy();
     this.#resource.destroy();
     this.#initialized = false;

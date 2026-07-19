@@ -1,8 +1,12 @@
-import { collectSceneLayoutAssetPaths } from "@slotclientengine/rendercore/scene-layout";
+import {
+  collectSceneLayoutAssetPaths,
+  type SceneLayoutVariantId,
+} from "@slotclientengine/rendercore/scene-layout";
 import { ObjectUrlRegistry } from "../io/object-url-registry.js";
 import { exportLayoutZip } from "../io/exported-layout-zip.js";
 import { importLayoutZip } from "../io/imported-layout-zip.js";
 import { importSymbolsZipWithFiles } from "../io/imported-symbol-package.js";
+import { importPopupPackageZip } from "../io/imported-popup-package.js";
 import {
   createSymbolPackageResource,
   parseSymbolPackageManifest,
@@ -107,6 +111,10 @@ export class GameLayoutEditorApp {
     spineControls.innerHTML =
       '<span class="hint">当前 variant 无 stateful Spine node。</span>';
     this.requireElement(".preview-stage").before(spineControls);
+    const popupControls = document.createElement("details");
+    popupControls.className = "symbols-drawer";
+    popupControls.innerHTML = `<summary>Popup 获奖庆祝预览与导出</summary><div class="symbols-controls"><button type="button" data-import-popup>导入 Popup ZIP</button><button type="button" data-clear-popup>清除 Popup</button><label>bet raw <input type="number" value="100" data-popup-bet /></label><label>win raw <input type="number" value="5000" data-popup-win /></label><button type="button" data-play-popup>Play / Replay</button><button type="button" data-advance-popup>Advance</button>${(["default", "landscape", "portrait"] as const).map((variant) => `<fieldset><legend>${variant} viewport center placement</legend><label>x <input type="number" value="0" data-popup-placement="${variant}" data-popup-placement-field="x" /></label><label>y <input type="number" value="0" data-popup-placement="${variant}" data-popup-placement-field="y" /></label><label>scale <input type="number" min="0.01" step="0.01" value="1" data-popup-placement="${variant}" data-popup-placement-field="scale" /></label></fieldset>`).join("")}</div>`;
+    this.requireElement(".preview-stage").before(popupControls);
     const previewHost = this.requireElement("[data-preview-host]");
     const diagnostics = this.requireElement("[data-preview-diagnostics]");
     this.#preview = new LayoutPreview(previewHost, diagnostics);
@@ -173,6 +181,56 @@ export class GameLayoutEditorApp {
     this.requireElement("[data-clear-symbols]").addEventListener("click", () =>
       this.clearSymbolsPackage(),
     );
+    this.requireElement("[data-import-popup]").addEventListener(
+      "click",
+      () => void this.importPopupPackage(),
+    );
+    this.requireElement("[data-clear-popup]").addEventListener("click", () =>
+      this.#store.transact((project) => {
+        project.popupDependency = null;
+      }),
+    );
+    this.requireElement("[data-play-popup]").addEventListener("click", () => {
+      try {
+        const dependency = this.#store.getSnapshot().project.popupDependency;
+        if (!dependency) throw new Error("尚未导入 popup dependency。");
+        this.#preview?.playAwardCelebration(dependency.bindingId, {
+          betAmountRaw: Number(this.requireInput("[data-popup-bet]").value),
+          winAmountRaw: Number(this.requireInput("[data-popup-win]").value),
+        });
+      } catch (error) {
+        this.#store.setExternalError(error);
+      }
+    });
+    this.requireElement("[data-advance-popup]").addEventListener(
+      "click",
+      () => {
+        const dependency = this.#store.getSnapshot().project.popupDependency;
+        if (dependency)
+          this.#preview?.advanceAwardCelebration(dependency.bindingId);
+      },
+    );
+    this.#root
+      .querySelectorAll<HTMLInputElement>("[data-popup-placement]")
+      .forEach((input) =>
+        input.addEventListener("change", () => {
+          this.#store.transact((project) => {
+            const dependency = project.popupDependency;
+            if (!dependency) throw new Error("尚未导入 popup dependency。");
+            const variant = input.dataset
+              .popupPlacement as SceneLayoutVariantId;
+            if (!activeVariantIds(project).includes(variant)) return;
+            const placement = dependency.placements[variant];
+            if (!placement)
+              throw new Error(`popup placement ${variant} 缺失。`);
+            const field = input.dataset.popupPlacementField as
+              | "x"
+              | "y"
+              | "scale";
+            placement[field] = Number(input.value);
+          });
+        }),
+      );
     this.requireSelect("[data-reel-set]").addEventListener(
       "change",
       (event) => {
@@ -1287,11 +1345,17 @@ export class GameLayoutEditorApp {
           const symbolPrefix = dependency
             ? `dependencies/symbols/${dependency.packageId}/`
             : "";
+          const popupDependency = snapshot.project.popupDependency;
+          const popupPrefix = popupDependency
+            ? `dependencies/popups/${popupDependency.packageId}/`
+            : "";
           const bytes =
             snapshot.project.assets.get(path) ??
             (symbolPrefix && path.startsWith(symbolPrefix)
               ? dependency?.files.get(path.slice(symbolPrefix.length))
-              : undefined);
+              : popupPrefix && path.startsWith(popupPrefix)
+                ? popupDependency?.files.get(path.slice(popupPrefix.length))
+                : undefined);
           if (!bytes) throw new Error(`预览缺少资源：${path}`);
           return [path, bytes] as const;
         }),
@@ -1299,6 +1363,11 @@ export class GameLayoutEditorApp {
       if (manifest.symbolPackage && snapshot.project.symbolDependency) {
         const prefix = `dependencies/symbols/${snapshot.project.symbolDependency.packageId}/`;
         for (const [path, bytes] of snapshot.project.symbolDependency.files)
+          assets.set(`${prefix}${path}`, bytes);
+      }
+      if (manifest.popups && snapshot.project.popupDependency) {
+        const prefix = `dependencies/popups/${snapshot.project.popupDependency.packageId}/`;
+        for (const [path, bytes] of snapshot.project.popupDependency.files)
           assets.set(`${prefix}${path}`, bytes);
       }
       if (revision !== this.#previewRevision) return;
@@ -1352,6 +1421,9 @@ export class GameLayoutEditorApp {
         assets: snapshot.project.assets,
         ...(snapshot.project.symbolDependency?.includeInExport
           ? { symbolFiles: snapshot.project.symbolDependency.files }
+          : {}),
+        ...(snapshot.project.popupDependency
+          ? { popupFiles: snapshot.project.popupDependency.files }
           : {}),
       });
       const url = URL.createObjectURL(exported.blob);
@@ -1420,6 +1492,35 @@ export class GameLayoutEditorApp {
         this.#symbolImportBusy = false;
         this.renderSymbolsMetadata();
       }
+    }
+  }
+
+  private async importPopupPackage(): Promise<void> {
+    const files = await pickFiles(".zip,application/zip", false);
+    if (files.length === 0) return;
+    try {
+      const imported = importPopupPackageZip(
+        new Uint8Array(await files[0].arrayBuffer()),
+      );
+      this.#store.transact((project) => {
+        const placements = Object.fromEntries(
+          activeVariantIds(project).map((variant) => [
+            variant,
+            { x: 0, y: 0, scale: 1 },
+          ]),
+        );
+        project.popupDependency = {
+          packageId: imported.manifest.id,
+          files: imported.files,
+          bindingId: "award-celebration",
+          placements,
+        };
+      });
+      this.showFeedback(
+        `已导入 popup ${imported.manifest.id}；默认绑定到 viewport center。`,
+      );
+    } catch (error) {
+      this.#store.setExternalError(error);
     }
   }
 

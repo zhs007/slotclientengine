@@ -8,6 +8,11 @@ import {
   createDeterministicZip,
   extractBoundedZip,
   resolvePackagePath,
+  allocateContentAddressedPath,
+  createBoundedSourceIndex,
+  resolveSourcePath,
+  sha256Hex,
+  suggestLogicalResourceId,
 } from "../src/index.js";
 
 const limits = {
@@ -137,5 +142,47 @@ describe("ObjectUrlRegistry", () => {
     expect(registry.size).toBe(0);
     registry.destroy();
     expect(revoke).toHaveBeenCalledOnce();
+  });
+});
+
+describe("resource identity", () => {
+  it("suggests stable ASCII logical ids", () => {
+    expect(suggestLogicalResourceId("BG_2.PNG")).toBe("bg-2");
+    expect(suggestLogicalResourceId("Mini.BK.PNG")).toBe("mini-bk");
+    expect(suggestLogicalResourceId("中奖.png")).toBeNull();
+  });
+
+  it("uses complete SHA-256 content paths", async () => {
+    const digest = await sha256Hex(new TextEncoder().encode("abc"));
+    expect(digest).toBe(
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    );
+    expect(allocateContentAddressedPath({ digest, extension: ".PNG" })).toBe(
+      `assets/${digest}.png`,
+    );
+  });
+
+  it("bounds and resolves source files by exact then unique case-fold", () => {
+    const file = (name: string) => ({
+      name,
+      size: 1,
+      async arrayBuffer() {
+        return new Uint8Array([1]).buffer;
+      },
+    });
+    const index = createBoundedSourceIndex([file("Art.PNG")], {
+      maxEntries: 2,
+      maxFileBytes: 2,
+      maxTotalBytes: 2,
+    });
+    expect(resolveSourcePath(index, "Art.PNG").path).toBe("Art.PNG");
+    expect(resolveSourcePath(index, "art.png").path).toBe("Art.PNG");
+    expect(() =>
+      createBoundedSourceIndex([file("A"), file("a")], {
+        maxEntries: 2,
+        maxFileBytes: 2,
+        maxTotalBytes: 2,
+      }),
+    ).toThrow(/case-fold/);
   });
 });

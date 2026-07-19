@@ -1,5 +1,26 @@
 # Scene Layout Manifest v1
 
+## Popup dependency
+
+v1 可选声明一个获奖庆祝 popup：
+
+```json
+{
+  "popups": {
+    "award-celebration": {
+      "type": "award-celebration",
+      "manifest": "dependencies/popups/game-win/popup.manifest.json",
+      "placements": {
+        "landscape": { "x": 0, "y": 0, "scale": 1 },
+        "portrait": { "x": 0, "y": 20, "scale": 0.9 }
+      }
+    }
+  }
+}
+```
+
+placements 必须与 active variants 完全匹配，坐标相对最终 Pixi viewport center。nested popup bytes 只增加 `dependencies/popups/<id>/` 前缀，内部路径和 bytes 不重写。省略 `popups` 时旧 v1 行为不变。
+
 Scene layout 是 rendercore 的通用场景布局合同，入口为：
 
 ```ts

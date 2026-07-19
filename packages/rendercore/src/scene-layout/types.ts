@@ -2,6 +2,10 @@ import type { Container } from "pixi.js";
 import type { ImageStringResource } from "../image-string/index.js";
 import type { SymbolPackageResource } from "../symbol/package.js";
 import type {
+  AwardCelebrationPlayer,
+  PopupPackageResource,
+} from "../popup/index.js";
+import type {
   FocusedArtViewport,
   RenderViewportMargin,
   RenderViewportRect,
@@ -98,6 +102,14 @@ export interface SceneLayoutSymbolPackageBinding {
   readonly renderMode: "standard" | "grid-cell";
 }
 
+export interface SceneLayoutPopupBinding {
+  readonly type: "award-celebration";
+  readonly manifest: string;
+  readonly placements: Readonly<
+    Partial<Record<SceneLayoutVariantId, SceneLayoutNodePlacement>>
+  >;
+}
+
 export interface MaximizedFocusSceneLayoutAdaptation {
   readonly mode: "maximized-focus";
   readonly artSize: RenderViewportSize;
@@ -132,6 +144,7 @@ export interface SceneLayoutManifestV1 {
   readonly nodes: readonly SceneLayoutNode[];
   readonly reels: Readonly<Record<string, SceneLayoutReelGrid>>;
   readonly symbolPackage?: SceneLayoutSymbolPackageBinding;
+  readonly popups?: Readonly<Record<string, SceneLayoutPopupBinding>>;
 }
 
 export interface SceneLayoutResource {
@@ -156,6 +169,7 @@ export interface SceneLayoutPackageResource {
   readonly layout: SceneLayoutResource;
   readonly imageStrings: Readonly<Record<string, ImageStringResource>>;
   readonly symbolPackage: SymbolPackageResource | null;
+  readonly popupPackages: Readonly<Record<string, PopupPackageResource>>;
   destroy(): Promise<void> | void;
 }
 
@@ -257,4 +271,5 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   }): Promise<void>;
   resetReelScene(reelId: "main", input: SceneLayoutInitialReelScene): void;
   getReelPresentation(reelId: "main"): Container;
+  getAwardCelebrationPopup(id: string): AwardCelebrationPlayer;
 }

@@ -2,6 +2,10 @@
 
 `rendercore` 是 slot 前端渲染核心库。它基于 `pixi.js` v8、复用 `@slotclientengine/pixiani` 的基础显示对象生命周期，并复用 `@slotclientengine/logiccore` 的 game config/paytable 契约。`apps/symbolsviewer` 和 `apps/reelsviewer` 是调试 app，业务展示逻辑不放进核心库。
 
+## Popup API
+
+`@slotclientengine/rendercore/popup` 提供 strict popup parser、传递资源闭包、files/CDN loader、image/VNI/official Spine/image-string layer、五档 BigInt threshold sequence、点击/dismiss/end drain 和 snapshot。调用方只提交 bet/win、逐帧 `update()` 和转发点击。
+
 ## Image String API
 
 `@slotclientengine/rendercore/image-string` 提供中性的图片字符串 v1 合同：严格 manifest parser、PNG/WebP 精确资源闭包、files/Vite/CDN 资源装配、Unicode code point 布局，以及共享 resource 上的 Pixi `RenderImageString`。自然宽度与 fixed advance group 可以混用；fixed group 只改变逻辑 advance，不拉伸纹理。

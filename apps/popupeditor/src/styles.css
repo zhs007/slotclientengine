@@ -1,0 +1,139 @@
+:root {
+  font-family: Inter, system-ui, sans-serif;
+  color: #e9eeff;
+  background: #070a12;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 14px 20px;
+  background: #11182a;
+  border-bottom: 1px solid #27314c;
+}
+h1 {
+  font-size: 18px;
+  margin: 0;
+}
+nav,
+.actions,
+.preview-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.actions {
+  margin-left: auto;
+}
+.actions input[type="file"] {
+  display: none;
+}
+.actions label,
+button {
+  background: #202b46;
+  color: #e9eeff;
+  border: 1px solid #354263;
+  border-radius: 6px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+main {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) 600px;
+  height: calc(100vh - 72px);
+}
+.left {
+  overflow: auto;
+  padding: 18px;
+}
+aside {
+  background: #0b1020;
+  padding: 14px;
+  overflow: auto;
+}
+.preview-controls label {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.preview-controls input[type="number"] {
+  width: 90px;
+}
+#preview-canvas {
+  margin-top: 10px;
+}
+#preview-canvas canvas {
+  width: 540px;
+  height: 720px;
+  border: 1px solid #283554;
+}
+.card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  margin: 10px 0;
+  background: #121a2c;
+  border: 1px solid #2b3858;
+  border-radius: 8px;
+}
+.card code,
+.card pre,
+pre {
+  white-space: pre-wrap;
+  overflow: auto;
+  color: #a9c1ff;
+}
+.tiers {
+  display: flex;
+  gap: 6px;
+}
+.tiers button {
+  display: grid;
+}
+.tiers .active {
+  border-color: #8aa4ff;
+  background: #334a86;
+}
+label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+input {
+  background: #0b1020;
+  color: #fff;
+  border: 1px solid #3b496b;
+  padding: 5px;
+}
+#diagnostics {
+  position: sticky;
+  bottom: 0;
+  background: #190f19;
+  color: #ffb8c5;
+  padding: 10px;
+}
+dialog {
+  background: #10182a;
+  color: #fff;
+  border: 1px solid #4a5e91;
+  max-width: 720px;
+}
+#review-body article {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid #34446a;
+}

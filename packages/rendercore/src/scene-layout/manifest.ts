@@ -9,6 +9,7 @@ import type {
   SceneLayoutReelGrid,
   SceneLayoutSpineStateMachine,
   SceneLayoutSymbolPackageBinding,
+  SceneLayoutPopupBinding,
   SceneLayoutVariantId,
 } from "./types.js";
 
@@ -22,7 +23,16 @@ export function parseSceneLayoutManifest(
   const record = readRecord(value, "scene layout manifest");
   known(
     record,
-    ["version", "kind", "id", "adaptation", "nodes", "reels", "symbolPackage"],
+    [
+      "version",
+      "kind",
+      "id",
+      "adaptation",
+      "nodes",
+      "reels",
+      "symbolPackage",
+      "popups",
+    ],
     "scene layout manifest",
   );
   if (record.version !== 1) fail("scene layout manifest.version must be 1.");
@@ -66,6 +76,10 @@ export function parseSceneLayoutManifest(
       "scene layout node/reel order",
     );
   }
+  const popups =
+    record.popups === undefined
+      ? undefined
+      : parsePopupBindings(record.popups, adaptation.mode);
   validateReferencesAndBounds(adaptation, nodes, nodeIds, reels);
   validatePathClosure(nodes);
   return deepFreeze({
@@ -76,6 +90,7 @@ export function parseSceneLayoutManifest(
     nodes,
     reels,
     ...(symbolPackage ? { symbolPackage } : {}),
+    ...(popups ? { popups } : {}),
   });
 }
 
@@ -95,6 +110,8 @@ export function collectSceneLayoutAssetPaths(
     }
   }
   if (parsed.symbolPackage) paths.add(parsed.symbolPackage.manifest);
+  for (const popup of Object.values(parsed.popups ?? {}))
+    paths.add(popup.manifest);
   return Object.freeze(
     [...paths].sort((left, right) => left.localeCompare(right, "en")),
   );
@@ -574,6 +591,53 @@ function parseSymbolPackageBinding(
   });
 }
 
+function parsePopupBindings(
+  value: unknown,
+  mode: SceneLayoutAdaptation["mode"],
+): Readonly<Record<string, SceneLayoutPopupBinding>> {
+  const record = readRecord(value, "scene layout popups");
+  const entries = Object.entries(record);
+  if (entries.length !== 1)
+    fail(
+      "scene layout popups must contain exactly one award-celebration binding when present.",
+    );
+  const [id, raw] = entries[0]!;
+  identifier(id, "scene layout popup id");
+  const label = `scene layout popups.${id}`;
+  const binding = readRecord(raw, label);
+  known(binding, ["type", "manifest", "placements"], label);
+  if (binding.type !== "award-celebration")
+    fail(`${label}.type must be "award-celebration".`);
+  const placementsRecord = readRecord(
+    binding.placements,
+    `${label}.placements`,
+  );
+  const expected =
+    mode === "maximized-focus"
+      ? (["default"] as const)
+      : (["landscape", "portrait"] as const);
+  known(placementsRecord, expected, `${label}.placements`);
+  for (const variant of expected)
+    if (!Object.hasOwn(placementsRecord, variant))
+      fail(`${label}.placements.${variant} is required.`);
+  const placements = Object.fromEntries(
+    expected.map((variant) => [
+      variant,
+      parseNodePlacement(
+        placementsRecord[variant],
+        `${label}.placements.${variant}`,
+      ),
+    ]),
+  );
+  return deepFreeze({
+    [id]: {
+      type: "award-celebration" as const,
+      manifest: popupDependencyPath(binding.manifest, `${label}.manifest`),
+      placements,
+    },
+  });
+}
+
 function imageStringDependencyPath(value: unknown, label: string): string {
   const path = canonicalLowercasePath(value, label);
   const match =
@@ -595,6 +659,17 @@ function symbolDependencyPath(value: unknown, label: string): string {
     );
   if (!match)
     fail(`${label} must be dependencies/symbols/<id>/symbols.package.json.`);
+  return path;
+}
+
+function popupDependencyPath(value: unknown, label: string): string {
+  const path = canonicalLowercasePath(value, label);
+  if (
+    !/^dependencies\/popups\/([a-z0-9]+(?:-[a-z0-9]+)*)\/popup\.manifest\.json$/u.test(
+      path,
+    )
+  )
+    fail(`${label} must be dependencies/popups/<id>/popup.manifest.json.`);
   return path;
 }
 

@@ -7,6 +7,13 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: "@slotclientengine/rendercore/popup",
+        replacement: resolve(
+          __dirname,
+          "../../packages/rendercore/src/popup/index.ts",
+        ),
+      },
+      {
         find: "@slotclientengine/rendercore/image-string",
         replacement: resolve(
           __dirname,

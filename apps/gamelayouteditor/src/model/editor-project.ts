@@ -81,6 +81,15 @@ export interface EditorSymbolPackageDependency {
   includeInExport: boolean;
 }
 
+export interface EditorPopupDependency {
+  readonly packageId: string;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+  bindingId: string;
+  placements: Partial<
+    Record<SceneLayoutVariantId, { x: number; y: number; scale: number }>
+  >;
+}
+
 export interface EditorProject {
   id: string;
   mode: EditorMode;
@@ -103,6 +112,7 @@ export interface EditorProject {
   resources: Map<string, EditorLayoutResource>;
   assets: Map<string, Uint8Array>;
   symbolDependency: EditorSymbolPackageDependency | null;
+  popupDependency: EditorPopupDependency | null;
 }
 
 export function activeVariantIds(
@@ -139,6 +149,7 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
     resources: new Map(),
     assets: new Map(),
     symbolDependency: null,
+    popupDependency: null,
   };
 }
 
@@ -386,6 +397,7 @@ export function editorProjectToPreviewManifest(
       adaptation: manifest.adaptation,
       nodes: manifest.nodes,
       reels: manifest.reels,
+      ...(manifest.popups ? { popups: manifest.popups } : {}),
     });
   } catch {
     const available = previewVariantOrder(project.mode, preferredVariant).find(
@@ -495,6 +507,17 @@ export function editorProjectToManifest(
             reel: "main",
             reelSet: project.symbolDependency.reelSet,
             renderMode: project.symbolDependency.renderMode,
+          },
+        }
+      : {}),
+    ...(project.popupDependency
+      ? {
+          popups: {
+            [project.popupDependency.bindingId]: {
+              type: "award-celebration",
+              manifest: `dependencies/popups/${project.popupDependency.packageId}/popup.manifest.json`,
+              placements: project.popupDependency.placements,
+            },
           },
         }
       : {}),
@@ -652,6 +675,27 @@ export function manifestToEditorProject(
     for (const path of [...project.assets.keys()])
       if (path.startsWith(prefix)) project.assets.delete(path);
   }
+  if (parsed.popups) {
+    const [bindingId, binding] = Object.entries(parsed.popups)[0]!;
+    const packageId = binding.manifest.split("/").at(-2)!;
+    const prefix = `dependencies/popups/${packageId}/`;
+    const files = new Map(
+      [...assets.entries()]
+        .filter(([path]) => path.startsWith(prefix))
+        .map(
+          ([path, bytes]) =>
+            [path.slice(prefix.length), bytes.slice()] as const,
+        ),
+    );
+    project.popupDependency = {
+      packageId,
+      files,
+      bindingId,
+      placements: structuredClone(binding.placements),
+    };
+    for (const path of [...project.assets.keys()])
+      if (path.startsWith(prefix)) project.assets.delete(path);
+  }
   return project;
 }
 
@@ -672,6 +716,17 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
           ...structuredClone({ ...project.symbolDependency, files: undefined }),
           files: new Map(
             [...project.symbolDependency.files].map(([path, bytes]) => [
+              path,
+              bytes.slice(),
+            ]),
+          ),
+        }
+      : null,
+    popupDependency: project.popupDependency
+      ? {
+          ...structuredClone({ ...project.popupDependency, files: undefined }),
+          files: new Map(
+            [...project.popupDependency.files].map(([path, bytes]) => [
               path,
               bytes.slice(),
             ]),

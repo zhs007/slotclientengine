@@ -185,6 +185,21 @@ export class LayoutPreview {
     this.applySize();
   }
 
+  playAwardCelebration(
+    id: string,
+    input: { readonly betAmountRaw: number; readonly winAmountRaw: number },
+  ): void {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    const popup = this.#packageRuntime.getAwardCelebrationPopup(id);
+    popup.dismissImmediately();
+    popup.start(input);
+  }
+
+  advanceAwardCelebration(id: string): void {
+    this.#packageRuntime?.getAwardCelebrationPopup(id).requestAdvance();
+  }
+
   clear(): void {
     this.assertReady();
     this.#layoutRequest += 1;

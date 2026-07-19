@@ -3,6 +3,7 @@ import {
   assertNoPackagePathCollisions,
   resolvePackagePath,
 } from "@slotclientengine/browserartifactio";
+import { assertVNIProject } from "@slotclientengine/vnicore/core";
 import {
   collectImageStringAssetPaths,
   createImageStringResourceFromFiles,
@@ -18,6 +19,13 @@ import {
   validateSymbolPackageContents,
   type SymbolPackageResource,
 } from "../symbol/package.js";
+import {
+  collectPopupPackagePaths,
+  collectPopupDirectPaths,
+  createPopupPackageResource,
+  parsePopupManifest,
+  type PopupPackageResource,
+} from "../popup/index.js";
 import { SceneLayoutError } from "./errors.js";
 import {
   collectSceneLayoutAssetPaths,
@@ -95,6 +103,29 @@ export function collectSceneLayoutPackagePaths(options: {
     }
   }
 
+  for (const popup of Object.values(manifest.popups ?? {})) {
+    const nestedValue = parseJsonBytes(
+      requireBytes(options.files, popup.manifest),
+      popup.manifest,
+    );
+    const nested = parsePopupManifest(nestedValue);
+    if (nested.id !== popup.manifest.split("/").at(-2)) {
+      throw new SceneLayoutError(
+        `Scene layout popup dependency id mismatch at "${popup.manifest}".`,
+      );
+    }
+    const nestedFiles = extractPrefixedFiles(
+      options.files,
+      directoryOf(popup.manifest),
+    );
+    for (const path of collectPopupPackagePaths({
+      manifest: nested,
+      files: nestedFiles,
+    })) {
+      expected.add(resolvePackagePath(popup.manifest, path));
+    }
+  }
+
   const sortedExpected = [...expected].sort(comparePaths);
   assertNoPackagePathCollisions(sortedExpected);
   const sortedActual = actual.sort(comparePaths);
@@ -120,6 +151,7 @@ export async function createSceneLayoutPackageResource(options: {
 
   const imageStrings: Record<string, ImageStringResource> = {};
   let symbolPackage: SymbolPackageResource | null = null;
+  const popupPackages: Record<string, PopupPackageResource> = {};
   const objectUrls: string[] = [];
   try {
     for (const node of manifest.nodes) {
@@ -151,6 +183,17 @@ export async function createSceneLayoutPackageResource(options: {
         loadTextures: options.loadSymbolTextures,
       });
       validateBinding(manifest, symbolPackage);
+    }
+
+    for (const [popupId, popup] of Object.entries(manifest.popups ?? {})) {
+      const nestedFiles = extractPrefixedFiles(
+        options.files,
+        directoryOf(popup.manifest),
+      );
+      popupPackages[popupId] = await createPopupPackageResource({
+        files: nestedFiles,
+        ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+      });
     }
 
     const imageModules: Record<string, string> = {};
@@ -200,11 +243,13 @@ export async function createSceneLayoutPackageResource(options: {
       layout,
       imageStrings: Object.freeze({ ...imageStrings }),
       symbolPackage,
+      popupPackages: Object.freeze({ ...popupPackages }),
       destroy(): void {
         if (destroyed) return;
         destroyed = true;
         layout.destroy();
         symbolPackage?.destroy();
+        for (const popup of Object.values(popupPackages)) void popup.destroy();
       },
     });
   } catch (error) {
@@ -213,6 +258,7 @@ export async function createSceneLayoutPackageResource(options: {
       await resource.destroy();
     }
     symbolPackage?.destroy();
+    for (const popup of Object.values(popupPackages)) await popup.destroy();
     throw error instanceof SceneLayoutError
       ? error
       : new SceneLayoutError(formatError(error));
@@ -280,12 +326,84 @@ export async function loadSceneLayoutPackageFromUrl(options: {
       );
     }
   }
+  for (const popup of Object.values(manifest.popups ?? {})) {
+    const nested = parsePopupManifest(
+      parseJsonBytes(requireBytes(files, popup.manifest), popup.manifest),
+    );
+    const nestedFiles = new Map<string, Uint8Array>();
+    nestedFiles.set("popup.manifest.json", requireBytes(files, popup.manifest));
+    const direct = collectPopupDirectPaths(nested);
+    for (const path of direct) {
+      const full = resolvePackagePath(popup.manifest, path);
+      if (!files.has(full))
+        files.set(
+          full,
+          await fetchBytes(fetchImpl, containedUrl(manifestUrl, full)),
+        );
+      nestedFiles.set(path, requireBytes(files, full));
+    }
+    await fetchPopupTransitive(
+      fetchImpl,
+      manifestUrl,
+      nested,
+      nestedFiles,
+      popup.manifest,
+      files,
+    );
+  }
   return createSceneLayoutPackageResource({
     manifest,
     files,
     ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
     loadSymbolTextures: options.loadSymbolTextures,
   });
+}
+
+async function fetchPopupTransitive(
+  fetchImpl: typeof fetch,
+  layoutManifestUrl: URL,
+  manifest: ReturnType<typeof parsePopupManifest>,
+  nestedFiles: Map<string, Uint8Array>,
+  popupManifestPath: string,
+  layoutFiles: Map<string, Uint8Array>,
+): Promise<void> {
+  for (const resource of Object.values(manifest.resources)) {
+    if (resource.kind === "image-string") {
+      const nested = parseImageStringManifest(
+        parseJsonBytes(
+          requireBytes(nestedFiles, resource.manifest),
+          resource.manifest,
+        ),
+      );
+      for (const path of collectImageStringAssetPaths(nested)) {
+        const popupPath = resolvePackagePath(resource.manifest, path);
+        const layoutPath = resolvePackagePath(popupManifestPath, popupPath);
+        const bytes = await fetchBytes(
+          fetchImpl,
+          containedUrl(layoutManifestUrl, layoutPath),
+        );
+        nestedFiles.set(popupPath, bytes);
+        layoutFiles.set(layoutPath, bytes);
+      }
+    } else if (resource.kind === "vni") {
+      const project = assertVNIProject(
+        parseJsonBytes(
+          requireBytes(nestedFiles, resource.project),
+          resource.project,
+        ),
+      );
+      for (const asset of project.assets) {
+        const popupPath = resolvePackagePath(resource.project, asset.path);
+        const layoutPath = resolvePackagePath(popupManifestPath, popupPath);
+        const bytes = await fetchBytes(
+          fetchImpl,
+          containedUrl(layoutManifestUrl, layoutPath),
+        );
+        nestedFiles.set(popupPath, bytes);
+        layoutFiles.set(layoutPath, bytes);
+      }
+    }
+  }
 }
 
 function validateBinding(

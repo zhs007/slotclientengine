@@ -23,6 +23,36 @@ describe("scene layout manifest", () => {
     ).toThrow(/must be an object/);
   });
 
+  it("parses one viewport-center popup binding and requires every active variant", () => {
+    const parsed = parseSceneLayoutManifest({
+      ...game003LayoutFixture,
+      popups: {
+        celebration: {
+          type: "award-celebration",
+          manifest:
+            "dependencies/popups/game003-win-celebration/popup.manifest.json",
+          placements: {
+            landscape: { x: 10, y: -20, scale: 1 },
+            portrait: { x: 0, y: 30, scale: 0.8 },
+          },
+        },
+      },
+    });
+    expect(parsed.popups?.celebration.placements.portrait).toEqual({
+      x: 0,
+      y: 30,
+      scale: 0.8,
+    });
+    expect(collectSceneLayoutAssetPaths(parsed)).toContain(
+      "dependencies/popups/game003-win-celebration/popup.manifest.json",
+    );
+    const invalid = structuredClone(parsed) as any;
+    delete invalid.popups.celebration.placements.portrait;
+    expect(() => parseSceneLayoutManifest(invalid)).toThrow(
+      /portrait.*required/,
+    );
+  });
+
   it("parses image-string, stateful Spine and an ordered symbol binding", () => {
     const manifest = parseSceneLayoutManifest({
       ...game002LayoutFixture,
