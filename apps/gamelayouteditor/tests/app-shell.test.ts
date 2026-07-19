@@ -11,6 +11,9 @@ const previewSpies = vi.hoisted(() => ({
   setSelectedReelSet: vi.fn((): unknown => undefined),
   randomizeSymbols: vi.fn((): unknown => undefined),
   setSymbolGrid: vi.fn((): unknown => undefined),
+  setOtherSceneBindings: vi.fn(
+    (_bindings: readonly unknown[]): unknown => undefined,
+  ),
   destroy: vi.fn(),
 }));
 
@@ -65,6 +68,7 @@ vi.mock("../src/preview/layout-preview.js", () => ({
     setSelectedReelSet = previewSpies.setSelectedReelSet;
     randomizeSymbols = previewSpies.randomizeSymbols;
     setSymbolGrid = previewSpies.setSymbolGrid;
+    setOtherSceneBindings = previewSpies.setOtherSceneBindings;
     destroy = previewSpies.destroy;
   },
 }));
@@ -515,6 +519,13 @@ describe("GameLayoutEditorApp workspace", () => {
       status: "pending-selection" as const,
       message: "请选择",
       scene: null,
+      availableTargets: {
+        A: [{ kind: "image-string-node" as const, name: "amount" }],
+        B: [{ kind: "legacy-presentation-value" as const }],
+      },
+      numberWeightTableNames: ["coin-weight"],
+      bindings: [],
+      otherScene: null,
     };
     ioSpies.importSymbolsZip.mockResolvedValueOnce(resource);
     previewSpies.setSymbolPackage.mockResolvedValueOnce(metadata);
@@ -528,11 +539,49 @@ describe("GameLayoutEditorApp workspace", () => {
       selectedReelSet: "first",
       status: "ready",
     });
+    previewSpies.setOtherSceneBindings.mockImplementation((bindings) => ({
+      ...metadata,
+      bindings,
+    }));
     const fileClick = selectFilesOnce([new File(["zip"], "symbols.zip")]);
     const { app, root } = await createApp();
     (root.querySelector("[data-import-symbols]") as HTMLButtonElement).click();
     await vi.waitFor(() =>
       expect(previewSpies.setSymbolPackage).toHaveBeenCalled(),
+    );
+    const aEnabled = root.querySelector<HTMLInputElement>(
+      '[data-other-scene-row="A"] [data-binding-enabled]',
+    )!;
+    aEnabled.checked = true;
+    aEnabled.dispatchEvent(new Event("change"));
+    expect(previewSpies.setOtherSceneBindings).toHaveBeenLastCalledWith([
+      {
+        symbol: "A",
+        target: { kind: "image-string-node", name: "amount" },
+        source: {
+          kind: "number-weight-table",
+          tableName: "coin-weight",
+        },
+      },
+    ]);
+    const bEnabled = root.querySelector<HTMLInputElement>(
+      '[data-other-scene-row="B"] [data-binding-enabled]',
+    )!;
+    bEnabled.checked = true;
+    bEnabled.dispatchEvent(new Event("change"));
+    const bSource = root.querySelector<HTMLSelectElement>(
+      '[data-other-scene-row="B"] [data-binding-source-kind]',
+    )!;
+    bSource.value = "fixed-number";
+    bSource.dispatchEvent(new Event("change"));
+    expect(previewSpies.setOtherSceneBindings).toHaveBeenLastCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          symbol: "B",
+          target: { kind: "legacy-presentation-value" },
+          source: { kind: "fixed-number", value: 1 },
+        }),
+      ]),
     );
     const select = root.querySelector("[data-reel-set]") as HTMLSelectElement;
     select.value = "first";

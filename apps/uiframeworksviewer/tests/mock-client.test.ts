@@ -1,12 +1,12 @@
 import { createSlotUiFramework } from "@slotclientengine/uiframeworks";
 import {
   createViewerMockClient,
-  createViewerMockSpinResult
+  createViewerMockSpinResult,
 } from "../src/mock-client.js";
 import {
   VIEWER_BET_OPTIONS,
   getViewerRuntimeConfig,
-  getViewerScenario
+  getViewerScenario,
 } from "../src/scenarios.js";
 
 describe("viewer mock client", () => {
@@ -21,12 +21,12 @@ describe("viewer mock client", () => {
         mount: () => undefined,
         applySpinResult: (result) => {
           received.push(result.logic.getStepCount());
-        }
+        },
       },
       live: runtime.live,
       betOptions: VIEWER_BET_OPTIONS,
       initialBalance: scenario.balance,
-      clientFactory: (live) => createViewerMockClient({ scenario, live })
+      clientFactory: (live) => createViewerMockClient({ scenario, live }),
     });
 
     await framework.connect();
@@ -44,12 +44,12 @@ describe("viewer mock client", () => {
       root,
       gameAdapter: {
         mount: () => undefined,
-        applySpinResult: () => undefined
+        applySpinResult: () => undefined,
       },
       live: runtime.live,
       betOptions: VIEWER_BET_OPTIONS,
       initialBalance: scenario.balance,
-      clientFactory: (live) => createViewerMockClient({ scenario, live })
+      clientFactory: (live) => createViewerMockClient({ scenario, live }),
     });
 
     await expect(framework.connect()).rejects.toThrow(/mock connect error/);

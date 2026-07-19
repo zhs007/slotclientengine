@@ -62,7 +62,7 @@
 
 ## 7. 注意事项
 
-  - 不要在 on message 或 on state 里，直接做任何的 游戏核心操作（spin、selectOptional、collect），而应该在逻辑循环内部处理这些，且一定要依次执行。
+- 不要在 on message 或 on state 里，直接做任何的 游戏核心操作（spin、selectOptional、collect），而应该在逻辑循环内部处理这些，且一定要依次执行。
 
 ## 8. 开发日志 (Development Log)
 
@@ -375,6 +375,7 @@ For debugging and testing purposes, the `SlotcraftClient` can be initialized in 
 ### Use Case
 
 Replay mode is invaluable for:
+
 - **Reproducing Bugs**: A specific server response that causes a bug can be saved as a JSON file, allowing developers to consistently reproduce and debug the client-side issue without needing the server to be in a specific state.
 - **Integration Testing**: Writing client-side integration tests becomes much simpler, as there is no need to mock a complex WebSocket server.
 - **UI Prototyping**: Frontend developers can build and test UI components against a predictable game state without a running backend.

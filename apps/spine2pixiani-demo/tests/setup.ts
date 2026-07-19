@@ -28,7 +28,7 @@ class MockContainer {
       this.y = y;
       this.position.x = x;
       this.position.y = y;
-    }
+    },
   };
   scale = {
     x: 1,
@@ -36,12 +36,22 @@ class MockContainer {
     set: (x: number, y?: number) => {
       this.scale.x = x;
       this.scale.y = y ?? x;
-    }
+    },
   };
 
-  setFromMatrix(matrix: { a: number; b: number; c: number; d: number; tx: number; ty: number }) {
+  setFromMatrix(matrix: {
+    a: number;
+    b: number;
+    c: number;
+    d: number;
+    tx: number;
+    ty: number;
+  }) {
     this.position.set(matrix.tx, matrix.ty);
-    this.scale.set(Math.hypot(matrix.a, matrix.b), Math.hypot(matrix.c, matrix.d));
+    this.scale.set(
+      Math.hypot(matrix.a, matrix.b),
+      Math.hypot(matrix.c, matrix.d),
+    );
     this.rotation = Math.atan2(matrix.b, matrix.a);
     return this;
   }
@@ -90,7 +100,7 @@ class MockTexture {
 class MockSprite extends MockContainer {
   texture: MockTexture;
   anchor = {
-    set: vi.fn()
+    set: vi.fn(),
   };
 
   constructor(texture: MockTexture = MockTexture.EMPTY) {
@@ -157,5 +167,5 @@ vi.mock("pixi.js", () => ({
   Graphics: MockGraphics,
   Matrix: MockMatrix,
   Sprite: MockSprite,
-  Texture: MockTexture
+  Texture: MockTexture,
 }));

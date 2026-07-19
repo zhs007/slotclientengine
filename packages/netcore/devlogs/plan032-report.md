@@ -13,22 +13,22 @@ The execution followed the plan laid out in `jules/plan031.md` systematically.
 2.  **`SlotcraftClient` Wrapper**: The `selectSomething` method was added to the main `SlotcraftClient` class in `src/main.ts` to delegate the call, which was a straightforward step.
 
 3.  **Live Client Implementation (`src/live-client.ts`)**:
-    *   The `selectSomething` method was implemented as a queued operation (`_enqueueOperation`). This was crucial for ensuring it respects the serial execution of user commands, preventing any potential race conditions with `spin` or `collect`.
-    *   The logic correctly constructs the `gamectrl3` message with `ctrlname: 'selectany'` and includes the required parameters (`bet`, `lines`, `times`, `clientParameter`).
-    *   The `clientParameter` is cached in `userInfo`.
-    *   The `updateCaches` method was modified to handle `gmi.clientParameter` during game resume, ensuring state is restored correctly.
+    - The `selectSomething` method was implemented as a queued operation (`_enqueueOperation`). This was crucial for ensuring it respects the serial execution of user commands, preventing any potential race conditions with `spin` or `collect`.
+    - The logic correctly constructs the `gamectrl3` message with `ctrlname: 'selectany'` and includes the required parameters (`bet`, `lines`, `times`, `clientParameter`).
+    - The `clientParameter` is cached in `userInfo`.
+    - The `updateCaches` method was modified to handle `gmi.clientParameter` during game resume, ensuring state is restored correctly.
 
 4.  **Replay Client Implementation (`src/replay-client.ts`)**:
-    *   The `selectSomething` method was added with a simple mock implementation that returns a resolved promise.
-    *   The data loading logic was updated to correctly initialize `userInfo.clientParameter` from `playCtrlParam.clientParameter` in the replay file.
+    - The `selectSomething` method was added with a simple mock implementation that returns a resolved promise.
+    - The data loading logic was updated to correctly initialize `userInfo.clientParameter` from `playCtrlParam.clientParameter` in the replay file.
 
 5.  **Testing**:
-    *   **Integration Tests**: New tests were added to `tests/integration.test.ts`. These tests were critical for verifying the live functionality. A mock server was configured to handle the new `selectany` command and to send resume messages containing `clientParameter`, confirming both the sending logic and the resume logic.
-    *   **Replay Tests**: A new test was added to `tests/replay.test.ts` with a dedicated replay JSON file (`replay-select.json`) to ensure that the client correctly initializes its state from the replay data.
-    *   All tests were run successfully, and coverage was maintained above the 90% threshold.
+    - **Integration Tests**: New tests were added to `tests/integration.test.ts`. These tests were critical for verifying the live functionality. A mock server was configured to handle the new `selectany` command and to send resume messages containing `clientParameter`, confirming both the sending logic and the resume logic.
+    - **Replay Tests**: A new test was added to `tests/replay.test.ts` with a dedicated replay JSON file (`replay-select.json`) to ensure that the client correctly initializes its state from the replay data.
+    - All tests were run successfully, and coverage was maintained above the 90% threshold.
 
 6.  **Documentation**:
-    *   The main project documentation, `jules.md`, was updated to include a detailed section on the `selectSomething` method.
+    - The main project documentation, `jules.md`, was updated to include a detailed section on the `selectSomething` method.
 
 ## 3. Problems and Solutions
 

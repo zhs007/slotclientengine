@@ -25,7 +25,7 @@ class MockContainer {
       this.y = y;
       this.position.x = x;
       this.position.y = y;
-    }
+    },
   };
   scale = {
     x: 1,
@@ -33,11 +33,11 @@ class MockContainer {
     set: (x: number, y?: number) => {
       this.scale.x = x;
       this.scale.y = y ?? x;
-    }
+    },
   };
   skew = {
     x: 0,
-    y: 0
+    y: 0,
   };
 
   addChild<T extends Child>(child: T) {
@@ -85,7 +85,7 @@ class MockTexture {
 class MockSprite extends MockContainer {
   texture: MockTexture;
   anchor = {
-    set: vi.fn()
+    set: vi.fn(),
   };
 
   constructor(texture: MockTexture = MockTexture.EMPTY) {
@@ -96,7 +96,7 @@ class MockSprite extends MockContainer {
 
 class MockText extends MockContainer {
   anchor = {
-    set: vi.fn()
+    set: vi.fn(),
   };
 
   constructor(public readonly options: { text: string; style?: unknown }) {
@@ -151,7 +151,7 @@ class MockDisplacementFilter {
     set: (x: number, y?: number) => {
       this.scale.x = x;
       this.scale.y = y ?? x;
-    }
+    },
   };
 
   constructor(public readonly options: { sprite: MockSprite; scale: number }) {
@@ -164,22 +164,22 @@ const assetsLoad = vi.fn(async () => new MockTexture());
 vi.mock("pixi.js", () => ({
   Application: class {},
   Assets: {
-    load: assetsLoad
+    load: assetsLoad,
   },
   BLEND_MODES: {
     NORMAL: 0,
     ADD: 1,
     MULTIPLY: 2,
-    SCREEN: 3
+    SCREEN: 3,
   },
   Container: MockContainer,
   DisplacementFilter: MockDisplacementFilter,
   Graphics: MockGraphics,
   Sprite: MockSprite,
   Text: MockText,
-  Texture: MockTexture
+  Texture: MockTexture,
 }));
 
 Object.assign(globalThis, {
-  __victoryaniAssetsLoad: assetsLoad
+  __victoryaniAssetsLoad: assetsLoad,
 });

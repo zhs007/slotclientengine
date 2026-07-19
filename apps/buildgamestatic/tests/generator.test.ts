@@ -207,7 +207,9 @@ describe("buildgamestatic generator", () => {
     expect(result.generated).toMatch(
       /import\.meta\.glob\(\s+"..\/..\/..\/..\/assets\/game003-s1\/win-amount\/\{bigwin,superwin,megawin\}\.json"/,
     );
-    expect(result.generated).toContain("manifest: game003Skin1WinAmountManifest");
+    expect(result.generated).toContain(
+      "manifest: game003Skin1WinAmountManifest",
+    );
     expect(result.generated).not.toContain('project: "./megawin.json"');
     expect(result.generated).not.toContain("durationSeconds: 5");
   });

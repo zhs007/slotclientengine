@@ -7,6 +7,7 @@ export function parseCliArgs(argv: string[]): CliConfig {
   let paytablePath: string | undefined;
   let outPath: string | undefined;
   const reelPaths: string[] = [];
+  const numberWeightPaths: string[] = [];
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -39,6 +40,13 @@ export function parseCliArgs(argv: string[]): CliConfig {
         index += 1;
         break;
       }
+      case "--number-weight": {
+        const value = readOptionValue(args, index, arg);
+        assertExtension(value, ".xlsx", arg);
+        numberWeightPaths.push(resolve(invocationCwd, value));
+        index += 1;
+        break;
+      }
       default:
         throw new Error(`未知参数：${arg}`);
     }
@@ -59,11 +67,16 @@ export function parseCliArgs(argv: string[]): CliConfig {
   return {
     paytablePath,
     reelPaths,
+    numberWeightPaths,
     outPath,
   };
 }
 
-function readOptionValue(argv: string[], index: number, optionName: string): string {
+function readOptionValue(
+  argv: string[],
+  index: number,
+  optionName: string,
+): string {
   const value = argv[index + 1];
   if (!value || value.startsWith("--")) {
     throw new Error(`参数 ${optionName} 缺少取值`);
@@ -72,7 +85,11 @@ function readOptionValue(argv: string[], index: number, optionName: string): str
   return value;
 }
 
-function assertExtension(filePath: string, expectedExtension: string, optionName: string): void {
+function assertExtension(
+  filePath: string,
+  expectedExtension: string,
+  optionName: string,
+): void {
   if (extname(filePath).toLowerCase() !== expectedExtension) {
     throw new Error(`参数 ${optionName} 必须使用 ${expectedExtension} 文件`);
   }

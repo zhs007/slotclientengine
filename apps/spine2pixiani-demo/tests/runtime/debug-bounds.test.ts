@@ -6,9 +6,13 @@ import {
   computeSlotSelectionBounds,
   createBoneFallbackSelectionBounds,
   createBoneSubtreeSlotIndex,
-  mergeAxisAlignedBounds
+  mergeAxisAlignedBounds,
 } from "../../src/runtime/debug-bounds.js";
-import { composeAttachmentTransform, computeWorldBoneTransforms, sampleAnimationPose } from "../../src/runtime/timeline-sampler.js";
+import {
+  composeAttachmentTransform,
+  computeWorldBoneTransforms,
+  sampleAnimationPose,
+} from "../../src/runtime/timeline-sampler.js";
 import { composeWorldTransform } from "../../src/runtime/transform.js";
 
 describe("debug-bounds", () => {
@@ -19,12 +23,12 @@ describe("debug-bounds", () => {
         y: 16,
         rotation: 0,
         scaleX: 2,
-        scaleY: 1.5
+        scaleY: 1.5,
       }),
       {
         width: 20,
-        height: 12
-      }
+        height: 12,
+      },
     );
 
     expect(bounds.center).toEqual({ x: 48, y: -16 });
@@ -32,20 +36,29 @@ describe("debug-bounds", () => {
       { x: 28, y: -25 },
       { x: 68, y: -25 },
       { x: 68, y: -7 },
-      { x: 28, y: -7 }
+      { x: 28, y: -7 },
     ]);
   });
 
   it("matches slot selection center with the composed attachment transform", () => {
     const pose = sampleAnimationPose(cabinAnimationData, "cabin", 0.5, true);
-    const worldBones = computeWorldBoneTransforms(cabinAnimationData, pose.bones);
+    const worldBones = computeWorldBoneTransforms(
+      cabinAnimationData,
+      pose.bones,
+    );
     const slotPose = Object.values(pose.slots).find((slot) => slot.attachment);
     if (!slotPose) {
       throw new Error("Expected at least one visible slot in sampled pose");
     }
 
-    const attachmentWorld = composeAttachmentTransform(worldBones[slotPose.boneName], slotPose.attachment!);
-    const bounds = computeSlotSelectionBounds(worldBones[slotPose.boneName], slotPose);
+    const attachmentWorld = composeAttachmentTransform(
+      worldBones[slotPose.boneName],
+      slotPose.attachment!,
+    );
+    const bounds = computeSlotSelectionBounds(
+      worldBones[slotPose.boneName],
+      slotPose,
+    );
 
     expect(bounds).not.toBeNull();
     expect(bounds?.center.x).toBeCloseTo(attachmentWorld.x, 5);
@@ -56,10 +69,18 @@ describe("debug-bounds", () => {
 
   it("builds subtree unions for bones and falls back when no attachment is visible", () => {
     const pose = sampleAnimationPose(cabinAnimationData, "cabin", 0.5, true);
-    const worldBones = computeWorldBoneTransforms(cabinAnimationData, pose.bones);
+    const worldBones = computeWorldBoneTransforms(
+      cabinAnimationData,
+      pose.bones,
+    );
     const slotIndex = createBoneSubtreeSlotIndex(cabinAnimationData);
     const boneName = "ping2_01";
-    const bounds = computeBoneSelectionBounds(pose, worldBones, boneName, slotIndex.get(boneName) ?? []);
+    const bounds = computeBoneSelectionBounds(
+      pose,
+      worldBones,
+      boneName,
+      slotIndex.get(boneName) ?? [],
+    );
 
     expect(bounds).not.toBeNull();
     expect(bounds?.kind).toBe("bone");
@@ -68,14 +89,24 @@ describe("debug-bounds", () => {
 
     const fallback = computeBoneSelectionBounds(pose, worldBones, boneName, []);
     expect(fallback?.kind).toBe("fallback");
-    expect(fallback).toEqual(createBoneFallbackSelectionBounds(worldBones[boneName]));
+    expect(fallback).toEqual(
+      createBoneFallbackSelectionBounds(worldBones[boneName]),
+    );
   });
 
   it("merges multiple slot bounds and skips empty attachments", () => {
     const pose = sampleAnimationPose(cabinAnimationData, "cabin", 1.5, true);
-    const worldBones = computeWorldBoneTransforms(cabinAnimationData, pose.bones);
-    const hiddenSlotBounds = computeSlotSelectionBounds(worldBones[pose.slots.ping1_01.boneName], pose.slots.ping1_01);
-    const visibleSlotPose = Object.values(pose.slots).find((slot) => slot.attachment);
+    const worldBones = computeWorldBoneTransforms(
+      cabinAnimationData,
+      pose.bones,
+    );
+    const hiddenSlotBounds = computeSlotSelectionBounds(
+      worldBones[pose.slots.ping1_01.boneName],
+      pose.slots.ping1_01,
+    );
+    const visibleSlotPose = Object.values(pose.slots).find(
+      (slot) => slot.attachment,
+    );
 
     if (!visibleSlotPose) {
       throw new Error("Expected a visible slot when validating merged bounds");
@@ -83,7 +114,7 @@ describe("debug-bounds", () => {
 
     const visibleSlotBounds = computeSlotSelectionBounds(
       worldBones[visibleSlotPose.boneName],
-      visibleSlotPose
+      visibleSlotPose,
     );
 
     expect(hiddenSlotBounds).toBeNull();
@@ -95,9 +126,18 @@ describe("debug-bounds", () => {
 
   it("keeps mirrored slot bounds symmetric for ui_k and ui_k2 branches", () => {
     const pose = sampleAnimationPose(cabinAnimationData, "cabin", 0, true);
-    const worldBones = computeWorldBoneTransforms(cabinAnimationData, pose.bones);
-    const leftBounds = computeSlotSelectionBounds(worldBones[pose.slots.ui13.boneName], pose.slots.ui13);
-    const rightBounds = computeSlotSelectionBounds(worldBones[pose.slots.ui18.boneName], pose.slots.ui18);
+    const worldBones = computeWorldBoneTransforms(
+      cabinAnimationData,
+      pose.bones,
+    );
+    const leftBounds = computeSlotSelectionBounds(
+      worldBones[pose.slots.ui13.boneName],
+      pose.slots.ui13,
+    );
+    const rightBounds = computeSlotSelectionBounds(
+      worldBones[pose.slots.ui18.boneName],
+      pose.slots.ui18,
+    );
 
     expect(leftBounds).not.toBeNull();
     expect(rightBounds).not.toBeNull();

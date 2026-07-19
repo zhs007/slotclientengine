@@ -17,7 +17,10 @@ export function resetLayerInstances(instances: Map<string, LayerInstance>) {
 
     while (instance.container.children.length > 1) {
       const child = instance.container.removeChildAt(1);
-      const destroyable = child as { destroyed?: boolean; destroy?: (options?: object) => void };
+      const destroyable = child as {
+        destroyed?: boolean;
+        destroy?: (options?: object) => void;
+      };
       if (!destroyable.destroyed && typeof destroyable.destroy === "function") {
         destroyable.destroy({ children: true });
       }
@@ -28,7 +31,10 @@ export function resetLayerInstances(instances: Map<string, LayerInstance>) {
     gsap.killTweensOf(instance.target.position);
     gsap.killTweensOf((instance.target as { skew?: object }).skew ?? {});
     instance.target.position.set(instance.baseState.x, instance.baseState.y);
-    instance.target.scale.set(instance.baseState.scaleX, instance.baseState.scaleY);
+    instance.target.scale.set(
+      instance.baseState.scaleX,
+      instance.baseState.scaleY,
+    );
     instance.target.rotation = instance.baseState.rotation;
     instance.target.alpha = instance.baseState.alpha;
     instance.target.visible = instance.baseState.visible;
@@ -36,14 +42,19 @@ export function resetLayerInstances(instances: Map<string, LayerInstance>) {
   }
 }
 
-export function buildMasterTimeline({ project, registry, instances, onTimeUpdate }: TimelineBuildInput) {
+export function buildMasterTimeline({
+  project,
+  registry,
+  instances,
+  onTimeUpdate,
+}: TimelineBuildInput) {
   resetLayerInstances(instances);
 
   const timeline = gsap.timeline({
     paused: true,
     onUpdate: () => {
       onTimeUpdate?.(timeline.time());
-    }
+    },
   });
 
   for (const layer of project.layers) {
@@ -68,7 +79,7 @@ export function buildMasterTimeline({ project, registry, instances, onTimeUpdate
         registerCleanup: (cleanup) => {
           instance.cleanupTasks.add(cleanup);
         },
-        timelineFactory: gsap.timeline
+        timelineFactory: gsap.timeline,
       });
 
       if (tween) {

@@ -19,7 +19,9 @@ export interface LayerInstance {
   cleanupTasks: Set<() => void>;
 }
 
-export function createLayerBaseState(layer: VictoryLayerConfig): LayerBaseState {
+export function createLayerBaseState(
+  layer: VictoryLayerConfig,
+): LayerBaseState {
   return {
     x: layer.x,
     y: layer.y,
@@ -27,7 +29,7 @@ export function createLayerBaseState(layer: VictoryLayerConfig): LayerBaseState 
     scaleY: layer.scaleY,
     rotation: layer.rotation,
     alpha: layer.alpha,
-    visible: layer.visible
+    visible: layer.visible,
   };
 }
 

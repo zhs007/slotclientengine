@@ -19,26 +19,26 @@ The implementation followed the strategy outlined in `jules/plan029.md`.
 - **New Replay Client**: A new class, `SlotcraftClientReplay`, was created in `src/replay-client.ts`.
 - **Dependency**: The `node-fetch@2` library was added to the project to handle fetching the JSON file in a Node.js environment.
 - **Logic**:
-    - `connect()`: Fetches and parses the JSON from the URL.
-    - `enterGame()`: Simulates entering a game by processing the loaded JSON data and setting the appropriate initial state (`SPINEND` or `IN_GAME`).
-    - `spin()`, `collect()`: These methods act as stubs that manipulate the internal state and return data based on the already-loaded JSON, without any network activity.
+  - `connect()`: Fetches and parses the JSON from the URL.
+  - `enterGame()`: Simulates entering a game by processing the loaded JSON data and setting the appropriate initial state (`SPINEND` or `IN_GAME`).
+  - `spin()`, `collect()`: These methods act as stubs that manipulate the internal state and return data based on the already-loaded JSON, without any network activity.
 
 ### 2.3. Testing
 
 - **New Replay Tests**: A new test file, `tests/replay.test.ts`, was created to specifically test the `SlotcraftClientReplay` functionality. Mocks for `node-fetch` were used to provide a consistent JSON payload for the tests.
 - **Integration Test Fixes**: The major refactoring broke the existing integration tests in `tests/integration.test.ts`, which were making assumptions about the internal structure of `SlotcraftClient`. These tests were updated to access private methods/properties for testing purposes through the new `implementation` property (e.g., `(client as any).implementation.setState(...)`).
 - **Validation**: Several issues were caught and fixed during the testing phase:
-    - A typo (`.msg` instead of `msg`) in `src/live-client.ts` was found and corrected.
-    - Multiple test failures in `tests/integration.test.ts` were debugged and fixed by updating how the tests accessed internal client properties.
-    - A final linting error (`no-redeclare`) was introduced and subsequently fixed in the test file.
+  - A typo (`.msg` instead of `msg`) in `src/live-client.ts` was found and corrected.
+  - Multiple test failures in `tests/integration.test.ts` were debugged and fixed by updating how the tests accessed internal client properties.
+  - A final linting error (`no-redeclare`) was introduced and subsequently fixed in the test file.
 - **Final Check**: The `npm run check` command was run successfully, confirming that all linting, tests, and build steps passed.
 
 ## 3. Challenges and Solutions
 
 - **Broken Integration Tests**: The biggest challenge was the widespread failure of integration tests after the refactoring. The tests were tightly coupled to the private implementation details of the original `SlotcraftClient`.
-    - **Solution**: Instead of rewriting the tests, the decision was made to adapt them to the new structure. All calls to private members were updated to go through the new `implementation` property. This was an effective, surgical solution that preserved the existing test coverage.
+  - **Solution**: Instead of rewriting the tests, the decision was made to adapt them to the new structure. All calls to private members were updated to go through the new `implementation` property. This was an effective, surgical solution that preserved the existing test coverage.
 - **Testing Asynchronous Heartbeats**: One test for a failed heartbeat was particularly tricky, as it involved a combination of state, mocks, and timers.
-    - **Solution**: The test was fixed by ensuring the client was in a valid state (`LOGGED_IN`) before triggering the heartbeat, and by correctly spying on the `send` method of the `SlotcraftClientLive` implementation rather than the `SlotcraftClient` wrapper.
+  - **Solution**: The test was fixed by ensuring the client was in a valid state (`LOGGED_IN`) before triggering the heartbeat, and by correctly spying on the `send` method of the `SlotcraftClientLive` implementation rather than the `SlotcraftClient` wrapper.
 
 ## 4. Final Outcome
 

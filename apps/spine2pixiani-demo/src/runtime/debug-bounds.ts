@@ -1,5 +1,11 @@
 import { composeAttachmentTransform } from "./timeline-sampler.js";
-import type { AttachmentPose, SampledAnimationPose, SlotPose, SpineModel, WorldTransform } from "./spine-types.js";
+import type {
+  AttachmentPose,
+  SampledAnimationPose,
+  SlotPose,
+  SpineModel,
+  WorldTransform,
+} from "./spine-types.js";
 import { applyWorldTransformToScenePoint } from "./transform.js";
 
 export type ScenePoint = {
@@ -25,7 +31,7 @@ export type SelectionBounds = {
 
 export function computeAttachmentSceneQuad(
   transform: WorldTransform,
-  attachment: Pick<AttachmentPose, "width" | "height">
+  attachment: Pick<AttachmentPose, "width" | "height">,
 ): SelectionBounds {
   const halfWidth = attachment.width / 2;
   const halfHeight = attachment.height / 2;
@@ -33,7 +39,7 @@ export function computeAttachmentSceneQuad(
     projectScenePoint(transform, -halfWidth, -halfHeight),
     projectScenePoint(transform, halfWidth, -halfHeight),
     projectScenePoint(transform, halfWidth, halfHeight),
-    projectScenePoint(transform, -halfWidth, halfHeight)
+    projectScenePoint(transform, -halfWidth, halfHeight),
   ] as [ScenePoint, ScenePoint, ScenePoint, ScenePoint];
   const aabb = computeAxisAlignedBounds(corners);
 
@@ -43,20 +49,28 @@ export function computeAttachmentSceneQuad(
     aabb,
     center: {
       x: (corners[0].x + corners[2].x) / 2,
-      y: (corners[0].y + corners[2].y) / 2
-    }
+      y: (corners[0].y + corners[2].y) / 2,
+    },
   };
 }
 
-export function computeSlotSelectionBounds(worldBone: WorldTransform | undefined, slotPose: SlotPose): SelectionBounds | null {
+export function computeSlotSelectionBounds(
+  worldBone: WorldTransform | undefined,
+  slotPose: SlotPose,
+): SelectionBounds | null {
   if (!worldBone || !slotPose.attachment) {
     return null;
   }
 
-  return computeAttachmentSceneQuad(composeAttachmentTransform(worldBone, slotPose.attachment), slotPose.attachment);
+  return computeAttachmentSceneQuad(
+    composeAttachmentTransform(worldBone, slotPose.attachment),
+    slotPose.attachment,
+  );
 }
 
-export function computeAxisAlignedBounds(points: readonly ScenePoint[]): AxisAlignedBounds {
+export function computeAxisAlignedBounds(
+  points: readonly ScenePoint[],
+): AxisAlignedBounds {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
@@ -75,11 +89,13 @@ export function computeAxisAlignedBounds(points: readonly ScenePoint[]): AxisAli
     maxX,
     maxY,
     width: maxX - minX,
-    height: maxY - minY
+    height: maxY - minY,
   };
 }
 
-export function mergeAxisAlignedBounds(boundsList: readonly AxisAlignedBounds[]): AxisAlignedBounds | null {
+export function mergeAxisAlignedBounds(
+  boundsList: readonly AxisAlignedBounds[],
+): AxisAlignedBounds | null {
   if (boundsList.length === 0) {
     return null;
   }
@@ -90,13 +106,13 @@ export function mergeAxisAlignedBounds(boundsList: readonly AxisAlignedBounds[])
     maxX: Math.max(...boundsList.map((bounds) => bounds.maxX)),
     maxY: Math.max(...boundsList.map((bounds) => bounds.maxY)),
     width: 0,
-    height: 0
+    height: 0,
   });
 }
 
 export function createSelectionBoundsFromAabb(
   kind: SelectionBounds["kind"],
-  bounds: AxisAlignedBounds
+  bounds: AxisAlignedBounds,
 ): SelectionBounds {
   const normalizedBounds = finalizeBounds(bounds);
   const corners = axisAlignedBoundsToQuad(normalizedBounds);
@@ -107,12 +123,15 @@ export function createSelectionBoundsFromAabb(
     aabb: normalizedBounds,
     center: {
       x: (normalizedBounds.minX + normalizedBounds.maxX) / 2,
-      y: (normalizedBounds.minY + normalizedBounds.maxY) / 2
-    }
+      y: (normalizedBounds.minY + normalizedBounds.maxY) / 2,
+    },
   };
 }
 
-export function createBoneFallbackSelectionBounds(worldBone: WorldTransform | undefined, size = 56): SelectionBounds | null {
+export function createBoneFallbackSelectionBounds(
+  worldBone: WorldTransform | undefined,
+  size = 56,
+): SelectionBounds | null {
   if (!worldBone) {
     return null;
   }
@@ -124,7 +143,7 @@ export function createBoneFallbackSelectionBounds(worldBone: WorldTransform | un
     maxX: worldBone.x + halfSize,
     maxY: -worldBone.y + halfSize,
     width: size,
-    height: size
+    height: size,
   });
 }
 
@@ -167,16 +186,20 @@ export function computeBoneSelectionBounds(
   pose: SampledAnimationPose,
   worldBones: Record<string, WorldTransform>,
   boneName: string,
-  slotNames: readonly string[]
+  slotNames: readonly string[],
 ): SelectionBounds | null {
   const slotBounds = slotNames
     .map((slotName) => {
       const slotPose = pose.slots[slotName];
-      return slotPose ? computeSlotSelectionBounds(worldBones[slotPose.boneName], slotPose) : null;
+      return slotPose
+        ? computeSlotSelectionBounds(worldBones[slotPose.boneName], slotPose)
+        : null;
     })
     .filter((bounds): bounds is SelectionBounds => bounds !== null);
 
-  const mergedBounds = mergeAxisAlignedBounds(slotBounds.map((bounds) => bounds.aabb));
+  const mergedBounds = mergeAxisAlignedBounds(
+    slotBounds.map((bounds) => bounds.aabb),
+  );
   if (mergedBounds) {
     return createSelectionBoundsFromAabb("bone", mergedBounds);
   }
@@ -184,16 +207,22 @@ export function computeBoneSelectionBounds(
   return createBoneFallbackSelectionBounds(worldBones[boneName]);
 }
 
-function projectScenePoint(transform: WorldTransform, localX: number, localY: number): ScenePoint {
+function projectScenePoint(
+  transform: WorldTransform,
+  localX: number,
+  localY: number,
+): ScenePoint {
   return applyWorldTransformToScenePoint(transform, { x: localX, y: localY });
 }
 
-function axisAlignedBoundsToQuad(bounds: AxisAlignedBounds): [ScenePoint, ScenePoint, ScenePoint, ScenePoint] {
+function axisAlignedBoundsToQuad(
+  bounds: AxisAlignedBounds,
+): [ScenePoint, ScenePoint, ScenePoint, ScenePoint] {
   return [
     { x: bounds.minX, y: bounds.minY },
     { x: bounds.maxX, y: bounds.minY },
     { x: bounds.maxX, y: bounds.maxY },
-    { x: bounds.minX, y: bounds.maxY }
+    { x: bounds.minX, y: bounds.maxY },
   ];
 }
 
@@ -201,6 +230,6 @@ function finalizeBounds(bounds: AxisAlignedBounds): AxisAlignedBounds {
   return {
     ...bounds,
     width: bounds.maxX - bounds.minX,
-    height: bounds.maxY - bounds.minY
+    height: bounds.maxY - bounds.minY,
   };
 }

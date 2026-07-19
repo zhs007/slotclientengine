@@ -1,4 +1,7 @@
-import type { AnimationSupportEntry, VictoryProjectConfig } from "../config/victory-types.js";
+import type {
+  AnimationSupportEntry,
+  VictoryProjectConfig,
+} from "../config/victory-types.js";
 
 export interface ControlPanel {
   root: HTMLElement;
@@ -14,7 +17,10 @@ export interface ControlPanel {
   resetCameraButton: HTMLButtonElement;
 }
 
-export function createControlPanel(project: VictoryProjectConfig, supportMatrix: AnimationSupportEntry[]): ControlPanel {
+export function createControlPanel(
+  project: VictoryProjectConfig,
+  supportMatrix: AnimationSupportEntry[],
+): ControlPanel {
   const root = document.createElement("aside");
   root.className = "control-panel";
 
@@ -64,25 +70,47 @@ export function createControlPanel(project: VictoryProjectConfig, supportMatrix:
   cameraGrid.append(
     createDebugEntry("Stage focus", cameraActiveLabel),
     createDebugEntry("Zoom", cameraScaleLabel),
-    createDebugEntry("Pan", cameraOffsetLabel)
+    createDebugEntry("Pan", cameraOffsetLabel),
   );
 
   const interactionHint = document.createElement("p");
   interactionHint.className = "control-panel__meta";
-  interactionHint.textContent = "Click the stage to arm wheel zoom, drag to pan, and use Reset View to return to the centered camera.";
+  interactionHint.textContent =
+    "Click the stage to arm wheel zoom, drag to pan, and use Reset View to return to the centered camera.";
 
   const resetCameraButton = createButton("Reset View");
-  cameraSection.append(createSectionTitle("Scene camera"), cameraGrid, interactionHint, resetCameraButton);
+  cameraSection.append(
+    createSectionTitle("Scene camera"),
+    cameraGrid,
+    interactionHint,
+    resetCameraButton,
+  );
 
   const usedSection = document.createElement("section");
   usedSection.className = "control-panel__section";
-  usedSection.append(createSectionTitle("Used in sample"), createTagList(collectUsedAnimations(project)));
+  usedSection.append(
+    createSectionTitle("Used in sample"),
+    createTagList(collectUsedAnimations(project)),
+  );
 
   const supportSection = document.createElement("section");
   supportSection.className = "control-panel__section";
-  supportSection.append(createSectionTitle("Support matrix"), createSupportList(supportMatrix));
+  supportSection.append(
+    createSectionTitle("Support matrix"),
+    createSupportList(supportMatrix),
+  );
 
-  root.append(title, meta, actions, toggles, statusLabel, timeLabel, cameraSection, usedSection, supportSection);
+  root.append(
+    title,
+    meta,
+    actions,
+    toggles,
+    statusLabel,
+    timeLabel,
+    cameraSection,
+    usedSection,
+    supportSection,
+  );
 
   return {
     root,
@@ -95,12 +123,18 @@ export function createControlPanel(project: VictoryProjectConfig, supportMatrix:
     cameraActiveLabel,
     cameraScaleLabel,
     cameraOffsetLabel,
-    resetCameraButton
+    resetCameraButton,
   };
 }
 
 function collectUsedAnimations(project: VictoryProjectConfig) {
-  return [...new Set(project.layers.flatMap((layer) => layer.animations.map((animation) => animation.type)))].sort();
+  return [
+    ...new Set(
+      project.layers.flatMap((layer) =>
+        layer.animations.map((animation) => animation.type),
+      ),
+    ),
+  ].sort();
 }
 
 function createButton(label: string, extraClass = "") {

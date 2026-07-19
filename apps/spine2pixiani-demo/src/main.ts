@@ -1,13 +1,30 @@
 import { Application, Assets, Container } from "pixi.js";
-import { animationBundles, defaultAnimationBundle, getAnimationBundle } from "./data/animation-bundles.js";
+import {
+  animationBundles,
+  defaultAnimationBundle,
+  getAnimationBundle,
+} from "./data/animation-bundles.js";
 import { computeCanvasLayout } from "./layout.js";
 import { loadAtlasTextures } from "./runtime/atlas.js";
 import { CabinAnimationEntity } from "./ani/cabin/cabin-animation.js";
 import { createDebugNodeIndex, buildDebugTree } from "./runtime/debug-tree.js";
-import { computeSlotSelectionBounds, mergeAxisAlignedBounds } from "./runtime/debug-bounds.js";
-import { computeWorldBoneTransforms, sampleAnimationPose } from "./runtime/timeline-sampler.js";
-import { createViewportState, panViewport, zoomViewportAtPoint } from "./runtime/viewport-controller.js";
-import { createAnimationSelect, type MouseMode } from "./ui/animation-select.js";
+import {
+  computeSlotSelectionBounds,
+  mergeAxisAlignedBounds,
+} from "./runtime/debug-bounds.js";
+import {
+  computeWorldBoneTransforms,
+  sampleAnimationPose,
+} from "./runtime/timeline-sampler.js";
+import {
+  createViewportState,
+  panViewport,
+  zoomViewportAtPoint,
+} from "./runtime/viewport-controller.js";
+import {
+  createAnimationSelect,
+  type MouseMode,
+} from "./ui/animation-select.js";
 import { createNodeTreePanel } from "./ui/node-tree.js";
 import "./styles.css";
 
@@ -28,10 +45,10 @@ async function bootstrap() {
       id: bundle.id,
       label: bundle.label,
       description: bundle.description,
-      animationCount: bundle.animationNames.length
+      animationCount: bundle.animationNames.length,
     })),
     defaultAnimationBundle.id,
-    defaultAnimationBundle.animationNames
+    defaultAnimationBundle.animationNames,
   );
   const nodeTree = createNodeTreePanel();
   const stageShell = document.createElement("section");
@@ -51,7 +68,7 @@ async function bootstrap() {
     width: designWidth,
     height: designHeight,
     antialias: true,
-    background: "#081019"
+    background: "#081019",
   });
   stageHost.appendChild(app.canvas);
 
@@ -60,10 +77,18 @@ async function bootstrap() {
   app.stage.addChild(viewportRoot);
   viewportRoot.addChild(sceneRoot);
 
-  const textureCache = new Map<string, Awaited<ReturnType<typeof loadAtlasTextures>>>();
+  const textureCache = new Map<
+    string,
+    Awaited<ReturnType<typeof loadAtlasTextures>>
+  >();
   let currentBundle = defaultAnimationBundle;
   let currentEntity: CabinAnimationEntity | null = null;
-  let debugNodeIndex = new Map<string, ReturnType<typeof createDebugNodeIndex> extends Map<infer K, infer V> ? V : never>();
+  let debugNodeIndex = new Map<
+    string,
+    ReturnType<typeof createDebugNodeIndex> extends Map<infer K, infer V>
+      ? V
+      : never
+  >();
   let detachBoneListener: (() => void) | null = null;
   let bundleLoadToken = 0;
   const viewport = {
@@ -72,21 +97,19 @@ async function bootstrap() {
       minZoom: 0.6,
       maxZoom: 2.4,
       panX: 0,
-      panY: 0
-    })
+      panY: 0,
+    }),
   };
 
   let mouseMode: MouseMode = "select";
   let selectedNodeId: string | null = null;
-  let dragState:
-    | {
-        pointerId: number;
-        originPanX: number;
-        originPanY: number;
-        startX: number;
-        startY: number;
-      }
-    | null = null;
+  let dragState: {
+    pointerId: number;
+    originPanX: number;
+    originPanY: number;
+    startX: number;
+    startY: number;
+  } | null = null;
 
   const applyViewport = () => {
     viewportRoot.position.set(viewport.state.panX, viewport.state.panY);
@@ -100,20 +123,35 @@ async function bootstrap() {
       return cached;
     }
 
-    const textures = await loadAtlasTextures(bundle.atlasText, bundle.atlasImageUrl);
+    const textures = await loadAtlasTextures(
+      bundle.atlasText,
+      bundle.atlasImageUrl,
+    );
     textureCache.set(bundle.id, textures);
     return textures;
   };
 
-  const estimateSceneBounds = (bundle = currentBundle, animationName = bundle.defaultAnimationName) => {
+  const estimateSceneBounds = (
+    bundle = currentBundle,
+    animationName = bundle.defaultAnimationName,
+  ) => {
     const pose = sampleAnimationPose(bundle.model, animationName, 0, true);
     const worldBones = computeWorldBoneTransforms(bundle.model, pose.bones);
     const slotBounds = bundle.model.slotOrder
       .map((slotName) => {
         const slotPose = pose.slots[slotName];
-        return slotPose ? computeSlotSelectionBounds(worldBones[slotPose.boneName], slotPose)?.aabb ?? null : null;
+        return slotPose
+          ? (computeSlotSelectionBounds(worldBones[slotPose.boneName], slotPose)
+              ?.aabb ?? null)
+          : null;
       })
-      .filter((bounds): bounds is NonNullable<ReturnType<typeof computeSlotSelectionBounds>>["aabb"] => bounds !== null);
+      .filter(
+        (
+          bounds,
+        ): bounds is NonNullable<
+          ReturnType<typeof computeSlotSelectionBounds>
+        >["aabb"] => bounds !== null,
+      );
 
     const mergedBounds = mergeAxisAlignedBounds(slotBounds);
     if (mergedBounds) {
@@ -133,20 +171,29 @@ async function bootstrap() {
       maxX,
       maxY,
       width: maxX - minX,
-      height: maxY - minY
+      height: maxY - minY,
     };
   };
 
-  const applyScenePlacement = (bundle = currentBundle, animationName = bundle.defaultAnimationName) => {
+  const applyScenePlacement = (
+    bundle = currentBundle,
+    animationName = bundle.defaultAnimationName,
+  ) => {
     const bounds = estimateSceneBounds(bundle, animationName);
     const width = Math.max(bounds.width, 320);
     const height = Math.max(bounds.height, 320);
-    const scale = Math.min((designWidth * 0.72) / width, (designHeight * 0.74) / height);
+    const scale = Math.min(
+      (designWidth * 0.72) / width,
+      (designHeight * 0.74) / height,
+    );
     const centerX = bounds.minX + width / 2;
     const centerY = bounds.minY + height / 2;
 
     sceneRoot.scale.set(scale, scale);
-    sceneRoot.position.set(designWidth * 0.52 - centerX * scale, designHeight * 0.56 - centerY * scale);
+    sceneRoot.position.set(
+      designWidth * 0.52 - centerX * scale,
+      designHeight * 0.56 - centerY * scale,
+    );
   };
 
   const setMouseMode = (nextMode: MouseMode) => {
@@ -173,7 +220,9 @@ async function bootstrap() {
     controls.setSelection({
       name: node.name,
       type: node.type,
-      parentName: node.parentId ? debugNodeIndex.get(node.parentId)?.name ?? null : null
+      parentName: node.parentId
+        ? (debugNodeIndex.get(node.parentId)?.name ?? null)
+        : null,
     });
   };
 
@@ -195,7 +244,7 @@ async function bootstrap() {
     const rect = app.canvas.getBoundingClientRect();
     return {
       x: ((clientX - rect.left) * designWidth) / rect.width,
-      y: ((clientY - rect.top) * designHeight) / rect.height
+      y: ((clientY - rect.top) * designHeight) / rect.height,
     };
   };
 
@@ -204,7 +253,7 @@ async function bootstrap() {
       designWidth,
       designHeight,
       viewportWidth: stageHost.clientWidth,
-      viewportHeight: stageHost.clientHeight
+      viewportHeight: stageHost.clientHeight,
     });
     app.canvas.style.width = `${layout.width}px`;
     app.canvas.style.height = `${layout.height}px`;
@@ -229,7 +278,11 @@ async function bootstrap() {
       currentEntity = null;
     }
 
-    const nextEntity = new CabinAnimationEntity(nextBundle.model, textures, nextBundle.defaultAnimationName);
+    const nextEntity = new CabinAnimationEntity(
+      nextBundle.model,
+      textures,
+      nextBundle.defaultAnimationName,
+    );
     currentEntity = nextEntity;
     sceneRoot.addChild(nextEntity);
     nextEntity.setLoop(controls.loopCheckbox.checked);
@@ -243,9 +296,12 @@ async function bootstrap() {
       id: nextBundle.id,
       label: nextBundle.label,
       description: nextBundle.description,
-      animationCount: nextBundle.animationNames.length
+      animationCount: nextBundle.animationNames.length,
     });
-    controls.setAnimationOptions(nextBundle.animationNames, nextBundle.defaultAnimationName);
+    controls.setAnimationOptions(
+      nextBundle.animationNames,
+      nextBundle.defaultAnimationName,
+    );
     nextEntity.play(nextBundle.defaultAnimationName);
     applyScenePlacement(nextBundle, nextBundle.defaultAnimationName);
     setSelectedNode(null);
@@ -286,7 +342,7 @@ async function bootstrap() {
       originPanX: viewport.state.panX,
       originPanY: viewport.state.panY,
       startX: point.x,
-      startY: point.y
+      startY: point.y,
     };
     stageHost.setPointerCapture(event.pointerId);
     stageHost.classList.add("is-dragging");
@@ -294,7 +350,11 @@ async function bootstrap() {
   });
 
   stageHost.addEventListener("pointermove", (event) => {
-    if (!dragState || mouseMode !== "pan" || dragState.pointerId !== event.pointerId) {
+    if (
+      !dragState ||
+      mouseMode !== "pan" ||
+      dragState.pointerId !== event.pointerId
+    ) {
       return;
     }
 
@@ -302,7 +362,7 @@ async function bootstrap() {
     viewport.state = panViewport(
       viewport.state,
       dragState.originPanX + (point.x - dragState.startX),
-      dragState.originPanY + (point.y - dragState.startY)
+      dragState.originPanY + (point.y - dragState.startY),
     );
     applyViewport();
   });
@@ -310,7 +370,10 @@ async function bootstrap() {
   stageHost.addEventListener("pointerup", finishDragging);
   stageHost.addEventListener("pointercancel", finishDragging);
   stageHost.addEventListener("pointerleave", (event) => {
-    if (dragState?.pointerId === event.pointerId && !stageHost.hasPointerCapture(event.pointerId)) {
+    if (
+      dragState?.pointerId === event.pointerId &&
+      !stageHost.hasPointerCapture(event.pointerId)
+    ) {
       finishDragging();
     }
   });
@@ -319,10 +382,14 @@ async function bootstrap() {
     (event) => {
       event.preventDefault();
       const factor = Math.exp(-event.deltaY * 0.0015);
-      viewport.state = zoomViewportAtPoint(viewport.state, factor, getStagePoint(event.clientX, event.clientY));
+      viewport.state = zoomViewportAtPoint(
+        viewport.state,
+        factor,
+        getStagePoint(event.clientX, event.clientY),
+      );
       applyViewport();
     },
-    { passive: false }
+    { passive: false },
   );
 
   app.ticker.add((ticker) => {

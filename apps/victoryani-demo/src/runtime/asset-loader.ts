@@ -9,7 +9,13 @@ export function createProjectAssetResolver(manifest: Record<string, string>) {
 }
 
 export function collectProjectAssetPaths(project: VictoryProjectConfig) {
-  return [...new Set(project.layers.filter((layer) => layer.type === "pic" && layer.asset).map((layer) => layer.asset))];
+  return [
+    ...new Set(
+      project.layers
+        .filter((layer) => layer.type === "pic" && layer.asset)
+        .map((layer) => layer.asset),
+    ),
+  ];
 }
 
 export async function loadProjectTextures(project: VictoryProjectConfig) {
@@ -19,7 +25,7 @@ export async function loadProjectTextures(project: VictoryProjectConfig) {
     collectProjectAssetPaths(project).map(async (assetPath) => {
       const texture = await Assets.load<Texture>(assetPath);
       textures.set(assetPath, texture);
-    })
+    }),
   );
 
   return textures;

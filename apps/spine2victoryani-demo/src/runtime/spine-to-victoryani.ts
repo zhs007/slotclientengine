@@ -1,7 +1,17 @@
-import type { VictoryLayerConfigRaw, VictoryProjectConfigRaw } from "../config/victory-types.js";
+import type {
+  VictoryLayerConfigRaw,
+  VictoryProjectConfigRaw,
+} from "../config/victory-types.js";
 import { parseSpineColor } from "./color.js";
-import type { EncodedTimelineAnimation, EncodedTimelineFrame } from "./export-types.js";
-import { composeAttachmentTransform, computeWorldBoneTransforms, sampleAnimationPose } from "./timeline-sampler.js";
+import type {
+  EncodedTimelineAnimation,
+  EncodedTimelineFrame,
+} from "./export-types.js";
+import {
+  composeAttachmentTransform,
+  computeWorldBoneTransforms,
+  sampleAnimationPose,
+} from "./timeline-sampler.js";
 import { createSceneMatrix, deriveWorldTransform } from "./transform.js";
 import type { SpineModel } from "./spine-types.js";
 
@@ -10,13 +20,13 @@ export const EXPORT_STAGE = {
   width: 1280,
   height: 900,
   anchorX: 1280 * 0.52,
-  anchorY: 900 * 0.84
+  anchorY: 900 * 0.84,
 };
 
 export const MIRROR_LAYER_PAIRS = [
   ["ui14__ui6", "ui20__ui6"],
   ["ui16__ui6", "ui25__ui6"],
-  ["ui3__ui3", "ui15__ui3"]
+  ["ui3__ui3", "ui15__ui3"],
 ] as const;
 
 export interface ExportBuildOptions {
@@ -52,7 +62,7 @@ function encodeTimeline(frames: EncodedTimelineFrame[], fps: number): string {
   const payload: EncodedTimelineAnimation = {
     kind: "timeline",
     fps,
-    frames
+    frames,
   };
   return JSON.stringify(payload);
 }
@@ -61,8 +71,15 @@ function createHiddenFrame(drawOrder = 0): EncodedTimelineFrame {
   return [0, 0, 1, 1, 0, 0, 0, drawOrder];
 }
 
-function createProjectLayer(layer: SlotAttachmentLayer, assetPath: string, duration: number, fps: number, frames: EncodedTimelineFrame[]): VictoryLayerConfigRaw {
-  const initial = frames.find((frame) => frame[6] === 1) ?? frames[0] ?? createHiddenFrame();
+function createProjectLayer(
+  layer: SlotAttachmentLayer,
+  assetPath: string,
+  duration: number,
+  fps: number,
+  frames: EncodedTimelineFrame[],
+): VictoryLayerConfigRaw {
+  const initial =
+    frames.find((frame) => frame[6] === 1) ?? frames[0] ?? createHiddenFrame();
 
   return {
     id: layer.id,
@@ -84,10 +101,10 @@ function createProjectLayer(layer: SlotAttachmentLayer, assetPath: string, durat
         duration,
         script: encodeTimeline(frames, fps),
         params: {
-          source: "spine-export"
-        }
-      }
-    ]
+          source: "spine-export",
+        },
+      },
+    ],
   };
 }
 
@@ -103,7 +120,7 @@ export function collectSlotAttachmentLayers(model: SpineModel) {
         slotName: slot.name,
         attachmentName,
         textureName: attachment.textureName,
-        blendMode: slot.blendMode === "additive" ? "add" : "normal"
+        blendMode: slot.blendMode === "additive" ? "add" : "normal",
       });
     }
   }
@@ -111,14 +128,21 @@ export function collectSlotAttachmentLayers(model: SpineModel) {
   return layers;
 }
 
-export function getStageScale(model: SpineModel, stageWidth = EXPORT_STAGE.width, stageHeight = EXPORT_STAGE.height) {
-  return Math.min((stageWidth * 0.72) / model.skeleton.width, (stageHeight * 0.82) / model.skeleton.height);
+export function getStageScale(
+  model: SpineModel,
+  stageWidth = EXPORT_STAGE.width,
+  stageHeight = EXPORT_STAGE.height,
+) {
+  return Math.min(
+    (stageWidth * 0.72) / model.skeleton.width,
+    (stageHeight * 0.82) / model.skeleton.height,
+  );
 }
 
 export function buildVictoryProject(
   model: SpineModel,
   animationName: string,
-  options: ExportBuildOptions
+  options: ExportBuildOptions,
 ): VictoryProjectConfigRaw {
   const animation = model.animations[animationName];
   if (!animation) {
@@ -133,37 +157,55 @@ export function buildVictoryProject(
   const stageScale = getStageScale(model, stageWidth, stageHeight);
   const layers = collectSlotAttachmentLayers(model);
   const frameCount = Math.max(1, Math.ceil(animation.duration * fps));
-  const layerFrames = new Map<string, EncodedTimelineFrame[]>(layers.map((layer) => [layer.id, []]));
-  const baseSlotOrder = new Map(model.slotOrder.map((slotName, index) => [slotName, index]));
+  const layerFrames = new Map<string, EncodedTimelineFrame[]>(
+    layers.map((layer) => [layer.id, []]),
+  );
+  const baseSlotOrder = new Map(
+    model.slotOrder.map((slotName, index) => [slotName, index]),
+  );
 
   for (let frameIndex = 0; frameIndex <= frameCount; frameIndex += 1) {
     const time = Math.min(animation.duration, frameIndex / fps);
     const pose = sampleAnimationPose(model, animationName, time, false);
     const worldBones = computeWorldBoneTransforms(model, pose.bones);
-    const drawOrder = new Map(pose.drawOrder.map((slotName, index) => [slotName, index]));
+    const drawOrder = new Map(
+      pose.drawOrder.map((slotName, index) => [slotName, index]),
+    );
 
     for (const layer of layers) {
       const slotPose = pose.slots[layer.slotName];
-      const orderIndex = drawOrder.get(layer.slotName) ?? baseSlotOrder.get(layer.slotName) ?? 0;
-      if (!slotPose || !slotPose.attachment || slotPose.attachmentName !== layer.attachmentName) {
+      const orderIndex =
+        drawOrder.get(layer.slotName) ?? baseSlotOrder.get(layer.slotName) ?? 0;
+      if (
+        !slotPose ||
+        !slotPose.attachment ||
+        slotPose.attachmentName !== layer.attachmentName
+      ) {
         layerFrames.get(layer.id)!.push(createHiddenFrame(orderIndex));
         continue;
       }
 
-      const attachmentWorld = composeAttachmentTransform(worldBones[slotPose.boneName], slotPose.attachment);
-      const scene = deriveWorldTransform(createSceneMatrix(attachmentWorld.matrix));
+      const attachmentWorld = composeAttachmentTransform(
+        worldBones[slotPose.boneName],
+        slotPose.attachment,
+      );
+      const scene = deriveWorldTransform(
+        createSceneMatrix(attachmentWorld.matrix),
+      );
       const color = parseSpineColor(slotPose.color);
 
-      layerFrames.get(layer.id)!.push([
-        round(stageAnchorX + scene.x * stageScale),
-        round(stageAnchorY + scene.y * stageScale),
-        round(scene.scaleX * stageScale),
-        round(scene.scaleY * stageScale),
-        round((scene.rotation * Math.PI) / 180),
-        round(clamp01(color.alpha)),
-        1,
-        orderIndex
-      ]);
+      layerFrames
+        .get(layer.id)!
+        .push([
+          round(stageAnchorX + scene.x * stageScale),
+          round(stageAnchorY + scene.y * stageScale),
+          round(scene.scaleX * stageScale),
+          round(scene.scaleY * stageScale),
+          round((scene.rotation * Math.PI) / 180),
+          round(clamp01(color.alpha)),
+          1,
+          orderIndex,
+        ]);
     }
   }
 
@@ -174,16 +216,24 @@ export function buildVictoryProject(
     layers: layers.map((layer) => {
       const assetPath = options.assetPaths[layer.textureName];
       if (!assetPath) {
-        throw new Error(`Missing exported asset for texture: ${layer.textureName}`);
+        throw new Error(
+          `Missing exported asset for texture: ${layer.textureName}`,
+        );
       }
-      return createProjectLayer(layer, assetPath, animation.duration, fps, layerFrames.get(layer.id) ?? [createHiddenFrame()]);
-    })
+      return createProjectLayer(
+        layer,
+        assetPath,
+        animation.duration,
+        fps,
+        layerFrames.get(layer.id) ?? [createHiddenFrame()],
+      );
+    }),
   };
 }
 
 export function createMirrorCheckPairs() {
   return MIRROR_LAYER_PAIRS.map(([leftLayerId, rightLayerId]) => ({
     leftLayerId,
-    rightLayerId
+    rightLayerId,
   }));
 }

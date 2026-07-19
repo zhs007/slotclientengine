@@ -5,13 +5,16 @@ import { cabinAnimationData } from "../../src/data/cabin-animation-data.js";
 
 function createTextureMap() {
   return Object.fromEntries(
-    cabinAnimationData.attachmentNames.map((name) => [name, Texture.EMPTY])
+    cabinAnimationData.attachmentNames.map((name) => [name, Texture.EMPTY]),
   ) as Record<string, Texture>;
 }
 
 describe("CabinAnimationEntity", () => {
   it("switches animations and resets elapsed time", () => {
-    const entity = new CabinAnimationEntity(cabinAnimationData, createTextureMap());
+    const entity = new CabinAnimationEntity(
+      cabinAnimationData,
+      createTextureMap(),
+    );
 
     entity.play("cabin");
     entity.update(1.25);
@@ -25,13 +28,18 @@ describe("CabinAnimationEntity", () => {
   });
 
   it("clamps sampled state when loop is disabled", () => {
-    const entity = new CabinAnimationEntity(cabinAnimationData, createTextureMap());
+    const entity = new CabinAnimationEntity(
+      cabinAnimationData,
+      createTextureMap(),
+    );
 
     entity.play("cabin");
     entity.setLoop(false);
     entity.update(99);
 
-    expect(entity.getCurrentPose().time).toBe(cabinAnimationData.animations.cabin.duration);
+    expect(entity.getCurrentPose().time).toBe(
+      cabinAnimationData.animations.cabin.duration,
+    );
 
     entity.stop();
     const before = entity.currentTime;

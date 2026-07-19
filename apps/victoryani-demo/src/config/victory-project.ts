@@ -4,7 +4,7 @@ import type {
   VictoryLayerConfig,
   VictoryLayerConfigRaw,
   VictoryProjectConfig,
-  VictoryProjectConfigRaw
+  VictoryProjectConfigRaw,
 } from "./victory-types.js";
 
 export const DEFAULT_STAGE_WIDTH = 2000;
@@ -23,7 +23,7 @@ export const SAMPLE_USED_ANIMATION_TYPES = [
   "sweepLight",
   "swing",
   "wave",
-  "zoomIn"
+  "zoomIn",
 ] as const;
 
 export const ALL_PRESET_ANIMATION_TYPES = [
@@ -51,14 +51,14 @@ export const ALL_PRESET_ANIMATION_TYPES = [
   "particleBurst",
   "starlight",
   "sequenceScale",
-  "fireDistortion"
+  "fireDistortion",
 ] as const;
 
 export function normalizeProjectConfig(
   raw: VictoryProjectConfigRaw,
   resolveAsset: (assetPath: string) => string,
   width = DEFAULT_STAGE_WIDTH,
-  height = DEFAULT_STAGE_HEIGHT
+  height = DEFAULT_STAGE_HEIGHT,
 ): VictoryProjectConfig {
   if (!raw.layers || !Array.isArray(raw.layers)) {
     throw new Error("Victory project must contain a layers array.");
@@ -70,14 +70,16 @@ export function normalizeProjectConfig(
     duration: coerceNumber(raw.duration, 5),
     width,
     height,
-    layers: raw.layers.map((layer, index) => normalizeLayer(layer, index, resolveAsset))
+    layers: raw.layers.map((layer, index) =>
+      normalizeLayer(layer, index, resolveAsset),
+    ),
   };
 }
 
 function normalizeLayer(
   layer: VictoryLayerConfigRaw,
   index: number,
-  resolveAsset: (assetPath: string) => string
+  resolveAsset: (assetPath: string) => string,
 ): VictoryLayerConfig {
   const sourceAsset = layer.asset ?? "";
   const fallbackScale = coerceNumber(layer.scale, 1);
@@ -98,18 +100,20 @@ function normalizeLayer(
     visible: layer.visible ?? true,
     locked: layer.locked ?? false,
     maskId: layer.maskId ?? null,
-    animations: (layer.animations ?? []).map(normalizeAnimation)
+    animations: (layer.animations ?? []).map(normalizeAnimation),
   };
 }
 
-function normalizeAnimation(animation: VictoryAnimationConfigRaw): VictoryAnimationConfig {
+function normalizeAnimation(
+  animation: VictoryAnimationConfigRaw,
+): VictoryAnimationConfig {
   return {
     type: animation.type ?? "custom",
     startTime: Math.max(0, coerceNumber(animation.startTime, 0)),
     duration: Math.max(0, coerceNumber(animation.duration, 0)),
     script: animation.script,
     params: animation.params ?? {},
-    showParams: animation.showParams
+    showParams: animation.showParams,
   };
 }
 

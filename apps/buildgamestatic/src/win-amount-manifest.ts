@@ -53,9 +53,7 @@ export function loadWinAmountManifestForBuild(options: {
     throw new Error(`${options.label}.version 必须是 1。`);
   }
   if (record.kind !== "vni-win-amount-tiers") {
-    throw new Error(
-      `${options.label}.kind 必须是 vni-win-amount-tiers。`,
-    );
+    throw new Error(`${options.label}.kind 必须是 vni-win-amount-tiers。`);
   }
   const projectGlob = assertManifestProjectGlob(
     record.projectGlob,
@@ -80,16 +78,15 @@ export function loadWinAmountManifestForBuild(options: {
   let previousThreshold = 0;
   for (const tier of tiers) {
     if (tier.thresholdMultiplier <= previousThreshold) {
-      throw new Error(`${options.label}.tiers thresholdMultiplier 必须严格递增。`);
+      throw new Error(
+        `${options.label}.tiers thresholdMultiplier 必须严格递增。`,
+      );
     }
     previousThreshold = tier.thresholdMultiplier;
   }
 
   const manifestDir = posix.dirname(options.manifestPath);
-  const projectGlobPath = resolveManifestRelativePath(
-    manifestDir,
-    projectGlob,
-  );
+  const projectGlobPath = resolveManifestRelativePath(manifestDir, projectGlob);
   const assetGlobPath = resolveManifestRelativePath(manifestDir, assetGlob);
   const projectDirectory = getStrictGlobDirectory(projectGlobPath);
   const assetDirectory = getStrictGlobDirectory(assetGlobPath);
@@ -224,7 +221,9 @@ function parseManifestPlayback(
 function assertManifestProjectGlob(value: unknown, label: string): string {
   const glob = assertManifestRelativeString(value, label);
   if (!/^\.[/]\{[-A-Za-z0-9_,]+\}\.json$/u.test(glob)) {
-    throw new Error(`${label} 必须是 ./{bigwin,superwin,megawin}.json 这类 brace JSON glob。`);
+    throw new Error(
+      `${label} 必须是 ./{bigwin,superwin,megawin}.json 这类 brace JSON glob。`,
+    );
   }
   return glob;
 }
@@ -302,10 +301,7 @@ function getStrictGlobDirectory(glob: string): string {
   return prefix.slice(0, slashIndex);
 }
 
-function assertRecord(
-  value: unknown,
-  label: string,
-): Record<string, unknown> {
+function assertRecord(value: unknown, label: string): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`${label} 必须是对象。`);
   }

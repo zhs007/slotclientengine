@@ -22,17 +22,24 @@ describe("animation registry", () => {
           fillStyle: "",
           filter: "",
           fillRect: () => undefined,
-          drawImage: () => undefined
-        })
-      })
+          drawImage: () => undefined,
+        }),
+      }),
     };
     vi.stubGlobal("document", documentMock);
 
     const project = normalizeProjectConfig(
       {
-        layers: [{ id: "fire", type: "pic", asset: "./assets/fire.png", animations: [] }]
+        layers: [
+          {
+            id: "fire",
+            type: "pic",
+            asset: "./assets/fire.png",
+            animations: [],
+          },
+        ],
       },
-      (value) => value
+      (value) => value,
     );
     const instances = createLayerInstances(project.layers, new Map());
     const instance = instances.get("fire")!;
@@ -46,7 +53,7 @@ describe("animation registry", () => {
       duration: 1,
       params: {},
       registerCleanup: (cleanup) => instance.cleanupTasks.add(cleanup),
-      timelineFactory: gsap.timeline
+      timelineFactory: gsap.timeline,
     });
 
     expect(tween).toBeDefined();

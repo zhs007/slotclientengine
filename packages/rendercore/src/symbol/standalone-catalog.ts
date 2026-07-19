@@ -185,6 +185,12 @@ function createStandaloneGameConfig(
       paytableByCode.get(code),
     getSymbolCode: (symbol: string): number | undefined => symbolCodes[symbol],
     getReelNames: () => Object.freeze([]),
+    getNumberWeightTableNames: () => Object.freeze([]),
+    getNumberWeightTable: (name: string) => {
+      throw new RangeError(
+        `Standalone symbol catalog does not provide number weight table "${name}".`,
+      );
+    },
     getReels: () => {
       throw new SymbolAssetError(
         "Standalone symbol catalog does not provide reels.",

@@ -40,6 +40,16 @@ import type {
   SymbolTextureSet,
 } from "./types.js";
 import type { RenderSymbol } from "./render-symbol.js";
+import {
+  collectImageStringAssetPaths,
+  parseImageStringManifest,
+  validateImageStringText,
+} from "../image-string/index.js";
+import {
+  createSymbolImageStringControllerFactories,
+  createSymbolImageStringResources,
+  type SymbolImageStringResourceMap,
+} from "../symbol-image-string/index.js";
 
 export interface SymbolPackageManifestV1 {
   readonly version: 1;
@@ -65,6 +75,7 @@ export interface SymbolPackageResource {
   readonly statePreset: SymbolStatePreset;
   readonly animationResolver: SymbolAnimationResolver;
   readonly valuePresentationResources: SymbolValuePresentationResourceMap;
+  readonly imageStringResources: SymbolImageStringResourceMap;
   readonly assets: ReadonlyMap<string, Uint8Array>;
   createCatalog(): Promise<SymbolCatalogModel>;
   destroy(): void;
@@ -291,6 +302,35 @@ export function collectSymbolManifestResourcePaths(options: {
         }
       }
     }
+    for (const node of entry.imageStringNodes) {
+      const manifestResourcePath = resolvePackagePath(
+        manifestPath,
+        node.resource,
+      );
+      paths.add(manifestResourcePath);
+      if (!options.files) {
+        throw new SymbolAssetError(
+          `Image-string dependency ${manifestResourcePath} requires package files to derive its exact glyph closure.`,
+        );
+      }
+      const nested = parseImageStringManifest(
+        parseJsonFile(
+          options.files,
+          manifestResourcePath,
+          "image-string manifest",
+        ),
+      );
+      try {
+        validateImageStringText(node.initialText, nested);
+      } catch (error) {
+        throw new SymbolAssetError(
+          `Image-string node "${node.name}" initialText is invalid: ${formatError(error)}.`,
+        );
+      }
+      for (const glyphPath of collectImageStringAssetPaths(nested)) {
+        paths.add(resolvePackagePath(manifestResourcePath, glyphPath));
+      }
+    }
   }
   const sorted = [...paths].sort(comparePaths);
   assertNoPackagePathCollisions(sorted);
@@ -369,6 +409,18 @@ export async function createSymbolPackageResource(options: {
         spineTextureModules: modules.imageModules,
         textImageModules: modules.imageModules,
       });
+    const imageStringBundle =
+      options.loadTextures === false
+        ? Object.freeze({
+            resources: Object.freeze({}),
+            sharedResources: Object.freeze([]),
+          })
+        : await createSymbolImageStringResources({
+            manifest: symbolManifest,
+            symbolManifestPath: packageManifest.entrypoints.symbolManifest,
+            imageStringManifests: modules.imageStringManifestModules,
+            imageModules: modules.imageModules,
+          });
     const symbolScales = createSymbolScaleMapFromManifest({
       manifest: rawSymbolManifest,
       displaySymbols,
@@ -400,6 +452,7 @@ export async function createSymbolPackageResource(options: {
       statePreset,
       animationResolver,
       valuePresentationResources,
+      imageStringResources: imageStringBundle.resources,
       assets,
       async createCatalog(): Promise<SymbolCatalogModel> {
         if (destroyed)
@@ -416,6 +469,10 @@ export async function createSymbolPackageResource(options: {
           statePreset,
           animationResolver,
           symbolAnimationCapabilities: animationCapabilities,
+          symbolImageStringControllerFactories:
+            createSymbolImageStringControllerFactories(
+              imageStringBundle.resources,
+            ),
           texturePolicy: { requiredStateTextures: [] },
         });
       },
@@ -423,6 +480,9 @@ export async function createSymbolPackageResource(options: {
         if (destroyed) return;
         destroyed = true;
         unloadCachedPackageTextures(textureUrls);
+        for (const imageStringResource of imageStringBundle.sharedResources) {
+          void imageStringResource.destroy();
+        }
         urls.destroy();
       },
     };
@@ -461,11 +521,13 @@ function createPackageModules(
   vniProjectModules: Record<string, unknown>;
   skeletonModules: Record<string, unknown>;
   atlasModules: Record<string, string>;
+  imageStringManifestModules: Record<string, unknown>;
 } {
   const imageModules: Record<string, string> = {};
   const vniProjectModules: Record<string, unknown> = {};
   const skeletonModules: Record<string, unknown> = {};
   const atlasModules: Record<string, string> = {};
+  const imageStringManifestModules: Record<string, unknown> = {};
   for (const path of manifest.resources) {
     const bytes = files.get(path)!;
     const lower = path.toLowerCase();
@@ -480,10 +542,18 @@ function createPackageModules(
     } else if (lower.endsWith(".json")) {
       const value = parseJsonBytes(bytes, path);
       if (isVniProject(value)) vniProjectModules[path] = value;
+      else if (isImageStringManifest(value))
+        imageStringManifestModules[path] = value;
       else skeletonModules[path] = value;
     }
   }
-  return { imageModules, vniProjectModules, skeletonModules, atlasModules };
+  return {
+    imageModules,
+    vniProjectModules,
+    skeletonModules,
+    atlasModules,
+    imageStringManifestModules,
+  };
 }
 
 async function loadSymbolAssetMap(
@@ -676,6 +746,15 @@ function isVniProject(value: unknown): boolean {
     "schemaVersion" in value &&
     "assets" in value &&
     "stage" in value,
+  );
+}
+
+function isImageStringManifest(value: unknown): boolean {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "kind" in value &&
+    (value as { kind?: unknown }).kind === "image-string",
   );
 }
 

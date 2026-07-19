@@ -11,6 +11,6 @@ export function parseSpineColor(color: string): ParsedColor {
 
   return {
     tint: Number.isNaN(rgb) ? 0xffffff : rgb,
-    alpha: Number.isNaN(alpha) ? 1 : alpha
+    alpha: Number.isNaN(alpha) ? 1 : alpha,
   };
 }

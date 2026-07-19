@@ -511,6 +511,12 @@ pnpm --filter reelsviewer dev -- --host 0.0.0.0
 
 # Symbol value presentation
 
+## Symbol image-string nodes
+
+symbol 可声明零到多个有唯一 name 的 `imageStringNodes`，每个节点引用 package 内的 standalone image-string 精确资源闭包，并绑定一个 manifest `kind: "spine"` state 的真实 slot。`createSymbolPackageResource()` 会递归校验 manifest、glyph、图片尺寸、initial text、Spine skeleton 与 slot；资源在 symbol 间共享，不使用宽泛 glob。
+
+`RenderSymbol` 公开 `getImageStringNodeNames()`、`setImageStringText(name, text)`、`getImageStringText(name)`。string 原样保存，缺 glyph/控制字符/非 NFC 或 unknown name 时原子失败；节点随目标 state/player attach/detach，保留等价 Loop 时间轴，并受 reel texture 显式优先级约束。consumer 不接触 Spine track、slot 私有对象或 Pixi glyph children。旧 `setPresentationValue()` value-presentation 合同独立保留，不会自动变成命名节点。
+
 symbol manifest 可为任意 symbol 声明可选 `valuePresentation`：该 symbol 禁止再声明顶层 `normal`/state；`reelStates.normal` 必须是显式透明占位，`spinBlur`/`disabled` 等 reel texture state 也归入 `reelStates`。`defaultValues` 必须是非空、无重复的 positive safe integer 数组；tier normal 只接受 named、looping official Spine animation。`appear/win/remove/dropdown` 等 animation state 则在 symbol 顶层 `animations` 以 `activeSpine` 显式配置；remove 是 once，dropdown 是 stable loop，未配置就是没有能力，不能猜动画名或回退 builtin。`text.type` 可为 `font|image`，缺省为 `font`；两种模式都必须声明 Spine `slot` 与 slot-local `x/y`。parser 深冻结配置并拒绝未知字段、非法路径、非 Spine fallback 与错误阈值。
 
 `createSymbolValuePresentationResourcesFromManifest()` 精确解析并校验 manifest 引用的 skeleton/atlas/texture/animation/slot 与默认候选图片；`createSymbolValuePresenter()` 只依赖 visible geometry target，提供 `prepare/show/update/clear/destroy`。font Text 或完整数值 Sprite 都通过 official Spine `addSlotObject()` 挂到 manifest 指定 slot，因此继承该 slot/bone 的位移、旋转、缩放、可见性与颜色动画，而不是作为 Spine 的同级 overlay。image 模式先通过 Pixi `Assets.load<Texture>()` 完成真实加载和 cache 注册，再创建 Sprite；不得对尚未进入 Pixi Cache 的 URL 直接调用 `Texture.from()`。找不到当前完整值的精确图片或加载失败时，prepare/初始 reel update 显式失败，不回退 font。它不理解 GMI、otherScenes、组件名或游戏名，不依赖具体 ReelSet，也不会创建第二 renderer/canvas。

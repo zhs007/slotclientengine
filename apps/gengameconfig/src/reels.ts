@@ -33,14 +33,18 @@ export function parseReelsSheet(
   const lastCol = findLastNonEmptyColumn(sheet);
 
   if (lastCol < 1) {
-    fail(`${sheet.filePath} / ${sheet.sheetName}: reels 必须包含 line 和至少一个 R 列`);
+    fail(
+      `${sheet.filePath} / ${sheet.sheetName}: reels 必须包含 line 和至少一个 R 列`,
+    );
   }
 
   validateReelsHeader(sheet, lastCol);
 
   const lastRow = findLastReelDataRow(sheet, lastCol);
   if (lastRow < 1) {
-    fail(`${sheet.filePath} / ${sheet.sheetName}: reels 必须包含表头和至少一行数据`);
+    fail(
+      `${sheet.filePath} / ${sheet.sheetName}: reels 必须包含表头和至少一行数据`,
+    );
   }
 
   const reels: number[][] = Array.from({ length: lastCol }, () => []);
@@ -60,7 +64,10 @@ export function parseReelsSheet(
       }
 
       if (endedReels[colIndex - 1]) {
-        failAtCell(row[colIndex], `R${colIndex} 在尾部空白后又出现 symbol：${symbol}`);
+        failAtCell(
+          row[colIndex],
+          `R${colIndex} 在尾部空白后又出现 symbol：${symbol}`,
+        );
       }
 
       if (!Object.prototype.hasOwnProperty.call(symbolCodes, symbol)) {
@@ -103,9 +110,15 @@ function validateReelsHeader(sheet: WorksheetMatrix, lastCol: number): void {
 
   for (let colIndex = 1; colIndex <= lastCol; colIndex += 1) {
     const expected = `R${colIndex}`;
-    const actual = requireTextCell(header[colIndex], `reels 表头第 ${colIndex + 1} 列`);
+    const actual = requireTextCell(
+      header[colIndex],
+      `reels 表头第 ${colIndex + 1} 列`,
+    );
     if (actual !== expected) {
-      failAtCell(header[colIndex], `reels R 列必须连续，期望 ${expected}，实际为 ${actual}`);
+      failAtCell(
+        header[colIndex],
+        `reels R 列必须连续，期望 ${expected}，实际为 ${actual}`,
+      );
     }
   }
 }

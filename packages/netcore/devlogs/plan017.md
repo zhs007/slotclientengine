@@ -16,28 +16,28 @@ Based on the user's request, the current `collect` implementation is unnecessari
 
 1.  **Create Plan File**: Create `jules/plan017.md` to document the plan. (This step)
 2.  **Refactor `collect` Method (`src/main.ts`)**:
-    -   Remove the internal `deriveSequence` function.
-    -   Modify the logic to determine `playIndex`:
-        -   If `playIndex` is passed as an argument, use it.
-        -   If `playIndex` is `undefined`, use `this.userInfo.lastResultsCount - 1`.
-        -   As a fallback, if `lastResultsCount` is not available, use `this.userInfo.lastPlayIndex`.
-    -   Remove the sequential collect loop, as the method should only send a single `collect` command per call.
-    -   Add detailed comments explaining the new, simplified logic and the purpose of the `collect` flow.
+    - Remove the internal `deriveSequence` function.
+    - Modify the logic to determine `playIndex`:
+      - If `playIndex` is passed as an argument, use it.
+      - If `playIndex` is `undefined`, use `this.userInfo.lastResultsCount - 1`.
+      - As a fallback, if `lastResultsCount` is not available, use `this.userInfo.lastPlayIndex`.
+    - Remove the sequential collect loop, as the method should only send a single `collect` command per call.
+    - Add detailed comments explaining the new, simplified logic and the purpose of the `collect` flow.
 
 3.  **Implement Auto-Collect (`src/main.ts`)**:
-    -   Locate the `cmdret` handler for the `gamectrl3` command within the `handleMessage` method.
-    -   After the existing state transitions (`SPINEND`, `WAITTING_PLAYER`, etc.), add a new block of code.
-    -   Inside this block, check if `this.userInfo.lastResultsCount` is greater than 1.
-    -   If it is, call `this.collect(this.userInfo.lastResultsCount - 2)`.
-    -   This call should be non-blocking. Use a `.catch()` block to log any potential errors without affecting the main application flow.
-    -   Add comments to explain the auto-collect mechanism, why it's there, and how it works.
+    - Locate the `cmdret` handler for the `gamectrl3` command within the `handleMessage` method.
+    - After the existing state transitions (`SPINEND`, `WAITTING_PLAYER`, etc.), add a new block of code.
+    - Inside this block, check if `this.userInfo.lastResultsCount` is greater than 1.
+    - If it is, call `this.collect(this.userInfo.lastResultsCount - 2)`.
+    - This call should be non-blocking. Use a `.catch()` block to log any potential errors without affecting the main application flow.
+    - Add comments to explain the auto-collect mechanism, why it's there, and how it works.
 
 4.  **Verify Changes**:
-    -   Run `npm install` to ensure all dependencies are correctly installed.
-    -   Run `npm run check` to execute linting, tests, and build to ensure the changes are correct and have not introduced any regressions.
-    -   If tests fail due to the changed `collect` behavior, update the relevant test cases in `tests/integration.test.ts` or `tests/main.test.ts` to reflect the new, correct logic.
+    - Run `npm install` to ensure all dependencies are correctly installed.
+    - Run `npm run check` to execute linting, tests, and build to ensure the changes are correct and have not introduced any regressions.
+    - If tests fail due to the changed `collect` behavior, update the relevant test cases in `tests/integration.test.ts` or `tests/main.test.ts` to reflect the new, correct logic.
 
 5.  **Update Documentation**:
-    -   Create a final report `jules/plan017-report.md` summarizing the work done.
-    -   Update `jules.md` to document the new `collect` and auto-collect logic in the development log section.
-    -   Review `agents.md` to determine if any instructions need to be updated for future agent interactions. Given the nature of the change, it's likely no update will be needed, but it's important to check.
+    - Create a final report `jules/plan017-report.md` summarizing the work done.
+    - Update `jules.md` to document the new `collect` and auto-collect logic in the development log section.
+    - Review `agents.md` to determine if any instructions need to be updated for future agent interactions. Given the nature of the change, it's likely no update will be needed, but it's important to check.

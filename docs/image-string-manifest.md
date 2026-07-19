@@ -115,3 +115,25 @@ Vite 输入必须只包含 glyph closure；CDN loader 只接受 http/https manif
 ## 编辑器
 
 `apps/Imgnumbereditor` 负责显式字符映射、offset/fixed group 表单、静态模板、RAF 计数模板和 standalone ZIP。文件名仅提供候选建议，不会自动成为 manifest 数据；编辑器不裁图、不 resize、不转码，也不把模板写入 ZIP。
+
+## Symbol 命名节点
+
+symbol manifest 的每个 symbol 可声明稳定有序的 `imageStringNodes`。节点通过唯一 `name` 寻址，`resource` 指向 symbol package 内 vendored 的 `image-string.manifest.json`，并显式绑定一个真实 Spine state 和大小写精确的真实 slot：
+
+```json
+{
+  "imageStringNodes": [
+    {
+      "name": "coin-value",
+      "resource": "./dependencies/image-strings/coin-digits/image-string.manifest.json",
+      "target": { "state": "normal", "slot": "Num" },
+      "initialText": "001",
+      "anchor": { "x": 0.5, "y": 0.5 },
+      "transform": { "x": 0, "y": 0, "scale": 1 },
+      "followSlotColor": true
+    }
+  ]
+}
+```
+
+只有 `kind: "spine"` 的 state 可作为 target。package prepare 会校验 nested glyph 精确闭包、`initialText`、skeleton 和 slot；缺 glyph、缺 slot、路径漂移或多余文件都会失败。运行时通过 `RenderSymbol.getImageStringNodeNames()`、`setImageStringText(name, text)` 与 `getImageStringText(name)` 操作；setter 先完整校验再原子提交，因此失败不会改变旧显示，前导零也不会丢失。节点仅在目标 state 可见时挂到 slot，state 切换、等价 Loop、异步 init、pool/reset 和 destroy 都由 rendercore 管理。

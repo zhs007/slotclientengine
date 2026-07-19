@@ -6,12 +6,16 @@ export type AnimationSelectControls = {
   replayButton: HTMLButtonElement;
   loopCheckbox: HTMLInputElement;
   setMouseMode: (mode: MouseMode) => void;
-  setSelection: (selection: { name: string; type: string; parentName: string | null } | null) => void;
+  setSelection: (
+    selection: { name: string; type: string; parentName: string | null } | null,
+  ) => void;
   setZoom: (zoom: number) => void;
   onMouseModeChange: (listener: (mode: MouseMode) => void) => void;
 };
 
-export function createAnimationSelect(animationNames: string[]): AnimationSelectControls {
+export function createAnimationSelect(
+  animationNames: string[],
+): AnimationSelectControls {
   const root = document.createElement("section");
   root.className = "panel";
 
@@ -23,7 +27,8 @@ export function createAnimationSelect(animationNames: string[]): AnimationSelect
   title.textContent = "Cabin Demo";
 
   const description = document.createElement("p");
-  description.textContent = "直接消费 cabin atlas 与 JSON 数据，使用手写 Pixi 播放层而不是 Spine 运行时；点击右侧节点树会在舞台中直接显示选中框。";
+  description.textContent =
+    "直接消费 cabin atlas 与 JSON 数据，使用手写 Pixi 播放层而不是 Spine 运行时；点击右侧节点树会在舞台中直接显示选中框。";
 
   const controls = document.createElement("div");
   controls.className = "controls";
@@ -106,7 +111,13 @@ export function createAnimationSelect(animationNames: string[]): AnimationSelect
   const parentValue = createStatRow("Parent", "-", "muted");
   const zoomValue = createStatRow("Zoom", "100%");
 
-  debugState.append(modeValue.row, selectedValue.row, typeValue.row, parentValue.row, zoomValue.row);
+  debugState.append(
+    modeValue.row,
+    selectedValue.row,
+    typeValue.row,
+    parentValue.row,
+    zoomValue.row,
+  );
 
   const meta = document.createElement("div");
   meta.className = "meta";
@@ -161,7 +172,7 @@ export function createAnimationSelect(animationNames: string[]): AnimationSelect
     },
     onMouseModeChange(listener) {
       listeners.add(listener);
-    }
+    },
   };
 }
 
@@ -184,6 +195,6 @@ function createStatRow(label: string, value: string, valueClassName?: string) {
 
   return {
     row,
-    value: content
+    value: content,
   };
 }

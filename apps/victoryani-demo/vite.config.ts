@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   base: "./",
   server: {
-    host: "0.0.0.0"
+    host: "0.0.0.0",
   },
   test: {
     globals: true,
@@ -18,8 +18,8 @@ export default defineConfig({
         "src/vite-env.d.ts",
         "vite.config.ts",
         "eslint.config.cjs",
-        "tests/setup.ts"
-      ]
-    }
-  }
+        "tests/setup.ts",
+      ],
+    },
+  },
 });

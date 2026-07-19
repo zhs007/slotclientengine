@@ -6,7 +6,7 @@ const eslintConfigPrettier = require("eslint-config-prettier");
 
 module.exports = [
   {
-    ignores: ["dist/**", "coverage/**", "node_modules/**"]
+    ignores: ["dist/**", "coverage/**", "node_modules/**"],
   },
   {
     files: ["**/*.cjs"],
@@ -14,12 +14,12 @@ module.exports = [
       ecmaVersion: "latest",
       sourceType: "commonjs",
       globals: {
-        ...globals.node
-      }
+        ...globals.node,
+      },
     },
     rules: {
-      "no-undef": "off"
-    }
+      "no-undef": "off",
+    },
   },
   js.configs.recommended,
   {
@@ -30,28 +30,28 @@ module.exports = [
         project: ["./tsconfig.eslint.json"],
         tsconfigRootDir: __dirname,
         sourceType: "module",
-        ecmaVersion: "latest"
+        ecmaVersion: "latest",
       },
       globals: {
         ...globals.browser,
-        ...globals.node
-      }
+        ...globals.node,
+      },
     },
     plugins: {
-      "@typescript-eslint": tsPlugin
+      "@typescript-eslint": tsPlugin,
     },
     rules: {
       "no-unused-vars": "off",
-      "@typescript-eslint/no-unused-vars": "off"
-    }
+      "@typescript-eslint/no-unused-vars": "off",
+    },
   },
   {
     files: ["tests/**/*.test.ts"],
     languageOptions: {
       globals: {
-        ...globals.node
-      }
-    }
+        ...globals.node,
+      },
+    },
   },
-  eslintConfigPrettier
+  eslintConfigPrettier,
 ];

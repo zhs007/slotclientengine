@@ -17,6 +17,7 @@ export interface SymbolPreviewCell {
   readonly status: SymbolPreviewCellStatus;
   readonly message?: string;
   readonly value?: number;
+  readonly imageStringTexts?: Readonly<Record<string, string>>;
 }
 
 const MIN_ZOOM = 0.25;
@@ -66,16 +67,19 @@ export class SymbolEditorPreview {
   ): Promise<void> {
     if (!this.#ready) throw new Error("preview 尚未初始化。");
     const request = ++this.#request;
-    const catalog = resource ? await resource.createCatalog() : null;
+    let catalog: Awaited<
+      ReturnType<SymbolPackageResource["createCatalog"]>
+    > | null;
+    try {
+      catalog = resource ? await resource.createCatalog() : null;
+    } catch (error) {
+      if (resource && resource !== this.#resource) resource.destroy();
+      throw error;
+    }
     if (request !== this.#request) {
-      resource?.destroy();
+      if (resource && resource !== this.#resource) resource.destroy();
       return;
     }
-    this.clearGallery();
-    this.#resource?.destroy();
-    this.#resource = resource;
-    this.#cells = Object.freeze([...cells]);
-    this.#selectedState = state;
     const available = new Set(resource?.displaySymbols ?? []);
     const cellWidth = resource?.packageManifest.cellSize.width ?? 160;
     const cellHeight = resource?.packageManifest.cellSize.height ?? 160;
@@ -87,73 +91,94 @@ export class SymbolEditorPreview {
       cellHeight,
     );
     const rows = Math.max(1, Math.ceil(cells.length / columns));
-    cells.forEach((cell, index) => {
-      const root = new Container();
-      const guide = new Graphics()
-        .rect(-cellWidth / 2, -cellHeight / 2, cellWidth, cellHeight)
-        .stroke({
-          color:
-            cell.status === "error"
-              ? 0xff6b6b
-              : cell.status === "missing"
-                ? 0xf4a261
-                : 0x38d9a9,
-          width: 1,
-          alpha: 0.85,
-        });
-      root.addChild(guide);
-      if (
-        catalog &&
-        available.has(cell.symbol) &&
-        cell.status === "configured"
-      ) {
-        const renderSymbol = catalog.createRenderSymbol(cell.symbol, {
-          valueControllerFactory: resource
-            ? createSymbolPackageValueControllerFactory(resource, cell.symbol)
-            : undefined,
-        });
-        renderSymbol.scale.set(resource?.symbolScales[cell.symbol] ?? 1);
-        renderSymbol.init();
-        if (cell.value !== undefined)
-          renderSymbol.setPresentationValue(cell.value);
-        if (state !== "normal") renderSymbol.requestState(state, "immediate");
-        root.addChild(renderSymbol);
-        this.#symbols.push(renderSymbol);
-      } else {
-        root.addChild(
-          new Text({
-            text:
-              cell.status === "empty"
-                ? "空"
+    const nextRoots: Container[] = [];
+    const nextSymbols: RenderSymbol[] = [];
+    try {
+      cells.forEach((cell, index) => {
+        const root = new Container();
+        nextRoots.push(root);
+        const guide = new Graphics()
+          .rect(-cellWidth / 2, -cellHeight / 2, cellWidth, cellHeight)
+          .stroke({
+            color:
+              cell.status === "error"
+                ? 0xff6b6b
                 : cell.status === "missing"
-                  ? "未配置"
-                  : (cell.message ?? "资源错误"),
-            style: {
-              fill: cell.status === "error" ? 0xff8f8f : 0xaab4c8,
-              fontSize: 15,
-              align: "center",
-              wordWrap: true,
-              wordWrapWidth: cellWidth * 0.8,
-            },
-            anchor: 0.5,
-          }),
+                  ? 0xf4a261
+                  : 0x38d9a9,
+            width: 1,
+            alpha: 0.85,
+          });
+        root.addChild(guide);
+        if (
+          catalog &&
+          available.has(cell.symbol) &&
+          cell.status === "configured"
+        ) {
+          const renderSymbol = catalog.createRenderSymbol(cell.symbol, {
+            valueControllerFactory: resource
+              ? createSymbolPackageValueControllerFactory(resource, cell.symbol)
+              : undefined,
+          });
+          nextSymbols.push(renderSymbol);
+          renderSymbol.scale.set(resource?.symbolScales[cell.symbol] ?? 1);
+          renderSymbol.init();
+          if (cell.value !== undefined)
+            renderSymbol.setPresentationValue(cell.value);
+          for (const [name, text] of Object.entries(
+            cell.imageStringTexts ?? {},
+          )) {
+            renderSymbol.setImageStringText(name, text);
+          }
+          if (state !== "normal") renderSymbol.requestState(state, "immediate");
+          root.addChild(renderSymbol);
+        } else {
+          root.addChild(
+            new Text({
+              text:
+                cell.status === "empty"
+                  ? "空"
+                  : cell.status === "missing"
+                    ? "未配置"
+                    : (cell.message ?? "资源错误"),
+              style: {
+                fill: cell.status === "error" ? 0xff8f8f : 0xaab4c8,
+                fontSize: 15,
+                align: "center",
+                wordWrap: true,
+                wordWrapWidth: cellWidth * 0.8,
+              },
+              anchor: 0.5,
+            }),
+          );
+        }
+        const label = new Text({
+          text: `${cell.code} · ${cell.symbol}`,
+          style: { fill: 0xe7eefc, fontSize: 13 },
+          anchor: { x: 0.5, y: 1 },
+        });
+        label.y = cellHeight / 2 - 6;
+        root.addChild(label);
+        const x = index % columns;
+        const y = Math.floor(index / columns);
+        root.position.set(
+          (x - (columns - 1) / 2) * cellWidth,
+          (y - (rows - 1) / 2) * cellHeight,
         );
-      }
-      const label = new Text({
-        text: `${cell.code} · ${cell.symbol}`,
-        style: { fill: 0xe7eefc, fontSize: 13 },
-        anchor: { x: 0.5, y: 1 },
       });
-      label.y = cellHeight / 2 - 6;
-      root.addChild(label);
-      const x = index % columns;
-      const y = Math.floor(index / columns);
-      root.position.set(
-        (x - (columns - 1) / 2) * cellWidth,
-        (y - (rows - 1) / 2) * cellHeight,
-      );
-      this.#gallery.addChild(root);
-    });
+    } catch (error) {
+      for (const symbol of nextSymbols) symbol.destroy();
+      for (const root of nextRoots) root.destroy({ children: true });
+      if (resource && resource !== this.#resource) resource.destroy();
+      throw error;
+    }
+    this.clearGallery();
+    if (this.#resource !== resource) this.#resource?.destroy();
+    this.#resource = resource;
+    this.#cells = Object.freeze([...cells]);
+    this.#selectedState = state;
+    this.#symbols.push(...nextSymbols);
+    this.#gallery.addChild(...nextRoots);
     this.applyLayout(cellWidth, cellHeight, columns, rows, !this.#manualZoom);
   }
 

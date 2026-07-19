@@ -1,4 +1,13 @@
-export type EncodedTimelineFrame = [number, number, number, number, number, number, 0 | 1, number];
+export type EncodedTimelineFrame = [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  0 | 1,
+  number,
+];
 
 export interface EncodedTimelineAnimation {
   kind: "timeline";

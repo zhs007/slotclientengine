@@ -446,6 +446,10 @@ describe("createSymbolCatalog", () => {
           getPaytableEntry: () => undefined,
           getSymbolCode: () => undefined,
           getReelNames: () => [],
+          getNumberWeightTableNames: () => [],
+          getNumberWeightTable: () => {
+            throw new Error("unused");
+          },
           getReels: () => {
             throw new Error("unused");
           },

@@ -2,7 +2,11 @@
   color: #f8f3e8;
   background:
     radial-gradient(circle at top, rgba(255, 191, 108, 0.18), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(94, 150, 255, 0.14), transparent 32%),
+    radial-gradient(
+      circle at bottom right,
+      rgba(94, 150, 255, 0.14),
+      transparent 32%
+    ),
     #050817;
   font-family: Georgia, "Times New Roman", serif;
 }
@@ -15,8 +19,16 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 20% 0%, rgba(248, 176, 88, 0.16), transparent 24%),
-    radial-gradient(circle at 100% 30%, rgba(69, 146, 255, 0.18), transparent 30%),
+    radial-gradient(
+      circle at 20% 0%,
+      rgba(248, 176, 88, 0.16),
+      transparent 24%
+    ),
+    radial-gradient(
+      circle at 100% 30%,
+      rgba(69, 146, 255, 0.18),
+      transparent 30%
+    ),
     linear-gradient(180deg, #090e22 0%, #030510 100%);
 }
 
@@ -215,12 +227,16 @@ body {
 
 .stage-host--active {
   border-color: rgba(255, 181, 93, 0.72);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 0 6px rgba(255, 181, 93, 0.08);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 0 6px rgba(255, 181, 93, 0.08);
 }
 
 .stage-host--dragging {
   cursor: grabbing;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 24px 56px rgba(0, 0, 0, 0.28);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 24px 56px rgba(0, 0, 0, 0.28);
 }
 
 .stage-host canvas {

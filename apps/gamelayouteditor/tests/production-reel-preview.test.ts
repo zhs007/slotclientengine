@@ -60,6 +60,30 @@ describe("production public reel preview compatibility", () => {
       }
     },
   );
+
+  it("exposes game002 bgcoinweight while keeping game003 table-free", () => {
+    const game002 = parseSymbolPackageGameConfig(
+      readJson("../../../assets/gamecfg002/gameconfig.json"),
+    ).gameConfig;
+    expect(game002.getNumberWeightTableNames()).toEqual(["bgcoinweight"]);
+    expect(game002.getNumberWeightTable("bgcoinweight")).toEqual([
+      { value: 1, weight: 100 },
+      { value: 2, weight: 75 },
+      { value: 5, weight: 30 },
+      { value: 10, weight: 5 },
+      { value: 25, weight: 5 },
+      { value: 50, weight: 5 },
+      { value: 100, weight: 5 },
+      { value: 250, weight: 5 },
+      { value: 500, weight: 5 },
+      { value: 1000, weight: 5 },
+    ]);
+
+    const game003 = parseSymbolPackageGameConfig(
+      readJson("../../../assets/gamecfg003/gameconfig.json"),
+    ).gameConfig;
+    expect(game003.getNumberWeightTableNames()).toEqual([]);
+  });
 });
 
 function readJson(relativePath: string): unknown {

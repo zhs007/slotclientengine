@@ -4,6 +4,12 @@
 
 本包只负责协议数据的严格解析和查询，不连接服务器，不依赖 `@slotclientengine/netcore`，也不做 protobuf Any 解码。
 
+## 命名数值权重表
+
+game config 可选顶层 `numberWeightTables`，key 必须是 lowercase ASCII kebab-case，每张表是保持顺序的非空 `{ value, weight }[]`。value/weight 都必须是正安全整数、value 不重复，单表 weight 总和不得超过 `2^32`；缺字段按冻结空集合解析。
+
+`LogicGameConfig.getNumberWeightTableNames()` 按 JSON object 插入顺序返回冻结 name 列表，`getNumberWeightTable(name)` 返回递归冻结 entries；unknown name 抛 `RangeError`。logiccore 不采样，也不知道 symbol、otherScene 或游戏组件语义。
+
 ## 基本信息
 
 - 包名：`@slotclientengine/logiccore`

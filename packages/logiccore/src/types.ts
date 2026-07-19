@@ -7,10 +7,18 @@ export interface GameConfigPaytableEntry {
   readonly pays: readonly number[];
 }
 
+export interface GameConfigNumberWeightEntry {
+  readonly value: number;
+  readonly weight: number;
+}
+
 export interface GameConfig {
   readonly paytable: Readonly<Record<string, GameConfigPaytableEntry>>;
   readonly symbolCodes: Readonly<Record<string, number>>;
   readonly reels: Readonly<Record<string, readonly (readonly number[])[]>>;
+  readonly numberWeightTables?: Readonly<
+    Record<string, readonly GameConfigNumberWeightEntry[]>
+  >;
 }
 
 export interface LogicGameConfig {
@@ -19,6 +27,8 @@ export interface LogicGameConfig {
   getSymbolCode(symbol: string): number | undefined;
   getReelNames(): readonly string[];
   getReels(name: string): LogicReels;
+  getNumberWeightTableNames(): readonly string[];
+  getNumberWeightTable(name: string): readonly GameConfigNumberWeightEntry[];
   getStopYCoordinates(options: ReelStopYOptions): readonly number[];
   getSpinStartYCoordinates(options: ReelSpinStartYsOptions): readonly number[];
 }
@@ -67,6 +77,10 @@ export interface ParsedGameConfigData {
   readonly symbolCodes: Readonly<Record<string, number>>;
   readonly reels: Readonly<Record<string, readonly (readonly number[])[]>>;
   readonly reelNames: readonly string[];
+  readonly numberWeightTables: Readonly<
+    Record<string, readonly GameConfigNumberWeightEntry[]>
+  >;
+  readonly numberWeightTableNames: readonly string[];
 }
 
 export interface GameLogicMeta {

@@ -129,6 +129,14 @@ export interface RenderSymbolValueController {
   destroy(): void;
 }
 
+export interface RenderSymbolImageStringController {
+  getNodeNames(): readonly string[];
+  setText(name: string, text: string): void;
+  getText(name: string): string;
+  resetForPoolRelease(): void;
+  destroy(): void;
+}
+
 export interface RenderSymbolOptions {
   readonly definition: SymbolDefinition;
   readonly texture: Texture | SymbolNormalTextureSource<Texture>;
@@ -141,6 +149,9 @@ export interface RenderSymbolOptions {
   readonly valueControllerFactory?: (
     root: RenderSymbol,
   ) => RenderSymbolValueController;
+  readonly imageStringControllerFactory?: (
+    root: RenderSymbol,
+  ) => RenderSymbolImageStringController;
 }
 
 export interface SymbolLayerTextureSource<TTexture = Texture | string> {
@@ -211,6 +222,9 @@ export interface CreateSymbolCatalogOptions {
   readonly symbolAnimationCapabilities?: Readonly<
     Record<string, readonly SymbolStateId[]>
   >;
+  readonly symbolImageStringControllerFactories?: Readonly<
+    Record<string, (root: RenderSymbol) => RenderSymbolImageStringController>
+  >;
 }
 
 export interface CreateStandaloneSymbolCatalogOptions {
@@ -234,6 +248,9 @@ export interface CreateCatalogRenderSymbolOptions {
   readonly valueControllerFactory?: (
     root: RenderSymbol,
   ) => RenderSymbolValueController;
+  readonly imageStringControllerFactory?: (
+    root: RenderSymbol,
+  ) => RenderSymbolImageStringController;
 }
 
 export interface SymbolNamedAnimationSpec {

@@ -36,12 +36,12 @@ function createProject(): VictoryProjectConfig {
               fps: 1,
               frames: [
                 [0, 0, 1, 1, 0, 1, 1, 0],
-                [0, 0, 1, 1, 0, 1, 1, 1]
-              ]
+                [0, 0, 1, 1, 0, 1, 1, 1],
+              ],
             }),
-            params: {}
-          }
-        ]
+            params: {},
+          },
+        ],
       },
       {
         id: "layer-b",
@@ -69,14 +69,14 @@ function createProject(): VictoryProjectConfig {
               fps: 1,
               frames: [
                 [0, 0, 1, 1, 0, 1, 1, 1],
-                [0, 0, 1, 1, 0, 1, 1, 0]
-              ]
+                [0, 0, 1, 1, 0, 1, 1, 0],
+              ],
             }),
-            params: {}
-          }
-        ]
-      }
-    ]
+            params: {},
+          },
+        ],
+      },
+    ],
   };
 }
 
@@ -84,22 +84,26 @@ describe("ExportPreviewPlayer", () => {
   it("sorts sprites using sampled draw order instead of fixed layer order", () => {
     const app = {
       renderer: {
-        render: vi.fn()
+        render: vi.fn(),
       },
-      stage: {}
+      stage: {},
     } as never;
     const textures = new Map([
       ["asset-a", {} as never],
-      ["asset-b", {} as never]
+      ["asset-b", {} as never],
     ]);
 
     const player = new ExportPreviewPlayer(app, createProject(), textures);
 
-    expect(player.root.children.map((child) => child.zIndex)).toEqual([0, 1001]);
+    expect(player.root.children.map((child) => child.zIndex)).toEqual([
+      0, 1001,
+    ]);
 
     player.play();
     player.update(1);
 
-    expect(player.root.children.map((child) => child.zIndex)).toEqual([1, 1000]);
+    expect(player.root.children.map((child) => child.zIndex)).toEqual([
+      1, 1000,
+    ]);
   });
 });

@@ -27,6 +27,8 @@ import type {
   SymbolStateDefinition,
   SymbolStatePreset,
 } from "./types.js";
+import { resolvePackagePath } from "@slotclientengine/browserartifactio";
+import { validateImageStringAnchor } from "../image-string/layout.js";
 
 export interface SymbolCascadeGroupPlaybackPresentation {
   readonly mode: "group";
@@ -158,6 +160,16 @@ export interface SymbolValuePresentationSpec {
   readonly text: SymbolValuePresentationTextSpec;
 }
 
+export interface SymbolImageStringNodeSpec {
+  readonly name: string;
+  readonly resource: string;
+  readonly target: Readonly<{ state: string; slot: string }>;
+  readonly initialText: string;
+  readonly anchor: Readonly<{ x: number; y: number }>;
+  readonly transform: Readonly<{ x: number; y: number; scale: number }>;
+  readonly followSlotColor: boolean;
+}
+
 export type SymbolManifestAnimationSpec =
   | SymbolManifestBuiltinAnimationSpec
   | SymbolManifestStaticAnimationSpec
@@ -198,6 +210,7 @@ export interface ParsedSymbolManifestSymbol {
     Partial<Record<SymbolStateId, SymbolManifestAnimationSpec>>
   >;
   readonly valuePresentation?: SymbolValuePresentationSpec;
+  readonly imageStringNodes: readonly SymbolImageStringNodeSpec[];
   readonly cascadeWinPresentation?: SymbolCascadeWinPresentation;
 }
 
@@ -368,6 +381,7 @@ export function parseSymbolStateTextureManifest(
       "renderPriority",
       "animations",
       "valuePresentation",
+      "imageStringNodes",
       "cascadeWinPresentation",
       ...states,
     ];
@@ -421,6 +435,22 @@ export function parseSymbolStateTextureManifest(
       animationStateSet,
       stateDefinitions,
     );
+    const imageStringNodes = parseImageStringNodes(
+      rawSymbolRecord.imageStringNodes,
+      symbol,
+      stateDefinitions,
+      animations,
+    );
+    if (valuePresentation) {
+      const slotConflict = imageStringNodes.find(
+        (node) => node.target.slot === valuePresentation.text.slot,
+      );
+      if (slotConflict) {
+        throw new SymbolAssetError(
+          `Symbol "${symbol}" image-string node "${slotConflict.name}" conflicts with valuePresentation text slot "${valuePresentation.text.slot}".`,
+        );
+      }
+    }
     if (
       Object.values(animations).some(
         (animation) => animation?.kind === "activeSpine",
@@ -462,6 +492,7 @@ export function parseSymbolStateTextureManifest(
         symbol,
       ),
       animations,
+      imageStringNodes,
       ...(valuePresentation !== undefined ? { valuePresentation } : {}),
       ...(cascadeWinPresentation !== undefined
         ? { cascadeWinPresentation }
@@ -475,6 +506,148 @@ export function parseSymbolStateTextureManifest(
     statePreset,
     symbols: Object.freeze(symbols),
   });
+}
+
+function parseImageStringNodes(
+  value: unknown,
+  symbol: string,
+  stateDefinitions: ReadonlyMap<string, SymbolStateDefinition>,
+  animations: Readonly<
+    Partial<Record<SymbolStateId, SymbolManifestAnimationSpec>>
+  >,
+): readonly SymbolImageStringNodeSpec[] {
+  if (value === undefined) return Object.freeze([]);
+  if (!Array.isArray(value)) {
+    throw new SymbolAssetError(
+      `Symbol "${symbol}" imageStringNodes must be an array.`,
+    );
+  }
+  const names = new Set<string>();
+  return Object.freeze(
+    value.map((rawNode, index) => {
+      const label = `symbol "${symbol}" imageStringNodes[${index}]`;
+      const node = assertRecord(rawNode, label);
+      assertOnlyKnownKeys(node, label, [
+        "name",
+        "resource",
+        "target",
+        "initialText",
+        "anchor",
+        "transform",
+        "followSlotColor",
+      ]);
+      const name = assertString(node.name, `${label}.name`);
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(name)) {
+        throw new SymbolAssetError(
+          `${label}.name must be lowercase ASCII kebab-case.`,
+        );
+      }
+      if (names.has(name)) {
+        throw new SymbolAssetError(
+          `Symbol "${symbol}" has duplicate imageString node name "${name}".`,
+        );
+      }
+      names.add(name);
+      const resource = assertString(node.resource, `${label}.resource`);
+      if (
+        !resource.startsWith("./") ||
+        !resource.endsWith("/image-string.manifest.json")
+      ) {
+        throw new SymbolAssetError(
+          `${label}.resource must be a canonical local path to image-string.manifest.json.`,
+        );
+      }
+      try {
+        resolvePackagePath("symbol-state-textures.manifest.json", resource);
+      } catch (error) {
+        throw new SymbolAssetError(
+          `${label}.resource is invalid: ${formatUnknownError(error)}.`,
+        );
+      }
+      const target = assertRecord(node.target, `${label}.target`);
+      assertOnlyKnownKeys(target, `${label}.target`, ["state", "slot"]);
+      const state = assertString(target.state, `${label}.target.state`);
+      const slot = assertString(target.slot, `${label}.target.slot`);
+      if (!stateDefinitions.has(state)) {
+        throw new SymbolAssetError(
+          `${label}.target.state references unknown state "${state}".`,
+        );
+      }
+      if (animations[state]?.kind !== "spine") {
+        throw new SymbolAssetError(
+          `${label}.target.state must resolve to a Spine animation.`,
+        );
+      }
+      const initialText = assertStringValue(
+        node.initialText,
+        `${label}.initialText`,
+      );
+      const anchorRecord = assertRecord(node.anchor, `${label}.anchor`);
+      assertOnlyKnownKeys(anchorRecord, `${label}.anchor`, ["x", "y"]);
+      let anchor: Readonly<{ x: number; y: number }>;
+      try {
+        anchor = validateImageStringAnchor({
+          x: finiteNumber(anchorRecord.x, `${label}.anchor.x`),
+          y: finiteNumber(anchorRecord.y, `${label}.anchor.y`),
+        });
+      } catch (error) {
+        throw new SymbolAssetError(
+          `${label}.anchor is invalid: ${formatUnknownError(error)}.`,
+        );
+      }
+      const transformRecord = assertRecord(
+        node.transform,
+        `${label}.transform`,
+      );
+      assertOnlyKnownKeys(transformRecord, `${label}.transform`, [
+        "x",
+        "y",
+        "scale",
+      ]);
+      const transform = Object.freeze({
+        x: finiteNumber(transformRecord.x, `${label}.transform.x`),
+        y: finiteNumber(transformRecord.y, `${label}.transform.y`),
+        scale: finitePositiveNumber(
+          transformRecord.scale,
+          `${label}.transform.scale`,
+        ),
+      });
+      if (typeof node.followSlotColor !== "boolean") {
+        throw new SymbolAssetError(
+          `${label}.followSlotColor must be a boolean.`,
+        );
+      }
+      return Object.freeze({
+        name,
+        resource,
+        target: Object.freeze({ state, slot }),
+        initialText,
+        anchor,
+        transform,
+        followSlotColor: node.followSlotColor,
+      });
+    }),
+  );
+}
+
+function assertStringValue(value: unknown, label: string): string {
+  if (typeof value !== "string") {
+    throw new SymbolAssetError(`${label} must be a string.`);
+  }
+  return value;
+}
+
+function finiteNumber(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new SymbolAssetError(`${label} must be a finite number.`);
+  }
+  return value;
+}
+
+function finitePositiveNumber(value: unknown, label: string): number {
+  const parsed = finiteNumber(value, label);
+  if (parsed <= 0) throw new SymbolAssetError(`${label} must be positive.`);
+  return parsed;
 }
 
 function parseManifestStatePreset(
@@ -1176,6 +1349,9 @@ export function createSymbolSpineAnimationResourcesFromManifest(
         spec: animation,
         skeleton,
         atlasText: atlas,
+        requiredSlots: manifestSymbol.imageStringNodes
+          .filter((node) => node.target.state === state)
+          .map((node) => node.target.slot),
       });
       resources[symbol] = resources[symbol] ?? {};
       resources[symbol][state] = Object.freeze({
@@ -1763,6 +1939,7 @@ function validateSpineAtlasAndSkeleton(options: {
   readonly spec: SymbolManifestSpineAnimationSpec;
   readonly skeleton: unknown;
   readonly atlasText: string;
+  readonly requiredSlots?: readonly string[];
 }): string {
   try {
     readSupportedSpineSkeletonVersion(options.skeleton);
@@ -1780,6 +1957,7 @@ function validateOfficialSpineAtlasAndSkeleton(options: {
   readonly spec: SymbolManifestSpineAnimationSpec;
   readonly skeleton: unknown;
   readonly atlasText: string;
+  readonly requiredSlots?: readonly string[];
 }): string {
   let atlas: TextureAtlas;
   try {
@@ -1811,9 +1989,19 @@ function validateOfficialSpineAtlasAndSkeleton(options: {
         `missing animation "${options.spec.playback.animationName}"`,
       );
     }
+    for (const slot of options.requiredSlots ?? []) {
+      if (!skeletonData.findSlot(slot)) {
+        throw new Error(`missing slot "${slot}"`);
+      }
+    }
   } catch (error) {
     const message = formatUnknownError(error);
     if (message.includes(`missing animation "`)) {
+      throw new SymbolAssetError(
+        `Symbol "${options.symbol}" ${options.state} Spine skeleton is ${message}.`,
+      );
+    }
+    if (message.includes(`missing slot "`)) {
       throw new SymbolAssetError(
         `Symbol "${options.symbol}" ${options.state} Spine skeleton is ${message}.`,
       );

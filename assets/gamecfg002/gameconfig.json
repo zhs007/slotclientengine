@@ -792,5 +792,49 @@
         4
       ]
     ]
+  },
+  "numberWeightTables": {
+    "bgcoinweight": [
+      {
+        "value": 1,
+        "weight": 100
+      },
+      {
+        "value": 2,
+        "weight": 75
+      },
+      {
+        "value": 5,
+        "weight": 30
+      },
+      {
+        "value": 10,
+        "weight": 5
+      },
+      {
+        "value": 25,
+        "weight": 5
+      },
+      {
+        "value": 50,
+        "weight": 5
+      },
+      {
+        "value": 100,
+        "weight": 5
+      },
+      {
+        "value": 250,
+        "weight": 5
+      },
+      {
+        "value": 500,
+        "weight": 5
+      },
+      {
+        "value": 1000,
+        "weight": 5
+      }
+    ]
   }
 }

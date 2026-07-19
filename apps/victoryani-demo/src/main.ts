@@ -1,10 +1,17 @@
 import { Application, Container } from "pixi.js";
 import rawProject from "./assets/project.json";
-import { DEFAULT_STAGE_HEIGHT, DEFAULT_STAGE_WIDTH, normalizeProjectConfig } from "./config/victory-project.js";
+import {
+  DEFAULT_STAGE_HEIGHT,
+  DEFAULT_STAGE_WIDTH,
+  normalizeProjectConfig,
+} from "./config/victory-project.js";
 import { createSceneCameraController } from "./interaction/camera-controller.js";
 import type { VictoryProjectConfigRaw } from "./config/victory-types.js";
 import { computeCanvasLayout } from "./layout.js";
-import { createProjectAssetResolver, loadProjectTextures } from "./runtime/asset-loader.js";
+import {
+  createProjectAssetResolver,
+  loadProjectTextures,
+} from "./runtime/asset-loader.js";
 import { ANIMATION_SUPPORT_MATRIX } from "./runtime/support-matrix.js";
 import { VictoryPlayer } from "./scene/victory-player.js";
 import { createControlPanel } from "./ui/control-panel.js";
@@ -19,20 +26,20 @@ async function bootstrap() {
   const assetModules = import.meta.glob("./assets/assets/*", {
     eager: true,
     import: "default",
-    query: "?url"
+    query: "?url",
   }) as Record<string, string>;
   const assetManifest = Object.fromEntries(
     Object.entries(assetModules).map(([modulePath, url]) => {
       const filename = modulePath.split("/").at(-1);
       return [`./assets/${filename}`, url];
-    })
+    }),
   );
 
   const project = normalizeProjectConfig(
     rawProject as VictoryProjectConfigRaw,
     createProjectAssetResolver(assetManifest),
     DEFAULT_STAGE_WIDTH,
-    DEFAULT_STAGE_HEIGHT
+    DEFAULT_STAGE_HEIGHT,
   );
   const textures = await loadProjectTextures(project);
 
@@ -55,7 +62,7 @@ async function bootstrap() {
     antialias: true,
     background: "#040611",
     autoDensity: true,
-    resolution: window.devicePixelRatio || 1
+    resolution: window.devicePixelRatio || 1,
   });
   stageHost.appendChild(app.canvas);
 
@@ -71,7 +78,7 @@ async function bootstrap() {
     designWidth: project.width,
     designHeight: project.height,
     viewportWidth: stageHost.clientWidth,
-    viewportHeight: stageHost.clientHeight
+    viewportHeight: stageHost.clientHeight,
   });
 
   createSceneCameraController({
@@ -80,7 +87,7 @@ async function bootstrap() {
     designWidth: project.width,
     designHeight: project.height,
     controlPanel: panel,
-    getLayoutScale: () => currentLayout.scale
+    getLayoutScale: () => currentLayout.scale,
   });
 
   const applyLayout = () => {
@@ -88,7 +95,7 @@ async function bootstrap() {
       designWidth: project.width,
       designHeight: project.height,
       viewportWidth: stageHost.clientWidth,
-      viewportHeight: stageHost.clientHeight
+      viewportHeight: stageHost.clientHeight,
     });
     app.canvas.style.width = `${currentLayout.width}px`;
     app.canvas.style.height = `${currentLayout.height}px`;
@@ -113,7 +120,9 @@ async function bootstrap() {
     panel.timeLabel.textContent = `${time.toFixed(2)}s / ${project.duration.toFixed(2)}s`;
   });
   player.onStateChange((playing) => {
-    panel.statusLabel.textContent = playing ? "Playing sample export" : "Stopped";
+    panel.statusLabel.textContent = playing
+      ? "Playing sample export"
+      : "Stopped";
   });
 
   window.addEventListener("resize", applyLayout);

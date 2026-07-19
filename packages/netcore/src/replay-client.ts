@@ -71,7 +71,8 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
     }
     this.userInfo.token = tokenToUse;
 
-    const fetchImpl = this.options.fetch ?? (typeof window !== 'undefined' ? window.fetch : undefined);
+    const fetchImpl =
+      this.options.fetch ?? (typeof window !== 'undefined' ? window.fetch : undefined);
     if (!fetchImpl) {
       throw new Error(
         'A fetch implementation must be provided in options.fetch in non-browser environments.'
@@ -194,7 +195,11 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
   public disconnect(): void {
     if (this.state !== ConnectionState.DISCONNECTED) {
       this.setState(ConnectionState.DISCONNECTED);
-      this.emitter.emit('disconnect', { code: 1000, reason: 'Client disconnected', wasClean: true });
+      this.emitter.emit('disconnect', {
+        code: 1000,
+        reason: 'Client disconnected',
+        wasClean: true,
+      });
     }
   }
 
@@ -255,23 +260,23 @@ export class SlotcraftClientReplay implements ISlotcraftClientImpl {
       typeof msg.playIndex === 'number'
         ? msg.playIndex
         : typeof g.playIndex === 'number'
-        ? g.playIndex
-        : undefined;
+          ? g.playIndex
+          : undefined;
     if (typeof playIndex === 'number') this.userInfo.lastPlayIndex = playIndex;
 
     const totalwin =
       typeof msg.totalwin === 'number'
         ? msg.totalwin
         : typeof g.totalwin === 'number'
-        ? g.totalwin
-        : undefined;
+          ? g.totalwin
+          : undefined;
     if (typeof totalwin === 'number') this.userInfo.lastTotalWin = totalwin;
 
     const resultsArr = Array.isArray(g.replyPlay?.results)
       ? g.replyPlay.results
       : Array.isArray(msg.results)
-      ? msg.results
-      : undefined;
+        ? msg.results
+        : undefined;
     if (resultsArr) this.userInfo.lastResultsCount = resultsArr.length;
   }
 }

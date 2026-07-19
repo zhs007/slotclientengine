@@ -14,12 +14,12 @@ export class EntityManager {
   add<TConfig, TEntity extends VisualEntity<TConfig>>(
     entity: TEntity,
     pool: ObjectPool<TConfig, TEntity>,
-    parent?: Container | null
+    parent?: Container | null,
   ) {
     this.active.push({
       entity,
       pool,
-      parent: parent ?? entity.parent
+      parent: parent ?? entity.parent,
     });
   }
 

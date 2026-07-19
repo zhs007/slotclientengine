@@ -1,5 +1,8 @@
 import type { VictoryLayerConfig } from "../config/victory-types.js";
-import type { EncodedTimelineAnimation, EncodedTimelineFrame } from "../runtime/export-types.js";
+import type {
+  EncodedTimelineAnimation,
+  EncodedTimelineFrame,
+} from "../runtime/export-types.js";
 
 export interface LayerSample {
   x: number;
@@ -17,7 +20,9 @@ function lerp(from: number, to: number, progress: number) {
 }
 
 export function parseLayerTimeline(layer: VictoryLayerConfig) {
-  const animation = layer.animations.find((item) => item.type === "timeline" && item.script);
+  const animation = layer.animations.find(
+    (item) => item.type === "timeline" && item.script,
+  );
   if (!animation?.script) {
     return null;
   }
@@ -30,11 +35,14 @@ function sampleFramePair(frames: EncodedTimelineFrame[], frameIndex: number) {
   const nextIndex = Math.max(0, Math.min(safeIndex + 1, frames.length - 1));
   return {
     current: frames[safeIndex],
-    next: frames[nextIndex]
+    next: frames[nextIndex],
   };
 }
 
-export function sampleTimelineLayer(layer: VictoryLayerConfig, time: number): LayerSample {
+export function sampleTimelineLayer(
+  layer: VictoryLayerConfig,
+  time: number,
+): LayerSample {
   const timeline = parseLayerTimeline(layer);
   if (!timeline || timeline.frames.length === 0) {
     return {
@@ -45,11 +53,14 @@ export function sampleTimelineLayer(layer: VictoryLayerConfig, time: number): La
       rotation: layer.rotation,
       alpha: layer.alpha,
       visible: layer.visible,
-      drawOrder: 0
+      drawOrder: 0,
     };
   }
 
-  const timelineTime = Math.max(0, Math.min(time, (timeline.frames.length - 1) / timeline.fps));
+  const timelineTime = Math.max(
+    0,
+    Math.min(time, (timeline.frames.length - 1) / timeline.fps),
+  );
   const rawIndex = timelineTime * timeline.fps;
   const frameIndex = Math.floor(rawIndex);
   const progress = Math.min(1, Math.max(0, rawIndex - frameIndex));
@@ -63,6 +74,6 @@ export function sampleTimelineLayer(layer: VictoryLayerConfig, time: number): La
     rotation: lerp(current[4], next[4], progress),
     alpha: lerp(current[5], next[5], progress),
     visible: current[6] === 1,
-    drawOrder: current[7]
+    drawOrder: current[7],
   };
 }

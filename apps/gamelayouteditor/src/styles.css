@@ -593,11 +593,34 @@ details summary {
   align-items: center;
   flex-wrap: wrap;
   gap: 7px;
-  max-height: 150px;
+  max-height: 320px;
   overflow: auto;
   padding: 0 12px 9px;
   color: #91a0b5;
   font-size: 11px;
+}
+
+.other-scene-bindings {
+  display: grid;
+  flex-basis: 100%;
+  gap: 6px;
+}
+
+.other-scene-bindings h3,
+.other-scene-bindings p {
+  margin: 0;
+}
+
+.other-scene-row {
+  display: grid;
+  grid-template-columns: minmax(70px, 0.7fr) repeat(4, minmax(90px, 1fr));
+  gap: 6px;
+  align-items: center;
+}
+
+.other-scene-row input,
+.other-scene-row select {
+  min-width: 0;
 }
 
 .symbols-controls label {

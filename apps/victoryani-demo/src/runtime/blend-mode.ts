@@ -2,7 +2,7 @@ const BLEND_MODE_MAP: Record<string, number> = {
   normal: 0,
   add: 1,
   multiply: 2,
-  screen: 3
+  screen: 3,
 };
 
 const FILTER_BLEND_ANIMATIONS = new Set(["cloudSea", "fireDistortion"]);

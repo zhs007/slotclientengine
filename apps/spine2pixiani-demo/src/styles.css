@@ -27,7 +27,10 @@ body {
 
 .shell {
   display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(280px, 360px);
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(
+      280px,
+      360px
+    );
   gap: 24px;
   min-height: 100vh;
   padding: 24px;
@@ -158,12 +161,25 @@ body {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 20% 20%, rgba(247, 181, 91, 0.18), transparent 24%),
-    radial-gradient(circle at 80% 0%, rgba(83, 175, 255, 0.18), transparent 26%),
+    radial-gradient(
+      circle at 20% 20%,
+      rgba(247, 181, 91, 0.18),
+      transparent 24%
+    ),
+    radial-gradient(
+      circle at 80% 0%,
+      rgba(83, 175, 255, 0.18),
+      transparent 26%
+    ),
     linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 25%),
     linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
     linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: auto, auto, auto, 34px 34px, 34px 34px;
+  background-size:
+    auto,
+    auto,
+    auto,
+    34px 34px,
+    34px 34px;
   pointer-events: none;
 }
 

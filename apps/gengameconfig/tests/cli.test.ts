@@ -30,6 +30,10 @@ describe("parseCliArgs", () => {
       "base.xlsx",
       "--reel",
       "bonus.xlsx",
+      "--number-weight",
+      "base-weight.xlsx",
+      "--number-weight",
+      "bonus-weight.xlsx",
       "--out",
       "game.json",
     ]);
@@ -38,6 +42,10 @@ describe("parseCliArgs", () => {
     expect(config.reelPaths.map((path) => basename(path))).toEqual([
       "base.xlsx",
       "bonus.xlsx",
+    ]);
+    expect(config.numberWeightPaths.map((path) => basename(path))).toEqual([
+      "base-weight.xlsx",
+      "bonus-weight.xlsx",
     ]);
     expect(basename(config.outPath)).toBe("game.json");
   });
@@ -62,7 +70,10 @@ describe("parseCliArgs", () => {
       expect(config.reelPaths[0]).toBe(
         join("/tmp/gengameconfig-root", "assets/gamecfg/bg-reel01.xlsx"),
       );
-      expect(config.outPath).toBe(join("/tmp/gengameconfig-root", "dist/game.json"));
+      expect(config.numberWeightPaths).toEqual([]);
+      expect(config.outPath).toBe(
+        join("/tmp/gengameconfig-root", "dist/game.json"),
+      );
     } finally {
       if (originalInitCwd === undefined) {
         delete process.env.INIT_CWD;
@@ -107,22 +118,58 @@ describe("parseCliArgs", () => {
   });
 
   it("rejects missing option value", () => {
-    expect(() => parseCliArgs(["--paytable"])).toThrow("参数 --paytable 缺少取值");
+    expect(() => parseCliArgs(["--paytable"])).toThrow(
+      "参数 --paytable 缺少取值",
+    );
   });
 
   it("rejects non-xlsx input files", () => {
     expect(() =>
-      parseCliArgs(["--paytable", "paytable.csv", "--reel", "reel.xlsx", "--out", "game.json"]),
+      parseCliArgs([
+        "--paytable",
+        "paytable.csv",
+        "--reel",
+        "reel.xlsx",
+        "--out",
+        "game.json",
+      ]),
     ).toThrow("参数 --paytable 必须使用 .xlsx 文件");
 
     expect(() =>
-      parseCliArgs(["--paytable", "paytable.xlsx", "--reel", "reel.xls", "--out", "game.json"]),
+      parseCliArgs([
+        "--paytable",
+        "paytable.xlsx",
+        "--reel",
+        "reel.xls",
+        "--out",
+        "game.json",
+      ]),
     ).toThrow("参数 --reel 必须使用 .xlsx 文件");
+
+    expect(() =>
+      parseCliArgs([
+        "--paytable",
+        "paytable.xlsx",
+        "--reel",
+        "reel.xlsx",
+        "--number-weight",
+        "weight.csv",
+        "--out",
+        "game.json",
+      ]),
+    ).toThrow("参数 --number-weight 必须使用 .xlsx 文件");
   });
 
   it("rejects non-json output files", () => {
     expect(() =>
-      parseCliArgs(["--paytable", "paytable.xlsx", "--reel", "reel.xlsx", "--out", "game.txt"]),
+      parseCliArgs([
+        "--paytable",
+        "paytable.xlsx",
+        "--reel",
+        "reel.xlsx",
+        "--out",
+        "game.txt",
+      ]),
     ).toThrow("参数 --out 必须使用 .json 文件");
   });
 });

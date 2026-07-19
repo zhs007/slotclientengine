@@ -14,14 +14,16 @@ import {
   deactivateViewportInteraction,
   endViewportDrag,
   updateViewportDrag,
-  zoomViewportWithWheel
+  zoomViewportWithWheel,
 } from "./runtime/viewport-interaction.js";
 import "./styles.css";
 
 async function fetchJson<T>(input: string | URL): Promise<T> {
   const response = await fetch(input);
   if (!response.ok) {
-    throw new Error(`Failed to load JSON from ${response.url || String(input)}: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to load JSON from ${response.url || String(input)}: ${response.status} ${response.statusText}`,
+    );
   }
 
   return (await response.json()) as T;
@@ -87,7 +89,7 @@ async function bootstrap() {
     width: designWidth,
     height: designHeight,
     antialias: true,
-    background: "#081019"
+    background: "#081019",
   });
   stageHost.appendChild(app.canvas);
 
@@ -124,33 +126,51 @@ async function bootstrap() {
 
     return {
       x: ((event.clientX - rect.left) / width) * designWidth,
-      y: ((event.clientY - rect.top) / height) * designHeight
+      y: ((event.clientY - rect.top) / height) * designHeight,
     };
   };
 
-  const isPointerInsideCanvas = (event: MouseEvent | PointerEvent | WheelEvent) => {
+  const isPointerInsideCanvas = (
+    event: MouseEvent | PointerEvent | WheelEvent,
+  ) => {
     const rect = app.canvas.getBoundingClientRect();
-    return event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom;
+    return (
+      event.clientX >= rect.left &&
+      event.clientX <= rect.right &&
+      event.clientY >= rect.top &&
+      event.clientY <= rect.bottom
+    );
   };
 
   applyViewport();
   syncStageState();
 
-  const animationSelect = sidebar.querySelector<HTMLSelectElement>("#animation-select");
+  const animationSelect =
+    sidebar.querySelector<HTMLSelectElement>("#animation-select");
   const playToggle = sidebar.querySelector<HTMLButtonElement>("#play-toggle");
-  const replayButton = sidebar.querySelector<HTMLButtonElement>("#replay-button");
+  const replayButton =
+    sidebar.querySelector<HTMLButtonElement>("#replay-button");
   const loopToggle = sidebar.querySelector<HTMLInputElement>("#loop-toggle");
   const summary = sidebar.querySelector<HTMLDivElement>("#summary");
   const details = detailPanel.querySelector<HTMLDivElement>("#details");
 
-  if (!animationSelect || !playToggle || !replayButton || !loopToggle || !summary || !details) {
+  if (
+    !animationSelect ||
+    !playToggle ||
+    !replayButton ||
+    !loopToggle ||
+    !summary ||
+    !details
+  ) {
     throw new Error("Missing preview controls");
   }
 
   const manifestUrl = new URL("./exported/manifest.json", window.location.href);
   const exportedRootUrl = new URL("./", manifestUrl);
   const manifest = await fetchJson<ExportManifest>(manifestUrl);
-  const defaultAnimationProjectPath = manifest.animations.find((item) => item.name === manifest.defaultAnimation)?.projectPath;
+  const defaultAnimationProjectPath = manifest.animations.find(
+    (item) => item.name === manifest.defaultAnimation,
+  )?.projectPath;
   const defaultProjectUrl = defaultAnimationProjectPath
     ? new URL(defaultAnimationProjectPath, manifestUrl).toString()
     : manifest.animations[0]
@@ -170,16 +190,26 @@ async function bootstrap() {
 
   const resolveProjectAsset = (assetPath: string, projectUrl: string) => {
     const projectAssetUrl = new URL(assetPath, projectUrl);
-    const exportedAssetUrl = new URL(assetPath.replace(/^\.\//, ""), exportedRootUrl);
+    const exportedAssetUrl = new URL(
+      assetPath.replace(/^\.\//, ""),
+      exportedRootUrl,
+    );
 
-    if (projectAssetUrl.pathname.includes("/animations/assets/") && assetPath.startsWith("./assets/")) {
+    if (
+      projectAssetUrl.pathname.includes("/animations/assets/") &&
+      assetPath.startsWith("./assets/")
+    ) {
       return exportedAssetUrl.toString();
     }
 
     return projectAssetUrl.toString();
   };
 
-  const renderSummary = (projectName: string, layerCount: number, duration: number) => {
+  const renderSummary = (
+    projectName: string,
+    layerCount: number,
+    duration: number,
+  ) => {
     summary.innerHTML = `
       <div class="debug-stat"><span class="debug-stat-label">Project</span><span class="debug-stat-value">${projectName}</span></div>
       <div class="debug-stat"><span class="debug-stat-label">Layers</span><span class="debug-stat-value">${layerCount}</span></div>
@@ -203,7 +233,12 @@ async function bootstrap() {
     }
 
     const raw = await fetchJson<VictoryProjectConfigRaw>(projectPath);
-    const project = normalizeProjectConfig(raw, (assetPath) => resolveProjectAsset(assetPath, projectPath), designWidth, designHeight);
+    const project = normalizeProjectConfig(
+      raw,
+      (assetPath) => resolveProjectAsset(assetPath, projectPath),
+      designWidth,
+      designHeight,
+    );
     const textures = await loadProjectTextures(project);
     player = new ExportPreviewPlayer(app, project, textures);
     player.setLoop(loopToggle.checked);
@@ -218,7 +253,7 @@ async function bootstrap() {
       designWidth,
       designHeight,
       viewportWidth: stageHost.clientWidth,
-      viewportHeight: stageHost.clientHeight
+      viewportHeight: stageHost.clientHeight,
     });
     app.canvas.style.width = `${layout.width}px`;
     app.canvas.style.height = `${layout.height}px`;
@@ -234,7 +269,11 @@ async function bootstrap() {
     viewportInteraction = activateViewportInteraction(viewportInteraction);
     syncStageState();
 
-    if (event.button !== 0 || !event.isPrimary || !isPointerInsideCanvas(event)) {
+    if (
+      event.button !== 0 ||
+      !event.isPrimary ||
+      !isPointerInsideCanvas(event)
+    ) {
       return;
     }
 
@@ -243,7 +282,7 @@ async function bootstrap() {
       clientX: event.clientX,
       clientY: event.clientY,
       panX: viewportState.panX,
-      panY: viewportState.panY
+      panY: viewportState.panY,
     });
     stageHost.setPointerCapture(event.pointerId);
     syncStageState();
@@ -279,7 +318,7 @@ async function bootstrap() {
       const next = zoomViewportWithWheel(viewportState, viewportInteraction, {
         deltaY: event.deltaY,
         anchor: getCanvasAnchor(event),
-        isPointerInsideStage: isPointerInsideCanvas(event)
+        isPointerInsideStage: isPointerInsideCanvas(event),
       });
       if (!next.handled) {
         return;
@@ -289,7 +328,7 @@ async function bootstrap() {
       applyViewport();
       event.preventDefault();
     },
-    { passive: false }
+    { passive: false },
   );
 
   document.addEventListener("pointerdown", (event) => {

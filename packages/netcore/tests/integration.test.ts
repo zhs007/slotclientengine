@@ -630,9 +630,7 @@ describe('SlotcraftClient Integration Tests', () => {
     it('should reject send() from disallowed states', async () => {
       client = getClient();
       expect(client.getState()).toBe(ConnectionState.IDLE);
-      await expect(client.send('anything')).rejects.toThrow(
-        'Cannot send message in state: IDLE'
-      );
+      await expect(client.send('anything')).rejects.toThrow('Cannot send message in state: IDLE');
       client.disconnect();
       expect(client.getState()).toBe(ConnectionState.DISCONNECTED);
       await expect(client.send('anything')).rejects.toThrow(

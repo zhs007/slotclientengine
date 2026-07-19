@@ -40,6 +40,7 @@ import {
   type SymbolPackagePreviewSnapshot,
 } from "../preview/layout-preview.js";
 import { PREVIEW_SIZE_PRESETS } from "../preview/preview-size.js";
+import type { SymbolOtherScenePreviewBinding } from "../preview/other-scene-preview.js";
 import { layoutWorkspaceMarkup } from "./layout-workspace.js";
 import { projectWorkspaceMarkup } from "./project-workspace.js";
 import {
@@ -226,6 +227,7 @@ export class GameLayoutEditorApp {
 
   private createProject(mode: EditorProject["mode"]): void {
     this.closePicker(false);
+    this.resetSymbolsForProjectReplace();
     this.#session.activeTab = "assets";
     this.#session.selection = null;
     this.#session.expandedResourceIds.clear();
@@ -1037,6 +1039,7 @@ export class GameLayoutEditorApp {
         imported.assets,
       );
       this.closePicker(false);
+      this.resetSymbolsForProjectReplace();
       this.#session.activeTab = "layout";
       this.#session.selection = defaultLayoutSelection(project);
       this.#session.expandedResourceIds.clear();
@@ -1129,6 +1132,13 @@ export class GameLayoutEditorApp {
     );
   }
 
+  private resetSymbolsForProjectReplace(): void {
+    this.#symbolImportRequest += 1;
+    this.#symbolImportBusy = false;
+    this.#symbolPackageMetadata = null;
+    void this.#preview?.setSymbolPackage(null);
+  }
+
   private renderSymbolsMetadata(): void {
     const target = this.requireElement("[data-symbols-metadata]");
     const metadata = this.#symbolPackageMetadata;
@@ -1160,6 +1170,7 @@ export class GameLayoutEditorApp {
     this.requireElement("[data-symbols-scene]").textContent = metadata
       ? formatSymbolPreviewDiagnostic(metadata)
       : "等待导入 strict symbol-package v1 ZIP。";
+    this.renderOtherSceneBindings(metadata);
     this.requireElement("[data-import-symbols]").toggleAttribute(
       "disabled",
       this.#symbolImportBusy,
@@ -1168,6 +1179,109 @@ export class GameLayoutEditorApp {
       "disabled",
       !metadata || this.#symbolImportBusy,
     );
+  }
+
+  private renderOtherSceneBindings(
+    metadata: SymbolPackagePreviewSnapshot | null,
+  ): void {
+    const host = this.requireElement("[data-other-scene-bindings]");
+    if (!metadata) {
+      host.innerHTML = "<p>导入 package 后可按 symbol 配置数值预览。</p>";
+      return;
+    }
+    const bindings = metadata.bindings ?? [];
+    const availableTargets = metadata.availableTargets ?? {};
+    const tableNames = metadata.numberWeightTableNames ?? [];
+    const bindingBySymbol = new Map(
+      bindings.map((binding) => [binding.symbol, binding]),
+    );
+    const rows = Object.entries(availableTargets)
+      .filter(([, targets]) => targets.length > 0)
+      .map(([symbol, targets]) => {
+        const binding = bindingBySymbol.get(symbol);
+        const target = binding?.target ?? targets[0]!;
+        const source =
+          binding?.source ??
+          (tableNames.length > 0
+            ? {
+                kind: "number-weight-table" as const,
+                tableName: tableNames[0]!,
+              }
+            : { kind: "fixed-number" as const, value: 1 });
+        return `<div class="other-scene-row" data-other-scene-row="${escapeHtml(symbol)}"><label><input type="checkbox" data-binding-enabled ${binding ? "checked" : ""}> ${escapeHtml(symbol)}</label><select data-binding-target>${targets
+          .map((candidate) => {
+            const value =
+              candidate.kind === "image-string-node"
+                ? `node:${candidate.name}`
+                : "legacy";
+            const selected =
+              candidate.kind === "image-string-node" &&
+              target.kind === "image-string-node"
+                ? candidate.name === target.name
+                : candidate.kind === target.kind;
+            return `<option value="${escapeHtml(value)}" ${selected ? "selected" : ""}>${escapeHtml(value)}</option>`;
+          })
+          .join(
+            "",
+          )}</select><select data-binding-source-kind><option value="number-weight-table" ${source.kind === "number-weight-table" ? "selected" : ""} ${tableNames.length === 0 ? "disabled" : ""}>权重表</option><option value="fixed-number" ${source.kind === "fixed-number" ? "selected" : ""}>固定值</option></select><select data-binding-table ${tableNames.length === 0 ? "disabled" : ""}>${tableNames.map((name) => `<option value="${escapeHtml(name)}" ${source.kind === "number-weight-table" && source.tableName === name ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select><input data-binding-fixed type="number" min="1" step="1" value="${source.kind === "fixed-number" ? source.value : 1}"></div>`;
+      });
+    host.innerHTML = `<h3>数值 / otherScene</h3>${rows.join("") || "<p>package 没有命名节点或 legacy value target。</p>"}<small>${tableNames.length ? `可用表：${tableNames.map(escapeHtml).join("、")}` : "game config 未声明 numberWeightTables；仍可使用固定值。"}</small>`;
+    host
+      .querySelectorAll<HTMLInputElement | HTMLSelectElement>("input, select")
+      .forEach((input) =>
+        input.addEventListener("change", () => this.commitOtherSceneBindings()),
+      );
+  }
+
+  private commitOtherSceneBindings(): void {
+    try {
+      const bindings: SymbolOtherScenePreviewBinding[] = [];
+      for (const row of this.#root.querySelectorAll<HTMLElement>(
+        "[data-other-scene-row]",
+      )) {
+        if (
+          !row.querySelector<HTMLInputElement>("[data-binding-enabled]")
+            ?.checked
+        )
+          continue;
+        const symbol = row.dataset.otherSceneRow!;
+        const targetValue = row.querySelector<HTMLSelectElement>(
+          "[data-binding-target]",
+        )!.value;
+        const sourceKind = row.querySelector<HTMLSelectElement>(
+          "[data-binding-source-kind]",
+        )!.value;
+        const target: SymbolOtherScenePreviewBinding["target"] =
+          targetValue === "legacy"
+            ? { kind: "legacy-presentation-value" }
+            : {
+                kind: "image-string-node",
+                name: targetValue.slice("node:".length),
+              };
+        const source: SymbolOtherScenePreviewBinding["source"] =
+          sourceKind === "number-weight-table"
+            ? {
+                kind: "number-weight-table",
+                tableName: row.querySelector<HTMLSelectElement>(
+                  "[data-binding-table]",
+                )!.value,
+              }
+            : {
+                kind: "fixed-number",
+                value: Number(
+                  row.querySelector<HTMLInputElement>("[data-binding-fixed]")!
+                    .value,
+                ),
+              };
+        bindings.push({ symbol, target, source });
+      }
+      this.#symbolPackageMetadata =
+        this.#preview?.setOtherSceneBindings(bindings) ?? null;
+      this.renderSymbolsMetadata();
+    } catch (error) {
+      this.#store.setExternalError(error);
+      this.renderSymbolsMetadata();
+    }
   }
 
   private syncSymbolPreviewGrid(project: EditorProject): void {
@@ -1358,7 +1472,7 @@ export class GameLayoutEditorApp {
 }
 
 function shellMarkup(): string {
-  return `<main class="editor-shell"><header class="topbar"><div class="brand"><strong>Game Layout Editor</strong><span>scene-layout v1 · resource-first workspace</span></div><nav aria-label="项目操作"><button type="button" data-new-single>新建单背景</button><button type="button" data-new-dual>新建横竖双背景</button><button type="button" data-import>导入 ZIP</button><button type="button" class="primary" data-export>导出 ZIP</button></nav><output data-project-status></output></header><section class="workspace"><aside class="editor-pane"><div class="workspace-tabs" role="tablist" aria-label="编辑工作区"><button type="button" id="tab-assets" role="tab" data-workspace-tab="assets" aria-selected="true" aria-controls="workspace-panel">资源</button><button type="button" id="tab-layout" role="tab" data-workspace-tab="layout" aria-selected="false" aria-controls="workspace-panel" tabindex="-1">布局</button><button type="button" id="tab-project" role="tab" data-workspace-tab="project" aria-selected="false" aria-controls="workspace-panel" tabindex="-1">项目</button></div><section id="workspace-panel" role="tabpanel" data-workspace-panel aria-labelledby="tab-assets"></section></aside><section class="preview-column"><div class="preview-toolbar"><div data-preview-presets></div><label>宽 <input type="number" min="1" value="1920" data-preview-width /></label><label>高 <input type="number" min="1" value="1080" data-preview-height /></label><div class="zoom-controls"><button type="button" data-zoom-out aria-label="缩小">−</button><button type="button" data-zoom-reset><span data-zoom-label>100%</span></button><button type="button" data-zoom-in aria-label="放大">＋</button></div><label><input type="checkbox" checked data-guide-focus /> focus</label><label><input type="checkbox" checked data-guide-reel /> reel/cells</label></div><details class="symbols-drawer" data-symbols-drawer><summary>Symbols 预览</summary><div class="symbols-controls"><button type="button" data-import-symbols>导入 symbols ZIP</button><button type="button" data-clear-symbols disabled>清除 package</button><label>reel set <select data-reel-set disabled><option value="">未导入 package</option></select></label><button type="button" data-randomize-symbols disabled>重新随机</button><span data-symbols-metadata>未导入；layout ZIP 不会嵌入 symbol 资源。</span><output data-symbols-scene>等待导入 strict symbol-package v1 ZIP。</output></div></details><div class="preview-stage"><div class="preview-page" data-preview-host></div><button class="resize-handle" type="button" aria-label="拖动调整页面尺寸" data-resize-handle>◢</button></div><output class="diagnostics" data-preview-diagnostics></output></section></section><output class="feedback" aria-live="polite" data-feedback></output><aside class="error-panel" aria-live="assertive" data-errors></aside><dialog class="resource-picker" data-resource-picker aria-label="Resource Picker"></dialog></main>`;
+  return `<main class="editor-shell"><header class="topbar"><div class="brand"><strong>Game Layout Editor</strong><span>scene-layout v1 · resource-first workspace</span></div><nav aria-label="项目操作"><button type="button" data-new-single>新建单背景</button><button type="button" data-new-dual>新建横竖双背景</button><button type="button" data-import>导入 ZIP</button><button type="button" class="primary" data-export>导出 ZIP</button></nav><output data-project-status></output></header><section class="workspace"><aside class="editor-pane"><div class="workspace-tabs" role="tablist" aria-label="编辑工作区"><button type="button" id="tab-assets" role="tab" data-workspace-tab="assets" aria-selected="true" aria-controls="workspace-panel">资源</button><button type="button" id="tab-layout" role="tab" data-workspace-tab="layout" aria-selected="false" aria-controls="workspace-panel" tabindex="-1">布局</button><button type="button" id="tab-project" role="tab" data-workspace-tab="project" aria-selected="false" aria-controls="workspace-panel" tabindex="-1">项目</button></div><section id="workspace-panel" role="tabpanel" data-workspace-panel aria-labelledby="tab-assets"></section></aside><section class="preview-column"><div class="preview-toolbar"><div data-preview-presets></div><label>宽 <input type="number" min="1" value="1920" data-preview-width /></label><label>高 <input type="number" min="1" value="1080" data-preview-height /></label><div class="zoom-controls"><button type="button" data-zoom-out aria-label="缩小">−</button><button type="button" data-zoom-reset><span data-zoom-label>100%</span></button><button type="button" data-zoom-in aria-label="放大">＋</button></div><label><input type="checkbox" checked data-guide-focus /> focus</label><label><input type="checkbox" checked data-guide-reel /> reel/cells</label></div><details class="symbols-drawer" data-symbols-drawer><summary>Symbols 预览</summary><div class="symbols-controls"><button type="button" data-import-symbols>导入 symbols ZIP</button><button type="button" data-clear-symbols disabled>清除 package</button><label>reel set <select data-reel-set disabled><option value="">未导入 package</option></select></label><button type="button" data-randomize-symbols disabled>重新随机</button><span data-symbols-metadata>未导入；layout ZIP 不会嵌入 symbol 资源。</span><output data-symbols-scene>等待导入 strict symbol-package v1 ZIP。</output><div class="other-scene-bindings" data-other-scene-bindings><p>导入 package 后可按 symbol 配置数值预览。</p></div></div></details><div class="preview-stage"><div class="preview-page" data-preview-host></div><button class="resize-handle" type="button" aria-label="拖动调整页面尺寸" data-resize-handle>◢</button></div><output class="diagnostics" data-preview-diagnostics></output></section></section><output class="feedback" aria-live="polite" data-feedback></output><aside class="error-panel" aria-live="assertive" data-errors></aside><dialog class="resource-picker" data-resource-picker aria-label="Resource Picker"></dialog></main>`;
 }
 
 function parseSelectionKey(key: string): LayoutSelection {
@@ -1411,7 +1525,12 @@ function formatSymbolPreviewDiagnostic(
   const rows = Array.from({ length: scene.rows }, (_, y) =>
     scene.symbols.map((column) => column[y]).join(" "),
   );
-  return `${preview.message} stops=[${scene.stopYs.join(", ")}] · ${rows.join(" / ")}`;
+  const otherRows = preview.otherScene
+    ? Array.from({ length: scene.rows }, (_, y) =>
+        preview.otherScene!.matrix.map((column) => column[y]).join(" "),
+      )
+    : [];
+  return `${preview.message} stops=[${scene.stopYs.join(", ")}] · scene=${rows.join(" / ")} · mappings=${preview.bindings?.length ?? 0} · otherScene=${otherRows.join(" / ")}`;
 }
 
 function byteFingerprint(path: string, bytes: Uint8Array): string {

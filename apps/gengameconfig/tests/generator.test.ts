@@ -14,7 +14,10 @@ import {
   writeWorkbook,
 } from "./workbook-helpers";
 
-const assetPaytable = resolve(__dirname, "../../../assets/gamecfg/paytables.xlsx");
+const assetPaytable = resolve(
+  __dirname,
+  "../../../assets/gamecfg/paytables.xlsx",
+);
 const assetReel = resolve(__dirname, "../../../assets/gamecfg/bg-reel01.xlsx");
 
 describe("generator", () => {
@@ -35,6 +38,7 @@ describe("generator", () => {
     expect(parsed.reels["bg-reel01"][0].slice(0, 12)).toEqual([
       1, 2, 6, 3, 1, 2, 7, 8, 1, 8, 7, 7,
     ]);
+    expect(parsed).not.toHaveProperty("numberWeightTables");
   });
 
   it("writes parseable JSON and creates missing parent directories", async () => {
@@ -54,9 +58,14 @@ describe("generator", () => {
     const outPath = join(dir, "game.json");
     writeFileSync(outPath, "old content", "utf8");
 
-    await writeGameConfigFile(outPath, buildGameConfig(assetPaytable, [assetReel]));
+    await writeGameConfigFile(
+      outPath,
+      buildGameConfig(assetPaytable, [assetReel]),
+    );
 
-    expect(JSON.parse(readFileSync(outPath, "utf8")).paytable["1"].symbol).toBe("H1");
+    expect(JSON.parse(readFileSync(outPath, "utf8")).paytable["1"].symbol).toBe(
+      "H1",
+    );
   });
 
   it("cleans the temporary file when rename fails", async () => {
@@ -68,7 +77,9 @@ describe("generator", () => {
       writeGameConfigFile(outPath, buildGameConfig(assetPaytable, [assetReel])),
     ).rejects.toThrow();
 
-    expect(readdirSync(dir).filter((name) => name.includes(".tmp"))).toEqual([]);
+    expect(readdirSync(dir).filter((name) => name.includes(".tmp"))).toEqual(
+      [],
+    );
   });
 
   it("rejects duplicate reel keys", () => {
@@ -85,5 +96,52 @@ describe("generator", () => {
     expect(() => buildGameConfig(paytablePath, [reelsA, reelsB])).toThrow(
       "重复 reel key：same",
     );
+  });
+
+  it("keeps multiple number weight tables in CLI order", () => {
+    const dir = createTempDir();
+    const first = join(dir, "first-weight.xlsx");
+    const second = join(dir, "second-weight.xlsx");
+    writeWorkbook(first, [
+      ["val", "weight"],
+      [1, 3],
+      [2, 1],
+    ]);
+    writeWorkbook(second, [
+      ["val", "weight"],
+      [10, 2],
+    ]);
+
+    const config = buildGameConfig(assetPaytable, [assetReel], [first, second]);
+    expect(Object.keys(config.numberWeightTables ?? {})).toEqual([
+      "first-weight",
+      "second-weight",
+    ]);
+    expect(config.numberWeightTables?.["first-weight"]).toEqual([
+      { value: 1, weight: 3 },
+      { value: 2, weight: 1 },
+    ]);
+  });
+
+  it("rejects duplicate number weight table names", () => {
+    const dir = createTempDir();
+    const firstDir = join(dir, "first");
+    const secondDir = join(dir, "second");
+    mkdirSync(firstDir);
+    mkdirSync(secondDir);
+    const first = join(firstDir, "same.xlsx");
+    const second = join(secondDir, "same.xlsx");
+    writeWorkbook(first, [
+      ["val", "weight"],
+      [1, 1],
+    ]);
+    writeWorkbook(second, [
+      ["val", "weight"],
+      [2, 1],
+    ]);
+
+    expect(() =>
+      buildGameConfig(assetPaytable, [assetReel], [first, second]),
+    ).toThrow("重复 number weight table name：same");
   });
 });

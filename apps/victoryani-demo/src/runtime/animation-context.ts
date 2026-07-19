@@ -1,6 +1,10 @@
 import { Container, Graphics, Sprite, Texture } from "pixi.js";
 import type gsap from "gsap";
-import type { AnimParamValue, AnimParams, VictoryLayerConfig } from "../config/victory-types.js";
+import type {
+  AnimParamValue,
+  AnimParams,
+  VictoryLayerConfig,
+} from "../config/victory-types.js";
 import type { LayerInstance } from "./layer-instance.js";
 
 export interface AnimationRuntimeContext {
@@ -14,17 +18,29 @@ export interface AnimationRuntimeContext {
   timelineFactory: typeof gsap.timeline;
 }
 
-export function getNumberParam(params: AnimParams, key: string, fallback: number) {
+export function getNumberParam(
+  params: AnimParams,
+  key: string,
+  fallback: number,
+) {
   const value = params[key];
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-export function getStringParam(params: AnimParams, key: string, fallback: string) {
+export function getStringParam(
+  params: AnimParams,
+  key: string,
+  fallback: string,
+) {
   const value = params[key];
   return typeof value === "string" ? value : fallback;
 }
 
-export function getBooleanParam(params: AnimParams, key: string, fallback: boolean) {
+export function getBooleanParam(
+  params: AnimParams,
+  key: string,
+  fallback: boolean,
+) {
   const value = params[key];
   return typeof value === "boolean" ? value : fallback;
 }
@@ -58,7 +74,10 @@ export function removeDisplayObject(child: Container | null | undefined) {
   }
 
   child.parent?.removeChild(child);
-  const destroyable = child as Container & { destroyed?: boolean; destroy?: (options?: object) => void };
+  const destroyable = child as Container & {
+    destroyed?: boolean;
+    destroy?: (options?: object) => void;
+  };
   if (!destroyable.destroyed && typeof destroyable.destroy === "function") {
     destroyable.destroy({ children: true });
   }

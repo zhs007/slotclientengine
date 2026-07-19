@@ -2,6 +2,7 @@ import { LogicParseError } from "./errors";
 import { LogicReelsModel } from "./reels";
 import {
   GameConfigPaytableEntry,
+  GameConfigNumberWeightEntry,
   LogicGameConfig,
   LogicReels,
   ParsedGameConfigData,
@@ -71,6 +72,17 @@ export class LogicGameConfigModel implements LogicGameConfig {
     }
 
     return this.#reelsByName[name];
+  }
+
+  getNumberWeightTableNames(): readonly string[] {
+    return this.#data.numberWeightTableNames;
+  }
+
+  getNumberWeightTable(name: string): readonly GameConfigNumberWeightEntry[] {
+    if (!hasOwn(this.#data.numberWeightTables, name)) {
+      throw new RangeError(`number weight table "${name}" does not exist.`);
+    }
+    return this.#data.numberWeightTables[name];
   }
 
   getStopYCoordinates(options: ReelStopYOptions): readonly number[] {
@@ -148,6 +160,9 @@ function parseGameConfig(config: unknown): ParsedGameConfigData {
   const paytable = parsePaytable(configRecord.paytable);
   const symbolCodes = parseSymbolCodes(configRecord.symbolCodes, paytable);
   const reels = parseReels(configRecord.reels, paytable);
+  const numberWeightTables = parseNumberWeightTables(
+    configRecord.numberWeightTables,
+  );
 
   return Object.freeze({
     rawConfig: cloneAndFreeze(config),
@@ -155,7 +170,86 @@ function parseGameConfig(config: unknown): ParsedGameConfigData {
     symbolCodes,
     reels,
     reelNames: freezeArray(Object.keys(reels)),
+    numberWeightTables,
+    numberWeightTableNames: freezeArray(Object.keys(numberWeightTables)),
   });
+}
+
+const NUMBER_WEIGHT_TABLE_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MAX_TOTAL_WEIGHT = 0x1_0000_0000;
+
+function parseNumberWeightTables(
+  value: unknown,
+): Readonly<Record<string, readonly GameConfigNumberWeightEntry[]>> {
+  if (value === undefined) {
+    return Object.freeze({});
+  }
+  const record = assertRecord(value, "gameConfig.numberWeightTables");
+  const tables: Record<string, readonly GameConfigNumberWeightEntry[]> = {};
+
+  for (const [name, rawEntries] of Object.entries(record)) {
+    if (!NUMBER_WEIGHT_TABLE_NAME_PATTERN.test(name)) {
+      throw new LogicParseError(
+        `gameConfig.numberWeightTables key "${name}" must be lowercase ASCII kebab-case.`,
+      );
+    }
+    const path = `gameConfig.numberWeightTables["${name}"]`;
+    const entries = assertArray(rawEntries, path);
+    if (entries.length === 0) {
+      throw new LogicParseError(`${path} must contain at least one entry.`);
+    }
+
+    const seenValues = new Set<number>();
+    let totalWeight = 0;
+    tables[name] = freezeArray(
+      entries.map((rawEntry, index) => {
+        const entryPath = `${path}[${index}]`;
+        const entry = assertRecord(rawEntry, entryPath);
+        const keys = Object.keys(entry);
+        if (
+          keys.length !== 2 ||
+          !hasOwn(entry, "value") ||
+          !hasOwn(entry, "weight")
+        ) {
+          throw new LogicParseError(
+            `${entryPath} must contain exactly value and weight.`,
+          );
+        }
+        const parsedValue = assertSafeNonNegativeInteger(
+          entry.value,
+          `${entryPath}.value`,
+        );
+        const weight = assertSafeNonNegativeInteger(
+          entry.weight,
+          `${entryPath}.weight`,
+        );
+        if (parsedValue === 0) {
+          throw new LogicParseError(`${entryPath}.value must be positive.`);
+        }
+        if (weight === 0) {
+          throw new LogicParseError(`${entryPath}.weight must be positive.`);
+        }
+        if (seenValues.has(parsedValue)) {
+          throw new LogicParseError(
+            `${path} contains duplicate value ${parsedValue}.`,
+          );
+        }
+        seenValues.add(parsedValue);
+        totalWeight += weight;
+        if (
+          !Number.isSafeInteger(totalWeight) ||
+          totalWeight > MAX_TOTAL_WEIGHT
+        ) {
+          throw new LogicParseError(
+            `${path} total weight must be between 1 and ${MAX_TOTAL_WEIGHT}.`,
+          );
+        }
+        return Object.freeze({ value: parsedValue, weight });
+      }),
+    );
+  }
+
+  return Object.freeze(tables);
 }
 
 function parsePaytable(

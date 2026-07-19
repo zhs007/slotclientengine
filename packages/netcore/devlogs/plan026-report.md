@@ -3,6 +3,7 @@
 ## 1. 任务背景
 
 本次任务旨在解决 `example001` 示例在运行时暴露出的两个核心问题：
+
 1.  **重复登录**: 客户端在初始化连接时，会向服务器发送两次 `flblogin` 命令。
 2.  **不当的状态转换**: 客户端在调用 `enterGame` 后，立即进入 `RESUMING` 状态，此状态命名具有误导性，因为它发生在不确定是否需要“恢复”游戏之前。
 
@@ -23,9 +24,9 @@
 3.  **修复代码逻辑**:
     - **第一轮修复**: 我首先移除了 `connect()` 方法中的 `await this._login()`，并修改状态机以使用 `ENTERING_GAME`。这成功修复了重复登录问题，但引入了一个**回归（Regression）**：一个原有的、测试“连接超时”的用例开始失败。原因是 `connect()` 的 Promise 现在会过早地返回，不再等待登录完成。
     - **第二轮修复 (最终方案)**: 我撤销了第一轮对 `connect` 的修改，并采取了更精确的策略：
-        - **恢复 `connect()`**: 将 `await this._login()` 调用放回到 `connect()` 方法中，确保其负责初次登录并等待结果。
-        - **修改 `handleOpen()`**: 在 `handleOpen()` 方法中增加了条件判断 `if (previousState === ConnectionState.RECONNECTING)`。这样，`handleOpen()` 就只会在“重连”成功后自动触发登录，而在“初次连接”时则不会，从而完美地解决了重复登录的问题，同时修复了回归。
-        - **重构状态机**: 按原计划，将 `enterGame` 的状态从 `RESUMING` 切换为 `ENTERING_GAME`，并在 `types.ts` 中彻底移除了多余的 `RESUMING` 状态。所有相关的测试文件也一并更新。
+      - **恢复 `connect()`**: 将 `await this._login()` 调用放回到 `connect()` 方法中，确保其负责初次登录并等待结果。
+      - **修改 `handleOpen()`**: 在 `handleOpen()` 方法中增加了条件判断 `if (previousState === ConnectionState.RECONNECTING)`。这样，`handleOpen()` 就只会在“重连”成功后自动触发登录，而在“初次连接”时则不会，从而完美地解决了重复登录的问题，同时修复了回归。
+      - **重构状态机**: 按原计划，将 `enterGame` 的状态从 `RESUMING` 切换为 `ENTERING_GAME`，并在 `types.ts` 中彻底移除了多余的 `RESUMING` 状态。所有相关的测试文件也一并更新。
 
 4.  **最终验证**: 再次运行 `npm run check`，所有测试（包括我新增的测试和之前失败的回归测试）均成功通过， lint 和 build 也无误，证明修复方案正确且完整。
 

@@ -2,7 +2,12 @@ import type { SymbolEditorProject } from "../model/editor-project.js";
 import type { ResourceBindingContext } from "./resource-picker.js";
 
 export type WorkspaceTab = "assets" | "symbols" | "project";
-export type SymbolInspectorTab = "basic" | "states" | "value" | "cascade";
+export type SymbolInspectorTab =
+  | "basic"
+  | "states"
+  | "image-string"
+  | "value"
+  | "cascade";
 export type AssetStatusFilter = "all" | "referenced" | "unused" | "error";
 export type AssetKindFilter = "all" | "image" | "spine" | "vni" | "other";
 export type AssetGroupMode = "batch" | "kind";
@@ -32,6 +37,7 @@ export class SymbolsEditorUiSession {
   addStateOpen = false;
   picker: AssetPickerState | null = null;
   transientMessage = "";
+  imageStringPreviewTexts = new Map<string, string>();
 
   resetForNewProject(project: SymbolEditorProject): void {
     this.resetProjectState(project);
@@ -95,6 +101,7 @@ export class SymbolsEditorUiSession {
     this.addStateOpen = false;
     this.picker = null;
     this.transientMessage = "";
+    this.imageStringPreviewTexts.clear();
     this.normalize(project);
   }
 }

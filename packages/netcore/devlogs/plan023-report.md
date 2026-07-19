@@ -11,11 +11,11 @@ The plan was executed successfully.
 1.  **Enum Inspection**: I first examined `src/types.ts` to confirm the structure and members of the `ConnectionState` enum.
 
 2.  **Code Refactoring**: I performed two edits on `examples/example001.ts`:
-    *   First, I added `ConnectionState` to the list of imports from `../src/types`.
-    *   Second, I replaced all instances of state strings (like `'IN_GAME'`, `'SPINEND'`, etc.) with their corresponding enum members (e.g., `ConnectionState.IN_GAME`, `ConnectionState.SPINEND`).
+    - First, I added `ConnectionState` to the list of imports from `../src/types`.
+    - Second, I replaced all instances of state strings (like `'IN_GAME'`, `'SPINEND'`, etc.) with their corresponding enum members (e.g., `ConnectionState.IN_GAME`, `ConnectionState.SPINEND`).
 
 3.  **Validation**:
-    *   I ran `npm run check` after the refactoring. The command completed successfully, indicating that the changes were syntactically correct and did not introduce any regressions. The project's tests, linting, and build process all passed.
+    - I ran `npm run check` after the refactoring. The command completed successfully, indicating that the changes were syntactically correct and did not introduce any regressions. The project's tests, linting, and build process all passed.
 
 ## 3. Final Outcome
 

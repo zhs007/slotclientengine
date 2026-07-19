@@ -3,10 +3,12 @@
 ## 1. 需求理解 (Understanding the Requirement)
 
 用户在运行 `example001` 时发现日志 (`msg001`) 中存在两个问题：
+
 1.  **重复登录**: 客户端连续执行了两次 `flblogin`（登录）操作。
 2.  **不当的状态转换**: 客户端在登录成功后，调用 `enterGame` 时立即进入 `RESUMING` 状态，而此时尚未确定是否需要恢复游戏。
 
 用户的期望是：
+
 - 登录操作只应执行一次。
 - 只有在明确需要恢复游戏时，才进入 `RESUMING` 状态。用户建议为此引入一个新的 `ENTERING_GAME` 状态。
 
@@ -23,6 +25,7 @@
 ### 步骤 1: 创建复现问题的测试 (Create Failing Tests)
 
 根据 `agents.md` 的指导，我将首先在 `tests/integration.test.ts` 中添加一个新的集成测试用例。这个测试将：
+
 - 模拟 `connect` -> `enterGame` 的流程。
 - **验证重复登录**: 监听 `send` 事件或 mock `_login` 方法，断言 `flblogin` 只被调用一次。
 - **验证状态转换**: 断言在调用 `enterGame` 后，客户端立即进入一个新的、准确的状态（`ENTERING_GAME`），而不是 `RESUMING`。

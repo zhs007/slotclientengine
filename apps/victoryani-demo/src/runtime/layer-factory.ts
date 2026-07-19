@@ -1,4 +1,10 @@
-import { Container, Sprite, Text, Texture, type TextStyleOptions } from "pixi.js";
+import {
+  Container,
+  Sprite,
+  Text,
+  Texture,
+  type TextStyleOptions,
+} from "pixi.js";
 import type { VictoryLayerConfig } from "../config/victory-types.js";
 import { resolveBlendMode, layerUsesContainerBlendMode } from "./blend-mode.js";
 import { createLayerBaseState, type LayerInstance } from "./layer-instance.js";
@@ -10,13 +16,13 @@ const TEXT_STYLE: TextStyleOptions = {
   fontWeight: "700",
   stroke: {
     color: "#2d1a4a",
-    width: 6
-  }
+    width: 6,
+  },
 };
 
 export function createLayerInstances(
   layers: VictoryLayerConfig[],
-  textures: Map<string, Texture>
+  textures: Map<string, Texture>,
 ): Map<string, LayerInstance> {
   const instances = new Map<string, LayerInstance>();
 
@@ -32,7 +38,11 @@ export function createLayerInstances(
     target.visible = layer.visible;
 
     const blendMode = resolveBlendMode(layer.blendMode);
-    if (layerUsesContainerBlendMode(layer.animations.map((animation) => animation.type))) {
+    if (
+      layerUsesContainerBlendMode(
+        layer.animations.map((animation) => animation.type),
+      )
+    ) {
       (container as any).blendMode = blendMode;
       (target as any).blendMode = resolveBlendMode("normal");
     } else {
@@ -46,18 +56,21 @@ export function createLayerInstances(
       container,
       target,
       baseState: createLayerBaseState(layer),
-      cleanupTasks: new Set()
+      cleanupTasks: new Set(),
     });
   }
 
   return instances;
 }
 
-function createLayerDisplayObject(layer: VictoryLayerConfig, textures: Map<string, Texture>) {
+function createLayerDisplayObject(
+  layer: VictoryLayerConfig,
+  textures: Map<string, Texture>,
+) {
   if (layer.type === "font") {
     const textNode = new Text({
       text: layer.text || layer.id,
-      style: TEXT_STYLE
+      style: TEXT_STYLE,
     });
 
     if ("anchor" in textNode && typeof textNode.anchor?.set === "function") {

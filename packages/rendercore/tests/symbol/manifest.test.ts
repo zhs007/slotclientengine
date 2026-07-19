@@ -159,6 +159,101 @@ function createProject() {
 }
 
 describe("symbol state texture manifest helpers", () => {
+  it("strictly parses ordered named image-string nodes targeting Spine states", () => {
+    const manifest = createManifest() as any;
+    manifest.symbols.H1.imageStringNodes = [
+      {
+        name: "coin-value",
+        resource:
+          "./dependencies/image-strings/coin-digits/image-string.manifest.json",
+        target: { state: "normal", slot: "Num" },
+        initialText: "001",
+        anchor: { x: 0.5, y: 0.5 },
+        transform: { x: 1, y: -2, scale: 0.75 },
+        followSlotColor: true,
+      },
+    ];
+    const parsed = parseSymbolStateTextureManifest(manifest);
+    expect(parsed.symbols.H1.imageStringNodes).toEqual(
+      manifest.symbols.H1.imageStringNodes,
+    );
+    expect(Object.isFrozen(parsed.symbols.H1.imageStringNodes)).toBe(true);
+    expect(parsed.symbols.L1.imageStringNodes).toEqual([]);
+  });
+
+  it.each([
+    [
+      "duplicate name",
+      (nodes: any[]) => nodes.push({ ...nodes[0] }),
+      /duplicate/,
+    ],
+    ["bad name", (nodes: any[]) => (nodes[0].name = "Bad_Name"), /kebab-case/],
+    [
+      "bad resource",
+      (nodes: any[]) => (nodes[0].resource = "https://x/a.json"),
+      /canonical local/,
+    ],
+    [
+      "non-Spine target",
+      (nodes: any[]) => (nodes[0].target.state = "win"),
+      /Spine/,
+    ],
+    [
+      "unknown slot field",
+      (nodes: any[]) => (nodes[0].target.extra = true),
+      /unknown/,
+    ],
+    [
+      "unknown node field",
+      (nodes: any[]) => (nodes[0].extra = true),
+      /unknown/,
+    ],
+    [
+      "unknown target state",
+      (nodes: any[]) => (nodes[0].target.state = "missing"),
+      /unknown state/,
+    ],
+    [
+      "non-string initial text",
+      (nodes: any[]) => (nodes[0].initialText = 1),
+      /string/,
+    ],
+    ["bad anchor", (nodes: any[]) => (nodes[0].anchor.x = 2), /anchor/],
+    [
+      "bad transform x",
+      (nodes: any[]) => (nodes[0].transform.x = Number.NaN),
+      /finite/,
+    ],
+    ["bad scale", (nodes: any[]) => (nodes[0].transform.scale = 0), /positive/],
+    [
+      "implicit color",
+      (nodes: any[]) => delete nodes[0].followSlotColor,
+      /boolean/,
+    ],
+  ])("rejects invalid image-string nodes: %s", (_label, mutate, message) => {
+    const manifest = createManifest() as any;
+    manifest.symbols.H1.imageStringNodes = [
+      {
+        name: "coin-value",
+        resource:
+          "./dependencies/image-strings/coin-digits/image-string.manifest.json",
+        target: { state: "normal", slot: "Num" },
+        initialText: "1",
+        anchor: { x: 0.5, y: 0.5 },
+        transform: { x: 0, y: 0, scale: 1 },
+        followSlotColor: false,
+      },
+    ];
+    mutate(manifest.symbols.H1.imageStringNodes);
+    expect(() => parseSymbolStateTextureManifest(manifest)).toThrow(message);
+  });
+
+  it("rejects a non-array imageStringNodes field", () => {
+    const manifest = createManifest() as any;
+    manifest.symbols.H1.imageStringNodes = {};
+    expect(() => parseSymbolStateTextureManifest(manifest)).toThrow(/array/);
+  });
+
   it("parses settings, display symbols, scales, single normals and layered normals", () => {
     const manifest = createManifest();
 

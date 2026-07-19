@@ -5,7 +5,10 @@ import { entityManager } from "../core/entitymanager.js";
 import { AnimationRegistry } from "../runtime/animation-registry.js";
 import { createLayerInstances } from "../runtime/layer-factory.js";
 import { applyMasks } from "../runtime/mask-manager.js";
-import { buildMasterTimeline, resetLayerInstances } from "../runtime/timeline.js";
+import {
+  buildMasterTimeline,
+  resetLayerInstances,
+} from "../runtime/timeline.js";
 
 export class VictoryPlayer {
   public readonly root = new Container();
@@ -21,7 +24,7 @@ export class VictoryPlayer {
   constructor(
     private readonly app: Application,
     private readonly project: VictoryProjectConfig,
-    textures: Map<string, Texture>
+    textures: Map<string, Texture>,
   ) {
     registerBuiltinAnimations(this.registry);
     this.instances = createLayerInstances(project.layers, textures);
@@ -46,7 +49,7 @@ export class VictoryPlayer {
         for (const listener of this.timeListeners) {
           listener(time);
         }
-      }
+      },
     });
 
     this.timeline.eventCallback("onComplete", () => {
@@ -99,7 +102,13 @@ export class VictoryPlayer {
   }
 
   getUsedAnimationTypes() {
-    return [...new Set(this.project.layers.flatMap((layer) => layer.animations.map((animation) => animation.type)))].sort();
+    return [
+      ...new Set(
+        this.project.layers.flatMap((layer) =>
+          layer.animations.map((animation) => animation.type),
+        ),
+      ),
+    ].sort();
   }
 
   update(deltaSeconds: number) {

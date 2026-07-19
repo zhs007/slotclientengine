@@ -8,7 +8,7 @@ import {
   setSceneCameraActive,
   startSceneCameraDrag,
   updateSceneCameraDrag,
-  zoomSceneCamera
+  zoomSceneCamera,
 } from "./scene-camera.js";
 
 export type SceneCameraControllerOptions = {
@@ -16,7 +16,13 @@ export type SceneCameraControllerOptions = {
   viewportRoot: Container;
   designWidth: number;
   designHeight: number;
-  controlPanel: Pick<ControlPanel, "cameraActiveLabel" | "cameraScaleLabel" | "cameraOffsetLabel" | "resetCameraButton">;
+  controlPanel: Pick<
+    ControlPanel,
+    | "cameraActiveLabel"
+    | "cameraScaleLabel"
+    | "cameraOffsetLabel"
+    | "resetCameraButton"
+  >;
   getLayoutScale: () => number;
 };
 
@@ -30,7 +36,7 @@ export function createSceneCameraController({
   designWidth,
   designHeight,
   controlPanel,
-  getLayoutScale
+  getLayoutScale,
 }: SceneCameraControllerOptions): SceneCameraController {
   let state = createSceneCameraState();
 
@@ -41,7 +47,9 @@ export function createSceneCameraController({
     applySceneCamera(viewportRoot, state, { designWidth, designHeight });
     stageHost.classList.toggle("stage-host--active", state.isActive);
     stageHost.classList.toggle("stage-host--dragging", state.isDragging);
-    controlPanel.cameraActiveLabel.textContent = state.isActive ? "Active" : "Inactive";
+    controlPanel.cameraActiveLabel.textContent = state.isActive
+      ? "Active"
+      : "Inactive";
     controlPanel.cameraScaleLabel.textContent = `${state.scale.toFixed(2)}x`;
     controlPanel.cameraOffsetLabel.textContent = `${Math.round(state.x)}, ${Math.round(state.y)}`;
   };
@@ -84,7 +92,7 @@ export function createSceneCameraController({
     state = startSceneCameraDrag(state, {
       clientX: event.clientX,
       clientY: event.clientY,
-      pointerId: event.pointerId
+      pointerId: event.pointerId,
     });
     stageHost.setPointerCapture(event.pointerId);
     render();
@@ -100,9 +108,9 @@ export function createSceneCameraController({
       state,
       {
         clientX: event.clientX,
-        clientY: event.clientY
+        clientY: event.clientY,
       },
-      getLayoutScale()
+      getLayoutScale(),
     );
     render();
   };
@@ -148,7 +156,11 @@ export function createSceneCameraController({
 
   return {
     destroy: () => {
-      document.removeEventListener("pointerdown", handleDocumentPointerDown, true);
+      document.removeEventListener(
+        "pointerdown",
+        handleDocumentPointerDown,
+        true,
+      );
       stageHost.removeEventListener("pointerdown", handlePointerDown);
       stageHost.removeEventListener("pointermove", handlePointerMove);
       stageHost.removeEventListener("pointerup", handlePointerEnd);
@@ -156,7 +168,10 @@ export function createSceneCameraController({
       stageHost.removeEventListener("lostpointercapture", stopDragging);
       stageHost.removeEventListener("wheel", handleWheel);
       window.removeEventListener("blur", handleWindowBlur);
-      controlPanel.resetCameraButton.removeEventListener("click", handleResetClick);
-    }
+      controlPanel.resetCameraButton.removeEventListener(
+        "click",
+        handleResetClick,
+      );
+    },
   };
 }

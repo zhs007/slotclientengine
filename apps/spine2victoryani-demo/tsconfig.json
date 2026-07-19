@@ -8,6 +8,13 @@
     "noEmit": true,
     "types": ["node", "vite/client", "vitest/globals"]
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "tests/**/*.ts", "scripts/**/*.ts", "vite.config.ts", "eslint.config.cjs"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "tests/**/*.ts",
+    "scripts/**/*.ts",
+    "vite.config.ts",
+    "eslint.config.cjs"
+  ],
   "exclude": ["dist", "coverage", "node_modules"]
 }

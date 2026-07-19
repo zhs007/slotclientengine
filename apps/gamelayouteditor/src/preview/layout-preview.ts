@@ -32,6 +32,11 @@ import {
   validatePreviewSize,
   type PreviewSize,
 } from "./preview-size.js";
+import {
+  createOtherScenePreview,
+  type OtherScenePreviewSnapshot,
+  type SymbolOtherScenePreviewBinding,
+} from "./other-scene-preview.js";
 
 export interface SymbolPreviewGridSize {
   readonly columns: number;
@@ -47,6 +52,12 @@ export interface SymbolPackagePreviewSnapshot {
   readonly status: "ready" | "pending-selection" | "incompatible";
   readonly message: string;
   readonly scene: RandomReelSceneSnapshot | null;
+  readonly availableTargets: Readonly<
+    Record<string, readonly SymbolOtherScenePreviewBinding["target"][]>
+  >;
+  readonly numberWeightTableNames: readonly string[];
+  readonly bindings: readonly SymbolOtherScenePreviewBinding[];
+  readonly otherScene: OtherScenePreviewSnapshot | null;
 }
 
 export class LayoutPreview {
@@ -75,6 +86,9 @@ export class LayoutPreview {
   #symbolGrid: SymbolPreviewGridSize | null = null;
   #renderSymbols: RenderSymbol[] = [];
   #symbolDiagnostic = "";
+  #symbolBindings: readonly SymbolOtherScenePreviewBinding[] = Object.freeze(
+    [],
+  );
 
   constructor(
     host: HTMLElement,
@@ -169,14 +183,18 @@ export class LayoutPreview {
     }
     let catalog: SymbolCatalogModel;
     let prepared: SymbolPackagePreviewSnapshot;
+    const previousBindings = this.#symbolBindings;
+    this.#symbolBindings = Object.freeze([]);
     try {
       catalog = await resource.createCatalog();
       prepared = this.createSymbolPreview(resource, targetGrid, null, true);
     } catch (error) {
+      this.#symbolBindings = previousBindings;
       resource.destroy();
       throw error;
     }
     if (request !== this.#symbolRequest || this.#destroyed) {
+      this.#symbolBindings = previousBindings;
       resource.destroy();
       return null;
     }
@@ -207,15 +225,22 @@ export class LayoutPreview {
       return this.#symbolPreview;
     }
     const selected = this.#symbolPreview?.selectedReelSet ?? null;
-    this.#symbolPreview = this.createSymbolPreview(
-      resource,
-      nextGrid,
-      selected,
-      false,
-    );
-    if (this.#lastLayoutSnapshot)
-      this.layoutSymbolOverlay(this.#lastLayoutSnapshot);
-    return this.#symbolPreview;
+    const previousPreview = this.#symbolPreview;
+    try {
+      this.#symbolPreview = this.createSymbolPreview(
+        resource,
+        nextGrid,
+        selected,
+        false,
+      );
+      if (this.#lastLayoutSnapshot)
+        this.layoutSymbolOverlay(this.#lastLayoutSnapshot);
+      return this.#symbolPreview;
+    } catch (error) {
+      this.#symbolGrid = previousGrid;
+      this.#symbolPreview = previousPreview;
+      throw error;
+    }
   }
 
   setSelectedReelSet(name: string): SymbolPackagePreviewSnapshot {
@@ -231,15 +256,20 @@ export class LayoutPreview {
         `reel set "${name}" 不可选择${selected?.reason ? `：${selected.reason}` : "。"}`,
       );
     }
-    this.#symbolPreview = this.createReadySymbolPreview(
-      resource,
-      grid,
-      preview.reelSets,
-      name,
-    );
-    if (this.#lastLayoutSnapshot)
-      this.layoutSymbolOverlay(this.#lastLayoutSnapshot);
-    return this.#symbolPreview;
+    try {
+      this.#symbolPreview = this.createReadySymbolPreview(
+        resource,
+        grid,
+        preview.reelSets,
+        name,
+      );
+      if (this.#lastLayoutSnapshot)
+        this.layoutSymbolOverlay(this.#lastLayoutSnapshot);
+      return this.#symbolPreview;
+    } catch (error) {
+      this.#symbolPreview = preview;
+      throw error;
+    }
   }
 
   randomizeSymbols(): SymbolPackagePreviewSnapshot {
@@ -251,15 +281,56 @@ export class LayoutPreview {
       throw new Error("请选择兼容 reel set 后再重新随机。");
     }
     this.#symbolRequest += 1;
-    this.#symbolPreview = this.createReadySymbolPreview(
-      resource,
-      grid,
-      preview.reelSets,
-      preview.selectedReelSet,
+    try {
+      this.#symbolPreview = this.createReadySymbolPreview(
+        resource,
+        grid,
+        preview.reelSets,
+        preview.selectedReelSet,
+      );
+      if (this.#lastLayoutSnapshot)
+        this.layoutSymbolOverlay(this.#lastLayoutSnapshot);
+      return this.#symbolPreview;
+    } catch (error) {
+      this.#symbolPreview = preview;
+      throw error;
+    }
+  }
+
+  setOtherSceneBindings(
+    bindings: readonly SymbolOtherScenePreviewBinding[],
+  ): SymbolPackagePreviewSnapshot {
+    this.assertReady();
+    const resource = this.#symbolResource;
+    const preview = this.#symbolPreview;
+    if (!resource || !preview) {
+      throw new Error("尚未导入可用的 symbols package。");
+    }
+    const previous = this.#symbolBindings;
+    const previousPreview = this.#symbolPreview;
+    this.#symbolBindings = Object.freeze(
+      bindings.map((binding) => structuredClone(binding)),
     );
-    if (this.#lastLayoutSnapshot)
-      this.layoutSymbolOverlay(this.#lastLayoutSnapshot);
-    return this.#symbolPreview;
+    try {
+      this.#symbolPreview = preview.scene
+        ? this.createReadySnapshotFromScene(
+            resource,
+            preview.reelSets,
+            preview.scene,
+          )
+        : Object.freeze({
+            ...preview,
+            bindings: this.#symbolBindings,
+            otherScene: null,
+          });
+      if (this.#lastLayoutSnapshot)
+        this.layoutSymbolOverlay(this.#lastLayoutSnapshot);
+      return this.#symbolPreview;
+    } catch (error) {
+      this.#symbolBindings = previous;
+      this.#symbolPreview = previousPreview;
+      throw error;
+    }
   }
 
   getSymbolPreviewSnapshot(): SymbolPackagePreviewSnapshot | null {
@@ -360,12 +431,31 @@ export class LayoutPreview {
       rows: grid.rows,
       randomSource: this.getRandomSource(),
     });
-    return Object.freeze({
-      ...this.createSymbolPreviewBase(resource, reelSets),
-      selectedReelSet: selected,
-      status: "ready" as const,
-      message: `reel set "${selected}" 已生成 ${grid.columns}×${grid.rows} 随机场景。`,
+    return this.createReadySnapshotFromScene(resource, reelSets, scene);
+  }
+
+  private createReadySnapshotFromScene(
+    resource: SymbolPackageResource,
+    reelSets: readonly ReelSetPreviewInfo[],
+    scene: RandomReelSceneSnapshot,
+  ): SymbolPackagePreviewSnapshot {
+    const base = this.createSymbolPreviewBase(resource, reelSets);
+    const otherScene = createOtherScenePreview({
       scene,
+      bindings: this.#symbolBindings,
+      gameConfig: resource.gameConfig,
+      randomSource: this.getRandomSource(),
+      validateTarget: (symbol, target) =>
+        validatePreviewTarget(base.availableTargets, symbol, target),
+    });
+    return Object.freeze({
+      ...base,
+      selectedReelSet: scene.reelSetName,
+      status: "ready" as const,
+      message: `reel set "${scene.reelSetName}" 已生成 ${scene.columns}×${scene.rows} 随机场景。`,
+      scene,
+      bindings: this.#symbolBindings,
+      otherScene,
     });
   }
 
@@ -373,11 +463,37 @@ export class LayoutPreview {
     resource: SymbolPackageResource,
     reelSets: readonly ReelSetPreviewInfo[],
   ) {
+    const availableTargets = Object.freeze(
+      Object.fromEntries(
+        resource.displaySymbols.map((symbol) => {
+          const manifest = resource.symbolManifest.symbols[symbol]!;
+          const targets: SymbolOtherScenePreviewBinding["target"][] = (
+            manifest.imageStringNodes ?? []
+          ).map((node) =>
+            Object.freeze({
+              kind: "image-string-node" as const,
+              name: node.name,
+            }),
+          );
+          if (targets.length === 0 && manifest.valuePresentation) {
+            targets.push(Object.freeze({ kind: "legacy-presentation-value" }));
+          }
+          return [symbol, Object.freeze(targets)] as const;
+        }),
+      ),
+    );
     return {
       packageId: resource.packageManifest.id,
       cellSize: resource.packageManifest.cellSize,
       displaySymbolCount: resource.displaySymbols.length,
       reelSets,
+      availableTargets,
+      numberWeightTableNames:
+        typeof resource.gameConfig.getNumberWeightTableNames === "function"
+          ? resource.gameConfig.getNumberWeightTableNames()
+          : Object.freeze([]),
+      bindings: this.#symbolBindings,
+      otherScene: null,
     };
   }
 
@@ -453,23 +569,34 @@ export class LayoutPreview {
   }
 
   private layoutSymbolOverlay(snapshot: SceneLayoutSnapshot): void {
-    this.clearRenderSymbols();
     this.#symbolDiagnostic = "";
     const resource = this.#symbolResource;
     const catalog = this.#symbolCatalog;
     const preview = this.#symbolPreview;
     const scene = preview?.scene;
     const reel = snapshot.reels.main;
-    if (!resource || !catalog || !preview || !reel) return;
+    if (!resource || !catalog || !preview || !reel) {
+      this.clearRenderSymbols();
+      return;
+    }
     if (!scene) {
+      this.clearRenderSymbols();
       this.#symbolDiagnostic = `symbols=${preview.packageId} · ${preview.message}`;
       return;
     }
     if (scene.columns !== reel.columns || scene.rows !== reel.rows) {
+      this.clearRenderSymbols();
       this.#symbolDiagnostic = `symbols=${preview.packageId} · sampled scene ${scene.columns}×${scene.rows} 与 runtime grid ${reel.columns}×${reel.rows} 不匹配`;
       return;
     }
     const cellCount = reel.columns * reel.rows;
+    const nextSymbols: RenderSymbol[] = [];
+    const assignmentByCell = new Map(
+      (preview.otherScene?.assignments ?? []).map((assignment) => [
+        `${assignment.x},${assignment.y}`,
+        assignment,
+      ]),
+    );
     try {
       for (let y = 0; y < reel.rows; y += 1) {
         for (let x = 0; x < reel.columns; x += 1) {
@@ -498,15 +625,26 @@ export class LayoutPreview {
             resource.symbolManifest.symbols[symbol]?.valuePresentation;
           if (presentation)
             renderSymbol.setPresentationValue(presentation.defaultValues[0]);
-          this.#symbolOverlay.addChild(renderSymbol);
-          this.#renderSymbols.push(renderSymbol);
+          const assignment = assignmentByCell.get(`${x},${y}`);
+          if (assignment?.target.kind === "image-string-node") {
+            renderSymbol.setImageStringText(
+              assignment.target.name,
+              String(assignment.value),
+            );
+          } else if (assignment) {
+            renderSymbol.setPresentationValue(assignment.value);
+          }
+          nextSymbols.push(renderSymbol);
         }
       }
     } catch (error) {
-      this.clearRenderSymbols();
+      for (const symbol of nextSymbols) symbol.destroy();
       throw error;
     }
-    this.#symbolDiagnostic = `symbols=${preview.packageId} · reel=${scene.reelSetName} · stops=[${scene.stopYs.join(",")}] · normal-only`;
+    this.clearRenderSymbols();
+    this.#symbolOverlay.addChild(...nextSymbols);
+    this.#renderSymbols = nextSymbols;
+    this.#symbolDiagnostic = `symbols=${preview.packageId} · reel=${scene.reelSetName} · stops=[${scene.stopYs.join(",")}] · mappings=${formatBindings(preview.bindings)} · otherScene=${formatOtherScene(preview.otherScene?.matrix ?? [])}`;
   }
 
   private clearRenderSymbols(): void {
@@ -521,6 +659,7 @@ export class LayoutPreview {
     this.#symbolResource?.destroy();
     this.#symbolResource = null;
     this.#symbolPreview = null;
+    this.#symbolBindings = Object.freeze([]);
     this.#symbolDiagnostic = "";
   }
 
@@ -568,4 +707,56 @@ function formatRect(rect: {
   height: number;
 }): string {
   return `${round(rect.x)},${round(rect.y)},${round(rect.width)},${round(rect.height)}`;
+}
+
+function validatePreviewTarget(
+  available: SymbolPackagePreviewSnapshot["availableTargets"],
+  symbol: string,
+  target: SymbolOtherScenePreviewBinding["target"],
+): void {
+  const targets = available[symbol];
+  if (!targets)
+    throw new Error(`mapped symbol "${symbol}" 不在 package display set。`);
+  const found = targets.some((candidate) =>
+    candidate.kind === "image-string-node" &&
+    target.kind === "image-string-node"
+      ? candidate.name === target.name
+      : candidate.kind === target.kind,
+  );
+  if (!found) {
+    throw new Error(
+      `symbol "${symbol}" 不存在 target ${
+        target.kind === "image-string-node"
+          ? `image-string-node:${target.name}`
+          : target.kind
+      }。`,
+    );
+  }
+}
+
+function formatBindings(
+  bindings: readonly SymbolOtherScenePreviewBinding[],
+): string {
+  if (bindings.length === 0) return "none";
+  return bindings
+    .map((binding) => {
+      const target =
+        binding.target.kind === "image-string-node"
+          ? binding.target.name
+          : "legacy";
+      const source =
+        binding.source.kind === "number-weight-table"
+          ? binding.source.tableName
+          : String(binding.source.value);
+      return `${binding.symbol}->${target}->${source}`;
+    })
+    .join(",");
+}
+
+function formatOtherScene(matrix: readonly (readonly number[])[]): string {
+  if (matrix.length === 0) return "[]";
+  const rows = matrix[0]?.length ?? 0;
+  return Array.from({ length: rows }, (_, y) =>
+    matrix.map((column) => column[y]).join(","),
+  ).join(";");
 }

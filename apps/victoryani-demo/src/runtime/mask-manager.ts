@@ -1,7 +1,10 @@
 import type { VictoryLayerConfig } from "../config/victory-types.js";
 import type { LayerInstance } from "./layer-instance.js";
 
-export function applyMasks(layers: VictoryLayerConfig[], instances: Map<string, LayerInstance>) {
+export function applyMasks(
+  layers: VictoryLayerConfig[],
+  instances: Map<string, LayerInstance>,
+) {
   for (const layer of layers) {
     const source = instances.get(layer.id);
     if (!source) {

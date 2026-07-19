@@ -18,11 +18,15 @@ export function parsePaytableSheet(sheet: WorksheetMatrix): PaytableModel {
   const lastCol = findLastNonEmptyColumn(sheet);
 
   if (lastRow < 1) {
-    fail(`${sheet.filePath} / ${sheet.sheetName}: paytable 必须包含表头和至少一行数据`);
+    fail(
+      `${sheet.filePath} / ${sheet.sheetName}: paytable 必须包含表头和至少一行数据`,
+    );
   }
 
   if (lastCol < 2) {
-    fail(`${sheet.filePath} / ${sheet.sheetName}: paytable 必须包含 Code、Symbol 和至少一个 X 列`);
+    fail(
+      `${sheet.filePath} / ${sheet.sheetName}: paytable 必须包含 Code、Symbol 和至少一个 X 列`,
+    );
   }
 
   validatePaytableHeader(sheet, lastCol);
@@ -47,7 +51,9 @@ export function parsePaytableSheet(sheet: WorksheetMatrix): PaytableModel {
 
     const pays: number[] = [];
     for (let colIndex = 2; colIndex <= lastCol; colIndex += 1) {
-      pays.push(requireNonNegativeIntegerCell(row[colIndex], `X${colIndex - 1}`));
+      pays.push(
+        requireNonNegativeIntegerCell(row[colIndex], `X${colIndex - 1}`),
+      );
     }
 
     const entry: PaytableEntry = {
@@ -63,7 +69,9 @@ export function parsePaytableSheet(sheet: WorksheetMatrix): PaytableModel {
   }
 
   const paytable: Record<string, PaytableEntry> = {};
-  for (const entry of [...entriesInRowOrder].sort((left, right) => left.code - right.code)) {
+  for (const entry of [...entriesInRowOrder].sort(
+    (left, right) => left.code - right.code,
+  )) {
     paytable[String(entry.code)] = entry;
   }
 
@@ -78,19 +86,31 @@ function validatePaytableHeader(sheet: WorksheetMatrix, lastCol: number): void {
   const header = sheet.cells[0];
   const codeHeader = requireTextCell(header[0], "paytable 表头第 1 列");
   if (codeHeader !== "Code") {
-    failAtCell(header[0], `paytable 表头第 1 列必须是 Code，实际为 ${codeHeader}`);
+    failAtCell(
+      header[0],
+      `paytable 表头第 1 列必须是 Code，实际为 ${codeHeader}`,
+    );
   }
 
   const symbolHeader = requireTextCell(header[1], "paytable 表头第 2 列");
   if (symbolHeader !== "Symbol") {
-    failAtCell(header[1], `paytable 表头第 2 列必须是 Symbol，实际为 ${symbolHeader}`);
+    failAtCell(
+      header[1],
+      `paytable 表头第 2 列必须是 Symbol，实际为 ${symbolHeader}`,
+    );
   }
 
   for (let colIndex = 2; colIndex <= lastCol; colIndex += 1) {
     const expected = `X${colIndex - 1}`;
-    const actual = requireTextCell(header[colIndex], `paytable 表头第 ${colIndex + 1} 列`);
+    const actual = requireTextCell(
+      header[colIndex],
+      `paytable 表头第 ${colIndex + 1} 列`,
+    );
     if (actual !== expected) {
-      failAtCell(header[colIndex], `paytable X 列必须连续，期望 ${expected}，实际为 ${actual}`);
+      failAtCell(
+        header[colIndex],
+        `paytable X 列必须连续，期望 ${expected}，实际为 ${actual}`,
+      );
     }
   }
 }

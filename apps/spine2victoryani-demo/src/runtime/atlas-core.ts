@@ -18,10 +18,12 @@ export type AtlasData = {
 };
 
 function parsePair(value: string) {
-  const [left, right] = value.split(",").map((item) => Number.parseInt(item.trim(), 10));
+  const [left, right] = value
+    .split(",")
+    .map((item) => Number.parseInt(item.trim(), 10));
   return {
     x: left,
-    y: right
+    y: right,
   };
 }
 
@@ -29,7 +31,7 @@ function parseSize(value: string) {
   const pair = parsePair(value);
   return {
     width: pair.x,
-    height: pair.y
+    height: pair.y,
   };
 }
 
@@ -60,7 +62,7 @@ export function parseAtlas(atlasText: string): AtlasData {
       size: { width: 0, height: 0 },
       orig: { width: 0, height: 0 },
       offset: { x: 0, y: 0 },
-      index: -1
+      index: -1,
     };
 
     const block = lines.slice(index + 1, index + 7);
@@ -98,10 +100,12 @@ export function parseAtlas(atlasText: string): AtlasData {
     format,
     filter,
     repeat,
-    regions
+    regions,
   };
 }
 
 export function sanitizeAssetName(name: string) {
-  return name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "asset";
+  return (
+    name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "asset"
+  );
 }

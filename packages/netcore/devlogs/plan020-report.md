@@ -5,6 +5,7 @@
 The goal of this task was to implement a "resume" state for the client. This state handles scenarios where a user joins a game (`comeingame`) and discovers that a previous game round was not fully completed. The implementation was successful and followed the plan closely.
 
 ### Execution Steps:
+
 1.  **Analysis**: I analyzed the request and the existing codebase (`src/main.ts`, `src/types.ts`). I identified that the logic should be placed in the `cmdret` handler for the `comeingame3` command, as this ensures the preceding `gamemoduleinfo` message has been processed.
 2.  **State Addition**: I introduced a new `ConnectionState.RESUMING` to make the state flow more explicit and easier to debug. The `enterGame` method was updated to use this state.
 3.  **Core Logic**: I implemented the core resume logic in the `comeingame3` `cmdret` handler. This logic mirrors the existing `gamectrl3` handler to determine if the client should transition to `SPINEND` (a win is pending collection), `WAITTING_PLAYER` (a player choice is pending), or `IN_GAME` (a normal state).

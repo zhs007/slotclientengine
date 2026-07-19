@@ -118,22 +118,22 @@ Workspace-wide validation is available through root scripts:
 
 ### `transformSceneData(data)` Utility
 
--   **Source**: `import { transformSceneData } from 'slotcraft-client-net'`
--   **Description**: A utility function designed to simplify the complex `defaultScene` object received from the server into a more usable format.
--   **Input**: Takes a raw scene data object, which typically has a structure like `{ values: [{ values: [1, 2] }, ...] }`.
--   **Output**: Returns a simple 2D array of numbers (e.g., `[[1, 2], ...]`)..
+- **Source**: `import { transformSceneData } from 'slotcraft-client-net'`
+- **Description**: A utility function designed to simplify the complex `defaultScene` object received from the server into a more usable format.
+- **Input**: Takes a raw scene data object, which typically has a structure like `{ values: [{ values: [1, 2] }, ...] }`.
+- **Output**: Returns a simple 2D array of numbers (e.g., `[[1, 2], ...]`)..
 
 ### The `collect` Flow and Auto-Collect
 
 The `collect` action is a crucial part of the game loop, used to formally acknowledge a result from the server, typically a win.
 
--   **When is `collect` needed?**: After a `spin` or `selectOptional` action, if the outcome results in a win or a multi-stage feature, the client's state will transition to `SPINEND`. This signals that a `collect()` call is required to confirm the result before the next spin can occur.
--   **Auto-Collect**: To simplify the developer experience and reduce network round-trips, the library implements an "auto-collect" mechanism. If a single action (like a spin) produces multiple results (e.g., a base game win that triggers a feature with its own result), the library will automatically call `collect()` on all intermediate results in the background. This leaves only the very final result for the user to `collect()` manually, streamlining the game flow significantly.
+- **When is `collect` needed?**: After a `spin` or `selectOptional` action, if the outcome results in a win or a multi-stage feature, the client's state will transition to `SPINEND`. This signals that a `collect()` call is required to confirm the result before the next spin can occur.
+- **Auto-Collect**: To simplify the developer experience and reduce network round-trips, the library implements an "auto-collect" mechanism. If a single action (like a spin) produces multiple results (e.g., a base game win that triggers a feature with its own result), the library will automatically call `collect()` on all intermediate results in the background. This leaves only the very final result for the user to `collect()` manually, streamlining the game flow significantly.
 
 ### `selectOptional` vs. `selectSomething`
 
 While both methods are used for player choices, they serve fundamentally different purposes:
 
--   **`selectOptional(index)`**: This method is used exclusively in the `WAITTING_PLAYER` state. This state is **server-driven**; the game logic on the server is paused and is waiting for the client to choose from a specific list of options that it provided. Calling `selectOptional` sends the player's choice back to the server, allowing the blocked game logic to proceed.
+- **`selectOptional(index)`**: This method is used exclusively in the `WAITTING_PLAYER` state. This state is **server-driven**; the game logic on the server is paused and is waiting for the client to choose from a specific list of options that it provided. Calling `selectOptional` sends the player's choice back to the server, allowing the blocked game logic to proceed.
 
--   **`selectSomething(clientParameter)`**: This is a more generic, **client-driven** action. It is used to send a custom string parameter to the server via a `selectany` command. It does not correspond to a blocked server state. Instead, it's a way for the client to send information or trigger custom features that don't fit the standard `spin` or `selectOptional` flows.
+- **`selectSomething(clientParameter)`**: This is a more generic, **client-driven** action. It is used to send a custom string parameter to the server via a `selectany` command. It does not correspond to a blocked server state. Instead, it's a way for the client to send information or trigger custom features that don't fit the standard `spin` or `selectOptional` flows.

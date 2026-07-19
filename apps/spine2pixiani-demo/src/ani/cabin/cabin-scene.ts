@@ -1,19 +1,26 @@
 import { Container, Graphics, Matrix, Sprite, Texture } from "pixi.js";
-import { applySlotVisual, createSlotSprite } from "../../runtime/display-factory.js";
+import {
+  applySlotVisual,
+  createSlotSprite,
+} from "../../runtime/display-factory.js";
 import {
   computeBoneSelectionBounds,
   computeSlotSelectionBounds,
   createBoneFallbackSelectionBounds,
   createBoneSubtreeSlotIndex,
   type ScenePoint,
-  type SelectionBounds
+  type SelectionBounds,
 } from "../../runtime/debug-bounds.js";
 import {
   composeAttachmentTransform,
   computeWorldBoneTransforms,
-  sampleAnimationPose
+  sampleAnimationPose,
 } from "../../runtime/timeline-sampler.js";
-import type { SampledAnimationPose, SpineModel, WorldTransform } from "../../runtime/spine-types.js";
+import type {
+  SampledAnimationPose,
+  SpineModel,
+  WorldTransform,
+} from "../../runtime/spine-types.js";
 import { createSceneMatrix } from "../../runtime/transform.js";
 import { getBoneDebugNodeId } from "../../runtime/debug-tree.js";
 
@@ -38,7 +45,7 @@ export class CabinScene {
 
   constructor(
     private readonly model: SpineModel,
-    private readonly textures: Record<string, Texture>
+    private readonly textures: Record<string, Texture>,
   ) {
     this.slotLayer.sortableChildren = true;
     this.view.addChild(this.boneLayer);
@@ -46,7 +53,9 @@ export class CabinScene {
     this.view.addChild(this.debugLayer);
     this.createBones();
     this.createSlots();
-    this.slotOrderIndex = new Map(this.model.slotOrder.map((slotName, index) => [slotName, index]));
+    this.slotOrderIndex = new Map(
+      this.model.slotOrder.map((slotName, index) => [slotName, index]),
+    );
     this.boneSubtreeSlots = createBoneSubtreeSlotIndex(this.model);
     this.selectionOverlay.visible = false;
     this.debugLayer.addChild(this.selectionOverlay);
@@ -125,7 +134,9 @@ export class CabinScene {
       marker.position.set(world.x, -world.y);
     }
 
-    const drawOrderIndex = new Map(pose.drawOrder.map((slotName, index) => [slotName, index]));
+    const drawOrderIndex = new Map(
+      pose.drawOrder.map((slotName, index) => [slotName, index]),
+    );
     for (const slotName of this.model.slotOrder) {
       const slotPose = pose.slots[slotName];
       const sprite = this.slotNodes.get(slotName);
@@ -134,14 +145,25 @@ export class CabinScene {
       }
 
       applySlotVisual(sprite, slotPose, this.textures);
-      sprite.zIndex = drawOrderIndex.get(slotName) ?? this.slotOrderIndex.get(slotName) ?? 0;
+      sprite.zIndex =
+        drawOrderIndex.get(slotName) ?? this.slotOrderIndex.get(slotName) ?? 0;
       if (!slotPose.attachment) {
         continue;
       }
 
-      const world = composeAttachmentTransform(this.currentWorldBones[slotPose.boneName], slotPose.attachment);
+      const world = composeAttachmentTransform(
+        this.currentWorldBones[slotPose.boneName],
+        slotPose.attachment,
+      );
       const sceneMatrix = createSceneMatrix(world.matrix);
-      tempMatrix.set(sceneMatrix.a, sceneMatrix.b, sceneMatrix.c, sceneMatrix.d, sceneMatrix.tx, sceneMatrix.ty);
+      tempMatrix.set(
+        sceneMatrix.a,
+        sceneMatrix.b,
+        sceneMatrix.c,
+        sceneMatrix.d,
+        sceneMatrix.tx,
+        sceneMatrix.ty,
+      );
       sprite.setFromMatrix(tempMatrix);
     }
 
@@ -203,7 +225,10 @@ export class CabinScene {
     const polygon = flattenPoints(selectionBounds.corners);
 
     this.selectionOverlay.lineStyle(0);
-    this.selectionOverlay.beginFill(0xffa65c, selectionBounds.kind === "fallback" ? 0.14 : 0.18);
+    this.selectionOverlay.beginFill(
+      0xffa65c,
+      selectionBounds.kind === "fallback" ? 0.14 : 0.18,
+    );
     this.selectionOverlay.drawPolygon(polygon);
     this.selectionOverlay.endFill();
 
@@ -215,7 +240,10 @@ export class CabinScene {
     this.selectionOverlay.drawPolygon(polygon);
 
     this.drawCornerAccents(selectionBounds.corners);
-    this.drawCenterCross(selectionBounds.center, selectionBounds.kind === "fallback" ? 18 : 12);
+    this.drawCenterCross(
+      selectionBounds.center,
+      selectionBounds.kind === "fallback" ? 18 : 12,
+    );
   }
 
   private drawCornerAccents(corners: readonly ScenePoint[]) {
@@ -252,7 +280,7 @@ export class CabinScene {
         this.currentPose,
         this.currentWorldBones,
         boneName,
-        this.boneSubtreeSlots.get(boneName) ?? []
+        this.boneSubtreeSlots.get(boneName) ?? [],
       );
     }
 
@@ -264,8 +292,13 @@ export class CabinScene {
       }
 
       return (
-        computeSlotSelectionBounds(this.currentWorldBones[slotPose.boneName], slotPose) ??
-        createBoneFallbackSelectionBounds(this.currentWorldBones[slotPose.boneName])
+        computeSlotSelectionBounds(
+          this.currentWorldBones[slotPose.boneName],
+          slotPose,
+        ) ??
+        createBoneFallbackSelectionBounds(
+          this.currentWorldBones[slotPose.boneName],
+        )
       );
     }
 
@@ -295,7 +328,12 @@ function flattenPoints(points: readonly ScenePoint[]) {
   return points.flatMap((point) => [point.x, point.y]);
 }
 
-function drawSegment(graphics: Graphics, start: ScenePoint, end: ScenePoint, maxLength: number) {
+function drawSegment(
+  graphics: Graphics,
+  start: ScenePoint,
+  end: ScenePoint,
+  maxLength: number,
+) {
   const deltaX = end.x - start.x;
   const deltaY = end.y - start.y;
   const length = Math.hypot(deltaX, deltaY);

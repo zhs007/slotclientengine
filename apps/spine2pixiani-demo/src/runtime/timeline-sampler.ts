@@ -8,7 +8,7 @@ import type {
   SpineCurve,
   SpineModel,
   VectorKeyframe,
-  WorldTransform
+  WorldTransform,
 } from "./spine-types.js";
 import { composeWorldTransform } from "./transform.js";
 
@@ -16,18 +16,33 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-function evaluateCubicBezier(t: number, [x1, y1, x2, y2]: [number, number, number, number]) {
+function evaluateCubicBezier(
+  t: number,
+  [x1, y1, x2, y2]: [number, number, number, number],
+) {
   const sampleCurveX = (time: number) => {
     const inverse = 1 - time;
-    return 3 * inverse * inverse * time * x1 + 3 * inverse * time * time * x2 + time * time * time;
+    return (
+      3 * inverse * inverse * time * x1 +
+      3 * inverse * time * time * x2 +
+      time * time * time
+    );
   };
   const sampleCurveY = (time: number) => {
     const inverse = 1 - time;
-    return 3 * inverse * inverse * time * y1 + 3 * inverse * time * time * y2 + time * time * time;
+    return (
+      3 * inverse * inverse * time * y1 +
+      3 * inverse * time * time * y2 +
+      time * time * time
+    );
   };
   const sampleCurveDerivativeX = (time: number) => {
     const inverse = 1 - time;
-    return 3 * inverse * inverse * x1 + 6 * inverse * time * (x2 - x1) + 3 * time * time * (1 - x2);
+    return (
+      3 * inverse * inverse * x1 +
+      6 * inverse * time * (x2 - x1) +
+      3 * time * time * (1 - x2)
+    );
   };
 
   let estimate = t;
@@ -55,7 +70,11 @@ function easeProgress(progress: number, curve: SpineCurve) {
   return evaluateCubicBezier(progress, curve);
 }
 
-function normalizeLoopTime(duration: number, elapsedSeconds: number, loop: boolean) {
+function normalizeLoopTime(
+  duration: number,
+  elapsedSeconds: number,
+  loop: boolean,
+) {
   if (duration <= 0) {
     return 0;
   }
@@ -79,7 +98,12 @@ function normalizeAngle(angle: number) {
   return normalized;
 }
 
-function sampleNumeric(frames: NumericKeyframe[], time: number, fallback: number, angle = false) {
+function sampleNumeric(
+  frames: NumericKeyframe[],
+  time: number,
+  fallback: number,
+  angle = false,
+) {
   if (frames.length === 0) {
     return fallback;
   }
@@ -97,9 +121,14 @@ function sampleNumeric(frames: NumericKeyframe[], time: number, fallback: number
         return frame.value;
       }
 
-      const progress = easeProgress((time - frame.time) / (next.time - frame.time), frame.curve);
+      const progress = easeProgress(
+        (time - frame.time) / (next.time - frame.time),
+        frame.curve,
+      );
       if (angle) {
-        return frame.value + normalizeAngle(next.value - frame.value) * progress;
+        return (
+          frame.value + normalizeAngle(next.value - frame.value) * progress
+        );
       }
       return frame.value + (next.value - frame.value) * progress;
     }
@@ -108,7 +137,11 @@ function sampleNumeric(frames: NumericKeyframe[], time: number, fallback: number
   return fallback;
 }
 
-function sampleVector(frames: VectorKeyframe[], time: number, fallback: { x: number; y: number }) {
+function sampleVector(
+  frames: VectorKeyframe[],
+  time: number,
+  fallback: { x: number; y: number },
+) {
   if (frames.length === 0) {
     return fallback;
   }
@@ -125,14 +158,17 @@ function sampleVector(frames: VectorKeyframe[], time: number, fallback: { x: num
       if (!next || next.time === frame.time || frame.curve === "stepped") {
         return {
           x: frame.x,
-          y: frame.y
+          y: frame.y,
         };
       }
 
-      const progress = easeProgress((time - frame.time) / (next.time - frame.time), frame.curve);
+      const progress = easeProgress(
+        (time - frame.time) / (next.time - frame.time),
+        frame.curve,
+      );
       return {
         x: frame.x + (next.x - frame.x) * progress,
-        y: frame.y + (next.y - frame.y) * progress
+        y: frame.y + (next.y - frame.y) * progress,
       };
     }
   }
@@ -154,7 +190,11 @@ function sampleColor(frames: ColorKeyframe[], time: number, fallback: string) {
   return fallback;
 }
 
-function sampleAttachment(frames: AttachmentKeyframe[], time: number, fallback: string | null) {
+function sampleAttachment(
+  frames: AttachmentKeyframe[],
+  time: number,
+  fallback: string | null,
+) {
   if (frames.length === 0) {
     return fallback;
   }
@@ -168,7 +208,11 @@ function sampleAttachment(frames: AttachmentKeyframe[], time: number, fallback: 
   return fallback;
 }
 
-function sampleDrawOrder(frames: NonNullable<SpineModel["animations"][string]["drawOrder"]>, time: number, fallback: string[]) {
+function sampleDrawOrder(
+  frames: NonNullable<SpineModel["animations"][string]["drawOrder"]>,
+  time: number,
+  fallback: string[],
+) {
   if (frames.length === 0) {
     return [...fallback];
   }
@@ -186,7 +230,7 @@ export function sampleAnimationPose(
   model: SpineModel,
   animationName: string,
   elapsedSeconds: number,
-  loop = true
+  loop = true,
 ): SampledAnimationPose {
   const animation = model.animations[animationName];
   if (!animation) {
@@ -197,7 +241,10 @@ export function sampleAnimationPose(
   const bones: Record<string, BonePose> = {};
   for (const bone of model.bones) {
     const timelines = animation.bones[bone.name];
-    const translate = sampleVector(timelines?.translate ?? [], time, { x: 0, y: 0 });
+    const translate = sampleVector(timelines?.translate ?? [], time, {
+      x: 0,
+      y: 0,
+    });
     const scale = sampleVector(timelines?.scale ?? [], time, { x: 1, y: 1 });
     const shear = sampleVector(timelines?.shear ?? [], time, { x: 0, y: 0 });
     const rotation = sampleNumeric(timelines?.rotate ?? [], time, 0, true);
@@ -209,16 +256,22 @@ export function sampleAnimationPose(
       scaleX: bone.scaleX * scale.x,
       scaleY: bone.scaleY * scale.y,
       shearX: bone.shearX + shear.x,
-      shearY: bone.shearY + shear.y
+      shearY: bone.shearY + shear.y,
     };
   }
 
   const slots: Record<string, SlotPose> = {};
   for (const slot of model.slots) {
     const timelines = animation.slots[slot.name];
-    const attachmentName = sampleAttachment(timelines?.attachment ?? [], time, slot.attachmentName);
+    const attachmentName = sampleAttachment(
+      timelines?.attachment ?? [],
+      time,
+      slot.attachmentName,
+    );
     const color = sampleColor(timelines?.color ?? [], time, slot.color);
-    const attachment = attachmentName ? model.attachments[slot.name]?.[attachmentName] ?? null : null;
+    const attachment = attachmentName
+      ? (model.attachments[slot.name]?.[attachmentName] ?? null)
+      : null;
 
     slots[slot.name] = {
       slotName: slot.name,
@@ -226,7 +279,7 @@ export function sampleAnimationPose(
       attachmentName,
       attachment,
       color,
-      blendMode: slot.blendMode
+      blendMode: slot.blendMode,
     };
   }
 
@@ -236,11 +289,14 @@ export function sampleAnimationPose(
     duration: animation.duration,
     bones,
     slots,
-    drawOrder: sampleDrawOrder(animation.drawOrder, time, model.slotOrder)
+    drawOrder: sampleDrawOrder(animation.drawOrder, time, model.slotOrder),
   };
 }
 
-export function computeWorldBoneTransforms(model: SpineModel, localBones: Record<string, BonePose>) {
+export function computeWorldBoneTransforms(
+  model: SpineModel,
+  localBones: Record<string, BonePose>,
+) {
   const worldBones: Record<string, WorldTransform> = {};
 
   for (const bone of model.bones) {
@@ -252,6 +308,9 @@ export function computeWorldBoneTransforms(model: SpineModel, localBones: Record
   return worldBones;
 }
 
-export function composeAttachmentTransform(bone: WorldTransform, attachment: NonNullable<SlotPose["attachment"]>) {
+export function composeAttachmentTransform(
+  bone: WorldTransform,
+  attachment: NonNullable<SlotPose["attachment"]>,
+) {
   return composeWorldTransform(attachment, bone);
 }

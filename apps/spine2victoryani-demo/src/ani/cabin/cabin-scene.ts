@@ -1,19 +1,26 @@
 import { Container, Graphics, Matrix, Sprite, Texture } from "pixi.js";
-import { applySlotVisual, createSlotSprite } from "../../runtime/display-factory.js";
+import {
+  applySlotVisual,
+  createSlotSprite,
+} from "../../runtime/display-factory.js";
 import {
   computeBoneSelectionBounds,
   computeSlotSelectionBounds,
   createBoneFallbackSelectionBounds,
   createBoneSubtreeSlotIndex,
   type ScenePoint,
-  type SelectionBounds
+  type SelectionBounds,
 } from "../../runtime/debug-bounds.js";
 import {
   composeAttachmentTransform,
   computeWorldBoneTransforms,
-  sampleAnimationPose
+  sampleAnimationPose,
 } from "../../runtime/timeline-sampler.js";
-import type { SampledAnimationPose, SpineModel, WorldTransform } from "../../runtime/spine-types.js";
+import type {
+  SampledAnimationPose,
+  SpineModel,
+  WorldTransform,
+} from "../../runtime/spine-types.js";
 import { createSceneMatrix } from "../../runtime/transform.js";
 import { getBoneDebugNodeId } from "../../runtime/debug-tree.js";
 
@@ -37,7 +44,7 @@ export class CabinScene {
 
   constructor(
     private readonly model: SpineModel,
-    private readonly textures: Record<string, Texture>
+    private readonly textures: Record<string, Texture>,
   ) {
     this.view.addChild(this.boneLayer);
     this.view.addChild(this.slotLayer);
@@ -134,9 +141,19 @@ export class CabinScene {
         continue;
       }
 
-      const world = composeAttachmentTransform(this.currentWorldBones[slotPose.boneName], slotPose.attachment);
+      const world = composeAttachmentTransform(
+        this.currentWorldBones[slotPose.boneName],
+        slotPose.attachment,
+      );
       const sceneMatrix = createSceneMatrix(world.matrix);
-      tempMatrix.set(sceneMatrix.a, sceneMatrix.b, sceneMatrix.c, sceneMatrix.d, sceneMatrix.tx, sceneMatrix.ty);
+      tempMatrix.set(
+        sceneMatrix.a,
+        sceneMatrix.b,
+        sceneMatrix.c,
+        sceneMatrix.d,
+        sceneMatrix.tx,
+        sceneMatrix.ty,
+      );
       sprite.setFromMatrix(tempMatrix);
     }
 
@@ -198,7 +215,10 @@ export class CabinScene {
     const polygon = flattenPoints(selectionBounds.corners);
 
     this.selectionOverlay.lineStyle(0);
-    this.selectionOverlay.beginFill(0xffa65c, selectionBounds.kind === "fallback" ? 0.14 : 0.18);
+    this.selectionOverlay.beginFill(
+      0xffa65c,
+      selectionBounds.kind === "fallback" ? 0.14 : 0.18,
+    );
     this.selectionOverlay.drawPolygon(polygon);
     this.selectionOverlay.endFill();
 
@@ -210,7 +230,10 @@ export class CabinScene {
     this.selectionOverlay.drawPolygon(polygon);
 
     this.drawCornerAccents(selectionBounds.corners);
-    this.drawCenterCross(selectionBounds.center, selectionBounds.kind === "fallback" ? 18 : 12);
+    this.drawCenterCross(
+      selectionBounds.center,
+      selectionBounds.kind === "fallback" ? 18 : 12,
+    );
   }
 
   private drawCornerAccents(corners: readonly ScenePoint[]) {
@@ -247,7 +270,7 @@ export class CabinScene {
         this.currentPose,
         this.currentWorldBones,
         boneName,
-        this.boneSubtreeSlots.get(boneName) ?? []
+        this.boneSubtreeSlots.get(boneName) ?? [],
       );
     }
 
@@ -259,8 +282,13 @@ export class CabinScene {
       }
 
       return (
-        computeSlotSelectionBounds(this.currentWorldBones[slotPose.boneName], slotPose) ??
-        createBoneFallbackSelectionBounds(this.currentWorldBones[slotPose.boneName])
+        computeSlotSelectionBounds(
+          this.currentWorldBones[slotPose.boneName],
+          slotPose,
+        ) ??
+        createBoneFallbackSelectionBounds(
+          this.currentWorldBones[slotPose.boneName],
+        )
       );
     }
 
@@ -290,7 +318,12 @@ function flattenPoints(points: readonly ScenePoint[]) {
   return points.flatMap((point) => [point.x, point.y]);
 }
 
-function drawSegment(graphics: Graphics, start: ScenePoint, end: ScenePoint, maxLength: number) {
+function drawSegment(
+  graphics: Graphics,
+  start: ScenePoint,
+  end: ScenePoint,
+  maxLength: number,
+) {
   const deltaX = end.x - start.x;
   const deltaY = end.y - start.y;
   const length = Math.hypot(deltaX, deltaY);

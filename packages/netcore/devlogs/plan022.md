@@ -7,6 +7,7 @@ Based on user feedback, the goal is to refactor the `examples/example001.ts` scr
 ## 2. Task Decomposition
 
 ### Step 1: Refactor `examples/example001.ts`
+
 - I will remove the `gameLoop` function from the script.
 - In its place, immediately after the `client.enterGame()` call, I will insert a simple `while` loop.
 - This loop will be clearly commented as the "Resume Handling" block.
@@ -15,13 +16,16 @@ Based on user feedback, the goal is to refactor the `examples/example001.ts` scr
 - I will also add a comment to the `spinAcrossLines` function to clarify its purpose as a simple loop for demonstrating spin calls.
 
 ### Step 2: Validate the Changes
+
 - I will run `npm run check` to ensure the simplified logic does not introduce any regressions.
 - I will execute `npx ts-node examples/example001.ts` to confirm the script is still valid and executable.
 
 ### Step 3: Create a New Task Report
+
 - I will create a new report file, `jules/plan022-report.md`, to document the process of this revision, explaining why the changes were made based on user feedback.
 
 ### Step 4: Update Project Documentation
+
 - I will add a new entry to the "Development Log" in `jules.md` for Plan 022, describing the simplification of the example script.
 
 ## 3. Success Criteria

@@ -7,12 +7,16 @@ import {
   setSceneCameraActive,
   startSceneCameraDrag,
   updateSceneCameraDrag,
-  zoomSceneCamera
+  zoomSceneCamera,
 } from "../../src/interaction/scene-camera.js";
 
 describe("scene-camera", () => {
   it("clamps zoom within configured bounds", () => {
-    const state = createSceneCameraState({ minScale: 0.75, maxScale: 2, scale: 1.25 });
+    const state = createSceneCameraState({
+      minScale: 0.75,
+      maxScale: 2,
+      scale: 1.25,
+    });
 
     expect(clampCameraScale(0.2, state.minScale, state.maxScale)).toBe(0.75);
     expect(clampCameraScale(5, state.minScale, state.maxScale)).toBe(2);
@@ -24,7 +28,7 @@ describe("scene-camera", () => {
     const dragging = startSceneCameraDrag(createSceneCameraState(), {
       clientX: 100,
       clientY: 200,
-      pointerId: 7
+      pointerId: 7,
     });
 
     const inactive = setSceneCameraActive(dragging, false);
@@ -40,17 +44,17 @@ describe("scene-camera", () => {
       {
         clientX: 50,
         clientY: 70,
-        pointerId: 1
-      }
+        pointerId: 1,
+      },
     );
 
     const updated = updateSceneCameraDrag(
       dragging,
       {
         clientX: 90,
-        clientY: 30
+        clientY: 30,
       },
-      0.5
+      0.5,
     );
 
     expect(updated.x).toBe(100);
@@ -59,9 +63,17 @@ describe("scene-camera", () => {
 
   it("applies centered transform and preserves active state on reset", () => {
     const container = new Container();
-    const state = createSceneCameraState({ isActive: true, x: 40, y: -20, scale: 1.5 });
+    const state = createSceneCameraState({
+      isActive: true,
+      x: 40,
+      y: -20,
+      scale: 1.5,
+    });
 
-    applySceneCamera(container, state, { designWidth: 1200, designHeight: 800 });
+    applySceneCamera(container, state, {
+      designWidth: 1200,
+      designHeight: 800,
+    });
 
     expect(container.x).toBeCloseTo(-260);
     expect(container.y).toBeCloseTo(-220);

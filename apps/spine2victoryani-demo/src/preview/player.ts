@@ -1,5 +1,8 @@
 import { Container, Sprite, Texture, type Application } from "pixi.js";
-import type { VictoryLayerConfig, VictoryProjectConfig } from "../config/victory-types.js";
+import type {
+  VictoryLayerConfig,
+  VictoryProjectConfig,
+} from "../config/victory-types.js";
 import { sampleTimelineLayer } from "./timeline.js";
 
 type LayerInstance = {
@@ -27,21 +30,20 @@ export class ExportPreviewPlayer {
   constructor(
     private readonly app: Application,
     private readonly project: VictoryProjectConfig,
-    textures: Map<string, Texture>
+    textures: Map<string, Texture>,
   ) {
     this.root.sortableChildren = true;
-    this.instances = [...project.layers]
-      .map((layer, index) => {
-        const sprite = new Sprite(textures.get(layer.asset) ?? Texture.WHITE);
-        sprite.anchor.set(0.5);
-        sprite.blendMode = resolveBlendMode(layer.blendMode) as never;
-        this.root.addChild(sprite);
-        return {
-          index,
-          layer,
-          sprite
-        };
-      });
+    this.instances = [...project.layers].map((layer, index) => {
+      const sprite = new Sprite(textures.get(layer.asset) ?? Texture.WHITE);
+      sprite.anchor.set(0.5);
+      sprite.blendMode = resolveBlendMode(layer.blendMode) as never;
+      this.root.addChild(sprite);
+      return {
+        index,
+        layer,
+        sprite,
+      };
+    });
 
     this.applyTime(0);
   }
@@ -96,7 +98,8 @@ export class ExportPreviewPlayer {
       instance.sprite.rotation = sample.rotation;
       instance.sprite.alpha = sample.alpha;
       instance.sprite.visible = sample.visible;
-      instance.sprite.zIndex = sample.drawOrder * DRAW_ORDER_STRIDE + instance.index;
+      instance.sprite.zIndex =
+        sample.drawOrder * DRAW_ORDER_STRIDE + instance.index;
     }
 
     this.root.sortChildren();

@@ -17,3 +17,5 @@ pnpm --filter imgnumbereditor build
 5. 导出 `<id>-image-string.zip`；导出前会走 rendercore production 等价解码与尺寸校验。
 
 ZIP 根只包含 `image-string.manifest.json` 与精确的 `assets/**` glyph 闭包。应用不保存到 localStorage、不上传网络、不修改原始图片。
+
+导出的 standalone ZIP 可由 `symbolseditor` 的专用“导入 Imgnumber ZIP”入口安装为 logical dependency，再绑定到 symbol 的命名 Spine slot 节点。consumer 会按 manifest 的精确 glyph closure vendoring；不需要也不应手工拆 ZIP 后逐个上传 JSON/PNG。

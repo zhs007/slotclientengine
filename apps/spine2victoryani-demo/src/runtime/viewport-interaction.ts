@@ -1,4 +1,9 @@
-import { panViewport, zoomViewportAtPoint, type ViewportPoint, type ViewportState } from "./viewport-controller.js";
+import {
+  panViewport,
+  zoomViewportAtPoint,
+  type ViewportPoint,
+  type ViewportState,
+} from "./viewport-controller.js";
 
 export type ViewportTransformTarget = {
   position: {
@@ -41,7 +46,7 @@ export type ViewportWheelZoomInput = {
 };
 
 export function createViewportInteractionState(
-  input?: Partial<ViewportInteractionState>
+  input?: Partial<ViewportInteractionState>,
 ): ViewportInteractionState {
   return {
     isActive: input?.isActive ?? false,
@@ -50,29 +55,36 @@ export function createViewportInteractionState(
     dragStartClientX: input?.dragStartClientX ?? 0,
     dragStartClientY: input?.dragStartClientY ?? 0,
     dragStartPanX: input?.dragStartPanX ?? 0,
-    dragStartPanY: input?.dragStartPanY ?? 0
+    dragStartPanY: input?.dragStartPanY ?? 0,
   };
 }
 
-export function applyViewportTransform(target: ViewportTransformTarget, state: ViewportState) {
+export function applyViewportTransform(
+  target: ViewportTransformTarget,
+  state: ViewportState,
+) {
   target.position.set(state.panX, state.panY);
   target.scale.set(state.zoom);
 }
 
-export function activateViewportInteraction(state: ViewportInteractionState): ViewportInteractionState {
+export function activateViewportInteraction(
+  state: ViewportInteractionState,
+): ViewportInteractionState {
   return {
     ...state,
-    isActive: true
+    isActive: true,
   };
 }
 
-export function deactivateViewportInteraction(state: ViewportInteractionState): ViewportInteractionState {
+export function deactivateViewportInteraction(
+  state: ViewportInteractionState,
+): ViewportInteractionState {
   return resetViewportDrag(state, false);
 }
 
 export function beginViewportDrag(
   state: ViewportInteractionState,
-  input: ViewportDragStart
+  input: ViewportDragStart,
 ): ViewportInteractionState {
   return {
     ...state,
@@ -82,19 +94,19 @@ export function beginViewportDrag(
     dragStartClientX: input.clientX,
     dragStartClientY: input.clientY,
     dragStartPanX: input.panX,
-    dragStartPanY: input.panY
+    dragStartPanY: input.panY,
   };
 }
 
 export function updateViewportDrag(
   state: ViewportInteractionState,
   viewportState: ViewportState,
-  input: ViewportDragUpdate
+  input: ViewportDragUpdate,
 ) {
   if (!state.isDragging || state.pointerId !== input.pointerId) {
     return {
       interactionState: state,
-      viewportState
+      viewportState,
     };
   }
 
@@ -103,31 +115,48 @@ export function updateViewportDrag(
 
   return {
     interactionState: state,
-    viewportState: panViewport(viewportState, state.dragStartPanX + deltaX, state.dragStartPanY + deltaY)
+    viewportState: panViewport(
+      viewportState,
+      state.dragStartPanX + deltaX,
+      state.dragStartPanY + deltaY,
+    ),
   };
 }
 
-export function endViewportDrag(state: ViewportInteractionState, pointerId?: number): ViewportInteractionState {
-  if (pointerId !== undefined && state.pointerId !== null && state.pointerId !== pointerId) {
+export function endViewportDrag(
+  state: ViewportInteractionState,
+  pointerId?: number,
+): ViewportInteractionState {
+  if (
+    pointerId !== undefined &&
+    state.pointerId !== null &&
+    state.pointerId !== pointerId
+  ) {
     return state;
   }
 
   return resetViewportDrag(state, state.isActive);
 }
 
-export function canZoomViewport(state: ViewportInteractionState, isPointerInsideStage: boolean) {
+export function canZoomViewport(
+  state: ViewportInteractionState,
+  isPointerInsideStage: boolean,
+) {
   return state.isActive && isPointerInsideStage;
 }
 
 export function zoomViewportWithWheel(
   viewportState: ViewportState,
   interactionState: ViewportInteractionState,
-  input: ViewportWheelZoomInput
+  input: ViewportWheelZoomInput,
 ) {
-  if (input.deltaY === 0 || !canZoomViewport(interactionState, input.isPointerInsideStage)) {
+  if (
+    input.deltaY === 0 ||
+    !canZoomViewport(interactionState, input.isPointerInsideStage)
+  ) {
     return {
       handled: false,
-      viewportState
+      viewportState,
     };
   }
 
@@ -136,11 +165,14 @@ export function zoomViewportWithWheel(
 
   return {
     handled: true,
-    viewportState: zoomViewportAtPoint(viewportState, factor, input.anchor)
+    viewportState: zoomViewportAtPoint(viewportState, factor, input.anchor),
   };
 }
 
-function resetViewportDrag(state: ViewportInteractionState, isActive: boolean): ViewportInteractionState {
+function resetViewportDrag(
+  state: ViewportInteractionState,
+  isActive: boolean,
+): ViewportInteractionState {
   return {
     ...state,
     isActive,
@@ -149,6 +181,6 @@ function resetViewportDrag(state: ViewportInteractionState, isActive: boolean): 
     dragStartClientX: 0,
     dragStartClientY: 0,
     dragStartPanX: 0,
-    dragStartPanY: 0
+    dragStartPanY: 0,
   };
 }

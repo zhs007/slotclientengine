@@ -9,27 +9,25 @@ describe("victory player", () => {
           {
             id: "foreground",
             type: "pic",
-            asset: "./assets/foreground.png"
+            asset: "./assets/foreground.png",
           },
           {
             id: "midground",
             type: "pic",
-            asset: "./assets/midground.png"
+            asset: "./assets/midground.png",
           },
           {
             id: "background",
             type: "pic",
-            asset: "./assets/background.png"
-          }
-        ]
+            asset: "./assets/background.png",
+          },
+        ],
       },
-      (value) => value
+      (value) => value,
     );
 
-    expect(getRenderOrderedLayers(project.layers).map((layer) => layer.id)).toEqual([
-      "background",
-      "midground",
-      "foreground"
-    ]);
+    expect(
+      getRenderOrderedLayers(project.layers).map((layer) => layer.id),
+    ).toEqual(["background", "midground", "foreground"]);
   });
 });

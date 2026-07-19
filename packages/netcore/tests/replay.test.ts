@@ -87,7 +87,6 @@ describe('SlotcraftClient Replay Mode', () => {
     delete (global as any).window;
   });
 
-
   describe('with a valid replay client instance', () => {
     beforeEach(() => {
       client = getClient({ gamecode: 'hoodlums' });

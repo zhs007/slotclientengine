@@ -17,15 +17,18 @@ describe("timeline", () => {
             type: "pic",
             asset: "./assets/title.png",
             alpha: 1,
-            animations: [{ type: "fadeIn", startTime: 0.5, duration: 1 }]
-          }
-        ]
+            animations: [{ type: "fadeIn", startTime: 0.5, duration: 1 }],
+          },
+        ],
       },
-      (value) => value
+      (value) => value,
     );
     const registry = new AnimationRegistry();
     registerBuiltinAnimations(registry);
-    const instances = createLayerInstances(project.layers, new Map([["./assets/title.png", Texture.WHITE]]));
+    const instances = createLayerInstances(
+      project.layers,
+      new Map([["./assets/title.png", Texture.WHITE]]),
+    );
 
     let observedTime = 0;
     const timeline = buildMasterTimeline({
@@ -34,7 +37,7 @@ describe("timeline", () => {
       instances,
       onTimeUpdate: (time) => {
         observedTime = time;
-      }
+      },
     });
 
     const target = instances.get("title")!.target;

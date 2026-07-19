@@ -1,10 +1,13 @@
 import { normalizeProjectConfig } from "../../src/config/victory-project.js";
-import { collectProjectAssetPaths, createProjectAssetResolver } from "../../src/runtime/asset-loader.js";
+import {
+  collectProjectAssetPaths,
+  createProjectAssetResolver,
+} from "../../src/runtime/asset-loader.js";
 
 describe("asset loader", () => {
   it("normalizes exported project config with defaults and resolved assets", () => {
     const resolver = createProjectAssetResolver({
-      "./assets/demo.png": "/demo.png"
+      "./assets/demo.png": "/demo.png",
     });
 
     const project = normalizeProjectConfig(
@@ -18,11 +21,11 @@ describe("asset loader", () => {
             x: 10,
             y: 20,
             scale: 1.5,
-            animations: [{ type: "fadeIn", duration: 1 }]
-          }
-        ]
+            animations: [{ type: "fadeIn", duration: 1 }],
+          },
+        ],
       },
-      resolver
+      resolver,
     );
 
     expect(project.name).toBe("Demo");
@@ -40,10 +43,10 @@ describe("asset loader", () => {
         layers: [
           { id: "a", type: "pic", asset: "./assets/a.png" },
           { id: "b", type: "pic", asset: "./assets/a.png" },
-          { id: "c", type: "font", text: "Hello" }
-        ]
+          { id: "c", type: "font", text: "Hello" },
+        ],
       },
-      (value) => value
+      (value) => value,
     );
 
     expect(collectProjectAssetPaths(project)).toEqual(["./assets/a.png"]);

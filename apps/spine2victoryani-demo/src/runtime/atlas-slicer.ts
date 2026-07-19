@@ -21,7 +21,7 @@ export async function sliceAtlasRegion(imagePath: string, region: AtlasRegion) {
     left: region.xy.x,
     top: region.xy.y,
     width: packedWidth,
-    height: packedHeight
+    height: packedHeight,
   });
 
   if (region.rotate) {
@@ -34,15 +34,15 @@ export async function sliceAtlasRegion(imagePath: string, region: AtlasRegion) {
       width: region.orig.width,
       height: region.orig.height,
       channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 }
-    }
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
   })
     .composite([
       {
         input: regionBuffer,
         left: destX,
-        top: destY
-      }
+        top: destY,
+      },
     ])
     .png()
     .toBuffer();
@@ -52,7 +52,7 @@ export async function writeSlicedAtlasAssets(
   imagePath: string,
   atlas: AtlasData,
   outputDir: string,
-  fileNames: Record<string, string>
+  fileNames: Record<string, string>,
 ) {
   await mkdir(outputDir, { recursive: true });
   const assets: SlicedAssetEntry[] = [];
@@ -67,7 +67,7 @@ export async function writeSlicedAtlasAssets(
       fileName,
       relativePath: `./assets/${fileName}`,
       width: region.orig.width,
-      height: region.orig.height
+      height: region.orig.height,
     });
   }
 

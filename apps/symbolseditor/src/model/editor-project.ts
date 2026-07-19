@@ -18,14 +18,21 @@ import {
   type SymbolManifestSpineAnimationTransform,
   type SymbolPackageGameConfigSymbol,
   type SymbolPackageManifestV1,
+  type SymbolImageStringNodeSpec,
   type SymbolValuePresentationSpec,
 } from "@slotclientengine/rendercore/symbol";
+import {
+  parseImageStringManifest,
+  validateImageStringPackageContents,
+  type ImageStringManifestV1,
+} from "@slotclientengine/rendercore/image-string";
 
 export type EditorAssetKind =
   | "image"
   | "spine-skeleton"
   | "spine-atlas"
   | "vni-project"
+  | "image-string-manifest"
   | "json-unknown"
   | "unsupported";
 
@@ -104,6 +111,14 @@ export interface EditorSymbolDraft {
   states: Map<string, EditorStateVisual>;
   valuePresentation?: SymbolValuePresentationSpec;
   cascadeWinPresentation?: SymbolCascadeWinPresentation;
+  imageStringNodes: SymbolImageStringNodeSpec[];
+}
+
+export interface EditorImageStringDependency {
+  readonly id: string;
+  readonly manifest: ImageStringManifestV1;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly fingerprint: string;
 }
 
 export interface SymbolEditorProject {
@@ -116,6 +131,7 @@ export interface SymbolEditorProject {
   legacyTextureStateOrder: string[];
   legacyStateSettings: Record<string, unknown>;
   assetLibrary: EditorAssetLibrary;
+  imageStringDependencies: Map<string, EditorImageStringDependency>;
   nextUploadBatch: number;
 }
 
@@ -162,6 +178,7 @@ export function createFromGameConfig(options: {
     legacyTextureStateOrder: [],
     legacyStateSettings: {},
     assetLibrary: { records: new Map(), batches: [] },
+    imageStringDependencies: new Map(),
     nextUploadBatch: 1,
   };
 }
@@ -272,6 +289,9 @@ export function createFromImportedPackage(options: {
             ),
           }
         : {}),
+      imageStringNodes: manifestSymbol.imageStringNodes.map((node) =>
+        cloneValue(node),
+      ),
     });
     void rawSymbol;
   }
@@ -290,6 +310,9 @@ export function createFromImportedPackage(options: {
   for (const [path, bytes] of options.assets) {
     library.records.set(path, createAssetRecord(path, bytes, importedBatch.id));
   }
+  const imageStringDependencies = collectImportedImageStringDependencies(
+    options.assets,
+  );
   return {
     id: options.packageManifest.id,
     cellSize: { ...options.packageManifest.cellSize },
@@ -300,6 +323,7 @@ export function createFromImportedPackage(options: {
     legacyTextureStateOrder: [...parsed.states],
     legacyStateSettings: rawSettings,
     assetLibrary: library,
+    imageStringDependencies,
     nextUploadBatch: 1,
   };
 }
@@ -334,6 +358,9 @@ export function cloneSymbolEditorProject(
                 ),
               }
             : {}),
+          imageStringNodes: draft.imageStringNodes.map((node) =>
+            cloneValue(node),
+          ),
         },
       ]),
     ),
@@ -349,6 +376,12 @@ export function cloneSymbolEditorProject(
       ),
       batches: cloneValue(project.assetLibrary.batches),
     },
+    imageStringDependencies: new Map(
+      [...project.imageStringDependencies].map(([id, dependency]) => [
+        id,
+        cloneImageStringDependency(dependency),
+      ]),
+    ),
     nextUploadBatch: project.nextUploadBatch,
   };
 }
@@ -554,6 +587,94 @@ export function setValuePresentationField(
   );
 }
 
+export function setSymbolImageStringNodes(
+  project: SymbolEditorProject,
+  symbol: string,
+  nodes: readonly SymbolImageStringNodeSpec[],
+): void {
+  requireSymbol(project, symbol).imageStringNodes = nodes.map((node) =>
+    cloneValue(node),
+  );
+}
+
+export function installImageStringDependency(
+  project: SymbolEditorProject,
+  dependency: EditorImageStringDependency,
+  mode: "import" | "replace" = "import",
+): void {
+  const existing = project.imageStringDependencies.get(dependency.id);
+  if (existing && mode === "import") {
+    if (imageStringDependenciesEqual(existing, dependency)) return;
+    throw new Error(
+      `image-string dependency id 冲突：${dependency.id} 内容不同，请显式替换。`,
+    );
+  }
+  if (!existing && mode === "replace") {
+    throw new Error(`image-string dependency 不存在：${dependency.id}。`);
+  }
+  const prefix = imageStringDependencyPrefix(dependency.id);
+  const nextPaths = [...dependency.files.keys()].map(
+    (path) => `${prefix}${path}`,
+  );
+  const oldPaths = existing
+    ? [...existing.files.keys()].map((path) => `${prefix}${path}`)
+    : [];
+  const conflicts = nextPaths.filter(
+    (path) =>
+      project.assetLibrary.records.has(path) && !oldPaths.includes(path),
+  );
+  if (conflicts.length > 0) {
+    throw new Error(`image-string vendor path 冲突：${conflicts.join(", ")}。`);
+  }
+  for (const path of oldPaths) project.assetLibrary.records.delete(path);
+  const batchId = `image-string-${dependency.id}`;
+  for (const [path, bytes] of dependency.files) {
+    const vendorPath = `${prefix}${path}`;
+    project.assetLibrary.records.set(
+      vendorPath,
+      createAssetRecord(vendorPath, bytes, batchId),
+    );
+  }
+  project.assetLibrary.batches = project.assetLibrary.batches.filter(
+    (batch) => batch.id !== batchId,
+  );
+  project.assetLibrary.batches.push({
+    id: batchId,
+    label: `ImgNumber · ${dependency.id}`,
+    paths: Object.freeze(nextPaths.sort(comparePath)),
+  });
+  project.imageStringDependencies.set(
+    dependency.id,
+    cloneImageStringDependency(dependency),
+  );
+}
+
+export function removeImageStringDependency(
+  project: SymbolEditorProject,
+  id: string,
+): void {
+  const dependency = project.imageStringDependencies.get(id);
+  if (!dependency) throw new Error(`image-string dependency 不存在：${id}。`);
+  const usedBy = [...project.symbols.values()].flatMap((symbol) =>
+    symbol.imageStringNodes
+      .filter((node) => imageStringDependencyId(node.resource) === id)
+      .map((node) => `${symbol.symbol}.${node.name}`),
+  );
+  if (usedBy.length > 0) {
+    throw new Error(
+      `image-string dependency ${id} 仍被引用：${usedBy.join("、")}。`,
+    );
+  }
+  const prefix = imageStringDependencyPrefix(id);
+  for (const path of dependency.files.keys()) {
+    project.assetLibrary.records.delete(`${prefix}${path}`);
+  }
+  project.assetLibrary.batches = project.assetLibrary.batches.filter(
+    (batch) => batch.id !== `image-string-${id}`,
+  );
+  project.imageStringDependencies.delete(id);
+}
+
 export function uploadAssetBatch(
   project: SymbolEditorProject,
   files: readonly { readonly path: string; readonly bytes: Uint8Array }[],
@@ -664,6 +785,12 @@ export function getAssetReferences(
         });
       });
     }
+    for (const node of symbol.imageStringNodes) {
+      references.push({
+        path: stripLocalRef(node.resource),
+        location: `${symbol.symbol}.imageStringNodes.${node.name}`,
+      });
+    }
   }
   return Object.freeze(
     references.filter(
@@ -762,6 +889,11 @@ export function compileSymbolEditorManifest(
       }
     }
     if (Object.keys(animations).length > 0) entry.animations = animations;
+    if (symbol.imageStringNodes.length > 0) {
+      entry.imageStringNodes = symbol.imageStringNodes.map((node) =>
+        cloneValue(node),
+      );
+    }
     if (symbol.cascadeWinPresentation) {
       entry.cascadeWinPresentation = cloneValue(symbol.cascadeWinPresentation);
     }
@@ -918,6 +1050,7 @@ function createBlankSymbol(
     states: new Map([
       ["normal", { kind: "empty", width, height } satisfies EditorBaseVisual],
     ]),
+    imageStringNodes: [],
   };
 }
 
@@ -1140,17 +1273,22 @@ function createAssetRecord(
     try {
       const raw = JSON.parse(decodeUtf8(bytes, path)) as unknown;
       try {
-        metadata = { ...inspectSymbolVniProject(raw) };
-        kind = "vni-project";
+        metadata = { ...parseImageStringManifest(raw) };
+        kind = "image-string-manifest";
       } catch {
         try {
-          metadata = { ...inspectSymbolSpineSkeleton(raw) };
-          kind = "spine-skeleton";
+          metadata = { ...inspectSymbolVniProject(raw) };
+          kind = "vni-project";
         } catch {
-          kind = "json-unknown";
-          diagnostics.push(
-            "JSON 既不是有效 VNI project，也不是 official Spine 4.3 skeleton",
-          );
+          try {
+            metadata = { ...inspectSymbolSpineSkeleton(raw) };
+            kind = "spine-skeleton";
+          } catch {
+            kind = "json-unknown";
+            diagnostics.push(
+              "JSON 既不是有效 image-string、VNI project，也不是 official Spine 4.3 skeleton",
+            );
+          }
         }
       }
     } catch (error) {
@@ -1215,10 +1353,17 @@ function getStateReferences(
   state: string,
 ): readonly string[] {
   const presentation = symbol.cascadeWinPresentation?.playback;
-  if (!presentation) return [];
-  return Object.entries(presentation)
-    .filter(([key, value]) => key !== "mode" && value === state)
-    .map(([key]) => `cascade.${key}`);
+  const references = presentation
+    ? Object.entries(presentation)
+        .filter(([key, value]) => key !== "mode" && value === state)
+        .map(([key]) => `cascade.${key}`)
+    : [];
+  references.push(
+    ...symbol.imageStringNodes
+      .filter((node) => node.target.state === state)
+      .map((node) => `imageStringNodes.${node.name}`),
+  );
+  return references;
 }
 
 function requireSymbol(
@@ -1393,6 +1538,101 @@ function readUint24(bytes: Uint8Array, offset: number): number {
   return (
     bytes[offset]! | (bytes[offset + 1]! << 8) | (bytes[offset + 2]! << 16)
   );
+}
+
+function collectImportedImageStringDependencies(
+  assets: ReadonlyMap<string, Uint8Array>,
+): Map<string, EditorImageStringDependency> {
+  const dependencies = new Map<string, EditorImageStringDependency>();
+  const manifestPattern =
+    /^dependencies\/image-strings\/([a-z0-9]+(?:-[a-z0-9]+)*)\/image-string\.manifest\.json$/u;
+  for (const path of assets.keys()) {
+    const match = manifestPattern.exec(path);
+    if (!match) continue;
+    const id = match[1]!;
+    const prefix = imageStringDependencyPrefix(id);
+    const files = new Map<string, Uint8Array>();
+    for (const [assetPath, bytes] of assets) {
+      if (assetPath.startsWith(prefix)) {
+        files.set(assetPath.slice(prefix.length), bytes.slice());
+      }
+    }
+    const manifestBytes = files.get("image-string.manifest.json");
+    if (!manifestBytes)
+      throw new Error(`image-string dependency ${id} 缺 manifest。`);
+    const raw = JSON.parse(decodeUtf8(manifestBytes, path));
+    const manifest = validateImageStringPackageContents({
+      manifest: raw,
+      files,
+    });
+    if (manifest.id !== id) {
+      throw new Error(
+        `image-string vendor directory ${id} 与 manifest id ${manifest.id} 不一致。`,
+      );
+    }
+    dependencies.set(
+      id,
+      Object.freeze({
+        id,
+        manifest,
+        files,
+        fingerprint: fingerprintFiles(files),
+      }),
+    );
+  }
+  return dependencies;
+}
+
+function cloneImageStringDependency(
+  dependency: EditorImageStringDependency,
+): EditorImageStringDependency {
+  return Object.freeze({
+    id: dependency.id,
+    manifest: cloneValue(dependency.manifest),
+    files: new Map(
+      [...dependency.files].map(([path, bytes]) => [path, bytes.slice()]),
+    ),
+    fingerprint: dependency.fingerprint,
+  });
+}
+
+function imageStringDependenciesEqual(
+  left: EditorImageStringDependency,
+  right: EditorImageStringDependency,
+): boolean {
+  if (left.files.size !== right.files.size) return false;
+  for (const [path, leftBytes] of left.files) {
+    const rightBytes = right.files.get(path);
+    if (!rightBytes || leftBytes.length !== rightBytes.length) return false;
+    if (leftBytes.some((byte, index) => byte !== rightBytes[index]))
+      return false;
+  }
+  return true;
+}
+
+function imageStringDependencyPrefix(id: string): string {
+  return `dependencies/image-strings/${id}/`;
+}
+
+function imageStringDependencyId(resource: string): string | null {
+  return (
+    /^\.\/dependencies\/image-strings\/([^/]+)\/image-string\.manifest\.json$/u.exec(
+      resource,
+    )?.[1] ?? null
+  );
+}
+
+function fingerprintFiles(files: ReadonlyMap<string, Uint8Array>): string {
+  let hash = 0x811c9dc5;
+  for (const [path, bytes] of [...files].sort(([a], [b]) =>
+    comparePath(a, b),
+  )) {
+    for (const byte of new TextEncoder().encode(path)) {
+      hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
+    }
+    for (const byte of bytes) hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
 }
 
 function fileStem(fileName: string): string {

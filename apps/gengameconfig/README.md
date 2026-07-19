@@ -40,9 +40,22 @@ pnpm --filter gengameconfig dev -- \
 
 - `--paytable <xlsx-file>`：必填，只能出现一次，只支持 `.xlsx`。
 - `--reel <xlsx-file>`：必填，至少出现一次，可重复，只支持 `.xlsx`。
+- `--number-weight <xlsx-file>`：可选、可重复，只支持 `.xlsx`；按参数顺序生成命名权重表。
 - `--out <json-file>`：必填，只能出现一次，只支持 `.json`。
 
 输出父目录不存在时会自动创建。输出文件已存在时会覆盖；写入时先写临时文件，再 `rename` 覆盖目标文件，避免留下半截 JSON。
+
+命名数值权重表的 table name 来自 lowercase ASCII kebab-case 文件 stem，并写入可选顶层 `numberWeightTables`。没有 `--number-weight` 时不输出该字段：
+
+```bash
+pnpm --filter gengameconfig dev -- \
+  --paytable assets/gamecfg002/paytables.xlsx \
+  --reel assets/gamecfg002/reels-001.xlsx \
+  --number-weight assets/gamecfg002/bgcoinweight.xlsx \
+  --out assets/gamecfg002/gameconfig.json
+```
+
+权重工作簿只读第一张 sheet，A1:B1 必须精确为 `val`、`weight`。数据行接受数值单元格或整数文本；value/weight 均须为正安全整数，value 不重复，weight 总和范围为 `1..2^32`。公式、日期、布尔、浮点、空白、中间断行、额外有内容列、非法/重复 stem 都显式失败。
 
 ## paytable 格式
 

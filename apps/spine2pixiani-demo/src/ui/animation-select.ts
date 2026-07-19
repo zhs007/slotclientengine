@@ -13,10 +13,15 @@ export type AnimationSelectControls = {
   select: HTMLSelectElement;
   replayButton: HTMLButtonElement;
   loopCheckbox: HTMLInputElement;
-  setAnimationOptions: (animationNames: string[], selectedAnimationName: string) => void;
+  setAnimationOptions: (
+    animationNames: string[],
+    selectedAnimationName: string,
+  ) => void;
   setBundleDetails: (bundle: AnimationBundleOption) => void;
   setMouseMode: (mode: MouseMode) => void;
-  setSelection: (selection: { name: string; type: string; parentName: string | null } | null) => void;
+  setSelection: (
+    selection: { name: string; type: string; parentName: string | null } | null,
+  ) => void;
   setZoom: (zoom: number) => void;
   onMouseModeChange: (listener: (mode: MouseMode) => void) => void;
 };
@@ -24,7 +29,7 @@ export type AnimationSelectControls = {
 export function createAnimationSelect(
   bundles: AnimationBundleOption[],
   initialBundleId: string,
-  initialAnimationNames: string[]
+  initialAnimationNames: string[],
 ): AnimationSelectControls {
   const root = document.createElement("section");
   root.className = "panel";
@@ -37,7 +42,8 @@ export function createAnimationSelect(
   title.textContent = "Bundle Demo";
 
   const description = document.createElement("p");
-  description.textContent = "直接消费多组 atlas 与 JSON 数据，使用手写 Pixi 播放层而不是 Spine 运行时；切换资源组后会同步刷新动画、调试树和舞台实例。";
+  description.textContent =
+    "直接消费多组 atlas 与 JSON 数据，使用手写 Pixi 播放层而不是 Spine 运行时；切换资源组后会同步刷新动画、调试树和舞台实例。";
 
   const controls = document.createElement("div");
   controls.className = "controls";
@@ -133,14 +139,21 @@ export function createAnimationSelect(
   const parentValue = createStatRow("Parent", "-", "muted");
   const zoomValue = createStatRow("Zoom", "100%");
 
-  debugState.append(modeValue.row, selectedValue.row, typeValue.row, parentValue.row, zoomValue.row);
+  debugState.append(
+    modeValue.row,
+    selectedValue.row,
+    typeValue.row,
+    parentValue.row,
+    zoomValue.row,
+  );
 
   const meta = document.createElement("div");
   meta.className = "meta";
   const metaAnimations = document.createElement("div");
   const metaDescription = document.createElement("div");
   const metaDebug = document.createElement("div");
-  metaDebug.textContent = "Debug view: tree-driven selection box, bone picking, viewport pan/zoom";
+  metaDebug.textContent =
+    "Debug view: tree-driven selection box, bone picking, viewport pan/zoom";
   meta.append(metaAnimations, metaDescription, metaDebug);
 
   controls.append(bundleGroup, selectGroup, actionGroup, modeGroup, debugState);
@@ -172,7 +185,10 @@ export function createAnimationSelect(
   panModeButton.addEventListener("click", () => setMouseMode("pan"));
   applyMouseMode(mouseMode);
 
-  const setAnimationOptions = (animationNames: string[], selectedAnimationName: string) => {
+  const setAnimationOptions = (
+    animationNames: string[],
+    selectedAnimationName: string,
+  ) => {
     select.replaceChildren();
     for (const animationName of animationNames) {
       const option = document.createElement("option");
@@ -191,7 +207,8 @@ export function createAnimationSelect(
   };
 
   setAnimationOptions(initialAnimationNames, initialAnimationNames[0] ?? "");
-  const initialBundle = bundles.find((bundle) => bundle.id === initialBundleId) ?? bundles[0];
+  const initialBundle =
+    bundles.find((bundle) => bundle.id === initialBundleId) ?? bundles[0];
   if (initialBundle) {
     setBundleDetails(initialBundle);
   }
@@ -218,7 +235,7 @@ export function createAnimationSelect(
     },
     onMouseModeChange(listener) {
       listeners.add(listener);
-    }
+    },
   };
 }
 
@@ -241,6 +258,6 @@ function createStatRow(label: string, value: string, valueClassName?: string) {
 
   return {
     row,
-    value: content
+    value: content,
   };
 }

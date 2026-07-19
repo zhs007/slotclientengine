@@ -16,6 +16,7 @@ import type {
   SymbolStateTransitionMode,
   SymbolVisualLayer,
   RenderSymbolValueController,
+  RenderSymbolImageStringController,
 } from "./types.js";
 import type { SymbolManifestAnimationPlaybackSpec } from "./manifest.js";
 
@@ -37,6 +38,7 @@ export class RenderSymbol extends VisualEntity<void> {
   readonly #stateMachine: SymbolStateMachine;
   readonly #animationResolver: RenderSymbolOptions["animationResolver"];
   readonly #valueController: RenderSymbolValueController | null;
+  readonly #imageStringController: RenderSymbolImageStringController | null;
   readonly #landingAppearEnabled: boolean;
   readonly #animationCapabilities: ReadonlySet<SymbolStateId>;
   #currentAni: SymbolAni;
@@ -86,6 +88,8 @@ export class RenderSymbol extends VisualEntity<void> {
       this.overlayLayer,
     );
     this.#valueController = options.valueControllerFactory?.(this) ?? null;
+    this.#imageStringController =
+      options.imageStringControllerFactory?.(this) ?? null;
 
     this.#lastAniKey = this.createAniKey(this.#stateMachine.getSnapshot());
     this.#currentAni = this.createCurrentAni();
@@ -174,6 +178,31 @@ export class RenderSymbol extends VisualEntity<void> {
     return this.#valueController?.getValue() ?? null;
   }
 
+  getImageStringNodeNames(): readonly string[] {
+    this.assertNotDestroyed();
+    return this.#imageStringController?.getNodeNames() ?? Object.freeze([]);
+  }
+
+  setImageStringText(name: string, text: string): void {
+    this.assertNotDestroyed();
+    if (!this.#imageStringController) {
+      throw new SymbolAnimationError(
+        `Render symbol "${this.symbol}" has no image-string node named "${name}".`,
+      );
+    }
+    this.#imageStringController.setText(name, text);
+  }
+
+  getImageStringText(name: string): string {
+    this.assertNotDestroyed();
+    if (!this.#imageStringController) {
+      throw new SymbolAnimationError(
+        `Render symbol "${this.symbol}" has no image-string node named "${name}".`,
+      );
+    }
+    return this.#imageStringController.getText(name);
+  }
+
   requestLandingAppear(): boolean {
     this.assertNotDestroyed();
     if (!this.#landingAppearEnabled) return false;
@@ -222,6 +251,7 @@ export class RenderSymbol extends VisualEntity<void> {
     this.assertNotDestroyed();
     this.#currentAni.destroy?.();
     this.#valueController?.resetForPoolRelease();
+    this.#imageStringController?.resetForPoolRelease();
     this.#stateMachine.reset();
     this.#lastAniKey = "";
     this.#currentAni = createReleasedSymbolAni();
@@ -245,6 +275,7 @@ export class RenderSymbol extends VisualEntity<void> {
     this.#destroyed = true;
     this.#currentAni.destroy?.();
     this.#valueController?.destroy();
+    this.#imageStringController?.destroy();
     destroyVniSymbolAnimationCache(this);
     super.destroy(options);
   }

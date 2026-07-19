@@ -21,6 +21,7 @@ describe("createGameConfig", () => {
     expect(reels.getName()).toBe("reels01");
     expect(reels.getReelCount()).toBe(5);
     expect(reels.get(0, 1)).toBe(2);
+    expect(gameConfig.getNumberWeightTableNames()).toEqual([]);
   });
 
   it("does not let source or returned data mutate internal state", () => {
@@ -47,6 +48,92 @@ describe("createGameConfig", () => {
     const gameConfig = createGameConfig(gameConfigFixture);
 
     expect(() => gameConfig.getReels("missing")).toThrow(RangeError);
+    expect(() => gameConfig.getNumberWeightTable("missing")).toThrow(
+      RangeError,
+    );
+  });
+
+  it("parses, orders and deeply freezes named number weight tables", () => {
+    const config = cloneFixture(gameConfigFixture) as any;
+    config.numberWeightTables = {
+      "coin-weight": [
+        { value: 1, weight: 100 },
+        { value: 25, weight: 5 },
+      ],
+      "bonus-weight": [{ value: 2, weight: 1 }],
+    };
+    const gameConfig = createGameConfig(config);
+
+    expect(gameConfig.getNumberWeightTableNames()).toEqual([
+      "coin-weight",
+      "bonus-weight",
+    ]);
+    expect(gameConfig.getNumberWeightTable("coin-weight")).toEqual([
+      { value: 1, weight: 100 },
+      { value: 25, weight: 5 },
+    ]);
+    expect(Object.isFrozen(gameConfig.getNumberWeightTableNames())).toBe(true);
+    expect(
+      Object.isFrozen(gameConfig.getNumberWeightTable("coin-weight")),
+    ).toBe(true);
+    expect(
+      Object.isFrozen(gameConfig.getNumberWeightTable("coin-weight")[0]),
+    ).toBe(true);
+    expect((gameConfig.getRawConfig() as any).numberWeightTables).toEqual(
+      config.numberWeightTables,
+    );
+    expect(
+      Object.isFrozen((gameConfig.getRawConfig() as any).numberWeightTables),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["bad name", { Bad_Name: [{ value: 1, weight: 1 }] }, "kebab-case"],
+    ["not object", [], "must be an object"],
+    ["empty table", { valid: [] }, "at least one entry"],
+    ["entry not object", { valid: [1] }, "must be an object"],
+    [
+      "unknown field",
+      { valid: [{ value: 1, weight: 1, extra: true }] },
+      "exactly",
+    ],
+    ["missing field", { valid: [{ value: 1 }] }, "exactly"],
+    [
+      "zero value",
+      { valid: [{ value: 0, weight: 1 }] },
+      "value must be positive",
+    ],
+    [
+      "zero weight",
+      { valid: [{ value: 1, weight: 0 }] },
+      "weight must be positive",
+    ],
+    ["float", { valid: [{ value: 1.5, weight: 1 }] }, "must be an integer"],
+    [
+      "duplicate value",
+      {
+        valid: [
+          { value: 1, weight: 1 },
+          { value: 1, weight: 2 },
+        ],
+      },
+      "duplicate value",
+    ],
+    [
+      "sum overflow",
+      {
+        valid: [
+          { value: 1, weight: 0xffff_ffff },
+          { value: 2, weight: 2 },
+        ],
+      },
+      "total weight",
+    ],
+  ])("rejects invalid number weight tables: %s", (_label, tables, message) => {
+    const config = cloneFixture(gameConfigFixture) as any;
+    config.numberWeightTables = tables;
+    expect(() => createGameConfig(config)).toThrow(LogicParseError);
+    expect(() => createGameConfig(config)).toThrow(message);
   });
 
   it.each([

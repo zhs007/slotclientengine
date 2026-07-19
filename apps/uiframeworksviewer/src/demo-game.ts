@@ -3,7 +3,7 @@ import type {
   SlotGameMountContext,
   SlotInitialState,
   SlotUiSpinResult,
-  SlotUiStateSnapshot
+  SlotUiStateSnapshot,
 } from "@slotclientengine/uiframeworks";
 
 export class DemoSlotGameAdapter implements SlotGameAdapter {
@@ -27,7 +27,7 @@ export class DemoSlotGameAdapter implements SlotGameAdapter {
     renderScene(this.#reels, [
       [1, 2, 3],
       [4, 5, 6],
-      [7, 8, 9]
+      [7, 8, 9],
     ]);
 
     this.#summary = textElement(
@@ -88,7 +88,9 @@ function renderScene(
   for (const column of scene) {
     const columnElement = element("div", "ui-viewer-reel-column");
     for (const symbol of column) {
-      columnElement.append(textElement("span", "ui-viewer-symbol", String(symbol)));
+      columnElement.append(
+        textElement("span", "ui-viewer-symbol", String(symbol)),
+      );
     }
     root.append(columnElement);
   }

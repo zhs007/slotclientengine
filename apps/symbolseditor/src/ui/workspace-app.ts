@@ -20,6 +20,9 @@ import {
   setSymbolRenderPriority,
   setSymbolScale,
   setValuePresentation,
+  installImageStringDependency,
+  removeImageStringDependency,
+  setSymbolImageStringNodes,
   uploadAssetBatch,
   type EditorAssetRecord,
   type EditorBaseVisual,
@@ -27,6 +30,7 @@ import {
   type EditorSymbolDraft,
   type SymbolEditorProject,
 } from "../model/editor-project.js";
+import { importImageStringDependencyZip } from "../io/image-string-dependency.js";
 import {
   SymbolEditorStore,
   type SymbolEditorStoreSnapshot,
@@ -70,6 +74,7 @@ export class SymbolsEditorApp {
   #unsubscribe: (() => void) | null = null;
   #previewRequest = 0;
   #replacePath: string | null = null;
+  #replaceImageStringId: string | null = null;
   #previewValue = 1;
   #pickerTrigger: HTMLElement | null = null;
   #feedbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -123,6 +128,10 @@ export class SymbolsEditorApp {
       "click",
       () => this.requireInput("[data-directory-input]").click(),
     );
+    this.requireElement("[data-import-image-string]").addEventListener(
+      "click",
+      () => this.requireInput("[data-image-string-input]").click(),
+    );
     this.requireElement("[data-export]").addEventListener(
       "click",
       () => void this.exportPackage(),
@@ -148,6 +157,13 @@ export class SymbolsEditorApp {
       "change",
       (event) =>
         void this.replaceResource(event.currentTarget as HTMLInputElement),
+    );
+    this.requireElement("[data-image-string-input]").addEventListener(
+      "change",
+      (event) =>
+        void this.importImageStringDependency(
+          event.currentTarget as HTMLInputElement,
+        ),
     );
     this.requireElement("[data-replay]").addEventListener("click", () =>
       this.#preview?.replay(),
@@ -210,6 +226,7 @@ export class SymbolsEditorApp {
     const uploadButtons = [
       this.requireElement("[data-upload]"),
       this.requireElement("[data-upload-directory]"),
+      this.requireElement("[data-import-image-string]"),
     ] as HTMLButtonElement[];
     if (!snapshot.project) {
       panel.innerHTML = `<div class="start-state"><h1>建立 Symbols 项目</h1><p>上传公开 gameconfig.json，或导入已有 symbols ZIP。</p></div>`;
@@ -310,6 +327,35 @@ export class SymbolsEditorApp {
     project: SymbolEditorProject,
   ): void {
     const rerender = () => this.render(this.#store.getSnapshot());
+    panel
+      .querySelector<HTMLElement>("[data-import-image-string-inline]")
+      ?.addEventListener("click", () =>
+        this.requireInput("[data-image-string-input]").click(),
+      );
+    panel
+      .querySelectorAll<HTMLElement>("[data-replace-image-string]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          this.#replaceImageStringId = button.dataset.replaceImageString!;
+          this.requireInput("[data-image-string-input]").click();
+        });
+      });
+    panel
+      .querySelectorAll<HTMLElement>("[data-remove-image-string]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          try {
+            this.#store.transact((draft) =>
+              removeImageStringDependency(
+                draft,
+                button.dataset.removeImageString!,
+              ),
+            );
+          } catch (error) {
+            this.#store.setExternalError(error);
+          }
+        });
+      });
     panel
       .querySelector<HTMLInputElement>("[data-asset-query]")
       ?.addEventListener("input", (event) => {
@@ -578,6 +624,7 @@ export class SymbolsEditorApp {
         button.addEventListener("click", () => this.runLayerAction(button));
       });
     this.bindValueControls(panel);
+    this.bindImageStringControls(panel);
     this.bindCascadeControls(panel);
     panel
       .querySelectorAll<HTMLDetailsElement>("[data-tier-index]")
@@ -953,6 +1000,115 @@ export class SymbolsEditorApp {
       });
   }
 
+  private bindImageStringControls(panel: HTMLElement): void {
+    const symbolName = this.#session.selectedSymbol;
+    panel
+      .querySelector<HTMLElement>("[data-add-image-string-node]")
+      ?.addEventListener("click", () => {
+        try {
+          this.#store.transact((draft) => {
+            const symbol = draft.symbols.get(symbolName)!;
+            if (
+              draft.imageStringDependencies.size === 0 ||
+              !symbol.stateOrder.some(
+                (state) => symbol.states.get(state)?.kind === "spine",
+              )
+            ) {
+              throw new Error(
+                "新增节点前必须先导入 Imgnumber ZIP，并配置至少一个 Spine state。",
+              );
+            }
+            let suffix = 1;
+            let name = "image-value";
+            while (symbol.imageStringNodes.some((node) => node.name === name)) {
+              suffix += 1;
+              name = `image-value-${suffix}`;
+            }
+            setSymbolImageStringNodes(draft, symbolName, [
+              ...symbol.imageStringNodes,
+              {
+                name,
+                resource: "",
+                target: { state: "", slot: "" },
+                initialText: "",
+                anchor: { x: 0.5, y: 0.5 },
+                transform: { x: 0, y: 0, scale: 1 },
+                followSlotColor: true,
+              },
+            ]);
+          });
+        } catch (error) {
+          this.#store.setExternalError(error);
+        }
+      });
+    panel
+      .querySelectorAll<HTMLElement>("[data-image-string-node-action]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          try {
+            this.#store.transact((draft) => {
+              const symbol = draft.symbols.get(symbolName)!;
+              const nodes = structuredClone(symbol.imageStringNodes);
+              const index = Number(button.dataset.imageStringNodeIndex);
+              const action = button.dataset.imageStringNodeAction;
+              if (action === "remove") nodes.splice(index, 1);
+              else moveArrayItem(nodes, index, action === "up" ? -1 : 1);
+              setSymbolImageStringNodes(draft, symbolName, nodes);
+            });
+          } catch (error) {
+            this.#store.setExternalError(error);
+          }
+        });
+      });
+    panel
+      .querySelectorAll<
+        HTMLInputElement | HTMLSelectElement
+      >("[data-image-string-node-field]")
+      .forEach((input) => {
+        input.addEventListener("change", () => {
+          try {
+            this.#store.transact((draft) => {
+              const symbol = draft.symbols.get(symbolName)!;
+              const nodes = structuredClone(symbol.imageStringNodes);
+              const node = nodes[Number(input.dataset.imageStringNodeIndex)]!;
+              const field = input.dataset.imageStringNodeField!;
+              const value =
+                input instanceof HTMLInputElement && input.type === "checkbox"
+                  ? input.checked
+                  : input instanceof HTMLInputElement && input.type === "number"
+                    ? Number(input.value)
+                    : input.value;
+              if (field === "target.state") {
+                setObjectPath(
+                  node as unknown as Record<string, unknown>,
+                  "target",
+                  { state: String(value), slot: "" },
+                );
+              } else {
+                setObjectPath(
+                  node as unknown as Record<string, unknown>,
+                  field,
+                  value,
+                );
+              }
+              setSymbolImageStringNodes(draft, symbolName, nodes);
+            });
+          } catch (error) {
+            this.#store.setExternalError(error);
+          }
+        });
+      });
+    panel
+      .querySelectorAll<HTMLInputElement>("[data-image-string-preview]")
+      .forEach((input) => {
+        input.addEventListener("input", () => {
+          const key = `${symbolName}\u0000${input.dataset.imageStringPreview}`;
+          this.#session.imageStringPreviewTexts.set(key, input.value);
+          void this.refreshPreview(this.#store.getSnapshot());
+        });
+      });
+  }
+
   private runValueAction(button: HTMLElement, panel: HTMLElement): void {
     try {
       this.#store.transact((draft) => {
@@ -1252,6 +1408,37 @@ export class SymbolsEditorApp {
     }
   }
 
+  private async importImageStringDependency(
+    input: HTMLInputElement,
+  ): Promise<void> {
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    try {
+      const dependency = await importImageStringDependencyZip(
+        new Uint8Array(await file.arrayBuffer()),
+      );
+      const replaceId = this.#replaceImageStringId;
+      this.#replaceImageStringId = null;
+      if (replaceId && replaceId !== dependency.id) {
+        throw new Error(
+          `替换 dependency id 必须保持 ${replaceId}，实际为 ${dependency.id}。`,
+        );
+      }
+      this.#store.transact((draft) =>
+        installImageStringDependency(
+          draft,
+          dependency,
+          replaceId ? "replace" : "import",
+        ),
+      );
+      this.showSuccess(`已导入 ImgNumber dependency：${dependency.id}`);
+    } catch (error) {
+      this.#replaceImageStringId = null;
+      this.#store.setExternalError(error);
+    }
+  }
+
   private async replaceResource(input: HTMLInputElement): Promise<void> {
     const file = input.files?.[0];
     input.value = "";
@@ -1297,6 +1484,7 @@ export class SymbolsEditorApp {
       project,
       this.#session.previewState,
       this.#previewValue,
+      this.#session.imageStringPreviewTexts,
     );
     const previewSnapshot = createPreviewSnapshot(project);
     if (!previewSnapshot) {
@@ -1441,12 +1629,14 @@ function shellMarkup(): string {
       <button data-new>新建（game config）</button><button data-import>导入 ZIP</button>
       <span class="toolbar-divider"></span>
       <button data-upload disabled>上传文件组</button><button data-upload-directory disabled>上传目录</button>
+      <button data-import-image-string disabled>导入 Imgnumber ZIP</button>
       <button class="primary" data-export disabled>导出 ZIP</button>
       <input hidden type="file" accept="application/json,.json" data-new-input>
       <input hidden type="file" accept=".zip,application/zip" data-import-input>
       <input hidden type="file" multiple data-upload-input>
       <input hidden type="file" multiple webkitdirectory data-directory-input>
       <input hidden type="file" data-replace-input>
+      <input hidden type="file" accept=".zip,application/zip" data-image-string-input>
     </header>
     <div class="feedback" data-feedback aria-live="polite"></div>
     <div class="errors" data-errors role="alert"></div>
@@ -1499,8 +1689,9 @@ function assetsWorkspaceMarkup(
   const refCounts = new Map<string, number>();
   for (const ref of references)
     refCounts.set(ref.path, (refCounts.get(ref.path) ?? 0) + 1);
-  const records = [...project.assetLibrary.records.values()].filter(
-    (record) => {
+  const records = [...project.assetLibrary.records.values()]
+    .filter((record) => !record.path.startsWith("dependencies/image-strings/"))
+    .filter((record) => {
       const query = session.assetQuery.trim().toLowerCase();
       const referenced = (refCounts.get(record.path) ?? 0) > 0;
       const diagnostics = getEditorAssetDiagnostics(project, record.path);
@@ -1527,13 +1718,27 @@ function assetsWorkspaceMarkup(
           .toLowerCase()
           .includes(query)
       );
-    },
-  );
+    });
   const groups = groupAssets(project, records, session.assetGroup);
+  const dependencyMarkup = `<section class="dependency-library"><div class="section-heading"><div><h2>ImgNumber dependencies</h2><p>Standalone ZIP 作为一个逻辑资源管理，glyph 不需要逐个绑定。</p></div><button data-import-image-string-inline>导入 Imgnumber ZIP</button></div><div class="dependency-list">${
+    [...project.imageStringDependencies.values()]
+      .map((dependency) => {
+        const references = [...project.symbols.values()].flatMap((symbol) =>
+          symbol.imageStringNodes
+            .filter((node) =>
+              node.resource.includes(`/image-strings/${dependency.id}/`),
+            )
+            .map((node) => `${symbol.symbol}.${node.name}`),
+        );
+        return `<article class="dependency-card"><div><strong>${escapeHtml(dependency.id)}</strong><small>${Object.keys(dependency.manifest.glyphs).length} glyphs · lineHeight ${dependency.manifest.metrics.lineHeight}</small><small>${references.length ? `引用：${references.map(escapeHtml).join("、")}` : "未引用"}</small></div><div class="button-row"><button data-replace-image-string="${escapeAttr(dependency.id)}">替换</button><button data-remove-image-string="${escapeAttr(dependency.id)}" ${references.length ? "disabled" : ""}>删除</button></div></article>`;
+      })
+      .join("") || '<p class="empty">尚未导入 Imgnumber ZIP。</p>'
+  }</div></section>`;
   return `<section class="workspace-intro">
       <div><h1>资源</h1><p>先上传，再由 Picker 显式绑定；上传不会按文件名自动匹配。</p></div>
       <button class="primary" data-start-symbols>开始配置 Symbols</button>
     </section>
+    ${dependencyMarkup}
     <div class="filter-toolbar sticky">
       <input data-asset-query data-focus-key="asset-query" type="search" placeholder="搜索 path / type / diagnostics" value="${escapeAttr(session.assetQuery)}">
       <select data-asset-kind aria-label="资源类型">${selectOptions(
@@ -1692,6 +1897,7 @@ function inspectorMarkup(
   const tabs: Array<[SymbolInspectorTab, string]> = [
     ["basic", "基础"],
     ["states", "状态"],
+    ["image-string", "ImgNumber"],
     ["value", "Value"],
     ["cascade", "Cascade"],
   ];
@@ -1700,14 +1906,54 @@ function inspectorMarkup(
       ? basicInspectorMarkup(project, symbol)
       : session.inspector === "states"
         ? statesInspectorMarkup(project, symbol, session, thumbnail)
-        : session.inspector === "value"
-          ? valueInspectorMarkup(project, symbol, session, thumbnail)
-          : cascadeInspectorMarkup(project, symbol);
+        : session.inspector === "image-string"
+          ? imageStringInspectorMarkup(project, symbol, session)
+          : session.inspector === "value"
+            ? valueInspectorMarkup(project, symbol, session, thumbnail)
+            : cascadeInspectorMarkup(project, symbol);
   return `<header class="inspector-heading"><div><small>当前 symbol</small><h1>${escapeHtml(symbol.symbol)} <span>· code ${symbol.code}</span></h1></div><span class="included-badge">${symbol.included ? "Included" : "Excluded"}</span></header>
     <div class="inspector-tabs" role="tablist" aria-label="Symbol Inspector">
       ${tabs.map(([id, label]) => tabMarkup(id, label, session.inspector === id, "inspector")).join("")}
     </div>
     <div id="inspector-${session.inspector}" class="inspector-body" role="tabpanel" aria-labelledby="inspector-tab-${session.inspector}" data-scroll-key="inspector">${content}</div>`;
+}
+
+function imageStringInspectorMarkup(
+  project: SymbolEditorProject,
+  symbol: EditorSymbolDraft,
+  session: SymbolsEditorUiSession,
+): string {
+  const spineStates = symbol.stateOrder.filter(
+    (state) => symbol.states.get(state)?.kind === "spine",
+  );
+  const dependencies = [...project.imageStringDependencies.values()];
+  return `<section class="image-string-editor"><div class="section-heading"><div><h2>Named image-string nodes</h2><p>每个节点绑定一个真实 Spine state 和 exact slot；预览输入不改 initialText。</p></div><button class="primary" data-add-image-string-node ${spineStates.length && dependencies.length ? "" : "disabled"}>增加节点</button></div>${
+    symbol.imageStringNodes
+      .map((node, index) => {
+        const visual = symbol.states.get(node.target.state);
+        const slots =
+          visual?.kind === "spine"
+            ? assetMetadataList(
+                project.assetLibrary.records.get(visual.skeletonPath),
+                "slotNames",
+              )
+            : [];
+        const previewKey = `${symbol.symbol}\u0000${node.name}`;
+        const previewText =
+          session.imageStringPreviewTexts.get(previewKey) ?? node.initialText;
+        return `<article class="node-card"><header><strong>${escapeHtml(node.name)}</strong><div class="button-row"><button data-image-string-node-action="up" data-image-string-node-index="${index}" ${index === 0 ? "disabled" : ""}>↑</button><button data-image-string-node-action="down" data-image-string-node-index="${index}" ${index === symbol.imageStringNodes.length - 1 ? "disabled" : ""}>↓</button><button data-image-string-node-action="remove" data-image-string-node-index="${index}">删除</button></div></header>
+        <label>Name <input data-image-string-node-field="name" data-image-string-node-index="${index}" value="${escapeAttr(node.name)}"></label>
+        <label>Dependency <select data-image-string-node-field="resource" data-image-string-node-index="${index}"><option value="">请选择 dependency</option>${dependencies.map((dependency) => option(`./dependencies/image-strings/${dependency.id}/image-string.manifest.json`, dependency.id, node.resource.includes(`/image-strings/${dependency.id}/`))).join("")}</select></label>
+        <div class="form-grid"><label>Target state <select data-image-string-node-field="target.state" data-image-string-node-index="${index}"><option value="">请选择 Spine state</option>${spineStates.map((state) => option(state, state, state === node.target.state)).join("")}</select></label><label>Exact slot <select data-image-string-node-field="target.slot" data-image-string-node-index="${index}"><option value="">请选择 slot</option>${slots.map((slot) => option(slot, slot, slot === node.target.slot)).join("")}</select></label></div>
+        <label>Initial text <input data-image-string-node-field="initialText" data-image-string-node-index="${index}" value="${escapeAttr(node.initialText)}"></label>
+        <div class="form-grid"><label>Anchor X <input type="number" min="0" max="1" step="0.01" data-image-string-node-field="anchor.x" data-image-string-node-index="${index}" value="${node.anchor.x}"></label><label>Anchor Y <input type="number" min="0" max="1" step="0.01" data-image-string-node-field="anchor.y" data-image-string-node-index="${index}" value="${node.anchor.y}"></label><label>X <input type="number" step="0.1" data-image-string-node-field="transform.x" data-image-string-node-index="${index}" value="${node.transform.x}"></label><label>Y <input type="number" step="0.1" data-image-string-node-field="transform.y" data-image-string-node-index="${index}" value="${node.transform.y}"></label><label>Scale <input type="number" min="0.01" step="0.01" data-image-string-node-field="transform.scale" data-image-string-node-index="${index}" value="${node.transform.scale}"></label></div>
+        <label class="check-row"><input type="checkbox" data-image-string-node-field="followSlotColor" data-image-string-node-index="${index}" ${node.followSlotColor ? "checked" : ""}> Follow slot color</label>
+        <label>Manual preview string <input data-image-string-preview="${escapeAttr(node.name)}" value="${escapeAttr(previewText)}"></label>
+      </article>`;
+      })
+      .join("") ||
+    '<p class="empty">尚未配置命名 image-string 节点。先导入 dependency，并为 symbol 配置 Spine state。</p>'
+  }</section>`;
 }
 
 function basicInspectorMarkup(
@@ -1983,6 +2229,7 @@ function createPreviewCells(
   project: SymbolEditorProject,
   state: string,
   previewValue: number,
+  previewTexts: ReadonlyMap<string, string> = new Map(),
 ): readonly SymbolPreviewCell[] {
   return getIncludedSymbols(project).map((symbol) => {
     const visual = symbol.states.get(state);
@@ -2003,6 +2250,19 @@ function createPreviewCells(
       code: symbol.code,
       status: "configured",
       ...(symbol.valuePresentation ? { value: previewValue } : {}),
+      ...(symbol.imageStringNodes.length > 0
+        ? {
+            imageStringTexts: Object.freeze(
+              Object.fromEntries(
+                symbol.imageStringNodes.map((node) => [
+                  node.name,
+                  previewTexts.get(`${symbol.symbol}\u0000${node.name}`) ??
+                    node.initialText,
+                ]),
+              ),
+            ),
+          }
+        : {}),
     };
   });
 }

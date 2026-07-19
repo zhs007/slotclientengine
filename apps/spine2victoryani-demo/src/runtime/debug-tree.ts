@@ -39,10 +39,15 @@ export function buildDebugTree(model: SpineModel): DebugTreeNode[] {
     slotsByBone.set(slot.boneName, slots);
   }
 
-  const buildBoneNode = (boneName: string, parentId: string | null): DebugTreeNode => {
+  const buildBoneNode = (
+    boneName: string,
+    parentId: string | null,
+  ): DebugTreeNode => {
     const childBones = childrenByParent.get(boneName) ?? [];
     const slots = slotsByBone.get(boneName) ?? [];
-    const childNodes = childBones.map((bone) => buildBoneNode(bone.name, getBoneDebugNodeId(boneName)));
+    const childNodes = childBones.map((bone) =>
+      buildBoneNode(bone.name, getBoneDebugNodeId(boneName)),
+    );
     const slotNodes = slots.map<DebugTreeNode>((slot) => ({
       id: getSlotDebugNodeId(slot.name),
       name: slot.name,
@@ -51,8 +56,8 @@ export function buildDebugTree(model: SpineModel): DebugTreeNode[] {
       ownerBoneName: slot.boneName,
       children: [],
       meta: {
-        boneName: slot.boneName
-      }
+        boneName: slot.boneName,
+      },
     }));
 
     return {
@@ -63,12 +68,14 @@ export function buildDebugTree(model: SpineModel): DebugTreeNode[] {
       ownerBoneName: boneName,
       children: [...childNodes, ...slotNodes],
       meta: {
-        slotCount: slots.length
-      }
+        slotCount: slots.length,
+      },
     };
   };
 
-  return (childrenByParent.get(null) ?? []).map((bone) => buildBoneNode(bone.name, null));
+  return (childrenByParent.get(null) ?? []).map((bone) =>
+    buildBoneNode(bone.name, null),
+  );
 }
 
 export function createDebugNodeIndex(nodes: DebugTreeNode[]) {

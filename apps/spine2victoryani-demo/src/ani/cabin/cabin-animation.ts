@@ -2,9 +2,15 @@ import { Texture } from "pixi.js";
 import { VisualEntity } from "../../core/visualentity.js";
 import { CabinScene } from "./cabin-scene.js";
 import { sampleAnimationPose } from "../../runtime/timeline-sampler.js";
-import type { SampledAnimationPose, SpineModel } from "../../runtime/spine-types.js";
+import type {
+  SampledAnimationPose,
+  SpineModel,
+} from "../../runtime/spine-types.js";
 
-export class CabinAnimationEntity extends VisualEntity<{ animationName: string; loop?: boolean }> {
+export class CabinAnimationEntity extends VisualEntity<{
+  animationName: string;
+  loop?: boolean;
+}> {
   private readonly scene: CabinScene;
   private elapsedSeconds = 0;
   private loop = true;
@@ -16,7 +22,12 @@ export class CabinAnimationEntity extends VisualEntity<{ animationName: string; 
     super();
     this.scene = new CabinScene(model, textures);
     this.addChild(this.scene.view);
-    this.lastPose = sampleAnimationPose(model, this.activeAnimationName, 0, true);
+    this.lastPose = sampleAnimationPose(
+      model,
+      this.activeAnimationName,
+      0,
+      true,
+    );
     this.scene.applyPose(this.lastPose);
     this.model = model;
   }
@@ -35,14 +46,24 @@ export class CabinAnimationEntity extends VisualEntity<{ animationName: string; 
     }
 
     this.elapsedSeconds += deltaSeconds;
-    this.lastPose = sampleAnimationPose(this.model, this.activeAnimationName, this.elapsedSeconds, this.loop);
+    this.lastPose = sampleAnimationPose(
+      this.model,
+      this.activeAnimationName,
+      this.elapsedSeconds,
+      this.loop,
+    );
     this.scene.applyPose(this.lastPose);
   }
 
   reset() {
     this.running = false;
     this.elapsedSeconds = 0;
-    this.lastPose = sampleAnimationPose(this.model, this.activeAnimationName, 0, this.loop);
+    this.lastPose = sampleAnimationPose(
+      this.model,
+      this.activeAnimationName,
+      0,
+      this.loop,
+    );
     this.scene.applyPose(this.lastPose);
   }
 
@@ -50,7 +71,12 @@ export class CabinAnimationEntity extends VisualEntity<{ animationName: string; 
     this.activeAnimationName = animationName;
     this.running = true;
     this.elapsedSeconds = 0;
-    this.lastPose = sampleAnimationPose(this.model, this.activeAnimationName, 0, this.loop);
+    this.lastPose = sampleAnimationPose(
+      this.model,
+      this.activeAnimationName,
+      0,
+      this.loop,
+    );
     this.scene.applyPose(this.lastPose);
   }
 
@@ -64,7 +90,12 @@ export class CabinAnimationEntity extends VisualEntity<{ animationName: string; 
 
   setLoop(loop: boolean) {
     this.loop = loop;
-    this.lastPose = sampleAnimationPose(this.model, this.activeAnimationName, this.elapsedSeconds, this.loop);
+    this.lastPose = sampleAnimationPose(
+      this.model,
+      this.activeAnimationName,
+      this.elapsedSeconds,
+      this.loop,
+    );
     this.scene.applyPose(this.lastPose);
   }
 

@@ -1,4 +1,7 @@
-export type SpineCurve = "linear" | "stepped" | [number, number, number, number];
+export type SpineCurve =
+  | "linear"
+  | "stepped"
+  | [number, number, number, number];
 
 export type RawSpineBone = {
   name: string;

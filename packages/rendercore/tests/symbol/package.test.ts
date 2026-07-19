@@ -207,6 +207,85 @@ describe("symbol package game config and resources", () => {
     ).rejects.toThrow(/orphan/);
   });
 
+  it("derives the exact nested image-string dependency closure", () => {
+    const nestedManifest = {
+      version: 1,
+      kind: "image-string",
+      id: "coin-digits",
+      metrics: { lineHeight: 10, letterSpacing: 0 },
+      glyphs: {
+        "0": {
+          path: "assets/0.png",
+          size: { width: 5, height: 10 },
+          offset: { x: 0, y: 0 },
+        },
+        "1": {
+          path: "assets/1.png",
+          size: { width: 5, height: 10 },
+          offset: { x: 0, y: 0 },
+        },
+      },
+      fixedAdvanceGroups: [],
+    };
+    const manifest = {
+      version: 1,
+      states: [],
+      symbols: {
+        A: {
+          normal: "./A.png",
+          scale: 1,
+          animations: {
+            normal: {
+              kind: "spine",
+              skeleton: "./A.json",
+              atlas: "./A.atlas",
+              texture: "./A-spine.png",
+              playback: {
+                mode: "animation",
+                animationName: "Idle",
+                loop: true,
+              },
+            },
+          },
+          imageStringNodes: [
+            {
+              name: "coin-value",
+              resource:
+                "./dependencies/image-strings/coin-digits/image-string.manifest.json",
+              target: { state: "normal", slot: "Num" },
+              initialText: "01",
+              anchor: { x: 0.5, y: 0.5 },
+              transform: { x: 0, y: 0, scale: 1 },
+              followSlotColor: true,
+            },
+          ],
+        },
+      },
+    };
+    const dependencyPath =
+      "dependencies/image-strings/coin-digits/image-string.manifest.json";
+    const packageFiles = new Map<string, Uint8Array>([
+      [dependencyPath, encode(nestedManifest)],
+    ]);
+    expect(
+      collectSymbolManifestResourcePaths({
+        symbolManifest: manifest,
+        files: packageFiles,
+      }),
+    ).toEqual([
+      "A-spine.png",
+      "A.atlas",
+      "A.json",
+      "A.png",
+      "dependencies/image-strings/coin-digits/assets/0.png",
+      "dependencies/image-strings/coin-digits/assets/1.png",
+      dependencyPath,
+    ]);
+    expect(() =>
+      collectSymbolManifestResourcePaths({ symbolManifest: manifest }),
+    ).toThrow(/requires package files/);
+  });
+
   it("forces Pixi's texture parser for extensionless package blob URLs", async () => {
     const load = vi
       .spyOn(Assets, "load")

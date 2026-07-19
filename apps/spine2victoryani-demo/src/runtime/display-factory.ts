@@ -12,7 +12,7 @@ export function createSlotSprite(initialTexture: Texture) {
 export function applySlotVisual(
   sprite: Sprite,
   slotPose: SlotPose,
-  textures: Record<string, Texture>
+  textures: Record<string, Texture>,
 ) {
   if (!slotPose.attachmentName || !slotPose.attachment) {
     sprite.visible = false;

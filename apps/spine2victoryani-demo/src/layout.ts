@@ -17,9 +17,13 @@ export function computeCanvasLayout({
   designWidth,
   designHeight,
   viewportWidth,
-  viewportHeight
+  viewportHeight,
 }: CanvasLayoutInput): CanvasLayout {
-  const rawScale = Math.min(viewportWidth / designWidth, viewportHeight / designHeight, 1);
+  const rawScale = Math.min(
+    viewportWidth / designWidth,
+    viewportHeight / designHeight,
+    1,
+  );
   const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
   const width = Math.round(designWidth * scale);
   const height = Math.round(designHeight * scale);
@@ -31,6 +35,6 @@ export function computeCanvasLayout({
     height,
     scale,
     offsetX,
-    offsetY
+    offsetY,
   };
 }

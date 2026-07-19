@@ -14,16 +14,16 @@ describe("layer factory", () => {
             x: 100,
             y: 120,
             blendMode: "screen",
-            animations: [{ type: "fireDistortion", duration: 1 }]
+            animations: [{ type: "fireDistortion", duration: 1 }],
           },
           {
             id: "title",
             type: "font",
-            text: "SUPER WIN"
-          }
-        ]
+            text: "SUPER WIN",
+          },
+        ],
       },
-      (value) => value
+      (value) => value,
     );
 
     const textures = new Map([["./assets/fire.png", Texture.WHITE]]);

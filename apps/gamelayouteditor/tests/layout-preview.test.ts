@@ -352,6 +352,43 @@ describe("LayoutPreview", () => {
     preview.destroy();
   });
 
+  it("keeps stops stable when an otherScene source changes and resamples on randomize", async () => {
+    const randomSource = { nextUint32: vi.fn(() => 0) };
+    const host = document.createElement("div");
+    const diagnostics = document.createElement("div");
+    document.body.append(host, diagnostics);
+    const preview = new LayoutPreview(host, diagnostics, { randomSource });
+    await preview.init();
+    const { resource } = symbolResource();
+    const initial = await preview.setSymbolPackage(resource as never, {
+      columns: 2,
+      rows: 2,
+    });
+    const initialScene = initial?.scene;
+    const initialStops = initialScene?.stopYs;
+    const callsAfterScene = randomSource.nextUint32.mock.calls.length;
+
+    const mapped = preview.setOtherSceneBindings([
+      {
+        symbol: "A",
+        target: { kind: "legacy-presentation-value" },
+        source: { kind: "fixed-number", value: 25 },
+      },
+    ]);
+    expect(mapped.scene).toBe(initialScene);
+    expect(mapped.scene?.stopYs).toBe(initialStops);
+    expect(mapped.otherScene?.matrix).toEqual([
+      [25, 0],
+      [0, 25],
+    ]);
+    expect(randomSource.nextUint32).toHaveBeenCalledTimes(callsAfterScene);
+
+    const rerolled = preview.randomizeSymbols();
+    expect(rerolled.scene).not.toBe(initialScene);
+    expect(randomSource.nextUint32).toHaveBeenCalledTimes(callsAfterScene + 2);
+    preview.destroy();
+  });
+
   it("resamples on rows changes and pauses on incompatible columns", async () => {
     const randomSource = { nextUint32: vi.fn(() => 0) };
     const host = document.createElement("div");

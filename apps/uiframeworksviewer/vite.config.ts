@@ -7,28 +7,37 @@ export default defineConfig({
     alias: [
       {
         find: "@slotclientengine/uiframeworks/styles.css",
-        replacement: resolve(__dirname, "../../packages/uiframeworks/src/styles.css")
+        replacement: resolve(
+          __dirname,
+          "../../packages/uiframeworks/src/styles.css",
+        ),
       },
       {
         find: "@slotclientengine/uiframeworks",
-        replacement: resolve(__dirname, "../../packages/uiframeworks/src/index.ts")
+        replacement: resolve(
+          __dirname,
+          "../../packages/uiframeworks/src/index.ts",
+        ),
       },
       {
         find: "@slotclientengine/logiccore",
-        replacement: resolve(__dirname, "../../packages/logiccore/src/index.ts")
+        replacement: resolve(
+          __dirname,
+          "../../packages/logiccore/src/index.ts",
+        ),
       },
       {
         find: "@slotclientengine/netcore",
-        replacement: resolve(__dirname, "../../packages/netcore/src/index.ts")
-      }
-    ]
+        replacement: resolve(__dirname, "../../packages/netcore/src/index.ts"),
+      },
+    ],
   },
   server: {
     host: "0.0.0.0",
     port: 5202,
     fs: {
-      allow: [resolve(__dirname, "../..")]
-    }
+      allow: [resolve(__dirname, "../..")],
+    },
   },
   test: {
     globals: true,
@@ -39,7 +48,7 @@ export default defineConfig({
       reporter: ["text", "lcov", "html"],
       reportsDirectory: "coverage",
       include: ["src/**"],
-      exclude: ["src/main.ts", "src/styles.css", "src/vite-env.d.ts"]
-    }
-  }
+      exclude: ["src/main.ts", "src/styles.css", "src/vite-env.d.ts"],
+    },
+  },
 });

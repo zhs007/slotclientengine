@@ -1,7 +1,9 @@
 import type gsap from "gsap";
 import type { AnimationRuntimeContext } from "./animation-context.js";
 
-export type AnimationFactory = (context: AnimationRuntimeContext) => gsap.core.Timeline | gsap.core.Tween | undefined;
+export type AnimationFactory = (
+  context: AnimationRuntimeContext,
+) => gsap.core.Timeline | gsap.core.Tween | undefined;
 
 export class AnimationRegistry {
   private readonly factories = new Map<string, AnimationFactory>();

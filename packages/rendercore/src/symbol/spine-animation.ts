@@ -3,6 +3,12 @@ import {
   createOfficialSpinePlayer,
   type RendercoreSpinePlayer,
 } from "../spine/runtime-player.js";
+import type { RendercoreSpineSlotPlayer } from "../spine/runtime-player.js";
+import {
+  hasSymbolImageStringController,
+  notifySymbolImageStringSpineActive,
+  notifySymbolImageStringSpineInactive,
+} from "../symbol-image-string/controller.js";
 import { assertValidDeltaSeconds, resetBaseDisplay } from "./ani.js";
 import { SymbolAnimationError } from "./errors.js";
 import { readSupportedSpineSkeletonVersion } from "./spine-version.js";
@@ -51,8 +57,8 @@ const cachedSpineSymbolPlayers = new WeakMap<
 >();
 
 export class SpineSymbolAni implements SymbolAni {
-  readonly stateId: string;
-  readonly playback: SymbolPlaybackKind;
+  stateId: string;
+  playback: SymbolPlaybackKind;
   readonly continuityKey: string;
   readonly #context: SymbolAnimationContext;
   readonly #resource: SymbolSpineAnimationResource;
@@ -127,6 +133,30 @@ export class SpineSymbolAni implements SymbolAni {
     return EMPTY_UPDATE_RESULT;
   }
 
+  adoptContinuation(next: SymbolAni): void {
+    if (!(next instanceof SpineSymbolAni)) {
+      throw new SymbolAnimationError(
+        "Spine continuation requires another Spine symbol animation.",
+      );
+    }
+    this.stateId = next.stateId;
+    this.playback = next.playback;
+    this.#reportedComplete = false;
+    const player = this.#cacheEntry?.player;
+    if (
+      player &&
+      this.#initialized &&
+      hasSymbolImageStringController(this.#context.root)
+    ) {
+      const slotPlayer = requireSlotPlayer(player, this.#context.symbol);
+      notifySymbolImageStringSpineActive(
+        this.#context.root,
+        next.#context.resolvedState,
+        slotPlayer,
+      );
+    }
+  }
+
   destroy(): void {
     if (this.#destroyed) {
       return;
@@ -178,6 +208,13 @@ export class SpineSymbolAni implements SymbolAni {
         this.#context.stateSprite.visible = false;
       }
       this.#initialized = true;
+      if (hasSymbolImageStringController(this.#context.root)) {
+        notifySymbolImageStringSpineActive(
+          this.#context.root,
+          this.#context.resolvedState,
+          requireSlotPlayer(player, this.#context.symbol),
+        );
+      }
     } catch (error) {
       if (this.#cacheEntry === entry && this.#playRequestId === requestId) {
         this.#initError = error;
@@ -192,6 +229,12 @@ export class SpineSymbolAni implements SymbolAni {
     }
     this.#cacheEntry = null;
     this.#initialized = false;
+    if (hasSymbolImageStringController(this.#context.root)) {
+      notifySymbolImageStringSpineInactive(
+        this.#context.root,
+        requireSlotPlayer(entry.player, this.#context.symbol),
+      );
+    }
     entry.owners = Math.max(0, entry.owners - 1);
     if (entry.owners > 0) {
       return;
@@ -211,6 +254,22 @@ export class SpineSymbolAni implements SymbolAni {
       );
     }
   }
+}
+
+function requireSlotPlayer(
+  player: RendercoreSpinePlayer,
+  symbol: string,
+): RendercoreSpineSlotPlayer {
+  const candidate = player as Partial<RendercoreSpineSlotPlayer>;
+  if (
+    typeof candidate.attachSlotObject !== "function" ||
+    typeof candidate.removeSlotObject !== "function"
+  ) {
+    throw new SymbolAnimationError(
+      `Spine player for symbol "${symbol}" does not support slot objects.`,
+    );
+  }
+  return candidate as RendercoreSpineSlotPlayer;
 }
 
 export class SpineNormalFallbackAni implements SymbolAni {

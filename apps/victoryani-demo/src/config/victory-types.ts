@@ -73,7 +73,10 @@ export interface VictoryProjectConfig {
   layers: VictoryLayerConfig[];
 }
 
-export type AnimationSupportStatus = "supported" | "implemented-not-used" | "unsupported";
+export type AnimationSupportStatus =
+  | "supported"
+  | "implemented-not-used"
+  | "unsupported";
 
 export interface AnimationSupportEntry {
   type: string;

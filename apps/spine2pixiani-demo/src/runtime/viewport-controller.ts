@@ -11,7 +11,9 @@ export type ViewportState = {
   panY: number;
 };
 
-export function createViewportState(input?: Partial<ViewportState>): ViewportState {
+export function createViewportState(
+  input?: Partial<ViewportState>,
+): ViewportState {
   const minZoom = input?.minZoom ?? 0.6;
   const maxZoom = input?.maxZoom ?? 2.4;
   const zoom = clampZoom(input?.zoom ?? 1, minZoom, maxZoom);
@@ -21,22 +23,26 @@ export function createViewportState(input?: Partial<ViewportState>): ViewportSta
     minZoom,
     maxZoom,
     panX: input?.panX ?? 0,
-    panY: input?.panY ?? 0
+    panY: input?.panY ?? 0,
   };
 }
 
-export function panViewport(state: ViewportState, panX: number, panY: number): ViewportState {
+export function panViewport(
+  state: ViewportState,
+  panX: number,
+  panY: number,
+): ViewportState {
   return {
     ...state,
     panX,
-    panY
+    panY,
   };
 }
 
 export function zoomViewportAtPoint(
   state: ViewportState,
   factor: number,
-  anchor: ViewportPoint
+  anchor: ViewportPoint,
 ): ViewportState {
   const nextZoom = clampZoom(state.zoom * factor, state.minZoom, state.maxZoom);
   if (nextZoom === state.zoom) {
@@ -49,7 +55,7 @@ export function zoomViewportAtPoint(
     ...state,
     zoom: nextZoom,
     panX: anchor.x - (anchor.x - state.panX) * zoomRatio,
-    panY: anchor.y - (anchor.y - state.panY) * zoomRatio
+    panY: anchor.y - (anchor.y - state.panY) * zoomRatio,
   };
 }
 

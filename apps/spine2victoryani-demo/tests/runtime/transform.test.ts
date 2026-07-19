@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { cabinAnimationData } from "../../src/data/cabin-animation-data.js";
-import { computeWorldBoneTransforms, sampleAnimationPose } from "../../src/runtime/timeline-sampler.js";
+import {
+  computeWorldBoneTransforms,
+  sampleAnimationPose,
+} from "../../src/runtime/timeline-sampler.js";
 import {
   applyWorldTransformToScenePoint,
   composeWorldTransform,
   createMatrixFromTransform,
   deriveWorldTransform,
-  multiplyAffineMatrices
+  multiplyAffineMatrices,
 } from "../../src/runtime/transform.js";
 
 describe("transform", () => {
@@ -16,7 +19,7 @@ describe("transform", () => {
       y: 0,
       rotation: 0,
       scaleX: -1,
-      scaleY: 1
+      scaleY: 1,
     });
 
     const child = composeWorldTransform(
@@ -25,9 +28,9 @@ describe("transform", () => {
         y: 0,
         rotation: 90,
         scaleX: 1,
-        scaleY: 1
+        scaleY: 1,
       },
-      mirroredParent
+      mirroredParent,
     );
 
     expect(child.matrix.a).toBeCloseTo(0, 6);
@@ -46,7 +49,7 @@ describe("transform", () => {
       y: 80,
       rotation: 35,
       scaleX: -1,
-      scaleY: 0.75
+      scaleY: 0.75,
     });
 
     const attachmentMatrix = createMatrixFromTransform({
@@ -54,7 +57,7 @@ describe("transform", () => {
       y: 25,
       rotation: -20,
       scaleX: 1.2,
-      scaleY: 0.8
+      scaleY: 0.8,
     });
 
     const composed = composeWorldTransform(
@@ -63,18 +66,23 @@ describe("transform", () => {
         y: 25,
         rotation: -20,
         scaleX: 1.2,
-        scaleY: 0.8
+        scaleY: 0.8,
       },
-      bone
+      bone,
     );
-    const manual = deriveWorldTransform(multiplyAffineMatrices(bone.matrix, attachmentMatrix));
+    const manual = deriveWorldTransform(
+      multiplyAffineMatrices(bone.matrix, attachmentMatrix),
+    );
 
     expect(composed.matrix).toEqual(manual.matrix);
   });
 
   it("keeps ui_k and ui_k2 sample branches mirrored in the default pose", () => {
     const pose = sampleAnimationPose(cabinAnimationData, "cabin", 0, true);
-    const worldBones = computeWorldBoneTransforms(cabinAnimationData, pose.bones);
+    const worldBones = computeWorldBoneTransforms(
+      cabinAnimationData,
+      pose.bones,
+    );
 
     expect(worldBones.ui_k2.x).toBeCloseTo(-worldBones.ui_k.x, 5);
     expect(worldBones.ui_k2.y).toBeCloseTo(worldBones.ui_k.y, 5);

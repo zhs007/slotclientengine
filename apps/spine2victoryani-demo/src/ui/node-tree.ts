@@ -20,7 +20,8 @@ export function createNodeTreePanel(): NodeTreePanel {
   title.textContent = "Node Tree";
 
   const description = document.createElement("p");
-  description.textContent = "骨骼层级和插槽归属直接从 SpineModel 派生；点击节点后，舞台会为当前目标绘制高可见性包围盒。";
+  description.textContent =
+    "骨骼层级和插槽归属直接从 SpineModel 派生；点击节点后，舞台会为当前目标绘制高可见性包围盒。";
 
   const list = document.createElement("div");
   list.className = "tree-list";
@@ -49,7 +50,11 @@ export function createNodeTreePanel(): NodeTreePanel {
     list.appendChild(fragment);
   };
 
-  const appendNode = (container: ParentNode, node: DebugTreeNode, depth: number) => {
+  const appendNode = (
+    container: ParentNode,
+    node: DebugTreeNode,
+    depth: number,
+  ) => {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "tree-node";
@@ -103,6 +108,6 @@ export function createNodeTreePanel(): NodeTreePanel {
     setOnSelect(handler) {
       onSelect = handler;
       render();
-    }
+    },
   };
 }
