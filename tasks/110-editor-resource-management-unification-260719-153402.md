@@ -84,7 +84,7 @@ gamelayouteditor:                    test/typecheck/lint/build/format:check
 
 ```text
 browserartifactio  1 file / 21 tests passed
-rendercore         64 files / 441 tests passed
+rendercore         64 files / 439 tests passed
 vnicore            15 files / 207 tests passed
 imgnumbereditor    7 files / 17 tests passed
 symbolseditor      7 files / 35 tests passed
@@ -154,3 +154,30 @@ http://127.0.0.1:4173/
 4. 替换被多个 node 使用的 resource，确认引用不变、画面原子更新。
 5. 导出 ZIP，检查 owned assets 扁平 hash 命名、dependency 自包含。
 6. 重导后检查 preview、状态机、image-string 与 symbols package 行为。
+
+## 7. 浏览器验收反馈修正（2026-07-20）
+
+- ImgNumber Editor 与 Popup Editor 补齐 `@slotclientengine/logiccore` 源码 alias，Vite 开发态不再把 CommonJS `dist/index.js` 当浏览器 ESM 直接加载；实际开发服务器转换结果已确认 `createGameConfig` 指向 `packages/logiccore/src/index.ts`。
+- Popup Editor 的 import review 确认改为“建立 logical resource 并应用可解释的建议绑定”：standalone ImgNumber 贯穿五档，win-amount descriptor 的三份 VNI 各进入同名档位，其他资源仅入库；同类替换继续保留既有 layer 引用且不重复添加。
+- Popup folder importer 从“整个批次只能唯一识别一组资源”改为逐资源精确闭包发现：单目录可混合多组 VNI、official Spine 4.3、图片及 standalone ImgNumber，允许共享依赖；闭包外合法图片成为独立 image resource，未知、缺失、歧义及不完整文件仍使 review 原子失败。
+- Folder importer 显式忽略 `.DS_Store`、AppleDouble/`__MACOSX`、`Thumbs.db` 和 `desktop.ini` 等操作系统元数据；其他未知文件仍严格失败。真实 win-amount 回归同时注入根目录与 `assets/` 子目录的 `.DS_Store`。
+- Popup Editor 项目页增加金额合同 preset：默认“纯数字整数”使用 `rawScale=1` 并直接显示服务器整数，只要求 `0–9`；可切换“纯数字两位小数”，使用 `rawScale=100` 并要求 `0–9` 与 `.`。两者均保持 `useGrouping=false` 和空 prefix/suffix。手动偏离 preset 后显示“自定义”，启用的字符仍严格校验对应 glyph。档位页根据当前 bet raw 动态展示 raw 与格式化后的累计计数边界。
+- `vni-win-amount-tiers` descriptor 进入严格解析和 VNI project 顺序/闭包校验；真实 `assets/game003-s1/win-amount` 目录自动化测试稳定识别 `bigwin -> superwin -> megawin` 三组 VNI。
+- 新项目档位阈值显式为 `1 / 15 / 25 / 50`，档位页集中编辑 `bigwin/superwin/megawin` 三个阈值并说明累计播放合同；descriptor 只提供 VNI 映射及 `2.9s` 总时长、`1s/2.5s` loop 边界，不覆盖项目阈值。五个档位导航改为无填充、底部 active indicator 的真实 tab 视觉。
+- ImgNumber 不再拥有 `start/loop/end` 可见性；每档严格恰好一个金额 binding，award player 全程只创建一个 ImgNumber runtime。相同 resource 跨档零重建，不同 resource 通过同一 `RenderImageString.setResource()` 原子切换并复用 glyph sprite pool，避免 ending tier 与 next tier 金额重叠。
+- Popup Editor 中再次为当前档选择 ImgNumber 会切换该档 binding，不会叠加第二个金额图层；后续导入的 ImgNumber 只自动补齐尚未配置金额的档位。Game Layout Editor 的自包含 popup fixture 已同步新合同并完成跨包回归。
+- Popup Editor 上传入口移入“资源”tab，项目导入/导出移入“项目”tab；顶部导航改为可访问 tab 状态。编辑栏固定为约 `340–440px`，预览占剩余空间，canvas 保持自身宽高比；资源 provenance/path 默认折叠，避免大 closure 撑高资源卡。
+
+反馈修正后严格门禁再次全部通过：
+
+```text
+popupeditor test: 4 files / 10 tests passed
+pnpm test:         27/27 tasks successful
+pnpm typecheck:    27/27 tasks successful
+pnpm lint:         27/27 tasks successful
+pnpm build:        27/27 tasks successful
+pnpm format:check: 27/27 tasks successful
+git diff --check:  passed
+```
+
+最终浏览器布局、文件夹选择、review 确认、预览及导出验收仍按约定由用户执行。

@@ -12,14 +12,17 @@ import {
 } from "../src/io/resource-import.js";
 import {
   addLayer,
+  applyImportedResourceBindings,
+  createPopupAmountFormat,
   createPopupEditorProject,
+  detectPopupAmountFormatPreset,
   projectToManifest,
   resourceReferenceCount,
   removeLogicalResource,
 } from "../src/model/project.js";
 
 describe("popup editor resource-first project", () => {
-  it("starts with fixed five tiers and explicit 15/30/50 defaults but cannot export without amount coverage", () => {
+  it("starts with fixed five tiers and explicit 15/25/50 defaults but cannot export without amount coverage", () => {
     const project = createPopupEditorProject();
     expect([...project.tiers.keys()]).toEqual([
       "base",
@@ -32,7 +35,28 @@ describe("popup editor resource-first project", () => {
       ["bigwin", "superwin", "megawin"].map(
         (id) => project.tiers.get(id as any)!.thresholdMultiplier,
       ),
-    ).toEqual([15, 30, 50]);
+    ).toEqual([15, 25, 50]);
+    expect(project.amountFormat).toMatchObject({
+      rawScale: 1,
+      fractionDigits: 0,
+      useGrouping: false,
+      prefix: "",
+      suffix: "",
+    });
+    expect(detectPopupAmountFormatPreset(project.amountFormat)).toBe("integer");
+    const decimal = createPopupAmountFormat("decimal");
+    expect(decimal).toMatchObject({
+      rawScale: 100,
+      fractionDigits: 2,
+      useGrouping: false,
+      decimalSeparator: ".",
+      prefix: "",
+      suffix: "",
+    });
+    expect(detectPopupAmountFormatPreset(decimal)).toBe("decimal");
+    expect(detectPopupAmountFormatPreset({ ...decimal, prefix: "$" })).toBe(
+      "custom",
+    );
     expect(() => projectToManifest(project)).toThrow(
       /layers must be non-empty/,
     );
@@ -47,7 +71,7 @@ describe("popup editor resource-first project", () => {
     expect(review[0]).toMatchObject({
       proposedId: "amount",
       kind: "image-string",
-      dependencyCount: 13,
+      dependencyCount: 10,
     });
     const directoryReview = await discoverPopupResources(
       [
@@ -70,13 +94,25 @@ describe("popup editor resource-first project", () => {
     expect(directoryReview[0]).toMatchObject({
       proposedId: "amount",
       kind: "image-string",
-      dependencyCount: 13,
+      dependencyCount: 10,
     });
     const project = createPopupEditorProject();
     expect(project.resources.size).toBe(0);
     commitImportReview(project, review);
     expect(resourceReferenceCount(project, "amount")).toBe(0);
-    for (const tier of project.tiers.keys()) addLayer(project, tier, "amount");
+    applyImportedResourceBindings(project, "amount");
+    commitImportReview(project, [{ ...review[0]!, proposedId: "amount-alt" }]);
+    applyImportedResourceBindings(project, "amount-alt");
+    expect(resourceReferenceCount(project, "amount")).toBe(5);
+    expect(resourceReferenceCount(project, "amount-alt")).toBe(0);
+    addLayer(project, "base", "amount-alt");
+    expect(project.tiers.get("base")!.layers).toHaveLength(1);
+    expect(project.tiers.get("base")!.layers[0]).toMatchObject({
+      kind: "image-string",
+      resource: "amount-alt",
+    });
+    expect(resourceReferenceCount(project, "amount")).toBe(4);
+    expect(resourceReferenceCount(project, "amount-alt")).toBe(1);
     expect(projectToManifest(project).resources.amount.kind).toBe(
       "image-string",
     );
@@ -87,7 +123,7 @@ describe("popup editor resource-first project", () => {
     expect(projectToManifest(imported)).toEqual(projectToManifest(project));
   });
 
-  it("content-addresses PNG by bytes and upload does not bind a layer", async () => {
+  it("keeps the lower-level resource commit independent from UI layer binding", async () => {
     const png = pngHeader(2, 3);
     const review = await discoverPopupResources([
       new File([png.buffer], "BG_2.PNG"),
@@ -124,7 +160,7 @@ describe("popup editor resource-first project", () => {
 });
 
 function imageStringZip() {
-  const characters = [..."$,.0123456789"];
+  const characters = [..."0123456789"];
   const glyphs = Object.fromEntries(
     characters.map((character, index) => [
       character,

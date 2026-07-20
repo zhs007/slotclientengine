@@ -8,7 +8,7 @@
 - layout 为每个 active variant 保存相对 viewport center 的 `x/y/scale`。
 - 游戏只提交 safe integer `betAmountRaw` 和 `winAmountRaw`；preview 的 bet、win、zoom、guides 不进入 manifest。
 - 档位固定为 `base -> standard -> bigwin -> superwin -> megawin`。`base` 截止 `1×bet`，`standard` 截止 bigwin threshold，后三档 threshold multiplier 显式且严格递增。边界相等时进入对应档，runtime 用 BigInt 比较。
-- 每档必须有非空 `layers`，且 `start/loop/end` 每段都由至少一个 `image-string + win-amount` 图层覆盖。
+- 每档必须有非空 `layers`，且必须恰好包含一个 `image-string + win-amount` 图层。金额不参与 `start/loop/end` 可见性：整场只维持一个 renderer/runtime，跨档只更新文本、transform，必要时在同一实例上切换 image-string resource。
 - VNI 显式保存 `loopStartTime/loopEndTime/keepParticlesAlive`；Spine 显式保存大小写精确且互不相同的 start/loop/end animation。
 
 ## 合同骨架
@@ -48,7 +48,7 @@
       },
       {
         "id": "superwin",
-        "thresholdMultiplier": 30,
+        "thresholdMultiplier": 25,
         "countDurationSeconds": 2.9,
         "layers": []
       },
@@ -63,7 +63,7 @@
 }
 ```
 
-骨架中的空 `layers` 是说明结构的无效占位，不能作为 fixture 或导出物。合法 image-string layer 必须包含 `id/kind/order/resource/binding/visibleSegments/anchor/transform`；image 相同但无 binding；VNI/Spine 使用各自 playback。
+骨架中的空 `layers` 是说明结构的无效占位，不能作为 fixture 或导出物。合法 image-string layer 必须包含 `id/kind/order/resource/binding/anchor/transform`，不接受 `visibleSegments`；image 图层才使用 `visibleSegments`；VNI/Spine 使用各自 playback。
 
 ## 资源、ZIP 与 runtime
 

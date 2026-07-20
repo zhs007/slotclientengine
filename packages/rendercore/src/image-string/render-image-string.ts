@@ -13,8 +13,9 @@ export function createRenderImageString(options: {
   readonly anchor?: { readonly x: number; readonly y: number };
 }): RenderImageString {
   options.resource.assertUsable();
+  let resource = options.resource;
   let snapshot = layoutImageString({
-    manifest: options.resource.manifest,
+    manifest: resource.manifest,
     text: options.text,
     anchor: options.anchor,
   });
@@ -23,7 +24,10 @@ export function createRenderImageString(options: {
   const pool: Sprite[] = [];
   let destroyed = false;
 
-  function commit(next: ImageStringSnapshot): void {
+  function commit(
+    next: ImageStringSnapshot,
+    nextResource: ImageStringResource = resource,
+  ): void {
     while (active.length > next.occurrences.length) {
       const sprite = active.pop()!;
       container.removeChild(sprite);
@@ -38,7 +42,7 @@ export function createRenderImageString(options: {
         active.push(sprite);
         container.addChild(sprite);
       }
-      sprite.texture = options.resource.textures[occurrence.path];
+      sprite.texture = nextResource.textures[occurrence.path];
       sprite.position.set(occurrence.x, occurrence.y);
       sprite.width = occurrence.width;
       sprite.height = occurrence.height;
@@ -55,18 +59,39 @@ export function createRenderImageString(options: {
   commit(snapshot);
   return Object.freeze({
     container,
-    setText(text: string): void {
-      assertUsable();
+    setResource(
+      nextResource: ImageStringResource,
+      text: string = snapshot.text,
+    ): void {
+      assertRendererUsable();
+      nextResource.assertUsable();
+      if (nextResource === resource) {
+        if (text !== snapshot.text) this.setText(text);
+        return;
+      }
       const next = layoutImageString({
-        manifest: options.resource.manifest,
+        manifest: nextResource.manifest,
         text,
         anchor: snapshot.anchor,
       });
-      options.resource.assertUsable();
+      commit(next, nextResource);
+      resource = nextResource;
+    },
+    setText(text: string): void {
+      assertUsable();
+      if (text === snapshot.text) return;
+      const next = layoutImageString({
+        manifest: resource.manifest,
+        text,
+        anchor: snapshot.anchor,
+      });
+      resource.assertUsable();
       commit(next);
     },
     setAnchor(anchor: { readonly x: number; readonly y: number }): void {
       assertUsable();
+      if (anchor.x === snapshot.anchor.x && anchor.y === snapshot.anchor.y)
+        return;
       const validated = validateImageStringAnchor(anchor);
       commit(Object.freeze({ ...snapshot, anchor: validated }));
     },
@@ -90,7 +115,10 @@ export function createRenderImageString(options: {
   });
 
   function assertUsable(): void {
+    assertRendererUsable();
+    resource.assertUsable();
+  }
+  function assertRendererUsable(): void {
     if (destroyed) throw new ImageStringError("RenderImageString 已销毁。");
-    options.resource.assertUsable();
   }
 }

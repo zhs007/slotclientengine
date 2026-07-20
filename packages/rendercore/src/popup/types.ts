@@ -65,7 +65,6 @@ export type PopupLayer =
       readonly kind: "image-string";
       readonly binding: "win-amount";
       readonly anchor: PopupAnchor;
-      readonly visibleSegments: readonly PopupSegment[];
     })
   | (PopupLayerBase & {
       readonly kind: "vni";

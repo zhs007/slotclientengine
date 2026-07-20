@@ -6,6 +6,13 @@ export default defineConfig({
   resolve: {
     alias: [
       {
+        find: "@slotclientengine/logiccore",
+        replacement: resolve(
+          __dirname,
+          "../../packages/logiccore/src/index.ts",
+        ),
+      },
+      {
         find: "@slotclientengine/rendercore/image-string",
         replacement: resolve(
           __dirname,

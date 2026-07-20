@@ -7,7 +7,6 @@ const amountLayer = (scale = 1) => ({
   order: 10,
   resource: "amount",
   binding: "win-amount" as const,
-  visibleSegments: ["start", "loop", "end"] as const,
   anchor: { x: 0.5, y: 0.5 },
   transform: { x: 0, y: 100, scale },
 });

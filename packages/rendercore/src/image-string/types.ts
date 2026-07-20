@@ -62,6 +62,7 @@ export interface ImageStringSnapshot {
 
 export interface RenderImageString {
   readonly container: Container;
+  setResource(resource: ImageStringResource, text?: string): void;
   setText(text: string): void;
   setAnchor(anchor: { readonly x: number; readonly y: number }): void;
   getSnapshot(): ImageStringSnapshot;

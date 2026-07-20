@@ -92,9 +92,26 @@ describe("image-string resource", () => {
     expect(renderer.container.children).toHaveLength(0);
     renderer.setText("0");
     expect(firstChildren).toContain(renderer.container.children[0]);
+    const alternate = await createImageStringResource({
+      manifest: {
+        ...imageStringManifestFixture,
+        id: "alternate-glyphs",
+        metrics: { lineHeight: 20, letterSpacing: 4 },
+      },
+      imageModules,
+    });
+    const stableContainer = renderer.container;
+    renderer.setResource(alternate, "10");
+    expect(renderer.container).toBe(stableContainer);
+    expect(renderer.container.children).toEqual(firstChildren);
+    expect(renderer.getSnapshot()).toMatchObject({
+      text: "10",
+      logicalBounds: { width: 20, height: 20 },
+    });
     renderer.destroy();
     renderer.destroy();
     expect(() => renderer.setText("0")).toThrow("已销毁");
+    await alternate.destroy();
     await resource.destroy();
   });
 

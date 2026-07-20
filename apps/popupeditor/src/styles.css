@@ -9,6 +9,11 @@
 body {
   margin: 0;
 }
+#app {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 100vh;
+}
 button,
 input,
 select {
@@ -17,8 +22,9 @@ select {
 header {
   display: flex;
   align-items: center;
-  gap: 24px;
-  padding: 14px 20px;
+  gap: 32px;
+  min-height: 60px;
+  padding: 0 20px;
   background: #11182a;
   border-bottom: 1px solid #27314c;
 }
@@ -26,21 +32,46 @@ h1 {
   font-size: 18px;
   margin: 0;
 }
-nav,
-.actions,
+.primary-tabs,
+.resource-actions,
+.project-actions,
 .preview-controls {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
-.actions {
-  margin-left: auto;
+.primary-tabs {
+  align-self: stretch;
+  gap: 4px;
 }
-.actions input[type="file"] {
-  display: none;
+.primary-tabs button {
+  position: relative;
+  min-width: 72px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: #94a3c7;
+  font-weight: 600;
 }
-.actions label,
-button {
+.primary-tabs button::after {
+  position: absolute;
+  right: 12px;
+  bottom: -1px;
+  left: 12px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: transparent;
+  content: "";
+}
+.primary-tabs button:hover,
+.primary-tabs button.active {
+  color: #fff;
+}
+.primary-tabs button.active::after {
+  background: #8aa4ff;
+}
+button,
+.file-action {
   background: #202b46;
   color: #e9eeff;
   border: 1px solid #354263;
@@ -48,19 +79,55 @@ button {
   padding: 7px 10px;
   cursor: pointer;
 }
+.file-action input[type="file"] {
+  display: none;
+}
 main {
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) 600px;
-  height: calc(100vh - 72px);
+  grid-template-columns: minmax(340px, 440px) minmax(0, 1fr);
+  min-height: 0;
 }
 .left {
   overflow: auto;
-  padding: 18px;
+  padding: 16px;
+  border-right: 1px solid #27314c;
 }
 aside {
   background: #0b1020;
-  padding: 14px;
+  padding: 16px;
   overflow: auto;
+}
+.resource-import-panel {
+  padding: 14px;
+  background: #0e1628;
+  border: 1px solid #2b3858;
+  border-radius: 10px;
+}
+.resource-import-panel h2 {
+  margin: 0 0 6px;
+}
+.resource-import-panel p {
+  margin: 0 0 12px;
+  color: #aebbd8;
+  line-height: 1.5;
+}
+.resource-actions,
+.project-actions {
+  align-items: center;
+}
+.project-actions {
+  padding-bottom: 14px;
+  border-bottom: 1px solid #27314c;
+}
+.preset-help {
+  color: #aebbd8;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.empty-state {
+  padding: 32px 12px;
+  color: #7f8ead;
+  text-align: center;
 }
 .preview-controls label {
   display: flex;
@@ -71,11 +138,17 @@ aside {
   width: 90px;
 }
 #preview-canvas {
+  display: grid;
+  place-items: center;
   margin-top: 10px;
+  min-height: 0;
 }
 #preview-canvas canvas {
-  width: 540px;
-  height: 720px;
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: calc(100vh - 190px);
   border: 1px solid #283554;
 }
 .card {
@@ -94,16 +167,136 @@ pre {
   overflow: auto;
   color: #a9c1ff;
 }
-.tiers {
-  display: flex;
-  gap: 6px;
+.card details summary {
+  color: #a9b6d2;
+  cursor: pointer;
 }
-.tiers button {
+.card details code {
+  display: block;
+  max-height: 180px;
+  margin-top: 8px;
+}
+.tier-tabs {
   display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0 -16px 18px;
+  padding: 0 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid #2c3855;
 }
-.tiers .active {
-  border-color: #8aa4ff;
-  background: #334a86;
+.tier-tabs button {
+  display: grid;
+  gap: 2px;
+  min-width: 78px;
+  padding: 12px 8px 10px;
+  color: #8997b7;
+  background: transparent;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+.tier-tabs button:hover {
+  color: #d7e0f7;
+  background: #11192a;
+}
+.tier-tabs button.active {
+  color: #fff;
+  background: transparent;
+  border-bottom-color: #8aa4ff;
+}
+.tier-tabs button span {
+  font-weight: 700;
+}
+.tier-tabs button small {
+  color: #71809f;
+  font-size: 10px;
+}
+.tier-tabs button.active small {
+  color: #aebfff;
+}
+.tier-contract {
+  margin-bottom: 20px;
+  padding: 14px;
+  color: #bec9df;
+  background: #0e1628;
+  border: 1px solid #2b3858;
+  border-radius: 8px;
+}
+.tier-contract h2,
+.tier-editor h2 {
+  margin: 0 0 8px;
+  color: #f0f4ff;
+  font-size: 16px;
+}
+.tier-contract p {
+  margin: 6px 0 12px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.threshold-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.threshold-grid label {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px 6px;
+  margin: 0;
+  padding: 8px;
+  background: #111b31;
+  border: 1px solid #2e3c5d;
+  border-radius: 6px;
+}
+.threshold-grid label span {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  font-weight: 700;
+}
+.threshold-grid input {
+  min-width: 0;
+  width: 100%;
+}
+.threshold-grid small {
+  align-self: center;
+  color: #8290ad;
+}
+.contract-example {
+  color: #90a9ed;
+}
+.raw-boundaries {
+  padding: 8px;
+  color: #d9e2ff;
+  background: #09111f;
+  border-left: 3px solid #6f8de7;
+}
+.layer-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin: 12px 0;
+}
+.segment-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  margin: 2px 0;
+  padding: 9px;
+  color: #aebbd8;
+  background: #0a1120;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.segment-summary strong {
+  grid-column: 1 / -1;
+  color: #dce5ff;
+}
+.amount-layer-note {
+  margin: 2px 0;
+  color: #9fb0d3;
+  font-size: 12px;
+  line-height: 1.5;
 }
 label {
   display: flex;
@@ -129,6 +322,8 @@ dialog {
   color: #fff;
   border: 1px solid #4a5e91;
   max-width: 720px;
+  max-height: 80vh;
+  overflow: auto;
 }
 #review-body article {
   display: grid;
@@ -136,4 +331,29 @@ dialog {
   margin: 12px 0;
   padding: 10px;
   border: 1px solid #34446a;
+}
+
+@media (max-width: 980px) {
+  #app {
+    display: block;
+  }
+  header {
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 10px 14px 0;
+  }
+  .primary-tabs {
+    min-height: 48px;
+  }
+  main {
+    grid-template-columns: 1fr;
+  }
+  .left {
+    max-height: none;
+    border-right: 0;
+    border-bottom: 1px solid #27314c;
+  }
+  #preview-canvas canvas {
+    max-height: 70vh;
+  }
 }

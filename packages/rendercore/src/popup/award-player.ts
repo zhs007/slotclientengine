@@ -14,6 +14,7 @@ import type {
   PopupLayer,
   PopupManifestV1,
   PopupPackageResource,
+  PopupPreparedImageString,
   PopupPreparedResource,
   PopupSegment,
 } from "./types.js";
@@ -29,6 +30,11 @@ export interface PopupLayerRuntime {
   requestEnd(): void;
   isEndComplete(): boolean;
   applySegment(segment: PopupSegment, amountText: string): void;
+  rebindAmountLayer?(options: {
+    readonly layer: Extract<PopupLayer, { readonly kind: "image-string" }>;
+    readonly resource: PopupPreparedImageString;
+    readonly amountText: string;
+  }): void;
   destroy(): void;
 }
 export type PopupLayerRuntimeFactory = (options: {
@@ -42,6 +48,8 @@ interface TierRuntime {
   readonly id: AwardTierId;
   readonly container: Container;
   readonly layers: readonly PopupLayerRuntime[];
+  readonly amountLayer: Extract<PopupLayer, { readonly kind: "image-string" }>;
+  readonly amountResource: PopupPreparedImageString;
   segment: PopupSegment;
   endRequested: boolean;
 }
@@ -69,6 +77,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
   #final = 0;
   #active: TierRuntime | null = null;
   #ending: TierRuntime[] = [];
+  #amount: PopupLayerRuntime | null = null;
   constructor(options: {
     readonly resource: PopupPackageResource;
     readonly layerFactory?: PopupLayerRuntimeFactory;
@@ -177,7 +186,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
       displayedAmountRaw: this.#displayed,
       finalAmountRaw: this.#final,
       formattedAmount: this.amountText(),
-      activeLayerCount: this.#active?.layers.length ?? 0,
+      activeLayerCount: this.#active ? this.#active.layers.length + 1 : 0,
       endingLayerCount: this.#ending.reduce(
         (sum, tier) => sum + tier.layers.length,
         0,
@@ -194,6 +203,8 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
       for (const layer of tier.layers) layer.destroy();
       tier.container.destroy({ children: false });
     }
+    this.#amount?.destroy();
+    this.#amount = null;
     this.#tiers.clear();
     this.container.destroy({ children: false });
   }
@@ -214,32 +225,64 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
       for (const [id, spec] of specs) {
         const container = new Container();
         container.visible = false;
-        const layers = spec.layers.map((layer) => {
+        const amountLayer = spec.layers.find(
+          (
+            layer,
+          ): layer is Extract<PopupLayer, { readonly kind: "image-string" }> =>
+            layer.kind === "image-string",
+        )!;
+        const amountResource = this.#resource.resources[amountLayer.resource]!;
+        if (amountResource.kind !== "image-string")
+          throw new Error("popup amount layer/resource kind mismatch.");
+        if (!this.#amount) {
+          this.#amount = this.#factory({
+            layer: amountLayer,
+            resource: amountResource,
+            popupId: manifest.id,
+            tierId: id,
+          });
+          if (!this.#amount.rebindAmountLayer)
+            throw new Error(
+              "popup ImgNumber runtime must support resource rebinding.",
+            );
+          this.#amount.container.visible = false;
+          await this.#amount.init();
+        }
+        const layers: PopupLayerRuntime[] = [];
+        const tier: TierRuntime = {
+          id,
+          container,
+          layers,
+          amountLayer,
+          amountResource,
+          segment: "start",
+          endRequested: false,
+        };
+        created.push(tier);
+        this.container.addChild(container);
+        for (const layer of spec.layers) {
+          if (layer.kind === "image-string") continue;
           const runtime = this.#factory({
             layer,
             resource: this.#resource.resources[layer.resource]!,
             popupId: manifest.id,
             tierId: id,
           });
+          layers.push(runtime);
           container.addChild(runtime.container);
-          return runtime;
-        });
-        const tier: TierRuntime = {
-          id,
-          container,
-          layers,
-          segment: "start",
-          endRequested: false,
-        };
-        created.push(tier);
-        this.container.addChild(container);
+        }
         await Promise.all(layers.map((layer) => layer.init()));
         this.#tiers.set(id, tier);
       }
+      this.container.addChild(this.#amount!.container);
       this.#initialized = true;
     } catch (error) {
-      for (const tier of created)
+      for (const tier of created) {
         for (const layer of tier.layers) layer.destroy();
+        tier.container.destroy({ children: false });
+      }
+      this.#amount?.destroy();
+      this.#amount = null;
       throw error;
     } finally {
       this.#initializing = null;
@@ -261,6 +304,12 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     tier.endRequested = false;
     tier.container.visible = true;
     for (const layer of tier.layers) layer.enter(this.amountText());
+    this.#amount!.rebindAmountLayer!({
+      layer: tier.amountLayer,
+      resource: tier.amountResource,
+      amountText: this.amountText(),
+    });
+    this.#amount!.enter(this.amountText());
     this.#active = tier;
     this.#phase = "counting";
   }
@@ -314,8 +363,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.#ending = remaining;
   }
   private updateAmount() {
-    const text = this.amountText();
-    for (const layer of this.#active?.layers ?? []) layer.updateAmount(text);
+    this.#amount?.updateAmount(this.amountText());
   }
   private amountText() {
     return formatPopupAmount(
@@ -326,12 +374,14 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
   private complete() {
     if (this.#active) this.#active.container.visible = false;
     for (const tier of this.#ending) tier.container.visible = false;
+    if (this.#amount) this.#amount.container.visible = false;
     this.#active = null;
     this.#ending = [];
     this.#phase = "complete";
   }
   private clearPlayback() {
     for (const tier of this.#tiers.values()) tier.container.visible = false;
+    if (this.#amount) this.#amount.container.visible = false;
     this.#active = null;
     this.#ending = [];
     this.#stages = [];
@@ -391,13 +441,36 @@ function defaultLayerFactory(options: {
     });
     container.addChild(renderer.container);
     return {
-      ...staticRuntime(container, layer.visibleSegments),
+      container,
+      animated: false,
+      async init() {},
+      enter(text) {
+        renderer.setText(text);
+        container.visible = true;
+      },
       updateAmount(text) {
         renderer.setText(text);
       },
-      applySegment(segment, text) {
+      update() {},
+      isLoopReady() {
+        return true;
+      },
+      requestEnd() {},
+      isEndComplete() {
+        return true;
+      },
+      applySegment(_segment, text) {
         renderer.setText(text);
-        container.visible = layer.visibleSegments.includes(segment);
+      },
+      rebindAmountLayer({
+        layer: nextLayer,
+        resource: nextResource,
+        amountText,
+      }) {
+        renderer.setResource(nextResource.resource, amountText);
+        renderer.setAnchor(nextLayer.anchor);
+        container.position.set(nextLayer.transform.x, nextLayer.transform.y);
+        container.scale.set(nextLayer.transform.scale);
       },
       destroy() {
         renderer.destroy();

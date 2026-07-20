@@ -31,6 +31,15 @@ export interface PopupEditorTier {
   layers: PopupLayer[];
   thresholdMultiplier?: number;
 }
+export interface PopupEditorTierBindingSuggestion {
+  readonly tierId: AwardTierId;
+  readonly countDurationSeconds: number;
+  readonly playback: {
+    readonly loopStartTime: number;
+    readonly loopEndTime: number;
+    readonly keepParticlesAlive: boolean;
+  };
+}
 export interface PopupEditorProject {
   id: string;
   designViewport: { width: number; height: number };
@@ -41,6 +50,53 @@ export interface PopupEditorProject {
   tiers: Map<AwardTierId, PopupEditorTier>;
 }
 
+export type PopupAmountFormatPresetId = "integer" | "decimal";
+export const POPUP_AMOUNT_FORMAT_PRESETS: Readonly<
+  Record<PopupAmountFormatPresetId, PopupAmountFormat>
+> = Object.freeze({
+  integer: Object.freeze({
+    rawScale: 1,
+    fractionDigits: 0,
+    useGrouping: false,
+    groupSeparator: ",",
+    decimalSeparator: ".",
+    prefix: "",
+    suffix: "",
+    rounding: "floor",
+  }),
+  decimal: Object.freeze({
+    rawScale: 100,
+    fractionDigits: 2,
+    useGrouping: false,
+    groupSeparator: ",",
+    decimalSeparator: ".",
+    prefix: "",
+    suffix: "",
+    rounding: "floor",
+  }),
+});
+
+export function createPopupAmountFormat(
+  presetId: PopupAmountFormatPresetId,
+): PopupAmountFormat {
+  return { ...POPUP_AMOUNT_FORMAT_PRESETS[presetId] };
+}
+
+export function detectPopupAmountFormatPreset(
+  format: PopupAmountFormat,
+): PopupAmountFormatPresetId | "custom" {
+  for (const presetId of ["integer", "decimal"] as const) {
+    const preset = POPUP_AMOUNT_FORMAT_PRESETS[presetId];
+    if (
+      (Object.keys(preset) as (keyof PopupAmountFormat)[]).every(
+        (key) => format[key] === preset[key],
+      )
+    )
+      return presetId;
+  }
+  return "custom";
+}
+
 export function createPopupEditorProject(): PopupEditorProject {
   const empty = (): PopupEditorTier => ({
     countDurationSeconds: 1.5,
@@ -49,16 +105,7 @@ export function createPopupEditorProject(): PopupEditorProject {
   return {
     id: "award-celebration",
     designViewport: { width: 1080, height: 1920 },
-    amountFormat: {
-      rawScale: 100,
-      fractionDigits: 2,
-      useGrouping: true,
-      groupSeparator: ",",
-      decimalSeparator: ".",
-      prefix: "$",
-      suffix: "",
-      rounding: "floor",
-    },
+    amountFormat: createPopupAmountFormat("integer"),
     resources: new Map(),
     blobs: new Map(),
     packageFiles: new Map(),
@@ -71,7 +118,7 @@ export function createPopupEditorProject(): PopupEditorProject {
       ],
       [
         "superwin",
-        { ...empty(), countDurationSeconds: 2.9, thresholdMultiplier: 30 },
+        { ...empty(), countDurationSeconds: 2.9, thresholdMultiplier: 25 },
       ],
       [
         "megawin",
@@ -171,6 +218,21 @@ export function addLayer(
   const resource = project.resources.get(resourceId);
   const tier = project.tiers.get(tierId);
   if (!resource || !tier) throw new Error("resource/tier 不存在。");
+  const existingAmount = tier.layers.find(
+    (layer) => layer.kind === "image-string",
+  );
+  if (resource.kind === "image-string" && existingAmount) {
+    tier.layers = tier.layers.map((layer) =>
+      layer === existingAmount
+        ? {
+            ...existingAmount,
+            id: `${resourceId}-${existingAmount.order}`,
+            resource: resourceId,
+          }
+        : layer,
+    );
+    return;
+  }
   const order = tier.layers.length
     ? Math.max(...tier.layers.map((layer) => layer.order)) + 1
     : 0;
@@ -187,7 +249,6 @@ export function addLayer(
       kind: "image-string",
       binding: "win-amount",
       anchor: { x: 0.5, y: 0.5 },
-      visibleSegments: ["start", "loop", "end"],
     };
   else if (resource.kind === "image")
     layer = {
@@ -219,6 +280,37 @@ export function addLayer(
       },
     };
   tier.layers = [...tier.layers, layer];
+}
+
+export function applyImportedResourceBindings(
+  project: PopupEditorProject,
+  resourceId: string,
+  suggestions: readonly PopupEditorTierBindingSuggestion[] = [],
+): void {
+  const resource = project.resources.get(resourceId);
+  if (!resource) throw new Error(`resource 不存在：${resourceId}`);
+  if (resource.kind === "image-string") {
+    for (const tierId of project.tiers.keys())
+      if (
+        !project.tiers
+          .get(tierId)!
+          .layers.some((layer) => layer.kind === "image-string")
+      )
+        addLayer(project, tierId, resourceId);
+    return;
+  }
+  for (const suggestion of suggestions) {
+    addLayer(project, suggestion.tierId, resourceId);
+    const tier = project.tiers.get(suggestion.tierId)!;
+    tier.countDurationSeconds = suggestion.countDurationSeconds;
+    const layer = tier.layers.at(-1)!;
+    if (layer.kind !== "vni")
+      throw new Error("win-amount 建议绑定只能应用到 VNI resource。");
+    tier.layers[tier.layers.length - 1] = {
+      ...layer,
+      playback: { mode: "segmented", ...suggestion.playback },
+    };
+  }
 }
 
 export function resourceReferenceCount(

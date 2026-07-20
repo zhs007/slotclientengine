@@ -7,13 +7,14 @@ import {
   discoverPopupResources,
 } from "../src/io/resource-import.js";
 import {
+  applyImportedResourceBindings,
   createPopupEditorProject,
   PopupEditorStore,
 } from "../src/model/project.js";
 import { importPopupZip } from "../src/io/popup-zip.js";
 
 describe("popup resource discovery", () => {
-  it("materializes a real VNI group with rewritten hash-flat refs and rejects unconsumed files", async () => {
+  it("materializes a real VNI closure and keeps unrelated images as independent resources", async () => {
     const projectPath = asset("game003-s1/win-amount/bigwin.json");
     const projectBytes = new Uint8Array(readFileSync(projectPath));
     const project = JSON.parse(new TextDecoder().decode(projectBytes)) as {
@@ -42,12 +43,115 @@ describe("popup resource discovery", () => {
     );
     expect(rewritten).not.toContain("assets/3_asset_image");
     expect(rewritten).toMatch(/[a-f0-9]{64}\.png/u);
-    await expect(
-      discoverPopupResources(
-        [...files, sourceFile("extra.png", png(1, 1))],
-        "directory",
+    const mixed = await discoverPopupResources(
+      [...files, sourceFile("extra.png", png(1, 1))],
+      "directory",
+    );
+    expect(mixed.map(({ kind, proposedId }) => [kind, proposedId])).toEqual([
+      ["vni", "bigwin"],
+      ["image", "extra"],
+    ]);
+  });
+
+  it("discovers the complete game003 win-amount folder as three manifest-ordered VNI resources", async () => {
+    const root = asset("game003-s1/win-amount");
+    const projectNames = ["bigwin.json", "superwin.json", "megawin.json"];
+    const assetPaths = new Set<string>();
+    const files = [
+      sourceFile(
+        "win-amount/win-amount.manifest.json",
+        new Uint8Array(readFileSync(resolve(root, "win-amount.manifest.json"))),
       ),
-    ).rejects.toThrow(/未消费文件/);
+      sourceFile("win-amount/.DS_Store", new Uint8Array([1, 2, 3])),
+      sourceFile("win-amount/assets/.DS_Store", new Uint8Array([4, 5, 6])),
+    ];
+    for (const name of projectNames) {
+      const payload = new Uint8Array(readFileSync(resolve(root, name)));
+      const project = JSON.parse(new TextDecoder().decode(payload)) as {
+        assets: readonly { path: string }[];
+      };
+      files.push(sourceFile(`win-amount/${name}`, payload));
+      for (const asset of project.assets) assetPaths.add(asset.path);
+    }
+    for (const path of [...assetPaths].sort())
+      files.push(
+        sourceFile(
+          `win-amount/${path}`,
+          new Uint8Array(readFileSync(resolve(root, path))),
+        ),
+      );
+    const review = await discoverPopupResources(files, "directory");
+    expect(review.map(({ kind, proposedId }) => [kind, proposedId])).toEqual([
+      ["vni", "bigwin"],
+      ["vni", "superwin"],
+      ["vni", "megawin"],
+    ]);
+    expect(review.every(({ dependencyCount }) => dependencyCount > 0)).toBe(
+      true,
+    );
+    expect(
+      review.map(({ suggestedTierBindings }) => suggestedTierBindings),
+    ).toEqual([
+      [
+        {
+          tierId: "bigwin",
+          countDurationSeconds: 2.9,
+          playback: {
+            loopStartTime: 1,
+            loopEndTime: 2.5,
+            keepParticlesAlive: true,
+          },
+        },
+      ],
+      [
+        {
+          tierId: "superwin",
+          countDurationSeconds: 2.9,
+          playback: {
+            loopStartTime: 1,
+            loopEndTime: 2.5,
+            keepParticlesAlive: true,
+          },
+        },
+      ],
+      [
+        {
+          tierId: "megawin",
+          countDurationSeconds: 2.9,
+          playback: {
+            loopStartTime: 1,
+            loopEndTime: 2.5,
+            keepParticlesAlive: true,
+          },
+        },
+      ],
+    ]);
+    const project = createPopupEditorProject();
+    commitImportReview(project, review);
+    for (const candidate of review)
+      applyImportedResourceBindings(
+        project,
+        candidate.proposedId,
+        candidate.suggestedTierBindings,
+      );
+    expect(
+      ["base", "standard", "bigwin", "superwin", "megawin"].map(
+        (id) => project.tiers.get(id as any)!.layers.length,
+      ),
+    ).toEqual([0, 0, 1, 1, 1]);
+    expect(
+      ["bigwin", "superwin", "megawin"].map(
+        (id) => project.tiers.get(id as any)!.thresholdMultiplier,
+      ),
+    ).toEqual([15, 25, 50]);
+    expect(project.tiers.get("superwin")!.layers[0]).toMatchObject({
+      resource: "superwin",
+      playback: {
+        loopStartTime: 1,
+        loopEndTime: 2.5,
+        keepParticlesAlive: true,
+      },
+    });
   });
 
   it("materializes official Spine 4.3 atlas pages and validates metadata", async () => {
@@ -69,7 +173,7 @@ describe("popup resource discovery", () => {
   it("keeps review/commit atomic on ids, candidate errors and source ambiguity", async () => {
     await expect(
       discoverPopupResources([sourceFile("unknown.txt", new Uint8Array([1]))]),
-    ).rejects.toThrow(/无法唯一识别/);
+    ).rejects.toThrow(/无法识别、未引用或不完整/);
     const review = await discoverPopupResources([
       sourceFile("BG_2.PNG", png(2, 3)),
     ]);

@@ -8,16 +8,23 @@ import {
   type SourceFileLike,
 } from "@slotclientengine/browserartifactio";
 import {
+  collectImageStringAssetPaths,
+  parseImageStringManifest,
+  parseWinAmountAnimationManifest,
   validateImageStringPackageContents,
   validateOfficialSpineResource,
 } from "@slotclientengine/rendercore";
 import { assertVNIProject } from "@slotclientengine/vnicore/core";
-import type { PopupResourceSpec } from "@slotclientengine/rendercore/popup";
+import type {
+  AwardTierId,
+  PopupResourceSpec,
+} from "@slotclientengine/rendercore/popup";
 import type {
   PopupEditorAssetBlob,
   PopupEditorLogicalResource,
   PopupEditorProject,
   PopupEditorResourceProvenance,
+  PopupEditorTierBindingSuggestion,
 } from "../model/project.js";
 import { garbageCollectResourceStorage } from "../model/project.js";
 
@@ -42,6 +49,12 @@ export interface PopupImportReviewCandidate {
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly blobs: readonly PopupEditorAssetBlob[];
   readonly errors: readonly string[];
+  readonly suggestedTierBindings?: readonly PopupEditorTierBindingSuggestion[];
+}
+
+interface DiscoveredCandidate {
+  readonly candidate: PopupImportReviewCandidate;
+  readonly consumed: ReadonlySet<string>;
 }
 
 export async function discoverPopupResources(
@@ -50,87 +63,178 @@ export async function discoverPopupResources(
 ): Promise<readonly PopupImportReviewCandidate[]> {
   const index = createBoundedSourceIndex(files, POPUP_SOURCE_LIMITS);
   const loaded = new Map<string, Uint8Array>();
-  for (const item of index)
-    loaded.set(item.path, new Uint8Array(await item.file.arrayBuffer()));
-  if (loaded.size === 1) {
-    const [path, bytes] = [...loaded][0]!;
-    if (isZip(bytes))
-      return [await discoverImageStringZip(path, bytes, sourceKind)];
-    if (imageType(bytes)) return [await discoverImage(path, bytes, sourceKind)];
-  }
-  const imageStringRoots = [...loaded.keys()].filter((path) =>
-    path.endsWith("image-string.manifest.json"),
-  );
-  if (imageStringRoots.length === 1)
-    return [
-      discoverImageStringDirectory(imageStringRoots[0]!, loaded, sourceKind),
-    ];
-  const jsonEntries = [...loaded].filter(([path]) =>
-    path.toLowerCase().endsWith(".json"),
-  );
-  const vniCandidates = jsonEntries.filter(([, bytes]) => {
+  for (const item of [...index].sort((left, right) =>
+    left.path.localeCompare(right.path, "en"),
+  ))
+    if (!isIgnoredFolderMetadata(item.path))
+      loaded.set(item.path, new Uint8Array(await item.file.arrayBuffer()));
+  if (!loaded.size) throw new Error("上传批次为空。");
+
+  const candidates: PopupImportReviewCandidate[] = [];
+  const consumed = new Set<string>();
+  const accept = (result: DiscoveredCandidate) => {
+    candidates.push(result.candidate);
+    for (const path of result.consumed) consumed.add(path);
+  };
+
+  for (const [path, bytes] of loaded)
+    if (isZip(bytes)) {
+      accept({
+        candidate: await discoverImageStringZip(path, bytes, sourceKind),
+        consumed: new Set([path]),
+      });
+    }
+
+  const jsonValues = new Map<string, unknown>();
+  for (const [path, bytes] of loaded)
+    if (path.toLowerCase().endsWith(".json") && !consumed.has(path)) {
+      try {
+        jsonValues.set(path, parseJson(bytes));
+      } catch (error) {
+        throw new Error(`${path} 不是合法 JSON：${formatError(error)}。`);
+      }
+    }
+
+  for (const path of jsonValues.keys())
+    if (path.toLowerCase().endsWith("image-string.manifest.json"))
+      accept(discoverImageStringDirectory(path, loaded, sourceKind));
+
+  const vniEntries = [...jsonValues].filter(([path, value]) => {
+    if (consumed.has(path)) return false;
     try {
-      assertVNIProject(parseJson(bytes));
+      assertVNIProject(value);
       return true;
     } catch {
       return false;
     }
   });
-  if (vniCandidates.length === 1)
-    return [await discoverVni(vniCandidates[0]!, loaded, sourceKind)];
-  const spineCandidates = jsonEntries.filter(([, bytes]) => {
-    const value = parseJson(bytes);
-    return typeof value === "object" && value !== null && "skeleton" in value;
+  const vniPaths = new Set(vniEntries.map(([path]) => path));
+  const vniOrder = new Map<string, number>();
+  const vniBindings = new Map<string, PopupEditorTierBindingSuggestion>();
+  let nextVniOrder = 0;
+  for (const [path, value] of jsonValues) {
+    if (!isWinAmountDescriptor(value)) continue;
+    const descriptor = parseWinAmountAnimationManifest(value);
+    const tierIds = descriptor.tiers.map(({ id }) => id);
+    if (tierIds.join(",") !== ["bigwin", "superwin", "megawin"].join(","))
+      throw new Error(
+        `${path} 必须按 bigwin/superwin/megawin 顺序声明三档 VNI。`,
+      );
+    consumed.add(path);
+    for (const tier of descriptor.tiers) {
+      const projectPath = findKey(loaded, resolveRelative(path, tier.project));
+      if (!vniPaths.has(projectPath))
+        throw new Error(
+          `${path} 引用的 ${tier.project} 不是完整、合法的 VNI project。`,
+        );
+      if (!vniOrder.has(projectPath)) vniOrder.set(projectPath, nextVniOrder++);
+      if (vniBindings.has(projectPath))
+        throw new Error(`${projectPath} 被多个 win-amount tier 重复引用。`);
+      vniBindings.set(projectPath, {
+        tierId: tier.id as AwardTierId,
+        countDurationSeconds: tier.playback.durationSeconds,
+        playback: {
+          loopStartTime: tier.playback.loopStartTime,
+          loopEndTime: tier.playback.loopEndTime,
+          keepParticlesAlive: tier.playback.keepParticlesAlive,
+        },
+      });
+    }
+  }
+  vniEntries.sort(([left], [right]) => {
+    const leftOrder = vniOrder.get(left) ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = vniOrder.get(right) ?? Number.MAX_SAFE_INTEGER;
+    return leftOrder - rightOrder || left.localeCompare(right, "en");
   });
-  const atlas = [...loaded].filter(([path]) =>
+  for (const entry of vniEntries)
+    accept(
+      await discoverVni(
+        [entry[0], required(loaded, entry[0])],
+        loaded,
+        sourceKind,
+        vniBindings.get(entry[0]),
+      ),
+    );
+
+  const atlasEntries = [...loaded].filter(([path]) =>
     path.toLowerCase().endsWith(".atlas"),
   );
-  if (spineCandidates.length === 1 && atlas.length === 1)
-    return [
-      await discoverSpine(spineCandidates[0]!, atlas[0]!, loaded, sourceKind),
-    ];
-  throw new Error(
-    "上传批次无法唯一识别为完整 image、VNI、official Spine 4.3 或 standalone ImgNumber。",
+  const spineEntries = [...jsonValues].filter(
+    ([path, value]) => !consumed.has(path) && isSpineSkeleton(value),
   );
+  for (const skeleton of spineEntries) {
+    accept(
+      await discoverSpineFromAtlases(
+        [skeleton[0], required(loaded, skeleton[0])],
+        atlasEntries,
+        loaded,
+        sourceKind,
+      ),
+    );
+  }
+
+  for (const [path, bytes] of loaded)
+    if (!consumed.has(path) && imageType(bytes)) {
+      candidates.push(await discoverImage(path, bytes, sourceKind));
+      consumed.add(path);
+    }
+
+  const unknown = [...loaded.keys()].filter((path) => !consumed.has(path));
+  if (unknown.length)
+    throw new Error(
+      `上传批次包含无法识别、未引用或不完整的文件：${unknown.join(", ")}。`,
+    );
+  if (!candidates.length)
+    throw new Error(
+      "上传批次未发现 image、VNI、official Spine 4.3 或 standalone ImgNumber 资源。",
+    );
+  return Object.freeze(candidates);
 }
 
 function discoverImageStringDirectory(
   manifestPath: string,
   source: ReadonlyMap<string, Uint8Array>,
   sourceKind: "files" | "directory",
-): PopupImportReviewCandidate {
-  const marker = manifestPath.slice(
-    0,
-    manifestPath.length - "image-string.manifest.json".length,
-  );
-  const nested = new Map<string, Uint8Array>();
-  for (const [path, bytes] of source) {
-    if (!path.startsWith(marker))
-      throw new Error(`standalone ImgNumber 上传包含未消费文件：${path}`);
-    nested.set(path.slice(marker.length), bytes);
+): DiscoveredCandidate {
+  const rawManifest = parseJson(required(source, manifestPath));
+  const parsedManifest = parseImageStringManifest(rawManifest);
+  const nested = new Map<string, Uint8Array>([
+    ["image-string.manifest.json", required(source, manifestPath)],
+  ]);
+  const consumed = new Set([manifestPath]);
+  for (const assetPath of collectImageStringAssetPaths(parsedManifest)) {
+    const sourcePath = findKey(
+      source,
+      resolveRelative(manifestPath, assetPath),
+    );
+    nested.set(assetPath, required(source, sourcePath));
+    consumed.add(sourcePath);
   }
   const manifest = validateImageStringPackageContents({
-    manifest: parseJson(required(nested, "image-string.manifest.json")),
+    manifest: rawManifest,
     files: nested,
   });
   const prefix = `dependencies/image-strings/${manifest.id}`;
-  return review({
-    proposedId: manifest.id,
-    kind: "image-string",
-    primarySource: manifestPath,
-    dependencyCount: nested.size - 1,
-    summary: `${Object.keys(manifest.glyphs).length} glyphs`,
-    sourceKind,
-    sourceNames: [...source.keys()],
-    spec: {
+  return {
+    candidate: review({
+      proposedId: manifest.id,
       kind: "image-string",
-      manifest: `${prefix}/image-string.manifest.json`,
-    },
-    files: new Map(
-      [...nested].map(([path, bytes]) => [`${prefix}/${path}`, bytes]),
-    ),
-    blobs: [],
-  });
+      primarySource: manifestPath,
+      dependencyCount: nested.size - 1,
+      summary: `${Object.keys(manifest.glyphs).length} glyphs`,
+      sourceKind,
+      sourceNames: [...consumed].sort((a, b) => a.localeCompare(b, "en")),
+      spec: {
+        kind: "image-string",
+        manifest: `${prefix}/image-string.manifest.json`,
+      },
+      files: new Map(
+        [...nested].map(([path, bytes]) => [`${prefix}/${path}`, bytes]),
+      ),
+      blobs: [],
+    }),
+    consumed,
+  };
 }
 
 export function commitImportReview(
@@ -265,9 +369,17 @@ async function discoverVni(
   projectEntry: readonly [string, Uint8Array],
   source: ReadonlyMap<string, Uint8Array>,
   sourceKind: "files" | "directory",
-): Promise<PopupImportReviewCandidate> {
+  suggestedTierBinding?: PopupEditorTierBindingSuggestion,
+): Promise<DiscoveredCandidate> {
   const [projectPath, projectBytes] = projectEntry;
   const project = assertVNIProject(parseJson(projectBytes));
+  if (
+    suggestedTierBinding &&
+    project.stage.duration !== suggestedTierBinding.countDurationSeconds
+  )
+    throw new Error(
+      `${projectPath} stage.duration=${project.stage.duration} 与 win-amount descriptor durationSeconds=${suggestedTierBinding.countDurationSeconds} 不一致。`,
+    );
   const consumed = new Set([projectPath]);
   const rewritten = structuredClone(project);
   const files = new Map<string, Uint8Array>();
@@ -293,7 +405,6 @@ async function discoverVni(
     });
     asset.path = leafPath.split("/").at(-1)!;
   }
-  assertConsumed(source, consumed);
   const canonical = encodeStable(rewritten);
   const digest = await sha256Hex(canonical);
   const output = allocateContentAddressedPath({ digest, extension: "json" });
@@ -305,18 +416,24 @@ async function discoverVni(
     byteLength: canonical.byteLength,
     bytes: canonical,
   });
-  return review({
-    proposedId: requiredSuggestion(projectPath),
-    kind: "vni",
-    primarySource: projectPath,
-    dependencyCount: rewritten.assets.length,
-    summary: `${project.stage.width}×${project.stage.height}, ${project.stage.duration}s`,
-    sourceKind,
-    sourceNames: [...source.keys()],
-    spec: { kind: "vni", project: output },
-    files,
-    blobs,
-  });
+  return {
+    candidate: review({
+      proposedId: requiredSuggestion(projectPath),
+      kind: "vni",
+      primarySource: projectPath,
+      dependencyCount: rewritten.assets.length,
+      summary: `${project.stage.width}×${project.stage.height}, ${project.stage.duration}s`,
+      sourceKind,
+      sourceNames: [...consumed].sort((a, b) => a.localeCompare(b, "en")),
+      spec: { kind: "vni", project: output },
+      files,
+      blobs,
+      ...(suggestedTierBinding
+        ? { suggestedTierBindings: [suggestedTierBinding] }
+        : {}),
+    }),
+    consumed,
+  };
 }
 
 async function discoverSpine(
@@ -324,7 +441,7 @@ async function discoverSpine(
   atlasEntry: readonly [string, Uint8Array],
   source: ReadonlyMap<string, Uint8Array>,
   sourceKind: "files" | "directory",
-): Promise<PopupImportReviewCandidate> {
+): Promise<DiscoveredCandidate> {
   const [skeletonPath, skeletonBytes] = skeletonEntry;
   const [atlasPath, atlasBytes] = atlasEntry;
   const skeleton = parseJson(skeletonBytes);
@@ -358,7 +475,6 @@ async function discoverSpine(
     mapping.set(page, flatName);
     texturePaths[flatName] = output;
   }
-  assertConsumed(source, consumed);
   const rewrittenAtlas = encode(rewriteAtlas(atlasText, mapping));
   const atlasDigest = await sha256Hex(rewrittenAtlas);
   const atlasOutput = allocateContentAddressedPath({
@@ -398,23 +514,26 @@ async function discoverSpine(
     resource,
     requiredAnimations: [],
   });
-  return review({
-    proposedId: requiredSuggestion(skeletonPath),
-    kind: "spine",
-    primarySource: skeletonPath,
-    dependencyCount: pages.length + 1,
-    summary: `${metadata.animationNames.length} animations / ${pages.length} pages`,
-    sourceKind,
-    sourceNames: [...source.keys()],
-    spec: {
+  return {
+    candidate: review({
+      proposedId: requiredSuggestion(skeletonPath),
       kind: "spine",
-      skeleton: skeletonOutput,
-      atlas: atlasOutput,
-      textures: texturePaths,
-    },
-    files,
-    blobs,
-  });
+      primarySource: skeletonPath,
+      dependencyCount: pages.length + 1,
+      summary: `${metadata.animationNames.length} animations / ${pages.length} pages`,
+      sourceKind,
+      sourceNames: [...consumed].sort((a, b) => a.localeCompare(b, "en")),
+      spec: {
+        kind: "spine",
+        skeleton: skeletonOutput,
+        atlas: atlasOutput,
+        textures: texturePaths,
+      },
+      files,
+      blobs,
+    }),
+    consumed,
+  };
 }
 
 function review(
@@ -445,6 +564,17 @@ function requiredSuggestion(path: string) {
 function isZip(bytes: Uint8Array) {
   return bytes[0] === 0x50 && bytes[1] === 0x4b;
 }
+function isIgnoredFolderMetadata(path: string) {
+  const parts = path.split("/");
+  const basename = parts.at(-1)?.toLowerCase();
+  return (
+    parts.includes("__MACOSX") ||
+    parts.some((part) => part.startsWith("._")) ||
+    basename === ".ds_store" ||
+    basename === "thumbs.db" ||
+    basename === "desktop.ini"
+  );
+}
 function imageType(
   bytes: Uint8Array,
 ): { extension: "png" | "webp" | "jpg"; mediaType: string } | null {
@@ -467,6 +597,47 @@ function imageSize(bytes: Uint8Array, extension: string) {
   throw new Error(
     `当前 image importer 需要浏览器 decode 确认 ${extension} 尺寸；请使用 PNG。`,
   );
+}
+function isWinAmountDescriptor(value: unknown): boolean {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "kind" in value &&
+    (value as { kind?: unknown }).kind === "vni-win-amount-tiers",
+  );
+}
+function isSpineSkeleton(value: unknown): boolean {
+  return Boolean(value && typeof value === "object" && "skeleton" in value);
+}
+async function discoverSpineFromAtlases(
+  skeleton: readonly [string, Uint8Array],
+  atlases: readonly (readonly [string, Uint8Array])[],
+  source: ReadonlyMap<string, Uint8Array>,
+  sourceKind: "files" | "directory",
+): Promise<DiscoveredCandidate> {
+  const directory = parentPath(skeleton[0]);
+  const local = atlases.filter(([path]) => parentPath(path) === directory);
+  const candidates = local.length ? local : atlases;
+  const matches: DiscoveredCandidate[] = [];
+  const errors: string[] = [];
+  for (const atlas of candidates) {
+    try {
+      matches.push(await discoverSpine(skeleton, atlas, source, sourceKind));
+    } catch (error) {
+      errors.push(`${atlas[0]}: ${formatError(error)}`);
+    }
+  }
+  if (matches.length !== 1)
+    throw new Error(
+      matches.length
+        ? `${skeleton[0]} 可关联多个 Spine atlas，必须消除歧义：${candidates.map(([path]) => path).join(", ")}。`
+        : `${skeleton[0]} 找不到可用的 official Spine 4.3 atlas closure：${errors.join(" | ") || "没有 atlas 候选"}。`,
+    );
+  return matches[0]!;
+}
+function parentPath(path: string) {
+  const index = path.lastIndexOf("/");
+  return index < 0 ? "" : path.slice(0, index);
 }
 function parseAtlasPages(text: string) {
   const lines = text.replace(/\r\n?/gu, "\n").split("\n");
@@ -520,13 +691,6 @@ function findKey(source: ReadonlyMap<string, Uint8Array>, path: string) {
     );
   return matches[0]!;
 }
-function assertConsumed(
-  source: ReadonlyMap<string, Uint8Array>,
-  consumed: ReadonlySet<string>,
-) {
-  const extra = [...source.keys()].filter((path) => !consumed.has(path));
-  if (extra.length) throw new Error(`上传包含未消费文件：${extra.join(", ")}`);
-}
 function required(map: ReadonlyMap<string, Uint8Array>, path: string) {
   const bytes = map.get(path);
   if (!bytes) throw new Error(`缺少 ${path}`);
@@ -558,4 +722,7 @@ function equal(a: Uint8Array, b: Uint8Array) {
     a.byteLength === b.byteLength &&
     a.every((value, index) => value === b[index])
   );
+}
+function formatError(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }

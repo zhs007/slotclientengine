@@ -90,7 +90,6 @@ function popupFiles() {
     order: 0,
     resource: "amount",
     binding: "win-amount",
-    visibleSegments: ["start", "loop", "end"],
     anchor: { x: 0.5, y: 0.5 },
     transform: { x: 0, y: 0, scale: 1 },
   };

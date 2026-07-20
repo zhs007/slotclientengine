@@ -46,13 +46,20 @@ describe("popup manifest", () => {
       },
     ]);
   });
-  it("rejects unknown fields and missing segment amount coverage", () => {
+  it("rejects unknown fields and requires exactly one always-visible ImgNumber per tier", () => {
     expect(() =>
       parsePopupManifest({ ...popupFixture(), extra: true }),
     ).toThrow(/unknown key/);
     const value = structuredClone(popupFixture()) as any;
     value.awardCelebration.base.layers[0].visibleSegments = ["start", "loop"];
-    expect(() => parsePopupManifest(value)).toThrow(/end segment/);
+    expect(() => parsePopupManifest(value)).toThrow(/unknown key/);
+    const duplicate = structuredClone(popupFixture()) as any;
+    duplicate.awardCelebration.base.layers.push({
+      ...duplicate.awardCelebration.base.layers[0],
+      id: "amount-2",
+      order: 11,
+    });
+    expect(() => parsePopupManifest(duplicate)).toThrow(/恰好包含一个/);
   });
   it("formats raw integer amounts deterministically", () => {
     expect(formatPopupAmount(123456, popupFixture().amountFormat)).toBe(
@@ -186,16 +193,6 @@ describe("popup manifest", () => {
     [
       "binding",
       (value: any) => (value.awardCelebration.base.layers[0].binding = "other"),
-    ],
-    [
-      "empty segment list",
-      (value: any) =>
-        (value.awardCelebration.base.layers[0].visibleSegments = []),
-    ],
-    [
-      "segment duplicate",
-      (value: any) =>
-        value.awardCelebration.base.layers[0].visibleSegments.push("start"),
     ],
     [
       "unused",

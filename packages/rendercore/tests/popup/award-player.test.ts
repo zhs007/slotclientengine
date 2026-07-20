@@ -10,11 +10,21 @@ import { popupFixture } from "./fixtures.js";
 describe("award celebration player", () => {
   it("preserves verified click tiers, awaiting-dismiss, ending drain, and cleanup", async () => {
     const resource = fakeResource();
+    const createdKinds: string[] = [];
+    let amountRebinds = 0;
     const player = createAwardCelebrationPlayer({
       resource,
-      layerFactory: ({ layer }) => fakeLayer(layer.kind === "vni"),
+      layerFactory: ({ layer }) => {
+        createdKinds.push(layer.kind);
+        return fakeLayer(layer.kind === "vni", () => {
+          amountRebinds += 1;
+        });
+      },
     });
     await player.init();
+    expect(createdKinds.filter((kind) => kind === "image-string")).toHaveLength(
+      1,
+    );
     player.start({ betAmountRaw: 100, winAmountRaw: 5000 });
     expect(player.getSnapshot()).toMatchObject({
       phase: "counting",
@@ -29,6 +39,7 @@ describe("award celebration player", () => {
     player.update(1);
     player.requestAdvance();
     expect(player.getSnapshot().activeTierId).toBe("megawin");
+    expect(amountRebinds).toBe(4);
     player.requestAdvance();
     expect(player.getSnapshot()).toMatchObject({
       phase: "awaiting-dismiss",
@@ -136,7 +147,6 @@ function staticResource(): PopupPackageResource {
     order: 1,
     resource: "amount",
     binding: "win-amount" as const,
-    visibleSegments: ["start", "loop", "end"] as const,
     anchor: { x: 0.5, y: 0.5 },
     transform: { x: 0, y: 0, scale: 1 },
   };
@@ -202,7 +212,10 @@ function staticResource(): PopupPackageResource {
     destroy() {},
   };
 }
-function fakeLayer(animated: boolean): PopupLayerRuntime {
+function fakeLayer(
+  animated: boolean,
+  onAmountRebind: () => void = () => {},
+): PopupLayerRuntime {
   const container = new Container();
   let elapsed = 0;
   let ended = false;
@@ -228,6 +241,9 @@ function fakeLayer(animated: boolean): PopupLayerRuntime {
       return ended && elapsed >= 0.2;
     },
     applySegment() {},
+    rebindAmountLayer() {
+      onAmountRebind();
+    },
     destroy() {
       container.destroy();
     },

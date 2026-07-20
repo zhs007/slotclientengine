@@ -266,16 +266,8 @@ function parseTier(
     layers.map(({ order }) => String(order)),
     `${label}.layers.order`,
   );
-  for (const segment of SEGMENTS) {
-    if (
-      !layers.some(
-        (layer) =>
-          layer.kind === "image-string" &&
-          layer.visibleSegments.includes(segment),
-      )
-    )
-      fail(`${label} 的 ${segment} segment 缺少动态 ImgNumber coverage。`);
-  }
+  if (layers.filter((layer) => layer.kind === "image-string").length !== 1)
+    fail(`${label} 必须恰好包含一个动态 ImgNumber 图层。`);
   return freeze({
     countDurationSeconds: nonNegative(
       record.countDurationSeconds,
@@ -314,13 +306,24 @@ function parseLayer(
       record,
       kind === "image"
         ? [...common, "anchor", "visibleSegments"]
-        : [...common, "binding", "anchor", "visibleSegments"],
+        : [...common, "binding", "anchor"],
       label,
     );
     if (kind === "image-string" && record.binding !== "win-amount")
       fail(`${label}.binding must be win-amount.`);
     const anchor = object(record.anchor, `${label}.anchor`);
     keys(anchor, ["x", "y"], `${label}.anchor`);
+    const parsedAnchor = {
+      x: unit(anchor.x, `${label}.anchor.x`),
+      y: unit(anchor.y, `${label}.anchor.y`),
+    };
+    if (kind === "image-string")
+      return freeze({
+        ...base,
+        kind,
+        binding: "win-amount" as const,
+        anchor: parsedAnchor,
+      });
     const visibleSegments = parseSegments(
       record.visibleSegments,
       `${label}.visibleSegments`,
@@ -328,13 +331,9 @@ function parseLayer(
     return freeze({
       ...base,
       kind,
-      ...(kind === "image-string" ? { binding: "win-amount" as const } : {}),
-      anchor: {
-        x: unit(anchor.x, `${label}.anchor.x`),
-        y: unit(anchor.y, `${label}.anchor.y`),
-      },
+      anchor: parsedAnchor,
       visibleSegments,
-    }) as PopupLayer;
+    });
   }
   if (kind === "vni") {
     keys(record, [...common, "playback"], label);

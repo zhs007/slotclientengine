@@ -71,6 +71,14 @@ describe("PopupEditorApp", () => {
     const app = new PopupEditorApp(root);
     await app.init();
     expect(root.textContent).toContain("Popup Award Celebration Editor");
+    expect(root.querySelectorAll('.primary-tabs [role="tab"]')).toHaveLength(3);
+    expect(
+      root
+        .querySelector('[data-tab="resources"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(root.querySelector("header #upload-files")).toBeNull();
+    expect(root.querySelector("#workspace #upload-files")).not.toBeNull();
     const upload = root.querySelector<HTMLInputElement>("#upload-files")!;
     Object.defineProperty(upload, "files", {
       value: [new File([new Uint8Array([1])], "amount.zip")],
@@ -83,8 +91,45 @@ describe("PopupEditorApp", () => {
     ).toBe(true);
     root.querySelector<HTMLButtonElement>("#review-confirm")!.click();
     expect(root.textContent).toContain("amount");
+    expect(root.textContent).toContain("5 个图层绑定");
+    const replacement = root.querySelector<HTMLInputElement>(
+      '[data-replace-resource="amount"]',
+    )!;
+    Object.defineProperty(replacement, "files", {
+      value: [new File([new Uint8Array([2])], "replacement.zip")],
+      configurable: true,
+    });
+    replacement.dispatchEvent(new Event("change"));
+    await tick();
+    root.querySelector<HTMLButtonElement>("#review-confirm")!.click();
+    expect(root.textContent).toContain("5 个图层绑定");
     root.querySelector<HTMLButtonElement>('[data-tab="tiers"]')!.click();
+    expect(root.querySelector("#upload-files")).toBeNull();
+    expect(
+      root.querySelector('[data-tab="tiers"]')?.getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(
+      [...root.querySelectorAll<HTMLButtonElement>("[data-tier]")].map(
+        (button) => button.querySelector("small")?.textContent,
+      ),
+    ).toEqual(Array.from({ length: 5 }, () => "1 层"));
+    expect(root.querySelector(".tier-tabs")?.getAttribute("role")).toBe(
+      "tablist",
+    );
+    expect(
+      [...root.querySelectorAll<HTMLInputElement>("[data-threshold-tier]")].map(
+        (input) => Number(input.value),
+      ),
+    ).toEqual([15, 25, 50]);
+    expect(root.querySelector("#tier-boundaries")?.textContent).toContain(
+      "raw 0→100→1500→2500→5000",
+    );
+    expect(root.querySelector("#tier-boundaries")?.textContent).toContain(
+      "显示为 0→100→1500→2500→5000",
+    );
+    expect(root.textContent).toContain("amount-0");
     root.querySelector<HTMLButtonElement>("[data-add-layer]")!.click();
+    expect(root.querySelectorAll("[data-delete-layer]")).toHaveLength(1);
     expect(root.textContent).toContain("amount-0");
     for (const [field, value] of [
       ["order", "2"],
@@ -97,17 +142,34 @@ describe("PopupEditorApp", () => {
       input.value = value;
       input.dispatchEvent(new Event("change"));
     }
-    const segment = root.querySelector<HTMLInputElement>(
-      '[data-layer-field="segment-start"]',
-    )!;
-    segment.checked = false;
-    segment.dispatchEvent(new Event("change"));
+    expect(root.textContent).toContain("五档共享一个 runtime");
     root.querySelector<HTMLInputElement>("#tier-duration")!.value = "2";
     root
       .querySelector<HTMLInputElement>("#tier-duration")!
       .dispatchEvent(new Event("change"));
     root.querySelector<HTMLButtonElement>('[data-tab="project"]')!.click();
     expect(root.textContent).toContain("Production manifest preview");
+    expect(root.querySelector("#workspace #import-project")).not.toBeNull();
+    expect(root.querySelector("header #import-project")).toBeNull();
+    expect(root.textContent).not.toContain("尚未形成合法 production manifest");
+    const preset = root.querySelector<HTMLSelectElement>(
+      "#amount-format-preset",
+    )!;
+    expect(preset.value).toBe("integer");
+    preset.value = "decimal";
+    preset.dispatchEvent(new Event("change"));
+    expect(
+      root.querySelector<HTMLSelectElement>("#amount-format-preset")!.value,
+    ).toBe("decimal");
+    expect(
+      root.querySelector<HTMLInputElement>(
+        '[data-project-field="fractionDigits"]',
+      )!.value,
+    ).toBe("2");
+    expect(
+      root.querySelector<HTMLInputElement>('[data-project-field="prefix"]')!
+        .value,
+    ).toBe("");
     for (const [field, value] of [
       ["viewport-width", "900"],
       ["rawScale", "10"],
