@@ -116,6 +116,7 @@ describe("PopupEditorApp", () => {
     expect(root.querySelector(".tier-tabs")?.getAttribute("role")).toBe(
       "tablist",
     );
+    expect(root.textContent).toContain("order 数值越小越靠下");
     expect(
       [...root.querySelectorAll<HTMLInputElement>("[data-threshold-tier]")].map(
         (input) => Number(input.value),

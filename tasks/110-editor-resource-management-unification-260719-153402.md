@@ -166,6 +166,7 @@ http://127.0.0.1:4173/
 - 新项目档位阈值显式为 `1 / 15 / 25 / 50`，档位页集中编辑 `bigwin/superwin/megawin` 三个阈值并说明累计播放合同；descriptor 只提供 VNI 映射及 `2.9s` 总时长、`1s/2.5s` loop 边界，不覆盖项目阈值。五个档位导航改为无填充、底部 active indicator 的真实 tab 视觉。
 - ImgNumber 不再拥有 `start/loop/end` 可见性；每档严格恰好一个金额 binding，award player 全程只创建一个 ImgNumber runtime。相同 resource 跨档零重建，不同 resource 通过同一 `RenderImageString.setResource()` 原子切换并复用 glyph sprite pool，避免 ending tier 与 next tier 金额重叠。
 - Popup Editor 中再次为当前档选择 ImgNumber 会切换该档 binding，不会叠加第二个金额图层；后续导入的 ImgNumber 只自动补齐尚未配置金额的档位。Game Layout Editor 的自包含 popup fixture 已同步新合同并完成跨包回归。
+- Popup runtime 按每档 `order` 升序建立 display list，数值越小越靠下；单一 ImgNumber 实例在切档时重挂到当前 tier container 的精确 child index。自动化测试覆盖默认“VNI 下、金额上”与只在 mega 反转为“金额下、VNI 上”，确认前序档位不受影响。
 - Popup Editor 上传入口移入“资源”tab，项目导入/导出移入“项目”tab；顶部导航改为可访问 tab 状态。编辑栏固定为约 `340–440px`，预览占剩余空间，canvas 保持自身宽高比；资源 provenance/path 默认折叠，避免大 closure 撑高资源卡。
 
 反馈修正后严格门禁再次全部通过：
@@ -181,3 +182,5 @@ git diff --check:  passed
 ```
 
 最终浏览器布局、文件夹选择、review 确认、预览及导出验收仍按约定由用户执行。
+
+`order` 修正后的追加验收：RenderCore `64 files / 439 tests`、Popup Editor `4 files / 10 tests` 均通过 test/typecheck/lint/build/format；根测试使用串行 Turbo 调度完成 `27/27`。默认并发根测试曾两次遇到 game002/game003 同时重建共享 `gameframeworks/dist` 导致的瞬时模块解析失败，串行重建后 game002 `18 files / 95 tests` 独立通过，确认与 popup 改动无关。

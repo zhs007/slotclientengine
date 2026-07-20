@@ -50,6 +50,7 @@ interface TierRuntime {
   readonly layers: readonly PopupLayerRuntime[];
   readonly amountLayer: Extract<PopupLayer, { readonly kind: "image-string" }>;
   readonly amountResource: PopupPreparedImageString;
+  readonly amountChildIndex: number;
   segment: PopupSegment;
   endRequested: boolean;
 }
@@ -199,6 +200,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    detach(this.#amount?.container);
     for (const tier of this.#tiers.values()) {
       for (const layer of tier.layers) layer.destroy();
       tier.container.destroy({ children: false });
@@ -225,7 +227,10 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
       for (const [id, spec] of specs) {
         const container = new Container();
         container.visible = false;
-        const amountLayer = spec.layers.find(
+        const orderedLayers = [...spec.layers].sort(
+          (left, right) => left.order - right.order,
+        );
+        const amountLayer = orderedLayers.find(
           (
             layer,
           ): layer is Extract<PopupLayer, { readonly kind: "image-string" }> =>
@@ -255,12 +260,13 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
           layers,
           amountLayer,
           amountResource,
+          amountChildIndex: orderedLayers.indexOf(amountLayer),
           segment: "start",
           endRequested: false,
         };
         created.push(tier);
         this.container.addChild(container);
-        for (const layer of spec.layers) {
+        for (const layer of orderedLayers) {
           if (layer.kind === "image-string") continue;
           const runtime = this.#factory({
             layer,
@@ -274,7 +280,6 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
         await Promise.all(layers.map((layer) => layer.init()));
         this.#tiers.set(id, tier);
       }
-      this.container.addChild(this.#amount!.container);
       this.#initialized = true;
     } catch (error) {
       for (const tier of created) {
@@ -304,6 +309,8 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     tier.endRequested = false;
     tier.container.visible = true;
     for (const layer of tier.layers) layer.enter(this.amountText());
+    detach(this.#amount!.container);
+    tier.container.addChildAt(this.#amount!.container, tier.amountChildIndex);
     this.#amount!.rebindAmountLayer!({
       layer: tier.amountLayer,
       resource: tier.amountResource,
@@ -413,6 +420,10 @@ function tierEnded(tier: TierRuntime) {
     tier.endRequested &&
     tier.layers.every((layer) => !layer.animated || layer.isEndComplete())
   );
+}
+
+function detach(container: Container | undefined): void {
+  if (container?.parent) container.parent.removeChild(container);
 }
 
 function defaultLayerFactory(options: {

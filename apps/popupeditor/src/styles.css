@@ -298,6 +298,10 @@ pre {
   font-size: 12px;
   line-height: 1.5;
 }
+.layer-order-help {
+  color: #91a5ce;
+  font-size: 13px;
+}
 label {
   display: flex;
   gap: 8px;

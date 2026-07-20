@@ -11,14 +11,24 @@ describe("award celebration player", () => {
   it("preserves verified click tiers, awaiting-dismiss, ending drain, and cleanup", async () => {
     const resource = fakeResource();
     const createdKinds: string[] = [];
+    const layerContainers = new Map<string, Container>();
+    let amountContainer: Container | null = null;
     let amountRebinds = 0;
+    const mega = resource.manifest.awardCelebration.celebrationTiers.find(
+      (tier) => tier.id === "megawin",
+    )!;
+    (mega.layers[0] as { order: number }).order = 1;
+    (mega.layers[1] as { order: number }).order = 0;
     const player = createAwardCelebrationPlayer({
       resource,
-      layerFactory: ({ layer }) => {
+      layerFactory: ({ layer, tierId }) => {
         createdKinds.push(layer.kind);
-        return fakeLayer(layer.kind === "vni", () => {
+        const runtime = fakeLayer(layer.kind === "vni", () => {
           amountRebinds += 1;
         });
+        if (layer.kind === "image-string") amountContainer = runtime.container;
+        else layerContainers.set(`${tierId}:${layer.kind}`, runtime.container);
+        return runtime;
       },
     });
     await player.init();
@@ -33,12 +43,20 @@ describe("award celebration player", () => {
     });
     player.requestAdvance();
     expect(player.getSnapshot().activeTierId).toBe("bigwin");
+    expect((player.container.children[2] as Container).children).toEqual([
+      layerContainers.get("bigwin:vni"),
+      amountContainer,
+    ]);
     player.update(1);
     player.requestAdvance();
     expect(player.getSnapshot().activeTierId).toBe("superwin");
     player.update(1);
     player.requestAdvance();
     expect(player.getSnapshot().activeTierId).toBe("megawin");
+    expect((player.container.children[4] as Container).children).toEqual([
+      amountContainer,
+      layerContainers.get("megawin:vni"),
+    ]);
     expect(amountRebinds).toBe(4);
     player.requestAdvance();
     expect(player.getSnapshot()).toMatchObject({

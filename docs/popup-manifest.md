@@ -9,6 +9,7 @@
 - 游戏只提交 safe integer `betAmountRaw` 和 `winAmountRaw`；preview 的 bet、win、zoom、guides 不进入 manifest。
 - 档位固定为 `base -> standard -> bigwin -> superwin -> megawin`。`base` 截止 `1×bet`，`standard` 截止 bigwin threshold，后三档 threshold multiplier 显式且严格递增。边界相等时进入对应档，runtime 用 BigInt 比较。
 - 每档必须有非空 `layers`，且必须恰好包含一个 `image-string + win-amount` 图层。金额不参与 `start/loop/end` 可见性：整场只维持一个 renderer/runtime，跨档只更新文本、transform，必要时在同一实例上切换 image-string resource。
+- 每档严格按唯一的 `order` 升序叠放，数值越小越靠下。跨档时单一金额 renderer 会移动到新档容器内对应的 child index，不会固定在全部 VNI 之上。
 - VNI 显式保存 `loopStartTime/loopEndTime/keepParticlesAlive`；Spine 显式保存大小写精确且互不相同的 start/loop/end animation。
 
 ## 合同骨架

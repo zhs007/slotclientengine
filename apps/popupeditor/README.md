@@ -12,4 +12,6 @@
 
 ImgNumber 是独立于 tier start/loop/end 的连续金额覆盖层：每档必须恰好声明一个金额 binding，但 runtime 全程只创建一个 renderer。相邻档位使用相同 resource 时只更新文本与 transform；resource 改变时调用同一 renderer 的 `setResource()`，复用容器和 glyph sprite pool，不并存两份金额实例。档位页选择 ImgNumber 执行的是当前档金额 binding 切换，不会新增第二个金额图层。
 
+每档图层按 `order` 升序叠放：数值越小越靠下。单一 ImgNumber runtime 在切档时会被同步移动到当前档容器内对应的 child index，因此只修改 mega 的 order 只影响 mega，不会改变前序档位。
+
 production 合同见 [popup-manifest.md](../../docs/popup-manifest.md)。
