@@ -126,7 +126,7 @@ describe("GameLayoutEditorApp workspace", () => {
     vi.clearAllMocks();
     previewSpies.setSymbolPackage.mockResolvedValue(null);
     window.confirm = vi.fn(() => true);
-    window.prompt = vi.fn(() => null);
+    window.prompt = vi.fn((_message, defaultValue) => defaultValue ?? null);
   });
 
   it("mounts one accessible three-tab workspace and keeps symbols controls in the preview drawer", async () => {
@@ -138,7 +138,7 @@ describe("GameLayoutEditorApp workspace", () => {
       "项目",
     ]);
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
-    expect(root.querySelector("[data-upload-images]")).toBeTruthy();
+    expect(root.querySelector("[data-upload-resources]")).toBeTruthy();
     expect(root.querySelector("[data-number]")).toBeNull();
     expect(
       root.querySelector(".symbols-drawer [data-import-symbols]"),
@@ -211,7 +211,9 @@ describe("GameLayoutEditorApp workspace", () => {
     const fileClick = selectFilesOnce([
       new File(["image"], "uploaded.png", { type: "image/png" }),
     ]);
-    (root.querySelector("[data-upload-images]") as HTMLButtonElement).click();
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
     await vi.waitFor(() => expect(commandSpies.uploadImage).toHaveBeenCalled());
     expect(root.querySelector('[data-resource-row="uploaded"]')).toBeTruthy();
     expect(root.textContent).toContain("未创建任何 node");
@@ -331,7 +333,9 @@ describe("GameLayoutEditorApp workspace", () => {
       new File(["b"], "beta.png"),
     ]);
     const { app, root } = await createApp();
-    (root.querySelector("[data-upload-images]") as HTMLButtonElement).click();
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
     await vi.waitFor(() =>
       expect(root.querySelectorAll("[data-resource-row]")).toHaveLength(2),
     );
@@ -363,7 +367,9 @@ describe("GameLayoutEditorApp workspace", () => {
     const { app, root } = await createApp();
     (root.querySelector("[data-new-dual]") as HTMLButtonElement).click();
     const fileClick = selectFilesOnce([new File(["image"], "uploaded.png")]);
-    (root.querySelector("[data-upload-images]") as HTMLButtonElement).click();
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
     await vi.waitFor(() =>
       expect(root.querySelector('[data-resource-row="uploaded"]')).toBeTruthy(),
     );
@@ -427,7 +433,9 @@ describe("GameLayoutEditorApp workspace", () => {
       new File(["image"], "hero.png"),
     ]);
     const { app, root } = await createApp();
-    (root.querySelector("[data-upload-spine]") as HTMLButtonElement).click();
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
     await vi.waitFor(() =>
       expect(root.querySelector('[data-resource-row="hero"]')).toBeTruthy(),
     );
@@ -531,7 +539,7 @@ describe("GameLayoutEditorApp workspace", () => {
     ]);
     const { app, root } = await createApp();
     (
-      root.querySelector("[data-upload-image-string]") as HTMLButtonElement
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
     ).click();
     await vi.waitFor(() =>
       expect(root.querySelector('[data-resource-row="digits"]')).toBeTruthy(),
@@ -651,7 +659,9 @@ describe("GameLayoutEditorApp workspace", () => {
       new File(["hero.png\n"], "hero.atlas"),
       new File(["image"], "hero.png"),
     ]);
-    (root.querySelector("[data-upload-spine]") as HTMLButtonElement).click();
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
     await vi.waitFor(() => expect(commandSpies.uploadSpine).toHaveBeenCalled());
     (
       root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
@@ -907,7 +917,7 @@ async function createAppWithUploadedImage(): Promise<{
   const fileClick = selectFilesOnce([new File(["image"], "uploaded.png")]);
   const result = await createApp();
   (
-    result.root.querySelector("[data-upload-images]") as HTMLButtonElement
+    result.root.querySelector("[data-upload-resources]") as HTMLButtonElement
   ).click();
   await vi.waitFor(() =>
     expect(

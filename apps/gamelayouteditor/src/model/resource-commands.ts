@@ -5,12 +5,14 @@ import {
   validateImageStringPackageContents,
   validateImageStringText,
 } from "@slotclientengine/rendercore/image-string";
-import { extractBoundedZip } from "@slotclientengine/browserartifactio";
 import {
-  createAssetPath,
-  deriveNodeId,
-  rewriteAtlasPageNamesToLowercase,
-} from "../io/filename-policy.js";
+  allocateContentAddressedPath,
+  createBoundedSourceIndex,
+  detectRasterAssetType,
+  extractBoundedZip,
+  sha256Hex,
+  suggestLogicalResourceId,
+} from "@slotclientengine/browserartifactio";
 import {
   activeVariantIds,
   resetVariantGeometry,
@@ -41,6 +43,12 @@ export const IMAGE_STRING_ZIP_LIMITS = Object.freeze({
   maxTotalBytes: 100 * 1024 * 1024,
 });
 
+export const EDITOR_SOURCE_LIMITS = Object.freeze({
+  maxEntries: 4096,
+  maxFileBytes: 50 * 1024 * 1024,
+  maxTotalBytes: 500 * 1024 * 1024,
+});
+
 export function importImageStringZip(options: {
   readonly project: EditorProject;
   readonly zipBytes: Uint8Array;
@@ -67,6 +75,11 @@ export function importImageStringZip(options: {
     assetPaths: Object.freeze(
       collectImageStringAssetPaths(manifest).map((path) => `${prefix}/${path}`),
     ),
+    provenance: {
+      sourceNames: Object.freeze(["image-string.manifest.json"]),
+      sourceKind: "zip" as const,
+      batchLabel: `zip:${manifest.id}`,
+    },
   });
   const prepared: PreparedResource = {
     resource,
@@ -240,7 +253,7 @@ export function deleteLayoutResource(
     );
   }
   project.resources.delete(resourceId);
-  for (const path of editorResourcePaths(resource)) project.assets.delete(path);
+  garbageCollectAssetPaths(project, editorResourcePaths(resource));
 }
 
 export function addLayerFromResource(options: {
@@ -760,8 +773,8 @@ async function prepareImageResource(options: {
     file: File,
   ) => Promise<{ readonly width: number; readonly height: number }>;
 }): Promise<PreparedResource> {
-  const path = createAssetPath(options.file.name);
-  const id = options.resourceId ?? deriveNodeId(options.file.name);
+  createBoundedSourceIndex([options.file], EDITOR_SOURCE_LIMITS);
+  const id = options.resourceId ?? requiredResourceId(options.file.name);
   const decoded = await (options.decodeImage ?? decodeImageFile)(options.file);
   if (
     !Number.isFinite(decoded.width) ||
@@ -772,12 +785,22 @@ async function prepareImageResource(options: {
     throw new Error(`图片尺寸必须是有限正数：${options.file.name}`);
   }
   const bytes = new Uint8Array(await options.file.arrayBuffer());
+  const type = detectRasterAssetType(bytes);
+  const path = allocateContentAddressedPath({
+    digest: await sha256Hex(bytes),
+    extension: type.extension,
+  });
   return {
     resource: {
       id,
       kind: "image",
       path,
       size: { width: decoded.width, height: decoded.height },
+      provenance: {
+        sourceNames: Object.freeze([options.file.name]),
+        sourceKind: options.file.webkitRelativePath ? "directory" : "files",
+        batchLabel: `image:${options.file.name}`,
+      },
     },
     assets: new Map([[path, bytes]]),
   };
@@ -789,6 +812,7 @@ async function prepareSpineResource(options: {
 }): Promise<
   PreparedResource & { readonly resource: EditorSpineLayoutResource }
 > {
+  createBoundedSourceIndex(options.files, EDITOR_SOURCE_LIMITS);
   const jsonFiles = options.files.filter((file) =>
     file.name.toLowerCase().endsWith(".json"),
   );
@@ -811,27 +835,39 @@ async function prepareSpineResource(options: {
   }
   const skeletonFile = jsonFiles[0];
   const atlasFile = atlasFiles[0];
-  const skeletonPath = createAssetPath(skeletonFile.name);
-  const atlasPath = createAssetPath(atlasFile.name);
-  const id = options.resourceId ?? deriveNodeId(skeletonFile.name);
-  const atlasResult = rewriteAtlasPageNamesToLowercase(await atlasFile.text());
+  const id = options.resourceId ?? requiredResourceId(skeletonFile.name);
+  const atlasText = await atlasFile.text();
+  const atlasPages = inspectAtlasPages(atlasText);
   const texturesByName = new Map<string, File>();
   for (const file of textureFiles) {
-    const key = file.name.toLowerCase();
+    const key = file.name.normalize("NFC").toLocaleLowerCase("en-US");
     if (texturesByName.has(key))
       throw new Error(`Spine texture 文件名冲突：${key}`);
     texturesByName.set(key, file);
   }
   const textures: Record<string, string> = {};
-  for (const page of atlasResult.pages) {
-    const file = texturesByName.get(page);
+  const assets = new Map<string, Uint8Array>();
+  const pageMapping = new Map<string, string>();
+  for (const page of atlasPages) {
+    const file = texturesByName.get(
+      page.normalize("NFC").toLocaleLowerCase("en-US"),
+    );
     if (!file) throw new Error(`Spine atlas page 缺少 texture：${page}`);
-    textures[page] = createAssetPath(file.name);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const type = detectRasterAssetType(bytes);
+    const path = allocateContentAddressedPath({
+      digest: await sha256Hex(bytes),
+      extension: type.extension,
+    });
+    const targetPage = path.split("/").at(-1)!;
+    textures[targetPage] = path;
+    pageMapping.set(page, targetPage);
+    putAsset(assets, path, bytes);
   }
-  if (texturesByName.size !== atlasResult.pages.length) {
+  if (texturesByName.size !== atlasPages.length) {
     throw new Error("Spine 上传包含 atlas 未引用的 texture。");
   }
-  const skeletonBytes = new Uint8Array(await skeletonFile.arrayBuffer());
+  const sourceSkeletonBytes = new Uint8Array(await skeletonFile.arrayBuffer());
   let skeleton: {
     readonly skeleton?: {
       readonly spine?: unknown;
@@ -842,7 +878,7 @@ async function prepareSpineResource(options: {
   };
   try {
     skeleton = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(skeletonBytes),
+      new TextDecoder("utf-8", { fatal: true }).decode(sourceSkeletonBytes),
     ) as typeof skeleton;
   } catch (error) {
     throw new Error(`Spine skeleton JSON/UTF-8 无效：${formatError(error)}`);
@@ -869,16 +905,20 @@ async function prepareSpineResource(options: {
   if (hasAnyBounds && !hasBounds) {
     throw new Error("Spine skeleton bounds 必须同时是有限正数，或同时省略。");
   }
-  const assets = new Map<string, Uint8Array>([
-    [skeletonPath, skeletonBytes],
-    [atlasPath, new TextEncoder().encode(atlasResult.atlasText)],
-  ]);
-  for (const [page, path] of Object.entries(textures)) {
-    assets.set(
-      path,
-      new Uint8Array(await texturesByName.get(page)!.arrayBuffer()),
-    );
-  }
+  const skeletonBytes = encodeStableJson(skeleton);
+  const skeletonPath = allocateContentAddressedPath({
+    digest: await sha256Hex(skeletonBytes),
+    extension: "json",
+  });
+  putAsset(assets, skeletonPath, skeletonBytes);
+  const atlasBytes = new TextEncoder().encode(
+    rewriteAtlasPages(atlasText, pageMapping),
+  );
+  const atlasPath = allocateContentAddressedPath({
+    digest: await sha256Hex(atlasBytes),
+    extension: "atlas",
+  });
+  putAsset(assets, atlasPath, atlasBytes);
   return {
     resource: {
       id,
@@ -888,6 +928,13 @@ async function prepareSpineResource(options: {
       textures,
       animationNames,
       ...(hasBounds ? { bounds: { width, height } } : {}),
+      provenance: {
+        sourceNames: Object.freeze(options.files.map((file) => file.name)),
+        sourceKind: options.files.some((file) => file.webkitRelativePath)
+          ? "directory"
+          : "files",
+        batchLabel: `spine:${skeletonFile.name}`,
+      },
     },
     assets,
   };
@@ -914,11 +961,15 @@ function assertPathsAvailable(
   const local = new Set<string>();
   for (const path of paths) {
     const lower = path.toLowerCase();
-    if (local.has(lower))
-      throw new Error(`资源内部 lowercase path 冲突：${path}`);
+    if (local.has(lower) && !local.has(path))
+      throw new Error(`资源内部 lowercase path alias 冲突：${path}`);
     local.add(lower);
     for (const existing of project.assets.keys()) {
-      if (!ignoredPaths.has(existing) && existing.toLowerCase() === lower) {
+      if (
+        !ignoredPaths.has(existing) &&
+        existing !== path &&
+        existing.toLowerCase() === lower
+      ) {
         throw new Error(`资源路径冲突：${path}`);
       }
     }
@@ -931,7 +982,7 @@ function commitNewResource(
 ): void {
   project.resources.set(prepared.resource.id, prepared.resource);
   for (const [path, bytes] of prepared.assets)
-    project.assets.set(path, bytes.slice());
+    putAsset(project.assets, path, bytes);
 }
 
 function commitResourceReplacement(
@@ -1000,10 +1051,10 @@ function commitResourceReplacement(
       );
     }
   }
-  for (const path of oldPaths) project.assets.delete(path);
   project.resources.set(current.id, prepared.resource);
+  garbageCollectAssetPaths(project, oldPaths);
   for (const [path, bytes] of prepared.assets)
-    project.assets.set(path, bytes.slice());
+    putAsset(project.assets, path, bytes);
   for (const variantId of backgroundVariants) {
     const currentSize = project.variants[variantId].artSize;
     if (!nextSize) resetVariantGeometry(project, variantId);
@@ -1033,6 +1084,94 @@ function decodeImageFile(
     };
     image.src = url;
   });
+}
+
+function requiredResourceId(sourceName: string): string {
+  const id = suggestLogicalResourceId(sourceName);
+  if (!id) {
+    throw new Error(
+      `无法从 ${sourceName} 建议 lowercase ASCII kebab-case resource id，请在导入审查中显式填写。`,
+    );
+  }
+  return id;
+}
+
+function inspectAtlasPages(atlasText: string): readonly string[] {
+  const lines = atlasText.replace(/\r\n?/gu, "\n").split("\n");
+  const pages: string[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    if (!line || /^\s/u.test(line) || line.includes(":")) continue;
+    const next = lines
+      .slice(index + 1)
+      .find((candidate) => candidate.length > 0);
+    if (next?.startsWith("size:")) pages.push(line);
+  }
+  if (pages.length === 0) throw new Error("Spine atlas 没有可识别的 page。");
+  const folded = pages.map((page) =>
+    page.normalize("NFC").toLocaleLowerCase("en-US"),
+  );
+  if (new Set(folded).size !== folded.length)
+    throw new Error("Spine atlas page 存在 case-fold/NFC collision。");
+  return Object.freeze(pages);
+}
+
+function rewriteAtlasPages(
+  atlasText: string,
+  mapping: ReadonlyMap<string, string>,
+): string {
+  const lines = atlasText.replace(/\r\n?/gu, "\n").split("\n");
+  const rewritten = lines.map((line) => mapping.get(line) ?? line);
+  if ([...mapping.keys()].some((page) => !lines.includes(page)))
+    throw new Error("Spine atlas page rewrite closure 不完整。");
+  return `${rewritten.join("\n").replace(/\n+$/u, "")}\n`;
+}
+
+function encodeStableJson(value: unknown): Uint8Array {
+  return new TextEncoder().encode(
+    `${JSON.stringify(sortValue(value), null, 2)}\n`,
+  );
+}
+
+function sortValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right, "en"))
+      .map(([key, child]) => [key, sortValue(child)]),
+  );
+}
+
+function putAsset(
+  assets: Map<string, Uint8Array>,
+  path: string,
+  bytes: Uint8Array,
+): void {
+  const current = assets.get(path);
+  if (current && !equalBytes(current, bytes))
+    throw new Error(`content-addressed path collision：${path}`);
+  if (!current) assets.set(path, bytes.slice());
+}
+
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return (
+    left.byteLength === right.byteLength &&
+    left.every((value, index) => value === right[index])
+  );
+}
+
+function garbageCollectAssetPaths(
+  project: EditorProject,
+  candidates: Iterable<string>,
+): void {
+  const retained = new Set(
+    [...project.resources.values()].flatMap((resource) =>
+      editorResourcePaths(resource),
+    ),
+  );
+  for (const path of candidates)
+    if (!retained.has(path)) project.assets.delete(path);
 }
 
 function formatError(error: unknown): string {

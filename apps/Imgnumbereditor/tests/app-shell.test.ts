@@ -114,4 +114,34 @@ describe("app shell", () => {
     expect(shell.store.project.glyphs.size).toBe(0);
     await shell.destroy();
   });
+
+  it("routes a ZIP through project import and keeps the current project when review is cancelled", async () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const imported = projectFixture();
+    const importZip = vi.fn(async () => imported);
+    const confirmation = vi.fn(() => false);
+    Object.defineProperty(window, "confirm", {
+      configurable: true,
+      value: confirmation,
+    });
+    const shell = createImageStringAppShell(root, { importZip });
+    const upload = root.querySelector<HTMLInputElement>("[data-role=upload]")!;
+    Object.defineProperty(upload, "files", {
+      configurable: true,
+      value: [new File(["zip"], "digits.zip", { type: "application/zip" })],
+    });
+    upload.dispatchEvent(new Event("change"));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(importZip).toHaveBeenCalledOnce();
+    expect(shell.store.project.glyphs.size).toBe(0);
+    expect(confirmation).toHaveBeenCalledOnce();
+    Object.defineProperty(window, "confirm", {
+      configurable: true,
+      value: undefined,
+    });
+    await shell.destroy();
+  });
 });

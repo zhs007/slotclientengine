@@ -1,6 +1,6 @@
 import {
   assertCanonicalPackagePath,
-  assertNoPackagePathCollisions,
+  assertNoPackagePathAliases,
 } from "@slotclientengine/browserartifactio";
 import { ImageStringError } from "./errors.js";
 import type {
@@ -85,7 +85,7 @@ export function parseImageStringManifest(
     };
   }
   try {
-    assertNoPackagePathCollisions(paths);
+    assertNoPackagePathAliases(paths);
   } catch (error) {
     fail("glyphs", formatError(error));
   }
@@ -172,9 +172,9 @@ export function parseImageStringManifest(
 export function collectImageStringAssetPaths(
   manifest: ImageStringManifestV1,
 ): readonly string[] {
-  return Object.values(manifest.glyphs)
-    .map((glyph) => glyph.path)
-    .sort((left, right) => left.localeCompare(right, "en"));
+  return [
+    ...new Set(Object.values(manifest.glyphs).map((glyph) => glyph.path)),
+  ].sort((left, right) => left.localeCompare(right, "en"));
 }
 
 export function validateImageStringText(

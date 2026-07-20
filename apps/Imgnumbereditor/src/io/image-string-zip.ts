@@ -4,6 +4,7 @@ import {
 } from "@slotclientengine/browserartifactio";
 import {
   createImageStringResourceFromFiles,
+  materializeImageStringPackage,
   parseImageStringManifest,
   validateImageStringPackageContents,
   type DecodeImageStringImage,
@@ -33,7 +34,11 @@ export async function exportImageStringZip(
   validation: ImageStringZipValidationOptions = {},
 ): Promise<{ readonly filename: string; readonly bytes: Uint8Array }> {
   const manifest = createManifestFromProject(project);
-  const files = createImageStringPackageFiles(project);
+  const materialized = await materializeImageStringPackage({
+    manifest,
+    files: createImageStringPackageFiles(project),
+  });
+  const files = new Map(materialized.files);
   const resource = await createImageStringResourceFromFiles({
     files,
     decodeImage: validation.decodeImage,
@@ -80,27 +85,40 @@ export async function importImageStringZip(
   } catch (error) {
     throw new Error(`manifest JSON 无效：${formatError(error)}`);
   }
-  const manifest = parseImageStringManifest(raw);
-  validateImageStringPackageContents({ manifest, files });
+  const legacyManifest = parseImageStringManifest(raw);
+  validateImageStringPackageContents({ manifest: legacyManifest, files });
   const resource = await createImageStringResourceFromFiles({
-    manifest,
+    manifest: legacyManifest,
     files,
     decodeImage: validation.decodeImage,
     loadTexture: validation.loadTexture,
   });
   await resource.destroy();
+  const materialized = await materializeImageStringPackage({
+    manifest: legacyManifest,
+    files,
+  });
+  const manifest = materialized.manifest;
+  const canonicalFiles = materialized.files;
   const glyphs = new Map<string, GlyphDraft>();
   for (const [character, spec] of Object.entries(manifest.glyphs))
     glyphs.set(character, {
       id: `imported-${character.codePointAt(0)!.toString(16)}`,
       originalName: spec.path.split("/").at(-1)!,
       mediaType: spec.path.endsWith(".webp") ? "image/webp" : "image/png",
-      bytes: files.get(spec.path)!.slice(),
+      bytes: canonicalFiles.get(spec.path)!.slice(),
       width: spec.size.width,
       height: spec.size.height,
       suggestedCharacter: character,
       character,
       path: spec.path,
+      contentPath: spec.path,
+      digest: spec.path.slice("assets/".length, spec.path.lastIndexOf(".")),
+      provenance: {
+        sourceNames: Object.freeze([spec.path]),
+        sourceKind: "package-import",
+        batchLabel: `package-import:${manifest.id}`,
+      },
       offset: { ...spec.offset },
     });
   return freezeEditorProject({

@@ -1,5 +1,10 @@
 # Symbol package v1
 
+Editor-owned payload 使用 `assets/<full-sha256>.<canonical-ext>`。Spine page 先物化、
+再结构化改写 atlas，VNI 只改写 vnicore 声明的 `project.assets[].path`；package
+`resources` 从重写后 manifest 精确派生。`dependencies/image-strings/<id>/` 保持
+自包含，legacy 重导不得改变 symbol/state/animation/slot/scale/priority 语义。
+
 Symbol package 是 symbols 编辑器与布局编辑器之间的独立、可重新导入 artifact。它不是 production spin 数据包，也不包含 scene layout。
 
 ## ZIP 结构

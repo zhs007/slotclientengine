@@ -1,7 +1,10 @@
 import { strToU8, zipSync } from "fflate";
 import { Assets, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
-import { exportLayoutZip } from "../src/io/exported-layout-zip.js";
+import {
+  exportLayoutZip,
+  materializeLayoutOwnedAssets,
+} from "../src/io/exported-layout-zip.js";
 import {
   extractBoundedZip,
   importLayoutZip,
@@ -96,6 +99,116 @@ function compositePackageFixture() {
 }
 
 describe("layout zip IO", () => {
+  it("materializes shared Spine leaves before atlas and skeleton roots", async () => {
+    const spineResource = {
+      kind: "spine" as const,
+      skeleton: "legacy/hero.json",
+      atlas: "legacy/hero.atlas",
+      textures: { "hero.png": "legacy/hero.png" },
+      defaultAnimation: "Idle",
+      loop: true as const,
+    };
+    const manifest = {
+      ...imageManifest,
+      nodes: [
+        {
+          ...imageManifest.nodes[0],
+          id: "bg",
+          resource: spineResource,
+        },
+        {
+          ...imageManifest.nodes[0],
+          id: "hero-b",
+          order: 2,
+          resource: spineResource,
+        },
+      ],
+    };
+    const texture = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1]);
+    const materialized = await materializeLayoutOwnedAssets({
+      manifest,
+      assets: new Map([
+        ["legacy/hero.png", texture],
+        [
+          "legacy/hero.atlas",
+          new TextEncoder().encode("hero.png\nsize: 1,1\n"),
+        ],
+        [
+          "legacy/hero.json",
+          new TextEncoder().encode(
+            JSON.stringify({
+              skeleton: { spine: "4.3.23" },
+              animations: { Idle: {} },
+            }),
+          ),
+        ],
+        ["dependencies/example/kept.bin", new Uint8Array([7])],
+        ["legacy/unused.png", texture],
+      ]),
+    });
+    const first = materialized.manifest.nodes[0]!.resource;
+    const second = materialized.manifest.nodes[1]!.resource;
+    expect(first.kind).toBe("spine");
+    expect(second).toEqual(first);
+    if (first.kind !== "spine") throw new Error("expected Spine resource");
+    expect(first.skeleton).toMatch(/^assets\/[a-f0-9]{64}\.json$/u);
+    expect(first.atlas).toMatch(/^assets\/[a-f0-9]{64}\.atlas$/u);
+    expect(first.textures).toEqual({
+      [Object.keys(first.textures)[0]!]: expect.stringMatching(
+        /^assets\/[a-f0-9]{64}\.png$/u,
+      ),
+    });
+    const page = Object.keys(first.textures)[0]!;
+    expect(
+      new TextDecoder().decode(materialized.assets.get(first.atlas)),
+    ).toContain(page);
+    expect(materialized.assets.has("dependencies/example/kept.bin")).toBe(true);
+    expect(materialized.assets.has("legacy/unused.png")).toBe(false);
+  });
+
+  it("rejects a Spine atlas whose declared texture page is absent", async () => {
+    const manifest = {
+      ...imageManifest,
+      nodes: [
+        {
+          ...imageManifest.nodes[0],
+          resource: {
+            kind: "spine" as const,
+            skeleton: "legacy/hero.json",
+            atlas: "legacy/hero.atlas",
+            textures: { "hero.png": "legacy/hero.png" },
+            defaultAnimation: "Idle",
+            loop: true as const,
+          },
+        },
+      ],
+    };
+    await expect(
+      materializeLayoutOwnedAssets({
+        manifest,
+        assets: new Map([
+          [
+            "legacy/hero.png",
+            new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+          ],
+          [
+            "legacy/hero.atlas",
+            new TextEncoder().encode("other.png\nsize: 1,1\n"),
+          ],
+          [
+            "legacy/hero.json",
+            new TextEncoder().encode(
+              JSON.stringify({
+                skeleton: { spine: "4.3.23" },
+                animations: { Idle: {} },
+              }),
+            ),
+          ],
+        ]),
+      }),
+    ).rejects.toThrow(/缺少 page/);
+  });
+
   it("round-trips vendored image-string and symbols closures without orphan bytes", async () => {
     const fixture = compositePackageFixture();
     const load = vi
@@ -108,7 +221,7 @@ describe("layout zip IO", () => {
       expect(first.bytes).toEqual(second.bytes);
       const entries = extractBoundedZip(first.bytes);
       expect([...entries.keys()].sort()).toEqual([
-        "assets/bg.png",
+        expect.stringMatching(/^assets\/[a-f0-9]{64}\.png$/u),
         "dependencies/image-strings/digits/assets/0.png",
         "dependencies/image-strings/digits/image-string.manifest.json",
         "dependencies/symbols/demo-symbols/a.png",
@@ -118,7 +231,11 @@ describe("layout zip IO", () => {
         "layout.manifest.json",
       ]);
       const imported = await importLayoutZip(first.bytes, { decodeImage });
-      expect(imported.manifest).toEqual(fixture.manifest);
+      expect(imported.manifest).toMatchObject({
+        id: fixture.manifest.id,
+        adaptation: fixture.manifest.adaptation,
+        symbolPackage: fixture.manifest.symbolPackage,
+      });
       const project = manifestToEditorProject(
         imported.manifest,
         imported.assets,
@@ -129,7 +246,7 @@ describe("layout zip IO", () => {
         renderMode: "standard",
         includeInExport: true,
       });
-      expect(editorProjectToManifest(project)).toEqual(fixture.manifest);
+      expect(editorProjectToManifest(project)).toEqual(imported.manifest);
       expect(
         project.assets.has("dependencies/symbols/demo-symbols/a.png"),
       ).toBe(false);
@@ -155,6 +272,45 @@ describe("layout zip IO", () => {
     }
   });
 
+  it("rejects missing, mismatched, or incomplete symbols dependency inputs", async () => {
+    const fixture = compositePackageFixture();
+    await expect(
+      exportLayoutZip({
+        manifest: fixture.manifest,
+        assets: fixture.assets,
+        decodeImage,
+      }),
+    ).rejects.toThrow(/未提供 symbolFiles/);
+
+    const mismatched = new Map(fixture.symbolFiles);
+    const packageManifest = JSON.parse(
+      new TextDecoder().decode(mismatched.get("symbols.package.json")),
+    );
+    mismatched.set(
+      "symbols.package.json",
+      encode({ ...packageManifest, id: "other-symbols" }),
+    );
+    await expect(
+      exportLayoutZip({
+        manifest: fixture.manifest,
+        assets: fixture.assets,
+        symbolFiles: mismatched,
+        decodeImage,
+      }),
+    ).rejects.toThrow(/目录不一致/);
+
+    const incomplete = new Map(fixture.symbolFiles);
+    incomplete.delete("a.png");
+    await expect(
+      exportLayoutZip({
+        manifest: fixture.manifest,
+        assets: fixture.assets,
+        symbolFiles: incomplete,
+        decodeImage,
+      }),
+    ).rejects.toThrow(/缺少 bytes/);
+  });
+
   it("exports deterministic bytes and round-trips the exact closure", async () => {
     const assetsWithUnused = new Map(assetBytes);
     assetsWithUnused.set("assets/unused.png", new Uint8Array([9, 9]));
@@ -171,8 +327,15 @@ describe("layout zip IO", () => {
     expect(first.fileName).toBe("fixture-layout.zip");
     expect(first.bytes).toEqual(second.bytes);
     const imported = await importLayoutZip(first.bytes, { decodeImage });
-    expect(imported.manifest).toEqual(imageManifest);
-    expect(imported.assets.get("assets/bg.png")).toEqual(
+    expect(imported.manifest).toMatchObject({
+      id: imageManifest.id,
+      adaptation: imageManifest.adaptation,
+    });
+    const importedImage = imported.manifest.nodes[0]!.resource;
+    expect(importedImage.kind).toBe("image");
+    if (importedImage.kind !== "image") throw new Error("expected image");
+    expect(importedImage.path).toMatch(/^assets\/[a-f0-9]{64}\.png$/u);
+    expect(imported.assets.get(importedImage.path)).toEqual(
       assetBytes.get("assets/bg.png"),
     );
     imported.destroy();

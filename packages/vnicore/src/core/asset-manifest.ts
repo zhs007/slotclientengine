@@ -1,4 +1,5 @@
 import type { V5GProjectConfig } from "./types.js";
+import { assertVNIProject } from "./validation.js";
 
 export type AssetUrlManifest = Readonly<Record<string, string>>;
 
@@ -25,6 +26,26 @@ export function resolveProjectAssetUrls(
     resolved[asset.path] = url;
   }
   return Object.freeze(resolved);
+}
+
+/** Rewrites only schema-declared VNI asset references. */
+export function rewriteVNIProjectAssetPaths(
+  value: unknown,
+  rewrite: (path: string, assetId: string) => string,
+): V5GProjectConfig {
+  assertVNIProject(value);
+  const project = structuredClone(value) as V5GProjectConfig;
+  for (const asset of project.assets) {
+    const next = rewrite(asset.path, asset.id);
+    if (typeof next !== "string" || next.length === 0) {
+      throw new Error(
+        `VNI asset "${asset.id}" rewrite returned an empty path.`,
+      );
+    }
+    asset.path = next;
+  }
+  assertVNIProject(project);
+  return project;
 }
 
 function getFilename(path: string): string {

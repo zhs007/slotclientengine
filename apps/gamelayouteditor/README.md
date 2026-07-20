@@ -1,5 +1,10 @@
 # gamelayouteditor
 
+资源栏统一为“上传资源 / 上传文件夹”。导入按内容识别 image、完整 Spine 和
+standalone image-string ZIP，成功只提交 logical resource；`BG_2.PNG` 建议 id 为
+`bg-2`。Owned payload 使用完整 SHA-256 扁平 `assets/` 路径，atlas page 与 manifest
+同步改写；相同 bytes 可跨 logical resource 复用，GC 只清理无引用 blob。
+
 浏览器内运行的 slot scene layout v1 编辑器，使用 Vite、TypeScript、Pixi.js v8 与 rendercore scene-layout。它是纯前端内存工作区：不连接业务服务器，不使用 WebSocket、账号、数据库、localStorage、IndexedDB 或 File System Access API。
 
 获奖庆祝 popup 作为自包含 dependency 导入。layout 为每个 active variant 只保存相对 viewport center 的 root `x/y/scale`，预览转发 bet/win 与 Advance；内部 tier/layer 必须回 popupeditor 修改。被绑定的 popup 会确定性 vendor 到最终 layout ZIP。

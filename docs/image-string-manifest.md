@@ -1,5 +1,10 @@
 # Image String Manifest v1
 
+新建 package 的 glyph path 固定为 `assets/<full-sha256>.<png|webp>`，hash 输入是最终
+canonical bytes。exact path 可由多个 Unicode scalar 引用，但 size/offset 语义仍
+独立并经真实 decode 校验。parser 接受合法 legacy path；owner 重导升级，consumer
+vendoring 只增加 dependency 根前缀，不重新 hash nested package。
+
 `image-string` 用普通透明 PNG/WebP glyph 渲染任意单行 JavaScript 字符串。它不等同于数字类型：数字、`.`、`+`、`-`、`×`、货币符号和其它单 Unicode scalar 都走相同合同。
 
 ## ZIP 目录

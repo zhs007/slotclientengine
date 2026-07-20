@@ -48,11 +48,6 @@ describe("image-string manifest", () => {
       "扩展名",
     ],
     [
-      "duplicate path",
-      (value: any) => (value.glyphs["1"].path = "assets/u0030.png"),
-      "重复",
-    ],
-    [
       "vertical overflow",
       (value: any) => (value.glyphs["0"].offset.y = 9),
       "vertical",
@@ -76,6 +71,14 @@ describe("image-string manifest", () => {
     const value = cloneFixture();
     mutate(value);
     expect(() => parseImageStringManifest(value)).toThrow(message);
+  });
+
+  it("allows exact content path reuse across glyph identities", () => {
+    const value = cloneFixture() as typeof imageStringManifestFixture;
+    value.glyphs["1"].path = value.glyphs["0"].path;
+    expect(parseImageStringManifest(value).glyphs["1"].path).toBe(
+      value.glyphs["0"].path,
+    );
   });
 
   it("validates scalar, NFC, control and missing glyph text", () => {

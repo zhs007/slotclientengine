@@ -1,6 +1,9 @@
 import { Texture } from "pixi.js";
 import { describe, expect, it } from "vitest";
-import { createDeterministicZip } from "@slotclientengine/browserartifactio";
+import {
+  createDeterministicZip,
+  extractBoundedZip,
+} from "@slotclientengine/browserartifactio";
 import {
   exportImageStringZip,
   importImageStringZip,
@@ -19,6 +22,26 @@ describe("image-string ZIP", () => {
     );
     expect(first.filename).toBe("neutral-library-image-string.zip");
     expect(first.bytes).toEqual(second.bytes);
+    const files = extractBoundedZip(first.bytes, {
+      limits: {
+        maxEntries: 20,
+        maxCompressedBytes: 1024 * 1024,
+        maxFileBytes: 1024 * 1024,
+        maxTotalBytes: 1024 * 1024,
+      },
+      pathPolicy: { requireLowercase: true },
+    });
+    const manifest = JSON.parse(
+      new TextDecoder().decode(files.get("image-string.manifest.json")),
+    ) as { glyphs: Record<string, { path: string }> };
+    expect(
+      Object.values(manifest.glyphs).every(({ path }) =>
+        /^assets\/[a-f0-9]{64}\.png$/u.test(path),
+      ),
+    ).toBe(true);
+    expect(
+      [...files.keys()].some((path) => /\/u[0-9a-f]+\.png$/u.test(path)),
+    ).toBe(false);
     const imported = await importImageStringZip(first.bytes, validationOptions);
     expect(imported.id).toBe("neutral-library");
     expect([...imported.glyphs.keys()]).toEqual(["0", "1", "+"]);

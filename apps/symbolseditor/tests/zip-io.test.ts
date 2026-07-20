@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createDeterministicZip } from "@slotclientengine/browserartifactio";
+import {
+  createDeterministicZip,
+  extractBoundedZip,
+} from "@slotclientengine/browserartifactio";
 import { describe, expect, it } from "vitest";
 import {
   createFromGameConfig,
@@ -69,11 +72,27 @@ describe("symbols zip IO", () => {
       loadTextures: false,
     });
     expect(first.bytes).toEqual(second.bytes);
+    const exportedFiles = extractBoundedZip(first.bytes, {
+      limits: {
+        maxEntries: 20,
+        maxCompressedBytes: 20 * 1024 * 1024,
+        maxFileBytes: 20 * 1024 * 1024,
+        maxTotalBytes: 20 * 1024 * 1024,
+      },
+    });
+    expect([...exportedFiles.keys()]).not.toContain("art/base-wild-final.webp");
+    expect(
+      [...exportedFiles.keys()].some((path) =>
+        /^assets\/[a-f0-9]{64}\.png$/u.test(path),
+      ),
+    ).toBe(true);
     const imported = await importSymbolPackageZip(first.bytes, {
       loadTextures: false,
     });
     expect(
-      imported.project.assetLibrary.records.has("art/base-wild-final.webp"),
+      [...imported.project.assetLibrary.records.keys()].some((path) =>
+        /^assets\/[a-f0-9]{64}\.png$/u.test(path),
+      ),
     ).toBe(true);
     expect(imported.project.assetLibrary.records.has("drafts/unused.png")).toBe(
       false,

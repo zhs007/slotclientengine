@@ -2,6 +2,7 @@ import {
   parseImageStringManifest,
   type ImageStringManifestV1,
 } from "@slotclientengine/rendercore/image-string";
+import type { EditorResourceProvenance } from "@slotclientengine/browserartifactio";
 
 export interface UploadedImageDraft {
   readonly id: string;
@@ -11,6 +12,9 @@ export interface UploadedImageDraft {
   readonly width: number;
   readonly height: number;
   readonly suggestedCharacter: string | null;
+  readonly contentPath?: string;
+  readonly digest?: string;
+  readonly provenance?: EditorResourceProvenance;
 }
 
 export interface GlyphDraft extends UploadedImageDraft {
@@ -137,9 +141,8 @@ export function confirmGlyphMapping(
     throw new Error(`字符 ${JSON.stringify(character)} 已映射。`);
   const image = project.unmappedFiles.get(fileId);
   if (!image) throw new Error(`未找到待映射图片：${fileId}`);
-  const path = deriveGlyphAssetPath(character, image.mediaType);
-  if ([...project.glyphs.values()].some((glyph) => glyph.path === path))
-    throw new Error(`目标路径冲突：${path}`);
+  const path =
+    image.contentPath ?? deriveGlyphAssetPath(character, image.mediaType);
   const next = cloneEditorProject(project);
   (next.unmappedFiles as Map<string, UploadedImageDraft>).delete(fileId);
   (next.glyphs as Map<string, GlyphDraft>).set(character, {
@@ -161,8 +164,9 @@ export function replaceGlyphImage(
   const next = cloneEditorProject(project);
   (next.glyphs as Map<string, GlyphDraft>).set(character, {
     ...cloneImage(image),
+    id: current.id,
     character,
-    path: deriveGlyphAssetPath(character, image.mediaType),
+    path: image.contentPath ?? deriveGlyphAssetPath(character, image.mediaType),
     offset: { ...current.offset },
   });
   createManifestFromProject(next);

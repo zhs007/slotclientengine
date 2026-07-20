@@ -2,6 +2,12 @@ import {
   collectSceneLayoutAssetPaths,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout";
+import {
+  createBoundedSourceIndex,
+  ephemeralContentFingerprint,
+  assertLogicalResourceId,
+  suggestLogicalResourceId,
+} from "@slotclientengine/browserartifactio";
 import { ObjectUrlRegistry } from "../io/object-url-registry.js";
 import { exportLayoutZip } from "../io/exported-layout-zip.js";
 import { importLayoutZip } from "../io/imported-layout-zip.js";
@@ -77,7 +83,10 @@ import {
   type WorkspaceTab,
 } from "./ui-session.js";
 import { escapeHtml } from "./ui-markup.js";
-import { editorResourcePaths } from "../model/editor-resource.js";
+import {
+  editorResourcePaths,
+  type EditorLayoutResource,
+} from "../model/editor-resource.js";
 
 export class GameLayoutEditorApp {
   readonly #root: HTMLElement;
@@ -403,14 +412,11 @@ export class GameLayoutEditorApp {
   private bindWorkspaceActions(project: EditorProject): void {
     const panel = this.requireElement("[data-workspace-panel]");
     panel
-      .querySelector("[data-upload-images]")
-      ?.addEventListener("click", () => void this.uploadImages());
+      .querySelector("[data-upload-resources]")
+      ?.addEventListener("click", () => void this.uploadResources(false));
     panel
-      .querySelector("[data-upload-spine]")
-      ?.addEventListener("click", () => void this.uploadSpine());
-    panel
-      .querySelector("[data-upload-image-string]")
-      ?.addEventListener("click", () => void this.uploadImageString());
+      .querySelector("[data-upload-folder]")
+      ?.addEventListener("click", () => void this.uploadResources(true));
     const query = panel.querySelector<HTMLInputElement>(
       "[data-resource-query]",
     );
@@ -1181,9 +1187,16 @@ export class GameLayoutEditorApp {
       const project = cloneEditorProject(this.#store.getSnapshot().project);
       let lastResourceId = "";
       for (const file of files) {
-        const resource = await uploadImageResource({ project, file });
+        const resourceId = reviewLogicalId(file.name);
+        if (!resourceId) return;
+        const resource = await uploadImageResource({
+          project,
+          file,
+          resourceId,
+        });
         lastResourceId = resource.id;
       }
+      if (!confirmImportReview(project, [lastResourceId], files)) return;
       this.#store.replace(project);
       if (fromPicker && this.#session.picker) {
         this.#session.picker.selectedResourceId = lastResourceId;
@@ -1199,12 +1212,112 @@ export class GameLayoutEditorApp {
     }
   }
 
+  private async uploadResources(directory: boolean): Promise<void> {
+    const files = await pickFiles(
+      ".png,.jpg,.jpeg,.webp,.json,.atlas,.zip,application/zip",
+      true,
+      directory,
+    );
+    if (files.length === 0) return;
+    try {
+      createBoundedSourceIndex(files, {
+        maxEntries: 4096,
+        maxFileBytes: 50 * 1024 * 1024,
+        maxTotalBytes: 500 * 1024 * 1024,
+      });
+    } catch (error) {
+      this.#store.setExternalError(error);
+      return;
+    }
+    if (files.length === 1 && files[0]!.name.toLowerCase().endsWith(".zip")) {
+      try {
+        const project = cloneEditorProject(this.#store.getSnapshot().project);
+        const resource = importImageStringZip({
+          project,
+          zipBytes: new Uint8Array(await files[0]!.arrayBuffer()),
+        });
+        if (!confirmImportReview(project, [resource.id], files)) return;
+        this.#store.replace(project);
+        this.showFeedback(
+          `导入审查确认 image-string ${resource.id}；未创建任何 node。`,
+        );
+      } catch (error) {
+        this.#store.setExternalError(error);
+      }
+      return;
+    }
+    if (files.every((file) => /\.(?:png|jpe?g|webp)$/iu.test(file.name))) {
+      try {
+        const project = cloneEditorProject(this.#store.getSnapshot().project);
+        const imported: string[] = [];
+        for (const file of files) {
+          const resourceId = reviewLogicalId(file.name);
+          if (!resourceId) return;
+          imported.push(
+            (await uploadImageResource({ project, file, resourceId })).id,
+          );
+        }
+        if (!confirmImportReview(project, imported, files)) return;
+        this.#store.replace(project);
+        this.showFeedback(
+          `导入审查确认 ${files.length} 个 image logical resources；未创建任何 node。`,
+        );
+      } catch (error) {
+        this.#store.setExternalError(error);
+      }
+      return;
+    }
+    try {
+      const project = cloneEditorProject(this.#store.getSnapshot().project);
+      const groups = groupSourceFiles(files);
+      const imported: string[] = [];
+      for (const group of groups) {
+        if (group.every((file) => /\.(?:png|jpe?g|webp)$/iu.test(file.name))) {
+          for (const file of group) {
+            const resourceId = reviewLogicalId(file.name);
+            if (!resourceId) return;
+            imported.push(
+              (await uploadImageResource({ project, file, resourceId })).id,
+            );
+          }
+        } else {
+          const primary = group.find((file) =>
+            file.name.toLowerCase().endsWith(".json"),
+          );
+          const resourceId = reviewLogicalId(primary?.name ?? group[0]!.name);
+          if (!resourceId) return;
+          imported.push(
+            (await uploadSpineResource({ project, files: group, resourceId }))
+              .id,
+          );
+        }
+      }
+      if (!confirmImportReview(project, imported, files)) return;
+      this.#store.replace(project);
+      this.showFeedback(
+        `导入审查确认 ${imported.join(", ")}；未创建任何 node。`,
+      );
+    } catch (error) {
+      this.#store.setExternalError(error);
+    }
+  }
+
   private async uploadSpine(fromPicker = false): Promise<void> {
     const files = await pickFiles(".json,.atlas,.png,.jpg,.jpeg,.webp", true);
     if (files.length === 0) return;
     try {
       const project = cloneEditorProject(this.#store.getSnapshot().project);
-      const resource = await uploadSpineResource({ project, files });
+      const primary = files.find((file) =>
+        file.name.toLowerCase().endsWith(".json"),
+      );
+      const resourceId = reviewLogicalId(primary?.name ?? files[0]!.name);
+      if (!resourceId) return;
+      const resource = await uploadSpineResource({
+        project,
+        files,
+        resourceId,
+      });
+      if (!confirmImportReview(project, [resource.id], files)) return;
       this.#store.replace(project);
       if (fromPicker && this.#session.picker) {
         this.#session.picker.selectedResourceId = resource.id;
@@ -1231,6 +1344,7 @@ export class GameLayoutEditorApp {
         project,
         zipBytes: new Uint8Array(await files[0].arrayBuffer()),
       });
+      if (!confirmImportReview(project, [resource.id], files)) return;
       this.#store.replace(project);
       this.showFeedback(
         `已加入 image-string ${resource.id}；可复用创建多个独立字符串图层。`,
@@ -1873,7 +1987,7 @@ export class GameLayoutEditorApp {
       desired.add(resource.id);
       const bytes = project.assets.get(resource.path);
       if (!bytes) continue;
-      const fingerprint = byteFingerprint(resource.path, bytes);
+      const fingerprint = `${resource.path}:${ephemeralContentFingerprint(bytes)}`;
       const current = this.#thumbnailEntries.get(resource.id);
       if (current?.fingerprint === fingerprint) continue;
       if (current) this.#thumbnailUrls.revoke(current.url);
@@ -1987,17 +2101,80 @@ function setPath(target: object, path: string, value: number): void {
   current[parts.at(-1)!] = value;
 }
 
-function pickFiles(accept: string, multiple: boolean): Promise<File[]> {
+function pickFiles(
+  accept: string,
+  multiple: boolean,
+  directory = false,
+): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = accept;
     input.multiple = multiple;
+    if (directory) input.setAttribute("webkitdirectory", "");
     input.addEventListener("change", () => resolve([...(input.files ?? [])]), {
       once: true,
     });
     input.click();
   });
+}
+
+function reviewLogicalId(sourceName: string): string | null {
+  const suggestion = suggestLogicalResourceId(sourceName) ?? "";
+  const prompt = globalThis.window?.prompt;
+  const value =
+    typeof prompt === "function"
+      ? prompt.call(
+          globalThis.window,
+          `导入审查：${sourceName}\n确认或修改 logical resource id`,
+          suggestion,
+        )
+      : suggestion;
+  if (value === null) return null;
+  return assertLogicalResourceId(value.trim());
+}
+
+function confirmImportReview(
+  project: EditorProject,
+  resourceIds: readonly string[],
+  files: readonly File[],
+): boolean {
+  const confirm = globalThis.window?.confirm;
+  if (typeof confirm !== "function") return true;
+  const rows = resourceIds.map((id) => {
+    const resource = project.resources.get(id)!;
+    return `${id} · ${resource.kind} · ${editorResourcePrimaryPathForReview(resource)} · dependencies ${Math.max(0, editorResourcePaths(resource).length - 1)}`;
+  });
+  const total = files.reduce((sum, file) => sum + file.size, 0);
+  return confirm.call(
+    globalThis.window,
+    `导入审查\n${rows.join("\n")}\n未消费文件 0 · ${files.length} files · ${total} bytes\n\n确认只加入资源库？`,
+  );
+}
+
+function editorResourcePrimaryPathForReview(
+  resource: EditorLayoutResource,
+): string {
+  return editorResourcePaths(resource)[0] ?? "";
+}
+
+function groupSourceFiles(files: readonly File[]): readonly File[][] {
+  if (!files.some((file) => file.webkitRelativePath)) return [[...files]];
+  const groups = new Map<string, File[]>();
+  for (const file of files) {
+    const path = file.webkitRelativePath || file.name;
+    const directory = path.includes("/")
+      ? path.slice(0, path.lastIndexOf("/"))
+      : "";
+    const group = groups.get(directory) ?? [];
+    group.push(file);
+    groups.set(directory, group);
+  }
+  return Object.freeze(
+    [...groups.entries()]
+      .sort(([left], [right]) => left.localeCompare(right, "en"))
+      .map(([, group]) => group),
+  );
 }
 
 function formatSymbolPreviewDiagnostic(
@@ -2014,15 +2191,6 @@ function formatSymbolPreviewDiagnostic(
       )
     : [];
   return `${preview.message} stops=[${scene.stopYs.join(", ")}] · scene=${rows.join(" / ")} · mappings=${preview.bindings?.length ?? 0} · otherScene=${otherRows.join(" / ")}`;
-}
-
-function byteFingerprint(path: string, bytes: Uint8Array): string {
-  let hash = 2166136261;
-  for (const byte of bytes) {
-    hash ^= byte;
-    hash = Math.imul(hash, 16777619);
-  }
-  return `${path}:${bytes.length}:${hash >>> 0}`;
 }
 
 function mimeType(path: string): string {

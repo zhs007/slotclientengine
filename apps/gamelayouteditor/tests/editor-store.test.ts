@@ -186,7 +186,7 @@ describe("EditorStore", () => {
     );
     const clone = cloneEditorProject(project);
     clone.assets.get("assets/bg.png")![0] = 99;
-    expect(project.assets.get("assets/bg.png")![0]).toBe(1);
+    expect(project.assets.get("assets/bg.png")![0]).toBe(137);
   });
 
   it("builds a strict single-variant draft preview while the other background is missing", () => {

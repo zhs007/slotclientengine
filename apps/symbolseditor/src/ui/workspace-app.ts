@@ -1,8 +1,13 @@
 import { createSymbolPackageResource } from "@slotclientengine/rendercore/symbol";
 import {
+  createBoundedSourceIndex,
+  ephemeralContentFingerprint,
+} from "@slotclientengine/browserartifactio";
+import {
   addCustomStateDefinition,
   addSymbolState,
   createFromGameConfig,
+  cloneSymbolEditorProject,
   createPreviewSnapshot,
   deleteAsset,
   exportSnapshot,
@@ -1418,13 +1423,43 @@ export class SymbolsEditorApp {
     input.value = "";
     if (files.length === 0) return;
     try {
+      createBoundedSourceIndex(files, {
+        maxEntries: 4096,
+        maxFileBytes: 50 * 1024 * 1024,
+        maxTotalBytes: 500 * 1024 * 1024,
+      });
+      if (files.length === 1 && files[0]!.name.toLowerCase().endsWith(".zip")) {
+        const dependency = await importImageStringDependencyZip(
+          new Uint8Array(await files[0]!.arrayBuffer()),
+        );
+        this.#store.transact((draft) =>
+          installImageStringDependency(draft, dependency),
+        );
+        this.showSuccess(
+          `已识别并安装 image-string ${dependency.id}；尚未自动绑定。`,
+        );
+        this.render(this.#store.getSnapshot());
+        return;
+      }
       const values = await Promise.all(
         files.map(async (file) => ({
           path: file.webkitRelativePath || file.name,
           bytes: new Uint8Array(await file.arrayBuffer()),
         })),
       );
-      this.#store.transact((draft) => uploadAssetBatch(draft, values));
+      const current = this.#store.getSnapshot().project;
+      if (!current) throw new Error("请先创建或导入项目。");
+      const candidate = cloneSymbolEditorProject(current);
+      const batchId = uploadAssetBatch(candidate, values);
+      const batch = candidate.assetLibrary.batches.find(
+        (item) => item.id === batchId,
+      )!;
+      const records = batch.paths.map(
+        (path) => candidate.assetLibrary.records.get(path)!,
+      );
+      validateResourceDiscovery(records);
+      if (!confirmSymbolImportReview(records, files)) return;
+      this.#store.replace(candidate);
       this.showSuccess(`已上传 ${files.length} 个资源；尚未自动绑定`);
       this.render(this.#store.getSnapshot());
     } catch (error) {
@@ -1596,7 +1631,7 @@ export class SymbolsEditorApp {
       if (
         !record ||
         record.kind !== "image" ||
-        fingerprint(record.bytes) !== entry.fingerprint
+        ephemeralContentFingerprint(record.bytes) !== entry.fingerprint
       ) {
         URL.revokeObjectURL(entry.url);
         this.#thumbnails.delete(path);
@@ -1611,7 +1646,7 @@ export class SymbolsEditorApp {
     const record = project.assetLibrary.records.get(path);
     if (!record || record.kind !== "image") return undefined;
     const current = this.#thumbnails.get(path);
-    const nextFingerprint = fingerprint(record.bytes);
+    const nextFingerprint = ephemeralContentFingerprint(record.bytes);
     if (current?.fingerprint === nextFingerprint) return current.url;
     if (current) URL.revokeObjectURL(current.url);
     const url = URL.createObjectURL(new Blob([record.bytes as BlobPart]));
@@ -1652,12 +1687,12 @@ function shellMarkup(): string {
       <strong>Symbols Editor</strong>
       <button data-new>新建（game config）</button><button data-import>导入 ZIP</button>
       <span class="toolbar-divider"></span>
-      <button data-upload disabled>上传文件组</button><button data-upload-directory disabled>上传目录</button>
-      <button data-import-image-string disabled>导入 Imgnumber ZIP</button>
+      <button data-upload disabled>上传资源</button><button data-upload-directory disabled>上传文件夹</button>
+      <button data-import-image-string disabled title="兼容入口；上传资源也会自动识别">导入 Imgnumber ZIP</button>
       <button class="primary" data-export disabled>导出 ZIP</button>
       <input hidden type="file" accept="application/json,.json" data-new-input>
       <input hidden type="file" accept=".zip,application/zip" data-import-input>
-      <input hidden type="file" multiple data-upload-input>
+      <input hidden type="file" multiple accept=".png,.jpg,.jpeg,.webp,.json,.atlas,.zip,application/zip" data-upload-input>
       <input hidden type="file" multiple webkitdirectory data-directory-input>
       <input hidden type="file" data-replace-input>
       <input hidden type="file" accept=".zip,application/zip" data-image-string-input>
@@ -2790,14 +2825,97 @@ function formatBytes(value: number): string {
   return `${(value / 1024 / 1024).toFixed(1)} MiB`;
 }
 
-function parseContext(value: string): ResourceBindingContext {
-  return JSON.parse(value) as ResourceBindingContext;
+function validateResourceDiscovery(
+  records: readonly EditorAssetRecord[],
+): void {
+  const diagnostics = records.flatMap((record) =>
+    record.diagnostics.map((diagnostic) => `${record.path}: ${diagnostic}`),
+  );
+  if (diagnostics.length) throw new Error(diagnostics.join("\n"));
+  const byDirectory = new Map<string, EditorAssetRecord[]>();
+  for (const record of records) {
+    const directory = record.path.includes("/")
+      ? record.path.slice(0, record.path.lastIndexOf("/"))
+      : "";
+    const group = byDirectory.get(directory) ?? [];
+    group.push(record);
+    byDirectory.set(directory, group);
+  }
+  for (const [directory, group] of byDirectory) {
+    const skeletons = group.filter(
+      (record) => record.kind === "spine-skeleton",
+    );
+    const atlases = group.filter((record) => record.kind === "spine-atlas");
+    if (skeletons.length || atlases.length) {
+      if (skeletons.length !== 1 || atlases.length !== 1) {
+        throw new Error(
+          `目录 ${directory || "."} 的 Spine closure 存在歧义：${skeletons.length} skeleton / ${atlases.length} atlas。`,
+        );
+      }
+      const pages = metadataList(atlases[0]!, "pageNames");
+      for (const page of pages) {
+        const matches = group.filter(
+          (record) =>
+            record.kind === "image" &&
+            record.path.split("/").at(-1)?.toLocaleLowerCase("en-US") ===
+              page.toLocaleLowerCase("en-US"),
+        );
+        if (matches.length !== 1)
+          throw new Error(`Spine atlas page ${page} 缺失或大小写匹配歧义。`);
+      }
+    }
+    for (const project of group.filter(
+      (record) => record.kind === "vni-project",
+    )) {
+      for (const assetPath of metadataList(project, "assetPaths")) {
+        const source = resolveReviewPath(project.path, assetPath);
+        const matches = records.filter(
+          (record) =>
+            record.path.toLocaleLowerCase("en-US") ===
+            source.toLocaleLowerCase("en-US"),
+        );
+        if (matches.length !== 1)
+          throw new Error(`VNI asset ${assetPath} 缺失或大小写匹配歧义。`);
+      }
+    }
+  }
 }
 
-function fingerprint(bytes: Uint8Array): string {
-  let hash = 2166136261;
-  for (const byte of bytes) hash = Math.imul(hash ^ byte, 16777619);
-  return `${bytes.byteLength}:${hash >>> 0}`;
+function confirmSymbolImportReview(
+  records: readonly EditorAssetRecord[],
+  files: readonly File[],
+): boolean {
+  const confirm = globalThis.window?.confirm;
+  if (typeof confirm !== "function") return true;
+  const rows = records.map(
+    (record) =>
+      `${record.path} · ${record.kind} · ${metadataList(record, "assetPaths").length + metadataList(record, "pageNames").length} dependencies`,
+  );
+  const total = files.reduce((sum, file) => sum + file.size, 0);
+  return confirm.call(
+    globalThis.window,
+    `导入审查\n${rows.join("\n")}\n未消费文件 0 · ${files.length} files · ${total} bytes\n\n确认只加入资源库？`,
+  );
+}
+
+function metadataList(record: EditorAssetRecord, key: string): string[] {
+  const value = record.metadata?.[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function resolveReviewPath(base: string, reference: string): string {
+  const stack = base.split("/").slice(0, -1);
+  for (const segment of reference.split("/")) {
+    if (segment === "..") stack.pop();
+    else if (segment !== "." && segment) stack.push(segment);
+  }
+  return stack.join("/");
+}
+
+function parseContext(value: string): ResourceBindingContext {
+  return JSON.parse(value) as ResourceBindingContext;
 }
 
 function escapeHtml(value: unknown): string {

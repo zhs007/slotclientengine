@@ -95,3 +95,24 @@ export function assertNoPackagePathCollisions(paths: readonly string[]): void {
     folded.set(caseFold, path);
   }
 }
+
+/**
+ * Validates package paths while permitting the exact same canonical spelling
+ * to be referenced more than once. This is the correct policy for
+ * content-addressed manifests: two logical resources may intentionally point
+ * at the same blob, but case/NFC aliases remain ambiguous and are rejected.
+ */
+export function assertNoPackagePathAliases(paths: readonly string[]): void {
+  const canonical = new Map<string, string>();
+  for (const path of paths) {
+    assertCanonicalPackagePath(path);
+    const key = path.normalize("NFC").toLocaleLowerCase("en-US");
+    const previous = canonical.get(key);
+    if (previous !== undefined && previous !== path) {
+      throw new Error(
+        `package path canonical alias collision：${previous} / ${path}`,
+      );
+    }
+    canonical.set(key, path);
+  }
+}

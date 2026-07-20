@@ -12,7 +12,12 @@ import {
   collectSymbolPackageEntryPaths,
   parseSymbolPackageManifest,
 } from "@slotclientengine/rendercore/symbol";
-import { createDeterministicZip } from "@slotclientengine/browserartifactio";
+import {
+  allocateContentAddressedPath,
+  createDeterministicZip,
+  detectRasterAssetType,
+  sha256Hex,
+} from "@slotclientengine/browserartifactio";
 import { assertCanonicalPackagePath } from "./filename-policy.js";
 import { validateLayoutAssets } from "./imported-layout-zip.js";
 
@@ -29,11 +34,16 @@ export async function exportLayoutZip(options: {
   readonly bytes: Uint8Array;
   readonly blob: Blob;
 }> {
-  const manifest = parseSceneLayoutManifest(options.manifest);
+  const materialized = await materializeLayoutOwnedAssets({
+    manifest: options.manifest,
+    assets: options.assets,
+  });
+  const manifest = materialized.manifest;
+  const ownedAssets = materialized.assets;
   if (manifest.id !== manifest.id.toLowerCase())
     throw new Error("project id 必须为小写。");
   const closure = new Map<string, Uint8Array>();
-  const add = (path: string, source = options.assets) => {
+  const add = (path: string, source = ownedAssets) => {
     assertCanonicalPackagePath(path);
     const bytes = source.get(path);
     if (!bytes) throw new Error(`导出资源闭包缺少 bytes：${path}`);
@@ -63,7 +73,7 @@ export async function exportLayoutZip(options: {
     add(node.resource.manifest);
     const nested = parseImageStringManifest(
       parseJson(
-        options.assets.get(node.resource.manifest),
+        ownedAssets.get(node.resource.manifest),
         node.resource.manifest,
       ),
     );
@@ -124,6 +134,91 @@ export async function exportLayoutZip(options: {
   });
 }
 
+export async function materializeLayoutOwnedAssets(options: {
+  readonly manifest: SceneLayoutManifestV1;
+  readonly assets: ReadonlyMap<string, Uint8Array>;
+}): Promise<{
+  readonly manifest: SceneLayoutManifestV1;
+  readonly assets: ReadonlyMap<string, Uint8Array>;
+}> {
+  const source = parseSceneLayoutManifest(options.manifest);
+  const assets = new Map<string, Uint8Array>();
+  for (const [path, bytes] of options.assets) {
+    if (path.startsWith("dependencies/")) assets.set(path, bytes.slice());
+  }
+  const cache = new Map<
+    string,
+    SceneLayoutManifestV1["nodes"][number]["resource"]
+  >();
+  const nodes = [] as unknown as Array<Record<string, unknown>>;
+  for (const node of source.nodes) {
+    const cacheKey = JSON.stringify(sortValue(node.resource));
+    let resource = cache.get(cacheKey);
+    if (!resource) {
+      if (node.resource.kind === "image") {
+        const bytes = requiredBytes(options.assets, node.resource.path);
+        const type = detectRasterAssetType(bytes);
+        const path = allocateContentAddressedPath({
+          digest: await sha256Hex(bytes),
+          extension: type.extension,
+        });
+        putAsset(assets, path, bytes);
+        resource = { ...node.resource, path };
+      } else if (node.resource.kind === "image-string") {
+        resource = node.resource;
+      } else {
+        const textures: Record<string, string> = {};
+        const pageMapping = new Map<string, string>();
+        for (const [page, oldPath] of Object.entries(node.resource.textures)) {
+          const bytes = requiredBytes(options.assets, oldPath);
+          const type = detectRasterAssetType(bytes);
+          const path = allocateContentAddressedPath({
+            digest: await sha256Hex(bytes),
+            extension: type.extension,
+          });
+          const targetPage = path.split("/").at(-1)!;
+          textures[targetPage] = path;
+          pageMapping.set(page, targetPage);
+          putAsset(assets, path, bytes);
+        }
+        const atlasBytes = new TextEncoder().encode(
+          rewriteAtlasText(
+            new TextDecoder("utf-8", { fatal: true }).decode(
+              requiredBytes(options.assets, node.resource.atlas),
+            ),
+            pageMapping,
+          ),
+        );
+        const atlas = allocateContentAddressedPath({
+          digest: await sha256Hex(atlasBytes),
+          extension: "atlas",
+        });
+        putAsset(assets, atlas, atlasBytes);
+        const skeletonValue = JSON.parse(
+          new TextDecoder("utf-8", { fatal: true }).decode(
+            requiredBytes(options.assets, node.resource.skeleton),
+          ),
+        );
+        const skeletonBytes = new TextEncoder().encode(
+          `${JSON.stringify(sortValue(skeletonValue), null, 2)}\n`,
+        );
+        const skeleton = allocateContentAddressedPath({
+          digest: await sha256Hex(skeletonBytes),
+          extension: "json",
+        });
+        putAsset(assets, skeleton, skeletonBytes);
+        resource = { ...node.resource, skeleton, atlas, textures };
+      }
+      cache.set(cacheKey, resource);
+    }
+    nodes.push({ ...node, resource });
+  }
+  return Object.freeze({
+    manifest: parseSceneLayoutManifest({ ...source, nodes }),
+    assets,
+  });
+}
+
 export function stableManifestJson(
   manifestValue: SceneLayoutManifestV1,
 ): string {
@@ -144,4 +239,42 @@ function sortValue(value: unknown): unknown {
       .sort(([left], [right]) => left.localeCompare(right, "en"))
       .map(([key, child]) => [key, sortValue(child)]),
   );
+}
+
+function rewriteAtlasText(
+  text: string,
+  mapping: ReadonlyMap<string, string>,
+): string {
+  const lines = text.replace(/\r\n?/gu, "\n").split("\n");
+  const rewritten = lines.map((line) => mapping.get(line) ?? line);
+  for (const page of mapping.keys()) {
+    if (!lines.includes(page))
+      throw new Error(`Spine atlas 缺少 page：${page}`);
+  }
+  return `${rewritten.join("\n").replace(/\n+$/u, "")}\n`;
+}
+
+function requiredBytes(
+  files: ReadonlyMap<string, Uint8Array>,
+  path: string,
+): Uint8Array {
+  const bytes = files.get(path);
+  if (!bytes) throw new Error(`导出资源闭包缺少 bytes：${path}`);
+  return bytes;
+}
+
+function putAsset(
+  files: Map<string, Uint8Array>,
+  path: string,
+  bytes: Uint8Array,
+): void {
+  const current = files.get(path);
+  if (
+    current &&
+    (current.byteLength !== bytes.byteLength ||
+      current.some((value, index) => value !== bytes[index]))
+  ) {
+    throw new Error(`content-addressed path collision：${path}`);
+  }
+  if (!current) files.set(path, bytes.slice());
 }

@@ -24,6 +24,16 @@ import {
 } from "../io/image-string-zip.js";
 import { CounterTemplateDriver } from "../preview/counter-template.js";
 import { ImageStringPreview } from "../preview/image-string-preview.js";
+import {
+  assertLogicalResourceId,
+  createBoundedSourceIndex,
+} from "@slotclientengine/browserartifactio";
+
+const SOURCE_LIMITS = Object.freeze({
+  maxEntries: 4096,
+  maxFileBytes: 50 * 1024 * 1024,
+  maxTotalBytes: 500 * 1024 * 1024,
+});
 
 interface PreviewHandle {
   setText(text: string): void;
@@ -59,7 +69,7 @@ export function createImageStringAppShell(
     <header><div><p class="eyebrow">PIXI.JS V8 RESOURCE TOOL</p><h1>图片字符串资源编辑器</h1></div><div class="actions"><button data-action="new">新建</button><label class="button">导入 ZIP<input data-role="import" type="file" accept=".zip" hidden></label><button data-action="export" class="primary">导出 ZIP</button></div></header>
     <div data-role="error" class="error" hidden></div>
     <main>
-      <section class="panel project"><h2>项目合同</h2><label>ID<input data-field="id"></label><div class="inline"><label>行高<input data-field="lineHeight" type="number" min="1"></label><label>字符间距<input data-field="letterSpacing" type="number" min="0"></label></div><label class="button upload">批量上传 PNG / WebP<input data-role="upload" type="file" accept="image/png,image/webp" multiple hidden></label><p class="hint">文件名只生成建议字符，必须逐张确认映射。</p></section>
+      <section class="panel project"><h2>项目合同</h2><label>ID<input data-field="id"></label><div class="inline"><label>行高<input data-field="lineHeight" type="number" min="1"></label><label>字符间距<input data-field="letterSpacing" type="number" min="0"></label></div><div class="actions"><label class="button upload">上传资源<input data-role="upload" type="file" accept="image/png,image/webp,.zip" multiple hidden></label><label class="button upload">上传文件夹<input data-role="upload-folder" type="file" accept="image/png,image/webp" webkitdirectory multiple hidden></label></div><p class="hint">导入审查只提出 kebab-case logical id 与字符建议；确认映射前不会自动创建 glyph。</p></section>
       <section class="panel library"><h2>待映射美术</h2><div data-role="unmapped" class="cards empty"></div><h2>Glyph 配置</h2><div data-role="glyphs" class="glyph-list empty"></div></section>
       <section class="panel groups"><h2>等距字符组</h2><div class="inline"><label>组 ID<input data-group="id" value="digits"></label><label>成员<input data-group="characters" value="0123456789"></label></div><div class="inline"><label>Advance<input data-group="advance" type="number" min="1" value="64"></label><label>对齐<select data-group="align"><option>center</option><option>start</option><option>end</option></select></label></div><div class="actions"><button data-action="group-max">使用成员最大宽度</button><button data-action="group-save" class="primary">保存组</button></div><div data-role="groups"></div></section>
       <section class="panel preview"><h2>实时预览</h2><div class="inline"><label>字符串<input data-role="preview-text" value="0123456789"></label><label>Zoom<input data-role="zoom" type="range" min="0.5" max="4" step="0.1" value="2"></label></div><div data-role="templates" class="template-list"></div><div data-role="canvas" class="canvas"><p>映射 glyph 后生成 Pixi 预览</p></div><pre data-role="snapshot"></pre></section>
@@ -144,7 +154,7 @@ export function createImageStringAppShell(
         img.onerror = () => URL.revokeObjectURL(url);
         card.querySelector("strong")!.textContent = image.originalName;
         card.querySelector("small")!.textContent =
-          `${image.width} × ${image.height}px · 建议 ${image.suggestedCharacter ?? "无"}`;
+          `${image.id} · ${image.width} × ${image.height}px · 建议 ${image.suggestedCharacter ?? "无"} · 来源 ${image.provenance?.sourceNames.join(", ") ?? image.originalName}`;
         const input = card.querySelector<HTMLInputElement>("[data-map-input]")!;
         input.value = image.suggestedCharacter ?? "";
         card
@@ -316,37 +326,67 @@ export function createImageStringAppShell(
           ),
         ),
       );
+    const upload = (event: Event): void =>
+      run(async () => {
+        const files = [...((event.target as HTMLInputElement).files ?? [])];
+        createBoundedSourceIndex(files, SOURCE_LIMITS);
+        if (
+          files.length === 1 &&
+          files[0]!.name.toLowerCase().endsWith(".zip")
+        ) {
+          const imported = await (
+            dependencies.importZip ?? importImageStringZip
+          )(new Uint8Array(await files[0]!.arrayBuffer()));
+          if (!confirmImageImportReview([...imported.glyphs.values()], files))
+            return;
+          store.replace(imported);
+          return;
+        }
+        const decoded = await Promise.all(
+          files.map((file) =>
+            (dependencies.decodeFile ?? decodeUploadedImage)(file),
+          ),
+        );
+        const reviewed: UploadedImageDraft[] = [];
+        for (const image of decoded) {
+          const id = reviewLogicalImageId(image.originalName, image.id);
+          if (!id) return;
+          reviewed.push({ ...image, id });
+        }
+        if (!confirmImageImportReview(reviewed, files)) return;
+        store.transact((draft) => {
+          const map = draft.unmappedFiles as Map<string, UploadedImageDraft>;
+          for (const image of reviewed) {
+            if (
+              map.has(image.id) ||
+              [...draft.glyphs.values()].some((glyph) => glyph.id === image.id)
+            )
+              throw new Error(`logical image id 冲突：${image.id}`);
+            map.set(image.id, image);
+          }
+        });
+      });
     required<HTMLInputElement>(root, "[data-role=upload]").addEventListener(
       "change",
-      (event) =>
-        run(async () => {
-          const files = [...((event.target as HTMLInputElement).files ?? [])];
-          const decoded = await Promise.all(
-            files.map((file) =>
-              (dependencies.decodeFile ?? decodeUploadedImage)(file),
-            ),
-          );
-          store.transact((draft) => {
-            const map = draft.unmappedFiles as Map<string, UploadedImageDraft>;
-            for (const image of decoded) {
-              if (map.has(image.id))
-                throw new Error(`图片 id 冲突：${image.id}`);
-              map.set(image.id, image);
-            }
-          });
-        }),
+      upload,
     );
+    required<HTMLInputElement>(
+      root,
+      "[data-role=upload-folder]",
+    ).addEventListener("change", upload);
     required<HTMLInputElement>(root, "[data-role=import]").addEventListener(
       "change",
       (event) =>
         run(async () => {
           const file = (event.target as HTMLInputElement).files?.[0];
           if (!file) return;
-          store.replace(
-            await (dependencies.importZip ?? importImageStringZip)(
-              new Uint8Array(await file.arrayBuffer()),
-            ),
-          );
+          createBoundedSourceIndex([file], SOURCE_LIMITS);
+          const imported = await (
+            dependencies.importZip ?? importImageStringZip
+          )(new Uint8Array(await file.arrayBuffer()));
+          if (!confirmImageImportReview([...imported.glyphs.values()], [file]))
+            return;
+          store.replace(imported);
         }),
     );
     root
@@ -513,4 +553,41 @@ function escapeHtml(value: string): string {
   const node = document.createElement("span");
   node.textContent = value;
   return node.innerHTML;
+}
+
+function reviewLogicalImageId(
+  sourceName: string,
+  suggestion: string,
+): string | null {
+  const prompt = globalThis.window?.prompt;
+  const value =
+    typeof prompt === "function"
+      ? prompt.call(
+          globalThis.window,
+          `导入审查：${sourceName}\n确认或修改 logical image id`,
+          suggestion,
+        )
+      : suggestion;
+  if (value === null) return null;
+  return assertLogicalResourceId(value.trim());
+}
+
+function confirmImageImportReview(
+  images: readonly UploadedImageDraft[],
+  files: readonly File[],
+): boolean {
+  const confirm = globalThis.window?.confirm;
+  if (typeof confirm !== "function") return true;
+  const total = files.reduce((sum, file) => sum + file.size, 0);
+  return confirm.call(
+    globalThis.window,
+    `导入审查\n${images
+      .map(
+        (image) =>
+          `${image.id} · image · ${image.originalName} · ${image.width}×${image.height} · dependencies 0`,
+      )
+      .join(
+        "\n",
+      )}\n未消费文件 0 · ${files.length} files · ${total} bytes\n\n确认只加入待映射资源库？`,
+  );
 }

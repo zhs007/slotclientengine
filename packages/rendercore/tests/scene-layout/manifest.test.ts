@@ -355,10 +355,10 @@ describe("scene layout manifest", () => {
           },
         ],
       }),
-    ).toThrow(/lowercase scene layout asset path/);
+    ).toThrow(/alias collision/);
   });
 
-  it("allows complete resource signature reuse but rejects partial path sharing", () => {
+  it("allows exact content path reuse without merging resource semantics", () => {
     const shared = parseSceneLayoutManifest({
       ...game002LayoutFixture,
       nodes: [
@@ -372,22 +372,24 @@ describe("scene layout manifest", () => {
     });
     expect(shared.nodes).toHaveLength(2);
     expect(collectSceneLayoutAssetPaths(shared)).toEqual(["assets/bg.png"]);
-    expect(() =>
-      parseSceneLayoutManifest({
-        ...game002LayoutFixture,
-        nodes: [
-          game002LayoutFixture.nodes[0],
-          {
-            ...game002LayoutFixture.nodes[0],
-            id: "overlay",
-            order: 1,
-            resource: {
-              ...game002LayoutFixture.nodes[0].resource,
-              size: { width: 1999, height: 2000 },
-            },
+    const differentSize = parseSceneLayoutManifest({
+      ...game002LayoutFixture,
+      nodes: [
+        game002LayoutFixture.nodes[0],
+        {
+          ...game002LayoutFixture.nodes[0],
+          id: "overlay",
+          order: 1,
+          resource: {
+            ...game002LayoutFixture.nodes[0].resource,
+            size: { width: 1999, height: 2000 },
           },
-        ],
-      }),
-    ).toThrow(/distinct resource signatures/);
+        },
+      ],
+    });
+    expect(differentSize.nodes[1]?.resource).toMatchObject({
+      kind: "image",
+      size: { width: 1999, height: 2000 },
+    });
   });
 });

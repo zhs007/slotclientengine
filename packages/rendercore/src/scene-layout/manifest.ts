@@ -1,4 +1,5 @@
 import { SceneLayoutError } from "./errors.js";
+import { assertNoPackagePathAliases } from "@slotclientengine/browserartifactio";
 import type {
   OrientationFocusSceneLayoutVariant,
   SceneLayoutAdaptation,
@@ -529,30 +530,11 @@ function validateReferencesAndBounds(
 }
 
 function validatePathClosure(nodes: readonly SceneLayoutNode[]): void {
-  const owners = new Map<string, string>();
+  const paths: string[] = [];
   for (const node of nodes) {
     const resource = node.resource;
-    const signature =
-      resource.kind === "image"
-        ? JSON.stringify({
-            kind: resource.kind,
-            path: resource.path,
-            size: resource.size,
-          })
-        : resource.kind === "image-string"
-          ? JSON.stringify({ kind: resource.kind, manifest: resource.manifest })
-          : JSON.stringify({
-              kind: resource.kind,
-              skeleton: resource.skeleton,
-              atlas: resource.atlas,
-              textures: Object.fromEntries(
-                Object.entries(resource.textures).sort(([left], [right]) =>
-                  left.localeCompare(right, "en"),
-                ),
-              ),
-            });
-    const paths =
-      resource.kind === "image"
+    paths.push(
+      ...(resource.kind === "image"
         ? [resource.path]
         : resource.kind === "image-string"
           ? [resource.manifest]
@@ -560,17 +542,13 @@ function validatePathClosure(nodes: readonly SceneLayoutNode[]): void {
               resource.skeleton,
               resource.atlas,
               ...Object.values(resource.textures),
-            ];
-    for (const path of paths) {
-      const key = path.toLowerCase();
-      const owner = owners.get(key);
-      if (owner !== undefined && owner !== signature) {
-        fail(
-          `lowercase scene layout asset path values must be unique across distinct resource signatures: "${path}".`,
-        );
-      }
-      owners.set(key, signature);
-    }
+            ]),
+    );
+  }
+  try {
+    assertNoPackagePathAliases(paths);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
   }
 }
 

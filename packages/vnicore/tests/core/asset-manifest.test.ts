@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createAssetUrlManifest,
   resolveProjectAssetUrls,
+  rewriteVNIProjectAssetPaths,
 } from "../../src/core/asset-manifest";
 import { assertVNIProject } from "../../src/core/validation";
 import bigwinData from "../fixtures/export/bigwin.json";
@@ -103,5 +104,19 @@ describe("asset-manifest", () => {
     expect(() => resolveProjectAssetUrls(project, {})).toThrow(
       "missing from manifest",
     );
+  });
+
+  it("rewrites only explicit asset refs without mutating the source", () => {
+    const source = assertVNIProject(bigwinData);
+    const original = source.assets[0]!.path;
+    const rewritten = rewriteVNIProjectAssetPaths(
+      source,
+      (_path, id) => `assets/${id}.png`,
+    );
+    expect(rewritten.assets[0]!.path).toBe(
+      `assets/${rewritten.assets[0]!.id}.png`,
+    );
+    expect(source.assets[0]!.path).toBe(original);
+    expect(rewritten.layers).toEqual(source.layers);
   });
 });

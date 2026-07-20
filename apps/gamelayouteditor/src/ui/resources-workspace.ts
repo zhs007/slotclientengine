@@ -42,9 +42,8 @@ export function resourcesWorkspaceMarkup(options: {
       <div class="workspace-toolbar sticky-toolbar">
         <div><h2 id="assets-heading">资源库</h2><span>${project.resources.size} 个 logical resources</span></div>
         <div class="toolbar-actions">
-          <button type="button" data-upload-images>上传图片</button>
-          <button type="button" data-upload-spine>上传 Spine 文件组</button>
-          <button type="button" data-upload-image-string>导入 image-string ZIP</button>
+          <button type="button" data-upload-resources>上传资源</button>
+          <button type="button" data-upload-folder>上传文件夹</button>
         </div>
         <label class="search-field">搜索 id / path<input type="search" data-resource-query value="${escapeHtml(session.resourceQuery)}" /></label>
         <label>类型<select data-resource-type><option value="all">全部</option><option value="image" ${session.resourceType === "image" ? "selected" : ""}>Image</option><option value="spine" ${session.resourceType === "spine" ? "selected" : ""}>Spine</option><option value="image-string" ${session.resourceType === "image-string" ? "selected" : ""}>Image String</option></select></label>

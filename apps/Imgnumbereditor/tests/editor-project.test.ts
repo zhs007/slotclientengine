@@ -72,10 +72,10 @@ describe("editor project", () => {
     expect(replaced.glyphs.get("+")?.width).toBe(5);
     const unmapped = unmapGlyph(replaced, "+");
     expect(unmapped.glyphs.has("+")).toBe(false);
-    expect(unmapped.unmappedFiles.has("replacement")).toBe(true);
-    expect(
-      removeUnmappedImage(unmapped, "replacement").unmappedFiles.size,
-    ).toBe(0);
+    expect(unmapped.unmappedFiles.has("glyph-2b")).toBe(true);
+    expect(removeUnmappedImage(unmapped, "glyph-2b").unmappedFiles.size).toBe(
+      0,
+    );
     expect(() => unmapGlyph(grouped, "0")).toThrow("fixed group");
   });
 });

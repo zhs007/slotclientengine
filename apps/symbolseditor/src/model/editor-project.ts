@@ -118,7 +118,6 @@ export interface EditorImageStringDependency {
   readonly id: string;
   readonly manifest: ImageStringManifestV1;
   readonly files: ReadonlyMap<string, Uint8Array>;
-  readonly fingerprint: string;
 }
 
 export interface SymbolEditorProject {
@@ -1591,7 +1590,6 @@ function collectImportedImageStringDependencies(
         id,
         manifest,
         files,
-        fingerprint: fingerprintFiles(files),
       }),
     );
   }
@@ -1607,7 +1605,6 @@ function cloneImageStringDependency(
     files: new Map(
       [...dependency.files].map(([path, bytes]) => [path, bytes.slice()]),
     ),
-    fingerprint: dependency.fingerprint,
   });
 }
 
@@ -1635,19 +1632,6 @@ function imageStringDependencyId(resource: string): string | null {
       resource,
     )?.[1] ?? null
   );
-}
-
-function fingerprintFiles(files: ReadonlyMap<string, Uint8Array>): string {
-  let hash = 0x811c9dc5;
-  for (const [path, bytes] of [...files].sort(([a], [b]) =>
-    comparePath(a, b),
-  )) {
-    for (const byte of new TextEncoder().encode(path)) {
-      hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
-    }
-    for (const byte of bytes) hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
-  }
-  return hash.toString(16).padStart(8, "0");
 }
 
 function fileStem(fileName: string): string {

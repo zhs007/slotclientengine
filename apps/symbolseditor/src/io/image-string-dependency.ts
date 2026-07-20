@@ -49,21 +49,7 @@ export async function importImageStringDependencyZip(
     id: manifest.id,
     manifest,
     files: new Map([...files].map(([path, value]) => [path, value.slice()])),
-    fingerprint: fingerprintFiles(files),
   });
-}
-
-function fingerprintFiles(files: ReadonlyMap<string, Uint8Array>): string {
-  let hash = 0x811c9dc5;
-  for (const [path, bytes] of [...files].sort(([a], [b]) =>
-    a.localeCompare(b, "en"),
-  )) {
-    for (const byte of new TextEncoder().encode(path)) {
-      hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
-    }
-    for (const byte of bytes) hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
-  }
-  return hash.toString(16).padStart(8, "0");
 }
 
 function formatError(error: unknown): string {

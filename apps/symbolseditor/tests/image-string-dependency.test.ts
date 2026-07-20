@@ -55,7 +55,6 @@ describe("image-string logical dependency", () => {
     const changed = {
       ...dependency,
       files: new Map(dependency.files),
-      fingerprint: "changed",
     };
     changed.files.set("assets/0.png", new Uint8Array([9, 9]));
     const project = createProject();

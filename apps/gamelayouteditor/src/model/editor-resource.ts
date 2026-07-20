@@ -1,11 +1,13 @@
 import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout";
 import type { ImageStringManifestV1 } from "@slotclientengine/rendercore/image-string";
+import type { EditorResourceProvenance } from "@slotclientengine/browserartifactio";
 
 export interface EditorImageLayoutResource {
   readonly id: string;
   readonly kind: "image";
   readonly path: string;
   readonly size: { readonly width: number; readonly height: number };
+  readonly provenance?: EditorResourceProvenance;
 }
 
 export interface EditorSpineLayoutResource {
@@ -16,6 +18,7 @@ export interface EditorSpineLayoutResource {
   readonly textures: Readonly<Record<string, string>>;
   readonly animationNames: readonly string[];
   readonly bounds?: { readonly width: number; readonly height: number };
+  readonly provenance?: EditorResourceProvenance;
 }
 
 export interface EditorImageStringLayoutResource {
@@ -24,6 +27,7 @@ export interface EditorImageStringLayoutResource {
   readonly manifestPath: string;
   readonly manifest: ImageStringManifestV1;
   readonly assetPaths: readonly string[];
+  readonly provenance?: EditorResourceProvenance;
 }
 
 export type EditorLayoutResource =

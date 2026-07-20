@@ -13,11 +13,14 @@ export function projectFixture(): ImageStringEditorProject {
     ["1", 4],
     ["+", 3],
   ] as const) {
+    const bytes = new Uint8Array(NEUTRAL_PNG_BYTES.byteLength + 1);
+    bytes.set(NEUTRAL_PNG_BYTES);
+    bytes[bytes.length - 1] = character.codePointAt(0)!;
     glyphs.set(character, {
       id: `glyph-${character.codePointAt(0)!.toString(16)}`,
       originalName: `${character}-1.png`,
       mediaType: "image/png",
-      bytes: NEUTRAL_PNG_BYTES,
+      bytes,
       width,
       height: 10,
       suggestedCharacter: character,
@@ -43,12 +46,16 @@ export function projectFixture(): ImageStringEditorProject {
 }
 
 export const validationOptions = {
-  decodeImage: async (_blob: Blob, path: string) => {
-    const glyph = [...projectFixture().glyphs.values()].find(
-      (candidate) => candidate.path === path,
-    );
-    if (!glyph) throw new Error(`unknown ${path}`);
-    return { width: glyph.width, height: glyph.height };
+  decodeImage: async (blob: Blob) => {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const character = String.fromCodePoint(bytes.at(-1)!);
+    const width = new Map([
+      ["0", 8],
+      ["1", 4],
+      ["+", 3],
+    ]).get(character);
+    if (!width) throw new Error(`unknown glyph payload ${character}`);
+    return { width, height: 10 };
   },
   loadTexture: async () => new Texture({ source: Texture.EMPTY.source }),
 };

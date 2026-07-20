@@ -1,5 +1,10 @@
 # Imgnumbereditor
 
+资源入口统一为“上传资源 / 上传文件夹”。图片先以 lowercase ASCII kebab-case
+logical image id 进入待映射库，上传不会自动创建 glyph；已知 ZIP 按根 manifest
+进入顶层项目导入。来源名只保存在 provenance。新导出以 canonical bytes 的完整
+SHA-256 生成 `assets/<64-hex>.<png|webp>`；legacy code-point path 重导会确定性升级。
+
 纯前端图片字符串资源编辑器。目录名按产品命名保留 `Imgnumbereditor`，pnpm package name 为 `imgnumbereditor`。运行时合同统一称为 `image-string`，并不限定为数字。
 
 ## 使用

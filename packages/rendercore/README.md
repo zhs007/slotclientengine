@@ -1,5 +1,9 @@
 # @slotclientengine/rendercore
 
+Editor materialization 使用格式 owner 的结构化边界：image-string 支持 glyph leaf
+bytes → SHA-256 path → deterministic manifest；scene-layout 允许不同 resource
+signature exact 复用 canonical content path，但仍严格拒绝 alias、媒体/尺寸不一致。
+
 `rendercore` 是 slot 前端渲染核心库。它基于 `pixi.js` v8、复用 `@slotclientengine/pixiani` 的基础显示对象生命周期，并复用 `@slotclientengine/logiccore` 的 game config/paytable 契约。`apps/symbolsviewer` 和 `apps/reelsviewer` 是调试 app，业务展示逻辑不放进核心库。
 
 ## Popup API

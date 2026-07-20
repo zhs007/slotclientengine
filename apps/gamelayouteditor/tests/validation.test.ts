@@ -36,6 +36,8 @@ import {
 } from "../src/model/resource-commands.js";
 
 const decodeImage = async () => ({ width: 2000, height: 2000 });
+const pngBytes = (seed = 0) =>
+  new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, seed]);
 
 function spineFiles(
   options: {
@@ -64,7 +66,7 @@ function spineFiles(
       [`${name}.png\nsize: 1,1\nfilter: Linear,Linear\n`],
       `${name}.atlas`,
     ),
-    new File([new Uint8Array([9])], `${name}.png`, { type: "image/png" }),
+    new File([pngBytes(9)], `${name}.png`, { type: "image/png" }),
   ];
 }
 
@@ -112,7 +114,7 @@ async function initializeProjectBackground(
 ): Promise<void> {
   await uploadImageResource({
     project,
-    file: new File([new Uint8Array([1])], "background.png"),
+    file: new File([pngBytes(1)], "background.png"),
     decodeImage,
   });
   assignBackgroundResource({
@@ -294,20 +296,20 @@ describe("logical layout resource commands", () => {
     const project = createNewEditorProject("maximized-focus");
     const resource = await uploadImageResource({
       project,
-      file: new File([new Uint8Array([1, 2, 3])], "BG.PNG"),
+      file: new File([pngBytes(3)], "BG_2.PNG"),
       decodeImage,
     });
-    expect(resource).toEqual({
-      id: "bg",
+    expect(resource).toMatchObject({
+      id: "bg-2",
       kind: "image",
-      path: "assets/bg.png",
+      path: expect.stringMatching(/^assets\/[a-f0-9]{64}\.png$/u),
       size: { width: 2000, height: 2000 },
     });
     expect(project.nodes).toEqual([]);
-    expect(project.resources.get("bg")).toEqual(resource);
-    expect(project.assets.get("assets/bg.png")).toEqual(
-      new Uint8Array([1, 2, 3]),
-    );
+    expect(project.resources.get("bg-2")).toEqual(resource);
+    expect(resource.kind).toBe("image");
+    if (resource.kind !== "image") throw new Error("expected image resource");
+    expect(project.assets.get(resource.path)).toEqual(pngBytes(3));
   });
 
   it("uploads one strict Spine logical resource and rejects invalid batches atomically", async () => {
@@ -320,12 +322,15 @@ describe("logical layout resource commands", () => {
       id: "hero",
       kind: "spine",
       animationNames: ["Idle", "Win"],
-      textures: { "hero.png": "assets/hero.png" },
     });
+    expect(Object.keys(resource.textures)[0]).toMatch(/^[a-f0-9]{64}\.png$/u);
+    expect(Object.values(resource.textures)[0]).toMatch(
+      /^assets\/[a-f0-9]{64}\.png$/u,
+    );
     expect(project.nodes).toEqual([]);
     expect(
-      new TextDecoder().decode(project.assets.get("assets/hero.atlas")),
-    ).toContain("hero.png\nsize:");
+      new TextDecoder().decode(project.assets.get(resource.atlas)),
+    ).toContain(`${Object.keys(resource.textures)[0]}\nsize:`);
     const before = cloneEditorProject(project);
     await expect(
       uploadSpineResource({
@@ -336,11 +341,37 @@ describe("logical layout resource commands", () => {
     expect(project).toEqual(before);
   });
 
+  it("records directory provenance and optional Spine bounds without exposing source paths", async () => {
+    const imageProject = createNewEditorProject("maximized-focus");
+    const imageFile = new File([pngBytes(4)], "panel.png");
+    Object.defineProperty(imageFile, "webkitRelativePath", {
+      value: "ui/panel.png",
+    });
+    const image = await uploadImageResource({
+      project: imageProject,
+      file: imageFile,
+      decodeImage: async () => ({ width: 20, height: 30 }),
+    });
+    expect(image.provenance?.sourceKind).toBe("directory");
+    expect(imageProject.assets.has("ui/panel.png")).toBe(false);
+
+    const spineProject = createNewEditorProject("maximized-focus");
+    const files = spineFiles({ bounds: { width: 100, height: 200 } });
+    for (const file of files) {
+      Object.defineProperty(file, "webkitRelativePath", {
+        value: `hero/${file.name}`,
+      });
+    }
+    const spine = await uploadSpineResource({ project: spineProject, files });
+    expect(spine.bounds).toEqual({ width: 100, height: 200 });
+    expect(spine.provenance?.sourceKind).toBe("directory");
+  });
+
   it("reuses one resource across independent layers and never garbage-collects it with a node", async () => {
     const project = createNewEditorProject("maximized-focus");
     await uploadImageResource({
       project,
-      file: new File(["image"], "layer.png"),
+      file: new File([pngBytes(2)], "layer.png"),
       decodeImage: async () => ({ width: 100, height: 80 }),
     });
     addLayerFromResource({
@@ -360,11 +391,39 @@ describe("logical layout resource commands", () => {
     expect(getLayoutResourceReferences(project, "layer")).toHaveLength(2);
     removeLayer(project, "layer-a");
     expect(project.resources.has("layer")).toBe(true);
-    expect(project.assets.has("assets/layer.png")).toBe(true);
+    const layer = project.resources.get("layer");
+    expect(layer?.kind).toBe("image");
+    expect(layer?.kind === "image" && project.assets.has(layer.path)).toBe(
+      true,
+    );
     expect(() => deleteLayoutResource(project, "layer")).toThrow(/layer-b/);
     removeLayer(project, "layer-b");
     deleteLayoutResource(project, "layer");
     expect(project.resources.size).toBe(0);
+    expect(project.assets.size).toBe(0);
+  });
+
+  it("deduplicates identical blobs without merging logical resources", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    const first = await uploadImageResource({
+      project,
+      file: new File([pngBytes(11)], "first.png", { type: "image/png" }),
+      decodeImage: async () => ({ width: 10, height: 10 }),
+    });
+    const second = await uploadImageResource({
+      project,
+      file: new File([pngBytes(11)], "second.png", { type: "image/png" }),
+      decodeImage: async () => ({ width: 10, height: 10 }),
+    });
+    expect(first.id).toBe("first");
+    expect(second.id).toBe("second");
+    if (first.kind !== "image" || second.kind !== "image")
+      throw new Error("expected images");
+    expect(first.path).toBe(second.path);
+    expect(project.assets.size).toBe(1);
+    deleteLayoutResource(project, "first");
+    expect(project.assets.has(second.path)).toBe(true);
+    deleteLayoutResource(project, "second");
     expect(project.assets.size).toBe(0);
   });
 
@@ -404,7 +463,7 @@ describe("logical layout resource commands", () => {
     const project = createNewEditorProject("maximized-focus");
     await uploadImageResource({
       project,
-      file: new File(["a"], "bg.png"),
+      file: new File([pngBytes(1)], "bg.png"),
       decodeImage,
     });
     assignBackgroundResource({
@@ -426,7 +485,7 @@ describe("logical layout resource commands", () => {
     });
     await uploadImageResource({
       project,
-      file: new File(["b"], "wide.png"),
+      file: new File([pngBytes(2)], "wide.png"),
       decodeImage: async () => ({ width: 1200, height: 800 }),
     });
     expect(() =>
@@ -476,7 +535,7 @@ describe("logical layout resource commands", () => {
     expect(project).toEqual(before);
     await uploadImageResource({
       project,
-      file: new File(["image"], "image.png"),
+      file: new File([pngBytes(3)], "image.png"),
       decodeImage: async () => ({ width: 10, height: 10 }),
     });
     rebindLayerResource({
@@ -491,7 +550,7 @@ describe("logical layout resource commands", () => {
     const project = createNewEditorProject("orientation-focus");
     await uploadImageResource({
       project,
-      file: new File(["image"], "shared.png"),
+      file: new File([pngBytes(4)], "shared.png"),
       decodeImage: async () => ({ width: 1000, height: 600 }),
     });
     expect(() =>
@@ -545,7 +604,7 @@ describe("logical layout resource commands", () => {
     const project = createNewEditorProject("maximized-focus");
     await uploadImageResource({
       project,
-      file: new File(["a"], "bg.png"),
+      file: new File([pngBytes(5)], "bg.png"),
       decodeImage: async () => ({ width: 1000, height: 600 }),
     });
     assignBackgroundResource({
@@ -559,22 +618,24 @@ describe("logical layout resource commands", () => {
       replaceImageResource({
         project,
         resourceId: "bg",
-        file: new File(["b"], "wide.png"),
+        file: new File([pngBytes(6)], "wide.png"),
         decodeImage: async () => ({ width: 1200, height: 800 }),
       }),
     ).rejects.toThrow(/背景替换尺寸/);
     await replaceImageResource({
       project,
       resourceId: "bg",
-      file: new File(["b"], "wide.png"),
+      file: new File([pngBytes(6)], "wide.png"),
       decodeImage: async () => ({ width: 1200, height: 800 }),
       reinitializeBackgrounds: true,
     });
     expect(project.resources.get("bg")).toMatchObject({
-      path: "assets/wide.png",
+      path: expect.stringMatching(/^assets\/[a-f0-9]{64}\.png$/u),
       size: { width: 1200, height: 800 },
     });
-    expect(project.assets.has("assets/bg.png")).toBe(false);
+    expect(
+      [...project.assets.keys()].some((path) => path === "assets/bg.png"),
+    ).toBe(false);
     expect(project.variants.default.artSize).toEqual({
       width: 1200,
       height: 800,
@@ -584,7 +645,7 @@ describe("logical layout resource commands", () => {
       replaceImageResource({
         project,
         resourceId: "hero",
-        file: new File(["x"], "x.png"),
+        file: new File([pngBytes(7)], "x.png"),
         decodeImage: async () => ({ width: 1, height: 1 }),
       }),
     ).rejects.toThrow(/保持为 image/);
@@ -649,7 +710,7 @@ describe("logical layout resource commands", () => {
         files: [
           new File(["{"], "bad.json"),
           new File(["page.png\nsize: 1,1\n"], "bad.atlas"),
-          new File(["x"], "page.png"),
+          new File([pngBytes(8)], "page.png"),
         ],
       }),
     ).rejects.toThrow(/JSON\/UTF-8/);
@@ -675,5 +736,131 @@ describe("logical layout resource commands", () => {
         files: partialBounds,
       }),
     ).rejects.toThrow(/bounds/);
+    await expect(
+      uploadImageResource({
+        project: createNewEditorProject("maximized-focus"),
+        file: new File([pngBytes(1)], "中奖.png"),
+        decodeImage: async () => ({ width: 1, height: 1 }),
+      }),
+    ).rejects.toThrow(/显式填写/);
+    await expect(
+      uploadImageResource({
+        project: createNewEditorProject("maximized-focus"),
+        file: new File(["not an image"], "bad.png"),
+        resourceId: "bad",
+        decodeImage: async () => ({ width: 1, height: 1 }),
+      }),
+    ).rejects.toThrow(/不是受支持/);
+    expect(() =>
+      importImageStringZip({
+        project: createNewEditorProject("maximized-focus"),
+        zipBytes: zipSync({ "unknown.json": strToU8("{}") }),
+      }),
+    ).toThrow(/根目录必须包含/);
+    await expect(
+      uploadSpineResource({
+        project: createNewEditorProject("maximized-focus"),
+        files: [
+          ...spineFiles({ name: "missing" }).slice(0, 2),
+          new File([pngBytes(1)], "other.png"),
+        ],
+      }),
+    ).rejects.toThrow(/缺少 texture/);
+    await expect(
+      uploadSpineResource({
+        project: createNewEditorProject("maximized-focus"),
+        files: [
+          ...spineFiles({ name: "extra" }),
+          new File([pngBytes(2)], "unused.png"),
+        ],
+      }),
+    ).rejects.toThrow(/未引用/);
+    await expect(
+      uploadSpineResource({
+        project: createNewEditorProject("maximized-focus"),
+        files: [
+          new File(
+            [
+              JSON.stringify({
+                skeleton: { spine: "4.3.23" },
+                animations: { Idle: {} },
+              }),
+            ],
+            "empty-atlas.json",
+          ),
+          new File(["region\n  rotate: false\n"], "empty-atlas.atlas"),
+          new File([pngBytes(1)], "page.png"),
+        ],
+      }),
+    ).rejects.toThrow(/没有可识别/);
+    await expect(
+      uploadSpineResource({
+        project: createNewEditorProject("maximized-focus"),
+        files: [
+          new File(
+            [
+              JSON.stringify({
+                skeleton: { spine: "4.3.23" },
+                animations: { Idle: {} },
+              }),
+            ],
+            "alias.json",
+          ),
+          new File(
+            ["Page.png\nsize: 1,1\n\npage.png\nsize: 1,1\n"],
+            "alias.atlas",
+          ),
+          new File([pngBytes(1)], "page.png"),
+        ],
+      }),
+    ).rejects.toThrow(/case-fold/);
+    const duplicateProject = createNewEditorProject("maximized-focus");
+    await uploadImageResource({
+      project: duplicateProject,
+      file: new File([pngBytes(1)], "same.png"),
+      decodeImage: async () => ({ width: 1, height: 1 }),
+    });
+    await expect(
+      uploadImageResource({
+        project: duplicateProject,
+        file: new File([pngBytes(2)], "same.png"),
+        decodeImage: async () => ({ width: 1, height: 1 }),
+      }),
+    ).rejects.toThrow(/资源 id 冲突/);
+    await expect(
+      uploadImageResource({
+        project: createNewEditorProject("maximized-focus"),
+        file: new File([pngBytes(1)], "valid.png"),
+        resourceId: "Bad_ID",
+        decodeImage: async () => ({ width: 1, height: 1 }),
+      }),
+    ).rejects.toThrow(/resource id/);
+
+    const wrongKindProject = createNewEditorProject("maximized-focus");
+    await uploadImageResource({
+      project: wrongKindProject,
+      file: new File([pngBytes(1)], "bg.png"),
+      decodeImage: async () => ({ width: 1, height: 1 }),
+    });
+    expect(() =>
+      replaceImageStringResource({
+        project: wrongKindProject,
+        resourceId: "bg",
+        zipBytes: imageStringZip({ id: "bg" }),
+      }),
+    ).toThrow(/类型必须保持/);
+
+    const nestedIdProject = createNewEditorProject("maximized-focus");
+    importImageStringZip({
+      project: nestedIdProject,
+      zipBytes: imageStringZip({ id: "digits" }),
+    });
+    expect(() =>
+      replaceImageStringResource({
+        project: nestedIdProject,
+        resourceId: "digits",
+        zipBytes: imageStringZip({ id: "other" }),
+      }),
+    ).toThrow(/nested manifest id/);
   });
 });

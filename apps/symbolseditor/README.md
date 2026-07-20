@@ -1,5 +1,10 @@
 # Symbols Editor
 
+“上传资源 / 上传文件夹”接受图片、完整 Spine/VNI closure 和已知 ZIP；standalone
+ImgNumber ZIP 也可由“上传资源”自动识别。上传只进入资源库，Picker 仍显式绑定。
+导出时 owned image、Spine skeleton/atlas/pages、VNI project/assets 自叶子向根
+结构化改写为完整 SHA-256 hash-flat path；nested dependency 保持自包含。
+
 纯前端、resource-library-first 的 symbols package v1 编辑器。它把公开 `gameconfig.json` 或已有 symbols ZIP 转为 typed draft；资源先进入项目资源库，再由每个 symbol/state 的 typed Picker 显式绑定，不从 symbol code 或文件名猜路径。
 
 ## 固定工作流

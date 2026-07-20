@@ -34,5 +34,5 @@ export const imageManifest = {
 } satisfies SceneLayoutManifestV1;
 
 export const assetBytes = new Map([
-  ["assets/bg.png", new Uint8Array([1, 2, 3])],
+  ["assets/bg.png", new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3])],
 ]);
