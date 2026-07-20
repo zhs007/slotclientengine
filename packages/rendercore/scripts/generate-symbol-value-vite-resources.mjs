@@ -375,7 +375,7 @@ function validatePresentation(symbol, value, states) {
     textType === "image-string"
       ? ["type", "tiers"]
       : textType === "image"
-        ? ["type", "slot", "x", "y", "prefix"]
+        ? ["type", "slot", "x", "y", "prefix", "images"]
         : [
             "type",
             "slot",
@@ -417,10 +417,7 @@ function validatePresentation(symbol, value, states) {
   }
   const textImagePaths =
     textType === "image"
-      ? defaultValues.map(
-          (candidate) =>
-            `${assertManifestPathPrefix(text.prefix, `${symbol} value text prefix`)}${candidate}.png`,
-        )
+      ? validateValueImagePaths(symbol, text, defaultValues)
       : [];
   const imageStringBindings =
     textType === "image-string"
@@ -433,6 +430,36 @@ function validatePresentation(symbol, value, states) {
     textImagePaths,
     imageStringBindings,
   };
+}
+
+function validateValueImagePaths(symbol, text, defaultValues) {
+  if ((text.prefix === undefined) === (text.images === undefined)) {
+    throw new Error(
+      `${symbol} value image text must declare exactly one of prefix or images.`,
+    );
+  }
+  if (text.prefix !== undefined) {
+    const prefix = assertManifestPathPrefix(
+      text.prefix,
+      `${symbol} value text prefix`,
+    );
+    return defaultValues.map((candidate) => `${prefix}${candidate}.png`);
+  }
+  const images = assertRecord(text.images, `${symbol} value text images`);
+  const expected = defaultValues.map(String).sort();
+  const actual = Object.keys(images).sort();
+  if (
+    expected.length !== actual.length ||
+    expected.some((key, index) => key !== actual[index])
+  ) {
+    throw new Error(`${symbol} value text images must match defaultValues.`);
+  }
+  return defaultValues.map((candidate) =>
+    assertManifestImagePath(
+      images[String(candidate)],
+      `${symbol} value text images[${candidate}]`,
+    ),
+  );
 }
 
 function validateImageStringBindings(symbol, value, tierCount) {
@@ -913,6 +940,19 @@ function assertManifestPathPrefix(value, label) {
     value.slice(2).includes("/")
   ) {
     throw new Error(`${label} must be a local ./basename prefix.`);
+  }
+  return value;
+}
+
+function assertManifestImagePath(value, label) {
+  if (
+    typeof value !== "string" ||
+    !value.startsWith("./") ||
+    value.includes("\\") ||
+    value.includes("../") ||
+    !/\.(?:png|jpe?g|webp)$/u.test(value)
+  ) {
+    throw new Error(`${label} must be a local raster path.`);
   }
   return value;
 }

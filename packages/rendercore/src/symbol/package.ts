@@ -465,10 +465,12 @@ export async function createSymbolPackageResource(options: {
         ? Object.freeze({})
         : createSymbolValuePresentationResourcesFromManifest({
             manifest: rawSymbolManifest,
-            spineSkeletonModules: modules.skeletonModules,
-            spineAtlasModules: modules.atlasModules,
-            spineTextureModules: modules.imageModules,
-            textImageModules: modules.imageModules,
+            spineSkeletonModules: toManifestLocalModules(
+              modules.skeletonModules,
+            ),
+            spineAtlasModules: toManifestLocalModules(modules.atlasModules),
+            spineTextureModules: toManifestLocalModules(modules.imageModules),
+            textImageModules: toManifestLocalModules(modules.imageModules),
             ...(imageStringPool
               ? { imageStringResourcePool: imageStringPool }
               : {}),
@@ -603,6 +605,17 @@ function createPackageModules(
     atlasModules,
     imageStringManifestModules,
   };
+}
+
+function toManifestLocalModules<T>(
+  modules: Readonly<Record<string, T>>,
+): Record<string, T> {
+  return Object.fromEntries(
+    Object.entries(modules).map(([path, value]) => [
+      path.startsWith("./") ? path : `./${path}`,
+      value,
+    ]),
+  );
 }
 
 async function loadSymbolAssetMap(

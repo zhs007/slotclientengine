@@ -13,6 +13,7 @@ import {
   defaultLayoutSelection,
   normalizeLayoutSelection,
 } from "../src/ui/ui-session.js";
+import { layoutWorkspaceMarkup } from "../src/ui/layout-workspace.js";
 
 function projectWithResources() {
   const project = createNewEditorProject("orientation-focus");
@@ -23,6 +24,7 @@ function projectWithResources() {
     atlas: "assets/hero.atlas",
     textures: { "hero.png": "assets/hero.png" },
     animationNames: ["Idle", "Win"],
+    bounds: { width: 3744.3176, height: 2371.955 },
   });
   project.resources.set("background", {
     id: "background",
@@ -88,7 +90,7 @@ describe("editor UI session and Resource Picker view model", () => {
     ]);
   });
 
-  it("reports references and incomplete no-bounds Spine background candidates", () => {
+  it("reports references and incomplete Spine background candidates without explicit art size", () => {
     const project = projectWithResources();
     addLayerFromResource({
       project,
@@ -106,6 +108,28 @@ describe("editor UI session and Resource Picker view model", () => {
       resourceId: "hero",
       status: "incomplete",
       referenceCount: 1,
+      summary: expect.stringContaining(
+        "export bounds 3744.3176×2371.955（非 art size）",
+      ),
     });
+  });
+
+  it("exposes background placement controls for explicit Spine art alignment", () => {
+    const project = projectWithResources();
+    const node = assignBackgroundResource({
+      project,
+      variant: "landscape",
+      resourceId: "hero",
+      nodeId: "hero-bg",
+      defaultAnimation: "Idle",
+    });
+    const markup = layoutWorkspaceMarkup(project, {
+      kind: "background",
+      variant: "landscape",
+    });
+    expect(node.placements.landscape).toEqual({ x: 0, y: 0, scale: 1 });
+    expect(markup).toContain("背景 Placement");
+    expect(markup).toContain('data-number="nodes.0.placements.landscape.x"');
+    expect(markup).toContain("Spine 的导出 bounds 不是 art size");
   });
 });

@@ -4,6 +4,8 @@ import {
   cloneEditorProject,
   createNewEditorProject,
   editorProjectToManifest,
+  resetVariantGeometry,
+  setVariantArtSizeDimension,
 } from "../src/model/editor-project.js";
 import {
   addLayerFromResource,
@@ -341,6 +343,47 @@ describe("logical layout resource commands", () => {
     expect(project).toEqual(before);
   });
 
+  it("keeps unique atlas pages while deduplicating identical Spine texture payloads", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    const texture = pngBytes(12);
+    const resource = await uploadSpineResource({
+      project,
+      files: [
+        new File(
+          [
+            JSON.stringify({
+              skeleton: { spine: "4.3.23" },
+              animations: { Idle: {} },
+            }),
+          ],
+          "shared.json",
+        ),
+        new File(
+          [
+            "page-a.png\nsize: 1,1\nfilter: Linear,Linear\n\n" +
+              "page-b.png\nsize: 1,1\nfilter: Linear,Linear\n",
+          ],
+          "shared.atlas",
+        ),
+        new File([texture], "page-a.png", { type: "image/png" }),
+        new File([texture], "page-b.png", { type: "image/png" }),
+      ],
+    });
+    const pages = Object.keys(resource.textures);
+    const paths = Object.values(resource.textures);
+    expect(pages).toHaveLength(2);
+    expect(pages[0]).toMatch(/^[a-f0-9]{64}\.png$/u);
+    expect(pages[1]).toBe(pages[0]!.replace(/\.png$/u, "-2.png"));
+    expect(new Set(paths).size).toBe(1);
+    expect(project.assets.get(paths[0]!)).toEqual(texture);
+    const atlasText = new TextDecoder().decode(
+      project.assets.get(resource.atlas),
+    );
+    expect(pages.every((page) => atlasText.includes(`${page}\nsize:`))).toBe(
+      true,
+    );
+  });
+
   it("records directory provenance and optional Spine bounds without exposing source paths", async () => {
     const imageProject = createNewEditorProject("maximized-focus");
     const imageFile = new File([pngBytes(4)], "panel.png");
@@ -365,6 +408,93 @@ describe("logical layout resource commands", () => {
     const spine = await uploadSpineResource({ project: spineProject, files });
     expect(spine.bounds).toEqual({ width: 100, height: 200 });
     expect(spine.provenance?.sourceKind).toBe("directory");
+  });
+
+  it("keeps Spine export bounds separate from art size and centers default geometry after explicit art input", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    await uploadSpineResource({
+      project,
+      files: spineFiles({
+        name: "bg",
+        animations: ["BG"],
+        bounds: { width: 3744.3176, height: 2371.955 },
+      }),
+    });
+    const node = assignBackgroundResource({
+      project,
+      variant: "default",
+      resourceId: "bg",
+      nodeId: "bg",
+      defaultAnimation: "BG",
+    });
+    expect(project.variants.default.artSize).toEqual({ width: 0, height: 0 });
+    expect(node.placements.default).toEqual({ x: 0, y: 0, scale: 1 });
+
+    setVariantArtSizeDimension(project, "default", "width", 2000);
+    setVariantArtSizeDimension(project, "default", "height", 2000);
+
+    expect(project.variants.default.artSize).toEqual({
+      width: 2000,
+      height: 2000,
+    });
+    expect(node.placements.default).toEqual({ x: 1000, y: 1000, scale: 1 });
+    expect(project.reel.placements.default).toEqual({ x: 600, y: 760 });
+    expect(project.variants.default.focusRect).toEqual({
+      x: 540,
+      y: 700,
+      width: 920,
+      height: 600,
+    });
+
+    node.placements.default = { x: 980, y: 1020, scale: 0.95 };
+    await replaceSpineResource({
+      project,
+      resourceId: "bg",
+      files: spineFiles({
+        name: "replacement",
+        animations: ["BG"],
+        bounds: { width: 4100, height: 2600 },
+      }),
+    });
+    expect(project.variants.default.artSize).toEqual({
+      width: 2000,
+      height: 2000,
+    });
+    expect(node.placements.default).toEqual({
+      x: 980,
+      y: 1020,
+      scale: 0.95,
+    });
+  });
+
+  it("re-centers legacy default geometry when correcting an export-bounds art size", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    await uploadSpineResource({
+      project,
+      files: spineFiles({
+        name: "bg",
+        animations: ["BG"],
+        bounds: { width: 3744.3176, height: 2371.955 },
+      }),
+    });
+    const node = assignBackgroundResource({
+      project,
+      variant: "default",
+      resourceId: "bg",
+      nodeId: "bg",
+      defaultAnimation: "BG",
+    });
+    resetVariantGeometry(project, "default", {
+      width: 3744.3176,
+      height: 2371.955,
+    });
+    expect(node.placements.default).toEqual({ x: 0, y: 0, scale: 1 });
+
+    setVariantArtSizeDimension(project, "default", "width", 2000);
+    setVariantArtSizeDimension(project, "default", "height", 2000);
+
+    expect(node.placements.default).toEqual({ x: 1000, y: 1000, scale: 1 });
+    expect(project.reel.placements.default).toEqual({ x: 600, y: 760 });
   });
 
   it("reuses one resource across independent layers and never garbage-collects it with a node", async () => {

@@ -142,7 +142,7 @@ Image-string node 引用 vendored standalone manifest，text 保持原始 JavaSc
 
 nested manifest id 必须等于 dependency 目录 id。prepare 与 `setImageStringText()` 都复用 image-string 的 Unicode、控制字符、缺 glyph 与布局校验；setter 原子提交，失败时旧 text 和显示不变。
 
-Spine node 必须为官方 4.3.x、atlas page 精确闭合。旧单 loop 形式继续合法：
+Spine node 必须为官方 4.3.x、atlas page 精确闭合。`textures` 的 key 是 atlas 中的逻辑 page name，value 是显式 owned payload path；两者不要求同 basename。多个逻辑 page 在原始 texture bytes 完全相同时允许显式复用同一个完整 SHA-256 hash-flat payload，atlas page key 仍必须唯一且与 atlas 精确闭合。Spine skeleton header 的 `x/y/width/height` 是 export content bounds，不是 scene art canvas；`adaptation.artSize` 及 node placement 必须由 layout 明确声明，禁止从 skeleton bounds 反推。旧单 loop 形式继续合法：
 
 ```json
 {

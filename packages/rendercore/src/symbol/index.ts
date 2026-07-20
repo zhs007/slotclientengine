@@ -13,6 +13,7 @@ export * from "./catalog.js";
 export * from "./standalone-catalog.js";
 export * from "./render-symbol.js";
 export * from "./package.js";
+export * from "./materialize-package.js";
 export { rewriteVNIProjectAssetPaths } from "@slotclientengine/vnicore/core";
 export type {
   SymbolValuePresentationSpec,

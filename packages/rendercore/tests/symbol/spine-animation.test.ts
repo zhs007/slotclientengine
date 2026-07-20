@@ -514,7 +514,10 @@ describe("SpineSymbolAni", () => {
     ani.reset();
     await flushSpineInit();
 
-    expect(pixiMock.assetsLoad).toHaveBeenCalledWith("/assets/Symbol.png");
+    expect(pixiMock.assetsLoad).toHaveBeenCalledWith({
+      src: "/assets/Symbol.png",
+      parser: "loadTextures",
+    });
     expect(spineRuntimeMock.spineTextureFrom).toHaveBeenCalledWith(
       pixiMock.MockTexture.WHITE.source,
     );
@@ -641,8 +644,5 @@ function createDeferred<T>() {
 }
 
 async function flushSpineInit(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
 }

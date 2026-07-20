@@ -3,6 +3,9 @@
 Editor materialization 使用格式 owner 的结构化边界：image-string 支持 glyph leaf
 bytes → SHA-256 path → deterministic manifest；scene-layout 允许不同 resource
 signature exact 复用 canonical content path，但仍严格拒绝 alias、媒体/尺寸不一致。
+symbol official Spine 的 skeleton、atlas 与 PNG/JPEG/WebP texture 使用安全、精确的
+manifest-relative `./` package path，可直接消费 `./assets/<full-sha256>.<ext>`；不允许
+`../`、绝对路径、URL、非法 segment 或 basename fallback。
 
 `rendercore` 是 slot 前端渲染核心库。它基于 `pixi.js` v8、复用 `@slotclientengine/pixiani` 的基础显示对象生命周期，并复用 `@slotclientengine/logiccore` 的 game config/paytable 契约。`apps/symbolsviewer` 和 `apps/reelsviewer` 是调试 app，业务展示逻辑不放进核心库。
 
@@ -527,7 +530,7 @@ symbol 可声明零到多个有唯一 name 的 `imageStringNodes`，每个节点
 
 `RenderSymbol` 公开 `getImageStringNodeNames()`、`setImageStringText(name, text)`、`getImageStringText(name)`。string 原样保存，缺 glyph/控制字符/非 NFC 或 unknown name 时原子失败；节点随目标 state/player attach/detach，保留等价 Loop 时间轴，并受 reel texture 显式优先级约束。consumer 不接触 Spine track、slot 私有对象或 Pixi glyph children。旧 `setPresentationValue()` value-presentation 合同独立保留，不会自动变成命名节点。
 
-symbol manifest 可为任意 symbol 声明可选 `valuePresentation`：该 symbol 禁止再声明顶层 `normal`/state；`reelStates.normal` 必须是显式透明占位，`spinBlur`/`disabled` 等 reel texture state 也归入 `reelStates`。`defaultValues` 必须是非空、无重复的 positive safe integer 数组；tier normal 只接受 named、looping official Spine animation。`appear/win/remove/dropdown` 等 animation state 则在 symbol 顶层 `animations` 以 `activeSpine` 显式配置；remove 是 once，dropdown 是 stable loop，未配置就是没有能力，不能猜动画名或回退 builtin。`text` 是严格的 `font|image|image-string` union：font/image 保留全局 exact slot 与 offset；image-string 必须为每个已解析 tier index 显式声明同数量的 dependency、exact slot、anchor、transform 和 `followSlotColor`，不复制阈值，也不沿用上一档。三种分支拒绝彼此字段残留。
+symbol manifest 可为任意 symbol 声明可选 `valuePresentation`：该 symbol 禁止再声明顶层 `normal`/state；`reelStates.normal` 必须是显式透明占位，`spinBlur`/`disabled` 等 reel texture state 也归入 `reelStates`。`defaultValues` 必须是非空、无重复的 positive safe integer 数组；tier normal 只接受 named、looping official Spine animation。`appear/win/remove/dropdown` 等 animation state 则在 symbol 顶层 `animations` 以 `activeSpine` 显式配置；remove 是 once，dropdown 是 stable loop，未配置就是没有能力，不能猜动画名或回退 builtin。`text` 是严格的 `font|image|image-string` union：font/image 保留全局 exact slot 与 offset；image 可导入 legacy `prefix`，新物化 package 使用与 `defaultValues` 精确等键的 `images` value→hash-flat path 映射，两者严格互斥；image-string 必须为每个已解析 tier index 显式声明同数量的 dependency、exact slot、anchor、transform 和 `followSlotColor`，不复制阈值，也不沿用上一档。三种分支拒绝彼此字段残留。
 
 `createSymbolValuePresentationResourceBundleFromManifest()` 为 value-tier binding 创建可销毁的共享 image-string resource pool，并逐档校验 skeleton animation 与该档 exact slot；相同 canonical dependency 只加载一次，每个 occurrence 只创建独立轻量 renderer。`createSymbolValuePresenter()` 与 reel controller 共用 display factory 和 official Spine slot API，提供 `prepare/show/update/clear/destroy`。font Text、完整数值 Sprite 或 `RenderImageString` 都挂在当前 tier player 内，继承 slot/bone 的 transform、可见性与颜色。image 模式仍要求完整值图片；image-string 直接渲染 `String(rawValue)` 并要求每个字符存在。缺图片、glyph、slot、resource 或晚到初始化失败都在可见提交前回滚，不提供跨模式 fallback。
 

@@ -128,20 +128,17 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
       throw this.#createError("Spine player is already initialized.");
     }
     const textureEntries = Object.entries(this.#resource.textureUrls);
-    const textures =
-      textureEntries.length === 1 && textureEntries[0]
-        ? ([
-            [
-              textureEntries[0][0],
-              await Assets.load<Texture>(textureEntries[0][1]),
-            ] as const,
-          ] as const)
-        : await Promise.all(
-            textureEntries.map(async ([page, url]) => {
-              const texture = await Assets.load<Texture>(url);
-              return [page, texture] as const;
-            }),
-          );
+    const textureLoadsByUrl = new Map<string, Promise<Texture>>();
+    const textures = await Promise.all(
+      textureEntries.map(async ([page, url]) => {
+        let loading = textureLoadsByUrl.get(url);
+        if (!loading) {
+          loading = loadOfficialSpineTexture(url, this.#createError);
+          textureLoadsByUrl.set(url, loading);
+        }
+        return [page, await loading] as const;
+      }),
+    );
     this.assertNotDestroyed();
     const atlas = createTextureAtlas(this.#resource.atlasText);
     assertExactTexturePageClosure(
@@ -280,6 +277,29 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
       throw this.#createError("Spine player was destroyed.");
     }
   }
+}
+
+async function loadOfficialSpineTexture(
+  url: string,
+  createError: (message: string) => Error,
+): Promise<Texture> {
+  let texture: Texture | null | undefined;
+  try {
+    texture = (await Assets.load({
+      src: url,
+      parser: "loadTextures",
+    })) as Texture | null | undefined;
+  } catch (error) {
+    throw createError(
+      `Spine texture failed to load from "${url}": ${formatError(error)}.`,
+    );
+  }
+  if (!texture?.source) {
+    throw createError(
+      `Spine texture failed to load a valid Pixi texture from "${url}".`,
+    );
+  }
+  return texture;
 }
 
 export function assertValidSpineDeltaSeconds(deltaSeconds: number): void {

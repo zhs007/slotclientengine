@@ -281,6 +281,68 @@ describe("layout zip IO", () => {
     expect(materialized.assets.has("legacy/unused.png")).toBe(false);
   });
 
+  it("materializes repeated Spine page payloads as unique aliases over one hash-flat asset", async () => {
+    const texture = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 9]);
+    const manifest = {
+      ...imageManifest,
+      nodes: [
+        {
+          ...imageManifest.nodes[0],
+          resource: {
+            kind: "spine" as const,
+            skeleton: "legacy/shared.json",
+            atlas: "legacy/shared.atlas",
+            textures: {
+              "page-a.png": "legacy/page-a.png",
+              "page-b.png": "legacy/page-b.png",
+            },
+            defaultAnimation: "Idle",
+            loop: true as const,
+          },
+        },
+      ],
+    };
+    const materialized = await materializeLayoutOwnedAssets({
+      manifest,
+      assets: new Map([
+        ["legacy/page-a.png", texture],
+        ["legacy/page-b.png", texture.slice()],
+        [
+          "legacy/shared.atlas",
+          new TextEncoder().encode(
+            "page-a.png\nsize: 1,1\n\npage-b.png\nsize: 1,1\n",
+          ),
+        ],
+        [
+          "legacy/shared.json",
+          new TextEncoder().encode(
+            JSON.stringify({
+              skeleton: { spine: "4.3.23" },
+              animations: { Idle: {} },
+            }),
+          ),
+        ],
+      ]),
+    });
+    const resource = materialized.manifest.nodes[0]!.resource;
+    if (resource.kind !== "spine") throw new Error("expected Spine resource");
+    const pages = Object.keys(resource.textures);
+    const paths = Object.values(resource.textures);
+    expect(pages).toHaveLength(2);
+    expect(pages[1]).toBe(pages[0]!.replace(/\.png$/u, "-2.png"));
+    expect(new Set(paths).size).toBe(1);
+    expect(
+      pages.every((page) =>
+        new TextDecoder()
+          .decode(materialized.assets.get(resource.atlas))
+          .includes(`${page}\nsize:`),
+      ),
+    ).toBe(true);
+    expect(
+      [...materialized.assets.keys()].filter((path) => path.endsWith(".png")),
+    ).toHaveLength(1);
+  });
+
   it("rejects a Spine atlas whose declared texture page is absent", async () => {
     const manifest = {
       ...imageManifest,
@@ -391,6 +453,56 @@ describe("layout zip IO", () => {
       load.mockRestore();
       unload.mockRestore();
     }
+  });
+
+  it("directs legacy uppercase symbols dependencies through Symbols Editor migration", async () => {
+    const fixture = compositePackageFixture();
+    const legacyManifest = {
+      version: 1,
+      kind: "symbol-package",
+      id: "demo-symbols",
+      cellSize: { width: 20, height: 20 },
+      entrypoints: {
+        gameConfig: "gameconfig.json",
+        symbolManifest: "symbol-state-textures.manifest.json",
+      },
+      resources: ["A.disabled.png"],
+    };
+    const legacyFiles = new Map<string, Uint8Array>([
+      ["symbols.package.json", encode(legacyManifest)],
+      [
+        "gameconfig.json",
+        encode({
+          paytable: { "0": { code: 0, symbol: "A", pays: [1] } },
+          symbolCodes: { A: 0 },
+          reels: { main: [[0], [0]] },
+        }),
+      ],
+      [
+        "symbol-state-textures.manifest.json",
+        encode({
+          version: 1,
+          states: ["disabled"],
+          symbols: {
+            A: {
+              normal: { kind: "transparent", width: 20, height: 20 },
+              disabled: "./A.disabled.png",
+              scale: 1,
+            },
+          },
+        }),
+      ],
+      ["A.disabled.png", new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 8])],
+    ]);
+
+    await expect(
+      exportLayoutZip({
+        manifest: fixture.manifest,
+        assets: fixture.assets,
+        symbolFiles: legacyFiles,
+        decodeImage,
+      }),
+    ).rejects.toThrow(/请先在 Symbols Editor 中导入并重新导出/);
   });
 
   it("rejects missing, mismatched, or incomplete symbols dependency inputs", async () => {

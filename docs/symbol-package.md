@@ -82,7 +82,7 @@ Symbols ZIP 固定限制：
 
 ## 精确资源闭包
 
-闭包包含 normal/layer/keyframe、实际存在的稀疏 state texture、VNI project 及其 `assets[].path`、Spine skeleton/atlas/texture、value tier Spine，以及 text 分支所需资源：image 模式的每个 `defaultValues` 完整数值图片，或 image-string 模式每个 distinct tier dependency 的 nested manifest 与精确 glyph。普通 `imageStringNodes` 和 value-tier binding 共用同一个 canonical resource pool。资源按 manifest exact path 解析；缺资源、decoded size 漂移或多余 orphan 都失败，不扫描目录、不使用 glob、不从文件名猜 display symbol。
+闭包包含 normal/layer/keyframe、实际存在的稀疏 state texture、VNI project 及其 `assets[].path`、Spine skeleton/atlas/texture、value tier Spine，以及 text 分支所需资源：image 模式的每个 `defaultValues` 完整数值图片，或 image-string 模式每个 distinct tier dependency 的 nested manifest 与精确 glyph。旧 image package 可用 `prefix + value + .png` 表达导入路径；Symbols Editor 重新导出时必须升级为 `images` 中 value 到完整 SHA-256 hash-flat path 的精确映射，不能把动态 prefix 指向的 `1.png` 等旧名遗留在新 closure。普通 `imageStringNodes` 和 value-tier binding 共用同一个 canonical resource pool。资源按 manifest exact path 解析；缺资源、decoded size 漂移或多余 orphan 都失败，不扫描目录、不使用 glob、不从文件名猜 display symbol。
 
 顶层 `states[]` 是允许出现的 state texture id 稳定并集，不再表示每个 symbol 必须提供每个 texture。需要全量 state texture 的 production generator/caller 必须显式传 `requiredStates`；普通 package catalog 保持 sparse per-symbol 语义。
 
@@ -110,7 +110,7 @@ Symbols ZIP 固定限制：
 
 `empty` reset 时隐藏 base/state/underlay/overlay，并按 state definition 的 static/once/loop 生命周期上报完成边界。它不引用隐藏 PNG，也绝不作为图片、VNI、Spine 或 resolver 错误的 fallback。
 
-Spine 只接受 official 4.3.x，animation name 大小写精确，atlas page 必须匹配 texture。VNI project 通过 vnicore parser 和精确 asset manifest 验证。image value 缺图不回退 font。`cascadeWinPresentation` 等合法高级 metadata 可以 round-trip，但不因此引入 sequence UI。
+Spine 只接受 official 4.3.x，animation name 大小写精确，atlas page 必须匹配 texture。skeleton、atlas 与 texture 都使用 manifest-relative `./` 精确路径，可指向 `./assets/<full-sha256>.<canonical-ext>`；禁止 `../`、绝对路径、URL、非法 segment 或 basename fallback。Spine texture 支持 materializer 可生成的 PNG、JPEG 与 WebP。VNI project 通过 vnicore parser 和精确 asset manifest 验证。image value 缺图不回退 font。`cascadeWinPresentation` 等合法高级 metadata 可以 round-trip，但不因此引入 sequence UI。
 
 ## 导入、导出与稳定性
 
@@ -126,7 +126,7 @@ Spine 只接受 official 4.3.x，animation name 大小写精确，atlas page 必
 
 `apps/gamelayouteditor` 导入同一 ZIP 后，以 package `cellSize` 原子覆盖 `main` grid 的 cell width/height，保留 rows、columns、gap 与 placement，并按现有 focus offsets 重派生 focus。越出 art/focus 时失败，不 auto-fit。用户必须显式选择 reel set 与 `standard | grid-cell`，并选择“仅预览”或“随布局包导出”；默认仅预览。
 
-选择导出时，原始 validated file map 会原字节 vendor 到 `dependencies/symbols/<package-id>/`，nested manifest 相对路径不重写。layout manifest 只保存 package manifest path、`reels.main`、reel set、render mode 与 reel order；package cell 必须等于 layout cell，reel count 必须等于 columns。ZIP 实际 entry 必须与 layout、image-string、symbols 的传递闭包精确一致。sampled scene、otherScene mapping、服务器真实轮带、token 和玩家输入均不进入 package。
+选择导出时，已符合小写 strict contract 的 validated file map 会原字节 vendor 到 `dependencies/symbols/<package-id>/`，nested manifest 相对路径不重写。历史 package 若仍含 `AF.disabled.png` 一类大写 owned resource path，必须先由 Symbols Editor 执行“导入旧包 → 导出新包”：格式 owner 将顶层 raster、VNI project、Spine skeleton/atlas 物化为完整 SHA-256 小写 hash-flat path，并结构化同步 symbol manifest、VNI asset 与 atlas page 引用。Game Layout Editor 在导入和导出边界拒绝旧路径并给出该迁移提示，不静默修改 dependency，也不放宽最终 ZIP 的全小写精确闭包合同；nested dependency 继续保持自包含。layout manifest 只保存 package manifest path、`reels.main`、reel set、render mode 与 reel order；package cell 必须等于 layout cell，reel count 必须等于 columns。ZIP 实际 entry 必须与 layout、image-string、symbols 的传递闭包精确一致。sampled scene、otherScene mapping、服务器真实轮带、token 和玩家输入均不进入 package。
 
 ## Production 接入
 

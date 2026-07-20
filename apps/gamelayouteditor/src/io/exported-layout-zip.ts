@@ -22,6 +22,8 @@ import {
   detectRasterAssetType,
   sha256Hex,
 } from "@slotclientengine/browserartifactio";
+import { allocateSpineAtlasPageName } from "../model/spine-page-name.js";
+import { assertStrictSymbolsPackagePaths } from "./imported-symbol-package.js";
 import { assertCanonicalPackagePath } from "./filename-policy.js";
 import { validateLayoutAssets } from "./imported-layout-zip.js";
 
@@ -95,6 +97,7 @@ export async function exportLayoutZip(options: {
     const files = options.symbolFiles;
     if (!files)
       throw new Error("manifest 绑定 symbols package，但未提供 symbolFiles。");
+    assertStrictSymbolsPackagePaths(files);
     const nested = parseSymbolPackageManifest(
       parseJson(files.get("symbols.package.json"), "symbols.package.json"),
     );
@@ -191,6 +194,7 @@ export async function materializeLayoutOwnedAssets(options: {
       } else {
         const textures: Record<string, string> = {};
         const pageMapping = new Map<string, string>();
+        const usedPageNames = new Set<string>();
         for (const [page, oldPath] of Object.entries(node.resource.textures)) {
           const bytes = requiredBytes(options.assets, oldPath);
           const type = detectRasterAssetType(bytes);
@@ -198,7 +202,10 @@ export async function materializeLayoutOwnedAssets(options: {
             digest: await sha256Hex(bytes),
             extension: type.extension,
           });
-          const targetPage = path.split("/").at(-1)!;
+          const targetPage = allocateSpineAtlasPageName({
+            contentPath: path,
+            usedPageNames,
+          });
           textures[targetPage] = path;
           pageMapping.set(page, targetPage);
           putAsset(assets, path, bytes);

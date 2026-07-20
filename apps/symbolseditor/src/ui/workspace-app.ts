@@ -2244,6 +2244,17 @@ function valueNumberPresentationMarkup(
   const slots = valueSlotOptions(project, symbol);
   const common = `${valueSelectField("text.slot", value.text.slot, slots, "Slot intersection")}<div class="form-grid">${valueNumberField("text.x", value.text.x, "X")}${valueNumberField("text.y", value.text.y, "Y")}</div>`;
   if (value.text.type === "image") {
+    const imageText = value.text;
+    if ("images" in imageText) {
+      const closure = value.defaultValues
+        .map((candidate) => {
+          const reference = imageText.images[String(candidate)] ?? "";
+          const path = reference.replace(/^\.\//u, "");
+          return `<small>${escapeHtml(reference || `${candidate} · 未映射`)} · ${path && project.assetLibrary.records.has(path) ? "已找到" : "缺失"}</small>`;
+        })
+        .join("");
+      return `<section class="number-presentation"><h3>Number presentation</h3>${modeButtons}${common}<p>完整数值图片已物化为显式 content-addressed mapping。</p><div class="closure-list">${closure}</div></section>`;
+    }
     const prefixes = [
       "./",
       ...new Set(
@@ -2256,13 +2267,11 @@ function valueNumberPresentationMarkup(
     const closure = value.defaultValues
       .map((candidate) => {
         const path =
-          value.text.type === "image"
-            ? value.text.prefix.replace(/^\.\//u, "") + candidate + ".png"
-            : "";
-        return `<small>${escapeHtml(`${value.text.type === "image" ? value.text.prefix : ""}${candidate}.png`)} · ${project.assetLibrary.records.has(path) ? "已找到" : "缺失"}</small>`;
+          imageText.prefix.replace(/^\.\//u, "") + candidate + ".png";
+        return `<small>${escapeHtml(`${imageText.prefix}${candidate}.png`)} · ${project.assetLibrary.records.has(path) ? "已找到" : "缺失"}</small>`;
       })
       .join("");
-    return `<section class="number-presentation"><h3>Number presentation</h3>${modeButtons}${common}${valueSelectField("text.prefix", value.text.prefix, prefixes, "Image prefix")}<div class="closure-list">${closure}</div></section>`;
+    return `<section class="number-presentation"><h3>Number presentation</h3>${modeButtons}${common}${valueSelectField("text.prefix", imageText.prefix, prefixes, "Image prefix")}<div class="closure-list">${closure}</div></section>`;
   }
   return `<section class="number-presentation"><h3>Number presentation</h3>${modeButtons}${common}<div class="form-grid">${valueTextField("text.fontFamily", value.text.fontFamily, "Font family")}${valueNumberField("text.fontSize", value.text.fontSize, "Font size")}${valueTextField("text.fontWeight", value.text.fontWeight, "Font weight")}${valueTextField("text.fill", value.text.fill, "Fill")}${valueTextField("text.stroke", value.text.stroke, "Stroke")}${valueNumberField("text.strokeWidth", value.text.strokeWidth, "Stroke width")}</div></section>`;
 }

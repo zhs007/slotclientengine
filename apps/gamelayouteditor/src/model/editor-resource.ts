@@ -62,14 +62,12 @@ export function editorResourcePaths(
   return [resource.manifestPath, ...resource.assetPaths];
 }
 
-export function editorResourceSize(
+export function editorResourceArtSize(
   resource: EditorLayoutResource,
 ): { readonly width: number; readonly height: number } | undefined {
-  return resource.kind === "image"
-    ? resource.size
-    : resource.kind === "spine"
-      ? resource.bounds
-      : undefined;
+  // A Spine skeleton header describes exported content bounds. It does not
+  // declare the scene's art-space canvas, so only raster images are intrinsic.
+  return resource.kind === "image" ? resource.size : undefined;
 }
 
 export function editorResourceSignature(

@@ -25,6 +25,7 @@ import {
   editorProjectToManifest,
   editorProjectToPreviewManifest,
   manifestToEditorProject,
+  setVariantArtSizeDimension,
   updateVariantFocusFromReel,
   type EditorProject,
 } from "../model/editor-project.js";
@@ -1058,12 +1059,25 @@ export class GameLayoutEditorApp {
       input.addEventListener("change", () => {
         this.runTransaction((draft) => {
           const path = input.dataset.number!;
-          setPath(draft, path, Number(input.value));
+          const artSizeMatch =
+            /^variants\.(default|landscape|portrait)\.artSize\.(width|height)$/u.exec(
+              path,
+            );
+          if (artSizeMatch) {
+            setVariantArtSizeDimension(
+              draft,
+              artSizeMatch[1] as "default" | "landscape" | "portrait",
+              artSizeMatch[2] as "width" | "height",
+              Number(input.value),
+            );
+          } else {
+            setPath(draft, path, Number(input.value));
+          }
           if (path.startsWith("reel.")) {
             for (const variant of activeVariantIds(draft)) {
               updateVariantFocusFromReel(draft, variant);
             }
-          } else {
+          } else if (!artSizeMatch) {
             const match =
               /^variants\.(default|landscape|portrait)\.(focusOffsets|artSize)\./u.exec(
                 path,

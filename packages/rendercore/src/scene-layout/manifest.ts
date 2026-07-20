@@ -324,13 +324,9 @@ function parseResource(
         `${label}.textures.${page}`,
         IMAGE_EXTENSIONS,
       );
-      if (path.split("/").at(-1) !== page)
-        fail(
-          `${label}.textures.${page} path filename must match the atlas page.`,
-        );
       textures[page] = path;
     }
-    unique([skeleton, atlas, ...Object.values(textures)], `${label} path`);
+    unique([skeleton, atlas], `${label} path`);
     if (hasStateMachine) {
       return deepFreeze({
         kind: "spine" as const,

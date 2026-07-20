@@ -178,7 +178,7 @@ export class SymbolEditorPreview {
     this.#cells = Object.freeze([...cells]);
     this.#selectedState = state;
     this.#symbols.push(...nextSymbols);
-    this.#gallery.addChild(...nextRoots);
+    attachPreviewRoots(this.#gallery, nextRoots);
     this.applyLayout(cellWidth, cellHeight, columns, rows, !this.#manualZoom);
   }
 
@@ -232,19 +232,15 @@ export class SymbolEditorPreview {
     this.#app.renderer.resize(width, height);
     this.#gallery.position.set(width / 2, height / 2);
     this.#manualZoom = false;
-    void this.rebuild();
+    this.rebuild();
   }
 
-  private async rebuild(): Promise<void> {
+  private rebuild(): void {
     const resource = this.#resource;
-    if (!resource) {
-      await this.setResource(null, this.#cells, this.#selectedState);
-      return;
-    }
-    // The current resource owns Object URLs and cannot be shared with a second
-    // owner. Re-layout its existing tree directly on resize.
-    const cellWidth = resource.packageManifest.cellSize.width;
-    const cellHeight = resource.packageManifest.cellSize.height;
+    // Resize only repositions the current tree. Recreating it would race the
+    // active resource owner and an empty initial gallery must remain a no-op.
+    const cellWidth = resource?.packageManifest.cellSize.width ?? 160;
+    const cellHeight = resource?.packageManifest.cellSize.height ?? 160;
     const { columns } = calculateGalleryLayout(
       this.#cells.length,
       this.#app.renderer.width,
@@ -290,6 +286,13 @@ export class SymbolEditorPreview {
     for (const child of this.#gallery.removeChildren())
       child.destroy({ children: true });
   }
+}
+
+export function attachPreviewRoots(
+  gallery: Container,
+  roots: readonly Container[],
+): void {
+  for (const root of roots) gallery.addChild(root);
 }
 
 export function calculateGalleryLayout(

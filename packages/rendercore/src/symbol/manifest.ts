@@ -134,10 +134,19 @@ export interface SymbolValuePresentationFontTextSpec extends SymbolValuePresenta
   readonly strokeWidth: number;
 }
 
-export interface SymbolValuePresentationImageTextSpec extends SymbolValuePresentationTextBaseSpec {
+export interface SymbolValuePresentationLegacyImageTextSpec extends SymbolValuePresentationTextBaseSpec {
   readonly type: "image";
   readonly prefix: string;
 }
+
+export interface SymbolValuePresentationMappedImageTextSpec extends SymbolValuePresentationTextBaseSpec {
+  readonly type: "image";
+  readonly images: Readonly<Record<string, string>>;
+}
+
+export type SymbolValuePresentationImageTextSpec =
+  | SymbolValuePresentationLegacyImageTextSpec
+  | SymbolValuePresentationMappedImageTextSpec;
 
 export interface SymbolValuePresentationImageStringTierBindingSpec {
   readonly resource: string;
@@ -1121,17 +1130,61 @@ function parseValuePresentation(
       "x",
       "y",
       "prefix",
+      "images",
     ]);
-    parsedText = Object.freeze({
-      type: "image",
+    const common = {
+      type: "image" as const,
       slot: assertString(text.slot, "valuePresentation text slot"),
       x: assertFiniteNumber(text.x, "valuePresentation text x"),
       y: assertFiniteNumber(text.y, "valuePresentation text y"),
-      prefix: assertManifestPathPrefix(
-        text.prefix,
-        "valuePresentation image prefix",
-      ),
-    });
+    };
+    if ((text.prefix === undefined) === (text.images === undefined)) {
+      throw new SymbolAssetError(
+        `symbol "${symbol}" valuePresentation image text must declare exactly one of prefix or images.`,
+      );
+    }
+    if (text.prefix !== undefined) {
+      parsedText = Object.freeze({
+        ...common,
+        prefix: assertManifestPathPrefix(
+          text.prefix,
+          "valuePresentation image prefix",
+        ),
+      });
+    } else {
+      const rawImages = assertRecord(
+        text.images,
+        `symbol "${symbol}" valuePresentation image images`,
+      );
+      const expectedKeys = defaultValues.map(String).sort();
+      const actualKeys = Object.keys(rawImages).sort();
+      if (
+        expectedKeys.length !== actualKeys.length ||
+        expectedKeys.some((key, index) => key !== actualKeys[index])
+      ) {
+        throw new SymbolAssetError(
+          `symbol "${symbol}" valuePresentation image images must exactly match defaultValues.`,
+        );
+      }
+      parsedText = Object.freeze({
+        ...common,
+        images: Object.freeze(
+          Object.fromEntries(
+            defaultValues.map((value) => {
+              const key = String(value);
+              return [
+                key,
+                assertManifestLocalFilePath(
+                  rawImages[key],
+                  `valuePresentation image images[${key}]`,
+                  [".png", ".jpg", ".jpeg", ".webp"],
+                ),
+              ];
+            }),
+          ),
+        ),
+      });
+    }
   } else {
     assertOnlyKnownKeys(text, `symbol "${symbol}" valuePresentation.text`, [
       "type",
@@ -1183,6 +1236,15 @@ export function createSymbolValuePresentationImagePath(
     throw new SymbolAssetError(
       "Symbol value presentation image value must be a positive safe integer.",
     );
+  }
+  if ("images" in text) {
+    const path = text.images[String(value)];
+    if (!path) {
+      throw new SymbolAssetError(
+        `Symbol value presentation image ${value} is not mapped.`,
+      );
+    }
+    return path;
   }
   return `${text.prefix}${value}.png`;
 }
@@ -1870,7 +1932,7 @@ function parseManifestAnimationSpec(
       texture: assertManifestLocalFilePath(
         record.texture,
         `symbol "${symbol}" ${state} Spine texture`,
-        [".png"],
+        [".png", ".jpg", ".jpeg", ".webp"],
       ),
       playback,
       ...(record.transform !== undefined
@@ -2169,10 +2231,14 @@ function assertManifestLocalFilePath(
   if (!path.startsWith("./") || path.includes("\\") || path.includes("../")) {
     throw new SymbolAssetError(`${label} must be a local ./ path: ${path}.`);
   }
-  const suffix = path.slice("./".length);
-  if (suffix.includes("/") || suffix.length === 0) {
-    throw new SymbolAssetError(`${label} must be a ./basename path: ${path}.`);
+  try {
+    resolvePackagePath("symbol-state-textures.manifest.json", path);
+  } catch {
+    throw new SymbolAssetError(
+      `${label} must be a canonical local ./ path: ${path}.`,
+    );
   }
+  const suffix = path.slice("./".length);
   if (!extensions.some((extension) => suffix.endsWith(extension))) {
     throw new SymbolAssetError(
       `${label} must end with ${extensions.join(" or ")}: ${path}.`,

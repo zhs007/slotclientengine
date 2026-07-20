@@ -726,7 +726,7 @@ function validatePreservedValuePresentation(symbol, value) {
     textType === "image-string"
       ? ["type", "tiers"]
       : textType === "image"
-        ? ["type", "slot", "x", "y", "prefix"]
+        ? ["type", "slot", "x", "y", "prefix", "images"]
         : [
             "type",
             "slot",
@@ -751,16 +751,7 @@ function validatePreservedValuePresentation(symbol, value) {
           ),
         })
       : textType === "image"
-        ? Object.freeze({
-            type: "image",
-            slot: assertNonEmptyString(text.slot, `${symbol}.slot`),
-            x: assertFiniteNumber(text.x, `${symbol}.text.x`),
-            y: assertFiniteNumber(text.y, `${symbol}.text.y`),
-            prefix: assertManifestPathPrefix(
-              text.prefix,
-              `${symbol}.text.prefix`,
-            ),
-          })
+        ? preserveValueImageText(symbol, text, defaultValues)
         : Object.freeze({
             type: "font",
             slot: assertNonEmptyString(text.slot, `${symbol}.slot`),
@@ -790,6 +781,49 @@ function validatePreservedValuePresentation(symbol, value) {
     reelStates: Object.freeze(preservedReelStates),
     tiers,
     text: preservedText,
+  });
+}
+
+function preserveValueImageText(symbol, text, defaultValues) {
+  const common = {
+    type: "image",
+    slot: assertNonEmptyString(text.slot, `${symbol}.slot`),
+    x: assertFiniteNumber(text.x, `${symbol}.text.x`),
+    y: assertFiniteNumber(text.y, `${symbol}.text.y`),
+  };
+  if ((text.prefix === undefined) === (text.images === undefined)) {
+    throw new Error(
+      `${symbol}.text must declare exactly one of prefix or images.`,
+    );
+  }
+  if (text.prefix !== undefined) {
+    return Object.freeze({
+      ...common,
+      prefix: assertManifestPathPrefix(text.prefix, `${symbol}.text.prefix`),
+    });
+  }
+  const images = assertRecord(text.images, `${symbol}.text.images`);
+  const expected = defaultValues.map(String).sort();
+  const actual = Object.keys(images).sort();
+  if (
+    expected.length !== actual.length ||
+    expected.some((key, index) => key !== actual[index])
+  ) {
+    throw new Error(`${symbol}.text.images must match defaultValues.`);
+  }
+  return Object.freeze({
+    ...common,
+    images: Object.freeze(
+      Object.fromEntries(
+        defaultValues.map((value) => [
+          String(value),
+          assertManifestImagePath(
+            images[String(value)],
+            `${symbol}.text.images[${value}]`,
+          ),
+        ]),
+      ),
+    ),
   });
 }
 
@@ -1260,6 +1294,19 @@ function assertManifestPathPrefix(value, label) {
     throw new Error(`${label} must be a local ./basename prefix.`);
   }
   return prefix;
+}
+
+function assertManifestImagePath(value, label) {
+  const path = assertNonEmptyString(value, label);
+  if (
+    !path.startsWith("./") ||
+    path.includes("\\") ||
+    path.includes("../") ||
+    !/\.(?:png|jpe?g|webp)$/u.test(path)
+  ) {
+    throw new Error(`${label} must be a local raster path.`);
+  }
+  return path;
 }
 
 function assertOnlyKnownKeys(record, label, allowed) {

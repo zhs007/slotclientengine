@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  load: vi.fn(async (url: string) => ({ source: { url } })),
+  load: vi.fn(async (asset: { readonly src: string }) => ({
+    source: { url: asset.src },
+  })),
   setTexture: vi.fn(),
   textureFrom: vi.fn((source: unknown) => ({ source })),
   updates: [] as number[],
@@ -114,8 +116,8 @@ describe("shared official Spine player", () => {
       skeleton: { skeleton: { spine: "4.3.23" } },
       atlasText: "BG.png,BG_2.png",
       textureUrls: {
-        "BG.png": "/assets/BG.png",
-        "BG_2.png": "/assets/BG_2.png",
+        "BG.png": "blob:http://localhost/shared-texture",
+        "BG_2.png": "blob:http://localhost/shared-texture",
       },
     };
     const validation = validateOfficialSpineResource({
@@ -137,9 +139,11 @@ describe("shared official Spine player", () => {
     const player = createOfficialSpinePlayer({ resource });
     await player.init();
 
-    expect(mocks.load).toHaveBeenCalledTimes(2);
-    expect(mocks.load).toHaveBeenCalledWith("/assets/BG.png");
-    expect(mocks.load).toHaveBeenCalledWith("/assets/BG_2.png");
+    expect(mocks.load).toHaveBeenCalledTimes(1);
+    expect(mocks.load).toHaveBeenCalledWith({
+      src: "blob:http://localhost/shared-texture",
+      parser: "loadTextures",
+    });
     expect(mocks.setTexture).toHaveBeenCalledTimes(2);
     const slotObject = new (await import("pixi.js")).Container();
     player.attachSlotObject({ slot: "ValueSlot", object: slotObject });

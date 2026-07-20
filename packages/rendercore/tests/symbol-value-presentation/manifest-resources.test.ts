@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   createSymbolLandingAppearSymbolsFromManifest,
+  createSymbolValuePresentationImagePath,
   createSymbolValuePresentationResourcesFromManifest,
   parseSymbolStateTextureManifest,
 } from "../../src/index.js";
@@ -210,6 +211,40 @@ describe("symbol value presentation manifest resources", () => {
         textImageModules: { "./1.png": "/1.png" },
       }),
     ).toThrow(/value image 2.*missing/i);
+  });
+
+  it("parses exact materialized full-value image mappings", () => {
+    const mapped = structuredClone(manifest);
+    const presentation = mapped.symbols.CN.valuePresentation;
+    presentation.text = {
+      type: "image",
+      slot: "Num",
+      x: 0,
+      y: 0,
+      images: Object.fromEntries(
+        presentation.defaultValues.map((value: number) => [
+          String(value),
+          `./assets/${value}.png`,
+        ]),
+      ),
+    };
+    const parsed =
+      parseSymbolStateTextureManifest(mapped).symbols.CN.valuePresentation!;
+    expect(parsed.text.type).toBe("image");
+    if (parsed.text.type !== "image") throw new Error("expected image text");
+    expect(createSymbolValuePresentationImagePath(parsed.text, 25)).toBe(
+      "./assets/25.png",
+    );
+
+    delete presentation.text.images["25"];
+    expect(() => parseSymbolStateTextureManifest(mapped)).toThrow(
+      /exactly match defaultValues/,
+    );
+    presentation.text.images["25"] = "./assets/25.png";
+    presentation.text.prefix = "./";
+    expect(() => parseSymbolStateTextureManifest(mapped)).toThrow(
+      /exactly one of prefix or images/,
+    );
   });
 
   it("rejects a configured text slot missing from any tier skeleton", () => {

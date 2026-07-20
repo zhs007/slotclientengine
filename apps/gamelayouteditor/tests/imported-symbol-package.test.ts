@@ -1,9 +1,14 @@
 import { createDeterministicZip } from "@slotclientengine/browserartifactio";
 import { describe, expect, it } from "vitest";
-import { importSymbolsZip } from "../src/io/imported-symbol-package.js";
+import {
+  importSymbolsZip,
+  importSymbolsZipWithFiles,
+} from "../src/io/imported-symbol-package.js";
 
 const encode = (value: unknown) =>
   new TextEncoder().encode(`${JSON.stringify(value)}\n`);
+const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1]);
+const canonicalImagePath = `assets/${"a".repeat(64)}.png`;
 
 describe("layout editor symbols package import", () => {
   it("reads the same strict package and exposes deterministic display metadata", async () => {
@@ -16,7 +21,7 @@ describe("layout editor symbols package import", () => {
         gameConfig: "gameconfig.json",
         symbolManifest: "symbol-state-textures.manifest.json",
       },
-      resources: ["A.png"],
+      resources: [canonicalImagePath],
     };
     const zip = createDeterministicZip({
       "symbols.package.json": encode(packageManifest),
@@ -28,17 +33,69 @@ describe("layout editor symbols package import", () => {
       "symbol-state-textures.manifest.json": encode({
         version: 1,
         states: [],
-        symbols: { A: { normal: "./A.png", scale: 1 } },
+        symbols: { A: { normal: `./${canonicalImagePath}`, scale: 1 } },
       }),
-      "A.png": new Uint8Array([1, 2, 3]),
+      [canonicalImagePath]: png,
     });
-    const resource = await importSymbolsZip(zip, { loadTextures: false });
+    const imported = await importSymbolsZipWithFiles(zip, {
+      loadTextures: false,
+    });
+    const { resource } = imported;
     expect(resource.packageManifest.cellSize).toEqual({
       width: 120,
       height: 120,
     });
     expect(resource.displaySymbols).toEqual(["A"]);
+    expect(
+      [...imported.files.keys()].every((path) => path === path.toLowerCase()),
+    ).toBe(true);
+    expect(resource.packageManifest.resources).toEqual([canonicalImagePath]);
+    expect(resource.rawSymbolManifest).toMatchObject({
+      symbols: {
+        A: {
+          normal: `./${canonicalImagePath}`,
+        },
+      },
+    });
     resource.destroy();
+  });
+
+  it("directs legacy uppercase packages through Symbols Editor migration", async () => {
+    const packageManifest = {
+      version: 1,
+      kind: "symbol-package",
+      id: "legacy-symbols",
+      cellSize: { width: 160, height: 160 },
+      entrypoints: {
+        gameConfig: "gameconfig.json",
+        symbolManifest: "symbol-state-textures.manifest.json",
+      },
+      resources: ["AF.disabled.png"],
+    };
+    const zip = createDeterministicZip({
+      "symbols.package.json": encode(packageManifest),
+      "gameconfig.json": encode({
+        paytable: { "0": { code: 0, symbol: "AF", pays: [1] } },
+        symbolCodes: { AF: 0 },
+        reels: { main: [[0]] },
+      }),
+      "symbol-state-textures.manifest.json": encode({
+        version: 1,
+        states: ["disabled"],
+        symbols: {
+          AF: {
+            normal: { kind: "transparent", width: 160, height: 160 },
+            disabled: "./AF.disabled.png",
+            scale: 1,
+          },
+        },
+      }),
+      "AF.disabled.png": png,
+    });
+
+    await expect(
+      importSymbolsZipWithFiles(zip, { loadTextures: false }),
+    ).rejects.toThrow(/请先在 Symbols Editor 中导入并重新导出/);
   });
 
   it("imports a transparent-only package with an empty resource closure", async () => {

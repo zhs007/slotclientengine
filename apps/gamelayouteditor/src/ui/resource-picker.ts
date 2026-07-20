@@ -74,21 +74,24 @@ function candidateFromResource(
     project,
     resource.id,
   ).length;
-  const missingBounds = resource.kind === "spine" && !resource.bounds;
   const forbidden =
     context.kind === "assign-background" && resource.kind === "image-string";
-  const incomplete = context.kind === "assign-background" && missingBounds;
+  const needsArtSize =
+    context.kind === "assign-background" &&
+    resource.kind === "spine" &&
+    (project.variants[context.variant].artSize.width <= 0 ||
+      project.variants[context.variant].artSize.height <= 0);
   const summary =
     resource.kind === "image"
       ? `${resource.size.width}×${resource.size.height}`
       : resource.kind === "spine"
-        ? `${resource.animationNames.length} animations${resource.bounds ? ` · ${resource.bounds.width}×${resource.bounds.height}` : " · 无 bounds，背景需手填 art size"}`
+        ? `${resource.animationNames.length} animations${resource.bounds ? ` · export bounds ${resource.bounds.width}×${resource.bounds.height}（非 art size）` : " · 无 export bounds"}${needsArtSize ? " · 背景需手填 art size" : ""}`
         : `${Object.keys(resource.manifest.glyphs).length} glyphs · lineHeight ${resource.manifest.metrics.lineHeight}`;
   return Object.freeze({
     resourceId: resource.id,
     kind: resource.kind,
     primaryPath: editorResourcePrimaryPath(resource),
-    status: incomplete ? "incomplete" : "ready",
+    status: needsArtSize ? "incomplete" : "ready",
     referenceCount,
     summary,
     ...(forbidden ? { disabledReason: "image-string 不能设为背景" } : {}),

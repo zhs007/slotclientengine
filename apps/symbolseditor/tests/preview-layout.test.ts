@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { Container } from "pixi.js";
 import {
+  attachPreviewRoots,
   calculateGalleryLayout,
   clampZoom,
 } from "../src/preview/symbol-preview.js";
@@ -25,5 +27,16 @@ describe("fixed all-symbol gallery layout", () => {
     expect(clampZoom(1.5)).toBe(1.5);
     expect(clampZoom(99)).toBe(4);
     expect(clampZoom(Number.NaN)).toBe(1);
+  });
+
+  it("keeps the initial empty gallery mount and resize as a no-op", () => {
+    const gallery = new Container();
+    expect(() => attachPreviewRoots(gallery, [])).not.toThrow();
+    expect(gallery.children).toHaveLength(0);
+
+    const roots = [new Container(), new Container()];
+    attachPreviewRoots(gallery, roots);
+    expect(gallery.children).toEqual(roots);
+    gallery.destroy({ children: true });
   });
 });

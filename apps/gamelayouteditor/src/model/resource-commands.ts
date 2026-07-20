@@ -25,12 +25,13 @@ import { synchronizeGameModeNodeStates } from "./game-mode-commands.js";
 import {
   editorResourcePaths,
   editorResourcePrimaryPath,
-  editorResourceSize,
+  editorResourceArtSize,
   type EditorLayoutResource,
   type EditorImageStringLayoutResource,
   type EditorResourceReference,
   type EditorSpineLayoutResource,
 } from "./editor-resource.js";
+import { allocateSpineAtlasPageName } from "./spine-page-name.js";
 
 interface PreparedResource {
   readonly resource: EditorLayoutResource;
@@ -327,7 +328,7 @@ export function assignBackgroundResource(options: {
     ? options.project.nodes.find((item) => item.id === variant.backgroundNode)
     : undefined;
   const previousSize = variant.artSize;
-  const nextSize = editorResourceSize(resource);
+  const nextSize = editorResourceArtSize(resource);
   const hasPreviousSize = previousSize.width > 0 && previousSize.height > 0;
   const sizeChanged =
     Boolean(nextSize) &&
@@ -350,25 +351,45 @@ export function assignBackgroundResource(options: {
       ...(resource.kind === "spine"
         ? { playback: { kind: "loop" as const, animation: animation! } }
         : {}),
-      placements: { [options.variant]: { x: 0, y: 0, scale: 1 } },
+      placements: {
+        [options.variant]: defaultBackgroundPlacement(resource, previousSize),
+      },
     };
     options.project.nodes.push(node);
   } else {
+    const previousResource = requireResource(options.project, node.resourceId);
     node.resourceId = resource.id;
-    node.placements[options.variant] ??= { x: 0, y: 0, scale: 1 };
+    node.placements[options.variant] ??= defaultBackgroundPlacement(
+      resource,
+      previousSize,
+    );
+    if (previousResource.kind !== resource.kind) {
+      node.placements[options.variant] = defaultBackgroundPlacement(
+        resource,
+        previousSize,
+      );
+    }
     delete node.imageString;
     if (resource.kind === "spine")
       node.playback = { kind: "loop", animation: animation! };
     else delete node.playback;
   }
   variant.backgroundNode = node.id;
-  if (!nextSize) {
-    resetVariantGeometry(options.project, options.variant);
-  } else if (!hasPreviousSize || sizeChanged || options.reinitialize) {
+  if (nextSize && (!hasPreviousSize || sizeChanged || options.reinitialize)) {
     resetVariantGeometry(options.project, options.variant, nextSize);
   }
   normalizeNodeOrders(options.project);
   return node;
+}
+
+function defaultBackgroundPlacement(
+  resource: EditorLayoutResource,
+  artSize: { readonly width: number; readonly height: number },
+): { x: number; y: number; scale: number } {
+  if (resource.kind === "spine" && artSize.width > 0 && artSize.height > 0) {
+    return { x: artSize.width / 2, y: artSize.height / 2, scale: 1 };
+  }
+  return { x: 0, y: 0, scale: 1 };
 }
 
 export function clearBackground(
@@ -863,6 +884,7 @@ async function prepareSpineResource(options: {
   const textures: Record<string, string> = {};
   const assets = new Map<string, Uint8Array>();
   const pageMapping = new Map<string, string>();
+  const usedPageNames = new Set<string>();
   for (const page of atlasPages) {
     const file = texturesByName.get(
       page.normalize("NFC").toLocaleLowerCase("en-US"),
@@ -874,7 +896,10 @@ async function prepareSpineResource(options: {
       digest: await sha256Hex(bytes),
       extension: type.extension,
     });
-    const targetPage = path.split("/").at(-1)!;
+    const targetPage = allocateSpineAtlasPageName({
+      contentPath: path,
+      usedPageNames,
+    });
     textures[targetPage] = path;
     pageMapping.set(page, targetPage);
     putAsset(assets, path, bytes);
@@ -1051,7 +1076,7 @@ function commitResourceReplacement(
   const backgroundVariants = references.flatMap(
     (reference) => reference.variants,
   );
-  const nextSize = editorResourceSize(prepared.resource);
+  const nextSize = editorResourceArtSize(prepared.resource);
   for (const variantId of backgroundVariants) {
     const currentSize = project.variants[variantId].artSize;
     const changed =
@@ -1072,11 +1097,11 @@ function commitResourceReplacement(
     putAsset(project.assets, path, bytes);
   for (const variantId of backgroundVariants) {
     const currentSize = project.variants[variantId].artSize;
-    if (!nextSize) resetVariantGeometry(project, variantId);
-    else if (
-      reinitializeBackgrounds ||
-      currentSize.width <= 0 ||
-      currentSize.height <= 0
+    if (
+      nextSize &&
+      (reinitializeBackgrounds ||
+        currentSize.width <= 0 ||
+        currentSize.height <= 0)
     ) {
       resetVariantGeometry(project, variantId, nextSize);
     }
@@ -1198,7 +1223,7 @@ export function describeResource(resource: EditorLayoutResource): string {
     return `${editorResourcePrimaryPath(resource)} · ${resource.size.width}×${resource.size.height}`;
   if (resource.kind === "image-string")
     return `${editorResourcePrimaryPath(resource)} · ${Object.keys(resource.manifest.glyphs).length} glyphs · lineHeight ${resource.manifest.metrics.lineHeight}`;
-  return `${editorResourcePrimaryPath(resource)} · ${resource.animationNames.length} animations${resource.bounds ? ` · ${resource.bounds.width}×${resource.bounds.height}` : " · 无 bounds"}`;
+  return `${editorResourcePrimaryPath(resource)} · ${resource.animationNames.length} animations${resource.bounds ? ` · export bounds ${resource.bounds.width}×${resource.bounds.height}（非 art size）` : " · 无 export bounds"}`;
 }
 
 function requireStateMachine(

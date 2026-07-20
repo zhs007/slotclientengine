@@ -268,6 +268,58 @@ export function updateVariantFocusFromReel(
   };
 }
 
+export function setVariantArtSizeDimension(
+  project: EditorProject,
+  variantId: SceneLayoutVariantId,
+  dimension: "width" | "height",
+  value: number,
+): void {
+  const variant = project.variants[variantId];
+  const previousSize = { ...variant.artSize };
+  const previousComplete = previousSize.width > 0 && previousSize.height > 0;
+  const reelSize = calculateReelSize(project);
+  const reelPlacement = project.reel.placements[variantId];
+  const reelWasCentered =
+    !previousComplete ||
+    (Boolean(reelPlacement) &&
+      reelPlacement!.x ===
+        Math.round((previousSize.width - reelSize.width) / 2) &&
+      reelPlacement!.y ===
+        Math.round((previousSize.height - reelSize.height) / 2));
+
+  variant.artSize[dimension] = value;
+
+  const background = project.nodes.find(
+    (node) => node.id === variant.backgroundNode,
+  );
+  const backgroundResource = background
+    ? project.resources.get(background.resourceId)
+    : undefined;
+  const placement = background?.placements[variantId];
+  const placementAxis = dimension === "width" ? "x" : "y";
+  if (
+    backgroundResource?.kind === "spine" &&
+    placement &&
+    Number.isFinite(value) &&
+    value > 0
+  ) {
+    const previousCenter = previousSize[dimension] / 2;
+    if (
+      placement[placementAxis] === 0 ||
+      placement[placementAxis] === previousCenter
+    ) {
+      placement[placementAxis] = value / 2;
+    }
+  }
+
+  const nextComplete = variant.artSize.width > 0 && variant.artSize.height > 0;
+  if (nextComplete && reelWasCentered) {
+    initializeVariantFromBackground(project, variantId, variant.artSize);
+  } else {
+    updateVariantFocusFromReel(project, variantId);
+  }
+}
+
 export function updateVariantFocusOffsetsFromRect(
   project: EditorProject,
   variantId: SceneLayoutVariantId,

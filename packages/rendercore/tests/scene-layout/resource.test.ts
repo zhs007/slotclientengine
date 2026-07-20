@@ -83,6 +83,39 @@ describe("scene layout resources", () => {
     expect(resource.spineResources.bg).toBeDefined();
     resource.destroy();
     resource.destroy();
+    const sharedTexturePath = "assets/bg/shared.webp";
+    const deduplicatedTextures = {
+      ...textures,
+      "BG.png": sharedTexturePath,
+      "BG_2.png": sharedTexturePath,
+    };
+    const deduplicatedManifest = {
+      ...manifest,
+      nodes: [
+        {
+          ...manifest.nodes[0],
+          resource: {
+            ...manifest.nodes[0].resource,
+            textures: deduplicatedTextures,
+          },
+        },
+      ],
+    } as const;
+    const deduplicated = createSceneLayoutResource({
+      manifest: deduplicatedManifest,
+      skeletonModules: { "assets/bg/bg.json": skeleton },
+      atlasModules: { "assets/bg/bg.atlas": atlasText },
+      textureModules: Object.fromEntries(
+        [...new Set(Object.values(deduplicatedTextures))].map((path) => [
+          path,
+          `memory:${path}`,
+        ]),
+      ),
+    });
+    expect(deduplicated.spineResources.bg?.textureUrls["BG.png"]).toBe(
+      deduplicated.spineResources.bg?.textureUrls["BG_2.png"],
+    );
+    deduplicated.destroy();
     expect(() =>
       createSceneLayoutResource({
         manifest: {

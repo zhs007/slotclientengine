@@ -37,6 +37,7 @@ export async function importSymbolsZipWithFiles(
     );
   }
   const packageManifest = parseSymbolPackageManifest(rawManifest);
+  assertStrictSymbolsPackagePaths(files);
   const resource = await createSymbolPackageResource({
     packageManifest,
     files,
@@ -48,6 +49,19 @@ export async function importSymbolsZipWithFiles(
       [...files].map(([path, bytes]) => [path, bytes.slice()] as const),
     ),
   });
+}
+
+export function assertStrictSymbolsPackagePaths(
+  files: ReadonlyMap<string, Uint8Array>,
+): void {
+  const legacyPath = [...files.keys()].find(
+    (path) => path !== path.toLowerCase(),
+  );
+  if (legacyPath) {
+    throw new Error(
+      `旧版 symbols package 包含非小写路径 ${legacyPath}；请先在 Symbols Editor 中导入并重新导出，再导入 Game Layout Editor。`,
+    );
+  }
 }
 
 export async function importSymbolsZip(
