@@ -3,6 +3,7 @@ import {
   editorProjectToManifest,
   type EditorProject,
 } from "./editor-project.js";
+import { synchronizeGameModeNodeStates } from "./game-mode-commands.js";
 
 export interface EditorStoreSnapshot {
   readonly project: EditorProject;
@@ -32,6 +33,7 @@ export class EditorStore {
   transact(update: (draft: EditorProject) => void): void {
     const draft = cloneEditorProject(this.#project);
     update(draft);
+    synchronizeGameModeNodeStates(draft);
     this.#project = draft;
     this.#revision += 1;
     this.validate();

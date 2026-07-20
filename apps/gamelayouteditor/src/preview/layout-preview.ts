@@ -146,21 +146,28 @@ export class LayoutPreview {
       nextPackage.destroy();
       return;
     }
-    const nextRuntime = manifest.symbolPackage
+    const needsPackageRuntime = Boolean(
+      manifest.symbolPackage || manifest.popups || manifest.gameModes,
+    );
+    const nextRuntime = needsPackageRuntime
       ? createSceneLayoutPackageRuntime({
           resource: nextPackage.packageResource,
         })
       : createSceneLayoutRuntime({ resource: nextPackage.resource });
     try {
-      if (manifest.symbolPackage) {
-        await (nextRuntime as SceneLayoutPackageRuntime).init({
-          reels: {
-            main: {
-              scene: packageScene!.codes,
-              localPhaseYs: packageScene!.stopYs,
-            },
-          },
-        });
+      if (needsPackageRuntime) {
+        await (nextRuntime as SceneLayoutPackageRuntime).init(
+          manifest.symbolPackage
+            ? {
+                reels: {
+                  main: {
+                    scene: packageScene!.codes,
+                    localPhaseYs: packageScene!.stopYs,
+                  },
+                },
+              }
+            : {},
+        );
       } else {
         await nextRuntime.init();
       }
@@ -177,7 +184,7 @@ export class LayoutPreview {
     this.clearRuntime();
     this.#package = nextPackage;
     this.#runtime = nextRuntime;
-    this.#packageRuntime = manifest.symbolPackage
+    this.#packageRuntime = needsPackageRuntime
       ? (nextRuntime as SceneLayoutPackageRuntime)
       : null;
     this.#manifest = manifest;
@@ -185,19 +192,44 @@ export class LayoutPreview {
     this.applySize();
   }
 
-  playAwardCelebration(
-    id: string,
-    input: { readonly betAmountRaw: number; readonly winAmountRaw: number },
-  ): void {
+  playAwardCelebration(input: {
+    readonly betAmountRaw: number;
+    readonly winAmountRaw: number;
+  }): void {
     if (!this.#packageRuntime)
       throw new Error("当前 layout preview 没有 package runtime。");
-    const popup = this.#packageRuntime.getAwardCelebrationPopup(id);
-    popup.dismissImmediately();
-    popup.start(input);
+    this.#packageRuntime.dismissActiveAwardCelebrationImmediately();
+    this.#packageRuntime.startAwardCelebrationForCurrentMode(input);
   }
 
-  advanceAwardCelebration(id: string): void {
-    this.#packageRuntime?.getAwardCelebrationPopup(id).requestAdvance();
+  advanceAwardCelebration(): void {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    this.#packageRuntime.requestAdvanceAwardCelebration();
+  }
+
+  dismissAwardCelebrationImmediately(): void {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    this.#packageRuntime.dismissActiveAwardCelebrationImmediately();
+  }
+
+  getGameModeIds(): readonly string[] {
+    return this.#packageRuntime?.getGameModeIds() ?? Object.freeze([]);
+  }
+
+  getGameModeSnapshot() {
+    return this.#packageRuntime?.getGameModeSnapshot() ?? null;
+  }
+
+  getActiveAwardCelebrationSnapshot() {
+    return this.#packageRuntime?.getActiveAwardCelebrationSnapshot() ?? null;
+  }
+
+  async requestGameMode(modeId: string): Promise<void> {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    await this.#packageRuntime.requestGameMode(modeId);
   }
 
   clear(): void {

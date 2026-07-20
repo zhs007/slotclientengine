@@ -28,6 +28,7 @@ import type {
   AttachRelativeOptions,
   ResolvedSceneLayoutReelGrid,
   SceneLayoutInitialReelScene,
+  SceneLayoutGameModeSnapshot,
   SceneLayoutNodeStateSnapshot,
   SceneLayoutPackageResource,
   SceneLayoutPackageRuntime,
@@ -52,6 +53,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #initialized = false;
   #initializing = false;
   #destroyed = false;
+  #stableMode: string | null = null;
+  #targetMode: string | null = null;
+  #activePopupId: string | null = null;
 
   constructor(resource: SceneLayoutPackageResource) {
     this.#resource = resource;
@@ -109,6 +113,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.#popups.set(id, popup);
         this.container.addChild(popup.container);
       }
+      this.#stableMode = this.#resource.manifest.gameModes?.initialMode ?? null;
       this.#initialized = true;
     } catch (error) {
       this.destroy();
@@ -151,6 +156,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#reel?.update(deltaSeconds);
     for (const popup of this.#popups.values())
       if (popup.isPlaying()) popup.update(deltaSeconds);
+    if (
+      this.#activePopupId &&
+      !this.#popups.get(this.#activePopupId)?.isPlaying()
+    )
+      this.#activePopupId = null;
   }
 
   resetReelScene(reelId: "main", input: SceneLayoutInitialReelScene): void {
@@ -202,6 +212,110 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return popup;
   }
 
+  getGameModeIds(): readonly string[] {
+    this.assertReady();
+    return Object.freeze(this.requireGameModes().modes.map((mode) => mode.id));
+  }
+
+  getGameModeSnapshot(): SceneLayoutGameModeSnapshot {
+    this.assertReady();
+    this.requireGameModes();
+    return Object.freeze({
+      stableMode: this.#stableMode!,
+      targetMode: this.#targetMode,
+      phase: this.#targetMode ? "transitioning" : "stable",
+    });
+  }
+
+  async requestGameMode(modeId: string): Promise<void> {
+    this.assertReady();
+    const modes = this.requireGameModes();
+    const mode = modes.modes.find((candidate) => candidate.id === modeId);
+    if (!mode)
+      throw new SceneLayoutError(`Unknown scene layout game mode "${modeId}".`);
+    if (this.#targetMode)
+      throw new SceneLayoutError(
+        `Scene layout game mode transition to "${this.#targetMode}" is already in progress.`,
+      );
+    if (this.playingPopupId())
+      throw new SceneLayoutError(
+        "Cannot change scene layout game mode while an award celebration is active.",
+      );
+    if (mode.id === this.#stableMode) return;
+    for (const [nodeId, state] of Object.entries(mode.nodeStates)) {
+      if (!this.#layout.canRequestNodeState(nodeId, state))
+        throw new SceneLayoutError(
+          `Scene layout node "${nodeId}" cannot transition to state "${state}".`,
+        );
+    }
+    this.#targetMode = mode.id;
+    try {
+      await Promise.all(
+        Object.entries(mode.nodeStates).map(([nodeId, state]) =>
+          this.#layout.requestNodeState(nodeId, state),
+        ),
+      );
+      this.assertAlive();
+      this.#stableMode = mode.id;
+    } finally {
+      this.#targetMode = null;
+    }
+  }
+
+  startAwardCelebrationForCurrentMode(input: {
+    readonly betAmountRaw: number;
+    readonly winAmountRaw: number;
+  }): void {
+    this.assertReady();
+    const modes = this.requireGameModes();
+    if (this.#targetMode)
+      throw new SceneLayoutError(
+        "Cannot start an award celebration during a game mode transition.",
+      );
+    if (this.playingPopupId())
+      throw new SceneLayoutError("An award celebration is already active.");
+    if (!Number.isSafeInteger(input.betAmountRaw) || input.betAmountRaw <= 0)
+      throw new SceneLayoutError(
+        "betAmountRaw must be a positive safe integer.",
+      );
+    if (!Number.isSafeInteger(input.winAmountRaw) || input.winAmountRaw < 0)
+      throw new SceneLayoutError(
+        "winAmountRaw must be a non-negative safe integer.",
+      );
+    const mode = modes.modes.find(
+      (candidate) => candidate.id === this.#stableMode,
+    )!;
+    if (!mode.awardCelebrationPopup)
+      throw new SceneLayoutError(
+        `Scene layout game mode "${mode.id}" has no award celebration popup.`,
+      );
+    const popup = this.getAwardCelebrationPopup(mode.awardCelebrationPopup);
+    popup.start(input);
+    if (popup.isPlaying()) this.#activePopupId = mode.awardCelebrationPopup;
+  }
+
+  requestAdvanceAwardCelebration(): void {
+    this.assertReady();
+    const id = this.#activePopupId ?? this.playingPopupId();
+    if (!id) throw new SceneLayoutError("No award celebration is active.");
+    this.getAwardCelebrationPopup(id).requestAdvance();
+  }
+
+  dismissActiveAwardCelebrationImmediately(): void {
+    this.assertReady();
+    const id = this.#activePopupId ?? this.playingPopupId();
+    if (!id) return;
+    this.getAwardCelebrationPopup(id).dismissImmediately();
+    this.#activePopupId = null;
+  }
+
+  getActiveAwardCelebrationSnapshot() {
+    this.assertReady();
+    const id = this.#activePopupId ?? this.playingPopupId();
+    if (!id) return null;
+    return this.getAwardCelebrationPopup(id).getSnapshot();
+  }
+
   getSnapshot(): SceneLayoutSnapshot {
     this.assertReady();
     return this.#layout.getSnapshot();
@@ -247,6 +361,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return this.#layout.requestNodeState(nodeId, state);
   }
 
+  canRequestNodeState(nodeId: string, state: string): boolean {
+    this.assertReady();
+    return this.#layout.canRequestNodeState(nodeId, state);
+  }
+
   getNodeStateSnapshot(nodeId: string): SceneLayoutNodeStateSnapshot {
     this.assertReady();
     return this.#layout.getNodeStateSnapshot(nodeId);
@@ -263,6 +382,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#layout.destroy();
     this.#resource.destroy();
     this.#initialized = false;
+    this.#stableMode = null;
+    this.#targetMode = null;
+    this.#activePopupId = null;
   }
 
   private createReelPresentation(
@@ -319,6 +441,20 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         "Scene layout package has no symbol package binding.",
       );
     return resource;
+  }
+
+  private requireGameModes() {
+    const gameModes = this.#resource.manifest.gameModes;
+    if (!gameModes)
+      throw new SceneLayoutError(
+        "Scene layout manifest does not declare gameModes.",
+      );
+    return gameModes;
+  }
+
+  private playingPopupId(): string | null {
+    for (const [id, popup] of this.#popups) if (popup.isPlaying()) return id;
+    return null;
   }
 
   private assertReady(): void {

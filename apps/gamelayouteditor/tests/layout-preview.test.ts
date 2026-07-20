@@ -17,13 +17,30 @@ const state = vi.hoisted(() => {
     })),
     destroy: vi.fn(),
   };
+  const packageRuntime = {
+    ...runtime,
+    init: vi.fn(async () => undefined),
+    dismissActiveAwardCelebrationImmediately: vi.fn(),
+    startAwardCelebrationForCurrentMode: vi.fn(),
+    requestAdvanceAwardCelebration: vi.fn(),
+    getGameModeIds: vi.fn(() => ["BaseGame", "FreeGame"]),
+    getGameModeSnapshot: vi.fn(() => ({
+      stableMode: "BaseGame",
+      targetMode: null,
+      phase: "stable",
+    })),
+    getActiveAwardCelebrationSnapshot: vi.fn(() => null),
+    requestGameMode: vi.fn(async () => undefined),
+  };
   const pkg = {
     resource: {},
+    packageResource: {},
     destroy: vi.fn(),
   };
   return {
     canvas,
     runtime,
+    packageRuntime,
     pkg,
     validate: vi.fn(async () => pkg),
     resize: vi.fn(),
@@ -181,6 +198,7 @@ vi.mock("../src/io/imported-layout-zip.js", () => ({
 
 vi.mock("@slotclientengine/rendercore/scene-layout", () => ({
   createSceneLayoutRuntime: () => state.runtime,
+  createSceneLayoutPackageRuntime: () => state.packageRuntime,
   resolveSceneLayoutFrameViewport: state.resolveFrame,
 }));
 
@@ -247,6 +265,45 @@ describe("LayoutPreview", () => {
     );
     expect(state.runtime.destroy).toHaveBeenCalled();
     expect(state.pkg.destroy).toHaveBeenCalled();
+    preview.destroy();
+  });
+
+  it("uses the production package runtime for game modes without symbols", async () => {
+    const host = document.createElement("div");
+    const diagnostics = document.createElement("div");
+    document.body.append(host, diagnostics);
+    const preview = new LayoutPreview(host, diagnostics);
+    await preview.init();
+    const manifest = {
+      ...imageManifest,
+      gameModes: {
+        initialMode: "BaseGame",
+        modes: [
+          { id: "BaseGame", nodeStates: {} },
+          { id: "FreeGame", nodeStates: {} },
+        ],
+      },
+    };
+    await preview.setLayout(manifest, assetBytes);
+    expect(state.packageRuntime.init).toHaveBeenCalledWith({});
+    expect(preview.getGameModeIds()).toEqual(["BaseGame", "FreeGame"]);
+    await preview.requestGameMode("FreeGame");
+    preview.playAwardCelebration({ betAmountRaw: 100, winAmountRaw: 6000 });
+    expect(
+      state.packageRuntime.dismissActiveAwardCelebrationImmediately,
+    ).toHaveBeenCalled();
+    expect(
+      state.packageRuntime.startAwardCelebrationForCurrentMode,
+    ).toHaveBeenCalledWith({ betAmountRaw: 100, winAmountRaw: 6000 });
+    preview.advanceAwardCelebration();
+    preview.dismissAwardCelebrationImmediately();
+    expect(
+      state.packageRuntime.requestAdvanceAwardCelebration,
+    ).toHaveBeenCalled();
+    expect(preview.getGameModeSnapshot()).toMatchObject({
+      stableMode: "BaseGame",
+    });
+    expect(preview.getActiveAwardCelebrationSnapshot()).toBeNull();
     preview.destroy();
   });
 
@@ -417,7 +474,11 @@ describe("LayoutPreview", () => {
     document.body.append(host, diagnostics);
     const preview = new LayoutPreview(host, diagnostics);
     await preview.init();
-    const stalePackage = { resource: {}, destroy: vi.fn() };
+    const stalePackage = {
+      resource: {},
+      packageResource: {},
+      destroy: vi.fn(),
+    };
     let resolveStale!: (value: typeof stalePackage) => void;
     state.validate.mockImplementationOnce(
       () =>

@@ -21,6 +21,7 @@
 - `packages/gameloading`：通用轻量 loading 页面、资源加载和 `99%/100%` 生命周期编排；游戏 app 只配置资源列表和回调，不在 app 内复制通用 loading 调度。
 - `apps/popupeditor`：纯前端获奖庆祝 popup 编辑器；从第一版使用 logical resource、import review、完整 SHA-256 content-addressed owned payload，并只输出 strict `award-celebration` popup package。普通 popup 不在当前范围。
 - `packages/rendercore/popup` 拥有 popup manifest/parser、精确传递闭包、image/VNI/official Spine/image-string layer、五档 BigInt threshold sequence、金额格式、点击/dismiss/end drain 和 runtime snapshot；editor、gamelayouteditor 与 game app 不得复制这些算法。
+- `apps/gamelayouteditor` 拥有通用游戏模式 draft、mode 到 stateful scene node / award-celebration popup 的显式绑定、popup dependency library 与 per-variant viewport-center root placement；`packages/rendercore/scene-layout` 拥有 strict gameModes schema、原子 mode transition preflight、当前模式 popup lifecycle 与 production API。shared code 不得硬编码 BaseGame/FreeGame/BonusGame、BG/FG 或游戏业务字段。
 - `gamelayouteditor` 把 popup ZIP 当自包含 dependency，每个 active variant 只配置相对 viewport center 的 root `x/y/scale`，最终 vendor 到 layout ZIP；popup 内部坐标、tier、layer 和资源只回 popupeditor 编辑。真实获奖 ImgNumber 未提供前，game002/game003 仍保留当前 production win-amount 路径，不得用 CN digits、字体或 fixture glyph 冒充迁移完成。
 - `packages/vnicore`：Pixi.js v8 VNI 动画核心库，供 `apps/anieditorv5viewer` 等 Pixi 运行时使用；不要与 `packages/anieditorv5runtime-cc` 的 Cocos Creator runtime 混用。
 - `tasks/`：任务计划、任务报告和执行记录

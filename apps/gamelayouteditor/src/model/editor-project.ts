@@ -12,6 +12,10 @@ import {
   collectSymbolPackageEntryPaths,
   parseSymbolPackageManifest,
 } from "@slotclientengine/rendercore/symbol";
+import {
+  collectPopupPackagePaths,
+  parsePopupManifest,
+} from "@slotclientengine/rendercore/popup";
 import { deriveNodeId } from "../io/filename-policy.js";
 import {
   editorResourcePaths,
@@ -82,12 +86,17 @@ export interface EditorSymbolPackageDependency {
 }
 
 export interface EditorPopupDependency {
-  readonly packageId: string;
+  readonly id: string;
   readonly files: ReadonlyMap<string, Uint8Array>;
-  bindingId: string;
   placements: Partial<
     Record<SceneLayoutVariantId, { x: number; y: number; scale: number }>
   >;
+}
+
+export interface EditorGameModeDraft {
+  id: string;
+  nodeStates: Record<string, string>;
+  awardCelebrationPopupId: string | null;
 }
 
 export interface EditorProject {
@@ -112,7 +121,11 @@ export interface EditorProject {
   resources: Map<string, EditorLayoutResource>;
   assets: Map<string, Uint8Array>;
   symbolDependency: EditorSymbolPackageDependency | null;
-  popupDependency: EditorPopupDependency | null;
+  popupDependencies: Map<string, EditorPopupDependency>;
+  gameModes: {
+    initialMode: string;
+    modes: EditorGameModeDraft[];
+  };
 }
 
 export function activeVariantIds(
@@ -149,7 +162,13 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
     resources: new Map(),
     assets: new Map(),
     symbolDependency: null,
-    popupDependency: null,
+    popupDependencies: new Map(),
+    gameModes: {
+      initialMode: "BaseGame",
+      modes: [
+        { id: "BaseGame", nodeStates: {}, awardCelebrationPopupId: null },
+      ],
+    },
   };
 }
 
@@ -398,6 +417,7 @@ export function editorProjectToPreviewManifest(
       nodes: manifest.nodes,
       reels: manifest.reels,
       ...(manifest.popups ? { popups: manifest.popups } : {}),
+      ...(manifest.gameModes ? { gameModes: manifest.gameModes } : {}),
     });
   } catch {
     const available = previewVariantOrder(project.mode, preferredVariant).find(
@@ -510,17 +530,41 @@ export function editorProjectToManifest(
           },
         }
       : {}),
-    ...(project.popupDependency
-      ? {
-          popups: {
-            [project.popupDependency.bindingId]: {
-              type: "award-celebration",
-              manifest: `dependencies/popups/${project.popupDependency.packageId}/popup.manifest.json`,
-              placements: project.popupDependency.placements,
-            },
-          },
-        }
-      : {}),
+    ...(() => {
+      const referenced = new Set(
+        project.gameModes.modes.flatMap((mode) =>
+          mode.awardCelebrationPopupId ? [mode.awardCelebrationPopupId] : [],
+        ),
+      );
+      if (referenced.size === 0) return {};
+      return {
+        popups: Object.fromEntries(
+          [...referenced].map((id) => {
+            const dependency = project.popupDependencies.get(id);
+            if (!dependency)
+              throw new Error(`游戏模式引用了未知 Popup dependency：${id}`);
+            return [
+              id,
+              {
+                type: "award-celebration",
+                manifest: `dependencies/popups/${id}/popup.manifest.json`,
+                placements: dependency.placements,
+              },
+            ];
+          }),
+        ),
+      };
+    })(),
+    gameModes: {
+      initialMode: project.gameModes.initialMode,
+      modes: project.gameModes.modes.map((mode) => ({
+        id: mode.id,
+        nodeStates: mode.nodeStates,
+        ...(mode.awardCelebrationPopupId
+          ? { awardCelebrationPopup: mode.awardCelebrationPopupId }
+          : {}),
+      })),
+    },
   });
 }
 
@@ -675,10 +719,8 @@ export function manifestToEditorProject(
     for (const path of [...project.assets.keys()])
       if (path.startsWith(prefix)) project.assets.delete(path);
   }
-  if (parsed.popups) {
-    const [bindingId, binding] = Object.entries(parsed.popups)[0]!;
-    const packageId = binding.manifest.split("/").at(-2)!;
-    const prefix = `dependencies/popups/${packageId}/`;
+  for (const [id, binding] of Object.entries(parsed.popups ?? {})) {
+    const prefix = `dependencies/popups/${id}/`;
     const files = new Map(
       [...assets.entries()]
         .filter(([path]) => path.startsWith(prefix))
@@ -687,21 +729,57 @@ export function manifestToEditorProject(
             [path.slice(prefix.length), bytes.slice()] as const,
         ),
     );
-    project.popupDependency = {
-      packageId,
+    const nested = parsePopupManifest(
+      parseJsonBytes(files.get("popup.manifest.json"), "popup.manifest.json"),
+    );
+    if (nested.id !== id)
+      throw new Error(`导入 Popup dependency id 不一致：${id}`);
+    collectPopupPackagePaths({ manifest: nested, files });
+    project.popupDependencies.set(id, {
+      id,
       files,
-      bindingId,
       placements: structuredClone(binding.placements),
-    };
+    });
     for (const path of [...project.assets.keys()])
       if (path.startsWith(prefix)) project.assets.delete(path);
   }
+  project.gameModes = parsed.gameModes
+    ? {
+        initialMode: parsed.gameModes.initialMode,
+        modes: parsed.gameModes.modes.map((mode) => ({
+          id: mode.id,
+          nodeStates: { ...mode.nodeStates },
+          awardCelebrationPopupId: mode.awardCelebrationPopup ?? null,
+        })),
+      }
+    : {
+        initialMode: "BaseGame",
+        modes: [
+          {
+            id: "BaseGame",
+            nodeStates: Object.fromEntries(
+              parsed.nodes.flatMap((node) =>
+                node.resource.kind === "spine" &&
+                "stateMachine" in node.resource
+                  ? [[node.id, node.resource.stateMachine.initialState]]
+                  : [],
+              ),
+            ),
+            awardCelebrationPopupId: null,
+          },
+        ],
+      };
   return project;
 }
 
 export function cloneEditorProject(project: EditorProject): EditorProject {
   return {
-    ...structuredClone({ ...project, resources: undefined, assets: undefined }),
+    ...structuredClone({
+      ...project,
+      resources: undefined,
+      assets: undefined,
+      popupDependencies: undefined,
+    }),
     resources: new Map(
       [...project.resources].map(([id, resource]) => [
         id,
@@ -722,17 +800,17 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
           ),
         }
       : null,
-    popupDependency: project.popupDependency
-      ? {
-          ...structuredClone({ ...project.popupDependency, files: undefined }),
+    popupDependencies: new Map(
+      [...project.popupDependencies].map(([id, dependency]) => [
+        id,
+        {
+          ...structuredClone({ ...dependency, files: undefined }),
           files: new Map(
-            [...project.popupDependency.files].map(([path, bytes]) => [
-              path,
-              bytes.slice(),
-            ]),
+            [...dependency.files].map(([path, bytes]) => [path, bytes.slice()]),
           ),
-        }
-      : null,
+        },
+      ]),
+    ),
   } as EditorProject;
 }
 

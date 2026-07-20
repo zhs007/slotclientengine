@@ -79,6 +79,120 @@ function files(): Map<string, Uint8Array> {
   ]);
 }
 
+function popupLayoutFixture() {
+  const characters = [..."$,.0123456789"];
+  const glyphs = Object.fromEntries(
+    characters.map((character, index) => [
+      character,
+      {
+        path: `assets/g${index}.png`,
+        size: { width: 1, height: 1 },
+        offset: { x: 0, y: 0 },
+      },
+    ]),
+  );
+  const amountLayer = {
+    id: "amount",
+    kind: "image-string",
+    order: 0,
+    resource: "amount",
+    binding: "win-amount",
+    anchor: { x: 0.5, y: 0.5 },
+    transform: { x: 0, y: 0, scale: 1 },
+  };
+  const popup = {
+    version: 1,
+    kind: "popup",
+    id: "celebration",
+    type: "award-celebration",
+    designViewport: { width: 100, height: 100 },
+    amountFormat: {
+      rawScale: 100,
+      fractionDigits: 2,
+      useGrouping: true,
+      groupSeparator: ",",
+      decimalSeparator: ".",
+      prefix: "$",
+      suffix: "",
+      rounding: "floor",
+    },
+    resources: {
+      amount: {
+        kind: "image-string",
+        manifest:
+          "dependencies/image-strings/amount/image-string.manifest.json",
+      },
+    },
+    awardCelebration: {
+      base: { countDurationSeconds: 1, layers: [amountLayer] },
+      standard: { countDurationSeconds: 1, layers: [amountLayer] },
+      celebrationTiers: [
+        {
+          id: "bigwin",
+          thresholdMultiplier: 15,
+          countDurationSeconds: 1,
+          layers: [amountLayer],
+        },
+        {
+          id: "superwin",
+          thresholdMultiplier: 30,
+          countDurationSeconds: 1,
+          layers: [amountLayer],
+        },
+        {
+          id: "megawin",
+          thresholdMultiplier: 50,
+          countDurationSeconds: 1,
+          layers: [amountLayer],
+        },
+      ],
+    },
+  };
+  const imageString = {
+    version: 1,
+    kind: "image-string",
+    id: "amount",
+    metrics: { lineHeight: 1, letterSpacing: 0 },
+    glyphs,
+    fixedAdvanceGroups: [],
+  };
+  const manifest = {
+    ...game002LayoutFixture,
+    popups: {
+      celebration: {
+        type: "award-celebration" as const,
+        manifest: "dependencies/popups/celebration/popup.manifest.json",
+        placements: { default: { x: 3, y: -4, scale: 0.8 } },
+      },
+    },
+    gameModes: {
+      initialMode: "BaseGame",
+      modes: [
+        {
+          id: "BaseGame",
+          nodeStates: {},
+          awardCelebrationPopup: "celebration",
+        },
+        { id: "FreeGame", nodeStates: {} },
+      ],
+    },
+  };
+  const prefix = "dependencies/popups/celebration/";
+  const dependency = `${prefix}dependencies/image-strings/amount/`;
+  const packageFiles = new Map<string, Uint8Array>([
+    ["assets/bg.png", new Uint8Array([1])],
+    [`${prefix}popup.manifest.json`, encode(popup)],
+    [`${dependency}image-string.manifest.json`, encode(imageString)],
+  ]);
+  characters.forEach((_, index) =>
+    packageFiles.set(
+      `${dependency}assets/g${index}.png`,
+      new Uint8Array([index + 2]),
+    ),
+  );
+  return { manifest, files: packageFiles };
+}
+
 describe("scene layout package runtime", () => {
   for (const renderMode of ["standard", "grid-cell"] as const) {
     it(`creates, orders and resets the ${renderMode} reel from package contracts`, async () => {
@@ -239,6 +353,157 @@ describe("scene layout package runtime", () => {
           reels: { main: { scene: [], localPhaseYs: [] } },
         }),
       ).rejects.toThrow(/no symbol binding/);
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
+  it("owns generic game-mode snapshots and rejects popup fallbacks", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const manifest = {
+        ...game002LayoutFixture,
+        gameModes: {
+          initialMode: "BaseGame",
+          modes: [
+            { id: "BaseGame", nodeStates: {} },
+            { id: "FreeGame", nodeStates: {} },
+          ],
+        },
+      };
+      const resource = await createSceneLayoutPackageResource({
+        manifest,
+        files: new Map([["assets/bg.png", new Uint8Array([1])]]),
+      });
+      const runtime = createSceneLayoutPackageRuntime({ resource });
+      await runtime.init();
+      expect(runtime.getGameModeIds()).toEqual(["BaseGame", "FreeGame"]);
+      expect(runtime.getGameModeSnapshot()).toEqual({
+        stableMode: "BaseGame",
+        targetMode: null,
+        phase: "stable",
+      });
+      await expect(
+        runtime.requestGameMode("BaseGame"),
+      ).resolves.toBeUndefined();
+      await expect(
+        runtime.requestGameMode("FreeGame"),
+      ).resolves.toBeUndefined();
+      expect(runtime.getGameModeSnapshot().stableMode).toBe("FreeGame");
+      await expect(runtime.requestGameMode("Missing")).rejects.toThrow(
+        /Unknown/,
+      );
+      expect(() =>
+        runtime.startAwardCelebrationForCurrentMode({
+          betAmountRaw: 0,
+          winAmountRaw: 1,
+        }),
+      ).toThrow(/betAmountRaw/);
+      expect(() =>
+        runtime.startAwardCelebrationForCurrentMode({
+          betAmountRaw: 1,
+          winAmountRaw: -1,
+        }),
+      ).toThrow(/winAmountRaw/);
+      expect(() =>
+        runtime.startAwardCelebrationForCurrentMode({
+          betAmountRaw: 1,
+          winAmountRaw: 1,
+        }),
+      ).toThrow(/has no award celebration/);
+      expect(() => runtime.requestAdvanceAwardCelebration()).toThrow(
+        /No award celebration/,
+      );
+      expect(runtime.getActiveAwardCelebrationSnapshot()).toBeNull();
+      runtime.dismissActiveAwardCelebrationImmediately();
+      runtime.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
+  it("keeps legacy low-level package runtime and rejects new game-mode APIs", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const resource = await createSceneLayoutPackageResource({
+        manifest: game002LayoutFixture,
+        files: new Map([["assets/bg.png", new Uint8Array([1])]]),
+      });
+      const runtime = createSceneLayoutPackageRuntime({ resource });
+      await runtime.init();
+      expect(() => runtime.getGameModeIds()).toThrow(
+        /does not declare gameModes/,
+      );
+      expect(() => runtime.getGameModeSnapshot()).toThrow(
+        /does not declare gameModes/,
+      );
+      await expect(runtime.requestGameMode("BaseGame")).rejects.toThrow(
+        /does not declare gameModes/,
+      );
+      runtime.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
+  it("starts, advances and clears the popup bound to the current mode", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const fixture = popupLayoutFixture();
+      const resource = await createSceneLayoutPackageResource({
+        ...fixture,
+        decodeImage: async () => ({ width: 1, height: 1 }),
+      });
+      const runtime = createSceneLayoutPackageRuntime({ resource });
+      await runtime.init();
+      runtime.applyViewport({ width: 200, height: 100 });
+      const popup = runtime.getAwardCelebrationPopup("celebration");
+      expect(popup.container.position).toMatchObject({ x: 103, y: 46 });
+      expect(popup.container.scale).toMatchObject({ x: 0.8, y: 0.8 });
+      runtime.startAwardCelebrationForCurrentMode({
+        betAmountRaw: 100,
+        winAmountRaw: 6000,
+      });
+      expect(runtime.getActiveAwardCelebrationSnapshot()).toMatchObject({
+        phase: "counting",
+        finalAmountRaw: 6000,
+      });
+      expect(() =>
+        runtime.startAwardCelebrationForCurrentMode({
+          betAmountRaw: 100,
+          winAmountRaw: 6000,
+        }),
+      ).toThrow(/already active/);
+      await expect(runtime.requestGameMode("FreeGame")).rejects.toThrow(
+        /while an award celebration is active/,
+      );
+      runtime.update(0.25);
+      expect(
+        runtime.getActiveAwardCelebrationSnapshot()!.displayedAmountRaw,
+      ).toBeGreaterThan(0);
+      runtime.requestAdvanceAwardCelebration();
+      runtime.dismissActiveAwardCelebrationImmediately();
+      expect(runtime.getActiveAwardCelebrationSnapshot()).toBeNull();
+      await runtime.requestGameMode("FreeGame");
+      expect(() =>
+        runtime.startAwardCelebrationForCurrentMode({
+          betAmountRaw: 100,
+          winAmountRaw: 6000,
+        }),
+      ).toThrow(/has no award celebration/);
+      runtime.destroy();
     } finally {
       load.mockRestore();
       unload.mockRestore();

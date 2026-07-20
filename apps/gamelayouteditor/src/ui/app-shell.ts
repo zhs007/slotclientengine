@@ -62,6 +62,18 @@ import {
   uploadSpineResource,
 } from "../model/resource-commands.js";
 import {
+  addGameMode,
+  bindGameModePopup,
+  deleteGameMode,
+  deletePopupDependency,
+  importPopupDependency,
+  replacePopupDependency,
+  renameGameMode,
+  setGameModeNodeState,
+  setInitialGameMode,
+  setPopupPlacement,
+} from "../model/game-mode-commands.js";
+import {
   LayoutPreview,
   type SymbolPackagePreviewSnapshot,
 } from "../preview/layout-preview.js";
@@ -107,6 +119,8 @@ export class GameLayoutEditorApp {
   #symbolImportBusy = false;
   #pickerTrigger: HTMLElement | null = null;
   #feedbackTimer: ReturnType<typeof setTimeout> | null = null;
+  #selectedGameMode = "BaseGame";
+  #selectedPopupId: string | null = null;
 
   constructor(root: HTMLElement) {
     this.#root = root;
@@ -122,7 +136,7 @@ export class GameLayoutEditorApp {
     this.requireElement(".preview-stage").before(spineControls);
     const popupControls = document.createElement("details");
     popupControls.className = "symbols-drawer";
-    popupControls.innerHTML = `<summary>Popup 获奖庆祝预览与导出</summary><div class="symbols-controls"><button type="button" data-import-popup>导入 Popup ZIP</button><button type="button" data-clear-popup>清除 Popup</button><label>bet raw <input type="number" value="100" data-popup-bet /></label><label>win raw <input type="number" value="5000" data-popup-win /></label><button type="button" data-play-popup>Play / Replay</button><button type="button" data-advance-popup>Advance</button>${(["default", "landscape", "portrait"] as const).map((variant) => `<fieldset><legend>${variant} viewport center placement</legend><label>x <input type="number" value="0" data-popup-placement="${variant}" data-popup-placement-field="x" /></label><label>y <input type="number" value="0" data-popup-placement="${variant}" data-popup-placement-field="y" /></label><label>scale <input type="number" min="0.01" step="0.01" value="1" data-popup-placement="${variant}" data-popup-placement-field="scale" /></label></fieldset>`).join("")}</div>`;
+    popupControls.innerHTML = `<summary>游戏模式与 Popup dependencies</summary><div class="symbols-controls"><label>当前模式 <select data-game-mode></select></label><label>新增模式 <input data-new-game-mode value="FreeGame" /></label><button type="button" data-add-game-mode>添加</button><button type="button" data-rename-game-mode>重命名</button><button type="button" data-set-initial-mode>设为 initial</button><button type="button" data-delete-game-mode>删除模式</button><label>获奖庆祝 <select data-mode-popup></select></label><div data-mode-node-states></div><button type="button" data-import-popup>导入 Popup ZIP</button><label>Popup dependency <select data-popup-dependency></select></label><button type="button" data-replace-popup>替换 Popup</button><button type="button" data-clear-popup>删除 Popup</button><span data-popup-metadata></span><label>bet raw <input type="number" value="100" data-popup-bet /></label><label>win raw <input type="number" value="6000" data-popup-win /></label><button type="button" data-play-popup>开始庆祝 / 重新播放</button><button type="button" data-advance-popup>Advance</button><button type="button" data-dismiss-popup>立即清理</button><span data-popup-runtime-status></span>${(["default", "landscape", "portrait"] as const).map((variant) => `<fieldset><legend>${variant} viewport center placement</legend><label>x <input type="number" value="0" data-popup-placement="${variant}" data-popup-placement-field="x" /></label><label>y <input type="number" value="0" data-popup-placement="${variant}" data-popup-placement-field="y" /></label><label>scale <input type="number" min="0.01" step="0.01" value="1" data-popup-placement="${variant}" data-popup-placement-field="scale" /></label></fieldset>`).join("")}<p class="hint">内部 tier、layer、金额格式请回 Popup Editor 修改。</p></div>`;
     this.requireElement(".preview-stage").before(popupControls);
     const previewHost = this.requireElement("[data-preview-host]");
     const diagnostics = this.requireElement("[data-preview-diagnostics]");
@@ -194,19 +208,100 @@ export class GameLayoutEditorApp {
       "click",
       () => void this.importPopupPackage(),
     );
-    this.requireElement("[data-clear-popup]").addEventListener("click", () =>
-      this.#store.transact((project) => {
-        project.popupDependency = null;
-      }),
+    this.requireElement("[data-replace-popup]").addEventListener(
+      "click",
+      () => {
+        if (!this.#selectedPopupId) {
+          this.#store.setExternalError(
+            new Error("尚未选择要替换的 Popup dependency。"),
+          );
+          return;
+        }
+        void this.importPopupPackage(this.#selectedPopupId);
+      },
     );
+    this.requireSelect("[data-game-mode]").addEventListener(
+      "change",
+      (event) => {
+        this.#selectedGameMode = (
+          event.currentTarget as HTMLSelectElement
+        ).value;
+        const pending = this.#preview?.requestGameMode(this.#selectedGameMode);
+        void pending
+          ?.catch((error) => this.#store.setExternalError(error))
+          .finally(() => this.renderPopupControls(this.#store.getSnapshot()));
+        this.renderPopupControls(this.#store.getSnapshot());
+      },
+    );
+    this.requireElement("[data-add-game-mode]").addEventListener(
+      "click",
+      () => {
+        const id = this.requireInput("[data-new-game-mode]").value;
+        this.runTransaction((project) => addGameMode(project, id));
+        this.#selectedGameMode = id;
+        this.renderPopupControls(this.#store.getSnapshot());
+      },
+    );
+    this.requireElement("[data-rename-game-mode]").addEventListener(
+      "click",
+      () => {
+        const id = this.requireInput("[data-new-game-mode]").value;
+        const previous = this.#selectedGameMode;
+        this.runTransaction((project) => renameGameMode(project, previous, id));
+        this.#selectedGameMode = id;
+        this.renderPopupControls(this.#store.getSnapshot());
+      },
+    );
+    this.requireElement("[data-set-initial-mode]").addEventListener(
+      "click",
+      () =>
+        this.runTransaction((project) =>
+          setInitialGameMode(project, this.#selectedGameMode),
+        ),
+    );
+    this.requireElement("[data-delete-game-mode]").addEventListener(
+      "click",
+      () => {
+        const removed = this.#selectedGameMode;
+        this.runTransaction((project) => deleteGameMode(project, removed));
+        this.#selectedGameMode =
+          this.#store.getSnapshot().project.gameModes.initialMode;
+        this.renderPopupControls(this.#store.getSnapshot());
+      },
+    );
+    this.requireSelect("[data-mode-popup]").addEventListener(
+      "change",
+      (event) =>
+        this.runTransaction((project) =>
+          bindGameModePopup(
+            project,
+            this.#selectedGameMode,
+            (event.currentTarget as HTMLSelectElement).value || null,
+          ),
+        ),
+    );
+    this.requireSelect("[data-popup-dependency]").addEventListener(
+      "change",
+      (event) => {
+        this.#selectedPopupId =
+          (event.currentTarget as HTMLSelectElement).value || null;
+        this.renderPopupControls(this.#store.getSnapshot());
+      },
+    );
+    this.requireElement("[data-clear-popup]").addEventListener("click", () => {
+      if (!this.#selectedPopupId) return;
+      this.runTransaction((project) =>
+        deletePopupDependency(project, this.#selectedPopupId!),
+      );
+      this.#selectedPopupId = null;
+    });
     this.requireElement("[data-play-popup]").addEventListener("click", () => {
       try {
-        const dependency = this.#store.getSnapshot().project.popupDependency;
-        if (!dependency) throw new Error("尚未导入 popup dependency。");
-        this.#preview?.playAwardCelebration(dependency.bindingId, {
+        this.#preview?.playAwardCelebration({
           betAmountRaw: Number(this.requireInput("[data-popup-bet]").value),
           winAmountRaw: Number(this.requireInput("[data-popup-win]").value),
         });
+        this.renderPopupControls(this.#store.getSnapshot());
       } catch (error) {
         this.#store.setExternalError(error);
       }
@@ -214,9 +309,19 @@ export class GameLayoutEditorApp {
     this.requireElement("[data-advance-popup]").addEventListener(
       "click",
       () => {
-        const dependency = this.#store.getSnapshot().project.popupDependency;
-        if (dependency)
-          this.#preview?.advanceAwardCelebration(dependency.bindingId);
+        try {
+          this.#preview?.advanceAwardCelebration();
+          this.renderPopupControls(this.#store.getSnapshot());
+        } catch (error) {
+          this.#store.setExternalError(error);
+        }
+      },
+    );
+    this.requireElement("[data-dismiss-popup]").addEventListener(
+      "click",
+      () => {
+        this.#preview?.dismissAwardCelebrationImmediately();
+        this.renderPopupControls(this.#store.getSnapshot());
       },
     );
     this.#root
@@ -224,8 +329,12 @@ export class GameLayoutEditorApp {
       .forEach((input) =>
         input.addEventListener("change", () => {
           this.#store.transact((project) => {
-            const dependency = project.popupDependency;
-            if (!dependency) throw new Error("尚未导入 popup dependency。");
+            if (!this.#selectedPopupId)
+              throw new Error("尚未选择 popup dependency。");
+            const dependency = project.popupDependencies.get(
+              this.#selectedPopupId,
+            );
+            if (!dependency) throw new Error("尚未选择 popup dependency。");
             const variant = input.dataset
               .popupPlacement as SceneLayoutVariantId;
             if (!activeVariantIds(project).includes(variant)) return;
@@ -236,7 +345,8 @@ export class GameLayoutEditorApp {
               | "x"
               | "y"
               | "scale";
-            placement[field] = Number(input.value);
+            const next = { ...placement, [field]: Number(input.value) };
+            setPopupPlacement(project, this.#selectedPopupId, variant, next);
           });
         }),
       );
@@ -356,6 +466,8 @@ export class GameLayoutEditorApp {
     this.#session.activeTab = "assets";
     this.#session.selection = null;
     this.#session.expandedResourceIds.clear();
+    this.#selectedGameMode = "BaseGame";
+    this.#selectedPopupId = null;
     this.#store.replace(createNewEditorProject(mode));
     this.showFeedback("已新建项目。先上传资源，再显式设置背景或添加图层。");
   }
@@ -407,6 +519,140 @@ export class GameLayoutEditorApp {
     this.restoreFocusToken(focusToken);
     this.renderPicker(snapshot.project);
     this.renderProjectStatus(snapshot);
+    this.renderPopupControls(snapshot);
+  }
+
+  private renderPopupControls(snapshot: EditorStoreSnapshot): void {
+    const project = snapshot.project;
+    if (
+      !project.gameModes.modes.some(
+        (mode) => mode.id === this.#selectedGameMode,
+      )
+    )
+      this.#selectedGameMode = project.gameModes.initialMode;
+    if (
+      this.#selectedPopupId &&
+      !project.popupDependencies.has(this.#selectedPopupId)
+    )
+      this.#selectedPopupId = null;
+    this.#selectedPopupId ??=
+      project.popupDependencies.keys().next().value ?? null;
+
+    const modeSelect = this.requireSelect("[data-game-mode]");
+    modeSelect.replaceChildren(
+      ...project.gameModes.modes.map((mode) => {
+        const option = document.createElement("option");
+        option.value = mode.id;
+        option.textContent = `${mode.id}${mode.id === project.gameModes.initialMode ? " (initial)" : ""}`;
+        option.selected = mode.id === this.#selectedGameMode;
+        return option;
+      }),
+    );
+    const mode = project.gameModes.modes.find(
+      (candidate) => candidate.id === this.#selectedGameMode,
+    )!;
+    const popupSelect = this.requireSelect("[data-mode-popup]");
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = "无庆祝效果";
+    popupSelect.replaceChildren(none);
+    for (const id of project.popupDependencies.keys()) {
+      const option = document.createElement("option");
+      option.value = id;
+      option.textContent = id;
+      popupSelect.append(option);
+    }
+    popupSelect.value = mode.awardCelebrationPopupId ?? "";
+
+    const dependencySelect = this.requireSelect("[data-popup-dependency]");
+    const dependencyPlaceholder = document.createElement("option");
+    dependencyPlaceholder.value = "";
+    dependencyPlaceholder.textContent = "未选择";
+    dependencySelect.replaceChildren(dependencyPlaceholder);
+    for (const id of project.popupDependencies.keys()) {
+      const option = document.createElement("option");
+      option.value = id;
+      option.textContent = id;
+      dependencySelect.append(option);
+    }
+    dependencySelect.value = this.#selectedPopupId ?? "";
+
+    const dependency = this.#selectedPopupId
+      ? project.popupDependencies.get(this.#selectedPopupId)
+      : undefined;
+    const references = dependency
+      ? project.gameModes.modes
+          .filter(
+            (candidate) => candidate.awardCelebrationPopupId === dependency.id,
+          )
+          .map((candidate) => candidate.id)
+      : [];
+    const totalBytes = dependency
+      ? [...dependency.files.values()].reduce(
+          (sum, bytes) => sum + bytes.byteLength,
+          0,
+        )
+      : 0;
+    this.requireElement("[data-popup-metadata]").textContent = dependency
+      ? `${dependency.id} · ${dependency.files.size} files · ${totalBytes} bytes · 引用：${references.join(", ") || "无"}`
+      : "未导入 Popup dependency。";
+    for (const input of this.#root.querySelectorAll<HTMLInputElement>(
+      "[data-popup-placement]",
+    )) {
+      const variant = input.dataset.popupPlacement as SceneLayoutVariantId;
+      const placement = dependency?.placements[variant];
+      const field = input.dataset.popupPlacementField as "x" | "y" | "scale";
+      input.disabled = !placement;
+      input.value = String(placement?.[field] ?? (field === "scale" ? 1 : 0));
+    }
+
+    const stateTarget = this.requireElement("[data-mode-node-states]");
+    const stateful = project.nodes.filter(
+      (node) => node.playback?.kind === "state-machine",
+    );
+    stateTarget.innerHTML = stateful.length
+      ? stateful
+          .map((node) => {
+            const playback = node.playback!;
+            if (playback.kind !== "state-machine") return "";
+            return `<label>${escapeHtml(node.id)} <select data-mode-node-state="${escapeHtml(node.id)}">${playback.states.map((state) => `<option value="${escapeHtml(state.id)}" ${mode.nodeStates[node.id] === state.id ? "selected" : ""}>${escapeHtml(state.id)}</option>`).join("")}</select></label>`;
+          })
+          .join("")
+      : '<span class="hint">当前 layout 无 stateful Spine node。</span>';
+    stateTarget
+      .querySelectorAll<HTMLSelectElement>("[data-mode-node-state]")
+      .forEach((select) =>
+        select.addEventListener("change", () =>
+          this.runTransaction((draft) =>
+            setGameModeNodeState(
+              draft,
+              this.#selectedGameMode,
+              select.dataset.modeNodeState!,
+              select.value,
+            ),
+          ),
+        ),
+      );
+    const modeSnapshot = this.#preview?.getGameModeSnapshot?.();
+    const popupSnapshot = this.#preview?.getActiveAwardCelebrationSnapshot?.();
+    const transitioning = modeSnapshot?.phase === "transitioning";
+    const popupActive = Boolean(
+      popupSnapshot && !["idle", "complete"].includes(popupSnapshot.phase),
+    );
+    modeSelect.disabled = Boolean(transitioning || popupActive);
+    popupSelect.disabled = Boolean(transitioning);
+    (this.requireElement("[data-play-popup]") as HTMLButtonElement).disabled =
+      Boolean(transitioning || !mode.awardCelebrationPopupId);
+    (
+      this.requireElement("[data-advance-popup]") as HTMLButtonElement
+    ).disabled = !popupActive;
+    (
+      this.requireElement("[data-dismiss-popup]") as HTMLButtonElement
+    ).disabled = !popupActive;
+    this.requireElement("[data-popup-runtime-status]").textContent =
+      modeSnapshot
+        ? `mode ${modeSnapshot.phase}: stable=${modeSnapshot.stableMode}${modeSnapshot.targetMode ? ` target=${modeSnapshot.targetMode}` : ""} · popup=${mode.awardCelebrationPopupId ?? "无"}${popupSnapshot ? ` · ${popupSnapshot.phase}/${popupSnapshot.activeTierId ?? "none"}/${popupSnapshot.activeSegment ?? "none"}` : ""}`
+        : `mode=${mode.id} · popup=${mode.awardCelebrationPopupId ?? "无"}`;
   }
 
   private bindWorkspaceActions(project: EditorProject): void {
@@ -1459,16 +1705,18 @@ export class GameLayoutEditorApp {
           const symbolPrefix = dependency
             ? `dependencies/symbols/${dependency.packageId}/`
             : "";
-          const popupDependency = snapshot.project.popupDependency;
-          const popupPrefix = popupDependency
-            ? `dependencies/popups/${popupDependency.packageId}/`
+          const popupEntry = [...snapshot.project.popupDependencies].find(
+            ([id]) => path.startsWith(`dependencies/popups/${id}/`),
+          );
+          const popupPrefix = popupEntry
+            ? `dependencies/popups/${popupEntry[0]}/`
             : "";
           const bytes =
             snapshot.project.assets.get(path) ??
             (symbolPrefix && path.startsWith(symbolPrefix)
               ? dependency?.files.get(path.slice(symbolPrefix.length))
               : popupPrefix && path.startsWith(popupPrefix)
-                ? popupDependency?.files.get(path.slice(popupPrefix.length))
+                ? popupEntry?.[1].files.get(path.slice(popupPrefix.length))
                 : undefined);
           if (!bytes) throw new Error(`预览缺少资源：${path}`);
           return [path, bytes] as const;
@@ -1479,9 +1727,11 @@ export class GameLayoutEditorApp {
         for (const [path, bytes] of snapshot.project.symbolDependency.files)
           assets.set(`${prefix}${path}`, bytes);
       }
-      if (manifest.popups && snapshot.project.popupDependency) {
-        const prefix = `dependencies/popups/${snapshot.project.popupDependency.packageId}/`;
-        for (const [path, bytes] of snapshot.project.popupDependency.files)
+      for (const id of Object.keys(manifest.popups ?? {})) {
+        const dependency = snapshot.project.popupDependencies.get(id);
+        if (!dependency) throw new Error(`预览缺少 Popup dependency：${id}`);
+        const prefix = `dependencies/popups/${id}/`;
+        for (const [path, bytes] of dependency.files)
           assets.set(`${prefix}${path}`, bytes);
       }
       if (revision !== this.#previewRevision) return;
@@ -1513,10 +1763,17 @@ export class GameLayoutEditorApp {
       this.#session.activeTab = "layout";
       this.#session.selection = defaultLayoutSelection(project);
       this.#session.expandedResourceIds.clear();
+      this.#selectedGameMode = project.gameModes.initialMode;
+      this.#selectedPopupId =
+        project.popupDependencies.keys().next().value ?? null;
       this.#store.replace(project);
       if (project.symbolDependency)
         await this.restoreProjectSymbolDependency(project);
-      this.showFeedback(`已导入 ${project.id}，资源库按完整素材签名重建。`);
+      this.showFeedback(
+        imported.manifest.gameModes
+          ? `已导入 ${project.id}，资源库按完整素材签名重建。`
+          : `已导入 ${project.id}；旧 layout 已升级，导出后将显式保存 gameModes。`,
+      );
     } catch (error) {
       this.#store.setExternalError(error);
     } finally {
@@ -1536,8 +1793,14 @@ export class GameLayoutEditorApp {
         ...(snapshot.project.symbolDependency?.includeInExport
           ? { symbolFiles: snapshot.project.symbolDependency.files }
           : {}),
-        ...(snapshot.project.popupDependency
-          ? { popupFiles: snapshot.project.popupDependency.files }
+        ...(snapshot.project.popupDependencies.size
+          ? {
+              popupFilesById: new Map(
+                [...snapshot.project.popupDependencies].map(
+                  ([id, dependency]) => [id, dependency.files],
+                ),
+              ),
+            }
           : {}),
       });
       const url = URL.createObjectURL(exported.blob);
@@ -1609,29 +1872,23 @@ export class GameLayoutEditorApp {
     }
   }
 
-  private async importPopupPackage(): Promise<void> {
+  private async importPopupPackage(replaceId?: string): Promise<void> {
     const files = await pickFiles(".zip,application/zip", false);
     if (files.length === 0) return;
     try {
-      const imported = importPopupPackageZip(
+      const imported = await importPopupPackageZip(
         new Uint8Array(await files[0].arrayBuffer()),
       );
-      this.#store.transact((project) => {
-        const placements = Object.fromEntries(
-          activeVariantIds(project).map((variant) => [
-            variant,
-            { x: 0, y: 0, scale: 1 },
-          ]),
-        );
-        project.popupDependency = {
-          packageId: imported.manifest.id,
-          files: imported.files,
-          bindingId: "award-celebration",
-          placements,
-        };
-      });
+      this.#store.transact((project) =>
+        replaceId
+          ? replacePopupDependency(project, replaceId, imported)
+          : importPopupDependency(project, imported),
+      );
+      this.#selectedPopupId = imported.manifest.id;
       this.showFeedback(
-        `已导入 popup ${imported.manifest.id}；默认绑定到 viewport center。`,
+        replaceId
+          ? `已替换 popup ${imported.manifest.id}；模式引用与 placement 已保留。`
+          : `已导入 popup ${imported.manifest.id}；尚未自动绑定任何游戏模式。`,
       );
     } catch (error) {
       this.#store.setExternalError(error);

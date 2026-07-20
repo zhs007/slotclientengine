@@ -17,3 +17,4 @@ export {
   uploadImageResource,
   uploadSpineResource,
 } from "./resource-commands.js";
+export * from "./game-mode-commands.js";

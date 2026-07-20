@@ -21,6 +21,7 @@ import {
   type EditorSpinePlaybackDraft,
   validateEditorSpinePlayback,
 } from "./editor-project.js";
+import { synchronizeGameModeNodeStates } from "./game-mode-commands.js";
 import {
   editorResourcePaths,
   editorResourcePrimaryPath,
@@ -428,6 +429,12 @@ export function renameNode(
   if (!node) throw new Error(`未知节点：${nodeId}`);
   if (nodeId === nextNodeId) return;
   assertNodeIdAvailable(project, nextNodeId);
+  for (const mode of project.gameModes.modes) {
+    if (Object.hasOwn(mode.nodeStates, nodeId)) {
+      mode.nodeStates[nextNodeId] = mode.nodeStates[nodeId];
+      delete mode.nodeStates[nodeId];
+    }
+  }
   node.id = nextNodeId;
   for (const variant of activeVariantIds(project)) {
     if (project.variants[variant].backgroundNode === nodeId) {
@@ -447,6 +454,7 @@ export function setNodeDefaultAnimation(
   const value = validateAnimation(resource, animation);
   if (!value) throw new Error("图片节点没有 animation。");
   node.playback = { kind: "loop", animation: value };
+  synchronizeGameModeNodeStates(project);
 }
 
 export function setNodeSpinePlayback(
@@ -460,6 +468,7 @@ export function setNodeSpinePlayback(
   if (resource.kind !== "spine") throw new Error(`节点 ${nodeId} 不是 Spine。`);
   validateEditorSpinePlayback(playback, resource.animationNames, nodeId);
   node.playback = structuredClone(playback);
+  synchronizeGameModeNodeStates(project);
 }
 
 export function setSpinePlaybackKind(
@@ -483,6 +492,7 @@ export function setSpinePlaybackKind(
           states: [{ id: "State1", animation }],
           transitions: [],
         };
+  synchronizeGameModeNodeStates(project);
 }
 
 export function addSpineState(
@@ -594,6 +604,9 @@ export function renameSpineState(
     throw new Error(`state id 冲突：${nextId}`);
   const state = playback.states.find((item) => item.id === currentId);
   if (!state) throw new Error(`未知 state：${currentId}`);
+  const referencedModes = project.gameModes.modes
+    .filter((mode) => mode.nodeStates[nodeId] === currentId)
+    .map((mode) => mode.id);
   commitStateMachineMutation(project, nodeId, (candidate) => {
     candidate.states.find((item) => item.id === currentId)!.id = nextId;
     if (candidate.initialState === currentId) candidate.initialState = nextId;
@@ -602,6 +615,8 @@ export function renameSpineState(
       if (transition.to === currentId) transition.to = nextId;
     }
   });
+  for (const mode of project.gameModes.modes)
+    if (referencedModes.includes(mode.id)) mode.nodeStates[nodeId] = nextId;
 }
 
 export function deleteSpineState(
@@ -1211,6 +1226,7 @@ function commitStateMachineMutation(
   mutate(candidate);
   validateEditorSpinePlayback(candidate, resource.animationNames, nodeId);
   node.playback = candidate;
+  synchronizeGameModeNodeStates(project);
 }
 
 function requireImageStringNode(project: EditorProject, nodeId: string) {

@@ -8,6 +8,146 @@ import {
 import { game002LayoutFixture, game003LayoutFixture } from "./fixtures.js";
 
 describe("scene layout manifest", () => {
+  const gameModeManifest = () => ({
+    ...game002LayoutFixture,
+    nodes: [
+      {
+        ...game002LayoutFixture.nodes[0],
+        resource: {
+          kind: "spine" as const,
+          skeleton: "assets/bg/bg.json",
+          atlas: "assets/bg/bg.atlas",
+          textures: { "bg.png": "assets/bg/bg.png" },
+          stateMachine: {
+            initialState: "BG",
+            states: { BG: { animation: "BG" }, FG: { animation: "FG" } },
+            transitions: [
+              { from: "BG", to: "FG", animation: "BG_FG" },
+              { from: "FG", to: "BG", animation: "FG_BG" },
+            ],
+          },
+        },
+      },
+    ],
+    popups: {
+      "base-popup": {
+        type: "award-celebration" as const,
+        manifest: "dependencies/popups/base-popup/popup.manifest.json",
+        placements: { default: { x: 0, y: 0, scale: 1 } },
+      },
+      "free-popup": {
+        type: "award-celebration" as const,
+        manifest: "dependencies/popups/free-popup/popup.manifest.json",
+        placements: { default: { x: 10, y: -20, scale: 0.9 } },
+      },
+    },
+    gameModes: {
+      initialMode: "BaseGame",
+      modes: [
+        {
+          id: "BaseGame",
+          nodeStates: { bg: "BG" },
+          awardCelebrationPopup: "base-popup",
+        },
+        {
+          id: "FreeGame",
+          nodeStates: { bg: "FG" },
+          awardCelebrationPopup: "free-popup",
+        },
+        {
+          id: "BonusGame",
+          nodeStates: { bg: "BG" },
+          awardCelebrationPopup: "base-popup",
+        },
+        { id: "NoCelebration", nodeStates: { bg: "BG" } },
+      ],
+    },
+  });
+
+  it("strictly parses generic game modes and multiple reusable popup bindings", () => {
+    const parsed = parseSceneLayoutManifest(gameModeManifest());
+    expect(parsed.gameModes?.modes.map((mode) => mode.id)).toEqual([
+      "BaseGame",
+      "FreeGame",
+      "BonusGame",
+      "NoCelebration",
+    ]);
+    expect(Object.keys(parsed.popups ?? {})).toEqual([
+      "base-popup",
+      "free-popup",
+    ]);
+    expect(Object.isFrozen(parsed.gameModes?.modes)).toBe(true);
+  });
+
+  it("rejects every invalid game-mode reference and incomplete state mapping", () => {
+    type MutableGameModeManifest = {
+      gameModes: {
+        extra?: unknown;
+        initialMode: unknown;
+        modes: Array<{
+          id: unknown;
+          nodeStates?: Record<string, unknown>;
+          awardCelebrationPopup?: unknown;
+          extra?: unknown;
+        }>;
+      };
+      popups: Record<string, { manifest: string }>;
+    };
+    const invalid = (
+      mutate: (value: MutableGameModeManifest) => void,
+      pattern: RegExp,
+    ) => {
+      const value: MutableGameModeManifest =
+        structuredClone(gameModeManifest());
+      mutate(value);
+      expect(() => parseSceneLayoutManifest(value)).toThrow(pattern);
+    };
+    invalid((value) => (value.gameModes.extra = true), /unknown key/);
+    invalid(
+      (value) => (value.gameModes.initialMode = "Missing"),
+      /unknown mode/,
+    );
+    invalid((value) => (value.gameModes.modes = []), /non-empty array/);
+    invalid((value) => (value.gameModes.modes[1].id = "BaseGame"), /unique/);
+    invalid((value) => (value.gameModes.modes[1].id = "bad id"), /ASCII state/);
+    invalid(
+      (value) => delete value.gameModes.modes[1].nodeStates,
+      /must be an object/,
+    );
+    invalid(
+      (value) => (value.gameModes.modes[1].nodeStates = {}),
+      /cover every/,
+    );
+    invalid(
+      (value) =>
+        (value.gameModes.modes[1].nodeStates = { bg: "FG", extra: "BG" }),
+      /cover every/,
+    );
+    invalid(
+      (value) => (value.gameModes.modes[1].nodeStates!.bg = "Missing"),
+      /unknown stable state/,
+    );
+    invalid(
+      (value) => (value.gameModes.modes[0].nodeStates!.bg = "FG"),
+      /initialState/,
+    );
+    invalid(
+      (value) => (value.gameModes.modes[1].awardCelebrationPopup = "missing"),
+      /unknown popup/,
+    );
+    invalid((value) => {
+      delete value.gameModes.modes[0].awardCelebrationPopup;
+      delete value.gameModes.modes[2].awardCelebrationPopup;
+    }, /orphaned/);
+    invalid(
+      (value) =>
+        (value.popups["base-popup"]!.manifest =
+          "dependencies/popups/other/popup.manifest.json"),
+      /must equal binding id/,
+    );
+    invalid((value) => (value.popups = {}), /must not be empty/);
+    invalid((value) => (value.gameModes.modes[0].extra = true), /unknown key/);
+  });
   it("keeps the legacy v1 shape unchanged when optional package fields are absent", () => {
     const manifest = parseSceneLayoutManifest(game002LayoutFixture);
     expect(Object.hasOwn(manifest, "symbolPackage")).toBe(false);
@@ -27,7 +167,7 @@ describe("scene layout manifest", () => {
     const parsed = parseSceneLayoutManifest({
       ...game003LayoutFixture,
       popups: {
-        celebration: {
+        "game003-win-celebration": {
           type: "award-celebration",
           manifest:
             "dependencies/popups/game003-win-celebration/popup.manifest.json",
@@ -38,7 +178,9 @@ describe("scene layout manifest", () => {
         },
       },
     });
-    expect(parsed.popups?.celebration.placements.portrait).toEqual({
+    expect(
+      parsed.popups?.["game003-win-celebration"].placements.portrait,
+    ).toEqual({
       x: 0,
       y: 30,
       scale: 0.8,
@@ -47,7 +189,7 @@ describe("scene layout manifest", () => {
       "dependencies/popups/game003-win-celebration/popup.manifest.json",
     );
     const invalid = structuredClone(parsed) as any;
-    delete invalid.popups.celebration.placements.portrait;
+    delete invalid.popups["game003-win-celebration"].placements.portrait;
     expect(() => parseSceneLayoutManifest(invalid)).toThrow(
       /portrait.*required/,
     );

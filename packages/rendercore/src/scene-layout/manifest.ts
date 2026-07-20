@@ -11,6 +11,7 @@ import type {
   SceneLayoutSpineStateMachine,
   SceneLayoutSymbolPackageBinding,
   SceneLayoutPopupBinding,
+  SceneLayoutGameModes,
   SceneLayoutVariantId,
 } from "./types.js";
 
@@ -33,6 +34,7 @@ export function parseSceneLayoutManifest(
       "reels",
       "symbolPackage",
       "popups",
+      "gameModes",
     ],
     "scene layout manifest",
   );
@@ -81,6 +83,10 @@ export function parseSceneLayoutManifest(
     record.popups === undefined
       ? undefined
       : parsePopupBindings(record.popups, adaptation.mode);
+  const gameModes =
+    record.gameModes === undefined
+      ? undefined
+      : parseGameModes(record.gameModes, nodes, popups);
   validateReferencesAndBounds(adaptation, nodes, nodeIds, reels);
   validatePathClosure(nodes);
   return deepFreeze({
@@ -92,6 +98,7 @@ export function parseSceneLayoutManifest(
     reels,
     ...(symbolPackage ? { symbolPackage } : {}),
     ...(popups ? { popups } : {}),
+    ...(gameModes ? { gameModes } : {}),
   });
 }
 
@@ -575,45 +582,138 @@ function parsePopupBindings(
 ): Readonly<Record<string, SceneLayoutPopupBinding>> {
   const record = readRecord(value, "scene layout popups");
   const entries = Object.entries(record);
-  if (entries.length !== 1)
-    fail(
-      "scene layout popups must contain exactly one award-celebration binding when present.",
+  if (entries.length === 0)
+    fail("scene layout popups must not be empty when present.");
+  const result: Record<string, SceneLayoutPopupBinding> = {};
+  for (const [id, raw] of entries) {
+    identifier(id, "scene layout popup id");
+    const label = `scene layout popups.${id}`;
+    const binding = readRecord(raw, label);
+    known(binding, ["type", "manifest", "placements"], label);
+    if (binding.type !== "award-celebration")
+      fail(`${label}.type must be "award-celebration".`);
+    const placementsRecord = readRecord(
+      binding.placements,
+      `${label}.placements`,
     );
-  const [id, raw] = entries[0]!;
-  identifier(id, "scene layout popup id");
-  const label = `scene layout popups.${id}`;
-  const binding = readRecord(raw, label);
-  known(binding, ["type", "manifest", "placements"], label);
-  if (binding.type !== "award-celebration")
-    fail(`${label}.type must be "award-celebration".`);
-  const placementsRecord = readRecord(
-    binding.placements,
-    `${label}.placements`,
-  );
-  const expected =
-    mode === "maximized-focus"
-      ? (["default"] as const)
-      : (["landscape", "portrait"] as const);
-  known(placementsRecord, expected, `${label}.placements`);
-  for (const variant of expected)
-    if (!Object.hasOwn(placementsRecord, variant))
-      fail(`${label}.placements.${variant} is required.`);
-  const placements = Object.fromEntries(
-    expected.map((variant) => [
-      variant,
-      parseNodePlacement(
-        placementsRecord[variant],
-        `${label}.placements.${variant}`,
-      ),
-    ]),
-  );
-  return deepFreeze({
-    [id]: {
+    const expected =
+      mode === "maximized-focus"
+        ? (["default"] as const)
+        : (["landscape", "portrait"] as const);
+    known(placementsRecord, expected, `${label}.placements`);
+    for (const variant of expected)
+      if (!Object.hasOwn(placementsRecord, variant))
+        fail(`${label}.placements.${variant} is required.`);
+    const placements = Object.fromEntries(
+      expected.map((variant) => [
+        variant,
+        parseNodePlacement(
+          placementsRecord[variant],
+          `${label}.placements.${variant}`,
+        ),
+      ]),
+    );
+    const manifest = popupDependencyPath(binding.manifest, `${label}.manifest`);
+    if (manifest.split("/").at(-2) !== id)
+      fail(`${label}.manifest dependency id must equal binding id "${id}".`);
+    result[id] = {
       type: "award-celebration" as const,
-      manifest: popupDependencyPath(binding.manifest, `${label}.manifest`),
+      manifest,
       placements,
-    },
+    };
+  }
+  return deepFreeze(result);
+}
+
+function parseGameModes(
+  value: unknown,
+  nodes: readonly SceneLayoutNode[],
+  popups: Readonly<Record<string, SceneLayoutPopupBinding>> | undefined,
+): SceneLayoutGameModes {
+  const record = readRecord(value, "scene layout gameModes");
+  known(record, ["initialMode", "modes"], "scene layout gameModes");
+  const initialMode = stateIdentifier(
+    record.initialMode,
+    "scene layout gameModes.initialMode",
+  );
+  if (!Array.isArray(record.modes) || record.modes.length === 0)
+    fail("scene layout gameModes.modes must be a non-empty array.");
+  const stateful = nodes.filter(
+    (
+      node,
+    ): node is SceneLayoutNode & {
+      readonly resource: Extract<
+        SceneLayoutNode["resource"],
+        { readonly stateMachine: unknown }
+      >;
+    } => node.resource.kind === "spine" && "stateMachine" in node.resource,
+  );
+  const statefulIds = new Set(stateful.map((node) => node.id));
+  const modes = record.modes.map((rawMode, index) => {
+    const label = `scene layout gameModes.modes[${index}]`;
+    const mode = readRecord(rawMode, label);
+    known(mode, ["id", "nodeStates", "awardCelebrationPopup"], label);
+    const id = stateIdentifier(mode.id, `${label}.id`);
+    const rawStates = readRecord(mode.nodeStates, `${label}.nodeStates`);
+    const keys = Object.keys(rawStates);
+    if (
+      keys.length !== stateful.length ||
+      keys.some((nodeId) => !statefulIds.has(nodeId))
+    )
+      fail(`${label}.nodeStates must cover every stateful Spine node exactly.`);
+    const nodeStates: Record<string, string> = {};
+    for (const node of stateful) {
+      const state = stateIdentifier(
+        rawStates[node.id],
+        `${label}.nodeStates.${node.id}`,
+      );
+      if (!Object.hasOwn(node.resource.stateMachine.states, state))
+        fail(
+          `${label}.nodeStates.${node.id} references unknown stable state "${state}".`,
+        );
+      nodeStates[node.id] = state;
+    }
+    const popup =
+      mode.awardCelebrationPopup === undefined
+        ? undefined
+        : identifier(
+            mode.awardCelebrationPopup,
+            `${label}.awardCelebrationPopup`,
+          );
+    if (popup && !popups?.[popup])
+      fail(
+        `${label}.awardCelebrationPopup references unknown popup "${popup}".`,
+      );
+    return deepFreeze({
+      id,
+      nodeStates,
+      ...(popup ? { awardCelebrationPopup: popup } : {}),
+    });
   });
+  unique(
+    modes.map((mode) => mode.id),
+    "scene layout game mode id",
+  );
+  const initial = modes.find((mode) => mode.id === initialMode);
+  if (!initial)
+    fail(
+      `scene layout gameModes.initialMode references unknown mode "${initialMode}".`,
+    );
+  for (const node of stateful) {
+    if (initial.nodeStates[node.id] !== node.resource.stateMachine.initialState)
+      fail(
+        `scene layout initial mode nodeStates.${node.id} must equal the node initialState.`,
+      );
+  }
+  const referenced = new Set(
+    modes.flatMap((mode) =>
+      mode.awardCelebrationPopup ? [mode.awardCelebrationPopup] : [],
+    ),
+  );
+  for (const id of Object.keys(popups ?? {}))
+    if (!referenced.has(id))
+      fail(`scene layout popup "${id}" is orphaned by gameModes.`);
+  return deepFreeze({ initialMode, modes });
 }
 
 function imageStringDependencyPath(value: unknown, label: string): string {

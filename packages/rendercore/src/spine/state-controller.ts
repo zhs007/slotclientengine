@@ -110,6 +110,15 @@ export class SpineStateController {
     });
   }
 
+  canRequest(state: string): boolean {
+    this.assertReady();
+    if (!this.#spec.states[state] || this.#targetState) return false;
+    return (
+      state === this.#stableState ||
+      this.#transitions.has(key(this.#stableState, state))
+    );
+  }
+
   snapshot(): SpineStateControllerSnapshot {
     this.assertReady();
     return Object.freeze({

@@ -16,6 +16,7 @@ import {
   editorProjectToManifest,
   manifestToEditorProject,
 } from "../src/model/editor-project.js";
+import { popupFiles } from "./popup-fixture.js";
 
 const decodeImage = async () => ({ width: 1, height: 1 });
 
@@ -99,6 +100,120 @@ function compositePackageFixture() {
 }
 
 describe("layout zip IO", () => {
+  it("vendors multiple referenced popups once and restores mode bindings losslessly", async () => {
+    const baseFiles = popupFiles();
+    const freeFiles = popupFiles();
+    const freeManifest = JSON.parse(
+      new TextDecoder().decode(freeFiles.get("popup.manifest.json")),
+    );
+    freeFiles.set(
+      "popup.manifest.json",
+      encode({ ...freeManifest, id: "free-popup" }),
+    );
+    const orphanFiles = popupFiles();
+    const manifest = {
+      ...imageManifest,
+      popups: {
+        "fixture-popup": {
+          type: "award-celebration" as const,
+          manifest: "dependencies/popups/fixture-popup/popup.manifest.json",
+          placements: { default: { x: 1, y: 2, scale: 1 } },
+        },
+        "free-popup": {
+          type: "award-celebration" as const,
+          manifest: "dependencies/popups/free-popup/popup.manifest.json",
+          placements: { default: { x: -3, y: 4, scale: 0.8 } },
+        },
+      },
+      gameModes: {
+        initialMode: "BaseGame",
+        modes: [
+          {
+            id: "BaseGame",
+            nodeStates: {},
+            awardCelebrationPopup: "fixture-popup",
+          },
+          {
+            id: "FreeGame",
+            nodeStates: {},
+            awardCelebrationPopup: "free-popup",
+          },
+          {
+            id: "BonusGame",
+            nodeStates: {},
+            awardCelebrationPopup: "fixture-popup",
+          },
+          { id: "NoCelebration", nodeStates: {} },
+        ],
+      },
+    };
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const options = {
+        manifest,
+        assets: assetBytes,
+        popupFilesById: new Map([
+          ["fixture-popup", baseFiles],
+          ["free-popup", freeFiles],
+          ["orphan-popup", orphanFiles],
+        ]),
+        decodeImage,
+      };
+      const first = await exportLayoutZip(options);
+      const second = await exportLayoutZip(options);
+      expect(first.bytes).toEqual(second.bytes);
+      const entries = [...extractBoundedZip(first.bytes).keys()];
+      expect(
+        entries.filter((path) =>
+          path.endsWith("/fixture-popup/popup.manifest.json"),
+        ),
+      ).toHaveLength(1);
+      expect(entries.some((path) => path.includes("orphan-popup"))).toBe(false);
+      const imported = await importLayoutZip(first.bytes, { decodeImage });
+      const project = manifestToEditorProject(
+        imported.manifest,
+        imported.assets,
+      );
+      expect(project.gameModes).toEqual({
+        initialMode: "BaseGame",
+        modes: [
+          {
+            id: "BaseGame",
+            nodeStates: {},
+            awardCelebrationPopupId: "fixture-popup",
+          },
+          {
+            id: "FreeGame",
+            nodeStates: {},
+            awardCelebrationPopupId: "free-popup",
+          },
+          {
+            id: "BonusGame",
+            nodeStates: {},
+            awardCelebrationPopupId: "fixture-popup",
+          },
+          {
+            id: "NoCelebration",
+            nodeStates: {},
+            awardCelebrationPopupId: null,
+          },
+        ],
+      });
+      expect(project.popupDependencies.get("fixture-popup")?.files).toEqual(
+        baseFiles,
+      );
+      expect(project.popupDependencies.get("free-popup")?.placements).toEqual({
+        default: { x: -3, y: 4, scale: 0.8 },
+      });
+      imported.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
   it("materializes shared Spine leaves before atlas and skeleton roots", async () => {
     const spineResource = {
       kind: "spine" as const,
@@ -246,7 +361,13 @@ describe("layout zip IO", () => {
         renderMode: "standard",
         includeInExport: true,
       });
-      expect(editorProjectToManifest(project)).toEqual(imported.manifest);
+      expect(editorProjectToManifest(project)).toEqual({
+        ...imported.manifest,
+        gameModes: {
+          initialMode: "BaseGame",
+          modes: [{ id: "BaseGame", nodeStates: {} }],
+        },
+      });
       expect(
         project.assets.has("dependencies/symbols/demo-symbols/a.png"),
       ).toBe(false);

@@ -240,6 +240,11 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     return this.requireStateController(nodeId).request(state);
   }
 
+  canRequestNodeState(nodeId: string, state: string): boolean {
+    this.assertReady();
+    return this.requireStateController(nodeId).canRequest(state);
+  }
+
   getNodeStateSnapshot(nodeId: string): SceneLayoutNodeStateSnapshot {
     this.assertReady();
     return this.requireStateController(nodeId).snapshot();

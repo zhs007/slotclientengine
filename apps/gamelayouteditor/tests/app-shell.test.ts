@@ -28,6 +28,10 @@ const previewSpies = vi.hoisted(() => ({
   requestNodeState: vi.fn(async () => undefined),
   playAwardCelebration: vi.fn(),
   advanceAwardCelebration: vi.fn(),
+  dismissAwardCelebrationImmediately: vi.fn(),
+  requestGameMode: vi.fn(async () => undefined),
+  getGameModeSnapshot: vi.fn(() => null),
+  getActiveAwardCelebrationSnapshot: vi.fn((): any => null),
   destroy: vi.fn(),
 }));
 
@@ -88,6 +92,12 @@ vi.mock("../src/preview/layout-preview.js", () => ({
     requestNodeState = previewSpies.requestNodeState;
     playAwardCelebration = previewSpies.playAwardCelebration;
     advanceAwardCelebration = previewSpies.advanceAwardCelebration;
+    dismissAwardCelebrationImmediately =
+      previewSpies.dismissAwardCelebrationImmediately;
+    requestGameMode = previewSpies.requestGameMode;
+    getGameModeSnapshot = previewSpies.getGameModeSnapshot;
+    getActiveAwardCelebrationSnapshot =
+      previewSpies.getActiveAwardCelebrationSnapshot;
     destroy = previewSpies.destroy;
   },
 }));
@@ -124,6 +134,7 @@ import { assetBytes, imageManifest } from "./fixtures.js";
 describe("GameLayoutEditorApp workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    previewSpies.getActiveAwardCelebrationSnapshot.mockReturnValue(null);
     previewSpies.setSymbolPackage.mockResolvedValue(null);
     window.confirm = vi.fn(() => true);
     window.prompt = vi.fn((_message, defaultValue) => defaultValue ?? null);
@@ -165,6 +176,12 @@ describe("GameLayoutEditorApp workspace", () => {
     await vi.waitFor(() =>
       expect(ioSpies.importPopupPackageZip).toHaveBeenCalled(),
     );
+    const binding = root.querySelector(
+      "[data-mode-popup]",
+    ) as HTMLSelectElement;
+    binding.value = "fixture-popup";
+    binding.dispatchEvent(new Event("change"));
+    previewSpies.playAwardCelebration.mockClear();
     placement.value = "12";
     placement.dispatchEvent(new Event("change"));
     const inactivePlacement = root.querySelector(
@@ -172,13 +189,18 @@ describe("GameLayoutEditorApp workspace", () => {
     ) as HTMLInputElement;
     inactivePlacement.value = "99";
     inactivePlacement.dispatchEvent(new Event("change"));
+    previewSpies.getActiveAwardCelebrationSnapshot.mockReturnValue({
+      phase: "counting",
+    });
     (root.querySelector("[data-play-popup]") as HTMLButtonElement).click();
     (root.querySelector("[data-advance-popup]") as HTMLButtonElement).click();
-    expect(previewSpies.playAwardCelebration).toHaveBeenCalledWith(
-      "award-celebration",
-      { betAmountRaw: 100, winAmountRaw: 5000 },
-    );
+    expect(previewSpies.playAwardCelebration).toHaveBeenCalledWith({
+      betAmountRaw: 100,
+      winAmountRaw: 6000,
+    });
     expect(previewSpies.advanceAwardCelebration).toHaveBeenCalled();
+    binding.value = "";
+    binding.dispatchEvent(new Event("change"));
     (root.querySelector("[data-clear-popup]") as HTMLButtonElement).click();
     (root.querySelector("[data-advance-popup]") as HTMLButtonElement).click();
     fileClick.mockRestore();

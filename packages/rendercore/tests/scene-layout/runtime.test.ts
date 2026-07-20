@@ -74,6 +74,9 @@ describe("scene layout runtime", () => {
       phase: "stable",
     });
     await runtime.requestNodeState("bg", "BG");
+    expect(runtime.canRequestNodeState("bg", "BG")).toBe(true);
+    expect(runtime.canRequestNodeState("bg", "FG")).toBe(true);
+    expect(runtime.canRequestNodeState("bg", "Missing")).toBe(false);
     expect(play).toHaveBeenCalledTimes(1);
     const toFg = runtime.requestNodeState("bg", "FG");
     expect(play).toHaveBeenLastCalledWith({
@@ -85,6 +88,7 @@ describe("scene layout runtime", () => {
       targetState: "FG",
       phase: "transitioning",
     });
+    expect(runtime.canRequestNodeState("bg", "BG")).toBe(false);
     expect(() => runtime.requestNodeState("bg", "BG")).toThrow(
       /already in progress/,
     );

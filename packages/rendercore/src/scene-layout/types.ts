@@ -110,6 +110,17 @@ export interface SceneLayoutPopupBinding {
   >;
 }
 
+export interface SceneLayoutGameMode {
+  readonly id: string;
+  readonly nodeStates: Readonly<Record<string, string>>;
+  readonly awardCelebrationPopup?: string;
+}
+
+export interface SceneLayoutGameModes {
+  readonly initialMode: string;
+  readonly modes: readonly SceneLayoutGameMode[];
+}
+
 export interface MaximizedFocusSceneLayoutAdaptation {
   readonly mode: "maximized-focus";
   readonly artSize: RenderViewportSize;
@@ -145,6 +156,7 @@ export interface SceneLayoutManifestV1 {
   readonly reels: Readonly<Record<string, SceneLayoutReelGrid>>;
   readonly symbolPackage?: SceneLayoutSymbolPackageBinding;
   readonly popups?: Readonly<Record<string, SceneLayoutPopupBinding>>;
+  readonly gameModes?: SceneLayoutGameModes;
 }
 
 export interface SceneLayoutResource {
@@ -247,6 +259,7 @@ export interface SceneLayoutRuntime {
   setImageStringText(nodeId: string, text: string): void;
   getImageStringText(nodeId: string): string;
   requestNodeState(nodeId: string, state: string): Promise<void>;
+  canRequestNodeState(nodeId: string, state: string): boolean;
   getNodeStateSnapshot(nodeId: string): SceneLayoutNodeStateSnapshot;
   destroy(): void;
 }
@@ -254,6 +267,12 @@ export interface SceneLayoutRuntime {
 export interface SceneLayoutNodeStateSnapshot {
   readonly stableState: string;
   readonly targetState: string | null;
+  readonly phase: "stable" | "transitioning";
+}
+
+export interface SceneLayoutGameModeSnapshot {
+  readonly stableMode: string;
+  readonly targetMode: string | null;
   readonly phase: "stable" | "transitioning";
 }
 
@@ -272,4 +291,23 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   resetReelScene(reelId: "main", input: SceneLayoutInitialReelScene): void;
   getReelPresentation(reelId: "main"): Container;
   getAwardCelebrationPopup(id: string): AwardCelebrationPlayer;
+  /** Returns the manifest-declared mode ids in their stable declaration order. */
+  getGameModeIds(): readonly string[];
+  /** Returns the committed mode and any transition target without mutating playback. */
+  getGameModeSnapshot(): SceneLayoutGameModeSnapshot;
+  /** Atomically preflights, starts, and drains all node transitions for one mode. */
+  requestGameMode(modeId: string): Promise<void>;
+  /** Starts the award-celebration popup explicitly bound to the current stable mode. */
+  startAwardCelebrationForCurrentMode(input: {
+    readonly betAmountRaw: number;
+    readonly winAmountRaw: number;
+  }): void;
+  /** Advances the active mode popup according to its production interaction contract. */
+  requestAdvanceAwardCelebration(): void;
+  /** Immediately clears the active mode popup and its pending end lifecycle. */
+  dismissActiveAwardCelebrationImmediately(): void;
+  /** Returns the active mode popup snapshot, or null when no popup is active. */
+  getActiveAwardCelebrationSnapshot():
+    | import("../popup/index.js").AwardCelebrationSnapshot
+    | null;
 }
