@@ -4,6 +4,8 @@
 
 VNI_0.087 adds strict six-track `basicAnimation` sampling (`opacity`, position, scale, and rotation), `bounce_jump`, and a current rotate contract with acceleration/deceleration plus pressure rotation. Basic tracks are sampled before the preset/particle stack; a segment uses the arriving (right-hand) point's easing and holds its first/last endpoint. Pressure rotate keeps the outer layer ellipse upright while rotating only the stable inner content root. Legacy `fromRotation/toRotation` rotate remains supported, while non-empty legacy layer `keyframes` remain rejected rather than migrated at runtime.
 
+VNI_0.095 adds strict `card_carousel_3d` playback. The core owns the five-phase timeline, reveal order, target alignment, perspective/card/slice geometry, tint and stable depth order. Image layers use one texture; sequence layers use the complete explicit `frameAssetIds` library with `cardIndex % frameCount`. Pixi card containers, slice sprites, and slice texture views are pooled for the player lifetime and released by `destroy()` without destroying shared source textures.
+
 This package is separate from `@slotclientengine/anieditorv5runtime-cc`: `vnicore` targets Pixi.js/browser runtimes, while `anieditorv5runtime-cc` targets Cocos Creator 3.8.6 projects. Do not share Cocos `cc` shims, standalone files, or component examples with this package.
 
 ## Public Imports
@@ -48,7 +50,7 @@ Runtime profile metadata comes from JSON `exportProfile` values and manifest ent
 
 Layer group slots are exposed through `VNIPlayer.getLayerGroupSlots()`. The slot order follows the actual `project.layers` render order, not `layerGroups.order`. `attachNodeBetweenLayerGroups(...)`, `attachImageBetweenLayerGroups(...)`, and `attachExternalImageBetweenLayerGroups(...)` require the two group ids to be an adjacent slot; reversed, unknown, or non-adjacent ids throw. Project images keep the project texture-size validation path; external image URLs are for host-owned assets that are not listed in `project.assets`.
 
-`VNIPlayer` does not create its own Pixi application or canvas. Hosts pass an existing Pixi `parent` container; browser tools such as `apps/anieditorv5viewer` create the canvas themselves, while in-game callers such as `rendercore` mount the VNI display tree directly into the game renderer. Hosts that need diagnostics pass `diagnosticsElement`, hosts that resize a standalone viewer pass `viewport` / `setViewportSize(...)`, and manually rendered hosts pass `requestRender`.
+`VNIPlayer` does not create its own Pixi application or canvas. Hosts pass an existing Pixi `parent` container; browser tools such as `apps/anieditorv5viewer` create the canvas themselves, while in-game callers such as `rendercore` mount the VNI display tree directly into the game renderer. Hosts that need diagnostics pass `diagnosticsElement`, hosts that resize a standalone viewer pass `viewport` / `setViewportSize(...)`, display zoom uses `viewportScale` / `setViewportScale(...)` without shrinking the clipping viewport, and manually rendered hosts pass `requestRender`.
 
 `VNIPlayer` uses RAF by default. Embedders that already have a game ticker can pass `autoTick: false` and call `update(deltaSeconds)` themselves; this is the path used by `rendercore` symbol animations to keep VNI playback synchronized with Pixi slot updates. `fitPadding` defaults to the existing responsive padding, and can be set to `0` when the host needs VNI stage coordinates to map directly to a host-controlled viewport or mask.
 

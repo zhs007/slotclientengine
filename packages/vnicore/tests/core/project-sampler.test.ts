@@ -61,6 +61,24 @@ function layer(
 }
 
 describe("project-sampler", () => {
+  it("samples card_carousel_3d source opacity while keeping the effect active", () => {
+    const carousel = cardCarouselAnimation();
+    const sourceLayer = layer({ opacity: 0.8 }, [carousel]);
+
+    const kept = sampleLayerAtTime(sourceLayer, 0.5);
+    expect(kept.opacity).toBe(0.2);
+    expect(kept.renderImageDisplay).toBe(true);
+    expect(kept.hasActiveCardCarousel3D).toBe(true);
+    expect(kept.visible).toBe(true);
+
+    carousel.params.keepOriginal = false;
+    const hidden = sampleLayerAtTime(sourceLayer, 0.5);
+    expect(hidden.opacity).toBe(0);
+    expect(hidden.renderImageDisplay).toBe(false);
+    expect(hidden.hasActiveCardCarousel3D).toBe(true);
+    expect(hidden.visible).toBe(true);
+  });
+
   it("samples basic tracks before the preset stack with right-point easing", () => {
     const sampled = sampleLayerAtTime(
       layer(
@@ -751,3 +769,52 @@ describe("project-sampler", () => {
     expect(sampleProjectAtTime(project, -1).time).toBe(0);
   });
 });
+
+function cardCarouselAnimation(): V5GAnimationConfig {
+  return {
+    id: "carousel",
+    type: "card_carousel_3d",
+    startTime: 0,
+    duration: 1,
+    enabled: true,
+    seed: 1,
+    params: {
+      phasePreviewMode: "hold",
+      cardCount: 7,
+      targetIndex: 0,
+      rounds: 3,
+      direction: 1,
+      introDuration: 1.2,
+      introSpeed: 0.22,
+      revealDirection: 0,
+      revealStagger: 0.08,
+      revealOffsetX: 90,
+      revealScaleFrom: 0.72,
+      demoIdleDuration: 1.2,
+      idleSpeed: 0.18,
+      fastDuration: 1.1,
+      fastSpeed: 2.8,
+      accelRatio: 0.28,
+      stopDuration: 1.6,
+      holdDuration: 1,
+      stopOvershoot: 0.18,
+      finalPop: 0.12,
+      finalGlow: 0.18,
+      radius: 360,
+      cardSpacing: 1,
+      perspective: 0.72,
+      slices: 12,
+      visibleRange: 0.72,
+      cardSize: 360,
+      centerScale: 1.12,
+      sideScale: 0.72,
+      sideAlpha: 0.38,
+      shadeStrength: 0.42,
+      curve: 0.55,
+      tilt: 8,
+      sourceOpacity: 0.25,
+      hideBack: true,
+      keepOriginal: true,
+    },
+  };
+}

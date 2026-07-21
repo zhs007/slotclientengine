@@ -26,6 +26,7 @@ const playerMock = vi.hoisted(() => {
     readonly getLoop = vi.fn(() => true);
     readonly getTime = vi.fn(() => 0);
     readonly setViewportSize = vi.fn();
+    readonly setViewportScale = vi.fn();
     readonly seek = vi.fn();
     readonly requestSegmentedPlaybackEnd = vi.fn();
     readonly getLayerGroupSlots = vi.fn(() => this.layerGroupSlots);
@@ -138,6 +139,18 @@ describe("anieditorv5viewer main", () => {
       "megawin.zip:project.json",
     );
     expect(getButton("Play").disabled).toBe(false);
+  });
+
+  it("summarizes VNI_0.095 sequence card carousel resources and pool ceiling", async () => {
+    await mountViewer();
+    await uploadZipFile("card-carousel-sequence.zip");
+
+    expect(document.querySelector(".viewer-summary")?.textContent).toContain(
+      "card_carousel_3d full_demo, 7 cards, 3 textures, 12 slices, max 84",
+    );
+    expect(playerMock.instances[0].options).toMatchObject({
+      viewportScale: 1,
+    });
   });
 
   it("uploads a synthetic VNI_0.087 contract and summarizes basic/bounce capabilities", async () => {
@@ -318,10 +331,18 @@ describe("anieditorv5viewer main", () => {
     const app = pixiMock.instances[0];
     expect(canvasLayer.style.width).toBe("1px");
     getAriaButton("放大画布").click();
-    expect(canvasLayer.style.width).toBe("1.25px");
-    expect(app.renderer.resize).toHaveBeenLastCalledWith(1.25, 1.25);
-    expect(player.setViewportSize).toHaveBeenLastCalledWith(1.25, 1.25);
+    expect(canvasLayer.style.width).toBe("1px");
+    expect(app.renderer.resize).toHaveBeenLastCalledWith(1, 1);
+    expect(player.setViewportSize).toHaveBeenLastCalledWith(1, 1);
+    expect(player.setViewportScale).toHaveBeenLastCalledWith(1.25);
     expect(stageMount.dataset.viewerCanvasScale).toBe("1.25");
+
+    for (let index = 0; index < 7; index += 1) {
+      getAriaButton("缩小画布").click();
+    }
+    expect(player.setViewportScale).toHaveBeenLastCalledWith(0.1);
+    expect(stageMount.dataset.viewerCanvasScale).toBe("0.10");
+    expect(getAriaButton("缩小画布").disabled).toBe(true);
   });
 
   it("wires group insertion and text-layer replacement through VNIPlayer public APIs", async () => {
@@ -428,7 +449,11 @@ async function mountViewer(): Promise<void> {
 }
 
 async function uploadZipFile(
-  name: "megawin.zip" | "roundreel.zip",
+  name:
+    | "megawin.zip"
+    | "roundreel.zip"
+    | "card-carousel-image.zip"
+    | "card-carousel-sequence.zip",
 ): Promise<void> {
   await uploadFile(
     new File([toArrayBuffer(createFixtureZip(name))], name, {

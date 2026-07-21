@@ -66,6 +66,10 @@ VNI_0.074 `multi_move` 使用 `params.pointsJson` 承载多段位移点。runtim
 
 VNI_0.087 `basicAnimation` 提供 opacity、positionX/Y、scaleX/Y、rotation 六条独立轨道。runtime 先采样 basic track，再把结果交给 preset/particle animation stack；每段采用右侧到达点的 easing，首点前和末点后保持端点，`backOut` 超调不会被截断。`bounce_jump` 只在自身闭区间内应用蓄力、主跳、顶点压缩、落地和衰减反弹。新版 `rotate` 使用 `turns/direction/accelRatio/decelRatio/pressure/pressureStretch`，旧版 `fromRotation/toRotation` 仍明确兼容；pressure 大于阈值时外层只压缩，内容在稳定内层容器中旋转。宿主不得操作该内层容器或复制采样器。非空 legacy `keyframes` 继续显式失败。
 
+VNI_0.095 `card_carousel_3d` 只允许挂在 image/sequence layer。所有参数、phase duration 和 `targetIndex < cardCount` 都必须通过严格校验；runtime 不用 editor 默认值修补坏 JSON。sequence 的全部 `frameAssetIds` 是卡片贴图库，按逻辑 card index 循环取图；当前 sequence 播放帧不会缩小这份贴图库。卡片容器、竖切片 sprite 和 frame-view texture 在初始化边界池化，seek/restart/loop 只更新状态，`destroy()` 释放 owned view 而不销毁共享 source texture。
+
+standalone viewer 需要缩放时，保持 renderer 和 `setViewportSize()` 为真实 mount 尺寸，仅调用 `setViewportScale(0.1)` 等比例缩放 display tree。不要通过缩小 viewport 或 canvas 来模拟 zoom，否则 runtime 裁剪边界也会缩小。
+
 ## 生命周期
 
 - `init()`: 加载贴图、校验真实 texture size，把 VNI display tree 挂到宿主 `parent`，初始化 layer 和 particle 容器。

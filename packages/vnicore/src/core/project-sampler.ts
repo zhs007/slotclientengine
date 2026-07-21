@@ -9,6 +9,7 @@ import { hasActiveDeterministicEffectAnimation } from "./effect-sampler.js";
 import { hasActiveParticleAnimation } from "./particle-sampler.js";
 import { hasActiveRenderEffectAnimation } from "./render-effect-sampler.js";
 import { hasActiveSafeGlowAnimation } from "./safe-glow-sampler.js";
+import { getCardCarousel3DProgress } from "./card-carousel-3d.js";
 import type {
   V5GAnimationConfig,
   V5GBlendMode,
@@ -32,6 +33,7 @@ export interface SampledLayerState {
   hasActiveRenderEffect: boolean;
   hasActiveDeterministicEffect: boolean;
   hasActiveSafeGlowAnimation: boolean;
+  hasActiveCardCarousel3D: boolean;
   blendMode: V5GBlendMode;
 }
 
@@ -94,13 +96,23 @@ export function sampleLayerAtTime(
     hasActiveDeterministicEffectAnimation(layer, time);
   const activeSafeGlow =
     layer.visible && baseOpacity > 0 && hasActiveSafeGlowAnimation(layer, time);
+  const activeCardCarousel =
+    layer.visible &&
+    baseOpacity > 0 &&
+    (layer.type === "image" || layer.type === "sequence") &&
+    layer.animations.some(
+      (animation) =>
+        animation.enabled &&
+        getCardCarousel3DProgress(animation, time) !== null,
+    );
   const visible =
     layer.visible &&
     (opacity > 0 ||
       activeChaserLight ||
       activeRenderEffect ||
       activeDeterministicEffect ||
-      activeSafeGlow);
+      activeSafeGlow ||
+      activeCardCarousel);
 
   return {
     layerId: layer.id,
@@ -115,6 +127,7 @@ export function sampleLayerAtTime(
     hasActiveRenderEffect: activeRenderEffect,
     hasActiveDeterministicEffect: activeDeterministicEffect,
     hasActiveSafeGlowAnimation: activeSafeGlow,
+    hasActiveCardCarousel3D: activeCardCarousel,
     blendMode: layer.blendMode,
   };
 }

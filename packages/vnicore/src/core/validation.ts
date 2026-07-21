@@ -8,6 +8,7 @@ import {
   normalizeVNIProjectLayerGroups,
 } from "./layer-groups.js";
 import { parseMultiMovePointsJson } from "./multi-move.js";
+import { getCardCarousel3DSyncedDuration } from "./card-carousel-3d.js";
 import type {
   V5GAnimationConfig,
   V5GAnimationParamValue,
@@ -313,6 +314,41 @@ const REQUIRED_NUMERIC_PARAMS: Readonly<
     "toX",
     "toY",
   ],
+  card_carousel_3d: [
+    "cardCount",
+    "targetIndex",
+    "rounds",
+    "direction",
+    "introDuration",
+    "introSpeed",
+    "revealDirection",
+    "revealStagger",
+    "revealOffsetX",
+    "revealScaleFrom",
+    "demoIdleDuration",
+    "idleSpeed",
+    "fastDuration",
+    "fastSpeed",
+    "accelRatio",
+    "stopDuration",
+    "holdDuration",
+    "stopOvershoot",
+    "finalPop",
+    "finalGlow",
+    "radius",
+    "cardSpacing",
+    "perspective",
+    "slices",
+    "visibleRange",
+    "cardSize",
+    "centerScale",
+    "sideScale",
+    "sideAlpha",
+    "shadeStrength",
+    "curve",
+    "tilt",
+    "sourceOpacity",
+  ],
 };
 
 const OPTIONAL_BOOLEAN_PARAMS: Readonly<
@@ -339,6 +375,7 @@ const OPTIONAL_BOOLEAN_PARAMS: Readonly<
   shatter: ["fadeOut"],
   glow: ["keepOriginal"],
   safe_glow: ["keepOriginal"],
+  card_carousel_3d: ["hideBack", "keepOriginal"],
 };
 
 const OPTIONAL_NUMERIC_PARAMS: Readonly<
@@ -524,6 +561,7 @@ export function validateV5GProject(project: V5GProjectConfig): void {
     validateBasicAnimation(layer, project.stage.duration);
     for (const animation of layer.animations) {
       assertSupportedAnimation(animation, layer.id, project.stage.duration);
+      validateCardCarouselLayerContract(animation, layer);
     }
   }
   validateLayerMasks(project, layerIds);
@@ -817,6 +855,120 @@ function validateAnimationParamRanges(animation: V5GAnimationConfig): void {
       1,
       200,
       `animation "${animation.id}" chaser_light totalCount`,
+    );
+  }
+  if (animation.type === "card_carousel_3d") {
+    validateCardCarouselContract(animation);
+  }
+}
+
+function validateCardCarouselContract(animation: V5GAnimationConfig): void {
+  const previewMode = animation.params.phasePreviewMode;
+  if (
+    typeof previewMode !== "string" ||
+    !["full_demo", "intro", "idle", "fast", "stop", "hold"].includes(
+      previewMode,
+    )
+  ) {
+    throw new Error(
+      `animation "${animation.id}" card_carousel_3d phasePreviewMode is unsupported: ${String(previewMode)}.`,
+    );
+  }
+  for (const key of ["hideBack", "keepOriginal"] as const) {
+    if (typeof animation.params[key] !== "boolean") {
+      throw new Error(
+        `animation "${animation.id}" card_carousel_3d ${key} must be boolean.`,
+      );
+    }
+  }
+  const ranges = {
+    cardCount: [2, 30],
+    targetIndex: [0, 29],
+    rounds: [0, 20],
+    direction: [-1, 1],
+    introDuration: [0.1, 10],
+    introSpeed: [0, 8],
+    revealDirection: [0, 2],
+    revealStagger: [0, 2],
+    revealOffsetX: [-1000, 1000],
+    revealScaleFrom: [0.05, 2],
+    demoIdleDuration: [0.1, 20],
+    idleSpeed: [0, 8],
+    fastDuration: [0.1, 10],
+    fastSpeed: [0, 20],
+    accelRatio: [0, 0.9],
+    stopDuration: [0.1, 10],
+    holdDuration: [0, 20],
+    stopOvershoot: [0, 2],
+    finalPop: [0, 1],
+    finalGlow: [0, 1],
+    radius: [20, 3000],
+    cardSpacing: [0.2, 3],
+    perspective: [0, 1],
+    slices: [2, 48],
+    visibleRange: [0.1, 1],
+    cardSize: [20, 1200],
+    centerScale: [0.1, 5],
+    sideScale: [0.05, 3],
+    sideAlpha: [0, 1],
+    shadeStrength: [0, 0.9],
+    curve: [0, 1],
+    tilt: [0, 45],
+    sourceOpacity: [0, 1],
+  } as const;
+  for (const [key, [min, max]] of Object.entries(ranges)) {
+    assertAnimationParamRange(animation, key, min, max);
+  }
+  for (const key of [
+    "cardCount",
+    "targetIndex",
+    "revealDirection",
+    "slices",
+  ] as const) {
+    if (!Number.isInteger(getNumericParamForValidation(animation, key))) {
+      throw new Error(
+        `animation "${animation.id}" card_carousel_3d ${key} must be an integer.`,
+      );
+    }
+  }
+  const direction = getNumericParamForValidation(animation, "direction");
+  if (direction !== 1 && direction !== -1) {
+    throw new Error(
+      `animation "${animation.id}" card_carousel_3d direction must be 1 or -1.`,
+    );
+  }
+  const revealDirection = getNumericParamForValidation(
+    animation,
+    "revealDirection",
+  );
+  if (![0, 1, 2].includes(revealDirection)) {
+    throw new Error(
+      `animation "${animation.id}" card_carousel_3d revealDirection must be 0, 1, or 2.`,
+    );
+  }
+  const cardCount = getNumericParamForValidation(animation, "cardCount");
+  const targetIndex = getNumericParamForValidation(animation, "targetIndex");
+  if (targetIndex >= cardCount) {
+    throw new Error(
+      `animation "${animation.id}" card_carousel_3d targetIndex must be less than cardCount.`,
+    );
+  }
+  const expectedDuration = getCardCarousel3DSyncedDuration(animation);
+  if (Math.abs(animation.duration - expectedDuration) > 0.0001) {
+    throw new Error(
+      `animation "${animation.id}" card_carousel_3d duration must be ${expectedDuration} for phasePreviewMode ${previewMode}; got ${animation.duration}.`,
+    );
+  }
+}
+
+function validateCardCarouselLayerContract(
+  animation: V5GAnimationConfig,
+  layer: V5GLayerConfig,
+): void {
+  if (animation.type !== "card_carousel_3d") return;
+  if (layer.type !== "image" && layer.type !== "sequence") {
+    throw new Error(
+      `VNI card_carousel_3d animation "${animation.id}" requires an image or sequence layer; got ${layer.type}.`,
     );
   }
 }

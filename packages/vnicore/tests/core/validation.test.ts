@@ -400,6 +400,44 @@ const newAnimationParams: Readonly<
     toX: 0,
     toY: 0,
   },
+  card_carousel_3d: {
+    phasePreviewMode: "hold",
+    cardCount: 7,
+    targetIndex: 0,
+    rounds: 3,
+    direction: 1,
+    introDuration: 1.2,
+    introSpeed: 0.22,
+    revealDirection: 0,
+    revealStagger: 0.08,
+    revealOffsetX: 90,
+    revealScaleFrom: 0.72,
+    demoIdleDuration: 1.2,
+    idleSpeed: 0.18,
+    fastDuration: 1.1,
+    fastSpeed: 2.8,
+    accelRatio: 0.28,
+    stopDuration: 1.6,
+    holdDuration: 1,
+    stopOvershoot: 0.18,
+    finalPop: 0.12,
+    finalGlow: 0.18,
+    radius: 360,
+    cardSpacing: 1,
+    perspective: 0.72,
+    slices: 12,
+    visibleRange: 0.72,
+    cardSize: 360,
+    centerScale: 1.12,
+    sideScale: 0.72,
+    sideAlpha: 0.38,
+    shadeStrength: 0.42,
+    curve: 0.55,
+    tilt: 8,
+    sourceOpacity: 0,
+    hideBack: true,
+    keepOriginal: false,
+  },
 };
 
 function validProject(): V5GProjectConfig {
@@ -919,6 +957,60 @@ describe("validation", () => {
       ];
       expect(() => validateV5GProject(project)).not.toThrow();
     }
+  });
+
+  it("validates the complete VNI_0.095 card_carousel_3d contract", () => {
+    const valid = validProject();
+    valid.schemaVersion = "VNI_0.095";
+    valid.editor.version = "VNI_0.095";
+    valid.layers[0].animations = [
+      animation("card_carousel_3d", {
+        ...newAnimationParams.card_carousel_3d,
+      }),
+    ];
+    expect(() => validateV5GProject(valid)).not.toThrow();
+
+    expectInvalid((project) => {
+      const params = { ...newAnimationParams.card_carousel_3d };
+      delete params.hideBack;
+      project.layers[0].animations = [animation("card_carousel_3d", params)];
+    }, "hideBack must be boolean");
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("card_carousel_3d", {
+          ...newAnimationParams.card_carousel_3d,
+          cardCount: "7",
+        }),
+      ];
+    }, 'requires numeric param "cardCount"');
+    expectInvalid((project) => {
+      project.layers[0].animations = [
+        animation("card_carousel_3d", {
+          ...newAnimationParams.card_carousel_3d,
+          targetIndex: 7,
+        }),
+      ];
+    }, "targetIndex must be less than cardCount");
+    expectInvalid((project) => {
+      const carousel = animation("card_carousel_3d", {
+        ...newAnimationParams.card_carousel_3d,
+        phasePreviewMode: "full_demo",
+      });
+      carousel.duration = 1;
+      project.layers[0].animations = [carousel];
+    }, "duration must be 6.1");
+    expectInvalid((project) => {
+      project.layers[0] = {
+        ...project.layers[0],
+        type: "text",
+        assetId: null,
+        animations: [
+          animation("card_carousel_3d", {
+            ...newAnimationParams.card_carousel_3d,
+          }),
+        ],
+      };
+    }, "requires an image or sequence layer");
   });
 
   it("accepts VNI_0.070 sequence layers with explicit image frames", () => {

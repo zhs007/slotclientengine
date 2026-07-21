@@ -4,7 +4,7 @@
 
 The animation runtime comes from `@slotclientengine/vnicore`. This app owns upload handling, zip parsing, profile selection, controls, styles, Blob URL lifecycle, and browser assembly. Validation, sequence frame selection, `multi_move` sampling, Pixi.js v8 rendering, texture-size checks, masks, particles, VNI_0.070 deterministic effects, playback ranges, segmented playback, particle-draining, and diagnostics live in `packages/vnicore`.
 
-The viewer owns the browser Pixi `Application` and canvas. It passes `app.stage` to `VNIPlayer`, then uses `viewport` / `setViewportSize(...)` and `requestRender` to keep the player aligned with the viewer mount. `VNIPlayer` itself does not create a canvas.
+The viewer owns the browser Pixi `Application` and canvas. It passes `app.stage` to `VNIPlayer`, then uses `viewport` / `setViewportSize(...)`, `setViewportScale(...)`, and `requestRender` to keep the player aligned with the viewer mount. `VNIPlayer` itself does not create a canvas.
 
 ## Uploaded Zip Formats
 
@@ -62,6 +62,7 @@ Supported by `@slotclientengine/vnicore`:
 - image layers, `sequence` layers, and basic text layers
 - VNI_0.074 `multi_move` path transforms, including ended transform handoff and empty-frame hiding
 - VNI_0.087 strict `basicAnimation` tracks, `bounce_jump`, current and legacy rotate, and pressure-separated outer/inner rotation
+- VNI_0.095 strict `card_carousel_3d` image/sequence playback through vnicore, with summary diagnostics for phase, card count, texture count, slices, and maximum slice pool size
 - text layer replacement through `VNIPlayer` public APIs for dynamic text and image binding
 - Pixi `precompose_light_alpha` masks with explicit `sourceLayerId` validation and vnicore-owned light-mask precomposition
 - `normal`, `add`, `screen`, `multiply`, `lighten` blend modes
@@ -121,7 +122,7 @@ The viewer has a separate advanced playback section for segmented playback. It p
 
 ## Canvas Zoom
 
-The Pixi preview uses a two-layer stage layout: the outer stage mount remains the fixed clipped viewer area, and the inner canvas layer is resized from its center point. The zoom buttons update the Pixi renderer size and the `VNIPlayer` viewport, so Pixi redraws at the zoomed canvas size instead of browser-scaling an already-rendered bitmap.
+The Pixi preview keeps the outer stage mount, inner canvas, renderer, and `VNIPlayer` viewport at the same clipped viewer size. Zoom buttons call the public `setViewportScale(...)` API, so only the VNI display tree scales around the viewport center; the clipping rectangle never shrinks with zoom. Supported steps run from 10% through 400%, with 100% as reset.
 
 ## Text Replacement UI
 
