@@ -483,6 +483,29 @@ describe("symbol state texture manifest helpers", () => {
     expect(resources.L1?.win?.spec.playback.endTime).toBe(2);
   });
 
+  it("resolves a hash-flat VNI image relative to its materialized project", () => {
+    const manifest = structuredClone(createManifest()) as any;
+    manifest.symbols.L1.animations.win.project =
+      "./assets/project-hash.json";
+    const project = createProject();
+    project.assets[0]!.path = "image-hash.png";
+
+    const resources = createSymbolVniAnimationResourcesFromManifest({
+      manifest,
+      requiredStates,
+      vniProjectModules: {
+        "assets/project-hash.json": project,
+      },
+      vniAssetModules: {
+        "assets/image-hash.png": "/assets/image-hash.png",
+      },
+    });
+
+    expect(resources.L1?.win?.assetUrls).toEqual({
+      "image-hash.png": "/assets/image-hash.png",
+    });
+  });
+
   it("orchestrates VNI loop playback with the same state lifecycle contract as Spine", () => {
     const manifest = structuredClone(createManifest()) as any;
     manifest.settings.additionalStateDefinitions = [

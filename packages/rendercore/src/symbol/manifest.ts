@@ -1,6 +1,5 @@
 import {
   assertVNIProject,
-  createAssetUrlManifest,
   resolveProjectAssetUrls,
   type AssetUrlManifest,
   type VNIProjectConfig,
@@ -1416,9 +1415,6 @@ export function createSymbolVniAnimationResourcesFromManifest(
   options: CreateSymbolVniAnimationResourcesOptions,
 ): SymbolVniAnimationResourceMap {
   const manifest = parseSymbolStateTextureManifest(options.manifest, options);
-  const assetUrlManifest = createAssetUrlManifest({
-    ...options.vniAssetModules,
-  });
   const resources: Record<
     string,
     Partial<Record<SymbolStateId, SymbolVniAnimationResource>>
@@ -1437,7 +1433,13 @@ export function createSymbolVniAnimationResourcesFromManifest(
         `Symbol "${symbol}" ${state} VNI project`,
       );
       const project = assertVNIProject(rawProject);
-      const assetUrls = resolveProjectAssetUrls(project, assetUrlManifest);
+      const assetUrls = createProjectRelativeVniAssetUrls({
+        symbol,
+        state,
+        projectPath: animation.project,
+        project,
+        modules: options.vniAssetModules,
+      });
       resources[symbol] = resources[symbol] ?? {};
       resources[symbol][state] = Object.freeze({
         symbol,
@@ -1457,6 +1459,47 @@ export function createSymbolVniAnimationResourcesFromManifest(
       ]),
     ),
   );
+}
+
+function createProjectRelativeVniAssetUrls(options: {
+  readonly symbol: string;
+  readonly state: string;
+  readonly projectPath: string;
+  readonly project: VNIProjectConfig;
+  readonly modules: Readonly<Record<string, string>>;
+}): AssetUrlManifest {
+  const packageProjectPath = resolvePackagePath(
+    "symbol-state-textures.manifest.json",
+    options.projectPath,
+  );
+  const manifest = Object.fromEntries(
+    options.project.assets.map((asset) => {
+      const packageAssetPath = resolvePackagePath(
+        packageProjectPath,
+        asset.path,
+      );
+      let url: string;
+      try {
+        url = resolveManifestModule(
+          options.modules,
+          `./${packageAssetPath}`,
+          `Symbol "${options.symbol}" ${options.state} VNI asset "${asset.path}"`,
+        );
+      } catch (error) {
+        if (
+          error instanceof SymbolAssetError &&
+          error.message.includes(" is missing from modules: ")
+        ) {
+          throw new SymbolAssetError(
+            `V5G asset path is missing from manifest: ${asset.path}`,
+          );
+        }
+        throw error;
+      }
+      return [asset.path, url] as const;
+    }),
+  );
+  return resolveProjectAssetUrls(options.project, manifest);
 }
 
 export function createSymbolSpineAnimationResourcesFromManifest(
