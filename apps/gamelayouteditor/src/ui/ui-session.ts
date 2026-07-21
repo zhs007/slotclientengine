@@ -21,6 +21,7 @@ export type LayoutResourceBindingContext =
   | { readonly kind: "add-layer" }
   | {
       readonly kind: "assign-background";
+      readonly modeId: string;
       readonly variant: SceneLayoutVariantId;
     }
   | { readonly kind: "rebind-layer"; readonly nodeId: string };
@@ -39,7 +40,7 @@ export interface EditorUiSession {
   activeTab: WorkspaceTab;
   selection: LayoutSelection | null;
   resourceQuery: string;
-  resourceType: "all" | "image" | "spine" | "image-string";
+  resourceType: "all" | "image" | "spine" | "image-string" | "video";
   resourceStatus: "all" | "referenced" | "unused" | "error";
   expandedResourceIds: Set<string>;
   expandedInspectorSections: Set<string>;

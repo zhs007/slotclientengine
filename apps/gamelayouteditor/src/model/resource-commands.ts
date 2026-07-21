@@ -18,11 +18,15 @@ import {
   resetVariantGeometry,
   type EditorNodeDraft,
   type EditorProject,
+  type EditorSpineGameModeTransitionDraft,
   type EditorSpinePlaybackDraft,
   validateEditorTransitionEvent,
   validateEditorSpinePlayback,
 } from "./editor-project.js";
-import { synchronizeGameModeNodeStates } from "./game-mode-commands.js";
+import {
+  normalizeGameModeNodeOrders,
+  synchronizeGameModeNodeStates,
+} from "./game-mode-commands.js";
 import {
   editorResourcePaths,
   editorResourcePrimaryPath,
@@ -31,6 +35,7 @@ import {
   type EditorImageStringLayoutResource,
   type EditorResourceReference,
   type EditorSpineLayoutResource,
+  type EditorVideoLayoutResource,
   readEditorSpineMetadata,
 } from "./editor-resource.js";
 
@@ -174,6 +179,23 @@ export async function uploadSpineResource(options: {
   return prepared.resource;
 }
 
+export async function uploadVideoResource(options: {
+  readonly project: EditorProject;
+  readonly file: File;
+  readonly resourceId?: string;
+  readonly decodeVideo?: (file: File) => Promise<{
+    readonly width: number;
+    readonly height: number;
+    readonly durationSeconds: number;
+    readonly hasAudio: boolean | "unknown";
+  }>;
+}): Promise<EditorVideoLayoutResource> {
+  const prepared = await prepareVideoResource(options);
+  assertNewResourceAvailable(options.project, prepared.resource);
+  commitNewResource(options.project, prepared);
+  return prepared.resource;
+}
+
 export async function replaceImageResource(options: {
   readonly project: EditorProject;
   readonly resourceId: string;
@@ -216,6 +238,27 @@ export async function replaceSpineResource(options: {
     prepared,
     options.reinitializeBackgrounds ?? false,
   );
+  return prepared.resource;
+}
+
+export async function replaceVideoResource(options: {
+  readonly project: EditorProject;
+  readonly resourceId: string;
+  readonly file: File;
+  readonly decodeVideo?: (file: File) => Promise<{
+    readonly width: number;
+    readonly height: number;
+    readonly durationSeconds: number;
+    readonly hasAudio: boolean | "unknown";
+  }>;
+}): Promise<EditorVideoLayoutResource> {
+  const current = requireResource(options.project, options.resourceId);
+  if (current.kind !== "video") throw new Error("资源类型必须保持为 video。");
+  const prepared = await prepareVideoResource({
+    ...options,
+    resourceId: options.resourceId,
+  });
+  commitResourceReplacement(options.project, current, prepared, false);
   return prepared.resource;
 }
 
@@ -281,6 +324,8 @@ export function addLayerFromResource(options: {
   readonly defaultAnimation?: string;
 }): EditorNodeDraft {
   const resource = requireResource(options.project, options.resourceId);
+  if (resource.kind === "video")
+    throw new Error("video 资源只能绑定黑场视频转场，不能创建普通图层。");
   assertNodeIdAvailable(options.project, options.nodeId);
   assertVariantsAllowed(options.project, options.variants);
   const defaultAnimation = validateAnimation(
@@ -312,6 +357,8 @@ export function rebindLayerResource(options: {
 }): void {
   const node = requireLayer(options.project, options.nodeId);
   const resource = requireResource(options.project, options.resourceId);
+  if (resource.kind === "video")
+    throw new Error("video 资源只能绑定黑场视频转场，不能重绑普通图层。");
   const defaultAnimation = validateAnimation(
     resource,
     options.defaultAnimation,
@@ -336,8 +383,8 @@ export function assignBackgroundResource(options: {
 }): EditorNodeDraft {
   assertVariantsAllowed(options.project, [options.variant]);
   const resource = requireResource(options.project, options.resourceId);
-  if (resource.kind === "image-string")
-    throw new Error("image-string 资源不能设为背景。");
+  if (resource.kind === "image-string" || resource.kind === "video")
+    throw new Error(`${resource.kind} 资源不能设为背景。`);
   const animation = validateAnimation(resource, options.defaultAnimation);
   const variant = options.project.variants[options.variant];
   const modeId = options.modeId ?? options.project.gameModes.initialMode;
@@ -373,7 +420,8 @@ export function assignBackgroundResource(options: {
   }
   if (!node) {
     const nodeId =
-      options.nodeId ?? suggestNodeId(options.project, resource.id);
+      options.nodeId ??
+      suggestModeBackgroundNodeId(options.project, modeId, options.variant);
     assertNodeIdAvailable(options.project, nodeId);
     node = {
       id: nodeId,
@@ -425,7 +473,7 @@ export function assignBackgroundResource(options: {
     );
   }
   synchronizeGameModeNodeStates(options.project);
-  normalizeNodeOrders(options.project);
+  normalizeGameModeNodeOrders(options.project);
   return node;
 }
 
@@ -475,14 +523,14 @@ export function clearBackground(
     );
     if (node && !stillUsedInVariant) delete node.placements[variantId];
   }
-  normalizeNodeOrders(project);
+  normalizeGameModeNodeOrders(project);
 }
 
 export function removeLayer(project: EditorProject, nodeId: string): void {
   requireLayer(project, nodeId);
   const index = project.nodes.findIndex((node) => node.id === nodeId);
   project.nodes.splice(index, 1);
-  normalizeNodeOrders(project);
+  normalizeGameModeNodeOrders(project);
 }
 
 export function moveLayer(
@@ -611,6 +659,22 @@ export function suggestNodeId(
   return `${resourceId}-${suffix}`;
 }
 
+export function suggestModeBackgroundNodeId(
+  project: EditorProject,
+  modeId: string,
+  variant: SceneLayoutVariantId,
+): string {
+  const modeSlug = modeId
+    .toLowerCase()
+    .replace(/[_-]+/gu, "-")
+    .replace(/^-+|-+$/gu, "");
+  const base =
+    variant === "default"
+      ? `${modeSlug}-background`
+      : `${modeSlug}-${variant}-background`;
+  return suggestNodeId(project, base);
+}
+
 function requireResource(
   project: EditorProject,
   resourceId: string,
@@ -681,23 +745,6 @@ function nextOrder(project: EditorProject): number {
     project.nodes.reduce((maximum, node) => Math.max(maximum, node.order), -1) +
     1
   );
-}
-
-function normalizeNodeOrders(project: EditorProject): void {
-  const backgrounds = new Set(
-    project.gameModes.modes
-      .flatMap((mode) => Object.values(mode.backgroundNodes))
-      .filter(Boolean),
-  );
-  project.nodes = project.nodes
-    .map((node, index) => ({ node, index }))
-    .sort((left, right) => {
-      const leftBackground = backgrounds.has(left.node.id);
-      const rightBackground = backgrounds.has(right.node.id);
-      if (leftBackground !== rightBackground) return leftBackground ? -1 : 1;
-      return left.node.order - right.node.order || left.index - right.index;
-    })
-    .map(({ node }, order) => ({ ...node, order }));
 }
 
 async function prepareImageResource(options: {
@@ -874,6 +921,68 @@ async function prepareSpineResource(options: {
   };
 }
 
+async function prepareVideoResource(options: {
+  readonly file: File;
+  readonly resourceId?: string;
+  readonly decodeVideo?: (file: File) => Promise<{
+    readonly width: number;
+    readonly height: number;
+    readonly durationSeconds: number;
+    readonly hasAudio: boolean | "unknown";
+  }>;
+}): Promise<
+  PreparedResource & { readonly resource: EditorVideoLayoutResource }
+> {
+  createBoundedSourceIndex([options.file], EDITOR_SOURCE_LIMITS);
+  if (!options.file.name.toLowerCase().endsWith(".mp4"))
+    throw new Error("视频文件扩展名必须是 .mp4。");
+  if (options.file.type && options.file.type !== "video/mp4")
+    throw new Error(
+      `视频 MIME 必须是 video/mp4，实际为 ${options.file.type}。`,
+    );
+  const bytes = new Uint8Array(await options.file.arrayBuffer());
+  if (
+    bytes.byteLength < 12 ||
+    String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp"
+  )
+    throw new Error("视频文件不是可识别的 ISO MP4（缺少 ftyp header）。");
+  const metadata = await (options.decodeVideo ?? decodeVideoFile)(options.file);
+  if (
+    !Number.isSafeInteger(metadata.width) ||
+    metadata.width <= 0 ||
+    !Number.isSafeInteger(metadata.height) ||
+    metadata.height <= 0 ||
+    !Number.isFinite(metadata.durationSeconds) ||
+    metadata.durationSeconds <= 0 ||
+    (metadata.hasAudio !== true &&
+      metadata.hasAudio !== false &&
+      metadata.hasAudio !== "unknown")
+  )
+    throw new Error("视频 metadata 的尺寸、时长或 audio 诊断无效。");
+  const path = allocateContentAddressedPath({
+    digest: await sha256Hex(bytes),
+    extension: "mp4",
+  });
+  const id = options.resourceId ?? requiredResourceId(options.file.name);
+  return {
+    resource: {
+      id,
+      kind: "video",
+      path,
+      mimeType: "video/mp4",
+      size: { width: metadata.width, height: metadata.height },
+      durationSeconds: metadata.durationSeconds,
+      hasAudio: metadata.hasAudio,
+      provenance: {
+        sourceNames: Object.freeze([options.file.name]),
+        sourceKind: options.file.webkitRelativePath ? "directory" : "files",
+        batchLabel: `video:${options.file.name}`,
+      },
+    },
+    assets: new Map([[path, bytes]]),
+  };
+}
+
 function assertNewResourceAvailable(
   project: EditorProject,
   resource: EditorLayoutResource,
@@ -968,7 +1077,10 @@ function commitResourceReplacement(
       );
     }
     const invalidTransitions = project.gameModes.transitions
-      .filter((transition) => transition.resourceId === current.id)
+      .filter(
+        (transition): transition is EditorSpineGameModeTransitionDraft =>
+          transition.kind === "spine" && transition.resourceId === current.id,
+      )
       .filter((transition) => {
         try {
           validateEditorTransitionEvent(replacement, transition);
@@ -980,6 +1092,23 @@ function commitResourceReplacement(
     if (invalidTransitions.length)
       throw new Error(
         `替换资源缺少转场使用的 animation/event：${invalidTransitions
+          .map(
+            (transition) =>
+              `${transition.fromModeId} -> ${transition.toModeId}`,
+          )
+          .join(", ")}。`,
+      );
+  }
+  if (replacement.kind === "video") {
+    const invalidTransitions = project.gameModes.transitions.filter(
+      (transition) =>
+        transition.kind === "video" &&
+        transition.resourceId === current.id &&
+        transition.fadeOutSeconds >= replacement.durationSeconds,
+    );
+    if (invalidTransitions.length)
+      throw new Error(
+        `替换视频时 fadeOutSeconds 必须小于新视频实际时长：${invalidTransitions
           .map(
             (transition) =>
               `${transition.fromModeId} -> ${transition.toModeId}`,
@@ -1037,6 +1166,49 @@ function decodeImageFile(
       reject(new Error(`图片无法解码：${file.name}`));
     };
     image.src = url;
+  });
+}
+
+function decodeVideoFile(file: File): Promise<{
+  width: number;
+  height: number;
+  durationSeconds: number;
+  hasAudio: "unknown";
+}> {
+  if (typeof document === "undefined")
+    return Promise.reject(new Error(`视频解码器不可用：${file.name}`));
+  const video = document.createElement("video");
+  if (!video.canPlayType("video/mp4"))
+    return Promise.reject(new Error("当前浏览器不支持 video/mp4。"));
+  const url = URL.createObjectURL(file);
+  return new Promise((resolve, reject) => {
+    const cleanup = (): void => {
+      video.removeEventListener("canplay", onReady);
+      video.removeEventListener("error", onError);
+      video.removeAttribute("src");
+      video.load();
+      URL.revokeObjectURL(url);
+    };
+    const onReady = (): void => {
+      const result = {
+        width: video.videoWidth,
+        height: video.videoHeight,
+        durationSeconds: video.duration,
+        hasAudio: "unknown" as const,
+      };
+      cleanup();
+      resolve(result);
+    };
+    const onError = (): void => {
+      cleanup();
+      reject(new Error(`视频无法解码：${file.name}`));
+    };
+    video.preload = "auto";
+    video.playsInline = true;
+    video.addEventListener("canplay", onReady);
+    video.addEventListener("error", onError);
+    video.src = url;
+    video.load();
   });
 }
 
@@ -1137,6 +1309,8 @@ export function describeResource(resource: EditorLayoutResource): string {
     return `${editorResourcePrimaryPath(resource)} · ${resource.size.width}×${resource.size.height}`;
   if (resource.kind === "image-string")
     return `${editorResourcePrimaryPath(resource)} · ${Object.keys(resource.manifest.glyphs).length} glyphs · lineHeight ${resource.manifest.metrics.lineHeight}`;
+  if (resource.kind === "video")
+    return `${resource.path} · ${resource.size.width}×${resource.size.height} · ${resource.durationSeconds.toFixed(3)}s · audio ${String(resource.hasAudio)}`;
   return `${editorResourcePrimaryPath(resource)} · ${resource.animationNames.length} animations${resource.bounds ? ` · export bounds ${resource.bounds.width}×${resource.bounds.height}（非 art size）` : " · 无 export bounds"}`;
 }
 

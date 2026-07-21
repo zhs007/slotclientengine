@@ -20,6 +20,15 @@ export interface ImportedLayoutPackage {
   readonly assets: ReadonlyMap<string, Uint8Array>;
   readonly resource: SceneLayoutResource;
   readonly packageResource: SceneLayoutPackageResource;
+  readonly videoMetadata: ReadonlyMap<
+    string,
+    {
+      readonly width: number;
+      readonly height: number;
+      readonly durationSeconds: number;
+      readonly hasAudio: boolean | "unknown";
+    }
+  >;
   destroy(): void;
 }
 
@@ -29,6 +38,12 @@ export async function importLayoutZip(
     readonly decodeImage?: (
       url: string,
     ) => Promise<{ readonly width: number; readonly height: number }>;
+    readonly decodeVideo?: (url: string) => Promise<{
+      readonly width: number;
+      readonly height: number;
+      readonly durationSeconds: number;
+      readonly hasAudio: boolean | "unknown";
+    }>;
   } = {},
 ): Promise<ImportedLayoutPackage> {
   const files = extractBoundedZip(zipBytes);
@@ -58,6 +73,12 @@ export async function validateLayoutAssets(
     readonly decodeImage?: (
       url: string,
     ) => Promise<{ readonly width: number; readonly height: number }>;
+    readonly decodeVideo?: (url: string) => Promise<{
+      readonly width: number;
+      readonly height: number;
+      readonly durationSeconds: number;
+      readonly hasAudio: boolean | "unknown";
+    }>;
   } = {},
 ): Promise<ImportedLayoutPackage> {
   const manifest = parseSceneLayoutManifest(manifestValue);
@@ -84,6 +105,51 @@ export async function validateLayoutAssets(
       }
     }
   }
+  const videoMetadata = new Map<
+    string,
+    {
+      readonly width: number;
+      readonly height: number;
+      readonly durationSeconds: number;
+      readonly hasAudio: boolean | "unknown";
+    }
+  >();
+  for (const transition of manifest.gameModes?.transitions ?? []) {
+    const overlay = transition.overlay;
+    if (!("fadeOutSeconds" in overlay)) continue;
+    if (videoMetadata.has(overlay.resource.path)) continue;
+    const decodeVideo = options.decodeVideo ?? decodeBrowserVideoUrl;
+    const bytes = assets.get(overlay.resource.path)!;
+    if (
+      bytes.byteLength < 12 ||
+      String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp"
+    )
+      throw new Error(
+        `视频文件不是可识别的 ISO MP4（缺少 ftyp header）：${overlay.resource.path}`,
+      );
+    const url = URL.createObjectURL(
+      new Blob([bytes as BlobPart], { type: "video/mp4" }),
+    );
+    try {
+      const metadata = await decodeVideo(url);
+      if (
+        !Number.isSafeInteger(metadata.width) ||
+        metadata.width <= 0 ||
+        !Number.isSafeInteger(metadata.height) ||
+        metadata.height <= 0 ||
+        !Number.isFinite(metadata.durationSeconds) ||
+        metadata.durationSeconds <= 0
+      )
+        throw new Error(`视频 metadata 无效：${overlay.resource.path}`);
+      if (overlay.fadeOutSeconds >= metadata.durationSeconds)
+        throw new Error(
+          `fadeOutSeconds ${overlay.fadeOutSeconds} 必须小于视频实际时长 ${metadata.durationSeconds}。`,
+        );
+      videoMetadata.set(overlay.resource.path, Object.freeze({ ...metadata }));
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
   const packageResource = await createSceneLayoutPackageResource({
     manifest,
     files: assets,
@@ -106,11 +172,55 @@ export async function validateLayoutAssets(
     assets,
     resource: packageResource.layout,
     packageResource,
+    videoMetadata,
     destroy(): void {
       if (destroyed) return;
       destroyed = true;
       packageResource.destroy();
     },
+  });
+}
+
+function decodeBrowserVideoUrl(url: string): Promise<{
+  readonly width: number;
+  readonly height: number;
+  readonly durationSeconds: number;
+  readonly hasAudio: "unknown";
+}> {
+  if (typeof document === "undefined")
+    return Promise.reject(
+      new Error("导入 video 需要浏览器 metadata decoder。"),
+    );
+  const video = document.createElement("video");
+  if (!video.canPlayType("video/mp4"))
+    return Promise.reject(new Error("当前浏览器不支持 video/mp4。"));
+  return new Promise((resolve, reject) => {
+    const cleanup = (): void => {
+      video.removeEventListener("canplay", onReady);
+      video.removeEventListener("error", onError);
+      video.removeAttribute("src");
+      video.load();
+    };
+    const onReady = (): void => {
+      const metadata = {
+        width: video.videoWidth,
+        height: video.videoHeight,
+        durationSeconds: video.duration,
+        hasAudio: "unknown" as const,
+      };
+      cleanup();
+      resolve(metadata);
+    };
+    const onError = (): void => {
+      cleanup();
+      reject(new Error("导入 video 无法解码。"));
+    };
+    video.preload = "auto";
+    video.playsInline = true;
+    video.addEventListener("canplay", onReady);
+    video.addEventListener("error", onError);
+    video.src = url;
+    video.load();
   });
 }
 

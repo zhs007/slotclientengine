@@ -414,7 +414,8 @@ describe("scene layout package runtime", () => {
             ? reel instanceof RenderReelSet
             : reel instanceof RenderGridCellReelSet,
         ).toBe(true);
-        expect(runtime.container.getChildIndex(reel)).toBe(1);
+        expect(reel.parent).toBe(runtime.container.children[0]);
+        expect(reel.parent!.getChildIndex(reel)).toBe(1);
         const snapshot = runtime.applyViewport({ width: 1920, height: 1080 });
         expect(snapshot.reels.main.artRect).toEqual({
           x: 640,
@@ -646,7 +647,7 @@ describe("scene layout package runtime", () => {
         targetSymbolPackage: "alt-symbols",
       });
       expect(runtime.container.children.at(-1)?.label).toBe(
-        "scene-transition-overlay",
+        "scene-transition-video-blackout",
       );
       expect(players[0].plays).toEqual([
         { animationName: "BaseGame_FreeGame", loop: false },
@@ -761,6 +762,11 @@ describe("scene layout package runtime", () => {
         phase: "stable",
         transitionPhase: null,
         transition: null,
+        preparedTargetMode: null,
+        transitionKind: null,
+        mediaTimeSeconds: null,
+        mediaDurationSeconds: null,
+        fadeProgress: null,
         stableSymbolPackage: null,
         displayedSymbolPackage: null,
         targetSymbolPackage: null,

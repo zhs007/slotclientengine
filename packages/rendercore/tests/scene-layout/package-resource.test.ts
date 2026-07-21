@@ -72,6 +72,80 @@ function packageFiles(): Map<string, Uint8Array> {
 }
 
 describe("scene layout package resources", () => {
+  it("owns the exact MP4 closure and revokes its object URL", async () => {
+    const videoPath = `assets/${"a".repeat(64)}.mp4`;
+    const manifest = {
+      ...packageManifest,
+      gameModes: {
+        initialMode: "BaseGame",
+        modes: [
+          {
+            id: "BaseGame",
+            backgroundNodes: { default: "bg" },
+            nodeStates: {},
+          },
+          {
+            id: "FreeGame",
+            backgroundNodes: { default: "bg" },
+            nodeStates: {},
+          },
+        ],
+        transitions: [
+          {
+            from: "BaseGame",
+            to: "FreeGame",
+            overlay: {
+              resource: {
+                kind: "video" as const,
+                path: videoPath,
+                mimeType: "video/mp4" as const,
+              },
+              fit: "contain" as const,
+              fadeOutSeconds: 0.5,
+            },
+          },
+        ],
+      },
+    };
+    const files = packageFiles();
+    files.set(
+      videoPath,
+      new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109, 1]),
+    );
+    expect(collectSceneLayoutPackagePaths({ manifest, files })).toContain(
+      videoPath,
+    );
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    try {
+      const resource = await createSceneLayoutPackageResource({
+        manifest,
+        files,
+        decodeImage: async () => ({ width: 1, height: 1 }),
+      });
+      const videoUrl = resource.layout.videoUrls[videoPath];
+      expect(videoUrl).toMatch(/^blob:/u);
+      resource.destroy();
+      expect(revoke).toHaveBeenCalledWith(videoUrl);
+      const malformed = new Map(files);
+      malformed.set(videoPath, new Uint8Array([1, 2, 3]));
+      await expect(
+        createSceneLayoutPackageResource({
+          manifest,
+          files: malformed,
+          decodeImage: async () => ({ width: 1, height: 1 }),
+        }),
+      ).rejects.toThrow(/ISO MP4/);
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+      revoke.mockRestore();
+    }
+  });
+
   it("collects an exact transitive closure and shares nested image-string resources", async () => {
     const files = packageFiles();
     expect(

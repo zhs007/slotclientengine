@@ -5,6 +5,7 @@ import {
 import {
   editorResourcePrimaryPath,
   type EditorLayoutResource,
+  type EditorVideoLayoutResource,
 } from "../model/editor-resource.js";
 import { getLayoutResourceReferences } from "../model/resource-commands.js";
 import type {
@@ -36,7 +37,11 @@ export function createResourcePickerState(
     type: "all",
     selectedResourceId,
     nodeId:
-      context.kind === "rebind-layer" ? context.nodeId : selectedResourceId,
+      context.kind === "rebind-layer"
+        ? context.nodeId
+        : context.kind === "add-layer"
+          ? selectedResourceId
+          : "",
     variants:
       context.kind === "assign-background"
         ? [context.variant]
@@ -51,6 +56,7 @@ export function getResourcePickerCandidates(
 ): readonly LayoutResourcePickerCandidate[] {
   const query = state.query.trim().toLowerCase();
   return [...project.resources.values()]
+    .filter((resource) => resource.kind !== "video")
     .filter((resource) => state.type === "all" || resource.kind === state.type)
     .filter((resource) => {
       if (!query) return true;
@@ -67,7 +73,7 @@ export function getResourcePickerCandidates(
 
 function candidateFromResource(
   project: EditorProject,
-  resource: EditorLayoutResource,
+  resource: Exclude<EditorLayoutResource, EditorVideoLayoutResource>,
   context: LayoutResourceBindingContext,
 ): LayoutResourcePickerCandidate {
   const referenceCount = getLayoutResourceReferences(

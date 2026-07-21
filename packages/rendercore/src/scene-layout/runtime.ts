@@ -67,6 +67,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly #nodesById: ReadonlyMap<string, RuntimeNode>;
   readonly #artMask = new Graphics();
   readonly #loadedTextureUrls = new Set<string>();
+  readonly #texturesByUrl = new Map<string, Texture>();
   readonly #activeNodes = new Map<string, boolean>();
   #snapshot: SceneLayoutSnapshot | null = null;
   #initializing = false;
@@ -291,9 +292,18 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
           `Scene layout image URL is missing: ${node.spec.resource.path}.`,
         );
       }
-      const texture = await this.#loadTexture(url);
-      this.#loadedTextureUrls.add(url);
-      this.assertAlive();
+      let texture = this.#texturesByUrl.get(url);
+      if (!texture) {
+        texture = await this.#loadTexture(url);
+        this.#loadedTextureUrls.add(url);
+        this.assertAlive();
+        if (!texture?.source) {
+          throw new SceneLayoutError(
+            `Scene layout image "${node.spec.resource.path}" failed to load a valid Pixi texture.`,
+          );
+        }
+        this.#texturesByUrl.set(url, texture);
+      }
       if (!texture?.source) {
         throw new SceneLayoutError(
           `Scene layout image "${node.spec.resource.path}" failed to load a valid Pixi texture.`,
@@ -375,6 +385,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     }
     const textureUrls = [...this.#loadedTextureUrls];
     this.#loadedTextureUrls.clear();
+    this.#texturesByUrl.clear();
     for (const url of textureUrls) {
       try {
         void this.#unloadTexture(url).catch(() => undefined);

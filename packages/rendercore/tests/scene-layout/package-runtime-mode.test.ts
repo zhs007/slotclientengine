@@ -156,7 +156,7 @@ describe("scene layout package event-driven game-mode transition", () => {
     expect(player.plays).toEqual([{ animationName: "BG_FG", loop: false }]);
     expect(player.view.position).toMatchObject({ x: 100, y: 200 });
     expect(runtime.container.children.at(-1)?.label).toBe(
-      "scene-transition-overlay",
+      "scene-transition-video-blackout",
     );
     expect(runtime.getGameModeSnapshot()).toMatchObject({
       stableMode: "BaseGame",

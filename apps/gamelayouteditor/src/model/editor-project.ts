@@ -25,12 +25,14 @@ import {
   type EditorImageStringLayoutResource,
   type EditorLayoutResource,
   type EditorSpineLayoutResource,
+  type EditorVideoLayoutResource,
 } from "./editor-resource.js";
 
 type EditorLayoutResourceDraft =
   | Omit<EditorImageLayoutResource, "id">
   | Omit<EditorSpineLayoutResource, "id">
-  | Omit<EditorImageStringLayoutResource, "id">;
+  | Omit<EditorImageStringLayoutResource, "id">
+  | Omit<EditorVideoLayoutResource, "id">;
 
 export type EditorMode = "maximized-focus" | "orientation-focus";
 
@@ -101,9 +103,13 @@ export interface EditorGameModeDraft {
   awardCelebrationPopupId: string | null;
 }
 
-export interface EditorGameModeTransitionDraft {
+interface EditorGameModeTransitionBaseDraft {
   fromModeId: string;
   toModeId: string;
+}
+
+export interface EditorSpineGameModeTransitionDraft extends EditorGameModeTransitionBaseDraft {
+  kind: "spine";
   resourceId: string;
   animation: string;
   switchEvent: string;
@@ -111,6 +117,17 @@ export interface EditorGameModeTransitionDraft {
     Record<SceneLayoutVariantId, { x: number; y: number; scale: number }>
   >;
 }
+
+export interface EditorVideoGameModeTransitionDraft extends EditorGameModeTransitionBaseDraft {
+  kind: "video";
+  resourceId: string;
+  fit: "contain";
+  fadeOutSeconds: number;
+}
+
+export type EditorGameModeTransitionDraft =
+  | EditorSpineGameModeTransitionDraft
+  | EditorVideoGameModeTransitionDraft;
 
 export interface EditorProject {
   id: string;
@@ -445,6 +462,8 @@ export function resolveEditorNodeResource(
       anchor: { ...node.imageString.anchor },
     };
   }
+  if (resource.kind === "video")
+    throw new Error(`video 资源 ${resource.id} 不能创建 scene node。`);
   if (node.imageString !== undefined)
     throw new Error(`Spine 节点 ${node.id} 不得声明 imageString。`);
   const playback = node.playback;
@@ -704,6 +723,33 @@ export function editorProjectToManifest(
         })
         .map((transition) => {
           const resource = project.resources.get(transition.resourceId);
+          if (transition.kind === "video") {
+            if (!resource || resource.kind !== "video")
+              throw new Error(
+                `转场 ${transition.fromModeId} -> ${transition.toModeId} 必须绑定 video resource。`,
+              );
+            if (
+              !Number.isFinite(transition.fadeOutSeconds) ||
+              transition.fadeOutSeconds <= 0 ||
+              transition.fadeOutSeconds >= resource.durationSeconds
+            )
+              throw new Error(
+                `转场 ${transition.fromModeId} -> ${transition.toModeId} fadeOutSeconds 必须小于视频实际时长。`,
+              );
+            return {
+              from: transition.fromModeId,
+              to: transition.toModeId,
+              overlay: {
+                resource: {
+                  kind: "video" as const,
+                  path: resource.path,
+                  mimeType: "video/mp4" as const,
+                },
+                fit: "contain" as const,
+                fadeOutSeconds: transition.fadeOutSeconds,
+              },
+            };
+          }
           if (!resource || resource.kind !== "spine")
             throw new Error(
               `转场 ${transition.fromModeId} -> ${transition.toModeId} 必须绑定 Spine resource。`,
@@ -731,7 +777,10 @@ export function editorProjectToManifest(
 
 export function validateEditorTransitionEvent(
   resource: EditorSpineLayoutResource,
-  transition: Pick<EditorGameModeTransitionDraft, "animation" | "switchEvent">,
+  transition: Pick<
+    EditorSpineGameModeTransitionDraft,
+    "animation" | "switchEvent"
+  >,
 ): void {
   if (!resource.animationNames.includes(transition.animation))
     throw new Error(
@@ -749,6 +798,15 @@ export function validateEditorTransitionEvent(
 export function manifestToEditorProject(
   manifest: SceneLayoutManifestV1,
   assets: ReadonlyMap<string, Uint8Array>,
+  videoMetadata: ReadonlyMap<
+    string,
+    {
+      readonly width: number;
+      readonly height: number;
+      readonly durationSeconds: number;
+      readonly hasAudio: boolean | "unknown";
+    }
+  > = new Map(),
 ): EditorProject {
   const parsed = parseSceneLayoutManifest(manifest);
   if (
@@ -784,7 +842,9 @@ export function manifestToEditorProject(
           ? resourceDraft.path
           : resourceDraft.kind === "spine"
             ? resourceDraft.skeleton
-            : resourceDraft.manifest.id
+            : resourceDraft.kind === "video"
+              ? resourceDraft.path
+              : resourceDraft.manifest.id
         )
           .split("/")
           .at(-1)!,
@@ -839,14 +899,32 @@ export function manifestToEditorProject(
   });
   const transitionResourceIds = new Map<string, string>();
   for (const transition of parsed.gameModes?.transitions ?? []) {
-    const draft = manifestResourceToEditorResource(
-      {
-        ...transition.overlay.resource,
-        defaultAnimation: transition.overlay.animation,
-        loop: true,
-      },
-      assets,
-    );
+    const overlay = transition.overlay;
+    let draft: EditorLayoutResourceDraft;
+    if ("fadeOutSeconds" in overlay) {
+      const metadata = videoMetadata.get(overlay.resource.path);
+      if (!metadata)
+        throw new Error(
+          `导入 video 缺少浏览器 metadata：${overlay.resource.path}`,
+        );
+      draft = {
+        kind: "video",
+        path: overlay.resource.path,
+        mimeType: "video/mp4",
+        size: { width: metadata.width, height: metadata.height },
+        durationSeconds: metadata.durationSeconds,
+        hasAudio: metadata.hasAudio,
+      };
+    } else {
+      draft = manifestResourceToEditorResource(
+        {
+          ...overlay.resource,
+          defaultAnimation: overlay.animation,
+          loop: true,
+        },
+        assets,
+      );
+    }
     transitionResourceIds.set(
       `${transition.from}\u0000${transition.to}`,
       registerResource(draft),
@@ -950,16 +1028,30 @@ export function manifestToEditorProject(
   project.gameModes = parsed.gameModes
     ? {
         initialMode: parsed.gameModes.initialMode,
-        transitions: (parsed.gameModes.transitions ?? []).map((transition) => ({
-          fromModeId: transition.from,
-          toModeId: transition.to,
-          resourceId: transitionResourceIds.get(
-            `${transition.from}\u0000${transition.to}`,
-          )!,
-          animation: transition.overlay.animation,
-          switchEvent: transition.overlay.switchEvent,
-          placements: structuredClone(transition.overlay.placements),
-        })),
+        transitions: (parsed.gameModes.transitions ?? []).map((transition) => {
+          const overlay = transition.overlay;
+          const common = {
+            fromModeId: transition.from,
+            toModeId: transition.to,
+            resourceId: transitionResourceIds.get(
+              `${transition.from}\u0000${transition.to}`,
+            )!,
+          };
+          return "fadeOutSeconds" in overlay
+            ? {
+                ...common,
+                kind: "video" as const,
+                fit: "contain" as const,
+                fadeOutSeconds: overlay.fadeOutSeconds,
+              }
+            : {
+                ...common,
+                kind: "spine" as const,
+                animation: overlay.animation,
+                switchEvent: overlay.switchEvent,
+                placements: structuredClone(overlay.placements),
+              };
+        }),
         modes: parsed.gameModes.modes.map((mode) => ({
           id: mode.id,
           backgroundNodes: structuredClone(

@@ -16,6 +16,9 @@ import {
   createGameModeTransition,
   deleteGameModeTransition,
   setInitialGameMode,
+  setGameModeTransitionKind,
+  setGameModeVideoTransitionFadeOut,
+  setGameModeVideoTransitionResource,
   setPopupPlacement,
 } from "../src/model/game-mode-commands.js";
 
@@ -27,6 +30,9 @@ describe("game mode and popup dependency commands", () => {
       "BaseGame",
       "FreeGame",
     ]);
+    expect(project.gameModes.modes[1]!.backgroundNodes).toEqual({
+      default: "",
+    });
     expect(() => addGameMode(project, "FreeGame")).toThrow(/已存在/);
     expect(() => addGameMode(project, "bad id")).toThrow(/必须匹配/);
     renameGameMode(project, "FreeGame", "FG");
@@ -120,6 +126,46 @@ describe("game mode and popup dependency commands", () => {
     expect(project.gameModes.modes[0].nodeStates).toEqual({});
   });
 
+  it("switches transition presentation as a clean discriminated union", () => {
+    const project = createNewEditorProject("orientation-focus");
+    project.resources.set("clip", {
+      id: "clip",
+      kind: "video",
+      path: `assets/${"a".repeat(64)}.mp4`,
+      mimeType: "video/mp4",
+      size: { width: 1280, height: 720 },
+      durationSeconds: 3.625,
+      hasAudio: true,
+    });
+    addGameMode(project, "FreeGame");
+    createGameModeTransition(project, "BaseGame", "FreeGame");
+    const video = setGameModeTransitionKind(
+      project,
+      project.gameModes.transitions[0]!,
+      "video",
+    );
+    setGameModeVideoTransitionResource(project, video, "clip");
+    setGameModeVideoTransitionFadeOut(project, video, 0.5);
+    expect(video).not.toHaveProperty("animation");
+    expect(video).not.toHaveProperty("placements");
+    expect(() =>
+      setGameModeVideoTransitionFadeOut(project, video, 3.625),
+    ).toThrow(/小于视频实际时长/);
+    const spine = setGameModeTransitionKind(project, video, "spine");
+    expect(spine).toMatchObject({
+      kind: "spine",
+      resourceId: "",
+      animation: "",
+      switchEvent: "",
+      placements: {
+        landscape: { x: 0, y: 0, scale: 1 },
+        portrait: { x: 0, y: 0, scale: 1 },
+      },
+    });
+    expect(spine).not.toHaveProperty("fit");
+    expect(spine).not.toHaveProperty("fadeOutSeconds");
+  });
+
   it("owns per-mode background and Symbols bindings with reference protection", () => {
     const project = createNewEditorProject("maximized-focus");
     project.resources.set("bg-art", {
@@ -176,6 +222,116 @@ describe("game mode and popup dependency commands", () => {
     bindGameModeSymbols(project, "BaseGame", null);
     deleteSymbolDependency(project, "demo-symbols");
     expect(project.symbolDependencies.size).toBe(0);
+  });
+
+  it("never aliases a new mode to the currently edited background nodes", () => {
+    const project = createNewEditorProject("orientation-focus");
+    project.gameModes.modes[0]!.backgroundNodes = {
+      landscape: "base-landscape",
+      portrait: "base-portrait",
+    };
+    project.variants.landscape.backgroundNode = "base-landscape";
+    project.variants.portrait.backgroundNode = "base-portrait";
+
+    addGameMode(project, "FreeGame");
+
+    expect(project.gameModes.modes[1]!.backgroundNodes).toEqual({
+      landscape: "",
+      portrait: "",
+    });
+    expect(project.gameModes.modes[0]!.backgroundNodes).toEqual({
+      landscape: "base-landscape",
+      portrait: "base-portrait",
+    });
+  });
+
+  it("removes only the deleted mode's orphaned background nodes", () => {
+    const project = createNewEditorProject("maximized-focus");
+    project.resources.set("art", {
+      id: "art",
+      kind: "image",
+      path: "assets/art.png",
+      size: { width: 100, height: 100 },
+    });
+    project.nodes.push(
+      {
+        id: "base-background",
+        order: 0,
+        resourceId: "art",
+        placements: { default: { x: 0, y: 0, scale: 1 } },
+      },
+      {
+        id: "free-background",
+        order: 1,
+        resourceId: "art",
+        placements: { default: { x: 0, y: 0, scale: 1 } },
+      },
+    );
+    bindGameModeBackground(project, "BaseGame", "default", "base-background");
+    addGameMode(project, "FreeGame");
+    bindGameModeBackground(project, "FreeGame", "default", "free-background");
+
+    deleteGameMode(project, "FreeGame");
+
+    expect(project.nodes.map((node) => node.id)).toEqual(["base-background"]);
+    expect(project.resources.has("art")).toBe(true);
+  });
+
+  it("keeps the initial mode backgrounds below every other mode background", () => {
+    const project = createNewEditorProject("orientation-focus");
+    project.resources.set("art", {
+      id: "art",
+      kind: "image",
+      path: "assets/art.png",
+      size: { width: 100, height: 100 },
+    });
+    project.nodes.push(
+      {
+        id: "base-landscape",
+        order: 2,
+        resourceId: "art",
+        placements: { landscape: { x: 0, y: 0, scale: 1 } },
+      },
+      {
+        id: "free-landscape",
+        order: 0,
+        resourceId: "art",
+        placements: { landscape: { x: 0, y: 0, scale: 1 } },
+      },
+      {
+        id: "base-portrait",
+        order: 3,
+        resourceId: "art",
+        placements: { portrait: { x: 0, y: 0, scale: 1 } },
+      },
+      {
+        id: "free-portrait",
+        order: 1,
+        resourceId: "art",
+        placements: { portrait: { x: 0, y: 0, scale: 1 } },
+      },
+    );
+    addGameMode(project, "FreeGame");
+    bindGameModeBackground(project, "BaseGame", "landscape", "base-landscape");
+    bindGameModeBackground(project, "BaseGame", "portrait", "base-portrait");
+    bindGameModeBackground(project, "FreeGame", "landscape", "free-landscape");
+    bindGameModeBackground(project, "FreeGame", "portrait", "free-portrait");
+    expect(project.nodes.map((node) => node.id)).toEqual([
+      "base-landscape",
+      "base-portrait",
+      "free-landscape",
+      "free-portrait",
+    ]);
+
+    setInitialGameMode(project, "FreeGame");
+    expect(project.nodes.map((node) => node.id)).toEqual([
+      "free-landscape",
+      "free-portrait",
+      "base-landscape",
+      "base-portrait",
+    ]);
+    expect(project.variants.landscape.backgroundNode).toBe("free-landscape");
+    expect(project.variants.portrait.backgroundNode).toBe("free-portrait");
   });
 });
 

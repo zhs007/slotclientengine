@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   exportLayoutZip,
   materializeLayoutOwnedAssets,
+  stableManifestJson,
 } from "../src/io/exported-layout-zip.js";
 import {
   extractBoundedZip,
@@ -100,6 +101,118 @@ function compositePackageFixture() {
 }
 
 describe("layout zip IO", () => {
+  it("deterministically round-trips an owned MP4 video transition without re-encoding", async () => {
+    const sourcePath = `assets/${"c".repeat(64)}.mp4`;
+    const mp4 = new Uint8Array([
+      0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109, 1, 2, 3, 4,
+    ]);
+    const manifest = {
+      ...imageManifest,
+      gameModes: {
+        initialMode: "BaseGame",
+        modes: [
+          {
+            id: "BaseGame",
+            backgroundNodes: { default: "bg" },
+            nodeStates: {},
+          },
+          {
+            id: "FreeGame",
+            backgroundNodes: { default: "bg" },
+            nodeStates: {},
+          },
+        ],
+        transitions: [
+          {
+            from: "BaseGame",
+            to: "FreeGame",
+            overlay: {
+              resource: {
+                kind: "video" as const,
+                path: sourcePath,
+                mimeType: "video/mp4" as const,
+              },
+              fit: "contain" as const,
+              fadeOutSeconds: 0.5,
+            },
+          },
+        ],
+      },
+    };
+    const assets = new Map(assetBytes);
+    assets.set(sourcePath, mp4);
+    const decodeVideo = async () => ({
+      width: 1280,
+      height: 720,
+      durationSeconds: 3.625,
+      hasAudio: true as const,
+    });
+    const first = await exportLayoutZip({
+      manifest,
+      assets,
+      decodeImage,
+      decodeVideo,
+    });
+    const imported = await importLayoutZip(first.bytes, {
+      decodeImage,
+      decodeVideo,
+    });
+    const project = manifestToEditorProject(
+      imported.manifest,
+      imported.assets,
+      imported.videoMetadata,
+    );
+    expect(project.gameModes.transitions).toEqual([
+      expect.objectContaining({
+        kind: "video",
+        fromModeId: "BaseGame",
+        toModeId: "FreeGame",
+        fit: "contain",
+        fadeOutSeconds: 0.5,
+      }),
+    ]);
+    const video = [...project.resources.values()].find(
+      (resource) => resource.kind === "video",
+    );
+    expect(video).toMatchObject({
+      size: { width: 1280, height: 720 },
+      durationSeconds: 3.625,
+      hasAudio: true,
+    });
+    const second = await exportLayoutZip({
+      manifest: editorProjectToManifest(project),
+      assets: project.assets,
+      decodeImage,
+      decodeVideo,
+    });
+    expect(second.bytes).toEqual(first.bytes);
+    const firstEntries = extractBoundedZip(first.bytes);
+    const secondEntries = extractBoundedZip(second.bytes);
+    expect([...secondEntries.keys()]).toEqual([...firstEntries.keys()]);
+    expect(stableManifestJson(imported.manifest)).toBe(
+      new TextDecoder().decode(secondEntries.get("layout.manifest.json")),
+    );
+    const importedOverlay =
+      imported.manifest.gameModes!.transitions![0]!.overlay;
+    if (importedOverlay.resource.kind !== "video")
+      throw new Error("expected video transition");
+    const videoPath = importedOverlay.resource.path;
+    expect(firstEntries.get(videoPath)).toEqual(mp4);
+    expect(secondEntries.get(videoPath)).toEqual(mp4);
+    imported.destroy();
+
+    const malformed = new Map(assetBytes);
+    malformed.set(sourcePath, new Uint8Array([1, 2, 3]));
+    await expect(
+      exportLayoutZip({
+        manifest,
+        assets: malformed,
+        decodeImage,
+        decodeVideo,
+      }),
+    ).rejects.toThrow(/ISO MP4/);
+  });
+
   it("deterministically round-trips transition-only Spine resources and directed edges", async () => {
     const skeleton = {
       skeleton: { spine: "4.3.23" },

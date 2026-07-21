@@ -3,7 +3,10 @@ import {
   editorProjectToManifest,
   type EditorProject,
 } from "./editor-project.js";
-import { synchronizeGameModeNodeStates } from "./game-mode-commands.js";
+import {
+  normalizeGameModeNodeOrders,
+  synchronizeGameModeNodeStates,
+} from "./game-mode-commands.js";
 
 export interface EditorStoreSnapshot {
   readonly project: EditorProject;
@@ -19,6 +22,7 @@ export class EditorStore {
 
   constructor(project: EditorProject) {
     this.#project = project;
+    normalizeGameModeNodeOrders(this.#project);
     this.validate();
   }
 
@@ -34,6 +38,7 @@ export class EditorStore {
     const draft = cloneEditorProject(this.#project);
     update(draft);
     synchronizeGameModeNodeStates(draft);
+    normalizeGameModeNodeOrders(draft);
     this.#project = draft;
     this.#revision += 1;
     this.validate();
@@ -42,6 +47,7 @@ export class EditorStore {
 
   replace(project: EditorProject): void {
     this.#project = cloneEditorProject(project);
+    normalizeGameModeNodeOrders(this.#project);
     this.#revision += 1;
     this.validate();
     this.emit();

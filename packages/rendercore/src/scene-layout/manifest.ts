@@ -147,9 +147,12 @@ export function collectSceneLayoutAssetPaths(
     paths.add(popup.manifest);
   for (const transition of parsed.gameModes?.transitions ?? []) {
     const resource = transition.overlay.resource;
-    paths.add(resource.skeleton);
-    paths.add(resource.atlas);
-    for (const path of Object.values(resource.textures)) paths.add(path);
+    if (resource.kind === "video") paths.add(resource.path);
+    else {
+      paths.add(resource.skeleton);
+      paths.add(resource.atlas);
+      for (const path of Object.values(resource.textures)) paths.add(path);
+    }
   }
   return Object.freeze(
     [...paths].sort((left, right) => left.localeCompare(right, "en")),
@@ -928,16 +931,40 @@ function parseGameModeTransitions(
       pairs.add(pair);
       const overlayLabel = `${label}.overlay`;
       const overlay = readRecord(transition.overlay, overlayLabel);
+      const resourceLabel = `${overlayLabel}.resource`;
+      const resource = readRecord(overlay.resource, resourceLabel);
+      if (resource.kind === "video") {
+        known(overlay, ["resource", "fit", "fadeOutSeconds"], overlayLabel);
+        known(resource, ["kind", "path", "mimeType"], resourceLabel);
+        if (resource.mimeType !== "video/mp4")
+          fail(`${resourceLabel}.mimeType must be video/mp4.`);
+        if (overlay.fit !== "contain")
+          fail(`${overlayLabel}.fit must be contain.`);
+        return deepFreeze({
+          from,
+          to,
+          overlay: {
+            resource: {
+              kind: "video" as const,
+              path: videoOwnedPath(resource.path, `${resourceLabel}.path`),
+              mimeType: "video/mp4" as const,
+            },
+            fit: "contain" as const,
+            fadeOutSeconds: positive(
+              overlay.fadeOutSeconds,
+              `${overlayLabel}.fadeOutSeconds`,
+            ),
+          },
+        });
+      }
       known(
         overlay,
         ["resource", "animation", "switchEvent", "placements"],
         overlayLabel,
       );
-      const resourceLabel = `${overlayLabel}.resource`;
-      const resource = readRecord(overlay.resource, resourceLabel);
       known(resource, ["kind", "skeleton", "atlas", "textures"], resourceLabel);
       if (resource.kind !== "spine")
-        fail(`${resourceLabel}.kind must be spine.`);
+        fail(`${resourceLabel}.kind must be spine or video.`);
       const skeleton = localPath(
         resource.skeleton,
         `${resourceLabel}.skeleton`,
@@ -995,6 +1022,13 @@ function parseGameModeTransitions(
       });
     }),
   );
+}
+
+function videoOwnedPath(value: unknown, label: string): string {
+  const path = localPath(value, label, new Set([".mp4"]));
+  if (!/^assets\/[a-f0-9]{64}\.mp4$/u.test(path))
+    fail(`${label} must be assets/<full-lowercase-sha256>.mp4.`);
+  return path;
 }
 
 function activeVariantIds(

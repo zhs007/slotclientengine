@@ -1,5 +1,5 @@
 import type { LogicReels } from "@slotclientengine/logiccore";
-import { Container } from "pixi.js";
+import { Container, Graphics } from "pixi.js";
 import {
   createAwardCelebrationPlayer,
   type AwardCelebrationPlayer,
@@ -28,12 +28,17 @@ import {
 import { SceneLayoutError } from "./errors.js";
 import { transitionResourceKey } from "./resource.js";
 import { createSceneLayoutRuntime } from "./runtime.js";
+import {
+  createSceneLayoutTransitionVideoPlayer,
+  type SceneLayoutTransitionVideoPlayer,
+} from "./video-transition-player.js";
 import type {
   AttachChildOptions,
   AttachRelativeOptions,
   ResolvedSceneLayoutReelGrid,
   SceneLayoutGameMode,
   SceneLayoutGameModeTransition,
+  SceneLayoutGameModeRequestOptions,
   SceneLayoutGameModeSnapshot,
   SceneLayoutInitialReelScene,
   SceneLayoutNodeStateSnapshot,
@@ -50,28 +55,57 @@ interface PreparedModeTarget {
   readonly catalog: SymbolCatalogModel;
 }
 
-interface ActiveModeTransition {
+interface PreparedModeTransitionBase {
   readonly spec: SceneLayoutGameModeTransition;
   readonly source: SceneLayoutGameMode;
   readonly target: SceneLayoutGameMode;
-  readonly player: RendercoreSpinePlayer;
   readonly prepared: PreparedModeTarget | null;
   readonly bindingChanged: boolean;
+  readonly targetSymbolPackageId: string | null;
+  readonly optionsSignature: string;
+}
+
+type PreparedModeTransition =
+  | (PreparedModeTransitionBase & {
+      readonly kind: "spine";
+      readonly player: RendercoreSpinePlayer;
+    })
+  | (PreparedModeTransitionBase & {
+      readonly kind: "video";
+      readonly player: SceneLayoutTransitionVideoPlayer;
+    });
+
+interface ActiveModeTransitionBase extends PreparedModeTransitionBase {
   switched: boolean;
-  switchEventCount: number;
   readonly resolve: () => void;
   readonly reject: (error: SceneLayoutError) => void;
 }
+
+type ActiveModeTransition =
+  | (ActiveModeTransitionBase & {
+      readonly kind: "spine";
+      readonly player: RendercoreSpinePlayer;
+      switchEventCount: number;
+    })
+  | (ActiveModeTransitionBase & {
+      readonly kind: "video";
+      readonly player: SceneLayoutTransitionVideoPlayer;
+    });
 
 export function createSceneLayoutPackageRuntime(options: {
   readonly resource: SceneLayoutPackageResource;
   readonly createTransitionPlayer?: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
   }) => RendercoreSpinePlayer;
+  readonly createVideoTransitionPlayer?: (options: {
+    readonly url: string;
+    readonly fadeOutSeconds: number;
+  }) => SceneLayoutTransitionVideoPlayer;
 }): SceneLayoutPackageRuntime {
   return new DefaultSceneLayoutPackageRuntime(
     options.resource,
     options.createTransitionPlayer,
+    options.createVideoTransitionPlayer,
   );
 }
 
@@ -82,7 +116,14 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #createTransitionPlayer: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
   }) => RendercoreSpinePlayer;
+  readonly #createVideoTransitionPlayer: (options: {
+    readonly url: string;
+    readonly fadeOutSeconds: number;
+  }) => SceneLayoutTransitionVideoPlayer;
+  readonly #popupRoot = new Container();
   readonly #transitionRoot = new Container();
+  readonly #videoBlackoutRoot = new Container();
+  readonly #videoBlackout = new Graphics();
   #reel: ReelPresentation | null = null;
   #catalog: SymbolCatalogModel | null = null;
   #activeSymbolPackageId: string | null = null;
@@ -98,7 +139,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #targetMode: string | null = null;
   #modeRequestInProgress = false;
   #activeTransition: ActiveModeTransition | null = null;
+  #preparedTransition: PreparedModeTransition | null = null;
   #activePopupId: string | null = null;
+  #viewportSize: RenderViewportSize | null = null;
 
   constructor(
     resource: SceneLayoutPackageResource,
@@ -106,6 +149,12 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       | ((options: {
           readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
         }) => RendercoreSpinePlayer)
+      | undefined,
+    createVideoTransitionPlayer:
+      | ((options: {
+          readonly url: string;
+          readonly fadeOutSeconds: number;
+        }) => SceneLayoutTransitionVideoPlayer)
       | undefined,
   ) {
     this.#resource = resource;
@@ -117,9 +166,22 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           resource: options.resource,
           createError: (message) => new SceneLayoutError(message),
         }));
-    this.container = this.#layout.container;
+    this.#createVideoTransitionPlayer =
+      createVideoTransitionPlayer ?? createSceneLayoutTransitionVideoPlayer;
+    this.container = new Container();
+    this.container.label = `scene-layout-package:${resource.manifest.id}`;
+    this.#popupRoot.label = "scene-layout-popup-root";
     this.#transitionRoot.label = "scene-transition-overlay";
-    this.container.addChild(this.#transitionRoot);
+    this.#videoBlackoutRoot.label = "scene-transition-video-blackout";
+    this.#videoBlackout.label = "scene-transition-video-black";
+    this.#videoBlackoutRoot.visible = false;
+    this.#videoBlackoutRoot.addChild(this.#videoBlackout);
+    this.container.addChild(
+      this.#layout.container,
+      this.#popupRoot,
+      this.#transitionRoot,
+      this.#videoBlackoutRoot,
+    );
   }
 
   async init(
@@ -179,10 +241,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         await popup.init();
         this.assertAlive();
         this.#popups.set(id, popup);
-        this.container.addChildAt(
-          popup.container,
-          this.container.getChildIndex(this.#transitionRoot),
-        );
+        this.#popupRoot.addChild(popup.container);
       }
       this.#stableMode = initialModeId;
       this.#displayedMode = initialModeId;
@@ -198,6 +257,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   applyViewport(viewportSize: RenderViewportSize): SceneLayoutSnapshot {
     this.assertReady();
     const snapshot = this.#layout.applyViewport(viewportSize);
+    this.#viewportSize = Object.freeze({ ...viewportSize });
     if (this.#reel) {
       const grid = snapshot.reels.main;
       if (!grid)
@@ -219,10 +279,16 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       );
       popup.container.scale.set(placement.scale);
     }
+    this.#transitionRoot.position.set(
+      snapshot.worldOffset.x,
+      snapshot.worldOffset.y,
+    );
     const activeTransition = this.#activeTransition;
-    if (activeTransition) {
-      const placement =
-        activeTransition.spec.overlay.placements[snapshot.variantId];
+    if (activeTransition?.kind === "spine") {
+      const overlay = activeTransition.spec.overlay;
+      if (!("placements" in overlay))
+        throw new SceneLayoutError("Active Spine transition schema mismatch.");
+      const placement = overlay.placements[snapshot.variantId];
       if (!placement)
         throw new SceneLayoutError(
           `Scene transition ${activeTransition.spec.from} -> ${activeTransition.spec.to} has no ${snapshot.variantId} placement.`,
@@ -230,6 +296,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       activeTransition.player.view.position.set(placement.x, placement.y);
       activeTransition.player.view.scale.set(placement.scale);
     }
+    if (activeTransition?.kind === "video")
+      activeTransition.player.applyViewport(viewportSize);
+    this.redrawVideoBlackout(viewportSize);
     return snapshot;
   }
 
@@ -298,6 +367,23 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
             to: this.#activeTransition.spec.to,
           })
         : null,
+      preparedTargetMode: this.#preparedTransition?.target.id ?? null,
+      transitionKind:
+        this.#activeTransition?.kind ?? this.#preparedTransition?.kind ?? null,
+      mediaTimeSeconds:
+        this.#activeTransition?.kind === "video"
+          ? this.#activeTransition.player.currentTimeSeconds
+          : null,
+      mediaDurationSeconds:
+        this.#activeTransition?.kind === "video"
+          ? this.#activeTransition.player.durationSeconds
+          : this.#preparedTransition?.kind === "video"
+            ? this.#preparedTransition.player.durationSeconds
+            : null,
+      fadeProgress:
+        this.#activeTransition?.kind === "video"
+          ? this.videoFadeProgress(this.#activeTransition)
+          : null,
       stableSymbolPackage: this.#stableSymbolPackageId,
       displayedSymbolPackage: this.#activeSymbolPackageId,
       targetSymbolPackage: this.#targetMode
@@ -307,145 +393,89 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     });
   }
 
-  async requestGameMode(
+  async prepareGameModeTransition(
     modeId: string,
-    options: {
-      readonly recreateReel?: boolean;
-      readonly reels?: Readonly<
-        Partial<Record<"main", SceneLayoutInitialReelScene>>
-      >;
-    } = {},
+    options: SceneLayoutGameModeRequestOptions = {},
   ): Promise<void> {
-    this.assertReady();
-    const modes = this.requireGameModes();
-    const mode = modes.modes.find((candidate) => candidate.id === modeId);
-    if (!mode)
-      throw new SceneLayoutError(`Unknown scene layout game mode "${modeId}".`);
-    if (this.#modeRequestInProgress || this.#targetMode)
-      throw new SceneLayoutError(
-        `A scene layout game mode transition is already in progress${this.#targetMode ? ` to "${this.#targetMode}"` : " during target preparation"}.`,
-      );
-    if (this.playingPopupId())
-      throw new SceneLayoutError(
-        "Cannot change scene layout game mode while an award celebration is active.",
-      );
+    this.assertCanPrepareTransition();
+    const signature = requestOptionsSignature(options);
     if (
-      options.recreateReel !== undefined &&
-      typeof options.recreateReel !== "boolean"
+      this.#preparedTransition?.target.id === modeId &&
+      this.#preparedTransition.optionsSignature === signature
     )
-      throw new SceneLayoutError(
-        "recreateReel must be a boolean when provided.",
-      );
-    const recreateReel = options.recreateReel === true;
-    if (mode.id === this.#stableMode && !recreateReel) {
-      if (options.reels?.main)
-        throw new SceneLayoutError(
-          "Current game mode must not receive a redundant reels.main input.",
-        );
       return;
-    }
-    const source = modes.modes.find(
-      (candidate) => candidate.id === this.#stableMode,
-    )!;
-    const transition = (modes.transitions ?? []).find(
-      (candidate) => candidate.from === source.id && candidate.to === mode.id,
-    );
-    if (!transition)
-      throw new SceneLayoutError(
-        `No direct scene transition exists from "${source.id}" to "${mode.id}".`,
-      );
-    const sourceBinding = this.resolveModeSymbolBinding(source);
-    const targetBinding = this.resolveModeSymbolBinding(mode);
-    if (recreateReel && !targetBinding)
-      throw new SceneLayoutError(
-        `Scene layout game mode "${mode.id}" has no symbol package to recreate.`,
-      );
-    const bindingChanged =
-      sourceBinding?.id !== targetBinding?.id || recreateReel;
-    const targetInput = options.reels?.main;
-    if (!bindingChanged && targetInput)
-      throw new SceneLayoutError(
-        "Game modes sharing a symbol package must not receive reels.main input.",
-      );
-    if (bindingChanged && targetBinding && !targetInput)
-      throw new SceneLayoutError(
-        `Scene layout game mode "${mode.id}" requires target reels.main input.`,
-      );
-    if (!targetBinding && targetInput)
-      throw new SceneLayoutError(
-        `Scene layout game mode "${mode.id}" has no symbol package and must not receive reels.main input.`,
-      );
+    this.cancelPreparedGameModeTransition();
     this.#modeRequestInProgress = true;
     try {
-      let prepared: PreparedModeTarget | null = null;
-      if (bindingChanged && targetBinding) {
-        const catalog = await targetBinding.resource.createCatalog();
-        this.assertAlive();
-        const reel = this.createReelPresentation(
-          targetBinding.resource,
-          catalog,
-          targetBinding.binding,
-        );
-        try {
-          this.applyReelScene(
-            reel,
-            targetBinding.resource,
-            targetBinding.binding,
-            targetInput!,
-          );
-        } catch (error) {
-          reel.destroy({ children: true });
-          throw error;
-        }
-        prepared = { reel, catalog };
-      }
-      const playerResource =
-        this.#resource.layout.spineResources[
-          transitionResourceKey(transition.from, transition.to)
-        ];
-      if (!playerResource) {
-        prepared?.reel.destroy({ children: true });
-        throw new SceneLayoutError(
-          `Scene transition resource ${transition.from} -> ${transition.to} is unavailable.`,
-        );
-      }
-      const player = this.#createTransitionPlayer({ resource: playerResource });
-      try {
-        await player.init();
-        this.assertReady();
-        player.play({
-          animationName: transition.overlay.animation,
-          loop: false,
-        });
-      } catch (error) {
-        player.destroy();
-        prepared?.reel.destroy({ children: true });
-        throw asSceneLayoutError(error);
-      }
-      this.#targetMode = mode.id;
-      this.#targetSymbolPackageId = targetBinding?.id ?? null;
-      this.#transitionRoot.addChild(player.view);
-      const snapshot = this.#layout.getSnapshot();
-      const placement = transition.overlay.placements[snapshot.variantId]!;
-      player.view.position.set(placement.x, placement.y);
-      player.view.scale.set(placement.scale);
-      return await new Promise<void>((resolve, reject) => {
-        this.#activeTransition = {
-          spec: transition,
-          source,
-          target: mode,
-          player,
-          prepared,
-          bindingChanged,
-          switched: false,
-          switchEventCount: 0,
-          resolve,
-          reject,
-        };
-      });
+      this.#preparedTransition = await this.buildPreparedTransition(
+        modeId,
+        options,
+        signature,
+      );
+      this.assertReady();
+    } catch (error) {
+      this.releasePreparedTransition(this.#preparedTransition);
+      this.#preparedTransition = null;
+      throw asSceneLayoutError(error);
     } finally {
       this.#modeRequestInProgress = false;
     }
+  }
+
+  cancelPreparedGameModeTransition(): void {
+    this.assertReady();
+    if (this.#activeTransition || this.#targetMode)
+      throw new SceneLayoutError(
+        "Cannot cancel a scene layout game mode transition after it started.",
+      );
+    this.releasePreparedTransition(this.#preparedTransition);
+    this.#preparedTransition = null;
+  }
+
+  requestGameMode(
+    modeId: string,
+    options: SceneLayoutGameModeRequestOptions = {},
+  ): Promise<void> {
+    let transition: SceneLayoutGameModeTransition;
+    try {
+      this.assertCanPrepareTransition();
+      this.requireMode(modeId);
+      if (modeId === this.#stableMode && options.recreateReel !== true) {
+        if (options.reels?.main)
+          throw new SceneLayoutError(
+            "Current game mode must not receive a redundant reels.main input.",
+          );
+        return Promise.resolve();
+      }
+      transition = this.findTransition(modeId);
+    } catch (error) {
+      return Promise.reject(asSceneLayoutError(error));
+    }
+    const signature = requestOptionsSignature(options);
+    if (transition.overlay.resource.kind === "video") {
+      const prepared = this.#preparedTransition;
+      if (
+        prepared?.kind !== "video" ||
+        prepared.target.id !== modeId ||
+        prepared.optionsSignature !== signature
+      )
+        return Promise.reject(
+          new SceneLayoutError(
+            `Video scene transition to "${modeId}" must be prepared before the trusted user gesture.`,
+          ),
+        );
+      // This call is intentionally made before any await or visible mutation.
+      let playPromise: Promise<void>;
+      try {
+        playPromise = prepared.player.play();
+      } catch (error) {
+        this.#preparedTransition = null;
+        this.releasePreparedTransition(prepared);
+        return Promise.reject(asSceneLayoutError(error));
+      }
+      return this.startPreparedVideoTransition(prepared, playPromise);
+    }
+    return this.startSpineTransition(modeId, options, signature);
   }
 
   startAwardCelebrationForCurrentMode(input: {
@@ -565,6 +595,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.releasePreparedTransition(this.#preparedTransition);
+    this.#preparedTransition = null;
     if (this.#activeTransition) {
       const active = this.#activeTransition;
       this.#activeTransition = null;
@@ -581,6 +613,8 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#catalog = null;
     for (const popup of this.#popups.values()) popup.destroy();
     this.#popups.clear();
+    this.#videoBlackoutRoot.removeChildren();
+    this.#videoBlackout.destroy();
     this.#layout.destroy();
     this.#resource.destroy();
     this.#initialized = false;
@@ -593,16 +627,296 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#stableSymbolPackageId = null;
     this.#targetSymbolPackageId = null;
     this.#activeBackgroundNodes = Object.freeze([]);
+    this.#viewportSize = null;
+  }
+
+  private assertCanPrepareTransition(): void {
+    this.assertReady();
+    if (this.#modeRequestInProgress || this.#targetMode)
+      throw new SceneLayoutError(
+        `A scene layout game mode transition is already in progress${this.#targetMode ? ` to "${this.#targetMode}"` : " during target preparation"}.`,
+      );
+    if (this.playingPopupId())
+      throw new SceneLayoutError(
+        "Cannot change scene layout game mode while an award celebration is active.",
+      );
+  }
+
+  private findTransition(modeId: string): SceneLayoutGameModeTransition {
+    const modes = this.requireGameModes();
+    const mode = modes.modes.find((candidate) => candidate.id === modeId);
+    if (!mode)
+      throw new SceneLayoutError(`Unknown scene layout game mode "${modeId}".`);
+    const source = modes.modes.find(
+      (candidate) => candidate.id === this.#stableMode,
+    )!;
+    const transition = (modes.transitions ?? []).find(
+      (candidate) => candidate.from === source.id && candidate.to === mode.id,
+    );
+    if (!transition)
+      throw new SceneLayoutError(
+        `No direct scene transition exists from "${source.id}" to "${mode.id}".`,
+      );
+    return transition;
+  }
+
+  private async buildPreparedTransition(
+    modeId: string,
+    options: SceneLayoutGameModeRequestOptions,
+    optionsSignature: string,
+    onSpinePrepared?: (
+      prepared: Extract<PreparedModeTransition, { readonly kind: "spine" }>,
+    ) => void,
+  ): Promise<PreparedModeTransition> {
+    const transition = this.findTransition(modeId);
+    const source = this.requireMode(this.#stableMode!);
+    const target = this.requireMode(modeId);
+    if (
+      options.recreateReel !== undefined &&
+      typeof options.recreateReel !== "boolean"
+    )
+      throw new SceneLayoutError(
+        "recreateReel must be a boolean when provided.",
+      );
+    const recreateReel = options.recreateReel === true;
+    const sourceBinding = this.resolveModeSymbolBinding(source);
+    const targetBinding = this.resolveModeSymbolBinding(target);
+    if (recreateReel && !targetBinding)
+      throw new SceneLayoutError(
+        `Scene layout game mode "${target.id}" has no symbol package to recreate.`,
+      );
+    const bindingChanged =
+      sourceBinding?.id !== targetBinding?.id || recreateReel;
+    const targetInput = options.reels?.main;
+    if (!bindingChanged && targetInput)
+      throw new SceneLayoutError(
+        "Game modes sharing a symbol package must not receive reels.main input.",
+      );
+    if (bindingChanged && targetBinding && !targetInput)
+      throw new SceneLayoutError(
+        `Scene layout game mode "${target.id}" requires target reels.main input.`,
+      );
+    if (!targetBinding && targetInput)
+      throw new SceneLayoutError(
+        `Scene layout game mode "${target.id}" has no symbol package and must not receive reels.main input.`,
+      );
+    let prepared: PreparedModeTarget | null = null;
+    try {
+      if (bindingChanged && targetBinding) {
+        const catalog = await targetBinding.resource.createCatalog();
+        this.assertAlive();
+        const reel = this.createReelPresentation(
+          targetBinding.resource,
+          catalog,
+          targetBinding.binding,
+        );
+        try {
+          this.applyReelScene(
+            reel,
+            targetBinding.resource,
+            targetBinding.binding,
+            targetInput!,
+          );
+        } catch (error) {
+          reel.destroy({ children: true });
+          throw error;
+        }
+        prepared = { reel, catalog };
+      }
+      const common = {
+        spec: transition,
+        source,
+        target,
+        prepared,
+        bindingChanged,
+        targetSymbolPackageId: targetBinding?.id ?? null,
+        optionsSignature,
+      };
+      const overlay = transition.overlay;
+      if ("fadeOutSeconds" in overlay) {
+        const url = this.#resource.layout.videoUrls[overlay.resource.path];
+        if (!url)
+          throw new SceneLayoutError(
+            `Scene transition video ${transition.from} -> ${transition.to} is unavailable.`,
+          );
+        const player = this.#createVideoTransitionPlayer({
+          url,
+          fadeOutSeconds: overlay.fadeOutSeconds,
+        });
+        try {
+          await player.prepare();
+          this.assertReady();
+        } catch (error) {
+          player.destroy();
+          throw error;
+        }
+        return { ...common, kind: "video", player };
+      }
+      const playerResource =
+        this.#resource.layout.spineResources[
+          transitionResourceKey(transition.from, transition.to)
+        ];
+      if (!playerResource)
+        throw new SceneLayoutError(
+          `Scene transition resource ${transition.from} -> ${transition.to} is unavailable.`,
+        );
+      const player = this.#createTransitionPlayer({ resource: playerResource });
+      try {
+        await player.init();
+        this.assertReady();
+      } catch (error) {
+        player.destroy();
+        throw error;
+      }
+      const result = { ...common, kind: "spine" as const, player };
+      onSpinePrepared?.(result);
+      return result;
+    } catch (error) {
+      prepared?.reel.destroy({ children: true });
+      throw error;
+    }
+  }
+
+  private async startSpineTransition(
+    modeId: string,
+    options: SceneLayoutGameModeRequestOptions,
+    signature: string,
+  ): Promise<void> {
+    this.assertCanPrepareTransition();
+    let prepared = this.#preparedTransition;
+    let directlyStarted: Promise<void> | null = null;
+    if (
+      prepared?.kind !== "spine" ||
+      prepared.target.id !== modeId ||
+      prepared.optionsSignature !== signature
+    ) {
+      this.releasePreparedTransition(prepared);
+      this.#preparedTransition = null;
+      this.#modeRequestInProgress = true;
+      try {
+        prepared = await this.buildPreparedTransition(
+          modeId,
+          options,
+          signature,
+          (ready) => {
+            directlyStarted = this.activatePreparedSpineTransition(ready);
+          },
+        );
+      } finally {
+        this.#modeRequestInProgress = false;
+      }
+    }
+    if (prepared.kind !== "spine")
+      throw new SceneLayoutError(
+        "Prepared transition kind changed unexpectedly.",
+      );
+    if (directlyStarted) return await directlyStarted;
+    return await this.activatePreparedSpineTransition(prepared);
+  }
+
+  private async activatePreparedSpineTransition(
+    prepared: Extract<PreparedModeTransition, { readonly kind: "spine" }>,
+  ): Promise<void> {
+    const overlay = prepared.spec.overlay;
+    if (!("animation" in overlay))
+      throw new SceneLayoutError("Prepared Spine transition schema mismatch.");
+    this.#preparedTransition = null;
+    let started = false;
+    try {
+      prepared.player.play({
+        animationName: overlay.animation,
+        loop: false,
+      });
+      this.#targetMode = prepared.target.id;
+      this.#targetSymbolPackageId = prepared.targetSymbolPackageId;
+      this.#transitionRoot.addChild(prepared.player.view);
+      const snapshot = this.#layout.getSnapshot();
+      const placement = overlay.placements[snapshot.variantId]!;
+      prepared.player.view.position.set(placement.x, placement.y);
+      prepared.player.view.scale.set(placement.scale);
+      started = true;
+      return await new Promise<void>((resolve, reject) => {
+        this.#activeTransition = {
+          ...prepared,
+          switched: false,
+          switchEventCount: 0,
+          resolve,
+          reject,
+        };
+      });
+    } catch (error) {
+      if (!started) this.releasePreparedTransition(prepared);
+      throw asSceneLayoutError(error);
+    }
+  }
+
+  private async startPreparedVideoTransition(
+    prepared: Extract<PreparedModeTransition, { readonly kind: "video" }>,
+    playPromise: Promise<void>,
+  ): Promise<void> {
+    this.#modeRequestInProgress = true;
+    let started = false;
+    try {
+      await playPromise;
+      this.assertReady();
+      if (this.#preparedTransition !== prepared)
+        throw new SceneLayoutError(
+          "Prepared video transition changed before playback started.",
+        );
+      this.#preparedTransition = null;
+      this.#targetMode = prepared.target.id;
+      this.#targetSymbolPackageId = prepared.targetSymbolPackageId;
+      this.#videoBlackoutRoot.addChild(prepared.player.view);
+      this.#videoBlackoutRoot.visible = true;
+      this.#videoBlackoutRoot.alpha = 1;
+      prepared.player.view.alpha = 1;
+      if (!this.#viewportSize)
+        throw new SceneLayoutError(
+          "Scene layout viewport must be applied before a video transition.",
+        );
+      prepared.player.applyViewport(this.#viewportSize);
+      this.redrawVideoBlackout(this.#viewportSize);
+      started = true;
+      return await new Promise<void>((resolve, reject) => {
+        this.#activeTransition = {
+          ...prepared,
+          switched: false,
+          resolve,
+          reject,
+        };
+      });
+    } catch (error) {
+      if (this.#preparedTransition === prepared)
+        this.#preparedTransition = null;
+      if (!started) this.releasePreparedTransition(prepared);
+      throw asSceneLayoutError(error);
+    } finally {
+      this.#modeRequestInProgress = false;
+    }
+  }
+
+  private releasePreparedTransition(
+    prepared: PreparedModeTransition | null,
+  ): void {
+    if (!prepared) return;
+    prepared.player.destroy();
+    prepared.prepared?.reel.destroy({ children: true });
   }
 
   private updateActiveTransition(deltaSeconds: number): void {
     const active = this.#activeTransition;
     if (!active) return;
-    let result;
     try {
-      result = active.player.update(deltaSeconds);
+      if (active.kind === "video") {
+        this.updateActiveVideoTransition(active);
+        return;
+      }
+      const result = active.player.update(deltaSeconds);
+      const overlay = active.spec.overlay;
+      if (!("switchEvent" in overlay))
+        throw new SceneLayoutError("Active Spine transition schema mismatch.");
       for (const event of result.events) {
-        if (event.name !== active.spec.overlay.switchEvent) continue;
+        if (event.name !== overlay.switchEvent) continue;
         active.switchEventCount += 1;
         if (active.switchEventCount !== 1)
           throw new SceneLayoutError(
@@ -613,12 +927,51 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       if (!result.completed) return;
       if (!active.switched)
         throw new SceneLayoutError(
-          `Scene transition ${active.spec.from} -> ${active.spec.to} completed without switch event "${active.spec.overlay.switchEvent}".`,
+          `Scene transition ${active.spec.from} -> ${active.spec.to} completed without switch event "${overlay.switchEvent}".`,
         );
       this.completeActiveTransition(active);
     } catch (error) {
       this.failActiveTransition(active, asSceneLayoutError(error));
     }
+  }
+
+  private updateActiveVideoTransition(
+    active: Extract<ActiveModeTransition, { readonly kind: "video" }>,
+  ): void {
+    if (active.player.fatalError) throw active.player.fatalError;
+    const fadeProgress = this.videoFadeProgress(active);
+    const overlay = active.spec.overlay;
+    if (!("fadeOutSeconds" in overlay))
+      throw new SceneLayoutError("Active video transition schema mismatch.");
+    const fadeStart = active.player.durationSeconds - overlay.fadeOutSeconds;
+    if (active.player.currentTimeSeconds >= fadeStart && !active.switched)
+      this.commitActiveTransition(active);
+    const alpha = 1 - fadeProgress;
+    active.player.view.alpha = alpha;
+    this.#videoBlackout.alpha = alpha;
+    if (!active.player.ended) return;
+    if (!active.switched) this.commitActiveTransition(active);
+    this.completeActiveTransition(active);
+  }
+
+  private videoFadeProgress(
+    active: Extract<ActiveModeTransition, { readonly kind: "video" }>,
+  ): number {
+    const overlay = active.spec.overlay;
+    if (!("fadeOutSeconds" in overlay)) return 0;
+    const fadeSeconds = overlay.fadeOutSeconds;
+    const fadeStart = active.player.durationSeconds - fadeSeconds;
+    return Math.max(
+      0,
+      Math.min(1, (active.player.currentTimeSeconds - fadeStart) / fadeSeconds),
+    );
+  }
+
+  private redrawVideoBlackout(viewportSize: RenderViewportSize): void {
+    this.#videoBlackout.clear();
+    this.#videoBlackout
+      .rect(0, 0, viewportSize.width, viewportSize.height)
+      .fill({ color: 0x000000, alpha: 1 });
   }
 
   private commitActiveTransition(active: ActiveModeTransition): void {
@@ -647,6 +1000,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   private completeActiveTransition(active: ActiveModeTransition): void {
     if (this.#activeTransition !== active) return;
     active.player.destroy();
+    if (active.kind === "video") this.hideVideoBlackout();
     this.#stableMode = active.target.id;
     this.#displayedMode = active.target.id;
     this.#stableSymbolPackageId = this.#activeSymbolPackageId;
@@ -662,6 +1016,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   ): void {
     if (this.#activeTransition !== active) return;
     active.player.destroy();
+    if (active.kind === "video") this.hideVideoBlackout();
     if (!active.switched) active.prepared?.reel.destroy({ children: true });
     else {
       this.#stableMode = active.target.id;
@@ -754,9 +1109,15 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const insertionIndex = this.#resource.manifest.nodes.filter(
       (node) => node.order < order,
     ).length;
-    this.container.addChildAt(reel, insertionIndex);
+    this.#layout.container.addChildAt(reel, insertionIndex);
     const grid = this.#layout.getReelGrid("main");
     reel.position.set(grid.artRect.x, grid.artRect.y);
+  }
+
+  private hideVideoBlackout(): void {
+    this.#videoBlackoutRoot.visible = false;
+    this.#videoBlackoutRoot.alpha = 1;
+    this.#videoBlackout.alpha = 1;
   }
 
   private resolveModeSymbolBinding(mode: SceneLayoutGameMode | null): {
@@ -820,7 +1181,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   }
 
   private requireMode(id: string): SceneLayoutGameMode {
-    const mode = this.#resource.manifest.gameModes?.modes.find(
+    const mode = this.requireGameModes().modes.find(
       (candidate) => candidate.id === id,
     );
     if (!mode)
@@ -970,6 +1331,15 @@ function validateValues(
       );
     }),
   );
+}
+
+function requestOptionsSignature(
+  options: SceneLayoutGameModeRequestOptions,
+): string {
+  return JSON.stringify({
+    recreateReel: options.recreateReel === true,
+    reels: options.reels ?? null,
+  });
 }
 
 function asSceneLayoutError(error: unknown): SceneLayoutError {

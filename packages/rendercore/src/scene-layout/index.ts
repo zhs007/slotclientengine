@@ -6,3 +6,4 @@ export * from "./resource.js";
 export * from "./package-resource.js";
 export * from "./runtime.js";
 export * from "./package-runtime.js";
+export * from "./video-transition-player.js";

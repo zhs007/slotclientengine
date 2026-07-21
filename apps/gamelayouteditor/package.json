@@ -8,6 +8,7 @@
     "prepare:deps": "pnpm --filter @slotclientengine/rendercore build",
     "dev": "pnpm run prepare:deps && sh -c 'if [ \"$1\" = \"--\" ]; then shift; fi; exec vite \"$@\"' sh",
     "build": "pnpm run prepare:deps && vite build",
+    "acceptance:task114": "TS_NODE_PROJECT=tsconfig.json node --loader ts-node/esm scripts/build-task114-acceptance.ts",
     "lint": "eslint .",
     "test": "vitest run --coverage",
     "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",

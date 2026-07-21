@@ -1,6 +1,5 @@
 import {
   assertVNIProject,
-  createAssetUrlManifest,
   resolveProjectAssetUrls,
   type AssetUrlManifest,
   type VNIProjectConfig,
@@ -1416,9 +1415,6 @@ export function createSymbolVniAnimationResourcesFromManifest(
   options: CreateSymbolVniAnimationResourcesOptions,
 ): SymbolVniAnimationResourceMap {
   const manifest = parseSymbolStateTextureManifest(options.manifest, options);
-  const assetUrlManifest = createAssetUrlManifest({
-    ...options.vniAssetModules,
-  });
   const resources: Record<
     string,
     Partial<Record<SymbolStateId, SymbolVniAnimationResource>>
@@ -1431,13 +1427,21 @@ export function createSymbolVniAnimationResourcesFromManifest(
       if (!animation || animation.kind !== "vni") {
         continue;
       }
-      const rawProject = resolveManifestModule(
+      const [projectModulePath, rawProject] = resolveManifestModuleEntry(
         options.vniProjectModules,
         animation.project,
         `Symbol "${symbol}" ${state} VNI project`,
       );
       const project = assertVNIProject(rawProject);
-      const assetUrls = resolveProjectAssetUrls(project, assetUrlManifest);
+      const assetUrls = resolveProjectAssetUrls(
+        project,
+        createProjectRelativeAssetUrlManifest({
+          project,
+          projectModulePath,
+          assetModules: options.vniAssetModules,
+          label: `Symbol "${symbol}" ${state} VNI project`,
+        }),
+      );
       resources[symbol] = resources[symbol] ?? {};
       resources[symbol][state] = Object.freeze({
         symbol,
@@ -2177,6 +2181,14 @@ function resolveManifestModule<T>(
   manifestPath: string,
   label: string,
 ): T {
+  return resolveManifestModuleEntry(modules, manifestPath, label)[1];
+}
+
+function resolveManifestModuleEntry<T>(
+  modules: Readonly<Record<string, T>>,
+  manifestPath: string,
+  label: string,
+): readonly [string, T] {
   getFileNameFromManifestPath(manifestPath);
   const wanted = manifestPath.slice(2);
   const matches = Object.entries(modules).filter(([modulePath]) => {
@@ -2191,7 +2203,64 @@ function resolveManifestModule<T>(
   if (matches.length > 1) {
     throw new SymbolAssetError(`${label} path is ambiguous: ${manifestPath}.`);
   }
-  return matches[0]![1];
+  return matches[0]!;
+}
+
+function createProjectRelativeAssetUrlManifest(options: {
+  readonly project: VNIProjectConfig;
+  readonly projectModulePath: string;
+  readonly assetModules: Readonly<Record<string, string>>;
+  readonly label: string;
+}): AssetUrlManifest {
+  const moduleEntries = Object.entries(options.assetModules).map(
+    ([path, url]) => [normalizeModulePath(path), url] as const,
+  );
+  const resolved: Record<string, string> = {};
+  for (const asset of options.project.assets) {
+    const expected = resolveModuleReference(
+      options.projectModulePath,
+      asset.path,
+    );
+    const matches = moduleEntries.filter(([path]) => path === expected);
+    if (matches.length === 0)
+      throw new SymbolAssetError(
+        `${options.label} asset path is missing from manifest modules: ${asset.path} (expected "${expected}").`,
+      );
+    if (matches.length > 1)
+      throw new SymbolAssetError(
+        `${options.label} asset "${asset.path}" module path is ambiguous at "${expected}".`,
+      );
+    resolved[asset.path] = matches[0]![1];
+  }
+  return Object.freeze(resolved);
+}
+
+function resolveModuleReference(baseFile: string, reference: string): string {
+  if (/^(?:\/|[A-Za-z]:|[A-Za-z][A-Za-z0-9+.-]*:)/u.test(reference))
+    throw new SymbolAssetError(
+      `VNI asset path must be relative: ${reference}.`,
+    );
+  const stack = normalizeModulePath(baseFile).split("/").slice(0, -1);
+  for (const segment of reference.replaceAll("\\", "/").split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      if (stack.length > 0 && stack.at(-1) !== "..") stack.pop();
+      else stack.push(segment);
+    } else stack.push(segment);
+  }
+  return stack.join("/");
+}
+
+function normalizeModulePath(path: string): string {
+  const stack: string[] = [];
+  for (const segment of path.replaceAll("\\", "/").split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      if (stack.length > 0 && stack.at(-1) !== "..") stack.pop();
+      else stack.push(segment);
+    } else stack.push(segment);
+  }
+  return stack.join("/");
 }
 
 function getDefaultSymbolStateIds(): readonly SymbolStateId[] {

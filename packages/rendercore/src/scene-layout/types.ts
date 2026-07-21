@@ -120,7 +120,7 @@ export interface SceneLayoutGameMode {
   readonly awardCelebrationPopup?: string;
 }
 
-export interface SceneLayoutGameModeTransition {
+export interface SceneLayoutSpineGameModeTransition {
   readonly from: string;
   readonly to: string;
   readonly overlay: {
@@ -137,6 +137,24 @@ export interface SceneLayoutGameModeTransition {
     >;
   };
 }
+
+export interface SceneLayoutVideoGameModeTransition {
+  readonly from: string;
+  readonly to: string;
+  readonly overlay: {
+    readonly resource: {
+      readonly kind: "video";
+      readonly path: string;
+      readonly mimeType: "video/mp4";
+    };
+    readonly fit: "contain";
+    readonly fadeOutSeconds: number;
+  };
+}
+
+export type SceneLayoutGameModeTransition =
+  | SceneLayoutSpineGameModeTransition
+  | SceneLayoutVideoGameModeTransition;
 
 export interface SceneLayoutGameModes {
   readonly initialMode: string;
@@ -199,6 +217,7 @@ export interface SceneLayoutResource {
     >
   >;
   readonly imageStringResources: Readonly<Record<string, ImageStringResource>>;
+  readonly videoUrls: Readonly<Record<string, string>>;
   destroy(): void;
 }
 
@@ -306,10 +325,23 @@ export interface SceneLayoutGameModeSnapshot {
   readonly phase: "stable" | "transitioning";
   readonly transitionPhase: "before-switch" | "after-switch" | null;
   readonly transition: { readonly from: string; readonly to: string } | null;
+  readonly preparedTargetMode: string | null;
+  readonly transitionKind: "spine" | "video" | null;
+  readonly mediaTimeSeconds: number | null;
+  readonly mediaDurationSeconds: number | null;
+  readonly fadeProgress: number | null;
   readonly stableSymbolPackage: string | null;
   readonly displayedSymbolPackage: string | null;
   readonly targetSymbolPackage: string | null;
   readonly activeBackgroundNodes: readonly string[];
+}
+
+export interface SceneLayoutGameModeRequestOptions {
+  /** Explicitly rebuilds even when source and target use the same binding. */
+  readonly recreateReel?: boolean;
+  readonly reels?: Readonly<
+    Partial<Record<"main", SceneLayoutInitialReelScene>>
+  >;
 }
 
 export interface SceneLayoutInitialReelScene {
@@ -332,18 +364,24 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   /** Returns the committed mode and any transition target without mutating playback. */
   getGameModeSnapshot(): SceneLayoutGameModeSnapshot;
   /**
-   * Prepares any target reel, drains shared node transitions, then atomically
-   * commits background visibility, reel ownership, and the stable mode.
+   * Prepares the complete target scene and transition media without changing
+   * the displayed or stable mode. Video transitions must be prepared before
+   * the trusted user gesture that calls requestGameMode().
+   */
+  prepareGameModeTransition(
+    modeId: string,
+    options?: SceneLayoutGameModeRequestOptions,
+  ): Promise<void>;
+  /** Cancels a prepared transition that has not started. */
+  cancelPreparedGameModeTransition(): void;
+  /**
+   * Starts a prepared video transition. Call this directly from the trusted
+   * pointer/click listener: the implementation invokes audible video.play()
+   * synchronously before its first await. Spine transitions may prepare lazily.
    */
   requestGameMode(
     modeId: string,
-    options?: {
-      /** Explicitly rebuilds even when source and target use the same binding. */
-      readonly recreateReel?: boolean;
-      readonly reels?: Readonly<
-        Partial<Record<"main", SceneLayoutInitialReelScene>>
-      >;
-    },
+    options?: SceneLayoutGameModeRequestOptions,
   ): Promise<void>;
   /** Starts the award-celebration popup explicitly bound to the current stable mode. */
   startAwardCelebrationForCurrentMode(input: {
