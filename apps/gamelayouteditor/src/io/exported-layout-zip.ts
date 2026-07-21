@@ -22,7 +22,6 @@ import {
   detectRasterAssetType,
   sha256Hex,
 } from "@slotclientengine/browserartifactio";
-import { allocateSpineAtlasPageName } from "../model/spine-page-name.js";
 import { assertStrictSymbolsPackagePaths } from "./imported-symbol-package.js";
 import { assertCanonicalPackagePath } from "./filename-policy.js";
 import { validateLayoutAssets } from "./imported-layout-zip.js";
@@ -227,7 +226,6 @@ export async function materializeLayoutOwnedAssets(options: {
       } else {
         const textures: Record<string, string> = {};
         const pageMapping = new Map<string, string>();
-        const usedPageNames = new Set<string>();
         for (const [page, oldPath] of Object.entries(node.resource.textures)) {
           const bytes = requiredBytes(options.assets, oldPath);
           const type = detectRasterAssetType(bytes);
@@ -235,12 +233,8 @@ export async function materializeLayoutOwnedAssets(options: {
             digest: await sha256Hex(bytes),
             extension: type.extension,
           });
-          const targetPage = allocateSpineAtlasPageName({
-            contentPath: path,
-            usedPageNames,
-          });
-          textures[targetPage] = path;
-          pageMapping.set(page, targetPage);
+          textures[page] = path;
+          pageMapping.set(page, page);
           putAsset(assets, path, bytes);
         }
         const atlasBytes = new TextEncoder().encode(

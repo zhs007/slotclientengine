@@ -330,7 +330,7 @@ describe("logical layout resource commands", () => {
       kind: "spine",
       animationNames: ["Idle", "Win"],
     });
-    expect(Object.keys(resource.textures)[0]).toMatch(/^[a-f0-9]{64}\.png$/u);
+    expect(Object.keys(resource.textures)).toEqual(["hero.png"]);
     expect(Object.values(resource.textures)[0]).toMatch(
       /^assets\/[a-f0-9]{64}\.png$/u,
     );
@@ -365,20 +365,18 @@ describe("logical layout resource commands", () => {
         ),
         new File(
           [
-            "page-a.png\nsize: 1,1\nfilter: Linear,Linear\n\n" +
-              "page-b.png\nsize: 1,1\nfilter: Linear,Linear\n",
+            "BG.png\nsize: 1,1\nfilter: Linear,Linear\n\n" +
+              "BG_2.png\nsize: 1,1\nfilter: Linear,Linear\n",
           ],
           "shared.atlas",
         ),
-        new File([texture], "page-a.png", { type: "image/png" }),
-        new File([texture], "page-b.png", { type: "image/png" }),
+        new File([texture], "BG.png", { type: "image/png" }),
+        new File([texture], "BG_2.png", { type: "image/png" }),
       ],
     });
     const pages = Object.keys(resource.textures);
     const paths = Object.values(resource.textures);
-    expect(pages).toHaveLength(2);
-    expect(pages[0]).toMatch(/^[a-f0-9]{64}\.png$/u);
-    expect(pages[1]).toBe(pages[0]!.replace(/\.png$/u, "-2.png"));
+    expect(pages).toEqual(["BG.png", "BG_2.png"]);
     expect(new Set(paths).size).toBe(1);
     expect(project.assets.get(paths[0]!)).toEqual(texture);
     const atlasText = new TextDecoder().decode(

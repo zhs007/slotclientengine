@@ -117,3 +117,14 @@ Codex 未启动 dev server、未操作浏览器、未生成截图，原因是用
 - 根级 typecheck、lint、format:check、build、test：27/27 tasks 全部通过。
 - `git diff --check` 通过；Vite 只有既有的大 chunk warning。
 - 未执行浏览器操作，最终浏览器验收仍由用户完成。
+
+## 2026-07-21 ZIP Spine page 可读性与 FG 素材核查
+
+针对用户提供的 `new-layout-layout (3).zip`，逐项核对 `layout.manifest.json`、导出 atlas、
+skeleton JSON、8 个 texture payload 与 `assets/game002-s3/BG*` 原文件：
+
+- ZIP 中 8 个 atlas page 全部存在；将 hash page key 还原为 `BG.png` 至 `BG_8.png` 后，导出 atlas 与原 `BG.atlas` 逐字一致。
+- 导出 skeleton 与原 `BG.json` JSON 语义完全一致；texture payload 的 SHA-256 全部与源文件匹配，没有漏页或错绑证据。
+- 源文件 `BG.png` 与 `BG_2.png` 本身逐字节相同，分别承载 atlas region `BG/bg_14` 与 `FG/fg_16`；其它 FG region 分布在 `BG_3.png`、`BG_4.png`、`BG_5.png`。此外这些 `.png` 文件的真实媒体类型是 WebP，因此 content-addressed payload 使用 `.webp` 扩展是正确的。
+- 可读性问题成立：旧实现把 atlas 逻辑 page key 也改成 hash。现改为保留导入时原始 page 文件名，manifest `textures` 显式映射 `BG_2.png -> assets/<sha256>.webp`；只有 owned payload path 保持完整 SHA-256。相同 bytes 的多个 page 继续共享一个 payload，不影响去重和性能。
+- 修改后 Game Layout Editor 17 files / 123 tests、typecheck、lint、build 全部通过；根级 test、build、format:check 27/27 tasks 通过，`git diff --check` 通过。浏览器验收仍由用户执行。

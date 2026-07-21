@@ -31,7 +31,6 @@ import {
   type EditorResourceReference,
   type EditorSpineLayoutResource,
 } from "./editor-resource.js";
-import { allocateSpineAtlasPageName } from "./spine-page-name.js";
 
 interface PreparedResource {
   readonly resource: EditorLayoutResource;
@@ -1027,7 +1026,6 @@ async function prepareSpineResource(options: {
   const textures: Record<string, string> = {};
   const assets = new Map<string, Uint8Array>();
   const pageMapping = new Map<string, string>();
-  const usedPageNames = new Set<string>();
   for (const page of atlasPages) {
     const file = texturesByName.get(
       page.normalize("NFC").toLocaleLowerCase("en-US"),
@@ -1039,12 +1037,8 @@ async function prepareSpineResource(options: {
       digest: await sha256Hex(bytes),
       extension: type.extension,
     });
-    const targetPage = allocateSpineAtlasPageName({
-      contentPath: path,
-      usedPageNames,
-    });
-    textures[targetPage] = path;
-    pageMapping.set(page, targetPage);
+    textures[page] = path;
+    pageMapping.set(page, page);
     putAsset(assets, path, bytes);
   }
   if (texturesByName.size !== atlasPages.length) {

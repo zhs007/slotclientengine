@@ -1,7 +1,8 @@
 # Scene Layout Manifest v1
 
-Editor-owned image/Spine 导出为完整 SHA-256 hash-flat path；atlas page key、texture
-mapping 与 atlas text 必须同步。exact path 可由多个 resource/node 复用而不合并
+Editor-owned image/Spine payload 导出为完整 SHA-256 hash-flat path；Spine atlas page key
+保留导入时的原始可读文件名，texture mapping 的 value 指向 hash path，atlas text 与 key
+必须精确同步。exact path 可由多个 resource/node/page 复用而不合并
 playback/placement；case/NFC alias、媒体冲突和真实尺寸不一致仍失败。所有 nested
 dependency 保持自包含根，Layout Editor 不重新 hash 其 bytes。
 

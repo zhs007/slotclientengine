@@ -281,7 +281,7 @@ describe("layout zip IO", () => {
     expect(materialized.assets.has("legacy/unused.png")).toBe(false);
   });
 
-  it("materializes repeated Spine page payloads as unique aliases over one hash-flat asset", async () => {
+  it("preserves readable Spine page names while deduplicating one hash-flat payload", async () => {
     const texture = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 9]);
     const manifest = {
       ...imageManifest,
@@ -328,8 +328,7 @@ describe("layout zip IO", () => {
     if (resource.kind !== "spine") throw new Error("expected Spine resource");
     const pages = Object.keys(resource.textures);
     const paths = Object.values(resource.textures);
-    expect(pages).toHaveLength(2);
-    expect(pages[1]).toBe(pages[0]!.replace(/\.png$/u, "-2.png"));
+    expect(pages).toEqual(["page-a.png", "page-b.png"]);
     expect(new Set(paths).size).toBe(1);
     expect(
       pages.every((page) =>
