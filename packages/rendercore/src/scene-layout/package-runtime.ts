@@ -27,12 +27,14 @@ import type {
   AttachChildOptions,
   AttachRelativeOptions,
   ResolvedSceneLayoutReelGrid,
-  SceneLayoutInitialReelScene,
+  SceneLayoutGameMode,
   SceneLayoutGameModeSnapshot,
+  SceneLayoutInitialReelScene,
   SceneLayoutNodeStateSnapshot,
   SceneLayoutPackageResource,
   SceneLayoutPackageRuntime,
   SceneLayoutSnapshot,
+  SceneLayoutSymbolPackageBinding,
 } from "./types.js";
 
 type ReelPresentation = RenderReelSet | RenderGridCellReelSet;
@@ -49,6 +51,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly #layout;
   #reel: ReelPresentation | null = null;
   #catalog: SymbolCatalogModel | null = null;
+  #activeSymbolPackageId: string | null = null;
+  #targetSymbolPackageId: string | null = null;
+  #activeBackgroundNodes: readonly string[] = Object.freeze([]);
   readonly #popups = new Map<string, AwardCelebrationPlayer>();
   #initialized = false;
   #initializing = false;
@@ -78,27 +83,35 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#initializing = true;
     try {
       await this.#layout.init();
-      const binding = this.#resource.manifest.symbolPackage;
-      if (binding) {
+      const initialModeId =
+        this.#resource.manifest.gameModes?.initialMode ?? null;
+      const initialMode = initialModeId
+        ? this.requireMode(initialModeId)
+        : null;
+      this.commitBackgroundVisibility(initialMode);
+      const activeBinding = this.resolveModeSymbolBinding(initialMode);
+      if (activeBinding) {
         const initial = options.reels?.main;
         if (!initial)
           throw new SceneLayoutError(
             "Scene layout package runtime requires initial reels.main input.",
           );
-        const symbolPackage = this.requireSymbolPackage();
+        const symbolPackage = activeBinding.resource;
         this.#catalog = await symbolPackage.createCatalog();
         this.assertAlive();
-        this.#reel = this.createReelPresentation(symbolPackage, this.#catalog);
-        const order = this.#resource.manifest.reels.main?.order;
-        if (order === undefined)
-          throw new SceneLayoutError(
-            "Scene layout reels.main.order is required for a bound reel.",
-          );
-        const insertionIndex = this.#resource.manifest.nodes.filter(
-          (node) => node.order < order,
-        ).length;
-        this.container.addChildAt(this.#reel, insertionIndex);
-        this.resetReelScene("main", initial);
+        this.#reel = this.createReelPresentation(
+          symbolPackage,
+          this.#catalog,
+          activeBinding.binding,
+        );
+        this.attachReel(this.#reel);
+        this.applyReelScene(
+          this.#reel,
+          symbolPackage,
+          activeBinding.binding,
+          initial,
+        );
+        this.#activeSymbolPackageId = activeBinding.id;
       } else if (options.reels?.main) {
         throw new SceneLayoutError(
           "Scene layout package has no symbol binding and must not receive reels.main input.",
@@ -113,7 +126,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         this.#popups.set(id, popup);
         this.container.addChild(popup.container);
       }
-      this.#stableMode = this.#resource.manifest.gameModes?.initialMode ?? null;
+      this.#stableMode = initialModeId;
       this.#initialized = true;
     } catch (error) {
       this.destroy();
@@ -166,35 +179,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   resetReelScene(reelId: "main", input: SceneLayoutInitialReelScene): void {
     this.assertAlive();
     const reel = this.requireReel(reelId);
-    const packageResource = this.requireSymbolPackage();
-    const geometry = this.#resource.manifest.reels.main;
-    if (!geometry)
-      throw new SceneLayoutError('Scene layout reel "main" is missing.');
-    const scene = validateScene(
-      input.scene,
-      geometry.columns,
-      geometry.rows,
-      packageResource,
-    );
-    const reels = packageResource.gameConfig.getReels(
-      this.#resource.manifest.symbolPackage!.reelSet,
-    );
-    const phases = validatePhases(input.localPhaseYs, geometry.columns, reels);
-    const values = validateValues(
-      input.presentationValues,
-      geometry.columns,
-      geometry.rows,
-    );
-    if (reel instanceof RenderGridCellReelSet) {
-      reel.resetToScene(scene, phases, undefined, values);
-      return;
-    }
-    reel.resetToVisibleScene(scene, phases);
-    if (values) {
-      for (let x = 0; x < geometry.columns; x += 1) {
-        reel.reels[x].resetToVisibleSymbols(scene[x], phases[x], values[x]);
-      }
-    }
+    const mode = this.#stableMode ? this.requireMode(this.#stableMode) : null;
+    const binding = this.resolveModeSymbolBinding(mode);
+    if (!binding)
+      throw new SceneLayoutError(
+        "Current scene layout game mode has no symbol package binding.",
+      );
+    this.applyReelScene(reel, binding.resource, binding.binding, input);
   }
 
   getReelPresentation(reelId: "main"): Container {
@@ -224,10 +215,23 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       stableMode: this.#stableMode!,
       targetMode: this.#targetMode,
       phase: this.#targetMode ? "transitioning" : "stable",
+      stableSymbolPackage: this.#activeSymbolPackageId,
+      targetSymbolPackage: this.#targetMode
+        ? this.#targetSymbolPackageId
+        : null,
+      activeBackgroundNodes: this.#activeBackgroundNodes,
     });
   }
 
-  async requestGameMode(modeId: string): Promise<void> {
+  async requestGameMode(
+    modeId: string,
+    options: {
+      readonly recreateReel?: boolean;
+      readonly reels?: Readonly<
+        Partial<Record<"main", SceneLayoutInitialReelScene>>
+      >;
+    } = {},
+  ): Promise<void> {
     this.assertReady();
     const modes = this.requireGameModes();
     const mode = modes.modes.find((candidate) => candidate.id === modeId);
@@ -241,24 +245,118 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       throw new SceneLayoutError(
         "Cannot change scene layout game mode while an award celebration is active.",
       );
-    if (mode.id === this.#stableMode) return;
-    for (const [nodeId, state] of Object.entries(mode.nodeStates)) {
-      if (!this.#layout.canRequestNodeState(nodeId, state))
+    if (
+      options.recreateReel !== undefined &&
+      typeof options.recreateReel !== "boolean"
+    )
+      throw new SceneLayoutError(
+        "recreateReel must be a boolean when provided.",
+      );
+    const recreateReel = options.recreateReel === true;
+    if (mode.id === this.#stableMode && !recreateReel) {
+      if (options.reels?.main)
         throw new SceneLayoutError(
-          `Scene layout node "${nodeId}" cannot transition to state "${state}".`,
+          "Current game mode must not receive a redundant reels.main input.",
         );
+      return;
+    }
+    const source = modes.modes.find(
+      (candidate) => candidate.id === this.#stableMode,
+    )!;
+    const sourceBinding = this.resolveModeSymbolBinding(source);
+    const targetBinding = this.resolveModeSymbolBinding(mode);
+    if (recreateReel && !targetBinding)
+      throw new SceneLayoutError(
+        `Scene layout game mode "${mode.id}" has no symbol package to recreate.`,
+      );
+    const bindingChanged =
+      sourceBinding?.id !== targetBinding?.id || recreateReel;
+    const targetInput = options.reels?.main;
+    if (!bindingChanged && targetInput)
+      throw new SceneLayoutError(
+        "Game modes sharing a symbol package must not receive reels.main input.",
+      );
+    if (bindingChanged && targetBinding && !targetInput)
+      throw new SceneLayoutError(
+        `Scene layout game mode "${mode.id}" requires target reels.main input.`,
+      );
+    if (!targetBinding && targetInput)
+      throw new SceneLayoutError(
+        `Scene layout game mode "${mode.id}" has no symbol package and must not receive reels.main input.`,
+      );
+    let prepared: {
+      readonly reel: ReelPresentation;
+      readonly catalog: SymbolCatalogModel;
+    } | null = null;
+    if (bindingChanged && targetBinding) {
+      const catalog = await targetBinding.resource.createCatalog();
+      this.assertAlive();
+      const reel = this.createReelPresentation(
+        targetBinding.resource,
+        catalog,
+        targetBinding.binding,
+      );
+      try {
+        this.applyReelScene(
+          reel,
+          targetBinding.resource,
+          targetBinding.binding,
+          targetInput!,
+        );
+      } catch (error) {
+        reel.destroy({ children: true });
+        throw error;
+      }
+      prepared = { reel, catalog };
+    }
+    const transitions = this.modeTransitionEntries(source, mode);
+    try {
+      for (const [nodeId, state] of transitions) {
+        if (!this.#layout.canRequestNodeState(nodeId, state))
+          throw new SceneLayoutError(
+            `Scene layout node "${nodeId}" cannot transition to state "${state}".`,
+          );
+      }
+    } catch (error) {
+      prepared?.reel.destroy({ children: true });
+      throw error;
     }
     this.#targetMode = mode.id;
+    this.#targetSymbolPackageId = targetBinding?.id ?? null;
     try {
       await Promise.all(
-        Object.entries(mode.nodeStates).map(([nodeId, state]) =>
+        transitions.map(([nodeId, state]) =>
           this.#layout.requestNodeState(nodeId, state),
         ),
       );
       this.assertAlive();
-      this.#stableMode = mode.id;
+      this.commitBackgroundVisibility(mode);
+      if (bindingChanged) {
+        const previous = this.#reel;
+        if (prepared) {
+          this.attachReel(prepared.reel);
+          this.#reel = prepared.reel;
+          this.#catalog = prepared.catalog;
+        } else {
+          this.#reel = null;
+          this.#catalog = null;
+        }
+        this.#activeSymbolPackageId = targetBinding?.id ?? null;
+        this.#stableMode = mode.id;
+        if (previous) {
+          previous.parent?.removeChild(previous);
+          previous.destroy({ children: true });
+        }
+      } else {
+        this.#stableMode = mode.id;
+      }
+    } catch (error) {
+      if (prepared && prepared.reel !== this.#reel)
+        prepared.reel.destroy({ children: true });
+      throw error;
     } finally {
       this.#targetMode = null;
+      this.#targetSymbolPackageId = null;
     }
   }
 
@@ -371,6 +469,11 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return this.#layout.getNodeStateSnapshot(nodeId);
   }
 
+  setNodeActive(nodeId: string, active: boolean): void {
+    this.assertReady();
+    this.#layout.setNodeActive(nodeId, active);
+  }
+
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
@@ -385,13 +488,16 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#stableMode = null;
     this.#targetMode = null;
     this.#activePopupId = null;
+    this.#activeSymbolPackageId = null;
+    this.#targetSymbolPackageId = null;
+    this.#activeBackgroundNodes = Object.freeze([]);
   }
 
   private createReelPresentation(
     resource: SymbolPackageResource,
     catalog: SymbolCatalogModel,
+    binding: SceneLayoutSymbolPackageBinding,
   ): ReelPresentation {
-    const binding = this.#resource.manifest.symbolPackage!;
     const geometry = this.#resource.manifest.reels.main!;
     const reels = resource.gameConfig.getReels(binding.reelSet);
     const registry = createCatalogRegistry(resource, catalog);
@@ -426,21 +532,128 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     });
   }
 
+  private applyReelScene(
+    reel: ReelPresentation,
+    packageResource: SymbolPackageResource,
+    binding: SceneLayoutSymbolPackageBinding,
+    input: SceneLayoutInitialReelScene,
+  ): void {
+    const geometry = this.#resource.manifest.reels.main;
+    if (!geometry)
+      throw new SceneLayoutError('Scene layout reel "main" is missing.');
+    const scene = validateScene(
+      input.scene,
+      geometry.columns,
+      geometry.rows,
+      packageResource,
+    );
+    const reels = packageResource.gameConfig.getReels(binding.reelSet);
+    const phases = validatePhases(input.localPhaseYs, geometry.columns, reels);
+    const values = validateValues(
+      input.presentationValues,
+      geometry.columns,
+      geometry.rows,
+    );
+    if (reel instanceof RenderGridCellReelSet) {
+      reel.resetToScene(scene, phases, undefined, values);
+      return;
+    }
+    reel.resetToVisibleScene(scene, phases);
+    if (values) {
+      for (let x = 0; x < geometry.columns; x += 1)
+        reel.reels[x].resetToVisibleSymbols(scene[x], phases[x], values[x]);
+    }
+  }
+
+  private attachReel(reel: ReelPresentation): void {
+    const order = this.#resource.manifest.reels.main?.order;
+    if (order === undefined)
+      throw new SceneLayoutError(
+        "Scene layout reels.main.order is required for a bound reel.",
+      );
+    const insertionIndex = this.#resource.manifest.nodes.filter(
+      (node) => node.order < order,
+    ).length;
+    this.container.addChildAt(reel, insertionIndex);
+    const grid = this.#layout.getReelGrid("main");
+    reel.position.set(grid.artRect.x, grid.artRect.y);
+  }
+
+  private resolveModeSymbolBinding(mode: SceneLayoutGameMode | null): {
+    readonly id: string;
+    readonly binding: SceneLayoutSymbolPackageBinding;
+    readonly resource: SymbolPackageResource;
+  } | null {
+    const legacyBinding = this.#resource.manifest.symbolPackage;
+    if (legacyBinding) {
+      const resource = this.#resource.symbolPackage;
+      if (!resource)
+        throw new SceneLayoutError(
+          "Scene layout legacy symbol package resource is unavailable.",
+        );
+      return {
+        id: resource.packageManifest.id,
+        binding: legacyBinding,
+        resource,
+      };
+    }
+    const id = mode?.symbolPackage;
+    if (!id) return null;
+    const binding = this.#resource.manifest.symbolPackages?.[id];
+    const resource = this.#resource.symbolPackages[id];
+    if (!binding || !resource)
+      throw new SceneLayoutError(
+        `Scene layout symbol package "${id}" is unavailable.`,
+      );
+    return { id, binding, resource };
+  }
+
+  private modeTransitionEntries(
+    source: SceneLayoutGameMode,
+    target: SceneLayoutGameMode,
+  ): readonly (readonly [string, string])[] {
+    const candidates = new Set(
+      this.requireGameModes().modes.flatMap((mode) =>
+        Object.values(mode.backgroundNodes ?? {}),
+      ),
+    );
+    const sourceBackgrounds = new Set(
+      Object.values(source.backgroundNodes ?? {}),
+    );
+    const targetBackgrounds = new Set(
+      Object.values(target.backgroundNodes ?? {}),
+    );
+    return Object.freeze(
+      Object.entries(target.nodeStates)
+        .filter(
+          ([nodeId]) =>
+            !candidates.has(nodeId) ||
+            (sourceBackgrounds.has(nodeId) && targetBackgrounds.has(nodeId)),
+        )
+        .map(([nodeId, state]) => Object.freeze([nodeId, state] as const)),
+    );
+  }
+
+  private commitBackgroundVisibility(mode: SceneLayoutGameMode | null): void {
+    const modes = this.#resource.manifest.gameModes?.modes ?? [];
+    const candidates = new Set(
+      modes.flatMap((candidate) =>
+        Object.values(candidate.backgroundNodes ?? {}),
+      ),
+    );
+    if (candidates.size === 0) return;
+    const active = new Set(Object.values(mode?.backgroundNodes ?? {}));
+    for (const nodeId of candidates)
+      this.#layout.setNodeActive(nodeId, active.has(nodeId));
+    this.#activeBackgroundNodes = Object.freeze([...active].sort());
+  }
+
   private requireReel(id: "main"): ReelPresentation {
     if (id !== "main" || !this.#reel)
       throw new SceneLayoutError(
         `Scene layout reel presentation "${id}" is unavailable.`,
       );
     return this.#reel;
-  }
-
-  private requireSymbolPackage(): SymbolPackageResource {
-    const resource = this.#resource.symbolPackage;
-    if (!resource)
-      throw new SceneLayoutError(
-        "Scene layout package has no symbol package binding.",
-      );
-    return resource;
   }
 
   private requireGameModes() {
@@ -450,6 +663,15 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         "Scene layout manifest does not declare gameModes.",
       );
     return gameModes;
+  }
+
+  private requireMode(id: string): SceneLayoutGameMode {
+    const mode = this.#resource.manifest.gameModes?.modes.find(
+      (candidate) => candidate.id === id,
+    );
+    if (!mode)
+      throw new SceneLayoutError(`Unknown scene layout game mode "${id}".`);
+    return mode;
   }
 
   private playingPopupId(): string | null {

@@ -80,26 +80,23 @@ export function collectSceneLayoutPackagePaths(options: {
     }
   }
 
-  if (manifest.symbolPackage) {
+  for (const [bindingId, binding] of symbolBindings(manifest)) {
     const nestedValue = parseJsonBytes(
-      requireBytes(options.files, manifest.symbolPackage.manifest),
-      manifest.symbolPackage.manifest,
+      requireBytes(options.files, binding.manifest),
+      binding.manifest,
     );
     const nested = parseSymbolPackageManifest(nestedValue);
-    if (nested.id !== manifest.symbolPackage.manifest.split("/").at(-2)) {
+    if (nested.id !== bindingId) {
       throw new SceneLayoutError(
-        `Scene layout "${manifest.id}" symbol binding id mismatch at "${manifest.symbolPackage.manifest}": nested package is "${nested.id}".`,
+        `Scene layout "${manifest.id}" symbol binding id mismatch at "${binding.manifest}": nested package is "${nested.id}".`,
       );
     }
     validateSymbolPackageContents({
       packageManifest: nested,
-      files: extractPrefixedFiles(
-        options.files,
-        directoryOf(manifest.symbolPackage.manifest),
-      ),
+      files: extractPrefixedFiles(options.files, directoryOf(binding.manifest)),
     });
     for (const path of collectSymbolPackageEntryPaths(nested)) {
-      expected.add(resolvePackagePath(manifest.symbolPackage.manifest, path));
+      expected.add(resolvePackagePath(binding.manifest, path));
     }
   }
 
@@ -151,6 +148,7 @@ export async function createSceneLayoutPackageResource(options: {
 
   const imageStrings: Record<string, ImageStringResource> = {};
   let symbolPackage: SymbolPackageResource | null = null;
+  const symbolPackages: Record<string, SymbolPackageResource> = {};
   const popupPackages: Record<string, PopupPackageResource> = {};
   const objectUrls: string[] = [];
   try {
@@ -168,21 +166,23 @@ export async function createSceneLayoutPackageResource(options: {
         });
     }
 
-    if (manifest.symbolPackage) {
+    for (const [bindingId, binding] of symbolBindings(manifest)) {
       const nestedFiles = extractPrefixedFiles(
         options.files,
-        directoryOf(manifest.symbolPackage.manifest),
+        directoryOf(binding.manifest),
       );
       const nestedManifest = parseJsonBytes(
         requireBytes(nestedFiles, "symbols.package.json"),
-        manifest.symbolPackage.manifest,
+        binding.manifest,
       );
-      symbolPackage = await createSymbolPackageResource({
+      const resource = await createSymbolPackageResource({
         packageManifest: nestedManifest,
         files: nestedFiles,
         loadTextures: options.loadSymbolTextures,
       });
-      validateBinding(manifest, symbolPackage);
+      if (manifest.symbolPackage) symbolPackage = resource;
+      else symbolPackages[bindingId] = resource;
+      validateBinding(manifest, binding, resource);
     }
 
     for (const [popupId, popup] of Object.entries(manifest.popups ?? {})) {
@@ -243,12 +243,15 @@ export async function createSceneLayoutPackageResource(options: {
       layout,
       imageStrings: Object.freeze({ ...imageStrings }),
       symbolPackage,
+      symbolPackages: Object.freeze({ ...symbolPackages }),
       popupPackages: Object.freeze({ ...popupPackages }),
       destroy(): void {
         if (destroyed) return;
         destroyed = true;
         layout.destroy();
         symbolPackage?.destroy();
+        for (const resource of Object.values(symbolPackages))
+          resource.destroy();
         for (const popup of Object.values(popupPackages)) void popup.destroy();
       },
     });
@@ -258,6 +261,7 @@ export async function createSceneLayoutPackageResource(options: {
       await resource.destroy();
     }
     symbolPackage?.destroy();
+    for (const resource of Object.values(symbolPackages)) resource.destroy();
     for (const popup of Object.values(popupPackages)) await popup.destroy();
     throw error instanceof SceneLayoutError
       ? error
@@ -310,15 +314,12 @@ export async function loadSceneLayoutPackageFromUrl(options: {
       );
     }
   }
-  if (manifest.symbolPackage) {
+  for (const [, binding] of symbolBindings(manifest)) {
     const nested = parseSymbolPackageManifest(
-      parseJsonBytes(
-        requireBytes(files, manifest.symbolPackage.manifest),
-        manifest.symbolPackage.manifest,
-      ),
+      parseJsonBytes(requireBytes(files, binding.manifest), binding.manifest),
     );
     for (const path of collectSymbolPackageEntryPaths(nested)) {
-      const full = resolvePackagePath(manifest.symbolPackage.manifest, path);
+      const full = resolvePackagePath(binding.manifest, path);
       if (files.has(full)) continue;
       files.set(
         full,
@@ -408,11 +409,11 @@ async function fetchPopupTransitive(
 
 function validateBinding(
   manifest: SceneLayoutManifestV1,
+  binding: NonNullable<SceneLayoutManifestV1["symbolPackage"]>,
   resource: SymbolPackageResource,
 ): void {
-  const binding = manifest.symbolPackage;
   const reel = manifest.reels.main;
-  if (!binding || !reel) return;
+  if (!reel) return;
   const prefix = `Scene layout "${manifest.id}" symbol binding to package "${resource.packageManifest.id}"`;
   if (
     resource.packageManifest.cellSize.width !== reel.cellSize.width ||
@@ -449,6 +450,27 @@ function validateBinding(
         );
     }
   }
+}
+
+function symbolBindings(
+  manifest: SceneLayoutManifestV1,
+): readonly (readonly [
+  string,
+  NonNullable<SceneLayoutManifestV1["symbolPackage"]>,
+])[] {
+  if (manifest.symbolPackage) {
+    return Object.freeze([
+      Object.freeze([
+        manifest.symbolPackage.manifest.split("/").at(-2)!,
+        manifest.symbolPackage,
+      ] as const),
+    ]);
+  }
+  return Object.freeze(
+    Object.entries(manifest.symbolPackages ?? {}).map(([id, binding]) =>
+      Object.freeze([id, binding] as const),
+    ),
+  );
 }
 
 function extractPrefixedFiles(

@@ -5,7 +5,6 @@ import {
 import {
   createBoundedSourceIndex,
   ephemeralContentFingerprint,
-  assertLogicalResourceId,
   suggestLogicalResourceId,
 } from "@slotclientengine/browserartifactio";
 import { ObjectUrlRegistry } from "../io/object-url-registry.js";
@@ -19,7 +18,6 @@ import {
 } from "@slotclientengine/rendercore/symbol";
 import {
   activeVariantIds,
-  applySymbolPackageCellSize,
   cloneEditorProject,
   createNewEditorProject,
   editorProjectToManifest,
@@ -64,10 +62,14 @@ import {
 } from "../model/resource-commands.js";
 import {
   addGameMode,
+  bindGameModeSymbols,
   bindGameModePopup,
   deleteGameMode,
   deletePopupDependency,
   importPopupDependency,
+  importSymbolDependency,
+  deleteSymbolDependency,
+  replaceSymbolDependency,
   replacePopupDependency,
   renameGameMode,
   setGameModeNodeState,
@@ -81,6 +83,8 @@ import {
 import { PREVIEW_SIZE_PRESETS } from "../preview/preview-size.js";
 import type { SymbolOtherScenePreviewBinding } from "../preview/other-scene-preview.js";
 import { layoutWorkspaceMarkup } from "./layout-workspace.js";
+import { symbolsWorkspaceMarkup } from "./symbols-workspace.js";
+import { bigWinWorkspaceMarkup } from "./bigwin-workspace.js";
 import { projectWorkspaceMarkup } from "./project-workspace.js";
 import {
   createResourcePickerState,
@@ -121,6 +125,9 @@ export class GameLayoutEditorApp {
   #pickerTrigger: HTMLElement | null = null;
   #feedbackTimer: ReturnType<typeof setTimeout> | null = null;
   #selectedGameMode = "BaseGame";
+  #selectedPreviewMode = "BaseGame";
+  #followEditMode = true;
+  #selectedSymbolId: string | null = null;
   #selectedPopupId: string | null = null;
 
   constructor(root: HTMLElement) {
@@ -129,16 +136,6 @@ export class GameLayoutEditorApp {
 
   async init(): Promise<void> {
     this.#root.innerHTML = shellMarkup();
-    const spineControls = document.createElement("section");
-    spineControls.className = "spine-state-controls";
-    spineControls.dataset.spineStateControls = "";
-    spineControls.innerHTML =
-      '<span class="hint">当前 variant 无 stateful Spine node。</span>';
-    this.requireElement(".preview-stage").before(spineControls);
-    const popupControls = document.createElement("details");
-    popupControls.className = "symbols-drawer";
-    popupControls.innerHTML = `<summary>游戏模式与 Popup dependencies</summary><div class="symbols-controls"><label>当前模式 <select data-game-mode></select></label><label>新增模式 <input data-new-game-mode value="FreeGame" /></label><button type="button" data-add-game-mode>添加</button><button type="button" data-rename-game-mode>重命名</button><button type="button" data-set-initial-mode>设为 initial</button><button type="button" data-delete-game-mode>删除模式</button><label>获奖庆祝 <select data-mode-popup></select></label><div data-mode-node-states></div><button type="button" data-import-popup>导入 Popup ZIP</button><label>Popup dependency <select data-popup-dependency></select></label><button type="button" data-replace-popup>替换 Popup</button><button type="button" data-clear-popup>删除 Popup</button><span data-popup-metadata></span><label>bet raw <input type="number" value="100" data-popup-bet /></label><label>win raw <input type="number" value="6000" data-popup-win /></label><button type="button" data-play-popup>开始庆祝 / 重新播放</button><button type="button" data-advance-popup>Advance</button><button type="button" data-dismiss-popup>立即清理</button><span data-popup-runtime-status></span>${(["default", "landscape", "portrait"] as const).map((variant) => `<fieldset><legend>${variant} viewport center placement</legend><label>x <input type="number" value="0" data-popup-placement="${variant}" data-popup-placement-field="x" /></label><label>y <input type="number" value="0" data-popup-placement="${variant}" data-popup-placement-field="y" /></label><label>scale <input type="number" min="0.01" step="0.01" value="1" data-popup-placement="${variant}" data-popup-placement-field="scale" /></label></fieldset>`).join("")}<p class="hint">内部 tier、layer、金额格式请回 Popup Editor 修改。</p></div>`;
-    this.requireElement(".preview-stage").before(popupControls);
     const previewHost = this.requireElement("[data-preview-host]");
     const diagnostics = this.requireElement("[data-preview-diagnostics]");
     this.#preview = new LayoutPreview(previewHost, diagnostics);
@@ -166,11 +163,47 @@ export class GameLayoutEditorApp {
   }
 
   private bindStaticActions(): void {
-    this.requireElement("[data-new-single]").addEventListener("click", () =>
-      this.createProject("maximized-focus"),
+    const newDialog = this.requireElement(
+      "[data-new-project-dialog]",
+    ) as HTMLDialogElement;
+    this.requireElement("[data-new-project]").addEventListener("click", () =>
+      typeof newDialog.showModal === "function"
+        ? newDialog.showModal()
+        : newDialog.setAttribute("open", ""),
     );
-    this.requireElement("[data-new-dual]").addEventListener("click", () =>
-      this.createProject("orientation-focus"),
+    this.requireElement("[data-cancel-new-project]").addEventListener(
+      "click",
+      () =>
+        typeof newDialog.close === "function"
+          ? newDialog.close()
+          : newDialog.removeAttribute("open"),
+    );
+    this.requireElement("[data-confirm-new-project]").addEventListener(
+      "click",
+      () => {
+        const mode = this.#root.querySelector<HTMLInputElement>(
+          '[name="new-project-mode"]:checked',
+        )?.value as EditorProject["mode"] | undefined;
+        if (!mode) return;
+        this.createProject(mode);
+        if (typeof newDialog.close === "function") newDialog.close();
+        else newDialog.removeAttribute("open");
+      },
+    );
+    const modeDialog = this.requireElement(
+      "[data-mode-dialog]",
+    ) as HTMLDialogElement;
+    this.requireElement("[data-manage-modes]").addEventListener("click", () =>
+      typeof modeDialog.showModal === "function"
+        ? modeDialog.showModal()
+        : modeDialog.setAttribute("open", ""),
+    );
+    this.requireElement("[data-close-mode-dialog]").addEventListener(
+      "click",
+      () =>
+        typeof modeDialog.close === "function"
+          ? modeDialog.close()
+          : modeDialog.removeAttribute("open"),
     );
     this.requireElement("[data-import]").addEventListener("click", () => {
       void this.importZip();
@@ -202,8 +235,45 @@ export class GameLayoutEditorApp {
       "click",
       () => void this.importSymbolsPackage(),
     );
+    this.requireElement("[data-replace-symbols]").addEventListener(
+      "click",
+      () => {
+        if (!this.#selectedSymbolId) {
+          this.#store.setExternalError(
+            new Error("尚未选择要替换的 Symbols dependency。"),
+          );
+          return;
+        }
+        void this.importSymbolsPackage(this.#selectedSymbolId);
+      },
+    );
     this.requireElement("[data-clear-symbols]").addEventListener("click", () =>
       this.clearSymbolsPackage(),
+    );
+    this.requireSelect("[data-symbol-dependency]").addEventListener(
+      "change",
+      (event) => {
+        this.#selectedSymbolId =
+          (event.currentTarget as HTMLSelectElement).value || null;
+        void this.restoreProjectSymbolDependency(
+          this.#store.getSnapshot().project,
+          this.#selectedSymbolId,
+        );
+      },
+    );
+    this.requireSelect("[data-mode-symbols]").addEventListener(
+      "change",
+      (event) => {
+        const id = (event.currentTarget as HTMLSelectElement).value || null;
+        if (!id) {
+          this.runTransaction((project) =>
+            bindGameModeSymbols(project, this.#selectedGameMode, null),
+          );
+          return;
+        }
+        this.#selectedSymbolId = id;
+        void this.bindSelectedSymbolDependencyToMode(id);
+      },
     );
     this.requireElement("[data-import-popup]").addEventListener(
       "click",
@@ -227,12 +297,37 @@ export class GameLayoutEditorApp {
         this.#selectedGameMode = (
           event.currentTarget as HTMLSelectElement
         ).value;
-        const pending = this.#preview?.requestGameMode(this.#selectedGameMode);
-        void pending
-          ?.catch((error) => this.#store.setExternalError(error))
-          .finally(() => this.renderPopupControls(this.#store.getSnapshot()));
+        if (this.#followEditMode) {
+          this.#selectedPreviewMode = this.#selectedGameMode;
+          void this.requestPreviewMode(this.#selectedPreviewMode);
+        }
+        this.renderWorkspace(this.#store.getSnapshot());
         this.renderPopupControls(this.#store.getSnapshot());
       },
+    );
+    this.requireSelect("[data-preview-game-mode]").addEventListener(
+      "change",
+      (event) => {
+        this.#selectedPreviewMode = (
+          event.currentTarget as HTMLSelectElement
+        ).value;
+      },
+    );
+    this.requireInput("[data-follow-edit-mode]").addEventListener(
+      "change",
+      (event) => {
+        this.#followEditMode = (
+          event.currentTarget as HTMLInputElement
+        ).checked;
+        if (this.#followEditMode) {
+          this.#selectedPreviewMode = this.#selectedGameMode;
+          void this.requestPreviewMode(this.#selectedPreviewMode);
+        }
+      },
+    );
+    this.requireElement("[data-request-preview-mode]").addEventListener(
+      "click",
+      () => void this.requestPreviewMode(this.#selectedPreviewMode),
     );
     this.requireElement("[data-add-game-mode]").addEventListener(
       "click",
@@ -361,9 +456,12 @@ export class GameLayoutEditorApp {
           this.#symbolPackageMetadata =
             this.#preview?.setSelectedReelSet(name) ?? null;
           this.#store.transact((draft) => {
-            if (!draft.symbolDependency)
-              throw new Error("尚未导入 symbols dependency。");
-            draft.symbolDependency.reelSet = name;
+            const mode = draft.gameModes.modes.find(
+              (candidate) => candidate.id === this.#selectedGameMode,
+            );
+            if (!mode?.symbols)
+              throw new Error("当前主状态尚未绑定 Symbols dependency。");
+            mode.symbols.reelSet = name;
           });
           this.renderSymbolsMetadata();
         } catch (error) {
@@ -379,26 +477,12 @@ export class GameLayoutEditorApp {
           | "standard"
           | "grid-cell";
         this.runTransaction((draft) => {
-          if (!draft.symbolDependency)
-            throw new Error("尚未导入 symbols dependency。");
-          draft.symbolDependency.renderMode = value;
-        });
-      },
-    );
-    this.requireInput("[data-include-symbols]").addEventListener(
-      "change",
-      (event) => {
-        const checked = (event.currentTarget as HTMLInputElement).checked;
-        this.runTransaction((draft) => {
-          const dependency = draft.symbolDependency;
-          if (!dependency) throw new Error("尚未导入 symbols dependency。");
-          if (checked) {
-            if (!dependency.reelSet)
-              throw new Error("必须先显式选择兼容 reelSet。");
-            if (draft.reel.order === null)
-              throw new Error("随包导出 symbols 前必须填写 main reel order。");
-          }
-          dependency.includeInExport = checked;
+          const mode = draft.gameModes.modes.find(
+            (candidate) => candidate.id === this.#selectedGameMode,
+          );
+          if (!mode?.symbols)
+            throw new Error("当前主状态尚未绑定 Symbols dependency。");
+          mode.symbols.renderMode = value;
         });
       },
     );
@@ -415,21 +499,24 @@ export class GameLayoutEditorApp {
         }
       },
     );
-    const drawer = this.requireElement(
-      "[data-symbols-drawer]",
-    ) as HTMLDetailsElement;
-    drawer.addEventListener("toggle", () => {
-      this.#session.symbolsDrawerOpen = drawer.open;
+    const resolution = this.requireSelect("[data-preview-resolution]");
+    resolution.replaceChildren(
+      ...PREVIEW_SIZE_PRESETS.map((preset) => {
+        const option = document.createElement("option");
+        option.value = `${preset.width}x${preset.height}`;
+        option.textContent = preset.label;
+        return option;
+      }),
+      Object.assign(document.createElement("option"), {
+        value: "custom",
+        textContent: "自定义",
+      }),
+    );
+    resolution.addEventListener("change", () => {
+      if (resolution.value === "custom") return;
+      const [width, height] = resolution.value.split("x").map(Number);
+      this.setPreviewSize(width, height);
     });
-    for (const preset of PREVIEW_SIZE_PRESETS) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = preset.label;
-      button.addEventListener("click", () =>
-        this.setPreviewSize(preset.width, preset.height),
-      );
-      this.requireElement("[data-preview-presets]").append(button);
-    }
     const width = this.requireInput("[data-preview-width]");
     const height = this.requireInput("[data-preview-height]");
     const applyCustom = () =>
@@ -467,10 +554,61 @@ export class GameLayoutEditorApp {
     this.#session.activeTab = "assets";
     this.#session.selection = null;
     this.#session.expandedResourceIds.clear();
+    this.#session.expandedInspectorSections.clear();
     this.#selectedGameMode = "BaseGame";
+    this.#selectedPreviewMode = "BaseGame";
+    this.#selectedSymbolId = null;
     this.#selectedPopupId = null;
     this.#store.replace(createNewEditorProject(mode));
     this.showFeedback("已新建项目。先上传资源，再显式设置背景或添加图层。");
+  }
+
+  private async requestPreviewMode(modeId: string): Promise<void> {
+    try {
+      if (!this.#preview?.getGameModeSnapshot())
+        throw new Error(
+          "当前配置尚未形成可切换的 package preview；请先修复项目错误。",
+        );
+      const pending = this.#preview?.requestGameMode(modeId);
+      this.renderPopupControls(this.#store.getSnapshot());
+      await pending;
+      this.#selectedPreviewMode = modeId;
+    } catch (error) {
+      this.#store.setExternalError(error);
+    } finally {
+      this.renderPopupControls(this.#store.getSnapshot());
+    }
+  }
+
+  private async bindSelectedSymbolDependencyToMode(id: string): Promise<void> {
+    try {
+      const project = this.#store.getSnapshot().project;
+      if (this.#symbolPackageMetadata?.packageId !== id)
+        await this.restoreProjectSymbolDependency(project, id);
+      const metadata = this.#symbolPackageMetadata;
+      if (!metadata || metadata.packageId !== id || metadata.status !== "ready")
+        throw new Error(`Symbols ${id} 必须先显式选择兼容 reel set。`);
+      if (
+        metadata.cellSize.width !== project.reel.cellWidth ||
+        metadata.cellSize.height !== project.reel.cellHeight
+      )
+        throw new Error(
+          `Symbols ${id} cellSize ${metadata.cellSize.width}x${metadata.cellSize.height} 与 main ${project.reel.cellWidth}x${project.reel.cellHeight} 不一致。`,
+        );
+      this.runTransaction((draft) =>
+        bindGameModeSymbols(draft, this.#selectedGameMode, {
+          packageId: id,
+          reelSet: metadata.selectedReelSet!,
+          renderMode:
+            draft.gameModes.modes.find(
+              (mode) => mode.id === this.#selectedGameMode,
+            )?.symbols?.renderMode ?? "standard",
+        }),
+      );
+    } catch (error) {
+      this.#store.setExternalError(error);
+      this.renderSymbolsMetadata();
+    }
   }
 
   private setActiveTab(tab: WorkspaceTab): void {
@@ -502,25 +640,52 @@ export class GameLayoutEditorApp {
       tab.tabIndex = active ? 0 : -1;
     }
     const panel = this.requireElement("[data-workspace-panel]");
+    const symbolsPanel = this.requireElement("[data-symbols-workspace]");
+    const bigWinPanel = this.requireElement("[data-bigwin-workspace]");
+    const fixedTab =
+      this.#session.activeTab === "symbols" ||
+      this.#session.activeTab === "bigwin";
+    panel.hidden = fixedTab;
+    symbolsPanel.hidden = this.#session.activeTab !== "symbols";
+    bigWinPanel.hidden = this.#session.activeTab !== "bigwin";
     panel.setAttribute("aria-labelledby", `tab-${this.#session.activeTab}`);
-    panel.innerHTML =
-      this.#session.activeTab === "assets"
-        ? resourcesWorkspaceMarkup({
-            project: snapshot.project,
-            session: this.#session,
-            thumbnailUrls: new Map(
-              [...this.#thumbnailEntries].map(([id, entry]) => [id, entry.url]),
-            ),
-          })
-        : this.#session.activeTab === "layout"
-          ? layoutWorkspaceMarkup(snapshot.project, this.#session.selection)
-          : projectWorkspaceMarkup(snapshot.project, snapshot.errors);
-    this.bindWorkspaceActions(snapshot.project);
+    if (!fixedTab)
+      panel.innerHTML =
+        this.#session.activeTab === "assets"
+          ? resourcesWorkspaceMarkup({
+              project: snapshot.project,
+              session: this.#session,
+              thumbnailUrls: new Map(
+                [...this.#thumbnailEntries].map(([id, entry]) => [
+                  id,
+                  entry.url,
+                ]),
+              ),
+            })
+          : this.#session.activeTab === "layout"
+            ? layoutWorkspaceMarkup(
+                snapshot.project,
+                this.#session.selection,
+                this.#selectedGameMode,
+                this.#session,
+              )
+            : projectWorkspaceMarkup(snapshot.project, snapshot.errors);
+    if (!fixedTab) this.bindWorkspaceActions(snapshot.project);
+    panel
+      .querySelectorAll<HTMLDetailsElement>("[data-inspector-section]")
+      .forEach((details) =>
+        details.addEventListener("toggle", () => {
+          const key = details.dataset.inspectorSection!;
+          if (details.open) this.#session.expandedInspectorSections.add(key);
+          else this.#session.expandedInspectorSections.delete(key);
+        }),
+      );
     this.restoreScrollPositions();
     this.restoreFocusToken(focusToken);
     this.renderPicker(snapshot.project);
     this.renderProjectStatus(snapshot);
     this.renderPopupControls(snapshot);
+    this.renderSymbolsMetadata();
   }
 
   private renderPopupControls(snapshot: EditorStoreSnapshot): void {
@@ -531,6 +696,12 @@ export class GameLayoutEditorApp {
       )
     )
       this.#selectedGameMode = project.gameModes.initialMode;
+    if (
+      !project.gameModes.modes.some(
+        (mode) => mode.id === this.#selectedPreviewMode,
+      )
+    )
+      this.#selectedPreviewMode = project.gameModes.initialMode;
     if (
       this.#selectedPopupId &&
       !project.popupDependencies.has(this.#selectedPopupId)
@@ -552,6 +723,16 @@ export class GameLayoutEditorApp {
     const mode = project.gameModes.modes.find(
       (candidate) => candidate.id === this.#selectedGameMode,
     )!;
+    const previewModeSelect = this.requireSelect("[data-preview-game-mode]");
+    previewModeSelect.replaceChildren(
+      ...project.gameModes.modes.map((candidate) => {
+        const option = document.createElement("option");
+        option.value = candidate.id;
+        option.textContent = candidate.id;
+        option.selected = candidate.id === this.#selectedPreviewMode;
+        return option;
+      }),
+    );
     const popupSelect = this.requireSelect("[data-mode-popup]");
     const none = document.createElement("option");
     none.value = "";
@@ -609,7 +790,9 @@ export class GameLayoutEditorApp {
 
     const stateTarget = this.requireElement("[data-mode-node-states]");
     const stateful = project.nodes.filter(
-      (node) => node.playback?.kind === "state-machine",
+      (node) =>
+        node.playback?.kind === "state-machine" &&
+        Object.hasOwn(mode.nodeStates, node.id),
     );
     stateTarget.innerHTML = stateful.length
       ? stateful
@@ -641,9 +824,18 @@ export class GameLayoutEditorApp {
       popupSnapshot && !["idle", "complete"].includes(popupSnapshot.phase),
     );
     modeSelect.disabled = Boolean(transitioning || popupActive);
+    previewModeSelect.disabled = Boolean(
+      !modeSnapshot || transitioning || popupActive,
+    );
+    (
+      this.requireElement("[data-request-preview-mode]") as HTMLButtonElement
+    ).disabled = Boolean(!modeSnapshot || transitioning || popupActive);
     popupSelect.disabled = Boolean(transitioning);
+    const stableMode = project.gameModes.modes.find(
+      (candidate) => candidate.id === modeSnapshot?.stableMode,
+    );
     (this.requireElement("[data-play-popup]") as HTMLButtonElement).disabled =
-      Boolean(transitioning || !mode.awardCelebrationPopupId);
+      Boolean(transitioning || !stableMode?.awardCelebrationPopupId);
     (
       this.requireElement("[data-advance-popup]") as HTMLButtonElement
     ).disabled = !popupActive;
@@ -654,6 +846,9 @@ export class GameLayoutEditorApp {
       modeSnapshot
         ? `mode ${modeSnapshot.phase}: stable=${modeSnapshot.stableMode}${modeSnapshot.targetMode ? ` target=${modeSnapshot.targetMode}` : ""} · popup=${mode.awardCelebrationPopupId ?? "无"}${popupSnapshot ? ` · ${popupSnapshot.phase}/${popupSnapshot.activeTierId ?? "none"}/${popupSnapshot.activeSegment ?? "none"}` : ""}`
         : `mode=${mode.id} · popup=${mode.awardCelebrationPopupId ?? "无"}`;
+    this.requireElement("[data-main-state-status]").textContent = modeSnapshot
+      ? `${modeSnapshot.phase} · stable=${modeSnapshot.stableMode}${modeSnapshot.targetMode ? ` · target=${modeSnapshot.targetMode}` : ""} · initial=${project.gameModes.initialMode}`
+      : `initial=${project.gameModes.initialMode} · preview 未就绪`;
   }
 
   private bindWorkspaceActions(project: EditorProject): void {
@@ -794,13 +989,15 @@ export class GameLayoutEditorApp {
             | "default"
             | "landscape"
             | "portrait";
-          const nodeId = project.variants[variant].backgroundNode;
+          const nodeId = project.gameModes.modes.find(
+            (mode) => mode.id === this.#selectedGameMode,
+          )?.backgroundNodes[variant];
           if (
             !window.confirm(`确认清除 ${variant} 背景 ${nodeId}？资源会保留。`)
           )
             return;
           this.runTransaction(
-            (draft) => clearBackground(draft, variant),
+            (draft) => clearBackground(draft, this.#selectedGameMode, variant),
             `已清除 ${variant} 背景；资源仍保留。`,
           );
         }),
@@ -957,24 +1154,18 @@ export class GameLayoutEditorApp {
       .forEach((button) =>
         button.addEventListener("click", () => {
           const nodeId = button.dataset.addSpineTransition!;
-          const project = this.#store.getSnapshot().project;
-          const node = project.nodes.find((item) => item.id === nodeId)!;
-          const resource = project.resources.get(node.resourceId);
-          if (
-            resource?.kind !== "spine" ||
-            node.playback?.kind !== "state-machine"
-          )
-            return;
-          const stateIds = node.playback.states.map((state) => state.id);
-          const from = window.prompt(
-            `from：${stateIds.join(", ")}`,
-            stateIds[0],
+          const builder = button.closest<HTMLElement>(
+            "[data-spine-transition-builder]",
           );
-          const to = window.prompt(`to：${stateIds.join(", ")}`, stateIds[1]);
-          const animation = window.prompt(
-            `exact animation：${resource.animationNames.join(", ")}`,
-            resource.animationNames[0],
-          );
+          const from = builder?.querySelector<HTMLSelectElement>(
+            "[data-spine-transition-from]",
+          )?.value;
+          const to = builder?.querySelector<HTMLSelectElement>(
+            "[data-spine-transition-to]",
+          )?.value;
+          const animation = builder?.querySelector<HTMLSelectElement>(
+            "[data-spine-transition-animation]",
+          )?.value;
           if (!from || !to || !animation) return;
           this.runTransaction((draft) =>
             addSpineTransition(draft, nodeId, { from, to, animation }),
@@ -1391,6 +1582,7 @@ export class GameLayoutEditorApp {
         this.#store.transact((draft) =>
           assignBackgroundResource({
             project: draft,
+            modeId: this.#selectedGameMode,
             variant: context.variant,
             resourceId: resource.id,
             nodeId: state.nodeId,
@@ -1447,8 +1639,7 @@ export class GameLayoutEditorApp {
       const project = cloneEditorProject(this.#store.getSnapshot().project);
       let lastResourceId = "";
       for (const file of files) {
-        const resourceId = reviewLogicalId(file.name);
-        if (!resourceId) return;
+        const resourceId = defaultLogicalId(project, file.name);
         const resource = await uploadImageResource({
           project,
           file,
@@ -1511,8 +1702,7 @@ export class GameLayoutEditorApp {
         const project = cloneEditorProject(this.#store.getSnapshot().project);
         const imported: string[] = [];
         for (const file of files) {
-          const resourceId = reviewLogicalId(file.name);
-          if (!resourceId) return;
+          const resourceId = defaultLogicalId(project, file.name);
           imported.push(
             (await uploadImageResource({ project, file, resourceId })).id,
           );
@@ -1534,8 +1724,7 @@ export class GameLayoutEditorApp {
       for (const group of groups) {
         if (group.every((file) => /\.(?:png|jpe?g|webp)$/iu.test(file.name))) {
           for (const file of group) {
-            const resourceId = reviewLogicalId(file.name);
-            if (!resourceId) return;
+            const resourceId = defaultLogicalId(project, file.name);
             imported.push(
               (await uploadImageResource({ project, file, resourceId })).id,
             );
@@ -1544,8 +1733,10 @@ export class GameLayoutEditorApp {
           const primary = group.find((file) =>
             file.name.toLowerCase().endsWith(".json"),
           );
-          const resourceId = reviewLogicalId(primary?.name ?? group[0]!.name);
-          if (!resourceId) return;
+          const resourceId = defaultLogicalId(
+            project,
+            primary?.name ?? group[0]!.name,
+          );
           imported.push(
             (await uploadSpineResource({ project, files: group, resourceId }))
               .id,
@@ -1570,8 +1761,10 @@ export class GameLayoutEditorApp {
       const primary = files.find((file) =>
         file.name.toLowerCase().endsWith(".json"),
       );
-      const resourceId = reviewLogicalId(primary?.name ?? files[0]!.name);
-      if (!resourceId) return;
+      const resourceId = defaultLogicalId(
+        project,
+        primary?.name ?? files[0]!.name,
+      );
       const resource = await uploadSpineResource({
         project,
         files,
@@ -1694,7 +1887,7 @@ export class GameLayoutEditorApp {
     const manifest = editorProjectToPreviewManifest(
       snapshot.project,
       preferredVariant,
-      snapshot.project.symbolDependency?.includeInExport ?? false,
+      snapshot.project.gameModes.modes.some((mode) => Boolean(mode.symbols)),
     );
     if (!manifest) {
       this.#preview?.clear();
@@ -1715,9 +1908,11 @@ export class GameLayoutEditorApp {
       }
       const assets = new Map(
         [...paths].map((path) => {
-          const dependency = snapshot.project.symbolDependency;
-          const symbolPrefix = dependency
-            ? `dependencies/symbols/${dependency.packageId}/`
+          const symbolEntry = [...snapshot.project.symbolDependencies].find(
+            ([id]) => path.startsWith(`dependencies/symbols/${id}/`),
+          );
+          const symbolPrefix = symbolEntry
+            ? `dependencies/symbols/${symbolEntry[0]}/`
             : "";
           const popupEntry = [...snapshot.project.popupDependencies].find(
             ([id]) => path.startsWith(`dependencies/popups/${id}/`),
@@ -1728,7 +1923,7 @@ export class GameLayoutEditorApp {
           const bytes =
             snapshot.project.assets.get(path) ??
             (symbolPrefix && path.startsWith(symbolPrefix)
-              ? dependency?.files.get(path.slice(symbolPrefix.length))
+              ? symbolEntry?.[1].files.get(path.slice(symbolPrefix.length))
               : popupPrefix && path.startsWith(popupPrefix)
                 ? popupEntry?.[1].files.get(path.slice(popupPrefix.length))
                 : undefined);
@@ -1736,9 +1931,11 @@ export class GameLayoutEditorApp {
           return [path, bytes] as const;
         }),
       );
-      if (manifest.symbolPackage && snapshot.project.symbolDependency) {
-        const prefix = `dependencies/symbols/${snapshot.project.symbolDependency.packageId}/`;
-        for (const [path, bytes] of snapshot.project.symbolDependency.files)
+      for (const id of Object.keys(manifest.symbolPackages ?? {})) {
+        const dependency = snapshot.project.symbolDependencies.get(id);
+        if (!dependency) throw new Error(`预览缺少 Symbols dependency：${id}`);
+        const prefix = `dependencies/symbols/${id}/`;
+        for (const [path, bytes] of dependency.files)
           assets.set(`${prefix}${path}`, bytes);
       }
       for (const id of Object.keys(manifest.popups ?? {})) {
@@ -1750,11 +1947,11 @@ export class GameLayoutEditorApp {
       }
       if (revision !== this.#previewRevision) return;
       await this.#preview?.setLayout(manifest, assets);
-      if (revision === this.#previewRevision) this.renderSpineStateControls();
+      if (revision === this.#previewRevision)
+        this.renderPopupControls(this.#store.getSnapshot());
     } catch (error) {
       if (revision === this.#previewRevision) {
         this.#preview?.clear();
-        this.renderSpineStateControls();
         this.#store.setExternalError(error);
       }
     }
@@ -1777,12 +1974,23 @@ export class GameLayoutEditorApp {
       this.#session.activeTab = "layout";
       this.#session.selection = defaultLayoutSelection(project);
       this.#session.expandedResourceIds.clear();
+      this.#session.expandedInspectorSections.clear();
       this.#selectedGameMode = project.gameModes.initialMode;
+      this.#selectedPreviewMode = project.gameModes.initialMode;
+      this.#selectedSymbolId =
+        project.gameModes.modes.find(
+          (mode) => mode.id === project.gameModes.initialMode,
+        )?.symbols?.packageId ??
+        project.symbolDependencies.keys().next().value ??
+        null;
       this.#selectedPopupId =
         project.popupDependencies.keys().next().value ?? null;
       this.#store.replace(project);
-      if (project.symbolDependency)
-        await this.restoreProjectSymbolDependency(project);
+      if (this.#selectedSymbolId)
+        await this.restoreProjectSymbolDependency(
+          project,
+          this.#selectedSymbolId,
+        );
       this.showFeedback(
         imported.manifest.gameModes
           ? `已导入 ${project.id}，资源库按完整素材签名重建。`
@@ -1804,8 +2012,14 @@ export class GameLayoutEditorApp {
       const exported = await exportLayoutZip({
         manifest,
         assets: snapshot.project.assets,
-        ...(snapshot.project.symbolDependency?.includeInExport
-          ? { symbolFiles: snapshot.project.symbolDependency.files }
+        ...(snapshot.project.symbolDependencies.size
+          ? {
+              symbolFilesById: new Map(
+                [...snapshot.project.symbolDependencies].map(
+                  ([id, dependency]) => [id, dependency.files],
+                ),
+              ),
+            }
           : {}),
         ...(snapshot.project.popupDependencies.size
           ? {
@@ -1834,7 +2048,7 @@ export class GameLayoutEditorApp {
     }
   }
 
-  private async importSymbolsPackage(): Promise<void> {
+  private async importSymbolsPackage(replaceId?: string): Promise<void> {
     const files = await pickFiles(".zip,application/zip", false);
     if (files.length === 0) return;
     const request = ++this.#symbolImportRequest;
@@ -1853,7 +2067,8 @@ export class GameLayoutEditorApp {
         return;
       }
       const project = cloneEditorProject(this.#store.getSnapshot().project);
-      applySymbolPackageCellSize(project, resource.packageManifest.cellSize);
+      if (replaceId) replaceSymbolDependency(project, replaceId, imported);
+      else importSymbolDependency(project, imported);
       const preview = this.#preview;
       if (!preview) throw new Error("Symbols preview 尚未初始化。");
       const prepared = await preview.setSymbolPackage(resource, {
@@ -1862,18 +2077,14 @@ export class GameLayoutEditorApp {
       });
       if (request !== this.#symbolImportRequest || !prepared) return;
       this.#symbolPackageMetadata = prepared;
-      project.symbolDependency = {
-        packageId: resource.packageManifest.id,
-        files: imported.files,
-        reelSet: prepared.selectedReelSet ?? "",
-        renderMode: "standard",
-        includeInExport: false,
-      };
+      this.#selectedSymbolId = resource.packageManifest.id;
       resource = null;
       this.#store.replace(project);
       this.renderSymbolsMetadata();
       this.showFeedback(
-        "Symbols preview package 已导入；不会写入 layout ZIP。",
+        replaceId
+          ? `已替换 Symbols ${replaceId}；主状态引用保持不变。`
+          : "Symbols dependency 已导入 library；尚未自动绑定当前主状态。",
       );
     } catch (error) {
       resource?.destroy();
@@ -1910,13 +2121,20 @@ export class GameLayoutEditorApp {
   }
 
   private clearSymbolsPackage(): void {
+    if (!this.#selectedSymbolId) return;
+    try {
+      this.#store.transact((draft) =>
+        deleteSymbolDependency(draft, this.#selectedSymbolId!),
+      );
+    } catch (error) {
+      this.#store.setExternalError(error);
+      return;
+    }
     this.#symbolImportRequest += 1;
     this.#symbolImportBusy = false;
     this.#symbolPackageMetadata = null;
     void this.#preview?.setSymbolPackage(null);
-    this.#store.transact((draft) => {
-      draft.symbolDependency = null;
-    });
+    this.#selectedSymbolId = null;
     this.renderSymbolsMetadata();
     this.showFeedback(
       "Symbols preview package 已清除；layout cell size 保持不变。",
@@ -1932,8 +2150,11 @@ export class GameLayoutEditorApp {
 
   private async restoreProjectSymbolDependency(
     project: EditorProject,
+    dependencyId: string | null,
   ): Promise<void> {
-    const dependency = project.symbolDependency;
+    const dependency = dependencyId
+      ? project.symbolDependencies.get(dependencyId)
+      : undefined;
     const preview = this.#preview;
     if (!dependency || !preview) return;
     const manifestBytes = dependency.files.get("symbols.package.json");
@@ -1951,57 +2172,69 @@ export class GameLayoutEditorApp {
       columns: project.reel.columns,
       rows: project.reel.rows,
     });
+    const modeBinding = project.gameModes.modes.find(
+      (mode) => mode.id === this.#selectedGameMode,
+    )?.symbols;
     this.#symbolPackageMetadata =
-      dependency.reelSet && prepared?.selectedReelSet !== dependency.reelSet
-        ? preview.setSelectedReelSet(dependency.reelSet)
+      modeBinding?.packageId === dependency.packageId &&
+      modeBinding.reelSet &&
+      prepared?.selectedReelSet !== modeBinding.reelSet
+        ? preview.setSelectedReelSet(modeBinding.reelSet)
         : prepared;
     this.renderSymbolsMetadata();
     await this.refreshPreview(this.#store.getSnapshot());
   }
 
-  private renderSpineStateControls(): void {
-    const target = this.requireElement("[data-spine-state-controls]");
-    const snapshots = this.#preview?.getSpineNodeStates() ?? [];
-    if (snapshots.length === 0) {
-      target.innerHTML =
-        '<span class="hint">当前 variant 无 stateful Spine node。</span>';
-      return;
-    }
-    target.innerHTML = snapshots
-      .map(
-        (snapshot) =>
-          `<div><strong>${escapeHtml(snapshot.nodeId)}</strong><span>${escapeHtml(snapshot.phase)} · stable=${escapeHtml(snapshot.stableState)}${snapshot.targetState ? ` · target=${escapeHtml(snapshot.targetState)}` : ""}</span>${snapshot.states.map((state) => `<button type="button" data-preview-node-state="${escapeHtml(snapshot.nodeId)}" data-preview-state="${escapeHtml(state)}" ${snapshot.phase === "transitioning" || state === snapshot.stableState ? "disabled" : ""}>${escapeHtml(state)}</button>`).join("")}</div>`,
-      )
-      .join("");
-    target
-      .querySelectorAll<HTMLButtonElement>("[data-preview-node-state]")
-      .forEach((button) =>
-        button.addEventListener("click", () => {
-          const run = async () => {
-            try {
-              const pending = this.#preview?.requestNodeState(
-                button.dataset.previewNodeState!,
-                button.dataset.previewState!,
-              );
-              this.renderSpineStateControls();
-              await pending;
-              this.renderSpineStateControls();
-            } catch (error) {
-              this.#store.setExternalError(error);
-              this.renderSpineStateControls();
-            }
-          };
-          void run();
-        }),
-      );
-  }
-
   private renderSymbolsMetadata(): void {
+    const project = this.#store.getSnapshot().project;
+    const mode = project.gameModes.modes.find(
+      (candidate) => candidate.id === this.#selectedGameMode,
+    )!;
+    if (
+      this.#selectedSymbolId &&
+      !project.symbolDependencies.has(this.#selectedSymbolId)
+    )
+      this.#selectedSymbolId = null;
+    this.#selectedSymbolId ??=
+      mode.symbols?.packageId ??
+      project.symbolDependencies.keys().next().value ??
+      null;
+    const dependencySelect = this.requireSelect("[data-symbol-dependency]");
+    dependencySelect.replaceChildren(
+      Object.assign(document.createElement("option"), {
+        value: "",
+        textContent: "未选择",
+      }),
+      ...[...project.symbolDependencies.keys()].map((id) => {
+        const option = document.createElement("option");
+        option.value = id;
+        option.textContent = id;
+        option.selected = id === this.#selectedSymbolId;
+        return option;
+      }),
+    );
+    dependencySelect.value = this.#selectedSymbolId ?? "";
+    const modeSelect = this.requireSelect("[data-mode-symbols]");
+    modeSelect.replaceChildren(
+      Object.assign(document.createElement("option"), {
+        value: "",
+        textContent: "无",
+      }),
+      ...[...project.symbolDependencies.keys()].map((id) => {
+        const option = document.createElement("option");
+        option.value = id;
+        option.textContent = id;
+        return option;
+      }),
+    );
+    modeSelect.value = mode.symbols?.packageId ?? "";
     const target = this.requireElement("[data-symbols-metadata]");
     const metadata = this.#symbolPackageMetadata;
     target.textContent = metadata
       ? `${metadata.packageId} · cell ${metadata.cellSize.width}×${metadata.cellSize.height} · ${metadata.displaySymbolCount} display symbols`
-      : "未导入；layout ZIP 不会嵌入 symbol 资源。";
+      : this.#selectedSymbolId
+        ? `已选择 ${this.#selectedSymbolId}，等待加载 metadata。`
+        : "未导入 Symbols dependency。";
     const selector = this.requireSelect("[data-reel-set]");
     const placeholder = document.createElement("option");
     placeholder.value = "";
@@ -2020,17 +2253,9 @@ export class GameLayoutEditorApp {
       selector.append(option);
     }
     selector.disabled = !metadata || this.#symbolImportBusy;
-    const dependency = this.#store.getSnapshot().project.symbolDependency;
     const renderMode = this.requireSelect("[data-symbol-render-mode]");
-    renderMode.value = dependency?.renderMode ?? "standard";
-    renderMode.disabled = !dependency || this.#symbolImportBusy;
-    const include = this.requireInput("[data-include-symbols]");
-    include.checked = dependency?.includeInExport ?? false;
-    include.disabled =
-      !dependency ||
-      !metadata ||
-      metadata.status !== "ready" ||
-      this.#symbolImportBusy;
+    renderMode.value = mode.symbols?.renderMode ?? "standard";
+    renderMode.disabled = !mode.symbols || this.#symbolImportBusy;
     this.requireElement("[data-randomize-symbols]").toggleAttribute(
       "disabled",
       !metadata || metadata.status !== "ready" || this.#symbolImportBusy,
@@ -2045,7 +2270,11 @@ export class GameLayoutEditorApp {
     );
     this.requireElement("[data-clear-symbols]").toggleAttribute(
       "disabled",
-      !metadata || this.#symbolImportBusy,
+      !this.#selectedSymbolId || this.#symbolImportBusy,
+    );
+    this.requireElement("[data-replace-symbols]").toggleAttribute(
+      "disabled",
+      !this.#selectedSymbolId || this.#symbolImportBusy,
     );
   }
 
@@ -2178,6 +2407,12 @@ export class GameLayoutEditorApp {
       this.#preview?.setPageSize({ width, height });
       this.requireInput("[data-preview-width]").value = String(width);
       this.requireInput("[data-preview-height]").value = String(height);
+      const preset = PREVIEW_SIZE_PRESETS.find(
+        (candidate) => candidate.width === width && candidate.height === height,
+      );
+      this.requireSelect("[data-preview-resolution]").value = preset
+        ? `${preset.width}x${preset.height}`
+        : "custom";
       void this.refreshPreview(this.#store.getSnapshot());
     } catch (error) {
       this.#store.setExternalError(error);
@@ -2340,7 +2575,22 @@ export class GameLayoutEditorApp {
 }
 
 function shellMarkup(): string {
-  return `<main class="editor-shell"><header class="topbar"><div class="brand"><strong>Game Layout Editor</strong><span>scene-layout v1 · resource-first workspace</span></div><nav aria-label="项目操作"><button type="button" data-new-single>新建单背景</button><button type="button" data-new-dual>新建横竖双背景</button><button type="button" data-import>导入 ZIP</button><button type="button" class="primary" data-export>导出 ZIP</button></nav><output data-project-status></output></header><section class="workspace"><aside class="editor-pane"><div class="workspace-tabs" role="tablist" aria-label="编辑工作区"><button type="button" id="tab-assets" role="tab" data-workspace-tab="assets" aria-selected="true" aria-controls="workspace-panel">资源</button><button type="button" id="tab-layout" role="tab" data-workspace-tab="layout" aria-selected="false" aria-controls="workspace-panel" tabindex="-1">布局</button><button type="button" id="tab-project" role="tab" data-workspace-tab="project" aria-selected="false" aria-controls="workspace-panel" tabindex="-1">项目</button></div><section id="workspace-panel" role="tabpanel" data-workspace-panel aria-labelledby="tab-assets"></section></aside><section class="preview-column"><div class="preview-toolbar"><div data-preview-presets></div><label>宽 <input type="number" min="1" value="1920" data-preview-width /></label><label>高 <input type="number" min="1" value="1080" data-preview-height /></label><div class="zoom-controls"><button type="button" data-zoom-out aria-label="缩小">−</button><button type="button" data-zoom-reset><span data-zoom-label>100%</span></button><button type="button" data-zoom-in aria-label="放大">＋</button></div><label><input type="checkbox" checked data-guide-focus /> focus</label><label><input type="checkbox" checked data-guide-reel /> reel/cells</label></div><details class="symbols-drawer" data-symbols-drawer><summary>Symbols 预览与导出</summary><div class="symbols-controls"><button type="button" data-import-symbols>导入 symbols ZIP</button><button type="button" data-clear-symbols disabled>清除 package</button><label>reel set <select data-reel-set disabled><option value="">未导入 package</option></select></label><label>render mode <select data-symbol-render-mode disabled><option value="standard">standard</option><option value="grid-cell">grid-cell</option></select></label><label><input type="checkbox" data-include-symbols disabled/> 随 layout ZIP 导出</label><button type="button" data-randomize-symbols disabled>重新随机</button><span data-symbols-metadata>未导入；layout ZIP 不会嵌入 symbol 资源。</span><output data-symbols-scene>等待导入 strict symbol-package v1 ZIP。</output><div class="other-scene-bindings" data-other-scene-bindings><p>导入 package 后可按 symbol 配置数值预览。</p></div></div></details><div class="preview-stage"><div class="preview-page" data-preview-host></div><button class="resize-handle" type="button" aria-label="拖动调整页面尺寸" data-resize-handle>◢</button></div><output class="diagnostics" data-preview-diagnostics></output></section></section><output class="feedback" aria-live="polite" data-feedback></output><aside class="error-panel" aria-live="assertive" data-errors></aside><dialog class="resource-picker" data-resource-picker aria-label="Resource Picker"></dialog></main>`;
+  return `<main class="editor-shell"><header class="topbar"><div class="brand"><strong>Game Layout Editor</strong><span>scene-layout v1 · state workspaces</span></div><nav aria-label="项目操作"><button type="button" data-new-project>新建项目</button><button type="button" data-import>导入 ZIP</button><button type="button" class="primary" data-export>导出 ZIP</button></nav><output data-project-status></output></header><section class="workspace"><aside class="editor-pane"><section class="state-bar"><label>主状态<select data-game-mode></select></label><button type="button" data-manage-modes>管理状态</button><output data-main-state-status></output></section><div class="workspace-tabs" role="tablist" aria-label="编辑工作区">${(
+    [
+      ["assets", "资源"],
+      ["layout", "布局"],
+      ["symbols", "Symbols"],
+      ["bigwin", "BigWin"],
+      ["project", "项目"],
+    ] as const
+  )
+    .map(
+      ([id, label], index) =>
+        `<button type="button" id="tab-${id}" role="tab" data-workspace-tab="${id}" aria-selected="${index === 0}" aria-controls="workspace-panel" ${index ? 'tabindex="-1"' : ""}>${label}</button>`,
+    )
+    .join(
+      "",
+    )}</div><section id="workspace-panel" role="tabpanel" data-workspace-panel aria-labelledby="tab-assets"></section><div data-symbols-workspace hidden>${symbolsWorkspaceMarkup()}</div><div data-bigwin-workspace hidden>${bigWinWorkspaceMarkup()}</div></aside><section class="preview-column"><div class="preview-toolbar"><label>分辨率<select data-preview-resolution></select></label><label>宽<input type="number" min="1" value="1920" data-preview-width /></label><label>高<input type="number" min="1" value="1080" data-preview-height /></label><label>预览状态<select data-preview-game-mode></select></label><button type="button" data-request-preview-mode>切换到该状态</button><label><input type="checkbox" checked data-follow-edit-mode />跟随编辑状态</label><div class="zoom-controls"><button type="button" data-zoom-out aria-label="缩小">−</button><button type="button" data-zoom-reset><span data-zoom-label>100%</span></button><button type="button" data-zoom-in aria-label="放大">＋</button></div><label><input type="checkbox" checked data-guide-focus /> focus</label><label><input type="checkbox" checked data-guide-reel /> reel/cells</label></div><div class="preview-stage"><div class="preview-page" data-preview-host></div><button class="resize-handle" type="button" aria-label="拖动调整页面尺寸" data-resize-handle>◢</button></div><output class="diagnostics" data-preview-diagnostics></output></section></section><output class="feedback" aria-live="polite" data-feedback></output><aside class="error-panel" aria-live="assertive" data-errors></aside><dialog data-new-project-dialog aria-label="新建项目"><form method="dialog"><h2>新建项目</h2><label><input type="radio" name="new-project-mode" value="maximized-focus" checked />单背景适配（maximized-focus）</label><label><input type="radio" name="new-project-mode" value="orientation-focus" />横竖双背景适配（orientation-focus）</label><div class="button-row"><button type="button" data-cancel-new-project>取消</button><button type="button" class="primary" data-confirm-new-project>创建</button></div></form></dialog><dialog data-mode-dialog aria-label="管理主状态"><section><h2>管理主状态</h2><label>状态 id<input data-new-game-mode value="FreeGame" /></label><div class="button-row"><button type="button" data-add-game-mode>添加</button><button type="button" data-rename-game-mode>重命名当前</button><button type="button" data-set-initial-mode>设为 initial</button><button type="button" class="danger" data-delete-game-mode>删除当前</button></div><div data-mode-node-states></div><button type="button" data-close-mode-dialog>完成</button></section></dialog><dialog class="resource-picker" data-resource-picker aria-label="Resource Picker"></dialog></main>`;
 }
 
 function parseSelectionKey(key: string): LayoutSelection {
@@ -2390,19 +2640,14 @@ function pickFiles(
   });
 }
 
-function reviewLogicalId(sourceName: string): string | null {
-  const suggestion = suggestLogicalResourceId(sourceName) ?? "";
-  const prompt = globalThis.window?.prompt;
-  const value =
-    typeof prompt === "function"
-      ? prompt.call(
-          globalThis.window,
-          `导入审查：${sourceName}\n确认或修改 logical resource id`,
-          suggestion,
-        )
-      : suggestion;
-  if (value === null) return null;
-  return assertLogicalResourceId(value.trim());
+function defaultLogicalId(project: EditorProject, sourceName: string): string {
+  const suggestion = suggestLogicalResourceId(sourceName);
+  if (!suggestion)
+    throw new Error(`无法从文件名生成 logical resource id：${sourceName}`);
+  if (!project.resources.has(suggestion)) return suggestion;
+  let suffix = 2;
+  while (project.resources.has(`${suggestion}-${suffix}`)) suffix += 1;
+  return `${suggestion}-${suffix}`;
 }
 
 function confirmImportReview(

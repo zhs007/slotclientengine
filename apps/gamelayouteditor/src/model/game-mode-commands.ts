@@ -1,5 +1,6 @@
 import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout";
 import type { ImportedPopupPackage } from "../io/imported-popup-package.js";
+import type { ImportedSymbolPackage } from "../io/imported-symbol-package.js";
 import {
   activeVariantIds,
   type EditorGameModeDraft,
@@ -14,9 +15,17 @@ export function addGameMode(project: EditorProject, id: string): void {
     throw new Error(`游戏模式已存在：${id}`);
   project.gameModes.modes.push({
     id,
+    backgroundNodes: Object.fromEntries(
+      activeVariantIds(project).map((variant) => [
+        variant,
+        project.variants[variant].backgroundNode,
+      ]),
+    ),
     nodeStates: initialNodeStates(project),
+    symbols: null,
     awardCelebrationPopupId: null,
   });
+  synchronizeGameModeNodeStates(project);
 }
 
 export function renameGameMode(
@@ -48,13 +57,139 @@ export function deleteGameMode(project: EditorProject, id: string): void {
 
 export function setInitialGameMode(project: EditorProject, id: string): void {
   const mode = requireMode(project, id);
-  const expected = initialNodeStates(project);
+  const expected = initialStatesForMode(project, mode);
   for (const [nodeId, state] of Object.entries(expected))
     if (mode.nodeStates[nodeId] !== state)
       throw new Error(
         `initial mode ${id} 的节点 ${nodeId} 必须绑定初始状态 ${state}。`,
       );
   project.gameModes.initialMode = id;
+  for (const variant of activeVariantIds(project))
+    project.variants[variant].backgroundNode =
+      mode.backgroundNodes[variant] ?? "";
+}
+
+export function bindGameModeBackground(
+  project: EditorProject,
+  modeId: string,
+  variant: SceneLayoutVariantId,
+  nodeId: string,
+): void {
+  if (!activeVariantIds(project).includes(variant))
+    throw new Error(`当前项目不使用 ${variant} variant。`);
+  const mode = requireMode(project, modeId);
+  const node = project.nodes.find((candidate) => candidate.id === nodeId);
+  if (!node) throw new Error(`未知背景节点：${nodeId}`);
+  const resource = project.resources.get(node.resourceId);
+  if (!resource || resource.kind === "image-string")
+    throw new Error(`背景节点不能使用 image-string：${nodeId}`);
+  if (!node.placements[variant])
+    throw new Error(`背景节点 ${nodeId} 缺少 ${variant} placement。`);
+  mode.backgroundNodes[variant] = nodeId;
+  if (project.gameModes.initialMode === modeId)
+    project.variants[variant].backgroundNode = nodeId;
+  synchronizeGameModeNodeStates(project);
+}
+
+export function bindGameModeSymbols(
+  project: EditorProject,
+  modeId: string,
+  binding: {
+    readonly packageId: string;
+    readonly reelSet: string;
+    readonly renderMode: "standard" | "grid-cell";
+  } | null,
+): void {
+  const mode = requireMode(project, modeId);
+  if (binding && !project.symbolDependencies.has(binding.packageId))
+    throw new Error(`未知 Symbols dependency：${binding.packageId}`);
+  mode.symbols = binding ? { ...binding } : null;
+  if (binding && project.reel.order === null) {
+    project.reel.order =
+      project.nodes.reduce(
+        (maximum, node) => Math.max(maximum, node.order),
+        -1,
+      ) + 1;
+  }
+}
+
+export function importSymbolDependency(
+  project: EditorProject,
+  imported: ImportedSymbolPackage,
+): void {
+  const id = imported.resource.packageManifest.id;
+  if (project.symbolDependencies.has(id))
+    throw new Error(`Symbols dependency ${id} 已存在，可使用替换。`);
+  project.symbolDependencies.set(id, {
+    packageId: id,
+    files: cloneFiles(imported.files),
+  });
+}
+
+export function replaceSymbolDependency(
+  project: EditorProject,
+  id: string,
+  imported: ImportedSymbolPackage,
+): void {
+  if (!project.symbolDependencies.has(id))
+    throw new Error(`未知 Symbols dependency：${id}`);
+  if (imported.resource.packageManifest.id !== id)
+    throw new Error(
+      `替换 Symbols id 必须保持 ${id}，实际为 ${imported.resource.packageManifest.id}。`,
+    );
+  for (const mode of project.gameModes.modes)
+    if (mode.symbols?.packageId === id)
+      validateSymbolBinding(project, imported, mode.symbols.reelSet);
+  project.symbolDependencies.set(id, {
+    packageId: id,
+    files: cloneFiles(imported.files),
+  });
+}
+
+export function deleteSymbolDependency(
+  project: EditorProject,
+  id: string,
+): void {
+  if (!project.symbolDependencies.has(id))
+    throw new Error(`未知 Symbols dependency：${id}`);
+  const users = project.gameModes.modes
+    .filter((mode) => mode.symbols?.packageId === id)
+    .map((mode) => mode.id);
+  if (users.length)
+    throw new Error(`Symbols ${id} 仍被主状态引用：${users.join(", ")}`);
+  project.symbolDependencies.delete(id);
+}
+
+export function validateSymbolBinding(
+  project: EditorProject,
+  imported: ImportedSymbolPackage,
+  reelSet: string,
+): void {
+  const resource = imported.resource;
+  const cell = resource.packageManifest.cellSize;
+  if (
+    cell.width !== project.reel.cellWidth ||
+    cell.height !== project.reel.cellHeight
+  )
+    throw new Error(
+      `Symbols ${resource.packageManifest.id} cellSize ${cell.width}x${cell.height} 与 main ${project.reel.cellWidth}x${project.reel.cellHeight} 不一致。`,
+    );
+  const reels = resource.gameConfig.getReels(reelSet);
+  if (reels.getReelCount() !== project.reel.columns)
+    throw new Error(
+      `Symbols reelSet ${reelSet} 的 reel count ${reels.getReelCount()} 与 columns ${project.reel.columns} 不一致。`,
+    );
+  const displayCodes = new Set(
+    resource.displaySymbols.map((symbol) =>
+      resource.gameConfig.getSymbolCode(symbol),
+    ),
+  );
+  for (let x = 0; x < reels.getReelCount(); x += 1)
+    for (let y = 0; y < reels.getLength(x); y += 1)
+      if (!displayCodes.has(reels.get(x, y)))
+        throw new Error(
+          `Symbols reelSet ${reelSet} 含非 display symbol code ${reels.get(x, y)}。`,
+        );
 }
 
 export function setGameModeNodeState(
@@ -69,6 +204,10 @@ export function setGameModeNodeState(
     throw new Error(`节点不是 stateful Spine node：${nodeId}`);
   if (!node.playback.states.some((candidate) => candidate.id === state))
     throw new Error(`节点 ${nodeId} 不存在稳定状态：${state}`);
+  if (!Object.hasOwn(mode.nodeStates, nodeId))
+    throw new Error(
+      `节点 ${nodeId} 不属于主状态 ${modeId} 的 active/shared state。`,
+    );
   if (
     project.gameModes.initialMode === modeId &&
     state !== node.playback.initialState
@@ -157,7 +296,11 @@ export function setPopupPlacement(
 }
 
 export function synchronizeGameModeNodeStates(project: EditorProject): void {
-  const defaults = initialNodeStates(project);
+  const backgroundCandidates = new Set(
+    project.gameModes.modes.flatMap((mode) =>
+      Object.values(mode.backgroundNodes),
+    ),
+  );
   const valid = new Map(
     project.nodes.flatMap((node) =>
       node.playback?.kind === "state-machine"
@@ -171,15 +314,21 @@ export function synchronizeGameModeNodeStates(project: EditorProject): void {
     ),
   );
   for (const mode of project.gameModes.modes) {
+    const activeBackgrounds = new Set(Object.values(mode.backgroundNodes));
     const next: Record<string, string> = {};
-    for (const [nodeId, initial] of Object.entries(defaults)) {
+    for (const [nodeId, initial] of Object.entries(
+      initialNodeStates(project),
+    )) {
+      if (backgroundCandidates.has(nodeId) && !activeBackgrounds.has(nodeId))
+        continue;
       const current = mode.nodeStates[nodeId];
       next[nodeId] =
         current && valid.get(nodeId)?.has(current) ? current : initial;
     }
     mode.nodeStates = next;
   }
-  requireMode(project, project.gameModes.initialMode).nodeStates = defaults;
+  const initial = requireMode(project, project.gameModes.initialMode);
+  initial.nodeStates = initialStatesForMode(project, initial);
 }
 
 function initialNodeStates(project: EditorProject): Record<string, string> {
@@ -188,6 +337,23 @@ function initialNodeStates(project: EditorProject): Record<string, string> {
       node.playback?.kind === "state-machine"
         ? [[node.id, node.playback.initialState]]
         : [],
+    ),
+  );
+}
+
+function initialStatesForMode(
+  project: EditorProject,
+  mode: EditorGameModeDraft,
+): Record<string, string> {
+  const candidates = new Set(
+    project.gameModes.modes.flatMap((candidate) =>
+      Object.values(candidate.backgroundNodes),
+    ),
+  );
+  const active = new Set(Object.values(mode.backgroundNodes));
+  return Object.fromEntries(
+    Object.entries(initialNodeStates(project)).filter(
+      ([nodeId]) => !candidates.has(nodeId) || active.has(nodeId),
     ),
   );
 }

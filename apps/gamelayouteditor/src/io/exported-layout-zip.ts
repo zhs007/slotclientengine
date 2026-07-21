@@ -31,6 +31,10 @@ export async function exportLayoutZip(options: {
   readonly manifest: SceneLayoutManifestV1;
   readonly assets: ReadonlyMap<string, Uint8Array>;
   readonly symbolFiles?: ReadonlyMap<string, Uint8Array>;
+  readonly symbolFilesById?: ReadonlyMap<
+    string,
+    ReadonlyMap<string, Uint8Array>
+  >;
   readonly popupFilesById?: ReadonlyMap<
     string,
     ReadonlyMap<string, Uint8Array>
@@ -61,6 +65,9 @@ export async function exportLayoutZip(options: {
   for (const path of collectSceneLayoutAssetPaths(manifest)) {
     if (
       path === manifest.symbolPackage?.manifest ||
+      Object.values(manifest.symbolPackages ?? {}).some(
+        (binding) => binding.manifest === path,
+      ) ||
       Object.values(manifest.popups ?? {}).some(
         (popup) => popup.manifest === path,
       ) ||
@@ -106,6 +113,32 @@ export async function exportLayoutZip(options: {
     const directory = manifest.symbolPackage.manifest.slice(
       0,
       manifest.symbolPackage.manifest.lastIndexOf("/"),
+    );
+    for (const path of collectSymbolPackageEntryPaths(nested)) {
+      const bytes = files.get(path);
+      if (!bytes) throw new Error(`symbols dependency 缺少 bytes：${path}`);
+      closure.set(`${directory}/${path}`, bytes.slice());
+    }
+  }
+  for (const [symbolId, binding] of Object.entries(
+    manifest.symbolPackages ?? {},
+  )) {
+    const files = options.symbolFilesById?.get(symbolId);
+    if (!files)
+      throw new Error(
+        `manifest 绑定 symbols package，但未提供 bytes：${symbolId}`,
+      );
+    assertStrictSymbolsPackagePaths(files);
+    const nested = parseSymbolPackageManifest(
+      parseJson(files.get("symbols.package.json"), "symbols.package.json"),
+    );
+    if (nested.id !== symbolId)
+      throw new Error(
+        `Symbols nested id ${nested.id} 与 binding ${symbolId} 不一致。`,
+      );
+    const directory = binding.manifest.slice(
+      0,
+      binding.manifest.lastIndexOf("/"),
     );
     for (const path of collectSymbolPackageEntryPaths(nested)) {
       const bytes = files.get(path);

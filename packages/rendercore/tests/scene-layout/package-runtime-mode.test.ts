@@ -28,6 +28,7 @@ const state = vi.hoisted(() => {
     canRequestNodeState,
     requestNodeState,
     getNodeStateSnapshot: vi.fn(),
+    setNodeActive: vi.fn(),
     destroy: vi.fn(() => {
       for (const deferred of pending.values())
         deferred.reject(new Error("layout destroyed"));
@@ -58,6 +59,35 @@ function resource() {
     },
     layout: {},
     symbolPackage: null,
+    popupPackages: {},
+    destroy: vi.fn(),
+  };
+}
+
+function differentBackgroundResource() {
+  return {
+    manifest: {
+      nodes: [],
+      reels: {},
+      gameModes: {
+        initialMode: "BaseGame",
+        modes: [
+          {
+            id: "BaseGame",
+            backgroundNodes: { default: "base-bg" },
+            nodeStates: { panel: "Closed" },
+          },
+          {
+            id: "FreeGame",
+            backgroundNodes: { default: "free-bg" },
+            nodeStates: { panel: "Open" },
+          },
+        ],
+      },
+    },
+    layout: {},
+    symbolPackage: null,
+    symbolPackages: {},
     popupPackages: {},
     destroy: vi.fn(),
   };
@@ -104,6 +134,9 @@ describe("scene layout package game-mode orchestration", () => {
       stableMode: "BaseGame",
       targetMode: "FreeGame",
       phase: "transitioning",
+      stableSymbolPackage: null,
+      targetSymbolPackage: null,
+      activeBackgroundNodes: [],
     });
     await expect(runtime.requestGameMode("BaseGame")).rejects.toThrow(
       /already in progress/,
@@ -128,5 +161,36 @@ describe("scene layout package game-mode orchestration", () => {
     const transition = runtime.requestGameMode("FreeGame");
     runtime.destroy();
     await expect(transition).rejects.toThrow(/layout destroyed/);
+  });
+
+  it("keeps the source background active until the atomic commit boundary", async () => {
+    const runtime = createSceneLayoutPackageRuntime({
+      resource: differentBackgroundResource() as never,
+    });
+    await runtime.init();
+    expect(state.runtime.setNodeActive.mock.calls).toEqual([
+      ["base-bg", true],
+      ["free-bg", false],
+    ]);
+    state.runtime.setNodeActive.mockClear();
+
+    const transition = runtime.requestGameMode("FreeGame");
+    expect(state.requestNodeState).toHaveBeenCalledWith("panel", "Open");
+    expect(state.runtime.setNodeActive).not.toHaveBeenCalled();
+    expect(runtime.getGameModeSnapshot().activeBackgroundNodes).toEqual([
+      "base-bg",
+    ]);
+
+    state.pending.get("panel:Open")!.resolve();
+    await transition;
+    expect(state.runtime.setNodeActive.mock.calls).toEqual([
+      ["base-bg", false],
+      ["free-bg", true],
+    ]);
+    expect(runtime.getGameModeSnapshot()).toMatchObject({
+      stableMode: "FreeGame",
+      activeBackgroundNodes: ["free-bg"],
+    });
+    runtime.destroy();
   });
 });

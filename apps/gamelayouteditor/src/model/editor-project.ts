@@ -80,9 +80,12 @@ export interface EditorNodeDraft {
 export interface EditorSymbolPackageDependency {
   readonly packageId: string;
   readonly files: ReadonlyMap<string, Uint8Array>;
+}
+
+export interface EditorModeSymbolBinding {
+  readonly packageId: string;
   reelSet: string;
   renderMode: "standard" | "grid-cell";
-  includeInExport: boolean;
 }
 
 export interface EditorPopupDependency {
@@ -95,7 +98,9 @@ export interface EditorPopupDependency {
 
 export interface EditorGameModeDraft {
   id: string;
+  backgroundNodes: Partial<Record<SceneLayoutVariantId, string>>;
   nodeStates: Record<string, string>;
+  symbols: EditorModeSymbolBinding | null;
   awardCelebrationPopupId: string | null;
 }
 
@@ -120,7 +125,7 @@ export interface EditorProject {
   };
   resources: Map<string, EditorLayoutResource>;
   assets: Map<string, Uint8Array>;
-  symbolDependency: EditorSymbolPackageDependency | null;
+  symbolDependencies: Map<string, EditorSymbolPackageDependency>;
   popupDependencies: Map<string, EditorPopupDependency>;
   gameModes: {
     initialMode: string;
@@ -161,12 +166,21 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
     },
     resources: new Map(),
     assets: new Map(),
-    symbolDependency: null,
+    symbolDependencies: new Map(),
     popupDependencies: new Map(),
     gameModes: {
       initialMode: "BaseGame",
       modes: [
-        { id: "BaseGame", nodeStates: {}, awardCelebrationPopupId: null },
+        {
+          id: "BaseGame",
+          backgroundNodes:
+            mode === "maximized-focus"
+              ? { default: "" }
+              : { landscape: "", portrait: "" },
+          nodeStates: {},
+          symbols: null,
+          awardCelebrationPopupId: null,
+        },
       ],
     },
   };
@@ -460,7 +474,7 @@ export function editorProjectToPreviewManifest(
 ): SceneLayoutManifestV1 | null {
   try {
     const manifest = editorProjectToManifest(project);
-    if (!manifest.symbolPackage || includeSymbolPackage) return manifest;
+    if (!manifest.symbolPackages || includeSymbolPackage) return manifest;
     return parseSceneLayoutManifest({
       version: manifest.version,
       kind: manifest.kind,
@@ -469,7 +483,25 @@ export function editorProjectToPreviewManifest(
       nodes: manifest.nodes,
       reels: manifest.reels,
       ...(manifest.popups ? { popups: manifest.popups } : {}),
-      ...(manifest.gameModes ? { gameModes: manifest.gameModes } : {}),
+      ...(manifest.gameModes
+        ? {
+            gameModes: {
+              initialMode: manifest.gameModes.initialMode,
+              modes: manifest.gameModes.modes.map((mode) => ({
+                id: mode.id,
+                ...(mode.backgroundNodes
+                  ? { backgroundNodes: mode.backgroundNodes }
+                  : {}),
+                nodeStates: mode.nodeStates,
+                ...(mode.awardCelebrationPopup
+                  ? {
+                      awardCelebrationPopup: mode.awardCelebrationPopup,
+                    }
+                  : {}),
+              })),
+            },
+          }
+        : {}),
     });
   } catch {
     const available = previewVariantOrder(project.mode, preferredVariant).find(
@@ -533,19 +565,30 @@ export function editorProjectToPreviewManifest(
 export function editorProjectToManifest(
   project: EditorProject,
 ): SceneLayoutManifestV1 {
+  const initialMode = project.gameModes.modes.find(
+    (mode) => mode.id === project.gameModes.initialMode,
+  );
+  if (!initialMode)
+    throw new Error(`initial 主状态不存在：${project.gameModes.initialMode}`);
   const adaptation =
     project.mode === "maximized-focus"
       ? {
           mode: "maximized-focus" as const,
           artSize: project.variants.default.artSize,
           focusRect: project.variants.default.focusRect,
-          backgroundNode: project.variants.default.backgroundNode,
+          backgroundNode: initialMode.backgroundNodes.default ?? "",
         }
       : {
           mode: "orientation-focus" as const,
           variants: {
-            landscape: toOrientationVariant(project.variants.landscape),
-            portrait: toOrientationVariant(project.variants.portrait),
+            landscape: toOrientationVariant(
+              project.variants.landscape,
+              initialMode.backgroundNodes.landscape ?? "",
+            ),
+            portrait: toOrientationVariant(
+              project.variants.portrait,
+              initialMode.backgroundNodes.portrait ?? "",
+            ),
           },
         };
   return parseSceneLayoutManifest({
@@ -572,16 +615,43 @@ export function editorProjectToManifest(
         placements: project.reel.placements,
       },
     },
-    ...(project.symbolDependency?.includeInExport
-      ? {
-          symbolPackage: {
-            manifest: `dependencies/symbols/${project.symbolDependency.packageId}/symbols.package.json`,
-            reel: "main",
-            reelSet: project.symbolDependency.reelSet,
-            renderMode: project.symbolDependency.renderMode,
-          },
-        }
-      : {}),
+    ...(() => {
+      const bindings = new Map<string, EditorModeSymbolBinding>();
+      for (const mode of project.gameModes.modes) {
+        if (!mode.symbols) continue;
+        const dependency = project.symbolDependencies.get(
+          mode.symbols.packageId,
+        );
+        if (!dependency)
+          throw new Error(
+            `主状态 ${mode.id} 引用了未知 Symbols dependency：${mode.symbols.packageId}`,
+          );
+        const existing = bindings.get(mode.symbols.packageId);
+        if (
+          existing &&
+          (existing.reelSet !== mode.symbols.reelSet ||
+            existing.renderMode !== mode.symbols.renderMode)
+        )
+          throw new Error(
+            `共享 Symbols dependency ${mode.symbols.packageId} 的 reelSet/renderMode 必须一致。`,
+          );
+        bindings.set(mode.symbols.packageId, mode.symbols);
+      }
+      if (bindings.size === 0) return {};
+      return {
+        symbolPackages: Object.fromEntries(
+          [...bindings].map(([id, binding]) => [
+            id,
+            {
+              manifest: `dependencies/symbols/${id}/symbols.package.json`,
+              reel: "main",
+              reelSet: binding.reelSet,
+              renderMode: binding.renderMode,
+            },
+          ]),
+        ),
+      };
+    })(),
     ...(() => {
       const referenced = new Set(
         project.gameModes.modes.flatMap((mode) =>
@@ -611,7 +681,9 @@ export function editorProjectToManifest(
       initialMode: project.gameModes.initialMode,
       modes: project.gameModes.modes.map((mode) => ({
         id: mode.id,
+        backgroundNodes: mode.backgroundNodes,
         nodeStates: mode.nodeStates,
+        ...(mode.symbols ? { symbolPackage: mode.symbols.packageId } : {}),
         ...(mode.awardCelebrationPopupId
           ? { awardCelebrationPopup: mode.awardCelebrationPopupId }
           : {}),
@@ -742,8 +814,16 @@ export function manifestToEditorProject(
   project.assets = new Map(
     [...assets].map(([path, bytes]) => [path, bytes.slice()]),
   );
-  if (parsed.symbolPackage) {
-    const prefix = `dependencies/symbols/${parsed.symbolPackage.manifest.split("/").at(-2)}/`;
+  const importedSymbolBindings = parsed.symbolPackage
+    ? [
+        [
+          parsed.symbolPackage.manifest.split("/").at(-2)!,
+          parsed.symbolPackage,
+        ] as const,
+      ]
+    : Object.entries(parsed.symbolPackages ?? {});
+  for (const [bindingId] of importedSymbolBindings) {
+    const prefix = `dependencies/symbols/${bindingId}/`;
     const files = new Map(
       [...assets.entries()]
         .filter(([path]) => path.startsWith(prefix))
@@ -761,13 +841,10 @@ export function manifestToEditorProject(
       JSON.stringify([...expected].sort())
     )
       throw new Error("导入 symbols dependency 闭包不精确。");
-    project.symbolDependency = {
+    project.symbolDependencies.set(bindingId, {
       packageId: nested.id,
       files,
-      reelSet: parsed.symbolPackage.reelSet,
-      renderMode: parsed.symbolPackage.renderMode,
-      includeInExport: true,
-    };
+    });
     for (const path of [...project.assets.keys()])
       if (path.startsWith(prefix)) project.assets.delete(path);
   }
@@ -800,7 +877,24 @@ export function manifestToEditorProject(
         initialMode: parsed.gameModes.initialMode,
         modes: parsed.gameModes.modes.map((mode) => ({
           id: mode.id,
+          backgroundNodes: structuredClone(
+            mode.backgroundNodes ?? adaptationBackgroundNodes(parsed),
+          ),
           nodeStates: { ...mode.nodeStates },
+          symbols: mode.symbolPackage
+            ? {
+                packageId: mode.symbolPackage,
+                reelSet: parsed.symbolPackages![mode.symbolPackage]!.reelSet,
+                renderMode:
+                  parsed.symbolPackages![mode.symbolPackage]!.renderMode,
+              }
+            : parsed.symbolPackage
+              ? {
+                  packageId: parsed.symbolPackage.manifest.split("/").at(-2)!,
+                  reelSet: parsed.symbolPackage.reelSet,
+                  renderMode: parsed.symbolPackage.renderMode,
+                }
+              : null,
           awardCelebrationPopupId: mode.awardCelebrationPopup ?? null,
         })),
       }
@@ -809,6 +903,7 @@ export function manifestToEditorProject(
         modes: [
           {
             id: "BaseGame",
+            backgroundNodes: adaptationBackgroundNodes(parsed),
             nodeStates: Object.fromEntries(
               parsed.nodes.flatMap((node) =>
                 node.resource.kind === "spine" &&
@@ -817,6 +912,13 @@ export function manifestToEditorProject(
                   : [],
               ),
             ),
+            symbols: parsed.symbolPackage
+              ? {
+                  packageId: parsed.symbolPackage.manifest.split("/").at(-2)!,
+                  reelSet: parsed.symbolPackage.reelSet,
+                  renderMode: parsed.symbolPackage.renderMode,
+                }
+              : null,
             awardCelebrationPopupId: null,
           },
         ],
@@ -830,6 +932,7 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
       ...project,
       resources: undefined,
       assets: undefined,
+      symbolDependencies: undefined,
       popupDependencies: undefined,
     }),
     resources: new Map(
@@ -841,17 +944,17 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
     assets: new Map(
       [...project.assets].map(([path, bytes]) => [path, bytes.slice()]),
     ),
-    symbolDependency: project.symbolDependency
-      ? {
-          ...structuredClone({ ...project.symbolDependency, files: undefined }),
+    symbolDependencies: new Map(
+      [...project.symbolDependencies].map(([id, dependency]) => [
+        id,
+        {
+          packageId: dependency.packageId,
           files: new Map(
-            [...project.symbolDependency.files].map(([path, bytes]) => [
-              path,
-              bytes.slice(),
-            ]),
+            [...dependency.files].map(([path, bytes]) => [path, bytes.slice()]),
           ),
-        }
-      : null,
+        },
+      ]),
+    ),
     popupDependencies: new Map(
       [...project.popupDependencies].map(([id, dependency]) => [
         id,
@@ -905,7 +1008,21 @@ function previewVariantOrder(
     : ["landscape", "portrait"];
 }
 
-function toOrientationVariant(variant: EditorVariantDraft) {
+function adaptationBackgroundNodes(
+  manifest: SceneLayoutManifestV1,
+): Partial<Record<SceneLayoutVariantId, string>> {
+  return manifest.adaptation.mode === "maximized-focus"
+    ? { default: manifest.adaptation.backgroundNode }
+    : {
+        landscape: manifest.adaptation.variants.landscape.backgroundNode,
+        portrait: manifest.adaptation.variants.portrait.backgroundNode,
+      };
+}
+
+function toOrientationVariant(
+  variant: EditorVariantDraft,
+  backgroundNode: string,
+) {
   const margin = variant.minFocusMargin;
   const hasMargin = Object.values(margin).some((value) => value !== 0);
   return {
@@ -913,7 +1030,7 @@ function toOrientationVariant(variant: EditorVariantDraft) {
     focusRect: variant.focusRect,
     frameFocusRect: variant.frameFocusRect,
     ...(hasMargin ? { minFocusMargin: margin } : {}),
-    backgroundNode: variant.backgroundNode,
+    backgroundNode,
   };
 }
 

@@ -79,6 +79,74 @@ describe("scene layout manifest", () => {
     expect(Object.isFrozen(parsed.gameModes?.modes)).toBe(true);
   });
 
+  it("parses canonical mode backgrounds and plural symbol bindings strictly", () => {
+    const canonical = {
+      ...game002LayoutFixture,
+      nodes: gameModeManifest().nodes,
+      reels: { main: { ...game002LayoutFixture.reels.main, order: 10 } },
+      symbolPackages: {
+        "base-symbols": {
+          manifest: "dependencies/symbols/base-symbols/symbols.package.json",
+          reel: "main",
+          reelSet: "base",
+          renderMode: "grid-cell",
+        },
+        "free-symbols": {
+          manifest: "dependencies/symbols/free-symbols/symbols.package.json",
+          reel: "main",
+          reelSet: "free",
+          renderMode: "standard",
+        },
+      },
+      gameModes: {
+        initialMode: "BG",
+        modes: [
+          {
+            id: "BG",
+            backgroundNodes: { default: "bg" },
+            nodeStates: { bg: "BG" },
+            symbolPackage: "base-symbols",
+          },
+          {
+            id: "FG",
+            backgroundNodes: { default: "bg" },
+            nodeStates: { bg: "FG" },
+            symbolPackage: "free-symbols",
+          },
+        ],
+      },
+    };
+    const parsed = parseSceneLayoutManifest(canonical);
+    expect(parsed.gameModes?.modes[1]).toMatchObject({
+      backgroundNodes: { default: "bg" },
+      symbolPackage: "free-symbols",
+    });
+    expect(Object.isFrozen(parsed.symbolPackages)).toBe(true);
+    expect(collectSceneLayoutAssetPaths(parsed)).toContain(
+      "dependencies/symbols/free-symbols/symbols.package.json",
+    );
+
+    const both = structuredClone(canonical) as any;
+    both.symbolPackage = both.symbolPackages["base-symbols"];
+    expect(() => parseSceneLayoutManifest(both)).toThrow(/both/);
+    const missingBackground = structuredClone(canonical) as any;
+    delete missingBackground.gameModes.modes[1].backgroundNodes;
+    expect(() => parseSceneLayoutManifest(missingBackground)).toThrow(
+      /backgroundNodes is required/,
+    );
+    const orphan = structuredClone(canonical) as any;
+    delete orphan.gameModes.modes[1].symbolPackage;
+    expect(() => parseSceneLayoutManifest(orphan)).toThrow(/orphaned/);
+    const badInitial = structuredClone(canonical) as any;
+    badInitial.gameModes.modes[0].backgroundNodes.default = "missing";
+    expect(() => parseSceneLayoutManifest(badInitial)).toThrow(/unknown node/);
+    const noTransition = structuredClone(canonical) as any;
+    noTransition.nodes[0].resource.stateMachine.transitions = [];
+    expect(() => parseSceneLayoutManifest(noTransition)).toThrow(
+      /lacks direct transition/,
+    );
+  });
+
   it("rejects every invalid game-mode reference and incomplete state mapping", () => {
     type MutableGameModeManifest = {
       gameModes: {

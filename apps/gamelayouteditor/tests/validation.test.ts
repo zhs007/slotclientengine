@@ -4,6 +4,7 @@ import {
   cloneEditorProject,
   createNewEditorProject,
   editorProjectToManifest,
+  editorProjectToPreviewManifest,
   resetVariantGeometry,
   setVariantArtSizeDimension,
 } from "../src/model/editor-project.js";
@@ -36,6 +37,10 @@ import {
   uploadImageResource,
   uploadSpineResource,
 } from "../src/model/resource-commands.js";
+import {
+  addGameMode,
+  bindGameModeSymbols,
+} from "../src/model/game-mode-commands.js";
 
 const decodeImage = async () => ({ width: 2000, height: 2000 });
 const pngBytes = (seed = 0) =>
@@ -467,6 +472,97 @@ describe("logical layout resource commands", () => {
     });
   });
 
+  it("reuses one Spine background node across modes and maps stable states plus directed transitions", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    await uploadSpineResource({
+      project,
+      files: spineFiles({
+        name: "bg",
+        animations: ["BG", "FG", "BG_FG", "FG_BG"],
+      }),
+    });
+    const node = assignBackgroundResource({
+      project,
+      modeId: "BaseGame",
+      variant: "default",
+      resourceId: "bg",
+      nodeId: "background",
+      defaultAnimation: "BG",
+    });
+    addGameMode(project, "FreeGame");
+    const reused = assignBackgroundResource({
+      project,
+      modeId: "FreeGame",
+      variant: "default",
+      resourceId: "bg",
+      defaultAnimation: "FG",
+    });
+
+    expect(reused.id).toBe(node.id);
+    expect(project.nodes).toHaveLength(1);
+    expect(
+      project.gameModes.modes.map((mode) => mode.backgroundNodes.default),
+    ).toEqual(["background", "background"]);
+    expect(project.nodes[0]?.playback).toEqual({
+      kind: "state-machine",
+      initialState: "BaseGame",
+      states: [
+        { id: "BaseGame", animation: "BG" },
+        { id: "FreeGame", animation: "FG" },
+      ],
+      transitions: [],
+    });
+    expect(
+      project.gameModes.modes.map((mode) => mode.nodeStates.background),
+    ).toEqual(["BaseGame", "FreeGame"]);
+
+    addSpineTransition(project, "background", {
+      from: "BaseGame",
+      to: "FreeGame",
+      animation: "BG_FG",
+    });
+    addSpineTransition(project, "background", {
+      from: "FreeGame",
+      to: "BaseGame",
+      animation: "FG_BG",
+    });
+    setVariantArtSizeDimension(project, "default", "width", 2000);
+    setVariantArtSizeDimension(project, "default", "height", 2000);
+    const manifest = editorProjectToManifest(project);
+    expect(manifest.nodes).toHaveLength(1);
+    expect(
+      manifest.gameModes?.modes.map((mode) => mode.backgroundNodes?.default),
+    ).toEqual(["background", "background"]);
+    expect(manifest.nodes[0]?.resource).toMatchObject({
+      stateMachine: {
+        initialState: "BaseGame",
+        transitions: [
+          { from: "BaseGame", to: "FreeGame", animation: "BG_FG" },
+          { from: "FreeGame", to: "BaseGame", animation: "FG_BG" },
+        ],
+      },
+    });
+
+    project.symbolDependencies.set("shared-symbols", {
+      packageId: "shared-symbols",
+      files: new Map(),
+    });
+    for (const mode of project.gameModes.modes)
+      bindGameModeSymbols(project, mode.id, {
+        packageId: "shared-symbols",
+        reelSet: "main",
+        renderMode: "grid-cell",
+      });
+    const previewManifest = editorProjectToPreviewManifest(
+      project,
+      "default",
+      true,
+    );
+    expect(previewManifest?.gameModes?.modes).toHaveLength(2);
+    expect(previewManifest?.symbolPackages).toHaveProperty("shared-symbols");
+    expect(previewManifest?.reels.main?.order).toBe(1);
+  });
+
   it("re-centers legacy default geometry when correcting an export-bounds art size", async () => {
     const project = createNewEditorProject("maximized-focus");
     await uploadSpineResource({
@@ -798,6 +894,7 @@ describe("logical layout resource commands", () => {
       nodeId: "shared-bg",
       defaultAnimation: "Idle",
     });
+    project.gameModes.modes[0].backgroundNodes.portrait = node.id;
     project.variants.portrait.backgroundNode = node.id;
     node.placements.portrait = { x: 0, y: 0, scale: 1 };
     assignBackgroundResource({

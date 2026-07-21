@@ -225,8 +225,10 @@ export function getLayoutResourceReferences(
   return project.nodes
     .filter((node) => node.resourceId === resourceId)
     .map((node) => {
-      const variants = activeVariantIds(project).filter(
-        (variant) => project.variants[variant].backgroundNode === node.id,
+      const variants = activeVariantIds(project).filter((variant) =>
+        project.gameModes.modes.some(
+          (mode) => mode.backgroundNodes[variant] === node.id,
+        ),
       );
       return Object.freeze({
         nodeId: node.id,
@@ -312,6 +314,7 @@ export function rebindLayerResource(options: {
 
 export function assignBackgroundResource(options: {
   readonly project: EditorProject;
+  readonly modeId?: string;
   readonly variant: SceneLayoutVariantId;
   readonly resourceId: string;
   readonly nodeId?: string;
@@ -324,9 +327,35 @@ export function assignBackgroundResource(options: {
     throw new Error("image-string 资源不能设为背景。");
   const animation = validateAnimation(resource, options.defaultAnimation);
   const variant = options.project.variants[options.variant];
-  let node = variant.backgroundNode
-    ? options.project.nodes.find((item) => item.id === variant.backgroundNode)
+  const modeId = options.modeId ?? options.project.gameModes.initialMode;
+  const mode = options.project.gameModes.modes.find(
+    (candidate) => candidate.id === modeId,
+  );
+  if (!mode) throw new Error(`未知主状态：${modeId}`);
+  const currentBackgroundNode = mode.backgroundNodes[options.variant] ?? "";
+  let node = currentBackgroundNode
+    ? options.project.nodes.find((item) => item.id === currentBackgroundNode)
     : undefined;
+  const reusableNode = options.project.gameModes.modes
+    .filter((candidate) => candidate.id !== modeId)
+    .map((candidate) => candidate.backgroundNodes[options.variant])
+    .filter((nodeId): nodeId is string => Boolean(nodeId))
+    .map((nodeId) =>
+      options.project.nodes.find((candidate) => candidate.id === nodeId),
+    )
+    .find((candidate) => candidate?.resourceId === resource.id);
+  const replacedNode =
+    reusableNode && reusableNode.id !== node?.id ? node : undefined;
+  if (reusableNode) node = reusableNode;
+  const sharedByAnotherMode =
+    node &&
+    options.project.gameModes.modes.some(
+      (candidate) =>
+        candidate.id !== modeId &&
+        Object.values(candidate.backgroundNodes).includes(node!.id),
+    );
+  if (node && sharedByAnotherMode && node.resourceId !== resource.id)
+    node = undefined;
   const previousSize = variant.artSize;
   const nextSize = editorResourceArtSize(resource);
   const hasPreviousSize = previousSize.width > 0 && previousSize.height > 0;
@@ -358,6 +387,7 @@ export function assignBackgroundResource(options: {
     options.project.nodes.push(node);
   } else {
     const previousResource = requireResource(options.project, node.resourceId);
+    const resourceChanged = previousResource.id !== resource.id;
     node.resourceId = resource.id;
     node.placements[options.variant] ??= defaultBackgroundPlacement(
       resource,
@@ -370,16 +400,110 @@ export function assignBackgroundResource(options: {
       );
     }
     delete node.imageString;
-    if (resource.kind === "spine")
+    if (resource.kind === "spine" && resourceChanged)
       node.playback = { kind: "loop", animation: animation! };
-    else delete node.playback;
+    else if (resource.kind !== "spine") delete node.playback;
   }
-  variant.backgroundNode = node.id;
+  mode.backgroundNodes[options.variant] = node.id;
+  if (resource.kind === "spine")
+    bindSharedSpineBackgroundState(options.project, modeId, node, animation!);
+  if (options.project.gameModes.initialMode === modeId)
+    variant.backgroundNode = node.id;
   if (nextSize && (!hasPreviousSize || sizeChanged || options.reinitialize)) {
     resetVariantGeometry(options.project, options.variant, nextSize);
   }
+  if (
+    replacedNode &&
+    !options.project.gameModes.modes.some((candidate) =>
+      Object.values(candidate.backgroundNodes).includes(replacedNode.id),
+    )
+  ) {
+    options.project.nodes = options.project.nodes.filter(
+      (candidate) => candidate.id !== replacedNode.id,
+    );
+  }
+  synchronizeGameModeNodeStates(options.project);
   normalizeNodeOrders(options.project);
   return node;
+}
+
+function bindSharedSpineBackgroundState(
+  project: EditorProject,
+  modeId: string,
+  node: EditorNodeDraft,
+  animation: string,
+): void {
+  const users = project.gameModes.modes.filter((mode) =>
+    Object.values(mode.backgroundNodes).includes(node.id),
+  );
+  if (users.length < 2) {
+    if (node.playback?.kind === "loop") node.playback.animation = animation;
+    return;
+  }
+
+  if (!node.playback || node.playback.kind === "loop") {
+    const previousAnimation =
+      node.playback?.kind === "loop" ? node.playback.animation : animation;
+    const previousUsers = users.filter((mode) => mode.id !== modeId);
+    const previousStateId = uniqueSpineStateId(
+      [],
+      previousUsers[0]?.id ?? project.gameModes.initialMode,
+    );
+    const states = [{ id: previousStateId, animation: previousAnimation }];
+    const targetStateId =
+      animation === previousAnimation
+        ? previousStateId
+        : uniqueSpineStateId(states, modeId);
+    if (targetStateId !== previousStateId)
+      states.push({ id: targetStateId, animation });
+    const initialState =
+      project.gameModes.initialMode === modeId
+        ? targetStateId
+        : previousStateId;
+    node.playback = {
+      kind: "state-machine",
+      initialState,
+      states,
+      transitions: [],
+    };
+    for (const user of previousUsers)
+      user.nodeStates[node.id] = previousStateId;
+    users.find((user) => user.id === modeId)!.nodeStates[node.id] =
+      targetStateId;
+    return;
+  }
+
+  const transitionUsingAnimation = node.playback.transitions.find(
+    (transition) => transition.animation === animation,
+  );
+  if (transitionUsingAnimation)
+    throw new Error(
+      `animation ${animation} 已用于 transition ${transitionUsingAnimation.from} → ${transitionUsingAnimation.to}，不能同时作为稳定状态。`,
+    );
+  let state = node.playback.states.find(
+    (candidate) => candidate.animation === animation,
+  );
+  if (!state) {
+    state = {
+      id: uniqueSpineStateId(node.playback.states, modeId),
+      animation,
+    };
+    node.playback.states.push(state);
+  }
+  if (project.gameModes.initialMode === modeId)
+    node.playback.initialState = state.id;
+  users.find((user) => user.id === modeId)!.nodeStates[node.id] = state.id;
+}
+
+function uniqueSpineStateId(
+  states: readonly { readonly id: string }[],
+  preferred: string,
+): string {
+  if (!states.some((state) => state.id === preferred)) return preferred;
+  let suffix = 2;
+  while (states.some((state) => state.id === `${preferred}${suffix}`))
+    suffix += 1;
+  return `${preferred}${suffix}`;
 }
 
 function defaultBackgroundPlacement(
@@ -394,23 +518,39 @@ function defaultBackgroundPlacement(
 
 export function clearBackground(
   project: EditorProject,
-  variantId: SceneLayoutVariantId,
+  modeIdOrVariant: string,
+  explicitVariantId?: SceneLayoutVariantId,
 ): void {
+  const modeId = explicitVariantId
+    ? modeIdOrVariant
+    : project.gameModes.initialMode;
+  const variantId =
+    explicitVariantId ?? (modeIdOrVariant as SceneLayoutVariantId);
   assertVariantsAllowed(project, [variantId]);
   const variant = project.variants[variantId];
-  const nodeId = variant.backgroundNode;
+  const mode = project.gameModes.modes.find(
+    (candidate) => candidate.id === modeId,
+  );
+  if (!mode) throw new Error(`未知主状态：${modeId}`);
+  const nodeId = mode.backgroundNodes[variantId] ?? "";
   if (!nodeId) throw new Error(`${variantId} 背景尚未设置。`);
-  variant.backgroundNode = "";
-  resetVariantGeometry(project, variantId);
-  const stillBackground = activeVariantIds(project).some(
-    (id) => project.variants[id].backgroundNode === nodeId,
+  mode.backgroundNodes[variantId] = "";
+  if (project.gameModes.initialMode === modeId) {
+    variant.backgroundNode = "";
+    resetVariantGeometry(project, variantId);
+  }
+  const stillBackground = project.gameModes.modes.some((candidate) =>
+    Object.values(candidate.backgroundNodes).includes(nodeId),
   );
   if (!stillBackground) {
     const index = project.nodes.findIndex((node) => node.id === nodeId);
     if (index >= 0) project.nodes.splice(index, 1);
   } else {
     const node = project.nodes.find((item) => item.id === nodeId);
-    if (node) delete node.placements[variantId];
+    const stillUsedInVariant = project.gameModes.modes.some(
+      (candidate) => candidate.backgroundNodes[variantId] === nodeId,
+    );
+    if (node && !stillUsedInVariant) delete node.placements[variantId];
   }
   normalizeNodeOrders(project);
 }
@@ -455,6 +595,9 @@ export function renameNode(
       mode.nodeStates[nextNodeId] = mode.nodeStates[nodeId];
       delete mode.nodeStates[nodeId];
     }
+    for (const variant of activeVariantIds(project))
+      if (mode.backgroundNodes[variant] === nodeId)
+        mode.backgroundNodes[variant] = nextNodeId;
   }
   node.id = nextNodeId;
   for (const variant of activeVariantIds(project)) {
@@ -732,8 +875,8 @@ function requireLayer(project: EditorProject, nodeId: string): EditorNodeDraft {
 }
 
 function isBackgroundNode(project: EditorProject, nodeId: string): boolean {
-  return activeVariantIds(project).some(
-    (variant) => project.variants[variant].backgroundNode === nodeId,
+  return project.gameModes.modes.some((mode) =>
+    Object.values(mode.backgroundNodes).includes(nodeId),
   );
 }
 
@@ -787,8 +930,8 @@ function nextOrder(project: EditorProject): number {
 
 function normalizeNodeOrders(project: EditorProject): void {
   const backgrounds = new Set(
-    activeVariantIds(project)
-      .map((variant) => project.variants[variant].backgroundNode)
+    project.gameModes.modes
+      .flatMap((mode) => Object.values(mode.backgroundNodes))
       .filter(Boolean),
   );
   project.nodes = project.nodes
@@ -1280,11 +1423,11 @@ function structuredCloneProjectWithoutResource(
       ...project,
       resources: undefined,
       assets: undefined,
-      symbolDependency: undefined,
+      symbolDependencies: undefined,
     }),
     resources: new Map(project.resources),
     assets: new Map(project.assets),
-    symbolDependency: project.symbolDependency,
+    symbolDependencies: project.symbolDependencies,
   } as EditorProject;
   const current = clone.resources.get(resourceId);
   if (!current) throw new Error(`未知资源：${resourceId}`);

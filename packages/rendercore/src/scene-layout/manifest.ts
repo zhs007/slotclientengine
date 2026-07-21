@@ -33,6 +33,7 @@ export function parseSceneLayoutManifest(
       "nodes",
       "reels",
       "symbolPackage",
+      "symbolPackages",
       "popups",
       "gameModes",
     ],
@@ -69,11 +70,22 @@ export function parseSceneLayoutManifest(
     record.symbolPackage === undefined
       ? undefined
       : parseSymbolPackageBinding(record.symbolPackage);
-  if (symbolPackage) {
+  const symbolPackages =
+    record.symbolPackages === undefined
+      ? undefined
+      : parseSymbolPackageBindings(record.symbolPackages);
+  if (symbolPackage && symbolPackages)
+    fail(
+      "scene layout manifest must not declare both symbolPackage and symbolPackages.",
+    );
+  if (symbolPackage || symbolPackages) {
     const main = reels.main;
-    if (!main) fail('symbolPackage requires scene layout reel "main".');
+    if (!main)
+      fail('symbol package bindings require scene layout reel "main".');
     if (main.order === undefined)
-      fail("scene layout reels.main.order is required with symbolPackage.");
+      fail(
+        "scene layout reels.main.order is required with symbol package bindings.",
+      );
     unique(
       [...nodes.map((node) => node.order), main.order],
       "scene layout node/reel order",
@@ -86,7 +98,16 @@ export function parseSceneLayoutManifest(
   const gameModes =
     record.gameModes === undefined
       ? undefined
-      : parseGameModes(record.gameModes, nodes, popups);
+      : parseGameModes(
+          record.gameModes,
+          adaptation,
+          nodes,
+          symbolPackage,
+          symbolPackages,
+          popups,
+        );
+  if (symbolPackages && !gameModes)
+    fail("scene layout symbolPackages requires gameModes.");
   validateReferencesAndBounds(adaptation, nodes, nodeIds, reels);
   validatePathClosure(nodes);
   return deepFreeze({
@@ -97,6 +118,7 @@ export function parseSceneLayoutManifest(
     nodes,
     reels,
     ...(symbolPackage ? { symbolPackage } : {}),
+    ...(symbolPackages ? { symbolPackages } : {}),
     ...(popups ? { popups } : {}),
     ...(gameModes ? { gameModes } : {}),
   });
@@ -118,6 +140,8 @@ export function collectSceneLayoutAssetPaths(
     }
   }
   if (parsed.symbolPackage) paths.add(parsed.symbolPackage.manifest);
+  for (const binding of Object.values(parsed.symbolPackages ?? {}))
+    paths.add(binding.manifest);
   for (const popup of Object.values(parsed.popups ?? {}))
     paths.add(popup.manifest);
   return Object.freeze(
@@ -558,7 +582,32 @@ function validatePathClosure(nodes: readonly SceneLayoutNode[]): void {
 function parseSymbolPackageBinding(
   value: unknown,
 ): SceneLayoutSymbolPackageBinding {
-  const label = "scene layout symbolPackage";
+  return parseSymbolPackageBindingAt(value, "scene layout symbolPackage");
+}
+
+function parseSymbolPackageBindings(
+  value: unknown,
+): Readonly<Record<string, SceneLayoutSymbolPackageBinding>> {
+  const record = readRecord(value, "scene layout symbolPackages");
+  const entries = Object.entries(record);
+  if (entries.length === 0)
+    fail("scene layout symbolPackages must not be empty when present.");
+  const result: Record<string, SceneLayoutSymbolPackageBinding> = {};
+  for (const [id, value] of entries) {
+    identifier(id, "scene layout symbol package id");
+    const label = `scene layout symbolPackages.${id}`;
+    const binding = parseSymbolPackageBindingAt(value, label);
+    if (binding.manifest.split("/").at(-2) !== id)
+      fail(`${label}.manifest dependency id must equal binding id "${id}".`);
+    result[id] = binding;
+  }
+  return deepFreeze(result);
+}
+
+function parseSymbolPackageBindingAt(
+  value: unknown,
+  label: string,
+): SceneLayoutSymbolPackageBinding {
   const record = readRecord(value, label);
   known(record, ["manifest", "reel", "reelSet", "renderMode"], label);
   if (record.reel !== "main") fail(`${label}.reel must be "main".`);
@@ -623,7 +672,12 @@ function parsePopupBindings(
 
 function parseGameModes(
   value: unknown,
+  adaptation: SceneLayoutAdaptation,
   nodes: readonly SceneLayoutNode[],
+  legacySymbolPackage: SceneLayoutSymbolPackageBinding | undefined,
+  symbolPackages:
+    | Readonly<Record<string, SceneLayoutSymbolPackageBinding>>
+    | undefined,
   popups: Readonly<Record<string, SceneLayoutPopupBinding>> | undefined,
 ): SceneLayoutGameModes {
   const record = readRecord(value, "scene layout gameModes");
@@ -634,41 +688,88 @@ function parseGameModes(
   );
   if (!Array.isArray(record.modes) || record.modes.length === 0)
     fail("scene layout gameModes.modes must be a non-empty array.");
-  const stateful = nodes.filter(
-    (
-      node,
-    ): node is SceneLayoutNode & {
-      readonly resource: Extract<
-        SceneLayoutNode["resource"],
-        { readonly stateMachine: unknown }
-      >;
-    } => node.resource.kind === "spine" && "stateMachine" in node.resource,
-  );
-  const statefulIds = new Set(stateful.map((node) => node.id));
-  const modes = record.modes.map((rawMode, index) => {
+  const rawModes = record.modes.map((rawMode, index) => {
     const label = `scene layout gameModes.modes[${index}]`;
     const mode = readRecord(rawMode, label);
-    known(mode, ["id", "nodeStates", "awardCelebrationPopup"], label);
+    known(
+      mode,
+      [
+        "id",
+        "backgroundNodes",
+        "nodeStates",
+        "symbolPackage",
+        "awardCelebrationPopup",
+      ],
+      label,
+    );
+    return { mode, label };
+  });
+  const canonical =
+    symbolPackages !== undefined ||
+    rawModes.some(
+      ({ mode }) =>
+        mode.backgroundNodes !== undefined || mode.symbolPackage !== undefined,
+    );
+  if (
+    legacySymbolPackage &&
+    rawModes.some(({ mode }) => mode.symbolPackage !== undefined)
+  )
+    fail(
+      "gameModes symbolPackage bindings cannot be combined with legacy symbolPackage.",
+    );
+  const variants = activeVariantIds(adaptation);
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const backgroundNodesByMode = new Map<
+    string,
+    Readonly<Partial<Record<SceneLayoutVariantId, string>>>
+  >();
+  const parsedHeads = rawModes.map(({ mode, label }) => {
     const id = stateIdentifier(mode.id, `${label}.id`);
-    const rawStates = readRecord(mode.nodeStates, `${label}.nodeStates`);
-    const keys = Object.keys(rawStates);
-    if (
-      keys.length !== stateful.length ||
-      keys.some((nodeId) => !statefulIds.has(nodeId))
-    )
-      fail(`${label}.nodeStates must cover every stateful Spine node exactly.`);
-    const nodeStates: Record<string, string> = {};
-    for (const node of stateful) {
-      const state = stateIdentifier(
-        rawStates[node.id],
-        `${label}.nodeStates.${node.id}`,
+    let backgroundNodes:
+      | Readonly<Partial<Record<SceneLayoutVariantId, string>>>
+      | undefined;
+    if (canonical) {
+      if (mode.backgroundNodes === undefined)
+        fail(`${label}.backgroundNodes is required for canonical gameModes.`);
+      const rawBackgrounds = readRecord(
+        mode.backgroundNodes,
+        `${label}.backgroundNodes`,
       );
-      if (!Object.hasOwn(node.resource.stateMachine.states, state))
-        fail(
-          `${label}.nodeStates.${node.id} references unknown stable state "${state}".`,
+      known(rawBackgrounds, variants, `${label}.backgroundNodes`);
+      const result: Partial<Record<SceneLayoutVariantId, string>> = {};
+      for (const variant of variants) {
+        if (!Object.hasOwn(rawBackgrounds, variant))
+          fail(`${label}.backgroundNodes.${variant} is required.`);
+        const nodeId = identifier(
+          rawBackgrounds[variant],
+          `${label}.backgroundNodes.${variant}`,
         );
-      nodeStates[node.id] = state;
+        const node = nodesById.get(nodeId);
+        if (!node)
+          fail(
+            `${label}.backgroundNodes.${variant} references unknown node "${nodeId}".`,
+          );
+        if (node.resource.kind === "image-string")
+          fail(
+            `${label}.backgroundNodes.${variant} cannot reference image-string node "${nodeId}".`,
+          );
+        if (!node.placements[variant])
+          fail(
+            `${label}.backgroundNodes.${variant} node "${nodeId}" has no ${variant} placement.`,
+          );
+        result[variant] = nodeId;
+      }
+      backgroundNodes = deepFreeze(result);
+      backgroundNodesByMode.set(id, backgroundNodes);
     }
+    const symbolPackage =
+      mode.symbolPackage === undefined
+        ? undefined
+        : identifier(mode.symbolPackage, `${label}.symbolPackage`);
+    if (symbolPackage && !symbolPackages?.[symbolPackage])
+      fail(
+        `${label}.symbolPackage references unknown binding "${symbolPackage}".`,
+      );
     const popup =
       mode.awardCelebrationPopup === undefined
         ? undefined
@@ -680,27 +781,101 @@ function parseGameModes(
       fail(
         `${label}.awardCelebrationPopup references unknown popup "${popup}".`,
       );
-    return deepFreeze({
-      id,
-      nodeStates,
-      ...(popup ? { awardCelebrationPopup: popup } : {}),
-    });
+    return { id, label, mode, backgroundNodes, symbolPackage, popup };
   });
   unique(
-    modes.map((mode) => mode.id),
+    parsedHeads.map((mode) => mode.id),
     "scene layout game mode id",
+  );
+  const candidateBackgroundIds = new Set(
+    [...backgroundNodesByMode.values()].flatMap((bindings) =>
+      Object.values(bindings),
+    ),
+  );
+  const stateful = nodes.filter(
+    (
+      node,
+    ): node is SceneLayoutNode & {
+      readonly resource: Extract<
+        SceneLayoutNode["resource"],
+        { readonly stateMachine: unknown }
+      >;
+    } => node.resource.kind === "spine" && "stateMachine" in node.resource,
+  );
+  const statefulById = new Map(stateful.map((node) => [node.id, node]));
+  const sharedStatefulIds = stateful
+    .filter((node) => !candidateBackgroundIds.has(node.id))
+    .map((node) => node.id);
+  const modes = parsedHeads.map(
+    ({ id, label, mode, backgroundNodes, symbolPackage, popup }) => {
+      const rawStates = readRecord(mode.nodeStates, `${label}.nodeStates`);
+      const keys = Object.keys(rawStates);
+      const activeStatefulBackgroundIds = canonical
+        ? [...new Set(Object.values(backgroundNodes!))].filter((nodeId) =>
+            statefulById.has(nodeId),
+          )
+        : [];
+      const expectedStatefulIds = canonical
+        ? [...sharedStatefulIds, ...activeStatefulBackgroundIds]
+        : stateful.map((node) => node.id);
+      const expectedSet = new Set(expectedStatefulIds);
+      if (
+        keys.length !== expectedSet.size ||
+        keys.some((nodeId) => !expectedSet.has(nodeId))
+      )
+        fail(
+          `${label}.nodeStates must cover every active/shared stateful Spine node exactly.`,
+        );
+      const nodeStates: Record<string, string> = {};
+      for (const nodeId of expectedStatefulIds) {
+        const node = statefulById.get(nodeId)!;
+        const state = stateIdentifier(
+          rawStates[nodeId],
+          `${label}.nodeStates.${nodeId}`,
+        );
+        if (!Object.hasOwn(node.resource.stateMachine.states, state))
+          fail(
+            `${label}.nodeStates.${nodeId} references unknown stable state "${state}".`,
+          );
+        nodeStates[nodeId] = state;
+      }
+      return deepFreeze({
+        id,
+        ...(backgroundNodes ? { backgroundNodes } : {}),
+        nodeStates,
+        ...(symbolPackage ? { symbolPackage } : {}),
+        ...(popup ? { awardCelebrationPopup: popup } : {}),
+      });
+    },
   );
   const initial = modes.find((mode) => mode.id === initialMode);
   if (!initial)
     fail(
       `scene layout gameModes.initialMode references unknown mode "${initialMode}".`,
     );
-  for (const node of stateful) {
-    if (initial.nodeStates[node.id] !== node.resource.stateMachine.initialState)
+  if (canonical) {
+    const bootstrap = adaptationBackgroundNodes(adaptation);
+    for (const variant of variants)
+      if (initial.backgroundNodes?.[variant] !== bootstrap[variant])
+        fail(
+          `scene layout initial mode backgroundNodes.${variant} must equal adaptation bootstrap backgroundNode.`,
+        );
+    validateBackgroundOnlyOrdering(nodes, variants, candidateBackgroundIds);
+  }
+  for (const [nodeId, state] of Object.entries(initial.nodeStates)) {
+    const node = statefulById.get(nodeId)!;
+    if (state !== node.resource.stateMachine.initialState)
       fail(
-        `scene layout initial mode nodeStates.${node.id} must equal the node initialState.`,
+        `scene layout initial mode nodeStates.${nodeId} must equal the node initialState.`,
       );
   }
+  if (canonical) validateModeTransitions(modes, statefulById);
+  const referencedSymbols = new Set(
+    modes.flatMap((mode) => (mode.symbolPackage ? [mode.symbolPackage] : [])),
+  );
+  for (const id of Object.keys(symbolPackages ?? {}))
+    if (!referencedSymbols.has(id))
+      fail(`scene layout symbol package "${id}" is orphaned by gameModes.`);
   const referenced = new Set(
     modes.flatMap((mode) =>
       mode.awardCelebrationPopup ? [mode.awardCelebrationPopup] : [],
@@ -710,6 +885,95 @@ function parseGameModes(
     if (!referenced.has(id))
       fail(`scene layout popup "${id}" is orphaned by gameModes.`);
   return deepFreeze({ initialMode, modes });
+}
+
+function activeVariantIds(
+  adaptation: SceneLayoutAdaptation,
+): readonly SceneLayoutVariantId[] {
+  return adaptation.mode === "maximized-focus"
+    ? ["default"]
+    : ["landscape", "portrait"];
+}
+
+function adaptationBackgroundNodes(
+  adaptation: SceneLayoutAdaptation,
+): Readonly<Partial<Record<SceneLayoutVariantId, string>>> {
+  return adaptation.mode === "maximized-focus"
+    ? { default: adaptation.backgroundNode }
+    : {
+        landscape: adaptation.variants.landscape.backgroundNode,
+        portrait: adaptation.variants.portrait.backgroundNode,
+      };
+}
+
+function validateBackgroundOnlyOrdering(
+  nodes: readonly SceneLayoutNode[],
+  variants: readonly SceneLayoutVariantId[],
+  backgroundIds: ReadonlySet<string>,
+): void {
+  for (const variant of variants) {
+    const backgrounds = nodes.filter(
+      (node) => backgroundIds.has(node.id) && node.placements[variant],
+    );
+    const ordinary = nodes.filter(
+      (node) => !backgroundIds.has(node.id) && node.placements[variant],
+    );
+    const firstOrdinaryOrder = Math.min(
+      ...ordinary.map((node) => node.order),
+      Number.POSITIVE_INFINITY,
+    );
+    for (const background of backgrounds)
+      if (background.order >= firstOrdinaryOrder)
+        fail(
+          `mode background node "${background.id}" must be ordered below ordinary layers in ${variant}.`,
+        );
+  }
+}
+
+function validateModeTransitions(
+  modes: readonly import("./types.js").SceneLayoutGameMode[],
+  statefulById: ReadonlyMap<
+    string,
+    SceneLayoutNode & {
+      readonly resource: Extract<
+        SceneLayoutNode["resource"],
+        { readonly stateMachine: unknown }
+      >;
+    }
+  >,
+): void {
+  for (const source of modes) {
+    const sourceBackgrounds = new Set(
+      Object.values(source.backgroundNodes ?? {}),
+    );
+    for (const target of modes) {
+      if (source === target) continue;
+      const targetBackgrounds = new Set(
+        Object.values(target.backgroundNodes ?? {}),
+      );
+      for (const [nodeId, targetState] of Object.entries(target.nodeStates)) {
+        const sourceState = source.nodeStates[nodeId];
+        if (!sourceState || sourceState === targetState) continue;
+        const isBackground =
+          sourceBackgrounds.has(nodeId) || targetBackgrounds.has(nodeId);
+        if (
+          isBackground &&
+          !(sourceBackgrounds.has(nodeId) && targetBackgrounds.has(nodeId))
+        )
+          continue;
+        const machine = statefulById.get(nodeId)!.resource.stateMachine;
+        if (
+          !machine.transitions.some(
+            (transition) =>
+              transition.from === sourceState && transition.to === targetState,
+          )
+        )
+          fail(
+            `scene layout node "${nodeId}" lacks direct transition ${sourceState} -> ${targetState} for game modes ${source.id} -> ${target.id}.`,
+          );
+      }
+    }
+  }
 }
 
 function imageStringDependencyPath(value: unknown, label: string): string {

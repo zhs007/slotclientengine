@@ -30,7 +30,7 @@ const previewSpies = vi.hoisted(() => ({
   advanceAwardCelebration: vi.fn(),
   dismissAwardCelebrationImmediately: vi.fn(),
   requestGameMode: vi.fn(async () => undefined),
-  getGameModeSnapshot: vi.fn(() => null),
+  getGameModeSnapshot: vi.fn((): any => null),
   getActiveAwardCelebrationSnapshot: vi.fn((): any => null),
   destroy: vi.fn(),
 }));
@@ -43,8 +43,8 @@ const ioSpies = vi.hoisted(() => ({
 }));
 
 const commandSpies = vi.hoisted(() => ({
-  uploadImage: vi.fn(async ({ project, file }) => {
-    const id = file.name.replace(/\.[^.]+$/u, "").toLowerCase();
+  uploadImage: vi.fn(async ({ project, file, resourceId }) => {
+    const id = resourceId ?? file.name.replace(/\.[^.]+$/u, "").toLowerCase();
     const resource = {
       id,
       kind: "image" as const,
@@ -55,9 +55,9 @@ const commandSpies = vi.hoisted(() => ({
     project.assets.set(resource.path, new Uint8Array([1, 2, 3]));
     return resource;
   }),
-  uploadSpine: vi.fn(async ({ project }) => {
+  uploadSpine: vi.fn(async ({ project, resourceId }) => {
     const resource = {
-      id: "hero",
+      id: resourceId ?? "hero",
       kind: "spine" as const,
       skeleton: "assets/hero.json",
       atlas: "assets/hero.atlas",
@@ -140,24 +140,98 @@ describe("GameLayoutEditorApp workspace", () => {
     window.prompt = vi.fn((_message, defaultValue) => defaultValue ?? null);
   });
 
-  it("mounts one accessible three-tab workspace and keeps symbols controls in the preview drawer", async () => {
+  it("mounts five accessible state workspaces without preview drawers", async () => {
     const { app, root } = await createApp();
     const tabs = [...root.querySelectorAll<HTMLElement>('[role="tab"]')];
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       "资源",
       "布局",
+      "Symbols",
+      "BigWin",
       "项目",
     ]);
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
     expect(root.querySelector("[data-upload-resources]")).toBeTruthy();
     expect(root.querySelector("[data-number]")).toBeNull();
+    expect(root.querySelector(".symbols-drawer")).toBeNull();
+    (tabs[2] as HTMLButtonElement).click();
     expect(
-      root.querySelector(".symbols-drawer [data-import-symbols]"),
-    ).toBeTruthy();
+      root.querySelector("[data-symbols-workspace]")?.hasAttribute("hidden"),
+    ).toBe(false);
+    expect(root.querySelector("[data-import-symbols]")).toBeTruthy();
+    (tabs[0] as HTMLButtonElement).click();
     tabs[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
     expect(tabs[1].getAttribute("aria-selected")).toBe("true");
     expect(root.querySelector("[data-outline-list]")).toBeTruthy();
     expect(root.querySelectorAll(".inspector-inner")).toHaveLength(1);
+    app.destroy();
+  });
+
+  it("preserves advanced Inspector state and uses one resolution select", async () => {
+    const { app, root } = await createApp();
+    (
+      root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
+    ).click();
+    const details = root.querySelector(
+      '[data-inspector-section="layout:reel:main:advanced"]',
+    ) as HTMLDetailsElement;
+    details.open = true;
+    details.dispatchEvent(new Event("toggle"));
+    const cell = root.querySelector(
+      '[data-number="reel.cellWidth"]',
+    ) as HTMLInputElement;
+    cell.value = "161";
+    cell.dispatchEvent(new Event("change"));
+    expect(
+      (
+        root.querySelector(
+          '[data-inspector-section="layout:reel:main:advanced"]',
+        ) as HTMLDetailsElement
+      ).open,
+    ).toBe(true);
+    expect(root.querySelector("[data-preview-presets]")).toBeNull();
+    const resolution = root.querySelector(
+      "[data-preview-resolution]",
+    ) as HTMLSelectElement;
+    resolution.value = "390x844";
+    resolution.dispatchEvent(new Event("change"));
+    expect(previewSpies.setPageSize).toHaveBeenCalledWith({
+      width: 390,
+      height: 844,
+    });
+    const width = root.querySelector(
+      "[data-preview-width]",
+    ) as HTMLInputElement;
+    width.value = "1111";
+    width.dispatchEvent(new Event("change"));
+    expect(resolution.value).toBe("custom");
+    app.destroy();
+  });
+
+  it("creates projects only after confirming the single new-project dialog", async () => {
+    const { app, root } = await createApp();
+    expect(root.querySelectorAll("[data-new-project]")).toHaveLength(1);
+    expect(root.querySelector("[data-new-single]")).toBeNull();
+    expect(root.querySelector("[data-new-dual]")).toBeNull();
+    (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
+    (
+      root.querySelector("[data-cancel-new-project]") as HTMLButtonElement
+    ).click();
+    expect(
+      root.querySelector("[data-main-state-status]")?.textContent,
+    ).toContain("initial=BaseGame");
+    (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
+    (
+      root.querySelector(
+        '[name="new-project-mode"][value="orientation-focus"]',
+      ) as HTMLInputElement
+    ).checked = true;
+    (
+      root.querySelector("[data-confirm-new-project]") as HTMLButtonElement
+    ).click();
+    expect(root.querySelector("[data-project-status]")?.textContent).toContain(
+      "orientation-focus",
+    );
     app.destroy();
   });
 
@@ -167,6 +241,11 @@ describe("GameLayoutEditorApp workspace", () => {
       files: new Map([["popup.manifest.json", new Uint8Array([1])]]),
     });
     const { app, root } = await createApp();
+    previewSpies.getGameModeSnapshot.mockReturnValue({
+      stableMode: "BaseGame",
+      targetMode: null,
+      phase: "stable",
+    });
     (root.querySelector("[data-play-popup]") as HTMLButtonElement).click();
     const placement = root.querySelector(
       '[data-popup-placement="default"][data-popup-placement-field="x"]',
@@ -224,7 +303,15 @@ describe("GameLayoutEditorApp workspace", () => {
     (
       root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
     ).click();
-    (root.querySelector("[data-new-dual]") as HTMLButtonElement).click();
+    (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
+    (
+      root.querySelector(
+        '[name="new-project-mode"][value="orientation-focus"]',
+      ) as HTMLInputElement
+    ).checked = true;
+    (
+      root.querySelector("[data-confirm-new-project]") as HTMLButtonElement
+    ).click();
     expect(
       root
         .querySelector('[data-workspace-tab="assets"]')
@@ -385,9 +472,38 @@ describe("GameLayoutEditorApp workspace", () => {
     app.destroy();
   });
 
+  it("derives collision-safe logical ids without prompting for each imported resource", async () => {
+    const fileClick = selectFilesOnce([
+      new File(["a"], "same.png"),
+      new File(["b"], "same.jpg"),
+    ]);
+    const prompt = vi.spyOn(window, "prompt");
+    const { app, root } = await createApp();
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(root.querySelectorAll("[data-resource-row]")).toHaveLength(2),
+    );
+    expect(root.querySelector('[data-resource-row="same"]')).toBeTruthy();
+    expect(root.querySelector('[data-resource-row="same-2"]')).toBeTruthy();
+    expect(prompt).not.toHaveBeenCalled();
+    prompt.mockRestore();
+    fileClick.mockRestore();
+    app.destroy();
+  });
+
   it("edits one selected orientation layer, moves, renames, toggles placement and deletes it", async () => {
     const { app, root } = await createApp();
-    (root.querySelector("[data-new-dual]") as HTMLButtonElement).click();
+    (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
+    (
+      root.querySelector(
+        '[name="new-project-mode"][value="orientation-focus"]',
+      ) as HTMLInputElement
+    ).checked = true;
+    (
+      root.querySelector("[data-confirm-new-project]") as HTMLButtonElement
+    ).click();
     const fileClick = selectFilesOnce([new File(["image"], "uploaded.png")]);
     (
       root.querySelector("[data-upload-resources]") as HTMLButtonElement
@@ -503,10 +619,18 @@ describe("GameLayoutEditorApp workspace", () => {
     await vi.waitFor(() =>
       expect(root.querySelectorAll("[data-spine-state-id]")).toHaveLength(2),
     );
-    prompt
-      .mockReturnValueOnce("State1")
-      .mockReturnValueOnce("FG")
-      .mockReturnValueOnce("Bridge");
+    const transitionFrom = root.querySelector(
+      "[data-spine-transition-from]",
+    ) as HTMLSelectElement;
+    const transitionTo = root.querySelector(
+      "[data-spine-transition-to]",
+    ) as HTMLSelectElement;
+    const transitionAnimation = root.querySelector(
+      "[data-spine-transition-animation]",
+    ) as HTMLSelectElement;
+    transitionFrom.value = "State1";
+    transitionTo.value = "FG";
+    transitionAnimation.value = "Bridge";
     (
       root.querySelector("[data-add-spine-transition]") as HTMLButtonElement
     ).click();
@@ -609,7 +733,7 @@ describe("GameLayoutEditorApp workspace", () => {
     app.destroy();
   });
 
-  it("requests preview Spine states through runtime completion controls", async () => {
+  it("does not expose low-level preview Spine state controls", async () => {
     const manifest = {
       ...imageManifest,
       nodes: [
@@ -661,15 +785,9 @@ describe("GameLayoutEditorApp workspace", () => {
     const fileClick = selectFilesOnce([new File(["zip"], "layout.zip")]);
     const { app, root } = await createApp();
     (root.querySelector("[data-import]") as HTMLButtonElement).click();
-    await vi.waitFor(() =>
-      expect(root.querySelector('[data-preview-state="FG"]')).toBeTruthy(),
-    );
-    (
-      root.querySelector('[data-preview-state="FG"]') as HTMLButtonElement
-    ).click();
-    await vi.waitFor(() =>
-      expect(previewSpies.requestNodeState).toHaveBeenCalledWith("scene", "FG"),
-    );
+    await vi.waitFor(() => expect(ioSpies.importZip).toHaveBeenCalled());
+    expect(root.querySelector('[data-preview-state="FG"]')).toBeNull();
+    expect(previewSpies.requestNodeState).not.toHaveBeenCalled();
     fileClick.mockRestore();
     app.destroy();
   });

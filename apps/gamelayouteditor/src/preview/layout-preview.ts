@@ -100,6 +100,7 @@ export class LayoutPreview {
   #symbolBindings: readonly SymbolOtherScenePreviewBinding[] = Object.freeze(
     [],
   );
+  #packageScenes = new Map<string, RandomReelSceneSnapshot>();
 
   constructor(
     host: HTMLElement,
@@ -138,16 +139,52 @@ export class LayoutPreview {
   ): Promise<void> {
     this.assertReady();
     const request = ++this.#layoutRequest;
-    const packageScene = manifest.symbolPackage
-      ? this.requirePackagePreviewScene(manifest)
-      : null;
+    const initialBinding = resolveModeSymbolBinding(
+      manifest,
+      manifest.gameModes?.initialMode ?? null,
+    );
     const nextPackage = await validateLayoutAssets(manifest, assets);
     if (request !== this.#layoutRequest || this.#destroyed) {
       nextPackage.destroy();
       return;
     }
+    const packageScenes = new Map<string, RandomReelSceneSnapshot>();
+    const bindings = manifest.symbolPackage
+      ? [
+          [
+            manifest.symbolPackage.manifest.split("/").at(-2)!,
+            manifest.symbolPackage,
+            nextPackage.packageResource.symbolPackage!,
+          ] as const,
+        ]
+      : Object.entries(manifest.symbolPackages ?? {}).map(
+          ([id, binding]) =>
+            [
+              id,
+              binding,
+              nextPackage.packageResource.symbolPackages[id]!,
+            ] as const,
+        );
+    for (const [id, binding, resource] of bindings)
+      packageScenes.set(
+        id,
+        sampleRandomReelScene({
+          gameConfig: resource.gameConfig,
+          displaySymbols: resource.displaySymbols,
+          reelSetName: binding.reelSet,
+          columns: manifest.reels.main!.columns,
+          rows: manifest.reels.main!.rows,
+          randomSource: this.getRandomSource(),
+        }),
+      );
+    const packageScene = initialBinding
+      ? packageScenes.get(initialBinding.id)!
+      : null;
     const needsPackageRuntime = Boolean(
-      manifest.symbolPackage || manifest.popups || manifest.gameModes,
+      manifest.symbolPackage ||
+      manifest.symbolPackages ||
+      manifest.popups ||
+      manifest.gameModes,
     );
     const nextRuntime = needsPackageRuntime
       ? createSceneLayoutPackageRuntime({
@@ -157,7 +194,7 @@ export class LayoutPreview {
     try {
       if (needsPackageRuntime) {
         await (nextRuntime as SceneLayoutPackageRuntime).init(
-          manifest.symbolPackage
+          initialBinding
             ? {
                 reels: {
                   main: {
@@ -188,6 +225,7 @@ export class LayoutPreview {
       ? (nextRuntime as SceneLayoutPackageRuntime)
       : null;
     this.#manifest = manifest;
+    this.#packageScenes = packageScenes;
     this.#app.stage.addChildAt(nextRuntime.container, 0);
     this.applySize();
   }
@@ -229,7 +267,27 @@ export class LayoutPreview {
   async requestGameMode(modeId: string): Promise<void> {
     if (!this.#packageRuntime)
       throw new Error("当前 layout preview 没有 package runtime。");
-    await this.#packageRuntime.requestGameMode(modeId);
+    const current = this.#packageRuntime.getGameModeSnapshot();
+    const sourceBinding = resolveModeSymbolBinding(
+      this.#manifest!,
+      current.stableMode,
+    );
+    const targetBinding = resolveModeSymbolBinding(this.#manifest!, modeId);
+    const changed = sourceBinding?.id !== targetBinding?.id;
+    const scene =
+      changed && targetBinding
+        ? this.requirePackagePreviewScene(targetBinding)
+        : null;
+    await this.#packageRuntime.requestGameMode(
+      modeId,
+      scene
+        ? {
+            reels: {
+              main: { scene: scene.codes, localPhaseYs: scene.stopYs },
+            },
+          }
+        : {},
+    );
   }
 
   clear(): void {
@@ -677,6 +735,7 @@ export class LayoutPreview {
     this.#runtime?.destroy();
     this.#runtime = null;
     this.#packageRuntime = null;
+    this.#packageScenes.clear();
     this.#lastLayoutSnapshot = null;
     this.#frameViewport = null;
     this.#package?.destroy();
@@ -785,12 +844,14 @@ export class LayoutPreview {
     this.#symbolDiagnostic = "";
   }
 
-  private requirePackagePreviewScene(
-    manifest: SceneLayoutManifestV1,
-  ): RandomReelSceneSnapshot {
-    const binding = manifest.symbolPackage;
-    const scene = this.#symbolPreview?.scene;
-    if (!binding || !scene)
+  private requirePackagePreviewScene(resolved: {
+    readonly id: string;
+    readonly binding: NonNullable<SceneLayoutManifestV1["symbolPackage"]>;
+  }): RandomReelSceneSnapshot {
+    const binding = resolved.binding;
+    const scene =
+      this.#packageScenes.get(resolved.id) ?? this.#symbolPreview?.scene;
+    if (!scene)
       throw new Error(
         "组合 preview 要求先显式选择兼容 reel set 并生成本地场景。",
       );
@@ -804,8 +865,11 @@ export class LayoutPreview {
   private syncPackageReel(): void {
     const runtime = this.#packageRuntime;
     const manifest = this.#manifest;
-    if (!runtime || !manifest?.symbolPackage) return;
-    const scene = this.requirePackagePreviewScene(manifest);
+    if (!runtime || !manifest) return;
+    const snapshot = runtime.getGameModeSnapshot();
+    const resolved = resolveModeSymbolBinding(manifest, snapshot.stableMode);
+    if (!resolved) return;
+    const scene = this.requirePackagePreviewScene(resolved);
     runtime.resetReelScene("main", {
       scene: scene.codes,
       localPhaseYs: scene.stopYs,
@@ -831,6 +895,27 @@ function freezeGrid(grid: SymbolPreviewGridSize): SymbolPreviewGridSize {
   if (!Number.isSafeInteger(grid.rows) || grid.rows <= 0)
     throw new Error(`layout rows 必须是正安全整数，实际为 ${grid.rows}。`);
   return Object.freeze({ columns: grid.columns, rows: grid.rows });
+}
+
+function resolveModeSymbolBinding(
+  manifest: SceneLayoutManifestV1,
+  modeId: string | null,
+): {
+  readonly id: string;
+  readonly binding: NonNullable<SceneLayoutManifestV1["symbolPackage"]>;
+} | null {
+  if (manifest.symbolPackage)
+    return {
+      id: manifest.symbolPackage.manifest.split("/").at(-2)!,
+      binding: manifest.symbolPackage,
+    };
+  if (!modeId) return null;
+  const mode = manifest.gameModes?.modes.find(
+    (candidate) => candidate.id === modeId,
+  );
+  const id = mode?.symbolPackage;
+  const binding = id ? manifest.symbolPackages?.[id] : undefined;
+  return id && binding ? { id, binding } : null;
 }
 
 function incompatibleMessage(

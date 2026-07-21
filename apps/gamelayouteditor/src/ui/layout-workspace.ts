@@ -6,16 +6,22 @@ import {
 } from "../model/editor-project.js";
 import type { EditorLayoutResource } from "../model/editor-resource.js";
 import { describeResource } from "../model/resource-commands.js";
-import { selectionKey, type LayoutSelection } from "./ui-session.js";
+import {
+  selectionKey,
+  type EditorUiSession,
+  type LayoutSelection,
+} from "./ui-session.js";
 import { escapeHtml, numberField } from "./ui-markup.js";
 
 export function layoutWorkspaceMarkup(
   project: EditorProject,
   selection: LayoutSelection,
+  modeId: string,
+  session: EditorUiSession,
 ): string {
   const backgroundIds = new Set(
-    activeVariantIds(project)
-      .map((variant) => project.variants[variant].backgroundNode)
+    project.gameModes.modes
+      .flatMap((mode) => Object.values(mode.backgroundNodes))
       .filter(Boolean),
   );
   const layers = project.nodes
@@ -32,7 +38,7 @@ export function layoutWorkspaceMarkup(
             outlineRow({
               key: `background:${variant}`,
               label: variant,
-              meta: backgroundMeta(project, variant),
+              meta: backgroundMeta(project, modeId, variant),
               selected:
                 selection.kind === "background" &&
                 selection.variant === variant,
@@ -43,7 +49,7 @@ export function layoutWorkspaceMarkup(
         <div class="outline-group"><strong>图层 · ${layers.length}</strong>${layers.length ? layers.map((node) => outlineRow({ key: `layer:${node.id}`, label: node.id, meta: layerMeta(project, node), selected: selection.kind === "layer" && selection.nodeId === node.id })).join("") : '<span class="outline-empty">暂无普通图层</span>'}</div>
       </div>
     </aside>
-    <section class="inspector" aria-live="polite">${inspectorMarkup(project, selection, layers)}</section>
+    <section class="inspector" aria-live="polite">${inspectorMarkup(project, selection, layers, modeId, session)}</section>
   </section>`;
 }
 
@@ -58,10 +64,14 @@ function outlineRow(options: {
 
 function backgroundMeta(
   project: EditorProject,
+  modeId: string,
   variant: "default" | "landscape" | "portrait",
 ): string {
   const node = project.nodes.find(
-    (item) => item.id === project.variants[variant].backgroundNode,
+    (item) =>
+      item.id ===
+      project.gameModes.modes.find((mode) => mode.id === modeId)
+        ?.backgroundNodes[variant],
   );
   if (!node) return "未设置 · incomplete";
   const resource = project.resources.get(node.resourceId);
@@ -79,11 +89,13 @@ function inspectorMarkup(
   project: EditorProject,
   selection: LayoutSelection,
   layers: readonly EditorNodeDraft[],
+  modeId: string,
+  session: EditorUiSession,
 ): string {
   if (selection.kind === "background") {
-    return backgroundInspector(project, selection.variant);
+    return backgroundInspector(project, modeId, selection.variant, session);
   }
-  if (selection.kind === "reel") return reelInspector(project);
+  if (selection.kind === "reel") return reelInspector(project, session);
   const node = project.nodes.find((item) => item.id === selection.nodeId);
   return node
     ? layerInspector(project, node, layers)
@@ -92,23 +104,31 @@ function inspectorMarkup(
 
 function backgroundInspector(
   project: EditorProject,
+  modeId: string,
   variantId: "default" | "landscape" | "portrait",
+  session: EditorUiSession,
 ): string {
   const variant = project.variants[variantId];
-  const node = project.nodes.find((item) => item.id === variant.backgroundNode);
+  const backgroundNode = project.gameModes.modes.find(
+    (mode) => mode.id === modeId,
+  )?.backgroundNodes[variantId];
+  const node = project.nodes.find((item) => item.id === backgroundNode);
   const nodeIndex = node ? project.nodes.indexOf(node) : -1;
   const resource = node ? project.resources.get(node.resourceId) : undefined;
   return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>背景 Inspector</span><h2>${variantId}</h2></div>
     <section class="inspector-section"><h3>资源绑定</h3>${resource && node ? `<p><strong>${escapeHtml(node.id)}</strong> · order ${node.order}</p><p class="path">${escapeHtml(describeResource(resource))}</p>${nodeIdField(node)}${resource.kind === "spine" ? spinePlaybackEditor(resource, node) : ""}` : '<p class="hint">尚未绑定背景资源。</p>'}<div class="button-row"><button type="button" data-choose-background="${variantId}">${resource ? "更换资源" : "选择资源"}</button><button type="button" class="danger" data-clear-background="${variantId}" ${node ? "" : "disabled"}>清除背景</button></div></section>
-    <section class="inspector-section"><h3>Art / Focus</h3><div class="field-grid">${numberField("art width", `variants.${variantId}.artSize.width`, variant.artSize.width)}${numberField("art height", `variants.${variantId}.artSize.height`, variant.artSize.height)}</div><p class="derived">focus ${variant.focusRect.x}, ${variant.focusRect.y}, ${variant.focusRect.width} × ${variant.focusRect.height}</p><details><summary>高级 focus 配置</summary><div class="field-grid">${numberField("left", `variants.${variantId}.focusOffsets.left`, variant.focusOffsets.left)}${numberField("top", `variants.${variantId}.focusOffsets.top`, variant.focusOffsets.top)}${numberField("right", `variants.${variantId}.focusOffsets.right`, variant.focusOffsets.right)}${numberField("bottom", `variants.${variantId}.focusOffsets.bottom`, variant.focusOffsets.bottom)}</div>${project.mode === "orientation-focus" ? `<fieldset><legend>frame focus rect</legend><div class="field-grid">${numberField("width", `variants.${variantId}.frameFocusRect.width`, variant.frameFocusRect.width)}${numberField("height", `variants.${variantId}.frameFocusRect.height`, variant.frameFocusRect.height)}</div></fieldset><fieldset><legend>min focus margins</legend><div class="field-grid">${numberField("left", `variants.${variantId}.minFocusMargin.left`, variant.minFocusMargin.left)}${numberField("right", `variants.${variantId}.minFocusMargin.right`, variant.minFocusMargin.right)}${numberField("top", `variants.${variantId}.minFocusMargin.top`, variant.minFocusMargin.top)}${numberField("bottom", `variants.${variantId}.minFocusMargin.bottom`, variant.minFocusMargin.bottom)}</div></fieldset>` : ""}</details></section>
+    <section class="inspector-section"><h3>Art / Focus</h3><div class="field-grid">${numberField("art width", `variants.${variantId}.artSize.width`, variant.artSize.width)}${numberField("art height", `variants.${variantId}.artSize.height`, variant.artSize.height)}</div><p class="derived">focus ${variant.focusRect.x}, ${variant.focusRect.y}, ${variant.focusRect.width} × ${variant.focusRect.height}</p><details data-inspector-section="layout:background:${variantId}:focus" ${session.expandedInspectorSections.has(`layout:background:${variantId}:focus`) ? "open" : ""}><summary>高级 focus 配置</summary><div class="field-grid">${numberField("left", `variants.${variantId}.focusOffsets.left`, variant.focusOffsets.left)}${numberField("top", `variants.${variantId}.focusOffsets.top`, variant.focusOffsets.top)}${numberField("right", `variants.${variantId}.focusOffsets.right`, variant.focusOffsets.right)}${numberField("bottom", `variants.${variantId}.focusOffsets.bottom`, variant.focusOffsets.bottom)}</div>${project.mode === "orientation-focus" ? `<fieldset><legend>frame focus rect</legend><div class="field-grid">${numberField("width", `variants.${variantId}.frameFocusRect.width`, variant.frameFocusRect.width)}${numberField("height", `variants.${variantId}.frameFocusRect.height`, variant.frameFocusRect.height)}</div></fieldset><fieldset><legend>min focus margins</legend><div class="field-grid">${numberField("left", `variants.${variantId}.minFocusMargin.left`, variant.minFocusMargin.left)}${numberField("right", `variants.${variantId}.minFocusMargin.right`, variant.minFocusMargin.right)}${numberField("top", `variants.${variantId}.minFocusMargin.top`, variant.minFocusMargin.top)}${numberField("bottom", `variants.${variantId}.minFocusMargin.bottom`, variant.minFocusMargin.bottom)}</div></fieldset>` : ""}</details></section>
     ${node ? `<section class="inspector-section"><h3>背景 Placement</h3><p class="hint">Spine 的导出 bounds 不是 art size；居中原点资源通常使用 art 宽高的一半作为 x / y。</p><div class="field-grid">${numberField("x", `nodes.${nodeIndex}.placements.${variantId}.x`, node.placements[variantId]!.x)}${numberField("y", `nodes.${nodeIndex}.placements.${variantId}.y`, node.placements[variantId]!.y)}${numberField("scale", `nodes.${nodeIndex}.placements.${variantId}.scale`, node.placements[variantId]!.scale, 0.01)}</div></section>` : ""}
   </div>`;
 }
 
-function reelInspector(project: EditorProject): string {
+function reelInspector(
+  project: EditorProject,
+  session: EditorUiSession,
+): string {
   const reel = project.reel;
   const size = calculateReelSize(project);
-  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>主转轮 Inspector</span><h2>main</h2></div><section class="inspector-section"><div class="field-grid">${numberField("order", "reel.order", reel.order ?? 0)}${numberField("columns", "reel.columns", reel.columns)}${numberField("rows", "reel.rows", reel.rows)}</div><p class="derived">派生尺寸 ${size.width} × ${size.height}</p><details><summary>高级 cell / gap / placement</summary><div class="field-grid">${numberField("cell width", "reel.cellWidth", reel.cellWidth)}${numberField("cell height", "reel.cellHeight", reel.cellHeight)}${numberField("gap x", "reel.gapX", reel.gapX)}${numberField("gap y", "reel.gapY", reel.gapY)}</div>${activeVariantIds(
+  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>主转轮 Inspector</span><h2>main</h2></div><section class="inspector-section"><div class="field-grid">${numberField("order", "reel.order", reel.order ?? 0)}${numberField("columns", "reel.columns", reel.columns)}${numberField("rows", "reel.rows", reel.rows)}</div><p class="derived">派生尺寸 ${size.width} × ${size.height}</p><details data-inspector-section="layout:reel:main:advanced" ${session.expandedInspectorSections.has("layout:reel:main:advanced") ? "open" : ""}><summary>高级 cell / gap / placement</summary><div class="field-grid">${numberField("cell width", "reel.cellWidth", reel.cellWidth)}${numberField("cell height", "reel.cellHeight", reel.cellHeight)}${numberField("gap x", "reel.gapX", reel.gapX)}${numberField("gap y", "reel.gapY", reel.gapY)}</div>${activeVariantIds(
     project,
   )
     .map((variant) => {
@@ -168,7 +188,7 @@ function spinePlaybackEditor(
           )
           .join(
             "",
-          )}<button type="button" data-add-spine-transition="${escapeHtml(node.id)}">添加 transition</button></fieldset>`
+          )}<div class="field-row" data-spine-transition-builder="${escapeHtml(node.id)}"><label>from<select data-spine-transition-from><option value="">请选择</option>${playback.states.map((state) => `<option value="${escapeHtml(state.id)}">${escapeHtml(state.id)}</option>`).join("")}</select></label><label>to<select data-spine-transition-to><option value="">请选择</option>${playback.states.map((state) => `<option value="${escapeHtml(state.id)}">${escapeHtml(state.id)}</option>`).join("")}</select></label><label>animation<select data-spine-transition-animation><option value="">请选择（大小写精确）</option>${animationOptions("")}</select></label><button type="button" data-add-spine-transition="${escapeHtml(node.id)}">添加 transition</button></div><p class="hint">切换预览状态时，匹配的 transition 播放一次，再进入目标稳定状态。</p></fieldset>`
       : `<label>loop animation<select data-layer-animation="${escapeHtml(node.id)}"><option value="">请选择（大小写精确）</option>${animationOptions(selected)}</select></label>`
   }</div>`;
 }

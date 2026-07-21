@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import { createNewEditorProject } from "../src/model/editor-project.js";
 import {
   addGameMode,
+  bindGameModeBackground,
+  bindGameModeSymbols,
   bindGameModePopup,
   deleteGameMode,
   deletePopupDependency,
   importPopupDependency,
+  importSymbolDependency,
+  deleteSymbolDependency,
+  replaceSymbolDependency,
   renameGameMode,
   replacePopupDependency,
   setGameModeNodeState,
@@ -152,11 +157,78 @@ describe("game mode and popup dependency commands", () => {
       ),
     ).toBe(true);
   });
+
+  it("owns per-mode background and Symbols bindings with reference protection", () => {
+    const project = createNewEditorProject("maximized-focus");
+    project.resources.set("bg-art", {
+      id: "bg-art",
+      kind: "image",
+      path: "assets/bg.png",
+      size: { width: 100, height: 100 },
+    });
+    project.nodes.push({
+      id: "bg",
+      order: 0,
+      resourceId: "bg-art",
+      placements: { default: { x: 0, y: 0, scale: 1 } },
+    });
+    bindGameModeBackground(project, "BaseGame", "default", "bg");
+    expect(project.gameModes.modes[0].backgroundNodes).toEqual({
+      default: "bg",
+    });
+    expect(project.variants.default.backgroundNode).toBe("bg");
+    expect(() =>
+      bindGameModeBackground(project, "BaseGame", "portrait", "bg"),
+    ).toThrow(/不使用/);
+    expect(() =>
+      bindGameModeBackground(project, "BaseGame", "default", "missing"),
+    ).toThrow(/未知背景/);
+
+    const imported = symbolPackage("demo-symbols", 1);
+    importSymbolDependency(project, imported);
+    expect(() => importSymbolDependency(project, imported)).toThrow(/已存在/);
+    bindGameModeSymbols(project, "BaseGame", {
+      packageId: "demo-symbols",
+      reelSet: "main",
+      renderMode: "standard",
+    });
+    expect(project.gameModes.modes[0].symbols?.packageId).toBe("demo-symbols");
+    expect(project.reel.order).toBe(1);
+    expect(() => deleteSymbolDependency(project, "demo-symbols")).toThrow(
+      /BaseGame/,
+    );
+    expect(() =>
+      bindGameModeSymbols(project, "BaseGame", {
+        packageId: "missing",
+        reelSet: "main",
+        renderMode: "standard",
+      }),
+    ).toThrow(/未知 Symbols/);
+    expect(() =>
+      replaceSymbolDependency(
+        project,
+        "demo-symbols",
+        symbolPackage("other", 2),
+      ),
+    ).toThrow(/必须保持/);
+    bindGameModeSymbols(project, "BaseGame", null);
+    deleteSymbolDependency(project, "demo-symbols");
+    expect(project.symbolDependencies.size).toBe(0);
+  });
 });
 
 function popup(id: string, marker: number) {
   return {
     manifest: { id } as never,
     files: new Map([["popup.manifest.json", new Uint8Array([marker])]]),
+  };
+}
+
+function symbolPackage(id: string, marker: number) {
+  return {
+    resource: {
+      packageManifest: { id },
+    } as never,
+    files: new Map([["symbols.package.json", new Uint8Array([marker])]]),
   };
 }

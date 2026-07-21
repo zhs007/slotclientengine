@@ -166,16 +166,35 @@ h3 {
 
 .editor-pane {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   border-right: 1px solid #243044;
   background: #0b111c;
 }
 
+.state-bar {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) auto minmax(120px, 1fr);
+  align-items: end;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid #243044;
+  background: #101927;
+}
+
+.state-bar output {
+  align-self: center;
+  overflow: hidden;
+  color: #7fdda8;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
 .workspace-tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   padding: 9px 12px 0;
   border-bottom: 1px solid #243044;
   background: #0d1420;
@@ -204,6 +223,39 @@ h3 {
 
 .workspace-panel {
   background: #0b111c;
+}
+
+.workspace-form {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  height: 100%;
+  overflow: auto;
+  padding: 14px;
+}
+
+.workspace-form > h2,
+.workspace-form > .button-row {
+  margin: 0;
+}
+
+.workspace-form fieldset {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.symbols-workspace output {
+  min-height: 54px;
+  padding: 8px;
+  border: 1px solid #26344a;
+  border-radius: 7px;
+  color: #7fdda8;
+  background: #080d15;
+  font:
+    11px/1.45 ui-monospace,
+    monospace;
+  white-space: pre-wrap;
 }
 
 .workspace-toolbar {
@@ -525,6 +577,24 @@ details summary {
   margin: 0;
 }
 
+.readiness-table-wrap {
+  overflow: auto;
+}
+
+.readiness-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  text-align: left;
+}
+
+.readiness-table th,
+.readiness-table td {
+  padding: 6px;
+  border-bottom: 1px solid #26344a;
+  white-space: nowrap;
+}
+
 .diagnostic-list,
 .closure-list {
   margin: 0;
@@ -578,28 +648,6 @@ details summary {
   width: 82px;
 }
 
-.symbols-drawer {
-  border-bottom: 1px solid #243044;
-  background: #0b121d;
-}
-
-.symbols-drawer > summary {
-  padding: 7px 12px;
-  font-size: 12px;
-}
-
-.symbols-controls {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 7px;
-  max-height: 320px;
-  overflow: auto;
-  padding: 0 12px 9px;
-  color: #91a0b5;
-  font-size: 11px;
-}
-
 .other-scene-bindings {
   display: grid;
   flex-basis: 100%;
@@ -621,18 +669,6 @@ details summary {
 .other-scene-row input,
 .other-scene-row select {
   min-width: 0;
-}
-
-.symbols-controls label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.symbols-controls output {
-  flex-basis: 100%;
-  color: #7fdda8;
-  font-family: ui-monospace, monospace;
 }
 
 .preview-stage {
@@ -726,6 +762,32 @@ details summary {
   color: #8998ad;
   text-align: center;
   font-size: 12px;
+}
+
+dialog:not(.resource-picker) {
+  width: min(520px, calc(100vw - 48px));
+  padding: 18px;
+  border: 1px solid #415675;
+  border-radius: 12px;
+  color: #e8edf5;
+  background: #0c131f;
+  box-shadow: 0 28px 100px #000;
+}
+
+dialog:not(.resource-picker)::backdrop {
+  background: rgb(0 0 0 / 70%);
+  backdrop-filter: blur(3px);
+}
+
+dialog:not(.resource-picker) form,
+dialog:not(.resource-picker) > section {
+  display: grid;
+  gap: 12px;
+}
+
+dialog:not(.resource-picker) h2,
+dialog:not(.resource-picker) .button-row {
+  margin: 0;
 }
 
 .resource-picker {

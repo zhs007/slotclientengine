@@ -79,6 +79,74 @@ function files(): Map<string, Uint8Array> {
   ]);
 }
 
+function canonicalMultiSymbolFixture() {
+  const ids = ["demo-symbols", "alt-symbols"] as const;
+  const packageFiles = new Map<string, Uint8Array>([
+    ["assets/bg.png", new Uint8Array([1])],
+  ]);
+  for (const id of ids) {
+    const prefix = `dependencies/symbols/${id}/`;
+    packageFiles.set(
+      `${prefix}symbols.package.json`,
+      encode({ ...symbolsPackage, id }),
+    );
+    packageFiles.set(`${prefix}gameconfig.json`, encode(gameConfig));
+    packageFiles.set(
+      `${prefix}symbol-state-textures.manifest.json`,
+      encode(symbolManifest),
+    );
+    packageFiles.set(`${prefix}a.png`, new Uint8Array([2]));
+    packageFiles.set(`${prefix}b.png`, new Uint8Array([3]));
+  }
+  const manifest = {
+    ...game002LayoutFixture,
+    reels: layoutManifest("standard").reels,
+    symbolPackages: {
+      "demo-symbols": {
+        manifest: "dependencies/symbols/demo-symbols/symbols.package.json",
+        reel: "main" as const,
+        reelSet: "main",
+        renderMode: "standard" as const,
+      },
+      "alt-symbols": {
+        manifest: "dependencies/symbols/alt-symbols/symbols.package.json",
+        reel: "main" as const,
+        reelSet: "main",
+        renderMode: "grid-cell" as const,
+      },
+    },
+    gameModes: {
+      initialMode: "BaseGame",
+      modes: [
+        {
+          id: "BaseGame",
+          backgroundNodes: { default: "bg" },
+          nodeStates: {},
+          symbolPackage: "demo-symbols",
+        },
+        {
+          id: "FreeGame",
+          backgroundNodes: { default: "bg" },
+          nodeStates: {},
+          symbolPackage: "alt-symbols",
+        },
+        {
+          id: "BonusGame",
+          backgroundNodes: { default: "bg" },
+          nodeStates: {},
+          symbolPackage: "alt-symbols",
+        },
+        {
+          id: "EmptyGame",
+          backgroundNodes: { default: "bg" },
+          nodeStates: {},
+        },
+      ],
+    },
+  };
+  return { manifest, files: packageFiles };
+}
+
 function popupLayoutFixture() {
   const characters = [..."$,.0123456789"];
   const glyphs = Object.fromEntries(
@@ -315,6 +383,95 @@ describe("scene layout package runtime", () => {
     }
   });
 
+  it("prevalidates and atomically swaps canonical per-mode symbol packages", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const resource = await createSceneLayoutPackageResource(
+        canonicalMultiSymbolFixture(),
+      );
+      expect(Object.keys(resource.symbolPackages)).toEqual([
+        "demo-symbols",
+        "alt-symbols",
+      ]);
+      const runtime = createSceneLayoutPackageRuntime({ resource });
+      const baseInput = {
+        scene: [
+          [0, 1],
+          [1, 0],
+        ],
+        localPhaseYs: [0, 0],
+      };
+      await runtime.init({ reels: { main: baseInput } });
+      const baseReel = runtime.getReelPresentation("main");
+      expect(baseReel).toBeInstanceOf(RenderReelSet);
+      expect(runtime.getGameModeSnapshot()).toMatchObject({
+        stableMode: "BaseGame",
+        stableSymbolPackage: "demo-symbols",
+      });
+
+      await expect(runtime.requestGameMode("FreeGame")).rejects.toThrow(
+        /requires target reels\.main/,
+      );
+      await expect(
+        runtime.requestGameMode("FreeGame", {
+          reels: {
+            main: {
+              scene: [
+                [0, 9],
+                [1, 0],
+              ],
+              localPhaseYs: [0, 0],
+            },
+          },
+        }),
+      ).rejects.toThrow(/not displayable/);
+      expect(runtime.getReelPresentation("main")).toBe(baseReel);
+      expect(runtime.getGameModeSnapshot().stableMode).toBe("BaseGame");
+
+      await runtime.requestGameMode("FreeGame", {
+        reels: { main: baseInput },
+      });
+      const freeReel = runtime.getReelPresentation("main");
+      expect(freeReel).toBeInstanceOf(RenderGridCellReelSet);
+      expect(freeReel).not.toBe(baseReel);
+      expect(baseReel.destroyed).toBe(true);
+      expect(runtime.getGameModeSnapshot()).toMatchObject({
+        stableMode: "FreeGame",
+        stableSymbolPackage: "alt-symbols",
+      });
+
+      await runtime.requestGameMode("BonusGame");
+      expect(runtime.getReelPresentation("main")).toBe(freeReel);
+      await expect(
+        runtime.requestGameMode("FreeGame", { reels: { main: baseInput } }),
+      ).rejects.toThrow(/sharing a symbol package/);
+
+      await runtime.requestGameMode("FreeGame", {
+        recreateReel: true,
+        reels: { main: baseInput },
+      });
+      const forcedReel = runtime.getReelPresentation("main");
+      expect(forcedReel).not.toBe(freeReel);
+      expect(forcedReel).toBeInstanceOf(RenderGridCellReelSet);
+      expect(freeReel.destroyed).toBe(true);
+
+      await runtime.requestGameMode("EmptyGame");
+      expect(() => runtime.getReelPresentation("main")).toThrow(/unavailable/);
+      expect(forcedReel.destroyed).toBe(true);
+      expect(runtime.getGameModeSnapshot()).toMatchObject({
+        stableMode: "EmptyGame",
+        stableSymbolPackage: null,
+      });
+      runtime.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
   it("keeps the package runtime layout-only when no symbols binding exists", async () => {
     const load = vi
       .spyOn(Assets, "load")
@@ -386,6 +543,9 @@ describe("scene layout package runtime", () => {
         stableMode: "BaseGame",
         targetMode: null,
         phase: "stable",
+        stableSymbolPackage: null,
+        targetSymbolPackage: null,
+        activeBackgroundNodes: [],
       });
       await expect(
         runtime.requestGameMode("BaseGame"),

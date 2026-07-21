@@ -67,6 +67,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly #nodesById: ReadonlyMap<string, RuntimeNode>;
   readonly #artMask = new Graphics();
   readonly #loadedTextureUrls = new Set<string>();
+  readonly #activeNodes = new Map<string, boolean>();
   #snapshot: SceneLayoutSnapshot | null = null;
   #initializing = false;
   #initialized = false;
@@ -112,6 +113,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
     });
     this.#nodes = Object.freeze(nodes);
     this.#nodesById = new Map(nodes.map((node) => [node.spec.id, node]));
+    for (const node of nodes) this.#activeNodes.set(node.spec.id, true);
     this.#artMask.label = "scene-layout-art-mask";
     this.#artMask.visible = true;
     this.#artMask.renderable = true;
@@ -155,8 +157,9 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       .fill({ color: 0xffffff, alpha: 1 });
     for (const node of this.#nodes) {
       const placement = node.spec.placements[snapshot.variantId];
-      node.slot.visible = Boolean(placement);
-      node.slot.renderable = Boolean(placement);
+      const active = this.#activeNodes.get(node.spec.id) !== false;
+      node.slot.visible = Boolean(placement) && active;
+      node.slot.renderable = Boolean(placement) && active;
       if (placement) {
         node.slot.position.set(placement.x, placement.y);
         node.slot.scale.set(placement.scale);
@@ -248,6 +251,17 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   getNodeStateSnapshot(nodeId: string): SceneLayoutNodeStateSnapshot {
     this.assertReady();
     return this.requireStateController(nodeId).snapshot();
+  }
+
+  setNodeActive(nodeId: string, active: boolean): void {
+    this.assertReady();
+    const node = this.requireNode(nodeId);
+    this.#activeNodes.set(nodeId, active);
+    const placement = this.#snapshot?.variantId
+      ? node.spec.placements[this.#snapshot.variantId]
+      : undefined;
+    node.slot.visible = active && Boolean(placement);
+    node.slot.renderable = active && Boolean(placement);
   }
 
   destroy(): void {

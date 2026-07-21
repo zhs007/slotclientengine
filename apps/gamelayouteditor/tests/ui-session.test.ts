@@ -44,7 +44,7 @@ describe("editor UI session and Resource Picker view model", () => {
     const session = createEditorUiSession();
     session.resourceQuery = "hero";
     session.expandedResourceIds.add("hero");
-    session.symbolsDrawerOpen = true;
+    session.expandedInspectorSections.add("layout:reel:main:advanced");
     const project = createNewEditorProject("maximized-focus");
     expect(session.activeTab).toBe("assets");
     expect(project).not.toHaveProperty("activeTab");
@@ -123,10 +123,15 @@ describe("editor UI session and Resource Picker view model", () => {
       nodeId: "hero-bg",
       defaultAnimation: "Idle",
     });
-    const markup = layoutWorkspaceMarkup(project, {
-      kind: "background",
-      variant: "landscape",
-    });
+    const markup = layoutWorkspaceMarkup(
+      project,
+      {
+        kind: "background",
+        variant: "landscape",
+      },
+      "BaseGame",
+      createEditorUiSession(),
+    );
     expect(node.placements.landscape).toEqual({ x: 0, y: 0, scale: 1 });
     expect(markup).toContain("背景 Placement");
     expect(markup).toContain('data-number="nodes.0.placements.landscape.x"');

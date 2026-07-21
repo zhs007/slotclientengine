@@ -177,7 +177,7 @@ describe("layout zip IO", () => {
         imported.manifest,
         imported.assets,
       );
-      expect(project.gameModes).toEqual({
+      expect(project.gameModes).toMatchObject({
         initialMode: "BaseGame",
         modes: [
           {
@@ -417,18 +417,29 @@ describe("layout zip IO", () => {
         imported.manifest,
         imported.assets,
       );
-      expect(project.symbolDependency).toMatchObject({
+      expect(project.symbolDependencies.get("demo-symbols")).toMatchObject({
         packageId: "demo-symbols",
-        reelSet: "main",
-        renderMode: "standard",
-        includeInExport: true,
       });
-      expect(editorProjectToManifest(project)).toEqual({
-        ...imported.manifest,
-        gameModes: {
-          initialMode: "BaseGame",
-          modes: [{ id: "BaseGame", nodeStates: {} }],
+      const canonical = editorProjectToManifest(project);
+      expect(canonical).not.toHaveProperty("symbolPackage");
+      expect(canonical.symbolPackages).toEqual({
+        "demo-symbols": {
+          manifest: "dependencies/symbols/demo-symbols/symbols.package.json",
+          reel: "main",
+          reelSet: "main",
+          renderMode: "standard",
         },
+      });
+      expect(canonical.gameModes).toEqual({
+        initialMode: "BaseGame",
+        modes: [
+          {
+            id: "BaseGame",
+            backgroundNodes: { default: "bg" },
+            nodeStates: {},
+            symbolPackage: "demo-symbols",
+          },
+        ],
       });
       expect(
         project.assets.has("dependencies/symbols/demo-symbols/a.png"),

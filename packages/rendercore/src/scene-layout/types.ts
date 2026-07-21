@@ -112,7 +112,11 @@ export interface SceneLayoutPopupBinding {
 
 export interface SceneLayoutGameMode {
   readonly id: string;
+  readonly backgroundNodes?: Readonly<
+    Partial<Record<SceneLayoutVariantId, string>>
+  >;
   readonly nodeStates: Readonly<Record<string, string>>;
+  readonly symbolPackage?: string;
   readonly awardCelebrationPopup?: string;
 }
 
@@ -155,6 +159,9 @@ export interface SceneLayoutManifestV1 {
   readonly nodes: readonly SceneLayoutNode[];
   readonly reels: Readonly<Record<string, SceneLayoutReelGrid>>;
   readonly symbolPackage?: SceneLayoutSymbolPackageBinding;
+  readonly symbolPackages?: Readonly<
+    Record<string, SceneLayoutSymbolPackageBinding>
+  >;
   readonly popups?: Readonly<Record<string, SceneLayoutPopupBinding>>;
   readonly gameModes?: SceneLayoutGameModes;
 }
@@ -181,6 +188,7 @@ export interface SceneLayoutPackageResource {
   readonly layout: SceneLayoutResource;
   readonly imageStrings: Readonly<Record<string, ImageStringResource>>;
   readonly symbolPackage: SymbolPackageResource | null;
+  readonly symbolPackages: Readonly<Record<string, SymbolPackageResource>>;
   readonly popupPackages: Readonly<Record<string, PopupPackageResource>>;
   destroy(): Promise<void> | void;
 }
@@ -261,6 +269,8 @@ export interface SceneLayoutRuntime {
   requestNodeState(nodeId: string, state: string): Promise<void>;
   canRequestNodeState(nodeId: string, state: string): boolean;
   getNodeStateSnapshot(nodeId: string): SceneLayoutNodeStateSnapshot;
+  /** @internal Package runtimes own mode-aware visibility; game apps must not call this. */
+  setNodeActive(nodeId: string, active: boolean): void;
   destroy(): void;
 }
 
@@ -274,6 +284,9 @@ export interface SceneLayoutGameModeSnapshot {
   readonly stableMode: string;
   readonly targetMode: string | null;
   readonly phase: "stable" | "transitioning";
+  readonly stableSymbolPackage: string | null;
+  readonly targetSymbolPackage: string | null;
+  readonly activeBackgroundNodes: readonly string[];
 }
 
 export interface SceneLayoutInitialReelScene {
@@ -295,8 +308,20 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   getGameModeIds(): readonly string[];
   /** Returns the committed mode and any transition target without mutating playback. */
   getGameModeSnapshot(): SceneLayoutGameModeSnapshot;
-  /** Atomically preflights, starts, and drains all node transitions for one mode. */
-  requestGameMode(modeId: string): Promise<void>;
+  /**
+   * Prepares any target reel, drains shared node transitions, then atomically
+   * commits background visibility, reel ownership, and the stable mode.
+   */
+  requestGameMode(
+    modeId: string,
+    options?: {
+      /** Explicitly rebuilds even when source and target use the same binding. */
+      readonly recreateReel?: boolean;
+      readonly reels?: Readonly<
+        Partial<Record<"main", SceneLayoutInitialReelScene>>
+      >;
+    },
+  ): Promise<void>;
   /** Starts the award-celebration popup explicitly bound to the current stable mode. */
   startAwardCelebrationForCurrentMode(input: {
     readonly betAmountRaw: number;

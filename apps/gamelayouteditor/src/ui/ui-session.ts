@@ -4,7 +4,12 @@ import {
   type EditorProject,
 } from "../model/editor-project.js";
 
-export type WorkspaceTab = "assets" | "layout" | "project";
+export type WorkspaceTab =
+  | "assets"
+  | "layout"
+  | "symbols"
+  | "bigwin"
+  | "project";
 
 export type LayoutSelection =
   | { readonly kind: "background"; readonly variant: SceneLayoutVariantId }
@@ -36,8 +41,8 @@ export interface EditorUiSession {
   resourceType: "all" | "image" | "spine" | "image-string";
   resourceStatus: "all" | "referenced" | "unused" | "error";
   expandedResourceIds: Set<string>;
+  expandedInspectorSections: Set<string>;
   picker: ResourcePickerState | null;
-  symbolsDrawerOpen: boolean;
 }
 
 export function createEditorUiSession(): EditorUiSession {
@@ -48,8 +53,8 @@ export function createEditorUiSession(): EditorUiSession {
     resourceType: "all",
     resourceStatus: "all",
     expandedResourceIds: new Set(),
+    expandedInspectorSections: new Set(),
     picker: null,
-    symbolsDrawerOpen: false,
   };
 }
 
@@ -76,8 +81,8 @@ export function normalizeLayoutSelection(
       : defaultLayoutSelection(project);
   }
   const node = project.nodes.find((item) => item.id === selection.nodeId);
-  const background = activeVariantIds(project).some(
-    (variant) => project.variants[variant].backgroundNode === selection.nodeId,
+  const background = project.gameModes.modes.some((mode) =>
+    Object.values(mode.backgroundNodes).includes(selection.nodeId),
   );
   return node && !background ? selection : defaultLayoutSelection(project);
 }
