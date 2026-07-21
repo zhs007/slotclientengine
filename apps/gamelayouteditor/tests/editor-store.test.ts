@@ -144,16 +144,22 @@ describe("EditorStore", () => {
 
   it("deduplicates identical external errors and formats non-Error values", () => {
     const store = new EditorStore(createNewEditorProject("maximized-focus"));
+    const validationErrors = store.getSnapshot().errors;
     const listener = vi.fn();
     store.subscribe(listener);
     listener.mockClear();
 
     store.setExternalError("offline");
-    expect(store.getSnapshot().errors).toEqual(["offline"]);
+    expect(store.getSnapshot().errors).toBe(validationErrors);
+    expect(store.getSnapshot().externalError).toBe("offline");
     expect(listener).toHaveBeenCalledOnce();
 
     store.setExternalError("offline");
     expect(listener).toHaveBeenCalledOnce();
+
+    store.clearExternalError();
+    expect(store.getSnapshot().externalError).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 
   it("round-trips an orientation project without sharing asset bytes", () => {

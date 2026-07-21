@@ -13,8 +13,10 @@ import { createViewerControls } from "./ui/controls";
 
 const VIEWER_INSERTED_NODE_ID = "viewer-group-slot-image";
 const VIEWER_TEXT_LAYER_REPLACEMENT_ID = "viewer-text-layer-replacement";
-const STAGE_CANVAS_SCALES = [0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4] as const;
-const DEFAULT_STAGE_CANVAS_SCALE_INDEX = 2;
+const STAGE_CANVAS_SCALES = [
+  0.1, 0.2, 0.3, 0.4, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4,
+] as const;
+const DEFAULT_STAGE_CANVAS_SCALE_INDEX = 6;
 
 async function bootstrap(): Promise<void> {
   const appRoot = document.querySelector<HTMLDivElement>("#app");
@@ -310,6 +312,7 @@ async function bootstrap(): Promise<void> {
         parent: nextApp.stage,
         diagnosticsElement: stageMount,
         viewport: nextViewport,
+        viewportScale: getStageCanvasScale(stageCanvasScaleIndex),
         requestRender: () => nextApp.render(),
         projectId: loadedProject.projectId,
         bundleId: loadedProject.bundleId,
@@ -411,7 +414,6 @@ async function bootstrap(): Promise<void> {
       Math.max(0, index),
     );
     const scale = getStageCanvasScale(stageCanvasScaleIndex);
-    stageMount.style.setProperty("--stage-canvas-scale", String(scale));
     stageMount.dataset.viewerCanvasScale = scale.toFixed(2);
     zoomReadout.textContent = `${Math.round(scale * 100)}%`;
     zoomOutButton.disabled = stageCanvasScaleIndex === 0;
@@ -430,14 +432,14 @@ async function bootstrap(): Promise<void> {
     app: Application,
     viewportPlayer: VNIPlayer | null,
   ): { readonly width: number; readonly height: number } {
-    const viewport = getScaledMountViewport(
-      stageMount,
-      getStageCanvasScale(stageCanvasScaleIndex),
-    );
+    const viewport = getMountViewport(stageMount);
     stageCanvasLayer.style.width = `${viewport.width}px`;
     stageCanvasLayer.style.height = `${viewport.height}px`;
     app.renderer.resize(viewport.width, viewport.height);
     viewportPlayer?.setViewportSize(viewport.width, viewport.height);
+    viewportPlayer?.setViewportScale(
+      getStageCanvasScale(stageCanvasScaleIndex),
+    );
     return viewport;
   }
 }
@@ -478,17 +480,6 @@ function getMountViewport(stageMount: HTMLElement): {
   return {
     width: stageMount.clientWidth || 1,
     height: stageMount.clientHeight || 1,
-  };
-}
-
-function getScaledMountViewport(
-  stageMount: HTMLElement,
-  scale: number,
-): { readonly width: number; readonly height: number } {
-  const viewport = getMountViewport(stageMount);
-  return {
-    width: viewport.width * scale,
-    height: viewport.height * scale,
   };
 }
 

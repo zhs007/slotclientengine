@@ -185,3 +185,15 @@ pnpm --filter gamelayouteditor dev -- --host 0.0.0.0
 为兼容修复前已经打开的旧 draft，EditorStore 现在会在首次载入、import replace 和每次 transaction 后统一执行上述 canonical order，再运行 strict validation；不再要求用户手动重新绑定背景。导出被拦截时也会把真实 strict diagnostic 追加到“禁止导出”提示中，避免通用提示遮蔽根因。
 
 导入用户提供的 `/Users/zerro/Downloads/game003-s1-symbols.zip` 时曾报 `V5G asset path is missing from manifest`。ZIP 顶层 package manifest 与 entry 均完整；问题是 hash-flat VNI project 位于 `assets/<hash>.json`，其 project 内以同目录 basename 引用图片，而旧 resolver 把 image module 强制压成 `assets/<filename>` key，造成键名错配。现改为基于实际 project module 路径精确解析每个 `asset.path`，不使用 basename fallback，并新增 hash-flat/同名 decoy 回归。真实 ZIP 已在 `loadTextures=false` 的完整 package resource 路径中导入成功：id=`game003-s1`、14 个 display symbols、57 个 exact resources、`L1.win=vni`。
+
+最后发现 preview 的临时操作错误曾复用 strict validation diagnostics：未先 prepare 就点击播放时，`must be prepared before the trusted user gesture` 会覆盖真实配置错误，随后又被导出层包装成重复的“当前配置未通过校验”。现已把两类状态严格分离：`errors` 只保存 manifest/config strict diagnostics，`externalError` 只展示 prepare/play/import/export 等操作错误；外部错误不会阻止合法配置导出，也不会触发 preview 重建而丢失已 prepare 的 video。项目 draft 发生真实修改、操作成功或显式取消时会清除旧的外部错误。
+
+本轮与 task 115 合并时，`packages/rendercore/src/symbol/manifest.ts` 及其测试发生冲突。合并结果同时保留 task 115 的 materialize-package 覆盖，以及 task 114 基于 VNI project 实际 module path 的精确相对资源解析；没有引入 basename fallback。两个冲突均已标记解决，`git ls-files -u` 为空；merge 提交仍留给仓库操作者执行。
+
+最终专项验收结果更新为：
+
+- `@slotclientengine/rendercore`：68 个测试文件、473 个测试通过；typecheck、lint 通过。
+- `gamelayouteditor`：18 个测试文件、138 个测试通过；typecheck、lint、production build 通过。
+- 用户 symbols ZIP 真实导入复验通过：`game003-s1`、14 symbols、57 exact resources、`L1.win=vni`。
+- unstaged `git diff --check` 通过，`apps/game003/**` 无改动。
+- staged diff 仅有 task 115 报告文件末尾空行 warning；该文件不属于 task 114，本轮未擅自修改。

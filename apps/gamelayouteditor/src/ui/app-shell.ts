@@ -126,6 +126,7 @@ export class GameLayoutEditorApp {
   #preview: LayoutPreview | null = null;
   #unsubscribe: (() => void) | null = null;
   #previewRevision = 0;
+  #lastPreviewProjectRevision = -1;
   #previewModeRequest = 0;
   #previewModeFrame: number | null = null;
   #previewModeBusy = false;
@@ -155,7 +156,10 @@ export class GameLayoutEditorApp {
     this.#unsubscribe = this.#store.subscribe((snapshot) => {
       this.renderWorkspace(snapshot);
       this.syncSymbolPreviewGrid(snapshot.project);
-      void this.refreshPreview(snapshot);
+      if (snapshot.revision !== this.#lastPreviewProjectRevision) {
+        this.#lastPreviewProjectRevision = snapshot.revision;
+        void this.refreshPreview(snapshot);
+      }
     });
   }
 
@@ -590,6 +594,7 @@ export class GameLayoutEditorApp {
       await pending;
       if (request !== this.#previewModeRequest || this.#destroyed) return;
       this.#selectedPreviewMode = modeId;
+      this.#store.clearExternalError();
     } catch (error) {
       if (request === this.#previewModeRequest && !this.#destroyed)
         this.#store.setExternalError(error);
@@ -613,6 +618,7 @@ export class GameLayoutEditorApp {
         );
       await this.#preview.prepareGameModeTransition(modeId);
       if (request !== this.#previewModeRequest || this.#destroyed) return;
+      this.#store.clearExternalError();
       this.showFeedback(`转场目标 ${modeId} 已预加载，可由真实点击直接播放。`);
     } catch (error) {
       if (request === this.#previewModeRequest && !this.#destroyed)
@@ -1084,6 +1090,7 @@ export class GameLayoutEditorApp {
       ?.addEventListener("click", () => {
         try {
           this.#preview?.cancelPreparedGameModeTransition();
+          this.#store.clearExternalError();
           this.renderWorkspace(this.#store.getSnapshot());
         } catch (error) {
           this.#store.setExternalError(error);
@@ -2235,6 +2242,7 @@ export class GameLayoutEditorApp {
       this.showFeedback(
         `已导出 ${exported.fileName}；${unused} 个未引用资源未写入 ZIP。`,
       );
+      this.#store.clearExternalError();
     } catch (error) {
       this.#store.setExternalError(error);
     }
@@ -2669,8 +2677,12 @@ export class GameLayoutEditorApp {
     this.requireElement("[data-project-status]").textContent =
       `${snapshot.project.id} · ${snapshot.project.mode} · ${snapshot.project.resources.size} resources · ${snapshot.project.nodes.length} nodes · ${snapshot.errors.length ? `${snapshot.errors.length} diagnostics` : "strict ready"}`;
     const errors = this.requireElement("[data-errors]");
+    const messages = [
+      ...snapshot.errors,
+      ...(snapshot.externalError ? [snapshot.externalError] : []),
+    ];
     errors.replaceChildren(
-      ...snapshot.errors.map((message) => {
+      ...messages.map((message) => {
         const item = document.createElement("div");
         item.textContent = message;
         return item;

@@ -32,7 +32,7 @@
 - export JSON 和 bundle manifest 校验。
 - profile-scoped asset URL resolver。
 - center-coordinate 到 Pixi coordinate 的转换。
-- animation、VNI_0.074 `multi_move`、VNI_0.087 basic tracks / `bounce_jump` / 新旧 rotate / pressure `visualRotation`、结束位移持续采样、空帧隐藏、sequence frame、particle、`particle_stream`、`chaser_light`、VNI_0.070 deterministic effects、mask、project sampler，以及独立的 `safe_glow` 同图副本高亮 sampler。basic tracks 必须先于 preset stack；`chaser_light` 的灯位固定、弧长 spacing 和 `lightDuration + interval` 时序都属于 `vnicore` sampler 合同。
+- animation、VNI_0.074 `multi_move`、VNI_0.087 basic tracks / `bounce_jump` / 新旧 rotate / pressure `visualRotation`、VNI_0.095 `card_carousel_3d` 五阶段/sequence modulo/切片几何/深度顺序与 pool/cache 生命周期、结束位移持续采样、空帧隐藏、sequence frame、particle、`particle_stream`、`chaser_light`、VNI_0.070 deterministic effects、mask、project sampler，以及独立的 `safe_glow` 同图副本高亮 sampler。viewer 只展示 summary 并调用公共播放/viewport API，不解析 CardCarousel 参数或操作其 Pixi tree。
 - layer group schema 规范化、连续 group run 判断和相邻 slot 计算。
 - Pixi texture 加载、真实尺寸校验和 `runtime_50` 显示补偿。
 - `VNIPlayer` 的 RAF 播放、range、segmented 三段式状态机、live 粒子排空、sequence texture 切换、safe glow overlay 渲染、VNI_0.070 deterministic effect sprite/slice/line 池化渲染、mask、文字层绑定、走马灯、marker、complete listener、group slot 挂接、destroy 清理和 diagnostics。

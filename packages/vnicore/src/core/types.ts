@@ -80,7 +80,8 @@ export type V5GAnimationType =
   | "shatter"
   | "glow"
   | "safe_glow"
-  | "squash_stretch";
+  | "squash_stretch"
+  | "card_carousel_3d";
 
 export type V5GAnimationParamValue = string | number | boolean;
 

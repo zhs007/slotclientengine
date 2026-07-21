@@ -32,6 +32,7 @@
 - `parent: PIXI.Container`：必填，由宿主提供的 Pixi 父节点。`VNIPlayer` 不创建 `PIXI.Application`、renderer 或 canvas。
 - `diagnosticsElement?: HTMLElement`：可选，写入 `data-vni-*` / `data-v5g-*` diagnostics 的宿主 DOM 节点。
 - `viewport?: { width: number; height: number }`：可选，用于 standalone viewer 这类需要 player 适配宿主可视区域的场景。
+- `viewportScale?: number`：可选，默认 `1`；只缩放 VNI stage display tree，不改变 viewport/renderer 的裁剪尺寸。
 - `requestRender?: () => void`：可选，宿主手动渲染时由 player 在画面变化后请求外部 renderer render。
 - `autoTick?: boolean`：默认 `true`，由 player 自己使用 RAF 推进；设为 `false` 时宿主必须显式调用 `update(deltaSeconds)`。
 - `fitPadding?: number`：默认保持既有响应式 padding；设为 `0` 时 VNI stage 坐标不再额外留边，适合宿主用自己的 Pixi viewport 或 mask 做精确裁切。
@@ -47,6 +48,9 @@
 - `sampleLayerAtTime(layer, time)`: 采样单 layer。
 - `sampleLayerAnimationsAtTime(base, animations, time)`: 采样 animation 栈，包含 VNI_0.074 `multi_move`、结束位移持续采样和不裁掉超调的位移插值。
 - `sampleBasicAnimationAtTime(layer, time)` / `sampleBasicAnimationTrack(track, baseValue, time)`: 采样 VNI_0.087 六条基础属性轨道；先于 preset stack，段 easing 属于右点，端点持续。
+- `prepareCardCarousel3D(animation)`：严格参数通过校验后预计算 VNI_0.095 五阶段旋转、reveal rank、stop 对齐和静态几何常量。
+- `createCardCarousel3DSampleBuffer(prepared)` / `sampleCardCarousel3D(prepared, input, output)`：创建一次并复用 card/slice output buffer；采样 sequence modulo、透视、切片 frame/transform/tint 和稳定 z 顺序。
+- `getCardCarousel3DSyncedDuration(animation)`：按 `phasePreviewMode` 和五段参数派生、以 `0.05s` snap 的导出时长。
 - `getSequenceFrameAssetId(layer, time)`: 按 sequence 配置和当前时间解析当前帧 asset id；非 loop 序列停在最后一帧。
 - `getLayerDisplayAssetId(layer, time)` / `getLayerDisplayAsset(layer, time, assetsById)`: 获取 image/sequence layer 当前显示资源。
 - `sampleParticleSpritesForLayer(layer, sampledLayer, textureSize, time)`: 确定性采样粒子 sprite。
@@ -83,6 +87,8 @@
 - `update(deltaSeconds: number): void`
 - `getDisplayObject(): PIXI.Container`
 - `setViewportSize(width: number, height: number): void`
+- `setViewportScale(scale: number): void`
+- `getViewportScale(): number`
 - `playRange(options: VNIPlayRangeOptions): void`
 - `requestSegmentedPlaybackEnd(): void`
 - `getPlaybackState(): VNIPlaybackState`

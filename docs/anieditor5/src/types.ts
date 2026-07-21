@@ -78,6 +78,7 @@ export type V5GAnimationType =
   | "glow"
   | "safe_glow"
   | "squash_stretch"
+  | "card_carousel_3d"
   | "chaser_light";
 export type V5GAnimationParamValue = string | number | boolean;
 

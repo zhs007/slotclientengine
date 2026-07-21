@@ -177,6 +177,107 @@ describe("symbol package materialization", () => {
     prepared.destroy();
   });
 
+  it("prepares hash-flat VNI paths after materializing a legacy animation", async () => {
+    const packageManifest = parseSymbolPackageManifest({
+      version: 1,
+      kind: "symbol-package",
+      id: "legacy-vni",
+      cellSize: { width: 160, height: 160 },
+      entrypoints: {
+        gameConfig: "gameconfig.json",
+        symbolManifest: "symbol-state-textures.manifest.json",
+      },
+      resources: ["animation/assets/image.png", "animation/project.json"],
+    });
+    const rawGameConfig = {
+      paytable: { "0": { code: 0, symbol: "A", pays: [1] } },
+      symbolCodes: { A: 0 },
+      reels: { main: [[0]] },
+    };
+    const rawSymbolManifest = {
+      version: 1,
+      states: [],
+      symbols: {
+        A: {
+          normal: { kind: "transparent", width: 160, height: 160 },
+          scale: 1,
+          animations: {
+            win: {
+              kind: "vni",
+              project: "./animation/project.json",
+              playback: {
+                mode: "range",
+                startTime: 0,
+                endTime: 1,
+                loop: false,
+              },
+            },
+          },
+        },
+      },
+    };
+    const project = {
+      schemaVersion: "VNI_0.022",
+      editor: { name: "VNI", version: "VNI_0.022" },
+      engineTarget: { name: "cocos_creator", version: "3.8.6" },
+      name: "A win",
+      stage: {
+        width: 160,
+        height: 160,
+        coordinate: "center",
+        duration: 1,
+        backgroundColor: "#000000",
+      },
+      assets: [
+        {
+          id: "image",
+          type: "image",
+          path: "assets/image.png",
+          originalName: "image.png",
+          width: 1,
+          height: 1,
+          fileWidth: 1,
+          fileHeight: 1,
+          fileScale: 1,
+        },
+      ],
+      layerGroups: [],
+      layers: [],
+      particles: [],
+      exportProfile: {
+        id: "runtime_100",
+        purpose: "runtime",
+        assetScale: 1,
+      },
+    };
+    const result = await materializeSymbolPackageContents({
+      packageManifest,
+      rawGameConfig,
+      rawSymbolManifest,
+      assets: new Map([
+        ["animation/project.json", encode(project)],
+        ["animation/assets/image.png", png],
+      ]),
+    });
+
+    const materializedProjectPath = result.packageManifest.resources.find(
+      (path) => path.endsWith(".json"),
+    );
+    expect(materializedProjectPath).toMatch(/^assets\/[a-f0-9]{64}\.json$/u);
+    const materializedProject = JSON.parse(
+      new TextDecoder().decode(result.assets.get(materializedProjectPath!)!),
+    );
+    expect(materializedProject.assets[0].path).toMatch(/^[a-f0-9]{64}\.png$/u);
+
+    const prepared = await createSymbolPackageResource({
+      packageManifest: result.packageManifest,
+      files: result.files,
+      loadTextures: false,
+    });
+    expect(prepared.displaySymbols).toEqual(["A"]);
+    prepared.destroy();
+  });
+
   it("upgrades legacy full-value image prefixes to exact hash-flat mappings", async () => {
     const resources = ["1.png", "CN.atlas", "CN.json", "CN.png"].sort();
     const packageManifest = parseSymbolPackageManifest({

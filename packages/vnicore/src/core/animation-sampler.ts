@@ -99,6 +99,7 @@ export const SUPPORTED_ANIMATION_TYPES: readonly V5GAnimationType[] = [
   "glow",
   "safe_glow",
   "squash_stretch",
+  "card_carousel_3d",
 ];
 
 const DEFAULT_EASING_BY_TYPE: Readonly<
@@ -143,6 +144,7 @@ const DEFAULT_EASING_BY_TYPE: Readonly<
   glow: "linear",
   safe_glow: "linear",
   squash_stretch: "easeOutQuad",
+  card_carousel_3d: "linear",
 };
 
 interface MultiMovePointCacheEntry {
@@ -229,6 +231,8 @@ export function sampleLayerAnimationsAtTime(
       sampleKeepOriginalSource(result, animation);
     else if (animation.type === "chaser_light")
       sampleKeepOriginalSource(result, animation);
+    else if (animation.type === "card_carousel_3d")
+      sampleCardCarouselSource(result, animation, base);
     else if (isParticleAnimationType(animation.type)) {
       // Particle animations are sampled by particle-sampler. They do not alter
       // the base layer transform or opacity here.
@@ -289,6 +293,21 @@ function isSourceOpacityEffectAnimationType(
     value === "slash_light" ||
     value === "flame_flicker"
   );
+}
+
+function sampleCardCarouselSource(
+  result: V5GAnimationSampleResult,
+  animation: V5GAnimationConfig,
+  base: V5GAnimationSampleBase,
+): void {
+  const keepOriginal = getOptionalBooleanParam(
+    animation,
+    "keepOriginal",
+    false,
+  );
+  result.opacity = keepOriginal
+    ? base.opacity * getNumberParam(animation, "sourceOpacity")
+    : 0;
 }
 
 function isKeepOriginalEffectAnimationType(

@@ -578,6 +578,7 @@ export function createViewerControls(
           `${formatTime(currentProject.project.stage.duration)}s duration`,
         ),
         createSummaryItem(getAnimationTypeSummary(currentProject.project)),
+        createSummaryItem(getCardCarouselSummary(currentProject.project)),
         createSummaryItem(getBasicAnimationSummary(currentProject.project)),
         createSummaryItem(getMaskSummary(currentProject.project)),
       );
@@ -938,6 +939,28 @@ function getBasicAnimationSummary(project: VNIProjectConfig): string {
     }
   }
   return `${enabledTracks} basic tracks, ${points} points`;
+}
+
+function getCardCarouselSummary(project: VNIProjectConfig): string {
+  const summaries: string[] = [];
+  for (const layer of project.layers) {
+    const textureCount =
+      layer.type === "sequence"
+        ? (layer.sequence?.frameAssetIds.length ?? 0)
+        : 1;
+    for (const animation of layer.animations) {
+      if (!animation.enabled || animation.type !== "card_carousel_3d") {
+        continue;
+      }
+      const phase = String(animation.params.phasePreviewMode);
+      const cardCount = Number(animation.params.cardCount);
+      const slices = Number(animation.params.slices);
+      summaries.push(
+        `card_carousel_3d ${phase}, ${cardCount} cards, ${textureCount} textures, ${slices} slices, max ${cardCount * slices}`,
+      );
+    }
+  }
+  return summaries.length > 0 ? summaries.join("; ") : "0 card carousels";
 }
 
 function getMaskSummary(project: VNIProjectConfig): string {

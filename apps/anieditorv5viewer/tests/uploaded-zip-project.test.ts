@@ -114,6 +114,27 @@ describe("uploaded zip VNI project bundle", () => {
     }
   });
 
+  it("loads strict synthetic VNI_0.095 image and sequence card carousel fixtures", () => {
+    for (const name of [
+      "card-carousel-image.zip",
+      "card-carousel-sequence.zip",
+    ] as const) {
+      const bundle = createUploadedVNIProjectBundle(readFixtureZip(name), name);
+      const loaded = bundle.loadProfile("runtime_100");
+      try {
+        expect(loaded.project.schemaVersion).toBe("VNI_0.095");
+        expect(loaded.project.layers[0].animations[0].type).toBe(
+          "card_carousel_3d",
+        );
+        expect(Object.keys(loaded.assetUrls)).toHaveLength(
+          name.includes("sequence") ? 3 : 1,
+        );
+      } finally {
+        loaded.dispose();
+      }
+    }
+  });
+
   it("loads VNI_0.045 Pixi precompose_light_alpha projects", () => {
     const project = createMinimalProject("precompose", undefined, [
       { id: "asset_a", path: "assets/a.png" },
@@ -349,7 +370,13 @@ describe("uploaded zip viewer resource boundary", () => {
   });
 });
 
-function readFixtureZip(name: "roundreel.zip" | "megawin.zip"): Uint8Array {
+function readFixtureZip(
+  name:
+    | "roundreel.zip"
+    | "megawin.zip"
+    | "card-carousel-image.zip"
+    | "card-carousel-sequence.zip",
+): Uint8Array {
   return createFixtureZip(name);
 }
 

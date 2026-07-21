@@ -227,6 +227,14 @@ const BASIC_TRACK_LABELS: Record<V5GBasicTrackKey, string> = {
   rotation: "旋转",
 };
 
+const CARD_CAROUSEL_TIMELINE_DURATION_PARAMS = [
+  { key: "introDuration", fallback: 1.2, min: 0.1, max: 10 },
+  { key: "demoIdleDuration", fallback: 1.2, min: 0.1, max: 20 },
+  { key: "fastDuration", fallback: 1.1, min: 0.1, max: 10 },
+  { key: "stopDuration", fallback: 1.6, min: 0.1, max: 10 },
+  { key: "holdDuration", fallback: 1, min: 0, max: 20 },
+] as const;
+
 const els = {
   pixiContainer: getElement("pixi-container"),
   status: getElement("status"),
@@ -3636,7 +3644,7 @@ function createAnimationFromDraft(layerId: string, module: HTMLElement): void {
     ? readAnimationStart(startInput, state.playheadSeconds)
     : snapTimelineSeconds(state.playheadSeconds);
 
-  const duration = durationInput.value.trim()
+  const inputDuration = durationInput.value.trim()
     ? readAnimationDuration(durationInput, preset?.defaultDuration ?? 1)
     : snapTimelineSeconds(preset?.defaultDuration ?? 1);
 
@@ -3647,6 +3655,10 @@ function createAnimationFromDraft(layerId: string, module: HTMLElement): void {
   );
 
   params.easing = easingSelect.value || preset?.defaultEasing || "linear";
+
+  const duration =
+    syncCardCarouselDurationInput(animationType, params, durationInput) ??
+    inputDuration;
 
   const draftMemoryKey = module.dataset.animationMemoryKey;
 
@@ -3748,6 +3760,86 @@ function readAnimationDuration(
     ),
     2,
   );
+}
+
+function getCardCarouselSyncedDuration(
+  params: Record<string, V5GAnimationParamValue>,
+): number {
+  const getPhaseDuration = (key: string): number => {
+    const spec = CARD_CAROUSEL_TIMELINE_DURATION_PARAMS.find(
+      (item) => item.key === key,
+    );
+    if (!spec) return TIMELINE_MINOR_TICK_SECONDS;
+    const rawValue = params[spec.key];
+    const numericValue =
+      typeof rawValue === "number"
+        ? rawValue
+        : typeof rawValue === "string"
+          ? Number(rawValue)
+          : spec.fallback;
+    return clampNumber(
+      Number.isFinite(numericValue) ? numericValue : spec.fallback,
+      spec.min,
+      spec.max,
+    );
+  };
+
+  const previewMode =
+    typeof params.phasePreviewMode === "string"
+      ? params.phasePreviewMode
+      : "full_demo";
+  const phaseDurationByMode: Record<string, number | undefined> = {
+    intro: getPhaseDuration("introDuration"),
+    idle: getPhaseDuration("demoIdleDuration"),
+    fast: getPhaseDuration("fastDuration"),
+    stop: getPhaseDuration("stopDuration"),
+    hold: getPhaseDuration("holdDuration"),
+  };
+  const duration =
+    phaseDurationByMode[previewMode] ??
+    CARD_CAROUSEL_TIMELINE_DURATION_PARAMS.reduce(
+      (sum, spec) => sum + getPhaseDuration(spec.key),
+      0,
+    );
+
+  return snapTimelineSeconds(
+    clampNumber(
+      duration,
+      TIMELINE_MINOR_TICK_SECONDS,
+      MAX_PROJECT_DURATION_SECONDS,
+    ),
+  );
+}
+
+function syncCardCarouselDurationInput(
+  type: V5GAnimationType,
+  params: Record<string, V5GAnimationParamValue>,
+  durationInput: HTMLInputElement,
+): number | null {
+  if (type !== "card_carousel_3d") return null;
+  const syncedDuration = getCardCarouselSyncedDuration(params);
+  durationInput.value = formatTimelineSeconds(syncedDuration);
+  return syncedDuration;
+}
+
+function syncCardCarouselAnimationDuration(
+  animation: V5GAnimationConfig,
+): boolean {
+  if (animation.type !== "card_carousel_3d") return false;
+  const syncedDuration = getCardCarouselSyncedDuration(animation.params);
+  if (animation.duration === syncedDuration) return false;
+  animation.duration = syncedDuration;
+  return true;
+}
+
+function syncProjectCardCarouselAnimationDurations(): boolean {
+  let changed = false;
+  for (const layer of state.project.layers) {
+    for (const animation of layer.animations) {
+      changed = syncCardCarouselAnimationDuration(animation) || changed;
+    }
+  }
+  return changed;
 }
 
 function readAnimationParamsFromContainer(
@@ -4023,6 +4115,8 @@ function applyProjectDurationFromInput(
   options: { silentIfUnchanged?: boolean } = {},
 ): void {
   const previousDuration = state.project.stage.duration;
+  const syncedCardCarouselDuration =
+    syncProjectCardCarouselAnimationDurations();
   const requestedDuration = roundTo(
     clampNumber(
       readNumberInput(els.durationSeconds, previousDuration),
@@ -4046,6 +4140,17 @@ function applyProjectDurationFromInput(
   );
   els.durationSeconds.value = formatTimelineSeconds(nextDuration);
   if (nextDuration === previousDuration) {
+    if (syncedCardCarouselDuration) {
+      renderAll();
+      scheduleAutoSave(0);
+      if (!options.silentIfUnchanged) {
+        showStatus(
+          `CardCarousel3D 动画块长度已自动同步，总时长仍为 ${formatTimelineSeconds(nextDuration)}s。`,
+          "success",
+        );
+      }
+      return;
+    }
     if (!options.silentIfUnchanged) {
       showStatus(
         `总时长仍为 ${formatTimelineSeconds(nextDuration)}s。`,
@@ -4077,6 +4182,8 @@ function applyProjectDurationFromInput(
 function normalizeProjectDurationToAnimationEnd(
   options: { silent?: boolean } = {},
 ): number {
+  const syncedCardCarouselDuration =
+    syncProjectCardCarouselAnimationDurations();
   const longestAnimationEnd = getLongestAnimationEndTime();
   const nextDuration = roundTo(
     clampNumber(
@@ -4100,6 +4207,8 @@ function normalizeProjectDurationToAnimationEnd(
         "success",
       );
     }
+    scheduleAutoSave();
+  } else if (syncedCardCarouselDuration) {
     scheduleAutoSave();
   }
   return state.project.stage.duration;
@@ -6490,9 +6599,11 @@ function updateAnimationFromModule(
       readAnimationStart(startInput, currentAnimation.startTime),
     ),
 
-    duration: snapTimelineSeconds(
-      readAnimationDuration(durationInput, currentAnimation.duration),
-    ),
+    duration:
+      syncCardCarouselDurationInput(animationType, params, durationInput) ??
+      snapTimelineSeconds(
+        readAnimationDuration(durationInput, currentAnimation.duration),
+      ),
 
     enabled: enabledInput.checked,
 

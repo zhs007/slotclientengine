@@ -23,6 +23,7 @@ const pixiMock = vi.hoisted(() => {
     label?: string;
     destroyed?: boolean;
     destroy?: (destroySource?: boolean) => void;
+    frame?: MockRectangle;
   }
 
   const textureByUrl = new Map<string, MockTextureData>();
@@ -121,7 +122,18 @@ const pixiMock = vi.hoisted(() => {
     }
   }
 
+  class MockRectangle {
+    constructor(
+      readonly x: number,
+      readonly y: number,
+      readonly width: number,
+      readonly height: number,
+    ) {}
+  }
+
   class MockSprite extends MockContainer {
+    tint = 0xffffff;
+
     constructor(readonly texture: { width: number; height: number }) {
       super();
     }
@@ -177,6 +189,7 @@ const pixiMock = vi.hoisted(() => {
     readonly width: number;
     readonly height: number;
     readonly label: string;
+    readonly frame: MockRectangle;
     destroyed = false;
 
     constructor(options: {
@@ -184,11 +197,16 @@ const pixiMock = vi.hoisted(() => {
       width?: number;
       height?: number;
       label?: string;
+      frame?: MockRectangle;
     }) {
       this.source = options.source ?? {};
-      this.width = options.width ?? this.source.width ?? 0;
-      this.height = options.height ?? this.source.height ?? 0;
+      this.width =
+        options.width ?? options.frame?.width ?? this.source.width ?? 0;
+      this.height =
+        options.height ?? options.frame?.height ?? this.source.height ?? 0;
       this.label = options.label ?? "";
+      this.frame =
+        options.frame ?? new MockRectangle(0, 0, this.width, this.height);
     }
 
     destroy(destroySource = false): void {
@@ -230,6 +248,7 @@ const pixiMock = vi.hoisted(() => {
     MockCanvasSource,
     MockContainer,
     MockGraphics,
+    MockRectangle,
     MockSprite,
     MockText,
     MockTexture,
@@ -244,6 +263,7 @@ vi.mock("pixi.js", () => ({
   CanvasSource: pixiMock.MockCanvasSource,
   Container: pixiMock.MockContainer,
   Graphics: pixiMock.MockGraphics,
+  Rectangle: pixiMock.MockRectangle,
   Sprite: pixiMock.MockSprite,
   Text: pixiMock.MockText,
   Texture: pixiMock.MockTexture,
@@ -677,6 +697,62 @@ function createSequenceProject(): V5GProjectConfig {
   return project;
 }
 
+function createCardCarouselProject(): V5GProjectConfig {
+  const project = createSequenceProject();
+  project.schemaVersion = "VNI_0.095";
+  project.editor.version = "VNI_0.095";
+  project.stage.duration = 6.1;
+  project.layers[0].animations = [
+    {
+      id: "carousel",
+      type: "card_carousel_3d",
+      startTime: 0,
+      duration: 6.1,
+      enabled: true,
+      seed: 1,
+      params: {
+        phasePreviewMode: "full_demo",
+        cardCount: 7,
+        targetIndex: 2,
+        rounds: 3,
+        direction: 1,
+        introDuration: 1.2,
+        introSpeed: 0.22,
+        revealDirection: 0,
+        revealStagger: 0.08,
+        revealOffsetX: 90,
+        revealScaleFrom: 0.72,
+        demoIdleDuration: 1.2,
+        idleSpeed: 0.18,
+        fastDuration: 1.1,
+        fastSpeed: 2.8,
+        accelRatio: 0.28,
+        stopDuration: 1.6,
+        holdDuration: 1,
+        stopOvershoot: 0.18,
+        finalPop: 0.12,
+        finalGlow: 0.18,
+        radius: 360,
+        cardSpacing: 1,
+        perspective: 0.72,
+        slices: 3,
+        visibleRange: 0.72,
+        cardSize: 360,
+        centerScale: 1.12,
+        sideScale: 0.72,
+        sideAlpha: 0.38,
+        shadeStrength: 0.42,
+        curve: 0.55,
+        tilt: 8,
+        sourceOpacity: 0,
+        hideBack: true,
+        keepOriginal: false,
+      },
+    },
+  ];
+  return project;
+}
+
 function createDeterministicEffectProject(): V5GProjectConfig {
   const project = createStaticProject();
   project.schemaVersion = "VNI_0.070";
@@ -746,8 +822,18 @@ async function createInitializedPlayer(
     vi.fn(() => 1),
   );
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
-  pixiMock.textureByUrl.set("/a.png", { width: 100, height: 100 });
-  pixiMock.textureByUrl.set("/b.png", { width: 100, height: 100 });
+  pixiMock.textureByUrl.set("/a.png", {
+    width: 100,
+    height: 100,
+    source: { width: 100, height: 100 },
+    frame: new pixiMock.MockRectangle(0, 0, 100, 100),
+  });
+  pixiMock.textureByUrl.set("/b.png", {
+    width: 100,
+    height: 100,
+    source: { width: 100, height: 100 },
+    frame: new pixiMock.MockRectangle(0, 0, 100, 100),
+  });
 
   const player = new VNIPlayer({
     parent: createMockPixiContainer(),
@@ -771,6 +857,66 @@ async function createInitializedPlayer(
 }
 
 describe("VNIPlayer", () => {
+  it("pools card_carousel_3d nodes and slice textures across 300 frames and releases owned views", async () => {
+    const player = await createInitializedPlayer({
+      project: createCardCarouselProject(),
+      autoTick: false,
+    });
+    const internals = player as unknown as {
+      cardCarouselRenderer: {
+        getStats(): {
+          cardContainersCreated: number;
+          sliceSpritesCreated: number;
+          sliceTexturesCreated: number;
+        };
+        sliceTextures: Map<string, InstanceType<typeof pixiMock.MockTexture>>;
+      };
+      cardCarouselStates: Array<{
+        runtime: {
+          root: InstanceType<typeof pixiMock.MockContainer>;
+        };
+      }>;
+    };
+    const initialStats = internals.cardCarouselRenderer.getStats();
+    const root = internals.cardCarouselStates[0].runtime.root;
+    const cardNodes = [...root.children];
+    const sliceNodes = cardNodes.flatMap((card) => [...card.children]);
+
+    for (let frame = 0; frame < 300; frame += 1) {
+      player.seek((frame / 299) * 6.1);
+    }
+
+    expect(internals.cardCarouselRenderer.getStats()).toMatchObject({
+      cardContainersCreated: 7,
+      sliceSpritesCreated: 21,
+      sliceTexturesCreated: 6,
+    });
+    expect(initialStats).toMatchObject({
+      cardContainersCreated: 7,
+      sliceSpritesCreated: 21,
+      sliceTexturesCreated: 6,
+    });
+    expect(new Set(root.children)).toEqual(new Set(cardNodes));
+    expect(root.children.flatMap((card) => [...card.children])).toEqual(
+      expect.arrayContaining(sliceNodes),
+    );
+
+    const sliceTextures = [
+      ...internals.cardCarouselRenderer.sliceTextures.values(),
+    ];
+    const sourceTextures = [
+      pixiMock.textureByUrl.get("/a.png")?.source,
+      pixiMock.textureByUrl.get("/b.png")?.source,
+    ];
+    player.restart();
+    expect(internals.cardCarouselStates[0].runtime.root).toBe(root);
+    player.destroy();
+    expect(sliceTextures.every((texture) => texture.destroyed)).toBe(true);
+    expect(sourceTextures.every((source) => source?.destroyed !== true)).toBe(
+      true,
+    );
+  });
+
   it("loads project textures through Pixi texture parser even when URLs lack extensions", async () => {
     pixiMock.assetsLoad.mockClear();
 
@@ -815,6 +961,23 @@ describe("VNIPlayer", () => {
       slotContainer,
       layerB?.display,
     ]);
+  });
+
+  it("scales the stage independently from the clipping viewport", async () => {
+    const player = await createInitializedPlayer({
+      project: createStaticProject(),
+    });
+    const internals = player as unknown as {
+      stageRoot: InstanceType<typeof pixiMock.MockContainer>;
+    };
+
+    player.setViewportSize(1200, 430);
+    player.setViewportScale(0.1);
+
+    expect(internals.stageRoot.position).toMatchObject({ x: 600, y: 215 });
+    expect(internals.stageRoot.scale).toMatchObject({ x: 0.1, y: 0.1 });
+    expect(player.getViewportScale()).toBe(0.1);
+    expect(() => player.setViewportScale(0)).toThrow("positive finite");
   });
 
   it("destroys only its own display tree and leaves the external Pixi host alive", async () => {
@@ -996,6 +1159,7 @@ describe("VNIPlayer", () => {
         hasActiveRenderEffect: false,
         hasActiveDeterministicEffect: false,
         hasActiveSafeGlowAnimation: false,
+        hasActiveCardCarousel3D: false,
         blendMode: "add",
       },
       project.stage,
@@ -1026,6 +1190,7 @@ describe("VNIPlayer", () => {
         hasActiveRenderEffect: false,
         hasActiveDeterministicEffect: false,
         hasActiveSafeGlowAnimation: false,
+        hasActiveCardCarousel3D: false,
         blendMode: "normal",
       },
       project.stage,

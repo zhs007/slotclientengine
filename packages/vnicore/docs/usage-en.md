@@ -99,6 +99,7 @@ README and tests:
 - VNI_0.074 `multi_move`, including strict `pointsJson`, ended transform handoff,
   and empty-frame hiding.
 - VNI_0.087 six-track `basicAnimation`, `bounce_jump`, current/legacy rotate,
+- VNI_0.095 `card_carousel_3d` five-phase sampling, sequence texture modulo, vertical slice geometry, stable depth order, and pooled Pixi nodes/texture views,
   and pressure-separated outer scale plus inner visual rotation. Basic tracks
   run before the preset stack; segments use the arriving point's easing and
   hold both endpoints.
@@ -180,6 +181,7 @@ const player = new VNIPlayer({
   parent: app.stage,
   diagnosticsElement: host,
   viewport,
+  viewportScale: 0.1, // visual zoom; the clipping viewport stays unchanged
   requestRender: () => app.render(),
   projectId: project.name,
   bundleId: "example",

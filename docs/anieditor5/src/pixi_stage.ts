@@ -62,6 +62,10 @@ export class V5GPixiStage {
     PrecomposedLayerState
   >();
   private readonly imageElementCache = new Map<string, CachedImageElement>();
+  private readonly runtimeTextureCache = new Map<
+    string,
+    { objectUrl: string; texture: PIXI.Texture }
+  >();
   private readonly layerAssetIdMap = new Map<string, string | null>();
   private readonly callbacks: RenderCallbacks;
   private state: V5GEditorState;
@@ -255,6 +259,10 @@ export class V5GPixiStage {
     this.layerWrapperMap.clear();
     this.clearAllPrecomposedLayers();
     this.imageElementCache.clear();
+    for (const cached of this.runtimeTextureCache.values()) {
+      cached.texture.destroy(true);
+    }
+    this.runtimeTextureCache.clear();
     this.app.destroy(true);
   }
 
@@ -410,6 +418,10 @@ export class V5GPixiStage {
       this.applyLayerTransform(layer);
       if (layer.type === "image" || layer.type === "sequence") {
         this.ensureParticleGroup(layer.id);
+      }
+      if (layer.type === "sequence") {
+        await this.ensureCardCarouselPreviewTexturesLoaded(layer, runId);
+        if (!this.isCurrentRender(runId)) return;
       }
       if (temporarySoloLayerId === null) {
         await this.syncLayerMask(layer, runId);
@@ -1044,6 +1056,7 @@ export class V5GPixiStage {
             animation.type === "shatter" ||
             animation.type === "glow" ||
             animation.type === "safe_glow" ||
+            animation.type === "card_carousel_3d" ||
             animation.type === "chaser_light") &&
           getAnimationProgress(animation, playheadSeconds) !== null,
       );
@@ -1260,6 +1273,18 @@ export class V5GPixiStage {
             layer.blendMode,
             particleGroup,
           );
+        } else if (animation.type === "card_carousel_3d") {
+          this.drawCardCarousel3D(
+            animation,
+            this.getCardCarouselPreviewTextures(layer, texture),
+            emitter.x,
+            emitter.y,
+            progress,
+            layer.opacity,
+            transform,
+            layer.blendMode,
+            particleGroup,
+          );
         } else if (animation.type === "chaser_light") {
           this.drawChaserLight(
             animation,
@@ -1282,6 +1307,62 @@ export class V5GPixiStage {
       (child): child is PIXI.Sprite => child instanceof PIXI.Sprite,
     );
     return sprite?.texture ?? null;
+  }
+
+  private getCardCarouselPreviewTextures(
+    layer: V5GLayerConfig,
+    fallbackTexture: PIXI.Texture,
+  ): PIXI.Texture[] {
+    if (layer.type !== "sequence") return [fallbackTexture];
+    const frameAssetIds = layer.sequence?.frameAssetIds ?? [];
+    const textures = frameAssetIds
+      .map((assetId) => this.getRuntimeTexture(assetId))
+      .filter((texture): texture is PIXI.Texture => texture !== null);
+
+    // 仅编辑器预览：CardCarousel3D 挂在序列帧图层上时，
+    // frameAssetIds 只是“预览贴图库”，不改变 cardCount 的语义。
+    // cardCount 仍表示转盘一圈中的逻辑卡牌数量；贴图库不足时按卡片索引循环复用。
+    // 不写入 animation.params，也不表示运行时卡牌资源绑定，Cocos 运行时仍由程序传入真实卡牌数组。
+    return textures.length > 0 ? textures : [fallbackTexture];
+  }
+
+  private async ensureCardCarouselPreviewTexturesLoaded(
+    layer: V5GLayerConfig,
+    runId: number,
+  ): Promise<void> {
+    if (layer.type !== "sequence") return;
+    const needsPreviewTextures = layer.animations.some(
+      (animation) => animation.enabled && animation.type === "card_carousel_3d",
+    );
+    if (!needsPreviewTextures) return;
+    const frameAssetIds = layer.sequence?.frameAssetIds ?? [];
+    for (const assetId of frameAssetIds) {
+      await this.loadRuntimeTexture(assetId);
+      if (!this.isCurrentRender(runId)) return;
+    }
+  }
+
+  private getRuntimeTexture(assetId: string | null): PIXI.Texture | null {
+    const runtimeAsset = this.findRuntimeAsset(assetId);
+    if (!runtimeAsset) return null;
+    const cached = this.runtimeTextureCache.get(runtimeAsset.id);
+    return cached?.objectUrl === runtimeAsset.objectUrl ? cached.texture : null;
+  }
+
+  private async loadRuntimeTexture(
+    assetId: string | null,
+  ): Promise<PIXI.Texture | null> {
+    const runtimeAsset = this.findRuntimeAsset(assetId);
+    if (!runtimeAsset) return null;
+    const cached = this.runtimeTextureCache.get(runtimeAsset.id);
+    if (cached?.objectUrl === runtimeAsset.objectUrl) return cached.texture;
+    cached?.texture.destroy(true);
+    const texture = await this.loadImageTexture(runtimeAsset);
+    this.runtimeTextureCache.set(runtimeAsset.id, {
+      objectUrl: runtimeAsset.objectUrl,
+      texture,
+    });
+    return texture;
   }
 
   private drawParticleBurst(
@@ -3366,6 +3447,436 @@ export class V5GPixiStage {
     target.addChild(sprite);
   }
 
+  private drawCardCarousel3D(
+    animation: V5GAnimationConfig,
+    textures: PIXI.Texture[],
+    emitterX: number,
+    emitterY: number,
+    progress: number,
+    layerOpacity: number,
+    transform: V5GLayerConfig["transform"],
+    blendMode: V5GBlendMode,
+    target: PIXI.Container,
+  ): void {
+    const cardCount = Math.round(
+      clampParticleNumber(getParticleParam(animation, "cardCount", 7), 2, 30),
+    );
+    const rawTargetIndex = Math.round(
+      clampParticleNumber(
+        getParticleParam(animation, "targetIndex", 0),
+        0,
+        Math.max(0, cardCount - 1),
+      ),
+    );
+    const targetIndex = positiveModulo(rawTargetIndex, cardCount);
+    const rounds = clampParticleNumber(
+      getParticleParam(animation, "rounds", 3),
+      0,
+      20,
+    );
+    const direction = getParticleParam(animation, "direction", 1) < 0 ? -1 : 1;
+    const introDuration = clampParticleNumber(
+      getParticleParam(animation, "introDuration", 1.2),
+      0.1,
+      10,
+    );
+    const introSpeed = clampParticleNumber(
+      getParticleParam(animation, "introSpeed", 0.22),
+      0,
+      8,
+    );
+    const demoIdleDuration = clampParticleNumber(
+      getParticleParam(animation, "demoIdleDuration", 1.2),
+      0.1,
+      20,
+    );
+    const idleSpeed = clampParticleNumber(
+      getParticleParam(animation, "idleSpeed", 0.18),
+      0,
+      8,
+    );
+    const fastDuration = clampParticleNumber(
+      getParticleParam(animation, "fastDuration", 1.1),
+      0.1,
+      10,
+    );
+    const fastSpeed = clampParticleNumber(
+      getParticleParam(animation, "fastSpeed", 2.8),
+      0,
+      20,
+    );
+    const accelRatio = clampParticleNumber(
+      getParticleParam(animation, "accelRatio", 0.28),
+      0,
+      0.9,
+    );
+    const stopDuration = clampParticleNumber(
+      getParticleParam(animation, "stopDuration", 1.6),
+      0.1,
+      10,
+    );
+    const holdDuration = clampParticleNumber(
+      getParticleParam(animation, "holdDuration", 1),
+      0,
+      20,
+    );
+    const stopOvershoot = clampParticleNumber(
+      getParticleParam(animation, "stopOvershoot", 0.18),
+      0,
+      2,
+    );
+    const finalPop = clampParticleNumber(
+      getParticleParam(animation, "finalPop", 0.12),
+      0,
+      1,
+    );
+    const finalGlow = clampParticleNumber(
+      getParticleParam(animation, "finalGlow", 0.18),
+      0,
+      1,
+    );
+    const revealDirection = Math.round(
+      clampParticleNumber(
+        getParticleParam(animation, "revealDirection", 0),
+        0,
+        2,
+      ),
+    );
+    const revealStagger = clampParticleNumber(
+      getParticleParam(animation, "revealStagger", 0.08),
+      0,
+      2,
+    );
+    const revealOffsetX = getParticleParam(animation, "revealOffsetX", 90);
+    const revealScaleFrom = clampParticleNumber(
+      getParticleParam(animation, "revealScaleFrom", 0.72),
+      0.05,
+      2,
+    );
+    const radius = clampParticleNumber(
+      getParticleParam(animation, "radius", 360),
+      20,
+      3000,
+    );
+    const cardSpacing = clampParticleNumber(
+      getParticleParam(animation, "cardSpacing", 1),
+      0.2,
+      3,
+    );
+    const perspective = clampParticleNumber(
+      getParticleParam(animation, "perspective", 0.72),
+      0,
+      1,
+    );
+    const slices = Math.round(
+      clampParticleNumber(getParticleParam(animation, "slices", 12), 2, 48),
+    );
+    const visibleRange = clampParticleNumber(
+      getParticleParam(animation, "visibleRange", 0.72),
+      0.1,
+      1,
+    );
+    const cardSize = clampParticleNumber(
+      getParticleParam(animation, "cardSize", 360),
+      20,
+      1200,
+    );
+    const centerScale = clampParticleNumber(
+      getParticleParam(animation, "centerScale", 1.12),
+      0.1,
+      5,
+    );
+    const sideScale = clampParticleNumber(
+      getParticleParam(animation, "sideScale", 0.72),
+      0.05,
+      3,
+    );
+    const sideAlpha = clampParticleNumber(
+      getParticleParam(animation, "sideAlpha", 0.38),
+      0,
+      1,
+    );
+    const shadeStrength = clampParticleNumber(
+      getParticleParam(animation, "shadeStrength", 0.42),
+      0,
+      0.9,
+    );
+    const curve = clampParticleNumber(
+      getParticleParam(animation, "curve", 0.55),
+      0,
+      1,
+    );
+    const tiltRad =
+      (clampParticleNumber(getParticleParam(animation, "tilt", 8), 0, 45) *
+        Math.PI) /
+      180;
+    const hideBack = animation.params.hideBack !== false;
+    const previewModeRaw = animation.params.phasePreviewMode;
+    const previewMode =
+      typeof previewModeRaw === "string" ? previewModeRaw : "full_demo";
+    if (layerOpacity <= 0.002) return;
+
+    const angleStep = (Math.PI * 2) / cardCount;
+    const introRotation = direction * introSpeed * introDuration * Math.PI * 2;
+    const idleRotation = direction * idleSpeed * demoIdleDuration * Math.PI * 2;
+    const sampleFastRotation = (elapsed: number): number => {
+      const fastElapsed = clampNumber(elapsed, 0, fastDuration);
+      const accelSeconds = fastDuration * accelRatio;
+      let turns: number;
+      if (accelSeconds <= 0.0001 || fastElapsed >= accelSeconds) {
+        const accelTurns =
+          accelSeconds * (idleSpeed + (fastSpeed - idleSpeed) * 0.5);
+        turns =
+          accelTurns + fastSpeed * Math.max(0, fastElapsed - accelSeconds);
+      } else {
+        const accelPhase = fastElapsed / Math.max(accelSeconds, 0.0001);
+        turns =
+          idleSpeed * fastElapsed +
+          (fastSpeed - idleSpeed) * fastElapsed * accelPhase * 0.5;
+      }
+      return direction * turns * Math.PI * 2;
+    };
+    const fastRotation = sampleFastRotation(fastDuration);
+    const stopStartRotation = introRotation + idleRotation + fastRotation;
+    const targetRotation = -targetIndex * angleStep;
+    const directionalDelta =
+      direction > 0
+        ? positiveModulo(targetRotation - stopStartRotation, Math.PI * 2)
+        : -positiveModulo(stopStartRotation - targetRotation, Math.PI * 2);
+    const stopFinalRotation =
+      stopStartRotation + directionalDelta + direction * rounds * Math.PI * 2;
+    const sampleStopRotation = (phase: number): number => {
+      const t = clampNumber(phase, 0, 1);
+      const eased = easeOutQuart(t);
+      const overshoot =
+        direction *
+        angleStep *
+        stopOvershoot *
+        Math.sin(t * Math.PI) *
+        Math.pow(t, 1.2);
+      return (
+        lerpNumber(stopStartRotation, stopFinalRotation, eased) + overshoot
+      );
+    };
+
+    let rotation = 0;
+    let introElapsed = introDuration;
+    let stopPhase = 0;
+    if (previewMode === "intro") {
+      introElapsed = progress * introDuration;
+      rotation = direction * introSpeed * introElapsed * Math.PI * 2;
+    } else if (previewMode === "idle") {
+      rotation =
+        direction * idleSpeed * progress * demoIdleDuration * Math.PI * 2;
+    } else if (previewMode === "fast") {
+      rotation = sampleFastRotation(progress * fastDuration);
+    } else if (previewMode === "stop") {
+      stopPhase = progress;
+      rotation = sampleStopRotation(stopPhase);
+    } else if (previewMode === "hold") {
+      stopPhase = 1;
+      rotation = stopFinalRotation;
+    } else {
+      const totalDuration =
+        introDuration +
+        demoIdleDuration +
+        fastDuration +
+        stopDuration +
+        holdDuration;
+      const elapsed = progress * totalDuration;
+      if (elapsed < introDuration) {
+        introElapsed = elapsed;
+        rotation = direction * introSpeed * elapsed * Math.PI * 2;
+      } else if (elapsed < introDuration + demoIdleDuration) {
+        const idleElapsed = elapsed - introDuration;
+        rotation =
+          introRotation + direction * idleSpeed * idleElapsed * Math.PI * 2;
+      } else if (elapsed < introDuration + demoIdleDuration + fastDuration) {
+        const fastElapsed = elapsed - introDuration - demoIdleDuration;
+        rotation =
+          introRotation + idleRotation + sampleFastRotation(fastElapsed);
+      } else if (
+        elapsed <
+        introDuration + demoIdleDuration + fastDuration + stopDuration
+      ) {
+        stopPhase =
+          (elapsed - introDuration - demoIdleDuration - fastDuration) /
+          stopDuration;
+        rotation = sampleStopRotation(stopPhase);
+      } else {
+        stopPhase = 1;
+        rotation = stopFinalRotation;
+      }
+    }
+
+    const revealRanks = new Map<number, number>();
+    Array.from({ length: cardCount }, (_, cardIndex) => {
+      const baseSide = Math.sin(cardIndex * angleStep);
+      const centerDistance = Math.abs(baseSide);
+      const sortKey =
+        revealDirection === 2
+          ? centerDistance
+          : revealDirection === 1
+            ? -baseSide
+            : baseSide;
+      return { cardIndex, sortKey };
+    })
+      .sort((left, right) => left.sortKey - right.sortKey)
+      .forEach((item, rank) => revealRanks.set(item.cardIndex, rank));
+
+    const previewTextures = textures.length > 0 ? textures : [];
+    if (previewTextures.length === 0) return;
+    const baseRotation = (transform.rotation * Math.PI) / 180;
+    const visibleWindow = Math.PI * visibleRange;
+    const perspectiveTravel = 0.56 + perspective * 0.44;
+    const revealWindow = Math.max(
+      0.08,
+      introDuration - revealStagger * Math.max(0, cardCount - 1),
+    );
+    const finalEffectPhase = clampNumber((stopPhase - 0.78) / 0.22, 0, 1);
+    const finalEffectWave = Math.sin(finalEffectPhase * Math.PI);
+
+    const cards: { z: number; container: PIXI.Container }[] = [];
+    for (let cardIndex = 0; cardIndex < cardCount; cardIndex += 1) {
+      const revealRank = revealRanks.get(cardIndex) ?? cardIndex;
+      const revealPhase = clampNumber(
+        (introElapsed - revealRank * revealStagger) / revealWindow,
+        0,
+        1,
+      );
+      const revealEase = easeOutQuad(revealPhase);
+      if (revealEase <= 0.002) continue;
+
+      const angle = cardIndex * angleStep + rotation;
+      const normalizedAngle = Math.atan2(Math.sin(angle), Math.cos(angle));
+      const angleDistance = Math.abs(normalizedAngle);
+      const frontness = Math.cos(angle);
+      if (hideBack && frontness < -0.05) continue;
+      if (angleDistance > visibleWindow) continue;
+
+      const side = Math.sin(angle);
+      const depth = clampNumber((frontness + 1) / 2, 0, 1);
+      const sideAbs = Math.abs(side);
+      const isTargetCard = cardIndex === targetIndex;
+      const finalPopScale =
+        isTargetCard && stopPhase > 0 ? 1 + finalPop * finalEffectWave : 1;
+      const revealScale = lerpNumber(revealScaleFrom, 1, revealEase);
+      const cardScale =
+        lerpNumber(sideScale, centerScale, Math.pow(depth, 1.35)) *
+        (1 - perspective * (1 - depth) * 0.28) *
+        revealScale *
+        finalPopScale;
+      const revealOffset =
+        (1 - revealEase) * revealOffsetX * (revealDirection === 1 ? 1 : -1);
+      const x =
+        emitterX +
+        side * radius * perspectiveTravel * cardSpacing +
+        revealOffset;
+      const y = emitterY + (1 - depth) * radius * 0.08 * perspective;
+      const alpha = layerOpacity * lerpNumber(sideAlpha, 1, depth) * revealEase;
+      if (alpha <= 0.002) continue;
+
+      const cardTexture =
+        previewTextures[cardIndex % previewTextures.length] ??
+        previewTextures[0];
+      if (!cardTexture) continue;
+      const textureWidth = Math.max(1, Number(cardTexture.width) || 1);
+      const textureHeight = Math.max(1, Number(cardTexture.height) || 1);
+      const textureEdge = getTextureLongestEdge(cardTexture);
+      const baseTextureScale = cardSize / textureEdge;
+      const baseFrame = cardTexture.frame;
+      const baseFrameX = baseFrame?.x ?? 0;
+      const baseFrameY = baseFrame?.y ?? 0;
+      const baseFrameWidth = Math.max(1, baseFrame?.width ?? textureWidth);
+      const baseFrameHeight = Math.max(1, baseFrame?.height ?? textureHeight);
+      const source = cardTexture.source;
+      const anchorOffsetX = (0.5 - transform.anchorX) * textureWidth;
+      const anchorOffsetY = (0.5 - transform.anchorY) * textureHeight;
+
+      const container = new PIXI.Container();
+      container.position.set(x, y);
+      container.rotation = baseRotation + side * tiltRad;
+      container.alpha = alpha;
+      container.blendMode = toPixiBlendMode(blendMode);
+
+      const sideCompression = 1 - Math.pow(Math.abs(frontness), 1.6);
+      const horizontalCompression = clampNumber(
+        1 - sideCompression * (0.72 + perspective * 0.16),
+        0.08,
+        1.2,
+      );
+      const effectiveCurve = curve * clampNumber(sideAbs * 1.15, 0, 1);
+      const baseScaleX = transform.scaleX * baseTextureScale * cardScale;
+      const baseScaleY = transform.scaleY * baseTextureScale * cardScale;
+      for (let sliceIndex = 0; sliceIndex < slices; sliceIndex += 1) {
+        const x0 = (sliceIndex / slices) * textureWidth;
+        const x1 = ((sliceIndex + 1) / slices) * textureWidth;
+        const sliceWidth = Math.max(1, x1 - x0);
+        const sliceCenterT = (sliceIndex + 0.5) / slices;
+        const localT = sliceCenterT * 2 - 1;
+        const localSliceAngle = angle + localT * effectiveCurve * 0.95;
+        const sliceFacing = Math.abs(Math.cos(localSliceAngle));
+        const sliceWidthScale = clampNumber(
+          0.16 + sliceFacing * 0.84,
+          0.1,
+          1.15,
+        );
+        const bend =
+          Math.sin(localT * Math.PI) *
+          effectiveCurve *
+          side *
+          textureWidth *
+          baseScaleX *
+          0.045;
+        const localX =
+          (x0 + sliceWidth / 2 - textureWidth * 0.5 + anchorOffsetX) *
+            baseScaleX *
+            horizontalCompression +
+          bend;
+        const localY = anchorOffsetY * baseScaleY;
+        const frameX = baseFrameX + (x0 / textureWidth) * baseFrameWidth;
+        const frameWidth = Math.max(
+          1,
+          (sliceWidth / textureWidth) * baseFrameWidth,
+        );
+        const sliceTexture = new PIXI.Texture({
+          source,
+          frame: new PIXI.Rectangle(
+            frameX,
+            baseFrameY,
+            frameWidth,
+            baseFrameHeight,
+          ),
+        });
+        const sprite = new PIXI.Sprite(sliceTexture);
+        sprite.anchor.set(0.5);
+        sprite.position.set(localX, localY);
+        sprite.scale.set(
+          Math.max(0.01, baseScaleX * sliceWidthScale),
+          Math.max(0.01, baseScaleY),
+        );
+        const edgeShade = 1 - Math.abs(localT) * shadeStrength * 0.16 * sideAbs;
+        const depthShade = 1 - shadeStrength * (1 - depth);
+        const targetGlow =
+          isTargetCard && stopPhase > 0 ? 1 + finalGlow * finalEffectWave : 1;
+        const shade = clampNumber(edgeShade * depthShade * targetGlow, 0.08, 1);
+        const tintChannel = Math.round(shade * 255);
+        sprite.tint = (tintChannel << 16) | (tintChannel << 8) | tintChannel;
+        sprite.blendMode = toPixiBlendMode(blendMode);
+        container.addChild(sprite);
+      }
+
+      cards.push({
+        z: frontness + (isTargetCard ? finalEffectWave * 0.02 : 0),
+        container,
+      });
+    }
+
+    cards
+      .sort((left, right) => left.z - right.z)
+      .forEach((card) => target.addChild(card.container));
+  }
+
   private drawChaserLight(
     animation: V5GAnimationConfig,
     texture: PIXI.Texture,
@@ -4087,6 +4598,11 @@ function easeOutQuad(progress: number): number {
 function easeInOutQuad(progress: number): number {
   const t = clampNumber(progress, 0, 1);
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+function easeOutQuart(progress: number): number {
+  const t = clampNumber(progress, 0, 1);
+  return 1 - Math.pow(1 - t, 4);
 }
 
 function lerpNumber(from: number, to: number, progress: number): number {
