@@ -165,7 +165,7 @@ class FakePlayer implements SymbolValuePresentationPlayer {
   play() {}
   update(deltaSeconds: number) {
     this.updates.push(deltaSeconds);
-    return { completed: false };
+    return { completed: false, events: [] };
   }
   attachSlotObject(options: { slot: string; object: Container }) {
     this.slotNames.push(options.slot);

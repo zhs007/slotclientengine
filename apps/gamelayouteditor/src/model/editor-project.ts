@@ -20,6 +20,7 @@ import { deriveNodeId } from "../io/filename-policy.js";
 import {
   editorResourcePaths,
   editorResourceSignature,
+  readEditorSpineMetadata,
   type EditorImageLayoutResource,
   type EditorImageStringLayoutResource,
   type EditorLayoutResource,
@@ -54,14 +55,10 @@ export interface EditorVariantDraft {
   backgroundNode: string;
 }
 
-export type EditorSpinePlaybackDraft =
-  | { readonly kind: "loop"; animation: string }
-  | {
-      readonly kind: "state-machine";
-      initialState: string;
-      states: Array<{ id: string; animation: string }>;
-      transitions: Array<{ from: string; to: string; animation: string }>;
-    };
+export type EditorSpinePlaybackDraft = {
+  readonly kind: "loop";
+  animation: string;
+};
 
 export interface EditorNodeDraft {
   id: string;
@@ -104,6 +101,17 @@ export interface EditorGameModeDraft {
   awardCelebrationPopupId: string | null;
 }
 
+export interface EditorGameModeTransitionDraft {
+  fromModeId: string;
+  toModeId: string;
+  resourceId: string;
+  animation: string;
+  switchEvent: string;
+  placements: Partial<
+    Record<SceneLayoutVariantId, { x: number; y: number; scale: number }>
+  >;
+}
+
 export interface EditorProject {
   id: string;
   mode: EditorMode;
@@ -130,6 +138,7 @@ export interface EditorProject {
   gameModes: {
     initialMode: string;
     modes: EditorGameModeDraft[];
+    transitions: EditorGameModeTransitionDraft[];
   };
 }
 
@@ -170,6 +179,7 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
     popupDependencies: new Map(),
     gameModes: {
       initialMode: "BaseGame",
+      transitions: [],
       modes: [
         {
           id: "BaseGame",
@@ -441,29 +451,13 @@ export function resolveEditorNodeResource(
   if (!playback)
     throw new Error(`Spine 节点 ${node.id} 必须明确选择 playback。`);
   validateEditorSpinePlayback(playback, resource.animationNames, node.id);
-  const playbackSpec =
-    playback.kind === "loop"
-      ? { defaultAnimation: playback.animation, loop: true as const }
-      : {
-          stateMachine: {
-            initialState: playback.initialState,
-            states: Object.fromEntries(
-              playback.states.map((state) => [
-                state.id,
-                { animation: state.animation },
-              ]),
-            ),
-            transitions: playback.transitions.map((transition) => ({
-              ...transition,
-            })),
-          },
-        };
   return {
     kind: "spine",
     skeleton: resource.skeleton,
     atlas: resource.atlas,
     textures: resource.textures,
-    ...playbackSpec,
+    defaultAnimation: playback.animation,
+    loop: true,
   };
 }
 
@@ -499,6 +493,7 @@ export function editorProjectToPreviewManifest(
                     }
                   : {}),
               })),
+              transitions: manifest.gameModes.transitions ?? [],
             },
           }
         : {}),
@@ -682,14 +677,73 @@ export function editorProjectToManifest(
       modes: project.gameModes.modes.map((mode) => ({
         id: mode.id,
         backgroundNodes: mode.backgroundNodes,
-        nodeStates: mode.nodeStates,
+        nodeStates: {},
         ...(mode.symbols ? { symbolPackage: mode.symbols.packageId } : {}),
         ...(mode.awardCelebrationPopupId
           ? { awardCelebrationPopup: mode.awardCelebrationPopupId }
           : {}),
       })),
+      transitions: [...project.gameModes.transitions]
+        .sort((left, right) => {
+          const from =
+            project.gameModes.modes.findIndex(
+              (mode) => mode.id === left.fromModeId,
+            ) -
+            project.gameModes.modes.findIndex(
+              (mode) => mode.id === right.fromModeId,
+            );
+          if (from !== 0) return from;
+          return (
+            project.gameModes.modes.findIndex(
+              (mode) => mode.id === left.toModeId,
+            ) -
+            project.gameModes.modes.findIndex(
+              (mode) => mode.id === right.toModeId,
+            )
+          );
+        })
+        .map((transition) => {
+          const resource = project.resources.get(transition.resourceId);
+          if (!resource || resource.kind !== "spine")
+            throw new Error(
+              `转场 ${transition.fromModeId} -> ${transition.toModeId} 必须绑定 Spine resource。`,
+            );
+          validateEditorTransitionEvent(resource, transition);
+          return {
+            from: transition.fromModeId,
+            to: transition.toModeId,
+            overlay: {
+              resource: {
+                kind: "spine" as const,
+                skeleton: resource.skeleton,
+                atlas: resource.atlas,
+                textures: resource.textures,
+              },
+              animation: transition.animation,
+              switchEvent: transition.switchEvent,
+              placements: transition.placements,
+            },
+          };
+        }),
     },
   });
+}
+
+export function validateEditorTransitionEvent(
+  resource: EditorSpineLayoutResource,
+  transition: Pick<EditorGameModeTransitionDraft, "animation" | "switchEvent">,
+): void {
+  if (!resource.animationNames.includes(transition.animation))
+    throw new Error(
+      `转场 animation ${transition.animation || "<empty>"} 不存在。`,
+    );
+  const count = (resource.animationEvents[transition.animation] ?? []).filter(
+    (event) => event.name === transition.switchEvent,
+  ).length;
+  if (!transition.switchEvent || count !== 1)
+    throw new Error(
+      `转场 switch event ${transition.switchEvent || "<empty>"} 必须在 ${transition.animation} 中恰好出现一次，实际 ${count} 次。`,
+    );
 }
 
 export function manifestToEditorProject(
@@ -697,74 +751,80 @@ export function manifestToEditorProject(
   assets: ReadonlyMap<string, Uint8Array>,
 ): EditorProject {
   const parsed = parseSceneLayoutManifest(manifest);
+  if (
+    parsed.nodes.some(
+      (node) =>
+        node.resource.kind === "spine" && "stateMachine" in node.resource,
+    ) ||
+    parsed.gameModes?.modes.some(
+      (mode) => Object.keys(mode.nodeStates).length > 0,
+    )
+  )
+    throw new Error(
+      "旧 state-machine 主状态转场无法自动迁移：缺少可确定的 switch event；请拆分稳定背景并在“转场”Tab 重新配置。",
+    );
   const project = createNewEditorProject(parsed.adaptation.mode);
   project.id = parsed.id;
   const resourceIdsBySignature = new Map<string, string>();
   const pathsByResource = new Map<string, string>();
+  const registerResource = (
+    resourceDraft: EditorLayoutResourceDraft,
+  ): string => {
+    const temporary = {
+      ...resourceDraft,
+      id: "imported-resource",
+    } as EditorLayoutResource;
+    const signature = editorResourceSignature(temporary);
+    const existing = resourceIdsBySignature.get(signature);
+    if (existing) return existing;
+    const resourceId = uniqueResourceId(
+      project.resources,
+      deriveNodeId(
+        (resourceDraft.kind === "image"
+          ? resourceDraft.path
+          : resourceDraft.kind === "spine"
+            ? resourceDraft.skeleton
+            : resourceDraft.manifest.id
+        )
+          .split("/")
+          .at(-1)!,
+      ),
+    );
+    const resource = {
+      ...resourceDraft,
+      id: resourceId,
+    } as EditorLayoutResource;
+    for (const path of editorResourcePaths(resource)) {
+      const owner = pathsByResource.get(path);
+      if (owner && owner !== signature)
+        throw new Error(`导入资源路径 ${path} 被不同素材签名复用。`);
+      pathsByResource.set(path, signature);
+    }
+    project.resources.set(resourceId, resource);
+    resourceIdsBySignature.set(signature, resourceId);
+    return resourceId;
+  };
   project.nodes = parsed.nodes.map((node) => {
     const resourceDraft = manifestResourceToEditorResource(
       node.resource,
       assets,
     );
-    const resourceWithTemporaryId = {
-      ...resourceDraft,
-      id: "imported-resource",
-    } as EditorLayoutResource;
-    const signature = editorResourceSignature(resourceWithTemporaryId);
-    let resourceId = resourceIdsBySignature.get(signature);
-    if (!resourceId) {
-      resourceId = uniqueResourceId(
-        project.resources,
-        deriveNodeId(
-          (resourceDraft.kind === "image"
-            ? resourceDraft.path
-            : resourceDraft.kind === "spine"
-              ? resourceDraft.skeleton
-              : resourceDraft.manifest.id
-          )
-            .split("/")
-            .at(-1)!,
-        ),
-      );
-      const resource = {
-        ...resourceDraft,
-        id: resourceId,
-      } as EditorLayoutResource;
-      for (const path of editorResourcePaths(resource)) {
-        const owner = pathsByResource.get(path);
-        if (owner && owner !== signature) {
-          throw new Error(`导入资源路径 ${path} 被不同素材签名复用。`);
-        }
-        pathsByResource.set(path, signature);
-      }
-      project.resources.set(resourceId, resource);
-      resourceIdsBySignature.set(signature, resourceId);
-    }
+    const resourceId = registerResource(resourceDraft);
     return {
       id: node.id,
       order: node.order,
       resourceId,
       ...(node.resource.kind === "spine"
         ? {
-            playback:
-              "stateMachine" in node.resource
-                ? {
-                    kind: "state-machine" as const,
-                    initialState: node.resource.stateMachine.initialState,
-                    states: Object.entries(
-                      node.resource.stateMachine.states,
-                    ).map(([id, state]) => ({
-                      id,
-                      animation: state.animation,
-                    })),
-                    transitions: node.resource.stateMachine.transitions.map(
-                      (transition) => ({ ...transition }),
-                    ),
-                  }
-                : {
-                    kind: "loop" as const,
-                    animation: node.resource.defaultAnimation,
-                  },
+            playback: {
+              kind: "loop" as const,
+              animation:
+                "defaultAnimation" in node.resource
+                  ? node.resource.defaultAnimation
+                  : (() => {
+                      throw new Error("旧 Spine state-machine 无法导入。");
+                    })(),
+            },
           }
         : node.resource.kind === "image-string"
           ? {
@@ -777,6 +837,21 @@ export function manifestToEditorProject(
       placements: structuredClone(node.placements),
     };
   });
+  const transitionResourceIds = new Map<string, string>();
+  for (const transition of parsed.gameModes?.transitions ?? []) {
+    const draft = manifestResourceToEditorResource(
+      {
+        ...transition.overlay.resource,
+        defaultAnimation: transition.overlay.animation,
+        loop: true,
+      },
+      assets,
+    );
+    transitionResourceIds.set(
+      `${transition.from}\u0000${transition.to}`,
+      registerResource(draft),
+    );
+  }
   const reel = parsed.reels.main;
   if (!reel) throw new Error('导入 manifest 必须包含 reel "main"。');
   project.reel = {
@@ -875,6 +950,16 @@ export function manifestToEditorProject(
   project.gameModes = parsed.gameModes
     ? {
         initialMode: parsed.gameModes.initialMode,
+        transitions: (parsed.gameModes.transitions ?? []).map((transition) => ({
+          fromModeId: transition.from,
+          toModeId: transition.to,
+          resourceId: transitionResourceIds.get(
+            `${transition.from}\u0000${transition.to}`,
+          )!,
+          animation: transition.overlay.animation,
+          switchEvent: transition.overlay.switchEvent,
+          placements: structuredClone(transition.overlay.placements),
+        })),
         modes: parsed.gameModes.modes.map((mode) => ({
           id: mode.id,
           backgroundNodes: structuredClone(
@@ -900,18 +985,12 @@ export function manifestToEditorProject(
       }
     : {
         initialMode: "BaseGame",
+        transitions: [],
         modes: [
           {
             id: "BaseGame",
             backgroundNodes: adaptationBackgroundNodes(parsed),
-            nodeStates: Object.fromEntries(
-              parsed.nodes.flatMap((node) =>
-                node.resource.kind === "spine" &&
-                "stateMachine" in node.resource
-                  ? [[node.id, node.resource.stateMachine.initialState]]
-                  : [],
-              ),
-            ),
+            nodeStates: {},
             symbols: parsed.symbolPackage
               ? {
                   packageId: parsed.symbolPackage.manifest.split("/").at(-2)!,
@@ -1104,13 +1183,14 @@ function manifestResourceToEditorResource(
   const skeletonBytes = assets.get(resource.skeleton);
   if (!skeletonBytes)
     throw new Error(`导入缺少 skeleton：${resource.skeleton}`);
-  const metadata = readSpineMetadata(skeletonBytes);
+  const metadata = readEditorSpineMetadata(skeletonBytes);
   return {
     kind: "spine",
     skeleton: resource.skeleton,
     atlas: resource.atlas,
     textures: { ...resource.textures },
     animationNames: metadata.animationNames,
+    animationEvents: metadata.animationEvents,
     ...(metadata.bounds ? { bounds: metadata.bounds } : {}),
   };
 }
@@ -1121,46 +1201,10 @@ export function validateEditorSpinePlayback(
   nodeId = "node",
 ): void {
   const available = new Set(animationNames);
-  if (playback.kind === "loop") {
-    if (!available.has(playback.animation))
-      throw new Error(
-        `Spine 节点 ${nodeId} 的 animation ${playback.animation} 不存在。`,
-      );
-    return;
-  }
-  const stateIds = new Set(playback.states.map((state) => state.id));
-  if (stateIds.size !== playback.states.length || playback.states.length === 0)
-    throw new Error(`Spine 节点 ${nodeId} 的 state 必须非空且 id 唯一。`);
-  for (const state of playback.states) {
-    if (!/^[A-Za-z][A-Za-z0-9_-]*$/u.test(state.id))
-      throw new Error(
-        `Spine 节点 ${nodeId} 的 state id ${state.id} 格式无效。`,
-      );
-  }
-  if (!stateIds.has(playback.initialState))
-    throw new Error(`Spine 节点 ${nodeId} 的 initialState 不存在。`);
-  const pairs = new Set<string>();
-  for (const transition of playback.transitions) {
-    if (!stateIds.has(transition.from) || !stateIds.has(transition.to))
-      throw new Error(`Spine 节点 ${nodeId} 的 transition 引用了未知 state。`);
-    if (transition.from === transition.to)
-      throw new Error(`Spine 节点 ${nodeId} 的 transition 不得自循环。`);
-    const pair = `${transition.from}\u0000${transition.to}`;
-    if (pairs.has(pair))
-      throw new Error(`Spine 节点 ${nodeId} 的 transition 有向边必须唯一。`);
-    pairs.add(pair);
-  }
-  const animations = [
-    ...playback.states.map((state) => state.animation),
-    ...playback.transitions.map((transition) => transition.animation),
-  ];
-  for (const animation of animations)
-    if (!available.has(animation))
-      throw new Error(
-        `Spine 节点 ${nodeId} 的 animation ${animation} 不存在。`,
-      );
-  if (new Set(animations).size !== animations.length)
-    throw new Error(`Spine 节点 ${nodeId} 的 animation 语义槽必须全局唯一。`);
+  if (!available.has(playback.animation))
+    throw new Error(
+      `Spine 节点 ${nodeId} 的 animation ${playback.animation} 不存在。`,
+    );
 }
 
 function parseJsonBytes(bytes: Uint8Array | undefined, path: string): unknown {
@@ -1172,39 +1216,6 @@ function parseJsonBytes(bytes: Uint8Array | undefined, path: string): unknown {
       `${path} JSON 无效：${error instanceof Error ? error.message : String(error)}`,
     );
   }
-}
-
-function readSpineMetadata(bytes: Uint8Array): {
-  readonly animationNames: readonly string[];
-  readonly bounds?: { readonly width: number; readonly height: number };
-} {
-  let skeleton: {
-    readonly skeleton?: { readonly width?: unknown; readonly height?: unknown };
-    readonly animations?: Readonly<Record<string, unknown>>;
-  };
-  try {
-    skeleton = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-    ) as typeof skeleton;
-  } catch (error) {
-    throw new Error(
-      `Spine skeleton JSON 无效：${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  const animationNames = Object.keys(skeleton.animations ?? {});
-  const width = skeleton.skeleton?.width;
-  const height = skeleton.skeleton?.height;
-  const hasBounds =
-    typeof width === "number" &&
-    Number.isFinite(width) &&
-    width > 0 &&
-    typeof height === "number" &&
-    Number.isFinite(height) &&
-    height > 0;
-  return {
-    animationNames,
-    ...(hasBounds ? { bounds: { width, height } } : {}),
-  };
 }
 
 function uniqueResourceId(

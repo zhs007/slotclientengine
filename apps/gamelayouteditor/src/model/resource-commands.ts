@@ -19,6 +19,7 @@ import {
   type EditorNodeDraft,
   type EditorProject,
   type EditorSpinePlaybackDraft,
+  validateEditorTransitionEvent,
   validateEditorSpinePlayback,
 } from "./editor-project.js";
 import { synchronizeGameModeNodeStates } from "./game-mode-commands.js";
@@ -30,6 +31,7 @@ import {
   type EditorImageStringLayoutResource,
   type EditorResourceReference,
   type EditorSpineLayoutResource,
+  readEditorSpineMetadata,
 } from "./editor-resource.js";
 
 interface PreparedResource {
@@ -221,7 +223,7 @@ export function getLayoutResourceReferences(
   project: EditorProject,
   resourceId: string,
 ): readonly EditorResourceReference[] {
-  return project.nodes
+  const nodes = project.nodes
     .filter((node) => node.resourceId === resourceId)
     .map((node) => {
       const variants = activeVariantIds(project).filter((variant) =>
@@ -236,6 +238,16 @@ export function getLayoutResourceReferences(
         variants: Object.freeze(variants),
       });
     });
+  const transitions = project.gameModes.transitions
+    .filter((transition) => transition.resourceId === resourceId)
+    .map((transition) =>
+      Object.freeze({
+        nodeId: `${transition.fromModeId} -> ${transition.toModeId}`,
+        role: "scene-transition" as const,
+        variants: Object.freeze(activeVariantIds(project)),
+      }),
+    );
+  return Object.freeze([...nodes, ...transitions]);
 }
 
 export function deleteLayoutResource(
@@ -250,7 +262,9 @@ export function deleteLayoutResource(
         .map((reference) =>
           reference.role === "background"
             ? `${reference.nodeId} (${reference.variants.join(", ")} 背景)`
-            : `${reference.nodeId} (图层)`,
+            : reference.role === "scene-transition"
+              ? `${reference.nodeId} (scene-transition)`
+              : `${reference.nodeId} (图层)`,
         )
         .join("、")} 引用，不能删除。`,
     );
@@ -335,17 +349,7 @@ export function assignBackgroundResource(options: {
   let node = currentBackgroundNode
     ? options.project.nodes.find((item) => item.id === currentBackgroundNode)
     : undefined;
-  const reusableNode = options.project.gameModes.modes
-    .filter((candidate) => candidate.id !== modeId)
-    .map((candidate) => candidate.backgroundNodes[options.variant])
-    .filter((nodeId): nodeId is string => Boolean(nodeId))
-    .map((nodeId) =>
-      options.project.nodes.find((candidate) => candidate.id === nodeId),
-    )
-    .find((candidate) => candidate?.resourceId === resource.id);
-  const replacedNode =
-    reusableNode && reusableNode.id !== node?.id ? node : undefined;
-  if (reusableNode) node = reusableNode;
+  const replacedNode = node;
   const sharedByAnotherMode =
     node &&
     options.project.gameModes.modes.some(
@@ -353,8 +357,7 @@ export function assignBackgroundResource(options: {
         candidate.id !== modeId &&
         Object.values(candidate.backgroundNodes).includes(node!.id),
     );
-  if (node && sharedByAnotherMode && node.resourceId !== resource.id)
-    node = undefined;
+  if (node && sharedByAnotherMode) node = undefined;
   const previousSize = variant.artSize;
   const nextSize = editorResourceArtSize(resource);
   const hasPreviousSize = previousSize.width > 0 && previousSize.height > 0;
@@ -405,7 +408,7 @@ export function assignBackgroundResource(options: {
   }
   mode.backgroundNodes[options.variant] = node.id;
   if (resource.kind === "spine")
-    bindSharedSpineBackgroundState(options.project, modeId, node, animation!);
+    node.playback = { kind: "loop", animation: animation! };
   if (options.project.gameModes.initialMode === modeId)
     variant.backgroundNode = node.id;
   if (nextSize && (!hasPreviousSize || sizeChanged || options.reinitialize)) {
@@ -424,85 +427,6 @@ export function assignBackgroundResource(options: {
   synchronizeGameModeNodeStates(options.project);
   normalizeNodeOrders(options.project);
   return node;
-}
-
-function bindSharedSpineBackgroundState(
-  project: EditorProject,
-  modeId: string,
-  node: EditorNodeDraft,
-  animation: string,
-): void {
-  const users = project.gameModes.modes.filter((mode) =>
-    Object.values(mode.backgroundNodes).includes(node.id),
-  );
-  if (users.length < 2) {
-    if (node.playback?.kind === "loop") node.playback.animation = animation;
-    return;
-  }
-
-  if (!node.playback || node.playback.kind === "loop") {
-    const previousAnimation =
-      node.playback?.kind === "loop" ? node.playback.animation : animation;
-    const previousUsers = users.filter((mode) => mode.id !== modeId);
-    const previousStateId = uniqueSpineStateId(
-      [],
-      previousUsers[0]?.id ?? project.gameModes.initialMode,
-    );
-    const states = [{ id: previousStateId, animation: previousAnimation }];
-    const targetStateId =
-      animation === previousAnimation
-        ? previousStateId
-        : uniqueSpineStateId(states, modeId);
-    if (targetStateId !== previousStateId)
-      states.push({ id: targetStateId, animation });
-    const initialState =
-      project.gameModes.initialMode === modeId
-        ? targetStateId
-        : previousStateId;
-    node.playback = {
-      kind: "state-machine",
-      initialState,
-      states,
-      transitions: [],
-    };
-    for (const user of previousUsers)
-      user.nodeStates[node.id] = previousStateId;
-    users.find((user) => user.id === modeId)!.nodeStates[node.id] =
-      targetStateId;
-    return;
-  }
-
-  const transitionUsingAnimation = node.playback.transitions.find(
-    (transition) => transition.animation === animation,
-  );
-  if (transitionUsingAnimation)
-    throw new Error(
-      `animation ${animation} 已用于 transition ${transitionUsingAnimation.from} → ${transitionUsingAnimation.to}，不能同时作为稳定状态。`,
-    );
-  let state = node.playback.states.find(
-    (candidate) => candidate.animation === animation,
-  );
-  if (!state) {
-    state = {
-      id: uniqueSpineStateId(node.playback.states, modeId),
-      animation,
-    };
-    node.playback.states.push(state);
-  }
-  if (project.gameModes.initialMode === modeId)
-    node.playback.initialState = state.id;
-  users.find((user) => user.id === modeId)!.nodeStates[node.id] = state.id;
-}
-
-function uniqueSpineStateId(
-  states: readonly { readonly id: string }[],
-  preferred: string,
-): string {
-  if (!states.some((state) => state.id === preferred)) return preferred;
-  let suffix = 2;
-  while (states.some((state) => state.id === `${preferred}${suffix}`))
-    suffix += 1;
-  return `${preferred}${suffix}`;
 }
 
 function defaultBackgroundPlacement(
@@ -632,174 +556,6 @@ export function setNodeSpinePlayback(
   validateEditorSpinePlayback(playback, resource.animationNames, nodeId);
   node.playback = structuredClone(playback);
   synchronizeGameModeNodeStates(project);
-}
-
-export function setSpinePlaybackKind(
-  project: EditorProject,
-  nodeId: string,
-  kind: EditorSpinePlaybackDraft["kind"],
-): void {
-  const node = project.nodes.find((item) => item.id === nodeId);
-  if (!node) throw new Error(`未知节点：${nodeId}`);
-  const resource = requireResource(project, node.resourceId);
-  if (resource.kind !== "spine") throw new Error(`节点 ${nodeId} 不是 Spine。`);
-  if (node.playback?.kind === kind) return;
-  const animation = resource.animationNames[0];
-  if (!animation) throw new Error("Spine resource 没有 animation。");
-  node.playback =
-    kind === "loop"
-      ? { kind: "loop", animation }
-      : {
-          kind: "state-machine",
-          initialState: "State1",
-          states: [{ id: "State1", animation }],
-          transitions: [],
-        };
-  synchronizeGameModeNodeStates(project);
-}
-
-export function addSpineState(
-  project: EditorProject,
-  nodeId: string,
-  state: { readonly id: string; readonly animation: string },
-): void {
-  const playback = requireStateMachine(project, nodeId);
-  if (!/^[A-Za-z][A-Za-z0-9_-]*$/u.test(state.id))
-    throw new Error("state id 格式无效。");
-  if (playback.states.some((item) => item.id === state.id))
-    throw new Error(`state id 冲突：${state.id}`);
-  const resource = requireSpineNodeResource(project, nodeId);
-  if (!resource.animationNames.includes(state.animation))
-    throw new Error(`animation ${state.animation} 不存在。`);
-  commitStateMachineMutation(project, nodeId, (candidate) => {
-    candidate.states.push({ ...state });
-  });
-}
-
-export function setSpineStateAnimation(
-  project: EditorProject,
-  nodeId: string,
-  stateId: string,
-  animation: string,
-): void {
-  const playback = requireStateMachine(project, nodeId);
-  const state = playback.states.find((item) => item.id === stateId);
-  if (!state) throw new Error(`未知 state：${stateId}`);
-  const resource = requireSpineNodeResource(project, nodeId);
-  if (!resource.animationNames.includes(animation))
-    throw new Error(`animation ${animation} 不存在。`);
-  commitStateMachineMutation(project, nodeId, (candidate) => {
-    candidate.states.find((item) => item.id === stateId)!.animation = animation;
-  });
-}
-
-export function setSpineInitialState(
-  project: EditorProject,
-  nodeId: string,
-  stateId: string,
-): void {
-  const playback = requireStateMachine(project, nodeId);
-  if (!playback.states.some((state) => state.id === stateId))
-    throw new Error(`未知 state：${stateId}`);
-  commitStateMachineMutation(project, nodeId, (candidate) => {
-    candidate.initialState = stateId;
-  });
-}
-
-export function addSpineTransition(
-  project: EditorProject,
-  nodeId: string,
-  transition: {
-    readonly from: string;
-    readonly to: string;
-    readonly animation: string;
-  },
-): void {
-  const playback = requireStateMachine(project, nodeId);
-  if (transition.from === transition.to)
-    throw new Error("transition 不得自循环。");
-  if (
-    !playback.states.some((state) => state.id === transition.from) ||
-    !playback.states.some((state) => state.id === transition.to)
-  )
-    throw new Error("transition 必须引用已声明 state。");
-  if (
-    playback.transitions.some(
-      (item) => item.from === transition.from && item.to === transition.to,
-    )
-  )
-    throw new Error("transition 有向边重复。");
-  const resource = requireSpineNodeResource(project, nodeId);
-  if (!resource.animationNames.includes(transition.animation))
-    throw new Error(`animation ${transition.animation} 不存在。`);
-  commitStateMachineMutation(project, nodeId, (candidate) => {
-    candidate.transitions.push({ ...transition });
-  });
-}
-
-export function deleteSpineTransition(
-  project: EditorProject,
-  nodeId: string,
-  index: number,
-): void {
-  const playback = requireStateMachine(project, nodeId);
-  if (
-    !Number.isSafeInteger(index) ||
-    index < 0 ||
-    index >= playback.transitions.length
-  )
-    throw new Error("transition index 越界。");
-  commitStateMachineMutation(project, nodeId, (candidate) => {
-    candidate.transitions.splice(index, 1);
-  });
-}
-
-export function renameSpineState(
-  project: EditorProject,
-  nodeId: string,
-  currentId: string,
-  nextId: string,
-): void {
-  const playback = requireStateMachine(project, nodeId);
-  if (!/^[A-Za-z][A-Za-z0-9_-]*$/u.test(nextId))
-    throw new Error("state id 格式无效。");
-  if (playback.states.some((state) => state.id === nextId))
-    throw new Error(`state id 冲突：${nextId}`);
-  const state = playback.states.find((item) => item.id === currentId);
-  if (!state) throw new Error(`未知 state：${currentId}`);
-  const referencedModes = project.gameModes.modes
-    .filter((mode) => mode.nodeStates[nodeId] === currentId)
-    .map((mode) => mode.id);
-  commitStateMachineMutation(project, nodeId, (candidate) => {
-    candidate.states.find((item) => item.id === currentId)!.id = nextId;
-    if (candidate.initialState === currentId) candidate.initialState = nextId;
-    for (const transition of candidate.transitions) {
-      if (transition.from === currentId) transition.from = nextId;
-      if (transition.to === currentId) transition.to = nextId;
-    }
-  });
-  for (const mode of project.gameModes.modes)
-    if (referencedModes.includes(mode.id)) mode.nodeStates[nodeId] = nextId;
-}
-
-export function deleteSpineState(
-  project: EditorProject,
-  nodeId: string,
-  stateId: string,
-): void {
-  const playback = requireStateMachine(project, nodeId);
-  if (
-    playback.initialState === stateId ||
-    playback.transitions.some(
-      (transition) => transition.from === stateId || transition.to === stateId,
-    )
-  )
-    throw new Error(`state ${stateId} 仍被 initial/transition 引用。`);
-  const index = playback.states.findIndex((state) => state.id === stateId);
-  if (index < 0) throw new Error(`未知 state：${stateId}`);
-  commitStateMachineMutation(project, nodeId, (candidate) => {
-    candidate.states.splice(index, 1);
-  });
 }
 
 export function setImageStringLayerText(
@@ -1060,13 +816,13 @@ async function prepareSpineResource(options: {
   } catch (error) {
     throw new Error(`Spine skeleton JSON/UTF-8 无效：${formatError(error)}`);
   }
-  const version = skeleton.skeleton?.spine;
-  if (typeof version !== "string" || !/^4\.3(?:\.|$)/u.test(version)) {
+  const metadata = readEditorSpineMetadata(sourceSkeletonBytes);
+  if (!/^4\.3(?:\.|$)/u.test(metadata.version)) {
     throw new Error(
-      `Spine skeleton 版本必须是 4.3.x，实际为 ${String(version)}。`,
+      `Spine skeleton 版本必须是 4.3.x，实际为 ${metadata.version}。`,
     );
   }
-  const animationNames = Object.keys(skeleton.animations ?? {});
+  const animationNames = metadata.animationNames;
   if (animationNames.length === 0)
     throw new Error("Spine skeleton 没有 animation。");
   const width = skeleton.skeleton?.width;
@@ -1104,6 +860,7 @@ async function prepareSpineResource(options: {
       atlas: atlasPath,
       textures,
       animationNames,
+      animationEvents: metadata.animationEvents,
       ...(hasBounds ? { bounds: { width, height } } : {}),
       provenance: {
         sourceNames: Object.freeze(options.files.map((file) => file.name)),
@@ -1183,6 +940,7 @@ function commitResourceReplacement(
   const replacement = prepared.resource;
   if (replacement.kind === "spine") {
     const invalid = references
+      .filter((reference) => reference.role !== "scene-transition")
       .map(
         (reference) =>
           project.nodes.find((node) => node.id === reference.nodeId)!,
@@ -1209,10 +967,29 @@ function commitResourceReplacement(
         `替换资源缺少引用节点使用的 animation：${invalid.join(", ")}。`,
       );
     }
+    const invalidTransitions = project.gameModes.transitions
+      .filter((transition) => transition.resourceId === current.id)
+      .filter((transition) => {
+        try {
+          validateEditorTransitionEvent(replacement, transition);
+          return false;
+        } catch {
+          return true;
+        }
+      });
+    if (invalidTransitions.length)
+      throw new Error(
+        `替换资源缺少转场使用的 animation/event：${invalidTransitions
+          .map(
+            (transition) =>
+              `${transition.fromModeId} -> ${transition.toModeId}`,
+          )
+          .join(", ")}。`,
+      );
   }
-  const backgroundVariants = references.flatMap(
-    (reference) => reference.variants,
-  );
+  const backgroundVariants = references
+    .filter((reference) => reference.role === "background")
+    .flatMap((reference) => reference.variants);
   const nextSize = editorResourceArtSize(prepared.resource);
   for (const variantId of backgroundVariants) {
     const currentSize = project.variants[variantId].artSize;
@@ -1363,34 +1140,6 @@ export function describeResource(resource: EditorLayoutResource): string {
   return `${editorResourcePrimaryPath(resource)} · ${resource.animationNames.length} animations${resource.bounds ? ` · export bounds ${resource.bounds.width}×${resource.bounds.height}（非 art size）` : " · 无 export bounds"}`;
 }
 
-function requireStateMachine(
-  project: EditorProject,
-  nodeId: string,
-): Extract<EditorSpinePlaybackDraft, { kind: "state-machine" }> {
-  const node = project.nodes.find((item) => item.id === nodeId);
-  if (!node?.playback || node.playback.kind !== "state-machine")
-    throw new Error(`节点 ${nodeId} 未使用 Spine state machine。`);
-  return node.playback;
-}
-
-function commitStateMachineMutation(
-  project: EditorProject,
-  nodeId: string,
-  mutate: (
-    playback: Extract<EditorSpinePlaybackDraft, { kind: "state-machine" }>,
-  ) => void,
-): void {
-  const node = project.nodes.find((item) => item.id === nodeId);
-  if (!node?.playback || node.playback.kind !== "state-machine")
-    throw new Error(`节点 ${nodeId} 未使用 Spine state machine。`);
-  const resource = requireSpineNodeResource(project, nodeId);
-  const candidate = structuredClone(node.playback);
-  mutate(candidate);
-  validateEditorSpinePlayback(candidate, resource.animationNames, nodeId);
-  node.playback = candidate;
-  synchronizeGameModeNodeStates(project);
-}
-
 function requireImageStringNode(project: EditorProject, nodeId: string) {
   const node = project.nodes.find((item) => item.id === nodeId);
   if (!node?.imageString) throw new Error(`节点 ${nodeId} 不是 image-string。`);
@@ -1398,14 +1147,6 @@ function requireImageStringNode(project: EditorProject, nodeId: string) {
   if (resource.kind !== "image-string")
     throw new Error(`节点 ${nodeId} 的资源不是 image-string。`);
   return { node, resource };
-}
-
-function requireSpineNodeResource(project: EditorProject, nodeId: string) {
-  const node = project.nodes.find((item) => item.id === nodeId);
-  if (!node) throw new Error(`未知节点：${nodeId}`);
-  const resource = requireResource(project, node.resourceId);
-  if (resource.kind !== "spine") throw new Error(`节点 ${nodeId} 不是 Spine。`);
-  return resource;
 }
 
 function structuredCloneProjectWithoutResource(

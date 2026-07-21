@@ -525,6 +525,7 @@ class FakeSlotPlayer implements RendercoreSpineSlotPlayer {
   update(deltaSeconds: number): {
     completed: boolean;
     loopCompleted?: boolean;
+    events: readonly [];
   } {
     this.updates.push(deltaSeconds);
     const completed = this.completeNextUpdate && !this.#currentLoop;
@@ -533,6 +534,7 @@ class FakeSlotPlayer implements RendercoreSpineSlotPlayer {
     return {
       completed,
       ...(loopCompleted ? { loopCompleted: true } : {}),
+      events: [],
     };
   }
 

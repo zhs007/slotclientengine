@@ -12,6 +12,7 @@ import type {
   SceneLayoutSymbolPackageBinding,
   SceneLayoutPopupBinding,
   SceneLayoutGameModes,
+  SceneLayoutGameModeTransition,
   SceneLayoutVariantId,
 } from "./types.js";
 
@@ -144,6 +145,12 @@ export function collectSceneLayoutAssetPaths(
     paths.add(binding.manifest);
   for (const popup of Object.values(parsed.popups ?? {}))
     paths.add(popup.manifest);
+  for (const transition of parsed.gameModes?.transitions ?? []) {
+    const resource = transition.overlay.resource;
+    paths.add(resource.skeleton);
+    paths.add(resource.atlas);
+    for (const path of Object.values(resource.textures)) paths.add(path);
+  }
   return Object.freeze(
     [...paths].sort((left, right) => left.localeCompare(right, "en")),
   );
@@ -681,7 +688,11 @@ function parseGameModes(
   popups: Readonly<Record<string, SceneLayoutPopupBinding>> | undefined,
 ): SceneLayoutGameModes {
   const record = readRecord(value, "scene layout gameModes");
-  known(record, ["initialMode", "modes"], "scene layout gameModes");
+  known(
+    record,
+    ["initialMode", "modes", "transitions"],
+    "scene layout gameModes",
+  );
   const initialMode = stateIdentifier(
     record.initialMode,
     "scene layout gameModes.initialMode",
@@ -869,7 +880,11 @@ function parseGameModes(
         `scene layout initial mode nodeStates.${nodeId} must equal the node initialState.`,
       );
   }
-  if (canonical) validateModeTransitions(modes, statefulById);
+  const transitions = parseGameModeTransitions(
+    record.transitions ?? [],
+    modes,
+    adaptation,
+  );
   const referencedSymbols = new Set(
     modes.flatMap((mode) => (mode.symbolPackage ? [mode.symbolPackage] : [])),
   );
@@ -884,7 +899,102 @@ function parseGameModes(
   for (const id of Object.keys(popups ?? {}))
     if (!referenced.has(id))
       fail(`scene layout popup "${id}" is orphaned by gameModes.`);
-  return deepFreeze({ initialMode, modes });
+  return deepFreeze({ initialMode, modes, transitions });
+}
+
+function parseGameModeTransitions(
+  value: unknown,
+  modes: readonly import("./types.js").SceneLayoutGameMode[],
+  adaptation: SceneLayoutAdaptation,
+): readonly SceneLayoutGameModeTransition[] {
+  if (!Array.isArray(value))
+    fail("scene layout gameModes.transitions must be an array.");
+  const modeIds = new Set(modes.map((mode) => mode.id));
+  const variants = activeVariantIds(adaptation);
+  const pairs = new Set<string>();
+  return deepFreeze(
+    value.map((raw, index) => {
+      const label = `scene layout gameModes.transitions[${index}]`;
+      const transition = readRecord(raw, label);
+      known(transition, ["from", "to", "overlay"], label);
+      const from = stateIdentifier(transition.from, `${label}.from`);
+      const to = stateIdentifier(transition.to, `${label}.to`);
+      if (!modeIds.has(from) || !modeIds.has(to))
+        fail(`${label} must reference declared game modes.`);
+      if (from === to) fail(`${label} must not be a self transition.`);
+      const pair = `${from}\u0000${to}`;
+      if (pairs.has(pair))
+        fail("scene layout game mode transition pairs must be unique.");
+      pairs.add(pair);
+      const overlayLabel = `${label}.overlay`;
+      const overlay = readRecord(transition.overlay, overlayLabel);
+      known(
+        overlay,
+        ["resource", "animation", "switchEvent", "placements"],
+        overlayLabel,
+      );
+      const resourceLabel = `${overlayLabel}.resource`;
+      const resource = readRecord(overlay.resource, resourceLabel);
+      known(resource, ["kind", "skeleton", "atlas", "textures"], resourceLabel);
+      if (resource.kind !== "spine")
+        fail(`${resourceLabel}.kind must be spine.`);
+      const skeleton = localPath(
+        resource.skeleton,
+        `${resourceLabel}.skeleton`,
+        new Set([".json"]),
+      );
+      const atlas = localPath(
+        resource.atlas,
+        `${resourceLabel}.atlas`,
+        new Set([".atlas"]),
+      );
+      const texturesRecord = readRecord(
+        resource.textures,
+        `${resourceLabel}.textures`,
+      );
+      if (Object.keys(texturesRecord).length === 0)
+        fail(`${resourceLabel}.textures must not be empty.`);
+      const textures: Record<string, string> = {};
+      for (const [page, path] of Object.entries(texturesRecord)) {
+        if (!PATH_SEGMENT.test(page))
+          fail(`${resourceLabel}.textures page "${page}" is invalid.`);
+        textures[page] = localPath(
+          path,
+          `${resourceLabel}.textures.${page}`,
+          IMAGE_EXTENSIONS,
+        );
+      }
+      const placementsRecord = readRecord(
+        overlay.placements,
+        `${overlayLabel}.placements`,
+      );
+      known(placementsRecord, variants, `${overlayLabel}.placements`);
+      const placements: Partial<
+        Record<SceneLayoutVariantId, SceneLayoutNodePlacement>
+      > = {};
+      for (const variant of variants) {
+        if (!Object.hasOwn(placementsRecord, variant))
+          fail(`${overlayLabel}.placements.${variant} is required.`);
+        placements[variant] = parseNodePlacement(
+          placementsRecord[variant],
+          `${overlayLabel}.placements.${variant}`,
+        );
+      }
+      return deepFreeze({
+        from,
+        to,
+        overlay: {
+          resource: { kind: "spine" as const, skeleton, atlas, textures },
+          animation: exactName(overlay.animation, `${overlayLabel}.animation`),
+          switchEvent: exactName(
+            overlay.switchEvent,
+            `${overlayLabel}.switchEvent`,
+          ),
+          placements,
+        },
+      });
+    }),
+  );
 }
 
 function activeVariantIds(
@@ -927,52 +1037,6 @@ function validateBackgroundOnlyOrdering(
         fail(
           `mode background node "${background.id}" must be ordered below ordinary layers in ${variant}.`,
         );
-  }
-}
-
-function validateModeTransitions(
-  modes: readonly import("./types.js").SceneLayoutGameMode[],
-  statefulById: ReadonlyMap<
-    string,
-    SceneLayoutNode & {
-      readonly resource: Extract<
-        SceneLayoutNode["resource"],
-        { readonly stateMachine: unknown }
-      >;
-    }
-  >,
-): void {
-  for (const source of modes) {
-    const sourceBackgrounds = new Set(
-      Object.values(source.backgroundNodes ?? {}),
-    );
-    for (const target of modes) {
-      if (source === target) continue;
-      const targetBackgrounds = new Set(
-        Object.values(target.backgroundNodes ?? {}),
-      );
-      for (const [nodeId, targetState] of Object.entries(target.nodeStates)) {
-        const sourceState = source.nodeStates[nodeId];
-        if (!sourceState || sourceState === targetState) continue;
-        const isBackground =
-          sourceBackgrounds.has(nodeId) || targetBackgrounds.has(nodeId);
-        if (
-          isBackground &&
-          !(sourceBackgrounds.has(nodeId) && targetBackgrounds.has(nodeId))
-        )
-          continue;
-        const machine = statefulById.get(nodeId)!.resource.stateMachine;
-        if (
-          !machine.transitions.some(
-            (transition) =>
-              transition.from === sourceState && transition.to === targetState,
-          )
-        )
-          fail(
-            `scene layout node "${nodeId}" lacks direct transition ${sourceState} -> ${targetState} for game modes ${source.id} -> ${target.id}.`,
-          );
-      }
-    }
   }
 }
 
@@ -1078,6 +1142,20 @@ function nonEmpty(value: unknown, label: string): string {
   if (typeof value !== "string" || value.trim().length === 0)
     fail(`${label} must be a non-empty string.`);
   return value;
+}
+function exactName(value: unknown, label: string): string {
+  const name = nonEmpty(value, label);
+  if (
+    name !== name.trim() ||
+    [...name].some((character) => {
+      const code = character.codePointAt(0)!;
+      return code <= 0x1f || code === 0x7f;
+    })
+  )
+    fail(
+      `${label} must be an exact non-control name without outer whitespace.`,
+    );
+  return name;
 }
 function finite(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isFinite(value))

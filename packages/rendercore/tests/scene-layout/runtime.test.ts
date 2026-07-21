@@ -45,7 +45,7 @@ describe("scene layout runtime", () => {
       init: vi.fn(),
       play,
       update: vi.fn(() => {
-        const result = { completed };
+        const result = { completed, events: [] };
         completed = false;
         return result;
       }),

@@ -21,13 +21,19 @@ import {
   type SymbolPackageResource,
 } from "../symbol/index.js";
 import type { RenderViewportSize } from "../viewport/index.js";
+import {
+  createOfficialSpinePlayer,
+  type RendercoreSpinePlayer,
+} from "../spine/runtime-player.js";
 import { SceneLayoutError } from "./errors.js";
+import { transitionResourceKey } from "./resource.js";
 import { createSceneLayoutRuntime } from "./runtime.js";
 import type {
   AttachChildOptions,
   AttachRelativeOptions,
   ResolvedSceneLayoutReelGrid,
   SceneLayoutGameMode,
+  SceneLayoutGameModeTransition,
   SceneLayoutGameModeSnapshot,
   SceneLayoutInitialReelScene,
   SceneLayoutNodeStateSnapshot,
@@ -39,19 +45,48 @@ import type {
 
 type ReelPresentation = RenderReelSet | RenderGridCellReelSet;
 
+interface PreparedModeTarget {
+  readonly reel: ReelPresentation;
+  readonly catalog: SymbolCatalogModel;
+}
+
+interface ActiveModeTransition {
+  readonly spec: SceneLayoutGameModeTransition;
+  readonly source: SceneLayoutGameMode;
+  readonly target: SceneLayoutGameMode;
+  readonly player: RendercoreSpinePlayer;
+  readonly prepared: PreparedModeTarget | null;
+  readonly bindingChanged: boolean;
+  switched: boolean;
+  switchEventCount: number;
+  readonly resolve: () => void;
+  readonly reject: (error: SceneLayoutError) => void;
+}
+
 export function createSceneLayoutPackageRuntime(options: {
   readonly resource: SceneLayoutPackageResource;
+  readonly createTransitionPlayer?: (options: {
+    readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
+  }) => RendercoreSpinePlayer;
 }): SceneLayoutPackageRuntime {
-  return new DefaultSceneLayoutPackageRuntime(options.resource);
+  return new DefaultSceneLayoutPackageRuntime(
+    options.resource,
+    options.createTransitionPlayer,
+  );
 }
 
 class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly container: Container;
   readonly #resource: SceneLayoutPackageResource;
   readonly #layout;
+  readonly #createTransitionPlayer: (options: {
+    readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
+  }) => RendercoreSpinePlayer;
+  readonly #transitionRoot = new Container();
   #reel: ReelPresentation | null = null;
   #catalog: SymbolCatalogModel | null = null;
   #activeSymbolPackageId: string | null = null;
+  #stableSymbolPackageId: string | null = null;
   #targetSymbolPackageId: string | null = null;
   #activeBackgroundNodes: readonly string[] = Object.freeze([]);
   readonly #popups = new Map<string, AwardCelebrationPlayer>();
@@ -59,13 +94,32 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   #initializing = false;
   #destroyed = false;
   #stableMode: string | null = null;
+  #displayedMode: string | null = null;
   #targetMode: string | null = null;
+  #modeRequestInProgress = false;
+  #activeTransition: ActiveModeTransition | null = null;
   #activePopupId: string | null = null;
 
-  constructor(resource: SceneLayoutPackageResource) {
+  constructor(
+    resource: SceneLayoutPackageResource,
+    createTransitionPlayer:
+      | ((options: {
+          readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
+        }) => RendercoreSpinePlayer)
+      | undefined,
+  ) {
     this.#resource = resource;
     this.#layout = createSceneLayoutRuntime({ resource: resource.layout });
+    this.#createTransitionPlayer =
+      createTransitionPlayer ??
+      ((options) =>
+        createOfficialSpinePlayer({
+          resource: options.resource,
+          createError: (message) => new SceneLayoutError(message),
+        }));
     this.container = this.#layout.container;
+    this.#transitionRoot.label = "scene-transition-overlay";
+    this.container.addChild(this.#transitionRoot);
   }
 
   async init(
@@ -112,6 +166,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           initial,
         );
         this.#activeSymbolPackageId = activeBinding.id;
+        this.#stableSymbolPackageId = activeBinding.id;
       } else if (options.reels?.main) {
         throw new SceneLayoutError(
           "Scene layout package has no symbol binding and must not receive reels.main input.",
@@ -124,9 +179,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         await popup.init();
         this.assertAlive();
         this.#popups.set(id, popup);
-        this.container.addChild(popup.container);
+        this.container.addChildAt(
+          popup.container,
+          this.container.getChildIndex(this.#transitionRoot),
+        );
       }
       this.#stableMode = initialModeId;
+      this.#displayedMode = initialModeId;
       this.#initialized = true;
     } catch (error) {
       this.destroy();
@@ -160,6 +219,17 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       );
       popup.container.scale.set(placement.scale);
     }
+    const activeTransition = this.#activeTransition;
+    if (activeTransition) {
+      const placement =
+        activeTransition.spec.overlay.placements[snapshot.variantId];
+      if (!placement)
+        throw new SceneLayoutError(
+          `Scene transition ${activeTransition.spec.from} -> ${activeTransition.spec.to} has no ${snapshot.variantId} placement.`,
+        );
+      activeTransition.player.view.position.set(placement.x, placement.y);
+      activeTransition.player.view.scale.set(placement.scale);
+    }
     return snapshot;
   }
 
@@ -169,6 +239,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#reel?.update(deltaSeconds);
     for (const popup of this.#popups.values())
       if (popup.isPlaying()) popup.update(deltaSeconds);
+    this.updateActiveTransition(deltaSeconds);
     if (
       this.#activePopupId &&
       !this.#popups.get(this.#activePopupId)?.isPlaying()
@@ -213,9 +284,22 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.requireGameModes();
     return Object.freeze({
       stableMode: this.#stableMode!,
+      displayedMode: this.#displayedMode!,
       targetMode: this.#targetMode,
       phase: this.#targetMode ? "transitioning" : "stable",
-      stableSymbolPackage: this.#activeSymbolPackageId,
+      transitionPhase: this.#activeTransition
+        ? this.#activeTransition.switched
+          ? "after-switch"
+          : "before-switch"
+        : null,
+      transition: this.#activeTransition
+        ? Object.freeze({
+            from: this.#activeTransition.spec.from,
+            to: this.#activeTransition.spec.to,
+          })
+        : null,
+      stableSymbolPackage: this.#stableSymbolPackageId,
+      displayedSymbolPackage: this.#activeSymbolPackageId,
       targetSymbolPackage: this.#targetMode
         ? this.#targetSymbolPackageId
         : null,
@@ -237,9 +321,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const mode = modes.modes.find((candidate) => candidate.id === modeId);
     if (!mode)
       throw new SceneLayoutError(`Unknown scene layout game mode "${modeId}".`);
-    if (this.#targetMode)
+    if (this.#modeRequestInProgress || this.#targetMode)
       throw new SceneLayoutError(
-        `Scene layout game mode transition to "${this.#targetMode}" is already in progress.`,
+        `A scene layout game mode transition is already in progress${this.#targetMode ? ` to "${this.#targetMode}"` : " during target preparation"}.`,
       );
     if (this.playingPopupId())
       throw new SceneLayoutError(
@@ -263,6 +347,13 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     const source = modes.modes.find(
       (candidate) => candidate.id === this.#stableMode,
     )!;
+    const transition = (modes.transitions ?? []).find(
+      (candidate) => candidate.from === source.id && candidate.to === mode.id,
+    );
+    if (!transition)
+      throw new SceneLayoutError(
+        `No direct scene transition exists from "${source.id}" to "${mode.id}".`,
+      );
     const sourceBinding = this.resolveModeSymbolBinding(source);
     const targetBinding = this.resolveModeSymbolBinding(mode);
     if (recreateReel && !targetBinding)
@@ -284,79 +375,76 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       throw new SceneLayoutError(
         `Scene layout game mode "${mode.id}" has no symbol package and must not receive reels.main input.`,
       );
-    let prepared: {
-      readonly reel: ReelPresentation;
-      readonly catalog: SymbolCatalogModel;
-    } | null = null;
-    if (bindingChanged && targetBinding) {
-      const catalog = await targetBinding.resource.createCatalog();
-      this.assertAlive();
-      const reel = this.createReelPresentation(
-        targetBinding.resource,
-        catalog,
-        targetBinding.binding,
-      );
-      try {
-        this.applyReelScene(
-          reel,
+    this.#modeRequestInProgress = true;
+    try {
+      let prepared: PreparedModeTarget | null = null;
+      if (bindingChanged && targetBinding) {
+        const catalog = await targetBinding.resource.createCatalog();
+        this.assertAlive();
+        const reel = this.createReelPresentation(
           targetBinding.resource,
+          catalog,
           targetBinding.binding,
-          targetInput!,
         );
-      } catch (error) {
-        reel.destroy({ children: true });
-        throw error;
-      }
-      prepared = { reel, catalog };
-    }
-    const transitions = this.modeTransitionEntries(source, mode);
-    try {
-      for (const [nodeId, state] of transitions) {
-        if (!this.#layout.canRequestNodeState(nodeId, state))
-          throw new SceneLayoutError(
-            `Scene layout node "${nodeId}" cannot transition to state "${state}".`,
+        try {
+          this.applyReelScene(
+            reel,
+            targetBinding.resource,
+            targetBinding.binding,
+            targetInput!,
           );
-      }
-    } catch (error) {
-      prepared?.reel.destroy({ children: true });
-      throw error;
-    }
-    this.#targetMode = mode.id;
-    this.#targetSymbolPackageId = targetBinding?.id ?? null;
-    try {
-      await Promise.all(
-        transitions.map(([nodeId, state]) =>
-          this.#layout.requestNodeState(nodeId, state),
-        ),
-      );
-      this.assertAlive();
-      this.commitBackgroundVisibility(mode);
-      if (bindingChanged) {
-        const previous = this.#reel;
-        if (prepared) {
-          this.attachReel(prepared.reel);
-          this.#reel = prepared.reel;
-          this.#catalog = prepared.catalog;
-        } else {
-          this.#reel = null;
-          this.#catalog = null;
+        } catch (error) {
+          reel.destroy({ children: true });
+          throw error;
         }
-        this.#activeSymbolPackageId = targetBinding?.id ?? null;
-        this.#stableMode = mode.id;
-        if (previous) {
-          previous.parent?.removeChild(previous);
-          previous.destroy({ children: true });
-        }
-      } else {
-        this.#stableMode = mode.id;
+        prepared = { reel, catalog };
       }
-    } catch (error) {
-      if (prepared && prepared.reel !== this.#reel)
-        prepared.reel.destroy({ children: true });
-      throw error;
+      const playerResource =
+        this.#resource.layout.spineResources[
+          transitionResourceKey(transition.from, transition.to)
+        ];
+      if (!playerResource) {
+        prepared?.reel.destroy({ children: true });
+        throw new SceneLayoutError(
+          `Scene transition resource ${transition.from} -> ${transition.to} is unavailable.`,
+        );
+      }
+      const player = this.#createTransitionPlayer({ resource: playerResource });
+      try {
+        await player.init();
+        this.assertReady();
+        player.play({
+          animationName: transition.overlay.animation,
+          loop: false,
+        });
+      } catch (error) {
+        player.destroy();
+        prepared?.reel.destroy({ children: true });
+        throw asSceneLayoutError(error);
+      }
+      this.#targetMode = mode.id;
+      this.#targetSymbolPackageId = targetBinding?.id ?? null;
+      this.#transitionRoot.addChild(player.view);
+      const snapshot = this.#layout.getSnapshot();
+      const placement = transition.overlay.placements[snapshot.variantId]!;
+      player.view.position.set(placement.x, placement.y);
+      player.view.scale.set(placement.scale);
+      return await new Promise<void>((resolve, reject) => {
+        this.#activeTransition = {
+          spec: transition,
+          source,
+          target: mode,
+          player,
+          prepared,
+          bindingChanged,
+          switched: false,
+          switchEventCount: 0,
+          resolve,
+          reject,
+        };
+      });
     } finally {
-      this.#targetMode = null;
-      this.#targetSymbolPackageId = null;
+      this.#modeRequestInProgress = false;
     }
   }
 
@@ -477,6 +565,17 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    if (this.#activeTransition) {
+      const active = this.#activeTransition;
+      this.#activeTransition = null;
+      active.player.destroy();
+      if (!active.switched) active.prepared?.reel.destroy({ children: true });
+      active.reject(
+        new SceneLayoutError(
+          "Scene layout package runtime was destroyed during a game mode transition.",
+        ),
+      );
+    }
     this.#reel?.destroy({ children: true });
     this.#reel = null;
     this.#catalog = null;
@@ -486,11 +585,92 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#resource.destroy();
     this.#initialized = false;
     this.#stableMode = null;
+    this.#displayedMode = null;
     this.#targetMode = null;
+    this.#modeRequestInProgress = false;
     this.#activePopupId = null;
     this.#activeSymbolPackageId = null;
+    this.#stableSymbolPackageId = null;
     this.#targetSymbolPackageId = null;
     this.#activeBackgroundNodes = Object.freeze([]);
+  }
+
+  private updateActiveTransition(deltaSeconds: number): void {
+    const active = this.#activeTransition;
+    if (!active) return;
+    let result;
+    try {
+      result = active.player.update(deltaSeconds);
+      for (const event of result.events) {
+        if (event.name !== active.spec.overlay.switchEvent) continue;
+        active.switchEventCount += 1;
+        if (active.switchEventCount !== 1)
+          throw new SceneLayoutError(
+            `Scene transition ${active.spec.from} -> ${active.spec.to} emitted switch event "${event.name}" more than once.`,
+          );
+        this.commitActiveTransition(active);
+      }
+      if (!result.completed) return;
+      if (!active.switched)
+        throw new SceneLayoutError(
+          `Scene transition ${active.spec.from} -> ${active.spec.to} completed without switch event "${active.spec.overlay.switchEvent}".`,
+        );
+      this.completeActiveTransition(active);
+    } catch (error) {
+      this.failActiveTransition(active, asSceneLayoutError(error));
+    }
+  }
+
+  private commitActiveTransition(active: ActiveModeTransition): void {
+    if (active.switched) return;
+    this.commitBackgroundVisibility(active.target);
+    if (active.bindingChanged) {
+      const previous = this.#reel;
+      if (active.prepared) {
+        this.attachReel(active.prepared.reel);
+        this.#reel = active.prepared.reel;
+        this.#catalog = active.prepared.catalog;
+      } else {
+        this.#reel = null;
+        this.#catalog = null;
+      }
+      this.#activeSymbolPackageId = this.#targetSymbolPackageId;
+      if (previous) {
+        previous.parent?.removeChild(previous);
+        previous.destroy({ children: true });
+      }
+    }
+    this.#displayedMode = active.target.id;
+    active.switched = true;
+  }
+
+  private completeActiveTransition(active: ActiveModeTransition): void {
+    if (this.#activeTransition !== active) return;
+    active.player.destroy();
+    this.#stableMode = active.target.id;
+    this.#displayedMode = active.target.id;
+    this.#stableSymbolPackageId = this.#activeSymbolPackageId;
+    this.#targetMode = null;
+    this.#targetSymbolPackageId = null;
+    this.#activeTransition = null;
+    active.resolve();
+  }
+
+  private failActiveTransition(
+    active: ActiveModeTransition,
+    error: SceneLayoutError,
+  ): void {
+    if (this.#activeTransition !== active) return;
+    active.player.destroy();
+    if (!active.switched) active.prepared?.reel.destroy({ children: true });
+    else {
+      this.#stableMode = active.target.id;
+      this.#stableSymbolPackageId = this.#activeSymbolPackageId;
+    }
+    this.#targetMode = null;
+    this.#targetSymbolPackageId = null;
+    this.#activeTransition = null;
+    active.reject(error);
   }
 
   private createReelPresentation(
@@ -606,32 +786,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         `Scene layout symbol package "${id}" is unavailable.`,
       );
     return { id, binding, resource };
-  }
-
-  private modeTransitionEntries(
-    source: SceneLayoutGameMode,
-    target: SceneLayoutGameMode,
-  ): readonly (readonly [string, string])[] {
-    const candidates = new Set(
-      this.requireGameModes().modes.flatMap((mode) =>
-        Object.values(mode.backgroundNodes ?? {}),
-      ),
-    );
-    const sourceBackgrounds = new Set(
-      Object.values(source.backgroundNodes ?? {}),
-    );
-    const targetBackgrounds = new Set(
-      Object.values(target.backgroundNodes ?? {}),
-    );
-    return Object.freeze(
-      Object.entries(target.nodeStates)
-        .filter(
-          ([nodeId]) =>
-            !candidates.has(nodeId) ||
-            (sourceBackgrounds.has(nodeId) && targetBackgrounds.has(nodeId)),
-        )
-        .map(([nodeId, state]) => Object.freeze([nodeId, state] as const)),
-    );
   }
 
   private commitBackgroundVisibility(mode: SceneLayoutGameMode | null): void {

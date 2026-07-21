@@ -71,14 +71,20 @@ vi.mock("@esotericsoftware/spine-pixi-v8", () => {
       this.state = {
         clearTracks: vi.fn(),
         clearListeners: vi.fn(),
-        setAnimation: vi.fn((_track, _name, loop) => {
-          this.#entry = { loop };
+        setAnimation: vi.fn((_track, name, loop) => {
+          this.#entry = { loop, name, eventPending: name === "BG_FG" };
           return this.#entry;
         }),
       };
     }
     update(delta: number) {
       mocks.updates.push(delta);
+      if (this.#entry?.eventPending) {
+        this.#entry.eventPending = false;
+        this.#entry.listener?.event?.(this.#entry, {
+          data: { name: "SwitchScene" },
+        });
+      }
       if (delta > 0) {
         this.#entry.listener?.complete?.(this.#entry);
       }
@@ -113,7 +119,13 @@ describe("shared official Spine player", () => {
 
   it("loads and binds every explicitly configured atlas page", async () => {
     const resource = {
-      skeleton: { skeleton: { spine: "4.3.23" } },
+      skeleton: {
+        skeleton: { spine: "4.3.23" },
+        animations: {
+          BG: {},
+          BG_FG: { events: [{ time: 0, name: "SwitchScene" }] },
+        },
+      },
       atlasText: "BG.png,BG_2.png",
       textureUrls: {
         "BG.png": "blob:http://localhost/shared-texture",
@@ -124,6 +136,7 @@ describe("shared official Spine player", () => {
       resource,
       requiredAnimations: ["BG", "BG_FG"],
       requiredSlots: ["ValueSlot"],
+      requiredAnimationEvents: { BG_FG: ["SwitchScene"] },
     });
     expect(validation.atlasPages).toEqual(["BG.png", "BG_2.png"]);
     expect(validation.animationDurations).toEqual({ BG: 15, BG_FG: 1.6 });
@@ -149,14 +162,31 @@ describe("shared official Spine player", () => {
     player.attachSlotObject({ slot: "ValueSlot", object: slotObject });
     player.removeSlotObject(slotObject);
     player.play({ animationName: "BG_FG", loop: false });
-    expect(player.update(0.1)).toEqual({ completed: true });
+    expect(player.update(0.1)).toEqual({
+      completed: true,
+      events: [{ name: "SwitchScene" }],
+    });
     player.play({ animationName: "BG", loop: true });
     expect(player.update(0.1)).toEqual({
       completed: false,
       loopCompleted: true,
+      events: [],
     });
-    expect(player.update(0)).toEqual({ completed: false });
+    expect(player.update(0)).toEqual({ completed: false, events: [] });
+    player.play({ animationName: "BG_FG", loop: false });
+    const timeZero = player.update(0);
+    expect(timeZero).toEqual({
+      completed: false,
+      events: [{ name: "SwitchScene" }],
+    });
+    expect(Object.isFrozen(timeZero)).toBe(true);
+    expect(Object.isFrozen(timeZero.events)).toBe(true);
+    expect(player.update(0)).toEqual({ completed: false, events: [] });
+    player.play({ animationName: "BG_FG", loop: false });
+    player.reset();
+    expect(player.update(0)).toEqual({ completed: false, events: [] });
     player.destroy();
+    expect(() => player.update(0)).toThrow(/destroyed/);
   });
 
   it("rejects missing, extra and duplicate page contracts", () => {

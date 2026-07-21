@@ -24,6 +24,7 @@ function projectWithResources() {
     atlas: "assets/hero.atlas",
     textures: { "hero.png": "assets/hero.png" },
     animationNames: ["Idle", "Win"],
+    animationEvents: { Idle: [], Win: [] },
     bounds: { width: 3744.3176, height: 2371.955 },
   });
   project.resources.set("background", {

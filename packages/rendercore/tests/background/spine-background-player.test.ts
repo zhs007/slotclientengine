@@ -222,11 +222,14 @@ class FakeLowLevelPlayer implements RendercoreSpinePlayer {
     this.completeNextUpdate = false;
   }
 
-  update(deltaSeconds: number): { readonly completed: boolean } {
+  update(deltaSeconds: number): {
+    readonly completed: boolean;
+    readonly events: readonly [];
+  } {
     this.updateDeltas.push(deltaSeconds);
     const completed = this.completeNextUpdate;
     this.completeNextUpdate = false;
-    return { completed };
+    return { completed, events: [] };
   }
 
   reset(): void {

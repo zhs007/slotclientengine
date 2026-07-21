@@ -33,8 +33,6 @@ import {
 } from "../model/editor-store.js";
 import {
   addLayerFromResource,
-  addSpineState,
-  addSpineTransition,
   assignBackgroundResource,
   clearBackground,
   deleteLayoutResource,
@@ -49,12 +47,6 @@ import {
   setImageStringLayerAnchor,
   setImageStringLayerText,
   setNodeDefaultAnimation,
-  setSpineInitialState,
-  setSpinePlaybackKind,
-  setSpineStateAnimation,
-  renameSpineState,
-  deleteSpineState,
-  deleteSpineTransition,
   suggestNodeId,
   importImageStringZip,
   uploadImageResource,
@@ -72,7 +64,12 @@ import {
   replaceSymbolDependency,
   replacePopupDependency,
   renameGameMode,
-  setGameModeNodeState,
+  createGameModeTransition,
+  deleteGameModeTransition,
+  setGameModeTransitionAnimation,
+  setGameModeTransitionEvent,
+  setGameModeTransitionPlacement,
+  setGameModeTransitionResource,
   setInitialGameMode,
   setPopupPlacement,
 } from "../model/game-mode-commands.js";
@@ -83,6 +80,10 @@ import {
 import { PREVIEW_SIZE_PRESETS } from "../preview/preview-size.js";
 import type { SymbolOtherScenePreviewBinding } from "../preview/other-scene-preview.js";
 import { layoutWorkspaceMarkup } from "./layout-workspace.js";
+import {
+  transitionKey,
+  transitionsWorkspaceMarkup,
+} from "./transitions-workspace.js";
 import { symbolsWorkspaceMarkup } from "./symbols-workspace.js";
 import { bigWinWorkspaceMarkup } from "./bigwin-workspace.js";
 import { projectWorkspaceMarkup } from "./project-workspace.js";
@@ -118,6 +119,7 @@ export class GameLayoutEditorApp {
   #preview: LayoutPreview | null = null;
   #unsubscribe: (() => void) | null = null;
   #previewRevision = 0;
+  #previewModeRequest = 0;
   #destroyed = false;
   #symbolPackageMetadata: SymbolPackagePreviewSnapshot | null = null;
   #symbolImportRequest = 0;
@@ -151,6 +153,7 @@ export class GameLayoutEditorApp {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#previewModeRequest += 1;
     this.#symbolImportRequest += 1;
     this.#symbolImportBusy = false;
     if (this.#feedbackTimer) clearTimeout(this.#feedbackTimer);
@@ -564,6 +567,7 @@ export class GameLayoutEditorApp {
   }
 
   private async requestPreviewMode(modeId: string): Promise<void> {
+    const request = ++this.#previewModeRequest;
     try {
       if (!this.#preview?.getGameModeSnapshot())
         throw new Error(
@@ -572,11 +576,14 @@ export class GameLayoutEditorApp {
       const pending = this.#preview?.requestGameMode(modeId);
       this.renderPopupControls(this.#store.getSnapshot());
       await pending;
+      if (request !== this.#previewModeRequest || this.#destroyed) return;
       this.#selectedPreviewMode = modeId;
     } catch (error) {
-      this.#store.setExternalError(error);
+      if (request === this.#previewModeRequest && !this.#destroyed)
+        this.#store.setExternalError(error);
     } finally {
-      this.renderPopupControls(this.#store.getSnapshot());
+      if (request === this.#previewModeRequest && !this.#destroyed)
+        this.renderPopupControls(this.#store.getSnapshot());
     }
   }
 
@@ -631,6 +638,18 @@ export class GameLayoutEditorApp {
       snapshot.project,
       this.#session.selection,
     );
+    if (
+      this.#session.selectedTransitionKey &&
+      !snapshot.project.gameModes.transitions.some(
+        (transition) =>
+          transitionKey(transition) === this.#session.selectedTransitionKey,
+      )
+    )
+      this.#session.selectedTransitionKey = null;
+    this.#session.selectedTransitionKey ??= snapshot.project.gameModes
+      .transitions[0]
+      ? transitionKey(snapshot.project.gameModes.transitions[0])
+      : null;
     this.syncThumbnailUrls(snapshot.project);
     for (const tab of this.#root.querySelectorAll<HTMLButtonElement>(
       '[role="tab"]',
@@ -669,7 +688,13 @@ export class GameLayoutEditorApp {
                 this.#selectedGameMode,
                 this.#session,
               )
-            : projectWorkspaceMarkup(snapshot.project, snapshot.errors);
+            : this.#session.activeTab === "transitions"
+              ? transitionsWorkspaceMarkup({
+                  project: snapshot.project,
+                  selectedKey: this.#session.selectedTransitionKey,
+                  snapshot: this.#preview?.getGameModeSnapshot() ?? null,
+                })
+              : projectWorkspaceMarkup(snapshot.project, snapshot.errors);
     if (!fixedTab) this.bindWorkspaceActions(snapshot.project);
     panel
       .querySelectorAll<HTMLDetailsElement>("[data-inspector-section]")
@@ -789,39 +814,21 @@ export class GameLayoutEditorApp {
     }
 
     const stateTarget = this.requireElement("[data-mode-node-states]");
-    const stateful = project.nodes.filter(
-      (node) =>
-        node.playback?.kind === "state-machine" &&
-        Object.hasOwn(mode.nodeStates, node.id),
-    );
-    stateTarget.innerHTML = stateful.length
-      ? stateful
-          .map((node) => {
-            const playback = node.playback!;
-            if (playback.kind !== "state-machine") return "";
-            return `<label>${escapeHtml(node.id)} <select data-mode-node-state="${escapeHtml(node.id)}">${playback.states.map((state) => `<option value="${escapeHtml(state.id)}" ${mode.nodeStates[node.id] === state.id ? "selected" : ""}>${escapeHtml(state.id)}</option>`).join("")}</select></label>`;
-          })
-          .join("")
-      : '<span class="hint">当前 layout 无 stateful Spine node。</span>';
-    stateTarget
-      .querySelectorAll<HTMLSelectElement>("[data-mode-node-state]")
-      .forEach((select) =>
-        select.addEventListener("change", () =>
-          this.runTransaction((draft) =>
-            setGameModeNodeState(
-              draft,
-              this.#selectedGameMode,
-              select.dataset.modeNodeState!,
-              select.value,
-            ),
-          ),
-        ),
-      );
+    stateTarget.innerHTML =
+      '<span class="hint">稳定场景保持独立 loop；有向切换在“转场”工作区配置。</span>';
     const modeSnapshot = this.#preview?.getGameModeSnapshot?.();
     const popupSnapshot = this.#preview?.getActiveAwardCelebrationSnapshot?.();
     const transitioning = modeSnapshot?.phase === "transitioning";
     const popupActive = Boolean(
       popupSnapshot && !["idle", "complete"].includes(popupSnapshot.phase),
+    );
+    const hasPreviewEdge = Boolean(
+      modeSnapshot &&
+      project.gameModes.transitions.some(
+        (transition) =>
+          transition.fromModeId === modeSnapshot.stableMode &&
+          transition.toModeId === this.#selectedPreviewMode,
+      ),
     );
     modeSelect.disabled = Boolean(transitioning || popupActive);
     previewModeSelect.disabled = Boolean(
@@ -829,7 +836,9 @@ export class GameLayoutEditorApp {
     );
     (
       this.requireElement("[data-request-preview-mode]") as HTMLButtonElement
-    ).disabled = Boolean(!modeSnapshot || transitioning || popupActive);
+    ).disabled = Boolean(
+      !modeSnapshot || transitioning || popupActive || !hasPreviewEdge,
+    );
     popupSelect.disabled = Boolean(transitioning);
     const stableMode = project.gameModes.modes.find(
       (candidate) => candidate.id === modeSnapshot?.stableMode,
@@ -844,15 +853,108 @@ export class GameLayoutEditorApp {
     ).disabled = !popupActive;
     this.requireElement("[data-popup-runtime-status]").textContent =
       modeSnapshot
-        ? `mode ${modeSnapshot.phase}: stable=${modeSnapshot.stableMode}${modeSnapshot.targetMode ? ` target=${modeSnapshot.targetMode}` : ""} · popup=${mode.awardCelebrationPopupId ?? "无"}${popupSnapshot ? ` · ${popupSnapshot.phase}/${popupSnapshot.activeTierId ?? "none"}/${popupSnapshot.activeSegment ?? "none"}` : ""}`
+        ? `mode ${modeSnapshot.phase}: stable=${modeSnapshot.stableMode} displayed=${modeSnapshot.displayedMode}${modeSnapshot.targetMode ? ` target=${modeSnapshot.targetMode} ${modeSnapshot.transitionPhase}` : ""} · popup=${mode.awardCelebrationPopupId ?? "无"}${popupSnapshot ? ` · ${popupSnapshot.phase}/${popupSnapshot.activeTierId ?? "none"}/${popupSnapshot.activeSegment ?? "none"}` : ""}`
         : `mode=${mode.id} · popup=${mode.awardCelebrationPopupId ?? "无"}`;
     this.requireElement("[data-main-state-status]").textContent = modeSnapshot
-      ? `${modeSnapshot.phase} · stable=${modeSnapshot.stableMode}${modeSnapshot.targetMode ? ` · target=${modeSnapshot.targetMode}` : ""} · initial=${project.gameModes.initialMode}`
+      ? `${modeSnapshot.phase} · stable=${modeSnapshot.stableMode} · displayed=${modeSnapshot.displayedMode}${modeSnapshot.targetMode ? ` · target=${modeSnapshot.targetMode} · ${modeSnapshot.transitionPhase}` : ""} · initial=${project.gameModes.initialMode}`
       : `initial=${project.gameModes.initialMode} · preview 未就绪`;
   }
 
   private bindWorkspaceActions(project: EditorProject): void {
     const panel = this.requireElement("[data-workspace-panel]");
+    panel
+      .querySelectorAll<HTMLButtonElement>("[data-transition-key]")
+      .forEach((button) =>
+        button.addEventListener("click", () => {
+          this.#session.selectedTransitionKey = button.dataset.transitionKey!;
+          this.renderWorkspace(this.#store.getSnapshot());
+        }),
+      );
+    panel
+      .querySelector<HTMLButtonElement>("[data-create-transition]")
+      ?.addEventListener("click", () => {
+        const from = panel.querySelector<HTMLSelectElement>(
+          "[data-new-transition-from]",
+        )?.value;
+        const to = panel.querySelector<HTMLSelectElement>(
+          "[data-new-transition-to]",
+        )?.value;
+        if (!from || !to) {
+          this.#store.setExternalError(
+            new Error("新建转场必须明确选择 from 与 to。"),
+          );
+          return;
+        }
+        this.#session.selectedTransitionKey = `${from}::${to}`;
+        this.runTransaction(
+          (draft) => createGameModeTransition(draft, from, to),
+          `已创建转场 ${from} -> ${to}。`,
+        );
+      });
+    panel
+      .querySelector<HTMLSelectElement>("[data-transition-resource]")
+      ?.addEventListener("change", (event) => {
+        const value = (event.currentTarget as HTMLSelectElement).value;
+        this.runTransaction((draft) => {
+          const transition = draft.gameModes.transitions.find(
+            (candidate) =>
+              transitionKey(candidate) === this.#session.selectedTransitionKey,
+          );
+          if (!transition) throw new Error("所选转场已不存在。");
+          setGameModeTransitionResource(draft, transition, value);
+        });
+      });
+    panel
+      .querySelector<HTMLSelectElement>("[data-transition-animation]")
+      ?.addEventListener("change", (event) => {
+        const value = (event.currentTarget as HTMLSelectElement).value;
+        this.runTransaction((draft) => {
+          const transition = draft.gameModes.transitions.find(
+            (candidate) =>
+              transitionKey(candidate) === this.#session.selectedTransitionKey,
+          );
+          if (!transition) throw new Error("所选转场已不存在。");
+          setGameModeTransitionAnimation(draft, transition, value);
+        });
+      });
+    panel
+      .querySelector<HTMLSelectElement>("[data-transition-event]")
+      ?.addEventListener("change", (event) => {
+        const value = (event.currentTarget as HTMLSelectElement).value;
+        this.runTransaction((draft) => {
+          const transition = draft.gameModes.transitions.find(
+            (candidate) =>
+              transitionKey(candidate) === this.#session.selectedTransitionKey,
+          );
+          if (!transition) throw new Error("所选转场已不存在。");
+          setGameModeTransitionEvent(draft, transition, value);
+        });
+      });
+    panel
+      .querySelector<HTMLButtonElement>("[data-delete-transition]")
+      ?.addEventListener("click", () => {
+        const selected = project.gameModes.transitions.find(
+          (candidate) =>
+            transitionKey(candidate) === this.#session.selectedTransitionKey,
+        );
+        if (!selected) return;
+        this.runTransaction((draft) =>
+          deleteGameModeTransition(
+            draft,
+            selected.fromModeId,
+            selected.toModeId,
+          ),
+        );
+      });
+    panel
+      .querySelector<HTMLButtonElement>("[data-play-transition]")
+      ?.addEventListener("click", () => {
+        const selected = project.gameModes.transitions.find(
+          (candidate) =>
+            transitionKey(candidate) === this.#session.selectedTransitionKey,
+        );
+        if (selected) void this.requestPreviewMode(selected.toModeId);
+      });
     panel
       .querySelector("[data-upload-resources]")
       ?.addEventListener("click", () => void this.uploadResources(false));
@@ -1062,130 +1164,6 @@ export class GameLayoutEditorApp {
         ),
       );
     panel
-      .querySelectorAll<HTMLSelectElement>("[data-spine-playback-kind]")
-      .forEach((select) =>
-        select.addEventListener("change", () =>
-          this.runTransaction((draft) =>
-            setSpinePlaybackKind(
-              draft,
-              select.dataset.spinePlaybackKind!,
-              select.value as "loop" | "state-machine",
-            ),
-          ),
-        ),
-      );
-    panel
-      .querySelectorAll<HTMLInputElement>("[data-spine-state-id]")
-      .forEach((input) =>
-        input.addEventListener("change", () =>
-          this.runTransaction((draft) =>
-            renameSpineState(
-              draft,
-              input.dataset.spineStateId!,
-              input.dataset.currentState!,
-              input.value,
-            ),
-          ),
-        ),
-      );
-    panel
-      .querySelectorAll<HTMLSelectElement>("[data-spine-state-animation]")
-      .forEach((select) =>
-        select.addEventListener("change", () =>
-          this.runTransaction((draft) =>
-            setSpineStateAnimation(
-              draft,
-              select.dataset.spineStateAnimation!,
-              select.dataset.stateId!,
-              select.value,
-            ),
-          ),
-        ),
-      );
-    panel
-      .querySelectorAll<HTMLInputElement>("[data-spine-initial]")
-      .forEach((input) =>
-        input.addEventListener("change", () =>
-          this.runTransaction((draft) =>
-            setSpineInitialState(
-              draft,
-              input.dataset.spineInitial!,
-              input.value,
-            ),
-          ),
-        ),
-      );
-    panel
-      .querySelectorAll<HTMLButtonElement>("[data-add-spine-state]")
-      .forEach((button) =>
-        button.addEventListener("click", () => {
-          const nodeId = button.dataset.addSpineState!;
-          const project = this.#store.getSnapshot().project;
-          const node = project.nodes.find((item) => item.id === nodeId)!;
-          const resource = project.resources.get(node.resourceId);
-          if (resource?.kind !== "spine") return;
-          const id = window.prompt("新 state id（ASCII identifier）", "State2");
-          if (!id) return;
-          const animation = window.prompt(
-            `exact animation：${resource.animationNames.join(", ")}`,
-            resource.animationNames[0],
-          );
-          if (!animation) return;
-          this.runTransaction((draft) =>
-            addSpineState(draft, nodeId, { id, animation }),
-          );
-        }),
-      );
-    panel
-      .querySelectorAll<HTMLButtonElement>("[data-delete-spine-state]")
-      .forEach((button) =>
-        button.addEventListener("click", () =>
-          this.runTransaction((draft) =>
-            deleteSpineState(
-              draft,
-              button.dataset.deleteSpineState!,
-              button.dataset.stateId!,
-            ),
-          ),
-        ),
-      );
-    panel
-      .querySelectorAll<HTMLButtonElement>("[data-add-spine-transition]")
-      .forEach((button) =>
-        button.addEventListener("click", () => {
-          const nodeId = button.dataset.addSpineTransition!;
-          const builder = button.closest<HTMLElement>(
-            "[data-spine-transition-builder]",
-          );
-          const from = builder?.querySelector<HTMLSelectElement>(
-            "[data-spine-transition-from]",
-          )?.value;
-          const to = builder?.querySelector<HTMLSelectElement>(
-            "[data-spine-transition-to]",
-          )?.value;
-          const animation = builder?.querySelector<HTMLSelectElement>(
-            "[data-spine-transition-animation]",
-          )?.value;
-          if (!from || !to || !animation) return;
-          this.runTransaction((draft) =>
-            addSpineTransition(draft, nodeId, { from, to, animation }),
-          );
-        }),
-      );
-    panel
-      .querySelectorAll<HTMLButtonElement>("[data-delete-spine-transition]")
-      .forEach((button) =>
-        button.addEventListener("click", () =>
-          this.runTransaction((draft) =>
-            deleteSpineTransition(
-              draft,
-              button.dataset.deleteSpineTransition!,
-              Number(button.dataset.transitionIndex),
-            ),
-          ),
-        ),
-      );
-    panel
       .querySelectorAll<HTMLInputElement>("[data-image-string-text]")
       .forEach((input) =>
         input.addEventListener("change", () =>
@@ -1254,7 +1232,29 @@ export class GameLayoutEditorApp {
             /^variants\.(default|landscape|portrait)\.artSize\.(width|height)$/u.exec(
               path,
             );
-          if (artSizeMatch) {
+          const transitionPlacementMatch =
+            /^transition\.(default|landscape|portrait)\.(x|y|scale)$/u.exec(
+              path,
+            );
+          if (transitionPlacementMatch) {
+            const transition = draft.gameModes.transitions.find(
+              (candidate) =>
+                transitionKey(candidate) ===
+                this.#session.selectedTransitionKey,
+            );
+            if (!transition) throw new Error("所选转场已不存在。");
+            const variant = transitionPlacementMatch[1] as SceneLayoutVariantId;
+            const field = transitionPlacementMatch[2] as "x" | "y" | "scale";
+            const current = transition.placements[variant] ?? {
+              x: 0,
+              y: 0,
+              scale: 1,
+            };
+            setGameModeTransitionPlacement(draft, transition, variant, {
+              ...current,
+              [field]: Number(input.value),
+            });
+          } else if (artSizeMatch) {
             setVariantArtSizeDimension(
               draft,
               artSizeMatch[1] as "default" | "landscape" | "portrait",
@@ -1268,7 +1268,7 @@ export class GameLayoutEditorApp {
             for (const variant of activeVariantIds(draft)) {
               updateVariantFocusFromReel(draft, variant);
             }
-          } else if (!artSizeMatch) {
+          } else if (!artSizeMatch && !transitionPlacementMatch) {
             const match =
               /^variants\.(default|landscape|portrait)\.(focusOffsets|artSize)\./u.exec(
                 path,
@@ -1876,6 +1876,7 @@ export class GameLayoutEditorApp {
   }
 
   private async refreshPreview(snapshot: EditorStoreSnapshot): Promise<void> {
+    this.#previewModeRequest += 1;
     const revision = ++this.#previewRevision;
     const preferredVariant =
       snapshot.project.mode === "maximized-focus"
@@ -2579,6 +2580,7 @@ function shellMarkup(): string {
     [
       ["assets", "资源"],
       ["layout", "布局"],
+      ["transitions", "转场"],
       ["symbols", "Symbols"],
       ["bigwin", "BigWin"],
       ["project", "项目"],

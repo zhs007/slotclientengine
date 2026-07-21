@@ -5,6 +5,7 @@ import {
   createSceneLayoutResource,
   loadSceneLayoutResourceFromUrl,
 } from "../../src/scene-layout/index.js";
+import { transitionResourceKey } from "../../src/scene-layout/resource.js";
 import { game002LayoutFixture } from "./fixtures.js";
 
 describe("scene layout resources", () => {
@@ -137,6 +138,112 @@ describe("scene layout resources", () => {
         ),
       }),
     ).toThrow(/animation "bg" was not found/);
+  });
+
+  it("requires the transition switch event exactly once in its animation timeline", () => {
+    const root = resolve(__dirname, "../../../../");
+    const baseSkeleton = JSON.parse(
+      readFileSync(resolve(root, "assets/game002-s3/BG.json"), "utf8"),
+    );
+    const atlasText = readFileSync(
+      resolve(root, "assets/game002-s3/BG.atlas"),
+      "utf8",
+    );
+    const pages = [
+      "BG.png",
+      "BG_2.png",
+      "BG_3.png",
+      "BG_4.png",
+      "BG_5.png",
+      "BG_6.png",
+      "BG_7.png",
+      "BG_8.png",
+    ];
+    const textures = Object.fromEntries(
+      pages.map((page) => [page, `assets/bg/${page}`]),
+    );
+    const manifest = {
+      ...game002LayoutFixture,
+      nodes: [
+        {
+          id: "bg",
+          order: 0,
+          resource: {
+            kind: "spine" as const,
+            skeleton: "assets/bg/bg.json",
+            atlas: "assets/bg/bg.atlas",
+            textures,
+            defaultAnimation: "BG",
+            loop: true as const,
+          },
+          placements: { default: { x: 0, y: 0, scale: 1 } },
+        },
+      ],
+      gameModes: {
+        initialMode: "BaseGame",
+        modes: [
+          {
+            id: "BaseGame",
+            backgroundNodes: { default: "bg" },
+            nodeStates: {},
+          },
+          {
+            id: "FreeGame",
+            backgroundNodes: { default: "bg" },
+            nodeStates: {},
+          },
+        ],
+        transitions: [
+          {
+            from: "BaseGame",
+            to: "FreeGame",
+            overlay: {
+              resource: {
+                kind: "spine" as const,
+                skeleton: "assets/bg/bg.json",
+                atlas: "assets/bg/bg.atlas",
+                textures,
+              },
+              animation: "BG_FG",
+              switchEvent: "SwitchScene",
+              placements: { default: { x: 0, y: 0, scale: 1 } },
+            },
+          },
+        ],
+      },
+    };
+    const makeSkeleton = (
+      events: readonly { time: number; name: string }[],
+    ) => ({
+      ...structuredClone(baseSkeleton),
+      events: { ...structuredClone(baseSkeleton.events), SwitchScene: {} },
+      animations: {
+        ...structuredClone(baseSkeleton.animations),
+        BG_FG: { events },
+      },
+    });
+    const create = (events: readonly { time: number; name: string }[]) =>
+      createSceneLayoutResource({
+        manifest,
+        skeletonModules: { "assets/bg/bg.json": makeSkeleton(events) },
+        atlasModules: { "assets/bg/bg.atlas": atlasText },
+        textureModules: Object.fromEntries(
+          pages.map((page) => [`assets/bg/${page}`, `memory:${page}`]),
+        ),
+      });
+
+    expect(() => create([])).toThrow(/exactly once.*found 0/);
+    expect(() =>
+      create([
+        { time: 0.2, name: "SwitchScene" },
+        { time: 0.8, name: "SwitchScene" },
+      ]),
+    ).toThrow(/exactly once.*found 2/);
+    const resource = create([{ time: 0, name: "SwitchScene" }]);
+    expect(
+      resource.spineResources[transitionResourceKey("BaseGame", "FreeGame")],
+    ).toBeDefined();
+    resource.destroy();
   });
 
   it("loads the exact CDN closure and rejects network/protocol/JSON failures", async () => {

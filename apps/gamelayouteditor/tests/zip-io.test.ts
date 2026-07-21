@@ -100,6 +100,119 @@ function compositePackageFixture() {
 }
 
 describe("layout zip IO", () => {
+  it("deterministically round-trips transition-only Spine resources and directed edges", async () => {
+    const skeleton = {
+      skeleton: { spine: "4.3.23" },
+      bones: [{ name: "root" }],
+      events: { SwitchScene: {}, SwitchBack: {}, Duplicate: {} },
+      animations: {
+        BG_FG: { events: [{ time: 0, name: "SwitchScene" }] },
+        FG_BG: { events: [{ time: 0.4, name: "SwitchBack" }] },
+        NoEvent: {},
+        Duplicate: {
+          events: [
+            { time: 0.2, name: "Duplicate" },
+            { time: 0.8, name: "Duplicate" },
+          ],
+        },
+      },
+    };
+    const transitionResource = {
+      kind: "spine" as const,
+      skeleton: "assets/transition.json",
+      atlas: "assets/transition.atlas",
+      textures: { "transition.png": "assets/transition.png" },
+    };
+    const transition = (
+      from: string,
+      to: string,
+      animation: string,
+      switchEvent: string,
+    ) => ({
+      from,
+      to,
+      overlay: {
+        resource: transitionResource,
+        animation,
+        switchEvent,
+        placements: { default: { x: 50, y: 60, scale: 1 } },
+      },
+    });
+    const manifest = {
+      ...imageManifest,
+      gameModes: {
+        initialMode: "BaseGame",
+        modes: [
+          {
+            id: "BaseGame",
+            backgroundNodes: { default: "bg" },
+            nodeStates: {},
+          },
+          {
+            id: "FreeGame",
+            backgroundNodes: { default: "bg" },
+            nodeStates: {},
+          },
+        ],
+        transitions: [
+          transition("BaseGame", "FreeGame", "BG_FG", "SwitchScene"),
+          transition("FreeGame", "BaseGame", "FG_BG", "SwitchBack"),
+        ],
+      },
+    };
+    const assets = new Map(assetBytes);
+    assets.set("assets/transition.json", encode(skeleton));
+    assets.set(
+      "assets/transition.atlas",
+      new TextEncoder().encode(
+        "transition.png\nsize: 1,1\nfilter: Linear,Linear\n",
+      ),
+    );
+    assets.set(
+      "assets/transition.png",
+      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 9]),
+    );
+
+    const first = await exportLayoutZip({ manifest, assets, decodeImage });
+    const second = await exportLayoutZip({ manifest, assets, decodeImage });
+    expect(first.bytes).toEqual(second.bytes);
+    const imported = await importLayoutZip(first.bytes, { decodeImage });
+    const project = manifestToEditorProject(imported.manifest, imported.assets);
+    expect(project.gameModes.transitions).toMatchObject([
+      {
+        fromModeId: "BaseGame",
+        toModeId: "FreeGame",
+        animation: "BG_FG",
+        switchEvent: "SwitchScene",
+        placements: { default: { x: 50, y: 60, scale: 1 } },
+      },
+      {
+        fromModeId: "FreeGame",
+        toModeId: "BaseGame",
+        animation: "FG_BG",
+        switchEvent: "SwitchBack",
+      },
+    ]);
+    const resourceIds = project.gameModes.transitions.map(
+      (item) => item.resourceId,
+    );
+    expect(new Set(resourceIds).size).toBe(1);
+    expect(project.resources.get(resourceIds[0])).toMatchObject({
+      kind: "spine",
+      animationNames: ["BG_FG", "Duplicate", "FG_BG", "NoEvent"],
+      animationEvents: {
+        BG_FG: [{ name: "SwitchScene", time: 0 }],
+        FG_BG: [{ name: "SwitchBack", time: 0.4 }],
+        NoEvent: [],
+        Duplicate: [
+          { name: "Duplicate", time: 0.2 },
+          { name: "Duplicate", time: 0.8 },
+        ],
+      },
+    });
+    imported.destroy();
+  });
+
   it("vendors multiple referenced popups once and restores mode bindings losslessly", async () => {
     const baseFiles = popupFiles();
     const freeFiles = popupFiles();
@@ -431,6 +544,7 @@ describe("layout zip IO", () => {
       });
       expect(canonical.gameModes).toEqual({
         initialMode: "BaseGame",
+        transitions: [],
         modes: [
           {
             id: "BaseGame",

@@ -344,7 +344,7 @@ function createPlayerFactory(options: { readonly failInit?: boolean } = {}) {
       if (deltaSeconds >= 1) {
         completed = true;
       }
-      return { completed };
+      return { completed, events: [] };
     }),
     reset: vi.fn(() => {
       completed = false;

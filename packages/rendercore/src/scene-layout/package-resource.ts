@@ -227,6 +227,24 @@ export async function createSceneLayoutPackageResource(options: {
         );
       }
     }
+    for (const transition of manifest.gameModes?.transitions ?? []) {
+      const resource = transition.overlay.resource;
+      skeletonModules[resource.skeleton] ??= parseJsonBytes(
+        requireBytes(options.files, resource.skeleton),
+        resource.skeleton,
+      );
+      atlasModules[resource.atlas] ??= decodeUtf8(
+        requireBytes(options.files, resource.atlas),
+        resource.atlas,
+      );
+      for (const path of Object.values(resource.textures)) {
+        textureModules[path] ??= createObjectUrl(
+          requireBytes(options.files, path),
+          path,
+          objectUrls,
+        );
+      }
+    }
 
     const layout = createSceneLayoutResource({
       manifest,

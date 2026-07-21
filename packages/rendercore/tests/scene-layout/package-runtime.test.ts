@@ -1,14 +1,139 @@
-import { Assets, Texture } from "pixi.js";
+import { Assets, Container, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import { RenderGridCellReelSet, RenderReelSet } from "../../src/reel/index.js";
+import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 import {
   createSceneLayoutPackageResource,
   createSceneLayoutPackageRuntime,
 } from "../../src/scene-layout/index.js";
+import { transitionResourceKey } from "../../src/scene-layout/resource.js";
 import { game002LayoutFixture } from "./fixtures.js";
 
 const encode = (value: unknown) =>
   new TextEncoder().encode(`${JSON.stringify(value)}\n`);
+
+class CompletingTransitionPlayer implements RendercoreSpinePlayer {
+  readonly view = new Container();
+  #switchEvent = "SwitchScene";
+  #playing = false;
+
+  init() {}
+  play() {
+    this.#playing = true;
+  }
+  update() {
+    if (!this.#playing) return { completed: false, events: [] };
+    this.#playing = false;
+    return {
+      completed: true,
+      events: [{ name: this.#switchEvent }],
+    };
+  }
+  reset() {
+    this.#playing = false;
+  }
+  destroy() {
+    this.#playing = false;
+    this.view.parent?.removeChild(this.view);
+  }
+}
+
+class ManualTransitionPlayer implements RendercoreSpinePlayer {
+  readonly view = new Container();
+  readonly plays: Array<{ animationName: string; loop: boolean }> = [];
+  readonly results: Array<{
+    completed: boolean;
+    events: readonly { name: string }[];
+  }> = [];
+
+  init() {}
+  play(options: { animationName: string; loop: boolean }) {
+    this.plays.push(options);
+  }
+  update() {
+    return this.results.shift() ?? { completed: false, events: [] };
+  }
+  reset() {
+    this.results.length = 0;
+  }
+  destroy() {
+    this.view.parent?.removeChild(this.view);
+  }
+}
+
+function transitionSpec(from: string, to: string) {
+  return {
+    from,
+    to,
+    overlay: {
+      resource: {
+        kind: "spine" as const,
+        skeleton: `assets/transitions/${from}-${to}.json`,
+        atlas: `assets/transitions/${from}-${to}.atlas`,
+        textures: {
+          "transition.png": `assets/transitions/${from}-${to}.png`,
+        },
+      },
+      animation: `${from}_${to}`,
+      switchEvent: "SwitchScene",
+      placements: { default: { x: 0, y: 0, scale: 1 } },
+    },
+  };
+}
+
+function createRuntimeWithTransitions(
+  resource: Awaited<ReturnType<typeof createSceneLayoutPackageResource>>,
+  pairs: readonly (readonly [string, string])[],
+  createTransitionPlayer: () => RendercoreSpinePlayer = () =>
+    new CompletingTransitionPlayer(),
+) {
+  const transitions = pairs.map(([from, to]) => transitionSpec(from, to));
+  const manifest = {
+    ...resource.manifest,
+    gameModes: {
+      ...resource.manifest.gameModes!,
+      transitions,
+    },
+  };
+  const spineResources = { ...resource.layout.spineResources };
+  for (const [from, to] of pairs) {
+    spineResources[transitionResourceKey(from, to)] = {
+      skeleton: {},
+      atlasText: "transition.png",
+      textureUrls: { "transition.png": "blob:transition" },
+    };
+  }
+  return createSceneLayoutPackageRuntime({
+    resource: {
+      ...resource,
+      manifest,
+      layout: { ...resource.layout, manifest, spineResources },
+    },
+    createTransitionPlayer,
+  });
+}
+
+async function waitForModeTarget(
+  runtime: ReturnType<typeof createRuntimeWithTransitions>,
+  modeId: string,
+) {
+  for (let index = 0; index < 20; index += 1) {
+    if (runtime.getGameModeSnapshot().targetMode === modeId) return;
+    await Promise.resolve();
+  }
+  throw new Error(`Mode target ${modeId} did not become ready.`);
+}
+
+async function completeModeRequest(
+  runtime: ReturnType<typeof createRuntimeWithTransitions>,
+  modeId: string,
+  options?: Parameters<typeof runtime.requestGameMode>[1],
+) {
+  const pending = runtime.requestGameMode(modeId, options);
+  await waitForModeTarget(runtime, modeId);
+  runtime.update(1 / 60);
+  await pending;
+}
 
 const symbolsPackage = {
   version: 1,
@@ -396,7 +521,12 @@ describe("scene layout package runtime", () => {
         "demo-symbols",
         "alt-symbols",
       ]);
-      const runtime = createSceneLayoutPackageRuntime({ resource });
+      const runtime = createRuntimeWithTransitions(resource, [
+        ["BaseGame", "FreeGame"],
+        ["FreeGame", "BonusGame"],
+        ["BonusGame", "FreeGame"],
+        ["FreeGame", "EmptyGame"],
+      ]);
       const baseInput = {
         scene: [
           [0, 1],
@@ -405,6 +535,7 @@ describe("scene layout package runtime", () => {
         localPhaseYs: [0, 0],
       };
       await runtime.init({ reels: { main: baseInput } });
+      runtime.applyViewport({ width: 2000, height: 2000 });
       const baseReel = runtime.getReelPresentation("main");
       expect(baseReel).toBeInstanceOf(RenderReelSet);
       expect(runtime.getGameModeSnapshot()).toMatchObject({
@@ -431,7 +562,7 @@ describe("scene layout package runtime", () => {
       expect(runtime.getReelPresentation("main")).toBe(baseReel);
       expect(runtime.getGameModeSnapshot().stableMode).toBe("BaseGame");
 
-      await runtime.requestGameMode("FreeGame", {
+      await completeModeRequest(runtime, "FreeGame", {
         reels: { main: baseInput },
       });
       const freeReel = runtime.getReelPresentation("main");
@@ -443,13 +574,13 @@ describe("scene layout package runtime", () => {
         stableSymbolPackage: "alt-symbols",
       });
 
-      await runtime.requestGameMode("BonusGame");
+      await completeModeRequest(runtime, "BonusGame");
       expect(runtime.getReelPresentation("main")).toBe(freeReel);
       await expect(
         runtime.requestGameMode("FreeGame", { reels: { main: baseInput } }),
       ).rejects.toThrow(/sharing a symbol package/);
 
-      await runtime.requestGameMode("FreeGame", {
+      await completeModeRequest(runtime, "FreeGame", {
         recreateReel: true,
         reels: { main: baseInput },
       });
@@ -458,13 +589,94 @@ describe("scene layout package runtime", () => {
       expect(forcedReel).toBeInstanceOf(RenderGridCellReelSet);
       expect(freeReel.destroyed).toBe(true);
 
-      await runtime.requestGameMode("EmptyGame");
+      await completeModeRequest(runtime, "EmptyGame");
       expect(() => runtime.getReelPresentation("main")).toThrow(/unavailable/);
       expect(forcedReel.destroyed).toBe(true);
       expect(runtime.getGameModeSnapshot()).toMatchObject({
         stableMode: "EmptyGame",
         stableSymbolPackage: null,
       });
+      runtime.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
+  it("keeps the source reel before the event and swaps the complete scene at the event", async () => {
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const resource = await createSceneLayoutPackageResource(
+        canonicalMultiSymbolFixture(),
+      );
+      const players: ManualTransitionPlayer[] = [];
+      const runtime = createRuntimeWithTransitions(
+        resource,
+        [["BaseGame", "FreeGame"]],
+        () => {
+          const player = new ManualTransitionPlayer();
+          players.push(player);
+          return player;
+        },
+      );
+      const scene = {
+        scene: [
+          [0, 1],
+          [1, 0],
+        ],
+        localPhaseYs: [0, 0],
+      };
+      await runtime.init({ reels: { main: scene } });
+      runtime.applyViewport({ width: 2000, height: 2000 });
+      const sourceReel = runtime.getReelPresentation("main");
+      const pending = runtime.requestGameMode("FreeGame", {
+        reels: { main: scene },
+      });
+      await waitForModeTarget(runtime, "FreeGame");
+
+      expect(runtime.getReelPresentation("main")).toBe(sourceReel);
+      expect(runtime.getGameModeSnapshot()).toMatchObject({
+        stableMode: "BaseGame",
+        displayedMode: "BaseGame",
+        transitionPhase: "before-switch",
+        displayedSymbolPackage: "demo-symbols",
+        targetSymbolPackage: "alt-symbols",
+      });
+      expect(runtime.container.children.at(-1)?.label).toBe(
+        "scene-transition-overlay",
+      );
+      expect(players[0].plays).toEqual([
+        { animationName: "BaseGame_FreeGame", loop: false },
+      ]);
+
+      players[0].results.push({
+        completed: false,
+        events: [{ name: "SwitchScene" }],
+      });
+      runtime.update(0.5);
+      const targetReel = runtime.getReelPresentation("main");
+      expect(targetReel).not.toBe(sourceReel);
+      expect(sourceReel.destroyed).toBe(true);
+      expect(runtime.getGameModeSnapshot()).toMatchObject({
+        stableMode: "BaseGame",
+        displayedMode: "FreeGame",
+        transitionPhase: "after-switch",
+        displayedSymbolPackage: "alt-symbols",
+      });
+      expect(players[0].view.parent?.label).toBe("scene-transition-overlay");
+
+      players[0].results.push({ completed: true, events: [] });
+      runtime.update(0.5);
+      await pending;
+      expect(runtime.getGameModeSnapshot()).toMatchObject({
+        stableMode: "FreeGame",
+        displayedMode: "FreeGame",
+        phase: "stable",
+      });
+      expect(players[0].view.parent).toBeNull();
       runtime.destroy();
     } finally {
       load.mockRestore();
@@ -536,23 +748,28 @@ describe("scene layout package runtime", () => {
         manifest,
         files: new Map([["assets/bg.png", new Uint8Array([1])]]),
       });
-      const runtime = createSceneLayoutPackageRuntime({ resource });
+      const runtime = createRuntimeWithTransitions(resource, [
+        ["BaseGame", "FreeGame"],
+      ]);
       await runtime.init();
+      runtime.applyViewport({ width: 2000, height: 2000 });
       expect(runtime.getGameModeIds()).toEqual(["BaseGame", "FreeGame"]);
       expect(runtime.getGameModeSnapshot()).toEqual({
         stableMode: "BaseGame",
+        displayedMode: "BaseGame",
         targetMode: null,
         phase: "stable",
+        transitionPhase: null,
+        transition: null,
         stableSymbolPackage: null,
+        displayedSymbolPackage: null,
         targetSymbolPackage: null,
         activeBackgroundNodes: [],
       });
       await expect(
         runtime.requestGameMode("BaseGame"),
       ).resolves.toBeUndefined();
-      await expect(
-        runtime.requestGameMode("FreeGame"),
-      ).resolves.toBeUndefined();
+      await completeModeRequest(runtime, "FreeGame");
       expect(runtime.getGameModeSnapshot().stableMode).toBe("FreeGame");
       await expect(runtime.requestGameMode("Missing")).rejects.toThrow(
         /Unknown/,
@@ -626,7 +843,9 @@ describe("scene layout package runtime", () => {
         ...fixture,
         decodeImage: async () => ({ width: 1, height: 1 }),
       });
-      const runtime = createSceneLayoutPackageRuntime({ resource });
+      const runtime = createRuntimeWithTransitions(resource, [
+        ["BaseGame", "FreeGame"],
+      ]);
       await runtime.init();
       runtime.applyViewport({ width: 200, height: 100 });
       const popup = runtime.getAwardCelebrationPopup("celebration");
@@ -656,7 +875,7 @@ describe("scene layout package runtime", () => {
       runtime.requestAdvanceAwardCelebration();
       runtime.dismissActiveAwardCelebrationImmediately();
       expect(runtime.getActiveAwardCelebrationSnapshot()).toBeNull();
-      await runtime.requestGameMode("FreeGame");
+      await completeModeRequest(runtime, "FreeGame");
       expect(() =>
         runtime.startAwardCelebrationForCurrentMode({
           betAmountRaw: 100,

@@ -63,6 +63,11 @@ const commandSpies = vi.hoisted(() => ({
       atlas: "assets/hero.atlas",
       textures: { "hero.png": "assets/hero.png" },
       animationNames: ["Idle", "Win", "Bridge"],
+      animationEvents: {
+        Idle: [],
+        Win: [],
+        Bridge: [{ name: "SwitchScene", time: 0.5 }],
+      },
       bounds: { width: 400, height: 300 },
     };
     project.resources.set(resource.id, resource);
@@ -140,12 +145,13 @@ describe("GameLayoutEditorApp workspace", () => {
     window.prompt = vi.fn((_message, defaultValue) => defaultValue ?? null);
   });
 
-  it("mounts five accessible state workspaces without preview drawers", async () => {
+  it("mounts six accessible state workspaces without preview drawers", async () => {
     const { app, root } = await createApp();
     const tabs = [...root.querySelectorAll<HTMLElement>('[role="tab"]')];
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       "资源",
       "布局",
+      "转场",
       "Symbols",
       "BigWin",
       "项目",
@@ -154,7 +160,7 @@ describe("GameLayoutEditorApp workspace", () => {
     expect(root.querySelector("[data-upload-resources]")).toBeTruthy();
     expect(root.querySelector("[data-number]")).toBeNull();
     expect(root.querySelector(".symbols-drawer")).toBeNull();
-    (tabs[2] as HTMLButtonElement).click();
+    (tabs[3] as HTMLButtonElement).click();
     expect(
       root.querySelector("[data-symbols-workspace]")?.hasAttribute("hidden"),
     ).toBe(false);
@@ -164,6 +170,12 @@ describe("GameLayoutEditorApp workspace", () => {
     expect(tabs[1].getAttribute("aria-selected")).toBe("true");
     expect(root.querySelector("[data-outline-list]")).toBeTruthy();
     expect(root.querySelectorAll(".inspector-inner")).toHaveLength(1);
+    tabs[1].dispatchEvent(new KeyboardEvent("keydown", { key: "End" }));
+    expect(tabs[5].getAttribute("aria-selected")).toBe("true");
+    tabs[5].dispatchEvent(new KeyboardEvent("keydown", { key: "Home" }));
+    expect(tabs[0].getAttribute("aria-selected")).toBe("true");
+    tabs[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
+    expect(tabs[5].getAttribute("aria-selected")).toBe("true");
     app.destroy();
   });
 
@@ -603,50 +615,53 @@ describe("GameLayoutEditorApp workspace", () => {
     inspectorAnimation.value = "Win";
     inspectorAnimation.dispatchEvent(new Event("change"));
     expect(root.textContent).toContain("已设置 animation Win");
-    let playbackKind = root.querySelector(
-      "[data-spine-playback-kind]",
-    ) as HTMLSelectElement;
-    playbackKind.value = "state-machine";
-    playbackKind.dispatchEvent(new Event("change"));
-    await vi.waitFor(() =>
-      expect(root.querySelector("[data-add-spine-state]")).toBeTruthy(),
-    );
-    const prompt = vi
-      .spyOn(window, "prompt")
-      .mockReturnValueOnce("FG")
-      .mockReturnValueOnce("Win");
-    (root.querySelector("[data-add-spine-state]") as HTMLButtonElement).click();
-    await vi.waitFor(() =>
-      expect(root.querySelectorAll("[data-spine-state-id]")).toHaveLength(2),
-    );
+    expect(root.querySelector("[data-spine-playback-kind]")).toBeNull();
+    expect(root.querySelector("[data-add-spine-state]")).toBeNull();
+    (root.querySelector("[data-manage-modes]") as HTMLButtonElement).click();
+    (root.querySelector("[data-add-game-mode]") as HTMLButtonElement).click();
+    (
+      root.querySelector("[data-close-mode-dialog]") as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector(
+        '[data-workspace-tab="transitions"]',
+      ) as HTMLButtonElement
+    ).click();
     const transitionFrom = root.querySelector(
-      "[data-spine-transition-from]",
+      "[data-new-transition-from]",
     ) as HTMLSelectElement;
     const transitionTo = root.querySelector(
-      "[data-spine-transition-to]",
+      "[data-new-transition-to]",
     ) as HTMLSelectElement;
-    const transitionAnimation = root.querySelector(
-      "[data-spine-transition-animation]",
-    ) as HTMLSelectElement;
-    transitionFrom.value = "State1";
-    transitionTo.value = "FG";
-    transitionAnimation.value = "Bridge";
+    transitionFrom.value = "BaseGame";
+    transitionTo.value = "FreeGame";
     (
-      root.querySelector("[data-add-spine-transition]") as HTMLButtonElement
+      root.querySelector("[data-create-transition]") as HTMLButtonElement
     ).click();
     await vi.waitFor(() =>
-      expect(root.querySelector("[data-delete-spine-transition]")).toBeTruthy(),
+      expect(root.querySelector("[data-transition-resource]")).toBeTruthy(),
     );
-    const stateId = root.querySelector(
-      '[data-current-state="State1"]',
-    ) as HTMLInputElement;
-    stateId.value = "BG";
-    stateId.dispatchEvent(new Event("change"));
-    await vi.waitFor(() => expect(root.textContent).toContain("BG → FG"));
+    const transitionResource = root.querySelector(
+      "[data-transition-resource]",
+    ) as HTMLSelectElement;
+    transitionResource.value = "hero";
+    transitionResource.dispatchEvent(new Event("change"));
+    const transitionAnimation = root.querySelector(
+      "[data-transition-animation]",
+    ) as HTMLSelectElement;
+    transitionAnimation.value = "Bridge";
+    transitionAnimation.dispatchEvent(new Event("change"));
+    const transitionEvent = root.querySelector(
+      "[data-transition-event]",
+    ) as HTMLSelectElement;
+    expect(transitionEvent.tagName).toBe("SELECT");
+    expect(root.querySelector("[data-transition-event] input")).toBeNull();
+    transitionEvent.value = "SwitchScene";
+    transitionEvent.dispatchEvent(new Event("change"));
+    expect(root.textContent).toContain("SwitchScene");
     (
-      root.querySelector("[data-delete-spine-transition]") as HTMLButtonElement
+      root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
     ).click();
-    prompt.mockRestore();
     (root.querySelector("[data-rebind-layer]") as HTMLButtonElement).click();
     dialog = root.querySelector("[data-resource-picker]") as HTMLDialogElement;
     dialog.dispatchEvent(new Event("cancel", { cancelable: true }));

@@ -128,6 +128,50 @@ export function createSceneLayoutResource(
     });
   }
 
+  for (const transition of manifest.gameModes?.transitions ?? []) {
+    const spec = transition.overlay.resource;
+    skeletonPaths.add(spec.skeleton);
+    atlasPaths.add(spec.atlas);
+    const skeleton = requireValue(
+      skeletonModules,
+      spec.skeleton,
+      "scene transition Spine skeleton",
+    );
+    const atlasText = requireString(
+      atlasModules,
+      spec.atlas,
+      "scene transition Spine atlas",
+    );
+    const textureUrls: Record<string, string> = {};
+    for (const [page, path] of Object.entries(spec.textures)) {
+      texturePaths.add(path);
+      textureUrls[page] = requireString(
+        textureModules,
+        path,
+        `scene transition Spine texture "${page}"`,
+      );
+    }
+    try {
+      validateOfficialSpineResource({
+        resource: { skeleton, atlasText, textureUrls },
+        requiredAnimations: [transition.overlay.animation],
+        requiredAnimationEvents: {
+          [transition.overlay.animation]: [transition.overlay.switchEvent],
+        },
+      });
+    } catch (error) {
+      throw new SceneLayoutError(
+        `Scene transition ${transition.from} -> ${transition.to} is invalid: ${formatError(error)}`,
+      );
+    }
+    spineResources[transitionResourceKey(transition.from, transition.to)] =
+      Object.freeze({
+        skeleton,
+        atlasText,
+        textureUrls: Object.freeze(textureUrls),
+      });
+  }
+
   assertExactKeys(imageModules, imagePaths, "scene layout image modules");
   assertExactKeys(
     skeletonModules,
@@ -213,6 +257,13 @@ export async function loadSceneLayoutResourceFromUrl(options: {
       for (const path of Object.values(resource.textures)) {
         resourceByPath.set(path, "texture");
       }
+    }
+    for (const transition of manifest.gameModes?.transitions ?? []) {
+      const resource = transition.overlay.resource;
+      resourceByPath.set(resource.skeleton, "skeleton");
+      resourceByPath.set(resource.atlas, "atlas");
+      for (const path of Object.values(resource.textures))
+        resourceByPath.set(path, "texture");
     }
     for (const node of manifest.nodes) {
       if (node.resource.kind !== "image-string") continue;
@@ -437,4 +488,8 @@ function assertExactKeys(
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+export function transitionResourceKey(from: string, to: string): string {
+  return `scene-transition:${from}\u0000${to}`;
 }

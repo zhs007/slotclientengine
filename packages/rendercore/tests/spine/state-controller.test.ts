@@ -14,7 +14,7 @@ function fakePlayer(play = vi.fn()): RendercoreSpinePlayer {
     view: new Container(),
     init: vi.fn(),
     play,
-    update: vi.fn(() => ({ completed: false })),
+    update: vi.fn(() => ({ completed: false, events: [] })),
     reset: vi.fn(),
     destroy: vi.fn(),
   };

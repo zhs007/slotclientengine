@@ -207,6 +207,68 @@ export async function materializeLayoutOwnedAssets(options: {
     string,
     SceneLayoutManifestV1["nodes"][number]["resource"]
   >();
+  type SpineAssetResource = {
+    readonly kind: "spine";
+    readonly skeleton: string;
+    readonly atlas: string;
+    readonly textures: Readonly<Record<string, string>>;
+  };
+  const spineCache = new Map<string, SpineAssetResource>();
+  const materializeSpineResource = async <T extends SpineAssetResource>(
+    input: T,
+  ): Promise<T> => {
+    const cacheKey = JSON.stringify(
+      sortValue({
+        skeleton: input.skeleton,
+        atlas: input.atlas,
+        textures: input.textures,
+      }),
+    );
+    const cached = spineCache.get(cacheKey);
+    if (cached) return { ...input, ...cached };
+    const textures: Record<string, string> = {};
+    const pageMapping = new Map<string, string>();
+    for (const [page, oldPath] of Object.entries(input.textures)) {
+      const bytes = requiredBytes(options.assets, oldPath);
+      const type = detectRasterAssetType(bytes);
+      const path = allocateContentAddressedPath({
+        digest: await sha256Hex(bytes),
+        extension: type.extension,
+      });
+      textures[page] = path;
+      pageMapping.set(page, page);
+      putAsset(assets, path, bytes);
+    }
+    const atlasBytes = new TextEncoder().encode(
+      rewriteAtlasText(
+        new TextDecoder("utf-8", { fatal: true }).decode(
+          requiredBytes(options.assets, input.atlas),
+        ),
+        pageMapping,
+      ),
+    );
+    const atlas = allocateContentAddressedPath({
+      digest: await sha256Hex(atlasBytes),
+      extension: "atlas",
+    });
+    putAsset(assets, atlas, atlasBytes);
+    const skeletonValue = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(
+        requiredBytes(options.assets, input.skeleton),
+      ),
+    );
+    const skeletonBytes = new TextEncoder().encode(
+      `${JSON.stringify(sortValue(skeletonValue), null, 2)}\n`,
+    );
+    const skeleton = allocateContentAddressedPath({
+      digest: await sha256Hex(skeletonBytes),
+      extension: "json",
+    });
+    putAsset(assets, skeleton, skeletonBytes);
+    const materialized = { kind: "spine" as const, skeleton, atlas, textures };
+    spineCache.set(cacheKey, materialized);
+    return { ...input, ...materialized };
+  };
   const nodes = [] as unknown as Array<Record<string, unknown>>;
   for (const node of source.nodes) {
     const cacheKey = JSON.stringify(sortValue(node.resource));
@@ -224,53 +286,35 @@ export async function materializeLayoutOwnedAssets(options: {
       } else if (node.resource.kind === "image-string") {
         resource = node.resource;
       } else {
-        const textures: Record<string, string> = {};
-        const pageMapping = new Map<string, string>();
-        for (const [page, oldPath] of Object.entries(node.resource.textures)) {
-          const bytes = requiredBytes(options.assets, oldPath);
-          const type = detectRasterAssetType(bytes);
-          const path = allocateContentAddressedPath({
-            digest: await sha256Hex(bytes),
-            extension: type.extension,
-          });
-          textures[page] = path;
-          pageMapping.set(page, page);
-          putAsset(assets, path, bytes);
-        }
-        const atlasBytes = new TextEncoder().encode(
-          rewriteAtlasText(
-            new TextDecoder("utf-8", { fatal: true }).decode(
-              requiredBytes(options.assets, node.resource.atlas),
-            ),
-            pageMapping,
-          ),
-        );
-        const atlas = allocateContentAddressedPath({
-          digest: await sha256Hex(atlasBytes),
-          extension: "atlas",
-        });
-        putAsset(assets, atlas, atlasBytes);
-        const skeletonValue = JSON.parse(
-          new TextDecoder("utf-8", { fatal: true }).decode(
-            requiredBytes(options.assets, node.resource.skeleton),
-          ),
-        );
-        const skeletonBytes = new TextEncoder().encode(
-          `${JSON.stringify(sortValue(skeletonValue), null, 2)}\n`,
-        );
-        const skeleton = allocateContentAddressedPath({
-          digest: await sha256Hex(skeletonBytes),
-          extension: "json",
-        });
-        putAsset(assets, skeleton, skeletonBytes);
-        resource = { ...node.resource, skeleton, atlas, textures };
+        resource = await materializeSpineResource(node.resource);
       }
       cache.set(cacheKey, resource);
     }
     nodes.push({ ...node, resource });
   }
+  const transitions = [];
+  for (const transition of source.gameModes?.transitions ?? []) {
+    transitions.push({
+      ...transition,
+      overlay: {
+        ...transition.overlay,
+        resource: await materializeSpineResource(transition.overlay.resource),
+      },
+    });
+  }
   return Object.freeze({
-    manifest: parseSceneLayoutManifest({ ...source, nodes }),
+    manifest: parseSceneLayoutManifest({
+      ...source,
+      nodes,
+      ...(source.gameModes
+        ? {
+            gameModes: {
+              ...source.gameModes,
+              transitions,
+            },
+          }
+        : {}),
+    }),
     assets,
   });
 }

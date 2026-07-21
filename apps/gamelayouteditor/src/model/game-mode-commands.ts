@@ -3,6 +3,8 @@ import type { ImportedPopupPackage } from "../io/imported-popup-package.js";
 import type { ImportedSymbolPackage } from "../io/imported-symbol-package.js";
 import {
   activeVariantIds,
+  validateEditorTransitionEvent,
+  type EditorGameModeTransitionDraft,
   type EditorGameModeDraft,
   type EditorProject,
 } from "./editor-project.js";
@@ -21,11 +23,10 @@ export function addGameMode(project: EditorProject, id: string): void {
         project.variants[variant].backgroundNode,
       ]),
     ),
-    nodeStates: initialNodeStates(project),
+    nodeStates: {},
     symbols: null,
     awardCelebrationPopupId: null,
   });
-  synchronizeGameModeNodeStates(project);
 }
 
 export function renameGameMode(
@@ -41,6 +42,10 @@ export function renameGameMode(
   )
     throw new Error(`游戏模式已存在：${nextId}`);
   mode.id = nextId;
+  for (const transition of project.gameModes.transitions) {
+    if (transition.fromModeId === currentId) transition.fromModeId = nextId;
+    if (transition.toModeId === currentId) transition.toModeId = nextId;
+  }
   if (project.gameModes.initialMode === currentId)
     project.gameModes.initialMode = nextId;
 }
@@ -50,6 +55,17 @@ export function deleteGameMode(project: EditorProject, id: string): void {
     throw new Error("layout 至少必须保留一个游戏模式。");
   if (project.gameModes.initialMode === id)
     throw new Error("删除 initial mode 前必须先选择其它 initial mode。");
+  const references = project.gameModes.transitions.filter(
+    (transition) => transition.fromModeId === id || transition.toModeId === id,
+  );
+  if (references.length)
+    throw new Error(
+      `游戏模式 ${id} 仍被转场引用：${references
+        .map(
+          (transition) => `${transition.fromModeId} -> ${transition.toModeId}`,
+        )
+        .join(", ")}`,
+    );
   const index = project.gameModes.modes.findIndex((mode) => mode.id === id);
   if (index < 0) throw new Error(`未知游戏模式：${id}`);
   project.gameModes.modes.splice(index, 1);
@@ -57,12 +73,6 @@ export function deleteGameMode(project: EditorProject, id: string): void {
 
 export function setInitialGameMode(project: EditorProject, id: string): void {
   const mode = requireMode(project, id);
-  const expected = initialStatesForMode(project, mode);
-  for (const [nodeId, state] of Object.entries(expected))
-    if (mode.nodeStates[nodeId] !== state)
-      throw new Error(
-        `initial mode ${id} 的节点 ${nodeId} 必须绑定初始状态 ${state}。`,
-      );
   project.gameModes.initialMode = id;
   for (const variant of activeVariantIds(project))
     project.variants[variant].backgroundNode =
@@ -88,7 +98,119 @@ export function bindGameModeBackground(
   mode.backgroundNodes[variant] = nodeId;
   if (project.gameModes.initialMode === modeId)
     project.variants[variant].backgroundNode = nodeId;
-  synchronizeGameModeNodeStates(project);
+}
+
+export function createGameModeTransition(
+  project: EditorProject,
+  fromModeId: string,
+  toModeId: string,
+): void {
+  requireMode(project, fromModeId);
+  requireMode(project, toModeId);
+  if (fromModeId === toModeId) throw new Error("转场不得自循环。");
+  if (
+    project.gameModes.transitions.some(
+      (item) => item.fromModeId === fromModeId && item.toModeId === toModeId,
+    )
+  )
+    throw new Error(`转场已存在：${fromModeId} -> ${toModeId}`);
+  project.gameModes.transitions.push({
+    fromModeId,
+    toModeId,
+    resourceId: "",
+    animation: "",
+    switchEvent: "",
+    placements: Object.fromEntries(
+      activeVariantIds(project).map((variant) => [
+        variant,
+        { x: 0, y: 0, scale: 1 },
+      ]),
+    ),
+  });
+}
+
+export function deleteGameModeTransition(
+  project: EditorProject,
+  fromModeId: string,
+  toModeId: string,
+): void {
+  const index = project.gameModes.transitions.findIndex(
+    (item) => item.fromModeId === fromModeId && item.toModeId === toModeId,
+  );
+  if (index < 0) throw new Error(`未知转场：${fromModeId} -> ${toModeId}`);
+  project.gameModes.transitions.splice(index, 1);
+}
+
+export function setGameModeTransitionResource(
+  project: EditorProject,
+  transition: EditorGameModeTransitionDraft,
+  resourceId: string,
+): void {
+  const resource = project.resources.get(resourceId);
+  if (!resource || resource.kind !== "spine")
+    throw new Error(`转场资源必须是已有 Spine resource：${resourceId}`);
+  transition.resourceId = resourceId;
+  if (!resource.animationNames.includes(transition.animation)) {
+    transition.animation = "";
+    transition.switchEvent = "";
+  } else {
+    try {
+      validateEditorTransitionEvent(resource, transition);
+    } catch {
+      transition.switchEvent = "";
+    }
+  }
+}
+
+export function setGameModeTransitionAnimation(
+  project: EditorProject,
+  transition: EditorGameModeTransitionDraft,
+  animation: string,
+): void {
+  const resource = project.resources.get(transition.resourceId);
+  if (!resource || resource.kind !== "spine")
+    throw new Error("请先选择转场 Spine resource。");
+  if (!resource.animationNames.includes(animation))
+    throw new Error(`转场 animation 不存在：${animation}`);
+  transition.animation = animation;
+  try {
+    validateEditorTransitionEvent(resource, transition);
+  } catch {
+    transition.switchEvent = "";
+  }
+}
+
+export function setGameModeTransitionEvent(
+  project: EditorProject,
+  transition: EditorGameModeTransitionDraft,
+  switchEvent: string,
+): void {
+  const resource = project.resources.get(transition.resourceId);
+  if (!resource || resource.kind !== "spine")
+    throw new Error("请先选择转场 Spine resource。");
+  validateEditorTransitionEvent(resource, {
+    animation: transition.animation,
+    switchEvent,
+  });
+  transition.switchEvent = switchEvent;
+}
+
+export function setGameModeTransitionPlacement(
+  project: EditorProject,
+  transition: EditorGameModeTransitionDraft,
+  variant: SceneLayoutVariantId,
+  placement: { readonly x: number; readonly y: number; readonly scale: number },
+): void {
+  if (!activeVariantIds(project).includes(variant))
+    throw new Error(`当前项目不使用 ${variant} variant。`);
+  if (
+    !Number.isFinite(placement.x) ||
+    !Number.isFinite(placement.y) ||
+    !Number.isFinite(placement.scale) ||
+    placement.scale <= 0
+  )
+    throw new Error("转场 placement 必须使用有限 x/y 与正数 scale。");
+  transition.placements[variant] = { ...placement };
 }
 
 export function bindGameModeSymbols(
@@ -192,30 +314,6 @@ export function validateSymbolBinding(
         );
 }
 
-export function setGameModeNodeState(
-  project: EditorProject,
-  modeId: string,
-  nodeId: string,
-  state: string,
-): void {
-  const mode = requireMode(project, modeId);
-  const node = project.nodes.find((candidate) => candidate.id === nodeId);
-  if (!node?.playback || node.playback.kind !== "state-machine")
-    throw new Error(`节点不是 stateful Spine node：${nodeId}`);
-  if (!node.playback.states.some((candidate) => candidate.id === state))
-    throw new Error(`节点 ${nodeId} 不存在稳定状态：${state}`);
-  if (!Object.hasOwn(mode.nodeStates, nodeId))
-    throw new Error(
-      `节点 ${nodeId} 不属于主状态 ${modeId} 的 active/shared state。`,
-    );
-  if (
-    project.gameModes.initialMode === modeId &&
-    state !== node.playback.initialState
-  )
-    throw new Error(`initial mode 的节点 ${nodeId} 必须保持初始状态。`);
-  mode.nodeStates[nodeId] = state;
-}
-
 export function bindGameModePopup(
   project: EditorProject,
   modeId: string,
@@ -296,66 +394,7 @@ export function setPopupPlacement(
 }
 
 export function synchronizeGameModeNodeStates(project: EditorProject): void {
-  const backgroundCandidates = new Set(
-    project.gameModes.modes.flatMap((mode) =>
-      Object.values(mode.backgroundNodes),
-    ),
-  );
-  const valid = new Map(
-    project.nodes.flatMap((node) =>
-      node.playback?.kind === "state-machine"
-        ? [
-            [
-              node.id,
-              new Set(node.playback.states.map((state) => state.id)),
-            ] as const,
-          ]
-        : [],
-    ),
-  );
-  for (const mode of project.gameModes.modes) {
-    const activeBackgrounds = new Set(Object.values(mode.backgroundNodes));
-    const next: Record<string, string> = {};
-    for (const [nodeId, initial] of Object.entries(
-      initialNodeStates(project),
-    )) {
-      if (backgroundCandidates.has(nodeId) && !activeBackgrounds.has(nodeId))
-        continue;
-      const current = mode.nodeStates[nodeId];
-      next[nodeId] =
-        current && valid.get(nodeId)?.has(current) ? current : initial;
-    }
-    mode.nodeStates = next;
-  }
-  const initial = requireMode(project, project.gameModes.initialMode);
-  initial.nodeStates = initialStatesForMode(project, initial);
-}
-
-function initialNodeStates(project: EditorProject): Record<string, string> {
-  return Object.fromEntries(
-    project.nodes.flatMap((node) =>
-      node.playback?.kind === "state-machine"
-        ? [[node.id, node.playback.initialState]]
-        : [],
-    ),
-  );
-}
-
-function initialStatesForMode(
-  project: EditorProject,
-  mode: EditorGameModeDraft,
-): Record<string, string> {
-  const candidates = new Set(
-    project.gameModes.modes.flatMap((candidate) =>
-      Object.values(candidate.backgroundNodes),
-    ),
-  );
-  const active = new Set(Object.values(mode.backgroundNodes));
-  return Object.fromEntries(
-    Object.entries(initialNodeStates(project)).filter(
-      ([nodeId]) => !candidates.has(nodeId) || active.has(nodeId),
-    ),
-  );
+  for (const mode of project.gameModes.modes) mode.nodeStates = {};
 }
 
 function requireMode(project: EditorProject, id: string): EditorGameModeDraft {

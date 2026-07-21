@@ -569,7 +569,7 @@ describe("VniSymbolAni", () => {
         play: vi.fn(() => {
           completed = false;
         }),
-        update: vi.fn(() => ({ completed })),
+        update: vi.fn(() => ({ completed, events: [] })),
         reset: vi.fn(),
         destroy: vi.fn(() => {
           view.parent?.removeChild(view);

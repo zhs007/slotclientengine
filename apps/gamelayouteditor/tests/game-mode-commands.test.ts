@@ -13,15 +13,11 @@ import {
   replaceSymbolDependency,
   renameGameMode,
   replacePopupDependency,
-  setGameModeNodeState,
+  createGameModeTransition,
+  deleteGameModeTransition,
   setInitialGameMode,
   setPopupPlacement,
-  synchronizeGameModeNodeStates,
 } from "../src/model/game-mode-commands.js";
-import {
-  renameNode,
-  renameSpineState,
-} from "../src/model/resource-commands.js";
 
 describe("game mode and popup dependency commands", () => {
   it("adds, renames, selects and deletes generic modes atomically", () => {
@@ -108,54 +104,20 @@ describe("game mode and popup dependency commands", () => {
     );
   });
 
-  it("keeps every mode synchronized with exact stateful nodes", () => {
+  it("keeps stable modes state-free and rewrites directed transition references", () => {
     const project = createNewEditorProject("maximized-focus");
-    project.nodes.push({
-      id: "bg",
-      order: 0,
-      resourceId: "bg-resource",
-      playback: {
-        kind: "state-machine",
-        initialState: "BG",
-        states: [
-          { id: "BG", animation: "BG" },
-          { id: "FG", animation: "FG" },
-        ],
-        transitions: [],
-      },
-      placements: {},
-    });
-    project.resources.set("bg-resource", {
-      id: "bg-resource",
-      kind: "spine",
-      skeleton: "assets/bg.json",
-      atlas: "assets/bg.atlas",
-      textures: { "bg.png": "assets/bg.png" },
-      animationNames: ["BG", "FG"],
-    });
-    synchronizeGameModeNodeStates(project);
     addGameMode(project, "FreeGame");
-    setGameModeNodeState(project, "FreeGame", "bg", "FG");
-    expect(project.gameModes.modes[1].nodeStates).toEqual({ bg: "FG" });
-    renameNode(project, "bg", "scene");
-    synchronizeGameModeNodeStates(project);
-    expect(project.gameModes.modes[1].nodeStates).toEqual({ scene: "FG" });
-    renameSpineState(project, "scene", "FG", "Free");
-    expect(project.gameModes.modes[1].nodeStates).toEqual({ scene: "Free" });
-    expect(() => setInitialGameMode(project, "FreeGame")).toThrow(/初始状态/);
-    expect(() =>
-      setGameModeNodeState(project, "BaseGame", "scene", "Free"),
-    ).toThrow(/initial mode/);
-    expect(() =>
-      setGameModeNodeState(project, "FreeGame", "scene", "Missing"),
-    ).toThrow(/不存在稳定状态/);
-    project.nodes[0].playback = { kind: "loop", animation: "BG" };
-    synchronizeGameModeNodeStates(project);
-    expect(
-      project.gameModes.modes.every(
-        (mode) => Object.keys(mode.nodeStates).length === 0,
-      ),
-    ).toBe(true);
+    createGameModeTransition(project, "BaseGame", "FreeGame");
+    expect(project.gameModes.transitions).toHaveLength(1);
+    expect(() => deleteGameMode(project, "FreeGame")).toThrow(/转场引用/);
+    renameGameMode(project, "FreeGame", "FG");
+    expect(project.gameModes.transitions[0]).toMatchObject({
+      fromModeId: "BaseGame",
+      toModeId: "FG",
+    });
+    deleteGameModeTransition(project, "BaseGame", "FG");
+    deleteGameMode(project, "FG");
+    expect(project.gameModes.modes[0].nodeStates).toEqual({});
   });
 
   it("owns per-mode background and Symbols bindings with reference protection", () => {

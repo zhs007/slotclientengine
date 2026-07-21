@@ -316,6 +316,7 @@ class FakePlayer implements RendercoreSpinePlayer {
     return {
       completed: false,
       ...(loopCompleted ? { loopCompleted: true } : {}),
+      events: [],
     };
   }
   reset(): void {

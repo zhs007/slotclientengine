@@ -396,6 +396,29 @@ h3 {
   grid-template-columns: clamp(180px, 35%, 240px) minmax(0, 1fr);
 }
 
+.transitions-workspace {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(320px, 1.2fr);
+  min-height: 0;
+}
+
+.transition-list {
+  min-width: 0;
+  overflow: auto;
+  border-right: 1px solid var(--border);
+  padding: 16px;
+}
+
+.transition-create {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.error-text {
+  color: var(--danger, #b42318);
+}
+
 .layout-outline,
 .inspector {
   min-width: 0;

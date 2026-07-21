@@ -10,8 +10,6 @@ import {
 } from "../src/model/editor-project.js";
 import {
   addLayerFromResource,
-  addSpineState,
-  addSpineTransition,
   assignBackgroundResource,
   clearBackground,
   deleteLayoutResource,
@@ -19,7 +17,6 @@ import {
   moveLayer,
   importImageStringZip,
   rebindLayerResource,
-  renameSpineState,
   renameNode,
   removeLayer,
   replaceImageResource,
@@ -29,17 +26,16 @@ import {
   setImageStringLayerAnchor,
   setImageStringLayerText,
   setNodeDefaultAnimation,
-  setSpinePlaybackKind,
-  setSpineStateAnimation,
-  deleteSpineState,
-  deleteSpineTransition,
-  setSpineInitialState,
   uploadImageResource,
   uploadSpineResource,
 } from "../src/model/resource-commands.js";
 import {
   addGameMode,
   bindGameModeSymbols,
+  createGameModeTransition,
+  setGameModeTransitionAnimation,
+  setGameModeTransitionEvent,
+  setGameModeTransitionResource,
 } from "../src/model/game-mode-commands.js";
 
 const decodeImage = async () => ({ width: 2000, height: 2000 });
@@ -52,6 +48,12 @@ function spineFiles(
     animations?: readonly string[];
     bounds?: { width: number; height: number };
     version?: string;
+    animationEvents?: Readonly<
+      Record<
+        string,
+        readonly { readonly name: string; readonly time: number }[]
+      >
+    >;
   } = {},
 ): File[] {
   const name = options.name ?? "hero";
@@ -64,7 +66,14 @@ function spineFiles(
             spine: options.version ?? "4.3.23",
             ...(options.bounds ?? {}),
           },
-          animations: Object.fromEntries(animations.map((item) => [item, {}])),
+          animations: Object.fromEntries(
+            animations.map((item) => [
+              item,
+              options.animationEvents?.[item]
+                ? { events: options.animationEvents[item] }
+                : {},
+            ]),
+          ),
         }),
       ],
       `${name}.json`,
@@ -203,100 +212,68 @@ describe("logical layout resource commands", () => {
     expect(project).toEqual(beforeReplacement);
   });
 
-  it("edits a Spine state machine atomically and rewrites renamed references", async () => {
+  it("configures directed scene transitions with exact animation events", async () => {
     const project = createNewEditorProject("maximized-focus");
     await initializeProjectBackground(project);
     await uploadSpineResource({
       project,
       files: spineFiles({
-        animations: ["BG", "FG", "BG_FG", "FG_BG"],
+        animations: ["BG_FG", "NoEvent", "Duplicate"],
+        animationEvents: {
+          BG_FG: [{ name: "SwitchScene", time: 0.5 }],
+          Duplicate: [
+            { name: "SwitchScene", time: 0.2 },
+            { name: "SwitchScene", time: 0.8 },
+          ],
+        },
       }),
     });
+    addGameMode(project, "FreeGame");
+    createGameModeTransition(project, "BaseGame", "FreeGame");
+    const transition = project.gameModes.transitions[0];
+    setGameModeTransitionResource(project, transition, "hero");
+    setGameModeTransitionAnimation(project, transition, "BG_FG");
+    setGameModeTransitionEvent(project, transition, "SwitchScene");
+    const manifest = editorProjectToManifest(project);
+    expect(manifest.gameModes?.transitions).toEqual([
+      expect.objectContaining({
+        from: "BaseGame",
+        to: "FreeGame",
+        overlay: expect.objectContaining({
+          animation: "BG_FG",
+          switchEvent: "SwitchScene",
+        }),
+      }),
+    ]);
+    expect(() => deleteLayoutResource(project, "hero")).toThrow(
+      /scene-transition/,
+    );
+    setGameModeTransitionAnimation(project, transition, "NoEvent");
+    expect(transition.switchEvent).toBe("");
+    expect(() =>
+      setGameModeTransitionEvent(project, transition, "SwitchScene"),
+    ).toThrow(/恰好出现一次/);
+    setGameModeTransitionAnimation(project, transition, "Duplicate");
+    expect(() =>
+      setGameModeTransitionEvent(project, transition, "SwitchScene"),
+    ).toThrow(/实际 2 次/);
+    expect(() => editorProjectToManifest(project)).toThrow(/switch event/);
+  });
+
+  it("keeps stable Spine nodes on a single explicit loop", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    await initializeProjectBackground(project);
+    await uploadSpineResource({ project, files: spineFiles() });
     addLayerFromResource({
       project,
       resourceId: "hero",
       nodeId: "scene",
       variants: ["default"],
-      defaultAnimation: "BG",
+      defaultAnimation: "Idle",
     });
-    setSpinePlaybackKind(project, "scene", "state-machine");
-    renameSpineState(project, "scene", "State1", "BG");
-    addSpineState(project, "scene", { id: "FG", animation: "FG" });
-    addSpineTransition(project, "scene", {
-      from: "BG",
-      to: "FG",
-      animation: "BG_FG",
-    });
-    addSpineTransition(project, "scene", {
-      from: "FG",
-      to: "BG",
-      animation: "FG_BG",
-    });
-    renameSpineState(project, "scene", "FG", "FreeGame");
-    expect(
-      project.nodes.find((node) => node.id === "scene")?.playback,
-    ).toMatchObject({
-      kind: "state-machine",
-      initialState: "BG",
-      transitions: [
-        { from: "BG", to: "FreeGame", animation: "BG_FG" },
-        { from: "FreeGame", to: "BG", animation: "FG_BG" },
-      ],
-    });
-    const manifest = editorProjectToManifest(project);
-    expect(
-      manifest.nodes.find((node) => node.id === "scene")?.resource,
-    ).toMatchObject({
-      kind: "spine",
-      stateMachine: {
-        initialState: "BG",
-        states: { BG: { animation: "BG" }, FreeGame: { animation: "FG" } },
-      },
-    });
-    const beforeDuplicate = cloneEditorProject(project);
-    expect(() =>
-      setSpineStateAnimation(project, "scene", "FreeGame", "BG"),
-    ).toThrow(/animation.*全局唯一|重复/);
-    expect(project).toEqual(beforeDuplicate);
-    expect(() => deleteSpineState(project, "scene", "FreeGame")).toThrow(
-      /引用/,
+    expect(project.nodes.find((node) => node.id === "scene")?.playback).toEqual(
+      { kind: "loop", animation: "Idle" },
     );
-    expect(() =>
-      addSpineState(project, "scene", { id: "BG", animation: "FG" }),
-    ).toThrow(/state id 冲突/);
-    expect(() =>
-      addSpineState(project, "scene", { id: "1bad", animation: "FG" }),
-    ).toThrow(/格式无效/);
-    expect(() =>
-      addSpineState(project, "scene", { id: "Other", animation: "missing" }),
-    ).toThrow(/不存在/);
-    expect(() =>
-      addSpineTransition(project, "scene", {
-        from: "BG",
-        to: "BG",
-        animation: "BG_FG",
-      }),
-    ).toThrow(/自循环/);
-    expect(() =>
-      addSpineTransition(project, "scene", {
-        from: "missing",
-        to: "BG",
-        animation: "BG_FG",
-      }),
-    ).toThrow(/已声明/);
-    expect(() =>
-      addSpineTransition(project, "scene", {
-        from: "BG",
-        to: "FreeGame",
-        animation: "FG_BG",
-      }),
-    ).toThrow(/有向边重复/);
-    expect(() => setSpineInitialState(project, "scene", "missing")).toThrow(
-      /未知 state/,
-    );
-    expect(() => deleteSpineTransition(project, "scene", -1)).toThrow(/越界/);
-    setSpinePlaybackKind(project, "scene", "state-machine");
-    expect(project).toEqual(beforeDuplicate);
   });
 
   it("uploads image metadata and bytes without creating a node", async () => {
@@ -470,7 +447,7 @@ describe("logical layout resource commands", () => {
     });
   });
 
-  it("reuses one Spine background node across modes and maps stable states plus directed transitions", async () => {
+  it("keeps same-resource stable backgrounds as independent loop nodes", async () => {
     const project = createNewEditorProject("maximized-focus");
     await uploadSpineResource({
       project,
@@ -496,50 +473,30 @@ describe("logical layout resource commands", () => {
       defaultAnimation: "FG",
     });
 
-    expect(reused.id).toBe(node.id);
-    expect(project.nodes).toHaveLength(1);
+    expect(reused.id).not.toBe(node.id);
+    expect(project.nodes).toHaveLength(2);
     expect(
       project.gameModes.modes.map((mode) => mode.backgroundNodes.default),
-    ).toEqual(["background", "background"]);
-    expect(project.nodes[0]?.playback).toEqual({
-      kind: "state-machine",
-      initialState: "BaseGame",
-      states: [
-        { id: "BaseGame", animation: "BG" },
-        { id: "FreeGame", animation: "FG" },
-      ],
-      transitions: [],
-    });
-    expect(
-      project.gameModes.modes.map((mode) => mode.nodeStates.background),
-    ).toEqual(["BaseGame", "FreeGame"]);
-
-    addSpineTransition(project, "background", {
-      from: "BaseGame",
-      to: "FreeGame",
-      animation: "BG_FG",
-    });
-    addSpineTransition(project, "background", {
-      from: "FreeGame",
-      to: "BaseGame",
-      animation: "FG_BG",
-    });
+    ).toEqual(["background", reused.id]);
+    expect(project.nodes.map((item) => item.playback)).toEqual([
+      { kind: "loop", animation: "BG" },
+      { kind: "loop", animation: "FG" },
+    ]);
+    expect(project.gameModes.modes.map((mode) => mode.nodeStates)).toEqual([
+      {},
+      {},
+    ]);
     setVariantArtSizeDimension(project, "default", "width", 2000);
     setVariantArtSizeDimension(project, "default", "height", 2000);
     const manifest = editorProjectToManifest(project);
-    expect(manifest.nodes).toHaveLength(1);
+    expect(manifest.nodes).toHaveLength(2);
     expect(
       manifest.gameModes?.modes.map((mode) => mode.backgroundNodes?.default),
-    ).toEqual(["background", "background"]);
-    expect(manifest.nodes[0]?.resource).toMatchObject({
-      stateMachine: {
-        initialState: "BaseGame",
-        transitions: [
-          { from: "BaseGame", to: "FreeGame", animation: "BG_FG" },
-          { from: "FreeGame", to: "BaseGame", animation: "FG_BG" },
-        ],
-      },
-    });
+    ).toEqual(["background", reused.id]);
+    expect(manifest.nodes.map((item) => item.resource)).toEqual([
+      expect.objectContaining({ defaultAnimation: "BG", loop: true }),
+      expect.objectContaining({ defaultAnimation: "FG", loop: true }),
+    ]);
 
     project.symbolDependencies.set("shared-symbols", {
       packageId: "shared-symbols",
@@ -558,7 +515,7 @@ describe("logical layout resource commands", () => {
     );
     expect(previewManifest?.gameModes?.modes).toHaveLength(2);
     expect(previewManifest?.symbolPackages).toHaveProperty("shared-symbols");
-    expect(previewManifest?.reels.main?.order).toBe(1);
+    expect(previewManifest?.reels.main?.order).toBe(2);
   });
 
   it("re-centers legacy default geometry when correcting an export-bounds art size", async () => {

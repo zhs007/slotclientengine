@@ -120,9 +120,28 @@ export interface SceneLayoutGameMode {
   readonly awardCelebrationPopup?: string;
 }
 
+export interface SceneLayoutGameModeTransition {
+  readonly from: string;
+  readonly to: string;
+  readonly overlay: {
+    readonly resource: {
+      readonly kind: "spine";
+      readonly skeleton: string;
+      readonly atlas: string;
+      readonly textures: Readonly<Record<string, string>>;
+    };
+    readonly animation: string;
+    readonly switchEvent: string;
+    readonly placements: Readonly<
+      Partial<Record<SceneLayoutVariantId, SceneLayoutNodePlacement>>
+    >;
+  };
+}
+
 export interface SceneLayoutGameModes {
   readonly initialMode: string;
   readonly modes: readonly SceneLayoutGameMode[];
+  readonly transitions?: readonly SceneLayoutGameModeTransition[];
 }
 
 export interface MaximizedFocusSceneLayoutAdaptation {
@@ -282,9 +301,13 @@ export interface SceneLayoutNodeStateSnapshot {
 
 export interface SceneLayoutGameModeSnapshot {
   readonly stableMode: string;
+  readonly displayedMode: string;
   readonly targetMode: string | null;
   readonly phase: "stable" | "transitioning";
+  readonly transitionPhase: "before-switch" | "after-switch" | null;
+  readonly transition: { readonly from: string; readonly to: string } | null;
   readonly stableSymbolPackage: string | null;
+  readonly displayedSymbolPackage: string | null;
   readonly targetSymbolPackage: string | null;
   readonly activeBackgroundNodes: readonly string[];
 }

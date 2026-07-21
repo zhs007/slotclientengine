@@ -18,9 +18,19 @@ export interface RendercoreSpinePlayer {
   update(deltaSeconds: number): {
     readonly completed: boolean;
     readonly loopCompleted?: boolean;
+    readonly events: readonly RendercoreSpinePlaybackEvent[];
   };
   reset(): void;
   destroy(): void;
+}
+
+export interface RendercoreSpinePlaybackEvent {
+  readonly name: string;
+}
+
+export interface RendercoreSpineAnimationEventOccurrence {
+  readonly name: string;
+  readonly time: number;
 }
 
 export interface RendercoreSpineSlotPlayer extends RendercoreSpinePlayer {
@@ -42,6 +52,9 @@ export interface ValidatedSpineResource {
   readonly atlasPages: readonly string[];
   readonly animationNames: readonly string[];
   readonly animationDurations: Readonly<Record<string, number>>;
+  readonly animationEvents: Readonly<
+    Record<string, readonly RendercoreSpineAnimationEventOccurrence[]>
+  >;
   readonly slotNames: readonly string[];
 }
 
@@ -49,6 +62,9 @@ export function validateOfficialSpineResource(options: {
   readonly resource: OfficialSpinePlayerResource;
   readonly requiredAnimations: readonly string[];
   readonly requiredSlots?: readonly string[];
+  readonly requiredAnimationEvents?: Readonly<
+    Record<string, readonly string[]>
+  >;
 }): ValidatedSpineResource {
   readSupportedSpineSkeletonVersion(options.resource.skeleton);
   const atlas = createTextureAtlas(options.resource.atlasText);
@@ -78,6 +94,24 @@ export function validateOfficialSpineResource(options: {
       throw new Error(`Spine slot "${slotName}" was not found.`);
     }
   }
+  const animationEvents = readSpineAnimationEvents(options.resource.skeleton);
+  for (const [animationName, eventNames] of Object.entries(
+    options.requiredAnimationEvents ?? {},
+  )) {
+    if (!skeletonData.findAnimation(animationName)) {
+      throw new Error(`Spine animation "${animationName}" was not found.`);
+    }
+    for (const eventName of eventNames) {
+      const occurrences = (animationEvents[animationName] ?? []).filter(
+        (event) => event.name === eventName,
+      );
+      if (occurrences.length !== 1) {
+        throw new Error(
+          `Spine animation "${animationName}" event "${eventName}" must occur exactly once; found ${occurrences.length}.`,
+        );
+      }
+    }
+  }
   return Object.freeze({
     atlasPages,
     animationNames: Object.freeze(
@@ -91,6 +125,7 @@ export function validateOfficialSpineResource(options: {
         ]),
       ),
     ),
+    animationEvents,
     slotNames: Object.freeze(skeletonData.slots.map((slot) => slot.name)),
   });
 }
@@ -110,6 +145,7 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
   #spine: Spine | null = null;
   #completed = false;
   #loopCompleted = false;
+  #events: RendercoreSpinePlaybackEvent[] = [];
   #destroyed = false;
   #initialized = false;
 
@@ -187,6 +223,7 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
     }
     this.#completed = false;
     this.#loopCompleted = false;
+    this.#events = [];
     spine.state.clearTracks();
     spine.state.clearListeners();
     spine.skeleton.setupPose();
@@ -196,6 +233,10 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
       options.loop,
     );
     entry.listener = {
+      event: (eventEntry, event) => {
+        if (eventEntry === entry)
+          this.#events.push(Object.freeze({ name: event.data.name }));
+      },
       complete: (completedEntry) => {
         if (completedEntry === entry) {
           if (options.loop) this.#loopCompleted = true;
@@ -209,15 +250,19 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
   update(deltaSeconds: number): {
     readonly completed: boolean;
     readonly loopCompleted?: boolean;
+    readonly events: readonly RendercoreSpinePlaybackEvent[];
   } {
     assertValidSpineDeltaSeconds(deltaSeconds);
     this.assertNotDestroyed();
     this.getSpine().update(deltaSeconds);
     const loopCompleted = this.#loopCompleted;
     this.#loopCompleted = false;
+    const events = Object.freeze(this.#events.slice());
+    this.#events = [];
     return Object.freeze({
       completed: this.#completed,
       ...(loopCompleted ? { loopCompleted: true } : {}),
+      events,
     });
   }
 
@@ -245,6 +290,7 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
     this.assertNotDestroyed();
     this.#completed = false;
     this.#loopCompleted = false;
+    this.#events = [];
     if (this.#spine) {
       this.#spine.state.clearTracks();
       this.#spine.state.clearListeners();
@@ -259,6 +305,7 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
     }
     this.#destroyed = true;
     this.#spine?.state.clearListeners();
+    this.#events = [];
     this.#spine?.destroy();
     this.#spine = null;
     this.view.removeChildren();
@@ -277,6 +324,49 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
       throw this.#createError("Spine player was destroyed.");
     }
   }
+}
+
+export function readSpineAnimationEvents(
+  skeleton: unknown,
+): Readonly<
+  Record<string, readonly RendercoreSpineAnimationEventOccurrence[]>
+> {
+  readSupportedSpineSkeletonVersion(skeleton);
+  const animations =
+    isRecord(skeleton) && isRecord(skeleton.animations)
+      ? skeleton.animations
+      : {};
+  const result: Record<
+    string,
+    readonly RendercoreSpineAnimationEventOccurrence[]
+  > = {};
+  for (const [animationName, animationValue] of Object.entries(animations)) {
+    const rawEvents =
+      isRecord(animationValue) && Array.isArray(animationValue.events)
+        ? animationValue.events
+        : [];
+    result[animationName] = Object.freeze(
+      rawEvents.map((raw, index) => {
+        if (
+          !isRecord(raw) ||
+          typeof raw.name !== "string" ||
+          raw.name.length === 0
+        ) {
+          throw new Error(
+            `Spine animation "${animationName}" event[${index}] must have a non-empty name.`,
+          );
+        }
+        const time = raw.time === undefined ? 0 : raw.time;
+        if (typeof time !== "number" || !Number.isFinite(time) || time < 0) {
+          throw new Error(
+            `Spine animation "${animationName}" event[${index}] time must be finite and non-negative.`,
+          );
+        }
+        return Object.freeze({ name: raw.name, time });
+      }),
+    );
+  }
+  return Object.freeze(result);
 }
 
 async function loadOfficialSpineTexture(
@@ -339,4 +429,8 @@ function assertExactTexturePageClosure(
 
 function formatError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

@@ -7,6 +7,7 @@ import {
 export type WorkspaceTab =
   | "assets"
   | "layout"
+  | "transitions"
   | "symbols"
   | "bigwin"
   | "project";
@@ -42,6 +43,7 @@ export interface EditorUiSession {
   resourceStatus: "all" | "referenced" | "unused" | "error";
   expandedResourceIds: Set<string>;
   expandedInspectorSections: Set<string>;
+  selectedTransitionKey: string | null;
   picker: ResourcePickerState | null;
 }
 
@@ -54,6 +56,7 @@ export function createEditorUiSession(): EditorUiSession {
     resourceStatus: "all",
     expandedResourceIds: new Set(),
     expandedInspectorSections: new Set(),
+    selectedTransitionKey: null,
     picker: null,
   };
 }

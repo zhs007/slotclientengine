@@ -164,7 +164,7 @@ function spinePlaybackEditor(
   node: EditorNodeDraft,
 ): string {
   const playback = node.playback;
-  const selected = playback?.kind === "loop" ? playback.animation : "";
+  const selected = playback?.animation ?? "";
   const animationOptions = (value: string) =>
     resource.animationNames
       .map(
@@ -172,25 +172,7 @@ function spinePlaybackEditor(
           `<option value="${escapeHtml(name)}" ${value === name ? "selected" : ""}>${escapeHtml(name)}</option>`,
       )
       .join("");
-  return `<div class="spine-playback"><label>playback<select data-spine-playback-kind="${escapeHtml(node.id)}"><option value="loop" ${playback?.kind === "loop" ? "selected" : ""}>single loop</option><option value="state-machine" ${playback?.kind === "state-machine" ? "selected" : ""}>state machine</option></select></label>${
-    playback?.kind === "state-machine"
-      ? `<fieldset><legend>稳定状态</legend>${playback.states
-          .map(
-            (state) =>
-              `<div class="field-row"><label><input type="radio" name="initial-${escapeHtml(node.id)}" data-spine-initial="${escapeHtml(node.id)}" value="${escapeHtml(state.id)}" ${playback.initialState === state.id ? "checked" : ""}/> initial</label><input data-spine-state-id="${escapeHtml(node.id)}" data-current-state="${escapeHtml(state.id)}" value="${escapeHtml(state.id)}"/><select data-spine-state-animation="${escapeHtml(node.id)}" data-state-id="${escapeHtml(state.id)}">${animationOptions(state.animation)}</select><button type="button" data-delete-spine-state="${escapeHtml(node.id)}" data-state-id="${escapeHtml(state.id)}">删除</button></div>`,
-          )
-          .join(
-            "",
-          )}<button type="button" data-add-spine-state="${escapeHtml(node.id)}">添加状态</button></fieldset><fieldset><legend>有向 transitions</legend>${playback.transitions
-          .map(
-            (transition, index) =>
-              `<div class="field-row"><span>${escapeHtml(transition.from)} → ${escapeHtml(transition.to)}</span><code>${escapeHtml(transition.animation)}</code><button type="button" data-delete-spine-transition="${escapeHtml(node.id)}" data-transition-index="${index}">删除</button></div>`,
-          )
-          .join(
-            "",
-          )}<div class="field-row" data-spine-transition-builder="${escapeHtml(node.id)}"><label>from<select data-spine-transition-from><option value="">请选择</option>${playback.states.map((state) => `<option value="${escapeHtml(state.id)}">${escapeHtml(state.id)}</option>`).join("")}</select></label><label>to<select data-spine-transition-to><option value="">请选择</option>${playback.states.map((state) => `<option value="${escapeHtml(state.id)}">${escapeHtml(state.id)}</option>`).join("")}</select></label><label>animation<select data-spine-transition-animation><option value="">请选择（大小写精确）</option>${animationOptions("")}</select></label><button type="button" data-add-spine-transition="${escapeHtml(node.id)}">添加 transition</button></div><p class="hint">切换预览状态时，匹配的 transition 播放一次，再进入目标稳定状态。</p></fieldset>`
-      : `<label>loop animation<select data-layer-animation="${escapeHtml(node.id)}"><option value="">请选择（大小写精确）</option>${animationOptions(selected)}</select></label>`
-  }</div>`;
+  return `<div class="spine-playback"><label>loop animation<select data-layer-animation="${escapeHtml(node.id)}"><option value="">请选择（大小写精确）</option>${animationOptions(selected)}</select></label><p class="hint">稳定场景 Spine 节点只播放一个显式 loop；场景切换请在独立“转场”工作区配置。</p></div>`;
 }
 
 function imageStringEditor(node: EditorNodeDraft): string {

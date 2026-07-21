@@ -272,7 +272,7 @@ function createPlayer(): RendercoreSpineSlotPlayer {
     view: new Container(),
     init: () => undefined,
     play: () => undefined,
-    update: () => ({ completed: false }),
+    update: () => ({ completed: false, events: [] }),
     reset: () => undefined,
     destroy: () => undefined,
     attachSlotObject: vi.fn(),

@@ -114,6 +114,25 @@ describe("scene layout manifest", () => {
             symbolPackage: "free-symbols",
           },
         ],
+        transitions: [
+          {
+            from: "BG",
+            to: "FG",
+            overlay: {
+              resource: {
+                kind: "spine",
+                skeleton: "assets/transition/transition.json",
+                atlas: "assets/transition/transition.atlas",
+                textures: {
+                  "transition.png": "assets/transition/transition.png",
+                },
+              },
+              animation: "BG_FG",
+              switchEvent: "SwitchScene",
+              placements: { default: { x: 1000, y: 1000, scale: 1 } },
+            },
+          },
+        ],
       },
     };
     const parsed = parseSceneLayoutManifest(canonical);
@@ -124,6 +143,13 @@ describe("scene layout manifest", () => {
     expect(Object.isFrozen(parsed.symbolPackages)).toBe(true);
     expect(collectSceneLayoutAssetPaths(parsed)).toContain(
       "dependencies/symbols/free-symbols/symbols.package.json",
+    );
+    expect(collectSceneLayoutAssetPaths(parsed)).toEqual(
+      expect.arrayContaining([
+        "assets/transition/transition.json",
+        "assets/transition/transition.atlas",
+        "assets/transition/transition.png",
+      ]),
     );
 
     const both = structuredClone(canonical) as any;
@@ -142,8 +168,33 @@ describe("scene layout manifest", () => {
     expect(() => parseSceneLayoutManifest(badInitial)).toThrow(/unknown node/);
     const noTransition = structuredClone(canonical) as any;
     noTransition.nodes[0].resource.stateMachine.transitions = [];
-    expect(() => parseSceneLayoutManifest(noTransition)).toThrow(
-      /lacks direct transition/,
+    expect(() => parseSceneLayoutManifest(noTransition)).not.toThrow();
+
+    const selfTransition = structuredClone(canonical) as any;
+    selfTransition.gameModes.transitions[0].to = "BG";
+    expect(() => parseSceneLayoutManifest(selfTransition)).toThrow(
+      /self transition/,
+    );
+    const duplicateTransition = structuredClone(canonical) as any;
+    duplicateTransition.gameModes.transitions.push(
+      structuredClone(duplicateTransition.gameModes.transitions[0]),
+    );
+    expect(() => parseSceneLayoutManifest(duplicateTransition)).toThrow(
+      /unique/,
+    );
+    const wrongPlacement = structuredClone(canonical) as any;
+    wrongPlacement.gameModes.transitions[0].overlay.placements.portrait = {
+      x: 0,
+      y: 0,
+      scale: 1,
+    };
+    expect(() => parseSceneLayoutManifest(wrongPlacement)).toThrow(
+      /unknown key/,
+    );
+    const unknownOverlayKey = structuredClone(canonical) as any;
+    unknownOverlayKey.gameModes.transitions[0].overlay.event = "SwitchScene";
+    expect(() => parseSceneLayoutManifest(unknownOverlayKey)).toThrow(
+      /unknown key/,
     );
   });
 
