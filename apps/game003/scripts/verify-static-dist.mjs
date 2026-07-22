@@ -143,8 +143,29 @@ function verify() {
     );
   }
   if (existsSync(DIST_ROOT)) {
-    verifyNoSensitiveStrings(listFiles(DIST_ROOT));
-    verifyNoJpgSymbolRuntimeReferences(listFiles(DIST_ROOT));
+    const distFiles = listFiles(DIST_ROOT);
+    verifyNoSensitiveStrings(distFiles);
+    verifyNoJpgSymbolRuntimeReferences(distFiles);
+    verifyNoLeoReactRuntime(distFiles);
+  }
+}
+
+function verifyNoLeoReactRuntime(files) {
+  const markers = [
+    "slot-leo-ui-",
+    "react-dom",
+    "Minified React error",
+    "useSyncExternalStore",
+  ];
+  for (const file of files.filter((candidate) => candidate.endsWith(".js"))) {
+    const content = readFileSync(file, "utf8");
+    for (const marker of markers) {
+      if (content.includes(marker)) {
+        failures.push(
+          `${file.slice(DIST_ROOT.length + 1)} unexpectedly contains ${marker}.`,
+        );
+      }
+    }
   }
 }
 

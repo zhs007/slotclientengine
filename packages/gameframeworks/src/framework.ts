@@ -7,7 +7,8 @@ import { createSlotGameLogicResult } from "./logic-result.js";
 import { createSlotGameRoundContext } from "./round-context.js";
 import { requireFiniteBalance, SlotGameLiveSession } from "./session.js";
 import { SlotGameStateStore } from "./state.js";
-import { SlotGameUiAdapter } from "./ui-adapter.js";
+import { createDefaultSlotGameUiFactory } from "./ui-adapter.js";
+import { createAndValidateUi, validateViewportSnapshot } from "./ui-factory.js";
 import type { SpinParams, UserInfo } from "@slotclientengine/netcore";
 import type {
   GameLogic,
@@ -19,6 +20,8 @@ import type {
   SlotGameMountContext,
   SlotGameSpinRequest,
   SlotGameStateSnapshot,
+  SlotGameUi,
+  SlotGameUiCommands,
   SlotGameViewportListener,
 } from "./types.js";
 
@@ -31,10 +34,13 @@ export function createSlotGameFramework(
 class SlotGameFrameworkImpl implements SlotGameFramework {
   readonly #options: SlotGameFrameworkOptions;
   readonly #state: SlotGameStateStore;
-  readonly #ui: SlotGameUiAdapter;
+  readonly #ui: SlotGameUi;
   readonly #session: SlotGameLiveSessionLike;
   readonly #mountPromise: Promise<void>;
+  readonly #reportedErrors = new Set<Error>();
   #destroyed = false;
+  #lifecycleGeneration = 0;
+  #fatalUiError: Error | null = null;
   #roundId = 0;
 
   constructor(options: SlotGameFrameworkOptions) {
@@ -47,32 +53,19 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       initialBalance: options.initialBalance,
       initialWin: options.initialWin,
     });
-    this.#ui = new SlotGameUiAdapter({
+    const commands = this.#createUiCommands();
+    const uiFactory = options.uiFactory ?? createDefaultSlotGameUiFactory();
+    this.#ui = createAndValidateUi(uiFactory, {
       root: options.root,
       designSize: this.#state.designSize,
-      betOptions: this.#state.betOptions,
-      initialBetIndex: options.initialBetIndex,
-      initialBalance: options.initialBalance,
-      initialWin: options.initialWin,
       framePolicy: options.framePolicy,
+      betOptions: this.#state.betOptions,
+      initialState: this.#state.getState(),
       brandLabel: options.brandLabel,
       currency: options.currency,
       locale: options.locale,
       formatMoney: options.formatMoney,
-      onSpin: () => {
-        void this.spin().catch(() => undefined);
-      },
-      onIncreaseBet: () => {
-        this.#state.increaseBet();
-        this.#applyState();
-      },
-      onDecreaseBet: () => {
-        this.#state.decreaseBet();
-        this.#applyState();
-      },
-      onMutedChange: (muted) => this.setMuted(muted),
-      onFastModeChange: (enabled) => this.setFastMode(enabled),
-      onAutoModeChange: (enabled) => this.setAutoMode(enabled),
+      commands,
     });
     this.#session =
       options.liveSession ??
@@ -86,12 +79,15 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
 
   async connect(): Promise<void> {
     this.#assertAlive();
+    const generation = this.#lifecycleGeneration;
     try {
       this.#state.setError(null);
       this.#state.setSpinState("connecting");
       this.#applyState();
       await this.#mountPromise;
+      this.#assertOperationActive(generation);
       const userInfo = await this.#session.connect();
+      this.#assertOperationActive(generation);
       const balance = requireFiniteBalance(
         userInfo,
         this.#options.initialBalance,
@@ -101,11 +97,16 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       await this.#options.gameAdapter.applyInitialState?.(
         createInitialState(userInfo, balance),
       );
+      this.#assertOperationActive(generation);
       this.#state.setSpinState("idle");
       this.#state.setError(null);
       this.#applyState();
     } catch (error) {
-      throw this.#handleFailure(error, "Slot game connect failed.");
+      throw this.#handleOperationFailure(
+        error,
+        generation,
+        "Slot game connect failed.",
+      );
     }
   }
 
@@ -121,6 +122,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       );
     }
 
+    const generation = this.#lifecycleGeneration;
     try {
       const betOption = current.betOption;
       const balanceBefore = current.balance;
@@ -128,6 +130,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       this.#state.setSpinState("spinning");
       this.#applyState();
       await this.#mountPromise;
+      this.#assertOperationActive(generation);
 
       const params = buildSpinParams(
         this.#state.getState(),
@@ -135,6 +138,7 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
         this.#options.buildSpinRequest,
       );
       const rawResult = await this.#session.spin(params);
+      this.#assertOperationActive(generation);
       const balanceAfterSpin = readFiniteBalanceOrNull(
         this.#session.getUserInfo(),
       );
@@ -154,12 +158,16 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       this.#state.setWinAmount(logicResult.totalwin);
       this.#state.setSpinState("presenting");
       this.#applyState();
+      this.#assertOperationActive(generation);
       await this.#options.gameAdapter.playSpin(logicResult.logic);
+      this.#assertOperationActive(generation);
 
       if (round.shouldCollect) {
         this.#state.setSpinState("collecting");
         this.#applyState();
+        this.#assertOperationActive(generation);
         const userInfo = await this.#session.collect();
+        this.#assertOperationActive(generation);
         this.#state.setBalance(requireFiniteBalance(userInfo));
       } else if (balanceAfterSpin !== null) {
         this.#state.setBalance(balanceAfterSpin);
@@ -170,7 +178,11 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       this.#applyState();
       return logicResult.logic;
     } catch (error) {
-      throw this.#handleFailure(error, "Slot game spin failed.");
+      throw this.#handleOperationFailure(
+        error,
+        generation,
+        "Slot game spin failed.",
+      );
     }
   }
 
@@ -206,10 +218,10 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
     if (this.#destroyed) {
       return;
     }
-    this.#destroyed = true;
-    this.#ui.destroy();
-    this.#session.disconnect();
-    this.#options.gameAdapter.destroy?.();
+    const cleanupError = this.#destroyResources();
+    if (cleanupError) {
+      throw cleanupError;
+    }
   }
 
   async #mountGameAdapter(): Promise<void> {
@@ -218,16 +230,39 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       gameLayer: this.#ui.elements.gameLayer,
       overlay: this.#ui.elements.overlay,
       getState: () => this.#state.getState(),
-      getViewport: () => this.#ui.getViewport(),
-      onViewportChange: (listener: SlotGameViewportListener) =>
-        this.#ui.onViewportChange((viewport) => {
+      getViewport: () => {
+        this.#assertAlive();
+        return validateViewportSnapshot(this.#ui.getViewport());
+      },
+      onViewportChange: (listener: SlotGameViewportListener) => {
+        if (this.#destroyed) {
+          return () => undefined;
+        }
+        const unsubscribe = this.#ui.onViewportChange((viewport) => {
+          if (this.#destroyed) {
+            return;
+          }
           try {
-            listener(viewport);
+            listener(validateViewportSnapshot(viewport));
           } catch (error) {
             this.#handleFailure(error, "Slot game viewport change failed.");
             throw error;
           }
-        }),
+        });
+        if (typeof unsubscribe !== "function") {
+          throw new SlotGameConfigError(
+            "SlotGameUi.onViewportChange() must return an unsubscribe function.",
+          );
+        }
+        let subscribed = true;
+        return () => {
+          if (!subscribed) {
+            return;
+          }
+          subscribed = false;
+          unsubscribe();
+        };
+      },
     });
     await this.#options.gameAdapter.mount(context);
   }
@@ -237,17 +272,139 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       return;
     }
     const snapshot = this.#state.getState();
-    this.#ui.update(snapshot);
+    try {
+      this.#ui.update(snapshot);
+    } catch (error) {
+      throw this.#handleUiUpdateFailure(error);
+    }
+    if (this.#destroyed) {
+      return;
+    }
     this.#options.gameAdapter.setFrameworkState?.(snapshot);
     this.#options.onStateChange?.(snapshot);
   }
 
   #handleFailure(error: unknown, fallback: string): Error {
+    if (this.#fatalUiError) {
+      return this.#fatalUiError;
+    }
+    if (this.#destroyed) {
+      return createDestroyedError();
+    }
     const slotError = toSlotGameError(error, fallback);
     this.#state.setError(slotError);
-    this.#applyState();
-    this.#options.onError?.(slotError);
+    try {
+      this.#applyState();
+    } catch (stateError) {
+      return this.#fatalUiError ?? toSlotGameError(stateError, fallback);
+    }
+    this.#reportError(slotError);
     return slotError;
+  }
+
+  #handleOperationFailure(
+    error: unknown,
+    generation: number,
+    fallback: string,
+  ): Error {
+    if (this.#fatalUiError) {
+      return this.#fatalUiError;
+    }
+    if (this.#destroyed || generation !== this.#lifecycleGeneration) {
+      return createDestroyedError();
+    }
+    return this.#handleFailure(error, fallback);
+  }
+
+  #handleUiUpdateFailure(error: unknown): Error {
+    if (this.#fatalUiError) {
+      return this.#fatalUiError;
+    }
+    const slotError = toSlotGameError(error, "Slot game UI update failed.");
+    this.#fatalUiError = slotError;
+    this.#destroyResources();
+    void this.#mountPromise?.catch(() => undefined);
+    this.#reportError(slotError);
+    return slotError;
+  }
+
+  #reportError(error: Error): void {
+    if (this.#reportedErrors.has(error)) {
+      return;
+    }
+    this.#reportedErrors.add(error);
+    try {
+      this.#options.onError?.(error);
+    } catch {
+      // Error observers must not replace or duplicate the original failure.
+    }
+  }
+
+  #destroyResources(): Error | null {
+    if (this.#destroyed) {
+      return null;
+    }
+    this.#destroyed = true;
+    this.#lifecycleGeneration += 1;
+    let firstError: Error | null = null;
+    for (const cleanup of [
+      () => this.#ui.destroy(),
+      () => this.#session.disconnect(),
+      () => this.#options.gameAdapter.destroy?.(),
+    ]) {
+      try {
+        cleanup();
+      } catch (error) {
+        firstError ??= toSlotGameError(error, "Slot game destroy failed.");
+      }
+    }
+    return firstError;
+  }
+
+  #createUiCommands(): SlotGameUiCommands {
+    return Object.freeze({
+      requestSpin: (): void => {
+        if (this.#destroyed) {
+          return;
+        }
+        void this.spin().catch(() => undefined);
+      },
+      increaseBet: (): void => {
+        if (this.#destroyed) {
+          return;
+        }
+        this.#state.increaseBet();
+        this.#applyState();
+      },
+      decreaseBet: (): void => {
+        if (this.#destroyed) {
+          return;
+        }
+        this.#state.decreaseBet();
+        this.#applyState();
+      },
+      setMuted: (muted: boolean): void => {
+        if (!this.#destroyed) {
+          this.setMuted(muted);
+        }
+      },
+      setFastMode: (enabled: boolean): void => {
+        if (!this.#destroyed) {
+          this.setFastMode(enabled);
+        }
+      },
+      setAutoMode: (enabled: boolean): void => {
+        if (!this.#destroyed) {
+          this.setAutoMode(enabled);
+        }
+      },
+    });
+  }
+
+  #assertOperationActive(generation: number): void {
+    if (this.#destroyed || generation !== this.#lifecycleGeneration) {
+      throw createDestroyedError();
+    }
   }
 
   #assertAlive(): void {
@@ -313,6 +470,18 @@ function validateFrameworkOptions(options: SlotGameFrameworkOptions): void {
       "liveSession and clientFactory cannot be provided at the same time.",
     );
   }
+  if (
+    options.uiFactory !== undefined &&
+    (typeof options.uiFactory !== "object" ||
+      options.uiFactory === null ||
+      typeof options.uiFactory.create !== "function")
+  ) {
+    throw new SlotGameConfigError("uiFactory must provide create().");
+  }
+}
+
+function createDestroyedError(): SlotGameRuntimeError {
+  return new SlotGameRuntimeError("Slot game framework has been destroyed.");
 }
 
 function createInitialState(

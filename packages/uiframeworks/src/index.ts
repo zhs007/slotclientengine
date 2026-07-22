@@ -300,6 +300,12 @@ export {
 } from "./layout.js";
 export { createMoneyFormatter } from "./format.js";
 export { createSlotUiController } from "./controller.js";
+export { createSlotUiFrameHost } from "./frame-host.js";
+export type {
+  SlotUiFrameHost,
+  SlotUiFrameHostElements,
+  SlotUiFrameHostOptions,
+} from "./frame-host.js";
 export {
   SlotUiStateStore,
   getBetControls,

@@ -4,6 +4,8 @@ describe("Leo game loading UI", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     TestPreloadImage.instances.length = 0;
+    TestPreloadImage.nextComplete = false;
+    TestPreloadImage.nextNaturalWidth = 0;
     vi.stubGlobal("Image", TestPreloadImage);
   });
 
@@ -68,6 +70,27 @@ describe("Leo game loading UI", () => {
       } else {
         await vi.advanceTimersByTimeAsync(30);
       }
+      await expect(ui.readyToComplete).resolves.toBeUndefined();
+    },
+  );
+
+  it.each([
+    [1, true],
+    [0, false],
+  ] as const)(
+    "handles an already-complete GIF with naturalWidth=%s as success=%s",
+    async (naturalWidth, expectedSuccess) => {
+      TestPreloadImage.nextComplete = true;
+      TestPreloadImage.nextNaturalWidth = naturalWidth;
+      const root = createRoot();
+      const ui = createLeoGameLoadingUi({ introDurationMs: 10 }).create({
+        root,
+      });
+      expect(
+        (root.querySelector(".sce-leo-loading__intro") as HTMLElement).dataset
+          .visible === "true",
+      ).toBe(expectedSuccess);
+      await vi.advanceTimersByTimeAsync(10);
       await expect(ui.readyToComplete).resolves.toBeUndefined();
     },
   );
@@ -145,9 +168,12 @@ describe("Leo game loading UI", () => {
 
 class TestPreloadImage {
   static readonly instances: TestPreloadImage[] = [];
+  static nextComplete = false;
+  static nextNaturalWidth = 0;
   onload: (() => void) | null = null;
   onerror: (() => void) | null = null;
-  complete = false;
+  complete = TestPreloadImage.nextComplete;
+  naturalWidth = TestPreloadImage.nextNaturalWidth;
   src = "";
 
   constructor() {

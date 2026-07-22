@@ -5,6 +5,8 @@ import {
   type SlotGameLiveSessionLike,
 } from "@slotclientengine/gameframeworks";
 import "@slotclientengine/gameframeworks/styles.css";
+import { createLeoSlotGameUiFactory } from "@slotclientengine/game-ui-leo";
+import "@slotclientengine/game-ui-leo/styles.css";
 import { createGame002Adapter } from "./game-adapter.js";
 import {
   GAME002_REFERENCE_SIZE,
@@ -82,6 +84,7 @@ export async function enterGame002(options: {
       currency: "USD",
       locale: "en-US",
       formatMoney: formatServerUsdAmount,
+      uiFactory: createLeoSlotGameUiFactory(),
       buildSpinRequest: () => options.prepared.config.spinRequest,
       onError: (error) => console.error(error),
     });

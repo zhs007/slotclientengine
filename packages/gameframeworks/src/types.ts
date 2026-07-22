@@ -164,6 +164,46 @@ export interface SlotGameStateSnapshot {
   readonly error: string | null;
 }
 
+export interface SlotGameUiElements {
+  readonly frame: HTMLElement;
+  readonly gameLayer: HTMLElement;
+  readonly overlay: HTMLElement;
+}
+
+export interface SlotGameUiCommands {
+  requestSpin(): void;
+  increaseBet(): void;
+  decreaseBet(): void;
+  setMuted(muted: boolean): void;
+  setFastMode(enabled: boolean): void;
+  setAutoMode(enabled: boolean): void;
+}
+
+export interface SlotGameUiCreateContext {
+  readonly root: HTMLElement;
+  readonly designSize: { readonly width: number; readonly height: number };
+  readonly framePolicy?: SlotGameFramePolicy;
+  readonly betOptions: readonly SlotGameBetOption[];
+  readonly initialState: SlotGameStateSnapshot;
+  readonly brandLabel?: string;
+  readonly currency?: string;
+  readonly locale?: string;
+  readonly formatMoney?: (amount: number) => string;
+  readonly commands: SlotGameUiCommands;
+}
+
+export interface SlotGameUi {
+  readonly elements: SlotGameUiElements;
+  getViewport(): SlotGameViewportSnapshot;
+  onViewportChange(listener: SlotGameViewportListener): () => void;
+  update(state: SlotGameStateSnapshot): void;
+  destroy(): void;
+}
+
+export interface SlotGameUiFactory {
+  create(context: SlotGameUiCreateContext): SlotGameUi;
+}
+
 export interface SlotGameMountContext {
   readonly frame: HTMLElement;
   readonly gameLayer: HTMLElement;
@@ -229,6 +269,7 @@ export interface SlotGameFrameworkOptions {
   readonly liveSession?: SlotGameLiveSessionLike;
   readonly clientFactory?: SlotGameClientFactory;
   readonly logicFactory?: SlotGameLogicFactory;
+  readonly uiFactory?: SlotGameUiFactory;
   readonly onStateChange?: (state: SlotGameStateSnapshot) => void;
   readonly onError?: (error: Error) => void;
 }

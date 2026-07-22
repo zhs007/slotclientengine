@@ -7,6 +7,7 @@ const REPO_ROOT = resolve(APP_ROOT, "../..");
 const DIST_ROOT = join(APP_ROOT, "dist");
 const DIST_ASSETS = join(DIST_ROOT, "assets");
 const SOURCE_ROOT = join(REPO_ROOT, "assets/game002-s3");
+const LEO_UI_ASSET_ROOT = join(REPO_ROOT, "packages/game-ui-leo/src/assets");
 const INDEX_HTML = join(DIST_ROOT, "index.html");
 const MANIFEST_PATH = join(SOURCE_ROOT, "symbol-state-textures.manifest.json");
 const BACKGROUND_MANIFEST_PATH = join(SOURCE_ROOT, "background.manifest.json");
@@ -40,6 +41,18 @@ const SPINE_SYMBOLS = Object.freeze(
   SYMBOLS.filter((symbol) => symbol !== "CN"),
 );
 const EXCLUDED_RESOURCE_PREFIXES = Object.freeze(["Nearwin3", "WM_Fx"]);
+const LEO_UI_ASSETS = Object.freeze([
+  "font/Anton-Regular.woff2",
+  "font/NotoSansR.woff2",
+  "controls/addbet.png",
+  "controls/removbet.png",
+  "controls/image-play.png",
+  "controls/image-autoplay.png",
+  "controls/image-fastplays.png",
+  "controls/image-fasplays-off.png",
+  "controls/image-background-music.png",
+  "controls/image-background-music-off.png",
+]);
 const REEL_EFFECTS = Object.freeze([
   {
     id: "anticipation",
@@ -523,6 +536,7 @@ function verifyBackgroundSourceContract() {
 
 function verifyDistAssets(assetNames, bundledJavaScript) {
   verifyLoadingEntryChunk(assetNames);
+  verifyLeoGameUiClosure(assetNames, bundledJavaScript);
   for (const [pattern, label] of [
     [/^loading2-[A-Za-z0-9_-]+\.gif$/, "loading2-*.gif"],
     [/^logo_1-[A-Za-z0-9_-]+\.webp$/, "logo_1-*.webp"],
@@ -736,6 +750,36 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
         `dist unexpectedly contains excluded resource ${excluded}.`,
       );
     }
+  }
+}
+
+function verifyLeoGameUiClosure(assetNames, bundledJavaScript) {
+  for (const relativePath of LEO_UI_ASSETS) {
+    assertDistContainsAssetExactlyOnce(
+      assetNames,
+      join(LEO_UI_ASSET_ROOT, relativePath),
+      `Leo UI ${relativePath}`,
+    );
+  }
+  if (!bundledJavaScript.includes("slot-leo-ui-root")) {
+    failures.push("game runtime chunks are missing the Leo UI React view.");
+  }
+  if (!bundledJavaScript.includes("slot-leo-ui-mount")) {
+    failures.push("game runtime chunks are missing the Leo UI mount contract.");
+  }
+  const reactChunks = assetNames.filter((name) => {
+    if (!name.endsWith(".js")) return false;
+    const content = readFileSync(join(DIST_ASSETS, name), "utf8");
+    return (
+      content.includes("slot-leo-ui-root") ||
+      content.includes("Minified React error") ||
+      content.includes("react-dom")
+    );
+  });
+  if (reactChunks.length !== 1 || !/^game-entry-.+\.js$/.test(reactChunks[0])) {
+    failures.push(
+      `React and Leo UI must exist in exactly one game-entry chunk, got ${reactChunks.join(",") || "none"}.`,
+    );
   }
 }
 
@@ -1007,6 +1051,23 @@ function assertDistContainsSourceAssetExactlyOnce(assetNames, sourceFile) {
   if (matches.length !== 1) {
     failures.push(
       `dist/assets must contain source asset content exactly once for ${relative(SOURCE_ROOT, sourceFile)}, got ${matches.length}.`,
+    );
+  }
+}
+
+function assertDistContainsAssetExactlyOnce(assetNames, sourceFile, label) {
+  assertFile(sourceFile);
+  if (!existsSync(sourceFile)) return;
+  const sourceBytes = readFileSync(sourceFile);
+  const extension = sourceFile.split(".").at(-1);
+  const matches = assetNames.filter(
+    (name) =>
+      name.endsWith(`.${extension}`) &&
+      readFileSync(join(DIST_ASSETS, name)).equals(sourceBytes),
+  );
+  if (matches.length !== 1) {
+    failures.push(
+      `dist/assets must contain ${label} exactly once, got ${matches.length}.`,
     );
   }
 }

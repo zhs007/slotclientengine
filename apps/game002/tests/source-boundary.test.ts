@@ -45,16 +45,33 @@ describe("game002 source boundary", () => {
       "@slotclientengine/gameloading": "workspace:*",
       "@slotclientengine/gameloading-ui-leo": "workspace:*",
       "@slotclientengine/gameframeworks": "workspace:*",
+      "@slotclientengine/game-ui-leo": "workspace:*",
       "@slotclientengine/rendercore": "workspace:*",
       "pixi.js": "^8.1.6",
     });
   });
 
-  it("injects only the native Leo loading UI without test-branch frameworks", () => {
+  it("keeps native Leo loading separate from the injected Leo game UI", () => {
     const source = readSourceTree(join(APP_ROOT, "src"));
     expect(source).toContain("@slotclientengine/gameloading-ui-leo");
+    expect(source).toContain("@slotclientengine/game-ui-leo");
     expect(source).not.toMatch(
       /ui-leo-frameworks|game-leo-frameworks|netcore2|eventcore|stateData|__PLATFORM__|wildsheep/i,
+    );
+    const mainSource = readFileSync(join(APP_ROOT, "src/main.ts"), "utf8");
+    expect(mainSource).not.toMatch(/game-ui-leo|react(?:-dom)?/i);
+    const loadingSource = readFileSync(
+      join(APP_ROOT, "src/loading-resources.ts"),
+      "utf8",
+    );
+    expect(loadingSource).not.toMatch(/game-ui-leo|react(?:-dom)?/i);
+    const gameEntrySource = readFileSync(
+      join(APP_ROOT, "src/game-entry.ts"),
+      "utf8",
+    );
+    expect(gameEntrySource).toContain("createLeoSlotGameUiFactory");
+    expect(gameEntrySource).toContain(
+      "uiFactory: createLeoSlotGameUiFactory()",
     );
   });
 

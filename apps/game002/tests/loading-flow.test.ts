@@ -117,6 +117,7 @@ describe("game002 loading flow", () => {
           mode: "maximized-focus",
           resolveViewportSize: expect.any(Function),
         }),
+        uiFactory: expect.objectContaining({ create: expect.any(Function) }),
       }),
     );
     const frameworkOptions =
