@@ -2,32 +2,29 @@
 
 ## 1. 任务目标
 
-本任务基于已验收的 Task 121，实现平台初始化的下一层集成：建立通用、per-instance、可取消的 `PlatformBootstrapProvider` 合同；按照 `test` 分支已经存在且可视为最终版的 Leo launcher 参数，实现独立的 Leo provider；在 `game002` 的 loading 99% 阶段完成真实接入。
+本任务基于已验收的 Task 121，实现平台初始化的下一层集成：建立通用、per-instance、可取消的 `PlatformBootstrapProvider` 合同；按照 `test` 分支已经存在且可视为最终版的 Leo launcher 参数，实现独立的 Leo provider；让 `game002` 的平台请求、setting/translation 和 live session 与 CDN 资源加载尽早并行，并在 loading 99% 到 100% 之间完成统一 readiness 验收。
 
 目标流程：
 
 ```text
-Leo launcher URL
+loading start（Leo Loading UI 已挂载）
   -> game002 strict query parser
-       |-> app-owned game params
-       |    skin / bet / lines=30 / times / autonums
-       |    fixed live server / request timeout
-       |
-       `-> normalized Leo launcher params
-            configUrl / jurisdiction / license / gameCode / lang
-            platformToken / businessCode / moneymode
-            replayurl / mode / currency
+  -> concurrently
+       |-> CDN game resources: progress 0..99
+       |-> LeoPlatformBootstrapProvider.prepare()
+       |    launcher config -> translation + setting
+       `-> prepare the only live session / WebSocket
 
-loading 99% gate
-  -> LeoPlatformBootstrapProvider.prepare()
-       launcher config
-       common + game translation
-       initial setting
-       normalized immutable platform snapshot
-  -> prepare game002 skin
-  -> prepare the only live session
+loading reaches 99%
+  -> readiness join barrier
+       critical CDN resources loaded
+       launcher/config/translation/setting ready
+       WebSocket connected and entered game
+       game002 skin/resource validation ready
+       Leo Loading visual ready
+  -> transfer ownership only after every check passes
 
-loading 100%
+loading enters 100%
   -> create current gameframeworks
   -> inject Leo SlotGameUiFactory
   -> apply initial UI preferences and platform presentation
@@ -38,11 +35,12 @@ loading 100%
 1. 新增协议无关 package `@slotclientengine/platformbootstrap`。
 2. 新增独立 Leo 实现 package `@slotclientengine/platformbootstrap-leo`。
 3. Leo launcher 参数以 `test` 分支现有参数为最终合同，不再等待另一套参数定义。
-4. `game002` 在 loading 99% 阶段真实请求 launcher config、translation 和 setting。
+4. `game002` 在 Loading UI 挂载后尽早请求 launcher config、translation 和 setting，不等 CDN 到 99% 才开始。
 5. `game002` 仍只创建现有 gameframeworks live session，不引入 netcore2 或第二套 round framework。
 6. launcher/platform 数据通过只读 snapshot 注入，不恢复 `stateData`、Zustand singleton 或 `GameContainer`。
 7. `gameframeworks` 接受显式 initial muted/fast/auto preference，之后继续拥有唯一 runtime UI state。
 8. `game003` 不接入 Leo provider，作为默认路径稳定对照。
+9. `gameloading` 把“并行启动 readiness”和“99% 完成检查”拆成明确合同，资源进度与平台/network readiness 互不伪装。
 
 任务完成后必须新增中文执行报告：
 
@@ -139,7 +137,7 @@ test 分支 `creatUiFramework()` 还接收 `gameCode / platform / isWsBinary / g
 兼容名用于让当前 game002 URL 平滑迁移，但不允许 truthy fallback：
 
 1. canonical 与兼容名只有一个存在时使用该值。
-2. 两者都存在时，trim 后必须完全相等，否则 loading 99% 前显式失败。
+2. 两者都存在时，trim 后必须完全相等，否则 Loading 启动 readiness 时立即失败。
 3. 空字符串不能退回另一名称或默认值。
 4. 同一个 query key 重复出现必须显式失败。
 5. normalized object 只保留一个 canonical 字段，不把两套命名传到后续层。
@@ -616,33 +614,66 @@ interface Game002LaunchConfig {
 - `serverUrl` query 继续显式失败；
 - query 只解析一次，provider 不读取 global location。
 
-### 12.2 99% 并行准备
+### 12.2 Loading 启动时开始 readiness
 
-strict parse 成功后并行启动：
+不能等 `onBeforeComplete` 才发起平台和 session 请求。Leo Loading UI 挂载、`loading.start()` 执行后，应立即开始：
 
 ```text
-Leo provider.prepare(signal)
-prepareGame002SkinConfig()
-prepareSlotGameLiveSession({ live })
+startGame002Readiness({ search, signal })
+  -> strict parse once
+  -> concurrently
+       Leo provider.prepare(signal)
+       prepareSlotGameLiveSession({ live })
 ```
 
-必须使用 failure-safe coordinator，而不是裸 `Promise.all()` 后忽略晚完成资源。三路任一失败时：
+同时由 `gameloading` 正常加载 CDN game resources。两组任务互相并行：平台/session 不参与资源进度权重，资源下载也不等待平台请求。
 
-1. abort provider 和其它可取消准备；
+game002 使用 Section 13 的通用 readiness hook。hook 内通过 dynamic import 加载轻量 `game002-bootstrap` module，不能让 `platformbootstrap-leo`、gameframeworks 或 React 回流到 initial Leo Loading chunk。完整 `game-entry` runtime module 仍作为 game resource 加载；bootstrap module 不得反向 import 完整 game entry，bundler 应把双方真实共享的依赖抽成可缓存 shared chunk。
+
+early readiness 必须使用 failure-safe coordinator，而不是裸 `Promise.all()` 后忽略晚完成对象：
+
+1. provider/session 任一路失败立即 abort 另一侧；
 2. destroy 已完成 platform handle；
-3. destroy 已完成 skin/value-presentation bundle；
-4. disconnect 已完成 live session；
-5. 等待所有分支 settle，避免 unhandled rejection；
-6. 抛回原始首个失败；
-7. loading 不进入 100%。
+3. disconnect 已完成 live session；
+4. 等待两侧 settle，避免 unhandled rejection；
+5. 抛回原始首个失败；
+6. `gameloading` 同时 abort 尚未完成的资源下载并进入 error。
 
-现有 `gameloading.onBeforeComplete` 已提供 `AbortSignal`。必须把它传到 `prepareGame002At99()`，并与本次 coordinator controller 正确联动；loading destroy 必须中止未完成的 launcher/translation/setting fetch。
+### 12.3 99% readiness join barrier
 
-### 12.3 ownership transfer
+资源进度到 99% 只表示 CDN resource loader 已完成。`onBeforeComplete` 此时接收 early readiness result，并完成最终组合：
 
 ```text
-prepareGame002At99
-  owns platform handle + skin bundle + live session
+required CDN resources exist and passed loader validation
++ platform snapshot ready
++ live session connected and enterGame completed
++ prepareGame002SkinConfig() succeeds
++ Leo Loading visual ready
+= allowed to publish 100%
+```
+
+如果平台/session 已提前完成，99% 检查可立即通过；如果尚未完成，UI 停在 preparing/99 等待。不得在 99% 才创建这些请求，也不得为了进度好看把未完成 readiness 当成已完成。
+
+skin/resource bundle 的构造和校验放在资源完成后的 `onBeforeComplete`，避免它与同一批 CDN resource 重复竞争；资源应已由浏览器 cache 命中。skin finalization 失败时必须 destroy platform handle、disconnect live session，并清理任何部分创建的 value-presentation bundle。
+
+建议职责拆分：
+
+```ts
+startGame002Readiness({ search, signal });
+finalizeGame002At99({ loadedResources, readinessResult, signal });
+enterGame002({ root, prepared });
+```
+
+不能继续用 `prepareGame002At99()` 同时承担“开始网络请求”和“99% 最终验收”，否则接口名称会掩盖真实时序。
+
+### 12.4 ownership transfer
+
+```text
+gameloading readiness phase
+  owns platform handle + live session
+
+finalizeGame002At99 success
+  prepared state owns platform handle + skin bundle + live session
 
 enterGame002 success
   entered game owns all three
@@ -654,9 +685,9 @@ entered game destroy
   destroys all owned resources exactly once
 ```
 
-handle 可以幂等 destroy，但 owner 仍必须唯一明确。不得让 loading root、prepared state 和 framework 同时暗中拥有同一对象。
+在 `onBeforeComplete` 成功返回前，readiness disposer 仍负责失败清理；成功返回就是明确的 ownership transfer。handle 可以幂等 destroy，但 owner 仍必须唯一明确。不得让 loading root、readiness task、prepared state 和 framework 同时暗中拥有同一对象。
 
-### 12.4 UI/presentation mapping
+### 12.5 UI/presentation mapping
 
 game002 从 platform snapshot 显式提取：
 
@@ -670,7 +701,7 @@ game002 从 platform snapshot 显式提取：
 
 translation 到 Leo UI 文案的 key mapping 属于 game002/Leo adapter；未知或缺失 key 使用 Task 121 当前静态文案，不能显示空白、`undefined` 或 raw key。fallback 必须逐字段明确，不允许整份远程对象直接扩散进 UI props。
 
-### 12.5 session 不迁移
+### 12.6 session 不迁移
 
 仍使用：
 
@@ -689,26 +720,67 @@ prepareSlotGameLiveSession({ live: config.live });
 
 Task 122 证明：接入 launcher 并不要求 netcore2。
 
-## 13. loading 与 bundle 边界
+## 13. gameloading readiness 合同
 
-生命周期固定为：
+### 13.1 公共接口
 
-```text
-0..99  Leo Loading 加载最小资源
-99%    query + launcher + translations + setting + skin + live ready
-100%   创建 framework / Leo HUD / Pixi game
+当前 `gameloading` 只有资源完成后调用的 `onBeforeComplete`，无法表达 early readiness。Task 122 增加可选、通用且与平台无关的 readiness hook，名称可按仓库风格微调：
+
+```ts
+export interface GameLoadingReadinessContext {
+  readonly signal: AbortSignal;
+}
+
+export interface GameLoadingReadiness<TResult> {
+  start(context: GameLoadingReadinessContext): Promise<TResult> | TResult;
+  dispose(result: TResult): Promise<void> | void;
+}
+
+export interface GameLoadingCompleteContext<TReadinessResult = void> {
+  readonly loadedResources: ReadonlyMap<string, unknown>;
+  readonly readinessResult: TReadinessResult;
+  readonly signal: AbortSignal;
+}
 ```
 
-约束：
+`GameLoadingOptions` 增加 optional `readiness`。不提供时，game003 和现有 consumer 行为、类型和时序保持不变。
 
-- provider 未完成不能进入 100%；
-- fatal error/abort 进入 loading error；
+### 13.2 controller 时序
+
+`loading.start()` 的顺序固定为：
+
+1. Loading UI 已在 controller 构造阶段挂载并显示 0%。
+2. 同一个 start turn 启动 `readiness.start({ signal })` 和 resource runner。
+3. 两个 promise 立即安装 rejection handler，禁止浮空 Promise。
+4. resource runner 独立推动 0..99；readiness 不伪造资源进度。
+5. 最后一个资源完成时立即发布 `preparing / 99`，即使 readiness 仍在等待网络。
+6. controller join resource result、readiness result 和 `ui.readyToComplete`。
+7. join 全部成功后调用 `onBeforeComplete({ loadedResources, readinessResult, signal })` 做最终检查和组合。
+8. `onBeforeComplete` 成功返回后才发布 `entering-game / 100` 并调用 `onEnterGame`。
+
+这意味着 99% 是 readiness barrier，不是请求 trigger。
+
+### 13.3 failure 与 dispose
+
+- readiness 提前失败：立即 abort resource runner、显示 error；
+- resource 提前失败：立即 abort readiness；
+- Loading UI visual readiness 失败：清理 resource/readiness result；
+- readiness 已 fulfilled、但其它分支或 `onBeforeComplete` 失败：调用 `dispose(result)` 恰好一次；
+- resource 失败后，不服从 abort 的 readiness 晚到 fulfilled：仍调用 disposer，不能泄漏；
+- cleanup failure 不替换原始 loading error；
+- `loading.destroy()` abort 两组任务并清理已完成 readiness result；
+- `onBeforeComplete` 成功后 ownership 转移给 prepare result，controller 不再自动 dispose；
+- `onEnterGame` 失败后的清理由 prepare result/game app 合同负责。
+
+### 13.4 bundle 边界
+
 - 不加 polling、固定 sleep 或 timeout 后继续；
 - 不修改 Leo Loading intro/exit timing；
 - React、gameframeworks、platformbootstrap-leo 不能被打进 initial loading chunk；
-- 通过 99% 阶段的 dynamic runtime boundary 加载 provider/game runtime；
+- readiness callback 使用 dynamic import，在 Loading UI 首帧可见后启动 bootstrap chunk；
 - provider module import 本身不能创建 fetch、DB、socket 或 DOM side effect；
-- release check 记录 initial loading chunk 的前后 gzip size。
+- game002 bootstrap 和 runtime module 各自只请求一次，共享 dependency 使用同一 chunk URL，不能打包两份等价代码；
+- release check 记录 initial loading chunk 与 bootstrap/runtime chunks 的前后 gzip size。
 
 ## 14. 为什么不能恢复 stateData
 
@@ -877,31 +949,55 @@ game003 全量回归用于证明 gameframeworks optional initial state 和新增
 - command 更新后 framework 仍是唯一 owner；
 - Task 120/121 lifecycle、round、destroy、error 测试全部通过。
 
-### 17.5 game002
+### 17.5 gameloading
+
+至少覆盖：
+
+1. UI 挂载后，readiness 与第一个 resource 在同一 start turn 启动；
+2. readiness pending 时 resource progress 正常推进；
+3. resources 先完成时发布 preparing/99，但不进入 100；
+4. readiness 先完成时继续等待 resources；
+5. visual readiness、resource、readiness 三者全部完成后才调用 `onBeforeComplete`；
+6. readiness early reject 立即 abort resources；
+7. resource early reject 立即 abort readiness；
+8. readiness fulfilled 后其它分支失败时 dispose 恰好一次；
+9. abort 后仍晚到 fulfilled 的 readiness result 被 dispose；
+10. `onBeforeComplete` failure dispose readiness result；
+11. `onBeforeComplete` success 后 ownership transfer，不被 controller 提前 dispose；
+12. destroy、cleanup error 和多实例隔离；
+13. 不配置 readiness 的既有 consumer 时序完全不变。
+
+### 17.6 game002
 
 至少覆盖：
 
 1. query 只解析一次；
 2. canonical 与兼容 URL 都能生成同一 normalized config；
 3. `lines=30` 和 fixed server 不变；
-4. provider/skin/session 三路并行；
-5. 三路失败清理矩阵；
-6. loading abort 传播；
-7. success ownership transfer；
-8. enter failure cleanup；
-9. entered destroy cleanup；
-10. session 只创建一次；
-11. launcher `gameServerApi` 不覆盖 live server；
-12. credential 不进 platform snapshot/framework/UI；
-13. initial preference 注入；
-14. translation label mapping/fallback；
-15. fun mode setting path；
-16. replay 明确 unsupported；
-17. spin payload 不变；
-18. initial loading chunk 不含 React/framework/provider runtime；
-19. release closure 正确。
+4. provider/session readiness 在 CDN resources 完成前已经启动；
+5. provider/session 任一 early failure 的清理；
+6. CDN resource failure abort 并清理已完成 readiness；
+7. 资源到 99 后等待 pending provider/session；
+8. provider/session 提前完成后仍等待 resources；
+9. skin finalization 只在资源完成后的 barrier 执行；
+10. skin finalization failure 清理 platform/session/bundle；
+11. loading abort 传播；
+12. barrier success ownership transfer；
+13. enter failure cleanup；
+14. entered destroy cleanup；
+15. session 只创建一次；
+16. launcher `gameServerApi` 不覆盖 live server；
+17. credential 不进 platform snapshot/framework/UI；
+18. initial preference 注入；
+19. translation label mapping/fallback；
+20. fun mode setting path；
+21. replay 明确 unsupported；
+22. spin payload 不变；
+23. initial loading chunk 不含 React/framework/provider runtime；
+24. bootstrap/runtime 各请求一次，shared chunk URL 去重；
+25. release closure 正确。
 
-### 17.6 game003
+### 17.7 game003
 
 - 现有测试全部通过；
 - 无 platformbootstrap dependency/import；
@@ -996,7 +1092,7 @@ git status --short
 - test 分支参数审计结果；
 - 两个 package 的测试数量；
 - launcher/translation/setting fixture 覆盖；
-- game002 三路并行失败清理矩阵；
+- resource/readiness 并行时序和 failure/dispose 矩阵；
 - session/WebSocket 创建次数；
 - credential 泄漏检查；
 - game002/game003 release check；
@@ -1009,8 +1105,8 @@ git status --short
 自动化通过后，使用合法 Leo canonical URL 验证 game002：
 
 1. Leo Loading 与 Task 121 一致；
-2. launcher/config/translation/setting 在 99% 完成后才进入游戏；
-3. Network 中 launcher config 参数准确且正确编码；
+2. Network waterfall 显示 CDN resources 与 launcher/session 请求发生重叠，而不是 99% 后才开始；
+3. CDN resources、launcher/config/translation/setting、WebSocket 和 visual readiness 全部完成后才从 99 进入 100；
 4. setting request 不在 console/error 泄漏 token；
 5. 只有一条 WebSocket；
 6. WebSocket 仍连接固定 game002 server；
@@ -1058,19 +1154,20 @@ Task 122 不处理：
 7. credential 不进入 snapshot/error/warning/log/storage/UI/framework；
 8. 未引入 netcore2、stateData、event bridge、global store/container；
 9. gameframeworks 支持 optional initial muted/fast/auto，默认行为不变；
-10. game002 在 99% gate 并行准备 provider/skin/session；
+10. game002 在 Loading UI 可见后并行启动 CDN resources 与 provider/session，99% 仅做 readiness join；
 11. launcher config/common translation fatal，game translation/setting fallback 明确可观测；
 12. live session 仍由当前 gameframeworks helper 创建且只有一次；
 13. fixed server、lines=30 和 spin request 不变；
-14. prepared/entered/destroy ownership 明确，无资源泄漏；
+14. gameloading readiness dispose 与 prepared/entered/destroy ownership 明确，无资源泄漏；
 15. game002 Leo UI 初始状态和 translation mapping 正确；
 16. replay 在 transport 迁移前明确 unsupported；
 17. game003 不接入 provider 且完整回归通过；
-18. initial loading closure 无 React/framework/provider runtime 污染；
-19. 所有 format/lint/typecheck/test/build/release checks 通过；
-20. lockfile 只有预期 workspace 变化；
-21. 中文执行报告完整记录环境、设计、测试、bundle 和剩余风险；
-22. 浏览器验收完成，或报告明确列出需用户完成的人工项目。
+18. gameloading generic readiness 时序、early failure 和 late fulfillment cleanup 均有测试；
+19. initial loading closure 无 React/framework/provider runtime 污染；
+20. 所有 format/lint/typecheck/test/build/release checks 通过；
+21. lockfile 只有预期 workspace 变化；
+22. 中文执行报告完整记录环境、设计、测试、bundle 和剩余风险；
+23. 浏览器验收完成，或报告明确列出需用户完成的人工项目。
 
 ## 23. 后续接入点
 
