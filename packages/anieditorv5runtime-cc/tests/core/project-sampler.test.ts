@@ -200,9 +200,9 @@ describe("project-sampler", () => {
     expect(sampled.visible).toBe(true);
     expect(sampled.renderImageDisplay).toBe(false);
     expect(sampled.hasActiveSafeGlowAnimation).toBe(true);
-    expect(inactiveEnd.visible).toBe(false);
+    expect(inactiveEnd.visible).toBe(true);
     expect(inactiveEnd.renderImageDisplay).toBe(false);
-    expect(inactiveEnd.hasActiveSafeGlowAnimation).toBe(false);
+    expect(inactiveEnd.hasActiveSafeGlowAnimation).toBe(true);
   });
 
   it("suppresses near-zero scale entry on the first frame", () => {

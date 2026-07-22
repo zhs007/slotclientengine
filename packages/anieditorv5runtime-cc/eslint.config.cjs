@@ -6,7 +6,12 @@ const eslintConfigPrettier = require("eslint-config-prettier");
 
 module.exports = [
   {
-    ignores: ["dist/**", "coverage/**", "node_modules/**"],
+    ignores: [
+      "dist/**",
+      "coverage/**",
+      "node_modules/**",
+      "standalone/anieditorv5runtime-cc.ts",
+    ],
   },
   {
     files: ["**/*.cjs"],

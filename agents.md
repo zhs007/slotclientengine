@@ -96,6 +96,7 @@
 - 更新 `packages/anieditorv5runtime-cc` 的 public runtime 行为时，必须同步模块化源码、`standalone/anieditorv5runtime-cc.ts`、`scripts/check-standalone.mjs`、standalone 测试和 `standalone.zip`，避免 Cocos 主要交付面与 workspace package 漂移。
 - `packages/anieditorv5runtime-cc` 的 `requestSegmentedPlaybackEnd({ forceStopParticles: true })` 必须等 segmented ending 播放到尾帧后才清空粒子并跳过 drain；调用瞬间不能隐藏当前可见粒子，单独立即清粒子只能走 `forceStopAllParticles()`。
 - `packages/anieditorv5runtime-cc` 支持的 VNI 能力必须通过 Cocos public driver / public player API 落地：text layer 替换走 `attach*ToTextLayer`，`legacy_alpha` mask 走 Cocos mask adapter，`precompose_light_alpha` 在 Cocos runtime 显式失败；不要在 standalone 或 Cocos runtime 中复制 `vnicore` 私有 Pixi display tree、precompose cache 或隐藏 renderer。
+- `packages/anieditorv5runtime-cc` 已同步至 VNI_0.095：Cocos-compatible runtime 支持 sequence、10 类 deterministic effect、multi_move、basic tracks、bounce_jump、新/legacy rotate pressure visualRotation 和 card_carousel_3d；standalone 由 `scripts/build-standalone.mjs` 从模块化源码生成，禁止手改。wave/card 切片必须复用 runtime-owned SpriteFrame 并在 destroy 释放，rotated 或缺 texture/rect/originalSize 的切片源显式失败；不得引入 bundle manifest/profile selector、Pixi/DOM/URL loader 或 precompose fallback。
 - Prettier 校验不应覆盖 `dist/`、`coverage/` 等生成物；如果 package 脚本在子目录内执行 `prettier --check .`，需要在对应 package 放置 `.prettierignore` 保持一致。
 - 若依赖安装失败，可先执行：
   `export http_proxy=http://127.0.0.1:1087;export https_proxy=http://127.0.0.1:1087;`

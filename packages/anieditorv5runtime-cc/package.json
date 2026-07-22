@@ -30,6 +30,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint .",
+    "standalone:build": "node scripts/build-standalone.mjs",
     "standalone:check": "node scripts/check-standalone.mjs",
     "test": "vitest run --coverage",
     "typecheck:standalone": "tsc -p tsconfig.standalone.json --noEmit",

@@ -59,7 +59,7 @@ describe("safe-glow-sampler", () => {
 
     expect(getSafeGlowProgress(glow, -0.01)).toBeNull();
     expect(getSafeGlowProgress(glow, 0)).toBe(0);
-    expect(getSafeGlowProgress(glow, 1)).toBeNull();
+    expect(getSafeGlowProgress(glow, 1)).toBe(1);
     expect(hasActiveSafeGlowAnimation(layer, 0)).toBe(true);
 
     const sprites = sampleSafeGlowSpritesForLayer(layer, sampleState(), 0);

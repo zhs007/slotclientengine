@@ -39,6 +39,7 @@ import {
   validateV5GProject,
 } from "../../src/core/validation";
 import { sampleProjectAtTime } from "../../src/core/project-sampler";
+import { getSequenceFrameAssetId } from "../../src/core/sequence-layer";
 import { sampleSafeGlowSpritesForLayer } from "../../src/core/safe-glow-sampler";
 import { sampleChaserLightSpritesForLayer } from "../../src/core/chaser-light-sampler";
 import * as standalone from "../../standalone/anieditorv5runtime-cc";
@@ -124,6 +125,60 @@ describe("standalone runtime parity", () => {
         anchorY: 0.5,
       }),
     );
+  });
+
+  it("matches VNI_0.095 sequence, basic track, and multi_move sampling", () => {
+    const project = assertV5GProject(projectData);
+    project.schemaVersion = "VNI_0.095";
+    project.editor.version = "VNI_0.095";
+    project.stage.duration = 1;
+    const layer = project.layers[0];
+    layer.type = "sequence";
+    layer.assetId = null;
+    layer.sequence = {
+      frameAssetIds: [project.assets[0].id, project.assets[1].id],
+      cycleDuration: 1,
+      loop: true,
+    };
+    layer.basicAnimation = {
+      opacity: { enabled: false, points: [] },
+      positionX: {
+        enabled: true,
+        points: [
+          { id: "x0", time: 0, value: 0, easing: "linear" },
+          { id: "x1", time: 1, value: 50, easing: "linear" },
+        ],
+      },
+      positionY: { enabled: false, points: [] },
+      scaleX: { enabled: false, points: [] },
+      scaleY: { enabled: false, points: [] },
+      rotation: { enabled: false, points: [] },
+    };
+    layer.animations = [
+      {
+        id: "multi",
+        type: "multi_move",
+        startTime: 0,
+        duration: 1,
+        enabled: true,
+        seed: 4,
+        params: {
+          pointsJson: JSON.stringify([
+            { x: 0, y: 0, time: 0, easing: "linear" },
+            { x: 100, y: -20, time: 1, easing: "easeOutQuad" },
+          ]),
+        },
+      },
+    ];
+
+    expect(standalone.getSequenceFrameAssetId(layer, 0.75)).toBe(
+      getSequenceFrameAssetId(layer, 0.75),
+    );
+    for (const time of [0, 0.25, 0.5, 1]) {
+      expect(
+        comparableSample(standalone.sampleProjectAtTime(project, time)),
+      ).toEqual(comparableSample(sampleProjectAtTime(project, time)));
+    }
   });
 
   it("matches modular layer group helper behavior", () => {
@@ -568,13 +623,17 @@ function comparableSample(sample: SampledProjectState): SampledProjectState {
     layers: sample.layers.map((layer) => ({
       layerId: layer.layerId,
       transform: layer.transform,
+      visualRotation: layer.visualRotation,
       opacity: layer.opacity,
       baseOpacity: layer.baseOpacity,
       visible: layer.visible,
       renderImageDisplay: layer.renderImageDisplay,
       hasActiveParticleAnimation: layer.hasActiveParticleAnimation,
       hasActiveChaserLightAnimation: layer.hasActiveChaserLightAnimation,
+      hasActiveRenderEffect: layer.hasActiveRenderEffect,
+      hasActiveDeterministicEffect: layer.hasActiveDeterministicEffect,
       hasActiveSafeGlowAnimation: layer.hasActiveSafeGlowAnimation,
+      hasActiveCardCarousel3D: layer.hasActiveCardCarousel3D,
       blendMode: layer.blendMode,
     })),
   };

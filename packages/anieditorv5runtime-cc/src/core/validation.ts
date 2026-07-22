@@ -7,17 +7,24 @@ import {
   getVNIProjectRenderGroupOrder,
   normalizeVNIProjectLayerGroups,
 } from "./layer-groups.js";
+import { parseMultiMovePointsJson } from "./multi-move.js";
+import { getCardCarousel3DSyncedDuration } from "./card-carousel-3d.js";
 import type {
   V5GAnimationConfig,
   V5GAnimationParamValue,
   V5GAnimationType,
   V5GAssetConfig,
+  V5GBasicAnimationConfig,
+  V5GBasicAnimationEasing,
+  V5GBasicAnimationTrackConfig,
   V5GBlendMode,
   V5GExportProfileConfig,
   V5GLayerConfig,
   V5GLayerGroupConfig,
   V5GLayerMaskConfig,
+  V5GMaskCompositeMode,
   V5GProjectConfig,
+  V5GSequenceConfig,
   V5GTransformConfig,
 } from "./types.js";
 
@@ -31,20 +38,36 @@ const SUPPORTED_BLEND_MODES: readonly V5GBlendMode[] = [
   "lighten",
 ];
 
+const SUPPORTED_MASK_COMPOSITE_MODES: readonly V5GMaskCompositeMode[] = [
+  "precompose_light_alpha",
+  "legacy_alpha",
+];
+
 const REQUIRED_NUMERIC_PARAMS: Readonly<
   Record<V5GAnimationType, readonly string[]>
 > = {
   idle: [],
   move: ["fromX", "fromY", "toX", "toY"],
+  multi_move: [],
   fade: ["fromOpacity", "toOpacity"],
   scale_up: ["fromScaleX", "fromScaleY", "toScaleX", "toScaleY"],
   scale_down: ["fromScaleX", "fromScaleY", "toScaleX", "toScaleY"],
   scale_in: ["fromScale", "toScale"],
   scale_out: ["fromScale", "toScale"],
   pop: ["peakScale", "settleScale", "peakAt"],
+  bounce_jump: [
+    "height",
+    "anticipationRatio",
+    "squash",
+    "stretch",
+    "topSquash",
+    "bounceCount",
+    "bounceDecay",
+    "landSquash",
+  ],
   shake: ["amplitudeX", "amplitudeY", "cycles"],
   blink: ["minOpacity", "maxOpacity", "blinks", "endOpacity"],
-  rotate: ["fromRotation", "toRotation"],
+  rotate: [],
   slide_in: ["fromX", "fromY", "toX", "toY"],
   slide_out: ["fromX", "fromY", "toX", "toY"],
   bounce_in: ["fromScale", "toScale", "overshoot"],
@@ -130,6 +153,144 @@ const REQUIRED_NUMERIC_PARAMS: Readonly<
     "lightSize",
     "dimAlpha",
   ],
+  gather_particles: [
+    "count",
+    "size",
+    "sourceOpacity",
+    "spawnRadius",
+    "spawnRatio",
+    "targetX",
+    "targetY",
+    "travelMode",
+    "curve",
+    "spiralTurns",
+    "staggerRatio",
+    "trailCount",
+    "trailSpacing",
+    "trailFade",
+    "vanishMode",
+    "vanishRatio",
+    "flashScale",
+    "flashIntensity",
+  ],
+  smoke_mist: [
+    "count",
+    "size",
+    "sourceOpacity",
+    "spawnRadius",
+    "spread",
+    "windX",
+    "windY",
+    "swirl",
+    "startAlpha",
+    "fadePower",
+    "grow",
+    "sizeRandom",
+    "rotationSpeed",
+  ],
+  energy_ring: [
+    "ringCount",
+    "startScale",
+    "endScale",
+    "sourceOpacity",
+    "alpha",
+    "stagger",
+    "rotation",
+    "pulse",
+    "vanishMode",
+  ],
+  slash_light: [
+    "mode",
+    "angle",
+    "travel",
+    "lengthScale",
+    "widthScale",
+    "sourceOpacity",
+    "flashAlpha",
+    "startScale",
+    "fadeRatio",
+    "curve",
+  ],
+  flame_flicker: [
+    "count",
+    "emitterWidth",
+    "height",
+    "direction",
+    "spreadAngle",
+    "vanishSpread",
+    "lengthRandom",
+    "size",
+    "sway",
+    "turbulence",
+    "grow",
+    "sourceOpacity",
+    "alpha",
+    "flicker",
+  ],
+  wave_band: [
+    "mode",
+    "count",
+    "length",
+    "amplitude",
+    "frequency",
+    "speed",
+    "direction",
+    "size",
+    "alpha",
+    "trailFade",
+  ],
+  wave_distort: [
+    "rows",
+    "amplitude",
+    "frequency",
+    "phaseOffset",
+    "verticalBob",
+    "alpha",
+    "edgeFeather",
+  ],
+  speed_lines: [
+    "mode",
+    "count",
+    "radius",
+    "length",
+    "speed",
+    "direction",
+    "spreadAngle",
+    "lineWidth",
+    "alpha",
+  ],
+  drift_fall: [
+    "count",
+    "areaWidth",
+    "areaHeight",
+    "wind",
+    "swayAmplitude",
+    "swayFrequency",
+    "size",
+    "sizeRandom",
+    "rotationSpeed",
+    "alpha",
+  ],
+  path_particles: [
+    "pathMode",
+    "count",
+    "size",
+    "endX",
+    "endY",
+    "curve",
+    "amplitude",
+    "frequency",
+    "radiusStart",
+    "radiusEnd",
+    "turns",
+    "speed",
+    "stagger",
+    "oneShotStagger",
+    "trailCount",
+    "trailSpacing",
+    "trailFade",
+    "alpha",
+  ],
   shatter: [
     "count",
     "pieceSize",
@@ -151,6 +312,41 @@ const REQUIRED_NUMERIC_PARAMS: Readonly<
     "toX",
     "toY",
   ],
+  card_carousel_3d: [
+    "cardCount",
+    "targetIndex",
+    "rounds",
+    "direction",
+    "introDuration",
+    "introSpeed",
+    "revealDirection",
+    "revealStagger",
+    "revealOffsetX",
+    "revealScaleFrom",
+    "demoIdleDuration",
+    "idleSpeed",
+    "fastDuration",
+    "fastSpeed",
+    "accelRatio",
+    "stopDuration",
+    "holdDuration",
+    "stopOvershoot",
+    "finalPop",
+    "finalGlow",
+    "radius",
+    "cardSpacing",
+    "perspective",
+    "slices",
+    "visibleRange",
+    "cardSize",
+    "centerScale",
+    "sideScale",
+    "sideAlpha",
+    "shadeStrength",
+    "curve",
+    "tilt",
+    "sourceOpacity",
+  ],
 };
 
 const OPTIONAL_BOOLEAN_PARAMS: Readonly<
@@ -165,10 +361,19 @@ const OPTIONAL_BOOLEAN_PARAMS: Readonly<
   particles: ["fadeOut"],
   particle_stream: ["fadeOut", "rotateParticles", "randomRotation"],
   chaser_light: ["keepOriginal"],
+  energy_ring: ["additive"],
+  slash_light: ["additive"],
+  flame_flicker: ["additive"],
+  wave_band: ["keepOriginal", "rotateToWave"],
+  wave_distort: ["keepOriginal"],
+  speed_lines: ["keepOriginal", "fadeOut"],
+  drift_fall: ["keepOriginal", "fadeEdges"],
+  path_particles: ["keepOriginal", "rotateToPath", "fadeEnds", "loop"],
   particle_wall: ["fadeOut"],
   shatter: ["fadeOut"],
   glow: ["keepOriginal"],
   safe_glow: ["keepOriginal"],
+  card_carousel_3d: ["hideBack", "keepOriginal"],
 };
 
 const OPTIONAL_NUMERIC_PARAMS: Readonly<
@@ -183,6 +388,9 @@ const OPTIONAL_NUMERIC_PARAMS: Readonly<
     "randomRotationDegrees",
     "spinSpeed",
   ],
+  flame_flicker: ["speed", "cycles"],
+  wave_distort: ["speed", "cycles"],
+  drift_fall: ["fallSpeed", "cycles"],
 };
 
 export interface ValidateCocosV5GProjectOptions {
@@ -213,6 +421,13 @@ export function assertV5GProject(value: unknown): V5GProjectConfig {
   );
 
   const projectName = assertString(project.name, "project.name");
+  const maskCompositeMode =
+    project.maskCompositeMode === undefined
+      ? undefined
+      : assertMaskCompositeMode(
+          project.maskCompositeMode,
+          "project.maskCompositeMode",
+        );
   const exportProfile =
     project.exportProfile === undefined
       ? undefined
@@ -259,6 +474,7 @@ export function assertV5GProject(value: unknown): V5GProjectConfig {
       version: engineTargetVersion,
     },
     name: projectName,
+    maskCompositeMode,
     exportProfile,
     stage: {
       width: stageWidth,
@@ -280,7 +496,11 @@ export function validateV5GProject(project: V5GProjectConfig): void {
       `Unsupported V5G schemaVersion: ${project.schemaVersion}. Expected V5G_0.x or VNI_0.x.`,
     );
   }
-  if (!hasStringValue(SUPPORTED_EDITOR_NAMES, project.editor.name)) {
+  if (
+    SUPPORTED_EDITOR_NAMES.indexOf(
+      project.editor.name as (typeof SUPPORTED_EDITOR_NAMES)[number],
+    ) < 0
+  ) {
     throw new Error(`Unsupported V5G editor: ${project.editor.name}.`);
   }
   if (project.engineTarget.name !== "cocos_creator") {
@@ -305,6 +525,12 @@ export function validateV5GProject(project: V5GProjectConfig): void {
   }
   if (project.exportProfile) {
     validateExportProfile(project.exportProfile, "project.exportProfile");
+  }
+  if (project.maskCompositeMode !== undefined) {
+    validateMaskCompositeMode(
+      project.maskCompositeMode,
+      "project.maskCompositeMode",
+    );
   }
   validateLayerGroups(project);
 
@@ -335,11 +561,14 @@ export function validateV5GProject(project: V5GProjectConfig): void {
     }
     layerIds.add(layer.id);
     assertSupportedLayer(layer, assetsById);
+    validateBasicAnimation(layer, project.stage.duration);
     for (const animation of layer.animations) {
       assertSupportedAnimation(animation, layer.id, project.stage.duration);
+      validateCardCarouselLayerContract(animation, layer);
     }
   }
   validateLayerMasks(project, layerIds);
+
   getVNIProjectRenderGroupOrder(project);
 }
 
@@ -354,11 +583,13 @@ export function validateCocosV5GProject(
       `Unsupported Cocos Creator version: ${project.engineTarget.version}. Expected ${expectedVersion}.`,
     );
   }
+  if (project.maskCompositeMode === "precompose_light_alpha") {
+    throw new Error(
+      'Cocos runtime cannot support project.maskCompositeMode "precompose_light_alpha" through the copyable standalone runtime. Export a Cocos-compatible project with "legacy_alpha".',
+    );
+  }
 
   for (const layer of project.layers) {
-    if (layer.type !== "image" && layer.type !== "text") {
-      throw new Error(`Unsupported Cocos V5G layer type: ${layer.type}.`);
-    }
     if (
       layer.mask?.enabled &&
       layer.mask.compositeMode === "precompose_light_alpha"
@@ -397,10 +628,19 @@ export function assertSupportedLayer(
   if (layer.type === "group") {
     throw new Error("Unsupported V5G layer type: group");
   }
-  if (layer.type !== "image" && layer.type !== "text") {
+  if (
+    layer.type !== "image" &&
+    layer.type !== "text" &&
+    layer.type !== "sequence"
+  ) {
     throw new Error(`Unsupported V5G layer type: ${layer.type}.`);
   }
   if (layer.type === "image") {
+    if (layer.sequence !== undefined) {
+      throw new Error(
+        `V5G image layer "${layer.id}" must not include sequence config.`,
+      );
+    }
     if (!layer.assetId) {
       throw new Error(`V5G image layer "${layer.id}" requires assetId.`);
     }
@@ -416,17 +656,347 @@ export function assertSupportedLayer(
       );
     }
   }
+  if (layer.type === "sequence") {
+    if (layer.assetId !== null) {
+      throw new Error(
+        `V5G sequence layer "${layer.id}" must not reference assetId.`,
+      );
+    }
+    if (!layer.sequence) {
+      throw new Error(
+        `V5G sequence layer "${layer.id}" requires sequence config.`,
+      );
+    }
+    validateSequenceLayerConfig(layer, assetsById);
+  }
   if (layer.type === "text" && layer.assetId !== null) {
     throw new Error(`V5G text layer "${layer.id}" must not reference assetId.`);
+  }
+  if (layer.type === "text" && layer.sequence !== undefined) {
+    throw new Error(
+      `V5G text layer "${layer.id}" must not include sequence config.`,
+    );
   }
   if ((layer.keyframes ?? []).length > 0) {
     throw new Error(`Unsupported V5G keyframes on layer "${layer.id}".`);
   }
   validateTransform(layer.transform, `layer "${layer.id}" transform`);
   assertFiniteRange(layer.opacity, 0, 1, `layer "${layer.id}" opacity`);
-  if (!hasStringValue(SUPPORTED_BLEND_MODES, layer.blendMode)) {
+  if (SUPPORTED_BLEND_MODES.indexOf(layer.blendMode) < 0) {
     throw new Error(`Unsupported V5G blendMode: ${layer.blendMode}.`);
   }
+}
+
+function validateSequenceLayerConfig(
+  layer: V5GLayerConfig,
+  assetsById: ReadonlyMap<string, V5GAssetConfig>,
+): void {
+  const sequence = layer.sequence;
+  if (!sequence) {
+    throw new Error(
+      `V5G sequence layer "${layer.id}" requires sequence config.`,
+    );
+  }
+  if (!Array.isArray(sequence.frameAssetIds)) {
+    throw new Error(
+      `V5G sequence layer "${layer.id}" frameAssetIds must be an array.`,
+    );
+  }
+  if (sequence.frameAssetIds.length === 0) {
+    throw new Error(
+      `V5G sequence layer "${layer.id}" frameAssetIds must be non-empty.`,
+    );
+  }
+  for (const [index, assetId] of sequence.frameAssetIds.entries()) {
+    if (typeof assetId !== "string" || assetId.length === 0) {
+      throw new Error(
+        `V5G sequence layer "${layer.id}" frameAssetIds[${index}] must be a non-empty string.`,
+      );
+    }
+    const asset = assetsById.get(assetId);
+    if (!asset) {
+      throw new Error(
+        `V5G sequence layer "${layer.id}" references missing frame asset "${assetId}".`,
+      );
+    }
+    if (asset.type !== "image") {
+      throw new Error(
+        `V5G sequence layer "${layer.id}" frame asset "${asset.id}" must be image.`,
+      );
+    }
+  }
+  assertPositiveFinite(
+    sequence.cycleDuration,
+    `sequence layer "${layer.id}" cycleDuration`,
+  );
+  if (typeof sequence.loop !== "boolean") {
+    throw new Error(`V5G sequence layer "${layer.id}" loop must be boolean.`);
+  }
+}
+
+export function assertSupportedAnimation(
+  animation: V5GAnimationConfig,
+  layerId = "unknown",
+  stageDuration = Number.POSITIVE_INFINITY,
+): void {
+  if (!isSupportedAnimationType(animation.type)) {
+    throw new Error(`Unsupported V5G animation type: ${animation.type}`);
+  }
+  assertFiniteRange(
+    animation.startTime,
+    0,
+    Number.POSITIVE_INFINITY,
+    `animation "${animation.id}" startTime`,
+  );
+  assertPositiveFinite(
+    animation.duration,
+    `animation "${animation.id}" duration`,
+  );
+  if (animation.startTime + animation.duration > stageDuration) {
+    throw new Error(
+      `V5G animation "${animation.id}" on layer "${layerId}" exceeds stage.duration.`,
+    );
+  }
+  const easing = animation.params.easing;
+  if (easing !== undefined) {
+    if (typeof easing !== "string" || !isSupportedEasing(easing)) {
+      throw new Error(`Unsupported V5G easing: ${String(easing)}`);
+    }
+  } else {
+    getDefaultEasing(animation.type);
+  }
+
+  for (const paramKey of REQUIRED_NUMERIC_PARAMS[animation.type]) {
+    const value = animation.params[paramKey];
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error(
+        `V5G animation "${animation.id}" ${animation.type} requires numeric param "${paramKey}".`,
+      );
+    }
+  }
+  if (animation.type === "rotate") validateRotateContract(animation);
+  if (animation.type === "multi_move") {
+    parseMultiMovePointsJson(
+      animation.params.pointsJson,
+      animation.duration,
+      `V5G animation "${animation.id}" multi_move pointsJson`,
+      isSupportedEasing,
+    );
+  }
+  assertOptionalNumber(animation, "baseX");
+  assertOptionalNumber(animation, "baseY");
+  for (const paramKey of OPTIONAL_NUMERIC_PARAMS[animation.type] ?? []) {
+    assertOptionalNumber(animation, paramKey);
+  }
+  for (const paramKey of OPTIONAL_BOOLEAN_PARAMS[animation.type] ?? []) {
+    assertOptionalBoolean(animation, paramKey);
+  }
+  validateAnimationParamRanges(animation);
+}
+
+function validateAnimationParamRanges(animation: V5GAnimationConfig): void {
+  if (animation.type === "bounce_jump") {
+    assertAnimationParamRange(animation, "height", 0, 5000);
+    assertAnimationParamRange(animation, "anticipationRatio", 0.02, 0.6);
+    assertAnimationParamRange(animation, "squash", 0, 0.9);
+    assertAnimationParamRange(animation, "stretch", 0, 0.9);
+    assertAnimationParamRange(animation, "topSquash", 0, 0.6);
+    assertAnimationParamRange(animation, "bounceCount", 0, 8);
+    if (
+      !Number.isInteger(getNumericParamForValidation(animation, "bounceCount"))
+    ) {
+      throw new Error(
+        `animation "${animation.id}" bounce_jump bounceCount must be an integer.`,
+      );
+    }
+    assertAnimationParamRange(animation, "bounceDecay", 0.05, 0.95);
+    assertAnimationParamRange(animation, "landSquash", 0, 0.9);
+  }
+  if (
+    animation.type === "rotate" &&
+    Object.prototype.hasOwnProperty.call(animation.params, "turns")
+  ) {
+    assertAnimationParamRange(animation, "turns", -120, 120);
+    assertAnimationParamRange(animation, "accelRatio", 0, 0.8);
+    assertAnimationParamRange(animation, "decelRatio", 0, 0.8);
+    assertAnimationParamRange(animation, "pressure", 0, 0.8);
+    assertAnimationParamRange(animation, "pressureStretch", 0, 1);
+    const direction = getNumericParamForValidation(animation, "direction");
+    if (direction !== 1 && direction !== -1) {
+      throw new Error(
+        `animation "${animation.id}" rotate direction must be 1 or -1.`,
+      );
+    }
+  }
+  if (animation.type === "chaser_light") {
+    assertFiniteRange(
+      getNumericParamForValidation(animation, "totalCount"),
+      1,
+      200,
+      `animation "${animation.id}" chaser_light totalCount`,
+    );
+  }
+  if (animation.type === "card_carousel_3d") {
+    validateCardCarouselContract(animation);
+  }
+}
+
+function validateCardCarouselContract(animation: V5GAnimationConfig): void {
+  const previewMode = animation.params.phasePreviewMode;
+  if (
+    typeof previewMode !== "string" ||
+    ["full_demo", "intro", "idle", "fast", "stop", "hold"].indexOf(
+      previewMode,
+    ) < 0
+  ) {
+    throw new Error(
+      `animation "${animation.id}" card_carousel_3d phasePreviewMode is unsupported: ${String(previewMode)}.`,
+    );
+  }
+  for (const key of ["hideBack", "keepOriginal"] as const) {
+    if (typeof animation.params[key] !== "boolean") {
+      throw new Error(
+        `animation "${animation.id}" card_carousel_3d ${key} must be boolean.`,
+      );
+    }
+  }
+  const ranges = {
+    cardCount: [2, 30],
+    targetIndex: [0, 29],
+    rounds: [0, 20],
+    direction: [-1, 1],
+    introDuration: [0.1, 10],
+    introSpeed: [0, 8],
+    revealDirection: [0, 2],
+    revealStagger: [0, 2],
+    revealOffsetX: [-1000, 1000],
+    revealScaleFrom: [0.05, 2],
+    demoIdleDuration: [0.1, 20],
+    idleSpeed: [0, 8],
+    fastDuration: [0.1, 10],
+    fastSpeed: [0, 20],
+    accelRatio: [0, 0.9],
+    stopDuration: [0.1, 10],
+    holdDuration: [0, 20],
+    stopOvershoot: [0, 2],
+    finalPop: [0, 1],
+    finalGlow: [0, 1],
+    radius: [20, 3000],
+    cardSpacing: [0.2, 3],
+    perspective: [0, 1],
+    slices: [2, 48],
+    visibleRange: [0.1, 1],
+    cardSize: [20, 1200],
+    centerScale: [0.1, 5],
+    sideScale: [0.05, 3],
+    sideAlpha: [0, 1],
+    shadeStrength: [0, 0.9],
+    curve: [0, 1],
+    tilt: [0, 45],
+    sourceOpacity: [0, 1],
+  } as const;
+  for (const [key, [min, max]] of Object.entries(ranges)) {
+    assertAnimationParamRange(animation, key, min, max);
+  }
+  for (const key of [
+    "cardCount",
+    "targetIndex",
+    "revealDirection",
+    "slices",
+  ] as const) {
+    if (!Number.isInteger(getNumericParamForValidation(animation, key))) {
+      throw new Error(
+        `animation "${animation.id}" card_carousel_3d ${key} must be an integer.`,
+      );
+    }
+  }
+  const direction = getNumericParamForValidation(animation, "direction");
+  if (direction !== 1 && direction !== -1) {
+    throw new Error(
+      `animation "${animation.id}" card_carousel_3d direction must be 1 or -1.`,
+    );
+  }
+  const revealDirection = getNumericParamForValidation(
+    animation,
+    "revealDirection",
+  );
+  if ([0, 1, 2].indexOf(revealDirection) < 0) {
+    throw new Error(
+      `animation "${animation.id}" card_carousel_3d revealDirection must be 0, 1, or 2.`,
+    );
+  }
+  const cardCount = getNumericParamForValidation(animation, "cardCount");
+  const targetIndex = getNumericParamForValidation(animation, "targetIndex");
+  if (targetIndex >= cardCount) {
+    throw new Error(
+      `animation "${animation.id}" card_carousel_3d targetIndex must be less than cardCount.`,
+    );
+  }
+  const expectedDuration = getCardCarousel3DSyncedDuration(animation);
+  if (Math.abs(animation.duration - expectedDuration) > 0.0001) {
+    throw new Error(
+      `animation "${animation.id}" card_carousel_3d duration must be ${expectedDuration} for phasePreviewMode ${previewMode}; got ${animation.duration}.`,
+    );
+  }
+}
+
+function validateCardCarouselLayerContract(
+  animation: V5GAnimationConfig,
+  layer: V5GLayerConfig,
+): void {
+  if (animation.type !== "card_carousel_3d") return;
+  if (layer.type !== "image" && layer.type !== "sequence") {
+    throw new Error(
+      `VNI card_carousel_3d animation "${animation.id}" requires an image or sequence layer; got ${layer.type}.`,
+    );
+  }
+}
+
+function validateRotateContract(animation: V5GAnimationConfig): void {
+  const legacyKeys = ["fromRotation", "toRotation"] as const;
+  const currentKeys = [
+    "turns",
+    "direction",
+    "accelRatio",
+    "decelRatio",
+    "pressure",
+    "pressureStretch",
+  ] as const;
+  const legacyCount = legacyKeys.filter((key) =>
+    Object.prototype.hasOwnProperty.call(animation.params, key),
+  ).length;
+  const currentCount = currentKeys.filter((key) =>
+    Object.prototype.hasOwnProperty.call(animation.params, key),
+  ).length;
+  const validLegacy = legacyCount === legacyKeys.length && currentCount === 0;
+  const validCurrent = currentCount === currentKeys.length && legacyCount === 0;
+  if (!validLegacy && !validCurrent) {
+    throw new Error(
+      `V5G animation "${animation.id}" rotate must use either complete legacy fromRotation/toRotation params or complete VNI_0.087 turns/direction/accelRatio/decelRatio/pressure/pressureStretch params.`,
+    );
+  }
+  for (const key of validCurrent ? currentKeys : legacyKeys) {
+    const value = animation.params[key];
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error(
+        `V5G animation "${animation.id}" rotate requires numeric param "${key}".`,
+      );
+    }
+  }
+}
+
+function assertAnimationParamRange(
+  animation: V5GAnimationConfig,
+  key: string,
+  min: number,
+  max: number,
+): void {
+  assertFiniteRange(
+    getNumericParamForValidation(animation, key),
+    min,
+    max,
+    `animation "${animation.id}" ${animation.type} ${key}`,
+  );
 }
 
 function validateLayerMasks(
@@ -441,10 +1011,7 @@ function validateLayerMasks(
         `Unsupported VNI mask mode on layer "${layer.id}": ${mask.mode}.`,
       );
     }
-    if (
-      mask.compositeMode !== "legacy_alpha" &&
-      mask.compositeMode !== "precompose_light_alpha"
-    ) {
+    if (SUPPORTED_MASK_COMPOSITE_MODES.indexOf(mask.compositeMode) < 0) {
       throw new Error(
         `Unsupported VNI mask compositeMode on layer "${layer.id}": ${mask.compositeMode}.`,
       );
@@ -498,68 +1065,6 @@ function validateLayerGroups(project: V5GProjectConfig): void {
         `VNI layer "${layer.id}" references missing layer group "${layer.groupId}".`,
       );
     }
-  }
-}
-
-export function assertSupportedAnimation(
-  animation: V5GAnimationConfig,
-  layerId = "unknown",
-  stageDuration = Number.POSITIVE_INFINITY,
-): void {
-  if (!isSupportedAnimationType(animation.type)) {
-    throw new Error(`Unsupported V5G animation type: ${animation.type}`);
-  }
-  assertFiniteRange(
-    animation.startTime,
-    0,
-    Number.POSITIVE_INFINITY,
-    `animation "${animation.id}" startTime`,
-  );
-  assertPositiveFinite(
-    animation.duration,
-    `animation "${animation.id}" duration`,
-  );
-  if (animation.startTime + animation.duration > stageDuration) {
-    throw new Error(
-      `V5G animation "${animation.id}" on layer "${layerId}" exceeds stage.duration.`,
-    );
-  }
-  const easing = animation.params.easing;
-  if (easing !== undefined) {
-    if (typeof easing !== "string" || !isSupportedEasing(easing)) {
-      throw new Error(`Unsupported V5G easing: ${String(easing)}`);
-    }
-  } else {
-    getDefaultEasing(animation.type);
-  }
-
-  for (const paramKey of REQUIRED_NUMERIC_PARAMS[animation.type]) {
-    const value = animation.params[paramKey];
-    if (typeof value !== "number" || !Number.isFinite(value)) {
-      throw new Error(
-        `V5G animation "${animation.id}" ${animation.type} requires numeric param "${paramKey}".`,
-      );
-    }
-  }
-  assertOptionalNumber(animation, "baseX");
-  assertOptionalNumber(animation, "baseY");
-  for (const paramKey of OPTIONAL_NUMERIC_PARAMS[animation.type] ?? []) {
-    assertOptionalNumber(animation, paramKey);
-  }
-  for (const paramKey of OPTIONAL_BOOLEAN_PARAMS[animation.type] ?? []) {
-    assertOptionalBoolean(animation, paramKey);
-  }
-  validateAnimationParamRanges(animation);
-}
-
-function validateAnimationParamRanges(animation: V5GAnimationConfig): void {
-  if (animation.type === "chaser_light") {
-    assertFiniteRange(
-      getNumericParamForValidation(animation, "totalCount"),
-      1,
-      200,
-      `animation "${animation.id}" chaser_light totalCount`,
-    );
   }
 }
 
@@ -648,6 +1153,13 @@ function assertLayer(value: unknown, index: number): V5GLayerConfig {
       layer.text === undefined
         ? undefined
         : assertString(layer.text, `project.layers[${index}].text`),
+    sequence:
+      layer.sequence === undefined
+        ? undefined
+        : assertSequenceConfig(
+            layer.sequence,
+            `project.layers[${index}].sequence`,
+          ),
     mask:
       layer.mask === undefined
         ? undefined
@@ -658,10 +1170,141 @@ function assertLayer(value: unknown, index: number): V5GLayerConfig {
     ).map((animation, animationIndex) =>
       assertAnimation(animation, index, animationIndex),
     ),
+    basicAnimation:
+      layer.basicAnimation === undefined
+        ? undefined
+        : assertBasicAnimation(
+            layer.basicAnimation,
+            `project.layers[${index}].basicAnimation`,
+          ),
     keyframes: assertArray(
       layer.keyframes ?? [],
       `project.layers[${index}].keyframes`,
     ) as V5GLayerConfig["keyframes"],
+  };
+}
+
+const BASIC_ANIMATION_TRACK_KEYS = [
+  "opacity",
+  "positionX",
+  "positionY",
+  "scaleX",
+  "scaleY",
+  "rotation",
+] as const;
+
+const BASIC_ANIMATION_EASINGS: readonly V5GBasicAnimationEasing[] = [
+  "linear",
+  "easeInQuad",
+  "easeOutQuad",
+  "easeInOutQuad",
+  "backOut",
+];
+
+function assertBasicAnimation(
+  value: unknown,
+  path: string,
+): V5GBasicAnimationConfig {
+  const basic = assertRecord(value, path);
+  const result = {} as V5GBasicAnimationConfig;
+  for (const key of BASIC_ANIMATION_TRACK_KEYS) {
+    result[key] = assertBasicAnimationTrack(basic[key], `${path}.${key}`);
+  }
+  return result;
+}
+
+function assertBasicAnimationTrack(
+  value: unknown,
+  path: string,
+): V5GBasicAnimationTrackConfig {
+  const track = assertRecord(value, path);
+  return {
+    enabled: assertBoolean(track.enabled, `${path}.enabled`),
+    points: assertArray(track.points, `${path}.points`).map((value, index) => {
+      const point = assertRecord(value, `${path}.points[${index}]`);
+      const easing = assertString(
+        point.easing,
+        `${path}.points[${index}].easing`,
+      );
+      if (
+        BASIC_ANIMATION_EASINGS.indexOf(easing as V5GBasicAnimationEasing) < 0
+      ) {
+        throw new Error(
+          `${path}.points[${index}].easing is unsupported: ${easing}.`,
+        );
+      }
+      return {
+        id: assertString(point.id, `${path}.points[${index}].id`),
+        time: assertNumber(point.time, `${path}.points[${index}].time`),
+        value: assertNumber(point.value, `${path}.points[${index}].value`),
+        easing: easing as V5GBasicAnimationEasing,
+      };
+    }),
+  };
+}
+
+function validateBasicAnimation(
+  layer: V5GLayerConfig,
+  stageDuration: number,
+): void {
+  const basic = layer.basicAnimation;
+  if (!basic) return;
+  const ranges: Record<
+    keyof V5GBasicAnimationConfig,
+    readonly [number, number]
+  > = {
+    opacity: [0, 1],
+    positionX: [-5000, 5000],
+    positionY: [-5000, 5000],
+    scaleX: [0, 20],
+    scaleY: [0, 20],
+    rotation: [-36000, 36000],
+  };
+  for (const key of BASIC_ANIMATION_TRACK_KEYS) {
+    const track = basic[key];
+    if (track.points.length > 200) {
+      throw new Error(
+        `VNI layer "${layer.id}" basicAnimation.${key} supports at most 200 points.`,
+      );
+    }
+    let previousTime = Number.NEGATIVE_INFINITY;
+    for (const [index, point] of track.points.entries()) {
+      assertFiniteRange(
+        point.time,
+        0,
+        stageDuration,
+        `layer "${layer.id}" basicAnimation.${key}.points[${index}].time`,
+      );
+      assertFiniteRange(
+        point.value,
+        ranges[key][0],
+        ranges[key][1],
+        `layer "${layer.id}" basicAnimation.${key}.points[${index}].value`,
+      );
+      if (point.time < previousTime) {
+        throw new Error(
+          `VNI layer "${layer.id}" basicAnimation.${key} points must be sorted by non-decreasing time.`,
+        );
+      }
+      previousTime = point.time;
+    }
+  }
+}
+
+function assertSequenceConfig(value: unknown, path: string): V5GSequenceConfig {
+  const sequence = assertRecord(value, path);
+  return {
+    frameAssetIds: assertArray(
+      sequence.frameAssetIds,
+      `${path}.frameAssetIds`,
+    ).map((assetId, index) =>
+      assertString(assetId, `${path}.frameAssetIds[${index}]`),
+    ),
+    cycleDuration: assertNumber(
+      sequence.cycleDuration,
+      `${path}.cycleDuration`,
+    ),
+    loop: assertBoolean(sequence.loop, `${path}.loop`),
   };
 }
 
@@ -674,15 +1317,33 @@ function assertLayerMask(value: unknown, path: string): V5GLayerMaskConfig {
         ? null
         : assertString(mask.sourceLayerId, `${path}.sourceLayerId`),
     mode: assertString(mask.mode, `${path}.mode`) as V5GLayerMaskConfig["mode"],
-    compositeMode: assertString(
+    compositeMode: assertMaskCompositeMode(
       mask.compositeMode,
       `${path}.compositeMode`,
-    ) as V5GLayerMaskConfig["compositeMode"],
+    ),
     showSourceLayer: assertBoolean(
       mask.showSourceLayer,
       `${path}.showSourceLayer`,
     ),
   };
+}
+
+function assertMaskCompositeMode(
+  value: unknown,
+  path: string,
+): V5GMaskCompositeMode {
+  const mode = assertString(value, path) as V5GMaskCompositeMode;
+  validateMaskCompositeMode(mode, path);
+  return mode;
+}
+
+function validateMaskCompositeMode(
+  mode: V5GMaskCompositeMode,
+  path: string,
+): void {
+  if (SUPPORTED_MASK_COMPOSITE_MODES.indexOf(mode) < 0) {
+    throw new Error(`Unsupported VNI mask compositeMode at ${path}: ${mode}.`);
+  }
 }
 
 function assertLayerGroup(value: unknown, index: number): V5GLayerGroupConfig {
@@ -806,7 +1467,9 @@ function getNumericParamForValidation(
 ): number {
   const value = animation.params[key];
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  return Number.NaN;
+  throw new Error(
+    `V5G animation "${animation.id}" ${animation.type} requires numeric param "${key}".`,
+  );
 }
 
 function assertRecord(value: unknown, path: string): Record<string, unknown> {
@@ -875,16 +1538,6 @@ function assertFiniteRange(
   }
 }
 
-function hasStringValue<T extends string>(
-  values: readonly T[],
-  value: string,
-): value is T {
-  for (let index = 0; index < values.length; index += 1) {
-    if (values[index] === value) return true;
-  }
-  return false;
-}
-
 function isSupportedProjectSchemaVersion(value: string): boolean {
   return /^V5G_0\.\d+$/u.test(value) || /^VNI_0\.\d+$/u.test(value);
 }
@@ -909,27 +1562,21 @@ function validateAssetFileMetadata(asset: V5GAssetConfig): void {
   }
   assertPositiveInteger(asset.fileWidth, `asset "${asset.id}" fileWidth`);
   assertPositiveInteger(asset.fileHeight, `asset "${asset.id}" fileHeight`);
+  const fileWidth = asset.fileWidth;
+  const fileHeight = asset.fileHeight;
+  const fileScale = asset.fileScale;
   assertFiniteRange(
-    asset.fileScale,
+    fileScale,
     Number.MIN_VALUE,
     1,
     `asset "${asset.id}" fileScale`,
   );
 
-  const expectedFileWidth = Math.max(
-    1,
-    Math.round(asset.width * asset.fileScale),
-  );
-  const expectedFileHeight = Math.max(
-    1,
-    Math.round(asset.height * asset.fileScale),
-  );
-  if (
-    asset.fileWidth !== expectedFileWidth ||
-    asset.fileHeight !== expectedFileHeight
-  ) {
+  const expectedFileWidth = Math.max(1, Math.round(asset.width * fileScale));
+  const expectedFileHeight = Math.max(1, Math.round(asset.height * fileScale));
+  if (fileWidth !== expectedFileWidth || fileHeight !== expectedFileHeight) {
     throw new Error(
-      `V5G asset "${asset.id}" file size metadata mismatch: expected ${expectedFileWidth}x${expectedFileHeight} from logical ${asset.width}x${asset.height} at scale ${asset.fileScale}, got ${asset.fileWidth}x${asset.fileHeight}.`,
+      `V5G asset "${asset.id}" file size metadata mismatch: expected ${expectedFileWidth}x${expectedFileHeight} from logical ${asset.width}x${asset.height} at scale ${fileScale}, got ${fileWidth}x${fileHeight}.`,
     );
   }
 }
@@ -984,3 +1631,6 @@ function assertPositiveInteger(value: number | undefined, path: string): void {
     throw new Error(`${path} must be an integer.`);
   }
 }
+
+export const assertVNIProject = assertV5GProject;
+export const validateVNIProject = validateV5GProject;

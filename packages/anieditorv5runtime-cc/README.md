@@ -8,7 +8,7 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 
 当前支持：
 
-- V5G `V5G_0.x` 和 VNI `VNI_0.x`
+- V5G `V5G_0.x` 和 VNI `VNI_0.x`，已同步编辑器当前 `VNI_0.095` runtime 合同
 - `editor.name === "victory_editor_v5_g"` 或 `"VNI"`
 - `engineTarget.name === "cocos_creator"`
 - `engineTarget.version === "3.8.6"`
@@ -16,24 +16,29 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - `fileWidth`、`fileHeight`、`fileScale` 压缩资源 metadata
 - `project.layerGroups + layer.groupId`：runtime 按 `project.layers` 中连续的 group run 决定渲染顺序，不使用 `layerGroups.order` 重排画面
 - `image` 图层
+- `sequence` 图层：按 `frameAssetIds + cycleDuration + loop` 切换已解析的 SpriteFrame，不在播放中加载资源或重建图层节点
 - `text` 图层：runtime 创建 Cocos `Label` 作为原始文本节点；宿主可通过 public API 绑定自有 `Node`、文本节点或 SpriteFrame/项目资产到文本层
 - 中心坐标：Cocos 节点位置直接使用 `transform.x/y`，不做 Pixi 的左上角坐标转换
 - 负 `scaleX/scaleY` 镜像
 - `opacity`、`visible`、`rotation`、锚点
 - 已知 V5G blend mode：`normal`、`add`、`screen`、`multiply`、`lighten` 会被解析、接受并写入 Cocos Sprite / material pass blend state
-- `scale_up`、`scale_down`、`fade`、`rotate`、`move`
+- basic animation 六轨：`opacity/positionX/positionY/scaleX/scaleY/rotation`
+- `scale_up`、`scale_down`、`fade`、新/legacy `rotate`、`move`、`multi_move`
 - `slide_in`、`slide_out`、`bounce_in`、`pulse`、`float`、`swing`
-- `scale_in`、`scale_out`、`pop`、`shake`、`blink`
+- `scale_in`、`scale_out`、`pop`、`bounce_jump`、`shake`、`blink`
 - `idle`：作为 timeline coverage marker，不改变 transform 或 opacity
 - `safe_glow`：使用当前图层同一张 `SpriteFrame` 创建副本，继承图层 `blendMode`，通过缩放和透明度呼吸模拟高亮，不需要 shader、Effect、滤镜或模糊
 - `chaser_light`：使用当前图层同一张 `SpriteFrame` 采样走马灯节点；灯位固定在轨迹采样点上，动画只推进亮灯/暗灯窗口；圆形轨迹的 `spacing` 按弧长换算角度；`keepOriginal=false` 会隐藏源图像，走马灯副本仍在 `<layer name> Chaser Light` 容器中渲染
 - `particle_wall`、`particle_combo`、`particle_stream`、`squash_stretch`
+- VNI 0.070 十类确定性效果：`gather_particles`、`smoke_mist`、`energy_ring`、`slash_light`、`flame_flicker`、`wave_band`、`wave_distort`、`speed_lines`、`drift_fall`、`path_particles`
+- `card_carousel_3d`：初始化时按 card/slice 上限预建节点与切片 SpriteFrame，逐帧只更新 transform、opacity、tint 和 sibling depth；切片与节点会复用并在 `destroy()` 时释放
+- pressure rotate 使用独立 `visualRotation` 采样；Cocos 侧以稳定的 layer outer/content 双层节点分别承载基础 transform 与内容视觉旋转，effect sibling 不继承 pressure 视觉旋转
 - 图层动画 `particles`、`particle_twinkle`、`particle_wall`、`particle_combo`、`particle_stream`：复用当前图层的 `SpriteFrame` 创建粒子 Sprite；真实粒子节点挂在对应图层后面的 `<layer name> Particles` 容器下，全局 `V5G Particles` 节点只保留为空占位
 - 粒子参数仍按 VNI/Pixi 导出语义解释：`direction: 270` 表示向上，`gravity` 正数表示向下；Cocos 渲染时会把粒子 Y offset 转成 Cocos UI 坐标系，避免上下方向反转
 - `particle_combo.params.sourceOpacity` 只影响源图像显示，不会把同层粒子透明度一起清零；粒子透明度使用图层原始 `opacity`
 - `safe_glow.params.keepOriginal=false` 只隐藏源图像节点；safe glow 副本仍会在 `<layer name> Safe Glow` 容器中渲染
 - `mask.mode === "alpha"` 且 `mask.compositeMode === "legacy_alpha"`：通过 Cocos `Mask.Type.IMAGE_STENCIL` adapter 创建 alpha mask；`showSourceLayer=false` 会隐藏 source layer
-- 粒子动画在 `progress <= 0` 时不发射粒子；接近 0 缩放的入场首帧会保持隐藏，避免首帧漏图
+- 粒子、safe glow、chaser light 和确定性效果使用闭区间时间采样；粒子在动画精确起点即可发射，segmented/live 播放使用独立累计 elapsed 保持移动 emitter 和循环段连续
 - 由宿主 Cocos Component 在 `update(deltaTime)` 中显式驱动播放
 
 明确不支持：
@@ -44,6 +49,7 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - 嵌套 `parentId`
 - `mask.compositeMode === "precompose_light_alpha"`：Cocos standalone/runtime 当前没有 vnicore 的 precompose alpha 缓存链路，会在 `validateCocosV5GProject(...)` / `init()` 阶段显式失败
 - Cocos deterministic render effect：enabled `shatter` / `glow` 会在 `validateCocosV5GProject(...)` / `init()` 阶段显式失败；通用 `assertV5GProject(...)` 和 `validateV5GProject(...)` 仍会解析并校验其导出参数，便于诊断导出合同
+- runtime 不解析 bundle manifest、不选择 profile，也不提供 Pixi/DOM/URL loader
 - 未知资源、未知动画、未知 easing、未知 blend mode 的静默兜底
 
 遇到未支持能力会直接抛错。runtime 不创建 missing placeholder，不自动猜测资源路径。未知 V5G blend mode 仍会在通用校验失败；已知 blend mode 如果无法写入 Cocos Sprite blend factor 或 material pass blend state，会在 `init()` / `applyBlendMode(...)` 阶段显式抛错，不会静默退回 normal。
@@ -61,6 +67,8 @@ V5G Stage
       <layer safe glow container>
       <layer chaser light container>
       <layer particles node>
+      <layer deterministic effects node, only when used>
+      <card carousel node, only when used>
     V5G Slot <lower group id> -> <upper group id>
       <mounted external nodes>
     V5G Group <upper group id>
@@ -72,7 +80,7 @@ V5G Stage
   V5G Particles
 ```
 
-`V5G Particles` 仍保留为空占位；真实 layer particle 节点挂在对应 group 内的 `<layer name> Particles` 容器。`safe_glow` 副本节点挂在同一图层的 `<layer name> Safe Glow` 容器中，`chaser_light` 节点挂在 `<layer name> Chaser Light` 容器中。容器顺序固定为源图层节点、可选 text binding 容器、safe glow、chaser light、particles。group container 和 slot container 都使用 stage center 坐标体系，外部 `Node` 挂接时不会被 runtime 重置 transform。
+`V5G Particles` 仍保留为空占位；真实 layer particle 节点挂在对应 group 内的 `<layer name> Particles` 容器。`safe_glow` 副本节点挂在同一图层的 `<layer name> Safe Glow` 容器中，`chaser_light` 节点挂在 `<layer name> Chaser Light` 容器中。确定性效果和 card carousel 容器只在图层实际配置对应动画时创建。group container 和 slot container 都使用 stage center 坐标体系，外部 `Node` 挂接时不会被 runtime 重置 transform。
 
 查询合法 slot 并插入宿主节点：
 
@@ -169,11 +177,13 @@ player.attachSpriteFrameToTextLayer({
 
 这些 API 只接受真实存在的 `text` layer。未知 layer、非 text layer、重复 binding id、空 id 或空节点都会显式失败。runtime 不把 text layer 当私有 Cocos display tree 暴露给宿主直接改；替换文字和业务节点都应走这些 public API。
 
-`getRuntimeDiagnostics()` 可用于宿主调试和自动化验收，返回当前已渲染的 `particleSpriteCount`、`chaserLightSpriteCount`、`safeGlowSpriteCount`、`maskNodeCount`、`textLayerBindingCount`、`mountedNodeCount` 和 `liveParticleCount`。这些计数只描述 runtime 当前管理的节点，不替代业务侧自己的节点统计。
+`getRuntimeDiagnostics()` 可用于宿主调试和自动化验收，除原有 particle/chaser/safe-glow/mask/text/mounted 计数外，还返回 `deterministicEffectSpriteCount`、`deterministicEffectLineCount`、`cardCarouselCardPoolSize`、`cardCarouselSlicePoolSize` 和 `visibleCardCarouselCardCount`。这些计数只描述 runtime 当前管理的节点，不替代业务侧自己的节点统计。
 
 ## 单文件复制导入
 
 推荐 Cocos Creator 项目优先使用单文件 runtime，而不是直接依赖 pnpm workspace package。Cocos Creator 对 pnpm symlink、package `exports`、monorepo 构建产物和源码内 `.js` 后缀相对 import 的处理可能与 Node/Vite 不一致；单文件复制可以把运行时边界收敛到一个只依赖内置 `"cc"` 模块的 TypeScript 文件。
+
+单文件由模块化源码生成。修改源码后必须执行 `pnpm --dir packages/anieditorv5runtime-cc standalone:build`，再执行 `standalone:check`、`typecheck:standalone` 和 standalone parity tests；不要手改生成文件。
 
 复制路径示例：
 
@@ -234,7 +244,7 @@ const player = createV5GCocosPlayer({
 atlas.getSpriteFrame("respin_asset_image_mqkv73wu_e")
 ```
 
-runtime 不会 fallback 到 `asset.id`、`asset.originalName` 或其它猜测规则。`atlas.getSpriteFrame(...)` 返回 `null` 会直接抛错，错误包含 asset id、asset path 和实际 atlas key；不会创建 placeholder、跳过图层或吞掉 atlas 错误。atlas frame 可能被合图工具 trim/crop，runtime 不用 atlas `SpriteFrame` 的可读尺寸校验 JSON 尺寸；Cocos 节点内容尺寸始终使用 JSON `asset.width/height`，实际播放以 JSON 逻辑尺寸为准。
+runtime 不会 fallback 到 `asset.id`、`asset.originalName` 或其它猜测规则。`atlas.getSpriteFrame(...)` 返回 `null` 会直接抛错，错误包含 asset id、asset path 和实际 atlas key；不会创建 placeholder、跳过图层或吞掉 atlas 错误。atlas frame 可能被合图工具 trim/crop，普通 image/sequence 播放不用 atlas `SpriteFrame` 的可读尺寸校验 JSON 尺寸；Cocos 节点内容尺寸始终使用 JSON `asset.width/height`，实际播放以 JSON 逻辑尺寸为准。`wave_distort` 和 `card_carousel_3d` 必须切片，因此 SpriteFrame 必须公开 `texture/rect/originalSize` 且不能是 rotated atlas frame；不满足时会显式失败，不会退回整图或错误 UV。
 
 旧 resolver 入口如果能从 `SpriteFrame` 读取原始尺寸，runtime 会校验它与 JSON `asset.fileWidth/fileHeight` 一致。没有压缩字段的旧导出按 `asset.width/height` 校验。`fileScale` 只用于 metadata 校验和诊断，不会额外参与节点缩放。
 

@@ -47,6 +47,29 @@ export class Quat {
   ) {}
 }
 
+export class Vec2 {
+  constructor(
+    public x = 0,
+    public y = 0,
+  ) {}
+}
+
+export class Rect {
+  constructor(
+    public x = 0,
+    public y = 0,
+    public width = 0,
+    public height = 0,
+  ) {}
+}
+
+export class Size {
+  constructor(
+    public width = 0,
+    public height = 0,
+  ) {}
+}
+
 const BlendFactor = {
   ZERO: 0,
   ONE: 1,
@@ -98,6 +121,14 @@ export class Node {
     this.children = this.children.filter((candidate) => candidate !== child);
     child.parent = this;
     this.children.push(child);
+  }
+
+  setSiblingIndex(index: number): void {
+    if (!this.parent) return;
+    const siblings = this.parent.children.filter((child) => child !== this);
+    const target = Math.max(0, Math.min(siblings.length, index));
+    siblings.splice(target, 0, this);
+    this.parent.children = siblings;
   }
 
   removeFromParent(): void {
@@ -271,16 +302,48 @@ export class UIOpacity {
 
 export class SpriteFrame {
   originalSize?: { width: number; height: number };
-  rect?: { width: number; height: number };
+  rect?: { x: number; y: number; width: number; height: number };
+  texture?: unknown;
+  rotated = false;
   width?: number;
   height?: number;
+  destroyed = false;
 
   constructor(width?: number, height?: number) {
     if (width !== undefined && height !== undefined) {
       this.width = width;
       this.height = height;
       this.originalSize = { width, height };
+      this.rect = { x: 0, y: 0, width, height };
+      this.texture = {};
     }
+  }
+
+  reset(info: {
+    texture: unknown;
+    rect: Rect;
+    originalSize: Size;
+    offset: Vec2;
+    isRotate: boolean;
+  }): void {
+    this.texture = info.texture;
+    this.rect = {
+      x: info.rect.x,
+      y: info.rect.y,
+      width: info.rect.width,
+      height: info.rect.height,
+    };
+    this.originalSize = {
+      width: info.originalSize.width,
+      height: info.originalSize.height,
+    };
+    this.width = info.originalSize.width;
+    this.height = info.originalSize.height;
+    this.rotated = info.isRotate;
+  }
+
+  destroy(): void {
+    this.destroyed = true;
   }
 
   getOriginalSize(): { width: number; height: number } | undefined {
@@ -380,8 +443,21 @@ export class Mask {
 
 export class Graphics {
   fillColor = Color.WHITE;
+  strokeColor = Color.WHITE;
+  lineWidth = 1;
   rects: Array<{ x: number; y: number; width: number; height: number }> = [];
+  lines: Array<{
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    width: number;
+    color: Color;
+  }> = [];
   filled = false;
+  private lineStart = { x: 0, y: 0 };
+  private lineEnd = { x: 0, y: 0 };
+  private readonly materialInstance = new MaterialInstance();
 
   rect(x: number, y: number, width: number, height: number): void {
     this.rects.push({ x, y, width, height });
@@ -391,8 +467,36 @@ export class Graphics {
     this.filled = true;
   }
 
+  moveTo(x: number, y: number): void {
+    this.lineStart = { x, y };
+  }
+
+  lineTo(x: number, y: number): void {
+    this.lineEnd = { x, y };
+  }
+
+  stroke(): void {
+    this.lines.push({
+      x1: this.lineStart.x,
+      y1: this.lineStart.y,
+      x2: this.lineEnd.x,
+      y2: this.lineEnd.y,
+      width: this.lineWidth,
+      color: this.strokeColor,
+    });
+  }
+
+  getMaterialInstance(index: number): MaterialInstance | null {
+    return index === 0 ? this.materialInstance : null;
+  }
+
+  getRenderMaterial(index: number): MaterialInstance | null {
+    return this.getMaterialInstance(index);
+  }
+
   clear(): void {
     this.rects = [];
+    this.lines = [];
     this.filled = false;
   }
 }
