@@ -1,4 +1,5 @@
 import { createGameLoading } from "@slotclientengine/gameloading";
+import { createLeoGameLoadingUi } from "@slotclientengine/gameloading-ui-leo";
 import {
   createGame002LoadingResources,
   readGame002RuntimeModule,
@@ -27,6 +28,7 @@ const loading = createGameLoading<{
   readonly prepared: Game002PreparedLoadingSessionLike;
 }>({
   root: loadingHost,
+  ui: createLeoGameLoadingUi(),
   maxConcurrentResources: 4,
   resources: createGame002LoadingResources(),
   onBeforeComplete: async ({ loadedResources }) => {
@@ -44,8 +46,6 @@ const loading = createGameLoading<{
         root: gameHost,
         prepared: prepareResult.prepared,
       });
-      loading.destroy();
-      loadingHost.remove();
     } catch (error) {
       gameHost.hidden = true;
       gameHost.replaceChildren();
@@ -57,8 +57,9 @@ const loading = createGameLoading<{
   },
 });
 
-void loading.start();
+void loading.start().catch(() => undefined);
 
 window.addEventListener("beforeunload", () => {
+  loading.destroy();
   enteredGame?.destroy();
 });

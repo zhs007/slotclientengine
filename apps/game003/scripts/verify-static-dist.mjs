@@ -317,6 +317,18 @@ function verifyAssets(assetNames) {
   if (entryChunk) {
     verifyEntryChunkIsLight(join(ASSETS_ROOT, entryChunk));
   }
+  for (const forbiddenAsset of [
+    /^loading2-[A-Za-z0-9_-]+\.gif$/,
+    /^logo_1-[A-Za-z0-9_-]+\.webp$/,
+    /^a2-[A-Za-z0-9_-]+\.webp$/,
+    /^a3-[A-Za-z0-9_-]+\.webp$/,
+  ]) {
+    if (assetNames.some((name) => forbiddenAsset.test(name))) {
+      failures.push(
+        `dist unexpectedly contains Leo loading asset ${forbiddenAsset}.`,
+      );
+    }
+  }
 
   for (const asset of REQUIRED_SCENE_ASSETS) {
     assertAsset(assetNames, asset.pattern, asset.label);
@@ -376,8 +388,19 @@ function verifyAssets(assetNames) {
 
 function verifyEntryChunkIsLight(entryChunkPath) {
   const content = readFileSync(entryChunkPath, "utf8");
-  for (const forbidden of ["game-adapter", "RenderReelSet", "pixi.js"]) {
-    if (content.includes(forbidden)) {
+  for (const forbidden of [
+    "game-adapter",
+    "RenderReelSet",
+    "pixi.js",
+    "react",
+    "zustand",
+    "gameloading-ui-leo",
+    "wildsheep",
+    "spine-pixi",
+    "createSlotGameFramework",
+    "WebSocket",
+  ]) {
+    if (content.toLowerCase().includes(forbidden.toLowerCase())) {
       failures.push(`entry chunk contains game runtime marker ${forbidden}.`);
     }
   }

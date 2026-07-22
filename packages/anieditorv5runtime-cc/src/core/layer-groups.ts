@@ -2,7 +2,10 @@ import type { V5GLayerGroupConfig, V5GProjectConfig } from "./types.js";
 
 export const DEFAULT_VNI_LAYER_GROUP_ID = "group_default";
 
-type NormalizableV5GProjectConfig = Omit<V5GProjectConfig, "layerGroups"> & {
+export type NormalizableV5GProjectConfig = Omit<
+  V5GProjectConfig,
+  "layerGroups"
+> & {
   layerGroups?: V5GLayerGroupConfig[];
 };
 

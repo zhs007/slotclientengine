@@ -88,6 +88,7 @@ import type { SymbolOtherScenePreviewBinding } from "../preview/other-scene-prev
 import { layoutWorkspaceMarkup } from "./layout-workspace.js";
 import {
   transitionKey,
+  transitionUiStateText,
   transitionsWorkspaceMarkup,
   updateTransitionRuntimeUi,
 } from "./transitions-workspace.js";
@@ -107,6 +108,10 @@ import {
   type LayoutSelection,
   type WorkspaceTab,
 } from "./ui-session.js";
+import {
+  normalizeStateManagerSelection,
+  stateManagerDialogMarkup,
+} from "./state-manager-dialog.js";
 import { escapeHtml } from "./ui-markup.js";
 import {
   editorResourcePaths,
@@ -126,8 +131,12 @@ export class GameLayoutEditorApp {
   #preview: LayoutPreview | null = null;
   #unsubscribe: (() => void) | null = null;
   #previewRevision = 0;
+  #previewReadyProjectRevision = -1;
   #lastPreviewProjectRevision = -1;
   #previewModeRequest = 0;
+  #previewPrepareRequest = 0;
+  #previewPrepareIdentity: string | null = null;
+  #previewPrepareChain: Promise<void> = Promise.resolve();
   #previewModeFrame: number | null = null;
   #previewModeBusy = false;
   #destroyed = false;
@@ -141,6 +150,9 @@ export class GameLayoutEditorApp {
   #followEditMode = true;
   #selectedSymbolId: string | null = null;
   #selectedPopupId: string | null = null;
+  #modeDialogNewId = "";
+  #modeDialogRenameId = "";
+  #modeDialogFeedback = "";
 
   constructor(root: HTMLElement) {
     this.#root = root;
@@ -167,6 +179,8 @@ export class GameLayoutEditorApp {
     if (this.#destroyed) return;
     this.#destroyed = true;
     this.#previewModeRequest += 1;
+    this.#previewPrepareRequest += 1;
+    this.#previewPrepareIdentity = null;
     this.stopPreviewModeMonitor();
     this.#previewModeBusy = false;
     this.#symbolImportRequest += 1;
@@ -184,11 +198,22 @@ export class GameLayoutEditorApp {
     const newDialog = this.requireElement(
       "[data-new-project-dialog]",
     ) as HTMLDialogElement;
-    this.requireElement("[data-new-project]").addEventListener("click", () =>
-      typeof newDialog.showModal === "function"
-        ? newDialog.showModal()
-        : newDialog.setAttribute("open", ""),
-    );
+    const newProjectMode = this.requireSelect("[data-new-project-mode]");
+    const confirmNewProject = this.requireElement(
+      "[data-confirm-new-project]",
+    ) as HTMLButtonElement;
+    const resetNewProjectDialog = (): void => {
+      newProjectMode.value = "";
+      confirmNewProject.disabled = true;
+    };
+    this.requireElement("[data-new-project]").addEventListener("click", () => {
+      resetNewProjectDialog();
+      if (typeof newDialog.showModal === "function") newDialog.showModal();
+      else newDialog.setAttribute("open", "");
+    });
+    newProjectMode.addEventListener("change", () => {
+      confirmNewProject.disabled = newProjectMode.value === "";
+    });
     this.requireElement("[data-cancel-new-project]").addEventListener(
       "click",
       () =>
@@ -199,9 +224,7 @@ export class GameLayoutEditorApp {
     this.requireElement("[data-confirm-new-project]").addEventListener(
       "click",
       () => {
-        const mode = this.#root.querySelector<HTMLInputElement>(
-          '[name="new-project-mode"]:checked',
-        )?.value as EditorProject["mode"] | undefined;
+        const mode = newProjectMode.value as EditorProject["mode"] | "";
         if (!mode) return;
         this.createProject(mode);
         if (typeof newDialog.close === "function") newDialog.close();
@@ -211,18 +234,19 @@ export class GameLayoutEditorApp {
     const modeDialog = this.requireElement(
       "[data-mode-dialog]",
     ) as HTMLDialogElement;
-    this.requireElement("[data-manage-modes]").addEventListener("click", () =>
-      typeof modeDialog.showModal === "function"
-        ? modeDialog.showModal()
-        : modeDialog.setAttribute("open", ""),
-    );
-    this.requireElement("[data-close-mode-dialog]").addEventListener(
-      "click",
-      () =>
-        typeof modeDialog.close === "function"
-          ? modeDialog.close()
-          : modeDialog.removeAttribute("open"),
-    );
+    this.requireElement("[data-manage-modes]").addEventListener("click", () => {
+      const project = this.#store.getSnapshot().project;
+      this.#selectedGameMode = normalizeStateManagerSelection(
+        project,
+        this.#selectedGameMode,
+      );
+      this.#modeDialogNewId = "";
+      this.#modeDialogRenameId = this.#selectedGameMode;
+      this.#modeDialogFeedback = "";
+      this.renderModeDialog(project);
+      if (typeof modeDialog.showModal === "function") modeDialog.showModal();
+      else modeDialog.setAttribute("open", "");
+    });
     this.requireElement("[data-import]").addEventListener("click", () => {
       void this.importZip();
     });
@@ -317,10 +341,10 @@ export class GameLayoutEditorApp {
         ).value;
         if (this.#followEditMode) {
           this.#selectedPreviewMode = this.#selectedGameMode;
-          void this.requestPreviewMode(this.#selectedPreviewMode);
         }
         this.renderWorkspace(this.#store.getSnapshot());
         this.renderPopupControls(this.#store.getSnapshot());
+        void this.ensurePreviewTransitionPrepared();
       },
     );
     this.requireSelect("[data-preview-game-mode]").addEventListener(
@@ -329,6 +353,11 @@ export class GameLayoutEditorApp {
         this.#selectedPreviewMode = (
           event.currentTarget as HTMLSelectElement
         ).value;
+        this.renderPreviewRuntimeControls(
+          this.#store.getSnapshot().project,
+          this.#preview?.getGameModeSnapshot() ?? null,
+        );
+        void this.ensurePreviewTransitionPrepared();
       },
     );
     this.requireInput("[data-follow-edit-mode]").addEventListener(
@@ -339,49 +368,17 @@ export class GameLayoutEditorApp {
         ).checked;
         if (this.#followEditMode) {
           this.#selectedPreviewMode = this.#selectedGameMode;
-          void this.requestPreviewMode(this.#selectedPreviewMode);
+          this.renderPreviewRuntimeControls(
+            this.#store.getSnapshot().project,
+            this.#preview?.getGameModeSnapshot() ?? null,
+          );
+          void this.ensurePreviewTransitionPrepared();
         }
       },
     );
     this.requireElement("[data-request-preview-mode]").addEventListener(
       "click",
-      () => void this.requestPreviewMode(this.#selectedPreviewMode),
-    );
-    this.requireElement("[data-add-game-mode]").addEventListener(
-      "click",
-      () => {
-        const id = this.requireInput("[data-new-game-mode]").value;
-        this.runTransaction((project) => addGameMode(project, id));
-        this.#selectedGameMode = id;
-        this.renderPopupControls(this.#store.getSnapshot());
-      },
-    );
-    this.requireElement("[data-rename-game-mode]").addEventListener(
-      "click",
-      () => {
-        const id = this.requireInput("[data-new-game-mode]").value;
-        const previous = this.#selectedGameMode;
-        this.runTransaction((project) => renameGameMode(project, previous, id));
-        this.#selectedGameMode = id;
-        this.renderPopupControls(this.#store.getSnapshot());
-      },
-    );
-    this.requireElement("[data-set-initial-mode]").addEventListener(
-      "click",
-      () =>
-        this.runTransaction((project) =>
-          setInitialGameMode(project, this.#selectedGameMode),
-        ),
-    );
-    this.requireElement("[data-delete-game-mode]").addEventListener(
-      "click",
-      () => {
-        const removed = this.#selectedGameMode;
-        this.runTransaction((project) => deleteGameMode(project, removed));
-        this.#selectedGameMode =
-          this.#store.getSnapshot().project.gameModes.initialMode;
-        this.renderPopupControls(this.#store.getSnapshot());
-      },
+      () => this.requestPreviewMode(this.#selectedPreviewMode),
     );
     this.requireSelect("[data-mode-popup]").addEventListener(
       "change",
@@ -581,52 +578,212 @@ export class GameLayoutEditorApp {
     this.showFeedback("已新建项目。先上传资源，再显式设置背景或添加图层。");
   }
 
-  private async requestPreviewMode(modeId: string): Promise<void> {
+  private requestPreviewMode(modeId: string): void {
+    const preview = this.#preview;
+    const snapshot = preview?.getGameModeSnapshot() ?? null;
+    const state = this.#session.previewTransition;
+    if (
+      !preview ||
+      !snapshot ||
+      state.phase !== "ready" ||
+      state.from !== snapshot.stableMode ||
+      state.to !== modeId
+    ) {
+      const error = new Error("当前转场尚未准备完成，不能发起状态切换。");
+      this.#session.previewTransition = {
+        phase: "error",
+        message: error.message,
+      };
+      this.#store.setExternalError(error);
+      return;
+    }
+
     const request = ++this.#previewModeRequest;
-    try {
-      if (!this.#preview?.getGameModeSnapshot())
-        throw new Error(
-          "当前配置尚未形成可切换的 package preview；请先修复项目错误。",
-        );
-      this.#previewModeBusy = true;
-      const pending = this.#preview?.requestGameMode(modeId);
-      this.startPreviewModeMonitor(request);
-      await pending;
-      if (request !== this.#previewModeRequest || this.#destroyed) return;
-      this.#selectedPreviewMode = modeId;
-      this.#store.clearExternalError();
-    } catch (error) {
-      if (request === this.#previewModeRequest && !this.#destroyed)
+    this.#previewPrepareRequest += 1;
+    this.#previewPrepareIdentity = null;
+    this.#previewModeBusy = true;
+    this.#session.previewTransition = {
+      phase: "starting",
+      from: state.from,
+      to: state.to,
+      kind: state.kind,
+    };
+    this.renderPreviewModeProgress();
+
+    // Keep this invocation in the trusted click/pointer call stack. In
+    // particular, do not await preparation before calling requestGameMode().
+    const pending = preview.requestGameMode(modeId);
+    this.startPreviewModeMonitor(request);
+    void pending
+      .then(() => {
+        if (request !== this.#previewModeRequest || this.#destroyed) return;
+        const settled = preview.getGameModeSnapshot();
+        this.#selectedPreviewMode = settled?.stableMode ?? modeId;
+        this.#session.previewTransition = {
+          phase: "complete",
+          stableMode: this.#selectedPreviewMode,
+        };
+        this.#store.clearExternalError();
+      })
+      .catch((error: unknown) => {
+        if (request !== this.#previewModeRequest || this.#destroyed) return;
+        this.#session.previewTransition = {
+          phase: "error",
+          message: formatUiError(error),
+        };
         this.#store.setExternalError(error);
-    } finally {
-      if (request === this.#previewModeRequest && !this.#destroyed) {
+      })
+      .finally(() => {
+        if (request !== this.#previewModeRequest || this.#destroyed) return;
         this.#previewModeBusy = false;
         this.stopPreviewModeMonitor();
         this.renderWorkspace(this.#store.getSnapshot());
-      }
-    }
+      });
   }
 
-  private async preparePreviewMode(modeId: string): Promise<void> {
-    const request = ++this.#previewModeRequest;
-    this.#previewModeBusy = false;
-    this.stopPreviewModeMonitor();
-    try {
-      if (!this.#preview?.getGameModeSnapshot())
-        throw new Error(
-          "当前配置尚未形成可预加载的 package preview；请先修复项目错误。",
-        );
-      await this.#preview.prepareGameModeTransition(modeId);
-      if (request !== this.#previewModeRequest || this.#destroyed) return;
-      this.#store.clearExternalError();
-      this.showFeedback(`转场目标 ${modeId} 已预加载，可由真实点击直接播放。`);
-    } catch (error) {
-      if (request === this.#previewModeRequest && !this.#destroyed)
-        this.#store.setExternalError(error);
-    } finally {
-      if (request === this.#previewModeRequest && !this.#destroyed)
-        this.renderWorkspace(this.#store.getSnapshot());
+  private ensurePreviewTransitionPrepared(): Promise<void> {
+    if (this.#destroyed || this.#previewModeBusy) return Promise.resolve();
+    const storeSnapshot = this.#store.getSnapshot();
+    const project = storeSnapshot.project;
+    const runtimeSnapshot = this.#preview?.getGameModeSnapshot() ?? null;
+    const target = this.#selectedPreviewMode;
+    let idleMessage: string | null = null;
+    if (!runtimeSnapshot) {
+      idleMessage =
+        storeSnapshot.errors[0] ??
+        "当前配置尚未形成可切换的 package preview；请先修复项目错误。";
+    } else if (this.#previewReadyProjectRevision !== storeSnapshot.revision) {
+      idleMessage = "正在重建当前项目预览。";
+    } else if (target === runtimeSnapshot.stableMode) {
+      idleMessage = `当前已是 ${target}`;
     }
+    const edge = idleMessage
+      ? undefined
+      : project.gameModes.transitions.find(
+          (candidate) =>
+            candidate.fromModeId === runtimeSnapshot!.stableMode &&
+            candidate.toModeId === target,
+        );
+    if (!idleMessage && !edge)
+      idleMessage = `缺少 ${runtimeSnapshot!.stableMode} → ${target} 直接有向转场`;
+    if (idleMessage) {
+      this.#previewPrepareRequest += 1;
+      this.#previewPrepareIdentity = null;
+      if (
+        runtimeSnapshot?.phase === "stable" &&
+        runtimeSnapshot.preparedTargetMode
+      ) {
+        try {
+          this.#preview?.cancelPreparedGameModeTransition();
+        } catch (error) {
+          this.#session.previewTransition = {
+            phase: "error",
+            message: formatUiError(error),
+          };
+          this.renderPreviewModeProgress();
+          return Promise.resolve();
+        }
+      }
+      this.#session.previewTransition = {
+        phase: "idle",
+        message: idleMessage,
+      };
+      this.renderPreviewModeProgress();
+      return Promise.resolve();
+    }
+
+    const source = runtimeSnapshot!.stableMode;
+    const kind = edge!.kind;
+    const identity = `${this.#previewRevision}:${storeSnapshot.revision}:${source}:${target}:${kind}`;
+    if (
+      this.#previewPrepareIdentity === identity &&
+      ["preparing", "ready"].includes(this.#session.previewTransition.phase)
+    )
+      return this.#previewPrepareChain;
+    if (
+      runtimeSnapshot!.preparedTargetMode === target &&
+      runtimeSnapshot!.transitionKind === kind
+    ) {
+      this.#previewPrepareIdentity = identity;
+      this.#session.previewTransition = {
+        phase: "ready",
+        from: source,
+        to: target,
+        kind,
+      };
+      this.renderWorkspace(this.#store.getSnapshot());
+      return Promise.resolve();
+    }
+
+    const request = ++this.#previewPrepareRequest;
+    const previewRevision = this.#previewRevision;
+    this.#previewPrepareIdentity = identity;
+    this.#session.previewTransition = {
+      phase: "preparing",
+      from: source,
+      to: target,
+      kind,
+    };
+    this.renderWorkspace(storeSnapshot);
+    const preview = this.#preview!;
+    const job = this.#previewPrepareChain
+      .catch(() => undefined)
+      .then(async () => {
+        if (
+          request !== this.#previewPrepareRequest ||
+          previewRevision !== this.#previewRevision ||
+          this.#destroyed
+        )
+          return;
+        const before = preview.getGameModeSnapshot();
+        if (before?.preparedTargetMode)
+          preview.cancelPreparedGameModeTransition();
+        await preview.prepareGameModeTransition(target);
+        if (
+          request !== this.#previewPrepareRequest ||
+          previewRevision !== this.#previewRevision ||
+          this.#destroyed
+        ) {
+          if (previewRevision === this.#previewRevision) {
+            const stale = preview.getGameModeSnapshot();
+            if (
+              stale?.phase === "stable" &&
+              stale.preparedTargetMode === target
+            )
+              preview.cancelPreparedGameModeTransition();
+          }
+          return;
+        }
+        const prepared = preview.getGameModeSnapshot();
+        if (
+          prepared?.stableMode !== source ||
+          prepared.preparedTargetMode !== target ||
+          prepared.transitionKind !== kind
+        )
+          throw new Error(
+            `转场 ${source} → ${target} prepare snapshot 不匹配。`,
+          );
+        this.#session.previewTransition = {
+          phase: "ready",
+          from: source,
+          to: target,
+          kind,
+        };
+        this.#store.clearExternalError();
+        this.renderWorkspace(this.#store.getSnapshot());
+      })
+      .catch((error: unknown) => {
+        if (request !== this.#previewPrepareRequest || this.#destroyed) return;
+        this.#previewPrepareIdentity = null;
+        this.#session.previewTransition = {
+          phase: "error",
+          message: formatUiError(error),
+        };
+        this.#store.setExternalError(error);
+        this.renderWorkspace(this.#store.getSnapshot());
+      });
+    this.#previewPrepareChain = job;
+    return job;
   }
 
   private startPreviewModeMonitor(request: number): void {
@@ -652,11 +809,26 @@ export class GameLayoutEditorApp {
   private renderPreviewModeProgress(): void {
     const project = this.#store.getSnapshot().project;
     const modeSnapshot = this.#preview?.getGameModeSnapshot() ?? null;
+    if (
+      modeSnapshot?.phase === "transitioning" &&
+      modeSnapshot.transition &&
+      modeSnapshot.transitionPhase &&
+      modeSnapshot.transitionKind
+    ) {
+      this.#session.previewTransition = {
+        phase: "transitioning",
+        from: modeSnapshot.transition.from,
+        to: modeSnapshot.transition.to,
+        kind: modeSnapshot.transitionKind,
+        boundary: modeSnapshot.transitionPhase,
+      };
+    }
     this.renderPreviewRuntimeControls(project, modeSnapshot);
     if (this.#session.activeTab === "transitions")
       updateTransitionRuntimeUi(
         this.requireElement("[data-workspace-panel]"),
         modeSnapshot,
+        this.#session.previewTransition,
         this.#previewModeBusy || modeSnapshot?.phase === "transitioning",
       );
   }
@@ -767,6 +939,7 @@ export class GameLayoutEditorApp {
                   project: snapshot.project,
                   selectedKey: this.#session.selectedTransitionKey,
                   snapshot: this.#preview?.getGameModeSnapshot() ?? null,
+                  uiState: this.#session.previewTransition,
                 })
               : projectWorkspaceMarkup(snapshot.project, snapshot.errors);
     if (!fixedTab) this.bindWorkspaceActions(snapshot.project);
@@ -782,6 +955,10 @@ export class GameLayoutEditorApp {
     this.restoreScrollPositions();
     this.restoreFocusToken(focusToken);
     this.renderPicker(snapshot.project);
+    const modeDialog =
+      this.#root.querySelector<HTMLDialogElement>("[data-mode-dialog]");
+    if (modeDialog?.open || modeDialog?.hasAttribute("open"))
+      this.renderModeDialog(snapshot.project);
     this.renderProjectStatus(snapshot);
     this.renderPopupControls(snapshot);
     this.renderSymbolsMetadata();
@@ -887,11 +1064,130 @@ export class GameLayoutEditorApp {
       input.value = String(placement?.[field] ?? (field === "scale" ? 1 : 0));
     }
 
-    const stateTarget = this.requireElement("[data-mode-node-states]");
-    stateTarget.innerHTML =
-      '<span class="hint">稳定场景保持独立 loop；有向切换在“转场”工作区配置。</span>';
     const modeSnapshot = this.#preview?.getGameModeSnapshot?.() ?? null;
     this.renderPreviewRuntimeControls(project, modeSnapshot);
+  }
+
+  private renderModeDialog(project: EditorProject): void {
+    const dialog =
+      this.#root.querySelector<HTMLDialogElement>("[data-mode-dialog]");
+    if (!dialog) return;
+    this.#selectedGameMode = normalizeStateManagerSelection(
+      project,
+      this.#selectedGameMode,
+    );
+    dialog.innerHTML = stateManagerDialogMarkup({
+      project,
+      selectedModeId: this.#selectedGameMode,
+      newModeId: this.#modeDialogNewId,
+      renameModeId: this.#modeDialogRenameId,
+      feedback: this.#modeDialogFeedback,
+    });
+    const close = (): void => {
+      if (typeof dialog.close === "function") dialog.close();
+      else dialog.removeAttribute("open");
+    };
+    dialog
+      .querySelector<HTMLButtonElement>("[data-close-mode-dialog]")!
+      .addEventListener("click", close);
+    dialog
+      .querySelector<HTMLInputElement>("[data-new-game-mode]")!
+      .addEventListener("input", (event) => {
+        this.#modeDialogNewId = (event.currentTarget as HTMLInputElement).value;
+      });
+    dialog
+      .querySelector<HTMLInputElement>("[data-rename-game-mode-input]")!
+      .addEventListener("input", (event) => {
+        this.#modeDialogRenameId = (
+          event.currentTarget as HTMLInputElement
+        ).value;
+      });
+    dialog
+      .querySelectorAll<HTMLButtonElement>("[data-select-game-mode]")
+      .forEach((button) =>
+        button.addEventListener("click", () => {
+          this.#selectedGameMode = button.dataset.selectGameMode!;
+          this.#modeDialogRenameId = this.#selectedGameMode;
+          this.#modeDialogFeedback = `已选择状态 ${this.#selectedGameMode}`;
+          if (this.#followEditMode)
+            this.#selectedPreviewMode = this.#selectedGameMode;
+          this.renderWorkspace(this.#store.getSnapshot());
+          void this.ensurePreviewTransitionPrepared();
+        }),
+      );
+    dialog
+      .querySelector<HTMLButtonElement>("[data-add-game-mode]")!
+      .addEventListener("click", () => {
+        const id = this.#modeDialogNewId;
+        if (!this.runTransaction((draft) => addGameMode(draft, id))) {
+          this.#modeDialogFeedback =
+            this.#store.getSnapshot().externalError ?? "新建状态失败。";
+          this.renderModeDialog(this.#store.getSnapshot().project);
+          return;
+        }
+        this.#selectedGameMode = id;
+        this.#modeDialogNewId = "";
+        this.#modeDialogRenameId = id;
+        this.#modeDialogFeedback = `已创建状态 ${id}`;
+        if (this.#followEditMode) this.#selectedPreviewMode = id;
+        this.renderWorkspace(this.#store.getSnapshot());
+        void this.ensurePreviewTransitionPrepared();
+      });
+    dialog
+      .querySelector<HTMLButtonElement>("[data-rename-game-mode]")!
+      .addEventListener("click", () => {
+        const previous = this.#selectedGameMode;
+        const next = this.#modeDialogRenameId;
+        if (
+          !this.runTransaction((draft) => renameGameMode(draft, previous, next))
+        ) {
+          this.#modeDialogFeedback =
+            this.#store.getSnapshot().externalError ?? "重命名状态失败。";
+          this.renderModeDialog(this.#store.getSnapshot().project);
+          return;
+        }
+        this.#selectedGameMode = next;
+        if (this.#selectedPreviewMode === previous)
+          this.#selectedPreviewMode = next;
+        this.#modeDialogFeedback = `已将状态 ${previous} 重命名为 ${next}`;
+        this.renderWorkspace(this.#store.getSnapshot());
+        void this.ensurePreviewTransitionPrepared();
+      });
+    dialog
+      .querySelector<HTMLButtonElement>("[data-set-initial-mode]")!
+      .addEventListener("click", () => {
+        if (
+          !this.runTransaction((draft) =>
+            setInitialGameMode(draft, this.#selectedGameMode),
+          )
+        ) {
+          this.#modeDialogFeedback =
+            this.#store.getSnapshot().externalError ?? "设置 initial 失败。";
+          this.renderModeDialog(this.#store.getSnapshot().project);
+          return;
+        }
+        this.#modeDialogFeedback = `已将 ${this.#selectedGameMode} 设为 initial`;
+        this.renderWorkspace(this.#store.getSnapshot());
+      });
+    dialog
+      .querySelector<HTMLButtonElement>("[data-delete-game-mode]")!
+      .addEventListener("click", () => {
+        const removed = this.#selectedGameMode;
+        if (!this.runTransaction((draft) => deleteGameMode(draft, removed))) {
+          this.#modeDialogFeedback =
+            this.#store.getSnapshot().externalError ?? "删除状态失败。";
+          this.renderModeDialog(this.#store.getSnapshot().project);
+          return;
+        }
+        const next = this.#store.getSnapshot().project.gameModes.initialMode;
+        this.#selectedGameMode = next;
+        if (this.#selectedPreviewMode === removed)
+          this.#selectedPreviewMode = next;
+        this.#modeDialogRenameId = next;
+        this.#modeDialogFeedback = `已删除状态 ${removed}`;
+        this.renderWorkspace(this.#store.getSnapshot());
+        void this.ensurePreviewTransitionPrepared();
+      });
   }
 
   private renderPreviewRuntimeControls(
@@ -911,13 +1207,11 @@ export class GameLayoutEditorApp {
     const popupActive = Boolean(
       popupSnapshot && !["idle", "complete"].includes(popupSnapshot.phase),
     );
-    const hasPreviewEdge = Boolean(
+    const transitionReady = Boolean(
       modeSnapshot &&
-      project.gameModes.transitions.some(
-        (transition) =>
-          transition.fromModeId === modeSnapshot.stableMode &&
-          transition.toModeId === this.#selectedPreviewMode,
-      ),
+      this.#session.previewTransition.phase === "ready" &&
+      this.#session.previewTransition.from === modeSnapshot.stableMode &&
+      this.#session.previewTransition.to === this.#selectedPreviewMode,
     );
     modeSelect.disabled = transitioning || popupActive;
     previewModeSelect.disabled = Boolean(
@@ -926,7 +1220,7 @@ export class GameLayoutEditorApp {
     (
       this.requireElement("[data-request-preview-mode]") as HTMLButtonElement
     ).disabled = Boolean(
-      !modeSnapshot || transitioning || popupActive || !hasPreviewEdge,
+      !modeSnapshot || transitioning || popupActive || !transitionReady,
     );
     popupSelect.disabled = transitioning;
     const stableMode = project.gameModes.modes.find(
@@ -944,9 +1238,14 @@ export class GameLayoutEditorApp {
       modeSnapshot
         ? `mode ${modeSnapshot.phase}: stable=${modeSnapshot.stableMode} displayed=${modeSnapshot.displayedMode}${modeSnapshot.targetMode ? ` target=${modeSnapshot.targetMode} ${modeSnapshot.transitionPhase}` : ""} · popup=${mode.awardCelebrationPopupId ?? "无"}${popupSnapshot ? ` · ${popupSnapshot.phase}/${popupSnapshot.activeTierId ?? "none"}/${popupSnapshot.activeSegment ?? "none"}` : ""}`
         : `mode=${mode.id} · popup=${mode.awardCelebrationPopupId ?? "无"}`;
-    this.requireElement("[data-main-state-status]").textContent = modeSnapshot
-      ? `${modeSnapshot.phase} · stable=${modeSnapshot.stableMode} · displayed=${modeSnapshot.displayedMode}${modeSnapshot.targetMode ? ` · target=${modeSnapshot.targetMode} · ${modeSnapshot.transitionPhase}` : ""} · initial=${project.gameModes.initialMode}`
-      : `initial=${project.gameModes.initialMode} · preview 未就绪`;
+    const transitionStatus = transitionUiStateText(
+      this.#session.previewTransition,
+      modeSnapshot,
+    );
+    this.requireElement("[data-preview-transition-status]").textContent =
+      transitionStatus;
+    this.requireElement("[data-main-state-status]").textContent =
+      `${transitionStatus} · initial=${project.gameModes.initialMode}`;
   }
 
   private bindWorkspaceActions(project: EditorProject): void {
@@ -956,7 +1255,13 @@ export class GameLayoutEditorApp {
       .forEach((button) =>
         button.addEventListener("click", () => {
           this.#session.selectedTransitionKey = button.dataset.transitionKey!;
+          const transition = project.gameModes.transitions.find(
+            (candidate) =>
+              transitionKey(candidate) === this.#session.selectedTransitionKey,
+          );
+          if (transition) this.#selectedPreviewMode = transition.toModeId;
           this.renderWorkspace(this.#store.getSnapshot());
+          void this.ensurePreviewTransitionPrepared();
         }),
       );
     panel
@@ -975,6 +1280,7 @@ export class GameLayoutEditorApp {
           return;
         }
         this.#session.selectedTransitionKey = `${from}::${to}`;
+        this.#selectedPreviewMode = to;
         this.runTransaction(
           (draft) => createGameModeTransition(draft, from, to),
           `已创建转场 ${from} -> ${to}。`,
@@ -1077,33 +1383,9 @@ export class GameLayoutEditorApp {
         );
       });
     panel
-      .querySelector<HTMLButtonElement>("[data-prepare-transition]")
+      .querySelector<HTMLButtonElement>("[data-request-transition]")
       ?.addEventListener("click", () => {
-        const selected = project.gameModes.transitions.find(
-          (candidate) =>
-            transitionKey(candidate) === this.#session.selectedTransitionKey,
-        );
-        if (selected) void this.preparePreviewMode(selected.toModeId);
-      });
-    panel
-      .querySelector<HTMLButtonElement>("[data-cancel-prepared-transition]")
-      ?.addEventListener("click", () => {
-        try {
-          this.#preview?.cancelPreparedGameModeTransition();
-          this.#store.clearExternalError();
-          this.renderWorkspace(this.#store.getSnapshot());
-        } catch (error) {
-          this.#store.setExternalError(error);
-        }
-      });
-    panel
-      .querySelector<HTMLButtonElement>("[data-play-transition]")
-      ?.addEventListener("click", () => {
-        const selected = project.gameModes.transitions.find(
-          (candidate) =>
-            transitionKey(candidate) === this.#session.selectedTransitionKey,
-        );
-        if (selected) void this.requestPreviewMode(selected.toModeId);
+        this.requestPreviewMode(this.#selectedPreviewMode);
       });
     panel
       .querySelector("[data-upload-resources]")
@@ -2070,8 +2352,16 @@ export class GameLayoutEditorApp {
 
   private async refreshPreview(snapshot: EditorStoreSnapshot): Promise<void> {
     this.#previewModeRequest += 1;
+    this.#previewPrepareRequest += 1;
+    this.#previewPrepareIdentity = null;
+    this.#previewPrepareChain = Promise.resolve();
+    this.#previewReadyProjectRevision = -1;
     this.#previewModeBusy = false;
     this.stopPreviewModeMonitor();
+    this.#session.previewTransition = {
+      phase: "idle",
+      message: "正在重建当前项目预览。",
+    };
     const revision = ++this.#previewRevision;
     const preferredVariant =
       snapshot.project.mode === "maximized-focus"
@@ -2087,6 +2377,13 @@ export class GameLayoutEditorApp {
     );
     if (!manifest) {
       this.#preview?.clear();
+      this.#session.previewTransition = {
+        phase: "error",
+        message:
+          snapshot.errors[0] ??
+          "当前配置尚未形成可切换的 package preview；请先修复项目错误。",
+      };
+      this.renderWorkspace(this.#store.getSnapshot());
       return;
     }
     try {
@@ -2143,10 +2440,17 @@ export class GameLayoutEditorApp {
       }
       if (revision !== this.#previewRevision) return;
       await this.#preview?.setLayout(manifest, assets);
-      if (revision === this.#previewRevision)
+      if (revision === this.#previewRevision) {
+        this.#previewReadyProjectRevision = snapshot.revision;
         this.renderPopupControls(this.#store.getSnapshot());
+        await this.ensurePreviewTransitionPrepared();
+      }
     } catch (error) {
       if (revision === this.#previewRevision) {
+        this.#session.previewTransition = {
+          phase: "error",
+          message: formatUiError(error),
+        };
         this.#preview?.clear();
         this.#store.setExternalError(error);
       }
@@ -2655,12 +2959,14 @@ export class GameLayoutEditorApp {
   private runTransaction(
     update: (draft: EditorProject) => void,
     successMessage?: string,
-  ): void {
+  ): boolean {
     try {
       this.#store.transact(update);
       if (successMessage) this.showFeedback(successMessage);
+      return true;
     } catch (error) {
       this.#store.setExternalError(error);
+      return false;
     }
   }
 
@@ -2795,7 +3101,7 @@ function shellMarkup(): string {
     )
     .join(
       "",
-    )}</div><section id="workspace-panel" role="tabpanel" data-workspace-panel aria-labelledby="tab-assets"></section><div data-symbols-workspace hidden>${symbolsWorkspaceMarkup()}</div><div data-bigwin-workspace hidden>${bigWinWorkspaceMarkup()}</div></aside><section class="preview-column"><div class="preview-toolbar"><label>分辨率<select data-preview-resolution></select></label><label>宽<input type="number" min="1" value="1920" data-preview-width /></label><label>高<input type="number" min="1" value="1080" data-preview-height /></label><label>预览状态<select data-preview-game-mode></select></label><button type="button" data-request-preview-mode>切换到该状态</button><label><input type="checkbox" checked data-follow-edit-mode />跟随编辑状态</label><div class="zoom-controls"><button type="button" data-zoom-out aria-label="缩小">−</button><button type="button" data-zoom-reset><span data-zoom-label>100%</span></button><button type="button" data-zoom-in aria-label="放大">＋</button></div><label><input type="checkbox" checked data-guide-focus /> focus</label><label><input type="checkbox" checked data-guide-reel /> reel/cells</label></div><div class="preview-stage"><div class="preview-page" data-preview-host></div><button class="resize-handle" type="button" aria-label="拖动调整页面尺寸" data-resize-handle>◢</button></div><output class="diagnostics" data-preview-diagnostics></output></section></section><output class="feedback" aria-live="polite" data-feedback></output><aside class="error-panel" aria-live="assertive" data-errors></aside><dialog data-new-project-dialog aria-label="新建项目"><form method="dialog"><h2>新建项目</h2><label><input type="radio" name="new-project-mode" value="maximized-focus" checked />单背景适配（maximized-focus）</label><label><input type="radio" name="new-project-mode" value="orientation-focus" />横竖双背景适配（orientation-focus）</label><div class="button-row"><button type="button" data-cancel-new-project>取消</button><button type="button" class="primary" data-confirm-new-project>创建</button></div></form></dialog><dialog data-mode-dialog aria-label="管理主状态"><section><h2>管理主状态</h2><label>状态 id<input data-new-game-mode value="FreeGame" /></label><div class="button-row"><button type="button" data-add-game-mode>添加</button><button type="button" data-rename-game-mode>重命名当前</button><button type="button" data-set-initial-mode>设为 initial</button><button type="button" class="danger" data-delete-game-mode>删除当前</button></div><div data-mode-node-states></div><button type="button" data-close-mode-dialog>完成</button></section></dialog><dialog class="resource-picker" data-resource-picker aria-label="Resource Picker"></dialog></main>`;
+    )}</div><section id="workspace-panel" role="tabpanel" data-workspace-panel aria-labelledby="tab-assets"></section><div data-symbols-workspace hidden>${symbolsWorkspaceMarkup()}</div><div data-bigwin-workspace hidden>${bigWinWorkspaceMarkup()}</div></aside><section class="preview-column"><div class="preview-toolbar"><label>分辨率<select data-preview-resolution></select></label><label>宽<input type="number" min="1" value="1920" data-preview-width /></label><label>高<input type="number" min="1" value="1080" data-preview-height /></label><label>预览状态<select data-preview-game-mode></select></label><button type="button" data-request-preview-mode>切换到该状态</button><output data-preview-transition-status aria-live="polite"></output><label><input type="checkbox" checked data-follow-edit-mode />跟随编辑状态</label><div class="zoom-controls"><button type="button" data-zoom-out aria-label="缩小">−</button><button type="button" data-zoom-reset><span data-zoom-label>100%</span></button><button type="button" data-zoom-in aria-label="放大">＋</button></div><label><input type="checkbox" checked data-guide-focus /> focus</label><label><input type="checkbox" checked data-guide-reel /> reel/cells</label></div><div class="preview-stage"><div class="preview-page" data-preview-host></div><button class="resize-handle" type="button" aria-label="拖动调整页面尺寸" data-resize-handle>◢</button></div><output class="diagnostics" data-preview-diagnostics></output></section></section><output class="feedback" aria-live="polite" data-feedback></output><aside class="error-panel" aria-live="assertive" data-errors></aside><dialog data-new-project-dialog aria-label="新建项目"><form method="dialog"><h2>新建项目</h2><label>适配模式<select data-new-project-mode><option value="">请选择适配模式</option><option value="maximized-focus">单背景适配（maximized-focus）</option><option value="orientation-focus">横竖双背景适配（orientation-focus）</option></select></label><div class="button-row"><button type="button" data-cancel-new-project>取消</button><button type="button" class="primary" data-confirm-new-project disabled>创建</button></div></form></dialog><dialog data-mode-dialog aria-label="管理主状态"></dialog><dialog class="resource-picker" data-resource-picker aria-label="Resource Picker"></dialog></main>`;
 }
 
 function parseSelectionKey(key: string): LayoutSelection {
@@ -2813,6 +3119,10 @@ function parseSelectionKey(key: string): LayoutSelection {
     return { kind: "layer", nodeId: key.slice("layer:".length) };
   }
   throw new Error(`未知 outline selection：${key}`);
+}
+
+function formatUiError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function setPath(target: object, path: string, value: number): void {

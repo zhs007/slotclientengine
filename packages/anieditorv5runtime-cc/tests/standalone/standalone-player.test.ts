@@ -244,7 +244,15 @@ function getFirstGroup(root: Node): Node {
 }
 
 function getFirstLayerNode(root: Node): Node {
+  return getFirstLayerContent(root).children[0];
+}
+
+function getFirstLayerOuter(root: Node): Node {
   return getFirstGroup(root).children[0];
+}
+
+function getFirstLayerContent(root: Node): Node {
+  return getFirstLayerOuter(root).children[0];
 }
 
 function getFirstSafeGlowContainer(root: Node): Node {
@@ -499,12 +507,13 @@ describe("standalone V5GCocosPlayer", () => {
 
     player.init();
 
+    const layerOuter = getFirstLayerOuter(root);
     const layerNode = getFirstLayerNode(root);
-    expect(inspectNode(layerNode).position).toEqual({ x: 100, y: 50, z: 0 });
-    expect(inspectNode(layerNode).scale).toEqual({ x: -1, y: 2, z: 1 });
-    expect(inspectNode(layerNode).rotation.z).toBe(30);
-    expect(requireOpacity(layerNode).opacity).toBe(128);
-    expect(layerNode.active).toBe(true);
+    expect(inspectNode(layerOuter).position).toEqual({ x: 100, y: 50, z: 0 });
+    expect(inspectNode(layerOuter).scale).toEqual({ x: -1, y: 2, z: 1 });
+    expect(inspectNode(layerOuter).rotation.z).toBe(30);
+    expect(requireOpacity(layerOuter).opacity).toBe(128);
+    expect(layerOuter.active).toBe(true);
     expect(inspectTransform(layerNode).anchorX).toBe(0.25);
     expect(inspectTransform(layerNode).anchorY).toBe(0.75);
     const sprite = requireSprite(layerNode);
@@ -577,7 +586,9 @@ describe("standalone V5GCocosPlayer", () => {
     expect(safeGlowTarget?.blendEq).toBe(COCOS_BLEND_OP.ADD);
 
     player.seek(1);
-    expect(safeGlowContainer.children).toHaveLength(0);
+    expect(safeGlowContainer.children).toHaveLength(1);
+    expect(inspectNode(safeGlowNode).destroyed).toBe(false);
+    player.destroy();
     expect(inspectNode(safeGlowNode).destroyed).toBe(true);
   });
 
@@ -617,9 +628,11 @@ describe("standalone V5GCocosPlayer", () => {
     expect(player.getRuntimeDiagnostics().chaserLightSpriteCount).toBe(4);
 
     player.seek(1);
-    expect(chaserContainer.children).toHaveLength(0);
+    expect(chaserContainer.children).toHaveLength(4);
+    expect(inspectNode(chaserNode).destroyed).toBe(false);
+    expect(player.getRuntimeDiagnostics().chaserLightSpriteCount).toBe(4);
+    player.destroy();
     expect(inspectNode(chaserNode).destroyed).toBe(true);
-    expect(player.getRuntimeDiagnostics().chaserLightSpriteCount).toBe(0);
   });
 
   it("maps fixed circular chaser_light samples to Cocos coordinates", () => {
@@ -677,7 +690,7 @@ describe("standalone V5GCocosPlayer", () => {
       ),
     );
     if (!activeGroup) throw new Error("missing active safe_glow group");
-    const layerNode = activeGroup.children[0];
+    const layerNode = activeGroup.children[0].children[0].children[0];
     const safeGlowContainer = activeGroup.children.find((child) =>
       child.name.endsWith(" Safe Glow"),
     );
@@ -845,7 +858,11 @@ describe("standalone V5GCocosPlayer", () => {
     const layerNode = getFirstLayerNode(root);
     expect(inspectTransform(layerNode).width).toBe(100);
     expect(inspectTransform(layerNode).height).toBe(50);
-    expect(inspectNode(layerNode).scale).toEqual({ x: -1, y: 2, z: 1 });
+    expect(inspectNode(getFirstLayerOuter(root)).scale).toEqual({
+      x: -1,
+      y: 2,
+      z: 1,
+    });
 
     const wrongSize = makePlayer(project);
     wrongSize.frames.set("asset-1", makeSpriteFrame(100, 50));

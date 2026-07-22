@@ -202,7 +202,7 @@ describe("chaser-light-sampler", () => {
     };
 
     expect(hasActiveChaserLightAnimation(imageLayer, 0.2)).toBe(true);
-    expect(hasActiveChaserLightAnimation(imageLayer, 1)).toBe(false);
+    expect(hasActiveChaserLightAnimation(imageLayer, 1)).toBe(true);
     expect(hasActiveChaserLightAnimation(textLayer, 0.2)).toBe(false);
   });
 });

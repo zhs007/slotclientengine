@@ -22,6 +22,7 @@ interface FakeSpriteFrame {
   id: string;
   width: number;
   height: number;
+  destroyed?: boolean;
 }
 
 class FakeNode {
@@ -44,6 +45,8 @@ class FakeNode {
   maskSource: FakeNode | null = null;
   maskTarget: FakeNode | null = null;
   blendMode: CocosBlendModeConfig | null = null;
+  color = 0xffffff;
+  lines: unknown[] = [];
 
   constructor(readonly name: string) {}
 }
@@ -158,6 +161,53 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
     const node = new FakeNode(name);
     node.spriteFrame = spriteFrame;
     return node;
+  }
+
+  setImageSpriteFrame(node: FakeNode, spriteFrame: FakeSpriteFrame): void {
+    node.spriteFrame = spriteFrame;
+  }
+
+  setImageColor(
+    node: FakeNode,
+    red: number,
+    green: number,
+    blue: number,
+  ): void {
+    node.color = (red << 16) | (green << 8) | blue;
+  }
+
+  createSpriteFrameRegion(
+    spriteFrame: FakeSpriteFrame,
+    region: { x: number; y: number; width: number; height: number },
+  ): FakeSpriteFrame {
+    return {
+      id: `${spriteFrame.id}:${region.x}:${region.y}:${region.width}:${region.height}`,
+      width: region.width,
+      height: region.height,
+    };
+  }
+
+  destroySpriteFrameRegion(spriteFrame: FakeSpriteFrame): void {
+    spriteFrame.destroyed = true;
+  }
+
+  setSiblingIndex(node: FakeNode, index: number): void {
+    if (!node.parent) return;
+    const siblings = node.parent.children.filter((child) => child !== node);
+    siblings.splice(Math.max(0, Math.min(siblings.length, index)), 0, node);
+    node.parent.children = siblings;
+  }
+
+  createLineNode(name: string): FakeNode {
+    return new FakeNode(name);
+  }
+
+  updateLines(node: FakeNode, lines: readonly unknown[]): void {
+    node.lines = [...lines];
+  }
+
+  applyLineBlendMode(node: FakeNode, config: CocosBlendModeConfig): void {
+    node.blendMode = config;
   }
 
   createTextNode(name: string, text: string): FakeNode {
@@ -462,6 +512,55 @@ function chaserLightAnimation(
   };
 }
 
+function cardCarouselAnimation(): V5GAnimationConfig {
+  return {
+    id: "cards",
+    type: "card_carousel_3d",
+    startTime: 0,
+    duration: 1,
+    enabled: true,
+    seed: 5,
+    params: {
+      phasePreviewMode: "hold",
+      cardCount: 3,
+      targetIndex: 1,
+      rounds: 1,
+      direction: 1,
+      introDuration: 0.2,
+      introSpeed: 0.2,
+      revealDirection: 0,
+      revealStagger: 0.02,
+      revealOffsetX: 30,
+      revealScaleFrom: 0.7,
+      demoIdleDuration: 0.2,
+      idleSpeed: 0.2,
+      fastDuration: 0.2,
+      fastSpeed: 2,
+      accelRatio: 0.2,
+      stopDuration: 0.2,
+      holdDuration: 1,
+      stopOvershoot: 0.1,
+      finalPop: 0.1,
+      finalGlow: 0.1,
+      radius: 100,
+      cardSpacing: 1,
+      perspective: 0.7,
+      slices: 4,
+      visibleRange: 1,
+      cardSize: 100,
+      centerScale: 1,
+      sideScale: 0.7,
+      sideAlpha: 0.4,
+      shadeStrength: 0.4,
+      curve: 0.5,
+      tilt: 6,
+      sourceOpacity: 0,
+      hideBack: false,
+      keepOriginal: false,
+    },
+  };
+}
+
 function framesFor(project: V5GProjectConfig): Map<string, FakeSpriteFrame> {
   return new Map(
     project.assets.map((asset) => [
@@ -514,7 +613,15 @@ function getFirstGroup(root: FakeNode): FakeNode {
 }
 
 function getFirstLayerNode(root: FakeNode): FakeNode {
+  return getFirstLayerContent(root).children[0];
+}
+
+function getFirstLayerOuter(root: FakeNode): FakeNode {
   return getFirstGroup(root).children[0];
+}
+
+function getFirstLayerContent(root: FakeNode): FakeNode {
+  return getFirstLayerOuter(root).children[0];
 }
 
 function getFirstSafeGlowContainer(root: FakeNode): FakeNode {
@@ -597,6 +704,41 @@ describe("V5GCocosPlayer", () => {
         renderIndex: 0,
       },
     ]);
+  });
+
+  it("keeps pressure visual rotation on the stable content root", () => {
+    const project = tinyProject({
+      animations: [
+        {
+          id: "pressure-rotate",
+          type: "rotate",
+          startTime: 0,
+          duration: 1,
+          enabled: true,
+          seed: 17,
+          params: {
+            turns: 1,
+            direction: 1,
+            accelRatio: 0.2,
+            decelRatio: 0.2,
+            pressure: 0.8,
+            pressureStretch: 0.4,
+          },
+        },
+      ],
+    });
+    const { root, player } = makePlayer(project);
+    player.init();
+    player.seek(0.5);
+
+    const outer = getFirstLayerOuter(root);
+    const content = getFirstLayerContent(root);
+    const display = getFirstLayerNode(root);
+    expect(outer.name).toBe("Layer 1");
+    expect(content.name).toBe("Layer 1 Content");
+    expect(outer.rotation).toBe(30);
+    expect(content.rotation).not.toBe(0);
+    expect(display.rotation).toBe(0);
   });
 
   it("mounts external and runtime-owned nodes between adjacent groups", () => {
@@ -853,13 +995,14 @@ describe("V5GCocosPlayer", () => {
     player.init();
 
     const layerNode = getFirstLayerNode(root);
-    expect(layerNode.x).toBe(100);
-    expect(layerNode.y).toBe(50);
-    expect(layerNode.scaleX).toBe(-1);
-    expect(layerNode.scaleY).toBe(2);
-    expect(layerNode.rotation).toBe(30);
-    expect(layerNode.opacity).toBe(128);
-    expect(layerNode.active).toBe(true);
+    const layerOuter = getFirstLayerOuter(root);
+    expect(layerOuter.x).toBe(100);
+    expect(layerOuter.y).toBe(50);
+    expect(layerOuter.scaleX).toBe(-1);
+    expect(layerOuter.scaleY).toBe(2);
+    expect(layerOuter.rotation).toBe(30);
+    expect(layerOuter.opacity).toBe(128);
+    expect(layerOuter.active).toBe(true);
     expect(layerNode.anchorX).toBe(0.25);
     expect(layerNode.anchorY).toBe(0.75);
     expect(layerNode.blendMode).toEqual(getCocosBlendModeConfig("add"));
@@ -904,7 +1047,9 @@ describe("V5GCocosPlayer", () => {
     expect(safeGlowNode.opacity).toBe(51);
 
     player.seek(1);
-    expect(safeGlowContainer.children).toHaveLength(0);
+    expect(safeGlowContainer.children).toHaveLength(1);
+    expect(safeGlowNode.destroyed).toBe(false);
+    player.destroy();
     expect(safeGlowNode.destroyed).toBe(true);
   });
 
@@ -921,7 +1066,7 @@ describe("V5GCocosPlayer", () => {
     player.init();
 
     const textNode = getFirstLayerNode(root);
-    const textBindingContainer = getFirstGroup(root).children[1];
+    const textBindingContainer = getFirstLayerContent(root).children[1];
     expect(textNode.text).toBe("Base");
     expect(textNode.active).toBe(true);
     expect(textBindingContainer.name).toBe("Layer 1 Text Binding");
@@ -986,9 +1131,11 @@ describe("V5GCocosPlayer", () => {
     expect(player.getRuntimeDiagnostics().chaserLightSpriteCount).toBe(4);
 
     player.seek(1);
-    expect(chaserContainer.children).toHaveLength(0);
+    expect(chaserContainer.children).toHaveLength(4);
+    expect(chaserNode.destroyed).toBe(false);
+    expect(player.getRuntimeDiagnostics().chaserLightSpriteCount).toBe(4);
+    player.destroy();
     expect(chaserNode.destroyed).toBe(true);
-    expect(player.getRuntimeDiagnostics().chaserLightSpriteCount).toBe(0);
   });
 
   it("maps fixed circular chaser_light samples to Cocos coordinates", () => {
@@ -1052,14 +1199,17 @@ describe("V5GCocosPlayer", () => {
     if (!sourceNode || !targetNode || !maskNode) {
       throw new Error("missing mask test nodes");
     }
-    expect(sourceNode.active).toBe(false);
+    const sourceDisplayNode = sourceNode.children[0]?.children[0];
+    if (!sourceDisplayNode) throw new Error("missing mask source display node");
+    expect(sourceNode.active).toBe(true);
+    expect(sourceDisplayNode.active).toBe(false);
     expect(targetNode.active).toBe(true);
-    expect(maskNode.maskSource).toBe(sourceNode);
+    expect(maskNode.maskSource).toBe(sourceDisplayNode);
     expect(maskNode.maskTarget).toBe(targetNode);
     expect(player.getRuntimeDiagnostics().maskNodeCount).toBe(1);
 
     player.seek(0.25);
-    expect(maskNode.maskSource).toBe(sourceNode);
+    expect(maskNode.maskSource).toBe(sourceDisplayNode);
     expect(maskNode.maskTarget).toBe(targetNode);
 
     player.destroy();
@@ -1101,7 +1251,7 @@ describe("V5GCocosPlayer", () => {
       ),
     );
     if (!activeGroup) throw new Error("missing active safe_glow group");
-    const layerNode = activeGroup.children[0];
+    const layerNode = activeGroup.children[0].children[0].children[0];
     const safeGlowContainer = activeGroup.children.find((child) =>
       child.name.endsWith(" Safe Glow"),
     );
@@ -1329,10 +1479,11 @@ describe("V5GCocosPlayer", () => {
     player.init();
 
     const layerNode = getFirstLayerNode(root);
+    const layerOuter = getFirstLayerOuter(root);
     expect(layerNode.width).toBe(100);
     expect(layerNode.height).toBe(50);
-    expect(layerNode.scaleX).toBe(-1);
-    expect(layerNode.scaleY).toBe(2);
+    expect(layerOuter.scaleX).toBe(-1);
+    expect(layerOuter.scaleY).toBe(2);
 
     const wrongSize = makePlayer(project);
     wrongSize.frames.set("asset-1", { id: "asset-1", width: 100, height: 50 });
@@ -2181,6 +2332,176 @@ describe("V5GCocosPlayer", () => {
       keepParticlesAlive: false,
     });
     expect(player.time).toBeCloseTo(0.75, 5);
+  });
+
+  it("switches sequence SpriteFrames without recreating the layer node", () => {
+    const project = tinyProject({
+      type: "sequence",
+      assetId: null,
+      sequence: {
+        frameAssetIds: ["asset-1", "asset-2"],
+        cycleDuration: 1,
+        loop: true,
+      },
+    });
+    project.schemaVersion = "VNI_0.095";
+    project.editor.version = "VNI_0.095";
+    project.assets.push({
+      id: "asset-2",
+      type: "image",
+      path: "assets/b.png",
+      originalName: "b.png",
+      width: 100,
+      height: 50,
+    });
+    const { root, frames, player } = makePlayer(project);
+    player.init();
+    const layerNode = getFirstLayerNode(root);
+
+    expect(layerNode.spriteFrame).toBe(frames.get("asset-1"));
+    for (let frame = 0; frame < 300; frame += 1) {
+      player.seek(((frame + 1) % 60) / 60);
+      expect(getFirstLayerNode(root)).toBe(layerNode);
+    }
+    expect(getFirstLayerNode(root)).toBe(layerNode);
+    expect(layerNode.spriteFrame).toBe(frames.get("asset-1"));
+  });
+
+  it("preallocates and reuses card_carousel_3d card and slice nodes", () => {
+    const project = tinyProject({
+      animations: [cardCarouselAnimation()],
+    });
+    project.schemaVersion = "VNI_0.095";
+    project.editor.version = "VNI_0.095";
+    const { root, frames, player } = makePlayer(project);
+    player.init();
+    const cardRoot = getFirstGroup(root).children.find((node) =>
+      node.name.startsWith("V5G Card Carousel"),
+    );
+    expect(cardRoot).toBeDefined();
+    expect(cardRoot?.children).toHaveLength(3);
+    expect(cardRoot?.children[0].children).toHaveLength(4);
+    expect(player.getRuntimeDiagnostics()).toMatchObject({
+      cardCarouselCardPoolSize: 3,
+      cardCarouselSlicePoolSize: 12,
+      visibleCardCarouselCardCount: 3,
+    });
+    const cards = [...(cardRoot?.children ?? [])];
+    const slices = cards.map((card) => [...card.children]);
+
+    for (let frame = 0; frame < 300; frame += 1) {
+      player.seek(((frame + 1) % 60) / 60);
+      expect(cardRoot?.children).toEqual(cards);
+      expect(cards.map((card) => card.children)).toEqual(slices);
+    }
+
+    const ownedFrames = slices.flatMap((nodes) =>
+      nodes.map((node) => node.spriteFrame),
+    );
+    player.destroy();
+    for (const frame of ownedFrames) {
+      expect(frame?.destroyed).toBe(true);
+    }
+    expect(frames.get("asset-1")?.destroyed).not.toBe(true);
+  });
+
+  it("reuses wave_distort nodes and cached slice frames across seeks", () => {
+    const project = tinyProject({
+      animations: [
+        {
+          id: "wave",
+          type: "wave_distort",
+          startTime: 0,
+          duration: 1,
+          enabled: true,
+          seed: 3,
+          params: {
+            rows: 4,
+            amplitude: 12,
+            frequency: 2,
+            cycles: 1,
+            speed: 1,
+            phaseOffset: 0,
+            verticalBob: 0,
+            alpha: 1,
+            edgeFeather: 0,
+            keepOriginal: false,
+          },
+        },
+      ],
+    });
+    project.schemaVersion = "VNI_0.095";
+    project.editor.version = "VNI_0.095";
+    const { root, frames: sourceFrames, player } = makePlayer(project);
+    player.init();
+    const effectRoot = getFirstGroup(root).children.find((node) =>
+      node.name.endsWith("Deterministic Effects"),
+    );
+    expect(effectRoot).toBeDefined();
+    expect(effectRoot?.children).toHaveLength(4);
+    expect(player.getRuntimeDiagnostics().deterministicEffectSpriteCount).toBe(
+      4,
+    );
+    const nodes = [...(effectRoot?.children ?? [])];
+    const frames = nodes.map((node) => node.spriteFrame);
+
+    for (let frame = 0; frame < 300; frame += 1) {
+      player.seek(((frame + 1) % 60) / 60);
+      expect(effectRoot?.children).toEqual(nodes);
+      expect(nodes.map((node) => node.spriteFrame)).toEqual(frames);
+    }
+
+    player.destroy();
+    for (const frame of frames) {
+      expect(frame?.destroyed).toBe(true);
+    }
+    expect(sourceFrames.get("asset-1")?.destroyed).not.toBe(true);
+  });
+
+  it("renders speed_lines through the driver line primitive and blend state", () => {
+    const project = tinyProject({
+      animations: [
+        {
+          id: "lines",
+          type: "speed_lines",
+          startTime: 0,
+          duration: 1,
+          enabled: true,
+          seed: 9,
+          params: {
+            mode: 0,
+            count: 6,
+            radius: 80,
+            length: 30,
+            speed: 1,
+            direction: 0,
+            spreadAngle: 360,
+            lineWidth: 2,
+            alpha: 0.8,
+            keepOriginal: false,
+            fadeOut: true,
+          },
+        },
+      ],
+    });
+    project.schemaVersion = "VNI_0.095";
+    project.editor.version = "VNI_0.095";
+    const { root, player } = makePlayer(project);
+    player.init();
+    const effectRoot = getFirstGroup(root).children.find((node) =>
+      node.name.endsWith("Deterministic Effects"),
+    );
+    const lineNode = effectRoot?.children[0];
+
+    expect(lineNode?.name).toBe("Layer 1 Deterministic Lines");
+    expect(lineNode?.lines).toHaveLength(6);
+    expect(lineNode?.blendMode).toEqual(getCocosBlendModeConfig("add"));
+    expect(player.getRuntimeDiagnostics().deterministicEffectLineCount).toBe(6);
+    for (let frame = 0; frame < 300; frame += 1) {
+      player.seek(((frame + 1) % 60) / 60);
+      expect(effectRoot?.children[0]).toBe(lineNode);
+      expect(lineNode?.lines).toHaveLength(6);
+    }
   });
 
   it("restart seeks to zero and destroy only removes runtime nodes", () => {

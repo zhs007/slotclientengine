@@ -1,4 +1,5 @@
 import { clampNumber, roundTo } from "./coordinates.js";
+import { getTimelineAnimationProgress } from "./timeline-progress.js";
 import type {
   V5GAnimationConfig,
   V5GBlendMode,
@@ -31,21 +32,14 @@ export function getSafeGlowProgress(
   time: number,
 ): number | null {
   if (animation.type !== "safe_glow") return null;
-  const start = animation.startTime;
-  const end = animation.startTime + animation.duration;
-  if (time < start || time >= end) return null;
-  return clampNumber(
-    (time - start) / Math.max(animation.duration, 0.0001),
-    0,
-    1,
-  );
+  return getTimelineAnimationProgress(animation, time);
 }
 
 export function hasActiveSafeGlowAnimation(
   layer: V5GLayerConfig,
   time: number,
 ): boolean {
-  if (layer.type !== "image") return false;
+  if (!isTextureBackedLayer(layer)) return false;
   return layer.animations.some(
     (animation) =>
       animation.enabled && getSafeGlowProgress(animation, time) !== null,
@@ -58,7 +52,7 @@ export function sampleSafeGlowSpritesForLayer(
   time: number,
 ): VNISafeGlowSpriteSample[] {
   if (
-    layer.type !== "image" ||
+    !isTextureBackedLayer(layer) ||
     !layer.visible ||
     sampledLayer.baseOpacity <= 0
   ) {
@@ -74,6 +68,10 @@ export function sampleSafeGlowSpritesForLayer(
     if (sprite) sprites.push(sprite);
   }
   return sprites;
+}
+
+function isTextureBackedLayer(layer: V5GLayerConfig): boolean {
+  return layer.type === "image" || layer.type === "sequence";
 }
 
 function sampleSafeGlowSprite(

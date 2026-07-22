@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 const mainMocks = vi.hoisted(() => ({
   createGameLoading: vi.fn(),
+  createSimpleGameLoadingUi: vi.fn(() => ({ create: vi.fn() })),
   createGame003LoadingResources: vi.fn(),
   readGame003RuntimeModule: vi.fn(),
 }));
 
 interface CapturedLoadingOptions {
   readonly maxConcurrentResources?: number;
+  readonly ui?: unknown;
   onBeforeComplete(options: {
     readonly loadedResources: ReadonlyMap<string, unknown>;
   }): Promise<unknown>;
@@ -16,6 +18,10 @@ interface CapturedLoadingOptions {
 
 vi.mock("@slotclientengine/gameloading", () => ({
   createGameLoading: mainMocks.createGameLoading,
+}));
+
+vi.mock("@slotclientengine/gameloading-ui-simple", () => ({
+  createSimpleGameLoadingUi: mainMocks.createSimpleGameLoadingUi,
 }));
 
 vi.mock("../src/loading-resources.js", () => ({
@@ -57,6 +63,8 @@ describe("game003 main loading host flow", () => {
     expect(loadingHost).not.toBeNull();
     expect(gameHost?.hidden).toBe(true);
     expect(capturedLoadingOptions.maxConcurrentResources).toBe(4);
+    expect(mainMocks.createSimpleGameLoadingUi).toHaveBeenCalledOnce();
+    expect(capturedLoadingOptions.ui).toBeDefined();
     expect(loadingHandle.start).toHaveBeenCalled();
 
     const prepareResult = await capturedLoadingOptions.onBeforeComplete({
@@ -72,8 +80,11 @@ describe("game003 main loading host flow", () => {
       prepared,
     });
     expect(gameHost?.hidden).toBe(false);
-    expect(loadingHandle.destroy).toHaveBeenCalled();
-    expect(root?.querySelector(".game003-loading-host")).toBeNull();
+    expect(loadingHandle.destroy).not.toHaveBeenCalled();
+    expect(root?.querySelector(".game003-loading-host")).not.toBeNull();
+
+    window.dispatchEvent(new Event("beforeunload"));
+    expect(loadingHandle.destroy).toHaveBeenCalledOnce();
   });
 });
 

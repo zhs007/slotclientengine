@@ -205,6 +205,7 @@ describe("game002 loading resources", () => {
       await resource.load({
         resource,
         loadedResources: new Map(),
+        signal: new AbortController().signal,
       });
       expect(loadTexture, id).toHaveBeenCalledWith(resource.url);
     }

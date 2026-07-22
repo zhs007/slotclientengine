@@ -39,6 +39,26 @@ declare module "cc" {
     w: number;
   }
 
+  export class Vec2 {
+    constructor(x?: number, y?: number);
+    x: number;
+    y: number;
+  }
+
+  export class Rect {
+    constructor(x?: number, y?: number, width?: number, height?: number);
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }
+
+  export class Size {
+    constructor(width?: number, height?: number);
+    width: number;
+    height: number;
+  }
+
   interface BlendTarget {
     blend: boolean;
     blendEq: number;
@@ -85,6 +105,7 @@ declare module "cc" {
     setWorldScale(x: number, y: number, z?: number): void;
     getWorldRotation(out?: Quat): Quat;
     setWorldRotation(rotation: Quat): void;
+    setSiblingIndex(index: number): void;
     addComponent<T>(component: new (...args: never[]) => T): T;
     getComponent<T>(component: new (...args: never[]) => T): T | null;
   }
@@ -100,9 +121,19 @@ declare module "cc" {
 
   export class SpriteFrame {
     originalSize?: { width: number; height: number };
-    rect?: { width: number; height: number };
+    rect?: { x: number; y: number; width: number; height: number };
+    texture?: unknown;
+    rotated?: boolean;
     width?: number;
     height?: number;
+    reset(info: {
+      texture: unknown;
+      rect: Rect;
+      originalSize: Size;
+      offset: Vec2;
+      isRotate: boolean;
+    }): void;
+    destroy(): void;
   }
 
   export class SpriteAtlas {
@@ -134,7 +165,14 @@ declare module "cc" {
 
   export class Graphics {
     fillColor: Color;
+    strokeColor: Color;
+    lineWidth: number;
     rect(x: number, y: number, width: number, height: number): void;
+    moveTo(x: number, y: number): void;
+    lineTo(x: number, y: number): void;
+    stroke(): void;
+    getMaterialInstance(index: number): MaterialInstance | null;
+    getRenderMaterial(index: number): MaterialInstance | null;
     fill(): void;
     clear(): void;
   }
