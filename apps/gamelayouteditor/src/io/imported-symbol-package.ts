@@ -1,4 +1,5 @@
 import { extractBoundedZip } from "@slotclientengine/browserartifactio";
+import { normalizeEditorPackageZipEntries } from "@slotclientengine/editorresource";
 import {
   createSymbolPackageResource,
   materializeMappedSymbolPackageContents,
@@ -23,7 +24,10 @@ export async function importSymbolsZipWithFiles(
   zipBytes: Uint8Array,
   options: { readonly loadTextures?: boolean } = {},
 ): Promise<ImportedSymbolPackage> {
-  const files = extractBoundedZip(zipBytes, { limits: SYMBOL_ZIP_LIMITS });
+  const files = normalizeEditorPackageZipEntries(
+    extractBoundedZip(zipBytes, { limits: SYMBOL_ZIP_LIMITS }),
+    ["symbols.package.json"],
+  );
   const manifestBytes = files.get("symbols.package.json");
   if (!manifestBytes) {
     throw new Error("symbols ZIP 根目录必须包含 symbols.package.json。");

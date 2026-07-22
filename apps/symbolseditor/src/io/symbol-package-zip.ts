@@ -2,6 +2,7 @@ import {
   createDeterministicZip,
   extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
+import { normalizeEditorPackageZipEntries } from "@slotclientengine/editorresource";
 import {
   createSymbolPackageResource,
   materializeMappedSymbolPackageContents,
@@ -31,7 +32,10 @@ export async function importSymbolPackageZip(
   bytes: Uint8Array,
   options: { readonly loadTextures?: boolean } = {},
 ): Promise<ImportedSymbolEditorPackage> {
-  const files = extractBoundedZip(bytes, { limits: SYMBOL_ZIP_LIMITS });
+  const files = normalizeEditorPackageZipEntries(
+    extractBoundedZip(bytes, { limits: SYMBOL_ZIP_LIMITS }),
+    ["symbols.package.json"],
+  );
   const manifestBytes = files.get("symbols.package.json");
   if (!manifestBytes)
     throw new Error("zip 根目录必须包含 symbols.package.json。");

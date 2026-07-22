@@ -11,6 +11,7 @@ import {
   commitEditorAssetImport,
   createEditorAssetEntry,
   createEmptyEditorAssetWorkspace,
+  normalizeEditorPackageZipEntries,
   reviewEditorAssetImport,
   type EditorAssetEntry,
   type EditorAssetRewriteAdapter,
@@ -111,7 +112,10 @@ export async function discoverPopupResources(
 
   for (const [path, bytes] of loaded)
     if (isZip(bytes)) {
-      const entries = extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS });
+      const entries = normalizeEditorPackageZipEntries(
+        extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS }),
+        ["image-string.manifest.json", "manifest.json"],
+      );
       accept({
         candidate: entries.has("image-string.manifest.json")
           ? await discoverImageStringZip(path, bytes)
@@ -246,7 +250,10 @@ export async function discoverPopupResources(
 export function inspectVniBundleProfiles(
   bytes: Uint8Array,
 ): readonly PopupVniRuntimeProfile[] | null {
-  const entries = extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS });
+  const entries = normalizeEditorPackageZipEntries(
+    extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS }),
+    ["manifest.json"],
+  );
   return readVniBundleProfiles(entries);
 }
 
@@ -398,7 +405,10 @@ async function discoverImageStringZip(
   path: string,
   bytes: Uint8Array,
 ): Promise<PopupImportReviewCandidate> {
-  const nested = extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS });
+  const nested = normalizeEditorPackageZipEntries(
+    extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS }),
+    ["image-string.manifest.json"],
+  );
   const manifest = parseImageStringManifest(
     parseJson(required(nested, "image-string.manifest.json")),
   );

@@ -105,6 +105,7 @@ describe("editor UI session and Resource Picker view model", () => {
       modeId: "BaseGame",
       variant: "portrait",
     });
+    expect(state.backgroundArtSize).toEqual({ width: 0, height: 0 });
     state.query = "hero";
     expect(getResourcePickerCandidates(project, state)[0]).toMatchObject({
       resourceId: "hero",

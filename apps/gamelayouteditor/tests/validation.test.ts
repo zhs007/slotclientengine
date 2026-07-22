@@ -45,6 +45,8 @@ import {
 const decodeImage = async () => ({ width: 2000, height: 2000 });
 const pngBytes = (seed = 0) =>
   new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, seed]);
+const webpBytes = (seed = 0) =>
+  new Uint8Array([82, 73, 70, 70, seed, 0, 0, 0, 87, 69, 66, 80]);
 const mp4Bytes = (seed = 0) =>
   new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109, seed]);
 const decodeVideo = async () => ({
@@ -488,6 +490,38 @@ describe("filename-key layout resource commands", () => {
     expect(pages.every((page) => atlasText.includes(`${page}\nsize:`))).toBe(
       true,
     );
+  });
+
+  it("canonicalizes a Spine texture filename from its bytes without rewriting the atlas page", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    const resource = await uploadSpineResource({
+      project,
+      files: [
+        new File(
+          [
+            JSON.stringify({
+              skeleton: { spine: "4.3.23" },
+              animations: { BG: {} },
+            }),
+          ],
+          "BG.json",
+        ),
+        new File(
+          ["BG.png\nsize: 2000,2000\nfilter: Linear,Linear\n"],
+          "BG.atlas",
+        ),
+        new File([webpBytes(7)], "BG.png", { type: "image/png" }),
+      ],
+    });
+
+    expect(resource.textures).toEqual({ "BG.png": "BG.webp" });
+    expect(project.assets.has("BG.png")).toBe(false);
+    expect(project.assets.get("BG.webp")).toEqual(webpBytes(7));
+    const atlasText = new TextDecoder().decode(
+      project.assets.get(resource.atlas),
+    );
+    expect(atlasText).toContain("BG.png\nsize:");
+    expect(atlasText).not.toContain("BG.webp");
   });
 
   it("records files-only provenance and optional Spine bounds", async () => {

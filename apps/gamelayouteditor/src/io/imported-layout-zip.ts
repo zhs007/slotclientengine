@@ -7,7 +7,11 @@ import {
   type SceneLayoutPackageResource,
   type SceneLayoutResource,
 } from "@slotclientengine/rendercore/scene-layout";
-import { extractBoundedZip as extractSharedBoundedZip } from "@slotclientengine/browserartifactio";
+import {
+  assertCanonicalPackagePath,
+  extractBoundedZip as extractSharedBoundedZip,
+} from "@slotclientengine/browserartifactio";
+import { normalizeEditorPackageZipEntries } from "@slotclientengine/editorresource";
 
 export const LAYOUT_ZIP_LIMITS = Object.freeze({
   maxEntries: 4096,
@@ -233,10 +237,15 @@ function decodeBrowserVideoUrl(url: string): Promise<{
 export function extractBoundedZip(
   zipBytes: Uint8Array,
 ): Map<string, Uint8Array> {
-  return extractSharedBoundedZip(zipBytes, {
-    limits: LAYOUT_ZIP_LIMITS,
-    pathPolicy: { requireLowercase: true },
-  });
+  const entries = normalizeEditorPackageZipEntries(
+    extractSharedBoundedZip(zipBytes, {
+      limits: LAYOUT_ZIP_LIMITS,
+    }),
+    ["layout.manifest.json"],
+  );
+  for (const path of entries.keys())
+    assertCanonicalPackagePath(path, { requireLowercase: true });
+  return entries;
 }
 
 function decodeUtf8(bytes: Uint8Array): string {

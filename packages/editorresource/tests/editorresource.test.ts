@@ -22,6 +22,7 @@ import {
   exactEditorAssetClosure,
   ingestEditorResourceSources,
   materializeEditorAssetPayloads,
+  normalizeEditorPackageZipEntries,
   parseEditorAssetsMap,
   renameEditorAsset,
   resolveEditorAssetMapEntry,
@@ -483,6 +484,31 @@ describe("bounded files/ZIP ingestion and adapters", () => {
       limits,
     });
     expect(direct[0]).toMatchObject({ key: "Direct.png", container: "file" });
+  });
+
+  it("migrates macOS metadata and one Finder wrapper before strict package validation", () => {
+    const normalized = normalizeEditorPackageZipEntries(
+      new Map([
+        ["crave-symbols/symbols.package.json", bytes(1)],
+        ["crave-symbols/gameconfig.json", bytes(2)],
+        ["crave-symbols/assets/value.png", PNG],
+        ["__MACOSX/._crave-symbols", bytes(3)],
+        ["__MACOSX/crave-symbols/._gameconfig.json", bytes(4)],
+        ["crave-symbols/.DS_Store", bytes(5)],
+      ]),
+      ["symbols.package.json"],
+    );
+    expect([...normalized.keys()]).toEqual([
+      "symbols.package.json",
+      "gameconfig.json",
+      "assets/value.png",
+    ]);
+    expect(() =>
+      normalizeEditorPackageZipEntries(
+        new Map([["__MACOSX/._only", bytes(1)]]),
+        ["symbols.package.json"],
+      ),
+    ).toThrow(/只包含 macOS metadata/u);
   });
 
   it("checks declared file size before accepting reads", async () => {

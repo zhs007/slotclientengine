@@ -31,6 +31,10 @@ export function createResourcePickerState(
   const selectedResourceId = project.resources.has(preferredResourceId)
     ? preferredResourceId
     : "";
+  const backgroundArtSize =
+    context.kind === "assign-background"
+      ? { ...project.variants[context.variant].artSize }
+      : { width: 0, height: 0 };
   return {
     context,
     query: "",
@@ -47,6 +51,7 @@ export function createResourcePickerState(
         ? [context.variant]
         : [...activeVariantIds(project)],
     defaultAnimation: "",
+    backgroundArtSize,
   };
 }
 

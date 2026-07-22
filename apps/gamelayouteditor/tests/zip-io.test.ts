@@ -129,6 +129,44 @@ function compositePackageFixture() {
 }
 
 describe("layout zip IO", () => {
+  it("maps uppercase owned filename keys to lowercase hashed package paths", async () => {
+    const key = "BG_2.webp";
+    const manifest = {
+      ...imageManifest,
+      nodes: imageManifest.nodes.map((node) => ({
+        ...node,
+        resource: { ...node.resource, path: key },
+      })),
+    };
+    const webp = new Uint8Array([82, 73, 70, 70, 1, 0, 0, 0, 87, 69, 66, 80]);
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const exported = await exportLayoutZip({
+        manifest,
+        assets: new Map([[key, webp]]),
+        decodeImage,
+      });
+      const entries = extractBoundedZip(exported.bytes);
+      expect(
+        [...entries.keys()].every((path) => path === path.toLowerCase()),
+      ).toBe(true);
+      const map = decodeEditorAssetsMap(entries.get("assets.map.json")!);
+      expect(map.files[key]?.path).toMatch(/^assets\/[a-f0-9]{64}\.webp$/u);
+      expect(entries.get(map.files[key]!.path)).toEqual(webp);
+      expect(
+        JSON.parse(
+          new TextDecoder().decode(entries.get("layout.manifest.json")),
+        ).nodes[0].resource.path,
+      ).toBe(key);
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+  });
+
   it("deterministically round-trips an owned MP4 video transition without re-encoding", async () => {
     const sourcePath = `assets/${"c".repeat(64)}.mp4`;
     const mp4 = new Uint8Array([

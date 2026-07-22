@@ -1,4 +1,5 @@
 import { extractBoundedZip } from "@slotclientengine/browserartifactio";
+import { normalizeEditorPackageZipEntries } from "@slotclientengine/editorresource";
 import {
   collectPopupPackagePaths,
   createPopupPackageResource,
@@ -21,9 +22,12 @@ export async function importPopupPackageZip(
     ) => Promise<{ width: number; height: number }>;
   } = {},
 ): Promise<ImportedPopupPackage> {
-  const files = extractBoundedZip(bytes, {
-    limits: LAYOUT_ZIP_LIMITS,
-  });
+  const files = normalizeEditorPackageZipEntries(
+    extractBoundedZip(bytes, {
+      limits: LAYOUT_ZIP_LIMITS,
+    }),
+    ["popup.manifest.json"],
+  );
   const root = files.get("popup.manifest.json");
   if (!root) throw new Error("Popup ZIP 缺少根 popup.manifest.json sentinel。");
   const manifest = parsePopupManifest(

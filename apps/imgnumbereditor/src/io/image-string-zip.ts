@@ -16,6 +16,7 @@ import {
   basenameFromSourcePath,
   createEditorAssetEntry,
   decodeEditorAssetsMap,
+  normalizeEditorPackageZipEntries,
 } from "@slotclientengine/editorresource";
 import type { Texture } from "pixi.js";
 import {
@@ -75,9 +76,12 @@ export async function importImageStringZip(
   zipBytes: Uint8Array,
   validation: ImageStringZipValidationOptions = {},
 ): Promise<ImageStringEditorProject> {
-  const files = extractBoundedZip(zipBytes, {
-    limits: IMAGE_STRING_ZIP_LIMITS,
-  });
+  const files = normalizeEditorPackageZipEntries(
+    extractBoundedZip(zipBytes, {
+      limits: IMAGE_STRING_ZIP_LIMITS,
+    }),
+    ["image-string.manifest.json"],
+  );
   const manifestBytes = files.get("image-string.manifest.json");
   if (!manifestBytes) throw new Error("ZIP 缺少 image-string.manifest.json。");
   let raw: unknown;

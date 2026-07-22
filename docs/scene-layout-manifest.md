@@ -41,6 +41,8 @@ Game Layout Editor 新导出的所有资源引用是扁平 filename keys：
 
 无 map 的合法 legacy direct-path/nested dependency package继续加载。Editor import 会在内存中迁移为 flat keys，再导出新格式；不做 basename runtime fallback、404 探测或宽泛 glob。
 
+Spine atlas page 是 atlas 内部的逻辑标识，`textures` map 的 value 才是 filename key。legacy 输入允许 page 名后缀与真实图片编码不一致：导入边界按 bytes 规范化物理 key（例如 atlas page `BG.png` 映射到 WebP key `BG.webp`），同时保持 atlas page 文本不变。这样 runtime 仍按 page 精确查 map，`assets.map.json` 的扩展名、media type 与 payload 内容保持一致。
+
 ## Node、模式与转场
 
 多个 mode/variant 可以引用同一资源 key，但稳定 background node 与 placement 必须独立；新增 mode 背景未绑定，node id 按 mode/variant 稳定生成。稳定 Spine node 只使用显式 single loop，mode 切换时保留 player 与 exact bytes。

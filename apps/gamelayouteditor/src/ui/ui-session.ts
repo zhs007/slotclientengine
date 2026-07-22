@@ -34,6 +34,10 @@ export interface ResourcePickerState {
   nodeId: string;
   variants: SceneLayoutVariantId[];
   defaultAnimation: string;
+  backgroundArtSize: {
+    width: number;
+    height: number;
+  };
 }
 
 export interface EditorUiSession {

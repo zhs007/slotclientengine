@@ -926,6 +926,76 @@ describe("GameLayoutEditorApp workspace", () => {
     app.destroy();
   });
 
+  it("requires explicit art size when assigning an imported Spine background", async () => {
+    const fileClick = selectFilesOnce([
+      new File(["{}"], "BG.json"),
+      new File(["BG.png\n"], "BG.atlas"),
+      new File(["image"], "BG.png"),
+    ]);
+    const { app, root } = await createApp();
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() => expect(commandSpies.uploadSpine).toHaveBeenCalled());
+    (
+      root.querySelector(
+        '[data-resource-row="BG.json"] [data-resource-background="default"]',
+      ) as HTMLButtonElement
+    ).click();
+    const dialog = root.querySelector(
+      "[data-resource-picker]",
+    ) as HTMLDialogElement;
+    expect(dialog.textContent).toContain("背景 art size（必填）");
+    let animation = dialog.querySelector(
+      "[data-picker-animation]",
+    ) as HTMLSelectElement;
+    animation.value = "Idle";
+    animation.dispatchEvent(new Event("change"));
+    (
+      dialog.querySelector("[data-picker-confirm]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain("width 和 height（有限正数）"),
+    );
+    expect(dialog.open).toBe(true);
+
+    const width = dialog.querySelector(
+      "[data-picker-art-width]",
+    ) as HTMLInputElement;
+    const height = dialog.querySelector(
+      "[data-picker-art-height]",
+    ) as HTMLInputElement;
+    width.value = "2000";
+    width.dispatchEvent(new Event("input"));
+    height.value = "2000";
+    height.dispatchEvent(new Event("input"));
+    animation = dialog.querySelector(
+      "[data-picker-animation]",
+    ) as HTMLSelectElement;
+    expect(animation.value).toBe("Idle");
+    (
+      dialog.querySelector("[data-picker-confirm]") as HTMLButtonElement
+    ).click();
+
+    await vi.waitFor(() => expect(dialog.open).toBe(false));
+    expect(
+      (
+        root.querySelector(
+          '[data-number="variants.default.artSize.width"]',
+        ) as HTMLInputElement
+      ).value,
+    ).toBe("2000");
+    expect(
+      (
+        root.querySelector(
+          '[data-number="nodes.0.placements.default.x"]',
+        ) as HTMLInputElement
+      ).value,
+    ).toBe("1000");
+    fileClick.mockRestore();
+    app.destroy();
+  });
+
   it("streams transition progress into the Inspector and locks transition editing until completion", async () => {
     let currentSnapshot: any = {
       stableMode: "BaseGame",
@@ -1649,7 +1719,8 @@ describe("GameLayoutEditorApp workspace", () => {
       bindings,
     }));
     const symbolsZip = zipSync({
-      "symbols.package.json": strToU8("{}"),
+      "crave-symbols/symbols.package.json": strToU8("{}"),
+      "__MACOSX/._crave-symbols": strToU8("metadata"),
     });
     const fileClick = selectFilesOnce([
       new File([symbolsZip as BlobPart], "symbols.zip"),

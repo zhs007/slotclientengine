@@ -14,6 +14,7 @@ import {
   assertEditorAssetKey,
   assertNoEditorAssetKeyAliases,
   basenameFromSourcePath,
+  normalizeEditorPackageZipEntries,
 } from "@slotclientengine/editorresource";
 import {
   activeVariantIds,
@@ -63,9 +64,12 @@ export async function importImageStringZip(options: {
   readonly project: EditorProject;
   readonly zipBytes: Uint8Array;
 }): Promise<EditorImageStringLayoutResource> {
-  const files = extractBoundedZip(options.zipBytes, {
-    limits: IMAGE_STRING_ZIP_LIMITS,
-  });
+  const files = normalizeEditorPackageZipEntries(
+    extractBoundedZip(options.zipBytes, {
+      limits: IMAGE_STRING_ZIP_LIMITS,
+    }),
+    ["image-string.manifest.json"],
+  );
   const manifestBytes = files.get("image-string.manifest.json");
   if (!manifestBytes)
     throw new Error(
@@ -850,7 +854,6 @@ async function prepareSpineResource(options: {
   }
   const textures: Record<string, string> = {};
   const assets = new Map<string, Uint8Array>();
-  const pageMapping = new Map<string, string>();
   for (const page of atlasPages) {
     const file = texturesByName.get(
       page.normalize("NFC").toLocaleLowerCase("en-US"),
@@ -858,11 +861,8 @@ async function prepareSpineResource(options: {
     if (!file) throw new Error(`Spine atlas page 缺少 texture：${page}`);
     const bytes = new Uint8Array(await file.arrayBuffer());
     const type = detectRasterAssetType(bytes);
-    const path = basenameFromSourcePath(file.name);
-    if (!path.toLowerCase().endsWith(`.${type.extension}`))
-      throw new Error(`Spine texture extension 与内容不一致：${path}`);
+    const path = canonicalRasterFilename(file.name, type.extension);
     textures[page] = path;
-    pageMapping.set(page, path);
     putAsset(assets, path, bytes);
   }
   if (texturesByName.size !== atlasPages.length) {
@@ -910,7 +910,7 @@ async function prepareSpineResource(options: {
   const skeletonPath = basenameFromSourcePath(skeletonFile.name);
   putAsset(assets, skeletonPath, skeletonBytes);
   const atlasBytes = new TextEncoder().encode(
-    rewriteAtlasPages(atlasText, pageMapping),
+    `${atlasText.replace(/\r\n?/gu, "\n").replace(/\n+$/u, "")}\n`,
   );
   const atlasPath = basenameFromSourcePath(atlasFile.name);
   assertNoEditorAssetKeyAliases([
@@ -1251,15 +1251,12 @@ function inspectAtlasPages(atlasText: string): readonly string[] {
   return Object.freeze(pages);
 }
 
-function rewriteAtlasPages(
-  atlasText: string,
-  mapping: ReadonlyMap<string, string>,
+function canonicalRasterFilename(
+  sourceName: string,
+  detectedExtension: string,
 ): string {
-  const lines = atlasText.replace(/\r\n?/gu, "\n").split("\n");
-  const rewritten = lines.map((line) => mapping.get(line) ?? line);
-  if ([...mapping.keys()].some((page) => !lines.includes(page)))
-    throw new Error("Spine atlas page rewrite closure 不完整。");
-  return `${rewritten.join("\n").replace(/\n+$/u, "")}\n`;
+  const basename = basenameFromSourcePath(sourceName);
+  return `${basename.replace(/\.[^.]*$/u, "")}.${detectedExtension}`;
 }
 
 function encodeStableJson(value: unknown): Uint8Array {

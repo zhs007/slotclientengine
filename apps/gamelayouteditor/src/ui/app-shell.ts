@@ -1,5 +1,4 @@
 import {
-  collectSceneLayoutAssetPaths,
   type SceneLayoutGameModeSnapshot,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout";
@@ -8,7 +7,10 @@ import {
   ephemeralContentFingerprint,
   extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
-import { basenameFromSourcePath } from "@slotclientengine/editorresource";
+import {
+  basenameFromSourcePath,
+  normalizeEditorPackageZipEntries,
+} from "@slotclientengine/editorresource";
 import { ObjectUrlRegistry } from "../io/object-url-registry.js";
 import { exportLayoutZip } from "../io/exported-layout-zip.js";
 import {
@@ -88,6 +90,7 @@ import {
   type SymbolPackagePreviewSnapshot,
 } from "../preview/layout-preview.js";
 import { PREVIEW_SIZE_PRESETS } from "../preview/preview-size.js";
+import { collectLayoutPreviewAssetPaths } from "./preview-asset-paths.js";
 import type { SymbolOtherScenePreviewBinding } from "../preview/other-scene-preview.js";
 import { layoutWorkspaceMarkup } from "./layout-workspace.js";
 import {
@@ -1786,6 +1789,18 @@ export class GameLayoutEditorApp {
         : state.context.kind === "assign-background"
           ? `设置 ${state.context.modeId} / ${state.context.variant} 背景`
           : `重绑图层 ${state.context.nodeId}`;
+    const needsSpineBackgroundArtSize =
+      state.context.kind === "assign-background" &&
+      selected?.kind === "spine" &&
+      (project.variants[state.context.variant].artSize.width <= 0 ||
+        project.variants[state.context.variant].artSize.height <= 0);
+    const backgroundArtSizeFields = needsSpineBackgroundArtSize
+      ? `<fieldset><legend>背景 art size（必填）</legend><p class="hint">这是完整背景画布尺寸，不从 Spine export bounds 或 atlas texture 猜测。</p><label>width<input type="number" min="1" step="1" data-picker-art-width value="${Number.isFinite(state.backgroundArtSize.width) && state.backgroundArtSize.width > 0 ? state.backgroundArtSize.width : ""}" /></label><label>height<input type="number" min="1" step="1" data-picker-art-height value="${Number.isFinite(state.backgroundArtSize.height) && state.backgroundArtSize.height > 0 ? state.backgroundArtSize.height : ""}" /></label></fieldset>`
+      : "";
+    const placementHint =
+      state.context.kind === "assign-background"
+        ? "背景初始 placement 按完整 art size 居中，scale 为 1。不会按文件名或唯一候选自动绑定。"
+        : "初始 placement 固定为 { x: 0, y: 0, scale: 1 }。不会按文件名或唯一候选自动绑定。";
     dialog.innerHTML = `<div class="picker-shell"><header><div><span>Resource Picker</span><h2>${escapeHtml(contextLabel)}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源选择器">×</button></header><div class="picker-toolbar"><label>搜索<input type="search" data-picker-query value="${escapeHtml(state.query)}" /></label><label>类型<select data-picker-type><option value="all">全部</option><option value="image" ${state.type === "image" ? "selected" : ""}>Image</option><option value="spine" ${state.type === "spine" ? "selected" : ""}>Spine</option><option value="image-string" ${state.type === "image-string" ? "selected" : ""}>Image String</option></select></label><button type="button" data-picker-import>导入资源 / ZIP</button></div><div class="picker-body"><div class="picker-candidates" role="listbox" aria-label="可用资源">${candidates.map((candidate) => `<button type="button" role="option" data-picker-candidate="${escapeHtml(candidate.resourceId)}" aria-selected="${candidate.resourceId === state.selectedResourceId}" ${candidate.disabledReason ? `disabled title="${escapeHtml(candidate.disabledReason)}"` : ""}><span class="type-mark">${candidate.kind === "spine" ? "SP" : candidate.kind === "image-string" ? "TXT" : "IMG"}</span><span><strong>${escapeHtml(candidate.resourceId)}</strong><small title="${escapeHtml(candidate.primaryPath)}">${escapeHtml(candidate.primaryPath)}</small><small>${escapeHtml(candidate.summary)} · ${candidate.status} · 引用 ${candidate.referenceCount}</small></span></button>`).join("") || '<p class="empty-state">没有匹配资源；导入后仍需明确选择并确认。</p>'}</div><section class="picker-form">${selected ? `<p><strong>${escapeHtml(selected.id)}</strong><br/><span class="path">${escapeHtml(editorResourcePaths(selected)[0]!)}</span></p>` : "<p>请选择一个 filename-key resource。</p>"}${state.context.kind === "add-layer" ? `<label>node id<input data-picker-node-id value="${escapeHtml(state.nodeId)}" /></label>` : state.context.kind === "assign-background" ? `<p class="hint">背景 node id 将按 ${escapeHtml(state.context.modeId)} / ${escapeHtml(state.context.variant)} 稳定生成。</p>` : ""}${
       state.context.kind === "add-layer" && project.mode === "orientation-focus"
         ? activeVariantIds(project)
@@ -1795,7 +1810,7 @@ export class GameLayoutEditorApp {
             )
             .join("")
         : ""
-    }${selected?.kind === "spine" ? `<label>default animation<select data-picker-animation><option value="">必须明确选择</option>${selected.animationNames.map((name) => `<option value="${escapeHtml(name)}" ${state.defaultAnimation === name ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>` : ""}<p class="hint">初始 placement 固定为 { x: 0, y: 0, scale: 1 }。不会按文件名或唯一候选自动绑定。</p></section></div><footer><button type="button" data-picker-cancel>取消</button><button type="button" class="primary" data-picker-confirm ${selected ? "" : "disabled"}>确认</button></footer></div>`;
+    }${backgroundArtSizeFields}${selected?.kind === "spine" ? `<label>default animation<select data-picker-animation><option value="">必须明确选择</option>${selected.animationNames.map((name) => `<option value="${escapeHtml(name)}" ${state.defaultAnimation === name ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>` : ""}<p class="hint">${escapeHtml(placementHint)}</p></section></div><footer><button type="button" data-picker-cancel>取消</button><button type="button" class="primary" data-picker-confirm ${selected ? "" : "disabled"}>确认</button></footer></div>`;
     if (!dialog.open) {
       if (typeof dialog.showModal === "function") dialog.showModal();
       else dialog.setAttribute("open", "");
@@ -1906,6 +1921,20 @@ export class GameLayoutEditorApp {
         ).value;
       });
     dialog
+      .querySelector<HTMLInputElement>("[data-picker-art-width]")
+      ?.addEventListener("input", (event) => {
+        state.backgroundArtSize.width = (
+          event.currentTarget as HTMLInputElement
+        ).valueAsNumber;
+      });
+    dialog
+      .querySelector<HTMLInputElement>("[data-picker-art-height]")
+      ?.addEventListener("input", (event) => {
+        state.backgroundArtSize.height = (
+          event.currentTarget as HTMLInputElement
+        ).valueAsNumber;
+      });
+    dialog
       .querySelector("[data-picker-import]")
       ?.addEventListener("click", () => void this.uploadResources(true));
     dialog
@@ -1977,8 +2006,37 @@ export class GameLayoutEditorApp {
         return;
       }
       const context = state.context;
+      const needsSpineBackgroundArtSize =
+        resource.kind === "spine" &&
+        (project.variants[context.variant].artSize.width <= 0 ||
+          project.variants[context.variant].artSize.height <= 0);
+      if (
+        needsSpineBackgroundArtSize &&
+        (!Number.isFinite(state.backgroundArtSize.width) ||
+          state.backgroundArtSize.width <= 0 ||
+          !Number.isFinite(state.backgroundArtSize.height) ||
+          state.backgroundArtSize.height <= 0)
+      ) {
+        throw new Error(
+          "Spine 背景必须明确填写完整 art size 的 width 和 height（有限正数）。",
+        );
+      }
       const assign = (reinitialize: boolean) =>
-        this.#store.transact((draft) =>
+        this.#store.transact((draft) => {
+          if (needsSpineBackgroundArtSize) {
+            setVariantArtSizeDimension(
+              draft,
+              context.variant,
+              "width",
+              state.backgroundArtSize.width,
+            );
+            setVariantArtSizeDimension(
+              draft,
+              context.variant,
+              "height",
+              state.backgroundArtSize.height,
+            );
+          }
           assignBackgroundResource({
             project: draft,
             modeId: context.modeId,
@@ -1988,8 +2046,8 @@ export class GameLayoutEditorApp {
               ? { defaultAnimation: state.defaultAnimation }
               : {}),
             reinitialize,
-          }),
-        );
+          });
+        });
       try {
         assign(false);
       } catch (error) {
@@ -2050,9 +2108,17 @@ export class GameLayoutEditorApp {
       try {
         const project = cloneEditorProject(this.#store.getSnapshot().project);
         const zipBytes = new Uint8Array(await files[0]!.arrayBuffer());
-        const entries = extractBoundedZip(zipBytes, {
-          limits: LAYOUT_ZIP_LIMITS,
-        });
+        const entries = normalizeEditorPackageZipEntries(
+          extractBoundedZip(zipBytes, {
+            limits: LAYOUT_ZIP_LIMITS,
+          }),
+          [
+            "symbols.package.json",
+            "popup.manifest.json",
+            "image-string.manifest.json",
+            "layout.manifest.json",
+          ],
+        );
         if (entries.has("symbols.package.json")) {
           const imported = await importSymbolsZipWithFiles(zipBytes);
           if (
@@ -2340,18 +2406,7 @@ export class GameLayoutEditorApp {
       return;
     }
     try {
-      const paths = new Set(collectSceneLayoutAssetPaths(manifest));
-      for (const node of manifest.nodes) {
-        if (node.resource.kind !== "image-string") continue;
-        const manifestPath = node.resource.manifest;
-        const resource = [...snapshot.project.resources.values()].find(
-          (candidate) =>
-            candidate.kind === "image-string" &&
-            candidate.manifestPath === manifestPath,
-        );
-        if (resource)
-          for (const path of editorResourcePaths(resource)) paths.add(path);
-      }
+      const paths = collectLayoutPreviewAssetPaths(snapshot.project, manifest);
       const assets = new Map(
         [...paths].map((path) => {
           const bytes = snapshot.project.assets.get(path);

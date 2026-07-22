@@ -4,6 +4,7 @@ import {
   ephemeralContentFingerprint,
   extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
+import { normalizeEditorPackageZipEntries } from "@slotclientengine/editorresource";
 import {
   addCustomStateDefinition,
   addSymbolState,
@@ -1416,9 +1417,12 @@ export class SymbolsEditorApp {
       });
       if (files.length === 1 && files[0]!.name.toLowerCase().endsWith(".zip")) {
         const zipBytes = new Uint8Array(await files[0]!.arrayBuffer());
-        const entries = extractBoundedZip(zipBytes, {
-          limits: SYMBOL_ZIP_LIMITS,
-        });
+        const entries = normalizeEditorPackageZipEntries(
+          extractBoundedZip(zipBytes, {
+            limits: SYMBOL_ZIP_LIMITS,
+          }),
+          ["symbols.package.json", "image-string.manifest.json"],
+        );
         if (entries.has("symbols.package.json")) {
           const imported = await importSymbolPackageZip(zipBytes, {
             loadTextures: false,

@@ -1,4 +1,5 @@
 import { extractBoundedZip } from "@slotclientengine/browserartifactio";
+import { normalizeEditorPackageZipEntries } from "@slotclientengine/editorresource";
 import { formatPopupAmount } from "@slotclientengine/rendercore/popup";
 import type {
   AwardTierId,
@@ -305,7 +306,10 @@ export class PopupEditorApp {
     await this.action(async () => {
       if (files.length === 1 && files[0]!.name.toLowerCase().endsWith(".zip")) {
         const bytes = new Uint8Array(await files[0]!.arrayBuffer());
-        const entries = extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS });
+        const entries = normalizeEditorPackageZipEntries(
+          extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS }),
+          ["popup.manifest.json", "image-string.manifest.json"],
+        );
         if (entries.has("popup.manifest.json")) {
           const imported = await importPopupZip(bytes);
           if (

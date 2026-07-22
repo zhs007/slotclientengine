@@ -100,13 +100,16 @@ describe("EditorStore", () => {
 
   it("keeps invalid intermediate values and atomically replaces imports", () => {
     const store = new EditorStore(createNewEditorProject("maximized-focus"));
+    expect(store.getSnapshot().errors[0]).toContain(
+      "选择 Spine 背景时可在 Resource Picker 填写",
+    );
     const listener = vi.fn();
     store.subscribe(listener);
     store.transact((draft) => {
       draft.reel.cellWidth = 0;
     });
     expect(store.getSnapshot().project.reel.cellWidth).toBe(0);
-    expect(store.getSnapshot().errors[0]).toMatch(/positive/);
+    expect(store.getSnapshot().errors[0]).toMatch(/有限正数/);
     store.replace(manifestToEditorProject(imageManifest, assetBytes));
     expect(store.getSnapshot().errors).toEqual([]);
     expect(store.getSnapshot().project.reel.gapX).toBe(5);

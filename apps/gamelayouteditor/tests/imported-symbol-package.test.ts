@@ -145,6 +145,52 @@ describe("layout editor symbols package import", () => {
     resource.destroy();
   });
 
+  it("migrates a Finder wrapper and macOS metadata before strict Symbols validation", async () => {
+    const zip = createDeterministicZip({
+      "crave-symbols/symbols.package.json": encode({
+        version: 1,
+        kind: "symbol-package",
+        id: "finder-symbols",
+        cellSize: { width: 160, height: 160 },
+        entrypoints: {
+          gameConfig: "gameconfig.json",
+          symbolManifest: "symbol-state-textures.manifest.json",
+        },
+        resources: [],
+      }),
+      "crave-symbols/gameconfig.json": encode({
+        paytable: { "0": { code: 0, symbol: "A", pays: [1] } },
+        symbolCodes: { A: 0 },
+        reels: { main: [[0]] },
+      }),
+      "crave-symbols/symbol-state-textures.manifest.json": encode({
+        version: 1,
+        states: [],
+        symbols: {
+          A: {
+            normal: { kind: "transparent", width: 160, height: 160 },
+            scale: 1,
+          },
+        },
+      }),
+      "crave-symbols/.DS_Store": new Uint8Array([1]),
+      "__MACOSX/._crave-symbols": new Uint8Array([2]),
+      "__MACOSX/crave-symbols/._gameconfig.json": new Uint8Array([3]),
+    });
+    const imported = await importSymbolsZipWithFiles(zip, {
+      loadTextures: false,
+    });
+    expect(imported.resource.packageManifest.id).toBe("finder-symbols");
+    expect([...imported.files.keys()]).toEqual(
+      expect.arrayContaining([
+        "gameconfig.json",
+        "symbol-state-textures.manifest.json",
+        "symbols.package.json",
+      ]),
+    );
+    imported.resource.destroy();
+  });
+
   it("rejects a layout zip without guessing its kind", async () => {
     const zip = createDeterministicZip({
       "layout.manifest.json": encode({ version: 1 }),

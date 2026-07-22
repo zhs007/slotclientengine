@@ -93,5 +93,10 @@ export class EditorStore {
 }
 
 function formatError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : String(error);
+  if (message === "adaptation.artSize.width must be positive.")
+    return "背景 art size 尚未完成：width 必须是有限正数；选择 Spine 背景时可在 Resource Picker 填写。";
+  if (message === "adaptation.artSize.height must be positive.")
+    return "背景 art size 尚未完成：height 必须是有限正数；选择 Spine 背景时可在 Resource Picker 填写。";
+  return message;
 }

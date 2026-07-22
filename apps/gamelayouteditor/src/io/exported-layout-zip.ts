@@ -68,7 +68,6 @@ export async function exportLayoutZip(options: {
     throw new Error("project id 必须为小写。");
   const closure = new Map<string, Uint8Array>();
   const add = (path: string, source = ownedAssets) => {
-    assertCanonicalPackagePath(path);
     const bytes = source.get(path);
     if (!bytes) throw new Error(`导出资源闭包缺少 bytes：${path}`);
     putClosure(closure, path, bytes);
@@ -209,6 +208,7 @@ export async function exportLayoutZip(options: {
     "layout.manifest.json",
     new TextEncoder().encode(stableManifestJson(flattened.manifest)),
   );
+  for (const path of entries.keys()) assertCanonicalPackagePath(path);
   const bytes = createDeterministicZip(entries, {
     level: 6,
   });

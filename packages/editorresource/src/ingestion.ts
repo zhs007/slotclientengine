@@ -24,6 +24,33 @@ export interface EditorIngestionLimits {
   readonly zip: BoundedZipLimits;
 }
 
+export function normalizeEditorPackageZipEntries(
+  entries: ReadonlyMap<string, Uint8Array>,
+  rootSentinels: readonly string[],
+): Map<string, Uint8Array> {
+  if (entries.size === 0) throw new Error("zip 为空或结构无效。");
+  const filtered = new Map(
+    [...entries].filter(([path]) => !isMacOsMetadataPath(path)),
+  );
+  if (filtered.size === 0) throw new Error("ZIP 只包含 macOS metadata。");
+  if (rootSentinels.some((sentinel) => filtered.has(sentinel))) return filtered;
+  const outerDirectories = new Set(
+    [...filtered.keys()].map((path) => path.split("/")[0]!),
+  );
+  if (outerDirectories.size !== 1) return filtered;
+  if ([...filtered.keys()].some((path) => !path.includes("/"))) return filtered;
+  const outerDirectory = [...outerDirectories][0]!;
+  const unwrapped = new Map(
+    [...filtered].map(([path, bytes]) => [
+      path.slice(outerDirectory.length + 1),
+      bytes,
+    ]),
+  );
+  return rootSentinels.some((sentinel) => unwrapped.has(sentinel))
+    ? unwrapped
+    : filtered;
+}
+
 export async function ingestEditorResourceSources(options: {
   readonly files: readonly SourceFileLike[];
   readonly limits: EditorIngestionLimits;
@@ -36,9 +63,12 @@ export async function ingestEditorResourceSources(options: {
       throw new Error(`source file 读取尺寸与预检不一致：${path}`);
     const bytes = new Uint8Array(buffer);
     if (isZip(bytes)) {
-      const extracted = extractBoundedZip(bytes, {
-        limits: options.limits.zip,
-      });
+      const extracted = normalizeEditorPackageZipEntries(
+        extractBoundedZip(bytes, {
+          limits: options.limits.zip,
+        }),
+        [],
+      );
       for (const [innerPath, innerBytes] of extracted)
         output.push(
           Object.freeze({
@@ -145,5 +175,15 @@ function isZip(bytes: Uint8Array): boolean {
     ((bytes[2] === 0x03 && bytes[3] === 0x04) ||
       (bytes[2] === 0x05 && bytes[3] === 0x06) ||
       (bytes[2] === 0x07 && bytes[3] === 0x08))
+  );
+}
+
+function isMacOsMetadataPath(path: string): boolean {
+  const segments = path.split("/");
+  const basename = segments.at(-1)!;
+  return (
+    segments.includes("__MACOSX") ||
+    basename === ".DS_Store" ||
+    basename.startsWith("._")
   );
 }

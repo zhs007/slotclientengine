@@ -2,6 +2,7 @@ import { extractBoundedZip } from "@slotclientengine/browserartifactio";
 import {
   assertNoEditorAssetKeyAliases,
   basenameFromSourcePath,
+  normalizeEditorPackageZipEntries,
 } from "@slotclientengine/editorresource";
 import {
   createImageStringResourceFromFiles,
@@ -27,9 +28,12 @@ export async function importImageStringDependencyZip(
     readonly loadTexture?: (url: string, path: string) => Promise<Texture>;
   } = {},
 ): Promise<ImportedEditorImageStringDependency> {
-  const files = extractBoundedZip(bytes, {
-    limits: IMAGE_STRING_DEPENDENCY_ZIP_LIMITS,
-  });
+  const files = normalizeEditorPackageZipEntries(
+    extractBoundedZip(bytes, {
+      limits: IMAGE_STRING_DEPENDENCY_ZIP_LIMITS,
+    }),
+    ["image-string.manifest.json"],
+  );
   const manifestBytes = files.get("image-string.manifest.json");
   if (!manifestBytes) throw new Error("ZIP 缺少 image-string.manifest.json。");
   let raw: unknown;

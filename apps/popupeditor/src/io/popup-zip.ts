@@ -9,6 +9,7 @@ import {
   createEmptyEditorAssetWorkspace,
   decodeEditorAssetsMap,
   materializeEditorAssetPayloads,
+  normalizeEditorPackageZipEntries,
   reviewEditorAssetImport,
   serializeEditorAssetsMap,
 } from "@slotclientengine/editorresource";
@@ -72,7 +73,10 @@ export async function importPopupZip(
   bytes: Uint8Array,
   options: { readonly prepare?: boolean } = {},
 ): Promise<PopupEditorProject> {
-  const files = extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS });
+  const files = normalizeEditorPackageZipEntries(
+    extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS }),
+    [ROOT],
+  );
   const root = files.get(ROOT);
   if (!root) throw new Error(`popup package 缺少 root ${ROOT} sentinel。`);
   const manifest = parsePopupManifest(parseJson(root, ROOT));
