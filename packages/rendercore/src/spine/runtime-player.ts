@@ -142,6 +142,11 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
   readonly view = new Container();
   readonly #resource: OfficialSpinePlayerResource;
   readonly #createError: (message: string) => Error;
+  readonly #slotObjects = new Map<
+    Container,
+    { readonly slot: string; readonly wrapper: Container }
+  >();
+  readonly #slotOwners = new Map<string, Container>();
   #spine: Spine | null = null;
   #completed = false;
   #loopCompleted = false;
@@ -275,15 +280,35 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
     if (typeof options.slot !== "string" || options.slot.trim().length === 0) {
       throw this.#createError("Spine slot name must be non-empty.");
     }
-    this.getSpine().addSlotObject(options.slot, options.object, {
-      followAttachmentTimeline: false,
-      followSlotColor: options.followSlotColor ?? true,
-    });
+    const slot = options.slot.trim();
+    this.detachSlotObject(options.object);
+    const previous = this.#slotOwners.get(slot);
+    if (previous) this.detachSlotObject(previous);
+
+    // spine-pixi overwrites the transform of the object passed to
+    // addSlotObject() on every update. Keep the content one level below that
+    // object so its authored offset, scale, pivot and dynamic centering remain
+    // local to the slot instead of being replaced by the slot bone matrix.
+    const wrapper = new Container();
+    wrapper.label = `rendercore-spine-slot:${slot}`;
+    wrapper.addChild(options.object);
+    try {
+      this.getSpine().addSlotObject(slot, wrapper, {
+        followAttachmentTimeline: false,
+        followSlotColor: options.followSlotColor ?? true,
+      });
+    } catch (error) {
+      wrapper.removeChild(options.object);
+      wrapper.destroy();
+      throw error;
+    }
+    this.#slotObjects.set(options.object, { slot, wrapper });
+    this.#slotOwners.set(slot, options.object);
   }
 
   removeSlotObject(object: Container): void {
     this.assertNotDestroyed();
-    this.getSpine().removeSlotObject(object);
+    this.detachSlotObject(object);
   }
 
   reset(): void {
@@ -305,6 +330,9 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
     }
     this.#destroyed = true;
     this.#spine?.state.clearListeners();
+    for (const object of [...this.#slotObjects.keys()]) {
+      this.detachSlotObject(object);
+    }
     this.#events = [];
     this.#spine?.destroy();
     this.#spine = null;
@@ -317,6 +345,20 @@ class OfficialSpinePlayer implements RendercoreSpineSlotPlayer {
       throw this.#createError("Spine player has not initialized.");
     }
     return this.#spine;
+  }
+
+  private detachSlotObject(object: Container): void {
+    const attachment = this.#slotObjects.get(object);
+    if (!attachment) return;
+    this.#spine?.removeSlotObject(attachment.wrapper);
+    if (object.parent === attachment.wrapper) {
+      attachment.wrapper.removeChild(object);
+    }
+    attachment.wrapper.destroy();
+    this.#slotObjects.delete(object);
+    if (this.#slotOwners.get(attachment.slot) === object) {
+      this.#slotOwners.delete(attachment.slot);
+    }
   }
 
   private assertNotDestroyed(): void {

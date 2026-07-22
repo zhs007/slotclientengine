@@ -19,6 +19,7 @@ import {
   setCascadeWinPresentation,
   setStateVisual,
   setSymbolIncluded,
+  setValuePresentation,
   uploadAssetBatch,
 } from "../src/model/editor-project.js";
 import { SymbolEditorStore } from "../src/model/editor-store.js";
@@ -271,6 +272,98 @@ describe("symbol editor typed project", () => {
         parseSymbolStateTextureManifest(compileSymbolEditorManifest(project)),
       ).toEqual(parseSymbolStateTextureManifest(rawManifest));
     }
+  });
+
+  it("enforces one shared animation and ImgNumber binding across value tiers", () => {
+    const rawGameConfig = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), "../../assets/gamecfg002/gameconfig.json"),
+        "utf8",
+      ),
+    );
+    const rawManifest = JSON.parse(
+      readFileSync(
+        resolve(
+          process.cwd(),
+          "../../assets/game002-s3/symbol-state-textures.manifest.json",
+        ),
+        "utf8",
+      ),
+    );
+    const project = createFromImportedPackage({
+      packageManifest: {
+        version: 1,
+        kind: "symbol-package",
+        id: "game002-shared-tier-contract",
+        cellSize: { width: 200, height: 200 },
+        entrypoints: {
+          gameConfig: "gameconfig.json",
+          symbolManifest: "symbol-state-textures.manifest.json",
+        },
+        resources: [],
+      },
+      rawGameConfig,
+      rawSymbolManifest: rawManifest,
+      assets: new Map(),
+    });
+    const cn = project.symbols.get("CN")!;
+    const value = structuredClone(cn.valuePresentation!);
+    (
+      value.tiers[1]!.animation.playback as { animationName: string }
+    ).animationName = "Idle";
+    setValuePresentation(project, "CN", value);
+    expect(() => compileSymbolEditorManifest(project)).toThrow(
+      /共用同一个 normal animation/,
+    );
+
+    const restored = structuredClone(
+      parseSymbolStateTextureManifest(rawManifest).symbols.CN
+        .valuePresentation!,
+    );
+    if (restored.text.type !== "image-string")
+      throw new Error("expected game002 CN image-string presentation");
+    (restored.text.tiers[1] as { slot: string }).slot = "coin";
+    setValuePresentation(project, "CN", restored);
+    expect(() => compileSymbolEditorManifest(project)).toThrow(
+      /一份共享 slot\/anchor\/transform/,
+    );
+  });
+
+  it("derives tiered states as shared active Spine or independent static images", () => {
+    const project = createFromGameConfig({
+      rawGameConfig: {
+        paytable: { "1": { code: 1, symbol: "A", pays: [1] } },
+        symbolCodes: { A: 1 },
+        reels: { main: [[1]] },
+      },
+      fileName: "tiered.json",
+    });
+    const sourceManifest = parseSymbolStateTextureManifest(
+      JSON.parse(
+        readFileSync(
+          resolve(
+            process.cwd(),
+            "../../assets/game002-s3/symbol-state-textures.manifest.json",
+          ),
+          "utf8",
+        ),
+      ),
+    );
+    setValuePresentation(
+      project,
+      "A",
+      structuredClone(sourceManifest.symbols.CN.valuePresentation!),
+    );
+    addSymbolState(project, "A", "win");
+    addSymbolState(project, "A", "spinBlur");
+    expect(project.symbols.get("A")?.states.get("win")).toEqual({
+      kind: "activeSpine",
+      animationName: "",
+    });
+    expect(project.symbols.get("A")?.states.get("spinBlur")).toEqual({
+      kind: "image",
+      imagePath: "",
+    });
   });
 
   it("keeps store transactions atomic when an update throws", () => {

@@ -64,14 +64,10 @@ export class ImageStringPreview {
     const snapshot = this.#renderer.getSnapshot();
     const originX =
       this.#renderer.container.position.x -
-      snapshot.logicalBounds.width *
-        snapshot.anchor.x *
-        this.#renderer.container.scale.x;
+      this.#renderer.container.pivot.x * this.#renderer.container.scale.x;
     const originY =
       this.#renderer.container.position.y -
-      snapshot.logicalBounds.height *
-        snapshot.anchor.y *
-        this.#renderer.container.scale.y;
+      this.#renderer.container.pivot.y * this.#renderer.container.scale.y;
     this.#guides
       .clear()
       .rect(

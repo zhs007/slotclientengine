@@ -7,12 +7,15 @@ const mocks = vi.hoisted(() => ({
   setTexture: vi.fn(),
   textureFrom: vi.fn((source: unknown) => ({ source })),
   updates: [] as number[],
+  slotAdds: [] as Array<{ slot: string; object: any; options: any }>,
+  slotRemoves: [] as any[],
 }));
 
 vi.mock("pixi.js", () => {
   class Container {
     children: any[] = [];
     parent: Container | null = null;
+    label = "";
     addChild(...children: any[]) {
       this.children.push(...children);
       for (const child of children) child.parent = this;
@@ -24,6 +27,7 @@ vi.mock("pixi.js", () => {
     removeChildren() {
       this.children = [];
     }
+    destroy() {}
   }
   return { Assets: { load: mocks.load }, Container };
 });
@@ -90,10 +94,12 @@ vi.mock("@esotericsoftware/spine-pixi-v8", () => {
       }
     }
     destroy() {}
-    addSlotObject = vi.fn((_slot: string, object: any) => {
+    addSlotObject = vi.fn((slot: string, object: any, options: any) => {
+      mocks.slotAdds.push({ slot, object, options });
       object.parent = this;
     });
     removeSlotObject = vi.fn((object: any) => {
+      mocks.slotRemoves.push(object);
       object.parent = null;
     });
   }
@@ -115,6 +121,8 @@ describe("shared official Spine player", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.updates.length = 0;
+    mocks.slotAdds.length = 0;
+    mocks.slotRemoves.length = 0;
   });
 
   it("loads and binds every explicitly configured atlas page", async () => {
@@ -160,7 +168,21 @@ describe("shared official Spine player", () => {
     expect(mocks.setTexture).toHaveBeenCalledTimes(2);
     const slotObject = new (await import("pixi.js")).Container();
     player.attachSlotObject({ slot: "ValueSlot", object: slotObject });
+    const slotWrapper = mocks.slotAdds[0]!.object;
+    expect(slotWrapper).not.toBe(slotObject);
+    expect(slotWrapper.label).toBe("rendercore-spine-slot:ValueSlot");
+    expect(slotWrapper.children).toEqual([slotObject]);
+    expect(slotObject.parent).toBe(slotWrapper);
+    expect(mocks.slotAdds[0]).toMatchObject({
+      slot: "ValueSlot",
+      options: {
+        followAttachmentTimeline: false,
+        followSlotColor: true,
+      },
+    });
     player.removeSlotObject(slotObject);
+    expect(mocks.slotRemoves).toEqual([slotWrapper]);
+    expect(slotObject.parent).toBeNull();
     player.play({ animationName: "BG_FG", loop: false });
     expect(player.update(0.1)).toEqual({
       completed: true,

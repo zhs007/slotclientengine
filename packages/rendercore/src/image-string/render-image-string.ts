@@ -49,9 +49,10 @@ export function createRenderImageString(options: {
       sprite.visible = true;
       container.setChildIndex(sprite, index);
     }
+    const anchorBounds = next.visualBounds ?? next.logicalBounds;
     container.pivot.set(
-      next.logicalBounds.width * next.anchor.x,
-      next.logicalBounds.height * next.anchor.y,
+      anchorBounds.x + anchorBounds.width * next.anchor.x,
+      anchorBounds.y + anchorBounds.height * next.anchor.y,
     );
     snapshot = next;
   }

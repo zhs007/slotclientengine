@@ -2,6 +2,8 @@
 
 `image-string` 是 Unicode code-point 图片字符串格式。root sentinel 固定为 `image-string.manifest.json`，inner schema 版本仍为 `1`。
 
+Pixi renderer 的 anchor 以当前字符串的 `visualBounds` 为准；`anchor: { x: 0.5, y: 0.5 }` 会把实际 glyph 组合的中心放在容器原点。`setText()` 改变位数、glyph 尺寸或左右留白时会原子重算 pivot，因此绑定到 Spine slot 的 ImgNumber 始终保持动态内容中心对齐。official Spine slot attach 使用仅跟随 bone matrix 的外层 wrapper，ImgNumber 作为内层保留自身 pivot、`x/y` offset 与 scale；`x=0,y=0` 表示内容中心正好对齐 slot 原点。空字符串没有 `visualBounds` 时才使用 `logicalBounds`。
+
 ```json
 {
   "version": 1,

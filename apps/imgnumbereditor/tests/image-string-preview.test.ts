@@ -18,6 +18,7 @@ const renderer = {
         this.y = value;
       },
     },
+    pivot: { x: 10, y: 5 },
   },
   setText: vi.fn(),
   getSnapshot: vi.fn(() => ({

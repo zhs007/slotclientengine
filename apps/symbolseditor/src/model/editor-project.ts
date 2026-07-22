@@ -23,6 +23,7 @@ import {
   type SymbolPackageGameConfigSymbol,
   type SymbolPackageManifestV1,
   type SymbolImageStringNodeSpec,
+  type SymbolValuePresentationImageStringTierBindingSpec,
   type SymbolValuePresentationSpec,
 } from "@slotclientengine/rendercore/symbol";
 import {
@@ -172,7 +173,7 @@ export function createFromGameConfig(options: {
 }): SymbolEditorProject {
   const { symbols } = parseSymbolPackageGameConfig(options.rawGameConfig);
   const id = normalizeProjectId(fileStem(options.fileName));
-  return {
+  const project: SymbolEditorProject = {
     id,
     cellSize: { width: DEFAULT_CELL_SIZE, height: DEFAULT_CELL_SIZE },
     rawGameConfig: cloneValue(options.rawGameConfig),
@@ -190,6 +191,7 @@ export function createFromGameConfig(options: {
     imageStringDependencies: new Map(),
     nextUploadBatch: 1,
   };
+  return project;
 }
 
 export function createFromImportedPackage(options: {
@@ -322,7 +324,7 @@ export function createFromImportedPackage(options: {
   const imageStringDependencies = collectImportedImageStringDependencies(
     options.assets,
   );
-  return {
+  const project: SymbolEditorProject = {
     id: options.packageManifest.id,
     cellSize: { ...options.packageManifest.cellSize },
     rawGameConfig: cloneValue(options.rawGameConfig),
@@ -335,6 +337,10 @@ export function createFromImportedPackage(options: {
     imageStringDependencies,
     nextUploadBatch: 1,
   };
+  for (const symbol of project.symbols.values()) {
+    if (symbol.included) validateTieredSpineEditorContract(project, symbol);
+  }
+  return project;
 }
 
 export function cloneSymbolEditorProject(
@@ -451,14 +457,24 @@ export function addSymbolState(
   state: string,
 ): void {
   const draft = requireSymbol(project, symbol);
-  if (!project.stateDefinitions.some((definition) => definition.id === state)) {
+  const definition = project.stateDefinitions.find(
+    (candidate) => candidate.id === state,
+  );
+  if (!definition) {
     throw new Error(`未知 state：${state}。`);
   }
   if (draft.states.has(state)) throw new Error(`${symbol}.${state} 已存在。`);
-  draft.states.set(state, {
-    kind: "empty-state",
-    durationSeconds: DEFAULT_EMPTY_STATE_DURATION,
-  });
+  draft.states.set(
+    state,
+    draft.valuePresentation
+      ? definition.playback === "static"
+        ? { kind: "image", imagePath: "" }
+        : { kind: "activeSpine", animationName: "" }
+      : {
+          kind: "empty-state",
+          durationSeconds: DEFAULT_EMPTY_STATE_DURATION,
+        },
+  );
   draft.stateOrder.push(state);
 }
 
@@ -504,6 +520,27 @@ export function setStateVisual(
   const draft = requireSymbol(project, symbol);
   if (!draft.states.has(state))
     throw new Error(`${symbol}.${state} 尚未添加。`);
+  if (draft.valuePresentation) {
+    if (state === "normal") {
+      throw new Error(
+        `${symbol}.normal 由 Spine 档位和统一动画配置派生，不能配置普通 visual。`,
+      );
+    }
+    const definition = project.stateDefinitions.find(
+      (candidate) => candidate.id === state,
+    );
+    if (!definition) throw new Error(`未知 state：${state}。`);
+    if (definition.playback === "static" && visual.kind !== "image") {
+      throw new Error(
+        `${symbol}.${state} 是静态 reel state，只能配置独立图片。`,
+      );
+    }
+    if (definition.playback !== "static" && visual.kind !== "activeSpine") {
+      throw new Error(
+        `${symbol}.${state} 必须统一使用当前 Spine 档位的 activeSpine 动画。`,
+      );
+    }
+  }
   draft.states.set(state, cloneValue(visual));
 }
 
@@ -575,8 +612,42 @@ export function setValuePresentation(
       width: project.cellSize.width,
       height: project.cellSize.height,
     });
+    for (const state of draft.stateOrder) {
+      if (state === "normal") continue;
+      if (draft.states.get(state)?.kind === "activeSpine") {
+        draft.states.set(state, {
+          kind: "empty-state",
+          durationSeconds: DEFAULT_EMPTY_STATE_DURATION,
+        });
+      }
+    }
   } else {
+    const enabling = !draft.valuePresentation;
     draft.valuePresentation = cloneValue(value);
+    if (enabling) {
+      draft.states.set("normal", {
+        kind: "empty",
+        width: value.reelStates.normal.width,
+        height: value.reelStates.normal.height,
+      });
+      for (const state of draft.stateOrder) {
+        if (state === "normal") continue;
+        const definition = project.stateDefinitions.find(
+          (candidate) => candidate.id === state,
+        );
+        if (!definition) continue;
+        const current = draft.states.get(state);
+        if (definition.playback === "static") {
+          if (current?.kind !== "image")
+            draft.states.set(state, { kind: "image", imagePath: "" });
+        } else if (current?.kind !== "activeSpine") {
+          draft.states.set(state, {
+            kind: "activeSpine",
+            animationName: "",
+          });
+        }
+      }
+    }
   }
 }
 
@@ -1454,7 +1525,69 @@ function validateProjectBasics(project: SymbolEditorProject): void {
     ) {
       throw new Error(`${symbol.symbol}.renderPriority 必须是非负安全整数。`);
     }
+    if (symbol.included) validateTieredSpineEditorContract(project, symbol);
   }
+}
+
+function validateTieredSpineEditorContract(
+  project: SymbolEditorProject,
+  symbol: EditorSymbolDraft,
+): void {
+  const value = symbol.valuePresentation;
+  if (!value) return;
+  const normalAnimations = new Set(
+    value.tiers.map((tier) => tier.animation.playback.animationName),
+  );
+  if (normalAnimations.size !== 1) {
+    throw new Error(
+      `${symbol.symbol} 的全部 Spine 档位必须共用同一个 normal animation。`,
+    );
+  }
+  if (value.text.type === "image-string") {
+    const [first, ...rest] = value.text.tiers;
+    if (!first || rest.some((binding) => !sameValueBinding(first, binding))) {
+      throw new Error(
+        `${symbol.symbol} 的 ImgNumber 必须使用一份共享 slot/anchor/transform 配置。`,
+      );
+    }
+    if (first.anchor.x !== 0.5 || first.anchor.y !== 0.5) {
+      throw new Error(
+        `${symbol.symbol} 的 ImgNumber 必须以动态内容中心 (0.5, 0.5) 对齐 Spine slot。`,
+      );
+    }
+  }
+  for (const state of symbol.stateOrder) {
+    if (state === "normal") continue;
+    const visual = symbol.states.get(state);
+    const definition = project.stateDefinitions.find(
+      (candidate) => candidate.id === state,
+    );
+    if (!visual || !definition) continue;
+    if (definition.playback === "static" && visual.kind !== "image") {
+      throw new Error(`${symbol.symbol}.${state} 必须配置独立静态图片。`);
+    }
+    if (definition.playback !== "static" && visual.kind !== "activeSpine") {
+      throw new Error(
+        `${symbol.symbol}.${state} 必须使用当前档位的统一 activeSpine 动画。`,
+      );
+    }
+  }
+}
+
+function sameValueBinding(
+  left: SymbolValuePresentationImageStringTierBindingSpec,
+  right: SymbolValuePresentationImageStringTierBindingSpec,
+): boolean {
+  return (
+    left.resource === right.resource &&
+    left.slot === right.slot &&
+    left.anchor.x === right.anchor.x &&
+    left.anchor.y === right.anchor.y &&
+    left.transform.x === right.transform.x &&
+    left.transform.y === right.transform.y &&
+    left.transform.scale === right.transform.scale &&
+    left.followSlotColor === right.followSlotColor
+  );
 }
 
 function setNestedValue(

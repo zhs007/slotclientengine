@@ -906,6 +906,61 @@ export class SymbolsEditorApp {
         }
       });
     panel
+      .querySelector<HTMLSelectElement>("[data-tier-normal-animation]")
+      ?.addEventListener("change", (event) => {
+        try {
+          this.#store.transact((draft) => {
+            const symbol = draft.symbols.get(this.#session.selectedSymbol)!;
+            if (!symbol.valuePresentation) return;
+            const value = structuredClone(symbol.valuePresentation);
+            for (const tier of value.tiers) {
+              (
+                tier.animation.playback as { animationName: string }
+              ).animationName = (
+                event.currentTarget as HTMLSelectElement
+              ).value;
+            }
+            setValuePresentation(draft, symbol.symbol, value);
+          });
+        } catch (error) {
+          this.#store.setExternalError(error);
+        }
+      });
+    panel
+      .querySelectorAll<
+        HTMLInputElement | HTMLSelectElement
+      >("[data-shared-value-text-field]")
+      .forEach((input) => {
+        input.addEventListener("change", () => {
+          try {
+            this.#store.transact((draft) => {
+              const symbol = draft.symbols.get(this.#session.selectedSymbol)!;
+              const presentation = symbol.valuePresentation;
+              if (!presentation || presentation.text.type !== "image-string")
+                return;
+              const value = structuredClone(presentation);
+              if (value.text.type !== "image-string") return;
+              const next =
+                input instanceof HTMLInputElement && input.type === "checkbox"
+                  ? input.checked
+                  : input instanceof HTMLInputElement && input.type === "number"
+                    ? Number(input.value)
+                    : input.value;
+              for (const binding of value.text.tiers) {
+                setObjectPath(
+                  binding as unknown as Record<string, unknown>,
+                  input.dataset.sharedValueTextField!,
+                  next,
+                );
+              }
+              setValuePresentation(draft, symbol.symbol, value);
+            });
+          } catch (error) {
+            this.#store.setExternalError(error);
+          }
+        });
+      });
+    panel
       .querySelector<HTMLElement>("[data-disable-value]")
       ?.addEventListener("click", () => {
         try {
@@ -1117,7 +1172,10 @@ export class SymbolsEditorApp {
           value.tiers.push(clone);
           if (value.text.type === "image-string") {
             (value.text.tiers as Array<Record<string, unknown>>).push(
-              createEmptyValueImageStringBinding(),
+              structuredClone(
+                (value.text.tiers as Array<Record<string, unknown>>)[0] ??
+                  createEmptyValueImageStringBinding(),
+              ),
             );
           }
           this.#session.expandedTier = value.tiers.length - 1;
@@ -1854,9 +1912,9 @@ function inspectorMarkup(
 ): string {
   const tabs: Array<[SymbolInspectorTab, string]> = [
     ["basic", "基础"],
+    ["value", "档位"],
     ["states", "状态"],
     ["image-string", "ImgNumber"],
-    ["value", "Value"],
     ["cascade", "Cascade"],
   ];
   const content =
@@ -1921,7 +1979,7 @@ function basicInspectorMarkup(
   const status = getSymbolResourceStatus(project, symbol.symbol);
   const normal = symbol.states.get("normal");
   return `<section class="inspector-section"><h2>基础属性</h2>
-    <dl class="summary-grid"><div><dt>Symbol</dt><dd>${escapeHtml(symbol.symbol)}</dd></div><div><dt>Numeric code</dt><dd>${symbol.code}</dd></div><div><dt>Normal</dt><dd>${visualKindLabel(normal?.kind ?? "missing")}</dd></div><div><dt>状态数</dt><dd>${symbol.states.size}</dd></div></dl>
+    <dl class="summary-grid"><div><dt>Symbol</dt><dd>${escapeHtml(symbol.symbol)}</dd></div><div><dt>Numeric code</dt><dd>${symbol.code}</dd></div><div><dt>Normal</dt><dd>${symbol.valuePresentation ? "档位 Spine" : visualKindLabel(normal?.kind ?? "missing")}</dd></div><div><dt>状态数</dt><dd>${symbol.states.size}</dd></div></dl>
     <label class="check-row"><input type="checkbox" data-symbol-included="${escapeAttr(symbol.symbol)}" ${symbol.included ? "checked" : ""}> Included</label>
     <div class="form-grid"><label>Scale <input data-symbol-scale data-focus-key="symbol-scale" type="number" min="0.01" step="0.01" value="${symbol.scale}"></label><label>Render priority <input data-symbol-priority type="number" min="0" step="1" value="${symbol.renderPriority}"></label></div>
     <div class="completeness ${status.ready ? "ready-box" : "error-box"}"><strong>${status.ready ? "配置就绪" : "配置未完成"}</strong>${status.error ? `<p>${escapeHtml(status.error)}</p>` : ""}${status.missing.length ? `<p>缺少：${status.missing.map(escapeHtml).join("、")}</p>` : ""}</div>
@@ -1945,6 +2003,13 @@ function statesInspectorMarkup(
     (item) => item.id === state,
   )!;
   const index = symbol.stateOrder.indexOf(state);
+  const tiered = Boolean(symbol.valuePresentation);
+  const tieredNormal = tiered && state === "normal";
+  const tieredAnimated =
+    tiered && (state === "normal" || definition.playback !== "static");
+  const stateFields = tieredNormal
+    ? tierNormalAnimationMarkup(project, symbol)
+    : visualFieldsMarkup(project, symbol, state, visual, thumbnail);
   return `<section class="state-editor">
     <div class="state-nav-wrap sticky">
       <div class="state-nav" aria-label="Symbol states">${symbol.stateOrder.map((id) => stateNavItem(project, symbol, id, id === state)).join("")}</div>
@@ -1952,16 +2017,20 @@ function statesInspectorMarkup(
     </div>
     <article class="single-state-inspector">
       <header><div><h2 data-focus-key="state-heading" tabindex="-1">${escapeHtml(state)}</h2><p>${definition.phase} / ${definition.playback}</p></div>${state === "normal" ? '<span class="lock-label">固定状态</span>' : `<div class="button-row"><button data-state-action="up" data-state="${escapeAttr(state)}" ${index <= 1 ? "disabled" : ""} aria-label="上移 ${escapeAttr(state)}">↑</button><button data-state-action="down" data-state="${escapeAttr(state)}" ${index >= symbol.stateOrder.length - 1 ? "disabled" : ""} aria-label="下移 ${escapeAttr(state)}">↓</button><button data-state-action="remove" data-state="${escapeAttr(state)}">删除</button></div>`}</header>
-      <div class="explicit-state-note">${visual.kind === "empty" || visual.kind === "empty-state" ? "当前是 explicit empty：这是正式配置，不是 fallback。" : "当前 state 已配置资源。"}</div>
-      <label>Visual kind <select data-visual-kind data-focus-key="visual-kind">${compatibleVisualKinds(
-        symbol,
-        state,
-      )
-        .map((kind) =>
-          option(kind, visualKindLabel(kind), visual.kind === kind),
-        )
-        .join("")}</select></label>
-      ${visualFieldsMarkup(project, symbol, state, visual, thumbnail)}
+      <div class="explicit-state-note">${tieredNormal ? "normal 使用当前数值解析出的 Spine 档位；这里只统一选择一次动画。" : tieredAnimated ? "该状态统一切换当前 Spine 档位上的同名动画。" : tiered ? "该 reel state 使用独立静态图片，不进入 Spine 档位动画。" : visual.kind === "empty" || visual.kind === "empty-state" ? "当前是 explicit empty：这是正式配置，不是 fallback。" : "当前 state 已配置资源。"}</div>
+      ${
+        tiered
+          ? `<div class="derived-field"><span>Visual kind</span><strong>${tieredAnimated ? "Active Spine（全部档位）" : "独立静态图片"}</strong><small>由档位与 state lifecycle 固定</small></div>`
+          : `<label>Visual kind <select data-visual-kind data-focus-key="visual-kind">${compatibleVisualKinds(
+              symbol,
+              state,
+            )
+              .map((kind) =>
+                option(kind, visualKindLabel(kind), visual.kind === kind),
+              )
+              .join("")}</select></label>`
+      }
+      ${stateFields}
     </article>
   </section>`;
 }
@@ -1976,7 +2045,10 @@ function stateNavItem(
     (item) => item.id === state,
   )!;
   const visual = symbol.states.get(state)!;
-  const stateStatus = getStateVisualStatus(project, visual);
+  const stateStatus =
+    symbol.valuePresentation && state === "normal"
+      ? getTierNormalStatus(project, symbol)
+      : getStateVisualStatus(project, visual);
   const label =
     stateStatus === "configured"
       ? "已配置"
@@ -2036,6 +2108,22 @@ function visualFieldsMarkup(
   return "";
 }
 
+function tierNormalAnimationMarkup(
+  project: SymbolEditorProject,
+  symbol: EditorSymbolDraft,
+): string {
+  const names = symbol.valuePresentation!.tiers.map(
+    (tier) => tier.animation.playback.animationName,
+  );
+  const current = new Set(names).size === 1 ? (names[0] ?? "") : "";
+  return `<label>Normal animation（全部档位） <select data-tier-normal-animation><option value="">选择共同动画…</option>${activeSpineAnimationOptions(
+    project,
+    symbol,
+  )
+    .map((name) => option(name, name, name === current))
+    .join("")}</select></label>`;
+}
+
 function baseVisualMarkup(
   project: SymbolEditorProject,
   symbol: EditorSymbolDraft,
@@ -2086,11 +2174,12 @@ function valueInspectorMarkup(
 ): string {
   const value = symbol.valuePresentation;
   if (!value)
-    return `<section class="empty-feature"><h2>Value presentation</h2><p>为带数值的 symbol 配置分档 Spine、reel state 与文字或图片数字。</p><button class="primary" data-enable-value>启用 Value presentation</button></section>`;
-  return `<section class="value-editor"><div class="section-heading"><div><h2>Value presentation</h2><p>资源通过 Picker 绑定；tier 一次展开一个。</p></div><button data-disable-value>停用</button></div>
+    return `<section class="empty-feature"><h2>Spine 档位</h2><p>先按数值范围配置各档 Spine 资源，再到“状态”中为全部档位统一选择动画。</p><button class="primary" data-enable-value>启用 Spine 档位</button></section>`;
+  return `<section class="value-editor"><div class="section-heading"><div><h2>Spine 档位</h2><p>每档只配置 skeleton / atlas / texture 与阈值；状态动画在下一步统一配置。</p></div><button data-disable-value>停用</button></div>
     <h3>Default values</h3><div class="compact-list">${value.defaultValues.map((candidate, index) => `<div class="form-row"><input data-value-field="defaultValues.${index}" data-value-type="number" type="number" min="1" step="1" value="${candidate}"><button data-value-action="move-default" data-value-index="${index}" data-direction="-1" aria-label="上移 value">↑</button><button data-value-action="move-default" data-value-index="${index}" data-direction="1" aria-label="下移 value">↓</button><button data-value-action="remove-default" data-value-index="${index}">删除</button></div>`).join("")}</div><div class="form-row"><input data-new-default type="number" min="1" step="1" value="1"><button data-value-action="add-default">增加 value</button></div>
     <h3>Reel normal</h3><div class="form-grid">${valueNumberField("reelStates.normal.width", value.reelStates.normal.width, "Width")}${valueNumberField("reelStates.normal.height", value.reelStates.normal.height, "Height")}</div>
     <h3>Spine tiers</h3><div class="tier-list">${value.tiers.map((tier, index) => valueTierMarkup(project, symbol, tier, index, session.expandedTier === index, thumbnail)).join("")}</div><button data-value-action="add-tier">增加 tier</button>
+    <p class="hint">档位资源完成后，进入“状态”统一选择 normal / win / remove 等动画；静态模糊图在对应状态单独配置。</p>
     ${valueNumberPresentationMarkup(project, symbol)}
   </section>`;
 }
@@ -2100,36 +2189,28 @@ function valueNumberPresentationMarkup(
   symbol: EditorSymbolDraft,
 ): string {
   const value = symbol.valuePresentation!;
-  const modeButtons = `<div class="button-row"><button data-value-action="text-type" data-text-type="font">Font</button><button data-value-action="text-type" data-text-type="image">完整数值图片</button><button data-value-action="text-type" data-text-type="image-string">ImgNumber（按 tier）</button></div>`;
+  const modeButtons = `<div class="button-row"><button data-value-action="text-type" data-text-type="font">Font</button><button data-value-action="text-type" data-text-type="image">完整数值图片</button><button data-value-action="text-type" data-text-type="image-string">ImgNumber（共享节点）</button></div>`;
   if (value.text.type === "image-string") {
     const dependencies = [...project.imageStringDependencies.values()].sort(
       (left, right) => left.id.localeCompare(right.id, "en"),
     );
-    const cards = value.text.tiers
-      .map((binding, index) => {
-        const slots = valueTierSlotOptions(project, symbol, index);
-        const tier = value.tiers[index];
-        const lower = index === 0 ? 1 : value.tiers[index - 1]!.maxExclusive;
-        const upper = tier?.maxExclusive;
-        const ready =
-          dependencies.length > 0 &&
-          binding.resource === "./image-string.manifest.json" &&
-          slots.includes(binding.slot);
-        const dependencyOptions = [
-          `<option value="" ${binding.resource ? "" : "selected"}>未选择 dependency</option>`,
-          ...dependencies.map(() => {
-            const resource = "./image-string.manifest.json";
-            return option(
-              resource,
-              "image-string.manifest.json",
-              binding.resource === resource,
-            );
-          }),
-        ].join("");
-        return `<article class="tier-card value-number-tier"><header><strong>Tier ${index + 1} · ${lower}..${upper === undefined ? "∞" : upper - 1}</strong><span class="status-${ready ? "ready" : "missing"}">${ready ? "就绪" : "未完成"}</span></header><label>ImgNumber dependency <select data-value-field="text.tiers.${index}.resource">${dependencyOptions}</select></label>${valueSelectField(`text.tiers.${index}.slot`, binding.slot, slots, "Tier skeleton slot")}<div class="form-grid">${valueNumberField(`text.tiers.${index}.anchor.x`, binding.anchor.x, "Anchor X")}${valueNumberField(`text.tiers.${index}.anchor.y`, binding.anchor.y, "Anchor Y")}${valueNumberField(`text.tiers.${index}.transform.x`, binding.transform.x, "X")}${valueNumberField(`text.tiers.${index}.transform.y`, binding.transform.y, "Y")}${valueNumberField(`text.tiers.${index}.transform.scale`, binding.transform.scale, "Scale")}</div><label><input data-value-field="text.tiers.${index}.followSlotColor" type="checkbox" ${binding.followSlotColor ? "checked" : ""}> Follow slot color</label></article>`;
-      })
-      .join("");
-    return `<section class="number-presentation"><h3>Number presentation</h3>${modeButtons}<p>ImgNumber dependency、slot 与 layout 按已解析 tier index 独立配置，不复制阈值。</p><div class="tier-list">${cards}</div></section>`;
+    const binding = value.text.tiers[0]!;
+    const slots = valueSlotOptions(project, symbol);
+    const ready =
+      dependencies.length > 0 &&
+      binding.resource === "./image-string.manifest.json" &&
+      slots.includes(binding.slot);
+    const dependencyOptions = [
+      `<option value="" ${binding.resource ? "" : "selected"}>未选择 dependency</option>`,
+      ...dependencies.map(() =>
+        option(
+          "./image-string.manifest.json",
+          "image-string.manifest.json",
+          binding.resource === "./image-string.manifest.json",
+        ),
+      ),
+    ].join("");
+    return `<section class="number-presentation"><h3>Number presentation</h3>${modeButtons}<p>所有 Spine 档位共用一个 ImgNumber dependency、共同 slot 和中心对齐配置；导出时按稳定 manifest schema 精确物化到每档。</p><article class="tier-card value-number-tier"><header><strong>共享 ImgNumber 节点</strong><span class="status-${ready ? "ready" : "missing"}">${ready ? "就绪" : "未完成"}</span></header><label>ImgNumber dependency <select data-shared-value-text-field="resource">${dependencyOptions}</select></label>${sharedValueSelectField("slot", binding.slot, slots, "全部档位共同 slot")}<div class="derived-field"><span>Alignment</span><strong>动态内容中心对齐</strong><small>字符串变长后仍以实际宽高中心对齐 Spine slot</small></div><div class="form-grid">${sharedValueNumberField("transform.x", binding.transform.x, "X")}${sharedValueNumberField("transform.y", binding.transform.y, "Y")}${sharedValueNumberField("transform.scale", binding.transform.scale, "Scale")}</div><label><input data-shared-value-text-field="followSlotColor" type="checkbox" ${binding.followSlotColor ? "checked" : ""}> Follow slot color</label></article></section>`;
   }
   const slots = valueSlotOptions(project, symbol);
   const common = `${valueSelectField("text.slot", value.text.slot, slots, "Slot intersection")}<div class="form-grid">${valueNumberField("text.x", value.text.x, "X")}${valueNumberField("text.y", value.text.y, "Y")}</div>`;
@@ -2177,14 +2258,8 @@ function valueTierMarkup(
   const skeleton = tier.animation.skeleton.replace(/^\.\//u, "");
   const atlas = tier.animation.atlas.replace(/^\.\//u, "");
   const texture = tier.animation.texture.replace(/^\.\//u, "");
-  const animations = assetMetadataList(
-    project.assetLibrary.records.get(skeleton),
-    "animationNames",
-  );
-  const ready = Boolean(
-    skeleton && atlas && texture && tier.animation.playback.animationName,
-  );
-  return `<details class="tier-card" data-tier-index="${index}" ${expanded ? "open" : ""}><summary><strong>Tier ${index + 1}</strong><span>${index < (symbol.valuePresentation?.tiers.length ?? 0) - 1 ? `&lt; ${tier.maxExclusive}` : "unbounded"}</span><span class="status-${ready ? "ready" : "missing"}">${ready ? "就绪" : "未完成"}</span></summary><div class="tier-body">${index < symbol.valuePresentation!.tiers.length - 1 ? valueNumberField(`tiers.${index}.maxExclusive`, tier.maxExclusive!, "maxExclusive") : '<p class="empty">最终 tier 无上界</p>'}${resourceBindingMarkup("Skeleton", skeleton, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "skeleton" })}${resourceBindingMarkup("Atlas", atlas, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "atlas" })}${derivedResourceMarkup("Texture · 由 Atlas page 自动解析", texture, thumbnail(texture))}${valueSelectField(`tiers.${index}.animation.playback.animationName`, tier.animation.playback.animationName, animations, "Loop animation")}<details class="advanced-fields"><summary>Transform</summary><div class="form-grid">${valueNumberField(`tiers.${index}.animation.transform.x`, tier.animation.transform?.x ?? 0, "X")}${valueNumberField(`tiers.${index}.animation.transform.y`, tier.animation.transform?.y ?? 0, "Y")}${valueNumberField(`tiers.${index}.animation.transform.scale`, tier.animation.transform?.scale ?? 1, "Scale")}</div></details><div class="button-row"><button data-value-action="move-tier" data-value-index="${index}" data-direction="-1" ${index === 0 ? "disabled" : ""}>↑</button><button data-value-action="move-tier" data-value-index="${index}" data-direction="1" ${index === symbol.valuePresentation!.tiers.length - 1 ? "disabled" : ""}>↓</button><button data-value-action="remove-tier" data-value-index="${index}">删除 tier</button></div></div></details>`;
+  const ready = Boolean(skeleton && atlas && texture);
+  return `<details class="tier-card" data-tier-index="${index}" ${expanded ? "open" : ""}><summary><strong>Tier ${index + 1}</strong><span>${index < (symbol.valuePresentation?.tiers.length ?? 0) - 1 ? `&lt; ${tier.maxExclusive}` : "unbounded"}</span><span class="status-${ready ? "ready" : "missing"}">${ready ? "资源就绪" : "未完成"}</span></summary><div class="tier-body">${index < symbol.valuePresentation!.tiers.length - 1 ? valueNumberField(`tiers.${index}.maxExclusive`, tier.maxExclusive!, "maxExclusive") : '<p class="empty">最终 tier 无上界</p>'}${resourceBindingMarkup("Skeleton", skeleton, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "skeleton" })}${resourceBindingMarkup("Atlas", atlas, { kind: "value-tier-resource", symbol: symbol.symbol, tierIndex: index, field: "atlas" })}${derivedResourceMarkup("Texture · 由 Atlas page 自动解析", texture, thumbnail(texture))}<details class="advanced-fields"><summary>Transform</summary><div class="form-grid">${valueNumberField(`tiers.${index}.animation.transform.x`, tier.animation.transform?.x ?? 0, "X")}${valueNumberField(`tiers.${index}.animation.transform.y`, tier.animation.transform?.y ?? 0, "Y")}${valueNumberField(`tiers.${index}.animation.transform.scale`, tier.animation.transform?.scale ?? 1, "Scale")}</div></details><div class="button-row"><button data-value-action="move-tier" data-value-index="${index}" data-direction="-1" ${index === 0 ? "disabled" : ""}>↑</button><button data-value-action="move-tier" data-value-index="${index}" data-direction="1" ${index === symbol.valuePresentation!.tiers.length - 1 ? "disabled" : ""}>↓</button><button data-value-action="remove-tier" data-value-index="${index}">删除 tier</button></div></div></details>`;
 }
 
 function cascadeInspectorMarkup(
@@ -2244,7 +2319,10 @@ function createPreviewCells(
     const visual = symbol.states.get(state);
     if (!visual)
       return { symbol: symbol.symbol, code: symbol.code, status: "missing" };
-    if (visual.kind === "empty" || visual.kind === "empty-state")
+    if (
+      (visual.kind === "empty" || visual.kind === "empty-state") &&
+      !(state === "normal" && symbol.valuePresentation)
+    )
       return { symbol: symbol.symbol, code: symbol.code, status: "empty" };
     const status = getSymbolResourceStatus(project, symbol.symbol);
     if (!status.ready)
@@ -2464,21 +2542,6 @@ function valueSlotOptions(
   return [...sets[0]!].filter((name) => sets.every((set) => set.has(name)));
 }
 
-function valueTierSlotOptions(
-  project: SymbolEditorProject,
-  symbol: EditorSymbolDraft,
-  tierIndex: number,
-): readonly string[] {
-  const tier = symbol.valuePresentation?.tiers[tierIndex];
-  if (!tier) return [];
-  return assetMetadataList(
-    project.assetLibrary.records.get(
-      tier.animation.skeleton.replace(/^\.\//u, ""),
-    ),
-    "slotNames",
-  );
-}
-
 function getCurrentResourcePath(
   project: SymbolEditorProject,
   context: ResourceBindingContext,
@@ -2570,6 +2633,33 @@ function getStateVisualStatus(
   return "configured";
 }
 
+function getTierNormalStatus(
+  project: SymbolEditorProject,
+  symbol: EditorSymbolDraft,
+): "configured" | "missing" | "error" {
+  const tiers = symbol.valuePresentation?.tiers ?? [];
+  if (tiers.length === 0) return "missing";
+  const names = new Set(
+    tiers.map((tier) => tier.animation.playback.animationName),
+  );
+  if (names.size !== 1 || !tiers[0]!.animation.playback.animationName)
+    return "missing";
+  for (const tier of tiers) {
+    for (const path of [
+      tier.animation.skeleton,
+      tier.animation.atlas,
+      tier.animation.texture,
+    ]) {
+      const record = project.assetLibrary.records.get(
+        path.replace(/^\.\//u, ""),
+      );
+      if (!record) return "missing";
+      if (record.diagnostics.length > 0) return "error";
+    }
+  }
+  return "configured";
+}
+
 function collectBaseVisualPaths(
   visual: EditorBaseVisual | undefined,
   paths: string[],
@@ -2637,6 +2727,23 @@ function valueSelectField(
   label: string,
 ): string {
   return `<label>${escapeHtml(label)} <select data-value-field="${escapeAttr(field)}"><option value="">选择…</option>${values.map((value) => option(value, value, value === current)).join("")}</select></label>`;
+}
+
+function sharedValueSelectField(
+  field: string,
+  current: string,
+  values: readonly string[],
+  label: string,
+): string {
+  return `<label>${escapeHtml(label)} <select data-shared-value-text-field="${escapeAttr(field)}"><option value="">选择…</option>${values.map((value) => option(value, value, value === current)).join("")}</select></label>`;
+}
+
+function sharedValueNumberField(
+  field: string,
+  value: number,
+  label: string,
+): string {
+  return `<label>${escapeHtml(label)} <input data-shared-value-text-field="${escapeAttr(field)}" type="number" step="0.01" value="${value}"></label>`;
 }
 
 function setObjectPath(

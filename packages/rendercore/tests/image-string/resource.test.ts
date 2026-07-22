@@ -208,9 +208,12 @@ describe("image-string resource", () => {
     });
     const renderer = createRenderImageString({ resource, text: "01" });
     const firstChildren = [...renderer.container.children];
-    expect(renderer.container.pivot.x).toBe(9);
+    expect(renderer.container.pivot.x).toBe(8);
     renderer.setText("10");
     expect(renderer.container.children).toEqual(firstChildren);
+    expect(renderer.container.pivot.x).toBe(10);
+    renderer.setText("010");
+    expect(renderer.container.pivot.x).toBe(14);
     const beforeFailure = renderer.getSnapshot();
     expect(() => renderer.setText("2")).toThrow("缺少 glyph");
     expect(renderer.getSnapshot()).toBe(beforeFailure);

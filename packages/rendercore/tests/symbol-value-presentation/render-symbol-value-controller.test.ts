@@ -258,7 +258,11 @@ describe("render symbol value controller", () => {
       slot: "LowNum",
       followSlotColor: false,
     });
-    expect(players[0].attached[0]?.object.children).toHaveLength(1);
+    const lowDisplay = players[0].attached[0]!.object;
+    expect(lowDisplay.children).toHaveLength(1);
+    expect(lowDisplay.position).toMatchObject({ x: 2, y: 3 });
+    expect(lowDisplay.scale).toMatchObject({ x: 0.5, y: 0.5 });
+    expect(lowDisplay.pivot).toMatchObject({ x: 0.5, y: 0.5 });
 
     symbol.setPresentationValue(25);
     await flushPromises();
@@ -266,7 +270,11 @@ describe("render symbol value controller", () => {
       slot: "HighNum",
       followSlotColor: true,
     });
-    expect(players[1].attached[0]?.object.children).toHaveLength(2);
+    const highDisplay = players[1].attached[0]!.object;
+    expect(highDisplay.children).toHaveLength(2);
+    expect(highDisplay.position).toMatchObject({ x: -2, y: -3 });
+    expect(highDisplay.scale).toMatchObject({ x: 2, y: 2 });
+    expect(highDisplay.pivot).toMatchObject({ x: 2, y: 1 });
     expect(players[0].destroyed).toBe(true);
 
     expect(() => symbol.setPresentationValue(13)).toThrow(/缺少 glyph/);

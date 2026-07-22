@@ -352,7 +352,7 @@ describe("symbols editor app shell", () => {
     expect(root.textContent).toContain("groupAmount");
   });
 
-  it("keeps ImgNumber bindings aligned with tiers and removes inactive mode fields", async () => {
+  it("keeps one shared ImgNumber binding while Spine tiers change", async () => {
     await createProject(root);
     click(root, '[data-workspace-tab][data-tab-value="symbols"]');
     click(root, '[data-inspector-tab][data-tab-value="value"]');
@@ -367,7 +367,12 @@ describe("symbols editor app shell", () => {
 
     click(root, '[data-value-action="add-tier"]');
     expect(root.querySelectorAll("[data-tier-index]")).toHaveLength(2);
-    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(2);
+    expect(root.querySelectorAll(".value-number-tier")).toHaveLength(1);
+    expect(root.textContent).toContain("动态内容中心对齐");
+    expect(
+      root.querySelector("[data-shared-value-text-field='slot']"),
+    ).not.toBeNull();
+    expect(root.querySelector("[data-value-field^='text.tiers.']")).toBeNull();
     click(root, '[data-value-action="remove-tier"][data-value-index="1"]');
     expect(root.querySelectorAll(".value-number-tier")).toHaveLength(1);
 
@@ -377,6 +382,93 @@ describe("symbols editor app shell", () => {
       root.querySelector('[data-value-field="text.prefix"]'),
     ).not.toBeNull();
     expect(root.querySelector('[data-value-field^="text.tiers."]')).toBeNull();
+  });
+
+  it("orders tier setup before states and derives tiered state visual kinds", async () => {
+    await createProject(root);
+    click(root, '[data-workspace-tab][data-tab-value="symbols"]');
+    const tabs = [
+      ...root.querySelectorAll<HTMLElement>("[data-inspector-tab]"),
+    ];
+    expect(tabs.map((tab) => tab.dataset.tabValue)).toEqual([
+      "basic",
+      "value",
+      "states",
+      "image-string",
+      "cascade",
+    ]);
+
+    click(root, '[data-inspector-tab][data-tab-value="value"]');
+    click(root, "[data-enable-value]");
+    expect(root.querySelector("[data-tier-normal-animation]")).toBeNull();
+    expect(
+      root.querySelector('[data-value-field*="animationName"]'),
+    ).toBeNull();
+
+    click(root, '[data-inspector-tab][data-tab-value="states"]');
+    expect(root.textContent).toContain("Active Spine（全部档位）");
+    expect(root.querySelector("[data-tier-normal-animation]")).not.toBeNull();
+    expect(root.querySelector("[data-visual-kind]")).toBeNull();
+
+    click(root, "[data-toggle-add-state]");
+    click(root, '[data-add-state-id="spinBlur"]');
+    expect(root.textContent).toContain("独立静态图片");
+    expect(
+      root.querySelector('[data-open-picker*="state-image"]'),
+    ).not.toBeNull();
+  });
+
+  it("renders tiered Spine normal as configured instead of transparent empty", async () => {
+    await createProject(root);
+    const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
+    const names = ["CN_1.json", "Symbol.atlas", "Symbol.png"];
+    Object.defineProperty(upload, "files", {
+      configurable: true,
+      value: names.map(
+        (name) =>
+          new File(
+            [
+              readFileSync(
+                resolve(process.cwd(), `../../assets/game002-s3/${name}`),
+              ),
+            ],
+            name,
+          ),
+      ),
+    });
+    upload.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain("已上传 3 个资源"),
+    );
+
+    click(root, '[data-workspace-tab][data-tab-value="symbols"]');
+    click(root, '[data-inspector-tab][data-tab-value="value"]');
+    click(root, "[data-enable-value]");
+    click(root, `[data-open-picker*='"field":"skeleton"']`);
+    click(root, '[data-picker-candidate="CN_1.json"]');
+    click(root, "[data-picker-confirm]");
+    const slot = root.querySelector<HTMLSelectElement>(
+      '[data-value-field="text.slot"]',
+    )!;
+    slot.value = "Num";
+    slot.dispatchEvent(new Event("change", { bubbles: true }));
+
+    click(root, '[data-inspector-tab][data-tab-value="states"]');
+    const animation = root.querySelector<HTMLSelectElement>(
+      "[data-tier-normal-animation]",
+    )!;
+    animation.value = "Loop";
+    animation.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await vi.waitFor(() => {
+      const cells = previewSpies.setResource.mock.calls.at(-1)?.[1] as
+        | Array<Record<string, unknown>>
+        | undefined;
+      expect(cells?.find((cell) => cell.symbol === "A")).toMatchObject({
+        status: "configured",
+        value: 1,
+      });
+    });
   });
 
   it("surfaces protected state deletion as an error without fake success", async () => {
