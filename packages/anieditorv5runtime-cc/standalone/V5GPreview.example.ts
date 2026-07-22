@@ -3,6 +3,7 @@ import {
   assertV5GProject,
   createV5GCocosPlayer,
   validateCocosV5GProject,
+  type V5GCocosPlaybackEventContext,
   type V5GCocosPlaybackState,
   type V5GCocosPlayer,
 } from "./anieditorv5runtime-cc";
@@ -81,7 +82,7 @@ export class V5GPreview extends Component {
         id: "preview-midpoint-frame",
         at: { unit: "frame", at: midpointFrame, fps: previewFps },
         once: true,
-        listener: (event) => {
+        listener: (event: V5GCocosPlaybackEventContext) => {
           this.lastPlaybackEventId = event.id;
         },
       });
@@ -90,7 +91,7 @@ export class V5GPreview extends Component {
       id: "preview-end-time",
       at: { unit: "time", at: previewEndTime },
       once: true,
-      listener: (event) => {
+      listener: (event: V5GCocosPlaybackEventContext) => {
         this.lastPlaybackEventId = event.id;
       },
     });

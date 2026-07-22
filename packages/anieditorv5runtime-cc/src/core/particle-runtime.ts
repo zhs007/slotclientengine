@@ -83,6 +83,7 @@ export class V5GParticleRuntime {
     layers: readonly V5GParticleRuntimeLayer[],
     configTime: number,
     deltaSeconds: number,
+    simulationTime?: number,
   ): V5GParticleRuntimeFrame {
     this.draining = false;
     this.drainElapsed = 0;
@@ -91,6 +92,7 @@ export class V5GParticleRuntime {
       layers,
       configTime,
       deltaSeconds,
+      simulationTime,
     );
     const particles = sampleLiveParticleSpritesForRuntime(liveLayers);
     this.lastParticles = particles;
@@ -164,6 +166,7 @@ export class V5GParticleRuntime {
     layers: readonly V5GParticleRuntimeLayer[],
     configTime: number,
     deltaSeconds: number,
+    simulationTime?: number,
   ): V5GLiveParticleAnimationLayer[] {
     const nextActiveKeys = new Set<string>();
     const liveLayers: V5GLiveParticleAnimationLayer[] = [];
@@ -174,17 +177,19 @@ export class V5GParticleRuntime {
           continue;
         }
         const configProgress = getParticleProgress(animation, configTime);
-        if (configProgress === null || configProgress <= 0) continue;
+        if (configProgress === null) continue;
         const key = getLiveAnimationKey(entry.layer.id, animation.id);
         const configuredElapsed = Math.max(0, configTime - animation.startTime);
-        const previousElapsed = this.liveAnimationElapsedByKey.get(key);
-        const elapsed =
-          previousElapsed === undefined
+        const simulationElapsed =
+          simulationTime === undefined
             ? configuredElapsed
-            : Math.max(
-                configuredElapsed,
-                previousElapsed + Math.max(0, deltaSeconds),
-              );
+            : Math.max(0, simulationTime - animation.startTime);
+        const previousElapsed = this.liveAnimationElapsedByKey.get(key);
+        const elapsed = getLiveParticleElapsed(
+          simulationElapsed,
+          previousElapsed,
+          deltaSeconds,
+        );
         this.liveAnimationElapsedByKey.set(key, elapsed);
         nextActiveKeys.add(key);
         runtimeStates.push({
@@ -203,6 +208,20 @@ export class V5GParticleRuntime {
     }
     return liveLayers;
   }
+}
+
+function getLiveParticleElapsed(
+  simulationElapsed: number,
+  previousElapsed: number | undefined,
+  deltaSeconds: number,
+): number {
+  if (previousElapsed === undefined) {
+    return simulationElapsed;
+  }
+  return Math.max(
+    simulationElapsed,
+    previousElapsed + Math.max(0, deltaSeconds),
+  );
 }
 
 export function sampleLiveParticleSprites(

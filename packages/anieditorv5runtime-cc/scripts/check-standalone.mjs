@@ -23,6 +23,7 @@ for (const moduleName of importModules) {
 const forbiddenPatterns = [
   [/from\s+["']\.\.?\//u, "relative imports are not allowed"],
   [/from\s+["']@slotclientengine\//u, "workspace imports are not allowed"],
+  [/@slotclientengine\/vnicore/u, "vnicore dependency is not allowed"],
   [/from\s+["']pixi\.js["']/u, "pixi.js is not allowed"],
   [/from\s+["'](?:fs|path|url|node:)/u, "Node builtins are not allowed"],
   [/\brequire\s*\(/u, "CommonJS require is not allowed"],
@@ -42,6 +43,10 @@ const forbiddenPatterns = [
     /\.includes\s*\(/u,
     "ES2016 includes() is not allowed in the ES2015 standalone runtime",
   ],
+  [
+    /\bV5GBundleManifest\b/u,
+    "bundle manifest APIs are not part of Cocos runtime",
+  ],
 ];
 
 for (const [pattern, message] of forbiddenPatterns) {
@@ -55,6 +60,8 @@ const requiredExports = [
   "export interface V5GExportProfileConfig",
   "export interface V5GLayerGroupConfig",
   "export interface V5GProjectConfig",
+  "export interface V5GSequenceConfig",
+  "export interface V5GBasicAnimationConfig",
   "export const DEFAULT_VNI_LAYER_GROUP_ID",
   "export interface VNIRenderGroupInfo",
   "export interface VNILayerGroupSlot",
@@ -63,6 +70,8 @@ const requiredExports = [
   "export function getVNIProjectLayerGroupSlots",
   "export function assertVNIAdjacentLayerGroupSlot",
   "export interface SampledLayerState",
+  "export type VNIDeterministicEffectSample",
+  "export interface VNICardCarousel3DSampleBuffer",
   "export interface VNISafeGlowLayerSampleState",
   "export interface VNISafeGlowSpriteSample",
   "export interface VNIChaserLightLayerSampleState",
@@ -129,10 +138,25 @@ const requiredExports = [
   "export function hasActiveParticleAnimation",
   "export function opacityToCocosOpacity",
   "export function v5gTransformToCocosPosition",
+  "export function getSequenceFrameAssetId",
+  "export function sampleDeterministicEffectSpritesForLayer",
+  "export function prepareCardCarousel3D",
+  "export function createCardCarousel3DSampleBuffer",
+  "export function sampleCardCarousel3D",
 ];
 
+const runtimeExportBlock = source.match(/export \{([^}]+)\};\s*$/u)?.[1] ?? "";
 for (const expected of requiredExports) {
-  if (!source.includes(expected)) {
+  const runtimeMatch = expected.match(
+    /^export (?:function|class|const) (\w+)$/u,
+  );
+  const found = runtimeMatch
+    ? new RegExp(
+        `(?:^|[,\\s])(?:\\w+\\s+as\\s+)?${runtimeMatch[1]}(?:[,\\s]|$)`,
+        "u",
+      ).test(runtimeExportBlock)
+    : source.includes(expected);
+  if (!found) {
     violations.push(`missing public API: ${expected}`);
   }
 }
@@ -145,6 +169,16 @@ const requiredSnippets = [
   "detachMountedNodes(targets: readonly (string | TNode)[]): void",
   "hasActiveSafeGlowAnimation: boolean",
   "hasActiveChaserLightAnimation: boolean",
+  "visualRotation: number",
+  "hasActiveDeterministicEffect: boolean",
+  "hasActiveCardCarousel3D: boolean",
+  "setImageSpriteFrame?",
+  "createSpriteFrameRegion?",
+  "destroySpriteFrameRegion?",
+  "setSiblingIndex?",
+  "createLineNode?",
+  "updateLines?",
+  "applyLineBlendMode?",
   "safe_glow",
   "chaser_light",
   "lightDuration + interval",
@@ -159,6 +193,10 @@ const requiredSnippets = [
   "forceStopParticles",
   "emitPlaybackEventsAtBoundary",
   "dispatchPlaybackEvents",
+  "card_carousel_3d",
+  "wave_distort",
+  "multi_move",
+  "bounce_jump",
 ];
 
 for (const expected of requiredSnippets) {

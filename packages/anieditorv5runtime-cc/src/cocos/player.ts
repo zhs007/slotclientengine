@@ -18,6 +18,21 @@ import {
   type VNISafeGlowSpriteSample,
 } from "../core/safe-glow-sampler.js";
 import {
+  sampleDeterministicEffectSpritesForLayer,
+  type VNIDeterministicEffectSample,
+} from "../core/effect-sampler.js";
+import { isDeterministicEffectAnimationType } from "../core/animation-sampler.js";
+import { getLayerDisplayAssetId } from "../core/sequence-layer.js";
+import {
+  createCardCarousel3DSampleBuffer,
+  getCardCarousel3DProgress,
+  prepareCardCarousel3D,
+  sampleCardCarousel3D,
+  type VNICardCarousel3DPreparedConfig,
+  type VNICardCarousel3DSampleBuffer,
+  type VNICardCarousel3DTextureInfo,
+} from "../core/card-carousel-3d.js";
+import {
   assertVNIAdjacentLayerGroupSlot,
   getVNIProjectLayerGroupSlots,
   getVNIProjectRenderGroupOrder,
@@ -34,8 +49,16 @@ import {
   opacityToCocosOpacity,
   v5gTransformToCocosPosition,
 } from "./coordinates.js";
-import type { V5GCocosNodeTransformSnapshot } from "./node-driver.js";
-import type { V5GAssetConfig, V5GLayerConfig } from "../core/types.js";
+import type {
+  V5GCocosLineSample,
+  V5GCocosNodeTransformSnapshot,
+  V5GSpriteFrameRegion,
+} from "./node-driver.js";
+import type {
+  V5GAnimationConfig,
+  V5GAssetConfig,
+  V5GLayerConfig,
+} from "../core/types.js";
 import type {
   V5GCocosPlaybackCompleteContext,
   V5GCocosPlaybackEventContext,
@@ -69,7 +92,12 @@ import type {
 interface ManagedLayer<TNode, TSpriteFrame> {
   layer: V5GLayerConfig;
   asset: V5GAssetConfig | null;
+  /** Stable outer root: sampled x/y/scale/rotation/opacity and masks. */
   node: TNode;
+  /** Stable content root: pressure visualRotation only. */
+  contentNode: TNode;
+  /** Sprite or Label display owned by the runtime. */
+  displayNode: TNode;
   textBindingContainer: TNode | null;
   textBindings: TextLayerBindingRecord<TNode>[];
   safeGlowContainer: TNode;
@@ -80,6 +108,28 @@ interface ManagedLayer<TNode, TSpriteFrame> {
   particleNodes: TNode[];
   maskNode: TNode | null;
   spriteFrame: TSpriteFrame | null;
+  displayAssets: readonly V5GAssetConfig[];
+  displaySpriteFrames: readonly TSpriteFrame[];
+  currentDisplayAssetIndex: number;
+  deterministicEffectContainer: TNode | null;
+  deterministicEffectNodes: TNode[];
+  deterministicEffectFrameCache: Map<string, TSpriteFrame>;
+  deterministicEffectActiveCount: number;
+  deterministicLineActiveCount: number;
+  deterministicLineNode: TNode | null;
+  cardCarouselRuntimes: CardCarouselRuntime<TNode, TSpriteFrame>[];
+}
+
+interface CardCarouselRuntime<TNode, TSpriteFrame> {
+  animation: V5GAnimationConfig;
+  prepared: VNICardCarousel3DPreparedConfig;
+  output: VNICardCarousel3DSampleBuffer;
+  container: TNode;
+  cardContainers: TNode[];
+  sliceNodes: TNode[][];
+  sliceFrames: TSpriteFrame[][];
+  textureInfos: readonly VNICardCarousel3DTextureInfo[];
+  visibleCardCount: number;
 }
 
 interface PlaybackBoundary {
@@ -282,21 +332,31 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
             throw new Error(`Missing V5G layer for render group: ${layerId}.`);
           }
           const imageRuntime = this.createLayerRuntimeNode(layer, assetsById);
-          const { asset, spriteFrame, node } = imageRuntime;
+          const {
+            asset,
+            spriteFrame,
+            node: displayNode,
+            displayAssets,
+            displaySpriteFrames,
+          } = imageRuntime;
           const contentWidth = asset?.width ?? project.stage.width;
           const contentHeight = asset?.height ?? project.stage.height;
-          driver.setContentSize(node, contentWidth, contentHeight);
+          driver.setContentSize(displayNode, contentWidth, contentHeight);
           driver.setAnchorPoint(
-            node,
+            displayNode,
             layer.transform.anchorX,
             layer.transform.anchorY,
           );
-          if (layer.type === "image") {
+          if (layer.type === "image" || layer.type === "sequence") {
             driver.applyBlendMode(
-              node,
+              displayNode,
               getCocosBlendModeConfig(layer.blendMode),
             );
           }
+          const node = driver.createNode(layer.name);
+          const layerContentNode = driver.createNode(`${layer.name} Content`);
+          driver.appendChild(node, layerContentNode);
+          driver.appendChild(layerContentNode, displayNode);
           driver.appendChild(groupNode, node);
 
           const textBindingContainer =
@@ -310,7 +370,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
               project.stage.height,
             );
             driver.setAnchorPoint(textBindingContainer, 0.5, 0.5);
-            driver.appendChild(groupNode, textBindingContainer);
+            driver.appendChild(layerContentNode, textBindingContainer);
           }
 
           const safeGlowContainer = driver.createNode(
@@ -346,10 +406,55 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
           driver.setAnchorPoint(particleContainer, 0.5, 0.5);
           driver.appendChild(groupNode, particleContainer);
 
-          this.layers.set(layer.id, {
+          const needsDeterministicEffects = layer.animations.some(
+            (animation) =>
+              animation.enabled &&
+              isDeterministicEffectAnimationType(animation.type),
+          );
+          const deterministicEffectContainer = needsDeterministicEffects
+            ? driver.createNode(`${layer.name} Deterministic Effects`)
+            : null;
+          if (deterministicEffectContainer) {
+            driver.setContentSize(
+              deterministicEffectContainer,
+              project.stage.width,
+              project.stage.height,
+            );
+            driver.setAnchorPoint(deterministicEffectContainer, 0.5, 0.5);
+            driver.appendChild(groupNode, deterministicEffectContainer);
+          }
+          const needsLineNode = layer.animations.some(
+            (animation) =>
+              animation.enabled && animation.type === "speed_lines",
+          );
+          if (needsLineNode && !driver.createLineNode) {
+            throw new Error(
+              `Cocos node driver requires createLineNode() for speed_lines animation on layer "${layer.id}".`,
+            );
+          }
+          const deterministicLineNode = needsLineNode
+            ? (driver.createLineNode?.(`${layer.name} Deterministic Lines`) ??
+              null)
+            : null;
+          if (deterministicLineNode) {
+            driver.setContentSize(
+              deterministicLineNode,
+              project.stage.width,
+              project.stage.height,
+            );
+            driver.setAnchorPoint(deterministicLineNode, 0.5, 0.5);
+            driver.appendChild(
+              deterministicEffectContainer as TNode,
+              deterministicLineNode,
+            );
+          }
+
+          const managed: ManagedLayer<TNode, TSpriteFrame> = {
             layer,
             asset,
             node,
+            contentNode: layerContentNode,
+            displayNode,
             textBindingContainer,
             textBindings: [],
             safeGlowContainer,
@@ -360,7 +465,19 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
             particleNodes: [],
             maskNode: null,
             spriteFrame,
-          });
+            displayAssets,
+            displaySpriteFrames,
+            currentDisplayAssetIndex: 0,
+            deterministicEffectContainer,
+            deterministicEffectNodes: [],
+            deterministicEffectFrameCache: new Map(),
+            deterministicEffectActiveCount: 0,
+            deterministicLineActiveCount: 0,
+            deterministicLineNode,
+            cardCarouselRuntimes: [],
+          };
+          this.layers.set(layer.id, managed);
+          this.initializeCardCarouselRuntimes(managed, groupNode);
         }
 
         const slot = this.layerGroupSlots.find(
@@ -387,6 +504,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       this.stageNode = stage;
       this.renderDeterministicFrame(this.currentTime);
     } catch (error) {
+      this.destroyEffectFrameResources();
       driver.destroyNode(stage);
       this.stageNode = null;
       this.contentNode = null;
@@ -748,6 +866,12 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
         this.mountedNodesByNode.size + this.textBindingsById.size,
       safeGlowSpriteCount: this.getRenderedSafeGlowCount(),
       liveParticleCount: this.particleRuntime.getLiveParticleCount(),
+      deterministicEffectSpriteCount:
+        this.getRenderedDeterministicEffectCount(),
+      deterministicEffectLineCount: this.getRenderedDeterministicLineCount(),
+      cardCarouselCardPoolSize: this.getCardCarouselCardPoolSize(),
+      cardCarouselSlicePoolSize: this.getCardCarouselSlicePoolSize(),
+      visibleCardCarouselCardCount: this.getVisibleCardCarouselCardCount(),
     };
   }
 
@@ -1335,6 +1459,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
           `Missing runtime node for V5G layer "${sampledLayer.layerId}".`,
         );
       }
+      this.updateLayerDisplayAsset(managed, sampledProject.time);
       const position = v5gTransformToCocosPosition(sampledLayer.transform);
       this.options.driver.setPosition(managed.node, position.x, position.y);
       this.options.driver.setScale(
@@ -1353,41 +1478,424 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       const hideAsMaskSource = this.hiddenMaskSourceLayerIds.has(
         sampledLayer.layerId,
       );
+      this.options.driver.setActive(managed.node, sampledLayer.visible);
+      this.options.driver.setPosition(managed.contentNode, 0, 0);
+      this.options.driver.setScale(managed.contentNode, 1, 1);
+      this.options.driver.setRotationDegrees(
+        managed.contentNode,
+        sampledLayer.visualRotation,
+      );
+      this.options.driver.setOpacity(managed.contentNode, 255);
+      this.options.driver.setActive(managed.contentNode, true);
       this.options.driver.setActive(
-        managed.node,
+        managed.displayNode,
         sampledLayer.renderImageDisplay && !hideAsMaskSource,
       );
       this.applyTextLayerOriginalVisibility(managed);
       if (managed.textBindingContainer) {
-        this.options.driver.setPosition(
-          managed.textBindingContainer,
-          position.x,
-          position.y,
-        );
-        this.options.driver.setScale(
-          managed.textBindingContainer,
-          sampledLayer.transform.scaleX,
-          sampledLayer.transform.scaleY,
-        );
-        this.options.driver.setRotationDegrees(
-          managed.textBindingContainer,
-          sampledLayer.transform.rotation,
-        );
-        this.options.driver.setOpacity(
-          managed.textBindingContainer,
-          opacityToCocosOpacity(sampledLayer.opacity),
-        );
-        this.options.driver.setActive(
-          managed.textBindingContainer,
-          sampledLayer.visible,
-        );
+        this.options.driver.setPosition(managed.textBindingContainer, 0, 0);
+        this.options.driver.setScale(managed.textBindingContainer, 1, 1);
+        this.options.driver.setRotationDegrees(managed.textBindingContainer, 0);
+        this.options.driver.setOpacity(managed.textBindingContainer, 255);
+        this.options.driver.setActive(managed.textBindingContainer, true);
       }
       this.updateMaskSample(managed);
       this.renderSafeGlowSamples(managed, sampledLayer, sampledProject.time);
       this.renderChaserLightSamples(managed, sampledLayer, sampledProject.time);
+      this.renderDeterministicEffectSamples(
+        managed,
+        sampledLayer,
+        sampledProject.time,
+      );
+      this.renderCardCarouselSamples(
+        managed,
+        sampledLayer,
+        sampledProject.time,
+      );
     }
 
     return sampledProject;
+  }
+
+  private updateLayerDisplayAsset(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+    time: number,
+  ): void {
+    if (managed.layer.type !== "sequence") return;
+    const assetId = getLayerDisplayAssetId(managed.layer, time);
+    const index = managed.displayAssets.findIndex(
+      (asset) => asset.id === assetId,
+    );
+    if (index < 0) {
+      throw new Error(
+        `V5G sequence layer "${managed.layer.id}" is missing resolved frame "${String(assetId)}".`,
+      );
+    }
+    if (index === managed.currentDisplayAssetIndex) return;
+    const asset = managed.displayAssets[index];
+    const spriteFrame = managed.displaySpriteFrames[index];
+    managed.asset = asset;
+    managed.spriteFrame = spriteFrame;
+    managed.currentDisplayAssetIndex = index;
+    this.setRuntimeSpriteFrame(managed.displayNode, spriteFrame, "sequence");
+    this.options.driver.setContentSize(
+      managed.displayNode,
+      asset.width,
+      asset.height,
+    );
+  }
+
+  private renderDeterministicEffectSamples(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+    sampledLayer: SampledLayerState,
+    time: number,
+  ): void {
+    if (
+      !sampledLayer.hasActiveDeterministicEffect ||
+      !managed.asset ||
+      !managed.spriteFrame
+    ) {
+      this.setDeterministicEffectActiveCount(managed, 0);
+      this.updateRuntimeLines(managed.deterministicLineNode, []);
+      managed.deterministicLineActiveCount = 0;
+      return;
+    }
+    const textureSize = getExpectedSpriteFrameSize(managed.asset);
+    const samples = sampleDeterministicEffectSpritesForLayer(
+      managed.layer,
+      sampledLayer,
+      textureSize,
+      time,
+    );
+    const spriteSamples = samples.filter(
+      (sample) => sample.kind !== "speed_line",
+    );
+    const lineSamples = samples.filter(
+      (
+        sample,
+      ): sample is Extract<
+        VNIDeterministicEffectSample,
+        { kind: "speed_line" }
+      > => sample.kind === "speed_line",
+    );
+    this.ensureDeterministicEffectPool(managed, spriteSamples.length);
+    this.setDeterministicEffectActiveCount(managed, spriteSamples.length);
+    const emitter = v5gTransformToCocosPosition(sampledLayer.transform);
+    for (let index = 0; index < spriteSamples.length; index += 1) {
+      const sample = spriteSamples[index];
+      const node = managed.deterministicEffectNodes[index];
+      let displayScaleX = sample.scaleX;
+      let displayScaleY = sample.scaleY;
+      if (sample.kind === "wave_distort_slice") {
+        const frameKey = [
+          managed.currentDisplayAssetIndex,
+          sample.rows,
+          sample.row,
+          sample.frameX,
+          sample.frameY,
+          sample.frameWidth,
+          sample.frameHeight,
+        ].join(":");
+        let frame = managed.deterministicEffectFrameCache.get(frameKey);
+        if (!frame) {
+          frame = this.createRuntimeSpriteFrameRegion(managed.spriteFrame, {
+            x: sample.frameX,
+            y: sample.frameY,
+            width: sample.frameWidth,
+            height: sample.frameHeight,
+          });
+          managed.deterministicEffectFrameCache.set(frameKey, frame);
+        }
+        this.setRuntimeSpriteFrame(node, frame, "wave_distort");
+        this.options.driver.setContentSize(
+          node,
+          sample.frameWidth,
+          sample.frameHeight,
+        );
+        displayScaleX *= managed.asset.width / textureSize.width;
+        displayScaleY *= managed.asset.height / textureSize.height;
+        this.options.driver.setAnchorPoint(node, 0.5, 0.5);
+      } else {
+        this.setRuntimeSpriteFrame(
+          node,
+          managed.spriteFrame,
+          "deterministic effect",
+        );
+        this.options.driver.setContentSize(
+          node,
+          sample.type === "energy_ring" || sample.type === "slash_light"
+            ? managed.asset.width
+            : textureSize.width,
+          sample.type === "energy_ring" || sample.type === "slash_light"
+            ? managed.asset.height
+            : textureSize.height,
+        );
+        this.options.driver.setAnchorPoint(
+          node,
+          sample.anchorX,
+          sample.anchorY,
+        );
+      }
+      this.options.driver.setPosition(
+        node,
+        emitter.x + sample.x,
+        emitter.y - sample.y,
+      );
+      this.options.driver.setScale(node, displayScaleX, displayScaleY);
+      this.options.driver.setRotationDegrees(
+        node,
+        (-sample.rotation * 180) / Math.PI,
+      );
+      this.options.driver.setOpacity(node, opacityToCocosOpacity(sample.alpha));
+      this.options.driver.applyBlendMode(
+        node,
+        getCocosBlendModeConfig(sample.blendMode),
+      );
+      this.options.driver.setActive(node, true);
+    }
+    this.updateRuntimeLines(
+      managed.deterministicLineNode,
+      lineSamples.map((sample) => ({
+        x1: emitter.x + sample.x1,
+        y1: emitter.y - sample.y1,
+        x2: emitter.x + sample.x2,
+        y2: emitter.y - sample.y2,
+        width: sample.lineWidth,
+        opacity: sample.alpha,
+      })),
+    );
+    if (lineSamples.length > 0) {
+      this.applyRuntimeLineBlendMode(
+        managed.deterministicLineNode,
+        getCocosBlendModeConfig(lineSamples[0].blendMode),
+      );
+    }
+    managed.deterministicLineActiveCount = lineSamples.length;
+  }
+
+  private ensureDeterministicEffectPool(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+    size: number,
+  ): void {
+    if (!managed.spriteFrame && size > 0) {
+      throw new Error(
+        `V5G deterministic effect layer "${managed.layer.id}" requires a SpriteFrame.`,
+      );
+    }
+    if (!managed.deterministicEffectContainer && size > 0) {
+      throw new Error(
+        `V5G deterministic effect layer "${managed.layer.id}" is missing its runtime container.`,
+      );
+    }
+    while (managed.deterministicEffectNodes.length < size) {
+      const node = this.options.driver.createImageNode(
+        `V5G Deterministic Effect ${managed.layer.id}`,
+        managed.spriteFrame as TSpriteFrame,
+      );
+      this.options.driver.appendChild(
+        managed.deterministicEffectContainer as TNode,
+        node,
+      );
+      managed.deterministicEffectNodes.push(node);
+    }
+  }
+
+  private setDeterministicEffectActiveCount(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+    size: number,
+  ): void {
+    managed.deterministicEffectActiveCount = size;
+    for (
+      let index = size;
+      index < managed.deterministicEffectNodes.length;
+      index += 1
+    ) {
+      this.options.driver.setActive(
+        managed.deterministicEffectNodes[index],
+        false,
+      );
+    }
+  }
+
+  private initializeCardCarouselRuntimes(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+    groupNode: TNode,
+  ): void {
+    if (managed.displaySpriteFrames.length === 0) return;
+    for (const animation of managed.layer.animations) {
+      if (!animation.enabled || animation.type !== "card_carousel_3d") continue;
+      const prepared = prepareCardCarousel3D(animation);
+      const container = this.options.driver.createNode(
+        `V5G Card Carousel ${managed.layer.id} ${animation.id}`,
+      );
+      this.options.driver.setContentSize(
+        container,
+        this.options.project.stage.width,
+        this.options.project.stage.height,
+      );
+      this.options.driver.setAnchorPoint(container, 0.5, 0.5);
+      this.options.driver.appendChild(groupNode, container);
+      const cardContainers: TNode[] = [];
+      const sliceNodes: TNode[][] = [];
+      const sliceFrames: TSpriteFrame[][] = [];
+      const pendingFrames: TSpriteFrame[] = [];
+      try {
+        for (
+          let cardIndex = 0;
+          cardIndex < prepared.cardCount;
+          cardIndex += 1
+        ) {
+          const cardNode = this.options.driver.createNode(
+            `V5G Card ${managed.layer.id} ${cardIndex}`,
+          );
+          this.options.driver.appendChild(container, cardNode);
+          const textureIndex = cardIndex % managed.displaySpriteFrames.length;
+          const sourceFrame = managed.displaySpriteFrames[textureIndex];
+          const asset = managed.displayAssets[textureIndex];
+          const sourceSize = getExpectedSpriteFrameSize(asset);
+          const nodes: TNode[] = [];
+          const frames: TSpriteFrame[] = [];
+          for (
+            let sliceIndex = 0;
+            sliceIndex < prepared.slices;
+            sliceIndex += 1
+          ) {
+            const x0 = (sliceIndex / prepared.slices) * sourceSize.width;
+            const x1 = ((sliceIndex + 1) / prepared.slices) * sourceSize.width;
+            const frame = this.createRuntimeSpriteFrameRegion(sourceFrame, {
+              x: x0,
+              y: 0,
+              width: x1 - x0,
+              height: sourceSize.height,
+            });
+            pendingFrames.push(frame);
+            const node = this.options.driver.createImageNode(
+              `V5G Card Slice ${managed.layer.id} ${cardIndex} ${sliceIndex}`,
+              frame,
+            );
+            this.options.driver.setContentSize(
+              node,
+              x1 - x0,
+              sourceSize.height,
+            );
+            this.options.driver.setAnchorPoint(node, 0.5, 0.5);
+            this.options.driver.applyBlendMode(
+              node,
+              getCocosBlendModeConfig(managed.layer.blendMode),
+            );
+            this.options.driver.appendChild(cardNode, node);
+            nodes.push(node);
+            frames.push(frame);
+          }
+          cardContainers.push(cardNode);
+          sliceNodes.push(nodes);
+          sliceFrames.push(frames);
+        }
+        managed.cardCarouselRuntimes.push({
+          animation,
+          prepared,
+          output: createCardCarousel3DSampleBuffer(prepared),
+          container,
+          cardContainers,
+          sliceNodes,
+          sliceFrames,
+          textureInfos: managed.displayAssets.map((asset) => {
+            const size = getExpectedSpriteFrameSize(asset);
+            return {
+              width: size.width,
+              height: size.height,
+              frameX: 0,
+              frameY: 0,
+              frameWidth: size.width,
+              frameHeight: size.height,
+            };
+          }),
+          visibleCardCount: 0,
+        });
+        pendingFrames.length = 0;
+      } catch (error) {
+        for (const frame of pendingFrames) {
+          this.destroyRuntimeSpriteFrameRegion(frame);
+        }
+        throw error;
+      }
+    }
+  }
+
+  private renderCardCarouselSamples(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+    sampledLayer: SampledLayerState,
+    time: number,
+  ): void {
+    for (const runtime of managed.cardCarouselRuntimes) {
+      const progress = getCardCarousel3DProgress(runtime.animation, time);
+      if (
+        progress === null ||
+        !sampledLayer.hasActiveCardCarousel3D ||
+        sampledLayer.baseOpacity <= 0
+      ) {
+        this.options.driver.setActive(runtime.container, false);
+        runtime.visibleCardCount = 0;
+        continue;
+      }
+      sampleCardCarousel3D(
+        runtime.prepared,
+        {
+          progress,
+          emitterX: 0,
+          emitterY: 0,
+          layerOpacity: sampledLayer.baseOpacity,
+          transform: sampledLayer.transform,
+          blendMode: sampledLayer.blendMode,
+          textures: runtime.textureInfos,
+        },
+        runtime.output,
+      );
+      this.options.driver.setActive(runtime.container, true);
+      runtime.visibleCardCount = runtime.output.visibleCardCount;
+      const emitter = v5gTransformToCocosPosition(sampledLayer.transform);
+      for (const cardNode of runtime.cardContainers) {
+        this.options.driver.setActive(cardNode, false);
+      }
+      for (
+        let drawIndex = 0;
+        drawIndex < runtime.output.visibleCardCount;
+        drawIndex += 1
+      ) {
+        const cardIndex = runtime.output.drawOrder[drawIndex];
+        const sample = runtime.output.cards[cardIndex];
+        const cardNode = runtime.cardContainers[cardIndex];
+        this.options.driver.setActive(cardNode, true);
+        this.setRuntimeSiblingIndex(cardNode, drawIndex);
+        this.options.driver.setPosition(
+          cardNode,
+          emitter.x + sample.x,
+          emitter.y - sample.y,
+        );
+        this.options.driver.setRotationDegrees(
+          cardNode,
+          (-sample.rotation * 180) / Math.PI,
+        );
+        this.options.driver.setOpacity(
+          cardNode,
+          opacityToCocosOpacity(sample.alpha),
+        );
+        const nodes = runtime.sliceNodes[cardIndex];
+        for (let sliceIndex = 0; sliceIndex < nodes.length; sliceIndex += 1) {
+          const slice = sample.slices[sliceIndex];
+          const node = nodes[sliceIndex];
+          this.options.driver.setPosition(node, slice.x, -slice.y);
+          this.options.driver.setScale(node, slice.scaleX, slice.scaleY);
+          this.setRuntimeImageColor(
+            node,
+            (slice.tint >> 16) & 0xff,
+            (slice.tint >> 8) & 0xff,
+            slice.tint & 0xff,
+          );
+          this.options.driver.setActive(node, true);
+        }
+      }
+    }
   }
 
   private renderSafeGlowSamples(
@@ -1447,6 +1955,13 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     safeGlow: VNISafeGlowSpriteSample,
   ): void {
     if (!managed.asset) return;
+    if (managed.layer.type === "sequence" && managed.spriteFrame) {
+      this.setRuntimeSpriteFrame(
+        node,
+        managed.spriteFrame,
+        "sequence safe_glow",
+      );
+    }
     const position = v5gTransformToCocosPosition(sampledLayer.transform);
     this.options.driver.setContentSize(
       node,
@@ -1517,7 +2032,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     for (let index = 0; index < chasers.length; index += 1) {
       const chaser = chasers[index];
       const node = managed.chaserLightNodes[index];
-      this.applyChaserLightSample(node, sampledLayer, chaser);
+      this.applyChaserLightSample(node, managed, sampledLayer, chaser);
     }
 
     while (managed.chaserLightNodes.length > chasers.length) {
@@ -1528,9 +2043,24 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
 
   private applyChaserLightSample(
     node: TNode,
+    managed: ManagedLayer<TNode, TSpriteFrame>,
     sampledLayer: SampledLayerState,
     chaser: VNIChaserLightSpriteSample,
   ): void {
+    if (managed.layer.type === "sequence" && managed.spriteFrame) {
+      this.setRuntimeSpriteFrame(
+        node,
+        managed.spriteFrame,
+        "sequence chaser_light",
+      );
+    }
+    if (managed.asset) {
+      this.options.driver.setContentSize(
+        node,
+        managed.asset.width,
+        managed.asset.height,
+      );
+    }
     const position = v5gTransformToCocosPosition(sampledLayer.transform);
     this.options.driver.setPosition(
       node,
@@ -1620,6 +2150,18 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       for (let index = 0; index < layerParticles.length; index += 1) {
         const particle = layerParticles[index];
         const node = managed.particleNodes[index];
+        if (managed.layer.type === "sequence" && managed.spriteFrame) {
+          this.setRuntimeSpriteFrame(
+            node,
+            managed.spriteFrame,
+            "sequence particle",
+          );
+        }
+        this.options.driver.setContentSize(
+          node,
+          managed.asset.width,
+          managed.asset.height,
+        );
         this.options.driver.setPosition(node, particle.x, particle.y);
         this.options.driver.setScale(node, particle.scale, particle.scale);
         this.options.driver.setRotationDegrees(
@@ -1651,24 +2193,53 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     asset: V5GAssetConfig | null;
     spriteFrame: TSpriteFrame | null;
     node: TNode;
+    displayAssets: readonly V5GAssetConfig[];
+    displaySpriteFrames: readonly TSpriteFrame[];
   } {
     if (layer.type === "text") {
       return {
         asset: null,
         spriteFrame: null,
         node: this.options.driver.createTextNode(layer.name, layer.text ?? ""),
+        displayAssets: [],
+        displaySpriteFrames: [],
       };
     }
-    const asset = this.requireImageAsset(layer, assetsById);
-    const resolvedSpriteFrame = this.resolveSpriteFrame(asset);
-    const spriteFrame = resolvedSpriteFrame.spriteFrame;
-    if (resolvedSpriteFrame.shouldValidateSize) {
-      this.assertSpriteFrameSize(asset, spriteFrame);
+    const assetIds =
+      layer.type === "sequence"
+        ? (layer.sequence?.frameAssetIds ?? [])
+        : layer.assetId
+          ? [layer.assetId]
+          : [];
+    if (assetIds.length === 0) {
+      throw new Error(
+        `V5G Cocos ${layer.type} layer "${layer.id}" requires image assets.`,
+      );
     }
+    const displayAssets = assetIds.map((assetId) => {
+      const asset = assetsById.get(assetId);
+      if (!asset) {
+        throw new Error(
+          `V5G Cocos layer "${layer.id}" references missing asset "${assetId}".`,
+        );
+      }
+      return asset;
+    });
+    const displaySpriteFrames = displayAssets.map((asset) => {
+      const resolved = this.resolveSpriteFrame(asset);
+      if (resolved.shouldValidateSize) {
+        this.assertSpriteFrameSize(asset, resolved.spriteFrame);
+      }
+      return resolved.spriteFrame;
+    });
+    const asset = displayAssets[0];
+    const spriteFrame = displaySpriteFrames[0];
     return {
       asset,
       spriteFrame,
       node: this.options.driver.createImageNode(layer.name, spriteFrame),
+      displayAssets,
+      displaySpriteFrames,
     };
   }
 
@@ -1701,7 +2272,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       }
       const maskNode = createMask(
         `V5G Mask ${managed.layer.id}`,
-        source.node,
+        source.displayNode,
         managed.node,
       );
       const groupNode = this.groupNodesById.get(managed.layer.groupId ?? "");
@@ -1728,7 +2299,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     }
     this.options.driver.updateAlphaMaskNode?.(
       managed.maskNode,
-      source.node,
+      source.displayNode,
       managed.node,
     );
   }
@@ -1748,6 +2319,106 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.options.driver.setOpacity(node, 255);
     this.options.driver.setActive(node, true);
     this.options.driver.applyBlendMode(node, getCocosBlendModeConfig("normal"));
+  }
+
+  private setRuntimeSpriteFrame(
+    node: TNode,
+    spriteFrame: TSpriteFrame,
+    context: string,
+  ): void {
+    const setSpriteFrame = this.options.driver.setImageSpriteFrame;
+    if (!setSpriteFrame) {
+      throw new Error(
+        `Cocos node driver requires setImageSpriteFrame() for ${context}.`,
+      );
+    }
+    setSpriteFrame(node, spriteFrame);
+  }
+
+  private createRuntimeSpriteFrameRegion(
+    spriteFrame: TSpriteFrame,
+    region: V5GSpriteFrameRegion,
+  ): TSpriteFrame {
+    const createRegion = this.options.driver.createSpriteFrameRegion;
+    const destroyRegion = this.options.driver.destroySpriteFrameRegion;
+    if (!createRegion || !destroyRegion) {
+      throw new Error(
+        "Cocos node driver requires createSpriteFrameRegion() and destroySpriteFrameRegion() for sliced VNI effects.",
+      );
+    }
+    return createRegion(spriteFrame, region);
+  }
+
+  private destroyRuntimeSpriteFrameRegion(spriteFrame: TSpriteFrame): void {
+    const destroyRegion = this.options.driver.destroySpriteFrameRegion;
+    if (!destroyRegion) {
+      throw new Error(
+        "Cocos node driver requires destroySpriteFrameRegion() for sliced VNI effects.",
+      );
+    }
+    destroyRegion(spriteFrame);
+  }
+
+  private setRuntimeSiblingIndex(node: TNode, index: number): void {
+    const setSiblingIndex = this.options.driver.setSiblingIndex;
+    if (!setSiblingIndex) {
+      throw new Error(
+        "Cocos node driver requires setSiblingIndex() for card_carousel_3d depth order.",
+      );
+    }
+    setSiblingIndex(node, index);
+  }
+
+  private setRuntimeImageColor(
+    node: TNode,
+    red: number,
+    green: number,
+    blue: number,
+  ): void {
+    const setImageColor = this.options.driver.setImageColor;
+    if (!setImageColor) {
+      throw new Error(
+        "Cocos node driver requires setImageColor() for card_carousel_3d shading.",
+      );
+    }
+    setImageColor(node, red, green, blue);
+  }
+
+  private updateRuntimeLines(
+    node: TNode | null,
+    lines: readonly V5GCocosLineSample[],
+  ): void {
+    if (!node) {
+      if (lines.length > 0) {
+        throw new Error(
+          "Cocos speed_lines runtime requires a preallocated line node.",
+        );
+      }
+      return;
+    }
+    const updateLines = this.options.driver.updateLines;
+    if (!updateLines) {
+      throw new Error(
+        "Cocos node driver requires updateLines() for speed_lines animation.",
+      );
+    }
+    updateLines(node, lines);
+  }
+
+  private applyRuntimeLineBlendMode(
+    node: TNode | null,
+    config: ReturnType<typeof getCocosBlendModeConfig>,
+  ): void {
+    if (!node) {
+      throw new Error("Cocos speed_lines runtime requires a line node.");
+    }
+    const applyBlendMode = this.options.driver.applyLineBlendMode;
+    if (!applyBlendMode) {
+      throw new Error(
+        "Cocos node driver requires applyLineBlendMode() for speed_lines animation.",
+      );
+    }
+    applyBlendMode(node, config);
   }
 
   private attachTextBindingRecord(
@@ -1829,7 +2500,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       (binding) => binding.hideOriginal,
     );
     if (shouldHideOriginal) {
-      this.options.driver.setActive(managed.node, false);
+      this.options.driver.setActive(managed.displayNode, false);
     }
   }
 
@@ -2241,6 +2912,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.clearChaserLightNodes();
     this.clearParticles();
     this.clearMaskNodes();
+    this.destroyEffectFrameResources();
     if (this.stageNode !== null) {
       this.options.driver.destroyNode(this.stageNode);
     }
@@ -2396,6 +3068,23 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     }
   }
 
+  private destroyEffectFrameResources(): void {
+    for (const managed of this.layers.values()) {
+      for (const frame of managed.deterministicEffectFrameCache.values()) {
+        this.destroyRuntimeSpriteFrameRegion(frame);
+      }
+      managed.deterministicEffectFrameCache.clear();
+      for (const runtime of managed.cardCarouselRuntimes) {
+        for (const frames of runtime.sliceFrames) {
+          for (const frame of frames) {
+            this.destroyRuntimeSpriteFrameRegion(frame);
+          }
+        }
+      }
+      managed.cardCarouselRuntimes.length = 0;
+    }
+  }
+
   private getRenderedParticleCount(): number {
     let count = 0;
     for (const managed of this.layers.values()) {
@@ -2416,6 +3105,52 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     let count = 0;
     for (const managed of this.layers.values()) {
       count += managed.chaserLightNodes.length;
+    }
+    return count;
+  }
+
+  private getRenderedDeterministicEffectCount(): number {
+    let count = 0;
+    for (const managed of this.layers.values()) {
+      count += managed.deterministicEffectActiveCount;
+    }
+    return count;
+  }
+
+  private getRenderedDeterministicLineCount(): number {
+    let count = 0;
+    for (const managed of this.layers.values()) {
+      count += managed.deterministicLineActiveCount;
+    }
+    return count;
+  }
+
+  private getCardCarouselCardPoolSize(): number {
+    let count = 0;
+    for (const managed of this.layers.values()) {
+      for (const runtime of managed.cardCarouselRuntimes) {
+        count += runtime.cardContainers.length;
+      }
+    }
+    return count;
+  }
+
+  private getCardCarouselSlicePoolSize(): number {
+    let count = 0;
+    for (const managed of this.layers.values()) {
+      for (const runtime of managed.cardCarouselRuntimes) {
+        for (const slices of runtime.sliceNodes) count += slices.length;
+      }
+    }
+    return count;
+  }
+
+  private getVisibleCardCarouselCardCount(): number {
+    let count = 0;
+    for (const managed of this.layers.values()) {
+      for (const runtime of managed.cardCarouselRuntimes) {
+        count += runtime.visibleCardCount;
+      }
     }
     return count;
   }

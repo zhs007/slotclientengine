@@ -175,6 +175,11 @@ export interface V5GCocosRuntimeDiagnostics {
   mountedNodeCount: number;
   safeGlowSpriteCount: number;
   liveParticleCount: number;
+  deterministicEffectSpriteCount: number;
+  deterministicEffectLineCount: number;
+  cardCarouselCardPoolSize: number;
+  cardCarouselSlicePoolSize: number;
+  visibleCardCarouselCardCount: number;
 }
 
 export interface V5GCocosPlaybackEventContext {

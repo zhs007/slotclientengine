@@ -1,8 +1,15 @@
 import { clampNumber, roundTo } from "./coordinates.js";
-import { sampleLayerAnimationsAtTime } from "./animation-sampler.js";
+import {
+  sampleLayerAnimationsAtTime,
+  shouldHideLayerOutsideActiveAnimation,
+} from "./animation-sampler.js";
+import { sampleBasicAnimationAtTime } from "./basic-animation.js";
 import { hasActiveChaserLightAnimation } from "./chaser-light-sampler.js";
+import { hasActiveDeterministicEffectAnimation } from "./effect-sampler.js";
 import { hasActiveParticleAnimation } from "./particle-sampler.js";
+import { hasActiveRenderEffectAnimation } from "./render-effect-sampler.js";
 import { hasActiveSafeGlowAnimation } from "./safe-glow-sampler.js";
+import { getCardCarousel3DProgress } from "./card-carousel-3d.js";
 import type {
   V5GAnimationConfig,
   V5GBlendMode,
@@ -16,13 +23,17 @@ const VISUAL_ENTRY_SCALE_THRESHOLD = 0.011;
 export interface SampledLayerState {
   layerId: string;
   transform: V5GTransformConfig;
+  visualRotation: number;
   baseOpacity: number;
   opacity: number;
   visible: boolean;
   renderImageDisplay: boolean;
   hasActiveParticleAnimation: boolean;
   hasActiveChaserLightAnimation: boolean;
+  hasActiveRenderEffect: boolean;
+  hasActiveDeterministicEffect: boolean;
   hasActiveSafeGlowAnimation: boolean;
+  hasActiveCardCarousel3D: boolean;
   blendMode: V5GBlendMode;
 }
 
@@ -48,39 +59,24 @@ export function sampleLayerAtTime(
   layer: V5GLayerConfig,
   time: number,
 ): SampledLayerState {
+  const basic = sampleBasicAnimationAtTime(layer, time);
   const sampled = sampleLayerAnimationsAtTime(
     {
-      transform: { ...layer.transform },
-      opacity: layer.opacity,
+      transform: basic.transform,
+      opacity: basic.opacity,
     },
     layer.animations,
     time,
   );
-  const hasAnyEnabled = layer.animations.some((animation) => animation.enabled);
-  const hasPendingOpacityEntry = layer.animations.some(
-    (animation) =>
-      animation.enabled &&
-      isOpacityEntryAnimation(animation) &&
-      time < animation.startTime,
-  );
-  const hasPendingScaleEntry = layer.animations.some(
+  const hasActiveScaleEntryStart = layer.animations.some(
     (animation) =>
       animation.enabled &&
       isScaleEntryAnimation(animation) &&
-      time <= animation.startTime,
+      isSameSampleTime(time, animation.startTime),
   );
-  const hasActiveCoverage = hasAnyEnabled
-    ? layer.animations.some(
-        (animation) =>
-          animation.enabled &&
-          time >= animation.startTime &&
-          time <= animation.startTime + animation.duration,
-      )
-    : true;
   const opacity =
-    hasPendingOpacityEntry ||
-    hasPendingScaleEntry ||
-    (hasAnyEnabled && !hasActiveCoverage)
+    hasActiveScaleEntryStart ||
+    shouldHideLayerOutsideActiveAnimation(layer.animations, time)
       ? 0
       : roundTo(clampNumber(sampled.opacity, 0, 1), 4);
   const baseOpacity = roundTo(clampNumber(layer.opacity, 0, 1), 4);
@@ -90,40 +86,50 @@ export function sampleLayerAtTime(
     layer.visible &&
     baseOpacity > 0 &&
     hasActiveChaserLightAnimation(layer, time);
-  const activeSafeGlowAnimation =
+  const activeRenderEffect =
+    layer.visible &&
+    baseOpacity > 0 &&
+    hasActiveRenderEffectAnimation(layer, time);
+  const activeDeterministicEffect =
+    layer.visible &&
+    baseOpacity > 0 &&
+    hasActiveDeterministicEffectAnimation(layer, time);
+  const activeSafeGlow =
     layer.visible && baseOpacity > 0 && hasActiveSafeGlowAnimation(layer, time);
+  const activeCardCarousel =
+    layer.visible &&
+    baseOpacity > 0 &&
+    (layer.type === "image" || layer.type === "sequence") &&
+    layer.animations.some(
+      (animation) =>
+        animation.enabled &&
+        getCardCarousel3DProgress(animation, time) !== null,
+    );
   const visible =
     layer.visible &&
-    (opacity > 0 || activeChaserLight || activeSafeGlowAnimation);
+    (opacity > 0 ||
+      activeChaserLight ||
+      activeRenderEffect ||
+      activeDeterministicEffect ||
+      activeSafeGlow ||
+      activeCardCarousel);
 
   return {
     layerId: layer.id,
     transform: sampled.transform,
+    visualRotation: sampled.visualRotation,
     baseOpacity,
     opacity,
     visible,
     renderImageDisplay: layer.visible && opacity > 0,
     hasActiveParticleAnimation: activeParticleAnimation,
     hasActiveChaserLightAnimation: activeChaserLight,
-    hasActiveSafeGlowAnimation: activeSafeGlowAnimation,
+    hasActiveRenderEffect: activeRenderEffect,
+    hasActiveDeterministicEffect: activeDeterministicEffect,
+    hasActiveSafeGlowAnimation: activeSafeGlow,
+    hasActiveCardCarousel3D: activeCardCarousel,
     blendMode: layer.blendMode,
   };
-}
-
-function isOpacityEntryAnimation(animation: V5GAnimationConfig): boolean {
-  if (animation.type === "fade") {
-    return getNumberParam(animation, "fromOpacity") === 0;
-  }
-  if (animation.type === "slide_in") {
-    return getBooleanParam(animation, "fadeIn", true);
-  }
-  if (animation.type === "bounce_in") {
-    return getBooleanParam(animation, "fadeIn", true);
-  }
-  if (animation.type === "scale_in") {
-    return getBooleanParam(animation, "fadeIn", true);
-  }
-  return false;
 }
 
 function isScaleEntryAnimation(animation: V5GAnimationConfig): boolean {
@@ -147,12 +153,6 @@ function getNumberParam(animation: V5GAnimationConfig, key: string): number {
   return Number.NaN;
 }
 
-function getBooleanParam(
-  animation: V5GAnimationConfig,
-  key: string,
-  fallback: boolean,
-): boolean {
-  const value = animation.params[key];
-  if (value === undefined) return fallback;
-  return value === true;
+function isSameSampleTime(left: number, right: number): boolean {
+  return roundTo(left - right, 4) === 0;
 }

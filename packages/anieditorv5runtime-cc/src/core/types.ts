@@ -1,5 +1,5 @@
 export type V5GCoordinateMode = "center";
-export type V5GLayerType = "image" | "text" | "group";
+export type V5GLayerType = "image" | "text" | "group" | "sequence";
 export type V5GAssetType = "image";
 export type V5GBlendMode = "normal" | "add" | "screen" | "multiply" | "lighten";
 export type V5GMaskCompositeMode = "legacy_alpha" | "precompose_light_alpha";
@@ -44,12 +44,14 @@ export interface V5GTransformConfig {
 export type V5GAnimationType =
   | "idle"
   | "move"
+  | "multi_move"
   | "fade"
   | "scale_up"
   | "scale_down"
   | "scale_in"
   | "scale_out"
   | "pop"
+  | "bounce_jump"
   | "shake"
   | "blink"
   | "rotate"
@@ -65,10 +67,21 @@ export type V5GAnimationType =
   | "particle_combo"
   | "particle_stream"
   | "chaser_light"
+  | "gather_particles"
+  | "smoke_mist"
+  | "energy_ring"
+  | "slash_light"
+  | "flame_flicker"
+  | "wave_band"
+  | "wave_distort"
+  | "speed_lines"
+  | "drift_fall"
+  | "path_particles"
   | "shatter"
   | "glow"
   | "safe_glow"
-  | "squash_stretch";
+  | "squash_stretch"
+  | "card_carousel_3d";
 
 export type V5GAnimationParamValue = string | number | boolean;
 
@@ -81,6 +94,34 @@ export interface V5GAnimationConfig {
   enabled: boolean;
   seed: number;
   params: Record<string, V5GAnimationParamValue>;
+}
+
+export type V5GBasicAnimationEasing =
+  | "linear"
+  | "easeInQuad"
+  | "easeOutQuad"
+  | "easeInOutQuad"
+  | "backOut";
+
+export interface V5GBasicAnimationPointConfig {
+  id: string;
+  time: number;
+  value: number;
+  easing: V5GBasicAnimationEasing;
+}
+
+export interface V5GBasicAnimationTrackConfig {
+  enabled: boolean;
+  points: V5GBasicAnimationPointConfig[];
+}
+
+export interface V5GBasicAnimationConfig {
+  opacity: V5GBasicAnimationTrackConfig;
+  positionX: V5GBasicAnimationTrackConfig;
+  positionY: V5GBasicAnimationTrackConfig;
+  scaleX: V5GBasicAnimationTrackConfig;
+  scaleY: V5GBasicAnimationTrackConfig;
+  rotation: V5GBasicAnimationTrackConfig;
 }
 
 export interface V5GLayerKeyframeConfig {
@@ -99,6 +140,12 @@ export interface V5GLayerMaskConfig {
   showSourceLayer: boolean;
 }
 
+export interface V5GSequenceConfig {
+  frameAssetIds: string[];
+  cycleDuration: number;
+  loop: boolean;
+}
+
 export interface V5GLayerConfig {
   id: string;
   name: string;
@@ -112,8 +159,10 @@ export interface V5GLayerConfig {
   opacity: number;
   blendMode: V5GBlendMode;
   text?: string;
+  sequence?: V5GSequenceConfig;
   mask?: V5GLayerMaskConfig;
   animations: V5GAnimationConfig[];
+  basicAnimation?: V5GBasicAnimationConfig;
   keyframes?: V5GLayerKeyframeConfig[];
 }
 
@@ -153,6 +202,7 @@ export interface V5GProjectConfig {
     version: string;
   };
   name: string;
+  maskCompositeMode?: V5GMaskCompositeMode;
   exportProfile?: V5GExportProfileConfig;
   stage: V5GStageConfig;
   assets: V5GAssetConfig[];
@@ -160,3 +210,27 @@ export interface V5GProjectConfig {
   layers: V5GLayerConfig[];
   particles: V5GParticleConfig[];
 }
+
+export type VNICoordinateMode = V5GCoordinateMode;
+export type VNILayerType = V5GLayerType;
+export type VNIAssetType = V5GAssetType;
+export type VNIBlendMode = V5GBlendMode;
+export type VNIStageConfig = V5GStageConfig;
+export type VNIAssetConfig = V5GAssetConfig;
+export type VNIExportProfileConfig = V5GExportProfileConfig;
+export type VNITransformConfig = V5GTransformConfig;
+export type VNIAnimationType = V5GAnimationType;
+export type VNIAnimationParamValue = V5GAnimationParamValue;
+export type VNIAnimationConfig = V5GAnimationConfig;
+export type VNIBasicAnimationEasing = V5GBasicAnimationEasing;
+export type VNIBasicAnimationPointConfig = V5GBasicAnimationPointConfig;
+export type VNIBasicAnimationTrackConfig = V5GBasicAnimationTrackConfig;
+export type VNIBasicAnimationConfig = V5GBasicAnimationConfig;
+export type VNILayerKeyframeConfig = V5GLayerKeyframeConfig;
+export type VNILayerMaskConfig = V5GLayerMaskConfig;
+export type VNIMaskCompositeMode = V5GMaskCompositeMode;
+export type VNISequenceConfig = V5GSequenceConfig;
+export type VNILayerConfig = V5GLayerConfig;
+export type VNILayerGroupConfig = V5GLayerGroupConfig;
+export type VNIParticleConfig = V5GParticleConfig;
+export type VNIProjectConfig = V5GProjectConfig;
