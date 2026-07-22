@@ -6,25 +6,13 @@ import {
   type PopupManifestV1,
   type PopupResourceSpec,
 } from "@slotclientengine/rendercore/popup";
+import type { EditorAssetEntry } from "@slotclientengine/editorresource";
 
-export interface PopupEditorAssetBlob {
-  readonly digest: string;
-  readonly extension: string;
-  readonly mediaType: string;
-  readonly byteLength: number;
-  readonly bytes: Uint8Array;
-}
-export interface PopupEditorResourceProvenance {
-  readonly sourceNames: readonly string[];
-  readonly sourceKind: "files" | "directory" | "zip" | "package-import";
-  readonly batchLabel: string;
-}
-export interface PopupEditorLogicalResource {
-  readonly id: string;
+export interface PopupEditorResource {
+  readonly rootKey: string;
   readonly kind: PopupResourceSpec["kind"];
-  readonly provenance: PopupEditorResourceProvenance;
   readonly spec: PopupResourceSpec;
-  readonly paths: readonly string[];
+  readonly keys: readonly string[];
 }
 export interface PopupEditorTier {
   countDurationSeconds: number;
@@ -44,9 +32,8 @@ export interface PopupEditorProject {
   id: string;
   designViewport: { width: number; height: number };
   amountFormat: PopupAmountFormat;
-  resources: Map<string, PopupEditorLogicalResource>;
-  blobs: Map<string, PopupEditorAssetBlob>;
-  packageFiles: Map<string, Uint8Array>;
+  resources: Map<string, PopupEditorResource>;
+  assets: Map<string, EditorAssetEntry>;
   tiers: Map<AwardTierId, PopupEditorTier>;
 }
 
@@ -107,8 +94,7 @@ export function createPopupEditorProject(): PopupEditorProject {
     designViewport: { width: 1080, height: 1920 },
     amountFormat: createPopupAmountFormat("integer"),
     resources: new Map(),
-    blobs: new Map(),
-    packageFiles: new Map(),
+    assets: new Map(),
     tiers: new Map([
       ["base", empty()],
       ["standard", { ...empty(), countDurationSeconds: 3 }],
@@ -140,23 +126,16 @@ export function clonePopupEditorProject(
         id,
         {
           ...resource,
-          provenance: {
-            ...resource.provenance,
-            sourceNames: [...resource.provenance.sourceNames],
-          },
           spec: structuredClone(resource.spec),
-          paths: [...resource.paths],
+          keys: [...resource.keys],
         },
       ]),
     ),
-    blobs: new Map(
-      [...project.blobs].map(([key, blob]) => [
+    assets: new Map(
+      [...project.assets].map(([key, asset]) => [
         key,
-        { ...blob, bytes: blob.bytes.slice() },
+        { ...asset, bytes: asset.bytes.slice() },
       ]),
-    ),
-    packageFiles: new Map(
-      [...project.packageFiles].map(([path, bytes]) => [path, bytes.slice()]),
     ),
     tiers: new Map(
       [...project.tiers].map(([id, tier]) => [
@@ -213,9 +192,9 @@ export function projectToManifest(
 export function addLayer(
   project: PopupEditorProject,
   tierId: AwardTierId,
-  resourceId: string,
+  resourceKey: string,
 ): void {
-  const resource = project.resources.get(resourceId);
+  const resource = project.resources.get(resourceKey);
   const tier = project.tiers.get(tierId);
   if (!resource || !tier) throw new Error("resource/tier 不存在。");
   const existingAmount = tier.layers.find(
@@ -226,8 +205,7 @@ export function addLayer(
       layer === existingAmount
         ? {
             ...existingAmount,
-            id: `${resourceId}-${existingAmount.order}`,
-            resource: resourceId,
+            resource: resourceKey,
           }
         : layer,
     );
@@ -237,9 +215,9 @@ export function addLayer(
     ? Math.max(...tier.layers.map((layer) => layer.order)) + 1
     : 0;
   const base = {
-    id: `${resourceId}-${order}`,
+    id: `layer-${tierId}-${order}`,
     order,
-    resource: resourceId,
+    resource: resourceKey,
     transform: { x: 0, y: 0, scale: 1 },
   };
   let layer: PopupLayer;
@@ -284,11 +262,11 @@ export function addLayer(
 
 export function applyImportedResourceBindings(
   project: PopupEditorProject,
-  resourceId: string,
+  resourceKey: string,
   suggestions: readonly PopupEditorTierBindingSuggestion[] = [],
 ): void {
-  const resource = project.resources.get(resourceId);
-  if (!resource) throw new Error(`resource 不存在：${resourceId}`);
+  const resource = project.resources.get(resourceKey);
+  if (!resource) throw new Error(`resource 不存在：${resourceKey}`);
   if (resource.kind === "image-string") {
     for (const tierId of project.tiers.keys())
       if (
@@ -296,11 +274,11 @@ export function applyImportedResourceBindings(
           .get(tierId)!
           .layers.some((layer) => layer.kind === "image-string")
       )
-        addLayer(project, tierId, resourceId);
+        addLayer(project, tierId, resourceKey);
     return;
   }
   for (const suggestion of suggestions) {
-    addLayer(project, suggestion.tierId, resourceId);
+    addLayer(project, suggestion.tierId, resourceKey);
     const tier = project.tiers.get(suggestion.tierId)!;
     tier.countDurationSeconds = suggestion.countDurationSeconds;
     const layer = tier.layers.at(-1)!;
@@ -315,41 +293,36 @@ export function applyImportedResourceBindings(
 
 export function resourceReferenceCount(
   project: PopupEditorProject,
-  resourceId: string,
+  resourceKey: string,
 ): number {
   let count = 0;
   for (const tier of project.tiers.values())
     count += tier.layers.filter(
-      (layer) => layer.resource === resourceId,
+      (layer) => layer.resource === resourceKey,
     ).length;
   return count;
 }
 
-export function removeLogicalResource(
+export function removePopupResource(
   project: PopupEditorProject,
-  resourceId: string,
+  resourceKey: string,
 ): void {
-  if (resourceReferenceCount(project, resourceId))
-    throw new Error(`resource ${resourceId} 仍被 layer 引用，禁止删除。`);
-  const resource = project.resources.get(resourceId);
-  if (!resource) throw new Error(`resource 不存在：${resourceId}`);
-  project.resources.delete(resourceId);
+  if (resourceReferenceCount(project, resourceKey))
+    throw new Error(`resource ${resourceKey} 仍被 layer 引用，禁止删除。`);
+  const resource = project.resources.get(resourceKey);
+  if (!resource) throw new Error(`resource 不存在：${resourceKey}`);
+  project.resources.delete(resourceKey);
   garbageCollectResourceStorage(project);
 }
 
 export function garbageCollectResourceStorage(
   project: PopupEditorProject,
 ): void {
-  const livePaths = new Set(
-    [...project.resources.values()].flatMap((resource) => resource.paths),
+  const liveKeys = new Set(
+    [...project.resources.values()].flatMap((resource) => resource.keys),
   );
-  for (const path of project.packageFiles.keys())
-    if (!livePaths.has(path)) project.packageFiles.delete(path);
-  const liveBlobKeys = new Set(
-    [...livePaths].map((path) => path.split("/").at(-1)!),
-  );
-  for (const key of project.blobs.keys())
-    if (!liveBlobKeys.has(key)) project.blobs.delete(key);
+  for (const key of project.assets.keys())
+    if (!liveKeys.has(key)) project.assets.delete(key);
 }
 
 export class PopupEditorStore {

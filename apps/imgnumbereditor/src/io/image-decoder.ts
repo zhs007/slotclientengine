@@ -2,16 +2,14 @@ import {
   suggestCharacterFromFilename,
   type UploadedImageDraft,
 } from "../model/editor-project.js";
+import { detectRasterAssetType } from "@slotclientengine/browserartifactio";
 import {
-  allocateContentAddressedPath,
-  detectRasterAssetType,
-  sha256Hex,
-  suggestLogicalResourceId,
-} from "@slotclientengine/browserartifactio";
+  assertEditorAssetKey,
+  createEditorAssetEntry,
+} from "@slotclientengine/editorresource";
 
 export async function decodeUploadedImage(
   file: File,
-  id?: string,
 ): Promise<UploadedImageDraft> {
   const extension = file.name.toLowerCase().match(/\.(png|webp)$/u)?.[1];
   const mediaType =
@@ -27,35 +25,18 @@ export async function decodeUploadedImage(
   const detected = detectRasterAssetType(bytes);
   if (detected.mediaType !== mediaType)
     throw new Error(`文件扩展名与真实内容类型不一致：${file.name}`);
-  const logicalId = id ?? suggestLogicalResourceId(file.name);
-  if (!logicalId)
-    throw new Error(`无法从 ${file.name} 建议 ASCII logical resource id。`);
-  const digest = await sha256Hex(bytes);
-  const contentPath = allocateContentAddressedPath({
-    digest,
-    extension: detected.extension,
-  });
+  const key = assertEditorAssetKey(file.name);
+  const entry = await createEditorAssetEntry({ key, mediaType, bytes });
   const { width, height } = await decodeImageBlob(
     new Blob([bytes], { type: mediaType }),
     file.name,
   );
   return Object.freeze({
-    id: logicalId,
-    originalName: file.name,
+    ...entry,
     mediaType,
-    bytes,
     width,
     height,
     suggestedCharacter: suggestCharacterFromFilename(file.name),
-    digest,
-    contentPath,
-    provenance: {
-      sourceNames: Object.freeze([file.name]),
-      sourceKind: file.webkitRelativePath
-        ? ("directory" as const)
-        : ("files" as const),
-      batchLabel: `image:${file.name}`,
-    },
   });
 }
 

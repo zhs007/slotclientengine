@@ -3,36 +3,64 @@ import {
   extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
 import {
+  EDITOR_ASSETS_MAP_PATH,
+  commitEditorAssetImport,
+  createEditorAssetsMapFromWorkspace,
+  createEmptyEditorAssetWorkspace,
+  decodeEditorAssetsMap,
+  materializeEditorAssetPayloads,
+  reviewEditorAssetImport,
+  serializeEditorAssetsMap,
+} from "@slotclientengine/editorresource";
+import type { EditorAssetRewriteAdapter } from "@slotclientengine/editorresource";
+import {
+  collectImageStringAssetPaths,
+  parseImageStringManifest,
+} from "@slotclientengine/rendercore/image-string";
+import {
   collectPopupPackagePaths,
   createPopupPackageResource,
   parsePopupManifest,
-  type PopupManifestV1,
+  resolvePopupPackageFiles,
 } from "@slotclientengine/rendercore/popup";
+import type {
+  PopupManifestV1,
+  PopupResourceSpec,
+} from "@slotclientengine/rendercore/popup";
+import { assertVNIProject } from "@slotclientengine/vnicore/core";
 import {
   clonePopupEditorProject,
   createPopupEditorProject,
   projectToManifest,
-  type PopupEditorProject,
 } from "../model/project.js";
+import type { PopupEditorProject } from "../model/project.js";
 import { POPUP_ZIP_LIMITS } from "./resource-import.js";
+
+const ROOT = "popup.manifest.json";
 
 export async function exportPopupZip(
   project: PopupEditorProject,
   options: { readonly prepare?: boolean } = {},
 ) {
   const manifest = projectToManifest(project);
-  const files = productionFiles(project, manifest);
-  collectPopupPackagePaths({ manifest, files });
+  const liveKeys = popupManifestAssetClosure(manifest, project.assets);
+  const workspace = await projectWorkspace(project);
+  const map = createEditorAssetsMapFromWorkspace(workspace, liveKeys);
+  const entries = new Map(materializeEditorAssetPayloads(workspace, liveKeys));
+  entries.set(EDITOR_ASSETS_MAP_PATH, serializeEditorAssetsMap(map));
+  entries.set(ROOT, encodeStable(manifest));
+  collectPopupPackagePaths({
+    manifest,
+    files: await resolvePopupPackageFiles({ manifest, files: entries }),
+  });
   if (options.prepare !== false) {
-    const resource = await createPopupPackageResource({ manifest, files });
+    const resource = await createPopupPackageResource({
+      manifest,
+      files: entries,
+    });
     await resource.destroy();
   }
-  const entries = new Map(files);
-  entries.set("popup.manifest.json", encodeStable(manifest));
-  const bytes = createDeterministicZip(entries, {
-    level: 6,
-    pathPolicy: { requireLowercase: true },
-  });
+  const bytes = createDeterministicZip(entries, { level: 6 });
   return Object.freeze({
     fileName: `${manifest.id}-popup.zip`,
     bytes,
@@ -40,53 +68,49 @@ export async function exportPopupZip(
   });
 }
 
-export function importPopupZip(bytes: Uint8Array): PopupEditorProject {
-  const files = extractBoundedZip(bytes, {
-    limits: POPUP_ZIP_LIMITS,
-    pathPolicy: { requireLowercase: true },
-  });
-  const root = files.get("popup.manifest.json");
-  if (!root)
-    throw new Error("popup package 缺少 root popup.manifest.json sentinel。");
-  const manifest = parsePopupManifest(
-    JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(root)),
-  );
-  collectPopupPackagePaths({ manifest, files });
+export async function importPopupZip(
+  bytes: Uint8Array,
+  options: { readonly prepare?: boolean } = {},
+): Promise<PopupEditorProject> {
+  const files = extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS });
+  const root = files.get(ROOT);
+  if (!root) throw new Error(`popup package 缺少 root ${ROOT} sentinel。`);
+  const manifest = parsePopupManifest(parseJson(root, ROOT));
+  if (!files.has(EDITOR_ASSETS_MAP_PATH))
+    throw new Error(
+      "legacy popup package 必须先在统一导入审查中为资源指定 filename key。",
+    );
+  const virtual = await resolvePopupPackageFiles({ manifest, files });
+  collectPopupPackagePaths({ manifest, files: virtual });
+  if (options.prepare !== false) {
+    const resource = await createPopupPackageResource({ manifest, files });
+    await resource.destroy();
+  }
+  const map = decodeEditorAssetsMap(files.get(EDITOR_ASSETS_MAP_PATH)!);
   const project = createPopupEditorProject();
   project.id = manifest.id;
   project.designViewport = { ...manifest.designViewport };
   project.amountFormat = { ...manifest.amountFormat };
   project.resources.clear();
-  project.blobs.clear();
-  project.packageFiles.clear();
-  for (const [path, payload] of files)
-    if (path !== "popup.manifest.json")
-      project.packageFiles.set(path, payload.slice());
-  for (const [id, spec] of Object.entries(manifest.resources)) {
-    const paths = resourcePaths(spec, manifest, files);
-    project.resources.set(id, {
-      id,
-      kind: spec.kind,
-      provenance: {
-        sourceNames: [],
-        sourceKind: "package-import",
-        batchLabel: `${manifest.id}-popup.zip`,
-      },
-      spec,
-      paths,
+  project.assets.clear();
+  for (const key of Object.keys(map.files)) {
+    const entry = map.files[key]!;
+    project.assets.set(key, {
+      key,
+      sha256: entry.sha256,
+      payloadPath: entry.path,
+      mediaType: entry.mediaType,
+      byteLength: entry.byteLength,
+      bytes: virtual.get(key)!.slice(),
     });
   }
-  for (const [path, payload] of project.packageFiles) {
-    const match = /^assets\/([a-f0-9]{64})\.([a-z0-9]+)$/u.exec(path);
-    if (match)
-      project.blobs.set(`${match[1]}.${match[2]}`, {
-        digest: match[1]!,
-        extension: match[2]!,
-        mediaType: media(path),
-        byteLength: payload.byteLength,
-        bytes: payload.slice(),
-      });
-  }
+  for (const [rootKey, spec] of Object.entries(manifest.resources))
+    project.resources.set(rootKey, {
+      rootKey,
+      kind: spec.kind,
+      spec: structuredClone(spec),
+      keys: resourceClosure(spec, project.assets),
+    });
   project.tiers.set("base", {
     countDurationSeconds: manifest.awardCelebration.base.countDurationSeconds,
     layers: structuredClone([...manifest.awardCelebration.base.layers]),
@@ -102,50 +126,65 @@ export function importPopupZip(bytes: Uint8Array): PopupEditorProject {
       layers: structuredClone([...tier.layers]),
       thresholdMultiplier: tier.thresholdMultiplier,
     });
+  const closure = popupManifestAssetClosure(manifest, project.assets);
+  if (closure.length !== project.assets.size)
+    throw new Error("popup assets map 包含未引用 entry。");
   return clonePopupEditorProject(project);
 }
 
-function productionFiles(
-  project: PopupEditorProject,
+function popupManifestAssetClosure(
   manifest: PopupManifestV1,
+  assets: ReadonlyMap<string, { readonly bytes: Uint8Array }>,
 ) {
-  const files = new Map<string, Uint8Array>();
-  const referenced = new Set<string>();
-  for (const resource of Object.values(manifest.resources))
-    for (const path of resourcePaths(resource, manifest, project.packageFiles))
-      referenced.add(path);
-  for (const path of referenced) {
-    const bytes = project.packageFiles.get(path);
-    if (!bytes) throw new Error(`project resource bytes 缺失：${path}`);
-    files.set(path, bytes.slice());
-  }
-  return files;
+  const keys = new Set<string>();
+  for (const spec of Object.values(manifest.resources))
+    for (const key of resourceClosure(spec, assets)) keys.add(key);
+  return Object.freeze([...keys].sort((a, b) => a.localeCompare(b, "en")));
 }
-function resourcePaths(
-  spec: PopupManifestV1["resources"][string],
-  manifest: PopupManifestV1,
-  files: ReadonlyMap<string, Uint8Array>,
-) {
-  if (spec.kind === "image") return [spec.path];
+
+function resourceClosure(
+  spec: PopupResourceSpec,
+  assets: ReadonlyMap<string, { readonly bytes: Uint8Array }>,
+): readonly string[] {
+  if (spec.kind === "image") return Object.freeze([spec.path]);
   if (spec.kind === "spine")
-    return [spec.skeleton, spec.atlas, ...Object.values(spec.textures)];
-  if (spec.kind === "image-string") {
-    const prefix = spec.manifest.slice(0, spec.manifest.lastIndexOf("/"));
-    return [...files.keys()].filter(
-      (path) => path === spec.manifest || path.startsWith(`${prefix}/assets/`),
-    );
+    return Object.freeze([
+      spec.skeleton,
+      spec.atlas,
+      ...Object.values(spec.textures),
+    ]);
+  const root = spec.kind === "vni" ? spec.project : spec.manifest;
+  const rootBytes = assets.get(root)?.bytes;
+  if (!rootBytes) throw new Error(`popup asset bytes 缺失：${root}`);
+  if (spec.kind === "vni") {
+    const project = assertVNIProject(parseJson(rootBytes, root));
+    return Object.freeze([root, ...project.assets.map(({ path }) => path)]);
   }
-  const projectBytes = files.get(spec.project);
-  if (!projectBytes) return [spec.project];
-  const project = JSON.parse(new TextDecoder().decode(projectBytes)) as {
-    assets: readonly { path: string }[];
-  };
-  const directory = spec.project.slice(0, spec.project.lastIndexOf("/"));
-  return [
-    spec.project,
-    ...project.assets.map((asset) => `${directory}/${asset.path}`),
-  ];
+  const manifest = parseImageStringManifest(parseJson(rootBytes, root));
+  return Object.freeze([root, ...collectImageStringAssetPaths(manifest)]);
 }
+
+async function projectWorkspace(project: PopupEditorProject) {
+  const empty = createEmptyEditorAssetWorkspace();
+  const review = await reviewEditorAssetImport({
+    workspace: empty,
+    incoming: [...project.assets.values()],
+  });
+  const adapter: EditorAssetRewriteAdapter<null> = {
+    cloneProject: () => null,
+    collectReferences: () => ({ references: [] }),
+    renameReferences: () => null,
+  };
+  return (
+    await commitEditorAssetImport({
+      workspace: empty,
+      project: null,
+      review,
+      adapter,
+    })
+  ).workspace;
+}
+
 function encodeStable(value: unknown) {
   return new TextEncoder().encode(`${JSON.stringify(sort(value), null, 2)}\n`);
 }
@@ -158,10 +197,13 @@ function sort(value: unknown): unknown {
       .map(([key, child]) => [key, sort(child)]),
   );
 }
-function media(path: string) {
-  if (path.endsWith(".png")) return "image/png";
-  if (path.endsWith(".webp")) return "image/webp";
-  if (path.endsWith(".jpg")) return "image/jpeg";
-  if (path.endsWith(".json")) return "application/json";
-  return "text/plain";
+function parseJson(bytes: Uint8Array, label: string): unknown {
+  try {
+    return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch (error) {
+    throw new Error(`${label} JSON 无效：${formatError(error)}`);
+  }
+}
+function formatError(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }

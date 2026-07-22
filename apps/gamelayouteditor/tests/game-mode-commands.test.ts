@@ -76,11 +76,7 @@ describe("game mode and popup dependency commands", () => {
     expect(project.popupDependencies.get("celebration")!.placements).toBe(
       placement,
     );
-    expect(
-      project.popupDependencies
-        .get("celebration")!
-        .files.get("popup.manifest.json")![0],
-    ).toBe(9);
+    expect(project.assets.get("popup.manifest.json")![0]).toBe(9);
     expect(() =>
       replacePopupDependency(project, "celebration", popup("other", 2)),
     ).toThrow(/必须保持/);

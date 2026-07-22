@@ -182,7 +182,7 @@ function videoInspector(
   const metadata =
     resource?.kind === "video"
       ? `<dl><dt>尺寸</dt><dd>${resource.size.width}×${resource.size.height}</dd><dt>时长</dt><dd>${resource.durationSeconds.toFixed(3)}s</dd><dt>audio</dt><dd>${escapeHtml(String(resource.hasAudio))}</dd><dt>owned path</dt><dd>${escapeHtml(resource.path)}</dd><dt>fadeStart</dt><dd>${(resource.durationSeconds - transition.fadeOutSeconds).toFixed(3)}s</dd></dl>`
-      : '<p class="error-text">必须明确选择一个 video logical resource。</p>';
+      : '<p class="error-text">必须明确选择一个 video filename-key resource。</p>';
   return `<section class="inspector-section"><h3>Viewport-space video blackout</h3><label>MP4 resource<select data-transition-video-resource><option value="">必须明确选择</option>${videos.map((candidate) => `<option value="${escapeHtml(candidate.id)}" ${candidate.id === transition.resourceId ? "selected" : ""}>${escapeHtml(candidate.id)}</option>`).join("")}</select></label><label>fit<input value="contain" readonly /></label><label>fadeOutSeconds<input type="number" min="0.001" step="0.001" data-transition-fade value="${transition.fadeOutSeconds}" /></label>${metadata}<p class="hint">视频始终 contain + center；未覆盖区域由 viewport 全黑层填充。fade 由 media currentTime 驱动。</p></section>`;
 }
 

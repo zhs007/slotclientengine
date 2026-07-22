@@ -149,34 +149,33 @@ describe("symbol editor typed project", () => {
       fileName: "x.json",
     });
     uploadAssetBatch(project, [
-      { path: "art/wild-final.webp", bytes: imageBytes() },
+      { path: "wild-final.webp", bytes: imageBytes() },
       { path: "unused/approved.png", bytes: imageBytes() },
     ]);
     expect(getAssetReferences(project)).toEqual([]);
     setStateVisual(project, "A", "normal", {
       kind: "image",
-      imagePath: "art/wild-final.webp",
+      imagePath: "wild-final.webp",
     });
-    expect(getAssetReferences(project, "art/wild-final.webp")).toEqual([
-      { path: "art/wild-final.webp", location: "A.normal" },
+    expect(getAssetReferences(project, "wild-final.webp")).toEqual([
+      { path: "wild-final.webp", location: "A.normal" },
     ]);
     expect(exportSnapshot(project).packageManifest.resources).toEqual([
-      "art/wild-final.webp",
+      "wild-final.webp",
     ]);
-    expect(() =>
-      uploadAssetBatch(project, [
-        { path: "art/wild-final.webp", bytes: new Uint8Array([3]) },
-        { path: "half-batch.png", bytes: new Uint8Array([4]) },
-      ]),
-    ).toThrow(/冲突/);
-    expect(project.assetLibrary.records.has("half-batch.png")).toBe(false);
-    expect(() => deleteAsset(project, "art/wild-final.webp")).toThrow(
-      /仍被引用/,
+    uploadAssetBatch(project, [
+      { path: "wild-final.webp", bytes: new Uint8Array([3]) },
+      { path: "half-batch.png", bytes: new Uint8Array([4]) },
+    ]);
+    expect(project.assetLibrary.records.has("half-batch.png")).toBe(true);
+    expect(project.assetLibrary.records.get("wild-final.webp")?.bytes).toEqual(
+      new Uint8Array([3]),
     );
-    replaceAsset(project, "art/wild-final.webp", new Uint8Array([9]));
-    expect(
-      project.assetLibrary.records.get("art/wild-final.webp")?.bytes,
-    ).toEqual(new Uint8Array([9]));
+    expect(() => deleteAsset(project, "wild-final.webp")).toThrow(/仍被引用/);
+    replaceAsset(project, "wild-final.webp", new Uint8Array([9]));
+    expect(project.assetLibrary.records.get("wild-final.webp")?.bytes).toEqual(
+      new Uint8Array([9]),
+    );
     deleteAsset(project, "unused/approved.png");
     expect(project.assetLibrary.records.has("unused/approved.png")).toBe(false);
   });

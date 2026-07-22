@@ -3,11 +3,14 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createImageStringResource,
   createImageStringResourceFromFiles,
+  createImageStringResourceFromResolvedFiles,
   createRenderImageString,
   loadImageStringResourceFromUrl,
+  resolveImageStringPackageFiles,
   validateImageStringPackageContents,
 } from "../../src/image-string/index.js";
 import { imageStringManifestFixture } from "./fixtures.js";
+import { createMappedPackageFiles } from "../editor-assets-map-fixture.js";
 
 const encoder = new TextEncoder();
 
@@ -56,6 +59,129 @@ describe("image-string resource", () => {
     await resource.destroy();
     expect(resource.destroyed).toBe(true);
     expect(() => resource.assertUsable()).toThrow("已销毁");
+  });
+
+  it("resolves filename-key packages through one assets map for files and CDN URLs", async () => {
+    const manifest = {
+      ...imageStringManifestFixture,
+      glyphs: Object.fromEntries(
+        Object.entries(imageStringManifestFixture.glyphs).map(
+          ([character, glyph]) => [
+            character,
+            { ...glyph, path: glyph.path.split("/").at(-1)! },
+          ],
+        ),
+      ),
+    };
+    const assets = new Map(
+      Object.values(manifest.glyphs).map(
+        (glyph) => [glyph.path, new Uint8Array([1, 2, 3])] as const,
+      ),
+    );
+    const root = encoder.encode(JSON.stringify(manifest));
+    const mapped = await createMappedPackageFiles({
+      controls: new Map([["image-string.manifest.json", root]]),
+      assets,
+    });
+    const resolved = await resolveImageStringPackageFiles({
+      manifest,
+      files: mapped.files,
+    });
+    expect(resolved.mapped).toBe(true);
+    const direct = await createImageStringResourceFromResolvedFiles({
+      manifest,
+      files: resolved.files,
+      decodeImage: async (_blob, path) =>
+        Object.values(manifest.glyphs).find((glyph) => glyph.path === path)!
+          .size,
+      loadTexture: async () => new Texture({ source: Texture.EMPTY.source }),
+    });
+    await direct.destroy();
+
+    const responses = new Map<string, Uint8Array>([
+      ["https://cdn.example/library/image-string.manifest.json", root],
+      [
+        "https://cdn.example/library/assets.map.json",
+        mapped.files.get("assets.map.json")!,
+      ],
+      ...Object.values(mapped.map.files).map(
+        ({ path }) =>
+          [
+            `https://cdn.example/library/${path}`,
+            mapped.files.get(path)!,
+          ] as const,
+      ),
+    ]);
+    const remote = await loadImageStringResourceFromUrl({
+      manifestUrl: "https://cdn.example/library/image-string.manifest.json",
+      fetchImpl: async (input) => {
+        const bytes = responses.get(String(input));
+        return bytes
+          ? new Response(bytes.slice().buffer)
+          : new Response(null, { status: 404 });
+      },
+      decodeImage: async (_blob, path) =>
+        Object.values(manifest.glyphs).find((glyph) => glyph.path === path)!
+          .size,
+      loadTexture: async () => new Texture({ source: Texture.EMPTY.source }),
+    });
+    await remote.destroy();
+
+    await expect(
+      resolveImageStringPackageFiles({ manifest, files: new Map() }),
+    ).rejects.toThrow(/assets\.map/);
+    const withoutRoot = new Map(mapped.files);
+    withoutRoot.delete("image-string.manifest.json");
+    await expect(
+      resolveImageStringPackageFiles({ manifest, files: withoutRoot }),
+    ).rejects.toThrow(/image-string\.manifest/);
+    await expect(
+      resolveImageStringPackageFiles({
+        manifest: imageStringManifestFixture,
+        files: new Map([
+          ...files(),
+          ["assets.map.json", mapped.files.get("assets.map.json")!],
+        ]),
+      }),
+    ).rejects.toThrow(/legacy/);
+
+    const badMapResponses = new Map(responses);
+    badMapResponses.set(
+      "https://cdn.example/library/assets.map.json",
+      encoder.encode("{"),
+    );
+    await expect(
+      loadImageStringResourceFromUrl({
+        manifestUrl: "https://cdn.example/library/image-string.manifest.json",
+        fetchImpl: async (input) => {
+          const bytes = badMapResponses.get(String(input));
+          return bytes
+            ? new Response(bytes.slice().buffer)
+            : new Response(null, { status: 404 });
+        },
+      }),
+    ).rejects.toThrow(/assets\.map/);
+
+    const missingEntryMap = structuredClone(mapped.map);
+    delete (missingEntryMap.files as Record<string, unknown>)[
+      Object.keys(missingEntryMap.files)[0]!
+    ];
+    const missingEntryResponses = new Map(responses);
+    missingEntryResponses.set(
+      "https://cdn.example/library/assets.map.json",
+      encoder.encode(JSON.stringify(missingEntryMap)),
+    );
+    await expect(
+      loadImageStringResourceFromUrl({
+        manifestUrl: "https://cdn.example/library/image-string.manifest.json",
+        fetchImpl: async (input) => {
+          const bytes = missingEntryResponses.get(String(input));
+          return bytes
+            ? new Response(bytes.slice().buffer)
+            : new Response(null, { status: 404 });
+        },
+      }),
+    ).rejects.toThrow(/未声明/);
   });
 
   it("fails a size mismatch before exposing a resource", async () => {

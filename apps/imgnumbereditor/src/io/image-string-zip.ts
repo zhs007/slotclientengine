@@ -4,11 +4,19 @@ import {
 } from "@slotclientengine/browserartifactio";
 import {
   createImageStringResourceFromFiles,
-  materializeImageStringPackage,
+  materializeMappedImageStringPackage,
   parseImageStringManifest,
+  resolveImageStringPackageFiles,
   validateImageStringPackageContents,
   type DecodeImageStringImage,
 } from "@slotclientengine/rendercore/image-string";
+import {
+  EDITOR_ASSETS_MAP_PATH,
+  assertNoEditorAssetKeyAliases,
+  basenameFromSourcePath,
+  createEditorAssetEntry,
+  decodeEditorAssetsMap,
+} from "@slotclientengine/editorresource";
 import type { Texture } from "pixi.js";
 import {
   createManifestFromProject,
@@ -34,11 +42,7 @@ export async function exportImageStringZip(
   validation: ImageStringZipValidationOptions = {},
 ): Promise<{ readonly filename: string; readonly bytes: Uint8Array }> {
   const manifest = createManifestFromProject(project);
-  const materialized = await materializeImageStringPackage({
-    manifest,
-    files: createImageStringPackageFiles(project),
-  });
-  const files = new Map(materialized.files);
+  const files = new Map(await createImageStringPackageFiles(project));
   const resource = await createImageStringResourceFromFiles({
     files,
     decodeImage: validation.decodeImage,
@@ -48,14 +52,14 @@ export async function exportImageStringZip(
   return Object.freeze({
     filename: `${manifest.id}-image-string.zip`,
     bytes: createDeterministicZip(files, {
-      pathPolicy: { requireLowercase: true },
+      level: 6,
     }),
   });
 }
 
-export function createImageStringPackageFiles(
+export async function createImageStringPackageFiles(
   project: ImageStringEditorProject,
-): Map<string, Uint8Array> {
+): Promise<ReadonlyMap<string, Uint8Array>> {
   const manifest = createManifestFromProject(project);
   const files = new Map<string, Uint8Array>();
   files.set(
@@ -63,8 +67,8 @@ export function createImageStringPackageFiles(
     new TextEncoder().encode(`${JSON.stringify(manifest, null, 2)}\n`),
   );
   for (const glyph of project.glyphs.values())
-    files.set(glyph.path, glyph.bytes.slice());
-  return files;
+    files.set(glyph.key, glyph.bytes.slice());
+  return (await materializeMappedImageStringPackage({ manifest, files })).files;
 }
 
 export async function importImageStringZip(
@@ -73,7 +77,6 @@ export async function importImageStringZip(
 ): Promise<ImageStringEditorProject> {
   const files = extractBoundedZip(zipBytes, {
     limits: IMAGE_STRING_ZIP_LIMITS,
-    pathPolicy: { requireLowercase: true },
   });
   const manifestBytes = files.get("image-string.manifest.json");
   if (!manifestBytes) throw new Error("ZIP 缺少 image-string.manifest.json。");
@@ -85,42 +88,70 @@ export async function importImageStringZip(
   } catch (error) {
     throw new Error(`manifest JSON 无效：${formatError(error)}`);
   }
-  const legacyManifest = parseImageStringManifest(raw);
-  validateImageStringPackageContents({ manifest: legacyManifest, files });
+  const sourceManifest = parseImageStringManifest(raw);
+  const hasMap = files.has(EDITOR_ASSETS_MAP_PATH);
+  if (!hasMap)
+    validateImageStringPackageContents({ manifest: sourceManifest, files });
   const resource = await createImageStringResourceFromFiles({
-    manifest: legacyManifest,
+    manifest: sourceManifest,
     files,
     decodeImage: validation.decodeImage,
     loadTexture: validation.loadTexture,
   });
   await resource.destroy();
-  const materialized = await materializeImageStringPackage({
-    manifest: legacyManifest,
+  const resolved = await resolveImageStringPackageFiles({
+    manifest: sourceManifest,
     files,
   });
-  const manifest = materialized.manifest;
-  const canonicalFiles = materialized.files;
+  const rewritten = structuredClone(sourceManifest) as {
+    glyphs: Record<string, { path: string }>;
+  };
+  const pathToKey = new Map<string, string>();
+  for (const glyph of Object.values(rewritten.glyphs)) {
+    if (pathToKey.has(glyph.path)) continue;
+    if (/^assets\/[a-f0-9]{64}\.[a-z0-9]+$/u.test(glyph.path))
+      throw new Error(
+        `legacy package 仅保留 hash path ${glyph.path}；导入审查必须先指定 filename key。`,
+      );
+    pathToKey.set(
+      glyph.path,
+      glyph.path.includes("/")
+        ? basenameFromSourcePath(glyph.path)
+        : glyph.path,
+    );
+  }
+  assertNoEditorAssetKeyAliases([...pathToKey.values()]);
+  for (const glyph of Object.values(rewritten.glyphs))
+    glyph.path = pathToKey.get(glyph.path)!;
+  const manifest = parseImageStringManifest(rewritten);
+  const assetMap = hasMap
+    ? decodeEditorAssetsMap(files.get(EDITOR_ASSETS_MAP_PATH)!)
+    : undefined;
   const glyphs = new Map<string, GlyphDraft>();
-  for (const [character, spec] of Object.entries(manifest.glyphs))
+  for (const [character, spec] of Object.entries(manifest.glyphs)) {
+    const sourcePath = [...pathToKey].find(([, key]) => key === spec.path)?.[0];
+    if (!sourcePath)
+      throw new Error(`image-string glyph source path 缺失：${spec.path}`);
     glyphs.set(character, {
-      id: `imported-${character.codePointAt(0)!.toString(16)}`,
-      originalName: spec.path.split("/").at(-1)!,
-      mediaType: spec.path.endsWith(".webp") ? "image/webp" : "image/png",
-      bytes: canonicalFiles.get(spec.path)!.slice(),
+      ...(await createEditorAssetEntry({
+        key: spec.path,
+        mediaType: spec.path.toLowerCase().endsWith(".webp")
+          ? "image/webp"
+          : "image/png",
+        bytes: resolved.files.get(sourcePath)!.slice(),
+      })),
+      mediaType: spec.path.toLowerCase().endsWith(".webp")
+        ? "image/webp"
+        : "image/png",
       width: spec.size.width,
       height: spec.size.height,
       suggestedCharacter: character,
       character,
-      path: spec.path,
-      contentPath: spec.path,
-      digest: spec.path.slice("assets/".length, spec.path.lastIndexOf(".")),
-      provenance: {
-        sourceNames: Object.freeze([spec.path]),
-        sourceKind: "package-import",
-        batchLabel: `package-import:${manifest.id}`,
-      },
       offset: { ...spec.offset },
     });
+  }
+  if (assetMap && Object.keys(assetMap.files).length !== pathToKey.size)
+    throw new Error("assets map 包含 image-string closure 外的 entry。");
   return freezeEditorProject({
     id: manifest.id,
     metrics: { ...manifest.metrics },

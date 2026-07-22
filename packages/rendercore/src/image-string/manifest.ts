@@ -2,6 +2,10 @@ import {
   assertCanonicalPackagePath,
   assertNoPackagePathAliases,
 } from "@slotclientengine/browserartifactio";
+import {
+  assertEditorAssetKey,
+  assertNoEditorAssetKeyAliases,
+} from "@slotclientengine/editorresource";
 import { ImageStringError } from "./errors.js";
 import type {
   ImageStringFixedAdvanceGroup,
@@ -42,6 +46,7 @@ export function parseImageStringManifest(
   if (glyphEntries.length === 0) fail("glyphs", "不得为空");
   const glyphs: Record<string, ImageStringGlyphSpec> = {};
   const paths: string[] = [];
+  let referenceKind: "legacy" | "filename" | null = null;
   for (const [character, raw] of glyphEntries) {
     assertGlyphCharacter(character, `glyphs.${JSON.stringify(character)}`);
     const path = `glyphs.${JSON.stringify(character)}`;
@@ -49,18 +54,25 @@ export function parseImageStringManifest(
     exactKeys(spec, ["path", "size", "offset"], path);
     if (typeof spec.path !== "string") fail(`${path}.path`, "必须是字符串");
     let assetPath: string;
+    const kind = spec.path.includes("/") ? "legacy" : "filename";
+    if (referenceKind && referenceKind !== kind)
+      fail(`${path}.path`, "不得混用 filename key 与 direct package path");
+    referenceKind = kind;
     try {
-      assetPath = assertCanonicalPackagePath(spec.path, {
-        requireLowercase: true,
-      });
+      if (kind === "filename") assetPath = assertEditorAssetKey(spec.path);
+      else {
+        assetPath = assertCanonicalPackagePath(spec.path, {
+          requireLowercase: true,
+        });
+        if (!ASCII_PATTERN.test(assetPath))
+          fail(`${path}.path`, "legacy path 必须是 ASCII");
+        if (!assetPath.startsWith("assets/"))
+          fail(`${path}.path`, "legacy path 必须位于 assets/ 下");
+      }
     } catch (error) {
       fail(`${path}.path`, formatError(error));
     }
-    if (!ASCII_PATTERN.test(assetPath))
-      fail(`${path}.path`, "必须是 ASCII 路径");
-    if (!assetPath.startsWith("assets/"))
-      fail(`${path}.path`, "必须位于 assets/ 下");
-    if (!/\.(?:png|webp)$/u.test(assetPath))
+    if (!/\.(?:png|webp)$/iu.test(assetPath))
       fail(`${path}.path`, "扩展名只能是 .png 或 .webp");
     paths.push(assetPath);
 
@@ -85,7 +97,8 @@ export function parseImageStringManifest(
     };
   }
   try {
-    assertNoPackagePathAliases(paths);
+    if (referenceKind === "filename") assertNoEditorAssetKeyAliases(paths);
+    else assertNoPackagePathAliases(paths);
   } catch (error) {
     fail("glyphs", formatError(error));
   }

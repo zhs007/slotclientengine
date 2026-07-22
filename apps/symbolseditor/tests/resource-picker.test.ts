@@ -59,9 +59,9 @@ describe("typed resource picker", () => {
       state: "normal",
     });
     expect(images.map(({ path }) => path)).toEqual([
-      "art/H1.png",
       "broken.png",
-      "spine/Symbol.png",
+      "H1.png",
+      "Symbol.png",
     ]);
     expect(images.find(({ path }) => path === "broken.png")).toMatchObject({
       status: "error",
@@ -72,7 +72,7 @@ describe("typed resource picker", () => {
         symbol: "A",
         state: "normal",
       }).map(({ path }) => path),
-    ).toEqual(["spine/H1.json"]);
+    ).toEqual(["H1.json"]);
   });
 
   it("derives the exact texture from atlas page metadata without a texture picker", () => {
@@ -86,23 +86,23 @@ describe("typed resource picker", () => {
       animationName: "Idle",
     });
     expect(getDefaultSpineAtlasBinding(project)).toEqual({
-      atlasPath: "spine/Symbol.atlas",
-      texturePath: "spine/Symbol.png",
+      atlasPath: "Symbol.atlas",
+      texturePath: "Symbol.png",
     });
-    expect(resolveSpineAtlasBinding(project, "spine/Symbol.atlas")).toEqual({
-      atlasPath: "spine/Symbol.atlas",
-      texturePath: "spine/Symbol.png",
+    expect(resolveSpineAtlasBinding(project, "Symbol.atlas")).toEqual({
+      atlasPath: "Symbol.atlas",
+      texturePath: "Symbol.png",
     });
     applyResourceBinding(
       project,
       { kind: "spine-skeleton", symbol: "A", state: "normal" },
-      "spine/H1.json",
+      "H1.json",
     );
     expect(project.symbols.get("A")?.states.get("normal")).toMatchObject({
       kind: "spine",
-      skeletonPath: "spine/H1.json",
-      atlasPath: "spine/Symbol.atlas",
-      texturePath: "spine/Symbol.png",
+      skeletonPath: "H1.json",
+      atlasPath: "Symbol.atlas",
+      texturePath: "Symbol.png",
     });
     applyResourceBinding(
       project,
@@ -112,12 +112,12 @@ describe("typed resource picker", () => {
     applyResourceBinding(
       project,
       { kind: "spine-atlas", symbol: "A", state: "normal" },
-      "spine/Symbol.atlas",
+      "Symbol.atlas",
     );
     expect(project.symbols.get("A")?.states.get("normal")).toMatchObject({
       kind: "spine",
-      atlasPath: "spine/Symbol.atlas",
-      texturePath: "spine/Symbol.png",
+      atlasPath: "Symbol.atlas",
+      texturePath: "Symbol.png",
     });
 
     uploadAssetBatch(project, [
@@ -130,7 +130,10 @@ describe("typed resource picker", () => {
         bytes: fixture("assets/game003-s1/Symbol.png"),
       },
     ]);
-    expect(getDefaultSpineAtlasBinding(project)).toBeNull();
+    expect(getDefaultSpineAtlasBinding(project)).toEqual({
+      atlasPath: "Symbol.atlas",
+      texturePath: "Symbol.png",
+    });
   });
 
   it("confirms one atomic store transaction and rejects stale targets", () => {
@@ -142,13 +145,13 @@ describe("typed resource picker", () => {
       applyResourceBinding(
         draft,
         { kind: "state-image", symbol: "A", state: "normal" },
-        "art/H1.png",
+        "H1.png",
       );
     });
     expect(store.getSnapshot().revision).toBe(before + 1);
     expect(
       store.getSnapshot().project?.symbols.get("A")?.states.get("normal"),
-    ).toEqual({ kind: "image", imagePath: "art/H1.png" });
+    ).toEqual({ kind: "image", imagePath: "H1.png" });
 
     const revision = store.getSnapshot().revision;
     expect(() =>
@@ -156,7 +159,7 @@ describe("typed resource picker", () => {
         applyResourceBinding(
           draft,
           { kind: "state-image", symbol: "missing", state: "normal" },
-          "art/H1.png",
+          "H1.png",
         ),
       ),
     ).toThrow(/不存在/);
@@ -172,7 +175,7 @@ describe("typed resource picker", () => {
         { kind: "state-image", symbol: "A", state: "normal" },
         "symbol.png",
       ).map(({ path }) => path),
-    ).toEqual(["spine/Symbol.png"]);
+    ).toEqual(["Symbol.png"]);
     expect(project.symbols.get("A")?.states.get("normal")).toEqual(before);
   });
 });

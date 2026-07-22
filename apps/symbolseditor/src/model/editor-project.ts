@@ -3,6 +3,10 @@ import {
   resolvePackagePath,
 } from "@slotclientengine/browserartifactio";
 import {
+  assertNoEditorAssetKeyAliases,
+  basenameFromSourcePath,
+} from "@slotclientengine/editorresource";
+import {
   collectSymbolManifestResourcePaths,
   createDefaultSymbolStatePreset,
   inspectSymbolSpineAtlas,
@@ -22,6 +26,7 @@ import {
   type SymbolValuePresentationSpec,
 } from "@slotclientengine/rendercore/symbol";
 import {
+  collectImageStringAssetPaths,
   parseImageStringManifest,
   validateImageStringPackageContents,
   type ImageStringManifestV1,
@@ -116,7 +121,12 @@ export interface EditorSymbolDraft {
 
 export interface EditorImageStringDependency {
   readonly id: string;
+  readonly rootKey: string;
   readonly manifest: ImageStringManifestV1;
+  readonly keys: readonly string[];
+}
+
+export interface ImportedEditorImageStringDependency extends EditorImageStringDependency {
   readonly files: ReadonlyMap<string, Uint8Array>;
 }
 
@@ -598,12 +608,25 @@ export function setSymbolImageStringNodes(
 
 export function installImageStringDependency(
   project: SymbolEditorProject,
-  dependency: EditorImageStringDependency,
+  dependency: ImportedEditorImageStringDependency,
   mode: "import" | "replace" = "import",
 ): void {
   const existing = project.imageStringDependencies.get(dependency.id);
   if (existing && mode === "import") {
-    if (imageStringDependenciesEqual(existing, dependency)) return;
+    if (
+      imageStringDependenciesEqual(existing, dependency) &&
+      existing.keys.every((key) => {
+        const current = project.assetLibrary.records.get(key)?.bytes;
+        const incoming = dependency.files.get(key);
+        return (
+          current !== undefined &&
+          incoming !== undefined &&
+          current.length === incoming.length &&
+          current.every((byte, index) => byte === incoming[index])
+        );
+      })
+    )
+      return;
     throw new Error(
       `image-string dependency id 冲突：${dependency.id} 内容不同，请显式替换。`,
     );
@@ -611,24 +634,21 @@ export function installImageStringDependency(
   if (!existing && mode === "replace") {
     throw new Error(`image-string dependency 不存在：${dependency.id}。`);
   }
-  const prefix = imageStringDependencyPrefix(dependency.id);
-  const nextPaths = [...dependency.files.keys()].map(
-    (path) => `${prefix}${path}`,
-  );
-  const oldPaths = existing
-    ? [...existing.files.keys()].map((path) => `${prefix}${path}`)
-    : [];
+  const nextPaths = [...dependency.files.keys()];
+  const oldPaths = existing ? [...existing.keys] : [];
   const conflicts = nextPaths.filter(
     (path) =>
       project.assetLibrary.records.has(path) && !oldPaths.includes(path),
   );
   if (conflicts.length > 0) {
-    throw new Error(`image-string vendor path 冲突：${conflicts.join(", ")}。`);
+    throw new Error(
+      `image-string filename key 冲突：${conflicts.join(", ")}。`,
+    );
   }
   for (const path of oldPaths) project.assetLibrary.records.delete(path);
   const batchId = `image-string-${dependency.id}`;
   for (const [path, bytes] of dependency.files) {
-    const vendorPath = `${prefix}${path}`;
+    const vendorPath = path;
     project.assetLibrary.records.set(
       vendorPath,
       createAssetRecord(vendorPath, bytes, batchId),
@@ -644,7 +664,12 @@ export function installImageStringDependency(
   });
   project.imageStringDependencies.set(
     dependency.id,
-    cloneImageStringDependency(dependency),
+    Object.freeze({
+      id: dependency.id,
+      rootKey: dependency.rootKey,
+      manifest: cloneValue(dependency.manifest),
+      keys: Object.freeze([...nextPaths].sort(comparePath)),
+    }),
   );
 }
 
@@ -656,11 +681,13 @@ export function removeImageStringDependency(
   if (!dependency) throw new Error(`image-string dependency 不存在：${id}。`);
   const usedBy = [...project.symbols.values()].flatMap((symbol) => [
     ...symbol.imageStringNodes
-      .filter((node) => imageStringDependencyId(node.resource) === id)
+      .filter((node) =>
+        imageStringDependencyMatches(node.resource, dependency.rootKey),
+      )
       .map((node) => `${symbol.symbol}.imageStringNodes.${node.name}`),
     ...(symbol.valuePresentation?.text.type === "image-string"
       ? symbol.valuePresentation.text.tiers.flatMap((binding, index) =>
-          imageStringDependencyId(binding.resource) === id
+          imageStringDependencyMatches(binding.resource, dependency.rootKey)
             ? [`${symbol.symbol}.valuePresentation.text.tiers[${index}]`]
             : [],
         )
@@ -671,9 +698,8 @@ export function removeImageStringDependency(
       `image-string dependency ${id} 仍被引用：${usedBy.join("、")}。`,
     );
   }
-  const prefix = imageStringDependencyPrefix(id);
-  for (const path of dependency.files.keys()) {
-    project.assetLibrary.records.delete(`${prefix}${path}`);
+  for (const path of dependency.keys) {
+    project.assetLibrary.records.delete(path);
   }
   project.assetLibrary.batches = project.assetLibrary.batches.filter(
     (batch) => batch.id !== `image-string-${id}`,
@@ -688,26 +714,35 @@ export function uploadAssetBatch(
 ): string {
   if (files.length === 0) throw new Error("上传批次不能为空。");
   const normalized = files.map((file) => ({
-    path: assertCanonicalPackagePath(file.path.normalize("NFC")),
+    path: basenameFromSourcePath(file.path),
     bytes: file.bytes.slice(),
   }));
+  assertNoEditorAssetKeyAliases(normalized.map(({ path }) => path));
   const duplicates = normalized
     .map((file) => file.path)
     .filter((path, index, paths) => paths.indexOf(path) !== index);
-  const conflicts = normalized
-    .map((file) => file.path)
-    .filter((path) => project.assetLibrary.records.has(path));
-  if (duplicates.length > 0 || conflicts.length > 0) {
+  if (duplicates.length > 0) {
     throw new Error(
-      `资源 path 冲突：${[...new Set([...duplicates, ...conflicts])].join(", ")}。请从资源列表显式替换。`,
+      `资源 filename key 冲突：${[...new Set(duplicates)].join(", ")}。`,
     );
   }
   const batchId = `upload-${project.nextUploadBatch++}`;
   const records = normalized.map((file) =>
     createAssetRecord(file.path, file.bytes, batchId),
   );
+  const overwritten = new Set(
+    records
+      .map(({ path }) => path)
+      .filter((path) => project.assetLibrary.records.has(path)),
+  );
   for (const record of records)
     project.assetLibrary.records.set(record.path, record);
+  project.assetLibrary.batches = project.assetLibrary.batches
+    .map((batch) => ({
+      ...batch,
+      paths: batch.paths.filter((path) => !overwritten.has(path)),
+    }))
+    .filter((batch) => batch.paths.length > 0);
   project.assetLibrary.batches.push({
     id: batchId,
     label,
@@ -1558,38 +1593,31 @@ function collectImportedImageStringDependencies(
   assets: ReadonlyMap<string, Uint8Array>,
 ): Map<string, EditorImageStringDependency> {
   const dependencies = new Map<string, EditorImageStringDependency>();
-  const manifestPattern =
-    /^dependencies\/image-strings\/([a-z0-9]+(?:-[a-z0-9]+)*)\/image-string\.manifest\.json$/u;
-  for (const path of assets.keys()) {
-    const match = manifestPattern.exec(path);
-    if (!match) continue;
-    const id = match[1]!;
-    const prefix = imageStringDependencyPrefix(id);
-    const files = new Map<string, Uint8Array>();
-    for (const [assetPath, bytes] of assets) {
-      if (assetPath.startsWith(prefix)) {
-        files.set(assetPath.slice(prefix.length), bytes.slice());
-      }
+  const flatManifestBytes = assets.get("image-string.manifest.json");
+  if (flatManifestBytes) {
+    const raw = JSON.parse(
+      decodeUtf8(flatManifestBytes, "image-string.manifest.json"),
+    );
+    const parsed = parseImageStringManifest(raw);
+    const files = new Map<string, Uint8Array>([
+      ["image-string.manifest.json", flatManifestBytes.slice()],
+    ]);
+    for (const path of collectImageStringAssetPaths(parsed)) {
+      const bytes = assets.get(path);
+      if (!bytes) throw new Error(`image-string glyph 缺失：${path}`);
+      files.set(path, bytes.slice());
     }
-    const manifestBytes = files.get("image-string.manifest.json");
-    if (!manifestBytes)
-      throw new Error(`image-string dependency ${id} 缺 manifest。`);
-    const raw = JSON.parse(decodeUtf8(manifestBytes, path));
     const manifest = validateImageStringPackageContents({
-      manifest: raw,
+      manifest: parsed,
       files,
     });
-    if (manifest.id !== id) {
-      throw new Error(
-        `image-string vendor directory ${id} 与 manifest id ${manifest.id} 不一致。`,
-      );
-    }
     dependencies.set(
-      id,
+      manifest.id,
       Object.freeze({
-        id,
+        id: manifest.id,
+        rootKey: "image-string.manifest.json",
         manifest,
-        files,
+        keys: Object.freeze([...files.keys()].sort(comparePath)),
       }),
     );
   }
@@ -1601,37 +1629,29 @@ function cloneImageStringDependency(
 ): EditorImageStringDependency {
   return Object.freeze({
     id: dependency.id,
+    rootKey: dependency.rootKey,
     manifest: cloneValue(dependency.manifest),
-    files: new Map(
-      [...dependency.files].map(([path, bytes]) => [path, bytes.slice()]),
-    ),
+    keys: Object.freeze([...dependency.keys]),
   });
 }
 
 function imageStringDependenciesEqual(
   left: EditorImageStringDependency,
-  right: EditorImageStringDependency,
+  right: ImportedEditorImageStringDependency,
 ): boolean {
-  if (left.files.size !== right.files.size) return false;
-  for (const [path, leftBytes] of left.files) {
-    const rightBytes = right.files.get(path);
-    if (!rightBytes || leftBytes.length !== rightBytes.length) return false;
-    if (leftBytes.some((byte, index) => byte !== rightBytes[index]))
-      return false;
-  }
-  return true;
-}
-
-function imageStringDependencyPrefix(id: string): string {
-  return `dependencies/image-strings/${id}/`;
-}
-
-function imageStringDependencyId(resource: string): string | null {
   return (
-    /^\.\/dependencies\/image-strings\/([^/]+)\/image-string\.manifest\.json$/u.exec(
-      resource,
-    )?.[1] ?? null
+    left.rootKey === right.rootKey &&
+    JSON.stringify(left.manifest) === JSON.stringify(right.manifest) &&
+    left.keys.length === right.files.size &&
+    left.keys.every((key) => right.files.has(key))
   );
+}
+
+function imageStringDependencyMatches(
+  resource: string,
+  rootKey: string,
+): boolean {
+  return resource === rootKey || resource === `./${rootKey}`;
 }
 
 function fileStem(fileName: string): string {

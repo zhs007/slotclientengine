@@ -1,18 +1,20 @@
 import type { SceneLayoutVariantId } from "@slotclientengine/rendercore/scene-layout";
 import {
-  collectImageStringAssetPaths,
   parseImageStringManifest,
+  resolveImageStringPackageFiles,
   validateImageStringPackageContents,
   validateImageStringText,
 } from "@slotclientengine/rendercore/image-string";
 import {
-  allocateContentAddressedPath,
   createBoundedSourceIndex,
   detectRasterAssetType,
   extractBoundedZip,
-  sha256Hex,
-  suggestLogicalResourceId,
 } from "@slotclientengine/browserartifactio";
+import {
+  assertEditorAssetKey,
+  assertNoEditorAssetKeyAliases,
+  basenameFromSourcePath,
+} from "@slotclientengine/editorresource";
 import {
   activeVariantIds,
   resetVariantGeometry,
@@ -57,13 +59,12 @@ export const EDITOR_SOURCE_LIMITS = Object.freeze({
   maxTotalBytes: 500 * 1024 * 1024,
 });
 
-export function importImageStringZip(options: {
+export async function importImageStringZip(options: {
   readonly project: EditorProject;
   readonly zipBytes: Uint8Array;
-}): EditorImageStringLayoutResource {
+}): Promise<EditorImageStringLayoutResource> {
   const files = extractBoundedZip(options.zipBytes, {
     limits: IMAGE_STRING_ZIP_LIMITS,
-    pathPolicy: { requireLowercase: true },
   });
   const manifestBytes = files.get("image-string.manifest.json");
   if (!manifestBytes)
@@ -73,16 +74,26 @@ export function importImageStringZip(options: {
   const manifest = parseImageStringManifest(
     JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(manifestBytes)),
   );
-  validateImageStringPackageContents({ manifest, files });
-  const prefix = `dependencies/image-strings/${manifest.id}`;
+  const resolved = await resolveImageStringPackageFiles({ manifest, files });
+  validateImageStringPackageContents({ manifest, files: resolved.files });
+  const rewritten = structuredClone(manifest) as {
+    glyphs: Record<string, { path: string }>;
+  };
+  const mapping = new Map<string, string>();
+  for (const glyph of Object.values(rewritten.glyphs))
+    if (!mapping.has(glyph.path))
+      mapping.set(glyph.path, basenameFromSourcePath(glyph.path));
+  assertNoEditorAssetKeyAliases([...mapping.values()]);
+  for (const glyph of Object.values(rewritten.glyphs))
+    glyph.path = mapping.get(glyph.path)!;
+  const flatManifest = parseImageStringManifest(rewritten);
+  const rootKey = "image-string.manifest.json";
   const resource: EditorImageStringLayoutResource = Object.freeze({
-    id: manifest.id,
+    id: rootKey,
     kind: "image-string",
-    manifestPath: `${prefix}/image-string.manifest.json`,
-    manifest,
-    assetPaths: Object.freeze(
-      collectImageStringAssetPaths(manifest).map((path) => `${prefix}/${path}`),
-    ),
+    manifestPath: rootKey,
+    manifest: flatManifest,
+    assetPaths: Object.freeze([...mapping.values()].sort()),
     provenance: {
       sourceNames: Object.freeze(["image-string.manifest.json"]),
       sourceKind: "zip" as const,
@@ -91,45 +102,36 @@ export function importImageStringZip(options: {
   });
   const prepared: PreparedResource = {
     resource,
-    assets: new Map(
-      [...files].map(([path, bytes]) => [`${prefix}/${path}`, bytes] as const),
-    ),
+    assets: new Map([
+      [rootKey, encodeStableJson(flatManifest)],
+      ...[...mapping].map(
+        ([source, key]) => [key, resolved.files.get(source)!.slice()] as const,
+      ),
+    ]),
   };
+  const existing = options.project.resources.get(rootKey);
+  if (existing) {
+    commitResourceReplacement(options.project, existing, prepared, false);
+    return resource;
+  }
   assertNewResourceAvailable(options.project, resource);
   commitNewResource(options.project, prepared);
   return resource;
 }
 
-export function replaceImageStringResource(options: {
+export async function replaceImageStringResource(options: {
   readonly project: EditorProject;
   readonly resourceId: string;
   readonly zipBytes: Uint8Array;
-}): EditorImageStringLayoutResource {
+}): Promise<EditorImageStringLayoutResource> {
   const candidate = structuredCloneProjectWithoutResource(
     options.project,
     options.resourceId,
   );
-  const imported = importImageStringZip({
+  const imported = await importImageStringZip({
     project: candidate,
     zipBytes: options.zipBytes,
   });
-  const replacement: EditorImageStringLayoutResource = Object.freeze({
-    ...imported,
-    id: options.resourceId,
-    manifestPath: `dependencies/image-strings/${options.resourceId}/image-string.manifest.json`,
-    assetPaths: Object.freeze(
-      imported.assetPaths.map((path) =>
-        path.replace(
-          `dependencies/image-strings/${imported.id}/`,
-          `dependencies/image-strings/${options.resourceId}/`,
-        ),
-      ),
-    ),
-  });
-  if (imported.manifest.id !== options.resourceId)
-    throw new Error(
-      "替换 image-string 的 nested manifest id 必须与 resource id 相同。",
-    );
   const current = requireResource(options.project, options.resourceId);
   if (current.kind !== "image-string")
     throw new Error("资源类型必须保持为 image-string。");
@@ -138,20 +140,20 @@ export function replaceImageStringResource(options: {
   )) {
     validateImageStringText(node.imageString?.text ?? "", imported.manifest);
   }
-  const assets = new Map<string, Uint8Array>();
-  const sourcePrefix = `dependencies/image-strings/${imported.id}/`;
-  const targetPrefix = `dependencies/image-strings/${options.resourceId}/`;
-  for (const [path, bytes] of candidate.assets) {
-    if (path.startsWith(sourcePrefix))
-      assets.set(path.replace(sourcePrefix, targetPrefix), bytes);
-  }
+  if (imported.id !== current.id)
+    throw new Error("替换 image-string 必须保持 root filename key。 ");
+  const assets = new Map(
+    editorResourcePaths(imported).map(
+      (path) => [path, candidate.assets.get(path)!.slice()] as const,
+    ),
+  );
   commitResourceReplacement(
     options.project,
     current,
-    { resource: replacement, assets },
+    { resource: imported, assets },
     false,
   );
-  return replacement;
+  return imported;
 }
 
 export async function uploadImageResource(options: {
@@ -163,6 +165,11 @@ export async function uploadImageResource(options: {
   ) => Promise<{ readonly width: number; readonly height: number }>;
 }): Promise<EditorLayoutResource> {
   const prepared = await prepareImageResource(options);
+  const existing = options.project.resources.get(prepared.resource.id);
+  if (existing) {
+    commitResourceReplacement(options.project, existing, prepared, false);
+    return prepared.resource;
+  }
   assertNewResourceAvailable(options.project, prepared.resource);
   commitNewResource(options.project, prepared);
   return prepared.resource;
@@ -174,6 +181,11 @@ export async function uploadSpineResource(options: {
   readonly resourceId?: string;
 }): Promise<EditorSpineLayoutResource> {
   const prepared = await prepareSpineResource(options);
+  const existing = options.project.resources.get(prepared.resource.id);
+  if (existing) {
+    commitResourceReplacement(options.project, existing, prepared, false);
+    return prepared.resource;
+  }
   assertNewResourceAvailable(options.project, prepared.resource);
   commitNewResource(options.project, prepared);
   return prepared.resource;
@@ -191,6 +203,11 @@ export async function uploadVideoResource(options: {
   }>;
 }): Promise<EditorVideoLayoutResource> {
   const prepared = await prepareVideoResource(options);
+  const existing = options.project.resources.get(prepared.resource.id);
+  if (existing) {
+    commitResourceReplacement(options.project, existing, prepared, false);
+    return prepared.resource;
+  }
   assertNewResourceAvailable(options.project, prepared.resource);
   commitNewResource(options.project, prepared);
   return prepared.resource;
@@ -651,12 +668,18 @@ export function suggestNodeId(
   project: EditorProject,
   resourceId: string,
 ): string {
-  if (!project.nodes.some((node) => node.id === resourceId)) return resourceId;
+  const base =
+    resourceId
+      .replace(/\.[^.]+$/u, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/gu, "-")
+      .replace(/^-+|-+$/gu, "") || "layer";
+  if (!project.nodes.some((node) => node.id === base)) return base;
   let suffix = 2;
-  while (project.nodes.some((node) => node.id === `${resourceId}-${suffix}`)) {
+  while (project.nodes.some((node) => node.id === `${base}-${suffix}`)) {
     suffix += 1;
   }
-  return `${resourceId}-${suffix}`;
+  return `${base}-${suffix}`;
 }
 
 export function suggestModeBackgroundNodeId(
@@ -767,10 +790,9 @@ async function prepareImageResource(options: {
   }
   const bytes = new Uint8Array(await options.file.arrayBuffer());
   const type = detectRasterAssetType(bytes);
-  const path = allocateContentAddressedPath({
-    digest: await sha256Hex(bytes),
-    extension: type.extension,
-  });
+  const path = basenameFromSourcePath(options.file.name);
+  if (!path.toLowerCase().endsWith(`.${type.extension}`))
+    throw new Error(`图片 filename extension 与内容不一致：${path}`);
   return {
     resource: {
       id,
@@ -779,7 +801,7 @@ async function prepareImageResource(options: {
       size: { width: decoded.width, height: decoded.height },
       provenance: {
         sourceNames: Object.freeze([options.file.name]),
-        sourceKind: options.file.webkitRelativePath ? "directory" : "files",
+        sourceKind: "files",
         batchLabel: `image:${options.file.name}`,
       },
     },
@@ -836,12 +858,11 @@ async function prepareSpineResource(options: {
     if (!file) throw new Error(`Spine atlas page 缺少 texture：${page}`);
     const bytes = new Uint8Array(await file.arrayBuffer());
     const type = detectRasterAssetType(bytes);
-    const path = allocateContentAddressedPath({
-      digest: await sha256Hex(bytes),
-      extension: type.extension,
-    });
+    const path = basenameFromSourcePath(file.name);
+    if (!path.toLowerCase().endsWith(`.${type.extension}`))
+      throw new Error(`Spine texture extension 与内容不一致：${path}`);
     textures[page] = path;
-    pageMapping.set(page, page);
+    pageMapping.set(page, path);
     putAsset(assets, path, bytes);
   }
   if (texturesByName.size !== atlasPages.length) {
@@ -886,18 +907,17 @@ async function prepareSpineResource(options: {
     throw new Error("Spine skeleton bounds 必须同时是有限正数，或同时省略。");
   }
   const skeletonBytes = encodeStableJson(skeleton);
-  const skeletonPath = allocateContentAddressedPath({
-    digest: await sha256Hex(skeletonBytes),
-    extension: "json",
-  });
+  const skeletonPath = basenameFromSourcePath(skeletonFile.name);
   putAsset(assets, skeletonPath, skeletonBytes);
   const atlasBytes = new TextEncoder().encode(
     rewriteAtlasPages(atlasText, pageMapping),
   );
-  const atlasPath = allocateContentAddressedPath({
-    digest: await sha256Hex(atlasBytes),
-    extension: "atlas",
-  });
+  const atlasPath = basenameFromSourcePath(atlasFile.name);
+  assertNoEditorAssetKeyAliases([
+    skeletonPath,
+    atlasPath,
+    ...Object.values(textures),
+  ]);
   putAsset(assets, atlasPath, atlasBytes);
   return {
     resource: {
@@ -911,9 +931,7 @@ async function prepareSpineResource(options: {
       ...(hasBounds ? { bounds: { width, height } } : {}),
       provenance: {
         sourceNames: Object.freeze(options.files.map((file) => file.name)),
-        sourceKind: options.files.some((file) => file.webkitRelativePath)
-          ? "directory"
-          : "files",
+        sourceKind: "files",
         batchLabel: `spine:${skeletonFile.name}`,
       },
     },
@@ -959,10 +977,7 @@ async function prepareVideoResource(options: {
       metadata.hasAudio !== "unknown")
   )
     throw new Error("视频 metadata 的尺寸、时长或 audio 诊断无效。");
-  const path = allocateContentAddressedPath({
-    digest: await sha256Hex(bytes),
-    extension: "mp4",
-  });
+  const path = basenameFromSourcePath(options.file.name);
   const id = options.resourceId ?? requiredResourceId(options.file.name);
   return {
     resource: {
@@ -975,7 +990,7 @@ async function prepareVideoResource(options: {
       hasAudio: metadata.hasAudio,
       provenance: {
         sourceNames: Object.freeze([options.file.name]),
-        sourceKind: options.file.webkitRelativePath ? "directory" : "files",
+        sourceKind: "files",
         batchLabel: `video:${options.file.name}`,
       },
     },
@@ -987,9 +1002,9 @@ function assertNewResourceAvailable(
   project: EditorProject,
   resource: EditorLayoutResource,
 ): void {
-  if (!/^[a-z0-9][a-z0-9-]*$/u.test(resource.id)) {
-    throw new Error(`resource id 必须是小写字母数字与连字符：${resource.id}`);
-  }
+  assertEditorAssetKey(resource.id);
+  if (resource.id !== editorResourcePrimaryPath(resource))
+    throw new Error("resource identity 必须等于 compound root filename key。");
   if (project.resources.has(resource.id)) {
     throw new Error(`资源 id 冲突：${resource.id}`);
   }
@@ -1036,7 +1051,7 @@ function commitResourceReplacement(
 ): void {
   if (current.kind !== prepared.resource.kind) {
     throw new Error(
-      "替换资源必须保持 logical resource kind；类型切换请重绑节点。",
+      "替换资源必须保持 filename-key resource kind；类型切换请重绑节点。",
     );
   }
   const oldPaths = new Set(editorResourcePaths(current));
@@ -1134,10 +1149,10 @@ function commitResourceReplacement(
       );
     }
   }
+  for (const [path, bytes] of prepared.assets)
+    project.assets.set(path, bytes.slice());
   project.resources.set(current.id, prepared.resource);
   garbageCollectAssetPaths(project, oldPaths);
-  for (const [path, bytes] of prepared.assets)
-    putAsset(project.assets, path, bytes);
   for (const variantId of backgroundVariants) {
     const currentSize = project.variants[variantId].artSize;
     if (
@@ -1213,13 +1228,7 @@ function decodeVideoFile(file: File): Promise<{
 }
 
 function requiredResourceId(sourceName: string): string {
-  const id = suggestLogicalResourceId(sourceName);
-  if (!id) {
-    throw new Error(
-      `无法从 ${sourceName} 建议 lowercase ASCII kebab-case resource id，请在导入审查中显式填写。`,
-    );
-  }
-  return id;
+  return basenameFromSourcePath(sourceName);
 }
 
 function inspectAtlasPages(atlasText: string): readonly string[] {

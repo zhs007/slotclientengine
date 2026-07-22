@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createMappedPackageFiles } from "../editor-assets-map-fixture.js";
 
 const destroyImageString = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("../../src/image-string/index.js", async (original) => {
@@ -85,6 +86,93 @@ describe("popup package resource", () => {
     });
     expect(fetchImpl).toHaveBeenCalled();
     await resource.destroy();
+  });
+
+  it("flattens legacy structured resources and resolves one mapped file closure", async () => {
+    const {
+      collectMappedPopupAssetKeys,
+      createPopupPackageResource,
+      flattenPopupPackageFiles,
+      resolvePopupPackageFiles,
+    } = await import("../../src/popup/package-resource.js");
+    const { source, flattened, mapped } = await mappedFixture();
+    expect(
+      collectMappedPopupAssetKeys(flattened).every((key) => !key.includes("/")),
+    ).toBe(true);
+    expect(flattenPopupPackageFiles(flattened)).toEqual(flattened);
+    const resolved = await resolvePopupPackageFiles({
+      manifest: flattened.manifest,
+      files: mapped.files,
+    });
+    expect(resolved.has("assets.map.json")).toBe(false);
+    const texture = { width: 1, height: 1, destroy: vi.fn() };
+    const resource = await createPopupPackageResource({
+      manifest: flattened.manifest,
+      files: mapped.files,
+      decodeImage: async () => ({ width: 1, height: 1 }),
+      loadTexture: vi.fn(async () => texture as never),
+    });
+    await resource.destroy();
+
+    await expect(
+      resolvePopupPackageFiles({
+        manifest: flattened.manifest,
+        files: flattened.files,
+      }),
+    ).rejects.toThrow(/assets\.map/);
+    await expect(
+      resolvePopupPackageFiles({
+        manifest: source.manifest,
+        files: new Map([
+          ...source.files,
+          ["assets.map.json", mapped.files.get("assets.map.json")!],
+        ]),
+      }),
+    ).rejects.toThrow(/legacy/);
+  });
+
+  it("loads the mapped popup closure from content-addressed CDN URLs", async () => {
+    const { loadPopupPackageFromUrl } =
+      await import("../../src/popup/package-resource.js");
+    const { flattened, mapped } = await mappedFixture();
+    const responses = new Map<string, Uint8Array>([
+      ["popup.manifest.json", flattened.files.get("popup.manifest.json")!],
+      ...mapped.files,
+    ]);
+    const texture = { width: 1, height: 1, destroy: vi.fn() };
+    const remote = await loadPopupPackageFromUrl({
+      manifestUrl: "https://cdn.example/pkg/popup.manifest.json",
+      fetchImpl: vi.fn(async (input: string | URL | Request) => {
+        const path = new URL(String(input)).pathname.split("/pkg/")[1]!;
+        const body = responses.get(path);
+        return body
+          ? new Response(body.slice().buffer)
+          : new Response("missing", { status: 404 });
+      }) as typeof fetch,
+      decodeImage: async () => ({ width: 1, height: 1 }),
+      loadTexture: vi.fn(async () => texture as never),
+    });
+    await remote.destroy();
+
+    const firstPayload = Object.values(mapped.map.files)[0]!.path;
+    const loadCorrupt = async (payload: Uint8Array) => {
+      const corrupt = new Map(responses);
+      corrupt.set(firstPayload, payload);
+      return loadPopupPackageFromUrl({
+        manifestUrl: "https://cdn.example/pkg/popup.manifest.json",
+        fetchImpl: (async (input: string | URL | Request) => {
+          const path = new URL(String(input)).pathname.split("/pkg/")[1]!;
+          const body = corrupt.get(path);
+          return body
+            ? new Response(body.slice().buffer)
+            : new Response("missing", { status: 404 });
+        }) as typeof fetch,
+      });
+    };
+    await expect(loadCorrupt(new Uint8Array())).rejects.toThrow(/byteLength/);
+    const sameLength = responses.get(firstPayload)!.slice();
+    sameLength[0] = (sameLength[0] ?? 0) ^ 0xff;
+    await expect(loadCorrupt(sameLength)).rejects.toThrow(/SHA-256/);
   });
 
   it("rejects missing/orphan/nested-id/URL/status failures and rolls back", async () => {
@@ -382,6 +470,52 @@ function fixture() {
   );
   return { manifest, files };
 }
+
+let mappedFixturePromise:
+  | Promise<{
+      source: ReturnType<typeof fixture>;
+      flattened: ReturnType<
+        typeof import("../../src/popup/package-resource.js").flattenPopupPackageFiles
+      >;
+      mapped: Awaited<ReturnType<typeof createMappedPackageFiles>>;
+    }>
+  | undefined;
+
+function mappedFixture() {
+  return (mappedFixturePromise ??= (async () => {
+    const { flattenPopupPackageFiles } =
+      await import("../../src/popup/package-resource.js");
+    const source = mappedSourceFixture();
+    const flattened = flattenPopupPackageFiles(source);
+    const root = flattened.files.get("popup.manifest.json")!;
+    const mapped = await createMappedPackageFiles({
+      controls: new Map([["popup.manifest.json", root]]),
+      assets: new Map(
+        [...flattened.files].filter(([path]) => path !== "popup.manifest.json"),
+      ),
+    });
+    return { source, flattened, mapped };
+  })());
+}
+
+function mappedSourceFixture(): ReturnType<typeof fixture> {
+  const source = fixture();
+  source.manifest.resources = {
+    amount: source.manifest.resources.amount,
+    image: source.manifest.resources.image,
+  };
+  source.manifest.awardCelebration.base.layers =
+    source.manifest.awardCelebration.base.layers.filter(
+      (layer: { resource: string }) =>
+        layer.resource === "amount" || layer.resource === "image",
+    );
+  source.files.set(
+    "popup.manifest.json",
+    new TextEncoder().encode(JSON.stringify(source.manifest)),
+  );
+  return source;
+}
+
 function bytes(path: string) {
   return new Uint8Array(
     readFileSync(resolve(process.cwd(), "../../assets", path)),

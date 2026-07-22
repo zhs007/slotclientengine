@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
-    "prepare:deps": "pnpm --filter @slotclientengine/browserartifactio build && pnpm --filter @slotclientengine/rendercore build",
+    "prepare:deps": "pnpm --filter @slotclientengine/browserartifactio build && pnpm --filter @slotclientengine/editorresource build && pnpm --filter @slotclientengine/rendercore build",
     "dev": "pnpm run prepare:deps && vite",
     "build": "pnpm run prepare:deps && vite build",
     "lint": "eslint .",
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@slotclientengine/browserartifactio": "workspace:*",
+    "@slotclientengine/editorresource": "workspace:*",
     "@slotclientengine/rendercore": "workspace:*",
     "@slotclientengine/vnicore": "workspace:*",
     "pixi.js": "^8.1.6"

@@ -361,9 +361,11 @@ export function importSymbolDependency(
   const id = imported.resource.packageManifest.id;
   if (project.symbolDependencies.has(id))
     throw new Error(`Symbols dependency ${id} 已存在，可使用替换。`);
+  mergeDependencyAssets(project, imported.files);
   project.symbolDependencies.set(id, {
     packageId: id,
-    files: cloneFiles(imported.files),
+    rootKey: "symbols.package.json",
+    keys: Object.freeze([...imported.files.keys()].sort()),
   });
 }
 
@@ -381,9 +383,11 @@ export function replaceSymbolDependency(
   for (const mode of project.gameModes.modes)
     if (mode.symbols?.packageId === id)
       validateSymbolBinding(project, imported, mode.symbols.reelSet);
+  mergeDependencyAssets(project, imported.files);
   project.symbolDependencies.set(id, {
     packageId: id,
-    files: cloneFiles(imported.files),
+    rootKey: "symbols.package.json",
+    keys: Object.freeze([...imported.files.keys()].sort()),
   });
 }
 
@@ -451,9 +455,11 @@ export function importPopupDependency(
   const id = imported.manifest.id;
   if (project.popupDependencies.has(id))
     throw new Error(`Popup dependency ${id} 已存在，可使用替换。`);
+  mergeDependencyAssets(project, imported.files);
   project.popupDependencies.set(id, {
     id,
-    files: cloneFiles(imported.files),
+    rootKey: "popup.manifest.json",
+    keys: Object.freeze([...imported.files.keys()].sort()),
     placements: Object.fromEntries(
       activeVariantIds(project).map((variantId) => [
         variantId,
@@ -474,9 +480,11 @@ export function replacePopupDependency(
     throw new Error(
       `替换 Popup id 必须保持 ${id}，实际为 ${imported.manifest.id}。`,
     );
+  mergeDependencyAssets(project, imported.files);
   project.popupDependencies.set(id, {
     ...current,
-    files: cloneFiles(imported.files),
+    rootKey: "popup.manifest.json",
+    keys: Object.freeze([...imported.files.keys()].sort()),
   });
 }
 
@@ -527,8 +535,25 @@ function assertModeId(id: string): void {
     throw new Error(`游戏模式 id 必须匹配 ${MODE_ID.source}。`);
 }
 
-function cloneFiles(
+function mergeDependencyAssets(
+  project: EditorProject,
   files: ReadonlyMap<string, Uint8Array>,
-): ReadonlyMap<string, Uint8Array> {
-  return new Map([...files].map(([path, bytes]) => [path, bytes.slice()]));
+): void {
+  const aliases = new Map(
+    [...project.assets.keys()].map((key) => [
+      key.normalize("NFC").toLocaleLowerCase("en-US"),
+      key,
+    ]),
+  );
+  for (const [key, bytes] of files) {
+    const existingKey = aliases.get(
+      key.normalize("NFC").toLocaleLowerCase("en-US"),
+    );
+    if (existingKey && existingKey !== key)
+      throw new Error(
+        `全局扁平 filename key 大小写冲突：${existingKey} / ${key}`,
+      );
+    project.assets.set(key, bytes.slice());
+    aliases.set(key.normalize("NFC").toLocaleLowerCase("en-US"), key);
+  }
 }

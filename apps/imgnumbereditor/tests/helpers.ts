@@ -16,16 +16,19 @@ export function projectFixture(): ImageStringEditorProject {
     const bytes = new Uint8Array(NEUTRAL_PNG_BYTES.byteLength + 1);
     bytes.set(NEUTRAL_PNG_BYTES);
     bytes[bytes.length - 1] = character.codePointAt(0)!;
+    const digest = character.codePointAt(0)!.toString(16).padStart(64, "0");
+    const key = `${character}-1.png`;
     glyphs.set(character, {
-      id: `glyph-${character.codePointAt(0)!.toString(16)}`,
-      originalName: `${character}-1.png`,
+      key,
+      sha256: digest,
+      payloadPath: `assets/${digest}.png`,
       mediaType: "image/png",
+      byteLength: bytes.byteLength,
       bytes,
       width,
       height: 10,
       suggestedCharacter: character,
       character,
-      path: `assets/u${character.codePointAt(0)!.toString(16).padStart(4, "0")}.png`,
       offset: { x: 0, y: 2 },
     });
   }

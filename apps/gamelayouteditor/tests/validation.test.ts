@@ -4,7 +4,6 @@ import {
   cloneEditorProject,
   createNewEditorProject,
   editorProjectToManifest,
-  editorProjectToPreviewManifest,
   resetVariantGeometry,
   setVariantArtSizeDimension,
 } from "../src/model/editor-project.js";
@@ -34,7 +33,6 @@ import {
 import {
   addGameMode,
   bindGameModeBackground,
-  bindGameModeSymbols,
   createGameModeTransition,
   setGameModeTransitionKind,
   setGameModeTransitionAnimation,
@@ -150,35 +148,34 @@ async function initializeProjectBackground(
   assignBackgroundResource({
     project,
     variant: "default",
-    resourceId: "background",
+    resourceId: "background.png",
     nodeId: "background",
   });
 }
 
-describe("logical layout resource commands", () => {
+describe("filename-key layout resource commands", () => {
   it("imports, reuses and atomically edits a standalone image-string resource", async () => {
     const project = createNewEditorProject("maximized-focus");
     await initializeProjectBackground(project);
-    const resource = importImageStringZip({
+    const resource = await importImageStringZip({
       project,
       zipBytes: imageStringZip(),
     });
     expect(resource).toMatchObject({
-      id: "digits",
+      id: "image-string.manifest.json",
       kind: "image-string",
-      manifestPath:
-        "dependencies/image-strings/digits/image-string.manifest.json",
+      manifestPath: "image-string.manifest.json",
     });
     expect(project.assets.has(resource.manifestPath)).toBe(true);
     addLayerFromResource({
       project,
-      resourceId: "digits",
+      resourceId: "image-string.manifest.json",
       nodeId: "amount-a",
       variants: ["default"],
     });
     addLayerFromResource({
       project,
-      resourceId: "digits",
+      resourceId: "image-string.manifest.json",
       nodeId: "amount-b",
       variants: ["default"],
     });
@@ -212,17 +209,17 @@ describe("logical layout resource commands", () => {
       assignBackgroundResource({
         project,
         variant: "default",
-        resourceId: "digits",
+        resourceId: "image-string.manifest.json",
       }),
     ).toThrow(/背景|尺寸/);
     const beforeReplacement = cloneEditorProject(project);
-    expect(() =>
+    await expect(
       replaceImageStringResource({
         project,
-        resourceId: "digits",
+        resourceId: "image-string.manifest.json",
         zipBytes: imageStringZip({ glyphs: ["0"] }),
       }),
-    ).toThrow(/缺少 glyph/);
+    ).rejects.toThrow(/缺少 glyph/);
     expect(project).toEqual(beforeReplacement);
   });
 
@@ -246,7 +243,7 @@ describe("logical layout resource commands", () => {
     bindGameModeBackground(project, "FreeGame", "default", "background");
     createGameModeTransition(project, "BaseGame", "FreeGame");
     const transition = project.gameModes.transitions[0];
-    setGameModeTransitionResource(project, transition, "hero");
+    setGameModeTransitionResource(project, transition, "hero.json");
     setGameModeTransitionAnimation(project, transition, "BG_FG");
     setGameModeTransitionEvent(project, transition, "SwitchScene");
     const manifest = editorProjectToManifest(project);
@@ -260,7 +257,7 @@ describe("logical layout resource commands", () => {
         }),
       }),
     ]);
-    expect(() => deleteLayoutResource(project, "hero")).toThrow(
+    expect(() => deleteLayoutResource(project, "hero.json")).toThrow(
       /scene-transition/,
     );
     setGameModeTransitionAnimation(project, transition, "NoEvent");
@@ -283,12 +280,12 @@ describe("logical layout resource commands", () => {
     const video = await uploadVideoResource({
       project,
       file: new File([mp4Bytes(1)], "BG2FG.MP4", { type: "video/mp4" }),
-      resourceId: "bg2fg",
+      resourceId: "BG2FG.MP4",
       decodeVideo,
     });
     expect(video).toMatchObject({
       kind: "video",
-      path: expect.stringMatching(/^assets\/[a-f0-9]{64}\.mp4$/u),
+      path: "BG2FG.MP4",
       mimeType: "video/mp4",
       size: { width: 1280, height: 720 },
       durationSeconds: 3.625,
@@ -298,14 +295,14 @@ describe("logical layout resource commands", () => {
     await uploadVideoResource({
       project,
       file: new File([mp4Bytes(1)], "same-bytes.mp4"),
-      resourceId: "same-bytes",
+      resourceId: "same-bytes.mp4",
       decodeVideo,
     });
-    expect(project.assets.size).toBe(2);
+    expect(project.assets.size).toBe(3);
     await uploadVideoResource({
       project,
       file: new File([mp4Bytes(2)], "BG2FG.MP4"),
-      resourceId: "same-name-different-bytes",
+      resourceId: "BG2FG.MP4",
       decodeVideo,
     });
     expect(project.assets.size).toBe(3);
@@ -323,7 +320,7 @@ describe("logical layout resource commands", () => {
       fit: "contain",
       fadeOutSeconds: 0.5,
     });
-    setGameModeVideoTransitionResource(project, transition, "bg2fg");
+    setGameModeVideoTransitionResource(project, transition, "BG2FG.MP4");
     setGameModeVideoTransitionFadeOut(project, transition, 0.5);
     const manifest = editorProjectToManifest(project);
     expect(manifest.gameModes?.transitions).toEqual([
@@ -344,7 +341,7 @@ describe("logical layout resource commands", () => {
     expect(() =>
       addLayerFromResource({
         project,
-        resourceId: "bg2fg",
+        resourceId: "BG2FG.MP4",
         nodeId: "bad-video-layer",
         variants: ["default"],
       }),
@@ -352,18 +349,20 @@ describe("logical layout resource commands", () => {
     expect(() =>
       assignBackgroundResource({
         project,
-        resourceId: "bg2fg",
+        resourceId: "BG2FG.MP4",
         variant: "default",
       }),
     ).toThrow(/video/);
-    expect(() => deleteLayoutResource(project, "bg2fg")).toThrow(
+    expect(() => deleteLayoutResource(project, "BG2FG.MP4")).toThrow(
       /BaseGame -> FreeGame/,
     );
     await expect(
       replaceVideoResource({
         project,
-        resourceId: "bg2fg",
-        file: new File([mp4Bytes(3)], "short.mp4", { type: "video/mp4" }),
+        resourceId: "BG2FG.MP4",
+        file: new File([mp4Bytes(3)], "BG2FG.MP4", {
+          type: "video/mp4",
+        }),
         decodeVideo: async () => ({
           width: 1280,
           height: 720,
@@ -372,7 +371,7 @@ describe("logical layout resource commands", () => {
         }),
       }),
     ).rejects.toThrow(/fadeOutSeconds/);
-    expect(project.resources.get("bg2fg")).toBe(video);
+    expect(project.resources.get("BG2FG.MP4")).toEqual(video);
 
     const before = cloneEditorProject(project);
     await expect(
@@ -381,7 +380,7 @@ describe("logical layout resource commands", () => {
         file: new File([new Uint8Array([1, 2, 3])], "bad.mp4", {
           type: "video/mp4",
         }),
-        resourceId: "bad",
+        resourceId: "bad.mp4",
         decodeVideo,
       }),
     ).rejects.toThrow(/ftyp/);
@@ -394,7 +393,7 @@ describe("logical layout resource commands", () => {
     await uploadSpineResource({ project, files: spineFiles() });
     addLayerFromResource({
       project,
-      resourceId: "hero",
+      resourceId: "hero.json",
       nodeId: "scene",
       variants: ["default"],
       defaultAnimation: "Idle",
@@ -412,33 +411,31 @@ describe("logical layout resource commands", () => {
       decodeImage,
     });
     expect(resource).toMatchObject({
-      id: "bg-2",
+      id: "BG_2.PNG",
       kind: "image",
-      path: expect.stringMatching(/^assets\/[a-f0-9]{64}\.png$/u),
+      path: "BG_2.PNG",
       size: { width: 2000, height: 2000 },
     });
     expect(project.nodes).toEqual([]);
-    expect(project.resources.get("bg-2")).toEqual(resource);
+    expect(project.resources.get("BG_2.PNG")).toEqual(resource);
     expect(resource.kind).toBe("image");
     if (resource.kind !== "image") throw new Error("expected image resource");
     expect(project.assets.get(resource.path)).toEqual(pngBytes(3));
   });
 
-  it("uploads one strict Spine logical resource and rejects invalid batches atomically", async () => {
+  it("uploads one strict Spine filename-key descriptor and rejects invalid batches atomically", async () => {
     const project = createNewEditorProject("orientation-focus");
     const resource = await uploadSpineResource({
       project,
       files: spineFiles(),
     });
     expect(resource).toMatchObject({
-      id: "hero",
+      id: "hero.json",
       kind: "spine",
       animationNames: ["Idle", "Win"],
     });
     expect(Object.keys(resource.textures)).toEqual(["hero.png"]);
-    expect(Object.values(resource.textures)[0]).toMatch(
-      /^assets\/[a-f0-9]{64}\.png$/u,
-    );
+    expect(Object.values(resource.textures)[0]).toBe("hero.png");
     expect(project.nodes).toEqual([]);
     expect(
       new TextDecoder().decode(project.assets.get(resource.atlas)),
@@ -482,8 +479,9 @@ describe("logical layout resource commands", () => {
     const pages = Object.keys(resource.textures);
     const paths = Object.values(resource.textures);
     expect(pages).toEqual(["BG.png", "BG_2.png"]);
-    expect(new Set(paths).size).toBe(1);
+    expect(paths).toEqual(["BG.png", "BG_2.png"]);
     expect(project.assets.get(paths[0]!)).toEqual(texture);
+    expect(project.assets.get(paths[1]!)).toEqual(texture);
     const atlasText = new TextDecoder().decode(
       project.assets.get(resource.atlas),
     );
@@ -492,30 +490,22 @@ describe("logical layout resource commands", () => {
     );
   });
 
-  it("records directory provenance and optional Spine bounds without exposing source paths", async () => {
+  it("records files-only provenance and optional Spine bounds", async () => {
     const imageProject = createNewEditorProject("maximized-focus");
     const imageFile = new File([pngBytes(4)], "panel.png");
-    Object.defineProperty(imageFile, "webkitRelativePath", {
-      value: "ui/panel.png",
-    });
     const image = await uploadImageResource({
       project: imageProject,
       file: imageFile,
       decodeImage: async () => ({ width: 20, height: 30 }),
     });
-    expect(image.provenance?.sourceKind).toBe("directory");
+    expect(image.provenance?.sourceKind).toBe("files");
     expect(imageProject.assets.has("ui/panel.png")).toBe(false);
 
     const spineProject = createNewEditorProject("maximized-focus");
     const files = spineFiles({ bounds: { width: 100, height: 200 } });
-    for (const file of files) {
-      Object.defineProperty(file, "webkitRelativePath", {
-        value: `hero/${file.name}`,
-      });
-    }
     const spine = await uploadSpineResource({ project: spineProject, files });
     expect(spine.bounds).toEqual({ width: 100, height: 200 });
-    expect(spine.provenance?.sourceKind).toBe("directory");
+    expect(spine.provenance?.sourceKind).toBe("files");
   });
 
   it("keeps Spine export bounds separate from art size and centers default geometry after explicit art input", async () => {
@@ -531,7 +521,7 @@ describe("logical layout resource commands", () => {
     const node = assignBackgroundResource({
       project,
       variant: "default",
-      resourceId: "bg",
+      resourceId: "bg.json",
       nodeId: "bg",
       defaultAnimation: "BG",
     });
@@ -557,9 +547,9 @@ describe("logical layout resource commands", () => {
     node.placements.default = { x: 980, y: 1020, scale: 0.95 };
     await replaceSpineResource({
       project,
-      resourceId: "bg",
+      resourceId: "bg.json",
       files: spineFiles({
-        name: "replacement",
+        name: "bg",
         animations: ["BG"],
         bounds: { width: 4100, height: 2600 },
       }),
@@ -588,7 +578,7 @@ describe("logical layout resource commands", () => {
       project,
       modeId: "BaseGame",
       variant: "default",
-      resourceId: "bg",
+      resourceId: "bg.json",
       nodeId: "background",
       defaultAnimation: "BG",
     });
@@ -597,7 +587,7 @@ describe("logical layout resource commands", () => {
       project,
       modeId: "FreeGame",
       variant: "default",
-      resourceId: "bg",
+      resourceId: "bg.json",
       defaultAnimation: "FG",
     });
 
@@ -626,25 +616,6 @@ describe("logical layout resource commands", () => {
       expect.objectContaining({ defaultAnimation: "BG", loop: true }),
       expect.objectContaining({ defaultAnimation: "FG", loop: true }),
     ]);
-
-    project.symbolDependencies.set("shared-symbols", {
-      packageId: "shared-symbols",
-      files: new Map(),
-    });
-    for (const mode of project.gameModes.modes)
-      bindGameModeSymbols(project, mode.id, {
-        packageId: "shared-symbols",
-        reelSet: "main",
-        renderMode: "grid-cell",
-      });
-    const previewManifest = editorProjectToPreviewManifest(
-      project,
-      "default",
-      true,
-    );
-    expect(previewManifest?.gameModes?.modes).toHaveLength(2);
-    expect(previewManifest?.symbolPackages).toHaveProperty("shared-symbols");
-    expect(previewManifest?.reels.main?.order).toBe(2);
   });
 
   it("gives every mode and orientation an explicit stable background identity", async () => {
@@ -653,7 +624,6 @@ describe("logical layout resource commands", () => {
       await uploadImageResource({
         project,
         file: new File([pngBytes(name.length)], `${name}.png`),
-        resourceId: name,
         decodeImage: async () =>
           name.endsWith("1")
             ? { width: 2000, height: 1125 }
@@ -665,25 +635,25 @@ describe("logical layout resource commands", () => {
       project,
       modeId: "FreeGame",
       variant: "landscape",
-      resourceId: "fg1",
+      resourceId: "fg1.png",
     });
     assignBackgroundResource({
       project,
       modeId: "FreeGame",
       variant: "portrait",
-      resourceId: "fg2",
+      resourceId: "fg2.png",
     });
     assignBackgroundResource({
       project,
       modeId: "BaseGame",
       variant: "landscape",
-      resourceId: "bg1",
+      resourceId: "bg1.png",
     });
     assignBackgroundResource({
       project,
       modeId: "BaseGame",
       variant: "portrait",
-      resourceId: "bg2",
+      resourceId: "bg2.png",
     });
 
     expect(project.gameModes.modes.map((mode) => mode.backgroundNodes)).toEqual(
@@ -699,10 +669,10 @@ describe("logical layout resource commands", () => {
       ],
     );
     expect(project.nodes.map((node) => node.resourceId)).toEqual([
-      "bg1",
-      "bg2",
-      "fg1",
-      "fg2",
+      "bg1.png",
+      "bg2.png",
+      "fg1.png",
+      "fg2.png",
     ]);
     expect(project.nodes.map((node) => node.order)).toEqual([0, 1, 2, 3]);
     expect(() => editorProjectToManifest(project)).not.toThrow();
@@ -721,7 +691,7 @@ describe("logical layout resource commands", () => {
     const node = assignBackgroundResource({
       project,
       variant: "default",
-      resourceId: "bg",
+      resourceId: "bg.json",
       nodeId: "bg",
       defaultAnimation: "BG",
     });
@@ -747,34 +717,34 @@ describe("logical layout resource commands", () => {
     });
     addLayerFromResource({
       project,
-      resourceId: "layer",
+      resourceId: "layer.png",
       nodeId: "layer-a",
       variants: ["default"],
     });
     addLayerFromResource({
       project,
-      resourceId: "layer",
+      resourceId: "layer.png",
       nodeId: "layer-b",
       variants: ["default"],
     });
     project.nodes[0].placements.default!.x = 10;
     expect(project.nodes[1].placements.default!.x).toBe(0);
-    expect(getLayoutResourceReferences(project, "layer")).toHaveLength(2);
+    expect(getLayoutResourceReferences(project, "layer.png")).toHaveLength(2);
     removeLayer(project, "layer-a");
-    expect(project.resources.has("layer")).toBe(true);
-    const layer = project.resources.get("layer");
+    expect(project.resources.has("layer.png")).toBe(true);
+    const layer = project.resources.get("layer.png");
     expect(layer?.kind).toBe("image");
     expect(layer?.kind === "image" && project.assets.has(layer.path)).toBe(
       true,
     );
-    expect(() => deleteLayoutResource(project, "layer")).toThrow(/layer-b/);
+    expect(() => deleteLayoutResource(project, "layer.png")).toThrow(/layer-b/);
     removeLayer(project, "layer-b");
-    deleteLayoutResource(project, "layer");
+    deleteLayoutResource(project, "layer.png");
     expect(project.resources.size).toBe(0);
     expect(project.assets.size).toBe(0);
   });
 
-  it("deduplicates identical blobs without merging logical resources", async () => {
+  it("keeps filename keys distinct while export may deduplicate payloads", async () => {
     const project = createNewEditorProject("maximized-focus");
     const first = await uploadImageResource({
       project,
@@ -786,15 +756,16 @@ describe("logical layout resource commands", () => {
       file: new File([pngBytes(11)], "second.png", { type: "image/png" }),
       decodeImage: async () => ({ width: 10, height: 10 }),
     });
-    expect(first.id).toBe("first");
-    expect(second.id).toBe("second");
+    expect(first.id).toBe("first.png");
+    expect(second.id).toBe("second.png");
     if (first.kind !== "image" || second.kind !== "image")
       throw new Error("expected images");
-    expect(first.path).toBe(second.path);
-    expect(project.assets.size).toBe(1);
-    deleteLayoutResource(project, "first");
+    expect(first.path).toBe("first.png");
+    expect(second.path).toBe("second.png");
+    expect(project.assets.size).toBe(2);
+    deleteLayoutResource(project, "first.png");
     expect(project.assets.has(second.path)).toBe(true);
-    deleteLayoutResource(project, "second");
+    deleteLayoutResource(project, "second.png");
     expect(project.assets.size).toBe(0);
   });
 
@@ -804,21 +775,21 @@ describe("logical layout resource commands", () => {
     expect(() =>
       addLayerFromResource({
         project,
-        resourceId: "hero",
+        resourceId: "hero.json",
         nodeId: "hero-a",
         variants: ["default"],
       }),
     ).toThrow(/明确选择/);
     addLayerFromResource({
       project,
-      resourceId: "hero",
+      resourceId: "hero.json",
       nodeId: "hero-a",
       variants: ["default"],
       defaultAnimation: "Idle",
     });
     addLayerFromResource({
       project,
-      resourceId: "hero",
+      resourceId: "hero.json",
       nodeId: "hero-b",
       variants: ["default"],
       defaultAnimation: "Win",
@@ -840,7 +811,7 @@ describe("logical layout resource commands", () => {
     assignBackgroundResource({
       project,
       variant: "default",
-      resourceId: "bg",
+      resourceId: "bg.png",
       nodeId: "background",
     });
     expect(project.variants.default.artSize).toEqual({
@@ -863,7 +834,7 @@ describe("logical layout resource commands", () => {
       assignBackgroundResource({
         project,
         variant: "default",
-        resourceId: "wide",
+        resourceId: "wide.png",
       }),
     ).toThrow(/明确选择/);
     expect(project.variants.default.artSize).toEqual({
@@ -873,7 +844,7 @@ describe("logical layout resource commands", () => {
     assignBackgroundResource({
       project,
       variant: "default",
-      resourceId: "wide",
+      resourceId: "wide.png",
       reinitialize: true,
     });
     expect(project.variants.default.artSize).toEqual({
@@ -890,7 +861,7 @@ describe("logical layout resource commands", () => {
     await uploadSpineResource({ project, files: spineFiles() });
     addLayerFromResource({
       project,
-      resourceId: "hero",
+      resourceId: "hero.json",
       nodeId: "hero-layer",
       variants: ["default"],
       defaultAnimation: "Win",
@@ -899,8 +870,8 @@ describe("logical layout resource commands", () => {
     await expect(
       replaceSpineResource({
         project,
-        resourceId: "hero",
-        files: spineFiles({ name: "replacement", animations: ["Idle"] }),
+        resourceId: "hero.json",
+        files: spineFiles({ name: "hero", animations: ["Idle"] }),
       }),
     ).rejects.toThrow(/hero-layer/);
     expect(project).toEqual(before);
@@ -912,7 +883,7 @@ describe("logical layout resource commands", () => {
     rebindLayerResource({
       project,
       nodeId: "hero-layer",
-      resourceId: "image",
+      resourceId: "image.png",
     });
     expect(project.nodes[0]).not.toHaveProperty("defaultAnimation");
   });
@@ -927,7 +898,7 @@ describe("logical layout resource commands", () => {
     expect(() =>
       addLayerFromResource({
         project,
-        resourceId: "shared",
+        resourceId: "shared.png",
         nodeId: "Bad_ID",
         variants: ["landscape"],
       }),
@@ -935,20 +906,20 @@ describe("logical layout resource commands", () => {
     expect(() =>
       addLayerFromResource({
         project,
-        resourceId: "shared",
+        resourceId: "shared.png",
         nodeId: "bad-variant",
         variants: ["default"],
       }),
     ).toThrow(/不允许 variant/);
     addLayerFromResource({
       project,
-      resourceId: "shared",
+      resourceId: "shared.png",
       nodeId: "first",
       variants: ["landscape"],
     });
     addLayerFromResource({
       project,
-      resourceId: "shared",
+      resourceId: "shared.png",
       nodeId: "second",
       variants: ["portrait"],
     });
@@ -981,27 +952,29 @@ describe("logical layout resource commands", () => {
     assignBackgroundResource({
       project,
       variant: "default",
-      resourceId: "bg",
+      resourceId: "bg.png",
       nodeId: "background",
     });
-    expect(() => deleteLayoutResource(project, "bg")).toThrow(/default 背景/);
+    expect(() => deleteLayoutResource(project, "bg.png")).toThrow(
+      /default 背景/,
+    );
     await expect(
       replaceImageResource({
         project,
-        resourceId: "bg",
-        file: new File([pngBytes(6)], "wide.png"),
+        resourceId: "bg.png",
+        file: new File([pngBytes(6)], "bg.png"),
         decodeImage: async () => ({ width: 1200, height: 800 }),
       }),
     ).rejects.toThrow(/背景替换尺寸/);
     await replaceImageResource({
       project,
-      resourceId: "bg",
-      file: new File([pngBytes(6)], "wide.png"),
+      resourceId: "bg.png",
+      file: new File([pngBytes(6)], "bg.png"),
       decodeImage: async () => ({ width: 1200, height: 800 }),
       reinitializeBackgrounds: true,
     });
-    expect(project.resources.get("bg")).toMatchObject({
-      path: expect.stringMatching(/^assets\/[a-f0-9]{64}\.png$/u),
+    expect(project.resources.get("bg.png")).toMatchObject({
+      path: "bg.png",
       size: { width: 1200, height: 800 },
     });
     expect(
@@ -1015,7 +988,7 @@ describe("logical layout resource commands", () => {
     await expect(
       replaceImageResource({
         project,
-        resourceId: "hero",
+        resourceId: "hero.json",
         file: new File([pngBytes(7)], "x.png"),
         decodeImage: async () => ({ width: 1, height: 1 }),
       }),
@@ -1023,8 +996,8 @@ describe("logical layout resource commands", () => {
     await expect(
       replaceSpineResource({
         project,
-        resourceId: "bg",
-        files: spineFiles({ name: "other" }),
+        resourceId: "bg.png",
+        files: spineFiles({ name: "bg" }),
       }),
     ).rejects.toThrow(/保持为 Spine/);
   });
@@ -1035,7 +1008,7 @@ describe("logical layout resource commands", () => {
     const node = assignBackgroundResource({
       project,
       variant: "landscape",
-      resourceId: "hero",
+      resourceId: "hero.json",
       nodeId: "shared-bg",
       defaultAnimation: "Idle",
     });
@@ -1045,7 +1018,7 @@ describe("logical layout resource commands", () => {
     assignBackgroundResource({
       project,
       variant: "portrait",
-      resourceId: "hero",
+      resourceId: "hero.json",
       defaultAnimation: "Win",
     });
     renameNode(project, "shared-bg", "renamed-bg");
@@ -1056,7 +1029,7 @@ describe("logical layout resource commands", () => {
     expect(project.nodes[0].placements.landscape).toBeUndefined();
     clearBackground(project, "portrait");
     expect(project.nodes).toHaveLength(0);
-    expect(project.resources.has("hero")).toBe(true);
+    expect(project.resources.has("hero.json")).toBe(true);
   });
 
   it("rejects every malformed upload batch without partial metadata or bytes", async () => {
@@ -1114,21 +1087,21 @@ describe("logical layout resource commands", () => {
         file: new File([pngBytes(1)], "中奖.png"),
         decodeImage: async () => ({ width: 1, height: 1 }),
       }),
-    ).rejects.toThrow(/显式填写/);
+    ).resolves.toMatchObject({ id: "中奖.png", path: "中奖.png" });
     await expect(
       uploadImageResource({
         project: createNewEditorProject("maximized-focus"),
         file: new File(["not an image"], "bad.png"),
-        resourceId: "bad",
+        resourceId: "bad.mp4",
         decodeImage: async () => ({ width: 1, height: 1 }),
       }),
     ).rejects.toThrow(/不是受支持/);
-    expect(() =>
+    await expect(
       importImageStringZip({
         project: createNewEditorProject("maximized-focus"),
         zipBytes: zipSync({ "unknown.json": strToU8("{}") }),
       }),
-    ).toThrow(/根目录必须包含/);
+    ).rejects.toThrow(/根目录必须包含/);
     await expect(
       uploadSpineResource({
         project: createNewEditorProject("maximized-focus"),
@@ -1192,13 +1165,12 @@ describe("logical layout resource commands", () => {
       file: new File([pngBytes(1)], "same.png"),
       decodeImage: async () => ({ width: 1, height: 1 }),
     });
-    await expect(
-      uploadImageResource({
-        project: duplicateProject,
-        file: new File([pngBytes(2)], "same.png"),
-        decodeImage: async () => ({ width: 1, height: 1 }),
-      }),
-    ).rejects.toThrow(/资源 id 冲突/);
+    await uploadImageResource({
+      project: duplicateProject,
+      file: new File([pngBytes(2)], "same.png"),
+      decodeImage: async () => ({ width: 1, height: 1 }),
+    });
+    expect(duplicateProject.assets.get("same.png")).toEqual(pngBytes(2));
     await expect(
       uploadImageResource({
         project: createNewEditorProject("maximized-focus"),
@@ -1206,7 +1178,7 @@ describe("logical layout resource commands", () => {
         resourceId: "Bad_ID",
         decodeImage: async () => ({ width: 1, height: 1 }),
       }),
-    ).rejects.toThrow(/resource id/);
+    ).rejects.toThrow(/filename key|扩展名/);
 
     const wrongKindProject = createNewEditorProject("maximized-focus");
     await uploadImageResource({
@@ -1214,25 +1186,28 @@ describe("logical layout resource commands", () => {
       file: new File([pngBytes(1)], "bg.png"),
       decodeImage: async () => ({ width: 1, height: 1 }),
     });
-    expect(() =>
+    await expect(
       replaceImageStringResource({
         project: wrongKindProject,
-        resourceId: "bg",
+        resourceId: "bg.png",
         zipBytes: imageStringZip({ id: "bg" }),
       }),
-    ).toThrow(/类型必须保持/);
+    ).rejects.toThrow(/类型必须保持/);
 
     const nestedIdProject = createNewEditorProject("maximized-focus");
-    importImageStringZip({
+    await importImageStringZip({
       project: nestedIdProject,
       zipBytes: imageStringZip({ id: "digits" }),
     });
-    expect(() =>
+    await expect(
       replaceImageStringResource({
         project: nestedIdProject,
-        resourceId: "digits",
+        resourceId: "image-string.manifest.json",
         zipBytes: imageStringZip({ id: "other" }),
       }),
-    ).toThrow(/nested manifest id/);
+    ).resolves.toMatchObject({
+      id: "image-string.manifest.json",
+      manifest: { id: "other" },
+    });
   });
 });

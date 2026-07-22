@@ -69,8 +69,10 @@ export function createSceneLayoutResource(
         );
       }
       nested.assertUsable();
-      const directoryId = node.resource.manifest.split("/").at(-2);
-      if (directoryId !== nested.manifest.id) {
+      const directoryId = node.resource.manifest.includes("/")
+        ? node.resource.manifest.split("/").at(-2)
+        : undefined;
+      if (directoryId !== undefined && directoryId !== nested.manifest.id) {
         throw new SceneLayoutError(
           `Scene layout image-string dependency id mismatch for "${node.resource.manifest}": expected ${directoryId}, actual ${nested.manifest.id}.`,
         );

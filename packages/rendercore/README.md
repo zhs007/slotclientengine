@@ -1,11 +1,11 @@
 # @slotclientengine/rendercore
 
-Editor materialization 使用格式 owner 的结构化边界：image-string 支持 glyph leaf
-bytes → SHA-256 path → deterministic manifest；scene-layout 允许不同 resource
-signature exact 复用 canonical content path，但仍严格拒绝 alias、媒体/尺寸不一致。
-symbol official Spine 的 skeleton、atlas 与 PNG/JPEG/WebP texture 使用安全、精确的
-manifest-relative `./` package path，可直接消费 `./assets/<full-sha256>.<ext>`；不允许
-`../`、绝对路径、URL、非法 segment 或 basename fallback。
+Editor materialization 使用格式 owner 的结构化边界。四个 Editor 的新 package 在
+manifest 中只引用扁平 filename key，并由根 `assets.map.json` 解析到完整 SHA-256
+payload；image-string、Popup、Symbols、Scene Layout 的 ZIP、Blob 与 URL loader 共用
+同一 map validator。父 package 已验证全局 map 后使用 resolved-files bridge 组装 nested
+resource，不要求内层第二份 map。无 map 的合法 legacy direct path 继续加载，但 map/direct
+不得混用，也不提供 basename、404 或 glob fallback。
 
 `rendercore` 是 slot 前端渲染核心库。它基于 `pixi.js` v8、复用 `@slotclientengine/pixiani` 的基础显示对象生命周期，并复用 `@slotclientengine/logiccore` 的 game config/paytable 契约。`apps/symbolsviewer` 和 `apps/reelsviewer` 是调试 app，业务展示逻辑不放进核心库。
 

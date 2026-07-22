@@ -4,7 +4,7 @@ export function popupFiles() {
     characters.map((character, index) => [
       character,
       {
-        path: `assets/g${index}.png`,
+        path: `g${index}.png`,
         size: { width: 1, height: 1 },
         offset: { x: 0, y: 0 },
       },
@@ -14,7 +14,7 @@ export function popupFiles() {
     id: "amount",
     kind: "image-string",
     order: 0,
-    resource: "amount",
+    resource: "image-string.manifest.json",
     binding: "win-amount",
     anchor: { x: 0.5, y: 0.5 },
     transform: { x: 0, y: 0, scale: 1 },
@@ -36,10 +36,9 @@ export function popupFiles() {
       rounding: "floor",
     },
     resources: {
-      amount: {
+      "image-string.manifest.json": {
         kind: "image-string",
-        manifest:
-          "dependencies/image-strings/amount/image-string.manifest.json",
+        manifest: "image-string.manifest.json",
       },
     },
     awardCelebration: {
@@ -78,15 +77,12 @@ export function popupFiles() {
   const files = new Map<string, Uint8Array>([
     ["popup.manifest.json", new TextEncoder().encode(JSON.stringify(popup))],
     [
-      "dependencies/image-strings/amount/image-string.manifest.json",
+      "image-string.manifest.json",
       new TextEncoder().encode(JSON.stringify(nested)),
     ],
   ]);
   characters.forEach((_, index) =>
-    files.set(
-      `dependencies/image-strings/amount/assets/g${index}.png`,
-      new Uint8Array([index]),
-    ),
+    files.set(`g${index}.png`, new Uint8Array([index])),
   );
   return files;
 }

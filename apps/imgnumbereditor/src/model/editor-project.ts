@@ -2,24 +2,17 @@ import {
   parseImageStringManifest,
   type ImageStringManifestV1,
 } from "@slotclientengine/rendercore/image-string";
-import type { EditorResourceProvenance } from "@slotclientengine/browserartifactio";
+import type { EditorAssetEntry } from "@slotclientengine/editorresource";
 
-export interface UploadedImageDraft {
-  readonly id: string;
-  readonly originalName: string;
+export interface UploadedImageDraft extends EditorAssetEntry {
   readonly mediaType: "image/png" | "image/webp";
-  readonly bytes: Uint8Array;
   readonly width: number;
   readonly height: number;
   readonly suggestedCharacter: string | null;
-  readonly contentPath?: string;
-  readonly digest?: string;
-  readonly provenance?: EditorResourceProvenance;
 }
 
 export interface GlyphDraft extends UploadedImageDraft {
   readonly character: string;
-  readonly path: string;
   readonly offset: { readonly x: number; readonly y: number };
 }
 
@@ -122,39 +115,27 @@ export function suggestCharacterFromFilename(filename: string): string | null {
   return isSingleAllowedScalar(basename) ? basename : null;
 }
 
-export function deriveGlyphAssetPath(
-  character: string,
-  mediaType: UploadedImageDraft["mediaType"],
-): string {
-  assertSingleAllowedScalar(character);
-  const codePoint = character.codePointAt(0)!;
-  return `assets/u${codePoint.toString(16).padStart(4, "0")}.${mediaType === "image/webp" ? "webp" : "png"}`;
-}
-
 export function confirmGlyphMapping(
   project: ImageStringEditorProject,
-  fileId: string,
+  fileKey: string,
   character: string,
 ): ImageStringEditorProject {
   assertSingleAllowedScalar(character);
   if (project.glyphs.has(character))
     throw new Error(`字符 ${JSON.stringify(character)} 已映射。`);
-  const image = project.unmappedFiles.get(fileId);
-  if (!image) throw new Error(`未找到待映射图片：${fileId}`);
-  const path =
-    image.contentPath ?? deriveGlyphAssetPath(character, image.mediaType);
+  const image = project.unmappedFiles.get(fileKey);
+  if (!image) throw new Error(`未找到待映射图片：${fileKey}`);
   const next = cloneEditorProject(project);
-  (next.unmappedFiles as Map<string, UploadedImageDraft>).delete(fileId);
+  (next.unmappedFiles as Map<string, UploadedImageDraft>).delete(fileKey);
   (next.glyphs as Map<string, GlyphDraft>).set(character, {
     ...cloneImage(image),
     character,
-    path,
     offset: { x: 0, y: 0 },
   });
   return freezeEditorProject(next);
 }
 
-export function replaceGlyphImage(
+export function overwriteGlyphAsset(
   project: ImageStringEditorProject,
   character: string,
   image: UploadedImageDraft,
@@ -164,9 +145,8 @@ export function replaceGlyphImage(
   const next = cloneEditorProject(project);
   (next.glyphs as Map<string, GlyphDraft>).set(character, {
     ...cloneImage(image),
-    id: current.id,
+    key: current.key,
     character,
-    path: image.contentPath ?? deriveGlyphAssetPath(character, image.mediaType),
     offset: { ...current.offset },
   });
   createManifestFromProject(next);
@@ -188,30 +168,25 @@ export function unmapGlyph(
       `glyph ${JSON.stringify(character)} 仍被 fixed group 引用。`,
     );
   }
-  if (project.unmappedFiles.has(current.id))
-    throw new Error(`待映射图片 id 冲突：${current.id}`);
+  if (project.unmappedFiles.has(current.key))
+    throw new Error(`待映射图片 filename key 冲突：${current.key}`);
   const next = cloneEditorProject(project);
   (next.glyphs as Map<string, GlyphDraft>).delete(character);
-  (next.unmappedFiles as Map<string, UploadedImageDraft>).set(current.id, {
-    id: current.id,
-    originalName: current.originalName,
-    mediaType: current.mediaType,
-    bytes: current.bytes.slice(),
-    width: current.width,
-    height: current.height,
-    suggestedCharacter: character,
-  });
+  (next.unmappedFiles as Map<string, UploadedImageDraft>).set(
+    current.key,
+    cloneImage({ ...current, suggestedCharacter: character }),
+  );
   return freezeEditorProject(next);
 }
 
 export function removeUnmappedImage(
   project: ImageStringEditorProject,
-  fileId: string,
+  fileKey: string,
 ): ImageStringEditorProject {
-  if (!project.unmappedFiles.has(fileId))
-    throw new Error(`未找到待映射图片：${fileId}`);
+  if (!project.unmappedFiles.has(fileKey))
+    throw new Error(`未找到待映射图片：${fileKey}`);
   const next = cloneEditorProject(project);
-  (next.unmappedFiles as Map<string, UploadedImageDraft>).delete(fileId);
+  (next.unmappedFiles as Map<string, UploadedImageDraft>).delete(fileKey);
   return freezeEditorProject(next);
 }
 
@@ -224,7 +199,7 @@ export function createManifestFromProject(
       .map(([character, glyph]) => [
         character,
         {
-          path: glyph.path,
+          path: glyph.key,
           size: { width: glyph.width, height: glyph.height },
           offset: { ...glyph.offset },
         },

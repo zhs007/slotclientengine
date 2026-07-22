@@ -1,4 +1,12 @@
-import { ObjectUrlRegistry } from "@slotclientengine/browserartifactio";
+import {
+  ObjectUrlRegistry,
+  sha256Hex,
+} from "@slotclientengine/browserartifactio";
+import {
+  EDITOR_ASSETS_MAP_PATH,
+  decodeEditorAssetsMap,
+  validateEditorAssetsMapPackage,
+} from "@slotclientengine/editorresource";
 import { Assets, Texture } from "pixi.js";
 import { ImageStringError } from "./errors.js";
 import {
@@ -127,10 +135,34 @@ export async function createImageStringResourceFromFiles(options: {
   const manifestValue =
     options.manifest ??
     parseManifestBytes(options.files.get("image-string.manifest.json"));
-  const manifest = validateImageStringPackageContents({
+  const resolvedPackage = await resolveImageStringPackageFiles({
     manifest: manifestValue,
     files: options.files,
   });
+  return createImageStringResourceFromResolvedFiles({
+    manifest: resolvedPackage.manifest,
+    files: resolvedPackage.files,
+    ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+    ...(options.loadTexture ? { loadTexture: options.loadTexture } : {}),
+  });
+}
+
+/** Format-owner bridge for a parent mapped package that already verified bytes. */
+export async function createImageStringResourceFromResolvedFiles(options: {
+  readonly manifest: unknown;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly decodeImage?: DecodeImageStringImage;
+  readonly loadTexture?: (url: string, path: string) => Promise<Texture>;
+}): Promise<ImageStringResource> {
+  const manifest = parseImageStringManifest(options.manifest);
+  assertExactKeys(
+    [...options.files.keys()].sort(),
+    [
+      "image-string.manifest.json",
+      ...collectImageStringAssetPaths(manifest),
+    ].sort(),
+    "resolved image-string files",
+  );
   const registry = new ObjectUrlRegistry();
   const imageModules: Record<string, string> = {};
   try {
@@ -189,13 +221,43 @@ export async function loadImageStringResourceFromUrl(options: {
     );
   }
   const manifest = parseImageStringManifest(manifestValue);
+  const filenameKeyPackage = collectImageStringAssetPaths(manifest).every(
+    (path) => !path.includes("/"),
+  );
+  const assetMap = filenameKeyPackage
+    ? await loadRemoteEditorAssetMap(fetchImpl, manifestUrl)
+    : undefined;
   const registry = new ObjectUrlRegistry();
   const modules: Record<string, string> = {};
   try {
     for (const [character, glyph] of Object.entries(manifest.glyphs)) {
-      const assetUrl = resolveContainedUrl(manifestUrl, glyph.path);
+      const mapped = assetMap?.get(glyph.path);
+      if (filenameKeyPackage && !mapped)
+        throw new ImageStringError(
+          `assets map 未声明 image-string glyph：${glyph.path}`,
+        );
+      const assetUrl = resolveContainedUrl(
+        manifestUrl,
+        mapped?.path ?? glyph.path,
+      );
       const response = await fetchRequired(fetchImpl, assetUrl);
-      const blob = await response.blob();
+      let blob: Blob;
+      if (mapped) {
+        const payload = new Uint8Array(await response.arrayBuffer());
+        if (payload.byteLength !== mapped.byteLength)
+          throw new ImageStringError(
+            `image-string glyph byteLength 与 assets map 不一致：${glyph.path}`,
+          );
+        if ((await sha256Hex(payload)) !== mapped.sha256)
+          throw new ImageStringError(
+            `image-string glyph SHA-256 与 assets map 不一致：${glyph.path}`,
+          );
+        blob = new Blob([copyArrayBuffer(payload)], {
+          type: mapped.mediaType,
+        });
+      } else {
+        blob = await response.blob();
+      }
       const decoded = await (options.decodeImage ?? decodeBrowserImage)(
         blob,
         glyph.path,
@@ -218,6 +280,73 @@ export async function loadImageStringResourceFromUrl(options: {
     registry.destroy();
     throw imageStringError(error);
   }
+}
+
+export async function resolveImageStringPackageFiles(options: {
+  readonly manifest: unknown;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+}): Promise<{
+  readonly manifest: ImageStringManifestV1;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly mapped: boolean;
+}> {
+  const manifest = parseImageStringManifest(options.manifest);
+  const references = collectImageStringAssetPaths(manifest);
+  const filenameKeyPackage = references.every((path) => !path.includes("/"));
+  const hasMap = options.files.has(EDITOR_ASSETS_MAP_PATH);
+  if (filenameKeyPackage !== hasMap)
+    throw new ImageStringError(
+      filenameKeyPackage
+        ? "filename-key image-string package 缺少 assets.map.json。"
+        : "legacy image-string package 不得混入 assets.map.json。",
+    );
+  if (!hasMap) {
+    validateImageStringPackageContents({ manifest, files: options.files });
+    return Object.freeze({ manifest, files: options.files, mapped: false });
+  }
+  const map = decodeEditorAssetsMap(options.files.get(EDITOR_ASSETS_MAP_PATH)!);
+  const resolved = await validateEditorAssetsMapPackage({
+    map,
+    files: options.files,
+    allowControlPaths: ["image-string.manifest.json"],
+  });
+  assertExactKeys(
+    Object.keys(map.files).sort(),
+    [...references].sort(),
+    "image-string assets map entries",
+  );
+  const rootBytes = options.files.get("image-string.manifest.json");
+  if (!rootBytes)
+    throw new ImageStringError(
+      "image-string package 缺少 image-string.manifest.json。",
+    );
+  const virtual = new Map<string, Uint8Array>([
+    ["image-string.manifest.json", rootBytes.slice()],
+  ]);
+  for (const key of references) virtual.set(key, resolved.get(key)!.bytes);
+  return Object.freeze({ manifest, files: virtual, mapped: true });
+}
+
+interface RemoteEditorAsset {
+  readonly path: string;
+  readonly sha256: string;
+  readonly mediaType: string;
+  readonly byteLength: number;
+}
+
+async function loadRemoteEditorAssetMap(
+  fetchImpl: typeof fetch,
+  manifestUrl: URL,
+): Promise<ReadonlyMap<string, RemoteEditorAsset>> {
+  const mapUrl = resolveContainedUrl(manifestUrl, EDITOR_ASSETS_MAP_PATH);
+  const response = await fetchRequired(fetchImpl, mapUrl);
+  let map;
+  try {
+    map = decodeEditorAssetsMap(new Uint8Array(await response.arrayBuffer()));
+  } catch (error) {
+    throw new ImageStringError(formatError(error));
+  }
+  return new Map(Object.entries(map.files));
 }
 
 function parseManifestBytes(bytes: Uint8Array | undefined): unknown {

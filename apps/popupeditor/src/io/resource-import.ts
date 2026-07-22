@@ -1,32 +1,46 @@
 import {
-  allocateContentAddressedPath,
-  assertLogicalResourceId,
   createBoundedSourceIndex,
   extractBoundedZip,
-  sha256Hex,
-  suggestLogicalResourceId,
+  resolvePackagePath,
   type SourceFileLike,
 } from "@slotclientengine/browserartifactio";
+import {
+  assertEditorAdapterProfilesChosen,
+  assertNoEditorAssetKeyAliases,
+  basenameFromSourcePath,
+  commitEditorAssetImport,
+  createEditorAssetEntry,
+  createEmptyEditorAssetWorkspace,
+  reviewEditorAssetImport,
+  type EditorAssetEntry,
+  type EditorAssetRewriteAdapter,
+  type EditorAssetWorkspace,
+  type EditorImportReview,
+} from "@slotclientengine/editorresource";
 import {
   collectImageStringAssetPaths,
   parseImageStringManifest,
   parseWinAmountAnimationManifest,
+  resolveImageStringPackageFiles,
   validateImageStringPackageContents,
   validateOfficialSpineResource,
 } from "@slotclientengine/rendercore";
-import { assertVNIProject } from "@slotclientengine/vnicore/core";
 import type {
   AwardTierId,
   PopupResourceSpec,
 } from "@slotclientengine/rendercore/popup";
-import type {
-  PopupEditorAssetBlob,
-  PopupEditorLogicalResource,
-  PopupEditorProject,
-  PopupEditorResourceProvenance,
-  PopupEditorTierBindingSuggestion,
+import {
+  assertVNIBundleManifest,
+  assertVNIProject,
+  validateManifestProjectProfile,
+  validateVNIBundleManifest,
+} from "@slotclientengine/vnicore/core";
+import {
+  clonePopupEditorProject,
+  type PopupEditorProject,
+  type PopupEditorResource,
+  type PopupEditorTierBindingSuggestion,
 } from "../model/project.js";
-import { garbageCollectResourceStorage } from "../model/project.js";
 
 export const POPUP_SOURCE_LIMITS = {
   maxEntries: 1024,
@@ -39,17 +53,27 @@ export const POPUP_ZIP_LIMITS = {
 } as const;
 
 export interface PopupImportReviewCandidate {
-  proposedId: string;
+  readonly rootKey: string;
   readonly kind: PopupResourceSpec["kind"];
   readonly primarySource: string;
   readonly dependencyCount: number;
   readonly summary: string;
-  readonly provenance: PopupEditorResourceProvenance;
   readonly spec: PopupResourceSpec;
-  readonly files: ReadonlyMap<string, Uint8Array>;
-  readonly blobs: readonly PopupEditorAssetBlob[];
+  readonly assets: readonly EditorAssetEntry[];
+  readonly exactKeys: readonly string[];
   readonly errors: readonly string[];
   readonly suggestedTierBindings?: readonly PopupEditorTierBindingSuggestion[];
+  readonly profiles?: readonly {
+    id: string;
+    label: string;
+    byteLength: number;
+  }[];
+  readonly selectedProfileId?: string;
+}
+
+export interface PopupImportTransactionReview {
+  readonly assets: EditorImportReview;
+  readonly candidates: readonly PopupImportReviewCandidate[];
 }
 
 interface DiscoveredCandidate {
@@ -59,16 +83,21 @@ interface DiscoveredCandidate {
 
 export async function discoverPopupResources(
   files: readonly SourceFileLike[],
-  sourceKind: "files" | "directory" = "files",
+  options: {
+    readonly vniProfileSelections?: ReadonlyMap<string, string>;
+  } = {},
 ): Promise<readonly PopupImportReviewCandidate[]> {
   const index = createBoundedSourceIndex(files, POPUP_SOURCE_LIMITS);
   const loaded = new Map<string, Uint8Array>();
   for (const item of [...index].sort((left, right) =>
     left.path.localeCompare(right.path, "en"),
-  ))
-    if (!isIgnoredFolderMetadata(item.path))
-      loaded.set(item.path, new Uint8Array(await item.file.arrayBuffer()));
-  if (!loaded.size) throw new Error("上传批次为空。");
+  )) {
+    const buffer = await item.file.arrayBuffer();
+    if (buffer.byteLength !== item.file.size)
+      throw new Error(`source file 读取尺寸与预检不一致：${item.path}`);
+    loaded.set(item.path, new Uint8Array(buffer));
+  }
+  if (!loaded.size) throw new Error("导入批次为空。");
 
   const candidates: PopupImportReviewCandidate[] = [];
   const consumed = new Set<string>();
@@ -79,8 +108,15 @@ export async function discoverPopupResources(
 
   for (const [path, bytes] of loaded)
     if (isZip(bytes)) {
+      const entries = extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS });
       accept({
-        candidate: await discoverImageStringZip(path, bytes, sourceKind),
+        candidate: entries.has("image-string.manifest.json")
+          ? await discoverImageStringZip(path, bytes)
+          : await discoverVniBundleZip(
+              path,
+              entries,
+              options.vniProfileSelections?.get(path),
+            ),
         consumed: new Set([path]),
       });
     }
@@ -97,7 +133,7 @@ export async function discoverPopupResources(
 
   for (const path of jsonValues.keys())
     if (path.toLowerCase().endsWith("image-string.manifest.json"))
-      accept(discoverImageStringDirectory(path, loaded, sourceKind));
+      accept(await discoverImageStringDirectory(path, loaded));
 
   const vniEntries = [...jsonValues].filter(([path, value]) => {
     if (consumed.has(path)) return false;
@@ -115,8 +151,10 @@ export async function discoverPopupResources(
   for (const [path, value] of jsonValues) {
     if (!isWinAmountDescriptor(value)) continue;
     const descriptor = parseWinAmountAnimationManifest(value);
-    const tierIds = descriptor.tiers.map(({ id }) => id);
-    if (tierIds.join(",") !== ["bigwin", "superwin", "megawin"].join(","))
+    if (
+      descriptor.tiers.map(({ id }) => id).join(",") !==
+      ["bigwin", "superwin", "megawin"].join(",")
+    )
       throw new Error(
         `${path} 必须按 bigwin/superwin/megawin 顺序声明三档 VNI。`,
       );
@@ -125,7 +163,7 @@ export async function discoverPopupResources(
       const projectPath = findKey(loaded, resolveRelative(path, tier.project));
       if (!vniPaths.has(projectPath))
         throw new Error(
-          `${path} 引用的 ${tier.project} 不是完整、合法的 VNI project。`,
+          `${path} 引用的 ${tier.project} 不是合法 VNI project。`,
         );
       if (!vniOrder.has(projectPath)) vniOrder.set(projectPath, nextVniOrder++);
       if (vniBindings.has(projectPath))
@@ -146,13 +184,13 @@ export async function discoverPopupResources(
     const rightOrder = vniOrder.get(right) ?? Number.MAX_SAFE_INTEGER;
     return leftOrder - rightOrder || left.localeCompare(right, "en");
   });
-  for (const entry of vniEntries)
+  for (const [path] of vniEntries)
     accept(
       await discoverVni(
-        [entry[0], required(loaded, entry[0])],
+        [path, required(loaded, path)],
         loaded,
-        sourceKind,
-        vniBindings.get(entry[0]),
+        vniBindings.get(path),
+        true,
       ),
     );
 
@@ -162,40 +200,203 @@ export async function discoverPopupResources(
   const spineEntries = [...jsonValues].filter(
     ([path, value]) => !consumed.has(path) && isSpineSkeleton(value),
   );
-  for (const skeleton of spineEntries) {
+  for (const [path] of spineEntries)
     accept(
       await discoverSpineFromAtlases(
-        [skeleton[0], required(loaded, skeleton[0])],
+        [path, required(loaded, path)],
         atlasEntries,
         loaded,
-        sourceKind,
       ),
     );
-  }
 
   for (const [path, bytes] of loaded)
     if (!consumed.has(path) && imageType(bytes)) {
-      candidates.push(await discoverImage(path, bytes, sourceKind));
+      candidates.push(await discoverImage(path, bytes));
       consumed.add(path);
     }
 
   const unknown = [...loaded.keys()].filter((path) => !consumed.has(path));
   if (unknown.length)
     throw new Error(
-      `上传批次包含无法识别、未引用或不完整的文件：${unknown.join(", ")}。`,
+      `导入批次包含无法识别、未引用或不完整的文件：${unknown.join(", ")}。`,
     );
   if (!candidates.length)
     throw new Error(
-      "上传批次未发现 image、VNI、official Spine 4.3 或 standalone ImgNumber 资源。",
+      "导入批次未发现 image、VNI、official Spine 4.3 或 ImgNumber 资源。",
     );
+  assertEditorAdapterProfilesChosen(
+    candidates.map((candidate) => ({
+      adapterId: candidate.kind,
+      rootKey: candidate.rootKey,
+      exactKeys: candidate.exactKeys,
+      parsed: candidate.spec,
+      diagnostics: candidate.errors,
+      ...(candidate.profiles ? { profiles: candidate.profiles } : {}),
+      ...(candidate.selectedProfileId
+        ? { selectedProfileId: candidate.selectedProfileId }
+        : {}),
+    })),
+  );
   return Object.freeze(candidates);
 }
 
-function discoverImageStringDirectory(
+export function inspectVniBundleProfiles(
+  bytes: Uint8Array,
+): readonly { id: string; label: string; byteLength: number }[] | null {
+  const entries = extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS });
+  return readVniBundleProfiles(entries);
+}
+
+function readVniBundleProfiles(
+  entries: ReadonlyMap<string, Uint8Array>,
+): readonly { id: string; label: string; byteLength: number }[] | null {
+  const manifestBytes = entries.get("manifest.json");
+  if (!manifestBytes) return null;
+  const manifest = assertVNIBundleManifest(parseJson(manifestBytes));
+  validateVNIBundleManifest(manifest);
+  return Object.freeze(
+    manifest.exports.map((entry) => {
+      const projectBytes = required(entries, entry.path);
+      const project = assertVNIProject(parseJson(projectBytes));
+      validateManifestProjectProfile(entry, project);
+      const assetBytes = project.assets.map(
+        (asset) =>
+          required(entries, resolvePackagePath(entry.path, asset.path))
+            .byteLength,
+      );
+      return Object.freeze({
+        id: entry.id,
+        label:
+          entry.label ?? `${entry.id} (${entry.purpose}, ${entry.assetScale})`,
+        byteLength:
+          projectBytes.byteLength +
+          assetBytes.reduce((total, size) => total + size, 0),
+      });
+    }),
+  );
+}
+
+async function discoverVniBundleZip(
+  sourcePath: string,
+  entries: ReadonlyMap<string, Uint8Array>,
+  selectedProfileId: string | undefined,
+): Promise<PopupImportReviewCandidate> {
+  const profiles = readVniBundleProfiles(entries);
+  if (!profiles)
+    throw new Error(`${sourcePath} 是未知 ZIP；缺少已知 root sentinel。`);
+  if (profiles.length > 1 && !selectedProfileId)
+    throw new Error(
+      `${sourcePath} 声明多个 VNI profile，必须明确选择：${profiles.map(({ id }) => id).join(", ")}。`,
+    );
+  const selected = selectedProfileId ?? profiles[0]?.id;
+  if (!selected || !profiles.some(({ id }) => id === selected))
+    throw new Error(
+      `${sourcePath} 的 VNI profile 选择无效：${selected ?? "未选择"}。`,
+    );
+  const manifest = assertVNIBundleManifest(
+    parseJson(required(entries, "manifest.json")),
+  );
+  validateVNIBundleManifest(manifest);
+  const entry = manifest.exports.find(({ id }) => id === selected)!;
+  const projectBytes = required(entries, entry.path);
+  const project = assertVNIProject(parseJson(projectBytes));
+  validateManifestProjectProfile(entry, project);
+  const discovered = await discoverVni([entry.path, projectBytes], entries);
+  return Object.freeze({
+    ...discovered.candidate,
+    primarySource: `${sourcePath}:${entry.path}`,
+    profiles,
+    selectedProfileId: selected,
+  });
+}
+
+export async function reviewPopupImportTransaction(
+  project: PopupEditorProject,
+  candidates: readonly PopupImportReviewCandidate[],
+): Promise<PopupImportTransactionReview> {
+  for (const candidate of candidates)
+    if (candidate.errors.length) throw new Error(candidate.errors.join("\n"));
+  const workspace = await popupProjectWorkspace(project);
+  const review = await reviewEditorAssetImport({
+    workspace,
+    incoming: candidates.flatMap((candidate) => candidate.assets),
+    references: popupProjectAdapter.collectReferences(project),
+  });
+  return Object.freeze({ assets: review, candidates });
+}
+
+export async function commitImportReview(
+  project: PopupEditorProject,
+  candidates: readonly PopupImportReviewCandidate[],
+): Promise<PopupImportTransactionReview> {
+  const transaction = await reviewPopupImportTransaction(project, candidates);
+  if (!transaction.assets.canCommit)
+    throw new Error(transaction.assets.blockingErrors.join("\n"));
+  const workspace = await popupProjectWorkspace(project);
+  const candidateProject = clonePopupEditorProject(project);
+  for (const candidate of candidates) {
+    const resource: PopupEditorResource = {
+      rootKey: candidate.rootKey,
+      kind: candidate.kind,
+      spec: structuredClone(candidate.spec),
+      keys: Object.freeze([...candidate.exactKeys]),
+    };
+    candidateProject.resources.set(candidate.rootKey, resource);
+  }
+  const committed = await commitEditorAssetImport({
+    workspace,
+    project: candidateProject,
+    review: transaction.assets,
+    adapter: popupProjectAdapter,
+  });
+  candidateProject.assets = new Map(committed.workspace.entries);
+  Object.assign(project, candidateProject);
+  return transaction;
+}
+
+async function discoverImage(
+  path: string,
+  bytes: Uint8Array,
+): Promise<PopupImportReviewCandidate> {
+  const media = imageType(bytes);
+  if (!media) throw new Error("图片内容类型不支持。");
+  const size = imageSize(bytes, media.extension);
+  const key = basenameFromSourcePath(path);
+  const asset = await createEditorAssetEntry({
+    key,
+    mediaType: media.mediaType,
+    bytes,
+  });
+  return candidate({
+    rootKey: key,
+    kind: "image",
+    primarySource: path,
+    dependencyCount: 0,
+    summary: `${size.width}×${size.height} ${media.mediaType}`,
+    spec: { kind: "image", path: key, size },
+    assets: [asset],
+  });
+}
+
+async function discoverImageStringZip(
+  path: string,
+  bytes: Uint8Array,
+): Promise<PopupImportReviewCandidate> {
+  const nested = extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS });
+  const manifest = parseImageStringManifest(
+    parseJson(required(nested, "image-string.manifest.json")),
+  );
+  const resolved = await resolveImageStringPackageFiles({
+    manifest,
+    files: nested,
+  });
+  return createImageStringCandidate(path, manifest, resolved.files);
+}
+
+async function discoverImageStringDirectory(
   manifestPath: string,
   source: ReadonlyMap<string, Uint8Array>,
-  sourceKind: "files" | "directory",
-): DiscoveredCandidate {
+): Promise<DiscoveredCandidate> {
   const rawManifest = parseJson(required(source, manifestPath));
   const parsedManifest = parseImageStringManifest(rawManifest);
   const nested = new Map<string, Uint8Array>([
@@ -214,162 +415,66 @@ function discoverImageStringDirectory(
     manifest: rawManifest,
     files: nested,
   });
-  const prefix = `dependencies/image-strings/${manifest.id}`;
   return {
-    candidate: review({
-      proposedId: manifest.id,
-      kind: "image-string",
-      primarySource: manifestPath,
-      dependencyCount: nested.size - 1,
-      summary: `${Object.keys(manifest.glyphs).length} glyphs`,
-      sourceKind,
-      sourceNames: [...consumed].sort((a, b) => a.localeCompare(b, "en")),
-      spec: {
-        kind: "image-string",
-        manifest: `${prefix}/image-string.manifest.json`,
-      },
-      files: new Map(
-        [...nested].map(([path, bytes]) => [`${prefix}/${path}`, bytes]),
-      ),
-      blobs: [],
-    }),
+    candidate: await createImageStringCandidate(manifestPath, manifest, nested),
     consumed,
   };
 }
 
-export function commitImportReview(
-  project: PopupEditorProject,
-  candidates: readonly PopupImportReviewCandidate[],
-): void {
-  const ids = candidates.map((candidate) =>
-    assertLogicalResourceId(candidate.proposedId),
-  );
-  if (new Set(ids).size !== ids.length)
-    throw new Error("import review logical id 冲突。");
-  for (const [index, candidate] of candidates.entries()) {
-    if (candidate.errors.length) throw new Error(candidate.errors.join("\n"));
-    const id = ids[index]!;
-    if (project.resources.has(id))
-      throw new Error(`logical resource id 已存在：${id}`);
-  }
-  for (const [index, candidate] of candidates.entries()) {
-    const id = ids[index]!;
-    for (const blob of candidate.blobs) {
-      const key = `${blob.digest}.${blob.extension}`;
-      const current = project.blobs.get(key);
-      if (current && !equal(current.bytes, blob.bytes))
-        throw new Error(`SHA-256 collision guard triggered：${key}`);
-      project.blobs.set(key, { ...blob, bytes: blob.bytes.slice() });
-    }
-    for (const [path, bytes] of candidate.files) {
-      const current = project.packageFiles.get(path);
-      if (current && !equal(current, bytes))
-        throw new Error(`production path collision：${path}`);
-      project.packageFiles.set(path, bytes.slice());
-    }
-    const resource: PopupEditorLogicalResource = {
-      id,
-      kind: candidate.kind,
-      provenance: candidate.provenance,
-      spec: candidate.spec,
-      paths: Object.freeze([...candidate.files.keys()].sort()),
-    };
-    project.resources.set(id, resource);
-  }
-}
-
-export function replaceResourceFromReview(
-  project: PopupEditorProject,
-  resourceId: string,
-  candidate: PopupImportReviewCandidate,
-): void {
-  const existing = project.resources.get(resourceId);
-  if (!existing) throw new Error(`待替换 resource 不存在：${resourceId}`);
-  if (candidate.errors.length) throw new Error(candidate.errors.join("\n"));
-  if (candidate.kind !== existing.kind)
-    throw new Error(
-      `替换必须保持 resource kind：${existing.kind} -> ${candidate.kind}`,
-    );
-  project.resources.delete(resourceId);
-  garbageCollectResourceStorage(project);
-  candidate.proposedId = resourceId;
-  commitImportReview(project, [candidate]);
-}
-
-async function discoverImage(
-  path: string,
-  bytes: Uint8Array,
-  sourceKind: "files" | "directory",
+async function createImageStringCandidate(
+  primarySource: string,
+  manifest: ReturnType<typeof parseImageStringManifest>,
+  files: ReadonlyMap<string, Uint8Array>,
 ): Promise<PopupImportReviewCandidate> {
-  const media = imageType(bytes);
-  if (!media) throw new Error("图片内容类型不支持。");
-  const size = imageSize(bytes, media.extension);
-  const digest = await sha256Hex(bytes);
-  const production = allocateContentAddressedPath({
-    digest,
-    extension: media.extension,
-  });
-  return review({
-    proposedId: requiredSuggestion(path),
-    kind: "image",
-    primarySource: path,
-    dependencyCount: 0,
-    summary: `${size.width}×${size.height} ${media.mediaType}`,
-    sourceKind,
-    sourceNames: [path],
-    spec: { kind: "image", path: production, size },
-    files: new Map([[production, bytes]]),
-    blobs: [
-      {
-        digest,
-        extension: media.extension,
+  const rewritten = structuredClone(manifest) as {
+    glyphs: Record<string, { path: string }>;
+  };
+  const pathMap = new Map<string, string>();
+  for (const glyph of Object.values(rewritten.glyphs))
+    if (!pathMap.has(glyph.path))
+      pathMap.set(glyph.path, basenameFromSourcePath(glyph.path));
+  assertNoEditorAssetKeyAliases([...pathMap.values()]);
+  for (const glyph of Object.values(rewritten.glyphs))
+    glyph.path = pathMap.get(glyph.path)!;
+  const parsed = parseImageStringManifest(rewritten);
+  const rootKey = "image-string.manifest.json";
+  const rootBytes = encodeStable(parsed);
+  const assets: EditorAssetEntry[] = [
+    await createEditorAssetEntry({
+      key: rootKey,
+      mediaType: "application/json",
+      bytes: rootBytes,
+    }),
+  ];
+  for (const [sourcePath, key] of pathMap) {
+    const payload = required(files, sourcePath);
+    const media = imageType(payload);
+    if (!media || media.extension === "jpg")
+      throw new Error(`image-string glyph 不是 PNG/WebP：${sourcePath}`);
+    assets.push(
+      await createEditorAssetEntry({
+        key,
         mediaType: media.mediaType,
-        byteLength: bytes.byteLength,
-        bytes,
-      },
-    ],
-  });
-}
-
-async function discoverImageStringZip(
-  path: string,
-  bytes: Uint8Array,
-  sourceKind: "files" | "directory",
-): Promise<PopupImportReviewCandidate> {
-  const nested = extractBoundedZip(bytes, {
-    limits: POPUP_ZIP_LIMITS,
-    pathPolicy: { requireLowercase: true },
-  });
-  const manifest = validateImageStringPackageContents({
-    manifest: parseJson(required(nested, "image-string.manifest.json")),
-    files: nested,
-  });
-  const prefix = `dependencies/image-strings/${manifest.id}`;
-  const files = new Map<string, Uint8Array>();
-  for (const [nestedPath, nestedBytes] of nested)
-    files.set(`${prefix}/${nestedPath}`, nestedBytes);
-  return review({
-    proposedId: manifest.id,
+        bytes: payload,
+      }),
+    );
+  }
+  return candidate({
+    rootKey,
     kind: "image-string",
-    primarySource: path,
-    dependencyCount: nested.size - 1,
-    summary: `${Object.keys(manifest.glyphs).length} glyphs`,
-    sourceKind,
-    sourceNames: [path],
-    spec: {
-      kind: "image-string",
-      manifest: `${prefix}/image-string.manifest.json`,
-    },
-    files,
-    blobs: [],
+    primarySource,
+    dependencyCount: assets.length - 1,
+    summary: `${Object.keys(parsed.glyphs).length} glyphs`,
+    spec: { kind: "image-string", manifest: rootKey },
+    assets,
   });
 }
 
 async function discoverVni(
   projectEntry: readonly [string, Uint8Array],
   source: ReadonlyMap<string, Uint8Array>,
-  sourceKind: "files" | "directory",
   suggestedTierBinding?: PopupEditorTierBindingSuggestion,
+  sourceIsFlat = false,
 ): Promise<DiscoveredCandidate> {
   const [projectPath, projectBytes] = projectEntry;
   const project = assertVNIProject(parseJson(projectBytes));
@@ -378,56 +483,52 @@ async function discoverVni(
     project.stage.duration !== suggestedTierBinding.countDurationSeconds
   )
     throw new Error(
-      `${projectPath} stage.duration=${project.stage.duration} 与 win-amount descriptor durationSeconds=${suggestedTierBinding.countDurationSeconds} 不一致。`,
+      `${projectPath} stage.duration 与 win-amount descriptor 不一致。`,
     );
   const consumed = new Set([projectPath]);
   const rewritten = structuredClone(project);
-  const files = new Map<string, Uint8Array>();
-  const blobs: PopupEditorAssetBlob[] = [];
+  const assets: EditorAssetEntry[] = [];
+  const assetKeys: string[] = [];
   for (const asset of rewritten.assets) {
-    const sourcePath = resolveRelative(projectPath, asset.path);
-    const bytes = requiredCaseFold(source, sourcePath);
-    consumed.add(findKey(source, sourcePath));
-    const media = imageType(bytes);
+    const referencedPath = resolveRelative(projectPath, asset.path);
+    const sourcePath = findKey(
+      source,
+      sourceIsFlat ? basenameFromSourcePath(referencedPath) : referencedPath,
+    );
+    const payload = required(source, sourcePath);
+    consumed.add(sourcePath);
+    const media = imageType(payload);
     if (!media) throw new Error(`VNI asset 不是支持图片：${asset.path}`);
-    const digest = await sha256Hex(bytes);
-    const leafPath = allocateContentAddressedPath({
-      digest,
-      extension: media.extension,
-    });
-    files.set(leafPath, bytes);
-    blobs.push({
-      digest,
-      extension: media.extension,
-      mediaType: media.mediaType,
-      byteLength: bytes.byteLength,
-      bytes,
-    });
-    asset.path = leafPath.split("/").at(-1)!;
+    const key = basenameFromSourcePath(sourcePath);
+    asset.path = key;
+    assetKeys.push(key);
+    assets.push(
+      await createEditorAssetEntry({
+        key,
+        mediaType: media.mediaType,
+        bytes: payload,
+      }),
+    );
   }
+  assertNoEditorAssetKeyAliases(assetKeys);
+  const rootKey = basenameFromSourcePath(projectPath);
   const canonical = encodeStable(rewritten);
-  const digest = await sha256Hex(canonical);
-  const output = allocateContentAddressedPath({ digest, extension: "json" });
-  files.set(output, canonical);
-  blobs.push({
-    digest,
-    extension: "json",
-    mediaType: "application/json",
-    byteLength: canonical.byteLength,
-    bytes: canonical,
-  });
+  assets.push(
+    await createEditorAssetEntry({
+      key: rootKey,
+      mediaType: "application/json",
+      bytes: canonical,
+    }),
+  );
   return {
-    candidate: review({
-      proposedId: requiredSuggestion(projectPath),
+    candidate: candidate({
+      rootKey,
       kind: "vni",
       primarySource: projectPath,
       dependencyCount: rewritten.assets.length,
       summary: `${project.stage.width}×${project.stage.height}, ${project.stage.duration}s`,
-      sourceKind,
-      sourceNames: [...consumed].sort((a, b) => a.localeCompare(b, "en")),
-      spec: { kind: "vni", project: output },
-      files,
-      blobs,
+      spec: { kind: "vni", project: rootKey },
+      assets,
       ...(suggestedTierBinding
         ? { suggestedTierBindings: [suggestedTierBinding] }
         : {}),
@@ -440,7 +541,6 @@ async function discoverSpine(
   skeletonEntry: readonly [string, Uint8Array],
   atlasEntry: readonly [string, Uint8Array],
   source: ReadonlyMap<string, Uint8Array>,
-  sourceKind: "files" | "directory",
 ): Promise<DiscoveredCandidate> {
   const [skeletonPath, skeletonBytes] = skeletonEntry;
   const [atlasPath, atlasBytes] = atlasEntry;
@@ -448,66 +548,50 @@ async function discoverSpine(
   const atlasText = decode(atlasBytes);
   const pages = parseAtlasPages(atlasText);
   const consumed = new Set([skeletonPath, atlasPath]);
-  const files = new Map<string, Uint8Array>();
-  const blobs: PopupEditorAssetBlob[] = [];
+  const assets: EditorAssetEntry[] = [];
   const mapping = new Map<string, string>();
-  const texturePaths: Record<string, string> = {};
+  const textureKeys: Record<string, string> = {};
   for (const page of pages) {
-    const sourcePath = resolveRelative(atlasPath, page);
-    const bytes = requiredCaseFold(source, sourcePath);
-    consumed.add(findKey(source, sourcePath));
-    const media = imageType(bytes);
+    const sourcePath = findKey(source, resolveRelative(atlasPath, page));
+    const payload = required(source, sourcePath);
+    consumed.add(sourcePath);
+    const media = imageType(payload);
     if (!media) throw new Error(`Spine atlas page 不是支持图片：${page}`);
-    const digest = await sha256Hex(bytes);
-    const output = allocateContentAddressedPath({
-      digest,
-      extension: media.extension,
-    });
-    files.set(output, bytes);
-    blobs.push({
-      digest,
-      extension: media.extension,
-      mediaType: media.mediaType,
-      byteLength: bytes.byteLength,
-      bytes,
-    });
-    const flatName = output.split("/").at(-1)!;
-    mapping.set(page, flatName);
-    texturePaths[flatName] = output;
+    const key = basenameFromSourcePath(sourcePath);
+    mapping.set(page, key);
+    textureKeys[key] = key;
+    assets.push(
+      await createEditorAssetEntry({
+        key,
+        mediaType: media.mediaType,
+        bytes: payload,
+      }),
+    );
   }
+  assertNoEditorAssetKeyAliases([...mapping.values()]);
+  const atlasKey = basenameFromSourcePath(atlasPath);
   const rewrittenAtlas = encode(rewriteAtlas(atlasText, mapping));
-  const atlasDigest = await sha256Hex(rewrittenAtlas);
-  const atlasOutput = allocateContentAddressedPath({
-    digest: atlasDigest,
-    extension: "atlas",
-  });
-  files.set(atlasOutput, rewrittenAtlas);
-  blobs.push({
-    digest: atlasDigest,
-    extension: "atlas",
-    mediaType: "text/plain",
-    byteLength: rewrittenAtlas.byteLength,
-    bytes: rewrittenAtlas,
-  });
+  assets.push(
+    await createEditorAssetEntry({
+      key: atlasKey,
+      mediaType: "text/plain",
+      bytes: rewrittenAtlas,
+    }),
+  );
+  const skeletonKey = basenameFromSourcePath(skeletonPath);
   const skeletonCanonical = encodeStable(skeleton);
-  const skeletonDigest = await sha256Hex(skeletonCanonical);
-  const skeletonOutput = allocateContentAddressedPath({
-    digest: skeletonDigest,
-    extension: "json",
-  });
-  files.set(skeletonOutput, skeletonCanonical);
-  blobs.push({
-    digest: skeletonDigest,
-    extension: "json",
-    mediaType: "application/json",
-    byteLength: skeletonCanonical.byteLength,
-    bytes: skeletonCanonical,
-  });
+  assets.push(
+    await createEditorAssetEntry({
+      key: skeletonKey,
+      mediaType: "application/json",
+      bytes: skeletonCanonical,
+    }),
+  );
   const resource = {
     skeleton,
     atlasText: decode(rewrittenAtlas),
     textureUrls: Object.fromEntries(
-      Object.keys(texturePaths).map((page) => [page, `memory:${page}`]),
+      Object.keys(textureKeys).map((page) => [page, `memory:${page}`]),
     ),
   };
   const metadata = validateOfficialSpineResource({
@@ -515,69 +599,135 @@ async function discoverSpine(
     requiredAnimations: [],
   });
   return {
-    candidate: review({
-      proposedId: requiredSuggestion(skeletonPath),
+    candidate: candidate({
+      rootKey: skeletonKey,
       kind: "spine",
       primarySource: skeletonPath,
       dependencyCount: pages.length + 1,
       summary: `${metadata.animationNames.length} animations / ${pages.length} pages`,
-      sourceKind,
-      sourceNames: [...consumed].sort((a, b) => a.localeCompare(b, "en")),
       spec: {
         kind: "spine",
-        skeleton: skeletonOutput,
-        atlas: atlasOutput,
-        textures: texturePaths,
+        skeleton: skeletonKey,
+        atlas: atlasKey,
+        textures: textureKeys,
       },
-      files,
-      blobs,
+      assets,
     }),
     consumed,
   };
 }
 
-function review(
-  value: Omit<PopupImportReviewCandidate, "provenance" | "errors"> & {
-    sourceKind: "files" | "directory";
-    sourceNames: readonly string[];
-  },
+function candidate(
+  value: Omit<PopupImportReviewCandidate, "exactKeys" | "errors">,
 ): PopupImportReviewCandidate {
-  const { sourceKind, sourceNames, ...rest } = value;
-  return {
-    ...rest,
-    provenance: {
-      sourceKind,
-      sourceNames: Object.freeze([...sourceNames]),
-      batchLabel: `${sourceKind}:${rest.primarySource}`,
-    },
+  return Object.freeze({
+    ...value,
+    exactKeys: Object.freeze(value.assets.map(({ key }) => key).sort()),
     errors: Object.freeze([]),
+  });
+}
+
+const popupProjectAdapter: EditorAssetRewriteAdapter<PopupEditorProject> = {
+  cloneProject: clonePopupEditorProject,
+  collectReferences(project) {
+    return {
+      references: [
+        ...[...project.resources].flatMap(([rootKey, resource]) =>
+          resource.keys.map((key) => ({
+            key,
+            location: `resources.${JSON.stringify(rootKey)}.${key}`,
+            kind: resource.kind,
+          })),
+        ),
+        ...[...project.tiers].flatMap(([tierId, tier]) =>
+          tier.layers.map((layer, index) => ({
+            key: layer.resource,
+            location: `tiers.${tierId}.layers[${index}].resource`,
+            kind: "layer",
+          })),
+        ),
+      ],
+    };
+  },
+  renameReferences(project, from, to) {
+    const resource = project.resources.get(from);
+    if (resource) {
+      project.resources.delete(from);
+      project.resources.set(to, {
+        ...resource,
+        rootKey: to,
+        spec: renamePopupSpec(resource.spec, from, to),
+        keys: resource.keys.map((key) => (key === from ? to : key)),
+      });
+    }
+    for (const [rootKey, value] of project.resources)
+      project.resources.set(rootKey, {
+        ...value,
+        spec: renamePopupSpec(value.spec, from, to),
+        keys: value.keys.map((key) => (key === from ? to : key)),
+      });
+    for (const tier of project.tiers.values())
+      tier.layers = tier.layers.map((layer) =>
+        layer.resource === from ? { ...layer, resource: to } : layer,
+      );
+    return project;
+  },
+};
+
+function renamePopupSpec(
+  spec: PopupResourceSpec,
+  from: string,
+  to: string,
+): PopupResourceSpec {
+  if (spec.kind === "image")
+    return { ...spec, path: spec.path === from ? to : spec.path };
+  if (spec.kind === "image-string")
+    return { ...spec, manifest: spec.manifest === from ? to : spec.manifest };
+  if (spec.kind === "vni")
+    return { ...spec, project: spec.project === from ? to : spec.project };
+  return {
+    ...spec,
+    skeleton: spec.skeleton === from ? to : spec.skeleton,
+    atlas: spec.atlas === from ? to : spec.atlas,
+    textures: Object.fromEntries(
+      Object.entries(spec.textures).map(([page, key]) => [
+        page === from ? to : page,
+        key === from ? to : key,
+      ]),
+    ),
   };
 }
-function requiredSuggestion(path: string) {
-  const value = suggestLogicalResourceId(path.split("/").at(-1)!);
-  if (!value)
-    throw new Error(
-      `无法从 ${path} 建议 ASCII logical id，请在 import review 显式填写。`,
-    );
-  return value;
+
+async function popupProjectWorkspace(
+  project: PopupEditorProject,
+): Promise<EditorAssetWorkspace> {
+  if (!project.assets.size) return createEmptyEditorAssetWorkspace();
+  const empty = createEmptyEditorAssetWorkspace();
+  const review = await reviewEditorAssetImport({
+    workspace: empty,
+    incoming: [...project.assets.values()],
+  });
+  return (
+    await commitEditorAssetImport({
+      workspace: empty,
+      project: null,
+      review,
+      adapter: {
+        cloneProject: () => null,
+        collectReferences: () => ({ references: [] }),
+        renameReferences: () => null,
+      },
+    })
+  ).workspace;
 }
+
 function isZip(bytes: Uint8Array) {
   return bytes[0] === 0x50 && bytes[1] === 0x4b;
 }
-function isIgnoredFolderMetadata(path: string) {
-  const parts = path.split("/");
-  const basename = parts.at(-1)?.toLowerCase();
-  return (
-    parts.includes("__MACOSX") ||
-    parts.some((part) => part.startsWith("._")) ||
-    basename === ".ds_store" ||
-    basename === "thumbs.db" ||
-    basename === "desktop.ini"
-  );
-}
-function imageType(
-  bytes: Uint8Array,
-): { extension: "png" | "webp" | "jpg"; mediaType: string } | null {
+function imageType(bytes: Uint8Array): {
+  extension: "png" | "webp" | "jpg";
+  mediaType: "image/png" | "image/webp" | "image/jpeg";
+} | null {
   if (bytes[0] === 0x89 && decode(bytes.slice(1, 4)) === "PNG")
     return { extension: "png", mediaType: "image/png" };
   if (
@@ -613,25 +763,23 @@ async function discoverSpineFromAtlases(
   skeleton: readonly [string, Uint8Array],
   atlases: readonly (readonly [string, Uint8Array])[],
   source: ReadonlyMap<string, Uint8Array>,
-  sourceKind: "files" | "directory",
 ): Promise<DiscoveredCandidate> {
   const directory = parentPath(skeleton[0]);
   const local = atlases.filter(([path]) => parentPath(path) === directory);
-  const candidates = local.length ? local : atlases;
+  const choices = local.length ? local : atlases;
   const matches: DiscoveredCandidate[] = [];
   const errors: string[] = [];
-  for (const atlas of candidates) {
+  for (const atlas of choices)
     try {
-      matches.push(await discoverSpine(skeleton, atlas, source, sourceKind));
+      matches.push(await discoverSpine(skeleton, atlas, source));
     } catch (error) {
       errors.push(`${atlas[0]}: ${formatError(error)}`);
     }
-  }
   if (matches.length !== 1)
     throw new Error(
       matches.length
-        ? `${skeleton[0]} 可关联多个 Spine atlas，必须消除歧义：${candidates.map(([path]) => path).join(", ")}。`
-        : `${skeleton[0]} 找不到可用的 official Spine 4.3 atlas closure：${errors.join(" | ") || "没有 atlas 候选"}。`,
+        ? `${skeleton[0]} 可关联多个 Spine atlas，必须消除歧义。`
+        : `${skeleton[0]} 找不到 official Spine 4.3 closure：${errors.join(" | ")}。`,
     );
   return matches[0]!;
 }
@@ -672,16 +820,10 @@ function resolveRelative(base: string, ref: string) {
   }
   return stack.join("/");
 }
-function requiredCaseFold(
-  source: ReadonlyMap<string, Uint8Array>,
-  path: string,
-) {
-  return source.get(findKey(source, path))!;
-}
 function findKey(source: ReadonlyMap<string, Uint8Array>, path: string) {
   if (source.has(path)) return path;
   const matches = [...source.keys()].filter(
-    (key) => key.toLowerCase() === path.toLowerCase(),
+    (key) => key.toLocaleLowerCase("en-US") === path.toLocaleLowerCase("en-US"),
   );
   if (matches.length !== 1)
     throw new Error(
@@ -715,12 +857,6 @@ function sort(value: unknown): unknown {
     Object.entries(value as Record<string, unknown>)
       .sort(([a], [b]) => a.localeCompare(b, "en"))
       .map(([key, child]) => [key, sort(child)]),
-  );
-}
-function equal(a: Uint8Array, b: Uint8Array) {
-  return (
-    a.byteLength === b.byteLength &&
-    a.every((value, index) => value === b[index])
   );
 }
 function formatError(error: unknown) {

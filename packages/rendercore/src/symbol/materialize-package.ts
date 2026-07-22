@@ -4,6 +4,18 @@ import {
   resolvePackagePath,
   sha256Hex,
 } from "@slotclientengine/browserartifactio";
+import {
+  EDITOR_ASSETS_MAP_PATH,
+  assertNoEditorAssetKeyAliases,
+  basenameFromSourcePath,
+  commitEditorAssetImport,
+  createEditorAssetsMapFromWorkspace,
+  createEmptyEditorAssetWorkspace,
+  materializeEditorAssetPayloads,
+  reviewEditorAssetImport,
+  serializeEditorAssetsMap,
+  type EditorAssetRewriteAdapter,
+} from "@slotclientengine/editorresource";
 import { rewriteVNIProjectAssetPaths } from "@slotclientengine/vnicore/core";
 import {
   collectSymbolManifestResourcePaths,
@@ -145,6 +157,149 @@ export async function materializeSymbolPackageFiles(options: {
   }
 }
 
+export async function materializeMappedSymbolPackageContents(options: {
+  readonly packageManifest: SymbolPackageManifestV1;
+  readonly rawGameConfig: unknown;
+  readonly rawSymbolManifest: unknown;
+  readonly assets: ReadonlyMap<string, Uint8Array>;
+}): Promise<MaterializedSymbolPackageContents> {
+  const flattened = flattenSymbolAssets(options.assets);
+  const rawSymbolManifest = rewriteSymbolManifestPaths(
+    options.rawSymbolManifest,
+    flattened.mapping,
+  );
+  const resources = collectSymbolManifestResourcePaths({
+    symbolManifest: rawSymbolManifest,
+    symbolManifestPath: options.packageManifest.entrypoints.symbolManifest,
+    files: flattened.assets,
+  });
+  const packageManifest = parseSymbolPackageManifest({
+    ...options.packageManifest,
+    resources,
+  });
+  const incoming = resources.map((key) => ({
+    key,
+    mediaType: symbolAssetMediaType(key),
+    bytes: requiredBytes(flattened.assets, key),
+  }));
+  const empty = createEmptyEditorAssetWorkspace();
+  const review = await reviewEditorAssetImport({ workspace: empty, incoming });
+  const adapter: EditorAssetRewriteAdapter<null> = {
+    cloneProject: () => null,
+    collectReferences: () => ({ references: [] }),
+    renameReferences: () => null,
+  };
+  const workspace = (
+    await commitEditorAssetImport({
+      workspace: empty,
+      project: null,
+      review,
+      adapter,
+    })
+  ).workspace;
+  const rawGameConfig = structuredClone(options.rawGameConfig);
+  const files = new Map(materializeEditorAssetPayloads(workspace, resources));
+  files.set(
+    EDITOR_ASSETS_MAP_PATH,
+    serializeEditorAssetsMap(
+      createEditorAssetsMapFromWorkspace(workspace, resources),
+    ),
+  );
+  files.set("symbols.package.json", encodeStableJson(packageManifest));
+  files.set(
+    packageManifest.entrypoints.gameConfig,
+    encodeStableJson(rawGameConfig),
+  );
+  files.set(
+    packageManifest.entrypoints.symbolManifest,
+    encodeStableJson(rawSymbolManifest),
+  );
+  const resource = await createSymbolPackageResource({
+    packageManifest,
+    files,
+    loadTextures: false,
+  });
+  resource.destroy();
+  return Object.freeze({
+    packageManifest,
+    rawGameConfig,
+    rawSymbolManifest,
+    assets: new Map(
+      resources.map(
+        (key) => [key, requiredBytes(flattened.assets, key).slice()] as const,
+      ),
+    ),
+    files,
+  });
+}
+
+function flattenSymbolAssets(source: ReadonlyMap<string, Uint8Array>): {
+  readonly mapping: ReadonlyMap<string, string>;
+  readonly assets: ReadonlyMap<string, Uint8Array>;
+} {
+  const mapping = new Map(
+    [...source.keys()].map(
+      (path) => [path, basenameFromSourcePath(path)] as const,
+    ),
+  );
+  assertNoEditorAssetKeyAliases([...new Set(mapping.values())]);
+  const assets = new Map<string, Uint8Array>();
+  for (const [path, bytes] of source) {
+    const target = mapping.get(path)!;
+    const lower = path.toLowerCase();
+    if (/\.(?:png|jpe?g|webp)$/u.test(lower)) {
+      putFile(assets, target, bytes);
+      continue;
+    }
+    if (lower.endsWith(".atlas")) {
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      const pages = inspectAtlasPages(text);
+      const pageMapping = new Map<string, string>();
+      for (const page of pages) {
+        const sourcePath = resolvePackagePath(path, page);
+        pageMapping.set(page, requiredMapping(mapping, sourcePath));
+      }
+      putFile(
+        assets,
+        target,
+        new TextEncoder().encode(rewriteAtlas(text, pageMapping)),
+      );
+      continue;
+    }
+    if (lower.endsWith(".json")) {
+      const raw = parseJson(bytes, path);
+      let rewritten = raw;
+      if (isVniLike(raw)) {
+        rewritten = rewriteVNIProjectAssetPaths(raw, (assetPath) =>
+          requiredMapping(mapping, resolvePackagePath(path, assetPath)),
+        );
+      } else if (isImageStringLike(raw)) {
+        const manifest = structuredClone(raw) as {
+          glyphs: Record<string, { path: string }>;
+        };
+        for (const glyph of Object.values(manifest.glyphs))
+          glyph.path = requiredMapping(
+            mapping,
+            resolvePackagePath(path, glyph.path),
+          );
+        rewritten = manifest;
+      }
+      putFile(assets, target, encodeStableJson(rewritten));
+      continue;
+    }
+    throw new Error(`symbol asset extension 不支持：${path}`);
+  }
+  return { mapping, assets };
+}
+
+function isImageStringLike(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { readonly kind?: unknown }).kind === "image-string"
+  );
+}
+
 function rewriteSymbolManifestPaths(
   value: unknown,
   mapping: ReadonlyMap<string, string>,
@@ -191,6 +346,16 @@ function rewriteSymbolManifestPaths(
     }
   }
   return manifest;
+}
+
+function symbolAssetMediaType(key: string): string {
+  const extension = key.slice(key.lastIndexOf(".") + 1).toLowerCase();
+  if (extension === "png") return "image/png";
+  if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
+  if (extension === "webp") return "image/webp";
+  if (extension === "json") return "application/json";
+  if (extension === "atlas") return "text/plain";
+  throw new Error(`symbol mapped asset extension 不支持：${key}`);
 }
 
 function rewriteValueImagePaths(

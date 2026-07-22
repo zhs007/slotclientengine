@@ -13,10 +13,10 @@ import {
   parseSymbolPackageManifest,
 } from "@slotclientengine/rendercore/symbol";
 import {
+  collectMappedPopupAssetKeys,
   collectPopupPackagePaths,
   parsePopupManifest,
 } from "@slotclientengine/rendercore/popup";
-import { deriveNodeId } from "../io/filename-policy.js";
 import {
   editorResourcePaths,
   editorResourceSignature,
@@ -78,7 +78,8 @@ export interface EditorNodeDraft {
 
 export interface EditorSymbolPackageDependency {
   readonly packageId: string;
-  readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly rootKey: string;
+  readonly keys: readonly string[];
 }
 
 export interface EditorModeSymbolBinding {
@@ -89,7 +90,8 @@ export interface EditorModeSymbolBinding {
 
 export interface EditorPopupDependency {
   readonly id: string;
-  readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly rootKey: string;
+  readonly keys: readonly string[];
   placements: Partial<
     Record<SceneLayoutVariantId, { x: number; y: number; scale: number }>
   >;
@@ -657,7 +659,7 @@ export function editorProjectToManifest(
           [...bindings].map(([id, binding]) => [
             id,
             {
-              manifest: `dependencies/symbols/${id}/symbols.package.json`,
+              manifest: project.symbolDependencies.get(id)!.rootKey,
               reel: "main",
               reelSet: binding.reelSet,
               renderMode: binding.renderMode,
@@ -683,7 +685,7 @@ export function editorProjectToManifest(
               id,
               {
                 type: "award-celebration",
-                manifest: `dependencies/popups/${id}/popup.manifest.json`,
+                manifest: dependency.rootKey,
                 placements: dependency.placements,
               },
             ];
@@ -828,31 +830,26 @@ export function manifestToEditorProject(
   const registerResource = (
     resourceDraft: EditorLayoutResourceDraft,
   ): string => {
+    const resourceKey =
+      resourceDraft.kind === "image"
+        ? resourceDraft.path
+        : resourceDraft.kind === "spine"
+          ? resourceDraft.skeleton
+          : resourceDraft.kind === "video"
+            ? resourceDraft.path
+            : resourceDraft.manifestPath;
     const temporary = {
       ...resourceDraft,
-      id: "imported-resource",
+      id: resourceKey,
     } as EditorLayoutResource;
     const signature = editorResourceSignature(temporary);
     const existing = resourceIdsBySignature.get(signature);
     if (existing) return existing;
-    const resourceId = uniqueResourceId(
-      project.resources,
-      deriveNodeId(
-        (resourceDraft.kind === "image"
-          ? resourceDraft.path
-          : resourceDraft.kind === "spine"
-            ? resourceDraft.skeleton
-            : resourceDraft.kind === "video"
-              ? resourceDraft.path
-              : resourceDraft.manifest.id
-        )
-          .split("/")
-          .at(-1)!,
-      ),
-    );
+    if (project.resources.has(resourceKey))
+      throw new Error(`导入 filename key 被不同资源复用：${resourceKey}`);
     const resource = {
       ...resourceDraft,
-      id: resourceId,
+      id: resourceKey,
     } as EditorLayoutResource;
     for (const path of editorResourcePaths(resource)) {
       const owner = pathsByResource.get(path);
@@ -860,9 +857,9 @@ export function manifestToEditorProject(
         throw new Error(`导入资源路径 ${path} 被不同素材签名复用。`);
       pathsByResource.set(path, signature);
     }
-    project.resources.set(resourceId, resource);
-    resourceIdsBySignature.set(signature, resourceId);
-    return resourceId;
+    project.resources.set(resourceKey, resource);
+    resourceIdsBySignature.set(signature, resourceKey);
+    return resourceKey;
   };
   project.nodes = parsed.nodes.map((node) => {
     const resourceDraft = manifestResourceToEditorResource(
@@ -975,20 +972,24 @@ export function manifestToEditorProject(
         ] as const,
       ]
     : Object.entries(parsed.symbolPackages ?? {});
-  for (const [bindingId] of importedSymbolBindings) {
-    const prefix = `dependencies/symbols/${bindingId}/`;
-    const files = new Map(
-      [...assets.entries()]
-        .filter(([path]) => path.startsWith(prefix))
-        .map(
-          ([path, bytes]) =>
-            [path.slice(prefix.length), bytes.slice()] as const,
-        ),
-    );
+  for (const [bindingId, binding] of importedSymbolBindings) {
+    const mapped = !binding.manifest.includes("/");
+    const prefix = mapped
+      ? ""
+      : binding.manifest.slice(0, binding.manifest.lastIndexOf("/") + 1);
+    const rootBytes = assets.get(binding.manifest);
+    const files = new Map<string, Uint8Array>([
+      ["symbols.package.json", requiredAsset(rootBytes, binding.manifest)],
+    ]);
     const nested = parseSymbolPackageManifest(
       parseJsonBytes(files.get("symbols.package.json"), "symbols.package.json"),
     );
     const expected = collectSymbolPackageEntryPaths(nested);
+    for (const path of expected) {
+      if (path === "symbols.package.json") continue;
+      const source = mapped ? path : `${prefix}${path}`;
+      files.set(path, requiredAsset(assets.get(source), source));
+    }
     if (
       JSON.stringify([...files.keys()].sort()) !==
       JSON.stringify([...expected].sort())
@@ -996,34 +997,46 @@ export function manifestToEditorProject(
       throw new Error("导入 symbols dependency 闭包不精确。");
     project.symbolDependencies.set(bindingId, {
       packageId: nested.id,
-      files,
+      rootKey: binding.manifest,
+      keys: Object.freeze(
+        expected.map((path) =>
+          path === "symbols.package.json" ? binding.manifest : path,
+        ),
+      ),
     });
-    for (const path of [...project.assets.keys()])
-      if (path.startsWith(prefix)) project.assets.delete(path);
   }
   for (const [id, binding] of Object.entries(parsed.popups ?? {})) {
-    const prefix = `dependencies/popups/${id}/`;
-    const files = new Map(
-      [...assets.entries()]
-        .filter(([path]) => path.startsWith(prefix))
-        .map(
-          ([path, bytes]) =>
-            [path.slice(prefix.length), bytes.slice()] as const,
-        ),
+    const mapped = !binding.manifest.includes("/");
+    const prefix = mapped
+      ? ""
+      : binding.manifest.slice(0, binding.manifest.lastIndexOf("/") + 1);
+    const rootBytes = requiredAsset(
+      assets.get(binding.manifest),
+      binding.manifest,
     );
     const nested = parsePopupManifest(
-      parseJsonBytes(files.get("popup.manifest.json"), "popup.manifest.json"),
+      parseJsonBytes(rootBytes, "popup.manifest.json"),
     );
     if (nested.id !== id)
       throw new Error(`导入 Popup dependency id 不一致：${id}`);
+    const keys = collectMappedPopupKeys(nested, assets, mapped, prefix);
+    const files = new Map<string, Uint8Array>([
+      ["popup.manifest.json", rootBytes],
+      ...keys.map(
+        (key) =>
+          [
+            key,
+            requiredAsset(assets.get(mapped ? key : `${prefix}${key}`), key),
+          ] as const,
+      ),
+    ]);
     collectPopupPackagePaths({ manifest: nested, files });
     project.popupDependencies.set(id, {
       id,
-      files,
+      rootKey: binding.manifest,
+      keys: Object.freeze([binding.manifest, ...keys]),
       placements: structuredClone(binding.placements),
     });
-    for (const path of [...project.assets.keys()])
-      if (path.startsWith(prefix)) project.assets.delete(path);
   }
   project.gameModes = parsed.gameModes
     ? {
@@ -1118,23 +1131,13 @@ export function cloneEditorProject(project: EditorProject): EditorProject {
     symbolDependencies: new Map(
       [...project.symbolDependencies].map(([id, dependency]) => [
         id,
-        {
-          packageId: dependency.packageId,
-          files: new Map(
-            [...dependency.files].map(([path, bytes]) => [path, bytes.slice()]),
-          ),
-        },
+        structuredClone(dependency),
       ]),
     ),
     popupDependencies: new Map(
       [...project.popupDependencies].map(([id, dependency]) => [
         id,
-        {
-          ...structuredClone({ ...dependency, files: undefined }),
-          files: new Map(
-            [...dependency.files].map(([path, bytes]) => [path, bytes.slice()]),
-          ),
-        },
+        structuredClone(dependency),
       ]),
     ),
   } as EditorProject;
@@ -1258,12 +1261,12 @@ function manifestResourceToEditorResource(
     const manifest = parseImageStringManifest(
       parseJsonBytes(bytes, resource.manifest),
     );
-    const directory = resource.manifest.slice(
-      0,
-      resource.manifest.lastIndexOf("/"),
-    );
-    const assetPaths = collectImageStringAssetPaths(manifest).map(
-      (path) => `${directory}/${path}`,
+    const mapped = !resource.manifest.includes("/");
+    const directory = mapped
+      ? ""
+      : resource.manifest.slice(0, resource.manifest.lastIndexOf("/"));
+    const assetPaths = collectImageStringAssetPaths(manifest).map((path) =>
+      mapped ? path : `${directory}/${path}`,
     );
     return {
       kind: "image-string",
@@ -1287,6 +1290,29 @@ function manifestResourceToEditorResource(
   };
 }
 
+function collectMappedPopupKeys(
+  manifest: ReturnType<typeof parsePopupManifest>,
+  assets: ReadonlyMap<string, Uint8Array>,
+  mapped: boolean,
+  prefix: string,
+): readonly string[] {
+  const virtual = new Map<string, Uint8Array>();
+  for (const [path, bytes] of assets) {
+    if (mapped) virtual.set(path, bytes);
+    else if (path.startsWith(prefix))
+      virtual.set(path.slice(prefix.length), bytes);
+  }
+  return collectMappedPopupAssetKeys({ manifest, files: virtual });
+}
+
+function requiredAsset(
+  bytes: Uint8Array | undefined,
+  path: string,
+): Uint8Array {
+  if (!bytes) throw new Error(`导入资源闭包缺少 bytes：${path}`);
+  return bytes.slice();
+}
+
 export function validateEditorSpinePlayback(
   playback: EditorSpinePlaybackDraft,
   animationNames: readonly string[],
@@ -1308,14 +1334,4 @@ function parseJsonBytes(bytes: Uint8Array | undefined, path: string): unknown {
       `${path} JSON 无效：${error instanceof Error ? error.message : String(error)}`,
     );
   }
-}
-
-function uniqueResourceId(
-  resources: ReadonlyMap<string, EditorLayoutResource>,
-  base: string,
-): string {
-  if (!resources.has(base)) return base;
-  let suffix = 2;
-  while (resources.has(`${base}-${suffix}`)) suffix += 1;
-  return `${base}-${suffix}`;
 }

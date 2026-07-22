@@ -1,7 +1,9 @@
 import { extractBoundedZip } from "@slotclientengine/browserartifactio";
 import {
   createSymbolPackageResource,
+  materializeMappedSymbolPackageContents,
   parseSymbolPackageManifest,
+  resolveSymbolPackageFiles,
   type SymbolPackageResource,
 } from "@slotclientengine/rendercore/symbol";
 
@@ -38,30 +40,39 @@ export async function importSymbolsZipWithFiles(
   }
   const packageManifest = parseSymbolPackageManifest(rawManifest);
   assertStrictSymbolsPackagePaths(files);
-  const resource = await createSymbolPackageResource({
+  const sourceResource = await createSymbolPackageResource({
     packageManifest,
     files,
+    loadTextures: false,
+  });
+  const materialized = await materializeMappedSymbolPackageContents({
+    packageManifest: sourceResource.packageManifest,
+    rawGameConfig: sourceResource.rawGameConfig,
+    rawSymbolManifest: sourceResource.rawSymbolManifest,
+    assets: sourceResource.assets,
+  });
+  sourceResource.destroy();
+  const resource = await createSymbolPackageResource({
+    packageManifest: materialized.packageManifest,
+    files: materialized.files,
     loadTextures: options.loadTextures,
+  });
+  const virtual = await resolveSymbolPackageFiles({
+    packageManifest: materialized.packageManifest,
+    files: materialized.files,
   });
   return Object.freeze({
     resource,
     files: new Map(
-      [...files].map(([path, bytes]) => [path, bytes.slice()] as const),
+      [...virtual].map(([path, bytes]) => [path, bytes.slice()] as const),
     ),
   });
 }
 
 export function assertStrictSymbolsPackagePaths(
-  files: ReadonlyMap<string, Uint8Array>,
+  _files: ReadonlyMap<string, Uint8Array>,
 ): void {
-  const legacyPath = [...files.keys()].find(
-    (path) => path !== path.toLowerCase(),
-  );
-  if (legacyPath) {
-    throw new Error(
-      `旧版 symbols package 包含非小写路径 ${legacyPath}；请先在 Symbols Editor 中导入并重新导出，再导入 Game Layout Editor。`,
-    );
-  }
+  // Kept as a compatibility export. Filename keys deliberately preserve case.
 }
 
 export async function importSymbolsZip(

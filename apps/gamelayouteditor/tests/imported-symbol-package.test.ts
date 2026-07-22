@@ -9,6 +9,7 @@ const encode = (value: unknown) =>
   new TextEncoder().encode(`${JSON.stringify(value)}\n`);
 const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1]);
 const canonicalImagePath = `assets/${"a".repeat(64)}.png`;
+const canonicalImageKey = `${"a".repeat(64)}.png`;
 
 describe("layout editor symbols package import", () => {
   it("reads the same strict package and exposes deterministic display metadata", async () => {
@@ -49,18 +50,18 @@ describe("layout editor symbols package import", () => {
     expect(
       [...imported.files.keys()].every((path) => path === path.toLowerCase()),
     ).toBe(true);
-    expect(resource.packageManifest.resources).toEqual([canonicalImagePath]);
+    expect(resource.packageManifest.resources).toEqual([canonicalImageKey]);
     expect(resource.rawSymbolManifest).toMatchObject({
       symbols: {
         A: {
-          normal: `./${canonicalImagePath}`,
+          normal: `./${canonicalImageKey}`,
         },
       },
     });
     resource.destroy();
   });
 
-  it("directs legacy uppercase packages through Symbols Editor migration", async () => {
+  it("migrates legal uppercase filename keys without lowercasing", async () => {
     const packageManifest = {
       version: 1,
       kind: "symbol-package",
@@ -93,9 +94,16 @@ describe("layout editor symbols package import", () => {
       "AF.disabled.png": png,
     });
 
-    await expect(
-      importSymbolsZipWithFiles(zip, { loadTextures: false }),
-    ).rejects.toThrow(/请先在 Symbols Editor 中导入并重新导出/);
+    const imported = await importSymbolsZipWithFiles(zip, {
+      loadTextures: false,
+    });
+    expect(imported.resource.packageManifest.resources).toEqual([
+      "AF.disabled.png",
+    ]);
+    expect(imported.resource.rawSymbolManifest).toMatchObject({
+      symbols: { AF: { disabled: "./AF.disabled.png" } },
+    });
+    imported.resource.destroy();
   });
 
   it("imports a transparent-only package with an empty resource closure", async () => {

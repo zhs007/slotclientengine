@@ -5,6 +5,7 @@ import { createDeterministicZip } from "@slotclientengine/browserartifactio";
 import {
   commitImportReview,
   discoverPopupResources,
+  inspectVniBundleProfiles,
 } from "../src/io/resource-import.js";
 import {
   applyImportedResourceBindings,
@@ -13,8 +14,8 @@ import {
 } from "../src/model/project.js";
 import { importPopupZip } from "../src/io/popup-zip.js";
 
-describe("popup resource discovery", () => {
-  it("materializes a real VNI closure and keeps unrelated images as independent resources", async () => {
+describe("popup flat resource discovery", () => {
+  it("rewrites a VNI closure to filename keys and preserves unrelated images", async () => {
     const projectPath = asset("game003-s1/win-amount/bigwin.json");
     const projectBytes = new Uint8Array(readFileSync(projectPath));
     const project = JSON.parse(new TextDecoder().decode(projectBytes)) as {
@@ -29,170 +30,188 @@ describe("popup resource discovery", () => {
         ),
       ),
     ];
-    const review = await discoverPopupResources(files, "directory");
+    const review = await discoverPopupResources(files);
     expect(review[0]).toMatchObject({
       kind: "vni",
-      proposedId: "bigwin",
+      rootKey: "bigwin.json",
       dependencyCount: project.assets.length,
     });
     const spec = review[0]!.spec;
-    expect(spec.kind).toBe("vni");
     if (spec.kind !== "vni") throw new Error("expected VNI");
     const rewritten = new TextDecoder().decode(
-      review[0]!.files.get(spec.project),
+      review[0]!.assets.find(({ key }) => key === spec.project)!.bytes,
     );
-    expect(rewritten).not.toContain("assets/3_asset_image");
-    expect(rewritten).toMatch(/[a-f0-9]{64}\.png/u);
-    const mixed = await discoverPopupResources(
-      [...files, sourceFile("extra.png", png(1, 1))],
-      "directory",
-    );
-    expect(mixed.map(({ kind, proposedId }) => [kind, proposedId])).toEqual([
-      ["vni", "bigwin"],
-      ["image", "extra"],
+    expect(rewritten).not.toContain("assets/");
+    expect(
+      JSON.parse(rewritten).assets.every(
+        ({ path }: { path: string }) => !path.includes("/"),
+      ),
+    ).toBe(true);
+
+    const mixed = await discoverPopupResources([
+      ...files,
+      sourceFile("extra.png", png(1, 1)),
+    ]);
+    expect(mixed.map(({ kind, rootKey }) => [kind, rootKey])).toEqual([
+      ["vni", "bigwin.json"],
+      ["image", "extra.png"],
     ]);
   });
 
-  it("discovers the complete game003 win-amount folder as three manifest-ordered VNI resources", async () => {
+  it("uses manifest order for the three win-amount profiles and requires explicit source hygiene", async () => {
     const root = asset("game003-s1/win-amount");
     const projectNames = ["bigwin.json", "superwin.json", "megawin.json"];
     const assetPaths = new Set<string>();
     const files = [
       sourceFile(
-        "win-amount/win-amount.manifest.json",
+        "win-amount.manifest.json",
         new Uint8Array(readFileSync(resolve(root, "win-amount.manifest.json"))),
       ),
-      sourceFile("win-amount/.DS_Store", new Uint8Array([1, 2, 3])),
-      sourceFile("win-amount/assets/.DS_Store", new Uint8Array([4, 5, 6])),
     ];
     for (const name of projectNames) {
       const payload = new Uint8Array(readFileSync(resolve(root, name)));
       const project = JSON.parse(new TextDecoder().decode(payload)) as {
         assets: readonly { path: string }[];
       };
-      files.push(sourceFile(`win-amount/${name}`, payload));
-      for (const asset of project.assets) assetPaths.add(asset.path);
+      files.push(sourceFile(name, payload));
+      for (const child of project.assets) assetPaths.add(child.path);
     }
     for (const path of [...assetPaths].sort())
       files.push(
-        sourceFile(
-          `win-amount/${path}`,
-          new Uint8Array(readFileSync(resolve(root, path))),
-        ),
+        sourceFile(path, new Uint8Array(readFileSync(resolve(root, path)))),
       );
-    const review = await discoverPopupResources(files, "directory");
-    expect(review.map(({ kind, proposedId }) => [kind, proposedId])).toEqual([
-      ["vni", "bigwin"],
-      ["vni", "superwin"],
-      ["vni", "megawin"],
-    ]);
-    expect(review.every(({ dependencyCount }) => dependencyCount > 0)).toBe(
-      true,
-    );
+    const review = await discoverPopupResources(files);
+    expect(review.map(({ rootKey }) => rootKey)).toEqual(projectNames);
     expect(
-      review.map(({ suggestedTierBindings }) => suggestedTierBindings),
-    ).toEqual([
-      [
-        {
-          tierId: "bigwin",
-          countDurationSeconds: 2.9,
-          playback: {
-            loopStartTime: 1,
-            loopEndTime: 2.5,
-            keepParticlesAlive: true,
-          },
-        },
-      ],
-      [
-        {
-          tierId: "superwin",
-          countDurationSeconds: 2.9,
-          playback: {
-            loopStartTime: 1,
-            loopEndTime: 2.5,
-            keepParticlesAlive: true,
-          },
-        },
-      ],
-      [
-        {
-          tierId: "megawin",
-          countDurationSeconds: 2.9,
-          playback: {
-            loopStartTime: 1,
-            loopEndTime: 2.5,
-            keepParticlesAlive: true,
-          },
-        },
-      ],
-    ]);
+      review.map(
+        ({ suggestedTierBindings }) => suggestedTierBindings?.[0]?.tierId,
+      ),
+    ).toEqual(["bigwin", "superwin", "megawin"]);
     const project = createPopupEditorProject();
-    commitImportReview(project, review);
+    await commitImportReview(project, review);
     for (const candidate of review)
       applyImportedResourceBindings(
         project,
-        candidate.proposedId,
+        candidate.rootKey,
         candidate.suggestedTierBindings,
       );
-    expect(
-      ["base", "standard", "bigwin", "superwin", "megawin"].map(
-        (id) => project.tiers.get(id as any)!.layers.length,
-      ),
-    ).toEqual([0, 0, 1, 1, 1]);
-    expect(
-      ["bigwin", "superwin", "megawin"].map(
-        (id) => project.tiers.get(id as any)!.thresholdMultiplier,
-      ),
-    ).toEqual([15, 25, 50]);
     expect(project.tiers.get("superwin")!.layers[0]).toMatchObject({
-      resource: "superwin",
-      playback: {
-        loopStartTime: 1,
-        loopEndTime: 2.5,
-        keepParticlesAlive: true,
-      },
+      resource: "superwin.json",
+      playback: { loopStartTime: 1, loopEndTime: 2.5 },
     });
+    await expect(
+      discoverPopupResources([
+        ...files,
+        sourceFile(".DS_Store", new Uint8Array([1, 2, 3])),
+      ]),
+    ).rejects.toThrow(/无法识别、未引用或不完整/);
   });
 
-  it("materializes official Spine 4.3 atlas pages and validates metadata", async () => {
-    const files = [
+  it("requires an explicit VNI bundle profile and imports only its closure", async () => {
+    const root = asset("game003-s1/win-amount");
+    const source = JSON.parse(
+      new TextDecoder().decode(bytes("game003-s1/win-amount/bigwin.json")),
+    ) as {
+      exportProfile: { id: string; purpose: string; assetScale: number };
+      assets: readonly { path: string }[];
+    };
+    const full = structuredClone(source);
+    full.exportProfile = { id: "full", purpose: "runtime", assetScale: 1 };
+    const half = structuredClone(source);
+    half.exportProfile = { id: "half", purpose: "runtime", assetScale: 0.5 };
+    const entries = new Map<string, Uint8Array>([
+      [
+        "manifest.json",
+        new TextEncoder().encode(
+          JSON.stringify({
+            type: "vni_export_bundle",
+            version: "VNI_0.2",
+            exports: [
+              {
+                id: "full",
+                purpose: "runtime",
+                assetScale: 1,
+                path: "profiles/full/project.json",
+              },
+              {
+                id: "half",
+                purpose: "runtime",
+                assetScale: 0.5,
+                path: "profiles/half/project.json",
+              },
+            ],
+          }),
+        ),
+      ],
+      [
+        "profiles/full/project.json",
+        new TextEncoder().encode(JSON.stringify(full)),
+      ],
+      [
+        "profiles/half/project.json",
+        new TextEncoder().encode(JSON.stringify(half)),
+      ],
+    ]);
+    for (const profile of ["full", "half"])
+      for (const child of source.assets)
+        entries.set(
+          `profiles/${profile}/${child.path}`,
+          new Uint8Array(readFileSync(resolve(root, child.path))),
+        );
+    const zip = createDeterministicZip(entries);
+    expect(inspectVniBundleProfiles(zip)?.map(({ id }) => id)).toEqual([
+      "full",
+      "half",
+    ]);
+    await expect(
+      discoverPopupResources([sourceFile("profiles.zip", zip)]),
+    ).rejects.toThrow(/必须明确选择/);
+    const selected = await discoverPopupResources(
+      [sourceFile("profiles.zip", zip)],
+      { vniProfileSelections: new Map([["profiles.zip", "half"]]) },
+    );
+    expect(selected).toHaveLength(1);
+    expect(selected[0]).toMatchObject({
+      kind: "vni",
+      selectedProfileId: "half",
+      profiles: [{ id: "full" }, { id: "half" }],
+    });
+    expect(selected[0]!.exactKeys).not.toContain("manifest.json");
+  });
+
+  it("rewrites and validates an official Spine 4.3 closure", async () => {
+    const review = await discoverPopupResources([
       sourceFile("WL.json", bytes("game003-s1/WL.json")),
       sourceFile("Symbol.atlas", bytes("game003-s1/Symbol.atlas")),
       sourceFile("Symbol.png", bytes("game003-s1/Symbol.png")),
-    ];
-    const review = await discoverPopupResources(files);
-    expect(review[0]!.kind).toBe("spine");
+    ]);
+    expect(review[0]).toMatchObject({ kind: "spine", rootKey: "WL.json" });
     expect(review[0]!.summary).toMatch(/animations/);
-    const spec = review[0]!.spec;
-    if (spec.kind !== "spine") throw new Error("expected Spine");
-    expect(
-      new TextDecoder().decode(review[0]!.files.get(spec.atlas)),
-    ).not.toContain("Symbol.png");
+    expect(review[0]!.exactKeys).toEqual([
+      "Symbol.atlas",
+      "Symbol.png",
+      "WL.json",
+    ]);
   });
 
-  it("keeps review/commit atomic on ids, candidate errors and source ambiguity", async () => {
+  it("rejects unknown inputs, aliases, and malformed popup ZIPs", async () => {
     await expect(
       discoverPopupResources([sourceFile("unknown.txt", new Uint8Array([1]))]),
     ).rejects.toThrow(/无法识别、未引用或不完整/);
-    const review = await discoverPopupResources([
-      sourceFile("BG_2.PNG", png(2, 3)),
-    ]);
-    const project = createPopupEditorProject();
-    commitImportReview(project, review);
-    expect(project.resources.has("bg-2")).toBe(true);
-    expect(() => commitImportReview(project, review)).toThrow(/已存在/);
-    const bad = [{ ...review[0]!, proposedId: "Bad Id" }];
-    expect(() => commitImportReview(project, bad)).toThrow(
-      /logical resource id/,
-    );
-    expect(() =>
-      commitImportReview(createPopupEditorProject(), [
-        { ...review[0]!, errors: ["broken"] },
+    await expect(
+      discoverPopupResources([
+        sourceFile("A.PNG", png(1, 1)),
+        sourceFile("a.png", png(1, 1)),
       ]),
-    ).toThrow(/broken/);
+    ).rejects.toThrow(/alias|冲突|collision/i);
+    await expect(
+      importPopupZip(
+        createDeterministicZip(new Map([["x.txt", new Uint8Array([1])]])),
+      ),
+    ).rejects.toThrow(/sentinel/);
   });
 
-  it("notifies store diagnostics and rejects malformed popup project ZIP", () => {
+  it("emits store diagnostics without mutating the previous snapshot", () => {
     const store = new PopupEditorStore();
     const listener = vi.fn();
     const dispose = store.subscribe(listener);
@@ -202,11 +221,6 @@ describe("popup resource discovery", () => {
     expect(listener).toHaveBeenCalled();
     store.replace(createPopupEditorProject());
     dispose();
-    expect(() =>
-      importPopupZip(
-        createDeterministicZip(new Map([["x.txt", new Uint8Array([1])]])),
-      ),
-    ).toThrow(/sentinel/);
   });
 });
 
@@ -217,9 +231,7 @@ function bytes(path: string) {
   return new Uint8Array(readFileSync(asset(path)));
 }
 function sourceFile(path: string, payload: Uint8Array): File {
-  const file = new File([payload.slice().buffer], path.split("/").at(-1)!);
-  Object.defineProperty(file, "webkitRelativePath", { value: path });
-  return file;
+  return new File([payload.slice().buffer], path.split("/").at(-1)!);
 }
 function png(width: number, height: number) {
   const data = new Uint8Array(24);

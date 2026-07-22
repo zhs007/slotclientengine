@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createSymbolPackageResource,
+  materializeMappedSymbolPackageContents,
   materializeSymbolPackageContents,
   materializeSymbolPackageFiles,
   parseSymbolPackageManifest,
@@ -10,6 +11,79 @@ const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 7]);
 const webp = new Uint8Array([82, 73, 70, 70, 0, 0, 0, 0, 87, 69, 66, 80]);
 
 describe("symbol package materialization", () => {
+  it("preserves mapped JPG/JPEG/WebP keys and rewrites image-string internals", async () => {
+    const packageManifest = parseSymbolPackageManifest({
+      version: 1,
+      kind: "symbol-package",
+      id: "mapped-images",
+      cellSize: { width: 160, height: 160 },
+      entrypoints: {
+        gameConfig: "gameconfig.json",
+        symbolManifest: "symbol-state-textures.manifest.json",
+      },
+      resources: ["A.jpeg", "A.jpg", "A.webp"],
+    });
+    const rawGameConfig = {
+      paytable: { "0": { code: 0, symbol: "A", pays: [1] } },
+      symbolCodes: { A: 0 },
+      reels: { main: [[0]] },
+    };
+    const rawSymbolManifest = {
+      version: 1,
+      states: ["disabled", "spinBlur", "win"],
+      symbols: {
+        A: {
+          normal: "./A.jpg",
+          disabled: "./A.jpg",
+          spinBlur: "./A.jpeg",
+          win: "./A.webp",
+          scale: 1,
+        },
+      },
+    };
+    const imageString = {
+      version: 1,
+      kind: "image-string",
+      id: "digits",
+      metrics: { lineHeight: 1, letterSpacing: 0 },
+      glyphs: {
+        "0": {
+          path: "glyph.png",
+          size: { width: 1, height: 1 },
+          offset: { x: 0, y: 0 },
+        },
+      },
+      fixedAdvanceGroups: [],
+    };
+    const inputs = new Map<string, Uint8Array>([
+      ["A.jpg", new Uint8Array([0xff, 0xd8, 0xff])],
+      ["A.jpeg", new Uint8Array([0xff, 0xd8, 0xff, 1])],
+      ["A.webp", webp],
+      ["nested/image-string.manifest.json", encode(imageString)],
+      ["nested/glyph.png", png],
+    ]);
+    const mapped = await materializeMappedSymbolPackageContents({
+      packageManifest,
+      rawGameConfig,
+      rawSymbolManifest,
+      assets: inputs,
+    });
+    expect(mapped.packageManifest.resources).toEqual([
+      "A.jpeg",
+      "A.jpg",
+      "A.webp",
+    ]);
+
+    await expect(
+      materializeMappedSymbolPackageContents({
+        packageManifest,
+        rawGameConfig,
+        rawSymbolManifest,
+        assets: new Map([...inputs, ["unsupported.bin", new Uint8Array()]]),
+      }),
+    ).rejects.toThrow(/extension/);
+  });
+
   it("rewrites legacy uppercase resource paths to a lowercase hash-flat closure", async () => {
     const packageManifest = parseSymbolPackageManifest({
       version: 1,
@@ -95,6 +169,25 @@ describe("symbol package materialization", () => {
       ]),
     });
     expect(fromLegacyFiles.files).toEqual(result.files);
+
+    const mapped = await materializeMappedSymbolPackageContents({
+      packageManifest,
+      rawGameConfig: result.rawGameConfig,
+      rawSymbolManifest: {
+        version: 1,
+        states: ["disabled"],
+        symbols: {
+          AF: {
+            normal: { kind: "transparent", width: 160, height: 160 },
+            disabled: "./AF.disabled.png",
+            scale: 1,
+          },
+        },
+      },
+      assets: new Map([["AF.disabled.png", png]]),
+    });
+    expect(mapped.packageManifest.resources).toEqual(["AF.disabled.png"]);
+    expect(mapped.files.has("assets.map.json")).toBe(true);
   });
 
   it("prepares hash-flat Spine paths after materializing a legacy animation", async () => {
@@ -175,6 +268,25 @@ describe("symbol package materialization", () => {
     });
     expect(prepared.displaySymbols).toEqual(["AF"]);
     prepared.destroy();
+
+    const mapped = await materializeMappedSymbolPackageContents({
+      packageManifest,
+      rawGameConfig,
+      rawSymbolManifest,
+      assets: new Map([
+        ["AF.json", encode(spineSkeleton())],
+        ["AF.atlas", atlas("AF.png")],
+        ["AF.png", webp],
+      ]),
+    });
+    expect(mapped.packageManifest.resources).toEqual([
+      "AF.atlas",
+      "AF.json",
+      "AF.png",
+    ]);
+    expect(mapped.rawSymbolManifest).toMatchObject({
+      symbols: { AF: { animations: { appear: { atlas: "./AF.atlas" } } } },
+    });
   });
 
   it("prepares hash-flat VNI paths after materializing a legacy animation", async () => {
@@ -276,6 +388,23 @@ describe("symbol package materialization", () => {
     });
     expect(prepared.displaySymbols).toEqual(["A"]);
     prepared.destroy();
+
+    const mapped = await materializeMappedSymbolPackageContents({
+      packageManifest,
+      rawGameConfig,
+      rawSymbolManifest,
+      assets: new Map([
+        ["animation/project.json", encode(project)],
+        ["animation/assets/image.png", png],
+      ]),
+    });
+    expect(mapped.packageManifest.resources).toEqual([
+      "image.png",
+      "project.json",
+    ]);
+    expect(mapped.rawSymbolManifest).toMatchObject({
+      symbols: { A: { animations: { win: { project: "./project.json" } } } },
+    });
   });
 
   it("upgrades legacy full-value image prefixes to exact hash-flat mappings", async () => {

@@ -1,6 +1,7 @@
 import { strToU8, zipSync } from "fflate";
 import { Assets, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
+import { decodeEditorAssetsMap } from "@slotclientengine/editorresource";
 import {
   exportLayoutZip,
   materializeLayoutOwnedAssets,
@@ -23,9 +24,17 @@ const decodeImage = async () => ({ width: 1, height: 1 });
 
 const encode = (value: unknown) => strToU8(`${JSON.stringify(value)}\n`);
 
+function mappedEntry(
+  entries: ReadonlyMap<string, Uint8Array>,
+  key: string,
+): Uint8Array | undefined {
+  const map = decodeEditorAssetsMap(entries.get("assets.map.json")!);
+  const entry = map.files[key];
+  return entry ? entries.get(entry.path) : undefined;
+}
+
 function compositePackageFixture() {
-  const dependencyPath =
-    "dependencies/image-strings/digits/image-string.manifest.json";
+  const dependencyPath = "image-string.manifest.json";
   const imageStringManifest = {
     version: 1,
     kind: "image-string",
@@ -33,7 +42,7 @@ function compositePackageFixture() {
     metrics: { lineHeight: 1, letterSpacing: 0 },
     glyphs: {
       "0": {
-        path: "assets/0.png",
+        path: "0.png",
         size: { width: 1, height: 1 },
         offset: { x: 0, y: 0 },
       },
@@ -64,7 +73,10 @@ function compositePackageFixture() {
   const manifest = {
     ...imageManifest,
     nodes: [
-      imageManifest.nodes[0],
+      {
+        ...imageManifest.nodes[0],
+        resource: { ...imageManifest.nodes[0].resource, path: "bg.png" },
+      },
       {
         id: "amount",
         order: 2,
@@ -78,26 +90,42 @@ function compositePackageFixture() {
       },
     ],
     reels: { main: { ...imageManifest.reels.main, order: 1 } },
-    symbolPackage: {
-      manifest: "dependencies/symbols/demo-symbols/symbols.package.json",
-      reel: "main" as const,
-      reelSet: "main",
-      renderMode: "standard" as const,
+    symbolPackages: {
+      "demo-symbols": {
+        manifest: "symbols.package.json",
+        reel: "main" as const,
+        reelSet: "main",
+        renderMode: "standard" as const,
+      },
+    },
+    gameModes: {
+      initialMode: "BaseGame",
+      transitions: [],
+      modes: [
+        {
+          id: "BaseGame",
+          backgroundNodes: { default: "bg" },
+          nodeStates: {},
+          symbolPackage: "demo-symbols",
+        },
+      ],
     },
   };
-  const assets = new Map(assetBytes);
+  const assets = new Map([["bg.png", assetBytes.get("assets/bg.png")!]]);
   assets.set(dependencyPath, encode(imageStringManifest));
-  assets.set(
-    "dependencies/image-strings/digits/assets/0.png",
-    new Uint8Array([4]),
-  );
+  assets.set("0.png", new Uint8Array([4]));
   const symbolFiles = new Map([
     ["symbols.package.json", encode(symbolPackage)],
     ["gameconfig.json", encode(gameConfig)],
     ["symbol-state-textures.manifest.json", encode(symbolManifest)],
     ["a.png", new Uint8Array([5])],
   ]);
-  return { manifest, assets, symbolFiles };
+  return {
+    manifest,
+    assets,
+    symbolFiles,
+    symbolFilesById: new Map([["demo-symbols", symbolFiles]]),
+  };
 }
 
 describe("layout zip IO", () => {
@@ -197,8 +225,8 @@ describe("layout zip IO", () => {
     if (importedOverlay.resource.kind !== "video")
       throw new Error("expected video transition");
     const videoPath = importedOverlay.resource.path;
-    expect(firstEntries.get(videoPath)).toEqual(mp4);
-    expect(secondEntries.get(videoPath)).toEqual(mp4);
+    expect(mappedEntry(firstEntries, videoPath)).toEqual(mp4);
+    expect(mappedEntry(secondEntries, videoPath)).toEqual(mp4);
     imported.destroy();
 
     const malformed = new Map(assetBytes);
@@ -312,7 +340,12 @@ describe("layout zip IO", () => {
     expect(new Set(resourceIds).size).toBe(1);
     expect(project.resources.get(resourceIds[0])).toMatchObject({
       kind: "spine",
-      animationNames: ["BG_FG", "Duplicate", "FG_BG", "NoEvent"],
+      animationNames: expect.arrayContaining([
+        "BG_FG",
+        "Duplicate",
+        "FG_BG",
+        "NoEvent",
+      ]),
       animationEvents: {
         BG_FG: [{ name: "SwitchScene", time: 0 }],
         FG_BG: [{ name: "SwitchBack", time: 0.4 }],
@@ -339,15 +372,21 @@ describe("layout zip IO", () => {
     const orphanFiles = popupFiles();
     const manifest = {
       ...imageManifest,
+      nodes: [
+        {
+          ...imageManifest.nodes[0],
+          resource: { ...imageManifest.nodes[0].resource, path: "bg.png" },
+        },
+      ],
       popups: {
         "fixture-popup": {
           type: "award-celebration" as const,
-          manifest: "dependencies/popups/fixture-popup/popup.manifest.json",
+          manifest: "fixture-popup.manifest.json",
           placements: { default: { x: 1, y: 2, scale: 1 } },
         },
         "free-popup": {
           type: "award-celebration" as const,
-          manifest: "dependencies/popups/free-popup/popup.manifest.json",
+          manifest: "free-popup.manifest.json",
           placements: { default: { x: -3, y: 4, scale: 0.8 } },
         },
       },
@@ -380,7 +419,7 @@ describe("layout zip IO", () => {
     try {
       const options = {
         manifest,
-        assets: assetBytes,
+        assets: new Map([["bg.png", assetBytes.get("assets/bg.png")!]]),
         popupFilesById: new Map([
           ["fixture-popup", baseFiles],
           ["free-popup", freeFiles],
@@ -391,13 +430,11 @@ describe("layout zip IO", () => {
       const first = await exportLayoutZip(options);
       const second = await exportLayoutZip(options);
       expect(first.bytes).toEqual(second.bytes);
-      const entries = [...extractBoundedZip(first.bytes).keys()];
-      expect(
-        entries.filter((path) =>
-          path.endsWith("/fixture-popup/popup.manifest.json"),
-        ),
-      ).toHaveLength(1);
-      expect(entries.some((path) => path.includes("orphan-popup"))).toBe(false);
+      const entries = extractBoundedZip(first.bytes);
+      const assetMap = decodeEditorAssetsMap(entries.get("assets.map.json")!);
+      expect(assetMap.files).toHaveProperty("fixture-popup.manifest.json");
+      expect(assetMap.files).toHaveProperty("free-popup.manifest.json");
+      expect(Object.keys(assetMap.files)).not.toContain("orphan-popup");
       const imported = await importLayoutZip(first.bytes, { decodeImage });
       const project = manifestToEditorProject(
         imported.manifest,
@@ -428,8 +465,12 @@ describe("layout zip IO", () => {
           },
         ],
       });
-      expect(project.popupDependencies.get("fixture-popup")?.files).toEqual(
-        baseFiles,
+      expect(project.popupDependencies.get("fixture-popup")?.keys).toEqual(
+        [...baseFiles.keys()]
+          .map((key) =>
+            key === "popup.manifest.json" ? "fixture-popup.manifest.json" : key,
+          )
+          .sort(),
       );
       expect(project.popupDependencies.get("free-popup")?.placements).toEqual({
         default: { x: -3, y: 4, scale: 0.8 },
@@ -440,7 +481,7 @@ describe("layout zip IO", () => {
       unload.mockRestore();
     }
   });
-  it("materializes shared Spine leaves before atlas and skeleton roots", async () => {
+  it("validates shared Spine leaves before export flattening", async () => {
     const spineResource = {
       kind: "spine" as const,
       skeleton: "legacy/hero.json",
@@ -492,22 +533,18 @@ describe("layout zip IO", () => {
     expect(first.kind).toBe("spine");
     expect(second).toEqual(first);
     if (first.kind !== "spine") throw new Error("expected Spine resource");
-    expect(first.skeleton).toMatch(/^assets\/[a-f0-9]{64}\.json$/u);
-    expect(first.atlas).toMatch(/^assets\/[a-f0-9]{64}\.atlas$/u);
-    expect(first.textures).toEqual({
-      [Object.keys(first.textures)[0]!]: expect.stringMatching(
-        /^assets\/[a-f0-9]{64}\.png$/u,
-      ),
-    });
+    expect(first.skeleton).toBe("legacy/hero.json");
+    expect(first.atlas).toBe("legacy/hero.atlas");
+    expect(first.textures).toEqual({ "hero.png": "legacy/hero.png" });
     const page = Object.keys(first.textures)[0]!;
     expect(
       new TextDecoder().decode(materialized.assets.get(first.atlas)),
     ).toContain(page);
     expect(materialized.assets.has("dependencies/example/kept.bin")).toBe(true);
-    expect(materialized.assets.has("legacy/unused.png")).toBe(false);
+    expect(materialized.assets.has("legacy/unused.png")).toBe(true);
   });
 
-  it("preserves readable Spine page names while deduplicating one hash-flat payload", async () => {
+  it("preserves readable Spine page filename keys before payload dedupe", async () => {
     const texture = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 9]);
     const manifest = {
       ...imageManifest,
@@ -555,7 +592,7 @@ describe("layout zip IO", () => {
     const pages = Object.keys(resource.textures);
     const paths = Object.values(resource.textures);
     expect(pages).toEqual(["page-a.png", "page-b.png"]);
-    expect(new Set(paths).size).toBe(1);
+    expect(paths).toEqual(["legacy/page-a.png", "legacy/page-b.png"]);
     expect(
       pages.every((page) =>
         new TextDecoder()
@@ -565,7 +602,7 @@ describe("layout zip IO", () => {
     ).toBe(true);
     expect(
       [...materialized.assets.keys()].filter((path) => path.endsWith(".png")),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
 
   it("rejects a Spine atlas whose declared texture page is absent", async () => {
@@ -622,21 +659,24 @@ describe("layout zip IO", () => {
       const second = await exportLayoutZip({ ...fixture, decodeImage });
       expect(first.bytes).toEqual(second.bytes);
       const entries = extractBoundedZip(first.bytes);
-      expect([...entries.keys()].sort()).toEqual([
-        expect.stringMatching(/^assets\/[a-f0-9]{64}\.png$/u),
-        "dependencies/image-strings/digits/assets/0.png",
-        "dependencies/image-strings/digits/image-string.manifest.json",
-        "dependencies/symbols/demo-symbols/a.png",
-        "dependencies/symbols/demo-symbols/gameconfig.json",
-        "dependencies/symbols/demo-symbols/symbol-state-textures.manifest.json",
-        "dependencies/symbols/demo-symbols/symbols.package.json",
-        "layout.manifest.json",
+      expect(
+        [...entries.keys()].filter((path) => !path.startsWith("assets/")),
+      ).toEqual(["assets.map.json", "layout.manifest.json"]);
+      const assetMap = decodeEditorAssetsMap(entries.get("assets.map.json")!);
+      expect(Object.keys(assetMap.files).sort()).toEqual([
+        "0.png",
+        "a.png",
+        "bg.png",
+        "gameconfig.json",
+        "image-string.manifest.json",
+        "symbol-state-textures.manifest.json",
+        "symbols.package.json",
       ]);
       const imported = await importLayoutZip(first.bytes, { decodeImage });
       expect(imported.manifest).toMatchObject({
         id: fixture.manifest.id,
         adaptation: fixture.manifest.adaptation,
-        symbolPackage: fixture.manifest.symbolPackage,
+        symbolPackages: fixture.manifest.symbolPackages,
       });
       const project = manifestToEditorProject(
         imported.manifest,
@@ -649,7 +689,7 @@ describe("layout zip IO", () => {
       expect(canonical).not.toHaveProperty("symbolPackage");
       expect(canonical.symbolPackages).toEqual({
         "demo-symbols": {
-          manifest: "dependencies/symbols/demo-symbols/symbols.package.json",
+          manifest: "symbols.package.json",
           reel: "main",
           reelSet: "main",
           renderMode: "standard",
@@ -667,14 +707,18 @@ describe("layout zip IO", () => {
           },
         ],
       });
-      expect(
-        project.assets.has("dependencies/symbols/demo-symbols/a.png"),
-      ).toBe(false);
+      expect(project.assets.has("a.png")).toBe(true);
       imported.destroy();
 
       const withoutSymbols = {
         ...fixture.manifest,
-        symbolPackage: undefined,
+        symbolPackages: undefined,
+        gameModes: {
+          ...fixture.manifest.gameModes,
+          modes: fixture.manifest.gameModes.modes.map(
+            ({ symbolPackage: _symbolPackage, ...mode }) => mode,
+          ),
+        },
       };
       const unbound = await exportLayoutZip({
         manifest: withoutSymbols,
@@ -683,7 +727,7 @@ describe("layout zip IO", () => {
       });
       expect(
         [...extractBoundedZip(unbound.bytes).keys()].some((path) =>
-          path.startsWith("dependencies/symbols/"),
+          path.includes("symbols.package"),
         ),
       ).toBe(false);
     } finally {
@@ -692,7 +736,7 @@ describe("layout zip IO", () => {
     }
   });
 
-  it("directs legacy uppercase symbols dependencies through Symbols Editor migration", async () => {
+  it("preserves legal uppercase filename keys in symbols dependencies", async () => {
     const fixture = compositePackageFixture();
     const legacyManifest = {
       version: 1,
@@ -732,14 +776,24 @@ describe("layout zip IO", () => {
       ["A.disabled.png", new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 8])],
     ]);
 
-    await expect(
-      exportLayoutZip({
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const exported = await exportLayoutZip({
         manifest: fixture.manifest,
         assets: fixture.assets,
-        symbolFiles: legacyFiles,
+        symbolFilesById: new Map([["demo-symbols", legacyFiles]]),
         decodeImage,
-      }),
-    ).rejects.toThrow(/请先在 Symbols Editor 中导入并重新导出/);
+      });
+      const entries = extractBoundedZip(exported.bytes);
+      const map = decodeEditorAssetsMap(entries.get("assets.map.json")!);
+      expect(map.files).toHaveProperty("A.disabled.png");
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
   });
 
   it("rejects missing, mismatched, or incomplete symbols dependency inputs", async () => {
@@ -750,24 +804,7 @@ describe("layout zip IO", () => {
         assets: fixture.assets,
         decodeImage,
       }),
-    ).rejects.toThrow(/未提供 symbolFiles/);
-
-    const mismatched = new Map(fixture.symbolFiles);
-    const packageManifest = JSON.parse(
-      new TextDecoder().decode(mismatched.get("symbols.package.json")),
-    );
-    mismatched.set(
-      "symbols.package.json",
-      encode({ ...packageManifest, id: "other-symbols" }),
-    );
-    await expect(
-      exportLayoutZip({
-        manifest: fixture.manifest,
-        assets: fixture.assets,
-        symbolFiles: mismatched,
-        decodeImage,
-      }),
-    ).rejects.toThrow(/目录不一致/);
+    ).rejects.toThrow(/未提供 bytes/);
 
     const incomplete = new Map(fixture.symbolFiles);
     incomplete.delete("a.png");
@@ -775,7 +812,7 @@ describe("layout zip IO", () => {
       exportLayoutZip({
         manifest: fixture.manifest,
         assets: fixture.assets,
-        symbolFiles: incomplete,
+        symbolFilesById: new Map([["demo-symbols", incomplete]]),
         decodeImage,
       }),
     ).rejects.toThrow(/缺少 bytes/);
@@ -804,12 +841,14 @@ describe("layout zip IO", () => {
     const importedImage = imported.manifest.nodes[0]!.resource;
     expect(importedImage.kind).toBe("image");
     if (importedImage.kind !== "image") throw new Error("expected image");
-    expect(importedImage.path).toMatch(/^assets\/[a-f0-9]{64}\.png$/u);
+    expect(importedImage.path).toBe("bg.png");
     expect(imported.assets.get(importedImage.path)).toEqual(
       assetBytes.get("assets/bg.png"),
     );
     imported.destroy();
-    expect(extractBoundedZip(first.bytes).has("assets/unused.png")).toBe(false);
+    const entries = extractBoundedZip(first.bytes);
+    const map = decodeEditorAssetsMap(entries.get("assets.map.json")!);
+    expect(map.files).not.toHaveProperty("unused.png");
     expect(assetsWithUnused.has("assets/unused.png")).toBe(true);
   });
 

@@ -1,4 +1,5 @@
 import { assertCanonicalPackagePath } from "@slotclientengine/browserartifactio";
+import { assertEditorAssetKey } from "@slotclientengine/editorresource";
 import type {
   AwardCelebrationSpec,
   AwardCelebrationTier,
@@ -40,8 +41,13 @@ export function parsePopupManifest(value: unknown): PopupManifestV1 {
   const resourcesRecord = object(record.resources, "resources");
   const resources: Record<string, PopupResourceSpec> = {};
   for (const [resourceId, spec] of Object.entries(resourcesRecord)) {
-    identifier(resourceId, `resources.${resourceId}`);
-    resources[resourceId] = parseResource(spec, `resources.${resourceId}`);
+    const parsed = parseResource(spec, `resources.${resourceId}`);
+    resourceKey(resourceId, `resources.${resourceId}`);
+    if (resourceId.includes(".") && resourceId !== resourceRoot(parsed))
+      fail(
+        `resources.${resourceId} filename key 必须等于 resource root ${resourceRoot(parsed)}。`,
+      );
+    resources[resourceId] = parsed;
   }
   const awardCelebration = parseAwardCelebration(
     record.awardCelebration,
@@ -150,6 +156,7 @@ function parseResource(value: unknown, label: string): PopupResourceSpec {
     keys(record, ["kind", "manifest"], label);
     const manifest = path(record.manifest, `${label}.manifest`);
     if (
+      manifest.includes("/") &&
       !/^dependencies\/image-strings\/([a-z0-9]+(?:-[a-z0-9]+)*)\/image-string\.manifest\.json$/u.test(
         manifest,
       )
@@ -285,7 +292,7 @@ function parseLayer(
   const record = object(value, label);
   const kind = record.kind;
   const common = ["id", "kind", "order", "resource", "transform"];
-  const resourceId = identifier(record.resource, `${label}.resource`);
+  const resourceId = resourceKey(record.resource, `${label}.resource`);
   const resource = resources[resourceId];
   if (!resource || resource.kind !== kind)
     fail(`${label}.resource 必须引用相同 kind 的 resource。`);
@@ -433,16 +440,38 @@ function identifier(value: unknown, label: string): string {
 function path(value: unknown, label: string): string {
   if (typeof value !== "string") fail(`${label} must be string.`);
   try {
-    return assertCanonicalPackagePath(value, { requireLowercase: true });
+    return value.includes("/")
+      ? assertCanonicalPackagePath(value, { requireLowercase: true })
+      : assertEditorAssetKey(value);
   } catch (error) {
     fail(`${label}: ${message(error)}`);
   }
 }
 function owned(value: unknown, label: string, extension?: string): string {
   const result = path(value, label);
-  if (!OWNED_PATH.test(result) || (extension && !result.endsWith(extension)))
+  if (
+    (result.includes("/") && !OWNED_PATH.test(result)) ||
+    (extension && !result.toLowerCase().endsWith(extension))
+  )
     fail(`${label} must use full SHA-256 content-addressed assets path.`);
   return result;
+}
+
+function resourceKey(value: unknown, label: string): string {
+  if (typeof value !== "string") fail(`${label} must be string.`);
+  if (IDS.test(value)) return value;
+  try {
+    return assertEditorAssetKey(value);
+  } catch (error) {
+    fail(`${label}: ${message(error)}`);
+  }
+}
+
+function resourceRoot(resource: PopupResourceSpec): string {
+  if (resource.kind === "image") return resource.path;
+  if (resource.kind === "image-string") return resource.manifest;
+  if (resource.kind === "vni") return resource.project;
+  return resource.skeleton;
 }
 function printable(value: unknown, label: string): string {
   if (

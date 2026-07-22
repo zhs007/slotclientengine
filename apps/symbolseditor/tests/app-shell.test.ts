@@ -60,7 +60,7 @@ describe("symbols editor app shell", () => {
   it("keeps project-only actions disabled before a project exists", () => {
     expect(
       root.querySelector<HTMLButtonElement>("[data-upload]")?.disabled,
-    ).toBe(true);
+    ).toBe(false);
     expect(
       root.querySelector<HTMLButtonElement>("[data-export]")?.disabled,
     ).toBe(true);

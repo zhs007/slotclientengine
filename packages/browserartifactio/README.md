@@ -1,10 +1,7 @@
 # @slotclientengine/browserartifactio
 
-除 deterministic bounded ZIP 外，本包统一拥有 editor logical id 建议、Web Crypto
-完整 SHA-256、canonical media detection、bounded File/directory source index、
-exact/unique case-fold resolution、immutable blob collision guard 与 flat allocator。
-`assertNoPackagePathAliases` 允许 exact content path 复用，但拒绝 NFC/case alias。
+Browser-safe artifact IO primitives: bounded ZIP extraction, deterministic ZIP creation, canonical package-path validation, Web Crypto SHA-256, media sniffing, source-size preflight and revocable Object URL ownership.
 
-浏览器侧 artifact 基础设施：受限流式 ZIP 解压、确定性 ZIP 创建、package 路径安全与 Blob URL 生命周期。调用方必须显式提供自己的大小限制和大小写策略。
+Editor-facing filename-key workspace policy is owned by `@slotclientengine/editorresource`. The older logical-id suggestion APIs remain legacy compatibility only; the four editors must not call them. Directory upload is not an editor resource model.
 
-同时提供 editor 通用的 logical id 建议、Web Crypto 完整 SHA-256、bounded source index、exact/unique case-fold resolution 和 `assets/<digest>.<ext>` allocator；本包不包含 editor、Pixi、VNI 或 Spine 业务语义。
+Content-addressed payload paths use the complete lowercase digest: `assets/<64-hex>.<canonical-extension>`. This package allocates and validates physical paths but does not interpret image-string, Popup, Symbols, Scene Layout, Spine or VNI schemas.

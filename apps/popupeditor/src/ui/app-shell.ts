@@ -1,3 +1,4 @@
+import { extractBoundedZip } from "@slotclientengine/browserartifactio";
 import { formatPopupAmount } from "@slotclientengine/rendercore/popup";
 import type {
   AwardTierId,
@@ -6,19 +7,21 @@ import type {
 import {
   addLayer,
   applyImportedResourceBindings,
+  clonePopupEditorProject,
   createPopupAmountFormat,
   detectPopupAmountFormatPreset,
-  removeLogicalResource,
+  removePopupResource,
   PopupEditorStore,
   projectToManifest,
   resourceReferenceCount,
-  type PopupEditorLogicalResource,
   type PopupEditorProject,
 } from "../model/project.js";
 import {
   commitImportReview,
   discoverPopupResources,
-  replaceResourceFromReview,
+  inspectVniBundleProfiles,
+  POPUP_ZIP_LIMITS,
+  reviewPopupImportTransaction,
   type PopupImportReviewCandidate,
 } from "../io/resource-import.js";
 import { exportPopupZip, importPopupZip } from "../io/popup-zip.js";
@@ -149,25 +152,11 @@ export class PopupEditorApp {
     layout();
   }
   private bindWorkspace(project: PopupEditorProject) {
-    const files = this.#root.querySelector<HTMLInputElement>("#upload-files");
-    const folder = this.#root.querySelector<HTMLInputElement>("#upload-folder");
+    const files = this.#root.querySelector<HTMLInputElement>("#import-assets");
     files?.addEventListener(
       "change",
-      () => void this.reviewFiles([...(files.files ?? [])], "files"),
+      () => void this.reviewFiles([...(files.files ?? [])]),
     );
-    folder?.addEventListener(
-      "change",
-      () => void this.reviewFiles([...(folder.files ?? [])], "directory"),
-    );
-    this.#root
-      .querySelector<HTMLInputElement>("#import-project")
-      ?.addEventListener(
-        "change",
-        (event) =>
-          void this.importProject(
-            (event.currentTarget as HTMLInputElement).files?.[0],
-          ),
-      );
     this.#root
       .querySelector<HTMLButtonElement>("#export-project")
       ?.addEventListener("click", () => void this.exportProject());
@@ -197,26 +186,11 @@ export class PopupEditorApp {
         button.addEventListener("click", () =>
           this.safe(() =>
             this.#store.transact((draft) => {
-              const id = button.dataset.deleteResource!;
-              removeLogicalResource(draft, id);
+              const key = button.dataset.deleteResource!;
+              removePopupResource(draft, key);
             }),
           ),
         ),
-      );
-    this.#root
-      .querySelectorAll<HTMLInputElement>("[data-replace-resource]")
-      .forEach((input) =>
-        input.addEventListener("change", () => {
-          const id = input.dataset.replaceResource!;
-          void this.action(async () => {
-            const candidates = await discoverPopupResources([
-              ...(input.files ?? []),
-            ]);
-            if (candidates.length !== 1)
-              throw new Error("替换操作必须唯一识别一个 resource。");
-            this.showReview(candidates, id);
-          });
-        }),
       );
     this.#root
       .querySelectorAll<HTMLButtonElement>("[data-delete-layer]")
@@ -326,60 +300,81 @@ export class PopupEditorApp {
         ),
       );
   }
-  private async reviewFiles(
-    files: readonly File[],
-    sourceKind: "files" | "directory",
-  ) {
+  private async reviewFiles(files: readonly File[]) {
     await this.action(async () => {
-      const candidates = await discoverPopupResources(files, sourceKind);
-      this.showReview(candidates);
+      if (files.length === 1 && files[0]!.name.toLowerCase().endsWith(".zip")) {
+        const bytes = new Uint8Array(await files[0]!.arrayBuffer());
+        const entries = extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS });
+        if (entries.has("popup.manifest.json")) {
+          const imported = await importPopupZip(bytes);
+          if (
+            globalThis.window?.confirm?.(
+              `导入资源审查\n${files[0]!.name} · popup project · ${files[0]!.size} bytes\n\n确认原子替换当前项目？`,
+            ) !== false
+          )
+            this.#store.replace(imported);
+          return;
+        }
+      }
+      const profileSelections = new Map<string, string>();
+      for (const file of files) {
+        if (!file.name.toLowerCase().endsWith(".zip")) continue;
+        const profiles = inspectVniBundleProfiles(
+          new Uint8Array(await file.arrayBuffer()),
+        );
+        if (!profiles) continue;
+        if (profiles.length === 1) {
+          profileSelections.set(file.name, profiles[0]!.id);
+          continue;
+        }
+        const selected = globalThis.window?.prompt?.(
+          `${file.name} 包含多个 VNI profile，必须输入本次导入的 profile id：\n${profiles
+            .map(
+              ({ id, label, byteLength }) =>
+                `${id} · ${label} · ${byteLength} bytes`,
+            )
+            .join("\n")}`,
+        );
+        if (!selected || !profiles.some(({ id }) => id === selected))
+          throw new Error(`${file.name} 未明确选择有效 VNI profile。`);
+        profileSelections.set(file.name, selected);
+      }
+      const candidates = await discoverPopupResources(files, {
+        vniProfileSelections: profileSelections,
+      });
+      await this.showReview(candidates);
     });
   }
-  private showReview(
-    candidates: readonly PopupImportReviewCandidate[],
-    replacementId?: string,
-  ) {
+  private async showReview(candidates: readonly PopupImportReviewCandidate[]) {
+    const transaction = await reviewPopupImportTransaction(
+      this.#store.project,
+      candidates,
+    );
     const dialog = this.required<HTMLDialogElement>("import-review");
     const body = this.required("review-body");
-    body.innerHTML = candidates
-      .map(
-        (candidate, index) =>
-          `<article><label>Logical id <input data-review-id="${index}" value="${replacementId ?? candidate.proposedId}" ${replacementId ? "disabled" : ""}/></label><strong>${candidate.kind}</strong><span>${candidate.primarySource}</span><span>${candidate.summary}</span><span>${candidateBindingSummary(candidate)}</span><span>${candidate.dependencyCount} dependencies / ${candidate.files.size} files / ${[...candidate.files.values()].reduce((sum, bytes) => sum + bytes.byteLength, 0)} bytes</span></article>`,
-      )
-      .join("");
+    body.innerHTML =
+      candidates
+        .map(
+          (candidate) =>
+            `<article><strong>${candidate.rootKey}</strong><span>${candidate.kind}</span><span>${candidate.primarySource}</span><span>${candidate.summary}</span>${candidate.profiles ? `<span>VNI profile：${candidate.selectedProfileId} / ${candidate.profiles.map(({ id, label }) => `${id} (${label})`).join(", ")}</span>` : ""}<span>${candidateBindingSummary(candidate)}</span><span>${candidate.dependencyCount} dependencies / ${candidate.assets.length} filename keys / ${candidate.assets.reduce((sum, asset) => sum + asset.byteLength, 0)} bytes</span></article>`,
+        )
+        .join("") +
+      `<pre>${transaction.assets.items.map((item) => `${item.targetKey} · ${item.action}${item.references.length ? ` · 影响 ${item.references.map(({ location }) => location).join(", ")}` : ""}`).join("\n")}</pre>`;
     this.required("review-confirm").onclick = () =>
-      this.safe(() => {
-        body
-          .querySelectorAll<HTMLInputElement>("[data-review-id]")
-          .forEach((input) => {
-            candidates[Number(input.dataset.reviewId)]!.proposedId =
-              input.value;
-          });
-        this.#store.transact((draft) => {
-          if (replacementId)
-            replaceResourceFromReview(draft, replacementId, candidates[0]!);
-          else {
-            commitImportReview(draft, candidates);
-            for (const candidate of candidates)
-              applyImportedResourceBindings(
-                draft,
-                candidate.proposedId,
-                candidate.suggestedTierBindings,
-              );
-          }
-        });
+      void this.action(async () => {
+        const draft = clonePopupEditorProject(this.#store.project);
+        await commitImportReview(draft, candidates);
+        for (const candidate of candidates)
+          applyImportedResourceBindings(
+            draft,
+            candidate.rootKey,
+            candidate.suggestedTierBindings,
+          );
+        this.#store.replace(draft);
         dialog.close();
       });
     this.required("review-cancel").onclick = () => dialog.close();
     dialog.showModal();
-  }
-  private async importProject(file?: File) {
-    if (!file) return;
-    await this.action(async () => {
-      this.#store.replace(
-        importPopupZip(new Uint8Array(await file.arrayBuffer())),
-      );
-    });
   }
   private async exportProject() {
     await this.action(async () => {
@@ -421,13 +416,7 @@ function shell() {
   return `<header><h1>Popup Award Celebration Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><button id="preview-build">Build preview</button><button id="preview-play">Play / Replay</button><button id="preview-advance">Advance</button><button id="preview-dismiss">Dismiss</button><button id="preview-clear">Dismiss immediately</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认并应用建议绑定</button><button id="review-cancel">取消</button></dialog>`;
 }
 function resourcesMarkup(project: PopupEditorProject) {
-  return `<section class="resource-import-panel"><h2>资源</h2><p>文件夹可同时包含多组 VNI、Spine、图片和 standalone ImgNumber。ImgNumber 自动补齐尚未配置金额的档位；win-amount descriptor 的三份 VNI 只绑定同名档位；其它资源仅入库，由档位页显式添加。</p><div class="resource-actions"><label class="file-action">上传资源<input id="upload-files" type="file" multiple/></label><label class="file-action">上传文件夹<input id="upload-folder" type="file" webkitdirectory multiple/></label></div></section><div class="resource-list">${[...project.resources.values()].map((resource) => `<article class="card"><strong>${resource.id}</strong><span>${resource.kind}</span><small>${resourceSourceSummary(resource)}</small><details><summary>${resource.paths.length} production files</summary><code>${resource.paths.join("\n")}</code></details><span>${resourceReferenceCount(project, resource.id)} 个图层绑定</span><label>同类替换<input data-replace-resource="${resource.id}" type="file" multiple/></label><button data-delete-resource="${resource.id}">删除</button></article>`).join("") || '<p class="empty-state">尚无资源</p>'}</div>`;
-}
-function resourceSourceSummary(resource: PopupEditorLogicalResource) {
-  const names = resource.provenance.sourceNames;
-  if (!names.length) return "package import";
-  if (names.length <= 2) return names.join(", ");
-  return `${names.slice(0, 2).join(", ")} +${names.length - 2} files`;
+  return `<section class="resource-import-panel"><h2>扁平资源库</h2><p>图片、Spine、VNI、ImgNumber ZIP 与 Popup ZIP 统一从这里导入；filename key 保留原始拼写，同名不同 bytes 默认覆盖。</p><div class="resource-actions"><label class="file-action">导入资源<input id="import-assets" type="file" accept="image/png,image/webp,image/jpeg,.json,.atlas,.zip" multiple/></label></div></section><div class="resource-list">${[...project.resources.values()].map((resource) => `<article class="card"><strong>${resource.rootKey}</strong><span>${resource.kind}</span><details><summary>${resource.keys.length} filename keys</summary><code>${resource.keys.join("\n")}</code></details><span>${resourceReferenceCount(project, resource.rootKey)} 个图层绑定</span><button data-delete-resource="${resource.rootKey}">删除</button></article>`).join("") || '<p class="empty-state">尚无资源</p>'}</div>`;
 }
 function tiersMarkup(
   project: PopupEditorProject,
@@ -435,7 +424,7 @@ function tiersMarkup(
   betRaw: number,
 ) {
   const tier = project.tiers.get(active)!;
-  return `<nav class="tier-tabs" role="tablist" aria-label="获奖档位">${TIERS.map((id) => `<button role="tab" aria-selected="${id === active}" tabindex="${id === active ? 0 : -1}" data-tier="${id}" class="${id === active ? "active" : ""}"><span>${id}</span><small>${project.tiers.get(id)!.layers.length} 层</small></button>`).join("")}</nav><section class="tier-contract"><h2>累计档位合同</h2><p>base：0 &lt; win ≤ 1×bet；standard：1×bet &lt; win &lt; bigwin。达到某个阈值时进入该档，已达到的前序档位会依次累计播放。</p><div class="threshold-grid">${(["bigwin", "superwin", "megawin"] as const).map((id) => `<label><span>${id}</span><input data-threshold-tier="${id}" type="number" min="2" step="1" value="${project.tiers.get(id)!.thresholdMultiplier}"/><small>× bet</small></label>`).join("")}</div><p class="contract-example">当前倍数边界：1× / ${project.tiers.get("bigwin")!.thresholdMultiplier}× / ${project.tiers.get("superwin")!.thresholdMultiplier}× / ${project.tiers.get("megawin")!.thresholdMultiplier}×；等于阈值时进入对应档。</p><p id="tier-boundaries" class="raw-boundaries">${tierBoundarySummary(project, betRaw)}</p></section><section class="tier-editor"><h2>${active}</h2><p class="layer-order-help">order 数值越小越靠下，只控制当前档位内的图层顺序。</p><label>金额计数时长<input id="tier-duration" type="number" step="0.1" min="0" value="${tier.countDurationSeconds}"/><small>秒</small></label><div class="layer-add"><select id="layer-resource">${[...project.resources.values()].map((resource) => `<option value="${resource.id}">${resource.id} (${resource.kind})</option>`)}</select><button data-add-layer ${project.resources.size ? "" : "disabled"}>新增 / 切换图层</button></div>${tier.layers.map((layer) => layerMarkup(layer, project)).join("")}</section>`;
+  return `<nav class="tier-tabs" role="tablist" aria-label="获奖档位">${TIERS.map((id) => `<button role="tab" aria-selected="${id === active}" tabindex="${id === active ? 0 : -1}" data-tier="${id}" class="${id === active ? "active" : ""}"><span>${id}</span><small>${project.tiers.get(id)!.layers.length} 层</small></button>`).join("")}</nav><section class="tier-contract"><h2>累计档位合同</h2><p>base：0 &lt; win ≤ 1×bet；standard：1×bet &lt; win &lt; bigwin。达到某个阈值时进入该档，已达到的前序档位会依次累计播放。</p><div class="threshold-grid">${(["bigwin", "superwin", "megawin"] as const).map((id) => `<label><span>${id}</span><input data-threshold-tier="${id}" type="number" min="2" step="1" value="${project.tiers.get(id)!.thresholdMultiplier}"/><small>× bet</small></label>`).join("")}</div><p class="contract-example">当前倍数边界：1× / ${project.tiers.get("bigwin")!.thresholdMultiplier}× / ${project.tiers.get("superwin")!.thresholdMultiplier}× / ${project.tiers.get("megawin")!.thresholdMultiplier}×；等于阈值时进入对应档。</p><p id="tier-boundaries" class="raw-boundaries">${tierBoundarySummary(project, betRaw)}</p></section><section class="tier-editor"><h2>${active}</h2><p class="layer-order-help">order 数值越小越靠下，只控制当前档位内的图层顺序。</p><label>金额计数时长<input id="tier-duration" type="number" step="0.1" min="0" value="${tier.countDurationSeconds}"/><small>秒</small></label><div class="layer-add"><select id="layer-resource">${[...project.resources.values()].map((resource) => `<option value="${resource.rootKey}">${resource.rootKey} (${resource.kind})</option>`)}</select><button data-add-layer ${project.resources.size ? "" : "disabled"}>新增 / 切换图层</button></div>${tier.layers.map((layer) => layerMarkup(layer, project)).join("")}</section>`;
 }
 
 function tierBoundarySummary(project: PopupEditorProject, betRaw: number) {
@@ -490,7 +479,7 @@ function vniTimingSummary(
 ) {
   const resource = project.resources.get(layer.resource);
   if (!resource || resource.spec.kind !== "vni") return "";
-  const bytes = project.packageFiles.get(resource.spec.project);
+  const bytes = project.assets.get(resource.spec.project)?.bytes;
   if (!bytes) return "";
   try {
     const value = JSON.parse(new TextDecoder().decode(bytes)) as {
@@ -516,5 +505,5 @@ function projectMarkup(project: PopupEditorProject, errors: readonly string[]) {
   ) =>
     `<label>${field}<input data-project-field="${field}" type="${type}" value="${project.amountFormat[field]}" ${type === "checkbox" && project.amountFormat[field] ? "checked" : ""}/></label>`;
   const preset = detectPopupAmountFormatPreset(project.amountFormat);
-  return `<div class="project-actions"><label class="file-action">导入项目<input id="import-project" type="file" accept=".zip"/></label><button id="export-project">导出 Popup ZIP</button></div><h2>项目</h2><label>project id<input id="project-id" value="${project.id}"/></label><label>viewport width<input data-project-field="viewport-width" type="number" value="${project.designViewport.width}"/></label><label>viewport height<input data-project-field="viewport-height" type="number" value="${project.designViewport.height}"/></label><h3>金额合同</h3><label>preset<select id="amount-format-preset"><option value="integer" ${preset === "integer" ? "selected" : ""}>纯数字整数（raw 100 → 100）</option><option value="decimal" ${preset === "decimal" ? "selected" : ""}>纯数字两位小数（raw 100 → 1.00）</option><option value="custom" ${preset === "custom" ? "selected" : ""}>自定义</option></select></label><p class="preset-help">整数预设使用 rawScale=1，只要求 glyph 0–9；两位小数预设使用 rawScale=100，要求 glyph 0–9 和 .。两者均不输出货币符号或千分位。</p>${amountInput("rawScale", "number")}${amountInput("fractionDigits", "number")}${amountInput("useGrouping", "checkbox")}${amountInput("groupSeparator")}${amountInput("decimalSeparator")}${amountInput("prefix")}${amountInput("suffix")}<p>rounding: floor（strict contract）</p><h3>五档金额与图层 diagnostics</h3><pre>${errors.join("\n") || "通过"}</pre><h3>Production manifest preview</h3><pre>${manifest}</pre>`;
+  return `<div class="project-actions"><button id="export-project">导出 Popup ZIP</button></div><h2>项目</h2><label>project id<input id="project-id" value="${project.id}"/></label><label>viewport width<input data-project-field="viewport-width" type="number" value="${project.designViewport.width}"/></label><label>viewport height<input data-project-field="viewport-height" type="number" value="${project.designViewport.height}"/></label><h3>金额合同</h3><label>preset<select id="amount-format-preset"><option value="integer" ${preset === "integer" ? "selected" : ""}>纯数字整数（raw 100 → 100）</option><option value="decimal" ${preset === "decimal" ? "selected" : ""}>纯数字两位小数（raw 100 → 1.00）</option><option value="custom" ${preset === "custom" ? "selected" : ""}>自定义</option></select></label><p class="preset-help">整数预设使用 rawScale=1，只要求 glyph 0–9；两位小数预设使用 rawScale=100，要求 glyph 0–9 和 .。两者均不输出货币符号或千分位。</p>${amountInput("rawScale", "number")}${amountInput("fractionDigits", "number")}${amountInput("useGrouping", "checkbox")}${amountInput("groupSeparator")}${amountInput("decimalSeparator")}${amountInput("prefix")}${amountInput("suffix")}<p>rounding: floor（strict contract）</p><h3>五档金额与图层 diagnostics</h3><pre>${errors.join("\n") || "通过"}</pre><h3>Production manifest preview</h3><pre>${manifest}</pre>`;
 }

@@ -4,6 +4,15 @@ import {
   sha256Hex,
 } from "@slotclientengine/browserartifactio";
 import {
+  commitEditorAssetImport,
+  createEditorAssetsMapFromWorkspace,
+  createEmptyEditorAssetWorkspace,
+  materializeEditorAssetPayloads,
+  reviewEditorAssetImport,
+  serializeEditorAssetsMap,
+  type EditorAssetRewriteAdapter,
+} from "@slotclientengine/editorresource";
+import {
   collectImageStringAssetPaths,
   parseImageStringManifest,
 } from "./manifest.js";
@@ -12,6 +21,55 @@ import type { ImageStringManifestV1 } from "./types.js";
 export interface MaterializedImageStringPackage {
   readonly manifest: ImageStringManifestV1;
   readonly files: ReadonlyMap<string, Uint8Array>;
+}
+
+export interface MappedImageStringPackage {
+  readonly manifest: ImageStringManifestV1;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+}
+
+/** Creates the filename-key + assets.map.json package introduced by Task 119. */
+export async function materializeMappedImageStringPackage(options: {
+  readonly manifest: ImageStringManifestV1 | unknown;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+}): Promise<MappedImageStringPackage> {
+  const manifest = parseImageStringManifest(options.manifest);
+  const keys = collectImageStringAssetPaths(manifest);
+  if (keys.some((key) => key.includes("/")))
+    throw new Error(
+      "mapped image-string materializer 只接受 filename-key manifest。",
+    );
+  const incoming = keys.map((key) => {
+    const bytes = options.files.get(key);
+    if (!bytes) throw new Error(`mapped image-string 缺少 glyph bytes：${key}`);
+    const detected = detectRasterAssetType(bytes);
+    if (detected.extension === "jpg")
+      throw new Error(`image-string glyph 不支持 JPEG：${key}`);
+    return { key, mediaType: detected.mediaType, bytes };
+  });
+  const empty = createEmptyEditorAssetWorkspace();
+  const review = await reviewEditorAssetImport({ workspace: empty, incoming });
+  const adapter: EditorAssetRewriteAdapter<null> = {
+    cloneProject: () => null,
+    collectReferences: () => ({ references: [] }),
+    renameReferences: () => null,
+  };
+  const { workspace } = await commitEditorAssetImport({
+    workspace: empty,
+    project: null,
+    review,
+    adapter,
+  });
+  const map = createEditorAssetsMapFromWorkspace(workspace, keys);
+  const output = new Map(materializeEditorAssetPayloads(workspace, keys));
+  output.set("assets.map.json", serializeEditorAssetsMap(map));
+  output.set(
+    "image-string.manifest.json",
+    new TextEncoder().encode(
+      `${JSON.stringify(sortValue(manifest), null, 2)}\n`,
+    ),
+  );
+  return Object.freeze({ manifest, files: output });
 }
 
 /** Materializes owned glyph payload from leaves to the root manifest. */

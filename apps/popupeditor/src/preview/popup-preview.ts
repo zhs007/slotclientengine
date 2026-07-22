@@ -49,10 +49,8 @@ export class PopupPreview {
     const exported = await exportPopupZip(project, { prepare: false });
     const files = extractBoundedZip(exported.bytes, {
       limits: POPUP_ZIP_LIMITS,
-      pathPolicy: { requireLowercase: true },
     });
-    const manifest = importPopupZip(exported.bytes);
-    void manifest;
+    await importPopupZip(exported.bytes);
     const resource = await createPopupPackageResource({ files });
     const player = createAwardCelebrationPlayer({ resource });
     await player.init();

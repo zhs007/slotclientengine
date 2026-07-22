@@ -40,10 +40,9 @@ export function resourcesWorkspaceMarkup(options: {
   return `
     <section class="workspace-panel resources-workspace" aria-labelledby="assets-heading">
       <div class="workspace-toolbar sticky-toolbar">
-        <div><h2 id="assets-heading">资源库</h2><span>${project.resources.size} 个 logical resources</span></div>
+        <div><h2 id="assets-heading">扁平资源库</h2><span>${project.resources.size} 个 filename-key roots</span></div>
         <div class="toolbar-actions">
-          <button type="button" data-upload-resources>上传资源</button>
-          <button type="button" data-upload-folder>上传文件夹</button>
+          <button type="button" data-upload-resources>导入资源 / ZIP</button>
         </div>
         <label class="search-field">搜索 id / path<input type="search" data-resource-query value="${escapeHtml(session.resourceQuery)}" /></label>
         <label>类型<select data-resource-type><option value="all">全部</option><option value="image" ${session.resourceType === "image" ? "selected" : ""}>Image</option><option value="spine" ${session.resourceType === "spine" ? "selected" : ""}>Spine</option><option value="image-string" ${session.resourceType === "image-string" ? "selected" : ""}>Image String</option><option value="video" ${session.resourceType === "video" ? "selected" : ""}>Video</option></select></label>
@@ -89,7 +88,6 @@ function resourceRowMarkup(
     <div class="resource-actions">
       ${resource.kind === "video" ? "" : `<button type="button" data-resource-add-layer="${escapeHtml(resource.id)}">添加为图层</button>`}
       ${resource.kind === "image-string" || resource.kind === "video" ? "" : project.mode === "maximized-focus" ? `<button type="button" data-resource-background="default" data-resource-id="${escapeHtml(resource.id)}">设为背景</button>` : `<button type="button" data-resource-background="landscape" data-resource-id="${escapeHtml(resource.id)}">设为横版背景</button><button type="button" data-resource-background="portrait" data-resource-id="${escapeHtml(resource.id)}">设为竖版背景</button>`}
-      <button type="button" data-replace-resource="${escapeHtml(resource.id)}">替换</button>
       <button type="button" class="danger" data-delete-resource="${escapeHtml(resource.id)}" ${references.length > 0 ? `title="被 ${references.map((reference) => reference.nodeId).join(", ")} 引用"` : ""}>删除</button>
     </div>
     ${expanded ? resourceDetailsMarkup(resource, references) : ""}

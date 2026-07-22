@@ -18,14 +18,15 @@ describe("app shell", () => {
       assertUsable: vi.fn(),
       destroy: destroyResource,
     } satisfies ImageStringResource;
+    const createPreview = vi.fn(async () => ({
+      setText,
+      setZoom: vi.fn(),
+      getSnapshot: () => ({ text: "0" }),
+      destroy: destroyPreview,
+    }));
     const shell = createImageStringAppShell(root, {
       createResource: async () => resource,
-      createPreview: async () => ({
-        setText,
-        setZoom: vi.fn(),
-        getSnapshot: () => ({ text: "0" }),
-        destroy: destroyPreview,
-      }),
+      createPreview,
       exportZip: async () => ({
         filename: "x.zip",
         bytes: new Uint8Array([1]),
@@ -34,8 +35,7 @@ describe("app shell", () => {
     });
     expect(root.textContent).toContain("图片字符串资源编辑器");
     shell.store.replace(projectFixture());
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(createPreview).toHaveBeenCalled());
     const template = [
       ...root.querySelectorAll("[data-role=templates] button"),
     ].find(
@@ -58,10 +58,12 @@ describe("app shell", () => {
     document.body.append(root);
     const shell = createImageStringAppShell(root, {
       decodeFile: async () => ({
-        id: "upload-0",
-        originalName: "0-1.png",
+        key: "0-1.png",
+        sha256: "a".repeat(64),
+        payloadPath: `assets/${"a".repeat(64)}.png`,
         mediaType: "image/png",
         bytes: new Uint8Array([1]),
+        byteLength: 1,
         width: 8,
         height: 10,
         suggestedCharacter: "0",
@@ -80,16 +82,17 @@ describe("app shell", () => {
         destroy: vi.fn(),
       }),
     });
-    const upload = root.querySelector<HTMLInputElement>("[data-role=upload]")!;
+    const upload = root.querySelector<HTMLInputElement>(
+      "[data-role=import-assets]",
+    )!;
     Object.defineProperty(upload, "files", {
       configurable: true,
       value: [new File(["x"], "0-1.png", { type: "image/png" })],
     });
     upload.dispatchEvent(new Event("change"));
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(shell.store.project.unmappedFiles.size).toBe(1);
+    await vi.waitFor(() =>
+      expect(shell.store.project.unmappedFiles.size).toBe(1),
+    );
     root.querySelector<HTMLButtonElement>("[data-map]")!.click();
     await Promise.resolve();
     await Promise.resolve();
@@ -109,7 +112,7 @@ describe("app shell", () => {
     expect(shell.store.project.fixedAdvanceGroups).toHaveLength(0);
     root.querySelector<HTMLButtonElement>("[data-unmap]")!.click();
     await Promise.resolve();
-    expect(shell.store.project.unmappedFiles.has("upload-0")).toBe(true);
+    expect(shell.store.project.unmappedFiles.has("0-1.png")).toBe(true);
     root.querySelector<HTMLButtonElement>("[data-action=new]")!.click();
     expect(shell.store.project.glyphs.size).toBe(0);
     await shell.destroy();
@@ -126,7 +129,9 @@ describe("app shell", () => {
       value: confirmation,
     });
     const shell = createImageStringAppShell(root, { importZip });
-    const upload = root.querySelector<HTMLInputElement>("[data-role=upload]")!;
+    const upload = root.querySelector<HTMLInputElement>(
+      "[data-role=import-assets]",
+    )!;
     Object.defineProperty(upload, "files", {
       configurable: true,
       value: [new File(["zip"], "digits.zip", { type: "application/zip" })],
@@ -143,5 +148,94 @@ describe("app shell", () => {
       value: undefined,
     });
     await shell.destroy();
+  });
+
+  it("covers overwrite review, glyph controls, preview controls and async errors", async () => {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const setText = vi.fn();
+    const setZoom = vi.fn();
+    const confirm = vi.fn(() => true);
+    Object.defineProperty(window, "confirm", {
+      configurable: true,
+      value: confirm,
+    });
+    let decodeVersion = 0;
+    const shell = createImageStringAppShell(root, {
+      decodeFile: async (file) => {
+        decodeVersion += 1;
+        const digest = String(decodeVersion).repeat(64).slice(0, 64);
+        return {
+          key: file.name,
+          sha256: digest,
+          payloadPath: `assets/${digest}.png`,
+          mediaType: "image/png",
+          bytes: new Uint8Array([decodeVersion]),
+          byteLength: 1,
+          width: 8 + decodeVersion,
+          height: 10,
+          suggestedCharacter: "0",
+        };
+      },
+      createResource: async () => ({
+        manifest: {} as never,
+        textures: {},
+        destroyed: false,
+        assertUsable: vi.fn(),
+        destroy: vi.fn(async () => undefined),
+      }),
+      createPreview: async () => ({
+        setText,
+        setZoom,
+        getSnapshot: () => ({ ready: true }),
+        destroy: vi.fn(),
+      }),
+      exportZip: async () => {
+        throw new Error("export failed");
+      },
+    });
+    shell.store.replace(projectFixture());
+    await vi.waitFor(() => expect(setZoom).toHaveBeenCalled());
+    const previewText = root.querySelector<HTMLInputElement>(
+      "[data-role=preview-text]",
+    )!;
+    previewText.value = "00";
+    previewText.dispatchEvent(new Event("input"));
+    const zoom = root.querySelector<HTMLInputElement>("[data-role=zoom]")!;
+    zoom.value = "3";
+    zoom.dispatchEvent(new Event("input"));
+    await vi.waitFor(() => expect(setText).toHaveBeenCalledWith("00"));
+    await vi.waitFor(() => expect(setZoom).toHaveBeenCalledWith(3));
+
+    const upload = root.querySelector<HTMLInputElement>(
+      "[data-role=import-assets]",
+    )!;
+    Object.defineProperty(upload, "files", {
+      configurable: true,
+      value: [new File(["next"], "0.png", { type: "image/png" })],
+    });
+    upload.dispatchEvent(new Event("change"));
+    await vi.waitFor(() => expect(confirm).toHaveBeenCalled());
+
+    root
+      .querySelector<HTMLButtonElement>("[data-action=counter-play]")!
+      .click();
+    root
+      .querySelector<HTMLButtonElement>("[data-action=counter-pause]")!
+      .click();
+    root
+      .querySelector<HTMLButtonElement>("[data-action=counter-reset]")!
+      .click();
+    root.querySelector<HTMLButtonElement>("[data-action=export]")!.click();
+    await vi.waitFor(() =>
+      expect(root.querySelector("[data-role=error]")?.textContent).toContain(
+        "export failed",
+      ),
+    );
+    await shell.destroy();
+    Object.defineProperty(window, "confirm", {
+      configurable: true,
+      value: undefined,
+    });
   });
 });

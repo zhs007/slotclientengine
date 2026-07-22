@@ -18,10 +18,9 @@ describe("image decoder", () => {
     );
     const result = await decodeUploadedImage(
       new File([NEUTRAL_PNG_BYTES], "0-1.png", { type: "image/png" }),
-      "upload-1",
     );
     expect(result).toMatchObject({
-      id: "upload-1",
+      key: "0-1.png",
       width: 8,
       height: 10,
       suggestedCharacter: "0",
@@ -44,6 +43,24 @@ describe("image decoder", () => {
     );
     await expect(decodeImageBlob(new Blob(), "broken.png")).rejects.toThrow(
       "broken",
+    );
+  });
+
+  it("accepts an omitted browser MIME and formats non-Error decode failures", async () => {
+    const close = vi.fn();
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => ({ width: 4, height: 5, close })),
+    );
+    await expect(
+      decodeUploadedImage(new File([NEUTRAL_PNG_BYTES], "plain.png")),
+    ).resolves.toMatchObject({ key: "plain.png", width: 4, height: 5 });
+    vi.stubGlobal(
+      "createImageBitmap",
+      vi.fn(async () => Promise.reject("bitmap rejected")),
+    );
+    await expect(decodeImageBlob(new Blob(), "plain.png")).rejects.toThrow(
+      "bitmap rejected",
     );
   });
 });

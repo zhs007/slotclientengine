@@ -20,6 +20,13 @@ export default defineConfig({
         ),
       },
       {
+        find: "@slotclientengine/rendercore/image-string",
+        replacement: resolve(
+          __dirname,
+          "../../packages/rendercore/src/image-string/index.ts",
+        ),
+      },
+      {
         find: "@slotclientengine/rendercore",
         replacement: resolve(
           __dirname,

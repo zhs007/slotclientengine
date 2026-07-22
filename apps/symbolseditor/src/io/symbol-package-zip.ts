@@ -4,7 +4,7 @@ import {
 } from "@slotclientengine/browserartifactio";
 import {
   createSymbolPackageResource,
-  materializeSymbolPackageContents,
+  materializeMappedSymbolPackageContents,
   parseSymbolPackageManifest,
   type SymbolPackageResource,
 } from "@slotclientengine/rendercore/symbol";
@@ -40,25 +40,44 @@ export async function importSymbolPackageZip(
   const resource = await createSymbolPackageResource({
     packageManifest,
     files,
-    loadTextures: options.loadTextures,
+    loadTextures: false,
   });
   try {
-    const project = createFromImportedPackage({
-      packageManifest,
+    const materialized = await materializeMappedSymbolPackageContents({
+      packageManifest: resource.packageManifest,
       rawGameConfig: resource.rawGameConfig,
       rawSymbolManifest: resource.rawSymbolManifest,
       assets: resource.assets,
     });
-    let destroyed = false;
-    return Object.freeze({
-      project,
-      resource,
-      destroy(): void {
-        if (destroyed) return;
-        destroyed = true;
-        resource.destroy();
-      },
+    resource.destroy();
+    const prepared = await createSymbolPackageResource({
+      packageManifest: materialized.packageManifest,
+      files: materialized.files,
+      ...(options.loadTextures !== undefined
+        ? { loadTextures: options.loadTextures }
+        : {}),
     });
+    try {
+      const project = createFromImportedPackage({
+        packageManifest: materialized.packageManifest,
+        rawGameConfig: materialized.rawGameConfig,
+        rawSymbolManifest: materialized.rawSymbolManifest,
+        assets: materialized.assets,
+      });
+      let destroyed = false;
+      return Object.freeze({
+        project,
+        resource: prepared,
+        destroy(): void {
+          if (destroyed) return;
+          destroyed = true;
+          prepared.destroy();
+        },
+      });
+    } catch (error) {
+      prepared.destroy();
+      throw error;
+    }
   } catch (error) {
     resource.destroy();
     throw error;
@@ -73,10 +92,20 @@ export async function exportSymbolPackageZip(
   readonly bytes: Uint8Array;
   readonly blob: Blob;
 }> {
-  const snapshot = await materializeSymbolEditorSnapshot(
-    exportSnapshot(project),
-  );
-  const files = createSnapshotFiles(snapshot);
+  const base = exportSnapshot(project);
+  const materialized = await materializeMappedSymbolPackageContents({
+    packageManifest: base.packageManifest,
+    rawGameConfig: base.rawGameConfig,
+    rawSymbolManifest: base.symbolManifest,
+    assets: base.assets,
+  });
+  const snapshot = Object.freeze({
+    packageManifest: materialized.packageManifest,
+    rawGameConfig: materialized.rawGameConfig,
+    symbolManifest: materialized.rawSymbolManifest,
+    assets: materialized.assets,
+  });
+  const files = new Map(materialized.files);
   const validationResource = await createSymbolPackageResource({
     packageManifest: snapshot.packageManifest,
     files,
@@ -94,7 +123,7 @@ export async function exportSymbolPackageZip(
 export async function materializeSymbolEditorSnapshot(
   snapshot: ReturnType<typeof exportSnapshot>,
 ): Promise<ReturnType<typeof exportSnapshot>> {
-  const materialized = await materializeSymbolPackageContents({
+  const materialized = await materializeMappedSymbolPackageContents({
     packageManifest: snapshot.packageManifest,
     rawGameConfig: snapshot.rawGameConfig,
     rawSymbolManifest: snapshot.symbolManifest,

@@ -29,19 +29,21 @@ describe("image-string ZIP", () => {
         maxFileBytes: 1024 * 1024,
         maxTotalBytes: 1024 * 1024,
       },
-      pathPolicy: { requireLowercase: true },
     });
     const manifest = JSON.parse(
       new TextDecoder().decode(files.get("image-string.manifest.json")),
     ) as { glyphs: Record<string, { path: string }> };
+    expect(Object.values(manifest.glyphs).map(({ path }) => path)).toEqual([
+      "0-1.png",
+      "1-1.png",
+      "+-1.png",
+    ]);
+    expect(files.has("assets.map.json")).toBe(true);
     expect(
-      Object.values(manifest.glyphs).every(({ path }) =>
+      [...files.keys()].filter((path) =>
         /^assets\/[a-f0-9]{64}\.png$/u.test(path),
       ),
-    ).toBe(true);
-    expect(
-      [...files.keys()].some((path) => /\/u[0-9a-f]+\.png$/u.test(path)),
-    ).toBe(false);
+    ).toHaveLength(3);
     const imported = await importImageStringZip(first.bytes, validationOptions);
     expect(imported.id).toBe("neutral-library");
     expect([...imported.glyphs.keys()]).toEqual(["0", "1", "+"]);

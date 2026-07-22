@@ -6,6 +6,7 @@ import {
   loadSceneLayoutPackageFromUrl,
 } from "../../src/scene-layout/index.js";
 import { game002LayoutFixture } from "./fixtures.js";
+import { createMappedPackageFiles } from "../editor-assets-map-fixture.js";
 
 const encode = (value: unknown) =>
   new TextEncoder().encode(`${JSON.stringify(value)}\n`);
@@ -177,6 +178,110 @@ describe("scene layout package resources", () => {
     } finally {
       load.mockRestore();
       unload.mockRestore();
+    }
+  });
+
+  it("resolves one filename-key asset map through files and the CDN loader", async () => {
+    const mappedImageString = {
+      ...imageStringManifest,
+      glyphs: {
+        "0": { ...imageStringManifest.glyphs["0"], path: "0.png" },
+        "1": { ...imageStringManifest.glyphs["1"], path: "1.png" },
+      },
+    };
+    const manifest = {
+      ...packageManifest,
+      nodes: packageManifest.nodes.map((node) =>
+        node.id === "bg"
+          ? {
+              ...node,
+              resource: { ...node.resource, path: "BG.png" },
+            }
+          : {
+              ...node,
+              resource: {
+                ...node.resource,
+                manifest: "Digits.manifest.json",
+              },
+            },
+      ),
+    };
+    const root = encode(manifest);
+    const mapped = await createMappedPackageFiles({
+      controls: new Map([["layout.manifest.json", root]]),
+      assets: new Map([
+        ["BG.png", new Uint8Array([1])],
+        ["Digits.manifest.json", encode(mappedImageString)],
+        ["0.png", new Uint8Array([2])],
+        ["1.png", new Uint8Array([3])],
+      ]),
+    });
+    expect(
+      collectSceneLayoutPackagePaths({
+        manifest,
+        files: await resolveMapped(),
+      }),
+    ).toEqual(["0.png", "1.png", "BG.png", "Digits.manifest.json"]);
+    const load = vi
+      .spyOn(Assets, "load")
+      .mockResolvedValue(Texture.WHITE as never);
+    const unload = vi.spyOn(Assets, "unload").mockResolvedValue(undefined);
+    try {
+      const resource = await createSceneLayoutPackageResource({
+        manifest,
+        files: mapped.files,
+        decodeImage: async () => ({ width: 1, height: 1 }),
+      });
+      expect(Object.keys(resource.imageStrings)).toEqual([
+        "Digits.manifest.json",
+      ]);
+      await resource.destroy();
+
+      const remote = await loadSceneLayoutPackageFromUrl({
+        manifestUrl: "https://cdn.example/layout/layout.manifest.json",
+        fetchImpl: async (input) => {
+          const path = new URL(String(input)).pathname.split("/layout/")[1]!;
+          const bytes = mapped.files.get(path);
+          return bytes
+            ? new Response(bytes.slice().buffer)
+            : new Response("missing", { status: 404 });
+        },
+        decodeImage: async () => ({ width: 1, height: 1 }),
+      });
+      await remote.destroy();
+    } finally {
+      load.mockRestore();
+      unload.mockRestore();
+    }
+
+    await expect(
+      createSceneLayoutPackageResource({ manifest, files: new Map() }),
+    ).rejects.toThrow(/assets\.map/);
+    await expect(
+      createSceneLayoutPackageResource({
+        manifest: packageManifest,
+        files: new Map([
+          ...packageFiles(),
+          ["assets.map.json", mapped.files.get("assets.map.json")!],
+        ]),
+      }),
+    ).rejects.toThrow(/Legacy/);
+    const mixed = {
+      ...manifest,
+      nodes: manifest.nodes.map((node) =>
+        node.id === "bg"
+          ? { ...node, resource: { ...node.resource, path: "assets/bg.png" } }
+          : node,
+      ),
+    };
+    expect(() =>
+      collectSceneLayoutPackagePaths({ manifest: mixed, files: new Map() }),
+    ).toThrow(/mix filename keys/);
+
+    async function resolveMapped() {
+      const { resolveSceneLayoutPackageFiles } =
+        await import("../../src/scene-layout/package-resource.js");
+      return resolveSceneLayoutPackageFiles({ manifest, files: mapped.files });
     }
   });
 

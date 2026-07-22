@@ -5,6 +5,11 @@ import {
   resolvePackagePath,
 } from "@slotclientengine/browserartifactio";
 import {
+  EDITOR_ASSETS_MAP_PATH,
+  decodeEditorAssetsMap,
+  validateEditorAssetsMapPackage,
+} from "@slotclientengine/editorresource";
+import {
   createGameConfig,
   type LogicGameConfig,
 } from "@slotclientengine/logiccore";
@@ -374,14 +379,42 @@ export async function createSymbolPackageResource(options: {
   readonly files: ReadonlyMap<string, Uint8Array>;
   readonly loadTextures?: boolean;
 }): Promise<SymbolPackageResource> {
-  const packageManifest = validateSymbolPackageContents(options);
+  const parsedPackageManifest = parseSymbolPackageManifest(
+    options.packageManifest,
+  );
+  const files = await resolveSymbolPackageFiles({
+    packageManifest: parsedPackageManifest,
+    files: options.files,
+  });
+  return createSymbolPackageResourceFromResolvedFiles({
+    packageManifest: parsedPackageManifest,
+    files,
+    ...(options.loadTextures !== undefined
+      ? { loadTextures: options.loadTextures }
+      : {}),
+  });
+}
+
+export async function createSymbolPackageResourceFromResolvedFiles(options: {
+  readonly packageManifest: unknown;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly loadTextures?: boolean;
+}): Promise<SymbolPackageResource> {
+  const parsedPackageManifest = parseSymbolPackageManifest(
+    options.packageManifest,
+  );
+  const files = options.files;
+  const packageManifest = validateSymbolPackageContents({
+    packageManifest: parsedPackageManifest,
+    files,
+  });
   const rawGameConfig = parseJsonFile(
-    options.files,
+    files,
     packageManifest.entrypoints.gameConfig,
     "game config",
   );
   const rawSymbolManifest = parseJsonFile(
-    options.files,
+    files,
     packageManifest.entrypoints.symbolManifest,
     "symbol manifest",
   );
@@ -393,7 +426,7 @@ export async function createSymbolPackageResource(options: {
   const requiredResources = collectSymbolManifestResourcePaths({
     symbolManifest: rawSymbolManifest,
     symbolManifestPath: packageManifest.entrypoints.symbolManifest,
-    files: options.files,
+    files,
   });
   if (!sameStrings(requiredResources, packageManifest.resources)) {
     throw new SymbolAssetError(
@@ -407,7 +440,7 @@ export async function createSymbolPackageResource(options: {
   try {
     const modules = createPackageModules(
       packageManifest,
-      options.files,
+      files,
       urls,
       textureUrls,
     );
@@ -491,7 +524,7 @@ export async function createSymbolPackageResource(options: {
       });
     const assets = new Map(
       packageManifest.resources.map(
-        (path) => [path, options.files.get(path)!.slice()] as const,
+        (path) => [path, files.get(path)!.slice()] as const,
       ),
     );
     const resource: SymbolPackageResource = {
@@ -543,6 +576,33 @@ export async function createSymbolPackageResource(options: {
     urls.destroy();
     throw error;
   }
+}
+
+export async function resolveSymbolPackageFiles(options: {
+  readonly packageManifest: unknown;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+}): Promise<ReadonlyMap<string, Uint8Array>> {
+  const manifest = parseSymbolPackageManifest(options.packageManifest);
+  if (!options.files.has(EDITOR_ASSETS_MAP_PATH)) return options.files;
+  const controls = [
+    "symbols.package.json",
+    manifest.entrypoints.gameConfig,
+    manifest.entrypoints.symbolManifest,
+  ];
+  const map = decodeEditorAssetsMap(
+    requirePackageBytes(options.files, EDITOR_ASSETS_MAP_PATH),
+  );
+  const resolved = await validateEditorAssetsMapPackage({
+    map,
+    files: options.files,
+    allowControlPaths: controls,
+  });
+  const virtual = new Map<string, Uint8Array>();
+  for (const path of controls)
+    virtual.set(path, requirePackageBytes(options.files, path).slice());
+  for (const [key, asset] of resolved) virtual.set(key, asset.bytes.slice());
+  validateSymbolPackageContents({ packageManifest: manifest, files: virtual });
+  return virtual;
 }
 
 function unloadCachedPackageTextures(textureUrls: readonly string[]): void {
@@ -728,6 +788,15 @@ function parseJsonFile(
   const bytes = files.get(path);
   if (!bytes) throw new SymbolAssetError(`${label} is missing: ${path}.`);
   return parseJsonBytes(bytes, path);
+}
+
+function requirePackageBytes(
+  files: ReadonlyMap<string, Uint8Array>,
+  path: string,
+): Uint8Array {
+  const bytes = files.get(path);
+  if (!bytes) throw new SymbolAssetError(`symbol package is missing: ${path}.`);
+  return bytes;
 }
 
 function parseJsonBytes(bytes: Uint8Array, path: string): unknown {

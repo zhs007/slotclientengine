@@ -1,5 +1,6 @@
 import { SceneLayoutError } from "./errors.js";
 import { assertNoPackagePathAliases } from "@slotclientengine/browserartifactio";
+import { assertEditorAssetKey } from "@slotclientengine/editorresource";
 import type {
   OrientationFocusSceneLayoutVariant,
   SceneLayoutAdaptation,
@@ -607,7 +608,10 @@ function parseSymbolPackageBindings(
     identifier(id, "scene layout symbol package id");
     const label = `scene layout symbolPackages.${id}`;
     const binding = parseSymbolPackageBindingAt(value, label);
-    if (binding.manifest.split("/").at(-2) !== id)
+    if (
+      binding.manifest.includes("/") &&
+      binding.manifest.split("/").at(-2) !== id
+    )
       fail(`${label}.manifest dependency id must equal binding id "${id}".`);
     result[id] = binding;
   }
@@ -669,7 +673,7 @@ function parsePopupBindings(
       ]),
     );
     const manifest = popupDependencyPath(binding.manifest, `${label}.manifest`);
-    if (manifest.split("/").at(-2) !== id)
+    if (manifest.includes("/") && manifest.split("/").at(-2) !== id)
       fail(`${label}.manifest dependency id must equal binding id "${id}".`);
     result[id] = {
       type: "award-celebration" as const,
@@ -1026,8 +1030,11 @@ function parseGameModeTransitions(
 
 function videoOwnedPath(value: unknown, label: string): string {
   const path = localPath(value, label, new Set([".mp4"]));
+  if (!path.includes("/")) return assertEditorAssetKey(path);
   if (!/^assets\/[a-f0-9]{64}\.mp4$/u.test(path))
-    fail(`${label} must be assets/<full-lowercase-sha256>.mp4.`);
+    fail(
+      `${label} must be a filename key or assets/<full-lowercase-sha256>.mp4.`,
+    );
   return path;
 }
 
@@ -1075,6 +1082,8 @@ function validateBackgroundOnlyOrdering(
 }
 
 function imageStringDependencyPath(value: unknown, label: string): string {
+  if (typeof value === "string" && !value.includes("/"))
+    return assertEditorAssetKey(value);
   const path = canonicalLowercasePath(value, label);
   const match =
     /^dependencies\/image-strings\/([a-z0-9]+(?:-[a-z0-9]+)*)\/image-string\.manifest\.json$/u.exec(
@@ -1088,6 +1097,8 @@ function imageStringDependencyPath(value: unknown, label: string): string {
 }
 
 function symbolDependencyPath(value: unknown, label: string): string {
+  if (typeof value === "string" && !value.includes("/"))
+    return assertEditorAssetKey(value);
   const path = canonicalLowercasePath(value, label);
   const match =
     /^dependencies\/symbols\/([a-z0-9]+(?:-[a-z0-9]+)*)\/symbols\.package\.json$/u.exec(
@@ -1099,6 +1110,8 @@ function symbolDependencyPath(value: unknown, label: string): string {
 }
 
 function popupDependencyPath(value: unknown, label: string): string {
+  if (typeof value === "string" && !value.includes("/"))
+    return assertEditorAssetKey(value);
   const path = canonicalLowercasePath(value, label);
   if (
     !/^dependencies\/popups\/([a-z0-9]+(?:-[a-z0-9]+)*)\/popup\.manifest\.json$/u.test(

@@ -1,7 +1,8 @@
 import {
   collectSceneLayoutPackagePaths,
-  createSceneLayoutPackageResource,
+  createSceneLayoutPackageResourceFromResolvedFiles,
   parseSceneLayoutManifest,
+  resolveSceneLayoutPackageFiles,
   type SceneLayoutManifestV1,
   type SceneLayoutPackageResource,
   type SceneLayoutResource,
@@ -57,9 +58,13 @@ export async function importLayoutZip(
     throw new Error(`layout.manifest.json 无效：${formatError(error)}`);
   }
   const manifest = parseSceneLayoutManifest(rawManifest);
-  collectSceneLayoutPackagePaths({ manifest, files });
+  const resolvedFiles = await resolveSceneLayoutPackageFiles({
+    manifest,
+    files,
+  });
+  collectSceneLayoutPackagePaths({ manifest, files: resolvedFiles });
   const assets = new Map(
-    [...files.entries()]
+    [...resolvedFiles.entries()]
       .filter(([path]) => path !== "layout.manifest.json")
       .map(([path, bytes]) => [path, bytes.slice()] as const),
   );
@@ -150,22 +155,23 @@ export async function validateLayoutAssets(
       URL.revokeObjectURL(url);
     }
   }
-  const packageResource = await createSceneLayoutPackageResource({
-    manifest,
-    files: assets,
-    ...(options.decodeImage
-      ? {
-          decodeImage: async (blob: Blob) => {
-            const url = URL.createObjectURL(blob);
-            try {
-              return await options.decodeImage!(url);
-            } finally {
-              URL.revokeObjectURL(url);
-            }
-          },
-        }
-      : {}),
-  });
+  const packageResource =
+    await createSceneLayoutPackageResourceFromResolvedFiles({
+      manifest,
+      files: assets,
+      ...(options.decodeImage
+        ? {
+            decodeImage: async (blob: Blob) => {
+              const url = URL.createObjectURL(blob);
+              try {
+                return await options.decodeImage!(url);
+              } finally {
+                URL.revokeObjectURL(url);
+              }
+            },
+          }
+        : {}),
+    });
   let destroyed = false;
   return Object.freeze({
     manifest,

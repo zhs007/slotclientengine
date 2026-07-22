@@ -16,12 +16,18 @@ import {
   collectPopupPackagePaths,
   parsePopupManifest,
 } from "@slotclientengine/rendercore/popup";
+import { createDeterministicZip } from "@slotclientengine/browserartifactio";
 import {
-  allocateContentAddressedPath,
-  createDeterministicZip,
-  detectRasterAssetType,
-  sha256Hex,
-} from "@slotclientengine/browserartifactio";
+  EDITOR_ASSETS_MAP_PATH,
+  basenameFromSourcePath,
+  commitEditorAssetImport,
+  createEditorAssetsMapFromWorkspace,
+  createEmptyEditorAssetWorkspace,
+  materializeEditorAssetPayloads,
+  reviewEditorAssetImport,
+  serializeEditorAssetsMap,
+  type EditorAssetRewriteAdapter,
+} from "@slotclientengine/editorresource";
 import { assertStrictSymbolsPackagePaths } from "./imported-symbol-package.js";
 import { assertCanonicalPackagePath } from "./filename-policy.js";
 import { validateLayoutAssets } from "./imported-layout-zip.js";
@@ -65,7 +71,7 @@ export async function exportLayoutZip(options: {
     assertCanonicalPackagePath(path);
     const bytes = source.get(path);
     if (!bytes) throw new Error(`导出资源闭包缺少 bytes：${path}`);
-    closure.set(path, bytes.slice());
+    putClosure(closure, path, bytes);
   };
   for (const path of collectSceneLayoutAssetPaths(manifest)) {
     if (
@@ -98,12 +104,15 @@ export async function exportLayoutZip(options: {
         node.resource.manifest,
       ),
     );
-    const directory = node.resource.manifest.slice(
-      0,
-      node.resource.manifest.lastIndexOf("/"),
-    );
+    const mapped = !node.resource.manifest.includes("/");
+    const directory = mapped
+      ? ""
+      : node.resource.manifest.slice(
+          0,
+          node.resource.manifest.lastIndexOf("/"),
+        );
     for (const path of collectImageStringAssetPaths(nested))
-      add(`${directory}/${path}`);
+      add(mapped ? path : `${directory}/${path}`);
   }
   if (manifest.symbolPackage) {
     const files = options.symbolFiles;
@@ -113,16 +122,21 @@ export async function exportLayoutZip(options: {
     const nested = parseSymbolPackageManifest(
       parseJson(files.get("symbols.package.json"), "symbols.package.json"),
     );
-    if (nested.id !== manifest.symbolPackage.manifest.split("/").at(-2))
+    if (
+      manifest.symbolPackage.manifest.includes("/") &&
+      nested.id !== manifest.symbolPackage.manifest.split("/").at(-2)
+    )
       throw new Error("symbols package id 与 layout binding 目录不一致。");
-    const directory = manifest.symbolPackage.manifest.slice(
-      0,
-      manifest.symbolPackage.manifest.lastIndexOf("/"),
-    );
     for (const path of collectSymbolPackageEntryPaths(nested)) {
       const bytes = files.get(path);
       if (!bytes) throw new Error(`symbols dependency 缺少 bytes：${path}`);
-      closure.set(`${directory}/${path}`, bytes.slice());
+      putClosure(
+        closure,
+        path === "symbols.package.json"
+          ? manifest.symbolPackage.manifest
+          : path,
+        bytes,
+      );
     }
   }
   for (const [symbolId, binding] of Object.entries(
@@ -141,14 +155,14 @@ export async function exportLayoutZip(options: {
       throw new Error(
         `Symbols nested id ${nested.id} 与 binding ${symbolId} 不一致。`,
       );
-    const directory = binding.manifest.slice(
-      0,
-      binding.manifest.lastIndexOf("/"),
-    );
     for (const path of collectSymbolPackageEntryPaths(nested)) {
       const bytes = files.get(path);
       if (!bytes) throw new Error(`symbols dependency 缺少 bytes：${path}`);
-      closure.set(`${directory}/${path}`, bytes.slice());
+      putClosure(
+        closure,
+        path === "symbols.package.json" ? binding.manifest : path,
+        bytes,
+      );
     }
   }
   const referencedPopupIds = new Set(
@@ -170,9 +184,12 @@ export async function exportLayoutZip(options: {
         `Popup nested id ${nested.id} 与 binding ${popupId} 不一致。`,
       );
     const paths = collectPopupPackagePaths({ manifest: nested, files });
-    const directory = `dependencies/popups/${popupId}`;
     for (const path of ["popup.manifest.json", ...paths])
-      closure.set(`${directory}/${path}`, files.get(path)!.slice());
+      putClosure(
+        closure,
+        path === "popup.manifest.json" ? popup.manifest : path,
+        files.get(path)!,
+      );
   }
   collectSceneLayoutPackagePaths({ manifest, files: closure });
   const validated = await validateLayoutAssets(manifest, closure, {
@@ -180,22 +197,195 @@ export async function exportLayoutZip(options: {
     ...(options.decodeVideo ? { decodeVideo: options.decodeVideo } : {}),
   });
   validated.destroy();
-  const entries: Record<string, Uint8Array> = {
-    "layout.manifest.json": new TextEncoder().encode(
-      stableManifestJson(manifest),
+  const flattened = await flattenLayoutClosure(manifest, closure);
+  const entries = new Map(materializeEditorAssetPayloads(flattened.workspace));
+  entries.set(
+    EDITOR_ASSETS_MAP_PATH,
+    serializeEditorAssetsMap(
+      createEditorAssetsMapFromWorkspace(flattened.workspace),
     ),
-  };
-  for (const path of [...closure.keys()].sort())
-    entries[path] = closure.get(path)!.slice();
+  );
+  entries.set(
+    "layout.manifest.json",
+    new TextEncoder().encode(stableManifestJson(flattened.manifest)),
+  );
   const bytes = createDeterministicZip(entries, {
     level: 6,
-    pathPolicy: { requireLowercase: true },
   });
   return Object.freeze({
     fileName: `${manifest.id}-layout.zip`,
     bytes,
     blob: new Blob([bytes as BlobPart], { type: "application/zip" }),
   });
+}
+
+async function flattenLayoutClosure(
+  manifest: SceneLayoutManifestV1,
+  closure: ReadonlyMap<string, Uint8Array>,
+) {
+  const mapping = new Map(
+    [...closure.keys()].map((path) => [path, basenameFromSourcePath(path)]),
+  );
+  const virtual = new Map<string, Uint8Array>();
+  for (const [path, bytes] of closure) {
+    const key = mapping.get(path)!;
+    const current = virtual.get(key);
+    if (current && !sameBytes(current, bytes))
+      throw new Error(`全局扁平 filename key 冲突：${key}`);
+    virtual.set(key, bytes.slice());
+  }
+  const rewritten = rewriteLayoutManifestFilenameKeys(manifest, mapping);
+  const empty = createEmptyEditorAssetWorkspace();
+  const review = await reviewEditorAssetImport({
+    workspace: empty,
+    incoming: [...virtual].map(([key, bytes]) => ({
+      key,
+      mediaType: layoutMediaType(key),
+      bytes,
+    })),
+  });
+  const adapter: EditorAssetRewriteAdapter<null> = {
+    cloneProject: () => null,
+    collectReferences: () => ({ references: [] }),
+    renameReferences: () => null,
+  };
+  const workspace = (
+    await commitEditorAssetImport({
+      workspace: empty,
+      project: null,
+      review,
+      adapter,
+    })
+  ).workspace;
+  return { manifest: rewritten, workspace };
+}
+
+function rewriteLayoutManifestFilenameKeys(
+  value: SceneLayoutManifestV1,
+  mapping: ReadonlyMap<string, string>,
+): SceneLayoutManifestV1 {
+  const key = (path: string) => mapping.get(path) ?? path;
+  const nodes = value.nodes.map((node) => {
+    const resource = node.resource;
+    if (resource.kind === "image")
+      return { ...node, resource: { ...resource, path: key(resource.path) } };
+    if (resource.kind === "image-string")
+      return {
+        ...node,
+        resource: { ...resource, manifest: key(resource.manifest) },
+      };
+    return {
+      ...node,
+      resource: {
+        ...resource,
+        skeleton: key(resource.skeleton),
+        atlas: key(resource.atlas),
+        textures: Object.fromEntries(
+          Object.entries(resource.textures).map(([page, path]) => [
+            page,
+            key(path),
+          ]),
+        ),
+      },
+    };
+  });
+  const transitions = value.gameModes?.transitions?.map((transition) => {
+    const resource = transition.overlay.resource;
+    if (resource.kind === "video")
+      return {
+        ...transition,
+        overlay: {
+          ...transition.overlay,
+          resource: { ...resource, path: key(resource.path) },
+        },
+      };
+    return {
+      ...transition,
+      overlay: {
+        ...transition.overlay,
+        resource: {
+          ...resource,
+          skeleton: key(resource.skeleton),
+          atlas: key(resource.atlas),
+          textures: Object.fromEntries(
+            Object.entries(resource.textures).map(([page, path]) => [
+              page,
+              key(path),
+            ]),
+          ),
+        },
+      },
+    };
+  });
+  return parseSceneLayoutManifest({
+    ...value,
+    nodes,
+    ...(value.symbolPackage
+      ? {
+          symbolPackage: {
+            ...value.symbolPackage,
+            manifest: key(value.symbolPackage.manifest),
+          },
+        }
+      : {}),
+    ...(value.symbolPackages
+      ? {
+          symbolPackages: Object.fromEntries(
+            Object.entries(value.symbolPackages).map(([id, binding]) => [
+              id,
+              { ...binding, manifest: key(binding.manifest) },
+            ]),
+          ),
+        }
+      : {}),
+    ...(value.popups
+      ? {
+          popups: Object.fromEntries(
+            Object.entries(value.popups).map(([id, popup]) => [
+              id,
+              { ...popup, manifest: key(popup.manifest) },
+            ]),
+          ),
+        }
+      : {}),
+    ...(value.gameModes
+      ? {
+          gameModes: {
+            ...value.gameModes,
+            ...(transitions ? { transitions } : {}),
+          },
+        }
+      : {}),
+  });
+}
+
+function layoutMediaType(key: string): string {
+  const extension = key.slice(key.lastIndexOf(".") + 1).toLowerCase();
+  if (extension === "png") return "image/png";
+  if (extension === "jpg" || extension === "jpeg") return "image/jpeg";
+  if (extension === "webp") return "image/webp";
+  if (extension === "mp4") return "video/mp4";
+  if (extension === "json") return "application/json";
+  if (extension === "atlas") return "text/plain";
+  throw new Error(`layout asset extension 不支持：${key}`);
+}
+
+function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return (
+    left.byteLength === right.byteLength &&
+    left.every((byte, index) => byte === right[index])
+  );
+}
+
+function putClosure(
+  closure: Map<string, Uint8Array>,
+  key: string,
+  bytes: Uint8Array,
+): void {
+  const current = closure.get(key);
+  if (current && !sameBytes(current, bytes))
+    throw new Error(`全局扁平 filename key 冲突：${key}`);
+  if (!current) closure.set(key, bytes.slice());
 }
 
 export async function materializeLayoutOwnedAssets(options: {
@@ -206,143 +396,59 @@ export async function materializeLayoutOwnedAssets(options: {
   readonly assets: ReadonlyMap<string, Uint8Array>;
 }> {
   const source = parseSceneLayoutManifest(options.manifest);
-  const assets = new Map<string, Uint8Array>();
-  for (const [path, bytes] of options.assets) {
-    if (path.startsWith("dependencies/")) assets.set(path, bytes.slice());
-  }
-  const cache = new Map<
-    string,
-    SceneLayoutManifestV1["nodes"][number]["resource"]
-  >();
-  type SpineAssetResource = {
-    readonly kind: "spine";
-    readonly skeleton: string;
-    readonly atlas: string;
-    readonly textures: Readonly<Record<string, string>>;
-  };
-  const spineCache = new Map<string, SpineAssetResource>();
-  const materializeSpineResource = async <T extends SpineAssetResource>(
-    input: T,
-  ): Promise<T> => {
-    const cacheKey = JSON.stringify(
-      sortValue({
-        skeleton: input.skeleton,
-        atlas: input.atlas,
-        textures: input.textures,
-      }),
-    );
-    const cached = spineCache.get(cacheKey);
-    if (cached) return { ...input, ...cached };
-    const textures: Record<string, string> = {};
-    const pageMapping = new Map<string, string>();
-    for (const [page, oldPath] of Object.entries(input.textures)) {
-      const bytes = requiredBytes(options.assets, oldPath);
-      const type = detectRasterAssetType(bytes);
-      const path = allocateContentAddressedPath({
-        digest: await sha256Hex(bytes),
-        extension: type.extension,
-      });
-      textures[page] = path;
-      pageMapping.set(page, page);
-      putAsset(assets, path, bytes);
-    }
-    const atlasBytes = new TextEncoder().encode(
-      rewriteAtlasText(
-        new TextDecoder("utf-8", { fatal: true }).decode(
-          requiredBytes(options.assets, input.atlas),
-        ),
-        pageMapping,
-      ),
-    );
-    const atlas = allocateContentAddressedPath({
-      digest: await sha256Hex(atlasBytes),
-      extension: "atlas",
-    });
-    putAsset(assets, atlas, atlasBytes);
-    const skeletonValue = JSON.parse(
+  const assets = new Map(
+    [...options.assets].map(([path, bytes]) => [path, bytes.slice()] as const),
+  );
+  const externalRoots = new Set([
+    ...(source.symbolPackage ? [source.symbolPackage.manifest] : []),
+    ...Object.values(source.symbolPackages ?? {}).map(
+      (binding) => binding.manifest,
+    ),
+    ...Object.values(source.popups ?? {}).map((binding) => binding.manifest),
+  ]);
+  for (const path of collectSceneLayoutAssetPaths(source))
+    if (!externalRoots.has(path) && !assets.has(path))
+      throw new Error(`导出资源闭包缺少 bytes：${path}`);
+  for (const resource of [
+    ...source.nodes
+      .filter((node) => node.resource.kind === "spine")
+      .map((node) => node.resource),
+    ...(source.gameModes?.transitions ?? [])
+      .filter((transition) => transition.overlay.resource.kind === "spine")
+      .map((transition) => transition.overlay.resource),
+  ]) {
+    if (resource.kind !== "spine") continue;
+    assertSpineAtlasBindings(
       new TextDecoder("utf-8", { fatal: true }).decode(
-        requiredBytes(options.assets, input.skeleton),
+        assets.get(resource.atlas),
       ),
+      Object.keys(resource.textures),
     );
-    const skeletonBytes = new TextEncoder().encode(
-      `${JSON.stringify(sortValue(skeletonValue), null, 2)}\n`,
-    );
-    const skeleton = allocateContentAddressedPath({
-      digest: await sha256Hex(skeletonBytes),
-      extension: "json",
-    });
-    putAsset(assets, skeleton, skeletonBytes);
-    const materialized = { kind: "spine" as const, skeleton, atlas, textures };
-    spineCache.set(cacheKey, materialized);
-    return { ...input, ...materialized };
-  };
-  const nodes = [] as unknown as Array<Record<string, unknown>>;
-  for (const node of source.nodes) {
-    const cacheKey = JSON.stringify(sortValue(node.resource));
-    let resource = cache.get(cacheKey);
-    if (!resource) {
-      if (node.resource.kind === "image") {
-        const bytes = requiredBytes(options.assets, node.resource.path);
-        const type = detectRasterAssetType(bytes);
-        const path = allocateContentAddressedPath({
-          digest: await sha256Hex(bytes),
-          extension: type.extension,
-        });
-        putAsset(assets, path, bytes);
-        resource = { ...node.resource, path };
-      } else if (node.resource.kind === "image-string") {
-        resource = node.resource;
-      } else {
-        resource = await materializeSpineResource(node.resource);
-      }
-      cache.set(cacheKey, resource);
-    }
-    nodes.push({ ...node, resource });
-  }
-  const transitions = [];
-  for (const transition of source.gameModes?.transitions ?? []) {
-    if (transition.overlay.resource.kind === "video") {
-      const bytes = requiredBytes(
-        options.assets,
-        transition.overlay.resource.path,
-      );
-      const path = allocateContentAddressedPath({
-        digest: await sha256Hex(bytes),
-        extension: "mp4",
-      });
-      putAsset(assets, path, bytes);
-      transitions.push({
-        ...transition,
-        overlay: {
-          ...transition.overlay,
-          resource: { ...transition.overlay.resource, path },
-        },
-      });
-      continue;
-    }
-    transitions.push({
-      ...transition,
-      overlay: {
-        ...transition.overlay,
-        resource: await materializeSpineResource(transition.overlay.resource),
-      },
-    });
   }
   return Object.freeze({
-    manifest: parseSceneLayoutManifest({
-      ...source,
-      nodes,
-      ...(source.gameModes
-        ? {
-            gameModes: {
-              ...source.gameModes,
-              transitions,
-            },
-          }
-        : {}),
-    }),
+    manifest: source,
     assets,
   });
+}
+
+function assertSpineAtlasBindings(
+  text: string,
+  expectedPages: readonly string[],
+): void {
+  const lines = text.replace(/\r\n?/gu, "\n").split("\n");
+  const pages = lines.filter((line, index) => {
+    if (!line || /^\s/u.test(line) || line.includes(":")) return false;
+    return lines
+      .slice(index + 1)
+      .find((candidate) => candidate.length > 0)
+      ?.startsWith("size:");
+  });
+  for (const page of expectedPages)
+    if (!pages.includes(page))
+      throw new Error(`Spine atlas 缺少 page：${page}`);
+  for (const page of pages)
+    if (!expectedPages.includes(page))
+      throw new Error(`Spine atlas 包含未绑定 page：${page}`);
 }
 
 export function stableManifestJson(
@@ -365,42 +471,4 @@ function sortValue(value: unknown): unknown {
       .sort(([left], [right]) => left.localeCompare(right, "en"))
       .map(([key, child]) => [key, sortValue(child)]),
   );
-}
-
-function rewriteAtlasText(
-  text: string,
-  mapping: ReadonlyMap<string, string>,
-): string {
-  const lines = text.replace(/\r\n?/gu, "\n").split("\n");
-  const rewritten = lines.map((line) => mapping.get(line) ?? line);
-  for (const page of mapping.keys()) {
-    if (!lines.includes(page))
-      throw new Error(`Spine atlas 缺少 page：${page}`);
-  }
-  return `${rewritten.join("\n").replace(/\n+$/u, "")}\n`;
-}
-
-function requiredBytes(
-  files: ReadonlyMap<string, Uint8Array>,
-  path: string,
-): Uint8Array {
-  const bytes = files.get(path);
-  if (!bytes) throw new Error(`导出资源闭包缺少 bytes：${path}`);
-  return bytes;
-}
-
-function putAsset(
-  files: Map<string, Uint8Array>,
-  path: string,
-  bytes: Uint8Array,
-): void {
-  const current = files.get(path);
-  if (
-    current &&
-    (current.byteLength !== bytes.byteLength ||
-      current.some((value, index) => value !== bytes[index]))
-  ) {
-    throw new Error(`content-addressed path collision：${path}`);
-  }
-  if (!current) files.set(path, bytes.slice());
 }

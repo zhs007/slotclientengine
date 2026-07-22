@@ -2,6 +2,7 @@ import { createSymbolPackageResource } from "@slotclientengine/rendercore/symbol
 import {
   createBoundedSourceIndex,
   ephemeralContentFingerprint,
+  extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
 import {
   addCustomStateDefinition,
@@ -17,7 +18,6 @@ import {
   moveSymbolState,
   removeCustomStateDefinition,
   removeSymbolState,
-  replaceAsset,
   setAllSymbolsIncluded,
   setCascadeWinPresentation,
   setStateVisual,
@@ -44,6 +44,7 @@ import {
   createSnapshotFiles,
   exportSymbolPackageZip,
   importSymbolPackageZip,
+  SYMBOL_ZIP_LIMITS,
 } from "../io/symbol-package-zip.js";
 import {
   SymbolEditorPreview,
@@ -78,8 +79,6 @@ export class SymbolsEditorApp {
   #preview: SymbolEditorPreview | null = null;
   #unsubscribe: (() => void) | null = null;
   #previewRequest = 0;
-  #replacePath: string | null = null;
-  #replaceImageStringId: string | null = null;
   #previewValue = 1;
   #pickerTrigger: HTMLElement | null = null;
   #feedbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -123,19 +122,8 @@ export class SymbolsEditorApp {
     this.requireElement("[data-new]").addEventListener("click", () =>
       this.requireInput("[data-new-input]").click(),
     );
-    this.requireElement("[data-import]").addEventListener("click", () =>
-      this.requireInput("[data-import-input]").click(),
-    );
     this.requireElement("[data-upload]").addEventListener("click", () =>
       this.requireInput("[data-upload-input]").click(),
-    );
-    this.requireElement("[data-upload-directory]").addEventListener(
-      "click",
-      () => this.requireInput("[data-directory-input]").click(),
-    );
-    this.requireElement("[data-import-image-string]").addEventListener(
-      "click",
-      () => this.requireInput("[data-image-string-input]").click(),
     );
     this.requireElement("[data-export]").addEventListener(
       "click",
@@ -146,29 +134,10 @@ export class SymbolsEditorApp {
       (event) =>
         void this.createProject(event.currentTarget as HTMLInputElement),
     );
-    this.requireElement("[data-import-input]").addEventListener(
+    this.requireElement("[data-upload-input]").addEventListener(
       "change",
       (event) =>
-        void this.importPackage(event.currentTarget as HTMLInputElement),
-    );
-    for (const selector of ["[data-upload-input]", "[data-directory-input]"]) {
-      this.requireElement(selector).addEventListener(
-        "change",
-        (event) =>
-          void this.uploadResources(event.currentTarget as HTMLInputElement),
-      );
-    }
-    this.requireElement("[data-replace-input]").addEventListener(
-      "change",
-      (event) =>
-        void this.replaceResource(event.currentTarget as HTMLInputElement),
-    );
-    this.requireElement("[data-image-string-input]").addEventListener(
-      "change",
-      (event) =>
-        void this.importImageStringDependency(
-          event.currentTarget as HTMLInputElement,
-        ),
+        void this.uploadResources(event.currentTarget as HTMLInputElement),
     );
     this.requireElement("[data-replay]").addEventListener("click", () =>
       this.#preview?.replay(),
@@ -230,14 +199,12 @@ export class SymbolsEditorApp {
     ) as HTMLButtonElement;
     const uploadButtons = [
       this.requireElement("[data-upload]"),
-      this.requireElement("[data-upload-directory]"),
-      this.requireElement("[data-import-image-string]"),
     ] as HTMLButtonElement[];
     if (!snapshot.project) {
       panel.innerHTML = `<div class="start-state"><h1>建立 Symbols 项目</h1><p>上传公开 gameconfig.json，或导入已有 symbols ZIP。</p></div>`;
       errors.textContent = "";
       exportButton.disabled = true;
-      uploadButtons.forEach((button) => (button.disabled = true));
+      uploadButtons.forEach((button) => (button.disabled = false));
       this.requireElement("[data-preview-state]").innerHTML =
         "<option>normal</option>";
       this.#preview?.clearResource();
@@ -335,16 +302,8 @@ export class SymbolsEditorApp {
     panel
       .querySelector<HTMLElement>("[data-import-image-string-inline]")
       ?.addEventListener("click", () =>
-        this.requireInput("[data-image-string-input]").click(),
+        this.requireInput("[data-upload-input]").click(),
       );
-    panel
-      .querySelectorAll<HTMLElement>("[data-replace-image-string]")
-      .forEach((button) => {
-        button.addEventListener("click", () => {
-          this.#replaceImageStringId = button.dataset.replaceImageString!;
-          this.requireInput("[data-image-string-input]").click();
-        });
-      });
     panel
       .querySelectorAll<HTMLElement>("[data-remove-image-string]")
       .forEach((button) => {
@@ -390,14 +349,6 @@ export class SymbolsEditorApp {
           const path = details.dataset.assetDetails!;
           if (details.open) this.#session.expandedAssets.add(path);
           else this.#session.expandedAssets.delete(path);
-        });
-      });
-    panel
-      .querySelectorAll<HTMLElement>("[data-replace-asset]")
-      .forEach((button) => {
-        button.addEventListener("click", () => {
-          this.#replacePath = button.dataset.replaceAsset!;
-          this.requireInput("[data-replace-input]").click();
         });
       });
     panel
@@ -1395,29 +1346,6 @@ export class SymbolsEditorApp {
     }
   }
 
-  private async importPackage(input: HTMLInputElement): Promise<void> {
-    const file = input.files?.[0];
-    input.value = "";
-    if (!file) return;
-    try {
-      const imported = await importSymbolPackageZip(
-        new Uint8Array(await file.arrayBuffer()),
-        {
-          loadTextures: false,
-        },
-      );
-      try {
-        this.#session.resetForImport(imported.project);
-        this.#store.replace(imported.project);
-        this.showSuccess("Symbols ZIP 已导入");
-      } finally {
-        imported.destroy();
-      }
-    } catch (error) {
-      this.#store.setExternalError(error);
-    }
-  }
-
   private async uploadResources(input: HTMLInputElement): Promise<void> {
     const files = [...(input.files ?? [])];
     input.value = "";
@@ -1429,9 +1357,24 @@ export class SymbolsEditorApp {
         maxTotalBytes: 500 * 1024 * 1024,
       });
       if (files.length === 1 && files[0]!.name.toLowerCase().endsWith(".zip")) {
-        const dependency = await importImageStringDependencyZip(
-          new Uint8Array(await files[0]!.arrayBuffer()),
-        );
+        const zipBytes = new Uint8Array(await files[0]!.arrayBuffer());
+        const entries = extractBoundedZip(zipBytes, {
+          limits: SYMBOL_ZIP_LIMITS,
+        });
+        if (entries.has("symbols.package.json")) {
+          const imported = await importSymbolPackageZip(zipBytes, {
+            loadTextures: false,
+          });
+          try {
+            this.#session.resetForImport(imported.project);
+            this.#store.replace(imported.project);
+            this.showSuccess("Symbols ZIP 已通过统一导入入口加载");
+          } finally {
+            imported.destroy();
+          }
+          return;
+        }
+        const dependency = await importImageStringDependencyZip(zipBytes);
         this.#store.transact((draft) =>
           installImageStringDependency(draft, dependency),
         );
@@ -1443,7 +1386,7 @@ export class SymbolsEditorApp {
       }
       const values = await Promise.all(
         files.map(async (file) => ({
-          path: file.webkitRelativePath || file.name,
+          path: file.name,
           bytes: new Uint8Array(await file.arrayBuffer()),
         })),
       );
@@ -1462,52 +1405,6 @@ export class SymbolsEditorApp {
       this.#store.replace(candidate);
       this.showSuccess(`已上传 ${files.length} 个资源；尚未自动绑定`);
       this.render(this.#store.getSnapshot());
-    } catch (error) {
-      this.#store.setExternalError(error);
-    }
-  }
-
-  private async importImageStringDependency(
-    input: HTMLInputElement,
-  ): Promise<void> {
-    const file = input.files?.[0];
-    input.value = "";
-    if (!file) return;
-    try {
-      const dependency = await importImageStringDependencyZip(
-        new Uint8Array(await file.arrayBuffer()),
-      );
-      const replaceId = this.#replaceImageStringId;
-      this.#replaceImageStringId = null;
-      if (replaceId && replaceId !== dependency.id) {
-        throw new Error(
-          `替换 dependency id 必须保持 ${replaceId}，实际为 ${dependency.id}。`,
-        );
-      }
-      this.#store.transact((draft) =>
-        installImageStringDependency(
-          draft,
-          dependency,
-          replaceId ? "replace" : "import",
-        ),
-      );
-      this.showSuccess(`已导入 ImgNumber dependency：${dependency.id}`);
-    } catch (error) {
-      this.#replaceImageStringId = null;
-      this.#store.setExternalError(error);
-    }
-  }
-
-  private async replaceResource(input: HTMLInputElement): Promise<void> {
-    const file = input.files?.[0];
-    input.value = "";
-    const path = this.#replacePath;
-    this.#replacePath = null;
-    if (!file || !path) return;
-    try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      this.#store.transact((draft) => replaceAsset(draft, path, bytes));
-      this.showSuccess(`已替换 ${path}`);
     } catch (error) {
       this.#store.setExternalError(error);
     }
@@ -1685,17 +1582,12 @@ function shellMarkup(): string {
   return `<main class="app-shell">
     <header class="toolbar">
       <strong>Symbols Editor</strong>
-      <button data-new>新建（game config）</button><button data-import>导入 ZIP</button>
+      <button data-new>新建（game config）</button>
       <span class="toolbar-divider"></span>
-      <button data-upload disabled>上传资源</button><button data-upload-directory disabled>上传文件夹</button>
-      <button data-import-image-string disabled title="兼容入口；上传资源也会自动识别">导入 Imgnumber ZIP</button>
+      <button data-upload>导入资源 / ZIP</button>
       <button class="primary" data-export disabled>导出 ZIP</button>
       <input hidden type="file" accept="application/json,.json" data-new-input>
-      <input hidden type="file" accept=".zip,application/zip" data-import-input>
       <input hidden type="file" multiple accept=".png,.jpg,.jpeg,.webp,.json,.atlas,.zip,application/zip" data-upload-input>
-      <input hidden type="file" multiple webkitdirectory data-directory-input>
-      <input hidden type="file" data-replace-input>
-      <input hidden type="file" accept=".zip,application/zip" data-image-string-input>
     </header>
     <div class="feedback" data-feedback aria-live="polite"></div>
     <div class="errors" data-errors role="alert"></div>
@@ -1749,7 +1641,7 @@ function assetsWorkspaceMarkup(
   for (const ref of references)
     refCounts.set(ref.path, (refCounts.get(ref.path) ?? 0) + 1);
   const records = [...project.assetLibrary.records.values()]
-    .filter((record) => !record.path.startsWith("dependencies/image-strings/"))
+    .filter((record) => record.kind !== "image-string-manifest")
     .filter((record) => {
       const query = session.assetQuery.trim().toLowerCase();
       const referenced = (refCounts.get(record.path) ?? 0) > 0;
@@ -1796,7 +1688,7 @@ function assetsWorkspaceMarkup(
               )
             : []),
         ]);
-        return `<article class="dependency-card"><div><strong>${escapeHtml(dependency.id)}</strong><small>${Object.keys(dependency.manifest.glyphs).length} glyphs · lineHeight ${dependency.manifest.metrics.lineHeight}</small><small>${references.length ? `引用：${references.map(escapeHtml).join("、")}` : "未引用"}</small></div><div class="button-row"><button data-replace-image-string="${escapeAttr(dependency.id)}">替换</button><button data-remove-image-string="${escapeAttr(dependency.id)}" ${references.length ? "disabled" : ""}>删除</button></div></article>`;
+        return `<article class="dependency-card"><div><strong>image-string.manifest.json</strong><small>${Object.keys(dependency.manifest.glyphs).length} glyphs · lineHeight ${dependency.manifest.metrics.lineHeight}</small><small>${references.length ? `引用：${references.map(escapeHtml).join("、")}` : "未引用"}</small></div><div class="button-row"><button data-remove-image-string="${escapeAttr(dependency.id)}" ${references.length ? "disabled" : ""}>删除</button></div></article>`;
       })
       .join("") || '<p class="empty">尚未导入 Imgnumber ZIP。</p>'
   }</div></section>`;
@@ -1886,7 +1778,7 @@ function assetRowMarkup(
       ${dependencies.length ? `<p>直接依赖：${dependencies.map(escapeHtml).join("、")}</p>` : ""}
       ${diagnostics.map((item) => `<div class="inline-error">${escapeHtml(item)}</div>`).join("")}
       <div class="refs">${references.map((ref) => `<button data-asset-reference="${escapeAttr(ref.location)}">${escapeHtml(ref.location)}</button>`).join("") || "0 references"}</div>
-      <div class="button-row"><button data-replace-asset="${escapeAttr(record.path)}">替换</button><button data-delete-asset="${escapeAttr(record.path)}">删除</button></div>
+      <div class="button-row"><button data-delete-asset="${escapeAttr(record.path)}">删除</button></div>
     </div>
   </details>`;
 }
@@ -2009,7 +1901,7 @@ function imageStringInspectorMarkup(
           session.imageStringPreviewTexts.get(previewKey) ?? node.initialText;
         return `<article class="node-card"><header><strong>${escapeHtml(node.name)}</strong><div class="button-row"><button data-image-string-node-action="up" data-image-string-node-index="${index}" ${index === 0 ? "disabled" : ""}>↑</button><button data-image-string-node-action="down" data-image-string-node-index="${index}" ${index === symbol.imageStringNodes.length - 1 ? "disabled" : ""}>↓</button><button data-image-string-node-action="remove" data-image-string-node-index="${index}">删除</button></div></header>
         <label>Name <input data-image-string-node-field="name" data-image-string-node-index="${index}" value="${escapeAttr(node.name)}"></label>
-        <label>Dependency <select data-image-string-node-field="resource" data-image-string-node-index="${index}"><option value="">请选择 dependency</option>${dependencies.map((dependency) => option(`./dependencies/image-strings/${dependency.id}/image-string.manifest.json`, dependency.id, node.resource.includes(`/image-strings/${dependency.id}/`))).join("")}</select></label>
+        <label>Dependency <select data-image-string-node-field="resource" data-image-string-node-index="${index}"><option value="">请选择 dependency</option>${dependencies.map(() => option("./image-string.manifest.json", "image-string.manifest.json", node.resource === "./image-string.manifest.json")).join("")}</select></label>
         <div class="form-grid"><label>Target state <select data-image-string-node-field="target.state" data-image-string-node-index="${index}"><option value="">请选择 Spine state</option>${spineStates.map((state) => option(state, state, state === node.target.state)).join("")}</select></label><label>Exact slot <select data-image-string-node-field="target.slot" data-image-string-node-index="${index}"><option value="">请选择 slot</option>${slots.map((slot) => option(slot, slot, slot === node.target.slot)).join("")}</select></label></div>
         <label>Initial text <input data-image-string-node-field="initialText" data-image-string-node-index="${index}" value="${escapeAttr(node.initialText)}"></label>
         <div class="form-grid"><label>Anchor X <input type="number" min="0" max="1" step="0.01" data-image-string-node-field="anchor.x" data-image-string-node-index="${index}" value="${node.anchor.x}"></label><label>Anchor Y <input type="number" min="0" max="1" step="0.01" data-image-string-node-field="anchor.y" data-image-string-node-index="${index}" value="${node.anchor.y}"></label><label>X <input type="number" step="0.1" data-image-string-node-field="transform.x" data-image-string-node-index="${index}" value="${node.transform.x}"></label><label>Y <input type="number" step="0.1" data-image-string-node-field="transform.y" data-image-string-node-index="${index}" value="${node.transform.y}"></label><label>Scale <input type="number" min="0.01" step="0.01" data-image-string-node-field="transform.scale" data-image-string-node-index="${index}" value="${node.transform.scale}"></label></div>
@@ -2220,18 +2112,16 @@ function valueNumberPresentationMarkup(
         const lower = index === 0 ? 1 : value.tiers[index - 1]!.maxExclusive;
         const upper = tier?.maxExclusive;
         const ready =
-          dependencies.some(
-            (dependency) =>
-              binding.resource ===
-              `./dependencies/image-strings/${dependency.id}/image-string.manifest.json`,
-          ) && slots.includes(binding.slot);
+          dependencies.length > 0 &&
+          binding.resource === "./image-string.manifest.json" &&
+          slots.includes(binding.slot);
         const dependencyOptions = [
           `<option value="" ${binding.resource ? "" : "selected"}>未选择 dependency</option>`,
-          ...dependencies.map((dependency) => {
-            const resource = `./dependencies/image-strings/${dependency.id}/image-string.manifest.json`;
+          ...dependencies.map(() => {
+            const resource = "./image-string.manifest.json";
             return option(
               resource,
-              dependency.id,
+              "image-string.manifest.json",
               binding.resource === resource,
             );
           }),

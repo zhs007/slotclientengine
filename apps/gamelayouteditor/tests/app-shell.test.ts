@@ -48,11 +48,11 @@ const ioSpies = vi.hoisted(() => ({
 
 const commandSpies = vi.hoisted(() => ({
   uploadImage: vi.fn(async ({ project, file, resourceId }) => {
-    const id = resourceId ?? file.name.replace(/\.[^.]+$/u, "").toLowerCase();
+    const id = resourceId ?? file.name;
     const resource = {
       id,
       kind: "image" as const,
-      path: `assets/${file.name.toLowerCase()}`,
+      path: id,
       size: { width: 100, height: 80 },
     };
     project.resources.set(id, resource);
@@ -61,11 +61,11 @@ const commandSpies = vi.hoisted(() => ({
   }),
   uploadSpine: vi.fn(async ({ project, resourceId }) => {
     const resource = {
-      id: resourceId ?? "hero",
+      id: resourceId ?? "hero.json",
       kind: "spine" as const,
-      skeleton: "assets/hero.json",
-      atlas: "assets/hero.atlas",
-      textures: { "hero.png": "assets/hero.png" },
+      skeleton: "hero.json",
+      atlas: "hero.atlas",
+      textures: { "hero.png": "hero.png" },
       animationNames: ["Idle", "Win", "Bridge"],
       animationEvents: {
         Idle: [],
@@ -77,14 +77,14 @@ const commandSpies = vi.hoisted(() => ({
     project.resources.set(resource.id, resource);
     project.assets.set(resource.skeleton, new Uint8Array([1]));
     project.assets.set(resource.atlas, new Uint8Array([2]));
-    project.assets.set("assets/hero.png", new Uint8Array([3]));
+    project.assets.set("hero.png", new Uint8Array([3]));
     return resource;
   }),
   uploadVideo: vi.fn(async ({ project, file, resourceId }) => {
     const resource = {
-      id: resourceId ?? "clip",
+      id: resourceId ?? file.name,
       kind: "video" as const,
-      path: "assets/clip.mp4",
+      path: file.name,
       mimeType: "video/mp4" as const,
       size: { width: 1280, height: 720 },
       durationSeconds: 3.625,
@@ -130,6 +130,12 @@ vi.mock("../src/preview/layout-preview.js", () => ({
 
 vi.mock("../src/io/imported-layout-zip.js", () => ({
   importLayoutZip: ioSpies.importZip,
+  LAYOUT_ZIP_LIMITS: {
+    maxEntries: 4096,
+    maxCompressedBytes: 200 * 1024 * 1024,
+    maxFileBytes: 50 * 1024 * 1024,
+    maxTotalBytes: 500 * 1024 * 1024,
+  },
 }));
 
 vi.mock("../src/io/exported-layout-zip.js", () => ({
@@ -189,7 +195,7 @@ describe("GameLayoutEditorApp workspace", () => {
     expect(
       root.querySelector("[data-symbols-workspace]")?.hasAttribute("hidden"),
     ).toBe(false);
-    expect(root.querySelector("[data-import-symbols]")).toBeTruthy();
+    expect(root.querySelector("[data-import-symbols]")).toBeNull();
     (tabs[0] as HTMLButtonElement).click();
     tabs[0].dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
     expect(tabs[1].getAttribute("aria-selected")).toBe("true");
@@ -409,8 +415,18 @@ describe("GameLayoutEditorApp workspace", () => {
     const placement = root.querySelector(
       '[data-popup-placement="default"][data-popup-placement-field="x"]',
     ) as HTMLInputElement;
-    const fileClick = selectFilesOnce([new File(["zip"], "popup.zip")]);
-    (root.querySelector("[data-import-popup]") as HTMLButtonElement).click();
+    (
+      root.querySelector('[data-workspace-tab="assets"]') as HTMLButtonElement
+    ).click();
+    const popupZip = zipSync({
+      "popup.manifest.json": strToU8("{}"),
+    });
+    const fileClick = selectFilesOnce([
+      new File([popupZip as BlobPart], "popup.zip"),
+    ]);
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
     await vi.waitFor(() =>
       expect(ioSpies.importPopupPackageZip).toHaveBeenCalled(),
     );
@@ -450,8 +466,15 @@ describe("GameLayoutEditorApp workspace", () => {
       throw new Error("bad popup");
     });
     const { app, root } = await createApp();
-    const fileClick = selectFilesOnce([new File(["bad"], "popup.zip")]);
-    (root.querySelector("[data-import-popup]") as HTMLButtonElement).click();
+    const popupZip = zipSync({
+      "popup.manifest.json": strToU8("{}"),
+    });
+    const fileClick = selectFilesOnce([
+      new File([popupZip as BlobPart], "popup.zip"),
+    ]);
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
     await vi.waitFor(() => expect(root.textContent).toContain("bad popup"));
     fileClick.mockRestore();
     app.destroy();
@@ -483,7 +506,9 @@ describe("GameLayoutEditorApp workspace", () => {
       root.querySelector("[data-upload-resources]") as HTMLButtonElement
     ).click();
     await vi.waitFor(() => expect(commandSpies.uploadImage).toHaveBeenCalled());
-    expect(root.querySelector('[data-resource-row="uploaded"]')).toBeTruthy();
+    expect(
+      root.querySelector('[data-resource-row="uploaded.png"]'),
+    ).toBeTruthy();
     expect(root.textContent).toContain("未创建任何 node");
     expect(
       root.querySelector('[data-outline-key="layer:uploaded"]'),
@@ -496,7 +521,7 @@ describe("GameLayoutEditorApp workspace", () => {
     const { app, root } = await createAppWithUploadedImage();
     (
       root.querySelector(
-        '[data-resource-add-layer="uploaded"]',
+        '[data-resource-add-layer="uploaded.png"]',
       ) as HTMLButtonElement
     ).click();
     const dialog = root.querySelector(
@@ -523,7 +548,7 @@ describe("GameLayoutEditorApp workspace", () => {
     expect(
       root.querySelector("[data-inspector-heading]")?.textContent,
     ).toContain("uploaded");
-    expect(root.textContent).toContain("资源 uploaded 保持可复用");
+    expect(root.textContent).toContain("资源 uploaded.png 保持可复用");
     expect(dialog.open).toBe(false);
     app.destroy();
   });
@@ -554,7 +579,7 @@ describe("GameLayoutEditorApp workspace", () => {
     app.destroy();
   });
 
-  it("assigns and clears a background while preserving its logical resource", async () => {
+  it("assigns and clears a background while preserving its filename-key resource", async () => {
     const { app, root } = await createAppWithUploadedImage();
     (
       root.querySelector(
@@ -580,7 +605,9 @@ describe("GameLayoutEditorApp workspace", () => {
     (
       root.querySelector('[data-workspace-tab="assets"]') as HTMLButtonElement
     ).click();
-    expect(root.querySelector('[data-resource-row="uploaded"]')).toBeTruthy();
+    expect(
+      root.querySelector('[data-resource-row="uploaded.png"]'),
+    ).toBeTruthy();
     (
       root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
     ).click();
@@ -611,12 +638,14 @@ describe("GameLayoutEditorApp workspace", () => {
       root.querySelector("[data-upload-resources]") as HTMLButtonElement
     ).click();
     await vi.waitFor(() =>
-      expect(root.querySelector('[data-resource-row="shared"]')).toBeTruthy(),
+      expect(
+        root.querySelector('[data-resource-row="shared.png"]'),
+      ).toBeTruthy(),
     );
 
     (
       root.querySelector(
-        '[data-resource-row="shared"] [data-resource-background="landscape"]',
+        '[data-resource-row="shared.png"] [data-resource-background="landscape"]',
       ) as HTMLButtonElement
     ).click();
     let dialog = root.querySelector(
@@ -643,7 +672,7 @@ describe("GameLayoutEditorApp workspace", () => {
     ).click();
     (
       root.querySelector(
-        '[data-resource-row="shared"] [data-resource-background="landscape"]',
+        '[data-resource-row="shared.png"] [data-resource-background="landscape"]',
       ) as HTMLButtonElement
     ).click();
     dialog = root.querySelector("[data-resource-picker]") as HTMLDialogElement;
@@ -675,7 +704,9 @@ describe("GameLayoutEditorApp workspace", () => {
       expect(root.querySelectorAll("[data-resource-row]")).toHaveLength(2),
     );
     (
-      root.querySelector('[data-toggle-resource="alpha"]') as HTMLButtonElement
+      root.querySelector(
+        '[data-toggle-resource="alpha.png"]',
+      ) as HTMLButtonElement
     ).click();
     expect(root.textContent).toContain("未引用，不会导出");
     const status = root.querySelector(
@@ -688,17 +719,19 @@ describe("GameLayoutEditorApp workspace", () => {
     ) as HTMLInputElement;
     query.value = "beta";
     query.dispatchEvent(new Event("input"));
-    expect(root.querySelector('[data-resource-row="alpha"]')).toBeNull();
+    expect(root.querySelector('[data-resource-row="alpha.png"]')).toBeNull();
     (
-      root.querySelector('[data-delete-resource="beta"]') as HTMLButtonElement
+      root.querySelector(
+        '[data-delete-resource="beta.png"]',
+      ) as HTMLButtonElement
     ).click();
-    expect(root.querySelector('[data-resource-row="beta"]')).toBeNull();
-    expect(root.textContent).toContain("已删除资源 beta");
+    expect(root.querySelector('[data-resource-row="beta.png"]')).toBeNull();
+    expect(root.textContent).toContain("已删除资源 beta.png");
     fileClick.mockRestore();
     app.destroy();
   });
 
-  it("derives collision-safe logical ids without prompting for each imported resource", async () => {
+  it("preserves distinct filename keys without prompting", async () => {
     const fileClick = selectFilesOnce([
       new File(["a"], "same.png"),
       new File(["b"], "same.jpg"),
@@ -711,8 +744,8 @@ describe("GameLayoutEditorApp workspace", () => {
     await vi.waitFor(() =>
       expect(root.querySelectorAll("[data-resource-row]")).toHaveLength(2),
     );
-    expect(root.querySelector('[data-resource-row="same"]')).toBeTruthy();
-    expect(root.querySelector('[data-resource-row="same-2"]')).toBeTruthy();
+    expect(root.querySelector('[data-resource-row="same.png"]')).toBeTruthy();
+    expect(root.querySelector('[data-resource-row="same.jpg"]')).toBeTruthy();
     expect(prompt).not.toHaveBeenCalled();
     prompt.mockRestore();
     fileClick.mockRestore();
@@ -735,11 +768,13 @@ describe("GameLayoutEditorApp workspace", () => {
       root.querySelector("[data-upload-resources]") as HTMLButtonElement
     ).click();
     await vi.waitFor(() =>
-      expect(root.querySelector('[data-resource-row="uploaded"]')).toBeTruthy(),
+      expect(
+        root.querySelector('[data-resource-row="uploaded.png"]'),
+      ).toBeTruthy(),
     );
     (
       root.querySelector(
-        '[data-resource-add-layer="uploaded"]',
+        '[data-resource-add-layer="uploaded.png"]',
       ) as HTMLButtonElement
     ).click();
     let dialog = root.querySelector(
@@ -752,7 +787,7 @@ describe("GameLayoutEditorApp workspace", () => {
     dialog = root.querySelector("[data-resource-picker]") as HTMLDialogElement;
     (
       dialog.querySelector(
-        '[data-picker-candidate="uploaded"]',
+        '[data-picker-candidate="uploaded.png"]',
       ) as HTMLButtonElement
     ).click();
     dialog = root.querySelector("[data-resource-picker]") as HTMLDialogElement;
@@ -801,11 +836,13 @@ describe("GameLayoutEditorApp workspace", () => {
       root.querySelector("[data-upload-resources]") as HTMLButtonElement
     ).click();
     await vi.waitFor(() =>
-      expect(root.querySelector('[data-resource-row="hero"]')).toBeTruthy(),
+      expect(
+        root.querySelector('[data-resource-row="hero.json"]'),
+      ).toBeTruthy(),
     );
     (
       root.querySelector(
-        '[data-resource-add-layer="hero"]',
+        '[data-resource-add-layer="hero.json"]',
       ) as HTMLButtonElement
     ).click();
     let dialog = root.querySelector(
@@ -863,7 +900,7 @@ describe("GameLayoutEditorApp workspace", () => {
     const transitionResource = root.querySelector(
       "[data-transition-resource]",
     ) as HTMLSelectElement;
-    transitionResource.value = "hero";
+    transitionResource.value = "hero.json";
     transitionResource.dispatchEvent(new Event("change"));
     const transitionAnimation = root.querySelector(
       "[data-transition-animation]",
@@ -944,7 +981,7 @@ describe("GameLayoutEditorApp workspace", () => {
     ).click();
     await vi.waitFor(() =>
       expect(
-        root.querySelector('[data-resource-row="background"]'),
+        root.querySelector('[data-resource-row="background.png"]'),
       ).toBeTruthy(),
     );
     backgroundFileClick.mockRestore();
@@ -957,11 +994,13 @@ describe("GameLayoutEditorApp workspace", () => {
       root.querySelector("[data-upload-resources]") as HTMLButtonElement
     ).click();
     await vi.waitFor(() =>
-      expect(root.querySelector('[data-resource-row="hero"]')).toBeTruthy(),
+      expect(
+        root.querySelector('[data-resource-row="hero.json"]'),
+      ).toBeTruthy(),
     );
     (
       root.querySelector(
-        '[data-resource-row="background"] [data-resource-background="default"]',
+        '[data-resource-row="background.png"] [data-resource-background="default"]',
       ) as HTMLButtonElement
     ).click();
     (
@@ -984,7 +1023,7 @@ describe("GameLayoutEditorApp workspace", () => {
     ).click();
     (
       root.querySelector(
-        '[data-resource-row="background"] [data-resource-background="default"]',
+        '[data-resource-row="background.png"] [data-resource-background="default"]',
       ) as HTMLButtonElement
     ).click();
     (
@@ -1161,13 +1200,13 @@ describe("GameLayoutEditorApp workspace", () => {
     ).click();
     await vi.waitFor(() =>
       expect(
-        root.querySelector('[data-resource-row="background"]'),
+        root.querySelector('[data-resource-row="background.png"]'),
       ).toBeTruthy(),
     );
     backgroundClick.mockRestore();
     (
       root.querySelector(
-        '[data-resource-row="background"] [data-resource-background="default"]',
+        '[data-resource-row="background.png"] [data-resource-background="default"]',
       ) as HTMLButtonElement
     ).click();
     (
@@ -1186,7 +1225,7 @@ describe("GameLayoutEditorApp workspace", () => {
       root.querySelector("[data-upload-resources]") as HTMLButtonElement
     ).click();
     await vi.waitFor(() =>
-      expect(root.querySelector('[data-resource-row="clip"]')).toBeTruthy(),
+      expect(root.querySelector('[data-resource-row="clip.mp4"]')).toBeTruthy(),
     );
     videoClick.mockRestore();
 
@@ -1205,7 +1244,7 @@ describe("GameLayoutEditorApp workspace", () => {
     ).click();
     (
       root.querySelector(
-        '[data-resource-row="background"] [data-resource-background="default"]',
+        '[data-resource-row="background.png"] [data-resource-background="default"]',
       ) as HTMLButtonElement
     ).click();
     (
@@ -1342,15 +1381,17 @@ describe("GameLayoutEditorApp workspace", () => {
       root.querySelector("[data-upload-resources]") as HTMLButtonElement
     ).click();
     await vi.waitFor(() =>
-      expect(root.querySelector('[data-resource-row="digits"]')).toBeTruthy(),
+      expect(
+        root.querySelector('[data-resource-row="image-string.manifest.json"]'),
+      ).toBeTruthy(),
     );
     const background = root.querySelector(
-      '[data-resource-row="digits"] [data-resource-background]',
+      '[data-resource-row="image-string.manifest.json"] [data-resource-background]',
     ) as HTMLButtonElement;
     expect(background).toBeNull();
     (
       root.querySelector(
-        '[data-resource-add-layer="digits"]',
+        '[data-resource-add-layer="image-string.manifest.json"]',
       ) as HTMLButtonElement
     ).click();
     const dialog = root.querySelector(
@@ -1607,9 +1648,16 @@ describe("GameLayoutEditorApp workspace", () => {
       ...metadata,
       bindings,
     }));
-    const fileClick = selectFilesOnce([new File(["zip"], "symbols.zip")]);
+    const symbolsZip = zipSync({
+      "symbols.package.json": strToU8("{}"),
+    });
+    const fileClick = selectFilesOnce([
+      new File([symbolsZip as BlobPart], "symbols.zip"),
+    ]);
     const { app, root } = await createApp();
-    (root.querySelector("[data-import-symbols]") as HTMLButtonElement).click();
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
     await vi.waitFor(() =>
       expect(previewSpies.setSymbolPackage).toHaveBeenCalled(),
     );
@@ -1715,7 +1763,7 @@ async function createAppWithUploadedImage(): Promise<{
   ).click();
   await vi.waitFor(() =>
     expect(
-      result.root.querySelector('[data-resource-row="uploaded"]'),
+      result.root.querySelector('[data-resource-row="uploaded.png"]'),
     ).toBeTruthy(),
   );
   fileClick.mockRestore();

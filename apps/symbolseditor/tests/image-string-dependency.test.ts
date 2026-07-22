@@ -32,16 +32,10 @@ describe("image-string logical dependency", () => {
     expect(
       project.imageStringDependencies.get("coin-digits")?.manifest,
     ).toBeDefined();
-    expect(
-      project.assetLibrary.records.has(
-        "dependencies/image-strings/coin-digits/image-string.manifest.json",
-      ),
-    ).toBe(true);
-    expect(
-      project.assetLibrary.records.has(
-        "dependencies/image-strings/coin-digits/assets/0.png",
-      ),
-    ).toBe(true);
+    expect(project.assetLibrary.records.has("image-string.manifest.json")).toBe(
+      true,
+    );
+    expect(project.assetLibrary.records.has("0.png")).toBe(true);
 
     installImageStringDependency(project, dependency);
     expect(project.imageStringDependencies.size).toBe(1);
@@ -66,8 +60,7 @@ describe("image-string logical dependency", () => {
     setSymbolImageStringNodes(project, "A", [
       {
         name: "coin-value",
-        resource:
-          "./dependencies/image-strings/coin-digits/image-string.manifest.json",
+        resource: "./image-string.manifest.json",
         target: { state: "normal", slot: "Num" },
         initialText: "0",
         anchor: { x: 0.5, y: 0.5 },
@@ -115,8 +108,7 @@ describe("image-string logical dependency", () => {
     setSymbolImageStringNodes(project, "A", [
       {
         name: "coin-value",
-        resource:
-          "./dependencies/image-strings/coin-digits/image-string.manifest.json",
+        resource: "./image-string.manifest.json",
         target: { state: "normal", slot: "Number" },
         initialText: "0",
         anchor: { x: 0.5, y: 0.5 },
@@ -129,11 +121,9 @@ describe("image-string logical dependency", () => {
 
     const exported = exportSnapshot(project);
     expect(exported.packageManifest.resources).toContain(
-      "dependencies/image-strings/coin-digits/image-string.manifest.json",
+      "image-string.manifest.json",
     );
-    expect(exported.packageManifest.resources).toContain(
-      "dependencies/image-strings/coin-digits/assets/0.png",
-    );
+    expect(exported.packageManifest.resources).toContain("0.png");
     const imported = createFromImportedPackage({
       packageManifest: exported.packageManifest,
       rawGameConfig: exported.rawGameConfig,
@@ -209,8 +199,7 @@ function createValuePresentation() {
       type: "image-string" as const,
       tiers: [
         {
-          resource:
-            "./dependencies/image-strings/coin-digits/image-string.manifest.json",
+          resource: "./image-string.manifest.json",
           slot: "Num",
           anchor: { x: 0.5, y: 0.5 },
           transform: { x: 0, y: 0, scale: 1 },

@@ -59,12 +59,12 @@ describe("symbols zip IO", () => {
       fileName: "fixture.json",
     });
     uploadAssetBatch(project, [
-      { path: "art/base-wild-final.webp", bytes: imageBytes() },
+      { path: "base-wild-final.webp", bytes: imageBytes() },
       { path: "drafts/unused.png", bytes: imageBytes() },
     ]);
     setStateVisual(project, "A", "normal", {
       kind: "image",
-      imagePath: "art/base-wild-final.webp",
+      imagePath: "base-wild-final.webp",
     });
     const first = await exportSymbolPackageZip(project, {
       loadTextures: false,
@@ -81,23 +81,19 @@ describe("symbols zip IO", () => {
         maxTotalBytes: 20 * 1024 * 1024,
       },
     });
-    expect([...exportedFiles.keys()]).not.toContain("art/base-wild-final.webp");
+    expect([...exportedFiles.keys()]).not.toContain("base-wild-final.webp");
     expect(
       [...exportedFiles.keys()].some((path) =>
-        /^assets\/[a-f0-9]{64}\.png$/u.test(path),
+        /^assets\/[a-f0-9]{64}\.webp$/u.test(path),
       ),
     ).toBe(true);
     const imported = await importSymbolPackageZip(first.bytes, {
       loadTextures: false,
     });
     expect(
-      [...imported.project.assetLibrary.records.keys()].some((path) =>
-        /^assets\/[a-f0-9]{64}\.png$/u.test(path),
-      ),
+      imported.project.assetLibrary.records.has("base-wild-final.webp"),
     ).toBe(true);
-    expect(imported.project.assetLibrary.records.has("drafts/unused.png")).toBe(
-      false,
-    );
+    expect(imported.project.assetLibrary.records.has("unused.png")).toBe(false);
     imported.destroy();
   });
 
@@ -157,9 +153,7 @@ describe("symbols zip IO", () => {
     const upgradedFiles = extractBoundedZip(upgraded.bytes, {
       limits: SYMBOL_ZIP_LIMITS,
     });
-    expect(
-      [...upgradedFiles.keys()].every((path) => path === path.toLowerCase()),
-    ).toBe(true);
+    expect(upgradedFiles.has("assets.map.json")).toBe(true);
     for (const path of resources) expect(upgradedFiles.has(path)).toBe(false);
     const upgradedImport = await importSymbolPackageZip(upgraded.bytes, {
       loadTextures: false,
@@ -168,7 +162,7 @@ describe("symbols zip IO", () => {
     imported.destroy();
   });
 
-  it("upgrades a legacy AF Spine package to a re-importable hash-flat package", async () => {
+  it("upgrades a legacy AF Spine package to a re-importable filename-map package", async () => {
     const legacyGameConfig = {
       paytable: { "0": { code: 0, symbol: "AF", pays: [1] } },
       symbolCodes: { AF: 0 },
@@ -246,15 +240,9 @@ describe("symbols zip IO", () => {
         AF: {
           animations: {
             appear: {
-              skeleton: expect.stringMatching(
-                /^\.\/assets\/[a-f0-9]{64}\.json$/u,
-              ),
-              atlas: expect.stringMatching(
-                /^\.\/assets\/[a-f0-9]{64}\.atlas$/u,
-              ),
-              texture: expect.stringMatching(
-                /^\.\/assets\/[a-f0-9]{64}\.png$/u,
-              ),
+              skeleton: "./AF.json",
+              atlas: "./AF.atlas",
+              texture: "./AF.png",
             },
           },
         },
@@ -359,7 +347,7 @@ describe("symbols zip IO", () => {
       x: 0,
       y: 0,
       images: {
-        "1": expect.stringMatching(/^\.\/assets\/[a-f0-9]{64}\.png$/u),
+        "1": "./1.png",
       },
     });
     const reimported = await importSymbolPackageZip(upgraded.bytes, {

@@ -258,7 +258,7 @@ describe("EditorStore", () => {
     });
   });
 
-  it("deduplicates imported logical resources by full material signature while preserving per-node animation", () => {
+  it("deduplicates imported filename-key resources by full material signature while preserving per-node animation", () => {
     const skeleton = new TextEncoder().encode(
       JSON.stringify({
         skeleton: { spine: "4.3.23", width: 100, height: 100 },

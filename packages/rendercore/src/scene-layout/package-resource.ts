@@ -3,10 +3,16 @@ import {
   assertNoPackagePathCollisions,
   resolvePackagePath,
 } from "@slotclientengine/browserartifactio";
+import {
+  EDITOR_ASSETS_MAP_PATH,
+  decodeEditorAssetsMap,
+  validateEditorAssetsMapPackage,
+} from "@slotclientengine/editorresource";
 import { assertVNIProject } from "@slotclientengine/vnicore/core";
 import {
   collectImageStringAssetPaths,
   createImageStringResourceFromFiles,
+  createImageStringResourceFromResolvedFiles,
   parseImageStringManifest,
   validateImageStringText,
   type DecodeImageStringImage,
@@ -14,7 +20,7 @@ import {
 } from "../image-string/index.js";
 import {
   collectSymbolPackageEntryPaths,
-  createSymbolPackageResource,
+  createSymbolPackageResourceFromResolvedFiles,
   parseSymbolPackageManifest,
   validateSymbolPackageContents,
   type SymbolPackageResource,
@@ -22,7 +28,7 @@ import {
 import {
   collectPopupPackagePaths,
   collectPopupDirectPaths,
-  createPopupPackageResource,
+  createPopupPackageResourceFromResolvedFiles,
   parsePopupManifest,
   type PopupPackageResource,
 } from "../popup/index.js";
@@ -44,6 +50,12 @@ export function collectSceneLayoutPackagePaths(options: {
   readonly files: ReadonlyMap<string, Uint8Array>;
 }): readonly string[] {
   const manifest = parseSceneLayoutManifest(options.manifest);
+  const references = collectSceneLayoutAssetPaths(manifest);
+  const mapped = references.every((path) => !path.includes("/"));
+  if (!mapped && references.some((path) => !path.includes("/")))
+    throw new SceneLayoutError(
+      "Scene layout package must not mix filename keys with direct package paths.",
+    );
   const actual = [...options.files.keys()].filter(
     (path) => path !== ROOT_MANIFEST,
   );
@@ -51,7 +63,7 @@ export function collectSceneLayoutPackagePaths(options: {
   assertNoPackagePathCollisions(actual);
   const expected = new Set<string>();
 
-  for (const path of collectSceneLayoutAssetPaths(manifest)) expected.add(path);
+  for (const path of references) expected.add(path);
   for (const node of manifest.nodes) {
     if (node.resource.kind !== "image-string") continue;
     const nestedValue = parseJsonBytes(
@@ -60,7 +72,7 @@ export function collectSceneLayoutPackagePaths(options: {
     );
     const nested = parseImageStringManifest(nestedValue);
     const directory = directoryOf(node.resource.manifest);
-    if (nested.id !== node.resource.manifest.split("/").at(-2)) {
+    if (!mapped && nested.id !== node.resource.manifest.split("/").at(-2)) {
       throw new SceneLayoutError(
         `Scene layout "${manifest.id}" image-string dependency id mismatch at "${node.resource.manifest}".`,
       );
@@ -73,9 +85,11 @@ export function collectSceneLayoutPackagePaths(options: {
       );
     }
     for (const path of collectImageStringAssetPaths(nested)) {
-      expected.add(resolvePackagePath(node.resource.manifest, path));
+      expected.add(
+        mapped ? path : resolvePackagePath(node.resource.manifest, path),
+      );
     }
-    if (!directory.startsWith("dependencies/image-strings/")) {
+    if (!mapped && !directory.startsWith("dependencies/image-strings/")) {
       throw new SceneLayoutError("Invalid image-string dependency directory.");
     }
   }
@@ -91,12 +105,21 @@ export function collectSceneLayoutPackagePaths(options: {
         `Scene layout "${manifest.id}" symbol binding id mismatch at "${binding.manifest}": nested package is "${nested.id}".`,
       );
     }
+    const nestedFiles = mapped
+      ? mappedSymbolFiles(options.files, binding.manifest, nested)
+      : extractPrefixedFiles(options.files, directoryOf(binding.manifest));
     validateSymbolPackageContents({
       packageManifest: nested,
-      files: extractPrefixedFiles(options.files, directoryOf(binding.manifest)),
+      files: nestedFiles,
     });
     for (const path of collectSymbolPackageEntryPaths(nested)) {
-      expected.add(resolvePackagePath(binding.manifest, path));
+      expected.add(
+        path === "symbols.package.json"
+          ? binding.manifest
+          : mapped
+            ? path
+            : resolvePackagePath(binding.manifest, path),
+      );
     }
   }
 
@@ -106,20 +129,19 @@ export function collectSceneLayoutPackagePaths(options: {
       popup.manifest,
     );
     const nested = parsePopupManifest(nestedValue);
-    if (nested.id !== popup.manifest.split("/").at(-2)) {
+    if (!mapped && nested.id !== popup.manifest.split("/").at(-2)) {
       throw new SceneLayoutError(
         `Scene layout popup dependency id mismatch at "${popup.manifest}".`,
       );
     }
-    const nestedFiles = extractPrefixedFiles(
-      options.files,
-      directoryOf(popup.manifest),
-    );
+    const nestedFiles = mapped
+      ? mappedPopupFiles(options.files, popup.manifest, nested)
+      : extractPrefixedFiles(options.files, directoryOf(popup.manifest));
     for (const path of collectPopupPackagePaths({
       manifest: nested,
       files: nestedFiles,
     })) {
-      expected.add(resolvePackagePath(popup.manifest, path));
+      expected.add(mapped ? path : resolvePackagePath(popup.manifest, path));
     }
   }
 
@@ -144,7 +166,31 @@ export async function createSceneLayoutPackageResource(options: {
     options.manifest ??
     parseJsonBytes(requireBytes(options.files, ROOT_MANIFEST), ROOT_MANIFEST);
   const manifest = parseSceneLayoutManifest(manifestValue);
-  collectSceneLayoutPackagePaths({ manifest, files: options.files });
+  const files = await resolveSceneLayoutPackageFiles({
+    manifest,
+    files: options.files,
+  });
+  return createSceneLayoutPackageResourceFromResolvedFiles({
+    manifest,
+    files,
+    ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+    loadSymbolTextures: options.loadSymbolTextures,
+  });
+}
+
+export async function createSceneLayoutPackageResourceFromResolvedFiles(options: {
+  readonly manifest?: unknown;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+  readonly decodeImage?: DecodeImageStringImage;
+  readonly loadSymbolTextures?: boolean;
+}): Promise<SceneLayoutPackageResource> {
+  const sourceManifestValue =
+    options.manifest ??
+    parseJsonBytes(requireBytes(options.files, ROOT_MANIFEST), ROOT_MANIFEST);
+  const manifest = parseSceneLayoutManifest(sourceManifestValue);
+  const files = options.files;
+  collectSceneLayoutPackagePaths({ manifest, files });
+  const mapped = isMappedSceneLayoutManifest(manifest);
 
   const imageStrings: Record<string, ImageStringResource> = {};
   let symbolPackage: SymbolPackageResource | null = null;
@@ -156,28 +202,53 @@ export async function createSceneLayoutPackageResource(options: {
       if (node.resource.kind !== "image-string") continue;
       if (imageStrings[node.resource.manifest]) continue;
       const nestedFiles = extractPrefixedFiles(
-        options.files,
+        files,
         directoryOf(node.resource.manifest),
       );
-      imageStrings[node.resource.manifest] =
-        await createImageStringResourceFromFiles({
-          files: nestedFiles,
-          ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
-        });
+      const preparedFiles = mapped
+        ? mappedImageStringFiles(files, node.resource.manifest)
+        : nestedFiles;
+      imageStrings[node.resource.manifest] = mapped
+        ? await createImageStringResourceFromResolvedFiles({
+            manifest: parseJsonBytes(
+              requireBytes(files, node.resource.manifest),
+              node.resource.manifest,
+            ),
+            files: preparedFiles,
+            ...(options.decodeImage
+              ? { decodeImage: options.decodeImage }
+              : {}),
+          })
+        : await createImageStringResourceFromFiles({
+            files: preparedFiles,
+            ...(options.decodeImage
+              ? { decodeImage: options.decodeImage }
+              : {}),
+          });
     }
 
     for (const [bindingId, binding] of symbolBindings(manifest)) {
       const nestedFiles = extractPrefixedFiles(
-        options.files,
+        files,
         directoryOf(binding.manifest),
       );
       const nestedManifest = parseJsonBytes(
-        requireBytes(nestedFiles, "symbols.package.json"),
+        requireBytes(
+          mapped ? files : nestedFiles,
+          mapped ? binding.manifest : "symbols.package.json",
+        ),
         binding.manifest,
       );
-      const resource = await createSymbolPackageResource({
+      const preparedFiles = mapped
+        ? mappedSymbolFiles(
+            files,
+            binding.manifest,
+            parseSymbolPackageManifest(nestedManifest),
+          )
+        : nestedFiles;
+      const resource = await createSymbolPackageResourceFromResolvedFiles({
         packageManifest: nestedManifest,
-        files: nestedFiles,
+        files: preparedFiles,
         loadTextures: options.loadSymbolTextures,
       });
       if (manifest.symbolPackage) symbolPackage = resource;
@@ -187,13 +258,26 @@ export async function createSceneLayoutPackageResource(options: {
 
     for (const [popupId, popup] of Object.entries(manifest.popups ?? {})) {
       const nestedFiles = extractPrefixedFiles(
-        options.files,
+        files,
         directoryOf(popup.manifest),
       );
-      popupPackages[popupId] = await createPopupPackageResource({
-        files: nestedFiles,
-        ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
-      });
+      const nestedManifest = parsePopupManifest(
+        parseJsonBytes(
+          requireBytes(
+            mapped ? files : nestedFiles,
+            mapped ? popup.manifest : "popup.manifest.json",
+          ),
+          popup.manifest,
+        ),
+      );
+      popupPackages[popupId] =
+        await createPopupPackageResourceFromResolvedFiles({
+          manifest: nestedManifest,
+          files: mapped
+            ? mappedPopupFiles(files, popup.manifest, nestedManifest)
+            : nestedFiles,
+          ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+        });
     }
 
     const imageModules: Record<string, string> = {};
@@ -206,23 +290,23 @@ export async function createSceneLayoutPackageResource(options: {
       if (resource.kind === "image-string") continue;
       if (resource.kind === "image") {
         imageModules[resource.path] ??= createObjectUrl(
-          requireBytes(options.files, resource.path),
+          requireBytes(files, resource.path),
           resource.path,
           objectUrls,
         );
         continue;
       }
       skeletonModules[resource.skeleton] ??= parseJsonBytes(
-        requireBytes(options.files, resource.skeleton),
+        requireBytes(files, resource.skeleton),
         resource.skeleton,
       );
       atlasModules[resource.atlas] ??= decodeUtf8(
-        requireBytes(options.files, resource.atlas),
+        requireBytes(files, resource.atlas),
         resource.atlas,
       );
       for (const path of Object.values(resource.textures)) {
         textureModules[path] ??= createObjectUrl(
-          requireBytes(options.files, path),
+          requireBytes(files, path),
           path,
           objectUrls,
         );
@@ -231,7 +315,7 @@ export async function createSceneLayoutPackageResource(options: {
     for (const transition of manifest.gameModes?.transitions ?? []) {
       const resource = transition.overlay.resource;
       if (resource.kind === "video") {
-        const bytes = requireBytes(options.files, resource.path);
+        const bytes = requireBytes(files, resource.path);
         if (
           bytes.byteLength < 12 ||
           String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp"
@@ -247,16 +331,16 @@ export async function createSceneLayoutPackageResource(options: {
         continue;
       }
       skeletonModules[resource.skeleton] ??= parseJsonBytes(
-        requireBytes(options.files, resource.skeleton),
+        requireBytes(files, resource.skeleton),
         resource.skeleton,
       );
       atlasModules[resource.atlas] ??= decodeUtf8(
-        requireBytes(options.files, resource.atlas),
+        requireBytes(files, resource.atlas),
         resource.atlas,
       );
       for (const path of Object.values(resource.textures)) {
         textureModules[path] ??= createObjectUrl(
-          requireBytes(options.files, path),
+          requireBytes(files, path),
           path,
           objectUrls,
         );
@@ -327,6 +411,28 @@ export async function loadSceneLayoutPackageFromUrl(options: {
   const manifest = parseSceneLayoutManifest(
     parseJsonBytes(manifestBytes, ROOT_MANIFEST),
   );
+
+  if (isMappedSceneLayoutManifest(manifest)) {
+    const mapBytes = await fetchBytes(
+      fetchImpl,
+      containedUrl(manifestUrl, EDITOR_ASSETS_MAP_PATH),
+    );
+    files.set(EDITOR_ASSETS_MAP_PATH, mapBytes);
+    const map = decodeEditorAssetsMap(mapBytes);
+    for (const entry of Object.values(map.files)) {
+      if (files.has(entry.path)) continue;
+      files.set(
+        entry.path,
+        await fetchBytes(fetchImpl, containedUrl(manifestUrl, entry.path)),
+      );
+    }
+    return createSceneLayoutPackageResource({
+      manifest,
+      files,
+      ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+      loadSymbolTextures: options.loadSymbolTextures,
+    });
+  }
 
   const direct = collectSceneLayoutAssetPaths(manifest);
   for (const path of direct) {
@@ -507,6 +613,107 @@ function symbolBindings(
       Object.freeze([id, binding] as const),
     ),
   );
+}
+
+export async function resolveSceneLayoutPackageFiles(options: {
+  readonly manifest: unknown;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+}): Promise<ReadonlyMap<string, Uint8Array>> {
+  const manifest = parseSceneLayoutManifest(options.manifest);
+  const mapped = isMappedSceneLayoutManifest(manifest);
+  const hasMap = options.files.has(EDITOR_ASSETS_MAP_PATH);
+  if (mapped !== hasMap)
+    throw new SceneLayoutError(
+      mapped
+        ? "Filename-key scene layout package is missing assets.map.json."
+        : "Legacy scene layout package must not contain assets.map.json.",
+    );
+  if (!mapped) return options.files;
+  const map = decodeEditorAssetsMap(
+    requireBytes(options.files, EDITOR_ASSETS_MAP_PATH),
+  );
+  const resolved = await validateEditorAssetsMapPackage({
+    map,
+    files: options.files,
+    allowControlPaths: [ROOT_MANIFEST],
+  });
+  const virtual = new Map<string, Uint8Array>([
+    [ROOT_MANIFEST, requireBytes(options.files, ROOT_MANIFEST).slice()],
+  ]);
+  for (const [key, asset] of resolved) virtual.set(key, asset.bytes.slice());
+  collectSceneLayoutPackagePaths({ manifest, files: virtual });
+  return virtual;
+}
+
+function isMappedSceneLayoutManifest(manifest: SceneLayoutManifestV1): boolean {
+  const references = collectSceneLayoutAssetPaths(manifest);
+  const hasFilenameKey = references.some((path) => !path.includes("/"));
+  const hasDirectPath = references.some((path) => path.includes("/"));
+  if (hasFilenameKey && hasDirectPath)
+    throw new SceneLayoutError(
+      "Scene layout package must not mix filename keys with direct package paths.",
+    );
+  return hasFilenameKey;
+}
+
+function mappedImageStringFiles(
+  files: ReadonlyMap<string, Uint8Array>,
+  rootKey: string,
+): ReadonlyMap<string, Uint8Array> {
+  const manifest = parseImageStringManifest(
+    parseJsonBytes(requireBytes(files, rootKey), rootKey),
+  );
+  return new Map([
+    ["image-string.manifest.json", requireBytes(files, rootKey).slice()],
+    ...collectImageStringAssetPaths(manifest).map(
+      (key) => [key, requireBytes(files, key).slice()] as const,
+    ),
+  ]);
+}
+
+function mappedSymbolFiles(
+  files: ReadonlyMap<string, Uint8Array>,
+  rootKey: string,
+  manifest: ReturnType<typeof parseSymbolPackageManifest>,
+): ReadonlyMap<string, Uint8Array> {
+  return new Map([
+    ["symbols.package.json", requireBytes(files, rootKey).slice()],
+    ...[
+      manifest.entrypoints.gameConfig,
+      manifest.entrypoints.symbolManifest,
+      ...manifest.resources,
+    ].map((key) => [key, requireBytes(files, key).slice()] as const),
+  ]);
+}
+
+function mappedPopupFiles(
+  files: ReadonlyMap<string, Uint8Array>,
+  rootKey: string,
+  manifest: ReturnType<typeof parsePopupManifest>,
+): ReadonlyMap<string, Uint8Array> {
+  const keys = new Set(collectPopupDirectPaths(manifest));
+  for (const resource of Object.values(manifest.resources)) {
+    if (resource.kind === "image-string") {
+      const nested = parseImageStringManifest(
+        parseJsonBytes(
+          requireBytes(files, resource.manifest),
+          resource.manifest,
+        ),
+      );
+      for (const key of collectImageStringAssetPaths(nested)) keys.add(key);
+    } else if (resource.kind === "vni") {
+      const project = assertVNIProject(
+        parseJsonBytes(requireBytes(files, resource.project), resource.project),
+      );
+      for (const asset of project.assets) keys.add(asset.path);
+    }
+  }
+  const result = new Map<string, Uint8Array>([
+    ["popup.manifest.json", requireBytes(files, rootKey).slice()],
+  ]);
+  for (const key of keys) result.set(key, requireBytes(files, key).slice());
+  collectPopupPackagePaths({ manifest, files: result });
+  return result;
 }
 
 function extractPrefixedFiles(

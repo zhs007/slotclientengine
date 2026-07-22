@@ -6,11 +6,15 @@ import {
 import {
   createBoundedSourceIndex,
   ephemeralContentFingerprint,
-  suggestLogicalResourceId,
+  extractBoundedZip,
 } from "@slotclientengine/browserartifactio";
+import { basenameFromSourcePath } from "@slotclientengine/editorresource";
 import { ObjectUrlRegistry } from "../io/object-url-registry.js";
 import { exportLayoutZip } from "../io/exported-layout-zip.js";
-import { importLayoutZip } from "../io/imported-layout-zip.js";
+import {
+  importLayoutZip,
+  LAYOUT_ZIP_LIMITS,
+} from "../io/imported-layout-zip.js";
 import { importSymbolsZipWithFiles } from "../io/imported-symbol-package.js";
 import { importPopupPackageZip } from "../io/imported-popup-package.js";
 import {
@@ -141,7 +145,6 @@ export class GameLayoutEditorApp {
   #previewModeBusy = false;
   #destroyed = false;
   #symbolPackageMetadata: SymbolPackagePreviewSnapshot | null = null;
-  #symbolImportRequest = 0;
   #symbolImportBusy = false;
   #pickerTrigger: HTMLElement | null = null;
   #feedbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -183,7 +186,6 @@ export class GameLayoutEditorApp {
     this.#previewPrepareIdentity = null;
     this.stopPreviewModeMonitor();
     this.#previewModeBusy = false;
-    this.#symbolImportRequest += 1;
     this.#symbolImportBusy = false;
     if (this.#feedbackTimer) clearTimeout(this.#feedbackTimer);
     this.closePicker(false);
@@ -273,22 +275,6 @@ export class GameLayoutEditorApp {
         this.setActiveTab(tabs[target].dataset.workspaceTab as WorkspaceTab);
       });
     });
-    this.requireElement("[data-import-symbols]").addEventListener(
-      "click",
-      () => void this.importSymbolsPackage(),
-    );
-    this.requireElement("[data-replace-symbols]").addEventListener(
-      "click",
-      () => {
-        if (!this.#selectedSymbolId) {
-          this.#store.setExternalError(
-            new Error("尚未选择要替换的 Symbols dependency。"),
-          );
-          return;
-        }
-        void this.importSymbolsPackage(this.#selectedSymbolId);
-      },
-    );
     this.requireElement("[data-clear-symbols]").addEventListener("click", () =>
       this.clearSymbolsPackage(),
     );
@@ -315,22 +301,6 @@ export class GameLayoutEditorApp {
         }
         this.#selectedSymbolId = id;
         void this.bindSelectedSymbolDependencyToMode(id);
-      },
-    );
-    this.requireElement("[data-import-popup]").addEventListener(
-      "click",
-      () => void this.importPopupPackage(),
-    );
-    this.requireElement("[data-replace-popup]").addEventListener(
-      "click",
-      () => {
-        if (!this.#selectedPopupId) {
-          this.#store.setExternalError(
-            new Error("尚未选择要替换的 Popup dependency。"),
-          );
-          return;
-        }
-        void this.importPopupPackage(this.#selectedPopupId);
       },
     );
     this.requireSelect("[data-game-mode]").addEventListener(
@@ -467,7 +437,6 @@ export class GameLayoutEditorApp {
         try {
           const name = (event.currentTarget as HTMLSelectElement).value;
           if (!name) throw new Error("请选择 reel set。");
-          this.#symbolImportRequest += 1;
           this.#symbolPackageMetadata =
             this.#preview?.setSelectedReelSet(name) ?? null;
           this.#store.transact((draft) => {
@@ -505,7 +474,6 @@ export class GameLayoutEditorApp {
       "click",
       () => {
         try {
-          this.#symbolImportRequest += 1;
           this.#symbolPackageMetadata =
             this.#preview?.randomizeSymbols() ?? null;
           this.renderSymbolsMetadata();
@@ -1046,13 +1014,13 @@ export class GameLayoutEditorApp {
           .map((candidate) => candidate.id)
       : [];
     const totalBytes = dependency
-      ? [...dependency.files.values()].reduce(
-          (sum, bytes) => sum + bytes.byteLength,
+      ? dependency.keys.reduce(
+          (sum, key) => sum + (project.assets.get(key)?.byteLength ?? 0),
           0,
         )
       : 0;
     this.requireElement("[data-popup-metadata]").textContent = dependency
-      ? `${dependency.id} · ${dependency.files.size} files · ${totalBytes} bytes · 引用：${references.join(", ") || "无"}`
+      ? `${dependency.id} · ${dependency.keys.length} files · ${totalBytes} bytes · 引用：${references.join(", ") || "无"}`
       : "未导入 Popup dependency。";
     for (const input of this.#root.querySelectorAll<HTMLInputElement>(
       "[data-popup-placement]",
@@ -1390,9 +1358,6 @@ export class GameLayoutEditorApp {
     panel
       .querySelector("[data-upload-resources]")
       ?.addEventListener("click", () => void this.uploadResources(false));
-    panel
-      .querySelector("[data-upload-folder]")
-      ?.addEventListener("click", () => void this.uploadResources(true));
     const query = panel.querySelector<HTMLInputElement>(
       "[data-resource-query]",
     );
@@ -1821,7 +1786,7 @@ export class GameLayoutEditorApp {
         : state.context.kind === "assign-background"
           ? `设置 ${state.context.modeId} / ${state.context.variant} 背景`
           : `重绑图层 ${state.context.nodeId}`;
-    dialog.innerHTML = `<div class="picker-shell"><header><div><span>Resource Picker</span><h2>${escapeHtml(contextLabel)}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源选择器">×</button></header><div class="picker-toolbar"><label>搜索<input type="search" data-picker-query value="${escapeHtml(state.query)}" /></label><label>类型<select data-picker-type><option value="all">全部</option><option value="image" ${state.type === "image" ? "selected" : ""}>Image</option><option value="spine" ${state.type === "spine" ? "selected" : ""}>Spine</option><option value="image-string" ${state.type === "image-string" ? "selected" : ""}>Image String</option></select></label><button type="button" data-picker-upload-image>上传新图片</button><button type="button" data-picker-upload-spine>上传新 Spine</button></div><div class="picker-body"><div class="picker-candidates" role="listbox" aria-label="可用资源">${candidates.map((candidate) => `<button type="button" role="option" data-picker-candidate="${escapeHtml(candidate.resourceId)}" aria-selected="${candidate.resourceId === state.selectedResourceId}" ${candidate.disabledReason ? `disabled title="${escapeHtml(candidate.disabledReason)}"` : ""}><span class="type-mark">${candidate.kind === "spine" ? "SP" : candidate.kind === "image-string" ? "TXT" : "IMG"}</span><span><strong>${escapeHtml(candidate.resourceId)}</strong><small title="${escapeHtml(candidate.primaryPath)}">${escapeHtml(candidate.primaryPath)}</small><small>${escapeHtml(candidate.summary)} · ${candidate.status} · 引用 ${candidate.referenceCount}</small></span></button>`).join("") || '<p class="empty-state">没有匹配资源；上传后仍需明确选择并确认。</p>'}</div><section class="picker-form">${selected ? `<p><strong>${escapeHtml(selected.id)}</strong><br/><span class="path">${escapeHtml(editorResourcePaths(selected)[0]!)}</span></p>` : "<p>请选择一个 logical resource。</p>"}${state.context.kind === "add-layer" ? `<label>node id<input data-picker-node-id value="${escapeHtml(state.nodeId)}" /></label>` : state.context.kind === "assign-background" ? `<p class="hint">背景 node id 将按 ${escapeHtml(state.context.modeId)} / ${escapeHtml(state.context.variant)} 稳定生成。</p>` : ""}${
+    dialog.innerHTML = `<div class="picker-shell"><header><div><span>Resource Picker</span><h2>${escapeHtml(contextLabel)}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源选择器">×</button></header><div class="picker-toolbar"><label>搜索<input type="search" data-picker-query value="${escapeHtml(state.query)}" /></label><label>类型<select data-picker-type><option value="all">全部</option><option value="image" ${state.type === "image" ? "selected" : ""}>Image</option><option value="spine" ${state.type === "spine" ? "selected" : ""}>Spine</option><option value="image-string" ${state.type === "image-string" ? "selected" : ""}>Image String</option></select></label><button type="button" data-picker-import>导入资源 / ZIP</button></div><div class="picker-body"><div class="picker-candidates" role="listbox" aria-label="可用资源">${candidates.map((candidate) => `<button type="button" role="option" data-picker-candidate="${escapeHtml(candidate.resourceId)}" aria-selected="${candidate.resourceId === state.selectedResourceId}" ${candidate.disabledReason ? `disabled title="${escapeHtml(candidate.disabledReason)}"` : ""}><span class="type-mark">${candidate.kind === "spine" ? "SP" : candidate.kind === "image-string" ? "TXT" : "IMG"}</span><span><strong>${escapeHtml(candidate.resourceId)}</strong><small title="${escapeHtml(candidate.primaryPath)}">${escapeHtml(candidate.primaryPath)}</small><small>${escapeHtml(candidate.summary)} · ${candidate.status} · 引用 ${candidate.referenceCount}</small></span></button>`).join("") || '<p class="empty-state">没有匹配资源；导入后仍需明确选择并确认。</p>'}</div><section class="picker-form">${selected ? `<p><strong>${escapeHtml(selected.id)}</strong><br/><span class="path">${escapeHtml(editorResourcePaths(selected)[0]!)}</span></p>` : "<p>请选择一个 filename-key resource。</p>"}${state.context.kind === "add-layer" ? `<label>node id<input data-picker-node-id value="${escapeHtml(state.nodeId)}" /></label>` : state.context.kind === "assign-background" ? `<p class="hint">背景 node id 将按 ${escapeHtml(state.context.modeId)} / ${escapeHtml(state.context.variant)} 稳定生成。</p>` : ""}${
       state.context.kind === "add-layer" && project.mode === "orientation-focus"
         ? activeVariantIds(project)
             .map(
@@ -1941,11 +1906,8 @@ export class GameLayoutEditorApp {
         ).value;
       });
     dialog
-      .querySelector("[data-picker-upload-image]")
-      ?.addEventListener("click", () => void this.uploadImages(true));
-    dialog
-      .querySelector("[data-picker-upload-spine]")
-      ?.addEventListener("click", () => void this.uploadSpine(true));
+      .querySelector("[data-picker-import]")
+      ?.addEventListener("click", () => void this.uploadResources(true));
     dialog
       .querySelector("[data-picker-confirm]")
       ?.addEventListener("click", () => void this.confirmPicker());
@@ -2068,42 +2030,10 @@ export class GameLayoutEditorApp {
     this.#pickerTrigger = null;
   }
 
-  private async uploadImages(fromPicker = false): Promise<void> {
-    const files = await pickFiles(".png,.jpg,.jpeg,.webp", true);
-    if (files.length === 0) return;
-    try {
-      const project = cloneEditorProject(this.#store.getSnapshot().project);
-      let lastResourceId = "";
-      for (const file of files) {
-        const resourceId = defaultLogicalId(project, file.name);
-        const resource = await uploadImageResource({
-          project,
-          file,
-          resourceId,
-        });
-        lastResourceId = resource.id;
-      }
-      if (!confirmImportReview(project, [lastResourceId], files)) return;
-      this.#store.replace(project);
-      if (fromPicker && this.#session.picker) {
-        this.#session.picker.selectedResourceId = lastResourceId;
-        this.#session.picker.defaultAnimation = "";
-        if (this.#session.picker.context.kind === "add-layer") {
-          this.#session.picker.nodeId = suggestNodeId(project, lastResourceId);
-        }
-        this.renderPicker(project);
-      }
-      this.showFeedback(`已加入 ${files.length} 个图片资源；未创建任何 node。`);
-    } catch (error) {
-      this.#store.setExternalError(error);
-    }
-  }
-
-  private async uploadResources(directory: boolean): Promise<void> {
+  private async uploadResources(fromPicker = false): Promise<void> {
     const files = await pickFiles(
       ".png,.jpg,.jpeg,.webp,.json,.atlas,.mp4,video/mp4,.zip,application/zip",
       true,
-      directory,
     );
     if (files.length === 0) return;
     try {
@@ -2119,12 +2049,61 @@ export class GameLayoutEditorApp {
     if (files.length === 1 && files[0]!.name.toLowerCase().endsWith(".zip")) {
       try {
         const project = cloneEditorProject(this.#store.getSnapshot().project);
-        const resource = importImageStringZip({
+        const zipBytes = new Uint8Array(await files[0]!.arrayBuffer());
+        const entries = extractBoundedZip(zipBytes, {
+          limits: LAYOUT_ZIP_LIMITS,
+        });
+        if (entries.has("symbols.package.json")) {
+          const imported = await importSymbolsZipWithFiles(zipBytes);
+          if (
+            project.symbolDependencies.has(imported.resource.packageManifest.id)
+          )
+            replaceSymbolDependency(
+              project,
+              imported.resource.packageManifest.id,
+              imported,
+            );
+          else importSymbolDependency(project, imported);
+          if (
+            !confirmDependencyImportReview("Symbols", imported.files, files)
+          ) {
+            imported.resource.destroy();
+            return;
+          }
+          this.#store.replace(project);
+          this.#selectedSymbolId = imported.resource.packageManifest.id;
+          this.#symbolPackageMetadata =
+            (await this.#preview?.setSymbolPackage(imported.resource, {
+              columns: project.reel.columns,
+              rows: project.reel.rows,
+            })) ?? null;
+          this.renderSymbolsMetadata();
+          this.showFeedback(
+            `已通过统一导入器提交 Symbols ${this.#selectedSymbolId}。`,
+          );
+          return;
+        }
+        if (entries.has("popup.manifest.json")) {
+          const imported = await importPopupPackageZip(zipBytes);
+          if (project.popupDependencies.has(imported.manifest.id))
+            replacePopupDependency(project, imported.manifest.id, imported);
+          else importPopupDependency(project, imported);
+          if (!confirmDependencyImportReview("Popup", imported.files, files))
+            return;
+          this.#store.replace(project);
+          this.#selectedPopupId = imported.manifest.id;
+          this.showFeedback(
+            `已通过统一导入器提交 Popup ${this.#selectedPopupId}。`,
+          );
+          return;
+        }
+        const resource = await importImageStringZip({
           project,
-          zipBytes: new Uint8Array(await files[0]!.arrayBuffer()),
+          zipBytes,
         });
         if (!confirmImportReview(project, [resource.id], files)) return;
         this.#store.replace(project);
+        this.selectImportedPickerResource(project, resource.id, fromPicker);
         this.showFeedback(
           `导入审查确认 image-string ${resource.id}；未创建任何 node。`,
         );
@@ -2138,15 +2117,20 @@ export class GameLayoutEditorApp {
         const project = cloneEditorProject(this.#store.getSnapshot().project);
         const imported: string[] = [];
         for (const file of files) {
-          const resourceId = defaultLogicalId(project, file.name);
+          const resourceId = defaultResourceKey(project, file.name);
           imported.push(
             (await uploadVideoResource({ project, file, resourceId })).id,
           );
         }
         if (!confirmImportReview(project, imported, files)) return;
         this.#store.replace(project);
+        this.selectImportedPickerResource(
+          project,
+          imported.at(-1) ?? "",
+          fromPicker,
+        );
         this.showFeedback(
-          `导入审查确认 ${files.length} 个 video logical resources；仅可用于黑场视频转场。`,
+          `导入审查确认 ${files.length} 个 video filename-key resources；仅可用于黑场视频转场。`,
         );
       } catch (error) {
         this.#store.setExternalError(error);
@@ -2158,15 +2142,20 @@ export class GameLayoutEditorApp {
         const project = cloneEditorProject(this.#store.getSnapshot().project);
         const imported: string[] = [];
         for (const file of files) {
-          const resourceId = defaultLogicalId(project, file.name);
+          const resourceId = defaultResourceKey(project, file.name);
           imported.push(
             (await uploadImageResource({ project, file, resourceId })).id,
           );
         }
         if (!confirmImportReview(project, imported, files)) return;
         this.#store.replace(project);
+        this.selectImportedPickerResource(
+          project,
+          imported.at(-1) ?? "",
+          fromPicker,
+        );
         this.showFeedback(
-          `导入审查确认 ${files.length} 个 image logical resources；未创建任何 node。`,
+          `导入审查确认 ${files.length} 个 image filename-key resources；未创建任何 node。`,
         );
       } catch (error) {
         this.#store.setExternalError(error);
@@ -2180,7 +2169,7 @@ export class GameLayoutEditorApp {
       for (const group of groups) {
         if (group.every((file) => file.name.toLowerCase().endsWith(".mp4"))) {
           for (const file of group) {
-            const resourceId = defaultLogicalId(project, file.name);
+            const resourceId = defaultResourceKey(project, file.name);
             imported.push(
               (await uploadVideoResource({ project, file, resourceId })).id,
             );
@@ -2189,7 +2178,7 @@ export class GameLayoutEditorApp {
           group.every((file) => /\.(?:png|jpe?g|webp)$/iu.test(file.name))
         ) {
           for (const file of group) {
-            const resourceId = defaultLogicalId(project, file.name);
+            const resourceId = defaultResourceKey(project, file.name);
             imported.push(
               (await uploadImageResource({ project, file, resourceId })).id,
             );
@@ -2198,7 +2187,7 @@ export class GameLayoutEditorApp {
           const primary = group.find((file) =>
             file.name.toLowerCase().endsWith(".json"),
           );
-          const resourceId = defaultLogicalId(
+          const resourceId = defaultResourceKey(
             project,
             primary?.name ?? group[0]!.name,
           );
@@ -2210,6 +2199,11 @@ export class GameLayoutEditorApp {
       }
       if (!confirmImportReview(project, imported, files)) return;
       this.#store.replace(project);
+      this.selectImportedPickerResource(
+        project,
+        imported.at(-1) ?? "",
+        fromPicker,
+      );
       this.showFeedback(
         `导入审查确认 ${imported.join(", ")}；未创建任何 node。`,
       );
@@ -2218,58 +2212,17 @@ export class GameLayoutEditorApp {
     }
   }
 
-  private async uploadSpine(fromPicker = false): Promise<void> {
-    const files = await pickFiles(".json,.atlas,.png,.jpg,.jpeg,.webp", true);
-    if (files.length === 0) return;
-    try {
-      const project = cloneEditorProject(this.#store.getSnapshot().project);
-      const primary = files.find((file) =>
-        file.name.toLowerCase().endsWith(".json"),
-      );
-      const resourceId = defaultLogicalId(
-        project,
-        primary?.name ?? files[0]!.name,
-      );
-      const resource = await uploadSpineResource({
-        project,
-        files,
-        resourceId,
-      });
-      if (!confirmImportReview(project, [resource.id], files)) return;
-      this.#store.replace(project);
-      if (fromPicker && this.#session.picker) {
-        this.#session.picker.selectedResourceId = resource.id;
-        this.#session.picker.defaultAnimation = "";
-        if (this.#session.picker.context.kind === "add-layer") {
-          this.#session.picker.nodeId = suggestNodeId(project, resource.id);
-        }
-        this.renderPicker(project);
-      }
-      this.showFeedback(
-        "已加入 1 个完整 Spine logical resource；未创建任何 node。",
-      );
-    } catch (error) {
-      this.#store.setExternalError(error);
-    }
-  }
-
-  private async uploadImageString(): Promise<void> {
-    const files = await pickFiles(".zip,application/zip", false);
-    if (files.length === 0) return;
-    try {
-      const project = cloneEditorProject(this.#store.getSnapshot().project);
-      const resource = importImageStringZip({
-        project,
-        zipBytes: new Uint8Array(await files[0].arrayBuffer()),
-      });
-      if (!confirmImportReview(project, [resource.id], files)) return;
-      this.#store.replace(project);
-      this.showFeedback(
-        `已加入 image-string ${resource.id}；可复用创建多个独立字符串图层。`,
-      );
-    } catch (error) {
-      this.#store.setExternalError(error);
-    }
+  private selectImportedPickerResource(
+    project: EditorProject,
+    resourceKey: string,
+    fromPicker: boolean,
+  ): void {
+    if (!fromPicker || !resourceKey || !this.#session.picker) return;
+    this.#session.picker.selectedResourceId = resourceKey;
+    this.#session.picker.defaultAnimation = "";
+    if (this.#session.picker.context.kind === "add-layer")
+      this.#session.picker.nodeId = suggestNodeId(project, resourceKey);
+    this.renderPicker(project);
   }
 
   private async replaceResource(resourceId: string): Promise<void> {
@@ -2319,7 +2272,7 @@ export class GameLayoutEditorApp {
         } else {
           if (files.length !== 1)
             throw new Error("image-string 替换必须选择一个 ZIP。");
-          replaceImageStringResource({
+          await replaceImageStringResource({
             project,
             resourceId,
             zipBytes: new Uint8Array(await files[0].arrayBuffer()),
@@ -2401,43 +2354,11 @@ export class GameLayoutEditorApp {
       }
       const assets = new Map(
         [...paths].map((path) => {
-          const symbolEntry = [...snapshot.project.symbolDependencies].find(
-            ([id]) => path.startsWith(`dependencies/symbols/${id}/`),
-          );
-          const symbolPrefix = symbolEntry
-            ? `dependencies/symbols/${symbolEntry[0]}/`
-            : "";
-          const popupEntry = [...snapshot.project.popupDependencies].find(
-            ([id]) => path.startsWith(`dependencies/popups/${id}/`),
-          );
-          const popupPrefix = popupEntry
-            ? `dependencies/popups/${popupEntry[0]}/`
-            : "";
-          const bytes =
-            snapshot.project.assets.get(path) ??
-            (symbolPrefix && path.startsWith(symbolPrefix)
-              ? symbolEntry?.[1].files.get(path.slice(symbolPrefix.length))
-              : popupPrefix && path.startsWith(popupPrefix)
-                ? popupEntry?.[1].files.get(path.slice(popupPrefix.length))
-                : undefined);
+          const bytes = snapshot.project.assets.get(path);
           if (!bytes) throw new Error(`预览缺少资源：${path}`);
           return [path, bytes] as const;
         }),
       );
-      for (const id of Object.keys(manifest.symbolPackages ?? {})) {
-        const dependency = snapshot.project.symbolDependencies.get(id);
-        if (!dependency) throw new Error(`预览缺少 Symbols dependency：${id}`);
-        const prefix = `dependencies/symbols/${id}/`;
-        for (const [path, bytes] of dependency.files)
-          assets.set(`${prefix}${path}`, bytes);
-      }
-      for (const id of Object.keys(manifest.popups ?? {})) {
-        const dependency = snapshot.project.popupDependencies.get(id);
-        if (!dependency) throw new Error(`预览缺少 Popup dependency：${id}`);
-        const prefix = `dependencies/popups/${id}/`;
-        for (const [path, bytes] of dependency.files)
-          assets.set(`${prefix}${path}`, bytes);
-      }
       if (revision !== this.#previewRevision) return;
       await this.#preview?.setLayout(manifest, assets);
       if (revision === this.#previewRevision) {
@@ -2519,7 +2440,15 @@ export class GameLayoutEditorApp {
           ? {
               symbolFilesById: new Map(
                 [...snapshot.project.symbolDependencies].map(
-                  ([id, dependency]) => [id, dependency.files],
+                  ([id, dependency]) => [
+                    id,
+                    dependencyFiles(
+                      snapshot.project,
+                      dependency.rootKey,
+                      dependency.keys,
+                      "symbols.package.json",
+                    ),
+                  ],
                 ),
               ),
             }
@@ -2528,7 +2457,15 @@ export class GameLayoutEditorApp {
           ? {
               popupFilesById: new Map(
                 [...snapshot.project.popupDependencies].map(
-                  ([id, dependency]) => [id, dependency.files],
+                  ([id, dependency]) => [
+                    id,
+                    dependencyFiles(
+                      snapshot.project,
+                      dependency.rootKey,
+                      dependency.keys,
+                      "popup.manifest.json",
+                    ),
+                  ],
                 ),
               ),
             }
@@ -2552,78 +2489,6 @@ export class GameLayoutEditorApp {
     }
   }
 
-  private async importSymbolsPackage(replaceId?: string): Promise<void> {
-    const files = await pickFiles(".zip,application/zip", false);
-    if (files.length === 0) return;
-    const request = ++this.#symbolImportRequest;
-    this.#symbolImportBusy = true;
-    this.renderSymbolsMetadata();
-    let resource:
-      | Awaited<ReturnType<typeof importSymbolsZipWithFiles>>["resource"]
-      | null = null;
-    try {
-      const imported = await importSymbolsZipWithFiles(
-        new Uint8Array(await files[0].arrayBuffer()),
-      );
-      resource = imported.resource;
-      if (request !== this.#symbolImportRequest) {
-        resource.destroy();
-        return;
-      }
-      const project = cloneEditorProject(this.#store.getSnapshot().project);
-      if (replaceId) replaceSymbolDependency(project, replaceId, imported);
-      else importSymbolDependency(project, imported);
-      const preview = this.#preview;
-      if (!preview) throw new Error("Symbols preview 尚未初始化。");
-      const prepared = await preview.setSymbolPackage(resource, {
-        columns: project.reel.columns,
-        rows: project.reel.rows,
-      });
-      if (request !== this.#symbolImportRequest || !prepared) return;
-      this.#symbolPackageMetadata = prepared;
-      this.#selectedSymbolId = resource.packageManifest.id;
-      resource = null;
-      this.#store.replace(project);
-      this.renderSymbolsMetadata();
-      this.showFeedback(
-        replaceId
-          ? `已替换 Symbols ${replaceId}；主状态引用保持不变。`
-          : "Symbols dependency 已导入 library；尚未自动绑定当前主状态。",
-      );
-    } catch (error) {
-      resource?.destroy();
-      this.#store.setExternalError(error);
-    } finally {
-      if (request === this.#symbolImportRequest) {
-        this.#symbolImportBusy = false;
-        this.renderSymbolsMetadata();
-      }
-    }
-  }
-
-  private async importPopupPackage(replaceId?: string): Promise<void> {
-    const files = await pickFiles(".zip,application/zip", false);
-    if (files.length === 0) return;
-    try {
-      const imported = await importPopupPackageZip(
-        new Uint8Array(await files[0].arrayBuffer()),
-      );
-      this.#store.transact((project) =>
-        replaceId
-          ? replacePopupDependency(project, replaceId, imported)
-          : importPopupDependency(project, imported),
-      );
-      this.#selectedPopupId = imported.manifest.id;
-      this.showFeedback(
-        replaceId
-          ? `已替换 popup ${imported.manifest.id}；模式引用与 placement 已保留。`
-          : `已导入 popup ${imported.manifest.id}；尚未自动绑定任何游戏模式。`,
-      );
-    } catch (error) {
-      this.#store.setExternalError(error);
-    }
-  }
-
   private clearSymbolsPackage(): void {
     if (!this.#selectedSymbolId) return;
     try {
@@ -2634,7 +2499,6 @@ export class GameLayoutEditorApp {
       this.#store.setExternalError(error);
       return;
     }
-    this.#symbolImportRequest += 1;
     this.#symbolImportBusy = false;
     this.#symbolPackageMetadata = null;
     void this.#preview?.setSymbolPackage(null);
@@ -2646,7 +2510,6 @@ export class GameLayoutEditorApp {
   }
 
   private resetSymbolsForProjectReplace(): void {
-    this.#symbolImportRequest += 1;
     this.#symbolImportBusy = false;
     this.#symbolPackageMetadata = null;
     void this.#preview?.setSymbolPackage(null);
@@ -2661,7 +2524,13 @@ export class GameLayoutEditorApp {
       : undefined;
     const preview = this.#preview;
     if (!dependency || !preview) return;
-    const manifestBytes = dependency.files.get("symbols.package.json");
+    const files = dependencyFiles(
+      project,
+      dependency.rootKey,
+      dependency.keys,
+      "symbols.package.json",
+    );
+    const manifestBytes = files.get("symbols.package.json");
     if (!manifestBytes) throw new Error("symbols dependency 缺少 manifest。");
     const packageManifest = parseSymbolPackageManifest(
       JSON.parse(
@@ -2670,7 +2539,7 @@ export class GameLayoutEditorApp {
     );
     const resource = await createSymbolPackageResource({
       packageManifest,
-      files: dependency.files,
+      files,
     });
     const prepared = await preview.setSymbolPackage(resource, {
       columns: project.reel.columns,
@@ -2768,15 +2637,7 @@ export class GameLayoutEditorApp {
       ? formatSymbolPreviewDiagnostic(metadata)
       : "等待导入 strict symbol-package v1 ZIP。";
     this.renderOtherSceneBindings(metadata);
-    this.requireElement("[data-import-symbols]").toggleAttribute(
-      "disabled",
-      this.#symbolImportBusy,
-    );
     this.requireElement("[data-clear-symbols]").toggleAttribute(
-      "disabled",
-      !this.#selectedSymbolId || this.#symbolImportBusy,
-    );
-    this.requireElement("[data-replace-symbols]").toggleAttribute(
       "disabled",
       !this.#selectedSymbolId || this.#symbolImportBusy,
     );
@@ -3137,17 +2998,12 @@ function setPath(target: object, path: string, value: number): void {
   current[parts.at(-1)!] = value;
 }
 
-function pickFiles(
-  accept: string,
-  multiple: boolean,
-  directory = false,
-): Promise<File[]> {
+function pickFiles(accept: string, multiple: boolean): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = accept;
     input.multiple = multiple;
-    if (directory) input.setAttribute("webkitdirectory", "");
     input.addEventListener("change", () => resolve([...(input.files ?? [])]), {
       once: true,
     });
@@ -3155,14 +3011,11 @@ function pickFiles(
   });
 }
 
-function defaultLogicalId(project: EditorProject, sourceName: string): string {
-  const suggestion = suggestLogicalResourceId(sourceName);
-  if (!suggestion)
-    throw new Error(`无法从文件名生成 logical resource id：${sourceName}`);
-  if (!project.resources.has(suggestion)) return suggestion;
-  let suffix = 2;
-  while (project.resources.has(`${suggestion}-${suffix}`)) suffix += 1;
-  return `${suggestion}-${suffix}`;
+function defaultResourceKey(
+  _project: EditorProject,
+  sourceName: string,
+): string {
+  return basenameFromSourcePath(sourceName);
 }
 
 function confirmImportReview(
@@ -3183,29 +3036,46 @@ function confirmImportReview(
   );
 }
 
+function confirmDependencyImportReview(
+  kind: "Symbols" | "Popup",
+  dependencyFiles: ReadonlyMap<string, Uint8Array>,
+  sourceFiles: readonly File[],
+): boolean {
+  const confirm = globalThis.window?.confirm;
+  if (typeof confirm !== "function") return true;
+  const bytes = [...dependencyFiles.values()].reduce(
+    (sum, value) => sum + value.byteLength,
+    0,
+  );
+  return confirm.call(
+    globalThis.window,
+    `导入审查\n${kind} · ${dependencyFiles.size} filename keys · ${bytes} bytes\n${sourceFiles.length} source file(s)\n\n确认提交到同一扁平资源库？`,
+  );
+}
+
 function editorResourcePrimaryPathForReview(
   resource: EditorLayoutResource,
 ): string {
   return editorResourcePaths(resource)[0] ?? "";
 }
 
-function groupSourceFiles(files: readonly File[]): readonly File[][] {
-  if (!files.some((file) => file.webkitRelativePath)) return [[...files]];
-  const groups = new Map<string, File[]>();
-  for (const file of files) {
-    const path = file.webkitRelativePath || file.name;
-    const directory = path.includes("/")
-      ? path.slice(0, path.lastIndexOf("/"))
-      : "";
-    const group = groups.get(directory) ?? [];
-    group.push(file);
-    groups.set(directory, group);
-  }
-  return Object.freeze(
-    [...groups.entries()]
-      .sort(([left], [right]) => left.localeCompare(right, "en"))
-      .map(([, group]) => group),
+function dependencyFiles(
+  project: EditorProject,
+  rootKey: string,
+  keys: readonly string[],
+  sentinel: "symbols.package.json" | "popup.manifest.json",
+): ReadonlyMap<string, Uint8Array> {
+  return new Map(
+    keys.map((key) => {
+      const bytes = project.assets.get(key);
+      if (!bytes) throw new Error(`dependency 缺少全局资源：${key}`);
+      return [key === rootKey ? sentinel : key, bytes.slice()] as const;
+    }),
   );
+}
+
+function groupSourceFiles(files: readonly File[]): readonly File[][] {
+  return Object.freeze([[...files]]);
 }
 
 function formatSymbolPreviewDiagnostic(
