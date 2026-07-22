@@ -79,6 +79,48 @@ await framework.connect();
 - `balance`、`bet`、`win`、spin 状态和 collect 状态由框架自动驱动 HUD。
 - 游戏如需动态 canvas backing size，应通过 `context.getViewport()` 读取初始 viewport，并通过 `context.onViewportChange(listener)` 订阅后续 resize；不要从游戏 app 直接依赖 `@slotclientengine/uiframeworks`。
 
+## 游戏内 UI Factory
+
+默认不传 `uiFactory` 时，framework 继续同步创建现有 `uiframeworks` DOM HUD，DOM class、frame policy、金额格式和按钮行为不变。其他 presentation 可以实现 `SlotGameUiFactory` 后按 framework instance 注入：
+
+```ts
+import type {
+  SlotGameUi,
+  SlotGameUiFactory,
+} from "@slotclientengine/gameframeworks";
+
+const uiFactory: SlotGameUiFactory = {
+  create(context): SlotGameUi {
+    // frame/gameLayer/overlay 必须在 create() 返回前同步建立。
+    const frame = document.createElement("div");
+    const gameLayer = document.createElement("div");
+    const overlay = document.createElement("div");
+    frame.append(gameLayer, overlay);
+    context.root.replaceChildren(frame);
+
+    return {
+      elements: { frame, gameLayer, overlay },
+      getViewport: () => currentViewport,
+      onViewportChange: (listener) => subscribeViewport(listener),
+      update: (snapshot) => renderHud(snapshot),
+      destroy: () => frame.remove(),
+    };
+  },
+};
+
+const framework = createSlotGameFramework({
+  root,
+  gameAdapter,
+  live,
+  betOptions,
+  uiFactory,
+});
+```
+
+`context.initialState` 和后续 `update(snapshot)` 都是 framework 状态的只读投影。UI 只能通过 `context.commands` 请求 spin、bet、mute、fast 和 auto 操作；不得持有 session、socket、adapter、collect 或 balance reconciliation。每次 framework 创建都会获得独立的 context、commands、UI handle、viewport subscription 和 destroy 生命周期。保留的 command 在 framework destroy 后不会再启动业务操作。
+
+任一 active connect/spin/presentation 在 destroy 后恢复时都会以 destroyed error 终止，不会迟到执行 initial state、presentation 或 collect。非法 factory handle 会在创建边界显式失败；UI `update()` 抛错时 framework 保留原始异常、只通知一次 `onError`，并清理 UI、session 和 adapter。
+
 ## Frame Policy
 
 `createSlotGameFramework()` 接受 `framePolicy` 并透传给底层 `uiframeworks`。默认不传时保持固定设计分辨率行为；传入 focus policy 时，DOM frame 会根据浏览器 viewport 计算提交给游戏 canvas 的逻辑尺寸、CSS 缩放和黑边居中：
