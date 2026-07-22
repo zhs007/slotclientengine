@@ -4,6 +4,7 @@ import {
   createSceneLayoutTransitionVideoPlayer,
   resolveSceneLayoutFrameViewport,
   type SceneLayoutFrameViewport,
+  type SceneLayoutInitialReelScene,
   type SceneLayoutManifestV1,
   type SceneLayoutRuntime,
   type SceneLayoutPackageRuntime,
@@ -181,6 +182,14 @@ export class LayoutPreview {
     const packageScene = initialBinding
       ? packageScenes.get(initialBinding.id)!
       : null;
+    const initialSymbolResource = initialBinding
+      ? (nextPackage.packageResource.symbolPackages[initialBinding.id] ??
+        nextPackage.packageResource.symbolPackage)
+      : null;
+    if (initialBinding && !initialSymbolResource)
+      throw new Error(
+        `组合 preview 缺少 Symbols resource：${initialBinding.id}`,
+      );
     const needsPackageRuntime = Boolean(
       manifest.symbolPackage ||
       manifest.symbolPackages ||
@@ -207,10 +216,10 @@ export class LayoutPreview {
           initialBinding
             ? {
                 reels: {
-                  main: {
-                    scene: packageScene!.codes,
-                    localPhaseYs: packageScene!.stopYs,
-                  },
+                  main: this.createPackageReelInput(
+                    initialSymbolResource!,
+                    packageScene!,
+                  ),
                 },
               }
             : {},
@@ -313,7 +322,10 @@ export class LayoutPreview {
     return scene
       ? {
           reels: {
-            main: { scene: scene.codes, localPhaseYs: scene.stopYs },
+            main: this.createPackageReelInput(
+              this.requirePackageSymbolResource(targetBinding!.id),
+              scene,
+            ),
           },
         }
       : {};
@@ -879,7 +891,10 @@ export class LayoutPreview {
   }): RandomReelSceneSnapshot {
     const binding = resolved.binding;
     const scene =
-      this.#packageScenes.get(resolved.id) ?? this.#symbolPreview?.scene;
+      this.#symbolPreview?.packageId === resolved.id &&
+      this.#symbolPreview.scene?.reelSetName === binding.reelSet
+        ? this.#symbolPreview.scene
+        : this.#packageScenes.get(resolved.id);
     if (!scene)
       throw new Error(
         "组合 preview 要求先显式选择兼容 reel set 并生成本地场景。",
@@ -899,10 +914,69 @@ export class LayoutPreview {
     const resolved = resolveModeSymbolBinding(manifest, snapshot.stableMode);
     if (!resolved) return;
     const scene = this.requirePackagePreviewScene(resolved);
-    runtime.resetReelScene("main", {
+    runtime.resetReelScene(
+      "main",
+      this.createPackageReelInput(
+        this.requirePackageSymbolResource(resolved.id),
+        scene,
+      ),
+    );
+  }
+
+  private createPackageReelInput(
+    resource: SymbolPackageResource,
+    scene: RandomReelSceneSnapshot,
+  ): SceneLayoutInitialReelScene {
+    const otherScene =
+      this.#symbolPreview?.scene === scene
+        ? this.#symbolPreview.otherScene
+        : this.#symbolBindings.length > 0
+          ? createOtherScenePreview({
+              scene,
+              bindings: this.#symbolBindings,
+              gameConfig: resource.gameConfig,
+              randomSource: this.getRandomSource(),
+            })
+          : null;
+    const assignedValues = new Map(
+      (otherScene?.assignments ?? [])
+        .filter(
+          (assignment) =>
+            assignment.target.kind === "legacy-presentation-value",
+        )
+        .map((assignment) => [
+          `${assignment.x},${assignment.y}`,
+          assignment.value,
+        ]),
+    );
+    const presentationValues = Object.freeze(
+      scene.symbols.map((column, x) =>
+        Object.freeze(
+          column.map((symbol, y) => {
+            const assigned = assignedValues.get(`${x},${y}`);
+            if (assigned !== undefined) return assigned;
+            return (
+              resource.symbolManifest.symbols[symbol]?.valuePresentation
+                ?.defaultValues[0] ?? null
+            );
+          }),
+        ),
+      ),
+    );
+    return Object.freeze({
       scene: scene.codes,
       localPhaseYs: scene.stopYs,
+      presentationValues,
     });
+  }
+
+  private requirePackageSymbolResource(id: string): SymbolPackageResource {
+    const packageResource = this.#package?.packageResource;
+    const resource =
+      packageResource?.symbolPackages[id] ?? packageResource?.symbolPackage;
+    if (!resource || resource.packageManifest.id !== id)
+      throw new Error(`组合 preview 缺少 Symbols resource：${id}`);
+    return resource;
   }
 
   private getRandomSource(): RandomUint32Source {

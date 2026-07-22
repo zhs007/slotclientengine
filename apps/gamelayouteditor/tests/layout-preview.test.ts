@@ -31,6 +31,7 @@ const state = vi.hoisted(() => {
     })),
     getActiveAwardCelebrationSnapshot: vi.fn(() => null),
     requestGameMode: vi.fn(async () => undefined),
+    resetReelScene: vi.fn(),
   };
   const pkg = {
     resource: {},
@@ -212,6 +213,8 @@ import { imageManifest, assetBytes } from "./fixtures.js";
 describe("LayoutPreview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    state.pkg.resource = {};
+    state.pkg.packageResource = {};
     state.canvas.removeAttribute("style");
     state.runtime.applyViewport.mockReturnValue({
       variantId: "default",
@@ -304,6 +307,60 @@ describe("LayoutPreview", () => {
       stableMode: "BaseGame",
     });
     expect(preview.getActiveAwardCelebrationSnapshot()).toBeNull();
+    preview.destroy();
+  });
+
+  it("passes default presentation values to the combined package runtime", async () => {
+    const host = document.createElement("div");
+    const diagnostics = document.createElement("div");
+    document.body.append(host, diagnostics);
+    const { resource } = symbolResource();
+    state.pkg.packageResource = {
+      symbolPackage: null,
+      symbolPackages: { "symbols-fixture": resource },
+    };
+    const manifest = {
+      ...imageManifest,
+      reels: { main: { ...imageManifest.reels.main, order: 1 } },
+      symbolPackages: {
+        "symbols-fixture": {
+          manifest: "symbols.package.json",
+          reel: "main" as const,
+          reelSet: "main",
+          renderMode: "standard" as const,
+        },
+      },
+      gameModes: {
+        initialMode: "BaseGame",
+        modes: [
+          {
+            id: "BaseGame",
+            nodeStates: {},
+            symbolPackage: "symbols-fixture",
+          },
+        ],
+      },
+    };
+    const preview = new LayoutPreview(host, diagnostics, {
+      randomSource: { nextUint32: () => 0 },
+    });
+    await preview.init();
+    await preview.setLayout(manifest, assetBytes);
+    expect(state.packageRuntime.init).toHaveBeenCalledWith({
+      reels: {
+        main: {
+          scene: [
+            [0, 1],
+            [1, 0],
+          ],
+          localPhaseYs: [0, 0],
+          presentationValues: [
+            [25, null],
+            [null, 25],
+          ],
+        },
+      },
+    });
     preview.destroy();
   });
 
