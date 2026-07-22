@@ -7,7 +7,7 @@
   "scripts": {
     "generate:symbol-value-resources": "node ../../packages/rendercore/scripts/generate-symbol-value-vite-resources.mjs --manifest assets/game002-s3/symbol-state-textures.manifest.json --out apps/game002/src/generated/symbol-value-resources.generated.ts",
     "check:symbol-value-resources": "node ../../packages/rendercore/scripts/generate-symbol-value-vite-resources.mjs --manifest assets/game002-s3/symbol-state-textures.manifest.json --out apps/game002/src/generated/symbol-value-resources.generated.ts --check",
-    "prepare:deps": "pnpm --filter @slotclientengine/gameloading build && pnpm --filter @slotclientengine/gameframeworks build && pnpm --filter @slotclientengine/rendercore build",
+    "prepare:deps": "pnpm --filter @slotclientengine/gameloading build && pnpm --filter @slotclientengine/gameloading-ui-leo build && pnpm --filter @slotclientengine/gameframeworks build && pnpm --filter @slotclientengine/rendercore build",
     "build": "pnpm run generate:symbol-value-resources && pnpm run prepare:deps && vite build",
     "dev": "pnpm run generate:symbol-value-resources && pnpm run prepare:deps && sh -c 'if [ \"$1\" = \"--\" ]; then shift; fi; exec vite \"$@\"' sh",
     "lint": "eslint .",
@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@slotclientengine/gameloading": "workspace:*",
+    "@slotclientengine/gameloading-ui-leo": "workspace:*",
     "@slotclientengine/gameframeworks": "workspace:*",
     "@slotclientengine/rendercore": "workspace:*",
     "pixi.js": "^8.1.6"

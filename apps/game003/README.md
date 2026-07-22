@@ -88,13 +88,14 @@ runtime 不读取 VNI `stageRect`，VNI 动画按 project 自己的 stage 在目
 
 ## Loading 启动顺序
 
-- `src/main.ts` 是轻入口，只静态导入 `@slotclientengine/gameloading` 和 `src/loading-resources.ts`。
+- `src/main.ts` 是轻入口，只静态导入 `@slotclientengine/gameloading`、零运行时依赖的 `@slotclientengine/gameloading-ui-simple` 和 `src/loading-resources.ts`。
 - `src/loading-resources.ts` 合并 `game-loading.generated.ts` 的静态资源和 `game003-runtime-module` 动态模块资源。
 - `src/game-entry.ts` 才导入 `gameframeworks`、Pixi adapter、game layout 和正式游戏配置。
 - loading 资源阶段完成后停在 `99%`，调用 `prepareGame003At99()` 解析 query、拒绝旧 `serverUrl`、创建预连接 live session，并完成真实 `connect + enterGame`。
 - `prepareGame003At99()` 成功后进度到 `100%`，再调用 `enterGame003()` 创建 framework 和 Pixi adapter。
 - framework 使用同一个预连接 session，`framework.connect()` 不会产生第二次 WebSocket connect / enterGame。
 - loading DOM 和 game DOM 分别挂载到 `loadingHost` / `gameHost`，进入游戏失败时会保留 loading 错误态，不留下半挂载 canvas。
+- simple UI 只消费 controller snapshot；enter 成功后由 controller 统一 destroy 并隐藏 loading root，app 不反向销毁 UI。game003 不包含 Leo、Wildsheep 或 platform switch。
 
 ## 布局边界
 

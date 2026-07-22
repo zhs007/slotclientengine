@@ -1,160 +1,216 @@
-import { createGameLoading } from "../src/index.js";
+import {
+  createGameLoading,
+  type GameLoadingUi,
+  type GameLoadingUiFactory,
+  type GameLoadingUiSnapshot,
+} from "../src/index.js";
 
 describe("game loading controller", () => {
-  it("advances weighted resources to 99 before completing at 100", async () => {
-    const root = document.createElement("div");
-    document.body.append(root);
-    const first = createDeferred("a");
-    const second = createDeferred("b");
+  it("publishes immutable weighted snapshots and waits for both completion gates", async () => {
+    const root = createRoot();
+    const first = createDeferred<string>();
+    const second = createDeferred<string>();
+    const prepare = createDeferred<string>();
+    const visual = createDeferred<void>();
+    const enter = createDeferred<void>();
+    const fake = createFakeUi({ readyToComplete: visual.promise });
     const events: string[] = [];
     const loading = createGameLoading({
       root,
+      ui: fake.factory,
       resources: [
         { id: "a", weight: 1, load: () => first.promise },
         { id: "b", weight: 3, load: () => second.promise },
       ],
-      onBeforeComplete: ({ loadedResources }) => {
+      onBeforeComplete: ({ loadedResources, signal }) => {
         events.push(
-          `before:${progressText(root)}:${loadedResources.get("a")}:${loadedResources.get("b")}`,
+          `prepare:${loadedResources.get("a")}:${loadedResources.get("b")}:${signal.aborted}`,
         );
-        return "prepared";
+        return prepare.promise;
       },
-      onEnterGame: ({ prepareResult }) => {
-        events.push(`enter:${progressText(root)}:${prepareResult}`);
+      onEnterGame: ({ prepareResult, signal }) => {
+        events.push(`enter:${prepareResult}:${signal.aborted}`);
+        return enter.promise;
       },
     });
 
+    expect(fake.snapshots).toEqual([
+      { phase: "loading-resources", progress: 0, error: null },
+    ]);
+    expect(Object.isFrozen(fake.snapshots[0])).toBe(true);
     const start = loading.start();
-    first.resolve();
-    await waitForProgress(root, "25%");
-    expect(progressText(root)).toBe("25%");
+    first.resolve("a");
+    await waitFor(() => fake.snapshots.length === 2);
+    expect(fake.snapshots.at(-1)?.progress).toBe(24.75);
+    second.resolve("b");
+    await waitFor(() => events.length === 1);
+    expect(fake.snapshots.at(-1)).toEqual({
+      phase: "preparing",
+      progress: 99,
+      error: null,
+    });
 
-    second.resolve();
+    prepare.resolve("prepared");
+    await flush();
+    expect(events).toHaveLength(1);
+    visual.resolve();
+    await waitFor(() => events.length === 2);
+    expect(fake.snapshots.at(-1)).toEqual({
+      phase: "entering-game",
+      progress: 100,
+      error: null,
+    });
+    expect(fake.events).not.toContain("exit");
+
+    enter.resolve();
     await start;
-
-    expect(progressText(root)).toBe("100%");
-    expect(events).toEqual(["before:99%:a:b", "enter:100%:prepared"]);
-    expect(loading.loadedResources.get("a")).toBe("a");
-    expect(loading.loadedResources.get("b")).toBe("b");
+    expect(fake.events.slice(-2)).toEqual(["exit", "destroy"]);
+    expect(root.hidden).toBe(true);
+    expect(loading.loadedResources).toEqual(
+      new Map([
+        ["a", "a"],
+        ["b", "b"],
+      ]),
+    );
   });
 
-  it("limits how many resources are started at the same time", async () => {
-    const root = document.createElement("div");
-    document.body.append(root);
-    const first = createDeferred("a");
-    const second = createDeferred("b");
-    const third = createDeferred("c");
+  it("does not enter when visual readiness finishes before business preparation", async () => {
+    const prepare = createDeferred<string>();
+    const fake = createFakeUi({ readyToComplete: Promise.resolve() });
+    const enter = vi.fn();
+    const start = createGameLoading({
+      root: createRoot(),
+      ui: fake.factory,
+      resources: [{ id: "resource", load: () => "ok" }],
+      onBeforeComplete: () => prepare.promise,
+      onEnterGame: enter,
+    }).start();
+
+    await waitFor(() => fake.snapshots.at(-1)?.phase === "preparing");
+    expect(enter).not.toHaveBeenCalled();
+    prepare.resolve("prepared");
+    await start;
+    expect(enter).toHaveBeenCalledOnce();
+  });
+
+  it("limits resource concurrency and reuses the same start promise", async () => {
+    const first = createDeferred<void>();
+    const second = createDeferred<void>();
+    const third = createDeferred<void>();
     const events: string[] = [];
     const loading = createGameLoading({
-      root,
+      root: createRoot(),
+      ui: createFakeUi().factory,
       maxConcurrentResources: 2,
-      resources: [
-        {
-          id: "a",
-          load: () => {
-            events.push("start:a");
-            return first.promise;
-          },
+      resources: [first, second, third].map((deferred, index) => ({
+        id: String(index),
+        load: () => {
+          events.push(`start:${index}`);
+          return deferred.promise;
         },
-        {
-          id: "b",
-          load: () => {
-            events.push("start:b");
-            return second.promise;
-          },
-        },
-        {
-          id: "c",
-          load: () => {
-            events.push("start:c");
-            return third.promise;
-          },
-        },
-      ],
-      onBeforeComplete: () => {
-        events.push(`before:${progressText(root)}`);
-      },
-      onEnterGame: () => {
-        events.push(`enter:${progressText(root)}`);
-      },
+      })),
+      onBeforeComplete: () => undefined,
+      onEnterGame: () => undefined,
     });
 
-    const start = loading.start();
+    const firstStart = loading.start();
+    expect(loading.start()).toBe(firstStart);
     await waitFor(() => events.length === 2);
-    expect(events).toEqual(["start:a", "start:b"]);
-
+    expect(events).toEqual(["start:0", "start:1"]);
     first.resolve();
-    await waitFor(() => events.includes("start:c"));
-    expect(events).toEqual(["start:a", "start:b", "start:c"]);
-
+    await waitFor(() => events.length === 3);
     second.resolve();
     third.resolve();
-    await start;
-
-    expect(events).toEqual([
-      "start:a",
-      "start:b",
-      "start:c",
-      "before:99%",
-      "enter:100%",
-    ]);
+    await firstStart;
   });
 
-  it("stops before callbacks when a resource or 99 percent callback fails", async () => {
-    const resourceRoot = document.createElement("div");
-    const resourceEvents: string[] = [];
-    document.body.append(resourceRoot);
-    await createGameLoading({
-      root: resourceRoot,
-      resources: [{ id: "bad", load: () => Promise.reject(new Error("bad")) }],
-      onBeforeComplete: () => {
-        resourceEvents.push("before");
-      },
-      onEnterGame: () => {
-        resourceEvents.push("enter");
-      },
-      onError: (error) => {
-        resourceEvents.push(`error:${error.message}`);
-      },
-    }).start();
+  it.each([
+    ["resource", "resource failed"],
+    ["prepare", "prepare failed"],
+    ["visual", "visual failed"],
+    ["enter", "enter failed"],
+    ["exit", "exit failed"],
+  ] as const)(
+    "rejects the same Error and preserves visible UI after a %s failure",
+    async (stage, message) => {
+      const failure = new Error(message);
+      const fake = createFakeUi({
+        readyToComplete:
+          stage === "visual" ? Promise.reject(failure) : Promise.resolve(),
+        exitError: stage === "exit" ? failure : undefined,
+      });
+      const root = createRoot();
+      const onError = vi.fn();
+      const before = vi.fn(() => {
+        if (stage === "prepare") {
+          throw failure;
+        }
+      });
+      const enter = vi.fn(() => {
+        if (stage === "enter") {
+          throw failure;
+        }
+      });
+      const start = createGameLoading({
+        root,
+        ui: fake.factory,
+        resources: [
+          {
+            id: "resource",
+            load: () => {
+              if (stage === "resource") {
+                throw failure;
+              }
+              return "ok";
+            },
+          },
+        ],
+        onBeforeComplete: before,
+        onEnterGame: enter,
+        onError,
+      }).start();
 
-    expect(resourceEvents).toEqual(["error:bad"]);
-    expect(resourceRoot.querySelector('[role="alert"]')?.textContent).toBe(
-      "bad",
-    );
+      await expect(start).rejects.toBe(failure);
+      expect(onError).toHaveBeenCalledOnce();
+      expect(onError).toHaveBeenCalledWith(failure);
+      expect(fake.snapshots.at(-1)).toMatchObject({
+        phase: "error",
+        error: message,
+      });
+      expect(root.hidden).toBe(false);
+      expect(fake.events).not.toContain("destroy");
+      if (stage === "resource") {
+        expect(before).not.toHaveBeenCalled();
+      }
+      if (["resource", "prepare", "visual"].includes(stage)) {
+        expect(enter).not.toHaveBeenCalled();
+      }
+    },
+  );
 
-    const beforeRoot = document.createElement("div");
-    const beforeEvents: string[] = [];
-    document.body.append(beforeRoot);
-    await createGameLoading({
-      root: beforeRoot,
-      resources: [{ id: "ok", load: () => undefined }],
-      onBeforeComplete: () => {
-        beforeEvents.push(`before:${progressText(beforeRoot)}`);
-        throw new Error("live failed");
-      },
-      onEnterGame: () => {
-        beforeEvents.push("enter");
-      },
-      onError: (error) => {
-        beforeEvents.push(`error:${error.message}`);
-      },
-    }).start();
-
-    expect(beforeEvents).toEqual(["before:99%", "error:live failed"]);
-    expect(progressText(beforeRoot)).toBe("99%");
-  });
-
-  it("does not update DOM or call later callbacks after destroy", async () => {
-    const root = document.createElement("div");
-    document.body.append(root);
-    const resource = createDeferred("done");
+  it("aborts immediately, destroys idempotently, and suppresses later work", async () => {
+    const never = createDeferred<void>();
+    const fake = createFakeUi();
     const events: string[] = [];
+    let receivedSignal: AbortSignal | undefined;
+    const root = createRoot();
     const loading = createGameLoading({
       root,
-      resources: [{ id: "slow", load: () => resource.promise }],
+      ui: fake.factory,
+      maxConcurrentResources: 1,
+      resources: [
+        {
+          id: "first",
+          load: ({ signal }) => {
+            receivedSignal = signal;
+            events.push("first");
+            return never.promise;
+          },
+        },
+        { id: "second", load: () => events.push("second") },
+      ],
       onBeforeComplete: () => {
-        events.push("before");
+        events.push("prepare");
       },
       onEnterGame: () => {
         events.push("enter");
@@ -164,80 +220,99 @@ describe("game loading controller", () => {
       },
     });
     const start = loading.start();
+    await waitFor(() => events.length === 1);
 
     loading.destroy();
-    resource.resolve();
-    await start;
-
-    expect(events).toEqual([]);
-    expect(root.childElementCount).toBe(0);
-  });
-
-  it("does not schedule more resources after destroy", async () => {
-    const root = document.createElement("div");
-    document.body.append(root);
-    const first = createDeferred("a");
-    const events: string[] = [];
-    const loading = createGameLoading({
-      root,
-      maxConcurrentResources: 1,
-      resources: [
-        {
-          id: "a",
-          load: () => {
-            events.push("start:a");
-            return first.promise;
-          },
-        },
-        {
-          id: "b",
-          load: () => {
-            events.push("start:b");
-          },
-        },
-      ],
-      onBeforeComplete: () => {
-        events.push("before");
-      },
-      onEnterGame: () => {
-        events.push("enter");
-      },
-    });
-    const start = loading.start();
-    await waitFor(() => events.includes("start:a"));
-
     loading.destroy();
-    first.resolve();
     await start;
-
-    expect(events).toEqual(["start:a"]);
+    expect(receivedSignal?.aborted).toBe(true);
+    expect(events).toEqual(["first"]);
+    expect(fake.events.filter((event) => event === "destroy")).toHaveLength(1);
+    expect(root.hidden).toBe(true);
+    const snapshotCount = fake.snapshots.length;
+    never.resolve();
+    await flush();
+    expect(fake.snapshots).toHaveLength(snapshotCount);
   });
 
-  it("validates root, ids, duplicate ids, URL contracts and weights", () => {
-    const root = document.createElement("div");
-    const base = {
-      root,
+  it.each(["prepare", "enter"] as const)(
+    "settles immediately when destroyed during %s",
+    async (stage) => {
+      const pending = createDeferred<void>();
+      const fake = createFakeUi();
+      const loading = createGameLoading({
+        root: createRoot(),
+        ui: fake.factory,
+        resources: [{ id: "resource", load: () => undefined }],
+        onBeforeComplete: () =>
+          stage === "prepare" ? pending.promise : undefined,
+        onEnterGame: () => (stage === "enter" ? pending.promise : undefined),
+      });
+      const start = loading.start();
+      await waitFor(
+        () =>
+          fake.snapshots.at(-1)?.phase ===
+          (stage === "prepare" ? "preparing" : "entering-game"),
+      );
+      loading.destroy();
+      await expect(start).resolves.toBeUndefined();
+      pending.resolve();
+    },
+  );
+
+  it("keeps multiple instances isolated", async () => {
+    const first = createFakeUi();
+    const second = createFakeUi();
+    const options = {
+      resources: [{ id: "resource", load: () => "ok" }],
       onBeforeComplete: () => undefined,
       onEnterGame: () => undefined,
     };
+    await Promise.all([
+      createGameLoading({
+        ...options,
+        root: createRoot(),
+        ui: first.factory,
+      }).start(),
+      createGameLoading({
+        ...options,
+        root: createRoot(),
+        ui: second.factory,
+      }).start(),
+    ]);
+    expect(first.ui).not.toBe(second.ui);
+    expect(first.snapshots).toEqual(second.snapshots);
+    expect(first.events).toEqual(["create", "exit", "destroy"]);
+  });
 
+  it("validates options, resources, concurrency, and UI factories", () => {
+    const root = createRoot();
+    const ui = createFakeUi().factory;
+    const base = {
+      root,
+      ui,
+      onBeforeComplete: () => undefined,
+      onEnterGame: () => undefined,
+    };
     expect(() =>
       createGameLoading({ ...base, root: null as never, resources: [] }),
     ).toThrow(/HTMLElement/);
     expect(() =>
-      createGameLoading({
-        ...base,
-        onBeforeComplete: null as never,
-        resources: [{ id: "a", load: () => undefined }],
-      }),
-    ).toThrow(/onBeforeComplete/);
+      createGameLoading({ ...base, ui: null as never, resources: [] }),
+    ).toThrow(/ui/);
     expect(() =>
       createGameLoading({
         ...base,
-        onEnterGame: null as never,
-        resources: [{ id: "a", load: () => undefined }],
+        onBeforeComplete: null as never,
+        resources: [],
       }),
+    ).toThrow(/onBeforeComplete/);
+    expect(() =>
+      createGameLoading({ ...base, onEnterGame: null as never, resources: [] }),
     ).toThrow(/onEnterGame/);
+    expect(() =>
+      createGameLoading({ ...base, onError: "bad" as never, resources: [] }),
+    ).toThrow(/onError/);
     expect(() => createGameLoading({ ...base, resources: [] })).toThrow(
       /non-empty/,
     );
@@ -259,7 +334,7 @@ describe("game loading controller", () => {
     expect(() =>
       createGameLoading({
         ...base,
-        resources: [{ id: "a", weight: 0, load: () => undefined }],
+        resources: [{ id: "a", weight: Number.NaN, load: () => undefined }],
       }),
     ).toThrow(/weight/);
     expect(() =>
@@ -285,26 +360,78 @@ describe("game loading controller", () => {
         resources: [{ id: "a", load: () => undefined }],
       }),
     ).toThrow(/maxConcurrentResources/);
+    expect(() =>
+      createGameLoading({
+        ...base,
+        ui: { create: () => ({}) as never },
+        resources: [{ id: "a", load: () => undefined }],
+      }),
+    ).toThrow(/invalid UI/);
   });
 });
 
-function progressText(root: HTMLElement): string {
-  return (
-    root.querySelector(".sce-game-loading__meta span:last-child")
-      ?.textContent ?? ""
-  );
+function createRoot(): HTMLDivElement {
+  const root = document.createElement("div");
+  root.hidden = true;
+  document.body.append(root);
+  return root;
 }
 
-async function waitForProgress(
-  root: HTMLElement,
-  expected: string,
-): Promise<void> {
-  await waitFor(() => progressText(root) === expected);
+function createFakeUi(
+  options: {
+    readonly readyToComplete?: Promise<void>;
+    readonly exitError?: Error;
+  } = {},
+): {
+  readonly factory: GameLoadingUiFactory;
+  readonly snapshots: GameLoadingUiSnapshot[];
+  readonly events: string[];
+  ui?: GameLoadingUi;
+} {
+  const result: {
+    factory: GameLoadingUiFactory;
+    snapshots: GameLoadingUiSnapshot[];
+    events: string[];
+    ui?: GameLoadingUi;
+  } = {
+    factory: undefined as never,
+    snapshots: [],
+    events: [],
+  };
+  result.factory = {
+    create: () => {
+      result.events.push("create");
+      result.ui = {
+        readyToComplete: options.readyToComplete,
+        update: (snapshot) => result.snapshots.push(snapshot),
+        playExit: async () => {
+          result.events.push("exit");
+          if (options.exitError) {
+            throw options.exitError;
+          }
+        },
+        destroy: () => result.events.push("destroy"),
+      };
+      return result.ui;
+    },
+  };
+  return result;
+}
+
+function createDeferred<T>(): {
+  readonly promise: Promise<T>;
+  resolve(value?: T): void;
+} {
+  let resolve: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve: (value) => resolve(value as T) };
 }
 
 async function waitFor(condition: () => boolean): Promise<void> {
-  for (let index = 0; index < 20; index += 1) {
-    await Promise.resolve();
+  for (let index = 0; index < 30; index += 1) {
+    await flush();
     if (condition()) {
       return;
     }
@@ -312,16 +439,7 @@ async function waitFor(condition: () => boolean): Promise<void> {
   expect(condition()).toBe(true);
 }
 
-function createDeferred(value: string): {
-  readonly promise: Promise<string>;
-  resolve(): void;
-} {
-  let resolve: (value: string) => void = () => undefined;
-  const promise = new Promise<string>((innerResolve) => {
-    resolve = innerResolve;
-  });
-  return {
-    promise,
-    resolve: () => resolve(value),
-  };
+async function flush(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
 }

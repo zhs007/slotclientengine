@@ -34,31 +34,33 @@ export async function loadGameLoadingResource(
   if (resource.load) {
     return resource.load(context);
   }
-  return loadDefaultGameLoadingResource(resource);
+  return loadDefaultGameLoadingResource(resource, context.signal);
 }
 
 export async function loadDefaultGameLoadingResource(
   resource: GameLoadingResource,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   const url = requireResourceUrl(resource);
   const kind = resource.kind ?? inferGameLoadingResourceKind(resource);
   switch (kind) {
     case "image":
-      return loadImage(url);
+      return loadImage(url, signal);
     case "json":
-      return (await fetchOk(resource, url)).json();
+      return (await fetchOk(resource, url, signal)).json();
     case "text":
-      return (await fetchOk(resource, url)).text();
+      return (await fetchOk(resource, url, signal)).text();
     case "binary":
-      return (await fetchOk(resource, url)).arrayBuffer();
+      return (await fetchOk(resource, url, signal)).arrayBuffer();
     case "wasm":
       return WebAssembly.compile(
-        await (await fetchOk(resource, url)).arrayBuffer(),
+        await (await fetchOk(resource, url, signal)).arrayBuffer(),
       );
     case "module":
+      throwIfAborted(signal);
       return import(/* @vite-ignore */ url);
     case "style":
-      return loadStyle(url);
+      return loadStyle(url, signal);
     default:
       return assertNever(kind);
   }
@@ -92,8 +94,9 @@ function requireResourceUrl(
 async function fetchOk(
   resource: Pick<GameLoadingResource, "id">,
   url: string,
+  signal?: AbortSignal,
 ): Promise<Response> {
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error(
       `Loading resource "${resource.id}" failed to fetch "${url}" with status ${response.status}.`,
@@ -102,7 +105,10 @@ async function fetchOk(
   return response;
 }
 
-function loadImage(url: string): Promise<HTMLImageElement> {
+function loadImage(
+  url: string,
+  signal?: AbortSignal,
+): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     let settled = false;
@@ -113,7 +119,14 @@ function loadImage(url: string): Promise<HTMLImageElement> {
       settled = true;
       image.onload = null;
       image.onerror = null;
+      signal?.removeEventListener("abort", handleAbort);
       callback();
+    };
+    const handleAbort = () => {
+      finish(() => {
+        image.src = "";
+        reject(createAbortError());
+      });
     };
     image.onload = () => {
       if (typeof image.decode === "function") {
@@ -124,6 +137,11 @@ function loadImage(url: string): Promise<HTMLImageElement> {
     image.onerror = () => {
       finish(() => reject(new Error(`Image loading failed: ${url}`)));
     };
+    signal?.addEventListener("abort", handleAbort, { once: true });
+    if (signal?.aborted) {
+      handleAbort();
+      return;
+    }
     image.src = url;
     if (typeof image.decode === "function") {
       void image.decode().then(
@@ -141,7 +159,10 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-function loadStyle(url: string): Promise<HTMLLinkElement> {
+function loadStyle(
+  url: string,
+  signal?: AbortSignal,
+): Promise<HTMLLinkElement> {
   return new Promise((resolve, reject) => {
     const link = document.createElement("link");
     let settled = false;
@@ -152,7 +173,14 @@ function loadStyle(url: string): Promise<HTMLLinkElement> {
       settled = true;
       link.onload = null;
       link.onerror = null;
+      signal?.removeEventListener("abort", handleAbort);
       callback();
+    };
+    const handleAbort = () => {
+      finish(() => {
+        link.remove();
+        reject(createAbortError());
+      });
     };
     link.rel = "stylesheet";
     link.href = url;
@@ -163,8 +191,23 @@ function loadStyle(url: string): Promise<HTMLLinkElement> {
         reject(new Error(`Stylesheet loading failed: ${url}`));
       });
     };
+    signal?.addEventListener("abort", handleAbort, { once: true });
+    if (signal?.aborted) {
+      handleAbort();
+      return;
+    }
     document.head.append(link);
   });
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+}
+
+function createAbortError(): Error {
+  return new DOMException("Game loading was aborted.", "AbortError");
 }
 
 function assertNever(value: never): never {

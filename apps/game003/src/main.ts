@@ -1,4 +1,5 @@
 import { createGameLoading } from "@slotclientengine/gameloading";
+import { createSimpleGameLoadingUi } from "@slotclientengine/gameloading-ui-simple";
 import {
   createGame003LoadingResources,
   readGame003RuntimeModule,
@@ -29,6 +30,7 @@ const loading = createGameLoading<{
   readonly prepared: Game003PreparedLoadingSessionLike;
 }>({
   root: loadingHost,
+  ui: createSimpleGameLoadingUi(),
   maxConcurrentResources: GAME003_LOADING_MAX_CONCURRENT_RESOURCES,
   resources: createGame003LoadingResources(),
   onBeforeComplete: async ({ loadedResources }) => {
@@ -46,8 +48,6 @@ const loading = createGameLoading<{
         root: gameHost,
         prepared: prepareResult.prepared,
       });
-      loading.destroy();
-      loadingHost.remove();
     } catch (error) {
       gameHost.hidden = true;
       gameHost.replaceChildren();
@@ -59,8 +59,9 @@ const loading = createGameLoading<{
   },
 });
 
-void loading.start();
+void loading.start().catch(() => undefined);
 
 window.addEventListener("beforeunload", () => {
+  loading.destroy();
   enteredGame?.destroy();
 });

@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
-    "prepare:deps": "pnpm --filter @slotclientengine/gameloading build && pnpm --filter @slotclientengine/gameframeworks build && pnpm --filter @slotclientengine/rendercore build",
+    "prepare:deps": "pnpm --filter @slotclientengine/gameloading build && pnpm --filter @slotclientengine/gameloading-ui-simple build && pnpm --filter @slotclientengine/gameframeworks build && pnpm --filter @slotclientengine/rendercore build",
     "generate:static-config": "pnpm --dir ../.. --filter buildgamestatic dev -- --input apps/game003/config/game-static.yaml --out apps/game003/src/generated/game-static.generated.ts --loading-out apps/game003/src/generated/game-loading.generated.ts --game game003",
     "check:static-config": "pnpm --dir ../.. --filter buildgamestatic dev -- --input apps/game003/config/game-static.yaml --out apps/game003/src/generated/game-static.generated.ts --loading-out apps/game003/src/generated/game-loading.generated.ts --game game003 --check",
     "build": "pnpm run generate:static-config && pnpm run prepare:deps && vite build",
@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@slotclientengine/gameloading": "workspace:*",
+    "@slotclientengine/gameloading-ui-simple": "workspace:*",
     "@slotclientengine/gameframeworks": "workspace:*",
     "@slotclientengine/rendercore": "workspace:*",
     "pixi.js": "^8.1.6"

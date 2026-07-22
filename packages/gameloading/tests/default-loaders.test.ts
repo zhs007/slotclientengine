@@ -133,6 +133,7 @@ describe("game loading default loaders", () => {
         {
           resource: { id: "custom" },
           loadedResources: new Map(),
+          signal: new AbortController().signal,
         },
       ),
     ).resolves.toBeUndefined();
@@ -143,6 +144,40 @@ describe("game loading default loaders", () => {
         url: "/asset.bad",
       }),
     ).rejects.toThrow(/Unsupported loading resource kind/);
+  });
+
+  it("passes abort signals to fetch and cancels pending image/style loaders", async () => {
+    const fetchMock = vi.fn(() => new Promise<Response>(() => undefined));
+    vi.stubGlobal("fetch", fetchMock);
+    const fetchAbort = new AbortController();
+    void loadDefaultGameLoadingResource(
+      { id: "json", url: "/config.json" },
+      fetchAbort.signal,
+    );
+    expect(fetchMock).toHaveBeenCalledWith("/config.json", {
+      signal: fetchAbort.signal,
+    });
+
+    vi.stubGlobal("Image", PendingImage);
+    const imageAbort = new AbortController();
+    const image = loadDefaultGameLoadingResource(
+      { id: "image", url: "/image.png" },
+      imageAbort.signal,
+    );
+    imageAbort.abort();
+    await expect(image).rejects.toMatchObject({ name: "AbortError" });
+
+    const styleAbort = new AbortController();
+    const style = loadDefaultGameLoadingResource(
+      { id: "style", kind: "style", url: "data:text/css,abort{}" },
+      styleAbort.signal,
+    );
+    const link = document.head.querySelector(
+      'link[href^="data:text/css,abort"]',
+    );
+    styleAbort.abort();
+    await expect(style).rejects.toMatchObject({ name: "AbortError" });
+    expect(link?.isConnected).toBe(false);
   });
 });
 
@@ -184,4 +219,10 @@ class ErrorImage {
     this.#src = value;
     queueMicrotask(() => this.onerror?.());
   }
+}
+
+class PendingImage {
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  src = "";
 }
