@@ -522,6 +522,15 @@ function verifyBackgroundSourceContract() {
 }
 
 function verifyDistAssets(assetNames, bundledJavaScript) {
+  verifyLoadingEntryChunk(assetNames);
+  for (const [pattern, label] of [
+    [/^loading2-[A-Za-z0-9_-]+\.gif$/, "loading2-*.gif"],
+    [/^logo_1-[A-Za-z0-9_-]+\.webp$/, "logo_1-*.webp"],
+    [/^a2-[A-Za-z0-9_-]+\.webp$/, "a2-*.webp"],
+    [/^a3-[A-Za-z0-9_-]+\.webp$/, "a3-*.webp"],
+  ]) {
+    assertOne(assetNames, pattern, label);
+  }
   assertOne(assetNames, /^index-[A-Za-z0-9_-]+\.js$/, "index JS");
   assertOne(assetNames, /^index-[A-Za-z0-9_-]+\.css$/, "index CSS");
   assertOne(
@@ -725,6 +734,35 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
     if (assetNames.some((name) => name.startsWith(`${excluded}-`))) {
       failures.push(
         `dist unexpectedly contains excluded resource ${excluded}.`,
+      );
+    }
+  }
+}
+
+function verifyLoadingEntryChunk(assetNames) {
+  const entryChunk = assetNames.find((name) =>
+    /^index-[A-Za-z0-9_-]+\.js$/.test(name),
+  );
+  if (!entryChunk) {
+    failures.push("dist is missing the initial index-*.js chunk.");
+    return;
+  }
+  const content = readFileSync(join(DIST_ASSETS, entryChunk), "utf8");
+  for (const forbidden of [
+    "react",
+    "zustand",
+    "eventcore",
+    "game-leo-frameworks",
+    "netcore2",
+    "pixi.js",
+    "spine-pixi",
+    "createSlotGameFramework",
+    "WebSocket",
+    "wildsheep",
+  ]) {
+    if (content.toLowerCase().includes(forbidden.toLowerCase())) {
+      failures.push(
+        `initial entry chunk contains forbidden marker ${forbidden}.`,
       );
     }
   }

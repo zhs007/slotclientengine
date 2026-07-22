@@ -13,12 +13,21 @@ describe("game003 source boundary", () => {
 
     expect(pkg.dependencies).toHaveProperty("@slotclientengine/gameframeworks");
     expect(pkg.dependencies).toHaveProperty("@slotclientengine/gameloading");
+    expect(pkg.dependencies).toHaveProperty(
+      "@slotclientengine/gameloading-ui-simple",
+    );
     expect(pkg.dependencies).toHaveProperty("@slotclientengine/rendercore");
     expect(pkg.dependencies).not.toHaveProperty("@slotclientengine/netcore");
     expect(pkg.dependencies).not.toHaveProperty(
       "@slotclientengine/uiframeworks",
     );
     expect(pkg.dependencies).not.toHaveProperty("@slotclientengine/logiccore");
+  });
+
+  it("injects simple loading without Leo or Wildsheep platform semantics", () => {
+    const source = readSourceTree(join(APP_ROOT, "src"));
+    expect(source).toContain("@slotclientengine/gameloading-ui-simple");
+    expect(source).not.toMatch(/gameloading-ui-leo|wildsheep|platform switch/i);
   });
 
   it("resolves rendercore's transitive logiccore runtime through ESM source in Vite dev", () => {

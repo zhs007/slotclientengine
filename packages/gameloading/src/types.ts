@@ -19,6 +19,7 @@ export type GameLoadingResourceKind =
 
 export interface GameLoadingOptions<TPrepareResult = unknown> {
   readonly root: HTMLElement;
+  readonly ui: GameLoadingUiFactory;
   readonly resources: readonly GameLoadingResource[];
   readonly maxConcurrentResources?: number;
   readonly onBeforeComplete: (
@@ -39,14 +40,43 @@ export interface GameLoadingHandle {
 export interface GameLoadingResourceContext {
   readonly resource: GameLoadingResource;
   readonly loadedResources: ReadonlyMap<string, unknown>;
+  readonly signal: AbortSignal;
 }
 
 export interface GameLoadingCompleteContext {
   readonly loadedResources: ReadonlyMap<string, unknown>;
+  readonly signal: AbortSignal;
 }
 
 export interface GameLoadingEnterContext<
   TPrepareResult = unknown,
 > extends GameLoadingCompleteContext {
   readonly prepareResult: TPrepareResult;
+}
+
+export type GameLoadingUiPhase =
+  | "loading-resources"
+  | "preparing"
+  | "entering-game"
+  | "error";
+
+export interface GameLoadingUiSnapshot {
+  readonly phase: GameLoadingUiPhase;
+  readonly progress: number;
+  readonly error: string | null;
+}
+
+export interface GameLoadingUiCreateContext {
+  readonly root: HTMLElement;
+}
+
+export interface GameLoadingUi {
+  readonly readyToComplete?: Promise<void>;
+  update(snapshot: GameLoadingUiSnapshot): void;
+  playExit?(): Promise<void>;
+  destroy(): void;
+}
+
+export interface GameLoadingUiFactory {
+  create(context: GameLoadingUiCreateContext): GameLoadingUi;
 }

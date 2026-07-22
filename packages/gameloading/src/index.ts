@@ -14,4 +14,9 @@ export type {
   GameLoadingResource,
   GameLoadingResourceContext,
   GameLoadingResourceKind,
+  GameLoadingUi,
+  GameLoadingUiCreateContext,
+  GameLoadingUiFactory,
+  GameLoadingUiPhase,
+  GameLoadingUiSnapshot,
 } from "./types.js";

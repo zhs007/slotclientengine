@@ -4,12 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 
 const mainMocks = vi.hoisted(() => ({
   createGameLoading: vi.fn(),
+  createLeoGameLoadingUi: vi.fn(() => ({ create: vi.fn() })),
   createGame002LoadingResources: vi.fn(),
   readGame002RuntimeModule: vi.fn(),
 }));
 
 interface CapturedLoadingOptions {
   readonly maxConcurrentResources?: number;
+  readonly ui?: unknown;
   onBeforeComplete(options: {
     readonly loadedResources: ReadonlyMap<string, unknown>;
   }): Promise<unknown>;
@@ -18,6 +20,10 @@ interface CapturedLoadingOptions {
 
 vi.mock("@slotclientengine/gameloading", () => ({
   createGameLoading: mainMocks.createGameLoading,
+}));
+
+vi.mock("@slotclientengine/gameloading-ui-leo", () => ({
+  createLeoGameLoadingUi: mainMocks.createLeoGameLoadingUi,
 }));
 
 vi.mock("../src/loading-resources.js", () => ({
@@ -74,6 +80,8 @@ describe("game002 main loading host flow", () => {
     expect(runtimeModule.prepareGame002At99).not.toHaveBeenCalled();
     expect(runtimeModule.enterGame002).not.toHaveBeenCalled();
     expect(captured.maxConcurrentResources).toBe(4);
+    expect(mainMocks.createLeoGameLoadingUi).toHaveBeenCalledOnce();
+    expect(captured.ui).toBeDefined();
     expect(loadingHandle.start).toHaveBeenCalledOnce();
 
     const prepareResult = await captured.onBeforeComplete({
@@ -90,11 +98,50 @@ describe("game002 main loading host flow", () => {
       prepared,
     });
     expect(gameHost.hidden).toBe(false);
-    expect(loadingHandle.destroy).toHaveBeenCalledOnce();
-    expect(root?.querySelector(".game002-loading-host")).toBeNull();
+    expect(loadingHandle.destroy).not.toHaveBeenCalled();
+    expect(root?.querySelector(".game002-loading-host")).not.toBeNull();
 
     window.dispatchEvent(new Event("beforeunload"));
+    expect(loadingHandle.destroy).toHaveBeenCalledOnce();
     expect(entered.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("rehides and clears the game host when enter fails", async () => {
+    vi.resetModules();
+    document.body.innerHTML = '<div id="app"></div>';
+    let loadingOptions: CapturedLoadingOptions | undefined;
+    mainMocks.createGameLoading.mockImplementation((options) => {
+      loadingOptions = options;
+      return {
+        loadedResources: new Map(),
+        start: vi.fn(async () => undefined),
+        destroy: vi.fn(),
+      };
+    });
+    mainMocks.createGame002LoadingResources.mockReturnValue([
+      { id: "runtime", load: vi.fn() },
+    ]);
+    mainMocks.readGame002RuntimeModule.mockReturnValue({
+      prepareGame002At99: vi.fn(async () => ({})),
+      enterGame002: vi.fn(async () => {
+        throw new Error("enter failed");
+      }),
+    });
+    await import("../src/main.js");
+    const captured = requireLoadingOptions(loadingOptions);
+    const gameHost = document.querySelector(
+      ".game002-game-host",
+    ) as HTMLElement;
+    await expect(
+      captured.onEnterGame({
+        prepareResult: {
+          runtimeModule: mainMocks.readGame002RuntimeModule(),
+          prepared: {},
+        },
+      }),
+    ).rejects.toThrow(/enter failed/);
+    expect(gameHost.hidden).toBe(true);
+    expect(gameHost.childElementCount).toBe(0);
   });
 });
 

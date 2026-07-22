@@ -6,7 +6,7 @@
 
 ## 启动与 live 边界
 
-首屏由 `packages/gameloading` 承载。资源加载到 99% 时才校验 query 并调用 `prepareSlotGameLiveSession()`；资源到 100% 后才创建 framework、Pixi canvas 并用同一个 prepared session 连接。因此 loading 前不会挂载游戏，也不会创建第二条 WebSocket。
+首屏由 `packages/gameloading` controller 承载，并显式注入零运行时依赖的 `@slotclientengine/gameloading-ui-leo`。Leo intro 只是视觉 gate，不能提前完成资源或 live prepare。资源加载到 99% 时才校验 query 并调用 `prepareSlotGameLiveSession()`；业务 prepare 与视觉 gate 都完成后才进入 100%，之后创建 framework、Pixi canvas 并用同一个 prepared session 连接。enter 成功前 Leo UI 保持覆盖，成功后由 controller 统一 exit/destroy；失败时 loading 保持可见。因此 loading 前不会挂载游戏，也不会创建第二条 WebSocket。
 
 loading 资源 ID 必须唯一且 URL 不能为空。Vite 发布构建允许把内容相同的多个逻辑图片合并为同一个产物 URL；这种情况下 loading 清单保留第一个资源并只预加载该 URL 一次，不能把生产态 content-addressed URL 合并误判成资源重复。运行时的 VNI project 仍保留各自的逻辑资源路径映射。
 

@@ -43,10 +43,19 @@ describe("game002 source boundary", () => {
 
     expect(packageJson.dependencies).toEqual({
       "@slotclientengine/gameloading": "workspace:*",
+      "@slotclientengine/gameloading-ui-leo": "workspace:*",
       "@slotclientengine/gameframeworks": "workspace:*",
       "@slotclientengine/rendercore": "workspace:*",
       "pixi.js": "^8.1.6",
     });
+  });
+
+  it("injects only the native Leo loading UI without test-branch frameworks", () => {
+    const source = readSourceTree(join(APP_ROOT, "src"));
+    expect(source).toContain("@slotclientengine/gameloading-ui-leo");
+    expect(source).not.toMatch(
+      /ui-leo-frameworks|game-leo-frameworks|netcore2|eventcore|stateData|__PLATFORM__|wildsheep/i,
+    );
   });
 
   it("keeps Vite source aliases aligned across rendercore and its logiccore runtime", () => {
