@@ -1,4 +1,4 @@
-import { Assets, Container, Texture } from "pixi.js";
+import { Assets, Container, Sprite, Texture } from "pixi.js";
 import { describe, expect, it, vi } from "vitest";
 import {
   createSceneLayoutResource,
@@ -58,6 +58,7 @@ describe("scene layout runtime", () => {
         manifest,
         imageUrls: {},
         imageStringResources: {},
+        videoUrls: {},
         spineResources: {
           bg: { skeleton: {}, atlasText: "", textureUrls: {} },
         },
@@ -325,5 +326,130 @@ describe("scene layout runtime", () => {
       unload.mockRestore();
       destroyTexture.mockRestore();
     }
+  });
+
+  it("loads one shared image texture for exact same-resource nodes and retains it across visibility changes", async () => {
+    const manifest = parseSceneLayoutManifest({
+      ...game002LayoutFixture,
+      nodes: [
+        game002LayoutFixture.nodes[0],
+        {
+          ...game002LayoutFixture.nodes[0],
+          id: "free-bg",
+          order: 1,
+        },
+      ],
+    });
+    const resource = createSceneLayoutResource({
+      manifest,
+      imageModules: { "assets/bg.png": "memory:shared-bg" },
+    });
+    const loadTexture = vi.fn(async () => Texture.WHITE);
+    const unloadTexture = vi.fn(async () => undefined);
+    const runtime = createSceneLayoutRuntime({
+      resource,
+      loadTexture,
+      unloadTexture,
+    });
+
+    await runtime.init();
+    runtime.applyViewport({ width: 1920, height: 1080 });
+    const baseSprite = runtime.getNode("bg").children[0] as Sprite;
+    const freeSprite = runtime.getNode("free-bg").children[0] as Sprite;
+    expect(loadTexture).toHaveBeenCalledOnce();
+    expect(baseSprite).not.toBe(freeSprite);
+    expect(baseSprite.texture).toBe(freeSprite.texture);
+
+    runtime.setNodeActive("bg", false);
+    runtime.setNodeActive("free-bg", true);
+    expect(unloadTexture).not.toHaveBeenCalled();
+    runtime.destroy();
+    expect(unloadTexture).toHaveBeenCalledOnce();
+    expect(unloadTexture).toHaveBeenCalledWith("memory:shared-bg");
+  });
+
+  it("retains independent same-resource Spine players until runtime destruction", async () => {
+    const spineSpec = {
+      kind: "spine" as const,
+      skeleton: "assets/shared.json",
+      atlas: "assets/shared.atlas",
+      textures: { "shared.png": "assets/shared.png" },
+      defaultAnimation: "Idle",
+      loop: true as const,
+    };
+    const manifest = parseSceneLayoutManifest({
+      ...game002LayoutFixture,
+      nodes: [
+        {
+          id: "base-bg",
+          order: 0,
+          resource: spineSpec,
+          placements: { default: { x: 0, y: 0, scale: 1 } },
+        },
+        {
+          id: "free-bg",
+          order: 1,
+          resource: { ...spineSpec, defaultAnimation: "Win" },
+          placements: { default: { x: 0, y: 0, scale: 1 } },
+        },
+      ],
+      adaptation: {
+        ...game002LayoutFixture.adaptation,
+        backgroundNode: "base-bg",
+      },
+    });
+    const players: RendercoreSpinePlayer[] = [];
+    const createPlayer = vi.fn(() => {
+      const player: RendercoreSpinePlayer = {
+        view: new Container(),
+        init: vi.fn(),
+        play: vi.fn(),
+        update: vi.fn(() => ({ completed: false, events: [] })),
+        reset: vi.fn(),
+        destroy: vi.fn(),
+      };
+      players.push(player);
+      return player;
+    });
+    const sharedResource = {
+      skeleton: {},
+      atlasText: "shared",
+      textureUrls: { "shared.png": "memory:shared" },
+    };
+    const runtime = createSceneLayoutRuntime({
+      resource: {
+        manifest,
+        imageUrls: {},
+        imageStringResources: {},
+        videoUrls: {},
+        spineResources: {
+          "base-bg": sharedResource,
+          "free-bg": sharedResource,
+        },
+        destroy: vi.fn(),
+      },
+      createSpinePlayer: createPlayer,
+    });
+
+    await runtime.init();
+    runtime.applyViewport({ width: 1920, height: 1080 });
+    runtime.setNodeActive("free-bg", false);
+    runtime.setNodeActive("base-bg", false);
+    runtime.setNodeActive("free-bg", true);
+    expect(createPlayer).toHaveBeenCalledTimes(2);
+    expect(
+      players.every(
+        (player) =>
+          !(player.destroy as ReturnType<typeof vi.fn>).mock.calls.length,
+      ),
+    ).toBe(true);
+
+    runtime.destroy();
+    expect(
+      players.every(
+        (player) =>
+          (player.destroy as ReturnType<typeof vi.fn>).mock.calls.length === 1,
+      ),
+    ).toBe(true);
   });
 });

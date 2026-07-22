@@ -41,6 +41,12 @@ export async function exportLayoutZip(options: {
   readonly decodeImage?: (
     url: string,
   ) => Promise<{ readonly width: number; readonly height: number }>;
+  readonly decodeVideo?: (url: string) => Promise<{
+    readonly width: number;
+    readonly height: number;
+    readonly durationSeconds: number;
+    readonly hasAudio: boolean | "unknown";
+  }>;
 }): Promise<{
   readonly fileName: string;
   readonly bytes: Uint8Array;
@@ -171,6 +177,7 @@ export async function exportLayoutZip(options: {
   collectSceneLayoutPackagePaths({ manifest, files: closure });
   const validated = await validateLayoutAssets(manifest, closure, {
     ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
+    ...(options.decodeVideo ? { decodeVideo: options.decodeVideo } : {}),
   });
   validated.destroy();
   const entries: Record<string, Uint8Array> = {
@@ -294,6 +301,25 @@ export async function materializeLayoutOwnedAssets(options: {
   }
   const transitions = [];
   for (const transition of source.gameModes?.transitions ?? []) {
+    if (transition.overlay.resource.kind === "video") {
+      const bytes = requiredBytes(
+        options.assets,
+        transition.overlay.resource.path,
+      );
+      const path = allocateContentAddressedPath({
+        digest: await sha256Hex(bytes),
+        extension: "mp4",
+      });
+      putAsset(assets, path, bytes);
+      transitions.push({
+        ...transition,
+        overlay: {
+          ...transition.overlay,
+          resource: { ...transition.overlay.resource, path },
+        },
+      });
+      continue;
+    }
     transitions.push({
       ...transition,
       overlay: {

@@ -1,5 +1,6 @@
 import {
   collectSceneLayoutAssetPaths,
+  type SceneLayoutGameModeSnapshot,
   type SceneLayoutVariantId,
 } from "@slotclientengine/rendercore/scene-layout";
 import {
@@ -43,6 +44,7 @@ import {
   replaceImageResource,
   replaceImageStringResource,
   replaceSpineResource,
+  replaceVideoResource,
   setLayerVariantVisibility,
   setImageStringLayerAnchor,
   setImageStringLayerText,
@@ -51,6 +53,7 @@ import {
   importImageStringZip,
   uploadImageResource,
   uploadSpineResource,
+  uploadVideoResource,
 } from "../model/resource-commands.js";
 import {
   addGameMode,
@@ -70,6 +73,9 @@ import {
   setGameModeTransitionEvent,
   setGameModeTransitionPlacement,
   setGameModeTransitionResource,
+  setGameModeTransitionKind,
+  setGameModeVideoTransitionFadeOut,
+  setGameModeVideoTransitionResource,
   setInitialGameMode,
   setPopupPlacement,
 } from "../model/game-mode-commands.js";
@@ -83,6 +89,7 @@ import { layoutWorkspaceMarkup } from "./layout-workspace.js";
 import {
   transitionKey,
   transitionsWorkspaceMarkup,
+  updateTransitionRuntimeUi,
 } from "./transitions-workspace.js";
 import { symbolsWorkspaceMarkup } from "./symbols-workspace.js";
 import { bigWinWorkspaceMarkup } from "./bigwin-workspace.js";
@@ -119,7 +126,10 @@ export class GameLayoutEditorApp {
   #preview: LayoutPreview | null = null;
   #unsubscribe: (() => void) | null = null;
   #previewRevision = 0;
+  #lastPreviewProjectRevision = -1;
   #previewModeRequest = 0;
+  #previewModeFrame: number | null = null;
+  #previewModeBusy = false;
   #destroyed = false;
   #symbolPackageMetadata: SymbolPackagePreviewSnapshot | null = null;
   #symbolImportRequest = 0;
@@ -146,7 +156,10 @@ export class GameLayoutEditorApp {
     this.#unsubscribe = this.#store.subscribe((snapshot) => {
       this.renderWorkspace(snapshot);
       this.syncSymbolPreviewGrid(snapshot.project);
-      void this.refreshPreview(snapshot);
+      if (snapshot.revision !== this.#lastPreviewProjectRevision) {
+        this.#lastPreviewProjectRevision = snapshot.revision;
+        void this.refreshPreview(snapshot);
+      }
     });
   }
 
@@ -154,6 +167,8 @@ export class GameLayoutEditorApp {
     if (this.#destroyed) return;
     this.#destroyed = true;
     this.#previewModeRequest += 1;
+    this.stopPreviewModeMonitor();
+    this.#previewModeBusy = false;
     this.#symbolImportRequest += 1;
     this.#symbolImportBusy = false;
     if (this.#feedbackTimer) clearTimeout(this.#feedbackTimer);
@@ -573,18 +588,77 @@ export class GameLayoutEditorApp {
         throw new Error(
           "当前配置尚未形成可切换的 package preview；请先修复项目错误。",
         );
+      this.#previewModeBusy = true;
       const pending = this.#preview?.requestGameMode(modeId);
-      this.renderPopupControls(this.#store.getSnapshot());
+      this.startPreviewModeMonitor(request);
       await pending;
       if (request !== this.#previewModeRequest || this.#destroyed) return;
       this.#selectedPreviewMode = modeId;
+      this.#store.clearExternalError();
+    } catch (error) {
+      if (request === this.#previewModeRequest && !this.#destroyed)
+        this.#store.setExternalError(error);
+    } finally {
+      if (request === this.#previewModeRequest && !this.#destroyed) {
+        this.#previewModeBusy = false;
+        this.stopPreviewModeMonitor();
+        this.renderWorkspace(this.#store.getSnapshot());
+      }
+    }
+  }
+
+  private async preparePreviewMode(modeId: string): Promise<void> {
+    const request = ++this.#previewModeRequest;
+    this.#previewModeBusy = false;
+    this.stopPreviewModeMonitor();
+    try {
+      if (!this.#preview?.getGameModeSnapshot())
+        throw new Error(
+          "当前配置尚未形成可预加载的 package preview；请先修复项目错误。",
+        );
+      await this.#preview.prepareGameModeTransition(modeId);
+      if (request !== this.#previewModeRequest || this.#destroyed) return;
+      this.#store.clearExternalError();
+      this.showFeedback(`转场目标 ${modeId} 已预加载，可由真实点击直接播放。`);
     } catch (error) {
       if (request === this.#previewModeRequest && !this.#destroyed)
         this.#store.setExternalError(error);
     } finally {
       if (request === this.#previewModeRequest && !this.#destroyed)
-        this.renderPopupControls(this.#store.getSnapshot());
+        this.renderWorkspace(this.#store.getSnapshot());
     }
+  }
+
+  private startPreviewModeMonitor(request: number): void {
+    this.stopPreviewModeMonitor();
+    const update = (): void => {
+      if (request !== this.#previewModeRequest || this.#destroyed) {
+        this.#previewModeFrame = null;
+        return;
+      }
+      this.renderPreviewModeProgress();
+      this.#previewModeFrame = window.requestAnimationFrame(update);
+    };
+    this.renderPreviewModeProgress();
+    this.#previewModeFrame = window.requestAnimationFrame(update);
+  }
+
+  private stopPreviewModeMonitor(): void {
+    if (this.#previewModeFrame === null) return;
+    window.cancelAnimationFrame(this.#previewModeFrame);
+    this.#previewModeFrame = null;
+  }
+
+  private renderPreviewModeProgress(): void {
+    const project = this.#store.getSnapshot().project;
+    const modeSnapshot = this.#preview?.getGameModeSnapshot() ?? null;
+    this.renderPreviewRuntimeControls(project, modeSnapshot);
+    if (this.#session.activeTab === "transitions")
+      updateTransitionRuntimeUi(
+        this.requireElement("[data-workspace-panel]"),
+        modeSnapshot,
+        this.#previewModeBusy || modeSnapshot?.phase === "transitioning",
+      );
   }
 
   private async bindSelectedSymbolDependencyToMode(id: string): Promise<void> {
@@ -816,9 +890,24 @@ export class GameLayoutEditorApp {
     const stateTarget = this.requireElement("[data-mode-node-states]");
     stateTarget.innerHTML =
       '<span class="hint">稳定场景保持独立 loop；有向切换在“转场”工作区配置。</span>';
-    const modeSnapshot = this.#preview?.getGameModeSnapshot?.();
+    const modeSnapshot = this.#preview?.getGameModeSnapshot?.() ?? null;
+    this.renderPreviewRuntimeControls(project, modeSnapshot);
+  }
+
+  private renderPreviewRuntimeControls(
+    project: EditorProject,
+    modeSnapshot: SceneLayoutGameModeSnapshot | null,
+  ): void {
+    const mode = project.gameModes.modes.find(
+      (candidate) => candidate.id === this.#selectedGameMode,
+    )!;
+    const modeSelect = this.requireSelect("[data-game-mode]");
+    const previewModeSelect = this.requireSelect("[data-preview-game-mode]");
+    const popupSelect = this.requireSelect("[data-mode-popup]");
     const popupSnapshot = this.#preview?.getActiveAwardCelebrationSnapshot?.();
-    const transitioning = modeSnapshot?.phase === "transitioning";
+    const transitioning = Boolean(
+      this.#previewModeBusy || modeSnapshot?.phase === "transitioning",
+    );
     const popupActive = Boolean(
       popupSnapshot && !["idle", "complete"].includes(popupSnapshot.phase),
     );
@@ -830,7 +919,7 @@ export class GameLayoutEditorApp {
           transition.toModeId === this.#selectedPreviewMode,
       ),
     );
-    modeSelect.disabled = Boolean(transitioning || popupActive);
+    modeSelect.disabled = transitioning || popupActive;
     previewModeSelect.disabled = Boolean(
       !modeSnapshot || transitioning || popupActive,
     );
@@ -839,7 +928,7 @@ export class GameLayoutEditorApp {
     ).disabled = Boolean(
       !modeSnapshot || transitioning || popupActive || !hasPreviewEdge,
     );
-    popupSelect.disabled = Boolean(transitioning);
+    popupSelect.disabled = transitioning;
     const stableMode = project.gameModes.modes.find(
       (candidate) => candidate.id === modeSnapshot?.stableMode,
     );
@@ -892,6 +981,21 @@ export class GameLayoutEditorApp {
         );
       });
     panel
+      .querySelector<HTMLSelectElement>("[data-transition-kind]")
+      ?.addEventListener("change", (event) => {
+        const value = (event.currentTarget as HTMLSelectElement).value as
+          | "spine"
+          | "video";
+        this.runTransaction((draft) => {
+          const transition = draft.gameModes.transitions.find(
+            (candidate) =>
+              transitionKey(candidate) === this.#session.selectedTransitionKey,
+          );
+          if (!transition) throw new Error("所选转场已不存在。");
+          setGameModeTransitionKind(draft, transition, value);
+        });
+      });
+    panel
       .querySelector<HTMLSelectElement>("[data-transition-resource]")
       ?.addEventListener("change", (event) => {
         const value = (event.currentTarget as HTMLSelectElement).value;
@@ -902,6 +1006,32 @@ export class GameLayoutEditorApp {
           );
           if (!transition) throw new Error("所选转场已不存在。");
           setGameModeTransitionResource(draft, transition, value);
+        });
+      });
+    panel
+      .querySelector<HTMLSelectElement>("[data-transition-video-resource]")
+      ?.addEventListener("change", (event) => {
+        const value = (event.currentTarget as HTMLSelectElement).value;
+        this.runTransaction((draft) => {
+          const transition = draft.gameModes.transitions.find(
+            (candidate) =>
+              transitionKey(candidate) === this.#session.selectedTransitionKey,
+          );
+          if (!transition) throw new Error("所选转场已不存在。");
+          setGameModeVideoTransitionResource(draft, transition, value);
+        });
+      });
+    panel
+      .querySelector<HTMLInputElement>("[data-transition-fade]")
+      ?.addEventListener("change", (event) => {
+        const value = Number((event.currentTarget as HTMLInputElement).value);
+        this.runTransaction((draft) => {
+          const transition = draft.gameModes.transitions.find(
+            (candidate) =>
+              transitionKey(candidate) === this.#session.selectedTransitionKey,
+          );
+          if (!transition) throw new Error("所选转场已不存在。");
+          setGameModeVideoTransitionFadeOut(draft, transition, value);
         });
       });
     panel
@@ -947,6 +1077,26 @@ export class GameLayoutEditorApp {
         );
       });
     panel
+      .querySelector<HTMLButtonElement>("[data-prepare-transition]")
+      ?.addEventListener("click", () => {
+        const selected = project.gameModes.transitions.find(
+          (candidate) =>
+            transitionKey(candidate) === this.#session.selectedTransitionKey,
+        );
+        if (selected) void this.preparePreviewMode(selected.toModeId);
+      });
+    panel
+      .querySelector<HTMLButtonElement>("[data-cancel-prepared-transition]")
+      ?.addEventListener("click", () => {
+        try {
+          this.#preview?.cancelPreparedGameModeTransition();
+          this.#store.clearExternalError();
+          this.renderWorkspace(this.#store.getSnapshot());
+        } catch (error) {
+          this.#store.setExternalError(error);
+        }
+      });
+    panel
       .querySelector<HTMLButtonElement>("[data-play-transition]")
       ?.addEventListener("click", () => {
         const selected = project.gameModes.transitions.find(
@@ -974,7 +1124,8 @@ export class GameLayoutEditorApp {
         | "all"
         | "image"
         | "spine"
-        | "image-string";
+        | "image-string"
+        | "video";
       this.renderWorkspace(this.#store.getSnapshot());
     });
     const status = panel.querySelector<HTMLSelectElement>(
@@ -1017,6 +1168,7 @@ export class GameLayoutEditorApp {
           this.openPicker(
             {
               kind: "assign-background",
+              modeId: this.#selectedGameMode,
               variant: button.dataset.resourceBackground as
                 | "default"
                 | "landscape"
@@ -1074,6 +1226,7 @@ export class GameLayoutEditorApp {
           this.openPicker(
             {
               kind: "assign-background",
+              modeId: this.#selectedGameMode,
               variant: button.dataset.chooseBackground as
                 | "default"
                 | "landscape"
@@ -1243,6 +1396,8 @@ export class GameLayoutEditorApp {
                 this.#session.selectedTransitionKey,
             );
             if (!transition) throw new Error("所选转场已不存在。");
+            if (transition.kind !== "spine")
+              throw new Error("video 转场没有 art-space placement。");
             const variant = transitionPlacementMatch[1] as SceneLayoutVariantId;
             const field = transitionPlacementMatch[2] as "x" | "y" | "scale";
             const current = transition.placements[variant] ?? {
@@ -1357,7 +1512,7 @@ export class GameLayoutEditorApp {
       preferredResourceId,
     );
     const selected = this.#session.picker.selectedResourceId;
-    if (selected && context.kind !== "rebind-layer") {
+    if (selected && context.kind === "add-layer") {
       this.#session.picker.nodeId = suggestNodeId(
         this.#store.getSnapshot().project,
         selected,
@@ -1382,9 +1537,9 @@ export class GameLayoutEditorApp {
       state.context.kind === "add-layer"
         ? "添加图层"
         : state.context.kind === "assign-background"
-          ? `设置 ${state.context.variant} 背景`
+          ? `设置 ${state.context.modeId} / ${state.context.variant} 背景`
           : `重绑图层 ${state.context.nodeId}`;
-    dialog.innerHTML = `<div class="picker-shell"><header><div><span>Resource Picker</span><h2>${escapeHtml(contextLabel)}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源选择器">×</button></header><div class="picker-toolbar"><label>搜索<input type="search" data-picker-query value="${escapeHtml(state.query)}" /></label><label>类型<select data-picker-type><option value="all">全部</option><option value="image" ${state.type === "image" ? "selected" : ""}>Image</option><option value="spine" ${state.type === "spine" ? "selected" : ""}>Spine</option><option value="image-string" ${state.type === "image-string" ? "selected" : ""}>Image String</option></select></label><button type="button" data-picker-upload-image>上传新图片</button><button type="button" data-picker-upload-spine>上传新 Spine</button></div><div class="picker-body"><div class="picker-candidates" role="listbox" aria-label="可用资源">${candidates.map((candidate) => `<button type="button" role="option" data-picker-candidate="${escapeHtml(candidate.resourceId)}" aria-selected="${candidate.resourceId === state.selectedResourceId}" ${candidate.disabledReason ? `disabled title="${escapeHtml(candidate.disabledReason)}"` : ""}><span class="type-mark">${candidate.kind === "spine" ? "SP" : candidate.kind === "image-string" ? "TXT" : "IMG"}</span><span><strong>${escapeHtml(candidate.resourceId)}</strong><small title="${escapeHtml(candidate.primaryPath)}">${escapeHtml(candidate.primaryPath)}</small><small>${escapeHtml(candidate.summary)} · ${candidate.status} · 引用 ${candidate.referenceCount}</small></span></button>`).join("") || '<p class="empty-state">没有匹配资源；上传后仍需明确选择并确认。</p>'}</div><section class="picker-form">${selected ? `<p><strong>${escapeHtml(selected.id)}</strong><br/><span class="path">${escapeHtml(selected.kind === "image" ? selected.path : selected.kind === "spine" ? selected.skeleton : selected.manifestPath)}</span></p>` : "<p>请选择一个 logical resource。</p>"}${state.context.kind !== "rebind-layer" ? `<label>node id<input data-picker-node-id value="${escapeHtml(state.nodeId)}" /></label>` : ""}${
+    dialog.innerHTML = `<div class="picker-shell"><header><div><span>Resource Picker</span><h2>${escapeHtml(contextLabel)}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源选择器">×</button></header><div class="picker-toolbar"><label>搜索<input type="search" data-picker-query value="${escapeHtml(state.query)}" /></label><label>类型<select data-picker-type><option value="all">全部</option><option value="image" ${state.type === "image" ? "selected" : ""}>Image</option><option value="spine" ${state.type === "spine" ? "selected" : ""}>Spine</option><option value="image-string" ${state.type === "image-string" ? "selected" : ""}>Image String</option></select></label><button type="button" data-picker-upload-image>上传新图片</button><button type="button" data-picker-upload-spine>上传新 Spine</button></div><div class="picker-body"><div class="picker-candidates" role="listbox" aria-label="可用资源">${candidates.map((candidate) => `<button type="button" role="option" data-picker-candidate="${escapeHtml(candidate.resourceId)}" aria-selected="${candidate.resourceId === state.selectedResourceId}" ${candidate.disabledReason ? `disabled title="${escapeHtml(candidate.disabledReason)}"` : ""}><span class="type-mark">${candidate.kind === "spine" ? "SP" : candidate.kind === "image-string" ? "TXT" : "IMG"}</span><span><strong>${escapeHtml(candidate.resourceId)}</strong><small title="${escapeHtml(candidate.primaryPath)}">${escapeHtml(candidate.primaryPath)}</small><small>${escapeHtml(candidate.summary)} · ${candidate.status} · 引用 ${candidate.referenceCount}</small></span></button>`).join("") || '<p class="empty-state">没有匹配资源；上传后仍需明确选择并确认。</p>'}</div><section class="picker-form">${selected ? `<p><strong>${escapeHtml(selected.id)}</strong><br/><span class="path">${escapeHtml(editorResourcePaths(selected)[0]!)}</span></p>` : "<p>请选择一个 logical resource。</p>"}${state.context.kind === "add-layer" ? `<label>node id<input data-picker-node-id value="${escapeHtml(state.nodeId)}" /></label>` : state.context.kind === "assign-background" ? `<p class="hint">背景 node id 将按 ${escapeHtml(state.context.modeId)} / ${escapeHtml(state.context.variant)} 稳定生成。</p>` : ""}${
       state.context.kind === "add-layer" && project.mode === "orientation-focus"
         ? activeVariantIds(project)
             .map(
@@ -1468,7 +1623,7 @@ export class GameLayoutEditorApp {
         const select = () => {
           state.selectedResourceId = button.dataset.pickerCandidate!;
           state.defaultAnimation = "";
-          if (state.context.kind !== "rebind-layer") {
+          if (state.context.kind === "add-layer") {
             state.nodeId = suggestNodeId(project, state.selectedResourceId);
           }
           this.renderPicker(project);
@@ -1582,10 +1737,9 @@ export class GameLayoutEditorApp {
         this.#store.transact((draft) =>
           assignBackgroundResource({
             project: draft,
-            modeId: this.#selectedGameMode,
+            modeId: context.modeId,
             variant: context.variant,
             resourceId: resource.id,
-            nodeId: state.nodeId,
             ...(resource.kind === "spine"
               ? { defaultAnimation: state.defaultAnimation }
               : {}),
@@ -1652,7 +1806,7 @@ export class GameLayoutEditorApp {
       if (fromPicker && this.#session.picker) {
         this.#session.picker.selectedResourceId = lastResourceId;
         this.#session.picker.defaultAnimation = "";
-        if (this.#session.picker.context.kind !== "rebind-layer") {
+        if (this.#session.picker.context.kind === "add-layer") {
           this.#session.picker.nodeId = suggestNodeId(project, lastResourceId);
         }
         this.renderPicker(project);
@@ -1665,7 +1819,7 @@ export class GameLayoutEditorApp {
 
   private async uploadResources(directory: boolean): Promise<void> {
     const files = await pickFiles(
-      ".png,.jpg,.jpeg,.webp,.json,.atlas,.zip,application/zip",
+      ".png,.jpg,.jpeg,.webp,.json,.atlas,.mp4,video/mp4,.zip,application/zip",
       true,
       directory,
     );
@@ -1697,6 +1851,26 @@ export class GameLayoutEditorApp {
       }
       return;
     }
+    if (files.every((file) => file.name.toLowerCase().endsWith(".mp4"))) {
+      try {
+        const project = cloneEditorProject(this.#store.getSnapshot().project);
+        const imported: string[] = [];
+        for (const file of files) {
+          const resourceId = defaultLogicalId(project, file.name);
+          imported.push(
+            (await uploadVideoResource({ project, file, resourceId })).id,
+          );
+        }
+        if (!confirmImportReview(project, imported, files)) return;
+        this.#store.replace(project);
+        this.showFeedback(
+          `导入审查确认 ${files.length} 个 video logical resources；仅可用于黑场视频转场。`,
+        );
+      } catch (error) {
+        this.#store.setExternalError(error);
+      }
+      return;
+    }
     if (files.every((file) => /\.(?:png|jpe?g|webp)$/iu.test(file.name))) {
       try {
         const project = cloneEditorProject(this.#store.getSnapshot().project);
@@ -1722,7 +1896,16 @@ export class GameLayoutEditorApp {
       const groups = groupSourceFiles(files);
       const imported: string[] = [];
       for (const group of groups) {
-        if (group.every((file) => /\.(?:png|jpe?g|webp)$/iu.test(file.name))) {
+        if (group.every((file) => file.name.toLowerCase().endsWith(".mp4"))) {
+          for (const file of group) {
+            const resourceId = defaultLogicalId(project, file.name);
+            imported.push(
+              (await uploadVideoResource({ project, file, resourceId })).id,
+            );
+          }
+        } else if (
+          group.every((file) => /\.(?:png|jpe?g|webp)$/iu.test(file.name))
+        ) {
           for (const file of group) {
             const resourceId = defaultLogicalId(project, file.name);
             imported.push(
@@ -1775,7 +1958,7 @@ export class GameLayoutEditorApp {
       if (fromPicker && this.#session.picker) {
         this.#session.picker.selectedResourceId = resource.id;
         this.#session.picker.defaultAnimation = "";
-        if (this.#session.picker.context.kind !== "rebind-layer") {
+        if (this.#session.picker.context.kind === "add-layer") {
           this.#session.picker.nodeId = suggestNodeId(project, resource.id);
         }
         this.renderPicker(project);
@@ -1818,7 +2001,9 @@ export class GameLayoutEditorApp {
         ? ".png,.jpg,.jpeg,.webp"
         : current.kind === "spine"
           ? ".json,.atlas,.png,.jpg,.jpeg,.webp"
-          : ".zip,application/zip",
+          : current.kind === "video"
+            ? ".mp4,video/mp4"
+            : ".zip,application/zip",
       current.kind === "spine",
     );
     if (files.length === 0) return;
@@ -1840,6 +2025,14 @@ export class GameLayoutEditorApp {
             resourceId,
             files,
             reinitializeBackgrounds,
+          });
+        } else if (current.kind === "video") {
+          if (files.length !== 1)
+            throw new Error("video 替换必须选择一个 MP4。");
+          await replaceVideoResource({
+            project,
+            resourceId,
+            file: files[0],
           });
         } else {
           if (files.length !== 1)
@@ -1877,6 +2070,8 @@ export class GameLayoutEditorApp {
 
   private async refreshPreview(snapshot: EditorStoreSnapshot): Promise<void> {
     this.#previewModeRequest += 1;
+    this.#previewModeBusy = false;
+    this.stopPreviewModeMonitor();
     const revision = ++this.#previewRevision;
     const preferredVariant =
       snapshot.project.mode === "maximized-focus"
@@ -1969,6 +2164,7 @@ export class GameLayoutEditorApp {
       const project = manifestToEditorProject(
         imported.manifest,
         imported.assets,
+        imported.videoMetadata,
       );
       this.closePicker(false);
       this.resetSymbolsForProjectReplace();
@@ -2008,7 +2204,9 @@ export class GameLayoutEditorApp {
     try {
       const snapshot = this.#store.getSnapshot();
       if (snapshot.errors.length > 0)
-        throw new Error("当前配置未通过校验，禁止导出。");
+        throw new Error(
+          `当前配置未通过校验，禁止导出：${snapshot.errors.join("；")}`,
+        );
       const manifest = editorProjectToManifest(snapshot.project);
       const exported = await exportLayoutZip({
         manifest,
@@ -2044,6 +2242,7 @@ export class GameLayoutEditorApp {
       this.showFeedback(
         `已导出 ${exported.fileName}；${unused} 个未引用资源未写入 ZIP。`,
       );
+      this.#store.clearExternalError();
     } catch (error) {
       this.#store.setExternalError(error);
     }
@@ -2478,8 +2677,12 @@ export class GameLayoutEditorApp {
     this.requireElement("[data-project-status]").textContent =
       `${snapshot.project.id} · ${snapshot.project.mode} · ${snapshot.project.resources.size} resources · ${snapshot.project.nodes.length} nodes · ${snapshot.errors.length ? `${snapshot.errors.length} diagnostics` : "strict ready"}`;
     const errors = this.requireElement("[data-errors]");
+    const messages = [
+      ...snapshot.errors,
+      ...(snapshot.externalError ? [snapshot.externalError] : []),
+    ];
     errors.replaceChildren(
-      ...snapshot.errors.map((message) => {
+      ...messages.map((message) => {
         const item = document.createElement("div");
         item.textContent = message;
         return item;

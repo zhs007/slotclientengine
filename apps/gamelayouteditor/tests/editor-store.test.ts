@@ -113,18 +113,53 @@ describe("EditorStore", () => {
     expect(listener).toHaveBeenCalled();
   });
 
+  it("repairs legacy mode background ordering before strict validation", () => {
+    const project = manifestToEditorProject(imageManifest, assetBytes);
+    const baseNode = project.nodes[0]!;
+    baseNode.id = "base-background";
+    baseNode.order = 1;
+    project.variants.default.backgroundNode = baseNode.id;
+    project.gameModes.modes[0]!.backgroundNodes.default = baseNode.id;
+    project.nodes.push({
+      ...structuredClone(baseNode),
+      id: "free-background",
+      order: 0,
+    });
+    project.gameModes.modes.push({
+      ...structuredClone(project.gameModes.modes[0]!),
+      id: "FreeGame",
+      backgroundNodes: { default: "free-background" },
+    });
+
+    const store = new EditorStore(project);
+
+    expect(store.getSnapshot().errors).toEqual([]);
+    expect(
+      store.getSnapshot().project.nodes.map((node) => [node.id, node.order]),
+    ).toEqual([
+      ["base-background", 0],
+      ["free-background", 1],
+    ]);
+  });
+
   it("deduplicates identical external errors and formats non-Error values", () => {
     const store = new EditorStore(createNewEditorProject("maximized-focus"));
+    const validationErrors = store.getSnapshot().errors;
     const listener = vi.fn();
     store.subscribe(listener);
     listener.mockClear();
 
     store.setExternalError("offline");
-    expect(store.getSnapshot().errors).toEqual(["offline"]);
+    expect(store.getSnapshot().errors).toBe(validationErrors);
+    expect(store.getSnapshot().externalError).toBe("offline");
     expect(listener).toHaveBeenCalledOnce();
 
     store.setExternalError("offline");
     expect(listener).toHaveBeenCalledOnce();
+
+    store.clearExternalError();
+    expect(store.getSnapshot().externalError).toBeNull();
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 
   it("round-trips an orientation project without sharing asset bytes", () => {

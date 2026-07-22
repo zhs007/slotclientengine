@@ -22,25 +22,39 @@ import {
   replaceImageResource,
   replaceImageStringResource,
   replaceSpineResource,
+  replaceVideoResource,
   setLayerVariantVisibility,
   setImageStringLayerAnchor,
   setImageStringLayerText,
   setNodeDefaultAnimation,
   uploadImageResource,
   uploadSpineResource,
+  uploadVideoResource,
 } from "../src/model/resource-commands.js";
 import {
   addGameMode,
+  bindGameModeBackground,
   bindGameModeSymbols,
   createGameModeTransition,
+  setGameModeTransitionKind,
   setGameModeTransitionAnimation,
   setGameModeTransitionEvent,
   setGameModeTransitionResource,
+  setGameModeVideoTransitionFadeOut,
+  setGameModeVideoTransitionResource,
 } from "../src/model/game-mode-commands.js";
 
 const decodeImage = async () => ({ width: 2000, height: 2000 });
 const pngBytes = (seed = 0) =>
   new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, seed]);
+const mp4Bytes = (seed = 0) =>
+  new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109, seed]);
+const decodeVideo = async () => ({
+  width: 1280,
+  height: 720,
+  durationSeconds: 3.625,
+  hasAudio: true as const,
+});
 
 function spineFiles(
   options: {
@@ -229,6 +243,7 @@ describe("logical layout resource commands", () => {
       }),
     });
     addGameMode(project, "FreeGame");
+    bindGameModeBackground(project, "FreeGame", "default", "background");
     createGameModeTransition(project, "BaseGame", "FreeGame");
     const transition = project.gameModes.transitions[0];
     setGameModeTransitionResource(project, transition, "hero");
@@ -249,6 +264,8 @@ describe("logical layout resource commands", () => {
       /scene-transition/,
     );
     setGameModeTransitionAnimation(project, transition, "NoEvent");
+    if (transition.kind !== "spine")
+      throw new Error("expected Spine transition");
     expect(transition.switchEvent).toBe("");
     expect(() =>
       setGameModeTransitionEvent(project, transition, "SwitchScene"),
@@ -258,6 +275,117 @@ describe("logical layout resource commands", () => {
       setGameModeTransitionEvent(project, transition, "SwitchScene"),
     ).toThrow(/实际 2 次/);
     expect(() => editorProjectToManifest(project)).toThrow(/switch event/);
+  });
+
+  it("uploads owned MP4 atomically and exports a strict video transition branch", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    await initializeProjectBackground(project);
+    const video = await uploadVideoResource({
+      project,
+      file: new File([mp4Bytes(1)], "BG2FG.MP4", { type: "video/mp4" }),
+      resourceId: "bg2fg",
+      decodeVideo,
+    });
+    expect(video).toMatchObject({
+      kind: "video",
+      path: expect.stringMatching(/^assets\/[a-f0-9]{64}\.mp4$/u),
+      mimeType: "video/mp4",
+      size: { width: 1280, height: 720 },
+      durationSeconds: 3.625,
+      hasAudio: true,
+    });
+    expect(project.nodes).toHaveLength(1);
+    await uploadVideoResource({
+      project,
+      file: new File([mp4Bytes(1)], "same-bytes.mp4"),
+      resourceId: "same-bytes",
+      decodeVideo,
+    });
+    expect(project.assets.size).toBe(2);
+    await uploadVideoResource({
+      project,
+      file: new File([mp4Bytes(2)], "BG2FG.MP4"),
+      resourceId: "same-name-different-bytes",
+      decodeVideo,
+    });
+    expect(project.assets.size).toBe(3);
+
+    addGameMode(project, "FreeGame");
+    bindGameModeBackground(project, "FreeGame", "default", "background");
+    createGameModeTransition(project, "BaseGame", "FreeGame");
+    const spineDraft = project.gameModes.transitions[0]!;
+    const transition = setGameModeTransitionKind(project, spineDraft, "video");
+    expect(transition).toEqual({
+      kind: "video",
+      fromModeId: "BaseGame",
+      toModeId: "FreeGame",
+      resourceId: "",
+      fit: "contain",
+      fadeOutSeconds: 0.5,
+    });
+    setGameModeVideoTransitionResource(project, transition, "bg2fg");
+    setGameModeVideoTransitionFadeOut(project, transition, 0.5);
+    const manifest = editorProjectToManifest(project);
+    expect(manifest.gameModes?.transitions).toEqual([
+      {
+        from: "BaseGame",
+        to: "FreeGame",
+        overlay: {
+          resource: {
+            kind: "video",
+            path: video.path,
+            mimeType: "video/mp4",
+          },
+          fit: "contain",
+          fadeOutSeconds: 0.5,
+        },
+      },
+    ]);
+    expect(() =>
+      addLayerFromResource({
+        project,
+        resourceId: "bg2fg",
+        nodeId: "bad-video-layer",
+        variants: ["default"],
+      }),
+    ).toThrow(/video/);
+    expect(() =>
+      assignBackgroundResource({
+        project,
+        resourceId: "bg2fg",
+        variant: "default",
+      }),
+    ).toThrow(/video/);
+    expect(() => deleteLayoutResource(project, "bg2fg")).toThrow(
+      /BaseGame -> FreeGame/,
+    );
+    await expect(
+      replaceVideoResource({
+        project,
+        resourceId: "bg2fg",
+        file: new File([mp4Bytes(3)], "short.mp4", { type: "video/mp4" }),
+        decodeVideo: async () => ({
+          width: 1280,
+          height: 720,
+          durationSeconds: 0.4,
+          hasAudio: false,
+        }),
+      }),
+    ).rejects.toThrow(/fadeOutSeconds/);
+    expect(project.resources.get("bg2fg")).toBe(video);
+
+    const before = cloneEditorProject(project);
+    await expect(
+      uploadVideoResource({
+        project,
+        file: new File([new Uint8Array([1, 2, 3])], "bad.mp4", {
+          type: "video/mp4",
+        }),
+        resourceId: "bad",
+        decodeVideo,
+      }),
+    ).rejects.toThrow(/ftyp/);
+    expect(project).toEqual(before);
   });
 
   it("keeps stable Spine nodes on a single explicit loop", async () => {
@@ -447,7 +575,7 @@ describe("logical layout resource commands", () => {
     });
   });
 
-  it("keeps same-resource stable backgrounds as independent loop nodes", async () => {
+  it("keeps same-resource stable backgrounds as independent retained loop nodes", async () => {
     const project = createNewEditorProject("maximized-focus");
     await uploadSpineResource({
       project,
@@ -474,6 +602,7 @@ describe("logical layout resource commands", () => {
     });
 
     expect(reused.id).not.toBe(node.id);
+    expect(reused.id).toBe("freegame-background");
     expect(project.nodes).toHaveLength(2);
     expect(
       project.gameModes.modes.map((mode) => mode.backgroundNodes.default),
@@ -516,6 +645,67 @@ describe("logical layout resource commands", () => {
     expect(previewManifest?.gameModes?.modes).toHaveLength(2);
     expect(previewManifest?.symbolPackages).toHaveProperty("shared-symbols");
     expect(previewManifest?.reels.main?.order).toBe(2);
+  });
+
+  it("gives every mode and orientation an explicit stable background identity", async () => {
+    const project = createNewEditorProject("orientation-focus");
+    for (const name of ["bg1", "bg2", "fg1", "fg2"]) {
+      await uploadImageResource({
+        project,
+        file: new File([pngBytes(name.length)], `${name}.png`),
+        resourceId: name,
+        decodeImage: async () =>
+          name.endsWith("1")
+            ? { width: 2000, height: 1125 }
+            : { width: 1174, height: 2000 },
+      });
+    }
+    addGameMode(project, "FreeGame");
+    assignBackgroundResource({
+      project,
+      modeId: "FreeGame",
+      variant: "landscape",
+      resourceId: "fg1",
+    });
+    assignBackgroundResource({
+      project,
+      modeId: "FreeGame",
+      variant: "portrait",
+      resourceId: "fg2",
+    });
+    assignBackgroundResource({
+      project,
+      modeId: "BaseGame",
+      variant: "landscape",
+      resourceId: "bg1",
+    });
+    assignBackgroundResource({
+      project,
+      modeId: "BaseGame",
+      variant: "portrait",
+      resourceId: "bg2",
+    });
+
+    expect(project.gameModes.modes.map((mode) => mode.backgroundNodes)).toEqual(
+      [
+        {
+          landscape: "basegame-landscape-background",
+          portrait: "basegame-portrait-background",
+        },
+        {
+          landscape: "freegame-landscape-background",
+          portrait: "freegame-portrait-background",
+        },
+      ],
+    );
+    expect(project.nodes.map((node) => node.resourceId)).toEqual([
+      "bg1",
+      "bg2",
+      "fg1",
+      "fg2",
+    ]);
+    expect(project.nodes.map((node) => node.order)).toEqual([0, 1, 2, 3]);
+    expect(() => editorProjectToManifest(project)).not.toThrow();
   });
 
   it("re-centers legacy default geometry when correcting an export-bounds art size", async () => {

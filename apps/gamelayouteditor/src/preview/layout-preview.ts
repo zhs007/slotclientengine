@@ -1,6 +1,7 @@
 import {
   createSceneLayoutRuntime,
   createSceneLayoutPackageRuntime,
+  createSceneLayoutTransitionVideoPlayer,
   resolveSceneLayoutFrameViewport,
   type SceneLayoutFrameViewport,
   type SceneLayoutManifestV1,
@@ -189,6 +190,15 @@ export class LayoutPreview {
     const nextRuntime = needsPackageRuntime
       ? createSceneLayoutPackageRuntime({
           resource: nextPackage.packageResource,
+          createVideoTransitionPlayer: (options) =>
+            createSceneLayoutTransitionVideoPlayer({
+              ...options,
+              onDiagnostic: (diagnostic) => {
+                console.info(
+                  `[scene-transition-video] ${JSON.stringify(diagnostic)}`,
+                );
+              },
+            }),
         })
       : createSceneLayoutRuntime({ resource: nextPackage.resource });
     try {
@@ -264,10 +274,32 @@ export class LayoutPreview {
     return this.#packageRuntime?.getActiveAwardCelebrationSnapshot() ?? null;
   }
 
+  async prepareGameModeTransition(modeId: string): Promise<void> {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    await this.#packageRuntime.prepareGameModeTransition(
+      modeId,
+      this.gameModeRequestOptions(modeId),
+    );
+  }
+
+  cancelPreparedGameModeTransition(): void {
+    if (!this.#packageRuntime)
+      throw new Error("当前 layout preview 没有 package runtime。");
+    this.#packageRuntime.cancelPreparedGameModeTransition();
+  }
+
   async requestGameMode(modeId: string): Promise<void> {
     if (!this.#packageRuntime)
       throw new Error("当前 layout preview 没有 package runtime。");
-    const current = this.#packageRuntime.getGameModeSnapshot();
+    await this.#packageRuntime.requestGameMode(
+      modeId,
+      this.gameModeRequestOptions(modeId),
+    );
+  }
+
+  private gameModeRequestOptions(modeId: string) {
+    const current = this.#packageRuntime!.getGameModeSnapshot();
     const sourceBinding = resolveModeSymbolBinding(
       this.#manifest!,
       current.stableMode,
@@ -278,16 +310,13 @@ export class LayoutPreview {
       changed && targetBinding
         ? this.requirePackagePreviewScene(targetBinding)
         : null;
-    await this.#packageRuntime.requestGameMode(
-      modeId,
-      scene
-        ? {
-            reels: {
-              main: { scene: scene.codes, localPhaseYs: scene.stopYs },
-            },
-          }
-        : {},
-    );
+    return scene
+      ? {
+          reels: {
+            main: { scene: scene.codes, localPhaseYs: scene.stopYs },
+          },
+        }
+      : {};
   }
 
   clear(): void {

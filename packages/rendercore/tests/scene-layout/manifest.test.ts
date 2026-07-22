@@ -198,6 +198,53 @@ describe("scene layout manifest", () => {
     );
   });
 
+  it("parses a strict video-blackout union and collects its exact MP4", () => {
+    const hash = "a".repeat(64);
+    const value = gameModeManifest() as any;
+    value.gameModes.transitions = [
+      {
+        from: "BaseGame",
+        to: "FreeGame",
+        overlay: {
+          resource: {
+            kind: "video",
+            path: `assets/${hash}.mp4`,
+            mimeType: "video/mp4",
+          },
+          fit: "contain",
+          fadeOutSeconds: 0.5,
+        },
+      },
+    ];
+    const parsed = parseSceneLayoutManifest(value);
+    expect(parsed.gameModes?.transitions?.[0].overlay.resource.kind).toBe(
+      "video",
+    );
+    expect(collectSceneLayoutAssetPaths(parsed)).toContain(
+      `assets/${hash}.mp4`,
+    );
+    expect(Object.isFrozen(parsed.gameModes?.transitions?.[0].overlay)).toBe(
+      true,
+    );
+
+    for (const mutate of [
+      (draft: any) => (draft.gameModes.transitions[0].overlay.animation = "x"),
+      (draft: any) => (draft.gameModes.transitions[0].overlay.fit = "cover"),
+      (draft: any) =>
+        (draft.gameModes.transitions[0].overlay.resource.mimeType =
+          "video/webm"),
+      (draft: any) =>
+        (draft.gameModes.transitions[0].overlay.resource.path =
+          "assets/video.mp4"),
+      (draft: any) =>
+        (draft.gameModes.transitions[0].overlay.fadeOutSeconds = 0),
+    ]) {
+      const invalid = structuredClone(value);
+      mutate(invalid);
+      expect(() => parseSceneLayoutManifest(invalid)).toThrow();
+    }
+  });
+
   it("rejects every invalid game-mode reference and incomplete state mapping", () => {
     type MutableGameModeManifest = {
       gameModes: {

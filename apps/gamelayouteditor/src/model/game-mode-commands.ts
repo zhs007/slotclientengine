@@ -18,10 +18,7 @@ export function addGameMode(project: EditorProject, id: string): void {
   project.gameModes.modes.push({
     id,
     backgroundNodes: Object.fromEntries(
-      activeVariantIds(project).map((variant) => [
-        variant,
-        project.variants[variant].backgroundNode,
-      ]),
+      activeVariantIds(project).map((variant) => [variant, ""]),
     ),
     nodeStates: {},
     symbols: null,
@@ -68,7 +65,22 @@ export function deleteGameMode(project: EditorProject, id: string): void {
     );
   const index = project.gameModes.modes.findIndex((mode) => mode.id === id);
   if (index < 0) throw new Error(`未知游戏模式：${id}`);
+  const removedBackgrounds = new Set(
+    Object.values(project.gameModes.modes[index]!.backgroundNodes).filter(
+      Boolean,
+    ),
+  );
   project.gameModes.modes.splice(index, 1);
+  const retainedBackgrounds = new Set(
+    project.gameModes.modes.flatMap((mode) =>
+      Object.values(mode.backgroundNodes).filter(Boolean),
+    ),
+  );
+  project.nodes = project.nodes.filter(
+    (node) =>
+      !removedBackgrounds.has(node.id) || retainedBackgrounds.has(node.id),
+  );
+  normalizeGameModeNodeOrders(project);
 }
 
 export function setInitialGameMode(project: EditorProject, id: string): void {
@@ -77,6 +89,7 @@ export function setInitialGameMode(project: EditorProject, id: string): void {
   for (const variant of activeVariantIds(project))
     project.variants[variant].backgroundNode =
       mode.backgroundNodes[variant] ?? "";
+  normalizeGameModeNodeOrders(project);
 }
 
 export function bindGameModeBackground(
@@ -91,13 +104,44 @@ export function bindGameModeBackground(
   const node = project.nodes.find((candidate) => candidate.id === nodeId);
   if (!node) throw new Error(`未知背景节点：${nodeId}`);
   const resource = project.resources.get(node.resourceId);
-  if (!resource || resource.kind === "image-string")
-    throw new Error(`背景节点不能使用 image-string：${nodeId}`);
+  if (
+    !resource ||
+    resource.kind === "image-string" ||
+    resource.kind === "video"
+  )
+    throw new Error(`背景节点不能使用 ${resource?.kind ?? "未知"}：${nodeId}`);
   if (!node.placements[variant])
     throw new Error(`背景节点 ${nodeId} 缺少 ${variant} placement。`);
   mode.backgroundNodes[variant] = nodeId;
   if (project.gameModes.initialMode === modeId)
     project.variants[variant].backgroundNode = nodeId;
+  normalizeGameModeNodeOrders(project);
+}
+
+export function normalizeGameModeNodeOrders(project: EditorProject): void {
+  const initialMode = project.gameModes.modes.find(
+    (mode) => mode.id === project.gameModes.initialMode,
+  );
+  const initialBackgrounds = new Set(
+    Object.values(initialMode?.backgroundNodes ?? {}).filter(Boolean),
+  );
+  const allBackgrounds = new Set(
+    project.gameModes.modes
+      .flatMap((mode) => Object.values(mode.backgroundNodes))
+      .filter(Boolean),
+  );
+  project.nodes = project.nodes
+    .map((node, index) => ({ node, index }))
+    .sort((left, right) => {
+      const group = (nodeId: string): number =>
+        initialBackgrounds.has(nodeId) ? 0 : allBackgrounds.has(nodeId) ? 1 : 2;
+      return (
+        group(left.node.id) - group(right.node.id) ||
+        left.node.order - right.node.order ||
+        left.index - right.index
+      );
+    })
+    .map(({ node }, order) => ({ ...node, order }));
 }
 
 export function createGameModeTransition(
@@ -117,6 +161,7 @@ export function createGameModeTransition(
   project.gameModes.transitions.push({
     fromModeId,
     toModeId,
+    kind: "spine",
     resourceId: "",
     animation: "",
     switchEvent: "",
@@ -127,6 +172,42 @@ export function createGameModeTransition(
       ]),
     ),
   });
+}
+
+export function setGameModeTransitionKind(
+  project: EditorProject,
+  transition: EditorGameModeTransitionDraft,
+  kind: "spine" | "video",
+): EditorGameModeTransitionDraft {
+  if (transition.kind === kind) return transition;
+  const index = project.gameModes.transitions.indexOf(transition);
+  if (index < 0) throw new Error("所选转场已不存在。");
+  const replacement: EditorGameModeTransitionDraft =
+    kind === "spine"
+      ? {
+          kind: "spine",
+          fromModeId: transition.fromModeId,
+          toModeId: transition.toModeId,
+          resourceId: "",
+          animation: "",
+          switchEvent: "",
+          placements: Object.fromEntries(
+            activeVariantIds(project).map((variant) => [
+              variant,
+              { x: 0, y: 0, scale: 1 },
+            ]),
+          ),
+        }
+      : {
+          kind: "video",
+          fromModeId: transition.fromModeId,
+          toModeId: transition.toModeId,
+          resourceId: "",
+          fit: "contain",
+          fadeOutSeconds: 0.5,
+        };
+  project.gameModes.transitions[index] = replacement;
+  return replacement;
 }
 
 export function deleteGameModeTransition(
@@ -146,6 +227,8 @@ export function setGameModeTransitionResource(
   transition: EditorGameModeTransitionDraft,
   resourceId: string,
 ): void {
+  if (transition.kind !== "spine")
+    throw new Error("当前转场类型不是 Spine 顶层特效。");
   const resource = project.resources.get(resourceId);
   if (!resource || resource.kind !== "spine")
     throw new Error(`转场资源必须是已有 Spine resource：${resourceId}`);
@@ -167,6 +250,8 @@ export function setGameModeTransitionAnimation(
   transition: EditorGameModeTransitionDraft,
   animation: string,
 ): void {
+  if (transition.kind !== "spine")
+    throw new Error("当前转场类型不是 Spine 顶层特效。");
   const resource = project.resources.get(transition.resourceId);
   if (!resource || resource.kind !== "spine")
     throw new Error("请先选择转场 Spine resource。");
@@ -185,6 +270,8 @@ export function setGameModeTransitionEvent(
   transition: EditorGameModeTransitionDraft,
   switchEvent: string,
 ): void {
+  if (transition.kind !== "spine")
+    throw new Error("当前转场类型不是 Spine 顶层特效。");
   const resource = project.resources.get(transition.resourceId);
   if (!resource || resource.kind !== "spine")
     throw new Error("请先选择转场 Spine resource。");
@@ -195,12 +282,44 @@ export function setGameModeTransitionEvent(
   transition.switchEvent = switchEvent;
 }
 
+export function setGameModeVideoTransitionResource(
+  project: EditorProject,
+  transition: EditorGameModeTransitionDraft,
+  resourceId: string,
+): void {
+  if (transition.kind !== "video")
+    throw new Error("当前转场类型不是黑场视频。");
+  const resource = project.resources.get(resourceId);
+  if (!resource || resource.kind !== "video")
+    throw new Error(`转场资源必须是已有 video resource：${resourceId}`);
+  if (transition.fadeOutSeconds >= resource.durationSeconds)
+    throw new Error("fadeOutSeconds 必须小于视频实际时长。");
+  transition.resourceId = resourceId;
+}
+
+export function setGameModeVideoTransitionFadeOut(
+  project: EditorProject,
+  transition: EditorGameModeTransitionDraft,
+  fadeOutSeconds: number,
+): void {
+  if (transition.kind !== "video")
+    throw new Error("当前转场类型不是黑场视频。");
+  if (!Number.isFinite(fadeOutSeconds) || fadeOutSeconds <= 0)
+    throw new Error("fadeOutSeconds 必须是有限正数。");
+  const resource = project.resources.get(transition.resourceId);
+  if (resource?.kind === "video" && fadeOutSeconds >= resource.durationSeconds)
+    throw new Error("fadeOutSeconds 必须小于视频实际时长。");
+  transition.fadeOutSeconds = fadeOutSeconds;
+}
+
 export function setGameModeTransitionPlacement(
   project: EditorProject,
   transition: EditorGameModeTransitionDraft,
   variant: SceneLayoutVariantId,
   placement: { readonly x: number; readonly y: number; readonly scale: number },
 ): void {
+  if (transition.kind !== "spine")
+    throw new Error("video 转场没有 art-space placement。");
   if (!activeVariantIds(project).includes(variant))
     throw new Error(`当前项目不使用 ${variant} variant。`);
   if (

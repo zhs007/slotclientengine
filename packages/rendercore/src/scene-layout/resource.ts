@@ -17,6 +17,7 @@ export interface CreateSceneLayoutResourceOptions {
   readonly skeletonModules?: Readonly<Record<string, unknown>>;
   readonly atlasModules?: Readonly<Record<string, string>>;
   readonly textureModules?: Readonly<Record<string, string>>;
+  readonly videoModules?: Readonly<Record<string, string>>;
   readonly ownedObjectUrls?: readonly string[];
   readonly imageStringResources?: Readonly<Record<string, ImageStringResource>>;
 }
@@ -29,6 +30,7 @@ export function createSceneLayoutResource(
   const skeletonModules = normalizeMap(options.skeletonModules);
   const atlasModules = normalizeMap(options.atlasModules);
   const textureModules = normalizeMap(options.textureModules);
+  const videoModules = normalizeMap(options.videoModules);
   const imagePaths = new Set<string>();
   const skeletonPaths = new Set<string>();
   const atlasPaths = new Set<string>();
@@ -36,6 +38,7 @@ export function createSceneLayoutResource(
   const imageStringResources: Readonly<Record<string, ImageStringResource>> =
     options.imageStringResources ?? Object.freeze({});
   const imageStringPaths = new Set<string>();
+  const videoPaths = new Set<string>();
   const imageUrls: Record<string, string> = {};
   const spineResources: Record<
     string,
@@ -45,6 +48,7 @@ export function createSceneLayoutResource(
       readonly textureUrls: Readonly<Record<string, string>>;
     }
   > = {};
+  const videoUrls: Record<string, string> = {};
 
   for (const node of manifest.nodes) {
     if (node.resource.kind === "image") {
@@ -129,7 +133,17 @@ export function createSceneLayoutResource(
   }
 
   for (const transition of manifest.gameModes?.transitions ?? []) {
-    const spec = transition.overlay.resource;
+    const overlay = transition.overlay;
+    const spec = overlay.resource;
+    if (spec.kind === "video") {
+      videoPaths.add(spec.path);
+      videoUrls[spec.path] = requireString(
+        videoModules,
+        spec.path,
+        "scene transition video",
+      );
+      continue;
+    }
     skeletonPaths.add(spec.skeleton);
     atlasPaths.add(spec.atlas);
     const skeleton = requireValue(
@@ -154,9 +168,13 @@ export function createSceneLayoutResource(
     try {
       validateOfficialSpineResource({
         resource: { skeleton, atlasText, textureUrls },
-        requiredAnimations: [transition.overlay.animation],
+        requiredAnimations: [
+          "animation" in overlay ? overlay.animation : unreachableVideo(),
+        ],
         requiredAnimationEvents: {
-          [transition.overlay.animation]: [transition.overlay.switchEvent],
+          ["animation" in overlay ? overlay.animation : unreachableVideo()]: [
+            "switchEvent" in overlay ? overlay.switchEvent : unreachableVideo(),
+          ],
         },
       });
     } catch (error) {
@@ -180,6 +198,7 @@ export function createSceneLayoutResource(
   );
   assertExactKeys(atlasModules, atlasPaths, "scene layout atlas modules");
   assertExactKeys(textureModules, texturePaths, "scene layout texture modules");
+  assertExactKeys(videoModules, videoPaths, "scene layout video modules");
   assertExactKeys(
     imageStringResources,
     imageStringPaths,
@@ -193,6 +212,7 @@ export function createSceneLayoutResource(
     imageUrls: Object.freeze(imageUrls),
     spineResources: Object.freeze(spineResources),
     imageStringResources: Object.freeze({ ...imageStringResources }),
+    videoUrls: Object.freeze(videoUrls),
     destroy(): void {
       if (destroyed) return;
       destroyed = true;
@@ -202,6 +222,10 @@ export function createSceneLayoutResource(
       }
     },
   });
+}
+
+function unreachableVideo(): never {
+  throw new SceneLayoutError("Scene transition schema mismatch.");
 }
 
 export async function loadSceneLayoutResourceFromUrl(options: {
@@ -238,12 +262,13 @@ export async function loadSceneLayoutResourceFromUrl(options: {
   const skeletonModules: Record<string, unknown> = {};
   const atlasModules: Record<string, string> = {};
   const textureModules: Record<string, string> = {};
+  const videoModules: Record<string, string> = {};
   const ownedObjectUrls: string[] = [];
   const imageStringResources: Record<string, ImageStringResource> = {};
   try {
     const resourceByPath = new Map<
       string,
-      "image" | "skeleton" | "atlas" | "texture"
+      "image" | "skeleton" | "atlas" | "texture" | "video"
     >();
     for (const node of manifest.nodes) {
       const resource = node.resource;
@@ -260,6 +285,10 @@ export async function loadSceneLayoutResourceFromUrl(options: {
     }
     for (const transition of manifest.gameModes?.transitions ?? []) {
       const resource = transition.overlay.resource;
+      if (resource.kind === "video") {
+        resourceByPath.set(resource.path, "video");
+        continue;
+      }
       resourceByPath.set(resource.skeleton, "skeleton");
       resourceByPath.set(resource.atlas, "atlas");
       for (const path of Object.values(resource.textures))
@@ -297,6 +326,19 @@ export async function loadSceneLayoutResourceFromUrl(options: {
         }
       } else if (kind === "atlas") {
         atlasModules[path] = await response.text();
+      } else if (kind === "video") {
+        const blob = await response.blob();
+        if (blob.type && blob.type !== "video/mp4")
+          throw new SceneLayoutError(
+            `Scene layout video "${path}" must use video/mp4, actual ${blob.type}.`,
+          );
+        const objectUrl = URL.createObjectURL(
+          blob.type === "video/mp4"
+            ? blob
+            : new Blob([blob], { type: "video/mp4" }),
+        );
+        ownedObjectUrls.push(objectUrl);
+        videoModules[path] = objectUrl;
       } else {
         const blob = await response.blob();
         const decoded = await (options.decodeImage ?? decodeBrowserImageBlob)(
@@ -328,6 +370,7 @@ export async function loadSceneLayoutResourceFromUrl(options: {
       skeletonModules,
       atlasModules,
       textureModules,
+      videoModules,
       ownedObjectUrls,
       imageStringResources,
     });

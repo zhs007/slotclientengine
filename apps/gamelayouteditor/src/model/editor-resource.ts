@@ -38,10 +38,22 @@ export interface EditorImageStringLayoutResource {
   readonly provenance?: EditorResourceProvenance;
 }
 
+export interface EditorVideoLayoutResource {
+  readonly id: string;
+  readonly kind: "video";
+  readonly path: string;
+  readonly mimeType: "video/mp4";
+  readonly size: { readonly width: number; readonly height: number };
+  readonly durationSeconds: number;
+  readonly hasAudio: boolean | "unknown";
+  readonly provenance?: EditorResourceProvenance;
+}
+
 export type EditorLayoutResource =
   | EditorImageLayoutResource
   | EditorSpineLayoutResource
-  | EditorImageStringLayoutResource;
+  | EditorImageStringLayoutResource
+  | EditorVideoLayoutResource;
 
 export interface EditorResourceReference {
   readonly nodeId: string;
@@ -54,6 +66,7 @@ export function editorResourcePrimaryPath(
 ): string {
   if (resource.kind === "image") return resource.path;
   if (resource.kind === "spine") return resource.skeleton;
+  if (resource.kind === "video") return resource.path;
   return resource.manifestPath;
 }
 
@@ -67,6 +80,7 @@ export function editorResourcePaths(
       resource.atlas,
       ...Object.values(resource.textures),
     ];
+  if (resource.kind === "video") return [resource.path];
   return [resource.manifestPath, ...resource.assetPaths];
 }
 
@@ -94,6 +108,16 @@ export function editorResourceSignature(
       manifestPath: resource.manifestPath,
       manifest: resource.manifest,
       assetPaths: resource.assetPaths,
+    });
+  }
+  if (resource.kind === "video") {
+    return JSON.stringify({
+      kind: resource.kind,
+      path: resource.path,
+      mimeType: resource.mimeType,
+      size: resource.size,
+      durationSeconds: resource.durationSeconds,
+      hasAudio: resource.hasAudio,
     });
   }
   return JSON.stringify({

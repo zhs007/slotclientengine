@@ -102,6 +102,7 @@ describe("editor UI session and Resource Picker view model", () => {
     });
     const state = createResourcePickerState(project, {
       kind: "assign-background",
+      modeId: "BaseGame",
       variant: "portrait",
     });
     state.query = "hero";

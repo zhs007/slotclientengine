@@ -200,6 +200,7 @@ export async function createSceneLayoutPackageResource(options: {
     const skeletonModules: Record<string, unknown> = {};
     const atlasModules: Record<string, string> = {};
     const textureModules: Record<string, string> = {};
+    const videoModules: Record<string, string> = {};
     for (const node of manifest.nodes) {
       const resource = node.resource;
       if (resource.kind === "image-string") continue;
@@ -229,6 +230,22 @@ export async function createSceneLayoutPackageResource(options: {
     }
     for (const transition of manifest.gameModes?.transitions ?? []) {
       const resource = transition.overlay.resource;
+      if (resource.kind === "video") {
+        const bytes = requireBytes(options.files, resource.path);
+        if (
+          bytes.byteLength < 12 ||
+          String.fromCharCode(...bytes.slice(4, 8)) !== "ftyp"
+        )
+          throw new SceneLayoutError(
+            `Scene transition video is not an ISO MP4: ${resource.path}.`,
+          );
+        videoModules[resource.path] ??= createObjectUrl(
+          bytes,
+          resource.path,
+          objectUrls,
+        );
+        continue;
+      }
       skeletonModules[resource.skeleton] ??= parseJsonBytes(
         requireBytes(options.files, resource.skeleton),
         resource.skeleton,
@@ -252,6 +269,7 @@ export async function createSceneLayoutPackageResource(options: {
       skeletonModules,
       atlasModules,
       textureModules,
+      videoModules,
       imageStringResources: imageStrings,
       ownedObjectUrls: objectUrls,
     });
@@ -588,6 +606,7 @@ function mimeType(path: string): string {
   if (lower.endsWith(".png")) return "image/png";
   if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
   if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".mp4")) return "video/mp4";
   return "application/octet-stream";
 }
 

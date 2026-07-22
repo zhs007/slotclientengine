@@ -483,26 +483,26 @@ describe("symbol state texture manifest helpers", () => {
     expect(resources.L1?.win?.spec.playback.endTime).toBe(2);
   });
 
-  it("resolves a hash-flat VNI image relative to its materialized project", () => {
+  it("resolves hash-flat VNI assets relative to the materialized project module", () => {
     const manifest = structuredClone(createManifest()) as any;
-    manifest.symbols.L1.animations.win.project =
-      "./assets/project-hash.json";
+    manifest.symbols.L1.animations.win.project = "./assets/project.json";
     const project = createProject();
-    project.assets[0]!.path = "image-hash.png";
+    project.assets[0].path = "texture.png";
 
     const resources = createSymbolVniAnimationResourcesFromManifest({
       manifest,
       requiredStates,
       vniProjectModules: {
-        "assets/project-hash.json": project,
+        "assets/project.json": project,
       },
       vniAssetModules: {
-        "assets/image-hash.png": "/assets/image-hash.png",
+        "assets/texture.png": "/blob/correct",
+        "other/texture.png": "/blob/decoy",
       },
     });
 
     expect(resources.L1?.win?.assetUrls).toEqual({
-      "image-hash.png": "/assets/image-hash.png",
+      "texture.png": "/blob/correct",
     });
   });
 

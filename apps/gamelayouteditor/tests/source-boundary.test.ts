@@ -58,6 +58,16 @@ describe("gamelayouteditor production ownership boundary", () => {
       /Math\.random|serverReel|server reel|token|cookie/i,
     );
   });
+
+  it("keeps video presentation in the production Pixi runtime", () => {
+    const ui = readSourceTree(join(APP_ROOT, "src/ui"));
+    const sceneLayout = readSourceTree(
+      join(REPO_ROOT, "packages/rendercore/src/scene-layout"),
+    );
+    expect(ui).not.toMatch(/<video\b|createElement\(["']video["']\)/u);
+    expect(sceneLayout).not.toMatch(/setTimeout\s*\(/u);
+    expect(sceneLayout).toMatch(/new VideoSource/u);
+  });
 });
 
 function readSourceTree(directory: string): string {
