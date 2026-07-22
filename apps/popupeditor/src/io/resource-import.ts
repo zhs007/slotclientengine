@@ -63,12 +63,15 @@ export interface PopupImportReviewCandidate {
   readonly exactKeys: readonly string[];
   readonly errors: readonly string[];
   readonly suggestedTierBindings?: readonly PopupEditorTierBindingSuggestion[];
-  readonly profiles?: readonly {
-    id: string;
-    label: string;
-    byteLength: number;
-  }[];
+  readonly profiles?: readonly PopupVniRuntimeProfile[];
   readonly selectedProfileId?: string;
+}
+
+export interface PopupVniRuntimeProfile {
+  readonly id: string;
+  readonly label: string;
+  readonly assetScale: number;
+  readonly byteLength: number;
 }
 
 export interface PopupImportTransactionReview {
@@ -242,37 +245,48 @@ export async function discoverPopupResources(
 
 export function inspectVniBundleProfiles(
   bytes: Uint8Array,
-): readonly { id: string; label: string; byteLength: number }[] | null {
+): readonly PopupVniRuntimeProfile[] | null {
   const entries = extractBoundedZip(bytes, { limits: POPUP_ZIP_LIMITS });
   return readVniBundleProfiles(entries);
 }
 
 function readVniBundleProfiles(
   entries: ReadonlyMap<string, Uint8Array>,
-): readonly { id: string; label: string; byteLength: number }[] | null {
+): readonly PopupVniRuntimeProfile[] | null {
   const manifestBytes = entries.get("manifest.json");
   if (!manifestBytes) return null;
   const manifest = assertVNIBundleManifest(parseJson(manifestBytes));
   validateVNIBundleManifest(manifest);
+  const validated = manifest.exports.map((entry) => {
+    const projectBytes = required(entries, entry.path);
+    const project = assertVNIProject(parseJson(projectBytes));
+    validateManifestProjectProfile(entry, project);
+    const assetBytes = project.assets.map(
+      (asset) =>
+        required(entries, resolvePackagePath(entry.path, asset.path))
+          .byteLength,
+    );
+    return Object.freeze({
+      id: entry.id,
+      purpose: entry.purpose,
+      label:
+        entry.label ?? `${entry.id} (${entry.purpose}, ${entry.assetScale})`,
+      assetScale: entry.assetScale,
+      byteLength:
+        projectBytes.byteLength +
+        assetBytes.reduce((total, size) => total + size, 0),
+    });
+  });
+  const runtimeProfiles = validated.filter(
+    (profile): profile is PopupVniRuntimeProfile & { purpose: "runtime" } =>
+      profile.purpose === "runtime",
+  );
+  if (!runtimeProfiles.length)
+    throw new Error("VNI bundle 未声明 purpose=runtime 的运行发布包。");
   return Object.freeze(
-    manifest.exports.map((entry) => {
-      const projectBytes = required(entries, entry.path);
-      const project = assertVNIProject(parseJson(projectBytes));
-      validateManifestProjectProfile(entry, project);
-      const assetBytes = project.assets.map(
-        (asset) =>
-          required(entries, resolvePackagePath(entry.path, asset.path))
-            .byteLength,
-      );
-      return Object.freeze({
-        id: entry.id,
-        label:
-          entry.label ?? `${entry.id} (${entry.purpose}, ${entry.assetScale})`,
-        byteLength:
-          projectBytes.byteLength +
-          assetBytes.reduce((total, size) => total + size, 0),
-      });
-    }),
+    runtimeProfiles.map(({ purpose: _purpose, ...profile }) =>
+      Object.freeze(profile),
+    ),
   );
 }
 
@@ -286,18 +300,20 @@ async function discoverVniBundleZip(
     throw new Error(`${sourcePath} 是未知 ZIP；缺少已知 root sentinel。`);
   if (profiles.length > 1 && !selectedProfileId)
     throw new Error(
-      `${sourcePath} 声明多个 VNI profile，必须明确选择：${profiles.map(({ id }) => id).join(", ")}。`,
+      `${sourcePath} 声明多个 VNI runtime，必须明确选择：${profiles.map(({ id }) => id).join(", ")}。`,
     );
   const selected = selectedProfileId ?? profiles[0]?.id;
   if (!selected || !profiles.some(({ id }) => id === selected))
     throw new Error(
-      `${sourcePath} 的 VNI profile 选择无效：${selected ?? "未选择"}。`,
+      `${sourcePath} 的 VNI runtime 选择无效：${selected ?? "未选择"}。`,
     );
   const manifest = assertVNIBundleManifest(
     parseJson(required(entries, "manifest.json")),
   );
   validateVNIBundleManifest(manifest);
-  const entry = manifest.exports.find(({ id }) => id === selected)!;
+  const entry = manifest.exports.find(
+    ({ id, purpose }) => id === selected && purpose === "runtime",
+  )!;
   const projectBytes = required(entries, entry.path);
   const project = assertVNIProject(parseJson(projectBytes));
   validateManifestProjectProfile(entry, project);

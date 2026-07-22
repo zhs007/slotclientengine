@@ -329,6 +329,11 @@ dialog {
   max-height: 80vh;
   overflow: auto;
 }
+.vni-runtime-options {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
 #review-body article {
   display: grid;
   gap: 6px;

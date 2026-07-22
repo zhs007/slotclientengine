@@ -60,6 +60,7 @@ vi.mock("../src/io/resource-import.js", async (original) => {
   };
   return {
     ...actual,
+    inspectVniBundleProfiles: vi.fn(actual.inspectVniBundleProfiles),
     discoverPopupResources: vi.fn(async () => [structuredCloneCandidate()]),
     reviewPopupImportTransaction: vi.fn(async () => transaction),
     commitImportReview: vi.fn(async (project) => {
@@ -92,6 +93,10 @@ describe("PopupEditorApp", () => {
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     Object.defineProperty(window, "confirm", {
       value: vi.fn(() => true),
+      configurable: true,
+    });
+    Object.defineProperty(window, "prompt", {
+      value: vi.fn(),
       configurable: true,
     });
   });
@@ -170,6 +175,93 @@ describe("PopupEditorApp", () => {
     );
     app.destroy();
     expect(preview.destroy).toHaveBeenCalled();
+  });
+
+  it("auto-selects one VNI runtime and uses a select for multiple runtimes", async () => {
+    const { PopupEditorApp } = await import("../src/ui/app-shell.js");
+    const resourceImport = await import("../src/io/resource-import.js");
+    const inspect = vi.mocked(resourceImport.inspectVniBundleProfiles);
+    const discover = vi.mocked(resourceImport.discoverPopupResources);
+    const root = document.querySelector<HTMLElement>("#app")!;
+    const app = new PopupEditorApp(root);
+    await app.init();
+    const importer = root.querySelector<HTMLInputElement>("#import-assets")!;
+    const zip = createDeterministicZip(
+      new Map([["manifest.json", new TextEncoder().encode("{}")]]),
+    );
+    const importZip = async (name: string) => {
+      Object.defineProperty(importer, "files", {
+        value: [new File([zip.slice().buffer], name)],
+        configurable: true,
+      });
+      importer.dispatchEvent(new Event("change"));
+    };
+
+    inspect.mockReturnValue([
+      {
+        id: "runtime_100",
+        label: "100% 运行发布包",
+        assetScale: 1,
+        byteLength: 100,
+      },
+    ]);
+    await importZip("single-runtime.zip");
+    await vi.waitFor(() =>
+      expect(
+        (root.querySelector("#import-review") as HTMLDialogElement).open,
+      ).toBe(true),
+    );
+    expect(
+      (root.querySelector("#vni-runtime-choice") as HTMLDialogElement).open,
+    ).toBe(false);
+    expect(window.prompt).not.toHaveBeenCalled();
+    expect(
+      discover.mock.calls
+        .at(-1)?.[1]
+        ?.vniProfileSelections?.get("single-runtime.zip"),
+    ).toBe("runtime_100");
+    root.querySelector<HTMLButtonElement>("#review-cancel")!.click();
+
+    inspect.mockReturnValue([
+      {
+        id: "runtime_100",
+        label: "100% 运行发布包",
+        assetScale: 1,
+        byteLength: 100,
+      },
+      {
+        id: "runtime_50",
+        label: "50% 运行发布包",
+        assetScale: 0.5,
+        byteLength: 50,
+      },
+    ]);
+    await importZip("multiple-runtimes.zip");
+    const runtimeDialog = root.querySelector(
+      "#vni-runtime-choice",
+    ) as HTMLDialogElement;
+    await vi.waitFor(() => expect(runtimeDialog.open).toBe(true));
+    const select = root.querySelector<HTMLSelectElement>(
+      "#vni-runtime-select",
+    )!;
+    expect([...select.options].map(({ value }) => value)).toEqual([
+      "runtime_100",
+      "runtime_50",
+    ]);
+    select.value = "runtime_50";
+    root.querySelector<HTMLButtonElement>("#vni-runtime-confirm")!.click();
+    await vi.waitFor(() =>
+      expect(
+        (root.querySelector("#import-review") as HTMLDialogElement).open,
+      ).toBe(true),
+    );
+    expect(window.prompt).not.toHaveBeenCalled();
+    expect(
+      discover.mock.calls
+        .at(-1)?.[1]
+        ?.vniProfileSelections?.get("multiple-runtimes.zip"),
+    ).toBe("runtime_50");
+    app.destroy();
   });
 
   it("recognizes a popup ZIP by sentinel through the same import entry", async () => {

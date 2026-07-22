@@ -23,6 +23,7 @@ import {
   POPUP_ZIP_LIMITS,
   reviewPopupImportTransaction,
   type PopupImportReviewCandidate,
+  type PopupVniRuntimeProfile,
 } from "../io/resource-import.js";
 import { exportPopupZip, importPopupZip } from "../io/popup-zip.js";
 import { PopupPreview } from "../preview/popup-preview.js";
@@ -327,22 +328,53 @@ export class PopupEditorApp {
           profileSelections.set(file.name, profiles[0]!.id);
           continue;
         }
-        const selected = globalThis.window?.prompt?.(
-          `${file.name} 包含多个 VNI profile，必须输入本次导入的 profile id：\n${profiles
-            .map(
-              ({ id, label, byteLength }) =>
-                `${id} · ${label} · ${byteLength} bytes`,
-            )
-            .join("\n")}`,
+        const selected = await this.chooseVniRuntimeProfile(
+          file.name,
+          profiles,
         );
-        if (!selected || !profiles.some(({ id }) => id === selected))
-          throw new Error(`${file.name} 未明确选择有效 VNI profile。`);
+        if (!selected) return;
         profileSelections.set(file.name, selected);
       }
       const candidates = await discoverPopupResources(files, {
         vniProfileSelections: profileSelections,
       });
       await this.showReview(candidates);
+    });
+  }
+  private chooseVniRuntimeProfile(
+    fileName: string,
+    profiles: readonly PopupVniRuntimeProfile[],
+  ): Promise<string | null> {
+    const dialog = this.required<HTMLDialogElement>("vni-runtime-choice");
+    const description = this.required("vni-runtime-description");
+    const select = this.required<HTMLSelectElement>("vni-runtime-select");
+    const confirm = this.required<HTMLButtonElement>("vni-runtime-confirm");
+    const cancel = this.required<HTMLButtonElement>("vni-runtime-cancel");
+    description.textContent = `${fileName} 包含多个 runtime 运行发布包，请选择本次导入版本。`;
+    select.replaceChildren(
+      ...profiles.map((profile) => {
+        const option = document.createElement("option");
+        option.value = profile.id;
+        option.textContent = `${profile.label} · ${profile.id} · ${profile.assetScale * 100}% · ${profile.byteLength} bytes`;
+        return option;
+      }),
+    );
+    return new Promise((resolve) => {
+      const finish = (value: string | null) => {
+        confirm.onclick = null;
+        cancel.onclick = null;
+        dialog.removeEventListener("cancel", onDialogCancel);
+        if (dialog.open) dialog.close();
+        resolve(value);
+      };
+      const onDialogCancel = (event: Event) => {
+        event.preventDefault();
+        finish(null);
+      };
+      confirm.onclick = () => finish(select.value);
+      cancel.onclick = () => finish(null);
+      dialog.addEventListener("cancel", onDialogCancel);
+      dialog.showModal();
     });
   }
   private async showReview(candidates: readonly PopupImportReviewCandidate[]) {
@@ -413,7 +445,7 @@ export class PopupEditorApp {
 }
 
 function shell() {
-  return `<header><h1>Popup Award Celebration Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><button id="preview-build">Build preview</button><button id="preview-play">Play / Replay</button><button id="preview-advance">Advance</button><button id="preview-dismiss">Dismiss</button><button id="preview-clear">Dismiss immediately</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认并应用建议绑定</button><button id="review-cancel">取消</button></dialog>`;
+  return `<header><h1>Popup Award Celebration Editor</h1><nav class="primary-tabs" role="tablist" aria-label="编辑区域"><button role="tab" data-tab="resources">资源</button><button role="tab" data-tab="tiers">档位</button><button role="tab" data-tab="project">项目</button></nav></header><main><section class="left"><div id="workspace" role="tabpanel"></div><pre id="diagnostics"></pre></section><aside><div class="preview-controls"><select id="preview-resolution"><option value="1920x1080">1920×1080</option><option value="1080x1920" selected>1080×1920</option><option value="2000x2000">2000×2000</option><option value="custom">custom</option></select><label>width<input id="preview-width" type="number" min="1" value="1080"/></label><label>height<input id="preview-height" type="number" min="1" value="1920"/></label><select id="preview-zoom"><option value="fit">fit</option>${[0.25, 0.5, 0.75, 1, 1.5, 2].map((v) => `<option value="${v}">${v * 100}%</option>`)}</select><label><input id="preview-guides" type="checkbox" checked/>guides</label><label>bet raw<input id="preview-bet" type="number" value="100"/></label><label>win raw<input id="preview-win" type="number" value="5000"/></label><button id="preview-build">Build preview</button><button id="preview-play">Play / Replay</button><button id="preview-advance">Advance</button><button id="preview-dismiss">Dismiss</button><button id="preview-clear">Dismiss immediately</button></div><div id="preview-canvas"></div><output id="preview-status"></output></aside></main><dialog id="vni-runtime-choice"><h2>选择 VNI runtime</h2><p id="vni-runtime-description"></p><label class="vni-runtime-options">运行版本<select id="vni-runtime-select"></select></label><button id="vni-runtime-confirm">确认 runtime</button><button id="vni-runtime-cancel">取消导入</button></dialog><dialog id="import-review"><h2>Import review</h2><div id="review-body"></div><button id="review-confirm">确认并应用建议绑定</button><button id="review-cancel">取消</button></dialog>`;
 }
 function resourcesMarkup(project: PopupEditorProject) {
   return `<section class="resource-import-panel"><h2>扁平资源库</h2><p>图片、Spine、VNI、ImgNumber ZIP 与 Popup ZIP 统一从这里导入；filename key 保留原始拼写，同名不同 bytes 默认覆盖。</p><div class="resource-actions"><label class="file-action">导入资源<input id="import-assets" type="file" accept="image/png,image/webp,image/jpeg,.json,.atlas,.zip" multiple/></label></div></section><div class="resource-list">${[...project.resources.values()].map((resource) => `<article class="card"><strong>${resource.rootKey}</strong><span>${resource.kind}</span><details><summary>${resource.keys.length} filename keys</summary><code>${resource.keys.join("\n")}</code></details><span>${resourceReferenceCount(project, resource.rootKey)} 个图层绑定</span><button data-delete-resource="${resource.rootKey}">删除</button></article>`).join("") || '<p class="empty-state">尚无资源</p>'}</div>`;

@@ -107,13 +107,19 @@ describe("popup flat resource discovery", () => {
     ).rejects.toThrow(/无法识别、未引用或不完整/);
   });
 
-  it("requires an explicit VNI bundle profile and imports only its closure", async () => {
+  it("defaults to the only runtime and requires selection only for multiple runtimes", async () => {
     const root = asset("game003-s1/win-amount");
     const source = JSON.parse(
       new TextDecoder().decode(bytes("game003-s1/win-amount/bigwin.json")),
     ) as {
       exportProfile: { id: string; purpose: string; assetScale: number };
       assets: readonly { path: string }[];
+    };
+    const editing = structuredClone(source);
+    editing.exportProfile = {
+      id: "edit_full",
+      purpose: "editing",
+      assetScale: 1,
     };
     const full = structuredClone(source);
     full.exportProfile = { id: "full", purpose: "runtime", assetScale: 1 };
@@ -127,6 +133,12 @@ describe("popup flat resource discovery", () => {
             type: "vni_export_bundle",
             version: "VNI_0.2",
             exports: [
+              {
+                id: "edit_full",
+                purpose: "editing",
+                assetScale: 1,
+                path: "edit_full/project.json",
+              },
               {
                 id: "full",
                 purpose: "runtime",
@@ -144,6 +156,10 @@ describe("popup flat resource discovery", () => {
         ),
       ],
       [
+        "edit_full/project.json",
+        new TextEncoder().encode(JSON.stringify(editing)),
+      ],
+      [
         "profiles/full/project.json",
         new TextEncoder().encode(JSON.stringify(full)),
       ],
@@ -152,10 +168,10 @@ describe("popup flat resource discovery", () => {
         new TextEncoder().encode(JSON.stringify(half)),
       ],
     ]);
-    for (const profile of ["full", "half"])
+    for (const directory of ["edit_full", "profiles/full", "profiles/half"])
       for (const child of source.assets)
         entries.set(
-          `profiles/${profile}/${child.path}`,
+          `${directory}/${child.path}`,
           new Uint8Array(readFileSync(resolve(root, child.path))),
         );
     const zip = createDeterministicZip(entries);
@@ -163,9 +179,47 @@ describe("popup flat resource discovery", () => {
       "full",
       "half",
     ]);
+
+    const uniqueEntries = new Map(entries);
+    uniqueEntries.set(
+      "manifest.json",
+      new TextEncoder().encode(
+        JSON.stringify({
+          type: "vni_export_bundle",
+          version: "VNI_0.087",
+          exports: [
+            {
+              id: "edit_full",
+              purpose: "editing",
+              assetScale: 1,
+              path: "edit_full/project.json",
+            },
+            {
+              id: "full",
+              purpose: "runtime",
+              assetScale: 1,
+              path: "profiles/full/project.json",
+            },
+          ],
+        }),
+      ),
+    );
+    uniqueEntries.delete("profiles/half/project.json");
+    for (const child of source.assets)
+      uniqueEntries.delete(`profiles/half/${child.path}`);
+    const automatic = await discoverPopupResources([
+      sourceFile("stable-export.zip", createDeterministicZip(uniqueEntries)),
+    ]);
+    expect(automatic[0]).toMatchObject({
+      kind: "vni",
+      selectedProfileId: "full",
+      profiles: [{ id: "full", assetScale: 1 }],
+      primarySource: "stable-export.zip:profiles/full/project.json",
+    });
+
     await expect(
       discoverPopupResources([sourceFile("profiles.zip", zip)]),
-    ).rejects.toThrow(/必须明确选择/);
+    ).rejects.toThrow(/多个 VNI runtime.*必须明确选择/);
     const selected = await discoverPopupResources(
       [sourceFile("profiles.zip", zip)],
       { vniProfileSelections: new Map([["profiles.zip", "half"]]) },
