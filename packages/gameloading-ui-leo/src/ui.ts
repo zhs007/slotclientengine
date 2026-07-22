@@ -147,7 +147,7 @@ function createUi(
   );
   preloadImage.src = ASSET_URLS.gif;
   if (preloadImage.complete) {
-    beginIntro(true);
+    beginIntro(preloadImage.naturalWidth > 0);
   }
 
   return {

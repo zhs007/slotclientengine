@@ -9,6 +9,12 @@ export function normalizeLeoProgress(value: number): number {
 
 export function createLeoProgressStyles(progress: number): LeoProgressStyles {
   const normalized = normalizeLeoProgress(progress);
+  if (normalized === 0) {
+    return Object.freeze({
+      radialClipPath: "polygon(50% 50%, 50% 50%, 50% 50%)",
+      horizontalClipPath: "inset(0 100% 0 0)",
+    });
+  }
   const angle = normalized * 3.6;
   const points = ["50% 50%", "50% 0%"];
   for (let current = 5; current < angle; current += 5) {

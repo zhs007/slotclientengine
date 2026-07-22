@@ -110,7 +110,7 @@ game003：
 | --------------------- | -------------------: | ---------: | -------: |
 | gameloading           |   3 files / 19 tests |     91.66% |   85.15% |
 | gameloading-ui-simple |    3 files / 5 tests |     98.33% |   92.30% |
-| gameloading-ui-leo    |   4 files / 20 tests |     94.57% |   81.39% |
+| gameloading-ui-leo    |   4 files / 22 tests |     95.41% |   82.22% |
 | game002               |  18 files / 97 tests |     86.34% |   80.33% |
 | game003               | 27 files / 136 tests |     92.52% |   83.68% |
 
@@ -152,3 +152,12 @@ package dist 为 tsc ESM 输出，以下 gzip 为逐 JS 文件 gzip 后合计；
 ## 10. 非目标确认
 
 未实现 Wildsheep、平台运行时切换、React HUD、Leo framework、netcore2、stateData bridge、玩法/round 状态机、rendercore/Pixi/Spine/VNI 修改或远程 loading 配置。
+
+## 11. Main 验收收尾
+
+基于 `main c01884c` 完成代码验收，并修复两个 Leo UI 边界问题：
+
+- `0%` 径向 reveal 改为合法的三点退化 polygon，避免慢网络下浏览器忽略无效 clip-path 后显示完整圆形进度图；
+- 已缓存 GIF 的同步完成路径同时检查 `naturalWidth`，损坏缓存图片继续走 logo fallback，不再误判为 GIF 加载成功。
+
+补充 `0%` polygon 和 `complete=true / naturalWidth=0|1` 回归测试。最终五个相关目标共 `279` 个测试通过；Leo UI 的 format、lint、typecheck 通过；game002、game003 串行 test 与 `release:check` 均通过；最终 `git diff --check` 通过。
