@@ -175,6 +175,82 @@ describe("symbols editor app shell", () => {
     ).toBeNull();
   });
 
+  it("imports multiple Spine skeletons that share one atlas and texture", async () => {
+    await createProject(root);
+    const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
+    const names = [
+      "CN_1.json",
+      "CN_2.json",
+      "CN_3.json",
+      "CN_4.json",
+      "Symbol.atlas",
+      "Symbol.png",
+    ];
+    const files = names.map(
+      (name) =>
+        new File(
+          [
+            readFileSync(
+              resolve(process.cwd(), `../../assets/game002-s3/${name}`),
+            ),
+          ],
+          name,
+        ),
+    );
+    Object.defineProperty(upload, "files", {
+      configurable: true,
+      value: files,
+    });
+    upload.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain("已上传 6 个资源"),
+    );
+
+    click(root, '[data-workspace-tab][data-tab-value="symbols"]');
+    click(root, '[data-inspector-tab][data-tab-value="states"]');
+    const kind = root.querySelector<HTMLSelectElement>("[data-visual-kind]")!;
+    kind.value = "spine";
+    kind.dispatchEvent(new Event("change", { bubbles: true }));
+    click(root, '[data-open-picker*="spine-skeleton"]');
+
+    expect(
+      [...root.querySelectorAll<HTMLElement>("[data-picker-candidate]")].map(
+        (candidate) => candidate.dataset.pickerCandidate,
+      ),
+    ).toEqual(["CN_1.json", "CN_2.json", "CN_3.json", "CN_4.json"]);
+    expect(root.textContent).toContain("Symbol.atlas");
+    expect(root.textContent).toContain("Symbol.png");
+  });
+
+  it("still rejects a Spine import when multiple atlases make the closure ambiguous", async () => {
+    await createProject(root);
+    const upload = root.querySelector<HTMLInputElement>("[data-upload-input]")!;
+    const skeleton = readFileSync(
+      resolve(process.cwd(), "../../assets/game002-s3/CN_1.json"),
+    );
+    const atlas = readFileSync(
+      resolve(process.cwd(), "../../assets/game002-s3/Symbol.atlas"),
+    );
+    const texture = readFileSync(
+      resolve(process.cwd(), "../../assets/game002-s3/Symbol.png"),
+    );
+    Object.defineProperty(upload, "files", {
+      configurable: true,
+      value: [
+        new File([skeleton], "CN_1.json"),
+        new File([atlas], "Symbol.atlas"),
+        new File([atlas], "Other.atlas"),
+        new File([texture], "Symbol.png"),
+      ],
+    });
+    upload.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await vi.waitFor(() =>
+      expect(root.textContent).toContain("1 skeleton / 2 atlas"),
+    );
+    expect(root.textContent).not.toContain("已上传 4 个资源");
+  });
+
   it("supports keyboard tab navigation and idempotent destroy", async () => {
     await createProject(root);
     const assets = root.querySelector<HTMLElement>(

@@ -2746,7 +2746,7 @@ function validateResourceDiscovery(
     );
     const atlases = group.filter((record) => record.kind === "spine-atlas");
     if (skeletons.length || atlases.length) {
-      if (skeletons.length !== 1 || atlases.length !== 1) {
+      if (skeletons.length === 0 || atlases.length !== 1) {
         throw new Error(
           `目录 ${directory || "."} 的 Spine closure 存在歧义：${skeletons.length} skeleton / ${atlases.length} atlas。`,
         );
