@@ -29,7 +29,9 @@ const previewSpies = vi.hoisted(() => ({
   playAwardCelebration: vi.fn(),
   advanceAwardCelebration: vi.fn(),
   dismissAwardCelebrationImmediately: vi.fn(),
-  prepareGameModeTransition: vi.fn(async (): Promise<void> => undefined),
+  prepareGameModeTransition: vi.fn(
+    async (_target: string): Promise<void> => undefined,
+  ),
   cancelPreparedGameModeTransition: vi.fn(),
   requestGameMode: vi.fn(async (): Promise<void> => undefined),
   getGameModeSnapshot: vi.fn((): any => null),
@@ -76,6 +78,20 @@ const commandSpies = vi.hoisted(() => ({
     project.assets.set(resource.skeleton, new Uint8Array([1]));
     project.assets.set(resource.atlas, new Uint8Array([2]));
     project.assets.set("assets/hero.png", new Uint8Array([3]));
+    return resource;
+  }),
+  uploadVideo: vi.fn(async ({ project, file, resourceId }) => {
+    const resource = {
+      id: resourceId ?? "clip",
+      kind: "video" as const,
+      path: "assets/clip.mp4",
+      mimeType: "video/mp4" as const,
+      size: { width: 1280, height: 720 },
+      durationSeconds: 3.625,
+      hasAudio: true,
+    };
+    project.resources.set(resource.id, resource);
+    project.assets.set(resource.path, new Uint8Array(await file.arrayBuffer()));
     return resource;
   }),
 }));
@@ -135,6 +151,7 @@ vi.mock("../src/model/resource-commands.js", async (importOriginal) => {
     ...actual,
     uploadImageResource: commandSpies.uploadImage,
     uploadSpineResource: commandSpies.uploadSpine,
+    uploadVideoResource: commandSpies.uploadVideo,
   };
 });
 
@@ -234,6 +251,21 @@ describe("GameLayoutEditorApp workspace", () => {
     expect(root.querySelector("[data-new-single]")).toBeNull();
     expect(root.querySelector("[data-new-dual]")).toBeNull();
     (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
+    expect(
+      root.querySelectorAll('input[type="radio"][name="new-project-mode"]'),
+    ).toHaveLength(0);
+    const modeSelect = root.querySelector(
+      "[data-new-project-mode]",
+    ) as HTMLSelectElement;
+    expect([...modeSelect.options].map((option) => option.value)).toEqual([
+      "",
+      "maximized-focus",
+      "orientation-focus",
+    ]);
+    expect(
+      (root.querySelector("[data-confirm-new-project]") as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
     (
       root.querySelector("[data-cancel-new-project]") as HTMLButtonElement
     ).click();
@@ -241,17 +273,124 @@ describe("GameLayoutEditorApp workspace", () => {
       root.querySelector("[data-main-state-status]")?.textContent,
     ).toContain("initial=BaseGame");
     (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
-    (
-      root.querySelector(
-        '[name="new-project-mode"][value="orientation-focus"]',
-      ) as HTMLInputElement
-    ).checked = true;
+    modeSelect.value = "orientation-focus";
+    modeSelect.dispatchEvent(new Event("change"));
     (
       root.querySelector("[data-confirm-new-project]") as HTMLButtonElement
     ).click();
     expect(root.querySelector("[data-project-status]")?.textContent).toContain(
       "orientation-focus",
     );
+    (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
+    expect(modeSelect.value).toBe("");
+    (
+      root.querySelector("[data-new-project-dialog]") as HTMLDialogElement
+    ).dispatchEvent(new Event("cancel", { cancelable: true }));
+    expect(root.querySelector("[data-project-status]")?.textContent).toContain(
+      "orientation-focus",
+    );
+    modeSelect.value = "maximized-focus";
+    modeSelect.dispatchEvent(new Event("change"));
+    (
+      root.querySelector("[data-confirm-new-project]") as HTMLButtonElement
+    ).click();
+    expect(root.querySelector("[data-project-status]")?.textContent).toContain(
+      "maximized-focus",
+    );
+    app.destroy();
+  });
+
+  it("keeps the complete state list open and synchronizes successful mode mutations", async () => {
+    const { app, root } = await createApp();
+    (root.querySelector("[data-manage-modes]") as HTMLButtonElement).click();
+    const dialog = root.querySelector(
+      "[data-mode-dialog]",
+    ) as HTMLDialogElement;
+    expect(dialog.open).toBe(true);
+    expect(
+      dialog.querySelector('[data-select-game-mode="BaseGame"]'),
+    ).toBeTruthy();
+    expect(dialog.textContent).toContain("initial");
+    expect(dialog.textContent).toContain("incomplete");
+    expect(
+      (dialog.querySelector("[data-delete-game-mode]") as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+
+    let input = dialog.querySelector(
+      "[data-new-game-mode]",
+    ) as HTMLInputElement;
+    input.value = "1bad";
+    input.dispatchEvent(new Event("input"));
+    (dialog.querySelector("[data-add-game-mode]") as HTMLButtonElement).click();
+    expect(dialog.textContent).toContain("游戏模式 id");
+    expect(dialog.querySelectorAll('[role="option"]')).toHaveLength(1);
+
+    input = dialog.querySelector("[data-new-game-mode]") as HTMLInputElement;
+    input.value = "FreeGame";
+    input.dispatchEvent(new Event("input"));
+    (dialog.querySelector("[data-add-game-mode]") as HTMLButtonElement).click();
+    expect(dialog.open).toBe(true);
+    expect(dialog.querySelectorAll('[role="option"]')).toHaveLength(2);
+    expect(
+      dialog
+        .querySelector('[data-select-game-mode="FreeGame"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(dialog.textContent).toContain("已创建状态 FreeGame");
+    expect(
+      (root.querySelector("[data-game-mode]") as HTMLSelectElement).value,
+    ).toBe("FreeGame");
+
+    input = dialog.querySelector("[data-new-game-mode]") as HTMLInputElement;
+    input.value = "FreeGame";
+    input.dispatchEvent(new Event("input"));
+    (dialog.querySelector("[data-add-game-mode]") as HTMLButtonElement).click();
+    expect(dialog.querySelectorAll('[role="option"]')).toHaveLength(2);
+    expect(dialog.textContent).toContain("游戏模式已存在：FreeGame");
+    expect(
+      dialog
+        .querySelector('[data-select-game-mode="FreeGame"]')
+        ?.getAttribute("aria-selected"),
+    ).toBe("true");
+
+    input = dialog.querySelector(
+      "[data-rename-game-mode-input]",
+    ) as HTMLInputElement;
+    input.value = "BonusGame";
+    input.dispatchEvent(new Event("input"));
+    (
+      dialog.querySelector("[data-rename-game-mode]") as HTMLButtonElement
+    ).click();
+    expect(
+      dialog.querySelector('[data-select-game-mode="BonusGame"]'),
+    ).toBeTruthy();
+    expect(
+      (root.querySelector("[data-game-mode]") as HTMLSelectElement).value,
+    ).toBe("BonusGame");
+
+    (
+      dialog.querySelector("[data-set-initial-mode]") as HTMLButtonElement
+    ).click();
+    expect(
+      dialog.querySelector('[data-select-game-mode="BonusGame"]')?.textContent,
+    ).toContain("initial");
+    (
+      dialog.querySelector(
+        '[data-select-game-mode="BaseGame"]',
+      ) as HTMLButtonElement
+    ).click();
+    (
+      dialog.querySelector("[data-delete-game-mode]") as HTMLButtonElement
+    ).click();
+    expect(
+      dialog.querySelector('[data-select-game-mode="BaseGame"]'),
+    ).toBeNull();
+    expect(dialog.querySelectorAll('[role="option"]')).toHaveLength(1);
+    expect(
+      (root.querySelector("[data-game-mode]") as HTMLSelectElement).value,
+    ).toBe("BonusGame");
+    expect(dialog.textContent).toContain("layout 至少必须保留一个游戏模式");
     app.destroy();
   });
 
@@ -324,11 +463,11 @@ describe("GameLayoutEditorApp workspace", () => {
       root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
     ).click();
     (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
-    (
-      root.querySelector(
-        '[name="new-project-mode"][value="orientation-focus"]',
-      ) as HTMLInputElement
-    ).checked = true;
+    const newProjectMode = root.querySelector(
+      "[data-new-project-mode]",
+    ) as HTMLSelectElement;
+    newProjectMode.value = "orientation-focus";
+    newProjectMode.dispatchEvent(new Event("change"));
     (
       root.querySelector("[data-confirm-new-project]") as HTMLButtonElement
     ).click();
@@ -459,11 +598,11 @@ describe("GameLayoutEditorApp workspace", () => {
   it("captures the edited mode in background Picker and creates stable per-mode node ids", async () => {
     const { app, root } = await createApp();
     (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
-    (
-      root.querySelector(
-        '[name="new-project-mode"][value="orientation-focus"]',
-      ) as HTMLInputElement
-    ).checked = true;
+    const newProjectMode = root.querySelector(
+      "[data-new-project-mode]",
+    ) as HTMLSelectElement;
+    newProjectMode.value = "orientation-focus";
+    newProjectMode.dispatchEvent(new Event("change"));
     (
       root.querySelector("[data-confirm-new-project]") as HTMLButtonElement
     ).click();
@@ -490,6 +629,11 @@ describe("GameLayoutEditorApp workspace", () => {
     ).click();
 
     (root.querySelector("[data-manage-modes]") as HTMLButtonElement).click();
+    const newMode = root.querySelector(
+      "[data-new-game-mode]",
+    ) as HTMLInputElement;
+    newMode.value = "FreeGame";
+    newMode.dispatchEvent(new Event("input"));
     (root.querySelector("[data-add-game-mode]") as HTMLButtonElement).click();
     (
       root.querySelector("[data-close-mode-dialog]") as HTMLButtonElement
@@ -578,11 +722,11 @@ describe("GameLayoutEditorApp workspace", () => {
   it("edits one selected orientation layer, moves, renames, toggles placement and deletes it", async () => {
     const { app, root } = await createApp();
     (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
-    (
-      root.querySelector(
-        '[name="new-project-mode"][value="orientation-focus"]',
-      ) as HTMLInputElement
-    ).checked = true;
+    const mode = root.querySelector(
+      "[data-new-project-mode]",
+    ) as HTMLSelectElement;
+    mode.value = "orientation-focus";
+    mode.dispatchEvent(new Event("change"));
     (
       root.querySelector("[data-confirm-new-project]") as HTMLButtonElement
     ).click();
@@ -688,6 +832,11 @@ describe("GameLayoutEditorApp workspace", () => {
     expect(root.querySelector("[data-spine-playback-kind]")).toBeNull();
     expect(root.querySelector("[data-add-spine-state]")).toBeNull();
     (root.querySelector("[data-manage-modes]") as HTMLButtonElement).click();
+    const newMode = root.querySelector(
+      "[data-new-game-mode]",
+    ) as HTMLInputElement;
+    newMode.value = "FreeGame";
+    newMode.dispatchEvent(new Event("input"));
     (root.querySelector("[data-add-game-mode]") as HTMLButtonElement).click();
     (
       root.querySelector("[data-close-mode-dialog]") as HTMLButtonElement
@@ -759,29 +908,89 @@ describe("GameLayoutEditorApp workspace", () => {
       activeBackgroundNodes: ["background"],
     };
     previewSpies.getGameModeSnapshot.mockImplementation(() => currentSnapshot);
+    previewSpies.prepareGameModeTransition.mockImplementation(
+      async (target: string) => {
+        currentSnapshot = {
+          ...currentSnapshot,
+          preparedTargetMode: target,
+          transitionKind: "spine",
+        };
+      },
+    );
     let finishRequest!: () => void;
     const pendingRequest = new Promise<void>((resolve) => {
       finishRequest = resolve;
     });
+    let trustedClickActive = false;
     previewSpies.requestGameMode.mockImplementationOnce(() => {
+      expect(trustedClickActive).toBe(true);
       currentSnapshot = {
         ...currentSnapshot,
         targetMode: "FreeGame",
         phase: "transitioning",
         transitionPhase: "before-switch",
         transition: { from: "BaseGame", to: "FreeGame" },
-        transitionKind: "video",
-        mediaTimeSeconds: 0.875,
-        mediaDurationSeconds: 3.625,
-        fadeProgress: 0,
+        preparedTargetMode: null,
+        transitionKind: "spine",
       };
       return pendingRequest;
     });
     const { app, root } = await createApp();
+    const backgroundFileClick = selectFilesOnce([
+      new File(["background"], "background.png", { type: "image/png" }),
+    ]);
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector('[data-resource-row="background"]'),
+      ).toBeTruthy(),
+    );
+    backgroundFileClick.mockRestore();
+    const fileClick = selectFilesOnce([
+      new File(["{}"], "hero.json"),
+      new File(["hero.png\n"], "hero.atlas"),
+      new File(["image"], "hero.png"),
+    ]);
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('[data-resource-row="hero"]')).toBeTruthy(),
+    );
+    (
+      root.querySelector(
+        '[data-resource-row="background"] [data-resource-background="default"]',
+      ) as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector(
+        "[data-resource-picker] [data-picker-confirm]",
+      ) as HTMLButtonElement
+    ).click();
     (root.querySelector("[data-manage-modes]") as HTMLButtonElement).click();
+    const newMode = root.querySelector(
+      "[data-new-game-mode]",
+    ) as HTMLInputElement;
+    newMode.value = "FreeGame";
+    newMode.dispatchEvent(new Event("input"));
     (root.querySelector("[data-add-game-mode]") as HTMLButtonElement).click();
     (
       root.querySelector("[data-close-mode-dialog]") as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector('[data-workspace-tab="assets"]') as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector(
+        '[data-resource-row="background"] [data-resource-background="default"]',
+      ) as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector(
+        "[data-resource-picker] [data-picker-confirm]",
+      ) as HTMLButtonElement
     ).click();
     (
       root.querySelector(
@@ -799,18 +1008,38 @@ describe("GameLayoutEditorApp workspace", () => {
     (
       root.querySelector("[data-create-transition]") as HTMLButtonElement
     ).click();
-    (root.querySelector("[data-play-transition]") as HTMLButtonElement).click();
+    const resource = root.querySelector(
+      "[data-transition-resource]",
+    ) as HTMLSelectElement;
+    resource.value = "hero";
+    resource.dispatchEvent(new Event("change"));
+    const animation = root.querySelector(
+      "[data-transition-animation]",
+    ) as HTMLSelectElement;
+    animation.value = "Bridge";
+    animation.dispatchEvent(new Event("change"));
+    const transitionEvent = root.querySelector(
+      "[data-transition-event]",
+    ) as HTMLSelectElement;
+    transitionEvent.value = "SwitchScene";
+    transitionEvent.dispatchEvent(new Event("change"));
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector("[data-transition-runtime-status]")?.textContent,
+      ).toContain("Spine 转场已准备，可切换"),
+    );
+    expect(previewSpies.prepareGameModeTransition).toHaveBeenCalledTimes(1);
+    trustedClickActive = true;
+    (
+      root.querySelector("[data-request-transition]") as HTMLButtonElement
+    ).click();
+    trustedClickActive = false;
 
     await vi.waitFor(() =>
       expect(
         root.querySelector("[data-transition-runtime-status]")?.textContent,
-      ).toContain(
-        "phase=transitioning · stable=BaseGame · displayed=BaseGame · target=FreeGame",
-      ),
+      ).toContain("转场播放中，尚未切换场景"),
     );
-    expect(
-      root.querySelector("[data-transition-runtime-status]")?.textContent,
-    ).toContain("media=0.875/3.625 · fade=0.000");
     expect(
       (root.querySelector("[data-transition-kind]") as HTMLSelectElement)
         .disabled,
@@ -825,21 +1054,17 @@ describe("GameLayoutEditorApp workspace", () => {
     ).toBe(true);
     expect(
       root.querySelector("[data-main-state-status]")?.textContent,
-    ).toContain(
-      "transitioning · stable=BaseGame · displayed=BaseGame · target=FreeGame",
-    );
+    ).toContain("转场播放中，尚未切换场景");
 
     currentSnapshot = {
       ...currentSnapshot,
       displayedMode: "FreeGame",
       transitionPhase: "after-switch",
-      mediaTimeSeconds: 3.2,
-      fadeProgress: 0.15,
     };
     await vi.waitFor(() =>
       expect(
         root.querySelector("[data-transition-runtime-status]")?.textContent,
-      ).toContain("media=3.200/3.625 · fade=0.150"),
+      ).toContain("已切换目标场景，等待 once 完成"),
     );
 
     currentSnapshot = {
@@ -858,13 +1083,230 @@ describe("GameLayoutEditorApp workspace", () => {
     await vi.waitFor(() =>
       expect(
         root.querySelector("[data-transition-runtime-status]")?.textContent,
-      ).toContain("phase=stable · stable=FreeGame · displayed=FreeGame"),
+      ).toContain("转场完成，当前状态：FreeGame"),
     );
     expect(
       (root.querySelector("[data-delete-transition]") as HTMLButtonElement)
         .disabled,
     ).toBe(false);
+    fileClick.mockRestore();
     app.destroy();
+  });
+
+  it("automatically prepares an audible video edge and keeps the source stable when play rejects", async () => {
+    let currentSnapshot: any = {
+      stableMode: "BaseGame",
+      displayedMode: "BaseGame",
+      targetMode: null,
+      phase: "stable",
+      transitionPhase: null,
+      transition: null,
+      preparedTargetMode: null,
+      transitionKind: null,
+      mediaTimeSeconds: null,
+      mediaDurationSeconds: null,
+      fadeProgress: null,
+      stableSymbolPackage: null,
+      displayedSymbolPackage: null,
+      targetSymbolPackage: null,
+      activeBackgroundNodes: ["basegame-default-background"],
+    };
+    previewSpies.getGameModeSnapshot.mockImplementation(() => currentSnapshot);
+    let finishFirstPrepare!: () => void;
+    const firstPrepare = new Promise<void>((resolve) => {
+      finishFirstPrepare = resolve;
+    });
+    let finishDestroyPrepare!: () => void;
+    const destroyPrepare = new Promise<void>((resolve) => {
+      finishDestroyPrepare = resolve;
+    });
+    let prepareCalls = 0;
+    previewSpies.prepareGameModeTransition.mockImplementation(
+      async (target: string) => {
+        prepareCalls += 1;
+        if (prepareCalls === 1) await firstPrepare;
+        if (prepareCalls === 3) await destroyPrepare;
+        currentSnapshot = {
+          ...currentSnapshot,
+          preparedTargetMode: target,
+          transitionKind: "video",
+          mediaDurationSeconds: 3.625,
+        };
+      },
+    );
+    previewSpies.cancelPreparedGameModeTransition.mockImplementation(() => {
+      currentSnapshot = {
+        ...currentSnapshot,
+        preparedTargetMode: null,
+        transitionKind: null,
+        mediaDurationSeconds: null,
+      };
+    });
+    let rejectPlay!: (error: Error) => void;
+    const playPending = new Promise<void>((_resolve, reject) => {
+      rejectPlay = reject;
+    });
+    let trustedClickActive = false;
+    previewSpies.requestGameMode.mockImplementationOnce(() => {
+      expect(trustedClickActive).toBe(true);
+      return playPending;
+    });
+
+    const { app, root } = await createApp();
+    const backgroundClick = selectFilesOnce([
+      new File(["background"], "background.png", { type: "image/png" }),
+    ]);
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector('[data-resource-row="background"]'),
+      ).toBeTruthy(),
+    );
+    backgroundClick.mockRestore();
+    (
+      root.querySelector(
+        '[data-resource-row="background"] [data-resource-background="default"]',
+      ) as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector(
+        "[data-resource-picker] [data-picker-confirm]",
+      ) as HTMLButtonElement
+    ).click();
+
+    (
+      root.querySelector('[data-workspace-tab="assets"]') as HTMLButtonElement
+    ).click();
+    const videoClick = selectFilesOnce([
+      new File(["video"], "clip.mp4", { type: "video/mp4" }),
+    ]);
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
+    await vi.waitFor(() =>
+      expect(root.querySelector('[data-resource-row="clip"]')).toBeTruthy(),
+    );
+    videoClick.mockRestore();
+
+    (root.querySelector("[data-manage-modes]") as HTMLButtonElement).click();
+    const newMode = root.querySelector(
+      "[data-new-game-mode]",
+    ) as HTMLInputElement;
+    newMode.value = "FreeGame";
+    newMode.dispatchEvent(new Event("input"));
+    (root.querySelector("[data-add-game-mode]") as HTMLButtonElement).click();
+    (
+      root.querySelector("[data-close-mode-dialog]") as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector('[data-workspace-tab="assets"]') as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector(
+        '[data-resource-row="background"] [data-resource-background="default"]',
+      ) as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector(
+        "[data-resource-picker] [data-picker-confirm]",
+      ) as HTMLButtonElement
+    ).click();
+
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector("[data-preview-transition-status]")?.textContent,
+      ).toContain("缺少 BaseGame → FreeGame 直接有向转场"),
+    );
+    (
+      root.querySelector(
+        '[data-workspace-tab="transitions"]',
+      ) as HTMLButtonElement
+    ).click();
+    const from = root.querySelector(
+      "[data-new-transition-from]",
+    ) as HTMLSelectElement;
+    const to = root.querySelector(
+      "[data-new-transition-to]",
+    ) as HTMLSelectElement;
+    from.value = "BaseGame";
+    to.value = "FreeGame";
+    (
+      root.querySelector("[data-create-transition]") as HTMLButtonElement
+    ).click();
+    const kind = root.querySelector(
+      "[data-transition-kind]",
+    ) as HTMLSelectElement;
+    kind.value = "video";
+    kind.dispatchEvent(new Event("change"));
+    const resource = root.querySelector(
+      "[data-transition-video-resource]",
+    ) as HTMLSelectElement;
+    resource.value = "clip";
+    resource.dispatchEvent(new Event("change"));
+
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector("[data-preview-transition-status]")?.textContent,
+      ).toContain("开始准备 MP4 与目标场景"),
+    );
+    const targetSelect = root.querySelector(
+      "[data-preview-game-mode]",
+    ) as HTMLSelectElement;
+    targetSelect.value = "BaseGame";
+    targetSelect.dispatchEvent(new Event("change"));
+    finishFirstPrepare();
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector("[data-preview-transition-status]")?.textContent,
+      ).toContain("当前已是 BaseGame"),
+    );
+    await vi.waitFor(() =>
+      expect(previewSpies.cancelPreparedGameModeTransition).toHaveBeenCalled(),
+    );
+    targetSelect.value = "FreeGame";
+    targetSelect.dispatchEvent(new Event("change"));
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector("[data-preview-transition-status]")?.textContent,
+      ).toContain("MP4 媒体可播放，目标场景已准备"),
+    );
+    expect(previewSpies.prepareGameModeTransition).toHaveBeenCalledTimes(2);
+    trustedClickActive = true;
+    (
+      root.querySelector("[data-request-preview-mode]") as HTMLButtonElement
+    ).click();
+    trustedClickActive = false;
+    expect(currentSnapshot.targetMode).toBeNull();
+    expect(
+      root.querySelector("[data-preview-transition-status]")?.textContent,
+    ).toContain("开始 MP4 转场");
+
+    currentSnapshot = {
+      ...currentSnapshot,
+      preparedTargetMode: null,
+      transitionKind: null,
+      mediaDurationSeconds: null,
+    };
+    rejectPlay(new Error("NotAllowedError: audible play rejected"));
+    await vi.waitFor(() =>
+      expect(
+        root.querySelector("[data-preview-transition-status]")?.textContent,
+      ).toContain("NotAllowedError: audible play rejected"),
+    );
+    expect(currentSnapshot.stableMode).toBe("BaseGame");
+    expect(currentSnapshot.displayedMode).toBe("BaseGame");
+    expect(currentSnapshot.targetMode).toBeNull();
+    targetSelect.value = "BaseGame";
+    targetSelect.dispatchEvent(new Event("change"));
+    targetSelect.value = "FreeGame";
+    targetSelect.dispatchEvent(new Event("change"));
+    await vi.waitFor(() => expect(prepareCalls).toBe(3));
+    app.destroy();
+    finishDestroyPrepare();
+    await Promise.resolve();
+    expect(root.childElementCount).toBe(0);
   });
 
   it("imports and edits an image-string layer through the resource and inspector UI", async () => {

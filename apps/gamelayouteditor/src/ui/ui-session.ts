@@ -45,8 +45,29 @@ export interface EditorUiSession {
   expandedResourceIds: Set<string>;
   expandedInspectorSections: Set<string>;
   selectedTransitionKey: string | null;
+  previewTransition: PreviewTransitionUiState;
   picker: ResourcePickerState | null;
 }
+
+export type PreviewTransitionKind = "spine" | "video";
+
+export type PreviewTransitionUiState =
+  | { readonly phase: "idle"; readonly message: string }
+  | {
+      readonly phase: "preparing" | "ready" | "starting";
+      readonly from: string;
+      readonly to: string;
+      readonly kind: PreviewTransitionKind;
+    }
+  | {
+      readonly phase: "transitioning";
+      readonly from: string;
+      readonly to: string;
+      readonly kind: PreviewTransitionKind;
+      readonly boundary: "before-switch" | "after-switch";
+    }
+  | { readonly phase: "complete"; readonly stableMode: string }
+  | { readonly phase: "error"; readonly message: string };
 
 export function createEditorUiSession(): EditorUiSession {
   return {
@@ -58,6 +79,7 @@ export function createEditorUiSession(): EditorUiSession {
     expandedResourceIds: new Set(),
     expandedInspectorSections: new Set(),
     selectedTransitionKey: null,
+    previewTransition: { phase: "idle", message: "请选择预览目标状态。" },
     picker: null,
   };
 }

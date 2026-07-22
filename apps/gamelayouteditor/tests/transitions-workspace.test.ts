@@ -3,7 +3,10 @@ import {
   createNewEditorProject,
   type EditorGameModeTransitionDraft,
 } from "../src/model/editor-project.js";
-import { transitionsWorkspaceMarkup } from "../src/ui/transitions-workspace.js";
+import {
+  transitionsWorkspaceMarkup,
+  transitionUiStateText,
+} from "../src/ui/transitions-workspace.js";
 
 describe("transitions workspace", () => {
   it("uses strict resource/animation/event selects and excludes duplicate event names", () => {
@@ -62,6 +65,12 @@ describe("transitions workspace", () => {
         targetSymbolPackage: null,
         activeBackgroundNodes: ["background"],
       },
+      uiState: {
+        phase: "ready",
+        from: "BaseGame",
+        to: "FreeGame",
+        kind: "spine",
+      },
     });
 
     expect(host.querySelector("select[data-transition-resource]")).toBeTruthy();
@@ -78,7 +87,7 @@ describe("transitions workspace", () => {
     expect(host.querySelector("input[data-transition-event]")).toBeNull();
     expect(host.textContent).toContain("Duplicate × 2");
     expect(
-      (host.querySelector("[data-play-transition]") as HTMLButtonElement)
+      (host.querySelector("[data-request-transition]") as HTMLButtonElement)
         .disabled,
     ).toBe(false);
   });
@@ -136,6 +145,12 @@ describe("transitions workspace", () => {
         targetSymbolPackage: null,
         activeBackgroundNodes: ["bg"],
       },
+      uiState: {
+        phase: "ready",
+        from: "BaseGame",
+        to: "FreeGame",
+        kind: "video",
+      },
     });
     const resource = host.querySelector(
       "select[data-transition-video-resource]",
@@ -146,21 +161,67 @@ describe("transitions workspace", () => {
     ]);
     expect(host.textContent).toContain("3.125s");
     expect(host.textContent).toContain("1280×720");
+    expect(host.querySelector("[data-prepare-transition]")).toBeNull();
+    expect(host.querySelector("[data-cancel-prepared-transition]")).toBeNull();
     expect(
-      (host.querySelector("[data-prepare-transition]") as HTMLButtonElement)
-        .disabled,
-    ).toBe(false);
-    expect(
-      (
-        host.querySelector(
-          "[data-cancel-prepared-transition]",
-        ) as HTMLButtonElement
-      ).disabled,
-    ).toBe(false);
-    expect(
-      (host.querySelector("[data-play-transition]") as HTMLButtonElement)
+      (host.querySelector("[data-request-transition]") as HTMLButtonElement)
         .disabled,
     ).toBe(false);
     expect(host.querySelector("video")).toBeNull();
+  });
+
+  it("describes Chinese preparation, media boundaries and missing-frame diagnostics without NaN", () => {
+    expect(
+      transitionUiStateText(
+        {
+          phase: "preparing",
+          from: "BaseGame",
+          to: "FreeGame",
+          kind: "video",
+        },
+        null,
+      ),
+    ).toContain("开始准备 MP4 与目标场景");
+    const before = transitionUiStateText(
+      {
+        phase: "transitioning",
+        from: "BaseGame",
+        to: "FreeGame",
+        kind: "video",
+        boundary: "before-switch",
+      },
+      null,
+    );
+    expect(before).toContain("等待 fadeStart");
+    expect(before).toContain("等待首帧");
+    expect(before).not.toContain("NaN");
+    expect(
+      transitionUiStateText(
+        {
+          phase: "transitioning",
+          from: "BaseGame",
+          to: "FreeGame",
+          kind: "video",
+          boundary: "after-switch",
+        },
+        {
+          stableMode: "BaseGame",
+          displayedMode: "FreeGame",
+          targetMode: "FreeGame",
+          phase: "transitioning",
+          transitionPhase: "after-switch",
+          transition: { from: "BaseGame", to: "FreeGame" },
+          preparedTargetMode: null,
+          transitionKind: "video",
+          mediaTimeSeconds: 3.2,
+          mediaDurationSeconds: 3.625,
+          fadeProgress: 0.15,
+          stableSymbolPackage: null,
+          displayedSymbolPackage: null,
+          targetSymbolPackage: null,
+          activeBackgroundNodes: ["background"],
+        },
+      ),
+    ).toContain("3.200 / 3.625s · fade 0.150");
   });
 });

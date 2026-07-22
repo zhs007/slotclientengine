@@ -6,6 +6,7 @@ import {
   type EditorProject,
 } from "../model/editor-project.js";
 import { escapeHtml, numberField } from "./ui-markup.js";
+import type { PreviewTransitionUiState } from "./ui-session.js";
 
 export function transitionKey(
   transition: Pick<EditorGameModeTransitionDraft, "fromModeId" | "toModeId">,
@@ -23,12 +24,13 @@ export function transitionSnapshotText(
 export function updateTransitionRuntimeUi(
   root: ParentNode,
   snapshot: SceneLayoutGameModeSnapshot | null,
+  uiState: PreviewTransitionUiState,
   locked: boolean,
 ): void {
   const status = root.querySelector<HTMLOutputElement>(
     "[data-transition-runtime-status]",
   );
-  if (status) status.textContent = transitionSnapshotText(snapshot);
+  if (status) status.textContent = transitionUiStateText(uiState, snapshot);
   if (!locked) return;
   root
     .querySelectorAll<
@@ -43,6 +45,7 @@ export function transitionsWorkspaceMarkup(options: {
   readonly project: EditorProject;
   readonly selectedKey: string | null;
   readonly snapshot: SceneLayoutGameModeSnapshot | null;
+  readonly uiState: PreviewTransitionUiState;
 }): string {
   const selected = options.project.gameModes.transitions.find(
     (transition) => transitionKey(transition) === options.selectedKey,
@@ -65,7 +68,7 @@ export function transitionsWorkspaceMarkup(options: {
       <div class="transition-create"><label>from<select data-new-transition-from><option value="">必须明确选择</option>${modeOptions}</select></label><label>to<select data-new-transition-to><option value="">必须明确选择</option>${modeOptions}</select></label><button type="button" class="primary" data-create-transition>新建转场</button></div>
       <div role="listbox" aria-label="场景转场" class="outline-list">${rows}</div>
     </aside>
-    <section class="inspector" aria-live="polite">${selected ? transitionInspector(options.project, selected, options.snapshot) : '<div class="empty-state">选择一条转场进行配置。两种 presentation 是严格互斥的 union。</div>'}</section>
+    <section class="inspector" aria-live="polite">${selected ? transitionInspector(options.project, selected, options.snapshot, options.uiState) : '<div class="empty-state">选择一条转场进行配置。两种 presentation 是严格互斥的 union。</div>'}</section>
   </section>`;
 }
 
@@ -101,6 +104,7 @@ function transitionInspector(
   project: EditorProject,
   transition: EditorGameModeTransitionDraft,
   snapshot: SceneLayoutGameModeSnapshot | null,
+  uiState: PreviewTransitionUiState,
 ): string {
   const kindSelector = `<label>presentation type<select data-transition-kind><option value="spine" ${transition.kind === "spine" ? "selected" : ""}>Spine 顶层特效</option><option value="video" ${transition.kind === "video" ? "selected" : ""}>黑场视频</option></select></label>`;
   const body =
@@ -110,17 +114,16 @@ function transitionInspector(
   const stableAtSource =
     snapshot?.phase === "stable" &&
     snapshot.stableMode === transition.fromModeId;
-  const prepared =
-    transition.kind === "video" &&
-    snapshot?.preparedTargetMode === transition.toModeId &&
-    snapshot.transitionKind === "video";
-  const canPrepare = stableAtSource;
-  const canPlay =
-    stableAtSource && (transition.kind === "spine" || prepared === true);
+  const canSwitch =
+    stableAtSource &&
+    uiState.phase === "ready" &&
+    uiState.from === transition.fromModeId &&
+    uiState.to === transition.toModeId &&
+    uiState.kind === transition.kind;
   return `<div class="inspector-inner"><div class="inspector-heading"><span>Scene Transition Inspector</span><h2>${escapeHtml(transition.fromModeId)} → ${escapeHtml(transition.toModeId)}</h2></div>
     <section class="inspector-section"><h3>Presentation</h3>${kindSelector}<p class="hint">切换类型会原子清除另一分支的全部不兼容字段。</p></section>
     ${body}
-    <section class="inspector-section"><div class="button-row"><button type="button" data-prepare-transition ${canPrepare ? "" : "disabled"}>预加载当前转场</button><button type="button" data-cancel-prepared-transition ${prepared ? "" : "disabled"}>取消预加载</button><button type="button" class="primary" data-play-transition ${canPlay ? "" : "disabled"}>播放当前转场</button><button type="button" class="danger" data-delete-transition>删除转场</button></div><output data-transition-runtime-status>${snapshotMarkup(snapshot)}</output></section>
+    <section class="inspector-section"><div class="button-row"><button type="button" class="primary" data-request-transition ${canSwitch ? "" : "disabled"}>切换到该状态</button><button type="button" class="danger" data-delete-transition>删除转场</button></div><output data-transition-runtime-status>${escapeHtml(transitionUiStateText(uiState, snapshot))}</output><details><summary>runtime snapshot</summary><code>${snapshotMarkup(snapshot)}</code></details></section>
   </div>`;
 }
 
@@ -185,4 +188,39 @@ function videoInspector(
 
 function snapshotMarkup(snapshot: SceneLayoutGameModeSnapshot | null): string {
   return escapeHtml(transitionSnapshotText(snapshot));
+}
+
+export function transitionUiStateText(
+  state: PreviewTransitionUiState,
+  snapshot: SceneLayoutGameModeSnapshot | null,
+): string {
+  if (state.phase === "idle" || state.phase === "error") return state.message;
+  if (state.phase === "complete")
+    return `转场完成，当前状态：${state.stableMode}`;
+  if (state.phase === "preparing")
+    return state.kind === "video"
+      ? `开始准备 MP4 与目标场景：${state.from} → ${state.to}`
+      : `正在准备目标场景与 Spine 转场：${state.from} → ${state.to}`;
+  if (state.phase === "ready")
+    return state.kind === "video"
+      ? `MP4 媒体可播放，目标场景已准备：${state.from} → ${state.to}`
+      : `Spine 转场已准备，可切换：${state.from} → ${state.to}`;
+  if (state.phase === "starting")
+    return state.kind === "video" ? "开始 MP4 转场" : "开始 Spine 转场";
+  if (state.phase !== "transitioning") return "转场状态未知。";
+  const base =
+    state.kind === "video"
+      ? state.boundary === "before-switch"
+        ? "MP4 播放中，等待 fadeStart"
+        : "已切换目标场景，MP4 收尾中"
+      : state.boundary === "before-switch"
+        ? "转场播放中，尚未切换场景"
+        : "已切换目标场景，等待 once 完成";
+  if (state.kind !== "video") return base;
+  const current = snapshot?.mediaTimeSeconds;
+  const duration = snapshot?.mediaDurationSeconds;
+  const fade = snapshot?.fadeProgress;
+  if (!Number.isFinite(current) || !Number.isFinite(duration))
+    return `${base} · 等待首帧`;
+  return `${base} · ${current!.toFixed(3)} / ${duration!.toFixed(3)}s${Number.isFinite(fade) ? ` · fade ${fade!.toFixed(3)}` : ""}`;
 }
