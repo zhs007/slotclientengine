@@ -1,8 +1,4 @@
-import {
-  calculateFrameScale,
-  calculateSlotUiFrameViewport,
-  createDefaultSlotLayout,
-} from "./layout.js";
+import { createSlotUiFrameHost } from "./frame-host.js";
 import { SlotUiConfigError } from "./errors.js";
 import type { MoneyFormatter } from "./format.js";
 import { createSlotIcon, type SlotUiIconName } from "./icons.js";
@@ -82,19 +78,12 @@ interface ListenerBinding {
 }
 
 export function createSlotUiDom(options: SlotUiDomOptions): SlotUiDom {
-  let viewportSnapshot = calculateSlotUiFrameViewport({
-    ...readRootViewport(options.root),
+  const frameHost = createSlotUiFrameHost({
+    root: options.root,
     designSize: options.designSize,
-    policy: options.framePolicy,
+    framePolicy: options.framePolicy,
   });
-  const layout = createDefaultSlotLayout(viewportSnapshot.frameDesignSize);
-  const page = element("main", "slot-ui-page");
-  const frame = element("div", "slot-ui-frame");
-  const gameLayer = element("div", "slot-ui-game-layer");
-  const overlay = element("div", "slot-ui-overlay");
-
-  page.setAttribute("data-slot-ui", "dom");
-  applyFrameViewport(frame, viewportSnapshot, layout);
+  const { page, frame, gameLayer, overlay } = frameHost.elements;
 
   const topHud = element("div", "slot-ui-top-hud");
   const clock =
@@ -164,10 +153,6 @@ export function createSlotUiDom(options: SlotUiDomOptions): SlotUiDom {
   statusText.setAttribute("aria-live", "polite");
 
   overlay.append(topHud, leftRail, bottomHud, statusText);
-  frame.append(gameLayer, overlay);
-  page.append(frame);
-  options.root.replaceChildren(page);
-
   const bindings: ListenerBinding[] = [];
   bind(bindings, menuButton, "click", () => options.handlers.onMenu?.());
   bind(bindings, fastButton, "click", () => {
@@ -207,21 +192,6 @@ export function createSlotUiDom(options: SlotUiDomOptions): SlotUiDom {
     }
   });
 
-  const viewportListeners = new Set<SlotUiViewportListener>();
-  const resizeListener = () => {
-    viewportSnapshot = calculateSlotUiFrameViewport({
-      ...readRootViewport(options.root),
-      designSize: options.designSize,
-      policy: options.framePolicy,
-    });
-    applyFrameViewport(frame, viewportSnapshot);
-    for (const listener of viewportListeners) {
-      listener(viewportSnapshot);
-    }
-  };
-  window.addEventListener("resize", resizeListener);
-  resizeListener();
-
   const clockController = clock
     ? startClock(clock, options.clock === false ? undefined : options.clock)
     : null;
@@ -253,13 +223,10 @@ export function createSlotUiDom(options: SlotUiDomOptions): SlotUiDom {
   return {
     elements,
     getViewport(): SlotUiViewportSnapshot {
-      return viewportSnapshot;
+      return frameHost.getViewport();
     },
     onViewportChange(listener: SlotUiViewportListener): () => void {
-      viewportListeners.add(listener);
-      return () => {
-        viewportListeners.delete(listener);
-      };
+      return frameHost.onViewportChange(listener);
     },
     update(state: SlotUiStateSnapshot): void {
       renderState(
@@ -271,77 +238,16 @@ export function createSlotUiDom(options: SlotUiDomOptions): SlotUiDom {
     },
     destroy(): void {
       clockController?.destroy();
-      window.removeEventListener("resize", resizeListener);
       for (const binding of bindings) {
         binding.element.removeEventListener(binding.type, binding.listener);
       }
       bindings.length = 0;
-      viewportListeners.clear();
+      frameHost.destroy();
     },
   };
 }
 
-export function applyFrameScale(
-  frame: HTMLElement,
-  root: HTMLElement,
-  designSize: SlotUiDesignSize,
-): number {
-  const viewport = calculateSlotUiFrameViewport({
-    ...readRootViewport(root),
-    designSize,
-    policy: { mode: "fixed" },
-  });
-  applyFrameViewport(frame, viewport);
-  return calculateFrameScale(
-    viewport.pageSize.width,
-    viewport.pageSize.height,
-    designSize,
-  );
-}
-
-export function applyFrameViewport(
-  frame: HTMLElement,
-  viewport: SlotUiViewportSnapshot,
-  layout = createDefaultSlotLayout(viewport.frameDesignSize),
-): void {
-  frame.style.width = `${layout.designSize.width}px`;
-  frame.style.height = `${layout.designSize.height}px`;
-  frame.style.setProperty("--slot-ui-width", `${layout.designSize.width}px`);
-  frame.style.setProperty("--slot-ui-height", `${layout.designSize.height}px`);
-  frame.style.setProperty(
-    "--slot-ui-bottom-hud-height",
-    `${layout.bottomHudHeight}px`,
-  );
-  frame.style.setProperty(
-    "--slot-ui-left-rail-button-size",
-    `${layout.leftRailButtonSize}px`,
-  );
-  frame.style.setProperty("--slot-ui-left-rail-gap", `${layout.leftRailGap}px`);
-  frame.style.setProperty(
-    "--slot-ui-buy-bonus-width",
-    `${layout.buyBonusWidth}px`,
-  );
-  frame.style.setProperty(
-    "--slot-ui-buy-bonus-height",
-    `${layout.buyBonusHeight}px`,
-  );
-  frame.style.setProperty(
-    "--slot-ui-spin-size",
-    `${layout.spinButtonDiameter}px`,
-  );
-  frame.style.setProperty(
-    "--slot-ui-auto-size",
-    `${layout.autoButtonDiameter}px`,
-  );
-  frame.style.setProperty(
-    "--slot-ui-bet-step-size",
-    `${layout.betStepButtonDiameter}px`,
-  );
-  frame.style.setProperty("--slot-ui-top-inset", `${layout.topInset}px`);
-  frame.style.setProperty("--slot-ui-side-inset", `${layout.sideInset}px`);
-  frame.style.setProperty("--slot-ui-scale", String(viewport.scale));
-  frame.style.transform = `translate(${viewport.offsetX}px, ${viewport.offsetY}px) scale(${viewport.scale})`;
-}
+export { applyFrameScale } from "./frame-host.js";
 
 export function renderState(
   elements: SlotUiDomElements,
@@ -546,16 +452,6 @@ function bind(
 ): void {
   element.addEventListener(type, listener);
   bindings.push({ element, type, listener });
-}
-
-function readRootViewport(root: HTMLElement): {
-  readonly viewportWidth: number;
-  readonly viewportHeight: number;
-} {
-  return Object.freeze({
-    viewportWidth: root.clientWidth || window.innerWidth,
-    viewportHeight: root.clientHeight || window.innerHeight,
-  });
 }
 
 function withoutNull<T>(...items: readonly (T | null)[]): T[] {

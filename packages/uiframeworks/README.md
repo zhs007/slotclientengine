@@ -1,5 +1,7 @@
 # @slotclientengine/uiframeworks
 
+`createSlotUiFrameHost()` 是 presentation-neutral 的公开 host：同步创建稳定的 `page/frame/gameLayer/overlay`，并统一拥有 fixed、focus、orientation-focus、maximized-focus viewport 与 resize 生命周期。默认 DOM/controller 和可注入游戏 UI 必须复用这一实现，不能复制 frame 计算。
+
 通用 slot 游戏 DOM UI 框架。该包负责固定设计分辨率 frame、游戏层、UI overlay、slot HUD 控件、viewport 缩放，以及兼容旧调用方的 live `netcore` + `logiccore` spin 数据流编排。
 
 后续完整游戏默认应优先依赖 `@slotclientengine/gameframeworks`。`uiframeworks` 现在同时提供 UI-only controller，供上层框架复用 HUD/DOM/状态渲染，而不强制使用本包旧的网络与 collect 流程。

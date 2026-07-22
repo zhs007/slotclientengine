@@ -22,6 +22,11 @@ describe("game003 source boundary", () => {
       "@slotclientengine/uiframeworks",
     );
     expect(pkg.dependencies).not.toHaveProperty("@slotclientengine/logiccore");
+    expect(pkg.dependencies).not.toHaveProperty(
+      "@slotclientengine/game-ui-leo",
+    );
+    expect(pkg.dependencies).not.toHaveProperty("react");
+    expect(pkg.dependencies).not.toHaveProperty("react-dom");
   });
 
   it("injects simple loading without Leo or Wildsheep platform semantics", () => {
@@ -47,6 +52,8 @@ describe("game003 source boundary", () => {
     expect(source).not.toMatch(/@slotclientengine\/uiframeworks/);
     expect(source).not.toMatch(/@slotclientengine\/logiccore/);
     expect(source).not.toMatch(/@slotclientengine\/vnicore/);
+    expect(source).not.toMatch(/@slotclientengine\/game-ui-leo/);
+    expect(source).not.toMatch(/from ["']react(?:-dom)?(?:\/[^"']*)?["']/);
     expect(source).not.toMatch(/@esotericsoftware\/spine-pixi-v8/);
   });
 
