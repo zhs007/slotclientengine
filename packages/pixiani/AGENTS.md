@@ -2,6 +2,8 @@
 
 `packages/pixiani` 是 `slotclientengine` monorepo 内部的动画基础包。你的工作目标不是维护一个演示项目，而是在稳定基础设施之上新增动画实体、测试和必要的预览接线。
 
+先遵守根目录 [AGENTS.md](../../AGENTS.md)；本文件只补充 pixiani 范围规则。
+
 ## 项目定位
 
 - 技术栈：`pixi.js` v8、`gsap` v3、TypeScript、Vitest
@@ -16,7 +18,7 @@
 3. 每个新增动画实体都必须在 `tests/ani` 补对应测试。
 4. `src/main.ts` 是调试入口，不是正式导出入口；正式导出统一走 `src/index.ts`。
 5. 不要假设包内已经有可复用的示例动画。当前初始化状态下没有预置动画资产。
-6. 完成后必须通过根目录验证：`pnpm lint`、`pnpm test`、`pnpm typecheck`、`pnpm build`。
+6. 默认只运行 pixiani 定向检查；整仓验证仅按根文件 L3 条件执行。
 7. 如需保留空目录，使用 `.keepme`，不要再用 `.gitkeep`。
 
 ## 目录职责
@@ -83,7 +85,8 @@
 ## 预览和验证
 
 - 本地预览：在根目录运行 `pnpm --filter @slotclientengine/pixiani dev`
-- 正式库构建：在根目录运行 `pnpm build`
+- package 测试：`pnpm --filter @slotclientengine/pixiani test`
+- package typecheck/build：使用 package 现有脚本和根级 `--filter`，不默认运行全部 workspace。
 - 若依赖安装失败，可先设置：
   - `export http_proxy=http://127.0.0.1:1087`
   - `export https_proxy=http://127.0.0.1:1087`
@@ -96,4 +99,4 @@
 2. 在 `src/ani` 新增动画实体。
 3. 在 `tests/ani` 补测试。
 4. 仅在任务需要时修改 `src/main.ts` 做预览接线。
-5. 从仓库根目录完成统一验证。
+5. 从仓库根目录完成 pixiani 定向验证；仅在 public API 影响直接消费者时按根规则升级到 L2。

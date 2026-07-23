@@ -10,7 +10,7 @@ This document provides package-level instructions for AI agents working in `pack
 - Task runner at repo root: `turbo`
 - Primary quality tools: `vitest`, `eslint`, `typescript`, `prettier`
 
-Follow the root-level [agents.md](../agents.md) first. This file only adds package-specific guidance.
+Follow the root-level [AGENTS.md](../../AGENTS.md) first. This file only adds package-specific guidance.
 
 ## Key Commands
 
@@ -20,7 +20,7 @@ Run these commands from the repository root unless there is a strong reason not 
 - Run package checks: `pnpm --filter @slotclientengine/netcore run check`
 - Run package tests: `pnpm --filter @slotclientengine/netcore test`
 - Build the package: `pnpm --filter @slotclientengine/netcore build`
-- Run workspace-wide validation: `pnpm lint`, `pnpm test`, `pnpm typecheck`, `pnpm build`
+- Workspace-wide validation follows the root L3 policy and is not the default for package-local changes.
 
 ## Package Notes
 
@@ -35,3 +35,4 @@ Run these commands from the repository root unless there is a strong reason not 
 - Prefer minimal runtime dependencies.
 - Update package documentation when behavior or workflow changes.
 - When fixing behavior, add or adjust tests if existing coverage does not already protect the change.
+- Default validation is the package `check`/typecheck, directly related tests, package build when exports change, and `git diff --check`.
