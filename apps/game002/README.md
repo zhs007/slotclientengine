@@ -2,32 +2,35 @@
 
 动画状态切换、业务时序和配置来源汇总见 [`docs/animation-flow-and-timing.md`](./docs/animation-flow-and-timing.md)。调整动画节奏时应同步更新该文档、对应 source contract 和测试。
 
-`game002` 是基于 Pixi、`@slotclientengine/gameframeworks`、`@slotclientengine/gameloading` 和 `@slotclientengine/rendercore` 的 live slot app，并通过 `@slotclientengine/game-ui-leo` 注入独立 Leo 游戏内 HUD。当前项目已收口为单资源集：URL `skin=1` 固定映射 `assets/game002-s3`；`skin=2|3|4|5`、缺失 `skin` 和旧 `serverUrl` query 都会显式失败。
+`game002` 是基于 Pixi、`@slotclientengine/gameframeworks`、`@slotclientengine/gameloading` 和 `@slotclientengine/rendercore` 的 live slot app，并通过 `@slotclientengine/platformbootstrap-leo` 获取只读平台初始化 snapshot、通过 `@slotclientengine/game-ui-leo` 注入独立 Leo 游戏内 HUD。当前项目已收口为单资源集：URL `skin=1` 固定映射 `assets/game002-s3`；`skin=2|3|4|5`、缺失 `skin` 和旧 `serverUrl` query 都会显式失败。
 
 ## 启动与 live 边界
 
-首屏由 `packages/gameloading` controller 承载，并显式注入零运行时依赖的 `@slotclientengine/gameloading-ui-leo`。Leo intro 只是视觉 gate，不能提前完成资源或 live prepare。资源加载到 99% 时才校验 query 并调用 `prepareSlotGameLiveSession()`；业务 prepare 与视觉 gate 都完成后才进入 100%，之后创建 framework、Pixi canvas 并用同一个 prepared session 连接。enter 成功前 Leo UI 保持覆盖，成功后由 controller 统一 exit/destroy；失败时 loading 保持可见。因此 loading 前不会挂载游戏，也不会创建第二条 WebSocket。
+首屏由 `packages/gameloading` controller 承载，并显式注入零运行时依赖的 `@slotclientengine/gameloading-ui-leo`。Loading UI 挂载后，`readiness.start()` 通过独立 bootstrap chunk 严格解析一次 query，并让 Leo provider 与唯一 `prepareSlotGameLiveSession()` 同 CDN 资源并行。资源进度只表示 `0..99%` 的真实资源完成度；99% 是 platform snapshot、translation/setting、已 enter 的 live session、visual readiness 与 skin/resource validation 的 join barrier，不是请求起点。全部完成后才发布 100%、创建 framework/Pixi，并把同一个 prepared session 交给 framework。任一分支失败都会 abort 并清理其它已完成 owner；不会创建第二条 WebSocket。
 
 100% 后的正式 `game-entry` 才加载 React、ReactDOM 和 `@slotclientengine/game-ui-leo/styles.css`，并在 `createSlotGameFramework()` 中注入 per-instance Leo factory。Leo HUD 与默认 UI 复用 `uiframeworks` 的同一 frame/viewport host，只消费 framework snapshot 并调用 typed commands；session、spin、presentation、collect、balance reconciliation 和 adapter 生命周期仍完全属于 framework。initial loading chunk 不包含 React 或 Leo 游戏内资产。
 
 loading 资源 ID 必须唯一且 URL 不能为空。Vite 发布构建允许把内容相同的多个逻辑图片合并为同一个产物 URL；这种情况下 loading 清单保留第一个资源并只预加载该 URL 一次，不能把生产态 content-addressed URL 合并误判成资源重复。运行时的 VNI project 仍保留各自的逻辑资源路径映射。
 
-manifest 精确引用的 CN valuePresentation Pixi 纹理（共享 `Symbol.png`、`CN.spinBlur.png`、`CN.disabled.png` 和 `cn-digits` glyph）在 loading 0%–99% 阶段通过动态 Pixi `Assets.load()` 注册；99% 回调并行准备可销毁 value resource bundle 与唯一 live session，100% 后才创建 framework。这样 defaultScene 创建 value controller 时直接复用 Pixi Cache，不会先显示透明 CN 再补数字；任一准备失败会回滚另一方。
+manifest 精确引用的 CN valuePresentation Pixi 纹理（共享 `Symbol.png`、`CN.spinBlur.png`、`CN.disabled.png` 和 `cn-digits` glyph）在 loading 0%–99% 阶段通过动态 Pixi `Assets.load()` 注册；99% 回调只最终构造可销毁 value resource bundle，唯一 live session 已在 early readiness 中并行准备。这样 defaultScene 创建 value controller 时直接复用 Pixi Cache，不会先显示透明 CN 再补数字；任一准备失败会回滚 platform handle、session 与 bundle。
 
-live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`。`gamecode` 和下列运行参数来自 URL，不从环境变量、cookie 或 localStorage 推导；其中 `lines` 是 game002 固定游戏合同，URL 只能显式提供 `30`，其它值会在 loading 99% 阶段失败，不能进入 spin：
+live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`。launcher canonical 参数与 legacy compatibility alias 由同一个 strict parser 归一化；两者同时存在时必须 trim 后完全相等，空值、重复 key 或冲突都会在 early readiness 立即失败。`lines` 是 game002 固定游戏合同，URL 只能显式提供 `30`：
 
-| 参数                                                                        | 合同                  |
-| --------------------------------------------------------------------------- | --------------------- |
-| `skin`                                                                      | 必须且只能为 `1`      |
-| `gamecode`、`token`、`businessid`、`clienttype`、`jurisdiction`、`language` | 必填非空字符串        |
-| `bet`、`times`、`requestTimeoutMs`                                          | 必填正数              |
-| `lines`                                                                     | 必填且必须精确为 `30` |
-| `autonums`                                                                  | 必填整数，允许 `-1`   |
+| 参数                                                                                   | 合同                                            |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `skin`                                                                                 | 必须且只能为 `1`                                |
+| `gameCode/gamecode`、`platformToken/token`、`businessCode/businessid`、`lang/language` | 每组至少一个；双写必须相等                      |
+| `jurisdiction`、`clienttype`                                                           | 必填非空字符串                                  |
+| `configUrl`、`license`、`currency`                                                     | 可选 launcher 参数                              |
+| `moneymode=fun`                                                                        | 仅 `businessCode=guest` 时进入 fun setting 路径 |
+| `bet`、`times`、`requestTimeoutMs`                                                     | 必填正数                                        |
+| `lines`                                                                                | 必填且必须精确为 `30`                           |
+| `autonums`                                                                             | 必填整数，允许 `-1`                             |
 
 示例：
 
 ```text
-http://127.0.0.1:5207/?skin=1&gamecode=GAME_CODE&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
+http://127.0.0.1:5207/?skin=1&gameCode=GAME_CODE&platformToken=TOKEN&businessCode=guest&clienttype=web&jurisdiction=MT&lang=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
 ```
 
 参数值必须 URL encode。URL query 可能进入地址栏、历史记录、access log 和 Referer，发布环境应使用短期或一次性 token。

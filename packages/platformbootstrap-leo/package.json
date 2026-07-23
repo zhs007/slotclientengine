@@ -1,0 +1,42 @@
+{
+  "name": "@slotclientengine/platformbootstrap-leo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Leo launcher platform bootstrap provider.",
+  "packageManager": "pnpm@10.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "prepare:deps": "pnpm --filter @slotclientengine/platformbootstrap build",
+    "build": "pnpm run prepare:deps && tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "test": "pnpm run prepare:deps && vitest run --coverage",
+    "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@slotclientengine/platformbootstrap": "workspace:*"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "^4.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.15.0",
+    "happy-dom": "^20.0.10"
+  }
+}

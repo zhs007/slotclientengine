@@ -17,6 +17,9 @@ export interface SlotGameStateInit {
   readonly initialBetIndex?: number;
   readonly initialBalance?: number;
   readonly initialWin?: number;
+  readonly initialMuted?: boolean;
+  readonly initialFastMode?: boolean;
+  readonly initialAutoMode?: boolean;
 }
 
 export class SlotGameStateStore {
@@ -41,9 +44,9 @@ export class SlotGameStateStore {
       win: assertFiniteNumber(init.initialWin ?? 0, "initialWin"),
       betIndex,
       betOption: this.#betOptions[betIndex],
-      muted: false,
-      fastMode: false,
-      autoMode: false,
+      muted: assertOptionalBoolean(init.initialMuted, "initialMuted"),
+      fastMode: assertOptionalBoolean(init.initialFastMode, "initialFastMode"),
+      autoMode: assertOptionalBoolean(init.initialAutoMode, "initialAutoMode"),
       error: null,
     });
   }
@@ -138,6 +141,14 @@ export function assertFiniteNumber(value: unknown, label: string): number {
     throw new SlotGameConfigError(`${label} must be a finite number.`);
   }
   return value as number;
+}
+
+function assertOptionalBoolean(value: unknown, label: string): boolean {
+  if (value === undefined) return false;
+  if (typeof value !== "boolean") {
+    throw new SlotGameConfigError(`${label} must be a boolean.`);
+  }
+  return value;
 }
 
 export function assertBetIndex(

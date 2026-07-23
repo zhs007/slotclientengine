@@ -46,6 +46,8 @@ describe("game002 source boundary", () => {
       "@slotclientengine/gameloading-ui-leo": "workspace:*",
       "@slotclientengine/gameframeworks": "workspace:*",
       "@slotclientengine/game-ui-leo": "workspace:*",
+      "@slotclientengine/platformbootstrap": "workspace:*",
+      "@slotclientengine/platformbootstrap-leo": "workspace:*",
       "@slotclientengine/rendercore": "workspace:*",
       "pixi.js": "^8.1.6",
     });
@@ -71,8 +73,12 @@ describe("game002 source boundary", () => {
     );
     expect(gameEntrySource).toContain("createLeoSlotGameUiFactory");
     expect(gameEntrySource).toContain(
-      "uiFactory: createLeoSlotGameUiFactory()",
+      "uiFactory: createLeoSlotGameUiFactory({",
     );
+    expect(mainSource).toContain('import("./game002-bootstrap.js")');
+    expect(mainSource).toContain("readiness:");
+    expect(gameEntrySource).toContain("finalizeGame002At99");
+    expect(gameEntrySource).not.toContain("prepareSlotGameLiveSession");
   });
 
   it("keeps Vite source aliases aligned across rendercore and its logiccore runtime", () => {

@@ -6,6 +6,149 @@ import {
 } from "../src/index.js";
 
 describe("game loading controller", () => {
+  it("starts readiness with resources and keeps 99 as a join barrier", async () => {
+    const readiness = createDeferred<string>();
+    const resource = createDeferred<string>();
+    const events: string[] = [];
+    const before = vi.fn((_readinessResult: string) => "prepared");
+    const fake = createFakeUi();
+    const loading = createGameLoading({
+      root: createRoot(),
+      ui: fake.factory,
+      readiness: {
+        start: ({ signal }) => {
+          events.push(`readiness:${signal.aborted}`);
+          return readiness.promise;
+        },
+        dispose: vi.fn(),
+      },
+      resources: [
+        {
+          id: "resource",
+          load: ({ signal }) => {
+            events.push(`resource:${signal.aborted}`);
+            return resource.promise;
+          },
+        },
+      ],
+      onBeforeComplete: ({ readinessResult }) => before(readinessResult),
+      onEnterGame: () => undefined,
+    });
+    const start = loading.start();
+    expect(events).toEqual(["readiness:false", "resource:false"]);
+    resource.resolve("loaded");
+    await waitFor(() => fake.snapshots.at(-1)?.phase === "preparing");
+    expect(fake.snapshots.at(-1)?.progress).toBe(99);
+    expect(before).not.toHaveBeenCalled();
+    readiness.resolve("ready");
+    await start;
+    expect(before).toHaveBeenCalledWith("ready");
+  });
+
+  it("aborts resources on an early readiness failure", async () => {
+    const failure = new Error("readiness failed");
+    const pending = createDeferred<void>();
+    let resourceSignal: AbortSignal | undefined;
+    const loading = createGameLoading({
+      root: createRoot(),
+      ui: createFakeUi().factory,
+      readiness: {
+        start: () => Promise.reject(failure),
+        dispose: vi.fn(),
+      },
+      resources: [
+        {
+          id: "resource",
+          load: ({ signal }) => {
+            resourceSignal = signal;
+            return pending.promise;
+          },
+        },
+      ],
+      onBeforeComplete: () => undefined,
+      onEnterGame: () => undefined,
+    });
+    await expect(loading.start()).rejects.toBe(failure);
+    expect(resourceSignal?.aborted).toBe(true);
+  });
+
+  it("aborts readiness on resource failure and disposes a late fulfillment", async () => {
+    const readiness = createDeferred<{ readonly id: string }>();
+    const dispose = vi.fn();
+    let readinessSignal: AbortSignal | undefined;
+    const failure = new Error("resource failed");
+    const loading = createGameLoading({
+      root: createRoot(),
+      ui: createFakeUi().factory,
+      readiness: {
+        start: ({ signal }) => {
+          readinessSignal = signal;
+          return readiness.promise;
+        },
+        dispose,
+      },
+      resources: [{ id: "resource", load: () => Promise.reject(failure) }],
+      onBeforeComplete: () => undefined,
+      onEnterGame: () => undefined,
+    });
+    await expect(loading.start()).rejects.toBe(failure);
+    expect(readinessSignal?.aborted).toBe(true);
+    const result = Object.freeze({ id: "late" });
+    readiness.resolve(result);
+    await waitFor(() => dispose.mock.calls.length === 1);
+    expect(dispose).toHaveBeenCalledWith(result);
+  });
+
+  it.each(["visual", "prepare"] as const)(
+    "disposes fulfilled readiness exactly once after a %s failure",
+    async (stage) => {
+      const result = Object.freeze({ id: "ready" });
+      const dispose = vi.fn(async () => {
+        throw new Error("cleanup failure");
+      });
+      const failure = new Error(`${stage} failed`);
+      const loading = createGameLoading({
+        root: createRoot(),
+        ui: createFakeUi({
+          readyToComplete:
+            stage === "visual" ? Promise.reject(failure) : Promise.resolve(),
+        }).factory,
+        readiness: { start: () => result, dispose },
+        resources: [{ id: "resource", load: () => "loaded" }],
+        onBeforeComplete: () => {
+          if (stage === "prepare") throw failure;
+        },
+        onEnterGame: () => undefined,
+      });
+      await expect(loading.start()).rejects.toBe(failure);
+      expect(dispose).toHaveBeenCalledOnce();
+      expect(dispose).toHaveBeenCalledWith(result);
+      loading.destroy();
+      expect(dispose).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("transfers readiness ownership after successful finalization", async () => {
+    const result = Object.freeze({ id: "ready" });
+    const dispose = vi.fn();
+    const loading = createGameLoading({
+      root: createRoot(),
+      ui: createFakeUi().factory,
+      readiness: { start: () => result, dispose },
+      resources: [{ id: "resource", load: () => "loaded" }],
+      onBeforeComplete: ({ readinessResult }) => {
+        expect(readinessResult).toBe(result);
+        return "prepared";
+      },
+      onEnterGame: () => {
+        throw new Error("entered owner failed");
+      },
+    });
+    await expect(loading.start()).rejects.toThrow(/entered owner failed/);
+    loading.destroy();
+    expect(dispose).not.toHaveBeenCalled();
+  });
+
   it("publishes immutable weighted snapshots and waits for both completion gates", async () => {
     const root = createRoot();
     const first = createDeferred<string>();
@@ -43,17 +186,18 @@ describe("game loading controller", () => {
     await waitFor(() => fake.snapshots.length === 2);
     expect(fake.snapshots.at(-1)?.progress).toBe(24.75);
     second.resolve("b");
-    await waitFor(() => events.length === 1);
+    await waitFor(() => fake.snapshots.at(-1)?.phase === "preparing");
     expect(fake.snapshots.at(-1)).toEqual({
       phase: "preparing",
       progress: 99,
       error: null,
     });
+    expect(events).toHaveLength(0);
 
-    prepare.resolve("prepared");
-    await flush();
-    expect(events).toHaveLength(1);
     visual.resolve();
+    await waitFor(() => events.length === 1);
+    prepare.resolve("prepared");
+    expect(events).toHaveLength(1);
     await waitFor(() => events.length === 2);
     expect(fake.snapshots.at(-1)).toEqual({
       phase: "entering-game",
@@ -313,6 +457,13 @@ describe("game loading controller", () => {
     expect(() =>
       createGameLoading({ ...base, onError: "bad" as never, resources: [] }),
     ).toThrow(/onError/);
+    expect(() =>
+      createGameLoading({
+        ...base,
+        readiness: { start: vi.fn() } as never,
+        resources: [],
+      }),
+    ).toThrow(/readiness/);
     expect(() => createGameLoading({ ...base, resources: [] })).toThrow(
       /non-empty/,
     );
@@ -421,12 +572,15 @@ function createFakeUi(
 function createDeferred<T>(): {
   readonly promise: Promise<T>;
   resolve(value?: T): void;
+  reject(error: unknown): void;
 } {
   let resolve: (value: T) => void = () => undefined;
-  const promise = new Promise<T>((innerResolve) => {
+  let reject: (error: unknown) => void = () => undefined;
+  const promise = new Promise<T>((innerResolve, innerReject) => {
     resolve = innerResolve;
+    reject = innerReject;
   });
-  return { promise, resolve: (value) => resolve(value as T) };
+  return { promise, resolve: (value) => resolve(value as T), reject };
 }
 
 async function waitFor(condition: () => boolean): Promise<void> {

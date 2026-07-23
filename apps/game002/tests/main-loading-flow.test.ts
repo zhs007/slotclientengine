@@ -7,13 +7,20 @@ const mainMocks = vi.hoisted(() => ({
   createLeoGameLoadingUi: vi.fn(() => ({ create: vi.fn() })),
   createGame002LoadingResources: vi.fn(),
   readGame002RuntimeModule: vi.fn(),
+  startGame002Readiness: vi.fn(),
 }));
 
 interface CapturedLoadingOptions {
   readonly maxConcurrentResources?: number;
   readonly ui?: unknown;
+  readonly readiness: {
+    start(options: { readonly signal: AbortSignal }): Promise<unknown>;
+    dispose(result: { destroy(): void }): void;
+  };
   onBeforeComplete(options: {
     readonly loadedResources: ReadonlyMap<string, unknown>;
+    readonly readinessResult: unknown;
+    readonly signal: AbortSignal;
   }): Promise<unknown>;
   onEnterGame(options: { readonly prepareResult: any }): Promise<void>;
 }
@@ -29,6 +36,10 @@ vi.mock("@slotclientengine/gameloading-ui-leo", () => ({
 vi.mock("../src/loading-resources.js", () => ({
   createGame002LoadingResources: mainMocks.createGame002LoadingResources,
   readGame002RuntimeModule: mainMocks.readGame002RuntimeModule,
+}));
+
+vi.mock("../src/game002-bootstrap.js", () => ({
+  startGame002Readiness: mainMocks.startGame002Readiness,
 }));
 
 describe("game002 main loading host flow", () => {
@@ -61,12 +72,14 @@ describe("game002 main loading host flow", () => {
     mainMocks.createGame002LoadingResources.mockReturnValue([
       { id: "runtime", load: vi.fn() },
     ]);
-    const prepared = { liveSession: { disconnect: vi.fn() } };
+    const prepared = { readiness: { destroy: vi.fn() } };
+    const readinessResult = { destroy: vi.fn() };
     const entered = { destroy: vi.fn() };
     const runtimeModule = {
-      prepareGame002At99: vi.fn(async () => prepared),
+      finalizeGame002At99: vi.fn(async () => prepared),
       enterGame002: vi.fn(async () => entered),
     };
+    mainMocks.startGame002Readiness.mockResolvedValue(readinessResult);
     mainMocks.readGame002RuntimeModule.mockReturnValue(runtimeModule);
 
     await import("../src/main.js");
@@ -77,18 +90,28 @@ describe("game002 main loading host flow", () => {
 
     expect(loadingHost).not.toBeNull();
     expect(gameHost.hidden).toBe(true);
-    expect(runtimeModule.prepareGame002At99).not.toHaveBeenCalled();
+    expect(runtimeModule.finalizeGame002At99).not.toHaveBeenCalled();
     expect(runtimeModule.enterGame002).not.toHaveBeenCalled();
     expect(captured.maxConcurrentResources).toBe(4);
     expect(mainMocks.createLeoGameLoadingUi).toHaveBeenCalledOnce();
     expect(captured.ui).toBeDefined();
     expect(loadingHandle.start).toHaveBeenCalledOnce();
 
+    const signal = new AbortController().signal;
+    await captured.readiness.start({ signal });
+    expect(mainMocks.startGame002Readiness).toHaveBeenCalledWith({
+      search: "",
+      signal,
+    });
+
     const prepareResult = await captured.onBeforeComplete({
       loadedResources: new Map(),
+      readinessResult,
+      signal,
     });
-    expect(runtimeModule.prepareGame002At99).toHaveBeenCalledWith({
-      search: "",
+    expect(runtimeModule.finalizeGame002At99).toHaveBeenCalledWith({
+      readinessResult,
+      signal,
     });
     expect(runtimeModule.enterGame002).not.toHaveBeenCalled();
 
@@ -100,6 +123,9 @@ describe("game002 main loading host flow", () => {
     expect(gameHost.hidden).toBe(false);
     expect(loadingHandle.destroy).not.toHaveBeenCalled();
     expect(root?.querySelector(".game002-loading-host")).not.toBeNull();
+
+    captured.readiness.dispose(readinessResult);
+    expect(readinessResult.destroy).toHaveBeenCalledOnce();
 
     window.dispatchEvent(new Event("beforeunload"));
     expect(loadingHandle.destroy).toHaveBeenCalledOnce();
@@ -122,7 +148,7 @@ describe("game002 main loading host flow", () => {
       { id: "runtime", load: vi.fn() },
     ]);
     mainMocks.readGame002RuntimeModule.mockReturnValue({
-      prepareGame002At99: vi.fn(async () => ({})),
+      finalizeGame002At99: vi.fn(async () => ({})),
       enterGame002: vi.fn(async () => {
         throw new Error("enter failed");
       }),

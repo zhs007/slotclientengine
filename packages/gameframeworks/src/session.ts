@@ -27,6 +27,7 @@ export class SlotGameLiveSession implements SlotGameLiveSessionLike {
   readonly #client: SlotGameClientLike;
   readonly #detachHandlers: () => void;
   #connected = false;
+  #disconnected = false;
   #spinInFlight = false;
 
   constructor(options: SlotGameSessionOptions) {
@@ -49,6 +50,11 @@ export class SlotGameLiveSession implements SlotGameLiveSessionLike {
   }
 
   async connect(): Promise<Readonly<UserInfo>> {
+    if (this.#disconnected) {
+      throw new SlotGameRuntimeError(
+        "Slot game live session has been disconnected.",
+      );
+    }
     if (this.#connected) {
       this.#monitor.throwIfFailed();
       const currentUserInfo = this.#client.getUserInfo();
@@ -56,8 +62,18 @@ export class SlotGameLiveSession implements SlotGameLiveSessionLike {
       return currentUserInfo;
     }
     await this.#monitor.race(this.#client.connect(this.#live.token));
+    if (this.#disconnected) {
+      throw new SlotGameRuntimeError(
+        "Slot game live session has been disconnected.",
+      );
+    }
     this.#monitor.throwIfFailed();
     await this.#monitor.race(this.#client.enterGame(this.#live.gamecode));
+    if (this.#disconnected) {
+      throw new SlotGameRuntimeError(
+        "Slot game live session has been disconnected.",
+      );
+    }
     this.#monitor.throwIfFailed();
     const userInfo = this.#client.getUserInfo();
     validateLiveUserInfo(userInfo);
@@ -97,6 +113,8 @@ export class SlotGameLiveSession implements SlotGameLiveSessionLike {
   }
 
   disconnect(): void {
+    if (this.#disconnected) return;
+    this.#disconnected = true;
     this.#monitor.markDisconnectExpected();
     this.#detachHandlers();
     this.#client.disconnect();
@@ -107,15 +125,54 @@ export class SlotGameLiveSession implements SlotGameLiveSessionLike {
 export async function prepareSlotGameLiveSession(options: {
   readonly live: SlotGameLiveConfig;
   readonly clientFactory?: SlotGameClientFactory;
+  readonly signal?: AbortSignal;
 }): Promise<SlotGameLiveSession> {
   const session = new SlotGameLiveSession(options);
   try {
-    await session.connect();
+    if (options.signal?.aborted) {
+      throw createSessionAbortError();
+    }
+    await raceWithAbort(session.connect(), options.signal);
     return session;
   } catch (error) {
     session.disconnect();
     throw error;
   }
+}
+
+function raceWithAbort<T>(
+  operation: Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T> {
+  if (!signal) return operation;
+  if (signal.aborted) {
+    void operation.catch(() => undefined);
+    return Promise.reject(createSessionAbortError());
+  }
+  return new Promise((resolve, reject) => {
+    const handleAbort = () => {
+      signal.removeEventListener("abort", handleAbort);
+      reject(createSessionAbortError());
+    };
+    signal.addEventListener("abort", handleAbort, { once: true });
+    void operation.then(
+      (value) => {
+        signal.removeEventListener("abort", handleAbort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", handleAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+function createSessionAbortError(): DOMException {
+  return new DOMException(
+    "Slot game live preparation was aborted.",
+    "AbortError",
+  );
 }
 
 export function validateLiveServerUrl(serverUrl: string): void {

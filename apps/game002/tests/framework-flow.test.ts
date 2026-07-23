@@ -18,7 +18,7 @@ import {
 } from "../src/game-layout.js";
 import {
   GAME002_LIVE_SERVER_URL,
-  parseGame002FrameworkConfigFromQuery,
+  parseGame002LaunchQuery,
 } from "../src/framework-config.js";
 
 describe("game002 framework flow", () => {
@@ -47,7 +47,7 @@ describe("game002 framework flow", () => {
       const framework = createSlotGameFramework({
         root,
         gameAdapter: adapter,
-        live: parseGame002FrameworkConfigFromQuery(validQuery()).live,
+        live: parseGame002LaunchQuery(validQuery()).live,
         betOptions: [{ bet: 5, lines: 30 }],
         designSize: GAME002_REFERENCE_SIZE,
         framePolicy: createGame002FramePolicy(),
@@ -103,7 +103,7 @@ describe("game002 framework flow", () => {
   });
 
   it("uses game002 default spin request and collects only after adapter play resolves", async () => {
-    const config = parseGame002FrameworkConfigFromQuery(validQuery());
+    const config = parseGame002LaunchQuery(validQuery());
     expect(config.skin).toBe("1");
     expect(config.live.serverUrl).toBe(GAME002_LIVE_SERVER_URL);
     expect(config.live.gamecode).toBe("GAME_CODE");
@@ -150,7 +150,7 @@ describe("game002 framework flow", () => {
   });
 
   it("passes live defaultScene to the adapter without inventing one", async () => {
-    const config = parseGame002FrameworkConfigFromQuery(validQuery());
+    const config = parseGame002LaunchQuery(validQuery());
     expect(config.skin).toBe("1");
     expect(config.live.gamecode).toBe("GAME_CODE");
     const client = new FakeClient();
@@ -188,7 +188,7 @@ describe("game002 framework flow", () => {
   });
 
   it("does not collect when adapter rejects", async () => {
-    const config = parseGame002FrameworkConfigFromQuery(validQuery());
+    const config = parseGame002LaunchQuery(validQuery());
     const client = new FakeClient();
     client.spinResult = createSpinResult({ totalwin: 5, results: 1 });
     const adapter = new FlowAdapter();

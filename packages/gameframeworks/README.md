@@ -39,6 +39,9 @@ const framework = createSlotGameFramework({
     gamecode: "game001",
   },
   betOptions: [{ bet: 1, lines: 10 }],
+  initialMuted: false,
+  initialFastMode: false,
+  initialAutoMode: false,
 });
 
 await framework.connect();
@@ -55,7 +58,7 @@ import {
   prepareSlotGameLiveSession,
 } from "@slotclientengine/gameframeworks";
 
-const liveSession = await prepareSlotGameLiveSession({ live });
+const liveSession = await prepareSlotGameLiveSession({ live, signal });
 
 const framework = createSlotGameFramework({
   root,
@@ -69,6 +72,8 @@ await framework.connect();
 ```
 
 `prepareSlotGameLiveSession()` 只创建 session 并完成 `client.connect()` / `client.enterGame()`，不会创建 UI、mount adapter 或渲染 Pixi。进入游戏时把同一个 `liveSession` 传给 framework，`framework.connect()` 会幂等读取当前 userInfo，不会重复 WebSocket connect 或 enterGame。若同时传 `liveSession` 和 `clientFactory`，会显式失败，避免调用方误以为自定义 factory 仍会生效。
+
+`initialMuted/initialFastMode/initialAutoMode` 缺省都为 `false`，非 boolean 会 fail-fast。显式值会进入第一份 framework snapshot、UI initial state 与 `onStateChange`；之后玩家操作仍只通过 framework commands 更新唯一的 instance state。
 
 ## 游戏侧合同
 

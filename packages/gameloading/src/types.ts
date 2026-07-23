@@ -17,16 +17,20 @@ export type GameLoadingResourceKind =
   | "module"
   | "style";
 
-export interface GameLoadingOptions<TPrepareResult = unknown> {
+export interface GameLoadingOptions<
+  TPrepareResult = unknown,
+  TReadinessResult = void,
+> {
   readonly root: HTMLElement;
   readonly ui: GameLoadingUiFactory;
   readonly resources: readonly GameLoadingResource[];
   readonly maxConcurrentResources?: number;
+  readonly readiness?: GameLoadingReadiness<TReadinessResult>;
   readonly onBeforeComplete: (
-    context: GameLoadingCompleteContext,
+    context: GameLoadingCompleteContext<TReadinessResult>,
   ) => Promise<TPrepareResult> | TPrepareResult;
   readonly onEnterGame: (
-    context: GameLoadingEnterContext<TPrepareResult>,
+    context: GameLoadingEnterContext<TPrepareResult, TReadinessResult>,
   ) => Promise<void> | void;
   readonly onError?: (error: Error) => void;
 }
@@ -43,14 +47,25 @@ export interface GameLoadingResourceContext {
   readonly signal: AbortSignal;
 }
 
-export interface GameLoadingCompleteContext {
+export interface GameLoadingReadinessContext {
+  readonly signal: AbortSignal;
+}
+
+export interface GameLoadingReadiness<TResult> {
+  start(context: GameLoadingReadinessContext): Promise<TResult> | TResult;
+  dispose(result: TResult): Promise<void> | void;
+}
+
+export interface GameLoadingCompleteContext<TReadinessResult = void> {
   readonly loadedResources: ReadonlyMap<string, unknown>;
+  readonly readinessResult: TReadinessResult;
   readonly signal: AbortSignal;
 }
 
 export interface GameLoadingEnterContext<
   TPrepareResult = unknown,
-> extends GameLoadingCompleteContext {
+  TReadinessResult = void,
+> extends GameLoadingCompleteContext<TReadinessResult> {
   readonly prepareResult: TPrepareResult;
 }
 

@@ -2,6 +2,27 @@ import { SlotGameStateStore, SlotGameConfigError } from "../src/index.js";
 import { BET_OPTIONS } from "./test-helpers.js";
 
 describe("state", () => {
+  it("defaults and validates initial preferences", () => {
+    expect(
+      new SlotGameStateStore({ betOptions: BET_OPTIONS }).getState(),
+    ).toMatchObject({ muted: false, fastMode: false, autoMode: false });
+    expect(
+      new SlotGameStateStore({
+        betOptions: BET_OPTIONS,
+        initialMuted: true,
+        initialFastMode: true,
+        initialAutoMode: true,
+      }).getState(),
+    ).toMatchObject({ muted: true, fastMode: true, autoMode: true });
+    expect(
+      () =>
+        new SlotGameStateStore({
+          betOptions: BET_OPTIONS,
+          initialMuted: "yes" as never,
+        }),
+    ).toThrow(/initialMuted must be a boolean/);
+  });
+
   it("validates bet options, balances, and indexes", () => {
     expect(() => new SlotGameStateStore({ betOptions: [] })).toThrow(
       /non-empty/,

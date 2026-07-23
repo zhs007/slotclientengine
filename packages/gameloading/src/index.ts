@@ -11,6 +11,8 @@ export type {
   GameLoadingEnterContext,
   GameLoadingHandle,
   GameLoadingOptions,
+  GameLoadingReadiness,
+  GameLoadingReadinessContext,
   GameLoadingResource,
   GameLoadingResourceContext,
   GameLoadingResourceKind,

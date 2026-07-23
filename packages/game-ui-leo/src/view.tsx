@@ -11,7 +11,53 @@ export interface LeoSlotGameUiViewProps {
   readonly betOptionCount: number;
   readonly brandLabel: string;
   readonly formatMoney: (amount: number) => string;
+  readonly labels: LeoSlotGameUiLabels;
 }
+
+export interface LeoSlotGameUiLabels {
+  readonly increaseBet: string;
+  readonly spin: string;
+  readonly decreaseBet: string;
+  readonly autoMode: string;
+  readonly fastMode: string;
+  readonly soundOn: string;
+  readonly soundOff: string;
+  readonly balance: string;
+  readonly win: string;
+  readonly totalBet: string;
+  readonly loading: string;
+  readonly connecting: string;
+  readonly disconnected: string;
+  readonly spinning: string;
+  readonly presenting: string;
+  readonly collecting: string;
+  readonly disabled: string;
+  readonly readyFast: string;
+  readonly ready: string;
+}
+
+export const DEFAULT_LEO_SLOT_GAME_UI_LABELS: LeoSlotGameUiLabels =
+  Object.freeze({
+    increaseBet: "Increase bet",
+    spin: "Spin",
+    decreaseBet: "Decrease bet",
+    autoMode: "Auto mode",
+    fastMode: "Fast mode",
+    soundOn: "Sound on",
+    soundOff: "Sound off",
+    balance: "BALANCE",
+    win: "WIN",
+    totalBet: "TOTAL BET",
+    loading: "Loading",
+    connecting: "Connecting",
+    disconnected: "Disconnected",
+    spinning: "Spinning",
+    presenting: "Presenting",
+    collecting: "Collecting",
+    disabled: "Disabled",
+    readyFast: "Ready fast",
+    ready: "Ready",
+  });
 
 export function LeoSlotGameUiView({
   store,
@@ -19,6 +65,7 @@ export function LeoSlotGameUiView({
   betOptionCount,
   brandLabel,
   formatMoney,
+  labels,
 }: LeoSlotGameUiViewProps) {
   const state = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const clock = useClock();
@@ -43,25 +90,25 @@ export function LeoSlotGameUiView({
       <div className="slot-leo-ui-right-controls">
         <ControlButton
           className="slot-leo-ui-bet-button slot-leo-ui-bet-increase"
-          label="Increase bet"
+          label={labels.increaseBet}
           disabled={!canIncrease}
           onClick={commands.increaseBet}
         />
         <ControlButton
           className="slot-leo-ui-spin-button"
-          label="Spin"
+          label={labels.spin}
           disabled={!canSpin}
           onClick={commands.requestSpin}
         />
         <ControlButton
           className="slot-leo-ui-bet-button slot-leo-ui-bet-decrease"
-          label="Decrease bet"
+          label={labels.decreaseBet}
           disabled={!canDecrease}
           onClick={commands.decreaseBet}
         />
         <ControlButton
           className="slot-leo-ui-auto-button"
-          label="Auto mode"
+          label={labels.autoMode}
           pressed={state.autoMode}
           onClick={() => commands.setAutoMode(!state.autoMode)}
         />
@@ -71,32 +118,32 @@ export function LeoSlotGameUiView({
         <div className="slot-leo-ui-footer-controls">
           <ControlButton
             className="slot-leo-ui-fast-button"
-            label="Fast mode"
+            label={labels.fastMode}
             pressed={state.fastMode}
             onClick={() => commands.setFastMode(!state.fastMode)}
           />
           <ControlButton
             className="slot-leo-ui-sound-button"
-            label={state.muted ? "Sound off" : "Sound on"}
+            label={state.muted ? labels.soundOff : labels.soundOn}
             pressed={!state.muted}
             onClick={() => commands.setMuted(!state.muted)}
           />
         </div>
         <MoneyBlock
           className="slot-leo-ui-balance"
-          label="BALANCE"
+          label={labels.balance}
           value={
-            state.balance === null ? "Loading" : formatMoney(state.balance)
+            state.balance === null ? labels.loading : formatMoney(state.balance)
           }
         />
         <MoneyBlock
           className="slot-leo-ui-win"
-          label="WIN"
+          label={labels.win}
           value={formatMoney(state.win)}
         />
         <MoneyBlock
           className="slot-leo-ui-bet"
-          label="TOTAL BET"
+          label={labels.totalBet}
           value={formatMoney(state.betOption.bet)}
         />
       </footer>
@@ -107,7 +154,7 @@ export function LeoSlotGameUiView({
         aria-live={state.error === null ? "polite" : "assertive"}
         data-slot-leo-error={String(state.error !== null)}
       >
-        {state.error ?? statusLabel(state)}
+        {state.error ?? statusLabel(state, labels)}
       </div>
     </div>
   );
@@ -147,15 +194,20 @@ function MoneyBlock(props: {
   );
 }
 
-function statusLabel(state: SlotGameStateSnapshot): string {
+function statusLabel(
+  state: SlotGameStateSnapshot,
+  labels: LeoSlotGameUiLabels,
+): string {
   if (!state.connected) {
-    return state.spinState === "connecting" ? "Connecting" : "Disconnected";
+    return state.spinState === "connecting"
+      ? labels.connecting
+      : labels.disconnected;
   }
-  if (state.spinState === "spinning") return "Spinning";
-  if (state.spinState === "presenting") return "Presenting";
-  if (state.spinState === "collecting") return "Collecting";
-  if (state.spinState === "disabled") return "Disabled";
-  return state.fastMode ? "Ready fast" : "Ready";
+  if (state.spinState === "spinning") return labels.spinning;
+  if (state.spinState === "presenting") return labels.presenting;
+  if (state.spinState === "collecting") return labels.collecting;
+  if (state.spinState === "disabled") return labels.disabled;
+  return state.fastMode ? labels.readyFast : labels.ready;
 }
 
 function useClock(): { readonly label: string; readonly iso: string } {

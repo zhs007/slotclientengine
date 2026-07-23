@@ -1,33 +1,28 @@
 import {
   createSlotGameFramework,
-  prepareSlotGameLiveSession,
   type SlotGameFramework,
-  type SlotGameLiveSessionLike,
 } from "@slotclientengine/gameframeworks";
 import "@slotclientengine/gameframeworks/styles.css";
 import { createLeoSlotGameUiFactory } from "@slotclientengine/game-ui-leo";
 import "@slotclientengine/game-ui-leo/styles.css";
+import type { SymbolValuePresentationResourceBundle } from "@slotclientengine/rendercore";
 import { createGame002Adapter } from "./game-adapter.js";
+import type { Game002ReadinessResult } from "./game002-bootstrap.js";
 import {
   GAME002_REFERENCE_SIZE,
   createGame002FramePolicy,
 } from "./game-layout.js";
-import {
-  parseGame002FrameworkConfigFromQuery,
-  type Game002FrameworkConfig,
-} from "./framework-config.js";
 import { formatServerUsdAmount } from "./money.js";
+import { createGame002LeoUiLabels } from "./platform-ui.js";
 import {
   prepareGame002SkinConfig,
   type Game002SkinConfig,
 } from "./skin-config.js";
-import type { SymbolValuePresentationResourceBundle } from "@slotclientengine/rendercore";
 import "./styles.css";
 
 export interface Game002PreparedLoadingState {
-  readonly config: Game002FrameworkConfig;
+  readonly readiness: Game002ReadinessResult;
   readonly skin: Game002SkinConfig;
-  readonly liveSession: SlotGameLiveSessionLike;
   readonly valuePresentationResourceBundle: SymbolValuePresentationResourceBundle;
 }
 
@@ -36,61 +31,93 @@ export interface Game002EnteredGame {
   destroy(): void;
 }
 
-export async function prepareGame002At99(options: {
-  readonly search: string;
+export async function finalizeGame002At99(options: {
+  readonly readinessResult: Game002ReadinessResult;
+  readonly signal: AbortSignal;
 }): Promise<Game002PreparedLoadingState> {
-  const config = parseGame002FrameworkConfigFromQuery(options.search);
-  const [skinResult, liveResult] = await Promise.allSettled([
-    prepareGame002SkinConfig(config.skin),
-    prepareSlotGameLiveSession({ live: config.live }),
-  ]);
-  if (skinResult.status === "rejected" || liveResult.status === "rejected") {
-    if (skinResult.status === "fulfilled") {
-      await skinResult.value.valuePresentationResourceBundle.destroy();
+  try {
+    if (options.signal.aborted) throw createAbortError();
+    const skinResult = await prepareGame002SkinConfig(
+      options.readinessResult.config.skin,
+    );
+    if (options.signal.aborted) {
+      await skinResult.valuePresentationResourceBundle.destroy();
+      throw createAbortError();
     }
-    if (liveResult.status === "fulfilled") liveResult.value.disconnect();
-    throw skinResult.status === "rejected"
-      ? skinResult.reason
-      : liveResult.status === "rejected"
-        ? liveResult.reason
-        : new Error("game002 preparation failed.");
+    return Object.freeze({
+      readiness: options.readinessResult,
+      skin: skinResult.skin,
+      valuePresentationResourceBundle:
+        skinResult.valuePresentationResourceBundle,
+    });
+  } catch (error) {
+    options.readinessResult.destroy();
+    throw error;
   }
-  return Object.freeze({
-    config,
-    skin: skinResult.value.skin,
-    liveSession: liveResult.value,
-    valuePresentationResourceBundle:
-      skinResult.value.valuePresentationResourceBundle,
-  });
 }
 
 export async function enterGame002(options: {
   readonly root: HTMLElement;
   readonly prepared: Game002PreparedLoadingState;
 }): Promise<Game002EnteredGame> {
+  const { config, liveSession, platformHandle } = options.prepared.readiness;
+  const { snapshot } = platformHandle;
   let framework: SlotGameFramework | null = null;
   let removeBeforeUnload: (() => void) | null = null;
+  let destroyed = false;
+  const destroyOwnedResources = async (): Promise<void> => {
+    if (destroyed) return;
+    destroyed = true;
+    removeBeforeUnload?.();
+    removeBeforeUnload = null;
+    let cleanupError: unknown;
+    try {
+      if (framework) framework.destroy();
+      else liveSession.disconnect();
+    } catch (error) {
+      cleanupError = error;
+    }
+    try {
+      platformHandle.destroy();
+    } catch (error) {
+      cleanupError ??= error;
+    }
+    try {
+      await options.prepared.valuePresentationResourceBundle.destroy();
+    } catch (error) {
+      cleanupError ??= error;
+    }
+    framework = null;
+    if (cleanupError) throw cleanupError;
+  };
   try {
     framework = createSlotGameFramework({
       root: options.root,
       gameAdapter: createGame002Adapter({ skin: options.prepared.skin }),
-      live: options.prepared.config.live,
-      liveSession: options.prepared.liveSession,
-      betOptions: options.prepared.config.betOptions,
-      initialBetIndex: options.prepared.config.initialBetIndex,
+      live: config.live,
+      liveSession,
+      betOptions: config.betOptions,
+      initialBetIndex: config.initialBetIndex,
+      initialMuted: snapshot.initialPreferences.muted,
+      initialFastMode: snapshot.initialPreferences.fastMode,
+      initialAutoMode: snapshot.initialPreferences.autoMode,
       designSize: GAME002_REFERENCE_SIZE,
       framePolicy: createGame002FramePolicy(options.prepared.skin.focusRegion),
-      brandLabel: "game002",
-      currency: "USD",
-      locale: "en-US",
+      brandLabel: snapshot.presentation.brandLabel,
+      currency: snapshot.presentation.currency,
+      locale: snapshot.presentation.locale,
       formatMoney: formatServerUsdAmount,
-      uiFactory: createLeoSlotGameUiFactory(),
-      buildSpinRequest: () => options.prepared.config.spinRequest,
+      uiFactory: createLeoSlotGameUiFactory({
+        labels: createGame002LeoUiLabels(snapshot.translations),
+      }),
+      buildSpinRequest: () => config.spinRequest,
       onError: (error) => console.error(error),
     });
     await framework.connect();
 
-    const handleBeforeUnload = () => framework?.destroy();
+    const handleBeforeUnload = () => {
+      void destroyOwnedResources();
+    };
     window.addEventListener("beforeunload", handleBeforeUnload);
     removeBeforeUnload = () =>
       window.removeEventListener("beforeunload", handleBeforeUnload);
@@ -98,20 +125,19 @@ export async function enterGame002(options: {
     return Object.freeze({
       framework,
       destroy(): void {
-        removeBeforeUnload?.();
-        removeBeforeUnload = null;
-        framework?.destroy();
-        framework = null;
-        void options.prepared.valuePresentationResourceBundle.destroy();
+        void destroyOwnedResources();
       },
     });
   } catch (error) {
-    if (framework) {
-      framework.destroy();
-    } else {
-      options.prepared.liveSession.disconnect();
+    try {
+      await destroyOwnedResources();
+    } catch {
+      // The enter failure remains authoritative after best-effort cleanup.
     }
-    await options.prepared.valuePresentationResourceBundle.destroy();
     throw error;
   }
+}
+
+function createAbortError(): DOMException {
+  return new DOMException("game002 finalization was aborted.", "AbortError");
 }

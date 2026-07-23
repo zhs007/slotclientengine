@@ -16,8 +16,12 @@ const loading = createGameLoading({
     { id: "background", url: "./assets/bg.jpg", weight: 8 },
     { id: "runtime", weight: 10, load: () => import("./game-entry.js") },
   ],
-  async onBeforeComplete({ loadedResources, signal }) {
-    return prepareLiveSession(loadedResources.get("runtime"), signal);
+  readiness: {
+    start: ({ signal }) => prepareLiveSession(signal),
+    dispose: (session) => session.disconnect(),
+  },
+  async onBeforeComplete({ loadedResources, readinessResult, signal }) {
+    return finalizeResources(loadedResources, readinessResult, signal);
   },
   async onEnterGame({ prepareResult, signal }) {
     await enterGame(prepareResult, signal);
@@ -30,7 +34,9 @@ const loading = createGameLoading({
 await loading.start();
 ```
 
-固定顺序为：资源 `0..99%` → `preparing/99%` → 同时等待业务 prepare 与 UI `readyToComplete` → `entering-game/100%` → enter 成功 → UI exit → UI destroy → root hidden。UI 的视觉 gate 不能代表 live session 已完成，也不能调用业务回调。
+固定顺序为：Loading UI 已挂载 → 同一 `start()` turn 启动 readiness 与资源 runner → 资源独立推进 `0..99%` → 最后一个资源完成立即发布 `preparing/99%` → join readiness、资源与 UI `readyToComplete` → `onBeforeComplete` 最终验收 → `entering-game/100%`。readiness 不参与资源权重，99% 是 barrier 而不是请求 trigger。
+
+readiness 失败会 abort resource runner，资源或 visual readiness 失败也会 abort readiness。已完成结果在 barrier 失败、destroy 或晚到 fulfillment 时由 `dispose()` 恰好清理一次；`onBeforeComplete` 成功就是 ownership transfer，之后由 prepare result / app 清理。
 
 `start()` 成功时 resolve；任一资源、prepare、视觉 gate、enter 或 exit 失败时，发布可见 error snapshot、调用 `onError` 恰好一次，并 reject 同一个规范化 `Error`。调用方若使用 fire-and-forget，应显式处理 rejection。`destroy()` 幂等，会中止同一实例的 `AbortSignal`、销毁 UI 并隐藏 root；之后不会再发布 snapshot 或启动业务阶段。
 
