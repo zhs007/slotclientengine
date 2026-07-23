@@ -74,7 +74,7 @@ describe("game002 main loading host flow", () => {
     ]);
     const prepared = { readiness: { destroy: vi.fn() } };
     const readinessResult = { destroy: vi.fn() };
-    const entered = { destroy: vi.fn() };
+    const entered = { destroy: vi.fn(async () => undefined) };
     const runtimeModule = {
       finalizeGame002At99: vi.fn(async () => prepared),
       enterGame002: vi.fn(async () => entered),

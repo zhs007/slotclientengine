@@ -37,7 +37,10 @@ export async function startGame002Readiness(options: {
       brandLabel: "game002",
       defaultCurrency: "USD",
       defaultLocale: "en-US",
-      localeByLanguage: Object.freeze({ en: "en-US" }),
+      localeByLanguage: Object.freeze({
+        en: "en-US",
+        en_GB: "en-GB",
+      }),
     },
     expectedGameServerUrl: GAME002_LIVE_SERVER_URL,
   });

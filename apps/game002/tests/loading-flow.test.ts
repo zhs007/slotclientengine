@@ -74,12 +74,35 @@ describe("game002 99 percent finalization and ownership", () => {
     expect(readiness.destroy).toHaveBeenCalledOnce();
   });
 
+  it("keeps the abort authoritative when readiness cleanup throws", async () => {
+    const readiness = createReadiness();
+    readiness.destroy.mockImplementation(() => {
+      throw new Error("cleanup failed");
+    });
+    const controller = new AbortController();
+    controller.abort();
+    const { finalizeGame002At99 } = await import("../src/game-entry.js");
+    await expect(
+      finalizeGame002At99({
+        readinessResult: readiness,
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(readiness.destroy).toHaveBeenCalledOnce();
+  });
+
   it("injects platform presentation/preferences and cleans entered ownership", async () => {
     const config = parseGame002LaunchQuery(validQuery());
     const skin = await import("../src/skin-config.js").then((module) =>
       module.getGame002SkinConfig("1"),
     );
-    const readiness = createReadiness(config);
+    const readiness = createReadiness(config, {
+      presentation: {
+        brandLabel: "game002",
+        currency: "EUR",
+        locale: "de-DE",
+      },
+    });
     const framework = createFramework();
     frameworkMocks.createSlotGameFramework.mockReturnValue(framework);
     const valueBundle = {
@@ -103,18 +126,61 @@ describe("game002 99 percent finalization and ownership", () => {
         initialFastMode: true,
         initialAutoMode: false,
         brandLabel: "game002",
-        currency: "USD",
-        locale: "en-US",
+        currency: "EUR",
+        locale: "de-DE",
+        formatMoney: expect.any(Function),
         designSize: { width: 1125, height: 2000 },
         framePolicy: expect.objectContaining({ mode: "maximized-focus" }),
         uiFactory: expect.objectContaining({ create: expect.any(Function) }),
       }),
     );
+    const frameworkOptions = frameworkMocks.createSlotGameFramework.mock
+      .calls[0]?.[0] as { readonly formatMoney?: (amount: number) => string };
+    expect(frameworkOptions.formatMoney?.(1575)).toBe(
+      new Intl.NumberFormat("de-DE", {
+        style: "currency",
+        currency: "EUR",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(15.75),
+    );
     expect(framework.connect).toHaveBeenCalledOnce();
     expect(readiness.liveSession.connect).not.toHaveBeenCalled();
-    entered.destroy();
-    entered.destroy();
-    await Promise.resolve();
+    await entered.destroy();
+    await entered.destroy();
+    expect(framework.destroy).toHaveBeenCalledOnce();
+    expect(readiness.platformHandle.destroy).toHaveBeenCalledOnce();
+    expect(valueBundle.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("returns a shared rejecting destroy promise without skipping later cleanup", async () => {
+    const skin = await import("../src/skin-config.js").then((module) =>
+      module.getGame002SkinConfig("1"),
+    );
+    const readiness = createReadiness();
+    const framework = createFramework();
+    framework.destroy.mockImplementation(() => {
+      throw new Error("framework cleanup failed");
+    });
+    frameworkMocks.createSlotGameFramework.mockReturnValue(framework);
+    const valueBundle = {
+      resources: {},
+      destroy: vi.fn(async () => undefined),
+    };
+    const { enterGame002 } = await import("../src/game-entry.js");
+    const entered = await enterGame002({
+      root: document.createElement("div"),
+      prepared: {
+        readiness,
+        skin,
+        valuePresentationResourceBundle: valueBundle,
+      },
+    });
+    const firstDestroy = entered.destroy();
+    const secondDestroy = entered.destroy();
+    expect(secondDestroy).toBe(firstDestroy);
+    await expect(firstDestroy).rejects.toThrow(/framework cleanup failed/);
+    await expect(secondDestroy).rejects.toThrow(/framework cleanup failed/);
     expect(framework.destroy).toHaveBeenCalledOnce();
     expect(readiness.platformHandle.destroy).toHaveBeenCalledOnce();
     expect(valueBundle.destroy).toHaveBeenCalledOnce();
@@ -157,6 +223,13 @@ describe("game002 99 percent finalization and ownership", () => {
 
 function createReadiness(
   config = parseGame002LaunchQuery(validQuery()),
+  options: {
+    readonly presentation?: {
+      readonly brandLabel: string;
+      readonly currency: string;
+      readonly locale: string;
+    };
+  } = {},
 ): Game002ReadinessResult & { readonly destroy: ReturnType<typeof vi.fn> } {
   const liveSession = {
     getUserInfo: vi.fn(() => ({ balance: 1000 })),
@@ -173,11 +246,13 @@ function createReadiness(
       businessCode: "guest",
       language: "en",
       jurisdiction: "MT",
-      presentation: Object.freeze({
-        brandLabel: "game002",
-        currency: "USD",
-        locale: "en-US",
-      }),
+      presentation: Object.freeze(
+        options.presentation ?? {
+          brandLabel: "game002",
+          currency: "USD",
+          locale: "en-US",
+        },
+      ),
       initialPreferences: Object.freeze({
         muted: true,
         fastMode: true,

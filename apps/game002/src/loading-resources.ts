@@ -62,7 +62,7 @@ export interface Game002PreparedLoadingSessionLike {
 }
 
 export interface Game002EnteredGameLike {
-  destroy(): void;
+  destroy(): Promise<void>;
 }
 
 export interface Game002RuntimeModule {

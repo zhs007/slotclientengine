@@ -142,7 +142,7 @@ describe("game002 loading resources", () => {
   it("validates the runtime module exports", () => {
     const runtime = {
       finalizeGame002At99: async () => ({ readiness: { destroy() {} } }),
-      enterGame002: async () => ({ destroy() {} }),
+      enterGame002: async () => ({ async destroy() {} }),
     };
     expect(
       readGame002RuntimeModule(

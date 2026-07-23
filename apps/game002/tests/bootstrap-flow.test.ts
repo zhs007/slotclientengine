@@ -43,6 +43,16 @@ describe("game002 early readiness coordinator", () => {
       signal: new AbortController().signal,
     });
     expect(mocks.providerPrepare).toHaveBeenCalledOnce();
+    expect(mocks.createProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        presentation: expect.objectContaining({
+          localeByLanguage: {
+            en: "en-US",
+            en_GB: "en-GB",
+          },
+        }),
+      }),
+    );
     expect(mocks.prepareSession).toHaveBeenCalledOnce();
     expect(mocks.prepareSession).toHaveBeenCalledWith({
       live: expect.objectContaining({

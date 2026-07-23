@@ -72,5 +72,5 @@ void loading.start().catch(() => undefined);
 
 window.addEventListener("beforeunload", () => {
   loading.destroy();
-  enteredGame?.destroy();
+  void enteredGame?.destroy().catch((error: unknown) => console.error(error));
 });

@@ -12,7 +12,7 @@ import {
   GAME002_REFERENCE_SIZE,
   createGame002FramePolicy,
 } from "./game-layout.js";
-import { formatServerUsdAmount } from "./money.js";
+import { createServerCurrencyAmountFormatter } from "./money.js";
 import { createGame002LeoUiLabels } from "./platform-ui.js";
 import {
   prepareGame002SkinConfig,
@@ -28,7 +28,7 @@ export interface Game002PreparedLoadingState {
 
 export interface Game002EnteredGame {
   readonly framework: SlotGameFramework;
-  destroy(): void;
+  destroy(): Promise<void>;
 }
 
 export async function finalizeGame002At99(options: {
@@ -41,7 +41,11 @@ export async function finalizeGame002At99(options: {
       options.readinessResult.config.skin,
     );
     if (options.signal.aborted) {
-      await skinResult.valuePresentationResourceBundle.destroy();
+      try {
+        await skinResult.valuePresentationResourceBundle.destroy();
+      } catch {
+        // The abort remains authoritative after best-effort cleanup.
+      }
       throw createAbortError();
     }
     return Object.freeze({
@@ -51,7 +55,11 @@ export async function finalizeGame002At99(options: {
         skinResult.valuePresentationResourceBundle,
     });
   } catch (error) {
-    options.readinessResult.destroy();
+    try {
+      options.readinessResult.destroy();
+    } catch {
+      // The finalization failure remains authoritative.
+    }
     throw error;
   }
 }
@@ -64,31 +72,33 @@ export async function enterGame002(options: {
   const { snapshot } = platformHandle;
   let framework: SlotGameFramework | null = null;
   let removeBeforeUnload: (() => void) | null = null;
-  let destroyed = false;
-  const destroyOwnedResources = async (): Promise<void> => {
-    if (destroyed) return;
-    destroyed = true;
-    removeBeforeUnload?.();
-    removeBeforeUnload = null;
-    let cleanupError: unknown;
-    try {
-      if (framework) framework.destroy();
-      else liveSession.disconnect();
-    } catch (error) {
-      cleanupError = error;
-    }
-    try {
-      platformHandle.destroy();
-    } catch (error) {
-      cleanupError ??= error;
-    }
-    try {
-      await options.prepared.valuePresentationResourceBundle.destroy();
-    } catch (error) {
-      cleanupError ??= error;
-    }
-    framework = null;
-    if (cleanupError) throw cleanupError;
+  let destroyPromise: Promise<void> | null = null;
+  const destroyOwnedResources = (): Promise<void> => {
+    if (destroyPromise) return destroyPromise;
+    destroyPromise = (async () => {
+      removeBeforeUnload?.();
+      removeBeforeUnload = null;
+      let cleanupError: unknown;
+      try {
+        if (framework) framework.destroy();
+        else liveSession.disconnect();
+      } catch (error) {
+        cleanupError = error;
+      }
+      try {
+        platformHandle.destroy();
+      } catch (error) {
+        cleanupError ??= error;
+      }
+      try {
+        await options.prepared.valuePresentationResourceBundle.destroy();
+      } catch (error) {
+        cleanupError ??= error;
+      }
+      framework = null;
+      if (cleanupError) throw cleanupError;
+    })();
+    return destroyPromise;
   };
   try {
     framework = createSlotGameFramework({
@@ -106,7 +116,10 @@ export async function enterGame002(options: {
       brandLabel: snapshot.presentation.brandLabel,
       currency: snapshot.presentation.currency,
       locale: snapshot.presentation.locale,
-      formatMoney: formatServerUsdAmount,
+      formatMoney: createServerCurrencyAmountFormatter({
+        currency: snapshot.presentation.currency,
+        locale: snapshot.presentation.locale,
+      }),
       uiFactory: createLeoSlotGameUiFactory({
         labels: createGame002LeoUiLabels(snapshot.translations),
       }),
@@ -116,7 +129,9 @@ export async function enterGame002(options: {
     await framework.connect();
 
     const handleBeforeUnload = () => {
-      void destroyOwnedResources();
+      void destroyOwnedResources().catch((error: unknown) =>
+        console.error(error),
+      );
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     removeBeforeUnload = () =>
@@ -124,8 +139,8 @@ export async function enterGame002(options: {
 
     return Object.freeze({
       framework,
-      destroy(): void {
-        void destroyOwnedResources();
+      destroy(): Promise<void> {
+        return destroyOwnedResources();
       },
     });
   } catch (error) {
