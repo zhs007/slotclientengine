@@ -283,6 +283,9 @@ describe("Leo URL helpers", () => {
     expect(
       parseLeoLauncherConfig(config({ disableSpacebar: true })),
     ).toMatchObject({ quickStop: true, disableSpacebar: true });
+    expect(
+      parseLeoLauncherConfig(config({ gameTranslationJsonUrl: "" })),
+    ).not.toHaveProperty("gameTranslationJsonUrl");
     expect(() => parseLeoLauncherConfig([])).toThrow(/plain object/);
     expect(() => parseLeoLauncherConfig(config({ quickStop: "yes" }))).toThrow(
       /quickStop/,

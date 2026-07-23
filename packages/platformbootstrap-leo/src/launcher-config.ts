@@ -124,7 +124,9 @@ export function requireString(value: unknown, label: string): string {
 }
 
 function optionalString(value: unknown, label: string): string | undefined {
-  return value === undefined ? undefined : requireString(value, label);
+  return value === undefined || value === ""
+    ? undefined
+    : requireString(value, label);
 }
 
 function requireBoolean(value: unknown, label: string): boolean {
