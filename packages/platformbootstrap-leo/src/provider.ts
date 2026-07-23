@@ -36,7 +36,11 @@ export interface LeoPlatformBootstrapOptions {
 export function createLeoPlatformBootstrapProvider(
   options: LeoPlatformBootstrapOptions,
 ): SlotPlatformBootstrapProvider {
-  const fetchImplementation = options.fetch ?? globalThis.fetch;
+  const fetchImplementation =
+    options.fetch ??
+    (typeof globalThis.fetch === "function"
+      ? globalThis.fetch.bind(globalThis)
+      : undefined);
   if (typeof fetchImplementation !== "function") {
     throw new Error("Leo platform bootstrap requires fetch.");
   }

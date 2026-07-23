@@ -35,6 +35,51 @@ function response(body: unknown, ok = true): Response {
 }
 
 describe("Leo platform bootstrap provider", () => {
+  it("binds the browser default fetch to its global receiver", async () => {
+    const originalFetch = globalThis.fetch;
+    const browserFetch = vi.fn(function (
+      this: typeof globalThis,
+      input: RequestInfo | URL,
+    ) {
+      if (this !== globalThis) {
+        throw new TypeError("Illegal invocation");
+      }
+      const url = String(input);
+      if (url.includes("gameclient/config")) {
+        return Promise.resolve(response(config()));
+      }
+      if (url.includes("common.json")) {
+        return Promise.resolve(response({ spin: "Spin" }));
+      }
+      if (url.includes("game.json")) {
+        return Promise.resolve(response({}));
+      }
+      if (url.includes("/v2/")) {
+        return Promise.resolve(
+          response({ fastplays: false, sound: 100, music: 100 }),
+        );
+      }
+      return Promise.reject(new Error("unexpected request"));
+    }) as typeof globalThis.fetch;
+    globalThis.fetch = browserFetch;
+    try {
+      const handle = await createLeoPlatformBootstrapProvider({
+        params: params(),
+        presentation: {
+          brandLabel: "game002",
+          defaultCurrency: "USD",
+          defaultLocale: "en-US",
+          localeByLanguage: { en: "en-US" },
+        },
+      }).prepare(new AbortController().signal);
+      expect(browserFetch).toHaveBeenCalled();
+      expect(handle.snapshot.translations).toMatchObject({ spin: "Spin" });
+      handle.destroy();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("builds exact encoded URLs and returns a credential-free frozen snapshot", async () => {
     const requests: string[] = [];
     const fetch = vi.fn(async (input: RequestInfo | URL) => {
