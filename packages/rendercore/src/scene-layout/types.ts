@@ -374,6 +374,26 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   getMainReelSymbolStateSnapshots(
     positions: readonly { readonly x: number; readonly y: number }[],
   ): readonly import("../reel/index.js").RenderVisibleSymbolStateSnapshot[];
+  hasMainReelSymbolStateCapability(
+    position: { readonly x: number; readonly y: number },
+    state: string,
+  ): boolean;
+  getMainReelSceneSnapshot(): readonly (readonly number[])[];
+  getMainReelCascadeValues(): import("../reel/index.js").GridCellCascadeValueMatrix;
+  releaseMainReelSymbols(
+    positions: readonly { readonly x: number; readonly y: number }[],
+  ): void;
+  setMainReelSymbolDimming(
+    highlightedPositions: readonly {
+      readonly x: number;
+      readonly y: number;
+    }[],
+    dimmingAlpha: number,
+  ): void;
+  clearMainReelSymbolDimming(): void;
+  startMainReelCascadeDrop(
+    plan: import("../reel/index.js").GridCellCascadeDropPlan,
+  ): void;
   getReelPresentation(reelId: "main"): Container;
   getAwardCelebrationPopup(id: string): AwardCelebrationPlayer;
   /** Returns the manifest-declared mode ids in their stable declaration order. */

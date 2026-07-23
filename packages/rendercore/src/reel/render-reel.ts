@@ -337,7 +337,6 @@ export class RenderReel extends Container {
     occurrence.symbol.position.set(0);
     occurrence.symbol.visible = true;
     occurrence.symbol.renderable = true;
-    occurrence.symbol.reset();
     this.setStaticVisibleSlot(
       windowY,
       occurrence.code,

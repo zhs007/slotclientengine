@@ -34,7 +34,7 @@ export interface SlotCascadeBlockProfileV1 {
     readonly removeExcludedSymbols: readonly string[];
     readonly dropHeldSymbols: readonly string[];
     readonly valueSymbols: readonly string[];
-    readonly sequentialWinCompanionSymbols?: readonly string[];
+    readonly sequentialWinCompanionSymbols: readonly string[];
   };
   readonly amount: AmountFieldProfileV1;
 }
@@ -53,6 +53,7 @@ export interface SlotRoundFlowProfileV1 {
 
 export function parseSlotRoundFlowProfile(
   input: unknown,
+  context?: SlotRoundFlowProfileParseContext,
 ): SlotRoundFlowProfileV1 {
   const root = strictRecord(input, "round", [
     "kind",
@@ -105,7 +106,7 @@ export function parseSlotRoundFlowProfile(
     throw new LogicParseError(
       `round component roles must be unique; duplicate "${duplicates[0]}".`,
     );
-  return cloneAndFreeze({
+  const profile = cloneAndFreeze({
     kind: "slot-round-flow" as const,
     version: 1 as const,
     components: {
@@ -116,6 +117,42 @@ export function parseSlotRoundFlowProfile(
     ...(cascade ? { cascade } : {}),
     amount,
   });
+  if (context) validateSlotRoundFlowSymbolCatalog(profile, context);
+  return profile;
+}
+
+export interface SlotRoundFlowProfileParseContext {
+  readonly activeSymbols: readonly string[];
+}
+
+export function validateSlotRoundFlowSymbolCatalog(
+  profile: SlotRoundFlowProfileV1,
+  context: SlotRoundFlowProfileParseContext,
+): void {
+  if (!Array.isArray(context.activeSymbols))
+    throw new LogicParseError("activeSymbols must be an array.");
+  const catalog = new Set<string>();
+  for (const [index, symbol] of context.activeSymbols.entries()) {
+    const parsed = componentName(symbol, `activeSymbols[${index}]`);
+    if (catalog.has(parsed))
+      throw new LogicParseError(
+        `activeSymbols contains duplicate "${parsed}".`,
+      );
+    catalog.add(parsed);
+  }
+  const policy = profile.cascade?.symbols;
+  if (!policy) return;
+  for (const [path, values] of [
+    ["removeExcludedSymbols", policy.removeExcludedSymbols],
+    ["dropHeldSymbols", policy.dropHeldSymbols],
+    ["valueSymbols", policy.valueSymbols],
+    ["sequentialWinCompanionSymbols", policy.sequentialWinCompanionSymbols],
+  ] as const)
+    for (const symbol of values)
+      if (!catalog.has(symbol))
+        throw new LogicParseError(
+          `round.cascade.symbols.${path} contains unknown active symbol "${symbol}".`,
+        );
 }
 
 export function validateSlotRoundFlowCatalogCompatibility(options: {
@@ -230,14 +267,10 @@ function parseCascade(value: unknown, path: string): SlotCascadeBlockProfileV1 {
         symbols.valueSymbols,
         `${path}.symbols.valueSymbols`,
       ),
-      ...(symbols.sequentialWinCompanionSymbols === undefined
-        ? {}
-        : {
-            sequentialWinCompanionSymbols: uniqueStringList(
-              symbols.sequentialWinCompanionSymbols,
-              `${path}.symbols.sequentialWinCompanionSymbols`,
-            ),
-          }),
+      sequentialWinCompanionSymbols: uniqueStringList(
+        symbols.sequentialWinCompanionSymbols,
+        `${path}.symbols.sequentialWinCompanionSymbols`,
+      ),
     },
     amount: parseAmount(root.amount, `${path}.amount`),
   };

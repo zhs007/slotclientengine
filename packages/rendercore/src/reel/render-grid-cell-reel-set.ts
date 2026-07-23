@@ -1260,7 +1260,7 @@ export class RenderGridCellReelSet extends Container {
           `Dropdown target (${item.movement.x},${item.movement.targetY}) is occupied.`,
         );
       }
-      item.occurrence.symbol.returnToDefaultState();
+      item.occurrence.symbol.requestState("normal");
       this.removeChild(item.occurrence.symbol);
       target.reel.placeVisibleOccurrence(item.occurrence);
       target.occupied = true;

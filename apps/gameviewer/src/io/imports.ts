@@ -1,6 +1,8 @@
 import {
   inspectSceneLayoutPackageInput,
+  parseSceneLayoutSlotTemplateConfig,
   parseServerGameAuthoringSummary,
+  type SceneLayoutSlotTemplateConfigV1,
 } from "@slotclientengine/gameframeworks/scene-layout-template";
 import type {
   ImportedLayoutState,
@@ -36,6 +38,31 @@ export async function importServerAuthoringFile(
     sha256Hex(bytes),
   ]);
   return Object.freeze({ fileName: file.name, sha256, summary });
+}
+
+export async function importTemplateConfigFile(
+  file: File,
+): Promise<SceneLayoutSlotTemplateConfigV1> {
+  if (!file.name.toLowerCase().endsWith(".json"))
+    throw new Error("运行配置必须是单个 .json 文件。");
+  let raw: unknown;
+  try {
+    raw = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(
+        new Uint8Array(await file.arrayBuffer()),
+      ),
+    );
+  } catch (error) {
+    throw new Error(`运行配置 JSON 无效：${formatError(error)}`);
+  }
+  return parseSceneLayoutSlotTemplateConfig(raw);
+}
+
+export function serializeTemplateConfig(
+  config: SceneLayoutSlotTemplateConfigV1,
+): string {
+  const normalized = parseSceneLayoutSlotTemplateConfig(config);
+  return `${JSON.stringify(normalized, null, 2)}\n`;
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {

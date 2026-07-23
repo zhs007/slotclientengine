@@ -1,6 +1,25 @@
 import "./styles.css";
 
-export { createGameConfig } from "@slotclientengine/logiccore";
+export {
+  compileSlotRoundExecutionPlan,
+  createGameConfig,
+} from "@slotclientengine/logiccore";
+export type {
+  SlotRoundCapability,
+  SlotRoundCompileContext,
+  SlotRoundDropdownStepPlan,
+  SlotRoundExecutionPlan,
+  SlotRoundExecutionStep,
+  SlotRoundMovementPlan,
+  SlotRoundOccurrence,
+  SlotRoundOccurrenceSnapshot,
+  SlotRoundPosition,
+  SlotRoundPresentationValue,
+  SlotRoundRefillStepPlan,
+  SlotRoundValueMatrix,
+  SlotRoundWinGroupPlan,
+  SlotRoundWinStepPlan,
+} from "@slotclientengine/logiccore";
 export { createSlotGameFramework, buildSpinParams } from "./framework.js";
 export {
   SlotGameConfigError,

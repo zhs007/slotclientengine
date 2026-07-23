@@ -1,12 +1,19 @@
 import { Application, Container } from "pixi.js";
 import type {
   GameLogic,
+  SlotRoundDropdownStepPlan,
+  SlotRoundCapability,
+  SlotRoundExecutionPlan,
+  SlotRoundOccurrenceSnapshot,
+  SlotRoundRefillStepPlan,
+  SlotRoundWinStepPlan,
   SlotGameAdapter,
   SlotGameInitialState,
   SlotGameMountContext,
   SlotGameStateSnapshot,
   SlotGameViewportSnapshot,
 } from "@slotclientengine/gameframeworks";
+import { compileSlotRoundExecutionPlan } from "@slotclientengine/gameframeworks";
 import {
   assertSymbolValueDisplayResource,
   createSymbolCascadePlayer,
@@ -15,9 +22,10 @@ import {
   type CreateSymbolValuePresenterOptions,
   type SymbolWinCarousel,
   type SymbolValuePresenter,
-  type PreparedSymbolCascade,
   type SymbolAssetMap,
   type SymbolCascadePlayer,
+  createSlotRoundCoordinator,
+  type SlotRoundPresentationCapabilityTarget,
 } from "@slotclientengine/rendercore";
 import {
   createSpineBackgroundPlayer,
@@ -32,6 +40,8 @@ import {
   loadGame002SymbolTextures,
 } from "./assets.js";
 import {
+  GAME002_REEL_COUNT,
+  GAME002_VISIBLE_ROWS,
   createGame002GridCellDimming,
   createGame002Layout,
 } from "./game-layout.js";
@@ -61,6 +71,7 @@ import {
 import {
   GAME002_CASCADE_MOTION,
   GAME002_CASCADE_PRESENTATION,
+  GAME002_ROUND_FLOW_PROFILE,
   canGame002CascadeDropSymbol,
   canGame002CascadeRemoveSymbol,
   isGame002SequentialWinCompanionSymbol,
@@ -113,27 +124,6 @@ export interface Game002AdapterOptions {
   readonly reportFatalError?: (error: Error) => void;
 }
 
-interface PendingAnimation {
-  phase:
-    | "initial-spin"
-    | "step-win-remove"
-    | "cascade-unified-fall"
-    | "cascade-dropdown"
-    | "refill-sweep"
-    | "refill-spin"
-    | "finalizing"
-    | "win-amount";
-  readonly sequence: Game002CascadeSequence;
-  cascadeIndex: number;
-  activeWinStage: Game002WinRemoveStage | null;
-  preparedCascade: PreparedSymbolCascade | null;
-  readonly betAmountRaw: number;
-  readonly winAmountRaw: number;
-  winAmountPlaybackComplete: boolean;
-  resolve(): void;
-  reject(error: Error): void;
-}
-
 const GAME002_MAX_TICK_DELTA_SECONDS = 1 / 30;
 
 export function createGame002Adapter(
@@ -161,7 +151,9 @@ class Game002PixiAdapter implements SlotGameAdapter {
   #runtime: Game002ReelRuntime | null = null;
   #winAmountPlayer: WinAmountAnimationPlayer | null = null;
   #symbolCascadePlayer: SymbolCascadePlayer | null = null;
-  #pendingAnimation: PendingAnimation | null = null;
+  #roundCoordinator: ReturnType<typeof createSlotRoundCoordinator> | null =
+    null;
+  #roundTarget: Game002RoundTarget | null = null;
   #unsubscribeViewport: (() => void) | null = null;
   #disposeWinAmountAdvanceListener: (() => void) | null = null;
 
@@ -279,6 +271,14 @@ class Game002PixiAdapter implements SlotGameAdapter {
       this.#runtime = runtime;
       this.#winAmountPlayer = winAmountPlayer;
       this.#symbolCascadePlayer = symbolCascadePlayer;
+      this.#roundTarget = new Game002RoundTarget({
+        runtime,
+        cascadePlayer: symbolCascadePlayer,
+        winAmountPlayer,
+      });
+      this.#roundCoordinator = createSlotRoundCoordinator({
+        target: this.#roundTarget,
+      });
       app.ticker.add(this.#onTick);
       tickerAdded = true;
       const requestWinAmountAdvance = () => {
@@ -313,6 +313,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
       this.#runtime = null;
       this.#winAmountPlayer = null;
       this.#symbolCascadePlayer = null;
+      this.#roundCoordinator = null;
+      this.#roundTarget = null;
       throw error;
     }
   }
@@ -332,7 +334,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
 
   playSpin(logic: GameLogic): Promise<void> {
     const runtime = this.#requireRuntime();
-    if (this.#pendingAnimation) {
+    const coordinator = this.#requireRoundCoordinator();
+    if (coordinator.getSnapshot().running) {
       throw new Error("game002 adapter animation is already in progress.");
     }
     const betAmountRaw = logic.getBet() * logic.getLines();
@@ -344,6 +347,23 @@ class Game002PixiAdapter implements SlotGameAdapter {
     if (cnSymbolCode === undefined) {
       throw new Error("game002 game config is missing CN symbol code.");
     }
+    const symbolCodes = Object.fromEntries(
+      this.#skin.displaySymbols.map((symbol) => {
+        const code = runtime.gameConfig.getSymbolCode(symbol);
+        if (code === undefined)
+          throw new Error(`game002 display symbol "${symbol}" has no code.`);
+        return [symbol, code];
+      }),
+    );
+    const plan = compileSlotRoundExecutionPlan(
+      GAME002_ROUND_FLOW_PROFILE,
+      logic,
+      {
+        symbolCodes,
+        columns: GAME002_REEL_COUNT,
+        rows: GAME002_VISIBLE_ROWS,
+      },
+    );
     const sequence = createGame002CascadeSequence({
       logic,
       cnSymbolCode,
@@ -355,29 +375,13 @@ class Game002PixiAdapter implements SlotGameAdapter {
         canGame002CascadeDropSymbol(resolveGame002CascadeSymbol(runtime, code)),
     });
     assertCascadeResources(sequence, runtime, this.#skin);
-    this.#requireSymbolCascadePlayer().clear();
-    this.#requireWinAmountPlayer().dismissImmediately();
-    runtime.spinToScene(
-      sequence.initial.spinScene,
-      "game002 cascade initial spin scene",
-      sequence.initial.usesServerValues
-        ? sequence.initial.spinValues
-        : undefined,
-    );
-    return new Promise<void>((resolve, reject) => {
-      this.#pendingAnimation = {
-        phase: "initial-spin",
-        sequence,
-        cascadeIndex: -1,
-        activeWinStage: null,
-        preparedCascade: null,
-        betAmountRaw,
-        winAmountRaw,
-        winAmountPlaybackComplete: winAmountRaw <= 0,
-        resolve,
-        reject,
-      };
+    assertGame002PlanMatchesSequence(plan, sequence);
+    this.#requireRoundTarget().configure({
+      sequence,
+      betAmountRaw,
+      winAmountRaw,
     });
+    return coordinator.start(plan);
   }
 
   setFrameworkState(_state: SlotGameStateSnapshot): void {
@@ -385,7 +389,9 @@ class Game002PixiAdapter implements SlotGameAdapter {
   }
 
   destroy(): void {
-    this.#rejectPending(new Error("game002 adapter was destroyed."));
+    this.#roundCoordinator?.destroy();
+    this.#roundCoordinator = null;
+    this.#roundTarget = null;
     this.#unsubscribeViewport?.();
     this.#unsubscribeViewport = null;
     this.#disposeWinAmountAdvanceListener?.();
@@ -414,210 +420,24 @@ class Game002PixiAdapter implements SlotGameAdapter {
     try {
       const deltaSeconds = normalizeTickerDeltaSeconds(ticker);
       this.#backgroundPlayer.update(deltaSeconds);
-      const pending = this.#pendingAnimation;
-      if (!pending) {
+      const coordinator = this.#roundCoordinator;
+      if (!coordinator?.getSnapshot().running) {
         if (this.#winAmountPlayer?.isPlaying()) {
           this.#winAmountPlayer.update(deltaSeconds);
         }
         this.#runtime.update(deltaSeconds);
         return;
       }
-      if (pending.phase === "initial-spin") {
-        const result = this.#runtime.update(deltaSeconds);
-        if (!result.completed) return;
-        assertGame002ReelVisualMatchesTarget(
-          this.#runtime.getVisualSnapshot(),
-          pending.sequence.initial.spinScene,
-          "completed game002 cascade initial spin",
-        );
-        if (pending.sequence.initial.winStage) {
-          this.#startWinStage(pending, pending.sequence.initial.winStage);
-        } else {
-          this.#startCascadeStage(pending, 0);
-        }
-        return;
-      }
-      if (pending.phase === "step-win-remove") {
-        const result = this.#requireSymbolCascadePlayer().update(deltaSeconds);
-        if (!result.completed) return;
-        this.#startCascadeStage(pending, pending.cascadeIndex + 1);
-        return;
-      }
-      if (pending.phase === "cascade-unified-fall") {
-        const result = this.#runtime.update(deltaSeconds);
-        if (!result.completed) return;
-        const stage = pending.sequence.cascades[pending.cascadeIndex];
-        if (!stage) throw new Error("game002 cascade fall stage is missing.");
-        assertGame002ReelVisualMatchesTarget(
-          this.#runtime.getVisualSnapshot(),
-          stage.refillScene,
-          `completed game002 cascade step[${stage.stepIndex}] unified fall`,
-        );
-        if (stage.winStage) {
-          this.#startWinStage(pending, stage.winStage);
-        } else {
-          this.#startCascadeStage(pending, pending.cascadeIndex + 1);
-        }
-        return;
-      }
-      if (pending.phase === "cascade-dropdown") {
-        const result = this.#runtime.update(deltaSeconds);
-        if (!result.completed) return;
-        const stage = pending.sequence.cascades[pending.cascadeIndex];
-        if (!stage)
-          throw new Error("game002 cascade dropdown stage is missing.");
-        const currentScene = this.#runtime.getCurrentScene();
-        if (!currentScene || !sceneEquals(currentScene, stage.dropdownScene)) {
-          throw new Error(
-            `completed game002 cascade step[${stage.stepIndex}] dropdown scene does not match.`,
-          );
-        }
-        this.#startRefillSweep(pending, stage);
-        return;
-      }
-      if (pending.phase === "refill-sweep") {
-        const result = this.#runtime.update(deltaSeconds);
-        if (!result.completed) return;
-        const stage = pending.sequence.cascades[pending.cascadeIndex];
-        if (!stage) throw new Error("game002 refill sweep stage is missing.");
-        this.#startRefillSpin(pending, stage);
-        return;
-      }
-      if (pending.phase === "refill-spin") {
-        const result = this.#runtime.update(deltaSeconds);
-        if (!result.completed) return;
-        const stage = pending.sequence.cascades[pending.cascadeIndex];
-        if (!stage) throw new Error("game002 refill spin stage is missing.");
-        assertGame002ReelVisualMatchesTarget(
-          this.#runtime.getVisualSnapshot(),
-          stage.refillScene,
-          `completed game002 cascade step[${stage.stepIndex}] selective refill`,
-        );
-        this.#completeCascadeStage(pending, stage);
-        return;
-      }
-      if (pending.phase === "win-amount") {
-        this.#runtime.update(deltaSeconds);
-        const result = this.#requireWinAmountPlayer().update(deltaSeconds);
-        pending.winAmountPlaybackComplete = !isWinAmountBlockingSpin(
-          result.phase,
-        );
-        if (pending.winAmountPlaybackComplete) this.#resolvePending(pending);
-      }
+      coordinator.update(deltaSeconds);
     } catch (error) {
       this.#app?.ticker.stop();
       const failure = error instanceof Error ? error : new Error(String(error));
-      const hadPendingAnimation = this.#pendingAnimation !== null;
-      this.#rejectPending(failure);
-      if (!hadPendingAnimation) {
-        this.#reportFatalError(failure);
-      }
+      const hadPendingAnimation =
+        this.#roundCoordinator?.getSnapshot().running === true;
+      this.#roundCoordinator?.cleanup("execution-failure");
+      if (!hadPendingAnimation) this.#reportFatalError(failure);
     }
   };
-
-  #startWinStage(
-    pending: PendingAnimation,
-    stage: Game002WinRemoveStage,
-  ): void {
-    const player = this.#requireSymbolCascadePlayer();
-    const prepared = player.prepare(stage.groups);
-    pending.activeWinStage = stage;
-    pending.preparedCascade = prepared;
-    pending.phase = "step-win-remove";
-    player.start(prepared);
-  }
-
-  #startCascadeStage(pending: PendingAnimation, index: number): void {
-    pending.activeWinStage = null;
-    pending.preparedCascade = null;
-    if (index >= pending.sequence.cascades.length) {
-      this.#finalizeSpin(pending);
-      return;
-    }
-    const stage = pending.sequence.cascades[index];
-    pending.cascadeIndex = index;
-    const planOptions: Parameters<
-      Game002ReelRuntime["createCascadeDropPlan"]
-    >[0] = {
-      sourceScene: stage.removedSourceScene,
-      sourceValues: stage.removedSourceValues,
-      settledScene: stage.dropdownScene,
-      settledValues: stage.dropdownValues,
-      targetScene: stage.refillScene,
-      targetValues: stage.refillValues,
-      refillPositions: stage.refillPositions,
-      canDropOccurrence: ({ code }) =>
-        canGame002CascadeDropSymbol(
-          resolveGame002CascadeSymbol(this.#requireRuntime(), code),
-        ),
-      motion: GAME002_CASCADE_MOTION,
-    };
-    const runtime = this.#requireRuntime();
-    const plan = runtime.isAnticipationActive()
-      ? runtime.createCascadeDropdownPlan(planOptions)
-      : runtime.createCascadeDropPlan(planOptions);
-    pending.phase = runtime.isAnticipationActive()
-      ? "cascade-dropdown"
-      : "cascade-unified-fall";
-    runtime.startCascadeDrop(plan);
-    if (plan.totalSeconds === 0) {
-      if (runtime.isAnticipationActive())
-        this.#startRefillSweep(pending, stage);
-      else this.#completeCascadeStage(pending, stage);
-    }
-  }
-
-  #startRefillSweep(
-    pending: PendingAnimation,
-    stage: Game002CascadeSequence["cascades"][number],
-  ): void {
-    pending.phase = "refill-sweep";
-    this.#requireRuntime().startRefillEffectSweep(stage.refillPositions);
-  }
-
-  #startRefillSpin(
-    pending: PendingAnimation,
-    stage: Game002CascadeSequence["cascades"][number],
-  ): void {
-    pending.phase = "refill-spin";
-    this.#requireRuntime().startSelectiveRefillSpin({
-      dropdownScene: stage.dropdownScene,
-      dropdownValues: stage.dropdownValues,
-      targetScene: stage.refillScene,
-      targetValues: stage.refillValues,
-      refillPositions: stage.refillPositions,
-      sceneName: `game002 cascade step[${stage.stepIndex}] selective refill`,
-    });
-  }
-
-  #completeCascadeStage(
-    pending: PendingAnimation,
-    stage: Game002CascadeSequence["cascades"][number],
-  ): void {
-    if (stage.winStage) this.#startWinStage(pending, stage.winStage);
-    else this.#startCascadeStage(pending, pending.cascadeIndex + 1);
-  }
-
-  #finalizeSpin(pending: PendingAnimation): void {
-    pending.phase = "finalizing";
-    this.#requireSymbolCascadePlayer().clear();
-    if (pending.winAmountRaw <= 0) {
-      pending.winAmountPlaybackComplete = true;
-      this.#resolvePending(pending);
-      return;
-    }
-    this.#requireWinAmountPlayer().start({
-      betAmountRaw: pending.betAmountRaw,
-      winAmountRaw: pending.winAmountRaw,
-    });
-    pending.phase = "win-amount";
-  }
-
-  #resolvePending(pending: PendingAnimation): void {
-    if (this.#pendingAnimation !== pending) return;
-    this.#pendingAnimation = null;
-    pending.resolve();
-  }
 
   #requireRuntime(): Game002ReelRuntime {
     if (!this.#runtime) {
@@ -626,18 +446,22 @@ class Game002PixiAdapter implements SlotGameAdapter {
     return this.#runtime;
   }
 
-  #requireWinAmountPlayer(): WinAmountAnimationPlayer {
-    if (!this.#winAmountPlayer) {
-      throw new Error("game002 adapter is not mounted.");
-    }
-    return this.#winAmountPlayer;
-  }
-
   #requireSymbolCascadePlayer(): SymbolCascadePlayer {
     if (!this.#symbolCascadePlayer) {
       throw new Error("game002 adapter is not mounted.");
     }
     return this.#symbolCascadePlayer;
+  }
+
+  #requireRoundCoordinator(): ReturnType<typeof createSlotRoundCoordinator> {
+    if (!this.#roundCoordinator)
+      throw new Error("game002 adapter is not mounted.");
+    return this.#roundCoordinator;
+  }
+
+  #requireRoundTarget(): Game002RoundTarget {
+    if (!this.#roundTarget) throw new Error("game002 adapter is not mounted.");
+    return this.#roundTarget;
   }
 
   #applyViewport(viewport: SlotGameViewportSnapshot): void {
@@ -662,25 +486,423 @@ class Game002PixiAdapter implements SlotGameAdapter {
     }
     this.#winAmountPlayer?.applyLayout(createGame002WinAmountLayout(layout));
   }
+}
 
-  #rejectPending(error: Error): void {
-    const pending = this.#pendingAnimation;
-    if (!pending) {
+class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget {
+  readonly capabilities: ReadonlySet<SlotRoundCapability> = new Set([
+    "spin",
+    "visible-symbol-states",
+    "remove",
+    "dropdown",
+    "refill",
+    "sequential-collect",
+  ]);
+  readonly #runtime: Game002ReelRuntime;
+  readonly #cascadePlayer: SymbolCascadePlayer;
+  readonly #winAmountPlayer: WinAmountAnimationPlayer;
+  #round: {
+    readonly sequence: Game002CascadeSequence;
+    readonly betAmountRaw: number;
+    readonly winAmountRaw: number;
+  } | null = null;
+  #activity:
+    | "idle"
+    | "initial"
+    | "win"
+    | "dropdown-unified"
+    | "dropdown-only"
+    | "refill-complete"
+    | "refill-sweep"
+    | "refill-spin"
+    | "completion" = "idle";
+  #activeStage: Game002CascadeSequence["cascades"][number] | null = null;
+  #runtimeCompleted = false;
+  #winCompleted = false;
+  #completionComplete = true;
+  #unifiedSteps = new Set<number>();
+
+  constructor(options: {
+    readonly runtime: Game002ReelRuntime;
+    readonly cascadePlayer: SymbolCascadePlayer;
+    readonly winAmountPlayer: WinAmountAnimationPlayer;
+  }) {
+    this.#runtime = options.runtime;
+    this.#cascadePlayer = options.cascadePlayer;
+    this.#winAmountPlayer = options.winAmountPlayer;
+  }
+
+  configure(round: {
+    readonly sequence: Game002CascadeSequence;
+    readonly betAmountRaw: number;
+    readonly winAmountRaw: number;
+  }): void {
+    if (this.#activity !== "idle")
+      throw new Error("game002 round target is already active.");
+    this.#round = round;
+  }
+
+  cleanup(): void {
+    this.#cascadePlayer.clear();
+    this.#winAmountPlayer.dismissImmediately();
+    this.#runtime.resetPresentationState();
+    this.#activity = "idle";
+    this.#activeStage = null;
+    this.#runtimeCompleted = false;
+    this.#winCompleted = false;
+    this.#completionComplete = true;
+    this.#unifiedSteps.clear();
+  }
+
+  startInitialSpin(_snapshot: SlotRoundOccurrenceSnapshot): void {
+    const sequence = this.requireRound().sequence;
+    this.#activity = "initial";
+    this.#runtimeCompleted = false;
+    this.#runtime.spinToScene(
+      sequence.initial.spinScene,
+      "game002 cascade initial spin scene",
+      sequence.initial.usesServerValues
+        ? sequence.initial.spinValues
+        : undefined,
+    );
+  }
+
+  isInitialSpinComplete(): boolean {
+    if (this.#activity !== "initial")
+      throw new Error("game002 initial spin is not active.");
+    if (!this.#runtimeCompleted) return false;
+    assertGame002ReelVisualMatchesTarget(
+      this.#runtime.getVisualSnapshot(),
+      this.requireRound().sequence.initial.spinScene,
+      "completed game002 cascade initial spin",
+    );
+    this.#activity = "idle";
+    return true;
+  }
+
+  startWin(step: SlotRoundWinStepPlan): void {
+    const stage = this.findWinStage(step.stepIndex);
+    const prepared = this.#cascadePlayer.prepare(stage.groups);
+    this.#winCompleted = false;
+    this.#activity = "win";
+    this.#cascadePlayer.start(prepared);
+  }
+
+  updateWin(_deltaSeconds: number): { readonly completed: boolean } {
+    if (this.#activity !== "win")
+      throw new Error("game002 win stage is not active.");
+    if (!this.#winCompleted) return { completed: false };
+    this.#activity = "idle";
+    return { completed: true };
+  }
+
+  startDropdown(step: SlotRoundDropdownStepPlan): void {
+    const stage = this.findCascadeStage(step.stepIndex);
+    this.#activeStage = stage;
+    const planOptions = this.createDropPlanOptions(stage);
+    const anticipation = this.#runtime.isAnticipationActive();
+    const plan = anticipation
+      ? this.#runtime.createCascadeDropdownPlan(planOptions)
+      : this.#runtime.createCascadeDropPlan(planOptions);
+    this.#activity = anticipation ? "dropdown-only" : "dropdown-unified";
+    if (!anticipation) this.#unifiedSteps.add(step.stepIndex);
+    this.#runtimeCompleted = plan.totalSeconds === 0;
+    this.#runtime.startCascadeDrop(plan);
+  }
+
+  isDropdownComplete(): boolean {
+    const stage = this.requireActiveStage();
+    if (!this.#runtimeCompleted) return false;
+    if (this.#activity === "dropdown-unified")
+      assertGame002ReelVisualMatchesTarget(
+        this.#runtime.getVisualSnapshot(),
+        stage.refillScene,
+        `completed game002 cascade step[${stage.stepIndex}] unified fall`,
+      );
+    else {
+      const current = this.#runtime.getCurrentScene();
+      if (!current || !sceneEquals(current, stage.dropdownScene))
+        throw new Error(
+          `completed game002 cascade step[${stage.stepIndex}] dropdown scene does not match.`,
+        );
+    }
+    this.#activity = "idle";
+    return true;
+  }
+
+  startRefill(step: SlotRoundRefillStepPlan): void {
+    const stage = this.findCascadeStage(step.stepIndex);
+    this.#activeStage = stage;
+    this.#runtimeCompleted = false;
+    if (this.#unifiedSteps.has(step.stepIndex)) {
+      this.#activity = "refill-complete";
+      this.#runtimeCompleted = true;
       return;
     }
-    let rejection = error;
-    try {
-      this.#symbolCascadePlayer?.clear();
-      this.#runtime?.resetPresentationState();
-    } catch (cleanupError) {
-      rejection = new AggregateError(
-        [error, cleanupError],
-        "game002 cascade failed and cleanup also failed.",
-      );
-    }
-    this.#pendingAnimation = null;
-    pending.reject(rejection);
+    this.#activity = "refill-sweep";
+    this.#runtime.startRefillEffectSweep(stage.refillPositions);
   }
+
+  isRefillComplete(): boolean {
+    const stage = this.requireActiveStage();
+    if (this.#activity === "refill-complete") {
+      this.#activity = "idle";
+      return true;
+    }
+    if (this.#activity !== "refill-spin" || !this.#runtimeCompleted)
+      return false;
+    assertGame002ReelVisualMatchesTarget(
+      this.#runtime.getVisualSnapshot(),
+      stage.refillScene,
+      `completed game002 cascade step[${stage.stepIndex}] selective refill`,
+    );
+    this.#activity = "idle";
+    return true;
+  }
+
+  update(deltaSeconds: number): void {
+    if (this.#activity === "win") {
+      this.#winCompleted = this.#cascadePlayer.update(deltaSeconds).completed;
+      return;
+    }
+    if (this.#activity === "completion") {
+      this.#runtime.update(deltaSeconds);
+      const result = this.#winAmountPlayer.update(deltaSeconds);
+      this.#completionComplete = !isWinAmountBlockingSpin(result.phase);
+      return;
+    }
+    if (this.#activity === "idle" || this.#activity === "refill-complete")
+      return;
+    const result = this.#runtime.update(deltaSeconds);
+    this.#runtimeCompleted = result.completed;
+    if (this.#activity === "refill-sweep" && result.completed) {
+      const stage = this.requireActiveStage();
+      this.#activity = "refill-spin";
+      this.#runtimeCompleted = false;
+      this.#runtime.startSelectiveRefillSpin({
+        dropdownScene: stage.dropdownScene,
+        dropdownValues: stage.dropdownValues,
+        targetScene: stage.refillScene,
+        targetValues: stage.refillValues,
+        refillPositions: stage.refillPositions,
+        sceneName: `game002 cascade step[${stage.stepIndex}] selective refill`,
+      });
+    }
+  }
+
+  startCompletion(_plan: SlotRoundExecutionPlan): void {
+    const round = this.requireRound();
+    this.#cascadePlayer.clear();
+    if (round.winAmountRaw <= 0) {
+      this.#completionComplete = true;
+      this.#activity = "idle";
+      return;
+    }
+    this.#completionComplete = false;
+    this.#activity = "completion";
+    this.#winAmountPlayer.start({
+      betAmountRaw: round.betAmountRaw,
+      winAmountRaw: round.winAmountRaw,
+    });
+  }
+
+  isCompletionComplete(): boolean {
+    if (!this.#completionComplete) return false;
+    this.#activity = "idle";
+    return true;
+  }
+
+  private createDropPlanOptions(
+    stage: Game002CascadeSequence["cascades"][number],
+  ): Parameters<Game002ReelRuntime["createCascadeDropPlan"]>[0] {
+    return {
+      sourceScene: stage.removedSourceScene,
+      sourceValues: stage.removedSourceValues,
+      settledScene: stage.dropdownScene,
+      settledValues: stage.dropdownValues,
+      targetScene: stage.refillScene,
+      targetValues: stage.refillValues,
+      refillPositions: stage.refillPositions,
+      canDropOccurrence: ({ code }) =>
+        canGame002CascadeDropSymbol(
+          resolveGame002CascadeSymbol(this.#runtime, code),
+        ),
+      motion: GAME002_CASCADE_MOTION,
+    };
+  }
+
+  private findWinStage(stepIndex: number): Game002WinRemoveStage {
+    const sequence = this.requireRound().sequence;
+    const stage =
+      stepIndex === 0
+        ? sequence.initial.winStage
+        : sequence.cascades.find(
+            (candidate) => candidate.stepIndex === stepIndex,
+          )?.winStage;
+    if (!stage)
+      throw new Error(`game002 step[${stepIndex}] win stage is missing.`);
+    return stage;
+  }
+
+  private findCascadeStage(
+    stepIndex: number,
+  ): Game002CascadeSequence["cascades"][number] {
+    const stage = this.requireRound().sequence.cascades.find(
+      (candidate) => candidate.stepIndex === stepIndex,
+    );
+    if (!stage)
+      throw new Error(`game002 cascade step[${stepIndex}] is missing.`);
+    return stage;
+  }
+
+  private requireActiveStage(): Game002CascadeSequence["cascades"][number] {
+    if (!this.#activeStage)
+      throw new Error("game002 cascade stage is not active.");
+    return this.#activeStage;
+  }
+
+  private requireRound() {
+    if (!this.#round)
+      throw new Error("game002 round target is not configured.");
+    return this.#round;
+  }
+}
+
+function assertGame002PlanMatchesSequence(
+  plan: SlotRoundExecutionPlan,
+  sequence: Game002CascadeSequence,
+): void {
+  if (!sceneEquals(plan.initial.scene, sequence.initial.spinScene))
+    throw new Error(
+      "game002 shared plan initial scene diverged from sequence.",
+    );
+  if (!matrixEquals(plan.initial.values, sequence.initial.spinValues))
+    throw new Error(
+      "game002 shared plan initial values diverged from sequence.",
+    );
+  if (!sceneEquals(plan.final.scene, sequence.finalScene))
+    throw new Error("game002 shared plan final scene diverged from sequence.");
+  if (!matrixEquals(plan.final.values, sequence.finalValues))
+    throw new Error("game002 shared plan final values diverged from sequence.");
+  const plannedCascadeIndexes = plan.steps
+    .filter((step) => step.kind === "dropdown")
+    .map((step) => step.stepIndex);
+  const sequenceCascadeIndexes = sequence.cascades.map(
+    (stage) => stage.stepIndex,
+  );
+  if (
+    plannedCascadeIndexes.length !== sequenceCascadeIndexes.length ||
+    plannedCascadeIndexes.some(
+      (value, index) => value !== sequenceCascadeIndexes[index],
+    )
+  )
+    throw new Error(
+      "game002 shared plan cascade order diverged from sequence.",
+    );
+  assertGame002WinPlanMatchesStage(
+    plan,
+    sequence.initial.winStage,
+    sequence.initial.stepIndex,
+  );
+  for (const stage of sequence.cascades) {
+    const dropdown = plan.steps.find(
+      (step): step is SlotRoundDropdownStepPlan =>
+        step.kind === "dropdown" && step.stepIndex === stage.stepIndex,
+    );
+    const refill = plan.steps.find(
+      (step): step is SlotRoundRefillStepPlan =>
+        step.kind === "refill" && step.stepIndex === stage.stepIndex,
+    );
+    if (
+      !dropdown ||
+      !sceneEquals(dropdown.input.scene, stage.removedSourceScene) ||
+      !matrixEquals(dropdown.input.values, stage.removedSourceValues) ||
+      !sceneEquals(dropdown.output.scene, stage.dropdownScene) ||
+      !matrixEquals(dropdown.output.values, stage.dropdownValues)
+    )
+      throw new Error(
+        `game002 shared plan step[${stage.stepIndex}] dropdown trace diverged from sequence.`,
+      );
+    if (
+      !refill ||
+      !sceneEquals(refill.input.scene, stage.dropdownScene) ||
+      !matrixEquals(refill.input.values, stage.dropdownValues) ||
+      !sceneEquals(refill.output.scene, stage.refillScene) ||
+      !matrixEquals(refill.output.values, stage.refillValues) ||
+      refill.movements.length !== stage.refillPositions.length
+    )
+      throw new Error(
+        `game002 shared plan step[${stage.stepIndex}] refill trace diverged from sequence.`,
+      );
+    assertGame002WinPlanMatchesStage(plan, stage.winStage, stage.stepIndex);
+  }
+}
+
+function assertGame002WinPlanMatchesStage(
+  plan: SlotRoundExecutionPlan,
+  stage: Game002WinRemoveStage | undefined,
+  stepIndex: number,
+): void {
+  const planned = plan.steps.find(
+    (step): step is SlotRoundWinStepPlan =>
+      step.kind === "win" && step.stepIndex === stepIndex,
+  );
+  if (!stage) {
+    if (planned)
+      throw new Error(
+        `game002 shared plan step[${stepIndex}] has an unexpected win trace.`,
+      );
+    return;
+  }
+  if (
+    !planned ||
+    !sceneEquals(planned.input.scene, stage.sourceScene) ||
+    !matrixEquals(planned.input.values, stage.sourceValues) ||
+    !sceneEquals(planned.output.scene, stage.outputScene) ||
+    !matrixEquals(planned.output.values, stage.outputValues) ||
+    planned.groups.length !== stage.groups.length
+  )
+    throw new Error(
+      `game002 shared plan step[${stepIndex}] win/remove trace diverged from sequence.`,
+    );
+  for (const [groupIndex, group] of stage.groups.entries()) {
+    const plannedGroup = planned.groups[groupIndex];
+    if (
+      !plannedGroup ||
+      plannedGroup.amount !== group.amount ||
+      !samePositionTrace(plannedGroup.positions, group.positions) ||
+      !samePositionTrace(plannedGroup.removePositions, group.removePositions)
+    )
+      throw new Error(
+        `game002 shared plan step[${stepIndex}] group[${groupIndex}] trace diverged from sequence.`,
+      );
+  }
+}
+
+function samePositionTrace(
+  left: readonly { readonly x: number; readonly y: number }[],
+  right: readonly { readonly x: number; readonly y: number }[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (position, index) =>
+        position.x === right[index]?.x && position.y === right[index]?.y,
+    )
+  );
+}
+
+function matrixEquals(
+  left: readonly (readonly unknown[])[],
+  right: readonly (readonly unknown[])[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every(
+      (column, x) =>
+        column.length === right[x]?.length &&
+        column.every((value, y) => value === right[x]?.[y]),
+    )
+  );
 }
 
 function assertCascadeResources(

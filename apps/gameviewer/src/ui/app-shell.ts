@@ -6,7 +6,12 @@ import {
   type SceneLayoutSlotTemplateConfigV1,
   type SlotRoundFlowSuggestions,
 } from "@slotclientengine/gameframeworks/scene-layout-template";
-import { importLayoutFile, importServerAuthoringFile } from "../io/imports.js";
+import {
+  importLayoutFile,
+  importServerAuthoringFile,
+  importTemplateConfigFile,
+  serializeTemplateConfig,
+} from "../io/imports.js";
 import { GameViewerStore } from "../model/store.js";
 import { launchRuntimeWindow } from "../runtime/launch-channel.js";
 
@@ -26,6 +31,14 @@ export function createGameViewerAppShell(root: HTMLElement): void {
   const serverInput = requireElement<HTMLInputElement>(
     root,
     "[data-server-input]",
+  );
+  const configInput = requireElement<HTMLInputElement>(
+    root,
+    "[data-config-input]",
+  );
+  const configExportButton = requireElement<HTMLButtonElement>(
+    root,
+    "[data-config-export]",
   );
   const methodSelect = requireElement<HTMLSelectElement>(
     root,
@@ -50,6 +63,7 @@ export function createGameViewerAppShell(root: HTMLElement): void {
     if (
       event.target === layoutInput ||
       event.target === serverInput ||
+      event.target === configInput ||
       event.target === methodSelect
     )
       return;
@@ -91,6 +105,30 @@ export function createGameViewerAppShell(root: HTMLElement): void {
       serverInput.value = "";
       renderError(root, error);
     });
+  });
+
+  configInput.addEventListener("change", () => {
+    const file = configInput.files?.[0];
+    if (!file) return;
+    void withBusy(root, "正在严格导入运行配置…", async () => {
+      const config = await importTemplateConfigFile(file);
+      applyTemplateConfig(form, config);
+      invalidate();
+      updateConditionalSections(root);
+      renderNotice(root, "运行配置已导入；credential 保持当前 session 值。");
+    }).catch((error) => {
+      configInput.value = "";
+      renderError(root, error);
+    });
+  });
+
+  configExportButton.addEventListener("click", () => {
+    try {
+      downloadTemplateConfig(serializeTemplateConfig(buildConfig(form)));
+      renderNotice(root, "已导出严格运行配置（不包含 credential）。");
+    } catch (error) {
+      renderError(root, error);
+    }
   });
 
   methodSelect.addEventListener("change", () => {
@@ -278,7 +316,7 @@ function buildConfig(form: HTMLFormElement): SceneLayoutSlotTemplateConfigV1 {
     presentation: {
       reel,
       flow: {
-        version: 1,
+        version: 2,
         symbolStates: {
           normal: value(form, "normalState"),
           win: value(form, "winState"),
@@ -295,9 +333,266 @@ function buildConfig(form: HTMLFormElement): SceneLayoutSlotTemplateConfigV1 {
           maxFallSeconds: numberValue(form, "maxFallSeconds"),
           settleSeconds: numberValue(form, "settleSeconds"),
         },
+        collect: {
+          startPresentationsWithEmphasis: checked(
+            form,
+            "collectStartsWithEmphasis",
+          ),
+          formatter: {
+            kind: "decimal-cents",
+            prefix: value(form, "collectAmountPrefix"),
+          },
+          itemOrder: "row-major",
+          amountText: {
+            yOffsetRatioFromCellCenter: numberValue(
+              form,
+              "collectAmountYOffsetRatio",
+            ),
+            fontSize: numberValue(form, "collectAmountFontSize"),
+            fill: value(form, "collectFill"),
+            stroke: value(form, "collectStroke"),
+            strokeWidth: numberValue(form, "collectStrokeWidth"),
+          },
+          summary: {
+            countDurationSeconds: numberValue(
+              form,
+              "collectCountDurationSeconds",
+            ),
+            startIntervalSeconds: numberValue(
+              form,
+              "collectStartIntervalSeconds",
+            ),
+            position: {
+              x: numberValue(form, "collectSummaryX"),
+              y: numberValue(form, "collectSummaryY"),
+            },
+            textStyle: {
+              fontSize: numberValue(form, "collectSummaryFontSize"),
+              fontWeight: 900,
+              fill: value(form, "collectFill"),
+              stroke: value(form, "collectStroke"),
+              strokeWidth: numberValue(form, "collectStrokeWidth"),
+            },
+          },
+        },
       },
     },
   });
+}
+
+function applyTemplateConfig(
+  form: HTMLFormElement,
+  config: SceneLayoutSlotTemplateConfigV1,
+): void {
+  assertTemplateConfigRepresentable(config);
+  const bet = config.wager.betOptions[config.wager.initialBetIndex];
+  if (!bet) throw new Error("运行配置 initialBetIndex 没有对应投注项。");
+  setValue(form, "title", config.title);
+  setValue(form, "serverUrl", config.live.serverUrl);
+  setValue(form, "gamecode", config.live.gamecode);
+  setValue(form, "clienttype", config.live.clienttype);
+  setValue(form, "jurisdiction", config.live.jurisdiction ?? "");
+  setValue(form, "language", config.live.language ?? "");
+  setValue(form, "requestTimeoutMs", String(config.live.requestTimeoutMs));
+  setValue(form, "bet", String(bet.bet));
+  setValue(form, "lines", String(bet.lines));
+  setValue(form, "times", bet.times === undefined ? "" : String(bet.times));
+
+  setValue(form, "spinComponent", config.round.components.spin);
+  setValue(form, "winComponents", config.round.components.wins.join(", "));
+  setValue(
+    form,
+    "valueComponents",
+    config.round.components.valueUpdates?.join(", ") ?? "",
+  );
+  const cascade = config.round.cascade;
+  setChecked(form, "cascadeEnabled", Boolean(cascade));
+  setValue(form, "removeComponent", cascade?.components.remove ?? "");
+  setValue(form, "dropdownComponent", cascade?.components.dropdown ?? "");
+  setValue(form, "refillComponent", cascade?.components.refill ?? "");
+  setValue(form, "stepComponent", cascade?.components.stepMarker ?? "");
+  setValue(form, "emptyCode", String(cascade?.symbols.emptyCode ?? -1));
+  setValue(
+    form,
+    "removeExcludedSymbols",
+    cascade?.symbols.removeExcludedSymbols.join(", ") ?? "",
+  );
+  setValue(
+    form,
+    "dropHeldSymbols",
+    cascade?.symbols.dropHeldSymbols.join(", ") ?? "",
+  );
+  setValue(
+    form,
+    "valueSymbols",
+    cascade?.symbols.valueSymbols.join(", ") ?? "",
+  );
+  setValue(
+    form,
+    "companionSymbols",
+    cascade?.symbols.sequentialWinCompanionSymbols.join(", ") ?? "",
+  );
+
+  const reel = config.presentation.reel;
+  setValue(form, "reelKind", reel.kind);
+  setValue(form, "direction", reel.direction);
+  setValue(
+    form,
+    "speed",
+    String(
+      reel.kind === "standard"
+        ? reel.speedSymbolsPerSecond
+        : reel.timing.speedSymbolsPerSecond,
+    ),
+  );
+  setValue(
+    form,
+    "minimumCycles",
+    String(
+      reel.kind === "standard"
+        ? reel.minimumSpinCycles
+        : reel.timing.minimumSpinCycles,
+    ),
+  );
+  setValue(form, "bounceStrength", String(reel.bounceStrength));
+  if (reel.kind === "standard") {
+    setValue(form, "baseDurationMs", String(reel.baseDurationMs));
+    setValue(form, "startDelayMs", String(reel.startDelayMs));
+    setValue(form, "stopDelayMs", String(reel.stopDelayMs));
+  } else {
+    setValue(form, "cellStartStepMs", String(reel.timing.startStepMs));
+    setValue(form, "cellStopStepMs", String(reel.timing.stopStepMs));
+    setValue(
+      form,
+      "settleAfterLastStartMs",
+      String(reel.timing.settleAfterLastStartMs),
+    );
+  }
+
+  const flow = config.presentation.flow;
+  setValue(form, "normalState", flow.symbolStates.normal);
+  setValue(form, "winState", flow.symbolStates.win);
+  setValue(form, "removeState", flow.symbolStates.remove);
+  setValue(form, "dimmingAlpha", String(flow.dimmingAlpha));
+  setChecked(form, "popupEnabled", flow.popup.enabled);
+  setValue(form, "emphasisFadeInMs", String(flow.cascade.emphasisFadeInMs));
+  setValue(form, "emphasisHoldMs", String(flow.cascade.emphasisHoldMs));
+  setValue(form, "emphasisFadeOutMs", String(flow.cascade.emphasisFadeOutMs));
+  setValue(form, "baseFallSeconds", String(flow.cascade.baseFallSeconds));
+  setValue(form, "perRowFallSeconds", String(flow.cascade.perRowFallSeconds));
+  setValue(form, "maxFallSeconds", String(flow.cascade.maxFallSeconds));
+  setValue(form, "settleSeconds", String(flow.cascade.settleSeconds));
+  if (flow.version === 2) {
+    const collect = flow.collect;
+    setChecked(
+      form,
+      "collectStartsWithEmphasis",
+      collect.startPresentationsWithEmphasis,
+    );
+    setValue(form, "collectAmountPrefix", collect.formatter.prefix);
+    setValue(
+      form,
+      "collectAmountYOffsetRatio",
+      String(collect.amountText.yOffsetRatioFromCellCenter),
+    );
+    setValue(
+      form,
+      "collectAmountFontSize",
+      String(collect.amountText.fontSize),
+    );
+    setValue(form, "collectFill", collect.amountText.fill);
+    setValue(form, "collectStroke", collect.amountText.stroke);
+    setValue(
+      form,
+      "collectStrokeWidth",
+      String(collect.amountText.strokeWidth),
+    );
+    setValue(
+      form,
+      "collectCountDurationSeconds",
+      String(collect.summary.countDurationSeconds),
+    );
+    setValue(
+      form,
+      "collectStartIntervalSeconds",
+      String(collect.summary.startIntervalSeconds),
+    );
+    setValue(form, "collectSummaryX", String(collect.summary.position.x));
+    setValue(form, "collectSummaryY", String(collect.summary.position.y));
+    setValue(
+      form,
+      "collectSummaryFontSize",
+      String(collect.summary.textStyle.fontSize),
+    );
+  }
+}
+
+function assertTemplateConfigRepresentable(
+  config: SceneLayoutSlotTemplateConfigV1,
+): void {
+  if (
+    config.wager.betOptions.length !== 1 ||
+    config.wager.initialBetIndex !== 0 ||
+    config.wager.autonums !== undefined
+  )
+    throw new Error(
+      "当前配置器只可无损导入单一投注项且不含 autonums 的运行配置。",
+    );
+  const expectedCashFields = ["cashWin64", "cashWin"];
+  const expectedCoinFields = ["coinWin64", "coinWin"];
+  for (const [label, amount] of [
+    ["round.amount", config.round.amount],
+    ...(config.round.cascade
+      ? ([["round.cascade.amount", config.round.cascade.amount]] as const)
+      : []),
+  ] as const) {
+    if (
+      amount.cashUnit !== "cents" ||
+      !sameStrings(amount.cashFields, expectedCashFields) ||
+      !sameStrings(amount.coinFields ?? [], expectedCoinFields)
+    )
+      throw new Error(
+        `${label} 不是当前配置器可无损表示的 cash/coin cents 字段配置。`,
+      );
+  }
+  const flow = config.presentation.flow;
+  if (flow.version !== 2)
+    throw new Error(
+      "当前配置器只可无损导入 presentation.flow V2；V1 仍可由 framework API 使用。",
+    );
+  if (
+    flow.collect.amountText.fill !== flow.collect.summary.textStyle.fill ||
+    flow.collect.amountText.stroke !== flow.collect.summary.textStyle.stroke ||
+    flow.collect.amountText.strokeWidth !==
+      flow.collect.summary.textStyle.strokeWidth
+  )
+    throw new Error(
+      "当前配置器要求 collect item 与 summary 使用相同 fill/stroke/strokeWidth。",
+    );
+}
+
+function sameStrings(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+}
+
+function downloadTemplateConfig(contents: string): void {
+  const url = URL.createObjectURL(
+    new Blob([contents], { type: "application/json;charset=utf-8" }),
+  );
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "gameviewer.runtime-config.json";
+    anchor.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 function shellMarkup(): string {
@@ -384,6 +679,10 @@ function shellMarkup(): string {
 
         <section class="panel" id="step-4">
           ${sectionHeader("04", "逻辑配置", "base components + optional cascade block")}
+          <div class="field-grid two">
+            ${field("导入严格运行配置", `<input type="file" accept=".json" data-config-input />`)}
+            <div class="field action-field"><span>配置快照</span><button type="button" class="secondary" data-config-export>导出 JSON（无 credential）</button></div>
+          </div>
           <div class="field-grid three">
             ${inputField("Main spin component", "spinComponent", "", "text")}
             ${inputField("Win components（逗号分隔）", "winComponents", "", "text")}
@@ -445,6 +744,20 @@ function shellMarkup(): string {
                 ${inputField("Per-row fall (s)", "perRowFallSeconds", "0.05", "number")}
                 ${inputField("Max fall (s)", "maxFallSeconds", "1", "number")}
                 ${inputField("Settle (s)", "settleSeconds", "0.1", "number")}
+              </div>
+              <label class="switch-row"><input type="checkbox" name="collectStartsWithEmphasis" checked /><span></span><strong>Collect opening 与 emphasis 同边界启动</strong></label>
+              <div class="field-grid two">
+                ${inputField("Collect cadence (s)", "collectStartIntervalSeconds", "0.3", "number")}
+                ${inputField("Summary count (s)", "collectCountDurationSeconds", "0.35", "number")}
+                ${inputField("Summary X (reel local)", "collectSummaryX", "360", "number")}
+                ${inputField("Summary Y (reel local)", "collectSummaryY", "1116", "number")}
+                ${inputField("Summary font size", "collectSummaryFontSize", "48", "number")}
+                ${inputField("Item amount font size", "collectAmountFontSize", "38", "number")}
+                ${inputField("Item amount Y ratio", "collectAmountYOffsetRatio", "0.22", "number")}
+                ${inputField("Amount prefix", "collectAmountPrefix", "$", "text")}
+                ${inputField("Collect fill", "collectFill", "#fff7d6", "text")}
+                ${inputField("Collect stroke", "collectStroke", "#5a2500", "text")}
+                ${inputField("Collect stroke width", "collectStrokeWidth", "6", "number")}
               </div>
             </div>
           </div>

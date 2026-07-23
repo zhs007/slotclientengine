@@ -1,4 +1,9 @@
 import type { SlotRoundFlowProfileV1 } from "@slotclientengine/logiccore";
+import {
+  parseSymbolPackageManifest,
+  parseSymbolStateTextureManifest,
+  type SymbolPackageResource,
+} from "../symbol/index.js";
 import { SceneLayoutError } from "./errors.js";
 import type {
   SceneLayoutManifestV1,
@@ -59,17 +64,60 @@ export interface SlotFlowPresentationProfileV1 {
   };
 }
 
+export interface SlotFlowPresentationProfileV2 {
+  readonly version: 2;
+  readonly symbolStates: SlotFlowPresentationProfileV1["symbolStates"];
+  readonly dimmingAlpha: number;
+  readonly popup: SlotFlowPresentationProfileV1["popup"];
+  readonly cascade: SlotFlowPresentationProfileV1["cascade"];
+  readonly collect: {
+    readonly startPresentationsWithEmphasis: boolean;
+    readonly formatter: {
+      readonly kind: "decimal-cents";
+      readonly prefix: string;
+    };
+    readonly itemOrder: "row-major";
+    readonly amountText: {
+      readonly yOffsetRatioFromCellCenter: number;
+      readonly fontSize: number;
+      readonly fill: string;
+      readonly stroke: string;
+      readonly strokeWidth: number;
+    };
+    readonly summary: {
+      readonly countDurationSeconds: number;
+      readonly startIntervalSeconds: number;
+      readonly position: {
+        readonly x: number;
+        readonly y: number;
+      };
+      readonly textStyle: {
+        readonly fontSize: number;
+        readonly fontWeight: 900;
+        readonly fill: string;
+        readonly stroke: string;
+        readonly strokeWidth: number;
+      };
+    };
+  };
+}
+
+export type SlotFlowPresentationProfile =
+  | SlotFlowPresentationProfileV1
+  | SlotFlowPresentationProfileV2;
+
 export interface SlotReelPresentationCapabilities {
   readonly spinToScene: true;
   readonly visibleSymbolStates: true;
   readonly removeOccurrences: boolean;
   readonly dropdownOccurrences: boolean;
   readonly refillOccurrences: boolean;
+  readonly sequentialCollect: boolean;
 }
 
 export interface SlotTemplatePresentationProfileV1 {
   readonly reel: SlotReelPresentationProfileV1;
-  readonly flow: SlotFlowPresentationProfileV1;
+  readonly flow: SlotFlowPresentationProfile;
 }
 
 export interface SlotTemplateCompatibilitySnapshot {
@@ -106,6 +154,7 @@ export function getSlotReelPresentationCapabilities(
     removeOccurrences: true,
     dropdownOccurrences: true,
     refillOccurrences: true,
+    sequentialCollect: false,
   });
 }
 
@@ -129,9 +178,13 @@ export function validateSlotTemplateCompatibility(options: {
     throw new SceneLayoutError(
       `Reel presentation "${options.presentation.reel.kind}" is incompatible with layout renderMode "${binding.renderMode}".`,
     );
-  const capabilities = getSlotReelPresentationCapabilities(
+  const baseCapabilities = getSlotReelPresentationCapabilities(
     options.presentation.reel,
   );
+  const capabilities = Object.freeze({
+    ...baseCapabilities,
+    sequentialCollect: options.presentation.flow.version === 2,
+  });
   if (
     options.roundFlow.cascade &&
     (!capabilities.removeOccurrences ||
@@ -149,6 +202,12 @@ export function validateSlotTemplateCompatibility(options: {
   if (options.presentation.flow.popup.enabled && !popupAvailable)
     throw new SceneLayoutError(
       "Popup presentation is enabled but the initial game mode has no explicit award-celebration popup binding.",
+    );
+  const valueSymbols =
+    options.roundFlow.cascade?.symbols.valueSymbols ?? Object.freeze([]);
+  if (valueSymbols.length > 0 && !capabilities.sequentialCollect)
+    throw new SceneLayoutError(
+      "Value-symbol rounds require presentation.flow version 2 collect capability.",
     );
   if ("symbolPackages" in options.packageResource) {
     const resource = resolveInitialSymbolResource(
@@ -170,6 +229,10 @@ export function validateSlotTemplateCompatibility(options: {
         "round.cascade.symbols.valueSymbols",
         options.roundFlow.cascade?.symbols.valueSymbols ?? [],
       ],
+      [
+        "round.cascade.symbols.sequentialWinCompanionSymbols",
+        options.roundFlow.cascade?.symbols.sequentialWinCompanionSymbols ?? [],
+      ],
     ] as const) {
       for (const symbol of symbols)
         if (!names.has(symbol))
@@ -178,11 +241,30 @@ export function validateSlotTemplateCompatibility(options: {
           );
     }
     const values = resource?.valuePresentationResources ?? {};
-    for (const symbol of options.roundFlow.cascade?.symbols.valueSymbols ?? [])
-      if (!values[symbol])
+    for (const symbol of valueSymbols) {
+      const definition = resource?.symbolManifest.symbols[symbol];
+      if (!values[symbol] && !definition?.valuePresentation)
         throw new SceneLayoutError(
           `Value symbol "${symbol}" has no manifest-owned value presentation binding.`,
         );
+      if (
+        definition?.cascadeWinPresentation?.playback.mode !==
+        "sequentialCollect"
+      )
+        throw new SceneLayoutError(
+          `Value symbol "${symbol}" has no manifest-owned sequential collect presentation.`,
+        );
+    }
+    for (const symbol of options.roundFlow.cascade?.symbols
+      .sequentialWinCompanionSymbols ?? []) {
+      const playback =
+        resource?.symbolManifest.symbols[symbol]?.cascadeWinPresentation
+          ?.playback;
+      if (playback?.mode !== "group")
+        throw new SceneLayoutError(
+          `Sequential companion symbol "${symbol}" has no manifest-owned group presentation.`,
+        );
+    }
   }
   return Object.freeze({
     renderMode: binding.renderMode,
@@ -194,6 +276,114 @@ export function validateSlotTemplateCompatibility(options: {
     initialMode: initialModeId,
     popupAvailable,
   });
+}
+
+export function validateInspectedSlotTemplateCompatibility(options: {
+  readonly roundFlow: SlotRoundFlowProfileV1;
+  readonly presentation: SlotTemplatePresentationProfileV1;
+  readonly packageInput: {
+    readonly manifest: SceneLayoutManifestV1;
+    readonly files: ReadonlyMap<string, Uint8Array>;
+  };
+}): SlotTemplateCompatibilitySnapshot {
+  const binding = resolveInitialBinding(options.packageInput.manifest);
+  if (!binding)
+    return validateSlotTemplateCompatibility({
+      roundFlow: options.roundFlow,
+      presentation: options.presentation,
+      packageResource: { manifest: options.packageInput.manifest },
+    });
+  const packageManifest = parseSymbolPackageManifest(
+    parseJsonBytes(
+      requireInspectionBytes(
+        options.packageInput.files,
+        binding.manifest,
+        binding.manifest,
+      ),
+      binding.manifest,
+    ),
+  );
+  const symbolManifestPath = resolveInspectionEntryPath(
+    binding.manifest,
+    packageManifest.entrypoints.symbolManifest,
+    options.packageInput.files,
+  );
+  const symbolManifest = parseSymbolStateTextureManifest(
+    parseJsonBytes(
+      requireInspectionBytes(
+        options.packageInput.files,
+        symbolManifestPath,
+        packageManifest.entrypoints.symbolManifest,
+      ),
+      symbolManifestPath,
+    ),
+  );
+  const displaySymbols = Object.freeze(Object.keys(symbolManifest.symbols));
+  const symbolResource = {
+    displaySymbols,
+    symbolManifest,
+    valuePresentationResources: Object.freeze(
+      Object.fromEntries(
+        displaySymbols.flatMap((symbol) =>
+          symbolManifest.symbols[symbol]?.valuePresentation
+            ? [[symbol, Object.freeze({})] as const]
+            : [],
+        ),
+      ),
+    ),
+  } as unknown as SymbolPackageResource;
+  const direct = options.packageInput.manifest.symbolPackage === binding;
+  const bindingId = direct
+    ? null
+    : (Object.entries(options.packageInput.manifest.symbolPackages ?? {}).find(
+        ([, candidate]) => candidate === binding,
+      )?.[0] ?? null);
+  return validateSlotTemplateCompatibility({
+    roundFlow: options.roundFlow,
+    presentation: options.presentation,
+    packageResource: {
+      manifest: options.packageInput.manifest,
+      symbolPackage: direct ? symbolResource : undefined,
+      symbolPackages: bindingId === null ? {} : { [bindingId]: symbolResource },
+    } as unknown as SceneLayoutPackageResource,
+  });
+}
+
+function resolveInspectionEntryPath(
+  manifestPath: string,
+  entryPath: string,
+  files: ReadonlyMap<string, Uint8Array>,
+): string {
+  if (files.has(entryPath)) return entryPath;
+  const slash = manifestPath.lastIndexOf("/");
+  const resolved =
+    slash < 0 ? entryPath : `${manifestPath.slice(0, slash + 1)}${entryPath}`;
+  return resolved;
+}
+
+function requireInspectionBytes(
+  files: ReadonlyMap<string, Uint8Array>,
+  path: string,
+  label: string,
+): Uint8Array {
+  const bytes = files.get(path);
+  if (!bytes)
+    throw new SceneLayoutError(
+      `Scene layout inspection is missing "${label}" at "${path}".`,
+    );
+  return bytes;
+}
+
+function parseJsonBytes(bytes: Uint8Array, path: string): unknown {
+  try {
+    return JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+    ) as unknown;
+  } catch (error) {
+    throw new SceneLayoutError(
+      `${path} is invalid JSON: ${error instanceof Error ? error.message : String(error)}.`,
+    );
+  }
 }
 
 function resolveInitialBinding(
@@ -324,15 +514,18 @@ function parseReel(value: unknown): SlotReelPresentationProfileV1 {
   );
 }
 
-function parseFlow(value: unknown): SlotFlowPresentationProfileV1 {
-  const record = strictRecord(value, "presentation.flow", [
+function parseFlow(value: unknown): SlotFlowPresentationProfile {
+  const record = asRecord(value, "presentation.flow");
+  if (record.version !== 1 && record.version !== 2)
+    throw new SceneLayoutError("presentation.flow.version must be 1 or 2.");
+  assertKeys(record, "presentation.flow", [
     "version",
     "symbolStates",
     "dimmingAlpha",
     "popup",
     "cascade",
+    ...(record.version === 2 ? ["collect"] : []),
   ]);
-  version(record.version, "presentation.flow.version");
   const states = strictRecord(
     record.symbolStates,
     "presentation.flow.symbolStates",
@@ -362,8 +555,7 @@ function parseFlow(value: unknown): SlotFlowPresentationProfileV1 {
     throw new SceneLayoutError(
       "presentation.flow.dimmingAlpha must be between 0 and 1.",
     );
-  return {
-    version: 1,
+  const common = {
     symbolStates: {
       normal: nonBlank(states.normal, "presentation.flow.symbolStates.normal"),
       win: nonBlank(states.win, "presentation.flow.symbolStates.win"),
@@ -401,6 +593,136 @@ function parseFlow(value: unknown): SlotFlowPresentationProfileV1 {
         "presentation.flow.cascade.settleSeconds",
       ),
     },
+  };
+  if (record.version === 1)
+    return {
+      version: 1,
+      ...common,
+    };
+  const collect = strictRecord(record.collect, "presentation.flow.collect", [
+    "startPresentationsWithEmphasis",
+    "formatter",
+    "itemOrder",
+    "amountText",
+    "summary",
+  ]);
+  if (typeof collect.startPresentationsWithEmphasis !== "boolean")
+    throw new SceneLayoutError(
+      "presentation.flow.collect.startPresentationsWithEmphasis must be a boolean.",
+    );
+  if (collect.itemOrder !== "row-major")
+    throw new SceneLayoutError(
+      'presentation.flow.collect.itemOrder must be "row-major".',
+    );
+  const formatter = strictRecord(
+    collect.formatter,
+    "presentation.flow.collect.formatter",
+    ["kind", "prefix"],
+  );
+  if (formatter.kind !== "decimal-cents")
+    throw new SceneLayoutError(
+      'presentation.flow.collect.formatter.kind must be "decimal-cents".',
+    );
+  if (typeof formatter.prefix !== "string")
+    throw new SceneLayoutError(
+      "presentation.flow.collect.formatter.prefix must be a string.",
+    );
+  const amountText = parseTextStyle(
+    collect.amountText,
+    "presentation.flow.collect.amountText",
+    true,
+  );
+  const summary = strictRecord(
+    collect.summary,
+    "presentation.flow.collect.summary",
+    ["countDurationSeconds", "startIntervalSeconds", "position", "textStyle"],
+  );
+  const position = strictRecord(
+    summary.position,
+    "presentation.flow.collect.summary.position",
+    ["x", "y"],
+  );
+  const textStyle = parseTextStyle(
+    summary.textStyle,
+    "presentation.flow.collect.summary.textStyle",
+    false,
+  );
+  return {
+    version: 2,
+    ...common,
+    collect: {
+      startPresentationsWithEmphasis: collect.startPresentationsWithEmphasis,
+      formatter: {
+        kind: "decimal-cents",
+        prefix: formatter.prefix,
+      },
+      itemOrder: "row-major",
+      amountText: {
+        yOffsetRatioFromCellCenter: amountText.yOffsetRatioFromCellCenter!,
+        fontSize: amountText.fontSize,
+        fill: amountText.fill,
+        stroke: amountText.stroke,
+        strokeWidth: amountText.strokeWidth,
+      },
+      summary: {
+        countDurationSeconds: positive(
+          summary.countDurationSeconds,
+          "presentation.flow.collect.summary.countDurationSeconds",
+        ),
+        startIntervalSeconds: positive(
+          summary.startIntervalSeconds,
+          "presentation.flow.collect.summary.startIntervalSeconds",
+        ),
+        position: {
+          x: finite(position.x, "presentation.flow.collect.summary.position.x"),
+          y: finite(position.y, "presentation.flow.collect.summary.position.y"),
+        },
+        textStyle: {
+          fontSize: textStyle.fontSize,
+          fontWeight: 900,
+          fill: textStyle.fill,
+          stroke: textStyle.stroke,
+          strokeWidth: textStyle.strokeWidth,
+        },
+      },
+    },
+  };
+}
+
+function parseTextStyle(
+  value: unknown,
+  path: string,
+  includeOffset: boolean,
+): {
+  readonly yOffsetRatioFromCellCenter?: number;
+  readonly fontSize: number;
+  readonly fill: string;
+  readonly stroke: string;
+  readonly strokeWidth: number;
+} {
+  const record = strictRecord(value, path, [
+    ...(includeOffset ? ["yOffsetRatioFromCellCenter"] : []),
+    ...(!includeOffset ? ["fontWeight"] : []),
+    "fontSize",
+    "fill",
+    "stroke",
+    "strokeWidth",
+  ]);
+  if (!includeOffset && record.fontWeight !== 900)
+    throw new SceneLayoutError(`${path}.fontWeight must be 900.`);
+  return {
+    ...(includeOffset
+      ? {
+          yOffsetRatioFromCellCenter: finite(
+            record.yOffsetRatioFromCellCenter,
+            `${path}.yOffsetRatioFromCellCenter`,
+          ),
+        }
+      : {}),
+    fontSize: positive(record.fontSize, `${path}.fontSize`),
+    fill: nonBlank(record.fill, `${path}.fill`),
+    stroke: nonBlank(record.stroke, `${path}.stroke`),
+    strokeWidth: nonNegative(record.strokeWidth, `${path}.strokeWidth`),
   };
 }
 

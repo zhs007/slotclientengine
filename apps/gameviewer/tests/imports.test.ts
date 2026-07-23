@@ -20,7 +20,110 @@ vi.mock(
 import {
   importLayoutFile,
   importServerAuthoringFile,
+  importTemplateConfigFile,
+  serializeTemplateConfig,
 } from "../src/io/imports.js";
+
+function templateConfig() {
+  return {
+    kind: "scene-layout-slot-template",
+    version: 1,
+    title: "fixture",
+    live: {
+      serverUrl: "wss://example.com/",
+      gamecode: "code",
+      clienttype: "web",
+      requestTimeoutMs: 1000,
+    },
+    wager: {
+      betOptions: [{ bet: 1, lines: 30 }],
+      initialBetIndex: 0,
+    },
+    round: {
+      kind: "slot-round-flow",
+      version: 1,
+      components: { spin: "spin", wins: ["wins"], valueUpdates: ["values"] },
+      cascade: {
+        kind: "cascade",
+        version: 1,
+        components: {
+          remove: "remove",
+          dropdown: "dropdown",
+          refill: "refill",
+        },
+        symbols: {
+          emptyCode: -1,
+          removeExcludedSymbols: ["HOLD"],
+          dropHeldSymbols: ["HOLD"],
+          valueSymbols: ["VALUE"],
+          sequentialWinCompanionSymbols: ["HOLD"],
+        },
+        amount: {
+          cashFields: ["cashWin64", "cashWin"],
+          coinFields: ["coinWin64", "coinWin"],
+          cashUnit: "cents",
+        },
+      },
+      amount: {
+        cashFields: ["cashWin64", "cashWin"],
+        coinFields: ["coinWin64", "coinWin"],
+        cashUnit: "cents",
+      },
+    },
+    presentation: {
+      reel: {
+        kind: "standard",
+        version: 1,
+        direction: "forward",
+        speedSymbolsPerSecond: 20,
+        minimumSpinCycles: 3,
+        baseDurationMs: 800,
+        startDelayMs: 0,
+        stopDelayMs: 100,
+        bounceStrength: 0,
+      },
+      flow: {
+        version: 2,
+        symbolStates: { normal: "normal", win: "win", remove: "remove" },
+        dimmingAlpha: 0.5,
+        popup: { enabled: false },
+        cascade: {
+          emphasisFadeInMs: 100,
+          emphasisHoldMs: 1000,
+          emphasisFadeOutMs: 100,
+          baseFallSeconds: 0.2,
+          perRowFallSeconds: 0.05,
+          maxFallSeconds: 1,
+          settleSeconds: 0.1,
+        },
+        collect: {
+          startPresentationsWithEmphasis: true,
+          formatter: { kind: "decimal-cents", prefix: "$" },
+          itemOrder: "row-major",
+          amountText: {
+            yOffsetRatioFromCellCenter: 0.2,
+            fontSize: 24,
+            fill: "#fff",
+            stroke: "#000",
+            strokeWidth: 2,
+          },
+          summary: {
+            countDurationSeconds: 0.3,
+            startIntervalSeconds: 0.2,
+            position: { x: 10, y: 20 },
+            textStyle: {
+              fontSize: 30,
+              fontWeight: 900,
+              fill: "#fff",
+              stroke: "#000",
+              strokeWidth: 2,
+            },
+          },
+        },
+      },
+    },
+  };
+}
 
 describe("gameviewer file imports", () => {
   beforeEach(() => {
@@ -70,5 +173,32 @@ describe("gameviewer file imports", () => {
     expect(parseServerGameAuthoringSummary).toHaveBeenCalledWith({
       game: "sample",
     });
+  });
+
+  it("strictly imports and deterministically re-exports runtime config JSON", async () => {
+    await expect(
+      importTemplateConfigFile(new File(["{}"], "config.txt")),
+    ).rejects.toThrow(/\.json/);
+    await expect(
+      importTemplateConfigFile(new File(["{"], "config.json")),
+    ).rejects.toThrow(/运行配置 JSON 无效/);
+    await expect(
+      importTemplateConfigFile(
+        new File(
+          [JSON.stringify({ ...templateConfig(), hiddenFallback: true })],
+          "config.json",
+        ),
+      ),
+    ).rejects.toThrow(/hiddenFallback is not supported/);
+
+    const parsed = await importTemplateConfigFile(
+      new File([JSON.stringify(templateConfig())], "config.JSON"),
+    );
+    const serialized = serializeTemplateConfig(parsed);
+    expect(Object.isFrozen(parsed)).toBe(true);
+    expect(serialized.endsWith("\n")).toBe(true);
+    expect(JSON.parse(serialized)).toEqual(parsed);
+    expect(serialized).not.toContain("token");
+    expect(serialized).toContain('"sequentialWinCompanionSymbols"');
   });
 });

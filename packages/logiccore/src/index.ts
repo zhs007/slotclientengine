@@ -20,7 +20,9 @@ export {
 export {
   parseSlotRoundFlowProfile,
   validateSlotRoundFlowCatalogCompatibility,
+  validateSlotRoundFlowSymbolCatalog,
 } from "./slot-round-flow";
+export { compileSlotRoundExecutionPlan } from "./slot-round-plan";
 export * from "./types";
 export type {
   ServerAuthoringParameter,
@@ -36,7 +38,24 @@ export type {
   SlotCashAmountField,
   SlotCoinAmountField,
   SlotRoundFlowProfileV1,
+  SlotRoundFlowProfileParseContext,
 } from "./slot-round-flow";
+export type {
+  SlotRoundCapability,
+  SlotRoundCompileContext,
+  SlotRoundDropdownStepPlan,
+  SlotRoundExecutionPlan,
+  SlotRoundExecutionStep,
+  SlotRoundMovementPlan,
+  SlotRoundOccurrence,
+  SlotRoundOccurrenceSnapshot,
+  SlotRoundPosition,
+  SlotRoundPresentationValue,
+  SlotRoundRefillStepPlan,
+  SlotRoundValueMatrix,
+  SlotRoundWinGroupPlan,
+  SlotRoundWinStepPlan,
+} from "./slot-round-plan";
 export type {
   ComponentWinResultGroup,
   ComponentWinResultGroupOptions,

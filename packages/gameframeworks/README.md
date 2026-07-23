@@ -242,6 +242,12 @@ UI spinning -> netcore spin -> GameLogic -> UI presenting -> adapter.playSpin(lo
 
 因此 `framework.spin()` resolve 时，必要 collect 已完成并且状态已回到可安全下一次 spin 的 `idle`。
 
+## 配置驱动 round facade
+
+本包重导出 logiccore 的 strict round-flow parser、immutable execution-plan compiler 与相关类型，供游戏和 scene-layout template 通过默认 facade 接入。framework 不复制 server round 解释或 renderer movement；配置模板把规范化 `GameLogic` 先交给 compiler，再把冻结 plan 交给 rendercore coordinator。游戏专属 amount/value resolver 与 typed extension 仍由 app 注入。
+
+scene-layout readiness 使用 ZIP inspection 得到的已解析 filename-key 文件检查 active symbol manifest、value presentation、sequential collect 与 popup capability，不提前创建 Pixi、图片 texture 或 Worker；真正启动 runtime 时才构造并独立销毁渲染资源。
+
 ## 验收命令
 
 ```bash

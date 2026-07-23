@@ -560,3 +560,11 @@ manifest 扩展 state 只能声明不覆盖 base preset 的 `once/once` 或 `sta
 grid-cell 级联以 `-1` 作为中间态空洞。`createGridCellCascadeDropPlan()` 同时校验 remove 后 source、服务器 settled/dropdown 和 refill 后完整 target，按列稳定匹配 `(symbol code, presentation value)` occurrence，并把既有 occurrence 与从棋盘上方创建的 refill occurrence 编入同一批 unified fall movement。`createGridCellCascadeDropdownPlan()` 复用同一验证和 occurrence pairing，但只保留 existing movement，完成后允许精确 holes；调用方随后可用 effect sweep 与既有 selective `spin(positions)` 填洞，未选 occurrence 不重建、不 appear。`deriveGridCellCascadeSettledValues()` 使用相同 occurrence 顺序与 fixed predicate，从 source scene/value 和 settled scene 确定性推导 settled values。调用方可注入 `canDropOccurrence` 固定特殊 occurrence；其它 symbol 可从固定 symbol 后面穿过，渲染前后关系统一服从 manifest `renderPriority`。fall 期间只在整个 `RenderGridCellReelSet` 上启用一个完整 grid rect mask，活动 symbol 自身不绑定 mask。非法 hole/value、上移、顺序漂移、refill closure、selective position 或 fixed occurrence 漂移均显式失败。
 
 `scripts/generate-symbol-value-vite-resources.mjs` 为 consumer 生成 tier Spine、`reelStates` PNG，以及 image 模式完整值图片或 image-string 模式 nested manifest/glyph 的 Vite 可静态分析精确 imports、module maps 和 loading URL；共享 dependency 去重，decoded glyph 尺寸也在生成时核对。`--check` 检查漂移。状态贴图 generator 会严格保留并验证三种互斥分支，确保重生成不丢 tier binding、不写回 value-managed symbol 的顶层 normal/state。
+
+## 通用 round coordinator
+
+`createSlotRoundCoordinator()` 只消费 logiccore 已编译且冻结的 execution plan 和 capability target。启动前会完整预检 `spin / visible-symbol-states / remove / dropdown / refill / sequential-collect` 能力，预检成功后才执行 next-spin cleanup 和 initial mutation；执行异常统一进入 fatal cleanup，destroy/重复 cleanup 幂等。
+
+standard `RenderReelSet` 与 grid-cell `RenderGridCellReelSet` 都提供真实 cascade movement：release 后保留 surviving renderer identity、presentation value 和等价 animation playback，dropdown 按编译 movement 落位，refill 只创建 hole occurrence。scene-layout configured adapter 使用同一 coordinator，不再用最终 scene reset 跳过 remove/drop/refill。金额 resolver、symbol policy、component 名和游戏 extension 仍留在 app/config。
+
+`presentation.flow` V1 保持 Task 123 已发布语义；只有显式 V2 才提供 configured sequential collect。V2 的 cadence、decimal-cents formatter、item amount 文本和 summary 布局均为严格可序列化配置，实际 state/playback/value binding 仍由 active symbol manifest 拥有。value symbol 配合 V1 或缺少 manifest-owned `sequentialCollect` 时在 readiness/preflight 失败。
