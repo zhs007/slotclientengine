@@ -103,6 +103,13 @@ describe("Leo game loading UI", () => {
       (root.querySelector(".sce-leo-loading__horizontal") as HTMLElement).style
         .clipPath,
     ).toBe("inset(0 50% 0 0)");
+    expect(
+      (root.querySelector(".sce-leo-loading__radial") as HTMLElement).style
+        .clipPath,
+    ).toContain("50% 35%");
+    expect(styleText(root)).toContain(
+      "transition: opacity 500ms ease; will-change: clip-path, opacity",
+    );
     ui.update({ phase: "error", progress: 99, error: "live failed" });
     expect(root.querySelector('[role="alert"]')?.textContent).toBe(
       "live failed",
@@ -185,4 +192,14 @@ function createRoot(): HTMLDivElement {
   const root = document.createElement("div");
   document.body.append(root);
   return root;
+}
+
+function styleText(root: HTMLElement): string {
+  const instanceId = root.querySelector<HTMLElement>("[data-sce-leo-loading]")
+    ?.dataset.sceLeoLoading;
+  return (
+    document.head.querySelector<HTMLStyleElement>(
+      `[data-sce-leo-loading-style="${instanceId}"]`,
+    )?.textContent ?? ""
+  );
 }

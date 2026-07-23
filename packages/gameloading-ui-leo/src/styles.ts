@@ -20,7 +20,7 @@ ${selector} .sce-leo-loading__art { position: absolute; inset: 50% auto auto 50%
 ${selector} .sce-leo-loading__logo { animation: sce-leo-slide-in 500ms ease-out; }
 ${selector} .sce-leo-loading__intro, ${selector} .sce-leo-loading__progress-art { opacity: 0; }
 ${selector} .sce-leo-loading__art[data-visible="true"] { opacity: 1; }
-${selector} .sce-leo-loading__progress-art { transition: opacity 300ms ease; }
+${selector} .sce-leo-loading__progress-art { transition: opacity 500ms ease; will-change: clip-path, opacity; }
 ${selector} .sce-leo-loading__error { position: absolute; right: 24px; bottom: 24px; left: 24px; color: #f87171; font: 600 14px/1.5 ui-sans-serif, system-ui, sans-serif; text-align: center; overflow-wrap: anywhere; }
 @keyframes sce-leo-slide-in { from { opacity: 0; transform: translate(-50%, -50%) scale(.8); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 `;
