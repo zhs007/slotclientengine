@@ -350,6 +350,10 @@ export interface SceneLayoutInitialReelScene {
   readonly presentationValues?: readonly (readonly (number | null)[])[];
 }
 
+export interface SceneLayoutMainReelSpinInput extends SceneLayoutInitialReelScene {
+  readonly random: () => number;
+}
+
 export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   init(options?: {
     readonly reels?: Readonly<
@@ -357,6 +361,19 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
     >;
   }): Promise<void>;
   resetReelScene(reelId: "main", input: SceneLayoutInitialReelScene): void;
+  /**
+   * Starts the manifest-selected reel presentation against a server target
+   * while retaining the package-owned public local reel strips.
+   */
+  spinMainReelToScene(input: SceneLayoutMainReelSpinInput): void;
+  isMainReelSpinning(): boolean;
+  requestMainReelSymbolStates(
+    positions: readonly { readonly x: number; readonly y: number }[],
+    state: string,
+  ): void;
+  getMainReelSymbolStateSnapshots(
+    positions: readonly { readonly x: number; readonly y: number }[],
+  ): readonly import("../reel/index.js").RenderVisibleSymbolStateSnapshot[];
   getReelPresentation(reelId: "main"): Container;
   getAwardCelebrationPopup(id: string): AwardCelebrationPlayer;
   /** Returns the manifest-declared mode ids in their stable declaration order. */

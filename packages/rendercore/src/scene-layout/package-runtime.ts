@@ -8,7 +8,10 @@ import {
   RenderGridCellReelSet,
   RenderReelSet,
   createGridCellOrder,
+  createGridCellReelSpinPlan,
   createReelLayout,
+  createReelSpinPlan,
+  createShuffledGridCellReelOffsetMatrix,
   type ReelSymbolRegistry,
   type ReelSymbolRegistryEntry,
   type ReelSymbolRegistryValidation,
@@ -41,12 +44,14 @@ import type {
   SceneLayoutGameModeRequestOptions,
   SceneLayoutGameModeSnapshot,
   SceneLayoutInitialReelScene,
+  SceneLayoutMainReelSpinInput,
   SceneLayoutNodeStateSnapshot,
   SceneLayoutPackageResource,
   SceneLayoutPackageRuntime,
   SceneLayoutSnapshot,
   SceneLayoutSymbolPackageBinding,
 } from "./types.js";
+import type { SlotReelPresentationProfileV1 } from "./template-presentation.js";
 
 type ReelPresentation = RenderReelSet | RenderGridCellReelSet;
 
@@ -94,6 +99,7 @@ type ActiveModeTransition =
 
 export function createSceneLayoutPackageRuntime(options: {
   readonly resource: SceneLayoutPackageResource;
+  readonly reelPresentation?: SlotReelPresentationProfileV1;
   readonly createTransitionPlayer?: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
   }) => RendercoreSpinePlayer;
@@ -104,6 +110,7 @@ export function createSceneLayoutPackageRuntime(options: {
 }): SceneLayoutPackageRuntime {
   return new DefaultSceneLayoutPackageRuntime(
     options.resource,
+    options.reelPresentation,
     options.createTransitionPlayer,
     options.createVideoTransitionPlayer,
   );
@@ -113,6 +120,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   readonly container: Container;
   readonly #resource: SceneLayoutPackageResource;
   readonly #layout;
+  readonly #reelPresentation: SlotReelPresentationProfileV1 | null;
   readonly #createTransitionPlayer: (options: {
     readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
   }) => RendercoreSpinePlayer;
@@ -145,6 +153,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
 
   constructor(
     resource: SceneLayoutPackageResource,
+    reelPresentation: SlotReelPresentationProfileV1 | undefined,
     createTransitionPlayer:
       | ((options: {
           readonly resource: SceneLayoutPackageResource["layout"]["spineResources"][string];
@@ -158,6 +167,7 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
       | undefined,
   ) {
     this.#resource = resource;
+    this.#reelPresentation = reelPresentation ?? null;
     this.#layout = createSceneLayoutRuntime({ resource: resource.layout });
     this.#createTransitionPlayer =
       createTransitionPlayer ??
@@ -326,6 +336,118 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         "Current scene layout game mode has no symbol package binding.",
       );
     this.applyReelScene(reel, binding.resource, binding.binding, input);
+  }
+
+  spinMainReelToScene(input: SceneLayoutMainReelSpinInput): void {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    const binding = this.resolveModeSymbolBinding(
+      this.#stableMode ? this.requireMode(this.#stableMode) : null,
+    );
+    if (!binding)
+      throw new SceneLayoutError(
+        "Scene layout current mode has no active symbol package binding.",
+      );
+    const profile = this.#reelPresentation;
+    if (!profile)
+      throw new SceneLayoutError(
+        "Scene layout runtime was not configured with a reel presentation profile.",
+      );
+    if (profile.kind !== binding.binding.renderMode)
+      throw new SceneLayoutError(
+        `Configured reel kind "${profile.kind}" does not match active renderMode "${binding.binding.renderMode}".`,
+      );
+    if (typeof input.random !== "function")
+      throw new SceneLayoutError("spin random must be a function.");
+    const geometry = this.#resource.manifest.reels.main!;
+    const scene = validateScene(
+      input.scene,
+      geometry.columns,
+      geometry.rows,
+      binding.resource,
+    );
+    const reels = binding.resource.gameConfig.getReels(binding.binding.reelSet);
+    const phases = validatePhases(input.localPhaseYs, geometry.columns, reels);
+    const values = validateValues(
+      input.presentationValues,
+      geometry.columns,
+      geometry.rows,
+    );
+    if (profile.kind === "grid-cell") {
+      if (!(reel instanceof RenderGridCellReelSet))
+        throw new SceneLayoutError(
+          "Grid-cell reel profile resolved a non-grid-cell runtime.",
+        );
+      const order = createGridCellOrder({
+        columns: geometry.columns,
+        rows: geometry.rows,
+        mode: profile.order,
+      });
+      const plan = createGridCellReelSpinPlan({
+        reels,
+        finalYs: phases,
+        targetScene: scene,
+        columns: geometry.columns,
+        rows: geometry.rows,
+        order,
+        cellReelOffsets: createShuffledGridCellReelOffsetMatrix({
+          reels,
+          columns: geometry.columns,
+          rows: geometry.rows,
+          random: input.random,
+        }),
+        direction: profile.direction,
+        timing: profile.timing,
+        dimming: {
+          resolveDimmingAlpha: () => 0,
+          fadeInMs: 0,
+          fadeOutMs: 0,
+        },
+      });
+      reel.spin(plan, {
+        ...(values ? { targetPresentationValues: values } : {}),
+      });
+      return;
+    }
+    if (reel instanceof RenderGridCellReelSet)
+      throw new SceneLayoutError(
+        "Standard reel profile resolved a grid-cell runtime.",
+      );
+    const plan = createReelSpinPlan({
+      reels,
+      finalYs: phases,
+      visibleRows: geometry.rows,
+      direction: profile.direction,
+      minimumSpinCycles: profile.minimumSpinCycles,
+      baseDurationMs: profile.baseDurationMs,
+      speedSymbolsPerSecond: profile.speedSymbolsPerSecond,
+      startDelayMs: profile.startDelayMs,
+      stopDelayMs: profile.stopDelayMs,
+    });
+    reel.spin(plan, { targetVisibleScene: scene });
+  }
+
+  isMainReelSpinning(): boolean {
+    this.assertReady();
+    const reel = this.requireReel("main");
+    return reel instanceof RenderGridCellReelSet
+      ? reel.getSnapshot().spinning
+      : reel.getSnapshot().spinning;
+  }
+
+  requestMainReelSymbolStates(
+    positions: readonly { readonly x: number; readonly y: number }[],
+    state: string,
+  ): void {
+    this.assertReady();
+    this.requireReel("main").requestVisibleSymbolStates(positions, state);
+  }
+
+  getMainReelSymbolStateSnapshots(
+    positions: readonly { readonly x: number; readonly y: number }[],
+  ) {
+    this.assertReady();
+    return this.requireReel("main").getVisibleSymbolStateSnapshots(positions);
   }
 
   getReelPresentation(reelId: "main"): Container {
@@ -1048,6 +1170,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           columnGap: geometry.gap.x,
           rowGap: geometry.gap.y,
         }),
+        ...(this.#reelPresentation?.kind === "standard"
+          ? { bounceStrength: this.#reelPresentation.bounceStrength }
+          : {}),
       });
     }
     return new RenderGridCellReelSet({
@@ -1064,6 +1189,9 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
         rows: geometry.rows,
         mode: "top-down-left-right",
       }),
+      ...(this.#reelPresentation?.kind === "grid-cell"
+        ? { bounceStrength: this.#reelPresentation.bounceStrength }
+        : {}),
     });
   }
 

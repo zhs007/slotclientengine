@@ -17,6 +17,10 @@
 
 - `apps/`：可运行项目
 - `packages/`：内部依赖库
+- `apps/gameviewer` 是纯前端零代码游戏模板配置器与独立 runtime window，不生成游戏源码。layout ZIP 是唯一美术/runtime resource owner；server authoring JSON 只用于遍历 bet method/component 和生成待用户确认的职责候选，不执行 graph、不启动服务器，也不向 runtime 传播原始 JSON 或 server repository reels。新实例只能由 ZIP + versioned strict component/presentation config 建立，禁止新增游戏专属 adapter/resolver/source。
+- Game Viewer 的 reel presentation 与 round flow 是两条独立配置轴：首版 reel 只支持与 layout `renderMode` 匹配的 `standard-v1 | grid-cell-v1`，flow 是 base components + optional `remove -> dropdown -> refill` cascade block。cascade 不属于任一 reel kind，standard、grid-cell 与未来 typed reel 都必须通过 capability contract 匹配 flow requirement；未知 kind/block/extension、缺资源/state/component/value/popup 一律显式失败，不能 fallback。
+- Game Viewer 的 component 语义 parser/profile 在 `packages/logiccore`，production ZIP/reel/symbol/cascade player 与最薄 coordinator 在 `packages/rendercore`，one-call scene-layout template factory 在 `packages/gameframeworks`。`apps/gameviewer/src/runtime` 只能验证一次性 payload并调用 framework facade，不得直接依赖 rendercore/Pixi/Spine/VNI，也不得硬编码具体游戏、component 或 symbol。game003 的 bg-bar/minecart 等主转轮外玩法不是 standard reel 的隐式能力，只能通过后续 versioned typed extension 接入。
+- Game Viewer launch credential 只存在单次 MessageChannel payload，不进入 URL、project、localStorage 或日志；配置器不预连接 WebSocket。新窗口必须重新核对 payload version/nonce/layout hash/readiness，并独立拥有和销毁 session/render resource。
 - `packages/gameframeworks`：后续 slot 游戏默认 facade，整合 UI、网络和逻辑数据流。
 - `packages/gameloading` 只拥有资源加载、进度、可取消的 `99%/100%` 生命周期和可注入 Loading UI contract，不包含具体 DOM/CSS。`packages/gameloading-ui-simple` 与 `packages/gameloading-ui-leo` 是独立原生 DOM/CSS、零运行时依赖实现，不得依赖 React、Pixi、framework 或 network。game002 注入 Leo UI，game003 注入 simple UI；UI 的视觉 gate 不得决定 live session 是否完成，enter 成功后才由 controller 统一 exit/destroy。Wildsheep Loading 不在当前范围，不得增加 alias 或 fallback。
 - `apps/popupeditor`：纯前端获奖庆祝 popup 编辑器；使用扁平 filename-key 资源、统一导入 review、完整 SHA-256 content-addressed owned payload，并只输出 strict `award-celebration` popup package。VNI export bundle 只导入 `purpose=runtime` 的运行发布包：唯一 runtime 自动选择，只有多个 runtime 才显示枚举选择，禁止手输 profile id；`purpose=editing` 不得作为运行资源候选。普通 popup 不在当前范围。

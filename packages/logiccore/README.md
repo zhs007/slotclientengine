@@ -4,6 +4,17 @@
 
 本包只负责协议数据的严格解析和查询，不连接服务器，不依赖 `@slotclientengine/netcore`，也不做 protobuf Any 解码。
 
+## 零代码模板语义配置
+
+`parseServerGameAuthoringSummary()` 只从服务器作者 JSON 提取有序 bet method 和各自
+component catalog；graph edge、port、controller、作者工具 UI 字段和整个 `repository`
+都不会进入返回值。`suggestSlotRoundFlow()` 只产生 `requiresReview` 候选，不执行 graph，
+也不选择 reel presentation。
+
+`parseSlotRoundFlowProfile()` 拥有 strict、versioned 的 base components + optional
+cascade block 语义。cascade 是 `remove -> dropdown -> refill` flow，不属于 standard 或
+grid-cell reel kind；logiccore 不接受 reel kind、动画名、Pixi 对象或 timing callback。
+
 ## 命名数值权重表
 
 game config 可选顶层 `numberWeightTables`，key 必须是 lowercase ASCII kebab-case，每张表是保持顺序的非空 `{ value, weight }[]`。value/weight 都必须是正安全整数、value 不重复，单表 weight 总和不得超过 `2^32`；缺字段按冻结空集合解析。

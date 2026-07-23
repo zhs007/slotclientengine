@@ -2,6 +2,20 @@
 
 `gameframeworks` 是后续 slot 游戏默认 facade。游戏侧默认只依赖 `@slotclientengine/gameframeworks`，由本包整合 `uiframeworks` HUD、`netcore` live session 和 `logiccore` 的 `GameLogic`。
 
+## Scene-layout 零代码模板
+
+`@slotclientengine/gameframeworks/scene-layout-template` 是 app-facing 的唯一模板入口。
+`inspectSceneLayoutTemplateInputs()` 编译 immutable readiness snapshot；
+`createSceneLayoutSlotGameTemplate()` 一次接收 layout ZIP bytes、strict serializable
+config 和 session-only credential，内部组合现有 framework/session/logic/render
+lifecycle。调用方不传 Pixi factory、Spine/VNI player、symbol resolver、reel callback 或
+game-specific adapter。
+
+server authoring JSON 只用于 bet method/component catalog 与 review suggestion，不属于
+runtime 输入。reel presentation (`standard | grid-cell`) 和 round flow (base + optional
+cascade) 是两条独立 versioned 轴；未知 kind/block、缺资源、renderMode mismatch 与
+capability mismatch 都在 mutation 前显式失败。
+
 ## 基本用法
 
 ```ts

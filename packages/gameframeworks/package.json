@@ -16,6 +16,10 @@
       "types": "./dist/static-config/index.d.ts",
       "import": "./dist/static-config/index.js"
     },
+    "./scene-layout-template": {
+      "types": "./dist/scene-layout-template/index.d.ts",
+      "import": "./dist/index.js"
+    },
     "./styles.css": "./dist/gameframeworks.css",
     "./package.json": "./package.json"
   },
@@ -24,7 +28,7 @@
     "README.md"
   ],
   "scripts": {
-    "prepare:deps": "pnpm --filter @slotclientengine/uiframeworks build && pnpm --filter @slotclientengine/netcore build && pnpm --filter @slotclientengine/logiccore build",
+    "prepare:deps": "pnpm --filter @slotclientengine/uiframeworks build && pnpm --filter @slotclientengine/netcore build && pnpm --filter @slotclientengine/logiccore build && pnpm --filter @slotclientengine/rendercore build",
     "build": "pnpm run prepare:deps && vite build && tsc -p tsconfig.build.json --emitDeclarationOnly && tsc -p tsconfig.static-config-build.json",
     "lint": "eslint .",
     "test": "vitest run --coverage",
@@ -35,6 +39,7 @@
   "dependencies": {
     "@slotclientengine/logiccore": "workspace:*",
     "@slotclientengine/netcore": "workspace:*",
+    "@slotclientengine/rendercore": "workspace:*",
     "@slotclientengine/uiframeworks": "workspace:*"
   },
   "devDependencies": {

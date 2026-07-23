@@ -29,6 +29,13 @@ export default defineConfig({
         find: "@slotclientengine/logiccore",
         replacement: resolve(__dirname, "../logiccore/src/index.ts"),
       },
+      {
+        find: "@slotclientengine/rendercore/scene-layout",
+        replacement: resolve(
+          __dirname,
+          "../rendercore/src/scene-layout/index.ts",
+        ),
+      },
     ],
   },
   test: {

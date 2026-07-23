@@ -72,3 +72,22 @@ export type {
   WinResult,
   WinResultPosition,
 } from "./types.js";
+export {
+  createSceneLayoutSlotGameTemplate,
+  getServerBetMethodComponentCatalog,
+  inspectSceneLayoutPackageInput,
+  inspectSceneLayoutTemplateInputs,
+  parseSceneLayoutSlotTemplateConfig,
+  parseServerGameAuthoringSummary,
+  suggestSlotRoundFlow,
+  validateSlotRoundFlowCatalogCompatibility,
+} from "./scene-layout-template/index.js";
+export type {
+  SceneLayoutSlotTemplateConfigV1,
+  SceneLayoutTemplateCredential,
+  SceneLayoutTemplateReadinessSnapshot,
+  ServerGameAuthoringSummary,
+  SlotRoundFlowProfileV1,
+  SlotRoundFlowSuggestions,
+  SlotTemplatePresentationProfileV1,
+} from "./scene-layout-template/index.js";
