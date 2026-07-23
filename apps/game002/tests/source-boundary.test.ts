@@ -97,6 +97,7 @@ describe("game002 source boundary", () => {
     expect(viteConfig.indexOf("@slotclientengine/logiccore")).toBeLessThan(
       viteConfig.indexOf('find: "@slotclientengine/rendercore"'),
     );
+    expect(viteConfig).toContain('include: ["@slotclientengine/netcore"]');
     expect(viteConfig).not.toMatch(
       /\.\.\/\.\.\/packages\/(?:netcore|uiframeworks)\//,
     );
