@@ -7,6 +7,7 @@ export * from "./types.js";
 export * from "./node-driver.js";
 export * from "./blend-mode.js";
 export * from "./coordinates.js";
+export * from "./manual-playback.js";
 export { createCocosNodeDriver } from "./cocos-node-driver.js";
 export { V5GCocosPlayer } from "./player.js";
 

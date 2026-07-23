@@ -1,11 +1,17 @@
 import {
+  Camera,
+  Canvas,
   Color,
+  director,
   Graphics,
+  instantiate,
   Label,
+  Layers,
   Mask,
   Node,
   Quat,
   Rect,
+  RenderTexture,
   Size,
   Sprite,
   SpriteFrame,
@@ -20,6 +26,8 @@ import type {
   CocosBlendOperationName,
 } from "./blend-mode.js";
 import type {
+  V5GCocosCapturedNodeVisual,
+  V5GCocosNodeCaptureOptions,
   V5GCocosNodeDriver,
   V5GCocosNodeTransformSnapshot,
   V5GSize,
@@ -220,6 +228,9 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
     destroySpriteFrameRegion(spriteFrame) {
       spriteFrame.destroy();
     },
+    captureNodeVisual(options) {
+      return captureCocosNodeVisual(options);
+    },
     setSiblingIndex(node, index) {
       node.setSiblingIndex(index);
     },
@@ -301,6 +312,114 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
       }
     },
   };
+}
+
+function captureCocosNodeVisual(
+  options: V5GCocosNodeCaptureOptions<Node>,
+): V5GCocosCapturedNodeVisual<SpriteFrame> {
+  const { node, width, height } = options;
+  if (!isValidCocosNode(node)) {
+    throw new Error("Cocos node visual capture requires a valid host Node.");
+  }
+  if (
+    !Number.isFinite(width) ||
+    width <= 0 ||
+    !Number.isFinite(height) ||
+    height <= 0 ||
+    !Number.isSafeInteger(Math.ceil(width)) ||
+    !Number.isSafeInteger(Math.ceil(height))
+  ) {
+    throw new Error(
+      "Cocos node visual capture width and height must be finite and positive.",
+    );
+  }
+  const scene = director.getScene();
+  if (!scene) {
+    throw new Error(
+      "Cocos node visual capture requires an active Creator scene.",
+    );
+  }
+  const captureRoot = new Node("V5G Node Capture");
+  captureRoot.setPosition(1_000_000, 1_000_000, 0);
+  const renderTexture = new RenderTexture();
+  let spriteFrame: SpriteFrame | null = null;
+  let released = false;
+  try {
+    const pixelWidth = Math.ceil(width);
+    const pixelHeight = Math.ceil(height);
+    renderTexture.reset({ width: pixelWidth, height: pixelHeight });
+
+    const clonedNode = instantiate(node);
+    const captureLayer = Layers.Enum.UI_2D;
+    applyNodeLayerRecursively(clonedNode, captureLayer);
+    clonedNode.active = true;
+    clonedNode.setPosition(0, 0, 0);
+    clonedNode.setScale(1, 1, 1);
+    clonedNode.setRotationFromEuler(0, 0, 0);
+    captureRoot.addChild(clonedNode);
+
+    const cameraNode = new Node("V5G Node Capture Camera");
+    cameraNode.layer = captureLayer;
+    captureRoot.addChild(cameraNode);
+    const camera = cameraNode.addComponent(Camera);
+    camera.projection = Camera.ProjectionType.ORTHO;
+    camera.orthoHeight = height / 2;
+    camera.clearFlags =
+      Camera.ClearFlag.COLOR |
+      Camera.ClearFlag.DEPTH |
+      Camera.ClearFlag.STENCIL;
+    camera.clearColor = new Color(0, 0, 0, 0);
+    camera.visibility = captureLayer;
+    camera.targetTexture = renderTexture;
+    cameraNode.setPosition(0, 0, 1000);
+    const canvasTransform = captureRoot.addComponent(UITransform);
+    canvasTransform.setContentSize(width, height);
+    canvasTransform.setAnchorPoint(0.5, 0.5);
+    const canvas = captureRoot.addComponent(Canvas);
+    canvas.alignCanvasWithScreen = false;
+    canvas.cameraComponent = camera;
+    scene.addChild(captureRoot);
+    camera.render();
+
+    spriteFrame = new SpriteFrame();
+    spriteFrame.reset({
+      texture: renderTexture,
+      rect: new Rect(0, 0, pixelWidth, pixelHeight),
+      originalSize: new Size(width, height),
+      offset: new Vec2(0, 0),
+      isRotate: false,
+    });
+    spriteFrame.flipUVY = true;
+    captureRoot.removeFromParent();
+    captureRoot.destroy();
+    const capturedFrame = spriteFrame;
+    return {
+      spriteFrame: capturedFrame,
+      width,
+      height,
+      release() {
+        if (released) return;
+        released = true;
+        capturedFrame.destroy();
+        renderTexture.destroy();
+      },
+    };
+  } catch (error) {
+    captureRoot.removeFromParent();
+    captureRoot.destroy();
+    spriteFrame?.destroy();
+    renderTexture.destroy();
+    throw new Error(
+      `Cocos node visual capture failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function applyNodeLayerRecursively(node: Node, layer: number): void {
+  node.layer = layer;
+  for (const child of node.children) {
+    applyNodeLayerRecursively(child, layer);
+  }
 }
 
 function isValidCocosNode(node: Node | null | undefined): node is Node {

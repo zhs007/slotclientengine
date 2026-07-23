@@ -54,6 +54,106 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 
 遇到未支持能力会直接抛错。runtime 不创建 missing placeholder，不自动猜测资源路径。未知 V5G blend mode 仍会在通用校验失败；已知 blend mode 如果无法写入 Cocos Sprite blend factor 或 material pass blend state，会在 `init()` / `applyBlendMode(...)` 阶段显式抛错，不会静默退回 normal。
 
+## Manual cyclic playback
+
+`card_carousel_3d` 现在支持由宿主控制的 staged transport：普通时间轴播放 intro，主时间轴停在 authored hold point，carousel 按真实 `player.update(deltaTime)` 持续推进未折返的相位，服务器结果准备完成后安全替换隐藏 carrier，再从当前真实相位进入 fast / stop / hold 并动态对齐选中 carrier。该能力属于 Cocos runtime，不依赖 Pixi 或 `@slotclientengine/vnicore`。
+
+真实 Cocos-compatible Bamboo4 基线是：
+
+```text
+bundle/schema: VNI_0.103
+project: runtime_100/bamboo4.json
+maskCompositeMode: legacy_alpha
+layerId: layer_sequence_mrupvsr0_7
+animationId: anim_module_mrupw05e_8
+cardCount: 13
+authored targetIndex: 0
+intro: 0..1.5s
+continuous hold point: 1.5s
+authored idle preview: 1.5s
+ending: 3..9.6s
+```
+
+完整调用顺序：
+
+```ts
+const session = player.createManualPlaybackSession();
+const cyclic = session
+  .getAnimation({
+    layerId: "layer_sequence_mrupvsr0_7",
+    animationId: "anim_module_mrupw05e_8",
+  })
+  .requireCyclicSelection();
+const descriptor = cyclic.getAuthoredPreviewDescriptor();
+
+await cyclic.setInitialItems(
+  bambooCardNodes.map((node, index) => ({
+    key: `bamboo-card-${index < 10 ? "0" : ""}${index}`,
+    visual: {
+      kind: "node",
+      node,
+      width: 720,
+      height: 720,
+      revision: "initial-v1",
+    },
+  })),
+).ready;
+
+await session.playRange({ range: descriptor.introRange }).completed;
+const hold = session.holdTimeline({
+  at: descriptor.continuousHoldPoint,
+});
+cyclic.startContinuousPhase({
+  phaseId: descriptor.continuousPhaseId,
+});
+
+const result = await requestServerResult();
+await cyclic.prepareSelection({
+  selectedItem: result.selectedItem,
+}).committed;
+
+hold.release();
+cyclic.startResolvePhase();
+await session.playRange({
+  range: descriptor.endingRange,
+  preserveRuntimeAnimationState: true,
+}).completed;
+session.destroy();
+```
+
+服务器选中初始 13 张中的已有卡时不需要重复提交 visual：
+
+```ts
+const result = {
+  selectedItem: { key: "bamboo-card-07" },
+};
+```
+
+服务器返回新卡或同 key 的新 revision 时，必须提交完整 host `Node` 和显式逻辑尺寸：
+
+```ts
+const result = {
+  selectedItem: {
+    key: "bamboo-card-server-result",
+    visual: {
+      kind: "node" as const,
+      node: bambooResultNode,
+      width: 720,
+      height: 720,
+      revision: "result-v1",
+    },
+  },
+};
+```
+
+production carrier 不是 Sprite-only contract。`node` 可以是包含 Sprite、Label、嵌套 Node、Spine 或自定义 RenderComponent 的宿主节点根；runtime 不要求 root 带 Sprite，也不会 reparent、停用、修改或销毁宿主节点。`width/height` 必须是 finite positive 的逻辑 art size，runtime 不从首个 Sprite、bounds、文件名或子节点猜测。key、Node identity、尺寸、revision 或捕获能力非法都会显式失败。
+
+默认 Cocos driver 在 initial/replace prepare 边界 clone 完整子树，通过透明 `RenderTexture + Camera + Canvas` 做一次性视觉快照，并把得到的 SpriteFrame 送入与 authored asset 相同的 CardCarousel 切片、曲面、tint、shade 和 depth 路径。捕获不会发生在逐帧热路径；同一 Node + size + revision 使用引用计数缓存。提交失败会回滚，runtime 只销毁自己拥有的 capture、RenderTexture、slice view 和内部节点。
+
+一次性捕获记录的是提交时刻的完整视觉快照，carrier 内嵌 Spine、Label 或自定义组件随后发生的动画不会逐帧同步。需要 carrier 内部动画实时继续播放时，应新增专门的 live-node renderer/mesh contract；本 runtime 不会以逐帧 RenderTexture capture 作为隐式降级。
+
+manual session active 时，`play()`、legacy `playRange()`、`seek()`、`restart()`、`pause()` 和 segmented transport 会显式失败。Cocos runtime 不创建 RAF、Tween、schedule 或 timer；宿主必须继续在 Component `update(deltaTime)` 中调用 `player.update(deltaTime)`。`update(0)` 是合法 no-op，`advanceFor()` 也只累计这些真实 delta。
+
 ## Layer group slot
 
 runtime 初始化后会创建 group-aware tree：

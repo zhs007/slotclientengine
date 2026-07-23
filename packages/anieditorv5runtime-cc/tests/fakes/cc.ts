@@ -101,6 +101,7 @@ export class Node {
   parent: Node | null = null;
   children: Node[] = [];
   destroyed = false;
+  layer = 1;
   position = new Vec3();
   scale = new Vec3(1, 1, 1);
   rotation = new Vec3();
@@ -308,6 +309,7 @@ export class SpriteFrame {
   width?: number;
   height?: number;
   destroyed = false;
+  flipUVY = false;
 
   constructor(width?: number, height?: number) {
     if (width !== undefined && height !== undefined) {
@@ -349,6 +351,75 @@ export class SpriteFrame {
   getOriginalSize(): { width: number; height: number } | undefined {
     return this.originalSize;
   }
+}
+
+export class RenderTexture {
+  width = 0;
+  height = 0;
+  destroyed = false;
+
+  reset(info: { width: number; height: number }): void {
+    this.width = info.width;
+    this.height = info.height;
+  }
+
+  destroy(): void {
+    this.destroyed = true;
+  }
+}
+
+export class Camera {
+  static readonly ProjectionType = { ORTHO: 0 } as const;
+  static readonly ClearFlag = {
+    COLOR: 1,
+    DEPTH: 2,
+    STENCIL: 4,
+  } as const;
+  projection = Camera.ProjectionType.ORTHO;
+  orthoHeight = 0;
+  clearFlags = 0;
+  clearColor = new Color(0, 0, 0, 0);
+  visibility = 0;
+  targetTexture: RenderTexture | null = null;
+  renderCount = 0;
+
+  render(): void {
+    this.renderCount += 1;
+  }
+}
+
+export class Canvas {
+  alignCanvasWithScreen = true;
+  cameraComponent: Camera | null = null;
+}
+
+export const Layers = {
+  Enum: { UI_2D: 1 << 25 },
+} as const;
+
+const fakeScene = new Node("Scene");
+
+export const director = {
+  getScene(): Node {
+    return fakeScene;
+  },
+};
+
+export function instantiate(node: Node): Node {
+  const clone = new Node(node.name);
+  clone.active = node.active;
+  clone.layer = node.layer;
+  clone.setPosition(node.position.x, node.position.y, node.position.z);
+  clone.setScale(node.scale.x, node.scale.y, node.scale.z);
+  clone.setRotationFromEuler(
+    node.eulerAngles.x,
+    node.eulerAngles.y,
+    node.eulerAngles.z,
+  );
+  for (const child of node.children) {
+    clone.addChild(instantiate(child));
+  }
+  return clone;
 }
 
 export class SpriteAtlas {

@@ -1,0 +1,81 @@
+import { describe, expect, it } from "vitest";
+import { director, Label, Node, Sprite, SpriteFrame } from "cc";
+import { createCocosNodeDriver } from "../../src/cocos/cocos-node-driver";
+
+describe("Cocos Node visual capture", () => {
+  it("captures a complete complex subtree without reparenting or destroying the host", () => {
+    const driver = createCocosNodeDriver();
+    const hostParent = new Node("Host Parent");
+    const root = new Node("Card Content Root");
+    const art = new Node("art Sprite");
+    const artFrame = new SpriteFrame();
+    artFrame.originalSize = { width: 100, height: 50 };
+    artFrame.rect = { x: 0, y: 0, width: 100, height: 50 };
+    artFrame.texture = {};
+    art.addComponent(Sprite).spriteFrame = artFrame;
+    const value = new Node("value Label");
+    value.addComponent(Label).string = "Bamboo 07";
+    const decoration = new Node("decoration");
+    decoration.addChild(new Node("nested renderable child"));
+    root.addChild(art);
+    root.addChild(value);
+    root.addChild(decoration);
+    hostParent.addChild(root);
+    root.setPosition(14, -9, 0);
+    root.setScale(1.2, 0.8, 1);
+    const scene = director.getScene();
+    if (!scene) throw new Error("fake Cocos scene is missing");
+    const sceneChildrenBefore = [...scene.children];
+
+    const captured = driver.captureNodeVisual?.({
+      node: root,
+      width: 100,
+      height: 50,
+      revision: "result-v1",
+    });
+    if (!captured || captured instanceof Promise) {
+      throw new Error("fake Cocos capture must be synchronous");
+    }
+
+    expect(captured.width).toBe(100);
+    expect(captured.height).toBe(50);
+    expect(captured.spriteFrame.originalSize).toEqual({
+      width: 100,
+      height: 50,
+    });
+    expect(captured.spriteFrame.flipUVY).toBe(true);
+    expect(root.parent).toBe(hostParent);
+    expect(root.position).toMatchObject({ x: 14, y: -9 });
+    expect(root.scale).toMatchObject({ x: 1.2, y: 0.8 });
+    expect(root.children).toEqual([art, value, decoration]);
+    expect(root.isValid).toBe(true);
+    expect(scene.children).toEqual(sceneChildrenBefore);
+
+    captured.release();
+    captured.release();
+    expect(
+      (captured.spriteFrame as SpriteFrame & { destroyed: boolean }).destroyed,
+    ).toBe(true);
+    expect(root.isValid).toBe(true);
+  });
+
+  it("fails before capture for missing scenes, invalid nodes, and invalid sizes", () => {
+    const driver = createCocosNodeDriver();
+    const destroyed = new Node("destroyed");
+    destroyed.destroy();
+    expect(() =>
+      driver.captureNodeVisual?.({
+        node: destroyed,
+        width: 100,
+        height: 50,
+      }),
+    ).toThrow("valid host Node");
+    expect(() =>
+      driver.captureNodeVisual?.({
+        node: new Node("bad size"),
+        width: 0,
+        height: 50,
+      }),
+    ).toThrow("finite and positive");
+  });
+});

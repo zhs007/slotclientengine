@@ -7,6 +7,7 @@ import type {
   V5GAssetConfig,
   V5GExportProfileConfig,
   V5GCocosAssetSource,
+  V5GCocosCyclicSelectionItem,
   V5GCocosForceStopParticlesOptions,
   V5GCocosSegmentedPlaybackEndOptions,
   V5GCocosSpriteAtlasAssetSource,
@@ -70,6 +71,21 @@ describe("standalone runtime import", () => {
 
     expect(cocosForceStopOptions.suppressUntilNextPlayback).toBe(true);
     expect(cocosSegmentedEndOptions.forceStopParticles).toBe(true);
+  });
+
+  it("exports the Cocos Node carrier contract", () => {
+    const item: V5GCocosCyclicSelectionItem<{ readonly id: string }> = {
+      key: "bamboo-card-07",
+      visual: {
+        kind: "node",
+        node: { id: "complex-node-root" },
+        width: 720,
+        height: 720,
+        revision: "result-v1",
+      },
+    };
+    expect(item.visual.kind).toBe("node");
+    expect(item.visual.width).toBe(720);
   });
 
   it("exports safe_glow sample types with inherited blend modes", () => {

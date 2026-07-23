@@ -4,6 +4,7 @@ import {
   createV5GCocosPlayer,
   validateCocosV5GProject,
   type V5GCocosPlaybackEventContext,
+  type V5GCocosManualPlaybackSession,
   type V5GCocosPlaybackState,
   type V5GCocosPlayer,
 } from "./anieditorv5runtime-cc";
@@ -30,7 +31,20 @@ export class V5GPreview extends Component {
   @property(Number)
   segmentedLoopEnd = 0;
 
+  @property(Boolean)
+  manualBambooPreview = false;
+
+  // Each entry is a host-owned complex subtree:
+  // Card Content Root -> art Sprite + value Label + decoration child Node.
+  @property([Node])
+  bambooCarrierNodes: Node[] = [];
+
+  // Optional new server-result card. Leave empty to select existing card 07.
+  @property(Node)
+  bambooReplacementNode: Node | null = null;
+
   private player: V5GCocosPlayer | null = null;
+  private manualSession: V5GCocosManualPlaybackSession<Node> | null = null;
   private slotProbeDispose: (() => void) | null = null;
   private lastPlaybackEventId = "";
   private completedPlaybackTasks = 0;
@@ -98,7 +112,9 @@ export class V5GPreview extends Component {
     this.player.onPlaybackComplete(() => {
       this.completedPlaybackTasks += 1;
     });
-    if (this.segmentedPreview) {
+    if (this.manualBambooPreview) {
+      void this.runBambooManualPreview();
+    } else if (this.segmentedPreview) {
       const loopStart = Math.max(
         0,
         Math.min(project.stage.duration, this.segmentedLoopStart),
@@ -118,6 +134,80 @@ export class V5GPreview extends Component {
         range: { unit: "time", start: 0, end: previewEndTime },
         loop: false,
       });
+    }
+  }
+
+  private async runBambooManualPreview(): Promise<void> {
+    const player = this.player;
+    if (!player) throw new Error("V5GPreview player is not initialized.");
+    if (this.bambooCarrierNodes.length !== 13) {
+      throw new Error(
+        "V5GPreview manual Bamboo fixture requires exactly 13 complex carrier Nodes.",
+      );
+    }
+    const session = player.createManualPlaybackSession();
+    this.manualSession = session;
+    try {
+      const cyclic = session
+        .getAnimation({
+          layerId: "layer_sequence_mrupvsr0_7",
+          animationId: "anim_module_mrupw05e_8",
+        })
+        .requireCyclicSelection();
+      const descriptor = cyclic.getAuthoredPreviewDescriptor();
+      await cyclic.setInitialItems(
+        this.bambooCarrierNodes.map((node, index) => ({
+          key: `bamboo-card-${index < 10 ? "0" : ""}${index}`,
+          visual: {
+            kind: "node",
+            node,
+            width: 720,
+            height: 720,
+            revision: "initial-v1",
+          },
+        })),
+      ).ready;
+
+      await session.playRange({ range: descriptor.introRange }).completed;
+      const hold = session.holdTimeline({
+        at: descriptor.continuousHoldPoint,
+      });
+      cyclic.startContinuousPhase({
+        phaseId: descriptor.continuousPhaseId,
+      });
+
+      // Fixture for waiting on user/server work without timers: update(deltaTime)
+      // advances this operation while the authored timeline remains at 1.5s.
+      await session.advanceFor({ durationSeconds: 1.5 }).completed;
+      const transaction = this.bambooReplacementNode
+        ? cyclic.prepareSelection({
+            selectedItem: {
+              key: "bamboo-server-result-new",
+              visual: {
+                kind: "node",
+                node: this.bambooReplacementNode,
+                width: 720,
+                height: 720,
+                revision: "result-v1",
+              },
+            },
+          })
+        : cyclic.prepareSelection({
+            selectedItem: { key: "bamboo-card-07" },
+          });
+      await transaction.committed;
+
+      hold.release();
+      cyclic.startResolvePhase();
+      await session.playRange({
+        range: descriptor.endingRange,
+        preserveRuntimeAnimationState: true,
+      }).completed;
+    } finally {
+      session.destroy();
+      if (this.manualSession === session) {
+        this.manualSession = null;
+      }
     }
   }
 
@@ -150,6 +240,8 @@ export class V5GPreview extends Component {
   onDestroy(): void {
     this.slotProbeDispose?.();
     this.slotProbeDispose = null;
+    this.manualSession?.destroy();
+    this.manualSession = null;
     this.player?.destroy();
     this.player = null;
   }

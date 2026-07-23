@@ -23,6 +23,20 @@ export interface V5GCocosLineSample {
 
 export type V5GCocosNodeTransformSnapshot = unknown;
 
+export interface V5GCocosNodeCaptureOptions<TNode> {
+  readonly node: TNode;
+  readonly width: number;
+  readonly height: number;
+  readonly revision?: string | number;
+}
+
+export interface V5GCocosCapturedNodeVisual<TSpriteFrame> {
+  readonly spriteFrame: TSpriteFrame;
+  readonly width: number;
+  readonly height: number;
+  release(): void;
+}
+
 export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
   createNode(name: string): TNode;
   appendChild(parent: TNode, child: TNode): void;
@@ -55,6 +69,11 @@ export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
     region: V5GSpriteFrameRegion,
   ): TSpriteFrame;
   destroySpriteFrameRegion?(spriteFrame: TSpriteFrame): void;
+  captureNodeVisual?(
+    options: V5GCocosNodeCaptureOptions<TNode>,
+  ):
+    | V5GCocosCapturedNodeVisual<TSpriteFrame>
+    | Promise<V5GCocosCapturedNodeVisual<TSpriteFrame>>;
   setSiblingIndex?(node: TNode, index: number): void;
   createLineNode?(name: string): TNode;
   updateLines?(node: TNode, lines: readonly V5GCocosLineSample[]): void;

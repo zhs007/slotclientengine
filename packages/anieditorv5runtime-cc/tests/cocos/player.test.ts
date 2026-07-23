@@ -60,6 +60,10 @@ interface FakeNodeTransformSnapshot {
 }
 
 class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
+  captureCount = 0;
+  capturedReleaseCount = 0;
+  failCaptureAt = 0;
+
   createNode(name: string): FakeNode {
     return new FakeNode(name);
   }
@@ -191,6 +195,41 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
     spriteFrame.destroyed = true;
   }
 
+  captureNodeVisual(options: {
+    node: FakeNode;
+    width: number;
+    height: number;
+    revision?: string | number;
+  }): {
+    spriteFrame: FakeSpriteFrame;
+    width: number;
+    height: number;
+    release(): void;
+  } {
+    this.captureCount += 1;
+    if (this.captureCount === this.failCaptureAt) {
+      throw new Error("synthetic complete subtree capture failure");
+    }
+    const snapshot = snapshotFakeNodeTree(options.node);
+    const spriteFrame: FakeSpriteFrame = {
+      id: `capture:${this.captureCount}:${String(options.revision)}:${snapshot}`,
+      width: options.width,
+      height: options.height,
+    };
+    let released = false;
+    return {
+      spriteFrame,
+      width: options.width,
+      height: options.height,
+      release: () => {
+        if (released) return;
+        released = true;
+        spriteFrame.destroyed = true;
+        this.capturedReleaseCount += 1;
+      },
+    };
+  }
+
   setSiblingIndex(node: FakeNode, index: number): void {
     if (!node.parent) return;
     const siblings = node.parent.children.filter((child) => child !== node);
@@ -256,6 +295,15 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
       maskNode.maskTarget = null;
     }
   }
+}
+
+function snapshotFakeNodeTree(node: FakeNode): string {
+  return [
+    node.name,
+    node.text,
+    node.spriteFrame?.id ?? "",
+    ...node.children.map((child) => snapshotFakeNodeTree(child)),
+  ].join("|");
 }
 
 function captureFakeLocalTransform(node: FakeNode): FakeNodeTransformSnapshot {
@@ -559,6 +607,45 @@ function cardCarouselAnimation(): V5GAnimationConfig {
       keepOriginal: false,
     },
   };
+}
+
+function manualCardCarouselProject(): V5GProjectConfig {
+  const animation = cardCarouselAnimation();
+  animation.duration = 1.8;
+  animation.params = {
+    ...animation.params,
+    phasePreviewMode: "full_demo",
+    visibleRange: 0.5,
+    hideBack: true,
+  };
+  const project = tinyProject({ animations: [animation] });
+  project.schemaVersion = "VNI_0.095";
+  project.editor.version = "VNI_0.095";
+  project.stage.duration = 2;
+  return project;
+}
+
+function complexCarrierNode(key: string, frame: FakeSpriteFrame): FakeNode {
+  const root = new FakeNode(`${key} Root`);
+  const art = new FakeNode(`${key} Art Sprite`);
+  art.spriteFrame = frame;
+  const value = new FakeNode(`${key} Value Label`);
+  value.text = key;
+  const nested = new FakeNode(`${key} Decoration`);
+  nested.children.push(new FakeNode(`${key} Decoration Child`));
+  root.children.push(art, value, nested);
+  art.parent = root;
+  value.parent = root;
+  nested.parent = root;
+  nested.children[0].parent = nested;
+  return root;
+}
+
+async function flushPromiseJobs(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 function framesFor(project: V5GProjectConfig): Map<string, FakeSpriteFrame> {
@@ -2403,6 +2490,266 @@ describe("V5GCocosPlayer", () => {
       expect(frame?.destroyed).toBe(true);
     }
     expect(frames.get("asset-1")?.destroyed).not.toBe(true);
+  });
+
+  it("runs host-driven manual hold, continuous selection, and dynamic resolve", async () => {
+    const { root, driver, frames, player } = makePlayer(
+      manualCardCarouselProject(),
+    );
+    player.init();
+    const session = player.createManualPlaybackSession();
+    const info = session.listAnimations({
+      capability: "cyclic-selection",
+    });
+    expect(info).toHaveLength(1);
+    expect(info[0].ref).toEqual({
+      layerId: "layer-1",
+      animationId: "cards",
+    });
+    const cyclic = session.getAnimation(info[0].ref).requireCyclicSelection();
+    const descriptor = cyclic.getAuthoredPreviewDescriptor();
+    expect(descriptor).toMatchObject({
+      introRange: { unit: "time", start: 0, end: 0.2 },
+      continuousHoldPoint: { unit: "time", at: 0.2 },
+      endingRange: { unit: "time", start: 0.4, end: 1.8 },
+      authoredTargetCarrierIndex: 1,
+    });
+    const sourceFrame = frames.get("asset-1") as FakeSpriteFrame;
+    const carriers = [0, 1, 2].map((index) => ({
+      key: `bamboo-card-0${index}`,
+      visual: {
+        kind: "node" as const,
+        node: complexCarrierNode(`card-${index}`, sourceFrame),
+        width: 100,
+        height: 50,
+        revision: "initial-v1",
+      },
+    }));
+    await cyclic.setInitialItems(carriers).ready;
+    expect(driver.captureCount).toBe(3);
+
+    const intro = session.playRange({ range: descriptor.introRange });
+    player.update(0.2);
+    await expect(intro.completed).resolves.toEqual({ reason: "complete" });
+    const hold = session.holdTimeline({
+      at: descriptor.continuousHoldPoint,
+    });
+    cyclic.startContinuousPhase({
+      phaseId: descriptor.continuousPhaseId,
+    });
+    const cardRoot = getFirstGroup(root).children.find((node) =>
+      node.name.startsWith("V5G Card Carousel"),
+    ) as FakeNode;
+    const cards = [...cardRoot.children];
+    const slices = cards.map((card) => [...card.children]);
+    for (let frame = 0; frame < 300; frame += 1) {
+      player.update(1 / 60);
+    }
+    expect(driver.captureCount).toBe(3);
+    expect(cardRoot.children).toEqual(cards);
+    expect(cards.map((card) => card.children)).toEqual(slices);
+    expect(cyclic.getState().continuousElapsedSeconds).toBeCloseTo(5, 10);
+
+    await expect(
+      cyclic.prepareSelection({
+        selectedItem: { key: "bamboo-card-01" },
+      }).committed,
+    ).resolves.toEqual({
+      itemKey: "bamboo-card-01",
+      carrierIndex: 1,
+    });
+    hold.release();
+    cyclic.startResolvePhase();
+    const ending = session.playRange({
+      range: descriptor.endingRange,
+      preserveRuntimeAnimationState: true,
+    });
+    player.update(2);
+    await expect(ending.completed).resolves.toEqual({ reason: "complete" });
+    expect(cyclic.getState()).toMatchObject({
+      phase: "complete",
+      selectedCarrierIndex: 1,
+    });
+    session.destroy();
+    expect(driver.capturedReleaseCount).toBe(3);
+    expect(carriers.every((item) => !item.visual.node.destroyed)).toBe(true);
+  });
+
+  it("captures replacement nodes once, commits only on update, and stays bounded for 20 rounds", async () => {
+    const { driver, frames, player } = makePlayer(manualCardCarouselProject());
+    player.init();
+    const session = player.createManualPlaybackSession();
+    const cyclic = session
+      .getAnimation({ layerId: "layer-1", animationId: "cards" })
+      .requireCyclicSelection();
+    const sourceFrame = frames.get("asset-1") as FakeSpriteFrame;
+    cyclic.adoptAuthoredItems();
+    const hold = session.holdTimeline({
+      at: { unit: "time", at: 0.2 },
+    });
+    const initialDiagnostics = player.getRuntimeDiagnostics();
+
+    for (let round = 0; round < 20; round += 1) {
+      cyclic.startContinuousPhase({ phaseId: "idle" });
+      player.update(0.016);
+      const hostNode = complexCarrierNode(`server-card-${round}`, sourceFrame);
+      const transaction = cyclic.prepareSelection({
+        selectedItem: {
+          key: `server-card-${round}`,
+          visual: {
+            kind: "node",
+            node: hostNode,
+            width: 100,
+            height: 50,
+            revision: `result-${round}`,
+          },
+        },
+      });
+      await flushPromiseJobs();
+      expect(cyclic.getState().phase).toBe("selection-pending");
+      player.update(0.016);
+      await expect(transaction.committed).resolves.toMatchObject({
+        itemKey: `server-card-${round}`,
+      });
+      expect(hostNode.destroyed).toBe(false);
+      cyclic.clear();
+      cyclic.adoptAuthoredItems();
+    }
+
+    expect(driver.captureCount).toBe(20);
+    expect(driver.capturedReleaseCount).toBe(20);
+    expect(player.getRuntimeDiagnostics()).toMatchObject({
+      cardCarouselCardPoolSize: initialDiagnostics.cardCarouselCardPoolSize,
+      cardCarouselSlicePoolSize: initialDiagnostics.cardCarouselSlicePoolSize,
+    });
+    hold.release();
+    session.destroy();
+  });
+
+  it("rejects transport conflicts and cancellation without mutating the host node", async () => {
+    const { frames, player } = makePlayer(manualCardCarouselProject());
+    player.init();
+    const session = player.createManualPlaybackSession();
+    expect(() => player.play()).toThrow("manual playback session");
+    expect(() => player.seek(0)).toThrow("manual playback session");
+    expect(() => player.pause()).toThrow("manual playback session");
+    const cyclic = session
+      .getAnimation({ layerId: "layer-1", animationId: "cards" })
+      .requireCyclicSelection();
+    const node = complexCarrierNode(
+      "cancelled",
+      frames.get("asset-1") as FakeSpriteFrame,
+    );
+    const operation = cyclic.setInitialItems(
+      [0, 1, 2].map((index) => ({
+        key: `item-${index}`,
+        visual: {
+          kind: "node" as const,
+          node:
+            index === 0
+              ? node
+              : complexCarrierNode(
+                  `cancelled-${index}`,
+                  frames.get("asset-1") as FakeSpriteFrame,
+                ),
+          width: 100,
+          height: 50,
+        },
+      })),
+    );
+    operation.cancel();
+    await expect(operation.ready).rejects.toMatchObject({
+      name: "V5GCocosPlaybackCancelledError",
+    });
+    await Promise.resolve();
+    expect(node.destroyed).toBe(false);
+    session.destroy();
+  });
+
+  it("rolls back capture failures and rejects invalid carrier contracts", async () => {
+    const { driver, frames, player } = makePlayer(manualCardCarouselProject());
+    player.init();
+    const session = player.createManualPlaybackSession();
+    const cyclic = session
+      .getAnimation({ layerId: "layer-1", animationId: "cards" })
+      .requireCyclicSelection();
+    const source = frames.get("asset-1") as FakeSpriteFrame;
+    const nodes = [0, 1, 2].map((index) =>
+      complexCarrierNode(`strict-${index}`, source),
+    );
+    expect(() =>
+      cyclic.setInitialItems(
+        nodes.map((node, index) => ({
+          key: index === 2 ? "same-key" : `item-${index}`,
+          visual: {
+            kind: "node" as const,
+            node,
+            width: index === 1 ? 0 : 100,
+            height: 50,
+          },
+        })),
+      ),
+    ).toThrow("finite and positive");
+    expect(() =>
+      cyclic.setInitialItems(
+        nodes.map((node, index) => ({
+          key: "duplicate",
+          visual: {
+            kind: "node" as const,
+            node,
+            width: 100,
+            height: 50,
+          },
+        })),
+      ),
+    ).toThrow("Duplicate");
+    expect(() =>
+      cyclic.setInitialItems(
+        [nodes[0], nodes[0], nodes[2]].map((node, index) => ({
+          key: `unique-${index}`,
+          visual: {
+            kind: "node" as const,
+            node,
+            width: 100,
+            height: 50,
+          },
+        })),
+      ),
+    ).toThrow("same host Node");
+
+    driver.failCaptureAt = 2;
+    const failed = cyclic.setInitialItems(
+      nodes.map((node, index) => ({
+        key: `valid-${index}`,
+        visual: {
+          kind: "node" as const,
+          node,
+          width: 100,
+          height: 50,
+          revision: "capture-failure",
+        },
+      })),
+    );
+    await expect(failed.ready).rejects.toThrow(
+      "synthetic complete subtree capture failure",
+    );
+    expect(cyclic.getState()).toMatchObject({
+      phase: "uncontrolled",
+      carrierKeys: [],
+    });
+    expect(driver.capturedReleaseCount).toBe(2);
+
+    driver.failCaptureAt = 0;
+    cyclic.adoptAuthoredItems();
+    const operation = session.playRange({
+      range: { unit: "time", start: 0, end: 1 },
+    });
+    player.update(0.1);
+    session.destroy();
+    await expect(operation.completed).rejects.toMatchObject({
+      name: "V5GCocosPlaybackCancelledError",
+    });
+    expect(nodes.every((node) => !node.destroyed)).toBe(true);
   });
 
   it("reuses wave_distort nodes and cached slice frames across seeks", () => {

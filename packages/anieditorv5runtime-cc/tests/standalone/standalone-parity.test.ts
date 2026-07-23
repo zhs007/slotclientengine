@@ -42,6 +42,12 @@ import { sampleProjectAtTime } from "../../src/core/project-sampler";
 import { getSequenceFrameAssetId } from "../../src/core/sequence-layer";
 import { sampleSafeGlowSpritesForLayer } from "../../src/core/safe-glow-sampler";
 import { sampleChaserLightSpritesForLayer } from "../../src/core/chaser-light-sampler";
+import {
+  createVNICyclicMotionSnapshot,
+  createVNICyclicResolvePlan,
+  getVNICyclicCarrierAlignmentErrorTurns,
+  sampleVNICyclicResolveStopTurns,
+} from "../../src/core/cyclic-selection";
 import * as standalone from "../../standalone/anieditorv5runtime-cc";
 import type { SampledProjectState } from "../../src/core/project-sampler";
 import type {
@@ -125,6 +131,51 @@ describe("standalone runtime parity", () => {
         anchorY: 0.5,
       }),
     );
+  });
+
+  it("matches modular cyclic-selection golden behavior", () => {
+    for (const direction of [1, -1] as const) {
+      for (let target = 0; target < 13; target += 1) {
+        const options = {
+          snapshot: createVNICyclicMotionSnapshot({
+            unwrappedTurns: direction * 4.5321,
+            velocityTurnsPerSecond: direction * 0.1,
+            carrierCount: 13,
+          }),
+          selectedCarrierIndex: target,
+          direction,
+          rounds: 2,
+          fastRelativeTurns: direction * 3.4,
+          stopOvershoot: 0.18,
+        };
+        const modularPlan = createVNICyclicResolvePlan(options);
+        const singlePlan = standalone.createVNICyclicResolvePlan({
+          ...options,
+          snapshot: standalone.createVNICyclicMotionSnapshot({
+            unwrappedTurns: direction * 4.5321,
+            velocityTurnsPerSecond: direction * 0.1,
+            carrierCount: 13,
+          }),
+        });
+        expect(singlePlan).toEqual(modularPlan);
+        expect(
+          standalone.sampleVNICyclicResolveStopTurns(singlePlan, 0.4),
+        ).toBe(sampleVNICyclicResolveStopTurns(modularPlan, 0.4));
+        expect(
+          standalone.getVNICyclicCarrierAlignmentErrorTurns(
+            singlePlan.finalTurns,
+            target,
+            13,
+          ),
+        ).toBe(
+          getVNICyclicCarrierAlignmentErrorTurns(
+            modularPlan.finalTurns,
+            target,
+            13,
+          ),
+        );
+      }
+    }
   });
 
   it("matches VNI_0.095 sequence, basic track, and multi_move sampling", () => {

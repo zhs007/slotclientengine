@@ -89,6 +89,7 @@ declare module "cc" {
     active: boolean;
     parent: Node | null;
     children: Node[];
+    layer: number;
     position: Vec3;
     scale: Vec3;
     eulerAngles: Vec3;
@@ -124,6 +125,7 @@ declare module "cc" {
     rect?: { x: number; y: number; width: number; height: number };
     texture?: unknown;
     rotated?: boolean;
+    flipUVY: boolean;
     width?: number;
     height?: number;
     reset(info: {
@@ -135,6 +137,44 @@ declare module "cc" {
     }): void;
     destroy(): void;
   }
+
+  export class RenderTexture {
+    reset(info: { width: number; height: number }): void;
+    destroy(): void;
+  }
+
+  export class Camera {
+    static readonly ProjectionType: { ORTHO: number };
+    static readonly ClearFlag: {
+      COLOR: number;
+      DEPTH: number;
+      STENCIL: number;
+    };
+    projection: number;
+    orthoHeight: number;
+    clearFlags: number;
+    clearColor: Color;
+    visibility: number;
+    targetTexture: RenderTexture | null;
+    render(): void;
+  }
+
+  export class Canvas {
+    alignCanvasWithScreen: boolean;
+    cameraComponent: Camera | null;
+  }
+
+  export const Layers: {
+    Enum: {
+      UI_2D: number;
+    };
+  };
+
+  export const director: {
+    getScene(): Node | null;
+  };
+
+  export function instantiate(node: Node): Node;
 
   export class SpriteAtlas {
     getSpriteFrame(name: string): SpriteFrame | null;

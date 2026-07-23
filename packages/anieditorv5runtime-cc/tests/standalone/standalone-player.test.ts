@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Node, Sprite, SpriteFrame, UITransform, UIOpacity } from "cc";
+import { Label, Node, Sprite, SpriteFrame, UITransform, UIOpacity } from "cc";
 import roundreelData from "../fixtures/roundreel.json";
 import {
   assertV5GProject,
@@ -193,6 +193,55 @@ function chaserLightAnimation(
       keepOriginal: false,
     },
     ...overrides,
+  };
+}
+
+function cardCarouselAnimation(): V5GAnimationConfig {
+  return {
+    id: "cards",
+    type: "card_carousel_3d",
+    startTime: 0,
+    duration: 1.8,
+    enabled: true,
+    seed: 5,
+    params: {
+      phasePreviewMode: "full_demo",
+      cardCount: 3,
+      targetIndex: 1,
+      rounds: 1,
+      direction: 1,
+      introDuration: 0.2,
+      introSpeed: 0.2,
+      revealDirection: 0,
+      revealStagger: 0.02,
+      revealOffsetX: 30,
+      revealScaleFrom: 0.7,
+      demoIdleDuration: 0.2,
+      idleSpeed: 0.2,
+      fastDuration: 0.2,
+      fastSpeed: 2,
+      accelRatio: 0.2,
+      stopDuration: 0.2,
+      holdDuration: 1,
+      stopOvershoot: 0.1,
+      finalPop: 0.1,
+      finalGlow: 0.1,
+      radius: 100,
+      cardSpacing: 1,
+      perspective: 0.7,
+      slices: 4,
+      visibleRange: 0.5,
+      cardSize: 100,
+      centerScale: 1,
+      sideScale: 0.7,
+      sideAlpha: 0.4,
+      shadeStrength: 0.4,
+      curve: 0.5,
+      tilt: 6,
+      sourceOpacity: 0,
+      hideBack: true,
+      keepOriginal: false,
+    },
   };
 }
 
@@ -1357,6 +1406,82 @@ describe("standalone V5GCocosPlayer", () => {
       { startTime: 0, endTime: 2, currentTime: 2, loopIndex: 0 },
     ]);
   });
+
+  it("runs the generated standalone manual cyclic API with complex host nodes", async () => {
+    const project = tinyProject({
+      animations: [cardCarouselAnimation()],
+    });
+    project.schemaVersion = "VNI_0.095";
+    project.editor.version = "VNI_0.095";
+    project.stage.duration = 2;
+    const { frames, player } = makePlayer(project);
+    player.init();
+    const session = player.createManualPlaybackSession();
+    const cyclic = session
+      .getAnimation({ layerId: "layer-1", animationId: "cards" })
+      .requireCyclicSelection();
+    const source = frames.get("asset-1") as SpriteFrame;
+    const hostNodes = [0, 1, 2].map((index) => {
+      const root = new Node(`Bamboo Card ${index}`);
+      const art = new Node("art Sprite");
+      art.addComponent(Sprite).spriteFrame = source;
+      const value = new Node("value Label");
+      value.addComponent(Label).string = String(index);
+      const decoration = new Node("decoration");
+      decoration.addChild(new Node("nested child"));
+      root.addChild(art);
+      root.addChild(value);
+      root.addChild(decoration);
+      return root;
+    });
+    await cyclic.setInitialItems(
+      hostNodes.map((node, index) => ({
+        key: `bamboo-card-0${index}`,
+        visual: {
+          kind: "node",
+          node,
+          width: 100,
+          height: 50,
+          revision: "fixture-v1",
+        },
+      })),
+    ).ready;
+
+    const descriptor = cyclic.getAuthoredPreviewDescriptor();
+    const intro = session.playRange({ range: descriptor.introRange });
+    player.update(0.2);
+    await expect(intro.completed).resolves.toEqual({ reason: "complete" });
+    const hold = session.holdTimeline({
+      at: descriptor.continuousHoldPoint,
+    });
+    cyclic.startContinuousPhase({
+      phaseId: descriptor.continuousPhaseId,
+    });
+    player.update(4.5);
+    await expect(
+      cyclic.prepareSelection({
+        selectedItem: { key: "bamboo-card-01" },
+      }).committed,
+    ).resolves.toEqual({
+      itemKey: "bamboo-card-01",
+      carrierIndex: 1,
+    });
+    hold.release();
+    cyclic.startResolvePhase();
+    const ending = session.playRange({
+      range: descriptor.endingRange,
+      preserveRuntimeAnimationState: true,
+    });
+    player.update(2);
+    await expect(ending.completed).resolves.toEqual({ reason: "complete" });
+    expect(cyclic.getState()).toMatchObject({
+      phase: "complete",
+      continuousElapsedSeconds: 4.5,
+      selectedCarrierIndex: 1,
+    });
+    session.destroy();
+    expect(hostNodes.every((node) => node.isValid)).toBe(true);
+  });
 });
 
 function requireTransform(node: Node): UITransform {
@@ -1441,6 +1566,8 @@ function makeSpriteFrame(width: number, height: number): SpriteFrame {
   frame.width = width;
   frame.height = height;
   frame.originalSize = { width, height };
+  frame.rect = { x: 0, y: 0, width, height };
+  frame.texture = {};
   return frame;
 }
 

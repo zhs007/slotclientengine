@@ -28,6 +28,7 @@ import {
   getCardCarousel3DProgress,
   prepareCardCarousel3D,
   sampleCardCarousel3D,
+  type VNICardCarousel3DMotionSample,
   type VNICardCarousel3DPreparedConfig,
   type VNICardCarousel3DSampleBuffer,
   type VNICardCarousel3DTextureInfo,
@@ -50,7 +51,9 @@ import {
   v5gTransformToCocosPosition,
 } from "./coordinates.js";
 import type {
+  V5GCocosCapturedNodeVisual,
   V5GCocosLineSample,
+  V5GCocosNodeCaptureOptions,
   V5GCocosNodeTransformSnapshot,
   V5GSpriteFrameRegion,
 } from "./node-driver.js";
@@ -88,6 +91,13 @@ import type {
   V5GCocosSegmentedPlaybackEndOptions,
   V5GCocosSegmentedPlaybackPhase,
 } from "./types.js";
+import {
+  V5GCocosManualPlaybackSessionImpl,
+  type V5GCocosAnimationRuntimeRef,
+  type V5GCocosManualAnimationRuntimeRecord,
+  type V5GCocosManualPlaybackHost,
+  type V5GCocosManualPlaybackSession,
+} from "./manual-playback.js";
 
 interface ManagedLayer<TNode, TSpriteFrame> {
   layer: V5GLayerConfig;
@@ -128,7 +138,20 @@ interface CardCarouselRuntime<TNode, TSpriteFrame> {
   cardContainers: TNode[];
   sliceNodes: TNode[][];
   sliceFrames: TSpriteFrame[][];
-  textureInfos: readonly VNICardCarousel3DTextureInfo[];
+  sourceFrames: TSpriteFrame[];
+  authoredSourceFrames: readonly TSpriteFrame[];
+  textureInfos: VNICardCarousel3DTextureInfo[];
+  authoredTextureInfos: readonly VNICardCarousel3DTextureInfo[];
+  viewCache: Map<
+    TSpriteFrame,
+    Map<
+      string,
+      {
+        readonly frames: readonly TSpriteFrame[];
+        refs: number;
+      }
+    >
+  >;
   visibleCardCount: number;
 }
 
@@ -212,7 +235,10 @@ function getExpectedSpriteFrameSize(asset: V5GAssetConfig): {
   };
 }
 
-export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
+export class V5GCocosPlayer<
+  TNode = Node,
+  TSpriteFrame = SpriteFrame,
+> implements V5GCocosManualPlaybackHost<TNode, TSpriteFrame> {
   private readonly options: V5GCocosPlayerOptions<TNode, TSpriteFrame>;
   private readonly layers = new Map<
     string,
@@ -263,6 +289,12 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   private loopIndex = 0;
   private nextPlaybackEventOrder = 0;
   private nextTextBindingVersion = 0;
+  private manualSession: V5GCocosManualPlaybackSessionImpl<
+    TNode,
+    TSpriteFrame
+  > | null = null;
+  private manualClockActive = false;
+  private manualRangeCompletion: (() => void) | null = null;
 
   constructor(options: V5GCocosPlayerOptions<TNode, TSpriteFrame>) {
     this.options = options;
@@ -275,10 +307,11 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   }
 
   get playing(): boolean {
-    return this.isPlaying;
+    return this.isPlaying || this.manualClockActive;
   }
 
   init(): void {
+    this.assertLegacyTransportAvailable("init");
     this.destroyManagedNodes();
     this.resetPlaybackRuntime();
     validateCocosV5GProject(this.options.project);
@@ -523,6 +556,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   }
 
   seek(time: number): void {
+    this.assertLegacyTransportAvailable("seek");
     this.assertInitialized();
     this.activeRange = null;
     this.segmentedPlayback = null;
@@ -543,6 +577,14 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
         "V5GCocosPlayer.update(deltaSeconds) requires a non-negative finite number.",
       );
     }
+    if (this.manualSession) {
+      if (this.particleRuntime.isDraining() && !this.drainPaused) {
+        this.advanceParticleDrain(deltaSeconds);
+        return;
+      }
+      this.manualSession.advance(deltaSeconds);
+      return;
+    }
     if (!this.isPlaying) {
       if (this.particleRuntime.isDraining() && !this.drainPaused) {
         this.advanceParticleDrain(deltaSeconds);
@@ -561,6 +603,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   }
 
   play(options?: V5GCocosPlayOptions): void {
+    this.assertLegacyTransportAvailable("play");
     if (options?.mode === "range") {
       this.startRangePlayback(options);
       return;
@@ -573,12 +616,14 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   }
 
   playRange(options: V5GCocosPlayRangeOptions): void {
+    this.assertLegacyTransportAvailable("playRange");
     this.startRangePlayback(options);
   }
 
   requestSegmentedPlaybackEnd(
     options?: V5GCocosSegmentedPlaybackEndOptions,
   ): void {
+    this.assertLegacyTransportAvailable("requestSegmentedPlaybackEnd");
     assertOptionsObject(options, "V5GCocosPlayer.requestSegmentedPlaybackEnd");
     const forceStopParticles = getOptionalBooleanOption(
       options?.forceStopParticles,
@@ -619,7 +664,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       mode: this.playbackMode,
       phase: this.getEffectivePlaybackPhase(),
       currentTime: this.currentTime,
-      isPlaying: this.isPlaying,
+      isPlaying: this.playing,
       isDrainingParticles: this.particleRuntime.isDraining(),
       liveParticleCount: this.getRenderedParticleCount(),
       loopIndex: this.segmentedPlayback?.getLoopIndex() ?? this.loopIndex,
@@ -1006,7 +1051,187 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     };
   }
 
+  createManualPlaybackSession(): V5GCocosManualPlaybackSession<TNode> {
+    this.assertInitialized("createManualPlaybackSession");
+    if (this.manualSession) {
+      throw new Error(
+        "V5GCocosPlayer already has an active manual playback session.",
+      );
+    }
+    if (this.isPlaying || this.particleRuntime.isDraining()) {
+      this.pause();
+      this.particleRuntime.reset();
+      this.clearParticles();
+    }
+    this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.drainPaused = false;
+    const session = new V5GCocosManualPlaybackSessionImpl(this);
+    this.manualSession = session;
+    return session;
+  }
+
+  getManualDuration(): number {
+    return this.options.project.stage.duration;
+  }
+
+  getManualAnimationRecords(): readonly V5GCocosManualAnimationRuntimeRecord<TSpriteFrame>[] {
+    const records: V5GCocosManualAnimationRuntimeRecord<TSpriteFrame>[] = [];
+    for (const managed of this.layers.values()) {
+      for (const runtime of managed.cardCarouselRuntimes) {
+        const authoredAssetIds =
+          managed.layer.type === "image"
+            ? managed.layer.assetId
+              ? [managed.layer.assetId]
+              : []
+            : managed.layer.type === "sequence"
+              ? (managed.layer.sequence?.frameAssetIds ?? [])
+              : [];
+        records.push(
+          Object.freeze({
+            ref: Object.freeze({
+              layerId: managed.layer.id,
+              animationId: runtime.animation.id,
+            }),
+            layerName: managed.layer.name,
+            animationName: runtime.animation.name ?? runtime.animation.id,
+            animation: runtime.animation,
+            authoredAssetIds: Object.freeze([...authoredAssetIds]),
+            runtime: {
+              prepared: runtime.prepared,
+              getAuthoredSources: () =>
+                runtime.authoredSourceFrames.map((spriteFrame, index) => ({
+                  spriteFrame,
+                  info: runtime.authoredTextureInfos[index],
+                })),
+              getCurrentSources: () =>
+                runtime.sourceFrames.map((spriteFrame, index) => ({
+                  spriteFrame,
+                  info: runtime.textureInfos[index],
+                })),
+              replaceCarrierSource: (
+                carrierIndex: number,
+                spriteFrame: TSpriteFrame,
+                width: number,
+                height: number,
+              ) =>
+                this.replaceCardCarouselCarrierSource(
+                  runtime,
+                  carrierIndex,
+                  spriteFrame,
+                  width,
+                  height,
+                ),
+              isCarrierSafeToReplace: (carrierIndex: number) => {
+                if (
+                  !Number.isSafeInteger(carrierIndex) ||
+                  carrierIndex < 0 ||
+                  carrierIndex >= runtime.prepared.cardCount
+                ) {
+                  throw new Error(
+                    `V5G CardCarousel carrierIndex must be within 0..${runtime.prepared.cardCount - 1}.`,
+                  );
+                }
+                return (
+                  runtime.visibleCardCount === 0 ||
+                  !runtime.output.cards[carrierIndex].visible
+                );
+              },
+              canEverHideCarrier: () =>
+                runtime.prepared.hideBack || runtime.prepared.visibleRange < 1,
+            },
+          }),
+        );
+      }
+    }
+    return records;
+  }
+
+  isManualHostNodeValid(node: TNode): boolean {
+    return (
+      node !== null &&
+      node !== undefined &&
+      (this.options.driver.isValidNode?.(node) ?? true)
+    );
+  }
+
+  captureManualNodeVisual(
+    options: V5GCocosNodeCaptureOptions<TNode>,
+  ):
+    | V5GCocosCapturedNodeVisual<TSpriteFrame>
+    | Promise<V5GCocosCapturedNodeVisual<TSpriteFrame>> {
+    const capture = this.options.driver.captureNodeVisual;
+    if (!capture) {
+      throw new Error(
+        "V5G Cocos node driver does not support complete Node visual capture.",
+      );
+    }
+    return capture.call(this.options.driver, options);
+  }
+
+  renderManualFrame(time: number): void {
+    this.renderPlaybackFrame(time, time);
+  }
+
+  triggerManualRangeStart(time: number): void {
+    this.emitPlaybackEventsAtBoundary(time, 0, {
+      startTime: 0,
+      endTime: this.options.project.stage.duration,
+      loop: false,
+    });
+  }
+
+  triggerManualRangeEvents(previousTime: number, currentTime: number): void {
+    this.emitPlaybackEventsBetween(previousTime, currentTime, 0, {
+      startTime: 0,
+      endTime: this.options.project.stage.duration,
+      loop: false,
+    });
+  }
+
+  completeManualRange(
+    startTime: number,
+    endTime: number,
+    completed: () => void,
+  ): void {
+    if (this.manualRangeCompletion) {
+      throw new Error("V5G Cocos manual range completion is already pending.");
+    }
+    this.manualRangeCompletion = completed;
+    this.startParticleDrain(endTime, {
+      startTime,
+      endTime,
+      currentTime: endTime,
+      loopIndex: 0,
+    });
+  }
+
+  cancelManualRangeCompletion(): void {
+    if (!this.manualRangeCompletion) return;
+    this.manualRangeCompletion = null;
+    this.pendingComplete = null;
+    this.particleRuntime.reset();
+    this.playbackPhase = "idle";
+    this.drainPaused = false;
+  }
+
+  setManualClockActive(active: boolean): void {
+    if (this.manualClockActive === active) return;
+    this.manualClockActive = active;
+    this.options.onPlayingChange?.(this.playing);
+  }
+
+  detachManualSession(
+    session: V5GCocosManualPlaybackSessionImpl<TNode, TSpriteFrame>,
+  ): void {
+    if (this.manualSession !== session) return;
+    this.manualSession = null;
+    this.manualClockActive = false;
+  }
+
   pause(): void {
+    this.assertLegacyTransportAvailable("pause");
     if (this.particleRuntime.isDraining()) {
       this.drainPaused = true;
     }
@@ -1014,6 +1239,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   }
 
   restart(): void {
+    this.assertLegacyTransportAvailable("restart");
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
@@ -1032,6 +1258,10 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   }
 
   destroy(): void {
+    this.manualSession?.destroy();
+    this.manualSession = null;
+    this.manualClockActive = false;
+    this.manualRangeCompletion = null;
     this.destroyManagedNodes();
     this.activeRange = null;
     this.segmentedPlayback = null;
@@ -1395,9 +1625,12 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       this.drainPaused = false;
       const event = this.pendingComplete;
       this.pendingComplete = null;
+      const manualCompletion = this.manualRangeCompletion;
+      this.manualRangeCompletion = null;
       if (event) {
         this.emitPlaybackComplete(event);
       }
+      manualCompletion?.();
     }
   }
 
@@ -1408,9 +1641,12 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
     this.clearParticles();
     const event = this.pendingComplete;
     this.pendingComplete = null;
+    const manualCompletion = this.manualRangeCompletion;
+    this.manualRangeCompletion = null;
     if (event) {
       this.emitPlaybackComplete(event);
     }
+    manualCompletion?.();
   }
 
   private renderDeterministicFrame(time: number): void {
@@ -1738,7 +1974,46 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       const cardContainers: TNode[] = [];
       const sliceNodes: TNode[][] = [];
       const sliceFrames: TSpriteFrame[][] = [];
-      const pendingFrames: TSpriteFrame[] = [];
+      const authoredSourceFrames = Array.from(
+        { length: prepared.cardCount },
+        (_, cardIndex) =>
+          managed.displaySpriteFrames[
+            cardIndex % managed.displaySpriteFrames.length
+          ],
+      );
+      const authoredTextureInfos = Array.from(
+        { length: prepared.cardCount },
+        (_, cardIndex) => {
+          const asset =
+            managed.displayAssets[cardIndex % managed.displayAssets.length];
+          const size = getExpectedSpriteFrameSize(asset);
+          return {
+            width: size.width,
+            height: size.height,
+            frameX: 0,
+            frameY: 0,
+            frameWidth: size.width,
+            frameHeight: size.height,
+          };
+        },
+      );
+      const runtime: CardCarouselRuntime<TNode, TSpriteFrame> = {
+        animation,
+        prepared,
+        output: createCardCarousel3DSampleBuffer(prepared),
+        container,
+        cardContainers,
+        sliceNodes,
+        sliceFrames,
+        sourceFrames: [...authoredSourceFrames],
+        authoredSourceFrames: Object.freeze([...authoredSourceFrames]),
+        textureInfos: authoredTextureInfos.map((info) => ({ ...info })),
+        authoredTextureInfos: Object.freeze(
+          authoredTextureInfos.map((info) => Object.freeze({ ...info })),
+        ),
+        viewCache: new Map(),
+        visibleCardCount: 0,
+      };
       try {
         for (
           let cardIndex = 0;
@@ -1749,12 +2024,15 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
             `V5G Card ${managed.layer.id} ${cardIndex}`,
           );
           this.options.driver.appendChild(container, cardNode);
-          const textureIndex = cardIndex % managed.displaySpriteFrames.length;
-          const sourceFrame = managed.displaySpriteFrames[textureIndex];
-          const asset = managed.displayAssets[textureIndex];
-          const sourceSize = getExpectedSpriteFrameSize(asset);
+          const sourceFrame = runtime.sourceFrames[cardIndex];
+          const sourceSize = runtime.textureInfos[cardIndex];
+          const frames = this.acquireCardCarouselView(
+            runtime,
+            sourceFrame,
+            sourceSize,
+          );
+          sliceFrames.push([...frames]);
           const nodes: TNode[] = [];
-          const frames: TSpriteFrame[] = [];
           for (
             let sliceIndex = 0;
             sliceIndex < prepared.slices;
@@ -1762,16 +2040,9 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
           ) {
             const x0 = (sliceIndex / prepared.slices) * sourceSize.width;
             const x1 = ((sliceIndex + 1) / prepared.slices) * sourceSize.width;
-            const frame = this.createRuntimeSpriteFrameRegion(sourceFrame, {
-              x: x0,
-              y: 0,
-              width: x1 - x0,
-              height: sourceSize.height,
-            });
-            pendingFrames.push(frame);
             const node = this.options.driver.createImageNode(
               `V5G Card Slice ${managed.layer.id} ${cardIndex} ${sliceIndex}`,
-              frame,
+              frames[sliceIndex],
             );
             this.options.driver.setContentSize(
               node,
@@ -1785,41 +2056,164 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
             );
             this.options.driver.appendChild(cardNode, node);
             nodes.push(node);
-            frames.push(frame);
           }
           cardContainers.push(cardNode);
           sliceNodes.push(nodes);
-          sliceFrames.push(frames);
         }
-        managed.cardCarouselRuntimes.push({
-          animation,
-          prepared,
-          output: createCardCarousel3DSampleBuffer(prepared),
-          container,
-          cardContainers,
-          sliceNodes,
-          sliceFrames,
-          textureInfos: managed.displayAssets.map((asset) => {
-            const size = getExpectedSpriteFrameSize(asset);
-            return {
-              width: size.width,
-              height: size.height,
-              frameX: 0,
-              frameY: 0,
-              frameWidth: size.width,
-              frameHeight: size.height,
-            };
-          }),
-          visibleCardCount: 0,
-        });
-        pendingFrames.length = 0;
+        managed.cardCarouselRuntimes.push(runtime);
       } catch (error) {
-        for (const frame of pendingFrames) {
-          this.destroyRuntimeSpriteFrameRegion(frame);
+        for (let index = 0; index < sliceFrames.length; index += 1) {
+          this.releaseCardCarouselView(
+            runtime,
+            runtime.sourceFrames[index],
+            runtime.textureInfos[index],
+          );
         }
         throw error;
       }
     }
+  }
+
+  private acquireCardCarouselView(
+    runtime: CardCarouselRuntime<TNode, TSpriteFrame>,
+    sourceFrame: TSpriteFrame,
+    textureInfo: VNICardCarousel3DTextureInfo,
+  ): readonly TSpriteFrame[] {
+    const key = `${textureInfo.width}:${textureInfo.height}:${runtime.prepared.slices}`;
+    let bySize = runtime.viewCache.get(sourceFrame);
+    if (!bySize) {
+      bySize = new Map();
+      runtime.viewCache.set(sourceFrame, bySize);
+    }
+    const existing = bySize.get(key);
+    if (existing) {
+      existing.refs += 1;
+      return existing.frames;
+    }
+    const frames: TSpriteFrame[] = [];
+    try {
+      for (
+        let sliceIndex = 0;
+        sliceIndex < runtime.prepared.slices;
+        sliceIndex += 1
+      ) {
+        const x0 = (sliceIndex / runtime.prepared.slices) * textureInfo.width;
+        const x1 =
+          ((sliceIndex + 1) / runtime.prepared.slices) * textureInfo.width;
+        frames.push(
+          this.createRuntimeSpriteFrameRegion(sourceFrame, {
+            x: x0,
+            y: 0,
+            width: x1 - x0,
+            height: textureInfo.height,
+          }),
+        );
+      }
+    } catch (error) {
+      for (const frame of frames) {
+        this.destroyRuntimeSpriteFrameRegion(frame);
+      }
+      if (bySize.size === 0) runtime.viewCache.delete(sourceFrame);
+      throw error;
+    }
+    const view = { frames: Object.freeze(frames), refs: 1 };
+    bySize.set(key, view);
+    return view.frames;
+  }
+
+  private releaseCardCarouselView(
+    runtime: CardCarouselRuntime<TNode, TSpriteFrame>,
+    sourceFrame: TSpriteFrame,
+    textureInfo: VNICardCarousel3DTextureInfo,
+  ): void {
+    const key = `${textureInfo.width}:${textureInfo.height}:${runtime.prepared.slices}`;
+    const bySize = runtime.viewCache.get(sourceFrame);
+    const view = bySize?.get(key);
+    if (!view || view.refs <= 0) {
+      throw new Error("V5G CardCarousel slice view refcount is corrupted.");
+    }
+    view.refs -= 1;
+    if (view.refs > 0) return;
+    for (const frame of view.frames) {
+      this.destroyRuntimeSpriteFrameRegion(frame);
+    }
+    bySize?.delete(key);
+    if (bySize?.size === 0) runtime.viewCache.delete(sourceFrame);
+  }
+
+  replaceCardCarouselCarrierSource(
+    runtime: CardCarouselRuntime<TNode, TSpriteFrame>,
+    carrierIndex: number,
+    sourceFrame: TSpriteFrame,
+    width: number,
+    height: number,
+  ): void {
+    if (
+      !Number.isSafeInteger(carrierIndex) ||
+      carrierIndex < 0 ||
+      carrierIndex >= runtime.prepared.cardCount
+    ) {
+      throw new Error(
+        `V5G CardCarousel carrierIndex must be within 0..${runtime.prepared.cardCount - 1}.`,
+      );
+    }
+    const nextInfo: VNICardCarousel3DTextureInfo = {
+      width,
+      height,
+      frameX: 0,
+      frameY: 0,
+      frameWidth: width,
+      frameHeight: height,
+    };
+    const previousFrame = runtime.sourceFrames[carrierIndex];
+    const previousInfo = runtime.textureInfos[carrierIndex];
+    if (
+      previousFrame === sourceFrame &&
+      previousInfo.width === width &&
+      previousInfo.height === height
+    ) {
+      return;
+    }
+    const nextFrames = this.acquireCardCarouselView(
+      runtime,
+      sourceFrame,
+      nextInfo,
+    );
+    const nodes = runtime.sliceNodes[carrierIndex];
+    const previousFrames = runtime.sliceFrames[carrierIndex];
+    try {
+      for (let index = 0; index < nodes.length; index += 1) {
+        this.setRuntimeSpriteFrame(
+          nodes[index],
+          nextFrames[index],
+          "CardCarousel replacement",
+        );
+        this.options.driver.setContentSize(
+          nodes[index],
+          width / runtime.prepared.slices,
+          height,
+        );
+      }
+    } catch (error) {
+      for (let index = 0; index < nodes.length; index += 1) {
+        this.setRuntimeSpriteFrame(
+          nodes[index],
+          previousFrames[index],
+          "CardCarousel rollback",
+        );
+        this.options.driver.setContentSize(
+          nodes[index],
+          previousInfo.width / runtime.prepared.slices,
+          previousInfo.height,
+        );
+      }
+      this.releaseCardCarouselView(runtime, sourceFrame, nextInfo);
+      throw error;
+    }
+    runtime.sourceFrames[carrierIndex] = sourceFrame;
+    runtime.textureInfos[carrierIndex] = nextInfo;
+    runtime.sliceFrames[carrierIndex] = [...nextFrames];
+    this.releaseCardCarouselView(runtime, previousFrame, previousInfo);
   }
 
   private renderCardCarouselSamples(
@@ -1838,6 +2232,12 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
         runtime.visibleCardCount = 0;
         continue;
       }
+      const ref: V5GCocosAnimationRuntimeRef = {
+        layerId: managed.layer.id,
+        animationId: runtime.animation.id,
+      };
+      const controlledMotion: VNICardCarousel3DMotionSample | undefined =
+        this.manualSession?.getControlledMotion(ref, time) ?? undefined;
       sampleCardCarousel3D(
         runtime.prepared,
         {
@@ -1848,6 +2248,7 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
           transform: sampledLayer.transform,
           blendMode: sampledLayer.blendMode,
           textures: runtime.textureInfos,
+          motion: controlledMotion,
         },
         runtime.output,
       );
@@ -2889,13 +3290,14 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   private setPlaying(nextPlaying: boolean): void {
     if (this.isPlaying === nextPlaying) return;
     this.isPlaying = nextPlaying;
-    this.options.onPlayingChange?.(this.isPlaying);
+    this.options.onPlayingChange?.(this.playing);
   }
 
   private resetPlaybackRuntime(): void {
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
+    this.manualRangeCompletion = null;
     this.playbackMode = "timeline";
     this.playbackPhase = "idle";
     this.loopIndex = 0;
@@ -2933,6 +3335,14 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   private assertInitialized(apiName = "seek/update"): void {
     if (this.stageNode === null) {
       throw new Error(`V5GCocosPlayer must be initialized before ${apiName}.`);
+    }
+  }
+
+  private assertLegacyTransportAvailable(methodName: string): void {
+    if (this.manualSession) {
+      throw new Error(
+        `V5GCocosPlayer.${methodName}() cannot run while a manual playback session is active.`,
+      );
     }
   }
 
@@ -3075,10 +3485,21 @@ export class V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
       }
       managed.deterministicEffectFrameCache.clear();
       for (const runtime of managed.cardCarouselRuntimes) {
-        for (const frames of runtime.sliceFrames) {
-          for (const frame of frames) {
-            this.destroyRuntimeSpriteFrameRegion(frame);
-          }
+        for (
+          let carrierIndex = 0;
+          carrierIndex < runtime.sourceFrames.length;
+          carrierIndex += 1
+        ) {
+          this.releaseCardCarouselView(
+            runtime,
+            runtime.sourceFrames[carrierIndex],
+            runtime.textureInfos[carrierIndex],
+          );
+        }
+        if (runtime.viewCache.size !== 0) {
+          throw new Error(
+            "V5G CardCarousel slice view cache leaked during destroy.",
+          );
         }
       }
       managed.cardCarouselRuntimes.length = 0;

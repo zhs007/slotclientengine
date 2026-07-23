@@ -137,6 +137,11 @@ export interface V5GBasicAnimationTrackConfig {
   points: V5GBasicAnimationPointConfig[];
 }
 
+export interface V5GCocosAnimationRuntimeRef {
+  readonly layerId: string;
+  readonly animationId: string;
+}
+
 export interface V5GCocosAssetResolver<TSpriteFrame = SpriteFrame> {
   getSpriteFrame(assetPath: string, assetId: string): TSpriteFrame | null;
 }
@@ -222,6 +227,103 @@ export interface V5GCocosAttachTextToTextLayerOptions {
   hideOriginal?: boolean;
 }
 
+export interface V5GCocosCapturedNodeVisual<TSpriteFrame> {
+  readonly spriteFrame: TSpriteFrame;
+  readonly width: number;
+  readonly height: number;
+  release(): void;
+}
+
+export interface V5GCocosCardCarouselManualRuntime<TSpriteFrame> {
+  readonly prepared: VNICardCarousel3DPreparedConfig;
+  getAuthoredSources(): readonly {
+    readonly spriteFrame: TSpriteFrame;
+    readonly info: VNICardCarousel3DTextureInfo;
+  }[];
+  getCurrentSources(): readonly {
+    readonly spriteFrame: TSpriteFrame;
+    readonly info: VNICardCarousel3DTextureInfo;
+  }[];
+  replaceCarrierSource(
+    carrierIndex: number,
+    spriteFrame: TSpriteFrame,
+    width: number,
+    height: number,
+  ): void;
+  isCarrierSafeToReplace(carrierIndex: number): boolean;
+  canEverHideCarrier(): boolean;
+}
+
+export interface V5GCocosCyclicAuthoredPreviewDescriptor {
+  readonly introRange: V5GCocosPlaybackRange;
+  readonly continuousHoldPoint: V5GCocosPlaybackPoint;
+  readonly continuousPhaseId: string;
+  readonly authoredContinuousPreviewDurationSeconds: number;
+  readonly endingRange: V5GCocosPlaybackRange;
+  readonly authoredTargetCarrierIndex: number;
+}
+
+export interface V5GCocosCyclicBindingOperation {
+  readonly ready: Promise<void>;
+  cancel(): void;
+}
+
+export interface V5GCocosCyclicSelectionController<TNode> {
+  getState(): V5GCocosCyclicSelectionState;
+  getAuthoredPreviewDescriptor(): V5GCocosCyclicAuthoredPreviewDescriptor;
+  setInitialItems(
+    items: readonly V5GCocosCyclicSelectionItem<TNode>[],
+  ): V5GCocosCyclicBindingOperation;
+  adoptAuthoredItems(): void;
+  startContinuousPhase(options: { readonly phaseId: string }): void;
+  prepareSelection(options: {
+    readonly selectedItem:
+      | {
+          readonly key: string;
+        }
+      | V5GCocosCyclicSelectionItem<TNode>;
+  }): V5GCocosCyclicSelectionTransaction;
+  prepareAuthoredSelection(): V5GCocosCyclicSelectionTransaction;
+  startResolvePhase(): void;
+  clear(): void;
+}
+
+export interface V5GCocosCyclicSelectionItem<TNode> {
+  readonly key: string;
+  readonly visual: {
+    readonly kind: "node";
+    readonly node: TNode;
+    readonly width: number;
+    readonly height: number;
+    readonly revision?: string | number;
+  };
+}
+
+export interface V5GCocosCyclicSelectionState {
+  readonly phase:
+    | "uncontrolled"
+    | "preparing"
+    | "configured"
+    | "continuous"
+    | "selection-pending"
+    | "selection-committed"
+    | "resolving"
+    | "complete"
+    | "destroyed";
+  readonly continuousElapsedSeconds: number;
+  readonly selectedItemKey: string | null;
+  readonly selectedCarrierIndex: number | null;
+  readonly carrierKeys: readonly string[];
+}
+
+export interface V5GCocosCyclicSelectionTransaction {
+  readonly committed: Promise<{
+    readonly itemKey: string;
+    readonly carrierIndex: number;
+  }>;
+  cancel(): void;
+}
+
 export interface V5GCocosLayerGroupInfo {
   id: string;
   name: string;
@@ -238,6 +340,123 @@ export interface V5GCocosLineSample {
   y2: number;
   width: number;
   opacity: number;
+}
+
+export interface V5GCocosManualAnimationController<TNode> {
+  readonly ref: V5GCocosAnimationRuntimeRef;
+  getCapabilities(): readonly V5GCocosRuntimeAnimationCapability[];
+  requireCyclicSelection(): V5GCocosCyclicSelectionController<TNode>;
+  clearRuntimeOverride(): void;
+}
+
+export interface V5GCocosManualAnimationInfo {
+  readonly ref: V5GCocosAnimationRuntimeRef;
+  readonly layerName: string;
+  readonly animationName: string;
+  readonly animationType: string;
+  readonly capabilities: readonly V5GCocosRuntimeAnimationCapability[];
+}
+
+export interface V5GCocosManualAnimationRuntimeRecord<TSpriteFrame> {
+  readonly ref: V5GCocosAnimationRuntimeRef;
+  readonly layerName: string;
+  readonly animationName: string;
+  readonly animation: V5GAnimationConfig;
+  readonly runtime: V5GCocosCardCarouselManualRuntime<TSpriteFrame>;
+  readonly authoredAssetIds: readonly string[];
+}
+
+export interface V5GCocosManualPlaybackHost<TNode, TSpriteFrame> {
+  getManualDuration(): number;
+  getManualAnimationRecords(): readonly V5GCocosManualAnimationRuntimeRecord<TSpriteFrame>[];
+  isManualHostNodeValid(node: TNode): boolean;
+  captureManualNodeVisual(
+    options: V5GCocosNodeCaptureOptions<TNode>,
+  ):
+    | V5GCocosCapturedNodeVisual<TSpriteFrame>
+    | Promise<V5GCocosCapturedNodeVisual<TSpriteFrame>>;
+  renderManualFrame(time: number): void;
+  triggerManualRangeStart(time: number): void;
+  triggerManualRangeEvents(previousTime: number, currentTime: number): void;
+  completeManualRange(
+    startTime: number,
+    endTime: number,
+    completed: () => void,
+  ): void;
+  cancelManualRangeCompletion(): void;
+  setManualClockActive(active: boolean): void;
+  detachManualSession(
+    session: V5GCocosManualPlaybackSessionImpl<TNode, TSpriteFrame>,
+  ): void;
+}
+
+export interface V5GCocosManualPlaybackSession<TNode> {
+  playRange(options: {
+    readonly range: V5GCocosPlaybackRange;
+    readonly preserveRuntimeAnimationState?: boolean;
+  }): V5GCocosPlaybackOperation;
+  holdTimeline(options: {
+    readonly at: V5GCocosPlaybackPoint;
+  }): V5GCocosTimelineHoldHandle;
+  advanceFor(options: {
+    readonly durationSeconds: number;
+  }): V5GCocosPlaybackOperation;
+  listAnimations(options?: {
+    readonly capability?: V5GCocosRuntimeAnimationCapability;
+  }): readonly V5GCocosManualAnimationInfo[];
+  getAnimation(
+    ref: V5GCocosAnimationRuntimeRef,
+  ): V5GCocosManualAnimationController<TNode>;
+  getState(): V5GCocosManualPlaybackState;
+  destroy(): void;
+}
+
+export interface V5GCocosManualPlaybackSessionImpl<TNode, TSpriteFrame> {
+  playRange(options: {
+    readonly range: V5GCocosPlaybackRange;
+    readonly preserveRuntimeAnimationState?: boolean;
+  }): V5GCocosPlaybackOperation;
+  holdTimeline(options: {
+    readonly at: V5GCocosPlaybackPoint;
+  }): V5GCocosTimelineHoldHandle;
+  advanceFor(options: {
+    readonly durationSeconds: number;
+  }): V5GCocosPlaybackOperation;
+  listAnimations(options?: {
+    readonly capability?: V5GCocosRuntimeAnimationCapability;
+  }): readonly V5GCocosManualAnimationInfo[];
+  getAnimation(
+    ref: V5GCocosAnimationRuntimeRef,
+  ): V5GCocosManualAnimationController<TNode>;
+  getState(): V5GCocosManualPlaybackState;
+  destroy(): void;
+  advance(deltaSeconds: number): void;
+  getControlledMotion(
+    ref: V5GCocosAnimationRuntimeRef,
+    timelineTime: number,
+  ): VNICardCarousel3DMotionSample | null;
+}
+
+export interface V5GCocosManualPlaybackState {
+  readonly phase:
+    | "idle"
+    | "range"
+    | "hold"
+    | "continuous"
+    | "resolving"
+    | "complete"
+    | "destroyed";
+  readonly currentTime: number;
+  readonly hasActiveOperation: boolean;
+  readonly hasTimelineHold: boolean;
+  readonly activeContinuousAnimationCount: number;
+}
+
+export interface V5GCocosNodeCaptureOptions<TNode> {
+  readonly node: TNode;
+  readonly width: number;
+  readonly height: number;
+  readonly revision?: string | number;
 }
 
 export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
@@ -272,6 +491,11 @@ export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
     region: V5GSpriteFrameRegion,
   ): TSpriteFrame;
   destroySpriteFrameRegion?(spriteFrame: TSpriteFrame): void;
+  captureNodeVisual?(
+    options: V5GCocosNodeCaptureOptions<TNode>,
+  ):
+    | V5GCocosCapturedNodeVisual<TSpriteFrame>
+    | Promise<V5GCocosCapturedNodeVisual<TSpriteFrame>>;
   setSiblingIndex?(node: TNode, index: number): void;
   createLineNode?(name: string): TNode;
   updateLines?(node: TNode, lines: readonly V5GCocosLineSample[]): void;
@@ -293,6 +517,8 @@ export interface V5GCocosNodeDriver<TNode, TSpriteFrame> {
   clearAlphaMask?(targetNode: TNode, maskNode: TNode): void;
 }
 
+export interface V5GCocosPlaybackCancelledError {}
+
 export interface V5GCocosPlaybackCompleteContext {
   startTime: number;
   endTime: number;
@@ -313,6 +539,13 @@ export interface V5GCocosPlaybackEventOptions {
   at: V5GCocosPlaybackPoint;
   once?: boolean;
   listener: (event: V5GCocosPlaybackEventContext) => void;
+}
+
+export interface V5GCocosPlaybackOperation {
+  readonly completed: Promise<{
+    readonly reason: "complete";
+  }>;
+  cancel(): void;
 }
 
 export interface V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
@@ -361,10 +594,39 @@ export interface V5GCocosPlayer<TNode = Node, TSpriteFrame = SpriteFrame> {
   onPlaybackComplete(
     listener: (event: V5GCocosPlaybackCompleteContext) => void,
   ): () => void;
+  createManualPlaybackSession(): V5GCocosManualPlaybackSession<TNode>;
+  getManualDuration(): number;
+  getManualAnimationRecords(): readonly V5GCocosManualAnimationRuntimeRecord<TSpriteFrame>[];
+  isManualHostNodeValid(node: TNode): boolean;
+  captureManualNodeVisual(
+    options: V5GCocosNodeCaptureOptions<TNode>,
+  ):
+    | V5GCocosCapturedNodeVisual<TSpriteFrame>
+    | Promise<V5GCocosCapturedNodeVisual<TSpriteFrame>>;
+  renderManualFrame(time: number): void;
+  triggerManualRangeStart(time: number): void;
+  triggerManualRangeEvents(previousTime: number, currentTime: number): void;
+  completeManualRange(
+    startTime: number,
+    endTime: number,
+    completed: () => void,
+  ): void;
+  cancelManualRangeCompletion(): void;
+  setManualClockActive(active: boolean): void;
+  detachManualSession(
+    session: V5GCocosManualPlaybackSessionImpl<TNode, TSpriteFrame>,
+  ): void;
   pause(): void;
   restart(): void;
   setLoop(loop: boolean): void;
   destroy(): void;
+  replaceCardCarouselCarrierSource(
+    runtime: CardCarouselRuntime<TNode, TSpriteFrame>,
+    carrierIndex: number,
+    sourceFrame: TSpriteFrame,
+    width: number,
+    height: number,
+  ): void;
 }
 
 export interface V5GCocosPlayerOptions<
@@ -406,6 +668,10 @@ export interface V5GCocosSpriteAtlasLike<TSpriteFrame = SpriteFrame> {
 export interface V5GCocosTextLayerTextBinding {
   dispose(): void;
   setText(text: string): void;
+}
+
+export interface V5GCocosTimelineHoldHandle {
+  release(): void;
 }
 
 export interface V5GExportProfileConfig {
@@ -665,6 +931,13 @@ export interface VNICardCarousel3DCardSample {
   slices: VNICardCarousel3DSliceSample[];
 }
 
+export interface VNICardCarousel3DMotionSample {
+  readonly rotation: number;
+  readonly introElapsed: number;
+  readonly stopPhase: number;
+  readonly targetIndex: number;
+}
+
 export interface VNICardCarousel3DPreparedConfig {
   readonly animationId: string;
   readonly phasePreviewMode: VNICardCarousel3DPhasePreviewMode;
@@ -734,6 +1007,7 @@ export interface VNICardCarousel3DSampleInput {
   transform: V5GTransformConfig;
   blendMode: V5GBlendMode;
   textures: readonly VNICardCarousel3DTextureInfo[];
+  motion?: VNICardCarousel3DMotionSample;
 }
 
 export interface VNICardCarousel3DSliceSample {
@@ -780,6 +1054,26 @@ export interface VNIChaserLightSpriteSample {
 export interface VNIChaserLightTextureSize {
   width: number;
   height: number;
+}
+
+export interface VNICyclicMotionSnapshot {
+  readonly phase: VNICyclicMotionPhase;
+  readonly unwrappedTurns: number;
+  readonly velocityTurnsPerSecond: number;
+  readonly carrierCount: number;
+  readonly selectedCarrierIndex: number | null;
+}
+
+export interface VNICyclicResolvePlan {
+  readonly startTurns: number;
+  readonly fastRelativeTurns: number;
+  readonly stopStartTurns: number;
+  readonly finalTurns: number;
+  readonly direction: 1 | -1;
+  readonly carrierCount: number;
+  readonly selectedCarrierIndex: number;
+  readonly rounds: number;
+  readonly stopOvershoot: number;
 }
 
 export interface VNIEffectLayerSampleState {
@@ -1028,6 +1322,11 @@ export type V5GCocosPlayOptions = V5GPlayOptions;
 
 export type V5GCocosPlayRangeOptions = V5GPlayRangeOptions;
 
+export type V5GCocosRuntimeAnimationCapability =
+  | "continuous-phase"
+  | "replaceable-carriers"
+  | "cyclic-selection";
+
 export type V5GCocosSegmentedPlaybackEndOptions =
   V5GSegmentedPlaybackEndOptions;
 
@@ -1121,6 +1420,8 @@ export type VNICardCarousel3DPhasePreviewMode =
 
 export type VNICoordinateMode = V5GCoordinateMode;
 
+export type VNICyclicMotionPhase = "continuous" | "resolving" | "settled";
+
 export type VNIDeterministicEffectSample =
   | VNIEffectSpriteSample
   | VNIWaveDistortSliceSample
@@ -1169,13 +1470,17 @@ export type VNIStageConfig = V5GStageConfig;
 export type VNITransformConfig = V5GTransformConfig;
 
 import {
+  Camera,
+  Canvas,
   Color,
   Graphics,
   Label,
+  Layers,
   Mask,
   Node,
   Quat,
   Rect,
+  RenderTexture,
   Size,
   Sprite,
   SpriteFrame,
@@ -1183,6 +1488,8 @@ import {
   UITransform,
   Vec2,
   Vec3,
+  director,
+  instantiate,
 } from "cc";
 function editorToPixi(x, y, stageWidth, stageHeight) {
   return {
@@ -2528,7 +2835,7 @@ function sampleChaserLightSprites(animation, sampledLayer, textureSize, time) {
       endY,
       curve,
     );
-    const cycleTime = positiveModulo$3(
+    const cycleTime = positiveModulo$4(
       elapsed - index * chasePeriod,
       cycleDuration,
     );
@@ -2597,7 +2904,7 @@ function sampleTrajectoryPoint(
     rotation: Math.atan2(endY - centerY, endX - centerX),
   };
 }
-function positiveModulo$3(value, divisor) {
+function positiveModulo$4(value, divisor) {
   if (!Number.isFinite(divisor) || divisor <= 0) return 0;
   return ((value % divisor) + divisor) % divisor;
 }
@@ -2626,6 +2933,126 @@ function getNumberParam$6(animation, key) {
 function clampChaserNumber(value, min, max) {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
+}
+//#endregion
+function createVNICyclicMotionSnapshot(options) {
+  assertFinite$1(options.unwrappedTurns, "cyclic unwrappedTurns");
+  assertFinite$1(
+    options.velocityTurnsPerSecond,
+    "cyclic velocityTurnsPerSecond",
+  );
+  assertCarrierCount(options.carrierCount);
+  return Object.freeze({
+    phase: "continuous",
+    unwrappedTurns: options.unwrappedTurns,
+    velocityTurnsPerSecond: options.velocityTurnsPerSecond,
+    carrierCount: options.carrierCount,
+    selectedCarrierIndex: null,
+  });
+}
+function advanceVNICyclicContinuousMotion(snapshot, deltaSeconds) {
+  if (snapshot.phase !== "continuous")
+    throw new Error(
+      `Cannot advance cyclic continuous motion while phase is "${snapshot.phase}".`,
+    );
+  if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0)
+    throw new Error("cyclic deltaSeconds must be a positive finite number.");
+  const unwrappedTurns =
+    snapshot.unwrappedTurns + snapshot.velocityTurnsPerSecond * deltaSeconds;
+  assertFinite$1(unwrappedTurns, "cyclic advanced unwrappedTurns");
+  return Object.freeze(
+    _objectSpread2(_objectSpread2({}, snapshot), {}, { unwrappedTurns }),
+  );
+}
+function createVNICyclicResolvePlan(options) {
+  const {
+    snapshot,
+    selectedCarrierIndex,
+    direction,
+    rounds,
+    fastRelativeTurns,
+    stopOvershoot,
+  } = options;
+  if (snapshot.phase !== "continuous")
+    throw new Error(
+      `Cannot create cyclic resolve plan while phase is "${snapshot.phase}".`,
+    );
+  assertCarrierIndex(selectedCarrierIndex, snapshot.carrierCount);
+  if (direction !== 1 && direction !== -1)
+    throw new Error("cyclic direction must be 1 or -1.");
+  if (!Number.isSafeInteger(rounds) || rounds < 0)
+    throw new Error("cyclic rounds must be a non-negative safe integer.");
+  assertFinite$1(fastRelativeTurns, "cyclic fastRelativeTurns");
+  if (
+    Math.sign(fastRelativeTurns) !== 0 &&
+    Math.sign(fastRelativeTurns) !== direction
+  )
+    throw new Error("cyclic fastRelativeTurns must follow direction.");
+  if (!Number.isFinite(stopOvershoot) || stopOvershoot < 0)
+    throw new Error("cyclic stopOvershoot must be finite and non-negative.");
+  const stopStartTurns = snapshot.unwrappedTurns + fastRelativeTurns;
+  const targetModulo = -selectedCarrierIndex / snapshot.carrierCount;
+  const finalTurns =
+    stopStartTurns +
+    (direction === 1
+      ? positiveModulo$3(targetModulo - stopStartTurns, 1)
+      : -positiveModulo$3(stopStartTurns - targetModulo, 1)) +
+    direction * rounds;
+  assertFinite$1(finalTurns, "cyclic finalTurns");
+  return Object.freeze({
+    startTurns: snapshot.unwrappedTurns,
+    fastRelativeTurns,
+    stopStartTurns,
+    finalTurns,
+    direction,
+    carrierCount: snapshot.carrierCount,
+    selectedCarrierIndex,
+    rounds,
+    stopOvershoot,
+  });
+}
+function sampleVNICyclicResolveStopTurns(plan, progress) {
+  if (!Number.isFinite(progress))
+    throw new Error("cyclic stop progress must be finite.");
+  const t = clampNumber(progress, 0, 1);
+  const eased = 1 - Math.pow(1 - t, 4);
+  const overshoot =
+    plan.direction *
+    (plan.stopOvershoot / plan.carrierCount) *
+    Math.sin(t * Math.PI) *
+    Math.pow(t, 1.2);
+  return (
+    plan.stopStartTurns +
+    (plan.finalTurns - plan.stopStartTurns) * eased +
+    overshoot
+  );
+}
+function getVNICyclicCarrierAlignmentErrorTurns(
+  turns,
+  carrierIndex,
+  carrierCount,
+) {
+  assertFinite$1(turns, "cyclic alignment turns");
+  assertCarrierCount(carrierCount);
+  assertCarrierIndex(carrierIndex, carrierCount);
+  const phase = positiveModulo$3(turns + carrierIndex / carrierCount, 1);
+  return Math.min(phase, 1 - phase);
+}
+function assertCarrierCount(value) {
+  if (!Number.isSafeInteger(value) || value <= 0)
+    throw new Error("cyclic carrierCount must be a positive safe integer.");
+}
+function assertCarrierIndex(value, carrierCount) {
+  if (!Number.isSafeInteger(value) || value < 0 || value >= carrierCount)
+    throw new Error(
+      `cyclic selectedCarrierIndex must be within 0..${carrierCount - 1}.`,
+    );
+}
+function assertFinite$1(value, path) {
+  if (!Number.isFinite(value)) throw new Error(`${path} must be finite.`);
+}
+function positiveModulo$3(value, divisor) {
+  return ((value % divisor) + divisor) % divisor;
 }
 //#endregion
 var TWO_PI = Math.PI * 2;
@@ -2768,11 +3195,34 @@ function createCardCarousel3DSampleBuffer(prepared) {
   };
 }
 function sampleCardCarousel3D(prepared, input, output) {
+  var _motion$targetIndex;
   if (input.textures.length === 0)
     throw new Error(
       `VNI card_carousel_3d animation "${prepared.animationId}" requires at least one texture.`,
     );
-  samplePhase(prepared, clampNumber(input.progress, 0, 1), output);
+  const motion = input.motion;
+  if (motion) {
+    if (
+      !Number.isFinite(motion.rotation) ||
+      !Number.isFinite(motion.introElapsed) ||
+      !Number.isFinite(motion.stopPhase) ||
+      !Number.isSafeInteger(motion.targetIndex) ||
+      motion.targetIndex < 0 ||
+      motion.targetIndex >= prepared.cardCount
+    )
+      throw new Error(
+        `VNI card_carousel_3d animation "${prepared.animationId}" received invalid controlled motion.`,
+      );
+    output.rotation = motion.rotation;
+    output.introElapsed = motion.introElapsed;
+    output.stopPhase = clampNumber(motion.stopPhase, 0, 1);
+  } else samplePhase(prepared, clampNumber(input.progress, 0, 1), output);
+  const targetIndex =
+    (_motion$targetIndex =
+      motion === null || motion === void 0 ? void 0 : motion.targetIndex) !==
+      null && _motion$targetIndex !== void 0
+      ? _motion$targetIndex
+      : prepared.targetIndex;
   const finalEffectPhase = clampNumber((output.stopPhase - 0.78) / 0.22, 0, 1);
   const finalEffectWave = Math.sin(finalEffectPhase * Math.PI);
   output.finalEffectWave = finalEffectWave;
@@ -2799,7 +3249,7 @@ function sampleCardCarousel3D(prepared, input, output) {
     const side = Math.sin(angle);
     const sideAbs = Math.abs(side);
     const depth = clampNumber((frontness + 1) / 2, 0, 1);
-    const isTargetCard = cardIndex === prepared.targetIndex;
+    const isTargetCard = cardIndex === targetIndex;
     const finalPopScale =
       isTargetCard && output.stopPhase > 0
         ? 1 + prepared.finalPop * finalEffectWave
@@ -2898,6 +3348,74 @@ function sampleCardCarousel3D(prepared, input, output) {
     insertDrawOrder(output, cardIndex);
   }
   return output;
+}
+function createCardCarousel3DContinuousMotion(prepared, elapsedSeconds) {
+  if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 0)
+    throw new Error(
+      "VNI card_carousel_3d continuous elapsedSeconds must be finite and non-negative.",
+    );
+  return Object.freeze({
+    rotation:
+      prepared.introRotation +
+      prepared.direction * prepared.idleSpeed * elapsedSeconds * TWO_PI,
+    introElapsed: prepared.introDuration,
+    stopPhase: 0,
+    targetIndex: prepared.targetIndex,
+  });
+}
+function createCardCarousel3DResolvePlan(
+  prepared,
+  currentRotation,
+  selectedCarrierIndex,
+) {
+  if (!Number.isFinite(currentRotation))
+    throw new Error("VNI card_carousel_3d currentRotation must be finite.");
+  return createVNICyclicResolvePlan({
+    snapshot: createVNICyclicMotionSnapshot({
+      unwrappedTurns: currentRotation / TWO_PI,
+      velocityTurnsPerSecond: prepared.direction * prepared.idleSpeed,
+      carrierCount: prepared.cardCount,
+    }),
+    selectedCarrierIndex,
+    direction: prepared.direction,
+    rounds: prepared.rounds,
+    fastRelativeTurns:
+      sampleFastRotation(prepared, prepared.fastDuration) / TWO_PI,
+    stopOvershoot: prepared.stopOvershoot,
+  });
+}
+function sampleCardCarousel3DResolveMotion(
+  prepared,
+  plan,
+  endingElapsedSeconds,
+) {
+  if (!Number.isFinite(endingElapsedSeconds) || endingElapsedSeconds < 0)
+    throw new Error(
+      "VNI card_carousel_3d endingElapsedSeconds must be finite and non-negative.",
+    );
+  let rotation;
+  let stopPhase = 0;
+  if (endingElapsedSeconds < prepared.fastDuration)
+    rotation =
+      plan.startTurns * TWO_PI +
+      sampleFastRotation(prepared, endingElapsedSeconds);
+  else if (
+    endingElapsedSeconds <
+    prepared.fastDuration + prepared.stopDuration
+  ) {
+    stopPhase =
+      (endingElapsedSeconds - prepared.fastDuration) / prepared.stopDuration;
+    rotation = sampleVNICyclicResolveStopTurns(plan, stopPhase) * TWO_PI;
+  } else {
+    stopPhase = 1;
+    rotation = plan.finalTurns * TWO_PI;
+  }
+  return Object.freeze({
+    rotation,
+    introElapsed: prepared.introDuration,
+    stopPhase,
+    targetIndex: plan.selectedCarrierIndex,
+  });
 }
 function getCardCarousel3DProgress(animation, time) {
   return animation.type === "card_carousel_3d"
@@ -7837,6 +8355,9 @@ function createCocosNodeDriver() {
     destroySpriteFrameRegion(spriteFrame) {
       spriteFrame.destroy();
     },
+    captureNodeVisual(options) {
+      return captureCocosNodeVisual(options);
+    },
     setSiblingIndex(node, index) {
       node.setSiblingIndex(index);
     },
@@ -7911,6 +8432,105 @@ function createCocosNodeDriver() {
       if (targetNode.parent === maskNode) targetNode.removeFromParent();
     },
   };
+}
+function captureCocosNodeVisual(options) {
+  const { node, width, height } = options;
+  if (!isValidCocosNode(node))
+    throw new Error("Cocos node visual capture requires a valid host Node.");
+  if (
+    !Number.isFinite(width) ||
+    width <= 0 ||
+    !Number.isFinite(height) ||
+    height <= 0 ||
+    !Number.isSafeInteger(Math.ceil(width)) ||
+    !Number.isSafeInteger(Math.ceil(height))
+  )
+    throw new Error(
+      "Cocos node visual capture width and height must be finite and positive.",
+    );
+  const scene = director.getScene();
+  if (!scene)
+    throw new Error(
+      "Cocos node visual capture requires an active Creator scene.",
+    );
+  const captureRoot = new Node("V5G Node Capture");
+  captureRoot.setPosition(1e6, 1e6, 0);
+  const renderTexture = new RenderTexture();
+  let spriteFrame = null;
+  let released = false;
+  try {
+    const pixelWidth = Math.ceil(width);
+    const pixelHeight = Math.ceil(height);
+    renderTexture.reset({
+      width: pixelWidth,
+      height: pixelHeight,
+    });
+    const clonedNode = instantiate(node);
+    const captureLayer = Layers.Enum.UI_2D;
+    applyNodeLayerRecursively(clonedNode, captureLayer);
+    clonedNode.active = true;
+    clonedNode.setPosition(0, 0, 0);
+    clonedNode.setScale(1, 1, 1);
+    clonedNode.setRotationFromEuler(0, 0, 0);
+    captureRoot.addChild(clonedNode);
+    const cameraNode = new Node("V5G Node Capture Camera");
+    cameraNode.layer = captureLayer;
+    captureRoot.addChild(cameraNode);
+    const camera = cameraNode.addComponent(Camera);
+    camera.projection = Camera.ProjectionType.ORTHO;
+    camera.orthoHeight = height / 2;
+    camera.clearFlags =
+      Camera.ClearFlag.COLOR |
+      Camera.ClearFlag.DEPTH |
+      Camera.ClearFlag.STENCIL;
+    camera.clearColor = new Color(0, 0, 0, 0);
+    camera.visibility = captureLayer;
+    camera.targetTexture = renderTexture;
+    cameraNode.setPosition(0, 0, 1e3);
+    const canvasTransform = captureRoot.addComponent(UITransform);
+    canvasTransform.setContentSize(width, height);
+    canvasTransform.setAnchorPoint(0.5, 0.5);
+    const canvas = captureRoot.addComponent(Canvas);
+    canvas.alignCanvasWithScreen = false;
+    canvas.cameraComponent = camera;
+    scene.addChild(captureRoot);
+    camera.render();
+    spriteFrame = new SpriteFrame();
+    spriteFrame.reset({
+      texture: renderTexture,
+      rect: new Rect(0, 0, pixelWidth, pixelHeight),
+      originalSize: new Size(width, height),
+      offset: new Vec2(0, 0),
+      isRotate: false,
+    });
+    spriteFrame.flipUVY = true;
+    captureRoot.removeFromParent();
+    captureRoot.destroy();
+    const capturedFrame = spriteFrame;
+    return {
+      spriteFrame: capturedFrame,
+      width,
+      height,
+      release() {
+        if (released) return;
+        released = true;
+        capturedFrame.destroy();
+        renderTexture.destroy();
+      },
+    };
+  } catch (error) {
+    captureRoot.removeFromParent();
+    captureRoot.destroy();
+    spriteFrame === null || spriteFrame === void 0 || spriteFrame.destroy();
+    renderTexture.destroy();
+    throw new Error(
+      `Cocos node visual capture failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+function applyNodeLayerRecursively(node, layer) {
+  node.layer = layer;
+  for (const child of node.children) applyNodeLayerRecursively(child, layer);
 }
 function isValidCocosNode(node) {
   return node !== null && node !== void 0 && node.isValid !== false;
@@ -8297,6 +8917,1161 @@ function opacityToCocosOpacity(opacity) {
   return Math.round(clampNumber(opacity, 0, 1) * 255);
 }
 //#endregion
+//#region \0@oxc-project+runtime@0.122.0/helpers/asyncToGenerator.js
+function asyncGeneratorStep(n, t, e, r, o, a, c) {
+  try {
+    var i = n[a](c),
+      u = i.value;
+  } catch (n) {
+    e(n);
+    return;
+  }
+  i.done ? t(u) : Promise.resolve(u).then(r, o);
+}
+function _asyncToGenerator(n) {
+  return function () {
+    var t = this,
+      e = arguments;
+    return new Promise(function (r, o) {
+      var a = n.apply(t, e);
+      function _next(n) {
+        asyncGeneratorStep(a, r, o, _next, _throw, "next", n);
+      }
+      function _throw(n) {
+        asyncGeneratorStep(a, r, o, _next, _throw, "throw", n);
+      }
+      _next(void 0);
+    });
+  };
+}
+//#endregion
+var V5GCocosPlaybackCancelledError = class extends Error {
+  constructor(message = "V5G Cocos manual playback operation was cancelled.") {
+    super(message);
+    this.name = "V5GCocosPlaybackCancelledError";
+  }
+};
+var CYCLIC_CAPABILITIES = Object.freeze([
+  "continuous-phase",
+  "replaceable-carriers",
+  "cyclic-selection",
+]);
+var V5GCocosManualPlaybackSessionImpl = class {
+  constructor(host) {
+    _defineProperty(this, "controllers", /* @__PURE__ */ new Map());
+    _defineProperty(this, "activeRange", null);
+    _defineProperty(this, "activeAdvance", null);
+    _defineProperty(this, "holdTime", null);
+    _defineProperty(this, "currentTime", 0);
+    _defineProperty(this, "destroyed", false);
+    _defineProperty(this, "completed", false);
+    this.host = host;
+  }
+  playRange(options) {
+    this.assertAlive();
+    if (this.holdTime !== null)
+      throw new Error(
+        "Release the V5G Cocos manual timeline hold before starting a range.",
+      );
+    this.assertNoOperation();
+    if (!options.preserveRuntimeAnimationState)
+      for (const controller of this.controllers.values())
+        controller.clearRuntimeOverride();
+    const range = normalizePlaybackRange(
+      options.range,
+      this.host.getManualDuration(),
+    );
+    const operation = createDeferredOperation(() => {
+      var _this$activeRange;
+      if (
+        ((_this$activeRange = this.activeRange) === null ||
+        _this$activeRange === void 0
+          ? void 0
+          : _this$activeRange.operation) === operation
+      ) {
+        this.host.cancelManualRangeCompletion();
+        this.activeRange = null;
+        this.updateClock();
+      }
+    });
+    this.activeRange = _objectSpread2(
+      _objectSpread2({}, range),
+      {},
+      {
+        currentTime: range.startTime,
+        awaitingCompletion: false,
+        operation,
+      },
+    );
+    this.currentTime = range.startTime;
+    this.completed = false;
+    this.host.renderManualFrame(this.currentTime);
+    this.host.triggerManualRangeStart(this.currentTime);
+    this.updateClock();
+    return operation;
+  }
+  holdTimeline(options) {
+    this.assertAlive();
+    this.assertNoOperation();
+    if (this.holdTime !== null)
+      throw new Error("V5G Cocos manual timeline already has an active hold.");
+    this.holdTime = normalizePlaybackPoint(
+      options.at,
+      this.host.getManualDuration(),
+      "manual timeline hold",
+    );
+    this.currentTime = this.holdTime;
+    this.host.renderManualFrame(this.currentTime);
+    let released = false;
+    this.updateClock();
+    return {
+      release: () => {
+        if (released) return;
+        released = true;
+        if (this.destroyed) return;
+        this.holdTime = null;
+        this.updateClock();
+      },
+    };
+  }
+  advanceFor(options) {
+    this.assertAlive();
+    this.assertNoOperation();
+    if (this.holdTime === null)
+      throw new Error(
+        "V5G Cocos manual advanceFor() requires a timeline hold.",
+      );
+    if (
+      !Number.isFinite(options.durationSeconds) ||
+      options.durationSeconds <= 0
+    )
+      throw new Error(
+        "V5G Cocos manual advanceFor durationSeconds must be a positive finite number.",
+      );
+    const operation = createDeferredOperation(() => {
+      var _this$activeAdvance;
+      if (
+        ((_this$activeAdvance = this.activeAdvance) === null ||
+        _this$activeAdvance === void 0
+          ? void 0
+          : _this$activeAdvance.operation) === operation
+      ) {
+        this.activeAdvance = null;
+        this.updateClock();
+      }
+    });
+    this.activeAdvance = {
+      elapsedSeconds: 0,
+      durationSeconds: options.durationSeconds,
+      operation,
+    };
+    this.updateClock();
+    return operation;
+  }
+  listAnimations(options) {
+    this.assertAlive();
+    const capability =
+      options === null || options === void 0 ? void 0 : options.capability;
+    return this.host
+      .getManualAnimationRecords()
+      .map((record) => toAnimationInfo(record))
+      .filter(
+        (info) =>
+          capability === void 0 || info.capabilities.indexOf(capability) >= 0,
+      );
+  }
+  getAnimation(ref) {
+    this.assertAlive();
+    const key = getRefKey(ref);
+    const existing = this.controllers.get(key);
+    if (existing) return existing;
+    const matches = this.host
+      .getManualAnimationRecords()
+      .filter(
+        (record) =>
+          record.ref.layerId === ref.layerId &&
+          record.ref.animationId === ref.animationId,
+      );
+    if (matches.length !== 1)
+      throw new Error(
+        matches.length === 0
+          ? `Unknown or disabled V5G Cocos runtime animation: ${ref.layerId}/${ref.animationId}.`
+          : `Ambiguous V5G Cocos runtime animation: ${ref.layerId}/${ref.animationId}.`,
+      );
+    const controller = new V5GCocosManualAnimationControllerImpl(
+      this.host,
+      matches[0],
+      () => this.updateClock(),
+    );
+    this.controllers.set(key, controller);
+    return controller;
+  }
+  getState() {
+    let activeCount = 0;
+    let hasContinuous = false;
+    let hasResolving = false;
+    for (const controller of this.controllers.values()) {
+      if (controller.isContinuousOrResolving()) activeCount += 1;
+      if (controller.isContinuous()) hasContinuous = true;
+      if (controller.isResolving()) hasResolving = true;
+    }
+    let phase;
+    if (this.destroyed) phase = "destroyed";
+    else if (this.activeRange) phase = hasResolving ? "resolving" : "range";
+    else if (hasContinuous) phase = "continuous";
+    else if (this.holdTime !== null) phase = "hold";
+    else if (this.completed) phase = "complete";
+    else phase = "idle";
+    return {
+      phase,
+      currentTime: this.currentTime,
+      hasActiveOperation:
+        this.activeRange !== null || this.activeAdvance !== null,
+      hasTimelineHold: this.holdTime !== null,
+      activeContinuousAnimationCount: activeCount,
+    };
+  }
+  destroy() {
+    var _this$activeRange2, _this$activeAdvance2;
+    if (this.destroyed) return;
+    this.destroyed = true;
+    (_this$activeRange2 = this.activeRange) === null ||
+      _this$activeRange2 === void 0 ||
+      _this$activeRange2.operation.cancel();
+    (_this$activeAdvance2 = this.activeAdvance) === null ||
+      _this$activeAdvance2 === void 0 ||
+      _this$activeAdvance2.operation.cancel();
+    this.activeRange = null;
+    this.activeAdvance = null;
+    this.holdTime = null;
+    for (const controller of this.controllers.values()) controller.destroy();
+    this.controllers.clear();
+    this.host.setManualClockActive(false);
+    this.host.detachManualSession(this);
+  }
+  advance(deltaSeconds) {
+    this.assertAlive();
+    if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0)
+      throw new Error(
+        "V5G Cocos manual deltaSeconds must be non-negative and finite.",
+      );
+    if (deltaSeconds === 0) return;
+    const runtimeDeltaSeconds =
+      this.holdTime !== null && this.activeAdvance
+        ? Math.min(
+            deltaSeconds,
+            this.activeAdvance.durationSeconds -
+              this.activeAdvance.elapsedSeconds,
+          )
+        : deltaSeconds;
+    if (runtimeDeltaSeconds > 0)
+      for (const controller of this.controllers.values())
+        controller.advance(runtimeDeltaSeconds);
+    if (this.activeRange) {
+      const range = this.activeRange;
+      if (range.awaitingCompletion) return;
+      const previousTime = range.currentTime;
+      range.currentTime = Math.min(
+        range.endTime,
+        range.currentTime + deltaSeconds,
+      );
+      this.currentTime = range.currentTime;
+      this.host.renderManualFrame(this.currentTime);
+      this.host.triggerManualRangeEvents(previousTime, this.currentTime);
+      for (const controller of this.controllers.values())
+        controller.afterRender(this.currentTime);
+      if (range.currentTime >= range.endTime) {
+        range.awaitingCompletion = true;
+        this.host.completeManualRange(range.startTime, range.endTime, () => {
+          if (
+            this.destroyed ||
+            this.activeRange !== range ||
+            !range.operation.isPending()
+          )
+            return;
+          this.activeRange = null;
+          this.completed = true;
+          for (const controller of this.controllers.values())
+            controller.onRangeComplete(this.currentTime);
+          range.operation.resolve();
+          this.updateClock();
+        });
+      }
+    } else if (this.holdTime !== null) {
+      this.currentTime = this.holdTime;
+      this.host.renderManualFrame(this.currentTime);
+      for (const controller of this.controllers.values())
+        controller.afterRender(this.currentTime);
+    }
+    if (this.activeAdvance) {
+      const advance = this.activeAdvance;
+      advance.elapsedSeconds += runtimeDeltaSeconds;
+      if (advance.elapsedSeconds >= advance.durationSeconds) {
+        this.activeAdvance = null;
+        advance.operation.resolve();
+      }
+    }
+    this.updateClock();
+  }
+  getControlledMotion(ref, timelineTime) {
+    var _this$controllers$get, _this$controllers$get2;
+    return (_this$controllers$get =
+      (_this$controllers$get2 = this.controllers.get(getRefKey(ref))) ===
+        null || _this$controllers$get2 === void 0
+        ? void 0
+        : _this$controllers$get2.getMotion(timelineTime)) !== null &&
+      _this$controllers$get !== void 0
+      ? _this$controllers$get
+      : null;
+  }
+  updateClock() {
+    if (this.destroyed) return;
+    let controlled = false;
+    for (const controller of this.controllers.values())
+      if (controller.isContinuousOrResolving()) {
+        controlled = true;
+        break;
+      }
+    this.host.setManualClockActive(
+      (this.activeRange !== null && !this.activeRange.awaitingCompletion) ||
+        this.activeAdvance !== null ||
+        (this.holdTime !== null && controlled),
+    );
+  }
+  assertNoOperation() {
+    if (this.activeRange || this.activeAdvance)
+      throw new Error(
+        "V5G Cocos manual playback already has an active operation.",
+      );
+  }
+  assertAlive() {
+    if (this.destroyed)
+      throw new Error("V5G Cocos manual playback session is destroyed.");
+  }
+};
+var V5GCocosManualAnimationControllerImpl = class {
+  constructor(host, record, onClockChange) {
+    _defineProperty(this, "ref", void 0);
+    _defineProperty(this, "cyclic", void 0);
+    this.ref = record.ref;
+    this.cyclic = new V5GCocosCyclicSelectionControllerImpl(
+      host,
+      record,
+      onClockChange,
+    );
+  }
+  getCapabilities() {
+    return CYCLIC_CAPABILITIES;
+  }
+  requireCyclicSelection() {
+    return this.cyclic;
+  }
+  clearRuntimeOverride() {
+    this.cyclic.clearRuntimeOverride();
+  }
+  advance(deltaSeconds) {
+    this.cyclic.advance(deltaSeconds);
+  }
+  afterRender(time) {
+    this.cyclic.afterRender(time);
+  }
+  onRangeComplete(time) {
+    this.cyclic.onRangeComplete(time);
+  }
+  getMotion(time) {
+    return this.cyclic.getMotion(time);
+  }
+  isContinuousOrResolving() {
+    return this.cyclic.isContinuousOrResolving();
+  }
+  isContinuous() {
+    return this.cyclic.isContinuous();
+  }
+  isResolving() {
+    return this.cyclic.isResolving();
+  }
+  destroy() {
+    this.cyclic.destroy();
+  }
+};
+var V5GCocosCyclicSelectionControllerImpl = class {
+  constructor(host, record, onClockChange) {
+    _defineProperty(this, "authoredSources", void 0);
+    _defineProperty(this, "captureCache", /* @__PURE__ */ new Map());
+    _defineProperty(this, "bindings", []);
+    _defineProperty(this, "phase", "uncontrolled");
+    _defineProperty(this, "continuousElapsedSeconds", 0);
+    _defineProperty(this, "motion", null);
+    _defineProperty(this, "resolvePlan", null);
+    _defineProperty(this, "selectedItemKey", null);
+    _defineProperty(this, "selectedCarrierIndex", null);
+    _defineProperty(this, "pending", null);
+    _defineProperty(this, "initialOperation", null);
+    _defineProperty(this, "destroyed", false);
+    this.host = host;
+    this.record = record;
+    this.onClockChange = onClockChange;
+    this.authoredSources = record.runtime.getAuthoredSources();
+  }
+  getState() {
+    return {
+      phase: this.destroyed ? "destroyed" : this.phase,
+      continuousElapsedSeconds: this.continuousElapsedSeconds,
+      selectedItemKey: this.selectedItemKey,
+      selectedCarrierIndex: this.selectedCarrierIndex,
+      carrierKeys: this.bindings.map((binding) => binding.key),
+    };
+  }
+  getAuthoredPreviewDescriptor() {
+    this.assertAlive();
+    const prepared = this.record.runtime.prepared;
+    const start = this.record.animation.startTime;
+    const introEnd = start + prepared.introDuration;
+    const endingStart = introEnd + prepared.demoIdleDuration;
+    return Object.freeze({
+      introRange: {
+        unit: "time",
+        start,
+        end: introEnd,
+      },
+      continuousHoldPoint: {
+        unit: "time",
+        at: introEnd,
+      },
+      continuousPhaseId: "idle",
+      authoredContinuousPreviewDurationSeconds: prepared.demoIdleDuration,
+      endingRange: {
+        unit: "time",
+        start: endingStart,
+        end:
+          endingStart +
+          prepared.fastDuration +
+          prepared.stopDuration +
+          prepared.holdDuration,
+      },
+      authoredTargetCarrierIndex: prepared.targetIndex,
+    });
+  }
+  setInitialItems(items) {
+    var _this = this;
+    this.assertAlive();
+    if (this.phase !== "uncontrolled" && this.phase !== "configured")
+      throw new Error(
+        `Cannot set V5G Cocos cyclic initial items while phase is "${this.phase}".`,
+      );
+    if (this.initialOperation)
+      throw new Error(
+        "V5G Cocos cyclic initial item preparation is already active.",
+      );
+    const count = this.record.runtime.prepared.cardCount;
+    if (items.length !== count)
+      throw new Error(
+        `V5G Cocos cyclic initial items must contain exactly ${count} entries.`,
+      );
+    const seenKeys = /* @__PURE__ */ new Set();
+    const seenNodes = /* @__PURE__ */ new Set();
+    const normalized = items.map((item) => {
+      const key = normalizeItemKey(item.key);
+      if (seenKeys.has(key))
+        throw new Error(`Duplicate V5G Cocos cyclic item key: ${key}.`);
+      seenKeys.add(key);
+      validateNodeVisual(this.host, item.visual);
+      if (seenNodes.has(item.visual.node))
+        throw new Error(
+          "V5G Cocos cyclic initial items cannot reuse the same host Node.",
+        );
+      seenNodes.add(item.visual.node);
+      return {
+        key,
+        visual: item.visual,
+      };
+    });
+    let cancelled = false;
+    const operation = createDeferredBindingOperation(() => {
+      cancelled = true;
+      if (this.initialOperation === operation) {
+        this.initialOperation = null;
+        if (!this.destroyed)
+          this.phase = this.bindings.length > 0 ? "configured" : "uncontrolled";
+      }
+    });
+    this.initialOperation = operation;
+    this.phase = "preparing";
+    Promise.all(
+      normalized.map(
+        (function () {
+          var _ref = _asyncToGenerator(function* (item) {
+            try {
+              return {
+                ok: true,
+                key: item.key,
+                lease: yield _this.acquireVisual(item.visual),
+              };
+            } catch (error) {
+              return {
+                ok: false,
+                error,
+              };
+            }
+          });
+          return function (_x) {
+            return _ref.apply(this, arguments);
+          };
+        })(),
+      ),
+    ).then((results) => {
+      const failed = results.find((result) => !result.ok);
+      const prepared = results.filter((result) => result.ok);
+      if (failed) {
+        for (const item of prepared) item.lease.release();
+        if (operation.isPending()) {
+          this.initialOperation = null;
+          this.phase = this.bindings.length > 0 ? "configured" : "uncontrolled";
+          operation.reject(asError(failed.error));
+        }
+        return;
+      }
+      if (cancelled || this.destroyed || !operation.isPending()) {
+        for (const item of prepared) item.lease.release();
+        return;
+      }
+      const previous = this.record.runtime.getCurrentSources();
+      let replaced = 0;
+      try {
+        for (let index = 0; index < prepared.length; index += 1) {
+          const lease = prepared[index].lease;
+          this.record.runtime.replaceCarrierSource(
+            index,
+            lease.spriteFrame,
+            lease.width,
+            lease.height,
+          );
+          replaced += 1;
+        }
+      } catch (error) {
+        for (let index = 0; index < replaced; index += 1)
+          this.record.runtime.replaceCarrierSource(
+            index,
+            previous[index].spriteFrame,
+            previous[index].info.width,
+            previous[index].info.height,
+          );
+        for (const item of prepared) item.lease.release();
+        this.initialOperation = null;
+        this.phase = this.bindings.length > 0 ? "configured" : "uncontrolled";
+        operation.reject(asError(error));
+        return;
+      }
+      this.releaseBindings();
+      this.bindings = prepared.map(({ key, lease }) => ({
+        key,
+        node: lease.node,
+        spriteFrame: lease.spriteFrame,
+        width: lease.width,
+        height: lease.height,
+        revision: lease.revision,
+        lease,
+      }));
+      this.initialOperation = null;
+      this.phase = "configured";
+      this.selectedItemKey = null;
+      this.selectedCarrierIndex = null;
+      operation.resolve();
+    });
+    return operation;
+  }
+  adoptAuthoredItems() {
+    this.assertAlive();
+    if (this.phase !== "uncontrolled" && this.phase !== "configured")
+      throw new Error(
+        `Cannot adopt authored items while phase is "${this.phase}".`,
+      );
+    if (this.record.authoredAssetIds.length === 0)
+      throw new Error(
+        "V5G Cocos cyclic authored items require project assets.",
+      );
+    for (let index = 0; index < this.authoredSources.length; index += 1) {
+      const source = this.authoredSources[index];
+      this.record.runtime.replaceCarrierSource(
+        index,
+        source.spriteFrame,
+        source.info.width,
+        source.info.height,
+      );
+    }
+    this.releaseBindings();
+    this.bindings = this.authoredSources.map((source, index) => ({
+      key: `authored:${index}:${this.record.authoredAssetIds[index % this.record.authoredAssetIds.length]}`,
+      node: null,
+      spriteFrame: source.spriteFrame,
+      width: source.info.width,
+      height: source.info.height,
+      revision: void 0,
+      lease: null,
+    }));
+    this.phase = "configured";
+    this.selectedItemKey = null;
+    this.selectedCarrierIndex = null;
+  }
+  startContinuousPhase(options) {
+    this.assertAlive();
+    if (this.phase !== "configured")
+      throw new Error(
+        `Cannot start V5G Cocos cyclic continuous phase while phase is "${this.phase}".`,
+      );
+    if (options.phaseId !== "idle")
+      throw new Error(
+        `Unsupported V5G Cocos cyclic continuous phase: ${options.phaseId}.`,
+      );
+    this.continuousElapsedSeconds = 0;
+    this.motion = createCardCarousel3DContinuousMotion(
+      this.record.runtime.prepared,
+      0,
+    );
+    this.phase = "continuous";
+    this.onClockChange();
+  }
+  prepareSelection(options) {
+    this.assertAlive();
+    if (this.phase !== "continuous")
+      throw new Error(
+        `Cannot prepare V5G Cocos cyclic selection while phase is "${this.phase}".`,
+      );
+    if (this.pending)
+      throw new Error(
+        "V5G Cocos cyclic selection already has a pending transaction.",
+      );
+    const key = normalizeItemKey(options.selectedItem.key);
+    const existingIndex = this.bindings.findIndex(
+      (binding) => binding.key === key,
+    );
+    const hasVisual = "visual" in options.selectedItem;
+    if (existingIndex >= 0 && !hasVisual)
+      return this.commitExistingSelection(key, existingIndex);
+    if (existingIndex < 0 && !hasVisual)
+      throw new Error(
+        `V5G Cocos cyclic selected item "${key}" is not bound and has no visual.`,
+      );
+    const visual = options.selectedItem.visual;
+    validateNodeVisual(this.host, visual);
+    if (!this.record.runtime.canEverHideCarrier())
+      throw new Error(
+        "V5G Cocos cyclic replacement is impossible because no carrier can become hidden.",
+      );
+    const transaction = createDeferredTransaction(() => {
+      var _this$pending;
+      if (
+        ((_this$pending = this.pending) === null || _this$pending === void 0
+          ? void 0
+          : _this$pending.transaction) === transaction
+      ) {
+        const lease = this.pending.lease;
+        this.pending = null;
+        lease === null || lease === void 0 || lease.release();
+        if (!this.destroyed) this.phase = "continuous";
+      }
+    });
+    const pending = {
+      itemKey: key,
+      carrierIndex: existingIndex >= 0 ? existingIndex : null,
+      transaction,
+      lease: null,
+      capturePending: true,
+    };
+    this.pending = pending;
+    this.phase = "selection-pending";
+    this.acquireVisual(visual).then(
+      (lease) => {
+        if (
+          this.destroyed ||
+          this.pending !== pending ||
+          !transaction.isPending()
+        ) {
+          lease.release();
+          return;
+        }
+        if (
+          existingIndex >= 0 &&
+          isSameBindingVisual(this.bindings[existingIndex], lease)
+        ) {
+          lease.release();
+          this.pending = null;
+          this.selectedItemKey = key;
+          this.selectedCarrierIndex = existingIndex;
+          this.phase = "selection-committed";
+          transaction.resolve({
+            itemKey: key,
+            carrierIndex: existingIndex,
+          });
+          return;
+        }
+        pending.lease = lease;
+        pending.capturePending = false;
+      },
+      (error) => {
+        if (this.pending !== pending || !transaction.isPending()) return;
+        this.pending = null;
+        this.phase = "continuous";
+        transaction.reject(asError(error));
+      },
+    );
+    return transaction;
+  }
+  prepareAuthoredSelection() {
+    this.assertAlive();
+    const target = this.record.runtime.prepared.targetIndex;
+    const binding = this.bindings[target];
+    if (!binding)
+      throw new Error(
+        "V5G Cocos cyclic authored selection requires configured items.",
+      );
+    return this.prepareSelection({ selectedItem: { key: binding.key } });
+  }
+  startResolvePhase() {
+    this.assertAlive();
+    if (
+      this.phase !== "selection-committed" ||
+      this.selectedCarrierIndex === null ||
+      !this.motion
+    )
+      throw new Error(
+        "V5G Cocos cyclic resolve requires a committed selection and continuous motion.",
+      );
+    this.resolvePlan = createCardCarousel3DResolvePlan(
+      this.record.runtime.prepared,
+      this.motion.rotation,
+      this.selectedCarrierIndex,
+    );
+    this.phase = "resolving";
+    this.onClockChange();
+  }
+  clear() {
+    var _this$initialOperatio, _this$pending2;
+    if (this.destroyed) return;
+    (_this$initialOperatio = this.initialOperation) === null ||
+      _this$initialOperatio === void 0 ||
+      _this$initialOperatio.cancel();
+    this.initialOperation = null;
+    (_this$pending2 = this.pending) === null ||
+      _this$pending2 === void 0 ||
+      _this$pending2.transaction.cancel();
+    this.pending = null;
+    for (let index = 0; index < this.authoredSources.length; index += 1) {
+      const source = this.authoredSources[index];
+      this.record.runtime.replaceCarrierSource(
+        index,
+        source.spriteFrame,
+        source.info.width,
+        source.info.height,
+      );
+    }
+    this.releaseBindings();
+    this.bindings = [];
+    this.phase = "uncontrolled";
+    this.continuousElapsedSeconds = 0;
+    this.motion = null;
+    this.resolvePlan = null;
+    this.selectedItemKey = null;
+    this.selectedCarrierIndex = null;
+    this.onClockChange();
+  }
+  clearRuntimeOverride() {
+    if (this.phase === "uncontrolled" || this.phase === "configured") return;
+    this.clear();
+  }
+  advance(deltaSeconds) {
+    if (this.destroyed) return;
+    if (
+      this.phase === "continuous" ||
+      this.phase === "selection-pending" ||
+      this.phase === "selection-committed"
+    ) {
+      this.continuousElapsedSeconds += deltaSeconds;
+      this.motion = createCardCarousel3DContinuousMotion(
+        this.record.runtime.prepared,
+        this.continuousElapsedSeconds,
+      );
+    }
+  }
+  afterRender(_time) {
+    this.tryCommitPending();
+  }
+  onRangeComplete(time) {
+    if (this.phase !== "resolving") return;
+    const descriptor = this.getAuthoredPreviewDescriptor();
+    const end =
+      descriptor.endingRange.unit === "time"
+        ? descriptor.endingRange.end
+        : void 0;
+    if (end !== void 0 && time >= end) this.phase = "complete";
+  }
+  getMotion(timelineTime) {
+    if (this.phase === "resolving" || this.phase === "complete") {
+      if (!this.resolvePlan) return null;
+      const descriptor = this.getAuthoredPreviewDescriptor();
+      const start =
+        descriptor.endingRange.unit === "time"
+          ? descriptor.endingRange.start
+          : 0;
+      return sampleCardCarousel3DResolveMotion(
+        this.record.runtime.prepared,
+        this.resolvePlan,
+        Math.max(0, timelineTime - start),
+      );
+    }
+    return this.motion;
+  }
+  isContinuousOrResolving() {
+    return (
+      this.phase === "continuous" ||
+      this.phase === "selection-pending" ||
+      this.phase === "selection-committed" ||
+      this.phase === "resolving"
+    );
+  }
+  isContinuous() {
+    return (
+      this.phase === "continuous" ||
+      this.phase === "selection-pending" ||
+      this.phase === "selection-committed"
+    );
+  }
+  isResolving() {
+    return this.phase === "resolving";
+  }
+  destroy() {
+    if (this.destroyed) return;
+    this.clear();
+    this.destroyed = true;
+    this.phase = "destroyed";
+  }
+  commitExistingSelection(key, carrierIndex) {
+    const transaction = createDeferredTransaction();
+    this.selectedItemKey = key;
+    this.selectedCarrierIndex = carrierIndex;
+    this.phase = "selection-committed";
+    transaction.resolve({
+      itemKey: key,
+      carrierIndex,
+    });
+    return transaction;
+  }
+  tryCommitPending() {
+    var _pending$carrierIndex, _this$bindings$candid;
+    const pending = this.pending;
+    if (
+      !pending ||
+      pending.capturePending ||
+      !pending.lease ||
+      !pending.transaction.isPending()
+    )
+      return;
+    const candidate =
+      (_pending$carrierIndex = pending.carrierIndex) !== null &&
+      _pending$carrierIndex !== void 0
+        ? _pending$carrierIndex
+        : this.bindings.findIndex((_binding, index) =>
+            this.record.runtime.isCarrierSafeToReplace(index),
+          );
+    if (candidate < 0 || !this.record.runtime.isCarrierSafeToReplace(candidate))
+      return;
+    const lease = pending.lease;
+    try {
+      this.record.runtime.replaceCarrierSource(
+        candidate,
+        lease.spriteFrame,
+        lease.width,
+        lease.height,
+      );
+    } catch (error) {
+      this.pending = null;
+      this.phase = "continuous";
+      lease.release();
+      pending.transaction.reject(asError(error));
+      return;
+    }
+    (_this$bindings$candid = this.bindings[candidate]) === null ||
+      _this$bindings$candid === void 0 ||
+      (_this$bindings$candid = _this$bindings$candid.lease) === null ||
+      _this$bindings$candid === void 0 ||
+      _this$bindings$candid.release();
+    this.bindings[candidate] = {
+      key: pending.itemKey,
+      node: lease.node,
+      spriteFrame: lease.spriteFrame,
+      width: lease.width,
+      height: lease.height,
+      revision: lease.revision,
+      lease,
+    };
+    this.pending = null;
+    this.selectedItemKey = pending.itemKey;
+    this.selectedCarrierIndex = candidate;
+    this.phase = "selection-committed";
+    pending.transaction.resolve({
+      itemKey: pending.itemKey,
+      carrierIndex: candidate,
+    });
+  }
+  acquireVisual(visual) {
+    var _this2 = this;
+    return _asyncToGenerator(function* () {
+      const cacheKey = getCaptureCacheKey(visual);
+      let byConfig = _this2.captureCache.get(visual.node);
+      if (!byConfig) {
+        byConfig = /* @__PURE__ */ new Map();
+        _this2.captureCache.set(visual.node, byConfig);
+      }
+      let entry = byConfig.get(cacheKey);
+      if (!entry) {
+        entry = {
+          refs: 0,
+          visual: Promise.resolve(
+            _this2.host.captureManualNodeVisual({
+              node: visual.node,
+              width: visual.width,
+              height: visual.height,
+              revision: visual.revision,
+            }),
+          ).then((captured) => {
+            validateCapturedVisual(captured, visual.width, visual.height);
+            const current =
+              byConfig === null || byConfig === void 0
+                ? void 0
+                : byConfig.get(cacheKey);
+            if (current) current.resolved = captured;
+            return captured;
+          }),
+          resolved: null,
+        };
+        byConfig.set(cacheKey, entry);
+      }
+      entry.refs += 1;
+      let captured;
+      try {
+        captured = yield entry.visual;
+      } catch (error) {
+        _this2.releaseCaptureRef(visual.node, cacheKey, entry);
+        throw error;
+      }
+      let released = false;
+      return {
+        node: visual.node,
+        spriteFrame: captured.spriteFrame,
+        width: visual.width,
+        height: visual.height,
+        revision: visual.revision,
+        release: () => {
+          if (released) return;
+          released = true;
+          _this2.releaseCaptureRef(visual.node, cacheKey, entry);
+        },
+      };
+    })();
+  }
+  releaseCaptureRef(node, cacheKey, entry) {
+    if (entry.refs <= 0)
+      throw new Error("V5G Cocos captured visual refcount is corrupted.");
+    entry.refs -= 1;
+    if (entry.refs > 0) return;
+    const byConfig = this.captureCache.get(node);
+    if (
+      (byConfig === null || byConfig === void 0
+        ? void 0
+        : byConfig.get(cacheKey)) === entry
+    ) {
+      byConfig.delete(cacheKey);
+      if (byConfig.size === 0) this.captureCache.delete(node);
+    }
+    if (entry.resolved) entry.resolved.release();
+    else
+      entry.visual.then(
+        (captured) => captured.release(),
+        () => void 0,
+      );
+  }
+  releaseBindings() {
+    var _binding$lease;
+    for (const binding of this.bindings)
+      (_binding$lease = binding.lease) === null ||
+        _binding$lease === void 0 ||
+        _binding$lease.release();
+  }
+  assertAlive() {
+    if (this.destroyed)
+      throw new Error("V5G Cocos cyclic-selection controller is destroyed.");
+  }
+};
+function validateNodeVisual(host, visual) {
+  if (visual.kind !== "node")
+    throw new Error('V5G Cocos cyclic visual kind must be "node".');
+  if (!host.isManualHostNodeValid(visual.node))
+    throw new Error("V5G Cocos cyclic visual requires a valid host Node.");
+  if (
+    !Number.isFinite(visual.width) ||
+    visual.width <= 0 ||
+    !Number.isFinite(visual.height) ||
+    visual.height <= 0
+  )
+    throw new Error(
+      "V5G Cocos cyclic visual width and height must be finite and positive.",
+    );
+  if (
+    visual.revision !== void 0 &&
+    typeof visual.revision !== "string" &&
+    typeof visual.revision !== "number"
+  )
+    throw new Error(
+      "V5G Cocos cyclic visual revision must be a string or number.",
+    );
+  if (typeof visual.revision === "number" && !Number.isFinite(visual.revision))
+    throw new Error("V5G Cocos cyclic visual numeric revision must be finite.");
+}
+function validateCapturedVisual(captured, width, height) {
+  if (
+    !captured ||
+    !captured.spriteFrame ||
+    captured.width !== width ||
+    captured.height !== height ||
+    typeof captured.release !== "function"
+  ) {
+    var _captured$release;
+    captured === null ||
+      captured === void 0 ||
+      (_captured$release = captured.release) === null ||
+      _captured$release === void 0 ||
+      _captured$release.call(captured);
+    throw new Error(
+      "V5G Cocos node capture returned an invalid visual or logical size.",
+    );
+  }
+}
+function isSameBindingVisual(binding, lease) {
+  return (
+    binding.node === lease.node &&
+    binding.width === lease.width &&
+    binding.height === lease.height &&
+    binding.revision === lease.revision &&
+    binding.spriteFrame === lease.spriteFrame
+  );
+}
+function getCaptureCacheKey(visual) {
+  var _visual$revision;
+  return `${visual.width}\u0000${visual.height}\u0000${typeof visual.revision}\u0000${String((_visual$revision = visual.revision) !== null && _visual$revision !== void 0 ? _visual$revision : "")}`;
+}
+function toAnimationInfo(record) {
+  return Object.freeze({
+    ref: Object.freeze(_objectSpread2({}, record.ref)),
+    layerName: record.layerName,
+    animationName: record.animationName,
+    animationType: record.animation.type,
+    capabilities: CYCLIC_CAPABILITIES,
+  });
+}
+function createDeferredOperation(onCancel) {
+  let pending = true;
+  let resolvePromise;
+  let rejectPromise;
+  return {
+    completed: new Promise((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    }),
+    resolve: () => {
+      if (!pending) return;
+      pending = false;
+      resolvePromise({ reason: "complete" });
+    },
+    reject: (error) => {
+      if (!pending) return;
+      pending = false;
+      rejectPromise(error);
+    },
+    cancel: () => {
+      if (!pending) return;
+      pending = false;
+      onCancel === null || onCancel === void 0 || onCancel();
+      rejectPromise(new V5GCocosPlaybackCancelledError());
+    },
+    isPending: () => pending,
+  };
+}
+function createDeferredBindingOperation(onCancel) {
+  let pending = true;
+  let resolvePromise;
+  let rejectPromise;
+  return {
+    ready: new Promise((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    }),
+    resolve: () => {
+      if (!pending) return;
+      pending = false;
+      resolvePromise();
+    },
+    reject: (error) => {
+      if (!pending) return;
+      pending = false;
+      rejectPromise(error);
+    },
+    cancel: () => {
+      if (!pending) return;
+      pending = false;
+      onCancel === null || onCancel === void 0 || onCancel();
+      rejectPromise(
+        new V5GCocosPlaybackCancelledError(
+          "V5G Cocos cyclic initial item preparation was cancelled.",
+        ),
+      );
+    },
+    isPending: () => pending,
+  };
+}
+function createDeferredTransaction(onCancel) {
+  let pending = true;
+  let resolvePromise;
+  let rejectPromise;
+  return {
+    committed: new Promise((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    }),
+    resolve: (value) => {
+      if (!pending) return;
+      pending = false;
+      resolvePromise(value);
+    },
+    reject: (error) => {
+      if (!pending) return;
+      pending = false;
+      rejectPromise(error);
+    },
+    cancel: () => {
+      if (!pending) return;
+      pending = false;
+      onCancel === null || onCancel === void 0 || onCancel();
+      rejectPromise(
+        new V5GCocosPlaybackCancelledError(
+          "V5G Cocos cyclic-selection transaction was cancelled.",
+        ),
+      );
+    },
+    isPending: () => pending,
+  };
+}
+function getRefKey(ref) {
+  return `${ref.layerId}\u0000${ref.animationId}`;
+}
+function normalizeItemKey(value) {
+  const key = value.trim();
+  if (!key) throw new Error("V5G Cocos cyclic item key must be non-empty.");
+  return key;
+}
+function asError(error) {
+  return error instanceof Error ? error : new Error(String(error));
+}
+//#endregion
 var PLAYBACK_EVENT_ID = 0;
 var PLAYBACK_EVENT_TIME = 1;
 var PLAYBACK_EVENT_ONCE = 2;
@@ -8360,6 +10135,9 @@ var V5GCocosPlayer = class {
     _defineProperty(this, "loopIndex", 0);
     _defineProperty(this, "nextPlaybackEventOrder", 0);
     _defineProperty(this, "nextTextBindingVersion", 0);
+    _defineProperty(this, "manualSession", null);
+    _defineProperty(this, "manualClockActive", false);
+    _defineProperty(this, "manualRangeCompletion", null);
     this.options = options;
     this.loop =
       (_options$loop = options.loop) !== null && _options$loop !== void 0
@@ -8371,9 +10149,10 @@ var V5GCocosPlayer = class {
     return this.currentTime;
   }
   get playing() {
-    return this.isPlaying;
+    return this.isPlaying || this.manualClockActive;
   }
   init() {
+    this.assertLegacyTransportAvailable("init");
     this.destroyManagedNodes();
     this.resetPlaybackRuntime();
     validateCocosV5GProject(this.options.project);
@@ -8619,6 +10398,7 @@ var V5GCocosPlayer = class {
     }
   }
   seek(time) {
+    this.assertLegacyTransportAvailable("seek");
     this.assertInitialized();
     this.activeRange = null;
     this.segmentedPlayback = null;
@@ -8637,6 +10417,14 @@ var V5GCocosPlayer = class {
       throw new Error(
         "V5GCocosPlayer.update(deltaSeconds) requires a non-negative finite number.",
       );
+    if (this.manualSession) {
+      if (this.particleRuntime.isDraining() && !this.drainPaused) {
+        this.advanceParticleDrain(deltaSeconds);
+        return;
+      }
+      this.manualSession.advance(deltaSeconds);
+      return;
+    }
     if (!this.isPlaying) {
       if (this.particleRuntime.isDraining() && !this.drainPaused)
         this.advanceParticleDrain(deltaSeconds);
@@ -8653,6 +10441,7 @@ var V5GCocosPlayer = class {
     this.advanceFullTimeline(deltaSeconds);
   }
   play(options) {
+    this.assertLegacyTransportAvailable("play");
     if (
       (options === null || options === void 0 ? void 0 : options.mode) ===
       "range"
@@ -8670,9 +10459,11 @@ var V5GCocosPlayer = class {
     this.startTimelinePlayback();
   }
   playRange(options) {
+    this.assertLegacyTransportAvailable("playRange");
     this.startRangePlayback(options);
   }
   requestSegmentedPlaybackEnd(options) {
+    this.assertLegacyTransportAvailable("requestSegmentedPlaybackEnd");
     assertOptionsObject(options, "V5GCocosPlayer.requestSegmentedPlaybackEnd");
     const forceStopParticles = getOptionalBooleanOption(
       options === null || options === void 0
@@ -8714,7 +10505,7 @@ var V5GCocosPlayer = class {
       mode: this.playbackMode,
       phase: this.getEffectivePlaybackPhase(),
       currentTime: this.currentTime,
-      isPlaying: this.isPlaying,
+      isPlaying: this.playing,
       isDrainingParticles: this.particleRuntime.isDraining(),
       liveParticleCount: this.getRenderedParticleCount(),
       loopIndex:
@@ -9068,11 +10859,191 @@ var V5GCocosPlayer = class {
       if (listenerIndex >= 0) this.completeListeners.splice(listenerIndex, 1);
     };
   }
+  createManualPlaybackSession() {
+    this.assertInitialized("createManualPlaybackSession");
+    if (this.manualSession)
+      throw new Error(
+        "V5GCocosPlayer already has an active manual playback session.",
+      );
+    if (this.isPlaying || this.particleRuntime.isDraining()) {
+      this.pause();
+      this.particleRuntime.reset();
+      this.clearParticles();
+    }
+    this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.drainPaused = false;
+    const session = new V5GCocosManualPlaybackSessionImpl(this);
+    this.manualSession = session;
+    return session;
+  }
+  getManualDuration() {
+    return this.options.project.stage.duration;
+  }
+  getManualAnimationRecords() {
+    const records = [];
+    for (const managed of this.layers.values())
+      for (const runtime of managed.cardCarouselRuntimes) {
+        var _managed$layer$sequen,
+          _managed$layer$sequen2,
+          _runtime$animation$na;
+        const authoredAssetIds =
+          managed.layer.type === "image"
+            ? managed.layer.assetId
+              ? [managed.layer.assetId]
+              : []
+            : managed.layer.type === "sequence"
+              ? (_managed$layer$sequen =
+                  (_managed$layer$sequen2 = managed.layer.sequence) === null ||
+                  _managed$layer$sequen2 === void 0
+                    ? void 0
+                    : _managed$layer$sequen2.frameAssetIds) !== null &&
+                _managed$layer$sequen !== void 0
+                ? _managed$layer$sequen
+                : []
+              : [];
+        records.push(
+          Object.freeze({
+            ref: Object.freeze({
+              layerId: managed.layer.id,
+              animationId: runtime.animation.id,
+            }),
+            layerName: managed.layer.name,
+            animationName:
+              (_runtime$animation$na = runtime.animation.name) !== null &&
+              _runtime$animation$na !== void 0
+                ? _runtime$animation$na
+                : runtime.animation.id,
+            animation: runtime.animation,
+            authoredAssetIds: Object.freeze([...authoredAssetIds]),
+            runtime: {
+              prepared: runtime.prepared,
+              getAuthoredSources: () =>
+                runtime.authoredSourceFrames.map((spriteFrame, index) => ({
+                  spriteFrame,
+                  info: runtime.authoredTextureInfos[index],
+                })),
+              getCurrentSources: () =>
+                runtime.sourceFrames.map((spriteFrame, index) => ({
+                  spriteFrame,
+                  info: runtime.textureInfos[index],
+                })),
+              replaceCarrierSource: (
+                carrierIndex,
+                spriteFrame,
+                width,
+                height,
+              ) =>
+                this.replaceCardCarouselCarrierSource(
+                  runtime,
+                  carrierIndex,
+                  spriteFrame,
+                  width,
+                  height,
+                ),
+              isCarrierSafeToReplace: (carrierIndex) => {
+                if (
+                  !Number.isSafeInteger(carrierIndex) ||
+                  carrierIndex < 0 ||
+                  carrierIndex >= runtime.prepared.cardCount
+                )
+                  throw new Error(
+                    `V5G CardCarousel carrierIndex must be within 0..${runtime.prepared.cardCount - 1}.`,
+                  );
+                return (
+                  runtime.visibleCardCount === 0 ||
+                  !runtime.output.cards[carrierIndex].visible
+                );
+              },
+              canEverHideCarrier: () =>
+                runtime.prepared.hideBack || runtime.prepared.visibleRange < 1,
+            },
+          }),
+        );
+      }
+    return records;
+  }
+  isManualHostNodeValid(node) {
+    var _this$options$driver$, _this$options$driver$2, _this$options$driver;
+    return (
+      node !== null &&
+      node !== void 0 &&
+      ((_this$options$driver$ =
+        (_this$options$driver$2 = (_this$options$driver = this.options.driver)
+          .isValidNode) === null || _this$options$driver$2 === void 0
+          ? void 0
+          : _this$options$driver$2.call(_this$options$driver, node)) !== null &&
+      _this$options$driver$ !== void 0
+        ? _this$options$driver$
+        : true)
+    );
+  }
+  captureManualNodeVisual(options) {
+    const capture = this.options.driver.captureNodeVisual;
+    if (!capture)
+      throw new Error(
+        "V5G Cocos node driver does not support complete Node visual capture.",
+      );
+    return capture.call(this.options.driver, options);
+  }
+  renderManualFrame(time) {
+    this.renderPlaybackFrame(time, time);
+  }
+  triggerManualRangeStart(time) {
+    this.emitPlaybackEventsAtBoundary(time, 0, {
+      startTime: 0,
+      endTime: this.options.project.stage.duration,
+      loop: false,
+    });
+  }
+  triggerManualRangeEvents(previousTime, currentTime) {
+    this.emitPlaybackEventsBetween(previousTime, currentTime, 0, {
+      startTime: 0,
+      endTime: this.options.project.stage.duration,
+      loop: false,
+    });
+  }
+  completeManualRange(startTime, endTime, completed) {
+    if (this.manualRangeCompletion)
+      throw new Error("V5G Cocos manual range completion is already pending.");
+    this.manualRangeCompletion = completed;
+    this.startParticleDrain(endTime, {
+      startTime,
+      endTime,
+      currentTime: endTime,
+      loopIndex: 0,
+    });
+  }
+  cancelManualRangeCompletion() {
+    if (!this.manualRangeCompletion) return;
+    this.manualRangeCompletion = null;
+    this.pendingComplete = null;
+    this.particleRuntime.reset();
+    this.playbackPhase = "idle";
+    this.drainPaused = false;
+  }
+  setManualClockActive(active) {
+    var _this$options$onPlayi, _this$options;
+    if (this.manualClockActive === active) return;
+    this.manualClockActive = active;
+    (_this$options$onPlayi = (_this$options = this.options).onPlayingChange) ===
+      null ||
+      _this$options$onPlayi === void 0 ||
+      _this$options$onPlayi.call(_this$options, this.playing);
+  }
+  detachManualSession(session) {
+    if (this.manualSession !== session) return;
+    this.manualSession = null;
+    this.manualClockActive = false;
+  }
   pause() {
+    this.assertLegacyTransportAvailable("pause");
     if (this.particleRuntime.isDraining()) this.drainPaused = true;
     this.setPlaying(false);
   }
   restart() {
+    this.assertLegacyTransportAvailable("restart");
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
@@ -9089,6 +11060,13 @@ var V5GCocosPlayer = class {
     this.loop = loop;
   }
   destroy() {
+    var _this$manualSession;
+    (_this$manualSession = this.manualSession) === null ||
+      _this$manualSession === void 0 ||
+      _this$manualSession.destroy();
+    this.manualSession = null;
+    this.manualClockActive = false;
+    this.manualRangeCompletion = null;
     this.destroyManagedNodes();
     this.activeRange = null;
     this.segmentedPlayback = null;
@@ -9283,7 +11261,7 @@ var V5GCocosPlayer = class {
     this.triggerSegmentedPlaybackEvents(segmented, result);
     if (result.timelineEnded) {
       if (this.forceStopParticlesAfterSegmentEnd) {
-        var _this$options$onTimeC, _this$options, _this$segmentedPlayba5;
+        var _this$options$onTimeC, _this$options2, _this$segmentedPlayba5;
         const duration = this.options.project.stage.duration;
         this.setPlaying(false);
         this.pendingComplete = {
@@ -9293,10 +11271,10 @@ var V5GCocosPlayer = class {
           loopIndex: result.loopIndex,
         };
         this.applyProjectSample(duration);
-        (_this$options$onTimeC = (_this$options = this.options)
+        (_this$options$onTimeC = (_this$options2 = this.options)
           .onTimeChange) === null ||
           _this$options$onTimeC === void 0 ||
-          _this$options$onTimeC.call(_this$options, this.currentTime);
+          _this$options$onTimeC.call(_this$options2, this.currentTime);
         this.forceStopAllParticlesInternal({
           suppressUntilNextPlayback: false,
           finishPendingDrain: false,
@@ -9375,20 +11353,20 @@ var V5GCocosPlayer = class {
     );
   }
   startParticleDrain(endTime, completeContext) {
-    var _this$options$onTimeC3, _this$options3;
+    var _this$options$onTimeC3, _this$options4;
     this.setPlaying(false);
     this.currentTime = endTime;
     this.pendingComplete = completeContext;
     this.playbackPhase = "particle-draining";
     const sampled = this.applyProjectSample(endTime);
     if (this.suppressParticleEmission) {
-      var _this$options$onTimeC2, _this$options2;
+      var _this$options$onTimeC2, _this$options3;
       const frame = this.particleRuntime.forceStopAll();
       this.renderParticleSamples(frame.particles);
-      (_this$options$onTimeC2 = (_this$options2 = this.options)
+      (_this$options$onTimeC2 = (_this$options3 = this.options)
         .onTimeChange) === null ||
         _this$options$onTimeC2 === void 0 ||
-        _this$options$onTimeC2.call(_this$options2, this.currentTime);
+        _this$options$onTimeC2.call(_this$options3, this.currentTime);
       this.finishParticleDrain();
       return;
     }
@@ -9399,10 +11377,10 @@ var V5GCocosPlayer = class {
     }
     const frame = this.particleRuntime.beginDrain();
     this.renderParticleSamples(frame.particles);
-    (_this$options$onTimeC3 = (_this$options3 = this.options).onTimeChange) ===
+    (_this$options$onTimeC3 = (_this$options4 = this.options).onTimeChange) ===
       null ||
       _this$options$onTimeC3 === void 0 ||
-      _this$options$onTimeC3.call(_this$options3, this.currentTime);
+      _this$options$onTimeC3.call(_this$options4, this.currentTime);
     if (frame.isComplete) {
       this.finishParticleDrain();
       return;
@@ -9430,7 +11408,12 @@ var V5GCocosPlayer = class {
       this.drainPaused = false;
       const event = this.pendingComplete;
       this.pendingComplete = null;
+      const manualCompletion = this.manualRangeCompletion;
+      this.manualRangeCompletion = null;
       if (event) this.emitPlaybackComplete(event);
+      manualCompletion === null ||
+        manualCompletion === void 0 ||
+        manualCompletion();
     }
   }
   finishParticleDrain() {
@@ -9443,10 +11426,15 @@ var V5GCocosPlayer = class {
     this.clearParticles();
     const event = this.pendingComplete;
     this.pendingComplete = null;
+    const manualCompletion = this.manualRangeCompletion;
+    this.manualRangeCompletion = null;
     if (event) this.emitPlaybackComplete(event);
+    manualCompletion === null ||
+      manualCompletion === void 0 ||
+      manualCompletion();
   }
   renderDeterministicFrame(time) {
-    var _this$options$onTimeC4, _this$options4;
+    var _this$options$onTimeC4, _this$options5;
     const sampled = this.applyProjectSample(time);
     const frame = this.suppressParticleEmission
       ? this.particleRuntime.forceStopAll()
@@ -9455,13 +11443,13 @@ var V5GCocosPlayer = class {
           this.currentTime,
         );
     this.renderParticleSamples(frame.particles);
-    (_this$options$onTimeC4 = (_this$options4 = this.options).onTimeChange) ===
+    (_this$options$onTimeC4 = (_this$options5 = this.options).onTimeChange) ===
       null ||
       _this$options$onTimeC4 === void 0 ||
-      _this$options$onTimeC4.call(_this$options4, this.currentTime);
+      _this$options$onTimeC4.call(_this$options5, this.currentTime);
   }
   renderPlaybackFrame(nonParticleTime, particleTime, options = {}) {
-    var _options$liveParticle, _this$options$onTimeC5, _this$options5;
+    var _options$liveParticle, _this$options$onTimeC5, _this$options6;
     const sampled = this.applyProjectSample(nonParticleTime);
     const particleLayers = this.getParticleRuntimeLayers(sampled.layers);
     const frame = this.suppressParticleEmission
@@ -9477,10 +11465,10 @@ var V5GCocosPlayer = class {
           )
         : this.particleRuntime.emit(particleLayers, particleTime);
     this.renderParticleSamples(frame.particles);
-    (_this$options$onTimeC5 = (_this$options5 = this.options).onTimeChange) ===
+    (_this$options$onTimeC5 = (_this$options6 = this.options).onTimeChange) ===
       null ||
       _this$options$onTimeC5 === void 0 ||
-      _this$options$onTimeC5.call(_this$options5, this.currentTime);
+      _this$options$onTimeC5.call(_this$options6, this.currentTime);
   }
   applyProjectSample(time) {
     const sampledProject = sampleProjectAtTime(this.options.project, time);
@@ -9738,7 +11726,50 @@ var V5GCocosPlayer = class {
       const cardContainers = [];
       const sliceNodes = [];
       const sliceFrames = [];
-      const pendingFrames = [];
+      const authoredSourceFrames = Array.from(
+        { length: prepared.cardCount },
+        (_, cardIndex) =>
+          managed.displaySpriteFrames[
+            cardIndex % managed.displaySpriteFrames.length
+          ],
+      );
+      const authoredTextureInfos = Array.from(
+        { length: prepared.cardCount },
+        (_, cardIndex) => {
+          const asset =
+            managed.displayAssets[cardIndex % managed.displayAssets.length];
+          const size = getExpectedSpriteFrameSize(asset);
+          return {
+            width: size.width,
+            height: size.height,
+            frameX: 0,
+            frameY: 0,
+            frameWidth: size.width,
+            frameHeight: size.height,
+          };
+        },
+      );
+      const runtime = {
+        animation,
+        prepared,
+        output: createCardCarousel3DSampleBuffer(prepared),
+        container,
+        cardContainers,
+        sliceNodes,
+        sliceFrames,
+        sourceFrames: [...authoredSourceFrames],
+        authoredSourceFrames: Object.freeze([...authoredSourceFrames]),
+        textureInfos: authoredTextureInfos.map((info) =>
+          _objectSpread2({}, info),
+        ),
+        authoredTextureInfos: Object.freeze(
+          authoredTextureInfos.map((info) =>
+            Object.freeze(_objectSpread2({}, info)),
+          ),
+        ),
+        viewCache: /* @__PURE__ */ new Map(),
+        visibleCardCount: 0,
+      };
       try {
         for (
           let cardIndex = 0;
@@ -9749,12 +11780,15 @@ var V5GCocosPlayer = class {
             `V5G Card ${managed.layer.id} ${cardIndex}`,
           );
           this.options.driver.appendChild(container, cardNode);
-          const textureIndex = cardIndex % managed.displaySpriteFrames.length;
-          const sourceFrame = managed.displaySpriteFrames[textureIndex];
-          const asset = managed.displayAssets[textureIndex];
-          const sourceSize = getExpectedSpriteFrameSize(asset);
+          const sourceFrame = runtime.sourceFrames[cardIndex];
+          const sourceSize = runtime.textureInfos[cardIndex];
+          const frames = this.acquireCardCarouselView(
+            runtime,
+            sourceFrame,
+            sourceSize,
+          );
+          sliceFrames.push([...frames]);
           const nodes = [];
-          const frames = [];
           for (
             let sliceIndex = 0;
             sliceIndex < prepared.slices;
@@ -9762,16 +11796,9 @@ var V5GCocosPlayer = class {
           ) {
             const x0 = (sliceIndex / prepared.slices) * sourceSize.width;
             const x1 = ((sliceIndex + 1) / prepared.slices) * sourceSize.width;
-            const frame = this.createRuntimeSpriteFrameRegion(sourceFrame, {
-              x: x0,
-              y: 0,
-              width: x1 - x0,
-              height: sourceSize.height,
-            });
-            pendingFrames.push(frame);
             const node = this.options.driver.createImageNode(
               `V5G Card Slice ${managed.layer.id} ${cardIndex} ${sliceIndex}`,
-              frame,
+              frames[sliceIndex],
             );
             this.options.driver.setContentSize(
               node,
@@ -9785,43 +11812,155 @@ var V5GCocosPlayer = class {
             );
             this.options.driver.appendChild(cardNode, node);
             nodes.push(node);
-            frames.push(frame);
           }
           cardContainers.push(cardNode);
           sliceNodes.push(nodes);
-          sliceFrames.push(frames);
         }
-        managed.cardCarouselRuntimes.push({
-          animation,
-          prepared,
-          output: createCardCarousel3DSampleBuffer(prepared),
-          container,
-          cardContainers,
-          sliceNodes,
-          sliceFrames,
-          textureInfos: managed.displayAssets.map((asset) => {
-            const size = getExpectedSpriteFrameSize(asset);
-            return {
-              width: size.width,
-              height: size.height,
-              frameX: 0,
-              frameY: 0,
-              frameWidth: size.width,
-              frameHeight: size.height,
-            };
-          }),
-          visibleCardCount: 0,
-        });
-        pendingFrames.length = 0;
+        managed.cardCarouselRuntimes.push(runtime);
       } catch (error) {
-        for (const frame of pendingFrames)
-          this.destroyRuntimeSpriteFrameRegion(frame);
+        for (let index = 0; index < sliceFrames.length; index += 1)
+          this.releaseCardCarouselView(
+            runtime,
+            runtime.sourceFrames[index],
+            runtime.textureInfos[index],
+          );
         throw error;
       }
     }
   }
+  acquireCardCarouselView(runtime, sourceFrame, textureInfo) {
+    const key = `${textureInfo.width}:${textureInfo.height}:${runtime.prepared.slices}`;
+    let bySize = runtime.viewCache.get(sourceFrame);
+    if (!bySize) {
+      bySize = /* @__PURE__ */ new Map();
+      runtime.viewCache.set(sourceFrame, bySize);
+    }
+    const existing = bySize.get(key);
+    if (existing) {
+      existing.refs += 1;
+      return existing.frames;
+    }
+    const frames = [];
+    try {
+      for (
+        let sliceIndex = 0;
+        sliceIndex < runtime.prepared.slices;
+        sliceIndex += 1
+      ) {
+        const x0 = (sliceIndex / runtime.prepared.slices) * textureInfo.width;
+        const x1 =
+          ((sliceIndex + 1) / runtime.prepared.slices) * textureInfo.width;
+        frames.push(
+          this.createRuntimeSpriteFrameRegion(sourceFrame, {
+            x: x0,
+            y: 0,
+            width: x1 - x0,
+            height: textureInfo.height,
+          }),
+        );
+      }
+    } catch (error) {
+      for (const frame of frames) this.destroyRuntimeSpriteFrameRegion(frame);
+      if (bySize.size === 0) runtime.viewCache.delete(sourceFrame);
+      throw error;
+    }
+    const view = {
+      frames: Object.freeze(frames),
+      refs: 1,
+    };
+    bySize.set(key, view);
+    return view.frames;
+  }
+  releaseCardCarouselView(runtime, sourceFrame, textureInfo) {
+    const key = `${textureInfo.width}:${textureInfo.height}:${runtime.prepared.slices}`;
+    const bySize = runtime.viewCache.get(sourceFrame);
+    const view =
+      bySize === null || bySize === void 0 ? void 0 : bySize.get(key);
+    if (!view || view.refs <= 0)
+      throw new Error("V5G CardCarousel slice view refcount is corrupted.");
+    view.refs -= 1;
+    if (view.refs > 0) return;
+    for (const frame of view.frames)
+      this.destroyRuntimeSpriteFrameRegion(frame);
+    bySize === null || bySize === void 0 || bySize.delete(key);
+    if ((bySize === null || bySize === void 0 ? void 0 : bySize.size) === 0)
+      runtime.viewCache.delete(sourceFrame);
+  }
+  replaceCardCarouselCarrierSource(
+    runtime,
+    carrierIndex,
+    sourceFrame,
+    width,
+    height,
+  ) {
+    if (
+      !Number.isSafeInteger(carrierIndex) ||
+      carrierIndex < 0 ||
+      carrierIndex >= runtime.prepared.cardCount
+    )
+      throw new Error(
+        `V5G CardCarousel carrierIndex must be within 0..${runtime.prepared.cardCount - 1}.`,
+      );
+    const nextInfo = {
+      width,
+      height,
+      frameX: 0,
+      frameY: 0,
+      frameWidth: width,
+      frameHeight: height,
+    };
+    const previousFrame = runtime.sourceFrames[carrierIndex];
+    const previousInfo = runtime.textureInfos[carrierIndex];
+    if (
+      previousFrame === sourceFrame &&
+      previousInfo.width === width &&
+      previousInfo.height === height
+    )
+      return;
+    const nextFrames = this.acquireCardCarouselView(
+      runtime,
+      sourceFrame,
+      nextInfo,
+    );
+    const nodes = runtime.sliceNodes[carrierIndex];
+    const previousFrames = runtime.sliceFrames[carrierIndex];
+    try {
+      for (let index = 0; index < nodes.length; index += 1) {
+        this.setRuntimeSpriteFrame(
+          nodes[index],
+          nextFrames[index],
+          "CardCarousel replacement",
+        );
+        this.options.driver.setContentSize(
+          nodes[index],
+          width / runtime.prepared.slices,
+          height,
+        );
+      }
+    } catch (error) {
+      for (let index = 0; index < nodes.length; index += 1) {
+        this.setRuntimeSpriteFrame(
+          nodes[index],
+          previousFrames[index],
+          "CardCarousel rollback",
+        );
+        this.options.driver.setContentSize(
+          nodes[index],
+          previousInfo.width / runtime.prepared.slices,
+          previousInfo.height,
+        );
+      }
+      this.releaseCardCarouselView(runtime, sourceFrame, nextInfo);
+      throw error;
+    }
+    runtime.sourceFrames[carrierIndex] = sourceFrame;
+    runtime.textureInfos[carrierIndex] = nextInfo;
+    runtime.sliceFrames[carrierIndex] = [...nextFrames];
+    this.releaseCardCarouselView(runtime, previousFrame, previousInfo);
+  }
   renderCardCarouselSamples(managed, sampledLayer, time) {
     for (const runtime of managed.cardCarouselRuntimes) {
+      var _this$manualSession$g, _this$manualSession2;
       const progress = getCardCarousel3DProgress(runtime.animation, time);
       if (
         progress === null ||
@@ -9832,6 +11971,19 @@ var V5GCocosPlayer = class {
         runtime.visibleCardCount = 0;
         continue;
       }
+      const ref = {
+        layerId: managed.layer.id,
+        animationId: runtime.animation.id,
+      };
+      const controlledMotion =
+        (_this$manualSession$g =
+          (_this$manualSession2 = this.manualSession) === null ||
+          _this$manualSession2 === void 0
+            ? void 0
+            : _this$manualSession2.getControlledMotion(ref, time)) !== null &&
+        _this$manualSession$g !== void 0
+          ? _this$manualSession$g
+          : void 0;
       sampleCardCarousel3D(
         runtime.prepared,
         {
@@ -9842,6 +11994,7 @@ var V5GCocosPlayer = class {
           transform: sampledLayer.transform,
           blendMode: sampledLayer.blendMode,
           textures: runtime.textureInfos,
+          motion: controlledMotion,
         },
         runtime.output,
       );
@@ -10249,7 +12402,7 @@ var V5GCocosPlayer = class {
     }
   }
   updateMaskSample(managed) {
-    var _managed$layer$mask, _this$options$driver$, _this$options$driver;
+    var _managed$layer$mask, _this$options$driver$3, _this$options$driver2;
     if (
       !managed.maskNode ||
       !((_managed$layer$mask = managed.layer.mask) === null ||
@@ -10263,11 +12416,11 @@ var V5GCocosPlayer = class {
       throw new Error(
         `Missing VNI mask source layer "${managed.layer.mask.sourceLayerId}" for "${managed.layer.id}".`,
       );
-    (_this$options$driver$ = (_this$options$driver = this.options.driver)
+    (_this$options$driver$3 = (_this$options$driver2 = this.options.driver)
       .updateAlphaMaskNode) === null ||
-      _this$options$driver$ === void 0 ||
-      _this$options$driver$.call(
-        _this$options$driver,
+      _this$options$driver$3 === void 0 ||
+      _this$options$driver$3.call(
+        _this$options$driver2,
         managed.maskNode,
         source.displayNode,
         managed.node,
@@ -10604,15 +12757,15 @@ var V5GCocosPlayer = class {
     );
   }
   isDriverNodeValid(node) {
-    var _this$options$driver$2, _this$options$driver$3, _this$options$driver2;
+    var _this$options$driver$4, _this$options$driver$5, _this$options$driver3;
     if (node === null || node === void 0) return false;
-    return (_this$options$driver$2 =
-      (_this$options$driver$3 = (_this$options$driver2 = this.options.driver)
-        .isValidNode) === null || _this$options$driver$3 === void 0
+    return (_this$options$driver$4 =
+      (_this$options$driver$5 = (_this$options$driver3 = this.options.driver)
+        .isValidNode) === null || _this$options$driver$5 === void 0
         ? void 0
-        : _this$options$driver$3.call(_this$options$driver2, node)) !== null &&
-      _this$options$driver$2 !== void 0
-      ? _this$options$driver$2
+        : _this$options$driver$5.call(_this$options$driver3, node)) !== null &&
+      _this$options$driver$4 !== void 0
+      ? _this$options$driver$4
       : true;
   }
   normalizePlaybackRange(range, apiName) {
@@ -10741,18 +12894,19 @@ var V5GCocosPlayer = class {
       throw new Error(`${field} must be a non-negative integer.`);
   }
   setPlaying(nextPlaying) {
-    var _this$options$onPlayi, _this$options6;
+    var _this$options$onPlayi2, _this$options7;
     if (this.isPlaying === nextPlaying) return;
     this.isPlaying = nextPlaying;
-    (_this$options$onPlayi = (_this$options6 = this.options)
+    (_this$options$onPlayi2 = (_this$options7 = this.options)
       .onPlayingChange) === null ||
-      _this$options$onPlayi === void 0 ||
-      _this$options$onPlayi.call(_this$options6, this.isPlaying);
+      _this$options$onPlayi2 === void 0 ||
+      _this$options$onPlayi2.call(_this$options7, this.playing);
   }
   resetPlaybackRuntime() {
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
+    this.manualRangeCompletion = null;
     this.playbackMode = "timeline";
     this.playbackPhase = "idle";
     this.loopIndex = 0;
@@ -10787,6 +12941,12 @@ var V5GCocosPlayer = class {
   assertInitialized(apiName = "seek/update") {
     if (this.stageNode === null)
       throw new Error(`V5GCocosPlayer must be initialized before ${apiName}.`);
+  }
+  assertLegacyTransportAvailable(methodName) {
+    if (this.manualSession)
+      throw new Error(
+        `V5GCocosPlayer.${methodName}() cannot run while a manual playback session is active.`,
+      );
   }
   requireImageAsset(layer, assetsById) {
     if (layer.type !== "image" || !layer.assetId)
@@ -10880,12 +13040,12 @@ var V5GCocosPlayer = class {
   clearMaskNodes() {
     for (const managed of this.layers.values())
       if (managed.maskNode) {
-        var _this$options$driver$4, _this$options$driver3;
-        (_this$options$driver$4 = (_this$options$driver3 = this.options.driver)
+        var _this$options$driver$6, _this$options$driver4;
+        (_this$options$driver$6 = (_this$options$driver4 = this.options.driver)
           .clearAlphaMask) === null ||
-          _this$options$driver$4 === void 0 ||
-          _this$options$driver$4.call(
-            _this$options$driver3,
+          _this$options$driver$6 === void 0 ||
+          _this$options$driver$6.call(
+            _this$options$driver4,
             managed.node,
             managed.maskNode,
           );
@@ -10898,10 +13058,22 @@ var V5GCocosPlayer = class {
       for (const frame of managed.deterministicEffectFrameCache.values())
         this.destroyRuntimeSpriteFrameRegion(frame);
       managed.deterministicEffectFrameCache.clear();
-      for (const runtime of managed.cardCarouselRuntimes)
-        for (const frames of runtime.sliceFrames)
-          for (const frame of frames)
-            this.destroyRuntimeSpriteFrameRegion(frame);
+      for (const runtime of managed.cardCarouselRuntimes) {
+        for (
+          let carrierIndex = 0;
+          carrierIndex < runtime.sourceFrames.length;
+          carrierIndex += 1
+        )
+          this.releaseCardCarouselView(
+            runtime,
+            runtime.sourceFrames[carrierIndex],
+            runtime.textureInfos[carrierIndex],
+          );
+        if (runtime.viewCache.size !== 0)
+          throw new Error(
+            "V5G CardCarousel slice view cache leaked during destroy.",
+          );
+      }
       managed.cardCarouselRuntimes.length = 0;
     }
   }
@@ -11243,6 +13415,23 @@ const __standalone_sampleCardCarousel3D: (
   output: VNICardCarousel3DSampleBuffer,
 ) => VNICardCarousel3DSampleBuffer = sampleCardCarousel3D;
 
+const __standalone_createCardCarousel3DContinuousMotion: (
+  prepared: VNICardCarousel3DPreparedConfig,
+  elapsedSeconds: number,
+) => VNICardCarousel3DMotionSample = createCardCarousel3DContinuousMotion;
+
+const __standalone_createCardCarousel3DResolvePlan: (
+  prepared: VNICardCarousel3DPreparedConfig,
+  currentRotation: number,
+  selectedCarrierIndex: number,
+) => VNICyclicResolvePlan = createCardCarousel3DResolvePlan;
+
+const __standalone_sampleCardCarousel3DResolveMotion: (
+  prepared: VNICardCarousel3DPreparedConfig,
+  plan: VNICyclicResolvePlan,
+  endingElapsedSeconds: number,
+) => VNICardCarousel3DMotionSample = sampleCardCarousel3DResolveMotion;
+
 const __standalone_getCardCarousel3DProgress: (
   animation: V5GAnimationConfig,
   time: number,
@@ -11251,6 +13440,37 @@ const __standalone_getCardCarousel3DProgress: (
 const __standalone_getCardCarousel3DSyncedDuration: (
   animation: V5GAnimationConfig,
 ) => number = getCardCarousel3DSyncedDuration;
+
+const __standalone_createVNICyclicMotionSnapshot: (options: {
+  unwrappedTurns: number;
+  velocityTurnsPerSecond: number;
+  carrierCount: number;
+}) => VNICyclicMotionSnapshot = createVNICyclicMotionSnapshot;
+
+const __standalone_advanceVNICyclicContinuousMotion: (
+  snapshot: VNICyclicMotionSnapshot,
+  deltaSeconds: number,
+) => VNICyclicMotionSnapshot = advanceVNICyclicContinuousMotion;
+
+const __standalone_createVNICyclicResolvePlan: (options: {
+  snapshot: VNICyclicMotionSnapshot;
+  selectedCarrierIndex: number;
+  direction: 1 | -1;
+  rounds: number;
+  fastRelativeTurns: number;
+  stopOvershoot: number;
+}) => VNICyclicResolvePlan = createVNICyclicResolvePlan;
+
+const __standalone_sampleVNICyclicResolveStopTurns: (
+  plan: VNICyclicResolvePlan,
+  progress: number,
+) => number = sampleVNICyclicResolveStopTurns;
+
+const __standalone_getVNICyclicCarrierAlignmentErrorTurns: (
+  turns: number,
+  carrierIndex: number,
+  carrierCount: number,
+) => number = getVNICyclicCarrierAlignmentErrorTurns;
 
 const __standalone_isRenderEffectAnimationType: (
   value: string,
@@ -11465,8 +13685,16 @@ export {
   __standalone_prepareCardCarousel3D as prepareCardCarousel3D,
   __standalone_createCardCarousel3DSampleBuffer as createCardCarousel3DSampleBuffer,
   __standalone_sampleCardCarousel3D as sampleCardCarousel3D,
+  __standalone_createCardCarousel3DContinuousMotion as createCardCarousel3DContinuousMotion,
+  __standalone_createCardCarousel3DResolvePlan as createCardCarousel3DResolvePlan,
+  __standalone_sampleCardCarousel3DResolveMotion as sampleCardCarousel3DResolveMotion,
   __standalone_getCardCarousel3DProgress as getCardCarousel3DProgress,
   __standalone_getCardCarousel3DSyncedDuration as getCardCarousel3DSyncedDuration,
+  __standalone_createVNICyclicMotionSnapshot as createVNICyclicMotionSnapshot,
+  __standalone_advanceVNICyclicContinuousMotion as advanceVNICyclicContinuousMotion,
+  __standalone_createVNICyclicResolvePlan as createVNICyclicResolvePlan,
+  __standalone_sampleVNICyclicResolveStopTurns as sampleVNICyclicResolveStopTurns,
+  __standalone_getVNICyclicCarrierAlignmentErrorTurns as getVNICyclicCarrierAlignmentErrorTurns,
   __standalone_isRenderEffectAnimationType as isRenderEffectAnimationType,
   __standalone_getRenderEffectProgress as getRenderEffectProgress,
   __standalone_hasActiveRenderEffectAnimation as hasActiveRenderEffectAnimation,
@@ -11507,4 +13735,6 @@ export {
   __standalone_getCocosBlendModeConfig as getCocosBlendModeConfig,
   __standalone_v5gTransformToCocosPosition as v5gTransformToCocosPosition,
   __standalone_opacityToCocosOpacity as opacityToCocosOpacity,
+  V5GCocosPlaybackCancelledError,
+  V5GCocosManualPlaybackSessionImpl,
 };
