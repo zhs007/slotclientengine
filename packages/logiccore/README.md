@@ -254,3 +254,9 @@ pnpm --filter @slotclientengine/logiccore test:exports
 export http_proxy=http://127.0.0.1:1087;export https_proxy=http://127.0.0.1:1087;
 pnpm install
 ```
+
+## 配置驱动 round plan
+
+`parseSlotRoundFlowProfile(input, { activeSymbols })` 严格解析 V1 component role、cascade block 与 symbol policy。policy 数组必须显式存在、无重复，并按 active symbol package 的大小写精确 code 校验；未知字段、版本、component role 冲突和未知 symbol 都会失败。
+
+`compileSlotRoundExecutionPlan(profile, logic, context)` 是 renderer-free 纯函数。它在画面开始前一次性校验全部 step、scene/result/otherScene 索引、remove hole、dropdown occurrence 一一映射、held occurrence、refill closure 与 value authority，输出深冻结的稳定 occurrence/movement plan。编译器不依赖 Pixi、DOM 或动画实现，也不认识任何游戏 component/symbol 名。

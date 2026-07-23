@@ -52,6 +52,127 @@ const serverSummary = {
   ],
 } as const;
 
+function runtimeConfig(reelKind: "standard" | "grid-cell" = "standard") {
+  const amount = {
+    cashFields: ["cashWin64", "cashWin"],
+    coinFields: ["coinWin64", "coinWin"],
+    cashUnit: "cents",
+  };
+  return {
+    kind: "scene-layout-slot-template",
+    version: 1,
+    title: "Imported",
+    live: {
+      serverUrl: "wss://example.com/",
+      gamecode: "code",
+      clienttype: "web",
+      jurisdiction: "MT",
+      language: "zh-CN",
+      requestTimeoutMs: 1000,
+    },
+    wager: {
+      betOptions: [{ bet: 2, lines: 30, times: 3 }],
+      initialBetIndex: 0,
+    },
+    round: {
+      kind: "slot-round-flow",
+      version: 1,
+      components: {
+        spin: "spin",
+        wins: ["wins"],
+        valueUpdates: ["values"],
+      },
+      cascade: {
+        kind: "cascade",
+        version: 1,
+        components: {
+          remove: "remove",
+          dropdown: "dropdown",
+          refill: "refill",
+          stepMarker: "respin",
+        },
+        symbols: {
+          emptyCode: -1,
+          removeExcludedSymbols: ["HOLD"],
+          dropHeldSymbols: ["HOLD"],
+          valueSymbols: ["VALUE"],
+          sequentialWinCompanionSymbols: ["HOLD"],
+        },
+        amount,
+      },
+      amount,
+    },
+    presentation: {
+      reel:
+        reelKind === "standard"
+          ? {
+              kind: "standard",
+              version: 1,
+              direction: "backward",
+              speedSymbolsPerSecond: 20,
+              minimumSpinCycles: 3,
+              baseDurationMs: 800,
+              startDelayMs: 10,
+              stopDelayMs: 100,
+              bounceStrength: 0,
+            }
+          : {
+              kind: "grid-cell",
+              version: 1,
+              direction: "forward",
+              order: "top-down-left-right",
+              timing: {
+                startStepMs: 16,
+                stopStepMs: 100,
+                settleAfterLastStartMs: 800,
+                minimumSpinCycles: 3,
+                speedSymbolsPerSecond: 20,
+              },
+              bounceStrength: 0,
+            },
+      flow: {
+        version: 2,
+        symbolStates: { normal: "normal", win: "win", remove: "remove" },
+        dimmingAlpha: 0.5,
+        popup: { enabled: true },
+        cascade: {
+          emphasisFadeInMs: 100,
+          emphasisHoldMs: 1000,
+          emphasisFadeOutMs: 100,
+          baseFallSeconds: 0.2,
+          perRowFallSeconds: 0.05,
+          maxFallSeconds: 1,
+          settleSeconds: 0.1,
+        },
+        collect: {
+          startPresentationsWithEmphasis: true,
+          formatter: { kind: "decimal-cents", prefix: "$" },
+          itemOrder: "row-major",
+          amountText: {
+            yOffsetRatioFromCellCenter: 0.22,
+            fontSize: 38,
+            fill: "#fff",
+            stroke: "#000",
+            strokeWidth: 5,
+          },
+          summary: {
+            countDurationSeconds: 0.35,
+            startIntervalSeconds: 0.3,
+            position: { x: 360, y: 1116 },
+            textStyle: {
+              fontSize: 48,
+              fontWeight: 900,
+              fill: "#fff",
+              stroke: "#000",
+              strokeWidth: 5,
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
 function setFiles(input: HTMLInputElement, files: readonly File[]): void {
   Object.defineProperty(input, "files", {
     configurable: true,
@@ -172,6 +293,7 @@ describe("gameviewer configurator shell", () => {
             removeOccurrences: true,
             dropdownOccurrences: true,
             refillOccurrences: true,
+            sequentialCollect: true,
           },
           columns: 6,
           rows: 9,
@@ -228,6 +350,82 @@ describe("gameviewer configurator shell", () => {
     expect(root.querySelector("[data-toast-stack]")!.textContent).toContain(
       "已安全接收",
     );
+    root.remove();
+  });
+
+  it("imports, edits, exports and re-imports a strict policy config without credential", async () => {
+    const root = document.createElement("div");
+    document.body.appendChild(root);
+    createGameViewerAppShell(root);
+    const credential = root.querySelector<HTMLInputElement>("[name=token]")!;
+    credential.value = "session-secret";
+    const configInput = root.querySelector<HTMLInputElement>(
+      "[data-config-input]",
+    )!;
+    setFiles(configInput, [
+      new File([JSON.stringify(runtimeConfig())], "runtime.json"),
+    ]);
+    configInput.dispatchEvent(new Event("change"));
+    await flush();
+
+    expect(root.querySelector<HTMLInputElement>("[name=title]")!.value).toBe(
+      "Imported",
+    );
+    expect(
+      root.querySelector<HTMLInputElement>("[name=companionSymbols]")!.value,
+    ).toBe("HOLD");
+    expect(
+      root.querySelector<HTMLSelectElement>("[name=reelKind]")!.value,
+    ).toBe("standard");
+    expect(credential.value).toBe("session-secret");
+
+    let exportedBlob: Blob | null = null;
+    const createUrl = vi
+      .spyOn(URL, "createObjectURL")
+      .mockImplementation((blob) => {
+        if (!(blob instanceof Blob)) throw new Error("expected config Blob");
+        exportedBlob = blob;
+        return "blob:fixture";
+      });
+    const revokeUrl = vi
+      .spyOn(URL, "revokeObjectURL")
+      .mockImplementation(() => undefined);
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    root.querySelector<HTMLButtonElement>("[data-config-export]")!.click();
+    expect(exportedBlob).not.toBeNull();
+    const exported = await exportedBlob!.text();
+    expect(exported).toContain('"sequentialWinCompanionSymbols"');
+    expect(exported).not.toContain("session-secret");
+    expect(click).toHaveBeenCalledOnce();
+    expect(createUrl).toHaveBeenCalledOnce();
+    expect(revokeUrl).toHaveBeenCalledWith("blob:fixture");
+
+    setFiles(configInput, [new File([exported], "roundtrip.json")]);
+    configInput.dispatchEvent(new Event("change"));
+    await flush();
+    expect(
+      root.querySelector<HTMLInputElement>("[name=valueSymbols]")!.value,
+    ).toBe("VALUE");
+
+    setFiles(configInput, [
+      new File([JSON.stringify(runtimeConfig("grid-cell"))], "grid.json"),
+    ]);
+    configInput.dispatchEvent(new Event("change"));
+    await flush();
+    expect(
+      root.querySelector<HTMLSelectElement>("[name=reelKind]")!.value,
+    ).toBe("grid-cell");
+    expect(
+      root
+        .querySelector<HTMLElement>("[data-grid-fields]")!
+        .hasAttribute("data-visible"),
+    ).toBe(true);
+
+    click.mockRestore();
+    createUrl.mockRestore();
+    revokeUrl.mockRestore();
     root.remove();
   });
 });

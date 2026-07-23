@@ -34,6 +34,7 @@ describe("GameViewerStore", () => {
           removeOccurrences: true,
           dropdownOccurrences: true,
           refillOccurrences: true,
+          sequentialCollect: false,
         },
         columns: 3,
         rows: 3,

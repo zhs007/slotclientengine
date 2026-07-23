@@ -450,6 +450,61 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     return this.requireReel("main").getVisibleSymbolStateSnapshots(positions);
   }
 
+  hasMainReelSymbolStateCapability(
+    position: { readonly x: number; readonly y: number },
+    state: string,
+  ): boolean {
+    this.assertReady();
+    return this.requireReel("main").hasVisibleSymbolStateCapability(
+      position.x,
+      position.y,
+      state,
+    );
+  }
+
+  getMainReelSceneSnapshot(): readonly (readonly number[])[] {
+    this.assertReady();
+    return this.requireReel("main").getVisibleScene();
+  }
+
+  getMainReelCascadeValues(): import("../reel/index.js").GridCellCascadeValueMatrix {
+    this.assertReady();
+    return this.requireReel("main").getCascadeValues();
+  }
+
+  releaseMainReelSymbols(
+    positions: readonly { readonly x: number; readonly y: number }[],
+  ): void {
+    this.assertReady();
+    this.requireReel("main").releaseVisibleSymbols(positions);
+  }
+
+  setMainReelSymbolDimming(
+    highlightedPositions: readonly {
+      readonly x: number;
+      readonly y: number;
+    }[],
+    dimmingAlpha: number,
+  ): void {
+    this.assertReady();
+    this.requireReel("main").setVisibleSymbolDimming(
+      highlightedPositions,
+      dimmingAlpha,
+    );
+  }
+
+  clearMainReelSymbolDimming(): void {
+    this.assertReady();
+    this.requireReel("main").clearVisibleSymbolDimming();
+  }
+
+  startMainReelCascadeDrop(
+    plan: import("../reel/index.js").GridCellCascadeDropPlan,
+  ): void {
+    this.assertReady();
+    this.requireReel("main").startCascadeDrop(plan);
+  }
+
   getReelPresentation(reelId: "main"): Container {
     this.assertReady();
     return this.requireReel(reelId);

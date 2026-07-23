@@ -560,6 +560,124 @@ describe("RenderReelSet", () => {
         .every((slot) => slot.symbol === null),
     ).toBe(true);
   });
+
+  it("runs a real standard-reel cascade while preserving existing occurrence identity", () => {
+    const reelSet = new RenderReelSet({
+      reels: createBasicReels(),
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    reelSet.resetToVisibleScene(
+      [
+        [1, 1, 2],
+        [2, 2, 1],
+      ],
+      [0, 0],
+    );
+    const carried = getVisibleSlotSymbol(reelSet, 0, 0);
+    reelSet.releaseVisibleSymbols([{ x: 0, y: 1 }]);
+    reelSet.startCascadeDrop({
+      columns: 2,
+      rows: 3,
+      sourceScene: [
+        [1, -1, 2],
+        [2, 2, 1],
+      ],
+      sourceValues: [
+        [null, -1, null],
+        [null, null, null],
+      ],
+      settledScene: [
+        [-1, 1, 2],
+        [2, 2, 1],
+      ],
+      settledValues: [
+        [-1, null, null],
+        [null, null, null],
+      ],
+      targetScene: [
+        [2, 1, 2],
+        [2, 2, 1],
+      ],
+      targetValues: [
+        [null, null, null],
+        [null, null, null],
+      ],
+      refillPositions: [{ x: 0, y: 0 }],
+      movements: [
+        {
+          kind: "existing",
+          x: 0,
+          sourceY: 0,
+          targetY: 1,
+          code: 1,
+          presentationValue: null,
+          startSeconds: 0,
+          fallSeconds: 0.1,
+          settleSeconds: 0.05,
+          overshootPixels: 0,
+        },
+        {
+          kind: "refill",
+          x: 0,
+          sourceY: -1,
+          targetY: 0,
+          code: 2,
+          presentationValue: null,
+          startSeconds: 0.02,
+          fallSeconds: 0.1,
+          settleSeconds: 0.05,
+          overshootPixels: 0,
+        },
+      ],
+      totalSeconds: 0.17,
+    });
+    expect(reelSet.getSnapshot().spinning).toBe(true);
+    reelSet.update(0.1);
+    reelSet.update(0.1);
+    expect(reelSet.getVisibleScene()).toEqual([
+      [2, 1, 2],
+      [2, 2, 1],
+    ]);
+    expect(getVisibleSlotSymbol(reelSet, 0, 1)).toBe(carried);
+    expect(reelSet.getSnapshot().spinning).toBe(false);
+  });
+
+  it("rejects invalid standard-reel cascade positions and dimming inputs", () => {
+    const reelSet = new RenderReelSet({
+      reels: createBasicReels(),
+      layout: createBasicLayout(),
+      registry: createBasicRegistry(),
+    });
+    reelSet.resetToVisibleScene(
+      [
+        [1, 1, 2],
+        [2, 2, 1],
+      ],
+      [0, 0],
+    );
+    expect(() =>
+      reelSet.releaseVisibleSymbols([
+        { x: 0, y: 0 },
+        { x: 0, y: 0 },
+      ]),
+    ).toThrow(/duplicate 0,0/);
+    expect(() =>
+      reelSet.releaseVisibleSymbols([{ x: Number.NaN, y: 0 }]),
+    ).toThrow(/out of range/);
+    expect(() => reelSet.releaseVisibleSymbols([{ x: 2, y: 0 }])).toThrow(
+      /out of range/,
+    );
+    expect(() =>
+      reelSet.setVisibleSymbolDimming([], Number.POSITIVE_INFINITY),
+    ).toThrow(/finite and between 0 and 1/);
+    expect(() => reelSet.setVisibleSymbolDimming([], -0.1)).toThrow(
+      /finite and between 0 and 1/,
+    );
+    expect(() => reelSet.setVisibleSymbolDimming([], 1.1)).toThrow(
+      /finite and between 0 and 1/,
+    );
+  });
 });
 
 function getVisibleSlotSymbol(reelSet: RenderReelSet, x: number, y: number) {

@@ -48,3 +48,5 @@
 因此 Task 123 完成定义第 6、8、10、11 项尚不能标记通过；本报告不伪造完整 cascade/live 验收。live 凭据也未提供，未执行 live smoke。
 
 后续应优先把 game002 的通用 cascade sequence 下沉为 capability-driven shared coordinator，并让 standard/grid-cell adapter 都实现相同 cascade target；随后补 faithful GMI 的 no-win、win/cascade、value/collect 测试，再进行用户浏览器验收。
+
+> 后续状态：上述 round/cascade 缺口由 Task 124 处理；原报告保留 Task 123 当时的验收事实，Task 124 的实现与验证结果见对应带 UTC 时间戳的执行报告。

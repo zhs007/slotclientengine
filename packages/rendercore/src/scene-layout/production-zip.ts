@@ -7,7 +7,7 @@ import type { DecodeImageStringImage } from "../image-string/index.js";
 import { SceneLayoutError } from "./errors.js";
 import {
   collectSceneLayoutPackagePaths,
-  createSceneLayoutPackageResource,
+  createSceneLayoutPackageResourceFromResolvedFiles,
   resolveSceneLayoutPackageFiles,
 } from "./package-resource.js";
 import { parseSceneLayoutManifest } from "./manifest.js";
@@ -65,7 +65,7 @@ export async function inspectSceneLayoutPackageZipBytes(options: {
   );
   return Object.freeze({
     manifest,
-    files,
+    files: resolved,
     entryCount: files.size,
     totalBytes,
   });
@@ -78,7 +78,7 @@ export async function loadSceneLayoutPackageFromZipBytes(options: {
   readonly loadSymbolTextures?: boolean;
 }): Promise<SceneLayoutPackageResource> {
   const inspected = await inspectSceneLayoutPackageZipBytes(options);
-  return createSceneLayoutPackageResource({
+  return createSceneLayoutPackageResourceFromResolvedFiles({
     manifest: inspected.manifest,
     files: inspected.files,
     ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),

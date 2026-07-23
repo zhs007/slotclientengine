@@ -14,6 +14,7 @@ import {
   inspectSceneLayoutPackageZipBytes,
   loadSceneLayoutPackageFromZipBytes,
   parseSlotTemplatePresentationProfile,
+  validateInspectedSlotTemplateCompatibility,
   validateSlotTemplateCompatibility,
   type SceneLayoutManifestV1,
   type SlotTemplateCompatibilitySnapshot,
@@ -111,10 +112,10 @@ export async function inspectSceneLayoutTemplateInputs(options: {
     throw new Error(
       `Layout ZIP hash mismatch: expected ${options.expectedLayoutSha256}, received ${layout.sha256}.`,
     );
-  const compatibility = validateSlotTemplateCompatibility({
+  const compatibility = validateInspectedSlotTemplateCompatibility({
     roundFlow: config.round,
     presentation: config.presentation,
-    packageResource: inspected,
+    packageInput: inspected,
   });
   const warnings = createCapabilityWarnings(inspected.manifest);
   return deepFreeze({
