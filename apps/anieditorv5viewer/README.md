@@ -1,5 +1,9 @@
 # anieditorv5viewer
 
+控制区使用“项目 / 播放 / 组间插入 / 文字替换”四个原生可访问 Tab。方向键在 Tab 间循环，Home/End 跳到首尾；切换 Tab 只改变配置可见性，不中断动画。控制区高度有界，active panel 内部滚动，预览 stage 保留主要空间。
+
+“播放”Tab 的连续周期预览只枚举 public `cyclic-selection` capability。Viewer 从 public authored descriptor 取得默认慢速时长、intro/ending 和 authored target；一次“自动预览”依次执行 intro、连续阶段、authored selection、resolve 和 ending。慢速时长只改变运动路径，`0`、更长等待都仍停在导出 authored target；Viewer 不提供确认、结束循环或可编辑 target。
+
 `apps/anieditorv5viewer` is a Vite + TypeScript viewer shell for uploaded VNI zip exports. It no longer bundles local animation JSON or copied image assets; playback starts only after the user selects a `.zip` file in the browser.
 
 The animation runtime comes from `@slotclientengine/vnicore`. This app owns upload handling, zip parsing, profile selection, controls, styles, Blob URL lifecycle, and browser assembly. Validation, sequence frame selection, `multi_move` sampling, Pixi.js v8 rendering, texture-size checks, masks, particles, VNI_0.070 deterministic effects, playback ranges, segmented playback, particle-draining, and diagnostics live in `packages/vnicore`.

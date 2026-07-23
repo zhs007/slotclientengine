@@ -1,5 +1,11 @@
 # vnicore 使用说明
 
+## 手工连续周期选择
+
+高级宿主流程参见 `examples/manual-cyclic-playback.ts`：创建唯一 manual session，通过稳定 `layerId/animationId` 获取 `cyclic-selection` controller；播放 intro 一次；hold 主时间轴并启动 `idle` continuous phase；用户操作和服务器等待期间由 RAF 或宿主 `update(deltaSeconds)` 继续累计真实相位；提交 selected item 并等待 safe replacement committed；最后 release hold、启动 resolve 并播放 ending。
+
+不启用 manual session 时，原 full-demo、range、segmented 和粒子排空行为保持不变。编辑器和 VNI JSON schema 不需要为该能力新增字段。
+
 `@slotclientengine/vnicore` 是 Pixi.js v8 的 VNI 动画 runtime core。宿主应用负责页面、项目选择、资源导入和 UI 控件；`vnicore` 负责校验、采样、Pixi 渲染、贴图尺寸校验、播放控制和 diagnostics。
 
 ## 依赖方式

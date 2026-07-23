@@ -1,4 +1,10 @@
 import { clampNumber } from "./coordinates.js";
+import {
+  createVNICyclicMotionSnapshot,
+  createVNICyclicResolvePlan,
+  sampleVNICyclicResolveStopTurns,
+  type VNICyclicResolvePlan,
+} from "./cyclic-selection.js";
 import { getTimelineAnimationProgress } from "./timeline-progress.js";
 import type {
   V5GAnimationConfig,
@@ -116,6 +122,14 @@ export interface VNICardCarousel3DSampleInput {
   transform: V5GTransformConfig;
   blendMode: V5GBlendMode;
   textures: readonly VNICardCarousel3DTextureInfo[];
+  motion?: VNICardCarousel3DMotionSample;
+}
+
+export interface VNICardCarousel3DMotionSample {
+  readonly rotation: number;
+  readonly introElapsed: number;
+  readonly stopPhase: number;
+  readonly targetIndex: number;
 }
 
 const TWO_PI = Math.PI * 2;
@@ -283,7 +297,27 @@ export function sampleCardCarousel3D(
       `VNI card_carousel_3d animation "${prepared.animationId}" requires at least one texture.`,
     );
   }
-  samplePhase(prepared, clampNumber(input.progress, 0, 1), output);
+  const motion = input.motion;
+  if (motion) {
+    if (
+      !Number.isFinite(motion.rotation) ||
+      !Number.isFinite(motion.introElapsed) ||
+      !Number.isFinite(motion.stopPhase) ||
+      !Number.isSafeInteger(motion.targetIndex) ||
+      motion.targetIndex < 0 ||
+      motion.targetIndex >= prepared.cardCount
+    ) {
+      throw new Error(
+        `VNI card_carousel_3d animation "${prepared.animationId}" received invalid controlled motion.`,
+      );
+    }
+    output.rotation = motion.rotation;
+    output.introElapsed = motion.introElapsed;
+    output.stopPhase = clampNumber(motion.stopPhase, 0, 1);
+  } else {
+    samplePhase(prepared, clampNumber(input.progress, 0, 1), output);
+  }
+  const targetIndex = motion?.targetIndex ?? prepared.targetIndex;
   const finalEffectPhase = clampNumber((output.stopPhase - 0.78) / 0.22, 0, 1);
   const finalEffectWave = Math.sin(finalEffectPhase * Math.PI);
   output.finalEffectWave = finalEffectWave;
@@ -310,7 +344,7 @@ export function sampleCardCarousel3D(
     const side = Math.sin(angle);
     const sideAbs = Math.abs(side);
     const depth = clampNumber((frontness + 1) / 2, 0, 1);
-    const isTargetCard = cardIndex === prepared.targetIndex;
+    const isTargetCard = cardIndex === targetIndex;
     const finalPopScale =
       isTargetCard && output.stopPhase > 0
         ? 1 + prepared.finalPop * finalEffectWave
@@ -410,6 +444,83 @@ export function sampleCardCarousel3D(
     insertDrawOrder(output, cardIndex);
   }
   return output;
+}
+
+export function createCardCarousel3DContinuousMotion(
+  prepared: VNICardCarousel3DPreparedConfig,
+  elapsedSeconds: number,
+): VNICardCarousel3DMotionSample {
+  if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 0) {
+    throw new Error(
+      "VNI card_carousel_3d continuous elapsedSeconds must be finite and non-negative.",
+    );
+  }
+  return Object.freeze({
+    rotation:
+      prepared.introRotation +
+      prepared.direction * prepared.idleSpeed * elapsedSeconds * TWO_PI,
+    introElapsed: prepared.introDuration,
+    stopPhase: 0,
+    targetIndex: prepared.targetIndex,
+  });
+}
+
+export function createCardCarousel3DResolvePlan(
+  prepared: VNICardCarousel3DPreparedConfig,
+  currentRotation: number,
+  selectedCarrierIndex: number,
+): VNICyclicResolvePlan {
+  if (!Number.isFinite(currentRotation)) {
+    throw new Error("VNI card_carousel_3d currentRotation must be finite.");
+  }
+  return createVNICyclicResolvePlan({
+    snapshot: createVNICyclicMotionSnapshot({
+      unwrappedTurns: currentRotation / TWO_PI,
+      velocityTurnsPerSecond: prepared.direction * prepared.idleSpeed,
+      carrierCount: prepared.cardCount,
+    }),
+    selectedCarrierIndex,
+    direction: prepared.direction,
+    rounds: prepared.rounds,
+    fastRelativeTurns:
+      sampleFastRotation(prepared, prepared.fastDuration) / TWO_PI,
+    stopOvershoot: prepared.stopOvershoot,
+  });
+}
+
+export function sampleCardCarousel3DResolveMotion(
+  prepared: VNICardCarousel3DPreparedConfig,
+  plan: VNICyclicResolvePlan,
+  endingElapsedSeconds: number,
+): VNICardCarousel3DMotionSample {
+  if (!Number.isFinite(endingElapsedSeconds) || endingElapsedSeconds < 0) {
+    throw new Error(
+      "VNI card_carousel_3d endingElapsedSeconds must be finite and non-negative.",
+    );
+  }
+  let rotation: number;
+  let stopPhase = 0;
+  if (endingElapsedSeconds < prepared.fastDuration) {
+    rotation =
+      plan.startTurns * TWO_PI +
+      sampleFastRotation(prepared, endingElapsedSeconds);
+  } else if (
+    endingElapsedSeconds <
+    prepared.fastDuration + prepared.stopDuration
+  ) {
+    stopPhase =
+      (endingElapsedSeconds - prepared.fastDuration) / prepared.stopDuration;
+    rotation = sampleVNICyclicResolveStopTurns(plan, stopPhase) * TWO_PI;
+  } else {
+    stopPhase = 1;
+    rotation = plan.finalTurns * TWO_PI;
+  }
+  return Object.freeze({
+    rotation,
+    introElapsed: prepared.introDuration,
+    stopPhase,
+    targetIndex: plan.selectedCarrierIndex,
+  });
 }
 
 export function getCardCarousel3DProgress(

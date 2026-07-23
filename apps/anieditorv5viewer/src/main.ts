@@ -6,6 +6,9 @@ import {
 } from "./runtime/uploaded-zip-project";
 import {
   VNIPlayer,
+  type VNIAnimationRuntimeRef,
+  type VNIManualPlaybackSession,
+  type VNIPlaybackOperation,
   type VNITextLayerTextBinding,
 } from "@slotclientengine/vnicore/pixi";
 import { Application } from "pixi.js";
@@ -67,6 +70,9 @@ async function bootstrap(): Promise<void> {
   let activeProject: LoadedUploadedVNIProject | null = null;
   let stageCanvasScaleIndex = DEFAULT_STAGE_CANVAS_SCALE_INDEX;
   let loadToken = 0;
+  let manualPreviewToken = 0;
+  let manualPreviewSession: VNIManualPlaybackSession | null = null;
+  let manualPreviewOperation: VNIPlaybackOperation | null = null;
 
   const controls = createViewerControls({
     container: controlsMount,
@@ -78,11 +84,13 @@ async function bootstrap(): Promise<void> {
     },
     onTogglePlay: () => {
       if (!player) return;
+      disposeManualPreview();
       if (player.isPlaying()) player.pause();
       else player.play();
       syncPlaybackState();
     },
     onRestart: () => {
+      disposeManualPreview();
       player?.restart();
       syncPlaybackState();
     },
@@ -91,15 +99,18 @@ async function bootstrap(): Promise<void> {
       syncPlaybackState();
     },
     onSeekStart: () => {
+      disposeManualPreview();
       player?.pause();
       syncPlaybackState();
     },
     onSeek: (time) => {
+      disposeManualPreview();
       player?.seek(time);
       syncPlaybackState();
     },
     onSegmentedStart: (advanced) => {
       if (!player) return;
+      disposeManualPreview();
       try {
         player.play({
           mode: "segmented",
@@ -122,6 +133,9 @@ async function bootstrap(): Promise<void> {
       } catch (error) {
         controls.setAdvancedError(getErrorMessage(error));
       }
+    },
+    onCyclicPreview: ({ ref, durationSeconds }) => {
+      void runCyclicPreview(ref, durationSeconds);
     },
     onInsertBetweenGroups: (insertion) => {
       const currentPlayer = player;
@@ -359,6 +373,7 @@ async function bootstrap(): Promise<void> {
       controls.setLoop(player.getLoop());
       controls.setTime(player.getTime());
       syncPlaybackState();
+      inspectCyclicAnimations(player);
     } catch (error) {
       nextPlayer?.destroy();
       nextApp.destroy({ removeView: true });
@@ -373,6 +388,7 @@ async function bootstrap(): Promise<void> {
   }
 
   function disposeActivePlayback(): void {
+    disposeManualPreview();
     disposeInsertedNode?.();
     disposeInsertedNode = null;
     clearTextReplacement();
@@ -390,6 +406,114 @@ async function bootstrap(): Promise<void> {
     controls.setLayerGroupSlots([]);
     controls.setInsertedNodeActive(false);
     controls.setTextReplacementActive(false);
+    controls.setCyclicAnimations([]);
+    controls.setCyclicState(null);
+    controls.setCyclicError(null);
+  }
+
+  function inspectCyclicAnimations(currentPlayer: VNIPlayer): void {
+    const session = currentPlayer.createManualPlaybackSession();
+    try {
+      const animations = session.listAnimations({
+        capability: "cyclic-selection",
+      });
+      controls.setCyclicAnimations(
+        animations.map((animation) => ({
+          ref: animation.ref,
+          label: `${animation.layerName} / ${animation.animationName}`,
+          descriptor: session
+            .getAnimation(animation.ref)
+            .requireCyclicSelection()
+            .getAuthoredPreviewDescriptor(),
+        })),
+      );
+    } finally {
+      session.destroy();
+    }
+  }
+
+  async function runCyclicPreview(
+    ref: VNIAnimationRuntimeRef,
+    durationSeconds: number,
+  ): Promise<void> {
+    const currentPlayer = player;
+    if (!currentPlayer) return;
+    disposeManualPreview();
+    const token = ++manualPreviewToken;
+    const session = currentPlayer.createManualPlaybackSession();
+    manualPreviewSession = session;
+    controls.setCyclicError(null);
+    try {
+      const cyclic = session.getAnimation(ref).requireCyclicSelection();
+      const descriptor = cyclic.getAuthoredPreviewDescriptor();
+      cyclic.adoptAuthoredItems();
+      controls.setCyclicState(session.getState());
+
+      manualPreviewOperation = session.playRange({
+        range: descriptor.introRange,
+      });
+      await manualPreviewOperation.completed;
+      assertCurrentManualPreview(token, currentPlayer, session);
+
+      const hold = session.holdTimeline({
+        at: descriptor.continuousHoldPoint,
+      });
+      cyclic.startContinuousPhase({
+        phaseId: descriptor.continuousPhaseId,
+      });
+      controls.setCyclicState(session.getState());
+      if (durationSeconds > 0) {
+        manualPreviewOperation = session.advanceFor({ durationSeconds });
+        await manualPreviewOperation.completed;
+        assertCurrentManualPreview(token, currentPlayer, session);
+      }
+
+      await cyclic.prepareAuthoredSelection().committed;
+      assertCurrentManualPreview(token, currentPlayer, session);
+      hold.release();
+      cyclic.startResolvePhase();
+      manualPreviewOperation = session.playRange({
+        range: descriptor.endingRange,
+        preserveRuntimeAnimationState: true,
+      });
+      controls.setCyclicState(session.getState());
+      await manualPreviewOperation.completed;
+      assertCurrentManualPreview(token, currentPlayer, session);
+      manualPreviewOperation = null;
+      controls.setCyclicState(session.getState());
+    } catch (error) {
+      if (
+        token === manualPreviewToken &&
+        currentPlayer === player &&
+        session === manualPreviewSession
+      ) {
+        controls.setCyclicError(getErrorMessage(error));
+        controls.setCyclicState(session.getState());
+      }
+    }
+  }
+
+  function assertCurrentManualPreview(
+    token: number,
+    currentPlayer: VNIPlayer,
+    session: VNIManualPlaybackSession,
+  ): void {
+    if (
+      token !== manualPreviewToken ||
+      currentPlayer !== player ||
+      session !== manualPreviewSession
+    ) {
+      throw new Error("Stale VNI manual preview.");
+    }
+  }
+
+  function disposeManualPreview(): void {
+    manualPreviewToken += 1;
+    manualPreviewOperation?.cancel();
+    manualPreviewOperation = null;
+    manualPreviewSession?.destroy();
+    manualPreviewSession = null;
+    controls.setCyclicState(null);
   }
 
   function clearTextReplacement(): void {
@@ -427,6 +551,9 @@ async function bootstrap(): Promise<void> {
   }
 
   setStageCanvasScaleIndex(stageCanvasScaleIndex);
+  window.addEventListener("beforeunload", disposeActivePlayback, {
+    once: true,
+  });
 
   function applyStageCanvasViewport(
     app: Application,

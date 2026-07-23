@@ -1,8 +1,14 @@
 import type {
   VNILayerGroupSlot,
+  VNIPlaybackRange,
   VNIPlaybackState,
   VNIProjectConfig,
 } from "@slotclientengine/vnicore/core";
+import type {
+  VNIAnimationRuntimeRef,
+  VNICyclicAuthoredPreviewDescriptor,
+  VNIManualPlaybackState,
+} from "@slotclientengine/vnicore/pixi";
 
 export interface ViewerControlsProfile {
   id: string;
@@ -52,6 +58,10 @@ export interface ViewerControlsOptions {
     keepParticlesAlive: boolean;
   }) => void;
   onSegmentedEnd: () => void;
+  onCyclicPreview: (options: {
+    ref: VNIAnimationRuntimeRef;
+    durationSeconds: number;
+  }) => void;
   onInsertBetweenGroups: (options: {
     assetPath: string;
     assetUrl: string;
@@ -83,11 +93,20 @@ export interface ViewerControls {
   setLoop(loop: boolean): void;
   setPlaybackState(state: VNIPlaybackState): void;
   setAdvancedError(message: string | null): void;
+  setCyclicAnimations(options: readonly ViewerCyclicAnimationOption[]): void;
+  setCyclicState(state: VNIManualPlaybackState | null): void;
+  setCyclicError(message: string | null): void;
   setLayerGroupSlots(slots: readonly VNILayerGroupSlot[]): void;
   setInsertionError(message: string | null): void;
   setInsertedNodeActive(active: boolean): void;
   setTextReplacementError(message: string | null): void;
   setTextReplacementActive(active: boolean): void;
+}
+
+export interface ViewerCyclicAnimationOption {
+  readonly ref: VNIAnimationRuntimeRef;
+  readonly label: string;
+  readonly descriptor: VNICyclicAuthoredPreviewDescriptor;
 }
 
 export function createViewerControls(
@@ -98,6 +117,7 @@ export function createViewerControls(
   let currentLayerGroupSlots: readonly VNILayerGroupSlot[] = [];
   let insertedNodeActive = false;
   let textReplacementActive = false;
+  let cyclicAnimations: readonly ViewerCyclicAnimationOption[] = [];
 
   const root = document.createElement("div");
   root.className = "viewer-controls";
@@ -243,6 +263,58 @@ export function createViewerControls(
     segmentedEndButton,
   );
   advancedPanel.append(advancedHeader, advancedControls, advancedError);
+
+  const cyclicPanel = document.createElement("section");
+  cyclicPanel.className = "cyclic-playback-panel";
+  cyclicPanel.setAttribute("aria-label", "连续周期预览");
+  const cyclicHeader = document.createElement("div");
+  cyclicHeader.className = "cyclic-playback-header";
+  const cyclicTitle = document.createElement("strong");
+  cyclicTitle.textContent = "连续周期预览";
+  const cyclicState = document.createElement("span");
+  cyclicState.className = "cyclic-state";
+  cyclicState.textContent = "未加载";
+  cyclicHeader.append(cyclicTitle, cyclicState);
+  const cyclicControls = document.createElement("div");
+  cyclicControls.className = "cyclic-control-row";
+  const cyclicAnimationLabel = document.createElement("label");
+  cyclicAnimationLabel.className = "cyclic-select";
+  const cyclicAnimationText = document.createElement("span");
+  cyclicAnimationText.textContent = "animation";
+  const cyclicAnimationSelect = document.createElement("select");
+  cyclicAnimationSelect.setAttribute("aria-label", "连续周期动画");
+  cyclicAnimationLabel.append(cyclicAnimationText, cyclicAnimationSelect);
+  const cyclicDurationLabel = document.createElement("label");
+  cyclicDurationLabel.className = "cyclic-number";
+  const cyclicDurationText = document.createElement("span");
+  cyclicDurationText.textContent = "慢速持续秒数";
+  const cyclicDurationInput = document.createElement("input");
+  cyclicDurationInput.type = "number";
+  cyclicDurationInput.min = "0";
+  cyclicDurationInput.max = "3600";
+  cyclicDurationInput.step = "0.1";
+  cyclicDurationInput.setAttribute("aria-label", "连续周期慢速持续秒数");
+  cyclicDurationLabel.append(cyclicDurationText, cyclicDurationInput);
+  const cyclicPreviewButton = document.createElement("button");
+  cyclicPreviewButton.type = "button";
+  cyclicPreviewButton.className = "control-button primary";
+  cyclicPreviewButton.textContent = "自动预览";
+  const cyclicDescriptor = document.createElement("div");
+  cyclicDescriptor.className = "cyclic-descriptor";
+  const cyclicError = document.createElement("div");
+  cyclicError.className = "cyclic-error";
+  cyclicError.setAttribute("role", "status");
+  cyclicControls.append(
+    cyclicAnimationLabel,
+    cyclicDurationLabel,
+    cyclicPreviewButton,
+  );
+  cyclicPanel.append(
+    cyclicHeader,
+    cyclicControls,
+    cyclicDescriptor,
+    cyclicError,
+  );
 
   const insertionPanel = document.createElement("section");
   insertionPanel.className = "group-insertion-panel";
@@ -444,18 +516,87 @@ export function createViewerControls(
     setTextReplacementError(null);
     options.onClearTextLayerReplacement();
   });
+  cyclicAnimationSelect.addEventListener("change", () => {
+    const selected = getSelectedCyclicAnimation();
+    if (selected) {
+      cyclicDurationInput.value = String(
+        selected.descriptor.authoredContinuousPreviewDurationSeconds,
+      );
+    }
+    renderCyclicDescriptor();
+    updateCyclicValidation();
+  });
+  cyclicDurationInput.addEventListener("input", updateCyclicValidation);
+  cyclicPreviewButton.addEventListener("click", () => {
+    const parsed = parseCyclicInputs();
+    if (!parsed.ok) {
+      setCyclicError(parsed.message);
+      return;
+    }
+    setCyclicError(null);
+    options.onCyclicPreview(parsed);
+  });
 
   controls.append(playButton, restartButton, loopLabel, timeText, range);
-  root.append(
-    uploadRow,
-    uploadError,
-    summary,
-    controls,
-    advancedPanel,
-    insertionPanel,
-    textPanel,
-  );
+  const projectPanel = document.createElement("section");
+  projectPanel.className = "viewer-tab-panel";
+  projectPanel.append(uploadRow, uploadError, summary);
+  const playPanel = document.createElement("section");
+  playPanel.className = "viewer-tab-panel";
+  playPanel.append(controls, advancedPanel, cyclicPanel);
+  insertionPanel.classList.add("viewer-tab-panel");
+  textPanel.classList.add("viewer-tab-panel");
+  const tabBar = document.createElement("div");
+  tabBar.className = "viewer-tab-bar";
+  tabBar.setAttribute("role", "tablist");
+  tabBar.setAttribute("aria-label", "Viewer 配置");
+  const panelHost = document.createElement("div");
+  panelHost.className = "viewer-tab-panel-host";
+  const tabDefinitions = [
+    { key: "project", label: "项目", panel: projectPanel },
+    { key: "playback", label: "播放", panel: playPanel },
+    { key: "insertion", label: "组间插入", panel: insertionPanel },
+    { key: "text", label: "文字替换", panel: textPanel },
+  ] as const;
+  const tabButtons = tabDefinitions.map((definition) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.id = `viewer-tab-${definition.key}`;
+    button.className = "viewer-tab";
+    button.textContent = definition.label;
+    button.setAttribute("role", "tab");
+    button.setAttribute("aria-controls", `viewer-panel-${definition.key}`);
+    button.addEventListener("click", () => selectTab(definition.key, false));
+    definition.panel.id = `viewer-panel-${definition.key}`;
+    definition.panel.setAttribute("role", "tabpanel");
+    definition.panel.setAttribute("aria-labelledby", button.id);
+    tabBar.appendChild(button);
+    panelHost.appendChild(definition.panel);
+    return button;
+  });
+  tabBar.addEventListener("keydown", (event) => {
+    const currentIndex = tabButtons.indexOf(
+      document.activeElement as HTMLButtonElement,
+    );
+    if (currentIndex < 0) return;
+    let nextIndex = currentIndex;
+    if (event.key === "ArrowRight") {
+      nextIndex = (currentIndex + 1) % tabButtons.length;
+    } else if (event.key === "ArrowLeft") {
+      nextIndex = (currentIndex - 1 + tabButtons.length) % tabButtons.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = tabButtons.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    selectTab(tabDefinitions[nextIndex].key, true);
+  });
+  root.append(tabBar, panelHost);
   options.container.appendChild(root);
+  selectTab("project", false);
 
   renderProfileSelect();
   renderNoProject();
@@ -476,6 +617,7 @@ export function createViewerControls(
     },
     setProject(project: ViewerControlsProject): void {
       renderProject(project);
+      selectTab("playback", false);
     },
     clearProject(): void {
       renderNoProject();
@@ -505,6 +647,16 @@ export function createViewerControls(
     },
     setAdvancedError(message: string | null): void {
       setAdvancedError(message);
+    },
+    setCyclicAnimations(next): void {
+      cyclicAnimations = [...next];
+      renderCyclicAnimations();
+    },
+    setCyclicState(state): void {
+      cyclicState.textContent = state?.phase ?? "未运行";
+    },
+    setCyclicError(message): void {
+      setCyclicError(message);
     },
     setLayerGroupSlots(slots: readonly VNILayerGroupSlot[]): void {
       currentLayerGroupSlots = [...slots];
@@ -543,6 +695,8 @@ export function createViewerControls(
     resetAdvancedDefaults(null);
     resetInsertionDefaults(null);
     resetTextReplacementDefaults(null);
+    cyclicAnimations = [];
+    renderCyclicAnimations();
     renderSummary();
     updateLoadedControlAvailability();
   }
@@ -646,6 +800,133 @@ export function createViewerControls(
     updateAdvancedValidation();
     updateInsertionControls();
     updateTextReplacementControls();
+    updateCyclicValidation();
+  }
+
+  function selectTab(
+    key: (typeof tabDefinitions)[number]["key"],
+    focus: boolean,
+  ): void {
+    const index = tabDefinitions.findIndex((item) => item.key === key);
+    for (let cursor = 0; cursor < tabDefinitions.length; cursor += 1) {
+      const active = cursor === index;
+      tabButtons[cursor].setAttribute("aria-selected", String(active));
+      tabButtons[cursor].tabIndex = active ? 0 : -1;
+      tabDefinitions[cursor].panel.hidden = !active;
+    }
+    if (focus) tabButtons[index].focus();
+  }
+
+  function renderCyclicAnimations(): void {
+    cyclicAnimationSelect.replaceChildren();
+    if (cyclicAnimations.length === 0) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "不支持连续周期预览";
+      cyclicAnimationSelect.appendChild(option);
+      cyclicAnimationSelect.disabled = true;
+      cyclicDurationInput.value = "";
+      cyclicState.textContent = currentProject ? "不支持" : "未加载";
+    } else {
+      if (cyclicAnimations.length > 1) {
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "请选择 animation";
+        cyclicAnimationSelect.appendChild(placeholder);
+      }
+      for (const animation of cyclicAnimations) {
+        const option = document.createElement("option");
+        option.value = getAnimationRefValue(animation.ref);
+        option.textContent = animation.label;
+        cyclicAnimationSelect.appendChild(option);
+      }
+      cyclicAnimationSelect.disabled = false;
+      if (cyclicAnimations.length === 1) {
+        cyclicAnimationSelect.value = getAnimationRefValue(
+          cyclicAnimations[0].ref,
+        );
+        cyclicDurationInput.value = String(
+          cyclicAnimations[0].descriptor
+            .authoredContinuousPreviewDurationSeconds,
+        );
+      } else {
+        cyclicAnimationSelect.value = "";
+        cyclicDurationInput.value = "";
+      }
+      cyclicState.textContent = "就绪";
+    }
+    setCyclicError(null);
+    renderCyclicDescriptor();
+    updateCyclicValidation();
+  }
+
+  function renderCyclicDescriptor(): void {
+    const selected = getSelectedCyclicAnimation();
+    if (!selected) {
+      cyclicDescriptor.textContent = "";
+      return;
+    }
+    const descriptor = selected.descriptor;
+    cyclicDescriptor.textContent = [
+      `intro ${formatPlaybackRange(descriptor.introRange)}`,
+      `phase ${descriptor.continuousPhaseId}`,
+      `ending ${formatPlaybackRange(descriptor.endingRange)}`,
+      `authored target ${descriptor.authoredTargetCarrierIndex}`,
+    ].join(" · ");
+  }
+
+  function getSelectedCyclicAnimation():
+    | ViewerCyclicAnimationOption
+    | undefined {
+    return cyclicAnimations.find(
+      (animation) =>
+        getAnimationRefValue(animation.ref) === cyclicAnimationSelect.value,
+    );
+  }
+
+  function parseCyclicInputs():
+    | {
+        ok: true;
+        ref: VNIAnimationRuntimeRef;
+        durationSeconds: number;
+      }
+    | { ok: false; message: string } {
+    const selected = getSelectedCyclicAnimation();
+    if (!selected) {
+      return {
+        ok: false,
+        message:
+          cyclicAnimations.length === 0
+            ? "当前项目不支持连续周期预览"
+            : "请选择连续周期 animation",
+      };
+    }
+    if (!cyclicDurationInput.value.trim()) {
+      return { ok: false, message: "慢速持续秒数必须是数字" };
+    }
+    const durationSeconds = Number(cyclicDurationInput.value);
+    if (!Number.isFinite(durationSeconds)) {
+      return { ok: false, message: "慢速持续秒数必须是有限数字" };
+    }
+    if (durationSeconds < 0 || durationSeconds > 3600) {
+      return { ok: false, message: "慢速持续秒数必须在 0..3600 之间" };
+    }
+    return { ok: true, ref: selected.ref, durationSeconds };
+  }
+
+  function updateCyclicValidation(): void {
+    const parsed = parseCyclicInputs();
+    cyclicPreviewButton.disabled = !currentProject || !parsed.ok;
+    if (currentProject && !parsed.ok && cyclicAnimations.length > 0) {
+      setCyclicError(parsed.message);
+    } else {
+      setCyclicError(null);
+    }
+  }
+
+  function setCyclicError(message: string | null): void {
+    cyclicError.textContent = message ?? "";
+    cyclicError.classList.toggle("is-visible", Boolean(message));
   }
 
   function resetAdvancedDefaults(project: ViewerControlsProject | null): void {
@@ -905,6 +1186,17 @@ function createSummaryStrong(value: string): HTMLElement {
   const element = document.createElement("strong");
   element.textContent = value;
   return element;
+}
+
+function getAnimationRefValue(ref: VNIAnimationRuntimeRef): string {
+  return `${ref.layerId}\u0000${ref.animationId}`;
+}
+
+function formatPlaybackRange(range: VNIPlaybackRange): string {
+  if (range.unit === "time") {
+    return `${formatTime(range.start)}..${formatTime(range.end ?? range.start)}s`;
+  }
+  return `${range.start}..${range.end ?? range.start}f@${range.fps}`;
 }
 
 function createSummaryItem(value: string): HTMLElement {

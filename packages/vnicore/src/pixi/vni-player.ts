@@ -61,6 +61,13 @@ import {
   type VNICardCarousel3DPixiRuntime,
 } from "./card-carousel-3d-renderer.js";
 import {
+  VNIManualPlaybackSessionImpl,
+  type VNIAnimationRuntimeRef,
+  type VNIManualAnimationRuntimeRecord,
+  type VNIManualPlaybackHost,
+  type VNIManualPlaybackSession,
+} from "./manual-playback.js";
+import {
   deriveAdditiveMatteTexture,
   getAdditiveMatteAssetIds,
   shouldDeriveAdditiveMatteTexture,
@@ -276,7 +283,7 @@ interface VNICardCarousel3DState {
   readonly runtime: VNICardCarousel3DPixiRuntime;
 }
 
-export class VNIPlayer {
+export class VNIPlayer implements VNIManualPlaybackHost {
   private readonly stageRoot = new PIXI.Container();
   private readonly parent: PIXI.Container;
   private readonly diagnosticsElement: HTMLElement | undefined;
@@ -352,6 +359,9 @@ export class VNIPlayer {
   private readonly playbackCompleteListeners = new Set<
     (event: VNIPlaybackCompleteContext) => void
   >();
+  private manualSession: VNIManualPlaybackSessionImpl | null = null;
+  private manualClockActive = false;
+  private manualRangeCompletion: (() => void) | null = null;
 
   constructor(options: VNIPlayerOptions) {
     if (options.project.maskCompositeMode === "legacy_alpha") {
@@ -701,6 +711,7 @@ export class VNIPlayer {
   }
 
   play(options?: VNIPlayOptions): void {
+    this.assertLegacyTransportAvailable("play");
     if (options?.mode === "range") {
       this.startRangePlayback(options);
       return;
@@ -744,6 +755,7 @@ export class VNIPlayer {
   }
 
   restart(): void {
+    this.assertLegacyTransportAvailable("restart");
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.playbackMode = "timeline";
@@ -758,6 +770,7 @@ export class VNIPlayer {
   }
 
   seek(time: number): void {
+    this.assertLegacyTransportAvailable("seek");
     this.activeRange = null;
     this.segmentedPlayback = null;
     this.pendingComplete = null;
@@ -781,7 +794,7 @@ export class VNIPlayer {
   }
 
   isPlaying(): boolean {
-    return this.playing;
+    return this.playing || this.manualClockActive;
   }
 
   getPlaybackState(): VNIPlaybackState {
@@ -823,6 +836,14 @@ export class VNIPlayer {
 
   update(deltaSeconds: number): void {
     assertPositiveFinite(deltaSeconds, "deltaSeconds");
+    if (this.manualSession) {
+      if (this.particleRuntime.isDraining() && !this.drainPaused) {
+        this.advanceParticleDrain(deltaSeconds);
+        return;
+      }
+      this.manualSession.advance(deltaSeconds);
+      return;
+    }
     if (!this.playing) {
       if (this.particleRuntime.isDraining() && !this.drainPaused) {
         this.advanceParticleDrain(deltaSeconds);
@@ -841,10 +862,12 @@ export class VNIPlayer {
   }
 
   playRange(options: VNIPlayRangeOptions): void {
+    this.assertLegacyTransportAvailable("playRange");
     this.startRangePlayback(options);
   }
 
   requestSegmentedPlaybackEnd(): void {
+    this.assertLegacyTransportAvailable("requestSegmentedPlaybackEnd");
     if (!this.segmentedPlayback) {
       throw new Error("No active VNI segmented playback.");
     }
@@ -959,7 +982,127 @@ export class VNIPlayer {
     };
   }
 
+  createManualPlaybackSession(): VNIManualPlaybackSession {
+    this.assertInitialized("createManualPlaybackSession");
+    if (this.manualSession) {
+      throw new Error(
+        "VNIPlayer already has an active manual playback session.",
+      );
+    }
+    this.pause();
+    this.activeRange = null;
+    this.segmentedPlayback = null;
+    this.pendingComplete = null;
+    this.drainPaused = false;
+    this.particleRuntime.reset();
+    const session = new VNIManualPlaybackSessionImpl(this);
+    this.manualSession = session;
+    return session;
+  }
+
+  getManualDuration(): number {
+    return this.project.stage.duration;
+  }
+
+  getManualAnimationRecords(): readonly VNIManualAnimationRuntimeRecord[] {
+    return this.cardCarouselStates.map((state) => {
+      const layer = this.project.layers.find(
+        (candidate) => candidate.id === state.layerId,
+      );
+      if (!layer) {
+        throw new Error(`Missing VNI runtime layer: ${state.layerId}.`);
+      }
+      const authoredAssetIds =
+        layer.type === "image"
+          ? layer.assetId
+            ? [layer.assetId]
+            : []
+          : layer.type === "sequence"
+            ? (layer.sequence?.frameAssetIds ?? [])
+            : [];
+      return Object.freeze({
+        ref: Object.freeze({
+          layerId: state.layerId,
+          animationId: state.animation.id,
+        }),
+        layerName: layer.name,
+        animationName: state.animation.name ?? state.animation.id,
+        animation: state.animation,
+        runtime: state.runtime,
+        authoredAssetIds: Object.freeze([...authoredAssetIds]),
+      });
+    });
+  }
+
+  getManualProjectTexture(assetId: string): PIXI.Texture {
+    const normalized = assetId.trim();
+    if (!normalized) {
+      throw new Error("VNI cyclic project asset id must be non-empty.");
+    }
+    const texture = this.texturesByAssetId.get(normalized);
+    if (!texture || !this.assetsById.has(normalized)) {
+      throw new Error(`Unknown VNI cyclic project asset: ${normalized}.`);
+    }
+    return texture;
+  }
+
+  renderManualFrame(time: number): void {
+    this.renderPlaybackFrame(time, time);
+  }
+
+  triggerManualRangeEvents(previousTime: number, currentTime: number): void {
+    this.triggerPlaybackEvents(previousTime, currentTime, 0);
+  }
+
+  completeManualRange(
+    startTime: number,
+    endTime: number,
+    completed: () => void,
+  ): void {
+    if (this.manualRangeCompletion) {
+      throw new Error("VNI manual range completion is already pending.");
+    }
+    this.manualRangeCompletion = completed;
+    this.startParticleDrain(endTime, {
+      startTime,
+      endTime,
+      currentTime: endTime,
+      loopIndex: 0,
+    });
+  }
+
+  cancelManualRangeCompletion(): void {
+    if (!this.manualRangeCompletion) return;
+    this.manualRangeCompletion = null;
+    this.pendingComplete = null;
+    this.particleRuntime.reset();
+    this.playbackPhase = "idle";
+    this.drainPaused = false;
+    if (!this.isTickerNeeded()) this.cancelTicker();
+  }
+
+  setManualClockActive(active: boolean): void {
+    this.manualClockActive = active;
+    if (active) {
+      this.lastTickMs = performance.now();
+      this.ensureTicker();
+    } else if (!this.isTickerNeeded()) {
+      this.cancelTicker();
+    }
+  }
+
+  detachManualSession(session: VNIManualPlaybackSessionImpl): void {
+    if (this.manualSession === session) {
+      this.manualSession = null;
+      this.manualClockActive = false;
+    }
+  }
+
   destroy(): void {
+    this.manualSession?.destroy();
+    this.manualSession = null;
+    this.manualClockActive = false;
+    this.manualRangeCompletion = null;
     this.pause();
     this.activeRange = null;
     this.segmentedPlayback = null;
@@ -1267,6 +1410,9 @@ export class VNIPlayer {
     this.renderIfHostDriven();
     const event = this.pendingComplete;
     this.pendingComplete = null;
+    const manualCompletion = this.manualRangeCompletion;
+    this.manualRangeCompletion = null;
+    manualCompletion?.();
     if (event) {
       this.triggerPlaybackComplete(event);
     }
@@ -1323,7 +1469,9 @@ export class VNIPlayer {
 
   private isTickerNeeded(): boolean {
     return (
-      this.playing || (this.particleRuntime.isDraining() && !this.drainPaused)
+      this.playing ||
+      this.manualClockActive ||
+      (this.particleRuntime.isDraining() && !this.drainPaused)
     );
   }
 
@@ -1412,14 +1560,22 @@ export class VNIPlayer {
         state.runtime.hide();
         continue;
       }
-      visibleCards += state.runtime.render(
-        progress,
+      const ref: VNIAnimationRuntimeRef = {
+        layerId: state.layerId,
+        animationId: state.animation.id,
+      };
+      const controlledMotion =
+        this.manualSession?.getControlledMotion(ref, time) ?? null;
+      const args = [
         this.project.stage.width / 2 + sampled.transform.x,
         this.project.stage.height / 2 - sampled.transform.y,
         sampled.baseOpacity,
         sampled.transform,
         sampled.blendMode,
-      );
+      ] as const;
+      visibleCards += controlledMotion
+        ? state.runtime.renderControlled(controlledMotion, ...args)
+        : state.runtime.render(progress, ...args);
     }
     const diagnostics = this.diagnosticsElement;
     if (diagnostics) {
@@ -1437,6 +1593,14 @@ export class VNIPlayer {
       );
     }
     return visibleCards;
+  }
+
+  private assertLegacyTransportAvailable(methodName: string): void {
+    if (this.manualSession) {
+      throw new Error(
+        `VNIPlayer.${methodName}() cannot run while a manual playback session is active.`,
+      );
+    }
   }
 
   private async loadTextures(): Promise<ReadonlyMap<string, PIXI.Texture>> {

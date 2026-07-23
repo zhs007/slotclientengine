@@ -124,17 +124,68 @@ select {
 }
 
 .controls-panel {
+  min-height: 0;
+  max-height: min(38vh, 360px);
   padding: 8px 16px 16px;
 }
 
 .viewer-controls {
   display: grid;
-  gap: 10px;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
   padding: 12px;
   background: rgba(27, 30, 29, 0.94);
   border: 1px solid rgba(186, 197, 186, 0.18);
   border-radius: 8px;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.26);
+}
+
+.viewer-tab-bar {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(216, 224, 216, 0.14);
+}
+
+.viewer-tab {
+  min-width: 92px;
+  height: 36px;
+  padding: 0 14px;
+  color: #b8c7bf;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.viewer-tab[aria-selected="true"] {
+  color: #ffffff;
+  border-bottom-color: #8ee0bd;
+}
+
+.viewer-tab:focus-visible {
+  outline: 2px solid #8ee0bd;
+  outline-offset: -2px;
+}
+
+.viewer-tab-panel-host {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+}
+
+.viewer-tab-panel {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.viewer-tab-panel[hidden] {
+  display: none;
 }
 
 .project-row {
@@ -346,6 +397,71 @@ select {
   display: block;
 }
 
+.cyclic-playback-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 10px;
+  border-top: 1px solid rgba(216, 224, 216, 0.14);
+}
+
+.cyclic-playback-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cyclic-state {
+  color: #b8c7bf;
+  font-size: 13px;
+}
+
+.cyclic-control-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(140px, 180px) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.cyclic-select,
+.cyclic-number {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: #dbe5df;
+  font-size: 12px;
+}
+
+.cyclic-select select,
+.cyclic-number input {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  color: #f5f7f4;
+  background: #202622;
+  border: 1px solid rgba(216, 224, 216, 0.24);
+  border-radius: 6px;
+}
+
+.cyclic-descriptor {
+  color: #b8c7bf;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.cyclic-error {
+  display: none;
+  min-height: 18px;
+  color: #ffc9c9;
+  font-size: 12px;
+}
+
+.cyclic-error.is-visible {
+  display: block;
+}
+
 .group-insertion-panel {
   display: grid;
   gap: 10px;
@@ -518,6 +634,7 @@ select {
   }
 
   .controls-panel {
+    max-height: min(46vh, 420px);
     padding: 6px 10px 10px;
   }
 
@@ -555,6 +672,10 @@ select {
 
   .advanced-control-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cyclic-control-row {
+    grid-template-columns: 1fr;
   }
 
   .keep-particles-toggle,

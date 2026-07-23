@@ -6,6 +6,7 @@ import { createFixtureZip } from "./fixture-zips";
 
 const playerMock = vi.hoisted(() => {
   const instances: MockVNIPlayer[] = [];
+  const manualCallOrder: string[] = [];
   const uiTestSlot = {
     afterGroupId: "group_back",
     afterGroupName: "Back",
@@ -40,6 +41,12 @@ const playerMock = vi.hoisted(() => {
     readonly attachTextToTextLayer = vi.fn(() => this.textBinding);
     readonly attachImageToTextLayer = vi.fn(async () => vi.fn());
     readonly clearMountedNodes = vi.fn();
+    readonly manualSessions: MockManualSession[] = [];
+    readonly createManualPlaybackSession = vi.fn(() => {
+      const session = new MockManualSession(this.options);
+      this.manualSessions.push(session);
+      return session;
+    });
     readonly getPlaybackState = vi.fn(() => ({
       mode: "timeline",
       phase: "idle",
@@ -63,7 +70,149 @@ const playerMock = vi.hoisted(() => {
     }
   }
 
-  return { instances, MockVNIPlayer };
+  class MockManualSession {
+    readonly destroy = vi.fn();
+    readonly animation = new MockManualAnimation();
+    readonly listAnimations = vi.fn((filter?: { capability?: string }) => {
+      const project = getMockProject(this.options);
+      const entries = project?.layers
+        .flatMap((layer) =>
+          layer.animations.map((animation) => ({ layer, animation })),
+        )
+        .filter(
+          ({ animation }) =>
+            animation.enabled && animation.type === "card_carousel_3d",
+        );
+      if (
+        filter?.capability !== undefined &&
+        filter.capability !== "cyclic-selection"
+      ) {
+        return [];
+      }
+      return (entries ?? []).map(({ layer, animation }) => ({
+        ref: { layerId: layer.id, animationId: animation.id },
+        layerName: layer.name,
+        animationName: animation.name ?? animation.id,
+        animationType: animation.type,
+        capabilities: [
+          "continuous-phase",
+          "replaceable-carriers",
+          "cyclic-selection",
+        ],
+      }));
+    });
+    readonly getAnimation = vi.fn(() => this.animation);
+    readonly playRange = vi.fn(() => {
+      manualCallOrder.push("playRange");
+      return createCompletedOperation();
+    });
+    readonly holdTimeline = vi.fn(() => {
+      manualCallOrder.push("hold");
+      return { release: vi.fn(() => manualCallOrder.push("release")) };
+    });
+    readonly advanceFor = vi.fn(() => {
+      manualCallOrder.push("advance");
+      return createCompletedOperation();
+    });
+    readonly getState = vi.fn(() => ({
+      phase: "complete",
+      currentTime: 0,
+      hasActiveOperation: false,
+      hasTimelineHold: false,
+      activeContinuousAnimationCount: 0,
+    }));
+
+    constructor(readonly options: unknown) {
+      this.animation.descriptor = getMockDescriptor(options);
+    }
+  }
+
+  class MockManualAnimation {
+    descriptor = getMockDescriptor(null);
+    readonly requireCyclicSelection = vi.fn(() => this.cyclic);
+    readonly cyclic = {
+      getAuthoredPreviewDescriptor: vi.fn(() => this.descriptor),
+      adoptAuthoredItems: vi.fn(() => manualCallOrder.push("adopt")),
+      startContinuousPhase: vi.fn(() => manualCallOrder.push("continuous")),
+      prepareAuthoredSelection: vi.fn(() => {
+        manualCallOrder.push("selection");
+        return {
+          committed: Promise.resolve({
+            itemKey: "authored:2",
+            carrierIndex: this.descriptor.authoredTargetCarrierIndex,
+          }),
+          cancel: vi.fn(),
+        };
+      }),
+      startResolvePhase: vi.fn(() => manualCallOrder.push("resolve")),
+    };
+  }
+
+  function createCompletedOperation() {
+    return {
+      completed: Promise.resolve({ reason: "complete" as const }),
+      cancel: vi.fn(),
+    };
+  }
+
+  function getMockProject(options: unknown) {
+    if (
+      typeof options === "object" &&
+      options !== null &&
+      "project" in options
+    ) {
+      return (
+        options as {
+          project: {
+            layers: Array<{
+              id: string;
+              name: string;
+              animations: Array<{
+                id: string;
+                name?: string;
+                enabled: boolean;
+                type: string;
+                startTime: number;
+                params: Record<string, unknown>;
+              }>;
+            }>;
+          };
+        }
+      ).project;
+    }
+    return null;
+  }
+
+  function getMockDescriptor(options: unknown) {
+    const project = getMockProject(options);
+    const animation = project?.layers
+      .flatMap((layer) => layer.animations)
+      .find(
+        (candidate) =>
+          candidate.enabled && candidate.type === "card_carousel_3d",
+      );
+    const params = animation?.params ?? {};
+    const start = animation?.startTime ?? 0;
+    const intro = Number(params.introDuration ?? 1.2);
+    const idle = Number(params.demoIdleDuration ?? 1.2);
+    const fast = Number(params.fastDuration ?? 1.1);
+    const stop = Number(params.stopDuration ?? 1.6);
+    const hold = Number(params.holdDuration ?? 1);
+    return {
+      introRange: { unit: "time" as const, start, end: start + intro },
+      continuousHoldPoint: { unit: "time" as const, at: start + intro },
+      continuousPhaseId: "idle",
+      authoredContinuousPreviewDurationSeconds: idle,
+      endingRange: {
+        unit: "time" as const,
+        start: start + intro + idle,
+        end: start + intro + idle + fast + stop + hold,
+      },
+      authoredTargetCarrierIndex: Number(params.targetIndex ?? 0),
+    };
+  }
+
+  return { instances, manualCallOrder, MockVNIPlayer };
 });
 
 const pixiMock = vi.hoisted(() => {
@@ -103,6 +252,7 @@ afterEach(() => {
   vi.resetModules();
   document.body.innerHTML = "";
   playerMock.instances.length = 0;
+  playerMock.manualCallOrder.length = 0;
   pixiMock.instances.length = 0;
 });
 
@@ -118,6 +268,56 @@ describe("anieditorv5viewer main", () => {
         'select[aria-label="VNI profile"]',
       )?.disabled,
     ).toBe(true);
+  });
+
+  it("uses four accessible tabs with keyboard navigation and switches to playback after load", async () => {
+    await mountViewer();
+    const tabs = [
+      ...document.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+    ];
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "项目",
+      "播放",
+      "组间插入",
+      "文字替换",
+    ]);
+    expect(tabs.map((tab) => tab.getAttribute("aria-selected"))).toEqual([
+      "true",
+      "false",
+      "false",
+      "false",
+    ]);
+    for (const tab of tabs) {
+      const panelId = tab.getAttribute("aria-controls");
+      const panel = panelId ? document.getElementById(panelId) : null;
+      expect(panel?.getAttribute("role")).toBe("tabpanel");
+      expect(panel?.getAttribute("aria-labelledby")).toBe(tab.id);
+    }
+
+    tabs[0].focus();
+    tabs[0].dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }),
+    );
+    expect(document.activeElement).toBe(tabs[3]);
+    tabs[3].dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Home", bubbles: true }),
+    );
+    expect(document.activeElement).toBe(tabs[0]);
+    tabs[0].dispatchEvent(
+      new KeyboardEvent("keydown", { key: "End", bubbles: true }),
+    );
+    expect(document.activeElement).toBe(tabs[3]);
+    tabs[3].dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+    );
+    expect(document.activeElement).toBe(tabs[0]);
+
+    await uploadZipFile("megawin.zip");
+    expect(tabs[1].getAttribute("aria-selected")).toBe("true");
+    expect(document.getElementById("viewer-panel-playback")?.hidden).toBe(
+      false,
+    );
+    expect(document.getElementById("viewer-panel-project")?.hidden).toBe(true);
   });
 
   it("uploads megawin.zip and creates one runtime_50 player", async () => {
@@ -151,6 +351,73 @@ describe("anieditorv5viewer main", () => {
     expect(playerMock.instances[0].options).toMatchObject({
       viewportScale: 1,
     });
+  });
+
+  it("automatically previews cyclic-selection through the public descriptor and authored target", async () => {
+    await mountViewer();
+    await uploadZipFile("card-carousel-sequence.zip");
+
+    const selector = document.querySelector<HTMLSelectElement>(
+      'select[aria-label="连续周期动画"]',
+    );
+    const duration = document.querySelector<HTMLInputElement>(
+      'input[aria-label="连续周期慢速持续秒数"]',
+    );
+    if (!selector || !duration) throw new Error("Missing cyclic controls.");
+    expect(selector.options).toHaveLength(1);
+    expect(selector.disabled).toBe(false);
+    expect(duration.value).toBe("1.2");
+    expect(document.querySelector(".cyclic-descriptor")?.textContent).toContain(
+      "authored target 2",
+    );
+    expect(document.body.textContent).not.toContain("确认结果");
+    expect(document.body.textContent).not.toContain("结束循环");
+
+    getButton("自动预览").click();
+    await flushAsync();
+    expect(playerMock.manualCallOrder).toEqual([
+      "adopt",
+      "playRange",
+      "hold",
+      "continuous",
+      "advance",
+      "selection",
+      "release",
+      "resolve",
+      "playRange",
+    ]);
+    const player = playerMock.instances[0];
+    expect(player.manualSessions).toHaveLength(2);
+    expect(player.manualSessions[0].destroy).toHaveBeenCalledTimes(1);
+    expect(
+      player.manualSessions[1].animation.cyclic.prepareAuthoredSelection,
+    ).toHaveBeenCalledTimes(1);
+
+    getButton("组间插入").click();
+    expect(player.manualSessions[1].destroy).not.toHaveBeenCalled();
+  });
+
+  it("skips advanceFor for zero cyclic duration and rejects invalid input", async () => {
+    await mountViewer();
+    await uploadZipFile("card-carousel-sequence.zip");
+    const duration = document.querySelector<HTMLInputElement>(
+      'input[aria-label="连续周期慢速持续秒数"]',
+    );
+    if (!duration) throw new Error("Missing cyclic duration.");
+    duration.value = "0";
+    duration.dispatchEvent(new Event("input", { bubbles: true }));
+    getButton("自动预览").click();
+    await flushAsync();
+    expect(playerMock.manualCallOrder).not.toContain("advance");
+    expect(playerMock.manualCallOrder).toContain("selection");
+    expect(playerMock.manualCallOrder).toContain("resolve");
+
+    duration.value = "3600.1";
+    duration.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(getButton("自动预览").disabled).toBe(true);
+    expect(document.querySelector(".cyclic-error")?.textContent).toContain(
+      "0..3600",
+    );
   });
 
   it("uploads a synthetic VNI_0.087 contract and summarizes basic/bounce capabilities", async () => {

@@ -1,5 +1,11 @@
 # vnicore Usage Guide
 
+## Manual cyclic selection
+
+See `examples/manual-cyclic-playback.ts` for the advanced host flow. Create one manual session, play the authored intro, hold the main timeline while the declared continuous phase advances, await the host's user/server result and the safe carrier commit, then release the hold and play the dynamic resolve/ending range.
+
+`demoIdleDuration` is only the authored full-demo/default preview length. It never caps a production wait. Project textures and host-provided `PIXI.Texture` objects remain source-owned; vnicore owns only bounded slice views. Live containers are not accepted. Legacy timeline/range/segmented behavior is unchanged when no manual session is active, and no editor/export-schema change is required.
+
 `@slotclientengine/vnicore` is the Pixi.js v8 runtime core for VNI animation
 exports. It owns VNI export validation, deterministic sampling, asset URL
 resolution, Pixi texture-size checks, runtime rendering, playback controls,

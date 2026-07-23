@@ -857,6 +857,289 @@ async function createInitializedPlayer(
 }
 
 describe("VNIPlayer", () => {
+  it("runs manual intro, arbitrary continuous wait, authored selection, and dynamic resolve", async () => {
+    const player = await createInitializedPlayer({
+      project: createCardCarouselProject(),
+      autoTick: false,
+    });
+    const marker = vi.fn();
+    const completed = vi.fn();
+    player.addPlaybackEvent({
+      id: "manual-intro-marker",
+      at: { unit: "time", at: 1 },
+      listener: marker,
+    });
+    player.onPlaybackComplete(completed);
+    const session = player.createManualPlaybackSession();
+    const animations = session.listAnimations({
+      capability: "cyclic-selection",
+    });
+    expect(animations).toHaveLength(1);
+    expect(animations[0]).toMatchObject({
+      ref: { layerId: "layer-a", animationId: "carousel" },
+      animationType: "card_carousel_3d",
+      capabilities: [
+        "continuous-phase",
+        "replaceable-carriers",
+        "cyclic-selection",
+      ],
+    });
+    const cyclic = session
+      .getAnimation(animations[0].ref)
+      .requireCyclicSelection();
+    const descriptor = cyclic.getAuthoredPreviewDescriptor();
+    expect(descriptor).toMatchObject({
+      introRange: { unit: "time", start: 0, end: 1.2 },
+      continuousHoldPoint: { unit: "time", at: 1.2 },
+      continuousPhaseId: "idle",
+      authoredContinuousPreviewDurationSeconds: 1.2,
+      endingRange: { unit: "time", start: 2.4, end: 6.1 },
+      authoredTargetCarrierIndex: 2,
+    });
+    cyclic.adoptAuthoredItems();
+
+    const intro = session.playRange({ range: descriptor.introRange });
+    player.update(1.2);
+    await expect(intro.completed).resolves.toEqual({ reason: "complete" });
+    expect(marker).toHaveBeenCalledTimes(1);
+    expect(completed).toHaveBeenCalledWith({
+      startTime: 0,
+      endTime: 1.2,
+      currentTime: 1.2,
+      loopIndex: 0,
+    });
+
+    const hold = session.holdTimeline({
+      at: descriptor.continuousHoldPoint,
+    });
+    cyclic.startContinuousPhase({
+      phaseId: descriptor.continuousPhaseId,
+    });
+    const advance = session.advanceFor({ durationSeconds: 4.5 });
+    player.update(4.5);
+    await expect(advance.completed).resolves.toEqual({ reason: "complete" });
+    expect(cyclic.getState()).toMatchObject({
+      phase: "continuous",
+      continuousElapsedSeconds: 4.5,
+    });
+
+    const committed = cyclic.prepareAuthoredSelection();
+    await expect(committed.committed).resolves.toMatchObject({
+      carrierIndex: 2,
+    });
+    hold.release();
+    cyclic.startResolvePhase();
+    const ending = session.playRange({
+      range: descriptor.endingRange,
+      preserveRuntimeAnimationState: true,
+    });
+    player.update(3.7);
+    await expect(ending.completed).resolves.toEqual({ reason: "complete" });
+
+    const internals = player as unknown as {
+      cardCarouselStates: Array<{
+        runtime: {
+          output: { rotation: number };
+          prepared: { angleStep: number };
+        };
+      }>;
+    };
+    const runtime = internals.cardCarouselStates[0].runtime;
+    const targetAngle =
+      runtime.output.rotation + 2 * runtime.prepared.angleStep;
+    expect(
+      Math.atan2(Math.sin(targetAngle), Math.cos(targetAngle)),
+    ).toBeCloseTo(0, 10);
+    expect(cyclic.getState().phase).toBe("complete");
+    expect(() => player.seek(0)).toThrow("manual playback session");
+
+    session.destroy();
+    expect(() => session.getState()).not.toThrow();
+    player.seek(0);
+    player.destroy();
+  });
+
+  it("cancels manual operations and enforces single-session transport ownership", async () => {
+    const player = await createInitializedPlayer({
+      project: createCardCarouselProject(),
+      autoTick: false,
+    });
+    const session = player.createManualPlaybackSession();
+    expect(() => player.createManualPlaybackSession()).toThrow(
+      "already has an active",
+    );
+    const operation = session.playRange({
+      range: { unit: "time", start: 0, end: 1.2 },
+    });
+    expect(() =>
+      session.playRange({
+        range: { unit: "time", start: 0, end: 1.2 },
+      }),
+    ).toThrow("active operation");
+    operation.cancel();
+    await expect(operation.completed).rejects.toMatchObject({
+      name: "VNIPlaybackCancelledError",
+    });
+    session.destroy();
+    player.destroy();
+  });
+
+  it.each([0, 1.5, 4.5, 10])(
+    "keeps authored target 2 after %s seconds of controlled idle",
+    async (durationSeconds) => {
+      const player = await createInitializedPlayer({
+        project: createCardCarouselProject(),
+        autoTick: false,
+      });
+      const session = player.createManualPlaybackSession();
+      const info = session.listAnimations({
+        capability: "cyclic-selection",
+      })[0];
+      const cyclic = session.getAnimation(info.ref).requireCyclicSelection();
+      const descriptor = cyclic.getAuthoredPreviewDescriptor();
+      cyclic.adoptAuthoredItems();
+      const intro = session.playRange({ range: descriptor.introRange });
+      player.update(1.2);
+      await intro.completed;
+      const hold = session.holdTimeline({
+        at: descriptor.continuousHoldPoint,
+      });
+      cyclic.startContinuousPhase({ phaseId: "idle" });
+      if (durationSeconds > 0) {
+        const advance = session.advanceFor({ durationSeconds });
+        player.update(durationSeconds + 5);
+        await advance.completed;
+        expect(cyclic.getState().continuousElapsedSeconds).toBeCloseTo(
+          durationSeconds,
+          10,
+        );
+      }
+      await cyclic.prepareAuthoredSelection().committed;
+      hold.release();
+      cyclic.startResolvePhase();
+      const ending = session.playRange({
+        range: descriptor.endingRange,
+        preserveRuntimeAnimationState: true,
+      });
+      player.update(10);
+      await ending.completed;
+      const internals = player as unknown as {
+        cardCarouselStates: Array<{
+          runtime: {
+            output: { rotation: number };
+            prepared: { angleStep: number };
+          };
+        }>;
+      };
+      const runtime = internals.cardCarouselStates[0].runtime;
+      const aligned = runtime.output.rotation + 2 * runtime.prepared.angleStep;
+      expect(Math.atan2(Math.sin(aligned), Math.cos(aligned))).toBeCloseTo(
+        0,
+        10,
+      );
+      session.destroy();
+      player.destroy();
+    },
+  );
+
+  it("commits a replacement only after its carrier is hidden and preserves host texture ownership", async () => {
+    const player = await createInitializedPlayer({
+      project: createCardCarouselProject(),
+      autoTick: false,
+    });
+    const session = player.createManualPlaybackSession();
+    const info = session.listAnimations({
+      capability: "cyclic-selection",
+    })[0];
+    const cyclic = session.getAnimation(info.ref).requireCyclicSelection();
+    cyclic.setInitialItems(
+      Array.from({ length: 7 }, (_, index) => ({
+        key: `item-${index}`,
+        visual: {
+          kind: "project-asset" as const,
+          assetId: index % 2 === 0 ? "asset-a" : "asset-b",
+        },
+      })),
+    );
+    expect(() =>
+      cyclic.setInitialItems(
+        Array.from({ length: 7 }, () => ({
+          key: "duplicate",
+          visual: {
+            kind: "project-asset" as const,
+            assetId: "asset-a",
+          },
+        })),
+      ),
+    ).toThrow("Duplicate");
+    const hold = session.holdTimeline({
+      at: { unit: "time", at: 1.2 },
+    });
+    cyclic.startContinuousPhase({ phaseId: "idle" });
+    player.update(0.01);
+    const internals = player as unknown as {
+      cardCarouselRenderer: {
+        sliceTextures: Map<
+          string,
+          {
+            texture: InstanceType<typeof pixiMock.MockTexture>;
+            refs: number;
+          }
+        >;
+      };
+      cardCarouselStates: Array<{
+        runtime: {
+          output: {
+            cards: Array<{ visible: boolean }>;
+          };
+        };
+      }>;
+    };
+    const visibleIndex =
+      internals.cardCarouselStates[0].runtime.output.cards.findIndex(
+        (card) => card.visible,
+      );
+    expect(visibleIndex).toBeGreaterThanOrEqual(0);
+    const hostTexture = new pixiMock.MockTexture({
+      source: { width: 64, height: 64 },
+      width: 64,
+      height: 64,
+    });
+    const transaction = cyclic.prepareSelection({
+      selectedItem: {
+        key: `item-${visibleIndex}`,
+        visual: {
+          kind: "texture",
+          texture: hostTexture as unknown as PixiTexture,
+        },
+      },
+    });
+    expect(cyclic.getState().phase).toBe("selection-pending");
+    for (
+      let step = 0;
+      step < 200 && cyclic.getState().phase === "selection-pending";
+      step += 1
+    ) {
+      player.update(0.1);
+    }
+    await expect(transaction.committed).resolves.toMatchObject({
+      itemKey: `item-${visibleIndex}`,
+      carrierIndex: visibleIndex,
+    });
+    expect(cyclic.getState().phase).toBe("selection-committed");
+    expect(hostTexture.destroyed).toBe(false);
+    hold.release();
+    session.destroy();
+    expect(hostTexture.destroyed).toBe(false);
+    expect(
+      [...internals.cardCarouselRenderer.sliceTextures.values()].every(
+        (entry) => entry.refs > 0,
+      ),
+    ).toBe(true);
+    player.destroy();
+    expect(hostTexture.destroyed).toBe(false);
+  });
+
   it("pools card_carousel_3d nodes and slice textures across 300 frames and releases owned views", async () => {
     const player = await createInitializedPlayer({
       project: createCardCarouselProject(),
@@ -869,7 +1152,13 @@ describe("VNIPlayer", () => {
           sliceSpritesCreated: number;
           sliceTexturesCreated: number;
         };
-        sliceTextures: Map<string, InstanceType<typeof pixiMock.MockTexture>>;
+        sliceTextures: Map<
+          string,
+          {
+            texture: InstanceType<typeof pixiMock.MockTexture>;
+            refs: number;
+          }
+        >;
       };
       cardCarouselStates: Array<{
         runtime: {
@@ -903,7 +1192,7 @@ describe("VNIPlayer", () => {
 
     const sliceTextures = [
       ...internals.cardCarouselRenderer.sliceTextures.values(),
-    ];
+    ].map((entry) => entry.texture);
     const sourceTextures = [
       pixiMock.textureByUrl.get("/a.png")?.source,
       pixiMock.textureByUrl.get("/b.png")?.source,
@@ -912,6 +1201,7 @@ describe("VNIPlayer", () => {
     expect(internals.cardCarouselStates[0].runtime.root).toBe(root);
     player.destroy();
     expect(sliceTextures.every((texture) => texture.destroyed)).toBe(true);
+    expect(internals.cardCarouselRenderer.sliceTextures.size).toBe(0);
     expect(sourceTextures.every((source) => source?.destroyed !== true)).toBe(
       true,
     );

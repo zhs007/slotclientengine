@@ -6,6 +6,7 @@ export * from "./particle-sampler.js";
 export * from "./particle-runtime.js";
 export * from "./chaser-light-sampler.js";
 export * from "./card-carousel-3d.js";
+export * from "./cyclic-selection.js";
 export * from "./render-effect-sampler.js";
 export * from "./effect-sampler.js";
 export * from "./safe-glow-sampler.js";

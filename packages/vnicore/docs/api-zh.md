@@ -1,5 +1,13 @@
 # vnicore API
 
+## 高级 manual / cyclic-selection
+
+`VNIPlayer.createManualPlaybackSession()` 创建唯一的高级手工播放 session。`VNIManualPlaybackSession` 提供可等待、可取消的 `playRange()` / `advanceFor()`、主时间轴 `holdTimeline()`、稳定 animation ref 查询和 capability controller。manual range 复用真实 timeline marker、终点粒子排空和 complete listener，operation 在排空后 resolve；listener 抛错继续向调用栈传播。session 存在时，legacy `play/restart/seek/playRange` 显式失败，避免两个 transport 同时写时间轴；operation 在 cancel、session/player destroy 时以 `VNIPlaybackCancelledError` reject。
+
+`listAnimations({ capability: "cyclic-selection" })` 只返回 runtime 明确声明能力的 animation，不按名称或参数猜测。`VNICyclicSelectionController.getAuthoredPreviewDescriptor()` 提供 intro、hold、continuous phase、ending 和 authored target。`demoIdleDuration` 只是 full-demo/default preview 建议时长，不限制 production continuous wait。
+
+carrier 数量和 identity 固定。`setInitialItems()` 接受已校验 project asset 或宿主 `PIXI.Texture`；新内容只在 renderer 报告 carrier 不可见的 update 边界原子提交。`VNICyclicSelectionTransaction` 可等待、可取消，destroy 会拒绝 pending transaction。project/host 继续拥有 source texture，vnicore 只拥有 ref-counted slice view；任意 live `PIXI.Container` 不属于该合同。
+
 ## import surface
 
 - `@slotclientengine/vnicore`: re-export `./core` 和 `./pixi`。

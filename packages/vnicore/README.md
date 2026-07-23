@@ -6,6 +6,8 @@ VNI_0.087 adds strict six-track `basicAnimation` sampling (`opacity`, position, 
 
 VNI_0.095 adds strict `card_carousel_3d` playback. The core owns the five-phase timeline, reveal order, target alignment, perspective/card/slice geometry, tint and stable depth order. Image layers use one texture; sequence layers use the complete explicit `frameAssetIds` library with `cardIndex % frameCount`. Pixi card containers, slice sprites, and slice texture views are pooled for the player lifetime and released by `destroy()` without destroying shared source textures.
 
+The advanced manual playback API adds host-composed range operations, timeline holds, continuous runtime phases, and the generic `cyclic-selection` capability without changing the VNI export schema. `card_carousel_3d` is the first adapter: it keeps fixed carrier identities, advances an unwrapped phase for arbitrary user/server waits, commits replacement textures only while a carrier is hidden, and dynamically resolves the selected carrier from the real phase. `demoIdleDuration` remains only the authored full-demo/default-preview duration.
+
 This package is separate from `@slotclientengine/anieditorv5runtime-cc`: `vnicore` targets Pixi.js/browser runtimes, while `anieditorv5runtime-cc` targets Cocos Creator 3.8.6 projects. Do not share Cocos `cc` shims, standalone files, or component examples with this package.
 
 ## Public Imports
@@ -36,6 +38,7 @@ The root import re-exports both `./core` and `./pixi`. The `V5G*` names are lega
 - text-layer placeholder binding for host Pixi nodes, dynamic text, and project/external image replacements
 - `particle_stream` continuous layer particles, `chaser_light` fixed-position runtime lights, VNI_0.070 deterministic sequence effects with bounded sprite counts, and VNI_0.074 `multi_move` transform sampling
 - `play()`, `play({ mode: "segmented", ... })`, `pause()`, `restart()`, `seek()`, `setLoop()`, `playRange(...)`, playback markers, particle-draining, and complete listeners
+- `createManualPlaybackSession()` with awaitable/cancellable ranges, timeline hold, host-delta `advanceFor()`, runtime capability discovery, and `cyclic-selection`
 - `project.layerGroups + layer.groupId` layer group schema, with render order derived from `project.layers`
 - adjacent layer-group slot APIs for mounting host Pixi nodes, project asset images, or explicit external image URLs between two neighboring groups
 - direct Pixi host embedding through `VNIPlayerOptions.parent`; the host owns `PIXI.Application`, canvas, renderer resize, and browser DOM
@@ -51,6 +54,8 @@ Runtime profile metadata comes from JSON `exportProfile` values and manifest ent
 Layer group slots are exposed through `VNIPlayer.getLayerGroupSlots()`. The slot order follows the actual `project.layers` render order, not `layerGroups.order`. `attachNodeBetweenLayerGroups(...)`, `attachImageBetweenLayerGroups(...)`, and `attachExternalImageBetweenLayerGroups(...)` require the two group ids to be an adjacent slot; reversed, unknown, or non-adjacent ids throw. Project images keep the project texture-size validation path; external image URLs are for host-owned assets that are not listed in `project.assets`.
 
 `VNIPlayer` does not create its own Pixi application or canvas. Hosts pass an existing Pixi `parent` container; browser tools such as `apps/anieditorv5viewer` create the canvas themselves, while in-game callers such as `rendercore` mount the VNI display tree directly into the game renderer. Hosts that need diagnostics pass `diagnosticsElement`, hosts that resize a standalone viewer pass `viewport` / `setViewportSize(...)`, display zoom uses `viewportScale` / `setViewportScale(...)` without shrinking the clipping viewport, and manually rendered hosts pass `requestRender`.
+
+Manual carrier visuals may reference a validated project asset or a host-provided `PIXI.Texture`. Source textures remain owned by the project/host; vnicore owns and releases only its slice texture views. Arbitrary live containers are not accepted—hosts that need composite content must render it with their own renderer and pass the resulting texture.
 
 `VNIPlayer` uses RAF by default. Embedders that already have a game ticker can pass `autoTick: false` and call `update(deltaSeconds)` themselves; this is the path used by `rendercore` symbol animations to keep VNI playback synchronized with Pixi slot updates. `fitPadding` defaults to the existing responsive padding, and can be set to `0` when the host needs VNI stage coordinates to map directly to a host-controlled viewport or mask.
 
