@@ -16,18 +16,19 @@ describe("Leo loading progress styles", () => {
 
   it("creates deterministic radial and horizontal reveal CSS", () => {
     expect(createLeoProgressStyles(0)).toEqual({
-      radialClipPath: "polygon(50% 50%, 50% 50%, 50% 50%)",
-      horizontalClipPath: "inset(0 100% 0 0)",
+      radialClipPath: "polygon(50% 35%, 50% 0%)",
+      horizontalClipPath: "inset(0 70% 0 0)",
     });
     expect(createLeoProgressStyles(0).radialClipPath.match(/,/g)).toHaveLength(
-      2,
+      1,
     );
     expect(createLeoProgressStyles(50).horizontalClipPath).toBe(
       "inset(0 50% 0 0)",
     );
+    expect(createLeoProgressStyles(25).radialClipPath).toContain("0% 35%");
     expect(createLeoProgressStyles(99)).toEqual(createLeoProgressStyles(99));
     expect(createLeoProgressStyles(100).horizontalClipPath).toBe(
-      "inset(0 0% 0 0)",
+      "inset(0 30% 0 0)",
     );
     expect(createLeoProgressStyles(Number.NaN)).toEqual(
       createLeoProgressStyles(0),

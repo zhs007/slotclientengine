@@ -32,16 +32,18 @@ describe("Leo game loading UI", () => {
     expect(TestPreloadImage.instances).toHaveLength(1);
   });
 
-  it("shows the GIF intro after load and resolves after the intro duration", async () => {
+  it("shows the GIF intro, then visibly replays queued progress before resolving", async () => {
     const root = createRoot();
     const ui = createLeoGameLoadingUi({
       introDurationMs: 20,
       gifLoadTimeoutMs: 50,
+      progressRevealDurationMs: 1200,
     }).create({ root });
     let ready = false;
     void ui.readyToComplete?.then(() => {
       ready = true;
     });
+    ui.update({ phase: "preparing", progress: 99, error: null });
     TestPreloadImage.instances[0].onload?.();
     expect(
       (root.querySelector(".sce-leo-loading__intro") as HTMLElement).dataset
@@ -50,11 +52,20 @@ describe("Leo game loading UI", () => {
     await vi.advanceTimersByTimeAsync(19);
     expect(ready).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
-    expect(ready).toBe(true);
+    expect(ready).toBe(false);
     expect(
       (root.querySelector(".sce-leo-loading__radial") as HTMLElement).dataset
         .visible,
     ).toBe("true");
+    expect(horizontalClipPath(root)).toBe("inset(0 70% 0 0)");
+
+    await vi.advanceTimersByTimeAsync(608);
+    expect(ready).toBe(false);
+    expect(horizontalRightInset(root)).toBeCloseTo(50, 0);
+
+    await vi.advanceTimersByTimeAsync(592);
+    expect(ready).toBe(true);
+    expect(horizontalClipPath(root)).toBe("inset(0 30.4% 0 0)");
   });
 
   it.each(["error", "timeout"] as const)(
@@ -63,7 +74,9 @@ describe("Leo game loading UI", () => {
       const ui = createLeoGameLoadingUi({
         introDurationMs: 10,
         gifLoadTimeoutMs: 20,
+        progressRevealDurationMs: 0,
       }).create({ root: createRoot() });
+      ui.update({ phase: "preparing", progress: 99, error: null });
       if (mode === "error") {
         TestPreloadImage.instances[0].onerror?.();
         await vi.advanceTimersByTimeAsync(10);
@@ -83,9 +96,11 @@ describe("Leo game loading UI", () => {
       TestPreloadImage.nextComplete = true;
       TestPreloadImage.nextNaturalWidth = naturalWidth;
       const root = createRoot();
-      const ui = createLeoGameLoadingUi({ introDurationMs: 10 }).create({
-        root,
-      });
+      const ui = createLeoGameLoadingUi({
+        introDurationMs: 10,
+        progressRevealDurationMs: 0,
+      }).create({ root });
+      ui.update({ phase: "preparing", progress: 99, error: null });
       expect(
         (root.querySelector(".sce-leo-loading__intro") as HTMLElement).dataset
           .visible === "true",
@@ -95,14 +110,26 @@ describe("Leo game loading UI", () => {
     },
   );
 
-  it("updates progress art and exposes errors without exiting", () => {
+  it("updates visible progress art and exposes errors without exiting", async () => {
     const root = createRoot();
-    const ui = createLeoGameLoadingUi().create({ root });
+    const ui = createLeoGameLoadingUi({
+      introDurationMs: 0,
+      progressRevealDurationMs: 0,
+    }).create({ root });
+    TestPreloadImage.instances[0].onload?.();
+    await vi.advanceTimersByTimeAsync(0);
     ui.update({ phase: "loading-resources", progress: 50, error: null });
     expect(
       (root.querySelector(".sce-leo-loading__horizontal") as HTMLElement).style
         .clipPath,
     ).toBe("inset(0 50% 0 0)");
+    expect(
+      (root.querySelector(".sce-leo-loading__radial") as HTMLElement).style
+        .clipPath,
+    ).toContain("50% 35%");
+    expect(styleText(root)).toContain(
+      "transition: opacity 500ms ease; will-change: clip-path, opacity",
+    );
     ui.update({ phase: "error", progress: 99, error: "live failed" });
     expect(root.querySelector('[role="alert"]')?.textContent).toBe(
       "live failed",
@@ -161,6 +188,11 @@ describe("Leo game loading UI", () => {
       createLeoGameLoadingUi({ gifLoadTimeoutMs: Number.NaN }),
     ).toThrow(/gifLoadTimeoutMs/);
     expect(() =>
+      createLeoGameLoadingUi({
+        progressRevealDurationMs: Number.NEGATIVE_INFINITY,
+      }),
+    ).toThrow(/progressRevealDurationMs/);
+    expect(() =>
       createLeoGameLoadingUi({ exitDurationMs: Number.POSITIVE_INFINITY }),
     ).toThrow(/exitDurationMs/);
   });
@@ -185,4 +217,29 @@ function createRoot(): HTMLDivElement {
   const root = document.createElement("div");
   document.body.append(root);
   return root;
+}
+
+function styleText(root: HTMLElement): string {
+  const instanceId = root.querySelector<HTMLElement>("[data-sce-leo-loading]")
+    ?.dataset.sceLeoLoading;
+  return (
+    document.head.querySelector<HTMLStyleElement>(
+      `[data-sce-leo-loading-style="${instanceId}"]`,
+    )?.textContent ?? ""
+  );
+}
+
+function horizontalClipPath(root: HTMLElement): string {
+  return (
+    root.querySelector<HTMLElement>(".sce-leo-loading__horizontal")?.style
+      .clipPath ?? ""
+  );
+}
+
+function horizontalRightInset(root: HTMLElement): number {
+  const match = /^inset\(0 ([\d.]+)% 0 0\)$/.exec(horizontalClipPath(root));
+  if (!match) {
+    throw new Error("Leo horizontal progress clip path is invalid.");
+  }
+  return Number(match[1]);
 }

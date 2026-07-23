@@ -1,5 +1,6 @@
 import { createGameLoading } from "@slotclientengine/gameloading";
 import { createLeoGameLoadingUi } from "@slotclientengine/gameloading-ui-leo";
+import type { Game002ReadinessResult } from "./game002-bootstrap.js";
 import {
   createGame002LoadingResources,
   readGame002RuntimeModule,
@@ -10,9 +11,7 @@ import {
 import "./styles.css";
 
 const root = document.getElementById("app");
-if (!root) {
-  throw new Error("Missing #app root.");
-}
+if (!root) throw new Error("Missing #app root.");
 
 const loadingHost = document.createElement("div");
 loadingHost.className = "game002-loading-host";
@@ -23,18 +22,32 @@ root.replaceChildren(loadingHost, gameHost);
 
 let enteredGame: Game002EnteredGameLike | null = null;
 
-const loading = createGameLoading<{
-  readonly runtimeModule: Game002RuntimeModule;
-  readonly prepared: Game002PreparedLoadingSessionLike;
-}>({
+const loading = createGameLoading<
+  {
+    readonly runtimeModule: Game002RuntimeModule;
+    readonly prepared: Game002PreparedLoadingSessionLike;
+  },
+  Game002ReadinessResult
+>({
   root: loadingHost,
   ui: createLeoGameLoadingUi(),
   maxConcurrentResources: 4,
   resources: createGame002LoadingResources(),
-  onBeforeComplete: async ({ loadedResources }) => {
+  readiness: {
+    start: async ({ signal }) => {
+      const bootstrap = await import("./game002-bootstrap.js");
+      return bootstrap.startGame002Readiness({
+        search: window.location.search,
+        signal,
+      });
+    },
+    dispose: (result) => result.destroy(),
+  },
+  onBeforeComplete: async ({ loadedResources, readinessResult, signal }) => {
     const runtimeModule = readGame002RuntimeModule(loadedResources);
-    const prepared = await runtimeModule.prepareGame002At99({
-      search: window.location.search,
+    const prepared = await runtimeModule.finalizeGame002At99({
+      readinessResult,
+      signal,
     });
     return Object.freeze({ runtimeModule, prepared });
   },
@@ -52,14 +65,12 @@ const loading = createGameLoading<{
       throw error;
     }
   },
-  onError: (error) => {
-    console.error(error);
-  },
+  onError: (error) => console.error(error),
 });
 
 void loading.start().catch(() => undefined);
 
 window.addEventListener("beforeunload", () => {
   loading.destroy();
-  enteredGame?.destroy();
+  void enteredGame?.destroy().catch((error: unknown) => console.error(error));
 });

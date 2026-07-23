@@ -156,6 +156,9 @@ function verifyNoLeoReactRuntime(files) {
     "react-dom",
     "Minified React error",
     "useSyncExternalStore",
+    "launcher.rgstest.slammerstudios.com",
+    "leo-setting-unavailable",
+    "GameDB",
   ];
   for (const file of files.filter((candidate) => candidate.endsWith(".js"))) {
     const content = readFileSync(file, "utf8");

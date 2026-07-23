@@ -108,9 +108,88 @@ function verify() {
     .join("\n");
 
   verifyIndexHtml(indexHtml);
+  verifyTask122BundleBoundaries(indexHtml, assetNames);
   verifySourceContract();
   verifyDistAssets(assetNames, bundledJavaScript);
   verifySensitiveValues(listFiles(DIST_ROOT));
+}
+
+function verifyTask122BundleBoundaries(indexHtml, assetNames) {
+  const initialMatch = /\.\/assets\/(index-[^"']+\.js)/.exec(indexHtml);
+  if (!initialMatch) {
+    failures.push("cannot identify the initial loading JavaScript chunk.");
+    return;
+  }
+  const initialName = initialMatch[1];
+  const bootstrapNames = assetNames.filter((name) =>
+    /^game002-bootstrap-.+\.js$/.test(name),
+  );
+  const runtimeNames = assetNames.filter((name) =>
+    /^game-entry-.+\.js$/.test(name),
+  );
+  if (bootstrapNames.length !== 1 || runtimeNames.length !== 1) {
+    failures.push(
+      `expected one bootstrap and one runtime chunk, got ${bootstrapNames.length}/${runtimeNames.length}.`,
+    );
+    return;
+  }
+  const initial = readFileSync(join(DIST_ASSETS, initialName), "utf8");
+  const bootstrap = readFileSync(join(DIST_ASSETS, bootstrapNames[0]), "utf8");
+  const runtime = readFileSync(join(DIST_ASSETS, runtimeNames[0]), "utf8");
+  for (const marker of [
+    "launcher.rgstest.slammerstudios.com",
+    "GameDB",
+    "leo-setting-unavailable",
+    "slot-leo-ui-root",
+    "react-dom",
+    "Minified React error",
+  ]) {
+    if (initial.includes(marker)) {
+      failures.push(`initial loading chunk unexpectedly contains ${marker}.`);
+    }
+  }
+  for (const marker of [
+    "launcher.rgstest.slammerstudios.com",
+    "GameDB",
+    "leo-setting-unavailable",
+  ]) {
+    if (!bootstrap.includes(marker)) {
+      failures.push(`bootstrap chunk is missing ${marker}.`);
+    }
+  }
+  if (!runtime.includes("slot-leo-ui-root")) {
+    failures.push("formal runtime chunk is missing the Leo game UI marker.");
+  }
+  const bootstrapReferences = new Set(
+    [...initial.matchAll(/game002-bootstrap-[A-Za-z0-9_-]+\.js/g)].map(
+      (match) => match[0],
+    ),
+  );
+  const runtimeReferences = new Set(
+    [...initial.matchAll(/game-entry-[A-Za-z0-9_-]+\.js/g)].map(
+      (match) => match[0],
+    ),
+  );
+  if (bootstrapReferences.size !== 1 || runtimeReferences.size !== 1) {
+    failures.push(
+      "initial loading chunk must reference one stable bootstrap URL and one stable runtime URL.",
+    );
+  }
+  const bootstrapImports = readRelativeJavaScriptImports(bootstrap);
+  const runtimeImports = readRelativeJavaScriptImports(runtime);
+  if (![...bootstrapImports].some((name) => runtimeImports.has(name))) {
+    failures.push(
+      "bootstrap and runtime chunks do not share a stable dependency chunk URL.",
+    );
+  }
+}
+
+function readRelativeJavaScriptImports(source) {
+  return new Set(
+    [...source.matchAll(/from["']\.\/([^"']+\.js)["']/g)].map(
+      (match) => match[1],
+    ),
+  );
 }
 
 function verifyIndexHtml(indexHtml) {

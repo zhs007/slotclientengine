@@ -52,6 +52,9 @@ class SlotGameFrameworkImpl implements SlotGameFramework {
       initialBetIndex: options.initialBetIndex,
       initialBalance: options.initialBalance,
       initialWin: options.initialWin,
+      initialMuted: options.initialMuted,
+      initialFastMode: options.initialFastMode,
+      initialAutoMode: options.initialAutoMode,
     });
     const commands = this.#createUiCommands();
     const uiFactory = options.uiFactory ?? createDefaultSlotGameUiFactory();

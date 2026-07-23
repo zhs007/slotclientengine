@@ -14,16 +14,20 @@ interface NormalizedResource {
 
 const DEFAULT_MAX_CONCURRENT_RESOURCES = 6;
 
-export function createGameLoading<TPrepareResult = unknown>(
-  options: GameLoadingOptions<TPrepareResult>,
+export function createGameLoading<
+  TPrepareResult = unknown,
+  TReadinessResult = void,
+>(
+  options: GameLoadingOptions<TPrepareResult, TReadinessResult>,
 ): GameLoadingHandle {
   return new GameLoadingController(options);
 }
 
 class GameLoadingController<
   TPrepareResult = unknown,
+  TReadinessResult = void,
 > implements GameLoadingHandle {
-  readonly #options: GameLoadingOptions<TPrepareResult>;
+  readonly #options: GameLoadingOptions<TPrepareResult, TReadinessResult>;
   readonly #resources: readonly NormalizedResource[];
   readonly #maxConcurrentResources: number;
   readonly #ui: GameLoadingUi;
@@ -34,8 +38,12 @@ class GameLoadingController<
   #uiDestroyed = false;
   #startPromise: Promise<void> | null = null;
   #progress = 0;
+  #readinessResult: TReadinessResult | undefined;
+  #hasReadinessResult = false;
+  #readinessDisposed = false;
+  #readinessTransferred = false;
 
-  constructor(options: GameLoadingOptions<TPrepareResult>) {
+  constructor(options: GameLoadingOptions<TPrepareResult, TReadinessResult>) {
     validateOptions(options);
     this.#options = options;
     this.#resources = normalizeResources(options.resources);
@@ -66,59 +74,42 @@ class GameLoadingController<
     }
     this.#destroyed = true;
     this.#abortController.abort();
+    void this.#disposeReadinessResult();
     this.#destroyUi();
     this.#options.root.hidden = true;
   }
 
   async #run(): Promise<void> {
+    const readinessPromise = this.#startReadiness();
+    const resourcesPromise = this.#loadResources();
+    const visualPromise = waitWithAbort(
+      this.#visualReady,
+      this.#abortController.signal,
+    );
     try {
-      const totalWeight = this.#resources.reduce(
-        (total, item) => total + item.weight,
-        0,
-      );
-      let completedWeight = 0;
-      await runConcurrent(
-        this.#resources,
-        this.#maxConcurrentResources,
-        async ({ resource, weight }) => {
-          const value = await loadGameLoadingResource(resource, {
-            resource,
+      const [readinessResult] = await Promise.all([
+        readinessPromise,
+        resourcesPromise.then(() => undefined),
+        visualPromise,
+      ]);
+      if (this.#destroyed) {
+        return;
+      }
+
+      const prepareResult = await waitWithAbort(
+        Promise.resolve(
+          this.#options.onBeforeComplete({
             loadedResources: this.#loadedResources,
+            readinessResult,
             signal: this.#abortController.signal,
-          });
-          if (this.#destroyed || this.#abortController.signal.aborted) {
-            return;
-          }
-          this.#loadedResources.set(resource.id, value);
-          completedWeight += weight;
-          this.#publish(
-            "loading-resources",
-            (completedWeight / totalWeight) * 99,
-            null,
-          );
-        },
+          }),
+        ),
         this.#abortController.signal,
       );
       if (this.#destroyed) {
         return;
       }
-
-      this.#publish("preparing", 99, null);
-      const [prepareResult] = await Promise.all([
-        waitWithAbort(
-          Promise.resolve(
-            this.#options.onBeforeComplete({
-              loadedResources: this.#loadedResources,
-              signal: this.#abortController.signal,
-            }),
-          ),
-          this.#abortController.signal,
-        ),
-        waitWithAbort(this.#visualReady, this.#abortController.signal),
-      ]);
-      if (this.#destroyed) {
-        return;
-      }
+      this.#readinessTransferred = true;
 
       this.#publish("entering-game", 100, null);
       await waitWithAbort(
@@ -126,6 +117,7 @@ class GameLoadingController<
           this.#options.onEnterGame({
             loadedResources: this.#loadedResources,
             prepareResult,
+            readinessResult,
             signal: this.#abortController.signal,
           }),
         ),
@@ -149,6 +141,7 @@ class GameLoadingController<
       }
       const normalized = toError(error);
       this.#abortController.abort();
+      await this.#disposeReadinessResult();
       this.#options.root.hidden = false;
       try {
         this.#publish("error", this.#progress, normalized.message);
@@ -161,6 +154,92 @@ class GameLoadingController<
         // Error observers cannot replace the loading failure.
       }
       throw normalized;
+    }
+  }
+
+  async #loadResources(): Promise<void> {
+    const totalWeight = this.#resources.reduce(
+      (total, item) => total + item.weight,
+      0,
+    );
+    let completedWeight = 0;
+    await runConcurrent(
+      this.#resources,
+      this.#maxConcurrentResources,
+      async ({ resource, weight }) => {
+        const value = await loadGameLoadingResource(resource, {
+          resource,
+          loadedResources: this.#loadedResources,
+          signal: this.#abortController.signal,
+        });
+        if (this.#destroyed || this.#abortController.signal.aborted) return;
+        this.#loadedResources.set(resource.id, value);
+        completedWeight += weight;
+        if (completedWeight >= totalWeight) {
+          this.#publish("preparing", 99, null);
+        } else {
+          this.#publish(
+            "loading-resources",
+            (completedWeight / totalWeight) * 99,
+            null,
+          );
+        }
+      },
+      this.#abortController.signal,
+    );
+    if (this.#abortController.signal.aborted) throw createAbortError();
+  }
+
+  #startReadiness(): Promise<TReadinessResult> {
+    const readiness = this.#options.readiness;
+    let promise: Promise<TReadinessResult>;
+    try {
+      promise = readiness
+        ? Promise.resolve(
+            readiness.start({ signal: this.#abortController.signal }),
+          )
+        : Promise.resolve(undefined as TReadinessResult);
+    } catch (error) {
+      promise = Promise.reject(error);
+    }
+    return promise.then(async (result) => {
+      if (this.#abortController.signal.aborted || this.#destroyed) {
+        await this.#disposeLateReadinessResult(result);
+        throw createAbortError();
+      }
+      this.#readinessResult = result;
+      this.#hasReadinessResult = true;
+      return result;
+    });
+  }
+
+  async #disposeLateReadinessResult(result: TReadinessResult): Promise<void> {
+    if (!this.#options.readiness || this.#readinessTransferred) return;
+    if (this.#readinessDisposed) return;
+    this.#readinessDisposed = true;
+    try {
+      await this.#options.readiness.dispose(result);
+    } catch {
+      // Cleanup failures never replace the authoritative loading failure.
+    }
+  }
+
+  async #disposeReadinessResult(): Promise<void> {
+    if (
+      !this.#hasReadinessResult ||
+      this.#readinessTransferred ||
+      this.#readinessDisposed ||
+      !this.#options.readiness
+    ) {
+      return;
+    }
+    this.#readinessDisposed = true;
+    try {
+      await this.#options.readiness.dispose(
+        this.#readinessResult as TReadinessResult,
+      );
+    } catch {
+      // Cleanup failures never replace the authoritative loading failure.
     }
   }
 
@@ -296,8 +375,8 @@ function createAbortError(): Error {
   return new DOMException("Game loading was aborted.", "AbortError");
 }
 
-function validateOptions<TPrepareResult>(
-  options: GameLoadingOptions<TPrepareResult>,
+function validateOptions<TPrepareResult, TReadinessResult>(
+  options: GameLoadingOptions<TPrepareResult, TReadinessResult>,
 ): void {
   if (
     typeof HTMLElement === "undefined" ||
@@ -316,6 +395,17 @@ function validateOptions<TPrepareResult>(
   }
   if (options.onError !== undefined && typeof options.onError !== "function") {
     throw new Error("Game loading onError must be a function when provided.");
+  }
+  if (
+    options.readiness !== undefined &&
+    (typeof options.readiness !== "object" ||
+      options.readiness === null ||
+      typeof options.readiness.start !== "function" ||
+      typeof options.readiness.dispose !== "function")
+  ) {
+    throw new Error(
+      "Game loading readiness must provide start() and dispose().",
+    );
   }
 }
 

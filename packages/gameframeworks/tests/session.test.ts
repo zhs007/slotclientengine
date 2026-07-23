@@ -97,6 +97,39 @@ describe("session", () => {
     expect(failingClient.calls).toEqual(["connect:bad", "disconnect"]);
   });
 
+  it("cancels live preparation without entering or double-disconnecting", async () => {
+    const client = new MockClient();
+    let resolveConnect: () => void = () => undefined;
+    client.connectPromise = new Promise<void>((resolve) => {
+      resolveConnect = resolve;
+    });
+    const controller = new AbortController();
+    const preparing = prepareSlotGameLiveSession({
+      live: { serverUrl: "ws://localhost", token: "t", gamecode: "g" },
+      clientFactory: () => client,
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(preparing).rejects.toMatchObject({ name: "AbortError" });
+    expect(client.calls).toEqual(["connect:t", "disconnect"]);
+    resolveConnect();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(client.calls).not.toContain("enterGame:g");
+
+    const already = new AbortController();
+    already.abort();
+    const secondClient = new MockClient();
+    await expect(
+      prepareSlotGameLiveSession({
+        live: { serverUrl: "ws://localhost" },
+        clientFactory: () => secondClient,
+        signal: already.signal,
+      }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(secondClient.calls).toEqual(["disconnect"]);
+  });
+
   it("rejects session operations before connect and concurrent spin", async () => {
     const client = new MockClient();
     const session = new SlotGameLiveSession({

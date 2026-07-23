@@ -16,11 +16,25 @@ import {
 import { createLeoSlotGameUiStore, type LeoSlotGameUiStore } from "./store.js";
 import { LeoSlotGameUiView } from "./view.js";
 import { createLeoMoneyFormatter } from "./format.js";
+import {
+  DEFAULT_LEO_SLOT_GAME_UI_LABELS,
+  type LeoSlotGameUiLabels,
+} from "./view.js";
 
-export function createLeoSlotGameUiFactory(): SlotGameUiFactory {
+export interface LeoSlotGameUiFactoryOptions {
+  readonly labels?: Partial<LeoSlotGameUiLabels>;
+}
+
+export function createLeoSlotGameUiFactory(
+  options: LeoSlotGameUiFactoryOptions = {},
+): SlotGameUiFactory {
+  const labels = Object.freeze({
+    ...DEFAULT_LEO_SLOT_GAME_UI_LABELS,
+    ...options.labels,
+  });
   return Object.freeze({
     create(context: SlotGameUiCreateContext): SlotGameUi {
-      return new LeoSlotGameUi(context);
+      return new LeoSlotGameUi(context, labels);
     },
   });
 }
@@ -31,7 +45,7 @@ class LeoSlotGameUi implements SlotGameUi {
   readonly #reactRoot: Root;
   #destroyed = false;
 
-  constructor(context: SlotGameUiCreateContext) {
+  constructor(context: SlotGameUiCreateContext, labels: LeoSlotGameUiLabels) {
     this.#host = createSlotUiFrameHost({
       root: context.root,
       designSize: context.designSize,
@@ -48,6 +62,7 @@ class LeoSlotGameUi implements SlotGameUi {
         commands: context.commands,
         betOptionCount: context.betOptions.length,
         brandLabel: context.brandLabel ?? "LEO",
+        labels,
         formatMoney:
           context.formatMoney ??
           createLeoMoneyFormatter({

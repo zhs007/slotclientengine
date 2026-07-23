@@ -256,6 +256,9 @@ export interface SlotGameFrameworkOptions {
   readonly initialBetIndex?: number;
   readonly initialBalance?: number;
   readonly initialWin?: number;
+  readonly initialMuted?: boolean;
+  readonly initialFastMode?: boolean;
+  readonly initialAutoMode?: boolean;
   readonly designSize?: { readonly width: number; readonly height: number };
   readonly framePolicy?: SlotGameFramePolicy;
   readonly brandLabel?: string;

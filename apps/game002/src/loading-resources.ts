@@ -58,16 +58,17 @@ const symbolValuePixiTextureUrls = new Set(
 );
 
 export interface Game002PreparedLoadingSessionLike {
-  readonly liveSession: { disconnect(): void };
+  readonly readiness: { destroy(): void };
 }
 
 export interface Game002EnteredGameLike {
-  destroy(): void;
+  destroy(): Promise<void>;
 }
 
 export interface Game002RuntimeModule {
-  prepareGame002At99(options: {
-    readonly search: string;
+  finalizeGame002At99(options: {
+    readonly readinessResult: import("./game002-bootstrap.js").Game002ReadinessResult;
+    readonly signal: AbortSignal;
   }): Promise<Game002PreparedLoadingSessionLike>;
   enterGame002(options: {
     readonly root: HTMLElement;
@@ -129,7 +130,7 @@ export function readGame002RuntimeModule(
     throw new Error("game002 runtime module was not loaded.");
   }
   if (
-    typeof runtimeModule.prepareGame002At99 !== "function" ||
+    typeof runtimeModule.finalizeGame002At99 !== "function" ||
     typeof runtimeModule.enterGame002 !== "function"
   ) {
     throw new Error("game002 runtime module is missing required exports.");

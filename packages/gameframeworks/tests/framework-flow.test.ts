@@ -14,6 +14,39 @@ import {
 } from "./test-helpers.js";
 
 describe("framework flow", () => {
+  it("publishes explicit preferences in the first framework and UI snapshot", () => {
+    const states: Array<{
+      muted: boolean;
+      fastMode: boolean;
+      autoMode: boolean;
+    }> = [];
+    const root = document.createElement("div");
+    const framework = createSlotGameFramework({
+      root,
+      gameAdapter: new MockAdapter(),
+      live: { serverUrl: "ws://localhost" },
+      betOptions: BET_OPTIONS,
+      initialMuted: true,
+      initialFastMode: true,
+      initialAutoMode: true,
+      clientFactory: () => new MockClient(),
+      onStateChange: ({ muted, fastMode, autoMode }) =>
+        states.push({ muted, fastMode, autoMode }),
+    });
+    expect(framework.getState()).toMatchObject({
+      muted: true,
+      fastMode: true,
+      autoMode: true,
+    });
+    expect(states[0]).toEqual({ muted: true, fastMode: true, autoMode: true });
+    expect(
+      root.querySelector(".slot-ui-sound-button")?.getAttribute("aria-pressed"),
+    ).toBe("false");
+    framework.setMuted(false);
+    expect(framework.getState().muted).toBe(false);
+    framework.destroy();
+  });
+
   it("connects, spins, presents logic, collects after play resolves, and returns the same GameLogic", async () => {
     const root = document.createElement("div");
     const client = new MockClient();

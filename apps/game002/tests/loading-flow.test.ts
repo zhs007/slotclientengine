@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Assets } from "pixi.js";
 import {
   GAME002_LIVE_SERVER_URL,
-  parseGame002FrameworkConfigFromQuery,
+  parseGame002LaunchQuery,
 } from "../src/framework-config.js";
+import type { Game002ReadinessResult } from "../src/game002-bootstrap.js";
 
 const frameworkMocks = vi.hoisted(() => ({
-  prepareSlotGameLiveSession: vi.fn(),
   createSlotGameFramework: vi.fn(),
 }));
 
@@ -15,18 +15,14 @@ vi.mock("@slotclientengine/gameframeworks", async (importOriginal) => {
     await importOriginal<typeof import("@slotclientengine/gameframeworks")>();
   return {
     ...actual,
-    prepareSlotGameLiveSession: frameworkMocks.prepareSlotGameLiveSession,
     createSlotGameFramework: frameworkMocks.createSlotGameFramework,
   };
 });
 
-describe("game002 loading flow", () => {
-  beforeEach(() => {
-    frameworkMocks.prepareSlotGameLiveSession.mockReset();
-    frameworkMocks.createSlotGameFramework.mockReset();
-  });
+describe("game002 99 percent finalization and ownership", () => {
+  beforeEach(() => frameworkMocks.createSlotGameFramework.mockReset());
 
-  it("prepares one live session at 99 percent without creating framework", async () => {
+  it("finalizes skin only after an already prepared platform/session result", async () => {
     const sizes = [
       [36, 49],
       [26, 48],
@@ -51,159 +47,227 @@ describe("game002 loading flow", () => {
         const [width, height] = sizes[digit] ?? [];
         return { width, height } as never;
       });
-    const liveSession = createLiveSession();
-    frameworkMocks.prepareSlotGameLiveSession.mockResolvedValue(liveSession);
-    const { prepareGame002At99 } = await import("../src/game-entry.js");
-
-    const prepared = await prepareGame002At99({ search: validQuery() });
-
-    expect(prepared.liveSession).toBe(liveSession);
-    expect(prepared.skin.id).toBe("1");
-    expect(frameworkMocks.prepareSlotGameLiveSession).toHaveBeenCalledOnce();
-    expect(frameworkMocks.prepareSlotGameLiveSession).toHaveBeenCalledWith({
-      live: expect.objectContaining({
-        serverUrl: GAME002_LIVE_SERVER_URL,
-        gamecode: "GAME_CODE",
-        token: "TOKEN",
-      }),
+    const readiness = createReadiness();
+    const { finalizeGame002At99 } = await import("../src/game-entry.js");
+    const prepared = await finalizeGame002At99({
+      readinessResult: readiness,
+      signal: new AbortController().signal,
     });
-    expect(frameworkMocks.createSlotGameFramework).not.toHaveBeenCalled();
+    expect(prepared.readiness).toBe(readiness);
+    expect(prepared.skin.id).toBe("1");
+    expect(readiness.destroy).not.toHaveBeenCalled();
     await prepared.valuePresentationResourceBundle.destroy();
     loadTexture.mockRestore();
   });
 
-  it("rejects legacy serverUrl and old skins before live preparation", async () => {
-    const { prepareGame002At99 } = await import("../src/game-entry.js");
+  it("cleans readiness when finalization is aborted", async () => {
+    const readiness = createReadiness();
+    const controller = new AbortController();
+    controller.abort();
+    const { finalizeGame002At99 } = await import("../src/game-entry.js");
     await expect(
-      prepareGame002At99({
-        search: `${validQuery()}&serverUrl=wss%3A%2F%2Fexample.test%2F`,
+      finalizeGame002At99({
+        readinessResult: readiness,
+        signal: controller.signal,
       }),
-    ).rejects.toThrow(/serverUrl query parameter is not supported/);
-    await expect(
-      prepareGame002At99({ search: validQuery({ skin: "5" }) }),
-    ).rejects.toThrow(/skin query parameter must be exactly "1"/);
-    expect(frameworkMocks.prepareSlotGameLiveSession).not.toHaveBeenCalled();
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(readiness.destroy).toHaveBeenCalledOnce();
   });
 
-  it("enters with the prepared session and cleans up all failure paths", async () => {
-    const config = parseGame002FrameworkConfigFromQuery(validQuery());
+  it("keeps the abort authoritative when readiness cleanup throws", async () => {
+    const readiness = createReadiness();
+    readiness.destroy.mockImplementation(() => {
+      throw new Error("cleanup failed");
+    });
+    const controller = new AbortController();
+    controller.abort();
+    const { finalizeGame002At99 } = await import("../src/game-entry.js");
+    await expect(
+      finalizeGame002At99({
+        readinessResult: readiness,
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(readiness.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("injects platform presentation/preferences and cleans entered ownership", async () => {
+    const config = parseGame002LaunchQuery(validQuery());
     const skin = await import("../src/skin-config.js").then((module) =>
       module.getGame002SkinConfig("1"),
     );
-    const liveSession = createLiveSession();
+    const readiness = createReadiness(config, {
+      presentation: {
+        brandLabel: "game002",
+        currency: "EUR",
+        locale: "de-DE",
+      },
+    });
     const framework = createFramework();
     frameworkMocks.createSlotGameFramework.mockReturnValue(framework);
-    const { enterGame002 } = await import("../src/game-entry.js");
-    const createValueBundle = () => ({
+    const valueBundle = {
       resources: {},
       destroy: vi.fn(async () => undefined),
-    });
-
+    };
+    const { enterGame002 } = await import("../src/game-entry.js");
     const entered = await enterGame002({
       root: document.createElement("div"),
       prepared: {
-        config,
+        readiness,
         skin,
-        liveSession,
-        valuePresentationResourceBundle: createValueBundle(),
+        valuePresentationResourceBundle: valueBundle,
       },
     });
     expect(frameworkMocks.createSlotGameFramework).toHaveBeenCalledWith(
       expect.objectContaining({
-        liveSession,
+        liveSession: readiness.liveSession,
         live: config.live,
+        initialMuted: true,
+        initialFastMode: true,
+        initialAutoMode: false,
+        brandLabel: "game002",
+        currency: "EUR",
+        locale: "de-DE",
+        formatMoney: expect.any(Function),
         designSize: { width: 1125, height: 2000 },
-        framePolicy: expect.objectContaining({
-          mode: "maximized-focus",
-          resolveViewportSize: expect.any(Function),
-        }),
+        framePolicy: expect.objectContaining({ mode: "maximized-focus" }),
         uiFactory: expect.objectContaining({ create: expect.any(Function) }),
       }),
     );
-    const frameworkOptions =
-      frameworkMocks.createSlotGameFramework.mock.calls[0]?.[0];
-    expect(frameworkOptions).toBeDefined();
-    if (!frameworkOptions) {
-      throw new Error("game002 framework options were not captured.");
-    }
-    const framePolicy = frameworkOptions.framePolicy;
-    expect(framePolicy?.mode).toBe("maximized-focus");
-    if (framePolicy?.mode !== "maximized-focus") {
-      throw new Error("game002 must pass the maximized-focus frame policy.");
-    }
-    expect(
-      framePolicy.resolveViewportSize({ width: 1200, height: 1200 }),
-    ).toEqual({
-      width: 1200,
-      height: 1200,
-    });
+    const frameworkOptions = frameworkMocks.createSlotGameFramework.mock
+      .calls[0]?.[0] as { readonly formatMoney?: (amount: number) => string };
+    expect(frameworkOptions.formatMoney?.(1575)).toBe(
+      new Intl.NumberFormat("de-DE", {
+        style: "currency",
+        currency: "EUR",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(15.75),
+    );
     expect(framework.connect).toHaveBeenCalledOnce();
-    expect(liveSession.connect).not.toHaveBeenCalled();
-    entered.destroy();
-    entered.destroy();
+    expect(readiness.liveSession.connect).not.toHaveBeenCalled();
+    await entered.destroy();
+    await entered.destroy();
     expect(framework.destroy).toHaveBeenCalledOnce();
+    expect(readiness.platformHandle.destroy).toHaveBeenCalledOnce();
+    expect(valueBundle.destroy).toHaveBeenCalledOnce();
+  });
 
-    const failingFramework = createFramework();
-    failingFramework.connect.mockRejectedValue(new Error("framework failed"));
-    frameworkMocks.createSlotGameFramework.mockReturnValue(failingFramework);
-    await expect(
-      enterGame002({
-        root: document.createElement("div"),
-        prepared: {
-          config,
-          skin,
-          liveSession,
-          valuePresentationResourceBundle: createValueBundle(),
-        },
-      }),
-    ).rejects.toThrow(/framework failed/);
-    expect(failingFramework.destroy).toHaveBeenCalledOnce();
-
-    const thrownSession = createLiveSession();
-    frameworkMocks.createSlotGameFramework.mockImplementation(() => {
-      throw new Error("create failed");
+  it("returns a shared rejecting destroy promise without skipping later cleanup", async () => {
+    const skin = await import("../src/skin-config.js").then((module) =>
+      module.getGame002SkinConfig("1"),
+    );
+    const readiness = createReadiness();
+    const framework = createFramework();
+    framework.destroy.mockImplementation(() => {
+      throw new Error("framework cleanup failed");
     });
-    await expect(
-      enterGame002({
+    frameworkMocks.createSlotGameFramework.mockReturnValue(framework);
+    const valueBundle = {
+      resources: {},
+      destroy: vi.fn(async () => undefined),
+    };
+    const { enterGame002 } = await import("../src/game-entry.js");
+    const entered = await enterGame002({
+      root: document.createElement("div"),
+      prepared: {
+        readiness,
+        skin,
+        valuePresentationResourceBundle: valueBundle,
+      },
+    });
+    const firstDestroy = entered.destroy();
+    const secondDestroy = entered.destroy();
+    expect(secondDestroy).toBe(firstDestroy);
+    await expect(firstDestroy).rejects.toThrow(/framework cleanup failed/);
+    await expect(secondDestroy).rejects.toThrow(/framework cleanup failed/);
+    expect(framework.destroy).toHaveBeenCalledOnce();
+    expect(readiness.platformHandle.destroy).toHaveBeenCalledOnce();
+    expect(valueBundle.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("cleans framework, platform and bundle when framework connect fails", async () => {
+    const skin = await import("../src/skin-config.js").then((module) =>
+      module.getGame002SkinConfig("1"),
+    );
+    const { enterGame002 } = await import("../src/game-entry.js");
+    const readiness = createReadiness();
+    const valueBundle = {
+      resources: {},
+      destroy: vi.fn(async () => undefined),
+    };
+    const framework = createFramework();
+    framework.connect.mockRejectedValue(new Error("connect failed"));
+    frameworkMocks.createSlotGameFramework.mockReturnValue(framework);
+    let caught: unknown;
+    try {
+      await enterGame002({
         root: document.createElement("div"),
         prepared: {
-          config,
+          readiness,
           skin,
-          liveSession: thrownSession,
-          valuePresentationResourceBundle: createValueBundle(),
+          valuePresentationResourceBundle: valueBundle,
         },
-      }),
-    ).rejects.toThrow(/create failed/);
-    expect(thrownSession.disconnect).toHaveBeenCalledOnce();
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe("connect failed");
+    expect(framework.destroy).toHaveBeenCalledOnce();
+    expect(readiness.liveSession.disconnect).not.toHaveBeenCalled();
+    expect(readiness.platformHandle.destroy).toHaveBeenCalledOnce();
+    expect(valueBundle.destroy).toHaveBeenCalledOnce();
   });
 });
 
-function validQuery(overrides: Record<string, string> = {}): string {
-  return `?${new URLSearchParams({
-    skin: "1",
-    token: "TOKEN",
-    gamecode: "GAME_CODE",
-    businessid: "guest",
-    clienttype: "web",
-    jurisdiction: "MT",
-    language: "en",
-    bet: "5",
-    lines: "30",
-    times: "1",
-    autonums: "-1",
-    requestTimeoutMs: "30000",
-    ...overrides,
-  }).toString()}`;
-}
-
-function createLiveSession() {
-  return {
+function createReadiness(
+  config = parseGame002LaunchQuery(validQuery()),
+  options: {
+    readonly presentation?: {
+      readonly brandLabel: string;
+      readonly currency: string;
+      readonly locale: string;
+    };
+  } = {},
+): Game002ReadinessResult & { readonly destroy: ReturnType<typeof vi.fn> } {
+  const liveSession = {
     getUserInfo: vi.fn(() => ({ balance: 1000 })),
     connect: vi.fn(async () => ({ balance: 1000 })),
     spin: vi.fn(),
     collect: vi.fn(),
     disconnect: vi.fn(),
   };
+  const platformHandle = {
+    snapshot: Object.freeze({
+      platform: "leo",
+      mode: "real" as const,
+      gameCode: "GAME_CODE",
+      businessCode: "guest",
+      language: "en",
+      jurisdiction: "MT",
+      presentation: Object.freeze(
+        options.presentation ?? {
+          brandLabel: "game002",
+          currency: "USD",
+          locale: "en-US",
+        },
+      ),
+      initialPreferences: Object.freeze({
+        muted: true,
+        fastMode: true,
+        autoMode: false,
+      }),
+      translations: Object.freeze({ spin: "SPIN NOW" }),
+      warnings: Object.freeze([]),
+    }),
+    destroy: vi.fn(),
+  };
+  const destroy = vi.fn(() => {
+    platformHandle.destroy();
+    liveSession.disconnect();
+  });
+  return Object.freeze({ config, liveSession, platformHandle, destroy });
 }
 
 function createFramework() {
@@ -218,3 +282,24 @@ function createFramework() {
     destroy: vi.fn(),
   };
 }
+
+function validQuery(): string {
+  return `?${new URLSearchParams({
+    skin: "1",
+    token: "FAKE_TOKEN",
+    gamecode: "GAME_CODE",
+    businessid: "guest",
+    clienttype: "web",
+    jurisdiction: "MT",
+    language: "en",
+    bet: "5",
+    lines: "30",
+    times: "1",
+    autonums: "-1",
+    requestTimeoutMs: "30000",
+  })}`;
+}
+
+expect(GAME002_LIVE_SERVER_URL).toBe(
+  "wss://gameserv.rgstest.slammerstudios.com/",
+);
