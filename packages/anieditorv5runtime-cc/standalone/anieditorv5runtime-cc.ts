@@ -1473,6 +1473,7 @@ import {
   Camera,
   Canvas,
   Color,
+  Director,
   Graphics,
   Label,
   Layers,
@@ -8232,6 +8233,34 @@ function assertPositiveInteger(value, path) {
 var assertVNIProject = assertV5GProject;
 var validateVNIProject = validateV5GProject;
 //#endregion
+//#region \0@oxc-project+runtime@0.122.0/helpers/asyncToGenerator.js
+function asyncGeneratorStep(n, t, e, r, o, a, c) {
+  try {
+    var i = n[a](c),
+      u = i.value;
+  } catch (n) {
+    e(n);
+    return;
+  }
+  i.done ? t(u) : Promise.resolve(u).then(r, o);
+}
+function _asyncToGenerator(n) {
+  return function () {
+    var t = this,
+      e = arguments;
+    return new Promise(function (r, o) {
+      var a = n.apply(t, e);
+      function _next(n) {
+        asyncGeneratorStep(a, r, o, _next, _throw, "next", n);
+      }
+      function _throw(n) {
+        asyncGeneratorStep(a, r, o, _next, _throw, "throw", n);
+      }
+      _next(void 0);
+    });
+  };
+}
+//#endregion
 var COCOS_BLEND_FACTORS = {
   ZERO: 0,
   ONE: 1,
@@ -8456,8 +8485,6 @@ function captureCocosNodeVisual(options) {
   const captureRoot = new Node("V5G Node Capture");
   captureRoot.setPosition(1e6, 1e6, 0);
   const renderTexture = new RenderTexture();
-  let spriteFrame = null;
-  let released = false;
   try {
     const pixelWidth = Math.ceil(width);
     const pixelHeight = Math.ceil(height);
@@ -8494,39 +8521,69 @@ function captureCocosNodeVisual(options) {
     canvas.alignCanvasWithScreen = false;
     canvas.cameraComponent = camera;
     scene.addChild(captureRoot);
-    camera.render();
-    spriteFrame = new SpriteFrame();
-    spriteFrame.reset({
-      texture: renderTexture,
-      rect: new Rect(0, 0, pixelWidth, pixelHeight),
-      originalSize: new Size(width, height),
-      offset: new Vec2(0, 0),
-      isRotate: false,
-    });
-    spriteFrame.flipUVY = true;
-    captureRoot.removeFromParent();
-    captureRoot.destroy();
-    const capturedFrame = spriteFrame;
-    return {
-      spriteFrame: capturedFrame,
-      width,
-      height,
-      release() {
-        if (released) return;
-        released = true;
-        capturedFrame.destroy();
-        renderTexture.destroy();
-      },
-    };
   } catch (error) {
     captureRoot.removeFromParent();
     captureRoot.destroy();
-    spriteFrame === null || spriteFrame === void 0 || spriteFrame.destroy();
     renderTexture.destroy();
     throw new Error(
       `Cocos node visual capture failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+  return completeCocosNodeVisualCapture({
+    captureRoot,
+    renderTexture,
+    width,
+    height,
+    pixelWidth: Math.ceil(width),
+    pixelHeight: Math.ceil(height),
+  });
+}
+function completeCocosNodeVisualCapture(_x) {
+  return _completeCocosNodeVisualCapture.apply(this, arguments);
+}
+function _completeCocosNodeVisualCapture() {
+  _completeCocosNodeVisualCapture = _asyncToGenerator(function* (options) {
+    const { captureRoot, renderTexture } = options;
+    let spriteFrame = null;
+    let released = false;
+    try {
+      yield new Promise((resolve) => {
+        director.once(Director.EVENT_AFTER_DRAW, resolve);
+      });
+      spriteFrame = new SpriteFrame();
+      spriteFrame.reset({
+        texture: renderTexture,
+        rect: new Rect(0, 0, options.pixelWidth, options.pixelHeight),
+        originalSize: new Size(options.width, options.height),
+        offset: new Vec2(0, 0),
+        isRotate: false,
+      });
+      spriteFrame.flipUVY = true;
+      captureRoot.removeFromParent();
+      captureRoot.destroy();
+      const capturedFrame = spriteFrame;
+      return {
+        spriteFrame: capturedFrame,
+        width: options.width,
+        height: options.height,
+        release() {
+          if (released) return;
+          released = true;
+          capturedFrame.destroy();
+          renderTexture.destroy();
+        },
+      };
+    } catch (error) {
+      captureRoot.removeFromParent();
+      captureRoot.destroy();
+      spriteFrame === null || spriteFrame === void 0 || spriteFrame.destroy();
+      renderTexture.destroy();
+      throw new Error(
+        `Cocos node visual capture failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  });
+  return _completeCocosNodeVisualCapture.apply(this, arguments);
 }
 function applyNodeLayerRecursively(node, layer) {
   node.layer = layer;
@@ -8915,34 +8972,6 @@ function v5gTransformToCocosPosition(transform) {
 }
 function opacityToCocosOpacity(opacity) {
   return Math.round(clampNumber(opacity, 0, 1) * 255);
-}
-//#endregion
-//#region \0@oxc-project+runtime@0.122.0/helpers/asyncToGenerator.js
-function asyncGeneratorStep(n, t, e, r, o, a, c) {
-  try {
-    var i = n[a](c),
-      u = i.value;
-  } catch (n) {
-    e(n);
-    return;
-  }
-  i.done ? t(u) : Promise.resolve(u).then(r, o);
-}
-function _asyncToGenerator(n) {
-  return function () {
-    var t = this,
-      e = arguments;
-    return new Promise(function (r, o) {
-      var a = n.apply(t, e);
-      function _next(n) {
-        asyncGeneratorStep(a, r, o, _next, _throw, "next", n);
-      }
-      function _throw(n) {
-        asyncGeneratorStep(a, r, o, _next, _throw, "throw", n);
-      }
-      _next(void 0);
-    });
-  };
 }
 //#endregion
 var V5GCocosPlaybackCancelledError = class extends Error {

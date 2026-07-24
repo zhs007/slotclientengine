@@ -381,11 +381,6 @@ export class Camera {
   clearColor = new Color(0, 0, 0, 0);
   visibility = 0;
   targetTexture: RenderTexture | null = null;
-  renderCount = 0;
-
-  render(): void {
-    this.renderCount += 1;
-  }
 }
 
 export class Canvas {
@@ -399,9 +394,20 @@ export const Layers = {
 
 const fakeScene = new Node("Scene");
 
+export class Director {
+  static readonly EVENT_AFTER_DRAW = "director_after_draw";
+}
+
 export const director = {
   getScene(): Node {
     return fakeScene;
+  },
+  once(type: string, callback: () => void): () => void {
+    if (type !== Director.EVENT_AFTER_DRAW) {
+      throw new Error(`Unsupported fake Director event: ${type}.`);
+    }
+    queueMicrotask(callback);
+    return callback;
   },
 };
 

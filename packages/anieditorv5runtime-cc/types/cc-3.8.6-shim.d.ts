@@ -156,7 +156,6 @@ declare module "cc" {
     clearColor: Color;
     visibility: number;
     targetTexture: RenderTexture | null;
-    render(): void;
   }
 
   export class Canvas {
@@ -170,8 +169,13 @@ declare module "cc" {
     };
   };
 
+  export class Director {
+    static readonly EVENT_AFTER_DRAW: string;
+  }
+
   export const director: {
     getScene(): Node | null;
+    once(type: string, callback: () => void, thisArg?: unknown): () => void;
   };
 
   export function instantiate(node: Node): Node;

@@ -2,6 +2,7 @@ import {
   Camera,
   Canvas,
   Color,
+  Director,
   director,
   Graphics,
   instantiate,
@@ -316,7 +317,7 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
 
 function captureCocosNodeVisual(
   options: V5GCocosNodeCaptureOptions<Node>,
-): V5GCocosCapturedNodeVisual<SpriteFrame> {
+): Promise<V5GCocosCapturedNodeVisual<SpriteFrame>> {
   const { node, width, height } = options;
   if (!isValidCocosNode(node)) {
     throw new Error("Cocos node visual capture requires a valid host Node.");
@@ -342,8 +343,6 @@ function captureCocosNodeVisual(
   const captureRoot = new Node("V5G Node Capture");
   captureRoot.setPosition(1_000_000, 1_000_000, 0);
   const renderTexture = new RenderTexture();
-  let spriteFrame: SpriteFrame | null = null;
-  let released = false;
   try {
     const pixelWidth = Math.ceil(width);
     const pixelHeight = Math.ceil(height);
@@ -379,13 +378,44 @@ function captureCocosNodeVisual(
     canvas.alignCanvasWithScreen = false;
     canvas.cameraComponent = camera;
     scene.addChild(captureRoot);
-    camera.render();
+  } catch (error) {
+    captureRoot.removeFromParent();
+    captureRoot.destroy();
+    renderTexture.destroy();
+    throw new Error(
+      `Cocos node visual capture failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  return completeCocosNodeVisualCapture({
+    captureRoot,
+    renderTexture,
+    width,
+    height,
+    pixelWidth: Math.ceil(width),
+    pixelHeight: Math.ceil(height),
+  });
+}
 
+async function completeCocosNodeVisualCapture(options: {
+  readonly captureRoot: Node;
+  readonly renderTexture: RenderTexture;
+  readonly width: number;
+  readonly height: number;
+  readonly pixelWidth: number;
+  readonly pixelHeight: number;
+}): Promise<V5GCocosCapturedNodeVisual<SpriteFrame>> {
+  const { captureRoot, renderTexture } = options;
+  let spriteFrame: SpriteFrame | null = null;
+  let released = false;
+  try {
+    await new Promise<void>((resolve) => {
+      director.once(Director.EVENT_AFTER_DRAW, resolve);
+    });
     spriteFrame = new SpriteFrame();
     spriteFrame.reset({
       texture: renderTexture,
-      rect: new Rect(0, 0, pixelWidth, pixelHeight),
-      originalSize: new Size(width, height),
+      rect: new Rect(0, 0, options.pixelWidth, options.pixelHeight),
+      originalSize: new Size(options.width, options.height),
       offset: new Vec2(0, 0),
       isRotate: false,
     });
@@ -395,8 +425,8 @@ function captureCocosNodeVisual(
     const capturedFrame = spriteFrame;
     return {
       spriteFrame: capturedFrame,
-      width,
-      height,
+      width: options.width,
+      height: options.height,
       release() {
         if (released) return;
         released = true;

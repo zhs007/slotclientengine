@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { director, Label, Node, Sprite, SpriteFrame } from "cc";
+import { Camera, director, Label, Node, Sprite, SpriteFrame } from "cc";
 import { createCocosNodeDriver } from "../../src/cocos/cocos-node-driver";
 
 describe("Cocos Node visual capture", () => {
-  it("captures a complete complex subtree without reparenting or destroying the host", () => {
+  it("captures a complete complex subtree after the next draw without using Camera.render()", async () => {
     const driver = createCocosNodeDriver();
     const hostParent = new Node("Host Parent");
     const root = new Node("Card Content Root");
@@ -27,15 +27,18 @@ describe("Cocos Node visual capture", () => {
     if (!scene) throw new Error("fake Cocos scene is missing");
     const sceneChildrenBefore = [...scene.children];
 
-    const captured = driver.captureNodeVisual?.({
+    const capture = driver.captureNodeVisual?.({
       node: root,
       width: 100,
       height: 50,
       revision: "result-v1",
     });
-    if (!captured || captured instanceof Promise) {
-      throw new Error("fake Cocos capture must be synchronous");
+    if (!capture) {
+      throw new Error("fake Cocos capture is missing");
     }
+    expect(capture).toBeInstanceOf(Promise);
+    expect("render" in Camera.prototype).toBe(false);
+    const captured = await capture;
 
     expect(captured.width).toBe(100);
     expect(captured.height).toBe(50);
