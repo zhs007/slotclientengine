@@ -7,7 +7,7 @@ import {
 import {
   EDITOR_ASSETS_MAP_PATH,
   decodeEditorAssetsMap,
-  validateEditorAssetsMapPackage,
+  resolveEditorAssetsMapPackage,
 } from "@slotclientengine/editorresource";
 import {
   createGameConfig,
@@ -595,10 +595,9 @@ export async function resolveSymbolPackageFiles(options: {
   const map = decodeEditorAssetsMap(
     requirePackageBytes(options.files, EDITOR_ASSETS_MAP_PATH),
   );
-  const resolved = await validateEditorAssetsMapPackage({
+  const resolved = resolveEditorAssetsMapPackage({
     map,
     files: options.files,
-    allowControlPaths: controls,
   });
   const virtual = new Map<string, Uint8Array>();
   for (const path of controls)

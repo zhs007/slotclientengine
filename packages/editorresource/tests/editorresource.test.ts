@@ -26,6 +26,7 @@ import {
   parseEditorAssetsMap,
   renameEditorAsset,
   resolveEditorAssetMapEntry,
+  resolveEditorAssetsMapPackage,
   reviewEditorAssetImport,
   serializeEditorAssetsMap,
   validateEditorAssetsMapPackage,
@@ -256,6 +257,27 @@ describe("assets.map.json", () => {
         allowControlPaths: ["root.json"],
       }),
     ).resolves.toHaveProperty("size", 1);
+  });
+
+  it("resolves runtime payloads without auditing size, digest or orphans", async () => {
+    const { workspace } = await committed([
+      { key: "A.png", mediaType: "image/png", bytes: PNG },
+    ]);
+    const map = createEditorAssetsMapFromWorkspace(workspace);
+    const path = map.files["A.png"]!.path;
+    const changed = bytes(1);
+    const resolved = resolveEditorAssetsMapPackage({
+      map,
+      files: new Map([
+        [path, changed],
+        [`assets/${"b".repeat(64)}.png`, PNG],
+        ["unknown.json", bytes(2)],
+      ]),
+    });
+    expect(resolved.get("A.png")?.bytes).toEqual(changed);
+    expect(() =>
+      resolveEditorAssetsMapPackage({ map, files: new Map() }),
+    ).toThrow(/缺失/u);
   });
 
   it("wraps invalid JSON and byte input diagnostics", () => {

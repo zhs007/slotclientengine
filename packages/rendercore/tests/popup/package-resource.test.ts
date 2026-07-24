@@ -154,25 +154,24 @@ describe("popup package resource", () => {
     });
     await remote.destroy();
 
-    const firstPayload = Object.values(mapped.map.files)[0]!.path;
-    const loadCorrupt = async (payload: Uint8Array) => {
-      const corrupt = new Map(responses);
-      corrupt.set(firstPayload, payload);
-      return loadPopupPackageFromUrl({
-        manifestUrl: "https://cdn.example/pkg/popup.manifest.json",
-        fetchImpl: (async (input: string | URL | Request) => {
-          const path = new URL(String(input)).pathname.split("/pkg/")[1]!;
-          const body = corrupt.get(path);
-          return body
-            ? new Response(body.slice().buffer)
-            : new Response("missing", { status: 404 });
-        }) as typeof fetch,
-      });
-    };
-    await expect(loadCorrupt(new Uint8Array())).rejects.toThrow(/byteLength/);
-    const sameLength = responses.get(firstPayload)!.slice();
-    sameLength[0] = (sameLength[0] ?? 0) ^ 0xff;
-    await expect(loadCorrupt(sameLength)).rejects.toThrow(/SHA-256/);
+    const imagePayload = Object.entries(mapped.map.files).find(([key]) =>
+      key.endsWith(".png"),
+    )![1].path;
+    const changed = new Map(responses);
+    changed.set(imagePayload, new Uint8Array([9]));
+    const changedResource = await loadPopupPackageFromUrl({
+      manifestUrl: "https://cdn.example/pkg/popup.manifest.json",
+      fetchImpl: (async (input: string | URL | Request) => {
+        const path = new URL(String(input)).pathname.split("/pkg/")[1]!;
+        const body = changed.get(path);
+        return body
+          ? new Response(body.slice().buffer)
+          : new Response("missing", { status: 404 });
+      }) as typeof fetch,
+      decodeImage: async () => ({ width: 1, height: 1 }),
+      loadTexture: vi.fn(async () => texture as never),
+    });
+    await changedResource.destroy();
   });
 
   it("rejects missing/orphan/nested-id/URL/status failures and rolls back", async () => {

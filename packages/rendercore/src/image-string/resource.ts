@@ -1,11 +1,8 @@
-import {
-  ObjectUrlRegistry,
-  sha256Hex,
-} from "@slotclientengine/browserartifactio";
+import { ObjectUrlRegistry } from "@slotclientengine/browserartifactio";
 import {
   EDITOR_ASSETS_MAP_PATH,
   decodeEditorAssetsMap,
-  validateEditorAssetsMapPackage,
+  resolveEditorAssetsMapPackage,
 } from "@slotclientengine/editorresource";
 import { Assets, Texture } from "pixi.js";
 import { ImageStringError } from "./errors.js";
@@ -244,14 +241,6 @@ export async function loadImageStringResourceFromUrl(options: {
       let blob: Blob;
       if (mapped) {
         const payload = new Uint8Array(await response.arrayBuffer());
-        if (payload.byteLength !== mapped.byteLength)
-          throw new ImageStringError(
-            `image-string glyph byteLength 与 assets map 不一致：${glyph.path}`,
-          );
-        if ((await sha256Hex(payload)) !== mapped.sha256)
-          throw new ImageStringError(
-            `image-string glyph SHA-256 与 assets map 不一致：${glyph.path}`,
-          );
         blob = new Blob([copyArrayBuffer(payload)], {
           type: mapped.mediaType,
         });
@@ -305,10 +294,9 @@ export async function resolveImageStringPackageFiles(options: {
     return Object.freeze({ manifest, files: options.files, mapped: false });
   }
   const map = decodeEditorAssetsMap(options.files.get(EDITOR_ASSETS_MAP_PATH)!);
-  const resolved = await validateEditorAssetsMapPackage({
+  const resolved = resolveEditorAssetsMapPackage({
     map,
     files: options.files,
-    allowControlPaths: ["image-string.manifest.json"],
   });
   assertExactKeys(
     Object.keys(map.files).sort(),

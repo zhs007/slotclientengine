@@ -133,6 +133,26 @@ export async function validateEditorAssetsMapPackage(options: {
   return readonlyMap(resolved);
 }
 
+/**
+ * Resolves an exported assets map for runtime consumption.
+ *
+ * Payload size, digest and package-closure checks belong to the exporter/build
+ * checker. Runtime only requires the mapped payloads to exist.
+ */
+export function resolveEditorAssetsMapPackage(options: {
+  readonly map: EditorAssetsMapV1 | unknown;
+  readonly files: ReadonlyMap<string, Uint8Array>;
+}): ReadonlyMap<EditorAssetKey, ResolvedEditorAsset> {
+  const map = parseEditorAssetsMap(options.map);
+  const resolved = new Map<EditorAssetKey, ResolvedEditorAsset>();
+  for (const [key, entry] of Object.entries(map.files)) {
+    const bytes = options.files.get(entry.path);
+    if (!bytes) throw new Error(`assets map payload 缺失：${entry.path}`);
+    resolved.set(key, Object.freeze({ key, ...entry, bytes: bytes.slice() }));
+  }
+  return readonlyMap(resolved);
+}
+
 export function resolveEditorAssetMapEntry(
   map: EditorAssetsMapV1,
   key: string,

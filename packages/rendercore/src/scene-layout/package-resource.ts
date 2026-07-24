@@ -6,7 +6,7 @@ import {
 import {
   EDITOR_ASSETS_MAP_PATH,
   decodeEditorAssetsMap,
-  validateEditorAssetsMapPackage,
+  resolveEditorAssetsMapPackage,
 } from "@slotclientengine/editorresource";
 import { assertVNIProject } from "@slotclientengine/vnicore/core";
 import {
@@ -632,10 +632,9 @@ export async function resolveSceneLayoutPackageFiles(options: {
   const map = decodeEditorAssetsMap(
     requireBytes(options.files, EDITOR_ASSETS_MAP_PATH),
   );
-  const resolved = await validateEditorAssetsMapPackage({
+  const resolved = resolveEditorAssetsMapPackage({
     map,
     files: options.files,
-    allowControlPaths: [ROOT_MANIFEST],
   });
   const virtual = new Map<string, Uint8Array>([
     [ROOT_MANIFEST, requireBytes(options.files, ROOT_MANIFEST).slice()],

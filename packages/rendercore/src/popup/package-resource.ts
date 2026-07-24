@@ -3,7 +3,6 @@ import {
   assertCanonicalPackagePath,
   assertNoPackagePathCollisions,
   resolvePackagePath,
-  sha256Hex,
 } from "@slotclientengine/browserartifactio";
 import {
   EDITOR_ASSETS_MAP_PATH,
@@ -11,7 +10,7 @@ import {
   assertNoEditorAssetKeyAliases,
   basenameFromSourcePath,
   decodeEditorAssetsMap,
-  validateEditorAssetsMapPackage,
+  resolveEditorAssetsMapPackage,
 } from "@slotclientengine/editorresource";
 import {
   assertVNIProject,
@@ -276,10 +275,9 @@ export async function resolvePopupPackageFiles(options: {
   const map = decodeEditorAssetsMap(
     requireBytes(options.files, EDITOR_ASSETS_MAP_PATH),
   );
-  const resolved = await validateEditorAssetsMapPackage({
+  const resolved = resolveEditorAssetsMapPackage({
     map,
     files: options.files,
-    allowControlPaths: [ROOT],
   });
   const virtual = new Map<string, Uint8Array>([[ROOT, rootBytes.slice()]]);
   for (const [key, asset] of resolved) virtual.set(key, asset.bytes.slice());
@@ -498,12 +496,6 @@ export async function loadPopupPackageFromUrl(options: {
         fetchImpl,
         contained(rootUrl, entry.path),
       );
-      if (payload.byteLength !== entry.byteLength)
-        throw new Error(
-          `popup mapped payload byteLength mismatch: ${entry.path}`,
-        );
-      if ((await sha256Hex(payload)) !== entry.sha256)
-        throw new Error(`popup mapped payload SHA-256 mismatch: ${entry.path}`);
       files.set(entry.path, payload);
     }
     return createPopupPackageResource({

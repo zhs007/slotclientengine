@@ -56,6 +56,9 @@
 - production app 直接消费 editor 导出的 mapped folder 时，构建期必须从根 manifest
   与 `assets.map.json` 生成精确 physical Vite import map，并校验 path/hash/size/orphan；
   禁止宽泛 glob、运行时猜路径或另存业务资源表。
+- path/hash/size/orphan 和 generated parity 属于导出或构建 checker；runtime 只按
+  `assets.map.json` 把 filename key 解析为 payload bytes，不重复计算 byteLength/hash，
+  也不扫描 physical orphan。缺少实际引用、manifest/schema、资源解码和运行能力错误仍须失败。
 - 只需要 layout/background/popup、而 reel 由游戏业务 target 驱动时，使用 rendercore
   presentation surface；surface 仍拥有 mode-aware background visibility、popup placement
   和 destroy，app 只注入业务触发并组合公开 container。
