@@ -30,6 +30,7 @@
 - runtime 拥有 manual staged transport、continuous cyclic phase、安全隐藏 carrier replacement 和动态目标对齐。
 - production carrier contract 是宿主 `Node` 加显式 logical size/revision，不是 Sprite-only contract。
 - 复杂 Node 只在 prepare/replace 边界通过 Cocos Camera/RenderTexture 一次性捕获完整子树，再进入 CardCarousel slice renderer。
+- Cocos Creator 3.8.6 的 Camera component 没有 public `render()`；一次性捕获必须挂入 active scene 并等待 `Director.EVENT_AFTER_DRAW` 后读取 RenderTexture。
 - 禁止逐帧 capture、整卡 Node/Sprite 降级、临时 alpha 掩盖、第 14 个 carrier 或可见换图。
 - prepare 先完成全部资源，再原子 commit；replace 只在目标 carrier 隐藏的 render/update 边界提交。失败、取消和 destroy 必须 rollback 并释放未提交资源。
 - runtime 不 reparent、修改或销毁宿主 Node；只拥有 capture、slice view、cache 和内部 pool。
