@@ -8275,6 +8275,7 @@ var COCOS_BLEND_OPERATIONS = {
   MAX: 4,
 };
 function createCocosNodeDriver() {
+  let nodeVisualCaptureQueue = Promise.resolve();
   return {
     createNode(name) {
       return new Node(name);
@@ -8385,7 +8386,15 @@ function createCocosNodeDriver() {
       spriteFrame.destroy();
     },
     captureNodeVisual(options) {
-      return captureCocosNodeVisual(options);
+      validateCocosNodeVisualCaptureOptions(options);
+      const capture = nodeVisualCaptureQueue.then(() =>
+        captureCocosNodeVisual(options),
+      );
+      nodeVisualCaptureQueue = capture.then(
+        () => void 0,
+        () => void 0,
+      );
+      return capture;
     },
     setSiblingIndex(node, index) {
       node.setSiblingIndex(index);
@@ -8463,20 +8472,8 @@ function createCocosNodeDriver() {
   };
 }
 function captureCocosNodeVisual(options) {
+  validateCocosNodeVisualCaptureOptions(options);
   const { node, width, height } = options;
-  if (!isValidCocosNode(node))
-    throw new Error("Cocos node visual capture requires a valid host Node.");
-  if (
-    !Number.isFinite(width) ||
-    width <= 0 ||
-    !Number.isFinite(height) ||
-    height <= 0 ||
-    !Number.isSafeInteger(Math.ceil(width)) ||
-    !Number.isSafeInteger(Math.ceil(height))
-  )
-    throw new Error(
-      "Cocos node visual capture width and height must be finite and positive.",
-    );
   const scene = director.getScene();
   if (!scene)
     throw new Error(
@@ -8537,6 +8534,22 @@ function captureCocosNodeVisual(options) {
     pixelWidth: Math.ceil(width),
     pixelHeight: Math.ceil(height),
   });
+}
+function validateCocosNodeVisualCaptureOptions(options) {
+  const { node, width, height } = options;
+  if (!isValidCocosNode(node))
+    throw new Error("Cocos node visual capture requires a valid host Node.");
+  if (
+    !Number.isFinite(width) ||
+    width <= 0 ||
+    !Number.isFinite(height) ||
+    height <= 0 ||
+    !Number.isSafeInteger(Math.ceil(width)) ||
+    !Number.isSafeInteger(Math.ceil(height))
+  )
+    throw new Error(
+      "Cocos node visual capture width and height must be finite and positive.",
+    );
 }
 function completeCocosNodeVisualCapture(_x) {
   return _completeCocosNodeVisualCapture.apply(this, arguments);

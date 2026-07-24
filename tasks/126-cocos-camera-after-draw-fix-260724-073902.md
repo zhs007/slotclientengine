@@ -15,6 +15,7 @@ Cocos node visual capture failed: camera.render is not a function
 - 删除 runtime、shim 和 fake 中对 `Camera.render()` 的依赖。
 - capture root 挂入 active scene 后，异步等待 `Director.EVENT_AFTER_DRAW`。
 - 该帧完成后再用 RenderTexture 创建 SpriteFrame，并立即销毁临时 capture root/camera。
+- 同一 driver 的 capture 严格串行，避免并行 initial captures 在共享 UI_2D layer 和坐标中捕获到彼此、导致 13 张卡显示成同一视觉。
 - 保留同步参数校验、异步 capture failure rollback、宿主 Node ownership 和引用计数 release。
 - standalone 由生成器重新生成。
 
@@ -25,6 +26,7 @@ Cocos node visual capture failed: camera.render is not a function
 - package typecheck/lint/test/build/format：通过。
 - Vitest：19 files / 212 tests 通过。
 - 新增回归明确断言 fake `Camera.prototype` 不存在 `render`，capture 必须等待 draw Promise。
+- 并发 capture 回归证明任一时刻场景里最多只有一个临时 capture root。
 - `git diff --check`：通过。
 
 真实 Web 视觉、透明度、UV、Mask/Spine 和 profiler 结果仍由用户完成最终验收。
