@@ -81,4 +81,45 @@ describe("Cocos Node visual capture", () => {
       }),
     ).toThrow("finite and positive");
   });
+
+  it("serializes concurrent captures so cameras cannot see sibling capture roots", async () => {
+    const driver = createCocosNodeDriver();
+    const scene = director.getScene();
+    if (!scene) throw new Error("fake Cocos scene is missing");
+    const sceneChildrenBefore = [...scene.children];
+    const firstNode = new Node("first visual");
+    const secondNode = new Node("second visual");
+
+    const firstCapture = driver.captureNodeVisual?.({
+      node: firstNode,
+      width: 100,
+      height: 50,
+      revision: "first",
+    });
+    const secondCapture = driver.captureNodeVisual?.({
+      node: secondNode,
+      width: 100,
+      height: 50,
+      revision: "second",
+    });
+    if (!firstCapture || !secondCapture) {
+      throw new Error("fake Cocos capture is missing");
+    }
+
+    await Promise.resolve();
+    expect(
+      scene.children.filter((node) => node.name === "V5G Node Capture"),
+    ).toHaveLength(1);
+
+    const first = await firstCapture;
+    await Promise.resolve();
+    expect(
+      scene.children.filter((node) => node.name === "V5G Node Capture"),
+    ).toHaveLength(1);
+
+    const second = await secondCapture;
+    expect(scene.children).toEqual(sceneChildrenBefore);
+    first.release();
+    second.release();
+  });
 });
