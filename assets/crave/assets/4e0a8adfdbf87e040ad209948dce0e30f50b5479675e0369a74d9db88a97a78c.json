@@ -1,0 +1,140 @@
+{
+  "fixedAdvanceGroups": [
+    {
+      "advanceWidth": 37,
+      "align": "center",
+      "characters": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ],
+      "id": "digits"
+    }
+  ],
+  "glyphs": {
+    "0": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "0-1.png",
+      "size": {
+        "height": 49,
+        "width": 36
+      }
+    },
+    "1": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "1-1.png",
+      "size": {
+        "height": 48,
+        "width": 26
+      }
+    },
+    "2": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "2-1.png",
+      "size": {
+        "height": 48,
+        "width": 37
+      }
+    },
+    "3": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "3-1.png",
+      "size": {
+        "height": 49,
+        "width": 36
+      }
+    },
+    "4": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "4-1.png",
+      "size": {
+        "height": 48,
+        "width": 35
+      }
+    },
+    "5": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "5-1.png",
+      "size": {
+        "height": 49,
+        "width": 33
+      }
+    },
+    "6": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "6-1.png",
+      "size": {
+        "height": 49,
+        "width": 34
+      }
+    },
+    "7": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "7-1.png",
+      "size": {
+        "height": 48,
+        "width": 35
+      }
+    },
+    "8": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "8-1.png",
+      "size": {
+        "height": 49,
+        "width": 35
+      }
+    },
+    "9": {
+      "offset": {
+        "x": 0,
+        "y": 0
+      },
+      "path": "9-1.png",
+      "size": {
+        "height": 48,
+        "width": 34
+      }
+    }
+  },
+  "id": "new-image-string",
+  "kind": "image-string",
+  "metrics": {
+    "letterSpacing": 0,
+    "lineHeight": 64
+  },
+  "version": 1
+}

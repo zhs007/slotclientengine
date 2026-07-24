@@ -51,6 +51,8 @@ describe("game002-s3 layout", () => {
       boardFrame: GAME002_BOARD_FRAME,
       cellWidth: 120,
       cellHeight: 120,
+      columnGap: 0,
+      rowGap: 0,
     });
     expect(layout.boardFrame).toEqual(GAME002_BOARD_FRAME);
     expect(layout.boardFrameInViewport).toEqual(

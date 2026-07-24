@@ -7,6 +7,9 @@ const REPO_ROOT = resolve(APP_ROOT, "../..");
 const DIST_ROOT = join(APP_ROOT, "dist");
 const DIST_ASSETS = join(DIST_ROOT, "assets");
 const SOURCE_ROOT = join(REPO_ROOT, "assets/game002-s3");
+const CRAVE_ROOT = join(REPO_ROOT, "assets/crave");
+const CRAVE_MAP_PATH = join(CRAVE_ROOT, "assets.map.json");
+const CRAVE_LAYOUT_PATH = join(CRAVE_ROOT, "layout.manifest.json");
 const LEO_UI_ASSET_ROOT = join(REPO_ROOT, "packages/game-ui-leo/src/assets");
 const INDEX_HTML = join(DIST_ROOT, "index.html");
 const MANIFEST_PATH = join(SOURCE_ROOT, "symbol-state-textures.manifest.json");
@@ -95,6 +98,7 @@ if (failures.length > 0) {
 
 function verify() {
   assertFile(INDEX_HTML);
+  assertAbsent(join(DIST_ROOT, "visual-fixture.html"));
   assertDirectory(DIST_ASSETS);
   if (!existsSync(INDEX_HTML) || !existsSync(DIST_ASSETS)) {
     return;
@@ -108,8 +112,12 @@ function verify() {
     .join("\n");
 
   verifyIndexHtml(indexHtml);
+  if (bundledJavaScript.includes("__game002VisualFixture")) {
+    failures.push("production bundle must not include the visual fixture.");
+  }
   verifyTask122BundleBoundaries(indexHtml, assetNames);
   verifySourceContract();
+  verifyCraveSourceContract();
   verifyDistAssets(assetNames, bundledJavaScript);
   verifySensitiveValues(listFiles(DIST_ROOT));
 }
@@ -451,6 +459,49 @@ function verifySourceContract() {
   }
 }
 
+function verifyCraveSourceContract() {
+  assertFile(CRAVE_LAYOUT_PATH);
+  assertFile(CRAVE_MAP_PATH);
+  if (!existsSync(CRAVE_LAYOUT_PATH) || !existsSync(CRAVE_MAP_PATH)) return;
+  const layout = JSON.parse(readFileSync(CRAVE_LAYOUT_PATH, "utf8"));
+  const map = JSON.parse(readFileSync(CRAVE_MAP_PATH, "utf8"));
+  if (layout.version !== 1 || layout.kind !== "scene-layout") {
+    failures.push("Crave layout must declare scene-layout version=1.");
+  }
+  if (map.version !== 1 || map.kind !== "editor-assets") {
+    failures.push(
+      "Crave assets.map.json must declare editor-assets version=1.",
+    );
+  }
+  const physicalPaths = new Set();
+  for (const [key, asset] of Object.entries(map.files ?? {})) {
+    if (
+      typeof asset.path !== "string" ||
+      typeof asset.sha256 !== "string" ||
+      !asset.path.startsWith(`assets/${asset.sha256}.`) ||
+      !Number.isSafeInteger(asset.byteLength)
+    ) {
+      failures.push(`Crave assets.map.json entry "${key}" is invalid.`);
+      continue;
+    }
+    const path = join(CRAVE_ROOT, asset.path);
+    physicalPaths.add(asset.path);
+    assertFile(path);
+    if (existsSync(path) && statSync(path).size !== asset.byteLength) {
+      failures.push(`Crave mapped payload "${asset.path}" length drifted.`);
+    }
+  }
+  const actual = listFiles(join(CRAVE_ROOT, "assets")).map((path) =>
+    relative(CRAVE_ROOT, path).split("\\").join("/"),
+  );
+  const expected = [...physicalPaths].sort();
+  if (JSON.stringify(actual.sort()) !== JSON.stringify(expected)) {
+    failures.push(
+      "Crave mapped payload folder must exactly match assets.map.json physical paths.",
+    );
+  }
+}
+
 function verifyReelSourceContract() {
   if (!existsSync(REEL_MANIFEST_PATH)) {
     return;
@@ -631,6 +682,7 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
     /^background\.manifest-[A-Za-z0-9_-]+\.json$/,
     "background manifest",
   );
+  verifyCraveDistClosure(assetNames);
   assertOne(
     assetNames,
     /^reel\.manifest-[A-Za-z0-9_-]+\.json$/,
@@ -655,15 +707,7 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
     backgroundPageGroups.set(contentKey, pages);
   }
   for (const pages of backgroundPageGroups.values()) {
-    const stems = pages.map((page) => page.slice(0, -".png".length));
-    assertOne(
-      assetNames,
-      new RegExp(
-        `^(?:${stems.map(escapeRegExp).join("|")})-[A-Za-z0-9_-]+\\.png$`,
-      ),
-      `background atlas page content ${pages.join("/")}`,
-    );
-    assertDistContainsSourceAssetExactlyOnce(
+    assertDistContainsSourceAssetContentExactlyOnce(
       assetNames,
       join(SOURCE_ROOT, pages[0]),
     );
@@ -829,6 +873,23 @@ function verifyDistAssets(assetNames, bundledJavaScript) {
         `dist unexpectedly contains excluded resource ${excluded}.`,
       );
     }
+  }
+}
+
+function verifyCraveDistClosure(assetNames) {
+  if (!existsSync(CRAVE_MAP_PATH)) return;
+  const map = JSON.parse(readFileSync(CRAVE_MAP_PATH, "utf8"));
+  const files = [
+    CRAVE_LAYOUT_PATH,
+    CRAVE_MAP_PATH,
+    ...new Set(
+      Object.values(map.files ?? {}).map((asset) =>
+        join(CRAVE_ROOT, asset.path),
+      ),
+    ),
+  ];
+  for (const file of files) {
+    assertDistContainsSourceAssetContent(assetNames, file);
   }
 }
 
@@ -1111,6 +1172,37 @@ function assertDistContainsSourceAsset(assetNames, sourceFile) {
   if (!matchingContent) {
     failures.push(
       `dist/assets is missing source asset content for ${relative(SOURCE_ROOT, sourceFile)}.`,
+    );
+  }
+}
+
+function assertDistContainsSourceAssetContent(assetNames, sourceFile) {
+  assertFile(sourceFile);
+  if (!existsSync(sourceFile)) return;
+  const sourceBytes = readFileSync(sourceFile);
+  const matchingContent = assetNames.some((name) =>
+    readFileSync(join(DIST_ASSETS, name)).equals(sourceBytes),
+  );
+  if (!matchingContent) {
+    failures.push(
+      `dist/assets is missing source asset content for ${relative(REPO_ROOT, sourceFile)}.`,
+    );
+  }
+}
+
+function assertDistContainsSourceAssetContentExactlyOnce(
+  assetNames,
+  sourceFile,
+) {
+  assertFile(sourceFile);
+  if (!existsSync(sourceFile)) return;
+  const sourceBytes = readFileSync(sourceFile);
+  const matches = assetNames.filter((name) =>
+    readFileSync(join(DIST_ASSETS, name)).equals(sourceBytes),
+  );
+  if (matches.length !== 1) {
+    failures.push(
+      `dist/assets must contain source asset content exactly once for ${relative(REPO_ROOT, sourceFile)}, got ${matches.length}.`,
     );
   }
 }

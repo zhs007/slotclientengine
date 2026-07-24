@@ -22,6 +22,7 @@ function createGame002CascadeSequence(options: {
 }) {
   return createRawGame002CascadeSequence({
     ...options,
+    auxiliaryValueSymbolCodes: [0],
     canRemoveSymbol: ({ code }) => code !== 0,
     canDropSymbol: ({ code }) => code !== 0,
   });
@@ -175,6 +176,30 @@ describe("game002 cascade sequence", () => {
     expect(
       localSequence.initial.spinValues.flat().every((value) => value === null),
     ).toBe(true);
+  });
+
+  it("accepts a carried WL refill value without treating it as a CN presentation value", () => {
+    const value = structuredClone(GAME002_CASCADE_GMI) as any;
+    const x = 3;
+    const y = 7;
+    for (const scene of step(value, 0).scenes) {
+      scene.values[x].values[y] = 0;
+    }
+    for (const scene of step(value, 1).scenes) {
+      scene.values[x].values[y] = 0;
+    }
+    for (const otherScene of step(value, 0).otherScenes) {
+      otherScene.values[x].values[y] = 3;
+    }
+    for (const otherScene of step(value, 1).otherScenes) {
+      otherScene.values[x].values[y] = 3;
+    }
+    const sequence = createGame002CascadeSequence({
+      logic: createLogic(value),
+      cnSymbolCode: 8,
+    });
+    expect(sequence.cascades[0].refillScene[x][y]).toBe(0);
+    expect(sequence.cascades[0].refillValues[x][y]).toBeNull();
   });
 
   it("carries existing CN values when a refill adds no CN and omits bg-gencoins", () => {

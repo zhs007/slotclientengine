@@ -13,6 +13,8 @@ import {
   createSymbolStatePresetFromManifest,
   createSymbolCascadeWinPresentationMapFromManifest,
   createSymbolValuePresentationResourceBundleFromManifest,
+  createSceneLayoutPackageResource,
+  createSymbolPackageReelRegistry,
   parseReelManifest,
   type ParsedReelManifest,
   type GridCellEffectResourceMap,
@@ -21,9 +23,12 @@ import {
   type ReelSymbolScaleMap,
   type SymbolAnimationResolver,
   type SymbolValuePresentationResourceMap,
-  type SymbolValuePresentationResourceBundle,
   type SymbolStatePreset,
   type SymbolCascadeWinPresentationMap,
+  type SceneLayoutPackageResource,
+  type ReelSymbolRegistry,
+  type SymbolPackageResource,
+  type DecodeImageStringImage,
 } from "@slotclientengine/rendercore";
 import type { SpineBackgroundResource } from "@slotclientengine/rendercore/background";
 import {
@@ -34,6 +39,7 @@ import {
 } from "./assets.js";
 import {
   GAME002_GRID_LAYOUT,
+  GAME002_REELS_NAME,
   type Game002FocusRegion,
   type Game002GridLayout,
 } from "./game-layout.js";
@@ -94,13 +100,8 @@ const defaultAnimationResolver = createDefaultSymbolAnimationResolver();
 export interface Game002SkinConfig {
   readonly id: Game002SkinId;
   readonly label: string;
-  readonly background: SpineBackgroundResource;
+  readonly reelsName: string;
   readonly rawGameConfig: unknown;
-  readonly symbolModules: Record<string, string>;
-  readonly spineSkeletonModules: Record<string, unknown>;
-  readonly spineAtlasModules: Record<string, string>;
-  readonly spineTextureModules: Record<string, string>;
-  readonly reelEffectSkeletonModules: Record<string, unknown>;
   readonly reelEffectResources: GridCellEffectResourceMap;
   readonly reelEffectPoolCapacities: Readonly<Record<string, number>>;
   readonly stateTextureManifest: unknown;
@@ -117,14 +118,43 @@ export interface Game002SkinConfig {
   readonly symbolValuePresentationResources: SymbolValuePresentationResourceMap;
   readonly gridLayout: Game002GridLayout;
   readonly focusRegion: Game002FocusRegion;
+  readonly presentation:
+    | Readonly<{
+        kind: "legacy";
+        background: SpineBackgroundResource;
+        symbolModules: Record<string, string>;
+        spineSkeletonModules: Record<string, unknown>;
+        spineAtlasModules: Record<string, string>;
+        spineTextureModules: Record<string, string>;
+        reelEffectSkeletonModules: Record<string, unknown>;
+      }>
+    | Readonly<{
+        kind: "scene-layout";
+        resource: SceneLayoutPackageResource;
+        symbolPackage: SymbolPackageResource;
+        symbolRegistry: ReelSymbolRegistry;
+        initialMode: string;
+        awardCelebrationPopup: string;
+      }>;
 }
 
-const GAME002_SKIN_CONFIGS: Readonly<Record<Game002SkinId, Game002SkinConfig>> =
-  Object.freeze({
-    "1": createGame002Skin1Config(),
-  });
+export interface Game002Skin1Config extends Game002SkinConfig {
+  readonly id: "1";
+  readonly presentation: Extract<
+    Game002SkinConfig["presentation"],
+    { readonly kind: "legacy" }
+  >;
+  readonly background: SpineBackgroundResource;
+  readonly symbolModules: Record<string, string>;
+  readonly spineSkeletonModules: Record<string, unknown>;
+  readonly spineAtlasModules: Record<string, string>;
+  readonly spineTextureModules: Record<string, string>;
+  readonly reelEffectSkeletonModules: Record<string, unknown>;
+}
 
-function createGame002Skin1Config(): Game002SkinConfig {
+const GAME002_SKIN1_CONFIG = createGame002Skin1Config();
+
+function createGame002Skin1Config(): Game002Skin1Config {
   const reelManifest = parseReelManifest(game002S3ReelManifest);
   const reelEffectResources = createGridCellEffectResourcesFromManifest({
     manifest: reelManifest,
@@ -132,9 +162,19 @@ function createGame002Skin1Config(): Game002SkinConfig {
     atlasModules: game002S3SpineAtlasModules,
     textureModules: game002S3SpineTextureModules,
   });
+  const presentation = Object.freeze({
+    kind: "legacy" as const,
+    background: GAME002_BACKGROUND_RESOURCE,
+    symbolModules: game002S3SymbolModules,
+    spineSkeletonModules: game002S3SpineSkeletonModules,
+    spineAtlasModules: game002S3SpineAtlasModules,
+    spineTextureModules: game002S3SpineTextureModules,
+    reelEffectSkeletonModules: game002S3ReelEffectSkeletonModules,
+  });
   return Object.freeze({
-    id: parseGame002SkinId("1"),
+    id: "1",
     label: "game002-s3",
+    reelsName: GAME002_REELS_NAME,
     background: GAME002_BACKGROUND_RESOURCE,
     rawGameConfig: rawGame002Config,
     symbolModules: game002S3SymbolModules,
@@ -194,14 +234,31 @@ function createGame002Skin1Config(): Game002SkinConfig {
     symbolValuePresentationResources: Object.freeze({}),
     gridLayout: GAME002_GRID_LAYOUT,
     focusRegion: GAME002_BACKGROUND_RESOURCE.manifest.adaptation.focusRect,
+    presentation,
   });
 }
 
-export async function prepareGame002SkinConfig(id: Game002SkinId): Promise<{
+export interface Game002SkinResourceOwner {
+  destroy(): Promise<void> | void;
+}
+
+export async function prepareGame002SkinConfig(
+  id: Game002SkinId,
+  options: {
+    readonly craveFiles?: ReadonlyMap<string, Uint8Array>;
+    readonly decodeImage?: DecodeImageStringImage;
+  } = {},
+): Promise<{
   readonly skin: Game002SkinConfig;
-  readonly valuePresentationResourceBundle: SymbolValuePresentationResourceBundle;
+  readonly valuePresentationResourceBundle: Game002SkinResourceOwner;
 }> {
-  const staticSkin = getGame002SkinConfig(id);
+  if (id === "2") {
+    if (!options.craveFiles) {
+      throw new Error("game002 skin=2 requires loaded Crave package files.");
+    }
+    return prepareGame002Skin2Config(options.craveFiles, options.decodeImage);
+  }
+  const staticSkin = GAME002_SKIN1_CONFIG;
   const valuePresentationResourceBundle =
     await createSymbolValuePresentationResourceBundleFromManifest({
       manifest: game002S3StateTextureManifest,
@@ -224,12 +281,163 @@ export async function prepareGame002SkinConfig(id: Game002SkinId): Promise<{
   });
 }
 
-export function getGame002SkinConfig(id: Game002SkinId): Game002SkinConfig {
-  const config = GAME002_SKIN_CONFIGS[id];
-  if (!config) {
-    throw new Error(`Unknown game002 skin "${id}".`);
+async function prepareGame002Skin2Config(
+  files: ReadonlyMap<string, Uint8Array>,
+  decodeImage?: DecodeImageStringImage,
+): Promise<{
+  readonly skin: Game002SkinConfig;
+  readonly valuePresentationResourceBundle: Game002SkinResourceOwner;
+}> {
+  const resource = await createSceneLayoutPackageResource({
+    files,
+    ...(decodeImage ? { decodeImage } : {}),
+  });
+  try {
+    const gameModes = resource.manifest.gameModes;
+    if (!gameModes) {
+      throw new Error("game002 Crave layout must declare gameModes.");
+    }
+    const initialMode = gameModes.modes.find(
+      (mode) => mode.id === gameModes.initialMode,
+    );
+    if (!initialMode?.symbolPackage) {
+      throw new Error(
+        "game002 Crave initial mode must declare a symbol package.",
+      );
+    }
+    if (!initialMode.awardCelebrationPopup) {
+      throw new Error(
+        "game002 Crave initial mode must declare an award celebration popup.",
+      );
+    }
+    const symbolPackage = resource.symbolPackages[initialMode.symbolPackage];
+    if (!symbolPackage) {
+      throw new Error(
+        `game002 Crave symbol package "${initialMode.symbolPackage}" is unavailable.`,
+      );
+    }
+    const geometry = resource.manifest.reels.main;
+    const symbolBinding =
+      resource.manifest.symbolPackages?.[initialMode.symbolPackage];
+    if (!symbolBinding) {
+      throw new Error(
+        `game002 Crave symbol binding "${initialMode.symbolPackage}" is unavailable.`,
+      );
+    }
+    const placement = geometry?.placements.default;
+    if (!geometry || !placement) {
+      throw new Error(
+        "game002 Crave layout must declare reels.main default geometry.",
+      );
+    }
+    if (geometry.columns !== 6 || geometry.rows !== 9) {
+      throw new Error("game002 Crave reels.main geometry must be 6x9.");
+    }
+    const reelManifest = parseReelManifest(game002S3ReelManifest);
+    const reelEffectResources = createGridCellEffectResourcesFromManifest({
+      manifest: reelManifest,
+      skeletonModules: game002S3ReelEffectSkeletonModules,
+      atlasModules: game002S3SpineAtlasModules,
+      textureModules: game002S3SpineTextureModules,
+    });
+    const displaySymbols = symbolPackage.displaySymbols;
+    const stateTextureManifest = symbolPackage.rawSymbolManifest;
+    const symbolRegistry = await createSymbolPackageReelRegistry(symbolPackage);
+    const skin: Game002SkinConfig = Object.freeze({
+      id: "2",
+      label: "crave",
+      reelsName: symbolBinding.reelSet,
+      rawGameConfig: symbolPackage.rawGameConfig,
+      reelEffectResources,
+      reelEffectPoolCapacities: deriveGridCellEffectPoolCapacities({
+        manifest: reelManifest,
+        resources: reelEffectResources,
+        cellCount: geometry.columns * geometry.rows,
+      }),
+      stateTextureManifest,
+      reelManifest,
+      displaySymbols,
+      emptySymbols: Object.freeze([]),
+      symbolScales: symbolPackage.symbolScales,
+      symbolRenderPriorities: symbolPackage.symbolRenderPriorities,
+      symbolAnimationCapabilities:
+        createSymbolAnimationCapabilityMapFromManifest({
+          manifest: stateTextureManifest,
+          displaySymbols,
+          requiredStates: ["spinBlur", "disabled"],
+        }),
+      symbolStatePreset: symbolPackage.statePreset,
+      cascadeWinPresentations:
+        createSymbolCascadeWinPresentationMapFromManifest({
+          manifest: stateTextureManifest,
+          displaySymbols,
+          requiredStates: ["spinBlur", "disabled"],
+        }),
+      landingAppearSymbols: createSymbolLandingAppearSymbolsFromManifest({
+        manifest: stateTextureManifest,
+        displaySymbols,
+        requiredStates: ["spinBlur", "disabled"],
+      }),
+      symbolAnimationResolver: symbolPackage.animationResolver,
+      symbolValuePresentationResources:
+        symbolPackage.valuePresentationResources,
+      gridLayout: Object.freeze({
+        boardFrame: Object.freeze({
+          x: placement.x,
+          y: placement.y,
+          width:
+            geometry.columns * geometry.cellSize.width +
+            (geometry.columns - 1) * geometry.gap.x,
+          height:
+            geometry.rows * geometry.cellSize.height +
+            (geometry.rows - 1) * geometry.gap.y,
+        }),
+        cellWidth: geometry.cellSize.width,
+        cellHeight: geometry.cellSize.height,
+        columnGap: geometry.gap.x,
+        rowGap: geometry.gap.y,
+      }),
+      focusRegion: requireMaximizedFocusRegion(resource),
+      presentation: Object.freeze({
+        kind: "scene-layout",
+        resource,
+        symbolPackage,
+        symbolRegistry,
+        initialMode: initialMode.id,
+        awardCelebrationPopup: initialMode.awardCelebrationPopup,
+      }),
+    });
+    return Object.freeze({
+      skin,
+      valuePresentationResourceBundle: resource,
+    });
+  } catch (error) {
+    await resource.destroy();
+    throw error;
   }
-  return config;
+}
+
+export function getGame002SkinConfig(id: "1"): Game002Skin1Config;
+export function getGame002SkinConfig(id: Game002SkinId): Game002SkinConfig;
+export function getGame002SkinConfig(id: Game002SkinId): Game002SkinConfig {
+  if (id !== "1") {
+    throw new Error(
+      'game002 skin "2" is prepared from its loaded scene-layout package.',
+    );
+  }
+  return GAME002_SKIN1_CONFIG;
+}
+
+function requireMaximizedFocusRegion(
+  resource: SceneLayoutPackageResource,
+): Game002FocusRegion {
+  const adaptation = resource.manifest.adaptation;
+  if (adaptation.mode !== "maximized-focus") {
+    throw new Error(
+      'game002 Crave layout adaptation must be "maximized-focus".',
+    );
+  }
+  return adaptation.focusRect;
 }
 
 export { GAME002_SUPPORTED_SKINS, parseGame002SkinId, type Game002SkinId };

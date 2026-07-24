@@ -81,8 +81,9 @@ describe("game002 strict launch query", () => {
   });
 
   it("validates skin and numeric app parameters without leaking credentials", () => {
+    expect(parseGame002LaunchQuery(validQuery({ skin: "2" })).skin).toBe("2");
     expect(() => parseGame002LaunchQuery(validQuery({ skin: "5" }))).toThrow(
-      /skin query parameter must be exactly "1"/,
+      /skin query parameter must be exactly "1" or "2"/,
     );
     expect(() => parseGame002LaunchQuery(validQuery({ bet: "0" }))).toThrow(
       /bet query parameter/,

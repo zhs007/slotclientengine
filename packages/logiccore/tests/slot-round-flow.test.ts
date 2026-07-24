@@ -416,6 +416,19 @@ describe("slot round execution compiler", () => {
     ).toThrow(/refill changed carried occurrence/);
   });
 
+  it("accepts server-owned values on sequential companions without collecting them", () => {
+    const plan = compileSlotRoundExecutionPlan(
+      profile,
+      createRoundLogic({
+        initialValues: [[5, 0, 7]],
+        refillValues: [[0, 5, 7]],
+      }),
+      { symbolCodes: { A: 0, H: 1, V: 2 } },
+    );
+    expect(plan.initial.values).toEqual([[5, null, null]]);
+    expect(plan.final.values).toEqual([[null, 5, null]]);
+  });
+
   it("validates policy catalog again at compile time", () => {
     const unknownPolicy = parseSlotRoundFlowProfile({
       ...profile,
@@ -436,6 +449,7 @@ describe("slot round execution compiler", () => {
 });
 
 function createRoundLogic(options: {
+  readonly initialValues?: readonly (readonly number[])[];
   readonly dropdownScene?: readonly (readonly number[])[];
   readonly refillScene?: readonly (readonly number[])[];
   readonly refillPos?: readonly number[];
@@ -453,7 +467,7 @@ function createRoundLogic(options: {
     index: 0,
     components: {
       spin: { scenes: [initial] },
-      values: { otherScenes: [[[5, 0, 0]]] },
+      values: { otherScenes: [options.initialValues ?? [[5, 0, 0]]] },
       wins: { results: [result] },
       remove: { scenes: [removed] },
     },

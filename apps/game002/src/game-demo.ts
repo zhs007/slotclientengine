@@ -149,8 +149,10 @@ export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
 });
 
 export interface Game002ReelRuntimeOptions {
-  readonly rawGameConfig: unknown;
-  readonly symbolAssets: SymbolAssetMap;
+  readonly rawGameConfig?: unknown;
+  readonly symbolAssets?: SymbolAssetMap;
+  readonly gameConfig?: LogicGameConfig;
+  readonly symbolRegistry?: ReelSymbolRegistry;
   readonly initialScene?: SceneMatrix;
   readonly config?: Game002ReelConfig;
 }
@@ -268,7 +270,31 @@ export function createGame002ReelRuntime(
   options: Game002ReelRuntimeOptions,
 ): Game002ReelRuntime {
   const config = options.config ?? DEFAULT_GAME002_REEL_CONFIG;
-  const gameConfig = createGameConfig(options.rawGameConfig);
+  const usesPackageRegistry =
+    options.gameConfig !== undefined || options.symbolRegistry !== undefined;
+  const usesLegacyAssets =
+    options.rawGameConfig !== undefined || options.symbolAssets !== undefined;
+  if (usesPackageRegistry === usesLegacyAssets) {
+    throw new Error(
+      "game002 reel runtime requires exactly one complete symbol source.",
+    );
+  }
+  if (usesPackageRegistry && (!options.gameConfig || !options.symbolRegistry)) {
+    throw new Error(
+      "game002 package symbol source requires gameConfig and symbolRegistry.",
+    );
+  }
+  if (
+    usesLegacyAssets &&
+    (options.rawGameConfig === undefined || !options.symbolAssets)
+  ) {
+    throw new Error(
+      "game002 legacy symbol source requires rawGameConfig and symbolAssets.",
+    );
+  }
+  const gameConfig = usesPackageRegistry
+    ? options.gameConfig!
+    : createGameConfig(options.rawGameConfig);
   const reels = gameConfig.getReels(config.reelsName);
   const spinDimming = Object.freeze({
     resolveDimmingAlpha: (code: number, activated: boolean) => {
@@ -289,21 +315,23 @@ export function createGame002ReelRuntime(
     );
   }
 
-  const registry = createReelSymbolRegistry({
-    gameConfig,
-    assets: options.symbolAssets,
-    emptySymbols: config.emptySymbols,
-    symbolScales: config.symbolScales,
-    symbolRenderPriorities: config.symbolRenderPriorities,
-    symbolAnimationCapabilities: config.symbolAnimationCapabilities,
-    statePreset: config.symbolStatePreset,
-    landingAppearSymbols: config.landingAppearSymbols,
-    animationResolver: config.animationResolver,
-    texturePolicy: {
-      requiredStateTextures: GAME002_REQUIRED_STATE_TEXTURES,
-    },
-    valuePresentationResources: config.symbolValuePresentationResources,
-  });
+  const registry = usesPackageRegistry
+    ? options.symbolRegistry!
+    : createReelSymbolRegistry({
+        gameConfig,
+        assets: options.symbolAssets!,
+        emptySymbols: config.emptySymbols,
+        symbolScales: config.symbolScales,
+        symbolRenderPriorities: config.symbolRenderPriorities,
+        symbolAnimationCapabilities: config.symbolAnimationCapabilities,
+        statePreset: config.symbolStatePreset,
+        landingAppearSymbols: config.landingAppearSymbols,
+        animationResolver: config.animationResolver,
+        texturePolicy: {
+          requiredStateTextures: GAME002_REQUIRED_STATE_TEXTURES,
+        },
+        valuePresentationResources: config.symbolValuePresentationResources,
+      });
   assertConfiguredTexturedSymbolsAvailable(registry.getValidation(), config);
   const layout = createGame002ReelLayout(config.gridLayout);
   const layerLayout = createGame002ReelLayerLayout(

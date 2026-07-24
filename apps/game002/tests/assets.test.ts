@@ -12,6 +12,7 @@ import {
   GAME002_SUPPORTED_SKINS,
   parseGame002SkinId,
 } from "../src/skin-config.js";
+import { parseGame002SkinQuery } from "../src/skin-id.js";
 import { getTestGame002SkinConfig } from "./value-resource-fixture.js";
 
 const EXPECTED_SYMBOLS = [
@@ -33,13 +34,14 @@ const SPINE_SYMBOLS = EXPECTED_SYMBOLS.filter((symbol) => symbol !== "CN");
 const PAY_SYMBOLS = ["WL", "H1", "H2", "L1", "L2", "L3", "L4"] as const;
 
 describe("game002-s3 assets", () => {
-  it("exposes only explicit skin=1 and derives the 13 display symbols", () => {
+  it("exposes strict skin=1|2 and derives the skin1 13 display symbols", () => {
     const skin = getTestGame002SkinConfig();
 
-    expect(GAME002_SUPPORTED_SKINS).toEqual(["1"]);
+    expect(GAME002_SUPPORTED_SKINS).toEqual(["1", "2"]);
     expect(parseGame002SkinId("1")).toBe("1");
-    for (const invalid of ["", "01", "2", "3", "4", "5", "game002-s3"]) {
-      expect(() => parseGame002SkinId(invalid)).toThrow(/exactly "1"/);
+    expect(parseGame002SkinId("2")).toBe("2");
+    for (const invalid of ["", "01", "3", "4", "5", "game002-s3"]) {
+      expect(() => parseGame002SkinId(invalid)).toThrow(/exactly "1" or "2"/);
     }
     expect(
       getGame002DisplaySymbolsFromManifest(skin.stateTextureManifest),
@@ -82,6 +84,18 @@ describe("game002-s3 assets", () => {
       width: 840,
       height: 1200,
     });
+  });
+
+  it("parses the required skin query without aliases or whitespace", () => {
+    expect(parseGame002SkinQuery("?skin=1")).toBe("1");
+    expect(parseGame002SkinQuery(new URLSearchParams("skin=2"))).toBe("2");
+    expect(() => parseGame002SkinQuery("")).toThrow(/required/);
+    expect(() => parseGame002SkinQuery("skin=1&skin=2")).toThrow(
+      /more than once/,
+    );
+    for (const invalid of ["skin=", "skin=%201", "skin=1%20", "skin=1%092"]) {
+      expect(() => parseGame002SkinQuery(invalid)).toThrow(/whitespace/);
+    }
   });
 
   it("keeps PNG, Spine, scale and priority maps in one manifest-driven closure", () => {

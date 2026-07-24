@@ -1,0 +1,204 @@
+{
+  "adaptation": {
+    "artSize": {
+      "height": 2000,
+      "width": 2000
+    },
+    "backgroundNode": "basegame-background",
+    "focusRect": {
+      "height": 1200,
+      "width": 840,
+      "x": 580,
+      "y": 277
+    },
+    "mode": "maximized-focus"
+  },
+  "gameModes": {
+    "initialMode": "BaseGame",
+    "modes": [
+      {
+        "awardCelebrationPopup": "bigwin2",
+        "backgroundNodes": {
+          "default": "basegame-background"
+        },
+        "id": "BaseGame",
+        "nodeStates": {},
+        "symbolPackage": "game002-s3"
+      },
+      {
+        "awardCelebrationPopup": "bigwin2",
+        "backgroundNodes": {
+          "default": "freegame-background"
+        },
+        "id": "FreeGame",
+        "nodeStates": {},
+        "symbolPackage": "game002-s3"
+      }
+    ],
+    "transitions": [
+      {
+        "from": "BaseGame",
+        "overlay": {
+          "animation": "BG_FG",
+          "placements": {
+            "default": {
+              "scale": 1,
+              "x": 1000,
+              "y": 1000
+            }
+          },
+          "resource": {
+            "atlas": "BG.atlas",
+            "kind": "spine",
+            "skeleton": "BG.json",
+            "textures": {
+              "BG_2.png": "BG_2.webp",
+              "BG_3.png": "BG_3.webp",
+              "BG_4.png": "BG_4.webp",
+              "BG_5.png": "BG_5.webp",
+              "BG_6.png": "BG_6.webp",
+              "BG_7.png": "BG_7.webp",
+              "BG_8.png": "BG_8.webp",
+              "BG.png": "BG.webp"
+            }
+          },
+          "switchEvent": "Start"
+        },
+        "to": "FreeGame"
+      },
+      {
+        "from": "FreeGame",
+        "overlay": {
+          "animation": "FG_BG",
+          "placements": {
+            "default": {
+              "scale": 1,
+              "x": 1000,
+              "y": 1000
+            }
+          },
+          "resource": {
+            "atlas": "BG.atlas",
+            "kind": "spine",
+            "skeleton": "BG.json",
+            "textures": {
+              "BG_2.png": "BG_2.webp",
+              "BG_3.png": "BG_3.webp",
+              "BG_4.png": "BG_4.webp",
+              "BG_5.png": "BG_5.webp",
+              "BG_6.png": "BG_6.webp",
+              "BG_7.png": "BG_7.webp",
+              "BG_8.png": "BG_8.webp",
+              "BG.png": "BG.webp"
+            }
+          },
+          "switchEvent": "Start"
+        },
+        "to": "BaseGame"
+      }
+    ]
+  },
+  "id": "new-layout",
+  "kind": "scene-layout",
+  "nodes": [
+    {
+      "id": "basegame-background",
+      "order": 0,
+      "placements": {
+        "default": {
+          "scale": 1,
+          "x": 1000,
+          "y": 1000
+        }
+      },
+      "resource": {
+        "atlas": "BG.atlas",
+        "defaultAnimation": "BG",
+        "kind": "spine",
+        "loop": true,
+        "skeleton": "BG.json",
+        "textures": {
+          "BG_2.png": "BG_2.webp",
+          "BG_3.png": "BG_3.webp",
+          "BG_4.png": "BG_4.webp",
+          "BG_5.png": "BG_5.webp",
+          "BG_6.png": "BG_6.webp",
+          "BG_7.png": "BG_7.webp",
+          "BG_8.png": "BG_8.webp",
+          "BG.png": "BG.webp"
+        }
+      }
+    },
+    {
+      "id": "freegame-background",
+      "order": 1,
+      "placements": {
+        "default": {
+          "scale": 1,
+          "x": 1000,
+          "y": 1000
+        }
+      },
+      "resource": {
+        "atlas": "BG.atlas",
+        "defaultAnimation": "FG",
+        "kind": "spine",
+        "loop": true,
+        "skeleton": "BG.json",
+        "textures": {
+          "BG_2.png": "BG_2.webp",
+          "BG_3.png": "BG_3.webp",
+          "BG_4.png": "BG_4.webp",
+          "BG_5.png": "BG_5.webp",
+          "BG_6.png": "BG_6.webp",
+          "BG_7.png": "BG_7.webp",
+          "BG_8.png": "BG_8.webp",
+          "BG.png": "BG.webp"
+        }
+      }
+    }
+  ],
+  "popups": {
+    "bigwin2": {
+      "manifest": "popup.manifest.json",
+      "placements": {
+        "default": {
+          "scale": 1,
+          "x": 0,
+          "y": 0
+        }
+      },
+      "type": "award-celebration"
+    }
+  },
+  "reels": {
+    "main": {
+      "cellSize": {
+        "height": 120,
+        "width": 120
+      },
+      "columns": 6,
+      "gap": {
+        "x": 0,
+        "y": 0
+      },
+      "order": 2,
+      "placements": {
+        "default": {
+          "x": 640,
+          "y": 337
+        }
+      },
+      "rows": 9
+    }
+  },
+  "symbolPackages": {
+    "game002-s3": {
+      "manifest": "symbols.package.json",
+      "reel": "main",
+      "reelSet": "reels-001",
+      "renderMode": "grid-cell"
+    }
+  },
+  "version": 1
+}

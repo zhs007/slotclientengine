@@ -19,6 +19,9 @@ import { createSymbolValuePresentationResourcesFromManifest } from "../symbol-va
 import type { SymbolValuePresentationResourceMap } from "../symbol-value-presentation/types.js";
 import type {
   ReelSymbolRenderPriorityMap,
+  ReelSymbolRegistry,
+  ReelSymbolRegistryEntry,
+  ReelSymbolRegistryValidation,
   ReelSymbolScaleMap,
 } from "../reel/types.js";
 import { SymbolAssetError } from "./errors.js";
@@ -620,6 +623,60 @@ export function createSymbolPackageValueControllerFactory(
   if (!presentation) return undefined;
   return (root) =>
     createRenderSymbolValueController({ root, resource: presentation });
+}
+
+export async function createSymbolPackageReelRegistry(
+  resource: SymbolPackageResource,
+): Promise<ReelSymbolRegistry> {
+  const catalog = await resource.createCatalog();
+  return createSymbolPackageReelRegistryFromCatalog(resource, catalog);
+}
+
+export function createSymbolPackageReelRegistryFromCatalog(
+  resource: SymbolPackageResource,
+  catalog: SymbolCatalogModel,
+): ReelSymbolRegistry {
+  const entries = resource.displaySymbols.map((symbol) => {
+    const code = resource.gameConfig.getSymbolCode(symbol);
+    if (code === undefined) {
+      throw new SymbolAssetError(
+        `Display symbol "${symbol}" has no paytable code.`,
+      );
+    }
+    return Object.freeze({ code, symbol, kind: "textured" as const });
+  });
+  const byCode = new Map(entries.map((entry) => [entry.code, entry]));
+  const bySymbol = new Map(entries.map((entry) => [entry.symbol, entry]));
+  const validation: ReelSymbolRegistryValidation = Object.freeze({
+    texturedSymbols: Object.freeze(entries.map((entry) => entry.symbol)),
+    configuredEmptySymbols: Object.freeze([]),
+    configuredEmptySymbolsWithAssets: Object.freeze([]),
+    missingAssetEmptySymbols: Object.freeze([]),
+    ignoredAssetsWithoutPaytable: Object.freeze([]),
+  });
+  const requireEntry = <T>(entry: T | undefined, label: string): T => {
+    if (!entry) {
+      throw new SymbolAssetError(`Unknown display symbol ${label}.`);
+    }
+    return entry;
+  };
+  return Object.freeze({
+    getValidation: () => validation,
+    getEntryByCode: (code: number): ReelSymbolRegistryEntry =>
+      requireEntry(byCode.get(code), `code ${code}`),
+    getEntryBySymbol: (symbol: string): ReelSymbolRegistryEntry =>
+      requireEntry(bySymbol.get(symbol), `"${symbol}"`),
+    getCellSize: () => resource.packageManifest.cellSize,
+    createRenderSymbolByCode(code: number): RenderSymbol {
+      const entry = requireEntry(byCode.get(code), `code ${code}`);
+      return catalog.createRenderSymbol(entry.symbol, {
+        valueControllerFactory: createSymbolPackageValueControllerFactory(
+          resource,
+          entry.symbol,
+        ),
+      });
+    },
+  });
 }
 
 function createPackageModules(

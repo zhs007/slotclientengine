@@ -857,6 +857,9 @@ function resolveFullValues(options: {
   const valueSymbols = new Set(
     options.profile.cascade?.symbols.valueSymbols ?? [],
   );
+  const auxiliaryValueSymbols = new Set(
+    options.profile.cascade?.symbols.sequentialWinCompanionSymbols ?? [],
+  );
   const updateNames = options.profile.components.valueUpdates ?? [];
   const scenes = updateNames.flatMap((name) =>
     options.step.getComponentOtherScenes(name),
@@ -872,6 +875,7 @@ function resolveFullValues(options: {
       options.scene,
       options.symbolNames,
       valueSymbols,
+      auxiliaryValueSymbols,
       options.label,
     );
   const newKeys = new Set(options.newPositions.map(positionKey));
@@ -926,6 +930,7 @@ function parseAuthoritativeValues(
   scene: SceneMatrix,
   names: ReadonlyMap<number, string>,
   valueSymbols: ReadonlySet<string>,
+  auxiliaryValueSymbols: ReadonlySet<string>,
   label: string,
 ): SlotRoundValueMatrix {
   assertDimensions(other, scene, label);
@@ -941,6 +946,15 @@ function parseAuthoritativeValues(
                 `${label}[${x}][${y}] value must be a positive safe integer.`,
               );
             return raw;
+          }
+          if (auxiliaryValueSymbols.has(symbol)) {
+            if (!Number.isSafeInteger(raw) || raw < 0)
+              throw new LogicParseError(
+                `${label}[${x}][${y}] auxiliary value must be a non-negative safe integer.`,
+              );
+            // Sequential companions can carry server-owned values even when
+            // the active client has no presentation binding for them.
+            return null;
           }
           if (raw !== 0)
             throw new LogicParseError(

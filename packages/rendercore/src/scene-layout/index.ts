@@ -10,3 +10,4 @@ export * from "./video-transition-player.js";
 export * from "./production-zip.js";
 export * from "./template-presentation.js";
 export * from "./configured-round-adapter.js";
+export * from "./presentation-surface.js";

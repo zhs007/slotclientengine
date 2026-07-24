@@ -27,10 +27,7 @@ import {
   createSlotRoundCoordinator,
   type SlotRoundPresentationCapabilityTarget,
 } from "@slotclientengine/rendercore";
-import {
-  createSpineBackgroundPlayer,
-  type SpineBackgroundPlayer,
-} from "@slotclientengine/rendercore/background";
+import { createSpineBackgroundPlayer } from "@slotclientengine/rendercore/background";
 import type {
   WinAmountAnimationPhase,
   WinAmountAnimationPlayer,
@@ -53,6 +50,10 @@ import {
 } from "./game-demo.js";
 import { sceneEquals, validateGame002Scene } from "./scene.js";
 import type { Game002SkinConfig } from "./skin-config.js";
+import {
+  createGame002SceneLayoutPlayers,
+  type Game002BackgroundPlayer,
+} from "./scene-layout-skin.js";
 import {
   createGame002WinAmountLayout,
   createGame002WinAmountPlayer,
@@ -104,7 +105,7 @@ export interface Game002PixiApplication {
 export interface Game002AdapterOptions {
   readonly skin: Game002SkinConfig;
   readonly createApplication?: () => Game002PixiApplication;
-  readonly createBackgroundPlayer?: () => SpineBackgroundPlayer;
+  readonly createBackgroundPlayer?: () => Game002BackgroundPlayer;
   readonly loadSymbolTextures?: () => Promise<SymbolAssetMap>;
   readonly createRuntime?: (symbolAssets: SymbolAssetMap) => Game002ReelRuntime;
   readonly createWinAmountPlayer?: (
@@ -135,7 +136,7 @@ export function createGame002Adapter(
 class Game002PixiAdapter implements SlotGameAdapter {
   readonly #skin: Game002SkinConfig;
   readonly #createApplication: () => Game002PixiApplication;
-  readonly #createBackgroundPlayer: () => SpineBackgroundPlayer;
+  readonly #createBackgroundPlayer: () => Game002BackgroundPlayer;
   readonly #loadSymbolTextures: () => Promise<SymbolAssetMap>;
   readonly #createRuntime: (symbolAssets: SymbolAssetMap) => Game002ReelRuntime;
   readonly #createWinAmountPlayer: (
@@ -147,7 +148,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
   readonly #reportFatalError: (error: Error) => void;
   #app: Game002PixiApplication | null = null;
   #worldLayer: Container | null = null;
-  #backgroundPlayer: SpineBackgroundPlayer | null = null;
+  #backgroundPlayer: Game002BackgroundPlayer | null = null;
   #runtime: Game002ReelRuntime | null = null;
   #winAmountPlayer: WinAmountAnimationPlayer | null = null;
   #symbolCascadePlayer: SymbolCascadePlayer | null = null;
@@ -159,22 +160,51 @@ class Game002PixiAdapter implements SlotGameAdapter {
 
   constructor(options: Game002AdapterOptions) {
     const skin = options.skin;
+    let sceneLayoutPlayers:
+      | ReturnType<typeof createGame002SceneLayoutPlayers>
+      | undefined;
     this.#skin = skin;
     this.#createApplication =
       options.createApplication ?? createPixiApplication;
     this.#createBackgroundPlayer =
       options.createBackgroundPlayer ??
-      (() => createSpineBackgroundPlayer({ resource: skin.background }));
+      (() => {
+        if (skin.presentation.kind === "legacy") {
+          return createSpineBackgroundPlayer({
+            resource: skin.presentation.background,
+          });
+        }
+        sceneLayoutPlayers = createGame002SceneLayoutPlayers({
+          resource: skin.presentation.resource,
+          initialMode: skin.presentation.initialMode,
+          awardCelebrationPopup: skin.presentation.awardCelebrationPopup,
+        });
+        return sceneLayoutPlayers.backgroundPlayer;
+      });
     this.#loadSymbolTextures =
-      options.loadSymbolTextures ?? (() => loadSymbolTextures(skin));
+      options.loadSymbolTextures ??
+      (() =>
+        skin.presentation.kind === "legacy"
+          ? loadSymbolTextures(skin)
+          : Promise.resolve(Object.freeze({})));
     this.#createRuntime =
       options.createRuntime ??
-      ((symbolAssets) =>
-        createGame002ReelRuntime({
-          rawGameConfig: skin.rawGameConfig,
-          symbolAssets,
+      ((symbolAssets) => {
+        const symbolSource =
+          skin.presentation.kind === "scene-layout"
+            ? {
+                gameConfig: skin.presentation.symbolPackage.gameConfig,
+                symbolRegistry: skin.presentation.symbolRegistry,
+              }
+            : {
+                rawGameConfig: skin.rawGameConfig,
+                symbolAssets,
+              };
+        return createGame002ReelRuntime({
+          ...symbolSource,
           config: {
             ...DEFAULT_GAME002_REEL_CONFIG,
+            reelsName: skin.reelsName,
             emptySymbols: skin.emptySymbols,
             texturedSymbols: skin.displaySymbols,
             missingAssetLabel: skin.label,
@@ -196,9 +226,21 @@ class Game002PixiAdapter implements SlotGameAdapter {
             gridLayout: skin.gridLayout,
             focusRegion: skin.focusRegion,
           },
-        }));
+        });
+      });
     this.#createWinAmountPlayer =
-      options.createWinAmountPlayer ?? createGame002WinAmountPlayer;
+      options.createWinAmountPlayer ??
+      ((layout) => {
+        if (skin.presentation.kind === "legacy") {
+          return createGame002WinAmountPlayer(layout);
+        }
+        if (!sceneLayoutPlayers) {
+          throw new Error(
+            "game002 scene-layout presentation was not created before its popup.",
+          );
+        }
+        return sceneLayoutPlayers.winAmountPlayer;
+      });
     this.#createSymbolCascadePlayer =
       options.createSymbolCascadePlayer ?? createSymbolCascadePlayer;
     this.#reportFatalError = options.reportFatalError ?? reportFatalError;
@@ -210,7 +252,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     }
 
     const app = this.#createApplication();
-    let backgroundPlayer: SpineBackgroundPlayer | null = null;
+    let backgroundPlayer: Game002BackgroundPlayer | null = null;
     let runtime: Game002ReelRuntime | null = null;
     let winAmountPlayer: WinAmountAnimationPlayer | null = null;
     let symbolCascadePlayer: SymbolCascadePlayer | null = null;
@@ -347,6 +389,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
     if (cnSymbolCode === undefined) {
       throw new Error("game002 game config is missing CN symbol code.");
     }
+    const wlSymbolCode = runtime.gameConfig.getSymbolCode("WL");
+    if (wlSymbolCode === undefined) {
+      throw new Error("game002 game config is missing WL symbol code.");
+    }
     const symbolCodes = Object.fromEntries(
       this.#skin.displaySymbols.map((symbol) => {
         const code = runtime.gameConfig.getSymbolCode(symbol);
@@ -367,6 +413,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     const sequence = createGame002CascadeSequence({
       logic,
       cnSymbolCode,
+      auxiliaryValueSymbolCodes: [wlSymbolCode],
       canRemoveSymbol: ({ code }) =>
         canGame002CascadeRemoveSymbol(
           resolveGame002CascadeSymbol(runtime, code),
@@ -1150,8 +1197,11 @@ function createPixiApplication(): Game002PixiApplication {
 async function loadSymbolTextures(
   skin: Game002SkinConfig,
 ): Promise<SymbolAssetMap> {
+  if (skin.presentation.kind !== "legacy") {
+    throw new Error("game002 package skin does not use legacy symbol modules.");
+  }
   const assetUrls = createGame002SymbolAssetMapFromModules({
-    modules: skin.symbolModules,
+    modules: skin.presentation.symbolModules,
     stateTextureManifest: skin.stateTextureManifest,
     displaySymbols: skin.displaySymbols,
   });

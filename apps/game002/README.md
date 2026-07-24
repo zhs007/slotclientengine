@@ -2,7 +2,7 @@
 
 动画状态切换、业务时序和配置来源汇总见 [`docs/animation-flow-and-timing.md`](./docs/animation-flow-and-timing.md)。调整动画节奏时应同步更新该文档、对应 source contract 和测试。
 
-`game002` 是基于 Pixi、`@slotclientengine/gameframeworks`、`@slotclientengine/gameloading` 和 `@slotclientengine/rendercore` 的 live slot app，并通过 `@slotclientengine/platformbootstrap-leo` 获取只读平台初始化 snapshot、通过 `@slotclientengine/game-ui-leo` 注入独立 Leo 游戏内 HUD。当前项目已收口为单资源集：URL `skin=1` 固定映射 `assets/game002-s3`；`skin=2|3|4|5`、缺失 `skin` 和旧 `serverUrl` query 都会显式失败。
+`game002` 是基于 Pixi、`@slotclientengine/gameframeworks`、`@slotclientengine/gameloading` 和 `@slotclientengine/rendercore` 的 live slot app，并通过 `@slotclientengine/platformbootstrap-leo` 获取只读平台初始化 snapshot、通过 `@slotclientengine/game-ui-leo` 注入独立 Leo 游戏内 HUD。URL `skin=1` 固定映射 `assets/game002-s3`；`skin=2` 严格消费 `gamelayouteditor` 导出的 `assets/crave` mapped scene-layout package。两个 skin 使用同一套 game002 期待、cascade、WL/CN、summary、金额和 cleanup 流程；`skin=3|4|5`、缺失、重复、`01` 和旧 `serverUrl` query 都会显式失败。
 
 ## 启动与 live 边界
 
@@ -18,7 +18,7 @@ live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`。launcher ca
 
 | 参数                                                                                   | 合同                                            |
 | -------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| `skin`                                                                                 | 必须且只能为 `1`                                |
+| `skin`                                                                                 | 必须且只能为 `1` 或 `2`                         |
 | `gameCode/gamecode`、`platformToken/token`、`businessCode/businessid`、`lang/language` | 每组至少一个；双写必须相等                      |
 | `jurisdiction`、`clienttype`                                                           | 必填非空字符串                                  |
 | `configUrl`、`license`、`currency`                                                     | 可选 launcher 参数                              |
@@ -37,7 +37,16 @@ http://127.0.0.1:5207/?skin=1&gameCode=GAME_CODE&platformToken=TOKEN&businessCod
 
 ## 资源合同
 
-- 背景唯一配置源：`assets/game002-s3/background.manifest.json`。资源闭包为 `BG.json`、`BG.atlas` 和 `BG.png,BG_2.png..BG_8.png`；完整 art 仍为 `2000 x 2000`，Spine 原点通过 manifest 的 `{x:1000,y:1000,scale:1}` 映射到 art 中心，并裁切在完整 art 内。
+- `skin=2` 的 layout/background/focus/棋盘 geometry/symbols/公开轮带/popup
+  唯一来自 `assets/crave/layout.manifest.json`、`assets.map.json` 和内容寻址 payload。
+  构建期 generator 生成精确 Vite import map并校验每个物理文件的 hash/size/orphan；
+  loading 只下载 active skin。Crave CN 使用其 symbols manifest 的 ImgNumber
+  `slot: "coin"` 与包内 `0..9` glyph，不使用 skin1 `Num` binding、完整数值图片或字体。
+- `assets/game002-s3/reel.manifest.json`、Nearwin1/2 是两个 skin 共用的显式
+  game002 presentation extension；它保存期待 timing/effect policy，不属于 Crave
+  layout package，也不会被误报为 package fallback。
+
+- skin1 背景唯一配置源：`assets/game002-s3/background.manifest.json`。资源闭包为 `BG.json`、`BG.atlas` 和 `BG.png,BG_2.png..BG_8.png`；完整 art 仍为 `2000 x 2000`，Spine 原点通过 manifest 的 `{x:1000,y:1000,scale:1}` 映射到 art 中心，并裁切在完整 art 内。
 - 游戏配置：`assets/gamecfg002/gameconfig.json`，继续使用本地公开 `reels-001`。
 - 转轮表现配置：`assets/game002-s3/reel.manifest.json`。当前 `spin.bounceStrength=0`，因此 game002 普通 spin 完全不做上下回弹；`1` 才等价于 rendercore 原始力度。`spin.dimmingAlpha=0.5` 控制实际滚动 occurrence 的格底和 symbol 压暗强度：非期待 initial spin 的 `WL/CN` 都保持全亮；第 2 个真实落地 WL 激活期待的同一边界起，以及期待 selective refill 的整个 spin 期间，都只让 `WL` 保持全亮。cascade 强调阶段也使用 `0.5`。普通逐格 timing、Nearwin effect 资源/transform/loop、2-WL activation timing，以及期待 refill sweep/selective spin 的顺序与 timing 也只来自该 manifest。该 manifest 由 rendercore fail-fast parser 读取并进入 loading/dist 精确闭包，app 不硬编码第二份值。
 - 可展示 symbol 顺序固定为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`。
@@ -99,6 +108,12 @@ dropdown 请求仍是通用 symbol state，但 `RenderSymbol` 会比较切换前
 组件、索引、pos、金额或 geometry 非法时在转轮启动前显式失败。game002 只提供组件名、金额 resolver、formatter/style 和可见 symbol target；组件 result 解析、symbol 状态、Pixi 金额 renderer、确定性 anchor 与轮播生命周期由 rendercore 拥有。
 
 ## 开发与发布
+
+真实 renderer 的本地资源 smoke 可打开
+`/visual-fixture.html?skin=1` 或 `/visual-fixture.html?skin=2`；该入口使用正式
+skin prepare、adapter、公开本地轮带与 Pixi/Spine ticker，但不连接 live，也不进入
+production build。它只能证明资源、geometry、mask、background、symbol 和 resize
+装配；期待/cascade/CN collect/popup 仍由自动化 fixture 与真实 live 分开验收。
 
 ```bash
 pnpm --filter game002 dev -- --host 127.0.0.1 --port 5206

@@ -53,3 +53,9 @@
 
 - 每个 active variant 只配置 popup root 相对 viewport center 的 `x/y/scale`。
 - popup package 最终 vendor 到 layout ZIP；内部 layer、tier、坐标和资源保持 popup owner 自包含。
+- production app 直接消费 editor 导出的 mapped folder 时，构建期必须从根 manifest
+  与 `assets.map.json` 生成精确 physical Vite import map，并校验 path/hash/size/orphan；
+  禁止宽泛 glob、运行时猜路径或另存业务资源表。
+- 只需要 layout/background/popup、而 reel 由游戏业务 target 驱动时，使用 rendercore
+  presentation surface；surface 仍拥有 mode-aware background visibility、popup placement
+  和 destroy，app 只注入业务触发并组合公开 container。

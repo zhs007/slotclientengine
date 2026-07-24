@@ -4,7 +4,10 @@
 
 本文是便于策划、美术和开发查阅的汇总，不替代代码与 manifest。数值冲突时按下列优先级确认：
 
-1. `assets/game002-s3/*.manifest.json` 中的资源、状态和 manifest timing。
+1. active skin manifest：skin1 使用 `assets/game002-s3/*.manifest.json`；skin2 的
+   layout/background/geometry/symbol/ImgNumber/popup 使用 `assets/crave` mapped
+   scene-layout package。两者的 Nearwin timing/effect 继续使用显式共享的
+   `assets/game002-s3/reel.manifest.json` presentation extension。
 2. `apps/game002/src/*-config.ts` 中的 game002 业务 timing。
 3. Spine/VNI 资源自身的真实 animation duration。
 4. 本文档。

@@ -166,10 +166,12 @@ describe("game002 source boundary", () => {
     }
     expect(skinConfigSource).not.toMatch(/game002-s3\/\*\.(?:png|json)/);
     expect(backgroundConfigSource).not.toMatch(/game002-s3\/(?:\*|\*\*)/);
-    expect(adapterSource).toContain("skin.background");
+    expect(adapterSource).toContain('skin.presentation.kind === "legacy"');
     expect(adapterSource).not.toContain("backgroundUrl");
     expect(adapterSource).not.toContain("createPositionedSprite");
-    expect(adapterSource).toContain("skin.symbolModules");
+    expect(adapterSource).toContain("skin.presentation.symbolModules");
+    expect(adapterSource).toContain("skin.presentation.symbolRegistry");
+    expect(adapterSource).toContain("createGame002SceneLayoutPlayers");
   });
 
   it("keeps skin focus regions explicit and delegates art rect mapping to rendercore", () => {

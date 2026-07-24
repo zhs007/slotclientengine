@@ -66,6 +66,7 @@ export interface Game002CascadeSequence {
 export function createGame002CascadeSequence(options: {
   readonly logic: GameLogic;
   readonly cnSymbolCode: number;
+  readonly auxiliaryValueSymbolCodes?: readonly number[];
   readonly canRemoveSymbol: (context: {
     readonly stepIndex: number;
     readonly x: number;
@@ -84,6 +85,19 @@ export function createGame002CascadeSequence(options: {
     options.cnSymbolCode,
     "game002 CN symbol code",
   );
+  const auxiliaryValueSymbolCodes = new Set(
+    (options.auxiliaryValueSymbolCodes ?? []).map((code, index) =>
+      assertNonNegativeSafeInteger(
+        code,
+        `game002 auxiliary value symbol code[${index}]`,
+      ),
+    ),
+  );
+  if (auxiliaryValueSymbolCodes.has(cnSymbolCode)) {
+    throw new Error(
+      "game002 CN symbol code must not also be an auxiliary value symbol code.",
+    );
+  }
   const steps = options.logic.getSteps();
   if (steps.length === 0)
     throw new Error("game002 cascade requires at least one step.");
@@ -97,6 +111,7 @@ export function createGame002CascadeSequence(options: {
     step: initialStep,
     scene: spinScene,
     cnSymbolCode,
+    auxiliaryValueSymbolCodes,
     required: false,
   });
   const spinValues = spinValueResult.values;
@@ -224,6 +239,7 @@ export function createGame002CascadeSequence(options: {
       step,
       scene: refillScene,
       cnSymbolCode,
+      auxiliaryValueSymbolCodes,
       required: refillPositions.some(
         ({ x, y }) => refillScene[x][y] === cnSymbolCode,
       ),
@@ -460,6 +476,7 @@ function readFinalValues(options: {
   readonly step: GameLogicStep;
   readonly scene: SceneMatrix;
   readonly cnSymbolCode: number;
+  readonly auxiliaryValueSymbolCodes: ReadonlySet<number>;
   readonly required: boolean;
   readonly fallbackValues?: SymbolPresentationValueMatrix;
 }): Readonly<{
@@ -503,6 +520,7 @@ function readFinalValues(options: {
       other,
       options.scene,
       options.cnSymbolCode,
+      options.auxiliaryValueSymbolCodes,
       `${label} values`,
     ),
     usesServerValues: true,
@@ -548,6 +566,7 @@ function parseFullValues(
   other: OtherSceneMatrix,
   scene: SceneMatrix,
   cnCode: number,
+  auxiliaryValueSymbolCodes: ReadonlySet<number>,
   label: string,
 ): SymbolPresentationValueMatrix {
   assertDimensions(other, scene, label);
@@ -566,6 +585,7 @@ function parseFullValues(
               );
             return raw;
           }
+          if (auxiliaryValueSymbolCodes.has(code)) return null;
           if (raw !== 0)
             throw new Error(`${label}[${x}][${y}] non-CN value must be zero.`);
           return null;

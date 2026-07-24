@@ -1,0 +1,2574 @@
+{
+  "assets": [
+    {
+      "fileHeight": 80,
+      "fileScale": 1,
+      "fileWidth": 86,
+      "height": 80,
+      "id": "asset_image_mrae841s_3r",
+      "originalName": "mw_stone6.png",
+      "path": "mw_stone6_asset_image_mrae841s_3r.png",
+      "type": "image",
+      "width": 86
+    },
+    {
+      "fileHeight": 50,
+      "fileScale": 1,
+      "fileWidth": 50,
+      "height": 50,
+      "id": "asset_image_mraeg23u_46",
+      "originalName": "光点1.png",
+      "path": "1_asset_image_mraeg23u_46.png",
+      "type": "image",
+      "width": 50
+    },
+    {
+      "fileHeight": 200,
+      "fileScale": 1,
+      "fileWidth": 200,
+      "height": 200,
+      "id": "asset_image_mraepcja_4a",
+      "originalName": "闪光3.png",
+      "path": "3_asset_image_mraepcja_4a.png",
+      "type": "image",
+      "width": 200
+    },
+    {
+      "fileHeight": 217,
+      "fileScale": 1,
+      "fileWidth": 217,
+      "height": 217,
+      "id": "asset_image_mrafbzli_4s",
+      "originalName": "闪光2.png",
+      "path": "2_asset_image_mrafbzli_4s.png",
+      "type": "image",
+      "width": 217
+    },
+    {
+      "fileHeight": 28,
+      "fileScale": 1,
+      "fileWidth": 31,
+      "height": 28,
+      "id": "asset_image_mrag7g66_53",
+      "originalName": "粒子1.png",
+      "path": "1_asset_image_mrag7g66_53.png",
+      "type": "image",
+      "width": 31
+    },
+    {
+      "fileHeight": 200,
+      "fileScale": 1,
+      "fileWidth": 200,
+      "height": 200,
+      "id": "asset_image_mrbv0c6j_3i",
+      "originalName": "辉光a1.png",
+      "path": "a1_asset_image_mrbv0c6j_3i.png",
+      "type": "image",
+      "width": 200
+    },
+    {
+      "fileHeight": 54,
+      "fileScale": 1,
+      "fileWidth": 57,
+      "height": 54,
+      "id": "asset_image_mrebxd3p_a",
+      "originalName": "sw_stone1.png",
+      "path": "sw_stone1_asset_image_mrebxd3p_a.png",
+      "type": "image",
+      "width": 57
+    },
+    {
+      "fileHeight": 200,
+      "fileScale": 1,
+      "fileWidth": 200,
+      "height": 200,
+      "id": "asset_image_mrmzli4d_l",
+      "originalName": "辉光a5.png",
+      "path": "a5_asset_image_mrmzli4d_l.png",
+      "type": "image",
+      "width": 200
+    },
+    {
+      "fileHeight": 213,
+      "fileScale": 1,
+      "fileWidth": 502,
+      "height": 213,
+      "id": "asset_image_mrn9wskj_v",
+      "originalName": "QQ图片20260708150413.png",
+      "path": "qq_20260708150413_asset_image_mrn9wskj_v.png",
+      "type": "image",
+      "width": 502
+    },
+    {
+      "fileHeight": 257,
+      "fileScale": 1,
+      "fileWidth": 689,
+      "height": 257,
+      "id": "asset_image_mrn9wwcn_w",
+      "originalName": "QQ图片20260708150411.png",
+      "path": "qq_20260708150411_asset_image_mrn9wwcn_w.png",
+      "type": "image",
+      "width": 689
+    },
+    {
+      "fileHeight": 217,
+      "fileScale": 1,
+      "fileWidth": 217,
+      "height": 217,
+      "id": "asset_image_mrnag3e6_y",
+      "originalName": "光晕2.png",
+      "path": "2_asset_image_mrnag3e6_y.png",
+      "type": "image",
+      "width": 217
+    },
+    {
+      "fileHeight": 121,
+      "fileScale": 1,
+      "fileWidth": 143,
+      "height": 121,
+      "id": "asset_image_mroedq99_k",
+      "originalName": "光效1.png",
+      "path": "1_asset_image_mroedq99_k.png",
+      "type": "image",
+      "width": 143
+    },
+    {
+      "fileHeight": 250,
+      "fileScale": 1,
+      "fileWidth": 250,
+      "height": 250,
+      "id": "asset_image_mrsovy46_8",
+      "originalName": "辉光8.png",
+      "path": "8_asset_image_mrsovy46_8.png",
+      "type": "image",
+      "width": 250
+    },
+    {
+      "fileHeight": 217,
+      "fileScale": 1,
+      "fileWidth": 217,
+      "height": 217,
+      "id": "asset_image_mrsvyeba_t",
+      "originalName": "光晕3.png",
+      "path": "3_asset_image_mrsvyeba_t.png",
+      "type": "image",
+      "width": 217
+    },
+    {
+      "fileHeight": 121,
+      "fileScale": 1,
+      "fileWidth": 143,
+      "height": 121,
+      "id": "asset_image_mrswriz7_15",
+      "originalName": "光效1.png",
+      "path": "1_asset_image_mrswriz7_15.png",
+      "type": "image",
+      "width": 143
+    },
+    {
+      "fileHeight": 200,
+      "fileScale": 1,
+      "fileWidth": 200,
+      "height": 200,
+      "id": "asset_image_mrvii5u7_11",
+      "originalName": "闪光3.png",
+      "path": "3_asset_image_mrvii5u7_11.png",
+      "type": "image",
+      "width": 200
+    },
+    {
+      "fileHeight": 76,
+      "fileScale": 1,
+      "fileWidth": 90,
+      "height": 76,
+      "id": "asset_image_mrvkkyjs_1v",
+      "originalName": "sw_stone9.png",
+      "path": "sw_stone9_asset_image_mrvkkyjs_1v.png",
+      "type": "image",
+      "width": 90
+    }
+  ],
+  "editor": {
+    "name": "VNI",
+    "version": "VNI_0.087"
+  },
+  "engineTarget": {
+    "name": "cocos_creator",
+    "version": "3.8.6"
+  },
+  "exportProfile": {
+    "assetScale": 1,
+    "id": "runtime_100",
+    "purpose": "runtime"
+  },
+  "layerGroups": [
+    {
+      "collapsed": false,
+      "id": "group_default",
+      "name": "默认组",
+      "order": 0,
+      "visible": true
+    }
+  ],
+  "layers": [
+    {
+      "animations": [
+        {
+          "duration": 0.5,
+          "enabled": true,
+          "id": "anim_module_mrae2t0g_2i",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "backOut",
+            "fromOpacity": 0,
+            "toOpacity": 1
+          },
+          "seed": 31091,
+          "startTime": 0.3,
+          "type": "fade"
+        },
+        {
+          "duration": 2.4,
+          "enabled": true,
+          "id": "anim_module_mrae2t0g_2j",
+          "name": "Idle 待机",
+          "params": {
+            "easing": "linear"
+          },
+          "seed": 4675,
+          "startTime": 0.55,
+          "type": "idle"
+        },
+        {
+          "duration": 0.25,
+          "enabled": true,
+          "id": "anim_module_mrae2t0g_2k",
+          "name": "Scale Out 缩放退出",
+          "params": {
+            "easing": "easeInQuad",
+            "fadeOut": true,
+            "fromScale": 1,
+            "toScale": 0
+          },
+          "seed": 53535,
+          "startTime": 2.9,
+          "type": "scale_out"
+        }
+      ],
+      "assetId": "asset_image_mrmzli4d_l",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mrudei9d_16",
+              "time": 0.45,
+              "value": 4
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrudee96_15",
+              "time": 0.65,
+              "value": 5.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrude9lu_14",
+              "time": 0.9,
+              "value": 4.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrudg68p_18",
+              "time": 1.2,
+              "value": 5.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrudgi0p_1a",
+              "time": 2.1,
+              "value": 4.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrudhj1l_1c",
+              "time": 2.9,
+              "value": 5.5
+            }
+          ]
+        },
+        "scaleY": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mrudctmh_10",
+              "time": 0.45,
+              "value": 3
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrudcza2_11",
+              "time": 0.65,
+              "value": 4.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrudd5u9_12",
+              "time": 0.9,
+              "value": 3.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrudg5qx_17",
+              "time": 1.2,
+              "value": 4.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrudghju_19",
+              "time": 2.1,
+              "value": 3.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrudhi89_1b",
+              "time": 2.9,
+              "value": 4.5
+            }
+          ]
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mrae0m5e_2g",
+      "keyframes": [],
+      "locked": true,
+      "name": "辉光2.png",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 5,
+        "scaleY": 4,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 2.15,
+          "enabled": true,
+          "id": "anim_module_mrae8814_3t",
+          "name": "Particle Wall 粒子幕墙",
+          "params": {
+            "direction": 0,
+            "easing": "easeInOutQuad",
+            "emitterWidth": 350,
+            "endScaleMax": 0.8,
+            "endScaleMin": 1,
+            "fadeOut": true,
+            "gravity": 0,
+            "lifetimeMax": 0.7,
+            "lifetimeMin": 0.5,
+            "size": 50,
+            "spawnRate": 45,
+            "speed": 1100,
+            "spreadAngle": 180,
+            "startScaleMax": 1.5,
+            "startScaleMin": 1
+          },
+          "seed": 1784099001101,
+          "startTime": 0.9,
+          "type": "particle_wall"
+        },
+        {
+          "duration": 0.35,
+          "enabled": true,
+          "id": "anim_module_mrae8814_3u",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 74772,
+          "startTime": 2.8,
+          "type": "fade"
+        }
+      ],
+      "assetId": "asset_image_mrae841s_3r",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "normal",
+      "groupId": "group_default",
+      "id": "layer_image_mrae841v_3s",
+      "keyframes": [],
+      "locked": true,
+      "name": "散落coin中",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 2.15,
+          "enabled": true,
+          "id": "anim_module_mrebwld4_8",
+          "name": "Particle Wall 粒子幕墙",
+          "params": {
+            "direction": 0,
+            "easing": "easeInOutQuad",
+            "emitterWidth": 300,
+            "endScaleMax": 0.8,
+            "endScaleMin": 1,
+            "fadeOut": true,
+            "gravity": 0,
+            "lifetimeMax": 0.7,
+            "lifetimeMin": 0.5,
+            "size": 40,
+            "spawnRate": 35,
+            "speed": 1100,
+            "spreadAngle": 50,
+            "startScaleMax": 1.5,
+            "startScaleMin": 1
+          },
+          "seed": 1784013823116,
+          "startTime": 0.9,
+          "type": "particle_wall"
+        },
+        {
+          "duration": 0.35,
+          "enabled": true,
+          "id": "anim_module_mrebwld4_9",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 74772,
+          "startTime": 2.8,
+          "type": "fade"
+        }
+      ],
+      "assetId": "asset_image_mrebxd3p_a",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "normal",
+      "groupId": "group_default",
+      "id": "layer_image_mrebwld4_7",
+      "keyframes": [],
+      "locked": true,
+      "name": "散落coin 小",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 2.15,
+          "enabled": true,
+          "id": "anim_module_mrvkkow7_1t",
+          "name": "Particle Wall 粒子幕墙",
+          "params": {
+            "direction": 0,
+            "easing": "easeInOutQuad",
+            "emitterWidth": 300,
+            "endScaleMax": 0.8,
+            "endScaleMin": 1,
+            "fadeOut": true,
+            "gravity": 0,
+            "lifetimeMax": 0.7,
+            "lifetimeMin": 0.5,
+            "size": 90,
+            "spawnRate": 35,
+            "speed": 1100,
+            "spreadAngle": 180,
+            "startScaleMax": 1.5,
+            "startScaleMin": 1
+          },
+          "seed": 1784013823116,
+          "startTime": 0.9,
+          "type": "particle_wall"
+        },
+        {
+          "duration": 0.35,
+          "enabled": true,
+          "id": "anim_module_mrvkkow7_1u",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 74772,
+          "startTime": 2.8,
+          "type": "fade"
+        }
+      ],
+      "assetId": "asset_image_mrvkkyjs_1v",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "normal",
+      "groupId": "group_default",
+      "id": "layer_image_mrvkkow6_1s",
+      "keyframes": [],
+      "locked": true,
+      "name": "散落coin大",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 1.1,
+          "enabled": true,
+          "id": "anim_module_mraef5c0_45",
+          "name": "Particles 粒子爆发",
+          "params": {
+            "count": 60,
+            "easing": "easeOutQuad",
+            "emissionAngle": 90,
+            "emissionSpreadAngle": 350,
+            "fadeOut": true,
+            "gravity": 300,
+            "randomRotation": true,
+            "randomRotationDegrees": 135,
+            "rotateParticles": true,
+            "size": 70,
+            "speed": 400,
+            "spinSpeed": 1,
+            "spread": 40,
+            "trailCount": 0,
+            "trailFade": 0.5,
+            "trailSpacing": 0.035
+          },
+          "seed": 17972,
+          "startTime": 1.1,
+          "type": "particles"
+        }
+      ],
+      "assetId": "asset_image_mraeg23u_46",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mraeex38_44",
+      "keyframes": [],
+      "locked": true,
+      "mask": {
+        "compositeMode": "precompose_light_alpha",
+        "enabled": false,
+        "mode": "alpha",
+        "showSourceLayer": true,
+        "sourceLayerId": null
+      },
+      "name": "碰撞火花1",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "x": -161,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 1.1,
+          "enabled": true,
+          "id": "anim_module_mraej5c0_49",
+          "name": "Particles 粒子爆发",
+          "params": {
+            "count": 60,
+            "easing": "easeOutQuad",
+            "emissionAngle": 20,
+            "emissionSpreadAngle": 300,
+            "fadeOut": true,
+            "gravity": 300,
+            "randomRotation": true,
+            "randomRotationDegrees": 135,
+            "rotateParticles": true,
+            "size": 60,
+            "speed": 450,
+            "spinSpeed": 1,
+            "spread": 50,
+            "trailCount": 0,
+            "trailFade": 0.5,
+            "trailSpacing": 0.035
+          },
+          "seed": 17972,
+          "startTime": 1.1,
+          "type": "particles"
+        }
+      ],
+      "assetId": "asset_image_mraeg23u_46",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mraeibpw_48",
+      "keyframes": [],
+      "locked": true,
+      "name": "碰撞火花2",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "x": 178,
+        "y": 7
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [],
+      "assetId": "asset_image_mrn9wwcn_w",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mrsljhb8_h",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrsljk6d_i",
+              "time": 0.3,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrsnefcu_1n",
+              "time": 3.05,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrsneani_1m",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        },
+        "positionX": {
+          "enabled": false,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mru354ha_8",
+              "time": 0.8,
+              "value": 4
+            }
+          ]
+        },
+        "positionY": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "easeInQuad",
+              "id": "basic_point_mrsljyp9_j",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrslk18s_k",
+              "time": 0.3,
+              "value": 210
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrslpsj9_x",
+              "time": 0.4,
+              "value": 90
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mru32w9f_3",
+              "time": 0.5,
+              "value": 100
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mru35io5_9",
+              "time": 0.6,
+              "value": 85
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrslpvth_y",
+              "time": 0.7,
+              "value": 90
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_point_mrslqp51_z",
+              "time": 0.9,
+              "value": 120
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrslqr4l_10",
+              "time": 1,
+              "value": 90
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_point_mru9op85_r",
+              "time": 1.15,
+              "value": 100
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_point_mrsmwjsm_14",
+              "time": 1.9,
+              "value": 130
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_point_mrue0xzl_1d",
+              "time": 2.9,
+              "value": 100
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_point_mrsn08hi_15",
+              "time": 3.05,
+              "value": 130
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_point_mrsne29r_1j",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mrslm186_l",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrslmht8_o",
+              "time": 0.3,
+              "value": 1.2
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrslnjdx_s",
+              "time": 0.45,
+              "value": 1.2
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrsln5h9_q",
+              "time": 0.75,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_point_mrsloa25_u",
+              "time": 0.9,
+              "value": 1.3
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrsloczh_w",
+              "time": 1,
+              "value": 0.9
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mru3jluj_c",
+              "time": 1.15,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrsncifa_1d",
+              "time": 2.9,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mru477hw_i",
+              "time": 3.05,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_point_mrsne4hy_1k",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        },
+        "scaleY": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mrslm1ul_m",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrslmhgd_n",
+              "time": 0.3,
+              "value": 1.2
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrslniy5_r",
+              "time": 0.45,
+              "value": 1.2
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrsln54u_p",
+              "time": 0.75,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_point_mrslo9nh_t",
+              "time": 0.9,
+              "value": 1.3
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrsloclh_v",
+              "time": 1,
+              "value": 0.9
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mru3n8ks_f",
+              "time": 1.15,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrsncj6m_1e",
+              "time": 2.9,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mru3wy1v_g",
+              "time": 3.05,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_point_mrsne5mu_1l",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        }
+      },
+      "blendMode": "normal",
+      "groupId": "group_default",
+      "id": "layer_image_mrae66wv_38",
+      "keyframes": [],
+      "locked": true,
+      "name": "mega.png",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [],
+      "assetId": "asset_image_mrn9wskj_v",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mrosih4g_1b",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mroskmvs_1f",
+              "time": 0.3,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrsnehpa_1o",
+              "time": 3.1,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrsndjwu_1h",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mrosl4a8_1h",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrosl6yh_1j",
+              "time": 0.3,
+              "value": -210
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mroso5yu_1l",
+              "time": 0.4,
+              "value": -115
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mru4ga8h_3",
+              "time": 0.5,
+              "value": -125
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mru4i9c1_4",
+              "time": 0.6,
+              "value": -120
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_point_mrslan84_f",
+              "time": 0.7,
+              "value": -125
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_point_mrsl8oz8_c",
+              "time": 0.95,
+              "value": -120
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrslcdqd_g",
+              "time": 1.05,
+              "value": -80
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_point_mru9ohqv_q",
+              "time": 1.2,
+              "value": -85
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_point_mrsmrl1h_11",
+              "time": 2.2,
+              "value": -55
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_point_mrsn3p7p_17",
+              "time": 2.95,
+              "value": -85
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_point_mrsn0axa_16",
+              "time": 3.1,
+              "value": -110
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_point_mrsndse6_1i",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mrosezfr_19",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrosimgv_1c",
+              "time": 0.3,
+              "value": 1.2
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrucla9u_s",
+              "time": 0.75,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_point_mrsl6cgd_5",
+              "time": 0.95,
+              "value": 1.3
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrsl9s38_d",
+              "time": 1.05,
+              "value": 0.9
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mru4mx8b_5",
+              "time": 1.2,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrsncdwu_1b",
+              "time": 2.95,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mru4sfq3_8",
+              "time": 3.1,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_point_mrsndd52_1f",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        },
+        "scaleY": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mrosjge4_1d",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrosjrsu_1e",
+              "time": 0.3,
+              "value": 1.2
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mruclj5u_t",
+              "time": 0.75,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_point_mrsl6f25_6",
+              "time": 0.95,
+              "value": 1.3
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrsl9sol_e",
+              "time": 1.05,
+              "value": 0.9
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mru4mxte_6",
+              "time": 1.2,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrsncgb2_1c",
+              "time": 2.95,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mru4sf97_7",
+              "time": 3.1,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_point_mrsnddtz_1g",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        }
+      },
+      "blendMode": "normal",
+      "groupId": "group_default",
+      "id": "layer_image_mrosdf47_18",
+      "keyframes": [],
+      "locked": false,
+      "name": "win3",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 1.5,
+          "enabled": false,
+          "id": "anim_module_mroec34c_i",
+          "name": "Multi Move 多段位移",
+          "params": {
+            "easing": "linear",
+            "pointsJson": "[{\"x\":0,\"y\":0,\"time\":0,\"easing\":\"linear\"},{\"x\":950,\"y\":0,\"time\":0.5,\"easing\":\"linear\"},{\"x\":0,\"y\":0,\"time\":0.51,\"easing\":\"linear\"},{\"x\":0,\"y\":0,\"time\":1,\"easing\":\"linear\"},{\"x\":950,\"y\":0,\"time\":1.5,\"easing\":\"linear\"}]"
+          },
+          "seed": 1784597761464,
+          "startTime": 1,
+          "type": "multi_move"
+        },
+        {
+          "duration": 0.05,
+          "enabled": false,
+          "id": "anim_module_mroctr8r_5",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 0,
+            "toOpacity": 0
+          },
+          "seed": 1784740788839,
+          "startTime": 1.5,
+          "type": "fade"
+        },
+        {
+          "duration": 0.65,
+          "enabled": true,
+          "id": "anim_module_mroqao8y_p",
+          "name": "Move 位移",
+          "params": {
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "linear",
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 1000,
+            "toY": 0
+          },
+          "seed": 1784925874677,
+          "startTime": 1.8,
+          "type": "move"
+        }
+      ],
+      "assetId": "asset_image_mrswriz7_15",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "normal",
+      "groupId": "group_default",
+      "id": "layer_image_mrmyu0ni_f",
+      "keyframes": [],
+      "locked": true,
+      "mask": {
+        "compositeMode": "precompose_light_alpha",
+        "enabled": true,
+        "mode": "alpha",
+        "showSourceLayer": true,
+        "sourceLayerId": "layer_image_mrosdf47_18"
+      },
+      "name": "字体扫光",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 3,
+        "scaleY": 3,
+        "x": -500,
+        "y": -70
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 1.5,
+          "enabled": false,
+          "id": "anim_module_mrodriej_8",
+          "name": "Multi Move 多段位移",
+          "params": {
+            "easing": "linear",
+            "pointsJson": "[{\"x\":0,\"y\":0,\"time\":0,\"easing\":\"linear\"},{\"x\":950,\"y\":0,\"time\":0.5,\"easing\":\"linear\"},{\"x\":0,\"y\":0,\"time\":0.51,\"easing\":\"linear\"},{\"x\":0,\"y\":0,\"time\":1,\"easing\":\"linear\"},{\"x\":950,\"y\":0,\"time\":1.5,\"easing\":\"linear\"}]"
+          },
+          "seed": 1784597761464,
+          "startTime": 1,
+          "type": "multi_move"
+        },
+        {
+          "duration": 0.05,
+          "enabled": false,
+          "id": "anim_module_mrodsvma_9",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 0,
+            "toOpacity": 0
+          },
+          "seed": 1784740788839,
+          "startTime": 1.5,
+          "type": "fade"
+        },
+        {
+          "duration": 0.65,
+          "enabled": true,
+          "id": "anim_module_mroqbwpu_q",
+          "name": "Move 位移",
+          "params": {
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "linear",
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 1000,
+            "toY": 0
+          },
+          "seed": 1784925874677,
+          "startTime": 1.8,
+          "type": "move"
+        }
+      ],
+      "assetId": "asset_image_mroedq99_k",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "normal",
+      "groupId": "group_default",
+      "id": "layer_image_mrn4nsmp_r",
+      "keyframes": [],
+      "locked": true,
+      "mask": {
+        "compositeMode": "precompose_light_alpha",
+        "enabled": true,
+        "mode": "alpha",
+        "showSourceLayer": true,
+        "sourceLayerId": "layer_image_mrae66wv_38"
+      },
+      "name": "字体扫光",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 3,
+        "scaleY": 3,
+        "x": -500,
+        "y": 100
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.1,
+          "enabled": true,
+          "id": "anim_module_mraeqic9_4d",
+          "name": "Idle 待机",
+          "params": {
+            "easing": "linear"
+          },
+          "seed": 96656,
+          "startTime": 0.45,
+          "type": "idle"
+        },
+        {
+          "duration": 0.15,
+          "enabled": true,
+          "id": "anim_module_mrmzr4r1_n",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 1784706432382,
+          "startTime": 0.55,
+          "type": "fade"
+        }
+      ],
+      "assetId": "asset_image_mraepcja_4a",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mraepcjb_4b",
+      "keyframes": [],
+      "locked": true,
+      "name": "碰撞闪光",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 4,
+        "scaleY": 5,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.7,
+          "enabled": true,
+          "id": "anim_module_mrmxvr9c_6",
+          "name": "EnergyRing 能量环",
+          "params": {
+            "additive": true,
+            "alpha": 1,
+            "easing": "easeOutQuad",
+            "endScale": 4.5,
+            "pulse": 0.7,
+            "ringCount": 1,
+            "rotation": 2,
+            "sourceOpacity": 0,
+            "stagger": 0.28,
+            "startScale": 0.4,
+            "vanishMode": 1
+          },
+          "seed": 1784413018703,
+          "startTime": 0.45,
+          "type": "energy_ring"
+        }
+      ],
+      "assetId": "asset_image_mrnag3e6_y",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mrmxvklo_4",
+      "keyframes": [],
+      "locked": false,
+      "name": "光晕1.png",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.05,
+          "enabled": false,
+          "id": "anim_module_mrbuld8f_3b",
+          "name": "Scale Up 放大",
+          "params": {
+            "easing": "easeOutQuad",
+            "fromScaleX": 1,
+            "fromScaleY": 1,
+            "toScaleX": 6.5,
+            "toScaleY": 5
+          },
+          "seed": 46527,
+          "startTime": 0.4,
+          "type": "scale_up"
+        },
+        {
+          "duration": 0.1,
+          "enabled": false,
+          "id": "anim_module_mrbuo8zj_3d",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 80991,
+          "startTime": 0.45,
+          "type": "fade"
+        },
+        {
+          "duration": 0.7,
+          "enabled": true,
+          "id": "anim_module_mrebba0n_6",
+          "name": "EnergyRing 能量环",
+          "params": {
+            "additive": false,
+            "alpha": 1,
+            "easing": "easeInQuad",
+            "endScale": 2,
+            "pulse": 0,
+            "ringCount": 1,
+            "rotation": 0,
+            "sourceOpacity": 0,
+            "stagger": 0.5,
+            "startScale": 0.8,
+            "vanishMode": 0
+          },
+          "seed": 1783850218958,
+          "startTime": 0.45,
+          "type": "energy_ring"
+        }
+      ],
+      "assetId": "asset_image_mrsvyeba_t",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mrbujp33_2x",
+      "keyframes": [],
+      "locked": true,
+      "name": "碰撞爆炸震波",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 20,
+        "scaleX": 5,
+        "scaleY": 5,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [],
+      "assetId": "asset_image_mrvii5u7_11",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mrswcjzv_u",
+              "time": 2.95,
+              "value": 0
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrswcuxf_v",
+              "time": 3.2,
+              "value": 1
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_point_mrsweagr_12",
+              "time": 3.5,
+              "value": 0
+            }
+          ]
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mrucvx42_y",
+              "time": 2.95,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrucvua1_x",
+              "time": 3.2,
+              "value": 3.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrucvzl6_z",
+              "time": 3.5,
+              "value": 4
+            }
+          ]
+        },
+        "scaleY": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mru4z7uj_c",
+              "time": 2.95,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mru4zcdx_d",
+              "time": 3.2,
+              "value": 5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mru4zlxw_e",
+              "time": 3.5,
+              "value": 1
+            }
+          ]
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mraeson3_4h",
+      "keyframes": [],
+      "locked": true,
+      "name": "消失闪光3.png",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 2,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 1.85,
+          "enabled": true,
+          "id": "anim_module_mrafar0i_4p",
+          "name": "Particle Twinkle 随机闪烁粒子",
+          "params": {
+            "batchMax": 3,
+            "batchMin": 1,
+            "count": 40,
+            "easing": "linear",
+            "radius": 350,
+            "size": 120,
+            "spawnInterval": 0.5,
+            "twinkleDuration": 1
+          },
+          "seed": 3746,
+          "startTime": 1.1,
+          "type": "particle_twinkle"
+        },
+        {
+          "duration": 0.25,
+          "enabled": true,
+          "id": "anim_module_mrsq3nzr_s",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 1784444391468,
+          "startTime": 2.8,
+          "type": "fade"
+        }
+      ],
+      "assetId": "asset_image_mrafbzli_4s",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mrafahgn_4o",
+      "keyframes": [],
+      "locked": true,
+      "name": "大星星闪光",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "x": 0,
+        "y": 80
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.4,
+          "enabled": true,
+          "id": "anim_module_mrsowkbj_a",
+          "name": "Scale In 缩放进入",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeIn": true,
+            "fromScale": 0.2,
+            "toScale": 1
+          },
+          "seed": 13228,
+          "startTime": 0.95,
+          "type": "scale_in"
+        },
+        {
+          "duration": 0.25,
+          "enabled": true,
+          "id": "anim_module_mrsowkbj_b",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 29918,
+          "startTime": 1.2,
+          "type": "fade"
+        },
+        {
+          "duration": 0.4,
+          "enabled": true,
+          "id": "anim_module_mrsowkbj_e",
+          "name": "Scale In 缩放进入",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeIn": true,
+            "fromScale": 0.2,
+            "toScale": 1
+          },
+          "seed": 13228,
+          "startTime": 1.8,
+          "type": "scale_in"
+        },
+        {
+          "duration": 0.25,
+          "enabled": true,
+          "id": "anim_module_mrsowkbj_k",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 29918,
+          "startTime": 2.05,
+          "type": "fade"
+        },
+        {
+          "duration": 0.4,
+          "enabled": true,
+          "id": "anim_module_mruanoth_u",
+          "name": "Scale In 缩放进入",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeIn": true,
+            "fromScale": 0.2,
+            "toScale": 1
+          },
+          "seed": 13228,
+          "startTime": 2.65,
+          "type": "scale_in"
+        },
+        {
+          "duration": 0.25,
+          "enabled": true,
+          "id": "anim_module_mruanujp_v",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 29918,
+          "startTime": 2.9,
+          "type": "fade"
+        }
+      ],
+      "assetId": "asset_image_mrsovy46_8",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mrsovy46_9",
+      "keyframes": [],
+      "locked": true,
+      "name": "放射光",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": -18,
+        "scaleX": -5,
+        "scaleY": 4,
+        "x": 0,
+        "y": 50
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.4,
+          "enabled": true,
+          "id": "anim_module_mrubhlak_6",
+          "name": "Scale In 缩放进入",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeIn": true,
+            "fromScale": 0.2,
+            "toScale": 1
+          },
+          "seed": 13228,
+          "startTime": 1.35,
+          "type": "scale_in"
+        },
+        {
+          "duration": 0.25,
+          "enabled": true,
+          "id": "anim_module_mrubhlak_7",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 29918,
+          "startTime": 1.65,
+          "type": "fade"
+        },
+        {
+          "duration": 0.35,
+          "enabled": true,
+          "id": "anim_module_mrubhlak_a",
+          "name": "Scale In 缩放进入",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeIn": true,
+            "fromScale": 0.5,
+            "toScale": 1
+          },
+          "seed": 13228,
+          "startTime": 2.2,
+          "type": "scale_in"
+        },
+        {
+          "duration": 0.25,
+          "enabled": false,
+          "id": "anim_module_mrubhlak_b",
+          "name": "Scale In 缩放进入",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeIn": true,
+            "fromScale": 0.5,
+            "toScale": 1
+          },
+          "seed": 13228,
+          "startTime": 2.2,
+          "type": "scale_in"
+        },
+        {
+          "duration": 0.25,
+          "enabled": false,
+          "id": "anim_module_mrubhlak_d",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 29918,
+          "startTime": 2.35,
+          "type": "fade"
+        },
+        {
+          "duration": 0.25,
+          "enabled": true,
+          "id": "anim_module_mrubhlak_c",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 29918,
+          "startTime": 2.45,
+          "type": "fade"
+        }
+      ],
+      "assetId": "asset_image_mrsovy46_8",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mrubhlaj_3",
+      "keyframes": [],
+      "locked": true,
+      "name": "放射光 Copy",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 20,
+        "scaleX": 5,
+        "scaleY": 4,
+        "x": 0,
+        "y": 50
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.25,
+          "enabled": true,
+          "id": "anim_module_mrncquzw_11",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 0,
+            "toOpacity": 1
+          },
+          "seed": 1784444391468,
+          "startTime": 1.1,
+          "type": "fade"
+        },
+        {
+          "duration": 1.7,
+          "enabled": true,
+          "id": "anim_module_mrag7xpl_56",
+          "name": "Particle Stream 持续发射",
+          "params": {
+            "easing": "easeOutQuad",
+            "emissionAngle": 180,
+            "emissionSpreadAngle": 100,
+            "fadeOut": true,
+            "gravity": 0,
+            "lifetime": 1.5,
+            "randomRotation": true,
+            "randomRotationDegrees": 60,
+            "rotateParticles": true,
+            "size": 80,
+            "spawnRate": 5,
+            "speed": 100,
+            "spinSpeed": 0.5,
+            "spread": 200,
+            "trailCount": 1,
+            "trailFade": 0.5,
+            "trailSpacing": 0.035
+          },
+          "seed": 39081,
+          "startTime": 1.2,
+          "type": "particle_stream"
+        },
+        {
+          "duration": 0.25,
+          "enabled": true,
+          "id": "anim_module_mrsq2bhz_q",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 1784444391468,
+          "startTime": 2.75,
+          "type": "fade"
+        }
+      ],
+      "assetId": "asset_image_mrag7g66_53",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mrag7g67_54",
+      "keyframes": [],
+      "locked": true,
+      "name": "粒子1.png",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "x": -270,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.25,
+          "enabled": true,
+          "id": "anim_module_mrncqa98_10",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 0,
+            "toOpacity": 1
+          },
+          "seed": 1784444391468,
+          "startTime": 1.1,
+          "type": "fade"
+        },
+        {
+          "duration": 1.7,
+          "enabled": true,
+          "id": "anim_module_mragst36_59",
+          "name": "Particle Stream 持续发射",
+          "params": {
+            "easing": "easeOutQuad",
+            "emissionAngle": 0,
+            "emissionSpreadAngle": 100,
+            "fadeOut": true,
+            "gravity": 0,
+            "lifetime": 1.5,
+            "randomRotation": true,
+            "randomRotationDegrees": 60,
+            "rotateParticles": true,
+            "size": 80,
+            "spawnRate": 5,
+            "speed": 100,
+            "spinSpeed": 0.5,
+            "spread": 200,
+            "trailCount": 1,
+            "trailFade": 0.5,
+            "trailSpacing": 0.035
+          },
+          "seed": 39081,
+          "startTime": 1.2,
+          "type": "particle_stream"
+        },
+        {
+          "duration": 0.25,
+          "enabled": true,
+          "id": "anim_module_mrsq2ifz_r",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 1784444391468,
+          "startTime": 2.75,
+          "type": "fade"
+        }
+      ],
+      "assetId": "asset_image_mrag7g66_53",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mragst36_58",
+      "keyframes": [],
+      "locked": true,
+      "name": "粒子1.png Copy",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "x": 370,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.35,
+          "enabled": false,
+          "id": "anim_module_mrahhxzu_5i",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 0.2,
+            "toOpacity": 0.5
+          },
+          "seed": 41656,
+          "startTime": 0.15,
+          "type": "fade"
+        },
+        {
+          "duration": 0.75,
+          "enabled": true,
+          "id": "anim_module_mrahhxzu_5j",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 0.5,
+            "toOpacity": 0
+          },
+          "seed": 37876,
+          "startTime": 0.4,
+          "type": "fade"
+        }
+      ],
+      "assetId": "asset_image_mrbv0c6j_3i",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mrahhlpi_5h",
+      "keyframes": [],
+      "locked": true,
+      "name": "辉光增强",
+      "opacity": 0.5,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 5,
+        "scaleY": 5,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    }
+  ],
+  "maskCompositeMode": "precompose_light_alpha",
+  "name": "mega win0721",
+  "particles": [],
+  "schemaVersion": "VNI_0.087",
+  "stage": {
+    "backgroundColor": "#0a0a0a",
+    "coordinate": "center",
+    "duration": 3.5,
+    "height": 1600,
+    "width": 900
+  }
+}

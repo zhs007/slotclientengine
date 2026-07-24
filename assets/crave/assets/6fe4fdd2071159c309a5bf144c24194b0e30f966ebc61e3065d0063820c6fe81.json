@@ -1,0 +1,204 @@
+{
+  "amountFormat": {
+    "decimalSeparator": ".",
+    "fractionDigits": 0,
+    "groupSeparator": ",",
+    "prefix": "",
+    "rawScale": 1,
+    "rounding": "floor",
+    "suffix": "",
+    "useGrouping": false
+  },
+  "awardCelebration": {
+    "base": {
+      "countDurationSeconds": 1.5,
+      "layers": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "binding": "win-amount",
+          "id": "layer-base-0",
+          "kind": "image-string",
+          "order": 0,
+          "resource": "image-string.manifest.json",
+          "transform": {
+            "scale": 1,
+            "x": 0,
+            "y": 500
+          }
+        }
+      ]
+    },
+    "celebrationTiers": [
+      {
+        "countDurationSeconds": 2.9,
+        "id": "bigwin",
+        "layers": [
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "binding": "win-amount",
+            "id": "layer-bigwin-0",
+            "kind": "image-string",
+            "order": 0,
+            "resource": "image-string.manifest.json",
+            "transform": {
+              "scale": 3,
+              "x": 0,
+              "y": 300
+            }
+          },
+          {
+            "id": "layer-bigwin-1",
+            "kind": "vni",
+            "order": 1,
+            "playback": {
+              "keepParticlesAlive": true,
+              "loopEndTime": 2.9,
+              "loopStartTime": 1.2,
+              "mode": "segmented"
+            },
+            "resource": "big_win0721.json",
+            "transform": {
+              "scale": 1,
+              "x": 0,
+              "y": 0
+            }
+          }
+        ],
+        "thresholdMultiplier": 15
+      },
+      {
+        "countDurationSeconds": 2.9,
+        "id": "superwin",
+        "layers": [
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "binding": "win-amount",
+            "id": "layer-superwin-0",
+            "kind": "image-string",
+            "order": 0,
+            "resource": "image-string.manifest.json",
+            "transform": {
+              "scale": 4,
+              "x": 0,
+              "y": 300
+            }
+          },
+          {
+            "id": "layer-superwin-1",
+            "kind": "vni",
+            "order": 1,
+            "playback": {
+              "keepParticlesAlive": true,
+              "loopEndTime": 2.9,
+              "loopStartTime": 1.2,
+              "mode": "segmented"
+            },
+            "resource": "super_win0721.json",
+            "transform": {
+              "scale": 1,
+              "x": 0,
+              "y": 0
+            }
+          }
+        ],
+        "thresholdMultiplier": 25
+      },
+      {
+        "countDurationSeconds": 2.9,
+        "id": "megawin",
+        "layers": [
+          {
+            "anchor": {
+              "x": 0.5,
+              "y": 0.5
+            },
+            "binding": "win-amount",
+            "id": "layer-megawin-0",
+            "kind": "image-string",
+            "order": 0,
+            "resource": "image-string.manifest.json",
+            "transform": {
+              "scale": 5,
+              "x": 0,
+              "y": 300
+            }
+          },
+          {
+            "id": "layer-megawin-1",
+            "kind": "vni",
+            "order": 1,
+            "playback": {
+              "keepParticlesAlive": true,
+              "loopEndTime": 2.9,
+              "loopStartTime": 1.2,
+              "mode": "segmented"
+            },
+            "resource": "mega_win0721.json",
+            "transform": {
+              "scale": 1,
+              "x": 0,
+              "y": 0
+            }
+          }
+        ],
+        "thresholdMultiplier": 50
+      }
+    ],
+    "standard": {
+      "countDurationSeconds": 3,
+      "layers": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "binding": "win-amount",
+          "id": "layer-standard-0",
+          "kind": "image-string",
+          "order": 0,
+          "resource": "image-string.manifest.json",
+          "transform": {
+            "scale": 2,
+            "x": 0,
+            "y": 400
+          }
+        }
+      ]
+    }
+  },
+  "designViewport": {
+    "height": 1920,
+    "width": 1080
+  },
+  "id": "bigwin2",
+  "kind": "popup",
+  "resources": {
+    "big_win0721.json": {
+      "kind": "vni",
+      "project": "big_win0721.json"
+    },
+    "image-string.manifest.json": {
+      "kind": "image-string",
+      "manifest": "image-string.manifest.json"
+    },
+    "mega_win0721.json": {
+      "kind": "vni",
+      "project": "mega_win0721.json"
+    },
+    "super_win0721.json": {
+      "kind": "vni",
+      "project": "super_win0721.json"
+    }
+  },
+  "type": "award-celebration",
+  "version": 1
+}

@@ -7,7 +7,7 @@ import {
   parseLeoLauncherParameters,
   type LeoLauncherParameters,
 } from "@slotclientengine/platformbootstrap-leo";
-import { parseGame002SkinId, type Game002SkinId } from "./skin-id.js";
+import { parseGame002SkinQuery, type Game002SkinId } from "./skin-id.js";
 
 export const GAME002_LIVE_SERVER_URL =
   "wss://gameserv.rgstest.slammerstudios.com/";
@@ -29,7 +29,7 @@ export function parseGame002LaunchQuery(
     search instanceof URLSearchParams ? search : new URLSearchParams(search);
   rejectUnsupportedQueryParameter(params, "serverUrl");
   const platform = parseLeoLauncherParameters(params);
-  const skin = parseGame002SkinId(parseRequiredQueryString(params, "skin"));
+  const skin = parseGame002SkinQuery(params);
   const clienttype = parseRequiredQueryString(params, "clienttype");
   const bet = parsePositiveQueryNumber(params, "bet");
   const lines = parsePositiveQueryNumber(params, "lines");

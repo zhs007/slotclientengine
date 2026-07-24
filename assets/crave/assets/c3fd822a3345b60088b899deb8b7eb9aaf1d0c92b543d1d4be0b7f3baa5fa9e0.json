@@ -1,0 +1,52 @@
+{
+  "animations": {
+    "Idle": {
+      "bones": {
+        "BN": {
+          "translate": [
+            {}
+          ]
+        }
+      }
+    }
+  },
+  "bones": [
+    {
+      "name": "root"
+    },
+    {
+      "name": "BN",
+      "parent": "root"
+    }
+  ],
+  "skeleton": {
+    "audio": null,
+    "hash": "gC8YBhHLcFw",
+    "height": 200,
+    "images": "./images/",
+    "spine": "4.3.23",
+    "width": 200,
+    "x": -100,
+    "y": -100
+  },
+  "skins": [
+    {
+      "attachments": {
+        "BN": {
+          "BN": {
+            "height": 200,
+            "width": 200
+          }
+        }
+      },
+      "name": "default"
+    }
+  ],
+  "slots": [
+    {
+      "attachment": "BN",
+      "bone": "BN",
+      "name": "BN"
+    }
+  ]
+}

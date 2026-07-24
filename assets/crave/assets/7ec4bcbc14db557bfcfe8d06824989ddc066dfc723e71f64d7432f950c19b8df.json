@@ -1,0 +1,2013 @@
+{
+  "assets": [
+    {
+      "fileHeight": 200,
+      "fileScale": 1,
+      "fileWidth": 200,
+      "height": 200,
+      "id": "asset_image_mr8u0of5_1f",
+      "originalName": "闪光3.png",
+      "path": "3_asset_image_mr8u0of5_1f.png",
+      "type": "image",
+      "width": 200
+    },
+    {
+      "fileHeight": 217,
+      "fileScale": 1,
+      "fileWidth": 217,
+      "height": 217,
+      "id": "asset_image_mra2b5fo_v",
+      "originalName": "闪光2.png",
+      "path": "2_asset_image_mra2b5fo_v.png",
+      "type": "image",
+      "width": 217
+    },
+    {
+      "fileHeight": 50,
+      "fileScale": 1,
+      "fileWidth": 50,
+      "height": 50,
+      "id": "asset_image_mrbqoiso_14",
+      "originalName": "光点1.png",
+      "path": "1_asset_image_mrbqoiso_14.png",
+      "type": "image",
+      "width": 50
+    },
+    {
+      "fileHeight": 61,
+      "fileScale": 1,
+      "fileWidth": 62,
+      "height": 61,
+      "id": "asset_image_mrbrfpft_1m",
+      "originalName": "shine.png",
+      "path": "shine_asset_image_mrbrfpft_1m.png",
+      "type": "image",
+      "width": 62
+    },
+    {
+      "fileHeight": 200,
+      "fileScale": 1,
+      "fileWidth": 200,
+      "height": 200,
+      "id": "asset_image_mrbtoj8d_24",
+      "originalName": "辉光a1.png",
+      "path": "a1_asset_image_mrbtoj8d_24.png",
+      "type": "image",
+      "width": 200
+    },
+    {
+      "fileHeight": 203,
+      "fileScale": 1,
+      "fileWidth": 456,
+      "height": 203,
+      "id": "asset_image_mrn9w17x_u",
+      "originalName": "QQ图片20260708150407.png",
+      "path": "qq_20260708150407_asset_image_mrn9w17x_u.png",
+      "type": "image",
+      "width": 456
+    },
+    {
+      "fileHeight": 231,
+      "fileScale": 1,
+      "fileWidth": 457,
+      "height": 231,
+      "id": "asset_image_mruhr4v9_70",
+      "originalName": "QQ图片20260708150336.png",
+      "path": "qq_20260708150336_asset_image_mruhr4v9_70.png",
+      "type": "image",
+      "width": 457
+    },
+    {
+      "fileHeight": 200,
+      "fileScale": 1,
+      "fileWidth": 200,
+      "height": 200,
+      "id": "asset_image_mrvifkgo_10",
+      "originalName": "闪光3.png",
+      "path": "3_asset_image_mrvifkgo_10.png",
+      "type": "image",
+      "width": 200
+    },
+    {
+      "fileHeight": 88,
+      "fileScale": 1,
+      "fileWidth": 106,
+      "height": 88,
+      "id": "asset_image_mrvj5wui_12",
+      "originalName": "mw_stone4.png",
+      "path": "mw_stone4_asset_image_mrvj5wui_12.png",
+      "type": "image",
+      "width": 106
+    },
+    {
+      "fileHeight": 121,
+      "fileScale": 1,
+      "fileWidth": 143,
+      "height": 121,
+      "id": "asset_image_mrvjlrl5_1c",
+      "originalName": "光效2.png",
+      "path": "2_asset_image_mrvjlrl5_1c.png",
+      "type": "image",
+      "width": 143
+    }
+  ],
+  "editor": {
+    "name": "VNI",
+    "version": "VNI_0.087"
+  },
+  "engineTarget": {
+    "name": "cocos_creator",
+    "version": "3.8.6"
+  },
+  "exportProfile": {
+    "assetScale": 1,
+    "id": "runtime_100",
+    "purpose": "runtime"
+  },
+  "layerGroups": [
+    {
+      "collapsed": false,
+      "id": "group_default",
+      "name": "默认组",
+      "order": 0,
+      "visible": true
+    }
+  ],
+  "layers": [
+    {
+      "animations": [
+        {
+          "duration": 0.4,
+          "enabled": false,
+          "id": "anim_module_mruhv18i_9g",
+          "name": "Scale Out 缩放退出",
+          "params": {
+            "easing": "easeInQuad",
+            "fadeOut": true,
+            "fromScale": 1,
+            "toScale": 0
+          },
+          "seed": 53535,
+          "startTime": 2.95,
+          "type": "scale_out"
+        }
+      ],
+      "assetId": "asset_image_mrbtoj8d_24",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mrvkzu3x_1w",
+              "time": 0.3,
+              "value": 0
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrvl0af1_1y",
+              "time": 0.4,
+              "value": 0.8
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrvkzxm4_1x",
+              "time": 0.8,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrvl0l8d_1z",
+              "time": 2.95,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrvl2mct_20",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mruhty77_92",
+              "time": 0.4,
+              "value": 4
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mruhty77_93",
+              "time": 0.65,
+              "value": 4
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mruhty77_94",
+              "time": 0.9,
+              "value": 4
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mruhty77_95",
+              "time": 1.2,
+              "value": 3.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mruhty77_96",
+              "time": 2.1,
+              "value": 4
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mruhty77_97",
+              "time": 2.9,
+              "value": 3.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrvl4e85_23",
+              "time": 3.1,
+              "value": 3
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrvl2r8d_22",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        },
+        "scaleY": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mruhty77_98",
+              "time": 0.4,
+              "value": 3.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mruhty77_99",
+              "time": 0.65,
+              "value": 3.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mruhty77_9a",
+              "time": 0.9,
+              "value": 3.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mruhty77_9b",
+              "time": 1.2,
+              "value": 2.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mruhty77_9c",
+              "time": 2.1,
+              "value": 3.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mruhty77_9d",
+              "time": 2.9,
+              "value": 2.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrvl4ez1_24",
+              "time": 3.1,
+              "value": 2
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrvl2qil_21",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mr8oyfie_p",
+      "keyframes": [],
+      "locked": true,
+      "name": "背景辉光1.png",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 3,
+        "scaleY": 2.5,
+        "x": 0,
+        "y": 20
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 2.2,
+          "enabled": true,
+          "id": "anim_module_mrvj75ph_14",
+          "name": "Particle Wall 粒子幕墙",
+          "params": {
+            "direction": 0,
+            "easing": "easeOutQuad",
+            "emitterWidth": 200,
+            "endScaleMax": 0.8,
+            "endScaleMin": 1,
+            "fadeOut": true,
+            "gravity": 0,
+            "lifetimeMax": 0.8,
+            "lifetimeMin": 0.5,
+            "size": 65,
+            "spawnRate": 30,
+            "speed": 700,
+            "spreadAngle": 180,
+            "startScaleMax": 1.5,
+            "startScaleMin": 1
+          },
+          "seed": 1785297496723,
+          "startTime": 0.9,
+          "type": "particle_wall"
+        },
+        {
+          "duration": 0.35,
+          "enabled": true,
+          "id": "anim_module_mrvj7fv1_16",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 74772,
+          "startTime": 2.85,
+          "type": "fade"
+        }
+      ],
+      "assetId": "asset_image_mrvj5wui_12",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "normal",
+      "groupId": "group_default",
+      "id": "layer_image_mrvj5wui_13",
+      "keyframes": [],
+      "locked": true,
+      "name": "散落coin大",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.9,
+          "enabled": true,
+          "id": "anim_module_mr8pe93o_v",
+          "name": "Particles 粒子爆发",
+          "params": {
+            "count": 40,
+            "easing": "easeOutQuad",
+            "emissionAngle": 180,
+            "emissionSpreadAngle": 250,
+            "fadeOut": true,
+            "gravity": 200,
+            "randomRotation": true,
+            "randomRotationDegrees": 135,
+            "rotateParticles": true,
+            "size": 60,
+            "speed": 350,
+            "spinSpeed": 1,
+            "spread": 100,
+            "trailCount": 0,
+            "trailFade": 0.5,
+            "trailSpacing": 0.035
+          },
+          "seed": 17972,
+          "startTime": 0.95,
+          "type": "particles"
+        }
+      ],
+      "assetId": "asset_image_mrbqoiso_14",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mr8pdvze_t",
+      "keyframes": [],
+      "locked": true,
+      "name": "碰撞火花喷溅l",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "x": -116,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.9,
+          "enabled": true,
+          "id": "anim_module_mrui4523_9m",
+          "name": "Particles 粒子爆发",
+          "params": {
+            "count": 40,
+            "easing": "easeOutQuad",
+            "emissionAngle": 20,
+            "emissionSpreadAngle": 220,
+            "fadeOut": true,
+            "gravity": 200,
+            "randomRotation": true,
+            "randomRotationDegrees": 135,
+            "rotateParticles": true,
+            "size": 60,
+            "speed": 350,
+            "spinSpeed": 1,
+            "spread": 100,
+            "trailCount": 0,
+            "trailFade": 0.5,
+            "trailSpacing": 0.035
+          },
+          "seed": 17972,
+          "startTime": 0.95,
+          "type": "particles"
+        }
+      ],
+      "assetId": "asset_image_mrbqoiso_14",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mrui4523_9l",
+      "keyframes": [],
+      "locked": true,
+      "name": "碰撞火花喷溅.r",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "x": 150,
+        "y": -16
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [],
+      "assetId": "asset_image_mruhr4v9_70",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_opacity_mruhsr78_71",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_opacity_mruhsr78_72",
+              "time": 0.3,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_opacity_mruhsr78_73",
+              "time": 3.05,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_opacity_mruhsr78_74",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        },
+        "positionX": {
+          "enabled": false,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_positionX_mruhsr78_75",
+              "time": 0.8,
+              "value": 4
+            }
+          ]
+        },
+        "positionY": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "easeInQuad",
+              "id": "basic_positionY_mruhsr78_76",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_positionY_mruhsr78_77",
+              "time": 0.3,
+              "value": 210
+            },
+            {
+              "easing": "linear",
+              "id": "basic_positionY_mruhsr78_78",
+              "time": 0.4,
+              "value": 90
+            },
+            {
+              "easing": "linear",
+              "id": "basic_positionY_mruhsr78_79",
+              "time": 0.5,
+              "value": 100
+            },
+            {
+              "easing": "linear",
+              "id": "basic_positionY_mruhsr78_7a",
+              "time": 0.6,
+              "value": 85
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_positionY_mruhsr78_7b",
+              "time": 0.7,
+              "value": 90
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_positionY_mruhsr78_7c",
+              "time": 0.9,
+              "value": 120
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_positionY_mruhsr78_7d",
+              "time": 1,
+              "value": 90
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_positionY_mruhsr78_7e",
+              "time": 1.15,
+              "value": 100
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_positionY_mruhsr78_7f",
+              "time": 1.9,
+              "value": 130
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_positionY_mruhsr78_7g",
+              "time": 2.9,
+              "value": 100
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_positionY_mruhsr78_7h",
+              "time": 3.05,
+              "value": 130
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_positionY_mruhsr78_7i",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mruhsr78_7j",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_scaleX_mruhsr78_7k",
+              "time": 0.3,
+              "value": 1.2
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mruhsr78_7l",
+              "time": 0.45,
+              "value": 1.2
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_scaleX_mruhsr78_7m",
+              "time": 0.75,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_scaleX_mruhsr78_7n",
+              "time": 0.9,
+              "value": 1.3
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_scaleX_mruhsr78_7o",
+              "time": 1,
+              "value": 0.9
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_scaleX_mruhsr78_7p",
+              "time": 1.15,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mruhsr78_7q",
+              "time": 2.9,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mruhsr78_7r",
+              "time": 3.05,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_scaleX_mruhsr78_7s",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        },
+        "scaleY": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mruhsr78_7t",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_scaleY_mruhsr78_7u",
+              "time": 0.3,
+              "value": 1.2
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mruhsr78_7v",
+              "time": 0.45,
+              "value": 1.2
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_scaleY_mruhsr78_7w",
+              "time": 0.75,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_scaleY_mruhsr78_7x",
+              "time": 0.9,
+              "value": 1.3
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_scaleY_mruhsr78_7y",
+              "time": 1,
+              "value": 0.9
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_scaleY_mruhsr78_7z",
+              "time": 1.15,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mruhsr78_80",
+              "time": 2.9,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mruhsr78_81",
+              "time": 3.05,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_scaleY_mruhsr78_82",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        }
+      },
+      "blendMode": "normal",
+      "groupId": "group_default",
+      "id": "layer_image_mr4s4la3_x",
+      "keyframes": [],
+      "locked": true,
+      "name": "big.png",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [],
+      "assetId": "asset_image_mrn9w17x_u",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_opacity_mruhtal6_83",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_opacity_mruhtal7_84",
+              "time": 0.3,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_opacity_mruhtal7_85",
+              "time": 3.1,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_opacity_mruhtal7_86",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_positionY_mruhtal7_87",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_positionY_mruhtal7_88",
+              "time": 0.3,
+              "value": -210
+            },
+            {
+              "easing": "linear",
+              "id": "basic_positionY_mruhtal7_89",
+              "time": 0.4,
+              "value": -115
+            },
+            {
+              "easing": "linear",
+              "id": "basic_positionY_mruhtal7_8a",
+              "time": 0.5,
+              "value": -125
+            },
+            {
+              "easing": "linear",
+              "id": "basic_positionY_mruhtal7_8b",
+              "time": 0.6,
+              "value": -120
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_positionY_mruhtal7_8c",
+              "time": 0.7,
+              "value": -125
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_positionY_mruhtal7_8d",
+              "time": 0.95,
+              "value": -120
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_positionY_mruhtal7_8e",
+              "time": 1.05,
+              "value": -80
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_positionY_mruhtal7_8f",
+              "time": 1.2,
+              "value": -85
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_positionY_mruhtal7_8g",
+              "time": 2.2,
+              "value": -55
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_positionY_mruhtal7_8h",
+              "time": 2.95,
+              "value": -85
+            },
+            {
+              "easing": "easeInOutQuad",
+              "id": "basic_positionY_mruhtal7_8i",
+              "time": 3.1,
+              "value": -110
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_positionY_mruhtal7_8j",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mruhtal7_8k",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_scaleX_mruhtal7_8l",
+              "time": 0.3,
+              "value": 1.2
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mruhtal7_8m",
+              "time": 0.75,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_scaleX_mruhtal7_8n",
+              "time": 0.95,
+              "value": 1.3
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_scaleX_mruhtal7_8o",
+              "time": 1.05,
+              "value": 0.9
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_scaleX_mruhtal7_8p",
+              "time": 1.2,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mruhtal7_8q",
+              "time": 2.95,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mruhtal7_8r",
+              "time": 3.1,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_scaleX_mruhtal7_8s",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        },
+        "scaleY": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mruhtal7_8t",
+              "time": 0,
+              "value": 0
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_scaleY_mruhtal7_8u",
+              "time": 0.3,
+              "value": 1.2
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mruhtal7_8v",
+              "time": 0.75,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_scaleY_mruhtal7_8w",
+              "time": 0.95,
+              "value": 1.3
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_scaleY_mruhtal7_8x",
+              "time": 1.05,
+              "value": 0.9
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_scaleY_mruhtal7_8y",
+              "time": 1.2,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mruhtal7_8z",
+              "time": 2.95,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mruhtal7_90",
+              "time": 3.1,
+              "value": 1.2
+            },
+            {
+              "easing": "easeInQuad",
+              "id": "basic_scaleY_mruhtal7_91",
+              "time": 3.35,
+              "value": 0
+            }
+          ]
+        }
+      },
+      "blendMode": "normal",
+      "groupId": "group_default",
+      "id": "layer_image_mr4s4o3o_z",
+      "keyframes": [],
+      "locked": true,
+      "name": "win2.png",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.65,
+          "enabled": true,
+          "id": "anim_module_mrvjiu1x_19",
+          "name": "Move 位移",
+          "params": {
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "linear",
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 1000,
+            "toY": 0
+          },
+          "seed": 1784925874677,
+          "startTime": 1.8,
+          "type": "move"
+        }
+      ],
+      "assetId": "asset_image_mrvjlrl5_1c",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "normal",
+      "groupId": "group_default",
+      "id": "layer_image_mrvji2du_18",
+      "keyframes": [],
+      "locked": true,
+      "mask": {
+        "compositeMode": "precompose_light_alpha",
+        "enabled": true,
+        "mode": "alpha",
+        "showSourceLayer": true,
+        "sourceLayerId": "layer_image_mr4s4o3o_z"
+      },
+      "name": "win扫光",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 3,
+        "scaleY": 3,
+        "x": -300,
+        "y": -80
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.65,
+          "enabled": true,
+          "id": "anim_module_mrvjm09x_1e",
+          "name": "Move 位移",
+          "params": {
+            "baseX": 0,
+            "baseY": 0,
+            "easing": "linear",
+            "fromX": 0,
+            "fromY": 0,
+            "toX": 1000,
+            "toY": 0
+          },
+          "seed": 1784925874677,
+          "startTime": 1.8,
+          "type": "move"
+        }
+      ],
+      "assetId": "asset_image_mrvjlrl5_1c",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "normal",
+      "groupId": "group_default",
+      "id": "layer_image_mrvjm09x_1d",
+      "keyframes": [],
+      "locked": true,
+      "mask": {
+        "compositeMode": "precompose_light_alpha",
+        "enabled": true,
+        "mode": "alpha",
+        "showSourceLayer": true,
+        "sourceLayerId": "layer_image_mr4s4la3_x"
+      },
+      "name": "big扫光",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 3,
+        "scaleY": 3,
+        "x": -300,
+        "y": 120
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [],
+      "assetId": "asset_image_mrvifkgo_10",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_opacity_mrvi6c92_o",
+              "time": 2.95,
+              "value": 0
+            },
+            {
+              "easing": "linear",
+              "id": "basic_opacity_mrvi6c92_p",
+              "time": 3.2,
+              "value": 1
+            },
+            {
+              "easing": "easeOutQuad",
+              "id": "basic_opacity_mrvi6c92_q",
+              "time": 3.45,
+              "value": 0
+            }
+          ]
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mrvi6c92_r",
+              "time": 2.95,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mrvi6c92_s",
+              "time": 3.2,
+              "value": 2.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleX_mrvi6c92_t",
+              "time": 3.45,
+              "value": 4
+            }
+          ]
+        },
+        "scaleY": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mrvi6c92_u",
+              "time": 2.95,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mrvi6c92_v",
+              "time": 3.2,
+              "value": 3.5
+            },
+            {
+              "easing": "linear",
+              "id": "basic_scaleY_mrvi6c92_w",
+              "time": 3.45,
+              "value": 1
+            }
+          ]
+        }
+      },
+      "blendMode": "normal",
+      "groupId": "group_default",
+      "id": "layer_image_mrvi5hqq_n",
+      "keyframes": [],
+      "locked": true,
+      "name": "消失闪光",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.15,
+          "enabled": true,
+          "id": "anim_module_mruifphq_9o",
+          "name": "Idle 待机",
+          "params": {
+            "easing": "linear"
+          },
+          "seed": 1784743930824,
+          "startTime": 0.4,
+          "type": "idle"
+        },
+        {
+          "duration": 0.15,
+          "enabled": true,
+          "id": "anim_module_mr8tfjkg_16",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 0.7,
+            "toOpacity": 0
+          },
+          "seed": 96656,
+          "startTime": 0.45,
+          "type": "fade"
+        }
+      ],
+      "assetId": "asset_image_mr8u0of5_1f",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mr8te7o3_14",
+      "keyframes": [],
+      "locked": true,
+      "mask": {
+        "compositeMode": "precompose_light_alpha",
+        "enabled": false,
+        "mode": "alpha",
+        "showSourceLayer": true,
+        "sourceLayerId": null
+      },
+      "name": "碰撞闪光3.png",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 3,
+        "scaleY": 2.5,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 1.85,
+          "enabled": true,
+          "id": "anim_module_mra27hqa_u",
+          "name": "Particle Twinkle 随机闪烁粒子",
+          "params": {
+            "batchMax": 4,
+            "batchMin": 1,
+            "count": 35,
+            "easing": "linear",
+            "radius": 250,
+            "size": 100,
+            "spawnInterval": 0.5,
+            "twinkleDuration": 1
+          },
+          "seed": 3746,
+          "startTime": 1.1,
+          "type": "particle_twinkle"
+        },
+        {
+          "duration": 0.25,
+          "enabled": true,
+          "id": "anim_module_mruihky7_9p",
+          "name": "Fade 淡入淡出",
+          "params": {
+            "easing": "linear",
+            "fromOpacity": 1,
+            "toOpacity": 0
+          },
+          "seed": 1784444391468,
+          "startTime": 2.8,
+          "type": "fade"
+        }
+      ],
+      "assetId": "asset_image_mra2b5fo_v",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mra26z3m_s",
+      "keyframes": [],
+      "locked": true,
+      "mask": {
+        "compositeMode": "legacy_alpha",
+        "enabled": false,
+        "mode": "alpha",
+        "showSourceLayer": true,
+        "sourceLayerId": null
+      },
+      "name": "大闪光2.png",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 0,
+        "scaleY": 0,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.4,
+          "enabled": true,
+          "id": "anim_module_mrbrd48u_1l",
+          "name": "Slide Out 滑出",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeOut": true,
+            "fromX": 210,
+            "fromY": 150,
+            "toX": 450,
+            "toY": 280
+          },
+          "seed": 22782,
+          "startTime": 1.3,
+          "type": "slide_out"
+        },
+        {
+          "duration": 0.55,
+          "enabled": true,
+          "id": "anim_module_mrbrw46d_1u",
+          "name": "Slide Out 滑出",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeOut": true,
+            "fromX": -250,
+            "fromY": -300,
+            "toX": 100,
+            "toY": -380
+          },
+          "seed": 22782,
+          "startTime": 1.65,
+          "type": "slide_out"
+        },
+        {
+          "duration": 0.5,
+          "enabled": true,
+          "id": "anim_module_mrbs25p9_1v",
+          "name": "Slide Out 滑出",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeOut": true,
+            "fromX": -350,
+            "fromY": -20,
+            "toX": 0,
+            "toY": -150
+          },
+          "seed": 22782,
+          "startTime": 2.15,
+          "type": "slide_out"
+        }
+      ],
+      "assetId": "asset_image_mrbrfpft_1m",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mrbrccc0_1j",
+      "keyframes": [],
+      "locked": true,
+      "name": "星星闪光1",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 30,
+        "scaleX": 1.5,
+        "scaleY": 1.5,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.45,
+          "enabled": true,
+          "id": "anim_module_mrbrgr3h_1o",
+          "name": "Slide Out 滑出",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeOut": true,
+            "fromX": -200,
+            "fromY": -50,
+            "toX": -500,
+            "toY": -150
+          },
+          "seed": 22782,
+          "startTime": 1.2,
+          "type": "slide_out"
+        },
+        {
+          "duration": 0.55,
+          "enabled": true,
+          "id": "anim_module_mrbri5x9_1p",
+          "name": "Slide Out 滑出",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeOut": true,
+            "fromX": 270,
+            "fromY": 150,
+            "toX": -20,
+            "toY": 200
+          },
+          "seed": 22782,
+          "startTime": 1.85,
+          "type": "slide_out"
+        },
+        {
+          "duration": 0.55,
+          "enabled": true,
+          "id": "anim_module_mrbrso5x_1t",
+          "name": "Slide Out 滑出",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeOut": true,
+            "fromX": 300,
+            "fromY": 0,
+            "toX": -50,
+            "toY": 100
+          },
+          "seed": 22782,
+          "startTime": 2.25,
+          "type": "slide_out"
+        }
+      ],
+      "assetId": "asset_image_mrbrfpft_1m",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mrbrgr3h_1n",
+      "keyframes": [],
+      "locked": true,
+      "name": "星星闪光2",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 80,
+        "scaleX": 1.5,
+        "scaleY": 1.5,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.4,
+          "enabled": true,
+          "id": "anim_module_mrbsrdy6_1x",
+          "name": "Slide Out 滑出",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeOut": true,
+            "fromX": -200,
+            "fromY": 100,
+            "toX": -500,
+            "toY": -50
+          },
+          "seed": 22782,
+          "startTime": 1.6,
+          "type": "slide_out"
+        },
+        {
+          "duration": 0.55,
+          "enabled": true,
+          "id": "anim_module_mrbsrdy6_1y",
+          "name": "Slide Out 滑出",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeOut": true,
+            "fromX": 300,
+            "fromY": -50,
+            "toX": -20,
+            "toY": -250
+          },
+          "seed": 22782,
+          "startTime": 2.25,
+          "type": "slide_out"
+        }
+      ],
+      "assetId": "asset_image_mrbrfpft_1m",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mrbsrdy6_1w",
+      "keyframes": [],
+      "locked": true,
+      "name": "星星闪光3",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 80,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [
+        {
+          "duration": 0.45,
+          "enabled": true,
+          "id": "anim_module_mrbtfhhr_21",
+          "name": "Slide Out 滑出",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeOut": true,
+            "fromX": 220,
+            "fromY": 150,
+            "toX": 500,
+            "toY": 200
+          },
+          "seed": 22782,
+          "startTime": 1.35,
+          "type": "slide_out"
+        },
+        {
+          "duration": 0.55,
+          "enabled": true,
+          "id": "anim_module_mrbtfhhr_22",
+          "name": "Slide Out 滑出",
+          "params": {
+            "easing": "easeOutQuad",
+            "fadeOut": true,
+            "fromX": -300,
+            "fromY": -200,
+            "toX": 50,
+            "toY": -230
+          },
+          "seed": 22782,
+          "startTime": 2,
+          "type": "slide_out"
+        }
+      ],
+      "assetId": "asset_image_mrbrfpft_1m",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": false,
+          "points": []
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleY": {
+          "enabled": false,
+          "points": []
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mrbtfhhq_20",
+      "keyframes": [],
+      "locked": true,
+      "name": "星星闪光4",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 80,
+        "scaleX": 1,
+        "scaleY": 1,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    },
+    {
+      "animations": [],
+      "assetId": "asset_image_mrbtoj8d_24",
+      "basicAnimation": {
+        "opacity": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mrvhiwa8_e",
+              "time": 0.35,
+              "value": 0
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrvhiti8_d",
+              "time": 0.4,
+              "value": 1
+            },
+            {
+              "easing": "linear",
+              "id": "basic_point_mrvhmxfk_l",
+              "time": 0.55,
+              "value": 0
+            }
+          ]
+        },
+        "positionX": {
+          "enabled": false,
+          "points": []
+        },
+        "positionY": {
+          "enabled": false,
+          "points": []
+        },
+        "rotation": {
+          "enabled": false,
+          "points": []
+        },
+        "scaleX": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mrvhm6go_f",
+              "time": 0.4,
+              "value": 4
+            }
+          ]
+        },
+        "scaleY": {
+          "enabled": true,
+          "points": [
+            {
+              "easing": "linear",
+              "id": "basic_point_mrvhm6vk_g",
+              "time": 0.4,
+              "value": 3
+            }
+          ]
+        }
+      },
+      "blendMode": "add",
+      "groupId": "group_default",
+      "id": "layer_image_mr8whgiu_1s",
+      "keyframes": [],
+      "locked": true,
+      "name": "辉光增强.png",
+      "opacity": 1,
+      "parentId": null,
+      "transform": {
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "rotation": 0,
+        "scaleX": 5,
+        "scaleY": 4,
+        "x": 0,
+        "y": 0
+      },
+      "type": "image",
+      "visible": true
+    }
+  ],
+  "maskCompositeMode": "precompose_light_alpha",
+  "name": "big win0721",
+  "particles": [],
+  "schemaVersion": "VNI_0.087",
+  "stage": {
+    "backgroundColor": "#0a0a0a",
+    "coordinate": "center",
+    "duration": 3.55,
+    "height": 1600,
+    "width": 900
+  }
+}

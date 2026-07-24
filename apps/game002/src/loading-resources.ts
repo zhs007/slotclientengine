@@ -7,9 +7,12 @@ import game002SpineTextureUrl from "../../../assets/game002-s3/Symbol.png?url";
 import game002SymbolManifestUrl from "../../../assets/game002-s3/symbol-state-textures.manifest.json?url";
 import game002WinAmountManifestUrl from "../../../assets/game002-s3/win-amount/win-amount.manifest.json?url";
 import type { GameLoadingResource } from "@slotclientengine/gameloading";
+import type { Game002SkinId } from "./skin-id.js";
+import { craveSceneLayoutPhysicalResourceUrls } from "./generated/crave-layout-resources.generated.js";
 import { symbolValueLoadingResources } from "./generated/symbol-value-resources.generated.js";
 
 export const GAME002_RUNTIME_MODULE_RESOURCE_ID = "game002-runtime-module";
+export const GAME002_CRAVE_RESOURCE_ID_PREFIX = "game002-crave-package:";
 
 const normalModules = import.meta.glob(
   "../../../assets/game002-s3/{WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN}.png",
@@ -68,6 +71,7 @@ export interface Game002EnteredGameLike {
 export interface Game002RuntimeModule {
   finalizeGame002At99(options: {
     readonly readinessResult: import("./game002-bootstrap.js").Game002ReadinessResult;
+    readonly loadedResources?: ReadonlyMap<string, unknown>;
     readonly signal: AbortSignal;
   }): Promise<Game002PreparedLoadingSessionLike>;
   enterGame002(options: {
@@ -111,15 +115,39 @@ export function deduplicateGame002LoadingResourceUrls(
   return Object.freeze(resources);
 }
 
-export function createGame002LoadingResources(): readonly GameLoadingResource[] {
+export function createGame002LoadingResources(
+  skin: Game002SkinId = "1",
+): readonly GameLoadingResource[] {
+  const skinResources =
+    skin === "1"
+      ? GAME002_LOADING_RESOURCE_URLS
+      : createCraveLoadingResources();
   return Object.freeze([
-    ...GAME002_LOADING_RESOURCE_URLS,
+    ...skinResources,
     Object.freeze({
       id: GAME002_RUNTIME_MODULE_RESOURCE_ID,
       weight: 10,
       load: () => import("./game-entry.js"),
     } satisfies GameLoadingResource),
   ]);
+}
+
+export function readGame002CravePackageFiles(
+  loadedResources: ReadonlyMap<string, unknown>,
+): ReadonlyMap<string, Uint8Array> {
+  const files = new Map<string, Uint8Array>();
+  for (const path of Object.keys(craveSceneLayoutPhysicalResourceUrls)) {
+    const value = loadedResources.get(
+      `${GAME002_CRAVE_RESOURCE_ID_PREFIX}${path}`,
+    );
+    if (!(value instanceof ArrayBuffer)) {
+      throw new Error(
+        `game002 Crave package resource "${path}" was not loaded.`,
+      );
+    }
+    files.set(path, new Uint8Array(value.slice(0)));
+  }
+  return files;
 }
 
 export function readGame002RuntimeModule(
@@ -237,6 +265,30 @@ function createLoadingResourceUrls(): readonly GameLoadingResource[] {
       withGame002PixiTextureLoader,
     ),
   );
+}
+
+function createCraveLoadingResources(): readonly GameLoadingResource[] {
+  const packageResources = Object.entries(
+    craveSceneLayoutPhysicalResourceUrls,
+  ).map(([path, url]) =>
+    Object.freeze({
+      id: `${GAME002_CRAVE_RESOURCE_ID_PREFIX}${path}`,
+      url,
+      kind: "binary" as const,
+    }),
+  );
+  const presentationExtensions = GAME002_LOADING_RESOURCE_URLS.filter(
+    (resource) =>
+      resource.id === "game002-symbol-spine-atlas" ||
+      resource.id === "game002-symbol-spine-texture" ||
+      resource.id.startsWith("game002-reel-effect-spine-skeletons:"),
+  );
+  if (presentationExtensions.length !== 4) {
+    throw new Error(
+      "game002 Crave presentation extension must contain Symbol atlas/texture and Nearwin1/2 skeletons.",
+    );
+  }
+  return Object.freeze([...packageResources, ...presentationExtensions]);
 }
 
 function withGame002PixiTextureLoader(

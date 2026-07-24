@@ -86,6 +86,8 @@ export const GAME002_GRID_LAYOUT = Object.freeze({
   boardFrame: GAME002_BOARD_FRAME,
   cellWidth: GAME002_CELL_SIZE,
   cellHeight: GAME002_CELL_SIZE,
+  columnGap: 0,
+  rowGap: 0,
 }) satisfies Game002GridLayout;
 
 export const GAME002_FOCUS_REGION = GAME002_BACKGROUND_MANIFEST.adaptation
@@ -114,6 +116,8 @@ export interface Game002GridLayout {
   readonly boardFrame: Rect;
   readonly cellWidth: number;
   readonly cellHeight: number;
+  readonly columnGap: number;
+  readonly rowGap: number;
 }
 
 export interface Game002LayoutOptions {
@@ -216,6 +220,8 @@ export function validateGame002GridLayout(
     GAME002_ART_SIZE,
     gridLayout.cellWidth,
     gridLayout.cellHeight,
+    gridLayout.columnGap,
+    gridLayout.rowGap,
   );
 }
 
@@ -251,6 +257,8 @@ export function validateGame002BoardFrame(
   stage: typeof GAME002_ART_SIZE = GAME002_ART_SIZE,
   cellWidth = GAME002_CELL_SIZE,
   cellHeight = GAME002_CELL_SIZE,
+  columnGap = 0,
+  rowGap = 0,
 ): void {
   if (!Number.isFinite(frame.x) || frame.x < 0) {
     throw new Error("game002 board frame x must be a non-negative number.");
@@ -270,11 +278,31 @@ export function validateGame002BoardFrame(
   if (!Number.isFinite(cellHeight) || cellHeight <= 0) {
     throw new Error("game002 cell height must be a positive number.");
   }
-  if (!numbersClose(frame.width, GAME002_REEL_COUNT * cellWidth)) {
-    throw new Error("game002 board width must be reelCount * cellWidth.");
+  if (!Number.isFinite(columnGap) || columnGap < 0) {
+    throw new Error("game002 column gap must be a non-negative number.");
   }
-  if (!numbersClose(frame.height, GAME002_VISIBLE_ROWS * cellHeight)) {
-    throw new Error("game002 board height must be visibleRows * cellHeight.");
+  if (!Number.isFinite(rowGap) || rowGap < 0) {
+    throw new Error("game002 row gap must be a non-negative number.");
+  }
+  if (
+    !numbersClose(
+      frame.width,
+      GAME002_REEL_COUNT * cellWidth + (GAME002_REEL_COUNT - 1) * columnGap,
+    )
+  ) {
+    throw new Error(
+      "game002 board width must match reelCount, cellWidth and columnGap.",
+    );
+  }
+  if (
+    !numbersClose(
+      frame.height,
+      GAME002_VISIBLE_ROWS * cellHeight + (GAME002_VISIBLE_ROWS - 1) * rowGap,
+    )
+  ) {
+    throw new Error(
+      "game002 board height must match visibleRows, cellHeight and rowGap.",
+    );
   }
   if (
     frame.x + frame.width > stage.width ||
@@ -293,8 +321,8 @@ export function createGame002ReelLayout(
     visibleRows: GAME002_VISIBLE_ROWS,
     cellWidth: gridLayout.cellWidth,
     cellHeight: gridLayout.cellHeight,
-    columnGap: 0,
-    rowGap: 0,
+    columnGap: gridLayout.columnGap,
+    rowGap: gridLayout.rowGap,
   });
 }
 
@@ -307,6 +335,8 @@ export function createGame002ReelLayerLayout(
     gameLayout.stage,
     layout.cellWidth,
     layout.cellHeight,
+    layout.columnGap,
+    layout.rowGap,
   );
   if (layout.reelCount !== GAME002_REEL_COUNT) {
     throw new Error("game002 reel layout reelCount must be 6.");
@@ -317,22 +347,17 @@ export function createGame002ReelLayerLayout(
   if (
     !numbersClose(
       gameLayout.boardFrame.width,
-      layout.reelCount * layout.cellWidth,
+      layout.reelCount * layout.cellWidth +
+        (layout.reelCount - 1) * layout.columnGap,
     ) ||
     !numbersClose(
       gameLayout.boardFrame.height,
-      layout.visibleRows * layout.cellHeight,
+      layout.visibleRows * layout.cellHeight +
+        (layout.visibleRows - 1) * layout.rowGap,
     )
   ) {
     throw new Error("game002 reel layout cell size must match board frame.");
   }
-  if (layout.columnGap !== 0) {
-    throw new Error("game002 reel layout columnGap must be 0.");
-  }
-  if (layout.rowGap !== 0) {
-    throw new Error("game002 reel layout rowGap must be 0.");
-  }
-
   return Object.freeze({
     rawReelsContentWidth:
       layout.reelCount * layout.cellWidth +

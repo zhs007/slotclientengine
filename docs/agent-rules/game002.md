@@ -4,11 +4,19 @@
 
 ## 固定入口和资源
 
-- 当前只支持 `skin=1`，固定映射：
-  - `assets/game002-s3/background.manifest.json` 及 BG Spine 资源；
-  - `assets/game002-s3` symbols/reel/win-amount；
-  - `assets/gamecfg002/gameconfig.json`。
-- `skin=2|3|4|5` 显式失败，不保留 alias、默认值或打包入口。
+- 只支持严格的 `skin=1|2`：
+  - `skin=1` 固定映射：
+    - `assets/game002-s3/background.manifest.json` 及 BG Spine 资源；
+    - `assets/game002-s3` symbols/reel/win-amount；
+    - `assets/gamecfg002/gameconfig.json`。
+  - `skin=2` 固定映射 `assets/crave` 的完整 mapped scene-layout package；layout、
+    background、focus、grid geometry、symbols、公开本地轮带和 award popup 只从该包
+    的 manifest/map 取得。
+- 两个 skin 共用同一 game002 round target、期待/cascade/WL/CN/summary/cleanup
+  policy；Game Viewer 的简化流程不是 game002 的行为来源。`skin=3|4|5`、缺失、
+  重复、`01` 和未知值显式失败，不保留 alias 或默认值。
+- `assets/game002-s3/reel.manifest.json` 的 Nearwin1/2 是两个 skin 共用的显式
+  game002 presentation extension，不伪装成 Crave layout closure。
 - live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`；URL 不接受 `serverUrl`，旧参数也显式失败。
 - URL 必须显式提供 `lines=30`，其它值在 loading 99% 配置解析阶段失败。
 - 首屏遵守 `docs/agent-rules/loading-ui.md`；99% 准备 live session，100% 后创建 framework/Pixi，并复用 session。
@@ -24,7 +32,9 @@
 ## CN value presentation
 
 - `CN` 不配置顶层 `normal/spinBlur/disabled`；normal art 只来自 resolved tier Spine。
-- 当前 CN text 使用 `image-string`，每个 tier 显式引用 `cn-digits` dependency、真实 `Num` slot、anchor/transform/followSlotColor。
+- CN text 按 active symbols manifest 使用 `image-string`：skin1 绑定真实 `Num`
+  slot，skin2 绑定 Crave 的真实 `coin` slot；tier/resource/glyph 均不得跨 skin
+  复用或回退。
 - glyph 集、slot、resource、binding、tier 和尺寸均严格校验。完整数值图片与 ImgNumber 互斥，不回退字体、旧完整图片或 fixture glyph。
 - explicit reel state texture（如 spinBlur/disabled）优先于 normal active Spine。tier player 异步 init 不得把当前 reel texture 隐藏为空格；回 normal/activeSpine 后再显示同一 player。
 - normal 与 loop 使用同一 resource/playback 时保持时间轴 continuity，不 reset/replay，并同步新的 semantic playback 以报告真实 loop completion。

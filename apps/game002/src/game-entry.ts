@@ -5,7 +5,6 @@ import {
 import "@slotclientengine/gameframeworks/styles.css";
 import { createLeoSlotGameUiFactory } from "@slotclientengine/game-ui-leo";
 import "@slotclientengine/game-ui-leo/styles.css";
-import type { SymbolValuePresentationResourceBundle } from "@slotclientengine/rendercore";
 import { createGame002Adapter } from "./game-adapter.js";
 import type { Game002ReadinessResult } from "./game002-bootstrap.js";
 import {
@@ -17,13 +16,15 @@ import { createGame002LeoUiLabels } from "./platform-ui.js";
 import {
   prepareGame002SkinConfig,
   type Game002SkinConfig,
+  type Game002SkinResourceOwner,
 } from "./skin-config.js";
+import { readGame002CravePackageFiles } from "./loading-resources.js";
 import "./styles.css";
 
 export interface Game002PreparedLoadingState {
   readonly readiness: Game002ReadinessResult;
   readonly skin: Game002SkinConfig;
-  readonly valuePresentationResourceBundle: SymbolValuePresentationResourceBundle;
+  readonly valuePresentationResourceBundle: Game002SkinResourceOwner;
 }
 
 export interface Game002EnteredGame {
@@ -33,12 +34,20 @@ export interface Game002EnteredGame {
 
 export async function finalizeGame002At99(options: {
   readonly readinessResult: Game002ReadinessResult;
+  readonly loadedResources?: ReadonlyMap<string, unknown>;
   readonly signal: AbortSignal;
 }): Promise<Game002PreparedLoadingState> {
   try {
     if (options.signal.aborted) throw createAbortError();
     const skinResult = await prepareGame002SkinConfig(
       options.readinessResult.config.skin,
+      options.readinessResult.config.skin === "2"
+        ? {
+            craveFiles: readGame002CravePackageFiles(
+              options.loadedResources ?? new Map(),
+            ),
+          }
+        : {},
     );
     if (options.signal.aborted) {
       try {

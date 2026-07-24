@@ -8,6 +8,10 @@
 - `packages/logiccore` 只拥有通用 server round/component/result/otherScenes 解析、索引校验、strict profile 和不可变 execution plan；业务 component、symbol 和金额语义由 app 注入。
 - 所有配置驱动 round 必须在任何画面 mutation 前完整编译。component role、remove/drop/value/sequential companion policy 只能来自 strict versioned profile，并按 active symbol package 大小写精确校验。
 - `packages/rendercore` 的 capability-driven coordinator 是 standard/grid-cell、base/cascade 的共享编排入口，负责 initial、win、remove、dropdown、refill、sequential collect、completion 和 cleanup 边界。
+- symbol package 到 reel registry 的 catalog/value-controller 适配属于 rendercore；
+  game app 不从 package bytes 重建 asset 表。layout/background/popup 与 app-owned reel
+  组合时使用 rendercore presentation surface，不复制 scene-layout visibility、placement
+  或 popup lifecycle。
 - 游戏 app 只保留业务 component/value/result resolver、formatter、layout、anticipation 和 typed extension；不得复制 Pixi、Spine、reel、cascade 或 popup 状态机。
 
 ## Reel 与 server 数据边界

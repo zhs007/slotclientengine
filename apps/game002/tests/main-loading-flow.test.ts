@@ -58,6 +58,7 @@ describe("game002 main loading host flow", () => {
   });
 
   it("does not show or enter the game before the 99/100 percent callbacks", async () => {
+    window.history.replaceState({}, "", "/?skin=1");
     document.body.innerHTML = '<div id="app"></div>';
     const loadingHandle = {
       loadedResources: new Map<string, unknown>(),
@@ -96,11 +97,12 @@ describe("game002 main loading host flow", () => {
     expect(mainMocks.createLeoGameLoadingUi).toHaveBeenCalledOnce();
     expect(captured.ui).toBeDefined();
     expect(loadingHandle.start).toHaveBeenCalledOnce();
+    expect(mainMocks.createGame002LoadingResources).toHaveBeenCalledWith("1");
 
     const signal = new AbortController().signal;
     await captured.readiness.start({ signal });
     expect(mainMocks.startGame002Readiness).toHaveBeenCalledWith({
-      search: "",
+      search: "?skin=1",
       signal,
     });
 
@@ -111,6 +113,7 @@ describe("game002 main loading host flow", () => {
     });
     expect(runtimeModule.finalizeGame002At99).toHaveBeenCalledWith({
       readinessResult,
+      loadedResources: new Map(),
       signal,
     });
     expect(runtimeModule.enterGame002).not.toHaveBeenCalled();
@@ -134,6 +137,7 @@ describe("game002 main loading host flow", () => {
 
   it("rehides and clears the game host when enter fails", async () => {
     vi.resetModules();
+    window.history.replaceState({}, "", "/?skin=1");
     document.body.innerHTML = '<div id="app"></div>';
     let loadingOptions: CapturedLoadingOptions | undefined;
     mainMocks.createGameLoading.mockImplementation((options) => {

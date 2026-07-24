@@ -6,10 +6,10 @@ import {
 } from "@slotclientengine/rendercore";
 import {
   getGame002SkinConfig,
-  type Game002SkinConfig,
+  type Game002Skin1Config,
 } from "../src/skin-config.js";
 
-export function getTestGame002SkinConfig(): Game002SkinConfig {
+export function getTestGame002SkinConfig(): Game002Skin1Config {
   const skin = getGame002SkinConfig("1");
   return Object.freeze({
     ...skin,

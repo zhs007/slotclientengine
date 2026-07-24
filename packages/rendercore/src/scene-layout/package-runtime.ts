@@ -12,14 +12,10 @@ import {
   createReelLayout,
   createReelSpinPlan,
   createShuffledGridCellReelOffsetMatrix,
-  type ReelSymbolRegistry,
-  type ReelSymbolRegistryEntry,
-  type ReelSymbolRegistryValidation,
   type SymbolPresentationValueMatrix,
 } from "../reel/index.js";
 import {
-  createSymbolPackageValueControllerFactory,
-  type RenderSymbol,
+  createSymbolPackageReelRegistryFromCatalog,
   type SymbolCatalogModel,
   type SymbolPackageResource,
 } from "../symbol/index.js";
@@ -1212,7 +1208,10 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
   ): ReelPresentation {
     const geometry = this.#resource.manifest.reels.main!;
     const reels = resource.gameConfig.getReels(binding.reelSet);
-    const registry = createCatalogRegistry(resource, catalog);
+    const registry = createSymbolPackageReelRegistryFromCatalog(
+      resource,
+      catalog,
+    );
     if (binding.renderMode === "standard") {
       return new RenderReelSet({
         reels,
@@ -1389,50 +1388,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     if (this.#destroyed)
       throw new SceneLayoutError("Scene layout package runtime was destroyed.");
   }
-}
-
-function createCatalogRegistry(
-  resource: SymbolPackageResource,
-  catalog: SymbolCatalogModel,
-): ReelSymbolRegistry {
-  const entries = resource.displaySymbols.map((symbol) => {
-    const code = resource.gameConfig.getSymbolCode(symbol);
-    if (code === undefined)
-      throw new SceneLayoutError(
-        `Display symbol "${symbol}" has no paytable code.`,
-      );
-    return Object.freeze({ code, symbol, kind: "textured" as const });
-  });
-  const byCode = new Map(entries.map((entry) => [entry.code, entry]));
-  const bySymbol = new Map(entries.map((entry) => [entry.symbol, entry]));
-  const validation: ReelSymbolRegistryValidation = Object.freeze({
-    texturedSymbols: Object.freeze(entries.map((entry) => entry.symbol)),
-    configuredEmptySymbols: Object.freeze([]),
-    configuredEmptySymbolsWithAssets: Object.freeze([]),
-    missingAssetEmptySymbols: Object.freeze([]),
-    ignoredAssetsWithoutPaytable: Object.freeze([]),
-  });
-  const requireEntry = <T>(entry: T | undefined, label: string): T => {
-    if (!entry) throw new SceneLayoutError(`Unknown display symbol ${label}.`);
-    return entry;
-  };
-  return Object.freeze({
-    getValidation: () => validation,
-    getEntryByCode: (code: number): ReelSymbolRegistryEntry =>
-      requireEntry(byCode.get(code), `code ${code}`),
-    getEntryBySymbol: (symbol: string): ReelSymbolRegistryEntry =>
-      requireEntry(bySymbol.get(symbol), `"${symbol}"`),
-    getCellSize: () => resource.packageManifest.cellSize,
-    createRenderSymbolByCode(code: number): RenderSymbol {
-      const entry = requireEntry(byCode.get(code), `code ${code}`);
-      return catalog.createRenderSymbol(entry.symbol, {
-        valueControllerFactory: createSymbolPackageValueControllerFactory(
-          resource,
-          entry.symbol,
-        ),
-      });
-    },
-  });
 }
 
 function validateScene(
