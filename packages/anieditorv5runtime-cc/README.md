@@ -21,7 +21,7 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - 中心坐标：Cocos 节点位置直接使用 `transform.x/y`，不做 Pixi 的左上角坐标转换
 - 负 `scaleX/scaleY` 镜像
 - `opacity`、`visible`、`rotation`、锚点
-- 已知 V5G blend mode：`normal`、`add`、`screen`、`multiply`、`lighten` 会被解析、接受并写入 Cocos Sprite / material pass blend state
+- 已知 V5G blend mode：`normal`、`add`、`screen`、`multiply`、`lighten` 会被解析和接受；`screen` 使用随 standalone 交付的 alpha-correct Effect，其余模式使用 Cocos Sprite / material pass blend state
 - basic animation 六轨：`opacity/positionX/positionY/scaleX/scaleY/rotation`
 - `scale_up`、`scale_down`、`fade`、新/legacy `rotate`、`move`、`multi_move`
 - `slide_in`、`slide_out`、`bounce_in`、`pulse`、`float`、`swing`
@@ -523,24 +523,27 @@ import {
 
 runtime 不再创建 `V5G Background`，也不使用 Cocos `Graphics` 绘制 `project.stage.backgroundColor`。stage 背景属于编辑器预览或宿主场景职责；宿主可以在 Canvas、父节点、UI 层或业务场景中自行放置背景。runtime stage 下只创建 `V5G Content` 和 `V5G Particles`，其中 `V5G Particles` 当前保留为空占位，真实粒子节点挂在对应图层后面的 `<layer name> Particles` 容器下；safe glow、chaser light 和 text binding 分别挂在对应图层的专用容器下。
 
-runtime 当前使用 Cocos Creator 3.8.6 原生 `Sprite.srcBlendFactor` / `dstBlendFactor` 和 material pass `blendState` 应用 V5G blend mode，不需要额外 shader / Effect 资产：
+runtime 使用 Cocos Creator 3.8.6 Sprite/material 实现 V5G blend mode：
 
 - `normal`：`ADD` + `SRC_ALPHA / ONE_MINUS_SRC_ALPHA`
 - `add`：`ADD` + `SRC_ALPHA / ONE`
-- `screen`：`ADD` + `SRC_ALPHA / ONE_MINUS_SRC_COLOR`
+- `screen`：`standalone/effects/vni-screen-alpha.effect` 先在 fragment 输出阶段执行 `rgb *= alpha`，再用 `ADD` + `ONE / ONE_MINUS_SRC_COLOR`
 - `multiply`：`ADD` + `DST_COLOR / ONE_MINUS_SRC_ALPHA`
 - `lighten`：`MAX` + `SRC_ALPHA / ONE`
 
-`normal` 保持 Cocos Sprite 默认状态，不要求宿主 Sprite 暴露 blend factor API。非 `normal` 模式会写入 Cocos Creator 3.8.6 官方 enum 数值，并兼容 public `srcBlendFactor/dstBlendFactor` 或运行时可见的 `_srcBlendFactor/_dstBlendFactor`；实现不会从 `"cc"` 命名导入 `BlendFactor` / `BlendOp`，以兼容不重新导出这两个名字的 Cocos 项目。
+旧 `screen` 的 `SRC_ALPHA / ONE_MINUS_SRC_COLOR` 会让 straight-alpha PNG 的透明像素隐藏 RGB 继续参与 destination factor，造成黑框、染色或矩形压暗。新 Effect 使用已经乘过最终纹理/节点 alpha 的 RGB 计算 destination factor；alpha 为 `0` 时不改变背景，部分透明像素也保持正确 screen 公式。screen 图片应保持 Cocos 默认的 straight-alpha 导入，不要另外勾选 Premultiply Alpha。
 
-standalone 交付仍只需要复制：
+`normal` 保持 Cocos Sprite 默认状态，不要求宿主 Sprite 暴露 blend factor API。`add`、`multiply`、`lighten` 会写入 Cocos Creator 3.8.6 官方 enum 数值，并兼容 public `srcBlendFactor/dstBlendFactor` 或运行时可见的 `_srcBlendFactor/_dstBlendFactor`；实现不会从 `"cc"` 命名导入 `BlendFactor` / `BlendOp`，以兼容不重新导出这两个名字的 Cocos 项目。各模式的独立 alpha channel 使用 `ONE / ONE_MINUS_SRC_ALPHA`，避免再次乘 source alpha。
+
+standalone 交付必须一起复制：
 
 ```text
 standalone/anieditorv5runtime-cc.ts
 standalone/V5GPreview.example.ts
+standalone/effects/vni-screen-alpha.effect
 ```
 
-宿主不需要为 `safe_glow`、`chaser_light` 或其它当前支持能力绑定额外 Material / Effect；`safe_glow` 和 `chaser_light` 使用同图 `SpriteFrame` 副本，`chaser_light` 的亮灯窗口会临时使用 `add` blend mode，暗灯继续使用图层 `blendMode`、原始 scale 和 `dimAlpha`。standalone 单文件与模块化包使用同一套固定灯位采样语义，普通 Cocos 项目优先复制 standalone 文件接入。若运行环境里的 Sprite 不暴露 blend factor、material instance、pass blend target 或 pass hash 刷新能力，runtime 会直接抛出包含节点名和 blend mode 的错误；这类错误需要回到 Cocos 版本/API 兼容性排查，不能用静默兜底掩盖。
+Creator 导入 `.effect` 后会以 `vni-screen-alpha` 注册；runtime 为每个实际使用 screen 的 Sprite 懒创建并复用 Material，切换模式时恢复 builtin material，节点销毁时释放 runtime-owned Material。Effect 缺失会抛出包含节点名与 effect name 的错误，不会静默退回 normal。`safe_glow` 和 `chaser_light` 使用同图 `SpriteFrame` 副本；继承到 screen 时复用同一策略，亮灯窗口切到 add 时不会逐帧创建 Material。
 
 ## `cc` 类型 shim
 

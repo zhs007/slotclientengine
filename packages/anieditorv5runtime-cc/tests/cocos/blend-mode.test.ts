@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { Sprite, SpriteFrame } from "cc";
-import { getCocosBlendModeConfig } from "../../src/cocos/blend-mode";
+import { readFileSync } from "node:fs";
+import { Material, Sprite, SpriteFrame } from "cc";
+import {
+  getCocosBlendModeConfig,
+  VNI_SCREEN_ALPHA_EFFECT_NAME,
+} from "../../src/cocos/blend-mode";
 import { createCocosNodeDriver } from "../../src/cocos/cocos-node-driver";
 import type { V5GBlendMode } from "../../src/core/types";
 
@@ -26,6 +30,35 @@ const COCOS_BLEND_OP = {
 } as const;
 
 describe("cocos blend mode", () => {
+  it("ships an alpha-correct screen effect whose transparent pixels preserve the destination", () => {
+    const effect = readFileSync(
+      new URL(
+        "../../standalone/effects/vni-screen-alpha.effect",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    expect(effect).toContain("blendSrc: one");
+    expect(effect).toContain("blendDst: one_minus_src_color");
+    expect(effect).toContain("o.rgb *= o.a");
+
+    const destination = [0.2, 0.4, 0.6] as const;
+    const hiddenSource = [1, 0.5, 0.25] as const;
+    const transparent = compositeAlphaCorrectScreen(
+      hiddenSource,
+      0,
+      destination,
+    );
+    expect(transparent).toEqual(destination);
+
+    const legacyTransparent = compositeLegacyStraightScreen(
+      hiddenSource,
+      0,
+      destination,
+    );
+    expect(legacyTransparent).not.toEqual(destination);
+  });
+
   it("maps every known V5G blend mode to a distinct Cocos blend-state config", () => {
     expect(getCocosBlendModeConfig("normal")).toEqual({
       mode: "normal",
@@ -37,26 +70,22 @@ describe("cocos blend mode", () => {
       },
       alpha: {
         operation: "ADD",
-        sourceFactor: "SRC_ALPHA",
+        sourceFactor: "ONE",
         destinationFactor: "ONE_MINUS_SRC_ALPHA",
       },
     });
 
     const signatures = new Set(
       blendModes.map((blendMode) =>
-        JSON.stringify(getCocosBlendModeConfig(blendMode).color),
+        JSON.stringify(getCocosBlendModeConfig(blendMode)),
       ),
     );
     expect(signatures.size).toBe(blendModes.length);
-    for (const blendMode of blendModes.slice(1)) {
-      expect(getCocosBlendModeConfig(blendMode)).toMatchObject({
-        mode: blendMode,
-        strategy: "sprite-blend-state",
-      });
-      expect(getCocosBlendModeConfig(blendMode).color).not.toEqual(
-        getCocosBlendModeConfig("normal").color,
-      );
-    }
+    expect(getCocosBlendModeConfig("screen")).toEqual({
+      mode: "screen",
+      strategy: "alpha-correct-screen-material",
+      effectName: VNI_SCREEN_ALPHA_EFFECT_NAME,
+    });
   });
 
   it("keeps normal mode on default Sprite rendering without blend APIs", () => {
@@ -84,12 +113,6 @@ describe("cocos blend mode", () => {
         mode: "add",
         src: COCOS_BLEND_FACTOR.SRC_ALPHA,
         dst: COCOS_BLEND_FACTOR.ONE,
-        op: COCOS_BLEND_OP.ADD,
-      },
-      {
-        mode: "screen",
-        src: COCOS_BLEND_FACTOR.SRC_ALPHA,
-        dst: COCOS_BLEND_FACTOR.ONE_MINUS_SRC_COLOR,
         op: COCOS_BLEND_OP.ADD,
       },
       {
@@ -121,7 +144,7 @@ describe("cocos blend mode", () => {
       expect(target?.blendSrc).toBe(src);
       expect(target?.blendDst).toBe(dst);
       expect(target?.blendEq).toBe(op);
-      expect(target?.blendSrcAlpha).toBe(COCOS_BLEND_FACTOR.SRC_ALPHA);
+      expect(target?.blendSrcAlpha).toBe(COCOS_BLEND_FACTOR.ONE);
       expect(target?.blendDstAlpha).toBe(
         COCOS_BLEND_FACTOR.ONE_MINUS_SRC_ALPHA,
       );
@@ -130,6 +153,42 @@ describe("cocos blend mode", () => {
         (pass as typeof pass & { passHashUpdates: number }).passHashUpdates,
       ).toBe(2);
     }
+  });
+
+  it("uses a premultiplying material for alpha-correct screen blending", () => {
+    const driver = createCocosNodeDriver();
+    const node = driver.createImageNode("screen", new SpriteFrame());
+    const sprite = requireSprite(node) as Sprite & {
+      customMaterial: Material | null;
+      materialUpdates: number;
+    };
+
+    driver.applyBlendMode(node, getCocosBlendModeConfig("screen"));
+
+    const material = sprite.customMaterial as Material & {
+      effectName: string;
+      destroyed: boolean;
+    };
+    const target = material.passes[0].blendState.targets[0];
+    expect(material.effectName).toBe(VNI_SCREEN_ALPHA_EFFECT_NAME);
+    expect(target.blend).toBe(true);
+    expect(target.blendSrc).toBe(COCOS_BLEND_FACTOR.ONE);
+    expect(target.blendDst).toBe(COCOS_BLEND_FACTOR.ONE_MINUS_SRC_COLOR);
+    expect(target.blendSrcAlpha).toBe(COCOS_BLEND_FACTOR.ONE);
+    expect(target.blendDstAlpha).toBe(COCOS_BLEND_FACTOR.ONE_MINUS_SRC_ALPHA);
+    expect(sprite.materialUpdates).toBe(1);
+
+    driver.applyBlendMode(node, getCocosBlendModeConfig("screen"));
+    expect(sprite.customMaterial).toBe(material);
+    expect(sprite.materialUpdates).toBe(1);
+
+    driver.applyBlendMode(node, getCocosBlendModeConfig("add"));
+    expect(sprite.customMaterial).toBeNull();
+    expect(material.destroyed).toBe(false);
+
+    driver.destroyNode(node);
+    expect(sprite.customMaterial).toBeNull();
+    expect(material.destroyed).toBe(true);
   });
 
   it("uses Cocos protected blend factor storage when public accessors are unavailable", () => {
@@ -158,7 +217,7 @@ describe("cocos blend mode", () => {
     delete (sprite as Partial<Sprite>).dstBlendFactor;
 
     expect(() =>
-      driver.applyBlendMode(node, getCocosBlendModeConfig("screen")),
+      driver.applyBlendMode(node, getCocosBlendModeConfig("add")),
     ).toThrow("does not expose blend factor fields");
 
     const noMaterial = driver.createImageNode("NoMaterial", new SpriteFrame());
@@ -176,4 +235,28 @@ function requireSprite(node: {
   const sprite = node.getComponent(Sprite);
   if (!sprite) throw new Error("test Sprite component is missing.");
   return sprite;
+}
+
+function compositeAlphaCorrectScreen(
+  source: readonly [number, number, number],
+  alpha: number,
+  destination: readonly [number, number, number],
+): [number, number, number] {
+  return source.map((channel, index) => {
+    const premultiplied = channel * alpha;
+    return (
+      premultiplied + destination[index as 0 | 1 | 2] * (1 - premultiplied)
+    );
+  }) as [number, number, number];
+}
+
+function compositeLegacyStraightScreen(
+  source: readonly [number, number, number],
+  alpha: number,
+  destination: readonly [number, number, number],
+): [number, number, number] {
+  return source.map(
+    (channel, index) =>
+      channel * alpha + destination[index as 0 | 1 | 2] * (1 - channel),
+  ) as [number, number, number];
 }

@@ -4,7 +4,11 @@ import { fileURLToPath } from "node:url";
 const standalonePath = fileURLToPath(
   new URL("../standalone/anieditorv5runtime-cc.ts", import.meta.url),
 );
+const screenEffectPath = fileURLToPath(
+  new URL("../standalone/effects/vni-screen-alpha.effect", import.meta.url),
+);
 const source = readFileSync(standalonePath, "utf8");
+const screenEffectSource = readFileSync(screenEffectPath, "utf8");
 const violations = [];
 
 const importModules = [
@@ -123,7 +127,8 @@ const requiredExports = [
   "export interface V5GCocosPlaybackEventContext",
   "export interface V5GCocosPlaybackCompleteContext",
   "export type SupportedCocosBlendMode",
-  "export interface CocosBlendModeConfig",
+  "export type CocosBlendModeConfig",
+  "export const VNI_SCREEN_ALPHA_EFFECT_NAME",
   "export type V5GCocosNodeTransformSnapshot",
   "export class V5GSegmentedPlaybackSequence",
   "export class V5GParticleRuntime",
@@ -218,11 +223,26 @@ const requiredSnippets = [
   "wave_distort",
   "multi_move",
   "bounce_jump",
+  "alpha-correct-screen-material",
+  "vni-screen-alpha",
 ];
 
 for (const expected of requiredSnippets) {
   if (!source.includes(expected)) {
     violations.push(`missing standalone runtime snippet: ${expected}`);
+  }
+}
+
+const requiredScreenEffectSnippets = [
+  "blendSrc: one",
+  "blendDst: one_minus_src_color",
+  "blendSrcAlpha: one",
+  "blendDstAlpha: one_minus_src_alpha",
+  "o.rgb *= o.a",
+];
+for (const expected of requiredScreenEffectSnippets) {
+  if (!screenEffectSource.includes(expected)) {
+    violations.push(`missing alpha-correct screen Effect snippet: ${expected}`);
   }
 }
 

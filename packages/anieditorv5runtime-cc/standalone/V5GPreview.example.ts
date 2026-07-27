@@ -9,6 +9,10 @@ import {
   type V5GCocosPlayer,
 } from "./anieditorv5runtime-cc";
 
+// Copy effects/vni-screen-alpha.effect into the same Cocos project.
+// The runtime uses it for alpha-correct `screen` layers and fails explicitly
+// if the Effect was not imported by Creator.
+
 const { ccclass, property } = _decorator;
 
 @ccclass("V5GPreview")

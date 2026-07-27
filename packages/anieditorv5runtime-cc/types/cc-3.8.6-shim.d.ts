@@ -83,6 +83,13 @@ declare module "cc" {
     passes: Pass[];
   }
 
+  export class Material {
+    readonly effectName: string;
+    passes: Pass[];
+    initialize(options: { effectName: string }): void;
+    destroy(): boolean;
+  }
+
   export class Node {
     name: string;
     readonly isValid: boolean;
@@ -187,6 +194,7 @@ declare module "cc" {
   export class Sprite {
     spriteFrame: SpriteFrame | null;
     color: Color;
+    customMaterial: Material | null;
     srcBlendFactor: number;
     dstBlendFactor: number;
     updateMaterial(): void;

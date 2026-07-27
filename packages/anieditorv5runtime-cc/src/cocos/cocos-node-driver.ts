@@ -9,6 +9,7 @@ import {
   Label,
   Layers,
   Mask,
+  Material,
   Node,
   Quat,
   Rect,
@@ -82,6 +83,7 @@ interface BlendableSprite {
   dstBlendFactor: number;
   _srcBlendFactor?: number;
   _dstBlendFactor?: number;
+  customMaterial?: Material | null;
   updateMaterial?: () => void;
   _updateBlendFunc?: () => void;
   getRenderMaterial?: (index: number) => CocosMaterialInstanceLike | null;
@@ -119,6 +121,7 @@ const COCOS_BLEND_OPERATIONS: Record<CocosBlendOperationName, number> = {
 
 export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
   let nodeVisualCaptureQueue = Promise.resolve();
+  const screenMaterials = new WeakMap<Node, Material>();
 
   return {
     createNode(name) {
@@ -183,6 +186,7 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
     },
     destroyNode(node) {
       if (!isValidCocosNode(node)) return;
+      destroyScreenMaterialsRecursively(node, screenMaterials);
       node.removeFromParent();
       node.destroy();
     },
@@ -283,7 +287,7 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
       return readSpriteFrameSize(spriteFrame);
     },
     applyBlendMode(node, config) {
-      applySpriteBlendMode(node.name, requireSprite(node), config);
+      applySpriteBlendMode(node, requireSprite(node), config, screenMaterials);
     },
     createAlphaMaskNode(name, sourceNode, targetNode) {
       const maskNode = new Node(name);
@@ -588,16 +592,18 @@ function createCocosSpriteFrameRegion(
 }
 
 function applySpriteBlendMode(
-  nodeName: string,
+  node: Node,
   sprite: Sprite,
   config: CocosBlendModeConfig,
+  screenMaterials: WeakMap<Node, Material>,
 ): void {
-  if (config.strategy !== "sprite-blend-state") {
-    throw new Error(
-      `Unsupported Cocos blend strategy "${config.strategy}" for V5G blend mode "${config.mode}" on node "${nodeName}".`,
-    );
+  if (config.strategy === "alpha-correct-screen-material") {
+    applyAlphaCorrectScreenMaterial(node, sprite, config, screenMaterials);
+    return;
   }
 
+  const nodeName = node.name;
+  clearAlphaCorrectScreenMaterial(node, sprite, screenMaterials);
   if (config.mode === "normal") {
     return;
   }
@@ -657,9 +663,9 @@ function applyRendererBlendMode(
   renderer: CocosMaterialRendererLike,
   config: CocosBlendModeConfig,
 ): void {
-  if (config.strategy !== "sprite-blend-state") {
+  if (config.strategy === "alpha-correct-screen-material") {
     throw new Error(
-      `Unsupported Cocos blend strategy "${config.strategy}" for V5G blend mode "${config.mode}" on node "${nodeName}".`,
+      `Cocos Graphics on node "${nodeName}" cannot apply alpha-correct screen; the VNI screen blend requires a Sprite.`,
     );
   }
   if (config.mode === "normal") return;
@@ -693,6 +699,78 @@ function applyRendererBlendMode(
   );
   pass.blendState.setTarget(0, target);
   pass._updatePassHash();
+}
+
+function applyAlphaCorrectScreenMaterial(
+  node: Node,
+  sprite: Sprite,
+  config: Extract<
+    CocosBlendModeConfig,
+    { strategy: "alpha-correct-screen-material" }
+  >,
+  screenMaterials: WeakMap<Node, Material>,
+): void {
+  const blendable = sprite as Sprite & Partial<BlendableSprite>;
+  let material = screenMaterials.get(node);
+  if (!material) {
+    material = new Material();
+    try {
+      material.initialize({ effectName: config.effectName });
+      if (
+        material.effectName !== config.effectName ||
+        material.passes.length === 0
+      ) {
+        throw new Error(
+          `Effect "${config.effectName}" did not initialize a render pass.`,
+        );
+      }
+    } catch (error) {
+      material.destroy();
+      throw new Error(
+        `Cocos Sprite on node "${node.name}" requires imported Effect "${config.effectName}" for alpha-correct screen blending.`,
+        { cause: error },
+      );
+    }
+    screenMaterials.set(node, material);
+  }
+  if (blendable.customMaterial === material) return;
+  blendable.customMaterial = material;
+  if (typeof blendable.updateMaterial === "function") {
+    blendable.updateMaterial();
+  }
+}
+
+function clearAlphaCorrectScreenMaterial(
+  node: Node,
+  sprite: Sprite,
+  screenMaterials: WeakMap<Node, Material>,
+): void {
+  const material = screenMaterials.get(node);
+  if (!material) return;
+  const blendable = sprite as Sprite & Partial<BlendableSprite>;
+  if (blendable.customMaterial === material) {
+    blendable.customMaterial = null;
+    if (typeof blendable.updateMaterial === "function") {
+      blendable.updateMaterial();
+    }
+  }
+}
+
+function destroyScreenMaterialsRecursively(
+  node: Node,
+  screenMaterials: WeakMap<Node, Material>,
+): void {
+  for (const child of node.children) {
+    destroyScreenMaterialsRecursively(child, screenMaterials);
+  }
+  const material = screenMaterials.get(node);
+  if (!material) return;
+  const sprite = node.getComponent(Sprite);
+  if (sprite?.customMaterial === material) {
+    sprite.customMaterial = null;
+  }
+  screenMaterials.delete(node);
+  material.destroy();
 }
 
 function setSpriteBlendFactors(

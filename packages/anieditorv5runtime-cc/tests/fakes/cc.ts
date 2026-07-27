@@ -442,12 +442,12 @@ export class SpriteAtlas {
 
 export class BlendTarget {
   blend = false;
-  blendEq = BlendOp.ADD;
-  blendAlphaEq = BlendOp.ADD;
-  blendSrc = BlendFactor.SRC_ALPHA;
-  blendDst = BlendFactor.ONE_MINUS_SRC_ALPHA;
-  blendSrcAlpha = BlendFactor.SRC_ALPHA;
-  blendDstAlpha = BlendFactor.ONE_MINUS_SRC_ALPHA;
+  blendEq: number = BlendOp.ADD;
+  blendAlphaEq: number = BlendOp.ADD;
+  blendSrc: number = BlendFactor.SRC_ALPHA;
+  blendDst: number = BlendFactor.ONE_MINUS_SRC_ALPHA;
+  blendSrcAlpha: number = BlendFactor.SRC_ALPHA;
+  blendDstAlpha: number = BlendFactor.ONE_MINUS_SRC_ALPHA;
 }
 
 export class BlendState {
@@ -471,9 +471,34 @@ export class MaterialInstance {
   passes = [new Pass()];
 }
 
+export class Material extends MaterialInstance {
+  effectName = "";
+  destroyed = false;
+
+  initialize(options: { effectName: string }): void {
+    this.effectName = options.effectName;
+    if (options.effectName === "vni-screen-alpha") {
+      const target = this.passes[0].blendState.targets[0];
+      target.blend = true;
+      target.blendSrc = BlendFactor.ONE;
+      target.blendDst = BlendFactor.ONE_MINUS_SRC_COLOR;
+      target.blendEq = BlendOp.ADD;
+      target.blendSrcAlpha = BlendFactor.ONE;
+      target.blendDstAlpha = BlendFactor.ONE_MINUS_SRC_ALPHA;
+      target.blendAlphaEq = BlendOp.ADD;
+    }
+  }
+
+  destroy(): boolean {
+    this.destroyed = true;
+    return true;
+  }
+}
+
 export class Sprite {
   spriteFrame: SpriteFrame | null = null;
   color = Color.WHITE;
+  customMaterial: Material | null = null;
   srcBlendFactor = BlendFactor.SRC_ALPHA;
   dstBlendFactor = BlendFactor.ONE_MINUS_SRC_ALPHA;
   materialUpdates = 0;
@@ -481,6 +506,7 @@ export class Sprite {
 
   updateMaterial(): void {
     this.materialUpdates += 1;
+    if (this.customMaterial) return;
     this._updateBlendFunc();
   }
 
@@ -500,7 +526,7 @@ export class Sprite {
 
   getMaterialInstance(index: number): MaterialInstance | null {
     if (index !== 0) return null;
-    return this.materialInstance;
+    return this.customMaterial ?? this.materialInstance;
   }
 }
 
