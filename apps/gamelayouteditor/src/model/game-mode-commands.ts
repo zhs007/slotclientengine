@@ -130,7 +130,7 @@ export function normalizeGameModeNodeOrders(project: EditorProject): void {
       .flatMap((mode) => Object.values(mode.backgroundNodes))
       .filter(Boolean),
   );
-  project.nodes = project.nodes
+  const nodes = project.nodes
     .map((node, index) => ({ node, index }))
     .sort((left, right) => {
       const group = (nodeId: string): number =>
@@ -140,8 +140,32 @@ export function normalizeGameModeNodeOrders(project: EditorProject): void {
         left.node.order - right.node.order ||
         left.index - right.index
       );
-    })
-    .map(({ node }, order) => ({ ...node, order }));
+    });
+  const reelOrder = project.reel.order;
+  if (reelOrder === null || !Number.isSafeInteger(reelOrder)) {
+    project.nodes = nodes.map(({ node }, order) => ({ ...node, order }));
+    return;
+  }
+
+  let reelInsertionIndex = nodes.filter(
+    ({ node }) => node.order < reelOrder,
+  ).length;
+  const availableBelow = reelOrder - Number.MIN_SAFE_INTEGER;
+  const availableAbove = Number.MAX_SAFE_INTEGER - reelOrder;
+  reelInsertionIndex = Math.min(reelInsertionIndex, availableBelow);
+  reelInsertionIndex = Math.max(
+    reelInsertionIndex,
+    nodes.length - availableAbove,
+  );
+  const belowStart =
+    reelOrder >= reelInsertionIndex ? 0 : reelOrder - reelInsertionIndex;
+  project.nodes = nodes.map(({ node }, index) => ({
+    ...node,
+    order:
+      index < reelInsertionIndex
+        ? belowStart + index
+        : reelOrder + 1 + index - reelInsertionIndex,
+  }));
 }
 
 export function createGameModeTransition(

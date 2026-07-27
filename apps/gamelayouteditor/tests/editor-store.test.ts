@@ -15,6 +15,7 @@ describe("EditorStore", () => {
   it("starts with a useful 5x3 reel instead of placeholder dimensions", () => {
     const project = createNewEditorProject("maximized-focus");
     expect(project.reel).toMatchObject({
+      order: 999,
       columns: 5,
       rows: 3,
       cellWidth: 160,
@@ -143,6 +144,30 @@ describe("EditorStore", () => {
       ["base-background", 0],
       ["free-background", 1],
     ]);
+  });
+
+  it("keeps node orders unique when a reel order collides", () => {
+    const project = manifestToEditorProject(imageManifest, assetBytes);
+    project.reel.order = 0;
+    project.symbolDependencies.set("demo-symbols", {
+      packageId: "demo-symbols",
+      rootKey: "symbols.package.json",
+      keys: ["symbols.package.json"],
+    });
+    project.assets.set("symbols.package.json", new Uint8Array([1]));
+    project.gameModes.modes[0]!.symbols = {
+      packageId: "demo-symbols",
+      reelSet: "main",
+      renderMode: "standard",
+    };
+
+    const store = new EditorStore(project);
+
+    expect(store.getSnapshot().errors).toEqual([]);
+    expect(store.getSnapshot().project.reel.order).toBe(0);
+    expect(store.getSnapshot().project.nodes.map((node) => node.order)).toEqual(
+      [1],
+    );
   });
 
   it("deduplicates identical external errors and formats non-Error values", () => {

@@ -39,6 +39,7 @@ export type EditorMode = "maximized-focus" | "orientation-focus";
 export const DEFAULT_REEL_COLUMNS = 5;
 export const DEFAULT_REEL_ROWS = 3;
 export const DEFAULT_REEL_CELL_SIZE = 160;
+export const DEFAULT_REEL_ORDER = 999;
 export const DEFAULT_FOCUS_PADDING = 60;
 
 export interface EditorFocusOffsets {
@@ -180,7 +181,7 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
     },
     nodes: [],
     reel: {
-      order: null,
+      order: DEFAULT_REEL_ORDER,
       columns: DEFAULT_REEL_COLUMNS,
       rows: DEFAULT_REEL_ROWS,
       cellWidth: DEFAULT_REEL_CELL_SIZE,

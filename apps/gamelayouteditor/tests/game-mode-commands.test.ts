@@ -197,7 +197,7 @@ describe("game mode and popup dependency commands", () => {
       renderMode: "standard",
     });
     expect(project.gameModes.modes[0].symbols?.packageId).toBe("demo-symbols");
-    expect(project.reel.order).toBe(1);
+    expect(project.reel.order).toBe(999);
     expect(() => deleteSymbolDependency(project, "demo-symbols")).toThrow(
       /BaseGame/,
     );
