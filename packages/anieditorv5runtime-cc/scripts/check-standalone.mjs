@@ -128,6 +128,7 @@ const requiredExports = [
   "export interface V5GCocosPlaybackCompleteContext",
   "export type SupportedCocosBlendMode",
   "export type CocosBlendModeConfig",
+  "export interface CocosNodeDriverOptions",
   "export const VNI_SCREEN_ALPHA_EFFECT_NAME",
   "export type V5GCocosNodeTransformSnapshot",
   "export class V5GSegmentedPlaybackSequence",
@@ -225,6 +226,8 @@ const requiredSnippets = [
   "bounce_jump",
   "alpha-correct-screen-material",
   "vni-screen-alpha",
+  "screenMaterial?: Material | null",
+  "createV5GCocosPlayer({ screenMaterial })",
 ];
 
 for (const expected of requiredSnippets) {
@@ -238,12 +241,18 @@ const requiredScreenEffectSnippets = [
   "blendDst: one_minus_src_color",
   "blendSrcAlpha: one",
   "blendDstAlpha: one_minus_src_alpha",
+  "CCSampleWithAlphaSeparated(cc_spriteTexture, uv0)",
   "o.rgb *= o.a",
 ];
 for (const expected of requiredScreenEffectSnippets) {
   if (!screenEffectSource.includes(expected)) {
     violations.push(`missing alpha-correct screen Effect snippet: ${expected}`);
   }
+}
+if (screenEffectSource.includes("#if USE_TEXTURE")) {
+  violations.push(
+    "alpha-correct screen Effect must sample the Sprite texture without requiring a Material USE_TEXTURE define",
+  );
 }
 
 if (violations.length > 0) {

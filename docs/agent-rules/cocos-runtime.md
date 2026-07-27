@@ -17,7 +17,7 @@
   - standalone import/parity/player tests；
   - `standalone.zip`。
 - standalone 源码由 `scripts/build-standalone.mjs` 生成，禁止手改。
-- standalone 依赖的 Cocos Effect 属于正式交付物，必须随 runtime 一起进入 `standalone.zip` 并由 checker 校验；alpha-correct `screen` 使用 straight-alpha 纹理、fragment 预乘 RGB 和 `ONE / ONE_MINUS_SRC_COLOR`，不得退回会让透明像素隐藏 RGB 污染背景的固定 blend state。
+- standalone 依赖的 Cocos Effect 属于正式交付物，必须随 runtime 一起进入 `standalone.zip` 并由 checker 校验；alpha-correct `screen` 使用 straight-alpha 纹理、fragment 预乘 RGB 和 `ONE / ONE_MINUS_SRC_COLOR`，宿主通过序列化 `Material` 引用保证 Effect 在 init 前加载并显式传入 factory，不得依赖全局隐式加载顺序，也不得退回会让透明像素隐藏 RGB 污染背景的固定 blend state。
 - 目标 package 的 `standalone:build`、`standalone:check`、standalone typecheck 和相关测试属于 L1/L2 定向验收；不因此自动运行整仓门禁。
 
 ## Player 与资源生命周期

@@ -543,7 +543,18 @@ standalone/V5GPreview.example.ts
 standalone/effects/vni-screen-alpha.effect
 ```
 
-Creator 导入 `.effect` 后会以 `vni-screen-alpha` 注册；runtime 为每个实际使用 screen 的 Sprite 懒创建并复用 Material，切换模式时恢复 builtin material，节点销毁时释放 runtime-owned Material。Effect 缺失会抛出包含节点名与 effect name 的错误，不会静默退回 normal。`safe_glow` 和 `chaser_light` 使用同图 `SpriteFrame` 副本；继承到 screen 时复用同一策略，亮灯窗口切到 add 时不会逐帧创建 Material。
+把 `.effect` 放在 Cocos 项目的 `assets` 下，在 Creator 中创建一个使用 `vni-screen-alpha` Effect 的 Material，并通过宿主 Component 的 `@property(Material)` 字段绑定它。仅把 `.effect` 复制进 `assets` 不保证该资源会在 runtime init 前加载；调用 factory 时必须显式传入 `screenMaterial`：
+
+```ts
+this.player = createV5GCocosPlayer({
+  root: this.root,
+  project,
+  assets: { atlas: this.atlas },
+  screenMaterial: this.screenMaterial,
+});
+```
+
+runtime 在所有 screen Sprite 间共享这个 host-owned Material，切换模式时恢复 builtin material，节点销毁时解除引用但不销毁宿主 Material。未传入时仅为兼容旧接入尝试按已注册 Effect 名创建 runtime-owned Material；Effect 未加载、传入材质使用错误 Effect 或没有 render pass 时都会抛出包含节点名与接入参数的错误，不会静默退回 normal。`safe_glow` 和 `chaser_light` 使用同图 `SpriteFrame` 副本；继承到 screen 时复用同一策略，亮灯窗口切到 add 时不会逐帧创建 Material。
 
 ## `cc` 类型 shim
 

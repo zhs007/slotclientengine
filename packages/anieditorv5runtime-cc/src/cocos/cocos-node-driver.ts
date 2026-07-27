@@ -102,6 +102,19 @@ interface CocosWorldTransformSnapshot {
   rotation: Quat;
 }
 
+interface ScreenMaterialRecord {
+  material: Material;
+  ownedByRuntime: boolean;
+}
+
+export interface CocosNodeDriverOptions {
+  /**
+   * Host-owned Material using the bundled `vni-screen-alpha` Effect.
+   * The driver shares it across screen Sprites and never destroys it.
+   */
+  screenMaterial?: Material | null;
+}
+
 // Cocos Creator 3.8.6 exposes these enum values internally, but not all builds
 // re-export BlendFactor / BlendOp from "cc".
 const COCOS_BLEND_FACTORS: Record<CocosBlendFactorName, number> = {
@@ -119,9 +132,12 @@ const COCOS_BLEND_OPERATIONS: Record<CocosBlendOperationName, number> = {
   MAX: 4,
 };
 
-export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
+export function createCocosNodeDriver(
+  options: CocosNodeDriverOptions = {},
+): V5GCocosNodeDriver<Node, SpriteFrame> {
   let nodeVisualCaptureQueue = Promise.resolve();
-  const screenMaterials = new WeakMap<Node, Material>();
+  const screenMaterials = new WeakMap<Node, ScreenMaterialRecord>();
+  const configuredScreenMaterial = options.screenMaterial ?? null;
 
   return {
     createNode(name) {
@@ -287,7 +303,13 @@ export function createCocosNodeDriver(): V5GCocosNodeDriver<Node, SpriteFrame> {
       return readSpriteFrameSize(spriteFrame);
     },
     applyBlendMode(node, config) {
-      applySpriteBlendMode(node, requireSprite(node), config, screenMaterials);
+      applySpriteBlendMode(
+        node,
+        requireSprite(node),
+        config,
+        screenMaterials,
+        configuredScreenMaterial,
+      );
     },
     createAlphaMaskNode(name, sourceNode, targetNode) {
       const maskNode = new Node(name);
@@ -595,10 +617,17 @@ function applySpriteBlendMode(
   node: Node,
   sprite: Sprite,
   config: CocosBlendModeConfig,
-  screenMaterials: WeakMap<Node, Material>,
+  screenMaterials: WeakMap<Node, ScreenMaterialRecord>,
+  configuredScreenMaterial: Material | null,
 ): void {
   if (config.strategy === "alpha-correct-screen-material") {
-    applyAlphaCorrectScreenMaterial(node, sprite, config, screenMaterials);
+    applyAlphaCorrectScreenMaterial(
+      node,
+      sprite,
+      config,
+      screenMaterials,
+      configuredScreenMaterial,
+    );
     return;
   }
 
@@ -708,14 +737,18 @@ function applyAlphaCorrectScreenMaterial(
     CocosBlendModeConfig,
     { strategy: "alpha-correct-screen-material" }
   >,
-  screenMaterials: WeakMap<Node, Material>,
+  screenMaterials: WeakMap<Node, ScreenMaterialRecord>,
+  configuredScreenMaterial: Material | null,
 ): void {
   const blendable = sprite as Sprite & Partial<BlendableSprite>;
-  let material = screenMaterials.get(node);
-  if (!material) {
-    material = new Material();
+  let record = screenMaterials.get(node);
+  if (!record) {
+    const material = configuredScreenMaterial ?? new Material();
+    const ownedByRuntime = configuredScreenMaterial === null;
     try {
-      material.initialize({ effectName: config.effectName });
+      if (ownedByRuntime) {
+        material.initialize({ effectName: config.effectName });
+      }
       if (
         material.effectName !== config.effectName ||
         material.passes.length === 0
@@ -725,14 +758,18 @@ function applyAlphaCorrectScreenMaterial(
         );
       }
     } catch (error) {
-      material.destroy();
+      if (ownedByRuntime) {
+        material.destroy();
+      }
       throw new Error(
-        `Cocos Sprite on node "${node.name}" requires imported Effect "${config.effectName}" for alpha-correct screen blending.`,
+        `Cocos Sprite on node "${node.name}" requires a loaded Material using Effect "${config.effectName}" for alpha-correct screen blending; pass it as createV5GCocosPlayer({ screenMaterial }).`,
         { cause: error },
       );
     }
-    screenMaterials.set(node, material);
+    record = { material, ownedByRuntime };
+    screenMaterials.set(node, record);
   }
+  const { material } = record;
   if (blendable.customMaterial === material) return;
   blendable.customMaterial = material;
   if (typeof blendable.updateMaterial === "function") {
@@ -743,12 +780,12 @@ function applyAlphaCorrectScreenMaterial(
 function clearAlphaCorrectScreenMaterial(
   node: Node,
   sprite: Sprite,
-  screenMaterials: WeakMap<Node, Material>,
+  screenMaterials: WeakMap<Node, ScreenMaterialRecord>,
 ): void {
-  const material = screenMaterials.get(node);
-  if (!material) return;
+  const record = screenMaterials.get(node);
+  if (!record) return;
   const blendable = sprite as Sprite & Partial<BlendableSprite>;
-  if (blendable.customMaterial === material) {
+  if (blendable.customMaterial === record.material) {
     blendable.customMaterial = null;
     if (typeof blendable.updateMaterial === "function") {
       blendable.updateMaterial();
@@ -758,19 +795,21 @@ function clearAlphaCorrectScreenMaterial(
 
 function destroyScreenMaterialsRecursively(
   node: Node,
-  screenMaterials: WeakMap<Node, Material>,
+  screenMaterials: WeakMap<Node, ScreenMaterialRecord>,
 ): void {
   for (const child of node.children) {
     destroyScreenMaterialsRecursively(child, screenMaterials);
   }
-  const material = screenMaterials.get(node);
-  if (!material) return;
+  const record = screenMaterials.get(node);
+  if (!record) return;
   const sprite = node.getComponent(Sprite);
-  if (sprite?.customMaterial === material) {
+  if (sprite?.customMaterial === record.material) {
     sprite.customMaterial = null;
   }
   screenMaterials.delete(node);
-  material.destroy();
+  if (record.ownedByRuntime) {
+    record.material.destroy();
+  }
 }
 
 function setSpriteBlendFactors(

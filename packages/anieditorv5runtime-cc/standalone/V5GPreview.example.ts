@@ -1,4 +1,11 @@
-import { _decorator, Component, JsonAsset, Node, SpriteAtlas } from "cc";
+import {
+  _decorator,
+  Component,
+  JsonAsset,
+  Material,
+  Node,
+  SpriteAtlas,
+} from "cc";
 import {
   assertV5GProject,
   createV5GCocosPlayer,
@@ -9,9 +16,9 @@ import {
   type V5GCocosPlayer,
 } from "./anieditorv5runtime-cc";
 
-// Copy effects/vni-screen-alpha.effect into the same Cocos project.
-// The runtime uses it for alpha-correct `screen` layers and fails explicitly
-// if the Effect was not imported by Creator.
+// Copy effects/vni-screen-alpha.effect into the same Cocos project, create a
+// Material using that Effect, then assign the Material below. The serialized
+// reference guarantees that Creator loads the Effect before runtime init.
 
 const { ccclass, property } = _decorator;
 
@@ -25,6 +32,9 @@ export class V5GPreview extends Component {
 
   @property(SpriteAtlas)
   atlas: SpriteAtlas | null = null;
+
+  @property(Material)
+  screenMaterial: Material | null = null;
 
   @property(Boolean)
   segmentedPreview = false;
@@ -65,6 +75,11 @@ export class V5GPreview extends Component {
     if (!this.atlas) {
       throw new Error("V5GPreview.atlas must be assigned.");
     }
+    if (!this.screenMaterial) {
+      throw new Error(
+        "V5GPreview.screenMaterial must use the vni-screen-alpha Effect.",
+      );
+    }
 
     const project = assertV5GProject(this.projectJson.json);
     validateCocosV5GProject(project);
@@ -75,6 +90,7 @@ export class V5GPreview extends Component {
       assets: {
         atlas: this.atlas,
       },
+      screenMaterial: this.screenMaterial,
       loop: true,
     });
     // All image assets used by project.assets must exist in this atlas as the asset.path filename without extension.

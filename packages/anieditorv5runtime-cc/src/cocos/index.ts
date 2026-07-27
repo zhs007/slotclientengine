@@ -8,14 +8,24 @@ export * from "./node-driver.js";
 export * from "./blend-mode.js";
 export * from "./coordinates.js";
 export * from "./manual-playback.js";
-export { createCocosNodeDriver } from "./cocos-node-driver.js";
+export {
+  createCocosNodeDriver,
+  type CocosNodeDriverOptions,
+} from "./cocos-node-driver.js";
 export { V5GCocosPlayer } from "./player.js";
 
 export function createV5GCocosPlayer(
   options: V5GCocosPlayerFactoryOptions,
 ): V5GCocosPlayer<Node, SpriteFrame> {
   return new V5GCocosPlayer({
-    ...options,
-    driver: createCocosNodeDriver(),
+    root: options.root,
+    project: options.project,
+    assets: options.assets,
+    driver: createCocosNodeDriver({
+      screenMaterial: options.screenMaterial,
+    }),
+    loop: options.loop,
+    onTimeChange: options.onTimeChange,
+    onPlayingChange: options.onPlayingChange,
   });
 }

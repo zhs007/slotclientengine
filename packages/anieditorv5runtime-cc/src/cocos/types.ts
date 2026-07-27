@@ -1,4 +1,4 @@
-import type { Node, SpriteFrame } from "cc";
+import type { Material, Node, SpriteFrame } from "cc";
 import type { VNILayerGroupSlot } from "../core/layer-groups.js";
 import type { V5GBlendMode, V5GProjectConfig } from "../core/types.js";
 import type {
@@ -47,7 +47,14 @@ export interface V5GCocosPlayerOptions<
 export type V5GCocosPlayerFactoryOptions = Omit<
   V5GCocosPlayerOptions<Node, SpriteFrame>,
   "driver"
->;
+> & {
+  /**
+   * Host-owned Material using the bundled `vni-screen-alpha` Effect.
+   * Providing it makes Effect loading explicit and avoids relying on the
+   * global EffectAsset registration order.
+   */
+  screenMaterial?: Material | null;
+};
 
 export type V5GCocosPlaybackRange = V5GPlaybackRange;
 

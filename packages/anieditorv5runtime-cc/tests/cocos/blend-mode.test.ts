@@ -40,6 +40,10 @@ describe("cocos blend mode", () => {
     );
     expect(effect).toContain("blendSrc: one");
     expect(effect).toContain("blendDst: one_minus_src_color");
+    expect(effect).toContain(
+      "CCSampleWithAlphaSeparated(cc_spriteTexture, uv0)",
+    );
+    expect(effect).not.toContain("#if USE_TEXTURE");
     expect(effect).toContain("o.rgb *= o.a");
 
     const destination = [0.2, 0.4, 0.6] as const;
@@ -189,6 +193,51 @@ describe("cocos blend mode", () => {
     driver.destroyNode(node);
     expect(sprite.customMaterial).toBeNull();
     expect(material.destroyed).toBe(true);
+  });
+
+  it("shares a host-provided screen Material without taking ownership", () => {
+    const screenMaterial = new Material() as Material & {
+      destroyed: boolean;
+    };
+    screenMaterial.initialize({
+      effectName: VNI_SCREEN_ALPHA_EFFECT_NAME,
+    });
+    const driver = createCocosNodeDriver({ screenMaterial });
+    const firstNode = driver.createImageNode("first-screen", new SpriteFrame());
+    const secondNode = driver.createImageNode(
+      "second-screen",
+      new SpriteFrame(),
+    );
+    const firstSprite = requireSprite(firstNode);
+    const secondSprite = requireSprite(secondNode);
+
+    driver.applyBlendMode(firstNode, getCocosBlendModeConfig("screen"));
+    driver.applyBlendMode(secondNode, getCocosBlendModeConfig("screen"));
+
+    expect(firstSprite.customMaterial).toBe(screenMaterial);
+    expect(secondSprite.customMaterial).toBe(screenMaterial);
+
+    driver.destroyNode(firstNode);
+    driver.destroyNode(secondNode);
+    expect(firstSprite.customMaterial).toBeNull();
+    expect(secondSprite.customMaterial).toBeNull();
+    expect(screenMaterial.destroyed).toBe(false);
+  });
+
+  it("rejects a host Material that does not use the screen Effect", () => {
+    const wrongMaterial = new Material() as Material & {
+      destroyed: boolean;
+    };
+    wrongMaterial.initialize({ effectName: "builtin-sprite" });
+    const driver = createCocosNodeDriver({
+      screenMaterial: wrongMaterial,
+    });
+    const node = driver.createImageNode("wrong-screen", new SpriteFrame());
+
+    expect(() =>
+      driver.applyBlendMode(node, getCocosBlendModeConfig("screen")),
+    ).toThrow("pass it as createV5GCocosPlayer({ screenMaterial })");
+    expect(wrongMaterial.destroyed).toBe(false);
   });
 
   it("uses Cocos protected blend factor storage when public accessors are unavailable", () => {

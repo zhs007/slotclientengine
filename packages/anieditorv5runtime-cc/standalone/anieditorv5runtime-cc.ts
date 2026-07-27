@@ -14,6 +14,14 @@ export interface CocosBlendChannelConfig {
   destinationFactor: CocosBlendFactorName;
 }
 
+export interface CocosNodeDriverOptions {
+  /**
+   * Host-owned Material using the bundled `vni-screen-alpha` Effect.
+   * The driver shares it across screen Sprites and never destroys it.
+   */
+  screenMaterial?: Material | null;
+}
+
 export interface CocosPoint2D {
   x: number;
   y: number;
@@ -1328,7 +1336,14 @@ export type V5GCocosPlaybackState = V5GPlaybackState;
 export type V5GCocosPlayerFactoryOptions = Omit<
   V5GCocosPlayerOptions<Node, SpriteFrame>,
   "driver"
->;
+> & {
+  /**
+   * Host-owned Material using the bundled `vni-screen-alpha` Effect.
+   * Providing it makes Effect loading explicit and avoids relying on the
+   * global EffectAsset registration order.
+   */
+  screenMaterial?: Material | null;
+};
 
 export type V5GCocosPlayOptions = V5GPlayOptions;
 
@@ -8287,9 +8302,15 @@ var COCOS_BLEND_OPERATIONS = {
   ADD: 0,
   MAX: 4,
 };
-function createCocosNodeDriver() {
+function createCocosNodeDriver(options = {}) {
+  var _options$screenMateri;
   let nodeVisualCaptureQueue = Promise.resolve();
   const screenMaterials = /* @__PURE__ */ new WeakMap();
+  const configuredScreenMaterial =
+    (_options$screenMateri = options.screenMaterial) !== null &&
+    _options$screenMateri !== void 0
+      ? _options$screenMateri
+      : null;
   return {
     createNode(name) {
       return new Node(name);
@@ -8452,7 +8473,13 @@ function createCocosNodeDriver() {
       return readSpriteFrameSize(spriteFrame);
     },
     applyBlendMode(node, config) {
-      applySpriteBlendMode(node, requireSprite(node), config, screenMaterials);
+      applySpriteBlendMode(
+        node,
+        requireSprite(node),
+        config,
+        screenMaterials,
+        configuredScreenMaterial,
+      );
     },
     createAlphaMaskNode(name, sourceNode, targetNode) {
       var _Mask$Type;
@@ -8717,9 +8744,21 @@ function createCocosSpriteFrameRegion(source, region) {
   });
   return frame;
 }
-function applySpriteBlendMode(node, sprite, config, screenMaterials) {
+function applySpriteBlendMode(
+  node,
+  sprite,
+  config,
+  screenMaterials,
+  configuredScreenMaterial,
+) {
   if (config.strategy === "alpha-correct-screen-material") {
-    applyAlphaCorrectScreenMaterial(node, sprite, config, screenMaterials);
+    applyAlphaCorrectScreenMaterial(
+      node,
+      sprite,
+      config,
+      screenMaterials,
+      configuredScreenMaterial,
+    );
     return;
   }
   const nodeName = node.name;
@@ -8823,13 +8862,19 @@ function applyAlphaCorrectScreenMaterial(
   sprite,
   config,
   screenMaterials,
+  configuredScreenMaterial,
 ) {
   const blendable = sprite;
-  let material = screenMaterials.get(node);
-  if (!material) {
-    material = new Material();
+  let record = screenMaterials.get(node);
+  if (!record) {
+    const material =
+      configuredScreenMaterial !== null && configuredScreenMaterial !== void 0
+        ? configuredScreenMaterial
+        : new Material();
+    const ownedByRuntime = configuredScreenMaterial === null;
     try {
-      material.initialize({ effectName: config.effectName });
+      if (ownedByRuntime)
+        material.initialize({ effectName: config.effectName });
       if (
         material.effectName !== config.effectName ||
         material.passes.length === 0
@@ -8838,24 +8883,29 @@ function applyAlphaCorrectScreenMaterial(
           `Effect "${config.effectName}" did not initialize a render pass.`,
         );
     } catch (error) {
-      material.destroy();
+      if (ownedByRuntime) material.destroy();
       throw new Error(
-        `Cocos Sprite on node "${node.name}" requires imported Effect "${config.effectName}" for alpha-correct screen blending.`,
+        `Cocos Sprite on node "${node.name}" requires a loaded Material using Effect "${config.effectName}" for alpha-correct screen blending; pass it as createV5GCocosPlayer({ screenMaterial }).`,
         { cause: error },
       );
     }
-    screenMaterials.set(node, material);
+    record = {
+      material,
+      ownedByRuntime,
+    };
+    screenMaterials.set(node, record);
   }
+  const { material } = record;
   if (blendable.customMaterial === material) return;
   blendable.customMaterial = material;
   if (typeof blendable.updateMaterial === "function")
     blendable.updateMaterial();
 }
 function clearAlphaCorrectScreenMaterial(node, sprite, screenMaterials) {
-  const material = screenMaterials.get(node);
-  if (!material) return;
+  const record = screenMaterials.get(node);
+  if (!record) return;
   const blendable = sprite;
-  if (blendable.customMaterial === material) {
+  if (blendable.customMaterial === record.material) {
     blendable.customMaterial = null;
     if (typeof blendable.updateMaterial === "function")
       blendable.updateMaterial();
@@ -8864,16 +8914,16 @@ function clearAlphaCorrectScreenMaterial(node, sprite, screenMaterials) {
 function destroyScreenMaterialsRecursively(node, screenMaterials) {
   for (const child of node.children)
     destroyScreenMaterialsRecursively(child, screenMaterials);
-  const material = screenMaterials.get(node);
-  if (!material) return;
+  const record = screenMaterials.get(node);
+  if (!record) return;
   const sprite = node.getComponent(Sprite);
   if (
     (sprite === null || sprite === void 0 ? void 0 : sprite.customMaterial) ===
-    material
+    record.material
   )
     sprite.customMaterial = null;
   screenMaterials.delete(node);
-  material.destroy();
+  if (record.ownedByRuntime) record.material.destroy();
 }
 function setSpriteBlendFactors(
   nodeName,
@@ -13372,13 +13422,15 @@ function normalizeLayerId(layerId, apiName) {
 }
 //#endregion
 function createV5GCocosPlayer(options) {
-  return new V5GCocosPlayer(
-    _objectSpread2(
-      _objectSpread2({}, options),
-      {},
-      { driver: createCocosNodeDriver() },
-    ),
-  );
+  return new V5GCocosPlayer({
+    root: options.root,
+    project: options.project,
+    assets: options.assets,
+    driver: createCocosNodeDriver({ screenMaterial: options.screenMaterial }),
+    loop: options.loop,
+    onTimeChange: options.onTimeChange,
+    onPlayingChange: options.onPlayingChange,
+  });
 }
 //#endregion
 
@@ -13749,10 +13801,9 @@ const __standalone_createV5GCocosPlayer: (
   options: V5GCocosPlayerFactoryOptions,
 ) => V5GCocosPlayer<Node, SpriteFrame> = createV5GCocosPlayer;
 
-const __standalone_createCocosNodeDriver: () => V5GCocosNodeDriver<
-  Node,
-  SpriteFrame
-> = createCocosNodeDriver;
+const __standalone_createCocosNodeDriver: (
+  options?: CocosNodeDriverOptions,
+) => V5GCocosNodeDriver<Node, SpriteFrame> = createCocosNodeDriver;
 
 const __standalone_getCocosBlendModeConfig: (
   blendMode: V5GBlendMode,
