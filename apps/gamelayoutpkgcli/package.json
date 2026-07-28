@@ -1,0 +1,36 @@
+{
+  "name": "gamelayoutpkgcli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optimize exported scene-layout packages and derive asset loading groups.",
+  "type": "module",
+  "packageManager": "pnpm@10.0.0",
+  "bin": {
+    "gamelayoutpkg": "dist/index.js"
+  },
+  "scripts": {
+    "prepare:deps": "pnpm --filter @slotclientengine/browserartifactio build && pnpm --filter @slotclientengine/editorresource build && pnpm --filter @slotclientengine/vnicore build && pnpm --filter @slotclientengine/rendercore build",
+    "build": "pnpm run prepare:deps && tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "pnpm run prepare:deps && node --loader ts-node/esm src/index.ts",
+    "lint": "eslint .",
+    "test": "pnpm run prepare:deps && vitest run --coverage",
+    "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.eslint.json --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@slotclientengine/browserartifactio": "workspace:*",
+    "@slotclientengine/editorresource": "workspace:*",
+    "@slotclientengine/rendercore": "workspace:*",
+    "@slotclientengine/vnicore": "workspace:*"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vitest/coverage-v8": "^4.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.15.0"
+  }
+}

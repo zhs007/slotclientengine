@@ -57,6 +57,7 @@
 | `apps/gameviewer`、配置驱动 round、scene-layout template runtime                                       | `docs/agent-rules/gameviewer-round-flow.md`、`docs/agent-rules/shared-game-runtime.md`                         |
 | `packages/rendercore`、`logiccore`、`gameframeworks`、`uiframeworks`                                   | `docs/agent-rules/shared-game-runtime.md`；再按实际业务读取 game002、game003、Game Viewer 或 scene-layout 规则 |
 | `apps/gamelayouteditor`、scene layout、mode transition                                                 | `docs/agent-rules/scene-layout.md`、`docs/agent-rules/editor-artifacts.md`                                     |
+| `apps/gamelayoutpkgcli`、Scene Layout production ZIP 后处理、资源分组                                  | `docs/agent-rules/scene-layout.md`、`docs/agent-rules/editor-artifacts.md`                                     |
 | `apps/imgnumbereditor`、`popupeditor`、`symbolseditor`、`packages/editorresource`、`browserartifactio` | `docs/agent-rules/editor-artifacts.md`                                                                         |
 | `packages/rendercore/popup`、award-celebration popup                                                   | `docs/agent-rules/editor-artifacts.md`、`docs/agent-rules/shared-game-runtime.md`                              |
 | `packages/vnicore`、`apps/anieditorv5viewer`、`docs/anieditor5`                                        | `docs/agent-rules/vni-runtime.md`                                                                              |

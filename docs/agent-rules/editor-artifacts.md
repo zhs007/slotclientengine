@@ -25,6 +25,8 @@
 - manifest、Spine atlas 和 VNI refs 必须结构化同步改写。
 - exact content path 可以复用，但 logical identity 不合并。
 - nested dependency 自包含；consumer 只 vendor 精确闭包，不重新 hash。
+- production package 图片后处理只允许通过 owner schema 改写 layout、image-string、Symbols、Popup 和 VNI typed reference；Spine atlas page logical name、VNI `originalName` 和业务 identity 必须保持不变。
+- 后处理改变 bytes 或 filename key 后必须重新计算完整 SHA-256、byte length、media type 和 physical path，并严格复验 map hash/size/path/orphan；相同 bytes 可以共享 physical payload，但不得合并 logical key。
 
 ## Spine import
 
