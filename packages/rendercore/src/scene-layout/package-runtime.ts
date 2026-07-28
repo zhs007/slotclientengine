@@ -276,7 +276,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
           'Bound scene layout reel "main" is missing.',
         );
       this.#reel.position.set(grid.artRect.x, grid.artRect.y);
-      this.#reel.scale.set(grid.scale);
     }
     for (const [id, popup] of this.#popups) {
       const binding = this.#manifest.popups?.[id];
@@ -1342,7 +1341,6 @@ class DefaultSceneLayoutPackageRuntime implements SceneLayoutPackageRuntime {
     this.#layout.container.addChildAt(reel, insertionIndex);
     const grid = this.#layout.getReelGrid("main");
     reel.position.set(grid.artRect.x, grid.artRect.y);
-    reel.scale.set(grid.scale);
   }
 
   private hideVideoBlackout(): void {

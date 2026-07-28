@@ -5,9 +5,8 @@ import { EditorStore } from "../src/model/editor-store.js";
 import { assetBytes, imageManifest } from "./fixtures.js";
 
 describe("coordinate origin conversion", () => {
-  it("converts images, Spine-style placements, transitions and the scaled reel reversibly", () => {
+  it("converts images, Spine-style placements, transitions and the reel reversibly", () => {
     const project = manifestToEditorProject(imageManifest, assetBytes);
-    project.reel.placements.default!.scale = 0.5;
     project.resources.set("spine", {
       id: "spine",
       kind: "spine",
@@ -54,9 +53,8 @@ describe("coordinate origin conversion", () => {
       scale: 1,
     });
     expect(project.reel.placements.default).toEqual({
-      x: -18.75,
-      y: -19.25,
-      scale: 0.5,
+      x: -7.5,
+      y: -8.5,
     });
     expect(project.gameModes.transitions[0]).toMatchObject({
       placements: { default: { x: 10, y: -10, scale: 1 } },

@@ -65,27 +65,27 @@ describe("scene layout manifest", () => {
     },
   });
 
-  it("keeps legacy coordinates compatible and strictly parses center coordinates and reel scale", () => {
+  it("keeps legacy coordinates compatible and strictly parses center coordinates", () => {
     const legacy = parseSceneLayoutManifest(game002LayoutFixture);
     expect(legacy.coordinateOrigin).toBeUndefined();
-    expect(legacy.reels.main.placements.default?.scale).toBeUndefined();
 
     const centered = structuredClone(game002LayoutFixture) as any;
     centered.coordinateOrigin = "center";
     centered.nodes[0].placements.default = { x: -999.5, y: -999.5, scale: 1 };
-    centered.reels.main.placements.default = { x: 0, y: -123, scale: 1 };
+    centered.reels.main.placements.default = { x: 0, y: -123 };
     const parsed = parseSceneLayoutManifest(centered);
     expect(parsed.coordinateOrigin).toBe("center");
-    expect(parsed.reels.main.placements.default?.scale).toBe(1);
 
     const invalidOrigin = structuredClone(centered);
     invalidOrigin.coordinateOrigin = "bottom-right";
     expect(() => parseSceneLayoutManifest(invalidOrigin)).toThrow(
       /coordinateOrigin/,
     );
-    const invalidScale = structuredClone(centered);
-    invalidScale.reels.main.placements.default.scale = 0;
-    expect(() => parseSceneLayoutManifest(invalidScale)).toThrow(/scale/);
+    const unsupportedScale = structuredClone(centered);
+    unsupportedScale.reels.main.placements.default.scale = 1;
+    expect(() => parseSceneLayoutManifest(unsupportedScale)).toThrow(
+      /unknown key/,
+    );
   });
 
   it("accepts geometry-only manifest changes and rejects structural changes", () => {

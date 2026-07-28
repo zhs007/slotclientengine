@@ -151,9 +151,7 @@ export interface EditorProject {
     cellHeight: number;
     gapX: number;
     gapY: number;
-    placements: Partial<
-      Record<SceneLayoutVariantId, { x: number; y: number; scale?: number }>
-    >;
+    placements: Partial<Record<SceneLayoutVariantId, { x: number; y: number }>>;
   };
   resources: Map<string, EditorLayoutResource>;
   assets: Map<string, Uint8Array>;
@@ -195,10 +193,10 @@ export function createNewEditorProject(mode: EditorMode): EditorProject {
       gapY: 0,
       placements:
         mode === "maximized-focus"
-          ? { default: { x: 0, y: 0, scale: 1 } }
+          ? { default: { x: 0, y: 0 } }
           : {
-              landscape: { x: 0, y: 0, scale: 1 },
-              portrait: { x: 0, y: 0, scale: 1 },
+              landscape: { x: 0, y: 0 },
+              portrait: { x: 0, y: 0 },
             },
     },
     resources: new Map(),
@@ -252,8 +250,7 @@ export function initializeVariantFromBackground(
       Math.floor((availableHeight - gapsHeight) / reel.rows),
     ),
   );
-  const reelSize = calculateScaledReelSize(project, variantId);
-  const scale = reel.placements[variantId]?.scale ?? 1;
+  const reelSize = calculateReelSize(project);
   reel.placements[variantId] = {
     x:
       project.coordinateOrigin === "center"
@@ -263,7 +260,6 @@ export function initializeVariantFromBackground(
       project.coordinateOrigin === "center"
         ? 0
         : Math.round((artSize.height - reelSize.height) / 2),
-    scale,
   };
   updateVariantFocusFromReel(project, variantId);
 }
@@ -305,7 +301,7 @@ export function updateVariantFocusFromReel(
   ) {
     return;
   }
-  const reelSize = calculateScaledReelSize(project, variantId);
+  const reelSize = calculateReelSize(project);
   const reelTopLeft = resolveEditorReelTopLeft(project, variantId);
   const left = Math.max(0, reelTopLeft.x + offsets.left);
   const top = Math.max(0, reelTopLeft.y + offsets.top);
@@ -338,7 +334,7 @@ export function setVariantArtSizeDimension(
   const variant = project.variants[variantId];
   const previousSize = { ...variant.artSize };
   const previousComplete = previousSize.width > 0 && previousSize.height > 0;
-  const reelSize = calculateScaledReelSize(project, variantId);
+  const reelSize = calculateReelSize(project);
   const reelPlacement = project.reel.placements[variantId];
   const reelWasCentered =
     !previousComplete ||
@@ -392,7 +388,7 @@ export function updateVariantFocusOffsetsFromRect(
   const variant = project.variants[variantId];
   const placement = project.reel.placements[variantId];
   if (!placement) return;
-  const reelSize = calculateScaledReelSize(project, variantId);
+  const reelSize = calculateReelSize(project);
   const reelTopLeft = resolveEditorReelTopLeft(project, variantId);
   variant.focusOffsets = {
     left: variant.focusRect.x - reelTopLeft.x,
@@ -428,7 +424,7 @@ export function applySymbolPackageCellSize(
     const placement = project.reel.placements[variantId];
     if (!placement || variant.artSize.width <= 0 || variant.artSize.height <= 0)
       continue;
-    const size = calculateScaledReelSize(project, variantId);
+    const size = calculateReelSize(project);
     const topLeft = resolveEditorReelTopLeft(project, variantId);
     if (
       topLeft.x < 0 ||
@@ -965,8 +961,6 @@ export function manifestToEditorProject(
     gapY: reel.gap.y,
     placements: structuredClone(reel.placements),
   };
-  for (const placement of Object.values(project.reel.placements))
-    if (placement) placement.scale ??= 1;
   if (parsed.adaptation.mode === "maximized-focus") {
     project.variants.default = {
       ...createEmptyVariant(),
@@ -1184,15 +1178,6 @@ export function calculateReelSize(project: EditorProject): {
   };
 }
 
-export function calculateScaledReelSize(
-  project: EditorProject,
-  variantId: SceneLayoutVariantId,
-): { width: number; height: number } {
-  const size = calculateReelSize(project);
-  const scale = project.reel.placements[variantId]?.scale ?? 1;
-  return { width: size.width * scale, height: size.height * scale };
-}
-
 export function resolveEditorReelTopLeft(
   project: EditorProject,
   variantId: SceneLayoutVariantId,
@@ -1202,7 +1187,7 @@ export function resolveEditorReelTopLeft(
   if (project.coordinateOrigin === "top-left")
     return { x: placement.x, y: placement.y };
   const artSize = project.variants[variantId].artSize;
-  const size = calculateScaledReelSize(project, variantId);
+  const size = calculateReelSize(project);
   return {
     x: artSize.width / 2 + placement.x - size.width / 2,
     y: artSize.height / 2 + placement.y - size.height / 2,

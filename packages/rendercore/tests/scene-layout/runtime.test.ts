@@ -387,7 +387,7 @@ describe("scene layout runtime", () => {
       y: -979.5,
       scale: 1,
     };
-    centered.reels.main.placements.default = { x: 0, y: -123, scale: 1 };
+    centered.reels.main.placements.default = { x: 0, y: -123 };
     const snapshot = runtime.applyGeometryManifest(centered);
 
     expect(snapshot?.reels.main.artRect).toEqual({

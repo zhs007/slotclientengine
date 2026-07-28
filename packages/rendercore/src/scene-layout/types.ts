@@ -91,14 +91,7 @@ export interface SceneLayoutReelGrid {
   readonly gap: { readonly x: number; readonly y: number };
   readonly placements: Readonly<
     Partial<
-      Record<
-        SceneLayoutVariantId,
-        {
-          readonly x: number;
-          readonly y: number;
-          readonly scale?: number;
-        }
-      >
+      Record<SceneLayoutVariantId, { readonly x: number; readonly y: number }>
     >
   >;
 }
@@ -248,7 +241,6 @@ export interface ResolvedSceneLayoutReelGrid {
   readonly cellSize: RenderViewportSize;
   readonly gap: { readonly x: number; readonly y: number };
   readonly stride: RenderViewportSize;
-  readonly scale: number;
   readonly artRect: RenderViewportRect;
 }
 

@@ -162,10 +162,9 @@ export function resolveSceneLayoutReelGrid(
     width: reel.cellSize.width + reel.gap.x,
     height: reel.cellSize.height + reel.gap.y,
   });
-  const scale = placement.scale ?? 1;
-  const unscaledWidth =
+  const width =
     reel.columns * reel.cellSize.width + (reel.columns - 1) * reel.gap.x;
-  const unscaledHeight =
+  const height =
     reel.rows * reel.cellSize.height + (reel.rows - 1) * reel.gap.y;
   const artSize =
     manifest.adaptation.mode === "maximized-focus"
@@ -173,8 +172,6 @@ export function resolveSceneLayoutReelGrid(
       : manifest.adaptation.variants[
           resolvedVariant as "landscape" | "portrait"
         ].artSize;
-  const width = unscaledWidth * scale;
-  const height = unscaledHeight * scale;
   return Object.freeze({
     id: reelId,
     variantId: resolvedVariant,
@@ -183,7 +180,6 @@ export function resolveSceneLayoutReelGrid(
     cellSize: reel.cellSize,
     gap: reel.gap,
     stride,
-    scale,
     artRect: Object.freeze({
       x:
         (manifest.coordinateOrigin ?? "top-left") === "center"

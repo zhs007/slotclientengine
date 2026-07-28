@@ -4,17 +4,17 @@
 
 ### 目标
 
-修复 Game Layout Editor 导出再导入后图层可读名称被内容 hash 取代的问题；为当前选中普通图层增加红色预览框；重整编辑器 DOM 与 Pixi preview 的刷新分级，使纯选择和几何编辑不再重建 symbols；并为横竖双背景项目增加 per-variant 图标区整体缩放，以及可持久化、可转换、兼容旧包的全局左上角/中心坐标类型。
+修复 Game Layout Editor 导出再导入后图层可读名称被内容 hash 取代的问题；为当前选中普通图层增加红色边框与可见区斜线；重整编辑器 DOM 与 Pixi preview 的刷新分级，使纯选择和几何编辑不再重建 symbols；并增加可持久化、可转换、兼容旧包的全局左上角/中心坐标类型。根据执行后的产品决策，主转轮不增加整体缩放，横竖屏适配由背景素材、art size 与 reel placement 完成。
 
 ### 完成定义
 
 - [ ] layout ZIP 导出、导入、再次导出后，`SceneLayoutNode.id` 仍是原图层名称；资源列表和 Inspector 使用 logical filename key，不显示 `assets/<sha256>.*` 物理 payload 路径充当图层或资源名称。
 - [ ] 选中普通图层时，预览画布以红色非交互框标出当前 variant 中该图层的实际可见边界；黄色、绿色现有 guide 不变，隐藏/删除/切换选择时红框立即清除或更新。
-- [ ] 纯 UI selection 不触发 store mutation、资源 prepare、runtime 重建或 symbols 抽样；只改 node/reel placement、art/focus 几何、reel scale 或坐标类型时保留已加载资源、Spine player、当前 game mode、reel 与 sampled symbols scene。
+- [ ] 纯 UI selection 不触发 store mutation、资源 prepare、runtime 重建或 symbols 抽样；只改 node/reel placement、art/focus 几何或坐标类型时保留已加载资源、Spine player、当前 game mode、reel 与 sampled symbols scene。
 - [ ] 资源、node topology、animation、symbols binding、mode/transition 等结构变化仍走严格 prepare/commit；失败和 stale async 结果不半提交。
-- [ ] `orientation-focus` 项目的 `main` 图标区可分别设置 landscape/portrait 正数 scale，并由 reel 父容器整体缩放；单背景 UI 不开放该设置，symbol package 内部 per-symbol scale 不被改写。
+- [ ] `main` 图标区不提供整体 scale；`orientation-focus` 仅保留 landscape/portrait `x/y` placement，适配由背景素材和 art size 完成。
 - [ ] 项目可在 `top-left` 与 `center` 间全局切换；切换事务按当前 variant art size 原子转换现有 node、reel 和 art-space Spine transition placement，切换前后视觉位置不跳变。
-- [ ] 新包保存坐标类型；缺少该字段和 reel scale 的旧包按 `top-left`、scale `1` 正确读取、渲染并可 canonical re-export。
+- [ ] 新包保存坐标类型；缺少该字段的旧包按 `top-left` 正确读取、渲染并可 canonical re-export。
 - [ ] rendercore、gamelayouteditor 的定向自动化验收和真实浏览器人工视觉/刷新验收完成，并生成任务 129 UTC 中文执行报告。
 
 ## 2. 范围
@@ -22,14 +22,14 @@
 ### 包含
 
 - `apps/gamelayouteditor` 的 typed draft、manifest conversion、ZIP round-trip、布局/项目 Inspector、selection guide、preview 更新分级和相关测试。
-- `packages/rendercore/src/scene-layout` 的兼容 schema、坐标解析、scaled reel geometry、父容器缩放和原子几何更新 API。
+- `packages/rendercore/src/scene-layout` 的兼容 schema、坐标解析、reel geometry 和原子几何更新 API。
 - scene-layout manifest 文档、Game Layout Editor README，以及稳定职责边界所需的最小领域规则更新。
 - rendercore 直接 consumer `gamelayouteditor` 的 L2 验收；只在定向测试暴露回归时扩展到其它直接 consumer。
 
 ### 不包含
 
 - canvas 拖拽编辑、缩放手柄、snapping、multi-select、undo/redo、图层锁定或 hover hit-test。
-- 单背景图标区缩放 UI、per-symbol scale 改写、symbol package schema 改造或服务器 scene/reel 逻辑。
+- 图标区整体缩放 UI、per-symbol scale 改写、symbol package schema 改造或服务器 scene/reel 逻辑。
 - popup 坐标迁移；popup 已明确使用 viewport center offset。
 - video blackout 坐标迁移；它是 viewport-space，不是 art-space placement。
 - 用 editor sidecar、physical hash、原文件目录或运行时猜测恢复名称。
@@ -80,15 +80,15 @@ tasks/112-gamelayouteditor-state-workspaces.md
 - “图层名字”以 production `SceneLayoutNode.id` 为权威；资源 UI 使用 `assets.map.json` 的 logical filename key。完整 hash 只属于 payload path，不得成为 UI identity。共享资源仍可被多个不同名称 node 引用。
 - 红框只表示布局大纲当前选中的普通 layer；背景和 main reel 仍由现有 guide 表达，本任务不增加点击画布选层。
 - “尽量少刷”同时约束 DOM 和 Pixi：UI session 变化、几何变化、结构/资源变化使用不同更新路径，symbols 仅在 binding/grid topology/显式随机操作要求时重建或重新抽样。
-- “图标区整体缩放”指 main reel presentation 的父容器 uniform scale；cell size 和 symbol manifest 内部 scale 保持原值。
-- 中心坐标是 art-space 的全局 authored coordinate mode，不改变 viewport focus 算法。中心模式中 art center 是 `(0,0)`；图片 placement 指图片中心，Spine/image-string placement 保持其 authored origin/anchor，reel placement 指缩放后 grid 的中心。
+- 主转轮不提供整体缩放；横竖屏差异通过背景素材宽度、art size 和 reel `x/y` 解决。
+- 中心坐标是 art-space 的全局 authored coordinate mode，不改变 viewport focus 算法。中心模式中 art center 是 `(0,0)`；图片 placement 指图片中心，Spine/image-string placement 保持其 authored origin/anchor，reel placement 指 grid 的中心。
 
 ### 关键决策
 
 1. **保持 manifest v1，增加兼容可选字段**
    - 根级增加 `coordinateOrigin?: "top-left" | "center"`；缺失严格解释为 `top-left`。
-   - reel per-variant placement 增加可选正数 `scale`；缺失严格解释为 `1`。
-   - 新编辑器导出显式写入 `coordinateOrigin`，双背景 reel placement 显式写 scale；legacy import 后可 canonical 化。
+   - reel per-variant placement 继续只允许 `x/y`，scale 仍属于 unknown key。
+   - 新编辑器导出显式写入 `coordinateOrigin`；legacy import 后可 canonical 化。
    - 不引入 `version: 2`，因为两个扩展都有无歧义旧默认；parser 仍拒绝未知值、NaN、零和负 scale。
 
 2. **定义可逆坐标转换，保证切换不跳画面**
@@ -96,33 +96,33 @@ tasks/112-gamelayouteditor-state-workspaces.md
    - top-left -> center：
      - image node：`p' = p + scale * imageSize / 2 - C`；
      - Spine/image-string node及 art-space Spine transition：`p' = p - C`；
-     - reel：`p' = p + reelScale * G / 2 - C`。
+     - reel：`p' = p + G / 2 - C`。
    - center -> top-left 使用精确逆式；转换必须一次 transaction 覆盖所有 active variant placement。
    - `artSize`、`focusRect`、`frameFocusRect`、`minFocusMargin` 是区域几何，继续保持 top-left rect 表示，不转换。
    - popup placement 已是 viewport center offset，video transition 已是 viewport-space，二者不转换。
-   - 任一所需 art size、image size、placement 或 scale 非法时整次切换失败，原项目和 preview 不变。
+   - 任一所需 art size、image size 或 placement 非法时整次切换失败，原项目和 preview 不变。
 
 3. **把坐标语义统一放在 rendercore**
-   - `resolveSceneLayoutReelGrid()` 输出 resolved scale 和最终 top-left `artRect`；fit/focus 校验使用缩放后的 rect。
+   - `resolveSceneLayoutReelGrid()` 输出最终 top-left `artRect`；fit/focus 校验使用该 rect。
    - runtime 根据 coordinate origin 设置 image anchor/slot 映射；Spine 和 image-string 不伪造 visual bounds 或自动改内部 anchor。
-   - package runtime 对整个 reel root 设置 scale，position 使用 resolved scaled rect；不得循环改每个 symbol。
+   - package runtime 使用 resolved rect 设置 reel position，不缩放 reel root 或子 symbol。
    - editor 只维护 typed authored data、调用 public resolver/runtime API，不直接操作 production display tree 内部节点。
 
 4. **增加受限的原子几何更新，而非每次重建 runtime**
    - rendercore 提供明确的 `applyGeometryManifest(nextManifest)`（最终命名可按现有风格微调）给 scene/package runtime。
-   - API 先 strict parse，并比较 immutable compatibility signature；只允许 coordinate origin、adaptation geometry、node placements、reel placements/scale 变化。
+   - API 先 strict parse，并比较 immutable compatibility signature；只允许 coordinate origin、adaptation geometry、node placements、reel placements 变化。
    - node id/order/resource、reel topology/cell/gap、mode/binding/popup/transition topology 等变化必须拒绝该快路径并由 caller 走完整 prepare。
    - commit 后复用 node container、Texture、Spine player、当前 mode、reel object 和当前 scene；失败不得改变旧 manifest/snapshot/display。
 
 5. **以语义 diff 选择刷新级别**
    - 新增纯函数比较前后 project/preview manifest，至少返回 `ui-only | geometry | structural`。
    - selection/details/filter/focus 属于 `ui-only`，不增加 project revision。
-   - `geometry` 调用原子几何更新和 `applyViewport()`，重画 guides/红框；不调用 `validateLayoutAssets()`、`setLayout()`、random source 或 `resetReelScene()`。
+   - `geometry` 调用原子几何更新和 `applyViewport()`，重画 guides、红框与可见区斜线；不调用 `validateLayoutAssets()`、`setLayout()`、random source 或 `resetReelScene()`。
    - `structural` 才异步准备新 package/runtime；继续使用 request token，准备成功后一次 commit 并销毁旧 owner。
    - DOM 使用稳定 shell 和 keyed view-model signature，只替换受影响的 outline/Inspector/status；不得把 input focus/selection range、scroll、details open 当成“少刷新”的牺牲品。
 
 6. **红色选中框属于 editor overlay**
-   - `LayoutPreview.setSelectedLayer(nodeId | null)` 接受已校验 selection；通过 runtime public node/bounds 能力取得实际 viewport bounds，在独立顶层 `Graphics` 绘制红色矩形。
+   - `LayoutPreview.setSelectedLayer(nodeId | null)` 接受已校验 selection；通过 runtime public node/bounds 能力取得实际 viewport bounds，在独立顶层 `Graphics` 绘制红色矩形，并在 bounds 与渲染区交集内绘制半透明红色斜线。
    - overlay 不写入 manifest/ZIP，不参与 hit test，不改变 mask、node order、runtime visibility 或 symbols。
    - 当前 variant 无 placement、node 非 active/不存在、bounds 为空或 preview 未 ready 时清空红框并给出可测试诊断，不画 `(0,0)` placeholder。
 
@@ -133,10 +133,10 @@ tasks/112-gamelayouteditor-state-workspaces.md
 
 ## 5. 职责与合同
 
-- **gamelayouteditor model**：拥有 `EditorProject.coordinateOrigin`、per-variant reel scale、坐标转换 command 和 preview change classifier。
-- **gamelayouteditor UI**：拥有全局坐标切换按钮、仅双背景显示的 reel scale 输入、selection session 和分区 DOM 更新。
+- **gamelayouteditor model**：拥有 `EditorProject.coordinateOrigin`、坐标转换 command 和 preview change classifier。
+- **gamelayouteditor UI**：拥有全局坐标切换按钮、selection session 和分区 DOM 更新；不提供 reel scale。
 - **gamelayouteditor preview**：编排 full prepare 与 geometry fast path，拥有红框生命周期；不复制 scene-layout 坐标算法。
-- **rendercore scene-layout**：拥有 optional schema/default、坐标解析、scaled reel geometry、runtime placement、父 reel scale 和 geometry compatibility/commit。
+- **rendercore scene-layout**：拥有 optional schema/default、坐标解析、reel geometry、runtime placement 和 geometry compatibility/commit。
 - **ZIP/import**：只保存 canonical manifest、logical filename map 和精确 hash payload；旧 direct-path/map 包继续走统一 resolver。
 - **失败策略**：未知 origin、非法 scale、不可逆转换、fast-path signature 不兼容、缺 node/bounds/asset 都显式失败或清除 selection guide，不猜默认资源或静默降级为 full mutation。
 - **禁止行为**：不从 hash/basename 猜 node id；不修改 symbol child scale；不因坐标编辑重新随机；不让 app 直接访问 package runtime 私有 reel/display tree。
@@ -203,13 +203,13 @@ AGENTS.md
    - 记录真实 hash 泄漏发生在 node label、resource label 还是 resolved file key，并只修对应边界。
 
 2. **扩展 scene-layout 兼容合同**
-   - 增加 origin 和 reel placement scale 类型/parser/default，更新 exact validation。
-   - 调整 resolver、bounds/focus 校验、runtime image origin、package reel root placement/scale。
+   - 增加 origin 类型/parser/default，保持 reel placement 只允许 `x/y`。
+   - 调整 resolver、bounds/focus 校验、runtime image origin 和 package reel root placement。
    - 实现 immutable signature 与 `applyGeometryManifest()` 的 prepare/commit/rollback。
 
 3. **扩展 editor draft 与转换**
-   - 新项目默认 `top-left`，reel active variants 默认 scale `1`；legacy manifest 缺字段时补默认。
-   - 实现单一坐标转换 command，覆盖普通/背景 node、reel、Spine transition；同步 focus 计算使用 scaled reel bounds。
+   - 新项目默认 `top-left`；legacy manifest 缺字段时补默认。
+   - 实现单一坐标转换 command，覆盖普通/背景 node、reel、Spine transition；同步 focus 计算使用 reel bounds。
    - manifest/ZIP round-trip 保留 node id 和 logical keys，canonical export 写新字段。
 
 4. **重构 preview 更新策略**
@@ -219,8 +219,8 @@ AGENTS.md
 
 5. **接入产品 UI**
    - 项目级显式按钮显示当前“左上角/中心”，点击确认后执行全量坐标转换并保存。
-   - 双背景 main reel Inspector 增加 landscape/portrait scale；单背景不显示可编辑 scale。
-   - selection 变化同步红框；resize、variant、mode、geometry update 后重算，隐藏/无效 selection 清除。
+   - 双背景 main reel Inspector 只保留 landscape/portrait `x/y`，不增加 scale。
+   - selection 变化同步红框与可见区斜线；resize、variant、mode、geometry update 后重算，隐藏/无效 selection 清除。
 
 6. **测试、文档与收尾**
    - 完成 parser/geometry/runtime/editor/ZIP/UI/refresh 测试和浏览器人工验收。
@@ -232,7 +232,7 @@ AGENTS.md
 ### 测试原则
 
 - 以 object identity、mock call count、固定 random source 和视觉 snapshot 数据证明“没有重建/重新抽样”，不只断言最终像素相似。
-- 覆盖 top-left/center 双向转换、不同 art size/图片 scale/reel scale、landscape/portrait 和 legacy 缺字段。
+- 覆盖 top-left/center 双向转换、不同 art size/图片 scale、landscape/portrait 和 legacy 缺字段。
 - fast path 必须覆盖成功、非法 signature、apply 失败 rollback、stale request、destroy 后不提交。
 - 不放宽 strict unknown-key/path/hash/orphan 检查来通过旧 fixture。
 
@@ -254,16 +254,16 @@ git diff --check
 ### 自动化验收重点
 
 - strict parser：旧字段缺失默认、显式两种 origin、scale 正数、unknown/invalid 失败。
-- geometry/runtime：scaled reel rect/guide/focus、image center anchor、Spine authored origin、variant resize、父 reel scale。
+- geometry/runtime：reel rect/guide/focus、image center anchor、Spine authored origin、variant resize。
 - import/export：node ids、shared resources、Spine/image/image-string、physical hash 与 logical key 分离、legacy -> canonical -> reimport。
 - refresh：selection 和 placement edit 的 `setLayout`/validate/sample/reel-create 次数为零；结构变更只 prepare/commit 一次。
-- UI：坐标按钮、双背景 scale 字段、单背景隐藏、红框 set/clear、focus/details/scroll 保留。
+- UI：坐标按钮、无 reel scale 字段、红框/斜线 set/clear、focus/details/scroll 保留。
 
 ### 人工验收
 
 1. 在真实浏览器创建双背景项目，导入 image 与 Spine 图层及 symbols package，导出 ZIP 后重新导入；确认 outline/Inspector 名称未变且 ZIP payload 仍是 hash。
 2. 选中不同普通图层、切横竖屏/状态并缩放预览；确认红框跟随实际图层，黄绿 guide 不变，隐藏 layer 无假框。
-3. 连续只改 x/y/scale，观察 symbols 排列和当前 animation 不重置；分别设置横竖 reel scale，确认整体等比缩放。
+3. 连续只改 x/y，观察 symbols 排列和当前 animation 不重置；确认横竖 reel Inspector 均无整体 scale。
 4. 往返切换 top-left/center，确认背景、普通图层、Spine transition 和图标区视觉位置不跳；刷新页面通过重新导入包验证持久化与旧包兼容。
 
 ### 独立验收建议
@@ -292,9 +292,9 @@ pnpm --filter gamelayouteditor build
 ## 10. 生成物、文档与规则
 
 - 本任务不修改 YAML 或现有 generated resource map，不应产生生成物。
-- `docs/scene-layout-manifest.md` 记录 origin、reel scale、legacy defaults、坐标/anchor 公式和 canonical 示例。
-- `apps/gamelayouteditor/README.md` 记录坐标切换、双背景整体缩放、红框和刷新分级的用户可见行为。
-- `docs/agent-rules/scene-layout.md` 最小补充坐标 ownership、父 reel scale和 geometry update 保留 runtime identity。
+- `docs/scene-layout-manifest.md` 记录 origin、legacy default、坐标/anchor 公式，以及 reel placement 不支持 scale。
+- `apps/gamelayouteditor/README.md` 记录坐标切换、无 reel scale、红框/斜线和刷新分级的用户可见行为。
+- `docs/agent-rules/scene-layout.md` 最小补充坐标 ownership、reel 不缩放和 geometry update 保留 runtime identity。
 - `docs/agent-rules/editor-artifacts.md` 最小补充 logical name 与 hash payload 不得混用；不把具体任务证据写入规则。
 
 ## 11. 执行报告
@@ -314,7 +314,7 @@ UTC 使用 `date -u +%y%m%d-%H%M%S`。报告简要记录最终文件、关键决
 - Spine 动画实时 bounds 可能变化；红框若逐帧取 bounds 需避免额外 layout/GC，若使用稳定 authored bounds 则必须明确与实际可见 bounds 的差异。
 - center 模式对 raster image 改为 center anchor，而 Spine/image-string 保持 authored origin/anchor；转换公式若在 scale/variant 上遗漏会造成视觉跳变。
 - geometry fast path 若 compatibility signature 漏字段，可能错误复用过期资源；必须采用 allowlist 并让未知差异退回 structural prepare。
-- reel scale 会改变 focus containment，旧合法位置在放大后可能严格失败；UI 要保留旧值并显示准确错误，不自动 fit。
+- 中心原点转换会改变 authored reel placement 数值；必须保证转换前后视觉位置等价，不自动 fit。
 
 ### 假设
 

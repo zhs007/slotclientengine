@@ -8,11 +8,11 @@
 
 node/background/transition 直接引用 filename key 或 typed key 组合。node id、package id、mode id 仍是业务身份，但不是第二个资源 id。多个 mode/variant 可引用同一 `BG.jpg`，覆盖一次即可更新全部 bytes，同时各自的稳定 node id 与 placement 保持独立。
 
-layout 大纲选中普通图层后，preview 使用红框显示当前 variant 中该节点的实时可见边界；黄/绿 focus 与 reel guide 保持原语义。只修改 node/reel placement、focus、art size、坐标类型或 reel scale 时走 geometry 更新，复用已加载资源、Spine player、reel 和已抽样 symbols，不重新随机排列。
+layout 大纲选中普通图层后，preview 使用红框和半透明红色斜线显示当前 variant 中该节点的实时可见范围；斜线裁在渲染区域内，因此图层边界位于画布外时仍有选中提示。黄/绿 focus 与 reel guide 保持原语义。只修改 node/reel placement、focus、art size或坐标类型时走 geometry 更新，复用已加载资源、Spine player、reel 和已抽样 symbols，不重新随机排列。
 
 项目 Tab 可在“左上角”和“中心”全局坐标间切换。切换会在一次事务中转换普通图层、背景、main reel 和 art-space Spine transition 的现有 placement，视觉位置保持不变；popup 与 video 不参与转换。旧包缺少坐标字段时按左上角读取。
 
-双背景 `orientation-focus` 项目可在 main reel Inspector 分别设置 landscape/portrait 的“整体 scale”；缩放作用在 reel presentation 根节点，不修改子 symbol scale。单背景项目不提供该输入，旧包缺少 scale 时按 `1`。
+main reel 只提供横竖屏 `x/y` placement，不提供整体缩放。双背景适配通过美术调整背景素材宽度、art size 和 reel 位置完成，避免横竖屏分别缩放转轮造成额外布局差异。
 
 同名不同 bytes 默认覆盖，引用不变；冲突只能覆盖、取消或显式改名，不 lowercase、不生成 `-2/-3`、不建立 `dependencies/**` namespace。Symbols/Popup dependency 只保存业务 package id、root key、closure keys 与 placement；bytes 只存在全局 asset workspace。
 

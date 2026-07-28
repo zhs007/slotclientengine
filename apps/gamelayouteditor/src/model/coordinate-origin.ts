@@ -41,12 +41,8 @@ export function convertProjectCoordinateOrigin(
       throw new Error(`main reel 缺少 ${variantId} placement。`);
     assertPlacement(reelPlacement, `main reel ${variantId}`);
     const reelSize = calculateReelSize(project);
-    reelPlacement.x +=
-      (toCenter ? 1 : -1) *
-      (((reelPlacement.scale ?? 1) * reelSize.width) / 2 - center.x);
-    reelPlacement.y +=
-      (toCenter ? 1 : -1) *
-      (((reelPlacement.scale ?? 1) * reelSize.height) / 2 - center.y);
+    reelPlacement.x += (toCenter ? 1 : -1) * (reelSize.width / 2 - center.x);
+    reelPlacement.y += (toCenter ? 1 : -1) * (reelSize.height / 2 - center.y);
     for (const transition of project.gameModes.transitions) {
       if (transition.kind !== "spine") continue;
       const placement = transition.placements[variantId];

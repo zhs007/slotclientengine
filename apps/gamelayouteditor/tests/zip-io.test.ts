@@ -293,7 +293,10 @@ describe("layout zip IO", () => {
       new TextDecoder().decode(secondEntries.get("layout.manifest.json")),
     );
     expect(canonicalManifest.coordinateOrigin).toBe("top-left");
-    expect(canonicalManifest.reels.main.placements.default.scale).toBe(1);
+    expect(canonicalManifest.reels.main.placements.default).toEqual({
+      x: 20,
+      y: 20,
+    });
     const importedOverlay =
       imported.manifest.gameModes!.transitions![0]!.overlay;
     if (importedOverlay.resource.kind !== "video")

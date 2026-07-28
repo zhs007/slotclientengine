@@ -56,9 +56,10 @@ const state = vi.hoisted(() => {
     graphicsClear: vi.fn(),
     graphicsRect: vi.fn(),
     graphicsStroke: vi.fn(),
+    graphicsMoveTo: vi.fn(),
+    graphicsLineTo: vi.fn(),
     containerInstances: [] as Array<{
       position: { set: ReturnType<typeof vi.fn> };
-      scale: { set: ReturnType<typeof vi.fn> };
     }>,
     resolveFrame: vi.fn(
       ({ pageSize }: { pageSize: { width: number; height: number } }) =>
@@ -97,7 +98,6 @@ function gridSnapshot(columns = 2, rows = 2) {
         rows,
         cellSize: { width: 20, height: 20 },
         stride: { width: 25, height: 23 },
-        scale: 1,
         viewportRect: { x: 7, y: 11, width: 45, height: 43 },
       },
     },
@@ -195,6 +195,14 @@ vi.mock("pixi.js", () => ({
       state.graphicsRect(...args);
       return this;
     }
+    moveTo(...args: unknown[]) {
+      state.graphicsMoveTo(...args);
+      return this;
+    }
+    lineTo(...args: unknown[]) {
+      state.graphicsLineTo(...args);
+      return this;
+    }
     stroke(...args: unknown[]) {
       state.graphicsStroke(...args);
       return this;
@@ -203,7 +211,6 @@ vi.mock("pixi.js", () => ({
   },
   Container: class {
     position = { set: vi.fn() };
-    scale = { set: vi.fn() };
     addChild = vi.fn();
     removeChildren = vi.fn();
     destroy = vi.fn();
@@ -445,7 +452,6 @@ describe("LayoutPreview", () => {
       7,
       11,
     );
-    expect(state.containerInstances[0]?.scale.set).toHaveBeenCalledWith(1);
     expect(renderSymbols[2].scale.set).toHaveBeenCalledWith(1.5);
     expect(renderSymbols[2].setPresentationValue).toHaveBeenCalledWith(25);
     expect(renderSymbols[2].zIndex).toBe(10);
@@ -491,6 +497,33 @@ describe("LayoutPreview", () => {
       alpha: 1,
       color: 0xff3b30,
       width: 3,
+    });
+    expect(state.graphicsMoveTo).toHaveBeenCalled();
+    expect(state.graphicsLineTo).toHaveBeenCalled();
+    preview.destroy();
+  });
+
+  it("clips selected-layer hatching to the visible render area when its boundary is offscreen", async () => {
+    state.runtime.applyViewport.mockReturnValue(gridSnapshot());
+    state.runtime.getNode.mockReturnValueOnce({
+      getBounds: () => ({ x: -20, y: -10, width: 140, height: 120 }),
+    });
+    const host = document.createElement("div");
+    const diagnostics = document.createElement("div");
+    document.body.append(host, diagnostics);
+    const preview = new LayoutPreview(host, diagnostics);
+    await preview.init();
+    await preview.setLayout(imageManifest, assetBytes);
+
+    preview.setSelectedLayer("bg");
+
+    expect(state.graphicsRect).toHaveBeenCalledWith(-20, -10, 140, 120);
+    expect(state.graphicsMoveTo).toHaveBeenCalled();
+    expect(state.graphicsLineTo).toHaveBeenCalled();
+    expect(state.graphicsStroke).toHaveBeenCalledWith({
+      alpha: 0.38,
+      color: 0xff3b30,
+      width: 2,
     });
     preview.destroy();
   });

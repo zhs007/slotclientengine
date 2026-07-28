@@ -70,7 +70,7 @@ describe("scene layout frame geometry", () => {
     ).toThrow(/pageSize.width/);
   });
 
-  it("resolves a center-origin reel as one scaled parent rectangle", () => {
+  it("resolves a center-origin reel around the art center", () => {
     const manifest = structuredClone(game002LayoutFixture) as any;
     manifest.coordinateOrigin = "center";
     manifest.nodes[0].placements.default = {
@@ -78,7 +78,7 @@ describe("scene layout frame geometry", () => {
       y: -999.5,
       scale: 1,
     };
-    manifest.reels.main.placements.default = { x: 0, y: 0, scale: 0.5 };
+    manifest.reels.main.placements.default = { x: 0, y: -123 };
 
     const snapshot = resolveSceneLayoutViewport({
       manifest,
@@ -86,9 +86,8 @@ describe("scene layout frame geometry", () => {
     });
 
     expect(snapshot.reels.main).toMatchObject({
-      scale: 0.5,
-      artRect: { x: 820, y: 730, width: 360, height: 540 },
-      viewportRect: { width: 360, height: 540 },
+      artRect: { x: 640, y: 337, width: 720, height: 1080 },
+      viewportRect: { width: 720, height: 1080 },
     });
   });
 });

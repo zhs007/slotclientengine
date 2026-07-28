@@ -1675,41 +1675,6 @@ describe("GameLayoutEditorApp workspace", () => {
     app.destroy();
   });
 
-  it("shows per-variant whole reel scale only for dual-background projects", async () => {
-    const { app, root } = await createApp();
-    (
-      root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
-    ).click();
-    (
-      root.querySelector('[data-outline-key="reel:main"]') as HTMLButtonElement
-    ).click();
-    expect(root.querySelector('[data-number$=".scale"]')).toBeNull();
-
-    (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
-    const mode = root.querySelector(
-      "[data-new-project-mode]",
-    ) as HTMLSelectElement;
-    mode.value = "orientation-focus";
-    mode.dispatchEvent(new Event("change"));
-    (
-      root.querySelector("[data-confirm-new-project]") as HTMLButtonElement
-    ).click();
-    (
-      root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
-    ).click();
-    (
-      root.querySelector('[data-outline-key="reel:main"]') as HTMLButtonElement
-    ).click();
-
-    expect(
-      root.querySelector('[data-number="reel.placements.landscape.scale"]'),
-    ).toBeTruthy();
-    expect(
-      root.querySelector('[data-number="reel.placements.portrait.scale"]'),
-    ).toBeTruthy();
-    app.destroy();
-  });
-
   it("keeps preview page, zoom and guide controls independent of project tabs", async () => {
     const { app, root } = await createApp();
     const width = root.querySelector(

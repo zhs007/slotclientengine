@@ -848,7 +848,6 @@ export class LayoutPreview {
         reel.viewportRect.x,
         reel.viewportRect.y,
       );
-      this.#symbolOverlay.scale.set(reel.scale);
       this.#symbolDiagnostic = `symbols=${preview.packageId} · reel=${scene.reelSetName} · stops=[${scene.stopYs.join(",")}] · mappings=${formatBindings(preview.bindings)} · otherScene=${formatOtherScene(preview.otherScene?.matrix ?? [])}`;
       return;
     }
@@ -901,7 +900,6 @@ export class LayoutPreview {
     }
     this.clearRenderSymbols();
     this.#symbolOverlay.position.set(reel.viewportRect.x, reel.viewportRect.y);
-    this.#symbolOverlay.scale.set(reel.scale);
     this.#symbolOverlay.addChild(...nextSymbols);
     this.#renderSymbols = nextSymbols;
     this.#renderedSymbolPreview = preview;
@@ -914,7 +912,6 @@ export class LayoutPreview {
     this.#renderedSymbolPreview = null;
     this.#symbolOverlay.removeChildren();
     this.#symbolOverlay.position.set(0, 0);
-    this.#symbolOverlay.scale.set(1);
   }
 
   private drawSelectedLayerOutline(): void {
@@ -937,6 +934,23 @@ export class LayoutPreview {
         bounds.height <= 0
       )
         return;
+      const snapshot = this.#lastLayoutSnapshot;
+      const clipped = snapshot
+        ? intersectRect(bounds, {
+            x: 0,
+            y: 0,
+            width: snapshot.viewportSize.width,
+            height: snapshot.viewportSize.height,
+          })
+        : null;
+      if (clipped) {
+        drawDiagonalHatch(this.#selectionOutline, clipped);
+        this.#selectionOutline.stroke({
+          color: 0xff3b30,
+          width: 2,
+          alpha: 0.38,
+        });
+      }
       this.#selectionOutline
         .rect(bounds.x, bounds.y, bounds.width, bounds.height)
         .stroke({ color: 0xff3b30, width: 3, alpha: 1 });
@@ -1057,6 +1071,47 @@ export class LayoutPreview {
   private assertReady(): void {
     if (!this.#ready || this.#destroyed)
       throw new Error("Preview 尚未初始化或已销毁。");
+  }
+}
+
+function intersectRect(
+  left: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  },
+  right: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  },
+): { x: number; y: number; width: number; height: number } | null {
+  const x = Math.max(left.x, right.x);
+  const y = Math.max(left.y, right.y);
+  const edgeX = Math.min(left.x + left.width, right.x + right.width);
+  const edgeY = Math.min(left.y + left.height, right.y + right.height);
+  if (edgeX <= x || edgeY <= y) return null;
+  return { x, y, width: edgeX - x, height: edgeY - y };
+}
+
+function drawDiagonalHatch(
+  graphics: Graphics,
+  rect: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  },
+): void {
+  const spacing = 14;
+  const right = rect.x + rect.width;
+  for (let startX = rect.x - rect.height; startX < right; startX += spacing) {
+    const x1 = Math.max(rect.x, startX);
+    const x2 = Math.min(right, startX + rect.height);
+    if (x2 <= x1) continue;
+    graphics.moveTo(x1, rect.y + x1 - startX).lineTo(x2, rect.y + x2 - startX);
   }
 }
 

@@ -573,7 +573,6 @@ describe("filename-key layout resource commands", () => {
     expect(project.reel.placements.default).toEqual({
       x: 600,
       y: 760,
-      scale: 1,
     });
     expect(project.variants.default.focusRect).toEqual({
       x: 540,
@@ -746,7 +745,6 @@ describe("filename-key layout resource commands", () => {
     expect(project.reel.placements.default).toEqual({
       x: 600,
       y: 760,
-      scale: 1,
     });
   });
 
@@ -863,7 +861,6 @@ describe("filename-key layout resource commands", () => {
     expect(project.reel.placements.default).toEqual({
       x: 600,
       y: 760,
-      scale: 1,
     });
     expect(project.variants.default.focusRect).toEqual({
       x: 540,

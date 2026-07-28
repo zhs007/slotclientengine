@@ -491,22 +491,14 @@ function parseReel(
     mode === "maximized-focus" ? ["default"] : ["landscape", "portrait"];
   known(placementsRecord, allowed, `${label}.placements`);
   const placements: Partial<
-    Record<SceneLayoutVariantId, { x: number; y: number; scale?: number }>
+    Record<SceneLayoutVariantId, { x: number; y: number }>
   > = {};
   for (const [variantId, raw] of Object.entries(placementsRecord)) {
     const placement = readRecord(raw, `${label}.placements.${variantId}`);
-    known(placement, ["x", "y", "scale"], `${label}.placements.${variantId}`);
+    known(placement, ["x", "y"], `${label}.placements.${variantId}`);
     placements[variantId as SceneLayoutVariantId] = deepFreeze({
       x: finite(placement.x, `${label}.placements.${variantId}.x`),
       y: finite(placement.y, `${label}.placements.${variantId}.y`),
-      ...(placement.scale === undefined
-        ? {}
-        : {
-            scale: positive(
-              placement.scale,
-              `${label}.placements.${variantId}.scale`,
-            ),
-          }),
     });
   }
   if (mode === "maximized-focus" && !placements.default)
@@ -566,13 +558,10 @@ function validateReferencesAndBounds(
       );
     for (const [reelId, reel] of Object.entries(reels)) {
       const placement = reel.placements[variantId]!;
-      const scale = placement.scale ?? 1;
       const width =
-        (reel.columns * reel.cellSize.width + (reel.columns - 1) * reel.gap.x) *
-        scale;
+        reel.columns * reel.cellSize.width + (reel.columns - 1) * reel.gap.x;
       const height =
-        (reel.rows * reel.cellSize.height + (reel.rows - 1) * reel.gap.y) *
-        scale;
+        reel.rows * reel.cellSize.height + (reel.rows - 1) * reel.gap.y;
       const reelRect = {
         x:
           coordinateOrigin === "center"

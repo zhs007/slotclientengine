@@ -36,7 +36,7 @@
 
 - rendercore 拥有 strict gameModes、plural symbolPackages、directed transition schema、exact dependency closure 和 production API。
 - scene-layout authored coordinate origin 只允许 `top-left` / `center`；缺失按 `top-left`。node、art-space Spine transition 与 main reel 的 origin 映射由 rendercore 统一实现，focus rect 继续使用 art 左上角矩形。
-- main reel per-variant scale 必须作用于 reel presentation 根节点，不能改写 cell geometry 或 per-symbol scale；缺失 scale 按 `1`。
+- main reel per-variant placement 只允许 `x/y`，不提供整体 scale；横竖屏适配通过背景素材、art size 和 reel placement 完成，不改写转轮或 per-symbol scale。
 - geometry-only manifest 更新必须先校验 immutable structure，再原子提交并复用 texture、Spine player、当前 mode、reel 与 scene；资源、topology、binding 或 transition 结构变化必须走完整 prepare/commit。
 - transition overlay 使用固定顶层 `scene-transition-overlay`；video blackout 是 viewport-space runtime object，不是 CSS overlay。
 - runtime 在切换前准备完整 target scene；只在 exact Spine event occurrence 或 video media-time `fadeStart` 边界原子切换 background、reel 和 displayed mode。

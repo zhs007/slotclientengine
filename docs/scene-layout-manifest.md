@@ -2,7 +2,7 @@
 
 根 sentinel 为 `layout.manifest.json`。schema version 仍为 `1`，支持 `maximized-focus` / `orientation-focus`、image/image-string/official Spine 4.3 node、reels、plural `symbolPackages`、award-celebration `popups`、game modes 与显式有向 transitions。
 
-## 坐标原点与主转轮缩放
+## 坐标原点
 
 根级可选 `coordinateOrigin` 为 `"top-left"` 或 `"center"`；旧包缺失时严格按 `"top-left"` 读取。Game Layout Editor 的新导出会显式保存该值。
 
@@ -11,7 +11,7 @@
 - focus、frame focus、min margin 仍是以 art 左上角描述的矩形，不随坐标类型转换。
 - Spine transition overlay 使用与 node 相同的 art-space origin；popup 仍是 viewport center offset，video blackout 仍是 viewport-space。
 
-`reels.main.placements.<variant>` 可增加正数 `scale`；缺失时按 `1`。placement 在 `top-left` 模式表示缩放后转轮矩形左上角，在 `center` 模式表示缩放后转轮矩形中心相对 art center 的偏移。runtime 对 reel presentation 根节点统一缩放，不修改 cell size、symbol placement 或 symbol package 内部 scale。
+`reels.main.placements.<variant>` 只包含 `x/y`。placement 在 `top-left` 模式表示转轮矩形左上角，在 `center` 模式表示转轮矩形中心相对 art center 的偏移。scene-layout 不提供主转轮整体缩放；横竖屏适配应调整背景素材、art size 和 reel placement。
 
 ```json
 {
@@ -23,8 +23,8 @@
       "cellSize": { "width": 160, "height": 160 },
       "gap": { "x": 0, "y": 0 },
       "placements": {
-        "landscape": { "x": 0, "y": 20, "scale": 1 },
-        "portrait": { "x": 0, "y": -40, "scale": 0.8 }
+        "landscape": { "x": 0, "y": 20 },
+        "portrait": { "x": 0, "y": -40 }
       }
     }
   }
