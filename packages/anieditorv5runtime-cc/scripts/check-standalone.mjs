@@ -228,6 +228,8 @@ const requiredSnippets = [
   "vni-screen-alpha",
   "screenMaterial?: Material | null",
   "createV5GCocosPlayer({ screenMaterial })",
+  "SPRITE_STENCIL",
+  "getCocosRelativeTransform2D",
 ];
 
 for (const expected of requiredSnippets) {

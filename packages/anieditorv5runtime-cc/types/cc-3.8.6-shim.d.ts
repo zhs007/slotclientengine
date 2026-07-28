@@ -209,10 +209,11 @@ declare module "cc" {
 
   export class Mask {
     static readonly Type: {
-      IMAGE_STENCIL: number;
+      SPRITE_STENCIL: number;
     };
     type: number;
     inverted: boolean;
+    spriteFrame: SpriteFrame | null;
   }
 
   export class Graphics {

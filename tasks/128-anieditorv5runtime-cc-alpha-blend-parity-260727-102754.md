@@ -16,6 +16,8 @@
 - Effect 缺失或把 screen 应用到不支持该策略的 Graphics 时显式失败，不静默降级。
 - Effect 对 Sprite texture 做无条件采样，不依赖普通自定义 Material 默认未开启的 `USE_TEXTURE` 宏，避免 screen Sprite 只输出白色顶点色。
 - `normal`、`add`、`multiply`、`lighten` 的独立 alpha channel 修正为 source-over 的 `ONE / ONE_MINUS_SRC_ALPHA`，避免 source alpha 被重复相乘。
+- 修复 `legacy_alpha` 遮罩坐标：Mask 现在镜像 source layer 的 SpriteFrame、逻辑尺寸、锚点、位置、缩放和旋转；移动的 target layer 在 reparent 后换算到 Mask 局部坐标，不再把 stage 坐标误当局部坐标。
+- Cocos 3.8.6 mask 类型改用真实 public enum `Mask.Type.SPRITE_STENCIL`，不再依赖 shim 中错误的旧 `IMAGE_STENCIL` 名称。
 - 同步 fake `cc`、Cocos 3.8.6 类型 shim、公式/配置/生命周期回归、README、standalone checker、生成的单文件 runtime 和长期 Cocos runtime 规则。
 
 正式新增资产：
@@ -36,7 +38,7 @@ standalone 使用时必须一起复制 runtime、示例和该 Effect；screen �
 - ESLint；
 - Prettier check；
 - standalone build/check；
-- Vitest：19 个测试文件、217 项测试全部通过；
+- Vitest：20 个测试文件、219 项测试全部通过；
 - `git diff --check`。
 
 新增回归同时证明：
@@ -45,6 +47,8 @@ standalone 使用时必须一起复制 runtime、示例和该 Effect；screen �
 - 旧固定 blend 公式会错误改变 destination；
 - screen Material 的 blend factor、复用、模式切换与 destroy 生命周期；
 - host-owned screen Material 的显式注入、跨 Sprite 共享、错误 Effect 拒绝和 ownership；
+- masked target 在 source mask 发生平移、非等比/负缩放和旋转时仍保持期望世界变换，并正确执行 move 位移；
+- Cocos driver 使用 `SPRITE_STENCIL`、同步 SpriteFrame 并把 target reparent 到 Mask；
 - standalone Effect 包含预乘和 alpha-correct blend 合同。
 
 ## standalone 交付物
@@ -60,7 +64,7 @@ standalone/effects/vni-screen-alpha.effect
 SHA-256：
 
 ```text
-99c8f12f51f1d7673b3ea4a19d60907a7f6ae7c577e4d3cb19826dc1f765c5ca
+b8c67b165c729f608857ef30871fc2014ac872699c19ac282ee00098b79f5c83
 ```
 
 ## 计划偏差与剩余验收

@@ -47,6 +47,7 @@ import {
 import { validateCocosV5GProject } from "../core/validation.js";
 import { getCocosBlendModeConfig } from "./blend-mode.js";
 import {
+  getCocosRelativeTransform2D,
   opacityToCocosOpacity,
   v5gTransformToCocosPosition,
 } from "./coordinates.js";
@@ -1735,7 +1736,7 @@ export class V5GCocosPlayer<
         this.options.driver.setOpacity(managed.textBindingContainer, 255);
         this.options.driver.setActive(managed.textBindingContainer, true);
       }
-      this.updateMaskSample(managed);
+      this.updateMaskSample(managed, sampledLayer, sampledProject.layers);
       this.renderSafeGlowSamples(managed, sampledLayer, sampledProject.time);
       this.renderChaserLightSamples(managed, sampledLayer, sampledProject.time);
       this.renderDeterministicEffectSamples(
@@ -2676,6 +2677,21 @@ export class V5GCocosPlayer<
         source.displayNode,
         managed.node,
       );
+      if (!source.asset) {
+        throw new Error(
+          `VNI legacy_alpha mask source layer "${source.layer.id}" must resolve an image asset.`,
+        );
+      }
+      this.options.driver.setContentSize(
+        maskNode,
+        source.asset.width,
+        source.asset.height,
+      );
+      this.options.driver.setAnchorPoint(
+        maskNode,
+        source.layer.transform.anchorX,
+        source.layer.transform.anchorY,
+      );
       const groupNode = this.groupNodesById.get(managed.layer.groupId ?? "");
       if (!groupNode) {
         throw new Error(
@@ -2690,7 +2706,11 @@ export class V5GCocosPlayer<
     }
   }
 
-  private updateMaskSample(managed: ManagedLayer<TNode, TSpriteFrame>): void {
+  private updateMaskSample(
+    managed: ManagedLayer<TNode, TSpriteFrame>,
+    targetSample: SampledLayerState,
+    samples: readonly SampledLayerState[],
+  ): void {
     if (!managed.maskNode || !managed.layer.mask?.sourceLayerId) return;
     const source = this.layers.get(managed.layer.mask.sourceLayerId);
     if (!source) {
@@ -2698,6 +2718,44 @@ export class V5GCocosPlayer<
         `Missing VNI mask source layer "${managed.layer.mask.sourceLayerId}" for "${managed.layer.id}".`,
       );
     }
+    const sourceSample = samples.find(
+      (sample) => sample.layerId === source.layer.id,
+    );
+    if (!sourceSample) {
+      throw new Error(
+        `Missing sampled VNI mask source layer "${source.layer.id}" for "${managed.layer.id}".`,
+      );
+    }
+    const maskTransform = {
+      ...sourceSample.transform,
+      rotation: sourceSample.transform.rotation + sourceSample.visualRotation,
+    };
+    const maskPosition = v5gTransformToCocosPosition(maskTransform);
+    const targetLocal = getCocosRelativeTransform2D(
+      targetSample.transform,
+      maskTransform,
+    );
+    this.options.driver.setPosition(
+      managed.maskNode,
+      maskPosition.x,
+      maskPosition.y,
+    );
+    this.options.driver.setScale(
+      managed.maskNode,
+      maskTransform.scaleX,
+      maskTransform.scaleY,
+    );
+    this.options.driver.setRotationDegrees(
+      managed.maskNode,
+      maskTransform.rotation,
+    );
+    this.options.driver.setPosition(managed.node, targetLocal.x, targetLocal.y);
+    this.options.driver.setScale(
+      managed.node,
+      targetLocal.scaleX,
+      targetLocal.scaleY,
+    );
+    this.options.driver.setRotationDegrees(managed.node, targetLocal.rotation);
     this.options.driver.updateAlphaMaskNode?.(
       managed.maskNode,
       source.displayNode,

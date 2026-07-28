@@ -37,7 +37,7 @@ V5G 动画导出的 Cocos Creator 3.8.6 runtime 包。
 - 粒子参数仍按 VNI/Pixi 导出语义解释：`direction: 270` 表示向上，`gravity` 正数表示向下；Cocos 渲染时会把粒子 Y offset 转成 Cocos UI 坐标系，避免上下方向反转
 - `particle_combo.params.sourceOpacity` 只影响源图像显示，不会把同层粒子透明度一起清零；粒子透明度使用图层原始 `opacity`
 - `safe_glow.params.keepOriginal=false` 只隐藏源图像节点；safe glow 副本仍会在 `<layer name> Safe Glow` 容器中渲染
-- `mask.mode === "alpha"` 且 `mask.compositeMode === "legacy_alpha"`：通过 Cocos `Mask.Type.IMAGE_STENCIL` adapter 创建 alpha mask；`showSourceLayer=false` 会隐藏 source layer
+- `mask.mode === "alpha"` 且 `mask.compositeMode === "legacy_alpha"`：通过 Cocos 3.8.6 `Mask.Type.SPRITE_STENCIL` adapter 创建 alpha mask；Mask 跟随 source layer 的位置、缩放、旋转、尺寸和锚点，并把 target layer 换算到 Mask 局部坐标；`showSourceLayer=false` 会隐藏 source layer
 - 粒子、safe glow、chaser light 和确定性效果使用闭区间时间采样；粒子在动画精确起点即可发射，segmented/live 播放使用独立累计 elapsed 保持移动 emitter 和循环段连续
 - 由宿主 Cocos Component 在 `update(deltaTime)` 中显式驱动播放
 

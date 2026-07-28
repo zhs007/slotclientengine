@@ -317,28 +317,32 @@ export function createCocosNodeDriver(
       const maskLike = mask as Mask & {
         type?: number;
         inverted?: boolean;
+        spriteFrame?: SpriteFrame | null;
       };
       const maskType = (
-        Mask as unknown as { Type?: { IMAGE_STENCIL?: number } }
-      ).Type?.IMAGE_STENCIL;
+        Mask as unknown as { Type?: { SPRITE_STENCIL?: number } }
+      ).Type?.SPRITE_STENCIL;
       if (maskType === undefined) {
         throw new Error(
-          `Cocos Mask.Type.IMAGE_STENCIL is required for VNI legacy_alpha mask "${name}".`,
+          `Cocos Mask.Type.SPRITE_STENCIL is required for VNI legacy_alpha mask "${name}".`,
         );
       }
       maskLike.type = maskType;
       maskLike.inverted = false;
       const sourceSprite = requireSprite(sourceNode);
-      const maskSprite = maskNode.addComponent(Sprite);
-      maskSprite.spriteFrame = sourceSprite.spriteFrame;
-      maskSprite.color = new Color(255, 255, 255, 255);
+      maskLike.spriteFrame = sourceSprite.spriteFrame;
       maskNode.addChild(targetNode);
       return maskNode;
     },
     updateAlphaMaskNode(maskNode, sourceNode, targetNode) {
       const sourceSprite = requireSprite(sourceNode);
-      const maskSprite = requireSprite(maskNode);
-      maskSprite.spriteFrame = sourceSprite.spriteFrame;
+      const mask = maskNode.getComponent(Mask);
+      if (!mask) {
+        throw new Error(
+          `Cocos alpha mask node "${maskNode.name}" is missing its Mask component.`,
+        );
+      }
+      mask.spriteFrame = sourceSprite.spriteFrame;
       if (targetNode.parent !== maskNode) {
         maskNode.addChild(targetNode);
       }

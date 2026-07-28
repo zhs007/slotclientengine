@@ -278,6 +278,7 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
     const node = new FakeNode(name);
     node.maskSource = sourceNode;
     node.maskTarget = targetNode;
+    reparentFakeNode(node, targetNode);
     return node;
   }
 
@@ -288,11 +289,17 @@ class FakeDriver implements V5GCocosNodeDriver<FakeNode, FakeSpriteFrame> {
   ): void {
     maskNode.maskSource = sourceNode;
     maskNode.maskTarget = targetNode;
+    if (targetNode.parent !== maskNode) {
+      reparentFakeNode(maskNode, targetNode);
+    }
   }
 
   clearAlphaMask(targetNode: FakeNode, maskNode: FakeNode): void {
     if (maskNode.maskTarget === targetNode) {
       maskNode.maskTarget = null;
+    }
+    if (targetNode.parent === maskNode) {
+      this.removeChild(maskNode, targetNode);
     }
   }
 }
@@ -304,6 +311,16 @@ function snapshotFakeNodeTree(node: FakeNode): string {
     node.spriteFrame?.id ?? "",
     ...node.children.map((child) => snapshotFakeNodeTree(child)),
   ].join("|");
+}
+
+function reparentFakeNode(parent: FakeNode, child: FakeNode): void {
+  if (child.parent) {
+    child.parent.children = child.parent.children.filter(
+      (candidate) => candidate !== child,
+    );
+  }
+  child.parent = parent;
+  parent.children.push(child);
 }
 
 function captureFakeLocalTransform(node: FakeNode): FakeNodeTransformSnapshot {
@@ -1262,10 +1279,39 @@ describe("V5GCocosPlayer", () => {
 
   it("creates legacy alpha masks and hides source layers when configured", () => {
     const project = tinyProject();
-    project.layers.push({
+    const maskedLayer = {
       ...structuredClone(project.layers[0]),
       id: "layer-2",
       name: "Layer 2",
+      transform: {
+        x: -400,
+        y: 150,
+        scaleX: 2,
+        scaleY: 2,
+        rotation: 0,
+        anchorX: 0.5,
+        anchorY: 0.5,
+      },
+      animations: [
+        {
+          id: "masked-move",
+          type: "move",
+          name: "Move",
+          startTime: 0,
+          duration: 1,
+          enabled: true,
+          seed: 1,
+          params: {
+            fromX: 0,
+            fromY: 0,
+            toX: 800,
+            toY: 0,
+            baseX: 0,
+            baseY: 0,
+            easing: "linear",
+          },
+        },
+      ],
       mask: {
         enabled: true,
         sourceLayerId: "layer-1",
@@ -1273,15 +1319,18 @@ describe("V5GCocosPlayer", () => {
         compositeMode: "legacy_alpha",
         showSourceLayer: false,
       },
-    });
+    } satisfies V5GLayerConfig;
+    project.layers.push(maskedLayer);
     const { root, player } = makePlayer(project);
     player.init();
 
     const group = getFirstGroup(root);
     const sourceNode = group.children.find((node) => node.name === "Layer 1");
-    const targetNode = group.children.find((node) => node.name === "Layer 2");
     const maskNode = group.children.find(
       (node) => node.name === "V5G Mask layer-2",
+    );
+    const targetNode = maskNode?.children.find(
+      (node) => node.name === "Layer 2",
     );
     if (!sourceNode || !targetNode || !maskNode) {
       throw new Error("missing mask test nodes");
@@ -1293,11 +1342,36 @@ describe("V5GCocosPlayer", () => {
     expect(targetNode.active).toBe(true);
     expect(maskNode.maskSource).toBe(sourceDisplayNode);
     expect(maskNode.maskTarget).toBe(targetNode);
+    expect(maskNode.width).toBe(100);
+    expect(maskNode.height).toBe(50);
+    expect(maskNode.anchorX).toBe(0.25);
+    expect(maskNode.anchorY).toBe(0.75);
+    expectFakeTransformClose(captureFakeLocalTransform(maskNode), {
+      x: 100,
+      y: 50,
+      scaleX: -1,
+      scaleY: 2,
+      rotation: 30,
+    });
+    expectFakeTransformClose(captureFakeWorldTransform(targetNode), {
+      x: -400,
+      y: 150,
+      scaleX: 2,
+      scaleY: 2,
+      rotation: 0,
+    });
     expect(player.getRuntimeDiagnostics().maskNodeCount).toBe(1);
 
-    player.seek(0.25);
+    player.seek(0.5);
     expect(maskNode.maskSource).toBe(sourceDisplayNode);
     expect(maskNode.maskTarget).toBe(targetNode);
+    expectFakeTransformClose(captureFakeWorldTransform(targetNode), {
+      x: 0,
+      y: 150,
+      scaleX: 2,
+      scaleY: 2,
+      rotation: 0,
+    });
 
     player.destroy();
     expect(maskNode.maskTarget).toBeNull();

@@ -22,6 +22,7 @@
 
 ## Player 与资源生命周期
 
+- `legacy_alpha` 使用 Cocos 3.8.6 `Mask.Type.SPRITE_STENCIL`；Mask 必须镜像 source layer 的 SpriteFrame、逻辑尺寸、锚点和 sampled transform，target reparent 后必须换算到 Mask 局部坐标，不能把 stage 坐标直接当局部坐标。
 - wave/card slice 复用 runtime-owned SpriteFrame view，在 destroy 时释放。rotated 或缺 texture/rect/originalSize 的 source 显式失败。
 - `requestSegmentedPlaybackEnd({ forceStopParticles: true })` 必须先让 ending 到尾帧，再清粒子并跳过 drain；立即清理只能走 `forceStopAllParticles()`。
 - unknown capability、错误 project profile、捕获失败或无法保持视觉效果时显式失败。

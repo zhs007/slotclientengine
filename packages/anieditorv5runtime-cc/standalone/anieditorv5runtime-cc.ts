@@ -27,6 +27,14 @@ export interface CocosPoint2D {
   y: number;
 }
 
+export interface CocosRelativeTransform2D {
+  x: number;
+  y: number;
+  scaleX: number;
+  scaleY: number;
+  rotation: number;
+}
+
 export interface CocosSpriteBlendStateConfig {
   mode: SupportedCocosBlendMode;
   strategy: "sprite-blend-state";
@@ -8488,24 +8496,25 @@ function createCocosNodeDriver(options = {}) {
       const maskType =
         (_Mask$Type = Mask.Type) === null || _Mask$Type === void 0
           ? void 0
-          : _Mask$Type.IMAGE_STENCIL;
+          : _Mask$Type.SPRITE_STENCIL;
       if (maskType === void 0)
         throw new Error(
-          `Cocos Mask.Type.IMAGE_STENCIL is required for VNI legacy_alpha mask "${name}".`,
+          `Cocos Mask.Type.SPRITE_STENCIL is required for VNI legacy_alpha mask "${name}".`,
         );
       maskLike.type = maskType;
       maskLike.inverted = false;
-      const sourceSprite = requireSprite(sourceNode);
-      const maskSprite = maskNode.addComponent(Sprite);
-      maskSprite.spriteFrame = sourceSprite.spriteFrame;
-      maskSprite.color = new Color(255, 255, 255, 255);
+      maskLike.spriteFrame = requireSprite(sourceNode).spriteFrame;
       maskNode.addChild(targetNode);
       return maskNode;
     },
     updateAlphaMaskNode(maskNode, sourceNode, targetNode) {
       const sourceSprite = requireSprite(sourceNode);
-      const maskSprite = requireSprite(maskNode);
-      maskSprite.spriteFrame = sourceSprite.spriteFrame;
+      const mask = maskNode.getComponent(Mask);
+      if (!mask)
+        throw new Error(
+          `Cocos alpha mask node "${maskNode.name}" is missing its Mask component.`,
+        );
+      mask.spriteFrame = sourceSprite.spriteFrame;
       if (targetNode.parent !== maskNode) maskNode.addChild(targetNode);
     },
     clearAlphaMask(targetNode, maskNode) {
@@ -9110,6 +9119,25 @@ function v5gTransformToCocosPosition(transform) {
 }
 function opacityToCocosOpacity(opacity) {
   return Math.round(clampNumber(opacity, 0, 1) * 255);
+}
+function getCocosRelativeTransform2D(child, parent) {
+  const deltaX = child.x - parent.x;
+  const deltaY = child.y - parent.y;
+  const radians = (parent.rotation * Math.PI) / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  const unrotatedX = cosine * deltaX + sine * deltaY;
+  const unrotatedY = -sine * deltaX + cosine * deltaY;
+  return {
+    x: divideByParentScale(unrotatedX, parent.scaleX),
+    y: divideByParentScale(unrotatedY, parent.scaleY),
+    scaleX: divideByParentScale(child.scaleX, parent.scaleX),
+    scaleY: divideByParentScale(child.scaleY, parent.scaleY),
+    rotation: child.rotation - parent.rotation,
+  };
+}
+function divideByParentScale(value, parentScale) {
+  return Math.abs(parentScale) > 1e-8 ? value / parentScale : 0;
 }
 //#endregion
 var V5GCocosPlaybackCancelledError = class extends Error {
@@ -11686,7 +11714,7 @@ var V5GCocosPlayer = class {
         this.options.driver.setOpacity(managed.textBindingContainer, 255);
         this.options.driver.setActive(managed.textBindingContainer, true);
       }
-      this.updateMaskSample(managed);
+      this.updateMaskSample(managed, sampledLayer, sampledProject.layers);
       this.renderSafeGlowSamples(managed, sampledLayer, sampledProject.time);
       this.renderChaserLightSamples(managed, sampledLayer, sampledProject.time);
       this.renderDeterministicEffectSamples(
@@ -12552,6 +12580,20 @@ var V5GCocosPlayer = class {
         source.displayNode,
         managed.node,
       );
+      if (!source.asset)
+        throw new Error(
+          `VNI legacy_alpha mask source layer "${source.layer.id}" must resolve an image asset.`,
+        );
+      this.options.driver.setContentSize(
+        maskNode,
+        source.asset.width,
+        source.asset.height,
+      );
+      this.options.driver.setAnchorPoint(
+        maskNode,
+        source.layer.transform.anchorX,
+        source.layer.transform.anchorY,
+      );
       const groupNode = this.groupNodesById.get(
         (_managed$layer$groupI = managed.layer.groupId) !== null &&
           _managed$layer$groupI !== void 0
@@ -12568,7 +12610,7 @@ var V5GCocosPlayer = class {
         this.hiddenMaskSourceLayerIds.add(mask.sourceLayerId);
     }
   }
-  updateMaskSample(managed) {
+  updateMaskSample(managed, targetSample, samples) {
     var _managed$layer$mask, _this$options$driver$3, _this$options$driver2;
     if (
       !managed.maskNode ||
@@ -12583,6 +12625,46 @@ var V5GCocosPlayer = class {
       throw new Error(
         `Missing VNI mask source layer "${managed.layer.mask.sourceLayerId}" for "${managed.layer.id}".`,
       );
+    const sourceSample = samples.find(
+      (sample) => sample.layerId === source.layer.id,
+    );
+    if (!sourceSample)
+      throw new Error(
+        `Missing sampled VNI mask source layer "${source.layer.id}" for "${managed.layer.id}".`,
+      );
+    const maskTransform = _objectSpread2(
+      _objectSpread2({}, sourceSample.transform),
+      {},
+      {
+        rotation: sourceSample.transform.rotation + sourceSample.visualRotation,
+      },
+    );
+    const maskPosition = v5gTransformToCocosPosition(maskTransform);
+    const targetLocal = getCocosRelativeTransform2D(
+      targetSample.transform,
+      maskTransform,
+    );
+    this.options.driver.setPosition(
+      managed.maskNode,
+      maskPosition.x,
+      maskPosition.y,
+    );
+    this.options.driver.setScale(
+      managed.maskNode,
+      maskTransform.scaleX,
+      maskTransform.scaleY,
+    );
+    this.options.driver.setRotationDegrees(
+      managed.maskNode,
+      maskTransform.rotation,
+    );
+    this.options.driver.setPosition(managed.node, targetLocal.x, targetLocal.y);
+    this.options.driver.setScale(
+      managed.node,
+      targetLocal.scaleX,
+      targetLocal.scaleY,
+    );
+    this.options.driver.setRotationDegrees(managed.node, targetLocal.rotation);
     (_this$options$driver$3 = (_this$options$driver2 = this.options.driver)
       .updateAlphaMaskNode) === null ||
       _this$options$driver$3 === void 0 ||
@@ -13816,6 +13898,11 @@ const __standalone_v5gTransformToCocosPosition: (
 const __standalone_opacityToCocosOpacity: (opacity: number) => number =
   opacityToCocosOpacity;
 
+const __standalone_getCocosRelativeTransform2D: (
+  child: V5GTransformConfig,
+  parent: V5GTransformConfig,
+) => CocosRelativeTransform2D = getCocosRelativeTransform2D;
+
 export {
   __standalone_editorToPixi as editorToPixi,
   __standalone_pixiToEditor as pixiToEditor,
@@ -13904,6 +13991,7 @@ export {
   VNI_SCREEN_ALPHA_EFFECT_NAME,
   __standalone_v5gTransformToCocosPosition as v5gTransformToCocosPosition,
   __standalone_opacityToCocosOpacity as opacityToCocosOpacity,
+  __standalone_getCocosRelativeTransform2D as getCocosRelativeTransform2D,
   V5GCocosPlaybackCancelledError,
   V5GCocosManualPlaybackSessionImpl,
 };

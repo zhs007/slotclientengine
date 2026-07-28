@@ -537,11 +537,12 @@ export class Label {
 
 export class Mask {
   static readonly Type = {
-    IMAGE_STENCIL: 0,
+    SPRITE_STENCIL: 3,
   } as const;
 
-  type = Mask.Type.IMAGE_STENCIL;
+  type = Mask.Type.SPRITE_STENCIL;
   inverted = false;
+  spriteFrame: SpriteFrame | null = null;
 }
 
 export class Graphics {
