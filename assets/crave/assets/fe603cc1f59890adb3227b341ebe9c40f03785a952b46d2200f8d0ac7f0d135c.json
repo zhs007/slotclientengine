@@ -15,6 +15,26 @@
         "id": "collect",
         "phase": "once",
         "playback": "once"
+      },
+      {
+        "id": "multStart",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "multIdle",
+        "phase": "stable",
+        "playback": "loop"
+      },
+      {
+        "id": "multEnd",
+        "phase": "once",
+        "playback": "once"
+      },
+      {
+        "id": "change",
+        "phase": "once",
+        "playback": "once"
       }
     ],
     "disabled": {
@@ -927,6 +947,41 @@
         }
       },
       "disabled": "./WL.disabled.png",
+      "imageStringNodes": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "followSlotColor": true,
+          "initialText": "x1",
+          "name": "multiplier",
+          "resource": "./wl-wm-multiplier.image-string.manifest.json",
+          "targets": [
+            {
+              "slot": "Mult",
+              "state": "normal"
+            },
+            {
+              "slot": "Mult",
+              "state": "dropdown"
+            },
+            {
+              "slot": "Mult",
+              "state": "appear"
+            },
+            {
+              "slot": "Mult",
+              "state": "win"
+            }
+          ],
+          "transform": {
+            "scale": 1,
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
       "normal": "./WL.png",
       "renderPriority": 1,
       "scale": 1,
@@ -945,12 +1000,56 @@
           "skeleton": "./WM.json",
           "texture": "./Symbol.png"
         },
+        "change": {
+          "atlas": "./Symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Change",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./WM.json",
+          "texture": "./Symbol.png"
+        },
         "dropdown": {
           "atlas": "./Symbol.atlas",
           "kind": "spine",
           "playback": {
             "animationName": "Idle",
             "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./WM.json",
+          "texture": "./Symbol.png"
+        },
+        "multEnd": {
+          "atlas": "./Symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Mult_End",
+            "loop": false,
+            "mode": "animation"
+          },
+          "skeleton": "./WM.json",
+          "texture": "./Symbol.png"
+        },
+        "multIdle": {
+          "atlas": "./Symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Mult_Idle",
+            "loop": true,
+            "mode": "animation"
+          },
+          "skeleton": "./WM.json",
+          "texture": "./Symbol.png"
+        },
+        "multStart": {
+          "atlas": "./Symbol.atlas",
+          "kind": "spine",
+          "playback": {
+            "animationName": "Mult_Start",
+            "loop": false,
             "mode": "animation"
           },
           "skeleton": "./WM.json",
@@ -980,6 +1079,53 @@
         }
       },
       "disabled": "./WM.disabled.png",
+      "imageStringNodes": [
+        {
+          "anchor": {
+            "x": 0.5,
+            "y": 0.5
+          },
+          "followSlotColor": true,
+          "initialText": "x1",
+          "name": "multiplier",
+          "resource": "./wl-wm-multiplier.image-string.manifest.json",
+          "targets": [
+            {
+              "slot": "Mult",
+              "state": "normal"
+            },
+            {
+              "slot": "Mult",
+              "state": "dropdown"
+            },
+            {
+              "slot": "Mult",
+              "state": "appear"
+            },
+            {
+              "slot": "Mult",
+              "state": "multStart"
+            },
+            {
+              "slot": "Mult",
+              "state": "multIdle"
+            },
+            {
+              "slot": "Mult",
+              "state": "multEnd"
+            },
+            {
+              "slot": "Mult",
+              "state": "change"
+            }
+          ],
+          "transform": {
+            "scale": 1,
+            "x": 0,
+            "y": 0
+          }
+        }
+      ],
       "normal": "./WM.png",
       "scale": 1,
       "spinBlur": "./WM.spinBlur.png"

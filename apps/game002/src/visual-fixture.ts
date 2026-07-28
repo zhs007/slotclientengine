@@ -86,12 +86,12 @@ async function start(): Promise<void> {
       scene,
       async destroy(): Promise<void> {
         adapter.destroy?.();
-        await prepared.valuePresentationResourceBundle.destroy();
+        await prepared.resourceOwner.destroy();
       },
     });
   } catch (error) {
     adapter.destroy?.();
-    await prepared.valuePresentationResourceBundle.destroy();
+    await prepared.resourceOwner.destroy();
     throw error;
   }
 }

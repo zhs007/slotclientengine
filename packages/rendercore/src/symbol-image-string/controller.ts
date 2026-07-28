@@ -74,9 +74,12 @@ export class SymbolImageStringController implements RenderSymbolImageStringContr
     this.detach();
     this.#player = player;
     for (const node of this.#nodes) {
-      if (node.definition.spec.target.state !== state) continue;
+      const target = node.definition.spec.targets.find(
+        (candidate) => candidate.state === state,
+      );
+      if (!target) continue;
       player.attachSlotObject({
-        slot: node.definition.spec.target.slot,
+        slot: target.slot,
         object: node.renderer.container,
         followSlotColor: node.definition.spec.followSlotColor,
       });

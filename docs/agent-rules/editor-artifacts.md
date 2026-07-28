@@ -49,6 +49,9 @@
 - `empty` 是用户显式选择的 manifest resource kind，不是缺资源 fallback。
 - symbols ZIP 包含唯一公开 game config、package `cellSize` 与 exact resource closure；缺失、orphan、版本错配显式失败，不允许 glob 或 filename guess。
 - value presentation 先配置 Spine tier resource，再为所有 tier 统一选择 state animation；静态 reel state 独立绑定图片。
+- symbol-owned ImgNumber node 使用非空、无重复的 exact `{state, slot}` target 集；
+  dependency/state rename 或删除必须事务性重写并全量复验，失败回滚。UI 必须能查看、
+  增删、修改 targets，导出统一写 canonical `targets`，旧单 `target` 仅导入兼容。
 
 ## ImgNumber Editor
 
@@ -60,6 +63,9 @@
 ## Layout Editor dependency
 
 - gamelayouteditor 把 symbols ZIP 和 popup ZIP 当自包含 dependency；每个 active variant 只配置明确 binding 和相对 viewport center 的 popup root `x/y/scale`。
+- Symbols dependency 的导入、预览、替换和 layout ZIP 重导必须保留其完整
+  state/ImgNumber multi-target closure；headless authoring 可以显式跳过 texture load，
+  但不能跳过 manifest、hash、binding 或 closure 校验。
 - popup 内部坐标、tier、layer 和资源只回 popupeditor 编辑。
 - dependency Map 只拥有 validated files；被 mode 引用的 package 随 layout ZIP 精确 vendor 一次，未引用 dependency 排除。
 - 上传资源不会自动绑定 glyph/state/node/background/placement；所有 binding 都要求用户显式选择。

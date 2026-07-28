@@ -2,7 +2,7 @@
 
 动画状态切换、业务时序和配置来源汇总见 [`docs/animation-flow-and-timing.md`](./docs/animation-flow-and-timing.md)。调整动画节奏时应同步更新该文档、对应 source contract 和测试。
 
-`game002` 是基于 Pixi、`@slotclientengine/gameframeworks`、`@slotclientengine/gameloading` 和 `@slotclientengine/rendercore` 的 live slot app，并通过 `@slotclientengine/platformbootstrap-leo` 获取只读平台初始化 snapshot、通过 `@slotclientengine/game-ui-leo` 注入独立 Leo 游戏内 HUD。URL `skin=1` 固定映射 `assets/game002-s3`；`skin=2` 严格消费 `gamelayouteditor` 导出的 `assets/crave` mapped scene-layout package。两个 skin 使用同一套 game002 期待、cascade、WL/CN、summary、金额和 cleanup 流程；`skin=3|4|5`、缺失、重复、`01` 和旧 `serverUrl` query 都会显式失败。
+`game002` 是基于 Pixi、`@slotclientengine/gameframeworks`、`@slotclientengine/gameloading` 和 `@slotclientengine/rendercore` 的 live slot app，并通过 `@slotclientengine/platformbootstrap-leo` 获取只读平台初始化 snapshot、通过 `@slotclientengine/game-ui-leo` 注入独立 Leo 游戏内 HUD。URL 只支持显式 `skin=2`，严格消费 `gamelayouteditor` 导出的 `assets/crave` mapped scene-layout package；`skin=1|3|4|5`、缺失、重复、`01` 和旧 `serverUrl` query 都会显式失败。
 
 ## 启动与 live 边界
 
@@ -30,7 +30,7 @@ live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`。launcher ca
 示例：
 
 ```text
-http://127.0.0.1:5207/?skin=1&gameCode=GAME_CODE&platformToken=TOKEN&businessCode=guest&clienttype=web&jurisdiction=MT&lang=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
+http://127.0.0.1:5207/?skin=2&gameCode=GAME_CODE&platformToken=TOKEN&businessCode=guest&clienttype=web&jurisdiction=MT&lang=en&bet=5&lines=30&times=1&autonums=-1&requestTimeoutMs=30000
 ```
 
 参数值必须 URL encode。URL query 可能进入地址栏、历史记录、access log 和 Referer，发布环境应使用短期或一次性 token。
@@ -41,33 +41,30 @@ http://127.0.0.1:5207/?skin=1&gameCode=GAME_CODE&platformToken=TOKEN&businessCod
   唯一来自 `assets/crave/layout.manifest.json`、`assets.map.json` 和内容寻址 payload。
   构建期 generator 生成精确 Vite import map并校验每个物理文件的 hash/size/orphan；
   loading 只下载 active skin。Crave CN 使用其 symbols manifest 的 ImgNumber
-  `slot: "coin"` 与包内 `0..9` glyph，不使用 skin1 `Num` binding、完整数值图片或字体。
-- `assets/game002-s3/reel.manifest.json`、Nearwin1/2 是两个 skin 共用的显式
+  `slot: "coin"` 与包内 `0..9` glyph，不使用旧 `Num` binding、完整数值图片或字体。
+- `assets/game002-s3/reel.manifest.json`、Nearwin1/2 是 game002 的显式
   game002 presentation extension；它保存期待 timing/effect policy，不属于 Crave
   layout package，也不会被误报为 package fallback。
-
-- skin1 背景唯一配置源：`assets/game002-s3/background.manifest.json`。资源闭包为 `BG.json`、`BG.atlas` 和 `BG.png,BG_2.png..BG_8.png`；完整 art 仍为 `2000 x 2000`，Spine 原点通过 manifest 的 `{x:1000,y:1000,scale:1}` 映射到 art 中心，并裁切在完整 art 内。
-- 游戏配置：`assets/gamecfg002/gameconfig.json`，继续使用本地公开 `reels-001`。
 - 转轮表现配置：`assets/game002-s3/reel.manifest.json`。当前 `spin.bounceStrength=0`，因此 game002 普通 spin 完全不做上下回弹；`1` 才等价于 rendercore 原始力度。`spin.dimmingAlpha=0.5` 控制实际滚动 occurrence 的格底和 symbol 压暗强度：非期待 initial spin 的 `WL/CN` 都保持全亮；第 2 个真实落地 WL 激活期待的同一边界起，以及期待 selective refill 的整个 spin 期间，都只让 `WL` 保持全亮。cascade 强调阶段也使用 `0.5`。普通逐格 timing、Nearwin effect 资源/transform/loop、2-WL activation timing，以及期待 refill sweep/selective spin 的顺序与 timing 也只来自该 manifest。该 manifest 由 rendercore fail-fast parser 读取并进入 loading/dist 精确闭包，app 不硬编码第二份值。
 - 可展示 symbol 顺序固定为 `WL,H1,H2,L1,L2,L3,L4,WM,CN,CM,CO,AF,BN`。
-- 12 个普通 symbol 必须由 manifest 顶层声明 normal、`spinBlur`、`disabled` 和 `scale: 1`；`CN` 顶层只声明 `scale: 1 + valuePresentation`，不允许顶层 normal/state。CN 的无值 reel normal 是 `valuePresentation.reelStates.normal` 显式透明占位，blur/disabled 也只放在 `reelStates`，实际 normal art 只来自命中 tier 的 Spine。`emptySymbols=[]`，`BN` 是真实贴图，不是透明兜底。
-- `CN_1..CN_4` 不属于主 symbol 集，只是当前 `CN.valuePresentation` 精确引用的附属 Spine。`Nearwin1/2` 已作为独立 grid-cell reel effect 精确接入，但仍不属于 symbol manifest、display set、paytable、symbol resolver 或 symbolsviewer；`Nearwin3`、`WM_Fx` 仍未接入。所有附属资源都禁止宽泛 glob。
+- symbol package 的 game config、公开本地轮带、state、scale、render priority、
+  animation、Spine、ImgNumber 和依赖闭包全部从 Crave package resource/registry
+  取得；app 不从 filename 或旧 manifest 重建第二份表。
 
 ## CN otherScene value presentation
 
 第 0 step 触发 `bg-gencoins` 时，app 通过 gameframeworks facade 最多读取一个 `usedOtherScenes`。服务器在 auxiliary matrix 没有变化时可以省略该引用，此时不生成 CN value update；实际提供矩阵时，目标 scene 的 `CN` 格必须对应 positive safe integer，非 `CN` 格必须精确为 `0`。缺 basic data、超过一个引用、尺寸漂移、非法值或 code 不匹配都会在启动 reel 前或展示前显式失败。raw value 不走美元 formatter，直接由 ImgNumber 渲染 `String(value)`。
 
-档数、`maxExclusive`、默认候选数组、Spine skeleton/atlas/texture、animation 和数字 binding 唯一来自 `assets/game002-s3/symbol-state-textures.manifest.json`。当前候选为 `[1,2,5,10,25,50,100,250,500,1000]`，档位为 `<10`、`<100`、`<1000`、无上限；四档都显式引用 `./dependencies/image-strings/cn-digits/image-string.manifest.json` 和各自 skeleton 的 `Num` slot。dependency 使用视觉核对后的真实 `0..9` glyph，lineHeight `49`、fixed advance `37`，因此任意合法十进制 positive safe integer 均具备字符闭包。旧 `1.png..1000.png` 源文件仍保留但已不属于 generated/loading/dist runtime closure。缺 glyph、slot、resource 或尺寸漂移显式失败，不回退完整图片或字体。每个 CN occurrence 拥有独立 renderer，但共享 glyph resource；default/local strip/otherScene 的 occurrence/value 搬运语义不变。
+CN 档数、threshold、Spine resource、animation、`coin` slot 和数字 dependency 唯一
+来自 active Crave Symbols manifest。缺 glyph、slot、resource 或尺寸漂移显式失败，
+不回退完整图片或字体。每个 CN occurrence 拥有独立 renderer，但共享 glyph
+resource；default/local strip/otherScene 的 occurrence/value 搬运语义不变。
 
-逐格停轴动画由 `RenderGridCellReelSet` 统一调度：每格落地时，manifest 显式配置了 appear 的 symbol 先播放大小写精确的 `Start`，once 完成后回到 normal，整轮完成边界会等待落地 appear 结束。当前除 `BN` 外的主 display symbol 都配置 `Start`；`BN` skeleton 没有 `Start`，因此不触发 appear，也不使用 builtin/default fallback。normal animation 按资源真实能力配置：`CO` 与 `CN_1..CN_4` 使用 `Loop`，其它普通主 symbol 使用 `Idle`。CN collect 由 manifest 扩展 state 驱动同一 tier player 执行 `Win_Start once -> Win loop -> Collect once -> End once`；ImgNumber 始终作为 slot object 挂在同一 `Num` slot 下，值不变、状态切换和 dropdown 搬运都不会二次 create/attach 或重播等价 Loop。
-
-- scale、render priority 和 animation 都从 `assets/game002-s3/symbol-state-textures.manifest.json` 派生；app 不维护第二份表。
-
-Spine 统一由 rendercore 的官方 Pixi runtime 解析，只接受 4.3.x skeleton。当前 12 个普通主 symbol skeleton 是 4.3.23：`WL,H1,H2,L1,L2,L3,L4,WM,CM,CO,AF,BN`；`CN` 没有同名 skeleton，其 normal 由命中 value tier 的 Spine 提供。背景 skeleton 也是 4.3.23，并与 symbol 共用 rendercore 的版本、atlas、skeleton 和手动 update 底层，不在 app 内复制 adapter。manifest 中 animation name 区分大小写并必须真实存在。
-
-背景状态合同为 `BaseGame=BG loop`、`FreeGame=FG loop`、`BaseGame -> FreeGame=BG_FG once`、`FreeGame -> BaseGame=FG_BG once`。当前 app 只初始化并持续播放 `BaseGame`；FreeGame 的服务端触发语义尚未定义，因此 app 不猜测 GMI 字段，也不提供 query/debug fallback。以后业务合同明确后，只调用 rendercore background player 的 `requestState()`。
-
-`assets/game003-s1` 已升级为 Spine 4.3.23，但仍属于独立游戏资源；game002 不跨 skin 借用或打包它。
+逐格停轴动画由 `RenderGridCellReelSet` 统一调度：每格落地时，package manifest
+显式配置了 appear 的 symbol 先播放大小写精确的 `Start`，once 完成后回到 normal，
+整轮完成边界等待 appear 结束。CN collect 由 manifest state 驱动同一 tier player
+执行 `Win_Start once -> Win loop -> Collect once -> End once`；值不变、状态切换和
+dropdown 搬运不会二次 create/attach 或重播等价 Loop。
 
 ## 布局与 spin
 
@@ -87,9 +84,30 @@ framework 负责 live、HUD、spin/collect；adapter 负责 Pixi 画面和 grid-
 
 服务端整数 `100` 显示为 `$1.00`，但 spin/live 协议仍传原始整数。正中奖只在全部级联 step、remove、普通 unified fall 或期待 split refill 和必要的 gencoins 数据边界完成后启动金额动画；win-amount 播放期间 adapter 继续逐帧推进 main reel runtime，因此 CN 与其它 symbol 的 normal Loop 不会被冻结。`playSpin()` 等到金额进入 `awaiting-dismiss` 即可 resolve，不要求用户点击关闭。点击只调用 `requestAdvance()`：用于跳金额、进下一档或从最终等待态播放 dismiss。下一次 spin 会先清理遗留金额。
 
+## WL/WM multiplier
+
+spin 和每次 refill 的 symbol 全部落定后、中奖开始前，game002 会执行服务器
+multiplier transform。新 WL/WM 的 multiplier 分别来自 `bg-genwilds` 和
+`bg-setwm` 的 `otherScene`，使用 paired Symbols package 中同一个 ImgNumber
+dependency，在 exact `Mult` slot 显示 `xN`。
+如果当前 step 触发 `bg-genwm`，initial spin 和 refill 都以该 component 的唯一
+`scene` 作为最终落定盘面；`bg-spin/bg-refill` 的 scene 只作为生成前输入。
+
+如果上一步中奖 WL 的 `bg-incwl.otherScene` 将值加一，会在本次 refill 落定后先
+更新 WL 并播放一次 WL `Start`，随后才处理当前 WM。WM 同批并行执行
+`Mult_Start -> Mult_Idle(一个真实 loop) -> Mult_End -> Change`；进入
+`Mult_Idle` 时按 `bg-updwl` 同时更新全部 WL。盘面没有 WL 时仍完整播放 WM 流程，
+只跳过 WL 更新。
+
+`Change` 完成后才按 `bg-wm2cn` 原位置原子替换 CN，并用
+`bg-genwmcn.otherScene` 设置新 CN value；至此才进入现有中奖/cascade。
+各 multiplier component 只读取当前操作所需的目标 symbol cell，非目标 cell
+保留给服务器其它用途且不参与该 component 的语义校验；目标 multiplier、WM sum、
+矩阵尺寸和 occurrence continuity 都在画面 mutation 前严格校验。
+
 ## bg-win 消除级联
 
-`bg-spin/bg-gencoins/bg-win/bg-remove/bg-respin/bg-dropdown/bg-refill` 是 game002 app-owned 映射，只有 `historyComponents` 对应的 `step.hasComponent()` 才代表触发；`historyComponentsEx` 和 map 中的空组件不触发。adapter 预解析全部 steps 后，严格执行初始 spin、逐组 emphasis/win/remove、普通局 dropdown/refill unified fall，或期待局 existing-only dropdown -> refill-hole Nearwin2 sweep -> selective refill spin；任一结构漂移都在启动画面前失败。
+`bg-spin/bg-genwm/bg-gencoins/bg-win/bg-remove/bg-respin/bg-dropdown/bg-refill` 是 game002 app-owned 映射，只有 `historyComponents` 对应的 `step.hasComponent()` 才代表触发；`historyComponentsEx` 和 map 中的空组件不触发。adapter 预解析全部 steps 后，严格执行初始 spin、逐组 emphasis/win/remove、普通局 dropdown/refill unified fall，或期待局 existing-only dropdown -> refill-hole Nearwin2 sweep -> selective refill spin；任一结构漂移都在启动画面前失败。
 
 每个 result 的全部 `pos` 会在主转轮停稳后按 manifest presentation 执行。现有单组现金 overlay 与底部临时汇总都严格使用 `cashWin64 !== undefined ? cashWin64 : cashWin`；汇总要求 result cash 为 positive safe integer cents，并复用 `formatServerUsdAmount` 除以 `100` 显示。不能从 bet、lines、component total 或 `totalwin` 推导。`bg-win.basicComponentData.cashWin/coinWin` 只在字段存在时作为累计协议证据，不能替代 result 权威字段。
 
@@ -110,7 +128,7 @@ dropdown 请求仍是通用 symbol state，但 `RenderSymbol` 会比较切换前
 ## 开发与发布
 
 真实 renderer 的本地资源 smoke 可打开
-`/visual-fixture.html?skin=1` 或 `/visual-fixture.html?skin=2`；该入口使用正式
+`/visual-fixture.html?skin=2`；该入口使用正式
 skin prepare、adapter、公开本地轮带与 Pixi/Spine ticker，但不连接 live，也不进入
 production build。它只能证明资源、geometry、mask、background、symbol 和 resize
 装配；期待/cascade/CN collect/popup 仍由自动化 fixture 与真实 live 分开验收。

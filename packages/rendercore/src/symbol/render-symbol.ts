@@ -45,6 +45,8 @@ export class RenderSymbol extends VisualEntity<void> {
   #lastAniKey: string;
   #defaultScaleX = 1;
   #defaultScaleY = 1;
+  #loopCompletionCount = 0;
+  #onceCompletionCount = 0;
   #destroyed = false;
 
   constructor(options: RenderSymbolOptions) {
@@ -105,6 +107,17 @@ export class RenderSymbol extends VisualEntity<void> {
 
   getStateSnapshot(): SymbolStateSnapshot {
     return this.#stateMachine.getSnapshot();
+  }
+
+  getAnimationCompletionSnapshot(): Readonly<{
+    loopCompletionCount: number;
+    onceCompletionCount: number;
+  }> {
+    this.assertNotDestroyed();
+    return Object.freeze({
+      loopCompletionCount: this.#loopCompletionCount,
+      onceCompletionCount: this.#onceCompletionCount,
+    });
   }
 
   getMainSprite(): Sprite {
@@ -220,9 +233,11 @@ export class RenderSymbol extends VisualEntity<void> {
     const before = this.createAniKey(this.#stateMachine.getSnapshot());
     const aniResult = this.#currentAni.update(deltaSeconds);
     if (aniResult.loopCompleted) {
+      this.#loopCompletionCount += 1;
       this.#stateMachine.notifyLoopComplete();
     }
     if (aniResult.onceCompleted) {
+      this.#onceCompletionCount += 1;
       this.#stateMachine.notifyOnceComplete();
     }
 
@@ -240,6 +255,8 @@ export class RenderSymbol extends VisualEntity<void> {
 
   reset(): void {
     this.assertNotDestroyed();
+    this.#loopCompletionCount = 0;
+    this.#onceCompletionCount = 0;
     this.#stateMachine.reset();
     resetBaseDisplay(this.createAnimationContext());
     const before = this.#lastAniKey;
@@ -249,6 +266,8 @@ export class RenderSymbol extends VisualEntity<void> {
 
   resetForPoolRelease(): void {
     this.assertNotDestroyed();
+    this.#loopCompletionCount = 0;
+    this.#onceCompletionCount = 0;
     this.#currentAni.destroy?.();
     this.#valueController?.resetForPoolRelease();
     this.#imageStringController?.resetForPoolRelease();

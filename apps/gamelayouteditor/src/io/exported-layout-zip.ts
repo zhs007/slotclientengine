@@ -53,6 +53,7 @@ export async function exportLayoutZip(options: {
     readonly durationSeconds: number;
     readonly hasAudio: boolean | "unknown";
   }>;
+  readonly loadSymbolTextures?: boolean;
 }): Promise<{
   readonly fileName: string;
   readonly bytes: Uint8Array;
@@ -194,6 +195,9 @@ export async function exportLayoutZip(options: {
   const validated = await validateLayoutAssets(manifest, closure, {
     ...(options.decodeImage ? { decodeImage: options.decodeImage } : {}),
     ...(options.decodeVideo ? { decodeVideo: options.decodeVideo } : {}),
+    ...(options.loadSymbolTextures !== undefined
+      ? { loadSymbolTextures: options.loadSymbolTextures }
+      : {}),
   });
   validated.destroy();
   const flattened = await flattenLayoutClosure(manifest, closure);

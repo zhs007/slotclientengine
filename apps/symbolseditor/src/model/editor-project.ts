@@ -677,6 +677,31 @@ export function setSymbolImageStringNodes(
   );
 }
 
+export function renameImportedImageStringDependency(
+  dependency: ImportedEditorImageStringDependency,
+  id: string,
+): ImportedEditorImageStringDependency {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(id)) {
+    throw new Error("image-string dependency id 必须是小写 ASCII kebab-case。");
+  }
+  const manifest = parseImageStringManifest({
+    ...cloneValue(dependency.manifest),
+    id,
+  });
+  const files = new Map(dependency.files);
+  files.set(
+    dependency.rootKey,
+    new TextEncoder().encode(`${JSON.stringify(manifest, null, 2)}\n`),
+  );
+  return Object.freeze({
+    id,
+    rootKey: dependency.rootKey,
+    manifest,
+    keys: Object.freeze([...files.keys()].sort(comparePath)),
+    files,
+  });
+}
+
 export function installImageStringDependency(
   project: SymbolEditorProject,
   dependency: ImportedEditorImageStringDependency,
@@ -705,7 +730,12 @@ export function installImageStringDependency(
   if (!existing && mode === "replace") {
     throw new Error(`image-string dependency 不存在：${dependency.id}。`);
   }
-  const nextPaths = [...dependency.files.keys()];
+  const prepared = materializeImageStringDependencyForProject(
+    project,
+    dependency,
+    existing,
+  );
+  const nextPaths = [...prepared.files.keys()];
   const oldPaths = existing ? [...existing.keys] : [];
   const conflicts = nextPaths.filter(
     (path) =>
@@ -718,7 +748,7 @@ export function installImageStringDependency(
   }
   for (const path of oldPaths) project.assetLibrary.records.delete(path);
   const batchId = `image-string-${dependency.id}`;
-  for (const [path, bytes] of dependency.files) {
+  for (const [path, bytes] of prepared.files) {
     const vendorPath = path;
     project.assetLibrary.records.set(
       vendorPath,
@@ -737,8 +767,8 @@ export function installImageStringDependency(
     dependency.id,
     Object.freeze({
       id: dependency.id,
-      rootKey: dependency.rootKey,
-      manifest: cloneValue(dependency.manifest),
+      rootKey: prepared.rootKey,
+      manifest: cloneValue(prepared.manifest),
       keys: Object.freeze([...nextPaths].sort(comparePath)),
     }),
   );
@@ -1480,7 +1510,7 @@ function getStateReferences(
     : [];
   references.push(
     ...symbol.imageStringNodes
-      .filter((node) => node.target.state === state)
+      .filter((node) => node.targets.some((target) => target.state === state))
       .map((node) => `imageStringNodes.${node.name}`),
   );
   return references;
@@ -1726,35 +1756,115 @@ function collectImportedImageStringDependencies(
   assets: ReadonlyMap<string, Uint8Array>,
 ): Map<string, EditorImageStringDependency> {
   const dependencies = new Map<string, EditorImageStringDependency>();
-  const flatManifestBytes = assets.get("image-string.manifest.json");
-  if (flatManifestBytes) {
-    const raw = JSON.parse(
-      decodeUtf8(flatManifestBytes, "image-string.manifest.json"),
-    );
+  const rootKeys = [...assets.keys()]
+    .filter((key) => key.endsWith("image-string.manifest.json"))
+    .sort(comparePath);
+  for (const rootKey of rootKeys) {
+    const flatManifestBytes = assets.get(rootKey)!;
+    const raw = JSON.parse(decodeUtf8(flatManifestBytes, rootKey));
     const parsed = parseImageStringManifest(raw);
     const files = new Map<string, Uint8Array>([
-      ["image-string.manifest.json", flatManifestBytes.slice()],
+      [rootKey, flatManifestBytes.slice()],
     ]);
     for (const path of collectImageStringAssetPaths(parsed)) {
       const bytes = assets.get(path);
       if (!bytes) throw new Error(`image-string glyph 缺失：${path}`);
       files.set(path, bytes.slice());
     }
-    const manifest = validateImageStringPackageContents({
-      manifest: parsed,
+    const manifest = validateEditorImageStringDependencyFiles(
+      parsed,
+      rootKey,
       files,
-    });
+    );
+    if (dependencies.has(manifest.id)) {
+      throw new Error(`image-string dependency id 重复：${manifest.id}。`);
+    }
     dependencies.set(
       manifest.id,
       Object.freeze({
         id: manifest.id,
-        rootKey: "image-string.manifest.json",
+        rootKey,
         manifest,
         keys: Object.freeze([...files.keys()].sort(comparePath)),
       }),
     );
   }
   return dependencies;
+}
+
+function materializeImageStringDependencyForProject(
+  project: SymbolEditorProject,
+  dependency: ImportedEditorImageStringDependency,
+  existing: EditorImageStringDependency | undefined,
+): ImportedEditorImageStringDependency {
+  const occupied = new Set(project.assetLibrary.records.keys());
+  for (const key of existing?.keys ?? []) occupied.delete(key);
+  const sourceKeys = [...dependency.files.keys()].sort(comparePath);
+  const hasConflict = sourceKeys.some((key) => occupied.has(key));
+  if (!hasConflict) return dependency;
+  const prefix = dependency.id;
+  const pathMap = new Map<string, string>();
+  for (const sourceKey of sourceKeys) {
+    const base = basenameFromSourcePath(sourceKey);
+    const target =
+      sourceKey === dependency.rootKey
+        ? `${prefix}.image-string.manifest.json`
+        : `${prefix}-${base}`;
+    if (occupied.has(target) || [...pathMap.values()].includes(target)) {
+      throw new Error(`image-string filename key 冲突：${target}。`);
+    }
+    pathMap.set(sourceKey, target);
+  }
+  const rewritten = cloneValue(dependency.manifest) as {
+    glyphs: Record<string, { path: string }>;
+  };
+  for (const glyph of Object.values(rewritten.glyphs)) {
+    const target = pathMap.get(glyph.path);
+    if (!target) {
+      throw new Error(
+        `image-string dependency ${dependency.id} 缺少 glyph filename key：${glyph.path}。`,
+      );
+    }
+    glyph.path = target;
+  }
+  const manifest = parseImageStringManifest(rewritten);
+  const rootKey = pathMap.get(dependency.rootKey)!;
+  const files = new Map<string, Uint8Array>();
+  for (const [sourceKey, targetKey] of pathMap) {
+    const bytes =
+      sourceKey === dependency.rootKey
+        ? new TextEncoder().encode(`${JSON.stringify(manifest, null, 2)}\n`)
+        : dependency.files.get(sourceKey)!.slice();
+    files.set(targetKey, bytes);
+  }
+  validateEditorImageStringDependencyFiles(manifest, rootKey, files);
+  return Object.freeze({
+    id: manifest.id,
+    rootKey,
+    manifest,
+    keys: Object.freeze([...files.keys()].sort(comparePath)),
+    files,
+  });
+}
+
+function validateEditorImageStringDependencyFiles(
+  manifest: ImageStringManifestV1,
+  rootKey: string,
+  files: ReadonlyMap<string, Uint8Array>,
+): ImageStringManifestV1 {
+  const rootBytes = files.get(rootKey);
+  if (!rootBytes) {
+    throw new Error(`image-string dependency 缺少 root：${rootKey}。`);
+  }
+  return validateImageStringPackageContents({
+    manifest,
+    files: new Map([
+      ["image-string.manifest.json", rootBytes],
+      ...collectImageStringAssetPaths(manifest).map(
+        (path) => [path, files.get(path)!] as const,
+      ),
+    ]),
+  });
 }
 
 function cloneImageStringDependency(
