@@ -46,7 +46,10 @@ describe("SymbolImageStringController", () => {
             name: "coin-value",
             resource:
               "./dependencies/image-strings/digits/image-string.manifest.json",
-            target: { state: "normal", slot: "Num" },
+            targets: [
+              { state: "normal", slot: "Num" },
+              { state: "win", slot: "WinNum" },
+            ],
             initialText: "01",
             anchor: { x: 0.5, y: 0.5 },
             transform: { x: 2, y: 3, scale: 0.5 },
@@ -82,11 +85,15 @@ describe("SymbolImageStringController", () => {
     );
 
     notifySymbolImageStringSpineActive(symbol, "win", player);
-    expect(player.attachSlotObject).not.toHaveBeenCalled();
+    expect(player.attachSlotObject).toHaveBeenCalledWith(
+      expect.objectContaining({ slot: "WinNum", followSlotColor: false }),
+    );
+    vi.mocked(player.attachSlotObject).mockClear();
     notifySymbolImageStringSpineActive(symbol, "normal", player);
     expect(player.attachSlotObject).toHaveBeenCalledWith(
       expect.objectContaining({ slot: "Num", followSlotColor: false }),
     );
+    vi.mocked(player.removeSlotObject).mockClear();
     notifySymbolImageStringSpineInactive(symbol, createPlayer());
     expect(player.removeSlotObject).not.toHaveBeenCalled();
     notifySymbolImageStringSpineInactive(symbol, player);

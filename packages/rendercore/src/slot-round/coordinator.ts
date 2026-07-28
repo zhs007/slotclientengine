@@ -5,6 +5,7 @@ import type {
   SlotRoundExecutionStep,
   SlotRoundOccurrenceSnapshot,
   SlotRoundRefillStepPlan,
+  SlotRoundSettledTransformStepPlan,
   SlotRoundWinStepPlan,
 } from "@slotclientengine/logiccore";
 
@@ -31,6 +32,10 @@ export interface SlotRoundPresentationCapabilityTarget {
   isDropdownComplete(): boolean;
   startRefill(step: SlotRoundRefillStepPlan): void;
   isRefillComplete(): boolean;
+  startSettledTransform?(step: SlotRoundSettledTransformStepPlan): void;
+  updateSettledTransform?(deltaSeconds: number): {
+    readonly completed: boolean;
+  };
   update(deltaSeconds: number): void;
   startCompletion?(plan: SlotRoundExecutionPlan): void;
   isCompletionComplete?(): boolean;
@@ -42,6 +47,7 @@ export type SlotRoundCoordinatorPhase =
   | "win"
   | "dropdown"
   | "refill"
+  | "settled-transform"
   | "completion"
   | "complete"
   | "destroyed";
@@ -126,7 +132,10 @@ class DefaultSlotRoundCoordinator implements SlotRoundCoordinator {
         if (!this.#target.updateWin(deltaSeconds).completed) return;
       } else if (step.kind === "dropdown") {
         if (!this.#target.isDropdownComplete()) return;
-      } else if (!this.#target.isRefillComplete()) return;
+      } else if (step.kind === "refill") {
+        if (!this.#target.isRefillComplete()) return;
+      } else if (!this.#target.updateSettledTransform?.(deltaSeconds).completed)
+        return;
       this.#stepCursor += 1;
       this.startNextStep();
     } catch (error) {
@@ -204,7 +213,17 @@ class DefaultSlotRoundCoordinator implements SlotRoundCoordinator {
     this.#phase = step.kind;
     if (step.kind === "win") this.#target.startWin(step);
     else if (step.kind === "dropdown") this.#target.startDropdown(step);
-    else this.#target.startRefill(step);
+    else if (step.kind === "refill") this.#target.startRefill(step);
+    else {
+      if (
+        !this.#target.startSettledTransform ||
+        !this.#target.updateSettledTransform
+      )
+        throw new Error(
+          'Slot round target declares "settled-transform" without transform methods.',
+        );
+      this.#target.startSettledTransform(step);
+    }
   }
 
   private complete(): void {

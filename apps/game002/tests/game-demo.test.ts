@@ -665,6 +665,9 @@ function createRuntime(
       emptySymbols: [],
       symbolScales: skin.symbolScales,
       symbolRenderPriorities: skin.symbolRenderPriorities,
+      symbolAnimationCapabilities: skin.symbolAnimationCapabilities,
+      symbolStatePreset: skin.symbolStatePreset,
+      landingAppearSymbols: skin.landingAppearSymbols,
       symbolValuePresentationResources: skin.symbolValuePresentationResources,
       animationResolver: (context) =>
         context.resolvedState === "appear"

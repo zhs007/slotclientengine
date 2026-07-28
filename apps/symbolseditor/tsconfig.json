@@ -1,7 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["vite/client", "vitest/globals"]
+    "types": ["node", "vite/client", "vitest/globals"]
   },
-  "include": ["src", "tests", "vite.config.ts", "eslint.config.cjs"]
+  "include": ["src", "tests", "scripts", "vite.config.ts", "eslint.config.cjs"]
 }

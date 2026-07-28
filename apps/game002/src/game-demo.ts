@@ -26,6 +26,7 @@ import {
   type GridCellEffectResourceMap,
   type GridCellEffectSweepPlan,
   type ParsedReelManifest,
+  type PreparedVisibleOccurrenceReplacement,
   type ReelLayout,
   type ReelSymbolRegistry,
   type ReelSymbolAnimationCapabilityMap,
@@ -36,15 +37,17 @@ import {
   type RenderVisibleSymbolStateSnapshot,
   type SymbolPresentationValueMatrix,
 } from "@slotclientengine/rendercore/reel";
-import type {
-  ReelSymbolRenderPriorityMap,
-  ReelSymbolScaleMap,
-  SymbolAnimationResolver,
-  SymbolAssetMap,
-  SymbolStateId,
-  SymbolStatePreset,
-  SymbolStateTransitionMode,
-  SymbolValuePresentationResourceMap,
+import {
+  createDefaultSymbolAnimationResolver,
+  createDefaultSymbolStatePreset,
+  type ReelSymbolRenderPriorityMap,
+  type ReelSymbolScaleMap,
+  type SymbolAnimationResolver,
+  type SymbolAssetMap,
+  type SymbolStateId,
+  type SymbolStatePreset,
+  type SymbolStateTransitionMode,
+  type SymbolValuePresentationResourceMap,
 } from "@slotclientengine/rendercore";
 import type { WinResultPosition } from "@slotclientengine/gameframeworks";
 import {
@@ -67,11 +70,7 @@ import {
   type Game002GridLayout,
   type Game002ReelLayerLayout,
 } from "./game-layout.js";
-import {
-  GAME002_SYMBOL_RENDER_PRIORITIES,
-  GAME002_SYMBOL_SCALES,
-} from "./symbol-animation-config.js";
-import { getGame002SkinConfig } from "./skin-config.js";
+import { GAME002_REEL_PRESENTATION_EXTENSION } from "./skin-config.js";
 import {
   assertScenesEqual,
   sceneEquals,
@@ -104,7 +103,6 @@ export interface Game002ReelConfig {
   readonly spinBounceStrength: number;
 }
 
-const GAME002_DEFAULT_SKIN = getGame002SkinConfig("1");
 const UINT32_RANGE = 0x1_0000_0000;
 
 function randomGame002SpinPhase(): number {
@@ -122,30 +120,31 @@ function randomGame002SpinPhase(): number {
 export const DEFAULT_GAME002_REEL_CONFIG: Game002ReelConfig = Object.freeze({
   reelsName: GAME002_REELS_NAME,
   emptySymbols: GAME002_EMPTY_SYMBOLS,
-  texturedSymbols: GAME002_DEFAULT_SKIN.displaySymbols,
-  missingAssetLabel: GAME002_DEFAULT_SKIN.label,
-  symbolScales: GAME002_SYMBOL_SCALES,
-  symbolRenderPriorities: GAME002_SYMBOL_RENDER_PRIORITIES,
-  symbolAnimationCapabilities: GAME002_DEFAULT_SKIN.symbolAnimationCapabilities,
-  symbolStatePreset: GAME002_DEFAULT_SKIN.symbolStatePreset,
-  landingAppearSymbols: GAME002_DEFAULT_SKIN.landingAppearSymbols,
-  animationResolver: GAME002_DEFAULT_SKIN.symbolAnimationResolver,
-  symbolValuePresentationResources:
-    GAME002_DEFAULT_SKIN.symbolValuePresentationResources,
+  texturedSymbols: Object.freeze([]),
+  missingAssetLabel: "game002 runtime",
+  symbolScales: Object.freeze({}),
+  symbolRenderPriorities: Object.freeze({}),
+  symbolAnimationCapabilities: Object.freeze({}),
+  symbolStatePreset: createDefaultSymbolStatePreset(),
+  landingAppearSymbols: Object.freeze([]),
+  animationResolver: createDefaultSymbolAnimationResolver(),
+  symbolValuePresentationResources: Object.freeze({}),
   random: Math.random,
   spinPhaseRandom: randomGame002SpinPhase,
   gridLayout: GAME002_GRID_LAYOUT,
   focusRegion: GAME002_FOCUS_REGION,
   direction: "forward",
   orderMode: GAME002_GRID_CELL_REEL_ORDER,
-  timing: GAME002_DEFAULT_SKIN.reelManifest.spin.timing,
-  reelManifest: GAME002_DEFAULT_SKIN.reelManifest,
-  reelEffectResources: GAME002_DEFAULT_SKIN.reelEffectResources,
-  reelEffectPoolCapacities: GAME002_DEFAULT_SKIN.reelEffectPoolCapacities,
+  timing: GAME002_REEL_PRESENTATION_EXTENSION.reelManifest.spin.timing,
+  reelManifest: GAME002_REEL_PRESENTATION_EXTENSION.reelManifest,
+  reelEffectResources: GAME002_REEL_PRESENTATION_EXTENSION.reelEffectResources,
+  reelEffectPoolCapacities:
+    GAME002_REEL_PRESENTATION_EXTENSION.reelEffectPoolCapacities,
   dimming: createGame002GridCellDimming(
-    GAME002_DEFAULT_SKIN.reelManifest.spin.dimmingAlpha,
+    GAME002_REEL_PRESENTATION_EXTENSION.reelManifest.spin.dimmingAlpha,
   ),
-  spinBounceStrength: GAME002_DEFAULT_SKIN.reelManifest.spin.bounceStrength,
+  spinBounceStrength:
+    GAME002_REEL_PRESENTATION_EXTENSION.reelManifest.spin.bounceStrength,
 });
 
 export interface Game002ReelRuntimeOptions {
@@ -212,6 +211,25 @@ export interface Game002ReelRuntime {
   getVisibleSymbolStateSnapshots(
     positions: readonly WinResultPosition[],
   ): readonly RenderVisibleSymbolStateSnapshot[];
+  setVisibleSymbolPresentationValue(
+    x: number,
+    y: number,
+    value: number | null,
+  ): void;
+  setVisibleSymbolImageStringText(
+    x: number,
+    y: number,
+    name: string,
+    text: string,
+  ): void;
+  getVisibleSymbolImageStringText(x: number, y: number, name: string): string;
+  prepareVisibleOccurrenceReplacement(options: {
+    readonly x: number;
+    readonly y: number;
+    readonly expectedCode: number;
+    readonly outputCode: number;
+    readonly outputPresentationValue: number | null;
+  }): PreparedVisibleOccurrenceReplacement;
   getVisibleSymbolGeometrySnapshots(
     positions: readonly WinResultPosition[],
   ): readonly RenderVisibleSymbolGeometrySnapshot[];
@@ -779,6 +797,48 @@ export function createGame002ReelRuntime(
       positions: readonly WinResultPosition[],
     ): readonly RenderVisibleSymbolStateSnapshot[] {
       return reelSet.getVisibleSymbolStateSnapshots(positions);
+    },
+    setVisibleSymbolPresentationValue(
+      x: number,
+      y: number,
+      value: number | null,
+    ): void {
+      reelSet.setVisibleSymbolPresentationValue(x, y, value);
+    },
+    setVisibleSymbolImageStringText(
+      x: number,
+      y: number,
+      name: string,
+      text: string,
+    ): void {
+      reelSet.setVisibleSymbolImageStringText(x, y, name, text);
+    },
+    getVisibleSymbolImageStringText(
+      x: number,
+      y: number,
+      name: string,
+    ): string {
+      return reelSet.getVisibleSymbolImageStringText(x, y, name);
+    },
+    prepareVisibleOccurrenceReplacement(replacementOptions: {
+      readonly x: number;
+      readonly y: number;
+      readonly expectedCode: number;
+      readonly outputCode: number;
+      readonly outputPresentationValue: number | null;
+    }) {
+      const prepared =
+        reelSet.prepareVisibleOccurrenceReplacement(replacementOptions);
+      return Object.freeze({
+        ...prepared,
+        commit(): void {
+          prepared.commit();
+          currentScene = validateGame002Scene(
+            reelSet.getVisibleScene(),
+            "game002 committed visible occurrence replacement",
+          );
+        },
+      });
     },
     getVisibleSymbolGeometrySnapshots(
       positions: readonly WinResultPosition[],

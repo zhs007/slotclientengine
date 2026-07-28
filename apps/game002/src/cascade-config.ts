@@ -9,6 +9,13 @@ export const GAME002_CASCADE_COMPONENTS = Object.freeze({
   respin: "bg-respin",
   dropdown: "bg-dropdown",
   refill: "bg-refill",
+  genwilds: "bg-genwilds",
+  genwm: "bg-genwm",
+  setwm: "bg-setwm",
+  incwl: "bg-incwl",
+  updwl: "bg-updwl",
+  wm2cn: "bg-wm2cn",
+  genwmcn: "bg-genwmcn",
 });
 
 export const GAME002_CASCADE_MOTION = Object.freeze({

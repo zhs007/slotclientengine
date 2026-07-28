@@ -54,10 +54,19 @@ const INITIAL_VALUES = GAME002_CASCADE_INITIAL_SCENE.map((column, x) =>
     ),
   ),
 );
-const REMOVED_VALUES = holesLike(GAME002_CASCADE_REMOVED_SCENE);
+const INITIAL_WL_VALUES = GAME002_CASCADE_INITIAL_SCENE.map((column, x) =>
+  Object.freeze(column.map((_code, y) => (x === 0 && y === 5 ? 2 : 0))),
+);
+const INCREMENTED_WL_VALUES = GAME002_CASCADE_INITIAL_SCENE.map((column, x) =>
+  Object.freeze(column.map((_code, y) => (x === 0 && y === 5 ? 3 : 0))),
+);
+const REMOVED_VALUES = holesLike(
+  GAME002_CASCADE_REMOVED_SCENE,
+  Object.freeze({ x: 0, y: 5, value: 2 }),
+);
 const DROPDOWN_VALUES = holesLike(
   GAME002_CASCADE_DROPDOWN_SCENE,
-  Object.freeze({ x: 4, y: 6, value: 17 }),
+  Object.freeze({ x: 0, y: 5, value: 2 }),
 );
 const REFILL_INTERMEDIATE_VALUES = zeros(GAME002_CASCADE_REFILL_SCENE);
 const REFILL_FINAL_VALUES = GAME002_CASCADE_REFILL_SCENE.map((column, x) =>
@@ -81,6 +90,8 @@ export const GAME002_CASCADE_GMI = Object.freeze({
             otherScenes: Object.freeze([
               toSgc7Scene(INITIAL_VALUES),
               toSgc7Scene(REMOVED_VALUES),
+              toSgc7Scene(INITIAL_WL_VALUES),
+              toSgc7Scene(INCREMENTED_WL_VALUES),
             ]),
             results: Object.freeze([
               Object.freeze({
@@ -113,13 +124,16 @@ export const GAME002_CASCADE_GMI = Object.freeze({
               historyComponents: Object.freeze([
                 "bg-spin",
                 "bg-gencoins",
+                "bg-genwilds",
                 "bg-win",
+                "bg-incwl",
                 "bg-remove",
               ]),
               historyComponentsEx: Object.freeze([]),
               mapComponents: Object.freeze({
                 "bg-spin": component({ usedScenes: [0] }),
                 "bg-gencoins": component({ usedOtherScenes: [0] }),
+                "bg-genwilds": component({ usedOtherScenes: [2] }),
                 "bg-win": Object.freeze({
                   basicComponentData: basic({
                     usedResults: [2, 0, 1],
@@ -130,6 +144,10 @@ export const GAME002_CASCADE_GMI = Object.freeze({
                     cashWin: 290,
                     coinWin: 29,
                   }),
+                  nextComponent: "bg-incwl",
+                }),
+                "bg-incwl": Object.freeze({
+                  basicComponentData: basic({ usedOtherScenes: [3] }),
                   nextComponent: "bg-remove",
                 }),
                 "bg-remove": Object.freeze({

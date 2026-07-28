@@ -34,50 +34,19 @@ const SPINE_SYMBOLS = EXPECTED_SYMBOLS.filter((symbol) => symbol !== "CN");
 const PAY_SYMBOLS = ["WL", "H1", "H2", "L1", "L2", "L3", "L4"] as const;
 
 describe("game002-s3 assets", () => {
-  it("exposes strict skin=1|2 and derives the skin1 13 display symbols", () => {
+  it("exposes strict skin=2 and derives the 13 display symbols", () => {
     const skin = getTestGame002SkinConfig();
 
-    expect(GAME002_SUPPORTED_SKINS).toEqual(["1", "2"]);
-    expect(parseGame002SkinId("1")).toBe("1");
+    expect(GAME002_SUPPORTED_SKINS).toEqual(["2"]);
     expect(parseGame002SkinId("2")).toBe("2");
-    for (const invalid of ["", "01", "3", "4", "5", "game002-s3"]) {
-      expect(() => parseGame002SkinId(invalid)).toThrow(/exactly "1" or "2"/);
+    for (const invalid of ["", "1", "01", "3", "4", "5", "game002-s3"]) {
+      expect(() => parseGame002SkinId(invalid)).toThrow(/exactly "2"/);
     }
     expect(
       getGame002DisplaySymbolsFromManifest(skin.stateTextureManifest),
     ).toEqual(EXPECTED_SYMBOLS);
     expect(skin.displaySymbols).toEqual(EXPECTED_SYMBOLS);
     expect(skin.emptySymbols).toEqual([]);
-    expect(skin.background.manifest).toMatchObject({
-      version: 1,
-      kind: "spine",
-      artSize: { width: 2000, height: 2000 },
-      initialState: "BaseGame",
-      states: {
-        BaseGame: { animation: "BG" },
-        FreeGame: { animation: "FG" },
-      },
-      transitions: [
-        { from: "BaseGame", to: "FreeGame", animation: "BG_FG" },
-        { from: "FreeGame", to: "BaseGame", animation: "FG_BG" },
-      ],
-    });
-    expect(skin.background.atlasPages).toEqual([
-      "BG.png",
-      "BG_2.png",
-      "BG_3.png",
-      "BG_4.png",
-      "BG_5.png",
-      "BG_6.png",
-      "BG_7.png",
-      "BG_8.png",
-    ]);
-    expect(new Set(Object.values(skin.background.textureUrls)).size).toBe(8);
-    for (const page of skin.background.atlasPages) {
-      expect(skin.background.textureUrls[page]).toContain(
-        `spineAtlasPage=${encodeURIComponent(page)}`,
-      );
-    }
     expect(skin.focusRegion).toEqual({
       x: 580,
       y: 277,
@@ -87,13 +56,13 @@ describe("game002-s3 assets", () => {
   });
 
   it("parses the required skin query without aliases or whitespace", () => {
-    expect(parseGame002SkinQuery("?skin=1")).toBe("1");
     expect(parseGame002SkinQuery(new URLSearchParams("skin=2"))).toBe("2");
+    expect(() => parseGame002SkinQuery("?skin=1")).toThrow(/exactly "2"/);
     expect(() => parseGame002SkinQuery("")).toThrow(/required/);
     expect(() => parseGame002SkinQuery("skin=1&skin=2")).toThrow(
       /more than once/,
     );
-    for (const invalid of ["skin=", "skin=%201", "skin=1%20", "skin=1%092"]) {
+    for (const invalid of ["skin=", "skin=%202", "skin=2%20", "skin=2%092"]) {
       expect(() => parseGame002SkinQuery(invalid)).toThrow(/whitespace/);
     }
   });

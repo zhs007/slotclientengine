@@ -2,14 +2,16 @@ import type {
   ReelSymbolRenderPriorityMap,
   ReelSymbolScaleMap,
 } from "@slotclientengine/rendercore";
-import { getGame002SkinConfig } from "./skin-config.js";
 
-const GAME002_SKIN = getGame002SkinConfig("1");
-
+/**
+ * Production symbol scales and priorities are loaded from the skin=2 Symbols
+ * package. These empty defaults are only used before a package config is
+ * supplied and must never become a second business table.
+ */
 export const GAME002_SYMBOL_SCALES = Object.freeze(
-  GAME002_SKIN.symbolScales,
+  {},
 ) satisfies ReelSymbolScaleMap;
 
 export const GAME002_SYMBOL_RENDER_PRIORITIES = Object.freeze(
-  GAME002_SKIN.symbolRenderPriorities,
+  {},
 ) satisfies ReelSymbolRenderPriorityMap;
