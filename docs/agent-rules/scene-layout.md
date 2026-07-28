@@ -52,6 +52,14 @@
 - 底层 named-node state machine 可供独立 consumer 使用，但不得成为 `requestGameMode()` 的隐藏入口或 fallback。
 - app/editor 不复制 event drain、official Spine player、image-string、background visibility、reel placement 或 transition state machine。
 
+## Production package optimization
+
+- `apps/gamelayoutpkgcli` 只消费当前 filename-key mapped production ZIP；legacy direct-path、mixed package、坏 map、缺失 dependency 和 orphan payload 必须在优化前失败。
+- WebP 后处理必须结构化改写 layout 与 nested owner manifest/VNI 的 typed 图片引用，重新生成完整 content-addressed payload 和 `assets.map.json`，再用 production package parser 复验；不得扫描任意 JSON 字符串猜路径。
+- 资源分组从完整 typed dependency graph 推导，不硬编码 BaseGame、FreeGame、Symbols 或 BigWin 文件名。transition 归属 source mode；initial 集合包含 shared、initial mode、其 symbols 和从 initial mode 发出的 transition。
+- 每个 group 同时保存完整 `requiredAssets` 与相对 initial 的 `incrementalAssets`；完整闭包允许重叠，但全部优化资源必须至少被一个 group 覆盖。
+- versioned asset-groups JSON 是 ZIP 外的独立交付物，不进入 production ZIP；它可供后续合图或 loading 优化消费，但 CLI 本身不修改 runtime loading 行为。
+
 ## Popup placement
 
 - 每个 active variant 只配置 popup root 相对 viewport center 的 `x/y/scale`。
