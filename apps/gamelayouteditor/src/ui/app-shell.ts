@@ -34,6 +34,7 @@ import {
   updateVariantFocusFromReel,
   type EditorProject,
 } from "../model/editor-project.js";
+import { convertProjectCoordinateOrigin } from "../model/coordinate-origin.js";
 import {
   EditorStore,
   type EditorStoreSnapshot,
@@ -175,8 +176,14 @@ export class GameLayoutEditorApp {
       this.renderWorkspace(snapshot);
       this.syncSymbolPreviewGrid(snapshot.project);
       if (snapshot.revision !== this.#lastPreviewProjectRevision) {
+        const previousRevision = this.#lastPreviewProjectRevision;
         this.#lastPreviewProjectRevision = snapshot.revision;
-        void this.refreshPreview(snapshot);
+        if (
+          snapshot.changeKind === "geometry" &&
+          this.#previewReadyProjectRevision === previousRevision
+        )
+          void this.refreshPreviewGeometry(snapshot);
+        else void this.refreshPreview(snapshot);
       }
     });
   }
@@ -933,6 +940,7 @@ export class GameLayoutEditorApp {
     this.renderProjectStatus(snapshot);
     this.renderPopupControls(snapshot);
     this.renderSymbolsMetadata();
+    this.syncPreviewSelection();
   }
 
   private renderPopupControls(snapshot: EditorStoreSnapshot): void {
@@ -1695,11 +1703,34 @@ export class GameLayoutEditorApp {
           draft.id = (event.currentTarget as HTMLInputElement).value;
         }),
       );
+    panel
+      .querySelector<HTMLButtonElement>("[data-toggle-coordinate-origin]")
+      ?.addEventListener("click", (event) => {
+        const target = (event.currentTarget as HTMLButtonElement).dataset
+          .toggleCoordinateOrigin as "top-left" | "center";
+        if (
+          !window.confirm(
+            `确认切换为${target === "center" ? "中心" : "左上角"}坐标？现有 art-space 坐标会统一转换。`,
+          )
+        )
+          return;
+        this.runTransaction(
+          (draft) => convertProjectCoordinateOrigin(draft, target),
+          `全局坐标类型已切换为 ${target}。`,
+        );
+      });
   }
 
   private selectOutline(key: string): void {
     this.#session.selection = parseSelectionKey(key);
     this.renderWorkspace(this.#store.getSnapshot());
+  }
+
+  private syncPreviewSelection(): void {
+    const selection = this.#session.selection;
+    this.#preview?.setSelectedLayer(
+      selection?.kind === "layer" ? selection.nodeId : null,
+    );
   }
 
   private handleOutlineKeydown(event: KeyboardEvent): void {
@@ -2430,6 +2461,39 @@ export class GameLayoutEditorApp {
         this.#preview?.clear();
         this.#store.setExternalError(error);
       }
+    }
+  }
+
+  private async refreshPreviewGeometry(
+    snapshot: EditorStoreSnapshot,
+  ): Promise<void> {
+    const preferredVariant =
+      snapshot.project.mode === "maximized-focus"
+        ? "default"
+        : (this.#preview?.pageSize.height ?? 0) >
+            (this.#preview?.pageSize.width ?? 0)
+          ? "portrait"
+          : "landscape";
+    const manifest = editorProjectToPreviewManifest(
+      snapshot.project,
+      preferredVariant,
+      snapshot.project.gameModes.modes.some((mode) => Boolean(mode.symbols)),
+    );
+    if (!manifest) {
+      await this.refreshPreview(snapshot);
+      return;
+    }
+    try {
+      this.#preview?.applyGeometryManifest(manifest);
+      this.#previewReadyProjectRevision = snapshot.revision;
+      this.renderPopupControls(this.#store.getSnapshot());
+      await this.ensurePreviewTransitionPrepared();
+    } catch (error) {
+      this.#session.previewTransition = {
+        phase: "error",
+        message: formatUiError(error),
+      };
+      this.#store.setExternalError(error);
     }
   }
 

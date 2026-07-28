@@ -424,6 +424,17 @@ describe("scene layout package runtime", () => {
           height: 5,
         });
         expect(reel.position).toMatchObject({ x: 640, y: 337 });
+        const scaledManifest = structuredClone(
+          layoutManifest(renderMode),
+        ) as any;
+        scaledManifest.reels.main.placements.default.scale = 0.5;
+        const scaledSnapshot = runtime.applyGeometryManifest(scaledManifest);
+        expect(scaledSnapshot?.reels.main).toMatchObject({
+          scale: 0.5,
+          artRect: { x: 640, y: 337, width: 2, height: 2.5 },
+        });
+        expect(runtime.getReelPresentation("main")).toBe(reel);
+        expect(reel.scale).toMatchObject({ x: 0.5, y: 0.5 });
         expect(
           renderMode === "standard"
             ? (reel as RenderReelSet).getVisibleScene()

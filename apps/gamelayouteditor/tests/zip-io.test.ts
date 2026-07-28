@@ -133,10 +133,24 @@ describe("layout zip IO", () => {
     const key = "BG_2.webp";
     const manifest = {
       ...imageManifest,
-      nodes: imageManifest.nodes.map((node) => ({
-        ...node,
-        resource: { ...node.resource, path: key },
-      })),
+      adaptation: {
+        ...imageManifest.adaptation,
+        backgroundNode: "background",
+      },
+      nodes: [
+        {
+          ...imageManifest.nodes[0],
+          id: "background",
+          resource: { ...imageManifest.nodes[0].resource, path: key },
+        },
+        {
+          ...imageManifest.nodes[0],
+          id: "jackpot-title",
+          order: 1,
+          resource: { ...imageManifest.nodes[0].resource, path: key },
+          placements: { default: { x: 10, y: 10, scale: 1 } },
+        },
+      ],
     };
     const webp = new Uint8Array([82, 73, 70, 70, 1, 0, 0, 0, 87, 69, 66, 80]);
     const load = vi
@@ -156,11 +170,25 @@ describe("layout zip IO", () => {
       const map = decodeEditorAssetsMap(entries.get("assets.map.json")!);
       expect(map.files[key]?.path).toMatch(/^assets\/[a-f0-9]{64}\.webp$/u);
       expect(entries.get(map.files[key]!.path)).toEqual(webp);
+      const packedManifest = JSON.parse(
+        new TextDecoder().decode(entries.get("layout.manifest.json")),
+      );
       expect(
-        JSON.parse(
-          new TextDecoder().decode(entries.get("layout.manifest.json")),
-        ).nodes[0].resource.path,
-      ).toBe(key);
+        packedManifest.nodes.map((node: { id: string }) => node.id),
+      ).toEqual(["background", "jackpot-title"]);
+      expect(packedManifest.nodes[0].resource.path).toBe(key);
+      const imported = await importLayoutZip(exported.bytes, { decodeImage });
+      const project = manifestToEditorProject(
+        imported.manifest,
+        imported.assets,
+      );
+      expect(project.nodes.map((node) => node.id)).toEqual([
+        "background",
+        "jackpot-title",
+      ]);
+      expect([...project.resources.keys()]).toEqual([key]);
+      expect([...project.resources.keys()]).not.toContain(map.files[key]?.path);
+      imported.destroy();
     } finally {
       load.mockRestore();
       unload.mockRestore();
@@ -251,13 +279,21 @@ describe("layout zip IO", () => {
       decodeImage,
       decodeVideo,
     });
-    expect(second.bytes).toEqual(first.bytes);
+    const third = await exportLayoutZip({
+      manifest: editorProjectToManifest(project),
+      assets: project.assets,
+      decodeImage,
+      decodeVideo,
+    });
+    expect(third.bytes).toEqual(second.bytes);
     const firstEntries = extractBoundedZip(first.bytes);
     const secondEntries = extractBoundedZip(second.bytes);
     expect([...secondEntries.keys()]).toEqual([...firstEntries.keys()]);
-    expect(stableManifestJson(imported.manifest)).toBe(
+    const canonicalManifest = JSON.parse(
       new TextDecoder().decode(secondEntries.get("layout.manifest.json")),
     );
+    expect(canonicalManifest.coordinateOrigin).toBe("top-left");
+    expect(canonicalManifest.reels.main.placements.default.scale).toBe(1);
     const importedOverlay =
       imported.manifest.gameModes!.transitions![0]!.overlay;
     if (importedOverlay.resource.kind !== "video")

@@ -570,7 +570,11 @@ describe("filename-key layout resource commands", () => {
       height: 2000,
     });
     expect(node.placements.default).toEqual({ x: 1000, y: 1000, scale: 1 });
-    expect(project.reel.placements.default).toEqual({ x: 600, y: 760 });
+    expect(project.reel.placements.default).toEqual({
+      x: 600,
+      y: 760,
+      scale: 1,
+    });
     expect(project.variants.default.focusRect).toEqual({
       x: 540,
       y: 700,
@@ -739,7 +743,11 @@ describe("filename-key layout resource commands", () => {
     setVariantArtSizeDimension(project, "default", "height", 2000);
 
     expect(node.placements.default).toEqual({ x: 1000, y: 1000, scale: 1 });
-    expect(project.reel.placements.default).toEqual({ x: 600, y: 760 });
+    expect(project.reel.placements.default).toEqual({
+      x: 600,
+      y: 760,
+      scale: 1,
+    });
   });
 
   it("reuses one resource across independent layers and never garbage-collects it with a node", async () => {
@@ -852,7 +860,11 @@ describe("filename-key layout resource commands", () => {
       width: 2000,
       height: 2000,
     });
-    expect(project.reel.placements.default).toEqual({ x: 600, y: 760 });
+    expect(project.reel.placements.default).toEqual({
+      x: 600,
+      y: 760,
+      scale: 1,
+    });
     expect(project.variants.default.focusRect).toEqual({
       x: 540,
       y: 700,

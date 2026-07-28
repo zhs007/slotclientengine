@@ -162,6 +162,19 @@ export function resolveSceneLayoutReelGrid(
     width: reel.cellSize.width + reel.gap.x,
     height: reel.cellSize.height + reel.gap.y,
   });
+  const scale = placement.scale ?? 1;
+  const unscaledWidth =
+    reel.columns * reel.cellSize.width + (reel.columns - 1) * reel.gap.x;
+  const unscaledHeight =
+    reel.rows * reel.cellSize.height + (reel.rows - 1) * reel.gap.y;
+  const artSize =
+    manifest.adaptation.mode === "maximized-focus"
+      ? manifest.adaptation.artSize
+      : manifest.adaptation.variants[
+          resolvedVariant as "landscape" | "portrait"
+        ].artSize;
+  const width = unscaledWidth * scale;
+  const height = unscaledHeight * scale;
   return Object.freeze({
     id: reelId,
     variantId: resolvedVariant,
@@ -170,12 +183,18 @@ export function resolveSceneLayoutReelGrid(
     cellSize: reel.cellSize,
     gap: reel.gap,
     stride,
+    scale,
     artRect: Object.freeze({
-      x: placement.x,
-      y: placement.y,
-      width:
-        reel.columns * reel.cellSize.width + (reel.columns - 1) * reel.gap.x,
-      height: reel.rows * reel.cellSize.height + (reel.rows - 1) * reel.gap.y,
+      x:
+        (manifest.coordinateOrigin ?? "top-left") === "center"
+          ? artSize.width / 2 + placement.x - width / 2
+          : placement.x,
+      y:
+        (manifest.coordinateOrigin ?? "top-left") === "center"
+          ? artSize.height / 2 + placement.y - height / 2
+          : placement.y,
+      width,
+      height,
     }),
   });
 }

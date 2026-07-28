@@ -117,6 +117,27 @@ describe("EditorStore", () => {
     expect(listener).toHaveBeenCalled();
   });
 
+  it("classifies placement edits as geometry and resource changes as structural", () => {
+    const store = new EditorStore(
+      manifestToEditorProject(imageManifest, assetBytes),
+    );
+    store.transact((draft) => {
+      draft.nodes[0]!.placements.default!.x = 4;
+    });
+    expect(store.getSnapshot().changeKind).toBe("geometry");
+
+    store.transact((draft) => {
+      const resourceId = draft.nodes[0]!.resourceId;
+      const resource = draft.resources.get(resourceId)!;
+      if (resource.kind === "image")
+        draft.resources.set(resourceId, {
+          ...resource,
+          path: "assets/replaced.png",
+        });
+    });
+    expect(store.getSnapshot().changeKind).toBe("structural");
+  });
+
   it("repairs legacy mode background ordering before strict validation", () => {
     const project = manifestToEditorProject(imageManifest, assetBytes);
     const baseNode = project.nodes[0]!;

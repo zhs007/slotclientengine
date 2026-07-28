@@ -5,6 +5,8 @@ const previewSpies = vi.hoisted(() => ({
   init: vi.fn(async () => undefined),
   clear: vi.fn(),
   setLayout: vi.fn(async () => undefined),
+  applyGeometryManifest: vi.fn(),
+  setSelectedLayer: vi.fn(),
   setPageSize: vi.fn(),
   setZoom: vi.fn(),
   setGuideVisibility: vi.fn(),
@@ -103,6 +105,8 @@ vi.mock("../src/preview/layout-preview.js", () => ({
     init = previewSpies.init;
     clear = previewSpies.clear;
     setLayout = previewSpies.setLayout;
+    applyGeometryManifest = previewSpies.applyGeometryManifest;
+    setSelectedLayer = previewSpies.setSelectedLayer;
     setPageSize = previewSpies.setPageSize;
     setZoom = previewSpies.setZoom;
     setGuideVisibility = previewSpies.setGuideVisibility;
@@ -1634,6 +1638,75 @@ describe("GameLayoutEditorApp workspace", () => {
     expect(anchorClick).toHaveBeenCalled();
     fileClick.mockRestore();
     anchorClick.mockRestore();
+    app.destroy();
+  });
+
+  it("switches coordinate origin through geometry refresh without rebuilding the preview", async () => {
+    const imported = {
+      manifest: imageManifest,
+      assets: assetBytes,
+      destroy: vi.fn(),
+    };
+    ioSpies.importZip.mockResolvedValueOnce(imported);
+    const fileClick = selectFilesOnce([
+      new File(["zip"], "fixture-layout.zip"),
+    ]);
+    const { app, root } = await createApp();
+    (root.querySelector("[data-import]") as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(previewSpies.setLayout).toHaveBeenCalled());
+    previewSpies.setLayout.mockClear();
+    previewSpies.applyGeometryManifest.mockClear();
+    (
+      root.querySelector('[data-workspace-tab="project"]') as HTMLButtonElement
+    ).click();
+
+    (
+      root.querySelector(
+        '[data-toggle-coordinate-origin="center"]',
+      ) as HTMLButtonElement
+    ).click();
+
+    await vi.waitFor(() =>
+      expect(previewSpies.applyGeometryManifest).toHaveBeenCalledOnce(),
+    );
+    expect(previewSpies.setLayout).not.toHaveBeenCalled();
+    expect(root.textContent).toContain("全局坐标类型：中心");
+    fileClick.mockRestore();
+    app.destroy();
+  });
+
+  it("shows per-variant whole reel scale only for dual-background projects", async () => {
+    const { app, root } = await createApp();
+    (
+      root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector('[data-outline-key="reel:main"]') as HTMLButtonElement
+    ).click();
+    expect(root.querySelector('[data-number$=".scale"]')).toBeNull();
+
+    (root.querySelector("[data-new-project]") as HTMLButtonElement).click();
+    const mode = root.querySelector(
+      "[data-new-project-mode]",
+    ) as HTMLSelectElement;
+    mode.value = "orientation-focus";
+    mode.dispatchEvent(new Event("change"));
+    (
+      root.querySelector("[data-confirm-new-project]") as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector('[data-workspace-tab="layout"]') as HTMLButtonElement
+    ).click();
+    (
+      root.querySelector('[data-outline-key="reel:main"]') as HTMLButtonElement
+    ).click();
+
+    expect(
+      root.querySelector('[data-number="reel.placements.landscape.scale"]'),
+    ).toBeTruthy();
+    expect(
+      root.querySelector('[data-number="reel.placements.portrait.scale"]'),
+    ).toBeTruthy();
     app.destroy();
   });
 

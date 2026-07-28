@@ -132,8 +132,8 @@ function reelInspector(
     project,
   )
     .map((variant) => {
-      const placement = reel.placements[variant] ?? { x: 0, y: 0 };
-      return `<fieldset><legend>${variant} art-space</legend><div class="field-grid">${numberField("x", `reel.placements.${variant}.x`, placement.x)}${numberField("y", `reel.placements.${variant}.y`, placement.y)}</div></fieldset>`;
+      const placement = reel.placements[variant] ?? { x: 0, y: 0, scale: 1 };
+      return `<fieldset><legend>${variant} art-space</legend><div class="field-grid">${numberField("x", `reel.placements.${variant}.x`, placement.x)}${numberField("y", `reel.placements.${variant}.y`, placement.y)}${project.mode === "orientation-focus" ? numberField("整体 scale", `reel.placements.${variant}.scale`, placement.scale ?? 1, 0.01) : ""}</div></fieldset>`;
     })
     .join("")}</details></section></div>`;
 }

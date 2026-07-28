@@ -600,6 +600,23 @@ details summary {
   margin: 0;
 }
 
+.coordinate-origin-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid #33445e;
+  border-radius: 8px;
+  background: #0b1421;
+}
+
+.coordinate-origin-control .hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .readiness-table-wrap {
   overflow: auto;
 }

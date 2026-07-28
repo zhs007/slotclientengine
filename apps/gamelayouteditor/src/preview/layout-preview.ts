@@ -78,6 +78,7 @@ export class LayoutPreview {
   #randomSource: RandomUint32Source | null;
   readonly #app = new Application();
   readonly #guides = new Graphics();
+  readonly #selectionOutline = new Graphics();
   readonly #symbolOverlay = new Container();
   #package: ImportedLayoutPackage | null = null;
   #runtime: SceneLayoutRuntime | null = null;
@@ -96,6 +97,7 @@ export class LayoutPreview {
   #symbolResource: SymbolPackageResource | null = null;
   #symbolCatalog: SymbolCatalogModel | null = null;
   #symbolPreview: SymbolPackagePreviewSnapshot | null = null;
+  #renderedSymbolPreview: SymbolPackagePreviewSnapshot | null = null;
   #symbolGrid: SymbolPreviewGridSize | null = null;
   #renderSymbols: RenderSymbol[] = [];
   #symbolDiagnostic = "";
@@ -103,6 +105,7 @@ export class LayoutPreview {
     [],
   );
   #packageScenes = new Map<string, RandomReelSceneSnapshot>();
+  #selectedLayerId: string | null = null;
 
   constructor(
     host: HTMLElement,
@@ -126,11 +129,18 @@ export class LayoutPreview {
     });
     this.#app.canvas.setAttribute("aria-label", "布局预览画布");
     this.#host.replaceChildren(this.#app.canvas);
-    this.#app.stage.addChild(this.#symbolOverlay, this.#guides);
+    this.#selectionOutline.label = "editor-selected-layer-outline";
+    this.#selectionOutline.eventMode = "none";
+    this.#app.stage.addChild(
+      this.#symbolOverlay,
+      this.#guides,
+      this.#selectionOutline,
+    );
     this.#app.ticker.add((ticker) => {
       if (this.#runtime) this.#runtime.update(ticker.deltaMS / 1000);
       for (const symbol of this.#renderSymbols)
         symbol.update(ticker.deltaMS / 1000);
+      if (this.#selectedLayerId) this.drawSelectedLayerOutline();
     });
     this.#ready = true;
   }
@@ -249,6 +259,21 @@ export class LayoutPreview {
     this.applySize();
   }
 
+  applyGeometryManifest(manifest: SceneLayoutManifestV1): void {
+    this.assertReady();
+    const runtime = this.#runtime;
+    if (!runtime) throw new Error("布局 preview 尚未初始化。");
+    this.#layoutRequest += 1;
+    runtime.applyGeometryManifest(manifest);
+    this.#manifest = manifest;
+    this.applySize();
+  }
+
+  setSelectedLayer(nodeId: string | null): void {
+    this.#selectedLayerId = nodeId;
+    this.drawSelectedLayerOutline();
+  }
+
   playAwardCelebration(input: {
     readonly betAmountRaw: number;
     readonly winAmountRaw: number;
@@ -338,6 +363,7 @@ export class LayoutPreview {
     this.clearRenderSymbols();
     this.#manifest = null;
     this.#guides.clear();
+    this.#selectionOutline.clear();
     this.#diagnostics.textContent = "配置未通过严格校验，预览与导出已暂停。";
   }
 
@@ -586,6 +612,7 @@ export class LayoutPreview {
     this.clearSymbolPackage();
     this.#symbolOverlay.destroy({ children: true });
     this.#guides.destroy();
+    this.#selectionOutline.destroy();
     this.#app.destroy(true, { children: true, texture: true });
     this.#host.replaceChildren();
   }
@@ -734,6 +761,7 @@ export class LayoutPreview {
       showFocus: this.#showFocus,
       showReels: this.#showReels,
     });
+    this.drawSelectedLayerOutline();
     this.#diagnostics.textContent = [
       `variant=${snapshot.variantId}`,
       `page=${round(this.#pageSize.width)}×${round(this.#pageSize.height)}`,
@@ -812,6 +840,18 @@ export class LayoutPreview {
       return;
     }
     const cellCount = reel.columns * reel.rows;
+    if (
+      this.#renderedSymbolPreview === preview &&
+      this.#renderSymbols.length === cellCount
+    ) {
+      this.#symbolOverlay.position.set(
+        reel.viewportRect.x,
+        reel.viewportRect.y,
+      );
+      this.#symbolOverlay.scale.set(reel.scale);
+      this.#symbolDiagnostic = `symbols=${preview.packageId} · reel=${scene.reelSetName} · stops=[${scene.stopYs.join(",")}] · mappings=${formatBindings(preview.bindings)} · otherScene=${formatOtherScene(preview.otherScene?.matrix ?? [])}`;
+      return;
+    }
     const nextSymbols: RenderSymbol[] = [];
     const assignmentByCell = new Map(
       (preview.otherScene?.assignments ?? []).map((assignment) => [
@@ -836,12 +876,8 @@ export class LayoutPreview {
             orderIndex;
           renderSymbol.init();
           renderSymbol.position.set(
-            reel.viewportRect.x +
-              x * reel.stride.width +
-              reel.cellSize.width / 2,
-            reel.viewportRect.y +
-              y * reel.stride.height +
-              reel.cellSize.height / 2,
+            x * reel.stride.width + reel.cellSize.width / 2,
+            y * reel.stride.height + reel.cellSize.height / 2,
           );
           const presentation =
             resource.symbolManifest.symbols[symbol]?.valuePresentation;
@@ -864,15 +900,49 @@ export class LayoutPreview {
       throw error;
     }
     this.clearRenderSymbols();
+    this.#symbolOverlay.position.set(reel.viewportRect.x, reel.viewportRect.y);
+    this.#symbolOverlay.scale.set(reel.scale);
     this.#symbolOverlay.addChild(...nextSymbols);
     this.#renderSymbols = nextSymbols;
+    this.#renderedSymbolPreview = preview;
     this.#symbolDiagnostic = `symbols=${preview.packageId} · reel=${scene.reelSetName} · stops=[${scene.stopYs.join(",")}] · mappings=${formatBindings(preview.bindings)} · otherScene=${formatOtherScene(preview.otherScene?.matrix ?? [])}`;
   }
 
   private clearRenderSymbols(): void {
     for (const symbol of this.#renderSymbols) symbol.destroy();
     this.#renderSymbols = [];
+    this.#renderedSymbolPreview = null;
     this.#symbolOverlay.removeChildren();
+    this.#symbolOverlay.position.set(0, 0);
+    this.#symbolOverlay.scale.set(1);
+  }
+
+  private drawSelectedLayerOutline(): void {
+    this.#selectionOutline.clear();
+    const nodeId = this.#selectedLayerId;
+    const runtime = this.#runtime;
+    const manifest = this.#manifest;
+    const variantId = this.#lastLayoutSnapshot?.variantId;
+    if (!nodeId || !runtime || !manifest || !variantId) return;
+    const spec = manifest.nodes.find((node) => node.id === nodeId);
+    if (!spec?.placements[variantId]) return;
+    try {
+      const bounds = runtime.getNode(nodeId).getBounds();
+      if (
+        !Number.isFinite(bounds.x) ||
+        !Number.isFinite(bounds.y) ||
+        !Number.isFinite(bounds.width) ||
+        !Number.isFinite(bounds.height) ||
+        bounds.width <= 0 ||
+        bounds.height <= 0
+      )
+        return;
+      this.#selectionOutline
+        .rect(bounds.x, bounds.y, bounds.width, bounds.height)
+        .stroke({ color: 0xff3b30, width: 3, alpha: 1 });
+    } catch {
+      this.#selectionOutline.clear();
+    }
   }
 
   private clearSymbolPackage(): void {

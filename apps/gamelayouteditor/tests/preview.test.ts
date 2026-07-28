@@ -50,6 +50,7 @@ describe("preview helpers", () => {
               cellSize: { width: 20, height: 20 },
               gap: { x: 5, y: 3 },
               stride: { width: 25, height: 23 },
+              scale: 1,
               artRect: { x: 20, y: 20, width: 45, height: 43 },
               viewportRect: { x: 20, y: 20, width: 45, height: 43 },
             },

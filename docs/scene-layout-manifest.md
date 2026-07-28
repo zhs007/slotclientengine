@@ -2,6 +2,35 @@
 
 根 sentinel 为 `layout.manifest.json`。schema version 仍为 `1`，支持 `maximized-focus` / `orientation-focus`、image/image-string/official Spine 4.3 node、reels、plural `symbolPackages`、award-celebration `popups`、game modes 与显式有向 transitions。
 
+## 坐标原点与主转轮缩放
+
+根级可选 `coordinateOrigin` 为 `"top-left"` 或 `"center"`；旧包缺失时严格按 `"top-left"` 读取。Game Layout Editor 的新导出会显式保存该值。
+
+- `top-left`：art 左上角是 `(0, 0)`；image placement 表示图片左上角，Spine/image-string placement 表示各自 authored origin。
+- `center`：art 中心是 `(0, 0)`；image placement 表示缩放后图片中心，Spine/image-string placement 表示 authored origin 相对 art center 的偏移。
+- focus、frame focus、min margin 仍是以 art 左上角描述的矩形，不随坐标类型转换。
+- Spine transition overlay 使用与 node 相同的 art-space origin；popup 仍是 viewport center offset，video blackout 仍是 viewport-space。
+
+`reels.main.placements.<variant>` 可增加正数 `scale`；缺失时按 `1`。placement 在 `top-left` 模式表示缩放后转轮矩形左上角，在 `center` 模式表示缩放后转轮矩形中心相对 art center 的偏移。runtime 对 reel presentation 根节点统一缩放，不修改 cell size、symbol placement 或 symbol package 内部 scale。
+
+```json
+{
+  "coordinateOrigin": "center",
+  "reels": {
+    "main": {
+      "columns": 5,
+      "rows": 3,
+      "cellSize": { "width": 160, "height": 160 },
+      "gap": { "x": 0, "y": 0 },
+      "placements": {
+        "landscape": { "x": 0, "y": 20, "scale": 1 },
+        "portrait": { "x": 0, "y": -40, "scale": 0.8 }
+      }
+    }
+  }
+}
+```
+
 ## Filename-key package
 
 Game Layout Editor 新导出的所有资源引用是扁平 filename keys：
@@ -33,7 +62,7 @@ Game Layout Editor 新导出的所有资源引用是扁平 filename keys：
 
 根 `assets.map.json` 将 layout、image-string、Symbols、Popup 的全部 root/leaf keys 统一映射到 `assets/<完整 SHA-256>.<ext>`。ZIP 只有两个 root control files 和 hash payload 区；禁止 `dependencies/image-strings/**`、`dependencies/symbols/**`、`dependencies/popups/**`。
 
-同一个 filename key 全局只有一份 bytes。多个 package 带来同名不同 bytes 时必须覆盖、取消或显式改名并由 owner 结构化改写，不能按 package id 建 namespace。package/mode/node id 保留业务语义，不作为资源 alias。
+同一个 filename key 全局只有一份 bytes。多个 package 带来同名不同 bytes 时必须覆盖、取消或显式改名并由 owner 结构化改写，不能按 package id 建 namespace。package/mode/node id 保留业务语义，不作为资源 alias。导出与重新导入不得用 physical hash payload path 重建 node id 或资源列表标签。
 
 ## 精确闭包与 loader
 

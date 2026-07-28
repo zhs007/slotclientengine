@@ -6,6 +6,7 @@ const state = vi.hoisted(() => {
     container: {},
     init: vi.fn(async () => undefined),
     update: vi.fn(),
+    applyGeometryManifest: vi.fn(),
     applyViewport: vi.fn(() => ({
       variantId: "default",
       artSize: { width: 100, height: 100 },
@@ -14,6 +15,9 @@ const state = vi.hoisted(() => {
       worldOffset: { x: 0, y: 0 },
       focusRectInViewport: { x: 10, y: 10, width: 80, height: 80 },
       reels: {},
+    })),
+    getNode: vi.fn(() => ({
+      getBounds: () => ({ x: 12, y: 14, width: 30, height: 40 }),
     })),
     destroy: vi.fn(),
   };
@@ -50,6 +54,12 @@ const state = vi.hoisted(() => {
     tickerAdd: vi.fn(),
     appDestroy: vi.fn(),
     graphicsClear: vi.fn(),
+    graphicsRect: vi.fn(),
+    graphicsStroke: vi.fn(),
+    containerInstances: [] as Array<{
+      position: { set: ReturnType<typeof vi.fn> };
+      scale: { set: ReturnType<typeof vi.fn> };
+    }>,
     resolveFrame: vi.fn(
       ({ pageSize }: { pageSize: { width: number; height: number } }) =>
         pageSize.width === 800 && pageSize.height === 600
@@ -87,6 +97,7 @@ function gridSnapshot(columns = 2, rows = 2) {
         rows,
         cellSize: { width: 20, height: 20 },
         stride: { width: 25, height: 23 },
+        scale: 1,
         viewportRect: { x: 7, y: 11, width: 45, height: 43 },
       },
     },
@@ -180,12 +191,25 @@ vi.mock("pixi.js", () => ({
   },
   Graphics: class {
     clear = state.graphicsClear;
+    rect(...args: unknown[]) {
+      state.graphicsRect(...args);
+      return this;
+    }
+    stroke(...args: unknown[]) {
+      state.graphicsStroke(...args);
+      return this;
+    }
     destroy = vi.fn();
   },
   Container: class {
+    position = { set: vi.fn() };
+    scale = { set: vi.fn() };
     addChild = vi.fn();
     removeChildren = vi.fn();
     destroy = vi.fn();
+    constructor() {
+      state.containerInstances.push(this);
+    }
   },
 }));
 
@@ -215,6 +239,7 @@ describe("LayoutPreview", () => {
     vi.clearAllMocks();
     state.pkg.resource = {};
     state.pkg.packageResource = {};
+    state.containerInstances.length = 0;
     state.canvas.removeAttribute("style");
     state.runtime.applyViewport.mockReturnValue({
       variantId: "default",
@@ -413,9 +438,14 @@ describe("LayoutPreview", () => {
       ["B", "A"],
     ]);
     expect(catalog.createRenderSymbol).toHaveBeenCalledTimes(4);
-    expect(renderSymbols[0].position.set).toHaveBeenCalledWith(17, 21);
-    expect(renderSymbols[1].position.set).toHaveBeenCalledWith(42, 21);
-    expect(renderSymbols[2].position.set).toHaveBeenCalledWith(17, 44);
+    expect(renderSymbols[0].position.set).toHaveBeenCalledWith(10, 10);
+    expect(renderSymbols[1].position.set).toHaveBeenCalledWith(35, 10);
+    expect(renderSymbols[2].position.set).toHaveBeenCalledWith(10, 33);
+    expect(state.containerInstances[0]?.position.set).toHaveBeenCalledWith(
+      7,
+      11,
+    );
+    expect(state.containerInstances[0]?.scale.set).toHaveBeenCalledWith(1);
     expect(renderSymbols[2].scale.set).toHaveBeenCalledWith(1.5);
     expect(renderSymbols[2].setPresentationValue).toHaveBeenCalledWith(25);
     expect(renderSymbols[2].zIndex).toBe(10);
@@ -424,6 +454,44 @@ describe("LayoutPreview", () => {
     expect(preview.getSymbolPreviewSnapshot()?.scene).toBe(sampled.scene);
     expect(randomSource.nextUint32).toHaveBeenCalledTimes(2);
     expect(diagnostics.textContent).toContain("reel=main");
+    preview.destroy();
+  });
+
+  it("applies geometry changes without rebuilding symbols and outlines the selected layer in red", async () => {
+    state.runtime.applyViewport.mockReturnValue(gridSnapshot());
+    const host = document.createElement("div");
+    const diagnostics = document.createElement("div");
+    document.body.append(host, diagnostics);
+    const preview = new LayoutPreview(host, diagnostics, {
+      randomSource: { nextUint32: () => 0 },
+    });
+    await preview.init();
+    await preview.setLayout(imageManifest, assetBytes);
+    const { resource, catalog } = symbolResource();
+    await preview.setSymbolPackage(resource as never, {
+      columns: 2,
+      rows: 2,
+    });
+
+    preview.applyGeometryManifest({
+      ...imageManifest,
+      nodes: [
+        {
+          ...imageManifest.nodes[0],
+          placements: { default: { x: 4, y: 6, scale: 1 } },
+        },
+      ],
+    });
+    preview.setSelectedLayer("bg");
+
+    expect(state.runtime.applyGeometryManifest).toHaveBeenCalledOnce();
+    expect(catalog.createRenderSymbol).toHaveBeenCalledTimes(4);
+    expect(state.graphicsRect).toHaveBeenCalledWith(12, 14, 30, 40);
+    expect(state.graphicsStroke).toHaveBeenCalledWith({
+      alpha: 1,
+      color: 0xff3b30,
+      width: 3,
+    });
     preview.destroy();
   });
 

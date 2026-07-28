@@ -1,5 +1,10 @@
 import { extractBoundedZip } from "@slotclientengine/browserartifactio";
-import { normalizeEditorPackageZipEntries } from "@slotclientengine/editorresource";
+import {
+  decodeEditorAssetsMap,
+  EDITOR_ASSETS_MAP_PATH,
+  normalizeEditorPackageZipEntries,
+  validateEditorAssetsMapPackage,
+} from "@slotclientengine/editorresource";
 import {
   collectPopupPackagePaths,
   createPopupPackageResource,
@@ -33,6 +38,13 @@ export async function importPopupPackageZip(
   const manifest = parsePopupManifest(
     JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(root)),
   );
+  const assetsMap = files.get(EDITOR_ASSETS_MAP_PATH);
+  if (assetsMap)
+    await validateEditorAssetsMapPackage({
+      map: decodeEditorAssetsMap(assetsMap),
+      files,
+      allowControlPaths: ["popup.manifest.json"],
+    });
   const virtual = await resolvePopupPackageFiles({ manifest, files });
   collectPopupPackagePaths({ manifest, files: virtual });
   const resource = await createPopupPackageResource({

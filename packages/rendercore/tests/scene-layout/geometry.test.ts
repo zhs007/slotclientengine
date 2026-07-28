@@ -69,4 +69,26 @@ describe("scene layout frame geometry", () => {
       }),
     ).toThrow(/pageSize.width/);
   });
+
+  it("resolves a center-origin reel as one scaled parent rectangle", () => {
+    const manifest = structuredClone(game002LayoutFixture) as any;
+    manifest.coordinateOrigin = "center";
+    manifest.nodes[0].placements.default = {
+      x: -999.5,
+      y: -999.5,
+      scale: 1,
+    };
+    manifest.reels.main.placements.default = { x: 0, y: 0, scale: 0.5 };
+
+    const snapshot = resolveSceneLayoutViewport({
+      manifest,
+      viewportSize: { width: 2000, height: 2000 },
+    });
+
+    expect(snapshot.reels.main).toMatchObject({
+      scale: 0.5,
+      artRect: { x: 820, y: 730, width: 360, height: 540 },
+      viewportRect: { width: 360, height: 540 },
+    });
+  });
 });

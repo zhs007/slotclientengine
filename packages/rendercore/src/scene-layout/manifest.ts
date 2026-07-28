@@ -31,6 +31,7 @@ export function parseSceneLayoutManifest(
       "version",
       "kind",
       "id",
+      "coordinateOrigin",
       "adaptation",
       "nodes",
       "reels",
@@ -45,6 +46,10 @@ export function parseSceneLayoutManifest(
   if (record.kind !== "scene-layout")
     fail('scene layout manifest.kind must be "scene-layout".');
   const id = identifier(record.id, "scene layout manifest.id");
+  const coordinateOrigin =
+    record.coordinateOrigin === undefined
+      ? undefined
+      : parseCoordinateOrigin(record.coordinateOrigin);
   const adaptation = parseAdaptation(record.adaptation);
   if (!Array.isArray(record.nodes) || record.nodes.length === 0) {
     fail("scene layout manifest.nodes must be a non-empty array.");
@@ -110,12 +115,19 @@ export function parseSceneLayoutManifest(
         );
   if (symbolPackages && !gameModes)
     fail("scene layout symbolPackages requires gameModes.");
-  validateReferencesAndBounds(adaptation, nodes, nodeIds, reels);
+  validateReferencesAndBounds(
+    coordinateOrigin ?? "top-left",
+    adaptation,
+    nodes,
+    nodeIds,
+    reels,
+  );
   validatePathClosure(nodes);
   return deepFreeze({
     version: 1,
     kind: "scene-layout",
     id,
+    ...(coordinateOrigin ? { coordinateOrigin } : {}),
     adaptation,
     nodes,
     reels,
@@ -479,14 +491,22 @@ function parseReel(
     mode === "maximized-focus" ? ["default"] : ["landscape", "portrait"];
   known(placementsRecord, allowed, `${label}.placements`);
   const placements: Partial<
-    Record<SceneLayoutVariantId, { x: number; y: number }>
+    Record<SceneLayoutVariantId, { x: number; y: number; scale?: number }>
   > = {};
   for (const [variantId, raw] of Object.entries(placementsRecord)) {
     const placement = readRecord(raw, `${label}.placements.${variantId}`);
-    known(placement, ["x", "y"], `${label}.placements.${variantId}`);
+    known(placement, ["x", "y", "scale"], `${label}.placements.${variantId}`);
     placements[variantId as SceneLayoutVariantId] = deepFreeze({
       x: finite(placement.x, `${label}.placements.${variantId}.x`),
       y: finite(placement.y, `${label}.placements.${variantId}.y`),
+      ...(placement.scale === undefined
+        ? {}
+        : {
+            scale: positive(
+              placement.scale,
+              `${label}.placements.${variantId}.scale`,
+            ),
+          }),
     });
   }
   if (mode === "maximized-focus" && !placements.default)
@@ -513,6 +533,7 @@ function parseReel(
 }
 
 function validateReferencesAndBounds(
+  coordinateOrigin: "top-left" | "center",
   adaptation: SceneLayoutAdaptation,
   nodes: readonly SceneLayoutNode[],
   nodeIds: Set<unknown>,
@@ -545,12 +566,24 @@ function validateReferencesAndBounds(
       );
     for (const [reelId, reel] of Object.entries(reels)) {
       const placement = reel.placements[variantId]!;
+      const scale = placement.scale ?? 1;
+      const width =
+        (reel.columns * reel.cellSize.width + (reel.columns - 1) * reel.gap.x) *
+        scale;
+      const height =
+        (reel.rows * reel.cellSize.height + (reel.rows - 1) * reel.gap.y) *
+        scale;
       const reelRect = {
-        x: placement.x,
-        y: placement.y,
-        width:
-          reel.columns * reel.cellSize.width + (reel.columns - 1) * reel.gap.x,
-        height: reel.rows * reel.cellSize.height + (reel.rows - 1) * reel.gap.y,
+        x:
+          coordinateOrigin === "center"
+            ? variant.artSize.width / 2 + placement.x - width / 2
+            : placement.x,
+        y:
+          coordinateOrigin === "center"
+            ? variant.artSize.height / 2 + placement.y - height / 2
+            : placement.y,
+        width,
+        height,
       };
       fits(
         reelRect,
@@ -565,6 +598,79 @@ function validateReferencesAndBounds(
       );
     }
   }
+}
+
+function parseCoordinateOrigin(value: unknown): "top-left" | "center" {
+  if (value !== "top-left" && value !== "center")
+    fail(
+      'scene layout manifest.coordinateOrigin must be "top-left" or "center".',
+    );
+  return value;
+}
+
+export function assertSceneLayoutGeometryCompatible(
+  currentValue: SceneLayoutManifestV1,
+  nextValue: SceneLayoutManifestV1,
+): void {
+  const current = parseSceneLayoutManifest(currentValue);
+  const next = parseSceneLayoutManifest(nextValue);
+  if (
+    JSON.stringify(sceneLayoutStructure(current)) !==
+    JSON.stringify(sceneLayoutStructure(next))
+  )
+    fail("scene layout geometry update changed immutable structure.");
+}
+
+function sceneLayoutStructure(manifest: SceneLayoutManifestV1): unknown {
+  return {
+    version: manifest.version,
+    kind: manifest.kind,
+    id: manifest.id,
+    adaptation:
+      manifest.adaptation.mode === "maximized-focus"
+        ? {
+            mode: manifest.adaptation.mode,
+            backgroundNode: manifest.adaptation.backgroundNode,
+          }
+        : {
+            mode: manifest.adaptation.mode,
+            variants: {
+              landscape: {
+                backgroundNode:
+                  manifest.adaptation.variants.landscape.backgroundNode,
+              },
+              portrait: {
+                backgroundNode:
+                  manifest.adaptation.variants.portrait.backgroundNode,
+              },
+            },
+          },
+    nodes: manifest.nodes.map(({ placements: _placements, ...node }) => node),
+    reels: Object.fromEntries(
+      Object.entries(manifest.reels).map(
+        ([id, { placements: _placements, ...reel }]) => [id, reel],
+      ),
+    ),
+    symbolPackage: manifest.symbolPackage,
+    symbolPackages: manifest.symbolPackages,
+    popups: manifest.popups,
+    gameModes: manifest.gameModes
+      ? {
+          ...manifest.gameModes,
+          transitions: manifest.gameModes.transitions?.map((transition) =>
+            "placements" in transition.overlay
+              ? {
+                  ...transition,
+                  overlay: {
+                    ...transition.overlay,
+                    placements: undefined,
+                  },
+                }
+              : transition,
+          ),
+        }
+      : undefined,
+  };
 }
 
 function validatePathClosure(nodes: readonly SceneLayoutNode[]): void {

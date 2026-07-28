@@ -13,6 +13,7 @@ import type {
 } from "../viewport/index.js";
 
 export type SceneLayoutVariantId = "default" | "landscape" | "portrait";
+export type SceneLayoutCoordinateOrigin = "top-left" | "center";
 export type SceneLayoutOrientationVariantId = Exclude<
   SceneLayoutVariantId,
   "default"
@@ -90,7 +91,14 @@ export interface SceneLayoutReelGrid {
   readonly gap: { readonly x: number; readonly y: number };
   readonly placements: Readonly<
     Partial<
-      Record<SceneLayoutVariantId, { readonly x: number; readonly y: number }>
+      Record<
+        SceneLayoutVariantId,
+        {
+          readonly x: number;
+          readonly y: number;
+          readonly scale?: number;
+        }
+      >
     >
   >;
 }
@@ -192,6 +200,7 @@ export interface SceneLayoutManifestV1 {
   readonly version: 1;
   readonly kind: "scene-layout";
   readonly id: string;
+  readonly coordinateOrigin?: SceneLayoutCoordinateOrigin;
   readonly adaptation: SceneLayoutAdaptation;
   readonly nodes: readonly SceneLayoutNode[];
   readonly reels: Readonly<Record<string, SceneLayoutReelGrid>>;
@@ -239,6 +248,7 @@ export interface ResolvedSceneLayoutReelGrid {
   readonly cellSize: RenderViewportSize;
   readonly gap: { readonly x: number; readonly y: number };
   readonly stride: RenderViewportSize;
+  readonly scale: number;
   readonly artRect: RenderViewportRect;
 }
 
@@ -295,6 +305,9 @@ export interface SceneLayoutRuntime {
   readonly container: Container;
   init(): Promise<void>;
   applyViewport(viewportSize: RenderViewportSize): SceneLayoutSnapshot;
+  applyGeometryManifest(
+    manifest: SceneLayoutManifestV1,
+  ): SceneLayoutSnapshot | null;
   update(deltaSeconds: number): void;
   getSnapshot(): SceneLayoutSnapshot;
   getNode(id: string): Container;

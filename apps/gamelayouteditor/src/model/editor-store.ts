@@ -1,3 +1,4 @@
+import { assertSceneLayoutGeometryCompatible } from "@slotclientengine/rendercore/scene-layout";
 import {
   cloneEditorProject,
   editorProjectToManifest,
@@ -13,6 +14,7 @@ export interface EditorStoreSnapshot {
   readonly errors: readonly string[];
   readonly externalError: string | null;
   readonly revision: number;
+  readonly changeKind: "initial" | "geometry" | "structural";
 }
 
 export class EditorStore {
@@ -20,6 +22,7 @@ export class EditorStore {
   #errors: readonly string[] = [];
   #externalError: string | null = null;
   #revision = 0;
+  #changeKind: EditorStoreSnapshot["changeKind"] = "initial";
   readonly #listeners = new Set<(snapshot: EditorStoreSnapshot) => void>();
 
   constructor(project: EditorProject) {
@@ -34,14 +37,17 @@ export class EditorStore {
       errors: this.#errors,
       externalError: this.#externalError,
       revision: this.#revision,
+      changeKind: this.#changeKind,
     });
   }
 
   transact(update: (draft: EditorProject) => void): void {
+    const previous = this.#project;
     const draft = cloneEditorProject(this.#project);
     update(draft);
     synchronizeGameModeNodeStates(draft);
     normalizeGameModeNodeOrders(draft);
+    this.#changeKind = classifyProjectChange(previous, draft);
     this.#project = draft;
     this.#externalError = null;
     this.#revision += 1;
@@ -52,6 +58,7 @@ export class EditorStore {
   replace(project: EditorProject): void {
     this.#project = cloneEditorProject(project);
     normalizeGameModeNodeOrders(this.#project);
+    this.#changeKind = "structural";
     this.#externalError = null;
     this.#revision += 1;
     this.validate();
@@ -90,6 +97,39 @@ export class EditorStore {
     const snapshot = this.getSnapshot();
     for (const listener of this.#listeners) listener(snapshot);
   }
+}
+
+function classifyProjectChange(
+  previous: EditorProject,
+  next: EditorProject,
+): "geometry" | "structural" {
+  if (!sameAssetBytes(previous.assets, next.assets)) return "structural";
+  try {
+    assertSceneLayoutGeometryCompatible(
+      editorProjectToManifest(previous),
+      editorProjectToManifest(next),
+    );
+    return "geometry";
+  } catch {
+    return "structural";
+  }
+}
+
+function sameAssetBytes(
+  left: ReadonlyMap<string, Uint8Array>,
+  right: ReadonlyMap<string, Uint8Array>,
+): boolean {
+  if (left.size !== right.size) return false;
+  for (const [path, bytes] of left) {
+    const candidate = right.get(path);
+    if (
+      !candidate ||
+      candidate.byteLength !== bytes.byteLength ||
+      !bytes.every((byte, index) => candidate[index] === byte)
+    )
+      return false;
+  }
+  return true;
 }
 
 function formatError(error: unknown): string {

@@ -368,6 +368,48 @@ describe("scene layout runtime", () => {
     expect(unloadTexture).toHaveBeenCalledWith("memory:shared-bg");
   });
 
+  it("applies geometry-only manifests without rebuilding named nodes or textures", async () => {
+    const resource = createSceneLayoutResource({
+      manifest: game002LayoutFixture,
+      imageModules: { "assets/bg.png": "memory:bg" },
+    });
+    const loadTexture = vi.fn(async () => Texture.WHITE);
+    const runtime = createSceneLayoutRuntime({ resource, loadTexture });
+    await runtime.init();
+    runtime.applyViewport({ width: 2000, height: 2000 });
+    const node = runtime.getNode("bg");
+    const sprite = node.children[0] as Sprite;
+
+    const centered = structuredClone(game002LayoutFixture) as any;
+    centered.coordinateOrigin = "center";
+    centered.nodes[0].placements.default = {
+      x: -989.5,
+      y: -979.5,
+      scale: 1,
+    };
+    centered.reels.main.placements.default = { x: 0, y: -123, scale: 1 };
+    const snapshot = runtime.applyGeometryManifest(centered);
+
+    expect(snapshot?.reels.main.artRect).toEqual({
+      x: 640,
+      y: 337,
+      width: 720,
+      height: 1080,
+    });
+    expect(runtime.getNode("bg")).toBe(node);
+    expect(sprite.anchor.x).toBe(0.5);
+    expect(node.parent?.position).toMatchObject({ x: 10.5, y: 20.5 });
+    expect(loadTexture).toHaveBeenCalledOnce();
+
+    const structural = structuredClone(centered);
+    structural.nodes[0].resource.path = "assets/other.png";
+    expect(() => runtime.applyGeometryManifest(structural)).toThrow(
+      /immutable structure/,
+    );
+    expect(runtime.getNode("bg")).toBe(node);
+    runtime.destroy();
+  });
+
   it("retains independent same-resource Spine players until runtime destruction", async () => {
     const spineSpec = {
       kind: "spine" as const,

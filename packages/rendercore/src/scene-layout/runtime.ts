@@ -12,6 +12,10 @@ import {
 import type { RenderViewportSize } from "../viewport/index.js";
 import { SceneLayoutError } from "./errors.js";
 import {
+  assertSceneLayoutGeometryCompatible,
+  parseSceneLayoutManifest,
+} from "./manifest.js";
+import {
   resolveSceneLayoutReelGrid,
   resolveSceneLayoutViewport,
 } from "./geometry.js";
@@ -46,6 +50,7 @@ interface RuntimeNode {
   player: RendercoreSpinePlayer | null;
   stateController: SpineStateController | null;
   imageString: RenderImageString | null;
+  imageSprite: Sprite | null;
   texture: Texture | null;
 }
 
@@ -69,6 +74,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   readonly #loadedTextureUrls = new Set<string>();
   readonly #texturesByUrl = new Map<string, Texture>();
   readonly #activeNodes = new Map<string, boolean>();
+  #manifest: SceneLayoutResource["manifest"];
   #snapshot: SceneLayoutSnapshot | null = null;
   #initializing = false;
   #initialized = false;
@@ -76,6 +82,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
 
   constructor(options: CreateSceneLayoutRuntimeOptions) {
     this.#resource = options.resource;
+    this.#manifest = options.resource.manifest;
     this.#loadTexture = options.loadTexture ?? loadSceneLayoutTexture;
     this.#unloadTexture =
       options.unloadTexture ??
@@ -109,6 +116,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
         player: null,
         stateController: null,
         imageString: null,
+        imageSprite: null,
         texture: null,
       };
     });
@@ -147,7 +155,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   applyViewport(viewportSize: RenderViewportSize): SceneLayoutSnapshot {
     this.assertReady();
     const snapshot = resolveSceneLayoutViewport({
-      manifest: this.#resource.manifest,
+      manifest: this.#manifest,
       viewportSize,
     });
     this.#snapshot = snapshot;
@@ -157,16 +165,43 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       .rect(0, 0, snapshot.artSize.width, snapshot.artSize.height)
       .fill({ color: 0xffffff, alpha: 1 });
     for (const node of this.#nodes) {
-      const placement = node.spec.placements[snapshot.variantId];
+      const spec = this.requireCurrentNode(node.spec.id);
+      const placement = spec.placements[snapshot.variantId];
       const active = this.#activeNodes.get(node.spec.id) !== false;
       node.slot.visible = Boolean(placement) && active;
       node.slot.renderable = Boolean(placement) && active;
       if (placement) {
-        node.slot.position.set(placement.x, placement.y);
+        const position = resolveNodePlacementPosition(
+          this.#manifest,
+          snapshot.variantId,
+          placement,
+        );
+        node.slot.position.set(position.x, position.y);
         node.slot.scale.set(placement.scale);
       }
     }
     return snapshot;
+  }
+
+  applyGeometryManifest(
+    manifestValue: SceneLayoutResource["manifest"],
+  ): SceneLayoutSnapshot | null {
+    this.assertReady();
+    const manifest = parseSceneLayoutManifest(manifestValue);
+    assertSceneLayoutGeometryCompatible(this.#manifest, manifest);
+    const nextSnapshot = this.#snapshot
+      ? resolveSceneLayoutViewport({
+          manifest,
+          viewportSize: this.#snapshot.viewportSize,
+        })
+      : null;
+    this.#manifest = manifest;
+    for (const node of this.#nodes)
+      if (node.imageSprite)
+        node.imageSprite.anchor.set(
+          (manifest.coordinateOrigin ?? "top-left") === "center" ? 0.5 : 0,
+        );
+    return nextSnapshot ? this.applyViewport(nextSnapshot.viewportSize) : null;
   }
 
   update(deltaSeconds: number): void {
@@ -217,7 +252,7 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   getReelGrid(id: string): ResolvedSceneLayoutReelGrid {
     this.assertReady();
     const variantId = this.#snapshot?.variantId ?? this.defaultVariantId();
-    return resolveSceneLayoutReelGrid(this.#resource.manifest, id, variantId);
+    return resolveSceneLayoutReelGrid(this.#manifest, id, variantId);
   }
 
   getImageStringNodeNames(): readonly string[] {
@@ -321,6 +356,10 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       }
       node.texture = texture;
       const sprite = new Sprite(texture);
+      sprite.anchor.set(
+        (this.#manifest.coordinateOrigin ?? "top-left") === "center" ? 0.5 : 0,
+      );
+      node.imageSprite = sprite;
       sprite.label = `scene-layout-image:${node.spec.id}`;
       node.named.addChild(sprite);
       return;
@@ -422,9 +461,15 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
   }
 
   private defaultVariantId(): SceneLayoutVariantId {
-    return this.#resource.manifest.adaptation.mode === "maximized-focus"
+    return this.#manifest.adaptation.mode === "maximized-focus"
       ? "default"
       : "landscape";
+  }
+
+  private requireCurrentNode(id: string): SceneLayoutNode {
+    const node = this.#manifest.nodes.find((candidate) => candidate.id === id);
+    if (!node) throw new SceneLayoutError(`Unknown scene layout node "${id}".`);
+    return node;
   }
 
   private assertReady(): void {
@@ -439,6 +484,24 @@ class DefaultSceneLayoutRuntime implements SceneLayoutRuntime {
       throw new SceneLayoutError("Scene layout runtime was destroyed.");
     }
   }
+}
+
+function resolveNodePlacementPosition(
+  manifest: SceneLayoutResource["manifest"],
+  variantId: SceneLayoutVariantId,
+  placement: { readonly x: number; readonly y: number },
+): { readonly x: number; readonly y: number } {
+  if ((manifest.coordinateOrigin ?? "top-left") === "top-left")
+    return placement;
+  const artSize =
+    manifest.adaptation.mode === "maximized-focus"
+      ? manifest.adaptation.artSize
+      : manifest.adaptation.variants[variantId as "landscape" | "portrait"]
+          .artSize;
+  return {
+    x: artSize.width / 2 + placement.x,
+    y: artSize.height / 2 + placement.y,
+  };
 }
 
 async function loadSceneLayoutTexture(url: string): Promise<Texture> {

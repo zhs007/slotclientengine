@@ -452,7 +452,11 @@ export function assignBackgroundResource(options: {
         ? { playback: { kind: "loop" as const, animation: animation! } }
         : {}),
       placements: {
-        [options.variant]: defaultBackgroundPlacement(resource, previousSize),
+        [options.variant]: defaultBackgroundPlacement(
+          options.project,
+          resource,
+          previousSize,
+        ),
       },
     };
     options.project.nodes.push(node);
@@ -461,11 +465,13 @@ export function assignBackgroundResource(options: {
     const resourceChanged = previousResource.id !== resource.id;
     node.resourceId = resource.id;
     node.placements[options.variant] ??= defaultBackgroundPlacement(
+      options.project,
       resource,
       previousSize,
     );
     if (previousResource.kind !== resource.kind) {
       node.placements[options.variant] = defaultBackgroundPlacement(
+        options.project,
         resource,
         previousSize,
       );
@@ -499,9 +505,11 @@ export function assignBackgroundResource(options: {
 }
 
 function defaultBackgroundPlacement(
+  project: Pick<EditorProject, "coordinateOrigin">,
   resource: EditorLayoutResource,
   artSize: { readonly width: number; readonly height: number },
 ): { x: number; y: number; scale: number } {
+  if (project.coordinateOrigin === "center") return { x: 0, y: 0, scale: 1 };
   if (resource.kind === "spine" && artSize.width > 0 && artSize.height > 0) {
     return { x: artSize.width / 2, y: artSize.height / 2, scale: 1 };
   }

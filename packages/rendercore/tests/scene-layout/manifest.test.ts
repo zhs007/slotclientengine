@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertSceneLayoutGeometryCompatible,
   collectSceneLayoutAssetPaths,
   parseSceneLayoutManifest,
   resolveSceneLayoutReelGrid,
@@ -62,6 +63,44 @@ describe("scene layout manifest", () => {
         { id: "NoCelebration", nodeStates: { bg: "BG" } },
       ],
     },
+  });
+
+  it("keeps legacy coordinates compatible and strictly parses center coordinates and reel scale", () => {
+    const legacy = parseSceneLayoutManifest(game002LayoutFixture);
+    expect(legacy.coordinateOrigin).toBeUndefined();
+    expect(legacy.reels.main.placements.default?.scale).toBeUndefined();
+
+    const centered = structuredClone(game002LayoutFixture) as any;
+    centered.coordinateOrigin = "center";
+    centered.nodes[0].placements.default = { x: -999.5, y: -999.5, scale: 1 };
+    centered.reels.main.placements.default = { x: 0, y: -123, scale: 1 };
+    const parsed = parseSceneLayoutManifest(centered);
+    expect(parsed.coordinateOrigin).toBe("center");
+    expect(parsed.reels.main.placements.default?.scale).toBe(1);
+
+    const invalidOrigin = structuredClone(centered);
+    invalidOrigin.coordinateOrigin = "bottom-right";
+    expect(() => parseSceneLayoutManifest(invalidOrigin)).toThrow(
+      /coordinateOrigin/,
+    );
+    const invalidScale = structuredClone(centered);
+    invalidScale.reels.main.placements.default.scale = 0;
+    expect(() => parseSceneLayoutManifest(invalidScale)).toThrow(/scale/);
+  });
+
+  it("accepts geometry-only manifest changes and rejects structural changes", () => {
+    const moved = structuredClone(game002LayoutFixture) as any;
+    moved.coordinateOrigin = "top-left";
+    moved.nodes[0].placements.default.x = 12;
+    expect(() =>
+      assertSceneLayoutGeometryCompatible(game002LayoutFixture, moved),
+    ).not.toThrow();
+
+    const structural = structuredClone(game002LayoutFixture) as any;
+    structural.nodes[0].resource.path = "assets/replaced.png";
+    expect(() =>
+      assertSceneLayoutGeometryCompatible(game002LayoutFixture, structural),
+    ).toThrow(/immutable structure/);
   });
 
   it("strictly parses generic game modes and multiple reusable popup bindings", () => {
