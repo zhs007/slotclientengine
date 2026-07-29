@@ -134,6 +134,43 @@ describe("game003 win symbol sequence", () => {
     ).toThrow(/cashWin.*positive/);
   });
 
+  it("prefers 64-bit result and component amounts by field presence", () => {
+    const modern = clone(GAME003_SAMPLE_WIN_SPIN_RESULT);
+    const results = getClientResults(modern);
+    results[0].coinWin = 0;
+    results[0].cashWin = 0;
+    results[0].coinWin64 = 10;
+    results[0].cashWin64 = 100;
+    results[1].coinWin = 0;
+    results[1].cashWin = 0;
+    results[1].coinWin64 = 15;
+    results[1].cashWin64 = 150;
+    const basic = getBgWins(modern).basicComponentData;
+    basic.coinWin = 0;
+    basic.cashWin = 0;
+    basic.coinWin64 = 25;
+    basic.cashWin64 = 250;
+
+    const groups = createGame003WinSymbolSequence(
+      createLogic(modern),
+      GAME003_WIN_SPIN_SCENE,
+    );
+
+    expect(groups.map((group) => group.amount)).toEqual([100, 150]);
+  });
+
+  it("does not treat an explicitly provided zero 64-bit amount as absent", () => {
+    const invalid = clone(GAME003_SAMPLE_WIN_SPIN_RESULT);
+    getClientResults(invalid)[0].cashWin64 = 0;
+
+    expect(() =>
+      createGame003WinSymbolSequence(
+        createLogic(invalid),
+        GAME003_WIN_SPIN_SCENE,
+      ),
+    ).toThrow(/cashWin64.*positive/);
+  });
+
   it("fails when triggered bg-wins omits basicComponentData", () => {
     const missingBasic = clone(GAME003_SAMPLE_WIN_SPIN_RESULT);
     delete getBgWins(missingBasic).basicComponentData;

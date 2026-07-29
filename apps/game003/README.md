@@ -210,13 +210,13 @@ live spin 第 0 step 如果触发 `bg-gencoins`，`bg-gencoins.basicComponentDat
 
 ## 中奖播放
 
-`bg-wins` 是 `game003` 当前的中奖组件名，只在 app 层配置和识别。app 把组件名、每个 result 自身的 finite positive `cashWin` resolver、component totals validator、formatter 和 YAML `game003WinSymbolLoop` style/timing 传给 rendercore 通用 carousel；rendercore 不硬编码 `bg-wins` 或 game003。
+`bg-wins` 是 `game003` 当前的中奖组件名，只在 app 层配置和识别。app 把组件名、每个 result 自身按字段存在性选择 `cashWin64 -> cashWin` 的 resolver、component totals validator、formatter 和 YAML `game003WinSymbolLoop` style/timing 传给 rendercore 通用 carousel；rendercore 不硬编码 `bg-wins` 或 game003。64 位字段是新服务器权威协议，只有字段缺失时才读取旧 32 位兼容字段；显式 `0` 仍是已提供的非法中奖值，不能 fallback。
 
 live spin 启动前由 rendercore carousel 的 `prepare()` 读取第 0 step 的 `bg-wins.basicComponentData.usedResults`，每个索引指向同 step 的 `clientData.results[]`，并保留 `usedResults` 顺序。`apps/game003/src/win-sequence.ts` 只保留 app-owned 组件名、金额 resolver 和 totals validator，不再拥有第二套 Text、anchor 或轮播状态机。
 
 `result.pos` 是 `[x, y]` 成对坐标，坐标基准是当前 5 列 x 5 行主转轮可见窗口：`x` 为列索引，`y` 为列内可见行索引。一个 result 内的所有 `pos` 同时请求 symbol `win` 状态；多个 result 按 `usedResults` 顺序依次播放。首轮全部中奖组的 once 动画回到 `normal` 后，`playSpin()` 可以 resolve，后续按 `usedResults` 顺序继续 `1 -> 2 -> ... -> pause -> 1` 循环作为 lingering 展示，直到下一次 spin 开始时显式清理。
 
-每个展示中的 result 必须携带 finite positive `cashWin`，不能用 `coinWin`、component total 或 `logic.getTotalWin()` 兜底。运行时用 `formatServerAmount(group.cashWin)` 显示该 result 自己的金额；金额锚点先读取 rendercore 可见 symbol 几何快照，计算本组中奖 symbol 中心点平均值，再选择距离平均点最近的实际中奖 symbol，距离相同按 `x`、`y` 升序打破平局。金额显示在该 symbol 中心向下偏移 `resultAmount.yOffsetRatioFromCellCenter * cellHeight` 的位置，并在该 result 的 `win` 状态回到 `normal` 时隐藏。
+每个展示中的 result 必须按 `cashWin64 !== undefined ? cashWin64 : cashWin` 选出 finite positive cash amount，不能用 coin amount、component total 或 `logic.getTotalWin()` 兜底。component 汇总校验中的 coin/cash 同样按 `*Win64 -> *Win` 选择。运行时用 `formatServerAmount(group.amount)` 显示该 result 自己的金额；金额锚点先读取 rendercore 可见 symbol 几何快照，计算本组中奖 symbol 中心点平均值，再选择距离平均点最近的实际中奖 symbol，距离相同按 `x`、`y` 升序打破平局。金额显示在该 symbol 中心向下偏移 `resultAmount.yOffsetRatioFromCellCenter * cellHeight` 的位置，并在该 result 的 `win` 状态回到 `normal` 时隐藏。
 
 如果本轮 `logic.getTotalWin() > 0`，`game-adapter.ts` 会在 spin 落停并完成 target scene 校验后启动 Pixi 中奖金额动画。动画使用 `logic.getBet()` 和 `logic.getTotalWin()` 的 raw amount，先在主转轮区底部递增小额数字，超过 1x 后切到主转轮区中心，并在到达 15x / 30x / 50x 时由 rendercore 切换 bigwin / superwin / megawin segmented VNI tier。首轮 symbol win sequence 和金额动画的 counting/tier-counting 阶段都会纳入 `playSpin()` 完成条件；金额进入 `awaiting-dismiss` / `dismissing` / `complete` 后不再阻塞本轮 spin。canvas 点击只调用 rendercore 的 `requestAdvance()` 做加速或关闭：不到 bigwin 时第一次点击直接跳到最终金额并进入 `awaiting-dismiss`，第二次点击隐藏；到 bigwin 以上时每点一次跳到下一档，最终 tier 停在 `awaiting-dismiss` 后再点击一次会播放当前 tier 的 dismiss/end 段并隐藏。下一次 spin 开始时仍会通过 `dismissImmediately()` 清理任何残留金额展示。
 

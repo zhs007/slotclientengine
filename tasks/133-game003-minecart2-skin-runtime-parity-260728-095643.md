@@ -14,6 +14,9 @@
   `amountScale=100` 与两位小数逻辑保留。
 - ZIP popup 的 `amountFormat` 仍只作 editor/default preview，game003 runtime
   通过 formatter seam 覆盖，未修改 ZIP 内 popup 配置。
+- 浏览器验收反馈暴露的 win result 兼容问题已修正：新服务器的 `cashWin64` /
+  `coinWin64` 按字段存在性优先，只有 64 位字段缺失时才读取旧
+  `cashWin` / `coinWin`；显式 `0` 不会错误 fallback。
 
 浏览器视觉验收按用户要求未代做，留给用户执行。
 
@@ -87,6 +90,10 @@ game003 保留：
 - finite number 严格校验；
 - CO `otherScene` raw positive integer 显示语义不变。
 
+`bg-wins` result 金额与 component coin/cash 汇总都按
+`*Win64 !== undefined ? *Win64 : *Win` 选择。result cash 仍必须 finite
+positive，且不以 component total、coin amount 或 `logic.getTotalWin()` 代替。
+
 ## 自动化验收
 
 最终结果：
@@ -94,7 +101,7 @@ game003 保留：
 - buildgamestatic：4 files、25 tests 通过。
 - gameframeworks：12 files、81 tests 通过。
 - rendercore：73 files、561 tests 通过，branch coverage 80.01%。
-- game003：29 files、139 tests 通过，branch coverage 80.12%。
+- game003：29 files、141 tests 通过，branch coverage 80.17%。
 - buildgamestatic、gameframeworks、rendercore、game003 typecheck 通过。
 - buildgamestatic、gameframeworks、rendercore、game003 lint 通过。
 - game003 `check:static-config` 通过。

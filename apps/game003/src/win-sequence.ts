@@ -9,11 +9,15 @@ export const resolveGame003WinResultAmount: SymbolWinAmountResolver = ({
   componentName,
   resultIndex,
   result,
-}) =>
-  getRequiredPositiveFiniteNumber(
-    result.cashWin,
-    `${componentName} result[${resultIndex}].cashWin`,
+}) => {
+  const selected = selectPreferredAmount(
+    result,
+    "cashWin64",
+    "cashWin",
+    `${componentName} result[${resultIndex}]`,
   );
+  return getRequiredPositiveFiniteNumber(selected.value, selected.label);
+};
 
 export const validateGame003WinComponent: SymbolWinComponentValidator = ({
   componentName,
@@ -28,13 +32,29 @@ export const validateGame003WinComponent: SymbolWinComponentValidator = ({
   const coinWin = groups.reduce(
     (sum, group) =>
       sum +
-      (getOptionalFiniteNumber(
-        group.result.coinWin,
-        `${componentName} result[${group.resultIndex}].coinWin`,
+      (getOptionalSelectedFiniteNumber(
+        selectPreferredAmount(
+          group.result,
+          "coinWin64",
+          "coinWin",
+          `${componentName} result[${group.resultIndex}]`,
+        ),
       ) ?? 0),
     0,
   );
   const cashWin = groups.reduce((sum, group) => sum + group.amount, 0);
+  const selectedBasicCoinWin = selectPreferredAmount(
+    basicComponentData,
+    "coinWin64",
+    "coinWin",
+    `${componentName}.basicComponentData`,
+  );
+  const selectedBasicCashWin = selectPreferredAmount(
+    basicComponentData,
+    "cashWin64",
+    "cashWin",
+    `${componentName}.basicComponentData`,
+  );
 
   for (const group of groups) {
     getOptionalNonNegativeInteger(
@@ -49,22 +69,34 @@ export const validateGame003WinComponent: SymbolWinComponentValidator = ({
     `${componentName}.wins`,
   );
   assertOptionalEquals(
-    getOptionalFiniteNumber(
-      basicComponentData.coinWin,
-      `${componentName}.basicComponentData.coinWin`,
-    ),
+    getOptionalSelectedFiniteNumber(selectedBasicCoinWin),
     coinWin,
-    `${componentName}.basicComponentData.coinWin`,
+    selectedBasicCoinWin.label,
   );
   assertOptionalEquals(
-    getOptionalFiniteNumber(
-      basicComponentData.cashWin,
-      `${componentName}.basicComponentData.cashWin`,
-    ),
+    getOptionalSelectedFiniteNumber(selectedBasicCashWin),
     cashWin,
-    `${componentName}.basicComponentData.cashWin`,
+    selectedBasicCashWin.label,
   );
 };
+
+interface SelectedAmount {
+  readonly value: unknown;
+  readonly label: string;
+}
+
+function selectPreferredAmount(
+  record: Readonly<Record<string, unknown>>,
+  modernField: "coinWin64" | "cashWin64",
+  legacyField: "coinWin" | "cashWin",
+  label: string,
+): SelectedAmount {
+  const field = record[modernField] !== undefined ? modernField : legacyField;
+  return Object.freeze({
+    value: record[field],
+    label: `${label}.${field}`,
+  });
+}
 
 function assertOptionalEquals(
   actual: number | undefined,
@@ -94,6 +126,12 @@ function getOptionalFiniteNumber(
     throw new Error(`${label} must be a finite number.`);
   }
   return value;
+}
+
+function getOptionalSelectedFiniteNumber(
+  selected: SelectedAmount,
+): number | undefined {
+  return getOptionalFiniteNumber(selected.value, selected.label);
 }
 
 function getRequiredPositiveFiniteNumber(
