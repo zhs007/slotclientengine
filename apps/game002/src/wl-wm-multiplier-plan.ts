@@ -295,15 +295,6 @@ export function createGame002WlWmMultiplierCompiler(options: {
         pending: pendingWlIncrements,
       });
       pendingWlIncrements = [];
-      const winningWlPositions = readWinningWlPositions({
-        context,
-        wlCode,
-      });
-      pendingWlIncrements = createPendingWlIncrements({
-        context,
-        wlCode,
-        winningWlPositions,
-      });
       const wm = context.input.occurrences.filter(
         (occurrence) => occurrence.code === wmCode,
       );
@@ -645,6 +636,16 @@ export function createGame002WlWmMultiplierCompiler(options: {
             });
       for (const change of coCollection?.transform.changes ?? [])
         draftByPosition.set(positionKey(change.position), change);
+      const winningWlPositions = readWinningWlPositions({
+        context,
+        wlCode,
+      });
+      pendingWlIncrements = createPendingWlIncrements({
+        context,
+        wlCode,
+        winningWlPositions,
+        settledChanges: draftByPosition,
+      });
       const drafts = context.input.scene.flatMap((column, x) =>
         column.flatMap((_code, y) => {
           const draft = draftByPosition.get(`${x},${y}`);
@@ -699,6 +700,10 @@ function createPendingWlIncrements(options: {
   readonly context: SlotRoundSettledCompileContext;
   readonly wlCode: number;
   readonly winningWlPositions: ReadonlySet<string>;
+  readonly settledChanges: ReadonlyMap<
+    string,
+    SlotRoundSettledTransformChangeDraft
+  >;
 }): Game002PendingWlIncrement[] {
   const { context } = options;
   const sourceWinResultPositions = formatBgWinResultPositions(context.step);
@@ -706,8 +711,15 @@ function createPendingWlIncrements(options: {
     if (occurrence.code !== options.wlCode) return [];
     if (!options.winningWlPositions.has(positionKey(occurrence.position)))
       return [];
+    const settledChange = options.settledChanges.get(
+      positionKey(occurrence.position),
+    );
+    if (settledChange && settledChange.outputCode !== options.wlCode)
+      throw new Error(
+        `step[${context.stepIndex}] winning WL (${occurrence.position.x},${occurrence.position.y}) changed to code ${settledChange.outputCode} before bg-win.`,
+      );
     const inputValue = assertPositiveMultiplier(
-      occurrence.value,
+      settledChange ? settledChange.outputValue : occurrence.value,
       `step[${context.stepIndex}] WL (${occurrence.position.x},${occurrence.position.y}) multiplier`,
     );
     return [

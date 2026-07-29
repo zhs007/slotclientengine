@@ -595,6 +595,38 @@ describe("RenderGridCellReelSet", () => {
         columns: 3,
       }),
     ).toThrow(/dimensions/);
+
+    const valueDriftPlan = createGridCellCascadeDropPlan({
+      sourceScene: reelSet.getVisibleScene(),
+      sourceValues: [
+        [-1, 7, null],
+        [null, null, null],
+      ],
+      settledScene: reelSet.getVisibleScene(),
+      settledValues: [
+        [-1, 7, null],
+        [null, null, null],
+      ],
+      targetScene: INITIAL_SCENE,
+      targetValues: [
+        [null, 7, null],
+        [null, null, null],
+      ],
+      refillPositions: [{ x: 0, y: 0 }],
+      cellHeight: 12,
+      motion: {
+        columnStartStaggerSeconds: 0,
+        baseFallSeconds: 0.05,
+        perRowFallSeconds: 0.02,
+        maxFallSeconds: 0.2,
+        startStaggerSeconds: 0,
+        settleSeconds: 0.01,
+        overshootCellRatio: 0,
+      },
+    });
+    expect(() => reelSet.startCascadeDrop(valueDriftPlan)).toThrow(
+      /dropdown source values\[0\]\[1\] differs: actual\(runtime\)=null; expected\(plan\)=7/,
+    );
   });
 
   it("prepares visible occurrence replacement without mutation and commits atomically", () => {

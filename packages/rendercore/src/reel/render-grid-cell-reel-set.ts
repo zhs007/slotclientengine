@@ -1803,15 +1803,26 @@ function assertCascadeMatrixEqual(
   expected: readonly (readonly (number | null)[])[],
   label: string,
 ): void {
-  if (
-    actual.length !== expected.length ||
-    actual.some(
-      (column, x) =>
-        column.length !== expected[x]?.length ||
-        column.some((value, y) => value !== expected[x]?.[y]),
-    )
-  ) {
-    throw new ReelError(`${label} does not match cascade plan.`);
+  if (actual.length !== expected.length) {
+    throw new ReelError(
+      `${label} column count differs: actual=${actual.length}; expected=${expected.length}.`,
+    );
+  }
+  for (const [x, column] of actual.entries()) {
+    const expectedColumn = expected[x];
+    if (!expectedColumn || column.length !== expectedColumn.length) {
+      throw new ReelError(
+        `${label}[${x}] row count differs: actual=${column.length}; expected=${expectedColumn?.length ?? "missing"}.`,
+      );
+    }
+    for (const [y, value] of column.entries()) {
+      const expectedValue = expectedColumn[y];
+      if (value !== expectedValue) {
+        throw new ReelError(
+          `${label}[${x}][${y}] differs: actual(runtime)=${String(value)}; expected(plan)=${String(expectedValue)}.`,
+        );
+      }
+    }
   }
 }
 

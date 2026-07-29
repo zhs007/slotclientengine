@@ -229,6 +229,60 @@ describe("game002 WL/WM multiplier compiler", () => {
     compiler.assertComplete();
   });
 
+  it("chains consecutive winning WL increments from the settled output value", () => {
+    const scene = freezeMatrix([[WL]]);
+    const compiler = createGame002WlWmMultiplierCompiler({
+      wlSymbolCode: WL,
+      wmSymbolCode: WM,
+      cnSymbolCode: CN,
+      cmSymbolCode: CM,
+    });
+    expect(
+      compiler.compileSettledTransform(
+        createContext({
+          stepIndex: 0,
+          snapshot: createSnapshot(scene, [[1]]),
+          extraComponents: ["bg-win"],
+          results: {
+            "bg-win": [{ pos: [0, 0] }],
+          },
+        }),
+      ),
+    ).toEqual([]);
+
+    expect(
+      compiler.compileSettledTransform(
+        createContext({
+          stepIndex: 1,
+          snapshot: createSnapshot(scene, [[1]]),
+          extraComponents: ["bg-win"],
+          otherScenes: { "bg-incwl": freezeMatrix([[2]]) },
+          results: {
+            "bg-win": [{ pos: [0, 0] }],
+          },
+        }),
+      ),
+    ).toEqual([{ position: { x: 0, y: 0 }, outputCode: WL, outputValue: 2 }]);
+
+    expect(
+      compiler.compileSettledTransform(
+        createContext({
+          stepIndex: 2,
+          snapshot: createSnapshot(scene, [[2]]),
+          otherScenes: { "bg-incwl": freezeMatrix([[3]]) },
+        }),
+      ),
+    ).toEqual([{ position: { x: 0, y: 0 }, outputCode: WL, outputValue: 3 }]);
+    expect(compiler.getPresentationBatch(2)?.wlIncrements).toEqual([
+      {
+        position: { x: 0, y: 0 },
+        inputValue: 2,
+        outputValue: 3,
+      },
+    ]);
+    compiler.assertComplete();
+  });
+
   it("requires bg-incwl for every WL that participates in bg-win", () => {
     const scene = freezeMatrix([[WL]]);
     const compiler = createGame002WlWmMultiplierCompiler({
