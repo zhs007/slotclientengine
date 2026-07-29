@@ -928,6 +928,98 @@ describe("layout zip IO", () => {
     expect(assetsWithUnused.has("assets/unused.png")).toBe(true);
   });
 
+  it("round-trips sibling Spine roots with shared leaves and excludes an unused sibling JSON", async () => {
+    const shared = {
+      atlas: "assets/hero-shared.atlas",
+      textures: { "hero.png": "assets/hero.png" },
+    };
+    const node = (
+      id: string,
+      order: number,
+      skeleton: string,
+      animation: string,
+    ) => ({
+      id,
+      order,
+      resource: {
+        kind: "spine" as const,
+        skeleton,
+        ...shared,
+        defaultAnimation: animation,
+        loop: true,
+      },
+      placements: { default: { x: 50, y: 50, scale: 1 } },
+    });
+    const bothManifest = {
+      ...imageManifest,
+      nodes: [
+        imageManifest.nodes[0],
+        node("hero-idle", 1, "assets/hero-idle.json", "Idle"),
+        node("hero-win", 2, "assets/hero-win.json", "Win"),
+      ],
+    };
+    const assets = new Map(assetBytes);
+    assets.set(
+      "assets/hero-idle.json",
+      encode({
+        skeleton: { spine: "4.3.23" },
+        animations: { Idle: {} },
+      }),
+    );
+    assets.set(
+      "assets/hero-win.json",
+      encode({
+        skeleton: { spine: "4.3.23" },
+        animations: { Win: {} },
+      }),
+    );
+    assets.set(
+      shared.atlas,
+      new TextEncoder().encode("hero.png\nsize: 1,1\nfilter: Linear,Linear\n"),
+    );
+    assets.set(
+      "assets/hero.png",
+      new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 7]),
+    );
+
+    const both = await exportLayoutZip({
+      manifest: bothManifest,
+      assets,
+      decodeImage,
+    });
+    const imported = await importLayoutZip(both.bytes, { decodeImage });
+    const project = manifestToEditorProject(imported.manifest, imported.assets);
+    expect([...project.resources.keys()].sort()).toEqual([
+      "bg.png",
+      "hero-idle.json",
+      "hero-win.json",
+    ]);
+    expect(project.resources.get("hero-idle.json")).toMatchObject({
+      atlas: "hero-shared.atlas",
+      textures: { "hero.png": "hero.png" },
+    });
+    expect(project.resources.get("hero-win.json")).toMatchObject({
+      atlas: "hero-shared.atlas",
+      textures: { "hero.png": "hero.png" },
+    });
+    imported.destroy();
+
+    const onlyIdle = await exportLayoutZip({
+      manifest: {
+        ...bothManifest,
+        nodes: [imageManifest.nodes[0], bothManifest.nodes[1]!],
+      },
+      assets,
+      decodeImage,
+    });
+    const entries = extractBoundedZip(onlyIdle.bytes);
+    const map = decodeEditorAssetsMap(entries.get("assets.map.json")!);
+    expect(map.files).toHaveProperty("hero-idle.json");
+    expect(map.files).not.toHaveProperty("hero-win.json");
+    expect(map.files).toHaveProperty("hero-shared.atlas");
+    expect(map.files).toHaveProperty("hero.png");
+  });
+
   it("fails when a used closure byte is missing but ignores unrelated library bytes", async () => {
     await expect(
       exportLayoutZip({

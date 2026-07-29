@@ -16,5 +16,6 @@ export {
   setNodeDefaultAnimation,
   uploadImageResource,
   uploadSpineResource,
+  uploadSpineResources,
 } from "./resource-commands.js";
 export * from "./game-mode-commands.js";

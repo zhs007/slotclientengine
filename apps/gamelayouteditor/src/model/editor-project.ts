@@ -877,7 +877,14 @@ export function manifestToEditorProject(
   project.id = parsed.id;
   project.coordinateOrigin = parsed.coordinateOrigin ?? "top-left";
   const resourceIdsBySignature = new Map<string, string>();
-  const pathsByResource = new Map<string, string>();
+  const pathsByResource = new Map<
+    string,
+    {
+      readonly signature: string;
+      readonly kind: EditorLayoutResource["kind"];
+      readonly spineLeaf: boolean;
+    }
+  >();
   const registerResource = (
     resourceDraft: EditorLayoutResourceDraft,
   ): string => {
@@ -906,9 +913,18 @@ export function manifestToEditorProject(
     } as EditorLayoutResource;
     for (const path of editorResourcePaths(resource)) {
       const owner = pathsByResource.get(path);
-      if (owner && owner !== signature)
+      const sharedSpineLeaf =
+        owner?.kind === "spine" &&
+        owner.spineLeaf &&
+        resource.kind === "spine" &&
+        path !== resource.skeleton;
+      if (owner && owner.signature !== signature && !sharedSpineLeaf)
         throw new Error(`导入资源路径 ${path} 被不同素材签名复用。`);
-      pathsByResource.set(path, signature);
+      pathsByResource.set(path, {
+        signature,
+        kind: resource.kind,
+        spineLeaf: resource.kind === "spine" && path !== resource.skeleton,
+      });
     }
     project.resources.set(resourceKey, resource);
     resourceIdsBySignature.set(signature, resourceKey);

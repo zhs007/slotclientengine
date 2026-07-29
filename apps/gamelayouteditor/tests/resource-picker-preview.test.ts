@@ -1,0 +1,110 @@
+import { describe, expect, it, vi } from "vitest";
+import { createNewEditorProject } from "../src/model/editor-project.js";
+import { ResourcePickerPreview } from "../src/preview/resource-picker-preview.js";
+
+describe("ResourcePickerPreview", () => {
+  it("shows image and Spine page previews and revokes owned URLs on clear", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    const image = {
+      id: "panel.png",
+      kind: "image" as const,
+      path: "panel.png",
+      size: { width: 100, height: 80 },
+    };
+    const spine = {
+      id: "hero.json",
+      kind: "spine" as const,
+      skeleton: "hero.json",
+      atlas: "hero.atlas",
+      textures: {
+        "hero-a.png": "hero-a.png",
+        "hero-b.png": "hero-b.png",
+      },
+      animationNames: ["Idle"],
+      animationEvents: { Idle: [] },
+    };
+    project.resources.set(image.id, image);
+    project.resources.set(spine.id, spine);
+    project.assets.set(image.path, new Uint8Array([1]));
+    project.assets.set(spine.skeleton, new Uint8Array([2]));
+    project.assets.set(spine.atlas, new Uint8Array([3]));
+    project.assets.set("hero-a.png", new Uint8Array([4]));
+    project.assets.set("hero-b.png", new Uint8Array([5]));
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    const preview = new ResourcePickerPreview();
+    const host = document.createElement("div");
+
+    await preview.show({
+      host,
+      project,
+      resource: image,
+      animation: "",
+    });
+    expect(host.querySelector("img")?.alt).toContain("panel.png");
+
+    await preview.show({
+      host,
+      project,
+      resource: spine,
+      animation: "",
+    });
+    expect(
+      [...host.querySelectorAll("figcaption")].map(
+        (caption) => caption.textContent,
+      ),
+    ).toEqual(["hero-a.png", "hero-b.png"]);
+
+    preview.clear();
+    expect(host.childElementCount).toBe(0);
+    expect(revoke).toHaveBeenCalledTimes(3);
+    preview.destroy();
+    revoke.mockRestore();
+  });
+
+  it("reports missing bytes without mutating the project", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    const resource = {
+      id: "missing.png",
+      kind: "image" as const,
+      path: "missing.png",
+      size: { width: 1, height: 1 },
+    };
+    project.resources.set(resource.id, resource);
+    const preview = new ResourcePickerPreview();
+    const host = document.createElement("div");
+
+    await preview.show({ host, project, resource, animation: "" });
+
+    expect(host.textContent).toContain("资源预览缺少 bytes");
+    expect(project.assets.size).toBe(0);
+    preview.destroy();
+  });
+
+  it("revokes contact-sheet URLs when a later page is missing", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    const resource = {
+      id: "partial.json",
+      kind: "spine" as const,
+      skeleton: "partial.json",
+      atlas: "partial.atlas",
+      textures: {
+        "first.png": "first.png",
+        "missing.png": "missing.png",
+      },
+      animationNames: ["Idle"],
+      animationEvents: { Idle: [] },
+    };
+    project.resources.set(resource.id, resource);
+    project.assets.set("first.png", new Uint8Array([1]));
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    const preview = new ResourcePickerPreview();
+    const host = document.createElement("div");
+
+    await preview.show({ host, project, resource, animation: "" });
+
+    expect(host.textContent).toContain("资源预览缺少 bytes：missing.png");
+    expect(revoke).toHaveBeenCalledTimes(1);
+    preview.destroy();
+    revoke.mockRestore();
+  });
+});

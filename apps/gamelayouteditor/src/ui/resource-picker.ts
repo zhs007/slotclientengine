@@ -35,7 +35,7 @@ export function createResourcePickerState(
     context.kind === "assign-background"
       ? { ...project.variants[context.variant].artSize }
       : { width: 0, height: 0 };
-  return {
+  const state: ResourcePickerState = {
     context,
     query: "",
     type: "all",
@@ -53,6 +53,34 @@ export function createResourcePickerState(
     defaultAnimation: "",
     backgroundArtSize,
   };
+  state.defaultAnimation = preferredResourcePickerAnimation(
+    project,
+    state,
+    selectedResourceId,
+  );
+  return state;
+}
+
+export function preferredResourcePickerAnimation(
+  project: EditorProject,
+  state: Pick<ResourcePickerState, "context">,
+  resourceId: string,
+): string {
+  const resource = project.resources.get(resourceId);
+  if (resource?.kind !== "spine") return "";
+  let nodeId: string | undefined;
+  if (state.context.kind === "rebind-layer") nodeId = state.context.nodeId;
+  else if (state.context.kind === "assign-background") {
+    const { modeId, variant } = state.context;
+    nodeId = project.gameModes.modes.find(({ id }) => id === modeId)
+      ?.backgroundNodes[variant];
+  }
+  const node = nodeId
+    ? project.nodes.find((candidate) => candidate.id === nodeId)
+    : undefined;
+  const animation =
+    node?.playback?.kind === "loop" ? node.playback.animation : "";
+  return resource.animationNames.includes(animation) ? animation : "";
 }
 
 export function getResourcePickerCandidates(

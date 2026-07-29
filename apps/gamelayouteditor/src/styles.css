@@ -1023,6 +1023,82 @@ dialog:not(.resource-picker) .button-row {
   padding: 14px;
 }
 
+.picker-resource-preview {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  max-height: 340px;
+  overflow: auto;
+  margin-bottom: 14px;
+  border: 1px solid #2c3b51;
+  border-radius: 8px;
+  background:
+    linear-gradient(45deg, #101927 25%, transparent 25%) 0 0 / 18px 18px,
+    linear-gradient(45deg, transparent 75%, #101927 75%) 0 0 / 18px 18px,
+    linear-gradient(45deg, transparent 75%, #101927 75%) 9px -9px / 18px 18px,
+    linear-gradient(45deg, #101927 25%, #080d15 25%) 9px 9px / 18px 18px;
+}
+
+.picker-preview-image,
+.picker-preview-canvas {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 240px;
+}
+
+.picker-preview-image img,
+.picker-preview-canvas canvas {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+}
+
+.picker-preview-contact {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  align-self: stretch;
+  width: 100%;
+  gap: 8px;
+  padding: 8px;
+}
+
+.picker-preview-contact figure {
+  min-width: 0;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid #34445f;
+  border-radius: 6px;
+  background: rgb(8 13 21 / 82%);
+}
+
+.picker-preview-contact img {
+  display: block;
+  width: 100%;
+  height: 76px;
+  object-fit: contain;
+}
+
+.picker-preview-contact figcaption {
+  overflow: hidden;
+  margin-top: 4px;
+  color: #a9b8cb;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.picker-preview-status {
+  max-width: 28ch;
+  color: #8796ab;
+  text-align: center;
+}
+
+.picker-preview-error {
+  color: #ff9e9e;
+}
+
 .picker-shell footer {
   justify-content: flex-end;
   padding: 11px 14px;

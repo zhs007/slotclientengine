@@ -48,24 +48,12 @@ const ioSpies = vi.hoisted(() => ({
   importPopupPackageZip: vi.fn(),
 }));
 
-const commandSpies = vi.hoisted(() => ({
-  uploadImage: vi.fn(async ({ project, file, resourceId }) => {
-    const id = resourceId ?? file.name;
-    const resource = {
-      id,
-      kind: "image" as const,
-      path: id,
-      size: { width: 100, height: 80 },
-    };
-    project.resources.set(id, resource);
-    project.assets.set(resource.path, new Uint8Array([1, 2, 3]));
-    return resource;
-  }),
-  uploadSpine: vi.fn(async ({ project, resourceId }) => {
+const commandSpies = vi.hoisted(() => {
+  const uploadSpine = vi.fn(async ({ project, resourceId }) => {
     const resource = {
       id: resourceId ?? "hero.json",
       kind: "spine" as const,
-      skeleton: "hero.json",
+      skeleton: resourceId ?? "hero.json",
       atlas: "hero.atlas",
       textures: { "hero.png": "hero.png" },
       animationNames: ["Idle", "Win", "Bridge"],
@@ -81,22 +69,50 @@ const commandSpies = vi.hoisted(() => ({
     project.assets.set(resource.atlas, new Uint8Array([2]));
     project.assets.set("hero.png", new Uint8Array([3]));
     return resource;
-  }),
-  uploadVideo: vi.fn(async ({ project, file, resourceId }) => {
-    const resource = {
-      id: resourceId ?? file.name,
-      kind: "video" as const,
-      path: file.name,
-      mimeType: "video/mp4" as const,
-      size: { width: 1280, height: 720 },
-      durationSeconds: 3.625,
-      hasAudio: true,
-    };
-    project.resources.set(resource.id, resource);
-    project.assets.set(resource.path, new Uint8Array(await file.arrayBuffer()));
-    return resource;
-  }),
-}));
+  });
+  return {
+    uploadImage: vi.fn(async ({ project, file, resourceId }) => {
+      const id = resourceId ?? file.name;
+      const resource = {
+        id,
+        kind: "image" as const,
+        path: id,
+        size: { width: 100, height: 80 },
+      };
+      project.resources.set(id, resource);
+      project.assets.set(resource.path, new Uint8Array([1, 2, 3]));
+      return resource;
+    }),
+    uploadSpine,
+    uploadSpines: vi.fn(
+      async ({ project, files }: { project: any; files: File[] }) =>
+        Promise.all(
+          files
+            .filter((file) => file.name.toLowerCase().endsWith(".json"))
+            .map((file) =>
+              uploadSpine({ project, resourceId: file.name } as never),
+            ),
+        ),
+    ),
+    uploadVideo: vi.fn(async ({ project, file, resourceId }) => {
+      const resource = {
+        id: resourceId ?? file.name,
+        kind: "video" as const,
+        path: file.name,
+        mimeType: "video/mp4" as const,
+        size: { width: 1280, height: 720 },
+        durationSeconds: 3.625,
+        hasAudio: true,
+      };
+      project.resources.set(resource.id, resource);
+      project.assets.set(
+        resource.path,
+        new Uint8Array(await file.arrayBuffer()),
+      );
+      return resource;
+    }),
+  };
+});
 
 vi.mock("../src/preview/layout-preview.js", () => ({
   LayoutPreview: class {
@@ -161,6 +177,7 @@ vi.mock("../src/model/resource-commands.js", async (importOriginal) => {
     ...actual,
     uploadImageResource: commandSpies.uploadImage,
     uploadSpineResource: commandSpies.uploadSpine,
+    uploadSpineResources: commandSpies.uploadSpines,
     uploadVideoResource: commandSpies.uploadVideo,
   };
 });
@@ -576,6 +593,9 @@ describe("GameLayoutEditorApp workspace", () => {
     expect(
       dialog.querySelector('[aria-selected="true"]')?.textContent,
     ).toContain("uploaded");
+    await vi.waitFor(() =>
+      expect(dialog.querySelector("[data-picker-preview] img")).toBeTruthy(),
+    );
     expect(root.textContent).toContain("不会按文件名或唯一候选自动绑定");
     (
       dialog.querySelector("[data-picker-confirm]") as HTMLButtonElement
@@ -1020,6 +1040,33 @@ describe("GameLayoutEditorApp workspace", () => {
     dialog = root.querySelector("[data-resource-picker]") as HTMLDialogElement;
     dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
     expect(dialog.open).toBe(false);
+    fileClick.mockRestore();
+    app.destroy();
+  });
+
+  it("imports multiple Spine JSON roots from one shared atlas batch", async () => {
+    const fileClick = selectFilesOnce([
+      new File(["{}"], "hero-idle.json"),
+      new File(["{}"], "hero-win.json"),
+      new File(["hero.png\n"], "hero.atlas"),
+      new File(["image"], "hero.png"),
+    ]);
+    const { app, root } = await createApp();
+
+    (
+      root.querySelector("[data-upload-resources]") as HTMLButtonElement
+    ).click();
+
+    await vi.waitFor(() =>
+      expect(commandSpies.uploadSpines).toHaveBeenCalledOnce(),
+    );
+    expect(
+      root.querySelector('[data-resource-row="hero-idle.json"]'),
+    ).toBeTruthy();
+    expect(
+      root.querySelector('[data-resource-row="hero-win.json"]'),
+    ).toBeTruthy();
+    expect(root.querySelectorAll("[data-outline-key]")).toHaveLength(0);
     fileClick.mockRestore();
     app.destroy();
   });

@@ -44,6 +44,7 @@ import {
   assignBackgroundResource,
   clearBackground,
   deleteLayoutResource,
+  getLayoutResourceReferences,
   moveLayer,
   rebindLayerResource,
   removeLayer,
@@ -62,7 +63,7 @@ import {
   importVniBundle,
   inspectVniBundleProfiles,
   uploadImageResource,
-  uploadSpineResource,
+  uploadSpineResources,
   uploadVideoResource,
 } from "../model/resource-commands.js";
 import {
@@ -109,6 +110,7 @@ import { projectWorkspaceMarkup } from "./project-workspace.js";
 import {
   createResourcePickerState,
   getResourcePickerCandidates,
+  preferredResourcePickerAnimation,
 } from "./resource-picker.js";
 import { resourcesWorkspaceMarkup } from "./resources-workspace.js";
 import {
@@ -124,6 +126,7 @@ import {
   normalizeStateManagerSelection,
   stateManagerDialogMarkup,
 } from "./state-manager-dialog.js";
+import { ResourcePickerPreview } from "../preview/resource-picker-preview.js";
 import { escapeHtml } from "./ui-markup.js";
 import {
   editorResourcePaths,
@@ -147,6 +150,7 @@ export class GameLayoutEditorApp {
     { readonly fingerprint: string; readonly url: string }
   >();
   readonly #scrollPositions = new Map<string, number>();
+  readonly #resourcePickerPreview = new ResourcePickerPreview();
   #preview: LayoutPreview | null = null;
   #unsubscribe: (() => void) | null = null;
   #previewRevision = 0;
@@ -212,6 +216,7 @@ export class GameLayoutEditorApp {
     this.closePicker(false);
     this.#unsubscribe?.();
     this.#preview?.destroy();
+    this.#resourcePickerPreview.destroy();
     this.#thumbnailUrls.destroy();
     this.#thumbnailEntries.clear();
     this.#root.replaceChildren();
@@ -1941,6 +1946,7 @@ export class GameLayoutEditorApp {
       : null;
     const state = this.#session.picker;
     if (!state) {
+      this.#resourcePickerPreview.clear();
       if (dialog.open) dialog.close();
       dialog.replaceChildren();
       return;
@@ -1965,7 +1971,7 @@ export class GameLayoutEditorApp {
       state.context.kind === "assign-background"
         ? "背景初始 placement 按完整 art size 居中，scale 为 1。不会按文件名或唯一候选自动绑定。"
         : "初始 placement 固定为 { x: 0, y: 0, scale: 1 }。不会按文件名或唯一候选自动绑定。";
-    dialog.innerHTML = `<div class="picker-shell"><header><div><span>Resource Picker</span><h2>${escapeHtml(contextLabel)}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源选择器">×</button></header><div class="picker-toolbar"><label>搜索<input type="search" data-picker-query value="${escapeHtml(state.query)}" /></label><label>类型<select data-picker-type><option value="all">全部</option><option value="image" ${state.type === "image" ? "selected" : ""}>Image</option><option value="spine" ${state.type === "spine" ? "selected" : ""}>Spine</option><option value="vni" ${state.type === "vni" ? "selected" : ""}>VNI</option><option value="image-string" ${state.type === "image-string" ? "selected" : ""}>Image String</option></select></label><button type="button" data-picker-import>导入资源 / ZIP</button></div><div class="picker-body"><div class="picker-candidates" role="listbox" aria-label="可用资源">${candidates.map((candidate) => `<button type="button" role="option" data-picker-candidate="${escapeHtml(candidate.resourceId)}" aria-selected="${candidate.resourceId === state.selectedResourceId}" ${candidate.disabledReason ? `disabled title="${escapeHtml(candidate.disabledReason)}"` : ""}><span class="type-mark">${candidate.kind === "spine" ? "SP" : candidate.kind === "vni" ? "VNI" : candidate.kind === "image-string" ? "TXT" : "IMG"}</span><span><strong>${escapeHtml(candidate.resourceId)}</strong><small title="${escapeHtml(candidate.primaryPath)}">${escapeHtml(candidate.primaryPath)}</small><small>${escapeHtml(candidate.summary)} · ${candidate.status} · 引用 ${candidate.referenceCount}</small></span></button>`).join("") || '<p class="empty-state">没有匹配资源；导入后仍需明确选择并确认。</p>'}</div><section class="picker-form">${selected ? `<p><strong>${escapeHtml(selected.id)}</strong><br/><span class="path">${escapeHtml(editorResourcePaths(selected)[0]!)}</span></p>` : "<p>请选择一个 filename-key resource。</p>"}${state.context.kind === "add-layer" ? `<label>node id<input data-picker-node-id value="${escapeHtml(state.nodeId)}" /></label>` : state.context.kind === "assign-background" ? `<p class="hint">背景 node id 将按 ${escapeHtml(state.context.modeId)} / ${escapeHtml(state.context.variant)} 稳定生成。</p>` : ""}${
+    dialog.innerHTML = `<div class="picker-shell"><header><div><span>Resource Picker</span><h2>${escapeHtml(contextLabel)}</h2></div><button type="button" data-picker-cancel aria-label="关闭资源选择器">×</button></header><div class="picker-toolbar"><label>搜索<input type="search" data-picker-query value="${escapeHtml(state.query)}" /></label><label>类型<select data-picker-type><option value="all">全部</option><option value="image" ${state.type === "image" ? "selected" : ""}>Image</option><option value="spine" ${state.type === "spine" ? "selected" : ""}>Spine</option><option value="vni" ${state.type === "vni" ? "selected" : ""}>VNI</option><option value="image-string" ${state.type === "image-string" ? "selected" : ""}>Image String</option></select></label><button type="button" data-picker-import>导入资源 / ZIP</button></div><div class="picker-body"><div class="picker-candidates" role="listbox" aria-label="可用资源">${candidates.map((candidate) => `<button type="button" role="option" data-picker-candidate="${escapeHtml(candidate.resourceId)}" aria-selected="${candidate.resourceId === state.selectedResourceId}" ${candidate.disabledReason ? `disabled title="${escapeHtml(candidate.disabledReason)}"` : ""}><span class="type-mark">${candidate.kind === "spine" ? "SP" : candidate.kind === "vni" ? "VNI" : candidate.kind === "image-string" ? "TXT" : "IMG"}</span><span><strong>${escapeHtml(candidate.resourceId)}</strong><small title="${escapeHtml(candidate.primaryPath)}">${escapeHtml(candidate.primaryPath)}</small><small>${escapeHtml(candidate.summary)} · ${candidate.status} · 引用 ${candidate.referenceCount}</small></span></button>`).join("") || '<p class="empty-state">没有匹配资源；导入后仍需明确选择并确认。</p>'}</div><section class="picker-form"><div class="picker-resource-preview" data-picker-preview aria-live="polite"></div>${selected ? `<p><strong>${escapeHtml(selected.id)}</strong><br/><span class="path">${escapeHtml(editorResourcePaths(selected)[0]!)}</span></p>` : "<p>请选择一个 filename-key resource。</p>"}${state.context.kind === "add-layer" ? `<label>node id<input data-picker-node-id value="${escapeHtml(state.nodeId)}" /></label>` : state.context.kind === "assign-background" ? `<p class="hint">背景 node id 将按 ${escapeHtml(state.context.modeId)} / ${escapeHtml(state.context.variant)} 稳定生成。</p>` : ""}${
       state.context.kind === "add-layer" && project.mode === "orientation-focus"
         ? activeVariantIds(project)
             .map(
@@ -1979,6 +1985,12 @@ export class GameLayoutEditorApp {
       if (typeof dialog.showModal === "function") dialog.showModal();
       else dialog.setAttribute("open", "");
     }
+    void this.#resourcePickerPreview.show({
+      host: dialog.querySelector<HTMLElement>("[data-picker-preview]")!,
+      project,
+      resource: selected,
+      animation: state.defaultAnimation,
+    });
     this.bindPickerDynamicActions(project);
     if (focusSnapshot) this.restoreFocusSnapshot(focusSnapshot);
     else if (focus)
@@ -2054,7 +2066,11 @@ export class GameLayoutEditorApp {
       .forEach((button) => {
         const select = () => {
           state.selectedResourceId = button.dataset.pickerCandidate!;
-          state.defaultAnimation = "";
+          state.defaultAnimation = preferredResourcePickerAnimation(
+            project,
+            state,
+            state.selectedResourceId,
+          );
           if (state.context.kind === "add-layer") {
             state.nodeId = suggestNodeId(project, state.selectedResourceId);
           }
@@ -2089,6 +2105,7 @@ export class GameLayoutEditorApp {
         state.defaultAnimation = (
           event.currentTarget as HTMLSelectElement
         ).value;
+        this.renderPicker(project);
       });
     dialog
       .querySelector<HTMLInputElement>("[data-picker-art-width]")
@@ -2161,7 +2178,7 @@ export class GameLayoutEditorApp {
             nodeId: context.nodeId,
             resourceId: resource.id,
             ...(resource.kind === "spine"
-              ? { defaultAnimation: state.defaultAnimation }
+              ? { defaultAnimation: state.defaultAnimation || undefined }
               : {}),
           }),
         );
@@ -2191,48 +2208,31 @@ export class GameLayoutEditorApp {
           "Spine 背景必须明确填写完整 art size 的 width 和 height（有限正数）。",
         );
       }
-      const assign = (reinitialize: boolean) =>
-        this.#store.transact((draft) => {
-          if (needsSpineBackgroundArtSize) {
-            setVariantArtSizeDimension(
-              draft,
-              context.variant,
-              "width",
-              state.backgroundArtSize.width,
-            );
-            setVariantArtSizeDimension(
-              draft,
-              context.variant,
-              "height",
-              state.backgroundArtSize.height,
-            );
-          }
-          assignBackgroundResource({
-            project: draft,
-            modeId: context.modeId,
-            variant: context.variant,
-            resourceId: resource.id,
-            ...(resource.kind === "spine"
-              ? { defaultAnimation: state.defaultAnimation }
-              : {}),
-            reinitialize,
-          });
-        });
-      try {
-        assign(false);
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          /必须明确选择使用新尺寸并重新初始化/u.test(error.message) &&
-          window.confirm(
-            `${error.message}\n\n确认使用新尺寸并重新初始化 art / reel / focus？`,
-          )
-        ) {
-          assign(true);
-        } else {
-          throw error;
+      this.#store.transact((draft) => {
+        if (needsSpineBackgroundArtSize) {
+          setVariantArtSizeDimension(
+            draft,
+            context.variant,
+            "width",
+            state.backgroundArtSize.width,
+          );
+          setVariantArtSizeDimension(
+            draft,
+            context.variant,
+            "height",
+            state.backgroundArtSize.height,
+          );
         }
-      }
+        assignBackgroundResource({
+          project: draft,
+          modeId: context.modeId,
+          variant: context.variant,
+          resourceId: resource.id,
+          ...(resource.kind === "spine"
+            ? { defaultAnimation: state.defaultAnimation || undefined }
+            : {}),
+        });
+      });
       this.#session.activeTab = "layout";
       this.#session.selection = {
         kind: "background",
@@ -2252,6 +2252,7 @@ export class GameLayoutEditorApp {
       "[data-resource-picker]",
     );
     this.#session.picker = null;
+    this.#resourcePickerPreview.clear();
     if (dialog?.open) dialog.close();
     dialog?.replaceChildren();
     if (restoreFocus) this.#pickerTrigger?.focus();
@@ -2447,16 +2448,10 @@ export class GameLayoutEditorApp {
             );
           }
         } else {
-          const primary = group.find((file) =>
-            file.name.toLowerCase().endsWith(".json"),
-          );
-          const resourceId = defaultResourceKey(
-            project,
-            primary?.name ?? group[0]!.name,
-          );
           imported.push(
-            (await uploadSpineResource({ project, files: group, resourceId }))
-              .id,
+            ...(await uploadSpineResources({ project, files: group })).map(
+              ({ id }) => id,
+            ),
           );
         }
       }
@@ -2482,7 +2477,11 @@ export class GameLayoutEditorApp {
   ): void {
     if (!fromPicker || !resourceKey || !this.#session.picker) return;
     this.#session.picker.selectedResourceId = resourceKey;
-    this.#session.picker.defaultAnimation = "";
+    this.#session.picker.defaultAnimation = preferredResourcePickerAnimation(
+      project,
+      this.#session.picker,
+      resourceKey,
+    );
     if (this.#session.picker.context.kind === "add-layer")
       this.#session.picker.nodeId = suggestNodeId(project, resourceKey);
     this.renderPicker(project);
@@ -2506,7 +2505,7 @@ export class GameLayoutEditorApp {
     );
     if (files.length === 0) return;
     try {
-      const commit = async (reinitializeBackgrounds: boolean) => {
+      const commit = async () => {
         const project = cloneEditorProject(this.#store.getSnapshot().project);
         if (current.kind === "image") {
           if (files.length !== 1)
@@ -2515,14 +2514,12 @@ export class GameLayoutEditorApp {
             project,
             resourceId,
             file: files[0],
-            reinitializeBackgrounds,
           });
         } else if (current.kind === "spine") {
           await replaceSpineResource({
             project,
             resourceId,
             files,
-            reinitializeBackgrounds,
           });
         } else if (current.kind === "video") {
           if (files.length !== 1)
@@ -2568,23 +2565,7 @@ export class GameLayoutEditorApp {
         }
         this.#store.replace(project);
       };
-      try {
-        await commit(false);
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          /必须明确选择使用新尺寸并重新初始化|背景替换尺寸不一致/u.test(
-            error.message,
-          ) &&
-          window.confirm(
-            `${error.message}\n\n确认原子替换并重新初始化全部背景引用？`,
-          )
-        ) {
-          await commit(true);
-        } else {
-          throw error;
-        }
-      }
+      await commit();
       this.showFeedback(`资源 ${resourceId} 已原子替换，全部引用同步生效。`);
     } catch (error) {
       this.#store.setExternalError(error);
@@ -2788,9 +2769,11 @@ export class GameLayoutEditorApp {
       anchor.download = exported.fileName;
       anchor.click();
       queueMicrotask(() => URL.revokeObjectURL(url));
-      const unused =
-        snapshot.project.resources.size -
-        new Set(snapshot.project.nodes.map((node) => node.resourceId)).size;
+      const unused = [...snapshot.project.resources.keys()].filter(
+        (resourceId) =>
+          getLayoutResourceReferences(snapshot.project, resourceId).length ===
+          0,
+      ).length;
       this.showFeedback(
         `已导出 ${exported.fileName}；${unused} 个未引用资源未写入 ZIP。`,
       );
