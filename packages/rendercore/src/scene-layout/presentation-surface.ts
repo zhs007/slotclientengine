@@ -30,6 +30,7 @@ export interface SceneLayoutPresentationSurface {
 export function createSceneLayoutPresentationSurface(options: {
   readonly resource: SceneLayoutPackageResource;
   readonly initialMode?: string;
+  readonly formatPopupAmount?: import("../popup/index.js").PopupAmountFormatter;
 }): SceneLayoutPresentationSurface {
   return new DefaultSceneLayoutPresentationSurface(options);
 }
@@ -38,6 +39,9 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
   readonly #resource: SceneLayoutPackageResource;
   readonly #layout;
   readonly #initialMode: SceneLayoutGameMode | null;
+  readonly #formatPopupAmount:
+    | import("../popup/index.js").PopupAmountFormatter
+    | undefined;
   readonly #popups = new Map<string, AwardCelebrationPlayer>();
   readonly popupContainer = new Container();
   #initialized = false;
@@ -47,6 +51,7 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
   constructor(options: {
     readonly resource: SceneLayoutPackageResource;
     readonly initialMode?: string;
+    readonly formatPopupAmount?: import("../popup/index.js").PopupAmountFormatter;
   }) {
     this.#resource = options.resource;
     this.#layout = createSceneLayoutRuntime({
@@ -56,6 +61,7 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
       options.resource,
       options.initialMode,
     );
+    this.#formatPopupAmount = options.formatPopupAmount;
     this.popupContainer.label = "scene-layout-presentation-popup-root";
   }
 
@@ -87,7 +93,10 @@ class DefaultSceneLayoutPresentationSurface implements SceneLayoutPresentationSu
       for (const [id, resource] of Object.entries(
         this.#resource.popupPackages,
       )) {
-        const popup = createAwardCelebrationPlayer({ resource });
+        const popup = createAwardCelebrationPlayer({
+          resource,
+          formatAmount: this.#formatPopupAmount,
+        });
         await popup.init();
         this.assertAlive();
         this.#popups.set(id, popup);

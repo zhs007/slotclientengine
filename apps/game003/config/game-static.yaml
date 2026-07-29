@@ -287,8 +287,6 @@ skins:
     # 这里只放静态显示、阈值和资源配置，不放 token、cookie、服务器真实轮带或玩家本次下注。
     winAmount:
       amountScale: 100
-      currency: USD
-      locale: en-US
       # minor 负责 0 -> 1x；major 只负责 1x -> 15x 的纯数字变化，不启动 big/super/mega。
       minorCountDurationSeconds: 1.5
       majorCountDurationSeconds: 3

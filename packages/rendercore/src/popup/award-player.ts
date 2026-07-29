@@ -13,6 +13,7 @@ import type {
   AwardTierId,
   PopupLayer,
   PopupManifestV1,
+  PopupAmountFormatter,
   PopupPackageResource,
   PopupPreparedImageString,
   PopupPreparedResource,
@@ -58,6 +59,7 @@ interface TierRuntime {
 export function createAwardCelebrationPlayer(options: {
   readonly resource: PopupPackageResource;
   readonly layerFactory?: PopupLayerRuntimeFactory;
+  readonly formatAmount?: PopupAmountFormatter | undefined;
 }): AwardCelebrationPlayer {
   return new DefaultAwardCelebrationPlayer(options);
 }
@@ -66,6 +68,7 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
   readonly container = new Container();
   readonly #resource: PopupPackageResource;
   readonly #factory: PopupLayerRuntimeFactory;
+  readonly #formatAmount: PopupAmountFormatter;
   readonly #tiers = new Map<AwardTierId, TierRuntime>();
   #initialized = false;
   #initializing: Promise<void> | null = null;
@@ -82,9 +85,14 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
   constructor(options: {
     readonly resource: PopupPackageResource;
     readonly layerFactory?: PopupLayerRuntimeFactory;
+    readonly formatAmount?: PopupAmountFormatter | undefined;
   }) {
     this.#resource = options.resource;
     this.#factory = options.layerFactory ?? defaultLayerFactory;
+    this.#formatAmount =
+      options.formatAmount ??
+      ((amountRaw) =>
+        formatPopupAmount(amountRaw, this.#resource.manifest.amountFormat));
   }
   init(): Promise<void> {
     this.assertUsable();
@@ -373,10 +381,11 @@ class DefaultAwardCelebrationPlayer implements AwardCelebrationPlayer {
     this.#amount?.updateAmount(this.amountText());
   }
   private amountText() {
-    return formatPopupAmount(
-      Math.floor(this.#displayed),
-      this.#resource.manifest.amountFormat,
-    );
+    const text = this.#formatAmount(Math.floor(this.#displayed));
+    if (typeof text !== "string" || text.length === 0) {
+      throw new Error("popup amount formatter must return a non-empty string.");
+    }
+    return text;
   }
   private complete() {
     if (this.#active) this.#active.container.visible = false;

@@ -25,6 +25,8 @@ export interface PopupAmountFormat {
   readonly rounding: "floor";
 }
 
+export type PopupAmountFormatter = (amountRaw: number) => string;
+
 export type PopupResourceSpec =
   | { readonly kind: "image"; readonly path: string; readonly size: PopupSize }
   | { readonly kind: "image-string"; readonly manifest: string }

@@ -195,8 +195,8 @@ export interface GameStaticYamlWinAmountAnimations {
 
 export interface GameStaticYamlWinAmountConfig {
   readonly amountScale: number;
-  readonly currency: string;
-  readonly locale: string;
+  readonly currency?: string;
+  readonly locale?: string;
   readonly minorCountDurationSeconds: number;
   readonly majorCountDurationSeconds: number;
   readonly thresholds: GameStaticYamlWinAmountThresholds;

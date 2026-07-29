@@ -7,10 +7,13 @@ import {
   game003ExpandGeneratedLoadingResourceUrls,
 } from "../src/generated/game-loading.generated.js";
 import {
+  GAME003_MINECART2_RESOURCE_ID_PREFIX,
   GAME003_RUNTIME_MODULE_RESOURCE_ID,
   createGame003LoadingResources,
+  readGame003Minecart2PackageFiles,
   readGame003RuntimeModule,
 } from "../src/loading-resources.js";
+import { craveSceneLayoutPhysicalResourceUrls as minecart2SceneLayoutPhysicalResourceUrls } from "../src/generated/minecart2-layout-resources.generated.js";
 
 describe("game003 loading resources", () => {
   it("combines generated asset resources with the dynamic runtime module", () => {
@@ -90,6 +93,39 @@ describe("game003 loading resources", () => {
       ids.some((id) => id.startsWith("game003-symbol-spine-skeletons:bg")),
     ).toBe(false);
     expect(ids).not.toContain("game003-symbol-normal-pngs:mainreelbg.png");
+  });
+
+  it("loads only the mapped minecart2 folder for skin 2", () => {
+    const resources = createGame003LoadingResources("2");
+    const packageResources = resources.slice(0, -1);
+    expect(resources.at(-1)?.id).toBe(GAME003_RUNTIME_MODULE_RESOURCE_ID);
+    expect(packageResources).toHaveLength(
+      Object.keys(minecart2SceneLayoutPhysicalResourceUrls).length,
+    );
+    expect(
+      packageResources.every(
+        (resource) =>
+          resource.id.startsWith(GAME003_MINECART2_RESOURCE_ID_PREFIX) &&
+          resource.kind === "binary",
+      ),
+    ).toBe(true);
+    expect(
+      packageResources.some((resource) => resource.id === "game003-minecart"),
+    ).toBe(false);
+
+    const loaded = new Map<string, unknown>(
+      packageResources.map((resource) => [
+        resource.id,
+        new Uint8Array([1, 2, 3]).buffer,
+      ]),
+    );
+    const files = readGame003Minecart2PackageFiles(loaded);
+    expect([...files.keys()].sort()).toEqual(
+      Object.keys(minecart2SceneLayoutPhysicalResourceUrls).sort(),
+    );
+    expect(() => readGame003Minecart2PackageFiles(new Map())).toThrow(
+      /was not loaded/,
+    );
   });
 
   it("keeps generated glob expansion stable and fail-fast", () => {

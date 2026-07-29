@@ -7,6 +7,7 @@ import {
   type Game003PreparedLoadingSessionLike,
   type Game003RuntimeModule,
 } from "./loading-resources.js";
+import { parseGame003SkinQuery } from "./skin-id.js";
 import "./styles.css";
 
 const GAME003_LOADING_MAX_CONCURRENT_RESOURCES = 4;
@@ -32,11 +33,15 @@ const loading = createGameLoading<{
   root: loadingHost,
   ui: createSimpleGameLoadingUi(),
   maxConcurrentResources: GAME003_LOADING_MAX_CONCURRENT_RESOURCES,
-  resources: createGame003LoadingResources(),
-  onBeforeComplete: async ({ loadedResources }) => {
+  resources: createGame003LoadingResources(
+    parseGame003SkinQuery(window.location.search),
+  ),
+  onBeforeComplete: async ({ loadedResources, signal }) => {
     const runtimeModule = readGame003RuntimeModule(loadedResources);
     const prepared = await runtimeModule.prepareGame003At99({
       search: window.location.search,
+      loadedResources,
+      signal,
     });
     return Object.freeze({ runtimeModule, prepared });
   },
@@ -63,5 +68,5 @@ void loading.start().catch(() => undefined);
 
 window.addEventListener("beforeunload", () => {
   loading.destroy();
-  enteredGame?.destroy();
+  void enteredGame?.destroy();
 });

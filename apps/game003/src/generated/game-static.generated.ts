@@ -234,8 +234,6 @@ export const GAME003_STATIC_CONFIG = Object.freeze({
       }),
       winAmount: Object.freeze({
         amountScale: 100,
-        currency: "USD",
-        locale: "en-US",
         minorCountDurationSeconds: 1.5,
         majorCountDurationSeconds: 3,
         thresholds: Object.freeze({

@@ -435,6 +435,9 @@ describe("scene layout package runtime", () => {
         expect(runtime.getReelPresentation("main")).toBe(reel);
         expect(reel.position).toMatchObject({ x: 650, y: 345 });
         expect(
+          runtime.getMainReelSymbolGeometrySnapshots([{ x: 0, y: 0 }]),
+        ).toMatchObject([{ x: 0, y: 0 }]);
+        expect(
           renderMode === "standard"
             ? (reel as RenderReelSet).getVisibleScene()
             : (reel as RenderGridCellReelSet).getVisibleScene(),

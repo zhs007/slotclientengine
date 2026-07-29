@@ -628,6 +628,34 @@ describe("symbol state texture manifest helpers", () => {
     });
   });
 
+  it("binds an optimized Spine texture key without comparing it to the atlas page name", () => {
+    const manifest = structuredClone(createManifest());
+    for (const animation of Object.values(manifest.symbols.H1.animations)) {
+      if (animation?.kind === "spine") {
+        animation.texture = "./content-addressed-texture.webp";
+      }
+    }
+
+    const resources = createSymbolSpineAnimationResourcesFromManifest({
+      manifest,
+      requiredStates,
+      spineSkeletonModules: {
+        "../../../assets/game003-s1/H1.json": readJsonAsset("H1.json"),
+      },
+      spineAtlasModules: {
+        "../../../assets/game003-s1/Symbol.atlas":
+          readTextAsset("Symbol.atlas"),
+      },
+      spineTextureModules: {
+        "../../../assets/game003-s1/content-addressed-texture.webp":
+          "/assets/physical-hash.webp",
+      },
+    });
+
+    expect(resources.H1?.normal?.atlasPage).toBe("Symbol.png");
+    expect(resources.H1?.normal?.textureUrl).toBe("/assets/physical-hash.webp");
+  });
+
   it("validates the current game002-s3 Spine 4.3 resource set without copied fixtures", () => {
     const manifest = readJsonAsset("symbol-state-textures.manifest.json");
     const spineSkeletonModules = Object.fromEntries(

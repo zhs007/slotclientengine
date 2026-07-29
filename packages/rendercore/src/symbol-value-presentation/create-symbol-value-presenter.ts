@@ -1,6 +1,7 @@
 import { Container } from "pixi.js";
 import {
   createOfficialSpinePlayer,
+  readOfficialSpineAtlasPages,
   validateOfficialSpineResource,
   type RendercoreSpineSlotPlayer,
 } from "../spine/runtime-player.js";
@@ -97,8 +98,15 @@ export function createSymbolValuePresentationResourcesFromManifest(
           tier.animation.texture,
           `${symbol} value tier ${index} texture`,
         );
-        const atlasPage = getBaseName(tier.animation.texture);
+        let atlasPage: string;
         try {
+          const atlasPages = readOfficialSpineAtlasPages(atlasText);
+          if (atlasPages.length !== 1) {
+            throw new Error(
+              "value presentation Spine atlas must contain exactly one page for its single texture.",
+            );
+          }
+          atlasPage = atlasPages[0]!;
           validateOfficialSpineResource({
             resource: {
               skeleton,

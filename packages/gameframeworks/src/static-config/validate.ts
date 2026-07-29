@@ -602,20 +602,27 @@ function assertWinAmountConfig(
   label: string,
 ): asserts value is SlotGameStaticWinAmountConfig {
   const record = assertRecord(value, label);
-  assertKeys(record, label, [
-    "amountScale",
-    "currency",
-    "locale",
-    "minorCountDurationSeconds",
-    "majorCountDurationSeconds",
-    "thresholds",
-    "text",
-    "layout",
-    "animations",
-  ]);
+  assertKeys(
+    record,
+    label,
+    [
+      "amountScale",
+      "currency",
+      "locale",
+      "minorCountDurationSeconds",
+      "majorCountDurationSeconds",
+      "thresholds",
+      "text",
+      "layout",
+      "animations",
+    ],
+    { optional: ["currency", "locale"] },
+  );
   assertPositiveFiniteNumber(record.amountScale, `${label}.amountScale`);
-  assertNonEmptyString(record.currency, `${label}.currency`);
-  assertNonEmptyString(record.locale, `${label}.locale`);
+  if (record.currency !== undefined)
+    assertNonEmptyString(record.currency, `${label}.currency`);
+  if (record.locale !== undefined)
+    assertNonEmptyString(record.locale, `${label}.locale`);
   assertPositiveFiniteNumber(
     record.minorCountDurationSeconds,
     `${label}.minorCountDurationSeconds`,
