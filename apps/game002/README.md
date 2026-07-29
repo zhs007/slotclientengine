@@ -84,14 +84,14 @@ framework 负责 live、HUD、spin/collect；adapter 负责 Pixi 画面和 grid-
 
 服务端整数 `100` 显示为 `$1.00`，但 spin/live 协议仍传原始整数。正中奖只在全部级联 step、remove、普通 unified fall 或期待 split refill 和必要的 gencoins 数据边界完成后启动金额动画；win-amount 播放期间 adapter 继续逐帧推进 main reel runtime，因此 CN 与其它 symbol 的 normal Loop 不会被冻结。`playSpin()` 等到金额进入 `awaiting-dismiss` 即可 resolve，不要求用户点击关闭。点击只调用 `requestAdvance()`：用于跳金额、进下一档或从最终等待态播放 dismiss。下一次 spin 会先清理遗留金额。
 
-## WL/WM multiplier
+## WL/WM/CM multiplier
 
 spin 和每次 refill 的 symbol 全部落定后、中奖开始前，game002 会执行服务器
-multiplier transform。新 WL/WM 的 multiplier 分别来自 `bg-genwilds` 和
-`bg-setwm` 的 `otherScene`，使用 paired Symbols package 中同一个 ImgNumber
-dependency，在 exact `Mult` slot 显示 `xN`。
-如果当前 step 触发 `bg-genwm`，initial spin 和 refill 都以该 component 的唯一
-`scene` 作为最终落定盘面；`bg-spin/bg-refill` 的 scene 只作为生成前输入。
+multiplier transform。新 WL/WM/CM 的 multiplier 分别来自 `bg-genwilds`、
+`bg-setwm` 和 `bg-setcm` 的 `otherScene`，使用 paired Symbols package 中同一个
+ImgNumber dependency，在 exact `Mult` slot 显示 `xN`。initial spin 与 refill
+的最终 scene 优先级固定为 `bg-gencm > bg-genwm > bg-spin/bg-refill`，每个落定
+step 最多允许一个 CM。
 
 如果上一步中奖 WL 的 `bg-incwl.otherScene` 将值加一，会在本次 refill 落定后先
 更新 WL 并播放一次 WL `Start`，随后才处理当前 WM。WM 同批并行执行
@@ -99,11 +99,16 @@ dependency，在 exact `Mult` slot 显示 `xN`。
 `Mult_Idle` 时按 `bg-updwl` 同时更新全部 WL。盘面没有 WL 时仍完整播放 WM 流程，
 只跳过 WL 更新。
 
-`Change` 完成后才按 `bg-wm2cn` 原位置原子替换 CN，并用
-`bg-genwmcn.otherScene` 设置新 CN value；至此才进入现有中奖/cascade。
+WM `Change` 完成后才按 `bg-wm2cn` 原位置原子替换 CN，并用
+`bg-genwmcn.otherScene` 设置中间 CN value。若当前有 CM，随后播放 CM
+`Feature1`；`bg-updcn.otherScene` 将当时全部 CN（包含 WM 新生成的 CN）更新为
+原值乘 CM multiplier，并同时播放 CN `Feature_Change`。最后播放 CM `Change`，
+按 `bg-cm2cn` 原位置替换为 CN，并使用 `bg-gencmcn.otherScene` 的新 CN value。
+CM 流程完成后才进入现有中奖/cascade；没有 CM 时不制造空阶段。
+
 各 multiplier component 只读取当前操作所需的目标 symbol cell，非目标 cell
 保留给服务器其它用途且不参与该 component 的语义校验；目标 multiplier、WM sum、
-矩阵尺寸和 occurrence continuity 都在画面 mutation 前严格校验。
+CM 乘法、矩阵尺寸和 occurrence continuity 都在画面 mutation 前严格校验。
 
 ## bg-win 消除级联
 

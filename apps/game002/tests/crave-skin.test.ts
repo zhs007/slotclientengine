@@ -126,7 +126,7 @@ describe("game002 Crave skin", () => {
     );
   });
 
-  it("prepares manifest-owned geometry, symbol registry and CN coin ImgNumber", async () => {
+  it("prepares skin=2 geometry, CM multiplier states and CN coin states", async () => {
     const files = await readCravePackageFiles();
     const prepared = await prepareGame002SkinConfig("2", {
       craveFiles: files,
@@ -183,6 +183,46 @@ describe("game002 Crave skin", () => {
       );
       expect(skin.displaySymbols).toContain("WM");
       expect(skin.displaySymbols).toContain("WL");
+      expect(skin.displaySymbols).toContain("CM");
+      expect(skin.symbolAnimationCapabilities.CM).toEqual(
+        expect.arrayContaining(["appear", "feature1", "change"]),
+      );
+      expect(skin.symbolAnimationCapabilities.CN).toContain("featureChange");
+      const symbolManifest =
+        skin.presentation.symbolPackage.symbolManifest.symbols;
+      expect(symbolManifest.CM?.animations.feature1).toMatchObject({
+        kind: "spine",
+        playback: {
+          animationName: "Feature1",
+          loop: false,
+        },
+      });
+      expect(symbolManifest.CM?.animations.change).toMatchObject({
+        kind: "spine",
+        playback: {
+          animationName: "Change",
+          loop: false,
+        },
+      });
+      expect(symbolManifest.CN?.animations.featureChange).toMatchObject({
+        kind: "activeSpine",
+        playback: {
+          animationName: "Feature_Change",
+          loop: false,
+        },
+      });
+      expect(symbolManifest.CM?.imageStringNodes).toMatchObject([
+        {
+          name: "multiplier",
+          targets: [
+            { state: "normal", slot: "Mult" },
+            { state: "dropdown", slot: "Mult" },
+            { state: "appear", slot: "Mult" },
+            { state: "feature1", slot: "Mult" },
+            { state: "change", slot: "Mult" },
+          ],
+        },
+      ]);
     } finally {
       await prepared.resourceOwner.destroy();
     }

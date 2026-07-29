@@ -11,6 +11,7 @@ import { createGame002WlWmMultiplierCompiler } from "../src/wl-wm-multiplier-pla
 const WL = 0;
 const WM = 7;
 const CN = 8;
+const CM = 9;
 const A = 1;
 
 describe("game002 WL/WM multiplier compiler", () => {
@@ -27,6 +28,7 @@ describe("game002 WL/WM multiplier compiler", () => {
       wlSymbolCode: WL,
       wmSymbolCode: WM,
       cnSymbolCode: CN,
+      cmSymbolCode: CM,
     });
     const compileContext = createContext({
       stepIndex: 0,
@@ -58,6 +60,7 @@ describe("game002 WL/WM multiplier compiler", () => {
       wlSymbolCode: WL,
       wmSymbolCode: WM,
       cnSymbolCode: CN,
+      cmSymbolCode: CM,
     });
     const context = createContext({
       stepIndex: 0,
@@ -98,6 +101,7 @@ describe("game002 WL/WM multiplier compiler", () => {
       wlSymbolCode: WL,
       wmSymbolCode: WM,
       cnSymbolCode: CN,
+      cmSymbolCode: CM,
     });
     const context = createContext({
       stepIndex: 1,
@@ -137,6 +141,7 @@ describe("game002 WL/WM multiplier compiler", () => {
       wlSymbolCode: WL,
       wmSymbolCode: WM,
       cnSymbolCode: CN,
+      cmSymbolCode: CM,
     });
     const context = createContext({
       stepIndex: 2,
@@ -158,6 +163,7 @@ describe("game002 WL/WM multiplier compiler", () => {
       wlSymbolCode: WL,
       wmSymbolCode: WM,
       cnSymbolCode: CN,
+      cmSymbolCode: CM,
     });
     const context = createContext({
       stepIndex: 0,
@@ -182,6 +188,7 @@ describe("game002 WL/WM multiplier compiler", () => {
       wlSymbolCode: WL,
       wmSymbolCode: WM,
       cnSymbolCode: CN,
+      cmSymbolCode: CM,
     });
     expect(
       compiler.compileSettledTransform(
@@ -214,6 +221,9 @@ describe("game002 WL/WM multiplier compiler", () => {
           outputValue: 3,
         },
       ],
+      wmReplacements: [],
+      cnUpdates: [],
+      cm: null,
     });
     compiler.assertComplete();
   });
@@ -224,6 +234,7 @@ describe("game002 WL/WM multiplier compiler", () => {
       wlSymbolCode: WL,
       wmSymbolCode: WM,
       cnSymbolCode: CN,
+      cmSymbolCode: CM,
     });
 
     expect(() =>
@@ -246,6 +257,7 @@ describe("game002 WL/WM multiplier compiler", () => {
       wlSymbolCode: WL,
       wmSymbolCode: WM,
       cnSymbolCode: CN,
+      cmSymbolCode: CM,
     });
 
     expect(
@@ -263,6 +275,186 @@ describe("game002 WL/WM multiplier compiler", () => {
         }),
       ),
     ).toEqual([]);
+  });
+
+  it("gives bg-gencm precedence over bg-genwm for a refill scene", () => {
+    const inputScene = freezeMatrix([[A]]);
+    const generatedWmScene = freezeMatrix([[WM]]);
+    const generatedCmScene = freezeMatrix([[CM]]);
+    const compiler = createGame002WlWmMultiplierCompiler({
+      wlSymbolCode: WL,
+      wmSymbolCode: WM,
+      cnSymbolCode: CN,
+      cmSymbolCode: CM,
+    });
+    const context = createContext({
+      stepIndex: 1,
+      snapshot: createSnapshot(inputScene, [[null]]),
+      scenes: {
+        "bg-genwm": generatedWmScene,
+        "bg-gencm": generatedCmScene,
+      },
+    });
+
+    expect(
+      compiler.resolveSettledScene({
+        stepIndex: 1,
+        step: context.step,
+        kind: "refill",
+        inputScene,
+      }),
+    ).toBe(generatedCmScene);
+  });
+
+  it("hydrates one CM from bg-setcm and rejects multiple CM occurrences", () => {
+    const compiler = createGame002WlWmMultiplierCompiler({
+      wlSymbolCode: WL,
+      wmSymbolCode: WM,
+      cnSymbolCode: CN,
+      cmSymbolCode: CM,
+    });
+    const scene = freezeMatrix([[CM, A]]);
+    expect(
+      compiler.hydrateSettledValues(
+        createContext({
+          stepIndex: 1,
+          snapshot: createSnapshot(scene, [[null, null]]),
+          scenes: { "bg-gencm": scene },
+          otherScenes: { "bg-setcm": freezeMatrix([[3, 91]]) },
+        }),
+      ),
+    ).toEqual([{ position: { x: 0, y: 0 }, value: 3 }]);
+
+    const multipleCmScene = freezeMatrix([[CM, CM]]);
+    expect(() =>
+      compiler.hydrateSettledValues(
+        createContext({
+          stepIndex: 2,
+          snapshot: createSnapshot(multipleCmScene, [[null, null]]),
+          scenes: { "bg-gencm": multipleCmScene },
+          otherScenes: { "bg-setcm": freezeMatrix([[2, 3]]) },
+        }),
+      ),
+    ).toThrow(/at most one CM/);
+  });
+
+  it("processes WM before CM, multiplies every CN and then converts CM", () => {
+    const scene = freezeMatrix([
+      [WM, CN],
+      [CM, A],
+    ]);
+    const compiler = createGame002WlWmMultiplierCompiler({
+      wlSymbolCode: WL,
+      wmSymbolCode: WM,
+      cnSymbolCode: CN,
+      cmSymbolCode: CM,
+    });
+    const context = createContext({
+      stepIndex: 1,
+      snapshot: createSnapshot(scene, [
+        [3, 5],
+        [2, null],
+      ]),
+      scenes: {
+        "bg-wm2cn": freezeMatrix([
+          [CN, CN],
+          [CM, A],
+        ]),
+        "bg-cm2cn": freezeMatrix([
+          [CN, CN],
+          [CN, A],
+        ]),
+      },
+      otherScenes: {
+        "bg-genwmcn": freezeMatrix([
+          [4, 91],
+          [92, 93],
+        ]),
+        "bg-updcn": freezeMatrix([
+          [8, 10],
+          [94, 95],
+        ]),
+        "bg-gencmcn": freezeMatrix([
+          [96, 97],
+          [7, 98],
+        ]),
+      },
+    });
+
+    expect(compiler.compileSettledTransform(context)).toEqual([
+      { position: { x: 0, y: 0 }, outputCode: CN, outputValue: 8 },
+      { position: { x: 0, y: 1 }, outputCode: CN, outputValue: 10 },
+      { position: { x: 1, y: 0 }, outputCode: CN, outputValue: 7 },
+    ]);
+    expect(compiler.getPresentationBatch(1)).toEqual({
+      stepIndex: 1,
+      wlIncrements: [],
+      wmReplacements: [
+        {
+          position: { x: 0, y: 0 },
+          intermediateValue: 4,
+          outputValue: 8,
+        },
+      ],
+      cnUpdates: [
+        {
+          position: { x: 0, y: 0 },
+          inputValue: 4,
+          outputValue: 8,
+        },
+        {
+          position: { x: 0, y: 1 },
+          inputValue: 5,
+          outputValue: 10,
+        },
+      ],
+      cm: {
+        position: { x: 1, y: 0 },
+        multiplier: 2,
+        outputValue: 7,
+      },
+    });
+    compiler.assertComplete();
+  });
+
+  it("supports a refill CM with no prior CN and rejects unsafe CN products", () => {
+    const compiler = createGame002WlWmMultiplierCompiler({
+      wlSymbolCode: WL,
+      wmSymbolCode: WM,
+      cnSymbolCode: CN,
+      cmSymbolCode: CM,
+    });
+    expect(
+      compiler.compileSettledTransform(
+        createContext({
+          stepIndex: 1,
+          snapshot: createSnapshot(freezeMatrix([[CM]]), [[3]]),
+          scenes: { "bg-cm2cn": freezeMatrix([[CN]]) },
+          otherScenes: { "bg-gencmcn": freezeMatrix([[7]]) },
+        }),
+      ),
+    ).toEqual([{ position: { x: 0, y: 0 }, outputCode: CN, outputValue: 7 }]);
+
+    expect(() =>
+      createGame002WlWmMultiplierCompiler({
+        wlSymbolCode: WL,
+        wmSymbolCode: WM,
+        cnSymbolCode: CN,
+        cmSymbolCode: CM,
+      }).compileSettledTransform(
+        createContext({
+          stepIndex: 2,
+          snapshot: createSnapshot(freezeMatrix([[CN, CM]]), [
+            [Number.MAX_SAFE_INTEGER, 2],
+          ]),
+          scenes: { "bg-cm2cn": freezeMatrix([[CN, CN]]) },
+          otherScenes: {
+            "bg-updcn": freezeMatrix([[1, 91]]),
+            "bg-gencmcn": freezeMatrix([[92, 7]]),
+          },
+        }),
+      ),
+    ).toThrow(/safe integer range/);
   });
 });
 
@@ -311,7 +503,16 @@ function createSnapshot(
       Object.freeze({
         id: `o-${x}-${y}`,
         code,
-        symbol: code === WL ? "WL" : code === WM ? "WM" : "A",
+        symbol:
+          code === WL
+            ? "WL"
+            : code === WM
+              ? "WM"
+              : code === CN
+                ? "CN"
+                : code === CM
+                  ? "CM"
+                  : "A",
         value: values[x][y],
         position: Object.freeze({ x, y }),
       }),

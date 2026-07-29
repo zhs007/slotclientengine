@@ -63,12 +63,14 @@
 - normal 与 dropdown 指向相同 resource/playback 时保留 player 和时间轴，不 reset/replay 等价 Loop。
 - 所有 step 完成后才播放 global win-amount；播放期间 reel runtime 继续逐帧 update。
 
-## WL/WM multiplier 与中奖前转换
+## WL/WM/CM multiplier 与中奖前转换
 
-- step 触发 `bg-genwm` 时，initial spin 和 refill 都必须用该 component-scoped
-  唯一 `scene` 作为最终落定盘面；原 `bg-spin/bg-refill` scene 是生成前输入。
-- `bg-genwilds` 和 `bg-setwm` 的 component-scoped `otherScene` 分别给新 WL/WM
-  提供 positive safe integer multiplier；值随 occurrence dropdown/refill 搬运。
+- initial spin 和 refill 的最终落定 scene 优先级固定为
+  `bg-gencm > bg-genwm > bg-spin/bg-refill`；触发的生成 component 必须各自提供
+  唯一完整 scene。
+- `bg-genwilds`、`bg-setwm` 和 `bg-setcm` 的 component-scoped `otherScene`
+  分别给新 WL/WM/CM 提供 positive safe integer multiplier；每个 settled step
+  最多一个 CM，值随 occurrence dropdown/refill 搬运。
 - multiplier component 只读取当前操作目标 symbol cell；同一 `otherScene`
   的其它 cell 由服务器保留作其它用途，不得按当前 component 的零值合同拒绝。
 - spin 和每次 refill 都必须等全部 symbol 落定后再处理 multiplier，且 transform
@@ -82,8 +84,14 @@
   once、`Change` once；进入 `Mult_Idle` 时提交全部 WL multiplier 显示更新。
 - `Change` 完成边界才原子提交 `bg-wm2cn.scene` 的原位置 WM -> CN replacement，
   新 CN value 只取 `bg-genwmcn.otherScene`；prepare 或动画失败必须 rollback，
-  不得重建无关 symbol 或提前开始中奖。
-- WL/WM multiplier 共用 paired Symbols package 的唯一 ImgNumber dependency，
+  不得重建无关 symbol。
+- WM 全流程提交完成后才处理 CM。CM 先播放 `Feature1` once；完成边界按
+  `bg-updcn.otherScene` 将当时全部 CN（包含本批 WM 新转出的 CN）严格更新为
+  当前值乘唯一 CM multiplier，并同步播放 CN `Feature_Change` once。
+- 全部 CN `Feature_Change` 完成后播放 CM `Change` once；完成边界才按
+  `bg-cm2cn.scene` 原子提交该 CM -> CN，且新 CN value 只取
+  `bg-gencmcn.otherScene`。CM 全流程完成后才允许开始中奖；无 CM 时不得制造空阶段。
+- WL/WM/CM multiplier 共用 paired Symbols package 的唯一 ImgNumber dependency，
   formatter 为 exact `x${value}`，Spine slot 为 exact `Mult`；不得使用 `Multi`
   alias、CN digits、字体或路径猜测。
 

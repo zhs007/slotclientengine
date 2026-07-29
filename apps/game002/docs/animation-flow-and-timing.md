@@ -96,7 +96,7 @@ lastStop  = 1028 + (54 - 1) * 16 = 1876ms
 - 非期待 unified fall 不走 spin/appear；期待 selective refill 的新 symbol 才走逐格 appear。
 - `Start` 的准确时长由各 Spine JSON 自身决定，runtime 等待真实 completion，不在 app 中复制时长表。
 
-## WL/WM multiplier 与 WM 转 CN
+## WL/WM/CM multiplier 与 CN 更新
 
 每次 initial spin 或 refill 必须先等待全部 symbol 落定，再进入本节流程；本节完成前
 不得启动中奖。
@@ -111,6 +111,10 @@ bg-incwl（若上一中奖步有参与中奖的 WL）
   -> 当前 WM Mult_End once
   -> 当前 WM Change once
   -> 原位置原子替换 WM -> CN
+  -> 当前唯一 CM Feature1 once
+  -> 当时全部 CN 同时更新 value 并播放 Feature_Change once
+  -> 当前 CM Change once
+  -> 原位置原子替换 CM -> CN
   -> 开始现有中奖流程
 ```
 
@@ -120,8 +124,15 @@ bg-incwl（若上一中奖步有参与中奖的 WL）
   仍完整执行。
 - WM 的 `Mult_Start/Mult_Idle/Mult_End/Change` 同批并行；Idle 必须跨过一个真实
   loop boundary，其余等待 once completion。
-- WL/WM 数字使用唯一 multiplier ImgNumber，格式为 `xN`，exact Spine slot 为
-  `Mult`。
+- initial/refill scene 优先级是
+  `bg-gencm > bg-genwm > bg-spin/bg-refill`；每个落定 step 最多一个 CM。
+- WM 阶段完整结束后才开始 CM。CM `Feature1` 完成时按 `bg-updcn` 一次更新当时
+  全部 CN（含本批 WM 新转出的 CN），并行播放 `Feature_Change`；完成后才播放
+  CM `Change`，其真实 once completion 边界按 `bg-cm2cn/bg-gencmcn` 提交新 CN。
+- 没有 CM 时跳过全部 CM/CN 更新阶段；CM 存在但当时没有 CN 时只跳过
+  `Feature_Change`，仍完整播放 CM `Feature1/Change` 与 CM -> CN。
+- WL/WM/CM 数字使用唯一 multiplier ImgNumber，格式为 `xN`，exact Spine slot
+  为 `Mult`。
 
 ## Win、压暗和 remove
 

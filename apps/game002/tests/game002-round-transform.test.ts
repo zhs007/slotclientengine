@@ -8,7 +8,7 @@ import type { WinAmountAnimationPlayer } from "@slotclientengine/rendercore/win-
 import { Game002RoundTarget } from "../src/game-adapter.js";
 import type { Game002ReelRuntime } from "../src/game-demo.js";
 
-describe("Game002RoundTarget WM transform", () => {
+describe("Game002RoundTarget multiplier transform", () => {
   it("waits for real animation edges before updating WL, changing WM and committing CN", () => {
     const runtime = new TransformRuntime();
     const target = new Game002RoundTarget({
@@ -18,6 +18,7 @@ describe("Game002RoundTarget WM transform", () => {
       wlSymbolCode: 0,
       wmSymbolCode: 7,
       cnSymbolCode: 8,
+      cmSymbolCode: 9,
     });
     const step = createTransformStep();
     target.configure({
@@ -30,6 +31,15 @@ describe("Game002RoundTarget WM transform", () => {
           Object.freeze({
             stepIndex: step.stepIndex,
             wlIncrements: Object.freeze([]),
+            wmReplacements: Object.freeze([
+              Object.freeze({
+                position: Object.freeze({ x: 1, y: 0 }),
+                intermediateValue: 9,
+                outputValue: 9,
+              }),
+            ]),
+            cnUpdates: Object.freeze([]),
+            cm: null,
           }),
         ],
       ]),
@@ -73,6 +83,7 @@ describe("Game002RoundTarget WM transform", () => {
       wlSymbolCode: 0,
       wmSymbolCode: 7,
       cnSymbolCode: 8,
+      cmSymbolCode: 9,
     });
     const step = createWlIncrementStep(scene);
     target.configure({
@@ -91,6 +102,9 @@ describe("Game002RoundTarget WM transform", () => {
                 outputValue: 3,
               },
             ],
+            wmReplacements: [],
+            cnUpdates: [],
+            cm: null,
           },
         ],
       ]),
@@ -117,6 +131,7 @@ describe("Game002RoundTarget WM transform", () => {
       wlSymbolCode: 0,
       wmSymbolCode: 7,
       cnSymbolCode: 8,
+      cmSymbolCode: 9,
     });
     const step = createWmOnlyTransformStep(scene);
     target.configure({
@@ -129,6 +144,15 @@ describe("Game002RoundTarget WM transform", () => {
           {
             stepIndex: step.stepIndex,
             wlIncrements: [],
+            wmReplacements: [
+              {
+                position: { x: 1, y: 0 },
+                intermediateValue: 11,
+                outputValue: 11,
+              },
+            ],
+            cnUpdates: [],
+            cm: null,
           },
         ],
       ]),
@@ -152,6 +176,153 @@ describe("Game002RoundTarget WM transform", () => {
     runtime.advanceOnce();
     expect(target.updateSettledTransform(0).completed).toBe(true);
     expect(runtime.events.at(-1)).toBe("commit:1,0:8");
+  });
+
+  it("plays CM Feature1, changes all CN values, then converts CM to CN", () => {
+    const scene = createScene(1);
+    scene[0][0] = 1;
+    scene[1][0] = 9;
+    scene[2][0] = 8;
+    const runtime = new TransformRuntime(scene);
+    const target = new Game002RoundTarget({
+      runtime: runtime.asRuntime(),
+      cascadePlayer: {} as SymbolCascadePlayer,
+      winAmountPlayer: {} as WinAmountAnimationPlayer,
+      wlSymbolCode: 0,
+      wmSymbolCode: 7,
+      cnSymbolCode: 8,
+      cmSymbolCode: 9,
+    });
+    const step = createCmTransformStep(scene);
+    target.configure({
+      sequence: {} as never,
+      betAmountRaw: 0,
+      winAmountRaw: 0,
+      multiplierBatches: new Map([
+        [
+          step.stepIndex,
+          {
+            stepIndex: step.stepIndex,
+            wlIncrements: [],
+            wmReplacements: [],
+            cnUpdates: [
+              {
+                position: { x: 2, y: 0 },
+                inputValue: 5,
+                outputValue: 10,
+              },
+            ],
+            cm: {
+              position: { x: 1, y: 0 },
+              multiplier: 2,
+              outputValue: 7,
+            },
+          },
+        ],
+      ]),
+    });
+
+    target.startSettledTransform(step);
+    expect(runtime.events).toEqual([
+      "text:1,0=x2",
+      "prepare:1,0:9->8",
+      "state:feature1",
+    ]);
+
+    runtime.advanceOnce();
+    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(runtime.events.at(-1)).toBe("state:featureChange");
+
+    runtime.advanceOnce();
+    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(runtime.events.at(-1)).toBe("state:change");
+
+    runtime.advanceOnce();
+    expect(target.updateSettledTransform(0).completed).toBe(true);
+    expect(runtime.events.at(-1)).toBe("commit:1,0:8");
+    expect(runtime.scene[1][0]).toBe(8);
+  });
+
+  it("commits WM before starting CM and completes CM before the transform", () => {
+    const scene = createScene(1);
+    scene[0][0] = 1;
+    scene[1][0] = 7;
+    scene[2][0] = 8;
+    scene[3][0] = 9;
+    const runtime = new TransformRuntime(scene);
+    const target = new Game002RoundTarget({
+      runtime: runtime.asRuntime(),
+      cascadePlayer: {} as SymbolCascadePlayer,
+      winAmountPlayer: {} as WinAmountAnimationPlayer,
+      wlSymbolCode: 0,
+      wmSymbolCode: 7,
+      cnSymbolCode: 8,
+      cmSymbolCode: 9,
+    });
+    const step = createWmCmTransformStep(scene);
+    target.configure({
+      sequence: {} as never,
+      betAmountRaw: 0,
+      winAmountRaw: 0,
+      multiplierBatches: new Map([
+        [
+          step.stepIndex,
+          {
+            stepIndex: step.stepIndex,
+            wlIncrements: [],
+            wmReplacements: [
+              {
+                position: { x: 1, y: 0 },
+                intermediateValue: 4,
+                outputValue: 8,
+              },
+            ],
+            cnUpdates: [
+              {
+                position: { x: 1, y: 0 },
+                inputValue: 4,
+                outputValue: 8,
+              },
+              {
+                position: { x: 2, y: 0 },
+                inputValue: 5,
+                outputValue: 10,
+              },
+            ],
+            cm: {
+              position: { x: 3, y: 0 },
+              multiplier: 2,
+              outputValue: 7,
+            },
+          },
+        ],
+      ]),
+    });
+
+    target.startSettledTransform(step);
+    expect(runtime.events.at(-1)).toBe("state:multStart");
+    runtime.advanceOnce();
+    expect(target.updateSettledTransform(0).completed).toBe(false);
+    runtime.advanceLoop();
+    expect(target.updateSettledTransform(0).completed).toBe(false);
+    runtime.advanceOnce();
+    expect(target.updateSettledTransform(0).completed).toBe(false);
+    runtime.advanceOnce();
+    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(runtime.events.slice(-2)).toEqual([
+      "commit:1,0:8",
+      "state:feature1",
+    ]);
+
+    runtime.advanceOnce();
+    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(runtime.events.at(-1)).toBe("state:featureChange");
+    runtime.advanceOnce();
+    expect(target.updateSettledTransform(0).completed).toBe(false);
+    expect(runtime.events.at(-1)).toBe("state:change");
+    runtime.advanceOnce();
+    expect(target.updateSettledTransform(0).completed).toBe(true);
+    expect(runtime.events.at(-1)).toBe("commit:3,0:8");
   });
 });
 
@@ -354,6 +525,86 @@ function createWmOnlyTransformStep(
   });
 }
 
+function createCmTransformStep(
+  scene: readonly (readonly number[])[],
+): SlotRoundSettledTransformStepPlan {
+  const inputValues = createScene<number | null>(null);
+  inputValues[1][0] = 2;
+  inputValues[2][0] = 5;
+  const input = createGenericSnapshot(scene, inputValues);
+  const outputScene = scene.map((column) => [...column]);
+  outputScene[1][0] = 8;
+  const outputValues = createScene<number | null>(null);
+  outputValues[1][0] = 7;
+  outputValues[2][0] = 10;
+  const output = createGenericSnapshot(outputScene, outputValues);
+  const positions = [
+    Object.freeze({ x: 1, y: 0 }),
+    Object.freeze({ x: 2, y: 0 }),
+  ];
+  return Object.freeze({
+    kind: "settled-transform",
+    index: 0,
+    stepIndex: 1,
+    input,
+    output,
+    changes: Object.freeze(
+      positions.map((position) => {
+        const occurrenceId = `o-${position.x}-${position.y}`;
+        return Object.freeze({
+          occurrenceId,
+          position,
+          input: input.occurrences.find((item) => item.id === occurrenceId)!,
+          output: output.occurrences.find((item) => item.id === occurrenceId)!,
+        });
+      }),
+    ),
+    requiredCapabilities: Object.freeze(["settled-transform"] as const),
+  });
+}
+
+function createWmCmTransformStep(
+  scene: readonly (readonly number[])[],
+): SlotRoundSettledTransformStepPlan {
+  const inputValues = createScene<number | null>(null);
+  inputValues[1][0] = 3;
+  inputValues[2][0] = 5;
+  inputValues[3][0] = 2;
+  const input = createGenericSnapshot(scene, inputValues);
+  const outputScene = scene.map((column) => [...column]);
+  outputScene[1][0] = 8;
+  outputScene[3][0] = 8;
+  const outputValues = createScene<number | null>(null);
+  outputValues[1][0] = 8;
+  outputValues[2][0] = 10;
+  outputValues[3][0] = 7;
+  const output = createGenericSnapshot(outputScene, outputValues);
+  const positions = [
+    Object.freeze({ x: 1, y: 0 }),
+    Object.freeze({ x: 2, y: 0 }),
+    Object.freeze({ x: 3, y: 0 }),
+  ];
+  return Object.freeze({
+    kind: "settled-transform",
+    index: 0,
+    stepIndex: 1,
+    input,
+    output,
+    changes: Object.freeze(
+      positions.map((position) => {
+        const occurrenceId = `o-${position.x}-${position.y}`;
+        return Object.freeze({
+          occurrenceId,
+          position,
+          input: input.occurrences.find((item) => item.id === occurrenceId)!,
+          output: output.occurrences.find((item) => item.id === occurrenceId)!,
+        });
+      }),
+    ),
+    requiredCapabilities: Object.freeze(["settled-transform"] as const),
+  });
+}
+
 function createGenericSnapshot(
   scene: readonly (readonly number[])[],
   values: readonly (readonly (number | null)[])[],
@@ -368,7 +619,15 @@ function createGenericSnapshot(
             id: `o-${x}-${y}`,
             code,
             symbol:
-              code === 0 ? "WL" : code === 7 ? "WM" : code === 8 ? "CN" : "A",
+              code === 0
+                ? "WL"
+                : code === 7
+                  ? "WM"
+                  : code === 8
+                    ? "CN"
+                    : code === 9
+                      ? "CM"
+                      : "A",
             value: values[x][y],
             position: Object.freeze({ x, y }),
           }),

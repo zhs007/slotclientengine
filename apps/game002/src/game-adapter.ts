@@ -289,6 +289,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
         wlSymbolCode: requireGame002SymbolCode(runtime, "WL"),
         wmSymbolCode: requireGame002SymbolCode(runtime, "WM"),
         cnSymbolCode: requireGame002SymbolCode(runtime, "CN"),
+        cmSymbolCode: requireGame002SymbolCode(runtime, "CM"),
       });
       this.#roundCoordinator = createSlotRoundCoordinator({
         target: this.#roundTarget,
@@ -369,6 +370,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
     if (wmSymbolCode === undefined) {
       throw new Error("game002 game config is missing WM symbol code.");
     }
+    const cmSymbolCode = runtime.gameConfig.getSymbolCode("CM");
+    if (cmSymbolCode === undefined) {
+      throw new Error("game002 game config is missing CM symbol code.");
+    }
     const symbolCodes = Object.fromEntries(
       this.#skin.displaySymbols.map((symbol) => {
         const code = runtime.gameConfig.getSymbolCode(symbol);
@@ -381,6 +386,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       wlSymbolCode,
       wmSymbolCode,
       cnSymbolCode,
+      cmSymbolCode,
     });
     const plan = compileSlotRoundExecutionPlan(
       GAME002_ROUND_FLOW_PROFILE,
@@ -401,7 +407,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     const sequence = createGame002CascadeSequence({
       logic,
       cnSymbolCode,
-      auxiliaryValueSymbolCodes: [wlSymbolCode, wmSymbolCode],
+      auxiliaryValueSymbolCodes: [wlSymbolCode, wmSymbolCode, cmSymbolCode],
       executionPlan: plan,
       canRemoveSymbol: ({ code }) =>
         canGame002CascadeRemoveSymbol(
@@ -554,6 +560,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
   readonly #wlSymbolCode: number;
   readonly #wmSymbolCode: number;
   readonly #cnSymbolCode: number;
+  readonly #cmSymbolCode: number;
   #round: {
     readonly sequence: Game002CascadeSequence;
     readonly betAmountRaw: number;
@@ -576,7 +583,10 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     | "transform-mult-start"
     | "transform-mult-idle"
     | "transform-mult-end"
-    | "transform-change"
+    | "transform-wm-change"
+    | "transform-cm-feature"
+    | "transform-cn-feature-change"
+    | "transform-cm-change"
     | "completion" = "idle";
   #activeStage: Game002CascadeSequence["cascades"][number] | null = null;
   #runtimeCompleted = false;
@@ -587,7 +597,8 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
   #refillSnapshot: SlotRoundOccurrenceSnapshot | null = null;
   #activeTransform: SlotRoundSettledTransformStepPlan | null = null;
   #activeMultiplierBatch: Game002WlWmMultiplierPresentationBatch | null = null;
-  #preparedTransformReplacements: PreparedVisibleOccurrenceReplacement[] = [];
+  #preparedWmReplacements: PreparedVisibleOccurrenceReplacement[] = [];
+  #preparedCmReplacements: PreparedVisibleOccurrenceReplacement[] = [];
   #transformCompletionBaselines = new Map<
     string,
     Readonly<{ loop: number; once: number }>
@@ -600,6 +611,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     readonly wlSymbolCode: number;
     readonly wmSymbolCode: number;
     readonly cnSymbolCode: number;
+    readonly cmSymbolCode: number;
   }) {
     this.#runtime = options.runtime;
     this.#cascadePlayer = options.cascadePlayer;
@@ -607,6 +619,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     this.#wlSymbolCode = options.wlSymbolCode;
     this.#wmSymbolCode = options.wmSymbolCode;
     this.#cnSymbolCode = options.cnSymbolCode;
+    this.#cmSymbolCode = options.cmSymbolCode;
   }
 
   configure(round: {
@@ -637,9 +650,10 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     this.#refillSnapshot = null;
     this.#activeTransform = null;
     this.#activeMultiplierBatch = null;
-    for (const prepared of this.#preparedTransformReplacements)
-      prepared.rollback();
-    this.#preparedTransformReplacements = [];
+    for (const prepared of this.#preparedWmReplacements) prepared.rollback();
+    for (const prepared of this.#preparedCmReplacements) prepared.rollback();
+    this.#preparedWmReplacements = [];
+    this.#preparedCmReplacements = [];
     this.#transformCompletionBaselines.clear();
   }
 
@@ -769,9 +783,25 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
         change.input.code === this.#wlSymbolCode &&
         change.output.code === this.#wlSymbolCode,
     );
-    if (wmChanges.length + wlChanges.length !== step.changes.length) {
+    const cnChanges = step.changes.filter(
+      (change) =>
+        change.input.code === this.#cnSymbolCode &&
+        change.output.code === this.#cnSymbolCode,
+    );
+    const cmChanges = step.changes.filter(
+      (change) =>
+        change.input.code === this.#cmSymbolCode &&
+        change.output.code === this.#cnSymbolCode,
+    );
+    if (
+      wmChanges.length +
+        wlChanges.length +
+        cnChanges.length +
+        cmChanges.length !==
+      step.changes.length
+    ) {
       throw new Error(
-        `game002 step[${step.stepIndex}] settled transform must contain only WL updates and WM-to-CN replacements.`,
+        `game002 step[${step.stepIndex}] settled transform must contain only WL/CN updates and WM/CM-to-CN replacements.`,
       );
     }
     const batch = this.requireRound().multiplierBatches.get(step.stepIndex);
@@ -779,10 +809,94 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       throw new Error(
         `game002 step[${step.stepIndex}] multiplier presentation batch is missing.`,
       );
-    if (wmChanges.length === 0 && batch.wlIncrements.length === 0)
+    if (
+      wmChanges.length === 0 &&
+      batch.wlIncrements.length === 0 &&
+      batch.cm === null
+    )
       throw new Error(
         `game002 step[${step.stepIndex}] multiplier transform has no display operation.`,
       );
+    if (wmChanges.length !== batch.wmReplacements.length)
+      throw new Error(
+        `game002 step[${step.stepIndex}] WM replacement batch does not match the transform.`,
+      );
+    if (cmChanges.length !== (batch.cm ? 1 : 0))
+      throw new Error(
+        `game002 step[${step.stepIndex}] CM replacement batch does not match the transform.`,
+      );
+    for (const replacement of batch.wmReplacements) {
+      const { x, y } = replacement.position;
+      if (
+        step.input.scene[x]?.[y] !== this.#wmSymbolCode ||
+        step.output.scene[x]?.[y] !== this.#cnSymbolCode ||
+        step.output.values[x]?.[y] !== replacement.outputValue
+      )
+        throw new Error(
+          `game002 step[${step.stepIndex}] WM replacement (${x},${y}) does not match the transform snapshots.`,
+        );
+    }
+    if (batch.cm) {
+      const { x, y } = batch.cm.position;
+      if (
+        step.input.scene[x]?.[y] !== this.#cmSymbolCode ||
+        step.input.values[x]?.[y] !== batch.cm.multiplier ||
+        step.output.scene[x]?.[y] !== this.#cnSymbolCode ||
+        step.output.values[x]?.[y] !== batch.cm.outputValue
+      )
+        throw new Error(
+          `game002 step[${step.stepIndex}] CM replacement (${x},${y}) does not match the transform snapshots.`,
+        );
+      const expectedCnPositions = step.input.occurrences.filter(
+        (occurrence) =>
+          occurrence.code === this.#cnSymbolCode ||
+          occurrence.code === this.#wmSymbolCode,
+      );
+      const expectedCnKeys = new Set(
+        expectedCnPositions.map(
+          (occurrence) => `${occurrence.position.x},${occurrence.position.y}`,
+        ),
+      );
+      const actualCnKeys = new Set(
+        batch.cnUpdates.map(
+          (update) => `${update.position.x},${update.position.y}`,
+        ),
+      );
+      if (
+        expectedCnKeys.size !== batch.cnUpdates.length ||
+        actualCnKeys.size !== batch.cnUpdates.length ||
+        [...expectedCnKeys].some((key) => !actualCnKeys.has(key))
+      )
+        throw new Error(
+          `game002 step[${step.stepIndex}] CN update batch does not cover every intermediate CN.`,
+        );
+      for (const update of batch.cnUpdates) {
+        const { x, y } = update.position;
+        const inputCode = step.input.scene[x]?.[y];
+        const wmReplacement = batch.wmReplacements.find(
+          (replacement) =>
+            replacement.position.x === x && replacement.position.y === y,
+        );
+        const expectedInputValue =
+          inputCode === this.#wmSymbolCode
+            ? wmReplacement?.intermediateValue
+            : step.input.values[x]?.[y];
+        if (
+          (inputCode !== this.#cnSymbolCode &&
+            inputCode !== this.#wmSymbolCode) ||
+          expectedInputValue !== update.inputValue ||
+          step.output.scene[x]?.[y] !== this.#cnSymbolCode ||
+          step.output.values[x]?.[y] !== update.outputValue
+        )
+          throw new Error(
+            `game002 step[${step.stepIndex}] CN update (${x},${y}) does not match the transform snapshots.`,
+          );
+      }
+    } else if (batch.cnUpdates.length > 0) {
+      throw new Error(
+        `game002 step[${step.stepIndex}] CN updates require a CM presentation.`,
+      );
+    }
     this.applyMultiplierTexts(step.input);
     for (const change of wmChanges) {
       for (const state of ["multStart", "multIdle", "multEnd", "change"]) {
@@ -811,24 +925,66 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
           `game002 WL (${increment.position.x},${increment.position.y}) has no "appear" Start animation capability.`,
         );
     }
-    const prepared: PreparedVisibleOccurrenceReplacement[] = [];
+    if (batch.cm) {
+      for (const state of ["feature1", "change"]) {
+        if (
+          !this.#runtime.hasVisibleSymbolStateCapability(
+            batch.cm.position.x,
+            batch.cm.position.y,
+            state,
+          )
+        )
+          throw new Error(
+            `game002 CM (${batch.cm.position.x},${batch.cm.position.y}) has no "${state}" animation capability.`,
+          );
+      }
+    }
+    for (const update of batch.cnUpdates) {
+      const inputCode =
+        step.input.scene[update.position.x]?.[update.position.y];
+      if (
+        inputCode === this.#cnSymbolCode &&
+        !this.#runtime.hasVisibleSymbolStateCapability(
+          update.position.x,
+          update.position.y,
+          "featureChange",
+        )
+      )
+        throw new Error(
+          `game002 CN (${update.position.x},${update.position.y}) has no "featureChange" animation capability.`,
+        );
+    }
+    const preparedWm: PreparedVisibleOccurrenceReplacement[] = [];
+    const preparedCm: PreparedVisibleOccurrenceReplacement[] = [];
     try {
-      for (const change of wmChanges) {
-        prepared.push(
+      for (const replacement of batch.wmReplacements) {
+        preparedWm.push(
           this.#runtime.prepareVisibleOccurrenceReplacement({
-            x: change.position.x,
-            y: change.position.y,
+            x: replacement.position.x,
+            y: replacement.position.y,
             expectedCode: this.#wmSymbolCode,
             outputCode: this.#cnSymbolCode,
-            outputPresentationValue: change.output.value,
+            outputPresentationValue: replacement.intermediateValue,
           }),
         );
       }
+      if (batch.cm)
+        preparedCm.push(
+          this.#runtime.prepareVisibleOccurrenceReplacement({
+            x: batch.cm.position.x,
+            y: batch.cm.position.y,
+            expectedCode: this.#cmSymbolCode,
+            outputCode: this.#cnSymbolCode,
+            outputPresentationValue: batch.cm.outputValue,
+          }),
+        );
     } catch (error) {
-      for (const replacement of prepared) replacement.rollback();
+      for (const replacement of preparedWm) replacement.rollback();
+      for (const replacement of preparedCm) replacement.rollback();
       throw error;
     }
-    this.#preparedTransformReplacements = prepared;
+    this.#preparedWmReplacements = preparedWm;
+    this.#preparedCmReplacements = preparedCm;
     this.#activeTransform = step;
     this.#activeMultiplierBatch = batch;
     if (batch.wlIncrements.length > 0) {
@@ -852,11 +1008,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       this.#activity = "transform-wl-start";
       return;
     }
-    this.requestTransformState(
-      wmChanges.map((change) => change.position),
-      "multStart",
-    );
-    this.#activity = "transform-mult-start";
+    this.startWmOrCm(step, batch);
   }
 
   updateSettledTransform(_deltaSeconds: number): {
@@ -864,25 +1016,19 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
   } {
     const step = this.#activeTransform;
     if (!step) throw new Error("game002 settled transform is not active.");
-    const wmPositions = step.changes
-      .filter((change) => change.input.code === this.#wmSymbolCode)
-      .map((change) => change.position);
+    const batch = this.#activeMultiplierBatch;
+    if (!batch)
+      throw new Error("game002 multiplier presentation batch is missing.");
+    const wmPositions = batch.wmReplacements.map(
+      (replacement) => replacement.position,
+    );
     if (this.#activity === "transform-wl-start") {
-      const batch = this.#activeMultiplierBatch;
-      if (!batch)
-        throw new Error("game002 WL increment presentation batch is missing.");
       const positions = batch.wlIncrements.map(
         (increment) => increment.position,
       );
       if (!this.didTransformAnimationComplete(positions, "once"))
         return { completed: false };
-      if (wmPositions.length === 0) {
-        this.completeSettledTransform(step);
-        return { completed: true };
-      }
-      this.requestTransformState(wmPositions, "multStart");
-      this.#activity = "transform-mult-start";
-      return { completed: false };
+      return this.startWmOrCm(step, batch);
     }
     if (this.#activity === "transform-mult-start") {
       if (!this.didTransformAnimationComplete(wmPositions, "once"))
@@ -916,15 +1062,74 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       if (!this.didTransformAnimationComplete(wmPositions, "once"))
         return { completed: false };
       this.requestTransformState(wmPositions, "change");
-      this.#activity = "transform-change";
+      this.#activity = "transform-wm-change";
       return { completed: false };
     }
-    if (this.#activity !== "transform-change")
-      throw new Error("game002 settled transform activity is invalid.");
-    if (!this.didTransformAnimationComplete(wmPositions, "once"))
+    if (this.#activity === "transform-wm-change") {
+      if (!this.didTransformAnimationComplete(wmPositions, "once"))
+        return { completed: false };
+      for (const replacement of this.#preparedWmReplacements)
+        replacement.commit();
+      this.#preparedWmReplacements = [];
+      for (const update of batch.cnUpdates)
+        if (
+          !this.#runtime.hasVisibleSymbolStateCapability(
+            update.position.x,
+            update.position.y,
+            "featureChange",
+          )
+        )
+          throw new Error(
+            `game002 CN (${update.position.x},${update.position.y}) has no "featureChange" animation capability.`,
+          );
+      return this.startCmOrComplete(step, batch);
+    }
+    if (this.#activity === "transform-cm-feature") {
+      const cm = requireCmPresentation(batch);
+      if (!this.didTransformAnimationComplete([cm.position], "once"))
+        return { completed: false };
+      for (const update of batch.cnUpdates)
+        this.#runtime.setVisibleSymbolPresentationValue(
+          update.position.x,
+          update.position.y,
+          update.outputValue,
+        );
+      if (batch.cnUpdates.length === 0) {
+        this.requestTransformState([cm.position], "change");
+        this.#activity = "transform-cm-change";
+      } else {
+        this.requestTransformState(
+          batch.cnUpdates.map((update) => update.position),
+          "featureChange",
+        );
+        this.#activity = "transform-cn-feature-change";
+      }
       return { completed: false };
-    this.completeSettledTransform(step);
-    return { completed: true };
+    }
+    if (this.#activity === "transform-cn-feature-change") {
+      if (
+        !this.didTransformAnimationComplete(
+          batch.cnUpdates.map((update) => update.position),
+          "once",
+        )
+      )
+        return { completed: false };
+      const cm = requireCmPresentation(batch);
+      this.requestTransformState([cm.position], "change");
+      this.#activity = "transform-cm-change";
+      return { completed: false };
+    }
+    if (this.#activity === "transform-cm-change") {
+      const cm = requireCmPresentation(batch);
+      if (!this.didTransformAnimationComplete([cm.position], "once"))
+        return { completed: false };
+      for (const replacement of this.#preparedCmReplacements)
+        replacement.commit();
+      this.#preparedCmReplacements = [];
+      this.completeSettledTransform(step);
+      return { completed: true };
+    }
+    throw new Error("game002 settled transform activity is invalid.");
   }
 
   update(deltaSeconds: number): void {
@@ -1006,12 +1211,43 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     this.#refillSnapshot = null;
   }
 
+  private startWmOrCm(
+    step: SlotRoundSettledTransformStepPlan,
+    batch: Game002WlWmMultiplierPresentationBatch,
+  ): { readonly completed: boolean } {
+    if (batch.wmReplacements.length === 0)
+      return this.startCmOrComplete(step, batch);
+    this.requestTransformState(
+      batch.wmReplacements.map((replacement) => replacement.position),
+      "multStart",
+    );
+    this.#activity = "transform-mult-start";
+    return { completed: false };
+  }
+
+  private startCmOrComplete(
+    step: SlotRoundSettledTransformStepPlan,
+    batch: Game002WlWmMultiplierPresentationBatch,
+  ): { readonly completed: boolean } {
+    if (!batch.cm) {
+      this.completeSettledTransform(step);
+      return { completed: true };
+    }
+    this.requestTransformState([batch.cm.position], "feature1");
+    this.#activity = "transform-cm-feature";
+    return { completed: false };
+  }
+
   private completeSettledTransform(
     step: SlotRoundSettledTransformStepPlan,
   ): void {
-    for (const replacement of this.#preparedTransformReplacements)
-      replacement.commit();
-    this.#preparedTransformReplacements = [];
+    if (
+      this.#preparedWmReplacements.length > 0 ||
+      this.#preparedCmReplacements.length > 0
+    )
+      throw new Error(
+        `game002 step[${step.stepIndex}] multiplier transform completed with uncommitted replacements.`,
+      );
     assertGame002ReelVisualMatchesTarget(
       this.#runtime.getVisualSnapshot(),
       step.output.scene,
@@ -1027,7 +1263,8 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     for (const occurrence of snapshot.occurrences) {
       if (
         occurrence.code !== this.#wlSymbolCode &&
-        occurrence.code !== this.#wmSymbolCode
+        occurrence.code !== this.#wmSymbolCode &&
+        occurrence.code !== this.#cmSymbolCode
       )
         continue;
       this.#runtime.setVisibleSymbolPresentationValue(
@@ -1266,6 +1503,14 @@ function requireGame002SymbolCode(
   if (code === undefined)
     throw new Error(`game002 game config is missing ${symbol} symbol code.`);
   return code;
+}
+
+function requireCmPresentation(batch: Game002WlWmMultiplierPresentationBatch) {
+  if (!batch.cm)
+    throw new Error(
+      `game002 step[${batch.stepIndex}] CM presentation is missing.`,
+    );
+  return batch.cm;
 }
 
 function formatMultiplier(value: number | null): string {

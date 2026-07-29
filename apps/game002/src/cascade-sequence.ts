@@ -112,10 +112,10 @@ export function createGame002CascadeSequence(options: {
     initialStep.getComponentScenes(GAME002_CASCADE_COMPONENTS.spin),
     "step[0] bg-spin",
   );
-  const settledSpinScene = resolveGeneratedWmScene(
+  const settledSpinScene = resolveGeneratedMultiplierScene(
     initialStep,
     serverSpinScene,
-    "step[0] bg-genwm",
+    "step[0]",
   );
   const spinScene = options.executionPlan?.initial.scene ?? settledSpinScene;
   assertMatrixEqual(
@@ -274,10 +274,10 @@ export function createGame002CascadeSequence(options: {
       step.getComponentScenes(GAME002_CASCADE_COMPONENTS.refill),
       `step[${stepIndex}] bg-refill`,
     );
-    const settledRefillScene = resolveGeneratedWmScene(
+    const settledRefillScene = resolveGeneratedMultiplierScene(
       step,
       serverRefillScene,
-      `step[${stepIndex}] bg-genwm`,
+      `step[${stepIndex}]`,
     );
     const plannedRefill = findPlanRefill(options.executionPlan, stepIndex);
     const refillScene = plannedRefill?.output.scene ?? settledRefillScene;
@@ -919,16 +919,23 @@ function validateCarriedValues(
   });
 }
 
-function resolveGeneratedWmScene(
+function resolveGeneratedMultiplierScene(
   step: GameLogicStep,
   inputScene: SceneMatrix,
   label: string,
 ): SceneMatrix {
-  if (!step.hasComponent(GAME002_CASCADE_COMPONENTS.genwm)) return inputScene;
-  return exactlyOneFullScene(
-    step.getComponentScenes(GAME002_CASCADE_COMPONENTS.genwm),
-    label,
-  );
+  const generatedWm = step.hasComponent(GAME002_CASCADE_COMPONENTS.genwm)
+    ? exactlyOneFullScene(
+        step.getComponentScenes(GAME002_CASCADE_COMPONENTS.genwm),
+        `${label} bg-genwm`,
+      )
+    : inputScene;
+  return step.hasComponent(GAME002_CASCADE_COMPONENTS.gencm)
+    ? exactlyOneFullScene(
+        step.getComponentScenes(GAME002_CASCADE_COMPONENTS.gencm),
+        `${label} bg-gencm`,
+      )
+    : generatedWm;
 }
 
 function exactlyOneFullScene(

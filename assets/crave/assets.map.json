@@ -675,10 +675,10 @@
       "byteLength": 159281
     },
     "symbol-state-textures.manifest.json": {
-      "path": "assets/fe603cc1f59890adb3227b341ebe9c40f03785a952b46d2200f8d0ac7f0d135c.json",
-      "sha256": "fe603cc1f59890adb3227b341ebe9c40f03785a952b46d2200f8d0ac7f0d135c",
+      "path": "assets/20d19010375c99bebd15df7de539d446ed6220eb05dbc29f047508757b300a42.json",
+      "sha256": "20d19010375c99bebd15df7de539d446ed6220eb05dbc29f047508757b300a42",
       "mediaType": "application/json",
-      "byteLength": 28668
+      "byteLength": 30580
     },
     "Symbol.atlas": {
       "path": "assets/f914335ebe3242cf9ee31a683694a73d114acb8c2c61407b24cf915fc51b6497.atlas",

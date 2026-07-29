@@ -9,6 +9,7 @@
     "dev": "pnpm run prepare:deps && sh -c 'if [ \"$1\" = \"--\" ]; then shift; fi; exec vite \"$@\"' sh",
     "build": "pnpm run prepare:deps && vite build",
     "build:task131": "pnpm run prepare:deps && TS_NODE_PROJECT=tsconfig.json node --loader ts-node/esm scripts/build-task131-symbols.ts",
+    "build:task132": "pnpm run prepare:deps && TS_NODE_PROJECT=tsconfig.json node --loader ts-node/esm scripts/build-task132-symbols.ts",
     "lint": "eslint .",
     "test": "vitest run --coverage",
     "typecheck": "pnpm run prepare:deps && tsc -p tsconfig.json --noEmit",

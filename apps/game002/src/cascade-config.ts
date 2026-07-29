@@ -16,6 +16,11 @@ export const GAME002_CASCADE_COMPONENTS = Object.freeze({
   updwl: "bg-updwl",
   wm2cn: "bg-wm2cn",
   genwmcn: "bg-genwmcn",
+  gencm: "bg-gencm",
+  setcm: "bg-setcm",
+  updcn: "bg-updcn",
+  cm2cn: "bg-cm2cn",
+  gencmcn: "bg-gencmcn",
 });
 
 export const GAME002_CASCADE_MOTION = Object.freeze({
