@@ -26,6 +26,7 @@ import {
 } from "@slotclientengine/vnicore";
 import {
   activeVariantIds,
+  cloneEditorProject,
   resetVariantGeometry,
   type EditorNodeDraft,
   type EditorProject,
@@ -175,8 +176,7 @@ export async function importVniBundle(options: {
   });
   const existing = options.project.resources.get(resource.id);
   const prepared = { resource, assets };
-  if (existing)
-    commitResourceReplacement(options.project, existing, prepared, false);
+  if (existing) commitResourceReplacement(options.project, existing, prepared);
   else {
     assertNewResourceAvailable(options.project, resource);
     commitNewResource(options.project, prepared);
@@ -244,7 +244,7 @@ export async function importImageStringZip(options: {
   };
   const existing = options.project.resources.get(rootKey);
   if (existing) {
-    commitResourceReplacement(options.project, existing, prepared, false);
+    commitResourceReplacement(options.project, existing, prepared);
     return resource;
   }
   assertNewResourceAvailable(options.project, resource);
@@ -280,12 +280,10 @@ export async function replaceImageStringResource(options: {
       (path) => [path, candidate.assets.get(path)!.slice()] as const,
     ),
   );
-  commitResourceReplacement(
-    options.project,
-    current,
-    { resource: imported, assets },
-    false,
-  );
+  commitResourceReplacement(options.project, current, {
+    resource: imported,
+    assets,
+  });
   return imported;
 }
 
@@ -300,7 +298,7 @@ export async function uploadImageResource(options: {
   const prepared = await prepareImageResource(options);
   const existing = options.project.resources.get(prepared.resource.id);
   if (existing) {
-    commitResourceReplacement(options.project, existing, prepared, false);
+    commitResourceReplacement(options.project, existing, prepared);
     return prepared.resource;
   }
   assertNewResourceAvailable(options.project, prepared.resource);
@@ -313,15 +311,36 @@ export async function uploadSpineResource(options: {
   readonly files: readonly File[];
   readonly resourceId?: string;
 }): Promise<EditorSpineLayoutResource> {
-  const prepared = await prepareSpineResource(options);
-  const existing = options.project.resources.get(prepared.resource.id);
-  if (existing) {
-    commitResourceReplacement(options.project, existing, prepared, false);
-    return prepared.resource;
+  if (
+    options.files.filter((file) => file.name.toLowerCase().endsWith(".json"))
+      .length !== 1
+  )
+    throw new Error("单 Spine resource 上传必须恰好包含一个 JSON。");
+  const resources = await uploadSpineResources(options);
+  return resources[0]!;
+}
+
+export async function uploadSpineResources(options: {
+  readonly project: EditorProject;
+  readonly files: readonly File[];
+  readonly resourceId?: string;
+}): Promise<readonly EditorSpineLayoutResource[]> {
+  const prepared = await prepareSpineResources(options);
+  if (options.resourceId !== undefined && prepared.length !== 1)
+    throw new Error("指定 resourceId 时 Spine 上传必须恰好包含一个 JSON。");
+  const candidate = cloneEditorProject(options.project);
+  assertSharedSpineLeafCompatibility(candidate, prepared);
+  for (const item of prepared) {
+    const existing = candidate.resources.get(item.resource.id);
+    if (existing) commitResourceReplacement(candidate, existing, item);
+    else {
+      assertNewResourceAvailable(candidate, item.resource);
+      commitNewResource(candidate, item);
+    }
   }
-  assertNewResourceAvailable(options.project, prepared.resource);
-  commitNewResource(options.project, prepared);
-  return prepared.resource;
+  options.project.resources = candidate.resources;
+  options.project.assets = candidate.assets;
+  return Object.freeze(prepared.map(({ resource }) => resource));
 }
 
 export async function uploadVideoResource(options: {
@@ -338,7 +357,7 @@ export async function uploadVideoResource(options: {
   const prepared = await prepareVideoResource(options);
   const existing = options.project.resources.get(prepared.resource.id);
   if (existing) {
-    commitResourceReplacement(options.project, existing, prepared, false);
+    commitResourceReplacement(options.project, existing, prepared);
     return prepared.resource;
   }
   assertNewResourceAvailable(options.project, prepared.resource);
@@ -350,7 +369,6 @@ export async function replaceImageResource(options: {
   readonly project: EditorProject;
   readonly resourceId: string;
   readonly file: File;
-  readonly reinitializeBackgrounds?: boolean;
   readonly decodeImage?: (
     file: File,
   ) => Promise<{ readonly width: number; readonly height: number }>;
@@ -361,12 +379,7 @@ export async function replaceImageResource(options: {
     ...options,
     resourceId: options.resourceId,
   });
-  commitResourceReplacement(
-    options.project,
-    current,
-    prepared,
-    options.reinitializeBackgrounds ?? false,
-  );
+  commitResourceReplacement(options.project, current, prepared);
   return prepared.resource;
 }
 
@@ -374,7 +387,6 @@ export async function replaceSpineResource(options: {
   readonly project: EditorProject;
   readonly resourceId: string;
   readonly files: readonly File[];
-  readonly reinitializeBackgrounds?: boolean;
 }): Promise<EditorSpineLayoutResource> {
   const current = requireResource(options.project, options.resourceId);
   if (current.kind !== "spine") throw new Error("资源类型必须保持为 Spine。");
@@ -382,12 +394,7 @@ export async function replaceSpineResource(options: {
     ...options,
     resourceId: options.resourceId,
   });
-  commitResourceReplacement(
-    options.project,
-    current,
-    prepared,
-    options.reinitializeBackgrounds ?? false,
-  );
+  commitResourceReplacement(options.project, current, prepared);
   return prepared.resource;
 }
 
@@ -408,7 +415,7 @@ export async function replaceVideoResource(options: {
     ...options,
     resourceId: options.resourceId,
   });
-  commitResourceReplacement(options.project, current, prepared, false);
+  commitResourceReplacement(options.project, current, prepared);
   return prepared.resource;
 }
 
@@ -521,13 +528,30 @@ export function rebindLayerResource(options: {
   readonly loop?: boolean;
 }): void {
   const node = requireLayer(options.project, options.nodeId);
+  const previousResource = requireResource(options.project, node.resourceId);
+  const previousPlayback = node.playback;
+  const previousImageString = node.imageString;
   const resource = requireResource(options.project, options.resourceId);
   if (resource.kind === "video")
     throw new Error("video 资源只能绑定黑场视频转场，不能重绑普通图层。");
-  const defaultAnimation = validateAnimation(
-    resource,
-    options.defaultAnimation,
-  );
+  const defaultAnimation =
+    resource.kind === "spine"
+      ? validateAnimation(
+          resource,
+          options.defaultAnimation ??
+            (previousResource.kind === "spine" &&
+            previousPlayback?.kind === "loop" &&
+            resource.animationNames.includes(previousPlayback.animation)
+              ? previousPlayback.animation
+              : undefined),
+        )
+      : validateAnimation(resource, options.defaultAnimation);
+  if (
+    resource.kind === "image-string" &&
+    previousResource.kind === "image-string" &&
+    previousImageString
+  )
+    validateImageStringText(previousImageString.text, resource.manifest);
   node.resourceId = resource.id;
   delete node.playback;
   delete node.imageString;
@@ -535,12 +559,18 @@ export function rebindLayerResource(options: {
     node.playback = {
       kind: "loop",
       animation: defaultAnimation!,
-      loop: options.loop ?? true,
+      loop: options.loop ?? previousPlayback?.loop ?? true,
     };
   else if (resource.kind === "vni")
-    node.playback = { kind: "vni", loop: options.loop ?? true };
+    node.playback = {
+      kind: "vni",
+      loop: options.loop ?? previousPlayback?.loop ?? true,
+    };
   else if (resource.kind === "image-string")
-    node.imageString = { text: "", anchor: { x: 0.5, y: 0.5 } };
+    node.imageString =
+      previousResource.kind === "image-string" && previousImageString
+        ? structuredClone(previousImageString)
+        : { text: "", anchor: { x: 0.5, y: 0.5 } };
 }
 
 export function assignBackgroundResource(options: {
@@ -550,7 +580,6 @@ export function assignBackgroundResource(options: {
   readonly resourceId: string;
   readonly nodeId?: string;
   readonly defaultAnimation?: string;
-  readonly reinitialize?: boolean;
 }): EditorNodeDraft {
   assertVariantsAllowed(options.project, [options.variant]);
   const resource = requireResource(options.project, options.resourceId);
@@ -560,7 +589,6 @@ export function assignBackgroundResource(options: {
     resource.kind === "vni"
   )
     throw new Error(`${resource.kind} 资源不能设为背景。`);
-  const animation = validateAnimation(resource, options.defaultAnimation);
   const variant = options.project.variants[options.variant];
   const modeId = options.modeId ?? options.project.gameModes.initialMode;
   const mode = options.project.gameModes.modes.find(
@@ -580,7 +608,7 @@ export function assignBackgroundResource(options: {
         Object.values(candidate.backgroundNodes).includes(node!.id),
     );
   if (node && sharedByAnotherMode) node = undefined;
-  const previousSize = variant.artSize;
+  const previousSize = { ...variant.artSize };
   const nextSize = editorResourceArtSize(resource);
   const hasPreviousSize = previousSize.width > 0 && previousSize.height > 0;
   const sizeChanged =
@@ -588,12 +616,8 @@ export function assignBackgroundResource(options: {
     hasPreviousSize &&
     (previousSize.width !== nextSize!.width ||
       previousSize.height !== nextSize!.height);
-  if (sizeChanged && !options.reinitialize) {
-    throw new Error(
-      `${options.variant} 背景尺寸将从 ${previousSize.width}×${previousSize.height} 变为 ${nextSize!.width}×${nextSize!.height}；必须明确选择使用新尺寸并重新初始化。`,
-    );
-  }
   if (!node) {
+    const animation = validateAnimation(resource, options.defaultAnimation);
     const nodeId =
       options.nodeId ??
       suggestModeBackgroundNodeId(options.project, modeId, options.variant);
@@ -623,32 +647,37 @@ export function assignBackgroundResource(options: {
   } else {
     const previousResource = requireResource(options.project, node.resourceId);
     const resourceChanged = previousResource.id !== resource.id;
+    const previousPlayback = node.playback;
+    const animation =
+      resource.kind === "spine"
+        ? validateAnimation(
+            resource,
+            options.defaultAnimation ??
+              (previousResource.kind === "spine" &&
+              previousPlayback?.kind === "loop" &&
+              resource.animationNames.includes(previousPlayback.animation)
+                ? previousPlayback.animation
+                : undefined),
+          )
+        : validateAnimation(resource, options.defaultAnimation);
     node.resourceId = resource.id;
     node.placements[options.variant] ??= defaultBackgroundPlacement(
       options.project,
       resource,
       previousSize,
     );
-    if (previousResource.kind !== resource.kind) {
-      node.placements[options.variant] = defaultBackgroundPlacement(
-        options.project,
-        resource,
-        previousSize,
-      );
-    }
     delete node.imageString;
     if (resource.kind === "spine" && resourceChanged)
       node.playback = { kind: "loop", animation: animation!, loop: true };
     else if (resource.kind !== "spine") delete node.playback;
+    else node.playback = { kind: "loop", animation: animation!, loop: true };
   }
   mode.backgroundNodes[options.variant] = node.id;
-  if (resource.kind === "spine")
-    node.playback = { kind: "loop", animation: animation!, loop: true };
   if (options.project.gameModes.initialMode === modeId)
     variant.backgroundNode = node.id;
-  if (nextSize && (!hasPreviousSize || sizeChanged || options.reinitialize)) {
+  if (nextSize && !hasPreviousSize)
     resetVariantGeometry(options.project, options.variant, nextSize);
-  }
+  else if (nextSize && sizeChanged) variant.artSize = { ...nextSize };
   if (
     replacedNode &&
     !options.project.gameModes.modes.some((candidate) =>
@@ -1031,6 +1060,20 @@ async function prepareSpineResource(options: {
 }): Promise<
   PreparedResource & { readonly resource: EditorSpineLayoutResource }
 > {
+  const prepared = await prepareSpineResources(options);
+  if (prepared.length !== 1)
+    throw new Error("Spine 替换必须恰好包含一个 JSON。");
+  return prepared[0]!;
+}
+
+async function prepareSpineResources(options: {
+  readonly files: readonly File[];
+  readonly resourceId?: string;
+}): Promise<
+  readonly (PreparedResource & {
+    readonly resource: EditorSpineLayoutResource;
+  })[]
+> {
   createBoundedSourceIndex(options.files, EDITOR_SOURCE_LIMITS);
   const jsonFiles = options.files.filter((file) =>
     file.name.toLowerCase().endsWith(".json"),
@@ -1042,19 +1085,19 @@ async function prepareSpineResource(options: {
     /\.(png|jpe?g|webp)$/iu.test(file.name),
   );
   if (
-    jsonFiles.length !== 1 ||
+    jsonFiles.length === 0 ||
     atlasFiles.length !== 1 ||
     textureFiles.length === 0 ||
     jsonFiles.length + atlasFiles.length + textureFiles.length !==
       options.files.length
   ) {
     throw new Error(
-      "Spine 上传必须恰好包含一个 JSON、一个 atlas 和 atlas 精确引用的全部 texture。",
+      "Spine 上传必须恰好包含一个 atlas、一个或多个 JSON 和 atlas 精确引用的全部 texture。",
     );
   }
-  const skeletonFile = jsonFiles[0];
-  const atlasFile = atlasFiles[0];
-  const id = options.resourceId ?? requiredResourceId(skeletonFile.name);
+  if (options.resourceId !== undefined && jsonFiles.length !== 1)
+    throw new Error("指定 resourceId 时 Spine 上传必须恰好包含一个 JSON。");
+  const atlasFile = atlasFiles[0]!;
   const atlasText = await atlasFile.text();
   const atlasPages = inspectAtlasPages(atlasText);
   const texturesByName = new Map<string, File>();
@@ -1080,75 +1123,135 @@ async function prepareSpineResource(options: {
   if (texturesByName.size !== atlasPages.length) {
     throw new Error("Spine 上传包含 atlas 未引用的 texture。");
   }
-  const sourceSkeletonBytes = new Uint8Array(await skeletonFile.arrayBuffer());
-  let skeleton: {
-    readonly skeleton?: {
-      readonly spine?: unknown;
-      readonly width?: unknown;
-      readonly height?: unknown;
-    };
-    readonly animations?: Readonly<Record<string, unknown>>;
-  };
-  try {
-    skeleton = JSON.parse(
-      new TextDecoder("utf-8", { fatal: true }).decode(sourceSkeletonBytes),
-    ) as typeof skeleton;
-  } catch (error) {
-    throw new Error(`Spine skeleton JSON/UTF-8 无效：${formatError(error)}`);
-  }
-  const metadata = readEditorSpineMetadata(sourceSkeletonBytes);
-  if (!/^4\.3(?:\.|$)/u.test(metadata.version)) {
-    throw new Error(
-      `Spine skeleton 版本必须是 4.3.x，实际为 ${metadata.version}。`,
-    );
-  }
-  const animationNames = metadata.animationNames;
-  if (animationNames.length === 0)
-    throw new Error("Spine skeleton 没有 animation。");
-  const width = skeleton.skeleton?.width;
-  const height = skeleton.skeleton?.height;
-  const hasAnyBounds = width !== undefined || height !== undefined;
-  const hasBounds =
-    typeof width === "number" &&
-    Number.isFinite(width) &&
-    width > 0 &&
-    typeof height === "number" &&
-    Number.isFinite(height) &&
-    height > 0;
-  if (hasAnyBounds && !hasBounds) {
-    throw new Error("Spine skeleton bounds 必须同时是有限正数，或同时省略。");
-  }
-  const skeletonBytes = encodeStableJson(skeleton);
-  const skeletonPath = basenameFromSourcePath(skeletonFile.name);
-  putAsset(assets, skeletonPath, skeletonBytes);
   const atlasBytes = new TextEncoder().encode(
     `${atlasText.replace(/\r\n?/gu, "\n").replace(/\n+$/u, "")}\n`,
   );
   const atlasPath = basenameFromSourcePath(atlasFile.name);
   assertNoEditorAssetKeyAliases([
-    skeletonPath,
+    ...jsonFiles.map((file) => basenameFromSourcePath(file.name)),
     atlasPath,
     ...Object.values(textures),
   ]);
   putAsset(assets, atlasPath, atlasBytes);
-  return {
-    resource: {
-      id,
-      kind: "spine",
-      skeleton: skeletonPath,
-      atlas: atlasPath,
-      textures,
-      animationNames,
-      animationEvents: metadata.animationEvents,
-      ...(hasBounds ? { bounds: { width, height } } : {}),
-      provenance: {
-        sourceNames: Object.freeze(options.files.map((file) => file.name)),
-        sourceKind: "files",
-        batchLabel: `spine:${skeletonFile.name}`,
-      },
-    },
-    assets,
-  };
+  const sourceNames = Object.freeze(options.files.map((file) => file.name));
+  const batchLabel = `spine:${jsonFiles
+    .map((file) => basenameFromSourcePath(file.name))
+    .sort((left, right) => left.localeCompare(right, "en"))
+    .join(",")}`;
+  const prepared = await Promise.all(
+    jsonFiles.map(async (skeletonFile, index) => {
+      const sourceSkeletonBytes = new Uint8Array(
+        await skeletonFile.arrayBuffer(),
+      );
+      let skeleton: {
+        readonly skeleton?: {
+          readonly spine?: unknown;
+          readonly width?: unknown;
+          readonly height?: unknown;
+        };
+        readonly animations?: Readonly<Record<string, unknown>>;
+      };
+      try {
+        skeleton = JSON.parse(
+          new TextDecoder("utf-8", { fatal: true }).decode(sourceSkeletonBytes),
+        ) as typeof skeleton;
+      } catch (error) {
+        throw new Error(
+          `Spine skeleton ${skeletonFile.name} JSON/UTF-8 无效：${formatError(error)}`,
+        );
+      }
+      const metadata = readEditorSpineMetadata(sourceSkeletonBytes);
+      if (!/^4\.3(?:\.|$)/u.test(metadata.version)) {
+        throw new Error(
+          `Spine skeleton ${skeletonFile.name} 版本必须是 4.3.x，实际为 ${metadata.version}。`,
+        );
+      }
+      if (metadata.animationNames.length === 0)
+        throw new Error(`Spine skeleton ${skeletonFile.name} 没有 animation。`);
+      const width = skeleton.skeleton?.width;
+      const height = skeleton.skeleton?.height;
+      const hasAnyBounds = width !== undefined || height !== undefined;
+      const hasBounds =
+        typeof width === "number" &&
+        Number.isFinite(width) &&
+        width > 0 &&
+        typeof height === "number" &&
+        Number.isFinite(height) &&
+        height > 0;
+      if (hasAnyBounds && !hasBounds)
+        throw new Error(
+          `Spine skeleton ${skeletonFile.name} bounds 必须同时是有限正数，或同时省略。`,
+        );
+      const skeletonPath = basenameFromSourcePath(skeletonFile.name);
+      const resourceAssets = new Map(assets);
+      putAsset(resourceAssets, skeletonPath, encodeStableJson(skeleton));
+      const resource: EditorSpineLayoutResource = Object.freeze({
+        id:
+          options.resourceId !== undefined && index === 0
+            ? options.resourceId
+            : requiredResourceId(skeletonFile.name),
+        kind: "spine",
+        skeleton: skeletonPath,
+        atlas: atlasPath,
+        textures: Object.freeze({ ...textures }),
+        animationNames: metadata.animationNames,
+        animationEvents: metadata.animationEvents,
+        ...(hasBounds ? { bounds: { width, height } } : {}),
+        provenance: {
+          sourceNames,
+          sourceKind: "files" as const,
+          batchLabel,
+        },
+      });
+      return Object.freeze({ resource, assets: resourceAssets });
+    }),
+  );
+  return Object.freeze(
+    prepared.sort((left, right) =>
+      left.resource.id.localeCompare(right.resource.id, "en"),
+    ),
+  );
+}
+
+function assertSharedSpineLeafCompatibility(
+  project: EditorProject,
+  incoming: readonly (PreparedResource & {
+    readonly resource: EditorSpineLayoutResource;
+  })[],
+): void {
+  const replacedIds = new Set(incoming.map(({ resource }) => resource.id));
+  const incomingByAtlas = new Map(
+    incoming.map(({ resource }) => [resource.atlas, resource] as const),
+  );
+  for (const resource of project.resources.values()) {
+    if (resource.kind !== "spine" || replacedIds.has(resource.id)) continue;
+    const replacement = incomingByAtlas.get(resource.atlas);
+    if (!replacement) continue;
+    if (!sameStringRecord(resource.textures, replacement.textures)) {
+      throw new Error(
+        `Spine shared atlas ${resource.atlas} 仍被 ${resource.id} 使用，texture page mapping 必须一致或一并替换。`,
+      );
+    }
+  }
+}
+
+function sameStringRecord(
+  left: Readonly<Record<string, string>>,
+  right: Readonly<Record<string, string>>,
+): boolean {
+  const leftEntries = Object.entries(left).sort(([a], [b]) =>
+    a.localeCompare(b, "en"),
+  );
+  const rightEntries = Object.entries(right).sort(([a], [b]) =>
+    a.localeCompare(b, "en"),
+  );
+  return (
+    leftEntries.length === rightEntries.length &&
+    leftEntries.every(
+      ([key, value], index) =>
+        rightEntries[index]?.[0] === key && rightEntries[index]?.[1] === value,
+    )
+  );
 }
 
 async function prepareVideoResource(options: {
@@ -1259,7 +1362,6 @@ function commitResourceReplacement(
   project: EditorProject,
   current: EditorLayoutResource,
   prepared: PreparedResource,
-  reinitializeBackgrounds: boolean,
 ): void {
   if (current.kind !== prepared.resource.kind) {
     throw new Error(
@@ -1344,38 +1446,22 @@ function commitResourceReplacement(
           .join(", ")}。`,
       );
   }
-  const backgroundVariants = references
-    .filter((reference) => reference.role === "background")
-    .flatMap((reference) => reference.variants);
+  const backgroundVariants = new Set(
+    references
+      .filter((reference) => reference.role === "background")
+      .flatMap((reference) => reference.variants),
+  );
   const nextSize = editorResourceArtSize(prepared.resource);
-  for (const variantId of backgroundVariants) {
-    const currentSize = project.variants[variantId].artSize;
-    const changed =
-      nextSize &&
-      currentSize.width > 0 &&
-      currentSize.height > 0 &&
-      (nextSize.width !== currentSize.width ||
-        nextSize.height !== currentSize.height);
-    if (changed && !reinitializeBackgrounds) {
-      throw new Error(
-        `${variantId} 背景替换尺寸不一致；必须明确选择使用新尺寸并重新初始化。`,
-      );
-    }
-  }
   for (const [path, bytes] of prepared.assets)
     project.assets.set(path, bytes.slice());
   project.resources.set(current.id, prepared.resource);
   garbageCollectAssetPaths(project, oldPaths);
   for (const variantId of backgroundVariants) {
     const currentSize = project.variants[variantId].artSize;
-    if (
-      nextSize &&
-      (reinitializeBackgrounds ||
-        currentSize.width <= 0 ||
-        currentSize.height <= 0)
-    ) {
+    if (!nextSize) continue;
+    if (currentSize.width <= 0 || currentSize.height <= 0)
       resetVariantGeometry(project, variantId, nextSize);
-    }
+    else project.variants[variantId].artSize = { ...nextSize };
   }
 }
 

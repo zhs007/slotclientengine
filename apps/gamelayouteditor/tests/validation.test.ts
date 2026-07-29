@@ -31,6 +31,7 @@ import {
   setNodePlaybackLoop,
   uploadImageResource,
   uploadSpineResource,
+  uploadSpineResources,
   uploadVideoResource,
 } from "../src/model/resource-commands.js";
 import {
@@ -549,6 +550,60 @@ describe("filename-key layout resource commands", () => {
     expect(project).toEqual(before);
   });
 
+  it("uploads multiple Spine JSON roots with one shared atlas and releases leaves after the final root", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    const sharedFiles = [
+      new File(
+        [
+          JSON.stringify({
+            skeleton: { spine: "4.3.23" },
+            animations: { Idle: {} },
+          }),
+        ],
+        "hero-idle.json",
+      ),
+      new File(
+        [
+          JSON.stringify({
+            skeleton: { spine: "4.3.23" },
+            animations: { Win: {} },
+          }),
+        ],
+        "hero-win.json",
+      ),
+      new File(
+        ["hero.png\nsize: 1,1\nfilter: Linear,Linear\n"],
+        "hero-shared.atlas",
+      ),
+      new File([pngBytes(9)], "hero.png", { type: "image/png" }),
+    ];
+    const resources = await uploadSpineResources({
+      project,
+      files: sharedFiles,
+    });
+    expect(resources.map(({ id }) => id)).toEqual([
+      "hero-idle.json",
+      "hero-win.json",
+    ]);
+    expect(resources[0]).toMatchObject({
+      atlas: "hero-shared.atlas",
+      textures: { "hero.png": "hero.png" },
+      animationNames: ["Idle"],
+    });
+    expect(resources[1]).toMatchObject({
+      atlas: "hero-shared.atlas",
+      textures: { "hero.png": "hero.png" },
+      animationNames: ["Win"],
+    });
+    expect(project.assets.size).toBe(4);
+    deleteLayoutResource(project, "hero-idle.json");
+    expect(project.assets.has("hero-shared.atlas")).toBe(true);
+    expect(project.assets.has("hero.png")).toBe(true);
+    deleteLayoutResource(project, "hero-win.json");
+    expect(project.assets.has("hero-shared.atlas")).toBe(false);
+    expect(project.assets.has("hero.png")).toBe(false);
+  });
+
   it("keeps unique atlas pages while deduplicating identical Spine texture payloads", async () => {
     const project = createNewEditorProject("maximized-focus");
     const texture = pngBytes(12);
@@ -938,7 +993,7 @@ describe("filename-key layout resource commands", () => {
     ).toEqual(["Idle", "Win"]);
   });
 
-  it("initializes first background geometry, preserves same size and requires explicit reinitialize for size changes", async () => {
+  it("initializes first background geometry and preserves authored geometry across size changes", async () => {
     const project = createNewEditorProject("maximized-focus");
     await uploadImageResource({
       project,
@@ -970,27 +1025,28 @@ describe("filename-key layout resource commands", () => {
       file: new File([pngBytes(2)], "wide.png"),
       decodeImage: async () => ({ width: 1200, height: 800 }),
     });
-    expect(() =>
-      assignBackgroundResource({
-        project,
-        variant: "default",
-        resourceId: "wide.png",
-      }),
-    ).toThrow(/明确选择/);
-    expect(project.variants.default.artSize).toEqual({
-      width: 2000,
-      height: 2000,
-    });
     assignBackgroundResource({
       project,
       variant: "default",
       resourceId: "wide.png",
-      reinitialize: true,
     });
     expect(project.variants.default.artSize).toEqual({
       width: 1200,
       height: 800,
     });
+    expect(project.reel.placements.default).toEqual({
+      x: 600,
+      y: 760,
+    });
+    expect(project.variants.default.focusRect).toEqual({
+      x: 540,
+      y: 700,
+      width: 920,
+      height: 600,
+    });
+    expect(() => editorProjectToManifest(project)).toThrow(
+      /fit inside artSize/,
+    );
     clearBackground(project, "default");
     expect(project.nodes).toHaveLength(0);
     expect(project.resources.size).toBe(2);
@@ -1015,6 +1071,22 @@ describe("filename-key layout resource commands", () => {
       }),
     ).rejects.toThrow(/hero-layer/);
     expect(project).toEqual(before);
+    await uploadSpineResource({
+      project,
+      files: spineFiles({ name: "hero-next", animations: ["Win"] }),
+    });
+    project.nodes[0]!.playback!.loop = false;
+    project.nodes[0]!.placements.default = { x: 45, y: -12, scale: 0.75 };
+    rebindLayerResource({
+      project,
+      nodeId: "hero-layer",
+      resourceId: "hero-next.json",
+    });
+    expect(project.nodes[0]).toMatchObject({
+      resourceId: "hero-next.json",
+      playback: { kind: "loop", animation: "Win", loop: false },
+      placements: { default: { x: 45, y: -12, scale: 0.75 } },
+    });
     await uploadImageResource({
       project,
       file: new File([pngBytes(3)], "image.png"),
@@ -1106,7 +1178,7 @@ describe("filename-key layout resource commands", () => {
     expect(() => clearBackground(project, "landscape")).toThrow(/尚未设置/);
   });
 
-  it("replaces images atomically and validates background reference size", async () => {
+  it("replaces images atomically and preserves background geometry", async () => {
     const project = createNewEditorProject("maximized-focus");
     await uploadImageResource({
       project,
@@ -1122,20 +1194,18 @@ describe("filename-key layout resource commands", () => {
     expect(() => deleteLayoutResource(project, "bg.png")).toThrow(
       /default 背景/,
     );
-    await expect(
-      replaceImageResource({
-        project,
-        resourceId: "bg.png",
-        file: new File([pngBytes(6)], "bg.png"),
-        decodeImage: async () => ({ width: 1200, height: 800 }),
-      }),
-    ).rejects.toThrow(/背景替换尺寸/);
+    project.reel.placements.default = { x: 123, y: 45 };
+    project.variants.default.focusRect = {
+      x: 100,
+      y: 20,
+      width: 900,
+      height: 560,
+    };
     await replaceImageResource({
       project,
       resourceId: "bg.png",
       file: new File([pngBytes(6)], "bg.png"),
       decodeImage: async () => ({ width: 1200, height: 800 }),
-      reinitializeBackgrounds: true,
     });
     expect(project.resources.get("bg.png")).toMatchObject({
       path: "bg.png",
@@ -1147,6 +1217,13 @@ describe("filename-key layout resource commands", () => {
     expect(project.variants.default.artSize).toEqual({
       width: 1200,
       height: 800,
+    });
+    expect(project.reel.placements.default).toEqual({ x: 123, y: 45 });
+    expect(project.variants.default.focusRect).toEqual({
+      x: 100,
+      y: 20,
+      width: 900,
+      height: 560,
     });
     await uploadSpineResource({ project, files: spineFiles() });
     await expect(

@@ -7,6 +7,7 @@
 - gamelayouteditor 是 browser-only editing UI，拥有 draft、preview controls、filename-key workspace、受限 ZIP import/export 和 dependency binding。
 - editor 保持 `base: "./"`，可部署到任意静态 CDN 子路径，不依赖 server/API/WebSocket/数据库/登录态/持久化存储。
 - preview 复用 uiframeworks frame viewport 和 rendercore production scene runtime；preview zoom 不进入 manifest，canvas 拖动不修改 layout config。
+- Resource Picker 按资源 kind 提供 typed preview；Spine/VNI 必须复用 production player 语义，图片与 glyph 总览只读取 project-owned bytes。切换、关闭和销毁 Picker 必须释放 player、ticker、renderer 与 Object URL，preview 失败不得修改 draft。
 
 ## Mode、variant 与稳定节点
 
@@ -49,6 +50,8 @@
 ## Resource lifecycle
 
 - owned MP4、Spine、VNI project/assets、image、symbols 和 popup dependencies 都进入 exact closure；runtime 复用精确 bytes。
+- production export 先从 layout 收集实际引用的 root，再按有向依赖计算 exact closure。共享 atlas/贴图可由任一被用到的 Spine JSON root 带入；同批未引用的 sibling JSON root 不得因共享 leaf 被反向导出。
+- 替换或重绑资源必须保留稳定 node identity、order、各 variant placement/visibility，并尽可能保留仍兼容的 animation、loop 与 image-string 配置。资源尺寸变化不得自动重置 reel、focus 或 placement；现有几何与新 art size 冲突时必须严格失败。
 - 相同 symbols binding 的 mode 切换默认保留 reel、scene 和 player；只有显式 `recreateReel` 才重建。
 - background visibility、target scene commit、active standard/grid-cell reel prepare/swap 和 popup lifecycle 原子完成。
 - 底层 named-node state machine 可供独立 consumer 使用，但不得成为 `requestGameMode()` 的隐藏入口或 fallback。

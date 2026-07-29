@@ -32,6 +32,8 @@
 
 - atlas page 是结构化 logical page name，texture map value 才是 filename key。
 - legacy page suffix 与图片真实编码不一致时，导入边界保留 page logical name，按 bytes 规范化物理 key 并显式映射。
+- 同一批多个 skeleton JSON 可以共享一个 atlas 与同一组贴图，但每个 JSON 必须形成独立 root；依赖方向只允许 root JSON 指向共享 atlas/贴图，不得让 leaf 反向拥有或合并 sibling root。
+- 多 JSON Spine 上传必须先对全部 skeleton、atlas page 和 texture map 完成 prepare，再一次性 commit；任一成员失败时整批不修改 workspace。
 - Spine background art size 必须由用户或 manifest 明确提供，不从 skeleton bounds 或 atlas page 推导。
 
 ## Popup Editor

@@ -91,6 +91,24 @@ describe("editor UI session and Resource Picker view model", () => {
     ]);
   });
 
+  it("preserves a compatible Spine animation when reopening a layer rebind", () => {
+    const project = projectWithResources();
+    addLayerFromResource({
+      project,
+      resourceId: "hero",
+      nodeId: "hero-layer",
+      variants: ["landscape"],
+      defaultAnimation: "Win",
+    });
+    const state = createResourcePickerState(
+      project,
+      { kind: "rebind-layer", nodeId: "hero-layer" },
+      "hero",
+    );
+    expect(state.selectedResourceId).toBe("hero");
+    expect(state.defaultAnimation).toBe("Win");
+  });
+
   it("reports references and incomplete Spine background candidates without explicit art size", () => {
     const project = projectWithResources();
     addLayerFromResource({
