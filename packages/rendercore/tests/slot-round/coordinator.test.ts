@@ -163,6 +163,57 @@ describe("slot round coordinator", () => {
     await completion;
   });
 
+  it("runs a settled transform to completion before the following win", async () => {
+    const target = createTarget(
+      "grid-cell",
+      new Set(["spin", "settled-transform", "visible-symbol-states"]),
+    );
+    let transformReady = false;
+    target.startSettledTransform = vi.fn(() => {
+      target.events.push("grid-cell:settled-transform");
+    });
+    target.updateSettledTransform = () => ({ completed: transformReady });
+    const transformPlan = freeze({
+      ...createPlan("base"),
+      steps: [
+        {
+          kind: "settled-transform",
+          index: 0,
+          stepIndex: 0,
+          input: snapshot,
+          output: snapshot,
+          changes: [],
+          requiredCapabilities: ["settled-transform"],
+        },
+        {
+          kind: "win",
+          index: 1,
+          stepIndex: 0,
+          input: snapshot,
+          output: snapshot,
+          groups: [],
+          releaseOccurrenceIds: [],
+          requiredCapabilities: ["visible-symbol-states"],
+        },
+      ],
+      requiredCapabilities: [
+        "spin",
+        "settled-transform",
+        "visible-symbol-states",
+      ],
+    }) as SlotRoundExecutionPlan;
+    const coordinator = createSlotRoundCoordinator({ target });
+    const completion = coordinator.start(transformPlan);
+    coordinator.update(1 / 60);
+    expect(coordinator.getSnapshot().phase).toBe("settled-transform");
+    expect(target.events).not.toContain("grid-cell:win");
+    transformReady = true;
+    coordinator.update(1 / 60);
+    expect(target.events).toContain("grid-cell:win");
+    coordinator.update(1 / 60);
+    await completion;
+  });
+
   it("rejects malformed plans and invalid updates without mutation", async () => {
     const target = createTarget("standard");
     const coordinator = createSlotRoundCoordinator({ target });

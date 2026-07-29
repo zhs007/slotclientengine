@@ -47,7 +47,7 @@ describe("game003 win amount config", () => {
   it("creates rendercore config from generated resources and shared formatter", () => {
     const config = createGame003WinAmountAnimationConfig(createGame003Layout());
 
-    expect(config.formatter(100)).toBe("$1.00");
+    expect(config.formatter(100)).toBe("1.00");
     expect(config.thresholdMultipliers).toEqual({
       minor: 1,
       big: 15,

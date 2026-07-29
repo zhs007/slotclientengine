@@ -115,6 +115,20 @@ describe("Spine background manifest", () => {
     expect(readAnimationDuration(REAL_SKELETON, "FG_BG")).toBe(1.6);
   });
 
+  it("uses explicit atlas-page keys without comparing mapped texture basenames", () => {
+    const manifest = structuredClone(REAL_MANIFEST) as any;
+    manifest.resource.textures["BG.png"] =
+      "./content-addressed-background.webp";
+    const textureModules = createTextureModules();
+    delete textureModules["/fixture/BG.png"];
+    textureModules["/fixture/content-addressed-background.webp"] =
+      "/assets/physical-hash.webp";
+
+    const resource = createRealResource({ manifest, textureModules });
+
+    expect(resource.textureUrls["BG.png"]).toBe("/assets/physical-hash.webp");
+  });
+
   it("rejects version, animation, atlas-page and module-closure drift", () => {
     const versionMismatch = structuredClone(REAL_SKELETON) as any;
     versionMismatch.skeleton.spine = "4.2.43";

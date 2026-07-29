@@ -28,6 +28,7 @@ import {
   setValuePresentation,
   installImageStringDependency,
   removeImageStringDependency,
+  renameImportedImageStringDependency,
   setSymbolImageStringNodes,
   uploadAssetBatch,
   type EditorAssetRecord,
@@ -1043,7 +1044,7 @@ export class SymbolsEditorApp {
               {
                 name,
                 resource: "",
-                target: { state: "", slot: "" },
+                targets: [{ state: "", slot: "" }],
                 initialText: "",
                 anchor: { x: 0.5, y: 0.5 },
                 transform: { x: 0, y: 0, scale: 1 },
@@ -1092,19 +1093,93 @@ export class SymbolsEditorApp {
                   : input instanceof HTMLInputElement && input.type === "number"
                     ? Number(input.value)
                     : input.value;
-              if (field === "target.state") {
-                setObjectPath(
-                  node as unknown as Record<string, unknown>,
-                  "target",
-                  { state: String(value), slot: "" },
-                );
-              } else {
-                setObjectPath(
-                  node as unknown as Record<string, unknown>,
-                  field,
-                  value,
-                );
+              setObjectPath(
+                node as unknown as Record<string, unknown>,
+                field,
+                value,
+              );
+              setSymbolImageStringNodes(draft, symbolName, nodes);
+            });
+          } catch (error) {
+            this.#store.setExternalError(error);
+          }
+        });
+      });
+    panel
+      .querySelectorAll<HTMLElement>("[data-image-string-target-add]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          try {
+            this.#store.transact((draft) => {
+              const symbol = draft.symbols.get(symbolName)!;
+              const nodes = structuredClone(symbol.imageStringNodes);
+              const nodeIndex = Number(button.dataset.imageStringTargetAdd);
+              const node = nodes[nodeIndex]!;
+              nodes[nodeIndex] = {
+                ...node,
+                targets: [...node.targets, { state: "", slot: "" }],
+              };
+              setSymbolImageStringNodes(draft, symbolName, nodes);
+            });
+          } catch (error) {
+            this.#store.setExternalError(error);
+          }
+        });
+      });
+    panel
+      .querySelectorAll<HTMLElement>("[data-image-string-target-remove]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          try {
+            this.#store.transact((draft) => {
+              const symbol = draft.symbols.get(symbolName)!;
+              const nodes = structuredClone(symbol.imageStringNodes);
+              const nodeIndex = Number(button.dataset.imageStringNodeIndex);
+              const targetIndex = Number(
+                button.dataset.imageStringTargetRemove,
+              );
+              const node = nodes[nodeIndex]!;
+              if (node.targets.length <= 1) {
+                throw new Error("ImgNumber 节点必须至少保留一个 target。");
               }
+              nodes[nodeIndex] = {
+                ...node,
+                targets: node.targets.filter(
+                  (_target, index) => index !== targetIndex,
+                ),
+              };
+              setSymbolImageStringNodes(draft, symbolName, nodes);
+            });
+          } catch (error) {
+            this.#store.setExternalError(error);
+          }
+        });
+      });
+    panel
+      .querySelectorAll<HTMLSelectElement>("[data-image-string-target-field]")
+      .forEach((input) => {
+        input.addEventListener("change", () => {
+          try {
+            this.#store.transact((draft) => {
+              const symbol = draft.symbols.get(symbolName)!;
+              const nodes = structuredClone(symbol.imageStringNodes);
+              const nodeIndex = Number(input.dataset.imageStringNodeIndex);
+              const targetIndex = Number(input.dataset.imageStringTargetIndex);
+              const node = nodes[nodeIndex]!;
+              const target = node.targets[targetIndex]!;
+              const field = input.dataset.imageStringTargetField;
+              const nextTarget =
+                field === "state"
+                  ? { state: input.value, slot: "" }
+                  : field === "slot"
+                    ? { ...target, slot: input.value }
+                    : target;
+              nodes[nodeIndex] = {
+                ...node,
+                targets: node.targets.map((candidate, index) =>
+                  index === targetIndex ? nextTarget : candidate,
+                ),
+              };
               setSymbolImageStringNodes(draft, symbolName, nodes);
             });
           } catch (error) {
@@ -1436,7 +1511,19 @@ export class SymbolsEditorApp {
           }
           return;
         }
-        const dependency = await importImageStringDependencyZip(zipBytes);
+        let dependency = await importImageStringDependencyZip(zipBytes);
+        const currentProject = this.#store.getSnapshot().project;
+        if (currentProject?.imageStringDependencies.has(dependency.id)) {
+          const nextId = globalThis.window.prompt(
+            `image-string id ${dependency.id} 已存在。请输入新的唯一 id：`,
+            `${dependency.id}-2`,
+          );
+          if (nextId === null) return;
+          dependency = renameImportedImageStringDependency(
+            dependency,
+            nextId.trim(),
+          );
+        }
         this.#store.transact((draft) =>
           installImageStringDependency(draft, dependency),
         );
@@ -1947,24 +2034,30 @@ function imageStringInspectorMarkup(
     (state) => symbol.states.get(state)?.kind === "spine",
   );
   const dependencies = [...project.imageStringDependencies.values()];
-  return `<section class="image-string-editor"><div class="section-heading"><div><h2>Named image-string nodes</h2><p>每个节点绑定一个真实 Spine state 和 exact slot；预览输入不改 initialText。</p></div><button class="primary" data-add-image-string-node ${spineStates.length && dependencies.length ? "" : "disabled"}>增加节点</button></div>${
+  return `<section class="image-string-editor"><div class="section-heading"><div><h2>Named image-string nodes</h2><p>每个节点绑定一个或多个真实 Spine state/exact slot；同一 renderer 跨 state 复用，预览输入不改 initialText。</p></div><button class="primary" data-add-image-string-node ${spineStates.length && dependencies.length ? "" : "disabled"}>增加节点</button></div>${
     symbol.imageStringNodes
       .map((node, index) => {
-        const visual = symbol.states.get(node.target.state);
-        const slots =
-          visual?.kind === "spine"
-            ? assetMetadataList(
-                project.assetLibrary.records.get(visual.skeletonPath),
-                "slotNames",
-              )
-            : [];
         const previewKey = `${symbol.symbol}\u0000${node.name}`;
         const previewText =
           session.imageStringPreviewTexts.get(previewKey) ?? node.initialText;
         return `<article class="node-card"><header><strong>${escapeHtml(node.name)}</strong><div class="button-row"><button data-image-string-node-action="up" data-image-string-node-index="${index}" ${index === 0 ? "disabled" : ""}>↑</button><button data-image-string-node-action="down" data-image-string-node-index="${index}" ${index === symbol.imageStringNodes.length - 1 ? "disabled" : ""}>↓</button><button data-image-string-node-action="remove" data-image-string-node-index="${index}">删除</button></div></header>
         <label>Name <input data-image-string-node-field="name" data-image-string-node-index="${index}" value="${escapeAttr(node.name)}"></label>
-        <label>Dependency <select data-image-string-node-field="resource" data-image-string-node-index="${index}"><option value="">请选择 dependency</option>${dependencies.map(() => option("./image-string.manifest.json", "image-string.manifest.json", node.resource === "./image-string.manifest.json")).join("")}</select></label>
-        <div class="form-grid"><label>Target state <select data-image-string-node-field="target.state" data-image-string-node-index="${index}"><option value="">请选择 Spine state</option>${spineStates.map((state) => option(state, state, state === node.target.state)).join("")}</select></label><label>Exact slot <select data-image-string-node-field="target.slot" data-image-string-node-index="${index}"><option value="">请选择 slot</option>${slots.map((slot) => option(slot, slot, slot === node.target.slot)).join("")}</select></label></div>
+        <label>Dependency <select data-image-string-node-field="resource" data-image-string-node-index="${index}"><option value="">请选择 dependency</option>${dependencies.map((dependency) => option(`./${dependency.rootKey}`, `${dependency.id} · ${dependency.rootKey}`, node.resource === `./${dependency.rootKey}`)).join("")}</select></label>
+        <fieldset><legend>State targets</legend>${node.targets
+          .map((target, targetIndex) => {
+            const visual = symbol.states.get(target.state);
+            const slots =
+              visual?.kind === "spine"
+                ? assetMetadataList(
+                    project.assetLibrary.records.get(visual.skeletonPath),
+                    "slotNames",
+                  )
+                : [];
+            return `<div class="form-grid"><label>Target state <select data-image-string-target-field="state" data-image-string-node-index="${index}" data-image-string-target-index="${targetIndex}"><option value="">请选择 Spine state</option>${spineStates.map((state) => option(state, state, state === target.state)).join("")}</select></label><label>Exact slot <select data-image-string-target-field="slot" data-image-string-node-index="${index}" data-image-string-target-index="${targetIndex}"><option value="">请选择 slot</option>${slots.map((slot) => option(slot, slot, slot === target.slot)).join("")}</select></label><button type="button" data-image-string-target-remove="${targetIndex}" data-image-string-node-index="${index}" ${node.targets.length === 1 ? "disabled" : ""}>删除 target</button></div>`;
+          })
+          .join(
+            "",
+          )}<button type="button" data-image-string-target-add="${index}">增加 target</button></fieldset>
         <label>Initial text <input data-image-string-node-field="initialText" data-image-string-node-index="${index}" value="${escapeAttr(node.initialText)}"></label>
         <div class="form-grid"><label>Anchor X <input type="number" min="0" max="1" step="0.01" data-image-string-node-field="anchor.x" data-image-string-node-index="${index}" value="${node.anchor.x}"></label><label>Anchor Y <input type="number" min="0" max="1" step="0.01" data-image-string-node-field="anchor.y" data-image-string-node-index="${index}" value="${node.anchor.y}"></label><label>X <input type="number" step="0.1" data-image-string-node-field="transform.x" data-image-string-node-index="${index}" value="${node.transform.x}"></label><label>Y <input type="number" step="0.1" data-image-string-node-field="transform.y" data-image-string-node-index="${index}" value="${node.transform.y}"></label><label>Scale <input type="number" min="0.01" step="0.01" data-image-string-node-field="transform.scale" data-image-string-node-index="${index}" value="${node.transform.scale}"></label></div>
         <label class="check-row"><input type="checkbox" data-image-string-node-field="followSlotColor" data-image-string-node-index="${index}" ${node.followSlotColor ? "checked" : ""}> Follow slot color</label>

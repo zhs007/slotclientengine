@@ -709,8 +709,12 @@ function renderWinAmountConfig(
   return [
     "      winAmount: Object.freeze({",
     `        amountScale: ${numberLiteral(winAmount.amountScale)},`,
-    `        currency: ${quote(winAmount.currency)},`,
-    `        locale: ${quote(winAmount.locale)},`,
+    ...(winAmount.currency === undefined
+      ? []
+      : [`        currency: ${quote(winAmount.currency)},`]),
+    ...(winAmount.locale === undefined
+      ? []
+      : [`        locale: ${quote(winAmount.locale)},`]),
     `        minorCountDurationSeconds: ${numberLiteral(
       winAmount.minorCountDurationSeconds,
     )},`,

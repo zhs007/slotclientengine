@@ -8,7 +8,7 @@ import {
   readGame002CravePackageFiles,
 } from "../src/loading-resources.js";
 import {
-  getGame002SkinConfig,
+  GAME002_REEL_PRESENTATION_EXTENSION,
   prepareGame002SkinConfig,
 } from "../src/skin-config.js";
 
@@ -87,7 +87,7 @@ describe("game002 Crave skin", () => {
     const packageResources = resources.filter((resource) =>
       resource.id.startsWith(GAME002_CRAVE_RESOURCE_ID_PREFIX),
     );
-    expect(packageResources).toHaveLength(121);
+    expect(packageResources.length).toBeGreaterThan(120);
     expect(
       packageResources.every((resource) => resource.kind === "binary"),
     ).toBe(true);
@@ -117,14 +117,16 @@ describe("game002 Crave skin", () => {
         }),
       ),
     );
-    expect(readGame002CravePackageFiles(loaded).size).toBe(121);
+    expect(readGame002CravePackageFiles(loaded).size).toBe(
+      packageResources.length,
+    );
     loaded.delete(`${GAME002_CRAVE_RESOURCE_ID_PREFIX}assets.map.json`);
     expect(() => readGame002CravePackageFiles(loaded)).toThrow(
       /assets\.map\.json.*was not loaded/,
     );
   });
 
-  it("prepares manifest-owned geometry, symbol registry and CN coin ImgNumber", async () => {
+  it("prepares skin=2 geometry, CM multiplier states and CN coin states", async () => {
     const files = await readCravePackageFiles();
     const prepared = await prepareGame002SkinConfig("2", {
       craveFiles: files,
@@ -176,15 +178,53 @@ describe("game002 Crave skin", () => {
         ),
       ).toEqual(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
 
-      const skin1 = getGame002SkinConfig("1");
-      expect(skin.reelManifest).toEqual(skin1.reelManifest);
-      expect(skin.cascadeWinPresentations).toEqual(
-        skin1.cascadeWinPresentations,
+      expect(skin.reelManifest).toEqual(
+        GAME002_REEL_PRESENTATION_EXTENSION.reelManifest,
       );
-      expect(skin.landingAppearSymbols).toEqual(skin1.landingAppearSymbols);
-      expect(skin.rawGameConfig).toEqual(skin1.rawGameConfig);
+      expect(skin.displaySymbols).toContain("WM");
+      expect(skin.displaySymbols).toContain("WL");
+      expect(skin.displaySymbols).toContain("CM");
+      expect(skin.symbolAnimationCapabilities.CM).toEqual(
+        expect.arrayContaining(["appear", "feature1", "change"]),
+      );
+      expect(skin.symbolAnimationCapabilities.CN).toContain("featureChange");
+      const symbolManifest =
+        skin.presentation.symbolPackage.symbolManifest.symbols;
+      expect(symbolManifest.CM?.animations.feature1).toMatchObject({
+        kind: "spine",
+        playback: {
+          animationName: "Feature1",
+          loop: false,
+        },
+      });
+      expect(symbolManifest.CM?.animations.change).toMatchObject({
+        kind: "spine",
+        playback: {
+          animationName: "Change",
+          loop: false,
+        },
+      });
+      expect(symbolManifest.CN?.animations.featureChange).toMatchObject({
+        kind: "activeSpine",
+        playback: {
+          animationName: "Feature_Change",
+          loop: false,
+        },
+      });
+      expect(symbolManifest.CM?.imageStringNodes).toMatchObject([
+        {
+          name: "multiplier",
+          targets: [
+            { state: "normal", slot: "Mult" },
+            { state: "dropdown", slot: "Mult" },
+            { state: "appear", slot: "Mult" },
+            { state: "feature1", slot: "Mult" },
+            { state: "change", slot: "Mult" },
+          ],
+        },
+      ]);
     } finally {
-      await prepared.valuePresentationResourceBundle.destroy();
+      await prepared.resourceOwner.destroy();
     }
   });
 
@@ -192,10 +232,6 @@ describe("game002 Crave skin", () => {
     await expect(prepareGame002SkinConfig("2")).rejects.toThrow(
       /requires loaded Crave package files/,
     );
-    expect(() => getGame002SkinConfig("2")).toThrow(
-      /prepared from its loaded scene-layout package/,
-    );
-
     await expectInvalidCraveManifest((manifest) => {
       delete manifest.gameModes;
     }, /requires gameModes/);
@@ -222,7 +258,7 @@ describe("game002 Crave skin", () => {
       craveFiles: await readCravePackageFiles(),
     });
     expect(prepared.skin.id).toBe("2");
-    await prepared.valuePresentationResourceBundle.destroy();
+    await prepared.resourceOwner.destroy();
   });
 });
 

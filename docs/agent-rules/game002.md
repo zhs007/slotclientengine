@@ -4,18 +4,11 @@
 
 ## 固定入口和资源
 
-- 只支持严格的 `skin=1|2`：
-  - `skin=1` 固定映射：
-    - `assets/game002-s3/background.manifest.json` 及 BG Spine 资源；
-    - `assets/game002-s3` symbols/reel/win-amount；
-    - `assets/gamecfg002/gameconfig.json`。
-  - `skin=2` 固定映射 `assets/crave` 的完整 mapped scene-layout package；layout、
-    background、focus、grid geometry、symbols、公开本地轮带和 award popup 只从该包
-    的 manifest/map 取得。
-- 两个 skin 共用同一 game002 round target、期待/cascade/WL/CN/summary/cleanup
-  policy；Game Viewer 的简化流程不是 game002 的行为来源。`skin=3|4|5`、缺失、
-  重复、`01` 和未知值显式失败，不保留 alias 或默认值。
-- `assets/game002-s3/reel.manifest.json` 的 Nearwin1/2 是两个 skin 共用的显式
+- 只支持严格的 `skin=2`，固定映射 `assets/crave` 的完整 mapped scene-layout
+  package；layout、background、focus、grid geometry、symbols、公开本地轮带和
+  award popup 只从该包的 manifest/map 取得。`skin=1|3|4|5`、缺失、重复、`01`
+  和未知值显式失败，不保留 alias 或默认值。
+- `assets/game002-s3/reel.manifest.json` 的 Nearwin1/2 是 game002 的显式
   game002 presentation extension，不伪装成 Crave layout closure。
 - live server 固定为 `wss://gameserv.rgstest.slammerstudios.com/`；URL 不接受 `serverUrl`，旧参数也显式失败。
 - URL 必须显式提供 `lines=30`，其它值在 loading 99% 配置解析阶段失败。
@@ -32,9 +25,8 @@
 ## CN value presentation
 
 - `CN` 不配置顶层 `normal/spinBlur/disabled`；normal art 只来自 resolved tier Spine。
-- CN text 按 active symbols manifest 使用 `image-string`：skin1 绑定真实 `Num`
-  slot，skin2 绑定 Crave 的真实 `coin` slot；tier/resource/glyph 均不得跨 skin
-  复用或回退。
+- CN text 按 active Crave symbols manifest 使用 `image-string`，绑定真实 `coin`
+  slot；tier/resource/glyph 均不得复用或回退。
 - glyph 集、slot、resource、binding、tier 和尺寸均严格校验。完整数值图片与 ImgNumber 互斥，不回退字体、旧完整图片或 fixture glyph。
 - explicit reel state texture（如 spinBlur/disabled）优先于 normal active Spine。tier player 异步 init 不得把当前 reel texture 隐藏为空格；回 normal/activeSpine 后再显示同一 player。
 - normal 与 loop 使用同一 resource/playback 时保持时间轴 continuity，不 reset/replay，并同步新的 semantic playback 以报告真实 loop completion。
@@ -70,6 +62,38 @@
 - fall 期间整个 grid-cell reel set 只使用一个完整 board mask；active symbol 不叠加自己的 mask。
 - normal 与 dropdown 指向相同 resource/playback 时保留 player 和时间轴，不 reset/replay 等价 Loop。
 - 所有 step 完成后才播放 global win-amount；播放期间 reel runtime 继续逐帧 update。
+
+## WL/WM/CM multiplier 与中奖前转换
+
+- initial spin 和 refill 的最终落定 scene 优先级固定为
+  `bg-gencm > bg-genwm > bg-spin/bg-refill`；触发的生成 component 必须各自提供
+  唯一完整 scene。
+- `bg-genwilds`、`bg-setwm` 和 `bg-setcm` 的 component-scoped `otherScene`
+  分别给新 WL/WM/CM 提供 positive safe integer multiplier；每个 settled step
+  最多一个 CM，值随 occurrence dropdown/refill 搬运。
+- multiplier component 只读取当前操作目标 symbol cell；同一 `otherScene`
+  的其它 cell 由服务器保留作其它用途，不得按当前 component 的零值合同拒绝。
+- spin 和每次 refill 都必须等全部 symbol 落定后再处理 multiplier，且 transform
+  完成后才允许进入该 settled snapshot 对应的中奖流程。
+- 上一步参与中奖的 WL 可由 `bg-incwl.otherScene` 权威加一。表现延迟到下一次
+  refill 全部落定后，先更新 multiplier 并播放 WL 的 `Start` once；随后才处理当前
+  WM。没有当前 WM 时，WL Start 完成后 transform 直接结束。
+- 当前 WM 存在时，`bg-updwl.otherScene` 必须把每个 WL 更新为其当前值加本批全部
+  WM multiplier 之和。盘面没有 WL 时仍完整处理 WM，只有 WL 更新阶段为空。
+- 同批 WM 并行执行 `Mult_Start` once、`Mult_Idle` 一个真实 loop、`Mult_End`
+  once、`Change` once；进入 `Mult_Idle` 时提交全部 WL multiplier 显示更新。
+- `Change` 完成边界才原子提交 `bg-wm2cn.scene` 的原位置 WM -> CN replacement，
+  新 CN value 只取 `bg-genwmcn.otherScene`；prepare 或动画失败必须 rollback，
+  不得重建无关 symbol。
+- WM 全流程提交完成后才处理 CM。CM 先播放 `Feature1` once；完成边界按
+  `bg-updcn.otherScene` 将当时全部 CN（包含本批 WM 新转出的 CN）严格更新为
+  当前值乘唯一 CM multiplier，并同步播放 CN `Feature_Change` once。
+- 全部 CN `Feature_Change` 完成后播放 CM `Change` once；完成边界才按
+  `bg-cm2cn.scene` 原子提交该 CM -> CN，且新 CN value 只取
+  `bg-gencmcn.otherScene`。CM 全流程完成后才允许开始中奖；无 CM 时不得制造空阶段。
+- WL/WM/CM multiplier 共用 paired Symbols package 的唯一 ImgNumber dependency，
+  formatter 为 exact `x${value}`，Spine slot 为 exact `Mult`；不得使用 `Multi`
+  alias、CN digits、字体或路径猜测。
 
 ## CN otherScene、collect 与 summary
 

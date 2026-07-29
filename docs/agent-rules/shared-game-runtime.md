@@ -8,6 +8,10 @@
 - `packages/logiccore` 只拥有通用 server round/component/result/otherScenes 解析、索引校验、strict profile 和不可变 execution plan；业务 component、symbol 和金额语义由 app 注入。
 - 所有配置驱动 round 必须在任何画面 mutation 前完整编译。component role、remove/drop/value/sequential companion policy 只能来自 strict versioned profile，并按 active symbol package 大小写精确校验。
 - `packages/rendercore` 的 capability-driven coordinator 是 standard/grid-cell、base/cascade 的共享编排入口，负责 initial、win、remove、dropdown、refill、sequential collect、completion 和 cleanup 边界。
+- settled 后、中奖前的业务转换必须由 logiccore 的中性 immutable transform step
+  和 rendercore 的 capability phase 显式表达；共享层只校验 occurrence
+  code/value continuity 与 prepare/commit/rollback，不认识业务 symbol、component
+  或动画名。没有 transform 的 consumer trace 保持不变。
 - symbol package 到 reel registry 的 catalog/value-controller 适配属于 rendercore；
   game app 不从 package bytes 重建 asset 表。layout/background/popup 与 app-owned reel
   组合时使用 rendercore presentation surface，不复制 scene-layout visibility、placement
@@ -29,6 +33,9 @@
 - normal/win/appear 共享相同 Spine resource 时复用 player，只切换语义 animation；资源、value/tier 或 symbol 真实变化时才按合同重建。
 - image-string parser、Unicode code-point layout、glyph exact closure、natural/fixed advance、动态 `visualBounds` anchor 和 `setText()` 生命周期属于 rendercore。缺 glyph、slot、resource 或 binding 显式失败，不回退字体、占位图、glob 或路径猜测。
 - value presentation 使用 strict `font | image | image-string` union；Spine slot attach 通过外层 wrapper 跟随 bone matrix，内部 display 保留自身 offset/scale/pivot。
+- 一个 image-string logical node 可以声明多个唯一的 exact `{state, slot}` target；
+  runtime 只挂载当前 resolved state 的目标，同一 renderer/text identity 跨 state
+  保持连续。旧单 `target` 只在 parser 边界规范化，canonical 输出使用 `targets`。
 
 ## Background、viewport 与 UI
 

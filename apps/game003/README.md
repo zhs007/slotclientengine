@@ -9,7 +9,9 @@
 - loading 资源生成模块：`apps/game003/src/generated/game-loading.generated.ts`
 - 游戏配置：`assets/gamecfg003/gameconfig.json`
 - Excel 输入：`assets/gamecfg003/paytable.xlsx`、`assets/gamecfg003/bg-reel01.xlsx`
-- 视觉资源：`assets/game003-s1`
+- skin1 基线视觉资源：`assets/game003-s1`
+- skin2 正式 scene-layout mapped folder：`assets/minecart2`
+- skin2 Vite 资源模块：`apps/game003/src/generated/minecart2-layout-resources.generated.ts`
 - 横版背景：`assets/game003-s1/bg1.jpg`
 - 竖版背景：`assets/game003-s1/bg2.jpg`
 - 主转轮框：`assets/game003-s1/mainreelbg.png`
@@ -25,6 +27,20 @@
 - big/super/mega 金额动画 manifest：`assets/game003-s1/win-amount/win-amount.manifest.json`
 - big/super/mega 金额动画 VNI project：`assets/game003-s1/win-amount/{bigwin,superwin,megawin}.json`
 - big/super/mega 金额动画 VNI assets：`assets/game003-s1/win-amount/assets/*.{png,jpg,jpeg,webp}`
+
+`skin=1` 保留为功能/效果对齐基线；后续视觉资源、布局和 presentation 维护以
+`skin=2` 为准。skin2 直接消费 Game Layout Editor 优化包解压后的 mapped folder，
+运行时不读取 ZIP，也不从 skin1 回退资源。更新优化包时完整替换
+`assets/minecart2`，然后运行：
+
+```bash
+CI=true pnpm --filter game003 generate:minecart2-layout-resources
+CI=true pnpm --filter game003 check:minecart2-layout-resources
+```
+
+skin2 使用 package 的布局、standard reel、Symbols 和 popup 美术；旧的动态
+`bg-bar` 图标与矿车互动 runtime 只属于 skin1。package 中的静态节点仍按 authored
+layout 渲染，但 app 不把它们解释为动态传送带或矿车动画。
 
 生成 `gameconfig.json`：
 
@@ -49,6 +65,8 @@ CI=true pnpm --filter @slotclientengine/rendercore generate:symbol-state-texture
 
 `src/generated/game-static.generated.ts` 由 `apps/buildgamestatic` 生成，禁止手改。
 `src/generated/game-loading.generated.ts` 同样由 `apps/buildgamestatic` 生成，禁止手改。
+`src/generated/minecart2-layout-resources.generated.ts` 由 scene-layout resource
+generator 生成，禁止手改。
 修改 YAML 后执行：
 
 ```bash
@@ -60,7 +78,7 @@ CI=true pnpm --filter game003 check:static-config
 
 `symbols.vniProjectGlob` 和 `symbols.vniAssetGlob` 只用于把 manifest 声明的 VNI symbol 动画资源纳入 Vite 静态模块。`symbols.spineSkeletonGlob`、`symbols.spineAtlasGlob` 和 `symbols.spineTextureGlob` 必须三者同时配置，用于把 manifest 声明的 Spine skeleton、atlas raw text 和 texture URL 纳入静态模块；修改 Spine 资源时必须同步 YAML、loading 资源、generated TS、symbolsviewer 和 runtime resolver。`loading.resources` 只承载随游戏包发布的静态资源 path/glob 和权重，不承载 token、cookie、serverUrl、服务器真实轮带或玩家本次下注。glob 必须是明确资源组，不能用 `assets/game003-s1/*.png` 这类宽泛写法把主转轮框、传送带和 symbol 混在一起。
 
-`skins."1".winAmount` 配置中奖金额动画的显示规则、layout anchor、阈值和 manifest 入口。金额输入仍来自 live/GMI 的服务器整数；当前显示 formatter 与 framework HUD 共用 `formatServerUsdAmount(...)`，所以 `100` 显示为 `$1.00`。big/super/mega 的 project、assets 和 segmented 播放时间来自 `assets/game003-s1/win-amount/win-amount.manifest.json`，当前为 `durationSeconds=2.9`、`loopStartTime=1`、`loopEndTime=2.5`；YAML、runtime 和测试不要维护第二份 tier 时间表。big/super/mega 资源只属于 `assets/game003-s1/win-amount`，不要混入 symbol VNI manifest 或 `assets/game003-s1/assets`。
+`skins."1".winAmount` 配置中奖金额动画的显示规则、layout anchor、阈值和 manifest 入口。金额输入仍来自 live/GMI 的服务器整数；当前显示 formatter 与 framework HUD 共用 `formatServerAmount(...)`，所以 `100` 显示为 `1.00`，且 game003 永久不显示货币符号。game003 的静态 winAmount 配置不声明固定 `currency` / `locale`；未来多币种显示继续从游戏层 runtime formatter 注入，不读取 editor popup 的预览格式。big/super/mega 的 project、assets 和 segmented 播放时间来自 `assets/game003-s1/win-amount/win-amount.manifest.json`，当前为 `durationSeconds=2.9`、`loopStartTime=1`、`loopEndTime=2.5`；YAML、runtime 和测试不要维护第二份 tier 时间表。big/super/mega 资源只属于 `assets/game003-s1/win-amount`，不要混入 symbol VNI manifest 或 `assets/game003-s1/assets`。
 
 `skins."1".appExtensions.game003WinSymbolLoop` 配置 `bg-wins` result symbol 循环和每组 result 金额 overlay。`cyclePauseSeconds` 是一轮 `usedResults` 全部播放完后再从第一个 result 循环的暂停时间；`resultAmount` 配置金额文本相对选中 symbol cell 中心的 y 偏移、字号、填充和描边。该对象只由 `apps/game003` 严格解析，shared 静态配置层只透传，不理解 `bg-wins`、result 循环或金额 overlay 语义。
 
@@ -84,12 +102,14 @@ CI=true pnpm --filter game003 check:static-config
 - 未声明 animation 的 symbol 状态才会走 fallback；fallback 不承载 game003 的 `appear` / `win` 秒数。
 - app 的中奖逻辑仍只按可见窗口坐标请求 symbol 状态为 `win`，不在 `game-adapter.ts`、`game-demo.ts` 或 `win-sequence.ts` 中写 `L1-wins.json` 到 `L5-wins.json`、Spine JSON/atlas 路径、VNI/Spine 播放细节或动画秒数。
 
-runtime 不读取 VNI `stageRect`，VNI 动画按 project 自己的 stage 在目标 symbol 位置播放；如果 manifest 里写入 `stageRect`，会作为未知字段显式失败。Spine 动画由 rendercore 的 Spine adapter 初始化；当前 `game003-s1` skeleton 为 Spine `4.3.23`，由锁定在 `4.3.x` 的官方 Pixi v8 runtime 解析和播放。app 不直接 import `@esotericsoftware/spine-pixi-v8`、不解析 atlas/skeleton、不复制播放状态机。缺 animation `durationSeconds`、缺 VNI project、缺 VNI asset、缺 Spine skeleton/atlas/texture、atlas page/region 不匹配、Spine animation name 大小写不匹配、未知/错配 Spine 版本、非法 manifest 字段或动画初始化失败都会显式失败，避免 symbol 动画悄悄退回普通表现后难以排查。
+runtime 不读取 VNI `stageRect`，VNI 动画按 project 自己的 stage 在目标 symbol 位置播放；如果 manifest 里写入 `stageRect`，会作为未知字段显式失败。Spine 动画由 rendercore 的 Spine adapter 初始化；当前 `game003-s1` skeleton 为 Spine `4.3.23`，由锁定在 `4.3.x` 的官方 Pixi v8 runtime 解析和播放。app 不直接 import `@esotericsoftware/spine-pixi-v8`、不解析 atlas/skeleton、不复制播放状态机。atlas page logical name、texture filename key 和 mapped physical hash path 不要求 basename 相同，只校验显式映射闭包。缺 animation `durationSeconds`、缺 VNI project、缺 VNI asset、缺 Spine skeleton/atlas/texture、atlas page/region 或显式 texture map 不闭合、Spine animation name 大小写不匹配、未知/错配 Spine 版本、非法 manifest 字段或动画初始化失败都会显式失败，避免 symbol 动画悄悄退回普通表现后难以排查。
 
 ## Loading 启动顺序
 
 - `src/main.ts` 是轻入口，只静态导入 `@slotclientengine/gameloading`、零运行时依赖的 `@slotclientengine/gameloading-ui-simple` 和 `src/loading-resources.ts`。
-- `src/loading-resources.ts` 合并 `game-loading.generated.ts` 的静态资源和 `game003-runtime-module` 动态模块资源。
+- `src/loading-resources.ts` 根据已经严格解析的 active skin 选择资源：skin1 使用
+  `game-loading.generated.ts`，skin2 使用 `minecart2-layout-resources.generated.ts`；
+  两者都只加入一个 `game003-runtime-module` 动态模块资源。
 - `src/game-entry.ts` 才导入 `gameframeworks`、Pixi adapter、game layout 和正式游戏配置。
 - loading 资源阶段完成后停在 `99%`，调用 `prepareGame003At99()` 解析 query、拒绝旧 `serverUrl`、创建预连接 live session，并完成真实 `connect + enterGame`。
 - `prepareGame003At99()` 成功后进度到 `100%`，再调用 `enterGame003()` 创建 framework 和 Pixi adapter。
@@ -143,7 +163,7 @@ CI=true pnpm --filter game003 check:static-config
 必需 query 参数：
 
 ```text
-skin=1
+skin=<1|2>
 token=<token>
 businessid=<business id>
 clienttype=<client type>
@@ -161,7 +181,7 @@ live server 和 gamecode 固定来自 `config/game-static.yaml`。URL 中不支�
 示例：
 
 ```text
-http://127.0.0.1:5208/?skin=1&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=10&times=1&autonums=-1&requestTimeoutMs=30000
+http://127.0.0.1:5208/?skin=2&token=TOKEN&businessid=guest&clienttype=web&jurisdiction=MT&language=en&bet=5&lines=10&times=1&autonums=-1&requestTimeoutMs=30000
 ```
 
 `token` 中如果包含 `+`、`&`、`=` 等字符，调用方必须先使用 `encodeURIComponent()`。如果 URL 中继续携带旧的 `serverUrl` 参数，初始化会显式失败，避免误以为服务器地址仍可由链接覆盖。
@@ -176,7 +196,7 @@ http://127.0.0.1:5208/?skin=1&token=TOKEN&businessid=guest&clienttype=web&jurisd
 
 live spin 第 0 step 如果触发 `bg-gencoins`，`bg-gencoins.basicComponentData.usedOtherScenes` 可以为空或最多指向当前 step 的一个 `otherScene`：为空表示服务端本 step 没有生成 coin amount update；存在时矩阵和目标 scene 一样是 x 优先结构，`otherScene[x][y]` 对应 `targetScene[x][y]` 同一格。
 
-目标 scene 中每个 `CO` cell 都必须在同坐标 `otherScene[x][y]` 上有 positive integer amount，显示文本为 raw 数字，例如 `150` 显示为 `150`，不走 `formatServerUsdAmount(...)`，不会显示 `$1.50`。非 `CO` cell 的 `otherScene[x][y]` 第一版必须为 `0`；如果未来服务端定义其它语义，需要先改合同和测试，不能提前静默兼容。
+目标 scene 中每个 `CO` cell 都必须在同坐标 `otherScene[x][y]` 上有 positive integer amount，显示文本为 raw 数字，例如 `150` 显示为 `150`，不走 `formatServerAmount(...)` 的 cents 换算。非 `CO` cell 的 `otherScene[x][y]` 第一版必须为 `0`；如果未来服务端定义其它语义，需要先改合同和测试，不能提前静默兼容。
 
 `game-adapter.ts` 会在主转轮开始前解析 coin overlay update；零份 otherScene 返回空 update，不把服务端省略当错误。超过一个引用、索引越界、矩阵尺寸不匹配、已提供矩阵中的 CO 缺金额、非 CO 带非零金额、文字配置缺失或可见 symbol geometry 缺失仍会显式失败。spin 落停并通过 target scene 校验后才显示本次 CO 金额；下一次 spin 开始、重新应用 default scene 或销毁 adapter 时会清理旧文本；viewport resize 后会按当前可见 symbol geometry 重新定位。
 
@@ -196,7 +216,7 @@ live spin 启动前由 rendercore carousel 的 `prepare()` 读取第 0 step 的 
 
 `result.pos` 是 `[x, y]` 成对坐标，坐标基准是当前 5 列 x 5 行主转轮可见窗口：`x` 为列索引，`y` 为列内可见行索引。一个 result 内的所有 `pos` 同时请求 symbol `win` 状态；多个 result 按 `usedResults` 顺序依次播放。首轮全部中奖组的 once 动画回到 `normal` 后，`playSpin()` 可以 resolve，后续按 `usedResults` 顺序继续 `1 -> 2 -> ... -> pause -> 1` 循环作为 lingering 展示，直到下一次 spin 开始时显式清理。
 
-每个展示中的 result 必须携带 finite positive `cashWin`，不能用 `coinWin`、component total 或 `logic.getTotalWin()` 兜底。运行时用 `formatServerUsdAmount(group.cashWin)` 显示该 result 自己的金额；金额锚点先读取 rendercore 可见 symbol 几何快照，计算本组中奖 symbol 中心点平均值，再选择距离平均点最近的实际中奖 symbol，距离相同按 `x`、`y` 升序打破平局。金额显示在该 symbol 中心向下偏移 `resultAmount.yOffsetRatioFromCellCenter * cellHeight` 的位置，并在该 result 的 `win` 状态回到 `normal` 时隐藏。
+每个展示中的 result 必须携带 finite positive `cashWin`，不能用 `coinWin`、component total 或 `logic.getTotalWin()` 兜底。运行时用 `formatServerAmount(group.cashWin)` 显示该 result 自己的金额；金额锚点先读取 rendercore 可见 symbol 几何快照，计算本组中奖 symbol 中心点平均值，再选择距离平均点最近的实际中奖 symbol，距离相同按 `x`、`y` 升序打破平局。金额显示在该 symbol 中心向下偏移 `resultAmount.yOffsetRatioFromCellCenter * cellHeight` 的位置，并在该 result 的 `win` 状态回到 `normal` 时隐藏。
 
 如果本轮 `logic.getTotalWin() > 0`，`game-adapter.ts` 会在 spin 落停并完成 target scene 校验后启动 Pixi 中奖金额动画。动画使用 `logic.getBet()` 和 `logic.getTotalWin()` 的 raw amount，先在主转轮区底部递增小额数字，超过 1x 后切到主转轮区中心，并在到达 15x / 30x / 50x 时由 rendercore 切换 bigwin / superwin / megawin segmented VNI tier。首轮 symbol win sequence 和金额动画的 counting/tier-counting 阶段都会纳入 `playSpin()` 完成条件；金额进入 `awaiting-dismiss` / `dismissing` / `complete` 后不再阻塞本轮 spin。canvas 点击只调用 rendercore 的 `requestAdvance()` 做加速或关闭：不到 bigwin 时第一次点击直接跳到最终金额并进入 `awaiting-dismiss`，第二次点击隐藏；到 bigwin 以上时每点一次跳到下一档，最终 tier 停在 `awaiting-dismiss` 后再点击一次会播放当前 tier 的 dismiss/end 段并隐藏。下一次 spin 开始时仍会通过 `dismissImmediately()` 清理任何残留金额展示。
 

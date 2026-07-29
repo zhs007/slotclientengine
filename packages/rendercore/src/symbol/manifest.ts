@@ -185,7 +185,7 @@ export interface SymbolValuePresentationSpec {
 export interface SymbolImageStringNodeSpec {
   readonly name: string;
   readonly resource: string;
-  readonly target: Readonly<{ state: string; slot: string }>;
+  readonly targets: readonly Readonly<{ state: string; slot: string }>[];
   readonly initialText: string;
   readonly anchor: Readonly<{ x: number; y: number }>;
   readonly transform: Readonly<{ x: number; y: number; scale: number }>;
@@ -465,8 +465,8 @@ export function parseSymbolStateTextureManifest(
     );
     if (valuePresentation && valuePresentation.text.type !== "image-string") {
       const valueTextSlot = valuePresentation.text.slot;
-      const slotConflict = imageStringNodes.find(
-        (node) => node.target.slot === valueTextSlot,
+      const slotConflict = imageStringNodes.find((node) =>
+        node.targets.some((target) => target.slot === valueTextSlot),
       );
       if (slotConflict) {
         throw new SymbolAssetError(
@@ -554,6 +554,7 @@ function parseImageStringNodes(
         "name",
         "resource",
         "target",
+        "targets",
         "initialText",
         "anchor",
         "transform",
@@ -574,7 +575,7 @@ function parseImageStringNodes(
       const resource = assertString(node.resource, `${label}.resource`);
       if (
         !resource.startsWith("./") ||
-        !resource.endsWith("/image-string.manifest.json")
+        !resource.endsWith("image-string.manifest.json")
       ) {
         throw new SymbolAssetError(
           `${label}.resource must be a canonical local path to image-string.manifest.json.`,
@@ -587,20 +588,50 @@ function parseImageStringNodes(
           `${label}.resource is invalid: ${formatUnknownError(error)}.`,
         );
       }
-      const target = assertRecord(node.target, `${label}.target`);
-      assertOnlyKnownKeys(target, `${label}.target`, ["state", "slot"]);
-      const state = assertString(target.state, `${label}.target.state`);
-      const slot = assertString(target.slot, `${label}.target.slot`);
-      if (!stateDefinitions.has(state)) {
+      if (node.target !== undefined && node.targets !== undefined) {
         throw new SymbolAssetError(
-          `${label}.target.state references unknown state "${state}".`,
+          `${label} must not declare both target and targets.`,
         );
       }
-      if (animations[state]?.kind !== "spine") {
+      const rawTargets =
+        node.targets === undefined
+          ? node.target === undefined
+            ? undefined
+            : [node.target]
+          : node.targets;
+      if (!Array.isArray(rawTargets) || rawTargets.length === 0) {
         throw new SymbolAssetError(
-          `${label}.target.state must resolve to a Spine animation.`,
+          `${label}.targets must be a non-empty array.`,
         );
       }
+      const targetKeys = new Set<string>();
+      const targets = Object.freeze(
+        rawTargets.map((rawTarget, targetIndex) => {
+          const targetLabel = `${label}.targets[${targetIndex}]`;
+          const target = assertRecord(rawTarget, targetLabel);
+          assertOnlyKnownKeys(target, targetLabel, ["state", "slot"]);
+          const state = assertString(target.state, `${targetLabel}.state`);
+          const slot = assertString(target.slot, `${targetLabel}.slot`);
+          if (!stateDefinitions.has(state)) {
+            throw new SymbolAssetError(
+              `${targetLabel}.state references unknown state "${state}".`,
+            );
+          }
+          if (animations[state]?.kind !== "spine") {
+            throw new SymbolAssetError(
+              `${targetLabel}.state must resolve to a Spine animation.`,
+            );
+          }
+          const key = `${state}\u0000${slot}`;
+          if (targetKeys.has(key)) {
+            throw new SymbolAssetError(
+              `${label}.targets contains duplicate state/slot "${state}/${slot}".`,
+            );
+          }
+          targetKeys.add(key);
+          return Object.freeze({ state, slot });
+        }),
+      );
       const initialText = assertStringValue(
         node.initialText,
         `${label}.initialText`,
@@ -643,7 +674,7 @@ function parseImageStringNodes(
       return Object.freeze({
         name,
         resource,
-        target: Object.freeze({ state, slot }),
+        targets,
         initialText,
         anchor,
         transform,
@@ -1511,9 +1542,11 @@ export function createSymbolSpineAnimationResourcesFromManifest(
         spec: animation,
         skeleton,
         atlasText: atlas,
-        requiredSlots: manifestSymbol.imageStringNodes
-          .filter((node) => node.target.state === state)
-          .map((node) => node.target.slot),
+        requiredSlots: manifestSymbol.imageStringNodes.flatMap((node) =>
+          node.targets
+            .filter((target) => target.state === state)
+            .map((target) => target.slot),
+        ),
       });
       resources[symbol] = resources[symbol] ?? {};
       resources[symbol][state] = Object.freeze({
@@ -2135,12 +2168,6 @@ function validateOfficialSpineAtlasAndSkeleton(options: {
     );
   }
   const atlasPage = atlas.pages[0].name;
-  const textureFileName = getFileNameFromManifestPath(options.spec.texture);
-  if (atlasPage !== textureFileName) {
-    throw new SymbolAssetError(
-      `Symbol "${options.symbol}" ${options.state} Spine atlas page "${atlasPage}" must match texture "${textureFileName}".`,
-    );
-  }
 
   try {
     const skeletonData = new SkeletonJson(

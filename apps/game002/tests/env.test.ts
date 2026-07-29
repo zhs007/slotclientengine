@@ -17,7 +17,7 @@ describe("game002 strict launch query", () => {
       mode: "real",
     });
     expect(config).toMatchObject({
-      skin: "1",
+      skin: "2",
       live: {
         serverUrl: GAME002_LIVE_SERVER_URL,
         token: "FAKE_TOKEN",
@@ -83,7 +83,7 @@ describe("game002 strict launch query", () => {
   it("validates skin and numeric app parameters without leaking credentials", () => {
     expect(parseGame002LaunchQuery(validQuery({ skin: "2" })).skin).toBe("2");
     expect(() => parseGame002LaunchQuery(validQuery({ skin: "5" }))).toThrow(
-      /skin query parameter must be exactly "1" or "2"/,
+      /skin query parameter must be exactly "2"/,
     );
     expect(() => parseGame002LaunchQuery(validQuery({ bet: "0" }))).toThrow(
       /bet query parameter/,
@@ -119,7 +119,7 @@ function validQuery(
   overrides: Record<string, string | undefined> = {},
 ): string {
   const values: Record<string, string> = {
-    skin: "1",
+    skin: "2",
     token: "FAKE_TOKEN",
     gamecode: "GAME_CODE",
     businessid: "guest",

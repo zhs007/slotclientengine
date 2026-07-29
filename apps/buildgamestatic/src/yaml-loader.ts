@@ -626,24 +626,35 @@ function parseWinAmount(
   label: string,
 ): GameStaticYamlWinAmountConfig {
   const record = assertRecord(value, label);
-  assertKeys(record, label, [
-    "amountScale",
-    "currency",
-    "locale",
-    "minorCountDurationSeconds",
-    "majorCountDurationSeconds",
-    "thresholds",
-    "text",
-    "layout",
-    "animations",
-  ]);
+  assertKeys(
+    record,
+    label,
+    [
+      "amountScale",
+      "currency",
+      "locale",
+      "minorCountDurationSeconds",
+      "majorCountDurationSeconds",
+      "thresholds",
+      "text",
+      "layout",
+      "animations",
+    ],
+    { optional: ["currency", "locale"] },
+  );
   return Object.freeze({
     amountScale: assertPositiveNumber(
       record.amountScale,
       `${label}.amountScale`,
     ),
-    currency: assertNonEmptyString(record.currency, `${label}.currency`),
-    locale: assertNonEmptyString(record.locale, `${label}.locale`),
+    ...(record.currency === undefined
+      ? {}
+      : {
+          currency: assertNonEmptyString(record.currency, `${label}.currency`),
+        }),
+    ...(record.locale === undefined
+      ? {}
+      : { locale: assertNonEmptyString(record.locale, `${label}.locale`) }),
     minorCountDurationSeconds: assertPositiveNumber(
       record.minorCountDurationSeconds,
       `${label}.minorCountDurationSeconds`,

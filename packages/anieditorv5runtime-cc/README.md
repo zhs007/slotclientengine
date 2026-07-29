@@ -370,6 +370,151 @@ packages/anieditorv5runtime-cc/standalone/V5GPreview.example.ts
 
 本仓库当前没有执行真实 Cocos Creator 3.8.6 编辑器导入验收；已完成的是 monorepo 内 TypeScript、Vitest fake `cc`、standalone 边界扫描和构建验收。真实编辑器内的 `.meta`、场景绑定、资源导入结果仍需在宿主 Cocos 项目中人工确认。
 
+## 绑定 VNI 动画到 Spine slot
+
+Cocos Spine Socket 实际绑定的是 bone，不是 slot。需要按 slot 名挂接时，先通过 `sp.Skeleton.findSlot(slotName)` 找到 slot，再使用 `slot.bone` 的完整路径创建 `sp.SpineSocket`。VNI player 的宿主 root 放在 Socket target 下面，由 Cocos 每帧同步 bone transform，VNI runtime 继续独立推进自己的时间轴。
+
+推荐节点结构：
+
+```text
+SpineNode                 // 挂有 sp.Skeleton
+└─ VniSocketTarget        // Spine Socket target，必须是 SpineNode 的直接子节点
+   └─ VniRoot             // VNI player root；在这里调整局部偏移、缩放和旋转
+```
+
+`VniSocketTarget` 的 matrix 会由 Spine Socket 每帧覆盖，不要直接修改它的位置、缩放或旋转。业务偏移应设置在子节点 `VniRoot` 上。
+
+可复制的宿主 Component：
+
+```ts
+import {
+  _decorator,
+  Component,
+  JsonAsset,
+  Material,
+  Node,
+  SpriteAtlas,
+  sp,
+} from "cc";
+import {
+  assertV5GProject,
+  createV5GCocosPlayer,
+  validateCocosV5GProject,
+  type V5GCocosPlayer,
+} from "./vendor/anieditorv5runtime-cc";
+
+const { ccclass, property } = _decorator;
+
+@ccclass("SpineSlotVni")
+export class SpineSlotVni extends Component {
+  @property(sp.Skeleton)
+  skeleton: sp.Skeleton | null = null;
+
+  @property(Node)
+  socketTarget: Node | null = null;
+
+  @property(Node)
+  vniRoot: Node | null = null;
+
+  @property(JsonAsset)
+  vniProject: JsonAsset | null = null;
+
+  @property(SpriteAtlas)
+  vniAtlas: SpriteAtlas | null = null;
+
+  @property(Material)
+  vniScreenMaterial: Material | null = null;
+
+  @property
+  spineSlotName = "hand_slot";
+
+  private player: V5GCocosPlayer | null = null;
+
+  start(): void {
+    if (
+      !this.skeleton ||
+      !this.socketTarget ||
+      !this.vniRoot ||
+      !this.vniProject ||
+      !this.vniAtlas
+    ) {
+      throw new Error("SpineSlotVni properties are not completely assigned.");
+    }
+
+    bindSpineSocketToSlot(this.skeleton, this.spineSlotName, this.socketTarget);
+
+    // Socket target 由 Spine 驱动；业务偏移只写在它的子节点上。
+    this.vniRoot.setPosition(0, 0, 0);
+    this.vniRoot.setScale(0.25, 0.25, 1);
+    this.vniRoot.setRotationFromEuler(0, 0, 0);
+
+    const project = assertV5GProject(this.vniProject.json);
+    validateCocosV5GProject(project);
+
+    this.player = createV5GCocosPlayer({
+      root: this.vniRoot,
+      project,
+      assets: { atlas: this.vniAtlas },
+      screenMaterial: this.vniScreenMaterial,
+      loop: true,
+    });
+    this.player.init();
+    this.player.play();
+  }
+
+  update(deltaTime: number): void {
+    this.player?.update(deltaTime);
+
+    // 可选：让 VNI 跟随 slot attachment 和 slot alpha 的可见状态。
+    const slot = this.skeleton?.findSlot(this.spineSlotName);
+    if (slot && this.vniRoot) {
+      this.vniRoot.active = slot.attachment !== null && slot.color.a > 0;
+    }
+  }
+
+  onDestroy(): void {
+    this.player?.destroy();
+    this.player = null;
+  }
+}
+
+function bindSpineSocketToSlot(
+  skeleton: sp.Skeleton,
+  slotName: string,
+  target: Node,
+): void {
+  const slot = skeleton.findSlot(slotName);
+  if (!slot) {
+    throw new Error(`Spine slot "${slotName}" does not exist.`);
+  }
+
+  // Cocos 要求 Socket target 是 Skeleton Node 的直接子节点。
+  if (target.parent !== skeleton.node) {
+    target.setParent(skeleton.node);
+  }
+
+  skeleton.sockets = [
+    ...skeleton.sockets.filter((socket) => socket.target !== target),
+    new sp.SpineSocket(getSpineBonePath(slot.bone), target),
+  ];
+}
+
+function getSpineBonePath(bone: sp.spine.Bone): string {
+  const names: string[] = [];
+  let current: sp.spine.Bone | null = bone;
+  while (current) {
+    names.push(current.data.name);
+    current = current.parent;
+  }
+  names.reverse();
+  return names.join("/");
+}
+```
+
+如果工程已经在 Creator Inspector 中配置了 Spine Socket，可以省略 `bindSpineSocketToSlot(...)`，直接把已绑定 Socket target 下的 `VniRoot` 传给 `createV5GCocosPlayer(...)`。
+
+这条路径只同步 slot 所属 bone 的位置、旋转和缩放。Spine attachment 自身的局部偏移需要通过 `VniRoot` 手工配置。VNI 仍是独立的 Cocos Node，不能插入 Spine 内部 slot draw order 的中间；它通常整体显示在 Spine 前面或后面。要求严格夹在两个 Spine slot 之间时，需要拆分 Spine 渲染或实现专门的渲染 adapter，不能用普通 Socket 隐式降级。
+
 ## 播放控制和事件
 
 `play()`、`pause()`、`restart()`、`seek(time)`、`setLoop(loop)` 和 `update(deltaTime)` 继续可用。`pause(); play();` 会恢复当前未完成的 range；`restart()` 会清空 range 并回到从 0 秒开始的全时长播放语义。

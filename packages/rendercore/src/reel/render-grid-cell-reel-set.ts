@@ -23,6 +23,7 @@ import type {
   RenderGridCellReelSetUpdateResult,
   RenderVisibleSymbolGeometrySnapshot,
   RenderVisibleSymbolStateSnapshot,
+  PreparedVisibleOccurrenceReplacement,
   ReelSymbolRegistry,
   SymbolPresentationValueMatrix,
   RenderReelVisibleOccurrence,
@@ -628,6 +629,112 @@ export class RenderGridCellReelSet extends Container {
         transitionMode,
       );
     }
+  }
+
+  setVisibleSymbolPresentationValue(
+    x: number,
+    y: number,
+    value: number | null,
+  ): void {
+    this.assertStopped("set visible symbol presentation value");
+    const cell = this.getCell(x, y);
+    if (!cell.occupied) {
+      throw new ReelError(
+        `Cannot set presentation value for empty grid cell (${x},${y}).`,
+      );
+    }
+    cell.reel.setVisibleSymbolPresentationValue(0, value);
+  }
+
+  setVisibleSymbolImageStringText(
+    x: number,
+    y: number,
+    name: string,
+    text: string,
+  ): void {
+    this.assertStopped("set visible symbol image-string text");
+    const cell = this.getCell(x, y);
+    if (!cell.occupied) {
+      throw new ReelError(
+        `Cannot set image-string text for empty grid cell (${x},${y}).`,
+      );
+    }
+    cell.reel.setVisibleSymbolImageStringText(0, name, text);
+  }
+
+  getVisibleSymbolImageStringText(x: number, y: number, name: string): string {
+    this.assertStopped("read visible symbol image-string text");
+    const cell = this.getCell(x, y);
+    if (!cell.occupied) {
+      throw new ReelError(
+        `Cannot read image-string text for empty grid cell (${x},${y}).`,
+      );
+    }
+    return cell.reel.getVisibleSymbolImageStringText(0, name);
+  }
+
+  prepareVisibleOccurrenceReplacement(options: {
+    readonly x: number;
+    readonly y: number;
+    readonly expectedCode: number;
+    readonly outputCode: number;
+    readonly outputPresentationValue: number | null;
+  }): PreparedVisibleOccurrenceReplacement {
+    this.assertStopped("prepare visible occurrence replacement");
+    const cell = this.getCell(options.x, options.y);
+    if (!cell.occupied) {
+      throw new ReelError(
+        `Cannot replace empty grid cell (${options.x},${options.y}).`,
+      );
+    }
+    const input = cell.reel.getVisibleSymbolStateSnapshot(0);
+    if (input.code !== options.expectedCode) {
+      throw new ReelError(
+        `Cannot replace grid cell (${options.x},${options.y}): expected code ${options.expectedCode}, received ${input.code}.`,
+      );
+    }
+    const output = cell.reel.createDetachedOccurrence(
+      options.outputCode,
+      options.outputPresentationValue,
+    );
+    let state: "prepared" | "committed" | "rolled-back" = "prepared";
+    const rollback = (): void => {
+      if (state !== "prepared") return;
+      cell.reel.releaseDetachedOccurrence(output);
+      state = "rolled-back";
+    };
+    return Object.freeze({
+      x: options.x,
+      y: options.y,
+      inputCode: options.expectedCode,
+      outputCode: options.outputCode,
+      commit: (): void => {
+        if (state === "committed") return;
+        if (state !== "prepared") {
+          throw new ReelError(
+            `Cannot commit rolled-back replacement at grid cell (${options.x},${options.y}).`,
+          );
+        }
+        this.assertStopped("commit visible occurrence replacement");
+        const current = cell.reel.getVisibleSymbolStateSnapshot(0);
+        if (current.code !== options.expectedCode) {
+          throw new ReelError(
+            `Cannot commit replacement at grid cell (${options.x},${options.y}): expected code ${options.expectedCode}, received ${current.code}.`,
+          );
+        }
+        const previous = cell.reel.takeVisibleOccurrence();
+        try {
+          cell.reel.placeVisibleOccurrence(output);
+        } catch (error) {
+          cell.reel.placeVisibleOccurrence(previous);
+          throw error;
+        }
+        cell.reel.releaseDetachedOccurrence(previous);
+        state = "committed";
+      },
+      rollback,
+      destroy: rollback,
+    });
   }
 
   getVisibleSymbolStateSnapshot(

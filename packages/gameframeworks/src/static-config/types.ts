@@ -138,8 +138,8 @@ export interface SlotGameStaticWinAmountAnimations {
 
 export interface SlotGameStaticWinAmountConfig {
   readonly amountScale: number;
-  readonly currency: string;
-  readonly locale: string;
+  readonly currency?: string;
+  readonly locale?: string;
   readonly minorCountDurationSeconds: number;
   readonly majorCountDurationSeconds: number;
   readonly thresholds: SlotGameStaticWinAmountThresholds;

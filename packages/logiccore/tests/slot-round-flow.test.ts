@@ -314,6 +314,59 @@ describe("slot round execution compiler", () => {
     expect(Object.isFrozen(plan.final.occurrences)).toBe(true);
   });
 
+  it("hydrates settled values and compiles a neutral transform before win", () => {
+    const plan = compileSlotRoundExecutionPlan(profile, createRoundLogic({}), {
+      symbolCodes: { A: 0, H: 1, V: 2 },
+      hydrateSettledValues: ({ stepIndex }) =>
+        stepIndex === 0 ? [{ position: { x: 0, y: 1 }, value: 3 }] : [],
+      compileSettledTransform: ({ stepIndex, input }) => {
+        if (stepIndex !== 0) return [];
+        expect(input.values).toEqual([[5, 3, null]]);
+        return [
+          {
+            position: { x: 0, y: 1 },
+            outputCode: 0,
+            outputValue: 4,
+          },
+        ];
+      },
+    });
+    expect(plan.initial.values).toEqual([[5, 3, null]]);
+    expect(plan.steps.map((step) => step.kind)).toEqual([
+      "settled-transform",
+      "win",
+      "dropdown",
+      "refill",
+    ]);
+    const transform = plan.steps[0];
+    if (transform.kind !== "settled-transform")
+      throw new Error("expected settled transform");
+    expect(transform.changes[0]).toMatchObject({
+      occurrenceId: "initial:0:1",
+      input: { symbol: "A", value: 3 },
+      output: { symbol: "A", value: 4 },
+    });
+    expect(Object.isFrozen(transform.output)).toBe(true);
+    expect(plan.requiredCapabilities).toContain("settled-transform");
+  });
+
+  it("uses resolved settled scenes for both initial spin and refill", () => {
+    const logic = createRoundLogic({
+      initialSettledScene: [[2, 3, 1]],
+      refillSettledScene: [[3, 2, 1]],
+    });
+    const plan = compileSlotRoundExecutionPlan(profile, logic, {
+      symbolCodes: { A: 0, H: 1, V: 2, WM: 3 },
+      resolveSettledScene: ({ step, inputScene }) =>
+        step.getComponentScenes("settled")[0] ?? inputScene,
+    });
+
+    expect(plan.initial.scene).toEqual([[2, 3, 1]]);
+    const refill = plan.steps.find((step) => step.kind === "refill");
+    expect(refill?.output.scene).toEqual([[3, 2, 1]]);
+    expect(plan.final.scene).toEqual([[3, 2, 1]]);
+  });
+
   it("fails when refill creates a value occurrence without authoritative data", () => {
     const logic = createRoundLogic({
       refillScene: [[2, 2, 1]],
@@ -450,8 +503,10 @@ describe("slot round execution compiler", () => {
 
 function createRoundLogic(options: {
   readonly initialValues?: readonly (readonly number[])[];
+  readonly initialSettledScene?: readonly (readonly number[])[];
   readonly dropdownScene?: readonly (readonly number[])[];
   readonly refillScene?: readonly (readonly number[])[];
+  readonly refillSettledScene?: readonly (readonly number[])[];
   readonly refillPos?: readonly number[];
   readonly removedScene?: readonly (readonly number[])[];
   readonly resultPos?: readonly number[];
@@ -470,6 +525,9 @@ function createRoundLogic(options: {
       values: { otherScenes: [options.initialValues ?? [[5, 0, 0]]] },
       wins: { results: [result] },
       remove: { scenes: [removed] },
+      ...(options.initialSettledScene
+        ? { settled: { scenes: [options.initialSettledScene] } }
+        : {}),
     },
     results: [result],
   });
@@ -487,6 +545,9 @@ function createRoundLogic(options: {
         scenes: [refill],
         basic: { pos: options.refillPos ?? [0, 0] },
       },
+      ...(options.refillSettledScene
+        ? { settled: { scenes: [options.refillSettledScene] } }
+        : {}),
       ...(options.refillValues
         ? { values: { otherScenes: [options.refillValues] } }
         : {}),

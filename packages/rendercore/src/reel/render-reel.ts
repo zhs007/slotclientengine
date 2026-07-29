@@ -369,11 +369,50 @@ export class RenderReel extends Container {
     slot.symbol.requestState(state, transitionMode);
   }
 
+  setVisibleSymbolPresentationValue(
+    windowY: number,
+    value: number | null,
+  ): void {
+    const slot = this.getVisibleSlot(windowY);
+    if (slot.kind === "empty" || !slot.symbol || slot.code === null) {
+      throw new ReelError(
+        `Cannot set presentation value for empty visible symbol at reel ${this.xIndex}, y ${windowY}.`,
+      );
+    }
+    slot.symbol.setPresentationValue(value);
+    this.setStaticVisibleSlot(windowY, slot.code, value);
+  }
+
+  setVisibleSymbolImageStringText(
+    windowY: number,
+    name: string,
+    text: string,
+  ): void {
+    const slot = this.getVisibleSlot(windowY);
+    if (slot.kind === "empty" || !slot.symbol) {
+      throw new ReelError(
+        `Cannot set image-string text for empty visible symbol at reel ${this.xIndex}, y ${windowY}.`,
+      );
+    }
+    slot.symbol.setImageStringText(name, text);
+  }
+
+  getVisibleSymbolImageStringText(windowY: number, name: string): string {
+    const slot = this.getVisibleSlot(windowY);
+    if (slot.kind === "empty" || !slot.symbol) {
+      throw new ReelError(
+        `Cannot read image-string text for empty visible symbol at reel ${this.xIndex}, y ${windowY}.`,
+      );
+    }
+    return slot.symbol.getImageStringText(name);
+  }
+
   getVisibleSymbolStateSnapshot(
     windowY: number,
   ): RenderVisibleSymbolStateSnapshot {
     const slot = this.getVisibleSlot(windowY);
     const snapshot = this.createSlotSnapshot(slot);
+    const completion = slot.symbol?.getAnimationCompletionSnapshot();
     return Object.freeze({
       x: this.xIndex,
       y: windowY,
@@ -382,6 +421,8 @@ export class RenderReel extends Container {
       requestedState: snapshot.requestedState,
       resolvedState: snapshot.resolvedState,
       isOnce: snapshot.isOnce,
+      loopCompletionCount: completion?.loopCompletionCount ?? 0,
+      onceCompletionCount: completion?.onceCompletionCount ?? 0,
     });
   }
 

@@ -128,6 +128,28 @@ describe("grid cell effect resources and controller", () => {
     controller.destroy();
   });
 
+  it("reads the single atlas page instead of deriving it from the mapped texture key", () => {
+    const rawManifest = structuredClone(RAW_MANIFEST) as any;
+    for (const effect of Object.values(rawManifest.spin.cellEffects) as any[]) {
+      effect.texture = "./content-addressed-effect.webp";
+    }
+    const resources = createGridCellEffectResourcesFromManifest({
+      manifest: parseReelManifest(rawManifest),
+      skeletonModules: SKELETONS,
+      atlasModules: {
+        "../../../assets/game002-s3/Symbol.atlas": RAW_ATLAS,
+      },
+      textureModules: {
+        "../../../assets/game002-s3/content-addressed-effect.webp":
+          "/assets/physical-hash.webp",
+      },
+    });
+
+    expect(resources.anticipation?.playerResource.textureUrls).toEqual({
+      "Symbol.png": "/assets/physical-hash.webp",
+    });
+  });
+
   it("prepares a bounded pool, uses real loop edges, reuses and cleans players", () => {
     const resources = createFakeResources();
     const players: FakePlayer[] = [];

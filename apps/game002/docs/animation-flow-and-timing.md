@@ -1,12 +1,12 @@
 # game002 动画流程与时长
 
-本文记录 game002 当前实际使用的动画状态切换、业务时序、排序规则和配置来源。最后更新：2026-07-17。
+本文记录 game002 当前实际使用的动画状态切换、业务时序、排序规则和配置来源。最后更新：2026-07-28。
 
 本文是便于策划、美术和开发查阅的汇总，不替代代码与 manifest。数值冲突时按下列优先级确认：
 
-1. active skin manifest：skin1 使用 `assets/game002-s3/*.manifest.json`；skin2 的
-   layout/background/geometry/symbol/ImgNumber/popup 使用 `assets/crave` mapped
-   scene-layout package。两者的 Nearwin timing/effect 继续使用显式共享的
+1. active skin manifest：唯一支持的 skin2 从 `assets/crave` mapped scene-layout
+   package 取得 layout/background/geometry/symbol/ImgNumber/popup。Nearwin
+   timing/effect 继续使用显式的
    `assets/game002-s3/reel.manifest.json` presentation extension。
 2. `apps/game002/src/*-config.ts` 中的 game002 业务 timing。
 3. Spine/VNI 资源自身的真实 animation duration。
@@ -18,11 +18,13 @@
 
 ```text
 initial spin
+  -> settled multiplier transform（若存在）
   -> 按 result 分组播放 emphasis / opening win
   -> 按稳定顺序 remove 或 CN collect
   -> 有 cascade 时：
        非期待：unified fall
        已期待：existing-only dropdown -> Nearwin2 sweep -> selective refill spin
+  -> refill settled multiplier transform（若存在）
   -> 重复 win/remove/cascade
   -> global win-amount
   -> awaiting-dismiss / 下一次 spin 清理
@@ -85,7 +87,7 @@ lastStop  = 1028 + (54 - 1) * 16 = 1876ms
 
 ## Symbol 落地 appear
 
-配置来源：[`symbol-state-textures.manifest.json`](../../../assets/game002-s3/symbol-state-textures.manifest.json)。
+配置来源：`assets/crave` active Symbols package manifest。
 
 - manifest 配置 `appear` 的 symbol 在逐格 reel landing 时播放一次真实 `Start`。
 - `Start` 完成后回到同一个 symbol 的 normal：多数 symbol 为 `Idle`，CO 和 CN tier 为 `Loop`。
@@ -94,9 +96,48 @@ lastStop  = 1028 + (54 - 1) * 16 = 1876ms
 - 非期待 unified fall 不走 spin/appear；期待 selective refill 的新 symbol 才走逐格 appear。
 - `Start` 的准确时长由各 Spine JSON 自身决定，runtime 等待真实 completion，不在 app 中复制时长表。
 
+## WL/WM/CM multiplier 与 CN 更新
+
+每次 initial spin 或 refill 必须先等待全部 symbol 落定，再进入本节流程；本节完成前
+不得启动中奖。
+
+```text
+bg-incwl（若上一中奖步有参与中奖的 WL）
+  -> 更新对应 WL 为 +1
+  -> WL Start once
+  -> 当前 WM Mult_Start once
+  -> 更新全部 WL：当前值 + 本批全部 WM multiplier 之和
+  -> 当前 WM Mult_Idle 一个真实 loop
+  -> 当前 WM Mult_End once
+  -> 当前 WM Change once
+  -> 原位置原子替换 WM -> CN
+  -> 当前唯一 CM Feature1 once
+  -> 当时全部 CN 同时更新 value 并播放 Feature_Change once
+  -> 当前 CM Change once
+  -> 原位置原子替换 CM -> CN
+  -> 开始现有中奖流程
+```
+
+- `bg-incwl` 的服务器数据位于中奖 step，但表现延迟到随后的 refill 全部落定后；
+  它先于当前 WM 生效。没有 WM 时，WL Start 完成即结束 transform。
+- 没有 WL 时不要求 `bg-updwl`，但 WM 的四段动画、WM -> CN 和新 CN value 流程
+  仍完整执行。
+- WM 的 `Mult_Start/Mult_Idle/Mult_End/Change` 同批并行；Idle 必须跨过一个真实
+  loop boundary，其余等待 once completion。
+- initial/refill scene 优先级是
+  `bg-gencm > bg-genwm > bg-spin/bg-refill`；每个落定 step 最多一个 CM。
+- WM 阶段完整结束后才开始 CM。CM `Feature1` 完成时按 `bg-updcn` 一次更新当时
+  全部 CN（含本批 WM 新转出的 CN），并行播放 `Feature_Change`；完成后才播放
+  CM `Change`，其真实 once completion 边界按 `bg-cm2cn/bg-gencmcn` 提交新 CN。
+- 没有 CM 时跳过全部 CM/CN 更新阶段；CM 存在但当时没有 CN 时只跳过
+  `Feature_Change`，仍完整播放 CM `Feature1/Change` 与 CM -> CN。
+- WL/WM/CM 数字使用唯一 multiplier ImgNumber，格式为 `xN`，exact Spine slot
+  为 `Mult`。
+
 ## Win、压暗和 remove
 
-配置来源：[`cascade-config.ts`](../src/cascade-config.ts)、[`symbol-state-textures.manifest.json`](../../../assets/game002-s3/symbol-state-textures.manifest.json)。
+配置来源：[`cascade-config.ts`](../src/cascade-config.ts)、`assets/crave` active
+Symbols package manifest。
 
 | 阶段             |    时长 | 行为                                       |
 | ---------------- | ------: | ------------------------------------------ |
@@ -123,7 +164,8 @@ normal -> win once（压暗开始时已启动）
 
 ## CN coin 中奖与收集
 
-业务 cadence 来源：[`cascade-win-summary-config.ts`](../src/cascade-win-summary-config.ts)。状态映射来源：[`symbol-state-textures.manifest.json`](../../../assets/game002-s3/symbol-state-textures.manifest.json)。
+业务 cadence 来源：[`cascade-win-summary-config.ts`](../src/cascade-win-summary-config.ts)。
+状态映射来源：`assets/crave` active Symbols package manifest。
 
 整体状态：
 

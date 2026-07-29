@@ -613,6 +613,34 @@ describe("buildgamestatic YAML loader", () => {
       },
     });
 
+    const base = createYamlObject();
+    const {
+      currency: _currency,
+      locale: _locale,
+      ...winAmountWithoutDisplayMetadata
+    } = createWinAmountObject();
+    const withoutDisplayMetadata = parseGameStaticYamlValue(
+      {
+        ...base,
+        skins: {
+          "1": {
+            ...base.skins["1"],
+            winAmount: winAmountWithoutDisplayMetadata,
+          },
+        },
+      },
+      {
+        rootDir: root,
+        inputPath: "game.yaml",
+      },
+    );
+    expect(withoutDisplayMetadata.skins["1"].winAmount).not.toHaveProperty(
+      "currency",
+    );
+    expect(withoutDisplayMetadata.skins["1"].winAmount).not.toHaveProperty(
+      "locale",
+    );
+
     expect(() =>
       parseGameStaticYamlValue(
         withWinAmount(createYamlObject(), {

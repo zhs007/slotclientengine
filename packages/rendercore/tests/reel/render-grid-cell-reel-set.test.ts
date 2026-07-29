@@ -596,6 +596,43 @@ describe("RenderGridCellReelSet", () => {
       }),
     ).toThrow(/dimensions/);
   });
+
+  it("prepares visible occurrence replacement without mutation and commits atomically", () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS);
+    const before = reelSet.getVisibleScene();
+    const rolledBack = reelSet.prepareVisibleOccurrenceReplacement({
+      x: 0,
+      y: 0,
+      expectedCode: 1,
+      outputCode: 2,
+      outputPresentationValue: null,
+    });
+    expect(reelSet.getVisibleScene()).toEqual(before);
+    rolledBack.rollback();
+    expect(() => rolledBack.commit()).toThrow(/rolled-back/);
+    expect(reelSet.getVisibleScene()).toEqual(before);
+
+    const prepared = reelSet.prepareVisibleOccurrenceReplacement({
+      x: 0,
+      y: 0,
+      expectedCode: 1,
+      outputCode: 2,
+      outputPresentationValue: null,
+    });
+    prepared.commit();
+    prepared.commit();
+    expect(reelSet.getVisibleScene()[0][0]).toBe(2);
+    expect(() =>
+      reelSet.prepareVisibleOccurrenceReplacement({
+        x: 0,
+        y: 0,
+        expectedCode: 1,
+        outputCode: 2,
+        outputPresentationValue: null,
+      }),
+    ).toThrow(/expected code 1, received 2/);
+  });
 });
 
 function getCellClipMask(

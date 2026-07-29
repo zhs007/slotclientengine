@@ -675,10 +675,10 @@
       "byteLength": 159281
     },
     "symbol-state-textures.manifest.json": {
-      "path": "assets/bdf9ae2bc6c78a9e257544600eceb02887d5050ba1b0d9ea381cd19bf162a907.json",
-      "sha256": "bdf9ae2bc6c78a9e257544600eceb02887d5050ba1b0d9ea381cd19bf162a907",
+      "path": "assets/20d19010375c99bebd15df7de539d446ed6220eb05dbc29f047508757b300a42.json",
+      "sha256": "20d19010375c99bebd15df7de539d446ed6220eb05dbc29f047508757b300a42",
       "mediaType": "application/json",
-      "byteLength": 25184
+      "byteLength": 30580
     },
     "Symbol.atlas": {
       "path": "assets/f914335ebe3242cf9ee31a683694a73d114acb8c2c61407b24cf915fc51b6497.atlas",
@@ -693,10 +693,82 @@
       "byteLength": 4912488
     },
     "symbols.package.json": {
-      "path": "assets/c08923ec32c3412bd8b6d8bc08b3c443582fa507dcf454033b73cc1347ce0a5f.json",
-      "sha256": "c08923ec32c3412bd8b6d8bc08b3c443582fa507dcf454033b73cc1347ce0a5f",
+      "path": "assets/0754ee24033dc4d38dfcf59a81b756861d59e0c3103cef91b4c86b9fe81d7897.json",
+      "sha256": "0754ee24033dc4d38dfcf59a81b756861d59e0c3103cef91b4c86b9fe81d7897",
       "mediaType": "application/json",
-      "byteLength": 1504
+      "byteLength": 1885
+    },
+    "wl-wm-multiplier-0.png": {
+      "path": "assets/627e0a1375b921449a7dfb1fdf78681415115c6472dec0a23d977746efc50287.png",
+      "sha256": "627e0a1375b921449a7dfb1fdf78681415115c6472dec0a23d977746efc50287",
+      "mediaType": "image/png",
+      "byteLength": 2493
+    },
+    "wl-wm-multiplier-1.png": {
+      "path": "assets/a88db3ccc2af85909efd646088366afc4481ada403272c8d3155353ffb967f94.png",
+      "sha256": "a88db3ccc2af85909efd646088366afc4481ada403272c8d3155353ffb967f94",
+      "mediaType": "image/png",
+      "byteLength": 1523
+    },
+    "wl-wm-multiplier-2.png": {
+      "path": "assets/f958707022e82721e5992d10cd4f1e8ea12f6f3f98c55380d3930d7760c1a6af.png",
+      "sha256": "f958707022e82721e5992d10cd4f1e8ea12f6f3f98c55380d3930d7760c1a6af",
+      "mediaType": "image/png",
+      "byteLength": 2298
+    },
+    "wl-wm-multiplier-3.png": {
+      "path": "assets/82cb421895684ad04a87ef19c0724a2fa2f9c11ab8e86e194b65d1dc9553c367.png",
+      "sha256": "82cb421895684ad04a87ef19c0724a2fa2f9c11ab8e86e194b65d1dc9553c367",
+      "mediaType": "image/png",
+      "byteLength": 2726
+    },
+    "wl-wm-multiplier-4.png": {
+      "path": "assets/785987273954fe2524fb0f6ff7cb2799a9fce60ad1c5a906740558c586ea83fb.png",
+      "sha256": "785987273954fe2524fb0f6ff7cb2799a9fce60ad1c5a906740558c586ea83fb",
+      "mediaType": "image/png",
+      "byteLength": 1887
+    },
+    "wl-wm-multiplier-5.png": {
+      "path": "assets/56ed9debad2a633f16f1d71707d6aad83bffa67e254ce294cce1d159d4a30151.png",
+      "sha256": "56ed9debad2a633f16f1d71707d6aad83bffa67e254ce294cce1d159d4a30151",
+      "mediaType": "image/png",
+      "byteLength": 2295
+    },
+    "wl-wm-multiplier-6.png": {
+      "path": "assets/6c148b8e77060eff5eb2bf9c53ebf3602b0e70670a740f514706eb0c57d1a14a.png",
+      "sha256": "6c148b8e77060eff5eb2bf9c53ebf3602b0e70670a740f514706eb0c57d1a14a",
+      "mediaType": "image/png",
+      "byteLength": 2401
+    },
+    "wl-wm-multiplier-7.png": {
+      "path": "assets/0ad38e982cf2b9435d81a3cf403e33064bfd652c079feecb2ee583d0b5913a54.png",
+      "sha256": "0ad38e982cf2b9435d81a3cf403e33064bfd652c079feecb2ee583d0b5913a54",
+      "mediaType": "image/png",
+      "byteLength": 2031
+    },
+    "wl-wm-multiplier-8.png": {
+      "path": "assets/08787b0eb8a578b8fa2702812e5d2025b5476042c119914d34f8cacc236c6916.png",
+      "sha256": "08787b0eb8a578b8fa2702812e5d2025b5476042c119914d34f8cacc236c6916",
+      "mediaType": "image/png",
+      "byteLength": 2462
+    },
+    "wl-wm-multiplier-9.png": {
+      "path": "assets/ce2f1a0e8a1edb28a47b101e4b86b93db287926768b3c692deda2cd1a5f8b5ef.png",
+      "sha256": "ce2f1a0e8a1edb28a47b101e4b86b93db287926768b3c692deda2cd1a5f8b5ef",
+      "mediaType": "image/png",
+      "byteLength": 2422
+    },
+    "wl-wm-multiplier-x.png": {
+      "path": "assets/d63c3e66fca9a7058c2910ce069a6ef56cfd6de24a1f332ebe38d44b55a76a89.png",
+      "sha256": "d63c3e66fca9a7058c2910ce069a6ef56cfd6de24a1f332ebe38d44b55a76a89",
+      "mediaType": "image/png",
+      "byteLength": 2398
+    },
+    "wl-wm-multiplier.image-string.manifest.json": {
+      "path": "assets/4b4fc411f3c902baec7bde8d40fbad8edd0aed4518f07a2f5fa0117a797aa629.json",
+      "sha256": "4b4fc411f3c902baec7bde8d40fbad8edd0aed4518f07a2f5fa0117a797aa629",
+      "mediaType": "application/json",
+      "byteLength": 2433
     },
     "WL.disabled.png": {
       "path": "assets/e279acb4f3db0428942528838f38b9979db822d8e96bfbecdfdd06961d4e8d33.png",

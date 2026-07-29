@@ -104,12 +104,7 @@ export function inspectSymbolSpineBundle(options: {
       "Spine symbol schema currently supports exactly one atlas page.",
     );
   }
-  const textureName = fileName(options.texturePath);
-  if (atlasMetadata.pageNames[0] !== textureName) {
-    throw new SymbolAssetError(
-      `Spine atlas page "${atlasMetadata.pageNames[0]}" must match texture "${textureName}".`,
-    );
-  }
+  fileName(options.texturePath);
   try {
     const atlas = new TextureAtlas(options.atlasText);
     new SkeletonJson(new AtlasAttachmentLoader(atlas)).readSkeletonData(

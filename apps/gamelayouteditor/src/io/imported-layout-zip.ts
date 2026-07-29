@@ -49,6 +49,7 @@ export async function importLayoutZip(
       readonly durationSeconds: number;
       readonly hasAudio: boolean | "unknown";
     }>;
+    readonly loadSymbolTextures?: boolean;
   } = {},
 ): Promise<ImportedLayoutPackage> {
   const files = extractBoundedZip(zipBytes);
@@ -88,6 +89,7 @@ export async function validateLayoutAssets(
       readonly durationSeconds: number;
       readonly hasAudio: boolean | "unknown";
     }>;
+    readonly loadSymbolTextures?: boolean;
   } = {},
 ): Promise<ImportedLayoutPackage> {
   const manifest = parseSceneLayoutManifest(manifestValue);
@@ -174,6 +176,9 @@ export async function validateLayoutAssets(
               }
             },
           }
+        : {}),
+      ...(options.loadSymbolTextures !== undefined
+        ? { loadSymbolTextures: options.loadSymbolTextures }
         : {}),
     });
   let destroyed = false;

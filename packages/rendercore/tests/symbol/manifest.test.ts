@@ -174,9 +174,12 @@ describe("symbol state texture manifest helpers", () => {
       },
     ];
     const parsed = parseSymbolStateTextureManifest(manifest);
-    expect(parsed.symbols.H1.imageStringNodes).toEqual(
-      manifest.symbols.H1.imageStringNodes,
-    );
+    expect(parsed.symbols.H1.imageStringNodes).toEqual([
+      expect.objectContaining({
+        name: "coin-value",
+        targets: [{ state: "normal", slot: "Num" }],
+      }),
+    ]);
     expect(Object.isFrozen(parsed.symbols.H1.imageStringNodes)).toBe(true);
     expect(parsed.symbols.L1.imageStringNodes).toEqual([]);
   });
@@ -246,6 +249,47 @@ describe("symbol state texture manifest helpers", () => {
     ];
     mutate(manifest.symbols.H1.imageStringNodes);
     expect(() => parseSymbolStateTextureManifest(manifest)).toThrow(message);
+  });
+
+  it("parses canonical multi-target nodes and rejects duplicates or mixed legacy fields", () => {
+    const manifest = createManifest() as any;
+    manifest.symbols.H1.imageStringNodes = [
+      {
+        name: "coin-value",
+        resource:
+          "./dependencies/image-strings/coin-digits/image-string.manifest.json",
+        targets: [
+          { state: "normal", slot: "Num" },
+          { state: "appear", slot: "Num" },
+        ],
+        initialText: "1",
+        anchor: { x: 0.5, y: 0.5 },
+        transform: { x: 0, y: 0, scale: 1 },
+        followSlotColor: false,
+      },
+    ];
+    expect(
+      parseSymbolStateTextureManifest(manifest).symbols.H1.imageStringNodes[0]
+        ?.targets,
+    ).toEqual([
+      { state: "normal", slot: "Num" },
+      { state: "appear", slot: "Num" },
+    ]);
+    manifest.symbols.H1.imageStringNodes[0].targets.push({
+      state: "normal",
+      slot: "Num",
+    });
+    expect(() => parseSymbolStateTextureManifest(manifest)).toThrow(
+      /duplicate state\/slot/,
+    );
+    manifest.symbols.H1.imageStringNodes[0].targets.pop();
+    manifest.symbols.H1.imageStringNodes[0].target = {
+      state: "normal",
+      slot: "Num",
+    };
+    expect(() => parseSymbolStateTextureManifest(manifest)).toThrow(
+      /both target and targets/,
+    );
   });
 
   it("rejects a non-array imageStringNodes field", () => {
@@ -582,6 +626,34 @@ describe("symbol state texture manifest helpers", () => {
       animationName: "Start",
       loop: false,
     });
+  });
+
+  it("binds an optimized Spine texture key without comparing it to the atlas page name", () => {
+    const manifest = structuredClone(createManifest());
+    for (const animation of Object.values(manifest.symbols.H1.animations)) {
+      if (animation?.kind === "spine") {
+        animation.texture = "./content-addressed-texture.webp";
+      }
+    }
+
+    const resources = createSymbolSpineAnimationResourcesFromManifest({
+      manifest,
+      requiredStates,
+      spineSkeletonModules: {
+        "../../../assets/game003-s1/H1.json": readJsonAsset("H1.json"),
+      },
+      spineAtlasModules: {
+        "../../../assets/game003-s1/Symbol.atlas":
+          readTextAsset("Symbol.atlas"),
+      },
+      spineTextureModules: {
+        "../../../assets/game003-s1/content-addressed-texture.webp":
+          "/assets/physical-hash.webp",
+      },
+    });
+
+    expect(resources.H1?.normal?.atlasPage).toBe("Symbol.png");
+    expect(resources.H1?.normal?.textureUrl).toBe("/assets/physical-hash.webp");
   });
 
   it("validates the current game002-s3 Spine 4.3 resource set without copied fixtures", () => {

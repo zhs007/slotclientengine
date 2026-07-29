@@ -24,7 +24,7 @@ import "./styles.css";
 export interface Game002PreparedLoadingState {
   readonly readiness: Game002ReadinessResult;
   readonly skin: Game002SkinConfig;
-  readonly valuePresentationResourceBundle: Game002SkinResourceOwner;
+  readonly resourceOwner: Game002SkinResourceOwner;
 }
 
 export interface Game002EnteredGame {
@@ -41,17 +41,15 @@ export async function finalizeGame002At99(options: {
     if (options.signal.aborted) throw createAbortError();
     const skinResult = await prepareGame002SkinConfig(
       options.readinessResult.config.skin,
-      options.readinessResult.config.skin === "2"
-        ? {
-            craveFiles: readGame002CravePackageFiles(
-              options.loadedResources ?? new Map(),
-            ),
-          }
-        : {},
+      {
+        craveFiles: readGame002CravePackageFiles(
+          options.loadedResources ?? new Map(),
+        ),
+      },
     );
     if (options.signal.aborted) {
       try {
-        await skinResult.valuePresentationResourceBundle.destroy();
+        await skinResult.resourceOwner.destroy();
       } catch {
         // The abort remains authoritative after best-effort cleanup.
       }
@@ -60,8 +58,7 @@ export async function finalizeGame002At99(options: {
     return Object.freeze({
       readiness: options.readinessResult,
       skin: skinResult.skin,
-      valuePresentationResourceBundle:
-        skinResult.valuePresentationResourceBundle,
+      resourceOwner: skinResult.resourceOwner,
     });
   } catch (error) {
     try {
@@ -100,7 +97,7 @@ export async function enterGame002(options: {
         cleanupError ??= error;
       }
       try {
-        await options.prepared.valuePresentationResourceBundle.destroy();
+        await options.prepared.resourceOwner.destroy();
       } catch (error) {
         cleanupError ??= error;
       }

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,6 +29,9 @@ const SOURCE_WIN_AMOUNT_MANIFEST = join(
   SOURCE_WIN_AMOUNT_ROOT,
   "win-amount.manifest.json",
 );
+const MINECART2_ROOT = join(REPO_ROOT, "assets/minecart2");
+const MINECART2_LAYOUT = join(MINECART2_ROOT, "layout.manifest.json");
+const MINECART2_MAP = join(MINECART2_ROOT, "assets.map.json");
 
 const DISPLAY_SYMBOLS = Object.freeze([
   "WL",
@@ -120,6 +123,7 @@ function verify() {
   assertDirectory(ASSETS_ROOT);
   assertFile(SOURCE_MANIFEST);
   assertFile(SOURCE_WIN_AMOUNT_MANIFEST);
+  verifyMinecart2SourceContract();
   verifyGeneratedStaticConfigSync();
   if (existsSync(GENERATED_LOADING_CONFIG)) {
     verifyGeneratedLoadingConfigSource(
@@ -331,6 +335,7 @@ function verifyAssets(assetNames) {
   assertAsset(assetNames, /^index-[A-Za-z0-9_-]+\.js$/, "index-*.js");
   assertAsset(assetNames, /^index-[A-Za-z0-9_-]+\.css$/, "index-*.css");
   const distAssetHashes = createDistAssetHashMap(assetNames);
+  verifyMinecart2DistClosure(distAssetHashes);
   const jsAssets = assetNames.filter((name) => /\.js$/.test(name));
   if (jsAssets.length < 2) {
     failures.push("dist/assets must contain multiple JS chunks.");
@@ -406,6 +411,77 @@ function verifyAssets(assetNames) {
     verifyWinAmountAssetsBundled(
       distAssetHashes,
       JSON.parse(readFileSync(SOURCE_WIN_AMOUNT_MANIFEST, "utf8")),
+    );
+  }
+}
+
+function verifyMinecart2SourceContract() {
+  assertFile(MINECART2_LAYOUT);
+  assertFile(MINECART2_MAP);
+  if (!existsSync(MINECART2_LAYOUT) || !existsSync(MINECART2_MAP)) return;
+
+  const layout = JSON.parse(readFileSync(MINECART2_LAYOUT, "utf8"));
+  const map = JSON.parse(readFileSync(MINECART2_MAP, "utf8"));
+  if (layout.version !== 1 || layout.kind !== "scene-layout") {
+    failures.push("minecart2 layout must declare scene-layout version=1.");
+  }
+  if (map.version !== 1 || map.kind !== "editor-assets") {
+    failures.push(
+      "minecart2 assets.map.json must declare editor-assets version=1.",
+    );
+  }
+
+  const physicalPaths = new Set();
+  for (const [key, asset] of Object.entries(map.files ?? {})) {
+    if (
+      typeof asset.path !== "string" ||
+      typeof asset.sha256 !== "string" ||
+      !asset.path.startsWith(`assets/${asset.sha256}.`) ||
+      !Number.isSafeInteger(asset.byteLength)
+    ) {
+      failures.push(`minecart2 assets.map.json entry "${key}" is invalid.`);
+      continue;
+    }
+    const path = join(MINECART2_ROOT, asset.path);
+    physicalPaths.add(asset.path);
+    assertFile(path);
+    if (!existsSync(path)) continue;
+    if (statSync(path).size !== asset.byteLength) {
+      failures.push(`minecart2 mapped payload "${asset.path}" length drifted.`);
+    }
+    if (hashFile(path) !== asset.sha256) {
+      failures.push(`minecart2 mapped payload "${asset.path}" hash drifted.`);
+    }
+  }
+
+  const actual = listFiles(join(MINECART2_ROOT, "assets"))
+    .map((path) => relative(MINECART2_ROOT, path).split("\\").join("/"))
+    .sort();
+  const expected = [...physicalPaths].sort();
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    failures.push(
+      "minecart2 mapped payload folder must exactly match assets.map.json physical paths.",
+    );
+  }
+}
+
+function verifyMinecart2DistClosure(distAssetHashes) {
+  if (!existsSync(MINECART2_MAP)) return;
+  const map = JSON.parse(readFileSync(MINECART2_MAP, "utf8"));
+  const files = [
+    MINECART2_LAYOUT,
+    MINECART2_MAP,
+    ...new Set(
+      Object.values(map.files ?? {}).map((asset) =>
+        join(MINECART2_ROOT, asset.path),
+      ),
+    ),
+  ];
+  for (const file of files) {
+    assertSourceAssetBundled(
+      distAssetHashes,
+      file,
+      relative(MINECART2_ROOT, file),
     );
   }
 }

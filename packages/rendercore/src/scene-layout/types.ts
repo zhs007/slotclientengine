@@ -379,6 +379,9 @@ export interface SceneLayoutPackageRuntime extends SceneLayoutRuntime {
   getMainReelSymbolStateSnapshots(
     positions: readonly { readonly x: number; readonly y: number }[],
   ): readonly import("../reel/index.js").RenderVisibleSymbolStateSnapshot[];
+  getMainReelSymbolGeometrySnapshots(
+    positions: readonly { readonly x: number; readonly y: number }[],
+  ): readonly import("../reel/index.js").RenderVisibleSymbolGeometrySnapshot[];
   hasMainReelSymbolStateCapability(
     position: { readonly x: number; readonly y: number },
     state: string,

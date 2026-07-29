@@ -13,6 +13,7 @@
     },
     "mode": "maximized-focus"
   },
+  "coordinateOrigin": "top-left",
   "gameModes": {
     "initialMode": "BaseGame",
     "modes": [

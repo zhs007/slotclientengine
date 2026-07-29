@@ -61,7 +61,7 @@ describe("image-string logical dependency", () => {
       {
         name: "coin-value",
         resource: "./image-string.manifest.json",
-        target: { state: "normal", slot: "Num" },
+        targets: [{ state: "normal", slot: "Num" }],
         initialText: "0",
         anchor: { x: 0.5, y: 0.5 },
         transform: { x: 0, y: 0, scale: 1 },
@@ -109,7 +109,10 @@ describe("image-string logical dependency", () => {
       {
         name: "coin-value",
         resource: "./image-string.manifest.json",
-        target: { state: "normal", slot: "Number" },
+        targets: [
+          { state: "normal", slot: "Number" },
+          { state: "appear", slot: "Number" },
+        ],
         initialText: "0",
         anchor: { x: 0.5, y: 0.5 },
         transform: { x: 0, y: 0, scale: 1 },

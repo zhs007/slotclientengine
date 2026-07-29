@@ -74,7 +74,7 @@ describe("game002 task 95 adapter", () => {
     const localPending = adapter.playSpin(createTerminalLogic(false));
     fakeApp.tick(16);
     await localPending;
-    expect(runtime.spinValues.at(-1)).toBeUndefined();
+    expect(runtime.spinValues.at(-1)).toBeDefined();
     adapter.destroy?.();
     adapter.destroy?.();
   });
@@ -311,7 +311,6 @@ function createTestAdapter(options: Omit<Game002AdapterOptions, "skin">) {
   return createGame002Adapter({
     skin: getTestGame002SkinConfig(),
     createBackgroundPlayer: () => new FakeBackgroundPlayer().asPlayer(),
-    loadSymbolTextures: async () => ({}),
     createWinAmountPlayer: () => new FakeWinAmountPlayer([]).asPlayer(),
     createSymbolCascadePlayer: (playerOptions) =>
       new FakeCascadePlayer([], playerOptions.target).asPlayer(),
@@ -334,8 +333,8 @@ function createTerminalLogic(withServerValues = true) {
   value.gmi.replyPlay.results[0].cashWin = 0;
   const params = value.gmi.replyPlay.results[0].clientData.curGameModParam;
   params.historyComponents = withServerValues
-    ? ["bg-spin", "bg-gencoins"]
-    : ["bg-spin"];
+    ? ["bg-spin", "bg-gencoins", "bg-genwilds"]
+    : ["bg-spin", "bg-genwilds"];
   if (!withServerValues) delete params.mapComponents["bg-gencoins"];
   delete params.mapComponents["bg-win"];
   delete params.mapComponents["bg-remove"];
@@ -462,6 +461,9 @@ class FakeRuntime {
   anticipationActive = false;
   completeOperations = true;
   updateCalls = 0;
+  symbolState = "normal";
+  symbolLoopCompletionCount = 0;
+  symbolOnceCompletionCount = 0;
 
   constructor(events: string[]) {
     this.events = events;
@@ -519,16 +521,35 @@ class FakeRuntime {
       },
       update: () => this.update(),
       isSpinning: () => this.operation !== "idle",
-      requestVisibleSymbolStates: () => undefined,
+      requestVisibleSymbolStates: (
+        _positions: readonly TestPosition[],
+        state: string,
+      ) => {
+        this.symbolState = state;
+      },
       getVisibleSymbolStateSnapshots: (positions: readonly TestPosition[]) =>
         positions.map((position: TestPosition) => ({
           ...position,
           code: 1,
           kind: "textured",
-          requestedState: "normal",
-          resolvedState: "normal",
-          isOnce: false,
+          requestedState: this.symbolState,
+          resolvedState: this.symbolState,
+          isOnce: this.symbolState !== "multIdle",
+          loopCompletionCount: this.symbolLoopCompletionCount,
+          onceCompletionCount: this.symbolOnceCompletionCount,
         })),
+      setVisibleSymbolPresentationValue: () => undefined,
+      setVisibleSymbolImageStringText: () => undefined,
+      getVisibleSymbolImageStringText: () => "x1",
+      prepareVisibleOccurrenceReplacement: () => ({
+        x: 0,
+        y: 0,
+        inputCode: 7,
+        outputCode: 8,
+        commit: () => undefined,
+        rollback: () => undefined,
+        destroy: () => undefined,
+      }),
       getVisibleSymbolGeometrySnapshots: (positions: readonly TestPosition[]) =>
         positions.map((position: TestPosition) => ({
           ...position,
@@ -601,6 +622,10 @@ class FakeRuntime {
 
   private update() {
     this.updateCalls += 1;
+    if (this.operation === "idle" && this.symbolState !== "normal") {
+      if (this.symbolState === "multIdle") this.symbolLoopCompletionCount += 1;
+      else this.symbolOnceCompletionCount += 1;
+    }
     if (this.operation === "idle" || !this.completeOperations) {
       return {
         completed: this.operation === "idle",

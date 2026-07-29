@@ -94,10 +94,28 @@ export interface SlotRoundRefillStepPlan {
   readonly requiredCapabilities: readonly ["refill"];
 }
 
+export interface SlotRoundSettledTransformOccurrenceChange {
+  readonly occurrenceId: string;
+  readonly position: SlotRoundPosition;
+  readonly input: SlotRoundOccurrence;
+  readonly output: SlotRoundOccurrence;
+}
+
+export interface SlotRoundSettledTransformStepPlan {
+  readonly kind: "settled-transform";
+  readonly index: number;
+  readonly stepIndex: number;
+  readonly input: SlotRoundOccurrenceSnapshot;
+  readonly output: SlotRoundOccurrenceSnapshot;
+  readonly changes: readonly SlotRoundSettledTransformOccurrenceChange[];
+  readonly requiredCapabilities: readonly ["settled-transform"];
+}
+
 export type SlotRoundExecutionStep =
   | SlotRoundWinStepPlan
   | SlotRoundDropdownStepPlan
-  | SlotRoundRefillStepPlan;
+  | SlotRoundRefillStepPlan
+  | SlotRoundSettledTransformStepPlan;
 
 export interface SlotRoundExecutionPlan {
   readonly kind: "slot-round-execution-plan";
@@ -114,12 +132,46 @@ export type SlotRoundCapability =
   | "remove"
   | "dropdown"
   | "refill"
+  | "settled-transform"
   | "sequential-collect";
+
+export interface SlotRoundSettledValueDraft {
+  readonly position: SlotRoundPosition;
+  readonly value: SlotRoundPresentationValue;
+}
+
+export interface SlotRoundSettledTransformChangeDraft {
+  readonly position: SlotRoundPosition;
+  readonly outputCode: number;
+  readonly outputValue: SlotRoundPresentationValue;
+}
+
+export interface SlotRoundSettledCompileContext {
+  readonly stepIndex: number;
+  readonly step: GameLogicStep;
+  readonly input: SlotRoundOccurrenceSnapshot;
+}
+
+export interface SlotRoundSettledSceneCompileContext {
+  readonly stepIndex: number;
+  readonly step: GameLogicStep;
+  readonly kind: "spin" | "refill";
+  readonly inputScene: SceneMatrix;
+}
 
 export interface SlotRoundCompileContext {
   readonly symbolCodes: Readonly<Record<string, number>>;
   readonly columns?: number;
   readonly rows?: number;
+  readonly resolveSettledScene?: (
+    context: SlotRoundSettledSceneCompileContext,
+  ) => SceneMatrix;
+  readonly hydrateSettledValues?: (
+    context: SlotRoundSettledCompileContext,
+  ) => readonly SlotRoundSettledValueDraft[];
+  readonly compileSettledTransform?: (
+    context: SlotRoundSettledCompileContext,
+  ) => readonly SlotRoundSettledTransformChangeDraft[];
 }
 
 /**
@@ -144,19 +196,35 @@ export function compileSlotRoundExecutionPlan(
   const steps = round.getSteps();
   if (steps.length === 0)
     throw new LogicParseError("slot round must contain at least one step.");
-  const initialScene = exactlyOneScene(
+  const serverInitialScene = exactlyOneScene(
     steps[0],
     profile.components.spin,
     "initial spin",
   );
   const dimensions = validateScene(
-    initialScene,
+    serverInitialScene,
     context.columns,
     context.rows,
     emptyCode,
     symbolNames,
     false,
     "initial spin scene",
+  );
+  const initialScene =
+    context.resolveSettledScene?.({
+      stepIndex: 0,
+      step: steps[0],
+      kind: "spin",
+      inputScene: serverInitialScene,
+    }) ?? serverInitialScene;
+  validateScene(
+    initialScene,
+    dimensions.columns,
+    dimensions.rows,
+    emptyCode,
+    symbolNames,
+    false,
+    "step[0] settled spin scene",
   );
   const initialValues = resolveFullValues({
     profile,
@@ -169,6 +237,7 @@ export function compileSlotRoundExecutionPlan(
     label: "step[0] initial values",
   });
   let current = createInitialSnapshot(initialScene, initialValues, symbolNames);
+  let initial = current;
   const execution: SlotRoundExecutionStep[] = [];
   let planIndex = 0;
 
@@ -231,13 +300,13 @@ export function compileSlotRoundExecutionPlan(
       execution.push(dropdown);
       current = dropdown.output;
 
-      const refillScene = exactlyOneScene(
+      const serverRefillScene = exactlyOneScene(
         step,
         cascade.components.refill,
         `step[${stepOffset}] refill`,
       );
       validateScene(
-        refillScene,
+        serverRefillScene,
         dimensions.columns,
         dimensions.rows,
         emptyCode,
@@ -250,6 +319,22 @@ export function compileSlotRoundExecutionPlan(
         cascade.components.refill,
         current.scene,
         emptyCode,
+      );
+      const refillScene =
+        context.resolveSettledScene?.({
+          stepIndex: stepOffset,
+          step,
+          kind: "refill",
+          inputScene: serverRefillScene,
+        }) ?? serverRefillScene;
+      validateScene(
+        refillScene,
+        dimensions.columns,
+        dimensions.rows,
+        emptyCode,
+        symbolNames,
+        false,
+        `step[${stepOffset}] settled refill scene`,
       );
       const refillValues = resolveFullValues({
         profile,
@@ -271,8 +356,52 @@ export function compileSlotRoundExecutionPlan(
         stepOffset,
         planIndex++,
       );
-      execution.push(refill);
       current = refill.output;
+      const hydratedRefill = hydrateSettledValues(
+        current,
+        context.hydrateSettledValues?.({
+          stepIndex: stepOffset,
+          step,
+          input: current,
+        }) ?? [],
+        `step[${stepOffset}] settled values`,
+      );
+      execution.push(
+        hydratedRefill === current
+          ? refill
+          : Object.freeze({ ...refill, output: hydratedRefill }),
+      );
+      current = hydratedRefill;
+    }
+
+    if (stepOffset === 0) {
+      current = hydrateSettledValues(
+        current,
+        context.hydrateSettledValues?.({
+          stepIndex: stepOffset,
+          step,
+          input: current,
+        }) ?? [],
+        "step[0] settled values",
+      );
+      initial = current;
+    }
+    const transformDraft =
+      context.compileSettledTransform?.({
+        stepIndex: stepOffset,
+        step,
+        input: current,
+      }) ?? [];
+    if (transformDraft.length > 0) {
+      const transform = compileSettledTransform(
+        current,
+        transformDraft,
+        symbolNames,
+        stepOffset,
+        planIndex++,
+      );
+      execution.push(transform);
+      current = transform.output;
     }
 
     const groups = compileWinGroups(profile, step, current, cascade);
@@ -394,19 +523,11 @@ export function compileSlotRoundExecutionPlan(
   return cloneAndFreeze({
     kind: "slot-round-execution-plan" as const,
     version: 1 as const,
-    initial: currentPlanInitial(initialScene, initialValues, symbolNames),
+    initial,
     steps: execution,
     final: current,
     requiredCapabilities: [...required],
   });
-}
-
-function currentPlanInitial(
-  scene: SceneMatrix,
-  values: SlotRoundValueMatrix,
-  names: ReadonlyMap<number, string>,
-): SlotRoundOccurrenceSnapshot {
-  return createInitialSnapshot(scene, values, names);
 }
 
 function parseSymbolCodes(
@@ -429,6 +550,146 @@ function parseSymbolCodes(
   if (names.size === 0)
     throw new LogicParseError("symbolCodes must not be empty.");
   return names;
+}
+
+function hydrateSettledValues(
+  input: SlotRoundOccurrenceSnapshot,
+  drafts: readonly SlotRoundSettledValueDraft[],
+  label: string,
+): SlotRoundOccurrenceSnapshot {
+  if (drafts.length === 0) return input;
+  const seen = new Set<string>();
+  const updates = new Map<string, SlotRoundPresentationValue>();
+  for (const [index, draft] of drafts.entries()) {
+    const position = validatePlanPosition(
+      draft.position,
+      input.scene,
+      `${label}[${index}].position`,
+    );
+    const key = positionKey(position);
+    if (seen.has(key))
+      throw new LogicParseError(`${label} contains duplicate position ${key}.`);
+    seen.add(key);
+    updates.set(key, normalizeValue(draft.value));
+  }
+  const values = input.values.map((column, x) =>
+    Object.freeze(
+      column.map((value, y) =>
+        updates.has(`${x},${y}`) ? updates.get(`${x},${y}`)! : value,
+      ),
+    ),
+  );
+  const occurrences = input.occurrences.map((occurrence) => {
+    const value = updates.get(positionKey(occurrence.position));
+    return value === undefined
+      ? occurrence
+      : Object.freeze({ ...occurrence, value });
+  });
+  return snapshotFromOccurrences(input.scene, values, occurrences);
+}
+
+function compileSettledTransform(
+  input: SlotRoundOccurrenceSnapshot,
+  drafts: readonly SlotRoundSettledTransformChangeDraft[],
+  names: ReadonlyMap<number, string>,
+  stepIndex: number,
+  index: number,
+): SlotRoundSettledTransformStepPlan {
+  const seen = new Set<string>();
+  const changes: SlotRoundSettledTransformOccurrenceChange[] = [];
+  const outputOccurrences = [...input.occurrences];
+  for (const [changeIndex, draft] of drafts.entries()) {
+    const position = validatePlanPosition(
+      draft.position,
+      input.scene,
+      `step[${stepIndex}] settled transform[${changeIndex}].position`,
+    );
+    const key = positionKey(position);
+    if (seen.has(key))
+      throw new LogicParseError(
+        `step[${stepIndex}] settled transform contains duplicate position ${key}.`,
+      );
+    seen.add(key);
+    if (!Number.isSafeInteger(draft.outputCode) || !names.has(draft.outputCode))
+      throw new LogicParseError(
+        `step[${stepIndex}] settled transform[${changeIndex}].outputCode is unknown.`,
+      );
+    const inputOccurrence = requireOccurrence(input, position);
+    const outputValue = normalizeValue(draft.outputValue);
+    if (
+      inputOccurrence.code === draft.outputCode &&
+      inputOccurrence.value === outputValue
+    )
+      throw new LogicParseError(
+        `step[${stepIndex}] settled transform[${changeIndex}] is a no-op.`,
+      );
+    const outputOccurrence = Object.freeze({
+      ...inputOccurrence,
+      code: draft.outputCode,
+      symbol: names.get(draft.outputCode)!,
+      value: outputValue,
+    });
+    const occurrenceIndex = outputOccurrences.findIndex(
+      (occurrence) => occurrence.id === inputOccurrence.id,
+    );
+    outputOccurrences[occurrenceIndex] = outputOccurrence;
+    changes.push(
+      Object.freeze({
+        occurrenceId: inputOccurrence.id,
+        position,
+        input: inputOccurrence,
+        output: outputOccurrence,
+      }),
+    );
+  }
+  const scene = input.scene.map((column, x) =>
+    Object.freeze(
+      column.map(
+        (code, y) =>
+          changes.find(
+            (change) => change.position.x === x && change.position.y === y,
+          )?.output.code ?? code,
+      ),
+    ),
+  );
+  const values = input.values.map((column, x) =>
+    Object.freeze(
+      column.map((value, y) => {
+        const change = changes.find(
+          (candidate) =>
+            candidate.position.x === x && candidate.position.y === y,
+        );
+        return change ? change.output.value : value;
+      }),
+    ),
+  );
+  return Object.freeze({
+    kind: "settled-transform",
+    index,
+    stepIndex,
+    input,
+    output: snapshotFromOccurrences(scene, values, outputOccurrences),
+    changes: Object.freeze(changes),
+    requiredCapabilities: Object.freeze(["settled-transform"] as const),
+  });
+}
+
+function validatePlanPosition(
+  value: SlotRoundPosition,
+  scene: SceneMatrix,
+  label: string,
+): SlotRoundPosition {
+  if (
+    !value ||
+    !Number.isSafeInteger(value.x) ||
+    !Number.isSafeInteger(value.y) ||
+    value.x < 0 ||
+    value.y < 0 ||
+    value.x >= scene.length ||
+    value.y >= scene[value.x].length
+  )
+    throw new LogicParseError(`${label} is out of range.`);
+  return Object.freeze({ x: value.x, y: value.y });
 }
 
 function validateScene(
@@ -775,7 +1036,7 @@ function compileRefill(
       values[x][y] !== input.values[x][y]
     )
       throw new LogicParseError(
-        `refill changed carried occurrence at (${x},${y}).`,
+        `refill changed carried occurrence at (${x},${y}) from code/value ${input.scene[x][y]}/${String(input.values[x][y])} to ${scene[x][y]}/${String(values[x][y])}.`,
       );
   });
   return Object.freeze({
@@ -869,8 +1130,8 @@ function resolveFullValues(options: {
       `${options.label} must use at most one otherScene.`,
     );
   const authoritative = scenes[0];
-  if (authoritative)
-    return parseAuthoritativeValues(
+  if (authoritative) {
+    const parsed = parseAuthoritativeValues(
       authoritative,
       options.scene,
       options.symbolNames,
@@ -878,6 +1139,22 @@ function resolveFullValues(options: {
       auxiliaryValueSymbols,
       options.label,
     );
+    if (!options.previous) return parsed;
+    const newKeys = new Set(options.newPositions.map(positionKey));
+    return Object.freeze(
+      parsed.map((column, x) =>
+        Object.freeze(
+          column.map((value, y) =>
+            !newKeys.has(`${x},${y}`) &&
+            value === null &&
+            options.previous![x][y] !== null
+              ? options.previous![x][y]
+              : value,
+          ),
+        ),
+      ),
+    );
+  }
   const newKeys = new Set(options.newPositions.map(positionKey));
   return Object.freeze(
     options.scene.map((column, x) =>
@@ -919,6 +1196,7 @@ function resolveDerivedValues(options: {
     options.symbolNames,
     new Set(options.profile.cascade?.symbols.valueSymbols ?? []),
     options.emptyCode,
+    options.derived,
     options.label,
   );
   assertMatrixEqual(parsed, options.derived, options.label);
@@ -973,6 +1251,7 @@ function parseAuthoritativeHoleValues(
   names: ReadonlyMap<number, string>,
   valueSymbols: ReadonlySet<string>,
   emptyCode: number,
+  derived: SlotRoundValueMatrix,
   label: string,
 ): SlotRoundValueMatrix {
   assertDimensions(other, scene, label);
@@ -1003,7 +1282,12 @@ function parseAuthoritativeHoleValues(
             throw new LogicParseError(
               `${label}[${x}][${y}] must be a non-negative safe integer.`,
             );
-          return null;
+          const derivedValue = derived[x][y];
+          if (derivedValue !== null && raw !== derivedValue)
+            throw new LogicParseError(
+              `${label}[${x}][${y}] retained value must equal ${derivedValue}.`,
+            );
+          return derivedValue;
         }),
       ),
     ),

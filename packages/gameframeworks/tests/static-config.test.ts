@@ -250,6 +250,22 @@ describe("slot game static config", () => {
     };
 
     expect(() => assertSlotGameStaticConfig(withWinAmount)).not.toThrow();
+    const {
+      currency: _currency,
+      locale: _locale,
+      ...winAmountWithoutDisplayMetadata
+    } = createValidWinAmountConfig();
+    expect(() =>
+      assertSlotGameStaticConfig({
+        ...config,
+        skins: {
+          "1": {
+            ...config.skins["1"],
+            winAmount: winAmountWithoutDisplayMetadata,
+          },
+        },
+      }),
+    ).not.toThrow();
     expect(() =>
       assertSlotGameStaticConfig({
         ...withWinAmount,

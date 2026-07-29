@@ -4,43 +4,84 @@ import {
   type SlotGameFramework,
   type SlotGameLiveSessionLike,
 } from "@slotclientengine/gameframeworks";
+import { createSceneLayoutFramePolicy } from "@slotclientengine/rendercore";
 import "@slotclientengine/gameframeworks/styles.css";
 import { createGame003Adapter } from "./game-adapter.js";
 import { GAME003_STATIC_CONFIG } from "./generated/game-static.generated.js";
 import {
   GAME003_REFERENCE_SIZE,
+  GAME003_SKIN1_PORTRAIT_ART_SIZE,
   createGame003FramePolicy,
 } from "./game-layout.js";
 import {
   parseGame003FrameworkConfigFromQuery,
   type Game003FrameworkConfig,
 } from "./framework-config.js";
-import { formatServerUsdAmount } from "./money.js";
-import { getGame003SkinConfig, type Game003SkinConfig } from "./skin-config.js";
+import { formatServerAmount } from "./money.js";
+import {
+  prepareGame003SkinConfig,
+  type Game003SkinConfig,
+  type Game003SkinResourceOwner,
+} from "./skin-config.js";
+import { readGame003Minecart2PackageFiles } from "./loading-resources.js";
 import "./styles.css";
 
 export interface Game003PreparedLoadingState {
   readonly config: Game003FrameworkConfig;
   readonly skin: Game003SkinConfig;
+  readonly skinResourceOwner: Game003SkinResourceOwner;
   readonly liveSession: SlotGameLiveSessionLike;
 }
 
 export interface Game003EnteredGame {
   readonly framework: SlotGameFramework;
-  destroy(): void;
+  destroy(): Promise<void>;
 }
 
 export async function prepareGame003At99(options: {
   readonly search: string;
+  readonly loadedResources?: ReadonlyMap<string, unknown>;
+  readonly signal?: AbortSignal;
 }): Promise<Game003PreparedLoadingState> {
   const config = parseGame003FrameworkConfigFromQuery(options.search);
-  const skin = getGame003SkinConfig(config.skin);
-  const liveSession = await prepareSlotGameLiveSession({ live: config.live });
-  return Object.freeze({
-    config,
-    skin,
-    liveSession,
-  });
+  const signal = options.signal;
+  if (signal?.aborted) throw createAbortError();
+  const liveSessionPromise = prepareSlotGameLiveSession({ live: config.live });
+  let skinResult: Awaited<ReturnType<typeof prepareGame003SkinConfig>> | null =
+    null;
+  let liveSession: SlotGameLiveSessionLike | null = null;
+  try {
+    [skinResult, liveSession] = await Promise.all([
+      prepareGame003SkinConfig(
+        config.skin,
+        config.skin === "2"
+          ? {
+              minecart2Files: readGame003Minecart2PackageFiles(
+                options.loadedResources ?? new Map(),
+              ),
+            }
+          : {},
+      ),
+      liveSessionPromise,
+    ]);
+    if (signal?.aborted) throw createAbortError();
+    return Object.freeze({
+      config,
+      skin: skinResult.skin,
+      skinResourceOwner: skinResult.resourceOwner,
+      liveSession,
+    });
+  } catch (error) {
+    liveSession?.disconnect();
+    if (!liveSession) {
+      void liveSessionPromise.then(
+        (lateSession) => lateSession.disconnect(),
+        () => undefined,
+      );
+    }
+    await skinResult?.resourceOwner.destroy();
+    throw error;
+  }
 }
 
 export async function enterGame003(options: {
@@ -49,7 +90,38 @@ export async function enterGame003(options: {
 }): Promise<Game003EnteredGame> {
   let framework: SlotGameFramework | null = null;
   let removeBeforeUnload: (() => void) | null = null;
+  let destroyPromise: Promise<void> | null = null;
+  const destroyOwnedResources = (): Promise<void> => {
+    if (destroyPromise) return destroyPromise;
+    destroyPromise = (async () => {
+      removeBeforeUnload?.();
+      removeBeforeUnload = null;
+      let cleanupError: unknown;
+      try {
+        if (framework) framework.destroy();
+        else options.prepared.liveSession.disconnect();
+      } catch (error) {
+        cleanupError = error;
+      }
+      try {
+        await options.prepared.skinResourceOwner.destroy();
+      } catch (error) {
+        cleanupError ??= error;
+      }
+      framework = null;
+      if (cleanupError) throw cleanupError;
+    })();
+    return destroyPromise;
+  };
   try {
+    const sceneManifest =
+      options.prepared.skin.id === "2"
+        ? options.prepared.skin.resource.manifest
+        : null;
+    const scenePortraitSize =
+      sceneManifest?.adaptation.mode === "orientation-focus"
+        ? sceneManifest.adaptation.variants.portrait.artSize
+        : null;
     framework = createSlotGameFramework({
       root: options.root,
       gameAdapter: createGame003Adapter({ skin: options.prepared.skin }),
@@ -57,12 +129,16 @@ export async function enterGame003(options: {
       liveSession: options.prepared.liveSession,
       betOptions: options.prepared.config.betOptions,
       initialBetIndex: options.prepared.config.initialBetIndex,
-      designSize: GAME003_REFERENCE_SIZE,
-      framePolicy: createGame003FramePolicy(),
+      designSize:
+        scenePortraitSize ??
+        GAME003_SKIN1_PORTRAIT_ART_SIZE ??
+        GAME003_REFERENCE_SIZE,
+      framePolicy: sceneManifest
+        ? createSceneLayoutFramePolicy(sceneManifest)
+        : createGame003FramePolicy(),
       brandLabel: GAME003_STATIC_CONFIG.brandLabel,
-      currency: "USD",
       locale: "en-US",
-      formatMoney: formatServerUsdAmount,
+      formatMoney: formatServerAmount,
       buildSpinRequest: () => options.prepared.config.spinRequest,
       onError: (error) => {
         console.error(error);
@@ -71,7 +147,9 @@ export async function enterGame003(options: {
     await framework.connect();
 
     const handleBeforeUnload = () => {
-      framework?.destroy();
+      void destroyOwnedResources().catch((error: unknown) =>
+        console.error(error),
+      );
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     removeBeforeUnload = () => {
@@ -80,19 +158,20 @@ export async function enterGame003(options: {
 
     return Object.freeze({
       framework,
-      destroy(): void {
-        removeBeforeUnload?.();
-        removeBeforeUnload = null;
-        framework?.destroy();
-        framework = null;
+      destroy(): Promise<void> {
+        return destroyOwnedResources();
       },
     });
   } catch (error) {
-    if (framework) {
-      framework.destroy();
-    } else {
-      options.prepared.liveSession.disconnect();
+    try {
+      await destroyOwnedResources();
+    } catch {
+      // The enter failure remains authoritative after best-effort cleanup.
     }
     throw error;
   }
+}
+
+function createAbortError(): DOMException {
+  return new DOMException("game003 preparation was aborted.", "AbortError");
 }

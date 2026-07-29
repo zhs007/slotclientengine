@@ -12,6 +12,7 @@ interface CapturedLoadingOptions {
   readonly ui?: unknown;
   onBeforeComplete(options: {
     readonly loadedResources: ReadonlyMap<string, unknown>;
+    readonly signal?: AbortSignal;
   }): Promise<unknown>;
   onEnterGame(options: { readonly prepareResult: unknown }): Promise<void>;
 }
@@ -32,6 +33,7 @@ vi.mock("../src/loading-resources.js", () => ({
 describe("game003 main loading host flow", () => {
   it("keeps loading and game hosts separate until the runtime enters", async () => {
     document.body.innerHTML = '<div id="app"></div>';
+    window.history.replaceState({}, "", "/?skin=1");
     const loadingHandle = {
       loadedResources: new Map<string, unknown>(),
       start: vi.fn(async () => undefined),
@@ -73,7 +75,9 @@ describe("game003 main loading host flow", () => {
     await capturedLoadingOptions.onEnterGame({ prepareResult });
 
     expect(runtimeModule.prepareGame003At99).toHaveBeenCalledWith({
-      search: "",
+      search: "?skin=1",
+      loadedResources: expect.any(Map),
+      signal: undefined,
     });
     expect(runtimeModule.enterGame003).toHaveBeenCalledWith({
       root: gameHost,

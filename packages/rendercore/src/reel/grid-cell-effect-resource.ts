@@ -1,4 +1,5 @@
 import {
+  readOfficialSpineAtlasPages,
   validateOfficialSpineResource,
   type OfficialSpinePlayerResource,
 } from "../spine/runtime-player.js";
@@ -103,7 +104,13 @@ function resolveEffect(
     spec.texture,
     `${id} texture`,
   );
-  const page = spec.texture.slice(2);
+  const pages = readOfficialSpineAtlasPages(atlasText);
+  if (pages.length !== 1) {
+    throw new ReelError(
+      `grid cell effect "${id}" Spine atlas must contain exactly one page for its single texture.`,
+    );
+  }
+  const page = pages[0]!;
   const playerResource = Object.freeze({
     skeleton,
     atlasText,

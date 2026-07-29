@@ -178,6 +178,41 @@ describe("game002 cascade sequence", () => {
     ).toBe(true);
   });
 
+  it("uses bg-gencm ahead of bg-genwm as the terminal spin target", () => {
+    const value = terminalSpinFixture(false) as any;
+    const data = step(value, 0);
+    const generated = structuredClone(data.scenes[0]);
+    generated.values[0].values[0] = 7;
+    const generatedIndex = data.scenes.length;
+    data.scenes.push(generated);
+    const params = spin(value);
+    params.historyComponents.push("bg-genwm");
+    params.mapComponents["bg-genwm"] = structuredClone(
+      params.mapComponents["bg-spin"],
+    );
+    params.mapComponents["bg-genwm"].basicComponentData.usedScenes = [
+      generatedIndex,
+    ];
+    const generatedCm = structuredClone(data.scenes[0]);
+    generatedCm.values[0].values[0] = 9;
+    const generatedCmIndex = data.scenes.length;
+    data.scenes.push(generatedCm);
+    params.historyComponents.push("bg-gencm");
+    params.mapComponents["bg-gencm"] = structuredClone(
+      params.mapComponents["bg-spin"],
+    );
+    params.mapComponents["bg-gencm"].basicComponentData.usedScenes = [
+      generatedCmIndex,
+    ];
+
+    const sequence = createGame002CascadeSequence({
+      logic: createLogic(value),
+      cnSymbolCode: 8,
+    });
+
+    expect(sequence.initial.spinScene[0][0]).toBe(9);
+  });
+
   it("accepts a carried WL refill value without treating it as a CN presentation value", () => {
     const value = structuredClone(GAME002_CASCADE_GMI) as any;
     const x = 3;

@@ -398,9 +398,9 @@ describe("game003 generated static config", () => {
     );
   });
 
-  it("fails fast for skin ids outside the generated supported list", () => {
+  it("requires skin 2 to be prepared from its package", () => {
     expect(() => getGame003SkinConfig("2" as never)).toThrow(
-      /Unknown game003 skin/,
+      /prepared from its loaded scene-layout package/,
     );
   });
 

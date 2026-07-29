@@ -68,10 +68,7 @@ export function validateOfficialSpineResource(options: {
 }): ValidatedSpineResource {
   readSupportedSpineSkeletonVersion(options.resource.skeleton);
   const atlas = createTextureAtlas(options.resource.atlasText);
-  const atlasPages = Object.freeze(atlas.pages.map((page) => page.name));
-  if (atlasPages.length === 0 || atlasPages.some((page) => !page)) {
-    throw new Error("Spine atlas must contain at least one named page.");
-  }
+  const atlasPages = readNamedAtlasPages(atlas);
   assertExactTexturePageClosure(
     atlasPages,
     Object.keys(options.resource.textureUrls),
@@ -128,6 +125,12 @@ export function validateOfficialSpineResource(options: {
     animationEvents,
     slotNames: Object.freeze(skeletonData.slots.map((slot) => slot.name)),
   });
+}
+
+export function readOfficialSpineAtlasPages(
+  atlasText: string,
+): readonly string[] {
+  return readNamedAtlasPages(createTextureAtlas(atlasText));
 }
 
 export function createOfficialSpinePlayer(options: {
@@ -449,6 +452,17 @@ function createTextureAtlas(atlasText: string): TextureAtlas {
   } catch (error) {
     throw new Error(`Spine atlas failed to parse: ${formatError(error)}.`);
   }
+}
+
+function readNamedAtlasPages(atlas: TextureAtlas): readonly string[] {
+  const pages = atlas.pages.map((page) => page.name);
+  if (pages.length === 0 || pages.some((page) => !page)) {
+    throw new Error("Spine atlas must contain at least one named page.");
+  }
+  if (new Set(pages).size !== pages.length) {
+    throw new Error("Spine atlas page names must be unique.");
+  }
+  return Object.freeze(pages);
 }
 
 function assertExactTexturePageClosure(

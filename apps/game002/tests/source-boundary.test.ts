@@ -166,10 +166,10 @@ describe("game002 source boundary", () => {
     }
     expect(skinConfigSource).not.toMatch(/game002-s3\/\*\.(?:png|json)/);
     expect(backgroundConfigSource).not.toMatch(/game002-s3\/(?:\*|\*\*)/);
-    expect(adapterSource).toContain('skin.presentation.kind === "legacy"');
+    expect(adapterSource).not.toContain('"legacy"');
     expect(adapterSource).not.toContain("backgroundUrl");
     expect(adapterSource).not.toContain("createPositionedSprite");
-    expect(adapterSource).toContain("skin.presentation.symbolModules");
+    expect(adapterSource).not.toContain("skin.presentation.symbolModules");
     expect(adapterSource).toContain("skin.presentation.symbolRegistry");
     expect(adapterSource).toContain("createGame002SceneLayoutPlayers");
   });
@@ -195,9 +195,8 @@ describe("game002 source boundary", () => {
       ["rect.y", "visibleRect.y"],
     ]);
 
-    expect(skinConfigSource).toContain(
-      "GAME002_BACKGROUND_RESOURCE.manifest.adaptation.focusRect",
-    );
+    expect(skinConfigSource).toContain("return adaptation.focusRect");
+    expect(skinConfigSource).toContain("createSceneLayoutPackageResource");
     expect(layoutSource).toContain("GAME002_BACKGROUND_MANIFEST.artSize");
     expect(layoutSource).toContain("mapArtRectToViewport");
     expect(layoutSource).toContain("createMaximizedFocusedArtViewportPolicy");
@@ -240,8 +239,9 @@ describe("game002 source boundary", () => {
     );
     expect(source).toContain("createGameLoading");
     expect(source).toContain("prepareSlotGameLiveSession");
-    expect(source).toContain("createSymbolManifestAnimationResolver");
-    expect(source).toContain("createSpineBackgroundPlayer");
+    expect(source).toContain("createSceneLayoutPackageResource");
+    expect(source).toContain("createGridCellEffectResourcesFromManifest");
+    expect(source).not.toContain("createSpineBackgroundPlayer");
     for (const gameSpecificAnimation of ["BG_FG", "FG_BG"]) {
       expect(source).not.toContain(gameSpecificAnimation);
     }

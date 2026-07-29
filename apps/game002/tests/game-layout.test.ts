@@ -21,7 +21,7 @@ import {
   validateGame002FocusRegion,
 } from "../src/game-layout.js";
 import { GAME002_BACKGROUND_MANIFEST } from "../src/background-config.js";
-import { getGame002SkinConfig } from "../src/skin-config.js";
+import { GAME002_REEL_PRESENTATION_EXTENSION } from "../src/skin-config.js";
 
 describe("game002-s3 layout", () => {
   it("locks the single s3 art, focus and 6 x 9 board contract", () => {
@@ -155,7 +155,9 @@ describe("game002-s3 layout", () => {
   it("keeps grid timing/dimming stable and validates explicit geometry", () => {
     const dimming = createGame002GridCellDimming(0.5);
     expect(GAME002_GRID_CELL_REEL_ORDER).toBe("top-down-left-right");
-    expect(getGame002SkinConfig("1").reelManifest.spin.timing).toEqual({
+    expect(
+      GAME002_REEL_PRESENTATION_EXTENSION.reelManifest.spin.timing,
+    ).toEqual({
       startStepMs: 16,
       stopStepMs: 16,
       settleAfterLastStartMs: 180,

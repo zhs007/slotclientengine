@@ -306,6 +306,18 @@ export interface RenderVisibleSymbolStateSnapshot {
   readonly requestedState: SymbolStateId | null;
   readonly resolvedState: SymbolStateId | null;
   readonly isOnce: boolean;
+  readonly loopCompletionCount?: number;
+  readonly onceCompletionCount?: number;
+}
+
+export interface PreparedVisibleOccurrenceReplacement {
+  readonly x: number;
+  readonly y: number;
+  readonly inputCode: number;
+  readonly outputCode: number;
+  commit(): void;
+  rollback(): void;
+  destroy(): void;
 }
 
 export interface RenderVisibleSymbolGeometrySnapshot {

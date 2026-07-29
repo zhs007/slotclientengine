@@ -308,6 +308,7 @@ describe("RenderReel", () => {
       requestedState: "normal",
       resolvedState: "normal",
       isOnce: false,
+      onceCompletionCount: 1,
     });
 
     expect(() => reel.requestVisibleSymbolState(1, "win")).toThrow(/empty/);
