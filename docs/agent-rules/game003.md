@@ -57,7 +57,7 @@
 - 中奖 component 名 `bg-wins` 只在 game003 app 配置；logiccore/gameframeworks/rendercore 不硬编码。
 - 按 `bg-wins.basicComponentData.usedResults` 指向的 `clientData.results[]` 顺序播放首轮；首轮结束后 `playSpin()` 可 resolve，后续按 `usedResults -> pause -> usedResults` lingering 到下一 spin cleanup。
 - `result.pos` 坐标基准是当前 `5 x 5` 可见窗口。缺失或越界显式失败。
-- 每个 result 使用自身 finite positive `cashWin` 经 `formatServerAmount` 显示，锚到该 result 中间中奖 symbol 的中间偏下位置，并随该 result win 状态结束隐藏。
+- 每个 result 按字段存在性选择自身 `cashWin64 -> cashWin`，选中值必须 finite positive，再经 `formatServerAmount` 显示；64 位字段是新服务器权威字段，只有缺失时才兼容旧 32 位字段，显式 `0` 不 fallback。金额锚到该 result 中间中奖 symbol 的中间偏下位置，并随该 result win 状态结束隐藏。
 - 不使用 `coinWin`、totalwin 或全部 results 兜底。Ways 的 `symbolNums/symbolNum` 不等同于 `pos` 数量。
 - symbol 语义校验只由 app 显式 validator 决定；shared code 未收到 validator 时不默认比较 result.symbol 与 target scene。
 
