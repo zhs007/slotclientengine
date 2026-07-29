@@ -320,6 +320,24 @@ export interface PreparedVisibleOccurrenceReplacement {
   destroy(): void;
 }
 
+export interface GridCellVisibleOccurrenceTransfer {
+  readonly source: { readonly x: number; readonly y: number };
+  readonly target: { readonly x: number; readonly y: number };
+  readonly expectedSourceCode: number;
+  readonly expectedTargetCode: number;
+  readonly sourceReplacementCode: number;
+  readonly sourceReplacementPresentationValue: number | null;
+}
+
+export interface PreparedGridCellVisibleOccurrenceTransferBatch {
+  readonly transfers: readonly GridCellVisibleOccurrenceTransfer[];
+  start(): void;
+  setProgress(progress: number): void;
+  commit(): void;
+  rollback(): void;
+  destroy(): void;
+}
+
 export interface RenderVisibleSymbolGeometrySnapshot {
   readonly x: number;
   readonly y: number;

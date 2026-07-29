@@ -27,6 +27,7 @@ import {
   createSlotRoundCoordinator,
   type SlotRoundPresentationCapabilityTarget,
   type PreparedVisibleOccurrenceReplacement,
+  type PreparedGridCellVisibleOccurrenceTransferBatch,
 } from "@slotclientengine/rendercore";
 import type {
   WinAmountAnimationPhase,
@@ -382,6 +383,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
     if (coSymbolCode === undefined) {
       throw new Error("game002 game config is missing CO symbol code.");
     }
+    const bnSymbolCode = runtime.gameConfig.getSymbolCode("BN");
+    if (bnSymbolCode === undefined) {
+      throw new Error("game002 game config is missing BN symbol code.");
+    }
     const symbolCodes = Object.fromEntries(
       this.#skin.displaySymbols.map((symbol) => {
         const code = runtime.gameConfig.getSymbolCode(symbol);
@@ -396,6 +401,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
       cnSymbolCode,
       cmSymbolCode,
       coSymbolCode,
+      bnSymbolCode,
       logDiagnostic: this.#logRng,
     });
     const plan = compileSlotRoundExecutionPlan(
@@ -597,11 +603,16 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     | "transform-cm-feature"
     | "transform-cn-feature-change"
     | "transform-cm-change"
-    | "transform-co-commit"
+    | "transform-co-feature"
+    | "transform-co-transfer"
     | "completion" = "idle";
   #activeStage: Game002CascadeSequence["cascades"][number] | null = null;
   #runtimeCompleted = false;
   #winCompleted = false;
+  #activeReleaseOnlyPositions: readonly {
+    readonly x: number;
+    readonly y: number;
+  }[] = [];
   #completionComplete = true;
   #unifiedSteps = new Set<number>();
   #initialSnapshot: SlotRoundOccurrenceSnapshot | null = null;
@@ -611,6 +622,9 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
   #preparedWmReplacements: PreparedVisibleOccurrenceReplacement[] = [];
   #preparedCmReplacements: PreparedVisibleOccurrenceReplacement[] = [];
   #preparedCoReplacements: PreparedVisibleOccurrenceReplacement[] = [];
+  #preparedCoTransfers: PreparedGridCellVisibleOccurrenceTransferBatch | null =
+    null;
+  #coTransferProgress = 0;
   #transformCompletionBaselines = new Map<
     string,
     Readonly<{ loop: number; once: number }>
@@ -656,6 +670,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     this.#activeStage = null;
     this.#runtimeCompleted = false;
     this.#winCompleted = false;
+    this.#activeReleaseOnlyPositions = [];
     this.#completionComplete = true;
     this.#unifiedSteps.clear();
     this.#initialSnapshot = null;
@@ -665,9 +680,12 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     for (const prepared of this.#preparedWmReplacements) prepared.rollback();
     for (const prepared of this.#preparedCmReplacements) prepared.rollback();
     for (const prepared of this.#preparedCoReplacements) prepared.rollback();
+    this.#preparedCoTransfers?.rollback();
     this.#preparedWmReplacements = [];
     this.#preparedCmReplacements = [];
     this.#preparedCoReplacements = [];
+    this.#preparedCoTransfers = null;
+    this.#coTransferProgress = 0;
     this.#transformCompletionBaselines.clear();
   }
 
@@ -705,6 +723,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     const stage = this.findWinStage(step.stepIndex);
     const prepared = this.#cascadePlayer.prepare(stage.groups);
     this.#winCompleted = false;
+    this.#activeReleaseOnlyPositions = step.releaseOnlyPositions ?? [];
     this.#activity = "win";
     this.#cascadePlayer.start(prepared);
   }
@@ -713,6 +732,9 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     if (this.#activity !== "win")
       throw new Error("game002 win stage is not active.");
     if (!this.#winCompleted) return { completed: false };
+    if (this.#activeReleaseOnlyPositions.length > 0)
+      this.#runtime.releaseVisibleSymbols(this.#activeReleaseOnlyPositions);
+    this.#activeReleaseOnlyPositions = [];
     this.#activity = "idle";
     return { completed: true };
   }
@@ -792,9 +814,9 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       throw new Error(
         `game002 step[${step.stepIndex}] multiplier presentation batch is missing.`,
       );
-    const coReplacementKeys = new Set(
-      batch.coReplacements.map(
-        (replacement) => `${replacement.position.x},${replacement.position.y}`,
+    const coCollectionKeys = new Set(
+      (batch.coCollection?.transform.changes ?? []).map(
+        (change) => `${change.position.x},${change.position.y}`,
       ),
     );
     const wmChanges = step.changes.filter(
@@ -818,7 +840,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
         change.output.code === this.#cnSymbolCode,
     );
     const coChanges = step.changes.filter((change) =>
-      coReplacementKeys.has(`${change.position.x},${change.position.y}`),
+      coCollectionKeys.has(`${change.position.x},${change.position.y}`),
     );
     if (
       wmChanges.length +
@@ -836,7 +858,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       wmChanges.length === 0 &&
       batch.wlIncrements.length === 0 &&
       batch.cm === null &&
-      batch.coReplacements.length === 0
+      !batch.coCollection
     )
       throw new Error(
         `game002 step[${step.stepIndex}] multiplier transform has no display operation.`,
@@ -849,9 +871,11 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       throw new Error(
         `game002 step[${step.stepIndex}] CM replacement batch does not match the transform.`,
       );
-    if (coChanges.length !== batch.coReplacements.length)
+    if (
+      coChanges.length !== (batch.coCollection?.transform.changes.length ?? 0)
+    )
       throw new Error(
-        `game002 step[${step.stepIndex}] CO replacement batch does not match the transform.`,
+        `game002 step[${step.stepIndex}] CO collection batch does not match the transform.`,
       );
     for (const replacement of batch.wmReplacements) {
       const { x, y } = replacement.position;
@@ -925,15 +949,15 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
         `game002 step[${step.stepIndex}] CN updates require a CM presentation.`,
       );
     }
-    for (const replacement of batch.coReplacements) {
+    for (const replacement of batch.coCollection?.transform.changes ?? []) {
       const { x, y } = replacement.position;
       if (
-        step.input.scene[x]?.[y] !== replacement.inputCode ||
+        step.input.scene[x]?.[y] === undefined ||
         step.output.scene[x]?.[y] !== replacement.outputCode ||
-        step.output.values[x]?.[y] !== null
+        step.output.values[x]?.[y] !== replacement.outputValue
       )
         throw new Error(
-          `game002 step[${step.stepIndex}] CO replacement (${x},${y}) does not match the transform snapshots.`,
+          `game002 step[${step.stepIndex}] CO collection change (${x},${y}) does not match the transform snapshots.`,
         );
     }
     this.applyMultiplierTexts(step.input);
@@ -993,6 +1017,30 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
           `game002 CN (${update.position.x},${update.position.y}) has no "featureChange" animation capability.`,
         );
     }
+    for (const segment of batch.coCollection?.segments ?? []) {
+      if (
+        !this.#runtime.hasVisibleSymbolStateCapability(
+          segment.co.x,
+          segment.co.y,
+          "feature",
+        )
+      )
+        throw new Error(
+          `game002 CO (${segment.co.x},${segment.co.y}) has no "feature" animation capability.`,
+        );
+      for (const transfer of segment.transfers)
+        for (const state of ["feature1", "feature2"])
+          if (
+            !this.#runtime.hasVisibleSymbolStateCapability(
+              transfer.source.x,
+              transfer.source.y,
+              state,
+            )
+          )
+            throw new Error(
+              `game002 CO source (${transfer.source.x},${transfer.source.y}) has no "${state}" animation capability.`,
+            );
+    }
     const preparedWm: PreparedVisibleOccurrenceReplacement[] = [];
     const preparedCm: PreparedVisibleOccurrenceReplacement[] = [];
     const preparedCo: PreparedVisibleOccurrenceReplacement[] = [];
@@ -1018,20 +1066,67 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
             outputPresentationValue: batch.cm.outputValue,
           }),
         );
-      for (const replacement of batch.coReplacements)
-        preparedCo.push(
-          this.#runtime.prepareVisibleOccurrenceReplacement({
-            x: replacement.position.x,
-            y: replacement.position.y,
-            expectedCode: replacement.inputCode,
-            outputCode: replacement.outputCode,
-            outputPresentationValue: null,
-          }),
+      const relocations = batch.coCollection?.transform.relocations ?? [];
+      const relocatedPositions = new Set(
+        relocations.flatMap((relocation) => [
+          `${relocation.source.x},${relocation.source.y}`,
+          `${relocation.target.x},${relocation.target.y}`,
+        ]),
+      );
+      for (const replacement of batch.coCollection?.transform.changes ?? [])
+        if (
+          !relocatedPositions.has(
+            `${replacement.position.x},${replacement.position.y}`,
+          )
+        )
+          preparedCo.push(
+            this.#runtime.prepareVisibleOccurrenceReplacement({
+              x: replacement.position.x,
+              y: replacement.position.y,
+              expectedCode:
+                step.input.scene[replacement.position.x][
+                  replacement.position.y
+                ],
+              outputCode: replacement.outputCode,
+              outputPresentationValue: replacement.outputValue,
+            }),
+          );
+      if (batch.coCollection) {
+        const changes = new Map(
+          batch.coCollection.transform.changes.map((change) => [
+            `${change.position.x},${change.position.y}`,
+            change,
+          ]),
         );
+        this.#preparedCoTransfers =
+          this.#runtime.prepareVisibleOccurrenceTransferBatch({
+            transfers: relocations.map((relocation) => {
+              const sourceChange = changes.get(
+                `${relocation.source.x},${relocation.source.y}`,
+              );
+              if (!sourceChange)
+                throw new Error(
+                  `game002 CO source (${relocation.source.x},${relocation.source.y}) has no source replacement.`,
+                );
+              return Object.freeze({
+                source: relocation.source,
+                target: relocation.target,
+                expectedSourceCode:
+                  step.input.scene[relocation.source.x][relocation.source.y],
+                expectedTargetCode:
+                  step.input.scene[relocation.target.x][relocation.target.y],
+                sourceReplacementCode: sourceChange.outputCode,
+                sourceReplacementPresentationValue: sourceChange.outputValue,
+              });
+            }),
+          });
+      }
     } catch (error) {
       for (const replacement of preparedWm) replacement.rollback();
       for (const replacement of preparedCm) replacement.rollback();
       for (const replacement of preparedCo) replacement.rollback();
+      this.#preparedCoTransfers?.rollback();
+      this.#preparedCoTransfers = null;
       throw error;
     }
     this.#preparedWmReplacements = preparedWm;
@@ -1178,10 +1273,37 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       for (const replacement of this.#preparedCmReplacements)
         replacement.commit();
       this.#preparedCmReplacements = [];
-      this.completeSettledTransform(step);
-      return { completed: true };
+      return this.startCoOrComplete(step, batch);
     }
-    if (this.#activity === "transform-co-commit") {
+    if (this.#activity === "transform-co-feature") {
+      const collection = requireCoCollection(batch);
+      const positions = [
+        ...collection.segments.map((segment) => segment.co),
+        ...collection.sourcePositions,
+      ];
+      if (!this.didTransformAnimationComplete(positions, "once"))
+        return { completed: false };
+      this.requestTransformState(collection.sourcePositions, "feature2");
+      this.#preparedCoTransfers?.start();
+      this.#coTransferProgress = 0;
+      this.#activity = "transform-co-transfer";
+      return { completed: false };
+    }
+    if (this.#activity === "transform-co-transfer") {
+      const collection = requireCoCollection(batch);
+      const completed = this.didTransformAnimationComplete(
+        collection.sourcePositions,
+        "once",
+      );
+      if (!completed) {
+        this.#coTransferProgress = Math.min(
+          0.9,
+          this.#coTransferProgress + _deltaSeconds * 2,
+        );
+        this.#preparedCoTransfers?.setProgress(this.#coTransferProgress);
+        return { completed: false };
+      }
+      this.#preparedCoTransfers?.setProgress(1);
       this.completeSettledTransform(step);
       return { completed: true };
     }
@@ -1286,15 +1408,28 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     batch: Game002WlWmMultiplierPresentationBatch,
   ): { readonly completed: boolean } {
     if (!batch.cm) {
-      if (batch.coReplacements.length > 0) {
-        this.#activity = "transform-co-commit";
-        return { completed: false };
-      }
-      this.completeSettledTransform(step);
-      return { completed: true };
+      return this.startCoOrComplete(step, batch);
     }
     this.requestTransformState([batch.cm.position], "feature1");
     this.#activity = "transform-cm-feature";
+    return { completed: false };
+  }
+
+  private startCoOrComplete(
+    step: SlotRoundSettledTransformStepPlan,
+    batch: Game002WlWmMultiplierPresentationBatch,
+  ): { readonly completed: boolean } {
+    const collection = batch.coCollection;
+    if (!collection) {
+      this.completeSettledTransform(step);
+      return { completed: true };
+    }
+    this.requestTransformState(
+      collection.segments.map((segment) => segment.co),
+      "feature",
+    );
+    this.requestTransformState(collection.sourcePositions, "feature1");
+    this.#activity = "transform-co-feature";
     return { completed: false };
   }
 
@@ -1308,9 +1443,12 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       throw new Error(
         `game002 step[${step.stepIndex}] multiplier transform completed with uncommitted replacements.`,
       );
+    this.#preparedCoTransfers?.commit();
+    this.#preparedCoTransfers = null;
     for (const replacement of this.#preparedCoReplacements)
       replacement.commit();
     this.#preparedCoReplacements = [];
+    this.#coTransferProgress = 0;
     assertGame002ReelVisualMatchesTarget(
       this.#runtime.getVisualSnapshot(),
       step.output.scene,
@@ -1574,6 +1712,14 @@ function requireCmPresentation(batch: Game002WlWmMultiplierPresentationBatch) {
       `game002 step[${batch.stepIndex}] CM presentation is missing.`,
     );
   return batch.cm;
+}
+
+function requireCoCollection(batch: Game002WlWmMultiplierPresentationBatch) {
+  if (!batch.coCollection)
+    throw new Error(
+      `game002 step[${batch.stepIndex}] CO collection presentation is missing.`,
+    );
+  return batch.coCollection;
 }
 
 function formatMultiplier(value: number | null): string {

@@ -362,7 +362,7 @@ describe("game002 WL/WM multiplier compiler", () => {
       }),
     ).toEqual(settledScene);
     expect(messages).toEqual([
-      "settled step[1] kind=refill source=bg-genwm+bg-gencm(staged); flow=WM->CM->CO; bg-genwm=present; bg-gencm=present; bg-genco=missing",
+      "settled step[1] kind=refill source=bg-genwm+bg-gencm(staged); flow=CO-settled->WM->CM->CO-collect; bg-genwm=present; bg-gencm=present; bg-genco=missing",
     ]);
   });
 
@@ -435,7 +435,7 @@ describe("game002 WL/WM multiplier compiler", () => {
     });
   });
 
-  it("keeps bg-genco out of the animation input and compiles a terminal CO replacement", () => {
+  it("settles bg-genco CO before animation and does not compile a terminal replacement", () => {
     const inputScene = freezeMatrix([[A]]);
     const generatedCoScene = freezeMatrix([[10]]);
     const compiler = createGame002WlWmMultiplierCompiler({
@@ -447,7 +447,7 @@ describe("game002 WL/WM multiplier compiler", () => {
     });
     const context = createContext({
       stepIndex: 0,
-      snapshot: createSnapshot(inputScene, [[null]]),
+      snapshot: createSnapshot(generatedCoScene, [[null]]),
       scenes: {
         "bg-genco": generatedCoScene,
       },
@@ -460,17 +460,13 @@ describe("game002 WL/WM multiplier compiler", () => {
         kind: "spin",
         inputScene,
       }),
-    ).toBe(inputScene);
-    expect(compiler.compileSettledTransform(context)).toEqual([
-      { position: { x: 0, y: 0 }, outputCode: 10, outputValue: null },
-    ]);
-    expect(compiler.getPresentationBatch(0)?.coReplacements).toEqual([
-      { position: { x: 0, y: 0 }, inputCode: A, outputCode: 10 },
-    ]);
+    ).toEqual(generatedCoScene);
+    expect(compiler.compileSettledTransform(context)).toEqual([]);
+    expect(compiler.getPresentationBatch(0)).toBeUndefined();
   });
 
   it("keeps WM until bg-wm2cn and reconciles bg-genco only after the CN value exists", () => {
-    const inputScene = freezeMatrix([[WM], [A]]);
+    const inputScene = freezeMatrix([[WM], [10]]);
     const compiler = createGame002WlWmMultiplierCompiler({
       wlSymbolCode: WL,
       wmSymbolCode: WM,
@@ -492,7 +488,6 @@ describe("game002 WL/WM multiplier compiler", () => {
 
     expect(compiler.compileSettledTransform(context)).toEqual([
       { position: { x: 0, y: 0 }, outputCode: CN, outputValue: 500 },
-      { position: { x: 1, y: 0 }, outputCode: 10, outputValue: null },
     ]);
     expect(compiler.getPresentationBatch(0)).toMatchObject({
       wmReplacements: [
@@ -502,9 +497,7 @@ describe("game002 WL/WM multiplier compiler", () => {
           outputValue: 500,
         },
       ],
-      coReplacements: [
-        { position: { x: 1, y: 0 }, inputCode: A, outputCode: 10 },
-      ],
+      coReplacements: [],
     });
   });
 

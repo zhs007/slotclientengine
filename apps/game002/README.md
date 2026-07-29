@@ -92,9 +92,8 @@ multiplier transform。新 WL/WM/CM 的 multiplier 分别来自 `bg-genwilds`、
 ImgNumber dependency，在 exact `Mult` slot 显示 `xN`。initial spin 与 refill
 的动画前落定 scene 优先级固定为
 `bg-gencm > bg-genwm > bg-spin/bg-refill`，每个落定 step 最多允许一个 CM。
-`bg-genco.scene` 是 WM/CM 转 CN 后、中奖前的最终盘面；客户端在 multiplier
-transform 末尾提交其中新增的 CO replacement。当前不播放 CO 专属动画，也不实现
-CO 玩法。
+`bg-genco.scene` 是 WM/CM 转 CN 后、CO collection 前的最终盘面；其中新增 CO
+会在 initial spin/refill 落定前 overlay，不能在 multiplier transform 末尾突然出现。
 
 如果上一步有中奖 WL，服务器在下一 cascade step 的 `bg-dropdown` 后、
 `bg-refill` 前通过 `bg-incwl.otherScene` 将其值加一。客户端跨 step 关联中奖 WL，
@@ -110,13 +109,20 @@ WM `Change` 完成后才按 `bg-wm2cn` 原位置原子替换 CN，并用
 按 `bg-cm2cn` 原位置替换为 CN，并使用 `bg-gencmcn.otherScene` 的新 CN value。
 CM 流程完成后才进入现有中奖/cascade；没有 CM 时不制造空阶段。
 
+若当前 `bg-win` 有实际 result，它始终优先走原中奖/remove。否则
+`bg-triggerco` 命中 CO 后，客户端严格编译 `bg-co.pos` 的分段 transfer：
+CO `Feature` 与 source `Feature1` 并行，完成后 source 播放 `Feature2` 并携带
+value presentation 移到 CO 八邻域 target；整批提交后 source 成为 BN、CO 变为
+selected symbol。随后 `bg-win2` 走既有金额/中奖流程，`bg-bn` 只在 remove 完成
+边界 release，不生成零金额 carousel group。
+
 各 multiplier component 只读取当前操作所需的目标 symbol cell，非目标 cell
 保留给服务器其它用途且不参与该 component 的语义校验；目标 multiplier、WM sum、
 CM 乘法、矩阵尺寸和 occurrence continuity 都在画面 mutation 前严格校验。
 
 ## bg-win 消除级联
 
-`bg-spin/bg-genwm/bg-gencm/bg-genco/bg-gencoins/bg-win/bg-remove/bg-respin/bg-dropdown/bg-refill` 是 game002 app-owned 映射，只有 `historyComponents` 对应的 `step.hasComponent()` 才代表触发；`historyComponentsEx` 和 map 中的空组件不触发。adapter 预解析全部 steps 后，严格执行初始 spin、逐组 emphasis/win/remove、普通局 dropdown/refill unified fall，或期待局 existing-only dropdown -> refill-hole Nearwin2 sweep -> selective refill spin；任一结构漂移都在启动画面前失败。
+`bg-spin/bg-genwm/bg-gencm/bg-genco/bg-gencoins/bg-win/bg-triggerco/bg-co/bg-win2/bg-bn/bg-remove/bg-respin/bg-dropdown/bg-refill` 是 game002 app-owned 映射，只有 `historyComponents` 对应的 `step.hasComponent()` 才代表触发；`historyComponentsEx` 和 map 中的空组件不触发。adapter 预解析全部 steps 后，严格执行初始 spin、逐组 emphasis/win/remove、普通局 dropdown/refill unified fall，或期待局 existing-only dropdown -> refill-hole Nearwin2 sweep -> selective refill spin；任一结构漂移都在启动画面前失败。
 
 每个 result 的全部 `pos` 会在主转轮停稳后按 manifest presentation 执行。现有单组现金 overlay 与底部临时汇总都严格使用 `cashWin64 !== undefined ? cashWin64 : cashWin`；汇总要求 result cash 为 positive safe integer cents，并复用 `formatServerUsdAmount` 除以 `100` 显示。不能从 bet、lines、component total 或 `totalwin` 推导。`bg-win.basicComponentData.cashWin/coinWin` 只在字段存在时作为累计协议证据，不能替代 result 权威字段。
 

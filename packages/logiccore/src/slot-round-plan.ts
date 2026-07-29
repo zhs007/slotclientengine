@@ -69,6 +69,7 @@ export interface SlotRoundWinStepPlan {
   readonly input: SlotRoundOccurrenceSnapshot;
   readonly output: SlotRoundOccurrenceSnapshot;
   readonly groups: readonly SlotRoundWinGroupPlan[];
+  readonly releaseOnlyPositions?: readonly SlotRoundPosition[];
   readonly releaseOccurrenceIds: readonly string[];
   readonly requiredCapabilities: readonly SlotRoundCapability[];
 }
@@ -101,6 +102,14 @@ export interface SlotRoundSettledTransformOccurrenceChange {
   readonly output: SlotRoundOccurrence;
 }
 
+export interface SlotRoundSettledTransformRelocation {
+  readonly occurrenceId: string;
+  readonly overwrittenOccurrenceId: string;
+  readonly sourceReplacementOccurrenceId: string;
+  readonly source: SlotRoundPosition;
+  readonly target: SlotRoundPosition;
+}
+
 export interface SlotRoundSettledTransformStepPlan {
   readonly kind: "settled-transform";
   readonly index: number;
@@ -108,6 +117,7 @@ export interface SlotRoundSettledTransformStepPlan {
   readonly input: SlotRoundOccurrenceSnapshot;
   readonly output: SlotRoundOccurrenceSnapshot;
   readonly changes: readonly SlotRoundSettledTransformOccurrenceChange[];
+  readonly relocations?: readonly SlotRoundSettledTransformRelocation[];
   readonly requiredCapabilities: readonly ["settled-transform"];
 }
 
@@ -146,6 +156,16 @@ export interface SlotRoundSettledTransformChangeDraft {
   readonly outputValue: SlotRoundPresentationValue;
 }
 
+export interface SlotRoundSettledTransformRelocationDraft {
+  readonly source: SlotRoundPosition;
+  readonly target: SlotRoundPosition;
+}
+
+export interface SlotRoundSettledTransformDraft {
+  readonly changes: readonly SlotRoundSettledTransformChangeDraft[];
+  readonly relocations: readonly SlotRoundSettledTransformRelocationDraft[];
+}
+
 export interface SlotRoundSettledCompileContext {
   readonly stepIndex: number;
   readonly step: GameLogicStep;
@@ -171,7 +191,9 @@ export interface SlotRoundCompileContext {
   ) => readonly SlotRoundSettledValueDraft[];
   readonly compileSettledTransform?: (
     context: SlotRoundSettledCompileContext,
-  ) => readonly SlotRoundSettledTransformChangeDraft[];
+  ) =>
+    | readonly SlotRoundSettledTransformChangeDraft[]
+    | SlotRoundSettledTransformDraft;
 }
 
 /**
@@ -386,13 +408,25 @@ export function compileSlotRoundExecutionPlan(
       );
       initial = current;
     }
-    const transformDraft =
+    const rawTransformDraft =
       context.compileSettledTransform?.({
         stepIndex: stepOffset,
         step,
         input: current,
       }) ?? [];
-    if (transformDraft.length > 0) {
+    const transformDraft: SlotRoundSettledTransformDraft = Array.isArray(
+      rawTransformDraft,
+    )
+      ? {
+          changes:
+            rawTransformDraft as readonly SlotRoundSettledTransformChangeDraft[],
+          relocations: [],
+        }
+      : (rawTransformDraft as SlotRoundSettledTransformDraft);
+    if (
+      transformDraft.changes.length > 0 ||
+      transformDraft.relocations.length > 0
+    ) {
       const transform = compileSettledTransform(
         current,
         transformDraft,
@@ -405,7 +439,13 @@ export function compileSlotRoundExecutionPlan(
     }
 
     const groups = compileWinGroups(profile, step, current, cascade);
-    if (groups.length === 0) {
+    const releaseOnlyPositions = compileReleaseOnlyPositions(
+      step,
+      current,
+      cascade,
+      groups,
+    );
+    if (groups.length === 0 && releaseOnlyPositions.length === 0) {
       if (stepOffset !== steps.length - 1)
         throw new LogicParseError(
           `terminal step[${stepOffset}] leaves unconsumed cascade steps.`,
@@ -433,6 +473,7 @@ export function compileSlotRoundExecutionPlan(
               }),
             ),
           ),
+          releaseOnlyPositions: Object.freeze([]),
           releaseOccurrenceIds: Object.freeze([]),
           requiredCapabilities: Object.freeze(requiredCapabilities),
         }),
@@ -457,7 +498,12 @@ export function compileSlotRoundExecutionPlan(
       true,
       `step[${stepOffset}] remove scene`,
     );
-    const derivedRemoved = deriveRemovedSnapshot(current, groups, emptyCode);
+    const derivedRemoved = deriveRemovedSnapshot(
+      current,
+      groups,
+      releaseOnlyPositions,
+      emptyCode,
+    );
     assertMatrixEqual(
       removedScene,
       derivedRemoved.scene,
@@ -497,12 +543,12 @@ export function compileSlotRoundExecutionPlan(
         input: current,
         output,
         groups,
+        releaseOnlyPositions,
         releaseOccurrenceIds: Object.freeze(
-          groups.flatMap((group) =>
-            group.removePositions.map(
-              (position) => requireOccurrence(current, position).id,
-            ),
-          ),
+          [
+            ...groups.flatMap((group) => group.removePositions),
+            ...releaseOnlyPositions,
+          ].map((position) => requireOccurrence(current, position).id),
         ),
         requiredCapabilities: Object.freeze(requiredCapabilities),
       }),
@@ -590,14 +636,51 @@ function hydrateSettledValues(
 
 function compileSettledTransform(
   input: SlotRoundOccurrenceSnapshot,
-  drafts: readonly SlotRoundSettledTransformChangeDraft[],
+  draft: SlotRoundSettledTransformDraft,
   names: ReadonlyMap<number, string>,
   stepIndex: number,
   index: number,
 ): SlotRoundSettledTransformStepPlan {
+  const drafts = draft.changes;
   const seen = new Set<string>();
   const changes: SlotRoundSettledTransformOccurrenceChange[] = [];
   const outputOccurrences = [...input.occurrences];
+  const relocationByTarget = new Map<string, SlotRoundPosition>();
+  const relocationBySource = new Map<string, SlotRoundPosition>();
+  const relocationPairs: Array<{
+    readonly source: SlotRoundPosition;
+    readonly target: SlotRoundPosition;
+  }> = [];
+  for (const [relocationIndex, relocation] of draft.relocations.entries()) {
+    const source = validatePlanPosition(
+      relocation.source,
+      input.scene,
+      `step[${stepIndex}] settled relocation[${relocationIndex}].source`,
+    );
+    const target = validatePlanPosition(
+      relocation.target,
+      input.scene,
+      `step[${stepIndex}] settled relocation[${relocationIndex}].target`,
+    );
+    const sourceKey = positionKey(source);
+    const targetKey = positionKey(target);
+    if (sourceKey === targetKey)
+      throw new LogicParseError(
+        `step[${stepIndex}] settled relocation[${relocationIndex}] source and target must differ.`,
+      );
+    if (
+      relocationBySource.has(sourceKey) ||
+      relocationByTarget.has(sourceKey) ||
+      relocationBySource.has(targetKey) ||
+      relocationByTarget.has(targetKey)
+    )
+      throw new LogicParseError(
+        `step[${stepIndex}] settled relocation positions must be disjoint; collision at ${sourceKey} or ${targetKey}.`,
+      );
+    relocationBySource.set(sourceKey, target);
+    relocationByTarget.set(targetKey, source);
+    relocationPairs.push({ source, target });
+  }
   for (const [changeIndex, draft] of drafts.entries()) {
     const position = validatePlanPosition(
       draft.position,
@@ -623,11 +706,20 @@ function compileSettledTransform(
       throw new LogicParseError(
         `step[${stepIndex}] settled transform[${changeIndex}] is a no-op.`,
       );
+    const relocationSource = relocationByTarget.get(key);
+    const relocationTarget = relocationBySource.get(key);
+    const outputId = relocationSource
+      ? requireOccurrence(input, relocationSource).id
+      : relocationTarget
+        ? `transform:${stepIndex}:${position.x}:${position.y}`
+        : inputOccurrence.id;
     const outputOccurrence = Object.freeze({
       ...inputOccurrence,
+      id: outputId,
       code: draft.outputCode,
       symbol: names.get(draft.outputCode)!,
       value: outputValue,
+      position,
     });
     const occurrenceIndex = outputOccurrences.findIndex(
       (occurrence) => occurrence.id === inputOccurrence.id,
@@ -642,6 +734,30 @@ function compileSettledTransform(
       }),
     );
   }
+  for (const [relocationIndex, relocation] of relocationPairs.entries()) {
+    for (const [role, position] of [
+      ["source", relocation.source],
+      ["target", relocation.target],
+    ] as const)
+      if (!seen.has(positionKey(position)))
+        throw new LogicParseError(
+          `step[${stepIndex}] settled relocation[${relocationIndex}].${role} must have a transform change.`,
+        );
+  }
+  const relocations = relocationPairs.map(({ source, target }) => {
+    const sourceInput = requireOccurrence(input, source);
+    const targetInput = requireOccurrence(input, target);
+    const sourceOutput = changes.find(
+      (change) => positionKey(change.position) === positionKey(source),
+    )!.output;
+    return Object.freeze({
+      occurrenceId: sourceInput.id,
+      overwrittenOccurrenceId: targetInput.id,
+      sourceReplacementOccurrenceId: sourceOutput.id,
+      source,
+      target,
+    });
+  });
   const scene = input.scene.map((column, x) =>
     Object.freeze(
       column.map(
@@ -670,6 +786,7 @@ function compileSettledTransform(
     input,
     output: snapshotFromOccurrences(scene, values, outputOccurrences),
     changes: Object.freeze(changes),
+    relocations: Object.freeze(relocations),
     requiredCapabilities: Object.freeze(["settled-transform"] as const),
   });
 }
@@ -839,14 +956,57 @@ function compileWinGroups(
   );
 }
 
+function compileReleaseOnlyPositions(
+  step: GameLogicStep,
+  snapshot: SlotRoundOccurrenceSnapshot,
+  cascade: SlotRoundFlowProfileV1["cascade"],
+  groups: readonly SlotRoundWinGroupPlan[],
+): readonly SlotRoundPosition[] {
+  const componentNames = cascade?.components.releaseOnlyWins ?? [];
+  if (componentNames.length === 0) return Object.freeze([]);
+  const occupied = new Set(
+    groups.flatMap((group) => group.removePositions.map(positionKey)),
+  );
+  const seen = new Set<string>();
+  const positions: SlotRoundPosition[] = [];
+  for (const componentName of componentNames)
+    for (const resultGroup of getComponentWinResultGroups(step, componentName, {
+      scene: snapshot.scene,
+    }))
+      for (const position of resultGroup.positions) {
+        const key = positionKey(position);
+        if (occupied.has(key))
+          throw new LogicParseError(
+            `step[${step.getIndex()}] release-only position ${key} overlaps a win removal.`,
+          );
+        if (seen.has(key))
+          throw new LogicParseError(
+            `step[${step.getIndex()}] contains duplicate release-only position ${key}.`,
+          );
+        requireOccurrence(snapshot, position);
+        seen.add(key);
+        positions.push(Object.freeze({ x: position.x, y: position.y }));
+      }
+  if (positions.length > 0 && groups.length === 0)
+    throw new LogicParseError(
+      `step[${step.getIndex()}] release-only results require at least one positive win group.`,
+    );
+  return Object.freeze(positions);
+}
+
 function resolveAmount(
   profile: SlotRoundFlowProfileV1,
   result: WinResult,
   resultIndex: number,
 ): number {
-  const field = profile.amount.cashFields.find(
-    (candidate) => result[candidate] !== undefined,
-  );
+  const field = profile.amount.cashFields.find((candidate) => {
+    const candidateValue = result[candidate];
+    return (
+      typeof candidateValue === "number" &&
+      Number.isSafeInteger(candidateValue) &&
+      candidateValue > 0
+    );
+  });
   if (!field)
     throw new LogicParseError(
       `win result[${resultIndex}] has no configured cash amount field.`,
@@ -862,10 +1022,14 @@ function resolveAmount(
 function deriveRemovedSnapshot(
   input: SlotRoundOccurrenceSnapshot,
   groups: readonly SlotRoundWinGroupPlan[],
+  releaseOnlyPositions: readonly SlotRoundPosition[],
   emptyCode: number,
 ): SlotRoundOccurrenceSnapshot {
   const removed = new Set(
-    groups.flatMap((group) => group.removePositions.map(positionKey)),
+    [
+      ...groups.flatMap((group) => group.removePositions),
+      ...releaseOnlyPositions,
+    ].map(positionKey),
   );
   const scene = input.scene.map((column, x) =>
     Object.freeze(

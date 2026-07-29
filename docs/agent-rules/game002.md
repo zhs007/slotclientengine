@@ -65,11 +65,10 @@
 
 ## WL/WM/CM multiplier 与中奖前转换
 
-- initial spin 和 refill 的动画前落定 scene 优先级固定为
-  `bg-gencm > bg-genwm > bg-spin/bg-refill`。`bg-genco` 的唯一完整 scene 是
-  WM/CM 转 CN 后、中奖前的终态盘面；客户端必须先以动画前 scene 编译 multiplier
-  transform，再用 `bg-genco` 校验并在 transform 末尾提交新增 CO replacement。
-  当前不实现 CO 专属动画或玩法。
+- initial spin 和 refill 的动画前落定 scene 先按
+  `bg-gencm > bg-genwm > bg-spin/bg-refill` 合成 multiplier 输入，再把
+  `bg-genco` 中新增 CO overlay 到落定盘面；CO 不得在 transform 末尾凭空出现。
+  `bg-genco` 仍是 WM/CM 后、CO collection 前的权威完整盘面。
 - `bg-genwilds`、`bg-setwm` 和 `bg-setcm` 的 component-scoped `otherScene`
   分别给新 WL/WM/CM 提供 positive safe integer multiplier；每个 settled step
   最多一个 CM，值随 occurrence dropdown/refill 搬运。
@@ -94,6 +93,13 @@
 - 全部 CN `Feature_Change` 完成后播放 CM `Change` once；完成边界才按
   `bg-cm2cn.scene` 原子提交该 CM -> CN，且新 CN value 只取
   `bg-gencmcn.otherScene`。CM 全流程完成后才允许开始中奖；无 CM 时不得制造空阶段。
+- `bg-win` 有实际 result 时优先走原中奖流程，不启动 CO。没有 `bg-win` result
+  且 `bg-triggerco` 命中 CO 时，严格解析 `bg-co.pos` 的 `-1` 分段和 4..8 个
+  source/target 四元组；target 必须是该 CO 的八邻域，多 CO 必须全批 disjoint。
+- CO `feature` 与全部 source `feature1` 同时播放；全部真实 once 完成后 source
+  播放 `feature2`，完整 occurrence（含 value/image-string）在 board mask 内移到
+  target。全批完成后原子提交 source->BN、target<-source、CO->selected symbol。
+  `bg-win2` 进入普通中奖，`bg-bn` 只作为 release-only holes，不参与金额或 carousel。
 - WL/WM/CM multiplier 共用 paired Symbols package 的唯一 ImgNumber dependency，
   formatter 为 exact `x${value}`，Spine slot 为 exact `Mult`；不得使用 `Multi`
   alias、CN digits、字体或路径猜测。
@@ -114,6 +120,7 @@
 
 ## Win carousel
 
-- game002 中奖 component 名是 app-owned `bg-win`。
+- game002 正中奖 component 顺序是 app-owned `bg-win,bg-win2`；`bg-bn` 仅是
+  release-only result role。
 - rendercore carousel 按 component 数组和各自 `usedResults` 顺序驱动 symbol win、金额 anchor、首轮阻塞、lingering 和下一 spin cleanup。
 - 单组金额只使用 result 的 `cashWin64/cashWin` 字段存在性选择；不以 truthy、component total 或 totalwin 兜底。

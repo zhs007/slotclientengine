@@ -24,6 +24,8 @@ import type {
   RenderVisibleSymbolGeometrySnapshot,
   RenderVisibleSymbolStateSnapshot,
   PreparedVisibleOccurrenceReplacement,
+  PreparedGridCellVisibleOccurrenceTransferBatch,
+  GridCellVisibleOccurrenceTransfer,
   ReelSymbolRegistry,
   SymbolPresentationValueMatrix,
   RenderReelVisibleOccurrence,
@@ -89,6 +91,7 @@ export class RenderGridCellReelSet extends Container {
   readonly #cells: readonly RuntimeCell[];
   readonly #cellsByKey: ReadonlyMap<string, RuntimeCell>;
   readonly #cascadeMovementMask: Graphics;
+  readonly #transferLayer: Container;
   readonly #effectController: GridCellEffectController | null;
   #spinPlan: GridCellReelSpinPlan | null = null;
   #activeDrop: ActiveDrop | null = null;
@@ -98,6 +101,7 @@ export class RenderGridCellReelSet extends Container {
   #activationGateOpen = false;
   #dimmingActivated = false;
   #elapsedMs = 0;
+  #activeTransferRollback: (() => void) | null = null;
 
   constructor(options: RenderGridCellReelSetOptions) {
     super();
@@ -147,6 +151,10 @@ export class RenderGridCellReelSet extends Container {
     this.#cascadeMovementMask.includeInBuild = false;
     this.#cascadeMovementMask.measurable = false;
     this.addChild(this.#cascadeMovementMask);
+    this.#transferLayer = new Container();
+    this.#transferLayer.sortableChildren = true;
+    this.#transferLayer.zIndex = this.#cells.length * 20_000;
+    this.addChild(this.#transferLayer);
     this.#effectController = options.effectController ?? null;
     if (this.#effectController) {
       this.#effectController.container.zIndex = this.#cells.length * 10_000;
@@ -171,6 +179,7 @@ export class RenderGridCellReelSet extends Container {
     cellReelOffsets?: GridCellReelOffsetMatrix,
     presentationValues?: SymbolPresentationValueMatrix,
   ): void {
+    this.#activeTransferRollback?.();
     const parsedScene = parseScene(scene, this.#columns, this.#rows);
     const parsedFinalYs = parseFinalYs(finalYs, this.#columns);
     const parsedCellReelOffsets = normalizeGridCellReelOffsetMatrix(
@@ -737,6 +746,164 @@ export class RenderGridCellReelSet extends Container {
     });
   }
 
+  prepareVisibleOccurrenceTransferBatch(options: {
+    readonly transfers: readonly GridCellVisibleOccurrenceTransfer[];
+  }): PreparedGridCellVisibleOccurrenceTransferBatch {
+    this.assertStopped("prepare visible occurrence transfer batch");
+    if (!Array.isArray(options.transfers) || options.transfers.length === 0)
+      throw new ReelError(
+        "Visible occurrence transfer batch must contain transfers.",
+      );
+    if (this.#activeTransferRollback)
+      throw new ReelError("A visible occurrence transfer batch is active.");
+    const used = new Set<string>();
+    const validated = options.transfers.map((transfer, index) => {
+      const source = this.getCell(transfer.source.x, transfer.source.y);
+      const target = this.getCell(transfer.target.x, transfer.target.y);
+      const sourceKey = createCellKey(transfer.source.x, transfer.source.y);
+      const targetKey = createCellKey(transfer.target.x, transfer.target.y);
+      if (sourceKey === targetKey)
+        throw new ReelError(
+          `Transfer[${index}] source and target must differ.`,
+        );
+      if (used.has(sourceKey) || used.has(targetKey))
+        throw new ReelError(
+          `Transfer[${index}] collides with another transfer position.`,
+        );
+      used.add(sourceKey);
+      used.add(targetKey);
+      if (!source.occupied || !target.occupied)
+        throw new ReelError(
+          `Transfer[${index}] source and target must both be occupied.`,
+        );
+      const sourceSnapshot = source.reel.getVisibleSymbolStateSnapshot(0);
+      const targetSnapshot = target.reel.getVisibleSymbolStateSnapshot(0);
+      if (sourceSnapshot.code !== transfer.expectedSourceCode)
+        throw new ReelError(
+          `Transfer[${index}] expected source code ${transfer.expectedSourceCode}, received ${sourceSnapshot.code}.`,
+        );
+      if (targetSnapshot.code !== transfer.expectedTargetCode)
+        throw new ReelError(
+          `Transfer[${index}] expected target code ${transfer.expectedTargetCode}, received ${targetSnapshot.code}.`,
+        );
+      return { transfer, source, target };
+    });
+    const prepared: Array<{
+      readonly transfer: GridCellVisibleOccurrenceTransfer;
+      readonly source: RuntimeCell;
+      readonly target: RuntimeCell;
+      readonly sourceReplacement: RenderReelVisibleOccurrence;
+      moving: RenderReelVisibleOccurrence | null;
+    }> = [];
+    try {
+      for (const item of validated)
+        prepared.push({
+          transfer: Object.freeze({
+            ...item.transfer,
+            source: Object.freeze({ ...item.transfer.source }),
+            target: Object.freeze({ ...item.transfer.target }),
+          }),
+          source: item.source,
+          target: item.target,
+          sourceReplacement: item.source.reel.createDetachedOccurrence(
+            item.transfer.sourceReplacementCode,
+            item.transfer.sourceReplacementPresentationValue,
+          ),
+          moving: null,
+        });
+    } catch (error) {
+      for (const item of prepared)
+        item.source.reel.releaseDetachedOccurrence(item.sourceReplacement);
+      throw error;
+    }
+    let state: "prepared" | "started" | "committed" | "rolled-back" =
+      "prepared";
+    const rollback = (): void => {
+      if (state === "committed" || state === "rolled-back") return;
+      for (const item of prepared) {
+        if (item.moving) {
+          item.source.reel.restoreDetachedVisibleOccurrence(item.moving);
+          item.moving = null;
+        }
+        item.source.reel.releaseDetachedOccurrence(item.sourceReplacement);
+      }
+      this.#transferLayer.removeChildren();
+      this.#cascadeMovementMask.visible = false;
+      this.#cascadeMovementMask.renderable = false;
+      this.#activeTransferRollback = null;
+      state = "rolled-back";
+    };
+    const batch = Object.freeze({
+      transfers: Object.freeze(prepared.map((item) => item.transfer)),
+      start: (): void => {
+        if (state !== "prepared")
+          throw new ReelError(
+            "Visible occurrence transfer batch can only start once.",
+          );
+        this.assertStopped("start visible occurrence transfer batch");
+        state = "started";
+        this.#activeTransferRollback = rollback;
+        this.#cascadeMovementMask.visible = true;
+        this.#cascadeMovementMask.renderable = true;
+        this.#transferLayer.mask = this.#cascadeMovementMask;
+        try {
+          for (const item of prepared) {
+            item.moving = item.source.reel.detachVisibleOccurrenceForTransfer();
+            this.#transferLayer.addChild(item.moving.symbol);
+            const geometry = this.getCellGeometry(item.transfer.source);
+            item.moving.symbol.position.set(geometry.x, geometry.y);
+            item.moving.symbol.zIndex = item.moving.symbol.renderPriority;
+          }
+        } catch (error) {
+          rollback();
+          throw error;
+        }
+      },
+      setProgress: (progress: number): void => {
+        if (state !== "started")
+          throw new ReelError(
+            "Visible occurrence transfer progress requires a started batch.",
+          );
+        if (!Number.isFinite(progress) || progress < 0 || progress > 1)
+          throw new ReelError(
+            "Visible occurrence transfer progress must be between 0 and 1.",
+          );
+        const eased = 1 - Math.pow(1 - progress, 3);
+        for (const item of prepared) {
+          const source = this.getCellGeometry(item.transfer.source);
+          const target = this.getCellGeometry(item.transfer.target);
+          item.moving!.symbol.position.set(
+            source.x + (target.x - source.x) * eased,
+            source.y + (target.y - source.y) * eased,
+          );
+        }
+      },
+      commit: (): void => {
+        if (state !== "started")
+          throw new ReelError(
+            "Visible occurrence transfer commit requires a started batch.",
+          );
+        for (const item of prepared) {
+          const moving = item.source.reel.takeVisibleOccurrence();
+          const overwritten = item.target.reel.takeVisibleOccurrence();
+          item.target.reel.placeVisibleOccurrence(moving);
+          item.source.reel.placeVisibleOccurrence(item.sourceReplacement);
+          item.target.reel.releaseDetachedOccurrence(overwritten);
+          item.moving = null;
+        }
+        this.#transferLayer.removeChildren();
+        this.#transferLayer.mask = null;
+        this.#cascadeMovementMask.visible = false;
+        this.#cascadeMovementMask.renderable = false;
+        this.#activeTransferRollback = null;
+        state = "committed";
+      },
+      rollback,
+      destroy: rollback,
+    }) satisfies PreparedGridCellVisibleOccurrenceTransferBatch;
+    return batch;
+  }
+
   getVisibleSymbolStateSnapshot(
     x: number,
     y: number,
@@ -810,8 +977,24 @@ export class RenderGridCellReelSet extends Container {
   }
 
   override destroy(options?: Parameters<Container["destroy"]>[0]): void {
+    this.#activeTransferRollback?.();
     this.#effectController?.destroy();
     super.destroy(options);
+  }
+
+  private getCellGeometry(coordinate: {
+    readonly x: number;
+    readonly y: number;
+  }): {
+    readonly x: number;
+    readonly y: number;
+  } {
+    const cell = this.getCell(coordinate.x, coordinate.y);
+    const geometry = cell.reel.getVisibleSymbolGeometrySnapshot(0);
+    return Object.freeze({
+      x: cell.root.x + geometry.centerX,
+      y: cell.root.y + geometry.centerY,
+    });
   }
 
   private createRuntimeCell(

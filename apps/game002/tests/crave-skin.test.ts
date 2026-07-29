@@ -66,9 +66,7 @@ describe("game002 Crave skin", () => {
       const blob = objectUrlBlobs.get(src);
       if (!blob) throw new Error(`unknown test object URL "${src}"`);
       const bytes = new Uint8Array(await blob.arrayBuffer());
-      const size = isPng(bytes)
-        ? readPngBytesSize(bytes)
-        : { width: 1, height: 1 };
+      const size = readImageBytesSize(bytes);
       const canvas = document.createElement("canvas");
       canvas.width = size.width;
       canvas.height = size.height;
@@ -248,7 +246,7 @@ describe("game002 Crave skin", () => {
 
   it("uses the shared browser image decoder when no decoder is injected", async () => {
     vi.stubGlobal("createImageBitmap", async (blob: Blob) => {
-      const size = readPngBytesSize(new Uint8Array(await blob.arrayBuffer()));
+      const size = readImageBytesSize(new Uint8Array(await blob.arrayBuffer()));
       return {
         ...size,
         close: vi.fn(),
@@ -311,10 +309,11 @@ async function readPngSize(
   path: string,
 ): Promise<{ readonly width: number; readonly height: number }> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
-  if (!isPng(bytes)) {
-    throw new Error(`expected PNG glyph "${path}"`);
+  try {
+    return readImageBytesSize(bytes);
+  } catch {
+    throw new Error(`expected supported image glyph "${path}"`);
   }
-  return readPngBytesSize(bytes);
 }
 
 function isPng(bytes: Uint8Array): boolean {
@@ -336,6 +335,45 @@ function readPngBytesSize(bytes: Uint8Array): {
     width: view.getUint32(16),
     height: view.getUint32(20),
   };
+}
+
+function readImageBytesSize(bytes: Uint8Array): {
+  readonly width: number;
+  readonly height: number;
+} {
+  if (isPng(bytes)) return readPngBytesSize(bytes);
+  if (
+    bytes.length < 30 ||
+    String.fromCharCode(...bytes.slice(0, 4)) !== "RIFF" ||
+    String.fromCharCode(...bytes.slice(8, 12)) !== "WEBP"
+  )
+    throw new Error("unsupported image payload");
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const kind = String.fromCharCode(...bytes.slice(12, 16));
+  if (kind === "VP8X")
+    return {
+      width: 1 + readUint24(bytes, 24),
+      height: 1 + readUint24(bytes, 27),
+    };
+  if (kind === "VP8 ")
+    return {
+      width: view.getUint16(26, true) & 0x3fff,
+      height: view.getUint16(28, true) & 0x3fff,
+    };
+  if (kind === "VP8L") {
+    const bits = view.getUint32(21, true);
+    return {
+      width: (bits & 0x3fff) + 1,
+      height: ((bits >>> 14) & 0x3fff) + 1,
+    };
+  }
+  throw new Error(`unsupported WebP chunk ${kind}`);
+}
+
+function readUint24(bytes: Uint8Array, offset: number): number {
+  return (
+    bytes[offset]! | (bytes[offset + 1]! << 8) | (bytes[offset + 2]! << 16)
+  );
 }
 
 function resourceUrlToCravePath(url: string): string {

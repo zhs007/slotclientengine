@@ -25,7 +25,11 @@ export function resolveGame002WinResultCoinAmount(
 ): number {
   const { componentName, resultIndex, result } = context.group;
   const amount =
-    result.coinWin64 !== undefined ? result.coinWin64 : result.coinWin;
+    result.coinWin64 !== undefined
+      ? result.coinWin64
+      : typeof result.coinWin === "number" && result.coinWin > 0
+        ? result.coinWin
+        : result.mul;
   if (
     typeof amount !== "number" ||
     !Number.isSafeInteger(amount) ||
@@ -43,7 +47,11 @@ export function resolveGame002WinResultCashAmount(
 ): number {
   const { componentName, resultIndex, result } = context.group;
   const amount =
-    result.cashWin64 !== undefined ? result.cashWin64 : result.cashWin;
+    result.cashWin64 !== undefined
+      ? result.cashWin64
+      : typeof result.cashWin === "number" && result.cashWin > 0
+        ? result.cashWin
+        : result.mul;
   if (
     typeof amount !== "number" ||
     !Number.isSafeInteger(amount) ||
