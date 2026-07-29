@@ -3,6 +3,7 @@ import {
   activeVariantIds,
   type EditorProject,
 } from "../model/editor-project.js";
+import type { SymbolOtherScenePreviewBinding } from "../preview/other-scene-preview.js";
 
 export type WorkspaceTab =
   | "assets"
@@ -49,8 +50,20 @@ export interface EditorUiSession {
   expandedResourceIds: Set<string>;
   expandedInspectorSections: Set<string>;
   selectedTransitionKey: string | null;
+  newTransitionFromModeId: string;
+  newTransitionToModeId: string;
   previewTransition: PreviewTransitionUiState;
+  otherSceneDrafts: Map<string, OtherSceneBindingDraft>;
+  popupPlacementDrafts: Map<string, string>;
   picker: ResourcePickerState | null;
+}
+
+export interface OtherSceneBindingDraft {
+  enabled: boolean;
+  target: SymbolOtherScenePreviewBinding["target"];
+  sourceKind: SymbolOtherScenePreviewBinding["source"]["kind"];
+  tableName: string;
+  fixedNumber: string;
 }
 
 export type PreviewTransitionKind = "spine" | "video";
@@ -83,7 +96,11 @@ export function createEditorUiSession(): EditorUiSession {
     expandedResourceIds: new Set(),
     expandedInspectorSections: new Set(),
     selectedTransitionKey: null,
+    newTransitionFromModeId: "",
+    newTransitionToModeId: "",
     previewTransition: { phase: "idle", message: "请选择预览目标状态。" },
+    otherSceneDrafts: new Map(),
+    popupPlacementDrafts: new Map(),
     picker: null,
   };
 }

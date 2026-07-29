@@ -117,6 +117,7 @@ import {
   normalizeLayoutSelection,
   type LayoutResourceBindingContext,
   type LayoutSelection,
+  type OtherSceneBindingDraft,
   type WorkspaceTab,
 } from "./ui-session.js";
 import {
@@ -128,6 +129,13 @@ import {
   editorResourcePaths,
   type EditorLayoutResource,
 } from "../model/editor-resource.js";
+
+interface FocusSnapshot {
+  readonly selector: string;
+  readonly selectionStart: number | null;
+  readonly selectionEnd: number | null;
+  readonly selectionDirection: "forward" | "backward" | "none" | null;
+}
 
 export class GameLayoutEditorApp {
   readonly #root: HTMLElement;
@@ -384,10 +392,19 @@ export class GameLayoutEditorApp {
     );
     this.requireElement("[data-clear-popup]").addEventListener("click", () => {
       if (!this.#selectedPopupId) return;
-      this.runTransaction((project) =>
-        deletePopupDependency(project, this.#selectedPopupId!),
-      );
+      const removedPopupId = this.#selectedPopupId;
+      if (
+        !this.runTransaction((project) =>
+          deletePopupDependency(project, removedPopupId),
+        )
+      )
+        return;
+      for (const key of this.#session.popupPlacementDrafts.keys()) {
+        if (key.startsWith(`${removedPopupId}\u0000`))
+          this.#session.popupPlacementDrafts.delete(key);
+      }
       this.#selectedPopupId = null;
+      this.renderPopupControls(this.#store.getSnapshot());
     });
     this.requireElement("[data-play-popup]").addEventListener("click", () => {
       try {
@@ -420,30 +437,48 @@ export class GameLayoutEditorApp {
     );
     this.#root
       .querySelectorAll<HTMLInputElement>("[data-popup-placement]")
-      .forEach((input) =>
-        input.addEventListener("change", () => {
-          this.#store.transact((project) => {
-            if (!this.#selectedPopupId)
-              throw new Error("尚未选择 popup dependency。");
-            const dependency = project.popupDependencies.get(
+      .forEach((input) => {
+        input.addEventListener("input", () => {
+          if (!this.#selectedPopupId || input.disabled) return;
+          this.#session.popupPlacementDrafts.set(
+            popupPlacementDraftKey(
               this.#selectedPopupId,
+              input.dataset.popupPlacement as SceneLayoutVariantId,
+              input.dataset.popupPlacementField as "x" | "y" | "scale",
+            ),
+            input.value,
+          );
+        });
+        input.addEventListener("change", () => {
+          const popupId = this.#selectedPopupId;
+          const variant = input.dataset.popupPlacement as SceneLayoutVariantId;
+          const field = input.dataset.popupPlacementField as
+            | "x"
+            | "y"
+            | "scale";
+          if (!popupId) {
+            this.#store.setExternalError(
+              new Error("尚未选择 popup dependency。"),
             );
+            return;
+          }
+          const key = popupPlacementDraftKey(popupId, variant, field);
+          const committed = this.runTransaction((project) => {
+            const dependency = project.popupDependencies.get(popupId);
             if (!dependency) throw new Error("尚未选择 popup dependency。");
-            const variant = input.dataset
-              .popupPlacement as SceneLayoutVariantId;
             if (!activeVariantIds(project).includes(variant)) return;
             const placement = dependency.placements[variant];
             if (!placement)
               throw new Error(`popup placement ${variant} 缺失。`);
-            const field = input.dataset.popupPlacementField as
-              | "x"
-              | "y"
-              | "scale";
             const next = { ...placement, [field]: Number(input.value) };
-            setPopupPlacement(project, this.#selectedPopupId, variant, next);
+            setPopupPlacement(project, popupId, variant, next);
           });
-        }),
-      );
+          if (committed) {
+            this.#session.popupPlacementDrafts.delete(key);
+            this.renderPopupControls(this.#store.getSnapshot());
+          }
+        });
+      });
     this.requireSelect("[data-reel-set]").addEventListener(
       "change",
       (event) => {
@@ -547,6 +582,7 @@ export class GameLayoutEditorApp {
   private createProject(mode: EditorProject["mode"]): void {
     this.closePicker(false);
     this.resetSymbolsForProjectReplace();
+    this.resetTransientDraftsForProjectReplace();
     this.#session.activeTab = "assets";
     this.#session.selection = null;
     this.#session.expandedResourceIds.clear();
@@ -599,7 +635,17 @@ export class GameLayoutEditorApp {
       .then(() => {
         if (request !== this.#previewModeRequest || this.#destroyed) return;
         const settled = preview.getGameModeSnapshot();
-        this.#selectedPreviewMode = settled?.stableMode ?? modeId;
+        if (
+          !settled ||
+          settled.phase !== "stable" ||
+          settled.stableMode !== modeId ||
+          settled.displayedMode !== modeId
+        )
+          throw new Error(
+            `转场 promise 已完成，但 preview 未稳定在目标状态 ${modeId}。`,
+          );
+        this.#selectedPreviewMode = settled.stableMode;
+        if (this.#followEditMode) this.#selectedGameMode = settled.stableMode;
         this.#session.previewTransition = {
           phase: "complete",
           stableMode: this.#selectedPreviewMode,
@@ -860,7 +906,7 @@ export class GameLayoutEditorApp {
 
   private renderWorkspace(snapshot: EditorStoreSnapshot): void {
     this.captureScrollPositions();
-    const focusToken = this.captureFocusToken();
+    const focusSnapshot = this.captureFocusSnapshot();
     this.#session.selection = normalizeLayoutSelection(
       snapshot.project,
       this.#session.selection,
@@ -877,6 +923,13 @@ export class GameLayoutEditorApp {
       .transitions[0]
       ? transitionKey(snapshot.project.gameModes.transitions[0])
       : null;
+    const modeIds = new Set(
+      snapshot.project.gameModes.modes.map((mode) => mode.id),
+    );
+    if (!modeIds.has(this.#session.newTransitionFromModeId))
+      this.#session.newTransitionFromModeId = "";
+    if (!modeIds.has(this.#session.newTransitionToModeId))
+      this.#session.newTransitionToModeId = "";
     this.syncThumbnailUrls(snapshot.project);
     for (const tab of this.#root.querySelectorAll<HTMLButtonElement>(
       '[role="tab"]',
@@ -919,10 +972,22 @@ export class GameLayoutEditorApp {
               ? transitionsWorkspaceMarkup({
                   project: snapshot.project,
                   selectedKey: this.#session.selectedTransitionKey,
+                  newFromModeId: this.#session.newTransitionFromModeId,
+                  newToModeId: this.#session.newTransitionToModeId,
                   snapshot: this.#preview?.getGameModeSnapshot() ?? null,
                   uiState: this.#session.previewTransition,
                 })
               : projectWorkspaceMarkup(snapshot.project, snapshot.errors);
+    if (this.#session.activeTab === "transitions") {
+      const from = panel.querySelector<HTMLSelectElement>(
+        "[data-new-transition-from]",
+      );
+      const to = panel.querySelector<HTMLSelectElement>(
+        "[data-new-transition-to]",
+      );
+      if (from) from.value = this.#session.newTransitionFromModeId;
+      if (to) to.value = this.#session.newTransitionToModeId;
+    }
     if (!fixedTab) this.bindWorkspaceActions(snapshot.project);
     panel
       .querySelectorAll<HTMLDetailsElement>("[data-inspector-section]")
@@ -934,7 +999,7 @@ export class GameLayoutEditorApp {
         }),
       );
     this.restoreScrollPositions();
-    this.restoreFocusToken(focusToken);
+    this.restoreFocusSnapshot(focusSnapshot);
     this.renderPicker(snapshot.project);
     const modeDialog =
       this.#root.querySelector<HTMLDialogElement>("[data-mode-dialog]");
@@ -1043,7 +1108,16 @@ export class GameLayoutEditorApp {
       const placement = dependency?.placements[variant];
       const field = input.dataset.popupPlacementField as "x" | "y" | "scale";
       input.disabled = !placement;
-      input.value = String(placement?.[field] ?? (field === "scale" ? 1 : 0));
+      const draftKey = this.#selectedPopupId
+        ? popupPlacementDraftKey(this.#selectedPopupId, variant, field)
+        : null;
+      if (!placement && draftKey)
+        this.#session.popupPlacementDrafts.delete(draftKey);
+      input.value =
+        (draftKey
+          ? this.#session.popupPlacementDrafts.get(draftKey)
+          : undefined) ??
+        String(placement?.[field] ?? (field === "scale" ? 1 : 0));
     }
 
     const modeSnapshot = this.#preview?.getGameModeSnapshot?.() ?? null;
@@ -1218,7 +1292,7 @@ export class GameLayoutEditorApp {
     ).disabled = !popupActive;
     this.requireElement("[data-popup-runtime-status]").textContent =
       modeSnapshot
-        ? `mode ${modeSnapshot.phase}: stable=${modeSnapshot.stableMode} displayed=${modeSnapshot.displayedMode}${modeSnapshot.targetMode ? ` target=${modeSnapshot.targetMode} ${modeSnapshot.transitionPhase}` : ""} · popup=${mode.awardCelebrationPopupId ?? "无"}${popupSnapshot ? ` · ${popupSnapshot.phase}/${popupSnapshot.activeTierId ?? "none"}/${popupSnapshot.activeSegment ?? "none"}` : ""}`
+        ? `mode ${modeSnapshot.phase}: stable=${modeSnapshot.stableMode} displayed=${modeSnapshot.displayedMode}${modeSnapshot.targetMode ? ` target=${modeSnapshot.targetMode} ${modeSnapshot.transitionPhase}` : ""} · popup=${stableMode?.awardCelebrationPopupId ?? "无"}${popupSnapshot ? ` · ${popupSnapshot.phase}/${popupSnapshot.activeTierId ?? "none"}/${popupSnapshot.activeSegment ?? "none"}` : ""}`
         : `mode=${mode.id} · popup=${mode.awardCelebrationPopupId ?? "无"}`;
     const transitionStatus = transitionUiStateText(
       this.#session.previewTransition,
@@ -1232,6 +1306,20 @@ export class GameLayoutEditorApp {
 
   private bindWorkspaceActions(project: EditorProject): void {
     const panel = this.requireElement("[data-workspace-panel]");
+    panel
+      .querySelector<HTMLSelectElement>("[data-new-transition-from]")
+      ?.addEventListener("change", (event) => {
+        this.#session.newTransitionFromModeId = (
+          event.currentTarget as HTMLSelectElement
+        ).value;
+      });
+    panel
+      .querySelector<HTMLSelectElement>("[data-new-transition-to]")
+      ?.addEventListener("change", (event) => {
+        this.#session.newTransitionToModeId = (
+          event.currentTarget as HTMLSelectElement
+        ).value;
+      });
     panel
       .querySelectorAll<HTMLButtonElement>("[data-transition-key]")
       .forEach((button) =>
@@ -1249,24 +1337,32 @@ export class GameLayoutEditorApp {
     panel
       .querySelector<HTMLButtonElement>("[data-create-transition]")
       ?.addEventListener("click", () => {
-        const from = panel.querySelector<HTMLSelectElement>(
-          "[data-new-transition-from]",
-        )?.value;
-        const to = panel.querySelector<HTMLSelectElement>(
-          "[data-new-transition-to]",
-        )?.value;
+        this.#session.newTransitionFromModeId =
+          panel.querySelector<HTMLSelectElement>("[data-new-transition-from]")
+            ?.value ?? "";
+        this.#session.newTransitionToModeId =
+          panel.querySelector<HTMLSelectElement>("[data-new-transition-to]")
+            ?.value ?? "";
+        const from = this.#session.newTransitionFromModeId;
+        const to = this.#session.newTransitionToModeId;
         if (!from || !to) {
           this.#store.setExternalError(
             new Error("新建转场必须明确选择 from 与 to。"),
           );
           return;
         }
+        if (
+          !this.runTransaction(
+            (draft) => createGameModeTransition(draft, from, to),
+            `已创建转场 ${from} -> ${to}。`,
+          )
+        )
+          return;
         this.#session.selectedTransitionKey = `${from}::${to}`;
         this.#selectedPreviewMode = to;
-        this.runTransaction(
-          (draft) => createGameModeTransition(draft, from, to),
-          `已创建转场 ${from} -> ${to}。`,
-        );
+        this.#session.newTransitionFromModeId = "";
+        this.#session.newTransitionToModeId = "";
+        this.renderWorkspace(this.#store.getSnapshot());
       });
     panel
       .querySelector<HTMLSelectElement>("[data-transition-kind]")
@@ -1375,7 +1471,12 @@ export class GameLayoutEditorApp {
     const query = panel.querySelector<HTMLInputElement>(
       "[data-resource-query]",
     );
-    query?.addEventListener("input", () => {
+    query?.addEventListener("input", (event) => {
+      this.#session.resourceQuery = query.value;
+      if ((event as InputEvent).isComposing) return;
+      this.renderWorkspace(this.#store.getSnapshot());
+    });
+    query?.addEventListener("compositionend", () => {
       this.#session.resourceQuery = query.value;
       this.renderWorkspace(this.#store.getSnapshot());
     });
@@ -1632,7 +1733,15 @@ export class GameLayoutEditorApp {
     panel
       .querySelectorAll<HTMLInputElement>("[data-layer-visible]")
       .forEach((input) =>
-        input.addEventListener("change", () =>
+        input.addEventListener("change", () => {
+          const node = project.nodes.find(
+            (candidate) => candidate.id === input.dataset.layerNodeId,
+          );
+          const remembered = Boolean(
+            node?.hiddenPlacements?.[
+              input.dataset.layerVisible as "landscape" | "portrait"
+            ],
+          );
           this.runTransaction(
             (draft) =>
               setLayerVariantVisibility(
@@ -1642,10 +1751,12 @@ export class GameLayoutEditorApp {
                 input.checked,
               ),
             input.checked
-              ? `${input.dataset.layerVisible} placement 已以固定初值创建。`
-              : `${input.dataset.layerVisible} placement 已删除。`,
-          ),
-        ),
+              ? remembered
+                ? `${input.dataset.layerVisible} placement 已恢复此前编辑值。`
+                : `${input.dataset.layerVisible} placement 已以固定初值创建。`
+              : `${input.dataset.layerVisible} placement 已隐藏并保留编辑值。`,
+          );
+        }),
       );
     panel
       .querySelectorAll<HTMLButtonElement>("[data-remove-layer]")
@@ -1825,6 +1936,9 @@ export class GameLayoutEditorApp {
     const dialog = this.requireElement(
       "[data-resource-picker]",
     ) as HTMLDialogElement;
+    const focusSnapshot = dialog.contains(document.activeElement)
+      ? this.captureFocusSnapshot()
+      : null;
     const state = this.#session.picker;
     if (!state) {
       if (dialog.open) dialog.close();
@@ -1866,7 +1980,8 @@ export class GameLayoutEditorApp {
       else dialog.setAttribute("open", "");
     }
     this.bindPickerDynamicActions(project);
-    if (focus)
+    if (focusSnapshot) this.restoreFocusSnapshot(focusSnapshot);
+    else if (focus)
       queueMicrotask(() =>
         dialog.querySelector<HTMLInputElement>("[data-picker-query]")?.focus(),
       );
@@ -1912,7 +2027,12 @@ export class GameLayoutEditorApp {
     const query = dialog.querySelector<HTMLInputElement>(
       "[data-picker-query]",
     )!;
-    query.addEventListener("input", () => {
+    query.addEventListener("input", (event) => {
+      state.query = query.value;
+      if ((event as InputEvent).isComposing) return;
+      this.renderPicker(project, true);
+    });
+    query.addEventListener("compositionend", () => {
       state.query = query.value;
       this.renderPicker(project, true);
     });
@@ -2583,6 +2703,7 @@ export class GameLayoutEditorApp {
       );
       this.closePicker(false);
       this.resetSymbolsForProjectReplace();
+      this.resetTransientDraftsForProjectReplace();
       this.#session.activeTab = "layout";
       this.#session.selection = defaultLayoutSelection(project);
       this.#session.expandedResourceIds.clear();
@@ -2681,6 +2802,7 @@ export class GameLayoutEditorApp {
 
   private clearSymbolsPackage(): void {
     if (!this.#selectedSymbolId) return;
+    const removedPackageId = this.#selectedSymbolId;
     try {
       this.#store.transact((draft) =>
         deleteSymbolDependency(draft, this.#selectedSymbolId!),
@@ -2693,6 +2815,10 @@ export class GameLayoutEditorApp {
     this.#symbolPackageMetadata = null;
     void this.#preview?.setSymbolPackage(null);
     this.#selectedSymbolId = null;
+    for (const key of this.#session.otherSceneDrafts.keys()) {
+      if (key.startsWith(`${removedPackageId}\u0000`))
+        this.#session.otherSceneDrafts.delete(key);
+    }
     this.renderSymbolsMetadata();
     this.showFeedback(
       "Symbols preview package 已清除；layout cell size 保持不变。",
@@ -2703,6 +2829,14 @@ export class GameLayoutEditorApp {
     this.#symbolImportBusy = false;
     this.#symbolPackageMetadata = null;
     void this.#preview?.setSymbolPackage(null);
+  }
+
+  private resetTransientDraftsForProjectReplace(): void {
+    this.#session.selectedTransitionKey = null;
+    this.#session.newTransitionFromModeId = "";
+    this.#session.newTransitionToModeId = "";
+    this.#session.otherSceneDrafts.clear();
+    this.#session.popupPlacementDrafts.clear();
   }
 
   private async restoreProjectSymbolDependency(
@@ -2847,37 +2981,74 @@ export class GameLayoutEditorApp {
     const bindingBySymbol = new Map(
       bindings.map((binding) => [binding.symbol, binding]),
     );
+    const availableSymbols = new Set(Object.keys(availableTargets));
+    for (const key of this.#session.otherSceneDrafts.keys()) {
+      const [packageId, symbol] = key.split("\u0000");
+      if (packageId === metadata.packageId && !availableSymbols.has(symbol!))
+        this.#session.otherSceneDrafts.delete(key);
+    }
     const rows = Object.entries(availableTargets)
       .filter(([, targets]) => targets.length > 0)
       .map(([symbol, targets]) => {
         const binding = bindingBySymbol.get(symbol);
-        const target = binding?.target ?? targets[0]!;
-        const source =
-          binding?.source ??
-          (tableNames.length > 0
-            ? {
-                kind: "number-weight-table" as const,
-                tableName: tableNames[0]!,
-              }
-            : { kind: "fixed-number" as const, value: 1 });
-        return `<div class="other-scene-row" data-other-scene-row="${escapeHtml(symbol)}"><label><input type="checkbox" data-binding-enabled ${binding ? "checked" : ""}> ${escapeHtml(symbol)}</label><select data-binding-target>${targets
+        const key = otherSceneDraftKey(metadata.packageId, symbol);
+        const existing = this.#session.otherSceneDrafts.get(key);
+        const initialSource = binding?.source;
+        const draft: OtherSceneBindingDraft = existing ?? {
+          enabled: Boolean(binding),
+          target: binding?.target ?? targets[0]!,
+          sourceKind:
+            initialSource?.kind ??
+            (tableNames.length > 0 ? "number-weight-table" : "fixed-number"),
+          tableName:
+            initialSource?.kind === "number-weight-table"
+              ? initialSource.tableName
+              : (tableNames[0] ?? ""),
+          fixedNumber:
+            initialSource?.kind === "fixed-number"
+              ? String(initialSource.value)
+              : "1",
+        };
+        if (
+          !targets.some(
+            (candidate) =>
+              otherSceneTargetKey(candidate) ===
+              otherSceneTargetKey(draft.target),
+          )
+        )
+          draft.target = targets[0]!;
+        if (!tableNames.includes(draft.tableName))
+          draft.tableName = tableNames[0] ?? "";
+        if (
+          tableNames.length === 0 &&
+          draft.sourceKind === "number-weight-table"
+        )
+          draft.sourceKind = "fixed-number";
+        this.#session.otherSceneDrafts.set(key, draft);
+        return `<div class="other-scene-row" data-other-scene-row="${escapeHtml(symbol)}"><label><input type="checkbox" data-binding-enabled ${draft.enabled ? "checked" : ""}> ${escapeHtml(symbol)}</label><select data-binding-target>${targets
           .map((candidate) => {
-            const value =
-              candidate.kind === "image-string-node"
-                ? `node:${candidate.name}`
-                : "legacy";
-            const selected =
-              candidate.kind === "image-string-node" &&
-              target.kind === "image-string-node"
-                ? candidate.name === target.name
-                : candidate.kind === target.kind;
+            const value = otherSceneTargetKey(candidate);
+            const selected = value === otherSceneTargetKey(draft.target);
             return `<option value="${escapeHtml(value)}" ${selected ? "selected" : ""}>${escapeHtml(value)}</option>`;
           })
           .join(
             "",
-          )}</select><select data-binding-source-kind><option value="number-weight-table" ${source.kind === "number-weight-table" ? "selected" : ""} ${tableNames.length === 0 ? "disabled" : ""}>权重表</option><option value="fixed-number" ${source.kind === "fixed-number" ? "selected" : ""}>固定值</option></select><select data-binding-table ${tableNames.length === 0 ? "disabled" : ""}>${tableNames.map((name) => `<option value="${escapeHtml(name)}" ${source.kind === "number-weight-table" && source.tableName === name ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select><input data-binding-fixed type="number" min="1" step="1" value="${source.kind === "fixed-number" ? source.value : 1}"></div>`;
+          )}</select><select data-binding-source-kind><option value="number-weight-table" ${draft.sourceKind === "number-weight-table" ? "selected" : ""} ${tableNames.length === 0 ? "disabled" : ""}>权重表</option><option value="fixed-number" ${draft.sourceKind === "fixed-number" ? "selected" : ""}>固定值</option></select><select data-binding-table ${tableNames.length === 0 ? "disabled" : ""}>${tableNames.map((name) => `<option value="${escapeHtml(name)}" ${draft.tableName === name ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select><input data-binding-fixed type="number" min="1" step="1" value="${escapeHtml(draft.fixedNumber)}"></div>`;
       });
     host.innerHTML = `<h3>数值 / otherScene</h3>${rows.join("") || "<p>package 没有命名节点或 legacy value target。</p>"}<small>${tableNames.length ? `可用表：${tableNames.map(escapeHtml).join("、")}` : "game config 未声明 numberWeightTables；仍可使用固定值。"}</small>`;
+    host
+      .querySelectorAll<HTMLInputElement>("[data-binding-fixed]")
+      .forEach((input) =>
+        input.addEventListener("input", () => {
+          const symbol = input.closest<HTMLElement>("[data-other-scene-row]")
+            ?.dataset.otherSceneRow;
+          if (!symbol) return;
+          const draft = this.#session.otherSceneDrafts.get(
+            otherSceneDraftKey(metadata.packageId, symbol),
+          );
+          if (draft) draft.fixedNumber = input.value;
+        }),
+      );
     host
       .querySelectorAll<HTMLInputElement | HTMLSelectElement>("input, select")
       .forEach((input) =>
@@ -2887,22 +3058,19 @@ export class GameLayoutEditorApp {
 
   private commitOtherSceneBindings(): void {
     try {
+      const metadata = this.#symbolPackageMetadata;
+      if (!metadata) throw new Error("Symbols metadata 尚未就绪。");
       const bindings: SymbolOtherScenePreviewBinding[] = [];
       for (const row of this.#root.querySelectorAll<HTMLElement>(
         "[data-other-scene-row]",
       )) {
-        if (
-          !row.querySelector<HTMLInputElement>("[data-binding-enabled]")
-            ?.checked
-        )
-          continue;
         const symbol = row.dataset.otherSceneRow!;
         const targetValue = row.querySelector<HTMLSelectElement>(
           "[data-binding-target]",
         )!.value;
         const sourceKind = row.querySelector<HTMLSelectElement>(
           "[data-binding-source-kind]",
-        )!.value;
+        )!.value as SymbolOtherScenePreviewBinding["source"]["kind"];
         const target: SymbolOtherScenePreviewBinding["target"] =
           targetValue === "legacy"
             ? { kind: "legacy-presentation-value" }
@@ -2910,20 +3078,33 @@ export class GameLayoutEditorApp {
                 kind: "image-string-node",
                 name: targetValue.slice("node:".length),
               };
+        const draft: OtherSceneBindingDraft = {
+          enabled: row.querySelector<HTMLInputElement>(
+            "[data-binding-enabled]",
+          )!.checked,
+          target,
+          sourceKind,
+          tableName: row.querySelector<HTMLSelectElement>(
+            "[data-binding-table]",
+          )!.value,
+          fixedNumber: row.querySelector<HTMLInputElement>(
+            "[data-binding-fixed]",
+          )!.value,
+        };
+        this.#session.otherSceneDrafts.set(
+          otherSceneDraftKey(metadata.packageId, symbol),
+          draft,
+        );
+        if (!draft.enabled) continue;
         const source: SymbolOtherScenePreviewBinding["source"] =
           sourceKind === "number-weight-table"
             ? {
                 kind: "number-weight-table",
-                tableName: row.querySelector<HTMLSelectElement>(
-                  "[data-binding-table]",
-                )!.value,
+                tableName: draft.tableName,
               }
             : {
                 kind: "fixed-number",
-                value: Number(
-                  row.querySelector<HTMLInputElement>("[data-binding-fixed]")!
-                    .value,
-                ),
+                value: Number(draft.fixedNumber),
               };
         bindings.push({ symbol, target, source });
       }
@@ -3095,25 +3276,78 @@ export class GameLayoutEditorApp {
     }
   }
 
-  private captureFocusToken(): string | null {
+  private captureFocusSnapshot(): FocusSnapshot | null {
     const active = document.activeElement as HTMLElement | null;
     if (!active || !this.#root.contains(active)) return null;
-    for (const attribute of [
-      "data-number",
-      "data-resource-query",
-      "data-project-id",
-      "data-node-id",
-      "data-outline-key",
-    ]) {
-      const value = active.getAttribute(attribute);
-      if (value !== null) return `[${attribute}="${cssEscape(value)}"]`;
+    const dataAttributes = [...active.attributes].filter((attribute) =>
+      attribute.name.startsWith("data-"),
+    );
+    if (dataAttributes.length === 0) return null;
+    const elementSelector = `${active.tagName.toLowerCase()}${dataAttributes
+      .map((attribute) => `[${attribute.name}="${cssEscape(attribute.value)}"]`)
+      .join("")}`;
+    let selector =
+      this.#root.querySelectorAll(elementSelector).length === 1
+        ? elementSelector
+        : null;
+    for (
+      let ancestor = active.parentElement;
+      !selector && ancestor && ancestor !== this.#root;
+      ancestor = ancestor.parentElement
+    ) {
+      const attributes = [...ancestor.attributes].filter((attribute) =>
+        attribute.name.startsWith("data-"),
+      );
+      if (attributes.length === 0) continue;
+      const ancestorSelector = `${ancestor.tagName.toLowerCase()}${attributes
+        .map(
+          (attribute) => `[${attribute.name}="${cssEscape(attribute.value)}"]`,
+        )
+        .join("")}`;
+      const candidate = `${ancestorSelector} ${elementSelector}`;
+      if (this.#root.querySelectorAll(candidate).length === 1)
+        selector = candidate;
     }
-    return null;
+    if (!selector) return null;
+    const selectable =
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLTextAreaElement
+        ? active
+        : null;
+    return {
+      selector,
+      selectionStart: selectable?.selectionStart ?? null,
+      selectionEnd: selectable?.selectionEnd ?? null,
+      selectionDirection: selectable?.selectionDirection ?? null,
+    };
   }
 
-  private restoreFocusToken(token: string | null): void {
-    if (!token) return;
-    queueMicrotask(() => this.#root.querySelector<HTMLElement>(token)?.focus());
+  private restoreFocusSnapshot(snapshot: FocusSnapshot | null): void {
+    if (!snapshot) return;
+    queueMicrotask(() => {
+      const target = this.#root.querySelector<HTMLElement>(snapshot.selector);
+      target?.focus();
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement
+      ) {
+        if (
+          snapshot.selectionStart !== null &&
+          snapshot.selectionEnd !== null
+        ) {
+          try {
+            target.setSelectionRange(
+              snapshot.selectionStart,
+              snapshot.selectionEnd,
+              snapshot.selectionDirection ?? undefined,
+            );
+          } catch {
+            // Number inputs and some browser-native controls do not expose a
+            // selectable text range; focus restoration still applies.
+          }
+        }
+      }
+    });
   }
 
   private requireElement(selector: string): HTMLElement {
@@ -3293,4 +3527,22 @@ function mimeType(path: string): string {
 
 function cssEscape(value: string): string {
   return value.replace(/["\\]/gu, "\\$&");
+}
+
+function popupPlacementDraftKey(
+  popupId: string,
+  variant: SceneLayoutVariantId,
+  field: "x" | "y" | "scale",
+): string {
+  return `${popupId}\u0000${variant}\u0000${field}`;
+}
+
+function otherSceneDraftKey(packageId: string, symbol: string): string {
+  return `${packageId}\u0000${symbol}`;
+}
+
+function otherSceneTargetKey(
+  target: SymbolOtherScenePreviewBinding["target"],
+): string {
+  return target.kind === "image-string-node" ? `node:${target.name}` : "legacy";
 }

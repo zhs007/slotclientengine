@@ -18,23 +18,33 @@ export function convertProjectCoordinateOrigin(
     assertPositiveSize(artSize, `${variantId} artSize`);
     const center = { x: artSize.width / 2, y: artSize.height / 2 };
     for (const node of project.nodes) {
-      const placement = node.placements[variantId];
-      if (!placement) continue;
+      const placements = [
+        [node.placements[variantId], `节点 ${node.id} ${variantId}`],
+        [
+          node.hiddenPlacements?.[variantId],
+          `节点 ${node.id} ${variantId} 隐藏缓存`,
+        ],
+      ] as const;
+      if (!placements.some(([placement]) => placement)) continue;
       const resource = project.resources.get(node.resourceId);
       if (!resource)
         throw new Error(`节点 ${node.id} 引用了未知资源：${node.resourceId}`);
-      assertPlacement(placement, `节点 ${node.id} ${variantId}`);
-      if (resource.kind === "image" || resource.kind === "vni") {
-        const size =
-          resource.kind === "image" ? resource.size : resource.project.stage;
-        placement.x +=
-          (toCenter ? 1 : -1) * ((placement.scale * size.width) / 2 - center.x);
-        placement.y +=
-          (toCenter ? 1 : -1) *
-          ((placement.scale * size.height) / 2 - center.y);
-      } else {
-        placement.x += (toCenter ? -1 : 1) * center.x;
-        placement.y += (toCenter ? -1 : 1) * center.y;
+      for (const [placement, label] of placements) {
+        if (!placement) continue;
+        assertPlacement(placement, label);
+        if (resource.kind === "image" || resource.kind === "vni") {
+          const size =
+            resource.kind === "image" ? resource.size : resource.project.stage;
+          placement.x +=
+            (toCenter ? 1 : -1) *
+            ((placement.scale * size.width) / 2 - center.x);
+          placement.y +=
+            (toCenter ? 1 : -1) *
+            ((placement.scale * size.height) / 2 - center.y);
+        } else {
+          placement.x += (toCenter ? -1 : 1) * center.x;
+          placement.y += (toCenter ? -1 : 1) * center.y;
+        }
       }
     }
     const reelPlacement = project.reel.placements[variantId];

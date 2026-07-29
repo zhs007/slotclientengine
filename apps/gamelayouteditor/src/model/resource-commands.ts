@@ -855,8 +855,24 @@ export function setLayerVariantVisibility(
 ): void {
   const node = requireLayer(project, nodeId);
   assertVariantsAllowed(project, [variant]);
-  if (visible) node.placements[variant] = { x: 0, y: 0, scale: 1 };
-  else delete node.placements[variant];
+  const placement = node.placements[variant];
+  if (visible) {
+    if (placement) return;
+    const remembered = node.hiddenPlacements?.[variant];
+    node.placements[variant] = remembered
+      ? { ...remembered }
+      : { x: 0, y: 0, scale: 1 };
+    if (node.hiddenPlacements) {
+      delete node.hiddenPlacements[variant];
+      if (Object.keys(node.hiddenPlacements).length === 0)
+        delete node.hiddenPlacements;
+    }
+    return;
+  }
+  if (!placement) return;
+  node.hiddenPlacements ??= {};
+  node.hiddenPlacements[variant] = { ...placement };
+  delete node.placements[variant];
 }
 
 export function suggestNodeId(

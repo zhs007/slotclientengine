@@ -1072,8 +1072,32 @@ describe("filename-key layout resource commands", () => {
       y: 0,
       scale: 1,
     });
+    project.nodes[0].placements.landscape = {
+      x: 123,
+      y: -45,
+      scale: 0.75,
+    };
     setLayerVariantVisibility(project, "second", "landscape", false);
     expect(project.nodes[0].placements.landscape).toBeUndefined();
+    expect(project.nodes[0].hiddenPlacements?.landscape).toEqual({
+      x: 123,
+      y: -45,
+      scale: 0.75,
+    });
+    setLayerVariantVisibility(project, "second", "landscape", false);
+    setLayerVariantVisibility(project, "second", "landscape", true);
+    expect(project.nodes[0].placements.landscape).toEqual({
+      x: 123,
+      y: -45,
+      scale: 0.75,
+    });
+    expect(project.nodes[0].hiddenPlacements?.landscape).toBeUndefined();
+    setLayerVariantVisibility(project, "second", "landscape", true);
+    expect(project.nodes[0].placements.landscape).toEqual({
+      x: 123,
+      y: -45,
+      scale: 0.75,
+    });
     renameNode(project, "second", "second");
     expect(() => renameNode(project, "missing", "next")).toThrow(/未知节点/);
     expect(() => setNodeDefaultAnimation(project, "first", "Idle")).toThrow(
