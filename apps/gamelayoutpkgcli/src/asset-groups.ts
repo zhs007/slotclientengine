@@ -2,6 +2,7 @@ import {
   collectImageStringAssetPaths,
   parseImageStringManifest,
 } from "@slotclientengine/rendercore/image-string";
+import { assertVNIProject } from "@slotclientengine/vnicore/core";
 import {
   collectMappedPopupAssetKeys,
   parsePopupManifest,
@@ -354,6 +355,12 @@ function nodeClosure(
         parseRequiredJson(files, resource.manifest),
       );
       for (const key of collectImageStringAssetPaths(nested)) keys.add(key);
+    } else if (resource.kind === "vni") {
+      keys.add(resource.project);
+      const project = assertVNIProject(
+        parseRequiredJson(files, resource.project),
+      );
+      for (const asset of project.assets) keys.add(asset.path);
     } else {
       keys.add(resource.skeleton);
       keys.add(resource.atlas);

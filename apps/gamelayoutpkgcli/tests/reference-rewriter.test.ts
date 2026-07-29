@@ -16,6 +16,7 @@ const mapping = new Map([
   ["symbol-disabled.png", "symbol-disabled.webp"],
   ["popup.png", "popup.webp"],
   ["vni.png", "vni.webp"],
+  ["runtime.json", "runtime.hash.json"],
 ]);
 
 describe("typed asset reference rewriting", () => {
@@ -43,6 +44,31 @@ describe("typed asset reference rewriting", () => {
       mapping,
     );
     expect(imageString.glyphs["1"]?.path).toBe("digit.webp");
+
+    const withVni = rewriteLayoutManifest(
+      {
+        ...layoutFixture(),
+        nodes: [
+          ...layoutFixture().nodes,
+          {
+            id: "vni-fx",
+            order: 3,
+            resource: {
+              kind: "vni",
+              project: "runtime.json",
+              loop: false,
+            },
+            placements: { default: { x: 0, y: 0, scale: 1 } },
+          },
+        ],
+      },
+      mapping,
+    );
+    expect(withVni.nodes.at(-1)?.resource).toEqual({
+      kind: "vni",
+      project: "runtime.hash.json",
+      loop: false,
+    });
   });
 
   it("rewrites symbol package and all declared symbol image fields", () => {

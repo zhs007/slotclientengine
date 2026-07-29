@@ -7,9 +7,180 @@ import {
 } from "../../src/scene-layout/index.js";
 import type { RendercoreSpinePlayer } from "../../src/spine/runtime-player.js";
 import type { ImageStringResource } from "../../src/image-string/index.js";
+import type { SceneLayoutVniPlayer } from "../../src/scene-layout/runtime.js";
 import { game002LayoutFixture, game003LayoutFixture } from "./fixtures.js";
 
 describe("scene layout runtime", () => {
+  it("creates an independent manual VNI player and only advances it while renderable", async () => {
+    const manifest = parseSceneLayoutManifest({
+      ...game002LayoutFixture,
+      nodes: [
+        ...game002LayoutFixture.nodes,
+        {
+          id: "vni-fx",
+          order: 2,
+          resource: {
+            kind: "vni",
+            project: "runtime.json",
+            loop: false,
+          },
+          placements: { default: { x: 100, y: 200, scale: 0.75 } },
+        },
+      ],
+    });
+    const display = new Container();
+    const player: SceneLayoutVniPlayer = {
+      init: vi.fn(async () => undefined),
+      setLoop: vi.fn(),
+      play: vi.fn(),
+      update: vi.fn(),
+      destroy: vi.fn(),
+      getDisplayObject: () => display,
+    };
+    const runtime = createSceneLayoutRuntime({
+      resource: {
+        manifest,
+        imageUrls: { "assets/bg.png": "background.png" },
+        imageStringResources: {},
+        vniResources: {
+          "runtime.json": {
+            project: {
+              stage: { width: 400, height: 300 },
+              exportProfile: {
+                id: "runtime",
+                purpose: "runtime",
+                assetScale: 1,
+              },
+            } as never,
+            assetUrls: {},
+          },
+        },
+        videoUrls: {},
+        spineResources: {},
+        destroy: vi.fn(),
+      },
+      loadTexture: async () => Texture.EMPTY,
+      unloadTexture: async () => undefined,
+      createVniPlayer: () => player,
+    });
+    await runtime.init();
+    expect(runtime.applyGeometryManifest(manifest)).toBeNull();
+    runtime.applyViewport({ width: 2000, height: 2000 });
+    expect(display.pivot).toMatchObject({ x: 0, y: 0 });
+    expect(player.setLoop).toHaveBeenCalledWith(false);
+    expect(player.play).toHaveBeenCalledOnce();
+    runtime.update(1 / 60);
+    expect(player.update).toHaveBeenCalledOnce();
+    const centered = structuredClone(manifest) as any;
+    centered.coordinateOrigin = "center";
+    centered.nodes[0].placements.default = {
+      x: -999.5,
+      y: -999.5,
+      scale: 1,
+    };
+    centered.reels.main.placements.default = { x: 0, y: -123 };
+    runtime.applyGeometryManifest(centered);
+    expect(display.pivot).toMatchObject({ x: 200, y: 150 });
+    runtime.setNodeActive("vni-fx", false);
+    runtime.update(1 / 60);
+    expect(player.update).toHaveBeenCalledOnce();
+    runtime.destroy();
+    expect(player.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("rejects missing VNI resources and non-runtime default player profiles", async () => {
+    const manifest = parseSceneLayoutManifest({
+      ...game002LayoutFixture,
+      nodes: [
+        ...game002LayoutFixture.nodes,
+        {
+          id: "vni-fx",
+          order: 2,
+          resource: {
+            kind: "vni",
+            project: "runtime.json",
+            loop: true,
+          },
+          placements: { default: { x: 0, y: 0, scale: 1 } },
+        },
+      ],
+    });
+    const base = {
+      manifest,
+      imageUrls: { "assets/bg.png": "background.png" },
+      imageStringResources: {},
+      videoUrls: {},
+      spineResources: {},
+      destroy: vi.fn(),
+    };
+    const missing = createSceneLayoutRuntime({
+      resource: { ...base, vniResources: {} },
+      loadTexture: async () => Texture.EMPTY,
+      unloadTexture: async () => undefined,
+    });
+    await expect(missing.init()).rejects.toThrow(
+      /VNI resource is missing for node/,
+    );
+    missing.destroy();
+
+    const invalidProfile = createSceneLayoutRuntime({
+      resource: {
+        ...base,
+        vniResources: {
+          "runtime.json": {
+            project: {
+              stage: { width: 100, height: 200 },
+            } as never,
+            assetUrls: {},
+          },
+        },
+      },
+      loadTexture: async () => Texture.EMPTY,
+      unloadTexture: async () => undefined,
+    });
+    await expect(invalidProfile.init()).rejects.toThrow(
+      /missing a runtime exportProfile/,
+    );
+    invalidProfile.destroy();
+
+    const defaultPlayer = createSceneLayoutRuntime({
+      resource: {
+        ...base,
+        vniResources: {
+          "runtime.json": {
+            project: {
+              schemaVersion: "VNI_0.020",
+              editor: { name: "VNI", version: "VNI_0.020" },
+              engineTarget: { name: "cocos_creator", version: "3.8.6" },
+              name: "empty-fx",
+              exportProfile: {
+                id: "runtime",
+                purpose: "runtime",
+                assetScale: 1,
+              },
+              stage: {
+                width: 100,
+                height: 200,
+                coordinate: "center",
+                duration: 1,
+                backgroundColor: "#000000",
+              },
+              assets: [],
+              layerGroups: [],
+              layers: [],
+              particles: [],
+            } as never,
+            assetUrls: {},
+          },
+        },
+      },
+      loadTexture: async () => Texture.EMPTY,
+      unloadTexture: async () => undefined,
+    });
+    await expect(defaultPlayer.init()).resolves.toBeUndefined();
+    defaultPlayer.destroy();
+  });
+
   it("drives direct Spine transitions at the real completion boundary", async () => {
     const manifest = parseSceneLayoutManifest({
       ...game002LayoutFixture,
@@ -58,6 +229,7 @@ describe("scene layout runtime", () => {
         manifest,
         imageUrls: {},
         imageStringResources: {},
+        vniResources: {},
         videoUrls: {},
         spineResources: {
           bg: { skeleton: {}, atlasText: "", textureUrls: {} },
@@ -463,6 +635,7 @@ describe("scene layout runtime", () => {
         manifest,
         imageUrls: {},
         imageStringResources: {},
+        vniResources: {},
         videoUrls: {},
         spineResources: {
           "base-bg": sharedResource,

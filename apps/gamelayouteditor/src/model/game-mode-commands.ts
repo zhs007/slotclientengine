@@ -107,6 +107,7 @@ export function bindGameModeBackground(
   if (
     !resource ||
     resource.kind === "image-string" ||
+    resource.kind === "vni" ||
     resource.kind === "video"
   )
     throw new Error(`背景节点不能使用 ${resource?.kind ?? "未知"}：${nodeId}`);

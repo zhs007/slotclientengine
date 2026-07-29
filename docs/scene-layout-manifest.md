@@ -1,13 +1,13 @@
 # Scene Layout Manifest v1
 
-根 sentinel 为 `layout.manifest.json`。schema version 仍为 `1`，支持 `maximized-focus` / `orientation-focus`、image/image-string/official Spine 4.3 node、reels、plural `symbolPackages`、award-celebration `popups`、game modes 与显式有向 transitions。
+根 sentinel 为 `layout.manifest.json`。schema version 仍为 `1`，支持 `maximized-focus` / `orientation-focus`、image/image-string/official Spine 4.3/runtime VNI node、reels、plural `symbolPackages`、award-celebration `popups`、game modes 与显式有向 transitions。
 
 ## 坐标原点
 
 根级可选 `coordinateOrigin` 为 `"top-left"` 或 `"center"`；旧包缺失时严格按 `"top-left"` 读取。Game Layout Editor 的新导出会显式保存该值。
 
-- `top-left`：art 左上角是 `(0, 0)`；image placement 表示图片左上角，Spine/image-string placement 表示各自 authored origin。
-- `center`：art 中心是 `(0, 0)`；image placement 表示缩放后图片中心，Spine/image-string placement 表示 authored origin 相对 art center 的偏移。
+- `top-left`：art 左上角是 `(0, 0)`；image/VNI placement 表示资源左上角，Spine/image-string placement 表示各自 authored origin。
+- `center`：art 中心是 `(0, 0)`；image/VNI placement 表示缩放后资源中心，Spine/image-string placement 表示 authored origin 相对 art center 的偏移。
 - focus、frame focus、min margin 仍是以 art 左上角描述的矩形，不随坐标类型转换。
 - Spine transition overlay 使用与 node 相同的 art-space origin；popup 仍是 viewport center offset，video blackout 仍是 viewport-space。
 
@@ -60,13 +60,13 @@ Game Layout Editor 新导出的所有资源引用是扁平 filename keys：
 }
 ```
 
-根 `assets.map.json` 将 layout、image-string、Symbols、Popup 的全部 root/leaf keys 统一映射到 `assets/<完整 SHA-256>.<ext>`。ZIP 只有两个 root control files 和 hash payload 区；禁止 `dependencies/image-strings/**`、`dependencies/symbols/**`、`dependencies/popups/**`。
+根 `assets.map.json` 将 layout、VNI、image-string、Symbols、Popup 的全部 root/leaf keys 统一映射到 `assets/<完整 SHA-256>.<ext>`。ZIP 只有两个 root control files 和 hash payload 区；禁止 `dependencies/image-strings/**`、`dependencies/symbols/**`、`dependencies/popups/**`。
 
 同一个 filename key 全局只有一份 bytes。多个 package 带来同名不同 bytes 时必须覆盖、取消或显式改名并由 owner 结构化改写，不能按 package id 建 namespace。package/mode/node id 保留业务语义，不作为资源 alias。导出与重新导入不得用 physical hash payload path 重建 node id 或资源列表标签。
 
 ## 精确闭包与 loader
 
-`collectSceneLayoutPackagePaths()` 验证 layout 与全部 nested package 的传递 exact closure。map 声明的 hash、size、media、payload 和 orphan 均严格验证；map/direct 不得混用。ZIP resource creator、Blob preview 与 `loadSceneLayoutPackageFromUrl()` 使用同一 resolver。父 package 已解析 map 后，image-string/Symbols/Popup 使用 resolved-files bridge，不要求嵌套 map。
+`collectSceneLayoutPackagePaths()` 验证 layout 与全部 nested package 的传递 exact closure，包括 VNI project 声明的每个 asset。map 声明的 hash、size、media、payload 和 orphan 均严格验证；map/direct 不得混用。ZIP resource creator、Blob preview 与 `loadSceneLayoutPackageFromUrl()` 使用同一 resolver。父 package 已解析 map 后，VNI/image-string/Symbols/Popup 使用 resolved-files bridge，不要求嵌套 map。
 
 无 map 的合法 legacy direct-path/nested dependency package继续加载。Editor import 会在内存中迁移为 flat keys，再导出新格式；不做 basename runtime fallback、404 探测或宽泛 glob。
 
@@ -75,6 +75,8 @@ Spine atlas page 是 atlas 内部的逻辑标识，`textures` map 的 value 才�
 ## Node、模式与转场
 
 多个 mode/variant 可以引用同一资源 key，但稳定 background node 与 placement 必须独立；新增 mode 背景未绑定，node id 按 mode/variant 稳定生成。稳定 Spine node 只使用显式 single loop，mode 切换时保留 player 与 exact bytes。
+
+普通 Spine node 声明 exact `defaultAnimation` 和 boolean `loop`。普通 VNI node 声明 runtime project filename key 和 boolean `loop`，播放完整 timeline；同一 project 被多个 node 引用时仍创建独立 player/playhead。VNI node 可使用普通 placement/order/variant visibility，但不得作为 background 或 transition。
 
 transition 是独立有向边：
 

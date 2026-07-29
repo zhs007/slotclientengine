@@ -15,6 +15,8 @@ import {
   getLayoutResourceReferences,
   moveLayer,
   importImageStringZip,
+  importVniBundle,
+  inspectVniBundleProfiles,
   rebindLayerResource,
   renameNode,
   removeLayer,
@@ -26,6 +28,7 @@ import {
   setImageStringLayerAnchor,
   setImageStringLayerText,
   setNodeDefaultAnimation,
+  setNodePlaybackLoop,
   uploadImageResource,
   uploadSpineResource,
   uploadVideoResource,
@@ -139,6 +142,48 @@ function imageStringZip(
   );
 }
 
+function vniBundleZip(profileIds: readonly string[]): Uint8Array {
+  const entries: Record<string, Uint8Array> = {};
+  const exports = profileIds.map((id, index) => {
+    const assetScale = (index + 1) / profileIds.length;
+    const path = `profiles/${id}.json`;
+    entries[path] = strToU8(
+      JSON.stringify({
+        schemaVersion: "VNI_0.020",
+        editor: { name: "VNI", version: "VNI_0.020" },
+        engineTarget: { name: "cocos_creator", version: "3.8.6" },
+        name: id,
+        exportProfile: { id, purpose: "runtime", assetScale },
+        stage: {
+          width: 100,
+          height: 200,
+          coordinate: "center",
+          duration: 1,
+          backgroundColor: "#000000",
+        },
+        assets: [],
+        layerGroups: [],
+        layers: [],
+        particles: [],
+      }),
+    );
+    return {
+      id,
+      purpose: "runtime",
+      assetScale,
+      path,
+    };
+  });
+  entries["manifest.json"] = strToU8(
+    JSON.stringify({
+      type: "vni_export_bundle",
+      version: "VNI_0.020",
+      exports,
+    }),
+  );
+  return zipSync(entries);
+}
+
 async function initializeProjectBackground(
   project: ReturnType<typeof createNewEditorProject>,
 ): Promise<void> {
@@ -156,6 +201,58 @@ async function initializeProjectBackground(
 }
 
 describe("filename-key layout resource commands", () => {
+  it("imports a selected VNI runtime and configures an independent non-looping layer", async () => {
+    const project = createNewEditorProject("maximized-focus");
+    await initializeProjectBackground(project);
+    const zipBytes = vniBundleZip(["runtime-a", "runtime-b"]);
+    expect(inspectVniBundleProfiles(zipBytes)?.map(({ id }) => id)).toEqual([
+      "runtime-a",
+      "runtime-b",
+    ]);
+    await expect(importVniBundle({ project, zipBytes })).rejects.toThrow(
+      /必须明确选择/,
+    );
+    const resource = await importVniBundle({
+      project,
+      zipBytes,
+      selectedProfileId: "runtime-b",
+    });
+    expect(resource).toMatchObject({
+      kind: "vni",
+      projectPath: "runtime-b.json",
+      project: {
+        exportProfile: { id: "runtime-b", purpose: "runtime", assetScale: 1 },
+      },
+    });
+    addLayerFromResource({
+      project,
+      resourceId: resource.id,
+      nodeId: "vni-fx",
+      variants: ["default"],
+      loop: false,
+    });
+    expect(
+      editorProjectToManifest(project).nodes.find(({ id }) => id === "vni-fx")
+        ?.resource,
+    ).toEqual({
+      kind: "vni",
+      project: "runtime-b.json",
+      loop: false,
+    });
+    setNodePlaybackLoop(project, "vni-fx", true);
+    expect(project.nodes.find(({ id }) => id === "vni-fx")?.playback).toEqual({
+      kind: "vni",
+      loop: true,
+    });
+    expect(() =>
+      assignBackgroundResource({
+        project,
+        variant: "default",
+        resourceId: resource.id,
+      }),
+    ).toThrow(/不能设为背景/);
+  });
+
   it("imports, reuses and atomically edits a standalone image-string resource", async () => {
     const project = createNewEditorProject("maximized-focus");
     await initializeProjectBackground(project);
@@ -401,7 +498,7 @@ describe("filename-key layout resource commands", () => {
       defaultAnimation: "Idle",
     });
     expect(project.nodes.find((node) => node.id === "scene")?.playback).toEqual(
-      { kind: "loop", animation: "Idle" },
+      { kind: "loop", animation: "Idle", loop: true },
     );
   });
 
@@ -635,8 +732,8 @@ describe("filename-key layout resource commands", () => {
       project.gameModes.modes.map((mode) => mode.backgroundNodes.default),
     ).toEqual(["background", reused.id]);
     expect(project.nodes.map((item) => item.playback)).toEqual([
-      { kind: "loop", animation: "BG" },
-      { kind: "loop", animation: "FG" },
+      { kind: "loop", animation: "BG", loop: true },
+      { kind: "loop", animation: "FG", loop: true },
     ]);
     expect(project.gameModes.modes.map((mode) => mode.nodeStates)).toEqual([
       {},

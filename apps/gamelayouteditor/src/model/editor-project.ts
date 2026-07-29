@@ -18,6 +18,7 @@ import {
   collectPopupPackagePaths,
   parsePopupManifest,
 } from "@slotclientengine/rendercore/popup";
+import { assertVNIProject } from "@slotclientengine/vnicore";
 import {
   editorResourcePaths,
   editorResourceSignature,
@@ -26,6 +27,7 @@ import {
   type EditorImageStringLayoutResource,
   type EditorLayoutResource,
   type EditorSpineLayoutResource,
+  type EditorVniLayoutResource,
   type EditorVideoLayoutResource,
 } from "./editor-resource.js";
 
@@ -33,6 +35,7 @@ type EditorLayoutResourceDraft =
   | Omit<EditorImageLayoutResource, "id">
   | Omit<EditorSpineLayoutResource, "id">
   | Omit<EditorImageStringLayoutResource, "id">
+  | Omit<EditorVniLayoutResource, "id">
   | Omit<EditorVideoLayoutResource, "id">;
 
 export type EditorMode = "maximized-focus" | "orientation-focus";
@@ -62,13 +65,19 @@ export interface EditorVariantDraft {
 export type EditorSpinePlaybackDraft = {
   readonly kind: "loop";
   animation: string;
+  loop: boolean;
+};
+
+export type EditorVniPlaybackDraft = {
+  readonly kind: "vni";
+  loop: boolean;
 };
 
 export interface EditorNodeDraft {
   id: string;
   order: number;
   resourceId: string;
-  playback?: EditorSpinePlaybackDraft;
+  playback?: EditorSpinePlaybackDraft | EditorVniPlaybackDraft;
   imageString?: {
     text: string;
     anchor: { x: number; y: number };
@@ -484,6 +493,17 @@ export function resolveEditorNodeResource(
       anchor: { ...node.imageString.anchor },
     };
   }
+  if (resource.kind === "vni") {
+    if (node.imageString !== undefined)
+      throw new Error(`VNI 节点 ${node.id} 不得声明 imageString。`);
+    if (node.playback?.kind !== "vni")
+      throw new Error(`VNI 节点 ${node.id} 必须明确选择 playback。`);
+    return {
+      kind: "vni",
+      project: resource.projectPath,
+      loop: node.playback.loop,
+    };
+  }
   if (resource.kind === "video")
     throw new Error(`video 资源 ${resource.id} 不能创建 scene node。`);
   if (node.imageString !== undefined)
@@ -491,6 +511,8 @@ export function resolveEditorNodeResource(
   const playback = node.playback;
   if (!playback)
     throw new Error(`Spine 节点 ${node.id} 必须明确选择 playback。`);
+  if (playback.kind !== "loop")
+    throw new Error(`Spine 节点 ${node.id} playback 类型无效。`);
   validateEditorSpinePlayback(playback, resource.animationNames, node.id);
   return {
     kind: "spine",
@@ -498,7 +520,7 @@ export function resolveEditorNodeResource(
     atlas: resource.atlas,
     textures: resource.textures,
     defaultAnimation: playback.animation,
-    loop: true,
+    loop: playback.loop,
   };
 }
 
@@ -857,9 +879,11 @@ export function manifestToEditorProject(
         ? resourceDraft.path
         : resourceDraft.kind === "spine"
           ? resourceDraft.skeleton
-          : resourceDraft.kind === "video"
-            ? resourceDraft.path
-            : resourceDraft.manifestPath;
+          : resourceDraft.kind === "vni"
+            ? resourceDraft.projectPath
+            : resourceDraft.kind === "video"
+              ? resourceDraft.path
+              : resourceDraft.manifestPath;
     const temporary = {
       ...resourceDraft,
       id: resourceKey,
@@ -903,16 +927,25 @@ export function manifestToEditorProject(
                   : (() => {
                       throw new Error("旧 Spine state-machine 无法导入。");
                     })(),
+              loop:
+                "defaultAnimation" in node.resource ? node.resource.loop : true,
             },
           }
-        : node.resource.kind === "image-string"
+        : node.resource.kind === "vni"
           ? {
-              imageString: {
-                text: node.resource.text,
-                anchor: { ...node.resource.anchor },
+              playback: {
+                kind: "vni" as const,
+                loop: node.resource.loop,
               },
             }
-          : {}),
+          : node.resource.kind === "image-string"
+            ? {
+                imageString: {
+                  text: node.resource.text,
+                  anchor: { ...node.resource.anchor },
+                },
+              }
+            : {}),
       placements: structuredClone(node.placements),
     };
   });
@@ -1313,6 +1346,27 @@ function manifestResourceToEditorResource(
       assetPaths,
     };
   }
+  if (resource.kind === "vni") {
+    const project = assertVNIProject(
+      parseJsonBytes(assets.get(resource.project), resource.project),
+    );
+    if (project.exportProfile?.purpose !== "runtime")
+      throw new Error(
+        `导入 VNI project 必须声明 runtime exportProfile：${resource.project}`,
+      );
+    const mapped = !resource.project.includes("/");
+    const directory = mapped
+      ? ""
+      : resource.project.slice(0, resource.project.lastIndexOf("/"));
+    return {
+      kind: "vni",
+      projectPath: resource.project,
+      project,
+      assetPaths: project.assets.map((asset) =>
+        mapped ? asset.path : `${directory}/${asset.path}`,
+      ),
+    };
+  }
   const skeletonBytes = assets.get(resource.skeleton);
   if (!skeletonBytes)
     throw new Error(`导入缺少 skeleton：${resource.skeleton}`);
@@ -1356,6 +1410,8 @@ export function validateEditorSpinePlayback(
   animationNames: readonly string[],
   nodeId = "node",
 ): void {
+  if (playback.kind !== "loop")
+    throw new Error(`Spine 节点 ${nodeId} playback 类型无效。`);
   const available = new Set(animationNames);
   if (!available.has(playback.animation))
     throw new Error(

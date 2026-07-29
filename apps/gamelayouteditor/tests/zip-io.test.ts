@@ -5,7 +5,6 @@ import { decodeEditorAssetsMap } from "@slotclientengine/editorresource";
 import {
   exportLayoutZip,
   materializeLayoutOwnedAssets,
-  stableManifestJson,
 } from "../src/io/exported-layout-zip.js";
 import {
   extractBoundedZip,
@@ -937,6 +936,64 @@ describe("layout zip IO", () => {
         decodeImage,
       }),
     ).rejects.toThrow(/缺少 bytes/);
+  });
+
+  it("round-trips a VNI project through the mapped production ZIP", async () => {
+    const project = {
+      schemaVersion: "VNI_0.020",
+      editor: { name: "VNI", version: "VNI_0.020" },
+      engineTarget: { name: "cocos_creator", version: "3.8.6" },
+      name: "layout-vni",
+      exportProfile: {
+        id: "runtime",
+        purpose: "runtime",
+        assetScale: 1,
+      },
+      stage: {
+        width: 100,
+        height: 200,
+        coordinate: "center",
+        duration: 1,
+        backgroundColor: "#000000",
+      },
+      assets: [],
+      layerGroups: [],
+      layers: [],
+      particles: [],
+    };
+    const manifest = {
+      ...imageManifest,
+      nodes: [
+        imageManifest.nodes[0],
+        {
+          id: "vni-fx",
+          order: 1,
+          resource: {
+            kind: "vni" as const,
+            project: "assets/vni/runtime.json",
+            loop: false,
+          },
+          placements: { default: { x: 50, y: 60, scale: 0.75 } },
+        },
+      ],
+    };
+    const exported = await exportLayoutZip({
+      manifest,
+      assets: new Map([
+        ...assetBytes,
+        ["assets/vni/runtime.json", encode(project)],
+      ]),
+      decodeImage,
+    });
+    const imported = await importLayoutZip(exported.bytes, { decodeImage });
+    const importedVni = imported.manifest.nodes.find(
+      ({ id }) => id === "vni-fx",
+    )?.resource;
+    expect(importedVni).toMatchObject({ kind: "vni", loop: false });
+    if (importedVni?.kind !== "vni")
+      throw new Error("round-trip VNI node missing");
+    expect(imported.resource.vniResources).toHaveProperty(importedVni.project);
+    imported.destroy();
   });
 
   it("rejects extra, unsafe and noncanonical entries", async () => {

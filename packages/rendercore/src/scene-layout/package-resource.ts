@@ -8,7 +8,12 @@ import {
   decodeEditorAssetsMap,
   resolveEditorAssetsMapPackage,
 } from "@slotclientengine/editorresource";
-import { assertVNIProject } from "@slotclientengine/vnicore/core";
+import {
+  assertVNIProject,
+  resolveProjectAssetUrls,
+  type AssetUrlManifest,
+  type VNIProjectConfig,
+} from "@slotclientengine/vnicore/core";
 import {
   collectImageStringAssetPaths,
   createImageStringResourceFromFiles,
@@ -65,6 +70,20 @@ export function collectSceneLayoutPackagePaths(options: {
 
   for (const path of references) expected.add(path);
   for (const node of manifest.nodes) {
+    if (node.resource.kind === "vni") {
+      const project = parseRuntimeVniProject(
+        requireBytes(options.files, node.resource.project),
+        node.resource.project,
+      );
+      for (const asset of project.assets) {
+        expected.add(
+          mapped
+            ? asset.path
+            : resolvePackagePath(node.resource.project, asset.path),
+        );
+      }
+      continue;
+    }
     if (node.resource.kind !== "image-string") continue;
     const nestedValue = parseJsonBytes(
       requireBytes(options.files, node.resource.manifest),
@@ -196,6 +215,10 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
   let symbolPackage: SymbolPackageResource | null = null;
   const symbolPackages: Record<string, SymbolPackageResource> = {};
   const popupPackages: Record<string, PopupPackageResource> = {};
+  const vniResources: Record<
+    string,
+    { readonly project: VNIProjectConfig; readonly assetUrls: AssetUrlManifest }
+  > = {};
   const objectUrls: string[] = [];
   try {
     for (const node of manifest.nodes) {
@@ -288,6 +311,30 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
     for (const node of manifest.nodes) {
       const resource = node.resource;
       if (resource.kind === "image-string") continue;
+      if (resource.kind === "vni") {
+        if (!vniResources[resource.project]) {
+          const project = parseRuntimeVniProject(
+            requireBytes(files, resource.project),
+            resource.project,
+          );
+          const assetUrls: Record<string, string> = {};
+          for (const asset of project.assets) {
+            const filePath = mapped
+              ? asset.path
+              : resolvePackagePath(resource.project, asset.path);
+            assetUrls[asset.path] = createObjectUrl(
+              requireBytes(files, filePath),
+              filePath,
+              objectUrls,
+            );
+          }
+          vniResources[resource.project] = Object.freeze({
+            project,
+            assetUrls: resolveProjectAssetUrls(project, assetUrls),
+          });
+        }
+        continue;
+      }
       if (resource.kind === "image") {
         imageModules[resource.path] ??= createObjectUrl(
           requireBytes(files, resource.path),
@@ -355,6 +402,7 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       textureModules,
       videoModules,
       imageStringResources: imageStrings,
+      vniResources,
       ownedObjectUrls: objectUrls,
     });
     let destroyed = false;
@@ -387,6 +435,27 @@ export async function createSceneLayoutPackageResourceFromResolvedFiles(options:
       ? error
       : new SceneLayoutError(formatError(error));
   }
+}
+
+function parseRuntimeVniProject(
+  bytes: Uint8Array,
+  path: string,
+): VNIProjectConfig {
+  const value = parseJsonBytes(bytes, path);
+  let project: VNIProjectConfig;
+  try {
+    project = assertVNIProject(value);
+  } catch (error) {
+    throw new SceneLayoutError(
+      `Scene layout VNI project "${path}" is invalid: ${formatError(error)}`,
+    );
+  }
+  if (project.exportProfile?.purpose !== "runtime") {
+    throw new SceneLayoutError(
+      `Scene layout VNI project "${path}" must declare a runtime exportProfile.`,
+    );
+  }
+  return project;
 }
 
 export async function loadSceneLayoutPackageFromUrl(options: {
@@ -440,6 +509,21 @@ export async function loadSceneLayoutPackageFromUrl(options: {
     files.set(path, await fetchBytes(fetchImpl, url));
   }
   for (const node of manifest.nodes) {
+    if (node.resource.kind === "vni") {
+      const project = parseRuntimeVniProject(
+        requireBytes(files, node.resource.project),
+        node.resource.project,
+      );
+      for (const asset of project.assets) {
+        const full = resolvePackagePath(node.resource.project, asset.path);
+        if (files.has(full)) continue;
+        files.set(
+          full,
+          await fetchBytes(fetchImpl, containedUrl(manifestUrl, full)),
+        );
+      }
+      continue;
+    }
     if (node.resource.kind !== "image-string") continue;
     const nested = parseImageStringManifest(
       parseJsonBytes(

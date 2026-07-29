@@ -8,13 +8,13 @@
 
 ### 完成定义
 
-- [ ] VNI export bundle ZIP 可作为独立资源导入；只接受经过 vnicore 严格校验的 `purpose=runtime` profile，唯一 runtime 自动选择，多个 runtime 要求用户明确选择。
-- [ ] official Spine 4.3 的 skeleton JSON、atlas 和精确 texture closure 可继续独立导入；VNI 与 Spine 导入都只提交资源，不自动创建、绑定或替换图层。
-- [ ] 用户可用任一已导入 VNI/Spine 资源创建或重绑普通图层，并配置稳定 node id、order、每个 active variant 的显示开关、`x/y/scale`。
-- [ ] VNI 图层显式配置整段 timeline 是否循环；Spine 普通图层显式选择大小写精确的 animation，并配置循环或单次播放。
-- [ ] 非循环 VNI/Spine 从首帧开始播放一次，结束后不自动重播；循环播放在完整周期边界继续。preview 与 production runtime 的 update、隐藏、切 variant 和 destroy 行为一致。
-- [ ] 现有稳定 Spine 背景仍只允许显式 single loop；VNI 不进入背景或 scene transition 候选，不改变现有 Spine/MP4 有向转场合同。
-- [ ] VNI project 和其图片的 exact closure 能完成 layout ZIP 导出、重新导入、content-addressed 映射、生产加载和 package optimizer 往返；缺失、orphan、错误 profile、错误版本和非法 playback 显式失败。
+- [x] VNI export bundle ZIP 可作为独立资源导入；只接受经过 vnicore 严格校验的 `purpose=runtime` profile，唯一 runtime 自动选择，多个 runtime 要求用户明确选择。
+- [x] official Spine 4.3 的 skeleton JSON、atlas 和精确 texture closure 可继续独立导入；VNI 与 Spine 导入都只提交资源，不自动创建、绑定或替换图层。
+- [x] 用户可用任一已导入 VNI/Spine 资源创建或重绑普通图层，并配置稳定 node id、order、每个 active variant 的显示开关、`x/y/scale`。
+- [x] VNI 图层显式配置整段 timeline 是否循环；Spine 普通图层显式选择大小写精确的 animation，并配置循环或单次播放。
+- [x] 非循环 VNI/Spine 从首帧开始播放一次，结束后不自动重播；循环播放在完整周期边界继续。preview 与 production runtime 的 update、隐藏、切 variant 和 destroy 行为一致。
+- [x] 现有稳定 Spine 背景仍只允许显式 single loop；VNI 不进入背景或 scene transition 候选，不改变现有 Spine/MP4 有向转场合同。
+- [x] VNI project 和其图片的 exact closure 能完成 layout ZIP 导出、重新导入、content-addressed 映射、生产加载和 package optimizer 往返；缺失、orphan、错误 profile、错误版本和非法 playback 显式失败。
 - [ ] rendercore、gamelayouteditor、gamelayoutpkgcli 的定向测试、lockfile 触发的 L3 验收及真实浏览器人工验收完成，并生成任务 134 UTC 中文执行报告。
 
 ## 2. 范围

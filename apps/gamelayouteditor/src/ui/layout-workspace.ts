@@ -146,7 +146,7 @@ function layerInspector(
   const resource = project.resources.get(node.resourceId);
   const index = project.nodes.findIndex((item) => item.id === node.id);
   const layerIndex = layers.findIndex((item) => item.id === node.id);
-  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>图层 Inspector</span><h2>${escapeHtml(node.id)}</h2></div><section class="inspector-section"><h3>身份与资源</h3>${nodeIdField(node)}<p>order ${node.order}</p><p class="path">${resource ? escapeHtml(describeResource(resource)) : "未知资源"}</p><div class="button-row"><button type="button" data-rebind-layer="${escapeHtml(node.id)}">更换资源</button><button type="button" data-move-layer="-1" ${layerIndex <= 0 ? "disabled" : ""}>上移</button><button type="button" data-move-layer="1" ${layerIndex < 0 || layerIndex >= layers.length - 1 ? "disabled" : ""}>下移</button></div>${resource?.kind === "spine" ? spinePlaybackEditor(resource, node) : resource?.kind === "image-string" ? imageStringEditor(node) : ""}</section><section class="inspector-section"><h3>方向与 Placement</h3>${activeVariantIds(
+  return `<div class="inspector-inner"><div class="inspector-heading" tabindex="-1" data-inspector-heading><span>图层 Inspector</span><h2>${escapeHtml(node.id)}</h2></div><section class="inspector-section"><h3>身份与资源</h3>${nodeIdField(node)}<p>order ${node.order}</p><p class="path">${resource ? escapeHtml(describeResource(resource)) : "未知资源"}</p><div class="button-row"><button type="button" data-rebind-layer="${escapeHtml(node.id)}">更换资源</button><button type="button" data-move-layer="-1" ${layerIndex <= 0 ? "disabled" : ""}>上移</button><button type="button" data-move-layer="1" ${layerIndex < 0 || layerIndex >= layers.length - 1 ? "disabled" : ""}>下移</button></div>${resource?.kind === "spine" ? spinePlaybackEditor(resource, node) : resource?.kind === "vni" ? vniPlaybackEditor(node) : resource?.kind === "image-string" ? imageStringEditor(node) : ""}</section><section class="inspector-section"><h3>方向与 Placement</h3>${activeVariantIds(
     project,
   )
     .map((variant) => placementMarkup(node, index, variant, project.mode))
@@ -163,7 +163,7 @@ function spinePlaybackEditor(
   resource: Extract<EditorLayoutResource, { kind: "spine" }>,
   node: EditorNodeDraft,
 ): string {
-  const playback = node.playback;
+  const playback = node.playback?.kind === "loop" ? node.playback : undefined;
   const selected = playback?.animation ?? "";
   const animationOptions = (value: string) =>
     resource.animationNames
@@ -172,7 +172,12 @@ function spinePlaybackEditor(
           `<option value="${escapeHtml(name)}" ${value === name ? "selected" : ""}>${escapeHtml(name)}</option>`,
       )
       .join("");
-  return `<div class="spine-playback"><label>loop animation<select data-layer-animation="${escapeHtml(node.id)}"><option value="">请选择（大小写精确）</option>${animationOptions(selected)}</select></label><p class="hint">稳定场景 Spine 节点只播放一个显式 loop；场景切换请在独立“转场”工作区配置。</p></div>`;
+  return `<div class="spine-playback"><label>animation<select data-layer-animation="${escapeHtml(node.id)}"><option value="">请选择（大小写精确）</option>${animationOptions(selected)}</select></label><label class="visibility"><input type="checkbox" data-layer-loop="${escapeHtml(node.id)}" ${playback?.loop ? "checked" : ""}/> 循环播放</label><p class="hint">稳定场景 Spine 节点播放一个显式 animation；可独立控制是否循环。</p></div>`;
+}
+
+function vniPlaybackEditor(node: EditorNodeDraft): string {
+  const playback = node.playback?.kind === "vni" ? node.playback : undefined;
+  return `<div class="spine-playback"><label class="visibility"><input type="checkbox" data-layer-loop="${escapeHtml(node.id)}" ${playback?.loop ? "checked" : ""}/> 循环播放完整 VNI timeline</label></div>`;
 }
 
 function imageStringEditor(node: EditorNodeDraft): string {

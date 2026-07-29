@@ -24,13 +24,14 @@ export function convertProjectCoordinateOrigin(
       if (!resource)
         throw new Error(`节点 ${node.id} 引用了未知资源：${node.resourceId}`);
       assertPlacement(placement, `节点 ${node.id} ${variantId}`);
-      if (resource.kind === "image") {
+      if (resource.kind === "image" || resource.kind === "vni") {
+        const size =
+          resource.kind === "image" ? resource.size : resource.project.stage;
         placement.x +=
-          (toCenter ? 1 : -1) *
-          ((placement.scale * resource.size.width) / 2 - center.x);
+          (toCenter ? 1 : -1) * ((placement.scale * size.width) / 2 - center.x);
         placement.y +=
           (toCenter ? 1 : -1) *
-          ((placement.scale * resource.size.height) / 2 - center.y);
+          ((placement.scale * size.height) / 2 - center.y);
       } else {
         placement.x += (toCenter ? -1 : 1) * center.x;
         placement.y += (toCenter ? -1 : 1) * center.y;
