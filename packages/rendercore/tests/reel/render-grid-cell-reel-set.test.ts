@@ -633,6 +633,38 @@ describe("RenderGridCellReelSet", () => {
       }),
     ).toThrow(/expected code 1, received 2/);
   });
+
+  it("moves a complete visible occurrence and commits source replacement as one batch", () => {
+    const reelSet = createGridReelSet();
+    reelSet.resetToScene(INITIAL_SCENE, FINAL_YS, undefined, [
+      [7, null, null],
+      [null, null, null],
+    ]);
+    const before = reelSet.getVisibleScene();
+    const prepared = reelSet.prepareVisibleOccurrenceTransferBatch({
+      transfers: [
+        {
+          source: { x: 0, y: 0 },
+          target: { x: 1, y: 0 },
+          expectedSourceCode: 1,
+          expectedTargetCode: 2,
+          sourceReplacementCode: 2,
+          sourceReplacementPresentationValue: null,
+        },
+      ],
+    });
+    expect(reelSet.getVisibleScene()).toEqual(before);
+    prepared.start();
+    prepared.setProgress(0.5);
+    expect(reelSet.getVisibleScene()).toEqual(before);
+    prepared.setProgress(1);
+    prepared.commit();
+    expect(reelSet.getVisibleScene()).toEqual([
+      [2, 0, 2],
+      [1, 1, 0],
+    ]);
+    expect(reelSet.getCascadeValues()[1][0]).toBeNull();
+  });
 });
 
 function getCellClipMask(

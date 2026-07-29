@@ -115,6 +115,10 @@ bg-incwl（若上一中奖步有参与中奖的 WL）
   -> 当时全部 CN 同时更新 value 并播放 Feature_Change once
   -> 当前 CM Change once
   -> 原位置原子替换 CM -> CN
+  -> 若 bg-win 无 result 且 bg-triggerco 命中：CO Feature + sources Feature1 once
+  -> sources Feature2 once + 跨格移动
+  -> 原子提交 sources -> BN、targets <- sources、CO -> selected
+  -> bg-win2；正常 remove 完成边界 release bg-bn
   -> 开始现有中奖流程
 ```
 
@@ -127,8 +131,8 @@ bg-incwl（若上一中奖步有参与中奖的 WL）
   loop boundary，其余等待 once completion。
 - initial/refill 的动画前 scene 优先级是
   `bg-gencm > bg-genwm > bg-spin/bg-refill`；每个落定 step 最多一个 CM。
-  `bg-genco.scene` 是 WM/CM 转 CN 后、中奖前的终态盘面，在 multiplier transform
-  末尾提交其中新增的 CO replacement；CO 专属动画和玩法后续实现。
+  `bg-genco.scene` 是 WM/CM 转 CN 后、CO collection 前的终态盘面；新增 CO 在
+  spin/refill 落定前 overlay，不在 multiplier transform 末尾 replacement。
 - WM 阶段完整结束后才开始 CM。CM `Feature1` 完成时按 `bg-updcn` 一次更新当时
   全部 CN（含本批 WM 新转出的 CN），并行播放 `Feature_Change`；完成后才播放
   CM `Change`，其真实 once completion 边界按 `bg-cm2cn/bg-gencmcn` 提交新 CN。
@@ -136,6 +140,9 @@ bg-incwl（若上一中奖步有参与中奖的 WL）
   `Feature_Change`，仍完整播放 CM `Feature1/Change` 与 CM -> CN。
 - WL/WM/CM 数字使用唯一 multiplier ImgNumber，格式为 `xN`，exact Spine slot
   为 `Mult`。
+- `bg-co.pos` 按 `-1` 分段，每段 4..8 个 source/target 四元组；同段 target
+  必须落在唯一 CO 八邻域。所有 CO/source 的第一段动画并行，全部真实 once 完成
+  后才开始第二段；整批 transfer 完成才 commit。
 
 ## Win、压暗和 remove
 

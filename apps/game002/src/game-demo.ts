@@ -27,6 +27,8 @@ import {
   type GridCellEffectSweepPlan,
   type ParsedReelManifest,
   type PreparedVisibleOccurrenceReplacement,
+  type PreparedGridCellVisibleOccurrenceTransferBatch,
+  type GridCellVisibleOccurrenceTransfer,
   type ReelLayout,
   type ReelSymbolRegistry,
   type ReelSymbolAnimationCapabilityMap,
@@ -230,6 +232,9 @@ export interface Game002ReelRuntime {
     readonly outputCode: number;
     readonly outputPresentationValue: number | null;
   }): PreparedVisibleOccurrenceReplacement;
+  prepareVisibleOccurrenceTransferBatch(options: {
+    readonly transfers: readonly GridCellVisibleOccurrenceTransfer[];
+  }): PreparedGridCellVisibleOccurrenceTransferBatch;
   getVisibleSymbolGeometrySnapshots(
     positions: readonly WinResultPosition[],
   ): readonly RenderVisibleSymbolGeometrySnapshot[];
@@ -836,6 +841,22 @@ export function createGame002ReelRuntime(
           currentScene = validateGame002Scene(
             reelSet.getVisibleScene(),
             "game002 committed visible occurrence replacement",
+          );
+        },
+      });
+    },
+    prepareVisibleOccurrenceTransferBatch(transferOptions: {
+      readonly transfers: readonly GridCellVisibleOccurrenceTransfer[];
+    }) {
+      const prepared =
+        reelSet.prepareVisibleOccurrenceTransferBatch(transferOptions);
+      return Object.freeze({
+        ...prepared,
+        commit(): void {
+          prepared.commit();
+          currentScene = validateGame002Scene(
+            reelSet.getVisibleScene(),
+            "game002 committed visible occurrence transfer batch",
           );
         },
       });

@@ -56,6 +56,112 @@ describe("slot round flow profile", () => {
     expect(Object.isFrozen(profile.cascade?.symbols)).toBe(true);
   });
 
+  it("preserves relocation identity and removes release-only results without an amount group", () => {
+    const profile = parseSlotRoundFlowProfile({
+      ...base,
+      components: { spin: "spin", wins: ["win"] },
+      cascade: {
+        kind: "cascade",
+        version: 1,
+        components: {
+          remove: "remove",
+          dropdown: "dropdown",
+          refill: "refill",
+          stepMarker: "respin",
+          releaseOnlyWins: ["release"],
+        },
+        symbols: {
+          emptyCode: -1,
+          removeExcludedSymbols: [],
+          dropHeldSymbols: [],
+          valueSymbols: [],
+          sequentialWinCompanionSymbols: [],
+        },
+        amount: base.amount,
+      },
+    });
+    const winResult = { pos: [0, 1], cashWin: 5 };
+    const releaseResult = { pos: [0, 0], cashWin: 0 };
+    const rawStep0 = createStep({
+      index: 0,
+      components: {
+        spin: { scenes: [[[1, 2, 2]]] },
+        win: { results: [winResult] },
+        release: { results: [releaseResult] },
+        remove: { scenes: [[[-1, -1, 2]]] },
+      },
+      results: [winResult, releaseResult],
+    });
+    const step0 = {
+      ...rawStep0,
+      getComponent: (name: string) => {
+        const component = rawStep0.getComponent(name);
+        return name === "release" && component
+          ? { ...component, usedResultIndexes: [1] }
+          : component;
+      },
+    } as GameLogicStep;
+    const step1 = createStep({
+      index: 1,
+      components: {
+        respin: {},
+        dropdown: { scenes: [[[-1, -1, 2]]] },
+        refill: {
+          scenes: [[[2, 1, 2]]],
+          basic: { pos: [0, 0, 0, 1] },
+        },
+      },
+      results: [],
+    });
+    const plan = compileSlotRoundExecutionPlan(
+      profile,
+      { getSteps: () => [step0, step1] } as unknown as GameLogic,
+      {
+        symbolCodes: { A: 1, B: 2, BN: 3 },
+        compileSettledTransform: ({ stepIndex }) =>
+          stepIndex === 0
+            ? {
+                changes: [
+                  {
+                    position: { x: 0, y: 0 },
+                    outputCode: 3,
+                    outputValue: null,
+                  },
+                  {
+                    position: { x: 0, y: 1 },
+                    outputCode: 1,
+                    outputValue: null,
+                  },
+                ],
+                relocations: [
+                  { source: { x: 0, y: 0 }, target: { x: 0, y: 1 } },
+                ],
+              }
+            : [],
+      },
+    );
+    const transform = plan.steps.find(
+      (step) => step.kind === "settled-transform",
+    );
+    const win = plan.steps.find((step) => step.kind === "win");
+    expect(
+      transform?.kind === "settled-transform" && transform.relocations,
+    ).toEqual([
+      {
+        occurrenceId: "initial:0:0",
+        overwrittenOccurrenceId: "initial:0:1",
+        sourceReplacementOccurrenceId: "transform:0:0:0",
+        source: { x: 0, y: 0 },
+        target: { x: 0, y: 1 },
+      },
+    ]);
+    expect(win?.kind === "win" && win.releaseOnlyPositions).toEqual([
+      { x: 0, y: 0 },
+    ]);
+    expect(win?.kind === "win" && win.groups).toHaveLength(1);
+    expect(win?.kind === "win" && win.output.scene).toEqual([[-1, -1, 2]]);
+  });
+
   it("rejects unknown fields, aliases, duplicate roles and invalid amount policy", () => {
     expect(() => parseSlotRoundFlowProfile({ ...base, version: 2 })).toThrow(
       /round.version must be 1/,

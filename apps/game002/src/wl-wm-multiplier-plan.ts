@@ -5,10 +5,15 @@ import type {
   SlotRoundSettledCompileContext,
   SlotRoundSettledSceneCompileContext,
   SlotRoundSettledTransformChangeDraft,
+  SlotRoundSettledTransformDraft,
   SlotRoundSettledValueDraft,
   SlotRoundPosition,
 } from "@slotclientengine/gameframeworks";
 import { GAME002_CASCADE_COMPONENTS } from "./cascade-config.js";
+import {
+  compileGame002CoCollectionPlan,
+  type Game002CoCollectionPlan,
+} from "./co-collection-plan.js";
 
 export interface Game002WlWmMultiplierCompiler {
   resolveSettledScene(
@@ -19,7 +24,9 @@ export interface Game002WlWmMultiplierCompiler {
   ): readonly SlotRoundSettledValueDraft[];
   compileSettledTransform(
     context: SlotRoundSettledCompileContext,
-  ): readonly SlotRoundSettledTransformChangeDraft[];
+  ):
+    | readonly SlotRoundSettledTransformChangeDraft[]
+    | SlotRoundSettledTransformDraft;
   getPresentationBatch(
     stepIndex: number,
   ): Game002WlWmMultiplierPresentationBatch | undefined;
@@ -46,6 +53,8 @@ export interface Game002WlWmMultiplierPresentationBatch {
   readonly wmReplacements: readonly Game002WmReplacementPresentation[];
   readonly cnUpdates: readonly Game002CnValueUpdatePresentation[];
   readonly cm: Game002CmPresentation | null;
+  readonly coCollection?: Game002CoCollectionPlan | null;
+  /** @deprecated Task 135 settles CO before presentation. */
   readonly coReplacements: readonly Game002CoReplacementPresentation[];
 }
 
@@ -79,6 +88,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
   readonly cnSymbolCode: number;
   readonly cmSymbolCode: number;
   readonly coSymbolCode?: number;
+  readonly bnSymbolCode?: number;
   readonly logDiagnostic?: (message: string) => void;
 }): Game002WlWmMultiplierCompiler {
   const wlCode = assertCode(options.wlSymbolCode, "WL");
@@ -89,6 +99,10 @@ export function createGame002WlWmMultiplierCompiler(options: {
     options.coSymbolCode === undefined
       ? undefined
       : assertCode(options.coSymbolCode, "CO");
+  const bnCode =
+    options.bnSymbolCode === undefined
+      ? undefined
+      : assertCode(options.bnSymbolCode, "BN");
   if (
     new Set([
       wlCode,
@@ -96,10 +110,12 @@ export function createGame002WlWmMultiplierCompiler(options: {
       cnCode,
       cmCode,
       ...(coCode === undefined ? [] : [coCode]),
-    ]).size !== (coCode === undefined ? 4 : 5)
+      ...(bnCode === undefined ? [] : [bnCode]),
+    ]).size !==
+    4 + (coCode === undefined ? 0 : 1) + (bnCode === undefined ? 0 : 1)
   ) {
     throw new Error(
-      "game002 WL, WM, CN, CM and configured CO symbol codes must be distinct.",
+      "game002 WL, WM, CN, CM and configured CO/BN symbol codes must be distinct.",
     );
   }
   let pendingWlIncrements: Game002PendingWlIncrement[] = [];
@@ -133,7 +149,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
             scene: context.inputScene,
           })
         : generatedWm;
-      const settledScene =
+      const multiplierSettledScene =
         hasGeneratedWm && hasGeneratedCm
           ? composeWmThenCmSettledScene({
               stepIndex: context.stepIndex,
@@ -144,6 +160,16 @@ export function createGame002WlWmMultiplierCompiler(options: {
               cmCode,
             })
           : generatedCm;
+      const settledScene = context.step.hasComponent(
+        GAME002_CASCADE_COMPONENTS.genco,
+      )
+        ? overlayGeneratedCo({
+            step: context.step,
+            stepIndex: context.stepIndex,
+            input: multiplierSettledScene,
+            coCode: requireConfiguredCode(coCode, "CO", context.stepIndex),
+          })
+        : multiplierSettledScene;
       const source =
         hasGeneratedWm && hasGeneratedCm
           ? "bg-genwm+bg-gencm(staged)"
@@ -155,7 +181,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
                 ? "bg-spin"
                 : "bg-refill";
       logDiagnostic(
-        `settled step[${context.stepIndex}] kind=${context.kind} source=${source}; flow=WM->CM->CO; bg-genwm=${hasGeneratedWm ? "present" : "missing"}; bg-gencm=${hasGeneratedCm ? "present" : "missing"}; bg-genco=${context.step.hasComponent(GAME002_CASCADE_COMPONENTS.genco) ? "present(terminal)" : "missing"}`,
+        `settled step[${context.stepIndex}] kind=${context.kind} source=${source}; flow=CO-settled->WM->CM->CO-collect; bg-genwm=${hasGeneratedWm ? "present" : "missing"}; bg-gencm=${hasGeneratedCm ? "present" : "missing"}; bg-genco=${context.step.hasComponent(GAME002_CASCADE_COMPONENTS.genco) ? "present(settled)" : "missing"}`,
       );
       return settledScene;
     },
@@ -419,7 +445,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
                 outputValue: generatedValue,
               }),
             );
-          } else if (wm2cn[x][y] !== code) {
+          } else if (code !== coCode && wm2cn[x][y] !== code) {
             throw new Error(
               `step[${context.stepIndex}] bg-wm2cn changed non-WM occurrence (${x},${y}): actual(server) code=${wm2cn[x][y]}; expected(compiled) unchanged code=${code}.`,
             );
@@ -557,49 +583,68 @@ export function createGame002WlWmMultiplierCompiler(options: {
         intermediateScene = cm2cn;
       }
 
-      const coReplacements: Game002CoReplacementPresentation[] = [];
+      let generatedCoScene: SceneMatrix | null = null;
       if (context.step.hasComponent(GAME002_CASCADE_COMPONENTS.genco)) {
-        if (coCode === undefined)
-          throw new Error(
-            `step[${context.stepIndex}] bg-genco requires an explicit CO symbol code.`,
-          );
-        const generatedCo = readComponentScene({
+        generatedCoScene = readComponentScene({
           step: context.step,
           componentName: GAME002_CASCADE_COMPONENTS.genco,
           label: `step[${context.stepIndex}] bg-genco`,
           scene: intermediateScene,
         });
         forEachCell(intermediateScene, (x, y, code) => {
-          const outputCode = generatedCo[x][y];
-          if (outputCode === code) return;
-          const position = Object.freeze({ x, y });
-          const key = positionKey(position);
-          if (outputCode !== coCode)
+          const settledCode = context.input.scene[x][y];
+          const outputCode = generatedCoScene![x][y];
+          if (settledCode === coCode) {
+            if (outputCode !== coCode)
+              throw new Error(
+                `step[${context.stepIndex}] settled CO (${x},${y}) is missing from bg-genco final scene.`,
+              );
+            return;
+          }
+          if (outputCode !== code)
             throw new Error(
-              `step[${context.stepIndex}] bg-genco changed (${x},${y}) to non-CO code: actual(server)=${outputCode}; expected CO code=${coCode} or unchanged code=${code}.`,
+              `step[${context.stepIndex}] bg-genco final scene differs at (${x},${y}): actual(server)=${outputCode}; expected multiplier output code=${code}.`,
             );
-          if (draftByPosition.has(key))
-            throw new Error(
-              `step[${context.stepIndex}] bg-genco changed multiplier-transformed occurrence (${x},${y}); expected(server) the WM/CM/CN result to remain code=${code}.`,
-            );
-          coReplacements.push(
-            Object.freeze({
-              position,
-              inputCode: context.input.scene[x][y],
-              outputCode,
-            }),
-          );
-          draftByPosition.set(
-            key,
-            Object.freeze({
-              position,
-              outputCode,
-              outputValue: null,
-            }),
-          );
         });
       }
 
+      const intermediateOutputScene = intermediateScene.map((column, x) =>
+        Object.freeze(
+          column.map((_code, y) =>
+            context.input.scene[x][y] === coCode
+              ? coCode
+              : intermediateScene[x][y],
+          ),
+        ),
+      );
+      const intermediateOutputValues = context.input.values.map((column, x) =>
+        Object.freeze(
+          column.map((value, y) => {
+            const draft = draftByPosition.get(`${x},${y}`);
+            return draft?.outputValue ?? value;
+          }),
+        ),
+      );
+      if (generatedCoScene)
+        assertSceneEqual(
+          generatedCoScene,
+          intermediateOutputScene,
+          `step[${context.stepIndex}] bg-genco final scene`,
+        );
+      const coCollection =
+        coCode === undefined || bnCode === undefined
+          ? null
+          : compileGame002CoCollectionPlan({
+              stepIndex: context.stepIndex,
+              step: context.step,
+              inputScene: intermediateOutputScene,
+              inputValues: intermediateOutputValues,
+              coSymbolCode: coCode,
+              bnSymbolCode: bnCode,
+              valueSymbolCodes: new Set([wlCode, cnCode]),
+            });
+      for (const change of coCollection?.transform.changes ?? [])
+        draftByPosition.set(positionKey(change.position), change);
       const drafts = context.input.scene.flatMap((column, x) =>
         column.flatMap((_code, y) => {
           const draft = draftByPosition.get(`${x},${y}`);
@@ -610,7 +655,8 @@ export function createGame002WlWmMultiplierCompiler(options: {
         drafts.length === 0 &&
         incomingWlIncrements.length === 0 &&
         wm.length === 0 &&
-        cm.length === 0
+        cm.length === 0 &&
+        coCollection === null
       )
         return Object.freeze([]);
       presentationBatches.set(
@@ -625,10 +671,15 @@ export function createGame002WlWmMultiplierCompiler(options: {
           ),
           cnUpdates: Object.freeze(cnUpdates),
           cm: cmPresentation,
-          coReplacements: Object.freeze(coReplacements),
+          ...(coCollection ? { coCollection } : {}),
+          coReplacements: Object.freeze([]),
         }),
       );
-      return Object.freeze(drafts);
+      if (!coCollection) return Object.freeze(drafts);
+      return Object.freeze({
+        changes: Object.freeze(drafts),
+        relocations: coCollection.transform.relocations,
+      });
     },
 
     getPresentationBatch(stepIndex: number) {
@@ -953,6 +1004,60 @@ function forEachCell(
   scene.forEach((column, x) =>
     column.forEach((code, y) => callback(x, y, code)),
   );
+}
+
+function overlayGeneratedCo(options: {
+  readonly step: GameLogicStep;
+  readonly stepIndex: number;
+  readonly input: SceneMatrix;
+  readonly coCode: number;
+}): SceneMatrix {
+  const generated = readComponentScene({
+    step: options.step,
+    componentName: GAME002_CASCADE_COMPONENTS.genco,
+    label: `step[${options.stepIndex}] bg-genco`,
+    scene: options.input,
+  });
+  return Object.freeze(
+    options.input.map((column, x) =>
+      Object.freeze(
+        column.map((code, y) => {
+          const generatedCode = generated[x][y];
+          if (generatedCode === options.coCode) return options.coCode;
+          if (code === options.coCode)
+            throw new Error(
+              `step[${options.stepIndex}] bg-genco removed settled CO at (${x},${y}).`,
+            );
+          return code;
+        }),
+      ),
+    ),
+  );
+}
+
+function requireConfiguredCode(
+  code: number | undefined,
+  symbol: string,
+  stepIndex: number,
+): number {
+  if (code === undefined)
+    throw new Error(
+      `step[${stepIndex}] requires an explicit ${symbol} symbol code.`,
+    );
+  return code;
+}
+
+function assertSceneEqual(
+  actual: SceneMatrix,
+  expected: SceneMatrix,
+  label: string,
+): void {
+  forEachCell(expected, (x, y, code) => {
+    if (actual[x]?.[y] !== code)
+      throw new Error(
+        `${label}[${x}][${y}] differs: actual=${String(actual[x]?.[y])}; expected=${code}.`,
+      );
+  });
 }
 
 function positionKey(position: SlotRoundPosition): string {

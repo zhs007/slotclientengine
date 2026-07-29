@@ -11,8 +11,8 @@ import type {
   ServerComponentRole,
 } from "./server-authoring-config";
 
-export type SlotCashAmountField = "cashWin64" | "cashWin";
-export type SlotCoinAmountField = "coinWin64" | "coinWin";
+export type SlotCashAmountField = "cashWin64" | "cashWin" | "mul";
+export type SlotCoinAmountField = "coinWin64" | "coinWin" | "mul";
 
 export interface AmountFieldProfileV1 {
   readonly cashFields: readonly SlotCashAmountField[];
@@ -28,6 +28,7 @@ export interface SlotCascadeBlockProfileV1 {
     readonly dropdown: string;
     readonly refill: string;
     readonly stepMarker?: string;
+    readonly releaseOnlyWins?: readonly string[];
   };
   readonly symbols: {
     readonly emptyCode: number;
@@ -98,6 +99,7 @@ export function parseSlotRoundFlowProfile(
           ...(cascade.components.stepMarker
             ? [cascade.components.stepMarker]
             : []),
+          ...(cascade.components.releaseOnlyWins ?? []),
         ]
       : []),
   ];
@@ -201,6 +203,9 @@ export function validateSlotRoundFlowCatalogCompatibility(options: {
       "round.cascade.components.stepMarker",
       ["cascade-step"],
     );
+  cascade.components.releaseOnlyWins?.forEach((name, index) =>
+    check(name, `round.cascade.components.releaseOnlyWins[${index}]`, ["win"]),
+  );
 }
 
 function parseCascade(value: unknown, path: string): SlotCascadeBlockProfileV1 {
@@ -218,6 +223,7 @@ function parseCascade(value: unknown, path: string): SlotCascadeBlockProfileV1 {
     "dropdown",
     "refill",
     "stepMarker",
+    "releaseOnlyWins",
   ]);
   const symbols = strictRecord(root.symbols, `${path}.symbols`, [
     "emptyCode",
@@ -250,6 +256,15 @@ function parseCascade(value: unknown, path: string): SlotCascadeBlockProfileV1 {
             stepMarker: componentName(
               components.stepMarker,
               `${path}.components.stepMarker`,
+            ),
+          }),
+      ...(components.releaseOnlyWins === undefined
+        ? {}
+        : {
+            releaseOnlyWins: uniqueComponentList(
+              components.releaseOnlyWins,
+              `${path}.components.releaseOnlyWins`,
+              { allowEmpty: true },
             ),
           }),
     },
@@ -287,7 +302,7 @@ function parseAmount(value: unknown, path: string): AmountFieldProfileV1 {
   const cashFields = enumList(
     record.cashFields,
     `${path}.cashFields`,
-    ["cashWin64", "cashWin"] as const,
+    ["cashWin64", "cashWin", "mul"] as const,
     false,
   );
   const coinFields =
@@ -296,7 +311,7 @@ function parseAmount(value: unknown, path: string): AmountFieldProfileV1 {
       : enumList(
           record.coinFields,
           `${path}.coinFields`,
-          ["coinWin64", "coinWin"] as const,
+          ["coinWin64", "coinWin", "mul"] as const,
           true,
         );
   return {

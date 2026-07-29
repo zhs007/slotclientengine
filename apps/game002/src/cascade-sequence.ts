@@ -153,6 +153,7 @@ export function createGame002CascadeSequence(options: {
     previousCumulativeCoinAmount: cumulativeCoinAmount,
     canRemoveSymbol: options.canRemoveSymbol,
     expectedOutputValues: plannedInitialWin?.output.values,
+    releaseOnlyPositions: plannedInitialWin?.releaseOnlyPositions,
   });
   assertPlannedWinStage(initialWin, plannedInitialWin, 0);
   if (initialWin) {
@@ -354,6 +355,7 @@ export function createGame002CascadeSequence(options: {
       previousCumulativeCoinAmount: cumulativeCoinAmount,
       canRemoveSymbol: options.canRemoveSymbol,
       expectedOutputValues: plannedWin?.output.values,
+      releaseOnlyPositions: plannedWin?.releaseOnlyPositions,
     });
     assertPlannedWinStage(winStage, plannedWin, stepIndex);
     cascades.push(
@@ -538,6 +540,7 @@ function createWinRemoveStage(options: {
   readonly previousCumulativeWinAmount: number;
   readonly previousCumulativeCoinAmount: number;
   readonly expectedOutputValues?: readonly (readonly (number | null | -1)[])[];
+  readonly releaseOnlyPositions?: readonly WinResultPosition[];
   readonly canRemoveSymbol: (context: {
     readonly stepIndex: number;
     readonly x: number;
@@ -547,7 +550,11 @@ function createWinRemoveStage(options: {
 }): Game002WinRemoveStage | undefined {
   const { step } = options;
   const stepIndex = step.getIndex();
-  if (!step.hasComponent(GAME002_CASCADE_COMPONENTS.win)) return undefined;
+  const winComponentNames = [
+    GAME002_CASCADE_COMPONENTS.win,
+    GAME002_CASCADE_COMPONENTS.win2,
+  ].filter((name) => step.getComponentResults(name).length > 0);
+  if (winComponentNames.length === 0) return undefined;
   requireTriggered(step, GAME002_CASCADE_COMPONENTS.remove);
   const groups = createLastUseRemoveGroups(
     prepareSymbolWinGroups(
@@ -563,7 +570,7 @@ function createWinRemoveStage(options: {
         logic: options.logic,
         stepIndex,
         scene: options.sourceScene,
-        componentNames: [GAME002_CASCADE_COMPONENTS.win],
+        componentNames: winComponentNames,
       },
     ),
     {
@@ -583,11 +590,13 @@ function createWinRemoveStage(options: {
       },
     },
   );
-  validateComponentCoinWin(
-    requireBasicComponent(step, GAME002_CASCADE_COMPONENTS.win),
-    groups,
-    options.previousCumulativeCoinAmount,
-  );
+  for (const componentName of winComponentNames)
+    validateComponentCoinWin(
+      requireBasicComponent(step, componentName),
+      groups.filter((group) => group.componentName === componentName),
+      options.previousCumulativeCoinAmount,
+      componentName,
+    );
   const outputScene = exactlyOneHoleScene(
     step.getComponentScenes(GAME002_CASCADE_COMPONENTS.remove),
     `step[${stepIndex}] bg-remove`,
@@ -627,6 +636,7 @@ function createWinRemoveStage(options: {
     outputScene,
     outputValues,
     groups,
+    options.releaseOnlyPositions ?? [],
     stepIndex,
   );
   const remove = requireBasicComponent(step, GAME002_CASCADE_COMPONENTS.remove);
@@ -660,18 +670,21 @@ function validateComponentCoinWin(
   component: ReturnType<typeof requireBasicComponent>,
   groups: readonly SymbolCascadeGroup[],
   previousCumulativeCoinAmount: number,
+  componentName: string,
 ): void {
   const basic = component.basicComponentData;
   const selected =
     basic?.coinWin64 !== undefined ? basic.coinWin64 : basic?.coinWin;
   if (selected === undefined) return;
   if (typeof selected !== "number" || !Number.isSafeInteger(selected)) {
-    throw new Error("bg-win component coinWin must be a safe integer.");
+    throw new Error(
+      `${componentName} component coinWin must be a safe integer.`,
+    );
   }
   const expected = previousCumulativeCoinAmount + sumGroupCoinAmounts(groups);
   if (selected !== expected) {
     throw new Error(
-      `bg-win component coinWin ${selected} does not match expected ${expected}.`,
+      `${componentName} component coinWin ${selected} does not match expected ${expected}.`,
     );
   }
 }
@@ -841,10 +854,14 @@ function validateRemoveOutput(
   outputScene: GridCellCascadeScene,
   outputValues: GridCellCascadeValueMatrix,
   groups: readonly SymbolCascadeGroup[],
+  releaseOnlyPositions: readonly WinResultPosition[],
   stepIndex: number,
 ): void {
   const removed = new Set(
-    groups.flatMap((group) => group.removePositions.map(positionKey)),
+    [
+      ...groups.flatMap((group) => group.removePositions),
+      ...releaseOnlyPositions,
+    ].map(positionKey),
   );
   forEachCell(sourceScene, (x, y) => {
     const mustRemove = removed.has(`${x},${y}`);

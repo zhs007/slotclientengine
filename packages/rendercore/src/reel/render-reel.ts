@@ -282,12 +282,42 @@ export class RenderReel extends Container {
       symbol: slot.symbol,
       presentationValue: slot.symbol.getPresentationValue(),
     });
-    slot.container.removeChild(slot.symbol);
+    slot.symbol.parent?.removeChild(slot.symbol);
     slot.code = null;
     slot.kind = null;
     slot.symbol = null;
     this.setStaticVisibleSlot(windowY, -1, null);
     return occurrence;
+  }
+
+  detachVisibleOccurrenceForTransfer(windowY = 0): RenderReelVisibleOccurrence {
+    const slot = this.getVisibleSlot(windowY);
+    if (slot.kind !== "textured" || !slot.symbol || slot.code === null)
+      throw new ReelError(
+        `Cannot detach empty visible occurrence at reel ${this.xIndex}, y ${windowY}.`,
+      );
+    const occurrence = Object.freeze({
+      code: slot.code,
+      kind: "textured" as const,
+      symbol: slot.symbol,
+      presentationValue: slot.symbol.getPresentationValue(),
+    });
+    slot.symbol.parent?.removeChild(slot.symbol);
+    return occurrence;
+  }
+
+  restoreDetachedVisibleOccurrence(
+    occurrence: RenderReelVisibleOccurrence,
+    windowY = 0,
+  ): void {
+    const slot = this.getVisibleSlot(windowY);
+    if (slot.symbol !== occurrence.symbol || slot.code !== occurrence.code)
+      throw new ReelError(
+        `Cannot restore a different occurrence at reel ${this.xIndex}, y ${windowY}.`,
+      );
+    occurrence.symbol.parent?.removeChild(occurrence.symbol);
+    slot.container.addChild(occurrence.symbol);
+    occurrence.symbol.position.set(0);
   }
 
   createDetachedOccurrence(

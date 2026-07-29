@@ -18,7 +18,11 @@ import {
 
 const workspace = resolve(import.meta.dirname, "../../..");
 const downloads = "/Users/zerro/Downloads";
-const outputDirectory = resolve(workspace, "tasks/artifacts/132");
+const taskId = process.env.GAME002_SYMBOL_BUILD_TASK ?? "132";
+if (taskId !== "132" && taskId !== "135")
+  throw new Error(`Unsupported game002 Symbols build task "${taskId}".`);
+const isTask135 = taskId === "135";
+const outputDirectory = resolve(workspace, `tasks/artifacts/${taskId}`);
 const sourceSymbols = new Uint8Array(
   await readFile(resolve(downloads, "crave-symbols-fixed.zip")),
 );
@@ -57,6 +61,12 @@ try {
     { id: "change", phase: "once", playback: "once" },
     { id: "feature1", phase: "once", playback: "once" },
     { id: "featureChange", phase: "once", playback: "once" },
+    ...(isTask135
+      ? ([
+          { id: "feature", phase: "once", playback: "once" },
+          { id: "feature2", phase: "once", playback: "once" },
+        ] as const)
+      : []),
   ] as const) {
     addCustomStateDefinition(importedSymbols.project, definition);
   }
@@ -93,8 +103,46 @@ try {
     animationName: "Feature_Change",
   });
 
+  if (isTask135) {
+    const co = requireSpineNormal(importedSymbols.project, "CO");
+    addSymbolState(importedSymbols.project, "CO", "feature");
+    setStateVisual(importedSymbols.project, "CO", "feature", {
+      ...co,
+      animationName: "Feature",
+    });
+    for (const symbol of ["WL", "H1", "H2", "L1", "L2", "L3", "L4"]) {
+      const normal = requireSpineNormal(importedSymbols.project, symbol);
+      for (const [state, animationName] of [
+        ["feature1", "Feature1"],
+        ["feature2", "Feature2"],
+      ] as const) {
+        addSymbolState(importedSymbols.project, symbol, state);
+        setStateVisual(importedSymbols.project, symbol, state, {
+          ...normal,
+          animationName,
+        });
+      }
+    }
+    for (const [state, animationName] of [
+      ["feature1", "Feature1"],
+      ["feature2", "Feature2"],
+    ] as const) {
+      addSymbolState(importedSymbols.project, "CN", state);
+      setStateVisual(importedSymbols.project, "CN", state, {
+        kind: "activeSpine",
+        animationName,
+      });
+    }
+  }
+
   setSymbolImageStringNodes(importedSymbols.project, "WL", [
-    multiplierNode(resource, ["normal", "dropdown", "appear", "win"]),
+    multiplierNode(resource, [
+      "normal",
+      "dropdown",
+      "appear",
+      "win",
+      ...(isTask135 ? ["feature1", "feature2"] : []),
+    ]),
   ]);
   setSymbolImageStringNodes(importedSymbols.project, "WM", [
     multiplierNode(resource, [
@@ -151,12 +199,16 @@ try {
   });
   try {
     assertTask132Symbols(reimported.project);
+    if (isTask135) assertTask135Symbols(reimported.project);
   } finally {
     reimported.destroy();
   }
 
   await mkdir(outputDirectory, { recursive: true });
-  const outputPath = resolve(outputDirectory, "game002-s3-symbols-task132.zip");
+  const outputPath = resolve(
+    outputDirectory,
+    `game002-s3-symbols-task${taskId}.zip`,
+  );
   await writeFile(outputPath, exported.bytes);
   process.stdout.write(
     `${JSON.stringify({
@@ -168,6 +220,39 @@ try {
   );
 } finally {
   importedSymbols.destroy();
+}
+
+function assertTask135Symbols(
+  project: Awaited<ReturnType<typeof importSymbolPackageZip>>["project"],
+): void {
+  const coFeature = project.symbols.get("CO")?.states.get("feature");
+  if (coFeature?.kind !== "spine" || coFeature.animationName !== "Feature")
+    throw new Error("Task 135 CO feature must bind exact Spine Feature.");
+  for (const symbol of ["WL", "H1", "H2", "L1", "L2", "L3", "L4"]) {
+    for (const [state, animationName] of [
+      ["feature1", "Feature1"],
+      ["feature2", "Feature2"],
+    ] as const) {
+      const visual = project.symbols.get(symbol)?.states.get(state);
+      if (visual?.kind !== "spine" || visual.animationName !== animationName)
+        throw new Error(
+          `Task 135 ${symbol}.${state} must bind exact Spine ${animationName}.`,
+        );
+    }
+  }
+  for (const [state, animationName] of [
+    ["feature1", "Feature1"],
+    ["feature2", "Feature2"],
+  ] as const) {
+    const visual = project.symbols.get("CN")?.states.get(state);
+    if (
+      visual?.kind !== "activeSpine" ||
+      visual.animationName !== animationName
+    )
+      throw new Error(
+        `Task 135 CN.${state} must bind exact active Spine ${animationName}.`,
+      );
+  }
 }
 
 function requireSpineNormal(
@@ -204,7 +289,7 @@ function assertTask132Symbols(
   const cn = project.symbols.get("CN");
   if (!wl || !wm || !cm || !cn)
     throw new Error("Task 132 Symbols ZIP is missing WL, WM, CM or CN.");
-  if (wl.imageStringNodes[0]?.targets.length !== 4)
+  if (wl.imageStringNodes[0]?.targets.length !== (isTask135 ? 6 : 4))
     throw new Error("Task 132 WL multiplier targets were not preserved.");
   if (wm.imageStringNodes[0]?.targets.length !== 7)
     throw new Error("Task 132 WM multiplier targets were not preserved.");

@@ -329,54 +329,6 @@ describe("Game002RoundTarget multiplier transform", () => {
     expect(target.updateSettledTransform(0).completed).toBe(true);
     expect(runtime.events.at(-1)).toBe("commit:3,0:8");
   });
-
-  it("commits bg-genco CO replacement only after the transform boundary", () => {
-    const scene = Array.from({ length: 6 }, () =>
-      Array.from({ length: 9 }, () => 1),
-    );
-    const runtime = new TransformRuntime(scene);
-    const target = new Game002RoundTarget({
-      runtime: runtime.asRuntime(),
-      cascadePlayer: {} as SymbolCascadePlayer,
-      winAmountPlayer: {} as WinAmountAnimationPlayer,
-      wlSymbolCode: 0,
-      wmSymbolCode: 7,
-      cnSymbolCode: 8,
-      cmSymbolCode: 9,
-    });
-    const step = createCoTransformStep(scene);
-    target.configure({
-      sequence: {} as never,
-      betAmountRaw: 0,
-      winAmountRaw: 0,
-      multiplierBatches: new Map([
-        [
-          step.stepIndex,
-          {
-            stepIndex: step.stepIndex,
-            wlIncrements: [],
-            wmReplacements: [],
-            cnUpdates: [],
-            cm: null,
-            coReplacements: [
-              {
-                position: { x: 2, y: 0 },
-                inputCode: 1,
-                outputCode: 10,
-              },
-            ],
-          },
-        ],
-      ]),
-    });
-
-    target.startSettledTransform(step);
-    expect(runtime.events).toEqual(["prepare:2,0:1->10"]);
-    expect(runtime.scene[2][0]).toBe(1);
-    expect(target.updateSettledTransform(0).completed).toBe(true);
-    expect(runtime.events.at(-1)).toBe("commit:2,0:10");
-    expect(runtime.scene[2][0]).toBe(10);
-  });
 });
 
 class TransformRuntime {

@@ -5,6 +5,10 @@ export const GAME002_CASCADE_COMPONENTS = Object.freeze({
   spin: "bg-spin",
   gencoins: "bg-gencoins",
   win: "bg-win",
+  triggerco: "bg-triggerco",
+  co: "bg-co",
+  win2: "bg-win2",
+  bn: "bg-bn",
   remove: "bg-remove",
   respin: "bg-respin",
   dropdown: "bg-dropdown",
@@ -47,7 +51,7 @@ export const GAME002_ROUND_FLOW_PROFILE = Object.freeze({
   version: 1,
   components: {
     spin: GAME002_CASCADE_COMPONENTS.spin,
-    wins: [GAME002_CASCADE_COMPONENTS.win],
+    wins: [GAME002_CASCADE_COMPONENTS.win, GAME002_CASCADE_COMPONENTS.win2],
     valueUpdates: [GAME002_CASCADE_COMPONENTS.gencoins],
   },
   cascade: {
@@ -58,6 +62,7 @@ export const GAME002_ROUND_FLOW_PROFILE = Object.freeze({
       dropdown: GAME002_CASCADE_COMPONENTS.dropdown,
       refill: GAME002_CASCADE_COMPONENTS.refill,
       stepMarker: GAME002_CASCADE_COMPONENTS.respin,
+      releaseOnlyWins: [GAME002_CASCADE_COMPONENTS.bn],
     },
     symbols: {
       emptyCode: -1,
@@ -67,14 +72,14 @@ export const GAME002_ROUND_FLOW_PROFILE = Object.freeze({
       sequentialWinCompanionSymbols: ["WL"],
     },
     amount: {
-      coinFields: ["coinWin64", "coinWin"],
-      cashFields: ["cashWin64", "cashWin"],
+      coinFields: ["coinWin64", "coinWin", "mul"],
+      cashFields: ["cashWin64", "cashWin", "mul"],
       cashUnit: "cents",
     },
   },
   amount: {
-    coinFields: ["coinWin64", "coinWin"],
-    cashFields: ["cashWin64", "cashWin"],
+    coinFields: ["coinWin64", "coinWin", "mul"],
+    cashFields: ["cashWin64", "cashWin", "mul"],
     cashUnit: "cents",
   },
 } as const satisfies SlotRoundFlowProfileV1);

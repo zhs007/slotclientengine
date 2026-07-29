@@ -7,6 +7,10 @@
 - `packages/gameframeworks` 是后续游戏默认 facade，整合 UI、网络、logic 数据流和 production scene-layout API。
 - `packages/logiccore` 只拥有通用 server round/component/result/otherScenes 解析、索引校验、strict profile 和不可变 execution plan；业务 component、symbol 和金额语义由 app 注入。
 - 所有配置驱动 round 必须在任何画面 mutation 前完整编译。component role、remove/drop/value/sequential companion policy 只能来自 strict versioned profile，并按 active symbol package 大小写精确校验。
+- settled transform 的跨格 relocation 必须显式保存 source occurrence identity、
+  overwritten target 与 source replacement；release-only win positions 只加入 holes
+  和 release IDs，不得伪造金额组。grid-cell transfer 由 rendercore 以整批
+  prepare/start/commit/rollback/destroy transaction 承担。
 - `packages/rendercore` 的 capability-driven coordinator 是 standard/grid-cell、base/cascade 的共享编排入口，负责 initial、win、remove、dropdown、refill、sequential collect、completion 和 cleanup 边界。
 - settled 后、中奖前的业务转换必须由 logiccore 的中性 immutable transform step
   和 rendercore 的 capability phase 显式表达；共享层只校验 occurrence

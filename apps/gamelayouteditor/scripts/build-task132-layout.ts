@@ -13,12 +13,17 @@ import {
 import { replaceSymbolDependency } from "../src/model/game-mode-commands.js";
 
 const workspace = resolve(import.meta.dirname, "../../..");
-const outputDirectory = resolve(workspace, "tasks/artifacts/132");
+const taskId = process.env.GAME002_LAYOUT_BUILD_TASK ?? "132";
+if (taskId !== "132" && taskId !== "135")
+  throw new Error(`Unsupported game002 Layout build task "${taskId}".`);
+const outputDirectory = resolve(workspace, `tasks/artifacts/${taskId}`);
 const inputLayout = new Uint8Array(
   await readFile("/Users/zerro/Downloads/crave-v2.zip"),
 );
 const inputSymbols = new Uint8Array(
-  await readFile(resolve(outputDirectory, "game002-s3-symbols-task132.zip")),
+  await readFile(
+    resolve(outputDirectory, `game002-s3-symbols-task${taskId}.zip`),
+  ),
 );
 
 const pixiAssets = Assets as unknown as {
@@ -99,7 +104,7 @@ try {
   }
 
   await mkdir(outputDirectory, { recursive: true });
-  const outputPath = resolve(outputDirectory, "crave-layout-task132.zip");
+  const outputPath = resolve(outputDirectory, `crave-layout-task${taskId}.zip`);
   await writeFile(outputPath, exported.bytes);
   process.stdout.write(
     `${JSON.stringify({
