@@ -56,7 +56,7 @@ describe("slot round flow profile", () => {
     expect(Object.isFrozen(profile.cascade?.symbols)).toBe(true);
   });
 
-  it("preserves relocation identity and removes release-only results without an amount group", () => {
+  it("preserves relocation identity when the target presentation is unchanged and removes release-only results without an amount group", () => {
     const profile = parseSlotRoundFlowProfile({
       ...base,
       components: { spin: "spin", wins: ["win"] },
@@ -85,7 +85,7 @@ describe("slot round flow profile", () => {
     const rawStep0 = createStep({
       index: 0,
       components: {
-        spin: { scenes: [[[1, 2, 2]]] },
+        spin: { scenes: [[[1, 1, 2]]] },
         win: { results: [winResult] },
         release: { results: [releaseResult] },
         remove: { scenes: [[[-1, -1, 2]]] },

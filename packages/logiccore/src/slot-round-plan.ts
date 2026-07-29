@@ -699,15 +699,17 @@ function compileSettledTransform(
       );
     const inputOccurrence = requireOccurrence(input, position);
     const outputValue = normalizeValue(draft.outputValue);
+    const relocationSource = relocationByTarget.get(key);
+    const relocationTarget = relocationBySource.get(key);
     if (
       inputOccurrence.code === draft.outputCode &&
-      inputOccurrence.value === outputValue
+      inputOccurrence.value === outputValue &&
+      !relocationSource &&
+      !relocationTarget
     )
       throw new LogicParseError(
         `step[${stepIndex}] settled transform[${changeIndex}] is a no-op.`,
       );
-    const relocationSource = relocationByTarget.get(key);
-    const relocationTarget = relocationBySource.get(key);
     const outputId = relocationSource
       ? requireOccurrence(input, relocationSource).id
       : relocationTarget
