@@ -118,14 +118,17 @@ bg-incwl（若上一中奖步有参与中奖的 WL）
   -> 开始现有中奖流程
 ```
 
-- `bg-incwl` 的服务器数据位于中奖 step，但表现延迟到随后的 refill 全部落定后；
+- `bg-incwl` 的服务器数据位于中奖 step 的下一 cascade step，在 `bg-dropdown`
+  后、`bg-refill` 前；客户端跨 step 关联中奖 WL，表现等该 refill 全部落定后执行。
   它先于当前 WM 生效。没有 WM 时，WL Start 完成即结束 transform。
 - 没有 WL 时不要求 `bg-updwl`，但 WM 的四段动画、WM -> CN 和新 CN value 流程
   仍完整执行。
 - WM 的 `Mult_Start/Mult_Idle/Mult_End/Change` 同批并行；Idle 必须跨过一个真实
   loop boundary，其余等待 once completion。
-- initial/refill scene 优先级是
+- initial/refill 的动画前 scene 优先级是
   `bg-gencm > bg-genwm > bg-spin/bg-refill`；每个落定 step 最多一个 CM。
+  `bg-genco.scene` 是 WM/CM 转 CN 后、中奖前的终态盘面，在 multiplier transform
+  末尾提交其中新增的 CO replacement；CO 专属动画和玩法后续实现。
 - WM 阶段完整结束后才开始 CM。CM `Feature1` 完成时按 `bg-updcn` 一次更新当时
   全部 CN（含本批 WM 新转出的 CN），并行播放 `Feature_Change`；完成后才播放
   CM `Change`，其真实 once completion 边界按 `bg-cm2cn/bg-gencmcn` 提交新 CN。

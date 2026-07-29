@@ -213,6 +213,36 @@ describe("game002 cascade sequence", () => {
     expect(sequence.initial.spinScene[0][0]).toBe(9);
   });
 
+  it("keeps bg-genco out of the pre-transform terminal spin target", () => {
+    const value = terminalSpinFixture(false) as any;
+    const data = step(value, 0);
+    const params = spin(value);
+    for (const [componentName, code] of [
+      ["bg-genwm", 7],
+      ["bg-gencm", 9],
+      ["bg-genco", 10],
+    ] as const) {
+      const generated = structuredClone(data.scenes[0]);
+      generated.values[0].values[0] = code;
+      const generatedIndex = data.scenes.length;
+      data.scenes.push(generated);
+      params.historyComponents.push(componentName);
+      params.mapComponents[componentName] = structuredClone(
+        params.mapComponents["bg-spin"],
+      );
+      params.mapComponents[componentName].basicComponentData.usedScenes = [
+        generatedIndex,
+      ];
+    }
+
+    const sequence = createGame002CascadeSequence({
+      logic: createLogic(value),
+      cnSymbolCode: 8,
+    });
+
+    expect(sequence.initial.spinScene[0][0]).toBe(9);
+  });
+
   it("accepts a carried WL refill value without treating it as a CN presentation value", () => {
     const value = structuredClone(GAME002_CASCADE_GMI) as any;
     const x = 3;

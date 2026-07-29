@@ -119,6 +119,7 @@ export interface Game002AdapterOptions {
     options: CreateSymbolValuePresenterOptions,
   ) => SymbolValuePresenter;
   readonly reportFatalError?: (error: Error) => void;
+  readonly logRng?: (message: string) => void;
 }
 
 const GAME002_MAX_TICK_DELTA_SECONDS = 1 / 30;
@@ -141,6 +142,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     options: CreateSymbolCascadePlayerOptions,
   ) => SymbolCascadePlayer;
   readonly #reportFatalError: (error: Error) => void;
+  readonly #logRng: (message: string) => void;
   #app: Game002PixiApplication | null = null;
   #worldLayer: Container | null = null;
   #backgroundPlayer: Game002BackgroundPlayer | null = null;
@@ -216,6 +218,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
     this.#createSymbolCascadePlayer =
       options.createSymbolCascadePlayer ?? createSymbolCascadePlayer;
     this.#reportFatalError = options.reportFatalError ?? reportFatalError;
+    this.#logRng = options.logRng ?? ((message) => console.info(message));
   }
 
   async mount(context: SlotGameMountContext): Promise<void> {
@@ -348,6 +351,7 @@ class Game002PixiAdapter implements SlotGameAdapter {
   }
 
   playSpin(logic: GameLogic): Promise<void> {
+    this.#logRng(`rng ${logic.getRandomNumbers().join(",")}`);
     const runtime = this.#requireRuntime();
     const coordinator = this.#requireRoundCoordinator();
     if (coordinator.getSnapshot().running) {
@@ -374,6 +378,10 @@ class Game002PixiAdapter implements SlotGameAdapter {
     if (cmSymbolCode === undefined) {
       throw new Error("game002 game config is missing CM symbol code.");
     }
+    const coSymbolCode = runtime.gameConfig.getSymbolCode("CO");
+    if (coSymbolCode === undefined) {
+      throw new Error("game002 game config is missing CO symbol code.");
+    }
     const symbolCodes = Object.fromEntries(
       this.#skin.displaySymbols.map((symbol) => {
         const code = runtime.gameConfig.getSymbolCode(symbol);
@@ -387,6 +395,8 @@ class Game002PixiAdapter implements SlotGameAdapter {
       wmSymbolCode,
       cnSymbolCode,
       cmSymbolCode,
+      coSymbolCode,
+      logDiagnostic: this.#logRng,
     });
     const plan = compileSlotRoundExecutionPlan(
       GAME002_ROUND_FLOW_PROFILE,
@@ -587,6 +597,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     | "transform-cm-feature"
     | "transform-cn-feature-change"
     | "transform-cm-change"
+    | "transform-co-commit"
     | "completion" = "idle";
   #activeStage: Game002CascadeSequence["cascades"][number] | null = null;
   #runtimeCompleted = false;
@@ -599,6 +610,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
   #activeMultiplierBatch: Game002WlWmMultiplierPresentationBatch | null = null;
   #preparedWmReplacements: PreparedVisibleOccurrenceReplacement[] = [];
   #preparedCmReplacements: PreparedVisibleOccurrenceReplacement[] = [];
+  #preparedCoReplacements: PreparedVisibleOccurrenceReplacement[] = [];
   #transformCompletionBaselines = new Map<
     string,
     Readonly<{ loop: number; once: number }>
@@ -652,8 +664,10 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     this.#activeMultiplierBatch = null;
     for (const prepared of this.#preparedWmReplacements) prepared.rollback();
     for (const prepared of this.#preparedCmReplacements) prepared.rollback();
+    for (const prepared of this.#preparedCoReplacements) prepared.rollback();
     this.#preparedWmReplacements = [];
     this.#preparedCmReplacements = [];
+    this.#preparedCoReplacements = [];
     this.#transformCompletionBaselines.clear();
   }
 
@@ -773,6 +787,16 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
   startSettledTransform(step: SlotRoundSettledTransformStepPlan): void {
     if (this.#activity !== "idle")
       throw new Error("game002 settled transform cannot start while active.");
+    const batch = this.requireRound().multiplierBatches.get(step.stepIndex);
+    if (!batch)
+      throw new Error(
+        `game002 step[${step.stepIndex}] multiplier presentation batch is missing.`,
+      );
+    const coReplacementKeys = new Set(
+      batch.coReplacements.map(
+        (replacement) => `${replacement.position.x},${replacement.position.y}`,
+      ),
+    );
     const wmChanges = step.changes.filter(
       (change) =>
         change.input.code === this.#wmSymbolCode &&
@@ -793,26 +817,26 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
         change.input.code === this.#cmSymbolCode &&
         change.output.code === this.#cnSymbolCode,
     );
+    const coChanges = step.changes.filter((change) =>
+      coReplacementKeys.has(`${change.position.x},${change.position.y}`),
+    );
     if (
       wmChanges.length +
         wlChanges.length +
         cnChanges.length +
-        cmChanges.length !==
+        cmChanges.length +
+        coChanges.length !==
       step.changes.length
     ) {
       throw new Error(
-        `game002 step[${step.stepIndex}] settled transform must contain only WL/CN updates and WM/CM-to-CN replacements.`,
+        `game002 step[${step.stepIndex}] settled transform must contain only WL/CN updates, WM/CM-to-CN replacements and bg-genco CO replacements.`,
       );
     }
-    const batch = this.requireRound().multiplierBatches.get(step.stepIndex);
-    if (!batch)
-      throw new Error(
-        `game002 step[${step.stepIndex}] multiplier presentation batch is missing.`,
-      );
     if (
       wmChanges.length === 0 &&
       batch.wlIncrements.length === 0 &&
-      batch.cm === null
+      batch.cm === null &&
+      batch.coReplacements.length === 0
     )
       throw new Error(
         `game002 step[${step.stepIndex}] multiplier transform has no display operation.`,
@@ -824,6 +848,10 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     if (cmChanges.length !== (batch.cm ? 1 : 0))
       throw new Error(
         `game002 step[${step.stepIndex}] CM replacement batch does not match the transform.`,
+      );
+    if (coChanges.length !== batch.coReplacements.length)
+      throw new Error(
+        `game002 step[${step.stepIndex}] CO replacement batch does not match the transform.`,
       );
     for (const replacement of batch.wmReplacements) {
       const { x, y } = replacement.position;
@@ -897,6 +925,17 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
         `game002 step[${step.stepIndex}] CN updates require a CM presentation.`,
       );
     }
+    for (const replacement of batch.coReplacements) {
+      const { x, y } = replacement.position;
+      if (
+        step.input.scene[x]?.[y] !== replacement.inputCode ||
+        step.output.scene[x]?.[y] !== replacement.outputCode ||
+        step.output.values[x]?.[y] !== null
+      )
+        throw new Error(
+          `game002 step[${step.stepIndex}] CO replacement (${x},${y}) does not match the transform snapshots.`,
+        );
+    }
     this.applyMultiplierTexts(step.input);
     for (const change of wmChanges) {
       for (const state of ["multStart", "multIdle", "multEnd", "change"]) {
@@ -956,6 +995,7 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     }
     const preparedWm: PreparedVisibleOccurrenceReplacement[] = [];
     const preparedCm: PreparedVisibleOccurrenceReplacement[] = [];
+    const preparedCo: PreparedVisibleOccurrenceReplacement[] = [];
     try {
       for (const replacement of batch.wmReplacements) {
         preparedWm.push(
@@ -978,13 +1018,25 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
             outputPresentationValue: batch.cm.outputValue,
           }),
         );
+      for (const replacement of batch.coReplacements)
+        preparedCo.push(
+          this.#runtime.prepareVisibleOccurrenceReplacement({
+            x: replacement.position.x,
+            y: replacement.position.y,
+            expectedCode: replacement.inputCode,
+            outputCode: replacement.outputCode,
+            outputPresentationValue: null,
+          }),
+        );
     } catch (error) {
       for (const replacement of preparedWm) replacement.rollback();
       for (const replacement of preparedCm) replacement.rollback();
+      for (const replacement of preparedCo) replacement.rollback();
       throw error;
     }
     this.#preparedWmReplacements = preparedWm;
     this.#preparedCmReplacements = preparedCm;
+    this.#preparedCoReplacements = preparedCo;
     this.#activeTransform = step;
     this.#activeMultiplierBatch = batch;
     if (batch.wlIncrements.length > 0) {
@@ -1129,6 +1181,10 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       this.completeSettledTransform(step);
       return { completed: true };
     }
+    if (this.#activity === "transform-co-commit") {
+      this.completeSettledTransform(step);
+      return { completed: true };
+    }
     throw new Error("game002 settled transform activity is invalid.");
   }
 
@@ -1230,6 +1286,10 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
     batch: Game002WlWmMultiplierPresentationBatch,
   ): { readonly completed: boolean } {
     if (!batch.cm) {
+      if (batch.coReplacements.length > 0) {
+        this.#activity = "transform-co-commit";
+        return { completed: false };
+      }
       this.completeSettledTransform(step);
       return { completed: true };
     }
@@ -1248,6 +1308,9 @@ export class Game002RoundTarget implements SlotRoundPresentationCapabilityTarget
       throw new Error(
         `game002 step[${step.stepIndex}] multiplier transform completed with uncommitted replacements.`,
       );
+    for (const replacement of this.#preparedCoReplacements)
+      replacement.commit();
+    this.#preparedCoReplacements = [];
     assertGame002ReelVisualMatchesTarget(
       this.#runtime.getVisualSnapshot(),
       step.output.scene,

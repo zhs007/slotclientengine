@@ -906,7 +906,7 @@ function deriveDropdownValues(
       const moving = source.filter((item) => !held.has(item.symbol));
       if (targets.length !== moving.length)
         throw new LogicParseError(
-          `dropdown column ${x} occurrence count changed.`,
+          `dropdown column ${x} occurrence count changed: actual(server)=${targets.length} non-hole occurrence(s) at ${formatDropdownTargets(targets)}; expected(compiled)=${moving.length} movable occurrence(s) at ${formatOccurrencePositions(moving)}.`,
         );
       const values: Array<SlotRoundPresentationValue | -1> = outputScene[x].map(
         (code) => (code === emptyCode ? -1 : null),
@@ -914,7 +914,7 @@ function deriveDropdownValues(
       for (const item of fixed) {
         if (outputScene[x][item.position.y] !== item.code)
           throw new LogicParseError(
-            `held occurrence "${item.id}" changed at (${x},${item.position.y}).`,
+            `held occurrence "${item.id}" changed at (${x},${item.position.y}): actual(server) code=${outputScene[x][item.position.y]}; expected(compiled) code=${item.code} symbol="${item.symbol}".`,
           );
         values[item.position.y] = item.value;
       }
@@ -922,7 +922,7 @@ function deriveDropdownValues(
         const target = targets[index];
         if (target.code !== item.code || target.y < item.position.y)
           throw new LogicParseError(
-            `dropdown occurrence "${item.id}" cannot map to (${x},${target.y}).`,
+            `dropdown occurrence "${item.id}" cannot map from (${x},${item.position.y}) to (${x},${target.y}): actual(server) code=${target.code}; expected(compiled) code=${item.code} symbol="${item.symbol}", target row >= ${item.position.y}.`,
           );
         values[target.y] = item.value;
       });
@@ -1003,7 +1003,7 @@ function compileRefill(
   const movements = refillPositions.map((target) => {
     if (input.scene[target.x][target.y] !== emptyCode)
       throw new LogicParseError(
-        `refill target (${target.x},${target.y}) is not a hole.`,
+        `refill target (${target.x},${target.y}) is not a hole: actual(compiled input) code=${input.scene[target.x][target.y]}; expected emptyCode=${emptyCode}.`,
       );
     const code = scene[target.x][target.y];
     const symbol = names.get(code)!;
@@ -1098,10 +1098,17 @@ function parseRefillPositions(
   if (
     holes.size !== seen.size ||
     [...holes].some((candidate) => !seen.has(candidate))
-  )
-    throw new LogicParseError(
-      `step[${step.getIndex()}] refill positions must match dropdown holes exactly.`,
+  ) {
+    const missingFromServer = [...holes].filter(
+      (candidate) => !seen.has(candidate),
     );
+    const unexpectedFromServer = [...seen].filter(
+      (candidate) => !holes.has(candidate),
+    );
+    throw new LogicParseError(
+      `step[${step.getIndex()}] refill positions must match dropdown holes exactly: missing actual(server) position(s)=${formatPositionKeys(missingFromServer)}; unexpected actual(server) position(s)=${formatPositionKeys(unexpectedFromServer)}; expected(compiled) hole(s)=${formatPositionKeys([...holes])}; actual(server) refill position(s)=${formatPositionKeys([...seen])}.`,
+    );
+  }
   return Object.freeze(positions);
 }
 
@@ -1221,14 +1228,14 @@ function parseAuthoritativeValues(
           if (valueSymbols.has(symbol)) {
             if (!Number.isSafeInteger(raw) || raw <= 0)
               throw new LogicParseError(
-                `${label}[${x}][${y}] value must be a positive safe integer.`,
+                `${label}[${x}][${y}] value must be a positive safe integer: actual(server)=${formatDiagnosticValue(raw)}; scene symbol="${symbol}", code=${code}.`,
               );
             return raw;
           }
           if (auxiliaryValueSymbols.has(symbol)) {
             if (!Number.isSafeInteger(raw) || raw < 0)
               throw new LogicParseError(
-                `${label}[${x}][${y}] auxiliary value must be a non-negative safe integer.`,
+                `${label}[${x}][${y}] auxiliary value must be a non-negative safe integer: actual(server)=${formatDiagnosticValue(raw)}; scene symbol="${symbol}", code=${code}.`,
               );
             // Sequential companions can carry server-owned values even when
             // the active client has no presentation binding for them.
@@ -1236,7 +1243,7 @@ function parseAuthoritativeValues(
           }
           if (raw !== 0)
             throw new LogicParseError(
-              `${label}[${x}][${y}] non-value symbol must use zero.`,
+              `${label}[${x}][${y}] non-value symbol must use zero: actual(server)=${formatDiagnosticValue(raw)}; scene symbol="${symbol}", code=${code}; expected(server)=0.`,
             );
           return null;
         }),
@@ -1263,7 +1270,7 @@ function parseAuthoritativeHoleValues(
           if (code === emptyCode) {
             if (raw !== emptyCode)
               throw new LogicParseError(
-                `${label}[${x}][${y}] hole value must equal emptyCode.`,
+                `${label}[${x}][${y}] hole value differs: actual(server)=${formatDiagnosticValue(raw)}; expected(compiled emptyCode)=${emptyCode}.`,
               );
             return -1;
           }
@@ -1271,7 +1278,7 @@ function parseAuthoritativeHoleValues(
           if (valueSymbols.has(symbol)) {
             if (!Number.isSafeInteger(raw) || raw <= 0)
               throw new LogicParseError(
-                `${label}[${x}][${y}] value must be a positive safe integer.`,
+                `${label}[${x}][${y}] value must be a positive safe integer: actual(server)=${formatDiagnosticValue(raw)}; scene symbol="${symbol}", code=${code}.`,
               );
             return raw;
           }
@@ -1280,12 +1287,12 @@ function parseAuthoritativeHoleValues(
           // presentation value.
           if (!Number.isSafeInteger(raw) || raw < 0)
             throw new LogicParseError(
-              `${label}[${x}][${y}] must be a non-negative safe integer.`,
+              `${label}[${x}][${y}] must be a non-negative safe integer: actual(server)=${formatDiagnosticValue(raw)}; scene symbol="${symbol}", code=${code}.`,
             );
           const derivedValue = derived[x][y];
           if (derivedValue !== null && raw !== derivedValue)
             throw new LogicParseError(
-              `${label}[${x}][${y}] retained value must equal ${derivedValue}.`,
+              `${label}[${x}][${y}] retained value differs: actual(server)=${raw}; expected(compiled)=${derivedValue}.`,
             );
           return derivedValue;
         }),
@@ -1346,29 +1353,76 @@ function assertDimensions(
   label: string,
 ): void {
   if (!Array.isArray(value) || value.length !== scene.length)
-    throw new LogicParseError(`${label} width must match scene.`);
+    throw new LogicParseError(
+      `${label} width must match scene: actual(server) columns=${Array.isArray(value) ? value.length : "non-array"}; expected(scene) columns=${scene.length}.`,
+    );
   value.forEach((column, x) => {
     if (!Array.isArray(column) || column.length !== scene[x].length)
-      throw new LogicParseError(`${label}[${x}] height must match scene.`);
+      throw new LogicParseError(
+        `${label}[${x}] height must match scene: actual(server) rows=${Array.isArray(column) ? column.length : "non-array"}; expected(scene) rows=${scene[x].length}.`,
+      );
   });
 }
+
+const MAX_MATRIX_DIAGNOSTIC_DIFFERENCES = 32;
 
 function assertMatrixEqual(
   actual: readonly (readonly unknown[])[],
   expected: readonly (readonly unknown[])[],
   label: string,
 ): void {
+  const actualHeights = actual.map((column) => column.length);
+  const expectedHeights = expected.map((column) => column.length);
   if (
     actual.length !== expected.length ||
-    actual.some(
-      (column, x) =>
-        column.length !== expected[x]?.length ||
-        column.some((value, y) => value !== expected[x]?.[y]),
-    )
+    actualHeights.some((height, x) => height !== expectedHeights[x])
   )
     throw new LogicParseError(
-      `${label} does not match compiled occurrence state.`,
+      `${label} does not match compiled occurrence state: matrix shape differs; actual(server) columns=${actual.length}, rowsByColumn=${formatDiagnosticValue(actualHeights)}; expected(compiled) columns=${expected.length}, rowsByColumn=${formatDiagnosticValue(expectedHeights)}.`,
     );
+
+  const differences: string[] = [];
+  let differenceCount = 0;
+  actual.forEach((column, x) => {
+    column.forEach((value, y) => {
+      if (value === expected[x][y]) return;
+      differenceCount += 1;
+      if (differences.length >= MAX_MATRIX_DIAGNOSTIC_DIFFERENCES) return;
+      differences.push(
+        `(${x},${y}) actual(server)=${formatDiagnosticValue(value)}, expected(compiled)=${formatDiagnosticValue(expected[x][y])}`,
+      );
+    });
+  });
+  if (differenceCount === 0) return;
+  const omitted = differenceCount - differences.length;
+  throw new LogicParseError(
+    `${label} does not match compiled occurrence state: ${differenceCount} cell difference(s): ${differences.join("; ")}; omitted difference(s)=${omitted}.`,
+  );
+}
+
+function formatDiagnosticValue(value: unknown): string {
+  return String(JSON.stringify(value));
+}
+
+function formatPositionKeys(keys: readonly string[]): string {
+  return `[${keys.join("; ")}]`;
+}
+
+function formatDropdownTargets(
+  targets: readonly { readonly y: number; readonly code: number }[],
+): string {
+  return `[${targets.map((target) => `(row=${target.y}, code=${target.code})`).join("; ")}]`;
+}
+
+function formatOccurrencePositions(
+  occurrences: readonly SlotRoundOccurrence[],
+): string {
+  return `[${occurrences
+    .map(
+      (occurrence) =>
+        `(${occurrence.position.x},${occurrence.position.y}, code=${occurrence.code}, symbol="${occurrence.symbol}", id="${occurrence.id}")`,
+    )
+    .join("; ")}]`;
 }
 
 function forEachCell(

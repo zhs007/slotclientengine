@@ -410,17 +410,30 @@ describe("slot round execution compiler", () => {
     expect(() =>
       compileSlotRoundExecutionPlan(
         profile,
+        createRoundLogic({ initialValues: [[0, 0, 0]] }),
+        { symbolCodes: { A: 0, H: 1, V: 2 } },
+      ),
+    ).toThrow(
+      /initial values\[0\]\[0\] value must be a positive safe integer: actual\(server\)=0; scene symbol="V", code=2\./,
+    );
+    expect(() =>
+      compileSlotRoundExecutionPlan(
+        profile,
         createRoundLogic({ removedScene: [[2, 0, 1]] }),
         { symbolCodes: { A: 0, H: 1, V: 2 } },
       ),
-    ).toThrow(/remove scene does not match/);
+    ).toThrow(
+      /step\[0\] remove scene does not match compiled occurrence state: 1 cell difference\(s\): \(0,1\) actual\(server\)=0, expected\(compiled\)=-1; omitted difference\(s\)=0\./,
+    );
     expect(() =>
       compileSlotRoundExecutionPlan(
         profile,
         createRoundLogic({ refillPos: [0, 1] }),
         { symbolCodes: { A: 0, H: 1, V: 2 } },
       ),
-    ).toThrow(/must match dropdown holes exactly/);
+    ).toThrow(
+      /must match dropdown holes exactly: missing actual\(server\) position\(s\)=\[0,0\]; unexpected actual\(server\) position\(s\)=\[0,1\]/,
+    );
     expect(() =>
       compileSlotRoundExecutionPlan(
         profile,
