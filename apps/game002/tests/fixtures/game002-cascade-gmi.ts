@@ -91,7 +91,6 @@ export const GAME002_CASCADE_GMI = Object.freeze({
               toSgc7Scene(INITIAL_VALUES),
               toSgc7Scene(REMOVED_VALUES),
               toSgc7Scene(INITIAL_WL_VALUES),
-              toSgc7Scene(INCREMENTED_WL_VALUES),
             ]),
             results: Object.freeze([
               Object.freeze({
@@ -126,7 +125,6 @@ export const GAME002_CASCADE_GMI = Object.freeze({
                 "bg-gencoins",
                 "bg-genwilds",
                 "bg-win",
-                "bg-incwl",
                 "bg-remove",
               ]),
               historyComponentsEx: Object.freeze([]),
@@ -144,10 +142,6 @@ export const GAME002_CASCADE_GMI = Object.freeze({
                     cashWin: 290,
                     coinWin: 29,
                   }),
-                  nextComponent: "bg-incwl",
-                }),
-                "bg-incwl": Object.freeze({
-                  basicComponentData: basic({ usedOtherScenes: [3] }),
                   nextComponent: "bg-remove",
                 }),
                 "bg-remove": Object.freeze({
@@ -177,6 +171,7 @@ export const GAME002_CASCADE_GMI = Object.freeze({
               toSgc7Scene(DROPDOWN_VALUES),
               toSgc7Scene(REFILL_INTERMEDIATE_VALUES),
               toSgc7Scene(REFILL_FINAL_VALUES),
+              toSgc7Scene(INCREMENTED_WL_VALUES),
             ]),
             results: Object.freeze([]),
             curGameMod: "basic",
@@ -184,12 +179,14 @@ export const GAME002_CASCADE_GMI = Object.freeze({
               historyComponents: Object.freeze([
                 "bg-respin",
                 "bg-dropdown",
+                "bg-incwl",
                 "bg-refill",
                 "bg-gencoins",
               ]),
               historyComponentsEx: Object.freeze([
                 "bg-respin",
                 "bg-dropdown",
+                "bg-incwl",
                 "bg-refill",
                 "bg-gencoins",
                 "bg-win",
@@ -201,6 +198,7 @@ export const GAME002_CASCADE_GMI = Object.freeze({
                   usedOtherScenes: [1],
                   srcScenes: [0],
                 }),
+                "bg-incwl": component({ usedOtherScenes: [4] }),
                 "bg-refill": component({
                   usedScenes: [2],
                   usedOtherScenes: [2],

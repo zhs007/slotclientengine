@@ -52,6 +52,9 @@ UTC：2026-07-28T09:43:10Z
 
 ## 计划偏差与剩余风险
 
+- 后续 live 浏览器联调确认 `bg-incwl` 不在中奖 step，而在其下一 cascade step 的
+  `bg-dropdown` 后、`bg-refill` 前；实现与 fixture 已改为跨 step 关联中奖 WL，
+  refill 落定后再提交 +1 表现。
 - 用户补充了 refill WM、无 WL 的 WM、`bg-incwl` 延迟表现；实现和测试已并入同一
   settled-transform phase，没有建立第二条时序。
 - 浏览器联调确认 multiplier component 的 `otherScene` 非目标 cell 另有服务器

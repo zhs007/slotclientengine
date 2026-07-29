@@ -90,11 +90,15 @@ spin 和每次 refill 的 symbol 全部落定后、中奖开始前，game002 会
 multiplier transform。新 WL/WM/CM 的 multiplier 分别来自 `bg-genwilds`、
 `bg-setwm` 和 `bg-setcm` 的 `otherScene`，使用 paired Symbols package 中同一个
 ImgNumber dependency，在 exact `Mult` slot 显示 `xN`。initial spin 与 refill
-的最终 scene 优先级固定为 `bg-gencm > bg-genwm > bg-spin/bg-refill`，每个落定
-step 最多允许一个 CM。
+的动画前落定 scene 优先级固定为
+`bg-gencm > bg-genwm > bg-spin/bg-refill`，每个落定 step 最多允许一个 CM。
+`bg-genco.scene` 是 WM/CM 转 CN 后、中奖前的最终盘面；客户端在 multiplier
+transform 末尾提交其中新增的 CO replacement。当前不播放 CO 专属动画，也不实现
+CO 玩法。
 
-如果上一步中奖 WL 的 `bg-incwl.otherScene` 将值加一，会在本次 refill 落定后先
-更新 WL 并播放一次 WL `Start`，随后才处理当前 WM。WM 同批并行执行
+如果上一步有中奖 WL，服务器在下一 cascade step 的 `bg-dropdown` 后、
+`bg-refill` 前通过 `bg-incwl.otherScene` 将其值加一。客户端跨 step 关联中奖 WL，
+在本次 refill 落定后先更新 WL 并播放一次 WL `Start`，随后才处理当前 WM。WM 同批并行执行
 `Mult_Start -> Mult_Idle(一个真实 loop) -> Mult_End -> Change`；进入
 `Mult_Idle` 时按 `bg-updwl` 同时更新全部 WL。盘面没有 WL 时仍完整播放 WM 流程，
 只跳过 WL 更新。
@@ -112,7 +116,7 @@ CM 乘法、矩阵尺寸和 occurrence continuity 都在画面 mutation 前严�
 
 ## bg-win 消除级联
 
-`bg-spin/bg-genwm/bg-gencoins/bg-win/bg-remove/bg-respin/bg-dropdown/bg-refill` 是 game002 app-owned 映射，只有 `historyComponents` 对应的 `step.hasComponent()` 才代表触发；`historyComponentsEx` 和 map 中的空组件不触发。adapter 预解析全部 steps 后，严格执行初始 spin、逐组 emphasis/win/remove、普通局 dropdown/refill unified fall，或期待局 existing-only dropdown -> refill-hole Nearwin2 sweep -> selective refill spin；任一结构漂移都在启动画面前失败。
+`bg-spin/bg-genwm/bg-gencm/bg-genco/bg-gencoins/bg-win/bg-remove/bg-respin/bg-dropdown/bg-refill` 是 game002 app-owned 映射，只有 `historyComponents` 对应的 `step.hasComponent()` 才代表触发；`historyComponentsEx` 和 map 中的空组件不触发。adapter 预解析全部 steps 后，严格执行初始 spin、逐组 emphasis/win/remove、普通局 dropdown/refill unified fall，或期待局 existing-only dropdown -> refill-hole Nearwin2 sweep -> selective refill spin；任一结构漂移都在启动画面前失败。
 
 每个 result 的全部 `pos` 会在主转轮停稳后按 manifest presentation 执行。现有单组现金 overlay 与底部临时汇总都严格使用 `cashWin64 !== undefined ? cashWin64 : cashWin`；汇总要求 result cash 为 positive safe integer cents，并复用 `formatServerUsdAmount` 除以 `100` 显示。不能从 bet、lines、component total 或 `totalwin` 推导。`bg-win.basicComponentData.cashWin/coinWin` 只在字段存在时作为累计协议证据，不能替代 result 权威字段。
 

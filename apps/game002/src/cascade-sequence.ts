@@ -112,17 +112,10 @@ export function createGame002CascadeSequence(options: {
     initialStep.getComponentScenes(GAME002_CASCADE_COMPONENTS.spin),
     "step[0] bg-spin",
   );
-  const settledSpinScene = resolveGeneratedMultiplierScene(
-    initialStep,
-    serverSpinScene,
-    "step[0]",
-  );
-  const spinScene = options.executionPlan?.initial.scene ?? settledSpinScene;
-  assertMatrixEqual(
-    spinScene,
-    settledSpinScene,
-    "step[0] execution-plan initial scene",
-  );
+  const settledSpinScene =
+    options.executionPlan?.initial.scene ??
+    resolveGeneratedMultiplierScene(initialStep, serverSpinScene, "step[0]");
+  const spinScene = settledSpinScene;
   const spinValueResult = options.executionPlan
     ? Object.freeze({
         values: asFullPresentationValues(
@@ -274,18 +267,14 @@ export function createGame002CascadeSequence(options: {
       step.getComponentScenes(GAME002_CASCADE_COMPONENTS.refill),
       `step[${stepIndex}] bg-refill`,
     );
-    const settledRefillScene = resolveGeneratedMultiplierScene(
-      step,
-      serverRefillScene,
-      `step[${stepIndex}]`,
-    );
     const plannedRefill = findPlanRefill(options.executionPlan, stepIndex);
-    const refillScene = plannedRefill?.output.scene ?? settledRefillScene;
-    assertMatrixEqual(
-      refillScene,
-      settledRefillScene,
-      `step[${stepIndex}] execution-plan refill output`,
-    );
+    const refillScene =
+      plannedRefill?.output.scene ??
+      resolveGeneratedMultiplierScene(
+        step,
+        serverRefillScene,
+        `step[${stepIndex}]`,
+      );
     validateRefillScene(dropdownScene, refillScene, refillPositions, stepIndex);
     const refillOther = optionalOtherScene(
       step.getComponentOtherScenes(GAME002_CASCADE_COMPONENTS.refill),
@@ -930,12 +919,13 @@ function resolveGeneratedMultiplierScene(
         `${label} bg-genwm`,
       )
     : inputScene;
-  return step.hasComponent(GAME002_CASCADE_COMPONENTS.gencm)
+  const generatedCm = step.hasComponent(GAME002_CASCADE_COMPONENTS.gencm)
     ? exactlyOneFullScene(
         step.getComponentScenes(GAME002_CASCADE_COMPONENTS.gencm),
         `${label} bg-gencm`,
       )
     : generatedWm;
+  return generatedCm;
 }
 
 function exactlyOneFullScene(

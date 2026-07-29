@@ -11,6 +11,7 @@ export const GAME002_CASCADE_COMPONENTS = Object.freeze({
   refill: "bg-refill",
   genwilds: "bg-genwilds",
   genwm: "bg-genwm",
+  genco: "bg-genco",
   setwm: "bg-setwm",
   incwl: "bg-incwl",
   updwl: "bg-updwl",

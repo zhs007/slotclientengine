@@ -32,12 +32,21 @@ export interface Game002WlIncrementPresentation {
   readonly outputValue: number;
 }
 
+interface Game002PendingWlIncrement extends Game002WlIncrementPresentation {
+  readonly sourceStepIndex: number;
+  readonly sourceWinResultPositions: string;
+  readonly occurrenceId: string;
+  readonly code: number;
+  readonly symbol: string;
+}
+
 export interface Game002WlWmMultiplierPresentationBatch {
   readonly stepIndex: number;
   readonly wlIncrements: readonly Game002WlIncrementPresentation[];
   readonly wmReplacements: readonly Game002WmReplacementPresentation[];
   readonly cnUpdates: readonly Game002CnValueUpdatePresentation[];
   readonly cm: Game002CmPresentation | null;
+  readonly coReplacements: readonly Game002CoReplacementPresentation[];
 }
 
 export interface Game002WmReplacementPresentation {
@@ -58,30 +67,57 @@ export interface Game002CmPresentation {
   readonly outputValue: number;
 }
 
+export interface Game002CoReplacementPresentation {
+  readonly position: SlotRoundPosition;
+  readonly inputCode: number;
+  readonly outputCode: number;
+}
+
 export function createGame002WlWmMultiplierCompiler(options: {
   readonly wlSymbolCode: number;
   readonly wmSymbolCode: number;
   readonly cnSymbolCode: number;
   readonly cmSymbolCode: number;
+  readonly coSymbolCode?: number;
+  readonly logDiagnostic?: (message: string) => void;
 }): Game002WlWmMultiplierCompiler {
   const wlCode = assertCode(options.wlSymbolCode, "WL");
   const wmCode = assertCode(options.wmSymbolCode, "WM");
   const cnCode = assertCode(options.cnSymbolCode, "CN");
   const cmCode = assertCode(options.cmSymbolCode, "CM");
-  if (new Set([wlCode, wmCode, cnCode, cmCode]).size !== 4) {
-    throw new Error("game002 WL, WM, CN and CM symbol codes must be distinct.");
+  const coCode =
+    options.coSymbolCode === undefined
+      ? undefined
+      : assertCode(options.coSymbolCode, "CO");
+  if (
+    new Set([
+      wlCode,
+      wmCode,
+      cnCode,
+      cmCode,
+      ...(coCode === undefined ? [] : [coCode]),
+    ]).size !== (coCode === undefined ? 4 : 5)
+  ) {
+    throw new Error(
+      "game002 WL, WM, CN, CM and configured CO symbol codes must be distinct.",
+    );
   }
-  let pendingWlIncrements: Game002WlIncrementPresentation[] = [];
+  let pendingWlIncrements: Game002PendingWlIncrement[] = [];
   const presentationBatches = new Map<
     number,
     Game002WlWmMultiplierPresentationBatch
   >();
+  const logDiagnostic = options.logDiagnostic ?? (() => undefined);
 
   return Object.freeze({
     resolveSettledScene(context: SlotRoundSettledSceneCompileContext) {
-      const generatedWm = context.step.hasComponent(
+      const hasGeneratedWm = context.step.hasComponent(
         GAME002_CASCADE_COMPONENTS.genwm,
-      )
+      );
+      const hasGeneratedCm = context.step.hasComponent(
+        GAME002_CASCADE_COMPONENTS.gencm,
+      );
+      const generatedWm = hasGeneratedWm
         ? readComponentScene({
             step: context.step,
             componentName: GAME002_CASCADE_COMPONENTS.genwm,
@@ -89,7 +125,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
             scene: context.inputScene,
           })
         : context.inputScene;
-      return context.step.hasComponent(GAME002_CASCADE_COMPONENTS.gencm)
+      const generatedCm = hasGeneratedCm
         ? readComponentScene({
             step: context.step,
             componentName: GAME002_CASCADE_COMPONENTS.gencm,
@@ -97,6 +133,31 @@ export function createGame002WlWmMultiplierCompiler(options: {
             scene: context.inputScene,
           })
         : generatedWm;
+      const settledScene =
+        hasGeneratedWm && hasGeneratedCm
+          ? composeWmThenCmSettledScene({
+              stepIndex: context.stepIndex,
+              generatedWm,
+              generatedCm,
+              wmCode,
+              cnCode,
+              cmCode,
+            })
+          : generatedCm;
+      const source =
+        hasGeneratedWm && hasGeneratedCm
+          ? "bg-genwm+bg-gencm(staged)"
+          : hasGeneratedCm
+            ? "bg-gencm"
+            : hasGeneratedWm
+              ? "bg-genwm"
+              : context.kind === "spin"
+                ? "bg-spin"
+                : "bg-refill";
+      logDiagnostic(
+        `settled step[${context.stepIndex}] kind=${context.kind} source=${source}; flow=WM->CM->CO; bg-genwm=${hasGeneratedWm ? "present" : "missing"}; bg-gencm=${hasGeneratedCm ? "present" : "missing"}; bg-genco=${context.step.hasComponent(GAME002_CASCADE_COMPONENTS.genco) ? "present(terminal)" : "missing"}`,
+      );
+      return settledScene;
     },
 
     hydrateSettledValues(context: SlotRoundSettledCompileContext) {
@@ -202,24 +263,17 @@ export function createGame002WlWmMultiplierCompiler(options: {
     },
 
     compileSettledTransform(context: SlotRoundSettledCompileContext) {
-      const incomingWlIncrements = pendingWlIncrements;
+      const incomingWlIncrements = resolveIncomingWlIncrements({
+        context,
+        wlCode,
+        pending: pendingWlIncrements,
+      });
       pendingWlIncrements = [];
-      for (const increment of incomingWlIncrements) {
-        const code =
-          context.input.scene[increment.position.x]?.[increment.position.y];
-        const value =
-          context.input.values[increment.position.x]?.[increment.position.y];
-        if (code !== wlCode || value !== increment.inputValue) {
-          throw new Error(
-            `step[${context.stepIndex}] carried WL (${increment.position.x},${increment.position.y}) does not match pending bg-incwl input ${increment.inputValue}.`,
-          );
-        }
-      }
       const winningWlPositions = readWinningWlPositions({
         context,
         wlCode,
       });
-      pendingWlIncrements = parsePendingWlIncrements({
+      pendingWlIncrements = createPendingWlIncrements({
         context,
         wlCode,
         winningWlPositions,
@@ -266,6 +320,16 @@ export function createGame002WlWmMultiplierCompiler(options: {
             }),
           );
       } else {
+        const wmStageScene = context.step.hasComponent(
+          GAME002_CASCADE_COMPONENTS.genwm,
+        )
+          ? readComponentScene({
+              step: context.step,
+              componentName: GAME002_CASCADE_COMPONENTS.genwm,
+              label: `step[${context.stepIndex}] bg-genwm`,
+              scene: context.input.scene,
+            })
+          : context.input.scene;
         let wmTotal = 0;
         for (const occurrence of wm) {
           wmTotal = addSafe(
@@ -291,7 +355,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
           step: context.step,
           componentName: GAME002_CASCADE_COMPONENTS.wm2cn,
           label: `step[${context.stepIndex}] bg-wm2cn`,
-          scene: context.input.scene,
+          scene: wmStageScene,
         });
         const generatedCn = readComponentOtherScene({
           step: context.step,
@@ -301,7 +365,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
           scene: context.input.scene,
           validateAllValues: false,
         })!;
-        forEachCell(context.input.scene, (x, y, code) => {
+        forEachCell(wmStageScene, (x, y, code) => {
           const position = Object.freeze({ x, y });
           const key = positionKey(position);
           const wlRaw = updatedWl?.[x][y] ?? 0;
@@ -317,7 +381,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
             );
             if (wlRaw !== expected) {
               throw new Error(
-                `step[${context.stepIndex}] bg-updwl[${x}][${y}] must be ${expected}, received ${wlRaw}.`,
+                `step[${context.stepIndex}] bg-updwl[${x}][${y}] differs: actual(server)=${wlRaw}; expected(compiled)=${expected} (input WL=${current} + WM total=${wmTotal}).`,
               );
             }
             intermediateValues.set(key, expected);
@@ -357,11 +421,20 @@ export function createGame002WlWmMultiplierCompiler(options: {
             );
           } else if (wm2cn[x][y] !== code) {
             throw new Error(
-              `step[${context.stepIndex}] bg-wm2cn changed non-WM occurrence (${x},${y}).`,
+              `step[${context.stepIndex}] bg-wm2cn changed non-WM occurrence (${x},${y}): actual(server) code=${wm2cn[x][y]}; expected(compiled) unchanged code=${code}.`,
             );
           }
         });
-        intermediateScene = wm2cn;
+        intermediateScene = context.step.hasComponent(
+          GAME002_CASCADE_COMPONENTS.gencm,
+        )
+          ? readAndValidateGeneratedCmStage({
+              step: context.step,
+              stepIndex: context.stepIndex,
+              wmOutputScene: wm2cn,
+              cmCode,
+            })
+          : wm2cn;
       }
 
       const cnUpdates: Game002CnValueUpdatePresentation[] = [];
@@ -425,7 +498,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
             const raw = updatedCn?.[x][y];
             if (raw !== outputValue) {
               throw new Error(
-                `step[${context.stepIndex}] bg-updcn[${x}][${y}] must be ${outputValue}, received ${String(raw)}.`,
+                `step[${context.stepIndex}] bg-updcn[${x}][${y}] differs: actual(server)=${String(raw)}; expected(compiled)=${outputValue} (input CN=${inputValue} * CM=${multiplier}).`,
               );
             }
             cnUpdates.push(
@@ -473,7 +546,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
             );
           } else if (cm2cn[x][y] !== code) {
             throw new Error(
-              `step[${context.stepIndex}] bg-cm2cn changed non-CM occurrence (${x},${y}).`,
+              `step[${context.stepIndex}] bg-cm2cn changed non-CM occurrence (${x},${y}): actual(server) code=${cm2cn[x][y]}; expected(compiled) unchanged code=${code}.`,
             );
           }
         });
@@ -481,6 +554,50 @@ export function createGame002WlWmMultiplierCompiler(options: {
           throw new Error(
             `step[${context.stepIndex}] CM presentation position is missing.`,
           );
+        intermediateScene = cm2cn;
+      }
+
+      const coReplacements: Game002CoReplacementPresentation[] = [];
+      if (context.step.hasComponent(GAME002_CASCADE_COMPONENTS.genco)) {
+        if (coCode === undefined)
+          throw new Error(
+            `step[${context.stepIndex}] bg-genco requires an explicit CO symbol code.`,
+          );
+        const generatedCo = readComponentScene({
+          step: context.step,
+          componentName: GAME002_CASCADE_COMPONENTS.genco,
+          label: `step[${context.stepIndex}] bg-genco`,
+          scene: intermediateScene,
+        });
+        forEachCell(intermediateScene, (x, y, code) => {
+          const outputCode = generatedCo[x][y];
+          if (outputCode === code) return;
+          const position = Object.freeze({ x, y });
+          const key = positionKey(position);
+          if (outputCode !== coCode)
+            throw new Error(
+              `step[${context.stepIndex}] bg-genco changed (${x},${y}) to non-CO code: actual(server)=${outputCode}; expected CO code=${coCode} or unchanged code=${code}.`,
+            );
+          if (draftByPosition.has(key))
+            throw new Error(
+              `step[${context.stepIndex}] bg-genco changed multiplier-transformed occurrence (${x},${y}); expected(server) the WM/CM/CN result to remain code=${code}.`,
+            );
+          coReplacements.push(
+            Object.freeze({
+              position,
+              inputCode: context.input.scene[x][y],
+              outputCode,
+            }),
+          );
+          draftByPosition.set(
+            key,
+            Object.freeze({
+              position,
+              outputCode,
+              outputValue: null,
+            }),
+          );
+        });
       }
 
       const drafts = context.input.scene.flatMap((column, x) =>
@@ -508,6 +625,7 @@ export function createGame002WlWmMultiplierCompiler(options: {
           ),
           cnUpdates: Object.freeze(cnUpdates),
           cm: cmPresentation,
+          coReplacements: Object.freeze(coReplacements),
         }),
       );
       return Object.freeze(drafts);
@@ -520,28 +638,63 @@ export function createGame002WlWmMultiplierCompiler(options: {
     assertComplete() {
       if (pendingWlIncrements.length > 0)
         throw new Error(
-          "game002 terminal round leaves bg-incwl without a following settled refill.",
+          `game002 terminal round leaves winning WL without a following settled refill bg-incwl: pending=${formatPendingWlIncrements(pendingWlIncrements)}.`,
         );
     },
   });
 }
 
-function parsePendingWlIncrements(options: {
+function createPendingWlIncrements(options: {
   readonly context: SlotRoundSettledCompileContext;
   readonly wlCode: number;
   readonly winningWlPositions: ReadonlySet<string>;
+}): Game002PendingWlIncrement[] {
+  const { context } = options;
+  const sourceWinResultPositions = formatBgWinResultPositions(context.step);
+  return context.input.occurrences.flatMap((occurrence) => {
+    if (occurrence.code !== options.wlCode) return [];
+    if (!options.winningWlPositions.has(positionKey(occurrence.position)))
+      return [];
+    const inputValue = assertPositiveMultiplier(
+      occurrence.value,
+      `step[${context.stepIndex}] WL (${occurrence.position.x},${occurrence.position.y}) multiplier`,
+    );
+    return [
+      Object.freeze({
+        position: occurrence.position,
+        inputValue,
+        outputValue: addSafe(
+          inputValue,
+          1,
+          `step[${context.stepIndex}] pending bg-incwl (${occurrence.position.x},${occurrence.position.y})`,
+        ),
+        sourceStepIndex: context.stepIndex,
+        sourceWinResultPositions,
+        occurrenceId: occurrence.id,
+        code: occurrence.code,
+        symbol: occurrence.symbol,
+      }),
+    ];
+  });
+}
+
+function resolveIncomingWlIncrements(options: {
+  readonly context: SlotRoundSettledCompileContext;
+  readonly wlCode: number;
+  readonly pending: readonly Game002PendingWlIncrement[];
 }): Game002WlIncrementPresentation[] {
   const { context } = options;
-  if (!context.step.hasComponent(GAME002_CASCADE_COMPONENTS.incwl)) {
-    if (options.winningWlPositions.size > 0)
+  const hasIncwl = context.step.hasComponent(GAME002_CASCADE_COMPONENTS.incwl);
+  if (options.pending.length === 0) {
+    if (hasIncwl)
       throw new Error(
-        `step[${context.stepIndex}] bg-incwl is required when WL participates in bg-win.`,
+        `step[${context.stepIndex}] bg-incwl has no winning WL from the preceding step: actual(server) bg-incwl component=present; expected(compiled) no bg-incwl.`,
       );
     return [];
   }
-  if (!context.step.hasComponent(GAME002_CASCADE_COMPONENTS.win))
+  if (!hasIncwl)
     throw new Error(
-      `step[${context.stepIndex}] bg-incwl requires bg-win in the same server step.`,
+      `step[${context.stepIndex}] bg-incwl is required for WL that participated in the preceding bg-win: actual(server) bg-incwl component=missing; pending winning WL occurrence(s)=${formatPendingWlIncrements(options.pending)}; expected(server) bg-incwl after dropdown and before refill with otherScene value=current multiplier+1.`,
     );
   const values = readComponentOtherScene({
     step: context.step,
@@ -551,41 +704,46 @@ function parsePendingWlIncrements(options: {
     scene: context.input.scene,
     validateAllValues: false,
   })!;
-  const increments: Game002WlIncrementPresentation[] = [];
-  forEachCell(context.input.scene, (x, y, code) => {
-    if (code !== options.wlCode) return;
-    if (!options.winningWlPositions.has(`${x},${y}`)) return;
-    const raw = values[x][y];
-    const inputValue = assertPositiveMultiplier(
-      context.input.values[x][y],
-      `step[${context.stepIndex}] WL (${x},${y}) multiplier`,
-    );
-    const outputValue = addSafe(
-      inputValue,
-      1,
-      `step[${context.stepIndex}] bg-incwl[${x}][${y}]`,
-    );
-    if (raw !== outputValue)
+  return options.pending.map((increment) => {
+    const { x, y } = increment.position;
+    const code = context.input.scene[x]?.[y];
+    const value = context.input.values[x]?.[y];
+    if (code !== options.wlCode || value !== increment.inputValue)
       throw new Error(
-        `step[${context.stepIndex}] bg-incwl[${x}][${y}] must be ${outputValue}, received ${raw}.`,
+        `step[${context.stepIndex}] carried WL (${x},${y}) does not match preceding step[${increment.sourceStepIndex}] bg-win occurrence: actual(compiled refill) code=${String(code)}, value=${String(value)}; expected(pending) code=${options.wlCode}, value=${increment.inputValue}, id="${increment.occurrenceId}".`,
       );
-    increments.push(
-      Object.freeze({
-        position: Object.freeze({ x, y }),
-        inputValue,
-        outputValue,
-      }),
-    );
+    const raw = values[x][y];
+    if (raw !== increment.outputValue)
+      throw new Error(
+        `step[${context.stepIndex}] bg-incwl[${x}][${y}] differs for preceding step[${increment.sourceStepIndex}] winning WL: actual(server)=${raw}; expected(compiled)=${increment.outputValue} (input WL=${increment.inputValue} + 1).`,
+      );
+    return Object.freeze({
+      position: increment.position,
+      inputValue: increment.inputValue,
+      outputValue: increment.outputValue,
+    });
   });
-  if (increments.length === 0)
-    throw new Error(
-      `step[${context.stepIndex}] bg-incwl must increment at least one WL.`,
-    );
-  if (increments.length !== options.winningWlPositions.size)
-    throw new Error(
-      `step[${context.stepIndex}] bg-incwl must increment every WL that participates in bg-win.`,
-    );
-  return increments;
+}
+
+function formatPendingWlIncrements(
+  pending: readonly Game002PendingWlIncrement[],
+): string {
+  return `[${pending
+    .map(
+      (increment) =>
+        `(sourceStep=${increment.sourceStepIndex}, ${increment.position.x},${increment.position.y}, code=${increment.code}, symbol="${increment.symbol}", multiplier=${increment.inputValue}, id="${increment.occurrenceId}", bgWin=${increment.sourceWinResultPositions})`,
+    )
+    .join("; ")}]`;
+}
+
+function formatBgWinResultPositions(step: GameLogicStep): string {
+  return `[${step
+    .getComponentResults(GAME002_CASCADE_COMPONENTS.win)
+    .map(
+      (result, resultIndex) =>
+        `result[${resultIndex}]=${JSON.stringify(result.pos)}`,
+    )
+    .join("; ")}]`;
 }
 
 function readWinningWlPositions(options: {
@@ -652,6 +810,88 @@ function readComponentOtherScene(options: {
   return scenes[0];
 }
 
+function composeWmThenCmSettledScene(options: {
+  readonly stepIndex: number;
+  readonly generatedWm: SceneMatrix;
+  readonly generatedCm: SceneMatrix;
+  readonly wmCode: number;
+  readonly cnCode: number;
+  readonly cmCode: number;
+}): SceneMatrix {
+  assertMatrixShape(
+    options.generatedCm,
+    options.generatedWm,
+    `step[${options.stepIndex}] bg-gencm scene`,
+  );
+  let cmCount = 0;
+  const settledScene = Object.freeze(
+    options.generatedWm.map((wmColumn, x) =>
+      Object.freeze(
+        wmColumn.map((wmStageCode, y) => {
+          const cmStageCode = options.generatedCm[x][y];
+          if (wmStageCode === options.wmCode) {
+            if (cmStageCode !== options.cnCode) {
+              throw new Error(
+                `step[${options.stepIndex}] bg-gencm[${x}][${y}] must contain CN code ${options.cnCode} after WM code ${options.wmCode}: actual(server)=${cmStageCode}; flow=WM->CM->CO.`,
+              );
+            }
+            return options.wmCode;
+          }
+          if (cmStageCode === options.cmCode) {
+            cmCount += 1;
+            return options.cmCode;
+          }
+          if (cmStageCode !== wmStageCode) {
+            throw new Error(
+              `step[${options.stepIndex}] bg-gencm changed non-WM occurrence (${x},${y}) without producing CM: actual(server)=${cmStageCode}; expected(compiled) unchanged code=${wmStageCode}; flow=WM->CM->CO.`,
+            );
+          }
+          return cmStageCode;
+        }),
+      ),
+    ),
+  );
+  if (cmCount !== 1) {
+    throw new Error(
+      `step[${options.stepIndex}] bg-gencm must produce exactly one CM after WM; actual(server) count=${cmCount}.`,
+    );
+  }
+  return settledScene;
+}
+
+function readAndValidateGeneratedCmStage(options: {
+  readonly step: GameLogicStep;
+  readonly stepIndex: number;
+  readonly wmOutputScene: SceneMatrix;
+  readonly cmCode: number;
+}): SceneMatrix {
+  const generatedCm = readComponentScene({
+    step: options.step,
+    componentName: GAME002_CASCADE_COMPONENTS.gencm,
+    label: `step[${options.stepIndex}] bg-gencm`,
+    scene: options.wmOutputScene,
+  });
+  let cmCount = 0;
+  forEachCell(options.wmOutputScene, (x, y, inputCode) => {
+    const outputCode = generatedCm[x][y];
+    if (outputCode === options.cmCode) {
+      cmCount += 1;
+      return;
+    }
+    if (outputCode !== inputCode) {
+      throw new Error(
+        `step[${options.stepIndex}] bg-gencm changed post-WM occurrence (${x},${y}) without producing CM: actual(server)=${outputCode}; expected(compiled) unchanged code=${inputCode}; flow=WM->CM->CO.`,
+      );
+    }
+  });
+  if (cmCount !== 1) {
+    throw new Error(
+      `step[${options.stepIndex}] bg-gencm must produce exactly one CM after WM; actual(server) count=${cmCount}.`,
+    );
+  }
+  return generatedCm;
+}
+
 function readComponentScene(options: {
   readonly step: GameLogicStep;
   readonly componentName: string;
@@ -690,10 +930,14 @@ function assertMatrixShape(
   validateAllValues = true,
 ): void {
   if (matrix.length !== scene.length)
-    throw new Error(`${label} width must be ${scene.length}.`);
+    throw new Error(
+      `${label} width differs: actual(server) columns=${matrix.length}; expected(scene) columns=${scene.length}.`,
+    );
   matrix.forEach((column, x) => {
     if (column.length !== scene[x].length)
-      throw new Error(`${label}[${x}] height must be ${scene[x].length}.`);
+      throw new Error(
+        `${label}[${x}] height differs: actual(server) rows=${column.length}; expected(scene) rows=${scene[x].length}.`,
+      );
     if (!validateAllValues) return;
     column.forEach((value, y) => {
       if (!Number.isSafeInteger(value) || value < 0)
@@ -717,7 +961,9 @@ function positionKey(position: SlotRoundPosition): string {
 
 function assertPositiveMultiplier(value: unknown, label: string): number {
   if (!Number.isSafeInteger(value) || (value as number) <= 0)
-    throw new Error(`${label} must be a positive safe integer.`);
+    throw new Error(
+      `${label} must be a positive safe integer; actual=${String(value)}.`,
+    );
   return value as number;
 }
 

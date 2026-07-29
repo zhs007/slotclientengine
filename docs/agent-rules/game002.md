@@ -65,9 +65,11 @@
 
 ## WL/WM/CM multiplier 与中奖前转换
 
-- initial spin 和 refill 的最终落定 scene 优先级固定为
-  `bg-gencm > bg-genwm > bg-spin/bg-refill`；触发的生成 component 必须各自提供
-  唯一完整 scene。
+- initial spin 和 refill 的动画前落定 scene 优先级固定为
+  `bg-gencm > bg-genwm > bg-spin/bg-refill`。`bg-genco` 的唯一完整 scene 是
+  WM/CM 转 CN 后、中奖前的终态盘面；客户端必须先以动画前 scene 编译 multiplier
+  transform，再用 `bg-genco` 校验并在 transform 末尾提交新增 CO replacement。
+  当前不实现 CO 专属动画或玩法。
 - `bg-genwilds`、`bg-setwm` 和 `bg-setcm` 的 component-scoped `otherScene`
   分别给新 WL/WM/CM 提供 positive safe integer multiplier；每个 settled step
   最多一个 CM，值随 occurrence dropdown/refill 搬运。
@@ -75,9 +77,10 @@
   的其它 cell 由服务器保留作其它用途，不得按当前 component 的零值合同拒绝。
 - spin 和每次 refill 都必须等全部 symbol 落定后再处理 multiplier，且 transform
   完成后才允许进入该 settled snapshot 对应的中奖流程。
-- 上一步参与中奖的 WL 可由 `bg-incwl.otherScene` 权威加一。表现延迟到下一次
-  refill 全部落定后，先更新 multiplier 并播放 WL 的 `Start` once；随后才处理当前
-  WM。没有当前 WM 时，WL Start 完成后 transform 直接结束。
+- 上一步参与中奖的 WL 由下一 cascade step 中、`bg-dropdown` 后且 `bg-refill`
+  前的 `bg-incwl.otherScene` 权威加一。客户端跨 step 关联中奖 WL，等该 refill
+  全部落定后先更新 multiplier 并播放 WL 的 `Start` once；随后才处理当前 WM。
+  没有当前 WM 时，WL Start 完成后 transform 直接结束。
 - 当前 WM 存在时，`bg-updwl.otherScene` 必须把每个 WL 更新为其当前值加本批全部
   WM multiplier 之和。盘面没有 WL 时仍完整处理 WM，只有 WL 更新阶段为空。
 - 同批 WM 并行执行 `Mult_Start` once、`Mult_Idle` 一个真实 loop、`Mult_End`

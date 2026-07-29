@@ -40,6 +40,7 @@ describe("Game002RoundTarget multiplier transform", () => {
             ]),
             cnUpdates: Object.freeze([]),
             cm: null,
+            coReplacements: Object.freeze([]),
           }),
         ],
       ]),
@@ -105,6 +106,7 @@ describe("Game002RoundTarget multiplier transform", () => {
             wmReplacements: [],
             cnUpdates: [],
             cm: null,
+            coReplacements: [],
           },
         ],
       ]),
@@ -153,6 +155,7 @@ describe("Game002RoundTarget multiplier transform", () => {
             ],
             cnUpdates: [],
             cm: null,
+            coReplacements: [],
           },
         ],
       ]),
@@ -217,6 +220,7 @@ describe("Game002RoundTarget multiplier transform", () => {
               multiplier: 2,
               outputValue: 7,
             },
+            coReplacements: [],
           },
         ],
       ]),
@@ -294,6 +298,7 @@ describe("Game002RoundTarget multiplier transform", () => {
               multiplier: 2,
               outputValue: 7,
             },
+            coReplacements: [],
           },
         ],
       ]),
@@ -323,6 +328,54 @@ describe("Game002RoundTarget multiplier transform", () => {
     runtime.advanceOnce();
     expect(target.updateSettledTransform(0).completed).toBe(true);
     expect(runtime.events.at(-1)).toBe("commit:3,0:8");
+  });
+
+  it("commits bg-genco CO replacement only after the transform boundary", () => {
+    const scene = Array.from({ length: 6 }, () =>
+      Array.from({ length: 9 }, () => 1),
+    );
+    const runtime = new TransformRuntime(scene);
+    const target = new Game002RoundTarget({
+      runtime: runtime.asRuntime(),
+      cascadePlayer: {} as SymbolCascadePlayer,
+      winAmountPlayer: {} as WinAmountAnimationPlayer,
+      wlSymbolCode: 0,
+      wmSymbolCode: 7,
+      cnSymbolCode: 8,
+      cmSymbolCode: 9,
+    });
+    const step = createCoTransformStep(scene);
+    target.configure({
+      sequence: {} as never,
+      betAmountRaw: 0,
+      winAmountRaw: 0,
+      multiplierBatches: new Map([
+        [
+          step.stepIndex,
+          {
+            stepIndex: step.stepIndex,
+            wlIncrements: [],
+            wmReplacements: [],
+            cnUpdates: [],
+            cm: null,
+            coReplacements: [
+              {
+                position: { x: 2, y: 0 },
+                inputCode: 1,
+                outputCode: 10,
+              },
+            ],
+          },
+        ],
+      ]),
+    });
+
+    target.startSettledTransform(step);
+    expect(runtime.events).toEqual(["prepare:2,0:1->10"]);
+    expect(runtime.scene[2][0]).toBe(1);
+    expect(target.updateSettledTransform(0).completed).toBe(true);
+    expect(runtime.events.at(-1)).toBe("commit:2,0:10");
+    expect(runtime.scene[2][0]).toBe(10);
   });
 });
 
@@ -601,6 +654,34 @@ function createWmCmTransformStep(
         });
       }),
     ),
+    requiredCapabilities: Object.freeze(["settled-transform"] as const),
+  });
+}
+
+function createCoTransformStep(
+  scene: readonly (readonly number[])[],
+): SlotRoundSettledTransformStepPlan {
+  const values = scene.map((column) => column.map(() => null));
+  const input = createGenericSnapshot(scene, values);
+  const outputScene = scene.map((column) => [...column]);
+  outputScene[2][0] = 10;
+  const output = createGenericSnapshot(outputScene, values);
+  const position = Object.freeze({ x: 2, y: 0 });
+  const occurrenceId = "o-2-0";
+  return Object.freeze({
+    kind: "settled-transform",
+    index: 0,
+    stepIndex: 1,
+    input,
+    output,
+    changes: Object.freeze([
+      Object.freeze({
+        occurrenceId,
+        position,
+        input: input.occurrences.find((item) => item.id === occurrenceId)!,
+        output: output.occurrences.find((item) => item.id === occurrenceId)!,
+      }),
+    ]),
     requiredCapabilities: Object.freeze(["settled-transform"] as const),
   });
 }

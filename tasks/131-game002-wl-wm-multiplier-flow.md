@@ -24,8 +24,9 @@
 - [x] step 触发 `bg-genwm` 时，initial spin 和 refill 都以其唯一 `scene` 为最终
       落定盘面，原 `bg-spin/bg-refill` scene 仅作为生成前输入。
 - [x] 有 WM 时，`bg-updwl` 的 `otherScene` 必须把每个 WL 更新为 `旧 WL + 本批全部 WM 倍数之和`；没有 WL 时仍处理 WM，只不要求 `bg-updwl`。不得由客户端随机或用结果金额反推。
-- [x] `bg-incwl` 在中奖 step 权威地把参与中奖的 WL 加一；表现延迟到下一次
-      refill 全部落定后、当前 WM 生效前，更新文本并播放 WL Start once。
+- [x] `bg-incwl` 在中奖 step 的下一 cascade step（`bg-dropdown` 后、
+      `bg-refill` 前）权威地把参与中奖的 WL 加一；客户端跨 step 关联目标，
+      等 refill 全部落定后、当前 WM 生效前更新文本并播放 WL Start once。
 - [x] `bg-wm2cn` 的 scene 只允许把本批 WM 原位置改为 CN，其它 code/位置保持不变；
       `bg-genwmcn` 的 `otherScene` 必须为每个新 CN 提供 positive safe integer，
       其它位置保留给服务器用途。

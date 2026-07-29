@@ -30,6 +30,16 @@ import {
 type TestPosition = { readonly x: number; readonly y: number };
 
 describe("game002 task 95 adapter", () => {
+  it("logs every GMI RNG as a copyable comma-separated sequence", () => {
+    const messages: string[] = [];
+    const adapter = createTestAdapter({
+      logRng: (message) => messages.push(message),
+    });
+
+    expect(() => adapter.playSpin(createCascadeLogic())).toThrow(/not mounted/);
+    expect(messages).toEqual(["rng 1,2,3,4,5,6"]);
+  });
+
   it("fails lifecycle misuse and resolves a terminal zero-win spin without cascade", async () => {
     const events: string[] = [];
     const fakeApp = createFakeApplication();
@@ -310,6 +320,7 @@ describe("game002 task 95 adapter", () => {
 function createTestAdapter(options: Omit<Game002AdapterOptions, "skin">) {
   return createGame002Adapter({
     skin: getTestGame002SkinConfig(),
+    logRng: () => undefined,
     createBackgroundPlayer: () => new FakeBackgroundPlayer().asPlayer(),
     createWinAmountPlayer: () => new FakeWinAmountPlayer([]).asPlayer(),
     createSymbolCascadePlayer: (playerOptions) =>
